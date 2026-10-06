@@ -1175,6 +1175,7 @@ begin
     FHost.SetStatus('Convert refused: ' + string.Join(' ', Pre.Problems), True);
     Exit;
   end;
+  Job:= Default(TConvertJob); // Scope (managed fields) starts as the whole unit
   Job.ProjectDb  := FHost.GetProjectDb();
   Job.ProjectFile:= FHost.GetProjectFile();
   // Every unit and every book is followed by `index --project` on the DB's OWN

@@ -11044,16 +11044,18 @@ end;
 { C12 Task 3 (E9-E11, runner side): the scoped unit loop with fake engine seams.
   A book with no selected instance of its From types gets csOutOfScope and NO
   engine call; a scoped book's names reach apply as --only; an all-out-of-scope
-  unit keeps no backup; the engine's --only refusal gets the E10 hint. Also the
-  B5 binding: the scope covers the request's unit ONLY. }
+  unit keeps no backup; the engine's --only refusal gets the E10 hint; an --only
+  that matched nothing stays a failure and says what was asked. }
 procedure TestRunnerScope;
 const
   ORIG = 'unit F; interface implementation end.';
   OK_JSON      = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
+  // measured on engine 1.22.0: an --only name that matches nothing (task-3-report.md)
+  NO_MATCH_JSON = '{"schema":"apply/1","ok":false,"error":"no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)",' +
+                  '"refused":false,"reason":"","rule_errors":[],"edits_count":0}';
+  UNKNOWN_HINT = ' -- --only asked for Label1, Label3; the form may have changed since the IDE request -- re-send it';
   REFUSED_ONLY = '{"schema":"apply/1","ok":false,"refused":true,"reason":"#unuse DBTables would leave 1 unconverted instance(s) of TTable -- unit not changed",' +
                  '"rule_errors":[],"edits_count":0}';
-  LABEL_BOOK = '#convert TLabel -> TStaticText' + sLineBreak;
-  EDIT_BOOK  = '#convert TEdit -> TcxTextEdit' + sLineBreak;
   TWO_ROWS = 2;
   IDX_LABEL_ROW = 1;
 var
@@ -11065,9 +11067,9 @@ var
   Index : TIndexFn;
   Apply : TApplyOnlyFn;
   Scope : TScopeFn;
-  Sc    : TConvertScope;
-  Inst  : TDfmInstance;
-  Names : TArray<string>;
+  Whole  : TScopeFn;
+  Refuse : TApplyOnlyFn;
+  NoMatch: TApplyOnlyFn;
 
   function Describe(const R: TArray<TConvertRow>): string;
   var
@@ -11077,6 +11079,26 @@ var
     for var I: Integer:= 0 to High(R) do
       L[I]:= Format('[%s %s %s | %s]', [ExtractFileName(R[I].Book), ConvertStatusText(R[I].Status), R[I].Backup, R[I].Note]);
     Result:= string.Join(' ', L);
+  end;
+
+  // An apply that touches nothing and answers AJson with exit 1.
+  function Answer(const AJson: string): TApplyOnlyFn;
+  begin
+    Result:= function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson2: string): Integer
+      begin
+        AJson2:= AJson;
+        Result:= 1;
+      end;
+  end;
+
+  // The whole-unit scope: today's behaviour, no --only.
+  function WholeUnit: TScopeFn;
+  begin
+    Result:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
+      begin
+        ANames:= nil;
+        Result:= False;
+      end;
   end;
 
   procedure WriteUnit(const APas: string);
@@ -11091,6 +11113,9 @@ begin
   try
     LPas:= TPath.Combine(Dir, 'F.pas');
     WriteUnit(LPas);
+    Whole  := WholeUnit();
+    Refuse := Answer(REFUSED_ONLY);
+    NoMatch:= Answer(NO_MATCH_JSON);
     Index:= function(out AOutput: string): Integer
       begin
         AOutput:= '';
@@ -11115,21 +11140,17 @@ begin
     LRows:= RunConversionUnits([LPas], ['Button.rules', 'Label.rules'], Apply, Index, Scope, nil, nil);
     var LNoBackup: Boolean:= (Length(LRows) = TWO_ROWS) and (LRows[0].Backup = '') and (LRows[0].BackupDfm = '');
     Check('runner.scope.out.of.scope.no.call', LNoBackup and (LRows[0].Status = csOutOfScope)
-      and (LRows[0].Note = 'no selected instance of this book''s From types on the unit') and (Length(Calls) = 1), Describe(LRows) + string.Join(';', Calls));
+      and (LRows[0].Note = 'no in-scope instance of this book''s From types on the unit') and (Length(Calls) = 1), Describe(LRows) + string.Join(';', Calls));
     Check('runner.scope.only.reaches.apply', (Length(Calls) = 1) and (Calls[0] = 'Label.rules|Label1,Label3'), string.Join(';', Calls));
     Check('runner.scope.converted.note', (Length(LRows) = TWO_ROWS) and (LRows[IDX_LABEL_ROW].Status = csConverted)
-      and (LRows[IDX_LABEL_ROW].Note = 'converted 2 of 2 scoped instance(s): Label1, Label3; 2 edit(s), 0 remaining for manual work'), Describe(LRows));
+      and (LRows[IDX_LABEL_ROW].Note = '--only 2 instance(s): Label1, Label3; 2 edit(s), 0 remaining for manual work'), Describe(LRows));
     Check('runner.scope.status.text', ConvertStatusText(csOutOfScope) = 'skipped -- not in scope');
 
     // whole-unit scope function: today's behaviour, no --only, the plain note
     WriteUnit(LPas);
     Calls:= nil;
     LRows:= RunConversionUnits([LPas], ['Button.rules'], Apply, Index,
-      function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
-      begin
-        ANames:= nil;
-        Result:= False;
-      end, nil, nil);
+      Whole, nil, nil);
     Check('runner.scope.whole.unit', (Length(Calls) = 1) and (Calls[0] = 'Button.rules|') and (Length(LRows) = 1) and (LRows[0].Status = csConverted)
       and (LRows[0].Note = '2 edit(s), 0 remaining for manual work'), Describe(LRows));
 
@@ -11145,11 +11166,7 @@ begin
     // the engine's --only refusal gets the hint (E10)
     WriteUnit(LPas);
     LRows:= RunConversionUnits([LPas], ['Label.rules'],
-      function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
-      begin
-        AJson:= REFUSED_ONLY;
-        Result:= 1;
-      end, Index, Scope, nil, nil);
+      Refuse, Index, Scope, nil, nil);
     Check('runner.scope.refused.hint', (Length(LRows) = 1) and (LRows[0].Status = csRefused)
       and LRows[0].Note.EndsWith(' -- convert all TTable instances on this form, or remove the #unuse / #useswap from the book'), Describe(LRows));
     Check('runner.scope.refusal.hint.pure', (RefusalHint('x would leave 3 unconverted instance(s) of TQuery -- unit not changed') = ' -- convert all TQuery instances on this form, or remove the #unuse / #useswap from the book')
@@ -11157,22 +11174,41 @@ begin
     // an unscoped refusal never gets the hint: the reason is not about a scope
     WriteUnit(LPas);
     LRows:= RunConversionUnits([LPas], ['Label.rules'],
-      function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
-      begin
-        AJson:= REFUSED_ONLY;
-        Result:= 1;
-      end, Index,
-      function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
-      begin
-        ANames:= nil;
-        Result:= False;
-      end, nil, nil);
+      Refuse, Index,
+      Whole, nil, nil);
     Check('runner.scope.unscoped.refusal.no.hint', (Length(LRows) = 1) and (LRows[0].Status = csRefused) and (Pos(' -- convert all ', LRows[0].Note) = 0), Describe(LRows));
+    // an --only that matched nothing stays a failure (restored), and says what was asked
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      NoMatch, Index, Scope, nil, nil);
+    Check('runner.scope.unknown.name.hint', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and LRows[0].Note.EndsWith(UNKNOWN_HINT)
+      and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows));
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson:= NO_MATCH_JSON;
+        Result:= 1;
+      end, Index, nil, nil);
+    Check('runner.scope.unscoped.no.match.no.hint', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and (Pos('--only asked', LRows[0].Note) = 0), Describe(LRows));
   finally
     TDirectory.Delete(Dir, True);
   end; // try
+end;
 
-  // B5: the scope binds the request's unit ONLY; any other unit is converted whole.
+{ C12 Task 3, ruling B5: the scope binds the request's unit ONLY, and the job's
+  scope function (ScopedNamesForBookFile) turns an unreadable book into NO name. }
+procedure TestScopeForUnit;
+const
+  LABEL_BOOK = '#convert TLabel -> TStaticText' + sLineBreak;
+  EDIT_BOOK  = '#convert TEdit -> TcxTextEdit' + sLineBreak;
+var
+  Sc      : TConvertScope;
+  Inst    : TDfmInstance;
+  Names   : TArray<string>;
+  BookDir : string;
+  BookPath: string;
+begin
   Inst:= Default(TDfmInstance);
   Inst.Name    := 'Label1';
   Inst.TypeName:= 'TLabel';
@@ -11184,6 +11220,20 @@ begin
   Check('scope.unit.own.unit.other.book', ScopedNamesForUnit(Sc, 'P\U.pas', EDIT_BOOK, Names) and (Length(Names) = 0), string.Join(',', Names));
   Check('scope.unit.other.unit.whole', not ScopedNamesForUnit(Sc, 'P\V.pas', LABEL_BOOK, Names) and (Length(Names) = 0));
   Check('scope.unit.whole.unit.scope', not ScopedNamesForUnit(Default(TConvertScope), 'P\U.pas', LABEL_BOOK, Names) and (Length(Names) = 0));
+  // the job's scope function reads the BOOK FILE: an unreadable book scopes to no name
+  // (an out-of-scope row), never to a whole-unit apply
+  BookDir:= TPath.Combine(TPath.GetTempPath, 'c12book-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(BookDir);
+  try
+    BookPath:= TPath.Combine(BookDir, 'Label.rules');
+    TFile.WriteAllText(BookPath, LABEL_BOOK, TEncoding.ASCII);
+    Check('scope.book.file.read', ScopedNamesForBookFile(Sc, 'P\U.pas', BookPath, Names) and (string.Join(',', Names) = 'Label1'), string.Join(',', Names));
+    Check('scope.book.file.unreadable.out.of.scope', ScopedNamesForBookFile(Sc, 'P\U.pas', TPath.Combine(BookDir, 'Missing.rules'), Names) and (Length(Names) = 0),
+      string.Join(',', Names));
+    Check('scope.book.file.other.unit.whole', not ScopedNamesForBookFile(Sc, 'P\V.pas', TPath.Combine(BookDir, 'Missing.rules'), Names) and (Length(Names) = 0));
+  finally
+    TDirectory.Delete(BookDir, True);
+  end; // try
 end;
 
 { C12 Task 3: --only against the REAL engine (spec E9). Two labels, the book
@@ -11196,7 +11246,7 @@ const
   LIB64 = 'C:\Projects\.drag-lint\library-Win64.sqlite';  // dl:ok hardcoded-absolute-path@6fd2 -- REVIEWED 2026-10-06 the real Win64 library index; the test Skip()s when it is absent
   JSON_HEAD_CHARS = 600;
 var
-  Exe, Dir, Db, Dpr, Pas, Dfm, Book, Output, LJson, LDfm: string;
+  Exe, Dir, Db, Dpr, Pas, Dfm, Book, Output, LJson, LDfm, LPasText: string;
   Eng  : TEngineAdapter;
   LCode: Integer;
   LRow : TApplyRow;  // dl:ok duplicate-code@3a3a -- REVIEWED 2026-10-06 the live-runner prologue (ResolveExe / Skip / temp Dir / fixture paths) is copied from TestConvertRunnerLive on purpose (controller ruling R5); the .dpr writer is already shared (WriteFixDpr)
@@ -11235,6 +11285,8 @@ begin
       LDfm := TFile.ReadAllText(Dfm);
       Check('runner.live.only.converts.named', (LCode = 0) and LRow.Ok and (Pos('Label1: TStaticText', LDfm) > 0), Copy(LJson, 1, JSON_HEAD_CHARS));
       Check('runner.live.only.leaves.other', Pos('Label2: TLabel', LDfm) > 0, LDfm);
+      LPasText:= TFile.ReadAllText(Pas);
+      Check('runner.live.only.pas.partial', (Pos('Label1: TStaticText', LPasText) > 0) and (Pos('Label2: TLabel', LPasText) > 0), LPasText);
       // convert-apply patches at the index's line ranges: reindex the changed unit first (R5)
       Check('runner.live.only.reindex', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
       // MEASURED FOR N3 -- the outcome goes into the task report, whatever it is:
@@ -11449,6 +11501,7 @@ begin
     TestConvertRequestCaps;
     TestConvertScope;
     TestRunnerScope;
+    TestScopeForUnit;
     TestRunnerLiveOnly;
 
     FreeAndNil(GParseBook);

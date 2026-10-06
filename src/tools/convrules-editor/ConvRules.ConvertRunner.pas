@@ -196,7 +196,9 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// scopes to NO name gets a csOutOfScope row with no engine call and no backup named,
 /// and the unit's next book still runs (a unit whose every book is out of scope keeps
 /// no backup). A scoped converted row's note is ScopedConvertedNote; a scoped refusal's
-/// note gets RefusalHint appended. AScope raising counts as out of scope.</remarks>
+/// note gets RefusalHint appended; a scoped apply that fails with no refusal and no edit
+/// (an --only name that matched nothing) stays a failure (restored) and its note gets
+/// UnmatchedOnlyHint. AScope raising counts as out of scope.</remarks>
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False): TArray<TConvertRow>; overload;
 
 /// <summary>Display text for a status.</summary>
@@ -275,6 +277,7 @@ uses
 
 const
   OUTPUT_HEAD_CHARS = 200;
+  NOTE_OUT_OF_SCOPE = 'no in-scope instance of this book''s From types on the unit';
 
 function ConvertStatusText(AStatus: TConvertStatus): string;
 begin
@@ -372,21 +375,10 @@ var
 begin
   LJob   := AJob;
   LEngine:= AEngine;
-  // Read on the worker thread. An unreadable book scopes to no name: the row is
-  // csOutOfScope and its Book column names the book -- never a whole-unit apply.
+  // The book is read on the worker thread; an unreadable one is out of scope.
   LScope:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
-    var
-      LText: string;
     begin
-      LText:= '';
-      if LJob.Scope.Kind <> skWholeUnit then
-        try
-          LText:= TFile.ReadAllText(ABook);
-        except // '' scopes the book to no name: its row is csOutOfScope and names the book
-          on Exception do
-            LText:= '';
-        end; // try
-      Result:= ScopedNamesForUnit(LJob.Scope, AUnitPas, LText, ANames);
+      Result:= ScopedNamesForBookFile(LJob.Scope, AUnitPas, ABook, ANames);
     end;
   Result:= RunConversionUnits(AUnits, ABooks,
     function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
@@ -627,7 +619,7 @@ var
       Row.Backup   := ''; // the book made no change; the backups may yet be dropped
       Row.BackupDfm:= '';
       Row.Status   := csOutOfScope;
-      Row.Note     := 'no selected instance of this book''s From types on the unit';
+      Row.Note     := NOTE_OUT_OF_SCOPE;
       Add;
       Exit; // Result = True: the unit's next book still runs
     end;
@@ -658,7 +650,9 @@ var
       // The E10 hint only on a scoped run: an unscoped run never asked for --only.
       LReason:= Row.Apply.Error;
       if LScoped and Row.Apply.Refused then
-        LReason:= LReason + RefusalHint(LReason);
+        LReason:= LReason + RefusalHint(LReason)
+      else if LScoped and (Row.Apply.EditsCount = 0) then
+        LReason:= LReason + UnmatchedOnlyHint(LOnly); // measured shape of an --only name that matches nothing
       FailUnit(LReason, if Row.Apply.Refused then csRefused else csFailedRestored);
       Exit(False);
     end;

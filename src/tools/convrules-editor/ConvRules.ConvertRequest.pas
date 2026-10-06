@@ -217,6 +217,26 @@ function ScopeMatchesUnits(const AScope: TConvertScope; const AUnits: TArray<str
 /// unit whole, with no --only.</returns>
 function ScopedNamesForUnit(const AScope: TConvertScope; const AUnitPas, ARulesText: string; out ANames: TArray<string>): Boolean;
 
+/// <summary>ScopedNamesForUnit for a book FILE: the Convert run's scope decision
+/// (TConvertJob.Scope bound), called on the worker thread.</summary>
+/// <param name="AScope">The run's scope; Default(TConvertScope) for none.</param>
+/// <param name="AUnitPas">The unit about to be converted.</param>
+/// <param name="ABookPath">The .rules file; read only when the unit is in scope.</param>
+/// <param name="ANames">As ScopedNamesForUnit.</param>
+/// <returns>As ScopedNamesForUnit. A book that cannot be read scopes to NO name (True
+/// with ANames = []): the runner reports it out of scope and never applies it to the
+/// whole unit.</returns>
+/// <remarks>Never raises.</remarks>
+function ScopedNamesForBookFile(const AScope: TConvertScope; const AUnitPas, ABookPath: string; out ANames: TArray<string>): Boolean;
+
+/// <summary>The note tail for a scoped apply that failed without a refusal and without
+/// an edit -- the measured shape of an --only name that matches no instance (engine
+/// 1.22.0: ok=false, refused=false, 'no convertible instances found').</summary>
+/// <param name="AOnly">The names passed as --only.</param>
+/// <returns>' -- --only asked for a, b; the form may have changed since the IDE request
+/// -- re-send it'</returns>
+function UnmatchedOnlyHint(const AOnly: TArray<string>): string;
+
 /// <summary>The E10 hint appended to the engine's --only refusal.</summary>
 /// <param name="AReason">The apply/1 reason.</param>
 /// <returns>' -- convert all &lt;Type&gt; instances on this form, or remove the #unuse /
@@ -228,9 +248,12 @@ function RefusalHint(const AReason: string): string;
 /// <param name="AOnly">The names passed as --only, in order.</param>
 /// <param name="AConvertedNote">The unscoped note (ConvertedRowNote: '&lt;edits&gt;
 /// edit(s), &lt;k&gt; remaining for manual work' and any C8 tail).</param>
-/// <returns>'converted N of N scoped instance(s): a, b; ' + AConvertedNote.</returns>
-/// <remarks>Both numbers are the REQUEST count: the engine does not report per-name
-/// outcomes yet (engine ask N3, only_matched[]), so the note says what was asked.</remarks>
+/// <returns>'--only N instance(s): a, b; ' + AConvertedNote (spec E11 as amended by the
+/// controller ruling, fix round 1 of C12 Task 3).</returns>
+/// <remarks>States what was ASKED, never what converted: the engine does not report
+/// per-name outcomes yet (engine ask N3, only_matched[]). A selected inherited instance
+/// goes to --only, is left by the engine and appears in the C8 tail's inherited list; an
+/// unmatched name is invisible on success. "converted N of N" would be false in both.</remarks>
 function ScopedConvertedNote(const AOnly: TArray<string>; const AConvertedNote: string): string;
 
 /// <summary>The capabilities document, one line, no whitespace.</summary>
@@ -267,7 +290,8 @@ const
   UNIT_COUNT_FMT     = 'a %s request lists exactly one unit (got %d)';
   REFUSAL_MARK       = 'unconverted instance(s) of ';
   REFUSAL_HINT_FMT   = ' -- convert all %s instances on this form, or remove the #unuse / #useswap from the book';
-  SCOPED_NOTE_FMT    = 'converted %d of %d scoped instance(s): %s; ';
+  SCOPED_NOTE_FMT    = '--only %d instance(s): %s; ';
+  UNMATCHED_ONLY_FMT = ' -- --only asked for %s; the form may have changed since the IDE request -- re-send it';
 
 { The scope's word in a refusal: 'form' or 'selected'. }
 function ScopeWord(AScope: TRequestScope): string;
@@ -635,6 +659,28 @@ begin
     ANames:= ScopedNamesForBook(AScope, TypePairsOfText(ARulesText));
 end;
 
+function ScopedNamesForBookFile(const AScope: TConvertScope; const AUnitPas, ABookPath: string; out ANames: TArray<string>): Boolean;
+var
+  LText: string;
+begin
+  // Unit check first: a unit outside the scope is converted whole and its book is not read.
+  Result:= ScopedNamesForUnit(AScope, AUnitPas, '', ANames);
+  if not Result then
+    Exit;
+  try
+    LText:= TFile.ReadAllText(ABookPath);
+  except // an unreadable book scopes to no name: an out-of-scope row, never a whole-unit apply
+    on Exception do
+      LText:= '';
+  end; // try
+  Result:= ScopedNamesForUnit(AScope, AUnitPas, LText, ANames);
+end;
+
+function UnmatchedOnlyHint(const AOnly: TArray<string>): string;
+begin
+  Result:= Format(UNMATCHED_ONLY_FMT, [string.Join(LIST_SEP, AOnly)]);
+end;
+
 function RefusalHint(const AReason: string): string;
 var
   P, Q: Integer;
@@ -652,7 +698,7 @@ end;
 
 function ScopedConvertedNote(const AOnly: TArray<string>; const AConvertedNote: string): string;
 begin
-  Result:= Format(SCOPED_NOTE_FMT, [Length(AOnly), Length(AOnly), string.Join(LIST_SEP, AOnly)]) + AConvertedNote;
+  Result:= Format(SCOPED_NOTE_FMT, [Length(AOnly), string.Join(LIST_SEP, AOnly)]) + AConvertedNote;
 end;
 
 function CapabilitiesJson: string;
