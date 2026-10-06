@@ -5,6 +5,17 @@
   tools\feature-registry.ps1, tools\build-feature-pages.ps1 and
   tests\autotest\run_feature_registry_guard.ps1 are thin callers of this module.
   Spec: docs\superpowers\specs\2026-10-05-feature-registry-design.md
+
+  Array-return convention (two shapes; do not mix them up at a call site):
+  * UNROLLED -- Get-EntryKeyOrder, Test-FeatureEntry, Test-GroupsAndTeams.
+    The array goes down the pipeline element by element. Callers MUST wrap
+    the call in @(...): an empty result is $null otherwise, and .Count on
+    $null throws under StrictMode.
+  * WRAPPED (return ,@(...)) -- Get-NearestCandidates, Get-EntryList,
+    Sort-OrdinalUnique. The array arrives as ONE object, intact even when
+    empty or single-element. Assign it directly; wrapping it in @(...)
+    yields a one-element array holding the array.
+  Sort-OrdinalUnique is module-internal (not exported).
 #>
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -424,4 +435,4 @@ function Test-GroupsAndTeams {
   return [string[]]$p.ToArray()
 }
 
-Export-ModuleMember -Function Get-RegistryPaths, ConvertTo-OrderedObject, ConvertTo-CanonicalJson, Sort-OrdinalUnique, Get-EntryKeyOrder, ConvertTo-CanonicalEntry, Get-EntryList, Test-AsciiCrlfFile, Read-FeatureEntry, Write-FeatureEntry, Test-EntryCanonicalBytes, Get-RegistryContext, Get-NearestCandidates, Test-FeatureEntry, Test-GroupsAndTeams
+Export-ModuleMember -Function Get-RegistryPaths, ConvertTo-OrderedObject, ConvertTo-CanonicalJson, Get-EntryKeyOrder, ConvertTo-CanonicalEntry, Get-EntryList, Test-AsciiCrlfFile, Read-FeatureEntry, Write-FeatureEntry, Test-EntryCanonicalBytes, Get-RegistryContext, Get-NearestCandidates, Test-FeatureEntry, Test-GroupsAndTeams
