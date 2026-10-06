@@ -38,6 +38,7 @@ uses
   , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
   , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'
+  , ConvRules.InheritanceEngine in '..\ConvRules.InheritanceEngine.pas'
   ;
 
 var
@@ -7475,7 +7476,8 @@ begin
   Check('caps.string.true.is.not.true', not MatchText('lazy_validate', Caps));
   Check('caps.garbage', Length(ParseCapabilityNames('FATAL: no')) = 0);
   Check('caps.no.block', Length(ParseCapabilityNames('{"version":"1"}')) = 0);
-  Check('caps.consts', (CAPABILITY_BOOK_DEPTH = 'book_depth') and (CAPABILITY_PROGRESS_LINES = 'progress_lines'));
+  Check('caps.consts', (CAPABILITY_BOOK_DEPTH = 'book_depth') and (CAPABILITY_PROGRESS_LINES = 'progress_lines')
+    and (CAPABILITY_INHERITED_INSTANCES = 'inherited_instances'));
 end;
 
 { CapabilityNames is bounded by its own InfoTimeoutMs, not ENGINE_TIMEOUT_MS: a
@@ -8713,6 +8715,190 @@ begin
     Format('n=%d %s', [Length(U.Verdicts), U.Error]));
 end;
 
+{ C8: the class lookup reads `sql --json`'s POSITIONAL rows [path, parent] (measured
+  on DMTEST 2026-10-05). One file = found (a forward declaration's second row in the
+  same file is the same class); two files = ambiguous, never guessed. A name that is
+  not a plain identifier never reaches the SQL. A truncated answer is a failure. }
+procedure TestClassLookup;
+const
+  ONE = '{"schema":"sql/1","columns":[{"name":"path"},{"name":"c"}],"rows":[["C:\\DM\\dmCPData.pas","TdmlGlbReadings"]],"row_count":1}'
+    + sLineBreak + '(loaded defaults from C:\Projects\.drag-lint.json)';
+  NONE = '{"schema":"sql/1","rows":[],"row_count":0}';
+  TWO  = '{"rows":[["C:\\a\\U.pas","TForm"],["C:\\b\\U.pas","TForm"]]}';
+  FWD  = '{"rows":[["C:\\a\\U.pas",""],["C:\\a\\U.pas","TForm"]]}';
+  CUT  = '{"rows":[["C:\\a\\U.pas","TForm"]],"row_count":1,"truncated":true}';
+var
+  P, A    : string;
+  LAccepts: Boolean;
+  LRejects: Boolean;
+begin
+  Check('lookup.rows.found', (ParseClassLookupRows(ONE, P, A) = cloFound) and (P = 'C:\DM\dmCPData.pas') and (A = 'TdmlGlbReadings'), P + ' ' + A);  // dl:ok hardcoded-absolute-path@4926 -- REVIEWED 2026-10-05 a path VALUE inside fixture JSON; nothing on disk is touched
+  Check('lookup.rows.absent', (ParseClassLookupRows(NONE, P, A) = cloAbsent) and (P = ''));
+  Check('lookup.rows.ambiguous', (ParseClassLookupRows(TWO, P, A) = cloAmbiguous) and (P = '') and (A = ''));
+  Check('lookup.rows.forward.decl', (ParseClassLookupRows(FWD, P, A) = cloFound) and (A = 'TForm'), A);
+  Check('lookup.rows.garbage', ParseClassLookupRows('FATAL: index locked', P, A) = cloFailed);
+  Check('lookup.rows.truncated.failed', (ParseClassLookupRows(CUT, P, A) = cloFailed) and (P = ''));
+  LAccepts:= IsPlainIdentifier('TdmlCPData') and IsPlainIdentifier('_T1');
+  LRejects:= not (IsPlainIdentifier('') or IsPlainIdentifier('x'' OR 1=1') or IsPlainIdentifier('Unit.TFoo') or IsPlainIdentifier('1T'));
+  Check('lookup.ident', LAccepts and LRejects);
+end;
+
+{ The C8 two-unit fixture: Anc.pas declares TAncForm (Label1: TLabel, object in
+  Anc.dfm); ADescPas declares ADescClass = class(TAncForm) with ADescBody as its
+  class body and ADescImpl after implementation; ADescDfm is its .dfm. }
+procedure WriteC8Fixture(const ADir, ADescPas, ADescClass, ADescBody, ADescImpl, ADescDfm: string);
+var
+  LDescUnit, LDescForm: string;
+begin
+  LDescUnit:= TPath.GetFileNameWithoutExtension(ADescPas);
+  LDescForm:= Copy(ADescClass, 2, MaxInt);
+  TFile.WriteAllText(TPath.Combine(ADir, 'Fix.dpr'), 'program Fix;' + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms,' + sLineBreak +
+    '  Anc in ''Anc.pas'' {AncForm},' + sLineBreak + '  ' + LDescUnit + ' in ''' + LDescUnit + '.pas'' {' + LDescForm + '};' + sLineBreak +
+    'begin' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(ADir, 'Anc.pas'), 'unit Anc;' + sLineBreak + 'interface' + sLineBreak + 'uses' + sLineBreak +
+    '  Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes;' + sLineBreak + 'type' + sLineBreak + '  TAncForm = class(TForm)' + sLineBreak +
+    '    Label1: TLabel;' + sLineBreak + '  end;' + sLineBreak + 'implementation' + sLineBreak + '{$R *.dfm}' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(ADir, 'Anc.dfm'), 'object AncForm: TAncForm' + sLineBreak + '  Caption = ''Anc''' + sLineBreak +
+    '  object Label1: TLabel' + sLineBreak + '    Caption = ''Hello''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+  TFile.WriteAllText(ADescPas, 'unit ' + LDescUnit + ';' + sLineBreak + 'interface' + sLineBreak + 'uses' + sLineBreak + '  System.Classes, Anc;' + sLineBreak +
+    'type' + sLineBreak + '  ' + ADescClass + ' = class(TAncForm)' + sLineBreak + ADescBody + '  end;' + sLineBreak + 'implementation' + sLineBreak +
+    '{$R *.dfm}' + sLineBreak + ADescImpl + 'end.' + sLineBreak, TEncoding.ASCII);
+  TFile.WriteAllText(ChangeFileExt(ADescPas, '.dfm'), ADescDfm, TEncoding.ASCII);
+end;
+
+{ C8 live: a 2-unit fixture indexed by the test engine; LookupClass answers from the
+  real type_ancestors / files tables and AnalyzeUnit (through the editor's own
+  EngineClassLookup binder) + DiskTextReader find the declaring ancestor on disk. A
+  missing --db is a FAILED lookup: the pinned 1.21.1 engine exits 2 ("--db #1 of 1
+  does not exist ... Nothing was answered") and creates no file (measured 2026-10-05). }
+procedure TestClassLookupLive;
+var
+  Exe, Dir, Db, DescPas, Output, P, A, E: string;
+  Eng: TEngineAdapter;
+  U  : TUnitInheritance;
+  Pr : TTypePair;
+begin
+  Exe:= ResolveExe;
+  if Exe = '' then
+  begin
+    Skip('lookup.live', 'no test engine: ' + GEngineWhy);
+    Exit;
+  end;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c8lookup-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    DescPas:= TPath.Combine(Dir, 'Desc.pas');
+    Db     := TPath.Combine(Dir, 'Fix.sqlite');
+    WriteC8Fixture(Dir, DescPas, 'TDescForm', '', '',
+      'inherited DescForm: TDescForm' + sLineBreak + '  inherited Label1: TLabel' + sLineBreak + '    Caption = ''Desc''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak);
+    Eng:= TEngineAdapter.Create(Exe, [Db]);
+    try
+      Check('lookup.live.index', Eng.IndexProject(TPath.Combine(Dir, 'Fix.dpr'), Db, Output) = 0, Output);
+      Check('lookup.live.found', (Eng.LookupClass(Db, 'TDescForm', P, A, E) = cloFound) and SameText(P, DescPas) and (A = 'TAncForm'), P + ' ' + A + ' ' + E);
+      Check('lookup.live.nocase', (Eng.LookupClass(Db, 'tancform', P, A, E) = cloFound) and SameText(P, TPath.Combine(Dir, 'Anc.pas')) and (A = 'TForm'),
+        P + ' ' + A + ' ' + E);
+      Check('lookup.live.library.absent', Eng.LookupClass(Db, 'TForm', P, A, E) = cloAbsent, E);
+      Check('lookup.live.injection.absent', Eng.LookupClass(Db, 'x'' OR ''1''=''1', P, A, E) = cloAbsent);
+      Check('lookup.live.bad.db.failed', (Eng.LookupClass(TPath.Combine(Dir, 'none.sqlite'), 'TDescForm', P, A, E) = cloFailed) and (E <> '')
+        and not TFile.Exists(TPath.Combine(Dir, 'none.sqlite')), E);
+      Pr.FromType:= 'TLabel';
+      Pr.ToType  := 'TStaticText';
+      U:= AnalyzeUnit(DescPas, [Pr], EngineClassLookup(Eng, Db, [Pr]), DiskTextReader());
+      Check('lookup.live.analysis', U.Known and (Length(U.Verdicts) = 1) and (U.Verdicts[0].State = asUnconverted) and (U.Verdicts[0].DeclaringUnit = 'Anc'),
+        Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
+      U:= AnalyzeUnit(DescPas, [Pr], EngineClassLookup(Eng, TPath.Combine(Dir, 'none.sqlite'), [Pr]), DiskTextReader());
+      Check('lookup.live.analysis.bad.db.unknown', not U.Known and (U.Error <> ''), U.Error);
+    finally
+      Eng.Free;
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ C8 E2b engine reads: positional rows [name, type] and [name, receiver, line]. }
+procedure TestCodeRefs;
+const
+  FIELDS_JSON = '{"rows":[["tblFtrs","TTable"],["qryX","TQuery"]]}' + sLineBreak + '(loaded defaults from C:\x.json)';
+  REFS_JSON   = '{"rows":[["Post","tblFtrs",3371],["tblOps",null,3380],["Open","Self.qryX",3390]]}';
+  LINE_FIRST = 3371;
+  REF_ROWS   = 3;
+var
+  Fields : TArray<TEngineField>;
+  Refs   : TArray<TEngineCodeRef>;
+  LParsed: Boolean;
+begin
+  Check('fields.rows', ParseFieldRows(FIELDS_JSON, Fields) and (Length(Fields) = 2) and (Fields[0].Name = 'tblFtrs') and (Fields[1].TypeName = 'TQuery'));
+  Check('fields.rows.garbage', not ParseFieldRows('FATAL', Fields) and (Length(Fields) = 0));
+  LParsed:= ParseCodeRefRows(REFS_JSON, Refs) and (Length(Refs) = REF_ROWS);
+  Check('refs.rows', LParsed and (Refs[0].Receiver = 'tblFtrs') and (Refs[0].Line = LINE_FIRST) and (Refs[1].Name = 'tblOps') and (Refs[1].Receiver = ''));
+  Check('refs.rows.garbage', not ParseCodeRefRows('', Refs));
+  Check('sql.quote', SqlQuoted('C:\a''b\U.pas') = '''C:\a''''b\U.pas''');  // dl:ok hardcoded-absolute-path@336f -- REVIEWED 2026-10-05 quoting test text; nothing on disk is touched
+end;
+
+{ The identifiers a ListCodeRefs answer stands for (CodeUseName per row). }
+function CodeNames(const ARefs: TArray<TEngineCodeRef>): TArray<string>;
+begin
+  Result:= nil;
+  for var LRef: TEngineCodeRef in ARefs do
+    Result:= Result + [CodeUseName(LRef.Name, LRef.Receiver)];
+end;
+
+{ C8 E2b live: a descendant whose .dfm has NO block for Label1 but whose FormCreate
+  writes Label1.Caption, and has a LOCAL Label2. The index must answer the field (on
+  TAncForm) and the use (in TDesc2Form's method), never the local, and AnalyzeUnit
+  must report the use as an inherited code use. }
+procedure TestCodeRefsLive;
+var
+  Exe, Dir, Db, DescPas, Output, Err: string;
+  Eng   : TEngineAdapter;
+  Fields: TArray<TEngineField>;
+  Refs  : TArray<TEngineCodeRef>;  // dl:ok duplicate-code@e1ac -- REVIEWED 2026-10-05 the live-test skeleton (engine skip, private temp dir, fixture, adapter, try/finally) is repeated on purpose so each live test reads on its own; the shared fixture text is already WriteC8Fixture
+  U     : TUnitInheritance;
+  Pr    : TTypePair;
+  LUsed : Boolean;
+begin
+  Exe:= ResolveExe;
+  if Exe = '' then
+  begin
+    Skip('coderefs.live', 'no test engine: ' + GEngineWhy);
+    Exit;
+  end;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c8code-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    DescPas:= TPath.Combine(Dir, 'Desc2.pas');
+    Db     := TPath.Combine(Dir, 'Fix.sqlite');
+    WriteC8Fixture(Dir, DescPas, 'TDesc2Form', '    procedure FormCreate(Sender: TObject);' + sLineBreak,
+      'procedure TDesc2Form.FormCreate(Sender: TObject);' + sLineBreak + 'var' + sLineBreak + '  Label2: Integer;' + sLineBreak +
+      'begin' + sLineBreak + '  Label1.Caption:= ''Two'';' + sLineBreak + '  Label2:= 0;' + sLineBreak + '  Tag:= Label2;' + sLineBreak + 'end;' + sLineBreak,
+      'inherited Desc2Form: TDesc2Form' + sLineBreak + '  OnCreate = FormCreate' + sLineBreak + 'end' + sLineBreak);
+    Eng:= TEngineAdapter.Create(Exe, [Db]);
+    try
+      Check('coderefs.live.index', Eng.IndexProject(TPath.Combine(Dir, 'Fix.dpr'), Db, Output) = 0, Output);
+      Check('coderefs.live.fields', Eng.ListClassFields(Db, 'TAncForm', ['TLabel'], Fields, Err) and (Length(Fields) = 1) and (Fields[0].Name = 'Label1'), Err);
+      Check('coderefs.live.fields.filtered', Eng.ListClassFields(Db, 'TAncForm', ['TTable'], Fields, Err) and (Length(Fields) = 0), Err);
+      LUsed:= False;
+      if Eng.ListCodeRefs(Db, DescPas, 'TDesc2Form', Refs, Err) then
+        for var LRef: TEngineCodeRef in Refs do
+          if SameText(CodeUseName(LRef.Name, LRef.Receiver), 'Label1') then
+            LUsed:= True;
+      Check('coderefs.live.use.found', LUsed, Format('%d refs %s', [Length(Refs), Err]));
+      Check('coderefs.live.local.ignored', (Length(Refs) > 0) and not MatchText('Label2', CodeNames(Refs)), string.Join(',', CodeNames(Refs)));
+      Check('coderefs.live.bad.db.failed', not Eng.ListCodeRefs(TPath.Combine(Dir, 'none.sqlite'), DescPas, 'TDesc2Form', Refs, Err) and (Err <> ''), Err);
+      Pr.FromType:= 'TLabel';
+      Pr.ToType  := 'TStaticText';
+      U:= AnalyzeUnit(DescPas, [Pr], EngineClassLookup(Eng, Db, [Pr]), DiskTextReader(), EngineCodeUses(Eng, Db));
+      Check('coderefs.live.analysis', U.Known and (Length(U.Verdicts) = 1) and U.Verdicts[0].Instance.FromCode and (U.Verdicts[0].DeclaringUnit = 'Anc'),
+        Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
+    finally
+      Eng.Free;
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
 { C8 E5-E9 decisions, on hand-built verdicts (the walk itself is TestInheritanceWalk):
   the row note's exact text, the topmost-first chain, the offer, the insertion
   (dedupe, directly before the descendant), the ordering warning (never a block) and
@@ -9199,6 +9385,10 @@ begin
     TestInheritanceDecisions;
     TestInheritanceWalkEdges;
     TestInheritanceCodeUses;
+    TestClassLookup;
+    TestClassLookupLive;
+    TestCodeRefs;
+    TestCodeRefsLive;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;

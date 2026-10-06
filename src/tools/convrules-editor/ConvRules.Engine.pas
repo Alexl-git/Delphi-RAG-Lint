@@ -66,6 +66,11 @@ const
   /// <summary>info --json capability: --progress-interval and the stderr progress
   /// lines (engine 1.20.6). An engine WITHOUT it exits 3 on the flag.</summary>
   CAPABILITY_PROGRESS_LINES = 'progress_lines';
+  /// <summary>info --json capability: convert-apply converts a unit's own part when it
+  /// holds inherited / inline instances, reports them in apply/1 inherited[], and
+  /// retypes them once the declaring ancestor is converted (C8, engine N1-N5). Without
+  /// it the engine refuses such a unit.</summary>
+  CAPABILITY_INHERITED_INSTANCES = 'inherited_instances';
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`
@@ -256,6 +261,30 @@ function ParseQueryLocation(const AJson, AWantedName: string; out AFile: string;
 function ParseEnumMembers(const ADeclText: string; out AMembers: TArray<string>): Boolean;
 
 type
+  /// <summary>TEngineAdapter.LookupClass's answer.</summary>
+  /// <remarks>cloAmbiguous: two or more files declare the name -- never guessed.
+  /// cloFailed: the engine could not answer (non-zero exit -- a missing, locked or
+  /// stale-schema index -- unparseable or truncated output); unknown, never absent.</remarks>
+  TClassLookupOutcome = (cloFound, cloAbsent, cloAmbiguous, cloFailed);
+
+  /// <summary>One field row from TEngineAdapter.ListClassFields.</summary>
+  TEngineField = record
+    /// <summary>symbols.name.</summary>
+    Name    : string;
+    /// <summary>symbols.signature -- the declared type as written.</summary>
+    TypeName: string;
+  end;
+
+  /// <summary>One refs row from TEngineAdapter.ListCodeRefs.</summary>
+  TEngineCodeRef = record
+    /// <summary>refs.name_text.</summary>
+    Name    : string;
+    /// <summary>refs.receiver_text; '' for an implicit-Self use.</summary>
+    Receiver: string;
+    /// <summary>refs.start_line (1-based .pas line).</summary>
+    Line    : Integer;
+  end;
+
   /// <summary>Adapter over a drag-lint executable + a set of index DBs.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -468,9 +497,18 @@ type
       /// <param name="AError">Receives the failure text; '' on success.</param>
       /// <returns>False when the engine could not answer from ADb.</returns>
       function AddUnitsOfDb(const ADb: string; ASeen: TStringList; out AError: string): Boolean;
+      /// <summary>Runs ASql against ADb alone: one read-only `sql --json` call with a
+      /// row cap of SQL_ROW_CAP (the verb's default cap is 200) and an engine-side
+      /// timeout of SQL_TIMEOUT_MS. The one runner every `sql` read here goes through;
+      /// the answer is read with ParseSqlRows (positional rows).</summary>
+      /// <param name="ADb">One index path.</param>
+      /// <param name="ASql">A SELECT; no double quote (it is passed inside one).</param>
+      /// <param name="AOutput">Receives the raw output (JSON plus any note lines).</param>
+      /// <returns>The engine's exit code: 0 answered; 2 refused (missing --db, stale
+      /// schema -- "Nothing was answered"); 3 FATAL or the watchdog.</returns>
+      function RunSqlJson(const ADb, ASql: string; out AOutput: string): Integer;
       /// <summary>Adds the FIRST column of every row ASql returns from ADb to
-      /// ASeen, via one read-only `sql --json` call with a row cap of 1,000,000
-      /// (the verb's default cap is 200).</summary>
+      /// ASeen, via RunSqlJson.</summary>
       /// <param name="ADb">One index path.</param>
       /// <param name="ASql">A one-column SELECT.</param>
       /// <param name="AWhat">Names the listing in AError ('unit listing').</param>
@@ -725,6 +763,49 @@ type
       /// tab's pre-flight and row flags match these paths, not unit names
       /// (ConvRules.ConvertRun.UnitInIndex).</remarks>
       function ListIndexedFiles(const ADbs: TArray<string>; out APaths: TArray<string>; out AError: string): Boolean;
+
+      /// <summary>The unit that declares class AClassName in ADb, and the class's first
+      /// ancestor -- one read-only `sql` over symbols (kind class), files and
+      /// type_ancestors (ordinal 0), the class name matched COLLATE NOCASE.</summary>
+      /// <param name="ADb">The PROJECT index (the authority for project classes).</param>
+      /// <param name="AClassName">A bare class name from a .dfm.</param>
+      /// <param name="APasPath">Receives the declaring unit's path as indexed; '' unless cloFound.</param>
+      /// <param name="AParentClass">Receives the first ancestor's name as written; '' when none.</param>
+      /// <param name="AError">Receives the failure text; '' unless cloFailed.</param>
+      /// <returns>See TClassLookupOutcome. A name that is not a plain identifier is
+      /// cloAbsent without an engine call (it came from .dfm text). A missing,
+      /// locked or stale-schema ADb is cloFailed (engine exit 2 / 3), never cloAbsent.</returns>
+      function LookupClass(const ADb, AClassName: string; out APasPath, AParentClass, AError: string): TClassLookupOutcome;
+      /// <summary>The fields class AClassName ITSELF declares whose type is one of
+      /// AFromTypes (symbols kind field, parent_id = the class row, signature compared
+      /// COLLATE NOCASE) -- one read-only `sql`.</summary>
+      /// <param name="ADb">The PROJECT index.</param>
+      /// <param name="AClassName">A plain-identifier class name.</param>
+      /// <param name="AFromTypes">Bare From types; only plain identifiers are used.</param>
+      /// <param name="AFields">Receives the fields; [] on failure.</param>
+      /// <param name="AError">Receives the failure text; '' on success.</param>
+      /// <returns>False when the engine could not answer. True with [] and no engine
+      /// call when AClassName is not a plain identifier or no From type is.</returns>
+      /// <remarks>A field declared with a unit-qualified type ('DBTables.TTable') is
+      /// not matched: signature is compared whole.</remarks>
+      function ListClassFields(const ADb, AClassName: string; const AFromTypes: TArray<string>; out AFields: TArray<TEngineField>; out AError: string): Boolean;
+      /// <summary>The identifiers used inside AClassName's methods in AUnitPas: refs of
+      /// kind read / write / member-access / call whose enclosing routine's qualified
+      /// name contains '.AClassName.', and whose symbol is unresolved or a FIELD -- a
+      /// resolved local or parameter is not a field use, and neither is an unresolved
+      /// ref whose name (implicit-Self) or receiver is a local / parameter of the
+      /// enclosing routine -- one read-only `sql`.</summary>
+      /// <param name="ADb">The PROJECT index.</param>
+      /// <param name="AUnitPas">The unit's path as indexed (compared COLLATE NOCASE).</param>
+      /// <param name="AClassName">The unit's form / data-module class.</param>
+      /// <param name="ARefs">Receives [name, receiver, line] rows; [] on failure.</param>
+      /// <param name="AError">Receives the failure text; '' on success.</param>
+      /// <returns>False when the engine could not answer. True with [] and no engine
+      /// call when AClassName is not a plain identifier.</returns>
+      /// <remarks>Implicit-Self uses inside the class's own methods are UNRESOLVED in
+      /// the index (symbol_id NULL), so the filter is by enclosing class and name, not
+      /// by member_accesses (measured on DMTEST 2026-10-05).</remarks>
+      function ListCodeRefs(const ADb, AUnitPas, AClassName: string; out ARefs: TArray<TEngineCodeRef>; out AError: string): Boolean;
 
       /// <summary>The distinct component TYPES placed on AUnit's form, read from the
       /// unit's companion .dfm (`object &lt;Name&gt;: &lt;TType&gt;` lines) -- the
@@ -1056,6 +1137,39 @@ function DepthArgs(ADepth: Integer; AProgress: Boolean): string;
 /// the last '}' (the "(loaded defaults ...)" line) is ignored.</param>
 /// <returns>The keys, in document order; [] when unparseable or no capabilities object.</returns>
 function ParseCapabilityNames(const AInfoOutput: string): TArray<string>;
+
+/// <summary>PURE: True for [A-Za-z_][A-Za-z0-9_]* -- the only class and type names
+/// LookupClass / ListClassFields / ListCodeRefs put into SQL.</summary>
+/// <param name="AName">Candidate class name.</param>
+/// <returns>False for '', dotted, quoted or otherwise decorated text.</returns>
+function IsPlainIdentifier(const AName: string): Boolean;
+
+/// <summary>PURE: reads LookupClass's `sql --json` output (rows [path, parent]).</summary>
+/// <param name="ASqlJson">Raw output; text around the JSON object is ignored.</param>
+/// <param name="APasPath">Receives the single declaring file; '' unless cloFound.</param>
+/// <param name="AParentClass">Receives the first non-empty parent among that file's
+/// rows; '' unless cloFound.</param>
+/// <returns>cloFound, cloAbsent (no row), cloAmbiguous (rows from two files) or
+/// cloFailed (unparseable, or "truncated": true).</returns>
+function ParseClassLookupRows(const ASqlJson: string; out APasPath, AParentClass: string): TClassLookupOutcome;
+
+/// <summary>PURE: AText as a single-quoted SQL literal (embedded quotes doubled).</summary>
+/// <param name="AText">Any text (a path).</param>
+/// <returns>'...' ready to splice into a query.</returns>
+function SqlQuoted(const AText: string): string;
+
+/// <summary>PURE: ListClassFields' positional rows [name, type].</summary>
+/// <param name="ASqlJson">Raw `sql --json` output.</param>
+/// <param name="AFields">Receives the rows; [] when unparseable.</param>
+/// <returns>False when unparseable or truncated.</returns>
+function ParseFieldRows(const ASqlJson: string; out AFields: TArray<TEngineField>): Boolean;
+
+/// <summary>PURE: ListCodeRefs' positional rows [name, receiver, line]; a JSON null
+/// reads as ''.</summary>
+/// <param name="ASqlJson">Raw `sql --json` output.</param>
+/// <param name="ARefs">Receives the rows; [] when unparseable.</param>
+/// <returns>False when unparseable or truncated.</returns>
+function ParseCodeRefRows(const ASqlJson: string; out ARefs: TArray<TEngineCodeRef>): Boolean;
 
 /// <summary>PURE: the distinct class names in a `drag-lint outline --format json`
 /// payload, in document order.</summary>
@@ -1742,36 +1856,73 @@ begin
   Result:= AddSqlColumnOfDb(ADb, UNIT_SQL, 'unit listing', ASeen, AError);
 end; // function
 
-function TEngineAdapter.AddSqlColumnOfDb(const ADb, ASql, AWhat: string; ASeen: TStringList; out AError: string): Boolean;
 const
-  ROW_CAP    = 1000000;
-  TIMEOUT_MS = 120000 ;
+  // Row cap of every `sql` read (the verb's default is 200).
+  SQL_ROW_CAP = 1000000;
+  // The engine-side query timeout of every `sql` read, in milliseconds.
+  SQL_TIMEOUT_MS = 120000;
+  // How much of a failed call's output an error text quotes.
+  SQL_ERROR_HEAD_CHARS = 400;
+
+{ `sql --json`'s rows, POSITIONAL arrays one per row ([["Ap"], ["uMain"], ...]),
+  as strings; a JSON null reads as ''. False for unparseable output and for an
+  answer the engine marked "truncated" (an incomplete answer is not an answer). }
+function ParseSqlRows(const ASqlJson: string; out ARows: TArray<TArray<string>>): Boolean;
 var
-  Output: string    ;
-  Code  : Integer   ;
-  Root  : TJSONValue;
-  Rows  : TJSONArray;
-  Row   : TJSONValue;
+  LRoot     : TJSONValue;
+  LRows     : TJSONArray;
+  LTruncated: Boolean;
+  LCells    : TArray<string>;
+begin
+  ARows:= nil;
+  LRoot:= TJSONObject.ParseJSONValue(SliceJsonObject(ASqlJson));
+  try
+    Result:= (LRoot is TJSONObject) and TJSONObject(LRoot).TryGetValue<TJSONArray>('rows', LRows)
+      and not (TJSONObject(LRoot).TryGetValue<Boolean>('truncated', LTruncated) and LTruncated);
+    if not Result then
+      Exit;
+    for var LRow: TJSONValue in LRows do
+      if LRow is TJSONArray then
+      begin
+        LCells:= nil;
+        for var LCell: TJSONValue in TJSONArray(LRow) do
+          LCells:= LCells + [if LCell is TJSONNull then '' else LCell.Value];
+        ARows:= ARows + [LCells];
+      end;
+  finally
+    LRoot.Free;
+  end; // try
+end;
+
+{ The failure text of one `sql` read: what, which DB, the exit code and the head of
+  the engine's output. }
+function SqlFailureText(const AWhat, ADb: string; ACode: Integer; const AOutput: string): string;
+begin
+  Result:= Format('%s failed for %s (exit %d): %s', [AWhat, ADb, ACode, Copy(Trim(AOutput), 1, SQL_ERROR_HEAD_CHARS)]);
+end;
+
+function TEngineAdapter.RunSqlJson(const ADb, ASql: string; out AOutput: string): Integer;
+begin
+  Result:= RunCapture(Format('sql --query "%s" --db "%s" --json --limit %d --timeout-ms %d', [ASql, ADb, SQL_ROW_CAP, SQL_TIMEOUT_MS]), AOutput);
+end;
+
+function TEngineAdapter.AddSqlColumnOfDb(const ADb, ASql, AWhat: string; ASeen: TStringList; out AError: string): Boolean;
+var
+  LOutput: string;
+  LCode  : Integer;
+  LRows  : TArray<TArray<string>>;
 begin
   AError:= '';
-  Code:= RunCapture(Format('sql --query "%s" --db "%s" --json --limit %d --timeout-ms %d', [ASql, ADb, ROW_CAP, TIMEOUT_MS]), Output);
-  Root:= nil;
-  if Code = 0 then
-    Root:= TJSONObject.ParseJSONValue(SliceJsonObject(Output));
-  try
-    if not (Root is TJSONObject) or not TJSONObject(Root).TryGetValue<TJSONArray>('rows', Rows) then
-    begin
-      AError:= Format('%s failed for %s (exit %d): %s', [AWhat, ADb, Code, Trim(Output)]);
-      Exit(False);
-    end;
-    // `sql --json` rows are POSITIONAL arrays, one per row: [["Ap"], ["uMain"], ...].
-    for Row in Rows do
-      if (Row is TJSONArray) and (TJSONArray(Row).Count > 0) then
-        ASeen.Add(TJSONArray(Row).Items[0].Value);
-    Result:= True;
-  finally
-    Root.Free;
-  end; // try
+  LCode := RunSqlJson(ADb, ASql, LOutput);
+  Result:= (LCode = 0) and ParseSqlRows(LOutput, LRows);
+  if not Result then
+  begin
+    AError:= SqlFailureText(AWhat, ADb, LCode, LOutput);
+    Exit;
+  end;
+  for var LRow: TArray<string> in LRows do
+    if Length(LRow) > 0 then
+      ASeen.Add(LRow[0]);
 end; // function
 
 function TEngineAdapter.ListUnits(const ADbs: TArray<string>; out ANames: TArray<string>; out AError: string): Boolean;
@@ -1818,6 +1969,154 @@ begin
     Seen.Free;
   end; // try
 end; // function
+
+const
+  // C8 reads (measured on DMTEST 2026-10-05, see the C8 plan's "Measured index
+  // shape"). Only IsPlainIdentifier names and SqlQuoted paths are spliced in.
+  CLASS_LOOKUP_SQL = 'SELECT f.path, COALESCE(a.ancestor_name, '''') FROM symbols s JOIN files f ON f.id = s.file_id '
+    + 'LEFT JOIN type_ancestors a ON a.symbol_id = s.id AND a.ordinal = 0 '
+    + 'WHERE s.kind = ''class'' AND s.name = ''%s'' COLLATE NOCASE';
+  FIELDS_SQL = 'SELECT fs.name, fs.signature FROM symbols c JOIN symbols fs ON fs.parent_id = c.id '
+    + 'WHERE c.kind = ''class'' AND c.name = ''%s'' COLLATE NOCASE AND fs.kind = ''field'' AND fs.signature COLLATE NOCASE IN (%s)';
+  CODE_REFS_SQL = 'SELECT r.name_text, COALESCE(r.receiver_text, ''''), r.start_line FROM refs r JOIN files f ON f.id = r.file_id '
+    + 'JOIN symbols es ON es.id = r.enclosing_symbol_id LEFT JOIN symbols rs ON rs.id = r.symbol_id '
+    + 'WHERE f.path = %s COLLATE NOCASE AND es.qualified_name LIKE ''%%.%s.%%'' '
+    + 'AND r.kind IN (''read'', ''write'', ''member-access'', ''call'') AND (r.symbol_id IS NULL OR rs.kind = ''field'') '
+    // The index leaves SOME uses of a local unresolved (1.21.1: `Tag:= Label2` reads a
+    // local Label2 with symbol_id NULL while `Label2:= 0` resolves), so a name the
+    // enclosing routine declares as a local or parameter is dropped by name too.
+    + 'AND NOT EXISTS (SELECT 1 FROM symbols l WHERE l.parent_id = r.enclosing_symbol_id AND l.kind IN (''local_var'', ''param'') '
+    + 'AND ((COALESCE(r.receiver_text, '''') = '''' AND l.name = r.name_text COLLATE NOCASE) OR l.name = r.receiver_text COLLATE NOCASE))';
+  // Column positions in the C8 reads' positional rows.
+  COL_FIRST  = 0;
+  COL_SECOND = 1;
+  COL_THIRD  = 2;
+
+function IsPlainIdentifier(const AName: string): Boolean;
+begin
+  Result:= (AName <> '') and CharInSet(AName[1], ['A'..'Z', 'a'..'z', '_']);
+  for var I: Integer:= 2 to Length(AName) do
+    if Result and not CharInSet(AName[I], ['A'..'Z', 'a'..'z', '0'..'9', '_']) then
+      Result:= False;
+end;
+
+function ParseClassLookupRows(const ASqlJson: string; out APasPath, AParentClass: string): TClassLookupOutcome;
+var
+  LRows: TArray<TArray<string>>;
+begin
+  APasPath    := '';
+  AParentClass:= '';
+  if not ParseSqlRows(ASqlJson, LRows) then
+    Exit(cloFailed);
+  Result:= cloAbsent;
+  for var LRow: TArray<string> in LRows do
+  begin
+    if Length(LRow) <= COL_SECOND then
+      Continue;
+    if Result = cloAbsent then
+    begin
+      APasPath:= LRow[COL_FIRST];
+      Result  := cloFound;
+    end
+    else if not SameText(LRow[COL_FIRST], APasPath) then
+    begin
+      APasPath    := '';
+      AParentClass:= '';
+      Exit(cloAmbiguous);
+    end;
+    if AParentClass = '' then
+      AParentClass:= LRow[COL_SECOND];
+  end;
+end;
+
+function SqlQuoted(const AText: string): string;
+begin
+  Result:= '''' + StringReplace(AText, '''', '''''', [rfReplaceAll]) + '''';
+end;
+
+function ParseFieldRows(const ASqlJson: string; out AFields: TArray<TEngineField>): Boolean;
+var
+  LRows : TArray<TArray<string>>;
+  LField: TEngineField;
+begin
+  AFields:= nil;
+  Result := ParseSqlRows(ASqlJson, LRows);
+  for var LRow: TArray<string> in LRows do
+    if Length(LRow) > COL_SECOND then
+    begin
+      LField.Name    := LRow[COL_FIRST];
+      LField.TypeName:= LRow[COL_SECOND];
+      AFields        := AFields + [LField];
+    end;
+end;
+
+function ParseCodeRefRows(const ASqlJson: string; out ARefs: TArray<TEngineCodeRef>): Boolean;
+var
+  LRows: TArray<TArray<string>>;
+  LRef : TEngineCodeRef;
+begin
+  ARefs := nil;
+  Result:= ParseSqlRows(ASqlJson, LRows);
+  for var LRow: TArray<string> in LRows do
+    if Length(LRow) > COL_THIRD then
+    begin
+      LRef.Name    := LRow[COL_FIRST];
+      LRef.Receiver:= LRow[COL_SECOND];
+      LRef.Line    := StrToIntDef(LRow[COL_THIRD], 0);
+      ARefs        := ARefs + [LRef];
+    end;
+end;
+
+function TEngineAdapter.LookupClass(const ADb, AClassName: string; out APasPath, AParentClass, AError: string): TClassLookupOutcome;
+var
+  LOutput: string;
+  LCode  : Integer;
+begin
+  APasPath    := '';
+  AParentClass:= '';
+  AError      := '';
+  if not IsPlainIdentifier(AClassName) then
+    Exit(cloAbsent);
+  LCode := RunSqlJson(ADb, Format(CLASS_LOOKUP_SQL, [AClassName]), LOutput);
+  Result:= if LCode = 0 then ParseClassLookupRows(LOutput, APasPath, AParentClass) else cloFailed;
+  if Result = cloFailed then
+    AError:= SqlFailureText('class lookup of ' + AClassName, ADb, LCode, LOutput);
+end;
+
+function TEngineAdapter.ListClassFields(const ADb, AClassName: string; const AFromTypes: TArray<string>; out AFields: TArray<TEngineField>; out AError: string): Boolean;
+var
+  LTypes : TArray<string>;
+  LOutput: string;
+  LCode  : Integer;
+begin
+  AFields:= nil;
+  AError := '';
+  LTypes := nil;
+  for var LType: string in AFromTypes do
+    if IsPlainIdentifier(LType) then
+      LTypes:= LTypes + [SqlQuoted(LType)];
+  if not IsPlainIdentifier(AClassName) or (Length(LTypes) = 0) then
+    Exit(True);
+  LCode := RunSqlJson(ADb, Format(FIELDS_SQL, [AClassName, string.Join(', ', LTypes)]), LOutput);
+  Result:= (LCode = 0) and ParseFieldRows(LOutput, AFields);
+  if not Result then
+    AError:= SqlFailureText('field listing of ' + AClassName, ADb, LCode, LOutput);
+end;
+
+function TEngineAdapter.ListCodeRefs(const ADb, AUnitPas, AClassName: string; out ARefs: TArray<TEngineCodeRef>; out AError: string): Boolean;
+var
+  LOutput: string;
+  LCode  : Integer;
+begin
+  ARefs := nil;
+  AError:= '';
+  if not IsPlainIdentifier(AClassName) then
+    Exit(True);
+  LCode := RunSqlJson(ADb, Format(CODE_REFS_SQL, [SqlQuoted(AUnitPas), AClassName]), LOutput);
+  Result:= (LCode = 0) and ParseCodeRefRows(LOutput, ARefs);
+  if not Result then
+    AError:= SqlFailureText('code-ref listing of ' + AClassName, ADb, LCode, LOutput);
+end;
 
 function TEngineAdapter.ResolveUnitFile(const AUnit: string): string;
 var
