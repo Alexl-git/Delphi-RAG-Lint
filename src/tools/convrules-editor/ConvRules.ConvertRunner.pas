@@ -86,6 +86,10 @@ type
     /// project file (ProjectFileForDb), never the Unit Rules Destination: an
     /// `index --project` of another project would re-scope this DB.</summary>
     ProjectFile: string;
+    /// <summary>The engine reports inherited_instances (C8): a converted row's note then
+    /// lists the inherited instances it left (apply/1 inherited[]). False = today's
+    /// handling (the engine refuses such a unit).</summary>
+    InheritedSupported: Boolean;
   end;
 
   /// <summary>Called once per row (worker thread!). A unit's rows arrive
@@ -128,6 +132,7 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// successful apply.</param>
 /// <param name="AProgress">May be nil.</param>
 /// <param name="ACancelled">May be nil; polled exactly once just before each unit; True stops the run there.</param>
+/// <param name="AInheritedSupported">See TConvertJob.InheritedSupported.</param>
 /// <returns>One row per unit x book attempted (a missing, not-reindexed or
 /// un-backed-up unit: one csUnitSkipped row); a unit whose books were all found
 /// invalid on earlier units gets no row, no reindex and no backup.</returns>
@@ -141,7 +146,7 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// on a unit nothing has changed yet, which restores nothing and drops the backup. Never
 /// raises: file I/O failures and exceptions from AApply / AIndex become row
 /// outcomes (see TConvertStatus).</remarks>
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>; overload;
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False): TArray<TConvertRow>; overload;
 
 /// <summary>Display text for a status.</summary>
 /// <param name="AStatus">The status.</param>
@@ -203,10 +208,10 @@ begin
     begin
       Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
     end,
-    AProgress, ACancelled);
+    AProgress, ACancelled, LJob.InheritedSupported);
 end;
 
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>;
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean): TArray<TConvertRow>;
 var
   Rows    : TArray<TConvertRow>;
   UnitRows: TArray<TConvertRow>; // the current unit's rows, emitted when it finishes
@@ -423,6 +428,10 @@ var
     Changed   := True;
     Row.Status:= csConverted;
     Row.Note  := Format('%d edit(s), %d remaining for manual work', [Row.Apply.EditsCount, Length(Row.Apply.Remainder)]);
+    // E10: only an engine with inherited_instances sends inherited[]; the gate keeps an
+    // older engine's output from being read as this contract.
+    if AInheritedSupported and (Length(Row.Apply.InheritedLeft) > 0) then
+      Row.Note:= Row.Note + '; ' + InheritedLeftNote(Row.Apply.InheritedLeft);
     Add;
   end;
 

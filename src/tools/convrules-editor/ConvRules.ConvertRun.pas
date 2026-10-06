@@ -30,6 +30,23 @@ type
     Kind   : TBookKind;
   end;
 
+  /// <summary>One inherited / inline instance convert-apply left unconverted (apply/1
+  /// `inherited[]`, engine C8 N1; key names follow the engine's merge notice).</summary>
+  TInheritedLeft = record
+    /// <summary>`name` -- the instance.</summary>
+    Name         : string;
+    /// <summary>`type` -- its class.</summary>
+    TypeName     : string;
+    /// <summary>`line` -- its .dfm line; 0 when absent or not an integer.</summary>
+    Line         : Integer;
+    /// <summary>`ancestor_unit` -- the declaring ancestor's unit.</summary>
+    AncestorUnit : string;
+    /// <summary>`ancestor_state` -- unconverted / converted / outside.</summary>
+    AncestorState: string;
+    /// <summary>`reason` -- the engine's words.</summary>
+    Reason       : string;
+  end;
+
   /// <summary>One convert-apply run, read from its apply/1 JSON.</summary>
   TApplyRow = record
     /// <summary>The engine's own ok flag; False also for unparseable output.</summary>
@@ -54,6 +71,10 @@ type
     Converted : TArray<string>;
     /// <summary>todos[] + reemit_notes[] + warnings[] -- the manual remainder.</summary>
     Remainder : TArray<string>;
+    /// <summary>inherited[] -- the instances left unconverted; empty for an engine
+    /// without inherited_instances (it refuses such a unit instead). A non-object
+    /// entry is skipped; a missing or wrongly-typed field reads as '' / 0.</summary>
+    InheritedLeft: TArray<TInheritedLeft>;
   end;
 
   /// <summary>The verdict before any file is touched.</summary>
@@ -146,6 +167,18 @@ function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles
 /// '{' and after the last '}' (the "(loaded defaults ...)" line) is ignored.</param>
 /// <returns>See TApplyRow; never raises.</returns>
 function ParseApplyJson(const AJson: string): TApplyRow;
+
+/// <summary>PURE: the converted row's note for what was left (spec E10).</summary>
+/// <param name="AItems">TApplyRow.InheritedLeft.</param>
+/// <returns>'' for none; else per (ancestor, state) in first-seen order 'N inherited
+/// instance(s) left: ancestor &lt;U&gt; not converted' ('not in the index' for outside,
+/// the raw state otherwise), joined '; '.</returns>
+function InheritedLeftNote(const AItems: TArray<TInheritedLeft>): string;
+
+/// <summary>PURE: one run-report note for one left instance.</summary>
+/// <param name="AItem">The instance.</param>
+/// <returns>'&lt;name&gt;: &lt;type&gt; line N -- ancestor &lt;U&gt; &lt;state&gt; (&lt;reason&gt;)'.</returns>
+function InheritedReportNote(const AItem: TInheritedLeft): string;  // dl:ok unused-public-symbol@7df1 -- REVIEWED 2026-10-05 the Convert tab's run report consumes it in C8 Task 6; until then only the model tests (apply.inherited.report) call it
 
 implementation
 
@@ -395,6 +428,42 @@ function ParseApplyJson(const AJson: string): TApplyRow;
         Result:= Result + [LVal.Value];
   end;
 
+  // A JSON string member's text; '' when absent or of another JSON type
+  // (TJSONNumber descends from TJSONString, so it is excluded by name).
+  function Str(AObj: TJSONObject; const AKey: string): string;
+  var
+    LVal: TJSONValue;
+  begin
+    LVal:= AObj.Values[AKey];
+    Result:= if (LVal is TJSONString) and not (LVal is TJSONNumber) then LVal.Value else '';
+  end;
+
+  // apply/1 inherited[] (C8 N1). Read type-checked, never by GetValue<T>: a
+  // malformed entry must not cost the whole row (GetValue raises on a mismatch).
+  function InheritedItems(AObj: TJSONObject): TArray<TInheritedLeft>;
+  var
+    LItem: TInheritedLeft;
+    LNum : TJSONValue;
+  begin
+    Result:= nil;
+    if not (AObj.Values['inherited'] is TJSONArray) then
+      Exit;
+    for var LVal: TJSONValue in TJSONArray(AObj.Values['inherited']) do
+      if LVal is TJSONObject then
+      begin
+        LItem:= Default(TInheritedLeft);
+        LItem.Name         := Str(TJSONObject(LVal), 'name');
+        LItem.TypeName     := Str(TJSONObject(LVal), 'type');
+        LItem.AncestorUnit := Str(TJSONObject(LVal), 'ancestor_unit');
+        LItem.AncestorState:= Str(TJSONObject(LVal), 'ancestor_state');
+        LItem.Reason       := Str(TJSONObject(LVal), 'reason');
+        LNum:= TJSONObject(LVal).Values['line'];
+        if not ((LNum is TJSONNumber) and TryStrToInt(LNum.Value, LItem.Line)) then
+          LItem.Line:= 0;
+        Result:= Result + [LItem];
+      end;
+  end;
+
 var
   Root: TJSONValue;
   Obj : TJSONObject;
@@ -423,6 +492,7 @@ begin
     Result.EditsCount:= Obj.GetValue<Integer>('edits_count', 0);
     Result.Converted := Strings(Obj, 'converted');
     Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + Strings(Obj, 'warnings');
+    Result.InheritedLeft:= InheritedItems(Obj);
     if Obj.TryGetValue<TJSONArray>('rule_errors', Errs) then
       Result.RuleErrorCount:= Errs.Count;
     Result.Refused:= (not Result.Ok) and Obj.GetValue<Boolean>('refused', False);
@@ -446,6 +516,55 @@ begin
   finally
     Root.Free;
   end; // try
+end;
+
+const
+  LEFT_FMT        = '%d inherited instance(s) left: ancestor %s %s';
+  STATE_UNCONV    = 'unconverted';
+  STATE_OUTSIDE   = 'outside';
+  WORDS_UNCONV    = 'not converted';
+  WORDS_OUTSIDE   = 'not in the index';
+  REPORT_LEFT_FMT = '%s: %s line %d -- ancestor %s %s (%s)';
+
+function InheritedLeftNote(const AItems: TArray<TInheritedLeft>): string;
+var
+  LGroups: TArray<TInheritedLeft>; // one per (ancestor, state), first-seen order
+  LCounts: TArray<Integer>;
+  LIdx   : Integer;
+  LParts : TArray<string>;
+  LWords : string;
+begin
+  LGroups:= nil;
+  LCounts:= nil;
+  for var LItem: TInheritedLeft in AItems do
+  begin
+    LIdx:= High(LGroups);
+    while (LIdx >= 0) and not (SameText(LGroups[LIdx].AncestorUnit, LItem.AncestorUnit) and SameText(LGroups[LIdx].AncestorState, LItem.AncestorState)) do
+      Dec(LIdx);
+    if LIdx < 0 then
+    begin
+      LGroups:= LGroups + [LItem];
+      LCounts:= LCounts + [0];
+      LIdx   := High(LGroups);
+    end;
+    Inc(LCounts[LIdx]);
+  end;
+  LParts:= nil;
+  for var I: Integer:= 0 to High(LGroups) do
+  begin
+    LWords:= LGroups[I].AncestorState;
+    if SameText(LWords, STATE_UNCONV) then
+      LWords:= WORDS_UNCONV
+    else if SameText(LWords, STATE_OUTSIDE) then
+      LWords:= WORDS_OUTSIDE;
+    LParts:= LParts + [Format(LEFT_FMT, [LCounts[I], LGroups[I].AncestorUnit, LWords])];
+  end;
+  Result:= string.Join('; ', LParts);
+end;
+
+function InheritedReportNote(const AItem: TInheritedLeft): string;
+begin
+  Result:= Format(REPORT_LEFT_FMT, [AItem.Name, AItem.TypeName, AItem.Line, AItem.AncestorUnit, AItem.AncestorState, AItem.Reason]);
 end;
 
 end.

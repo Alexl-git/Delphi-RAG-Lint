@@ -8829,6 +8829,173 @@ begin
   end; // try
 end;
 
+{ C8 E10: convert-apply's apply/1 inherited[] (spec N1 key names) is read into
+  TApplyRow.InheritedLeft; a converted row's note lists what was left ONLY when the
+  engine reports inherited_instances; a refusal stays a refusal (today's handling).
+  E11: ancestor then descendant, each unit reindexed before its first book. }
+procedure TestInheritedApply;
+const
+  INH_JSON = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],'
+    + '"inherited":[{"name":"tblFtrs","type":"TTable","line":4,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"ancestor not converted"},'
+    + '{"name":"tblOps","type":"TTable","line":9,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"ancestor not converted"},'
+    + '{"name":"qryLib","type":"TQuery","line":12,"ancestor_unit":"LibForms","ancestor_state":"outside","reason":"ancestor not in any --db"}]}';
+  OLD_JSON = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
+  // A non-object entry is skipped; a wrongly-typed field reads as its default.
+  BAD_ITEMS_JSON = '{"schema":"apply/1","ok":true,"edits_count":1,"inherited":[5,"x",null,{"name":"tblA","line":"four","type":7}]}';
+  BAD_KEY_JSON   = '{"schema":"apply/1","ok":true,"edits_count":1,"inherited":{"name":"tblA"}}';
+  REFUSED_JSON = '{"schema":"apply/1","ok":false,"refused":true,"reason":"inherited instances of TTable are not converted yet -- unit not changed","rule_errors":[],"edits_count":0}';
+  ORIG = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
+  LINE_TBL = 4;
+  ITEMS    = 3;
+  NOTE_LEFT = '2 inherited instance(s) left: ancestor PathToData not converted; 1 inherited instance(s) left: ancestor LibForms not in the index';
+var
+  Row : TApplyRow;
+  Bad : TApplyRow;
+  Dir, Anc, Desc: string;
+  Rows: TArray<TConvertRow>;
+  Log : TStringList;
+  Index: TIndexFn;
+
+  function ApplyWith(const AJson: string): TApplyFn;
+  var
+    LJson: string;
+  begin
+    LJson:= AJson;
+    Result:= function(const AUnitPas, ARulesFile: string; out AJson2: string): Integer
+      begin
+        AJson2:= LJson;
+        Result:= 0;
+      end;
+  end;
+
+begin
+  Row:= ParseApplyJson(INH_JSON);
+  Check('apply.inherited.parsed', Row.Ok and (Length(Row.InheritedLeft) = ITEMS), IntToStr(Length(Row.InheritedLeft)));
+  if Length(Row.InheritedLeft) = ITEMS then
+  begin
+    Check('apply.inherited.fields', (Row.InheritedLeft[0].Name = 'tblFtrs') and (Row.InheritedLeft[0].TypeName = 'TTable') and (Row.InheritedLeft[0].Line = LINE_TBL));
+    Check('apply.inherited.fields.ancestor', (Row.InheritedLeft[0].AncestorUnit = 'PathToData') and (Row.InheritedLeft[0].AncestorState = 'unconverted')
+      and (Row.InheritedLeft[2].AncestorState = 'outside'));
+  end;
+  Check('apply.inherited.absent.key', Length(ParseApplyJson(OLD_JSON).InheritedLeft) = 0);
+  Bad:= ParseApplyJson(BAD_ITEMS_JSON);
+  Check('apply.inherited.malformed.items', Bad.Ok and (Length(Bad.InheritedLeft) = 1) and (Bad.InheritedLeft[0].Name = 'tblA') and (Bad.InheritedLeft[0].Line = 0)
+    and (Bad.InheritedLeft[0].TypeName = ''), Format('ok=%s n=%d %s', [BoolToStr(Bad.Ok, True), Length(Bad.InheritedLeft), Bad.Error]));
+  Bad:= ParseApplyJson(BAD_KEY_JSON);
+  Check('apply.inherited.malformed.key', Bad.Ok and (Length(Bad.InheritedLeft) = 0), Bad.Error);
+  Check('apply.inherited.note', InheritedLeftNote(Row.InheritedLeft) = NOTE_LEFT, InheritedLeftNote(Row.InheritedLeft));
+  Check('apply.inherited.note.empty', InheritedLeftNote(nil) = '');
+  if Length(Row.InheritedLeft) = ITEMS then
+    Check('apply.inherited.report', InheritedReportNote(Row.InheritedLeft[0]) = 'tblFtrs: TTable line 4 -- ancestor PathToData unconverted (ancestor not converted)',
+      InheritedReportNote(Row.InheritedLeft[0]));
+
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c8apply-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  Log:= TStringList.Create;
+  try
+    Anc := TPath.Combine(Dir, 'Anc.pas');
+    Desc:= TPath.Combine(Dir, 'Desc.pas');
+    TFile.WriteAllText(Anc, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(Desc, ORIG, TEncoding.ASCII);
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Log.Add('index');
+        Result:= 0;
+      end;
+
+    Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(INH_JSON), Index, nil, nil, True);
+    Check('runner.inherited.converted', (Length(Rows) = 1) and (Rows[0].Status = csConverted) and Rows[0].Note.EndsWith('; ' + NOTE_LEFT),
+      if Length(Rows) = 1 then Rows[0].Note else IntToStr(Length(Rows)));
+    Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(INH_JSON), Index, nil, nil, False);
+    Check('runner.inherited.gated', (Length(Rows) = 1) and (Rows[0].Status = csConverted) and (Pos('inherited', Rows[0].Note) = 0),
+      if Length(Rows) = 1 then Rows[0].Note else IntToStr(Length(Rows)));
+    Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(REFUSED_JSON), Index, nil, nil, True);
+    Check('runner.inherited.refusal.kept', (Length(Rows) = 1) and (Rows[0].Status = csRefused));
+
+    Log.Clear;
+    Rows:= RunConversionUnits([Anc, Desc], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Log.Add('apply ' + ExtractFileName(AUnitPas));
+        AJson := OLD_JSON;
+        Result:= 0;
+      end, Index, nil, nil, True);
+    Check('runner.e11.two.rows', Length(Rows) = 2, IntToStr(Length(Rows)));
+    Check('runner.e11.ancestor.then.reindexed.descendant', Log.CommaText = 'index,"apply Anc.pas",index,index,"apply Desc.pas",index', Log.CommaText);
+  finally
+    Log.Free;
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ C8 E11 live, ONLY against an engine that reports inherited_instances: Anc then
+  Desc in one run; the descendant's inherited Label1 is retyped. Skipped today. }
+procedure TestInheritedRunLive;
+var
+  Exe, Dir, Db, Dpr, AncPas, DescPas, Book, Output: string;
+  Eng : TEngineAdapter;
+  Job : TConvertJob;
+  Rows: TArray<TConvertRow>;
+begin
+  Exe:= ResolveExe;
+  if (Exe = '') or not TFile.Exists(LibWin64) then
+  begin
+    Skip('inherited.live', 'exe or library-Win64 absent: ' + GEngineWhy);
+    Exit;
+  end;
+  Eng:= TEngineAdapter.Create(Exe, []);
+  try
+    if not Eng.HasCapability(CAPABILITY_INHERITED_INSTANCES) then
+    begin
+      Skip('inherited.live', 'engine lacks ' + CAPABILITY_INHERITED_INSTANCES);
+      Exit;
+    end;
+  finally
+    Eng.Free;
+  end; // try
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c8run-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Dpr    := TPath.Combine(Dir, 'Fix.dpr');
+    AncPas := TPath.Combine(Dir, 'Anc.pas');
+    DescPas:= TPath.Combine(Dir, 'Desc.pas');
+    Db     := TPath.Combine(Dir, 'Fix.sqlite');
+    Book   := TPath.Combine(Dir, 'Fix.rules');
+    TFile.WriteAllText(Dpr, 'program Fix;' + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms,' + sLineBreak + '  Anc in ''Anc.pas'' {AncForm},' + sLineBreak +
+      '  Desc in ''Desc.pas'' {DescForm};' + sLineBreak + 'begin' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(AncPas, 'unit Anc;' + sLineBreak + 'interface' + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes;' + sLineBreak +
+      'type' + sLineBreak + '  TAncForm = class(TForm)' + sLineBreak + '    Label1: TLabel;' + sLineBreak + '  end;' + sLineBreak + 'implementation' + sLineBreak +
+      '{$R *.dfm}' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(ChangeFileExt(AncPas, '.dfm'), 'object AncForm: TAncForm' + sLineBreak + '  object Label1: TLabel' + sLineBreak +
+      '    Caption = ''Hello''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(DescPas, 'unit Desc;' + sLineBreak + 'interface' + sLineBreak + 'uses' + sLineBreak + '  Anc;' + sLineBreak + 'type' + sLineBreak +
+      '  TDescForm = class(TAncForm)' + sLineBreak + '  end;' + sLineBreak + 'implementation' + sLineBreak + '{$R *.dfm}' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(ChangeFileExt(DescPas, '.dfm'), 'inherited DescForm: TDescForm' + sLineBreak + '  inherited Label1: TLabel' + sLineBreak +
+      '    Caption = ''Desc''' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Book, '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak + '#link Caption <- Caption' + sLineBreak, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(Exe, [Db, LibWin64]);
+    try
+      Check('inherited.live.index', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
+      Job:= Default(TConvertJob);
+      Job.Units             := [AncPas, DescPas];
+      Job.Books             := [Book];
+      Job.Dbs               := [Db, LibWin64];
+      Job.ProjectDb         := Db;
+      Job.ProjectFile       := Dpr;
+      Job.InheritedSupported:= True;
+      Rows:= RunConversion(Job, Eng, nil, nil);
+      Check('inherited.live.both.converted', (Length(Rows) = 2) and (Rows[0].Status = csConverted) and (Rows[1].Status = csConverted), Format('%d rows', [Length(Rows)]));
+      Check('inherited.live.descendant.retyped', Pos('inherited Label1: TStaticText', TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm'))) > 0,
+        TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')));
+    finally
+      Eng.Free;
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
 { C8 E2b engine reads: positional rows [name, type] and [name, receiver, line]. }
 procedure TestCodeRefs;
 const
@@ -9413,6 +9580,8 @@ begin
     TestInheritanceCodeUses;
     TestClassLookup;
     TestClassLookupLive;
+    TestInheritedApply;
+    TestInheritedRunLive;
     TestCodeRefs;
     TestCodeRefsLive;
     TestUnitPickPlatform;
