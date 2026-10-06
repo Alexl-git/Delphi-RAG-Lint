@@ -848,6 +848,9 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `workspace status` | [workspace status](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-status) | Reports the status of every project registered in a .drag-lint-workspace.json workspace config |  |
 <!-- dl:registry:end agent-verbs -->
 
+Every row links the feature's wiki page; `features\generated\manifest.json` holds the same data
+expanded (families included) for a tool that would rather read JSON than this table.
+
 ## 3. MCP mode (structured tools)
 
 Start the server (one per index):

@@ -183,6 +183,8 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **dump-pp-eval** (internal) -- Diagnostic dump of preprocessor expression evaluation, paired with dump-pp-lex. [More](Maintenance)
 * **dump-pp-lex** (internal) -- Diagnostic dump of the preprocessor lexer; the documented preprocessor verbs are preprocess-file and pp-profile. [More](Maintenance)
 * **dump-refs** -- Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution. [More](dump-refs)
+* **Feature registry** -- The machine-checked master list of every feature, and the generator of the index pages. Register a feature with tools\feature-registry.ps1 add, regenerate the pages with tools\build-feature-pages.ps1, and let the battery guard name what is missing. Needs PowerShell 7.3 and a repository clone. [More](Feature-Registry)
+  aliases: blast radius, feature list, quick help, registry
 * **info** -- Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities. [More](info)
 * **Library Drift Check** -- Flags registered library roots that have source on disk but nothing in the index. [More](Library-Drift-Check)
 * **Maintenance** -- Indexes, the manifest, reindexing, and what to do when something looks wrong. [More](Maintenance)
@@ -206,6 +208,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Document project: host 'Structure form' (the caption is verified, the host is declared)
 * Document unit: host 'Structure form' (the caption is verified, the host is declared)
 * Effect Summary Legend: procedure docs\wiki\Effect-Summary-Legend.md
+* Feature registry: procedure docs\wiki\Feature-Registry.md
 * Find Usages: host 'Structure form' (the caption is verified, the host is declared)
 * Fix all in project: host 'Structure form' (the caption is verified, the host is declared)
 * Fix all in unit: host 'Structure form' (the caption is verified, the host is declared)

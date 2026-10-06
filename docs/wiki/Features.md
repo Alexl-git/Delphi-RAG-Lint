@@ -319,6 +319,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-pp-eval](Maintenance) | `dump-pp-eval` | internal |
 | [dump-pp-lex](Maintenance) | `dump-pp-lex` | internal |
 | [dump-refs](dump-refs) | `dump-refs` |  |
+| [Feature registry](Feature-Registry) | `tools\feature-registry.ps1 add / update / find / blast-radius / move-menu / deprecate / normalise / check / generate`; `tools\build-feature-pages.ps1 -Check -OutDir -Normalise`; `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
 | [info](info) | `info` |  |
 | [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |
 | [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |

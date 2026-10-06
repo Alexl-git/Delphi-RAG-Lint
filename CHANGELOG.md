@@ -3,6 +3,23 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.22.0-alpha -- unreleased
+
+### Added
+
+- **Feature registry.** `features\entries\*.json` (one file per feature, canonical form) plus the
+  imported `lint-rules` and `chart-questions` families are the master list of everything drag-lint
+  ships. `tools\feature-registry.ps1` (add / update / find / blast-radius / move-menu / deprecate /
+  normalise / check / generate) is the only way teams write it; `tools\build-feature-pages.ps1`
+  generates `Home.md`, `Features.md`, `Feature-Index.md`, the new `Quick-Help.md`, a block in
+  README.md and in docs\AI-USAGE.md, and `features\generated\manifest.json`.
+  `tests\autotest\run_feature_registry_guard.ps1` fails the battery when a `--help` verb, a
+  subcommand, an IDE caption, a rule, a chart question or a release exe has no entry, when an
+  entry points at something that no longer exists, or when a generated page was hand-edited.
+  `docs\wiki-featuremap.tsv` is retired. `tools\publish-release.ps1` orders the publish steps and
+  restores the deployed Debug engine after `pack-lint-release.ps1` overwrites it. Spec:
+  `docs\superpowers\specs\2026-10-05-feature-registry-design.md`; page: `Feature-Registry`.
+
 ## v1.21.1-alpha -- 2026-10-05
 
 EXTRACTOR BUMP 1.20.0 -> 1.21.1 (1.21.0 was never released): every index re-parses once
