@@ -492,6 +492,7 @@ type
     // Task 2: convert-apply's --unit (the .pas being converted) ALSO reuses
     // this field (same non-document-command routing as ghost-check).
     GhostUnit  : string; // --unit <real .pas to overlay | convert-apply target .pas>
+    ConvertUnits: TArray<string>; // every --unit in order (convert-apply batch mode, C13 b2); GhostUnit is the last
     GhostBuffer: string; // --buffer <temp file holding the buffer>
     // AutoDocument (whole-unit batch): --unit <file.pas> for the `document`
     // command means "document every public decl in this unit". It shares the
@@ -1762,7 +1763,11 @@ begin
       Inc(i);
       if (Result.Command = 'document') or (Result.Command = 'document-all') then Result.DocUnit:= ParamStr(i)
       else if Result.Command = 'query' then Result.UnitName:= ParamStr(i)
-      else Result.GhostUnit:= ParamStr(i);
+      else
+      begin
+        Result.GhostUnit   := ParamStr(i);
+        Result.ConvertUnits:= Result.ConvertUnits + [ParamStr(i)];
+      end;
     end
     // AutoDocument batch: --stubs opt-in (flips the facts-only default for
     // document / document --project / document-all).
@@ -16029,6 +16034,10 @@ begin
         inherited / inline .dfm instances (apply/1 inherited[]) instead of
         refusing the unit; an engine without the key still refuses (R6). }
       JCap.AddPair('inherited_instances', TJSONBool.Create(True));
+      { 1.23.0 (C13 b2), same contract: convert-apply takes --unit more than
+        once and converts every unit in ONE process -- one rule-book
+        validation, one member cache -- emitting apply-batch/1 under JSON. }
+      JCap.AddPair('batch_units', TJSONBool.Create(True));
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
@@ -24556,6 +24565,11 @@ type
       run SKIPPED, each with its declaring ancestor -- apply/1 inherited[]. Their
       'line N: warning:' text is ALSO in Report.Warnings / Report.Items. }
     InheritedInsts: TArray<TInheritedInstance>;
+    { 1.23.0 (C13 b2): batch mode's collector. nil -> EmitApplyJson writes the
+      document to stdout (single --unit, unchanged); assigned -> the apply/1
+      object is appended to it instead (owned by the array) and nothing is
+      written, so DoConvertApply can wrap every unit in one apply-batch/1. }
+    Sink: TJSONArray;
   end;
 
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
@@ -24771,7 +24785,13 @@ begin
     end;
     JRoot.AddPair('inherited', JInh);
 
-    WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
+    if Assigned(ACtx.Sink) then
+    begin
+      ACtx.Sink.AddElement(JRoot); { batch mode: the array owns it now }
+      JRoot:= nil;
+    end
+    else
+      WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
   finally
     JRoot.Free;
   end;
@@ -24958,17 +24978,20 @@ var
   Rules     : TConversionRuleSet;
   RuleErrors: TArray<TRuleError>;
   Unresolved: TArray<TRuleError>;
-  RE        : TRuleError        ;
   Trees     : TConvertTreeCache ; { one per run: validation and BuildApplyPlan share its member caches }
   Dbs       : TArray<string>    ;
   Stores    : TArray<ISymbolStore>;
   RoOk      : Boolean           ;
   LDb       : string            ;
   PlanRes   : TApplyResult      ;
-  S         : string            ;
   Freshness   : TFreshnessResult;
-  TouchedFiles: TList<string>   ;
-  TouchedSet  : TDictionary<string, Boolean>;
+  { 1.23.0 (C13 b2) batch state: every --unit; the book checks done once
+    (RunUnit); the apply/1 collector under batch JSON (nil otherwise) }
+  Units          : TArray<string>;
+  BookChecked    : Boolean;
+  FreshChecked   : Boolean;
+  BookUnreachable: TArray<TUnreachablePath>;
+  BatchJson      : TJSONArray;
   { --format json / --json. Both are parsed globally (ParseArgs), so this verb
     only has to READ them. Under JSON every Writeln on the success and failure
     paths is suppressed -- one stray line and the document stops parsing. }
@@ -25054,14 +25077,12 @@ var
   // Nothing has been written when this is called. Exit(RefuseUnit(S)).
   function RefuseUnit(const AReason: string): Integer;
   begin
+    JCtx.Ok     := False;
+    JCtx.Error  := AReason;
+    JCtx.Refused:= True; { set in text mode too: the batch summary counts it }
+    JCtx.Reason := AReason;
     if UseJson then
-    begin
-      JCtx.Ok     := False;
-      JCtx.Error  := AReason;
-      JCtx.Refused:= True;
-      JCtx.Reason := AReason;
-      EmitApplyJson(JCtx);
-    end
+      EmitApplyJson(JCtx)
     else
       Writeln('REFUSED: ' + AReason);
     Result:= 1;
@@ -25079,81 +25100,47 @@ var
       Writeln('no .dfm instance matches a #convert block -- component part skipped, unit rules only');
   end;
 
-begin
-  if not ExplicitDbsExist(AArgs, 'convert-apply') then Exit(2);
-  UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
-  JCtx   := Default(TApplyJsonCtx);
-  JCtx.Mode:= if AArgs.Apply then 'apply' else 'dry-run';
-  JCtx.RulesFile:= AArgs.RulesFile;
-  JCtx.Freshness.Fresh:= True;
-
-  if (AArgs.GhostUnit = '') or (AArgs.RulesFile = '') then
+  // ERROR: <AMsg> for one unit -- text, or under batch JSON an apply/1 object
+  // with ok=false -- and AExit as that unit's exit code.
+  function FailUnit(const AMsg: string; AExit: Integer): Integer;
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json]');
-    Exit(2);
-  end;
-  UnitPas:= AArgs.GhostUnit;
-  if not TFile.Exists(UnitPas) then
-  begin Writeln(Format('ERROR: unit not found: %s', [UnitPas])); Exit(2); end;
-  if not TFile.Exists(AArgs.RulesFile) then
-  begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile])); Exit(2); end;
-
-  // Sibling .dfm: same base name + '.dfm', same folder as --unit.
-  DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
-
-  try
-    RulesText:= TFile.ReadAllText(AArgs.RulesFile);
-  except
-    on Ex: Exception do
-    begin Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message])); Exit(2); end;
-  end;
-  Rules:= ParseConversionRules(RulesText);
-
-  { 1.20.6: a missing .dfm is fatal only to a book with NO unit rules -- its
-    #convert blocks have nothing to locate. A book with #unuse / #use /
-    #useswap still has the unit's uses clauses to change, so it runs them and
-    reports the component part as skipped (component_part skipped-no-dfm). }
-  if not TFile.Exists(DfmPath) and not BookHasUnitRules(Rules) then
-  begin
-    Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]));
-    Exit(1);
-  end;
-
-  Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
-
-  // Open EVERY readable --db up front (not just the first) -- Bug 2: the
-  // From type, To type, and the form's own instances may each live in a
-  // DIFFERENT --db, so rule validation, the freshness guard and BuildApplyPlan
-  // all need cross-db type resolution (first-db-that-resolves-wins), while
-  // unit/instance-scoped lookups use whichever store actually has --unit/the
-  // .dfm indexed. This runs BEFORE the rules are validated, so a stale
-  // explicit --db exits 2 (StaleDbRefusesRun) rather than being skipped while
-  // the trees are built -- pinned by run_explicit_db_strict.ps1's T5 row.
-  var StoresList: TList<ISymbolStore>:= TList<ISymbolStore>.Create;
-  try
-    for LDb in Dbs do
+    if Assigned(BatchJson) then
     begin
-      if not TFile.Exists(LDb) then Continue;
-      var St: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
-      if not RoOk then
-      begin
-        if StaleDbRefusesRun(AArgs, 'convert-apply', LDb) then Exit(2);
-        Continue; { manifest-resolved: stale DB reported, scan the rest }
-      end;
-      StoresList.Add(St);
-    end;
-    Stores:= StoresList.ToArray;
-  finally
-    StoresList.Free;
+      JCtx.Ok   := False;
+      JCtx.Error:= AMsg;
+      EmitApplyJson(JCtx);
+    end
+    else
+      Writeln('ERROR: ' + AMsg);
+    Result:= AExit;
   end;
-  if Length(Stores) = 0 then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
 
-  JCtx.UnitPas:= UnitPas;
-  JCtx.DfmPath:= DfmPath;
+  // 1.23.0 (C13 b2): ONE unit's whole run -- its sibling .dfm, plan, writes and
+  // report -- against the shared Rules / Stores / Trees. The book is validated
+  // (and its freshness checked) the FIRST time a unit reaches that step, then
+  // reused: a single --unit run keeps its old order, a batch pays for both and
+  // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
+  function RunUnit(const AUnitPas: string): Integer;
+  begin
+    UnitPas:= AUnitPas;
+    PlanRes:= Default(TApplyResult);
+    JCtx   := Default(TApplyJsonCtx);
+    JCtx.Mode:= if AArgs.Apply then 'apply' else 'dry-run';
+    JCtx.RulesFile:= AArgs.RulesFile;
+    JCtx.Freshness.Fresh:= True;
+    JCtx.Sink   := BatchJson;
+    JCtx.UnitPas:= UnitPas;
+    if not TFile.Exists(UnitPas) then Exit(FailUnit(Format('unit not found: %s', [UnitPas]), 2));
+    // Sibling .dfm: same base name + '.dfm', same folder as --unit.
+    DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
+    JCtx.DfmPath:= DfmPath;
+    { 1.20.6: a missing .dfm is fatal only to a book with NO unit rules -- its
+      #convert blocks have nothing to locate. A book with #unuse / #use /
+      #useswap still has the unit's uses clauses to change, so it runs them and
+      reports the component part as skipped (component_part skipped-no-dfm). }
+    if not TFile.Exists(DfmPath) and not BookHasUnitRules(Rules) then
+      Exit(FailUnit(Format('sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]), 1));
 
-  Trees:= TConvertTreeCache.Create(Stores);
-  try
     { 1.22.0 (C8 N1, N3; replaces 1.20.6's ruling-R6 refusal). Inherited /
       inline .dfm objects of a From type are declared by an ANCESTOR, so they
       are skipped -- each reported with its declaring ancestor (apply/1
@@ -25167,7 +25154,12 @@ begin
       pair for the whole book, so every link of blocks 2..N failed. A valid
       G-expression passes validation, but nothing realises it yet (CV-2):
       refuse through the same path rather than carry the source image whole. }
-    RuleErrors:= ValidateConvertBook(Trees, Rules, JCtx.Unreachable, Unresolved);
+    if not BookChecked then
+    begin
+      BookChecked:= True;
+      RuleErrors := ValidateConvertBook(Trees, Rules, BookUnreachable, Unresolved);
+    end;
+    JCtx.Unreachable := BookUnreachable;
     JCtx.ClassesBuilt:= Trees.ClassesBuilt;
     { T2h: an UNREACHABLE path warns and its rule is skipped (BuildApplyPlan
       below gets the book without those lines); it never fails the unit. On
@@ -25189,7 +25181,7 @@ begin
         Exit(1);
       end;
       Writeln('ERROR: conversion rules failed validation:');
-      for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
+      for var RE: TRuleError in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
       for var UW: string in JCtx.Report.Warnings do Writeln('  ' + UW);
       Exit(1);
     end;
@@ -25201,7 +25193,11 @@ begin
     // dry-run: WARN and continue (so a user can still preview a plan while
     // reindexing). --apply: REFUSE outright -- writing a conversion built from
     // a stale/empty property tree could silently drop or mis-map properties.
-    Freshness:= CheckFreshness(Stores, Rules);
+    if not FreshChecked then
+    begin
+      FreshChecked:= True;
+      Freshness   := CheckFreshness(Stores, Rules);
+    end;
     JCtx.Freshness:= Freshness;
     if not Freshness.Fresh then
     begin
@@ -25217,7 +25213,7 @@ begin
           Exit(1);
         end;
         Writeln('ERROR: freshness guard failed -- refusing to --apply:');
-        for S in Freshness.Reasons do Writeln('  ' + S);
+        for var S: string in Freshness.Reasons do Writeln('  ' + S);
         Exit(1);
       end
       else if not UseJson then
@@ -25225,7 +25221,7 @@ begin
         { dry-run only warns. Under JSON the warning is NOT printed -- it is
           already carried structurally by freshness.fresh=false + reasons. }
         Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
-        for S in Freshness.Reasons do Writeln('  ' + S);
+        for var S: string in Freshness.Reasons do Writeln('  ' + S);
       end;
     end;
 
@@ -25289,10 +25285,132 @@ begin
       PrintComponentPart;
       PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'applied');
     end;
+    Result:= 0;
+  end;
+
+  // 1.23.0 (C13 b2): the apply-batch/1 wrapper -- one apply/1 object per unit,
+  // in --unit order, plus the run's totals. exit_code is the worst unit's.
+  procedure EmitBatchJson(AExit, AOk, ARefused: Integer);
+  var
+    JRoot: TJSONObject;
+  begin
+    JRoot:= TJSONObject.Create;
+    try
+      JRoot.AddPair('schema'       , 'apply-batch/1');
+      JRoot.AddPair('mode'         , if AArgs.Apply then 'apply' else 'dry-run');
+      JRoot.AddPair('rules_file'   , AArgs.RulesFile);
+      JRoot.AddPair('units_count'  , TJSONNumber.Create(BatchJson.Count));
+      JRoot.AddPair('ok'           , TJSONBool.Create(AOk = BatchJson.Count));
+      JRoot.AddPair('exit_code'    , TJSONNumber.Create(AExit));
+      JRoot.AddPair('ok_count'     , TJSONNumber.Create(AOk));
+      JRoot.AddPair('refused_count', TJSONNumber.Create(ARefused));
+      JRoot.AddPair('failed_count' , TJSONNumber.Create(BatchJson.Count - AOk - ARefused));
+      JRoot.AddPair('classes_built', TJSONNumber.Create(Trees.ClassesBuilt));
+      JRoot.AddPair('units'        , BatchJson);
+      BatchJson:= nil; { JRoot owns it now }
+      WriteStdoutDocument(JRoot.ToJSON + sLineBreak);
+    finally
+      JRoot.Free;
+    end;
+  end;
+
+begin
+  if not ExplicitDbsExist(AArgs, 'convert-apply') then Exit(2);
+  UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  { every --unit, in order (C13 b2); GhostUnit alone for a caller that set
+    only that field }
+  Units:= AArgs.ConvertUnits;
+  if (Length(Units) = 0) and (AArgs.GhostUnit <> '') then Units:= [AArgs.GhostUnit];
+
+  if (Length(Units) = 0) or (AArgs.RulesFile = '') then
+  begin
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json]');
+    Exit(2);
+  end;
+  { one unit keeps its old first check; a batch checks each unit in RunUnit }
+  if (Length(Units) = 1) and not TFile.Exists(Units[0]) then
+  begin Writeln(Format('ERROR: unit not found: %s', [Units[0]])); Exit(2); end;
+  if not TFile.Exists(AArgs.RulesFile) then
+  begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile])); Exit(2); end;
+
+  try
+    RulesText:= TFile.ReadAllText(AArgs.RulesFile);
+  except
+    on Ex: Exception do
+    begin Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message])); Exit(2); end;
+  end;
+  Rules:= ParseConversionRules(RulesText);
+
+  { one unit keeps its old order: a missing .dfm (book without unit rules)
+    fails before any --db is opened }
+  if (Length(Units) = 1) and not TFile.Exists(TPath.ChangeExtension(Units[0], '.dfm')) and not BookHasUnitRules(Rules) then
+  begin
+    Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)',
+      [TPath.ChangeExtension(Units[0], '.dfm')]));
+    Exit(1);
+  end;
+
+  Dbs:= ResolveConsumerDbs(AArgs);
+  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
+
+  // Open EVERY readable --db up front (not just the first) -- Bug 2: the
+  // From type, To type, and the form's own instances may each live in a
+  // DIFFERENT --db, so rule validation, the freshness guard and BuildApplyPlan
+  // all need cross-db type resolution (first-db-that-resolves-wins), while
+  // unit/instance-scoped lookups use whichever store actually has --unit/the
+  // .dfm indexed. This runs BEFORE the rules are validated, so a stale
+  // explicit --db exits 2 (StaleDbRefusesRun) rather than being skipped while
+  // the trees are built -- pinned by run_explicit_db_strict.ps1's T5 row.
+  var StoresList: TList<ISymbolStore>:= TList<ISymbolStore>.Create;
+  try
+    for LDb in Dbs do
+    begin
+      if not TFile.Exists(LDb) then Continue;
+      var St: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'convert-apply', LDb) then Exit(2);
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
+      StoresList.Add(St);
+    end;
+    Stores:= StoresList.ToArray;
   finally
+    StoresList.Free;
+  end;
+  if Length(Stores) = 0 then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
+
+  BookChecked := False;
+  FreshChecked:= False;
+  BatchJson   := nil;
+  { batch JSON collects every unit's apply/1 object; one --unit keeps writing
+    its own apply/1 document, unchanged for existing callers }
+  if UseJson and (Length(Units) > 1) then BatchJson:= TJSONArray.Create;
+  Trees:= TConvertTreeCache.Create(Stores);
+  try
+    if Length(Units) = 1 then Exit(RunUnit(Units[0]));
+    { 1.23.0 (C13 b2): batch. A unit's refusal or failure never stops the
+      others; the exit code is the worst unit's (2 > 1 > 0). }
+    Result:= 0;
+    var NOk     : Integer:= 0;
+    var NRefused: Integer:= 0;
+    for var I: Integer:= 0 to High(Units) do
+    begin
+      if not UseJson then Writeln(Format('=== unit %d of %d: %s ===', [I + 1, Length(Units), Units[I]]));
+      var Code: Integer:= RunUnit(Units[I]);
+      if Code > Result then Result:= Code;
+      if Code = 0 then Inc(NOk)
+      else if JCtx.Refused then Inc(NRefused);
+      if not UseJson then Writeln('');
+    end;
+    if UseJson then EmitBatchJson(Result, NOk, NRefused)
+    else
+      Writeln(Format('batch: %d unit(s) -- %d ok, %d refused, %d failed; classes_built %d; exit %d',
+        [Length(Units), NOk, NRefused, Length(Units) - NOk - NRefused, Trees.ClassesBuilt, Result]));
+  finally
+    BatchJson.Free;
     Trees.Free;
   end;
-  Result:= 0;
 end; // function
 
 // drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]
