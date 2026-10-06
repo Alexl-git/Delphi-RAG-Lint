@@ -12922,11 +12922,11 @@ begin
       as the two lines above; then the with scope itself, whose declines are the
       bindings the pre-1.8 rungs WOULD have written and now do not. }
     ResolveLog(Format('calls      member-reads: %d of %d bare read(s) bound (with member %d, enclosing class %d); ' +
-      'declined with-scope %d, not-member %d, shadowed %d, field %d, not-found %d, qualified %d, unreadable %d',
+      'declined with-scope %d, not-member %d, shadowed %d, not-found %d, hidden %d, qualified %d, unreadable %d',
       [MemberBound, MemberCandidates,
        Resolver.MemberReadStats.BoundWith, Resolver.MemberReadStats.BoundOwn,
        Resolver.MemberReadStats.WithScope, Resolver.MemberReadStats.NotMember, Resolver.MemberReadStats.Shadowed,
-       Resolver.MemberReadStats.Field, Resolver.MemberReadStats.NotFound, Resolver.MemberReadStats.Qualified,
+       Resolver.MemberReadStats.NotFound, Resolver.MemberReadStats.Hidden, Resolver.MemberReadStats.Qualified,
        Resolver.MemberReadStats.Unreadable]));
     ResolveLog(Format('calls      with-scope: %d statement(s) in %d file(s); bare calls bound to a with member %d, ' +
       'declined %d; receivers typed through one %d, left untyped %d',
