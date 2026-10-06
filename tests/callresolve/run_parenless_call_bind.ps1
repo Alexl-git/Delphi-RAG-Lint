@@ -149,17 +149,17 @@ try {
   # --- check 4b: the member these reads DO name (resolver 1.8.0) -------------------
   # NEG-WITH reads the with target's FIELD, NEG-PROPERTY / NEG-PROPGETTER the
   # enclosing class's PROPERTY (D14, D16a). NEG-FIELD is an own-class FIELD,
-  # left unbound by design.
+  # bound since resolver 1.12.0 (DEC-19, owner ruled YES 2026-10-05; it stayed
+  # unbound by design until then).
   $mem = @(
     @{ M = 'NEG-WITH';       N = 'NextId'; Q = 'uParenlessUse.THolder.NextId' },
+    @{ M = 'NEG-FIELD';      N = 'NextId'; Q = 'uParenlessUse.THolder.NextId' },
     @{ M = 'NEG-PROPERTY';   N = 'Total';  Q = 'uParenlessUse.TCounter.Total' },
     @{ M = 'NEG-PROPGETTER'; N = 'NextId'; Q = 'uParenlessUse.TPropHolder.NextId' })
   foreach ($x in $mem) {
     $rows = @(RefsAt (LineOf $x.M) $x.N | Where-Object { $_.kind -eq 'read' })
     Check ("check 4b {0}: {1} binds the member {2}" -f $x.M, $x.N, $x.Q) (($rows.Count -eq 1) -and ($rows[0].sq -eq $x.Q)) "sq=$($rows[0].sq)"
   }
-  $fld = @(RefsAt (LineOf 'NEG-FIELD') 'NextId' | Where-Object { $_.kind -eq 'read' -and $null -ne $_.symbol_id })
-  Check 'check 4b NEG-FIELD: an own-class FIELD read stays unbound' ($fld.Count -eq 0) "bound=$($fld.Count)"
 
   # --- check 5: the counters ------------------------------------------------------
   # 7 bound; declines: shadowed 5 (local, proc-typed local, field, property, and

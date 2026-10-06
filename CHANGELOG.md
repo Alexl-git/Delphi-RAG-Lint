@@ -3,6 +3,30 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.24.0-alpha -- unreleased
+
+No extractor change: indexes do not re-parse. **Resolver 1.11.0 -> 1.12.0-alpha**: the next
+`index` of every database re-resolves on its own (resolver fingerprint); to do it at once,
+`index --all --resolve-only`.
+
+### Changed
+
+- **A bare read of a field of the enclosing class -- or of an ANCESTOR -- binds (E5 / DEC-19,
+  owner ruled YES 2026-10-05).** `if FConnected then`, `with tblFtrs do` and the receiver
+  `tblFtrs` of `tblFtrs.Post` inside a method whose class (or a grand-ancestor) declares the
+  field now get `refs.symbol_id` on that field and a `member_accesses` row (mode `read`, no
+  accessor, no call edge), exactly as `Self.FConnected` already did. Shadowing is Delphi's and
+  unchanged: a `with` target's member first, then a local / parameter / nested routine of the
+  routine or of its outer routines, then the class chain. Since 1.8.0 these reads declined
+  with reason `field` by design; that reason and its slot on the `calls member-reads:` log
+  line are gone. Measured on copies: DMTEST 23,338 reads newly bound (member_accesses 7,806 ->
+  31,144; `find-callers --name tblFtrs --resolved` 109 -> 160 rows, 18 -> 36 callers); this
+  repo's self-index 2,502. `lint-all` findings unchanged on both (byte-identical JSON).
+  Consumers counting member reads (charts who-reads) must re-baseline.
+  Guards: `run_in_class_field_bind.ps1` (new); `run_with_scope_bind.ps1` OWN-FIELD,
+  `run_parenless_call_bind.ps1` NEG-FIELD and `run_property_refs_resolve.ps1` E2 flipped
+  from "stays unbound" to "binds".
+
 ## v1.22.0-alpha -- unreleased
 
 No extractor change: indexes do not re-parse.

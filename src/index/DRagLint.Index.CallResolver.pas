@@ -161,8 +161,9 @@ type
   TMemberReadStats = record
     /// <summary>Bound to a with target's property or field.</summary>
     BoundWith : Int64;
-    /// <summary>Bound to a member of the enclosing class: a property read bare
-    /// (D16a), or a property or field read as `Self.X`.</summary>
+    /// <summary>Bound to a member of the enclosing class or an ancestor: a
+    /// property (D16a) or field (DEC-19, resolver 1.12.0-alpha) read bare, or
+    /// either read as `Self.X`.</summary>
     BoundOwn  : Int64;
     /// <summary>Declined: the with scope was undecided.</summary>
     WithScope : Int64;
@@ -170,9 +171,7 @@ type
     NotMember : Int64;
     /// <summary>Declined: a local, parameter or nested routine shadows the name.</summary>
     Shadowed  : Int64;
-    /// <summary>Declined: the name is a FIELD of the enclosing class -- left unbound by design.</summary>
-    Field     : Int64;
-    /// <summary>Declined: no property of the name in scope.</summary>
+    /// <summary>Declined: no property or field of the name on the class chain.</summary>
     NotFound  : Int64;
     /// <summary>Declined: a receiver other than Self qualifies the name.</summary>
     Qualified : Int64;
@@ -1353,14 +1352,15 @@ type
     /// pass.</remarks>
     property ParenlessStats: TParenlessResolveStats read FParenlessStats;
 
-    /// <summary>D14 + D16a (2026-09-23, resolver 1.8.0-alpha): decide whether a
-    /// bare `read` ref names a PROPERTY or FIELD, and if so which -- a member of
-    /// an enclosing `with` target, or a property of the enclosing class.</summary>
+    /// <summary>D14 + D16a (2026-09-23, resolver 1.8.0-alpha) + DEC-19 (resolver
+    /// 1.12.0-alpha): decide whether a bare `read` ref names a PROPERTY or FIELD,
+    /// and if so which -- a member of an enclosing `with` target, or a member of
+    /// the enclosing class or one of its resolved ancestors.</summary>
     /// <param name="ARef">The candidate read ref. FileId, NameText, StartLine,
     /// StartCol and EnclosingSymbolId are consulted.</param>
     /// <param name="AReason">OUT: '' when the ref bound; otherwise the decline
     /// reason -- 'unreadable' | 'qualified' | 'with-scope' | 'not-member' |
-    /// 'shadowed' | 'field' | 'not-found'.</param>
+    /// 'shadowed' | 'not-found'.</param>
     /// <returns>An edge whose TargetSymbolId is the property/field, MemberMode
     /// 'read', the accessor when the property names one, and
     /// ReceiverTypeSymbolId the with target's (or the class's) type; or
@@ -1371,11 +1371,12 @@ type
     /// shadow), then the enclosing class and its ancestors. A with target that
     /// cannot be typed, or whose surface is incomplete, declines.
     ///
-    /// A FIELD of the enclosing class read BARE is NOT bound ('field'),
-    /// deliberately: that population is every bare field read in a codebase,
-    /// and D16a asked for properties. A field of a WITH target is bound,
-    /// because the with scope is exactly where the enum-value collision (R7)
-    /// lives. An explicit `Self.X` (a `read` ref whose receiver is Self -- the
+    /// A FIELD of the enclosing class or of an ancestor read BARE binds, exactly
+    /// as a property does but with no accessor (DEC-19, owner ruling
+    /// 2026-10-05; until 1.12.0 it declined 'field' by design): `if FConnected`,
+    /// `with tblFtrs do` and the receiver `tblFtrs` of `tblFtrs.Post` -- its own
+    /// `read` ref -- where a grand-ancestor declares tblFtrs. A field of a WITH
+    /// target is bound too. An explicit `Self.X` (a `read` ref whose receiver is Self -- the
     /// extractor's shape for it) binds a property OR a field, exactly as
     /// `Obj.X` does, and is never declined for a same-named local: the local
     /// cannot be what `Self.X` names.
@@ -4225,16 +4226,14 @@ begin
       Scratch.Free;
     end;
   end;
-  { 3. The enclosing class and its ancestors: a PROPERTY binds (D16a); a BARE
-    field read is left alone by design -- see the declaration. An explicit
-    `Self.X` names the member exactly as `Obj.X` does, so it binds a field too,
-    and step 2 never ran for it: a local of the name cannot be what it names. }
+  { 3. The enclosing class and its ancestors: a PROPERTY (D16a) or a FIELD
+    (DEC-19) binds, bare or as `Self.X`. Step 2 never ran for `Self.X`: a local
+    of the name cannot be what it names. }
   if (AReason = '') and not ByWith then
   begin
     EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
     M:= LookupMemberOnType(ClassId, ARef.NameText);
     if M.Id <= 0 then AReason:= 'not-found'
-    else if (M.Kind <> skProperty) and (Rcv = '') then AReason:= 'field'
     else WType:= ClassId;
   end;
   if AReason = '' then
@@ -4257,7 +4256,6 @@ begin
   else if AReason = 'with-scope' then Inc(FMemberReadStats.WithScope)
   else if AReason = 'not-member' then Inc(FMemberReadStats.NotMember)
   else if AReason = 'shadowed' then Inc(FMemberReadStats.Shadowed)
-  else if AReason = 'field' then Inc(FMemberReadStats.Field)
   else if AReason = 'not-found' then Inc(FMemberReadStats.NotFound)
   else if AReason = 'qualified' then Inc(FMemberReadStats.Qualified)
   else Inc(FMemberReadStats.Unreadable);
