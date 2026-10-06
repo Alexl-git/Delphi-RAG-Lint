@@ -234,6 +234,19 @@ object Nest3DM: TNest3DM
 end
 '@
 
+# ---- (a3) ADJACENT converted blocks: each next block's insert lands on the line
+# the previous block's delete ends on (1.25.2, the DMREADINGS misplacement) ------
+$adjPas = "unit AdjDM;`n`ninterface`n`nuses`n  System.Classes, LibA;`n`ntype`n  TAdjDM = class(TDataModule)`n"
+$adjDfm = "object AdjDM: TAdjDM`n"
+for ($q = 1; $q -le 12; $q++) {
+  $adjPas += "    t${q}: TSrcTable;`n    t${q}f: TSrcField;`n"
+  $adjDfm += "  object t${q}: TSrcTable`n    Caption = 't$q'`n    object t${q}f: TSrcField`n      Caption = 'f$q'`n    end`n  end`n"
+}
+$adjPas += "  end;`n`nimplementation`n`n{`$R *.dfm}`n`nend.`n"
+$adjDfm += "end`n"
+Write-Ascii (P 'AdjDM.pas') $adjPas
+Write-Ascii (P 'AdjDM.dfm') $adjDfm
+
 # ---- (e) rollback: a write that fails after the pre-check -------------------------
 foreach ($rb in 'RollA', 'RollB', 'RollC') {
   Write-Ascii (P "$rb.pas") @"
@@ -382,6 +395,16 @@ Check 'A7 the mixed parent keeps its plain child verbatim beside the converted o
   ($dfm.Contains("    object plain: TPlainChild`r`n      Caption = 'p'`r`n    end`r`n  end`r`n") -and ($pas -match 'fld: TDstField;') -and ($pas -match 'sub: TDstField;') -and `
    ($pas -match 'plain: TPlainChild;')) ($dfm + "`n" + $pas)
 
+# ---- (a3) twelve adjacent converted tables, each with a converted field ------------
+$r = ApplyTo @('AdjDM.pas') 'nest.rules' @('--apply', '--no-backup')
+$dfm = Text 'AdjDM.dfm'
+$okAdj = $r.Code -eq 0
+for ($q = 1; $q -le 12; $q++) {
+  if (-not $dfm.Contains("  object t${q}: TDstTable`r`n    Title = 't$q'`r`n    object t${q}f: TDstField`r`n      Title = 'f$q'`r`n      Flag2 = True`r`n    end`r`n  end`r`n")) { $okAdj = $false }
+}
+Check 'A8 twelve ADJACENT converted blocks: each lands in its own place, intact, in order (insert-after-L before delete-ending-at-L)' `
+  ($okAdj -and -not ($dfm -match 'TSrc')) ($r.Out + "`n" + $dfm)
+
 # ---- (e) rollback ------------------------------------------------------------------
 # DRAGLINT_TEST_FAIL_WRITE_AT=2 makes the applier's SECOND file write raise -- one
 # file of the unit is already written by then.
@@ -460,6 +483,12 @@ if (-not $NoCompile) {
   Check 'C1 the converted NestDM and Nest3DM compile with dcc64' (($cl -match 'BUILD_EXITCODE=0') -and ($errLines.Count -eq 0)) ($errLines -join ' | ')
 }
 
+# ---- 1.25.2: the STANDING LOAD GUARD -- every .dfm this suite's --apply wrote
+# goes through Delphi's own reader (lib\DfmLoadCheck.ps1). A dry run proves the
+# PLAN, never the BYTES.
+. (Join-Path $PSScriptRoot 'lib\DfmLoadCheck.ps1')
+$loadFails = Test-DfmLoads @((P 'NestDM.dfm'), (P 'Nest3DM.dfm'), (P 'NestOnly.dfm'), (P 'PlainDM.dfm'), (P 'AdjDM.dfm'))
+Check 'LOAD1 every .dfm --apply wrote LOADS (text -> binary -> text -> binary)' ($loadFails.Count -eq 0) ($loadFails -join ' | ')
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {
