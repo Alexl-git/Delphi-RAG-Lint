@@ -64,14 +64,14 @@ function Sql([string]$Query) {
   }
   return ,@($out)
 }
-function LineOf([string]$Marker) {
-  $m = @(Select-String -LiteralPath $use -Pattern ("// " + [regex]::Escape($Marker) + "\s*$"))
+function LineOf([string]$Marker, [string]$File = $use) {
+  $m = @(Select-String -LiteralPath $File -Pattern ("// " + [regex]::Escape($Marker) + "\s*$"))
   if ($m.Count -ne 1) { throw "marker '$Marker' found $($m.Count) times in the fixture" }
   return [int]$m[0].LineNumber
 }
-# Every READ ref named $Name on the marker's line (or $Line), with what it binds.
-function ReadsAt([string]$Marker, [string]$Name, [int]$Line = 0) {
-  if ($Line -le 0) { $Line = LineOf $Marker }
+# Every READ ref named $Name on the marker's line, with what it binds.
+function ReadsAt([string]$Marker, [string]$Name, [string]$Unit = 'uIfUse') {
+  $Line = LineOf $Marker (Join-Path $scratch "$Unit.pas")
   return Sql ("SELECT r.id, r.kind, s.qualified_name AS sq, s.kind AS sk, ma.mode AS mode, " +
               "ma.accessor_symbol_id AS acc, rt.qualified_name AS rtq, " +
               "(SELECT COUNT(*) FROM call_edges ce WHERE ce.ref_id = r.id) AS edges " +
@@ -79,7 +79,7 @@ function ReadsAt([string]$Marker, [string]$Name, [int]$Line = 0) {
               "LEFT JOIN symbols s ON s.id = r.symbol_id " +
               "LEFT JOIN member_accesses ma ON ma.ref_id = r.id " +
               "LEFT JOIN symbols rt ON rt.id = ma.receiver_type_symbol_id " +
-              "WHERE f.path LIKE '%uIfUse.pas' AND r.start_line = $Line AND r.name_text = '$Name' " +
+              "WHERE f.path LIKE '%\$Unit.pas' AND r.start_line = $Line AND r.name_text = '$Name' " +
               "AND r.kind IN ('read', 'write')")
 }
 function Show($rows) { return (@($rows | ForEach-Object { "$($_.kind):sid=$($_.sq)/ma=$($_.mode)/rt=$($_.rtq)/edges=$($_.edges)" }) -join '; ') }
@@ -135,6 +135,47 @@ try {
   $r = ReadsAt 'F-WRITE' 'FOwn'
   Check 'F-WRITE  bare FOwn:= N (a write) binds TIfLeaf.FOwn' `
     (@($r | Where-Object { $_.kind -eq 'write' -and $_.sq -eq 'uIfUse.TIfLeaf.FOwn' }).Count -eq 1) (Show $r)
+
+  Write-Host '--- review round 1: the NEAREST member of the name answers, whatever its kind (uIfHide)'
+  # TBaseH declares fields FHm, FHc, FHp, FHo; TMidH hides FHm with a METHOD,
+  # FHc with a class CONST, FHp with a PROPERTY; TLeafH hides FHo with its OWN
+  # field. Before the fix the first two bound TBaseH's field `certain`.
+  $r = ReadsAt 'H-METHOD' 'FHm' 'uIfHide'
+  Check 'H-METHOD  P:= FHm, a METHOD of TMidH hides TBaseH.FHm: not bound to the field' `
+    (($r.Count -ge 1) -and (@($r | Where-Object { $_.sk -eq 'field' }).Count -eq 0)) (Show $r)
+  $r = ReadsAt 'H-CONST' 'FHc' 'uIfHide'
+  Check 'H-CONST   N:= FHc, a class CONST of TMidH hides TBaseH.FHc: not bound to the field' `
+    (($r.Count -ge 1) -and (@($r | Where-Object { $_.sk -eq 'field' }).Count -eq 0)) (Show $r)
+  $r = ReadsAt 'H-PROP' 'FHp' 'uIfHide'
+  Check 'H-PROP    FHp: the PROPERTY TMidH.FHp hides TBaseH.FHp and binds' `
+    ((@($r | Where-Object { $_.sq -eq 'uIfHide.TMidH.FHp' -and $_.mode -eq 'read' }).Count -eq 1) -and
+     (@($r | Where-Object { $_.sk -eq 'field' }).Count -eq 0)) (Show $r)
+  $r = ReadsAt 'H-OWN' 'FHo' 'uIfHide'
+  Check 'H-OWN     FHo: the OWN field TLeafH.FHo hides TBaseH.FHo and binds' `
+    (@($r | Where-Object { $_.sq -eq 'uIfHide.TLeafH.FHo' -and $_.mode -eq 'read' }).Count -eq 1) (Show $r)
+  $r = ReadsAt 'H-GLOBAL' 'GShadow' 'uIfHide'
+  Check 'H-GLOBAL  GShadow: the own FIELD wins over a unit var of the name' `
+    (@($r | Where-Object { $_.sq -eq 'uIfHide.TLeafH.GShadow' }).Count -eq 1) (Show $r)
+  $r = ReadsAt 'H-INTF' 'FIp' 'uIfHide'
+  Check 'H-INTF    FIp: an implemented INTERFACE''s property is not in the class scope: not bound to it' `
+    (($r.Count -ge 1) -and (@($r | Where-Object { $_.sq -eq 'uIfHide.IHasFIp.FIp' }).Count -eq 0)) (Show $r)
+
+  Write-Host '--- review round 1: edge shapes bind correctly or decline, never a wrong bind'
+  $r = ReadsAt 'H-CLASSVAR' 'FCv' 'uIfHide'
+  Check 'H-CLASSVAR  FCv (a class var, kind var): no FIELD bind' `
+    (($r.Count -ge 1) -and (@($r | Where-Object { $_.sk -eq 'field' }).Count -eq 0)) (Show $r)
+  $r = ReadsAt 'H-AMBIG' 'FAmb' 'uIfHide'
+  Check 'H-AMBIG   FAmb beyond an AMBIGUOUS (unresolved) ancestor TAmb: declines, never guesses' `
+    (($r.Count -ge 1) -and (@($r | Where-Object { $null -ne $_.sq }).Count -eq 0)) (Show $r)
+  foreach ($c in @(@{ M = 'H-NESTED';       N = 'FIn';   Q = 'uIfHide.TOuterN.TInnerN.FIn'; T = 'uIfHide.TOuterN.TInnerN' },
+                   @{ M = 'H-RECORD';       N = 'FA';    Q = 'uIfHide.TRecR.FA';            T = 'uIfHide.TRecR' },
+                   @{ M = 'H-GENERIC';      N = 'FItem'; Q = 'uIfHide.TBoxG.FItem';         T = 'uIfHide.TBoxG' },
+                   @{ M = 'H-GENERIC-DESC'; N = 'FItem'; Q = 'uIfHide.TBoxG.FItem';         T = 'uIfHide.TIntBox' },
+                   @{ M = 'H-HELPER';       N = 'FHo';   Q = 'uIfHide.TLeafH.FHo';          T = 'uIfHide.TLeafHHelper' })) {
+    $r = ReadsAt $c.M $c.N 'uIfHide'
+    Check ("{0}  {1} binds {2} (receiver type {3})" -f $c.M, $c.N, $c.Q, $c.T) `
+      (($r.Count -eq 1) -and ($r[0].sq -eq $c.Q) -and ($r[0].mode -eq 'read') -and ($r[0].rtq -eq $c.T)) (Show $r)
+  }
 
   Write-Host '--- the calls-stage log line'
   $ml = @($log.Split("`n") | Where-Object { $_ -match 'calls\s+member-reads: ' })

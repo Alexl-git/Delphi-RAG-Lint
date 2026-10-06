@@ -948,4 +948,6 @@
 #   chain instead of declining 'field'; TMemberReadStats.Field removed. Billed on
 #   DRAGLINT_RESOLVER_VERSION per the 1.6.0-1.11.0 precedent. No stored parse differs.
 #   Superseded: 1.21.1-alpha|23d91cc58ee54446b0cf6a5809389cef208aff1ef9dcf8960af9a5d2584a1704
-1.21.1-alpha|efde0f262790c06fbd35c0cf715ba4a8638dac660edcad09f1612868a1f08b9f
+#   2026-10-06 E5 review round 1 (NearestClassMember, resolver-only, still 1.12.0): re-pinned again.
+#   Superseded: 1.21.1-alpha|efde0f262790c06fbd35c0cf715ba4a8638dac660edcad09f1612868a1f08b9f
+1.21.1-alpha|dc59cf349ac20a0a676b3c002bd9ecfab9294f15bc50140debd99642393140a3

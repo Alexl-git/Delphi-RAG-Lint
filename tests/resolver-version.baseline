@@ -664,7 +664,8 @@
 #   take WriteMemberAccess). No code token changed; the engine rebuilt from this tree.
 #
 #   Superseded: 1.9.0-alpha|b2121f749843e1d3d5df61bdd7eb41a36e4c0119c8d78062569b7a8de703d575
-1.12.0-alpha|3cebd6247a15eb7fa8708c80fd73242b4c60d53c9d44a390564efaa12a6b1806
+1.12.0-alpha|e2db1d4d6dd17d7b1687e0cb9f7b27822e71e3299e5d2afed86dd0f329658c7d
+# superseded (same 1.12.0-alpha, never released; E5 review round 1 on the branch -- NearestClassMember: the nearest member of any kind hides a farther field, an unresolved parent ends the walk, interfaces are not walked; new decline reason 'hidden'): 1.12.0-alpha|3cebd6247a15eb7fa8708c80fd73242b4c60d53c9d44a390564efaa12a6b1806
 # superseded: 1.11.0-alpha|7d04a1be5c4bfd0968b01c171996afe597c3b1ad94ae9910e013e044974854bd
 #   2026-10-06 1.11.0 -> 1.12.0-alpha (E5 / DEC-19, owner ruled YES 2026-10-05): ResolveBareMemberRead binds a BARE read of a field of the enclosing class or an ancestor (refs.symbol_id + member_accesses, mode read, no accessor); the 'field' decline reason and its counter are gone. Resolve-only: remedy is index --all --resolve-only. PINNED ON THE BRANCH feat/e5-resolver.
 # superseded: 1.9.0-alpha|aafb3c523b3de03bb7b46665fac0b0d50bacf1282b64600e3f05e7746e22b17e

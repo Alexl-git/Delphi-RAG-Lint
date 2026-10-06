@@ -5,6 +5,9 @@ breaking changes** until v1.0.
 
 ## v1.24.0-alpha -- unreleased
 
+(1.23.0-alpha ships from `feat/c13-convert-apply`; this branch takes 1.24.0 so the two can
+merge in either order.)
+
 No extractor change: indexes do not re-parse. **Resolver 1.11.0 -> 1.12.0-alpha**: the next
 `index` of every database re-resolves on its own (resolver fingerprint); to do it at once,
 `index --all --resolve-only`.
@@ -23,6 +26,12 @@ No extractor change: indexes do not re-parse. **Resolver 1.11.0 -> 1.12.0-alpha*
   31,144; `find-callers --name tblFtrs --resolved` 109 -> 160 rows, 18 -> 36 callers); this
   repo's self-index 2,502. `lint-all` findings unchanged on both (byte-identical JSON).
   Consumers counting member reads (charts who-reads) must re-baseline.
+  The class chain is walked NEAREST first over every member kind: a nearer method, class
+  const/var or nested type of the name HIDES a farther field and the read declines (new
+  `hidden` slot on the log line); an own field hides an ancestor's; an unresolved or
+  ambiguous parent ends the walk; an implemented interface's property is not in scope (the
+  1.8.0 bare-property read used to bind it). The rows written change `refs.symbol_id` and add
+  a `member_accesses` row only -- `kind`, `name_text` and `receiver_text` are untouched.
   Guards: `run_in_class_field_bind.ps1` (new); `run_with_scope_bind.ps1` OWN-FIELD,
   `run_parenless_call_bind.ps1` NEG-FIELD and `run_property_refs_resolve.ps1` E2 flipped
   from "stays unbound" to "binds".

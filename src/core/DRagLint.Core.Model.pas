@@ -258,7 +258,11 @@ const
   /// member_accesses row, mode read, no accessor, no call edge. It declined
   /// 'field' by design since 1.8.0; that reason is gone. Shadowing is
   /// unchanged (with target, then locals/params of the routine and its outer
-  /// routines, then the class chain). DERIVED rows only, no parse change:
+  /// routines, then the class chain). The class chain is now walked NEAREST
+  /// first over ANY member kind (NearestClassMember): a nearer method, class
+  /// const/var or nested type hides a farther field ('hidden'), an unresolved
+  /// parent ends the walk, and an implemented interface's property -- which
+  /// the 1.8.0 bare-property read bound -- is no longer in scope. DERIVED rows only, no parse change:
   /// remedy is `index --all --resolve-only`. A MINOR: a new class of derived
   /// row (~31k reads on ORM3 SERVER, ~21k on CLIENT by the 2026-09-28 decline
   /// counters). The reservation for C2.3 + the IsStub unification MOVES from
