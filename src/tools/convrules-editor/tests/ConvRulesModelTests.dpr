@@ -8651,6 +8651,7 @@ begin
     and (Length(V('tblOps').Chain) = CHAIN_OPS) and SameText(V('tblOps').Chain[0].PasPath, MID_PAS));
   Check('code.use.unknown.dropped', V('lblNoSuch').Instance.Name = '');
   Check('code.use.own.field.dropped', V('qryOwn').Instance.Name = '');
+  Check('code.use.note', InheritanceRowNote(U) = 'inherits 2 TTable instance(s) from Base -- convert it first (recommended)', InheritanceRowNote(U));
   Check('code.use.left.note', CodeUseLeftNote(U) = '2 inherited code use(s) left: ancestor Base not converted', CodeUseLeftNote(U));
 
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
@@ -8710,6 +8711,96 @@ begin
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Inner, FakeCodeUses(['IndexName|TBLFTRS|45', 'tblftrs||40'], False));
   Check('code.use.case.insensitive', (Length(U.Verdicts) = 1) and (U.Verdicts[0].DeclaringUnit = 'Base') and (U.Verdicts[0].Instance.Line = LINE_FIRST),
     Format('n=%d %s', [Length(U.Verdicts), U.Error]));
+end;
+
+{ C8 E5-E9 decisions, on hand-built verdicts (the walk itself is TestInheritanceWalk):
+  the row note's exact text, the topmost-first chain, the offer, the insertion
+  (dedupe, directly before the descendant), the ordering warning (never a block) and
+  the notes for an engine without inherited_instances. }
+procedure TestInheritanceDecisions;
+const
+  BASE_PAS = 'fx\Base.pas';
+  MID_PAS  = 'fx\Mid.pas';
+  LEAF_PAS = 'fx\Leaf.pas';
+  X_PAS    = 'fx\X.pas';
+  Y_PAS    = 'fx\Y.pas';
+  DEPTH_MID  = 1;
+  DEPTH_BASE = 2;
+  N_WARN     = 2;
+  N_NOTES    = 2;
+var
+  Leaf, Done, Unknown, CodeOnly, NoAnc: TUnitInheritance;
+  Warn : TArray<string>;
+  Notes: TArray<string>;
+
+  function Link(const APas: string; ADepth: Integer): TChainUnit;
+  begin
+    Result.PasPath:= APas;
+    Result.Depth  := ADepth;
+  end;
+
+  function Verdict(const AName, AType: string; AState: TAncestorState; const AUnit: string; const AChain: TArray<TChainUnit>): TInstanceVerdict;
+  begin
+    Result:= Default(TInstanceVerdict);
+    Result.Instance.Name    := AName;
+    Result.Instance.TypeName:= AType;
+    Result.State            := AState;
+    Result.DeclaringUnit    := AUnit;
+    Result.DeclaringPas     := if AState = asOutside then '' else 'fx\' + AUnit + '.pas';
+    Result.Chain            := AChain;
+  end;
+
+begin
+  Leaf:= Default(TUnitInheritance);
+  Leaf.UnitPas := LEAF_PAS;
+  Leaf.Known   := True;
+  Leaf.Verdicts:= [Verdict('tblFtrs', 'TTable', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)]),
+    Verdict('tblOps', 'TTable', asUnconverted, 'Base', [Link(MID_PAS, DEPTH_MID), Link(BASE_PAS, DEPTH_BASE)]),
+    Verdict('qryX', 'TQuery', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)]),
+    Verdict('qryLib', 'TQuery', asOutside, 'TDataModule', [])];
+  Check('inherit.note.text', InheritanceRowNote(Leaf) = 'inherits 3 TTable, TQuery instance(s) from Base -- convert it first (recommended); '
+    + 'inherits from TDataModule, which is not in this project''s index -- convert it from its own project', InheritanceRowNote(Leaf));
+  NoAnc:= Leaf;
+  NoAnc.Verdicts:= [Verdict('qryLib', 'TQuery', asOutside, OUTSIDE_NO_ANCESTOR, [])];
+  Check('inherit.note.outside.no.ancestor', (InheritanceRowNote(NoAnc) = OutsideNote(NoAnc.Verdicts[0]))
+    and not InheritanceRowNote(NoAnc).Contains(OUTSIDE_NO_ANCESTOR), InheritanceRowNote(NoAnc));
+  Done:= Leaf;
+  Done.Verdicts:= [Verdict('tblFtrs', 'TTable', asConverted, 'Base', [])];
+  Check('inherit.note.converted.silent', InheritanceRowNote(Done) = '', InheritanceRowNote(Done));
+  Unknown:= Leaf;
+  Unknown.Known:= False;
+  Check('inherit.note.unknown.silent', InheritanceRowNote(Unknown) = '');
+
+  Check('inherit.chain.topmost.first', string.Join(',', AncestorChain(Leaf)) = BASE_PAS + ',' + MID_PAS, string.Join(',', AncestorChain(Leaf)));
+  Check('inherit.chain.converted.empty', Length(AncestorChain(Done)) = 0);
+  Check('inherit.offer.text', OfferText([BASE_PAS, MID_PAS], LEAF_PAS) = 'Add Base.pas, Mid.pas ahead of Leaf.pas?', OfferText([BASE_PAS, MID_PAS], LEAF_PAS));
+  Check('inherit.offer.missing', string.Join(',', MissingAncestors([BASE_PAS, MID_PAS], ['FX\mid.pas', LEAF_PAS])) = BASE_PAS);
+  Check('inherit.offer.none.when.listed', Length(MissingAncestors([BASE_PAS, MID_PAS], [MID_PAS, BASE_PAS, LEAF_PAS])) = 0);
+
+  Check('inherit.insert.before', string.Join(',', InsertAncestors([X_PAS, LEAF_PAS, Y_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])) = string.Join(',', [X_PAS, BASE_PAS, MID_PAS, LEAF_PAS, Y_PAS]),
+    string.Join(',', InsertAncestors([X_PAS, LEAF_PAS, Y_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])));
+  Check('inherit.insert.skips.listed', string.Join(',', InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, [BASE_PAS, MID_PAS])) = string.Join(',', [MID_PAS, BASE_PAS, LEAF_PAS]));
+  Check('inherit.insert.unit.absent.appends', string.Join(',', InsertAncestors([X_PAS], LEAF_PAS, [BASE_PAS])) = string.Join(',', [X_PAS, BASE_PAS]));
+
+  Warn:= OrderWarnings([LEAF_PAS, BASE_PAS, MID_PAS], [Leaf]);
+  Check('inherit.order.warns', (Length(Warn) = N_WARN) and (Warn[0] = 'Leaf.pas is listed above its ancestor Base.pas, which is not converted yet')
+    and (Warn[1] = 'Leaf.pas is listed above its ancestor Mid.pas, which is not converted yet'), string.Join(' | ', Warn));
+  Check('inherit.order.ok', Length(OrderWarnings([BASE_PAS, MID_PAS, LEAF_PAS], [Leaf])) = 0);
+  Check('inherit.order.unlisted.ancestor', Length(OrderWarnings([LEAF_PAS], [Leaf])) = 0);
+  Check('inherit.order.converted.silent', Length(OrderWarnings([LEAF_PAS, BASE_PAS], [Done])) = 0);
+  Check('inherit.order.text', OrderWarningText(Warn).StartsWith('Some units are listed above an ancestor that is not converted yet')
+    and OrderWarningText(Warn).Contains(Warn[0]) and OrderWarningText(Warn).EndsWith('Convert in this order anyway?'), OrderWarningText(Warn));
+
+  Notes:= EngineRefusalNotes([Leaf, Done, Unknown], False);
+  Check('inherit.refusal.notes', (Length(Notes) = N_NOTES)
+    and (Notes[0] = 'Leaf.pas: 4 inherited instance(s) of a From type -- this engine refuses such a unit (no inherited_instances capability), so it will be left unchanged'),
+    string.Join(' | ', Notes));
+  Check('inherit.refusal.notes.supported', Length(EngineRefusalNotes([Leaf], True)) = 0);
+  CodeOnly:= Leaf;
+  CodeOnly.Verdicts:= [Verdict('tblFtrs', 'TTable', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)])];
+  CodeOnly.Verdicts[0].Instance.FromCode:= True;
+  Check('inherit.refusal.notes.code.only.silent', Length(EngineRefusalNotes([CodeOnly], False)) = 0);
+  Check('inherit.chain.code.use', string.Join(',', AncestorChain(CodeOnly)) = BASE_PAS);
 end;
 
 { C8 E2 / E3 / E8: the ancestor walk over a fake index. The fixture mirrors the
@@ -9085,6 +9176,7 @@ begin
     TestInheritanceScan;
     TestInheritancePairs;
     TestInheritanceWalk;
+    TestInheritanceDecisions;
     TestInheritanceWalkEdges;
     TestInheritanceCodeUses;
     TestUnitPickPlatform;

@@ -113,6 +113,13 @@ function ExpandSources(const APaths: TArray<string>; out AErrors: TArray<string>
 /// pass a unit the engine then cannot find.</remarks>
 function UnitInIndex(const AUnitPas: string; const AIndexedFiles: TArray<string>): Boolean;
 
+/// <summary>PURE: where the FILE APath is in APaths, by UnitInIndex's compare (both
+/// sides ExpandFileName'd, case-insensitively).</summary>
+/// <param name="APath">A file path.</param>
+/// <param name="APaths">The paths to search.</param>
+/// <returns>The first matching index; -1 when absent.</returns>
+function PathIndex(const APath: string; const APaths: TArray<string>): Integer;
+
 /// <summary>The Convert tab's DISPLAYED text for one source row.</summary>
 /// <param name="AUnitPas">The listed .pas path. It stays the item string --
 /// the job and Preflight consume it -- so only the display changes.</param>
@@ -305,15 +312,20 @@ begin
   Result:= Found;
 end;
 
-function UnitInIndex(const AUnitPas: string; const AIndexedFiles: TArray<string>): Boolean;
+function PathIndex(const APath: string; const APaths: TArray<string>): Integer;
 var
   LFull: string;
 begin
-  LFull:= ExpandFileName(AUnitPas);
-  for var LPath: string in AIndexedFiles do
-    if SameText(ExpandFileName(LPath), LFull) then
-      Exit(True);
-  Result:= False;
+  LFull:= ExpandFileName(APath);
+  for var I: Integer:= 0 to High(APaths) do
+    if SameText(ExpandFileName(APaths[I]), LFull) then
+      Exit(I);
+  Result:= -1;
+end;
+
+function UnitInIndex(const AUnitPas: string; const AIndexedFiles: TArray<string>): Boolean;
+begin
+  Result:= PathIndex(AUnitPas, AIndexedFiles) >= 0;
 end;
 
 function SourceRowText(const AUnitPas: string; const AIndexedFiles: TArray<string>; AIndexKnown: Boolean; out AFlagged: Boolean): string;

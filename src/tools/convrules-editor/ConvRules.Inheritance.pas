@@ -273,7 +273,7 @@ function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; co
 /// the index at a named class; 'inherits &lt;Instance&gt; from an ancestor that is not in
 /// this project's index -- convert it from its own project' when it named no ancestor
 /// class at all (DeclaringUnit = OUTSIDE_NO_ANCESTOR).</returns>
-function OutsideNote(const AVerdict: TInstanceVerdict): string;  // dl:ok unused-public-symbol@a346 -- REVIEWED 2026-10-05 called by the model tests (inherit.note.*) only until the C8 row-note task wires it into the editor; drop this marker when it does
+function OutsideNote(const AVerdict: TInstanceVerdict): string;
 
 /// <summary>Wraps ALookup with a per-class cache (key: the upper-cased class name).</summary>
 /// <param name="AInner">The real lookup.</param>
@@ -300,12 +300,83 @@ function CodeUseLeftNote(const AUnit: TUnitInheritance): string;  // dl:ok unuse
 /// reading raises, else drRead.</returns>
 function DiskTextReader: TDfmTextReader;  // dl:ok unused-public-symbol@8af4 -- REVIEWED 2026-10-05 wired into the editor by the C8 Convert-tab tasks; drop this marker when they do
 
+/// <summary>PURE: the Convert tab's row note for a unit (spec E5, E8).</summary>
+/// <param name="AUnit">The unit's analysis.</param>
+/// <returns>'' when AUnit is not Known or nothing is unconverted / outside; else, per
+/// declaring unit of its asUnconverted verdicts (.dfm instances and E2b code uses alike)
+/// in first-seen order, 'inherits N &lt;types&gt; instance(s) from &lt;Unit&gt; --
+/// convert it first (recommended)' (types distinct, first-seen, ', '-joined), then each
+/// distinct OutsideNote of its asOutside verdicts; all joined '; '.</returns>
+/// <remarks>asConverted says nothing (E11: the run converts it). asUnknown never yields a
+/// note: AnalyzeUnit makes such a unit Known = False.</remarks>
+function InheritanceRowNote(const AUnit: TUnitInheritance): string;  // dl:ok unused-public-symbol@8131 -- REVIEWED 2026-10-05 called by the model tests (inherit.note.*, code.use.note) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+
+/// <summary>PURE: the ancestor units to convert before AUnit (spec E2a / E6): the chain
+/// units of its asUnconverted verdicts -- the units whose .dfm declares or re-opens one of
+/// its inherited instances (for an E2b code use, also the unit declaring the field) --
+/// de-duplicated by path, topmost first. An ancestor that never mentions an instance is
+/// not offered.</summary>
+/// <param name="AUnit">The unit's analysis.</param>
+/// <returns>.pas paths, larger TChainUnit.Depth first (a unit on several chains takes
+/// its largest Depth; equal depths keep first-seen order); [] when nothing is
+/// unconverted.</returns>
+function AncestorChain(const AUnit: TUnitInheritance): TArray<string>;
+
+/// <summary>PURE: the members of AChain not in AList (paths compared as UnitInIndex
+/// does: ExpandFileName'd, case-insensitively).</summary>
+/// <param name="AChain">AncestorChain's answer.</param>
+/// <param name="AList">The source list.</param>
+/// <returns>In AChain order.</returns>
+function MissingAncestors(const AChain, AList: TArray<string>): TArray<string>;
+
+/// <summary>PURE: the E6 question, 'Add &lt;chain&gt; ahead of &lt;unit&gt;?', with file names.</summary>
+/// <param name="AChain">The chain to offer, topmost first.</param>
+/// <param name="AUnitPas">The descendant.</param>
+/// <returns>'Add Base.pas, Mid.pas ahead of Leaf.pas?'.</returns>
+function OfferText(const AChain: TArray<string>; const AUnitPas: string): string;  // dl:ok unused-public-symbol@9c66 -- REVIEWED 2026-10-05 called by the model tests (inherit.offer.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+
+/// <summary>PURE: AList with AChain's missing units inserted directly before AUnitPas (spec E6 Yes).</summary>
+/// <param name="AList">The source list.</param>
+/// <param name="AUnitPas">The descendant.</param>
+/// <param name="AChain">Topmost first; units already listed are skipped wherever they are.</param>
+/// <returns>A new list; the missing units are appended when AUnitPas is not listed.</returns>
+function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; const AChain: TArray<string>): TArray<string>;  // dl:ok unused-public-symbol@5e06 -- REVIEWED 2026-10-05 called by the model tests (inherit.insert.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+
+/// <summary>PURE: one line per (listed descendant, listed ancestor of its AncestorChain
+/// listed BELOW it) pair (spec E7).</summary>
+/// <param name="AList">The source list, run order.</param>
+/// <param name="AUnits">The listed units' analyses (any order).</param>
+/// <returns>'&lt;Desc.pas&gt; is listed above its ancestor &lt;Anc.pas&gt;, which is not
+/// converted yet' lines, per unit in AUnits order, ancestors topmost first.</returns>
+/// <remarks>A warning, never a refusal: the run converts the descendant's own part
+/// either way (E9).</remarks>
+function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;  // dl:ok unused-public-symbol@69fc -- REVIEWED 2026-10-05 called by the model tests (inherit.order.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+
+/// <summary>PURE: the single E7 confirmation text.</summary>
+/// <param name="AWarnings">OrderWarnings' lines; not empty.</param>
+/// <returns>A heading line, the warnings one per line, a blank line, then 'Convert in
+/// this order anyway?'.</returns>
+function OrderWarningText(const AWarnings: TArray<string>): string;  // dl:ok unused-public-symbol@ff20 -- REVIEWED 2026-10-05 called by the model tests (inherit.order.text) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+
+/// <summary>PURE: the run notes for an engine WITHOUT inherited_instances: today's
+/// convert-apply refuses every unit holding an inherited From instance.</summary>
+/// <param name="AUnits">The listed units' analyses.</param>
+/// <param name="AInheritedSupported">The engine reports inherited_instances.</param>
+/// <returns>[] when supported; else one note per Known unit with at least one .dfm
+/// verdict, whatever its state ('&lt;Unit.pas&gt;: N inherited instance(s) of a From type
+/// -- this engine refuses such a unit (no inherited_instances capability), so it will be
+/// left unchanged').</returns>
+/// <remarks>FromCode verdicts are not counted: the engine does not refuse on code.</remarks>
+function EngineRefusalNotes(const AUnits: TArray<TUnitInheritance>; AInheritedSupported: Boolean): TArray<string>;  // dl:ok unused-public-symbol@2cbe -- REVIEWED 2026-10-05 called by the model tests (inherit.refusal.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+
 implementation
 
 uses
   System.IOUtils
+  , System.Math
   , System.StrUtils
   , ConvRules.BlockFile
+  , ConvRules.ConvertRun
   , ConvRules.Model
   , ConvRules.Usage
   ;
@@ -332,6 +403,13 @@ const
   NOTE_CODE_LEFT = '%d inherited code use(s) left: ancestor %s not converted';
   NOTE_JOIN     = '; ';
   SELF_WORD     = 'Self';
+  TYPE_SEP      = ', ';
+  NOTE_UNCONVERTED  = 'inherits %d %s instance(s) from %s -- convert it first (recommended)';
+  OFFER_FMT         = 'Add %s ahead of %s?';
+  ORDER_WARNING_FMT = '%s is listed above its ancestor %s, which is not converted yet';
+  ORDER_HEAD        = 'Some units are listed above an ancestor that is not converted yet; their inherited instances will not convert in this run:';
+  ORDER_TAIL        = 'Convert in this order anyway?';
+  REFUSAL_FMT       = '%s: %d inherited instance(s) of a From type -- this engine refuses such a unit (no inherited_instances capability), so it will be left unchanged';
 
 type
   // How one WalkChain ended: a .dfm (or, for a code use, a field) declared the
@@ -361,10 +439,12 @@ type
     Text: string;
   end;
 
-  // One declaring unit and how many verdicts name it (TallyByUnit).
+  // One declaring unit, how many verdicts name it and their distinct instance types,
+  // first-seen (TallyByUnit).
   TUnitTally = record
     UnitName: string;
     Count   : Integer;
+    Types   : TArray<string>;
   end;
 
   // Which verdicts TallyByUnit counts.
@@ -1009,7 +1089,8 @@ begin
   end; // try
 end;
 
-// Per declaring unit, in first-seen order, how many of AVerdicts AWanted accepts.
+// Per declaring unit, in first-seen order, how many of AVerdicts AWanted accepts and
+// their distinct instance types.
 function TallyByUnit(const AVerdicts: TArray<TInstanceVerdict>; const AWanted: TVerdictFilter): TArray<TUnitTally>;
 var
   LIdx: Integer;
@@ -1028,10 +1109,13 @@ begin
     begin
       LNew.UnitName:= LVerdict.DeclaringUnit;
       LNew.Count   := 0;
+      LNew.Types   := nil;
       Result:= Result + [LNew];
       LIdx  := High(Result);
     end;
     Inc(Result[LIdx].Count);
+    if not MatchText(LVerdict.Instance.TypeName, Result[LIdx].Types) then
+      Result[LIdx].Types:= Result[LIdx].Types + [LVerdict.Instance.TypeName];
   end;
 end;
 
@@ -1057,6 +1141,138 @@ begin
     Result:= Format(NOTE_OUTSIDE_NO_ANCESTOR, [AVerdict.Instance.Name])
   else
     Result:= Format(NOTE_OUTSIDE, [AVerdict.DeclaringUnit]);
+end;
+
+function InheritanceRowNote(const AUnit: TUnitInheritance): string;
+var
+  LParts: TArray<string>;
+  LNote : string;
+begin
+  if not AUnit.Known then
+    Exit('');
+  LParts:= nil;
+  for var LTally: TUnitTally in TallyByUnit(AUnit.Verdicts,
+    function(const AVerdict: TInstanceVerdict): Boolean
+    begin
+      Result:= AVerdict.State = asUnconverted;
+    end) do
+    LParts:= LParts + [Format(NOTE_UNCONVERTED, [LTally.Count, string.Join(TYPE_SEP, LTally.Types), LTally.UnitName])];
+  for var LVerdict: TInstanceVerdict in AUnit.Verdicts do
+  begin
+    LNote:= OutsideNote(LVerdict);
+    if (LNote <> '') and not MatchText(LNote, LParts) then
+      LParts:= LParts + [LNote];
+  end;
+  Result:= string.Join(NOTE_JOIN, LParts);
+end;
+
+function AncestorChain(const AUnit: TUnitInheritance): TArray<string>;
+var
+  LUnits: TArray<TChainUnit>;
+  LIdx  : Integer;
+  LKey  : TChainUnit;
+  J     : Integer;
+begin
+  LUnits:= nil;
+  Result:= nil; // the paths of LUnits, kept in step for PathIndex
+  for var LVerdict: TInstanceVerdict in AUnit.Verdicts do
+    if LVerdict.State = asUnconverted then
+      for var LLink: TChainUnit in LVerdict.Chain do
+      begin
+        LIdx:= PathIndex(LLink.PasPath, Result);
+        if LIdx >= 0 then
+          LUnits[LIdx].Depth:= Max(LUnits[LIdx].Depth, LLink.Depth)
+        else
+        begin
+          LUnits:= LUnits + [LLink];
+          Result:= Result + [LLink.PasPath];
+        end;
+      end;
+  // Topmost first: a STABLE insertion sort on Depth, descending (TArray.Sort is not stable).
+  for var I: Integer:= 1 to High(LUnits) do
+  begin
+    LKey:= LUnits[I];
+    J   := I - 1;
+    while (J >= 0) and (LUnits[J].Depth < LKey.Depth) do
+    begin
+      LUnits[J + 1]:= LUnits[J];
+      Dec(J);
+    end;
+    LUnits[J + 1]:= LKey;
+  end;
+  for var I: Integer:= 0 to High(LUnits) do
+    Result[I]:= LUnits[I].PasPath;
+end;
+
+function MissingAncestors(const AChain, AList: TArray<string>): TArray<string>;
+begin
+  Result:= nil;
+  for var LPas: string in AChain do
+    if PathIndex(LPas, AList) < 0 then
+      Result:= Result + [LPas];
+end;
+
+function OfferText(const AChain: TArray<string>; const AUnitPas: string): string;
+var
+  LNames: TArray<string>;
+begin
+  LNames:= nil;
+  for var LPas: string in AChain do
+    LNames:= LNames + [ExtractFileName(LPas)];
+  Result:= Format(OFFER_FMT, [string.Join(TYPE_SEP, LNames), ExtractFileName(AUnitPas)]);
+end;
+
+function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; const AChain: TArray<string>): TArray<string>;
+var
+  LMissing: TArray<string>;
+  LPos    : Integer;
+begin
+  LMissing:= MissingAncestors(AChain, AList);
+  LPos    := PathIndex(AUnitPas, AList);
+  if LPos < 0 then
+    Exit(AList + LMissing);
+  Result:= Copy(AList, 0, LPos) + LMissing + Copy(AList, LPos, Length(AList) - LPos);
+end;
+
+function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
+var
+  LPos: Integer;
+begin
+  Result:= nil;
+  for var LUnit: TUnitInheritance in AUnits do
+  begin
+    LPos:= PathIndex(LUnit.UnitPas, AList);
+    if LPos < 0 then
+      Continue;
+    for var LPas: string in AncestorChain(LUnit) do
+      if PathIndex(LPas, AList) > LPos then
+        Result:= Result + [Format(ORDER_WARNING_FMT, [ExtractFileName(LUnit.UnitPas), ExtractFileName(LPas)])];
+  end;
+end;
+
+function OrderWarningText(const AWarnings: TArray<string>): string;
+begin
+  Result:= ORDER_HEAD + sLineBreak + string.Join(sLineBreak, AWarnings) + sLineBreak + sLineBreak + ORDER_TAIL;
+end;
+
+function EngineRefusalNotes(const AUnits: TArray<TUnitInheritance>; AInheritedSupported: Boolean): TArray<string>;
+var
+  LDfm: Integer;
+begin
+  Result:= nil;
+  if AInheritedSupported then
+    Exit;
+  for var LUnit: TUnitInheritance in AUnits do
+  begin
+    if not LUnit.Known then
+      Continue;
+    LDfm:= 0; // the engine refuses on .dfm instances only; an E2b code use does not trigger it
+    for var LVerdict: TInstanceVerdict in LUnit.Verdicts do
+      if not LVerdict.Instance.FromCode then
+        Inc(LDfm);
+    if LDfm > 0 then
+      Result:= Result + [Format(REFUSAL_FMT, [ExtractFileName(LUnit.UnitPas), LDfm])];
+  end;
 end;
 
 function CachingLookup(const AInner: TClassLookup; ACache: TDictionary<string, TClassInfo>): TClassLookup;
