@@ -51,7 +51,7 @@ param(
                'hierarchy','class-surface','event-wiring','touches-tables',
                'lifecycle','cycles','wiring','effects','architecture',
                'protocol-trace','crosses-boundary','shown-where','change-impact','tested-by',
-               'exception-paths','consumers','feeds-from','lands-where','round-trip')]
+               'exception-paths','consumers','feeds-from','lands-where','round-trip','path')]
   [string] $Question = 'butterfly',
   # crosses-boundary only: the other half of the system, so the far side of a
   # protocol command can be named. Optional -- without it the chart shows one side
@@ -66,6 +66,8 @@ param(
   # reads THREE indexes: -DbPath, -ServerDbPath, -SqlDbPath.
   [string] $ServerDbPath,
   [string] $Control,                      # event-wiring only: filter, not selector
+  # path only: routine B. -Target is routine A; the chart is every shortest call path A -> B.
+  [string] $To,
   [int]    $Depth   = 2,
   [int]    $Cap     = 20,                 # member-access / hierarchy: readability cap
   # class-surface caps PER VISIBILITY CLUSTER, so its useful value is much
@@ -93,11 +95,18 @@ if ($Question -eq 'round-trip' -and (-not $SqlDbPath -or -not $ServerDbPath)) {
   throw 'round-trip needs -ServerDbPath (the SERVER clone) and -SqlDbPath (the SQL-script clone); -DbPath is the CLIENT clone'
 }
 
+if ($Question -eq 'path' -and -not $To) {
+  throw 'path needs -To: the routine the path ends at (-Target is where it starts), both qualified (Unit.Class.Method)'
+}
+
 # round-trip walks four call levels by default (the emitter's own default).
 $EffDepth = $(if ($PSBoundParameters.ContainsKey('Depth')) { $Depth } elseif ($Question -eq 'exception-paths') { 3 } elseif ($Question -eq 'round-trip') { 4 } else { $Depth })
 
 $Qname   = $Target
 $slug    = (($Target + $(if ($Control) { ".$Control" } else { '' })) -replace '[^A-Za-z0-9]', '_')
+# path names TWO routines: the slug takes the last two segments of each (Class_Method__Class_Method), because
+# two full qualified names plus the emitter's own file name run past dot's MAX_PATH. The full names are in meta.json.
+if ($Question -eq 'path') { $slug = ((@($Target -split '\.') | Select-Object -Last 2) -join '_') + '__' + ((@($To -split '\.') | Select-Object -Last 2) -join '_') -replace '[^A-Za-z0-9_]', '_' }
 $dir     = Join-Path $OutRoot "$Question-$slug"
 $dirWasNew = -not (Test-Path $dir)
 New-Item -ItemType Directory -Force $dir | Out-Null
@@ -163,6 +172,8 @@ try {
       & (Join-Path $PSScriptRoot 'Emit-CrossesBoundary.ps1') @cb
     }
     # the Interface report's trace core: CLIENT + SERVER + SQL -- trace.dlgraph AND the chart drawn from it (R5)
+    # every shortest call path -Target -> -To (engine call-path + the same call_edges), capped and disclosed
+    'path'           { & (Join-Path $PSScriptRoot 'Emit-Path.ps1')         -From $Target -To $To -DbPath $DbPath -Cap $Cap -OutDir $dir }
     'round-trip'     { & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1')     -Target $Target -DbPath $DbPath -ServerDbPath $ServerDbPath -SqlDbPath $SqlDbPath -Depth $EffDepth -OutDir $dir }
   }
 } catch {
@@ -219,6 +230,8 @@ $vocab = @{
   'lands-where'    = @('ServerRows','server DataService rows','Triggers','triggers touching the column')
   # steps beside unresolved: a trace with STOPS in it says so in its header (AC-12)
   'round-trip'     = @('Steps',  'steps',        'Unresolved', 'unresolved')
+  # how many shortest routes, and how long each is (every shortest path has the same length)
+  'path'           = @('Paths',  'shortest paths', 'Hops',     'calls on each path')
 }
 $v = $vocab[$Question]
 $leftCount  = $r.($v[0]); $leftLabel  = $v[1]
@@ -262,12 +275,13 @@ $fp = [pscustomobject]@{
   allClickable= $r.AllClickable
   regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
                 $(if ($Question -in 'butterfly','who-calls','what-it-calls','change-impact','exception-paths','round-trip') { " -Depth $EffDepth" } else { '' }) +
-                $(if ($Question -in 'who-writes','who-reads','hierarchy','wiring','protocol-trace','shown-where','tested-by','crosses-boundary','exception-paths','consumers','feeds-from','lands-where') { " -Cap $Cap" } else { '' }) +
+                $(if ($Question -in 'who-writes','who-reads','hierarchy','wiring','protocol-trace','shown-where','tested-by','crosses-boundary','exception-paths','consumers','feeds-from','lands-where','path') { " -Cap $Cap" } else { '' }) +
                 $(if ($Question -in 'consumers', 'feeds-from', 'lands-where', 'round-trip') { " -SqlDbPath `"$SqlDbPath`"" } else { '' }) +
                 $(if ($Question -in 'lands-where','round-trip') { " -ServerDbPath `"$ServerDbPath`"" } else { '' }) +
                 $(if ($Question -eq 'crosses-boundary' -and $CounterpartDb) { " -CounterpartDb `"$CounterpartDb`"" } else { '' }) +
                 $(if ($Question -eq 'class-surface') { " -SurfaceCap $SurfaceCap" } else { '' }) +
-                $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' })
+                $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' }) +
+                $(if ($Question -eq 'path') { " -To $To" } else { '' })
   # every count the emitter reported, not just the two the shell shows. The
   # ones the header omits are exactly the ones worth auditing later --
   # who-calls' NameOnly, event-wiring's DfmFallback, touches-tables' Unresolved.
@@ -276,6 +290,7 @@ $fp = [pscustomobject]@{
   # (round-trip's ChartManifest and ChartModelDot are the renderer's working sets, not counts)
   emitter     = ($r | Select-Object -ExcludeProperty Dot, Svg, Plain, Png, Pdf, Trace, Text, AnchorPaths, ChartManifest, ChartModelDot)
 }
+if ($Question -eq 'path') { $fp | Add-Member -NotePropertyName to -NotePropertyValue $To }
 $fp | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $dir 'meta.json') -Encoding ascii
 
 # ---- 3. the shell ------------------------------------------------------------
@@ -348,7 +363,7 @@ if ($isText) {
   $footFiles = 'graph.svg &middot; graph.png &middot; graph.pdf &middot; graph.plain (geometry, same layout run) &middot; '
 }
 
-$short = $Qname
+$short = $(if ($Question -eq 'path') { "$Qname -&gt; $To" } else { $Qname })
 $html = @"
 <!doctype html>
 <meta charset="utf-8">
@@ -439,7 +454,7 @@ $note
 $rel = (Resolve-Path (Join-Path $dir 'index.html')).Path
 $xref = @"
 /// <remarks>
-/// Diagram: $Question of $Target
+/// Diagram: $Question of $Target$(if ($Question -eq 'path') { " to $To" })
 /// Artifact: $rel
 /// Generated: $($fp.generated) from $([IO.Path]::GetFileName($DbPath))
 /// Regenerate: $($fp.regenerate)

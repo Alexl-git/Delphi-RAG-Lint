@@ -1204,6 +1204,49 @@ Step 'E-TB' {
   Chk 'A-TB3-TESTS' $tb3.Tests 13
 }
 
+# path (R4, Task 8): every SHORTEST call path A -> B. The engine's call-path verb answers
+# found / not found and ONE shortest path; the emitter enumerates all of them over the same
+# resolved call_edges and asserts call-path's own path is among them. MEASURED 2026-10-06 on
+# the CLIENT clone (engine 1.25.1-alpha): AddOperation reaches NextSeq in 3 calls by TWO
+# routes -- through ReserveNextID (:4084, then :4030) and through SendDeltaOperation (:4099,
+# then :3985) -- both into ExecuteCommand, which calls NextSeq at uPipeClientConnection.pas:470
+# (butterfly's hop-2 row, A-BF-CALLEES). Every site is grade certain.
+Note 'path ...'
+Step 'E-PATH' {
+  $script:pa1 = & "$SRC\Emit-Path.ps1" -From 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation' `
+                  -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-PA1-COUNTS' "$($pa1.Paths)/$($pa1.PathsShown)/$($pa1.Hops)/$($pa1.Routines)/$($pa1.Edges)/$($pa1.Sites)/$($pa1.Ambiguous)" '2/2/3/5/5/5/0'
+  Chk 'A-PA1-ENGINE' $pa1.EnginePath 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation -> Blueprint4.ViewModel.TBlueprint_ViewModel.ReserveNextID -> uPipeClientConnection.TPipeClientConnection.ExecuteCommand -> uPipeClientConnection.TPipeClientConnection.NextSeq'
+  # 5 routine rows + 5 call-site rows on the edges, each one anchor
+  Chk 'A-PA1-CLICKS' "$($pa1.ClickTargets)/$($pa1.AllClickable)" '10/True'
+  $tp1 = Dot $pa1
+  foreach ($ln in 4084, 4099, 4030, 3985, 470) { if (-not (HasLine $tp1 $ln)) { Fail 'A-PA1-SITES' "call site line $ln is not anchored" } }
+  if ($tp1 -notmatch 'Blueprint4\.ViewModel\.pas:4084 &#183; certain') { Fail 'A-PA1-LABEL' 'the edge label does not carry its call site and grade' }
+  if ($tp1 -match 'not shown') { Fail 'A-PA1-NODISC' 'an uncapped answer discloses hidden paths' }
+
+  # the cap is DISCLOSED, never silent: -Cap 1 draws one route and says the other exists
+  $script:pa2 = & "$SRC\Emit-Path.ps1" -From 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation' `
+                  -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -Cap 1 -OutDir (Join-Path $OutDir 'path-cap')
+  Chk 'A-PA2-COUNTS' "$($pa2.Paths)/$($pa2.PathsShown)/$($pa2.Routines)/$($pa2.Edges)" '2/1/4/3'
+  if ((Dot $pa2) -notmatch '\+1 more shortest path not shown') { Fail 'A-PA2-DISC' 'the capped path is not disclosed' }
+
+  # one call, TWO sites, both grade ambiguous (resolved to this routine, more than one candidate
+  # on the type chain): ImportJenVICI -> GetLastPersistError at Blueprint4.ViewModel.pas:1841 and :1843
+  $script:pa3 = & "$SRC\Emit-Path.ps1" -From 'Blueprint4.ViewModel.TBlueprint_ViewModel.ImportJenVICI' `
+                  -To 'Blueprint4.ViewModel.TBlueprint_ViewModel.GetLastPersistError' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-PA3-COUNTS' "$($pa3.Paths)/$($pa3.Hops)/$($pa3.Routines)/$($pa3.Edges)/$($pa3.Sites)/$($pa3.Ambiguous)" '1/1/2/1/2/2'
+  $tp3 = Dot $pa3
+  if ($tp3 -notmatch 'Blueprint4\.ViewModel\.pas:1841 &#183; ambiguous' -or -not (HasLine $tp3 1843)) { Fail 'A-PA3-SITES' 'both ambiguous sites must be labelled and anchored' }
+
+  # the bundle: -To travels into the slug, meta.json and the regenerate command
+  $art = & "$SRC\New-DiagramArtifact.ps1" -Question path -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.ImportJenVICI' `
+           -To 'Blueprint4.ViewModel.TBlueprint_ViewModel.GetLastPersistError' -DbPath $DbCli -OutRoot (Join-Path $OutDir 'bundle-path')
+  $pm = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
+  Chk 'A-PA-META' "$($pm.leftCount) $($pm.leftLabel) / $($pm.rightCount) $($pm.rightLabel)" '1 shortest paths / 1 calls on each path'
+  if ($pm.regenerate -notmatch ' -To Blueprint4\.ViewModel\.TBlueprint_ViewModel\.GetLastPersistError' -or $pm.regenerate -notmatch ' -Cap 20') { Fail 'A-PA-REGEN' "regenerate lacks -To / -Cap: $($pm.regenerate)" }
+  if ((Split-Path -Leaf $art.Bundle) -notmatch 'GetLastPersistError') { Fail 'A-PA-SLUG' "the bundle folder does not name B: $($art.Bundle)" }
+}
+
 # R24: population queries that ran into the 200-row cap with no real trigger on
 # the clones (largest type in the TESTS index: 108 members; largest DataService:
 # 11 routines -- measured), so a behavioural test cannot fail on them. Guard the
@@ -1234,6 +1277,14 @@ NegTest 'N23' '0 callers at any depth' 'impact_uMain_TfrmMAIN_FormCreate' {
   & "$SRC\Emit-ChangeImpact.ps1" -Target 'uMain.TfrmMAIN.FormCreate' -DbPath $DbCli -OutDir $negDir }
 NegTest 'N24' 'references no enum constant at all' 'prototrace_gammafunc_LnGamma' {
   & "$SRC\Emit-ProtocolTrace.ps1" -Target 'gammafunc.LnGamma' -DbPath $DbCli -OutDir $negDir }
+# path: the reverse direction has NO path (call-path exit 1, found:false) -- an answer, said
+# plainly, and no chart; an unknown routine and A = B are refused before the engine runs.
+NegTest 'PA-N1' 'no call path from uPipeClientConnection.TPipeClientConnection.NextSeq to Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation' 'path_NextSeq__AddOperation' {
+  & "$SRC\Emit-Path.ps1" -From 'uPipeClientConnection.TPipeClientConnection.NextSeq' -To 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation' -DbPath $DbCli -OutDir $negDir }
+NegTest 'PA-N2' 'Blueprint4.ViewModel.TBlueprint_ViewModel.NoSuchRoutine is not in this index' 'path_NoSuchRoutine__NextSeq' {
+  & "$SRC\Emit-Path.ps1" -From 'Blueprint4.ViewModel.TBlueprint_ViewModel.NoSuchRoutine' -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -OutDir $negDir }
+NegTest 'PA-N3' 'name two different routines' 'path_NextSeq__NextSeq' {
+  & "$SRC\Emit-Path.ps1" -From 'uPipeClientConnection.TPipeClientConnection.NextSeq' -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -OutDir $negDir }
 
 # ---- PLAN-last-four-verbs, Task 0: the shared helpers ----------------------------
 # Every number below was measured on 2026-09-23 against the clones and is PINNED
@@ -3455,6 +3506,7 @@ if (-not $Quiet) {
   Write-Host ("  shown-where    : {0} bindings on {1} forms, of {2} index-wide over {3} columns" -f (V $sw1 'Bindings'), (V $sw1 'Forms'), (V $sw1 'IndexRows'), (V $sw1 'IndexColumns'))
   Write-Host ("  change-impact  : {0} routines / {1} unit; a TYPE reaches {2} over {3} units (capped {4})" -f (V $ci1 'Affected'), (V $ci1 'Units'), (V $ci2 'Affected'), (V $ci2 'Units'), (V $ci2 'Capped'))
   Write-Host ("  tested-by      : {0} / {1} / {2} covering tests, from {3} test methods" -f (V $tb1 'Tests'), (V $tb2 'Tests'), (V $tb3 'Tests'), (V $tb1 'TestMethods'))
+  Write-Host ("  path           : {0} shortest paths of {1} calls ({2} routines, {3} sites); cap 1 draws {4} + discloses 1; ambiguous pair {5} sites" -f (V $pa1 'Paths'), (V $pa1 'Hops'), (V $pa1 'Routines'), (V $pa1 'Sites'), (V $pa2 'PathsShown'), (V $pa3 'Ambiguous'))
   Write-Host ("  task-0 helpers : SQL {0}/{1} tables, {2}/{3} trigger bodies; raise/handle {4}/{5}; datasources {6}/{7}/{8} resolve {9}/{10}/{11}; dangling {12}/{13}" -f (V $t0 'SqlTables'), (V $t0 'SqlDeclarations'), (V $t0 'TriggerBodies'), (V $t0 'Triggers'), (V $t0 'ExcRaise'), (V $t0 'ExcHandle'), (V $t0 'DsTotal'), (V $t0 'DsDfmWired'), (V $t0 'DsCodeSite'), (V $t0 'DsOne'), (V $t0 'DsMany'), (V $t0 'DsNone'), (V $t0 'DanglingRows'), (V $t0 'RePointedAny'))
   Write-Host ("  disk vs index  : CLIENT files differing today (informational, not pinned): {0}" -f (V $t0 'DiskStaleCli'))
   Write-Host ("  exception-paths: {0} raises / {1} callers / {2} caught; index {3}/{4}; source bare/on/reraise/var {5}/{6}/{7}/{8}" -f (V $ep1 'Raises'), (V $ep1 'Callers'), (V $ep1 'Caught'), (V $ep1 'IndexRaise'), (V $ep1 'IndexHandle'), (V $ex0 'BareExcept'), (V $ex0 'OnExcept'), (V $ex0 'Reraise'), (V $ex0 'RaiseVar'))
@@ -3462,7 +3514,7 @@ if (-not $Quiet) {
   Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
   Write-Host ("  lands-where    : REASON {0} ({1} server rows, {2} trigger, {3} client); convention {4}/{5}/{6}; DataService {7}; ParamByName {8}/{9}; orm_links {10}" -f (V $lw1 'TableColumn'), (V $lw1 'ServerRows'), (V $lw1 'Triggers'), (V $lw1 'ClientBindings'), (V $lw1 'ConvProps'), (V $lw1 'ConvOnTable'), (V $lw1 'ConvColumn'), (V $lw1 'DsClasses'), (V $lw1 'ParamByNameDs'), (V $lw1 'ParamByNameCol'), $ol)
   Write-Host ("  round-trip     : golden nodes {0}/17 matched (disclosed: {1}); {9} golden facts disclosed ({10}): {11}; guards {2}/12 (disclosed: {3}); steps/conditions/crossings/unresolved {4}; ALSO {5}; N1 {6} step(s); stale {7}; holdout candidates {8}" -f (V $rt0 'GoldenMatched'), (V $rt0 'GoldenDisclosed'), (V $rt0 'GuardsMatched'), (V $rt0 'GuardsDisclosed'), (V $rt0 'RtCounts'), (V $rt0 'RtAlso'), (V $rtn1 'Steps'), $(if ($rtStale) { $rtStale } else { '?' }), (V $rt0 'HoldoutCandidates'), (V $rt0 'GoldenFactsDisclosedN'), (V $rt0 'GoldenFactsReason'), (V $rt0 'GoldenFactsDisclosed'))
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, CO-STALE-REFUSE, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; RT-STALE (message AND absent .dlgraph); RT-N1, RT-N2 one-STOPS traces; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, PA-N1..N3, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, CO-STALE-REFUSE, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; RT-STALE (message AND absent .dlgraph); RT-N1, RT-N2 one-STOPS traces; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

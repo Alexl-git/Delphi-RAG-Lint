@@ -56,6 +56,8 @@ param(
   [int]    $SurfaceCap,
   [string] $Control,
   [string] $Mode,
+  # path only: routine B (-Target is routine A)
+  [string] $To,
   [switch] $Open,
   # overrides: an explicit index skips resolution for that index (never its freshness check)
   [string] $DbPath,
@@ -239,7 +241,7 @@ try {
     if ($needServer)                    { $nda.ServerDbPath  = $ServerDbPath }
     if ($needSql)                       { $nda.SqlDbPath     = $SqlDbPath }
     if ($wantOther -and $CounterpartDb) { $nda.CounterpartDb = $CounterpartDb }
-    foreach ($n in 'Depth', 'Cap', 'SurfaceCap', 'Control', 'Mode') { if ($PSBoundParameters.ContainsKey($n)) { $nda[$n] = $PSBoundParameters[$n] } }
+    foreach ($n in 'Depth', 'Cap', 'SurfaceCap', 'Control', 'Mode', 'To') { if ($PSBoundParameters.ContainsKey($n)) { $nda[$n] = $PSBoundParameters[$n] } }
     if ($Open) { $nda.Open = $true }
     $prevLive = [Environment]::GetEnvironmentVariable('DRAGLINT_CHARTS_ALLOW_LIVE_DB', 'Process')
     # the chart is drawn by the engine resolved above (fix round 1): the emitters resolve DRAGLINT_ENGINE first
@@ -270,7 +272,7 @@ try {
       if ($meta.emitter.PSObject.Properties['ChartError'] -and $meta.emitter.ChartError) { $answer.Add("NOTE the chart could not be drawn: $($meta.emitter.ChartError)") }
     } else {
       $meta = Get-Content -LiteralPath (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
-      $answer.Add("CHART $Question $Target -- $($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)")
+      $answer.Add("CHART $Question $Target$(if ($To) { " -> $To" }) -- $($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)")
       $rows = New-Object System.Collections.Generic.List[string]
       $targets = New-Object System.Collections.Generic.List[string]
       $notShown = New-Object System.Collections.Generic.List[string]
@@ -317,7 +319,7 @@ try {
     # ---- 6. the answer: plain, or (the default) the DocInsight block the IDE's Reports menu makes of it --------
     if ($Plain) { foreach ($a in $answer) { Write-Output $a } }
     else {
-      $doc = Format-ReportAsDocInsight $Question $Target (Get-Date) ($answer -join "`r`n")
+      $doc = Format-ReportAsDocInsight $Question $(if ($To) { "$Target -> $To" } else { $Target }) (Get-Date) ($answer -join "`r`n")
       foreach ($a in ($doc.TrimEnd("`r", "`n") -split "`r`n")) { Write-Output $a }
     }
   }
