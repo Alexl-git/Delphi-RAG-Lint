@@ -8521,23 +8521,30 @@ begin
     end;
 end;
 
-{ A fake file system for the C8 walk: APaths[i] holds ATexts[i]; anything else is absent. }
+const
+  { FakeReader answers drUnreadable for a path whose text is this. }
+  FAKE_UNREADABLE_DFM = '<unreadable>';
+
+{ A fake file system for the C8 walk: APaths[i] holds ATexts[i] (FAKE_UNREADABLE_DFM =
+  the file exists but cannot be read); anything else is absent. }
 function FakeReader(const APaths, ATexts: TArray<string>): TDfmTextReader;
 var
   LPaths, LTexts: TArray<string>;
 begin
   LPaths:= APaths;
   LTexts:= ATexts;
-  Result:= function(const APath: string; out AText: string): Boolean
+  Result:= function(const APath: string; out AText: string): TDfmRead
     begin
       AText:= '';
       for var I: Integer:= 0 to High(LPaths) do
         if SameText(LPaths[I], APath) then
         begin
+          if LTexts[I] = FAKE_UNREADABLE_DFM then
+            Exit(drUnreadable);
           AText:= LTexts[I];
-          Exit(True);
+          Exit(drRead);
         end;
-      Result:= False;
+      Result:= drMissing;
     end;
 end;
 
@@ -8640,7 +8647,8 @@ begin
   Check('inherit.walk.lookup.failed', not U.Known and (Length(U.Verdicts) = 0) and (U.Error <> ''), U.Error);
   U:= AnalyzeUnit('fx\Loop.pas', Pairs, FakeLookup(['TLoopA|fx\Loop.pas|TLoopB', 'TLoopB|fx\LoopB.pas|TLoopA'], nil),
     FakeReader(['fx\Loop.dfm'], [LOOP_DFM]));
-  Check('inherit.walk.cycle.ends', (Length(U.Verdicts) = 1) and (U.Verdicts[0].State = asOutside), Format('%d verdicts', [Length(U.Verdicts)]));
+  Check('inherit.walk.cycle.ends', not U.Known and (Length(U.Verdicts) = 0) and ContainsText(U.Error, 'loops back to TLoopB') and ContainsText(U.Error, 'tblX'),
+    U.Error);
 
   // C3: the unit's own class records no ancestor at all -- outside, but there is no
   // class to name, so the note names the instance instead of a pseudo-class.
@@ -8665,6 +8673,112 @@ begin
     Cache.Free;
     Calls.Free;
   end; // try
+end;
+
+{ C8 E2 edges: the frame fallback at any nesting depth inside the frame (a panel
+  between frame and button), a re-opening intermediate form kept in Chain below the
+  frame, and the outcomes that are UNKNOWN (cycle, depth cap, binary or unreadable
+  ancestor .dfm -- never reported as outside) or that end at an INDEXED class with no
+  ancestor (the no-ancestor wording, never naming that class). }
+procedure TestInheritanceWalkEdges;
+const
+  FRAMEP_DFM = 'object Frame1: TFrame1' + sLineBreak + '  object Panel1: TPanel' + sLineBreak + '    object Button1: TButton' + sLineBreak +
+    '    end' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  ANCF_DFM = 'object AncF: TAncF' + sLineBreak + '  inline Frame11: TFrame1' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  DESCP_DFM = 'inherited DescF: TDescF' + sLineBreak + '  inherited Frame11: TFrame1' + sLineBreak + '    inherited Panel1: TPanel' + sLineBreak +
+    '      inherited Button1: TButton' + sLineBreak + '      end' + sLineBreak + '    end' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  MIDF_DFM = 'inherited MidF: TMidF' + sLineBreak + '  inherited Frame11: TFrame1' + sLineBreak + '    inherited Panel1: TPanel' + sLineBreak +
+    '      inherited Button1: TButton' + sLineBreak + '      end' + sLineBreak + '    end' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  MID_DFM  = 'inherited MidDM: TMidDM' + sLineBreak + 'end' + sLineBreak;
+  BASE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BINARY_DFM = BINARY_DFM_SIGNATURE + #1#2#3;
+  CAP_DFM  = 'inherited C0: TC0' + sLineBreak + '  inherited tblX: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  CAP_EXTRA_CLASSES = 8;
+  REOPEN_CHAIN_UNITS = 2;
+  NOTE_NO_ANCESTOR = 'inherits tblFtrs from an ancestor that is not in this project''s index -- convert it from its own project';
+var
+  Pairs: TArray<TTypePair>;
+  Rows : TArray<string>;
+  U    : TUnitInheritance;
+  S    : TDfmInheritance;
+  R    : TInstanceVerdict;
+  Btn  : TInstanceVerdict;
+
+  function Pair(const AFrom, ATo: string): TTypePair;
+  begin
+    Result.FromType:= AFrom;
+    Result.ToType  := ATo;
+  end;
+
+  function V(const AName: string): TInstanceVerdict;
+  begin
+    Result:= Default(TInstanceVerdict);
+    for var LV: TInstanceVerdict in U.Verdicts do
+      if SameText(LV.Instance.Name, AName) then
+        Exit(LV);
+  end;
+
+begin
+  Pairs:= [Pair('TTable', 'TFDTable'), Pair('TButton', 'TcxButton')];
+
+  S:= ScanDfmInheritance(DESCP_DFM);
+  Btn:= Default(TInstanceVerdict);
+  for var LInst: TInheritedInstance in S.Instances do
+    if LInst.Name = 'Button1' then
+      Btn.Instance:= LInst;
+  Check('inherit.scan.enclosing', (Length(Btn.Instance.Enclosing) = REOPEN_CHAIN_UNITS) and (Btn.Instance.Enclosing[0] = 'TPanel')
+    and (Btn.Instance.Enclosing[1] = 'TFrame1'), string.Join(',', Btn.Instance.Enclosing));
+
+  // A panel between the frame and the button: the fallback must reach TFrame1.
+  U:= AnalyzeUnit('fx\DescF.pas', Pairs,
+    FakeLookup(['TDescF|fx\DescF.pas|TAncF', 'TAncF|fx\AncF.pas|TForm', 'TFrame1|fx\Frame1.pas|TFrame'], nil),
+    FakeReader(['fx\DescF.dfm', 'fx\AncF.dfm', 'fx\Frame1.dfm'], [DESCP_DFM, ANCF_DFM, FRAMEP_DFM]));
+  Check('inherit.walk.frame.panel.between', U.Known and (V('Button1').State = asUnconverted) and (V('Button1').DeclaringUnit = 'Frame1'),
+    V('Button1').DeclaringUnit + ' ' + U.Error);
+
+  // An intermediate form re-opens Frame11 / Panel1 / Button1: it stays in Chain, and
+  // the frame (converted first) sits above it.
+  U:= AnalyzeUnit('fx\DescF.pas', Pairs,
+    FakeLookup(['TDescF|fx\DescF.pas|TMidF', 'TMidF|fx\MidF.pas|TAncF', 'TAncF|fx\AncF.pas|TForm', 'TFrame1|fx\Frame1.pas|TFrame'], nil),
+    FakeReader(['fx\DescF.dfm', 'fx\MidF.dfm', 'fx\AncF.dfm', 'fx\Frame1.dfm'], [DESCP_DFM, MIDF_DFM, ANCF_DFM, FRAMEP_DFM]));
+  Btn:= V('Button1');
+  Check('inherit.walk.frame.reopen.in.chain', (Btn.DeclaringUnit = 'Frame1') and (Length(Btn.Chain) = REOPEN_CHAIN_UNITS)
+    and SameText(Btn.Chain[0].PasPath, 'fx\MidF.pas') and SameText(Btn.Chain[1].PasPath, 'fx\Frame1.pas'),
+    Format('%s, %d chain units', [Btn.DeclaringUnit, Length(Btn.Chain)]));
+  if Length(Btn.Chain) = REOPEN_CHAIN_UNITS then
+    Check('inherit.walk.frame.depth.above.forms', Btn.Chain[1].Depth > Btn.Chain[0].Depth,
+      Format('MidF %d, Frame1 %d', [Btn.Chain[0].Depth, Btn.Chain[1].Depth]));
+
+  Rows:= ['TLeafDM|fx\Leaf.pas|TMidDM', 'TMidDM|fx\Mid.pas|TBaseDM', 'TBaseDM|fx\Base.pas|TDataModule'];
+  U:= AnalyzeUnit('fx\Leaf.pas', Pairs, FakeLookup(Rows, nil), FakeReader(['fx\Leaf.dfm', 'fx\Base.dfm'], [LEAF_DFM, BASE_DFM]));
+  Check('inherit.walk.missing.dfm.skipped', U.Known and (V('tblFtrs').State = asUnconverted) and (V('tblFtrs').DeclaringUnit = 'Base'), U.Error);
+  U:= AnalyzeUnit('fx\Leaf.pas', Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, BINARY_DFM, BASE_DFM]));
+  Check('inherit.walk.binary.ancestor.unknown', not U.Known and (Length(U.Verdicts) = 0) and ContainsText(U.Error, 'TMidDM'), U.Error);
+  U:= AnalyzeUnit('fx\Leaf.pas', Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, FAKE_UNREADABLE_DFM, BASE_DFM]));
+  Check('inherit.walk.unreadable.ancestor.unknown', not U.Known and (Length(U.Verdicts) = 0) and ContainsText(U.Error, 'TMidDM'), U.Error);
+
+  // An INDEXED ancestor with no ancestor of its own ends the chain: no-ancestor wording.
+  U:= AnalyzeUnit('fx\Leaf.pas', Pairs, FakeLookup(['TLeafDM|fx\Leaf.pas|TMidDM', 'TMidDM|fx\Mid.pas|'], nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm'], [LEAF_DFM, MID_DFM]));
+  Check('inherit.walk.indexed.no.ancestor', U.Known and (V('tblFtrs').State = asOutside) and (V('tblFtrs').DeclaringUnit = OUTSIDE_NO_ANCESTOR),
+    V('tblFtrs').DeclaringUnit);
+  Check('inherit.note.indexed.no.ancestor', (OutsideNote(V('tblFtrs')) = NOTE_NO_ANCESTOR) and not ContainsText(OutsideNote(V('tblFtrs')), 'TMidDM'),
+    OutsideNote(V('tblFtrs')));
+
+  // A chain longer than MAX_CHAIN_DEPTH is unknown, not outside.
+  Rows:= nil;
+  for var I: Integer:= 0 to MAX_CHAIN_DEPTH + CAP_EXTRA_CLASSES do
+    Rows:= Rows + [Format('TC%d|fx\C%d.pas|TC%d', [I, I, I + 1])];
+  U:= AnalyzeUnit('fx\C0.pas', Pairs, FakeLookup(Rows, nil), FakeReader(['fx\C0.dfm'], [CAP_DFM]));
+  Check('inherit.walk.depth.cap.unknown', not U.Known and (Length(U.Verdicts) = 0) and ContainsText(U.Error, 'longer than ' + IntToStr(MAX_CHAIN_DEPTH)),
+    U.Error);
+
+  // The failure travels as a state, not as an empty string.
+  R:= ResolveInstance(Btn.Instance, 'TBroken', FakeLookup(['TBroken|!'], nil), FakeReader([], []));
+  Check('inherit.resolve.unknown.state', (R.State = asUnknown) and ContainsText(R.Reason, 'TBroken') and (OutsideNote(R) = ''), R.Reason);
 end;
 
 begin
@@ -8807,6 +8921,7 @@ begin
     TestInheritanceScan;
     TestInheritancePairs;
     TestInheritanceWalk;
+    TestInheritanceWalkEdges;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;

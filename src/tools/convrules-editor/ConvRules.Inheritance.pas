@@ -53,8 +53,12 @@ type
     /// object belongs to the form (or data module) itself.</summary>
     FrameClass: string;
     /// <summary>The class of the immediately enclosing block; '' for a top-level object
-    /// (a direct child of the root) -- ResolveInstance's frame fallback keys on it.</summary>
+    /// (a direct child of the root).</summary>
     ParentType: string;
+    /// <summary>The classes of the enclosing blocks below the root, innermost first,
+    /// stopping at (and including) the innermost enclosing `inline` block; [] for a
+    /// top-level object. ResolveInstance's frame fallback tries each in turn.</summary>
+    Enclosing : TArray<string>;
   end;
 
   /// <summary>What one .dfm says about inheritance.</summary>
@@ -83,22 +87,37 @@ type
   /// editor, a fake in the tests).</summary>
   TClassLookup = reference to function(const AClassName: string): TClassInfo;
 
-  /// <summary>Reads a text file; False when it does not exist or cannot be read.</summary>
-  TDfmTextReader = reference to function(const APath: string; out AText: string): Boolean;
+  /// <summary>How a TDfmTextReader answered.</summary>
+  /// <remarks>drMissing: no such file (a class with no .dfm declares no component).
+  /// drUnreadable: the file exists but could not be read. drRead: AText holds it.</remarks>
+  TDfmRead = (drMissing, drUnreadable, drRead);
+
+  /// <summary>Reads a text file (a .dfm).</summary>
+  TDfmTextReader = reference to function(const APath: string; out AText: string): TDfmRead;
 
   /// <summary>The declaring ancestor's state for one inherited instance (spec Terms).</summary>
   /// <remarks>asUnconverted: the ancestor's object still has the instance's (From)
   /// type. asConverted: the declaring object's type is no longer the From type (the
   /// block's To type, normally). asOutside: the chain left the project index (a
-  /// library ancestor, or an ambiguous class) before any .dfm opened the object with
-  /// `object`.</remarks>
-  TAncestorState = (asUnconverted, asConverted, asOutside);
+  /// library ancestor, or an ambiguous class) or ended at an indexed class with no
+  /// ancestor, before any .dfm opened the object with `object`. asUnknown: the walk
+  /// could not decide -- the index could not be asked, the chain loops or runs past
+  /// MAX_CHAIN_DEPTH, or an indexed ancestor's .dfm is binary or unreadable; the
+  /// verdict's Reason says which. Never reported as outside (AnalyzeUnit turns it into
+  /// Known = False).</remarks>
+  TAncestorState = (asUnconverted, asConverted, asOutside, asUnknown);
 
   /// <summary>One ancestor unit whose .dfm opens an instance with the From type.</summary>
   TChainUnit = record
     /// <summary>The ancestor's .pas.</summary>
     PasPath: string;
-    /// <summary>1 = the walk's first class; larger = further up the chain.</summary>
+    /// <summary>The class's position on the walk from the listed unit's own class (0):
+    /// 1 = the first class walked (the form's parent, or for an instance on the unit's
+    /// own inline frame the frame class), larger = further up. When the walk goes on
+    /// into a frame class after the form chain (a frame placed on an ancestor form),
+    /// the frame classes continue the count after the form-chain classes visited, so a
+    /// frame unit is always above every form that re-opens its child. A larger Depth
+    /// is converted first (topmost first).</summary>
     Depth  : Integer;
   end;
 
@@ -110,10 +129,12 @@ type
     State        : TAncestorState;
     /// <summary>The declaring unit's name ('Base'); for asOutside the class where the
     /// chain left the index ('TDataModule'), or OUTSIDE_NO_ANCESTOR when the chain
-    /// named no ancestor class at all.</summary>
+    /// named no ancestor class at all; '' for asUnknown.</summary>
     DeclaringUnit: string;
-    /// <summary>The declaring unit's .pas; '' for asOutside.</summary>
+    /// <summary>The declaring unit's .pas; '' for asOutside and asUnknown.</summary>
     DeclaringPas : string;
+    /// <summary>asUnknown only: why the walk could not decide, naming the class.</summary>
+    Reason       : string;
     /// <summary>Every ancestor unit (declaring or intermediate) whose .dfm still opens
     /// the instance with the From type -- the units to convert first.</summary>
     Chain        : TArray<TChainUnit>;
@@ -181,8 +202,11 @@ function UnitNameOf(const APasPath: string): string;
 /// <param name="ALookup">The project index.</param>
 /// <param name="AReader">The file system.</param>
 /// <returns>The verdict. When the form chain does not declare the instance and it sits
-/// in an inherited block, the block's own class is walked next (a frame placed on an
-/// ancestor form). A lookup that Failed yields asOutside with DeclaringUnit '' -- the
+/// in enclosing blocks, each enclosing block's class (AInst.Enclosing, innermost
+/// outward) is walked next until one declares it (a frame placed on an ancestor form,
+/// at any nesting depth inside the frame); the form chain's re-opening units stay in
+/// Chain. asUnknown (with Reason) when the index cannot be asked, the chain loops or
+/// passes MAX_CHAIN_DEPTH, or an indexed class's .dfm is binary or unreadable -- the
 /// caller (AnalyzeUnit) turns that into Known = False, never into a report.</returns>
 function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup; const AReader: TDfmTextReader): TInstanceVerdict;
 
@@ -212,7 +236,8 @@ function OutsideNote(const AVerdict: TInstanceVerdict): string;  // dl:ok unused
 function CachingLookup(const AInner: TClassLookup; ACache: TDictionary<string, TClassInfo>): TClassLookup;  // dl:ok unused-public-symbol@867b -- REVIEWED 2026-10-05 called by the model tests (inherit.cache.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
 
 /// <summary>A TDfmTextReader over the real file system (TFile.ReadAllText).</summary>
-/// <returns>A reader that answers False for a missing or unreadable file.</returns>
+/// <returns>A reader that answers drMissing for a missing file, drUnreadable when
+/// reading raises, else drRead.</returns>
 function DiskTextReader: TDfmTextReader;  // dl:ok unused-public-symbol@8af4 -- REVIEWED 2026-10-05 wired into the editor by the C8 Convert-tab tasks; drop this marker when they do
 
 implementation
@@ -238,10 +263,25 @@ const
   NO_CHAR      = #0;
   NOTE_OUTSIDE = 'inherits from %s, which is not in this project''s index -- convert it from its own project';
   NOTE_OUTSIDE_NO_ANCESTOR = 'inherits %s from an ancestor that is not in this project''s index -- convert it from its own project';
+  REASON_FAILED = 'the project index could not be asked about %s';
+  REASON_CYCLE  = 'the ancestor chain loops back to %s';
+  REASON_DEPTH  = 'the ancestor chain is longer than %d classes (stopped at %s)';
+  REASON_DFM    = 'the .dfm of %s (%s) is binary or cannot be read';
 
 type
-  // How one WalkChain ended.
-  TWalkEnd = (weDeclared, weLeftIndex, weNotFound, weFailed);
+  // How one WalkChain ended: a .dfm declared the instance; a class is not in the
+  // index; an indexed class has no ancestor; the walk could not decide.
+  TWalkEnd = (weDeclared, weLeftIndex, weNoAncestor, weUnknown);
+
+  // How one class's .dfm treats an instance name.
+  TDfmMatch = (dmNoDfm, dmUnusable, dmNotOpened, dmOpened);
+
+  // What every step of one instance's walk reads.
+  TWalkCtx = record
+    Inst  : TInheritedInstance;
+    Lookup: TClassLookup;
+    Reader: TDfmTextReader;
+  end;
 
   // One block header as the walk meets it.
   THeader = record
@@ -252,6 +292,7 @@ type
     Depth     : Integer; // 0 = the root
     FrameClass: string;  // innermost enclosing inline block's class; '' when none
     ParentType: string;  // immediately enclosing block's class; '' for the root
+    Enclosing : TArray<string>; // see TInheritedInstance.Enclosing
   end;
   THeaderProc = reference to procedure(const AHeader: THeader);
 
@@ -281,6 +322,19 @@ begin
   for var LCh: Char in AText do
     if LCh = AChar then
       Inc(Result);
+end;
+
+// The open blocks' classes below the root, innermost first, up to (and including)
+// the innermost inline block (see TInheritedInstance.Enclosing).
+function EnclosingOf(AStack: TList<THeader>): TArray<string>;
+begin
+  Result:= nil;
+  for var K: Integer:= AStack.Count - 1 downto 1 do
+  begin
+    Result:= Result + [AStack[K].TypeName];
+    if AStack[K].Opener = doInline then
+      Break;
+  end;
 end;
 
 // Calls AOnHeader for every block header of a text .dfm, in file order.
@@ -327,6 +381,7 @@ begin
         begin
           H.ParentType:= Stack.Last.TypeName;
           H.FrameClass:= if Stack.Last.Opener = doInline then Stack.Last.TypeName else Stack.Last.FrameClass;
+          H.Enclosing := EnclosingOf(Stack);
         end;
         AOnHeader(H);
         Stack.Add(H);
@@ -389,6 +444,7 @@ begin
       LItem.Opener    := AHeader.Opener;
       LItem.FrameClass:= AHeader.FrameClass;
       LItem.ParentType:= if AHeader.Depth = 1 then '' else AHeader.ParentType;
+      LItem.Enclosing := AHeader.Enclosing;
       LScan.Instances := LScan.Instances + [LItem];
     end);
   Result:= LScan;
@@ -466,91 +522,165 @@ begin
   Result.Depth  := ADepth;
 end;
 
-// How APasPath's .dfm opens AName; False when it has no text .dfm or does not open it.
-function DfmOpens(const APasPath, AName: string; const AReader: TDfmTextReader; out AOpener: TDfmOpener; out AType: string): Boolean;
+// How APasPath's .dfm treats AName: no .dfm (a class with no .dfm declares no
+// component), binary or unreadable, does not open it, or opens it (AOpener / AType).
+function DfmMatch(const APasPath, AName: string; const AReader: TDfmTextReader; out AOpener: TDfmOpener; out AType: string): TDfmMatch;
 var
   LText: string;
 begin
   AOpener:= doObject;
   AType  := '';
-  Result := AReader(ChangeFileExt(APasPath, DFM_EXT), LText) and FindDfmObject(LText, AName, AOpener, AType);
+  case AReader(ChangeFileExt(APasPath, DFM_EXT), LText) of
+    drMissing   : Result:= dmNoDfm;
+    drUnreadable: Result:= dmUnusable;
+    else
+      if LText.StartsWith(BINARY_DFM_SIGNATURE) then
+        Result:= dmUnusable
+      else if FindDfmObject(LText, AName, AOpener, AType) then
+        Result:= dmOpened
+      else
+        Result:= dmNotOpened;
+  end; // case
 end;
 
-// Follows the class chain from AStartClass until a .dfm opens AInst with `object`
-// (weDeclared, AVerdict filled), a class is not in the index (weLeftIndex), the
-// index cannot answer (weFailed), or the chain ends / cycles / runs past
-// MAX_CHAIN_DEPTH (weNotFound). ALastClass is the last class asked about.
-function WalkChain(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup;
-  const AReader: TDfmTextReader; out AVerdict: TInstanceVerdict; out ALastClass: string): TWalkEnd;
+// One class of a walk at ADepth. weNoAncestor here means "go on to AParent" (''
+// when the class records no ancestor); weDeclared fills AVerdict's state; a unit
+// whose .dfm opens AInst with its own type joins AVerdict.Chain.
+function VisitClass(const ACtx: TWalkCtx; const AClass: string; ADepth: Integer; var AVerdict: TInstanceVerdict; out AParent, AReason: string): TWalkEnd;
 var
-  Cls    : string;
   Info   : TClassInfo;
-  Seen   : TArray<string>;
   Opener : TDfmOpener;
   ObjType: string;
-  Depth  : Integer;
   Same   : Boolean;
 begin
-  AVerdict:= Default(TInstanceVerdict);
-  AVerdict.Instance:= AInst;
-  ALastClass:= '';
-  Cls  := AStartClass;
-  Depth:= 0;
-  Seen := nil;
-  while (Cls <> '') and (Depth < MAX_CHAIN_DEPTH) and not MatchText(Cls, Seen) do
+  AParent:= '';
+  AReason:= '';
+  Result := weNoAncestor;
+  Info:= ACtx.Lookup(AClass);
+  if Info.Failed then
   begin
-    Seen      := Seen + [Cls];
-    ALastClass:= Cls;
-    Inc(Depth);
-    Info:= ALookup(Cls);
-    if Info.Failed then
-      Exit(weFailed);
-    if not Info.Found then
-      Exit(weLeftIndex);
-    if DfmOpens(Info.PasPath, AInst.Name, AReader, Opener, ObjType) then
+    AReason:= Format(REASON_FAILED, [AClass]);
+    Exit(weUnknown);
+  end;
+  if not Info.Found then
+    Exit(weLeftIndex);
+  case DfmMatch(Info.PasPath, ACtx.Inst.Name, ACtx.Reader, Opener, ObjType) of
+    dmUnusable:
     begin
-      Same:= SameText(BareType(ObjType), BareType(AInst.TypeName));
+      AReason:= Format(REASON_DFM, [AClass, ChangeFileExt(Info.PasPath, DFM_EXT)]);
+      Result := weUnknown;
+    end;
+    dmOpened:
+    begin
+      Same:= SameText(BareType(ObjType), BareType(ACtx.Inst.TypeName));
       if Same then
-        AVerdict.Chain:= AVerdict.Chain + [ChainUnitOf(Info.PasPath, Depth)];
+        AVerdict.Chain:= AVerdict.Chain + [ChainUnitOf(Info.PasPath, ADepth)];
       if Opener = doObject then
       begin
         AVerdict.DeclaringPas := Info.PasPath;
         AVerdict.DeclaringUnit:= UnitNameOf(Info.PasPath);
         AVerdict.State        := if Same then asUnconverted else asConverted;
-        Exit(weDeclared);
+        Result                := weDeclared;
       end;
     end;
-    Cls:= Info.ParentClass;
+    else
+      ; // no .dfm, or it does not open AInst: go on up
+  end; // case
+  AParent:= Info.ParentClass;
+end;
+
+// Follows the class chain from AStartClass until a .dfm opens AInst with `object`
+// (weDeclared), a class is not in the index (weLeftIndex, ALastClass names it), an
+// indexed class records no ancestor (weNoAncestor), or the walk cannot decide
+// (weUnknown, AReason: failed lookup, cycle, MAX_CHAIN_DEPTH, unusable .dfm).
+// ADepth counts on from its value at entry (see TChainUnit.Depth).
+function WalkChain(const ACtx: TWalkCtx; const AStartClass: string; var ADepth: Integer; var AVerdict: TInstanceVerdict; out ALastClass, AReason: string): TWalkEnd;
+var
+  Cls   : string;
+  Parent: string;
+  Seen  : TArray<string>;
+begin
+  ALastClass:= '';
+  AReason   := '';
+  Result    := weNoAncestor;
+  Cls       := AStartClass;
+  Seen      := nil;
+  while (Cls <> '') and (Result = weNoAncestor) do
+  begin
+    if MatchText(Cls, Seen) then
+      AReason:= Format(REASON_CYCLE, [Cls])
+    else if Length(Seen) >= MAX_CHAIN_DEPTH then
+      AReason:= Format(REASON_DEPTH, [MAX_CHAIN_DEPTH, Cls]);
+    if AReason <> '' then
+      Exit(weUnknown);
+    Seen      := Seen + [Cls];
+    ALastClass:= Cls;
+    Inc(ADepth);
+    Result:= VisitClass(ACtx, Cls, ADepth, AVerdict, Parent, AReason);
+    Cls   := Parent;
   end;
-  Result:= weNotFound;
 end;
 
 function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup; const AReader: TDfmTextReader): TInstanceVerdict;
 var
   LEnd     : TWalkEnd;
+  LFallEnd : TWalkEnd;
   LLast    : string;
-  LFallback: TInstanceVerdict;
   LIgnored : string;
+  LReason  : string;
+  LDepth   : Integer;
+  LFallback: TInstanceVerdict;
+  LCtx     : TWalkCtx;
 begin
-  LEnd:= WalkChain(AInst, AStartClass, ALookup, AReader, Result, LLast);
+  Result:= Default(TInstanceVerdict);
+  Result.Instance:= AInst;
+  LCtx.Inst  := AInst;
+  LCtx.Lookup:= ALookup;
+  LCtx.Reader:= AReader;
+  LFallback  := Result;
+  LDepth:= 0;
+  LEnd  := WalkChain(LCtx, AStartClass, LDepth, Result, LLast, LReason);
+  // A child of an inherited FRAME is declared in the frame's own .dfm, which the form
+  // chain never reads (FindDfmObject skips inline blocks): try each enclosing block's
+  // class, innermost outward. Each try starts from the form chain's verdict, so the
+  // forms that re-open the instance stay in Chain, below the frame (Depth counts on).
+  LFallEnd:= weNoAncestor;
+  for var LClass: string in AInst.Enclosing do
+  begin
+    if (LEnd in [weDeclared, weUnknown]) or (LFallEnd in [weDeclared, weUnknown]) then
+      Break;
+    if SameText(LClass, AStartClass) then
+      Continue;
+    LFallback:= Result;
+    LFallEnd := WalkChain(LCtx, LClass, LDepth, LFallback, LIgnored, LReason);
+  end;
+  if LFallEnd in [weDeclared, weUnknown] then
+  begin
+    Result:= LFallback;
+    LEnd  := LFallEnd;
+  end;
   if LEnd = weDeclared then
     Exit;
-  if LEnd <> weFailed then
-  begin
-    // A child of an inherited FRAME is declared in the frame's own .dfm, which the
-    // form chain never reads (FindDfmObject skips inline blocks).
-    LEnd:= if AInst.ParentType = '' then weNotFound else WalkChain(AInst, AInst.ParentType, ALookup, AReader, LFallback, LIgnored);
-    if LEnd = weDeclared then
-      Exit(LFallback);
-  end;
-  Result.Chain        := nil;
-  Result.State        := asOutside;
-  Result.DeclaringPas := '';
-  // weFailed: DeclaringUnit '' tells AnalyzeUnit the index did not answer.
-  if LEnd = weFailed then
-    Result.DeclaringUnit:= ''
-  else
-    Result.DeclaringUnit:= if LLast <> '' then LLast else OUTSIDE_NO_ANCESTOR;
+  Result.Chain       := nil;
+  Result.DeclaringPas:= '';
+  case LEnd of
+    weUnknown:
+    begin
+      Result.State        := asUnknown;
+      Result.DeclaringUnit:= '';
+      Result.Reason       := LReason;
+    end;
+    weLeftIndex:
+    begin
+      Result.State        := asOutside;
+      Result.DeclaringUnit:= LLast;
+    end;
+    else
+    begin
+      Result.State        := asOutside;
+      Result.DeclaringUnit:= OUTSIDE_NO_ANCESTOR;
+    end;
+  end; // case
 end;
 
 function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader): TUnitInheritance;
@@ -564,8 +694,8 @@ var
 begin
   Result:= Default(TUnitInheritance);
   Result.UnitPas:= AUnitPas;
-  // E3: no checked From type, no .dfm, a binary .dfm or no header -- nothing to say.
-  if (Length(APairs) > 0) and AReader(ChangeFileExt(AUnitPas, DFM_EXT), LText) then
+  // E3: no checked From type, no readable .dfm, a binary .dfm or no header -- nothing to say.
+  if (Length(APairs) > 0) and (AReader(ChangeFileExt(AUnitPas, DFM_EXT), LText) = drRead) then
     LScan:= ScanDfmInheritance(LText)
   else
     LScan:= Default(TDfmInheritance);
@@ -583,7 +713,7 @@ begin
   LOwn:= ALookup(LScan.RootClass);
   if LOwn.Failed then
   begin
-    Result.Error:= 'the project index could not be asked about ' + LScan.RootClass;
+    Result.Error:= Format(REASON_FAILED, [LScan.RootClass]);
     Exit;
   end;
   if not LOwn.Found then
@@ -592,9 +722,9 @@ begin
   begin
     LStart  := if LInst.FrameClass <> '' then LInst.FrameClass else LOwn.ParentClass;
     LVerdict:= ResolveInstance(LInst, LStart, ALookup, AReader);
-    if (LVerdict.State = asOutside) and (LVerdict.DeclaringUnit = '') then
+    if LVerdict.State = asUnknown then
     begin
-      Result.Error   := 'the project index could not be asked about the ancestors of ' + LScan.RootClass;
+      Result.Error   := LInst.Name + ': ' + LVerdict.Reason;
       Result.Verdicts:= nil;
       Exit; // unknown is never reported as outside
     end;
@@ -627,17 +757,17 @@ end;
 
 function DiskTextReader: TDfmTextReader;
 begin
-  Result:= function(const APath: string; out AText: string): Boolean
+  Result:= function(const APath: string; out AText: string): TDfmRead
     begin
-      AText := '';
-      Result:= TFile.Exists(APath);
-      if not Result then
-        Exit;
+      AText:= '';
+      if not TFile.Exists(APath) then
+        Exit(drMissing);
       try
-        AText:= TFile.ReadAllText(APath);
-      except  // an unreadable .dfm reads as "no .dfm" (spec E3: show nothing); the analysis runs on drops and must never raise
+        AText := TFile.ReadAllText(APath);
+        Result:= drRead;
+      except  // reported as drUnreadable: the analysis runs on drops and must never raise
         on Exception do
-          Result:= False;
+          Result:= drUnreadable;
       end; // try
     end;
 end;
