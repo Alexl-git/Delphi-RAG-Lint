@@ -22,7 +22,8 @@ uses
 /// <param name="APairs">The checked books' pairs; their From types filter the fields.</param>
 /// <returns>A lookup answering Found (exactly one declaring file), not Found (absent,
 /// or ambiguous: two or more files), or Failed (the engine could not answer either
-/// read; Found is then False and nothing else is set).</returns>
+/// read; Found is then False and Error holds the engine's failure text, naming the DB).
+/// The fields are read from the declaring file LookupClass found.</returns>
 /// <remarks>Each call spawns up to two `sql` engine processes; wrap the result in
 /// CachingLookup. Not thread-safe beyond what TEngineAdapter is.</remarks>
 function EngineClassLookup(AEngine: TEngineAdapter; const ADb: string; const APairs: TArray<TTypePair>): TClassLookup;  // dl:ok unused-public-symbol@d8b1 -- REVIEWED 2026-10-05 called by the model tests (lookup.live.*, coderefs.live.*) only until the C8 Convert-tab task (Task 6) passes it to AnalyzeUnit; drop this marker when it does
@@ -32,7 +33,8 @@ function EngineClassLookup(AEngine: TEngineAdapter; const ADb: string; const APa
 /// <param name="AEngine">The adapter to ask; must outlive the returned lookup. Not owned.</param>
 /// <param name="ADb">The PROJECT index only.</param>
 /// <returns>A lookup answering False (unknown, never "no uses") when the engine could
-/// not answer.</returns>
+/// not answer, the answer was stale, or the unit is not in the index; AError then
+/// holds the engine-side failure text.</returns>
 function EngineCodeUses(AEngine: TEngineAdapter; const ADb: string): TCodeUseLookup;  // dl:ok unused-public-symbol@b06b -- REVIEWED 2026-10-05 called by the model tests (coderefs.live.analysis) only until the C8 Convert-tab task (Task 6) passes it to AnalyzeUnit; drop this marker when it does
 
 implementation
@@ -53,7 +55,7 @@ begin
       Result:= Default(TClassInfo);
       case AEngine.LookupClass(ADb, AClassName, LPath, LParent, LError) of
         cloFound:
-          if AEngine.ListClassFields(ADb, AClassName, LFrom, LFields, LError) then
+          if AEngine.ListClassFields(ADb, AClassName, LPath, LFrom, LFields, LError) then
           begin
             Result.Found      := True;
             Result.PasPath    := LPath;
@@ -66,9 +68,15 @@ begin
             end;
           end
           else
+          begin
             Result.Failed:= True;
+            Result.Error := LError;
+          end;
         cloFailed:
+        begin
           Result.Failed:= True;
+          Result.Error := LError;
+        end;
         cloAbsent, cloAmbiguous:
           Result.Found:= False;
       end; // case
@@ -77,14 +85,13 @@ end;
 
 function EngineCodeUses(AEngine: TEngineAdapter; const ADb: string): TCodeUseLookup;
 begin
-  Result:= function(const AUnitPas, AClassName: string; out AUses: TArray<TCodeUse>): Boolean
+  Result:= function(const AUnitPas, AClassName: string; out AUses: TArray<TCodeUse>; out AError: string): Boolean
     var
-      LRefs : TArray<TEngineCodeRef>;
-      LError: string;
-      LUse  : TCodeUse;
+      LRefs: TArray<TEngineCodeRef>;
+      LUse : TCodeUse;
     begin
       AUses := nil;
-      Result:= AEngine.ListCodeRefs(ADb, AUnitPas, AClassName, LRefs, LError);
+      Result:= AEngine.ListCodeRefs(ADb, AUnitPas, AClassName, LRefs, AError);
       for var LRef: TEngineCodeRef in LRefs do
       begin
         LUse.Name:= CodeUseName(LRef.Name, LRef.Receiver);

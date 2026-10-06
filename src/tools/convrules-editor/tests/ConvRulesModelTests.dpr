@@ -8489,7 +8489,7 @@ end;
 
 { A fake project index for the C8 walk: each row 'Class|PasPath|Parent[|f1:T1,f2:T2]'
   (the 4th part: the From-typed fields the class itself declares); a row 'Class|!'
-  answers Failed (the engine could not be asked). A class with no row is not in the
+  answers Failed (the engine could not be asked), 'Class|!|why' with Error 'why'. A class with no row is not in the
   index. ACalls (may be nil) records every question asked. }
 function FakeLookup(const ARows: TArray<string>; ACalls: TStringList): TClassLookup;
 const
@@ -8516,7 +8516,10 @@ begin
         if not SameText(LParts[0], AClassName) then
           Continue;
         if LParts[1] = '!' then
-          Result.Failed:= True
+        begin
+          Result.Failed:= True;
+          Result.Error := if Length(LParts) > PARENT_FIELD then LParts[PARENT_FIELD] else '';
+        end
         else
         begin
           Result.Found  := True;
@@ -8565,9 +8568,10 @@ begin
 end;
 
 { A fake `refs` answer for the C8 code-use scan: rows 'Name|Receiver|Line' for every
-  unit; AFail = the engine could not answer. }
+  unit; AFail = the engine could not answer (AError = FAKE_REFS_ERROR). }
 function FakeCodeUses(const ARows: TArray<string>; AFail: Boolean): TCodeUseLookup;
 const
+  FAKE_REFS_ERROR = 'fake: refs unavailable';
   NAME_FIELD     = 0;
   RECEIVER_FIELD = 1;
   LINE_FIELD     = 2;
@@ -8575,14 +8579,18 @@ var
   LRows: TArray<string>;
 begin
   LRows:= ARows;
-  Result:= function(const AUnitPas, AClassName: string; out AUses: TArray<TCodeUse>): Boolean
+  Result:= function(const AUnitPas, AClassName: string; out AUses: TArray<TCodeUse>; out AError: string): Boolean
     var
       LParts: TArray<string>;
       LUse  : TCodeUse;
     begin
-      AUses:= nil;
+      AUses := nil;
+      AError:= '';
       if AFail then
+      begin
+        AError:= FAKE_REFS_ERROR;
         Exit(False);
+      end;
       for var LRow: string in LRows do
       begin
         LParts   := LRow.Split(['|']);
@@ -8664,6 +8672,7 @@ begin
 
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses([], True));
   Check('code.use.lookup.failed', not U.Known and (U.Error <> '') and (Length(U.Verdicts) = 0), U.Error);
+  Check('code.use.lookup.failed.cause', ContainsText(U.Error, 'fake: refs unavailable'), U.Error);
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, nil);
   Check('code.use.not.asked', U.Known and (Length(U.Verdicts) = 0));
 
@@ -8727,6 +8736,7 @@ const
   TWO  = '{"rows":[["C:\\a\\U.pas","TForm"],["C:\\b\\U.pas","TForm"]]}';
   FWD  = '{"rows":[["C:\\a\\U.pas",""],["C:\\a\\U.pas","TForm"]]}';
   CUT  = '{"rows":[["C:\\a\\U.pas","TForm"]],"row_count":1,"truncated":true}';
+  OLD  = '{"rows":[["C:\\a\\U.pas","TForm"]],"row_count":1,"truncated":false,"stale":true,"stale_files":1}';
 var
   P, A    : string;
   LAccepts: Boolean;
@@ -8738,6 +8748,7 @@ begin
   Check('lookup.rows.forward.decl', (ParseClassLookupRows(FWD, P, A) = cloFound) and (A = 'TForm'), A);
   Check('lookup.rows.garbage', ParseClassLookupRows('FATAL: index locked', P, A) = cloFailed);
   Check('lookup.rows.truncated.failed', (ParseClassLookupRows(CUT, P, A) = cloFailed) and (P = ''));
+  Check('lookup.rows.stale.failed', (ParseClassLookupRows(OLD, P, A) = cloFailed) and (P = ''));
   LAccepts:= IsPlainIdentifier('TdmlCPData') and IsPlainIdentifier('_T1');
   LRejects:= not (IsPlainIdentifier('') or IsPlainIdentifier('x'' OR 1=1') or IsPlainIdentifier('Unit.TFoo') or IsPlainIdentifier('1T'));
   Check('lookup.ident', LAccepts and LRejects);
@@ -8807,7 +8818,9 @@ begin
       Check('lookup.live.analysis', U.Known and (Length(U.Verdicts) = 1) and (U.Verdicts[0].State = asUnconverted) and (U.Verdicts[0].DeclaringUnit = 'Anc'),
         Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
       U:= AnalyzeUnit(DescPas, [Pr], EngineClassLookup(Eng, TPath.Combine(Dir, 'none.sqlite'), [Pr]), DiskTextReader());
-      Check('lookup.live.analysis.bad.db.unknown', not U.Known and (U.Error <> ''), U.Error);
+      // The engine's own text ("--db #1 of 1 does not exist") reaches the unit's Error.
+      Check('lookup.live.analysis.bad.db.unknown', not U.Known and ContainsText(U.Error, 'TDescForm') and ContainsText(U.Error, 'does not exist')
+        and ContainsText(U.Error, 'none.sqlite'), U.Error);
     finally
       Eng.Free;
     end; // try
@@ -8833,6 +8846,7 @@ begin
   LParsed:= ParseCodeRefRows(REFS_JSON, Refs) and (Length(Refs) = REF_ROWS);
   Check('refs.rows', LParsed and (Refs[0].Receiver = 'tblFtrs') and (Refs[0].Line = LINE_FIRST) and (Refs[1].Name = 'tblOps') and (Refs[1].Receiver = ''));
   Check('refs.rows.garbage', not ParseCodeRefRows('', Refs));
+  Check('refs.rows.stale', not ParseCodeRefRows('{"rows":[["Post","tblFtrs",1]],"stale":true,"stale_files":2}', Refs) and (Length(Refs) = 0));
   Check('sql.quote', SqlQuoted('C:\a''b\U.pas') = '''C:\a''''b\U.pas''');  // dl:ok hardcoded-absolute-path@336f -- REVIEWED 2026-10-05 quoting test text; nothing on disk is touched
 end;
 
@@ -8850,7 +8864,7 @@ end;
   must report the use as an inherited code use. }
 procedure TestCodeRefsLive;
 var
-  Exe, Dir, Db, DescPas, Output, Err: string;
+  Exe, Dir, Db, DescPas, AncPas, Output, Err: string;
   Eng   : TEngineAdapter;
   Fields: TArray<TEngineField>;
   Refs  : TArray<TEngineCodeRef>;  // dl:ok duplicate-code@e1ac -- REVIEWED 2026-10-05 the live-test skeleton (engine skip, private temp dir, fixture, adapter, try/finally) is repeated on purpose so each live test reads on its own; the shared fixture text is already WriteC8Fixture
@@ -8876,8 +8890,10 @@ begin
     Eng:= TEngineAdapter.Create(Exe, [Db]);
     try
       Check('coderefs.live.index', Eng.IndexProject(TPath.Combine(Dir, 'Fix.dpr'), Db, Output) = 0, Output);
-      Check('coderefs.live.fields', Eng.ListClassFields(Db, 'TAncForm', ['TLabel'], Fields, Err) and (Length(Fields) = 1) and (Fields[0].Name = 'Label1'), Err);
-      Check('coderefs.live.fields.filtered', Eng.ListClassFields(Db, 'TAncForm', ['TTable'], Fields, Err) and (Length(Fields) = 0), Err);
+      AncPas:= TPath.Combine(Dir, 'Anc.pas');
+      Check('coderefs.live.fields', Eng.ListClassFields(Db, 'TAncForm', AncPas, ['TLabel'], Fields, Err) and (Length(Fields) = 1) and (Fields[0].Name = 'Label1'), Err);
+      Check('coderefs.live.fields.filtered', Eng.ListClassFields(Db, 'TAncForm', AncPas, ['TTable'], Fields, Err) and (Length(Fields) = 0), Err);
+      Check('coderefs.live.fields.other.file', Eng.ListClassFields(Db, 'TAncForm', DescPas, ['TLabel'], Fields, Err) and (Length(Fields) = 0), Err);
       LUsed:= False;
       if Eng.ListCodeRefs(Db, DescPas, 'TDesc2Form', Refs, Err) then
         for var LRef: TEngineCodeRef in Refs do
@@ -8886,11 +8902,18 @@ begin
       Check('coderefs.live.use.found', LUsed, Format('%d refs %s', [Length(Refs), Err]));
       Check('coderefs.live.local.ignored', (Length(Refs) > 0) and not MatchText('Label2', CodeNames(Refs)), string.Join(',', CodeNames(Refs)));
       Check('coderefs.live.bad.db.failed', not Eng.ListCodeRefs(TPath.Combine(Dir, 'none.sqlite'), DescPas, 'TDesc2Form', Refs, Err) and (Err <> ''), Err);
+      Check('coderefs.live.unit.not.indexed.failed', not Eng.ListCodeRefs(Db, TPath.Combine(Dir, 'Nope.pas'), 'TDesc2Form', Refs, Err)
+        and ContainsText(Err, 'not in the index'), Err);
       Pr.FromType:= 'TLabel';
       Pr.ToType  := 'TStaticText';
       U:= AnalyzeUnit(DescPas, [Pr], EngineClassLookup(Eng, Db, [Pr]), DiskTextReader(), EngineCodeUses(Eng, Db));
       Check('coderefs.live.analysis', U.Known and (Length(U.Verdicts) = 1) and U.Verdicts[0].Instance.FromCode and (U.Verdicts[0].DeclaringUnit = 'Anc'),
         Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
+      // A unit edited after it was indexed: the engine answers "stale": true, and a C8
+      // read refuses it (a stale DB is not authoritative) -- measured on 1.21.1.
+      TFile.AppendAllText(DescPas, '// edited after indexing' + sLineBreak, TEncoding.ASCII);
+      TFile.SetLastWriteTime(DescPas, Now + 1 / MinsPerDay);
+      Check('coderefs.live.stale.failed', not Eng.ListCodeRefs(Db, DescPas, 'TDesc2Form', Refs, Err) and ContainsText(Err, 'stale'), Err);
     finally
       Eng.Free;
     end; // try
@@ -9106,6 +9129,9 @@ begin
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|!'], nil),
     FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm'], [LEAF_DFM, MID_DFM]));
   Check('inherit.walk.lookup.failed', not U.Known and (Length(U.Verdicts) = 0) and (U.Error <> ''), U.Error);
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|!|index is locked'], nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm'], [LEAF_DFM, MID_DFM]));
+  Check('inherit.walk.lookup.failed.cause', not U.Known and ContainsText(U.Error, 'TMidDM') and ContainsText(U.Error, 'index is locked'), U.Error);
   U:= AnalyzeUnit('fx\Loop.pas', Pairs, FakeLookup(['TLoopA|fx\Loop.pas|TLoopB', 'TLoopB|fx\LoopB.pas|TLoopA'], nil),
     FakeReader(['fx\Loop.dfm'], [LOOP_DFM]));
   Check('inherit.walk.cycle.ends', not U.Known and (Length(U.Verdicts) = 0) and ContainsText(U.Error, 'loops back to TLoopB') and ContainsText(U.Error, 'tblX'),

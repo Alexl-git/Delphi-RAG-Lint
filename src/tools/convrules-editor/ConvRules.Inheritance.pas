@@ -89,6 +89,10 @@ type
     Found      : Boolean;
     /// <summary>The index could not be asked (engine failure); unknown, not absent.</summary>
     Failed     : Boolean;
+    /// <summary>Failed only: why -- the engine's own text naming the DB (missing,
+    /// locked, stale schema, stale files); '' otherwise. AnalyzeUnit appends it to the
+    /// unit's Error.</summary>
+    Error      : string;
     /// <summary>The declaring unit's .pas (full path); '' unless Found.</summary>
     PasPath    : string;
     /// <summary>The class's first ancestor as written ('TDataModule'); '' when none.</summary>
@@ -122,8 +126,10 @@ type
   end;
 
   /// <summary>Asks the project index which identifiers AClassName's methods in AUnitPas use.</summary>
-  /// <remarks>False = the index could not answer (unknown, never "no uses").</remarks>
-  TCodeUseLookup = reference to function(const AUnitPas, AClassName: string; out AUses: TArray<TCodeUse>): Boolean;
+  /// <remarks>False = the index could not answer (unknown, never "no uses"); AError then
+  /// says why (the engine's text naming the DB), else ''. AnalyzeUnit appends it to the
+  /// unit's Error.</remarks>
+  TCodeUseLookup = reference to function(const AUnitPas, AClassName: string; out AUses: TArray<TCodeUse>; out AError: string): Boolean;
 
   /// <summary>The declaring ancestor's state for one inherited instance (spec Terms).</summary>
   /// <remarks>asUnconverted: the ancestor's object still has the instance's (From)
@@ -261,7 +267,10 @@ function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: str
 /// ancestor declares is never unknown; only for a declared name is the chain walked again
 /// reading .dfm files (each read once per call). A code-use walk that cannot decide
 /// (asUnknown), or ACodeUses answering False, makes the unit Known = False with Error,
-/// like an instance. Accepted gap: a closer ancestor redeclaring the name with a
+/// like an instance; a failed lookup's or code-use listing's own error text
+/// (TClassInfo.Error, the TCodeUseLookup's AError) is appended to Error in
+/// parentheses, so the cause (missing DB, stale schema, stale files) reaches the
+/// caller. Accepted gap: a closer ancestor redeclaring the name with a
 /// non-From type (shadowing) is not in the filtered Fields, so the walk goes on to a
 /// further ancestor's From-typed field of that name and counts it.</remarks>
 function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader; const ACodeUses: TCodeUseLookup = nil): TUnitInheritance;  // dl:ok unused-public-symbol@af24 -- REVIEWED 2026-10-05 called by the model tests (inherit.walk.*, code.use.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
@@ -407,6 +416,7 @@ const
   REASON_DFM    = 'the .dfm of %s (%s) is binary or cannot be read';
   REASON_NO_CODE_USES = 'the project index could not list the code uses of %s';
   REASON_OF     = '%s: %s';
+  REASON_CAUSE  = '%s (%s)';
   NOTE_CODE_LEFT = '%d inherited code use(s) left: ancestor %s not converted';
   NOTE_JOIN     = '; ';
   SELF_WORD     = 'Self';
@@ -748,6 +758,12 @@ begin
     AVerdict.Chain:= AVerdict.Chain + [ChainUnitOf(AInfo.PasPath, ADepth)];
 end;
 
+// AReason, plus the engine's own failure text in parentheses when there is one.
+function WithCause(const AReason, ACause: string): string;
+begin
+  Result:= if ACause = '' then AReason else Format(REASON_CAUSE, [AReason, ACause]);
+end;
+
 // One class of a walk at ADepth. weNoAncestor here means "go on to AParent" (''
 // when the class records no ancestor); weDeclared fills AVerdict's state; a unit
 // whose .dfm opens AInst with its own type (a code use: with a From type) joins
@@ -767,7 +783,7 @@ begin
   Info:= ACtx.Lookup(AClass);
   if Info.Failed then
   begin
-    AReason:= Format(REASON_FAILED, [AClass]);
+    AReason:= WithCause(Format(REASON_FAILED, [AClass]), Info.Error);
     Exit(weUnknown);
   end;
   if not Info.Found then
@@ -1006,10 +1022,11 @@ var
   LUses   : TArray<TCodeUse>;
   LVerdict: TInstanceVerdict;
   LOwnType: string;
+  LError  : string;
 begin
-  if not ACodeUses(AResult.UnitPas, ARootClass, LUses) then
+  if not ACodeUses(AResult.UnitPas, ARootClass, LUses, LError) then
   begin
-    AResult.Error:= Format(REASON_NO_CODE_USES, [ARootClass]);
+    AResult.Error:= WithCause(Format(REASON_NO_CODE_USES, [ARootClass]), LError);
     Exit(False);
   end;
   for var LUse: TCodeUse in FirstUses(LUses) do
@@ -1061,7 +1078,7 @@ begin
   LOwn:= ALookup(LScan.RootClass);
   if LOwn.Failed then
   begin
-    Result.Error:= Format(REASON_FAILED, [LScan.RootClass]);
+    Result.Error:= WithCause(Format(REASON_FAILED, [LScan.RootClass]), LOwn.Error);
     Exit;
   end;
   if not LOwn.Found then
