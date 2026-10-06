@@ -43,7 +43,7 @@ green. A guard that only ever passes is the thing that produced the list above.
 ## Feature registry (5 lines, every shipped change, however small)
 
 The registry is the master list of what drag-lint ships; the page is yours, the
-list is the registry's. Spec: `docs\superpowers\specs\2026-10-05-feature-registry-design.md`;
+list is the registry's. Spec (local, gitignored design spec): `docs\superpowers\specs\2026-10-05-feature-registry-design.md`;
 page: `docs\wiki\Feature-Registry.md`.
 
 1. Register it: `tools\feature-registry.ps1 add -Id <id> -Title ... -Group ... -Owner ...
@@ -52,7 +52,7 @@ page: `docs\wiki\Feature-Registry.md`.
    menu item? `blast-radius -MenuPath "<node>"` first, then `move-menu -From ... -To ...`, in
    the same commit as the plugin change.
 2. Write or update the wiki page named in `wikiPage` -- you own it; the registry links to it.
-3. Run `tools\build-feature-pages.ps1` and commit the regenerated `docs\wiki` pages, the
+3. Run `tools\build-feature-pages.ps1 -Normalise` and commit the regenerated `docs\wiki` pages, the
    README / AI-USAGE blocks and `features\generated\manifest.json` WITH the feature.
 4. Run `tests\autotest\run_feature_registry_guard.ps1` -- it names exactly what is missing and
    prints the JSON skeleton; a red battery is the only reminder there is.

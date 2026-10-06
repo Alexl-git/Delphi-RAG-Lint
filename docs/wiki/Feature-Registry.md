@@ -26,7 +26,7 @@ team that shipped it -- the registry only has to know it exists and link to it.
    -- an unknown group or team is refused unless `-NewGroup` / `-NewTeam` creates it.
    Several surfaces go in one `-Surface` argument separated by ` ;; `.
 2. Write or update `docs\wiki\<page>.md` -- you own it.
-3. `pwsh -File tools\build-feature-pages.ps1` and commit the regenerated pages,
+3. `pwsh -File tools\build-feature-pages.ps1 -Normalise` and commit the regenerated pages,
    blocks and manifest WITH the feature.
 4. `pwsh -File tests\autotest\run_feature_registry_guard.ps1` -- it names exactly
    what is missing and prints a JSON skeleton for it.
@@ -132,5 +132,3 @@ reason, asserted two-way), `seed-backlog.json` (seeded entries still owing an
 `intro` and `lastVerified`; the guard prints the remaining count per team, the
 deadline is the R2 installer release), `families\*.json`, `templates\*.md`,
 `schema\entry.schema.json` (the field list and the canonical key order).
-
-Spec: `docs\superpowers\specs\2026-10-05-feature-registry-design.md`.

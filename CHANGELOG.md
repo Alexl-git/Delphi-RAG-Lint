@@ -17,8 +17,8 @@ breaking changes** until v1.0.
   subcommand, an IDE caption, a rule, a chart question or a release exe has no entry, when an
   entry points at something that no longer exists, or when a generated page was hand-edited.
   `docs\wiki-featuremap.tsv` is retired. `tools\publish-release.ps1` orders the publish steps and
-  restores the deployed Debug engine after `pack-lint-release.ps1` overwrites it. Spec:
-  `docs\superpowers\specs\2026-10-05-feature-registry-design.md`; page: `Feature-Registry`.
+  restores the deployed Debug engine after `pack-lint-release.ps1` overwrites it. Page:
+  [Feature-Registry](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Feature-Registry).
 
 ## v1.21.1-alpha -- 2026-10-05
 
