@@ -44,7 +44,7 @@ interface / project / command constant / wire field / db column / any symbol.**
 | `event-wiring` | form class | `Emit-EventWiring.ps1` | 41 events / 41 handlers / 40 controls |
 | `touches-tables` | method | `Emit-TouchesTables.ps1` | 5 read / 5 written / 2 both |
 | `lifecycle` | form class | `Emit-Lifecycle.ps1` | uMain: 2 wired / 1 implemented-not-wired / 4 absent |
-| `cycles` | unit / project | `Emit-Cycles.ps1` | CLIENT 2 groups / 5 edges; DL's SCC 7 edges; DataCopy 0 |
+| `cycles` | unit / project | `Emit-Cycles.ps1` | CLIENT 2 groups / 5 edges; DL's SCC 7 edges; DataCopy 0. **Proven 2026-10-06 (R3)** on DL's 5-unit SCC: all 7 edges verified against source (1 interface, 6 implementation), pinned `A-CY2-EDGESET`; example `docs\examples\cycles\` |
 | `wiring` | interface | `Emit-Wiring.ps1` | SERVER 2 regs / 4 sites of 535; CLIENT 1 of 4 |
 | `effects` | method | `Emit-Effects.ps1` | pure / not-analysed / `g,p0,p3,?` over 6 params |
 | `architecture` | project | `Emit-Architecture.ps1` | 563 units / 3 zones / 2,858 edges / 3 back-edges |
