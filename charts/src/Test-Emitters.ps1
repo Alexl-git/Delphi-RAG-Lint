@@ -3041,12 +3041,30 @@ Step 'E-R5' {
   # the holdout MSCLIST.NUM: 103 steps drawn or disclosed, none missing; 35 of 35 conditions drawn; 4 CROSSES; 2 STOPS
   # RE-PINNED fix round 1 (I2): conditions per step, drawn/disclosed/missing of all 35 (was a set count, '35/35')
   Chk 'A-R5-HOLD'       $rt0.R5Hold '103/0|conds 35/0/0 of 35|xing 4|stops 2|lanes 7/2/13/3'
-  # the calculated field: its STOPS node and a DERIVED card of 18 rows, each REGENERATE in its row's tooltip; all 27 drawn
-  # RE-PINNED fix round 1 (I2): + its facets per step -- 2 drawn (the anchor's VIA at [01], the STOPS' VIA FtrNameString), 18 REGENERATE in tooltips
-  Chk 'A-R5-CALC'       $rt0.R5Calc '1/18|tooltip regenerate 18|27/0/0|facets 2/18/0/0'
-  # a synthetic 300-step trace (150 routine cards): the ladder folds the cards with no protected row, missing 0, and the
-  # Legend says the chart is above the 45-node cap and drawn anyway
-  Chk 'A-R5-SIZE'       $rt0.R5Size 'cards|nodes 150|0/300/0|1 cap row'
+  # the calculated field: its STOPS node and a DERIVED card of 18 rows, each REGENERATE in its row's tooltip
+  # RE-PINNED fix round 1 (I2): + its facets per step -- 2 drawn (the anchor's VIA at [01], the STOPS' VIA FtrNameString)
+  # RE-PINNED Task 5b (owner 2026-10-06: DERIVED card capped like its components): 18 plain rows past the 14-row cap --
+  # 14 drawn (14 REGENERATE in tooltips), the last 4 folded into the card's disclosure row (their 4 REGENERATE disclosed);
+  # was '1/18|tooltip regenerate 18|27/0/0|facets 2/18/0/0' while DERIVED was exempt
+  Chk 'A-R5-CALC'       $rt0.R5Calc '1/14|tooltip regenerate 14|23/4/0|facets 2/14/4/0'
+  # a synthetic 300-step trace (150 routine cards of 2 steps): the ladder engages (150 nodes > 45) and the Legend says the
+  # chart is drawn anyway. RE-PINNED Task 5b (owner 2026-10-06, a fold that saves no row is not made): a 2-row card folded
+  # is header + 1 disclosure row + 1 Legend row, so no card folds -- all 300 drawn, ladder empty (was 'cards|...|0/300/0')
+  Chk 'A-R5-SIZE'       $rt0.R5Size '|nodes 150|300/0/0|1 cap row'
+  # Task 5b rule 1 (owner 2026-10-06, "1 row summary is OK"): 100 cards of 3 steps all fold under the ladder; above the
+  # 5-fold threshold the Legend holds ONE summary row, its ranges measured exact against the undrawn steps (a mutated
+  # range reads 'ranges mismatch' -- measured, not assumed)
+  Chk 'A-R5-SUMMARY'    $rt0.R5Summary '1 legend fold row|0/300/0|summary ranges exact|100 cards folded (300 rows not shown) -- [01]-[300] -- the full trace is in the text answer|mut ranges mismatch'
+  # ... cards alternating 3 and 2 steps: the 2-step cards stay whole, the 60 folded cards' ranges exceed one row, so the
+  # summary carries only the count -- 180 = exactly the undrawn steps (a mutated count reads 'counts mismatch')
+  Chk 'A-R5-SUMCOUNT'   $rt0.R5SumCount '1 legend fold row|120/180/0|summary counts exact|60 cards folded (180 rows not shown) -- 180 steps -- the full trace is in the text answer|mut counts mismatch'
+  # ... the threshold: 5 folds keep 5 per-fold Legend rows; 6 folds become 1 summary row, coverage still exact
+  Chk 'A-R5-FOLDTHRESH' $rt0.R5FoldThresh '5 cards: 5 per-fold/0 summary|6 cards: 0 per-fold/1 summary|cover 0 missing, summary counts exact'
+  # ... a fold that saves no row is not made: at a row cap of 2 a 4-step card stays whole, a 5-step card folds 3
+  Chk 'A-R5-NOSAVE'     $rt0.R5NoSave 'TSyn.R1: 4 drawn + 0 disclosure | TSyn.R2: 2 drawn + 1 disclosure'
+  # Task 5b rule 2 (owner 2026-10-06, "calculated fields get same treatment as their components"): a DERIVED card over the
+  # 14-row cap folds with a disclosure row; under the cap it is unchanged
+  Chk 'A-R5-DERIVEDCAP' $rt0.R5DerivedCap '20: 14 drawn + +6 more steps not shown -- [15]-[20]|missing 0 || 10: 10 drawn + |missing 0'
   # R19: an unknown section, and an actor outside the TIERS, throw -- never a default lane
   Chk 'A-R5-UNKNOWN'    $rt0.R5Unknown 'refused/refused'
 }

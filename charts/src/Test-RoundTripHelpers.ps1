@@ -1245,10 +1245,16 @@ function Measure-TraceChart([string] $DotPath) {
       foreach ($m in [regex]::Matches($html, '<TD([^>]*)>(.*?)</TD>')) {
         $txt = [Net.WebUtility]::HtmlDecode((($m.Groups[2].Value -replace '<BR[^>]*/>', ' ') -replace '<[^>]+>', ''))
         $tt = $(if ($m.Groups[1].Value -match ' TITLE="([^"]*)"') { [Net.WebUtility]::HtmlDecode($Matches[1]) } else { '' })
-        $c = [pscustomobject]@{ Node = $id; Lane = $lane; Text = $txt; Href = ($m.Groups[1].Value -match ' HREF="'); Title = ($m.Groups[1].Value -match ' TITLE="'); TitleText = $tt; Kind = 'other'; Nums = @(); Step = @() }
+        $c = [pscustomobject]@{ Node = $id; Lane = $lane; Text = $txt; Href = ($m.Groups[1].Value -match ' HREF="'); Title = ($m.Groups[1].Value -match ' TITLE="'); TitleText = $tt; Kind = 'other'; Nums = @(); Step = @(); Counted = -1 }
         if ($txt -match '^((?:\[\d{2,3}\])(?:/\[\d{2,3}\])*) ') { $c.Kind = 'step'; $c.Nums = @([regex]::Matches($Matches[1], '\d+') | ForEach-Object { [int]$_.Value }); $cur = $c.Nums }
         elseif ($txt -cmatch '^(WHEN|UNLESS) ') { $c.Kind = 'cond'; $c.Step = $cur }
         elseif ($txt -cmatch '^(VIA|ONTO|AT|CONTRACT|FROM|TO|OVER|WITH|REGENERATE) ') { $c.Kind = 'facet'; $c.Step = $cur }
+        elseif ($txt -cmatch '^\d+ cards folded \(\d+ rows not shown\) -- (.+) -- the full trace is in the text answer$') {
+          # Task 5b (owner 2026-10-06): the ONE Legend summary row -- it names the folded steps' ranges, or only their count
+          $c.Kind = 'summary'; $mid = $Matches[1]
+          if ($mid -cmatch '^(\d+) steps$') { $c.Counted = [int]$Matches[1] }
+          else { $c.Nums = @(foreach ($r in [regex]::Matches($mid, '\[(\d{2,3})\](?:-\[(\d{2,3})\])?')) { $a = [int]$r.Groups[1].Value; $b = $(if ($r.Groups[2].Success) { [int]$r.Groups[2].Value } else { $a }); $a..$b }) }
+        }
         elseif ($txt -match '^\+\d+ more ') {
           $c.Kind = 'disclosure'
           $c.Nums = @(foreach ($r in [regex]::Matches($txt, '\[(\d{2,3})\](?:-\[(\d{2,3})\])?')) { $a = [int]$r.Groups[1].Value; $b = $(if ($r.Groups[2].Success) { [int]$r.Groups[2].Value } else { $a }); $a..$b })
@@ -1266,14 +1272,23 @@ function Measure-TraceChart([string] $DotPath) {
 }
 
 # A-R5-COVER: every step number either on a drawn row or in a disclosure row -- disjoint, and together exactly 1..N
+# Task 5b: a Legend SUMMARY row is measured, never assumed -- one naming ranges must name exactly the steps not drawn
+# ('ranges exact'), one carrying only a count must count exactly them ('counts exact', and then it accounts for them);
+# Summary is '' when the chart has no summary row
 function Get-TraceChartCover($Chart, [int] $Steps) {
   $drawn = @($Chart.Cells | Where-Object { $_.Kind -eq 'step' } | ForEach-Object { $_.Nums } | Sort-Object -Unique)
-  $disc = @($Chart.Cells | Where-Object { $_.Kind -eq 'disclosure' } | ForEach-Object { $_.Nums } | Sort-Object -Unique)
+  $undrawn = @(1..$Steps | Where-Object { $drawn -notcontains $_ })
+  $sumv = @(foreach ($s in @($Chart.Cells | Where-Object { $_.Kind -eq 'summary' })) {
+    if ($s.Counted -ge 0) { $(if ($s.Counted -eq $undrawn.Count) { 'counts exact' } else { 'counts mismatch' }) }
+    else { $(if (((@($s.Nums | Sort-Object -Unique)) -join ',') -ceq ($undrawn -join ',')) { 'ranges exact' } else { 'ranges mismatch' }) }
+  })
+  $byCount = @(if ($sumv -contains 'counts exact') { $undrawn })
+  $disc = @(@($Chart.Cells | Where-Object { $_.Kind -in 'disclosure', 'summary' } | ForEach-Object { $_.Nums }) + $byCount | Sort-Object -Unique)
   $both = @($drawn | Where-Object { $disc -contains $_ })
   $all = @(@($drawn) + @($disc) | Sort-Object -Unique)
   $missing = @(1..$Steps | Where-Object { $all -notcontains $_ })
   $extra = @($all | Where-Object { $_ -lt 1 -or $_ -gt $Steps })
-  [pscustomobject]@{ Drawn = $drawn.Count; Disclosed = $disc.Count; Missing = $missing.Count; Both = $both.Count; Extra = $extra.Count; DisclosedNums = $disc; MissingNums = $missing }
+  [pscustomobject]@{ Drawn = $drawn.Count; Disclosed = $disc.Count; Missing = $missing.Count; Both = $both.Count; Extra = $extra.Count; DisclosedNums = $disc; MissingNums = $missing; Summary = ($sumv -join ',') }
 }
 
 # a drawn guard row read back as Form A: keyword, condition (rejoined), anchor, and the step numbers it hangs under
@@ -1288,7 +1303,7 @@ function Get-TraceChartConds($Chart) {
 # serves one child per step (a merged row serves each of its steps). A REGENERATE facet is carried by its step
 # row's tooltip. Not drawn: DISCLOSED when the step's number is in a disclosure row, else MISSING. All MEASURED.
 function Get-TraceChartChildCheck($Chart, $Model) {
-  $disc = @($Chart.Cells | Where-Object { $_.Kind -eq 'disclosure' } | ForEach-Object { $_.Nums })
+  $disc = @($Chart.Cells | Where-Object { $_.Kind -in 'disclosure', 'summary' } | ForEach-Object { $_.Nums })
   $conds = @(Get-TraceChartConds $Chart)
   $facets = @($Chart.Cells | Where-Object { $_.Kind -eq 'facet' } | ForEach-Object {
     $s = $_.Step
@@ -1424,7 +1439,8 @@ $dvn = @($cc.Nodes | Where-Object { $_.Title -like 'DERIVED*' })
 $ccv = Get-TraceChartCover $cc $rcF.Steps
 $ck5 = Get-TraceChartChildCheck $cc (Read-FormA $rcF.Text)
 $res.R5Calc = "$(@($cc.Nodes | Where-Object { $_.Shape -eq 'note' }).Count)/$(@($dvn | ForEach-Object { $_.Cells } | Where-Object { $_.Kind -eq 'step' }).Count)|tooltip regenerate $(@([regex]::Matches($cc.Dot, 'TITLE="[^"]*REGENERATE ')).Count)|$($ccv.Drawn)/$($ccv.Disclosed)/$($ccv.Missing)|facets $($ck5.FDrawn)/$($ck5.FTip)/$($ck5.FDisc)/$($ck5.FMiss)"
-# A-R5-SIZE: a synthetic 300-step trace (NO index) -- 150 routines of two steps each: the ladder engages, nothing is missing
+# A-R5-SIZE: a synthetic 300-step trace (NO index) -- 150 routines of two steps each: the ladder engages, nothing is missing;
+# Task 5b: a 2-row card folded saves no row, so none folds and all 300 are drawn
 $sz = New-Trace 'SYN.SIZE' 'a synthetic trace of 300 steps' 'X.Y' 'A' '2026-10-06' 'x' 'client -> pipe -> server -> database'
 $szW = Add-TraceSection $sz 'WRITE'
 for ($q = 1; $q -le 150; $q++) {
@@ -1437,6 +1453,73 @@ $szPath = Join-Path $work 'r5-size.dot'
 [IO.File]::WriteAllText($szPath, $szc.Dot, (New-Object Text.ASCIIEncoding))
 $szm = Measure-TraceChart $szPath; $szv = Get-TraceChartCover $szm 300
 $res.R5Size = "$($szc.Manifest.Ladder)|nodes $($szc.Manifest.Nodes)|$($szv.Drawn)/$($szv.Disclosed)/$($szv.Missing)|$(@($szm.Cells | Where-Object { $_.Text -like '*readability cap*' }).Count) cap row"
+# ---- Task 5b: the owner's size rules (2026-10-06) -- every value below read from the .dot written, never the Manifest ----
+# the Legend's fold rows: a per-fold disclosure row (`+N more ... in <card>`) or the one summary row
+function Get-TraceChartLegendFolds($Chart) { @($Chart.Nodes | Where-Object { $_.Id -eq 'legend' } | ForEach-Object { $_.Cells } | Where-Object { $_.Kind -in 'disclosure', 'summary' }) }
+# a synthetic trace of $Routines routines in one WRITE section; routine q holds $Rows.Invoke(q) steps (a CALLS, then READS)
+function New-SynthSizeTrace([string] $Name, [int] $Routines, [scriptblock] $Rows, [string] $Section = 'WRITE') {
+  $t = New-Trace $Name "a synthetic trace ($Name)" 'X.Y' 'A' '2026-10-06' 'x' 'client -> pipe -> server -> database'
+  $s = Add-TraceSection $t $Section
+  for ($q = 1; $q -le $Routines; $q++) {
+    $k = [int](& $Rows $q)
+    [void]$s.Items.Add((New-TraceStep 'step' "CALLS TSyn.R$q" "uSyn.pas:$($q * 10)" '' "TSyn.R$($q - 1)"))
+    for ($j = 2; $j -le $k; $j++) { [void]$s.Items.Add((New-TraceStep 'step' "READS F${q}x$j" "uSyn.pas:$($q * 10 + $j)" '' "TSyn.R$q")) }
+  }
+  [void](Write-FormA $t)
+  $t
+}
+function Save-SynthChart($Trace, [hashtable] $Caps, [string] $Leaf) {
+  $p = Join-Path $work $Leaf
+  [IO.File]::WriteAllText($p, (ConvertTo-TraceChart $Trace @{} $Caps).Dot, (New-Object Text.ASCIIEncoding))
+  $p
+}
+# A-R5-SUMMARY (rule 1): 100 routines of THREE steps -- the ladder folds every card (each fold saves a row), 100 folds are
+# above the summary threshold, so the Legend holds ONE summary row naming the ranges; coverage measured from that row
+$suT = New-SynthSizeTrace 'SYN.SUM' 100 { 3 }
+$suP = Save-SynthChart $suT @{} 'r5-summary.dot'
+$suM = Measure-TraceChart $suP; $suV = Get-TraceChartCover $suM 300
+$suL = Get-TraceChartLegendFolds $suM
+$suMut = $(try {
+  $mp = Join-Path $work 'r5-summary-mut.dot'
+  [IO.File]::WriteAllText($mp, ([IO.File]::ReadAllText($suP).Replace('-- [01]-[300] --', '-- [01]-[299] --')), (New-Object Text.ASCIIEncoding))
+  (Get-TraceChartCover (Measure-TraceChart $mp) 300).Summary
+} catch { "threw: $($_.Exception.Message)" })
+$res.R5Summary = "$(@($suL).Count) legend fold row|$($suV.Drawn)/$($suV.Disclosed)/$($suV.Missing)|summary $($suV.Summary)|$(@($suL | ForEach-Object { $_.Text }) -join ' || ')|mut $suMut"
+# A-R5-SUMCOUNT (rule 1): routines alternate THREE and TWO steps -- the 2-step cards stay whole (a fold that saves no row is
+# not made), the 60 folded cards' ranges do not fit one row, so the summary row carries only the counts -- still measured
+$scT = New-SynthSizeTrace 'SYN.SUMC' 120 { param($q) $(if ($q % 2) { 3 } else { 2 }) }
+$scP = Save-SynthChart $scT @{} 'r5-sumcount.dot'
+$scM = Measure-TraceChart $scP; $scV = Get-TraceChartCover $scM 300
+$scL = Get-TraceChartLegendFolds $scM
+$scMut = $(try {
+  $mp = Join-Path $work 'r5-sumcount-mut.dot'
+  [IO.File]::WriteAllText($mp, ([IO.File]::ReadAllText($scP).Replace('-- 180 steps --', '-- 179 steps --')), (New-Object Text.ASCIIEncoding))
+  (Get-TraceChartCover (Measure-TraceChart $mp) 300).Summary
+} catch { "threw: $($_.Exception.Message)" })
+$res.R5SumCount = "$(@($scL).Count) legend fold row|$($scV.Drawn)/$($scV.Disclosed)/$($scV.Missing)|summary $($scV.Summary)|$(@($scL | ForEach-Object { $_.Text }) -join ' || ')|mut $scMut"
+# A-R5-FOLDTHRESH (rule 1): at a row cap of 2, five 5-step cards fold 3 rows each -- five Legend rows, one per fold (at the
+# threshold); six such cards -- ONE summary row
+$ft5 = Measure-TraceChart (Save-SynthChart (New-SynthSizeTrace 'SYN.F5' 5 { 5 }) @{ Rows = 2 } 'r5-fold5.dot')
+$ft6 = Measure-TraceChart (Save-SynthChart (New-SynthSizeTrace 'SYN.F6' 6 { 5 }) @{ Rows = 2 } 'r5-fold6.dot')
+$res.R5FoldThresh = "5 cards: $(@(Get-TraceChartLegendFolds $ft5 | Where-Object { $_.Kind -eq 'disclosure' }).Count) per-fold/$(@(Get-TraceChartLegendFolds $ft5 | Where-Object { $_.Kind -eq 'summary' }).Count) summary|6 cards: $(@(Get-TraceChartLegendFolds $ft6 | Where-Object { $_.Kind -eq 'disclosure' }).Count) per-fold/$(@(Get-TraceChartLegendFolds $ft6 | Where-Object { $_.Kind -eq 'summary' }).Count) summary|cover $((Get-TraceChartCover $ft6 30).Missing) missing, summary $((Get-TraceChartCover $ft6 30).Summary)"
+# A-R5-NOSAVE (rule 1): at a row cap of 2, a 4-step card would fold 2 rows into 1 disclosure row + 1 Legend row -- not made,
+# all 4 drawn; a 5-step card folds 3
+$ns = Measure-TraceChart (Save-SynthChart (New-SynthSizeTrace 'SYN.NS' 2 { param($q) 3 + $q }) @{ Rows = 2 } 'r5-nosave.dot')
+$res.R5NoSave = (@($ns.Nodes | Where-Object { $_.Title -like 'TSyn.R*' } | ForEach-Object { "$($_.Title): $(@($_.Cells | Where-Object { $_.Kind -eq 'step' }).Count) drawn + $(@($_.Cells | Where-Object { $_.Kind -eq 'disclosure' }).Count) disclosure" })) -join ' | '
+# A-R5-DERIVEDCAP (rule 2, owner 2026-10-06: the DERIVED card is capped like its components): 20 DERIVED rows at the default
+# cap of 14 -- 14 drawn and one disclosure row naming [15]-[20]; 10 rows -- unchanged, all drawn
+function New-SynthDerived([string] $Name, [int] $N) {
+  $t = New-Trace $Name 'a synthetic calculated field' 'X.Y' 'A' '2026-10-06' 'x' 'client -> pipe -> server -> database'
+  $s = Add-TraceSection $t 'DERIVED'
+  for ($q = 1; $q -le $N; $q++) { [void]$s.Items.Add((New-TraceStep 'step' "READS TSyn.F$q" "uSyn.pas:$q" '' 'TSyn.CalcFields')) }
+  [void](Write-FormA $t)
+  $t
+}
+$res.R5DerivedCap = (@(20, 10) | ForEach-Object {
+  $dm = Measure-TraceChart (Save-SynthChart (New-SynthDerived "SYN.D$_" $_) @{} "r5-derived-$_.dot")
+  $dc = @($dm.Nodes | Where-Object { $_.Title -like 'DERIVED*' } | ForEach-Object { $_.Cells })
+  "${_}: $(@($dc | Where-Object { $_.Kind -eq 'step' }).Count) drawn + $(@($dc | Where-Object { $_.Kind -eq 'disclosure' } | ForEach-Object { $_.Text -replace ', full text.*$', '' }) -join ';')|missing $((Get-TraceChartCover $dm $_).Missing)"
+}) -join ' || '
 # R19: an unknown section and an actor outside the TIERS throw, naming why
 $res.R5Unknown = (@(
   $(try { $u = New-Trace 'U' 'u' 'x' 'A' '2026-10-06' 'x' 'client'; [void](Add-TraceSection $u 'LATER').Items.Add((New-TraceStep 'step' 'CALLS X' 'X.pas:1')); [void](Write-FormA $u); [void](ConvertTo-TraceChart $u @{} @{}); 'drawn' } catch { $(if ($_.Exception.Message -like "*unknown section 'LATER'*") { 'refused' } else { "wrong: $($_.Exception.Message)" }) }),

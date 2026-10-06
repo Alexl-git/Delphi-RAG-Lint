@@ -32,11 +32,15 @@
   Legend repeats; the Legend also carries the END TRACE line byte for byte,
   every section's generated note, and how many labels were shortened. The size
   rules (4.1, owner answer 4): ALSO shows every row up to $Caps.Also (default
-  15 -- only an unusually long list folds); a routine card or the anchor chain folds plain rows past
-  $Caps.Rows (default 14; DERIVED is never capped) but never a protected row (a guard, a crossing, a
-  STOPS, a failure edge, a column); above $Caps.Nodes (default 45) nodes the
-  ladder folds ALSO, then every card with no protected row -- and if the chart
-  is still above the cap it is drawn anyway and the Legend says so.
+  15 -- only an unusually long list folds); a routine card, the anchor chain and the DERIVED card
+  (owner 2026-10-06: capped like its components) fold plain rows past $Caps.Rows (default 14) but
+  never a protected row (a guard, a crossing, a STOPS, a failure edge, a column); above $Caps.Nodes
+  (default 45) nodes the ladder folds ALSO, then every card with no protected row -- and if the
+  chart is still above the cap it is drawn anyway and the Legend says so. Owner 2026-10-06: a
+  fold of k rows draws one disclosure row on the card and one in the Legend, so a fold of fewer
+  than 3 rows saves nothing and is not made; above $Caps.Folds (default 5) folds, the Legend
+  carries ONE summary row (the folded steps' ranges when the row stays within
+  $script:ChartSummaryWidth characters, else only their count) instead of one row per fold.
 
   Unknown section names, actor words outside the TIERS and an unnumbered item
   THROW (R19): a grammar that grows must grow this renderer, never fall into a
@@ -46,7 +50,9 @@
 $script:ChartSections    = @('ANCHOR', 'DERIVED', 'WRITE', 'SERVER', 'DATABASE', 'RESPONSE', 'READ', 'ALSO')
 $script:ChartWidth       = 72
 $script:ChartMaxLines    = 5
-$script:ChartCapDefaults = @{ Also = 15; Rows = 14; Nodes = 45 }
+$script:ChartCapDefaults = @{ Also = 15; Rows = 14; Nodes = 45; Folds = 5 }
+# the longest Legend summary row that still names the folded ranges (one unwrapped Legend row); past it, only the count
+$script:ChartSummaryWidth = 120
 # lane -> border, fill, header ink
 $script:ChartLaneInk = @{
   CLIENT   = @('#2563EB', '#F2F6FF', '#1D4ED8')
@@ -298,8 +304,11 @@ function ConvertTo-TraceChart($Trace, [hashtable] $AnchorPaths = @{}, [hashtable
 
   # ---- 2. the size rules (4.1), in order; every fold writes a Legend row and a Manifest entry ----------
   # one disclosure per node: a later fold of the same node (the ladder) replaces the earlier one (the row cap)
+  # owner 2026-10-06: a fold of k rows draws 1 disclosure row on the card and 1 in the Legend -- it saves k - 2 rows, so
+  # a fold of fewer than 3 rows is not made (a 2-row card stays whole). Returns whether the fold was made.
   $fold = {
     param($Node, $Rows, [string] $Noun)
+    if (@($Rows).Count -lt 3) { return $false }
     if ($Node.FoldLegend) { [void]$legend.Remove($Node.FoldLegend); [void]$manifest.Collapses.Remove($Node.FoldLegend) }
     $nums = @($Rows | ForEach-Object { $_.Nums } | ForEach-Object { [int]$_ })
     foreach ($r in $Rows) { $r.Folded = $true }
@@ -314,35 +323,51 @@ function ConvertTo-TraceChart($Trace, [hashtable] $AnchorPaths = @{}, [hashtable
         if ($ch.Kind -eq 'cond') { $manifest.Conds[$ck] = "disclosed:$lg" } else { $manifest.Facets[$ck] = "disclosed:$lg" }
       }
     }
+    $true
   }
   # 2a. ALSO: every row up to the cap (owner answer 4: only an unusually long list folds)
   if ($nodes.Contains('also') -and $nodes['also'].Rows.Count -gt $cap.Also) {
     $ar = @($nodes['also'].Rows)
-    & $fold $nodes['also'] @($ar[$cap.Also..($ar.Count - 1)]) 'routes'
+    [void](& $fold $nodes['also'] @($ar[$cap.Also..($ar.Count - 1)]) 'routes')
   }
-  # 2b. a card's plain rows past the row cap; a protected row never folds. DERIVED is not capped: each of its rows is
-  # an OFFER (a source field and the command that traces it), the whole answer of a calculated anchor (A-R5-CALC)
-  foreach ($n in @($nodes.Values | Where-Object { $_.Kind -in 'card', 'anchor' })) {
+  # 2b. a card's plain rows past the row cap; a protected row never folds. DERIVED is capped like the component cards
+  # it is derived from (owner 2026-10-06; it was exempt until then -- A-R5-CALC, A-R5-DERIVEDCAP)
+  foreach ($n in @($nodes.Values | Where-Object { $_.Kind -in 'card', 'anchor', 'derived' })) {
     if ($n.Rows.Count -le $cap.Rows) { continue }
     $room = [Math]::Max(0, $cap.Rows - @($n.Rows | Where-Object { $_.Protected }).Count)
     $plain = @($n.Rows | Where-Object { -not $_.Protected })
-    if ($plain.Count -gt $room) { & $fold $n @($plain[$room..($plain.Count - 1)]) 'steps' }
+    if ($plain.Count -gt $room) { [void](& $fold $n @($plain[$room..($plain.Count - 1)]) 'steps') }
   }
   # 2c. the ladder: above the node cap, ALSO folds whole, then every card with no protected row
   $laneNodes = @($nodes.Values)
   $ladder = @()
   if ($laneNodes.Count -gt $cap.Nodes) {
     if ($nodes.Contains('also') -and @($nodes['also'].Rows | Where-Object { -not $_.Folded }).Count) {
-      & $fold $nodes['also'] @($nodes['also'].Rows) 'routes'
-      $ladder += 'also'
+      if (& $fold $nodes['also'] @($nodes['also'].Rows) 'routes') { $ladder += 'also' }
     }
-    foreach ($n in @($nodes.Values | Where-Object { $_.Kind -eq 'card' })) {
+    foreach ($n in @($nodes.Values | Where-Object { $_.Kind -in 'card', 'derived' })) {
       if (@($n.Rows | Where-Object { $_.Protected }).Count) { continue }
-      & $fold $n @($n.Rows) 'steps'
-      $ladder += 'cards'
+      if (& $fold $n @($n.Rows) 'steps') { $ladder += 'cards' }
     }
     # folding rows does not remove nodes, so the chart is still above the cap: drawn anyway, and said
     [void]$legend.Add("$($laneNodes.Count) nodes, above the $($cap.Nodes)-node readability cap: drawn anyway, nothing dropped")
+  }
+  # 2d. owner 2026-10-06: above $cap.Folds folds the Legend holds ONE summary row instead of one row per fold -- the
+  # folded steps' ranges when the row stays within $script:ChartSummaryWidth, else their count; each card keeps its own
+  # disclosure row, and the Manifest's disclosed entries name the summary row (A-R5-SUMMARY, A-R5-SUMCOUNT)
+  $folded = @($nodes.Values | Where-Object { $_.FoldLegend })
+  if ($folded.Count -gt $cap.Folds) {
+    $fr = @($folded | ForEach-Object { @($_.Rows | Where-Object { $_.Folded }) })
+    $fn = @($fr | ForEach-Object { $_.Nums } | ForEach-Object { [int]$_ } | Sort-Object -Unique)
+    $head = "$($folded.Count) cards folded ($($fr.Count) rows not shown)"
+    $tail = 'the full trace is in the text answer'
+    $sum = "$head -- $(Format-ChartNumbers $fn) -- $tail"
+    if ($sum.Length -gt $script:ChartSummaryWidth) { $sum = "$head -- $($fn.Count) steps -- $tail" }
+    foreach ($n in $folded) { [void]$legend.Remove($n.FoldLegend); [void]$manifest.Collapses.Remove($n.FoldLegend) }
+    foreach ($tbl in @($manifest.Steps, $manifest.Conds, $manifest.Facets)) {
+      foreach ($k in @($tbl.Keys)) { if ([string]$tbl[$k] -like 'disclosed:*') { $tbl[$k] = "disclosed:$sum" } }
+    }
+    $legend.Insert(0, $sum); [void]$manifest.Collapses.Add($sum)
   }
   $manifest.Ladder = (@($ladder | Select-Object -Unique) -join ',')
 
