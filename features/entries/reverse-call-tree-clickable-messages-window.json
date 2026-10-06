@@ -9,14 +9,11 @@
   "wikiPage": "Reverse-Call-Tree-clickable-Messages-window",
   "surfaces": [
     {
-      "type": "ide-menu",
-      "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."
-    },
-    {
       "type": "cli",
       "verb": "reverse-calltree"
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "notes": "No menu item of its own since 2026-09-07: drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... asks where to render, and Yes picks the Messages window"
 }

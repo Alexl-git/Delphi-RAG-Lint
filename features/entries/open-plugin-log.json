@@ -9,8 +9,8 @@
   "wikiPage": "Open-Plugin-Log",
   "surfaces": [
     {
-      "type": "ide-menu",
-      "path": "drag-lint > About > Open Plugin Log"
+      "type": "ide-about",
+      "caption": "Open Plugin Log"
     }
   ],
   "audience": "both",

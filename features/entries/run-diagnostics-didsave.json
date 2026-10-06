@@ -9,8 +9,8 @@
   "wikiPage": "Run-Diagnostics-didSave",
   "surfaces": [
     {
-      "type": "ide-menu",
-      "path": "drag-lint > About > Run Diagnostics (didSave)"
+      "type": "ide-about",
+      "caption": "Run Diagnostics (didSave)"
     }
   ],
   "audience": "both",

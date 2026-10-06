@@ -13,10 +13,6 @@
       "path": "drag-lint > About"
     },
     {
-      "type": "ide-menu",
-      "path": "drag-lint > About > Diagnose Current State"
-    },
-    {
       "type": "cli",
       "verb": "info"
     },

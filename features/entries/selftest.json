@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "internal",
   "since": "1.13.0-alpha",
-  "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
+  "summary": "Umbrella self-test dispatcher (manifest-merge, glob, closure, dbselect, drift) used by the test battery, not a user verb",
   "wikiPage": "Maintenance",
   "surfaces": [
     {

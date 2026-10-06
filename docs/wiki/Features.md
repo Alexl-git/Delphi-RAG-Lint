@@ -93,22 +93,22 @@ Find symbols, callers, callees, text and types in the index.
 | [Class Surface](Class-Surface) | drag-lint > Inspect Symbol > Class Surface...; `surface` |  |
 | [Compiler Hints](Compiler-Hints) | drag-lint > Code Quality > Compiler Hints...; `query hints` |  |
 | [context](context) | `context` |  |
-| [find-callees](find-callees) | `find-callees` |  |
 | [Find Undocumented (public)](Find-Undocumented-public) | drag-lint > Code Quality > Find Undocumented (public)...; `query find` |  |
-| [find-unit](find-unit) | `find-unit` |  |
-| [Find Usages](Find-Usages-context) | Structure form: Find Usages; `usages` |  |
 | [Find Usages](Find-Usages) | drag-lint > Find Usages... |  |
+| [Find Usages](Find-Usages-context) | Structure form: Find Usages; `usages` |  |
+| [find-callees](find-callees) | `find-callees` |  |
+| [find-unit](find-unit) | `find-unit` |  |
 | [Go to Declaration](Go-to-Declaration) | Structure form: Go to Declaration |  |
 | [Go to Definition](Go-to-Definition) | drag-lint > Go to Definition |  |
 | [Go to Implementation](Go-to-Implementation) | Structure form: Go to Implementation |  |
 | [helpers-of](helpers-of) | `helpers-of` |  |
 | [Hover at Cursor](Hover-at-Cursor) | drag-lint > Hover at Cursor; `hover` |  |
 | [outline](outline) | `outline` |  |
+| [query --kind --all](query-kind-all) | `query` |  |
+| [query --name-like](query-name-like) | `query` |  |
 | [query ancestors](query-ancestors) | `query ancestors` |  |
 | [query descendants](query-descendants) | `query descendants` |  |
 | [query find-callers](query-find-callers) | `query find-callers` |  |
-| [query --kind --all](query-kind-all) | `query` |  |
-| [query --name-like](query-name-like) | `query` |  |
 | [query type-usage](query-type-usage) | `query type-usage` |  |
 | [query typecat](query-typecat) | `query typecat` |  |
 | [query unit-usage](query-unit-usage) | `query unit-usage` |  |
@@ -150,7 +150,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
-| [Copy Diagnostics (Current File)](Copy-Diagnostics-Current-File) | drag-lint > About > Copy Diagnostics (Current File); `lint` |  |
+| [Copy Diagnostics (Current File)](Copy-Diagnostics-Current-File) | About window: Copy Diagnostics (Current File); `lint` |  |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
@@ -158,12 +158,12 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Fix it](Fix-it) | Structure form: Fix it; `lint` |  |
 | [Format Whole Project with YADF](Format-Whole-Project-with-YADF) | drag-lint > Format Whole Project with YADF...; `format`; `index` |  |
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
-| [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | drag-lint > About > Lint Buffer (Unsaved); `lint` |  |
-| [lint-project](lint-project) | `lint-project` |  |
+| [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
 | [Lint rules](rules) | 189 rules, 23 fixable; `rules` |  |
+| [lint-project](lint-project) | `lint-project` |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
-| [Run AST Checks](Run-AST-Checks) | drag-lint > About > Run AST Checks; `check-ast` |  |
-| [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | drag-lint > About > Run Diagnostics (didSave) |  |
+| [Run AST Checks](Run-AST-Checks) | About window: Run AST Checks; `check-ast` |  |
+| [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
 
 ## Documentation
@@ -172,16 +172,16 @@ DocInsight comments generated from the index, and drift detection.
 
 | Feature | Surfaces | Status |
 |---|---|---|
+| [dl:wiki concept blocks](Wiki-Blocks-Authoring) | `wiki`; procedure: `docs\wiki\Wiki-Blocks-Authoring.md` |  |
 | [Doc Comment Stub (symbol)](Doc-Comment-Stub-symbol) | drag-lint > Generate & Export > Doc Comment Stub (symbol)...; `generate-docs` |  |
 | [doc-drift](doc-drift) | `doc-drift` |  |
 | [doc-forget](Features) | `doc-forget` |  |
-| [document-all](document-all) | `document-all` |  |
 | [Document it](Document-it) | Structure form: Document it; `document` |  |
 | [Document project](Document-project) | Structure form: Document project; `document` |  |
 | [Document unit](Document-unit) | Structure form: Document unit; `document` |  |
+| [document-all](document-all) | `document-all` |  |
 | [Effect Summary Legend](Effect-Summary-Legend) | procedure: `docs\wiki\Effect-Summary-Legend.md` |  |
 | [shared-unit](shared-unit) | `shared-unit` |  |
-| [dl:wiki concept blocks](Wiki-Blocks-Authoring) | `wiki`; procedure: `docs\wiki\Wiki-Blocks-Authoring.md` |  |
 
 ## Refactoring and code generation
 
@@ -191,8 +191,8 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 |---|---|---|
 | [Allow this message](Allow-this-message) | Structure form: Allow this message; `allow` |  |
 | [allow](allow) | `allow` |  |
-| [create-enum-helper](create-enum-helper) | `create-enum-helper` |  |
 | [Create helper class](Create-helper-class) | Structure form: Create helper class; `create-enum-helper` |  |
+| [create-enum-helper](create-enum-helper) | `create-enum-helper` |  |
 | [extract-method](extract-method) | `extract-method` |  |
 | [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](Quick-Fix-Add-Unit-for-Inline-Hint-H2443-at-Cursor) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor |  |
 | [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U) |  |
@@ -201,9 +201,9 @@ Rename, extract, safe delete, uses cleanup and code stubs.
 | [Rename Symbol](Rename-Symbol) | drag-lint > Rename Symbol...; `rename` |  |
 | [safe-delete](safe-delete) | `safe-delete` |  |
 | [Unit Test Stub (symbol)](Unit-Test-Stub-symbol) | drag-lint > Generate & Export > Unit Test Stub (symbol)...; `generate-test` |  |
+| [Uses & Deps Tab](Features) | drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes... |  |
 | [Uses Audit -- interface->impl moves + unused (this unit)](Uses-Audit-interface-impl-moves-unused-this-unit) | drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...; `uses-audit` |  |
 | [Uses Cleanup Preview (compiler-verified, this unit)](Uses-Cleanup-Preview-compiler-verified-this-unit) | drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...; `uses-fix` |  |
-| [Uses & Deps Tab](Features) | drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes... |  |
 
 ## Component conversion
 
@@ -237,7 +237,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [Find Dead Code](Find-Dead-Code) | drag-lint > Code Quality > Find Dead Code...; `find-deadcode` |  |
 | [Forms for testers (CSV)](Generate-Test-Helper-CSV) | drag-lint > Reports > Forms for testers (CSV)...; `forms-csv` |  |
 | [Impact / Blast Radius (symbol)](Impact-Blast-Radius-symbol) | drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...; `impact` |  |
-| [Reverse Call Tree (clickable, Messages window)](Reverse-Call-Tree-clickable-Messages-window) | drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...; `reverse-calltree` |  |
+| [Reverse Call Tree (clickable, Messages window)](Reverse-Call-Tree-clickable-Messages-window) | `reverse-calltree` |  |
 | [Reverse Call Tree (who calls this, N-deep)](Reverse-Call-Tree-who-calls-this-N-deep) | drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...; `reverse-calltree` |  |
 | [Scan TODOs / FIXMEs](Scan-TODOs-FIXMEs) | drag-lint > Code Quality > Scan TODOs / FIXMEs...; `todos` |  |
 | [Show in Call Graph](Show-in-Call-Graph) | Structure form: Show in Call Graph; `reverse-calltree` |  |
@@ -262,17 +262,17 @@ Compile, fold compiler output into findings, preprocess.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Add Missing Units to uses (whole unit)](Add-Missing-Units-to-uses-whole-unit) | drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)...; `check-unit` |  |
-| [Compile Buffer (unsaved)](Compile-Buffer-unsaved) | drag-lint > Compile Buffer (unsaved) |  |
-| [compile-check](compile-check) | `compile-check` |  |
-| [Compile Dependents](Features) | drag-lint > Compile Dependents |  |
 | [Compile & Diagnose](Compile-Diagnose) | drag-lint > Compile & Diagnose |  |
+| [Compile Buffer (unsaved)](Compile-Buffer-unsaved) | drag-lint > Compile Buffer (unsaved) |  |
+| [Compile Dependents](Features) | drag-lint > Compile Dependents |  |
+| [compile-check](compile-check) | `compile-check` |  |
 | [Full Compile Sweep](Full-Compile-Sweep) | drag-lint > Full Compile Sweep; `refresh-findings` |  |
 | [ghost-check](ghost-check) | `ghost-check` |  |
 | [ghost-recover](ghost-recover) | `ghost-recover` |  |
-| [Import Build Log](Import-Build-Log) | drag-lint > About > Import Build Log...; `import-log` |  |
+| [Import Build Log](Import-Build-Log) | About window: Import Build Log...; `import-log` |  |
 | [preprocess-file](preprocess-file) | `preprocess-file` |  |
 | [project-facts](Features) | `project-facts` |  |
-| [Recover Buffer-Compile Files](Recover-Buffer-Compile-Files) | drag-lint > About > Recover Buffer-Compile Files |  |
+| [Recover Buffer-Compile Files](Recover-Buffer-Compile-Files) | About window: Recover Buffer-Compile Files |  |
 
 ## Database and Firebird
 
@@ -309,7 +309,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 
 | Feature | Surfaces | Status |
 |---|---|---|
-| [About and Status](About-and-Status) | drag-lint > About; drag-lint > About > Diagnose Current State; `info`; About window: Check for Updates; About window: Close; About window: Copy Diagnostics (Current File); About window: Copy Report; About window: Diagnose Current State; About window: Import Build Log...; About window: Lint Buffer (Unsaved); About window: Open Plugin Log; About window: Recover Buffer-Compile Files; About window: Refresh; About window: Run AST Checks; About window: Run Diagnostics (didSave) |  |
+| [About and Status](About-and-Status) | drag-lint > About; `info`; About window: Check for Updates; About window: Close; About window: Copy Diagnostics (Current File); About window: Copy Report; About window: Diagnose Current State; About window: Import Build Log...; About window: Lint Buffer (Unsaved); About window: Open Plugin Log; About window: Recover Buffer-Compile Files; About window: Refresh; About window: Run AST Checks; About window: Run Diagnostics (didSave) |  |
 | [ambiguous-calls](ambiguous-calls) | `ambiguous-calls` |  |
 | [bench-context](bench-context) | `bench-context` |  |
 | [contrast-selftest](Maintenance) | `contrast-selftest` | internal |
@@ -322,7 +322,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [info](info) | `info` |  |
 | [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |
 | [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |
-| [Open Plugin Log](Open-Plugin-Log) | drag-lint > About > Open Plugin Log |  |
+| [Open Plugin Log](Open-Plugin-Log) | About window: Open Plugin Log |  |
 | [resolve-uses](Maintenance) | `resolve-uses` | internal |
 | [selftest](Maintenance) | `selftest` | internal |
 | [shutdown](Features) | `shutdown` |  |

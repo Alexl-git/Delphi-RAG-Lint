@@ -9,8 +9,8 @@
   "wikiPage": "Copy-Diagnostics-Current-File",
   "surfaces": [
     {
-      "type": "ide-menu",
-      "path": "drag-lint > About > Copy Diagnostics (Current File)"
+      "type": "ide-about",
+      "caption": "Copy Diagnostics (Current File)"
     },
     {
       "type": "cli",

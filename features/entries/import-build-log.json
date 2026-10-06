@@ -9,8 +9,8 @@
   "wikiPage": "Import-Build-Log",
   "surfaces": [
     {
-      "type": "ide-menu",
-      "path": "drag-lint > About > Import Build Log..."
+      "type": "ide-about",
+      "caption": "Import Build Log..."
     },
     {
       "type": "cli",

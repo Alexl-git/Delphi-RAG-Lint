@@ -9,8 +9,8 @@
   "wikiPage": "Run-AST-Checks",
   "surfaces": [
     {
-      "type": "ide-menu",
-      "path": "drag-lint > About > Run AST Checks"
+      "type": "ide-about",
+      "caption": "Run AST Checks"
     },
     {
       "type": "cli",

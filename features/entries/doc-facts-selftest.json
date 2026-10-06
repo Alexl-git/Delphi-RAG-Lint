@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "internal",
   "since": "0.0.0",
-  "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
+  "summary": "Self-test for the doc-facts renderer, driven by test runners",
   "wikiPage": "Maintenance",
   "surfaces": [
     {

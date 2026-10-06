@@ -54,13 +54,13 @@ path. This is not hypothetical: it once produced 33,626 findings against the rea
 | **[Features](Features)** | Everything it does, grouped |
 | **[Feature Index](Feature-Index)** | Every feature by the surface it is reached from |
 | **[Quick Help](Quick-Help)** | One line per feature, with the short help and the aliases people search for |
-| **[About and Status](About-and-Status)** | The plugin's status window -- versions, connection health, and which indexes are actually in use |
-| **[Chart questions](Diagrams-and-Charts)** | Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS |
-| **[Charts and the IDE](Charts-and-the-IDE)** | Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio |
-| **[IDE Menu Reference](IDE-Menu-Reference)** | What every item in the drag-lint menu does |
 | **[Installation](Installation)** | Getting the CLI, the IDE plugin, or the LSP running |
 | **[Maintenance](Maintenance)** | Indexes, the manifest, reindexing, and what to do when something looks wrong |
+| **[IDE Menu Reference](IDE-Menu-Reference)** | What every item in the drag-lint menu does |
+| **[Chart questions](Diagrams-and-Charts)** | Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS |
+| **[Charts and the IDE](Charts-and-the-IDE)** | Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio |
 | **[Field round-trip (grid -> server -> SQL)](Field-Round-Trip-Report)** | Field round-trip (grid -> server -> SQL) -- chart question (Field, property or grid column at the cursor) |
+| **[About and Status](About-and-Status)** | The plugin's status window -- versions, connection health, and which indexes are actually in use |
 
 ## Related projects
 

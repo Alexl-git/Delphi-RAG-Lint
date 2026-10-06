@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "0.61.0-alpha",
-  "summary": "Runs the full rule catalog (189 rules, 159 on by default across 16 categories",
+  "summary": "Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check",
   "wikiPage": "Run-Lint-All-Full-Report",
   "surfaces": [
     {

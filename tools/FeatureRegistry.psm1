@@ -1103,7 +1103,12 @@ function Sort-ByOrdinalKey([object[]]$Items, [scriptblock]$KeyOf) {
   if ($null -eq $Items -or $Items.Count -eq 0) { return ,@() }
   $keys = [string[]]@(foreach ($i in $Items) { [string](& $KeyOf $i) })
   $arr = [object[]]$Items.Clone()
-  [Array]::Sort($keys, $arr, [System.StringComparer]::Ordinal)
+  # The casts are load-bearing: with a typed string[] and a StringComparer,
+  # pwsh 7.6 binds a generic overload that sorts the KEYS ONLY and leaves the
+  # items where they were (measured 2026-10-05 -- every generated list came
+  # out in file/id order). The non-generic Sort(Array, Array, IComparer)
+  # moves both. Keys that want case-insensitivity lower-case themselves.
+  [Array]::Sort([Array]$keys, [Array]$arr, [System.Collections.IComparer][System.StringComparer]::Ordinal)
   return ,$arr
 }
 

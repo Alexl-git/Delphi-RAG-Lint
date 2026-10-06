@@ -44,6 +44,11 @@ $seed = @(
   [ordered]@{ id = 'zz-info'; title = 'Diagnose Current State'; group = 'maintenance'; owner = 'ENGINE'; status = 'shipped'; since = '1.21.1-alpha'; summary = 'Which databases the engine would open for a target, and why'; intro = 'Prints the resolved databases and the manifest sections.'; wikiPage = 'Maintenance'; surfaces = @([ordered]@{ type = 'cli'; verb = 'info' }, [ordered]@{ type = 'ide-menu'; path = 'drag-lint > About > Diagnose Current State' }); audience = 'both'; requires = @('index'); aliases = @('which db', 'resolved dbs'); homeOrder = 10; lastVerified = $lv },
   [ordered]@{ id = 'zz-fix-it'; title = 'Fix it'; group = 'linting'; owner = 'ENGINE'; status = 'shipped'; since = '1.21.1-alpha'; summary = 'Apply the autofix of one finding from the Structure form'; intro = 'Right-click a finding.'; wikiPage = 'Fix-it'; surfaces = @([ordered]@{ type = 'ide-context'; host = 'Structure form'; caption = 'Fix it' }, [ordered]@{ type = 'shortcut'; keys = 'Ctrl+Alt+F' }); audience = 'human'; lastVerified = $lv },
   [ordered]@{ id = 'zz-ask'; title = 'ask (engine verb)'; group = 'diagrams-charts'; owner = 'CHARTS'; status = 'planned'; summary = 'One engine verb for every chart question, not yet shipped'; wikiPage = 'Diagrams-and-Charts'; surfaces = @(); audience = 'both' },
+  # ORDER PROBES (fix round 1): id order (aa- < zz-) is the REVERSE of title
+  # order, and homeOrder runs against id order, so a sort that is a no-op
+  # (renders in file/id order) fails the order checks below.
+  [ordered]@{ id = 'aa-zeta-order'; title = 'Zeta order probe'; group = 'maintenance'; owner = 'ENGINE'; status = 'shipped'; since = '1.21.1-alpha'; summary = 'Order probe whose id sorts first and whose title sorts last'; intro = 'Probe.'; wikiPage = 'Maintenance'; surfaces = @([ordered]@{ type = 'cli'; verb = 'diff' }); audience = 'both'; homeOrder = 30; lastVerified = $lv },
+  [ordered]@{ id = 'zz-alpha-order'; title = 'alpha order probe'; group = 'maintenance'; owner = 'ENGINE'; status = 'shipped'; since = '1.21.1-alpha'; summary = 'Order probe whose id sorts last and whose lower-case title sorts first'; intro = 'Probe.'; wikiPage = 'Maintenance'; surfaces = @([ordered]@{ type = 'cli'; verb = 'sql' }); audience = 'both'; homeOrder = 20; lastVerified = $lv },
   [ordered]@{ id = 'zz-selftest'; title = 'selftest'; group = 'maintenance'; owner = 'ENGINE'; status = 'internal'; since = '1.21.1-alpha'; summary = 'Umbrella self-test dispatcher driven by the battery, not a user verb'; intro = 'Internal.'; wikiPage = 'Maintenance'; surfaces = @([ordered]@{ type = 'cli'; verb = 'selftest' }); audience = 'agent'; lastVerified = $lv }
 )
 foreach ($e in $seed) { [void](Write-FeatureEntry -Entry $e -Path (Join-Path $ent "$($e.id).json") -KeyOrder $keys) }
@@ -90,7 +95,7 @@ Check 'Quick-Help: declared-not-harvested footnote lists the shortcut' ($qh -mat
 $ai = Get-Content -LiteralPath (Join-Path $outA 'docs\AI-USAGE.md') -Raw
 Check 'AI-USAGE block: agent/both entries with cli surfaces, human ones excluded' (($ai -match '(?s)<!-- dl:registry:begin agent-verbs -->.*\| `info` \| \[Diagnose Current State\].*\| `selftest` \|.*<!-- dl:registry:end agent-verbs -->') -and -not ($ai -match '(?s)begin agent-verbs -->.*Fix it.*end agent-verbs'))
 $rd = Get-Content -LiteralPath (Join-Path $outA 'README.md') -Raw
-Check 'README block: one row per group with counts' ($rd -match '(?s)<!-- dl:registry:begin feature-summary -->.*\| \[Maintenance and diagnostics\]\(https://github\.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics\) \| 2 \|.*<!-- dl:registry:end feature-summary -->')
+Check 'README block: one row per group with counts' ($rd -match '(?s)<!-- dl:registry:begin feature-summary -->.*\| \[Maintenance and diagnostics\]\(https://github\.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics\) \| 4 \|.*<!-- dl:registry:end feature-summary -->')
 $man = Get-Content -LiteralPath (Join-Path $outA 'features\generated\manifest.json') -Raw
 # A machine path = the repo root, the scratch dir or the user profile (JSON-escaped).
 # A bare 'C:\\' would hit a rule's own title ("C:\Temp" in a temp-path rule).
@@ -98,6 +103,20 @@ $machine = @($Repo, $WorkDir, $env:USERPROFILE) | ForEach-Object { $_.Replace('\
 Check 'manifest: no date, no machine path, families expanded' ((-not ($man -match '20\d\d-\d\d-\d\d')) -and (@($machine | Where-Object { $man.IndexOf($_, [StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count -eq 0) -and ($man -match '"rule\.bare-except"') -and ($man -match '"chart\.who-calls"'))
 Check 'manifest: lastVerified is stripped (a date would make every review a diff)' (-not ($man -match 'lastVerified'))
 Check 'no generated wiki page carries a date' (@(@('docs\wiki\Home.md', 'docs\wiki\Features.md', 'docs\wiki\Feature-Index.md', 'docs\wiki\Quick-Help.md') | Where-Object { (Get-Content -LiteralPath (Join-Path $outA $_) -Raw) -match '20\d\d-\d\d-\d\d' }).Count -eq 0)
+
+# ORDER (spec 8: entries by group.order, title ordinal-ignore-case, id; Home by
+# homeOrder; AI-USAGE by verb). The probes make id order and the spec order
+# disagree, so these fail when the sort does not move the items.
+function IndexOrder([string]$Text, [string[]]$Needles) { $at = @(foreach ($n in $Needles) { $Text.IndexOf($n, [StringComparison]::Ordinal) }); return (($at -notcontains -1) -and ((($at | Sort-Object) -join ',') -eq ($at -join ','))) }
+$mSec = [regex]::Match($feat, '(?s)## Maintenance and diagnostics.*').Value
+Check 'ORDER Features: a group lists entries by title, ignoring case' (IndexOrder $mSec @('[alpha order probe]', '[Diagnose Current State]', '[selftest]', '[Zeta order probe]'))
+$cliSec = [regex]::Match($fi, '(?s)## CLI verbs.*?## Scripts and tools').Value
+Check 'ORDER Feature-Index: CLI verbs listed by title, ignoring case' (IndexOrder $cliSec @('[alpha order probe]', '[Diagnose Current State]', '[Zeta order probe]'))
+Check 'ORDER Home: Start-here rows by homeOrder, not by id' (IndexOrder $hm @('[Diagnose Current State](Maintenance)', '[alpha order probe](Maintenance)', '[Zeta order probe](Maintenance)', '[Field round-trip'))
+$aiBlk = [regex]::Match($ai, '(?s)begin agent-verbs -->.*end agent-verbs').Value
+Check 'ORDER AI-USAGE block: rows by verb' (IndexOrder $aiBlk @('| `diff` |', '| `info` |', '| `selftest` |', '| `sql` |'))
+$qhM = [regex]::Match($qh, '(?s)## Maintenance and diagnostics.*?(?=## )').Value
+Check 'ORDER Quick-Help: a group lists entries by title, ignoring case' (IndexOrder $qhM @('**alpha order probe**', '**Diagnose Current State**', '**selftest**', '**Zeta order probe**'))
 
 # -Check against the OutDir copy: clean, then one flipped byte
 $chk = Invoke-RegistryGenerate -Paths $p -OutDir $outA -Check

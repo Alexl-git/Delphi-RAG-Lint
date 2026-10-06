@@ -9,8 +9,8 @@
   "wikiPage": "Lint-Buffer-Unsaved",
   "surfaces": [
     {
-      "type": "ide-menu",
-      "path": "drag-lint > About > Lint Buffer (Unsaved)"
+      "type": "ide-about",
+      "caption": "Lint Buffer (Unsaved)"
     },
     {
       "type": "cli",

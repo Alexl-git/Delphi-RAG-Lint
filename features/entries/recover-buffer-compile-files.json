@@ -9,8 +9,8 @@
   "wikiPage": "Recover-Buffer-Compile-Files",
   "surfaces": [
     {
-      "type": "ide-menu",
-      "path": "drag-lint > About > Recover Buffer-Compile Files"
+      "type": "ide-about",
+      "caption": "Recover Buffer-Compile Files"
     }
   ],
   "audience": "both",

@@ -99,171 +99,6 @@
   ],
   "entries": [
     {
-      "id": "about-and-status",
-      "title": "About and Status",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.15.0-alpha",
-      "summary": "The plugin's status window -- versions, connection health, and which indexes are actually in use",
-      "wikiPage": "About-and-Status",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > About"
-        },
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > About > Diagnose Current State"
-        },
-        {
-          "type": "cli",
-          "verb": "info"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Check for Updates"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Close"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Copy Diagnostics (Current File)"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Copy Report"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Diagnose Current State"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Import Build Log..."
-        },
-        {
-          "type": "ide-about",
-          "caption": "Lint Buffer (Unsaved)"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Open Plugin Log"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Recover Buffer-Compile Files"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Refresh"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Run AST Checks"
-        },
-        {
-          "type": "ide-about",
-          "caption": "Run Diagnostics (didSave)"
-        }
-      ],
-      "audience": "both",
-      "homeOrder": 60
-    },
-    {
-      "id": "add-missing-units-to-uses-whole-unit",
-      "title": "Add Missing Units to uses (whole unit)",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.43.0-alpha",
-      "summary": "The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them",
-      "wikiPage": "Add-Missing-Units-to-uses-whole-unit",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)..."
-        },
-        {
-          "type": "cli",
-          "verb": "check-unit"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "allow-this-message",
-      "title": "Allow this message",
-      "group": "refactoring",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.54.0-alpha",
-      "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
-      "wikiPage": "Allow-this-message",
-      "surfaces": [
-        {
-          "type": "ide-context",
-          "host": "Structure form",
-          "caption": "Allow this message"
-        },
-        {
-          "type": "cli",
-          "verb": "allow"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "allow",
-      "title": "allow",
-      "group": "refactoring",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.54.0-alpha",
-      "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
-      "wikiPage": "allow",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "allow"
-        }
-      ],
-      "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1061"
-    },
-    {
-      "id": "ambiguous-calls",
-      "title": "ambiguous-calls",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.91.0-alpha",
-      "summary": "Resolver-coverage diagnostic that reports call sites the engine could not pin to exactly one target -- unresolved or ambiguous calls",
-      "wikiPage": "ambiguous-calls",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "ambiguous-calls"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "ask",
-      "title": "ask (engine verb)",
-      "group": "diagrams-charts",
-      "owner": "CHARTS",
-      "status": "planned",
-      "summary": "Ask the index a question, get a chart back",
-      "wikiPage": "Diagrams-and-Charts",
-      "surfaces": [],
-      "audience": "both",
-      "notes": "one engine verb for every chart question; planned, not shipped (Features.md 2026-10-05)"
-    },
-    {
       "id": "auto-document-whole-project",
       "title": "Auto-Document Whole Project",
       "group": "indexing",
@@ -289,62 +124,134 @@
       "audience": "both"
     },
     {
-      "id": "bench-context",
-      "title": "bench-context",
-      "group": "maintenance",
+      "id": "migrate-dbs",
+      "title": "migrate-dbs",
+      "group": "indexing",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.18.0-alpha",
-      "summary": "Benchmarks the context command by building context bundles for a sample of symbols against a database",
-      "wikiPage": "bench-context",
+      "since": "1.3.0-alpha",
+      "summary": "Moves project index databases into each project's own D-RAG folder, matching the current index layout",
+      "wikiPage": "migrate-dbs",
       "surfaces": [
         {
           "type": "cli",
-          "verb": "bench-context"
+          "verb": "migrate-dbs"
         }
       ],
-      "audience": "both",
-      "notes": "seed: group guessed"
+      "audience": "both"
     },
     {
-      "id": "butterfly",
-      "title": "butterfly",
-      "group": "graphs-reports",
+      "id": "pp-profile",
+      "title": "pp-profile",
+      "group": "indexing",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.99.0-alpha",
-      "summary": "Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command",
-      "wikiPage": "butterfly",
+      "since": "0.92.0-alpha",
+      "summary": "Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line",
+      "wikiPage": "pp-profile",
       "surfaces": [
         {
           "type": "cli",
-          "verb": "butterfly"
+          "verb": "pp-profile"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "purge-locals",
+      "title": "purge-locals",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.91.0-alpha",
+      "summary": "A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space",
+      "wikiPage": "purge-locals",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "purge-locals"
         }
       ],
       "audience": "both",
       "requires": ["index"]
     },
     {
-      "id": "call-graph-butterfly",
-      "title": "Call Graph (Butterfly)",
-      "group": "graphs-reports",
+      "id": "rebuild-index-for-this-project",
+      "title": "Rebuild Index for This Project",
+      "group": "indexing",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.96.0-alpha",
-      "summary": "Shows callers and callees of one symbol together in a single \"butterfly\" view",
-      "wikiPage": "Call-Graph-Butterfly",
+      "since": "0.1.0-alpha",
+      "summary": "Walks a project's .dproj compile closure and (re)builds its index",
+      "wikiPage": "Rebuild-Index-for-This-Project",
       "surfaces": [
         {
           "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)..."
+          "path": "drag-lint > Index & Maintenance > Rebuild Index for This Project"
         },
         {
           "type": "cli",
-          "verb": "reverse-calltree"
+          "verb": "index"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "register-project",
+      "title": "register-project",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.20.4-alpha",
+      "summary": "Add a new project to the manifest so index --all and the IDE can see it",
+      "wikiPage": "Features",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "register-project"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: needs own page"
+    },
+    {
+      "id": "schema",
+      "title": "schema",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.3.0-alpha",
+      "summary": "Prints the live schema of an index database: schemaversion, every table and column, and row counts",
+      "wikiPage": "schema",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "schema"
         }
       ],
       "audience": "both",
       "requires": ["index"]
+    },
+    {
+      "id": "show-resolved-dbs-debug",
+      "title": "Show Resolved DBs (debug)",
+      "group": "indexing",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.60.0-alpha",
+      "summary": "Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query",
+      "wikiPage": "Show-Resolved-DBs-debug",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Index & Maintenance > Show Resolved DBs (debug)..."
+        },
+        {
+          "type": "cli",
+          "verb": "resolve-dbs"
+        }
+      ],
+      "audience": "both"
     },
     {
       "id": "call-path",
@@ -359,107 +266,6 @@
         {
           "type": "cli",
           "verb": "call-path"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "callgraph",
-      "title": "callgraph",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.91.0-alpha",
-      "summary": "Prints an N-deep resolved call tree for a symbol, in either direction",
-      "wikiPage": "callgraph",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "callgraph"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "chart-questions",
-      "title": "Chart questions",
-      "group": "diagrams-charts",
-      "owner": "CHARTS",
-      "status": "shipped",
-      "since": "1.20.2-alpha",
-      "summary": "Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS",
-      "wikiPage": "Diagrams-and-Charts",
-      "surfaces": [
-        {
-          "type": "script",
-          "path": "charts\\src\\Ask-Report.ps1"
-        },
-        {
-          "type": "script",
-          "path": "charts\\src\\New-DiagramArtifact.ps1"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index", "powershell7", "graphviz"],
-      "family": "chart-questions",
-      "homeOrder": 44
-    },
-    {
-      "id": "charts-and-the-ide",
-      "title": "Charts and the IDE",
-      "group": "diagrams-charts",
-      "owner": "CHARTS",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio",
-      "wikiPage": "Charts-and-the-IDE",
-      "surfaces": [
-        {
-          "type": "workflow",
-          "doc": "docs\\wiki\\Charts-and-the-IDE.md"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown",
-      "homeOrder": 45
-    },
-    {
-      "id": "circular-dependency-report",
-      "title": "Circular Dependency Report (worked example)",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "A worked example: a real four-unit uses cycle, and the report drag-lint produces for it",
-      "wikiPage": "Circular-Dependency-Report",
-      "surfaces": [
-        {
-          "type": "workflow",
-          "doc": "docs\\wiki\\Circular-Dependency-Report.md"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
-    },
-    {
-      "id": "circular-uses-report-cycles-fix-plan",
-      "title": "Circular Uses Report (cycles + fix plan)",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.43.0-alpha",
-      "summary": "Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them",
-      "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)..."
-        },
-        {
-          "type": "cli",
-          "verb": "cycles"
         }
       ],
       "audience": "both",
@@ -485,78 +291,6 @@
         }
       ],
       "audience": "both"
-    },
-    {
-      "id": "compile-buffer-unsaved",
-      "title": "Compile Buffer (unsaved)",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Compiles a project with the current editor buffer's unsaved content substituted for its file on disk, then restores the original file unchanged",
-      "wikiPage": "Compile-Buffer-unsaved",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Compile Buffer (unsaved)"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
-    },
-    {
-      "id": "compile-check",
-      "title": "compile-check",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.26.0-alpha",
-      "summary": "Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result",
-      "wikiPage": "compile-check",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "compile-check"
-        }
-      ],
-      "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:2037"
-    },
-    {
-      "id": "compile-dependents",
-      "title": "Compile Dependents",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3)",
-      "wikiPage": "Features",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Compile Dependents"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: needs own page; seed: since unknown"
-    },
-    {
-      "id": "compile-diagnose",
-      "title": "Compile & Diagnose",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings",
-      "wikiPage": "Compile-Diagnose",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Compile & Diagnose"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
     },
     {
       "id": "compiler-hints",
@@ -600,111 +334,507 @@
       "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:633"
     },
     {
-      "id": "contrast-selftest",
-      "title": "contrast-selftest",
-      "group": "maintenance",
+      "id": "find-undocumented-public",
+      "title": "Find Undocumented (public)",
+      "group": "search-navigation",
       "owner": "ENGINE",
-      "status": "internal",
-      "since": "0.0.0",
-      "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
-      "wikiPage": "Maintenance",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "contrast-selftest"
-        }
-      ],
-      "audience": "agent",
-      "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown"
-    },
-    {
-      "id": "convert-apply",
-      "title": "convert-apply",
-      "group": "component-conversion",
-      "owner": "CONVERTER",
       "status": "shipped",
-      "since": "1.2.0-alpha",
-      "summary": "Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add",
-      "wikiPage": "convert-apply",
+      "since": "0.1.0-alpha",
+      "summary": "Uses query find to list indexed symbols filtered by documentation state, kind, or visibility",
+      "wikiPage": "Find-Undocumented-public",
       "surfaces": [
         {
-          "type": "cli",
-          "verb": "convert-apply"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "convert-reemit",
-      "title": "convert-reemit",
-      "group": "component-conversion",
-      "owner": "CONVERTER",
-      "status": "internal",
-      "since": "1.10.0-alpha",
-      "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
-      "wikiPage": "Maintenance",
-      "surfaces": [
+          "type": "ide-menu",
+          "path": "drag-lint > Code Quality > Find Undocumented (public)..."
+        },
         {
           "type": "cli",
-          "verb": "convert-reemit"
-        }
-      ],
-      "audience": "agent",
-      "notes": "internal: internal stage of the conversion pipeline (DFM re-emit), driven by convert-apply and by two runners under tests\\."
-    },
-    {
-      "id": "convert-scaffold",
-      "title": "convert-scaffold",
-      "group": "component-conversion",
-      "owner": "CONVERTER",
-      "status": "shipped",
-      "since": "1.1.0-alpha",
-      "summary": "Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type",
-      "wikiPage": "convert-scaffold",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "convert-scaffold"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "convert-validate",
-      "title": "convert-validate",
-      "group": "component-conversion",
-      "owner": "CONVERTER",
-      "status": "shipped",
-      "since": "1.1.0-alpha",
-      "summary": "Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees",
-      "wikiPage": "convert-validate",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "convert-validate"
+          "verb": "query",
+          "sub": "find"
         }
       ],
       "audience": "both"
     },
     {
-      "id": "convrules-editor",
-      "title": "ConvRulesEditor",
-      "group": "component-conversion",
-      "owner": "CONVERTER",
+      "id": "find-usages",
+      "title": "Find Usages",
+      "group": "search-navigation",
+      "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Visual rulebook editor for the component-conversion rules",
-      "wikiPage": "Features",
+      "since": "0.33.0-alpha",
+      "summary": "Lists every reference to the symbol under the editor caret across the indexed project",
+      "wikiPage": "Find-Usages",
       "surfaces": [
         {
-          "type": "exe",
-          "name": "ConvRulesEditor.exe"
+          "type": "ide-menu",
+          "path": "drag-lint > Find Usages..."
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "find-usages-context",
+      "title": "Find Usages",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.33.0-alpha",
+      "summary": "Lists references to the symbol represented by a Structure-tree node",
+      "wikiPage": "Find-Usages-context",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Find Usages"
+        },
+        {
+          "type": "cli",
+          "verb": "usages"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "find-callees",
+      "title": "find-callees",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.91.0-alpha",
+      "summary": "Lists the resolved outgoing calls of one routine",
+      "wikiPage": "find-callees",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "find-callees"
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown"
+      "requires": ["index"]
+    },
+    {
+      "id": "find-unit",
+      "title": "find-unit",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.69.0-alpha",
+      "summary": "Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause",
+      "wikiPage": "find-unit",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "find-unit"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "go-to-declaration",
+      "title": "Go to Declaration",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node",
+      "wikiPage": "Go-to-Declaration",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Go to Declaration"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown"
+    },
+    {
+      "id": "go-to-definition",
+      "title": "Go to Definition",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Jumps the editor caret to the declaration of the symbol under the cursor",
+      "wikiPage": "Go-to-Definition",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Go to Definition"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown"
+    },
+    {
+      "id": "go-to-implementation",
+      "title": "Go to Implementation",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.43.0-alpha",
+      "summary": "Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node",
+      "wikiPage": "Go-to-Implementation",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Go to Implementation"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "helpers-of",
+      "title": "helpers-of",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.94.0-alpha",
+      "summary": "Lists record/class helper edges targeting a given type, anywhere in the index",
+      "wikiPage": "helpers-of",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "helpers-of"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1179"
+    },
+    {
+      "id": "hover-at-cursor",
+      "title": "Hover at Cursor",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.7.0-alpha",
+      "summary": "Shows a hover card for the symbol under the editor caret: signature, documentation, and callers",
+      "wikiPage": "Hover-at-Cursor",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Hover at Cursor"
+        },
+        {
+          "type": "cli",
+          "verb": "hover"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "outline",
+      "title": "outline",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.86.0-alpha",
+      "summary": "Prints the file-scoped symbol outline for one Pascal unit",
+      "wikiPage": "outline",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "outline"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "query-kind-all",
+      "title": "query --kind --all",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.1.0-alpha",
+      "summary": "Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap",
+      "wikiPage": "query-kind-all",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "query",
+          "example": "drag-lint query --kind <k> --all"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "query-name-like",
+      "title": "query --name-like",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.1.0-alpha",
+      "summary": "Case-insensitive substring search over symbol names",
+      "wikiPage": "query-name-like",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "query"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "query-ancestors",
+      "title": "query ancestors",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.1.0-alpha",
+      "summary": "Resolves the transitive class/interface hierarchy of a type",
+      "wikiPage": "query-ancestors",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "query",
+          "sub": "ancestors"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "query-descendants",
+      "title": "query descendants",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.1.0-alpha",
+      "summary": "The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases",
+      "wikiPage": "query-descendants",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "query",
+          "sub": "descendants"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "query-find-callers",
+      "title": "query find-callers",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.1.0-alpha",
+      "summary": "Lists callers of a routine by name, with an option to restrict results to precise, resolved callers",
+      "wikiPage": "query-find-callers",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "query",
+          "sub": "find-callers"
+        }
+      ],
+      "audience": "both",
+      "notes": "issued by the plugin from DragLint.Plugin.CodeLensCache.pas:466"
+    },
+    {
+      "id": "query-type-usage",
+      "title": "query type-usage",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.1.0-alpha",
+      "summary": "Answers one question, of a list of type names, about one file",
+      "wikiPage": "query-type-usage",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "query",
+          "sub": "type-usage"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "query-typecat",
+      "title": "query typecat",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.1.0-alpha",
+      "summary": "Resolves a type's category -- float, string, class, interface, and so on",
+      "wikiPage": "query-typecat",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "query",
+          "sub": "typecat"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "query-unit-usage",
+      "title": "query unit-usage",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.1.0-alpha",
+      "summary": "Answers one question, about one unit and one file",
+      "wikiPage": "query-unit-usage",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "query",
+          "sub": "unit-usage"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "show-completion",
+      "title": "Show Completion",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.21.0-alpha",
+      "summary": "Shows an index-backed completion list at the editor caret",
+      "wikiPage": "Show-Completion",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Show Completion"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "show-signature-help",
+      "title": "Show Signature Help",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.21.0-alpha",
+      "summary": "Shows parameter help for the call being typed at the editor caret",
+      "wikiPage": "Show-Signature-Help",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Show Signature Help"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "show-structure",
+      "title": "Show Structure",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.30.0-alpha",
+      "summary": "Shows a structural outline of the current unit",
+      "wikiPage": "Show-Structure",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Show Structure"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "symbol-search",
+      "title": "Symbol Search",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.1.0-alpha",
+      "summary": "Searches symbols by name across the indexed projects",
+      "wikiPage": "Symbol-Search",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Symbol Search..."
+        },
+        {
+          "type": "cli",
+          "verb": "query"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "symbol-slice",
+      "title": "Symbol Slice",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.17.0-alpha",
+      "summary": "Shows the slice of code relevant to one symbol: its declaration, body, and immediate context",
+      "wikiPage": "Symbol-Slice",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Inspect Symbol > Symbol Slice..."
+        },
+        {
+          "type": "cli",
+          "verb": "slice"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "type-at-cursor",
+      "title": "Type at Cursor",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.19.0-alpha",
+      "summary": "Resolves the static type of the expression under the editor caret",
+      "wikiPage": "Type-at-Cursor",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Inspect Symbol > Type at Cursor"
+        },
+        {
+          "type": "cli",
+          "verb": "typeat"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "usages",
+      "title": "usages",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.33.0-alpha",
+      "summary": "Finds usage sites of a named symbol, with a choice of report width",
+      "wikiPage": "usages",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "usages"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "wiki",
+      "title": "wiki",
+      "group": "search-navigation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.7.0-alpha",
+      "summary": "Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it",
+      "wikiPage": "wiki",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "wiki"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
     },
     {
       "id": "copy-all-diagnostics",
@@ -739,8 +869,8 @@
       "wikiPage": "Copy-Diagnostics-Current-File",
       "surfaces": [
         {
-          "type": "ide-menu",
-          "path": "drag-lint > About > Copy Diagnostics (Current File)"
+          "type": "ide-about",
+          "caption": "Copy Diagnostics (Current File)"
         },
         {
           "type": "cli",
@@ -748,315 +878,6 @@
         }
       ],
       "audience": "both"
-    },
-    {
-      "id": "create-enum-helper",
-      "title": "create-enum-helper",
-      "group": "refactoring",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.94.0-alpha",
-      "summary": "Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type",
-      "wikiPage": "create-enum-helper",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "create-enum-helper"
-        }
-      ],
-      "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1226"
-    },
-    {
-      "id": "create-helper-class",
-      "title": "Create helper class",
-      "group": "refactoring",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.94.0-alpha",
-      "summary": "Generates a Byte-family record helper for an enum type represented by a Structure-tree node",
-      "wikiPage": "Create-helper-class",
-      "surfaces": [
-        {
-          "type": "ide-context",
-          "host": "Structure form",
-          "caption": "Create helper class"
-        },
-        {
-          "type": "cli",
-          "verb": "create-enum-helper"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "deps-report",
-      "title": "deps-report",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.95.0-alpha",
-      "summary": "Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on",
-      "wikiPage": "deps-report",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "deps-report"
-        },
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)..."
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "diff",
-      "title": "diff",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.13.0-alpha",
-      "summary": "Compares two index databases and reports what changed between them -- for example an index snapshot taken before and after a refactor",
-      "wikiPage": "diff",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "diff"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"],
-      "notes": "seed: group guessed"
-    },
-    {
-      "id": "doc-comment-stub-symbol",
-      "title": "Doc Comment Stub (symbol)",
-      "group": "documentation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.25.0-alpha",
-      "summary": "Uses generate-docs to produce a doc-comment stub for one qualified symbol",
-      "wikiPage": "Doc-Comment-Stub-symbol",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Generate & Export > Doc Comment Stub (symbol)..."
-        },
-        {
-          "type": "cli",
-          "verb": "generate-docs"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "doc-drift",
-      "title": "doc-drift",
-      "group": "documentation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.93.0-alpha",
-      "summary": "Diagnostic that computes deterministic doc-vs-code drift findings for one symbol",
-      "wikiPage": "doc-drift",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "doc-drift"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "doc-facts-selftest",
-      "title": "doc-facts-selftest",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "internal",
-      "since": "0.0.0",
-      "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
-      "wikiPage": "Maintenance",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "doc-facts-selftest"
-        }
-      ],
-      "audience": "agent",
-      "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown"
-    },
-    {
-      "id": "doc-forget",
-      "title": "doc-forget",
-      "group": "documentation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "1.17.0-alpha",
-      "summary": "Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply",
-      "wikiPage": "Features",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "doc-forget"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: needs own page"
-    },
-    {
-      "id": "document-all",
-      "title": "document-all",
-      "group": "documentation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.93.0-alpha",
-      "summary": "Documents every public declaration in every indexed unit, with no project scope",
-      "wikiPage": "document-all",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "document-all"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "document-it",
-      "title": "Document it",
-      "group": "documentation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.90.0-alpha",
-      "summary": "Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node",
-      "wikiPage": "Document-it",
-      "surfaces": [
-        {
-          "type": "ide-context",
-          "host": "Structure form",
-          "caption": "Document it"
-        },
-        {
-          "type": "cli",
-          "verb": "document"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "document-project",
-      "title": "Document project",
-      "group": "documentation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.90.0-alpha",
-      "summary": "Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project",
-      "wikiPage": "Document-project",
-      "surfaces": [
-        {
-          "type": "ide-context",
-          "host": "Structure form",
-          "caption": "Document project"
-        },
-        {
-          "type": "cli",
-          "verb": "document"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "document-unit",
-      "title": "Document unit",
-      "group": "documentation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.90.0-alpha",
-      "summary": "Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only)",
-      "wikiPage": "Document-unit",
-      "surfaces": [
-        {
-          "type": "ide-context",
-          "host": "Structure form",
-          "caption": "Document unit"
-        },
-        {
-          "type": "cli",
-          "verb": "document"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "drag-lint-graph-dockable",
-      "title": "drag-lint Graph (dockable)",
-      "group": "editor-integration",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure",
-      "wikiPage": "drag-lint-Graph-dockable",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > drag-lint Graph (dockable)"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
-    },
-    {
-      "id": "drag-lint-graph",
-      "title": "drag-lint Graph",
-      "group": "editor-integration",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.10.0-alpha",
-      "summary": "This page documents the \"View > Tool Windows > drag-lint Graph\" menu entry -- the drag-lint graph viewer",
-      "wikiPage": "drag-lint-Graph",
-      "surfaces": [
-        {
-          "type": "tool-window",
-          "path": "View > Tool Windows > drag-lint Graph"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "drag-lint-options",
-      "title": "drag-lint Options",
-      "group": "editor-integration",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.95.0-alpha",
-      "summary": "The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog",
-      "wikiPage": "drag-lint-Options",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > drag-lint Options..."
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "drag-lint-panel-dockable",
-      "title": "drag-lint Panel (dockable)",
-      "group": "editor-integration",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Opens the main drag-lint dockable tool window inside the IDE",
-      "wikiPage": "drag-lint-Panel-dockable",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > drag-lint Panel (dockable)"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
     },
     {
       "id": "drag-lint-project-rules",
@@ -1081,113 +902,6 @@
       "audience": "both"
     },
     {
-      "id": "drag-lint",
-      "title": "drag-lint",
-      "group": "editor-integration",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.2.0-alpha",
-      "summary": "This page documents the \"View > Tool Windows > drag-lint\" menu entry -- the main drag-lint dockable tool window",
-      "wikiPage": "drag-lint",
-      "surfaces": [
-        {
-          "type": "tool-window",
-          "path": "View > Tool Windows > drag-lint"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "dump-call-edges",
-      "title": "dump-call-edges",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.91.0-alpha",
-      "summary": "Diagnostic that dumps every resolved call edge in the index as refid|targetqname|confidence rows",
-      "wikiPage": "dump-call-edges",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "dump-call-edges"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "dump-pp-eval",
-      "title": "dump-pp-eval",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "internal",
-      "since": "0.92.0-alpha",
-      "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
-      "wikiPage": "Maintenance",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "dump-pp-eval"
-        }
-      ],
-      "audience": "agent",
-      "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed"
-    },
-    {
-      "id": "dump-pp-lex",
-      "title": "dump-pp-lex",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "internal",
-      "since": "0.92.0-alpha",
-      "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
-      "wikiPage": "Maintenance",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "dump-pp-lex"
-        }
-      ],
-      "audience": "agent",
-      "notes": "internal: diagnostic: preprocessor lexer dump. The documented preprocessor verbs are preprocess-file and pp-profile.; seed: group guessed"
-    },
-    {
-      "id": "dump-refs",
-      "title": "dump-refs",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.82.0-alpha",
-      "summary": "Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution",
-      "wikiPage": "dump-refs",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "dump-refs"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "effect-summary-legend",
-      "title": "Effect Summary Legend",
-      "group": "documentation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index",
-      "wikiPage": "Effect-Summary-Legend",
-      "surfaces": [
-        {
-          "type": "workflow",
-          "doc": "docs\\wiki\\Effect-Summary-Legend.md"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
-    },
-    {
       "id": "exceptions-sync",
       "title": "exceptions-sync",
       "group": "linting",
@@ -1204,228 +918,6 @@
       ],
       "audience": "both",
       "notes": "seed: needs own page"
-    },
-    {
-      "id": "export-enums-delphi-const",
-      "title": "Export Enums (Delphi const)",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.6.0-alpha",
-      "summary": "Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations",
-      "wikiPage": "Export-Enums-Delphi-const",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Generate & Export > Export Enums (Delphi const)..."
-        },
-        {
-          "type": "cli",
-          "verb": "export",
-          "sub": "enums"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "export-graph-dot",
-      "title": "Export Graph (DOT)",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.6.0-alpha",
-      "summary": "Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring",
-      "wikiPage": "Export-Graph-DOT",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Generate & Export > Export Graph (DOT)..."
-        },
-        {
-          "type": "cli",
-          "verb": "graph"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "export-to-obsidian",
-      "title": "Export to Obsidian",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.6.0-alpha",
-      "summary": "Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages",
-      "wikiPage": "Export-to-Obsidian",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Generate & Export > Export to Obsidian..."
-        },
-        {
-          "type": "cli",
-          "verb": "export",
-          "sub": "obsidian"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "extract-method",
-      "title": "extract-method",
-      "group": "refactoring",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.85.0-alpha",
-      "summary": "Pulls a run of statements out of a routine into a new method",
-      "wikiPage": "extract-method",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "extract-method"
-        }
-      ],
-      "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319"
-    },
-    {
-      "id": "fb-snapshot",
-      "title": "fb-snapshot",
-      "group": "database",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.40.5-alpha",
-      "summary": "Connects to a Firebird database and captures a snapshot into a sqlite index",
-      "wikiPage": "fb-snapshot",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "fb-snapshot"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "find-callees",
-      "title": "find-callees",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.91.0-alpha",
-      "summary": "Lists the resolved outgoing calls of one routine",
-      "wikiPage": "find-callees",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "find-callees"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "find-dead-code",
-      "title": "Find Dead Code",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.25.0-alpha",
-      "summary": "Scans the index for code with no references -- candidates to delete",
-      "wikiPage": "Find-Dead-Code",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Code Quality > Find Dead Code..."
-        },
-        {
-          "type": "cli",
-          "verb": "find-deadcode"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "find-undocumented-public",
-      "title": "Find Undocumented (public)",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "Uses query find to list indexed symbols filtered by documentation state, kind, or visibility",
-      "wikiPage": "Find-Undocumented-public",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Code Quality > Find Undocumented (public)..."
-        },
-        {
-          "type": "cli",
-          "verb": "query",
-          "sub": "find"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "find-unit",
-      "title": "find-unit",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.69.0-alpha",
-      "summary": "Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause",
-      "wikiPage": "find-unit",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "find-unit"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "find-usages-context",
-      "title": "Find Usages",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.33.0-alpha",
-      "summary": "Lists references to the symbol represented by a Structure-tree node",
-      "wikiPage": "Find-Usages-context",
-      "surfaces": [
-        {
-          "type": "ide-context",
-          "host": "Structure form",
-          "caption": "Find Usages"
-        },
-        {
-          "type": "cli",
-          "verb": "usages"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "find-usages",
-      "title": "Find Usages",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.33.0-alpha",
-      "summary": "Lists every reference to the symbol under the editor caret across the indexed project",
-      "wikiPage": "Find-Usages",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Find Usages..."
-        }
-      ],
-      "audience": "both"
     },
     {
       "id": "fix-all-in-project",
@@ -1540,356 +1032,6 @@
       "audience": "both"
     },
     {
-      "id": "full-compile-sweep",
-      "title": "Full Compile Sweep",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "1.2.0-alpha",
-      "summary": "Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold",
-      "wikiPage": "Full-Compile-Sweep",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Full Compile Sweep"
-        },
-        {
-          "type": "cli",
-          "verb": "refresh-findings"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "generate-test-helper-csv",
-      "title": "Forms for testers (CSV)",
-      "group": "graphs-reports",
-      "owner": "CHARTS",
-      "status": "shipped",
-      "since": "0.44.0-alpha",
-      "summary": "Produces a spreadsheet-style CSV of a project's forms, one row per form, telling a human tester how to reach each form from the main form: the menu, ribbon",
-      "wikiPage": "Generate-Test-Helper-CSV",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Reports > Forms for testers (CSV)..."
-        },
-        {
-          "type": "cli",
-          "verb": "forms-csv"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "ghost-check",
-      "title": "ghost-check",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "1.8.0-alpha",
-      "summary": "Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged",
-      "wikiPage": "ghost-check",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "ghost-check"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "ghost-recover",
-      "title": "ghost-recover",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.64.1-alpha",
-      "summary": "Scans a project's hidden D-RAG folder for recovery journals left behind when a ghost-check overlay was interrupted by a crash",
-      "wikiPage": "ghost-recover",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "ghost-recover"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "glyph-vacuum",
-      "title": "glyph-vacuum",
-      "group": "component-conversion",
-      "owner": "CONVERTER",
-      "status": "shipped",
-      "since": "1.15.0-alpha",
-      "summary": "Measure every streamed glyph or picture under a tree before writing a glyph rule",
-      "wikiPage": "Features",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "glyph-vacuum"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: needs own page"
-    },
-    {
-      "id": "go-to-declaration",
-      "title": "Go to Declaration",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node",
-      "wikiPage": "Go-to-Declaration",
-      "surfaces": [
-        {
-          "type": "ide-context",
-          "host": "Structure form",
-          "caption": "Go to Declaration"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
-    },
-    {
-      "id": "go-to-definition",
-      "title": "Go to Definition",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Jumps the editor caret to the declaration of the symbol under the cursor",
-      "wikiPage": "Go-to-Definition",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Go to Definition"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
-    },
-    {
-      "id": "go-to-implementation",
-      "title": "Go to Implementation",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.43.0-alpha",
-      "summary": "Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node",
-      "wikiPage": "Go-to-Implementation",
-      "surfaces": [
-        {
-          "type": "ide-context",
-          "host": "Structure form",
-          "caption": "Go to Implementation"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "helpers-of",
-      "title": "helpers-of",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.94.0-alpha",
-      "summary": "Lists record/class helper edges targeting a given type, anywhere in the index",
-      "wikiPage": "helpers-of",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "helpers-of"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"],
-      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1179"
-    },
-    {
-      "id": "hover-at-cursor",
-      "title": "Hover at Cursor",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.7.0-alpha",
-      "summary": "Shows a hover card for the symbol under the editor caret: signature, documentation, and callers",
-      "wikiPage": "Hover-at-Cursor",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Hover at Cursor"
-        },
-        {
-          "type": "cli",
-          "verb": "hover"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "ide-menu-reference",
-      "title": "IDE Menu Reference",
-      "group": "editor-integration",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "What every item in the drag-lint menu does",
-      "wikiPage": "IDE-Menu-Reference",
-      "surfaces": [
-        {
-          "type": "workflow",
-          "doc": "docs\\wiki\\IDE-Menu-Reference.md"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown",
-      "homeOrder": 40
-    },
-    {
-      "id": "ide-release",
-      "title": "ide-release",
-      "group": "editor-integration",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "1.13.0-alpha",
-      "summary": "Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request",
-      "wikiPage": "ide-release",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "ide-release"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "impact-blast-radius-symbol",
-      "title": "Impact / Blast Radius (symbol)",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.17.0-alpha",
-      "summary": "Reports what would be affected if a chosen symbol changes -- the set of code to retest",
-      "wikiPage": "Impact-Blast-Radius-symbol",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)..."
-        },
-        {
-          "type": "cli",
-          "verb": "impact"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "import-build-log",
-      "title": "Import Build Log",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.8.0-alpha",
-      "summary": "Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings",
-      "wikiPage": "Import-Build-Log",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > About > Import Build Log..."
-        },
-        {
-          "type": "cli",
-          "verb": "import-log"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "info",
-      "title": "info",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.19.0-alpha",
-      "summary": "Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities",
-      "wikiPage": "info",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "info"
-        }
-      ],
-      "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.About.pas:217"
-    },
-    {
-      "id": "installation",
-      "title": "Installation",
-      "group": "editor-integration",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.21.0-alpha",
-      "summary": "Getting the CLI, the IDE plugin, or the LSP running",
-      "wikiPage": "Installation",
-      "surfaces": [
-        {
-          "type": "exe",
-          "name": "drag-lint.exe"
-        },
-        {
-          "type": "workflow",
-          "doc": "docs\\wiki\\Installation.md"
-        }
-      ],
-      "audience": "both",
-      "homeOrder": 20
-    },
-    {
-      "id": "library-drift-check",
-      "title": "Library Drift Check",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Flags registered library roots that have source on disk but nothing in the index",
-      "wikiPage": "Library-Drift-Check",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Index & Maintenance > Library Drift Check..."
-        },
-        {
-          "type": "cli",
-          "verb": "library-drift"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
-    },
-    {
-      "id": "link-orm",
-      "title": "link-orm",
-      "group": "database",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.40.5-alpha",
-      "summary": "Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both",
-      "wikiPage": "link-orm",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "link-orm"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
       "id": "lint-buffer-unsaved",
       "title": "Lint Buffer (Unsaved)",
       "group": "linting",
@@ -1900,8 +1042,8 @@
       "wikiPage": "Lint-Buffer-Unsaved",
       "surfaces": [
         {
-          "type": "ide-menu",
-          "path": "drag-lint > About > Lint Buffer (Unsaved)"
+          "type": "ide-about",
+          "caption": "Lint Buffer (Unsaved)"
         },
         {
           "type": "cli",
@@ -1909,24 +1051,6 @@
         }
       ],
       "audience": "both"
-    },
-    {
-      "id": "lint-project",
-      "title": "lint-project",
-      "group": "linting",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.48.0-alpha",
-      "summary": "Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol",
-      "wikiPage": "lint-project",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "lint-project"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
     },
     {
       "id": "lint-rules",
@@ -1948,6 +1072,24 @@
       "family": "lint-rules"
     },
     {
+      "id": "lint-project",
+      "title": "lint-project",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.48.0-alpha",
+      "summary": "Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol",
+      "wikiPage": "lint-project",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint-project"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
       "id": "lint-tree",
       "title": "lint-tree",
       "group": "linting",
@@ -1965,327 +1107,359 @@
       "audience": "both"
     },
     {
-      "id": "lsp",
-      "title": "lsp",
-      "group": "editor-integration",
+      "id": "run-ast-checks",
+      "title": "Run AST Checks",
+      "group": "linting",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.6.0-alpha",
-      "summary": "Starts the LSP (Language Server Protocol) stdio server",
-      "wikiPage": "lsp",
+      "since": "0.31.0-alpha",
+      "summary": "Runs drag-lint's AST-level checks against a file",
+      "wikiPage": "Run-AST-Checks",
       "surfaces": [
         {
+          "type": "ide-about",
+          "caption": "Run AST Checks"
+        },
+        {
           "type": "cli",
-          "verb": "lsp"
+          "verb": "check-ast"
         }
       ],
-      "audience": "both",
-      "requires": ["index"],
-      "notes": "issued by the plugin from DragLint.Plugin.LspClient.pas:297"
+      "audience": "both"
     },
     {
-      "id": "maintenance",
-      "title": "Maintenance",
-      "group": "maintenance",
+      "id": "run-diagnostics-didsave",
+      "title": "Run Diagnostics (didSave)",
+      "group": "linting",
       "owner": "ENGINE",
       "status": "shipped",
       "since": "0.0.0",
-      "summary": "Indexes, the manifest, reindexing, and what to do when something looks wrong",
-      "wikiPage": "Maintenance",
+      "summary": "Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification",
+      "wikiPage": "Run-Diagnostics-didSave",
       "surfaces": [
         {
-          "type": "workflow",
-          "doc": "docs\\wiki\\Maintenance.md"
+          "type": "ide-about",
+          "caption": "Run Diagnostics (didSave)"
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown",
-      "homeOrder": 30
+      "notes": "seed: since unknown"
     },
     {
-      "id": "migrate-dbs",
-      "title": "migrate-dbs",
-      "group": "indexing",
+      "id": "run-lint-all-full-report",
+      "title": "Run Lint All (Full Report)",
+      "group": "linting",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.3.0-alpha",
-      "summary": "Moves project index databases into each project's own D-RAG folder, matching the current index layout",
-      "wikiPage": "migrate-dbs",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "migrate-dbs"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "open-plugin-log",
-      "title": "Open Plugin Log",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.39.0-alpha",
-      "summary": "Opens the drag-lint plugin's own log file",
-      "wikiPage": "Open-Plugin-Log",
+      "since": "0.61.0-alpha",
+      "summary": "Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check",
+      "wikiPage": "Run-Lint-All-Full-Report",
       "surfaces": [
         {
           "type": "ide-menu",
-          "path": "drag-lint > About > Open Plugin Log"
+          "path": "drag-lint > Code Quality > Run Lint All (Full Report)..."
+        },
+        {
+          "type": "cli",
+          "verb": "lint-all"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "wiki-blocks-authoring",
+      "title": "dl:wiki concept blocks",
+      "group": "documentation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.7.0-alpha",
+      "summary": "The format of a dl:wiki block -- the concept notes the wiki verb reads",
+      "wikiPage": "Wiki-Blocks-Authoring",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "wiki"
+        },
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\Wiki-Blocks-Authoring.md"
         }
       ],
       "audience": "both",
-      "notes": "seed: group guessed"
+      "requires": ["index"]
     },
     {
-      "id": "outline",
-      "title": "outline",
-      "group": "search-navigation",
+      "id": "doc-comment-stub-symbol",
+      "title": "Doc Comment Stub (symbol)",
+      "group": "documentation",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.86.0-alpha",
-      "summary": "Prints the file-scoped symbol outline for one Pascal unit",
-      "wikiPage": "outline",
+      "since": "0.25.0-alpha",
+      "summary": "Uses generate-docs to produce a doc-comment stub for one qualified symbol",
+      "wikiPage": "Doc-Comment-Stub-symbol",
       "surfaces": [
         {
+          "type": "ide-menu",
+          "path": "drag-lint > Generate & Export > Doc Comment Stub (symbol)..."
+        },
+        {
           "type": "cli",
-          "verb": "outline"
+          "verb": "generate-docs"
         }
       ],
       "audience": "both"
     },
     {
-      "id": "pp-profile",
-      "title": "pp-profile",
-      "group": "indexing",
+      "id": "doc-drift",
+      "title": "doc-drift",
+      "group": "documentation",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.92.0-alpha",
-      "summary": "Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line",
-      "wikiPage": "pp-profile",
+      "since": "0.93.0-alpha",
+      "summary": "Diagnostic that computes deterministic doc-vs-code drift findings for one symbol",
+      "wikiPage": "doc-drift",
       "surfaces": [
         {
           "type": "cli",
-          "verb": "pp-profile"
+          "verb": "doc-drift"
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "requires": ["index"]
     },
     {
-      "id": "preprocess-file",
-      "title": "preprocess-file",
-      "group": "compiler",
+      "id": "doc-forget",
+      "title": "doc-forget",
+      "group": "documentation",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.92.0-alpha",
-      "summary": "Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set",
-      "wikiPage": "preprocess-file",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "preprocess-file"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "project-facts",
-      "title": "project-facts",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "1.20.0-alpha",
-      "summary": "Report what the build does: defines that are on and what sets each, imports, output paths and packages",
+      "since": "1.17.0-alpha",
+      "summary": "Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply",
       "wikiPage": "Features",
       "surfaces": [
         {
           "type": "cli",
-          "verb": "project-facts"
+          "verb": "doc-forget"
         }
       ],
       "audience": "both",
       "notes": "seed: needs own page"
     },
     {
-      "id": "proptree",
-      "title": "proptree",
-      "group": "component-conversion",
-      "owner": "CONVERTER",
+      "id": "document-it",
+      "title": "Document it",
+      "group": "documentation",
+      "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.1.0-alpha",
-      "summary": "Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties",
-      "wikiPage": "proptree",
+      "since": "0.90.0-alpha",
+      "summary": "Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node",
+      "wikiPage": "Document-it",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Document it"
+        },
+        {
+          "type": "cli",
+          "verb": "document"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "document-project",
+      "title": "Document project",
+      "group": "documentation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.90.0-alpha",
+      "summary": "Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project",
+      "wikiPage": "Document-project",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Document project"
+        },
+        {
+          "type": "cli",
+          "verb": "document"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "document-unit",
+      "title": "Document unit",
+      "group": "documentation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.90.0-alpha",
+      "summary": "Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only)",
+      "wikiPage": "Document-unit",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Document unit"
+        },
+        {
+          "type": "cli",
+          "verb": "document"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "document-all",
+      "title": "document-all",
+      "group": "documentation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.93.0-alpha",
+      "summary": "Documents every public declaration in every indexed unit, with no project scope",
+      "wikiPage": "document-all",
       "surfaces": [
         {
           "type": "cli",
-          "verb": "proptree"
+          "verb": "document-all"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "effect-summary-legend",
+      "title": "Effect Summary Legend",
+      "group": "documentation",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index",
+      "wikiPage": "Effect-Summary-Legend",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\Effect-Summary-Legend.md"
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "notes": "seed: since unknown"
     },
     {
-      "id": "purge-locals",
-      "title": "purge-locals",
-      "group": "indexing",
+      "id": "shared-unit",
+      "title": "shared-unit",
+      "group": "documentation",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.91.0-alpha",
-      "summary": "A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space",
-      "wikiPage": "purge-locals",
+      "since": "1.10.0-alpha",
+      "summary": "Reads or extends the dl:shared marker on a unit, recording which projects share it",
+      "wikiPage": "shared-unit",
       "surfaces": [
         {
           "type": "cli",
-          "verb": "purge-locals"
+          "verb": "shared-unit"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "allow-this-message",
+      "title": "Allow this message",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.54.0-alpha",
+      "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
+      "wikiPage": "Allow-this-message",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Allow this message"
+        },
+        {
+          "type": "cli",
+          "verb": "allow"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "allow",
+      "title": "allow",
+      "group": "refactoring",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.54.0-alpha",
+      "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
+      "wikiPage": "allow",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "allow"
         }
       ],
       "audience": "both",
-      "requires": ["index"]
+      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1061"
     },
     {
-      "id": "query-ancestors",
-      "title": "query ancestors",
-      "group": "search-navigation",
+      "id": "create-helper-class",
+      "title": "Create helper class",
+      "group": "refactoring",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "Resolves the transitive class/interface hierarchy of a type",
-      "wikiPage": "query-ancestors",
+      "since": "0.94.0-alpha",
+      "summary": "Generates a Byte-family record helper for an enum type represented by a Structure-tree node",
+      "wikiPage": "Create-helper-class",
       "surfaces": [
         {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Create helper class"
+        },
+        {
           "type": "cli",
-          "verb": "query",
-          "sub": "ancestors"
+          "verb": "create-enum-helper"
         }
       ],
       "audience": "both"
     },
     {
-      "id": "query-descendants",
-      "title": "query descendants",
-      "group": "search-navigation",
+      "id": "create-enum-helper",
+      "title": "create-enum-helper",
+      "group": "refactoring",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases",
-      "wikiPage": "query-descendants",
+      "since": "0.94.0-alpha",
+      "summary": "Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type",
+      "wikiPage": "create-enum-helper",
       "surfaces": [
         {
           "type": "cli",
-          "verb": "query",
-          "sub": "descendants"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "query-find-callers",
-      "title": "query find-callers",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "Lists callers of a routine by name, with an option to restrict results to precise, resolved callers",
-      "wikiPage": "query-find-callers",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "query",
-          "sub": "find-callers"
+          "verb": "create-enum-helper"
         }
       ],
       "audience": "both",
-      "notes": "issued by the plugin from DragLint.Plugin.CodeLensCache.pas:466"
+      "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1226"
     },
     {
-      "id": "query-kind-all",
-      "title": "query --kind --all",
-      "group": "search-navigation",
+      "id": "extract-method",
+      "title": "extract-method",
+      "group": "refactoring",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap",
-      "wikiPage": "query-kind-all",
+      "since": "0.85.0-alpha",
+      "summary": "Pulls a run of statements out of a routine into a new method",
+      "wikiPage": "extract-method",
       "surfaces": [
         {
           "type": "cli",
-          "verb": "query",
-          "example": "drag-lint query --kind <k> --all"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "query-name-like",
-      "title": "query --name-like",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "Case-insensitive substring search over symbol names",
-      "wikiPage": "query-name-like",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "query"
+          "verb": "extract-method"
         }
       ],
       "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "query-type-usage",
-      "title": "query type-usage",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "Answers one question, of a list of type names, about one file",
-      "wikiPage": "query-type-usage",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "query",
-          "sub": "type-usage"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "query-typecat",
-      "title": "query typecat",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "Resolves a type's category -- float, string, class, interface, and so on",
-      "wikiPage": "query-typecat",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "query",
-          "sub": "typecat"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "query-unit-usage",
-      "title": "query unit-usage",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "Answers one question, about one unit and one file",
-      "wikiPage": "query-unit-usage",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "query",
-          "sub": "unit-usage"
-        }
-      ],
-      "audience": "both"
+      "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319"
     },
     {
       "id": "quick-fix-add-unit-for-inline-hint-h2443-at-cursor",
@@ -2342,27 +1516,6 @@
       "notes": "seed: moved from Uses & Dependencies to the root menu on 2026-09-07; the page title still says Quick-Fix; seed: since unknown"
     },
     {
-      "id": "rebuild-index-for-this-project",
-      "title": "Rebuild Index for This Project",
-      "group": "indexing",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "Walks a project's .dproj compile closure and (re)builds its index",
-      "wikiPage": "Rebuild-Index-for-This-Project",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Index & Maintenance > Rebuild Index for This Project"
-        },
-        {
-          "type": "cli",
-          "verb": "index"
-        }
-      ],
-      "audience": "both"
-    },
-    {
       "id": "reconcile-project-members-dpr-dproj",
       "title": "Reconcile Project Members (.dpr/.dproj)",
       "group": "refactoring",
@@ -2382,42 +1535,6 @@
         }
       ],
       "audience": "both"
-    },
-    {
-      "id": "recover-buffer-compile-files",
-      "title": "Recover Buffer-Compile Files",
-      "group": "compiler",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Restores any file left holding unsaved-buffer content after a Compile Buffer (unsaved) run was interrupted (for example by a crash)",
-      "wikiPage": "Recover-Buffer-Compile-Files",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > About > Recover Buffer-Compile Files"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
-    },
-    {
-      "id": "register-project",
-      "title": "register-project",
-      "group": "indexing",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "1.20.4-alpha",
-      "summary": "Add a new project to the manifest so index --all and the IDE can see it",
-      "wikiPage": "Features",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "register-project"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: needs own page"
     },
     {
       "id": "rename-symbol",
@@ -2442,128 +1559,6 @@
       "requires": ["index"]
     },
     {
-      "id": "resolve-uses",
-      "title": "resolve-uses",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "internal",
-      "since": "0.41.0-alpha",
-      "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
-      "wikiPage": "Maintenance",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "resolve-uses"
-        }
-      ],
-      "audience": "agent",
-      "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed"
-    },
-    {
-      "id": "reverse-call-tree-clickable-messages-window",
-      "title": "Reverse Call Tree (clickable, Messages window)",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.96.0-alpha",
-      "summary": "The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller",
-      "wikiPage": "Reverse-Call-Tree-clickable-Messages-window",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."
-        },
-        {
-          "type": "cli",
-          "verb": "reverse-calltree"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "reverse-call-tree-who-calls-this-n-deep",
-      "title": "Reverse Call Tree (who calls this, N-deep)",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.96.0-alpha",
-      "summary": "Builds the tree of callers of a chosen symbol, transitively, to a chosen depth",
-      "wikiPage": "Reverse-Call-Tree-who-calls-this-N-deep",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."
-        },
-        {
-          "type": "cli",
-          "verb": "reverse-calltree"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "run-ast-checks",
-      "title": "Run AST Checks",
-      "group": "linting",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.31.0-alpha",
-      "summary": "Runs drag-lint's AST-level checks against a file",
-      "wikiPage": "Run-AST-Checks",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > About > Run AST Checks"
-        },
-        {
-          "type": "cli",
-          "verb": "check-ast"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "run-diagnostics-didsave",
-      "title": "Run Diagnostics (didSave)",
-      "group": "linting",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification",
-      "wikiPage": "Run-Diagnostics-didSave",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > About > Run Diagnostics (didSave)"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: since unknown"
-    },
-    {
-      "id": "run-lint-all-full-report",
-      "title": "Run Lint All (Full Report)",
-      "group": "linting",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.61.0-alpha",
-      "summary": "Runs the full rule catalog (189 rules, 159 on by default across 16 categories",
-      "wikiPage": "Run-Lint-All-Full-Report",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Code Quality > Run Lint All (Full Report)..."
-        },
-        {
-          "type": "cli",
-          "verb": "lint-all"
-        }
-      ],
-      "audience": "both"
-    },
-    {
       "id": "safe-delete",
       "title": "safe-delete",
       "group": "refactoring",
@@ -2580,354 +1575,6 @@
       ],
       "audience": "both",
       "requires": ["index"]
-    },
-    {
-      "id": "scan-todos-fixmes",
-      "title": "Scan TODOs / FIXMEs",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.12.0-alpha",
-      "summary": "Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers",
-      "wikiPage": "Scan-TODOs-FIXMEs",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Code Quality > Scan TODOs / FIXMEs..."
-        },
-        {
-          "type": "cli",
-          "verb": "todos"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "schema",
-      "title": "schema",
-      "group": "indexing",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.3.0-alpha",
-      "summary": "Prints the live schema of an index database: schemaversion, every table and column, and row counts",
-      "wikiPage": "schema",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "schema"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "selftest",
-      "title": "selftest",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "internal",
-      "since": "1.13.0-alpha",
-      "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
-      "wikiPage": "Maintenance",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "selftest"
-        }
-      ],
-      "audience": "agent",
-      "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed"
-    },
-    {
-      "id": "serve",
-      "title": "serve",
-      "group": "editor-integration",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.4.0-alpha",
-      "summary": "Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index",
-      "wikiPage": "serve",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "serve"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "shared-unit",
-      "title": "shared-unit",
-      "group": "documentation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "1.10.0-alpha",
-      "summary": "Reads or extends the dl:shared marker on a unit, recording which projects share it",
-      "wikiPage": "shared-unit",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "shared-unit"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "show-completion",
-      "title": "Show Completion",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.21.0-alpha",
-      "summary": "Shows an index-backed completion list at the editor caret",
-      "wikiPage": "Show-Completion",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Show Completion"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "show-in-call-graph",
-      "title": "Show in Call Graph",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.96.0-alpha",
-      "summary": "Opens the call graph rooted at the symbol represented by a Structure-tree node",
-      "wikiPage": "Show-in-Call-Graph",
-      "surfaces": [
-        {
-          "type": "ide-context",
-          "host": "Structure form",
-          "caption": "Show in Call Graph"
-        },
-        {
-          "type": "cli",
-          "verb": "reverse-calltree"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "show-resolved-dbs-debug",
-      "title": "Show Resolved DBs (debug)",
-      "group": "indexing",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.60.0-alpha",
-      "summary": "Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query",
-      "wikiPage": "Show-Resolved-DBs-debug",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Index & Maintenance > Show Resolved DBs (debug)..."
-        },
-        {
-          "type": "cli",
-          "verb": "resolve-dbs"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "show-signature-help",
-      "title": "Show Signature Help",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.21.0-alpha",
-      "summary": "Shows parameter help for the call being typed at the editor caret",
-      "wikiPage": "Show-Signature-Help",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Show Signature Help"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "show-structure",
-      "title": "Show Structure",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.30.0-alpha",
-      "summary": "Shows a structural outline of the current unit",
-      "wikiPage": "Show-Structure",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Show Structure"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "show-wiring-spring4d-di-dfm-events",
-      "title": "Show Wiring (Spring4D DI + DFM events)",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.21.0-alpha",
-      "summary": "Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type",
-      "wikiPage": "Show-Wiring-Spring4D-DI-DFM-events",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)..."
-        },
-        {
-          "type": "cli",
-          "verb": "wiring"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "shutdown",
-      "title": "shutdown",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.6.0-alpha",
-      "summary": "Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them",
-      "wikiPage": "Features",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "shutdown"
-        }
-      ],
-      "audience": "both",
-      "notes": "seed: needs own page"
-    },
-    {
-      "id": "sql",
-      "title": "sql",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.40.5-alpha",
-      "summary": "Runs one read-only SQL statement against an index database and prints the result set",
-      "wikiPage": "sql",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "sql"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"],
-      "notes": "seed: group guessed"
-    },
-    {
-      "id": "symbol-search",
-      "title": "Symbol Search",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.1.0-alpha",
-      "summary": "Searches symbols by name across the indexed projects",
-      "wikiPage": "Symbol-Search",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Symbol Search..."
-        },
-        {
-          "type": "cli",
-          "verb": "query"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "symbol-slice",
-      "title": "Symbol Slice",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.17.0-alpha",
-      "summary": "Shows the slice of code relevant to one symbol: its declaration, body, and immediate context",
-      "wikiPage": "Symbol-Slice",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Inspect Symbol > Symbol Slice..."
-        },
-        {
-          "type": "cli",
-          "verb": "slice"
-        }
-      ],
-      "audience": "both"
-    },
-    {
-      "id": "test-store-freshness",
-      "title": "test-store-freshness",
-      "group": "maintenance",
-      "owner": "ENGINE",
-      "status": "internal",
-      "since": "0.0.0",
-      "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
-      "wikiPage": "Maintenance",
-      "surfaces": [
-        {
-          "type": "cli",
-          "verb": "test-store-freshness"
-        }
-      ],
-      "audience": "agent",
-      "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown"
-    },
-    {
-      "id": "top-symbols-fan-in",
-      "title": "Top Symbols (fan-in)",
-      "group": "graphs-reports",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.6.0-alpha",
-      "summary": "Ranks indexed symbols by fan-in -- how many places reference them",
-      "wikiPage": "Top-Symbols-fan-in",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Code Quality > Top Symbols (fan-in)..."
-        },
-        {
-          "type": "cli",
-          "verb": "top"
-        }
-      ],
-      "audience": "both",
-      "requires": ["index"]
-    },
-    {
-      "id": "type-at-cursor",
-      "title": "Type at Cursor",
-      "group": "search-navigation",
-      "owner": "ENGINE",
-      "status": "shipped",
-      "since": "0.19.0-alpha",
-      "summary": "Resolves the static type of the expression under the editor caret",
-      "wikiPage": "Type-at-Cursor",
-      "surfaces": [
-        {
-          "type": "ide-menu",
-          "path": "drag-lint > Inspect Symbol > Type at Cursor"
-        },
-        {
-          "type": "cli",
-          "verb": "typeat"
-        }
-      ],
-      "audience": "both"
     },
     {
       "id": "unit-test-stub-symbol",
@@ -2951,21 +1598,22 @@
       "audience": "both"
     },
     {
-      "id": "usages",
-      "title": "usages",
-      "group": "search-navigation",
+      "id": "uses-deps-tab",
+      "title": "Uses & Deps Tab",
+      "group": "refactoring",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "0.33.0-alpha",
-      "summary": "Finds usage sites of a named symbol, with a choice of report width",
-      "wikiPage": "usages",
+      "since": "0.0.0",
+      "summary": "Open the Uses & Deps tab to review uses-clause fixes and apply them",
+      "wikiPage": "Features",
       "surfaces": [
         {
-          "type": "cli",
-          "verb": "usages"
+          "type": "ide-menu",
+          "path": "drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes..."
         }
       ],
-      "audience": "both"
+      "audience": "both",
+      "notes": "seed: needs own page; seed: since unknown"
     },
     {
       "id": "uses-audit-interface-impl-moves-unused-this-unit",
@@ -3012,22 +1660,509 @@
       "requires": ["index"]
     },
     {
-      "id": "uses-deps-tab",
-      "title": "Uses & Deps Tab",
-      "group": "refactoring",
-      "owner": "ENGINE",
+      "id": "convert-apply",
+      "title": "convert-apply",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
       "status": "shipped",
-      "since": "0.0.0",
-      "summary": "Open the Uses & Deps tab to review uses-clause fixes and apply them",
-      "wikiPage": "Features",
+      "since": "1.2.0-alpha",
+      "summary": "Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add",
+      "wikiPage": "convert-apply",
       "surfaces": [
         {
-          "type": "ide-menu",
-          "path": "drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes..."
+          "type": "cli",
+          "verb": "convert-apply"
         }
       ],
       "audience": "both",
-      "notes": "seed: needs own page; seed: since unknown"
+      "requires": ["index"]
+    },
+    {
+      "id": "convert-reemit",
+      "title": "convert-reemit",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "internal",
+      "since": "1.10.0-alpha",
+      "summary": "The DFM re-emit stage of the conversion pipeline, driven by convert-apply and by test runners",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "convert-reemit"
+        }
+      ],
+      "audience": "agent",
+      "notes": "internal: internal stage of the conversion pipeline (DFM re-emit), driven by convert-apply and by two runners under tests\\."
+    },
+    {
+      "id": "convert-scaffold",
+      "title": "convert-scaffold",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.1.0-alpha",
+      "summary": "Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type",
+      "wikiPage": "convert-scaffold",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "convert-scaffold"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "convert-validate",
+      "title": "convert-validate",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.1.0-alpha",
+      "summary": "Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees",
+      "wikiPage": "convert-validate",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "convert-validate"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "convrules-editor",
+      "title": "ConvRulesEditor",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Visual rulebook editor for the component-conversion rules",
+      "wikiPage": "Features",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: needs own page (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown"
+    },
+    {
+      "id": "glyph-vacuum",
+      "title": "glyph-vacuum",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.15.0-alpha",
+      "summary": "Measure every streamed glyph or picture under a tree before writing a glyph rule",
+      "wikiPage": "Features",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "glyph-vacuum"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: needs own page"
+    },
+    {
+      "id": "proptree",
+      "title": "proptree",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.1.0-alpha",
+      "summary": "Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties",
+      "wikiPage": "proptree",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "proptree"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "butterfly",
+      "title": "butterfly",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.99.0-alpha",
+      "summary": "Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command",
+      "wikiPage": "butterfly",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "butterfly"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "call-graph-butterfly",
+      "title": "Call Graph (Butterfly)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.96.0-alpha",
+      "summary": "Shows callers and callees of one symbol together in a single \"butterfly\" view",
+      "wikiPage": "Call-Graph-Butterfly",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)..."
+        },
+        {
+          "type": "cli",
+          "verb": "reverse-calltree"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "callgraph",
+      "title": "callgraph",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.91.0-alpha",
+      "summary": "Prints an N-deep resolved call tree for a symbol, in either direction",
+      "wikiPage": "callgraph",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "callgraph"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "circular-dependency-report",
+      "title": "Circular Dependency Report (worked example)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "A worked example: a real four-unit uses cycle, and the report drag-lint produces for it",
+      "wikiPage": "Circular-Dependency-Report",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\Circular-Dependency-Report.md"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown"
+    },
+    {
+      "id": "circular-uses-report-cycles-fix-plan",
+      "title": "Circular Uses Report (cycles + fix plan)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.43.0-alpha",
+      "summary": "Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them",
+      "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)..."
+        },
+        {
+          "type": "cli",
+          "verb": "cycles"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "deps-report",
+      "title": "deps-report",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.95.0-alpha",
+      "summary": "Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on",
+      "wikiPage": "deps-report",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "deps-report"
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)..."
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "export-enums-delphi-const",
+      "title": "Export Enums (Delphi const)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.6.0-alpha",
+      "summary": "Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations",
+      "wikiPage": "Export-Enums-Delphi-const",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Generate & Export > Export Enums (Delphi const)..."
+        },
+        {
+          "type": "cli",
+          "verb": "export",
+          "sub": "enums"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "export-graph-dot",
+      "title": "Export Graph (DOT)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.6.0-alpha",
+      "summary": "Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring",
+      "wikiPage": "Export-Graph-DOT",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Generate & Export > Export Graph (DOT)..."
+        },
+        {
+          "type": "cli",
+          "verb": "graph"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "export-to-obsidian",
+      "title": "Export to Obsidian",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.6.0-alpha",
+      "summary": "Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages",
+      "wikiPage": "Export-to-Obsidian",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Generate & Export > Export to Obsidian..."
+        },
+        {
+          "type": "cli",
+          "verb": "export",
+          "sub": "obsidian"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "find-dead-code",
+      "title": "Find Dead Code",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.25.0-alpha",
+      "summary": "Scans the index for code with no references -- candidates to delete",
+      "wikiPage": "Find-Dead-Code",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Code Quality > Find Dead Code..."
+        },
+        {
+          "type": "cli",
+          "verb": "find-deadcode"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "generate-test-helper-csv",
+      "title": "Forms for testers (CSV)",
+      "group": "graphs-reports",
+      "owner": "CHARTS",
+      "status": "shipped",
+      "since": "0.44.0-alpha",
+      "summary": "Produces a spreadsheet-style CSV of a project's forms, one row per form, telling a human tester how to reach each form from the main form: the menu, ribbon",
+      "wikiPage": "Generate-Test-Helper-CSV",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Reports > Forms for testers (CSV)..."
+        },
+        {
+          "type": "cli",
+          "verb": "forms-csv"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "impact-blast-radius-symbol",
+      "title": "Impact / Blast Radius (symbol)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.17.0-alpha",
+      "summary": "Reports what would be affected if a chosen symbol changes -- the set of code to retest",
+      "wikiPage": "Impact-Blast-Radius-symbol",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)..."
+        },
+        {
+          "type": "cli",
+          "verb": "impact"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "reverse-call-tree-clickable-messages-window",
+      "title": "Reverse Call Tree (clickable, Messages window)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.96.0-alpha",
+      "summary": "The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller",
+      "wikiPage": "Reverse-Call-Tree-clickable-Messages-window",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "reverse-calltree"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "notes": "No menu item of its own since 2026-09-07: drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... asks where to render, and Yes picks the Messages window"
+    },
+    {
+      "id": "reverse-call-tree-who-calls-this-n-deep",
+      "title": "Reverse Call Tree (who calls this, N-deep)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.96.0-alpha",
+      "summary": "Builds the tree of callers of a chosen symbol, transitively, to a chosen depth",
+      "wikiPage": "Reverse-Call-Tree-who-calls-this-N-deep",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."
+        },
+        {
+          "type": "cli",
+          "verb": "reverse-calltree"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "scan-todos-fixmes",
+      "title": "Scan TODOs / FIXMEs",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.12.0-alpha",
+      "summary": "Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers",
+      "wikiPage": "Scan-TODOs-FIXMEs",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Code Quality > Scan TODOs / FIXMEs..."
+        },
+        {
+          "type": "cli",
+          "verb": "todos"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "show-in-call-graph",
+      "title": "Show in Call Graph",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.96.0-alpha",
+      "summary": "Opens the call graph rooted at the symbol represented by a Structure-tree node",
+      "wikiPage": "Show-in-Call-Graph",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Show in Call Graph"
+        },
+        {
+          "type": "cli",
+          "verb": "reverse-calltree"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "show-wiring-spring4d-di-dfm-events",
+      "title": "Show Wiring (Spring4D DI + DFM events)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.21.0-alpha",
+      "summary": "Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type",
+      "wikiPage": "Show-Wiring-Spring4D-DI-DFM-events",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)..."
+        },
+        {
+          "type": "cli",
+          "verb": "wiring"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "top-symbols-fan-in",
+      "title": "Top Symbols (fan-in)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.6.0-alpha",
+      "summary": "Ranks indexed symbols by fan-in -- how many places reference them",
+      "wikiPage": "Top-Symbols-fan-in",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Code Quality > Top Symbols (fan-in)..."
+        },
+        {
+          "type": "cli",
+          "verb": "top"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
     },
     {
       "id": "uses-report-csv",
@@ -3051,40 +2186,497 @@
       "audience": "both"
     },
     {
-      "id": "wiki-blocks-authoring",
-      "title": "dl:wiki concept blocks",
-      "group": "documentation",
+      "id": "ask",
+      "title": "ask (engine verb)",
+      "group": "diagrams-charts",
+      "owner": "CHARTS",
+      "status": "planned",
+      "summary": "Ask the index a question, get a chart back",
+      "wikiPage": "Diagrams-and-Charts",
+      "surfaces": [],
+      "audience": "both",
+      "notes": "one engine verb for every chart question; planned, not shipped (Features.md 2026-10-05)"
+    },
+    {
+      "id": "chart-questions",
+      "title": "Chart questions",
+      "group": "diagrams-charts",
+      "owner": "CHARTS",
+      "status": "shipped",
+      "since": "1.20.2-alpha",
+      "summary": "Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS",
+      "wikiPage": "Diagrams-and-Charts",
+      "surfaces": [
+        {
+          "type": "script",
+          "path": "charts\\src\\Ask-Report.ps1"
+        },
+        {
+          "type": "script",
+          "path": "charts\\src\\New-DiagramArtifact.ps1"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index", "powershell7", "graphviz"],
+      "family": "chart-questions",
+      "homeOrder": 44
+    },
+    {
+      "id": "charts-and-the-ide",
+      "title": "Charts and the IDE",
+      "group": "diagrams-charts",
+      "owner": "CHARTS",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio",
+      "wikiPage": "Charts-and-the-IDE",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\Charts-and-the-IDE.md"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown",
+      "homeOrder": 45
+    },
+    {
+      "id": "add-missing-units-to-uses-whole-unit",
+      "title": "Add Missing Units to uses (whole unit)",
+      "group": "compiler",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.7.0-alpha",
-      "summary": "The format of a dl:wiki block -- the concept notes the wiki verb reads",
-      "wikiPage": "Wiki-Blocks-Authoring",
+      "since": "0.43.0-alpha",
+      "summary": "The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them",
+      "wikiPage": "Add-Missing-Units-to-uses-whole-unit",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)..."
+        },
+        {
+          "type": "cli",
+          "verb": "check-unit"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "compile-diagnose",
+      "title": "Compile & Diagnose",
+      "group": "compiler",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings",
+      "wikiPage": "Compile-Diagnose",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Compile & Diagnose"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown"
+    },
+    {
+      "id": "compile-buffer-unsaved",
+      "title": "Compile Buffer (unsaved)",
+      "group": "compiler",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Compiles a project with the current editor buffer's unsaved content substituted for its file on disk, then restores the original file unchanged",
+      "wikiPage": "Compile-Buffer-unsaved",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Compile Buffer (unsaved)"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown"
+    },
+    {
+      "id": "compile-dependents",
+      "title": "Compile Dependents",
+      "group": "compiler",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3)",
+      "wikiPage": "Features",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Compile Dependents"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: needs own page; seed: since unknown"
+    },
+    {
+      "id": "compile-check",
+      "title": "compile-check",
+      "group": "compiler",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.26.0-alpha",
+      "summary": "Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result",
+      "wikiPage": "compile-check",
       "surfaces": [
         {
           "type": "cli",
-          "verb": "wiki"
+          "verb": "compile-check"
+        }
+      ],
+      "audience": "both",
+      "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:2037"
+    },
+    {
+      "id": "full-compile-sweep",
+      "title": "Full Compile Sweep",
+      "group": "compiler",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.2.0-alpha",
+      "summary": "Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold",
+      "wikiPage": "Full-Compile-Sweep",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Full Compile Sweep"
         },
         {
-          "type": "workflow",
-          "doc": "docs\\wiki\\Wiki-Blocks-Authoring.md"
+          "type": "cli",
+          "verb": "refresh-findings"
         }
       ],
       "audience": "both",
       "requires": ["index"]
     },
     {
-      "id": "wiki",
-      "title": "wiki",
-      "group": "search-navigation",
+      "id": "ghost-check",
+      "title": "ghost-check",
+      "group": "compiler",
       "owner": "ENGINE",
       "status": "shipped",
-      "since": "1.7.0-alpha",
-      "summary": "Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it",
-      "wikiPage": "wiki",
+      "since": "1.8.0-alpha",
+      "summary": "Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged",
+      "wikiPage": "ghost-check",
       "surfaces": [
         {
           "type": "cli",
-          "verb": "wiki"
+          "verb": "ghost-check"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "ghost-recover",
+      "title": "ghost-recover",
+      "group": "compiler",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.64.1-alpha",
+      "summary": "Scans a project's hidden D-RAG folder for recovery journals left behind when a ghost-check overlay was interrupted by a crash",
+      "wikiPage": "ghost-recover",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "ghost-recover"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "import-build-log",
+      "title": "Import Build Log",
+      "group": "compiler",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.8.0-alpha",
+      "summary": "Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings",
+      "wikiPage": "Import-Build-Log",
+      "surfaces": [
+        {
+          "type": "ide-about",
+          "caption": "Import Build Log..."
+        },
+        {
+          "type": "cli",
+          "verb": "import-log"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "preprocess-file",
+      "title": "preprocess-file",
+      "group": "compiler",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.92.0-alpha",
+      "summary": "Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set",
+      "wikiPage": "preprocess-file",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "preprocess-file"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "project-facts",
+      "title": "project-facts",
+      "group": "compiler",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.20.0-alpha",
+      "summary": "Report what the build does: defines that are on and what sets each, imports, output paths and packages",
+      "wikiPage": "Features",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "project-facts"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: needs own page"
+    },
+    {
+      "id": "recover-buffer-compile-files",
+      "title": "Recover Buffer-Compile Files",
+      "group": "compiler",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Restores any file left holding unsaved-buffer content after a Compile Buffer (unsaved) run was interrupted (for example by a crash)",
+      "wikiPage": "Recover-Buffer-Compile-Files",
+      "surfaces": [
+        {
+          "type": "ide-about",
+          "caption": "Recover Buffer-Compile Files"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown"
+    },
+    {
+      "id": "fb-snapshot",
+      "title": "fb-snapshot",
+      "group": "database",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.40.5-alpha",
+      "summary": "Connects to a Firebird database and captures a snapshot into a sqlite index",
+      "wikiPage": "fb-snapshot",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "fb-snapshot"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "link-orm",
+      "title": "link-orm",
+      "group": "database",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.40.5-alpha",
+      "summary": "Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both",
+      "wikiPage": "link-orm",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "link-orm"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "drag-lint-graph-dockable",
+      "title": "drag-lint Graph (dockable)",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure",
+      "wikiPage": "drag-lint-Graph-dockable",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > drag-lint Graph (dockable)"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown"
+    },
+    {
+      "id": "drag-lint-graph",
+      "title": "drag-lint Graph",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.10.0-alpha",
+      "summary": "This page documents the \"View > Tool Windows > drag-lint Graph\" menu entry -- the drag-lint graph viewer",
+      "wikiPage": "drag-lint-Graph",
+      "surfaces": [
+        {
+          "type": "tool-window",
+          "path": "View > Tool Windows > drag-lint Graph"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "drag-lint-options",
+      "title": "drag-lint Options",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.95.0-alpha",
+      "summary": "The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog",
+      "wikiPage": "drag-lint-Options",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > drag-lint Options..."
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "drag-lint-panel-dockable",
+      "title": "drag-lint Panel (dockable)",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Opens the main drag-lint dockable tool window inside the IDE",
+      "wikiPage": "drag-lint-Panel-dockable",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > drag-lint Panel (dockable)"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown"
+    },
+    {
+      "id": "drag-lint",
+      "title": "drag-lint",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.2.0-alpha",
+      "summary": "This page documents the \"View > Tool Windows > drag-lint\" menu entry -- the main drag-lint dockable tool window",
+      "wikiPage": "drag-lint",
+      "surfaces": [
+        {
+          "type": "tool-window",
+          "path": "View > Tool Windows > drag-lint"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "ide-menu-reference",
+      "title": "IDE Menu Reference",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "What every item in the drag-lint menu does",
+      "wikiPage": "IDE-Menu-Reference",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\IDE-Menu-Reference.md"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown",
+      "homeOrder": 40
+    },
+    {
+      "id": "ide-release",
+      "title": "ide-release",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.13.0-alpha",
+      "summary": "Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request",
+      "wikiPage": "ide-release",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "ide-release"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "installation",
+      "title": "Installation",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.21.0-alpha",
+      "summary": "Getting the CLI, the IDE plugin, or the LSP running",
+      "wikiPage": "Installation",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "drag-lint.exe"
+        },
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\Installation.md"
+        }
+      ],
+      "audience": "both",
+      "homeOrder": 20
+    },
+    {
+      "id": "lsp",
+      "title": "lsp",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.6.0-alpha",
+      "summary": "Starts the LSP (Language Server Protocol) stdio server",
+      "wikiPage": "lsp",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lsp"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "notes": "issued by the plugin from DragLint.Plugin.LspClient.pas:297"
+    },
+    {
+      "id": "serve",
+      "title": "serve",
+      "group": "editor-integration",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.4.0-alpha",
+      "summary": "Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index",
+      "wikiPage": "serve",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "serve"
         }
       ],
       "audience": "both",
@@ -3144,6 +2736,407 @@
         }
       ],
       "audience": "both"
+    },
+    {
+      "id": "about-and-status",
+      "title": "About and Status",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.15.0-alpha",
+      "summary": "The plugin's status window -- versions, connection health, and which indexes are actually in use",
+      "wikiPage": "About-and-Status",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > About"
+        },
+        {
+          "type": "cli",
+          "verb": "info"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Check for Updates"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Close"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Copy Diagnostics (Current File)"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Copy Report"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Diagnose Current State"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Import Build Log..."
+        },
+        {
+          "type": "ide-about",
+          "caption": "Lint Buffer (Unsaved)"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Open Plugin Log"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Recover Buffer-Compile Files"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Refresh"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Run AST Checks"
+        },
+        {
+          "type": "ide-about",
+          "caption": "Run Diagnostics (didSave)"
+        }
+      ],
+      "audience": "both",
+      "homeOrder": 60
+    },
+    {
+      "id": "ambiguous-calls",
+      "title": "ambiguous-calls",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.91.0-alpha",
+      "summary": "Resolver-coverage diagnostic that reports call sites the engine could not pin to exactly one target -- unresolved or ambiguous calls",
+      "wikiPage": "ambiguous-calls",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "ambiguous-calls"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "bench-context",
+      "title": "bench-context",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.18.0-alpha",
+      "summary": "Benchmarks the context command by building context bundles for a sample of symbols against a database",
+      "wikiPage": "bench-context",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "bench-context"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: group guessed"
+    },
+    {
+      "id": "contrast-selftest",
+      "title": "contrast-selftest",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "0.0.0",
+      "summary": "Self-test for the hover contrast computation, driven by a test runner",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "contrast-selftest"
+        }
+      ],
+      "audience": "agent",
+      "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown"
+    },
+    {
+      "id": "diff",
+      "title": "diff",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.13.0-alpha",
+      "summary": "Compares two index databases and reports what changed between them -- for example an index snapshot taken before and after a refactor",
+      "wikiPage": "diff",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "diff"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "notes": "seed: group guessed"
+    },
+    {
+      "id": "doc-facts-selftest",
+      "title": "doc-facts-selftest",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "0.0.0",
+      "summary": "Self-test for the doc-facts renderer, driven by test runners",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "doc-facts-selftest"
+        }
+      ],
+      "audience": "agent",
+      "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown"
+    },
+    {
+      "id": "dump-call-edges",
+      "title": "dump-call-edges",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.91.0-alpha",
+      "summary": "Diagnostic that dumps every resolved call edge in the index as refid|targetqname|confidence rows",
+      "wikiPage": "dump-call-edges",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "dump-call-edges"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "dump-pp-eval",
+      "title": "dump-pp-eval",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "0.92.0-alpha",
+      "summary": "Diagnostic dump of preprocessor expression evaluation, paired with dump-pp-lex",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "dump-pp-eval"
+        }
+      ],
+      "audience": "agent",
+      "notes": "internal: diagnostic: preprocessor expression-evaluation dump. Same pairing as dump-pp-lex.; seed: group guessed"
+    },
+    {
+      "id": "dump-pp-lex",
+      "title": "dump-pp-lex",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "0.92.0-alpha",
+      "summary": "Diagnostic dump of the preprocessor lexer; the documented preprocessor verbs are preprocess-file and pp-profile",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "dump-pp-lex"
+        }
+      ],
+      "audience": "agent",
+      "notes": "internal: diagnostic: preprocessor lexer dump. The documented preprocessor verbs are preprocess-file and pp-profile.; seed: group guessed"
+    },
+    {
+      "id": "dump-refs",
+      "title": "dump-refs",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.82.0-alpha",
+      "summary": "Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution",
+      "wikiPage": "dump-refs",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "dump-refs"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"]
+    },
+    {
+      "id": "info",
+      "title": "info",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.19.0-alpha",
+      "summary": "Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities",
+      "wikiPage": "info",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "info"
+        }
+      ],
+      "audience": "both",
+      "notes": "issued by the plugin from DragLint.Plugin.About.pas:217"
+    },
+    {
+      "id": "library-drift-check",
+      "title": "Library Drift Check",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Flags registered library roots that have source on disk but nothing in the index",
+      "wikiPage": "Library-Drift-Check",
+      "surfaces": [
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Index & Maintenance > Library Drift Check..."
+        },
+        {
+          "type": "cli",
+          "verb": "library-drift"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown"
+    },
+    {
+      "id": "maintenance",
+      "title": "Maintenance",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.0.0",
+      "summary": "Indexes, the manifest, reindexing, and what to do when something looks wrong",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "docs\\wiki\\Maintenance.md"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: since unknown",
+      "homeOrder": 30
+    },
+    {
+      "id": "open-plugin-log",
+      "title": "Open Plugin Log",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.39.0-alpha",
+      "summary": "Opens the drag-lint plugin's own log file",
+      "wikiPage": "Open-Plugin-Log",
+      "surfaces": [
+        {
+          "type": "ide-about",
+          "caption": "Open Plugin Log"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: group guessed"
+    },
+    {
+      "id": "resolve-uses",
+      "title": "resolve-uses",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "0.41.0-alpha",
+      "summary": "The diagnostic behind check-unit --resolve-uses; not a verb of its own",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "resolve-uses"
+        }
+      ],
+      "audience": "agent",
+      "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed"
+    },
+    {
+      "id": "selftest",
+      "title": "selftest",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "1.13.0-alpha",
+      "summary": "Umbrella self-test dispatcher (manifest-merge, glob, closure, dbselect, drift) used by the test battery, not a user verb",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "selftest"
+        }
+      ],
+      "audience": "agent",
+      "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed"
+    },
+    {
+      "id": "shutdown",
+      "title": "shutdown",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.6.0-alpha",
+      "summary": "Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them",
+      "wikiPage": "Features",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "shutdown"
+        }
+      ],
+      "audience": "both",
+      "notes": "seed: needs own page"
+    },
+    {
+      "id": "sql",
+      "title": "sql",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "0.40.5-alpha",
+      "summary": "Runs one read-only SQL statement against an index database and prints the result set",
+      "wikiPage": "sql",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "sql"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "notes": "seed: group guessed"
+    },
+    {
+      "id": "test-store-freshness",
+      "title": "test-store-freshness",
+      "group": "maintenance",
+      "owner": "ENGINE",
+      "status": "internal",
+      "since": "0.0.0",
+      "summary": "Store-freshness probe used by a test runner; it needs --db and does nothing else",
+      "wikiPage": "Maintenance",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "test-store-freshness"
+        }
+      ],
+      "audience": "agent",
+      "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown"
     }
   ],
   "families": {
