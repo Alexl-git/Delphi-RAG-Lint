@@ -13,14 +13,22 @@
     the call in @(...): an empty result is $null otherwise, and .Count on
     $null throws under StrictMode.
   * WRAPPED (return ,@(...)) -- Get-NearestCandidates, Get-EntryList,
-    Sort-OrdinalUnique. The array arrives as ONE object, intact even when
+    Sort-OrdinalUnique, Find-FeatureEntry, Get-FeatureBlastRadius,
+    Move-FeatureMenuPath, Invoke-RegistryNormalise (and the internal
+    Get-AllRegistryItems, Read-RegistryList). The array arrives as ONE object, intact even when
     empty or single-element. Assign it directly; wrapping it in @(...)
     yields a one-element array holding the array.
     Test-LastVerifiedValue (module-internal) is UNROLLED too.
+  * UNROLLED too: Get-ChildIdsIfNeeded (module-internal).
   * SINGLE OBJECT -- Read-FamilyDefinition and Get-RegistryChildren return one
     [ordered] dictionary; Get-RegistryChildren's values are object[] child
     lists (familyId -> children), already safe to .Count.
-  Sort-OrdinalUnique is module-internal (not exported). Family children carry
+  * SINGLE OBJECT also: Invoke-RegistryCheck ({ Failures; Notes; Stats }),
+    ConvertFrom-SurfaceSpec ([ordered] surface), and the [string] returns of
+    New-FeatureEntry / Update-FeatureEntry / Set-FeatureDeprecated (file path).
+  Sort-OrdinalUnique, Add-RegistryListItem, Read-RegistryList,
+  ConvertTo-RegistryListJson, Get-ChildIdsIfNeeded, Get-AllRegistryItems and
+  Test-MenuNodeCovers are module-internal (not exported). Family children carry
   child-only keys (parent, subgroup, emitter, wikiAnchor) and are NEVER
   written under features\entries\.
 #>
@@ -703,4 +711,310 @@ function Get-RegistryChildren {
   return $out
 }
 
-Export-ModuleMember -Function Get-RegistryPaths, ConvertTo-OrderedObject, ConvertTo-CanonicalJson, Get-EntryKeyOrder, ConvertTo-CanonicalEntry, Get-EntryList, Test-AsciiCrlfFile, Read-FeatureEntry, Write-FeatureEntry, Test-EntryCanonicalBytes, Get-RegistryContext, Get-NearestCandidates, Test-FeatureEntry, Test-GroupsAndTeams, Get-LiveSurface, Read-FamilyDefinition, Import-LintRuleFamily, Import-ChartQuestionFamily, Get-RegistryChildren
+# ---------------------------------------------------------------------------
+# Registry engine operations (spec 17)
+# ---------------------------------------------------------------------------
+function ConvertFrom-SurfaceSpec {
+  param([Parameter(Mandatory)][string]$Spec)
+  $i = $Spec.IndexOf(':')
+  if ($i -lt 1) { throw "surface spec '$Spec': expected <type>:<fields>" }
+  $type = $Spec.Substring(0, $i).Trim(); $rest = $Spec.Substring($i + 1).Trim()
+  if (-not $script:SurfaceKeys.Contains($type)) { throw "surface spec '$Spec': unknown type '$type' (one of: $($script:SurfaceKeys.Keys -join ' '))" }
+  $parts = @($rest -split '\|', 2 | ForEach-Object { $_.Trim() })
+  $s = [ordered]@{ type = $type }
+  switch ($type) {
+    'cli'         { $vs = @($parts[0] -split '/', 2); $s['verb'] = $vs[0]; if ($vs.Count -gt 1 -and $vs[1]) { $s['sub'] = $vs[1] }; if ($parts.Count -gt 1 -and $parts[1]) { $s['example'] = $parts[1] } }
+    'ide-menu'    { $s['path'] = $rest }
+    'ide-context' { if ($parts.Count -lt 2) { throw "surface spec '$Spec': ide-context needs <host>|<caption>" }; $s['host'] = $parts[0]; $s['caption'] = $parts[1] }
+    'ide-about'   { $s['caption'] = $rest }
+    'tool-window' { $s['path'] = $rest }
+    'shortcut'    { $s['keys'] = $rest }
+    'lsp'         { $s['method'] = $rest }
+    'mcp'         { $s['tool'] = $rest }
+    'script'      { $s['path'] = $parts[0]; if ($parts.Count -gt 1 -and $parts[1]) { $s['args'] = $parts[1] } }
+    'exe'         { $s['name'] = $parts[0]; if ($parts.Count -gt 1 -and $parts[1]) { $s['menu'] = $parts[1] } }
+    'workflow'    { $s['doc'] = $rest }
+  }
+  return $s
+}
+
+function Get-CurrentBuildVersion {
+  param([Parameter(Mandatory)]$Paths)
+  $m = [regex]::Match((Get-Content -LiteralPath $Paths.CoreModel -Raw), "DRAGLINT_VERSION\s*=\s*'([^']+)'")
+  if (-not $m.Success) { throw "DRAGLINT_VERSION not found in $($Paths.CoreModel)" }
+  return $m.Groups[1].Value
+}
+
+# groups.json / teams.json canonical layout (spec 5.3): one row per line, keys
+# id, title, order, summary. ConvertTo-CanonicalJson would explode every row and
+# (ConvertFrom-Json -AsHashtable returns an OrderedHashtable, which
+# ConvertTo-OrderedObject sorts) reorder the keys alphabetically.
+$script:ListRowKeys = @('id', 'title', 'order', 'summary')
+function ConvertTo-RegistryListJson([string]$Key, [object[]]$Rows) {
+  $sb = [System.Text.StringBuilder]::new()
+  [void]$sb.Append("{`r`n  "); Write-JsonString $sb $Key; [void]$sb.Append(": [`r`n")
+  for ($i = 0; $i -lt $Rows.Count; $i++) {
+    $r = $Rows[$i]
+    foreach ($k in $r.Keys) { if ($script:ListRowKeys -notcontains $k) { throw "$Key[$i]: unknown key '$k' (allowed: $($script:ListRowKeys -join ', '))" } }
+    [void]$sb.Append('    { ')
+    $first = $true
+    foreach ($k in $script:ListRowKeys) {
+      if (-not $r.Contains($k)) { continue }
+      if (-not $first) { [void]$sb.Append(', ') }; $first = $false
+      Write-JsonString $sb $k; [void]$sb.Append(': '); Write-JsonValue $sb $r[$k] 0
+    }
+    [void]$sb.Append(' }'); if ($i -lt $Rows.Count - 1) { [void]$sb.Append(',') }; [void]$sb.Append("`r`n")
+  }
+  [void]$sb.Append("  ]`r`n}`r`n")
+  return $sb.ToString()
+}
+function Read-RegistryList([string]$File, [string]$Key) {
+  $o = (Get-Content -LiteralPath $File -Raw) | ConvertFrom-Json -AsHashtable -Depth 8
+  return ,@(foreach ($x in @($o[$Key])) { $x })
+}
+function Add-RegistryListItem([string]$File, [string]$Key, [string]$Id, [string]$Title, [string]$Summary) {
+  $list = Read-RegistryList $File $Key
+  if (@($list | Where-Object { [string]$_['id'] -eq $Id }).Count -gt 0) { throw "$Key`: '$Id' already exists in $File" }
+  $max = 0; foreach ($x in $list) { if ([int]$x['order'] -gt $max) { $max = [int]$x['order'] } }
+  $list += [ordered]@{ id = $Id; title = $Title; order = ($max + 10); summary = $Summary }
+  [IO.File]::WriteAllText($File, (ConvertTo-RegistryListJson $Key $list), [Text.Encoding]::ASCII)
+}
+function Add-RegistryGroup { param([Parameter(Mandatory)]$Paths, [Parameter(Mandatory)][string]$Id, [Parameter(Mandatory)][string]$Title, [Parameter(Mandatory)][string]$Summary)
+  if ($Id -notmatch '^[a-z][a-z0-9-]*$') { throw "group id '$Id' must be kebab-case" }
+  Add-RegistryListItem $Paths.Groups 'groups' $Id $Title $Summary }
+function Add-RegistryTeam { param([Parameter(Mandatory)]$Paths, [Parameter(Mandatory)][string]$Id, [Parameter(Mandatory)][string]$Title, [Parameter(Mandatory)][string]$Summary)
+  if ($Id -notmatch '^[A-Z][A-Z0-9-]*$') { throw "team id '$Id' must be UPPER-CASE" }
+  Add-RegistryListItem $Paths.Teams 'teams' $Id $Title $Summary }
+
+function Get-ChildIdsIfNeeded($Paths, [System.Collections.IDictionary]$Entry, $Context) {
+  # Children are only needed when the entry refers to one; Get-LiveSurface costs ~1 s.
+  # Get-EntryList is WRAPPED: iterate it, never @(...) it (that nests the array).
+  $needs = @(foreach ($x in (Get-EntryList $Entry 'related')) { [string]$x }) + @($(if ($Entry.Contains('supersededBy')) { [string]$Entry['supersededBy'] }))
+  if (@($needs | Where-Object { $_ -like 'rule.*' -or $_ -like 'chart.*' }).Count -eq 0) { return @() }
+  $live = Get-LiveSurface -Paths $Paths
+  $kids = Get-RegistryChildren -Live $live -Entries @($Context.Entries | ForEach-Object { $_.Entry }) -Paths $Paths
+  return @($kids.Values | ForEach-Object { $_ } | ForEach-Object { [string]$_['id'] })
+}
+
+function New-FeatureEntry {
+  param([Parameter(Mandatory)]$Paths, [Parameter(Mandatory)][hashtable]$Fields, [Parameter(Mandatory)][string]$By,
+        [switch]$NewGroup, [string]$GroupTitle, [string]$GroupSummary, [switch]$NewTeam, [string]$TeamTitle, [string]$TeamSummary)
+  $id = [string]$Fields['id']
+  if (-not $id) { throw 'add: -Id is required' }
+  $file = Join-Path $Paths.Entries "$id.json"
+  if (Test-Path -LiteralPath $file) { throw "add: entry '$id' already exists ($file); use update" }
+  $ctx = Get-RegistryContext -Paths $Paths
+  $group = [string]$Fields['group']; $owner = [string]$Fields['owner']
+  if ($group -and -not $ctx.Groups.Contains($group)) {
+    if (-not $NewGroup) { throw "add: unknown group '$group' (one of: $($ctx.Groups.Keys -join ' ')); pass -NewGroup -GroupTitle <t> -GroupSummary <s> to create it" }
+    if (-not $GroupTitle -or -not $GroupSummary) { throw 'add: -NewGroup needs -GroupTitle and -GroupSummary' }
+    Add-RegistryGroup -Paths $Paths -Id $group -Title $GroupTitle -Summary $GroupSummary
+  }
+  if ($owner -and -not $ctx.Teams.Contains($owner)) {
+    if (-not $NewTeam) { throw "add: unknown owner '$owner' (one of: $(@($ctx.Teams) -join ' ')); pass -NewTeam -TeamTitle <t> -TeamSummary <s> to create it" }
+    if (-not $TeamTitle -or -not $TeamSummary) { throw 'add: -NewTeam needs -TeamTitle and -TeamSummary' }
+    Add-RegistryTeam -Paths $Paths -Id $owner -Title $TeamTitle -Summary $TeamSummary
+  }
+  $ctx = Get-RegistryContext -Paths $Paths
+  $e = [ordered]@{}
+  foreach ($k in $ctx.KeyOrder) { if ($Fields.ContainsKey($k) -and -not (Test-EmptyValue $Fields[$k])) { $e[$k] = $Fields[$k] } }
+  if (-not $e.Contains('status')) { $e['status'] = 'shipped' }
+  if (-not $e.Contains('audience')) { $e['audience'] = 'both' }
+  $build = Get-CurrentBuildVersion -Paths $Paths
+  if (-not $e.Contains('since') -and $e['status'] -ne 'planned') { $e['since'] = $build }
+  if (-not $e.Contains('lastVerified')) { $e['lastVerified'] = [ordered]@{ date = (Get-Date -Format 'yyyy-MM-dd'); by = $By; build = $build } }
+  $ctx = Get-RegistryContext -Paths $Paths -ExtraIds (Get-ChildIdsIfNeeded $Paths $e $ctx)
+  $problems = @(Test-FeatureEntry -Entry $e -Context $ctx -Stem $id)
+  if ($problems.Count) { throw ("add: entry '$id' is not valid; nothing written:`n  " + ($problems -join "`n  ")) }
+  [void](Write-FeatureEntry -Entry $e -Path $file -KeyOrder $ctx.KeyOrder)
+  return $file
+}
+
+function Update-FeatureEntry {
+  param([Parameter(Mandatory)]$Paths, [Parameter(Mandatory)][string]$Id, [Parameter(Mandatory)][hashtable]$Set)
+  $file = Join-Path $Paths.Entries "$Id.json"
+  if (-not (Test-Path -LiteralPath $file)) { throw "update: no entry '$Id' ($file)" }
+  $r = Read-FeatureEntry -Path $file
+  $e = $r.Entry
+  foreach ($k in $Set.Keys) { if ($null -eq $Set[$k] -or (Test-EmptyValue $Set[$k])) { $e.Remove($k) } else { $e[$k] = $Set[$k] } }
+  $ctx = Get-RegistryContext -Paths $Paths
+  $ctx = Get-RegistryContext -Paths $Paths -ExtraIds (Get-ChildIdsIfNeeded $Paths $e $ctx)
+  $problems = @(Test-FeatureEntry -Entry $e -Context $ctx -Stem $Id)
+  if ($problems.Count) { throw ("update: entry '$Id' would not be valid; file untouched:`n  " + ($problems -join "`n  ")) }
+  [void](Write-FeatureEntry -Entry $e -Path $file -KeyOrder $ctx.KeyOrder)
+  return $file
+}
+
+function Get-AllRegistryItems($Paths, [bool]$IncludeChildren) {
+  $ctx = Get-RegistryContext -Paths $Paths
+  $items = @($ctx.Entries | ForEach-Object { [pscustomobject]@{ Entry = $_.Entry; File = $_.Path } })
+  if ($IncludeChildren) {
+    $live = Get-LiveSurface -Paths $Paths
+    $kids = Get-RegistryChildren -Live $live -Entries @($ctx.Entries | ForEach-Object { $_.Entry }) -Paths $Paths
+    foreach ($fam in $kids.Keys) { foreach ($c in $kids[$fam]) { $items += [pscustomobject]@{ Entry = $c; File = (Join-Path $Paths.Families "$fam.json") } } }
+  }
+  return ,$items
+}
+
+function Find-FeatureEntry {
+  param([Parameter(Mandatory)]$Paths, [Parameter(Mandatory)][string]$Text, [switch]$IncludeChildren)
+  $needle = $Text.ToLowerInvariant()
+  $rows = foreach ($it in (Get-AllRegistryItems $Paths $IncludeChildren.IsPresent)) {
+    $e = $it.Entry; $hit = ''
+    foreach ($k in @('id', 'title', 'summary', 'intro', 'wikiPage', 'notes')) { if ($e.Contains($k) -and ([string]$e[$k]).ToLowerInvariant().Contains($needle)) { $hit = $k; break } }
+    if (-not $hit) { foreach ($a in (Get-EntryList $e 'aliases')) { if (([string]$a).ToLowerInvariant().Contains($needle)) { $hit = 'aliases'; break } } }
+    if (-not $hit) { foreach ($s in (Get-EntryList $e 'surfaces')) { if ((ConvertTo-CanonicalJson -Value $s).ToLowerInvariant().Contains($needle)) { $hit = 'surfaces'; break } } }
+    if ($hit) { [pscustomobject]@{ Id = [string]$e['id']; Title = [string]$e['title']; Group = [string]$e['group']; Owner = [string]$e['owner']; Status = [string]$e['status']; WikiPage = [string]$e['wikiPage']; Hit = $hit } }
+  }
+  return ,@($rows)
+}
+
+function ConvertTo-MenuKey {
+  param([Parameter(Mandatory)][string]$Path)
+  $segs = @($Path -split '\s+>\s+' | ForEach-Object { Get-CaptionKey -S $_ } | Where-Object { $_ })
+  return ($segs -join ' > ')
+}
+
+function Test-MenuNodeCovers([string]$NodeKey, [string]$PathKey) { return (($PathKey -eq $NodeKey) -or $PathKey.StartsWith($NodeKey + ' > ')) }
+
+function Get-FeatureBlastRadius {
+  param([Parameter(Mandatory)]$Paths, [string]$MenuPath, [string]$Verb, [string]$WikiPage, [string]$Group, [switch]$IncludeChildren)
+  if (-not ($MenuPath -or $Verb -or $WikiPage -or $Group)) { throw 'blast-radius: give -MenuPath, -Verb, -WikiPage or -Group' }
+  $nodeKey = if ($MenuPath) { ConvertTo-MenuKey -Path $MenuPath } else { '' }
+  $rows = foreach ($it in (Get-AllRegistryItems $Paths $IncludeChildren.IsPresent)) {
+    $e = $it.Entry
+    if ($Group -and [string]$e['group'] -ne $Group) { continue }
+    if ($WikiPage -and [string]$e['wikiPage'] -ne $WikiPage) { continue }
+    $matched = @()
+    foreach ($s in (Get-EntryList $e 'surfaces')) {
+      $t = [string]$s['type']
+      if ($nodeKey -and $t -eq 'ide-menu' -and (Test-MenuNodeCovers $nodeKey (ConvertTo-MenuKey -Path ([string]$s['path'])))) { $matched += [string]$s['path'] }
+      if ($Verb -and $t -eq 'cli' -and [string]$s['verb'] -eq $Verb) { $matched += ('cli ' + $Verb + $(if ($s.Contains('sub')) { ' ' + $s['sub'] } else { '' })) }
+    }
+    if (($nodeKey -or $Verb) -and $matched.Count -eq 0) { continue }
+    foreach ($m in @($(if ($matched.Count) { $matched } else { @('') }))) {
+      [pscustomobject]@{ Id = [string]$e['id']; Title = [string]$e['title']; Owner = [string]$e['owner']; WikiPage = [string]$e['wikiPage']; Surface = $m; File = $it.File }
+    }
+  }
+  return ,@($rows)
+}
+
+function Move-FeatureMenuPath {
+  param([Parameter(Mandatory)]$Paths, [Parameter(Mandatory)][string]$From, [Parameter(Mandatory)][string]$To, [switch]$WhatIf)
+  $fromKey = ConvertTo-MenuKey -Path $From
+  $fromCount = @($From -split '\s+>\s+').Count
+  $ctx = Get-RegistryContext -Paths $Paths
+  $rows = New-Object 'System.Collections.Generic.List[object]'
+  foreach ($r in $ctx.Entries) {
+    $changed = $false
+    foreach ($s in (Get-EntryList $r.Entry 'surfaces')) {
+      if ([string]$s['type'] -ne 'ide-menu') { continue }
+      $old = [string]$s['path']
+      if (-not (Test-MenuNodeCovers $fromKey (ConvertTo-MenuKey -Path $old))) { continue }
+      $segs = @($old -split '\s+>\s+')
+      $tail = @($segs | Select-Object -Skip $fromCount)
+      $new = (@($To) + $tail) -join ' > '
+      $rows.Add([pscustomobject]@{ Id = $r.Stem; Old = $old; New = $new; WikiPage = [string]$r.Entry['wikiPage']; File = $r.Path })
+      if (-not $WhatIf) { $s['path'] = $new; $changed = $true }
+    }
+    if ($changed) { [void](Write-FeatureEntry -Entry $r.Entry -Path $r.Path -KeyOrder $ctx.KeyOrder) }
+  }
+  $cqFile = Join-Path $Paths.Families 'chart-questions.json'
+  if (Test-Path -LiteralPath $cqFile) {
+    $cq = Read-FamilyDefinition -Path $cqFile
+    $parent = @($ctx.Entries | Where-Object { $_.Stem -ceq [string]$cq['entry'] })
+    $famPage = if ($parent.Count -eq 1 -and $parent[0].Entry.Contains('wikiPage')) { [string]$parent[0].Entry['wikiPage'] } else { 'Diagrams-and-Charts' }
+    if (-not $cq['defaults'].Contains('menuPrefix') -and (Test-MenuNodeCovers $fromKey (ConvertTo-MenuKey -Path 'drag-lint > Reports'))) {
+      throw "move-menu: $cqFile has no defaults.menuPrefix (the importer falls back to 'drag-lint > Reports'); add it before moving that node"
+    }
+    # The family file is hand-laid-out (one child per line); rewrite the
+    # menuPrefix VALUES in place -- defaults and any per-child override -- so the
+    # diff is the one value, not a re-serialised file.
+    $raw = [IO.File]::ReadAllText($cqFile)
+    $edits = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($m in [regex]::Matches($raw, '("menuPrefix"\s*:\s*)"((?:[^"\\]|\\.)*)"')) {
+      $prefix = [string]('"' + $m.Groups[2].Value + '"' | ConvertFrom-Json)
+      if (-not (Test-MenuNodeCovers $fromKey (ConvertTo-MenuKey -Path $prefix))) { continue }
+      $tail = @(@($prefix -split '\s+>\s+') | Select-Object -Skip $fromCount)
+      $new = (@($To) + $tail) -join ' > '
+      $sb = [System.Text.StringBuilder]::new(); Write-JsonString $sb $new
+      $edits.Add([pscustomobject]@{ Index = $m.Groups[2].Index - 1; Length = $m.Groups[2].Length + 2; Text = $sb.ToString() })
+      $rows.Add([pscustomobject]@{ Id = 'chart.* (family chart-questions)'; Old = $prefix + ' > <every question>'; New = $new + ' > <every question>'; WikiPage = $famPage; File = $cqFile })
+    }
+    if ($edits.Count -and -not $WhatIf) {
+      for ($i = $edits.Count - 1; $i -ge 0; $i--) { $raw = $raw.Remove($edits[$i].Index, $edits[$i].Length).Insert($edits[$i].Index, $edits[$i].Text) }
+      [IO.File]::WriteAllText($cqFile, $raw, [Text.Encoding]::ASCII)
+    }
+  }
+  if ($rows.Count -eq 0) { throw "move-menu: no ide-menu surface sits at or under '$From' (compared after caption normalisation); nothing changed" }
+  # .ToArray(), not @(): @() over a List[object] throws 'Argument types do not match' on pwsh 7.6.
+  return ,$rows.ToArray()
+}
+
+function Set-FeatureDeprecated {
+  param([Parameter(Mandatory)]$Paths, [Parameter(Mandatory)][string]$Id, [string]$SupersededBy, [string]$RemovedIn)
+  $set = @{ status = 'deprecated' }
+  if ($SupersededBy) { $set['supersededBy'] = $SupersededBy }
+  if ($RemovedIn) { $set['removedIn'] = $RemovedIn }
+  return (Update-FeatureEntry -Paths $Paths -Id $Id -Set $set)
+}
+
+function Invoke-RegistryNormalise {
+  param([Parameter(Mandatory)]$Paths)
+  $ctx = Get-RegistryContext -Paths $Paths
+  $changed = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($r in $ctx.Entries) { if (Write-FeatureEntry -Entry $r.Entry -Path $r.Path -KeyOrder $ctx.KeyOrder) { $changed.Add($r.Path) } }
+  # groups.json / teams.json have a canonical row layout (spec 5.3). The other
+  # data files are hand-laid-out tables (families: one child per line), so they
+  # are normalised at the BYTE level only -- CRLF, trailing newline, no BOM --
+  # never re-serialised; non-ASCII is refused, not rewritten.
+  foreach ($lf in @(@($Paths.Groups, 'groups'), @($Paths.Teams, 'teams'))) {
+    $text = ConvertTo-RegistryListJson $lf[1] (Read-RegistryList $lf[0] $lf[1])
+    if ([Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($lf[0])) -cne $text) { [IO.File]::WriteAllText($lf[0], $text, [Text.Encoding]::ASCII); $changed.Add($lf[0]) }
+  }
+  foreach ($f in @($Paths.Exemptions, $Paths.RelatedProjects) + @(Get-ChildItem -LiteralPath $Paths.Families -Filter '*.json' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })) {
+    if (-not (Test-Path -LiteralPath $f)) { continue }
+    $b = [IO.File]::ReadAllBytes($f)
+    $start = if ($b.Length -ge 3 -and $b[0] -eq 0xEF -and $b[1] -eq 0xBB -and $b[2] -eq 0xBF) { 3 } else { 0 }
+    for ($i = $start; $i -lt $b.Length; $i++) { if ($b[$i] -gt 127) { throw ("normalise: {0}: non-ASCII byte 0x{1:X2} at byte {2}; fix it by hand" -f $f, $b[$i], $i) } }
+    $text = [Text.Encoding]::ASCII.GetString($b, $start, $b.Length - $start)
+    $text = ($text -replace "`r`n", "`n") -replace "`n", "`r`n"
+    if (-not $text.EndsWith("`r`n")) { $text += "`r`n" }
+    if ([Text.Encoding]::ASCII.GetString($b) -cne $text) { [IO.File]::WriteAllText($f, $text, [Text.Encoding]::ASCII); $changed.Add($f) }
+  }
+  return ,[string[]]$changed.ToArray()
+}
+
+function Invoke-RegistryCheck {
+  param([Parameter(Mandatory)]$Paths, [ValidateSet('WellFormed', 'Full')][string]$Level = 'Full')
+  $fail = New-Object 'System.Collections.Generic.List[string]'
+  $notes = New-Object 'System.Collections.Generic.List[string]'
+  $stats = [ordered]@{}
+  # ---- A. well-formed ------------------------------------------------------
+  if (-not (Test-Path -LiteralPath $Paths.Entries)) { $fail.Add("A: $($Paths.Entries) does not exist") }
+  $ctx = $null
+  try { $ctx = Get-RegistryContext -Paths $Paths } catch { $fail.Add("A: cannot load the registry: $($_.Exception.Message)") }
+  if ($null -ne $ctx) {
+    # Non-empty groups are a Full-level property (Task 7): a scratch registry with
+    # three entries is well-formed, it is just not complete.
+    foreach ($pr in (Test-GroupsAndTeams -Context $ctx -RequireNonEmptyGroups:($Level -eq 'Full'))) { $fail.Add("A: $pr") }
+    # Not $home: $HOME is a read-only automatic variable and the assignment throws.
+    $homeSeen = @{}
+    foreach ($r in $ctx.Entries) {
+      foreach ($pr in @(Test-FeatureEntry -Entry $r.Entry -Context $ctx -Stem $r.Stem)) { $fail.Add("A: $pr") }
+      $canon = Test-EntryCanonicalBytes -Read $r -KeyOrder $ctx.KeyOrder; if ($canon) { $fail.Add("A: $canon") }
+      if ($r.Entry.Contains('homeOrder')) { $ho = [int]$r.Entry['homeOrder']; if ($homeSeen.ContainsKey($ho)) { $fail.Add("A: $($r.Stem).json: homeOrder $ho is also used by $($homeSeen[$ho])") } else { $homeSeen[$ho] = $r.Stem } }
+    }
+    foreach ($f in @(Get-ChildItem -LiteralPath $Paths.Templates -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) + @($Paths.RelatedProjects, $Paths.Exemptions, $Paths.Groups, $Paths.Teams) + @(Get-ChildItem -LiteralPath $Paths.Families -Filter '*.json' -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })) {
+      if (Test-Path -LiteralPath $f) { $asc = Test-AsciiCrlfFile -Path $f; if ($asc) { $fail.Add("A: $asc") } }
+    }
+    foreach ($f in (Get-ChildItem -LiteralPath $Paths.Families -Filter '*.json' -File -ErrorAction SilentlyContinue)) { try { [void](Read-FamilyDefinition -Path $f.FullName) } catch { $fail.Add("A: $($_.Exception.Message)") } }
+    $stats['entries'] = $ctx.Entries.Count
+    foreach ($g in $ctx.Groups.Keys) { $stats["group:$g"] = @($ctx.Entries | Where-Object { [string]$_.Entry['group'] -eq $g }).Count }
+  }
+  if ($Level -eq 'Full') { throw 'Invoke-RegistryCheck -Level Full is implemented in Task 7 (checks B-E)' }
+  return [pscustomobject]@{ Failures = $fail; Notes = $notes; Stats = $stats }
+}
+
+Export-ModuleMember -Function Get-RegistryPaths, ConvertTo-OrderedObject, ConvertTo-CanonicalJson, Get-EntryKeyOrder, ConvertTo-CanonicalEntry, Get-EntryList, Test-AsciiCrlfFile, Read-FeatureEntry, Write-FeatureEntry, Test-EntryCanonicalBytes, Get-RegistryContext, Get-NearestCandidates, Test-FeatureEntry, Test-GroupsAndTeams, Get-LiveSurface, Read-FamilyDefinition, Import-LintRuleFamily, Import-ChartQuestionFamily, Get-RegistryChildren,
+  ConvertFrom-SurfaceSpec, Get-CurrentBuildVersion, Add-RegistryGroup, Add-RegistryTeam, New-FeatureEntry, Update-FeatureEntry, Find-FeatureEntry, ConvertTo-MenuKey, Get-FeatureBlastRadius, Move-FeatureMenuPath, Set-FeatureDeprecated, Invoke-RegistryNormalise, Invoke-RegistryCheck
