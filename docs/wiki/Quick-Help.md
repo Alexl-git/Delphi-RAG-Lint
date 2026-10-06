@@ -202,6 +202,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Allow this message: host 'Structure form' (the caption is verified, the host is declared)
 * Charts and the IDE: procedure docs\wiki\Charts-and-the-IDE.md
 * Circular Dependency Report (worked example): procedure docs\wiki\Circular-Dependency-Report.md
+* ConvRulesEditor: menu 'Convert tab (--convert-request <file>; the IDE plugin probes --write-capabilities <file>)' inside ConvRulesEditor.exe
 * Copy All Diagnostics: host 'Structure form' (the caption is verified, the host is declared)
 * Create helper class: host 'Structure form' (the caption is verified, the host is declared)
 * Document it: host 'Structure form' (the caption is verified, the host is declared)
