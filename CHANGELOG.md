@@ -3,6 +3,24 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.25.0-alpha -- unreleased
+
+No extractor or resolver change on top of 1.24.0: indexes do not re-parse.
+
+### Added
+
+- **`convert-apply` descendant warnings.** Converting an ANCESTOR leaves every descendant
+  `.dfm` saying `inherited X: TOld` (load fails: `EClassNotFound` / `EReadError`) and its
+  code untouched. For each converted instance the run now lists every descendant unit -- a
+  class descending from the unit's root class at any level, or a form hosting it `inline`
+  -- whose `.dfm` re-opens it or whose code references it: text
+  `line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next
+  (needs C8 N2)` (N = the object line in the ancestor `.dfm`); `apply/1` `descendants[]`
+  `{unit, name, type, line, reason}` (`reason` `dfm`/`code`/`both`), `items[]` kind
+  `descendant-not-converted`; `--only` filters it; per unit in batch mode. A warning, never
+  a refusal; only descendants in the `--db` index are seen. `info --json`
+  `capabilities.descendant_warnings`. Guard: `run_convert_apply_descendants.ps1`.
+
 ## v1.24.0-alpha -- unreleased
 
 No extractor change: indexes do not re-parse. **Resolver 1.11.0 -> 1.12.0-alpha**: the next

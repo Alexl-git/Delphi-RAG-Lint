@@ -761,6 +761,32 @@ R26 (see *Refusals*) still counts every such instance as left unconverted. `info
 advertises the behaviour as `capabilities.inherited_instances: true`; an engine
 without the key still refuses the unit.
 
+**Descendant warnings** (1.25.0). Converting an ANCESTOR does not touch its
+descendants: each descendant `.dfm` still says `inherited X: TOld`, and VCL
+streaming then fails at load (`EClassNotFound`, or `EReadError` on an
+overridden property the To type lacks); descendant code using From-only
+members no longer compiles. Until C8 N2 retypes them, `convert-apply` SAYS so.
+For every instance the run converts it lists each descendant unit -- a class
+descending from the unit's root class at any level (the index's
+`type_ancestors`), or a form hosting that class as an `inline` frame -- whose
+`.dfm` re-opens the instance (`inherited` / `inline`, still the From type) or
+whose code references the field (a method of a descendant class):
+
+```
+line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)
+```
+
+N is the line of the instance's `object` block in the converted (ancestor)
+`.dfm`. JSON: that string in `warnings[]`, `items[]` kind
+`descendant-not-converted`, and `descendants[]` (always present)
+`{unit, name, type, line, reason}` -- `line` is the descendant `.dfm`'s
+block, or its first code reference when the `.dfm` does not re-open it;
+`reason` is `dfm`, `code` or `both`. `--only` filters it; in batch mode each
+unit's `apply/1` carries its own. It is a WARNING: the unit is never refused
+because of it, and descendants are not edited. LIMIT: a descendant outside the
+`--db` set cannot be seen -- the list covers the project index only.
+`info --json`: `capabilities.descendant_warnings: true`.
+
 `convert-apply` locates every `.dfm` component instance whose class matches a
 `#convert FromType` rule, then rewrites all **5 conversion surfaces** for each:
 
