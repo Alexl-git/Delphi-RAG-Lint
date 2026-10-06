@@ -5,8 +5,32 @@ breaking changes** until v1.0.
 
 ## v1.22.0-alpha -- unreleased
 
+No extractor change: indexes do not re-parse.
+
+### Changed
+
+- **`convert-apply` no longer refuses a unit with inherited / inline instances (C8 N1, N3).**
+  An `inherited` / `inline` `.dfm` object of a From type is declared by an ancestor, so it is
+  SKIPPED -- its `.dfm` lines untouched -- while the unit's own instances, code and unit rules
+  convert. Each is reported as `line N: warning: inherited instance <Name>: <Type> skipped --
+  <reason>`, and in apply/1 as `warnings[]` text, an `items[]` entry of the new kind
+  `inherited-instance-skipped` and an object in the new, always-present `inherited[]`:
+  `{name, type, line, ancestor_unit, ancestor_state, reason}`. The declaring ancestor is the
+  nearest class of the owner's ancestor chain (the root class, or an enclosing `inline` frame's
+  class) whose `.dfm` opens the component with `object`; `ancestor_state` is `unconverted`,
+  `converted` (still skipped: retyping is N2), `mismatched` (a third type, named in `reason`)
+  or `outside` (not determinable: in no `--db`, or an ancestor `.dfm` on the way is missing
+  or binary, which stops the walk; `ancestor_unit` `""`; never guessed). `--only` filters
+  `inherited[]` too.
+  R26 counts these instances as left unconverted. A `.dfm` whose only From-type instances are
+  inherited reports `component_part: skipped-no-instances` and exits 0. Ruling R6's
+  `inherited instances of <T> are not converted yet -- unit not changed` is gone.
+  Guard: `run_convert_apply_inherited.ps1`; `run_convert_apply_multiblock.ps1` arm I updated.
+
 ### Added
 
+- **`info --json` `capabilities.inherited_instances: true` (C8 N5)**, so the converter editor
+  can tell this engine from one that still refuses.
 - **Feature registry.** `features\entries\*.json` (one file per feature, canonical form) plus the
   imported `lint-rules` and `chart-questions` families are the master list of everything drag-lint
   ships. `tools\feature-registry.ps1` (add / update / find / blast-radius / move-menu / deprecate /

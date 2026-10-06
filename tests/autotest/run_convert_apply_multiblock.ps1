@@ -42,8 +42,9 @@
        against both (errors carry each block's suffix).
     C  minor 5: two blocks sharing a type resolve it ONCE, and the plan reuses
        validation's cache -- apply/1 classes_built = distinct classes (3).
-    I  R6: a .dfm holding an INHERITED object of a From type refuses the unit
-       whole (unit rules too): exit 1, the reason, both files byte-identical.
+    I  a .dfm holding an INHERITED object of a From type is no longer refused
+       (1.22.0, C8 N1 -- ruling R6 retired): the object is skipped and listed
+       in inherited[], the unit rules run, the .dfm is byte-identical.
 
   Fixture: LibAB, LibCD, LibG, MyForm + .dfm, InhForm + .dfm and Plain written fresh under a
   $PID scratch folder and indexed into a scratch --db there. Nothing shared is
@@ -467,29 +468,23 @@ Check 'C2 classes_built = 3 (TSrcA, TSrcE, TDstB once) across validation AND pla
   (($null -ne $j) -and ($j.classes_built -eq 3)) "classes_built=$(if ($j) { $j.classes_built } else { '<no json>' })"
 Check 'C3 both instances converted' (($null -ne $j) -and (@($j.converted).Count -eq 2)) ($j.converted | ConvertTo-Json -Compress)
 
-# ---- I: R6 -- an inherited object of a From type refuses the unit ---------
-$hp = (Get-FileHash (P 'InhForm.pas')).Hash
+# ---- I: an inherited object of a From type no longer refuses the unit -----
+# 1.22.0 (C8 N1) retired ruling R6's refusal: the inherited btn1 is SKIPPED and
+# reported (apply/1 inherited[]), the unit's other parts still run. The full
+# contract is pinned by run_convert_apply_inherited.ps1; this arm keeps the
+# old fixture honest about the change.
 $hd = (Get-FileHash (P 'InhForm.dfm')).Hash
-$R6 = 'inherited instances of TSrcA are not converted yet -- unit not changed'
-$r = ApplyTo 'InhForm.pas' 'inh.rules' @('--apply', '--no-backup')
-# T2f: a deliberate refusal prints ONE 'REFUSED: <reason>' line, not 'ERROR:'.
-Check 'I1 --apply refuses: exit 1, one "REFUSED: <R6 reason>" line, no ERROR: line' `
-  (($r.Code -eq 1) -and (@($r.Out -split "`n" | Where-Object { $_ -match '^REFUSED: ' }).Count -eq 1) -and `
-   ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape($R6) + '\r?$')) -and -not ($r.Out -match '(?m)^ERROR:')) $r.Out
-Check 'I2 InhForm.pas and InhForm.dfm are byte-identical (the #unuse did not run)' `
-  (((Get-FileHash (P 'InhForm.pas')).Hash -eq $hp) -and ((Get-FileHash (P 'InhForm.dfm')).Hash -eq $hd))
 $r = ApplyTo 'InhForm.pas' 'inh.rules' @('--format', 'json')
 $j = Json $r.Out
-Check 'I3 json: ok=false, error names the inherited type' `
-  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.error -eq $R6)) $r.Out
-# T2f: apply/1 refused (JSON bool, always emitted) + reason (the text line's reason).
-Check 'I4 json: refused is the JSON literal true and reason equals the R6 text' `
-  (($null -ne $j) -and ($j.refused -is [bool]) -and ($j.refused -eq $true) -and ($j.reason -eq $R6)) ($j | ConvertTo-Json -Compress -Depth 3)
-$r = ApplyTo 'InhForm.pas' 'inh.rules' @('--apply', '--no-backup', '--format', 'json')
-$j = Json $r.Out
-Check 'I5 json --apply: exit 1, ok=false, refused=true, both files byte-identical' `
-  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.refused -eq $true) -and ($j.reason -eq $R6) -and `
-   ((Get-FileHash (P 'InhForm.pas')).Hash -eq $hp) -and ((Get-FileHash (P 'InhForm.dfm')).Hash -eq $hd)) $r.Out
+Check 'I1 json dry run: exit 0, ok=true, refused=false, no R6 text' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and ($j.refused -eq $false) -and -not ($r.Out -match 'are not converted yet')) $r.Out
+Check 'I2 json: inherited[] reports btn1 (TSrcA) declared in MyForm, unconverted' `
+  (($null -ne $j) -and (@($j.inherited).Count -eq 1) -and (@($j.inherited)[0].name -eq 'btn1') -and `
+   (@($j.inherited)[0].ancestor_unit -eq 'MyForm') -and (@($j.inherited)[0].ancestor_state -eq 'unconverted')) ($j.inherited | ConvertTo-Json -Compress)
+$r = ApplyTo 'InhForm.pas' 'inh.rules' @('--apply', '--no-backup')
+Check 'I3 --apply: exit 0, no REFUSED line; the #unuse Classes ran (Classes gone from InhForm.pas)' `
+  (($r.Code -eq 0) -and -not ($r.Out -match '(?m)^REFUSED') -and -not ([IO.File]::ReadAllText((P 'InhForm.pas')) -match '\bClasses\b')) $r.Out
+Check 'I4 InhForm.dfm is byte-identical (the inherited block is not touched)' ((Get-FileHash (P 'InhForm.dfm')).Hash -eq $hd)
 # Controls: a genuine failure and a success are NOT refusals.
 $r = Apply 'bare.rules' @('--format', 'json')
 $j = Json $r.Out
