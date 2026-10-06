@@ -8607,6 +8607,10 @@ const
   MID_DFM  = 'inherited MidDM: TMidDM' + sLineBreak + '  inherited tblOps: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
   BARE_LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  Height = 200' + sLineBreak + 'end' + sLineBreak;
   BLOCK_LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  NONFROM_LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TFDTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  CONV_BASE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TFDTable' + sLineBreak + '  end' + sLineBreak +
+    '  object tblOps: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BINARY_DFM = BINARY_DFM_SIGNATURE + 'binary';
   LINE_FIRST = 40;
   DEPTH_BASE = 2;
   CHAIN_OPS  = 2;
@@ -8615,6 +8619,8 @@ var
   Pairs : TArray<TTypePair>;
   Rows  : TArray<string>;
   Reader: TDfmTextReader;
+  Inner : TDfmTextReader;
+  Reads : Integer;
   U     : TUnitInheritance;
   P     : TTypePair;
 
@@ -8632,7 +8638,8 @@ begin
   P.FromType:= 'TTable';
   P.ToType  := 'TFDTable';
   Pairs:= [P];
-  Rows := ['TLeafDM|' + LEAF_PAS + '|TMidDM|qryOwn:TTable', 'TMidDM|' + MID_PAS + '|TBaseDM', 'TBaseDM|' + BASE_PAS + '|TDataModule|tblFtrs:TTable,tblOps:TTable'];
+  // Base also lists qryOwn, so only the own-class skip (not "no ancestor declares it") drops the leaf's qryOwn use.
+  Rows := ['TLeafDM|' + LEAF_PAS + '|TMidDM|qryOwn:TTable', 'TMidDM|' + MID_PAS + '|TBaseDM', 'TBaseDM|' + BASE_PAS + '|TDataModule|tblFtrs:TTable,tblOps:TTable,qryOwn:TTable'];
   Reader:= FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, MID_DFM, BASE_DFM]);
 
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader,
@@ -8665,6 +8672,44 @@ begin
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|' + MID_PAS + '|TBaseDM',
     'TBaseDM|' + BASE_PAS + '|TDataModule|tblFtrs:TFDTable'], nil), Reader, FakeCodeUses(['IndexName|tblFtrs|41'], False));
   Check('code.use.converted.dropped', U.Known and (Length(U.Verdicts) = 0), Format('n=%d %s', [Length(U.Verdicts), U.Error]));
+  // The PRODUCT shape of a converted ancestor: the filtered Fields omit tblFtrs (now a
+  // TFDTable) while Base.dfm still opens it with the To type -- no inherited use left.
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|' + MID_PAS + '|TBaseDM',
+    'TBaseDM|' + BASE_PAS + '|TDataModule|tblOps:TTable'], nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, MID_DFM, CONV_BASE_DFM]), FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.converted.product.shape', U.Known and (Length(U.Verdicts) = 0), Format('n=%d %s', [Length(U.Verdicts), U.Error]));
+
+  // An unusable (binary) ancestor .dfm: a name no ancestor declares is still decided from
+  // Fields alone (Known); a declared name needs that .dfm for its chain (unknown).
+  Reader:= FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, BINARY_DFM, BASE_DFM]);
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses(['Caption|lblNoSuch|60', 'ShowMessage||61'], False));
+  Check('code.use.binary.dfm.nonfield.known', U.Known and (Length(U.Verdicts) = 0), Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.binary.dfm.field.unknown', not U.Known and (Pos('Mid.dfm', U.Error) > 0) and (Length(U.Verdicts) = 0), U.Error);
+
+  // One AnalyzeUnit reads each ancestor .dfm once, however many names walk past it.
+  Inner:= FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, MID_DFM, BASE_DFM]);
+  Reads:= 0;
+  Reader:= function(const APath: string; out AText: string): TDfmRead
+    begin
+      if SameText(APath, 'fx\Base.dfm') then
+        Inc(Reads);
+      Result:= Inner(APath, AText);
+    end;
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses(['IndexName|tblFtrs|41', 'Post|tblOps|50'], False));
+  Check('code.use.dfm.read.once', (Length(U.Verdicts) = N_USES) and (Reads = 1), Format('n=%d reads=%d', [Length(U.Verdicts), Reads]));
+
+  // A leaf .dfm block with a NON-From type is no verdict; the code use then counts from
+  // the ancestor's From-typed field.
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [NONFROM_LEAF_DFM, MID_DFM, BASE_DFM]), FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.leaf.block.nonfrom', U.Known and (Length(U.Verdicts) = 1) and U.Verdicts[0].Instance.FromCode and (U.Verdicts[0].DeclaringUnit = 'Base'),
+    Format('n=%d %s', [Length(U.Verdicts), U.Error]));
+
+  // Names match case-insensitively, against Fields and between uses (first line kept).
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Inner, FakeCodeUses(['IndexName|TBLFTRS|45', 'tblftrs||40'], False));
+  Check('code.use.case.insensitive', (Length(U.Verdicts) = 1) and (U.Verdicts[0].DeclaringUnit = 'Base') and (U.Verdicts[0].Instance.Line = LINE_FIRST),
+    Format('n=%d %s', [Length(U.Verdicts), U.Error]));
 end;
 
 { C8 E2 / E3 / E8: the ancestor walk over a fake index. The fixture mirrors the

@@ -93,8 +93,10 @@ type
     PasPath    : string;
     /// <summary>The class's first ancestor as written ('TDataModule'); '' when none.</summary>
     ParentClass: string;
-    /// <summary>The From-typed fields the class ITSELF declares (not inherited ones);
-    /// what an E2b code use is matched against.</summary>
+    /// <summary>The fields the editor passes: only the From-typed fields the class
+    /// ITSELF declares (not inherited ones) -- TEngineAdapter.ListClassFields filters by
+    /// the checked books' From types. What an E2b code use is matched against; a
+    /// converted ancestor's field (now the To type) is therefore absent.</summary>
     Fields     : TArray<TFieldDecl>;
   end;
 
@@ -253,9 +255,15 @@ function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: str
 /// walk as an instance; its Chain follows E2a (every ancestor whose .dfm opens it with a
 /// From type, plus the declaring unit). Dropped, not reported: a name the .dfm already
 /// reported, a field of the unit's own class, a name no project ancestor declares, and
-/// a field whose declared type is not a From type (a converted ancestor, E11). A code-use
-/// walk that cannot decide (asUnknown), or ACodeUses answering False, makes the unit
-/// Known = False with Error, like an instance.</remarks>
+/// a field whose declared type is not a From type (a converted ancestor, E11: absent
+/// from the filtered Fields, so its name leaves the index unmatched). Whether an ancestor
+/// declares the name is decided from Fields alone, before any .dfm is read, so a name no
+/// ancestor declares is never unknown; only for a declared name is the chain walked again
+/// reading .dfm files (each read once per call). A code-use walk that cannot decide
+/// (asUnknown), or ACodeUses answering False, makes the unit Known = False with Error,
+/// like an instance. Accepted gap: a closer ancestor redeclaring the name with a
+/// non-From type (shadowing) is not in the filtered Fields, so the walk goes on to a
+/// further ancestor's From-typed field of that name and counts it.</remarks>
 function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader; const ACodeUses: TCodeUseLookup = nil): TUnitInheritance;  // dl:ok unused-public-symbol@af24 -- REVIEWED 2026-10-05 called by the model tests (inherit.walk.*, code.use.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
 
 /// <summary>PURE: the spec E8 note for one asOutside verdict.</summary>
@@ -337,11 +345,20 @@ type
   // What every step of one walk reads. Inst.FromCode selects the E2b rule: the
   // declaration is a TClassInfo.Fields entry, and a .dfm joins the chain when it opens
   // the name with any From type of Pairs (an instance's own type is not known yet).
+  // FieldsOnly (code uses only) skips every .dfm: the walk then decides from
+  // TClassInfo.Fields alone whether any ancestor declares the name.
   TWalkCtx = record
-    Inst  : TInheritedInstance;
-    Lookup: TClassLookup;
-    Reader: TDfmTextReader;
-    Pairs : TArray<TTypePair>;
+    Inst      : TInheritedInstance;
+    Lookup    : TClassLookup;
+    Reader    : TDfmTextReader;
+    Pairs     : TArray<TTypePair>;
+    FieldsOnly: Boolean;
+  end;
+
+  // One TDfmTextReader answer, kept by CachingReader.
+  TCachedDfm = record
+    Read: TDfmRead;
+    Text: string;
   end;
 
   // One declaring unit and how many verdicts name it (TallyByUnit).
@@ -655,6 +672,7 @@ var
   ObjType: string;
   FldType: string;
   Same   : Boolean;
+  Match  : TDfmMatch;
 begin
   AParent:= '';
   AReason:= '';
@@ -667,7 +685,8 @@ begin
   end;
   if not Info.Found then
     Exit(weLeftIndex);
-  case DfmMatch(Info.PasPath, ACtx.Inst.Name, ACtx.Reader, Opener, ObjType) of
+  Match:= if ACtx.FieldsOnly then dmNoDfm else DfmMatch(Info.PasPath, ACtx.Inst.Name, ACtx.Reader, Opener, ObjType);
+  case Match of
     dmUnusable:
     begin
       AReason:= Format(REASON_DFM, [AClass, ChangeFileExt(Info.PasPath, DFM_EXT)]);
@@ -803,7 +822,11 @@ end;
 
 // E2b: the verdict on one code use, walked from AStartClass (the unit's own class's
 // parent) with ResolveWalk. asUnconverted = an inherited use; asUnknown = the walk could
-// not decide; asConverted / asOutside = not an inherited use.
+// not decide; asConverted / asOutside = not an inherited use. Two passes over the same
+// walk: Fields only first (most code uses -- methods, properties, RTL calls -- are no
+// ancestor's field, and that is decidable without reading any .dfm, so an unusable
+// ancestor .dfm cannot make them unknown); the .dfm-reading pass, which builds the E2a
+// Chain, runs only for a name an ancestor declares.
 function ResolveCodeUse(const AUse: TCodeUse; const AStartClass: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup;
   const AReader: TDfmTextReader): TInstanceVerdict;
 var
@@ -814,10 +837,33 @@ begin
   LCtx.Inst.Line    := AUse.Line;
   LCtx.Inst.Opener  := doInherited;
   LCtx.Inst.FromCode:= True;
-  LCtx.Lookup:= ALookup;
-  LCtx.Reader:= AReader;
-  LCtx.Pairs := APairs;
+  LCtx.Lookup    := ALookup;
+  LCtx.Reader    := AReader;
+  LCtx.Pairs     := APairs;
+  LCtx.FieldsOnly:= True;
   Result:= ResolveWalk(LCtx, AStartClass);
+  if Result.State <> asUnconverted then
+    Exit;
+  LCtx.FieldsOnly:= False;
+  Result:= ResolveWalk(LCtx, AStartClass);
+end;
+
+// AInner with a per-call cache (key: the upper-cased path), so one AnalyzeUnit reads
+// each ancestor .dfm once however many names it walks. ACache is owned by the caller.
+function CachingReader(const AInner: TDfmTextReader; ACache: TDictionary<string, TCachedDfm>): TDfmTextReader;
+begin
+  Result:= function(const APath: string; out AText: string): TDfmRead
+    var
+      LEntry: TCachedDfm;
+    begin
+      if not ACache.TryGetValue(UpperCase(APath), LEntry) then
+      begin
+        LEntry.Read:= AInner(APath, LEntry.Text);
+        ACache.Add(UpperCase(APath), LEntry);
+      end;
+      AText := LEntry.Text;
+      Result:= LEntry.Read;
+    end;
 end;
 
 function CodeUseName(const AName, AReceiver: string): string;
@@ -896,7 +942,8 @@ begin
   Result:= True;
 end;
 
-function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader;
+// AnalyzeUnit's body; AReader is already the per-call caching reader.
+function AnalyzeWith(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader;
   const ACodeUses: TCodeUseLookup): TUnitInheritance;
 var
   LText   : string;
@@ -947,6 +994,19 @@ begin
   Result.Known:= not Assigned(ACodeUses) or AddCodeUses(Result, LOwn, LScan.RootClass, APairs, ALookup, AReader, ACodeUses);
   if not Result.Known then
     Result.Verdicts:= nil; // AddCodeUses set Error: unknown, never a partial answer
+end;
+
+function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader;
+  const ACodeUses: TCodeUseLookup): TUnitInheritance;
+var
+  LCache: TDictionary<string, TCachedDfm>;
+begin
+  LCache:= TDictionary<string, TCachedDfm>.Create;
+  try
+    Result:= AnalyzeWith(AUnitPas, APairs, ALookup, CachingReader(AReader, LCache), ACodeUses);
+  finally
+    LCache.Free;
+  end; // try
 end;
 
 // Per declaring unit, in first-seen order, how many of AVerdicts AWanted accepts.
