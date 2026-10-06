@@ -1,0 +1,18 @@
+{
+  "id": "query-descendants",
+  "title": "query descendants",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases",
+  "wikiPage": "query-descendants",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "sub": "descendants"
+    }
+  ],
+  "audience": "both"
+}

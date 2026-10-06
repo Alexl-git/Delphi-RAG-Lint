@@ -1,0 +1,18 @@
+{
+  "id": "find-unit",
+  "title": "find-unit",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.69.0-alpha",
+  "summary": "Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause",
+  "wikiPage": "find-unit",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "find-unit"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

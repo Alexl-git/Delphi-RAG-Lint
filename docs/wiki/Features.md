@@ -14,82 +14,11 @@ Structure form** -- see [Fix it](Fix-it), [Fix all in unit](Fix-all-in-unit),
 [Allow this message](Allow-this-message). There is also a Project Manager
 right-click item, [drag-lint: Project Rules...](drag-lint-Project-Rules).
 
----
+## Notes carried over from the hand-written page
 
-## Indexing
+These were prose on the hand-written Features page and have no registry field. Each belongs on the page that owns its topic; move it there and delete it here.
 
-The foundation. Everything below that says *(index)* reads what this produces.
-
-| Feature | Command |
-|---|---|
-| Index a folder tree | `index <path>` |
-| Index a project's **compile closure** -- members, transitively used units, sibling `.dfm`, `{$I}` includes | `index --project <file.dproj>` |
-| Index the Delphi **Library + Browsing paths** for a platform | `index --scan-libraries-win`, `--scan-libraries-all` |
-| Index everything in the manifest, optionally one section | `index --all [--only <Sections>]` |
-| Incremental (default) vs full rebuild | `--recompile` / `--rebuild` |
-| Re-parse everything after an engine upgrade | `--force-reparse` |
-| Prune + evict files that left the disk or the scope | automatic; `--no-prune` for a dry look |
-| Watch mode | `--watch [--interval N]` |
-| Parallel walking | `--jobs <n>` |
-| Cross-index resolution -- consult another index for calls this one cannot resolve | `--library-db <lib.sqlite>` |
-| Per-file resume -- an interrupted walk continues where it stopped | automatic |
-| Preprocessing -- per-config `{$IFDEF}` resolution before parsing | on by default; `--no-preprocess` |
-| Show which databases a target resolves to | `resolve-dbs` |
-| Add a NEW project to the manifest so `index --all` and the IDE can see it | `register-project <file.dproj>` (dry run without `--apply`) |
-| Re-derive call edges, ancestry, enum-value bindings and purity verdicts from the stored parses, without re-parsing | `index --all --resolve-only` |
-| Define profile per project/platform/config -- `Base`, `Base_<Platform>`, `Cfg_N`, `Cfg_N_<Platform>` read in MSBuild order, so a define set only per platform (EurekaLog is the common one) is honoured | automatic; inspect with [`pp-profile`](pp-profile) |
-| Schema inspection / migration | [`schema`](schema), [`migrate-dbs`](migrate-dbs) |
-
-## Search and navigation *(index)*
-
-| Feature | Command |
-|---|---|
-| Find a symbol by name or qualified name | `query --name` / `--qname` |
-| **Text search over string literals** -- string constants, resourcestrings, DFM captions, SQL exception messages | `query --text "<phrase>"` |
-| Who calls this -- and, with `--resolved`, who reads/writes a property or field and who reads an **enum value** (`[certain, read]`) | [`query find-callers`](query-find-callers) (`--resolved` for precise call edges and bound accesses) |
-| What does this call | [`find-callees`](find-callees) |
-| Class / interface ancestry, transitively | [`query ancestors`](query-ancestors) |
-| Resolve a type category (class, interface, float, string, ...) | [`query typecat`](query-typecat) |
-| Does this file reference any of these type names? | [`query type-usage`](query-type-usage) |
-| Does this file reference anything this unit exports? | [`query unit-usage`](query-unit-usage) |
-| Type of the expression at a cursor position | `typeat <file>:<line>:<col>` |
-| Find by documentation state | `query find --doc-tag / --no-docs` |
-| Class helpers of a type | [`helpers-of`](helpers-of) |
-| Shortest call path between two symbols | `call-path --from --to` |
-| Symbol slice, class surface, context bundle | `slice`, `surface`, [`context`](context) |
-| Hover card | `hover` |
-| Which unit declares this symbol (and add it to `uses`) | [`find-unit`](find-unit) |
-| Route a human word ("the scheduler") to the code that owns it, via `dl:wiki` topics in doc comments | [`wiki`](wiki) |
-| A forward declaration (`TFoo = class;`) is folded into the real class wherever a name is looked up -- one `query` row, hover on the real declaration, `outline` tags the stub `[forward -> line N]` | automatic |
-
-## Linting
-
-**189 rules. 23 have an auto-fix. 159 are on by default.**
-136 are built-in checks; 53 are external tree-sitter `.scm` rules you can read
-and extend in `rules\`.
-
-Run `drag-lint rules` for the always-current catalogue, or
-`drag-lint rules --category <name>`.
-
-| Category | Rules | With auto-fix |
-|---|---:|---:|
-| bug-patterns | 54 | 6 |
-| dead-code | 12 | 6 |
-| complexity | 11 | - |
-| refactoring | 11 | - |
-| naming | 10 | 8 |
-| platform | 10 | - |
-| project-wide | 20 | - |
-| security | 10 | - |
-| data-flow | 9 | - |
-| metrics | 8 | - |
-| resource-lifetime | 8 | 1 |
-| structure | 7 | - |
-| other | 6 | - |
-| documentation | 5 | 2 |
-| firedac | 3 | - |
-| review-markers | 5 | - |
-| **Total** | **189** | **23** |
+### Linting
 
 **Newest -- the coupling rules.** `global-only-uses-edge` (a global variable is
 the only reason unit A depends on unit B, so relocating it deletes the `uses`
@@ -98,19 +27,6 @@ edge), `uses-global-census` (how heavy that edge is), `duplicate-global-decl`
 compiles), `with-hides-outer-symbol` and `stat-gated-destructive`. The first
 three are `project-wide` and therefore only reachable through `lint-all` --
 `lint <path>` is a genuine subset and never runs them.
-
-Scopes:
-
-| Feature | Command |
-|---|---|
-| One file (no index needed) | `lint <path>` |
-| A whole project -- adds project-wide rules, class metrics, duplicate code, documentation drift | `lint-all` |
-| Project-wide rules only | [`lint-project`](lint-project) |
-| Restrict the report to one project's compile closure | `lint-all --project <.dproj>` |
-| Machine-readable output | `--json`, and SARIF |
-| Apply the fixable subset | `lint-all --fix` |
-| Does an interface edit to this unit reach a dependent? Reports `stale-interface-reference` at every bound read of a removed or changed routine, property, field or **enum member** | [`lint-tree`](lint-tree) |
-| Declare one exception class per distinct `raise Exception.Create('...')` message, then rewrite the raise sites | `exceptions-sync`, then `lint --fix --fix-rule raise-bare-exception` |
 
 Formatting: drag-lint drives **YADF** (the Delphi formatter) for the current
 unit or the whole active project, straight from the IDE menu -- see
@@ -135,68 +51,8 @@ Suppression:
 * `review-marker-placeholder-hash` (ON) reports a marker whose `@hash` was never
   computed (`@0000`, `@xxxx`), including an `@0000` one written in a block
   comment, where no marker is read -- it suppresses nothing.
-## Documentation
 
-DocInsight (`///` XML) comments, generated from the index rather than from
-guesswork.
-
-| Feature | Command |
-|---|---|
-| Document one symbol, a unit, a project, or everything | `document --qname / --unit / --project`, [`document-all`](document-all) |
-| Stubs only, or fully populated facts | `--stubs` |
-| Managed fact blocks -- callers, callees, used-in-units, raises, returns, wiring, see-also | automatic |
-| Detect documentation that no longer matches the code | [`doc-drift`](doc-drift), and the [`doc-drift`](doc-drift) lint rule |
-| Strip generated blocks | `document --unit --strip` |
-| Generate a doc comment for a symbol | `generate-docs` |
-| Shared-unit markers, so several projects can document one unit without fighting | [`shared-unit`](shared-unit) |
-| Purity: every routine gets an effect summary (globals, heap, own fields, parameters written) computed to a fixpoint over the whole index; a proven one renders **Effect-free (proven)** in hover and autodoc. Two rules use it: `discarded-effect-free-result` (ON by default since 1.20.1) and `query-name-with-effect` (OFF) | automatic; `--enable query-name-with-effect` |
-
-## Refactoring and code generation
-
-| Feature | Command |
-|---|---|
-| Rename a symbol or a parameter, index-wide | `rename` |
-| Extract a method | [`extract-method`](extract-method) |
-| Safe delete (refuses when still referenced) | [`safe-delete`](safe-delete) |
-| Add the missing unit for an undeclared identifier | `find-unit --apply` |
-| Audit and fix `uses` clauses -- interface->implementation moves, unused units, **compiler-verified** | `uses-audit`, `uses-fix` |
-| Reconcile project members against disk | `reconcile-project` |
-| Generate an enum helper (`ToString`, parse, ...) | [`create-enum-helper`](create-enum-helper) |
-| Generate a DUnitX / DUnit test stub | `generate-test` |
-| Record a reviewed finding | [`allow`](allow) |
-
-## Component conversion
-
-Rule-driven migration of legacy component types (for example Orpheus `TOvc*` to
-DevExpress `cx`/`dx`).
-
-| Feature | Command |
-|---|---|
-| Property/event assignability engine over the type tree | [`proptree`](proptree) |
-| Scaffold a conversion rule from a real from/to pair | [`convert-scaffold`](convert-scaffold) |
-| Validate a rulebook | [`convert-validate`](convert-validate) |
-| Apply rules to a unit and its DFM | [`convert-apply`](convert-apply) |
-| Measure every streamed glyph/picture under a tree before writing a glyph rule (`instances.tsv`, `classes.tsv`, `gallery.html`) | `glyph-vacuum --root <dir> --out <dir>` |
-| Visual rulebook editor | `ConvRulesEditor.exe` |
-
-## Graphs and reports
-
-| Feature | Command |
-|---|---|
-| Call graph, either direction, to a depth | [`callgraph`](callgraph), `reverse-calltree` |
-| Butterfly view (callers + callees of one symbol) | [`butterfly`](butterfly) |
-| Dependency report | [`deps-report`](deps-report), `uses-report` |
-| Uses cycles -- see the [worked example](Circular-Dependency-Report) (tool-generated report on a real 4-unit cycle) | `cycles` |
-| Impact / blast radius of a change | `impact` |
-| Dead code | `find-deadcode` |
-| Top symbols by fan-in | `top` |
-| TODO / FIXME scan | `todos` |
-| Spring4D DI + DFM event wiring | `wiring` |
-| Tester spreadsheet: every form, the menu / ribbon / tab path to it, the control to click, modal or not, confidence, a blank Tester result column ([Forms for testers](Generate-Test-Helper-CSV); drag-lint > Reports > Forms for testers (CSV)...) | `forms-csv` |
-| Export to DOT / Mermaid / Obsidian / Delphi consts | `export`, `--format dot\|mermaid` |
-| Interactive graph viewer | `drag_lint_graph.exe`, dockable in the IDE |
-
-## Diagrams and charts
+### Diagrams and charts
 
 Ask a formal question about one symbol and get a clickable chart back. In RAD
 Studio, put the caret on the symbol and pick the question from **drag-lint >
@@ -210,59 +66,269 @@ DocInsight `/// <remarks>` block that Auto Document leaves alone. Outside the ID
 `consumers`, `feeds-from` and `lands-where`. Every row in a chart is a fact with a file and a line, and links
 back to it.
 
-| Feature | Command |
-|---|---|
-| Ask from the caret in RAD Studio | drag-lint > Reports > *question* |
-| Ask from a terminal or an agent; prints the answer as text | `charts\src\Ask-Report.ps1 -Question <id> -Target <name> -Project <x.dproj> [-Open]` |
-| Answer one as an SVG/PNG/PDF bundle that records how to regenerate it | `charts\src\New-DiagramArtifact.ps1 -Question <id> -Target <name>` |
-| One engine verb for all of them | `ask` -- planned, not shipped |
+---
 
-See [Diagrams and Charts](Diagrams-and-Charts), with three samples drawn from
-drag-lint's own code.
+## Indexing
+
+Build and maintain the per-project and library indexes.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [Auto-Document Whole Project](Auto-Document-Whole-Project) | drag-lint > Generate & Export > Auto-Document Whole Project...; `index`; `document` |  |
+| [migrate-dbs](migrate-dbs) | `migrate-dbs` |  |
+| [pp-profile](pp-profile) | `pp-profile` |  |
+| [purge-locals](purge-locals) | `purge-locals` |  |
+| [Rebuild Index for This Project](Rebuild-Index-for-This-Project) | drag-lint > Index & Maintenance > Rebuild Index for This Project; `index` |  |
+| [register-project](Features) | `register-project` |  |
+| [schema](schema) | `schema` |  |
+| [Show Resolved DBs (debug)](Show-Resolved-DBs-debug) | drag-lint > Index & Maintenance > Show Resolved DBs (debug)...; `resolve-dbs` |  |
+
+## Search and navigation
+
+Find symbols, callers, callees, text and types in the index.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [call-path](call-path) | `call-path` |  |
+| [Class Surface](Class-Surface) | drag-lint > Inspect Symbol > Class Surface...; `surface` |  |
+| [Compiler Hints](Compiler-Hints) | drag-lint > Code Quality > Compiler Hints...; `query hints` |  |
+| [context](context) | `context` |  |
+| [find-callees](find-callees) | `find-callees` |  |
+| [Find Undocumented (public)](Find-Undocumented-public) | drag-lint > Code Quality > Find Undocumented (public)...; `query find` |  |
+| [find-unit](find-unit) | `find-unit` |  |
+| [Find Usages](Find-Usages-context) | Structure form: Find Usages; `usages` |  |
+| [Find Usages](Find-Usages) | drag-lint > Find Usages... |  |
+| [Go to Declaration](Go-to-Declaration) | Structure form: Go to Declaration |  |
+| [Go to Definition](Go-to-Definition) | drag-lint > Go to Definition |  |
+| [Go to Implementation](Go-to-Implementation) | Structure form: Go to Implementation |  |
+| [helpers-of](helpers-of) | `helpers-of` |  |
+| [Hover at Cursor](Hover-at-Cursor) | drag-lint > Hover at Cursor; `hover` |  |
+| [outline](outline) | `outline` |  |
+| [query ancestors](query-ancestors) | `query ancestors` |  |
+| [query descendants](query-descendants) | `query descendants` |  |
+| [query find-callers](query-find-callers) | `query find-callers` |  |
+| [query --kind --all](query-kind-all) | `query` |  |
+| [query --name-like](query-name-like) | `query` |  |
+| [query type-usage](query-type-usage) | `query type-usage` |  |
+| [query typecat](query-typecat) | `query typecat` |  |
+| [query unit-usage](query-unit-usage) | `query unit-usage` |  |
+| [Show Completion](Show-Completion) | drag-lint > Show Completion |  |
+| [Show Signature Help](Show-Signature-Help) | drag-lint > Show Signature Help |  |
+| [Show Structure](Show-Structure) | drag-lint > Show Structure |  |
+| [Symbol Search](Symbol-Search) | drag-lint > Symbol Search...; `query` |  |
+| [Symbol Slice](Symbol-Slice) | drag-lint > Inspect Symbol > Symbol Slice...; `slice` |  |
+| [Type at Cursor](Type-at-Cursor) | drag-lint > Inspect Symbol > Type at Cursor; `typeat` |  |
+| [usages](usages) | `usages` |  |
+| [wiki](wiki) | `wiki` |  |
+
+## Linting
+
+Rules, autofix, suppression markers and project-wide checks.
+
+**189 rules. 23 have an auto-fix. 159 are on by default.** 136 are built-in checks; 53 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+
+| Category | Rules | With auto-fix |
+|---|---:|---:|
+| bug-patterns | 54 | 6 |
+| complexity | 11 | - |
+| data-flow | 9 | - |
+| dead-code | 12 | 6 |
+| documentation | 5 | 2 |
+| firedac | 3 | - |
+| metrics | 8 | - |
+| naming | 10 | 8 |
+| other | 6 | - |
+| platform | 10 | - |
+| project-wide | 20 | - |
+| refactoring | 11 | - |
+| resource-lifetime | 8 | 1 |
+| review-markers | 5 | - |
+| security | 10 | - |
+| structure | 7 | - |
+| **Total** | **189** | **23** |
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
+| [Copy Diagnostics (Current File)](Copy-Diagnostics-Current-File) | drag-lint > About > Copy Diagnostics (Current File); `lint` |  |
+| [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
+| [exceptions-sync](Features) | `exceptions-sync` |  |
+| [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
+| [Fix all in unit](Fix-all-in-unit) | Structure form: Fix all in unit; `lint` |  |
+| [Fix it](Fix-it) | Structure form: Fix it; `lint` |  |
+| [Format Whole Project with YADF](Format-Whole-Project-with-YADF) | drag-lint > Format Whole Project with YADF...; `format`; `index` |  |
+| [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
+| [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | drag-lint > About > Lint Buffer (Unsaved); `lint` |  |
+| [lint-project](lint-project) | `lint-project` |  |
+| [Lint rules](rules) | 189 rules, 23 fixable; `rules` |  |
+| [lint-tree](lint-tree) | `lint-tree` |  |
+| [Run AST Checks](Run-AST-Checks) | drag-lint > About > Run AST Checks; `check-ast` |  |
+| [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | drag-lint > About > Run Diagnostics (didSave) |  |
+| [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
+
+## Documentation
+
+DocInsight comments generated from the index, and drift detection.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [Doc Comment Stub (symbol)](Doc-Comment-Stub-symbol) | drag-lint > Generate & Export > Doc Comment Stub (symbol)...; `generate-docs` |  |
+| [doc-drift](doc-drift) | `doc-drift` |  |
+| [doc-forget](Features) | `doc-forget` |  |
+| [document-all](document-all) | `document-all` |  |
+| [Document it](Document-it) | Structure form: Document it; `document` |  |
+| [Document project](Document-project) | Structure form: Document project; `document` |  |
+| [Document unit](Document-unit) | Structure form: Document unit; `document` |  |
+| [Effect Summary Legend](Effect-Summary-Legend) | procedure: `docs\wiki\Effect-Summary-Legend.md` |  |
+| [shared-unit](shared-unit) | `shared-unit` |  |
+| [dl:wiki concept blocks](Wiki-Blocks-Authoring) | `wiki`; procedure: `docs\wiki\Wiki-Blocks-Authoring.md` |  |
+
+## Refactoring and code generation
+
+Rename, extract, safe delete, uses cleanup and code stubs.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [Allow this message](Allow-this-message) | Structure form: Allow this message; `allow` |  |
+| [allow](allow) | `allow` |  |
+| [create-enum-helper](create-enum-helper) | `create-enum-helper` |  |
+| [Create helper class](Create-helper-class) | Structure form: Create helper class; `create-enum-helper` |  |
+| [extract-method](extract-method) | `extract-method` |  |
+| [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](Quick-Fix-Add-Unit-for-Inline-Hint-H2443-at-Cursor) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor |  |
+| [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](Quick-Fix-Add-Unit-for-Undeclared-at-Cursor-Ctrl-Alt-U) | drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U) |  |
+| [Quick-Fix: Convert Public Field to Property at Cursor](Quick-Fix-Convert-Public-Field-to-Property-at-Cursor) | drag-lint > Convert Public Field to Property at Cursor |  |
+| [Reconcile Project Members (.dpr/.dproj)](Reconcile-Project-Members-dpr-dproj) | drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...; `reconcile-project` |  |
+| [Rename Symbol](Rename-Symbol) | drag-lint > Rename Symbol...; `rename` |  |
+| [safe-delete](safe-delete) | `safe-delete` |  |
+| [Unit Test Stub (symbol)](Unit-Test-Stub-symbol) | drag-lint > Generate & Export > Unit Test Stub (symbol)...; `generate-test` |  |
+| [Uses Audit -- interface->impl moves + unused (this unit)](Uses-Audit-interface-impl-moves-unused-this-unit) | drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...; `uses-audit` |  |
+| [Uses Cleanup Preview (compiler-verified, this unit)](Uses-Cleanup-Preview-compiler-verified-this-unit) | drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...; `uses-fix` |  |
+| [Uses & Deps Tab](Features) | drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes... |  |
+
+## Component conversion
+
+Rule-driven migration of legacy component types.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [convert-apply](convert-apply) | `convert-apply` |  |
+| [convert-reemit](Maintenance) | `convert-reemit` | internal |
+| [convert-scaffold](convert-scaffold) | `convert-scaffold` |  |
+| [convert-validate](convert-validate) | `convert-validate` |  |
+| [ConvRulesEditor](Features) | `ConvRulesEditor.exe` |  |
+| [glyph-vacuum](Features) | `glyph-vacuum` |  |
+| [proptree](proptree) | `proptree` |  |
+
+## Graphs and reports
+
+Call graphs, dependency reports, dead code, tester spreadsheets.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [butterfly](butterfly) | `butterfly` |  |
+| [Call Graph (Butterfly)](Call-Graph-Butterfly) | drag-lint > Uses & Dependencies > Call Graph (Butterfly)...; `reverse-calltree` |  |
+| [callgraph](callgraph) | `callgraph` |  |
+| [Circular Dependency Report (worked example)](Circular-Dependency-Report) | procedure: `docs\wiki\Circular-Dependency-Report.md` |  |
+| [Circular Uses Report (cycles + fix plan)](Circular-Uses-Report-cycles-fix-plan) | drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...; `cycles` |  |
+| [deps-report](deps-report) | `deps-report`; drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)... |  |
+| [Export Enums (Delphi const)](Export-Enums-Delphi-const) | drag-lint > Generate & Export > Export Enums (Delphi const)...; `export enums` |  |
+| [Export Graph (DOT)](Export-Graph-DOT) | drag-lint > Generate & Export > Export Graph (DOT)...; `graph` |  |
+| [Export to Obsidian](Export-to-Obsidian) | drag-lint > Generate & Export > Export to Obsidian...; `export obsidian` |  |
+| [Find Dead Code](Find-Dead-Code) | drag-lint > Code Quality > Find Dead Code...; `find-deadcode` |  |
+| [Forms for testers (CSV)](Generate-Test-Helper-CSV) | drag-lint > Reports > Forms for testers (CSV)...; `forms-csv` |  |
+| [Impact / Blast Radius (symbol)](Impact-Blast-Radius-symbol) | drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...; `impact` |  |
+| [Reverse Call Tree (clickable, Messages window)](Reverse-Call-Tree-clickable-Messages-window) | drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...; `reverse-calltree` |  |
+| [Reverse Call Tree (who calls this, N-deep)](Reverse-Call-Tree-who-calls-this-N-deep) | drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...; `reverse-calltree` |  |
+| [Scan TODOs / FIXMEs](Scan-TODOs-FIXMEs) | drag-lint > Code Quality > Scan TODOs / FIXMEs...; `todos` |  |
+| [Show in Call Graph](Show-in-Call-Graph) | Structure form: Show in Call Graph; `reverse-calltree` |  |
+| [Show Wiring (Spring4D DI + DFM events)](Show-Wiring-Spring4D-DI-DFM-events) | drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...; `wiring` |  |
+| [Top Symbols (fan-in)](Top-Symbols-fan-in) | drag-lint > Code Quality > Top Symbols (fan-in)...; `top` |  |
+| [Uses Report (CSV)](Uses-Report-CSV) | drag-lint > Uses & Dependencies > Uses Report (CSV)...; `uses-report` |  |
+
+## Diagrams and charts
+
+Ask a question about a symbol and get a clickable chart.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [ask (engine verb)](Diagrams-and-Charts) |  | planned |
+| [Chart questions](Diagrams-and-Charts) | 25 questions; `charts\src\Ask-Report.ps1`; `charts\src\New-DiagramArtifact.ps1` |  |
+| [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md` |  |
 
 ## Compiler integration
 
-| Feature | Command |
-|---|---|
-| Compile a project or unit and fold the errors into findings | [`compile-check`](compile-check), `check-unit` |
-| Compile the **unsaved editor buffer** ("ghost check") | [`ghost-check`](ghost-check); IDE: [Compile Buffer (unsaved)](Compile-Buffer-unsaved) |
-| Recover files left behind by an interrupted buffer-compile | [`ghost-recover`](ghost-recover) |
-| Refresh stored compiler findings across a project | `refresh-findings` |
-| Import an external build log | `import-log` |
-| Preprocessor profile for a project/config | [`pp-profile`](pp-profile), [`preprocess-file`](preprocess-file) |
+Compile, fold compiler output into findings, preprocess.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [Add Missing Units to uses (whole unit)](Add-Missing-Units-to-uses-whole-unit) | drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)...; `check-unit` |  |
+| [Compile Buffer (unsaved)](Compile-Buffer-unsaved) | drag-lint > Compile Buffer (unsaved) |  |
+| [compile-check](compile-check) | `compile-check` |  |
+| [Compile Dependents](Features) | drag-lint > Compile Dependents |  |
+| [Compile & Diagnose](Compile-Diagnose) | drag-lint > Compile & Diagnose |  |
+| [Full Compile Sweep](Full-Compile-Sweep) | drag-lint > Full Compile Sweep; `refresh-findings` |  |
+| [ghost-check](ghost-check) | `ghost-check` |  |
+| [ghost-recover](ghost-recover) | `ghost-recover` |  |
+| [Import Build Log](Import-Build-Log) | drag-lint > About > Import Build Log...; `import-log` |  |
+| [preprocess-file](preprocess-file) | `preprocess-file` |  |
+| [project-facts](Features) | `project-facts` |  |
+| [Recover Buffer-Compile Files](Recover-Buffer-Compile-Files) | drag-lint > About > Recover Buffer-Compile Files |  |
 
 ## Database and Firebird
 
-| Feature | Command |
-|---|---|
-| Index `.sql` migration scripts, including `CREATE EXCEPTION` messages | `index` |
-| Snapshot a live Firebird schema into an index | [`fb-snapshot`](fb-snapshot) |
-| Link ORM classes to tables and fields to columns | [`link-orm`](link-orm) |
+SQL scripts, live schema snapshots, ORM links.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [fb-snapshot](fb-snapshot) | `fb-snapshot` |  |
+| [link-orm](link-orm) | `link-orm` |  |
 
 ## Editor integration
 
-| Feature | How |
-|---|---|
-| **RAD Studio plugin** -- 66 entry points across four surfaces, hover, dockable panel and graph | `dclDragLintWizard.bpl`; see [IDE Menu Reference](IDE-Menu-Reference) |
-| **Language server** over stdio -- hover, go-to-definition, **find-references**, **workspace symbols**, completion, signature help | `drag-lint lsp` |
-| VS Code extension | `editors\vscode\drag-lint\` |
-| Neovim / Helix / any LSP client | point it at `drag-lint lsp` |
-| HTTP/MCP server for agents | [`serve`](serve) |
-| Multi-project workspaces | `workspace add / index / status` |
+The RAD Studio plugin, the language server, MCP and workspaces.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [drag-lint Graph (dockable)](drag-lint-Graph-dockable) | drag-lint > drag-lint Graph (dockable) |  |
+| [drag-lint Graph](drag-lint-Graph) | View > Tool Windows > drag-lint Graph |  |
+| [drag-lint Options](drag-lint-Options) | drag-lint > drag-lint Options... |  |
+| [drag-lint Panel (dockable)](drag-lint-Panel-dockable) | drag-lint > drag-lint Panel (dockable) |  |
+| [drag-lint](drag-lint) | View > Tool Windows > drag-lint |  |
+| [IDE Menu Reference](IDE-Menu-Reference) | procedure: `docs\wiki\IDE-Menu-Reference.md` |  |
+| [ide-release](ide-release) | `ide-release` |  |
+| [Installation](Installation) | `drag-lint.exe`; procedure: `docs\wiki\Installation.md` |  |
+| [lsp](lsp) | `lsp` |  |
+| [serve](serve) | `serve` |  |
+| [workspace add](workspace-add) | `workspace add` |  |
+| [workspace index](workspace-index) | `workspace index` |  |
+| [workspace status](workspace-status) | `workspace status` |  |
 
 ## Maintenance and diagnostics
 
-| Feature | Command |
-|---|---|
-| Which databases cover what | `resolve-dbs`, [`info`](info) |
-| Ask running `lsp` engines to close their indexes and stand down, so an index can be rebuilt without killing them | `shutdown` |
-| Library path drift after a third-party update | `library-drift` |
-| Per-phase timing breakdown | `DRAGLINT_PROFILE=1` |
-| Ambiguous call diagnosis | [`ambiguous-calls`](ambiguous-calls) |
-| Raw dumps for debugging | [`dump-refs`](dump-refs), [`dump-call-edges`](dump-call-edges) |
-| Index schema report | [`schema`](schema) |
+Which databases cover what, drift checks, raw dumps, self-tests.
+
+| Feature | Surfaces | Status |
+|---|---|---|
+| [About and Status](About-and-Status) | drag-lint > About; drag-lint > About > Diagnose Current State; `info`; About window: Check for Updates; About window: Close; About window: Copy Diagnostics (Current File); About window: Copy Report; About window: Diagnose Current State; About window: Import Build Log...; About window: Lint Buffer (Unsaved); About window: Open Plugin Log; About window: Recover Buffer-Compile Files; About window: Refresh; About window: Run AST Checks; About window: Run Diagnostics (didSave) |  |
+| [ambiguous-calls](ambiguous-calls) | `ambiguous-calls` |  |
+| [bench-context](bench-context) | `bench-context` |  |
+| [contrast-selftest](Maintenance) | `contrast-selftest` | internal |
+| [diff](diff) | `diff` |  |
+| [doc-facts-selftest](Maintenance) | `doc-facts-selftest` | internal |
+| [dump-call-edges](dump-call-edges) | `dump-call-edges` |  |
+| [dump-pp-eval](Maintenance) | `dump-pp-eval` | internal |
+| [dump-pp-lex](Maintenance) | `dump-pp-lex` | internal |
+| [dump-refs](dump-refs) | `dump-refs` |  |
+| [info](info) | `info` |  |
+| [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |
+| [Maintenance](Maintenance) | procedure: `docs\wiki\Maintenance.md` |  |
+| [Open Plugin Log](Open-Plugin-Log) | drag-lint > About > Open Plugin Log |  |
+| [resolve-uses](Maintenance) | `resolve-uses` | internal |
+| [selftest](Maintenance) | `selftest` | internal |
+| [shutdown](Features) | `shutdown` |  |
+| [sql](sql) | `sql` |  |
+| [test-store-freshness](Maintenance) | `test-store-freshness` | internal |
 
 ---
 
-*Counts verified against v1.19.1-alpha (extractor 1.20.0-alpha, resolver 1.10.0-alpha, schema 23) on 2026-09-28. `drag-lint rules` is always the
-authority -- this page can lag the catalogue.*
+*Generated by `tools\build-feature-pages.ps1` from `features\`; counts come from `drag-lint rules --json` at generation time. Do not edit by hand.*

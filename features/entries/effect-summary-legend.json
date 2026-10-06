@@ -1,0 +1,18 @@
+{
+  "id": "effect-summary-legend",
+  "title": "Effect Summary Legend",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index",
+  "wikiPage": "Effect-Summary-Legend",
+  "surfaces": [
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\Effect-Summary-Legend.md"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

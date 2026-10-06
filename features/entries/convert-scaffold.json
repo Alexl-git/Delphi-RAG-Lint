@@ -1,0 +1,18 @@
+{
+  "id": "convert-scaffold",
+  "title": "convert-scaffold",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.1.0-alpha",
+  "summary": "Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type",
+  "wikiPage": "convert-scaffold",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "convert-scaffold"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "uses-audit-interface-impl-moves-unused-this-unit",
+  "title": "Uses Audit -- interface->impl moves + unused (this unit)",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.43.0-alpha",
+  "summary": "For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely",
+  "wikiPage": "Uses-Audit-interface-impl-moves-unused-this-unit",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)..."
+    },
+    {
+      "type": "cli",
+      "verb": "uses-audit"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

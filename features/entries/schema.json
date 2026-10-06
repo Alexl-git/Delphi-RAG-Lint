@@ -1,0 +1,18 @@
+{
+  "id": "schema",
+  "title": "schema",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.3.0-alpha",
+  "summary": "Prints the live schema of an index database: schemaversion, every table and column, and row counts",
+  "wikiPage": "schema",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "schema"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

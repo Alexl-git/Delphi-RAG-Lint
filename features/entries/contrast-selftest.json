@@ -1,0 +1,18 @@
+{
+  "id": "contrast-selftest",
+  "title": "contrast-selftest",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "0.0.0",
+  "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
+  "wikiPage": "Maintenance",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "contrast-selftest"
+    }
+  ],
+  "audience": "agent",
+  "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown"
+}

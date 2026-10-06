@@ -97,7 +97,6 @@ docs/RESUME-*
 # source verbatim -- the exception-naming design carries 82 ORM3 message
 # strings -- so they belong in this block, not in the published docs set.
 docs/DESIGN-*
-docs/wiki-featuremap.tsv
 
 # MSBuild regenerates circular-demo's .res on every build even though the .dpr
 # has no {$R *.res}. Ignored so a rebuild of the sample project does not leave

@@ -1,0 +1,22 @@
+{
+  "id": "drag-lint-project-rules",
+  "title": "drag-lint: Project Rules",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.2.0-alpha",
+  "summary": "Shows the catalog of lint rules in the context of a specific project",
+  "wikiPage": "drag-lint-Project-Rules",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Project Manager",
+      "caption": "drag-lint: Project Rules"
+    },
+    {
+      "type": "cli",
+      "verb": "rules"
+    }
+  ],
+  "audience": "both"
+}

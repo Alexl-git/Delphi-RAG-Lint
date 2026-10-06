@@ -1,0 +1,12 @@
+{
+  "id": "ask",
+  "title": "ask (engine verb)",
+  "group": "diagrams-charts",
+  "owner": "CHARTS",
+  "status": "planned",
+  "summary": "Ask the index a question, get a chart back",
+  "wikiPage": "Diagrams-and-Charts",
+  "surfaces": [],
+  "audience": "both",
+  "notes": "one engine verb for every chart question; planned, not shipped (Features.md 2026-10-05)"
+}

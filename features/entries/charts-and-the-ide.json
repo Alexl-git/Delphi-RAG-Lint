@@ -1,0 +1,19 @@
+{
+  "id": "charts-and-the-ide",
+  "title": "Charts and the IDE",
+  "group": "diagrams-charts",
+  "owner": "CHARTS",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio",
+  "wikiPage": "Charts-and-the-IDE",
+  "surfaces": [
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\Charts-and-the-IDE.md"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown",
+  "homeOrder": 45
+}

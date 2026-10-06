@@ -1,0 +1,18 @@
+{
+  "id": "lint-project",
+  "title": "lint-project",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.48.0-alpha",
+  "summary": "Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol",
+  "wikiPage": "lint-project",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-project"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

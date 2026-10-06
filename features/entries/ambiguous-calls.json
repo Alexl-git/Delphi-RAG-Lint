@@ -1,0 +1,18 @@
+{
+  "id": "ambiguous-calls",
+  "title": "ambiguous-calls",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.91.0-alpha",
+  "summary": "Resolver-coverage diagnostic that reports call sites the engine could not pin to exactly one target -- unresolved or ambiguous calls",
+  "wikiPage": "ambiguous-calls",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "ambiguous-calls"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

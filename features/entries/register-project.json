@@ -1,0 +1,18 @@
+{
+  "id": "register-project",
+  "title": "register-project",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.20.4-alpha",
+  "summary": "Add a new project to the manifest so index --all and the IDE can see it",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "register-project"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page"
+}

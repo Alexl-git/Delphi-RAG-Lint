@@ -1,0 +1,18 @@
+{
+  "id": "doc-facts-selftest",
+  "title": "doc-facts-selftest",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "0.0.0",
+  "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
+  "wikiPage": "Maintenance",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "doc-facts-selftest"
+    }
+  ],
+  "audience": "agent",
+  "notes": "internal: self-test for the doc-facts renderer; driven by runners under tests\\.; seed: group guessed; seed: since unknown"
+}

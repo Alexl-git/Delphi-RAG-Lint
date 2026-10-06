@@ -1,0 +1,18 @@
+{
+  "id": "test-store-freshness",
+  "title": "test-store-freshness",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "0.0.0",
+  "summary": "Almost every \"drag-lint gave me a wrong answer\" turns out to be a stale or mis-scoped index",
+  "wikiPage": "Maintenance",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "test-store-freshness"
+    }
+  ],
+  "audience": "agent",
+  "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown"
+}

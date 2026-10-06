@@ -1,0 +1,22 @@
+{
+  "id": "find-undocumented-public",
+  "title": "Find Undocumented (public)",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Uses query find to list indexed symbols filtered by documentation state, kind, or visibility",
+  "wikiPage": "Find-Undocumented-public",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Find Undocumented (public)..."
+    },
+    {
+      "type": "cli",
+      "verb": "query",
+      "sub": "find"
+    }
+  ],
+  "audience": "both"
+}

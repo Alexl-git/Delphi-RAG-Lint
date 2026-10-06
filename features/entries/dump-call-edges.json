@@ -1,0 +1,18 @@
+{
+  "id": "dump-call-edges",
+  "title": "dump-call-edges",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.91.0-alpha",
+  "summary": "Diagnostic that dumps every resolved call edge in the index as refid|targetqname|confidence rows",
+  "wikiPage": "dump-call-edges",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "dump-call-edges"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

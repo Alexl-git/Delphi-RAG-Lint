@@ -1,0 +1,22 @@
+{
+  "id": "generate-test-helper-csv",
+  "title": "Forms for testers (CSV)",
+  "group": "graphs-reports",
+  "owner": "CHARTS",
+  "status": "shipped",
+  "since": "0.44.0-alpha",
+  "summary": "Produces a spreadsheet-style CSV of a project's forms, one row per form, telling a human tester how to reach each form from the main form: the menu, ribbon",
+  "wikiPage": "Generate-Test-Helper-CSV",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Reports > Forms for testers (CSV)..."
+    },
+    {
+      "type": "cli",
+      "verb": "forms-csv"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "pp-profile",
+  "title": "pp-profile",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.92.0-alpha",
+  "summary": "Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line",
+  "wikiPage": "pp-profile",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "pp-profile"
+    }
+  ],
+  "audience": "both"
+}

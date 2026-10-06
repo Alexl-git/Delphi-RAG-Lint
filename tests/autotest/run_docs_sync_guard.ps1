@@ -707,8 +707,8 @@ Check 'plugin menu sources located' ((Get-MenuSourceText -Repo $Repo).Length -gt
 $liveCaptions = Get-LiveMenuCaptions -Repo $Repo
 Check 'live menu captions harvested' ($liveCaptions.Count -ge 40) "$($liveCaptions.Count) caption(s)"
 
-# Documented paths: "drag-lint > A > B" in any tracked doc, plus the feature
-# map's MenuPath column.
+# Documented paths: "drag-lint > A > B" in any tracked doc. (The feature map TSV
+# was retired 2026-10-05; the registry guard polices the registry side.)
 $menuDocs = @()
 foreach ($d in @('docs\wiki', 'docs')) {
   $dir = Join-Path $Repo $d
@@ -716,8 +716,6 @@ foreach ($d in @('docs\wiki', 'docs')) {
     $menuDocs += @(Get-ChildItem -LiteralPath $dir -Filter *.md -File -ErrorAction SilentlyContinue)
   }
 }
-$fmPath = Join-Path $Repo 'docs\wiki-featuremap.tsv'
-if (Test-Path -LiteralPath $fmPath) { $menuDocs += @(Get-Item -LiteralPath $fmPath) }
 Check 'docs to scan for menu paths located' ($menuDocs.Count -gt 0) "$($menuDocs.Count) file(s)"
 
 # PLAN-*, INBOX-* and RESUME-* are gitignored working notes: they record what

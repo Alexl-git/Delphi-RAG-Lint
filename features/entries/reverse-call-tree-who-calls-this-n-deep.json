@@ -1,0 +1,22 @@
+{
+  "id": "reverse-call-tree-who-calls-this-n-deep",
+  "title": "Reverse Call Tree (who calls this, N-deep)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.96.0-alpha",
+  "summary": "Builds the tree of callers of a chosen symbol, transitively, to a chosen depth",
+  "wikiPage": "Reverse-Call-Tree-who-calls-this-N-deep",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)..."
+    },
+    {
+      "type": "cli",
+      "verb": "reverse-calltree"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "quick-fix-add-unit-for-inline-hint-h2443-at-cursor",
+  "title": "Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope",
+  "wikiPage": "Quick-Fix-Add-Unit-for-Inline-Hint-H2443-at-Cursor",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

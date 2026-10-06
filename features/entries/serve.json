@@ -1,0 +1,18 @@
+{
+  "id": "serve",
+  "title": "serve",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.4.0-alpha",
+  "summary": "Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index",
+  "wikiPage": "serve",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "serve"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

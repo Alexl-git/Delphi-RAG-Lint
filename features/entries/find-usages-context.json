@@ -1,0 +1,22 @@
+{
+  "id": "find-usages-context",
+  "title": "Find Usages",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.33.0-alpha",
+  "summary": "Lists references to the symbol represented by a Structure-tree node",
+  "wikiPage": "Find-Usages-context",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Find Usages"
+    },
+    {
+      "type": "cli",
+      "verb": "usages"
+    }
+  ],
+  "audience": "both"
+}

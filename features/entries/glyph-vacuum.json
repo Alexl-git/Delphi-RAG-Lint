@@ -1,0 +1,18 @@
+{
+  "id": "glyph-vacuum",
+  "title": "glyph-vacuum",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.15.0-alpha",
+  "summary": "Measure every streamed glyph or picture under a tree before writing a glyph rule",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "glyph-vacuum"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page"
+}

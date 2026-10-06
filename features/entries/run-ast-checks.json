@@ -1,0 +1,21 @@
+{
+  "id": "run-ast-checks",
+  "title": "Run AST Checks",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.31.0-alpha",
+  "summary": "Runs drag-lint's AST-level checks against a file",
+  "wikiPage": "Run-AST-Checks",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > About > Run AST Checks"
+    },
+    {
+      "type": "cli",
+      "verb": "check-ast"
+    }
+  ],
+  "audience": "both"
+}

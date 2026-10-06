@@ -1,0 +1,19 @@
+{
+  "id": "sql",
+  "title": "sql",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.40.5-alpha",
+  "summary": "Runs one read-only SQL statement against an index database and prints the result set",
+  "wikiPage": "sql",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "sql"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "notes": "seed: group guessed"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "find-dead-code",
+  "title": "Find Dead Code",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.25.0-alpha",
+  "summary": "Scans the index for code with no references -- candidates to delete",
+  "wikiPage": "Find-Dead-Code",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Find Dead Code..."
+    },
+    {
+      "type": "cli",
+      "verb": "find-deadcode"
+    }
+  ],
+  "audience": "both"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "proptree",
+  "title": "proptree",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.1.0-alpha",
+  "summary": "Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties",
+  "wikiPage": "proptree",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "proptree"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

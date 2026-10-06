@@ -1,0 +1,17 @@
+{
+  "id": "document-all",
+  "title": "document-all",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.93.0-alpha",
+  "summary": "Documents every public declaration in every indexed unit, with no project scope",
+  "wikiPage": "document-all",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "document-all"
+    }
+  ],
+  "audience": "both"
+}

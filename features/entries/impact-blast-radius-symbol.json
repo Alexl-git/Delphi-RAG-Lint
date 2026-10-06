@@ -1,0 +1,21 @@
+{
+  "id": "impact-blast-radius-symbol",
+  "title": "Impact / Blast Radius (symbol)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.17.0-alpha",
+  "summary": "Reports what would be affected if a chosen symbol changes -- the set of code to retest",
+  "wikiPage": "Impact-Blast-Radius-symbol",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)..."
+    },
+    {
+      "type": "cli",
+      "verb": "impact"
+    }
+  ],
+  "audience": "both"
+}

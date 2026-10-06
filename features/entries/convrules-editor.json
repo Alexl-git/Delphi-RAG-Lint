@@ -1,0 +1,18 @@
+{
+  "id": "convrules-editor",
+  "title": "ConvRulesEditor",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Visual rulebook editor for the component-conversion rules",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown"
+}
