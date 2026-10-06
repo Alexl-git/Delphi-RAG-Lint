@@ -191,6 +191,11 @@ if ($Only) { $EX = @($EX | Where-Object { $Only -contains $_.Q }) }
 
 $made = New-Object System.Collections.ArrayList
 $failed = New-Object System.Collections.ArrayList
+# the charts are drawn by the SAME engine the page names (fix round 1): every emitter resolves DRAGLINT_ENGINE first,
+# so it is set to the resolved full path for the loop and restored after (absent stays absent)
+$prevEngEnv = [Environment]::GetEnvironmentVariable('DRAGLINT_ENGINE', 'Process')
+$env:DRAGLINT_ENGINE = $EngineExe
+try {
 foreach ($e in $EX) {
   $dir = Join-Path $OutRoot $e.Q
   New-Item -ItemType Directory -Force $dir | Out-Null
@@ -212,6 +217,9 @@ foreach ($e in $EX) {
     Write-Host ("  FAIL {0}  -- {1}" -f $label, $_.Exception.Message)
     if (-not $KeepGoing) { throw }
   }
+}
+} finally {
+  if ($null -eq $prevEngEnv) { Remove-Item Env:\DRAGLINT_ENGINE -ErrorAction SilentlyContinue } else { $env:DRAGLINT_ENGINE = $prevEngEnv }
 }
 
 # ---- the central index -------------------------------------------------------

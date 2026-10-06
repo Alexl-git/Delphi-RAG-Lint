@@ -16,6 +16,8 @@
     AR-NOPAIRSFILE  a pairs file that does not exist is named as missing, not as "has no entry",
                  and the message says how to configure pairs (report-pairs.example.json, R2)
     AR-NOENGINE  an -Engine that does not exist: exit 2, stderr names it (R2)
+    AR-ENGINE-CHILD  an explicit -Engine is the engine the EMITTER runs, not only Ask-Report's own calls (R2 fix 1)
+    AR-NODOT-NOTE    dot that cannot be RESOLVED: round-trip still answers TRACE + the NOTE naming why (R2 fix 1)
     AR-JSON      a note line starting with '[' before the engine's JSON does not break resolution
     AR-INDEX     every answer names the index(es) that answered, after BUNDLE
     AR-TARGET    a chart's own focus row is marked TARGET, not listed like a result
@@ -143,6 +145,34 @@ Step 'AR-NOENGINE' {
   # R2: an -Engine that does not exist is a setup stop (exit 2) that names it -- never a silent switch to another engine
   $r = Invoke-Ask @('-Question', 'who-writes', '-Target', 'X.Y', '-Project', $PROJ, '-Engine', (Join-Path $OutDir 'no-such-engine.exe'), '-ResolveOnly')
   Chk 'AR-NOENGINE' "$($r.Exit)|$($r.Err -like '*-Engine*no-such-engine.exe does not exist*')" '2|True'
+}
+Step 'AR-ENGINE-CHILD' {
+  # fix round 1: an explicit -Engine reaches the EMITTER, not only Ask-Report's own resolve/freshness calls. The stand-in
+  # is a .ps1 (run in-process by `& $Engine`, so its arguments arrive intact) that logs every call and forwards it.
+  $marker = Join-Path $OutDir 'engine-child-calls.txt'
+  $standIn = Join-Path $OutDir 'engine-child.ps1'
+  $real = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+  [IO.File]::WriteAllText($standIn, ("Add-Content -LiteralPath '$marker' -Value (`$args -join ' ')`r`n& '$real' @args`r`nexit `$LASTEXITCODE`r`n"), (New-Object Text.ASCIIEncoding))
+  $r = Invoke-Ask @('-Question', 'who-writes', '-Target', $Q_FNR, '-DbPath', $DbCli, '-OutRoot', (Join-Path $OutDir 'engchild'), '-Engine', $standIn, '-Plain')
+  Chk 'AR-ENGINE-CHILD-EXIT' "$($r.Exit)|$($r.Err)" '0|'
+  $calls = @($(if (Test-Path -LiteralPath $marker) { Get-Content -LiteralPath $marker }))
+  $fromEmitter = @($calls | Where-Object { $_ -notlike '*SELECT 1 AS n*' })
+  if (-not $fromEmitter.Count) { Fail 'AR-ENGINE-CHILD' "the emitter did not run the -Engine stand-in ($($calls.Count) call(s), all Ask-Report's own)" }
+}
+Step 'AR-NODOT-NOTE' {
+  # fix round 1: when dot RESOLUTION throws (DRAGLINT_DOT set to a missing file), round-trip still answers its text plus
+  # the NOTE -- not only when dot fails at run time
+  $prevDot = [Environment]::GetEnvironmentVariable('DRAGLINT_DOT', 'Process')
+  try {
+    $env:DRAGLINT_DOT = Join-Path $OutDir 'no-such-dot.exe'
+    $r = Invoke-Ask @('-Question', 'round-trip', '-Target', 'frmBlueprint4.dxDBGrid1FtrsVNum', '-DbPath', $DbCli, '-ServerDbPath', $DbSrv, '-SqlDbPath', $DbSql, '-OutRoot', (Join-Path $OutDir 'nodot'), '-Plain')
+  } finally {
+    if ($null -eq $prevDot) { Remove-Item Env:\DRAGLINT_DOT -ErrorAction SilentlyContinue } else { $env:DRAGLINT_DOT = $prevDot }
+  }
+  Chk 'AR-NODOT-EXIT' "$($r.Exit)|$($r.Err)" '0|'
+  if ("$($r.Out[4])" -cnotlike 'TRACE *') { Fail 'AR-NODOT-NOTE' "the text does not begin with TRACE: $($r.Out[4])" }
+  $note = @($r.Out | Where-Object { $_ -clike 'NOTE the chart could not be drawn:*' })
+  if ($note.Count -ne 1 -or $note[0] -notlike '*DRAGLINT_DOT*no-such-dot.exe*') { Fail 'AR-NODOT-NOTE' "no NOTE naming the unresolved dot: $($note -join ' | ')" }
 }
 Step 'AR-JSON' {
   # a stand-in engine whose stdout starts with a '[note]' line, then the JSON document

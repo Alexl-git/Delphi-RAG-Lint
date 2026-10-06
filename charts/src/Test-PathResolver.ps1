@@ -66,6 +66,12 @@ $expEng = New-Exe (Join-Path $root 'explicit\drag-lint.exe')
 $expDot = New-Exe (Join-Path $root 'explicit\dot.exe')
 $pathDir = Join-Path $root 'pathdir'
 $pathDot = New-Exe (Join-Path $pathDir 'dot.exe')
+# the FLAT installed layout (owner D1): the scripts, drag-lint.exe and graphviz\ in ONE folder
+$flat    = Join-Path $root 'flat'
+$flatEng = New-Exe (Join-Path $flat 'drag-lint.exe')
+$flatDot = New-Exe (Join-Path $flat 'graphviz\bin\dot.exe')
+$flatEmpty = Join-Path $root 'flatempty'
+New-Item -ItemType Directory -Force $flatEmpty | Out-Null
 $emptyPath = Join-Path $root 'emptypath'
 New-Item -ItemType Directory -Force $emptyPath | Out-Null
 
@@ -97,20 +103,30 @@ try {
   $m = Throws 'E-EXPLICIT-MISSING' { Resolve-DragLintEngine (Join-Path $root 'typo.exe') @E }
   if ($m -notlike "*-Engine*typo.exe*") { Fail 'E-EXPLICIT-MISSING' "the message does not name the -Engine path: $m" }
   Chk 'E-ENV' (Resolve-DragLintEngine '' @E) $envEng
+  # fix round 1 (controller ruling): a SET variable or settings key naming a missing file THROWS, never falls through
   $env:DRAGLINT_ENGINE = Join-Path $root 'moved\drag-lint.exe'
-  Chk 'E-ENV-MISSING' (Resolve-DragLintEngine '' @E) $setEng
+  $m = Throws 'E-ENV-MISSING' { Resolve-DragLintEngine '' @E }
+  if ($m -notlike '*DRAGLINT_ENGINE*moved\drag-lint.exe*') { Fail 'E-ENV-MISSING' "the message does not name the variable and its path: $m" }
   Clear-Env
   Chk 'E-SETTINGS' (Resolve-DragLintEngine '' @E) $setEng
-  foreach ($c in @(@('E-SETTINGS-BAD', $setBad), @('E-SETTINGS-NOKEY', $setNoKey), @('E-SETTINGS-GONE', $setGone), @('E-SETTINGS-STALE', $setStale))) {
+  foreach ($c in @(@('E-SETTINGS-BAD', $setBad), @('E-SETTINGS-NOKEY', $setNoKey), @('E-SETTINGS-GONE', $setGone))) {
     Chk $c[0] (Resolve-DragLintEngine '' -SettingsPath $c[1] -ChartsRoot $appCharts -SharedDefault $shared) $appEng
   }
+  $m = Throws 'E-SETTINGS-STALE' { Resolve-DragLintEngine '' -SettingsPath $setStale -ChartsRoot $appCharts -SharedDefault $shared }
+  if ($m -notlike "*$setStale*`"engine`"*moved\drag-lint.exe*") { Fail 'E-SETTINGS-STALE' "the message does not name the file, the key and the path: $m" }
   Chk 'E-APP'    (Resolve-DragLintEngine '' -SettingsPath $setGone -ChartsRoot $appCharts  -SharedDefault $shared) $appEng
   Chk 'E-ORDER'  (Resolve-DragLintEngine '' -SettingsPath $setGone -ChartsRoot $repoCharts -SharedDefault $shared) $shared
   Chk 'E-REPO'   (Resolve-DragLintEngine '' -SettingsPath $setGone -ChartsRoot $repoCharts -SharedDefault $noShared) $repoEng
   Chk 'E-SHARED' (Resolve-DragLintEngine '' -SettingsPath $setGone -ChartsRoot $bareCharts -SharedDefault $shared) $shared
-  $env:DRAGLINT_ENGINE = Join-Path $root 'moved\drag-lint.exe'
-  $m = Throws 'E-NONE' { Resolve-DragLintEngine '' -SettingsPath $setStale -ChartsRoot $bareCharts -SharedDefault $noShared }
-  $want = @('-Engine', 'DRAGLINT_ENGINE', (Join-Path $root 'moved\drag-lint.exe'), $setStale, '"engine"',
+  # the flat step: beside the scripts, after settings.json and before <app>\bin
+  Chk 'E-FLAT'          (Resolve-DragLintEngine '' -SettingsPath $setGone -ChartsRoot $appCharts -ScriptDir $flat -SharedDefault $shared) $flatEng
+  Chk 'E-FLAT-SETTINGS' (Resolve-DragLintEngine '' -SettingsPath $setGood -ChartsRoot $appCharts -ScriptDir $flat -SharedDefault $shared) $setEng
+  # and its DEFAULT is the folder of the file that defines the resolver: a copy of Emit-Common beside a stand-in exe finds it
+  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Emit-Common.ps1') -Destination $flat -Force
+  Chk 'E-FLAT-DEFAULT' (& { . (Join-Path $flat 'Emit-Common.ps1'); Resolve-DragLintEngine '' -SettingsPath $setGone }) $flatEng
+  Chk 'D-FLAT-DEFAULT' (& { . (Join-Path $flat 'Emit-Common.ps1'); Resolve-GraphvizDot '' -SettingsPath $setGone }) $flatDot
+  $m = Throws 'E-NONE' { Resolve-DragLintEngine '' -SettingsPath $setGone -ChartsRoot $bareCharts -ScriptDir $flatEmpty -SharedDefault $noShared }
+  $want = @('-Engine', 'DRAGLINT_ENGINE', $setGone, '"engine"', (Join-Path $flatEmpty 'drag-lint.exe'),
             [IO.Path]::GetFullPath((Join-Path $bareCharts '..\bin\drag-lint.exe')), $noShared,
             [IO.Path]::GetFullPath((Join-Path $bareCharts '..\third_party\dll-win64\drag-lint.exe')))
   $at = -1
@@ -120,11 +136,29 @@ try {
     if ($i -lt $at) { Fail 'E-NONE' "the message names '$w' out of order: $m"; break }
     $at = $i
   }
+  # fix round 1, item 3: a RELATIVE path is made full against the PowerShell location and returned full -- a bare
+  # `-Engine drag-lint.exe` must not pass Test-Path here and then run from PATH
+  Push-Location (Join-Path $root 'explicit')
+  try {
+    Chk 'E-RELATIVE'      (Resolve-DragLintEngine 'drag-lint.exe' @E) $expEng
+    Chk 'E-RELATIVE-UP'   (Resolve-DragLintEngine '..\env\drag-lint.exe' @E) $envEng
+    $env:DRAGLINT_ENGINE = 'drag-lint.exe'
+    Chk 'E-RELATIVE-ENV'  (Resolve-DragLintEngine '' @E) $expEng
+    Clear-Env
+    Chk 'D-RELATIVE'      (Resolve-GraphvizDot 'dot.exe' -SettingsPath $setGone -ChartsRoot $bareCharts -SharedDefault $noSharedDot) $expDot
+  } finally { Pop-Location }
+  Push-Location $emptyPath
+  try {
+    $m = Throws 'E-RELATIVE-MISSING' { Resolve-DragLintEngine 'drag-lint.exe' @E }
+    if ($m -notlike "*$(Join-Path $emptyPath 'drag-lint.exe')*") { Fail 'E-RELATIVE-MISSING' "the message does not give the full path tested: $m" }
+  } finally { Pop-Location }
   Clear-Env
   # the defaults as every emitter calls them: the per-user settings file, and on THIS machine the same engine as before R2
   Chk 'E-SETTINGS-PATH' (Get-DragLintSettingsPath) $(if ($env:APPDATA) { Join-Path $env:APPDATA 'drag-lint\settings.json' } else { '' })
   if (-not (Test-Path -LiteralPath (Get-DragLintSettingsPath))) {
     Chk 'E-DEFAULT-HERE' (Resolve-DragLintEngine '') 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+  } else {
+    Write-Host "  SKIP E-DEFAULT-HERE: a real settings file exists ($(Get-DragLintSettingsPath)), so the machine default is whatever it names"
   }
 
   # ---- dot ----------------------------------------------------------------------------------
@@ -144,8 +178,14 @@ try {
   $env:PATH = $emptyPath
   Chk 'D-SHARED' (Resolve-GraphvizDot '' -SettingsPath $setGone -ChartsRoot $bareCharts -SharedDefault $sharedDot) $sharedDot
   $env:DRAGLINT_DOT = Join-Path $root 'moved\dot.exe'
-  $m = Throws 'D-NONE' { Resolve-GraphvizDot '' -SettingsPath $setStale -ChartsRoot $bareCharts -SharedDefault $noSharedDot }
-  $want = @('-Dot', 'DRAGLINT_DOT', (Join-Path $root 'moved\dot.exe'), $setStale, '"dot"',
+  $m = Throws 'D-ENV-MISSING' { Resolve-GraphvizDot '' @D }
+  if ($m -notlike '*DRAGLINT_DOT*moved\dot.exe*') { Fail 'D-ENV-MISSING' "the message does not name the variable and its path: $m" }
+  Clear-Env
+  $m = Throws 'D-SETTINGS-STALE' { Resolve-GraphvizDot '' -SettingsPath $setStale -ChartsRoot $appCharts -SharedDefault $sharedDot }
+  if ($m -notlike "*$setStale*`"dot`"*moved\dot.exe*") { Fail 'D-SETTINGS-STALE' "the message does not name the file, the key and the path: $m" }
+  Chk 'D-FLAT' (Resolve-GraphvizDot '' -SettingsPath $setGone -ChartsRoot $appCharts -ScriptDir $flat -SharedDefault $sharedDot) $flatDot
+  $m = Throws 'D-NONE' { Resolve-GraphvizDot '' -SettingsPath $setGone -ChartsRoot $bareCharts -ScriptDir $flatEmpty -SharedDefault $noSharedDot }
+  $want = @('-Dot', 'DRAGLINT_DOT', $setGone, '"dot"', (Join-Path $flatEmpty 'graphviz\bin\dot.exe'),
             [IO.Path]::GetFullPath((Join-Path $bareCharts '..\graphviz\bin\dot.exe')), 'PATH', $noSharedDot)
   $at = -1
   foreach ($w in $want) {

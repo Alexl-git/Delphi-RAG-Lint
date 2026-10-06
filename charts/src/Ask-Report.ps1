@@ -242,12 +242,16 @@ try {
     foreach ($n in 'Depth', 'Cap', 'SurfaceCap', 'Control', 'Mode') { if ($PSBoundParameters.ContainsKey($n)) { $nda[$n] = $PSBoundParameters[$n] } }
     if ($Open) { $nda.Open = $true }
     $prevLive = [Environment]::GetEnvironmentVariable('DRAGLINT_CHARTS_ALLOW_LIVE_DB', 'Process')
+    # the chart is drawn by the engine resolved above (fix round 1): the emitters resolve DRAGLINT_ENGINE first
+    $prevEng  = [Environment]::GetEnvironmentVariable('DRAGLINT_ENGINE', 'Process')
     try {
       $env:DRAGLINT_CHARTS_ALLOW_LIVE_DB = '1'
+      $env:DRAGLINT_ENGINE = $Engine
       $art = & $bundler @nda 6>$null
     } finally {
       # restore exactly: absent stays absent (SetEnvironmentVariable($null) from PowerShell passes '' and leaves it set)
       if ($null -eq $prevLive) { Remove-Item Env:\DRAGLINT_CHARTS_ALLOW_LIVE_DB -ErrorAction SilentlyContinue } else { $env:DRAGLINT_CHARTS_ALLOW_LIVE_DB = $prevLive }
+      if ($null -eq $prevEng)  { Remove-Item Env:\DRAGLINT_ENGINE -ErrorAction SilentlyContinue } else { $env:DRAGLINT_ENGINE = $prevEng }
     }
 
     # ---- 5. the text to read ----------------------------------------------------------------

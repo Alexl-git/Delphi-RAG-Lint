@@ -56,28 +56,41 @@ function New-RowHref([string] $File, [int] $Line) {
 # these two for the file. Each returns the first candidate that EXISTS, in order:
 #
 #   engine: -Engine -> $env:DRAGLINT_ENGINE -> settings.json "engine"
-#           -> <app>\bin\drag-lint.exe (installed layout)
+#           -> <scripts>\drag-lint.exe (the FLAT installed layout, owner D1)
+#           -> <app>\bin\drag-lint.exe (the earlier proposed bin\ layout)
 #           -> C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe (the shared engine)
 #           -> <repo>\third_party\dll-win64\drag-lint.exe (a clone's own build)
 #   dot:    -Dot -> $env:DRAGLINT_DOT -> settings.json "dot"
-#           -> <app>\graphviz\bin\dot.exe -> dot.exe on PATH
+#           -> <scripts>\graphviz\bin\dot.exe (flat) -> <app>\graphviz\bin\dot.exe -> dot.exe on PATH
 #           -> C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe
 #
-# <app> and <repo> are both the folder above charts\ (-ChartsRoot, default the
-# folder above this file). settings.json is %APPDATA%\drag-lint\settings.json,
-# written by the installer; a missing, unreadable or keyless file is skipped,
-# never an error.
+# <scripts> is the folder the chart scripts (and this file) live in (-ScriptDir,
+# default this file's folder): in the flat install drag-lint.exe, its DLLs and
+# the plugin BPL sit right there; in the repo (charts\src) nothing does, so the
+# step is skipped. <app> and <repo> are both the folder above charts\
+# (-ChartsRoot, default the folder above this file). settings.json is %APPDATA%\drag-lint\settings.json,
+# written by the installer; a MISSING or UNREADABLE file, or one without the key,
+# is skipped, never an error.
 #
 # WHY THE SHARED ENGINE COMES BEFORE THE REPO-RELATIVE ONE. In the main repo the
 # two are the same file. In a WORKTREE the repo-relative path is the worktree's
 # own, gitignored build -- and archify-ir held a 1.16.0-alpha there on
 # 2026-10-06 while the deployed engine was 1.22.0-alpha. Taking it would give
 # every chart on this machine an older parse: smaller, confident answers, no
-# error. So the repo-relative copy is only reached where the shared one is absent.
+# error. So the repo-relative copy is only reached where the shared one is absent
+# (controller ruling, Task 9a review).
 #
-# An explicit -Engine / -Dot that does not exist THROWS rather than falling
-# through: a typo must not silently pick another engine. When nothing exists the
+# EXPLICIT SETTINGS NEVER FALL THROUGH (controller ruling, fix round 1). A path
+# someone SET -- -Engine / -Dot, DRAGLINT_ENGINE / DRAGLINT_DOT, or the settings
+# key -- that does not exist THROWS, naming where it was set and the path: a typo
+# must not silently pick another file. Only an UNSET variable, an absent or
+# unreadable settings file, or a missing key is a skip. When nothing exists the
 # message names every place looked at, in order.
+#
+# Every path is made FULL against the PowerShell location
+# (GetUnresolvedProviderPathFromPSPath) before it is tested, and the full path is
+# returned: a bare `-Engine drag-lint.exe` would otherwise pass Test-Path for a
+# file in the current folder and then be run from PATH by `& $Engine`.
 function Get-DragLintSettingsPath {
   if ($env:APPDATA) { Join-Path $env:APPDATA 'drag-lint\settings.json' } else { '' }
 }
@@ -89,16 +102,22 @@ function Get-DragLintSetting([string] $SettingsPath, [string] $Key) {
   if ($j -isnot [pscustomobject] -or -not $j.PSObject.Properties[$Key] -or -not "$($j.$Key)") { return @('', "no `"$Key`" key") }
   @([string]$j.$Key, '')
 }
-# the shared walk: $Steps is an ordered list of @(label, path-or-'', why-empty)
+# the shared walk: $Steps is an ordered list of @(label, path-or-'', why-empty, set-by). A step
+# with a set-by (who SET that path) throws when its path is missing; the others are just candidates.
 function Resolve-ChartTool([string] $What, [string] $ParamName, [string] $Explicit, [object[]] $Steps, [string] $Hint) {
   if ($Explicit) {
-    if (Test-Path -LiteralPath $Explicit -PathType Leaf) { return $Explicit }
-    throw "$What not found: -$ParamName $Explicit does not exist"
+    $x = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Explicit)
+    if (Test-Path -LiteralPath $x -PathType Leaf) { return $x }
+    throw "$What not found: -$ParamName $Explicit does not exist ($x)"
   }
   $looked = New-Object System.Collections.Generic.List[string]
   $looked.Add("-$ParamName (not given)")
   foreach ($s in $Steps) {
-    if ($s[1] -and (Test-Path -LiteralPath $s[1] -PathType Leaf)) { return [IO.Path]::GetFullPath($s[1]) }
+    if ($s[1]) {
+      $x = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($s[1])
+      if (Test-Path -LiteralPath $x -PathType Leaf) { return $x }
+      if ($s.Count -gt 3 -and $s[3]) { throw "$What not found: $($s[3]) names $($s[1]), which does not exist ($x) -- fix or remove it" }
+    }
     $looked.Add($(if ($s[1]) { "$($s[0]) $($s[1]) (does not exist)" } else { "$($s[0]) ($($s[2]))" }))
   }
   throw ("$What not found. Looked, in order: " + (($looked | ForEach-Object -Begin { $n = 0 } -Process { $n++; "$n) $_" }) -join '; ') + ". $Hint")
@@ -108,12 +127,14 @@ function Resolve-ChartTool([string] $What, [string] $ParamName, [string] $Explic
 function Resolve-DragLintEngine([string] $Explicit,
                                 [string] $SettingsPath  = (Get-DragLintSettingsPath),
                                 [string] $ChartsRoot    = (Split-Path -Parent $PSScriptRoot),
+                                [string] $ScriptDir     = $PSScriptRoot,
                                 [string] $SharedDefault = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe') {
   $set = Get-DragLintSetting $SettingsPath 'engine'
   $app = [IO.Path]::GetFullPath((Join-Path $ChartsRoot '..'))
   Resolve-ChartTool 'drag-lint engine' 'Engine' $Explicit @(
-    , @('$env:DRAGLINT_ENGINE', $env:DRAGLINT_ENGINE, 'not set')
-    , @("$(if ($SettingsPath) { "settings $SettingsPath" } else { 'settings.json' }) `"engine`"", $set[0], $set[1])
+    , @('$env:DRAGLINT_ENGINE', $env:DRAGLINT_ENGINE, 'not set', '$env:DRAGLINT_ENGINE')
+    , @("$(if ($SettingsPath) { "settings $SettingsPath" } else { 'settings.json' }) `"engine`"", $set[0], $set[1], "settings.json $SettingsPath key `"engine`"")
+    , @('beside the scripts', (Join-Path $ScriptDir 'drag-lint.exe'), '')
     , @('installed', (Join-Path $app 'bin\drag-lint.exe'), '')
     , @('shared', $SharedDefault, '')
     , @('repo', (Join-Path $app 'third_party\dll-win64\drag-lint.exe'), '')
@@ -124,13 +145,15 @@ function Resolve-DragLintEngine([string] $Explicit,
 function Resolve-GraphvizDot([string] $Explicit,
                              [string] $SettingsPath  = (Get-DragLintSettingsPath),
                              [string] $ChartsRoot    = (Split-Path -Parent $PSScriptRoot),
+                             [string] $ScriptDir     = $PSScriptRoot,
                              [string] $SharedDefault = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe') {
   $set = Get-DragLintSetting $SettingsPath 'dot'
   $app = [IO.Path]::GetFullPath((Join-Path $ChartsRoot '..'))
   $onPath = @(Get-Command 'dot.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1)
   Resolve-ChartTool 'Graphviz dot' 'Dot' $Explicit @(
-    , @('$env:DRAGLINT_DOT', $env:DRAGLINT_DOT, 'not set')
-    , @("$(if ($SettingsPath) { "settings $SettingsPath" } else { 'settings.json' }) `"dot`"", $set[0], $set[1])
+    , @('$env:DRAGLINT_DOT', $env:DRAGLINT_DOT, 'not set', '$env:DRAGLINT_DOT')
+    , @("$(if ($SettingsPath) { "settings $SettingsPath" } else { 'settings.json' }) `"dot`"", $set[0], $set[1], "settings.json $SettingsPath key `"dot`"")
+    , @('beside the scripts', (Join-Path $ScriptDir 'graphviz\bin\dot.exe'), '')
     , @('installed', (Join-Path $app 'graphviz\bin\dot.exe'), '')
     , @('dot.exe on PATH', $(if ($onPath.Count) { $onPath[0].Source } else { '' }), 'not on PATH')
     , @('shared', $SharedDefault, '')

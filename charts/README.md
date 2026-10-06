@@ -53,13 +53,20 @@ for the emitters, `-Dot` with an EMPTY default; `Resolve-DragLintEngine` / `Reso
 | 1 | `-Engine <path>` | `-Dot <path>` |
 | 2 | `$env:DRAGLINT_ENGINE` | `$env:DRAGLINT_DOT` |
 | 3 | `%APPDATA%\drag-lint\settings.json` key `engine` | the same file, key `dot` |
-| 4 | `<app>\bin\drag-lint.exe` (installed layout) | `<app>\graphviz\bin\dot.exe` |
-| 5 | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` (the shared engine) | `dot.exe` on PATH |
-| 6 | `<repo>\third_party\dll-win64\drag-lint.exe` (a clone's own build) | `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe` |
+| 4 | `<scripts>\drag-lint.exe` (the FLAT install, owner D1) | `<scripts>\graphviz\bin\dot.exe` (flat) |
+| 5 | `<app>\bin\drag-lint.exe` (the earlier bin\ layout) | `<app>\graphviz\bin\dot.exe` |
+| 6 | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` (the shared engine) | `dot.exe` on PATH |
+| 7 | `<repo>\third_party\dll-win64\drag-lint.exe` (a clone's own build) | `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe` |
 
-`<app>` / `<repo>` is the folder above `charts\`. A missing, unreadable or keyless `settings.json` is
-skipped. An explicit `-Engine` / `-Dot` that does not exist is an error (a typo never silently picks
-another file); when nothing exists the error names every place looked at, in order. The shared engine
+`<scripts>` is the folder the chart scripts live in: in the flat install drag-lint.exe, its DLLs and the
+plugin BPL sit beside them; in the repo (`charts\src`) nothing does, so step 4 is skipped here.
+`<app>` / `<repo>` is the folder above `charts\`. A missing or unreadable `settings.json`, a missing
+key, or an unset variable is skipped. Any path someone SET -- `-Engine` / `-Dot`, `DRAGLINT_ENGINE` /
+`DRAGLINT_DOT`, or the `settings.json` key -- that does not exist is an error naming where it was set
+(a typo never silently picks another file); when nothing exists the error names every place looked at,
+in order. Relative paths are taken against the current PowerShell location and the full path is used.
+Ask-Report and New-ExampleGallery pass the engine they resolved to the charts they draw (through
+`DRAGLINT_ENGINE`, restored afterwards). The shared engine
 sits BEFORE the repo-relative one on purpose: a worktree's own `third_party\dll-win64` can hold an older
 build (this one held 1.16.0-alpha against a deployed 1.22.0-alpha), and taking it would give every chart
 an older parse. dot is resolved when a chart is drawn, so `round-trip` still delivers its text (with
