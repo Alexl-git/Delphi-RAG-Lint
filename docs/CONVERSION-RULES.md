@@ -774,6 +774,13 @@ R26 (see *Refusals*) still counts every such instance as left unconverted. `info
 advertises the behaviour as `capabilities.inherited_instances: true`; an engine
 without the key still refuses the unit.
 
+**Resolved defaults are written to streamable paths only** (1.25.2). A
+`#link`'d source property absent from the block is written with its declared
+`default` -- only when every hop of the target path is a PUBLISHED property
+(the only kind a `.dfm` streams); a path through a public hop such as a
+collection's `Items` or `TFieldDefs.ParentDef` gets nothing. A property's
+attributes (`[Default(False)]`) are never read as its `default` clause.
+
 **Collections** (1.25.1). A collection-valued property (`FieldDefs = < item ...
 end>`) streams as ONE leaf. A whole-collection `#link FieldDefs <- FieldDefs`
 relocates it verbatim, as before. Links on its ITEM members --

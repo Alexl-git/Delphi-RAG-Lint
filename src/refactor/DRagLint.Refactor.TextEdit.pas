@@ -468,9 +468,35 @@ begin
         function(const A, B: TTextEdit): Integer
         begin
           Result:= EditTopLine(B) - EditTopLine(A);
+          { 1.25.2: an `insert after L` and a delete ENDING at L share the key L
+            -- two ADJACENT re-emitted blocks: the second's insert after the
+            first's last line. The insert must go first: run after the delete,
+            its index L lands as many lines too low as were deleted, inside a
+            later block (DMREADINGS: tables spliced into their neighbours, a
+            .dfm Delphi refused). TList.Sort is not stable, so the order is
+            stated, never left to the sort. }
+          if Result = 0 then Result:= Ord(A.Kind <> tekInsertLines) - Ord(B.Kind <> tekInsertLines);
           if Result = 0 then Result:= B.Col - A.Col; // same line: larger column first (back-to-front)
         end);
-      Group.Sort(Cmp);
+      { 1.25.2: STABLE. Edits the comparer ties (two inserts at one line and
+        column) are applied in REVERSE planned order, so they land in the file
+        in planned order: each later insert at the same index goes above the
+        earlier one. TList.Sort alone left it to the sort. }
+      var Planned: TArray<TTextEdit>:= Group.ToArray;
+      var Order: TList<Integer>:= TList<Integer>.Create;
+      try
+        for var K: Integer:= 0 to High(Planned) do Order.Add(K);
+        Order.Sort(TComparer<Integer>.Construct(
+          function(const IA, IB: Integer): Integer
+          begin
+            Result:= Cmp.Compare(Planned[IA], Planned[IB]);
+            if Result = 0 then Result:= IB - IA;
+          end));
+        Group.Clear;
+        for var K: Integer in Order do Group.Add(Planned[K]);
+      finally
+        Order.Free;
+      end;
 
       Lines:= TStringList.Create;
       try
