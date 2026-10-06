@@ -10889,6 +10889,135 @@ begin
   end;
 end;
 
+{ C12 Task 2: the request resolved to a component scope over the .dfm text. }
+procedure TestConvertScope;
+const
+  DFM = 'object FormU: TFormU' + sLineBreak +
+        '  Caption = ''inherited fake: TLabel''' + sLineBreak +
+        '  object Label1: TLabel' + sLineBreak + '  end' + sLineBreak +
+        '  object Panel1: TPanel' + sLineBreak +
+        '    object Label2: TLabel' + sLineBreak +
+        '      Font.Name = ''Tahoma''' + sLineBreak + '    end' + sLineBreak +
+        '    inline Frame1: TFrame1' + sLineBreak +
+        '      inherited Label3: TLabel' + sLineBreak + '      end' + sLineBreak +
+        '    end' + sLineBreak + '  end' + sLineBreak +
+        '  object Grid1: TcxGrid' + sLineBreak +
+        '    Columns = <' + sLineBreak + '      item' + sLineBreak + '        Caption = ''object Bogus: TLabel''' + sLineBreak +
+        '      end>' + sLineBreak + '  end' + sLineBreak +
+        '  object Btn1: TButton' + sLineBreak + '  end' + sLineBreak +
+        'end' + sLineBreak;
+  // An inline frame child that shares the ROOT's name: the root is excluded by depth, not by name.
+  DFM_ROOT_NAME = 'object FormU: TFormU' + sLineBreak +
+        '  inline Frame1: TFrame1' + sLineBreak +
+        '    inherited FormU: TLabel' + sLineBreak + '    end' + sLineBreak +
+        '  end' + sLineBreak + 'end' + sLineBreak;
+  BINARY_DFM  = 'TPF0' + #0#1#2;
+  BOOK_LABEL  = '#convert TLabel -> TStaticText' + sLineBreak + '#link Caption <- Caption' + sLineBreak;
+  BOOK_BUTTON = '#convert TButton -> TcxButton' + sLineBreak;
+  BOOK_BOTH   = BOOK_LABEL + sLineBreak + BOOK_BUTTON;
+  REQ_SEL  = '{"schema":"convert-request/1","scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"Label1","type":"TLabel"},{"name":"Btn1","type":"TButton"},{"name":"Gone","type":"TLabel"}]}]}';
+  REQ_FORM = '{"schema":"convert-request/1","scope":"form","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"Label1","type":"tlabel"}]}]}';
+  REQ_ROOT = '{"schema":"convert-request/1","scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"FormU","type":"TFormU"}]}]}';
+  DFM_PATH = 'C:\P\U.dfm';  // dl:ok hardcoded-absolute-path@b501 -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  PAS_PATH = 'C:\P\U.pas';  // dl:ok hardcoded-absolute-path@94c1 -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  PAS_PATH_OTHER_CASE = 'c:\p\u.PAS';  // dl:ok hardcoded-absolute-path@728b -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  PAS_OTHER = 'C:\P\V.pas';  // dl:ok hardcoded-absolute-path@70fc -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  RULES_DIR = 'C:\R';  // dl:ok hardcoded-absolute-path@c2b2 -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  IDX_ROOT   = 0;
+  IDX_LABEL1 = 1;
+  IDX_FRAME1 = 4;
+  IDX_LABEL3 = 5;
+  IDX_LAST_FORM_HIT = 2;
+  FORM_HITS = 3;
+  LINE_ROOT   = 1;
+  LINE_LABEL1 = 3;
+  DEPTH_LABEL3 = 3; // root > Panel1 > Frame1 > Label3
+var
+  Inst : TArray<TDfmInstance>;
+  Sc   : TConvertScope;
+  Err  : string;
+  Names: TArray<string>;
+
+  function Join(const A: TArray<string>): string;
+  begin
+    Result:= string.Join(',', A);
+  end;
+
+  function InstNames(const A: TArray<TDfmInstance>): string;
+  begin
+    Result:= '';
+    for var I: TDfmInstance in A do
+      Result:= Result + I.Name + ':' + I.TypeName + ',';
+  end;
+
+begin
+  Inst:= ListDfmInstances(DFM);
+  Check('dfm.instances.all.depths', InstNames(Inst) = 'FormU:TFormU,Label1:TLabel,Panel1:TPanel,Label2:TLabel,Frame1:TFrame1,Label3:TLabel,Grid1:TcxGrid,Btn1:TButton,', InstNames(Inst));
+  Check('dfm.instances.quoted.not.header', Pos('fake', InstNames(Inst)) = 0);
+  Check('dfm.instances.collection.item.skipped', Pos('Bogus', InstNames(Inst)) = 0);
+  Check('dfm.instances.opener', (Inst[IDX_FRAME1].Opener = doInline) and (Inst[IDX_LABEL3].Opener = doInherited) and (Inst[IDX_LABEL1].Opener = doObject));
+  Check('dfm.instances.depth', (Inst[IDX_ROOT].Depth = 0) and (Inst[IDX_LABEL1].Depth = 1) and (Inst[IDX_LABEL3].Depth = DEPTH_LABEL3), IntToStr(Inst[IDX_LABEL3].Depth));
+  Check('dfm.instances.line', (Inst[IDX_ROOT].Line = LINE_ROOT) and (Inst[IDX_LABEL1].Line = LINE_LABEL1), IntToStr(Inst[IDX_LABEL1].Line));
+  Check('dfm.instances.binary', Length(ListDfmInstances(BINARY_DFM)) = 0);
+  Check('dfm.instances.empty', Length(ListDfmInstances('')) = 0);
+
+  // selected scope
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, DFM, Err);
+  Check('scope.selected.build', (Err = '') and (Sc.Kind = skSelected) and (Sc.UnitPas = PAS_PATH) and (Join(Sc.Types) = 'TLabel,TButton'), Err);
+  Check('scope.selected.instances', InstNames(Sc.Instances) = 'Label1:TLabel,Btn1:TButton,', InstNames(Sc.Instances));
+  Check('scope.selected.unknown.name', Join(Sc.NotFound) = 'Gone', Join(Sc.NotFound));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText(BOOK_LABEL));
+  Check('scope.selected.names.for.label.book', Join(Names) = 'Label1', Join(Names));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText(BOOK_BOTH));
+  Check('scope.selected.names.for.both.book', Join(Names) = 'Label1,Btn1', Join(Names));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText('#convert TEdit -> TcxTextEdit' + sLineBreak));
+  Check('scope.selected.names.none', Length(Names) = 0, Join(Names));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText('#convert TLabel -> ' + sLineBreak));
+  Check('scope.selected.names.from.only.stub', Length(Names) = 0, Join(Names));
+  Check('scope.selected.text', ScopeText(Sc) = 'Scope: 2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Gone', ScopeText(Sc));
+  Check('scope.selected.status', ScopeStatusText(Sc, 2) = 'Request from the IDE: convert 2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Gone with 2 matching book(s) -- review and press Convert.', ScopeStatusText(Sc, 2));
+  Sc:= BuildScope(ParseConvertRequest(REQ_ROOT).Request, DFM, Err);
+  Check('scope.selected.root.not.instance', (Err = '') and (Length(Sc.Instances) = 0) and (Join(Sc.NotFound) = 'FormU'), Join(Sc.NotFound));
+  // R9: a binary or missing .dfm is refused for BOTH scopes, naming the file.
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, BINARY_DFM, Err);
+  Check('scope.selected.binary.refused', (Pos('binary', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, '', Err);
+  Check('scope.selected.missing.refused', (Pos('missing', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+
+  // form scope: every TLabel at any depth, inline children included, .dfm order
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, DFM, Err);
+  Check('scope.form.build', (Err = '') and (Sc.Kind = skForm) and (Join(Sc.Types) = 'tlabel'), Err);
+  Check('scope.form.nested', InstNames(Sc.Instances) = 'Label1:TLabel,Label2:TLabel,Label3:TLabel,', InstNames(Sc.Instances));
+  Check('scope.form.inline.child', (Length(Sc.Instances) = FORM_HITS) and (Sc.Instances[IDX_LAST_FORM_HIT].Opener = doInherited));
+  Check('scope.form.text', ScopeText(Sc) = 'Scope: all tlabel instances on U (3 found)', ScopeText(Sc));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText(BOOK_BUTTON));
+  Check('scope.form.names.other.book', Length(Names) = 0, Join(Names));
+  Sc:= BuildScope(ParseConvertRequest(StringReplace(REQ_FORM, '"type":"tlabel"', '"type":"TcxTreeList"', [])).Request, DFM, Err);
+  Check('scope.form.none.found', (Err = '') and (Length(Sc.Instances) = 0) and (ScopeText(Sc) = 'Scope: all TcxTreeList instances on U (0 found)'), ScopeText(Sc));
+  Sc:= BuildScope(ParseConvertRequest(StringReplace(REQ_FORM, '"type":"tlabel"', '"type":"TFormU"', [])).Request, DFM, Err);
+  Check('scope.form.root.never.instance', (Err = '') and (Length(Sc.Instances) = 0), InstNames(Sc.Instances));
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, DFM_ROOT_NAME, Err);
+  Check('scope.form.root.by.depth.not.name', (Err = '') and (InstNames(Sc.Instances) = 'FormU:TLabel,'), InstNames(Sc.Instances));
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, 'TPF0' + #0#1, Err);
+  Check('scope.form.binary.refused', (Pos('binary', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, '', Err);
+  Check('scope.form.missing.refused', (Pos('missing', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+
+  // books, texts, unit check
+  Check('scope.book.matches', BookMatchesTypes(BOOK_LABEL, ['TLABEL']) and BookMatchesTypes(BOOK_BOTH, ['TButton']) and not BookMatchesTypes(BOOK_BUTTON, ['TLabel']));
+  Check('scope.book.exact.not.ancestor', not BookMatchesTypes('#convert TCustomLabel -> TX' + sLineBreak, ['TLabel']));
+  Check('scope.no.book.text', NoBookText(RULES_DIR, ['TLabel', 'TButton']) = 'No book in C:\R converts TLabel, TButton -- pick the From class on the Classes tab and choose Conversion > New Conversion');
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, DFM, Err);
+  Check('scope.matches.units.ok', ScopeMatchesUnits(Sc, [PAS_PATH_OTHER_CASE]) = '');
+  Check('scope.matches.units.mismatch', Pos(PAS_PATH, ScopeMatchesUnits(Sc, [PAS_PATH, PAS_OTHER])) > 0);
+  Check('scope.matches.units.other.unit', Pos(PAS_PATH, ScopeMatchesUnits(Sc, [PAS_OTHER])) > 0);
+  Sc:= Default(TConvertScope);
+  Check('scope.whole.unit.text', (ScopeText(Sc) = WHOLE_UNIT_SCOPE_TEXT) and (ScopeMatchesUnits(Sc, ['a', 'b']) = ''));
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -11084,6 +11213,7 @@ begin
     TestConvertRequestParse;
     TestConvertRequestValidate;
     TestConvertRequestCaps;
+    TestConvertScope;
 
     FreeAndNil(GParseBook);
 

@@ -10,6 +10,7 @@ interface
 
 uses
   System.SysUtils
+  , ConvRules.Inheritance
   ;
 
 const
@@ -21,6 +22,8 @@ const
   CAPABILITY_CONVERT_REQUEST = 1;
   /// <summary>Refusal text for scope "project" (reserved in the contract).</summary>
   SCOPE_PROJECT_UNSUPPORTED = 'Project-wide scope is not supported by this editor version';
+  /// <summary>The Scope line when no request scope is in force (spec E4).</summary>
+  WHOLE_UNIT_SCOPE_TEXT = 'Scope: whole unit';
 
 type
   /// <summary>The request's scope. rsProject is parsed so the refusal can name it.</summary>
@@ -82,6 +85,29 @@ type
     Error  : string;
   end;
 
+  /// <summary>What a Convert run is restricted to: the whole unit (no request), the
+  /// selected components, or every instance of the requested types on the form.</summary>
+  TScopeKind = (skWholeUnit, skSelected, skForm);
+
+  /// <summary>A request resolved against the unit's .dfm text (BuildScope).
+  /// Default(TConvertScope) is the whole-unit scope.</summary>
+  /// <remarks>The scope binds UnitPas ONLY: every other unit of a run is converted
+  /// whole (ScopeMatchesUnits refuses a source list that is not exactly UnitPas).</remarks>
+  TConvertScope = record
+    /// <summary>skWholeUnit when no request scope is in force.</summary>
+    Kind     : TScopeKind;
+    /// <summary>The request's unit (.pas path, as the request wrote it).</summary>
+    UnitPas  : string;
+    /// <summary>The requested bare types (RequestedTypes), request order.</summary>
+    Types    : TArray<string>;
+    /// <summary>The components in scope with their .dfm types and openers: request
+    /// order for skSelected, .dfm order for skForm. Never the root.</summary>
+    Instances: TArray<TDfmInstance>;
+    /// <summary>skSelected only: requested names the .dfm does not open below the
+    /// root, request order. They never reach the engine.</summary>
+    NotFound : TArray<string>;
+  end;
+
 /// <summary>Reads a convert-request/1 document.</summary>
 /// <param name="AJson">The file's text (UTF-8 already decoded).</param>
 /// <returns>Ok=False with the first problem named: not a JSON object, wrong or
@@ -115,6 +141,67 @@ function ValidateConvertRequest(const AReq: TConvertRequest; const AProjectDb, A
 /// <returns>E.g. ['TLabel', 'TButton'].</returns>
 function RequestedTypes(const AReq: TConvertRequest): TArray<string>;
 
+/// <summary>Resolves a validated request against its unit's .dfm text (spec E6-E8).</summary>
+/// <param name="AReq">A request ValidateConvertRequest accepted (exactly one unit).</param>
+/// <param name="ADfmText">The text of the unit's .dfm; '' when the file is missing
+/// or could not be read.</param>
+/// <param name="AError">'' on success; else the refusal, naming the .dfm (the
+/// request's "dfm", else the .pas with DFM_EXT).</param>
+/// <returns>skSelected: each requested name the .dfm opens below the root, request
+/// order, with the .dfm's own type and opener; the rest in NotFound. skForm: every
+/// .dfm object below the root whose bare type equals a requested type (case-
+/// insensitive), at any depth (panels, inline frames' children), .dfm order. On a
+/// refusal: no instances.</returns>
+/// <remarks>A binary .dfm (TPF0) and a missing / header-less one are refused for
+/// BOTH scopes: neither can say which components exist, and resolving against
+/// nothing would silently report every name not found. The root (Depth 0) is never an
+/// instance, whatever its name or class.</remarks>
+function BuildScope(const AReq: TConvertRequest; const ADfmText: string; out AError: string): TConvertScope;
+
+/// <summary>The scope's instance names one book converts (spec E6): those whose bare
+/// .dfm type is the From type of a pair with a To type.</summary>
+/// <param name="AScope">The resolved scope.</param>
+/// <param name="APairs">The book's pairs (TypePairsOfText).</param>
+/// <returns>Names in AScope.Instances order; [] when the book converts none of them
+/// (the runner then skips the book without an engine call).</returns>
+function ScopedNamesForBook(const AScope: TConvertScope; const APairs: TArray<TTypePair>): TArray<string>;
+
+/// <summary>True when a book has a #convert pair with a To type whose From type is one
+/// of ATypes (exact bare name, case-insensitive; an ancestor class does not match).</summary>
+/// <param name="ARulesText">The .rules text.</param>
+/// <param name="ATypes">Bare class names (RequestedTypes).</param>
+/// <returns>True when the book converts at least one requested type.</returns>
+function BookMatchesTypes(const ARulesText: string; const ATypes: TArray<string>): Boolean;
+
+/// <summary>The Convert tab's Scope line (spec E4), with the 'Scope: ' prefix.</summary>
+/// <param name="AScope">The scope; Default(TConvertScope) for none.</param>
+/// <returns>WHOLE_UNIT_SCOPE_TEXT; 'Scope: N selected component(s) on U: a (T), ...'
+/// plus '; not found on the form: x, y' when names were not found; or 'Scope: all
+/// T1, T2 instances on U (N found)'. U is the unit's file name without extension.</returns>
+function ScopeText(const AScope: TConvertScope): string;
+
+/// <summary>The status line after a request was applied (spec E5).</summary>
+/// <param name="AScope">The resolved scope.</param>
+/// <param name="AMatchingBooks">How many books were checked for it.</param>
+/// <returns>'Request from the IDE: convert &lt;ScopeText without its prefix&gt; with N
+/// matching book(s) -- review and press Convert.'</returns>
+function ScopeStatusText(const AScope: TConvertScope; AMatchingBooks: Integer): string;
+
+/// <summary>The error status when no book converts a requested type (spec E3).</summary>
+/// <param name="ARulesFolder">The folder holding the books.</param>
+/// <param name="ATypes">The requested types.</param>
+/// <returns>'No book in &lt;folder&gt; converts T1, T2 -- pick the From class on the
+/// Classes tab and choose Conversion &gt; New Conversion'</returns>
+function NoBookText(const ARulesFolder: string; const ATypes: TArray<string>): string;
+
+/// <summary>Checks that a scoped run's source list is exactly the scope's unit.</summary>
+/// <param name="AScope">The scope.</param>
+/// <param name="AUnits">The Convert tab's source units.</param>
+/// <returns>'' for skWholeUnit, or when AUnits is the one unit UnitPas (paths
+/// compared case-insensitively after ExpandFileName); else the refusal, naming
+/// UnitPas and the list's size.</returns>
+function ScopeMatchesUnits(const AScope: TConvertScope; const AUnits: TArray<string>): string;
+
 /// <summary>The capabilities document, one line, no whitespace.</summary>
 /// <returns>{"schema":"editor-capabilities/1","convert_request":1}</returns>
 function CapabilitiesJson: string;
@@ -132,6 +219,20 @@ uses
   , System.JSON
   , System.StrUtils
   ;
+
+const
+  SCOPE_PREFIX       = 'Scope: ';
+  SCOPE_SELECTED_FMT = SCOPE_PREFIX + '%d selected component(s) on %s: %s';
+  SCOPE_NOT_FOUND    = '; not found on the form: ';
+  SCOPE_FORM_FMT     = SCOPE_PREFIX + 'all %s instances on %s (%d found)';
+  SCOPE_ITEM_FMT     = '%s (%s)';
+  LIST_SEP           = ', ';
+  STATUS_HEAD        = 'Request from the IDE: convert ';
+  STATUS_TAIL_FMT    = ' with %d matching book(s) -- review and press Convert.';
+  NO_BOOK_FMT        = 'No book in %s converts %s -- pick the From class on the Classes tab and choose Conversion > New Conversion';
+  UNITS_MISMATCH_FMT = 'the scope names %s but the source list holds %d unit(s) -- clear the scope or list only that unit';
+  DFM_BINARY_FMT     = 'the .dfm %s is binary -- convert it to text in the IDE first';
+  DFM_MISSING_FMT    = 'the .dfm %s is missing, unreadable or has no object header -- the component scope cannot be resolved';
 
 function Fail(const AText: string; out AError: string): Boolean;
 begin
@@ -349,6 +450,124 @@ begin
     for var C: TRequestComponent in U.Components do
       if not MatchText(C.TypeName, Result) then
         Result:= Result + [C.TypeName];
+end;
+
+{ The request unit's .dfm path, for refusal texts: its "dfm", else beside the .pas. }
+function DfmPathOf(const AUnit: TRequestUnit): string;
+begin
+  Result:= if AUnit.Dfm <> '' then AUnit.Dfm else ChangeFileExt(AUnit.Pas, DFM_EXT);
+end;
+
+{ The first header below the root that AName opens (case-insensitive); False when none. }
+function FindBelowRoot(const AAll: TArray<TDfmInstance>; const AName: string; out AInst: TDfmInstance): Boolean;
+begin
+  AInst:= Default(TDfmInstance);
+  for var I: TDfmInstance in AAll do
+    if (I.Depth > 0) and SameText(I.Name, AName) then
+    begin
+      AInst:= I;
+      Exit(True);
+    end;
+  Result:= False;
+end;
+
+function BuildScope(const AReq: TConvertRequest; const ADfmText: string; out AError: string): TConvertScope;
+var
+  All : TArray<TDfmInstance>;
+  Inst: TDfmInstance;
+begin
+  AError:= '';
+  Result:= Default(TConvertScope);
+  Result.UnitPas:= AReq.Units[0].Pas;
+  Result.Types  := RequestedTypes(AReq);
+  if ADfmText.StartsWith(BINARY_DFM_SIGNATURE) then
+  begin
+    AError:= Format(DFM_BINARY_FMT, [DfmPathOf(AReq.Units[0])]);
+    Exit;
+  end;
+  All:= ListDfmInstances(ADfmText);
+  if Length(All) = 0 then
+  begin
+    AError:= Format(DFM_MISSING_FMT, [DfmPathOf(AReq.Units[0])]);
+    Exit;
+  end;
+  if AReq.Scope = rsForm then
+  begin
+    Result.Kind:= skForm;
+    for var I: TDfmInstance in All do
+      if (I.Depth > 0) and MatchText(BareType(I.TypeName), Result.Types) then
+        Result.Instances:= Result.Instances + [I];
+    Exit;
+  end;
+  Result.Kind:= skSelected;
+  for var C: TRequestComponent in AReq.Units[0].Components do
+    if FindBelowRoot(All, C.Name, Inst) then
+      Result.Instances:= Result.Instances + [Inst] // the .dfm's own type and opener win over the request's
+    else
+      Result.NotFound:= Result.NotFound + [C.Name];
+end;
+
+function ScopedNamesForBook(const AScope: TConvertScope; const APairs: TArray<TTypePair>): TArray<string>;
+begin
+  Result:= nil;
+  for var I: TDfmInstance in AScope.Instances do
+    for var P: TTypePair in APairs do
+      if (P.ToType <> '') and SameText(BareType(I.TypeName), P.FromType) then
+      begin
+        Result:= Result + [I.Name];
+        Break;
+      end;
+end;
+
+function BookMatchesTypes(const ARulesText: string; const ATypes: TArray<string>): Boolean;
+begin
+  for var P: TTypePair in TypePairsOfText(ARulesText) do
+    if (P.ToType <> '') and MatchText(P.FromType, ATypes) then
+      Exit(True);
+  Result:= False;
+end;
+
+function ScopeText(const AScope: TConvertScope): string;
+var
+  UnitBase: string;
+  Items   : TArray<string>;
+begin
+  UnitBase:= ChangeFileExt(ExtractFileName(AScope.UnitPas), '');
+  case AScope.Kind of
+    skSelected:
+      begin
+        Items:= nil;
+        for var I: TDfmInstance in AScope.Instances do
+          Items:= Items + [Format(SCOPE_ITEM_FMT, [I.Name, I.TypeName])];
+        Result:= Format(SCOPE_SELECTED_FMT, [Length(AScope.Instances), UnitBase, string.Join(LIST_SEP, Items)]);
+        if Length(AScope.NotFound) > 0 then
+          Result:= Result + SCOPE_NOT_FOUND + string.Join(LIST_SEP, AScope.NotFound);
+      end;
+    skForm:
+      Result:= Format(SCOPE_FORM_FMT, [string.Join(LIST_SEP, AScope.Types), UnitBase, Length(AScope.Instances)]);
+    else
+      Result:= WHOLE_UNIT_SCOPE_TEXT;
+  end; // case
+end;
+
+function ScopeStatusText(const AScope: TConvertScope; AMatchingBooks: Integer): string;
+begin
+  Result:= STATUS_HEAD + Copy(ScopeText(AScope), Length(SCOPE_PREFIX) + 1, MaxInt) + Format(STATUS_TAIL_FMT, [AMatchingBooks]);
+end;
+
+function NoBookText(const ARulesFolder: string; const ATypes: TArray<string>): string;
+begin
+  Result:= Format(NO_BOOK_FMT, [ARulesFolder, string.Join(LIST_SEP, ATypes)]);
+end;
+
+function ScopeMatchesUnits(const AScope: TConvertScope; const AUnits: TArray<string>): string;
+begin
+  Result:= '';
+  if AScope.Kind = skWholeUnit then
+    Exit;
+  if (Length(AUnits) = 1) and SameText(ExpandFileName(AUnits[0]), ExpandFileName(AScope.UnitPas)) then
+    Exit;
+  Result:= Format(UNITS_MISMATCH_FMT, [AScope.UnitPas, Length(AUnits)]);
 end;
 
 function CapabilitiesJson: string;
