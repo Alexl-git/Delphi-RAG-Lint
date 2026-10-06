@@ -64,6 +64,11 @@ Check 'add -NewGroup registers the group with order max+10' (($r.Code -eq 0) -an
 $gl = @(Get-Content -LiteralPath (Join-Path $S 'features\groups.json'))
 Check 'groups.json keeps its one-row-per-line layout' (($gl.Count -eq ($groups.Count + 4)) -and ($gl -contains '    { "id": "testing", "title": "Testing", "order": 130, "summary": "Self-tests and the battery." }')) "($($gl.Count) lines)"
 
+# Fix round 1, finding 1: add is ATOMIC -- a refused entry writes no group/team either.
+$gSha = Sha (Join-Path $S 'features\groups.json'); $tSha = Sha (Join-Path $S 'features\teams.json')
+$r = Run @('add', '-Id', 'zz-atomic', '-Title', 'Atomic add', '-Group', 'zz-atomic-group', '-Owner', 'ZZATOMIC', '-Summary', 'Too short.', '-Intro', 'x', '-WikiPage', 'Maintenance', '-Surface', 'cli:info', '-NewGroup', '-GroupTitle', 'Atomic group', '-GroupSummary', 'Never written.', '-NewTeam', '-TeamTitle', 'Atomic team', '-TeamSummary', 'Never written.')
+Check 'add -NewGroup -NewTeam with an invalid entry is refused' (($r.Code -eq 1) -and ($r.Out -match 'nothing written')) ($r.Out.Trim() -split "`n" | Select-Object -First 1)
+Check 'and leaves groups.json and teams.json byte-identical' (((Sha (Join-Path $S 'features\groups.json')) -eq $gSha) -and ((Sha (Join-Path $S 'features\teams.json')) -eq $tSha) -and -not (Test-Path -LiteralPath (Join-Path $S 'features\entries\zz-atomic.json')))
 # --- update -----------------------------------------------------------------
 $before = Sha $f1
 $r = Run @('update', '-Id', 'uses-report-csv', '-Set', 'summary=Too short')
@@ -107,6 +112,16 @@ $cqNew = @(Get-Content -LiteralPath (Join-Path $S 'features\families\chart-quest
 $cqDiff = @(for ($i = 0; $i -lt [Math]::Max($cqNew.Count, $cqOld.Count); $i++) { if ($cqNew[$i] -cne $cqOld[$i]) { $i } })
 Check 'and edits only that one line of the hand-laid-out family file' (($cqNew.Count -eq $cqOld.Count) -and ($cqDiff.Count -eq 1)) "($($cqDiff.Count) line(s) differ)"
 
+# Fix round 1, finding 3: move-menu is ATOMIC -- an unreadable family file
+# (LF endings: Read-FamilyDefinition refuses it) aborts BEFORE any entry is written.
+$cqPath = Join-Path $S 'features\families\chart-questions.json'; $cqSave = [IO.File]::ReadAllBytes($cqPath)
+[IO.File]::WriteAllText($cqPath, ([IO.File]::ReadAllText($cqPath) -replace "`r`n", "`n"), [Text.Encoding]::ASCII)
+$entSha = @(Get-ChildItem -LiteralPath (Join-Path $S 'features\entries') -File | Sort-Object Name | ForEach-Object { $_.Name + '=' + (Sha $_.FullName) }) -join ';'
+$r = Run @('move-menu', '-From', 'drag-lint > Dependencies', '-To', 'drag-lint > Deps')
+$entSha2 = @(Get-ChildItem -LiteralPath (Join-Path $S 'features\entries') -File | Sort-Object Name | ForEach-Object { $_.Name + '=' + (Sha $_.FullName) }) -join ';'
+Check 'move-menu with a broken family file is refused, naming it' (($r.Code -eq 1) -and ($r.Out -match 'chart-questions\.json')) ($r.Out.Trim() -split "`n" | Select-Object -First 1)
+Check 'and leaves every entry file byte-identical (the matching one included)' ($entSha2 -eq $entSha)
+[IO.File]::WriteAllBytes($cqPath, $cqSave)
 # --- deprecate --------------------------------------------------------------
 $r = Run @('deprecate', '-Id', 'zz-new-group-feature', '-SupersededBy', 'uses-report-csv')
 $e2 = Read-FeatureEntry -Path (Join-Path $S 'features\entries\zz-new-group-feature.json')
@@ -130,6 +145,54 @@ Check 'check passes again' ($r.Code -eq 0)
 $r = Run @('bogus-verb')
 Check 'an unknown verb exits 2' ($r.Code -eq 2)
 
+# --- Fix round 1, finding 2: family children, on a LIVE scratch repo --------
+# A second scratch repo with what Get-LiveSurface reads (engine exe for --help
+# and rules --json only, the harvested sources, the full wiki page set) plus the
+# two family parent entries. Spec 18: blast-radius sees what move-menu touches.
+$L = Join-Path $WorkDir 'live'
+$dl = Join-Path $L 'third_party\dll-win64'
+New-Item -ItemType Directory -Path (Join-Path $L 'features\entries'), (Join-Path $L 'docs\wiki'), $dl, (Join-Path $L 'tests\autotest'), (Join-Path $L 'build'), (Join-Path $L 'charts') -Force | Out-Null
+foreach ($d in 'schema', 'families') { Copy-Item -LiteralPath (Join-Path $Repo "features\$d") -Destination (Join-Path $L 'features') -Recurse -Force }
+foreach ($x in 'groups.json', 'teams.json', 'exemptions.json', 'related-projects.json') { Copy-Item -LiteralPath (Join-Path $Repo "features\$x") -Destination (Join-Path $L 'features') -Force }
+Copy-Item -LiteralPath (Join-Path $Repo 'CHANGELOG.md') -Destination $L -Force
+Get-ChildItem -LiteralPath (Join-Path $Repo 'docs\wiki') -Filter '*.md' -File | Copy-Item -Destination (Join-Path $L 'docs\wiki') -Force
+foreach ($x in 'src\core\DRagLint.Core.Model.pas', 'src\cli\DRagLint.CLI.pas', 'src\storage\DRagLint.Storage.Schema.pas', 'src\mcp\DRagLint.MCP.Server.pas',
+               'src\delphi-plugin\DragLint.Plugin.Editor.pas', 'src\delphi-plugin\DragLint.Plugin.AboutForm.pas', 'src\delphi-plugin\DragLint.Plugin.ReportText.pas', 'build\pack-lint-release.ps1') {
+  $to = Join-Path $L $x; New-Item -ItemType Directory -Path (Split-Path -Parent $to) -Force | Out-Null; Copy-Item -LiteralPath (Join-Path $Repo $x) -Destination $to -Force
+}
+Copy-Item -LiteralPath (Join-Path $Repo 'charts\src') -Destination (Join-Path $L 'charts') -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $Repo 'tests\autotest\lib') -Destination (Join-Path $L 'tests\autotest') -Recurse -Force
+$srcDl = Join-Path $Repo 'third_party\dll-win64'
+Get-ChildItem -LiteralPath $srcDl -File | Where-Object { $_.Name -eq 'drag-lint.exe' -or $_.Name -like 'tree-sitter*.dll' } | Copy-Item -Destination $dl -Force
+Copy-Item -LiteralPath (Join-Path $srcDl 'rules') -Destination $dl -Recurse -Force
+$pl = Get-RegistryPaths -Repo $L
+$today = Get-Date -Format 'yyyy-MM-dd'; $bld = Get-CurrentBuildVersion -Paths $pl
+$parents = @(
+  [ordered]@{ id = 'lint-rules'; title = 'Lint rules'; group = 'linting'; owner = 'ENGINE'; status = 'shipped'; since = $bld; summary = 'Every lint rule the engine ships, from rules --json'; intro = 'The rule family.'; wikiPage = 'rules'; surfaces = @([ordered]@{ type = 'cli'; verb = 'rules' }); audience = 'both'; family = 'lint-rules'; lastVerified = [ordered]@{ date = $today; by = 'guard'; build = $bld } },
+  [ordered]@{ id = 'chart-questions'; title = 'Chart questions'; group = 'diagrams-charts'; owner = 'CHARTS'; status = 'shipped'; since = $bld; summary = 'Every chart question of the Reports submenu and Ask-Report.ps1'; intro = 'The chart family.'; wikiPage = 'Diagrams-and-Charts'; surfaces = @([ordered]@{ type = 'script'; path = 'charts\src\Ask-Report.ps1' }); audience = 'both'; family = 'chart-questions'; lastVerified = [ordered]@{ date = $today; by = 'guard'; build = $bld } })
+foreach ($pe in $parents) { [void](Write-FeatureEntry -Entry $pe -Path (Join-Path $pl.Entries "$($pe.id).json") -KeyOrder (Get-EntryKeyOrder -Paths $pl)) }
+function RunL { param([string[]]$ArgList) $o = & pwsh -NoProfile -File $cli @ArgList -Repo $L 2>&1 | Out-String; return [pscustomobject]@{ Out = $o; Code = $LASTEXITCODE } }
+function JsonRows([string]$Out) { $i = $Out.IndexOf('['); $j = $Out.IndexOf('{'); $k = if ($i -ge 0 -and ($j -lt 0 -or $i -lt $j)) { $i } else { $j }; if ($k -lt 0) { return @() }; return @($Out.Substring($k) | ConvertFrom-Json) }
+
+$r = RunL @('blast-radius', '-MenuPath', 'drag-lint > Reports', '-Json')
+$rows = JsonRows $r.Out
+Check 'blast-radius on the Reports node lists the chart FAMILY (one row, family file)' (($r.Code -eq 0) -and (@($rows | Where-Object { $_.Id -eq 'chart-questions' -and $_.File -like '*chart-questions.json' }).Count -eq 1)) ($r.Out.Trim() -split "`n" | Select-Object -First 1)
+Check 'and, without -IncludeChildren, no chart children' (@($rows | Where-Object { $_.Id -like 'chart.*' }).Count -eq 0)
+$r = RunL @('blast-radius', '-MenuPath', 'drag-lint > Reports', '-IncludeChildren', '-Json')
+$rows = JsonRows $r.Out
+$kids = @($rows | Where-Object { $_.Id -like 'chart.*' })
+Check 'blast-radius -IncludeChildren also lists every chart child' (($r.Code -eq 0) -and ($kids.Count -gt 20) -and (@($kids | Where-Object { $_.Id -eq 'chart.who-writes' }).Count -eq 1)) "($($kids.Count) children)"
+$r = RunL @('find', '-Text', 'who writes', '-Json')
+Check 'find without -IncludeChildren does not see a chart child (control)' ($r.Code -eq 1)
+$r = RunL @('find', '-Text', 'who writes', '-IncludeChildren', '-Json')
+Check 'find -IncludeChildren hits a chart child' (($r.Code -eq 0) -and ($r.Out -match '"Id":\s*"chart\.who-writes"'))
+$r = RunL @('add', '-Id', 'zz-related-ok', '-Title', 'Related ok', '-Group', 'maintenance', '-Owner', 'ENGINE', '-Summary', 'Names a real chart child in related', '-Intro', 'x', '-WikiPage', 'Maintenance', '-Surface', 'cli:info', '-Related', 'chart.who-calls')
+Check 'add -Related chart.<real id> is accepted' (($r.Code -eq 0) -and (Test-Path -LiteralPath (Join-Path $pl.Entries 'zz-related-ok.json'))) ($r.Out.Trim() -split "`n" | Select-Object -First 1)
+$r = RunL @('update', '-Id', 'zz-related-ok', '-Set', 'related=["chart.what-it-calls"]')
+$eR = Read-FeatureEntry -Path (Join-Path $pl.Entries 'zz-related-ok.json')
+Check 'update -Set with a ONE-element JSON array stores an array' (($r.Code -eq 0) -and ((@($eR.Entry.related) -join ',') -eq 'chart.what-it-calls')) ($r.Out.Trim() -split "`n" | Select-Object -Skip 1 -First 1)
+$r = RunL @('update', '-Id', 'zz-related-ok', '-Set', 'related=["chart.who-cals"]')
+Check 'update -Set related=chart.<typo> is refused with nearest candidates' (($r.Code -eq 1) -and ($r.Out -match "related 'chart\.who-cals'") -and ($r.Out -match 'did you mean:[^\r\n]*chart\.who-calls') -and ($r.Out -notmatch 'schema:')) ($r.Out.Trim() -split "`n" | Select-Object -Skip 1 -First 1)
 Write-Host ''
 if ($script:Failed) { Write-Host 'FEATURE REGISTRY CLI: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'FEATURE REGISTRY CLI: PASS' -ForegroundColor Green

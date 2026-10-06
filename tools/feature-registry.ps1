@@ -66,7 +66,9 @@ function ConvertFrom-SetArg([string]$Arg) {
   if ($i -lt 1) { throw "-Set '$Arg': expected field=value" }
   $k = $Arg.Substring(0, $i).Trim(); $v = $Arg.Substring($i + 1)
   if ($v -eq '') { return @{ Key = $k; Value = $null } }
-  if ($v.TrimStart().StartsWith('[') -or $v.TrimStart().StartsWith('{')) { return @{ Key = $k; Value = (ConvertTo-OrderedObject ($v | ConvertFrom-Json -AsHashtable -Depth 8)) } }
+  if ($v.TrimStart().StartsWith('[') -or $v.TrimStart().StartsWith('{')) { # -NoEnumerate: without it a ONE-element JSON array arrives as a bare string.
+    $val = ConvertTo-OrderedObject ($v | ConvertFrom-Json -AsHashtable -Depth 8 -NoEnumerate)
+    return @{ Key = $k; Value = $val } }
   if ($k -eq 'homeOrder') { return @{ Key = $k; Value = [int]$v } }
   return @{ Key = $k; Value = $v }
 }
