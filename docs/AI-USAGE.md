@@ -711,6 +711,15 @@ reloads inside that window; `bench-context [--n N]` times N context bundles.
 
 ---
 
+### 2c. Registered verbs (generated from the feature registry)
+
+The table between the markers is written by `tools\build-feature-pages.ps1` from
+`features\entries\*.json` (entries whose `audience` is `agent` or `both` and that
+have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
+
+<!-- dl:registry:begin agent-verbs -->
+<!-- dl:registry:end agent-verbs -->
+
 ## 3. MCP mode (structured tools)
 
 Start the server (one per index):

@@ -693,6 +693,9 @@ and more (see [MCP tools](#mcp-tools-15) below).
 ---
 
 ## Features
+<!-- dl:registry:begin feature-summary -->
+<!-- dl:registry:end feature-summary -->
+
 
 ### Editors
 

@@ -26,6 +26,11 @@
   * SINGLE OBJECT also: Invoke-RegistryCheck ({ Failures; Notes; Stats }),
     ConvertFrom-SurfaceSpec ([ordered] surface), and the [string] returns of
     New-FeatureEntry / Update-FeatureEntry / Set-FeatureDeprecated (file path).
+  * Generator (Task 5): Get-RegistryModel and Invoke-RegistryGenerate return
+    ONE [pscustomobject]; Update-MarkedBlock, Get-DiffHead and the internal
+    Render-* functions return ONE [string] (CRLF). Sort-ByOrdinalKey
+    (internal) is WRAPPED. Render-* stay module-internal because 'Render' is
+    not an approved verb (exporting them would make Import-Module warn).
   Sort-OrdinalUnique, New-RegistryListAddition, Read-RegistryList,
   Get-FamilyMenuPrefixes, ConvertTo-RegistryListJson, Get-ChildIdsIfNeeded, Get-AllRegistryItems and
   Test-MenuNodeCovers are module-internal (not exported). Family children carry
@@ -98,15 +103,18 @@ function Get-RegistryPaths {
 # ---------------------------------------------------------------------------
 # Canonical JSON
 # ---------------------------------------------------------------------------
+# get_Keys(), never .Keys, on a dictionary whose keys are DATA: a shortcut
+# surface has a key named 'keys', and PowerShell member access then returns
+# that entry's VALUE instead of the key collection ({"Ctrl+Alt+F": null}).
 function ConvertTo-OrderedObject {
   param([AllowNull()]$Value)
   if ($null -eq $Value) { return $null }
   if ($Value -is [string] -or $Value -is [bool] -or $Value -is [int] -or $Value -is [long] -or $Value -is [double] -or $Value -is [decimal]) { return $Value }
   if ($Value -is [System.Collections.Specialized.OrderedDictionary]) {
-    $o = [ordered]@{}; foreach ($k in $Value.Keys) { $o[[string]$k] = ConvertTo-OrderedObject $Value[$k] }; return $o
+    $o = [ordered]@{}; foreach ($k in $Value.get_Keys()) { $o[[string]$k] = ConvertTo-OrderedObject $Value[$k] }; return $o
   }
   if ($Value -is [System.Collections.IDictionary]) {
-    $o = [ordered]@{}; $ks = [string[]]@($Value.Keys); [Array]::Sort($ks, [System.StringComparer]::Ordinal)
+    $o = [ordered]@{}; $ks = [string[]]@($Value.get_Keys()); [Array]::Sort($ks, [System.StringComparer]::Ordinal)
     foreach ($k in $ks) { $o[$k] = ConvertTo-OrderedObject $Value[$k] }; return $o
   }
   if ($Value -is [System.Management.Automation.PSCustomObject]) {
@@ -140,7 +148,7 @@ function Write-JsonValue([System.Text.StringBuilder]$Sb, $V, [int]$Level) {
   if ($V -is [int] -or $V -is [long] -or $V -is [double] -or $V -is [decimal]) { [void]$Sb.Append(([string]$V)); return }
   if ($V -is [System.Management.Automation.PSCustomObject]) { $V = ConvertTo-OrderedObject $V }
   if ($V -is [System.Collections.IDictionary]) {
-    $keys = @($V.Keys | ForEach-Object { [string]$_ })
+    $keys = @($V.get_Keys() | ForEach-Object { [string]$_ })
     if (-not ($V -is [System.Collections.Specialized.OrderedDictionary])) { $ks = [string[]]$keys; [Array]::Sort($ks, [System.StringComparer]::Ordinal); $keys = $ks }
     if ($keys.Count -eq 0) { [void]$Sb.Append('{}'); return }
     [void]$Sb.Append("{`r`n")
@@ -195,7 +203,7 @@ function Get-EntryKeyOrder {
 function Select-OrderedKeys([System.Collections.IDictionary]$Obj, [string[]]$Order) {
   $o = [ordered]@{}
   foreach ($k in $Order) { if ($Obj.Contains($k) -and $null -ne $Obj[$k]) { $o[$k] = $Obj[$k] } }
-  $rest = [string[]]@($Obj.Keys | Where-Object { $Order -notcontains $_ }); [Array]::Sort($rest, [System.StringComparer]::Ordinal)
+  $rest = [string[]]@($Obj.get_Keys() | Where-Object { $Order -notcontains $_ }); [Array]::Sort($rest, [System.StringComparer]::Ordinal)
   foreach ($k in $rest) { $o[$k] = $Obj[$k] }
   return $o
 }
@@ -408,7 +416,7 @@ function Test-FeatureEntry {
     if (-not ($s -is [System.Collections.IDictionary])) { $p.Add("${tag}: surfaces[] item is not an object"); continue }
     $t = [string]$s['type']
     if (-not $script:SurfaceKeys.Contains($t)) { $p.Add("${tag}: surface type '$t' unknown"); continue }
-    foreach ($k in $s.Keys) { if ($script:SurfaceKeys[$t] -notcontains $k) { $p.Add("${tag}: surface '$t' has unknown key '$k'") } }
+    foreach ($k in $s.get_Keys()) { if ($script:SurfaceKeys[$t] -notcontains $k) { $p.Add("${tag}: surface '$t' has unknown key '$k'") } }
     foreach ($k in $script:SurfaceRequired[$t]) { if (-not $s.Contains($k) -or [string]::IsNullOrWhiteSpace([string]$s[$k])) { $p.Add("${tag}: surface '$t' is missing required key '$k'") } }
     switch ($t) {
       'cli'         { if ([string]$s['verb'] -notmatch '^[a-z][a-z0-9-]*$') { $p.Add("${tag}: cli verb '$($s['verb'])' is not a verb token") } }
@@ -1080,5 +1088,327 @@ function Invoke-RegistryCheck {
   return [pscustomobject]@{ Failures = $fail; Notes = $notes; Stats = $stats }
 }
 
+# ---------------------------------------------------------------------------
+# Generator (spec 8): the pages the registry OWNS. Render-* are module-internal
+# ('Render' is not an approved verb; exporting them would make Import-Module
+# warn). Callers use Invoke-RegistryGenerate; tests reach a renderer through
+# & (Get-Module FeatureRegistry) { Render-HomePage -Model $args[0] } $model.
+# Every path comes from the -Paths object (Get-RegistryPaths, $PSScriptRoot
+# relative), never from the CWD, so a run from any directory is byte-identical.
+# ---------------------------------------------------------------------------
+$script:WikiUrl = 'https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/'
+
+# WRAPPED: returns ,[object[]] sorted by an ordinal string key.
+function Sort-ByOrdinalKey([object[]]$Items, [scriptblock]$KeyOf) {
+  if ($null -eq $Items -or $Items.Count -eq 0) { return ,@() }
+  $keys = [string[]]@(foreach ($i in $Items) { [string](& $KeyOf $i) })
+  $arr = [object[]]$Items.Clone()
+  [Array]::Sort($keys, $arr, [System.StringComparer]::Ordinal)
+  return ,$arr
+}
+
+function Get-RegistryModel {
+  param([Parameter(Mandatory)]$Paths, $Live = $null)
+  # Templates first: a non-ASCII byte is a generator failure with file:line,
+  # and it should not wait for the engine harvest.
+  $templates = @{}
+  foreach ($t in 'Home.intro.md', 'Features.intro.md', 'Quick-Help.intro.md') {
+    $f = Join-Path $Paths.Templates $t
+    if (-not (Test-Path -LiteralPath $f)) { throw "template missing: $f" }
+    $asc = Test-AsciiCrlfFile -Path $f; if ($asc) { throw "template: $asc" }
+    $templates[$t] = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($f))
+  }
+  if ($null -eq $Live) { $Live = Get-LiveSurface -Paths $Paths }
+  $ctx = Get-RegistryContext -Paths $Paths
+  $entries = [object[]]@(foreach ($r in $ctx.Entries) { ConvertTo-CanonicalEntry -Entry $r.Entry -KeyOrder $ctx.KeyOrder })
+  # An empty registry (before the seed) has no parent entry for any family:
+  # there is nothing to hang children on, so none are imported.
+  $children = if ($entries.Count -eq 0) { [ordered]@{} } else { Get-RegistryChildren -Live $Live -Entries $entries -Paths $Paths }
+  $groups = [object[]]@($ctx.Groups.Values | Sort-Object { [int]$_.order })
+  $sorted = Sort-ByOrdinalKey $entries { param($e) ('{0:D6}|{1}|{2}' -f [int]$ctx.Groups[[string]$e['group']].order, ([string]$e['title']).ToLowerInvariant(), [string]$e['id']) }
+  $related = [object[]]@((Get-Content -LiteralPath $Paths.RelatedProjects -Raw | ConvertFrom-Json).projects)
+  return [pscustomobject]@{ Live = $Live; Context = $ctx; Entries = $sorted; Children = $children; Groups = $groups; Templates = $templates; Related = $related }
+}
+
+function Get-FamilyCountText($Model, [System.Collections.IDictionary]$Entry) {
+  $fam = [string]$Entry['family']
+  if (-not $Model.Children.Contains($fam)) { return '' }
+  $n = @($Model.Children[$fam]).Count
+  if ($fam -eq 'lint-rules') { $fx = @($Model.Live.RuleCatalog.rules | Where-Object { $_.fixable }).Count; return "$n rules, $fx fixable" }
+  return "$n questions"
+}
+
+function Format-CliSurface($S) { return '`' + [string]$S['verb'] + $(if ($S.Contains('sub')) { ' ' + [string]$S['sub'] } else { '' }) + '`' }
+
+function Format-SurfaceCell([System.Collections.IDictionary]$Entry) {
+  $parts = foreach ($s in (Get-EntryList $Entry 'surfaces')) {
+    switch ([string]$s['type']) {
+      'cli'         { Format-CliSurface $s }
+      'ide-menu'    { [string]$s['path'] }
+      'ide-context' { [string]$s['host'] + ': ' + [string]$s['caption'] }
+      'ide-about'   { 'About window: ' + [string]$s['caption'] }
+      'tool-window' { [string]$s['path'] }
+      'shortcut'    { 'shortcut ' + [string]$s['keys'] }
+      'lsp'         { '`lsp ' + [string]$s['method'] + '`' }
+      'mcp'         { '`mcp ' + [string]$s['tool'] + '`' }
+      'script'      { '`' + [string]$s['path'] + $(if ($s.Contains('args')) { ' ' + [string]$s['args'] } else { '' }) + '`' }
+      'exe'         { '`' + [string]$s['name'] + '`' + $(if ($s.Contains('menu')) { ' (' + [string]$s['menu'] + ')' } else { '' }) }
+      'workflow'    { 'procedure: `' + [string]$s['doc'] + '`' }
+    }
+  }
+  return (@($parts) -join '; ')
+}
+
+function Get-StatusCell([System.Collections.IDictionary]$Entry) { $s = [string]$Entry['status']; if ($s -eq 'shipped') { return '' } else { return $s } }
+
+function Render-HomePage {
+  param([Parameter(Mandatory)]$Model)
+  $v = $Model.Live.Versions
+  $sb = [System.Text.StringBuilder]::new()
+  [void]$sb.Append($Model.Templates['Home.intro.md'].TrimEnd() + "`r`n`r`n")
+  [void]$sb.Append("**Status: alpha** (current release v$($v.Product); extractor $($v.Extractor), resolver $($v.Resolver), index schema $($v.Schema)). Expect breaking changes. The index format is stable within a schema version; the CLI surface is not yet frozen.`r`n`r`n")
+  [void]$sb.Append("## Start here`r`n`r`n| Page | For |`r`n|---|---|`r`n")
+  [void]$sb.Append("| **[Features](Features)** | Everything it does, grouped |`r`n")
+  [void]$sb.Append("| **[Feature Index](Feature-Index)** | Every feature by the surface it is reached from |`r`n")
+  [void]$sb.Append("| **[Quick Help](Quick-Help)** | One line per feature, with the short help and the aliases people search for |`r`n")
+  $withHome = [object[]]@(@($Model.Entries | Where-Object { $_.Contains('homeOrder') }) + @(foreach ($list in $Model.Children.Values) { foreach ($c in $list) { if ($c.Contains('homeOrder')) { $c } } }))
+  foreach ($e in (Sort-ByOrdinalKey $withHome { param($x) ('{0:D6}|{1}' -f [int]$x['homeOrder'], [string]$x['id']) })) {
+    [void]$sb.Append("| **[$($e['title'])]($($e['wikiPage']))** | $($e['summary']) |`r`n")
+  }
+  [void]$sb.Append("`r`n## Related projects`r`n`r`n")
+  foreach ($r in $Model.Related) { [void]$sb.Append("* **$($r.name)** -- $($r.summary)`r`n") }
+  [void]$sb.Append("`r`n## Links`r`n`r`n* [Issues](https://github.com/Alexl-git/Delphi-RAG-Lint/issues)`r`n* [Releases](https://github.com/Alexl-git/Delphi-RAG-Lint/releases)`r`n* ``CHANGELOG.md`` in the repository root`r`n`r`n")
+  [void]$sb.Append("*Generated by ``tools\build-feature-pages.ps1`` from ``features\``; do not edit by hand.*`r`n")
+  return $sb.ToString()
+}
+
+function Render-RuleStats($Model) {
+  $cat = $Model.Live.RuleCatalog
+  $t = [int]$cat.summary.total; $fx = @($cat.rules | Where-Object { $_.fixable }).Count; $on = @($cat.rules | Where-Object { $_.default_enabled }).Count
+  $bi = @($cat.rules | Where-Object { $_.source -eq 'builtin' }).Count; $ex = @($cat.rules | Where-Object { $_.source -eq 'scm' }).Count
+  $sb = [System.Text.StringBuilder]::new()
+  [void]$sb.Append("**$t rules. $fx have an auto-fix. $on are on by default.** $bi are built-in checks; $ex are external tree-sitter ``.scm`` rules you can read and extend in ``rules\``. Run ``drag-lint rules`` for the always-current catalogue.`r`n`r`n")
+  [void]$sb.Append("| Category | Rules | With auto-fix |`r`n|---|---:|---:|`r`n")
+  foreach ($c in (Sort-ByOrdinalKey ([object[]]@($cat.summary.per_category)) { param($c) [string]$c.category })) {
+    $f = @($cat.rules | Where-Object { $_.category -eq $c.category -and $_.fixable }).Count
+    [void]$sb.Append("| $($c.category) | $($c.count) | $(if ($f) { $f } else { '-' }) |`r`n")
+  }
+  [void]$sb.Append("| **Total** | **$t** | **$fx** |`r`n`r`n")
+  return $sb.ToString()
+}
+
+function Render-FeaturesPage {
+  param([Parameter(Mandatory)]$Model)
+  $sb = [System.Text.StringBuilder]::new()
+  [void]$sb.Append($Model.Templates['Features.intro.md'].TrimEnd() + "`r`n`r`n---`r`n`r`n")
+  foreach ($g in $Model.Groups) {
+    [void]$sb.Append("## $($g.title)`r`n`r`n$($g.summary)`r`n`r`n")
+    $rows = @($Model.Entries | Where-Object { [string]$_['group'] -eq [string]$g.id })
+    foreach ($fe in @($rows | Where-Object { $_.Contains('family') -and [string]$_['family'] -eq 'lint-rules' })) { [void]$sb.Append((Render-RuleStats $Model)) }
+    [void]$sb.Append("| Feature | Surfaces | Status |`r`n|---|---|---|`r`n")
+    foreach ($e in $rows) {
+      $cell = if ($e.Contains('family')) { (Get-FamilyCountText $Model $e) + '; ' + (Format-SurfaceCell $e) } else { Format-SurfaceCell $e }
+      $ex = @((Get-EntryList $e 'examples') | Where-Object { [string]$_['kind'] -eq 'file' -and [string]$_['path'] -like 'docs\wiki\*.md' })
+      $exText = ''
+      if ($ex.Count) { $stem = [IO.Path]::GetFileNameWithoutExtension([string]$ex[0]['path']); $exText = " (worked example: [$($stem.Replace('-', ' '))]($stem))" }
+      [void]$sb.Append("| [$($e['title'])]($($e['wikiPage']))$exText | $cell | $(Get-StatusCell $e) |`r`n")
+    }
+    [void]$sb.Append("`r`n")
+  }
+  [void]$sb.Append("---`r`n`r`n*Generated by ``tools\build-feature-pages.ps1`` from ``features\``; counts come from ``drag-lint rules --json`` at generation time. Do not edit by hand.*`r`n")
+  return $sb.ToString()
+}
+
+function Format-IndexLine($E, [string]$Detail) { return "* [$($E['title'])]($($E['wikiPage']))" + $(if ($Detail) { " -- $Detail" } else { '' }) + "`r`n" }
+
+function Render-FeatureIndexPage {
+  param([Parameter(Mandatory)]$Model)
+  $hand = @($Model.Entries | Where-Object { [string]$_['status'] -notin @('planned', 'internal') })
+  $byTitle = { param($e) ([string]$e['title']).ToLowerInvariant() + '|' + [string]$e['id'] }
+  $sb = [System.Text.StringBuilder]::new()
+  [void]$sb.Append("# Feature Index`r`n`r`nEvery registered feature, by the surface it is reached from. Generated by ``tools\build-feature-pages.ps1`` from ``features\entries\*.json`` and the two imported families; do not edit by hand. See also [Features](Features) for the grouped overview, [Quick Help](Quick-Help) for one line per feature, and [IDE Menu Reference](IDE-Menu-Reference) for the menu layout.`r`n`r`n")
+  # The H2 names are a CONTRACT: build-manual.ps1 keys on them (spec 8).
+  $sections = [ordered]@{
+    'Main menu'         = @('ide-menu', 'ide-about')
+    'Right-click menus' = @('ide-context')
+    'Tool windows'      = @('tool-window')
+    'CLI verbs'         = @('cli')
+    'Scripts and tools' = @('script', 'exe', 'workflow')
+  }
+  foreach ($name in $sections.Keys) {
+    [void]$sb.Append("## $name`r`n`r`n")
+    $types = $sections[$name]
+    $rows = [object[]]@($hand | Where-Object { @((Get-EntryList $_ 'surfaces') | Where-Object { $types -contains [string]$_['type'] }).Count -gt 0 })
+    foreach ($e in (Sort-ByOrdinalKey $rows $byTitle)) {
+      $mine = @((Get-EntryList $e 'surfaces') | Where-Object { $types -contains [string]$_['type'] })
+      $detail = switch ($name) {
+        'Main menu'         { (@($mine | ForEach-Object { if ([string]$_['type'] -eq 'ide-about') { 'About window: ' + [string]$_['caption'] } else { [string]$_['path'] } }) -join '; ') }
+        'Right-click menus' { (@($mine | ForEach-Object { [string]$_['host'] + ': ' + [string]$_['caption'] }) -join '; ') }
+        'Tool windows'      { (@($mine | ForEach-Object { [string]$_['path'] }) -join '; ') }
+        'CLI verbs'         { (@($mine | ForEach-Object { Format-CliSurface $_ }) -join ', ') }
+        'Scripts and tools' { (@(foreach ($s in $mine) { switch ([string]$s['type']) { 'script' { '`' + [string]$s['path'] + '`' } 'exe' { '`' + [string]$s['name'] + '`' } 'workflow' { 'procedure' } } }) -join ', ') }
+      }
+      [void]$sb.Append((Format-IndexLine $e $detail))
+    }
+    [void]$sb.Append("`r`n")
+  }
+  [void]$sb.Append("## Diagrams and charts`r`n`r`nEvery chart question, by its **drag-lint > Reports** caption in RAD Studio. Outside the IDE ask the same question with ``charts\src\Ask-Report.ps1 -Question <id>`` -- see [Charts and the IDE](Charts-and-the-IDE). Script paths are relative to a repository clone in v1.`r`n`r`n")
+  if ($Model.Children.Contains('chart-questions')) {
+    foreach ($c in $Model.Children['chart-questions']) { [void]$sb.Append("* [$($c['title'])]($($c['wikiPage'])) -- ``$(([string]$c['id']).Substring(6))`` ($($c['subgroup']))`r`n") }
+  }
+  [void]$sb.Append("`r`n## Lint rules`r`n`r`nOne line per rule, linking the rule reference. Counts: see [Features](Features#linting).`r`n`r`n")
+  if ($Model.Children.Contains('lint-rules')) {
+    $byId = @{}; foreach ($r0 in @($Model.Live.RuleCatalog.rules)) { $byId[[string]$r0.id] = $r0 }
+    foreach ($c in $Model.Children['lint-rules']) {
+      $rid = [string]$c['wikiAnchor']; $r = $byId[$rid]
+      [void]$sb.Append("* [$rid]($($c['wikiPage'])#$rid) -- $($r.category), $($r.default_severity)$(if ($r.fixable) { ', fixable' } else { '' })`r`n")
+    }
+  }
+  [void]$sb.Append("`r`n")
+  return $sb.ToString()
+}
+
+function Render-QuickHelpPage {
+  param([Parameter(Mandatory)]$Model)
+  $sb = [System.Text.StringBuilder]::new()
+  [void]$sb.Append($Model.Templates['Quick-Help.intro.md'].TrimEnd() + "`r`n`r`n")
+  $declared = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($g in $Model.Groups) {
+    $rows = @($Model.Entries | Where-Object { [string]$_['group'] -eq [string]$g.id })
+    if ($rows.Count -eq 0) { continue }
+    [void]$sb.Append("## $($g.title)`r`n`r`n")
+    foreach ($e in $rows) {
+      if ($e.Contains('family')) {
+        [void]$sb.Append("* **$($e['title'])** -- $(Get-FamilyCountText $Model $e). $($e['summary']). [More]($($e['wikiPage']))`r`n")
+      } else {
+        $intro = if ($e.Contains('intro')) { ' ' + [string]$e['intro'] } else { '' }
+        $st = if ([string]$e['status'] -ne 'shipped') { ' (' + [string]$e['status'] + ')' } else { '' }
+        [void]$sb.Append("* **$($e['title'])**$st -- $($e['summary']).$intro [More]($($e['wikiPage']))`r`n")
+        $al = Get-EntryList $e 'aliases'; if ($al.Count) { [void]$sb.Append("  aliases: $($al -join ', ')`r`n") }
+      }
+      foreach ($s in (Get-EntryList $e 'surfaces')) {
+        switch ([string]$s['type']) {
+          'shortcut'    { $declared.Add("$($e['title']): shortcut $($s['keys'])") }
+          'lsp'         { $declared.Add("$($e['title']): lsp $($s['method'])") }
+          'workflow'    { $declared.Add("$($e['title']): procedure $($s['doc'])") }
+          'ide-context' { $declared.Add("$($e['title']): host '$($s['host'])' (the caption is verified, the host is declared)") }
+          'exe'         { if ($s.Contains('menu')) { $declared.Add("$($e['title']): menu '$($s['menu'])' inside $($s['name'])") } }
+        }
+      }
+    }
+    [void]$sb.Append("`r`n")
+  }
+  [void]$sb.Append("## Declared, not harvested`r`n`r`nThe guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The surfaces below are declared by their entries and exercised only by the periodic review; a green battery does not prove them.`r`n`r`n")
+  foreach ($d in (Sort-OrdinalUnique ([string[]]$declared.ToArray()))) { [void]$sb.Append("* $d`r`n") }
+  [void]$sb.Append("`r`n*Generated by ``tools\build-feature-pages.ps1`` from ``features\``; do not edit by hand.*`r`n")
+  return $sb.ToString()
+}
+
+function Render-AgentVerbsBlock {
+  param([Parameter(Mandatory)]$Model)
+  $rows = New-Object 'System.Collections.Generic.List[object]'
+  foreach ($e in $Model.Entries) {
+    if ([string]$e['audience'] -notin @('agent', 'both')) { continue }
+    if ([string]$e['status'] -eq 'planned') { continue }
+    foreach ($s in (Get-EntryList $e 'surfaces')) {
+      if ([string]$s['type'] -ne 'cli') { continue }
+      $verb = [string]$s['verb'] + $(if ($s.Contains('sub')) { ' ' + [string]$s['sub'] } else { '' })
+      $rows.Add([pscustomobject]@{ Verb = $verb + '|' + [string]$e['id']; Line = "| ``$verb`` | [$($e['title'])]($script:WikiUrl$($e['wikiPage'])) | $($e['summary']) | $((Get-EntryList $e 'requires') -join ', ') |" })
+    }
+  }
+  $sb = [System.Text.StringBuilder]::new()
+  [void]$sb.Append("| Verb | Feature | Summary | Requires |`r`n|---|---|---|---|`r`n")
+  foreach ($r in (Sort-ByOrdinalKey ([object[]]$rows.ToArray()) { param($x) $x.Verb })) { [void]$sb.Append($r.Line + "`r`n") }
+  return $sb.ToString()
+}
+
+function Render-FeatureSummaryBlock {
+  param([Parameter(Mandatory)]$Model)
+  $sb = [System.Text.StringBuilder]::new()
+  [void]$sb.Append("| Group | Features | Wiki |`r`n|---|---:|---|`r`n")
+  foreach ($g in $Model.Groups) {
+    $rows = @($Model.Entries | Where-Object { [string]$_['group'] -eq [string]$g.id })
+    $extra = @($rows | Where-Object { $_.Contains('family') } | ForEach-Object { Get-FamilyCountText $Model $_ } | Where-Object { $_ })
+    $anchor = ([string]$g.title).ToLowerInvariant() -replace '[^a-z0-9 -]', '' -replace ' ', '-'
+    [void]$sb.Append("| [$($g.title)]($($script:WikiUrl)Features#$anchor) | $($rows.Count)$(if ($extra.Count) { ' (+ ' + ($extra -join ', ') + ')' } else { '' }) | [Quick Help]($($script:WikiUrl)Quick-Help#$anchor) |`r`n")
+  }
+  return $sb.ToString()
+}
+
+# lastVerified is stripped: a review date would make every review a manifest diff.
+function Remove-ManifestVolatile($E) { $o = ConvertTo-OrderedObject $E; if ($o.Contains('lastVerified')) { $o.Remove('lastVerified') }; return $o }
+
+function Render-Manifest {
+  param([Parameter(Mandatory)]$Model)
+  $m = [ordered]@{
+    product = [string]$Model.Live.Versions.Product; extractor = [string]$Model.Live.Versions.Extractor; resolver = [string]$Model.Live.Versions.Resolver; schema = [int]$Model.Live.Versions.Schema
+    groups = @(foreach ($g in $Model.Groups) { ConvertTo-OrderedObject $g })
+    teams = @(foreach ($t in @((Get-Content -LiteralPath $Model.Context.Paths.Teams -Raw | ConvertFrom-Json).teams)) { ConvertTo-OrderedObject $t })
+    entries = @(foreach ($e in $Model.Entries) { Remove-ManifestVolatile $e })
+    families = [ordered]@{}
+  }
+  $childOrder = [string[]]@($Model.Context.KeyOrder + $script:ChildOnlyKeys)
+  foreach ($fam in $Model.Children.Keys) { $m['families'][$fam] = @(foreach ($c in $Model.Children[$fam]) { Remove-ManifestVolatile (ConvertTo-CanonicalEntry -Entry $c -KeyOrder $childOrder) }) }
+  return (ConvertTo-CanonicalJson -Value $m)
+}
+
+function Update-MarkedBlock {
+  param([Parameter(Mandatory)][string]$Text, [Parameter(Mandatory)][string]$Name, [Parameter(Mandatory)][string]$Body)
+  $begin = "<!-- dl:registry:begin $Name -->"; $end = "<!-- dl:registry:end $Name -->"
+  $i = $Text.IndexOf($begin, [StringComparison]::Ordinal); $j = $Text.IndexOf($end, [StringComparison]::Ordinal)
+  if ($i -lt 0 -or $j -lt 0 -or $j -lt $i) { throw "markers absent: '$begin' / '$end' must both exist, in that order -- the generator never appends blindly" }
+  return $Text.Substring(0, $i + $begin.Length) + "`r`n" + $Body + $Text.Substring($j)
+}
+
+function Get-DiffHead {
+  param([Parameter(Mandatory)][AllowEmptyString()][string]$Old, [Parameter(Mandatory)][AllowEmptyString()][string]$New, [int]$Lines = 20)
+  $a = $Old -split "`r?`n"; $b = $New -split "`r?`n"
+  $n = [Math]::Min($a.Count, $b.Count); $first = $n
+  for ($i = 0; $i -lt $n; $i++) { if ($a[$i] -cne $b[$i]) { $first = $i; break } }
+  $sb = [System.Text.StringBuilder]::new()
+  [void]$sb.Append("@@ first difference at line $($first + 1) (old $($a.Count) lines, new $($b.Count) lines)`r`n")
+  $half = [Math]::Max(1, [int][Math]::Floor($Lines / 2))
+  for ($i = $first; $i -lt [Math]::Min($a.Count, $first + $half); $i++) { [void]$sb.Append("-$($a[$i])`r`n") }
+  for ($i = $first; $i -lt [Math]::Min($b.Count, $first + $half); $i++) { [void]$sb.Append("+$($b[$i])`r`n") }
+  return $sb.ToString()
+}
+
+function Invoke-RegistryGenerate {
+  param([Parameter(Mandatory)]$Paths, [switch]$Check, [string]$OutDir = '')
+  $model = Get-RegistryModel -Paths $Paths
+  $root = if ($OutDir) { $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutDir) } else { $Paths.Repo }
+  # The marked blocks are spliced into the TRACKED README/AI-USAGE text, also
+  # under -OutDir, so the OutDir copy is what the repo file would become.
+  $readmeSrc = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($Paths.Readme))
+  $aiSrc = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($Paths.AiUsage))
+  $outputs = [ordered]@{
+    'docs\wiki\Home.md'                = Render-HomePage -Model $model
+    'docs\wiki\Features.md'            = Render-FeaturesPage -Model $model
+    'docs\wiki\Feature-Index.md'       = Render-FeatureIndexPage -Model $model
+    'docs\wiki\Quick-Help.md'          = Render-QuickHelpPage -Model $model
+    'README.md'                        = Update-MarkedBlock -Text $readmeSrc -Name 'feature-summary' -Body (Render-FeatureSummaryBlock -Model $model)
+    'docs\AI-USAGE.md'                 = Update-MarkedBlock -Text $aiSrc -Name 'agent-verbs' -Body (Render-AgentVerbsBlock -Model $model)
+    'features\generated\manifest.json' = Render-Manifest -Model $model
+  }
+  foreach ($k in @($outputs.Keys)) {
+    $bad = [regex]::Match($outputs[$k], '[^\x00-\x7F]')
+    if ($bad.Success) { throw ("generator: non-ASCII character U+{0} in rendered {1}" -f ([int]$bad.Value[0]).ToString('X4'), $k) }
+  }
+  $changed = New-Object 'System.Collections.Generic.List[object]'
+  $written = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($rel in $outputs.Keys) {
+    $target = Join-Path $root $rel
+    $old = if (Test-Path -LiteralPath $target) { [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($target)) } else { '' }
+    if ($old -ceq $outputs[$rel]) { continue }
+    $changed.Add([pscustomobject]@{ Path = $rel; Diff = (Get-DiffHead -Old $old -New $outputs[$rel]) })
+    if ($Check) { continue }
+    $dir = Split-Path -Parent $target; if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    [IO.File]::WriteAllText($target, $outputs[$rel], [Text.Encoding]::ASCII)
+    $written.Add($rel)
+  }
+  return [pscustomobject]@{ Outputs = $outputs; Changed = [object[]]$changed.ToArray(); Written = [string[]]$written.ToArray() }
+}
+
 Export-ModuleMember -Function Get-RegistryPaths, ConvertTo-OrderedObject, ConvertTo-CanonicalJson, Get-EntryKeyOrder, ConvertTo-CanonicalEntry, Get-EntryList, Test-AsciiCrlfFile, Read-FeatureEntry, Write-FeatureEntry, Test-EntryCanonicalBytes, Get-RegistryContext, Get-NearestCandidates, Test-FeatureEntry, Test-GroupsAndTeams, Get-LiveSurface, Read-FamilyDefinition, Import-LintRuleFamily, Import-ChartQuestionFamily, Get-RegistryChildren,
-  ConvertFrom-SurfaceSpec, Get-CurrentBuildVersion, Add-RegistryGroup, Add-RegistryTeam, New-FeatureEntry, Update-FeatureEntry, Find-FeatureEntry, ConvertTo-MenuKey, Get-FeatureBlastRadius, Move-FeatureMenuPath, Set-FeatureDeprecated, Invoke-RegistryNormalise, Invoke-RegistryCheck
+  ConvertFrom-SurfaceSpec, Get-CurrentBuildVersion, Add-RegistryGroup, Add-RegistryTeam, New-FeatureEntry, Update-FeatureEntry, Find-FeatureEntry, ConvertTo-MenuKey, Get-FeatureBlastRadius, Move-FeatureMenuPath, Set-FeatureDeprecated, Invoke-RegistryNormalise, Invoke-RegistryCheck,
+  Get-RegistryModel, Update-MarkedBlock, Get-DiffHead, Invoke-RegistryGenerate
