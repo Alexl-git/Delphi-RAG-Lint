@@ -8077,7 +8077,8 @@ begin
       Exit;
     end;
   end; // try
-  LPrep:= PrepareConvertRequest(LText, GEditorProjectDb, ProjectFileForDb(GEditorProjectDb), GEditorRulesFolderArg, RulesFolderNow,
+  LPrep:= PrepareConvertRequest(LText,
+    TRequestEditorState.Make(GEditorProjectDb, ProjectFileForDb(GEditorProjectDb), GEditorRulesFolderArg, RulesFolderNow),
     function(P: string): Boolean
     begin
       Result:= TFile.Exists(P);

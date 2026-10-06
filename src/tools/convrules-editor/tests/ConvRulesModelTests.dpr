@@ -10896,7 +10896,7 @@ begin
 end;
 
 { C12 Task 2: the request resolved to a component scope over the .dfm text. }
-procedure TestConvertScope;
+procedure TestConvertScope;  // dl:ok cyclomatic-complexity@ffc2 -- REVIEWED 2026-10-06 an assertion list over one .dfm fixture; the count is the and-chains in Check conditions, and splitting the list would only scatter the fixture
 const
   DFM = 'object FormU: TFormU' + sLineBreak +
         '  Caption = ''inherited fake: TLabel''' + sLineBreak +
@@ -11048,7 +11048,7 @@ end;
   control is touched -- the project index a request launch adopts, the rules
   folder (ruling B1), the whole prepare chain, the report's Scope line and the
   run summary's out-of-scope count. Every path is FAKE (injected probes). }
-procedure TestConvertRequestLaunch;
+procedure TestConvertRequestLaunch;  // dl:ok cyclomatic-complexity@a140 -- REVIEWED 2026-10-06 an assertion list over one fake-probe fixture plus a one-line Row helper; the count is the and-chains in Check conditions, and splitting the list would only scatter the fixture
 const
   LAUNCH_DFM = 'object FormU: TFormU' + sLineBreak + '  object Label1: TLabel' + sLineBreak + '  end' + sLineBreak +
                '  object Btn1: TButton' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
@@ -11102,7 +11102,7 @@ begin
     and (Pos(RULES_SW, Err) = 0), Err);
   Err:= ResolveRequestRulesFolder('', '', '', ['TLabel', 'TButton'], Probe([], True), F);
   Check('launch.rules.none.refused', (F = '') and StartsText('No book in ', Err) and (Pos('no rules folder', Err) > 0)
-    and (Pos('TLabel, TButton', Err) > 0), Err);
+    and (Pos('and no book is open', Err) > 0) and (Pos('TLabel, TButton', Err) > 0), Err);
   // Task-4 review (a): the editor's in-session folder is the THIRD candidate.
   Err:= ResolveRequestRulesFolder('', '', RULES_SESS, ['TLabel'], Probe([], True), F);
   Check('launch.rules.session.fallback', (Err = '') and (F = RULES_SESS), Err + F);
@@ -11113,31 +11113,35 @@ begin
 
   // The whole chain.
   Req:= StringReplace(REQ_GOOD, '"platform":"Win64",', '"platform":"Win64","rules_folder":"C:\\R1",', []);
-  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.prepare.ok', P.Ok and (P.Error = '') and (P.Scope.Kind = skSelected) and (P.RulesFolder = RULES_REQ), P.Error);
   Check('launch.prepare.scope', (Length(P.Scope.Instances) = 2) and (Length(P.Scope.NotFound) = 1), ScopeText(P.Scope));
-  P:= PrepareConvertRequest(Req, REQ_ROOT + 'Other\_D-RAG\O.sqlite', REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([], []));
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_ROOT + 'Other\_D-RAG\O.sqlite', REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([], []));
   Check('launch.prepare.validate.refused', (not P.Ok) and (Pos('project index', P.Error) > 0), P.Error);
-  P:= PrepareConvertRequest('{', REQ_DB, REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([], []));
+  P:= PrepareConvertRequest('{', TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([], []));
   Check('launch.prepare.parse.refused', (not P.Ok) and (P.Error <> ''), P.Error);
-  P:= PrepareConvertRequest(REQ_GOOD, REQ_DB, REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  P:= PrepareConvertRequest(REQ_GOOD, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.prepare.no.folder.refused', (not P.Ok) and StartsText('No book in ', P.Error), P.Error);
-  P:= PrepareConvertRequest(REQ_GOOD, REQ_DB, REQ_PROJECT_FILE, RULES_SW, '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  P:= PrepareConvertRequest(REQ_GOOD, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, RULES_SW, ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.prepare.switch.folder', P.Ok and (P.RulesFolder = RULES_SW), P.Error);
-  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([], []));
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([], []));
   Check('launch.prepare.dfm.missing.refused', (not P.Ok) and (Pos('missing', P.Error) > 0) and (Pos(REQ_ROOT + 'P\U.dfm', P.Error) > 0), P.Error);
   // The request's own "dfm" is read, not the .pas sibling.
-  P:= PrepareConvertRequest(StringReplace(Req, '"dfm":"C:\\P\\U.dfm"', '"dfm":"C:\\P\\Forms\\U.dfm"', []), REQ_DB, REQ_PROJECT_FILE, '', '',
+  P:= PrepareConvertRequest(StringReplace(Req, '"dfm":"C:\\P\\U.dfm"', '"dfm":"C:\\P\\Forms\\U.dfm"', []), TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''),
     Probe([], True), Probe([], True), FakeReader([FORMS_DFM], [LAUNCH_DFM]));
   Check('launch.prepare.reads.request.dfm', P.Ok, P.Error);
-  P:= PrepareConvertRequest(REQ_GOOD, REQ_DB, REQ_PROJECT_FILE, '', RULES_SESS, Probe([], True), Probe([], True),
+  P:= PrepareConvertRequest(REQ_GOOD, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', RULES_SESS), Probe([], True), Probe([], True),
     FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.prepare.session.folder', P.Ok and (P.RulesFolder = RULES_SESS), P.Error);
   // Task-4 review (c): a project index that does not exist is refused before anything else is read.
-  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', '', Probe([REQ_PAS], False), Probe([], True),
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([REQ_PAS], False), Probe([], True),
     FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.prepare.db.missing.refused', (not P.Ok)
     and (P.Error = 'the project index ' + REQ_DB + ' does not exist -- index the project first'), P.Error);
+  // Task-5 review carry: an editor with no project index says so, without a blank name.
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make('', '', '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.db.empty.refused', (not P.Ok)
+    and (P.Error = 'the editor has no project index -- launch it with --project-db') and (Pos('  ', P.Error) = 0), P.Error);
 
   // Task-4 review (b): the E5 status tail -- an unindexed unit is named and Convert will refuse it.
   Check('launch.tail.indexed.empty', RequestStatusTail(REQ_PAS, [REQ_PAS], True, '') = '', RequestStatusTail(REQ_PAS, [REQ_PAS], True, ''));
@@ -11145,13 +11149,16 @@ begin
     ' Also: ' + REQ_PAS + ' is not in the project index -- Convert will refuse.', RequestStatusTail(REQ_PAS, [REQ_DB], True, ''));
   Check('launch.tail.index.unknown', RequestStatusTail(REQ_PAS, nil, False, '') =
     ' Also: the project index could not be read, so unindexed units are not flagged.', RequestStatusTail(REQ_PAS, nil, False, ''));
-  Check('launch.tail.inherit.error.first', RequestStatusTail(REQ_PAS, nil, True, 'boom') =
-    ' Also: inherited instances could not be checked -- boom Also: ' + REQ_PAS + ' is not in the project index -- Convert will refuse.',
-    RequestStatusTail(REQ_PAS, nil, True, 'boom'));
+  Check('launch.tail.inherit.error.first', RequestStatusTail(REQ_PAS, nil, False, 'boom') =
+    ' Also: inherited instances could not be checked -- boom Also: the project index could not be read, so unindexed units are not flagged.',
+    RequestStatusTail(REQ_PAS, nil, False, 'boom'));
+  // Task-5 review carry: an unindexed unit is ONE cause -- the C8 analysis error it causes is not repeated.
+  Check('launch.tail.unindexed.drops.inherit', RequestStatusTail(REQ_PAS, nil, True, 'boom') =
+    ' Also: ' + REQ_PAS + ' is not in the project index -- Convert will refuse.', RequestStatusTail(REQ_PAS, nil, True, 'boom'));
 
   // E11: the report line.
   Check('launch.report.scope.whole', ScopeReportLine(Default(TConvertScope)) = 'Scope'#9'whole unit', ScopeReportLine(Default(TConvertScope)));
-  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.report.scope.selected', ScopeReportLine(P.Scope) = 'Scope'#9'2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Label2',
     ScopeReportLine(P.Scope));
 

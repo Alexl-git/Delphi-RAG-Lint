@@ -10,7 +10,7 @@ interface
 
 uses
   System.SysUtils
-  , ConvRules.Inheritance
+  , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- BINARY_DFM_SIGNATURE / DFM_EXT are the .dfm conventions of the C8 header walk the scope reuses, so they travel with that walk
   ;
 
 const
@@ -298,6 +298,25 @@ function ResolveRequestRulesFolder(const ARequestFolder, ASwitchFolder, ASession
   const ADirExists: TFunc<string, Boolean>; out AFolder: string): string;
 
 type
+  /// <summary>The editor state PrepareConvertRequest checks a request against.</summary>
+  TRequestEditorState = record
+    /// <summary>GEditorProjectDb; '' when the editor has none (refused).</summary>
+    ProjectDb    : string;
+    /// <summary>ProjectFileForDb(ProjectDb).</summary>
+    ProjectFile  : string;
+    /// <summary>--rules-folder; '' when absent.</summary>
+    SwitchFolder : string;
+    /// <summary>The editor's in-session rules folder; '' when none.</summary>
+    SessionFolder: string;
+    /// <summary>The four fields in declaration order.</summary>
+    /// <param name="AProjectDb">ProjectDb.</param>
+    /// <param name="AProjectFile">ProjectFile.</param>
+    /// <param name="ASwitchFolder">SwitchFolder.</param>
+    /// <param name="ASessionFolder">SessionFolder.</param>
+    /// <returns>The filled record.</returns>
+    class function Make(const AProjectDb, AProjectFile, ASwitchFolder, ASessionFolder: string): TRequestEditorState; static;
+  end;
+
   /// <summary>PrepareConvertRequest's answer: everything the editor needs before it
   /// touches a control, or the refusal.</summary>
   TPreparedRequest = record
@@ -316,21 +335,21 @@ type
 /// <summary>E1 + B1 + E6-E8 in one pure pass: parse, validate, resolve the rules
 /// folder, read the .dfm and build the scope.</summary>
 /// <param name="AJson">The request file's text.</param>
-/// <param name="AProjectDb">GEditorProjectDb.</param>
-/// <param name="AProjectFile">ProjectFileForDb(GEditorProjectDb).</param>
-/// <param name="ASwitchFolder">--rules-folder; '' when absent.</param>
-/// <param name="ASessionFolder">The editor's in-session rules folder; '' when none.</param>
-/// <param name="AFileExists">File probe; also asked for AProjectDb.</param>
+/// <param name="AEditor">The editor's project index, project file and two rules-folder
+/// candidates.</param>
+/// <param name="AFileExists">File probe; also asked for AEditor.ProjectDb.</param>
 /// <param name="ADirExists">Folder probe.</param>
 /// <param name="AReader">Reads the unit's .dfm (the request's "dfm", else beside the
 /// .pas); anything but drRead counts as no text.</param>
 /// <returns>Ok with the request, scope and folder; else the first refusal in that
-/// order (parse, validate, project index exists, rules folder, scope). A project index
-/// that does not exist -- adopted from the request or given -- is refused as 'the
-/// project index X does not exist -- index the project first'.</returns>
+/// order (parse, editor has no project index, validate, project index exists, rules
+/// folder, scope). An empty AEditor.ProjectDb is refused as 'the editor has no project
+/// index -- launch it with --project-db'; a project index that does not exist --
+/// adopted from the request or given -- as 'the project index X does not exist --
+/// index the project first'.</returns>
 /// <remarks>Never raises (the reader must not either). A refusal touches nothing: the
 /// caller shows it and stays on the Classes tab (E1).</remarks>
-function PrepareConvertRequest(const AJson, AProjectDb, AProjectFile, ASwitchFolder, ASessionFolder: string;
+function PrepareConvertRequest(const AJson: string; const AEditor: TRequestEditorState;
   const AFileExists, ADirExists: TFunc<string, Boolean>; const AReader: TDfmTextReader): TPreparedRequest;
 
 /// <summary>What a request launch's E5 status line adds after its own text: the
@@ -341,7 +360,8 @@ function PrepareConvertRequest(const AJson, AProjectDb, AProjectFile, ASwitchFol
 /// <param name="AInheritError">The C8 analysis error; '' when none.</param>
 /// <returns>'' when there is nothing to add; else, in this order, the inherited-instance
 /// error, the unreadable-index note, and ' Also: AUnitPas is not in the project index
-/// -- Convert will refuse.' when SourceRowText flags the unit.</returns>
+/// -- Convert will refuse.' when SourceRowText flags the unit. A flagged unit drops
+/// the inherited-instance error: the missing index entry is its cause, reported once.</returns>
 /// <remarks>The caller shows the line in red exactly when the result is non-empty
 /// (Task 4 review b): a unit Convert will refuse must not read as ready to run.</remarks>
 function RequestStatusTail(const AUnitPas: string; const AIndexedFiles: TArray<string>; AIndexKnown: Boolean;
@@ -385,9 +405,10 @@ const
   SCOPED_NOTE_FMT    = '--only %d instance(s): %s; ';
   UNMATCHED_ONLY_FMT = ' -- --only asked for %s; the form may have changed since the IDE request -- re-send it';
   REPORT_SCOPE_HEAD  = 'Scope'#9;
-  NO_RULES_FOLDER    = '<no rules folder: the request has no rules_folder and no --rules-folder was given>';
+  NO_RULES_FOLDER    = '<no rules folder: the request has no rules_folder, no --rules-folder was given and no book is open>';
   RULES_FOLDER_GONE  = '%s (the folder does not exist)';
   DB_MISSING_FMT     = 'the project index %s does not exist -- index the project first';
+  NO_PROJECT_DB      = 'the editor has no project index -- launch it with --project-db';
   TAIL_INHERIT       = ' Also: inherited instances could not be checked -- ';
   TAIL_INDEX_UNKNOWN = ' Also: the project index could not be read, so unindexed units are not flagged.';
   TAIL_UNINDEXED_FMT = ' Also: %s is not in the project index -- Convert will refuse.';
@@ -839,7 +860,15 @@ begin
   Result:= '';
 end;
 
-function PrepareConvertRequest(const AJson, AProjectDb, AProjectFile, ASwitchFolder, ASessionFolder: string;  // dl:ok too-many-parameters@2a07 -- REVIEWED 2026-10-06 the editor state the pure pass reads (DB, file, two folder candidates) plus three injected seams the tests replace; a record would exist for this one call
+class function TRequestEditorState.Make(const AProjectDb, AProjectFile, ASwitchFolder, ASessionFolder: string): TRequestEditorState;
+begin
+  Result.ProjectDb    := AProjectDb;
+  Result.ProjectFile  := AProjectFile;
+  Result.SwitchFolder := ASwitchFolder;
+  Result.SessionFolder:= ASessionFolder;
+end;
+
+function PrepareConvertRequest(const AJson: string; const AEditor: TRequestEditorState;
   const AFileExists, ADirExists: TFunc<string, Boolean>; const AReader: TDfmTextReader): TPreparedRequest;
 var
   LOut: TRequestOutcome;
@@ -848,14 +877,17 @@ begin
   Result:= Default(TPreparedRequest);
   LOut:= ParseConvertRequest(AJson);
   Result.Error:= LOut.Error;
-  if LOut.Ok then
-    Result.Error:= ValidateConvertRequest(LOut.Request, AProjectDb, AProjectFile, AFileExists);
-  if (Result.Error = '') and not AFileExists(AProjectDb) then
-    Result.Error:= Format(DB_MISSING_FMT, [AProjectDb]);
+  if LOut.Ok and (Trim(AEditor.ProjectDb) = '') then
+    Result.Error:= NO_PROJECT_DB
+  else if LOut.Ok then
+    Result.Error:= ValidateConvertRequest(LOut.Request, AEditor.ProjectDb, AEditor.ProjectFile, AFileExists);
+  if (Result.Error = '') and not AFileExists(AEditor.ProjectDb) then
+    Result.Error:= Format(DB_MISSING_FMT, [AEditor.ProjectDb]);
   if Result.Error <> '' then
     Exit;
   Result.Request:= LOut.Request;
-  Result.Error:= ResolveRequestRulesFolder(LOut.Request.RulesFolder, ASwitchFolder, ASessionFolder, RequestedTypes(LOut.Request), ADirExists, Result.RulesFolder);
+  Result.Error:= ResolveRequestRulesFolder(LOut.Request.RulesFolder, AEditor.SwitchFolder, AEditor.SessionFolder, RequestedTypes(LOut.Request),
+    ADirExists, Result.RulesFolder);
   if Result.Error <> '' then
     Exit;
   if AReader(DfmPathOf(LOut.Request.Units[0]), LDfm) <> drRead then
@@ -870,11 +902,11 @@ var
   LFlagged: Boolean;
 begin
   Result:= '';
-  if AInheritError <> '' then
+  SourceRowText(AUnitPas, AIndexedFiles, AIndexKnown, LFlagged);
+  if (AInheritError <> '') and not LFlagged then
     Result:= Result + TAIL_INHERIT + AInheritError;
   if not AIndexKnown then
     Result:= Result + TAIL_INDEX_UNKNOWN;
-  SourceRowText(AUnitPas, AIndexedFiles, AIndexKnown, LFlagged);
   if LFlagged then
     Result:= Result + Format(TAIL_UNINDEXED_FMT, [AUnitPas]);
 end;

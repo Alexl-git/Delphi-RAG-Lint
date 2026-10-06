@@ -16,6 +16,8 @@
 #   project_db that does not exist -> refused. An unindexed unit -> the status says Convert will refuse, in red.
 #   Probe: --write-capabilities writes within 5 s, no window.
 # -ProofNoRequest launches every request run WITHOUT --convert-request: the request checks FAIL (the proof they can).
+#   Expected 6 pass / 18 fail; the PROOF lines name the 6 passes: 4 positive controls and 2 checks that CANNOT
+#   discriminate (req.label2.untouched, req.exit) -- they hold with or without a request, so they prove nothing.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
 param([string]$Exe, [switch]$ProofNoRequest)
 $ErrorActionPreference = 'Stop'
@@ -276,7 +278,8 @@ public static class RQ {
 }
 '@
 $script:pass = 0; $script:fail = 0
-function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
+$script:passed = @()
+function Check($name, $cond, $detail = '') { if ($cond) { $script:pass++; $script:passed += $name; "PASS  $name  $detail" } else { $script:fail++; "FAIL  $name  $detail" } }
 function Forms($procId) { @([W]::Tops($procId) | Where-Object { [W]::Cls($_) -notin 'TApplication', 'THintWindow' }) }
 function WaitCls($procId, $cls, $sec) { $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt $sec) { foreach ($h in [W]::Tops($procId)) { if ([W]::Cls($h) -eq $cls) { return $h } }; Start-Sleep -Milliseconds 250 }; return [IntPtr]::Zero }
 function TopsNow($procId) { (Forms $procId | ForEach-Object { $h = $_; $s = '{0}/{1}' -f [W]::Cls($h), [W]::Txt($h); if ([W]::Cls($h) -eq '#32770') { $s += ' [' + ((Find $h 'Static' $null | ForEach-Object { [W]::Txt($_) } | Where-Object { $_ }) -join ' ') + ']' }; $s }) -join ' | ' }
@@ -635,5 +638,20 @@ finally {
   }
   if ($gone) { "fixture removed: $tmp" } else { "WARN  fixture NOT removed: $tmp" }
   "gui-convert-request: $script:pass pass / $script:fail fail"
+  if ($ProofNoRequest) {
+    # Which passes the proof run EXPECTS, and why each cannot tell a request launch from none.
+    $why = [ordered]@{
+      'req.fixture.index'    = 'positive control: the fixture indexes before any launch'
+      'req.main'             = 'positive control: the editor starts either way'
+      'req.label2.untouched' = 'CANNOT DISCRIMINATE: Label2 stays a TLabel whether run 1 converted only Label1 or nothing ran'
+      'req.exit'             = 'CANNOT DISCRIMINATE: File > Exit closes without a prompt with or without a request'
+      'req.nofolder.usable'  = 'positive control: Conversion > Convert... works on a plain launch'
+      'req.caps.probe'       = 'positive control: --write-capabilities does not use --convert-request'
+    }
+    foreach ($k in $why.Keys) { "PROOF  {0,-22} {1}  -- {2}" -f $k, $(if ($script:passed -contains $k) { 'passed' } else { 'FAILED' }), $why[$k] }
+    $odd = @($script:passed | Where-Object { -not $why.Contains($_) })
+    if ($odd.Count -gt 0) { "PROOF  UNEXPECTED pass without --convert-request: " + ($odd -join ', ') + " -- that check cannot fail" }
+    else { "PROOF  the other {0} check(s) failed without --convert-request: each one can fail" -f $script:fail }
+  }
   if ($script:fail -gt 0) { exit 1 }
 }
