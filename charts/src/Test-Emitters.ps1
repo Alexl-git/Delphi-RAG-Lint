@@ -1631,23 +1631,8 @@ Step 'E-CO' {
     # literals it holds (the old counter counted hits).
     $mk = Measure-ConsumerKeys @(5) @(5, 7, -3, -3)
     $mk0 = Measure-ConsumerKeys @() @()
-    # Task 4 item 4: D18 on the CHARTS side -- a verb ending one SQL.Add literal and
-    # the table opening the next line's. MEASURED: no clone holds the shape (SERVER
-    # 445 routines with a verb literal, CLIENT 5: joining their literals finds 0
-    # table names the per-literal scan missed; SERVER's 5 verb-ending literals are
-    # all `' FROM ' + <variable>`), so it is checked on SYNTHETIC literal rows.
-    # Kept: :10>:11, the JOIN of :30>:31 (its FROM FOLDERS is inside :30, already
-    # found), DELETE FROM :40>:41. Dropped: same-line :20 (a variable between),
-    # :50>:52 (not the next line), :60 (lower case is text, not SQL).
-    $synSet = [pscustomobject]@{ Tables = @{ CAUSFAIL = 1; FOLDERS = 1 }; Procedures = (New-Object 'System.Collections.Generic.HashSet[string]') }
-    $synLits = @(@(10, 'SELECT REASON FROM'), @(11, 'CAUSFAIL'), @(20, ' FROM '), @(20, ' WHERE X'),
-                 @(30, 'SELECT * FROM FOLDERS JOIN'), @(31, 'CAUSFAIL ON'), @(40, 'DELETE FROM'), @(41, 'FOLDERS'),
-                 @(50, 'INSERT INTO'), @(52, 'CAUSFAIL'), @(60, 'select a from'), @(61, 'CAUSFAIL') |
-                 ForEach-Object { [pscustomobject]@{ line = $_[0]; text = $_[1] } })
-    $xl = @(Get-SqlVerbTablesAcrossLines $synLits $synSet | ForEach-Object { "$($_.Verb) $($_.Name):$($_.VerbLine)>$($_.Line)" }) -join ','
     [pscustomobject]@{ A = "$($a.Found):$($a.EndLine)"; AReason = $a.Reason; B = "$($b.Found):$($b.EndLine)"
                        Term = "$(Get-SqlTermAt $syn 7)$(Get-SqlTermAt $syn 11)"
-                       AcrossLines = $xl
                        Keys = "$($mk.Routines)/$($mk.Units) $($mk0.Routines)/$($mk0.Units)" }
   }
   Chk 'A-CO0-KEYS'      $co0.Keys '2/1 0/0'
@@ -1655,7 +1640,6 @@ Step 'E-CO' {
   if ($co0.AReason -notlike '*next statement at line 7*') { Fail 'A-CO0-BODYEND-A' "reason: $($co0.AReason)" }
   Chk 'A-CO0-BODYEND-B' $co0.B 'True:9'
   Chk 'A-CO0-TERM'      $co0.Term '^;'
-  Chk 'A-CO0-D18-JOIN'  $co0.AcrossLines 'FROM CAUSFAIL:10>11,JOIN CAUSFAIL:30>31,DELETE FROM FOLDERS:40>41'
 
   $script:co1 = & "$SRC\Emit-Consumers.ps1" -Table 'CAUSFAIL' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO1-CERT-W'    $co1.CertainWriters 1
@@ -1715,11 +1699,43 @@ Step 'E-CO' {
   # population definition, not the data, differs.
   Chk 'A-CO-IDX'        "$($co1.IndexReadFacts)/$($co1.IndexWriteFacts)/$($co1.IndexFactSymbols)" '112/148/250'
   Chk 'A-CO-LITS'       "$($co1.IndexVerbLiterals)/$($co1.IndexFromJoinTables)/$($co1.IndexFactReadTables)" '791/133/104'
-  # Task 4 item 4: 5 verb literals END on a verb, every one `' FROM ' + <variable>`
-  # or `INSERT INTO ' + '(` on ONE line (uPipeSessionBuilder.pas :544 :658 :1525 x2
-  # :3004), so no SQL.Add pair crosses a line: 0 joined hits, and A-CO-LITS above
-  # did not move. The joiner itself is pinned on synthetic rows (A-CO0-D18-JOIN).
-  Chk 'A-CO-D18-LINES'  "$($co1.IndexVerbEndingLiterals)/$($co1.IndexJoinedVerbHits)" '5/0'
+  # Task 4 item 4 (fix round 1: the charts-side joiner was REVERTED -- controller
+  # ruling). A statement split over SQL.Add lines (engine D18) is COVERED by the
+  # engine's sql_reads fact, which 1.19+ assembles across SQL.Add lines, plus the
+  # column form's span search over every routine in $rtIds (Emit-Consumers 3/3b/6).
+  # The real case, measured: PrepareLoadQuery builds `SELECT` :108 / the column
+  # list :109 / `FROM CAUSFAIL` :110 over separate SQL.Add lines, its fact reads
+  # CAUSFAIL, and the column form finds REASON on :109 (A-CO2-SRV pins it).
+  # What a charts-side join could add, measured: 5 SERVER verb literals END on a
+  # verb (uPipeSessionBuilder.pas :544 :658 :1525 x2 :3004), and none has a next
+  # line opening on a table of the set -- every one is `' FROM ' + <variable>` or
+  # `INSERT INTO ' + '(` -- so 0 statements are left over.
+  $script:cod18 = & {
+    $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+    . "$SRC\Emit-Common.ps1"
+    $S = Get-SqlTableSet $DbSql
+    $DbPath = $DbSrv
+    $rt = Invoke-IndexQuery @"
+SELECT s.file_id AS fid, s.impl_start_line AS a, s.impl_end_line AS b, sf.sql_reads AS r
+  FROM symbols s JOIN symbol_facts sf ON sf.symbol_id = s.id
+ WHERE s.qualified_name = 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareLoadQuery'
+"@
+    $lits = Get-AllIndexRows "SELECT sl.id AS id, sl.start_line AS line, sl.text AS text FROM string_literals sl WHERE sl.file_id = $([int]$rt[0].fid) AND sl.kind IN ('literal','format','const') AND sl.start_line BETWEEN $([int]$rt[0].a) AND $([int]$rt[0].b)" 'sl.start_line, sl.id'
+    $fromL = @($lits | Where-Object { [regex]::IsMatch([string]$_.text, '(?<![A-Za-z0-9_$])FROM\s+CAUSFAIL(?![A-Za-z0-9_$])') } | ForEach-Object { $_.line }) -join '+'
+    $colL  = @($lits | Where-Object { [regex]::IsMatch([string]$_.text, '(?<![A-Za-z0-9_$])REASON(?![A-Za-z0-9_$])') } | ForEach-Object { $_.line }) -join '+'
+    $verbRx = '(?<![A-Za-z0-9_$])(SELECT|INSERT|UPDATE|DELETE|FROM|JOIN|INTO|EXECUTE)(?![A-Za-z0-9_$])'
+    $glob = (@('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'FROM', 'JOIN', 'INTO', 'EXECUTE') | ForEach-Object { "sl.text GLOB '*$_*'" }) -join ' OR '
+    $pre = Get-AllIndexRows "SELECT sl.id AS id, sl.file_id AS fid, sl.start_line AS line, sl.text AS text FROM string_literals sl WHERE sl.source = 'pas' AND sl.kind IN ('literal','format') AND ($glob)" 'sl.id'
+    $ending = @($pre | Where-Object { [regex]::IsMatch([string]$_.text, $verbRx) -and [regex]::IsMatch([string]$_.text, '(?<![A-Za-z0-9_$.])(FROM|JOIN|INTO|UPDATE|PROCEDURE)\s*$') })
+    $cross = 0
+    foreach ($e in $ending) {
+      $nx = Invoke-IndexQuery "SELECT sl.text AS text FROM string_literals sl WHERE sl.file_id = $([int]$e.fid) AND sl.start_line = $([int]$e.line + 1) AND sl.kind IN ('literal','format') ORDER BY sl.start_col LIMIT 1"
+      if ($nx.Count) { $m = [regex]::Match([string]$nx[0].text, '^\s*([A-Z][A-Z0-9_$]*)'); if ($m.Success -and $S.Tables.ContainsKey($m.Groups[1].Value)) { $cross++ } }
+    }
+    [pscustomobject]@{ Covered = "reads=$($rt[0].r) col=$colL from=$fromL"; Leftover = "$($ending.Count)/$cross" }
+  }
+  Chk 'A-CO-D18-COVERED' $cod18.Covered 'reads=CAUSFAIL col=109 from=110'
+  Chk 'A-CO-D18-LINES'  $cod18.Leftover '5/0'
 
   $script:co2 = & "$SRC\Emit-Consumers.ps1" -Column 'CAUSFAIL.REASON' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO2-SRV'       $co2.ServerRoutineNames 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareLoadQuery,uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareSaveQuery'
@@ -2189,7 +2205,12 @@ Step 'LW-N31' {
 # FINDING: STATIONS.GRIDS is in no script, but uSTATIONS_SERVER.PAS:129 writes it
 # (`UPDATE OR INSERT INTO STATIONS (... GRIDS ...)`) -- NOT "computed or UI-only"
 Step 'LW-N31-SRVSQL' {
-  $script:lw31g = & "$SRC\Emit-LandsWhere.ps1" -Field 'uSTATIONS.TmcSTATIONS.GRIDS' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  $script:lw31g = & "$SRC\Emit-LandsWhere.ps1" -Field 'uSTATIONS.TmcSTATIONS.GRIDS' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir -InformationVariable lw31gInfo
+  # Task 4 fix round 1: the printed selection line names the FINAL state. It was
+  # printed before the server step, which turns `no` into `server-sql` here, so it
+  # said `not-a-column` for a column the chart draws as server-sql.
+  $selG = @($lw31gInfo | ForEach-Object { "$_" } | Where-Object { $_ -like '*selection:*' })
+  Chk 'A-LW-STATENAME-FINAL' $(if ($selG.Count) { $selG[0].Trim() } else { '(no selection line)' }) 'selection: uSTATIONS.TmcSTATIONS.GRIDS (orm); table STATIONS; column server-sql'
   Chk 'A-LW-N31-SRVSQL' "$($lw31g.ColumnState):$($lw31g.TableColumn):W=$($lw31g.ServerWrite) R=$($lw31g.ServerRead)" 'server-sql:STATIONS.GRIDS:W=PrepareSaveQuery:129,Save:271 R=PrepareLoadQuery:110,Load:176'
   $tg = Dot $lw31g
   if ($tg -match 'computed or UI-only') { Fail 'A-LW-N31-SRVSQL' 'a server-persisted column is called computed or UI-only' }
@@ -3156,7 +3177,7 @@ if (-not $Quiet) {
   Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
   Write-Host ("  lands-where    : REASON {0} ({1} server rows, {2} trigger, {3} client); convention {4}/{5}/{6}; DataService {7}; ParamByName {8}/{9}; orm_links {10}" -f (V $lw1 'TableColumn'), (V $lw1 'ServerRows'), (V $lw1 'Triggers'), (V $lw1 'ClientBindings'), (V $lw1 'ConvProps'), (V $lw1 'ConvOnTable'), (V $lw1 'ConvColumn'), (V $lw1 'DsClasses'), (V $lw1 'ParamByNameDs'), (V $lw1 'ParamByNameCol'), $ol)
   Write-Host ("  round-trip     : golden nodes {0}/17 matched (disclosed: {1}); {9} golden facts disclosed ({10}): {11}; guards {2}/12 (disclosed: {3}); steps/conditions/crossings/unresolved {4}; ALSO {5}; N1 {6} step(s); stale {7}; holdout candidates {8}" -f (V $rt0 'GoldenMatched'), (V $rt0 'GoldenDisclosed'), (V $rt0 'GuardsMatched'), (V $rt0 'GuardsDisclosed'), (V $rt0 'RtCounts'), (V $rt0 'RtAlso'), (V $rtn1 'Steps'), $(if ($rtStale) { $rtStale } else { '?' }), (V $rt0 'HoldoutCandidates'), (V $rt0 'GoldenFactsDisclosedN'), (V $rt0 'GoldenFactsReason'), (V $rt0 'GoldenFactsDisclosed'))
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; RT-STALE (message AND absent .dlgraph); RT-N1, RT-N2 one-STOPS traces; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, CO-STALE-REFUSE, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; RT-STALE (message AND absent .dlgraph); RT-N1, RT-N2 one-STOPS traces; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

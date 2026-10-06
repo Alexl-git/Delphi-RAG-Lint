@@ -364,7 +364,6 @@ if ($TName) {
   $cs = Get-SqlColumnState $sqlSet $TName $Prop $SourceOverride
   $colState = $cs.State
 }
-Write-Host ("  selection: {0} ({1}); table {2}; column {3}" -f $sel, $kind, $(if ($TName) { $TName } else { '(none)' }), (Get-ColumnStateName $colState))
 $hasColumn = [bool]($cs -and $cs.IsColumn)
 $COL = $(if ($Prop) { $Prop.ToUpperInvariant() } else { '' })
 
@@ -471,6 +470,9 @@ if ($colState -in 'no', 'stale') {
   $colState = $cs.State
   $hasColumn = $cs.IsColumn
 }
+# printed HERE, not at step 4 (Task 4 fix round 1): the server step can turn `no`
+# into `server-sql` (STATIONS.GRIDS), and the line names the FINAL state
+Write-Host ("  selection: {0} ({1}); table {2}; column {3}" -f $sel, $kind, $(if ($TName) { $TName } else { '(none)' }), (Get-ColumnStateName $colState))
 if ($cs -and $cs.IsColumn) {
   $cLabel = $(if ($colState -eq 'quoted') { "$TName.`"$COL`"" } else { "$TName.$COL" })
   $cTip = $(switch ($colState) {

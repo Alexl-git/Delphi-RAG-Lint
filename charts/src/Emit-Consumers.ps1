@@ -249,29 +249,6 @@ foreach ($x in $verbLits) {
                                            Text = [string]$x.text; Verb = $h.Verb; Name = $h.Name; Kind = $h.Kind })
   }
 }
-# D18 across SQL.Add lines (Task 4 item 4): a verb ENDING one literal and the
-# table opening the next line's (Get-SqlVerbTablesAcrossLines). The verb-ending
-# literals and their next line are read in ONE query; each crossing pair joins
-# $verbHits, anchored on the verb's line, so its routine is a reader / writer and
-# its span is searched for the column like any other. MEASURED 0 on every clone.
-$dangling = @($verbLits | Where-Object { [regex]::IsMatch([string]$_.text, '(?<![A-Za-z0-9_$.])(FROM|JOIN|INTO|UPDATE|PROCEDURE)\s*$') })
-$nJoinedHits = 0
-if ($dangling.Count) {
-  $win = (@($dangling | ForEach-Object { "(sl.file_id = $([int]$_.fid) AND sl.start_line BETWEEN $([int]$_.line) AND $([int]$_.line + 1))" }) -join ' OR ')
-  $winRows = Get-AllIndexRows @"
-SELECT sl.id AS id, sl.file_id AS fid, sl.start_line AS line, sl.text AS text, f.path AS path
-  FROM string_literals sl JOIN files f ON f.id = sl.file_id
- WHERE sl.source = 'pas' AND sl.kind IN ('literal','format','const') AND ($win)
-"@ 'sl.id'
-  foreach ($g in @($winRows | Group-Object { [int]$_.fid })) {
-    $rows = @($g.Group | Sort-Object { [int]$_.line }, { [int]$_.id })
-    foreach ($h in (Get-SqlVerbTablesAcrossLines $rows $sqlSet)) {
-      [void]$verbHits.Add([pscustomobject]@{ Fid = [int]$rows[0].fid; Path = [string]$rows[0].path; Line = $h.VerbLine
-                                             Text = $h.Text; Verb = $h.Verb; Name = $h.Name; Kind = $h.Kind })
-      $nJoinedHits++
-    }
-  }
-}
 $fromJoinTables = @($verbHits | Where-Object { $_.Kind -eq 'table' -and $_.Verb -in 'FROM', 'JOIN' } |
                     ForEach-Object { $_.Name } | Sort-Object -Unique)
 Write-Host ("  index-wide: {0} read / {1} write facts over {2} symbols ({3} tables read by fact); {4} upper-case SQL-verb literals naming {5} tables after FROM/JOIN" -f `
@@ -831,9 +808,7 @@ function Get-ClusterCount([string] $Id) { $c = @($clusters | Where-Object { $_.I
   IndexFactReadTables = $factReadTables.Count
   IndexVerbLiterals = $verbLits.Count
   IndexFromJoinTables = $fromJoinTables.Count
-  IndexVerbEndingLiterals = $dangling.Count
-  IndexJoinedVerbHits = $nJoinedHits
-  NoSqlFacts      = ($nFactSyms -eq 0)
+  NoSqlFacts       = ($nFactSyms -eq 0)
   NoSql            = $noSql
   Clusters         = $clusters.Count + 1
   ClickTargets     = $lay.Anchors
