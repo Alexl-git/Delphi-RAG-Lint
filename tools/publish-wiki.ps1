@@ -35,6 +35,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# GATE (feature registry, 2026-10-05): a publish must never carry a generated
+# page that differs from the registry. -Check writes nothing; exit 1 = stale.
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'build-feature-pages.ps1') -Check
+if ($LASTEXITCODE -ne 0) {
+  Write-Host 'publish-wiki: generated pages are not current -- run tools\build-feature-pages.ps1, commit, then publish' -ForegroundColor Red
+  exit 1
+}
+
 $src = (Resolve-Path $Source).Path
 $pages = @(Get-ChildItem $src -Filter *.md)
 if ($pages.Count -eq 0) { throw "no pages found in $src" }
