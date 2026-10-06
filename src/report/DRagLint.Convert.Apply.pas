@@ -2037,6 +2037,7 @@ var
   PasStore    : ISymbolStore; { the store that actually has AUnitPas indexed -- see StoreForFile }
   DoneUnits   : TDictionary<string, Boolean>; { ToType -> already handled (added or already-used) }
   ToTypesSeen : TList<string>;
+  IntfToTypes : TDictionary<string, Boolean>; { ToType -> a retyped field of it is declared in the INTERFACE (C13 a) }
   ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
   E           : TTextEdit;
   It          : TApplyItem; { scratch for the main body's own Emit calls }
@@ -2284,6 +2285,8 @@ var
         E.EndCol  := FEndCol;
         E.Text    := Inst.ToType;
         Edits.Add(E);
+        { C13 a: an interface field needs its To type's unit in the INTERFACE uses }
+        if SameText(Sym.Section, 'interface') then IntfToTypes.AddOrSetValue(Inst.ToType, True);
         It:= InstItem(aikFieldRetyped, afConverted,
           Format('%s: %s -> %s', [Inst.InstanceName, Inst.FromType, Inst.ToType]));
         It.FilePath:= AUnitPas;
@@ -2573,6 +2576,7 @@ var
   begin
     var UnitRules  : Boolean      := BookHasUnitRules(ABook.Rules);
     var ConvertAdds: TList<string>:= TList<string>.Create;
+    var IntfAdds   : TList<string>:= TList<string>.Create;
     try
       for var ToType_ in ToTypesSeen do
       begin
@@ -2581,10 +2585,15 @@ var
         var UseEdits: TArray<TTextEdit>;
         for var St in Stores do
         begin
-          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed);
+          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed,
+            IntfToTypes.ContainsKey(ToType_));
           if AlreadyUsed or (Length(UseEdits) > 0) then Break;
         end;
-        if UnitRules and (AlreadyUsed or (Length(UseEdits) > 0)) then ConvertAdds.Add(ResolvedUnit);
+        if UnitRules and (AlreadyUsed or (Length(UseEdits) > 0)) then
+        begin
+          ConvertAdds.Add(ResolvedUnit);
+          if IntfToTypes.ContainsKey(ToType_) then IntfAdds.Add(ResolvedUnit);
+        end;
         if AlreadyUsed then Continue;
         if Length(UseEdits) = 0 then
         begin
@@ -2603,11 +2612,12 @@ var
       if UnitRules then
       begin
         AUses:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
-          ConvertAdds.ToArray);
+          ConvertAdds.ToArray, IntfAdds.ToArray);
         if AUses.Ok then
           for E in AUses.Edits do Edits.Add(E);
       end;
     finally
+      IntfAdds.Free;
       ConvertAdds.Free;
     end;
   end;
@@ -2768,6 +2778,7 @@ begin
   ResolvedDefaults:= TList<TApplyResolvedDefault>.Create;
   DoneUnits:= TDictionary<string, Boolean>.Create;
   ToTypesSeen:= TList<string>.Create;
+  IntfToTypes:= TDictionary<string, Boolean>.Create;
   ConvertedInstNames:= TList<string>.Create;
   try
     PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
@@ -2949,6 +2960,7 @@ begin
     Items.Free;
     ResolvedDefaults.Free;
     DoneUnits.Free;
+    IntfToTypes.Free;
     ToTypesSeen.Free;
     ConvertedInstNames.Free;
   end;

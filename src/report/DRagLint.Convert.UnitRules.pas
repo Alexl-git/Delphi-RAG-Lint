@@ -113,6 +113,11 @@ function BookHasUnitRules(const ARules: TConversionRuleSet): Boolean;
 /// new implementation clause -- the section TFindUnitRefactoring.Build picks.
 /// They produce edits but no TUsesChange row: they are the #convert surface,
 /// not a unit rule.</param>
+/// <param name="AInterfaceAdds">The units of AExtraAdds that must go to the
+/// INTERFACE uses because a retyped field of their To type is declared in the
+/// interface section (C13 a). Requested first, so a #use of the same unit does
+/// not pull it into the implementation. Default nil: every extra add takes the
+/// section rule above.</param>
 /// <returns>The plan; see TUsesPlan. Ok=False (with Error) when the text is
 /// not a unit with interface and implementation sections, when a clause
 /// cannot be read, when an entry to remove sits in a conditional region, when
@@ -122,7 +127,7 @@ function BookHasUnitRules(const ARules: TConversionRuleSet): Boolean;
 /// contract (remove Old, add each New once in any case, keep Old's section) is
 /// pinned by tests\autotest\run_convert_apply_unit_rules.ps1.</remarks>
 function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionRuleSet;
-  const AExtraAdds: TArray<string>): TUsesPlan;
+  const AExtraAdds: TArray<string>; const AInterfaceAdds: TArray<string> = nil): TUsesPlan;
 
 implementation
 
@@ -487,7 +492,7 @@ type
     function IsPresent(const AName: string): Boolean;
     function SectionOf(const AName: string): Integer;
     procedure RequestAdd(const AName: string; ASection: Integer; const ARule: string);
-    procedure RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>);
+    procedure RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>);
     function Refuse(const AMsg: string): Boolean;
     function RemovalSpans(const AC: TUsesClause; AIdx, ALastKept: Integer;
       AClaimed: TList<Integer>; ASpans: TList<TSpan>): Boolean;
@@ -499,7 +504,7 @@ type
   public
     constructor Create(const AUnitPas, AText: string);
     destructor Destroy; override;
-    function Run(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>): TUsesPlan;
+    function Run(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>): TUsesPlan;
   end;
 
 function SwapRuleText(const R: TConversionRule): string;
@@ -695,12 +700,16 @@ begin
   FAdds[ASection].Add(C);
 end;
 
-procedure TUnitRulePlanner.RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>);
+procedure TUnitRulePlanner.RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>);
 var
   R: TConversionRule;
   U: string;
   S: Integer;
 begin
+  { C13 a: a To type whose retyped field is declared in the interface needs
+    its unit THERE -- requested before any rule, so IsPresent then keeps a
+    #use or the section rule below from adding it a second time }
+  for U in AInterfaceAdds do RequestAdd(U, 0, '');
   for R in ARules.Rules do
     case R.Kind of
       rkUse: RequestAdd(R.UnitName, 1, '#use ' + R.UnitName);
@@ -1016,13 +1025,13 @@ begin
   end;
 end;
 
-function TUnitRulePlanner.Run(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>): TUsesPlan;
+function TUnitRulePlanner.Run(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>): TUsesPlan;
 begin
   Result:= Default(TUsesPlan);
   if ReadUnit then
   begin
     Normalise(ARules, AExtraAdds);
-    RequestAdds(ARules, AExtraAdds);
+    RequestAdds(ARules, AExtraAdds, AInterfaceAdds);
     if PlanClause(0) and PlanClause(1) then
     begin
       Result.Ok     := True;
@@ -1045,13 +1054,13 @@ begin
 end;
 
 function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionRuleSet;
-  const AExtraAdds: TArray<string>): TUsesPlan;
+  const AExtraAdds: TArray<string>; const AInterfaceAdds: TArray<string>): TUsesPlan;
 var
   Planner: TUnitRulePlanner;
 begin
   Planner:= TUnitRulePlanner.Create(AUnitPas, AText);
   try
-    Result:= Planner.Run(ARules, AExtraAdds);
+    Result:= Planner.Run(ARules, AExtraAdds, AInterfaceAdds);
   finally
     Planner.Free;
   end;
