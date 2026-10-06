@@ -86,6 +86,13 @@ type
     ComponentPart: string;
     /// <summary>glyphs[] -- one outcome per converted instance per G-link (engine ask N3); [] when the engine sends none.</summary>
     Glyphs    : TArray<TGlyphOutcome>;
+    /// <summary>The engine's own edit-set refusals found in its output, each one
+    /// '[drag-lint: |ERROR: ]refused N edit(s) to &lt;file&gt; -- &lt;why&gt;' line,
+    /// distinct, in order. Up to 1.25.0 the line goes to stderr
+    /// (DRagLint.Refactor.TextEdit), which the editor's capture appends after the
+    /// document; from 1.25.1 it is also apply/1 error. warnings[] is read too. Empty
+    /// for a clean run.</summary>
+    EditRefusals: TArray<string>;
   end;
 
   /// <summary>The verdict before any file is touched.</summary>
@@ -205,6 +212,44 @@ function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles
 /// <returns>See TApplyRow; never raises.</returns>
 function ParseApplyJson(const AJson: string): TApplyRow;
 
+/// <summary>PURE: True when convert-apply claims success but refused to write one of
+/// the unit's edit sets -- the unit is left HALF-converted.</summary>
+/// <param name="ARow">ParseApplyJson's reading of the run.</param>
+/// <returns>ARow.Ok and ARow.EditRefusals is not empty. False for a row that is not
+/// Ok (failed or refused): it fails on its own already.</returns>
+/// <remarks>Engine defect, every version up to 1.25.0: a nested converted component
+/// makes the .dfm re-emit plan overlapping deletes; the applier refuses that file's
+/// edits whole ('overlapping delete ranges'), writes the .pas anyway, and the run
+/// still reports ok=true, exit 0. No apply/1 key carries it -- only the stderr line.
+/// A STOP-GAP until the engine applies a unit all-or-nothing; tighten it to the
+/// engine's exit contract when that ships.</remarks>
+function ApplyHalfWritten(const ARow: TApplyRow): Boolean;
+
+/// <summary>PURE: the note of a row ApplyHalfWritten fails.</summary>
+/// <param name="ARow">A row for which ApplyHalfWritten is True.</param>
+/// <returns>'engine left the unit half-converted (&lt;ext&gt; edits refused: N edit(s),
+/// &lt;why&gt;) -- restored from backup; engine fix pending', one parenthesised part per
+/// refusal joined '; ' (the extension is the refused file's, &lt;why&gt; the engine's
+/// reason without its trailing parenthesis).</returns>
+function HalfWrittenNote(const ARow: TApplyRow): string;
+
+/// <summary>PURE: True when convert-apply FAILED because it refused one of the unit's
+/// edit sets -- the engine 1.25.1+ shape, where the plan is checked before anything is
+/// written (exit 1, ok=false, 'refused N edit(s) to &lt;file&gt; -- ... -- unit not
+/// changed, nothing written').</summary>
+/// <param name="ARow">ParseApplyJson's reading of the run.</param>
+/// <returns>not ARow.Ok and ARow.EditRefusals is not empty.</returns>
+/// <remarks>A UNIT failure, never a book error: the runner's failure path takes it
+/// (its restore from its own .BCK is harmless -- the unit is unchanged).</remarks>
+function ApplyEditSetRefused(const ARow: TApplyRow): Boolean;
+
+/// <summary>PURE: the note of a row ApplyEditSetRefused fails.</summary>
+/// <param name="ARow">A row for which ApplyEditSetRefused is True.</param>
+/// <returns>'engine refused the unit as an engine defect (&lt;ext&gt; edits refused: N
+/// edit(s), &lt;why&gt;) -- unit not changed, nothing written', the parts as
+/// HalfWrittenNote's.</returns>
+function EditSetRefusedNote(const ARow: TApplyRow): string;
+
 /// <summary>PURE: the converted row's note for what was left (spec E10).</summary>
 /// <param name="ARetypeSupported">The engine reports inherited_retype (C8 N2). False
 /// (1.22.0) changes the converted words only (see returns).</param>
@@ -275,6 +320,23 @@ uses
 const
   BCK_TAG          = '.BCK';
   ERR_HEAD_CHARS   = 200;
+  // The engine's refusal of one file's edit set, one whole line. Up to 1.25.0 the
+  // applier (DRagLint.Refactor.TextEdit) writes it to stderr AFTER the other file
+  // was written, exit 0: 'drag-lint: refused <N> edit(s) to <file> -- <why>'. From
+  // 1.25.1 the plan is checked before any write, exit 1, ok=false: 'ERROR: refused
+  // <N> edit(s) to <file> -- <why> -- unit not changed, nothing written' (apply/1
+  // error: the same without 'ERROR: '). Anchored on the whole line, so the words
+  // 'overlapping delete ranges' elsewhere never match.
+  // Matched case-insensitively (EDIT_REFUSAL_OPTIONS); 'edit', 'edits' and 'edit(s)'.
+  EDIT_REFUSAL_PATTERN = '^(?:drag-lint: |ERROR: )?refused (\d+) edit(?:\(s\)|s)? to (.+?) -- (.+)$';
+  EDIT_REFUSAL_OPTIONS = [roIgnoreCase];
+  EDIT_REFUSAL_PREFIX  = '^(?:drag-lint: |ERROR: )';
+  EDIT_REFUSAL_COUNT   = 1;
+  EDIT_REFUSAL_FILE    = 2;
+  EDIT_REFUSAL_WHY     = 3;
+  HALF_PART_FMT = '%s edits refused: %s edit(s), %s';
+  HALF_NOTE_FMT = 'engine left the unit half-converted (%s) -- restored from backup; engine fix pending';
+  EDIT_SET_REFUSED_FMT = 'engine refused the unit as an engine defect (%s) -- unit not changed, nothing written';
   // The engine's per-instance inherited warning (also an items[] inherited-instance-skipped):
   // 'line N: warning: inherited instance <Name>: <Type> skipped -- <reason>'.
   INHERITED_WARNING_PATTERN = '^line \d+: warning: inherited instance ';
@@ -664,6 +726,32 @@ function ParseApplyJson(const AJson: string): TApplyRow;
         Result:= Result + [LWarn];
   end;
 
+  // A refusal line without its 'drag-lint: ' / 'ERROR: ' prefix: one refusal read
+  // from apply/1 error AND from stderr is the same refusal.
+  function RefusalKey(const ALine: string): string;
+  begin
+    Result:= TRegEx.Replace(ALine, EDIT_REFUSAL_PREFIX, '', EDIT_REFUSAL_OPTIONS);
+  end;
+
+  // Every distinct refusal line in ALines, in order, appended to AFound (first form kept).
+  procedure AddRefusals(const ALines: TArray<string>; var AFound: TArray<string>);
+  var
+    LLine: string;
+    LSeen: Boolean;
+  begin
+    for var LRaw: string in ALines do
+    begin
+      LLine:= Trim(LRaw);
+      if not TRegEx.IsMatch(LLine, EDIT_REFUSAL_PATTERN, EDIT_REFUSAL_OPTIONS) then
+        Continue;
+      LSeen:= False;
+      for var LHad: string in AFound do
+        LSeen:= LSeen or (RefusalKey(LHad) = RefusalKey(LLine));
+      if not LSeen then
+        AFound:= AFound + [LLine];
+    end;
+  end;
+
 var
   Root: TJSONValue;
   Obj : TJSONObject;
@@ -695,6 +783,11 @@ begin
     Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0);
     Result.ComponentPart:= Str(Obj, 'component_part');
     Result.Glyphs    := GlyphOutcomes(Obj);
+    // The applier's refusal reaches us on stderr, outside the document (no apply/1
+    // key carries it, up to engine 1.25.0); warnings[] / error are read as well.
+    AddRefusals(AJson.Split([#10]), Result.EditRefusals);
+    AddRefusals(Strings(Obj, 'warnings'), Result.EditRefusals);
+    AddRefusals([Str(Obj, 'error')], Result.EditRefusals);
     if Obj.TryGetValue<TJSONArray>('rule_errors', Errs) then
       Result.RuleErrorCount:= Errs.Count;
     Result.Refused:= (not Result.Ok) and Obj.GetValue<Boolean>('refused', False);
@@ -718,6 +811,50 @@ begin
   finally
     Root.Free;
   end; // try
+end;
+
+function ApplyHalfWritten(const ARow: TApplyRow): Boolean;
+begin
+  Result:= ARow.Ok and (Length(ARow.EditRefusals) > 0);
+end;
+
+// The refusals of ARow as '<ext> edits refused: N edit(s), <why>' parts, joined '; '.
+function RefusalParts(const ARow: TApplyRow): string;
+var
+  LMatch: TMatch;
+  LParts: TArray<string>;
+  LWhy  : string;
+begin
+  LParts:= nil;
+  for var LLine: string in ARow.EditRefusals do
+  begin
+    LMatch:= TRegEx.Match(LLine, EDIT_REFUSAL_PATTERN, EDIT_REFUSAL_OPTIONS);
+    if not LMatch.Success then
+      Continue;
+    // The engine's trailing '(an engine defect; the file is left unchanged)' is about
+    // that ONE file -- the other one was written, which is the point of this note.
+    LWhy:= LMatch.Groups[EDIT_REFUSAL_WHY].Value;
+    if Pos(' (', LWhy) > 0 then
+      LWhy:= Copy(LWhy, 1, Pos(' (', LWhy) - 1);
+    LParts:= LParts + [Format(HALF_PART_FMT, [LowerCase(ExtractFileExt(LMatch.Groups[EDIT_REFUSAL_FILE].Value)),
+      LMatch.Groups[EDIT_REFUSAL_COUNT].Value, LWhy])];
+  end;
+  Result:= string.Join('; ', LParts);
+end;
+
+function HalfWrittenNote(const ARow: TApplyRow): string;
+begin
+  Result:= Format(HALF_NOTE_FMT, [RefusalParts(ARow)]);
+end;
+
+function ApplyEditSetRefused(const ARow: TApplyRow): Boolean;
+begin
+  Result:= (not ARow.Ok) and (Length(ARow.EditRefusals) > 0);
+end;
+
+function EditSetRefusedNote(const ARow: TApplyRow): string;
+begin
+  Result:= Format(EDIT_SET_REFUSED_FMT, [RefusalParts(ARow)]);
 end;
 
 const

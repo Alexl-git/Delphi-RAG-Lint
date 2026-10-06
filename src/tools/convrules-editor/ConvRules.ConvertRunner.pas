@@ -32,9 +32,11 @@ type
   /// <summary>Outcome of one results-grid row.</summary>
   /// <remarks>
   /// csConverted: the book converted the unit and the reindex after it succeeded.
-  /// csFailedRestored: the book's apply (or the reindex after it) failed; the
-  ///   unit and its .dfm were restored from this run's backup and the unit's
-  ///   remaining books did not run.
+  /// csFailedRestored: the book's apply (or the reindex after it) failed -- a
+  ///   half-written apply (ApplyHalfWritten: ok=true, but one file's edits refused)
+  ///   counts as failed; the unit and its .dfm were restored from this run's
+  ///   backup and the unit's remaining books did not run. An engine 1.25.1+
+  ///   edit-set refusal (ApplyEditSetRefused: nothing written) is csRefused.
   /// csBookSkipped: the book failed the engine's validation (rule_errors) and the
   ///   reply is not a refusal; the unit is untouched by it and the book is not
   ///   tried on any later unit.
@@ -47,8 +49,8 @@ type
   /// csRestoreFailed: a book failed AND the restore from the backup raised; the
   ///   unit may be half-converted, the Note names the backups (.pas and .dfm)
   ///   to restore by hand.
-  /// csRefused: the engine refused this book on the unit (TApplyRow.Refused),
-  ///   whether or not the reply also lists rule_errors; the book stays valid for
+  /// csRefused: the engine refused this book on the unit (TApplyRow.Refused, or
+  ///   an engine 1.25.1+ edit-set refusal, ApplyEditSetRefused), whether or not the reply also lists rule_errors; the book stays valid for
   ///   later units. The unit's remaining books do not run and it ends unchanged. When an
   ///   earlier book had converted the unit, it is restored like a failure (those
   ///   rows become csRolledBack) and the backup is kept and named. When nothing
@@ -701,7 +703,8 @@ var
     Row.Apply:= ParseApplyJson(LJson);
     // A refusal is about THIS unit, even when it also lists rule_errors: it takes the
     // refused path below and leaves the book valid for the next unit.
-    if (not Row.Apply.Ok) and (Row.Apply.RuleErrorCount > 0) and not Row.Apply.Refused then
+    // An edit-set refusal (engine 1.25.1+) is a unit failure, never a book error.
+    if (not Row.Apply.Ok) and (Row.Apply.RuleErrorCount > 0) and not Row.Apply.Refused and not ApplyEditSetRefused(Row.Apply) then
     begin
       // The BOOK is invalid; the engine validates before writing, so this unit
       // is untouched by it. Skip the book for the rest of the run.
@@ -716,12 +719,22 @@ var
     if not Row.Apply.Ok then
     begin
       // The E10 hint only on a scoped run: an unscoped run never asked for --only.
-      LReason:= Row.Apply.Error;
+      LReason:= if ApplyEditSetRefused(Row.Apply) then EditSetRefusedNote(Row.Apply) else Row.Apply.Error;
       if LScoped and Row.Apply.Refused then
         LReason:= LReason + RefusalHint(LReason)
-      else if LScoped and (Row.Apply.EditsCount = 0) then
+      else if LScoped and (Row.Apply.EditsCount = 0) and not ApplyEditSetRefused(Row.Apply) then
         LReason:= LReason + (if Assigned(AOnlyHint) then AOnlyHint(LOnly) else UnmatchedOnlyHint(LOnly)); // measured shape of an --only name that matches nothing
-      FailUnit(LReason, if Row.Apply.Refused then csRefused else csFailedRestored);
+      // An edit-set refusal (1.25.1+) wrote nothing, like a refusal: FailUnit's
+      // csRefused path restores only when an earlier book changed the unit.
+      FailUnit(LReason, if Row.Apply.Refused or ApplyEditSetRefused(Row.Apply) then csRefused else csFailedRestored);
+      Exit(False);
+    end;
+    // ok=true and exit 0, but the engine refused one file's edit set and wrote the
+    // other: a half-converted unit is a failure, never a conversion (stop-gap until
+    // the engine applies all-or-nothing; see ApplyHalfWritten).
+    if ApplyHalfWritten(Row.Apply) then
+    begin
+      FailUnit(HalfWrittenNote(Row.Apply), csFailedRestored);
       Exit(False);
     end;
     if not TryReindex(LError) then

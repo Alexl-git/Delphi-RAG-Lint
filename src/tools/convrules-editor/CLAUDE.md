@@ -1558,3 +1558,49 @@ hand-written request file, which is exactly what `drive-convert-request.ps1` doe
   `Application.Run` (latent for IDE launches); a `--form` error is overwritten by the
   request status; a whitespace-only required value reads "is missing"; the
   unmatched-name hint also fires on unparseable output / a raised engine call.
+
+## Engine half-apply guard (fix/apply-refusal-guard, 2026-10-06)
+
+* **What it catches.** Every engine up to the deployed 1.25.0: a full
+  `convert-apply --apply` on a unit with NESTED converted components (a TTable
+  with TField children -- DMREADINGS on the DMTEST copies) plans overlapping
+  `.dfm` deletes; `TTextEditApplier.Apply` (`DRagLint.Refactor.TextEdit.pas`,
+  the `DeletesOverlap` branch) refuses that FILE's edits whole and writes one
+  stderr line, `drag-lint: refused N edit(s) to <file> -- overlapping delete
+  ranges (an engine defect; the file is left unchanged)`. The `.pas` IS written,
+  the `.dfm` is not, and `DoConvertApply` ignores the applier's skipped count:
+  apply/1 says `ok: true`, `edits_count` is the PLANNED count, exit 0. No
+  apply/1 key carries the refusal -- the stderr line is the only signal.
+* **What the editor does.** `ParseApplyJson` collects every whole line matching
+  `EDIT_REFUSAL_PATTERN` =
+  `^(?:drag-lint: |ERROR: )?refused (\d+) edit(?:\(s\)|s)? to (.+?) -- (.+)$`,
+  case-insensitive (`EDIT_REFUSAL_OPTIONS` = `[roIgnoreCase]`), from the captured
+  output (stderr follows stdout there), `warnings[]` and `error` into
+  `TApplyRow.EditRefusals`; `ApplyHalfWritten` = `Ok` and any refusal. The
+  runner then takes the FAILURE path (`FailUnit(.., csFailedRestored)`): the
+  unit is restored from its `.BCK<N>`, earlier books on it roll back, the summary
+  counts it failed (red), and the note reads `engine left the unit
+  half-converted (.dfm edits refused: N edit(s), overlapping delete ranges) --
+  restored from backup; engine fix pending` (`HalfWrittenNote`). Tests:
+  `half.*`, `runner.half.*`.
+* **Engine 1.25.1+ shape (not merged yet), covered too.** The plan is checked
+  BEFORE any write, on dry runs too: exit 1, `ok: false`, nothing written (no
+  `.BCK`, no recovery.txt), and the line is `ERROR: refused N edit(s) to <file>
+  -- overlapping delete ranges (an engine defect) -- unit not changed, nothing
+  written` (assumed the same text without `ERROR: ` in apply/1 `error`). The
+  pattern above accepts that prefix;
+  `ApplyEditSetRefused` = NOT `Ok` and any refusal. It is a UNIT failure, never a
+  book error (the book-skip branch excludes it; the next unit still runs), the
+  note is `EditSetRefusedNote` (`engine refused the unit as an engine defect
+  (...) -- unit not changed, nothing written`). It takes the `csRefused` path of
+  `FailUnit` (status `refused -- not changed`): when no earlier book changed the
+  unit nothing is restored and the unneeded `.BCK<N>` files are DROPPED (owner
+  decision 2026-10-04, as `runner.refused.first.drops.backup`); when one did, the
+  unit is restored from its `.BCK<N>` and that book rolls back. A scoped run's
+  `edits_count` 0 here never gets the `--only asked for ... re-send it` hint.
+  Tests: `editset.*`, `runner.editset.*`.
+* **A STOP-GAP.** It keys on engine TEXT. When the engine ships its
+  all-or-nothing apply (a non-zero exit / `ok:false` on any refused edit set),
+  tighten this to that exit contract and drop the text match. Blind spot: the
+  applier's other silent drops (stale anchor, invalid replace, out-of-range
+  line) print nothing, so they cannot be seen from here.
