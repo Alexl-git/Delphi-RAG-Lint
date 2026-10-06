@@ -29,6 +29,9 @@ No extractor change: indexes do not re-parse.
   `--apply` alike: `REFUSED: <Type> (line N) resolves in no --db -- index gap in the library
   or project index; reindex, or report it, before converting`, `refused: true`. It was a
   rule-validation error (`#convert From/To type not found in any --db`) before.
+  The C13 plan's "R26 silent when DeclaringUnitOf is empty" path is unreachable for such a
+  type: book validation (BuildBlockClasses, R7) finds it unresolved before any plan -- and
+  R26 -- runs, and now refuses the unit there.
 - **`--only` skips, rather than refuses, a unit rule it would strand (C12 N4).** A
   `#unuse` / `#useswap` removal whose stranded instances are ALL ones `--only` left out is
   skipped: unit kept, `uses[]` `{action: "skipped", ..., reason}`, a `line N: warning:` and
@@ -39,7 +42,13 @@ No extractor change: indexes do not re-parse.
 
 - **Interface uses for an interface-declared retyped field (C13 a).** The To type's unit
   went to the implementation uses whenever the unit had one, so a retyped form field failed
-  E2003. Both planners (no unit rules / unit rules) now put it in the interface uses.
+  E2003. Both planners (no unit rules / unit rules) now put it in the interface uses, and a
+  To unit the unit already uses ONLY in its implementation clause is MOVED there (removed
+  from the implementation clause, no `uses[]` row: it is the `#convert` surface).
+  Plan size: when a unit rule already rewrites the interface clause, the adds now ride that
+  rewrite instead of a second implementation-clause rewrite -- dmToolStats
+  (BDE-to-FireDAC.rules) plans 38 edits, not 1.21.1's 40; the 2 gone are that clause's
+  delete + insert. Pinned by arm P (IntfFormU: 7 -> 5).
   Guard: `run_convert_apply_interface_uses.ps1` (compiles the result).
 - **`#migrate Foo -> ` (From-only) read Old `Foo ->` (C13 c, R27).**
 

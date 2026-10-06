@@ -121,8 +121,10 @@ function BookHasUnitRules(const ARules: TConversionRuleSet): Boolean;
 /// <param name="AInterfaceAdds">The units of AExtraAdds that must go to the
 /// INTERFACE uses because a retyped field of their To type is declared in the
 /// interface section (C13 a). Requested first, so a #use of the same unit does
-/// not pull it into the implementation. Default nil: every extra add takes the
-/// section rule above.</param>
+/// not pull it into the implementation; one the unit uses ONLY in its
+/// implementation clause is MOVED (removed there, added to the interface; no
+/// TUsesChange row). Default nil: every extra add takes the section rule
+/// above.</param>
 /// <returns>The plan; see TUsesPlan. Ok=False (with Error) when the text is
 /// not a unit with interface and implementation sections, when a clause
 /// cannot be read, when an entry to remove sits in a conditional region, when
@@ -477,7 +479,7 @@ type
 
   { One planning run. A class so the many small steps share the lexed unit
     and the accumulating plan instead of passing a dozen parameters. }
-  TUnitRulePlanner = class
+  TUnitRulePlanner = class  // dl:ok high-response@7a45 -- REVIEWED 2026-10-06: 51 since PlanMoves (C13 a) joined; one uses-clause rewrite whose steps share the parsed clauses -- splitting it would pass that state between classes
   private
     FUnitPas   : string;
     FUnitName  : string;
@@ -498,6 +500,7 @@ type
     function SectionOf(const AName: string): Integer;
     procedure RequestAdd(const AName: string; ASection: Integer; const ARule: string);
     procedure RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>);
+    procedure PlanMoves(const AInterfaceAdds: TArray<string>);
     function Refuse(const AMsg: string): Boolean;
     function RemovalSpans(const AC: TUsesClause; AIdx, ALastKept: Integer;
       AClaimed: TList<Integer>; ASpans: TList<TSpan>): Boolean;
@@ -703,6 +706,21 @@ begin
   C.Section := FClauses[ASection].Section;
   C.Rule    := ARule;
   FAdds[ASection].Add(C);
+end;
+
+{ C13 a: a unit an INTERFACE declaration needs that the unit uses only in its
+  implementation clause is MOVED -- removed there (a removal with no rule, so
+  no uses[] row) and then added to the interface by RequestAdds. Left where it
+  is, the interface declaration fails E2003. }
+procedure TUnitRulePlanner.PlanMoves(const AInterfaceAdds: TArray<string>);
+var
+  U: string;
+  E: TUsesEntry;
+begin
+  for U in AInterfaceAdds do
+    if SectionOf(U) = 1 then
+      for E in FClauses[1].Entries do
+        if SameText(E.Name, U) then FRemoveRule.AddOrSetValue(E.Name, '');
 end;
 
 procedure TUnitRulePlanner.RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>);
@@ -915,7 +933,8 @@ begin
     Exit;
   end;
   for I:= 0 to High(AC.Entries) do
-    if ARemoved[I] then
+    { a C13 move (FRemoveRule value '') is the #convert surface: no row }
+    if ARemoved[I] and (FRemoveRule[AC.Entries[I].Name] <> '') then
     begin
       Ch:= Default(TUsesChange);
       Ch.Action  := 'remove';
@@ -1036,6 +1055,7 @@ begin
   if ReadUnit then
   begin
     Normalise(ARules, AExtraAdds);
+    PlanMoves(AInterfaceAdds);
     RequestAdds(ARules, AExtraAdds, AInterfaceAdds);
     if PlanClause(0) and PlanClause(1) then
     begin

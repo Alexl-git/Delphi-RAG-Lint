@@ -2673,12 +2673,30 @@ var
   // other one deletes. A unit already used is handed over too, so a #unuse of
   // it is overruled (ADD wins) rather than breaking the converted unit.
   // AUses is the unit-rule plan (Ok=True and empty when the book has none).
+  // C13 a: True when the unit uses AUnit in its implementation clause and NOT
+  // in its interface clause (as the index recorded the unit's uses).
+  function UsedOnlyInImplementation(const AUnit: string): Boolean;
+  var
+    InImpl, InIntf: Boolean;
+  begin
+    InImpl:= False;
+    InIntf:= False;
+    if PasFileId > 0 then
+      for var U: TUnitUse in PasStore.GetUnitUsesForFile(PasFileId) do
+        if SameText(U.UnitName, AUnit) then
+        begin
+          if U.Section = uusInterface then InIntf:= True else InImpl:= True;
+        end;
+    Result:= InImpl and not InIntf;
+  end;
   procedure PlanUsesAdditions(out AUses: TUsesPlan; out AAdds, AIntfAdds: TArray<string>);
   var
     E : TTextEdit;
     It: TApplyItem;
   begin
     var UnitRules  : Boolean      := BookHasUnitRules(ABook.Rules);
+    var MoveNeeded : Boolean      := False;
+    var Pending    : TList<TTextEdit>:= TList<TTextEdit>.Create;
     var ConvertAdds: TList<string>:= TList<string>.Create;
     var IntfAdds   : TList<string>:= TList<string>.Create;
     try
@@ -2687,16 +2705,19 @@ var
         var ResolvedUnit: string;
         var AlreadyUsed : Boolean;
         var UseEdits: TArray<TTextEdit>;
+        var WantIntf: Boolean:= IntfToTypes.ContainsKey(ToType_);
         for var St in Stores do
         begin
-          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed,
-            IntfToTypes.ContainsKey(ToType_));
+          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed, WantIntf);
           if AlreadyUsed or (Length(UseEdits) > 0) then Break;
         end;
-        if UnitRules and (AlreadyUsed or (Length(UseEdits) > 0)) then
+        if AlreadyUsed or (Length(UseEdits) > 0) then
         begin
           ConvertAdds.Add(ResolvedUnit);
-          if IntfToTypes.ContainsKey(ToType_) then IntfAdds.Add(ResolvedUnit);
+          if WantIntf then IntfAdds.Add(ResolvedUnit);
+          { C13 a: used, but only in the implementation clause -- it has to
+            MOVE, which only the uses planner can do }
+          if WantIntf and AlreadyUsed and UsedOnlyInImplementation(ResolvedUnit) then MoveNeeded:= True;
         end;
         if AlreadyUsed then Continue;
         if Length(UseEdits) = 0 then
@@ -2708,8 +2729,7 @@ var
           Emit(It);
           Continue;
         end;
-        if not UnitRules then
-          for E in UseEdits do Edits.Add(E);
+        for E in UseEdits do Pending.Add(E);
       end;
       AUses:= Default(TUsesPlan);
       AUses.Ok:= True;
@@ -2717,12 +2737,14 @@ var
         re-plans the unit rules with AAdds / AIntfAdds first }
       AAdds    := ConvertAdds.ToArray;
       AIntfAdds:= IntfAdds.ToArray;
-      if UnitRules then
+      if UnitRules or MoveNeeded then
         AUses:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
-          AAdds, AIntfAdds);
-    finally
+          AAdds, AIntfAdds)
+      else
+        for E in Pending do Edits.Add(E);    finally
       IntfAdds.Free;
       ConvertAdds.Free;
+      Pending.Free;
     end;
   end;
 

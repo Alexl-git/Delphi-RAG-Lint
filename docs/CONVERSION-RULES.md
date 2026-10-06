@@ -762,7 +762,8 @@ without the key still refuses the unit.
    clause (once per distinct ToType), via `TFindUnitRefactoring.Build` -- the
    INTERFACE uses when the retyped field is declared in the interface section
    (1.23.0; a form's published fields always are), else the implementation
-   uses when the unit has one.
+   uses when the unit has one. A To unit the unit already uses ONLY in its
+   implementation clause is MOVED to the interface clause in that case.
 3. **`.dfm` object-block re-emit** -- the instance's whole `object Name: Class
    ... end` block is replaced with the re-emitted T block from `ReemitComponent`
    (Batch 2a-i), including moved-depth properties and event renames. A hard

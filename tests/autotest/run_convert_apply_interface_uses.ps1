@@ -85,9 +85,51 @@ Check 'D1 implementation field, book with #use: --apply exits 0' ($r.Code -eq 0)
 Check 'D2 ... LibB and ExtraU both in the IMPLEMENTATION uses (control)' ($t.Contains("uses$CRLF  ImplU, ExtraU, LibB;$CRLF") -or $t.Contains("uses$CRLF  ImplU, LibB, ExtraU;$CRLF")) $t
 Check 'D3 ... the interface uses is untouched' ($t.Contains("uses$CRLF  Classes, LibA;$CRLF")) $t
 
+# ---- MOVE: the To unit is ALREADY in the implementation uses only ----------
+# An interface field needs it in the interface; left in the implementation the
+# unit fails E2003 at the field. It is MOVED -- removed from the implementation
+# clause and added to the interface one -- on both planner paths. The move is
+# the #convert surface, so it is not a uses[] row (like the add itself).
+$r = Apply 'IntfMove.pas' 'convert.rules' @('--apply', '--no-backup', '--format', 'json')
+$t = Text 'IntfMove.pas'
+$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+Check 'M1 #convert-only book, LibB already in the implementation uses: exit 0' ($r.Code -eq 0) $r.Out
+Check 'M2 ... LibB MOVED to the interface uses' ($t.Contains("interface$CRLF$CRLF" + "uses$CRLF  Classes, LibA, LibB;$CRLF")) $t
+Check 'M3 ... and removed from the implementation uses (ImplU kept), exactly once in the file' `
+  ($t.Contains("implementation$CRLF$CRLF" + "uses$CRLF  ImplU;$CRLF") -and (([regex]::Matches($t, '\bLibB\b')).Count -eq 1)) $t
+Check 'M4 ... no uses[] row for the move (it is the #convert surface)' (($null -ne $j) -and (@($j.uses).Count -eq 0)) $r.Out
+$r = Apply 'IntfMoveR.pas' 'convertuse.rules' @('--apply', '--no-backup')
+$t = Text 'IntfMoveR.pas'
+Check 'M5 book with #use: LibB moved to the interface, ExtraU added to the implementation beside ImplU' `
+  (($r.Code -eq 0) -and $t.Contains("uses$CRLF  Classes, LibA, LibB;$CRLF") -and $t.Contains("uses$CRLF  ImplU, ExtraU;$CRLF") -and `
+   (([regex]::Matches($t, '\bLibB\b')).Count -eq 1)) ($r.Out + "`n" + $t)
+$r = Apply 'IntfMoveSolo.pas' 'convert.rules' @('--apply', '--no-backup')
+$t = Text 'IntfMoveSolo.pas'
+Check 'M6 LibB was the implementation clause''s only entry: the clause goes, LibB is in the interface' `
+  (($r.Code -eq 0) -and $t.Contains("uses$CRLF  Classes, LibA, LibB;$CRLF") -and -not ($t -match '(?s)implementation.*\buses\b')) ($r.Out + "`n" + $t)
+
+# ---- PIN: the dmToolStats shape (an interface unit rule + an interface field)
+# 1.21.1 planned dmToolStats (BDE-to-FireDAC.rules) at 40 edits, 1.23.0 at 38:
+# the interface clause was already rewritten for '#unuse DBTables', and the
+# FireDAC adds used to be a SECOND rewrite of the implementation clause
+# (delete + insert = the 2 edits) -- which also left the TFDTable fields
+# undeclared (E2003). Now the adds ride the interface rewrite. Same shape here:
+# 1.22.0 planned 7 edits for IntfFormU, this plan is 5, and the implementation
+# clause (lines 15..16) is not touched.
+$r = Apply 'IntfFormU.pas' 'convertunuse.rules' @('--format', 'json')
+$j = $null; try { $j = $r.Out.Substring($r.Out.IndexOf('{')) | ConvertFrom-Json } catch {}
+Check 'P1 #unuse OldU (interface) + interface field: 5 edits planned (dfm 2, retype 1, ONE interface clause rewrite 2)' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and ($j.edits_count -eq 5)) $r.Out
+$r = Apply 'IntfFormU.pas' 'convertunuse.rules'
+Check 'P2 text plan: no edit of the implementation clause (lines 15..16)' (($r.Code -eq 0) -and -not ($r.Out -match 'delete lines 15\.\.16')) $r.Out
+$r = Apply 'IntfFormU.pas' 'convertunuse.rules' @('--apply', '--no-backup')
+$t = Text 'IntfFormU.pas'
+Check 'P3 --apply: interface uses is Classes, LibA, LibB (OldU gone), implementation uses ImplU untouched' `
+  (($r.Code -eq 0) -and $t.Contains("uses$CRLF  Classes, LibA, LibB;$CRLF") -and $t.Contains("implementation$CRLF$CRLF" + "uses$CRLF  ImplU;$CRLF")) ($r.Out + "`n" + $t)
+
 # ---- the converted units compile -------------------------------------------
 [IO.File]::WriteAllText((P 'P.dpr'), (@(
-  'program P;', '', 'uses', '  IntfForm, ImplForm, IntfFormR, ImplFormR;', '',
+  'program P;', '', 'uses', '  IntfForm, ImplForm, IntfFormR, ImplFormR, IntfMove, IntfMoveR, IntfMoveSolo, IntfFormU;', '',
   'begin', 'end.') -join $CRLF) + $CRLF, [Text.Encoding]::ASCII)
 New-Item -ItemType Directory (P 'bin'), (P 'dcu') -Force | Out-Null
 $bat = P 'compile.bat'; $log = P 'compile.log'
