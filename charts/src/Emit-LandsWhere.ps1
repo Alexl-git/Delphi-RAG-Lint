@@ -364,7 +364,7 @@ if ($TName) {
   $cs = Get-SqlColumnState $sqlSet $TName $Prop $SourceOverride
   $colState = $cs.State
 }
-Write-Host ("  selection: {0} ({1}); table {2}; column {3}" -f $sel, $kind, $(if ($TName) { $TName } else { '(none)' }), $colState)
+Write-Host ("  selection: {0} ({1}); table {2}; column {3}" -f $sel, $kind, $(if ($TName) { $TName } else { '(none)' }), (Get-ColumnStateName $colState))
 $hasColumn = [bool]($cs -and $cs.IsColumn)
 $COL = $(if ($Prop) { $Prop.ToUpperInvariant() } else { '' })
 

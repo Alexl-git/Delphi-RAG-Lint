@@ -209,7 +209,7 @@ function Set-ColumnFromState {
   $script:colOlder = ($cs.State -eq 'older'); $script:colFile = $cs.File; $script:colLine = $cs.Line
   $decl = @($tbl.ColumnNames | Where-Object { [string]::Equals($_, $selCol, [StringComparison]::OrdinalIgnoreCase) })
   $script:colName = $(if ($decl.Count) { [string]$decl[0] } else { $cs.Column })
-  Write-Host "  column $tName.$($script:colName) ($($cs.State))"
+  Write-Host "  column $tName.$($script:colName) ($(Get-ColumnStateName $cs.State))"
 }
 if ($selCol) {
   $cs = Get-SqlColumnState $sqlSet $tName $selCol $SourceOverride
@@ -247,6 +247,29 @@ foreach ($x in $verbLits) {
   foreach ($h in (Get-SqlVerbTables ([string]$x.text) $sqlSet)) {
     [void]$verbHits.Add([pscustomobject]@{ Fid = [int]$x.fid; Path = [string]$x.path; Line = [int]$x.line
                                            Text = [string]$x.text; Verb = $h.Verb; Name = $h.Name; Kind = $h.Kind })
+  }
+}
+# D18 across SQL.Add lines (Task 4 item 4): a verb ENDING one literal and the
+# table opening the next line's (Get-SqlVerbTablesAcrossLines). The verb-ending
+# literals and their next line are read in ONE query; each crossing pair joins
+# $verbHits, anchored on the verb's line, so its routine is a reader / writer and
+# its span is searched for the column like any other. MEASURED 0 on every clone.
+$dangling = @($verbLits | Where-Object { [regex]::IsMatch([string]$_.text, '(?<![A-Za-z0-9_$.])(FROM|JOIN|INTO|UPDATE|PROCEDURE)\s*$') })
+$nJoinedHits = 0
+if ($dangling.Count) {
+  $win = (@($dangling | ForEach-Object { "(sl.file_id = $([int]$_.fid) AND sl.start_line BETWEEN $([int]$_.line) AND $([int]$_.line + 1))" }) -join ' OR ')
+  $winRows = Get-AllIndexRows @"
+SELECT sl.id AS id, sl.file_id AS fid, sl.start_line AS line, sl.text AS text, f.path AS path
+  FROM string_literals sl JOIN files f ON f.id = sl.file_id
+ WHERE sl.source = 'pas' AND sl.kind IN ('literal','format','const') AND ($win)
+"@ 'sl.id'
+  foreach ($g in @($winRows | Group-Object { [int]$_.fid })) {
+    $rows = @($g.Group | Sort-Object { [int]$_.line }, { [int]$_.id })
+    foreach ($h in (Get-SqlVerbTablesAcrossLines $rows $sqlSet)) {
+      [void]$verbHits.Add([pscustomobject]@{ Fid = [int]$rows[0].fid; Path = [string]$rows[0].path; Line = $h.VerbLine
+                                             Text = $h.Text; Verb = $h.Verb; Name = $h.Name; Kind = $h.Kind })
+      $nJoinedHits++
+    }
   }
 }
 $fromJoinTables = @($verbHits | Where-Object { $_.Kind -eq 'table' -and $_.Verb -in 'FROM', 'JOIN' } |
@@ -659,7 +682,7 @@ $anchored++
 Add-DisclosureRow $ftbl $declText $PAL.lineInk
 if ($colName) {
   # the SHARED label (Get-SqlColumnState): the same words lands-where and feeds-from print
-  Add-DisclosureRow $ftbl "column state $($cs.State): $($cs.Label)" $PAL.lineInk
+  Add-DisclosureRow $ftbl "column state $(Get-ColumnStateName $cs.State): $($cs.Label)" $PAL.lineInk
 } else {
   # "; a quoted column name is not extracted" used to close this row (engine
   # D19). Extractor 1.19 extracts quoted names, so the clause was dropped at the
@@ -808,7 +831,9 @@ function Get-ClusterCount([string] $Id) { $c = @($clusters | Where-Object { $_.I
   IndexFactReadTables = $factReadTables.Count
   IndexVerbLiterals = $verbLits.Count
   IndexFromJoinTables = $fromJoinTables.Count
-  NoSqlFacts       = ($nFactSyms -eq 0)
+  IndexVerbEndingLiterals = $dangling.Count
+  IndexJoinedVerbHits = $nJoinedHits
+  NoSqlFacts      = ($nFactSyms -eq 0)
   NoSql            = $noSql
   Clusters         = $clusters.Count + 1
   ClickTargets     = $lay.Anchors

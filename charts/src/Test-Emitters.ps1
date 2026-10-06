@@ -1631,8 +1631,23 @@ Step 'E-CO' {
     # literals it holds (the old counter counted hits).
     $mk = Measure-ConsumerKeys @(5) @(5, 7, -3, -3)
     $mk0 = Measure-ConsumerKeys @() @()
+    # Task 4 item 4: D18 on the CHARTS side -- a verb ending one SQL.Add literal and
+    # the table opening the next line's. MEASURED: no clone holds the shape (SERVER
+    # 445 routines with a verb literal, CLIENT 5: joining their literals finds 0
+    # table names the per-literal scan missed; SERVER's 5 verb-ending literals are
+    # all `' FROM ' + <variable>`), so it is checked on SYNTHETIC literal rows.
+    # Kept: :10>:11, the JOIN of :30>:31 (its FROM FOLDERS is inside :30, already
+    # found), DELETE FROM :40>:41. Dropped: same-line :20 (a variable between),
+    # :50>:52 (not the next line), :60 (lower case is text, not SQL).
+    $synSet = [pscustomobject]@{ Tables = @{ CAUSFAIL = 1; FOLDERS = 1 }; Procedures = (New-Object 'System.Collections.Generic.HashSet[string]') }
+    $synLits = @(@(10, 'SELECT REASON FROM'), @(11, 'CAUSFAIL'), @(20, ' FROM '), @(20, ' WHERE X'),
+                 @(30, 'SELECT * FROM FOLDERS JOIN'), @(31, 'CAUSFAIL ON'), @(40, 'DELETE FROM'), @(41, 'FOLDERS'),
+                 @(50, 'INSERT INTO'), @(52, 'CAUSFAIL'), @(60, 'select a from'), @(61, 'CAUSFAIL') |
+                 ForEach-Object { [pscustomobject]@{ line = $_[0]; text = $_[1] } })
+    $xl = @(Get-SqlVerbTablesAcrossLines $synLits $synSet | ForEach-Object { "$($_.Verb) $($_.Name):$($_.VerbLine)>$($_.Line)" }) -join ','
     [pscustomobject]@{ A = "$($a.Found):$($a.EndLine)"; AReason = $a.Reason; B = "$($b.Found):$($b.EndLine)"
                        Term = "$(Get-SqlTermAt $syn 7)$(Get-SqlTermAt $syn 11)"
+                       AcrossLines = $xl
                        Keys = "$($mk.Routines)/$($mk.Units) $($mk0.Routines)/$($mk0.Units)" }
   }
   Chk 'A-CO0-KEYS'      $co0.Keys '2/1 0/0'
@@ -1640,6 +1655,7 @@ Step 'E-CO' {
   if ($co0.AReason -notlike '*next statement at line 7*') { Fail 'A-CO0-BODYEND-A' "reason: $($co0.AReason)" }
   Chk 'A-CO0-BODYEND-B' $co0.B 'True:9'
   Chk 'A-CO0-TERM'      $co0.Term '^;'
+  Chk 'A-CO0-D18-JOIN'  $co0.AcrossLines 'FROM CAUSFAIL:10>11,JOIN CAUSFAIL:30>31,DELETE FROM FOLDERS:40>41'
 
   $script:co1 = & "$SRC\Emit-Consumers.ps1" -Table 'CAUSFAIL' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO1-CERT-W'    $co1.CertainWriters 1
@@ -1699,6 +1715,11 @@ Step 'E-CO' {
   # population definition, not the data, differs.
   Chk 'A-CO-IDX'        "$($co1.IndexReadFacts)/$($co1.IndexWriteFacts)/$($co1.IndexFactSymbols)" '112/148/250'
   Chk 'A-CO-LITS'       "$($co1.IndexVerbLiterals)/$($co1.IndexFromJoinTables)/$($co1.IndexFactReadTables)" '791/133/104'
+  # Task 4 item 4: 5 verb literals END on a verb, every one `' FROM ' + <variable>`
+  # or `INSERT INTO ' + '(` on ONE line (uPipeSessionBuilder.pas :544 :658 :1525 x2
+  # :3004), so no SQL.Add pair crosses a line: 0 joined hits, and A-CO-LITS above
+  # did not move. The joiner itself is pinned on synthetic rows (A-CO0-D18-JOIN).
+  Chk 'A-CO-D18-LINES'  "$($co1.IndexVerbEndingLiterals)/$($co1.IndexJoinedVerbHits)" '5/0'
 
   $script:co2 = & "$SRC\Emit-Consumers.ps1" -Column 'CAUSFAIL.REASON' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO2-SRV'       $co2.ServerRoutineNames 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareLoadQuery,uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareSaveQuery'
@@ -1710,6 +1731,11 @@ Step 'E-CO' {
   Chk 'A-CO2-BIND'      "$($co2c.IndexBindings)/$($co2c.DrawnBindings)" '7/1'
   Chk 'A-CO2-BINDROW'   $co2c.DrawnBindingRows 'uCausFailForm.dfm:60:colREASON'
   Chk 'A-CO2-BINDELSE'  "$($co2c.BindingsElsewhere)/$($co2c.BindingsUnresolved)" '6/0'
+  # Task 4 item 1: the focus box names the state as the docs do (`column`), never
+  # the internal `yes` / `older` / `no` -- the summary's ColumnState stays internal
+  $tc2c = Dot $co2c
+  if ($tc2c -notmatch 'column state column: \[certain\] a column of the newest') { Fail 'A-CO-STATENAME' 'the focus box does not say "column state column:"' }
+  if ($tc2c -match 'column state (yes|older|no):') { Fail 'A-CO-STATENAME' 'the focus box still prints an internal state name' }
 
   $script:co3 = & "$SRC\Emit-Consumers.ps1" -Column 'DRA1.FLDRID' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO3-SRV'       $co3.ServerRoutineNames 'uDRA1_SERVER.TDataService_DRA1_SERVER.PrepareLoadQuery,uDRA1_SERVER.TDataService_DRA1_SERVER.PrepareSaveQuery,uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation'
@@ -1779,13 +1805,26 @@ Step 'E-CO' {
     $q2 = Get-SqlColumnState $fake 'IPCHART' 'ACTION' $null $null ''
     # the cached real set is untouched by the hide
     $untouched = $real.Tables['FOLDERCOUNT'].Columns.Contains('TABLE') -and $real.Tables['IPCHART'].Columns.Contains('ACTION')
+    # Task 4 item 3: Get-DataSourceChain's by-columns tie-break (Get-ColumnsNotHeld)
+    # used `.Columns.Contains`, which says NO to a quoted column (TABLE, hidden
+    # here) and to an older-only one (GONOFF.OFF: MEASURED older-only, the newest
+    # GONOFF declaration does not extract it) -- both of which Get-SqlColumnState
+    # calls a column. NOSUCHCOL is the control: not held either way.
+    $nh = @(Get-ColumnsNotHeld $fake 'FOLDERCOUNT' @('TABLE', 'NOSUCHCOL') $null) + @(Get-ColumnsNotHeld $real 'GONOFF' @('OFF') $null)
+    $oldNh = @(@('TABLE', 'NOSUCHCOL') | Where-Object { -not $fake.Tables['FOLDERCOUNT'].Columns.Contains($_) }) + @(@('OFF') | Where-Object { -not $real.Tables['GONOFF'].Columns.Contains($_) })
     [pscustomobject]@{ Q1 = "$($q1.State):$([IO.Path]::GetFileName($q1.File)):$($q1.Line):$($q1.QuotedScan)"; L1 = $q1.Label
+                       NotHeld = "$($nh -join ',')|old=$($oldNh -join ',')"
+                       # Task 4 item 1: the RENDERED state names are the documented ones
+                       # (STATUS-questions.md / question-catalogue.md); the internal values stay
+                       StateNames = (@('yes', 'quoted', 'older', 'server-sql', 'stale', 'no') | ForEach-Object { Get-ColumnStateName $_ }) -join ','
                        Q2 = "$($q2.State):$([IO.Path]::GetFileName($q2.File)):$($q2.Line)"; L2 = $q2.Label
                        Untouched = $untouched
                        # feeds-from's column-hop label (no real chain can end on a quoted column)
                        Hop = "$(Get-ColumnHopLabel $q1) / $(Get-ColumnHopLabel ([pscustomobject]@{ State = 'yes'; Column = 'REASON' }))" }
   }
   Chk 'A-COLSTATE-QUOTED' "$($cqs.Q1) $($cqs.Q2) $($cqs.Untouched)" 'quoted:MS1.SQL:3848:hit quoted:MS1.SQL:2243 True'
+  Chk 'A-DS-TIEBREAK-COLTEST' $cqs.NotHeld 'NOSUCHCOL|old=TABLE,NOSUCHCOL,OFF'
+  Chk 'A-COLSTATE-NAMES' $cqs.StateNames 'column,quoted,older-only,server-sql,[stale source],not-a-column'
   # FIX ROUND 1 (item 11): the label no longer says the index "does not extract a
   # quoted name" -- false as a general statement since 1.19 -- only that THIS one
   # was not extracted
@@ -1897,6 +1936,20 @@ Step 'CO-STALE-COL' {
     Fail 'A-CO-STALE-COL' 'the stale trigger is dropped from the column form without a word' }
   if ($tsc -notmatch '77 of 168 procedure bodies not scanned') { Fail 'A-CO-STALE-COL' 'the column form does not say which procedure bodies were not scanned' }
 }
+# Task 4 item 2: the column form REFUSES when the column's state is [stale
+# source] -- not extracted, and the newest declaration's script (a MANUFACTURED
+# stale MS1.SQL, as A-LW-STALE-Q) could not be scanned, so whether it is a column
+# is NOT known. The docs (question-catalogue.md, STATUS-questions.md) quote this
+# message; measured on the clones, verbatim. Own scratch path (freshness cache).
+# The brackets are backtick-escaped: NegTest matches with -like, where a bare
+# [stale source] is a one-character class.
+NegTest 'CO-STALE-REFUSE' 'consumers: cannot tell whether INSPRSLT.DISTHIST is a column -- `[stale source`] not extracted as a column by the SQL index (144 columns extracted from the newest of 2 declaration(s), MS1.SQL:2073); MS1.SQL differs from the indexed copy, so it was not scanned for a quoted identifier -- whether DISTHIST is a column of INSPRSLT is NOT known. Script-derived; the scripts may lag the live schema.' 'consumers_INSPRSLT_DISTHIST' {
+  $stDir = Join-Path $OutDir 'co-stale-refuse'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $ms1 = 'C:\Projects\DB\SQL\MS1.SQL'
+  $l = [IO.File]::ReadAllLines($ms1); $l[0] = $l[0] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'MS1.SQL'), (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  & "$SRC\Emit-Consumers.ps1" -Column 'INSPRSLT.DISTHIST' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir -SourceOverride @{ $ms1 = (Join-Path $stDir 'MS1.SQL') } }
 # ---- PLAN-last-four-verbs, Task 3: feeds-from --------------------------------------
 # CLIENT (-DbPath) + the SQL-SCRIPT clone (-SqlDbPath). Every number measured
 # 2026-09-23 and PINNED (R5); where a pin differs from the plan the comment names
@@ -2124,8 +2177,12 @@ NegTest 'LW-N31-BRIEF' 'uFOLDERS.TmcFOLDERS.TABLE resolves to no property or fie
 # N31 on a TRUE non-column: INSPRSLT.DistHist is in no script AND no server SQL
 # -> "not a column", no DB side, no trigger rows, exits 0 with a chart
 Step 'LW-N31' {
-  $script:lw31 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uINSPRSLT.TmcINSPRSLT.DistHist' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  $script:lw31 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uINSPRSLT.TmcINSPRSLT.DistHist' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir -InformationVariable lw31Info
   Chk 'A-LW-N31'        "$($lw31.ColumnState):$([string]$lw31.TableColumn):$($lw31.Triggers):$($lw31.Procedures):$($lw31.ServerRows)" 'no::0:0:0'
+  # Task 4 item 1: the printed selection line names the state as the docs do;
+  # the summary's ColumnState above stays the internal `no`
+  $selLine = @($lw31Info | ForEach-Object { "$_" } | Where-Object { $_ -like '*selection:*' })
+  Chk 'A-LW-STATENAME'  $(if ($selLine.Count) { $selLine[0].Trim() } else { '(no selection line)' }) 'selection: uINSPRSLT.TmcINSPRSLT.DistHist (orm); table INSPRSLT; column not-a-column'
   if ((Dot $lw31) -notmatch 'DistHist is not a column of INSPRSLT -- computed or UI-only') { Fail 'A-LW-N31' 'no "not a column of INSPRSLT" row' }
   if (-not (Test-Path $lw31.Svg)) { Fail 'A-LW-N31' 'no .svg' }
 }

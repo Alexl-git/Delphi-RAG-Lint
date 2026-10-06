@@ -990,6 +990,19 @@ function Test-IsColumn($Tbl, [string] $Col) {
   $Tbl.Columns.Contains($Col) -or $Tbl.OlderOnlyColumns.Contains($Col.ToUpperInvariant())
 }
 
+# The names in $Cols that table $Table does NOT hold -- Get-DataSourceChain's
+# by-columns tie-break and its MissingColumns. Judged by THE column test
+# (Task 4 item 3): `.Columns.Contains` alone said no to a quoted column and to
+# an older-only one, which every other verb calls a column. The cheap test
+# first; only a name it rejects pays for Get-SqlColumnState's source scan. A
+# `stale` column (not known) is not held: it cannot prove a candidate fits.
+# Unwrapped on purpose: callers take @(...) of it, which would NEST a
+# `, $array` return.
+function Get-ColumnsNotHeld($SqlSet, [string] $Table, $Cols, [hashtable] $SourceOverride) {
+  $t = $SqlSet.Tables[$Table]
+  $Cols | Where-Object { -not (Test-IsColumn $t $_) -and -not (Get-SqlColumnState $SqlSet $Table $_ $SourceOverride).IsColumn }
+}
+
 # A QUOTED identifier `"COL"` opening a line of T's newest declaration, read from
 # fresh source; $null when there is none; Stale when the script differs from the
 # indexed copy (the scan is then NOT run).
@@ -1005,6 +1018,20 @@ function Find-QuotedColumn($SqlSet, $Tbl, [string] $Col, [hashtable] $SourceOver
     if ($m.Success) { return [pscustomobject]@{ Stale = $false; Line = $i; Text = $lines[$i - 1].Trim() } }
   }
   $null
+}
+
+# The name a chart PRINTS for a Get-SqlColumnState state: the words
+# STATUS-questions.md and question-catalogue.md use (Task 4 item 1). The
+# internal values (`yes` / `older` / `no` / `stale`) stay what code and
+# summaries compare on; only rendered text goes through here.
+function Get-ColumnStateName([string] $State) {
+  switch ($State) {
+    'yes'   { 'column' }
+    'older' { 'older-only' }
+    'no'    { 'not-a-column' }
+    'stale' { '[stale source]' }
+    default { $State }
+  }
 }
 
 function Get-SqlColumnState($SqlSet, [string] $Table, [string] $Col, [hashtable] $SourceOverride,
@@ -1131,6 +1158,35 @@ function Get-SqlVerbTables([string] $Text, $SqlSet) {
     }
   }
   , $out.ToArray()
+}
+
+# ENGINE D18 on the charts side (Task 4 item 4). A statement built over several
+# SQL.Add lines can end one literal on its verb and open the next line's on the
+# table -- `SQL.Add('SELECT REASON FROM'); SQL.Add('CAUSFAIL');` -- a pair
+# Get-SqlVerbTables, reading one literal, cannot see. Each literal ENDING in a
+# verb is joined to the next literal when that one is on the NEXT line; only
+# the pairs that cross the join are returned (one inside a literal is already
+# found). Same-line neighbours are never joined: `' FROM ' + LTable + ' WHERE'`
+# is concatenation around a variable, not two SQL.Add lines. Pure over its
+# input: $Literals are rows with .line and .text in source order. Returns
+# Get-SqlVerbTables rows plus Line (the name's literal), VerbLine and Text (the
+# joined pair).
+function Get-SqlVerbTablesAcrossLines($Literals, $SqlSet) {
+  $out = New-Object System.Collections.ArrayList
+  $lits = @($Literals)
+  for ($i = 0; $i -lt $lits.Count - 1; $i++) {
+    $a = [string]$lits[$i].text; $la = [int]$lits[$i].line
+    if ([int]$lits[$i + 1].line -ne $la + 1) { continue }
+    if (-not [regex]::IsMatch($a, '(?<![A-Za-z0-9_$.])(FROM|JOIN|INTO|UPDATE|PROCEDURE)\s*$')) { continue }
+    $inA = @((Get-SqlVerbTables $a $SqlSet) | ForEach-Object { $_.Index })
+    $joined = "$a $([string]$lits[$i + 1].text)"
+    foreach ($h in (Get-SqlVerbTables $joined $SqlSet)) {
+      if ($h.Index -ge $a.Length -or $inA -contains $h.Index) { continue }
+      [void]$out.Add([pscustomobject]@{ Verb = $h.Verb; Name = $h.Name; Kind = $h.Kind; Index = $h.Index
+                                        Line = [int]$lits[$i + 1].line; VerbLine = $la; Text = $joined })
+    }
+  }
+  $out.ToArray()
 }
 
 # SQL text with strings and comments blanked, line-preserving (same contract as
@@ -1819,10 +1875,10 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line FROM string_literals sl
     Add-Hop 'table' 'unresolved' $typeName ([string]$ts[0].path) ([int]$ts[0].line) $why
     return (Complete 'none' $why)
   }
-  $fits = @($cand | Where-Object { $t = $SqlSet.Tables[$_]; -not @($o.BoundColumns | Where-Object { -not $t.Columns.Contains($_) }).Count })
+  $fits = @($cand | Where-Object { -not @(Get-ColumnsNotHeld $SqlSet $_ $o.BoundColumns $SourceOverride).Count })
   if ($cand.Count -eq 1) {
     $o.ResolvedTable = $cand[0]
-    $o.MissingColumns = @($o.BoundColumns | Where-Object { -not $SqlSet.Tables[$cand[0]].Columns.Contains($_) })
+    $o.MissingColumns = @(Get-ColumnsNotHeld $SqlSet $cand[0] $o.BoundColumns $SourceOverride)
     Add-Hop 'table' 'inferred' $cand[0] $typeFile $o.CandidateLines[$cand[0]] "the only upper-case table-name literal in $unit$caseNote"
     return (Complete 'one-table' '')
   }
