@@ -51,6 +51,20 @@ No extractor or resolver change on top of 1.25.0: indexes do not re-parse.
   parameter of that name. Own instances and C8 N2 / N2a inherited ones alike; DMTEST's
   DMREADINGS keeps all 32 of its sites. Pinned by run_convert_apply_inherited_retype.ps1
   H1-H3 (a bound use, a shadowing local, another class's field; inherited and own).
+- **A missed rewrite is never silent.** Scoping makes the rewrite depend on the resolver's
+  binds, so: (1) a DB whose edges were derived by a resolver older than 1.12.0 (or that
+  carries no resolver stamp) is REFUSED, dry run and `--apply` alike -- `REFUSED: <db>:
+  edges were derived by resolver <ver>; convert-apply needs 1.12.0-alpha or newer (bound
+  field reads) -- re-derive first: drag-lint index --project <file.dproj> --db "<db>"
+  --resolve-only`; (2) a site the index cannot vouch for -- no reference for its receiver
+  on its line (a `.pas` edited since it was indexed), a member reached through `with X do`,
+  or an UNBOUND reference to a converted ancestor's field -- is not rewritten and is
+  REPORTED: `access site <file>:<line> <receiver>.<member> not verified against the index
+  -- not rewritten` (`... with X do ... not verified ...`, `... <field> not verified ...`),
+  `items[]` kind `access-site-unverified`, json `access_sites_unverified` (always present),
+  and `inherited[]` action `unverified` for the ancestor-field case. Pinned by
+  run_convert_apply_inherited_retype.ps1 K1-K4, S1-S6 (`Self.X.Prop`, `with X do`, a
+  nested routine, an unbound X in an unrelated class) and T1.
 - **`.dfm` re-emit keeps the header keyword.** `ReemitComponent` used to write every block,
   nested ones included, as `object`; an `inline` frame or `inherited` child inside a
   converted block now keeps its keyword (written as `object` it would declare a second

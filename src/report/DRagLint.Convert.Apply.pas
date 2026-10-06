@@ -73,6 +73,11 @@ const
   /// <summary>apply/1 inherited[].action: no .dfm block; only code access
   /// sites follow the converted ancestor (C8 N2a, 1.26.0).</summary>
   INH_ACTION_CODE = 'code';
+  /// <summary>apply/1 inherited[].action: a code reference to a converted
+  /// ancestor's field that the resolver did NOT bind -- not verified against
+  /// the index, so not rewritten; reported as access-site-unverified (C8 N2
+  /// review, 1.26.0).</summary>
+  INH_ACTION_UNVERIFIED = 'unverified';
 
 type
   /// <summary>One component instance selected for conversion: its DFM instance
@@ -234,12 +239,19 @@ type
                                component, Line its object line in the unit's
                                .dfm; the structured row is apply/1
                                descendants[]. }
-    aikInheritedInstanceRetyped); { an inherited / inline .dfm object whose
+    aikInheritedInstanceRetyped, { an inherited / inline .dfm object whose
                                declaring ancestor already has the To type,
                                retyped and its block converted (C8 N2,
                                1.26.0). Field converted; Instance and Line
                                (its .dfm header) are set; the structured row
                                is apply/1 inherited[] action 'retyped'. }
+    aikAccessSiteUnverified); { a code access a rename would touch whose
+                               receiver the index cannot tie to the converted
+                               field -- no receiver reference on its line, an
+                               unbound reference to a converted ancestor's
+                               field, or a member reached through a `with`
+                               block -- NOT rewritten (C8 N2 review, 1.26.0).
+                               Field warnings; Line and Instance set. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -969,7 +981,7 @@ const
     'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped',
     'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable',
     'inherited-instance-skipped', 'unit-rule-skipped', 'descendant-not-converted',
-    'inherited-instance-retyped');
+    'inherited-instance-retyped', 'access-site-unverified');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1671,6 +1683,22 @@ var
 begin
   for Inst in AInstances do
   begin
+    if Inst.Action = INH_ACTION_UNVERIFIED then
+    begin
+      It         := Default(TApplyItem);
+      It.Kind    := aikAccessSiteUnverified;
+      It.Field   := afWarnings;
+      It.Instance:= Inst.Name;
+      It.FromType:= Inst.TypeName;
+      It.ToType  := Inst.ToType;
+      It.FilePath:= Inst.OwnerClass; { the .pas, carried here by FindInheritedCodeUses }
+      It.Line    := Inst.Line;
+      It.Text    := Format('access site %s:%d %s not verified against the index -- not rewritten',
+                      [ExtractFileName(Inst.OwnerClass), Inst.Line, Inst.Name]);
+      AReport.Warnings:= AReport.Warnings + [It.Text];
+      AReport.Items   := AReport.Items + [It];
+      Continue;
+    end;
     if Inst.Action <> INH_ACTION_SKIPPED then Continue; { retyped / code: not a warning (C8 N2) }
     It         := Default(TApplyItem);
     It.Kind    := aikInheritedInstanceSkipped;
@@ -1755,7 +1783,7 @@ var
 
   { -1, or the Found index of a new entry when AField is a converted ancestor's
     component field of a #convert To type }
-  function Candidate(const AField: TSymbol): Integer;
+  function Candidate(const AField: TSymbol; const AAction: string = INH_ACTION_CODE): Integer;
   var
     FromType, DeclClass, DeclPas: string;
     Inst    : TInheritedInstance;
@@ -1782,10 +1810,83 @@ var
     Inst.ToType       := DeclClass;
     Inst.AncestorUnit := TPath.GetFileNameWithoutExtension(DeclPas);
     Inst.AncestorState:= ANCESTOR_CONVERTED;
-    Inst.Action       := INH_ACTION_CODE;
-    Inst.Reason       := Format('declared in %s, which already has %s -- code access sites follow it (no .dfm block)',
-                           [Inst.AncestorUnit, DeclClass]);
+    Inst.Action       := AAction;
+    if AAction = INH_ACTION_UNVERIFIED then
+    begin
+      Inst.OwnerClass:= AUnitPas; { where the reference is, for the warning }
+      Inst.Reason    := Format('declared in %s, which already has %s -- an UNBOUND reference: not verified against the index, not rewritten',
+                          [Inst.AncestorUnit, DeclClass]);
+    end
+    else
+      Inst.Reason:= Format('declared in %s, which already has %s -- code access sites follow it (no .dfm block)',
+                      [Inst.AncestorUnit, DeclClass]);
     Result:= Found.Add(Inst);
+  end;
+
+  { True when the routine ARoutineId sits in (nested routines walked up) belongs
+    to a class of this unit and declares no local / parameter named AName }
+  function InOwnClassUnshadowed(ARoutineId: Int64; const AName: string): Boolean;
+  var
+    P: TSymbol;
+  begin
+    P:= St.GetSymbolById(ARoutineId);
+    for var Hop: Integer:= 1 to ENCLOSING_CLASS_HOPS do
+    begin
+      if P.Id = 0 then Break;
+      if P.Kind = skClass then Exit(OwnIds.ContainsKey(P.Id));
+      if St.FindChildSymbolByName(P.Id, AName).Id <> 0 then Break;
+      P:= St.GetSymbolById(P.ParentId);
+    end;
+    Result:= False;
+  end;
+
+  { 1.26.0 (C8 N2 review): an UNBOUND bare / Self. reference whose name is a
+    converted ancestor's component field, in a routine of this unit's class
+    that does not shadow it -- the resolver could not tie it to the field, so
+    it is not rewritten, and it is REPORTED rather than dropped in silence.
+    A name some bound reference already made a 'code' entry is not repeated. }
+  procedure CollectUnbound(const ARefs: TArray<TReference>);
+  var
+    F    : TSymbol;
+    Seen : TDictionary<string, Boolean>;
+  begin
+    Seen:= TDictionary<string, Boolean>.Create;
+    try
+      for var E: TInheritedInstance in Found do Seen.AddOrSetValue(UpperCase(E.Name), True);
+      for var U: TReference in ARefs do
+      begin
+        if (U.SymbolId <> 0) or (U.EnclosingSymbolId = 0) then Continue;
+        if (U.ReceiverText <> '') and not SameText(U.ReceiverText, SELF_RECEIVER) then Continue;
+        if Seen.ContainsKey(UpperCase(U.NameText)) then
+        begin
+          for var K: Integer:= 0 to Found.Count - 1 do
+            if (Found[K].Action = INH_ACTION_UNVERIFIED) and SameText(Found[K].Name, U.NameText) and (U.StartLine < Found[K].Line) then
+            begin
+              var Hit: TInheritedInstance:= Found[K];
+              Hit.Line:= U.StartLine;
+              Found[K]:= Hit;
+            end;
+          Continue;
+        end;
+        if not InOwnClassUnshadowed(U.EnclosingSymbolId, U.NameText) then Continue;
+        F:= Default(TSymbol);
+        for var AncId: Int64 in AncIds.Keys do
+        begin
+          F:= St.FindChildSymbolByName(AncId, U.NameText);
+          if (F.Id <> 0) and (F.Kind = skField) then Break;
+          F:= Default(TSymbol);
+        end;
+        if F.Id = 0 then Continue;
+        var Ix2: Integer:= Candidate(F, INH_ACTION_UNVERIFIED);
+        if Ix2 < 0 then Continue;
+        var Hit: TInheritedInstance:= Found[Ix2];
+        Hit.Line:= U.StartLine;
+        Found[Ix2]:= Hit;
+        Seen.AddOrSetValue(UpperCase(U.NameText), True);
+      end;
+    finally
+      Seen.Free;
+    end;
   end;
 
 begin
@@ -1816,7 +1917,8 @@ begin
         if A.Resolved and (A.SymbolId <> 0) and not OwnIds.ContainsKey(A.SymbolId) then
           AncIds.AddOrSetValue(A.SymbolId, True);
     if AncIds.Count = 0 then Exit;
-    for R in St.GetReferencesFromFile(FileId) do
+    var FileRefs: TArray<TReference>:= St.GetReferencesFromFile(FileId);
+    for R in FileRefs do
     begin
       if R.SymbolId = 0 then Continue;
       if not Fields.TryGetValue(R.SymbolId, Ix) then
@@ -1831,6 +1933,7 @@ begin
         Found[Ix]:= Hit;
       end;
     end;
+    CollectUnbound(FileRefs);
     Found.Sort(TComparer<TInheritedInstance>.Construct(
       function(const ALeft, ARight: TInheritedInstance): Integer
       begin
@@ -2949,10 +3052,13 @@ end;
 //     (walked up through nested routines) declares no local / parameter of
 //     that name and belongs to the root class.
 // Everything else -- bound to anything else, unbound with another receiver,
-// shadowed, in an unrelated class -- is dropped. Applies to own instances and
+// shadowed, in an unrelated class -- is dropped. A site whose line holds NO
+// reference for its receiver cannot be checked at all (the .pas changed since
+// it was indexed, or the indexer did not record it): it is not rewritten and
+// goes to AUnverified, which the caller REPORTS. Applies to own instances and
 // to C8 N2 / N2a inherited ones alike. Reads the index; writes nothing.
 function BoundAccessSites(const AStore: ISymbolStore; AFileId: Int64; const ADfmPath: string;
-  const ASites: TArray<TAccessSite>): TArray<TAccessSite>;
+  const ASites: TArray<TAccessSite>; out AUnverified: TArray<TAccessSite>): TArray<TAccessSite>;
 const
   { how many parents a reference's routine is walked up to reach its class }
   ROUTINE_HOPS = 4;
@@ -3021,7 +3127,7 @@ var
     Result:= 0;
   end;
 
-  function SiteIsBound(const ASite: TAccessSite): Boolean;
+  function SiteIsBound(const ASite: TAccessSite; out AUnchecked: Boolean): Boolean;
   var
     Recv   : TReference;
     Found  : Boolean;
@@ -3037,6 +3143,7 @@ var
         Recv := R;
         Found:= True;
       end;
+    AUnchecked:= not Found;
     if not Found then Exit(False);
     ScopeOf(ASite.InstanceName, Fields, Owners);
     if Recv.SymbolId <> 0 then Exit(Has(Fields, Recv.SymbolId));
@@ -3045,7 +3152,8 @@ var
   end;
 
 begin
-  Result:= nil;
+  Result     := nil;
+  AUnverified:= nil;
   if (AFileId <= 0) or (Length(ASites) = 0) then Exit;
   Refs:= AStore.GetReferencesFromFile(AFileId);
   Classes:= nil;
@@ -3057,7 +3165,11 @@ begin
   OwnerIds:= TDictionary<string, TArray<Int64>>.Create;
   try
     for var Site: TAccessSite in ASites do
-      if SiteIsBound(Site) then Result:= Result + [Site];
+    begin
+      var Unchecked: Boolean;
+      if SiteIsBound(Site, Unchecked) then Result:= Result + [Site]
+      else if Unchecked then AUnverified:= AUnverified + [Site];
+    end;
   finally
     OwnerIds.Free;
     FieldIds.Free;
@@ -3647,9 +3759,68 @@ var
   // crash, just no rewrite -- the .dfm-side #link still applies via surface #3).
   procedure PlanAccessSites;
   var
-    E : TTextEdit;
-    It: TApplyItem;
+    E  : TTextEdit;
+    It : TApplyItem;
+    Unv: TArray<TAccessSite>;
+
+    { 1.26.0 (C8 N2 review): a site the index cannot vouch for is REPORTED,
+      once per (line, member), never dropped in silence }
+    procedure ReportUnverified(const AMember: string);
+    begin
+      for var U: TAccessSite in Unv do
+      begin
+        var Dup: Boolean:= False;
+        for var Prior: TApplyItem in Items do
+          if (Prior.Kind = aikAccessSiteUnverified) and (Prior.Line = U.Line) and SameText(Prior.Path, AMember) then Dup:= True;
+        if Dup then Continue;
+        var UIt: TApplyItem:= PlainItem(aikAccessSiteUnverified, afWarnings,
+          Format('access site %s:%d %s.%s not verified against the index -- not rewritten',
+            [ExtractFileName(AUnitPas), U.Line, U.InstanceName, AMember]));
+        UIt.Instance:= U.InstanceName;
+        UIt.FilePath:= AUnitPas;
+        UIt.Path    := AMember;
+        UIt.Line    := U.Line;
+        Emit(UIt);
+      end;
+    end;
+
+    { 1.26.0: `with X do Member := ...` reaches X's members with no receiver at
+      the site, so the rewrite cannot see them -- each `with` naming a converted
+      instance is REPORTED for hand conversion }
+    procedure ReportWithBlocks;
+    const
+      KW_WITH = 'with ';
+      KW_DO   = ' do';
+    begin
+      var Renames: Boolean:= False;
+      for var Q: TConversionRule in ABook.Rules.Rules do
+        if (Q.Kind = rkLink) and (Q.FromPath <> '') and (Q.ToPath <> '') and not SameText(Q.FromPath, Q.ToPath) then Renames:= True;
+      if not Renames then Exit; { nothing a with block could hide }
+      for var LineNo: Integer:= 1 to PasLines.Count do
+      begin
+        var Low: string:= LowerCase(PasLines[LineNo - 1]);
+        var WithAt: Integer:= Pos(KW_WITH, Low);
+        if (WithAt = 0) or ((WithAt > 1) and IsIdentChar(Low[WithAt - 1])) then Continue;
+        var After: string:= Copy(Low, WithAt + Length(KW_WITH), MaxInt);
+        var DoAt: Integer:= Pos(KW_DO, After);
+        var Targets: string:= if DoAt > 0 then Copy(After, 1, DoAt - 1) else After;
+        for var N: string in ConvertedInstNames do
+          for var Tg: string in Targets.Split([',']) do
+            if SameText(Trim(Tg), N) then
+            begin
+              var WIt: TApplyItem:= PlainItem(aikAccessSiteUnverified, afWarnings,
+                Format('access site %s:%d with %s do ... not verified against the index -- not rewritten (a member reached through a with block is converted by hand)',
+                  [ExtractFileName(AUnitPas), LineNo, N]));
+              WIt.Instance:= N;
+              WIt.FilePath:= AUnitPas;
+              WIt.Line    := LineNo;
+              Emit(WIt);
+            end;
+      end;
+    end;
+
   begin
+    ReportWithBlocks;
     { T2h: an UNREACHABLE #link is never applied -- on the .pas side either. }
     for var LinkRule in WithoutUnreachableRules(ABook.Rules, ABook.Unreachable, 0).Rules do
     begin
@@ -3748,7 +3919,8 @@ var
            the same hazard exists here with the paren-star terminator, which is
            why neither delimiter is written out literally in this block. *)
         var CastSites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
-          LinkRule.FromPath, ConvertedInstNames.ToArray));
+          LinkRule.FromPath, ConvertedInstNames.ToArray), Unv);
+        ReportUnverified(LinkRule.FromPath);
         for var CSite in CastSites do
         begin
           var DstExpr: string:= CSite.InstanceName + '.' + LinkRule.ToPath;
@@ -3782,7 +3954,8 @@ var
       if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
 
       var Sites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
-        LinkRule.FromPath, ConvertedInstNames.ToArray));
+        LinkRule.FromPath, ConvertedInstNames.ToArray), Unv);
+      ReportUnverified(LinkRule.FromPath);
       for var Site in Sites do
       begin
         E:= Default(TTextEdit);

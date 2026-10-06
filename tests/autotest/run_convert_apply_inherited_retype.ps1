@@ -572,6 +572,109 @@ inherited RPlace: TRPlace
 end
 '@
 
+# ---- SHAPES: Self.X, with X do, a nested routine, an unbound X in an unrelated
+# class, and an UNBOUND reference to a converted ancestor's field ----------------
+Write-Ascii (P 'RShapes.pas') @'
+unit RShapes;
+
+interface
+
+uses
+  System.Classes, Vcl.Forms, LibA, RMid;
+
+type
+  TRShapes = class(TRMid)
+    procedure SelfQ;
+    procedure WithB;
+    procedure Nested;
+    procedure WithOther;
+  end;
+
+  TStranger = class
+    procedure Use;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TRShapes.SelfQ;
+begin
+  Self.rbtn.Caption := 'self';
+end;
+
+procedure TRShapes.WithB;
+begin
+  with rbtn do
+    Caption := 'with';
+end;
+
+procedure TRShapes.Nested;
+  procedure Inner;
+  begin
+    rbtn.Caption := 'nested';
+  end;
+begin
+  Inner;
+end;
+
+procedure TRShapes.WithOther;
+begin
+  with TObject.Create do
+    rcode.Caption := 'withother';
+end;
+
+procedure TStranger.Use;
+begin
+  rbtn.Caption := 'stranger';
+end;
+
+end.
+'@
+Write-Ascii (P 'RShapes.dfm') @'
+inherited RShapes: TRShapes
+  inherited rbtn: TSrcA
+    Caption = 's'
+  end
+end
+'@
+# STALE: indexed with xbtn, then the line is edited to rbtn -- the index holds no
+# reference for the receiver now on that line
+Write-Ascii (P 'RStale.pas') @'
+unit RStale;
+
+interface
+
+uses
+  System.Classes, Vcl.Forms, LibA, RMid;
+
+type
+  TRStale = class(TRMid)
+    procedure Touch;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TRStale.Touch;
+var
+  xbtn: TSrcA;
+begin
+  xbtn := nil;
+  xbtn.Caption := 'stale';
+end;
+
+end.
+'@
+Write-Ascii (P 'RStale.dfm') @'
+inherited RStale: TRStale
+  inherited rbtn: TSrcA
+    Caption = 'st'
+  end
+end
+'@
+
 Write-Ascii (P 'retype.rules') @'
 #convert LibA.TSrcA -> LibB.TDstB, LibB
 #link Title <- Caption
@@ -779,9 +882,65 @@ Check 'J1 code-only descendant: LibB goes to the IMPLEMENTATION uses (no interfa
   (($r.Code -eq 0) -and $t.Contains("uses`r`n  System.Classes, Vcl.Forms, RMid;`r`n") -and $t.Contains("uses`r`n  System.SysUtils, LibB;`r`n") -and `
    ($t -match 'rcode\.Title := IntToStr\(1\);')) ($r.Out + "`n" + $t)
 
+# ---- RESOLVER FRESHNESS: a DB resolved before bound field reads is refused ---------
+$py = 'C:\Python314\python.exe'
+if (-not (Test-Path $py)) {
+  Check 'K0 python (to age the resolver stamp of a DB copy) is available' $false "missing: $py"
+} else {
+  $old = P 'old-resolver.sqlite'
+  Copy-Item $db $old -Force
+  & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(""UPDATE schema_meta SET value='r=1.11.0-alpha;schema=23' WHERE key='resolver_fingerprint'""); c.commit(); c.close()" $old
+  $hp = (Get-FileHash (P 'RScope.pas')).Hash
+  $o = (& $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --format json 2>&1) -join "`n"; $kc = $LASTEXITCODE
+  $kj = Json $o
+  $want = "$old`: edges were derived by resolver 1.11.0-alpha; convert-apply needs 1.12.0-alpha or newer (bound field reads) -- re-derive first: drag-lint index <dir> --db `"$old`" --resolve-only"
+  Check 'K1 dry run on an r=1.11 DB: REFUSED, exit 1, ok=false, the reason names the DB and the exact --resolve-only fix' `
+    (($kc -eq 1) -and ($null -ne $kj) -and ($kj.ok -eq $false) -and ($kj.refused -eq $true) -and ($kj.reason -eq $want)) ($o + "`nwant: $want")
+  $o = (& $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --apply --no-backup 2>&1) -join "`n"; $kc = $LASTEXITCODE
+  Check 'K2 --apply on it: REFUSED (exit 1, one REFUSED: line), the unit byte-identical' `
+    (($kc -eq 1) -and ($o -match '(?m)^REFUSED: .*edges were derived by resolver 1\.11\.0-alpha') -and ((Get-FileHash (P 'RScope.pas')).Hash -eq $hp)) $o
+  & $py -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(""DELETE FROM schema_meta WHERE key='resolver_fingerprint'""); c.commit(); c.close()" $old
+  $o = (& $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $old --format json 2>&1) -join "`n"; $kc = $LASTEXITCODE
+  $kj = Json $o
+  Check 'K3 a DB with NO resolver stamp is refused the same way ("resolver (none)")' `
+    (($kc -eq 1) -and ($null -ne $kj) -and ($kj.refused -eq $true) -and ($kj.reason -match 'edges were derived by resolver \(none\)')) $o
+  $o = (& $Exe convert-apply --unit (P 'RScope.pas') --rules (P 'retype.rules') --db $db --format json 2>&1) -join "`n"
+  $kj = Json $o
+  Check 'K4 positive control: the current DB is not refused' (($null -ne $kj) -and ($kj.refused -eq $false)) $o
+}
+
+# ---- SHAPES ----------------------------------------------------------------------------
+$r = ApplyTo @('RShapes.pas') 'retype.rules' @('--format', 'json')
+$j = Json $r.Out
+$t0 = [IO.File]::ReadAllText((P 'RShapes.pas'))
+Check 'S1 RShapes dry run: exit 0, ok' (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok) $r.Out
+$wv = @($j.warnings | Where-Object { $_ -match '^access site RShapes\.pas:31 with rbtn do \.\.\. not verified against the index -- not rewritten' })
+Check 'S2 with rbtn do ...: NOT rewritten and REPORTED (warning at the with line, kind access-site-unverified)' `
+  (($wv.Count -eq 1) -and (@($j.items | Where-Object { $_.kind -eq 'access-site-unverified' -and $_.line -eq 31 }).Count -eq 1)) ($j.warnings -join ' | ')
+$cv = @($j.warnings | Where-Object { $_ -eq 'access site RShapes.pas:47 rcode not verified against the index -- not rewritten' })
+Check 'S3 an UNBOUND reference to a converted ancestor''s field (rcode inside with TObject.Create): reported, inherited[] action unverified' `
+  (($cv.Count -eq 1) -and (@($j.inherited | Where-Object { $_.name -eq 'rcode' -and $_.action -eq 'unverified' -and $_.line -eq 47 }).Count -eq 1)) (($j.warnings -join ' | ') + "`n" + ($j.inherited | ConvertTo-Json -Compress))
+Check 'S4 access_sites_unverified counts both (2)' ($j.access_sites_unverified -eq 2) "$($j.access_sites_unverified)"
+$r = ApplyTo @('RShapes.pas') 'retype.rules' @('--apply', '--no-backup')
+$t = [IO.File]::ReadAllText((P 'RShapes.pas'))
+Check 'S5 positive controls: Self.rbtn.Title and the nested routine''s rbtn.Title are rewritten' `
+  (($r.Code -eq 0) -and ($t -match "Self\.rbtn\.Title := 'self';") -and ($t -match "rbtn\.Title := 'nested';")) $t
+Check 'S6 not rewritten: the with block''s Caption, the unverified rcode.Caption, TStranger''s unbound rbtn.Caption' `
+  (($t -match "    Caption := 'with';") -and ($t -match "rcode\.Caption := 'withother';") -and ($t -match "rbtn\.Caption := 'stranger';")) $t
+
+# ---- STALE: a site whose receiver has no reference on its line --------------------------
+$sl = [IO.File]::ReadAllText((P 'RStale.pas')) -replace "  xbtn\.Caption := 'stale';", "  rbtn.Caption := 'stale';"
+Write-Ascii (P 'RStale.pas') $sl
+$r = ApplyTo @('RStale.pas') 'retype.rules' @('--format', 'json')
+$j = Json $r.Out
+Check 'T1 a site the index cannot vouch for (no receiver reference on its line): REPORTED, not rewritten, counted' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and (@($j.warnings | Where-Object { $_ -eq 'access site RStale.pas:22 rbtn.Caption not verified against the index -- not rewritten' }).Count -eq 1) -and `
+   (@($j.items | Where-Object { $_.kind -eq 'access-site-unverified' }).Count -eq 1) -and ($j.access_sites_unverified -eq 1) -and `
+   (@($j.access_sites).Count -eq 0)) $r.Out
+
 # ---- every .dfm this suite wrote LOADS -------------------------------------------------
 . (Join-Path $PSScriptRoot 'lib\DfmLoadCheck.ps1')
-$loadFails = Test-DfmLoads @((P 'RChild.dfm'), (P 'RCode.dfm'), (P 'RScope.dfm'), (P 'OScope.dfm'), (P 'RNChild.dfm'), (P 'RPlace.dfm'))
+$loadFails = Test-DfmLoads @((P 'RChild.dfm'), (P 'RCode.dfm'), (P 'RScope.dfm'), (P 'OScope.dfm'), (P 'RNChild.dfm'), (P 'RPlace.dfm'), (P 'RShapes.dfm'))
 Check 'LOAD1 every .dfm --apply wrote LOADS (text -> binary -> text -> binary)' ($loadFails.Count -eq 0) ($loadFails -join ' | ')
 
 # ---- the capability ----------------------------------------------------------------

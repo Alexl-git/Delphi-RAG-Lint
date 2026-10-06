@@ -797,6 +797,16 @@ inherits, or is unbound, bare or `Self.`-qualified, inside a routine of that
 class that declares no local or parameter of the same name. A local, a
 parameter or another class's same-named field is left alone.
 
+Because the scoping relies on the resolver's binds, a `--db` whose edges were
+derived by a resolver older than 1.12.0 (or that has no resolver stamp) is
+REFUSED, dry run and `--apply` alike, with the `index ... --resolve-only`
+command that fixes it. A site the index cannot vouch for -- no reference for
+its receiver on its line, a member reached through `with X do`, an unbound
+reference to a converted ancestor's field -- is not rewritten and is reported:
+`access site <file>:<line> <receiver>.<member> not verified against the index
+-- not rewritten`, `items[]` kind `access-site-unverified`, json
+`access_sites_unverified`.
+
 Code that uses a converted ancestor's field WITHOUT a `.dfm` block (N2a) is
 followed too: every access in the unit on a field an ancestor declares -- any
 number of levels up, bound to that field by the resolver (`refs.symbol_id`),
