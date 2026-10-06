@@ -10618,6 +10618,71 @@ begin
   end;
 end;
 
+{ C10 E10: the engine's G-expression error marks the G-link node (so the Glyph cell
+  shows [!]) and a good book marks nothing. Real captured engine text (1.21.1 pin,
+  convert-validate --rules <book>, parse-only, no --db), injected as the validate
+  function exactly as TestValidateScopeRun feeds its captures. }
+procedure TestGlyphValidateMarks;
+var
+  Dir    : string;
+  Bad    : string;
+  Ok     : string;
+  Txt    : string;
+  Dropped: Integer;
+  Map    : TArray<TRuleNode>;
+  Fake   : TValidateFn;
+  Capture: string;
+  Book   : TRuleBook;
+  N      : TRuleNode;
+  Hits   : Integer;
+  Text   : string;
+begin
+  Dir:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph'));
+  if not (TFile.Exists(TPath.Combine(Dir, 'validate-glyph-bad.txt'))
+    and TFile.Exists(TPath.Combine(Dir, 'validate-glyph-ok.txt'))
+    and TFile.Exists(TPath.Combine(Dir, 'BitBtn-glyph-bad.rules'))
+    and TFile.Exists(TPath.Combine(Dir, 'BitBtn-glyph.rules'))) then
+  begin
+    Skip('glyph.validate.fixture', 'missing captures under ' + Dir);
+    Exit;
+  end;
+  Bad:= TFile.ReadAllText(TPath.Combine(Dir, 'validate-glyph-bad.txt'));
+  Ok:= TFile.ReadAllText(TPath.Combine(Dir, 'validate-glyph-ok.txt'));
+  Check('glyph.validate.capture.shape', Pos('G-expression column', Bad) > 0, Bad);
+  Fake:= function(const AText, AFrom, ATo: string): string
+    begin
+      Result:= Capture;
+    end;
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(TFile.ReadAllText(TPath.Combine(Dir, 'BitBtn-glyph-bad.rules')));
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    Capture:= Bad;
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, nil, RunScopedValidation(Txt, nil, Fake));
+    Hits:= 0;
+    Text:= '';
+    for N in Book.Nodes do
+      if (N.Kind = rnkLink) and (N.GlyphExpr <> '') and (Length(N.Marks) > 0) and not N.Marks[0].IsWarning then
+      begin
+        Inc(Hits);
+        Text:= N.Marks[0].Text;
+      end;
+    Check('glyph.validate.marks.link', Hits = 1, IntToStr(Hits));
+    Check('glyph.validate.marks.text', Pos('G-expression column', Text) > 0, Text);
+
+    Book.LoadFromString(TFile.ReadAllText(TPath.Combine(Dir, 'BitBtn-glyph.rules')));
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    Capture:= Ok;
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, nil, RunScopedValidation(Txt, nil, Fake));
+    Hits:= 0;
+    for N in Book.Nodes do
+      Hits:= Hits + Length(N.Marks);
+    Check('glyph.validate.ok.no.marks', Hits = 0, IntToStr(Hits));
+  finally
+    Book.Free;
+  end;
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -10806,6 +10871,7 @@ begin
     TestGlyphCastLibArgs;
     TestGlyphApplyParse;
     TestGlyphRunner;
+    TestGlyphValidateMarks;
     TestGlyphLinkMerge;
     TestGlyphConvertTab;
 

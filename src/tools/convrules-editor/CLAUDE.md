@@ -1214,3 +1214,139 @@ in the `c8-inherited` worktree.
   base prompts once per descendant on No (no "No to all"); the Convert gate's Yes /
   No has no GUI check; `drive-inherited-offer.ps1` still has a fixed 2 s sleep after
   an answer.
+
+## Glyph expressions on #link -- hand-over notes (feat/c10-glyph-editor, 2026-10-06)
+
+The editor half of the G[I/N] glyph grammar (spec
+`docs\superpowers\specs\2026-10-06-c10-split-merge-design.md`, over
+`2026-09-17-glyph-strip-G-grammar-design.md`): a `#link` may carry a glyph
+expression (`#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] :
+AssignGraphic`, `#link OptionsImage.NumGlyphs <- Glyph G[count]`). Built against
+engine 1.21.1, which VALIDATES expressions (CV-4) but does not yet APPLY them.
+Plan, ledger and per-task reports: `docs\superpowers\plans\2026-10-06-c10-split-merge-editor.md`
+(main tree) and `.superpowers\sdd\2026-10-06-c10-split-merge-editor\` in the
+`c10-glyph` worktree. The engine asks (N1 `glyph_stitch`, N2, N3 `glyphs[]`, N5,
+N7 capture ...) are in `docs\superpowers\specs\2026-10-06-c10-engine-asks.md`.
+
+### Model and grammar
+
+* **`TRuleNode.GlyphExpr` holds the expression VERBATIM** ('' = none). `ParseLine`
+  splits the cast suffix FIRST (the existing `LastIndexOf(':')` rule), then the
+  expression at the first `GLYPH_EXPR_START` = `' G['` (space, capital G, `[`;
+  case-SENSITIVE, as the engine's `SplitGlyphExpr` -- `Picture g[1/2]` is a path).
+  `SplitGlyphExprOff` is that second step. A count link has no `:`, so `Cast = ''`
+  and the expression is `G[count]` (`glyph.parse.count.link`). `Emit` writes
+  `#link To <- From Expr : Cast`, so a load/save round trip is byte-exact.
+* **Merge (`ConvRules.BlockOps`)**: `TBlockLink` carries `GlyphExpr`; two links to
+  ONE To that differ only in the expression are a merge CONFLICT, an identical pair
+  is a duplicate, two G-links from one From to different Tos both merge in.
+
+### `ConvRules.Glyph` -- the decision unit (pure, model-tested)
+
+* **The expression is checked by the ENGINE's parser**, `DRagLint.Convert.GlyphExpr`,
+  imported from `src\report` by both `.dpr`s (as `DRagLint.Convert.CastLib` is):
+  `CheckGlyphExprText` gives `column C: <message>` with the engine's wording.
+* **Block rules** the parser cannot see: `CountLinkIssueFor` (`G[count] needs exactly
+  one image link from <From>; found K`, plus an exact same-From-same-To duplicate
+  refusal -- slightly stricter than the engine, which has no duplicate check; parked
+  ruling), `StraightCountCarryHint` (the engine's straight-carry warning as a hint),
+  `SuggestCountTarget`, `FindCountLink`, `OrphanedCountLink`, `CountLinkStepFor`,
+  `GlyphAssignBlock`. **Every block-level routine takes ONE block's nodes**
+  (`ActiveLinks` / `LinksForBlock`), never the whole book.
+* **Convert-tab and report text** also lives here: `GLYPH_BOOK_PENDING_SUFFIX`,
+  `BookHasGlyphLinks`, `GlyphNoteSuffix`, `GlyphReportLine`, `GlyphRunSummary`,
+  `TGlyphOutcome`.
+
+### Grid, dialog, Assign, Auto-Match
+
+* **Grid column `Glyph`** (`GRID_GLYPH_COL`, after `cast`) shows the expression
+  verbatim. A validation mark paints its `[!] ` / `[w] ` prefix on the Cast AND the
+  Glyph cell (text unchanged). The G[count] link is **not a grid row** (ruling R4:
+  `FindLinkForFrom` returns the first link per From); its marks show in the Glyph
+  cell of the row it shares a From with, and it is edited through the image link's
+  dialog or the Raw DSL.
+* **Mapping > Glyph expression...** (`DoGlyphExpr`) is DISABLED while no rule is
+  loaded (ruling B2, the Auto-Match gate). On the selected grid row it opens
+  `TGlyphExprForm` (`ConvRules.GlyphForm`, editor-only): caption `Glyph expression:
+  <From> -> <To>`, the edit prefilled, a live check line (`OK`, `enter an
+  expression, or Clear to remove it`, or the engine's error in red -- OK is disabled
+  until it reads OK), a box `Keep #link <To> <- <From> G[count]` (an existing count
+  link; unchecking removes it) or `Also add ...` (no count link and exactly one
+  `SuggestCountTarget`; hidden when there is none), the straight-carry hint, and
+  OK / Clear / Cancel. Statuses: `Glyph expression on <From> -> <To>: <Expr>` (+
+  ` -- added ...` / ` -- removed ...`), `Glyph expression removed from <From> ->
+  <To>.` (+ ` -- <count link> went with it`). Inserting the count link re-finds the
+  active header by NODE (ruling R3).
+* **Assign refuses on a G-link** or a From with several links
+  (`GlyphAssignBlock`, red status naming the existing link): the grid shows only the
+  first link per From, so a retarget would be silent. Unassign and Clear also drop a
+  G[count] link left with no image link from its From.
+* **Auto-Match never writes an expression**: it fills only From leaves with no
+  link, so a G-link is never touched or duplicated (`drive-glyph-link.ps1`
+  `glyph.saveas.no.duplicate`).
+
+### Engine arguments, gating, outcomes
+
+* **`--castlib` now reaches the engine.** `TEngineAdapter.CastLibFile` adds
+  `--castlib "<file>"` to `convert-apply` AND `convert-validate` when the file
+  EXISTS (`CastLibArgs`; a missing file would make the engine exit 2). The form
+  sets it from `GEditorCastLib`; the Convert tab passes `ExistingCastLib`, captured on
+  the UI thread when Convert is pressed. **Behaviour change, said out loud: enum
+  casts in `.castlib` blocks now EXECUTE in editor-driven runs**; before this branch
+  the editor never passed the castlib. `convert-validate` accepts `--castlib` and
+  IGNORES it -- no check may assume validate looks at cast names.
+* **`glyph_stitch` gating (engine ask N1, NOT shipped in 1.21.1).** The Convert
+  tab probes `info --json` ONCE for both `apply_unit_rules` and `glyph_stitch`
+  (`CapabilityNames`, one call), again only on the tab's Refresh. Without
+  `glyph_stitch` a book with a G-link (`BookHasGlyphLinks`, set on BOTH the
+  list-build and reload paths) is listed
+  `<book>  (glyph links: engine support pending)`, disabled, and unchecked again
+  after Check all. `Preflight`'s `<book>: glyph links: engine support pending --
+  skipped` note is DEFENCE IN DEPTH -- the GUI never lets the book be checked, so no
+  driver expects it. **Today every G-link book is greyed**; the with-capability
+  paths (row note, report lines, red summary) are model-tested only, on
+  `tests\fixtures\glyph\apply-glyphs-sample.json`, which is HAND-WRITTEN to the
+  N3 contract until engine ask N7's real capture replaces it.
+* **`glyphs[]` (apply/1, ask N3):** `{instance, from_path, to_path, kind,
+  source_n, alternative, dropped_slots[], rule_line, message}` ->
+  `TApplyRow.Glyphs`. `kind` `glyph-stitched` is a success; ANY other kind is a
+  to-do. Every key is optional and type-checked; a missing array or key, or a wrong
+  type, degrades and never raises (ruling R8).
+* **Report and status.** A converted row's note gets `; glyphs: N stitched, M
+  slot(s) dropped by rule, K TODO(s)`; the run report adds one tab-separated
+  `glyph` line per outcome for CONVERTED rows only, and a `Castlib<TAB><path>` /
+  `(none)` line before `Final reindex`. When a unit has glyph to-dos the status goes
+  red with `N unit(s) have glyph TODOs -- each one's implementation section starts
+  with the TODO line; see the report`, AFTER a `RESTORE FAILED` lead
+  (`RunStatusLead`) -- the most severe outcome still comes first. The summary counts
+  UNITS (ruling R5).
+
+### Verification kit additions
+
+* **Model tests: 1555 pass / 5 fail (1560)** on this branch (1422 / 5 when it
+  started: +133 checks); the 5 are still the VARINSP fixture. `glyph.validate.*` feeds the
+  REAL pinned-engine capture `tests\fixtures\glyph\validate-glyph-bad.txt` / `-ok.txt`
+  (1.21.1 pin, `convert-validate --rules <book>`, parse-only, no `--db`, stdout;
+  stderr was empty) of the fixture books `tests\fixtures\glyph\BitBtn-glyph-bad.rules`
+  / `BitBtn-glyph.rules` through
+  `RunScopedValidation` and asserts the error marks the G-link node.
+* **GUI driver** -- add to the kit table:
+
+  | driver | checks | covers |
+  |---|---|---|
+  | `drive-glyph-link.ps1` | 23 | Glyph expression menu item (disabled without a rule, enabled with one), Convert tab greys the G-link book and it stays unchecked through Check all / Space / a click (`Convert refused: No rule book is checked.`), the dialog's checked `Keep ... G[count]` box, Auto-Match + Save As keeps both G-link lines byte-exact with no duplicate, the bad book's Save shows `G-expression column` (`-ProofNoGlyph` control) |
+
+  It writes its own fixture (a Fix project indexed with the engine beside the exe,
+  so the Convert tab can pre-flight) and needs no real project. On an engine with
+  `glyph_stitch` the two greying checks SKIP and `glyph.convert.book.listed`
+  asserts the book is checkable instead. `-ProofNoGlyph` (books without
+  expressions) fails 6: greyed, never.checked, the count box, both exact-line checks
+  and the bad-save error. On the pre-C10 editor (main `0383bb87`) it fails 6: the
+  three menu checks, greyed, never.checked and the count box -- the old editor
+  already kept both G-link lines byte-exact (the expression rode along in LinkFrom)
+  and its Auto-Match did not duplicate the link (the To was taken).
+* **Driver trap found here:** a process's `ParentProcessId` can name a REUSED PID --
+  a day-old `tail.exe` of another session read as the editor's engine child and a
+  wait-for-idle loop never finished. `drive-glyph-link.ps1` counts only children
+  created after the editor started; `drive-engine-wait.ps1`'s `WaitIdle` still has
+  the old filter.

@@ -34,14 +34,23 @@ type
   /// to-do (the engine wrote one, whatever it called it). DroppedSlots are the slots the
   /// chosen alternative left out, named by the RULE, never inferred.</remarks>
   TGlyphOutcome = record
+    /// <summary>The component instance name (apply/1 instance).</summary>
     Instance    : string;
+    /// <summary>The rule's From path, e.g. Glyph (apply/1 from_path).</summary>
     FromPath    : string;
+    /// <summary>The rule's To path, e.g. OptionsImage.Glyph (apply/1 to_path).</summary>
     ToPath      : string;
+    /// <summary>GLYPH_KIND_STITCHED or a to-do kind (apply/1 kind).</summary>
     Kind        : string;
+    /// <summary>The alternative the engine chose; '' when none matched (apply/1 alternative).</summary>
     Alternative : string;
+    /// <summary>The engine's one-line message, shown verbatim (apply/1 message).</summary>
     Message     : string;
+    /// <summary>The source strip's glyph count N (apply/1 source_n); 0 when absent.</summary>
     SourceN     : Integer;
+    /// <summary>The rule book line of the G-link (apply/1 rule_line); 0 when absent.</summary>
     RuleLine    : Integer;
+    /// <summary>Slots the chosen alternative leaves out (apply/1 dropped_slots); empty when absent.</summary>
     DroppedSlots: TArray<Integer>;
   end;
 
@@ -61,6 +70,7 @@ function IsImageGlyphLink(ANode: TRuleNode): Boolean;
 /// <param name="ANodes">The block's nodes (header included or not; only links count).</param>
 /// <param name="AFromPath">Compared case-insensitively with LinkFrom.</param>
 /// <returns>The count; 0 when none.</returns>
+/// <remarks>Takes ONE block's nodes (a #convert block, e.g. LinksForBlock); passing the whole book mixes blocks and gives wrong counts.</remarks>
 function ImageGlyphLinksFrom(const ANodes: TArray<TRuleNode>; const AFromPath: string): Integer;
 
 /// <summary>The engine's rule that a G[count] link needs EXACTLY one image link from
@@ -76,6 +86,7 @@ function ImageGlyphLinksFrom(const ANodes: TArray<TRuleNode>; const AFromPath: s
 /// found K' (K counted without AEdited), or 'G[count] from &lt;From&gt; is already linked:
 /// #link &lt;To&gt; &lt;- &lt;From&gt; G[count]' when another count link has AEdited's From
 /// AND To (never checked when AEdited is nil).</returns>
+/// <remarks>Takes ONE block's nodes (a #convert block, e.g. LinksForBlock); passing the whole book mixes blocks and gives wrong counts.</remarks>
 function CountLinkIssueFor(const ANodes: TArray<TRuleNode>; AEdited: TRuleNode; const AFromPath, AExpr: string): string;
 
 /// <summary>The engine's warning, as a hint: a straight carry of a glyph-count property
@@ -84,6 +95,7 @@ function CountLinkIssueFor(const ANodes: TArray<TRuleNode>; AEdited: TRuleNode; 
 /// <returns>'' when the block has no image G-link or no straight count carry; else
 /// '#link &lt;To&gt; &lt;- &lt;From&gt; is a straight carry of the source glyph count -- write
 /// "#link &lt;To&gt; &lt;- &lt;ImageFrom&gt; G[count]" instead' for the first such carry.</returns>
+/// <remarks>Takes ONE block's nodes (a #convert block, e.g. LinksForBlock); passing the whole book mixes blocks and gives wrong counts.</remarks>
 function StraightCountCarryHint(const ANodes: TArray<TRuleNode>): string;
 
 /// <summary>The one To leaf a G[count] link should target: its last segment is a
@@ -91,6 +103,7 @@ function StraightCountCarryHint(const ANodes: TArray<TRuleNode>): string;
 /// <param name="AToLeafPaths">The To tree's leaf paths.</param>
 /// <param name="ANodes">The block's nodes.</param>
 /// <returns>The path, or '' when there is none OR more than one (never guess).</returns>
+/// <remarks>Takes ONE block's nodes (a #convert block, e.g. LinksForBlock); passing the whole book mixes blocks and gives wrong counts.</remarks>
 function SuggestCountTarget(const AToLeafPaths: TArray<string>; const ANodes: TArray<TRuleNode>): string;
 
 /// <summary>The block's G[count] link reading from AFromPath, if any.</summary>

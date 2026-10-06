@@ -10,7 +10,7 @@ interface
 
 uses
   System.SysUtils
-  , ConvRules.Glyph
+  , ConvRules.Glyph  // dl:unit ConvRules.Glyph accepted -- GLYPH_BOOK_PENDING_SUFFIX travels with BookHasGlyphLinks: the greyed-book text belongs to the glyph gate
   , ConvRules.UnitStatus
   ;
 
