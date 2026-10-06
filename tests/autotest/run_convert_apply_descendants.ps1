@@ -454,6 +454,97 @@ object ZHost: TZHost
 end
 '@
 
+# ---- (10) a descendant method whose LOCAL btnX shadows the field ------------
+Write-Ascii (P 'LocalUse.pas') @'
+unit LocalUse;
+
+interface
+
+uses
+  Classes, Forms, LibA, AncForm;
+
+type
+  TLocalUse = class(TAncForm)
+    procedure Touch;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TLocalUse.Touch;
+var
+  btnX: TSrcA;
+begin
+  btnX := nil;
+  btnX.Caption := 'l';
+end;
+
+end.
+'@
+Write-Ascii (P 'LocalUse.dfm') @'
+inherited LocalUse: TLocalUse
+end
+'@
+
+# ---- (11) a DIFFERENT class that shares a descendant's NAME (TDesc1), hosted
+#           inline by an unrelated form re-opening btnX: matched by symbol,
+#           not by name, so not reported ---------------------------------------
+Write-Ascii (P 'OtherDesc1.pas') @'
+unit OtherDesc1;
+
+interface
+
+uses
+  Classes, Forms, LibA;
+
+type
+  TDesc1 = class(TFrame)
+    btnX: TSrcA;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'OtherDesc1.dfm') @'
+object Desc1F: TDesc1
+  object btnX: TSrcA
+    Caption = 'od'
+  end
+end
+'@
+Write-Ascii (P 'TwinHost.pas') @'
+unit TwinHost;
+
+interface
+
+uses
+  Classes, Forms, LibA, OtherDesc1;
+
+type
+  TTwinHost = class(TForm)
+    od: TDesc1;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'TwinHost.dfm') @'
+object TwinHost: TTwinHost
+  inline od: TDesc1
+    inherited btnX: TSrcA
+      Caption = 'th'
+    end
+  end
+end
+'@
+
 # ---- (7) positive control: no descendants -----------------------------------
 Write-Ascii (P 'Lonely.pas') @'
 unit Lonely;
@@ -565,6 +656,10 @@ Check 'A7b (8) Shadow declares its OWN btnX and uses it: not reported' `
   (($null -ne $j) -and (@($j.descendants | Where-Object { $_.unit -eq 'Shadow' }).Count -eq 0)) ($j.descendants | ConvertTo-Json -Compress)
 Check 'A7c (9) unrelated forms -- Stranger (own object btnX) and ZHost (inline TZFrame re-opening btnX) -- not reported' `
   (($null -ne $j) -and (@($j.descendants | Where-Object { $_.unit -in @('Stranger', 'ZHost', 'ZFrame') }).Count -eq 0)) ($j.descendants | ConvertTo-Json -Compress)
+Check 'A7d (10) LocalUse reads and writes a LOCAL btnX: not reported' `
+  (($null -ne $j) -and (@($j.descendants | Where-Object { $_.unit -eq 'LocalUse' }).Count -eq 0)) ($j.descendants | ConvertTo-Json -Compress)
+Check 'A7e (11) TwinHost hosts an UNRELATED class named TDesc1 inline and re-opens btnX: not reported (owner matched by symbol)' `
+  (($null -ne $j) -and (@($j.descendants | Where-Object { $_.unit -in @('TwinHost', 'OtherDesc1') }).Count -eq 0)) ($j.descendants | ConvertTo-Json -Compress)
 $w = @($j.warnings | Where-Object { $_ -match '^line \d+: warning: descendant ' })
 Check 'A8 warnings[] has the agreed text, N = the ANCESTOR .dfm line of the object block' `
   (($w.Count -eq 4) -and ($w -contains "line $ancX`: warning: descendant Desc1 still streams btnX as TSrcA -- convert it next (needs C8 N2)") -and `

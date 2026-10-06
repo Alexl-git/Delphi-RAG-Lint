@@ -611,12 +611,17 @@ procedure AppendInheritedReport(const AInstances: TArray<TInheritedInstance>; co
 /// counts by its .dfm when it holds an `inherited` / `inline` block named for
 /// the component, with the From type, whose owner (the root class, or the
 /// nearest enclosing `inline` frame's class -- so a form HOSTING the frame
-/// counts too) is the root class or a descendant; the candidate .dfm files are
-/// those the index holds a component symbol of that name in. A unit counts by
-/// its code when a method of a descendant class references the field by name
-/// -- resolved to the ancestor's field, or unresolved with no receiver or
-/// Self. Only what the --db stores index is seen: a descendant in another
-/// project is not listed. Reads .dfm files; writes nothing.
+/// counts too) is the root class or a descendant, matched by class SYMBOL: the
+/// class of that name the candidate unit sees (declared in it, in a unit it
+/// uses, or the only one indexed), never by name alone. The candidate .dfm
+/// files are those the index holds a component symbol of that name in. A unit
+/// counts by its code when a method of a descendant class references the
+/// field by name -- resolved to the ancestor's field, or unresolved with no
+/// receiver or Self and no local / parameter of that name in the routine (or
+/// an enclosing one); a descendant's own same-named field binds to itself and
+/// does not count. Each descendant file's references are read once per call.
+/// Only what the --db stores index is seen: a descendant in another project is
+/// not listed. Reads .dfm files; writes nothing.
 /// </remarks>
 function FindDescendantUses(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AConverted: TArray<TConvertInstance>): TArray<TDescendantUse>;
@@ -1580,13 +1585,22 @@ type
     Sym    : TSymbol;
     PasPath: string;
   end;
+  { one descendant's first code use of one converted name }
+  TCodeHit = record
+    Desc: Integer;     { index into Descs }
+    Line: Integer;
+  end;
 var
   DfmText, Root: string;
   Descs     : TList<TDescClass>;
-  Owners    : TDictionary<string, Boolean>;   { upper class name -> True: root + descendants }
-  DescIds   : TDictionary<string, Integer>;   { '<store>:<id>' -> index into Descs }
+  OwnerIds  : TDictionary<string, Boolean>;   { '<store>:<id>' of the root class and every descendant }
+  Names     : TDictionary<string, Boolean>;   { upper converted instance names }
+  FieldIds  : TDictionary<string, Int64>;     { '<store>:<UPPER NAME>' -> the field AUnitPas declares }
+  CodeHits  : TObjectDictionary<string, TList<TCodeHit>>; { UPPER NAME -> per-descendant first use }
+  OwnerSeen : TDictionary<string, Boolean>;   { '<store>:<UPPER OWNER>:<UPPER .pas>' -> owner is ours }
   Scans     : TDictionary<string, TArray<TInheritedInstance>>; { upper .dfm path -> its blocks }
   Found     : TList<TDescendantUse>;
+  All       : TList<TDescendantUse>;          { every instance's entries, in order }
   ByUnit    : TDictionary<string, Integer>;   { upper .pas path -> index into Found, per instance }
   Inst      : TConvertInstance;
   AncLine   : Integer;
@@ -1607,7 +1621,8 @@ var
     Result:= False;
   end;
 
-  procedure CollectDescendants;
+  { the root class, its descendants, and the fields AUnitPas declares under a converted name -- once per store }
+  procedure CollectClassesAndFields;
   var
     StIx : Integer;
     DName: string;
@@ -1615,17 +1630,75 @@ var
     D    : TDescClass;
   begin
     for StIx:= 0 to High(ATrees.Stores) do
+    begin
+      for S in ATrees.Stores[StIx].FindSymbolsByFile(AUnitPas) do
+        if (S.Kind = skClass) and SameText(S.Name, Root) then OwnerIds.AddOrSetValue(IdKey(StIx, S.Id), True)
+        else if (S.Kind = skField) and Names.ContainsKey(UpperCase(S.Name)) then
+          FieldIds.AddOrSetValue(IntToStr(StIx) + ':' + UpperCase(S.Name), S.Id);
       for DName in ATrees.Stores[StIx].FindDescendantNames(Root) do
         for S in ATrees.Stores[StIx].FindSymbolsByExactName(DName) do
-          if (S.Kind = skClass) and not DescIds.ContainsKey(IdKey(StIx, S.Id)) and DescendsFromRoot(StIx, S.Id) then
+          if (S.Kind = skClass) and not OwnerIds.ContainsKey(IdKey(StIx, S.Id)) and DescendsFromRoot(StIx, S.Id) then
           begin
             D.Store  := StIx;
             D.Sym    := S;
             D.PasPath:= ATrees.Stores[StIx].GetFilePath(S.FileId);
-            DescIds.Add(IdKey(StIx, S.Id), Descs.Count);
+            OwnerIds.Add(IdKey(StIx, S.Id), True);
             Descs.Add(D);
-            Owners.AddOrSetValue(UpperCase(S.Name), True);
           end;
+    end;
+  end;
+
+  { True when the class named AOwner that ACandPas sees -- declared in it, or
+    in a unit it uses, or the only class of that name -- is the root class or
+    a descendant. Cached per (store, owner, candidate). }
+  function OwnerIsOurs(AStore: Integer; const AOwner, ACandPas: string): Boolean;
+  var
+    Key     : string;
+    Cands   : TList<TSymbol>;
+    CandFile: Int64;
+    UsesSet : TDictionary<string, Boolean>;
+    Pick    : TSymbol;
+    Picked  : Integer;
+  begin
+    Key:= IntToStr(AStore) + ':' + UpperCase(AOwner) + ':' + UpperCase(ACandPas);
+    if OwnerSeen.TryGetValue(Key, Result) then Exit;
+    Result:= False;
+    Cands  := TList<TSymbol>.Create;
+    UsesSet:= TDictionary<string, Boolean>.Create;
+    try
+      for var S: TSymbol in ATrees.Stores[AStore].FindSymbolsByExactName(AOwner) do
+        if S.Kind = skClass then Cands.Add(S);
+      Pick  := Default(TSymbol);
+      Picked:= 0;
+      if Cands.Count = 1 then
+      begin
+        Pick  := Cands[0];
+        Picked:= 1;
+      end
+      else if Cands.Count > 1 then
+      begin
+        CandFile:= ATrees.Stores[AStore].FindFileIdByPath(ACandPas);
+        for var U: TUnitUse in ATrees.Stores[AStore].GetUnitUsesForFile(CandFile) do
+          UsesSet.AddOrSetValue(UpperCase(U.UnitName), True);
+        for var S: TSymbol in Cands do
+          if S.FileId = CandFile then
+          begin
+            Pick  := S;
+            Picked:= 1;
+            Break;
+          end
+          else if UsesSet.ContainsKey(UpperCase(TPath.GetFileNameWithoutExtension(ATrees.Stores[AStore].GetFilePath(S.FileId)))) then
+          begin
+            Pick:= S;
+            Inc(Picked);
+          end;
+      end;
+      Result:= (Picked = 1) and OwnerIds.ContainsKey(IdKey(AStore, Pick.Id));
+    finally
+      UsesSet.Free;
+      Cands.Free;
+    end;
+    OwnerSeen.Add(Key, Result);
   end;
 
   { the inherited / inline From-type blocks of one candidate .dfm, scanned once }
@@ -1682,7 +1755,7 @@ var
           Seen.Add(UpperCase(Dfm), True);
           for var Blk: TInheritedInstance in ScanOf(Dfm) do
             if SameText(Blk.Name, Inst.InstanceName) and SameText(Blk.TypeName, Inst.FromType) and
-               Owners.ContainsKey(UpperCase(Blk.OwnerClass)) then
+               OwnerIsOurs(StIx, Blk.OwnerClass, TPath.ChangeExtension(Dfm, PAS_EXT)) then
             begin
               Ix:= EntryFor(TPath.ChangeExtension(Dfm, PAS_EXT));
               U := Found[Ix];
@@ -1700,8 +1773,10 @@ var
     end;
   end;
 
-  { the class a routine symbol belongs to, walking nested routines up; 0 when none }
-  function OwningClassId(AStore: Integer; ARoutineId: Int64): Int64;
+  { the class a routine belongs to, walking nested routines up; 0 when none,
+    or when a routine on the way declares a local / param named AName -- an
+    unresolved AName there is that local, not the ancestor's field }
+  function UnshadowedClassId(AStore: Integer; ARoutineId: Int64; const AName: string): Int64;
   var
     S   : TSymbol;
     Hops: Integer;
@@ -1711,47 +1786,92 @@ var
     begin
       if S.Id = 0 then Break;
       if S.Kind = skClass then Exit(S.Id);
+      if ATrees.Stores[AStore].FindChildSymbolByName(S.Id, AName).Id <> 0 then Break;
       S:= ATrees.Stores[AStore].GetSymbolById(S.ParentId);
     end;
     Result:= 0;
   end;
 
-  { the field Inst declares in AUnitPas, in one store; 0 when not indexed }
-  function FieldIdIn(AStore: Integer): Int64;
+  { every descendant's code uses of every converted name: each descendant
+    file's references read ONCE }
+  procedure CollectCodeUses;
+  var
+    DIx    : Integer;
+    D      : TDescClass;
+    R      : TReference;
+    Up     : string;
+    FieldId: Int64;
+    Hits   : TList<TCodeHit>;
+    Hit    : TCodeHit;
+    Done   : Boolean;
+    Refs   : TDictionary<string, TArray<TReference>>; { '<store>:<file id>' -> its refs }
+    FileRefs: TArray<TReference>;
   begin
-    for var S: TSymbol in ATrees.Stores[AStore].FindSymbolsByExactName(Inst.InstanceName) do
-      if (S.Kind = skField) and SamePath(ATrees.Stores[AStore].GetFilePath(S.FileId), AUnitPas) then Exit(S.Id);
-    Result:= 0;
+    Refs:= TDictionary<string, TArray<TReference>>.Create;
+    try
+      for DIx:= 0 to Descs.Count - 1 do
+      begin
+        D:= Descs[DIx];
+        if not Refs.TryGetValue(IdKey(D.Store, D.Sym.FileId), FileRefs) then
+        begin
+          FileRefs:= ATrees.Stores[D.Store].GetReferencesFromFile(D.Sym.FileId);
+          Refs.Add(IdKey(D.Store, D.Sym.FileId), FileRefs);
+        end;
+        for R in FileRefs do
+        begin
+          Up:= UpperCase(R.NameText);
+          if not Names.ContainsKey(Up) or (R.EnclosingSymbolId = 0) then Continue;
+          if not FieldIds.TryGetValue(IntToStr(D.Store) + ':' + Up, FieldId) then FieldId:= 0;
+          if not (((FieldId <> 0) and (R.SymbolId = FieldId)) or
+                  ((R.SymbolId = 0) and ((R.ReceiverText = '') or SameText(R.ReceiverText, SELF_RECEIVER)))) then Continue;
+          if UnshadowedClassId(D.Store, R.EnclosingSymbolId, R.NameText) <> D.Sym.Id then Continue;
+          if not CodeHits.TryGetValue(Up, Hits) then
+          begin
+            Hits:= TList<TCodeHit>.Create;
+            CodeHits.Add(Up, Hits);
+          end;
+          Done:= False;
+          for var K: Integer:= 0 to Hits.Count - 1 do
+            if Hits[K].Desc = DIx then
+            begin
+              Hit:= Hits[K];
+              if R.StartLine < Hit.Line then Hit.Line:= R.StartLine;
+              Hits[K]:= Hit;
+              Done:= True;
+              Break;
+            end;
+          if not Done then
+          begin
+            Hit.Desc:= DIx;
+            Hit.Line:= R.StartLine;
+            Hits.Add(Hit);
+          end;
+        end;
+      end;
+    finally
+      Refs.Free;
+    end;
   end;
 
   procedure AddCodeUses;
   var
-    D      : TDescClass;
-    R      : TReference;
-    FieldId: Int64;
-    Ix     : Integer;
-    U      : TDescendantUse;
+    Hits: TList<TCodeHit>;
+    Ix  : Integer;
+    U   : TDescendantUse;
   begin
-    for D in Descs do
+    if not CodeHits.TryGetValue(UpperCase(Inst.InstanceName), Hits) then Exit;
+    for var Hit: TCodeHit in Hits do
     begin
-      FieldId:= FieldIdIn(D.Store);
-      for R in ATrees.Stores[D.Store].GetReferencesFromFile(D.Sym.FileId) do
+      Ix:= EntryFor(Descs[Hit.Desc].PasPath);
+      U := Found[Ix];
+      if U.Reason = DESC_REASON_DFM then U.Reason:= DESC_REASON_BOTH
+      else if U.Reason = '' then
       begin
-        if not SameText(R.NameText, Inst.InstanceName) or (R.EnclosingSymbolId = 0) then Continue;
-        if not (((FieldId <> 0) and (R.SymbolId = FieldId)) or
-                ((R.SymbolId = 0) and ((R.ReceiverText = '') or SameText(R.ReceiverText, SELF_RECEIVER)))) then Continue;
-        if OwningClassId(D.Store, R.EnclosingSymbolId) <> D.Sym.Id then Continue;
-        Ix:= EntryFor(D.PasPath);
-        U := Found[Ix];
-        if U.Reason = DESC_REASON_DFM then U.Reason:= DESC_REASON_BOTH
-        else if U.Reason = '' then
-        begin
-          U.Reason:= DESC_REASON_CODE;
-          U.Line  := R.StartLine;
-        end
-        else if (U.Reason = DESC_REASON_CODE) and (R.StartLine < U.Line) then U.Line:= R.StartLine;
-        Found[Ix]:= U;
-      end;
+        U.Reason:= DESC_REASON_CODE;
+        U.Line  := Hit.Line;
+      end
+      else if (U.Reason = DESC_REASON_CODE) and (Hit.Line < U.Line) then U.Line:= Hit.Line;
+      Found[Ix]:= U;
     end;
   end;
 
@@ -1761,15 +1881,20 @@ begin
   DfmText:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
   Root   := DfmRootClass(DfmText);
   if Root = '' then Exit;
-  Descs  := TList<TDescClass>.Create;
-  Owners := TDictionary<string, Boolean>.Create;
-  DescIds:= TDictionary<string, Integer>.Create;
-  Scans  := TDictionary<string, TArray<TInheritedInstance>>.Create;
-  Found  := TList<TDescendantUse>.Create;
-  ByUnit := TDictionary<string, Integer>.Create;
+  Descs    := TList<TDescClass>.Create;
+  OwnerIds := TDictionary<string, Boolean>.Create;
+  Names    := TDictionary<string, Boolean>.Create;
+  FieldIds := TDictionary<string, Int64>.Create;
+  CodeHits := TObjectDictionary<string, TList<TCodeHit>>.Create([doOwnsValues]);
+  OwnerSeen:= TDictionary<string, Boolean>.Create;
+  Scans    := TDictionary<string, TArray<TInheritedInstance>>.Create;
+  Found    := TList<TDescendantUse>.Create;
+  All      := TList<TDescendantUse>.Create;
+  ByUnit   := TDictionary<string, Integer>.Create;
   try
-    Owners.Add(UpperCase(Root), True);
-    CollectDescendants;
+    for Inst in AConverted do Names.AddOrSetValue(UpperCase(Inst.InstanceName), True);
+    CollectClassesAndFields;
+    CollectCodeUses;
     for Inst in AConverted do
     begin
       AncLine:= DfmObjectLine(DfmText, Inst.InstanceName);
@@ -1782,14 +1907,19 @@ begin
         begin
           Result:= CompareText(ALeft.UnitName, ARight.UnitName);
         end));
-      Result:= Result + Found.ToArray;
+      All.AddRange(Found);
     end;
+    Result:= All.ToArray;
   finally
     ByUnit.Free;
+    All.Free;
     Found.Free;
     Scans.Free;
-    DescIds.Free;
-    Owners.Free;
+    OwnerSeen.Free;
+    CodeHits.Free;
+    FieldIds.Free;
+    Names.Free;
+    OwnerIds.Free;
     Descs.Free;
   end;
 end;
