@@ -37,6 +37,7 @@ uses
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
+  , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
   , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
   , ConvRules.Inheritance in '..\ConvRules.Inheritance.pas'  // dl:unit ConvRules.Inheritance accepted -- the tests read MAX_CHAIN_DEPTH / OUTSIDE_NO_ANCESTOR / ANALYSIS_CANCELLED / GATE_CANCELLED_TEXT / BINARY_DFM_SIGNATURE to pin the unit's own texts and limits, so the consts travel with the unit under test
@@ -1940,6 +1941,14 @@ begin
   end; // try
 end; // procedure
 
+// The live runner fixtures' project file: program Fix, using FixUnit (form FixForm).
+procedure WriteFixDpr(const ADpr: string);
+begin
+  TFile.WriteAllText(ADpr, 'program Fix;' + sLineBreak + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms,' + sLineBreak +
+    '  FixUnit in ''FixUnit.pas'' {FixForm};' + sLineBreak + sLineBreak + 'begin' + sLineBreak + '  Application.Initialize;' + sLineBreak +
+    '  Application.Run;' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+end;
+
 { The real engine on a 3-file fixture (one TLabel, a one-#convert book) -- the
   shape measured converting on 2026-09-29 (dry run 106 s; the bad book 93 s).
   Two jobs, one apply each -- the slowest test in the runner:
@@ -1971,9 +1980,7 @@ begin
     Book:= TPath.Combine(Dir, 'Fix.rules');
     Bad := TPath.Combine(Dir, 'Bad.rules');
     Db  := TPath.Combine(Dir, 'Fix.sqlite');
-    TFile.WriteAllText(Dpr, 'program Fix;' + sLineBreak + sLineBreak + 'uses' + sLineBreak + '  Vcl.Forms,' + sLineBreak +
-      '  FixUnit in ''FixUnit.pas'' {FixForm};' + sLineBreak + sLineBreak + 'begin' + sLineBreak + '  Application.Initialize;' + sLineBreak +
-      '  Application.Run;' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
+    WriteFixDpr(Dpr);
     TFile.WriteAllText(Pas, 'unit FixUnit;' + sLineBreak + sLineBreak + 'interface' + sLineBreak + sLineBreak + 'uses' + sLineBreak +
       '  Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes;' + sLineBreak + sLineBreak + 'type' + sLineBreak +
       '  TFixForm = class(TForm)' + sLineBreak + '    Label1: TLabel;' + sLineBreak + '  end;' + sLineBreak + sLineBreak + 'var' + sLineBreak +
@@ -10040,7 +10047,13 @@ begin
       Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
       Check('glyph.castlib.apply.arg', Pos('--castlib "' + Lib + '"', Json) > 0, Json);
       Check('glyph.castlib.apply.keeps.flags', (Pos('--apply', Json) > 0) and (Pos('--format json', Json) > 0), Json);
-      V:= Eng.ValidateText('#convert A -> B'#13#10, '', '', nil);
+      // C12: the runner ALWAYS calls the --only overload (nil = unscoped), so the
+      // castlib must travel on THAT overload's command line, scoped and unscoped.
+      Eng.ApplyConversion('U.pas', 'B.rules', [], ['BtnA', 'BtnB'], Json);
+      Check('glyph.castlib.apply.only.scoped.arg', (Pos('--castlib "' + Lib + '"', Json) > 0) and (Pos('--only "BtnA,BtnB"', Json) > 0), Json);
+      Eng.ApplyConversion('U.pas', 'B.rules', [], nil, Json);
+      Check('glyph.castlib.apply.only.unscoped.arg', (Pos('--castlib "' + Lib + '"', Json) > 0) and (Pos('--only', Json) = 0), Json);
+      V:=Eng.ValidateText('#convert A -> B'#13#10, '', '', nil);
       Check('glyph.castlib.validate.arg', Pos('--castlib "' + Lib + '"', V.Output) > 0, V.Output);
     finally
       Eng.Free;
@@ -10746,6 +10759,721 @@ begin
   end;
 end;
 
+{ C12 Task 1: the IDE convert-request file (convert-request/1) -- parse, validate
+  against the editor's own project index, and the editor-capabilities/1 file.
+  Every request path is a FAKE under REQ_ROOT: validation takes an injected file
+  probe, so none of them is ever opened. }
+const
+  REQ_ROOT = 'C:\';  // dl:ok hardcoded-absolute-path@c4f0 -- REVIEWED 2026-10-06 root of FAKE request paths: validation takes an injected file probe, nothing under it is ever opened
+  REQ_GOOD = '{"schema":"convert-request/1","written":"2026-10-06T14:02:11","source":"ide-menu","ide_pid":12345,' +
+             '"scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite","platform":"Win64",' +
+             '"units":[{"pas":"C:\\P\\U.pas","dfm":"C:\\P\\U.dfm","form_class":"TFormU",' +
+             '"components":[{"name":"Label1","type":"TLabel"},{"name":"Btn1","type":"TButton"},{"name":"Label2","type":"tlabel"}]}]}';
+  REQ_COMPONENTS = '"components":[{"name":"Label1","type":"TLabel"},{"name":"Btn1","type":"TButton"},{"name":"Label2","type":"tlabel"}]';
+  REQ_DB           = REQ_ROOT + 'P\_D-RAG\App.sqlite';
+  REQ_PROJECT_FILE = REQ_ROOT + 'P\App.dproj';
+  REQ_PAS          = REQ_ROOT + 'P\U.pas';
+
+{ ParseConvertRequest over REQ_GOOD with AFind replaced by AReplace (first match). }
+function ParseEditedRequest(const AFind, AReplace: string): TRequestOutcome;
+begin
+  Result:= ParseConvertRequest(StringReplace(REQ_GOOD, AFind, AReplace, []));
+end;
+
+procedure TestConvertRequestParse;
+const
+  IDE_PID         = 12345;
+  COMPONENT_COUNT = 3;
+var
+  O        : TRequestOutcome;
+  ShapeOk  : Boolean;
+  ValuesOk : Boolean;
+begin
+  O:= ParseConvertRequest(REQ_GOOD);
+  ShapeOk := O.Ok and (O.Request.Scope = rsSelected) and (Length(O.Request.Units) = 1)
+    and (Length(O.Request.Units[0].Components) = COMPONENT_COUNT);
+  ValuesOk:= ShapeOk and (O.Request.Units[0].Components[1].TypeName = 'TButton') and (O.Request.IdePid = IDE_PID)
+    and (O.Request.ProjectDb = REQ_DB);
+  Check('request.parse.ok', ValuesOk, O.Error);
+  Check('request.parse.types.distinct', string.Join(',', RequestedTypes(O.Request)) = 'TLabel,TButton');
+  Check('request.parse.rules.folder.absent', O.Ok and (O.Request.RulesFolder = ''), O.Request.RulesFolder);
+  O:= ParseEditedRequest('"platform":"Win64",', '"platform":"Win64","rules_folder":"C:\\R\\Books",');
+  Check('request.parse.rules.folder.present', O.Ok and (O.Request.RulesFolder = REQ_ROOT + 'R\Books'), O.Error + O.Request.RulesFolder);
+  O:= ParseEditedRequest('convert-request/1', 'convert-request/2');
+  Check('request.parse.schema.refused', (not O.Ok) and (Pos('schema', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"scope":"selected"', '"scope":"project"');
+  Check('request.parse.project.refused', (not O.Ok) and (O.Error = SCOPE_PROJECT_UNSUPPORTED), O.Error);
+  O:= ParseEditedRequest('"scope":"selected"', '"scope":"all"');
+  Check('request.parse.scope.unknown', (not O.Ok) and (Pos('scope', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest(REQ_COMPONENTS, '"components":[]');
+  Check('request.parse.components.empty', (not O.Ok) and (Pos('components', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('{"name":"Btn1","type":"TButton"}', '{"name":"Btn1"}');
+  Check('request.parse.component.no.type', (not O.Ok) and (Pos('type', O.Error) > 0), O.Error);
+  O:= ParseConvertRequest('{"schema":"convert-request/1","scope":"selected","project_file":"a","project_db":"b","units":[]}');
+  Check('request.parse.units.empty', (not O.Ok) and (Pos('units', O.Error) > 0), O.Error);
+  O:= ParseConvertRequest('not json at all');
+  Check('request.parse.garbage', (not O.Ok) and (O.Error <> ''), O.Error);
+  O:= ParseConvertRequest('[1,2]');
+  Check('request.parse.root.array', (not O.Ok) and (O.Error <> ''), O.Error);
+  O:= ParseEditedRequest('"platform":"Win64",', '"platform":"Win64","extra":{"x":1},');
+  Check('request.parse.unknown.key.ignored', O.Ok, O.Error);
+
+  // R8: a missing required key is refused and named.
+  O:= ParseEditedRequest('"project_file":"C:\\P\\App.dproj",', '');
+  Check('request.parse.project.file.missing', (not O.Ok) and (Pos('project_file', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"project_db":"C:\\P\\_D-RAG\\App.sqlite",', '');
+  Check('request.parse.project.db.missing', (not O.Ok) and (Pos('project_db', O.Error) > 0), O.Error);
+
+  // R4: a malformed shape is refused with a message, never an exception.
+  O:= ParseEditedRequest('"units":[{"pas":"C:\\P\\U.pas","dfm":"C:\\P\\U.dfm","form_class":"TFormU",' + REQ_COMPONENTS + '}]',
+    '"units":{"pas":"x"}');
+  Check('request.parse.units.not.array', (not O.Ok) and (Pos('units', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"units":[{', '"units":[5,{');
+  Check('request.parse.unit.not.object', (not O.Ok) and (Pos('unit', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest(REQ_COMPONENTS, '"components":"Label1"');
+  Check('request.parse.components.not.array', (not O.Ok) and (Pos('components', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('{"name":"Btn1","type":"TButton"}', '"Btn1"');
+  Check('request.parse.component.not.object', (not O.Ok) and (Pos('component', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"type":"TButton"', '"type":7');
+  Check('request.parse.component.type.wrong.type', (not O.Ok) and (Pos('type', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"project_file":"C:\\P\\App.dproj"', '"project_file":5');
+  Check('request.parse.project.file.wrong.type', (not O.Ok) and (Pos('project_file', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"scope":"selected"', '"scope":["selected"]');
+  Check('request.parse.scope.wrong.type', (not O.Ok) and (Pos('scope', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"ide_pid":12345', '"ide_pid":"abc"');
+  Check('request.parse.ide.pid.wrong.type', (not O.Ok) and (Pos('ide_pid', O.Error) > 0), O.Error);
+  O:= ParseEditedRequest('"pas":"C:\\P\\U.pas"', '"pas":{}');
+  Check('request.parse.pas.wrong.type', (not O.Ok) and (Pos('pas', O.Error) > 0), O.Error);
+end;
+
+procedure TestConvertRequestValidate;
+var
+  O  : TRequestOutcome;
+  Err: string;
+
+  function Exists(const AAll: Boolean): TFunc<string, Boolean>;
+  begin
+    Result:= function(APath: string): Boolean
+      begin
+        Result:= AAll;
+      end;
+  end;
+
+begin
+  O:= ParseConvertRequest(REQ_GOOD);
+  Err:= ValidateConvertRequest(O.Request, REQ_DB, REQ_PROJECT_FILE, Exists(True));
+  Check('request.validate.ok', Err = '', Err);
+  Err:= ValidateConvertRequest(O.Request, REQ_ROOT + 'P\_D-RAG\app.SQLITE', LowerCase(REQ_ROOT) + 'p\APP.dproj', Exists(True));
+  Check('request.validate.case.insensitive', Err = '', Err);
+  Err:= ValidateConvertRequest(O.Request, REQ_ROOT + 'Other\_D-RAG\Other.sqlite', REQ_ROOT + 'Other\Other.dproj', Exists(True));
+  Check('request.validate.project.db.mismatch', (Pos('project index', Err) > 0) and (Pos(REQ_ROOT + 'Other\_D-RAG\Other.sqlite', Err) > 0), Err);
+  // Review Focus 1: the editor's DB, but a DIFFERENT .dproj in the same folder.
+  Err:= ValidateConvertRequest(O.Request, REQ_DB, REQ_ROOT + 'P\Other.dproj', Exists(True));
+  Check('request.validate.project.file.mismatch', (Pos(REQ_PROJECT_FILE, Err) > 0) and (Pos(REQ_ROOT + 'P\Other.dproj', Err) > 0), Err);
+  Err:= ValidateConvertRequest(O.Request, REQ_DB, REQ_PROJECT_FILE, Exists(False));
+  Check('request.validate.pas.missing', Pos(REQ_PAS, Err) > 0, Err);
+  O:= ParseEditedRequest('"units":[{', '"units":[{"pas":"C:\\P\\V.pas","components":[{"name":"X","type":"TX"}]},{');
+  Check('request.validate.two.units', O.Ok and (Pos('one unit', ValidateConvertRequest(O.Request, REQ_DB, REQ_PROJECT_FILE, Exists(True))) > 0));
+end;
+
+procedure TestConvertRequestCaps;
+var
+  Dir : string;
+  Caps: string;
+  Cwd : string;
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c12caps-' + IntToStr(GetCurrentProcessId));
+  Cwd:= GetCurrentDir;
+  try
+    Check('request.caps.write', WriteCapabilitiesFile(TPath.Combine(Dir, 'sub\caps.json')) = 0);
+    Caps:= TFile.ReadAllText(TPath.Combine(Dir, 'sub\caps.json'));
+    Check('request.caps.json', (Caps = CapabilitiesJson) and (Pos('"schema":"editor-capabilities/1"', Caps) > 0) and (Pos('"convert_request":1', Caps) > 0), Caps);
+    Check('request.caps.no.bom', TFile.ReadAllBytes(TPath.Combine(Dir, 'sub\caps.json'))[0] = Ord('{'));
+    // a FILE in the folder position
+    Check('request.caps.write.fails', WriteCapabilitiesFile(TPath.Combine(Dir, 'sub\caps.json\inner.json')) = 1);
+    // C7: a bare file name has no folder part -- written to the current folder, no CreateDirectory('').
+    SetCurrentDir(TPath.Combine(Dir, 'sub'));
+    Check('request.caps.write.bare.name', (WriteCapabilitiesFile('bare-caps.json') = 0) and TFile.Exists(TPath.Combine(Dir, 'sub\bare-caps.json')));
+  finally
+    SetCurrentDir(Cwd);
+    if TDirectory.Exists(Dir) then
+      TDirectory.Delete(Dir, True);
+  end;
+end;
+
+{ C12 Task 2: the request resolved to a component scope over the .dfm text. }
+procedure TestConvertScope;  // dl:ok cyclomatic-complexity@ffc2 -- REVIEWED 2026-10-06 an assertion list over one .dfm fixture; the count is the and-chains in Check conditions, and splitting the list would only scatter the fixture
+const
+  DFM = 'object FormU: TFormU' + sLineBreak +
+        '  Caption = ''inherited fake: TLabel''' + sLineBreak +
+        '  object Label1: TLabel' + sLineBreak + '  end' + sLineBreak +
+        '  object Panel1: TPanel' + sLineBreak +
+        '    object Label2: TLabel' + sLineBreak +
+        '      Font.Name = ''Tahoma''' + sLineBreak + '    end' + sLineBreak +
+        '    inline Frame1: TFrame1' + sLineBreak +
+        '      inherited Label3: TLabel' + sLineBreak + '      end' + sLineBreak +
+        '    end' + sLineBreak + '  end' + sLineBreak +
+        '  object Grid1: TcxGrid' + sLineBreak +
+        '    Columns = <' + sLineBreak + '      item' + sLineBreak + '        Caption = ''object Bogus: TLabel''' + sLineBreak +
+        '      end>' + sLineBreak + '  end' + sLineBreak +
+        '  object Btn1: TButton' + sLineBreak + '  end' + sLineBreak +
+        'end' + sLineBreak;
+  // An inline frame child that shares the ROOT's name: the root is excluded by depth, not by name.
+  DFM_ROOT_NAME = 'object FormU: TFormU' + sLineBreak +
+        '  inline Frame1: TFrame1' + sLineBreak +
+        '    inherited FormU: TLabel' + sLineBreak + '    end' + sLineBreak +
+        '  end' + sLineBreak + 'end' + sLineBreak;
+  BINARY_DFM  = 'TPF0' + #0#1#2;
+  BOOK_LABEL  = '#convert TLabel -> TStaticText' + sLineBreak + '#link Caption <- Caption' + sLineBreak;
+  BOOK_BUTTON = '#convert TButton -> TcxButton' + sLineBreak;
+  BOOK_BOTH   = BOOK_LABEL + sLineBreak + BOOK_BUTTON;
+  REQ_SEL  = '{"schema":"convert-request/1","scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"Label1","type":"TLabel"},{"name":"Btn1","type":"TButton"},{"name":"Gone","type":"TLabel"}]}]}';
+  REQ_FORM = '{"schema":"convert-request/1","scope":"form","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"Label1","type":"tlabel"}]}]}';
+  REQ_ROOT = '{"schema":"convert-request/1","scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"FormU","type":"TFormU"}]}]}';
+  REQ_DUP  = '{"schema":"convert-request/1","scope":"selected","project_file":"C:\\P\\App.dproj","project_db":"C:\\P\\_D-RAG\\App.sqlite",' +
+             '"units":[{"pas":"C:\\P\\U.pas","components":[{"name":"Label1","type":"TLabel"},{"name":"Gone","type":"TLabel"},' +
+             '{"name":"label1","type":"TLabel"},{"name":"GONE","type":"TLabel"}]}]}';
+  DFM_PATH ='C:\P\U.dfm';  // dl:ok hardcoded-absolute-path@b501 -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  PAS_PATH = 'C:\P\U.pas';  // dl:ok hardcoded-absolute-path@94c1 -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  PAS_PATH_OTHER_CASE = 'c:\p\u.PAS';  // dl:ok hardcoded-absolute-path@728b -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  PAS_OTHER = 'C:\P\V.pas';  // dl:ok hardcoded-absolute-path@70fc -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  RULES_DIR = 'C:\R';  // dl:ok hardcoded-absolute-path@c2b2 -- REVIEWED 2026-10-06 a FAKE path in scope fixture text: BuildScope / ScopeText / ScopeMatchesUnits only compare and format it, nothing on disk is opened
+  IDX_ROOT   = 0;
+  IDX_LABEL1 = 1;
+  IDX_FRAME1 = 4;
+  IDX_LABEL3 = 5;
+  IDX_LAST_FORM_HIT = 2;
+  FORM_HITS = 3;
+  LINE_ROOT   = 1;
+  LINE_LABEL1 = 3;
+  DEPTH_LABEL3 = 3; // root > Panel1 > Frame1 > Label3
+var
+  Inst : TArray<TDfmInstance>;
+  Sc   : TConvertScope;
+  Err  : string;
+  Names: TArray<string>;
+  Req  : TConvertRequest;
+
+  function Join(const A: TArray<string>): string;
+  begin
+    Result:= string.Join(',', A);
+  end;
+
+  function InstNames(const A: TArray<TDfmInstance>): string;
+  begin
+    Result:= '';
+    for var I: TDfmInstance in A do
+      Result:= Result + I.Name + ':' + I.TypeName + ',';
+  end;
+
+begin
+  Inst:= ListDfmInstances(DFM);
+  Check('dfm.instances.all.depths', InstNames(Inst) = 'FormU:TFormU,Label1:TLabel,Panel1:TPanel,Label2:TLabel,Frame1:TFrame1,Label3:TLabel,Grid1:TcxGrid,Btn1:TButton,', InstNames(Inst));
+  Check('dfm.instances.quoted.not.header', Pos('fake', InstNames(Inst)) = 0);
+  Check('dfm.instances.collection.item.skipped', Pos('Bogus', InstNames(Inst)) = 0);
+  Check('dfm.instances.opener', (Inst[IDX_FRAME1].Opener = doInline) and (Inst[IDX_LABEL3].Opener = doInherited) and (Inst[IDX_LABEL1].Opener = doObject));
+  Check('dfm.instances.depth', (Inst[IDX_ROOT].Depth = 0) and (Inst[IDX_LABEL1].Depth = 1) and (Inst[IDX_LABEL3].Depth = DEPTH_LABEL3), IntToStr(Inst[IDX_LABEL3].Depth));
+  Check('dfm.instances.line', (Inst[IDX_ROOT].Line = LINE_ROOT) and (Inst[IDX_LABEL1].Line = LINE_LABEL1), IntToStr(Inst[IDX_LABEL1].Line));
+  Check('dfm.instances.binary', Length(ListDfmInstances(BINARY_DFM)) = 0);
+  Check('dfm.instances.empty', Length(ListDfmInstances('')) = 0);
+
+  // selected scope
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, DFM, Err);
+  Check('scope.selected.build', (Err = '') and (Sc.Kind = skSelected) and (Sc.UnitPas = PAS_PATH) and (Join(Sc.Types) = 'TLabel,TButton'), Err);
+  Check('scope.selected.instances', InstNames(Sc.Instances) = 'Label1:TLabel,Btn1:TButton,', InstNames(Sc.Instances));
+  Check('scope.selected.unknown.name', Join(Sc.NotFound) = 'Gone', Join(Sc.NotFound));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText(BOOK_LABEL));
+  Check('scope.selected.names.for.label.book', Join(Names) = 'Label1', Join(Names));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText(BOOK_BOTH));
+  Check('scope.selected.names.for.both.book', Join(Names) = 'Label1,Btn1', Join(Names));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText('#convert TEdit -> TcxTextEdit' + sLineBreak));
+  Check('scope.selected.names.none', Length(Names) = 0, Join(Names));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText('#convert TLabel -> ' + sLineBreak));
+  Check('scope.selected.names.from.only.stub', Length(Names) = 0, Join(Names));
+  Check('scope.selected.text', ScopeText(Sc) = 'Scope: 2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Gone', ScopeText(Sc));
+  Check('scope.selected.found.no.tail', EmptyScopeTail(Sc) = '', EmptyScopeTail(Sc));
+  Check('scope.selected.status', ScopeStatusText(Sc, 2) = 'Request from the IDE: convert 2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Gone with 2 matching book(s) -- review and press Convert.', ScopeStatusText(Sc, 2));
+  Sc:= BuildScope(ParseConvertRequest(REQ_ROOT).Request, DFM, Err);
+  Check('scope.selected.root.not.instance', (Err = '') and (Length(Sc.Instances) = 0) and (Join(Sc.NotFound) = 'FormU'), Join(Sc.NotFound));
+  // Fix wave Minor 1: no instance found -> no empty list before ';', and the E5 tail says so.
+  Check('scope.selected.none.text', ScopeText(Sc) = 'Scope: 0 selected component(s) on U; not found on the form: FormU', ScopeText(Sc));
+  Check('scope.selected.none.tail', EmptyScopeTail(Sc) = ' Also: no requested instance is on the form.', EmptyScopeTail(Sc));
+  // R9: a binary or missing .dfm is refused for BOTH scopes, naming the file.
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, BINARY_DFM, Err);
+  Check('scope.selected.binary.refused', (Pos('binary', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, '', Err);
+  Check('scope.selected.missing.refused', (Pos('missing', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+
+  // form scope: every TLabel at any depth, inline children included, .dfm order
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, DFM, Err);
+  Check('scope.form.build', (Err = '') and (Sc.Kind = skForm) and (Join(Sc.Types) = 'tlabel'), Err);
+  Check('scope.form.nested', InstNames(Sc.Instances) = 'Label1:TLabel,Label2:TLabel,Label3:TLabel,', InstNames(Sc.Instances));
+  Check('scope.form.inline.child', (Length(Sc.Instances) = FORM_HITS) and (Sc.Instances[IDX_LAST_FORM_HIT].Opener = doInherited));
+  Check('scope.form.text', ScopeText(Sc) = 'Scope: all tlabel instances on U (3 found)', ScopeText(Sc));
+  Names:= ScopedNamesForBook(Sc, TypePairsOfText(BOOK_BUTTON));
+  Check('scope.form.names.other.book', Length(Names) = 0, Join(Names));
+  Sc:= BuildScope(ParseConvertRequest(StringReplace(REQ_FORM, '"type":"tlabel"', '"type":"TcxTreeList"', [])).Request, DFM, Err);
+  Check('scope.form.none.found', (Err = '') and (Length(Sc.Instances) = 0) and (ScopeText(Sc) = 'Scope: all TcxTreeList instances on U (0 found)'), ScopeText(Sc));
+  Check('scope.form.none.tail', EmptyScopeTail(Sc) = ' Also: no requested instance is on the form.', EmptyScopeTail(Sc));
+  Sc:= BuildScope(ParseConvertRequest(StringReplace(REQ_FORM, '"type":"tlabel"', '"type":"TFormU"', [])).Request, DFM, Err);
+  Check('scope.form.root.never.instance', (Err = '') and (Length(Sc.Instances) = 0), InstNames(Sc.Instances));
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, DFM_ROOT_NAME, Err);
+  Check('scope.form.root.by.depth.not.name', (Err = '') and (InstNames(Sc.Instances) = 'FormU:TLabel,'), InstNames(Sc.Instances));
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, 'TPF0' + #0#1, Err);
+  Check('scope.form.binary.refused', (Pos('binary', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, '', Err);
+  Check('scope.form.missing.refused', (Pos('missing', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
+
+  // a name selected twice (any case) is one instance, and one not-found entry
+  Sc:= BuildScope(ParseConvertRequest(REQ_DUP).Request, DFM, Err);
+  Check('scope.selected.duplicate.name', (Err = '') and (InstNames(Sc.Instances) = 'Label1:TLabel,') and (Join(Sc.NotFound) = 'Gone'),
+    InstNames(Sc.Instances) + ' / ' + Join(Sc.NotFound));
+  // BuildScope guards its own precondition: exactly one unit, else a refusal, never a range error
+  Req:= ParseConvertRequest(REQ_SEL).Request;
+  Req.Units:= Req.Units + Req.Units;
+  Sc:= BuildScope(Req, DFM, Err);
+  Check('scope.units.two.refused', (Pos('exactly one unit', Err) > 0) and (Length(Sc.Instances) = 0), Err);
+  Req.Units:= nil;
+  Sc:= BuildScope(Req, DFM, Err);
+  Check('scope.units.none.refused', (Pos('exactly one unit', Err) > 0) and (Length(Sc.Instances) = 0) and (Sc.UnitPas = ''), Err);
+
+  // books, texts, unit check
+  Check('scope.book.matches', BookMatchesTypes(BOOK_LABEL, ['TLABEL']) and BookMatchesTypes(BOOK_BOTH, ['TButton']) and not BookMatchesTypes(BOOK_BUTTON, ['TLabel']));
+  Check('scope.book.exact.not.ancestor', not BookMatchesTypes('#convert TCustomLabel -> TX' + sLineBreak, ['TLabel']));
+  Check('scope.no.book.text', NoBookText(RULES_DIR, ['TLabel', 'TButton']) = 'No book in C:\R converts TLabel, TButton -- pick the From class on the Classes tab and choose Conversion > New Conversion');
+  Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, DFM, Err);
+  Check('scope.matches.units.ok', ScopeMatchesUnits(Sc, [PAS_PATH_OTHER_CASE]) = '');
+  // Ruling B5/R7 (C12 Task 4): the C8 ancestor insert lists more units WITHOUT a scope
+  // reset; they run whole, so a list that still holds the scope's unit is accepted.
+  Check('scope.matches.units.extra.unit.whole', ScopeMatchesUnits(Sc, [PAS_OTHER, PAS_PATH]) = '', ScopeMatchesUnits(Sc, [PAS_OTHER, PAS_PATH]));
+  Check('scope.matches.units.other.unit', Pos(PAS_PATH, ScopeMatchesUnits(Sc, [PAS_OTHER])) > 0);
+  Check('scope.matches.units.empty', Pos(PAS_PATH, ScopeMatchesUnits(Sc, [])) > 0);
+  Sc:= Default(TConvertScope);
+  Check('scope.whole.unit.text', (ScopeText(Sc) = WHOLE_UNIT_SCOPE_TEXT) and (ScopeMatchesUnits(Sc, ['a', 'b']) = ''));
+  Check('scope.whole.unit.no.tail', EmptyScopeTail(Sc) = '', EmptyScopeTail(Sc));
+
+  // Fix wave Minor 2 (interim until only_matched[]): no "re-send it" when every --only
+  // name is inherited or inline -- the engine leaves those to the ancestor.
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, DFM, Err); // Label1/Label2 doObject, Label3 doInherited
+  Check('scope.hint.all.inherited.none', UnmatchedOnlyHintFor(Sc, ['label3']) = '', UnmatchedOnlyHintFor(Sc, ['label3']));
+  Check('scope.hint.mixed.kept', UnmatchedOnlyHintFor(Sc, ['Label1', 'Label3']) = UnmatchedOnlyHint(['Label1', 'Label3']), UnmatchedOnlyHintFor(Sc, ['Label1', 'Label3']));
+  Check('scope.hint.unknown.kept', UnmatchedOnlyHintFor(Sc, ['Gone']) = UnmatchedOnlyHint(['Gone']), UnmatchedOnlyHintFor(Sc, ['Gone']));
+end;
+
+{ C12 Task 4: the launch decisions the .dpr and the main form make before any
+  control is touched -- the project index a request launch adopts, the rules
+  folder (ruling B1), the whole prepare chain, the report's Scope line and the
+  run summary's out-of-scope count. Every path is FAKE (injected probes). }
+procedure TestConvertRequestLaunch;  // dl:ok cyclomatic-complexity@c0ce -- REVIEWED 2026-10-06 an assertion list over one fake-probe fixture plus a one-line Row helper; the count is the and-chains in Check conditions, and splitting the list would only scatter the fixture
+const
+  LAUNCH_DFM = 'object FormU: TFormU' + sLineBreak + '  object Label1: TLabel' + sLineBreak + '  end' + sLineBreak +
+               '  object Btn1: TButton' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  DEFAULT_DB  = REQ_ROOT + 'Default.sqlite';
+  RULES_REQ   = REQ_ROOT + 'R1';
+  RULES_SW    = REQ_ROOT + 'R2';
+  RULES_SESS  = REQ_ROOT + 'R3';
+  FORMS_DFM   = REQ_ROOT + 'P\Forms\U.dfm';
+  PAIRS_RUN   = 4;
+  PAIRS_OTHER = 3;
+var
+  F   : string;
+  Err : string;
+  P   : TPreparedRequest;
+  Rows: TArray<TConvertRow>;
+  T   : TRunTally;
+  Req : string;
+
+  function Probe(const AYes: TArray<string>; AAll: Boolean): TFunc<string, Boolean>;
+  var
+    LYes: TArray<string>;
+  begin
+    LYes:= AYes;
+    Result:= function(APath: string): Boolean
+      begin
+        Result:= AAll or MatchText(APath, LYes);
+      end;
+  end;
+
+  function Row(AStatus: TConvertStatus; const AUnit: string): TConvertRow;
+  begin
+    Result:= Default(TConvertRow);
+    Result.Status := AStatus;
+    Result.UnitPas:= AUnit;
+  end;
+
+begin
+  // The project index a launch uses: explicit > the request's > the default.
+  Check('launch.db.explicit.wins', AdoptedProjectDb(DEFAULT_DB, REQ_GOOD, 'X', Probe([], True)) = DEFAULT_DB);
+  Check('launch.db.adopts.request', AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([REQ_DB], False)) = REQ_DB, AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([REQ_DB], False)));
+  Check('launch.db.no.request', AdoptedProjectDb('', '', DEFAULT_DB, Probe([], True)) = DEFAULT_DB);
+  Check('launch.db.bad.request', AdoptedProjectDb('', 'not json', DEFAULT_DB, Probe([], True)) = DEFAULT_DB);
+  // Fix wave Minor 3: a request project_db that does not exist is not adopted.
+  Check('launch.db.missing.not.adopted', AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([DEFAULT_DB], False)) = DEFAULT_DB,
+    AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([DEFAULT_DB], False)));
+
+  // B1: request > switch; a named folder that is missing is refused, never replaced.
+  Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, '', ['TLabel'], Probe([], True), F);
+  Check('launch.rules.request.wins', (Err = '') and (F = RULES_REQ), Err + F);
+  Err:= ResolveRequestRulesFolder('', RULES_SW, '', ['TLabel'], Probe([], True), F);
+  Check('launch.rules.switch.fallback', (Err = '') and (F = RULES_SW), Err + F);
+  Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, '', ['TLabel'], Probe([RULES_SW], False), F);
+  Check('launch.rules.request.missing.refused', (F = '') and StartsText('No book in ' + RULES_REQ, Err) and (Pos('does not exist', Err) > 0)
+    and (Pos(RULES_SW, Err) = 0), Err);
+  Err:= ResolveRequestRulesFolder('', '', '', ['TLabel', 'TButton'], Probe([], True), F);
+  Check('launch.rules.none.refused', (F = '') and StartsText('No book in ', Err) and (Pos('no rules folder', Err) > 0)
+    and (Pos('and no book is open', Err) > 0) and (Pos('TLabel, TButton', Err) > 0), Err);
+  // Task-4 review (a): the editor's in-session folder is the THIRD candidate.
+  Err:= ResolveRequestRulesFolder('', '', RULES_SESS, ['TLabel'], Probe([], True), F);
+  Check('launch.rules.session.fallback', (Err = '') and (F = RULES_SESS), Err + F);
+  Err:= ResolveRequestRulesFolder('', RULES_SW, RULES_SESS, ['TLabel'], Probe([], True), F);
+  Check('launch.rules.switch.beats.session', (Err = '') and (F = RULES_SW), Err + F);
+  Err:= ResolveRequestRulesFolder(RULES_REQ, '', RULES_SESS, ['TLabel'], Probe([RULES_SESS], False), F);
+  Check('launch.rules.request.missing.not.replaced.by.session', (F = '') and StartsText('No book in ' + RULES_REQ, Err), Err);
+
+  // The whole chain.
+  Req:= StringReplace(REQ_GOOD, '"platform":"Win64",', '"platform":"Win64","rules_folder":"C:\\R1",', []);
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.ok', P.Ok and (P.Error = '') and (P.Scope.Kind = skSelected) and (P.RulesFolder = RULES_REQ), P.Error);
+  Check('launch.prepare.scope', (Length(P.Scope.Instances) = 2) and (Length(P.Scope.NotFound) = 1), ScopeText(P.Scope));
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_ROOT + 'Other\_D-RAG\O.sqlite', REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([], []));
+  Check('launch.prepare.validate.refused', (not P.Ok) and (Pos('project index', P.Error) > 0), P.Error);
+  P:= PrepareConvertRequest('{', TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([], []));
+  Check('launch.prepare.parse.refused', (not P.Ok) and (P.Error <> ''), P.Error);
+  P:= PrepareConvertRequest(REQ_GOOD, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.no.folder.refused', (not P.Ok) and StartsText('No book in ', P.Error), P.Error);
+  P:= PrepareConvertRequest(REQ_GOOD, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, RULES_SW, ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.switch.folder', P.Ok and (P.RulesFolder = RULES_SW), P.Error);
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([], []));
+  Check('launch.prepare.dfm.missing.refused', (not P.Ok) and (Pos('missing', P.Error) > 0) and (Pos(REQ_ROOT + 'P\U.dfm', P.Error) > 0), P.Error);
+  // The request's own "dfm" is read, not the .pas sibling.
+  P:= PrepareConvertRequest(StringReplace(Req, '"dfm":"C:\\P\\U.dfm"', '"dfm":"C:\\P\\Forms\\U.dfm"', []), TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''),
+    Probe([], True), Probe([], True), FakeReader([FORMS_DFM], [LAUNCH_DFM]));
+  Check('launch.prepare.reads.request.dfm', P.Ok, P.Error);
+  P:= PrepareConvertRequest(REQ_GOOD, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', RULES_SESS), Probe([], True), Probe([], True),
+    FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.session.folder', P.Ok and (P.RulesFolder = RULES_SESS), P.Error);
+  // Task-4 review (c): a project index that does not exist is refused before anything else is read.
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([REQ_PAS], False), Probe([], True),
+    FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.db.missing.refused', (not P.Ok)
+    and (P.Error = 'the project index ' + REQ_DB + ' does not exist -- index the project first'), P.Error);
+  // Fix wave Minor 3: the request's own index is missing and was not adopted -- the
+  // refusal names THAT file, not a mismatch with the editor's (existing) default.
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(DEFAULT_DB, REQ_ROOT + 'Default.dproj', '', ''), Probe([REQ_PAS, DEFAULT_DB], False), Probe([], True),
+    FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.request.db.missing.named', (not P.Ok)
+    and (P.Error = 'the project index ' + REQ_DB + ' does not exist -- index the project first'), P.Error);
+  // Task-5 review carry: an editor with no project index says so, without a blank name.
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make('', '', '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.db.empty.refused', (not P.Ok)
+    and (P.Error = 'the editor has no project index -- launch it with --project-db') and (Pos('  ', P.Error) = 0), P.Error);
+
+  // Task-4 review (b): the E5 status tail -- an unindexed unit is named and Convert will refuse it.
+  Check('launch.tail.indexed.empty', RequestStatusTail(REQ_PAS, [REQ_PAS], True, '') = '', RequestStatusTail(REQ_PAS, [REQ_PAS], True, ''));
+  Check('launch.tail.unindexed', RequestStatusTail(REQ_PAS, [REQ_DB], True, '') =
+    ' Also: ' + REQ_PAS + ' is not in the project index -- Convert will refuse.', RequestStatusTail(REQ_PAS, [REQ_DB], True, ''));
+  Check('launch.tail.index.unknown', RequestStatusTail(REQ_PAS, nil, False, '') =
+    ' Also: the project index could not be read, so unindexed units are not flagged.', RequestStatusTail(REQ_PAS, nil, False, ''));
+  Check('launch.tail.inherit.error.first', RequestStatusTail(REQ_PAS, nil, False, 'boom') =
+    ' Also: inherited instances could not be checked -- boom Also: the project index could not be read, so unindexed units are not flagged.',
+    RequestStatusTail(REQ_PAS, nil, False, 'boom'));
+  // Task-5 review carry: an unindexed unit is ONE cause -- the C8 analysis error it causes is not repeated.
+  Check('launch.tail.unindexed.drops.inherit', RequestStatusTail(REQ_PAS, nil, True, 'boom') =
+    ' Also: ' + REQ_PAS + ' is not in the project index -- Convert will refuse.', RequestStatusTail(REQ_PAS, nil, True, 'boom'));
+
+  // E11: the report line.
+  Check('launch.report.scope.whole', ScopeReportLine(Default(TConvertScope)) = 'Scope'#9'whole unit', ScopeReportLine(Default(TConvertScope)));
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(REQ_DB, REQ_PROJECT_FILE, '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.report.scope.selected', ScopeReportLine(P.Scope) = 'Scope'#9'2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Label2',
+    ScopeReportLine(P.Scope));
+
+  // Task-3 carry: out-of-scope pairs are counted apart and leave the denominator.
+  Rows:= [Row(csConverted, 'a.pas'), Row(csOutOfScope, 'a.pas'), Row(csOutOfScope, 'a.pas'), Row(csFailedRestored, 'b.pas')];
+  T:= TallyRows(Rows);
+  Check('launch.tally.counts', (T.Converted = 1) and (T.OutOfScope = 2) and (T.Restored = 1) and (T.Refused = 0));
+  Check('launch.summary.out.of.scope', ConvertedSummaryText(T, PAIRS_RUN) =
+    'Converted 1 of 2 unit x book pair(s); 1 failed and were restored. 2 pair(s) skipped -- not in scope.', ConvertedSummaryText(T, PAIRS_RUN));
+  T:= TallyRows([Row(csConverted, 'a.pas'), Row(csRestoreFailed, 'x\b.pas'), Row(csRefused, 'c.pas')]);
+  Check('launch.summary.whole.unit', (ConvertedSummaryText(T, PAIRS_OTHER) = 'Converted 1 of 3 unit x book pair(s); 0 failed and were restored.')
+    and (string.Join(',', T.NotRestored) = 'b.pas') and (T.Refused = 1), ConvertedSummaryText(T, PAIRS_OTHER));
+end;
+
+{ C12 Task 3 (E9-E11, runner side): the scoped unit loop with fake engine seams.
+  A book with no selected instance of its From types gets csOutOfScope and NO
+  engine call; a scoped book's names reach apply as --only; an all-out-of-scope
+  unit keeps no backup; the engine's --only refusal gets the E10 hint; an --only
+  that matched nothing stays a failure and says what was asked. }
+procedure TestRunnerScope;  // dl:ok cyclomatic-complexity@10c5 -- REVIEWED 2026-10-06 one fake-seam fixture walked case by case (out of scope, --only, refusal, unmatched name, injected hint); the count is the and-chains in Check conditions, and splitting would duplicate the temp-folder fixture
+const
+  ORIG = 'unit F; interface implementation end.';
+  OK_JSON      = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
+  // measured on engine 1.22.0: an --only name that matches nothing (task-3-report.md)
+  NO_MATCH_JSON = '{"schema":"apply/1","ok":false,"error":"no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)",' +
+                  '"refused":false,"reason":"","rule_errors":[],"edits_count":0}';
+  UNKNOWN_HINT = ' -- --only asked for Label1, Label3; the form may have changed since the IDE request -- re-send it';
+  REFUSED_ONLY = '{"schema":"apply/1","ok":false,"refused":true,"reason":"#unuse DBTables would leave 1 unconverted instance(s) of TTable -- unit not changed",' +
+                 '"rule_errors":[],"edits_count":0}';
+  TWO_ROWS = 2;
+  IDX_LABEL_ROW = 1;
+var
+  Dir   : string;
+  AllDir: string;
+  LPas  : string;
+  LRows : TArray<TConvertRow>;
+  Calls : TArray<string>;   // "<book>|<only joined by ,>" per apply call
+  Index : TIndexFn;
+  Apply : TApplyOnlyFn;
+  Scope : TScopeFn;
+  Whole  : TScopeFn;
+  Refuse : TApplyOnlyFn;
+  NoMatch: TApplyOnlyFn;
+
+  function Describe(const R: TArray<TConvertRow>): string;
+  var
+    L: TArray<string>;
+  begin
+    SetLength(L, Length(R));
+    for var I: Integer:= 0 to High(R) do
+      L[I]:= Format('[%s %s %s | %s]', [ExtractFileName(R[I].Book), ConvertStatusText(R[I].Status), R[I].Backup, R[I].Note]);
+    Result:= string.Join(' ', L);
+  end;
+
+  // An apply that touches nothing and answers AJson with exit 1.
+  function Answer(const AJson: string): TApplyOnlyFn;
+  begin
+    Result:= function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson2: string): Integer
+      begin
+        AJson2:= AJson;
+        Result:= 1;
+      end;
+  end;
+
+  // The whole-unit scope: today's behaviour, no --only.
+  function WholeUnit: TScopeFn;
+  begin
+    Result:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
+      begin
+        ANames:= nil;
+        Result:= False;
+      end;
+  end;
+
+  procedure WriteUnit(const APas: string);
+  begin
+    TFile.WriteAllText(APas, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(ChangeFileExt(APas, '.dfm'), 'object F: TF' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+  end;
+
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'c12scope-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    LPas:= TPath.Combine(Dir, 'F.pas');
+    WriteUnit(LPas);
+    Whole  := WholeUnit();
+    Refuse := Answer(REFUSED_ONLY);
+    NoMatch:= Answer(NO_MATCH_JSON);
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result:= 0;
+      end;
+    Apply:= function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
+      begin
+        Calls:= Calls + [ExtractFileName(ARulesFile) + '|' + string.Join(',', AOnly)];
+        TFile.WriteAllText(AUnitPas, 'CONVERTED', TEncoding.ASCII);
+        AJson := OK_JSON;
+        Result:= 0;
+      end;
+    Scope:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
+      begin
+        Result:= True;
+        if SameText(ExtractFileName(ABook), 'Label.rules') then
+          ANames:= ['Label1', 'Label3']
+        else
+          ANames:= nil;
+      end;
+    Calls:= nil;
+    LRows:= RunConversionUnits([LPas], ['Button.rules', 'Label.rules'], Apply, Index, Scope, nil, nil);
+    var LNoBackup: Boolean:= (Length(LRows) = TWO_ROWS) and (LRows[0].Backup = '') and (LRows[0].BackupDfm = '');
+    Check('runner.scope.out.of.scope.no.call', LNoBackup and (LRows[0].Status = csOutOfScope)
+      and (LRows[0].Note = 'no in-scope instance of this book''s From types on the unit') and (Length(Calls) = 1), Describe(LRows) + string.Join(';', Calls));
+    Check('runner.scope.only.reaches.apply', (Length(Calls) = 1) and (Calls[0] = 'Label.rules|Label1,Label3'), string.Join(';', Calls));
+    Check('runner.scope.converted.note', (Length(LRows) = TWO_ROWS) and (LRows[IDX_LABEL_ROW].Status = csConverted)
+      and (LRows[IDX_LABEL_ROW].Note = '--only 2 instance(s): Label1, Label3; 2 edit(s), 0 remaining for manual work'), Describe(LRows));
+    Check('runner.scope.status.text', ConvertStatusText(csOutOfScope) = 'skipped -- not in scope');
+
+    // whole-unit scope function: today's behaviour, no --only, the plain note
+    WriteUnit(LPas);
+    Calls:= nil;
+    LRows:= RunConversionUnits([LPas], ['Button.rules'], Apply, Index,
+      Whole, nil, nil);
+    Check('runner.scope.whole.unit', (Length(Calls) = 1) and (Calls[0] = 'Button.rules|') and (Length(LRows) = 1) and (LRows[0].Status = csConverted)
+      and (LRows[0].Note = '2 edit(s), 0 remaining for manual work'), Describe(LRows));
+
+    // every book out of scope: no backup survives, the unit is untouched (own folder, B4)
+    AllDir:= TPath.Combine(Dir, 'allout');
+    TDirectory.CreateDirectory(AllDir);
+    WriteUnit(TPath.Combine(AllDir, 'F.pas'));
+    Calls:= nil;
+    LRows:= RunConversionUnits([TPath.Combine(AllDir, 'F.pas')], ['Button.rules'], Apply, Index, Scope, nil, nil);
+    Check('runner.scope.all.out.drops.backup', (Length(LRows) = 1) and (LRows[0].Status = csOutOfScope) and (Length(Calls) = 0)
+      and (TFile.ReadAllText(TPath.Combine(AllDir, 'F.pas')) = ORIG) and (Length(TDirectory.GetFiles(AllDir, 'F.*.BCK*')) = 0), Describe(LRows));
+
+    // the engine's --only refusal gets the hint (E10)
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      Refuse, Index, Scope, nil, nil);
+    Check('runner.scope.refused.hint', (Length(LRows) = 1) and (LRows[0].Status = csRefused)
+      and LRows[0].Note.EndsWith(' -- convert all TTable instances on this form, or remove the #unuse / #useswap from the book'), Describe(LRows));
+    Check('runner.scope.refusal.hint.pure', (RefusalHint('x would leave 3 unconverted instance(s) of TQuery -- unit not changed') = ' -- convert all TQuery instances on this form, or remove the #unuse / #useswap from the book')
+      and (RefusalHint('inherited instances of TTable are not converted yet') = ''));
+    // an unscoped refusal never gets the hint: the reason is not about a scope
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      Refuse, Index,
+      Whole, nil, nil);
+    Check('runner.scope.unscoped.refusal.no.hint', (Length(LRows) = 1) and (LRows[0].Status = csRefused) and (Pos(' -- convert all ', LRows[0].Note) = 0), Describe(LRows));
+    // an --only that matched nothing stays a failure (restored), and says what was asked
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      NoMatch, Index, Scope, nil, nil);
+    Check('runner.scope.unknown.name.hint', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and LRows[0].Note.EndsWith(UNKNOWN_HINT)
+      and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows));
+    // Fix wave Minor 2: the job binds the hint to its scope; an empty tail drops it.
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      NoMatch, Index, Scope, nil, nil, False, False,
+      function(const AOnly: TArray<string>): string
+      begin
+        Result:= '';
+      end);
+    Check('runner.scope.hint.injected.empty', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and (Pos('re-send', LRows[0].Note) = 0)
+      and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows));
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson:= NO_MATCH_JSON;
+        Result:= 1;
+      end, Index, nil, nil);
+    Check('runner.scope.unscoped.no.match.no.hint', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and (Pos('--only asked', LRows[0].Note) = 0), Describe(LRows));
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ C12 Task 3, ruling B5: the scope binds the request's unit ONLY, and the job's
+  scope function (ScopedNamesForBookFile) turns an unreadable book into NO name. }
+procedure TestScopeForUnit;
+const
+  LABEL_BOOK = '#convert TLabel -> TStaticText' + sLineBreak;
+  EDIT_BOOK  = '#convert TEdit -> TcxTextEdit' + sLineBreak;
+var
+  Sc      : TConvertScope;
+  Inst    : TDfmInstance;
+  Names   : TArray<string>;
+  BookDir : string;
+  BookPath: string;
+begin
+  Inst:= Default(TDfmInstance);
+  Inst.Name    := 'Label1';
+  Inst.TypeName:= 'TLabel';
+  Sc:= Default(TConvertScope);
+  Sc.Kind     := skSelected;
+  Sc.UnitPas  := 'P\U.pas'; // relative: ScopedNamesForUnit expands both sides alike
+  Sc.Instances:= [Inst];
+  Check('scope.unit.own.unit.scoped', ScopedNamesForUnit(Sc, 'p\u.PAS', LABEL_BOOK, Names) and (string.Join(',', Names) = 'Label1'), string.Join(',', Names));
+  Check('scope.unit.own.unit.other.book', ScopedNamesForUnit(Sc, 'P\U.pas', EDIT_BOOK, Names) and (Length(Names) = 0), string.Join(',', Names));
+  Check('scope.unit.other.unit.whole', not ScopedNamesForUnit(Sc, 'P\V.pas', LABEL_BOOK, Names) and (Length(Names) = 0));
+  Check('scope.unit.whole.unit.scope', not ScopedNamesForUnit(Default(TConvertScope), 'P\U.pas', LABEL_BOOK, Names) and (Length(Names) = 0));
+  // the job's scope function reads the BOOK FILE: an unreadable book scopes to no name
+  // (an out-of-scope row), never to a whole-unit apply
+  BookDir:= TPath.Combine(TPath.GetTempPath, 'c12book-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(BookDir);
+  try
+    BookPath:= TPath.Combine(BookDir, 'Label.rules');
+    TFile.WriteAllText(BookPath, LABEL_BOOK, TEncoding.ASCII);
+    Check('scope.book.file.read', ScopedNamesForBookFile(Sc, 'P\U.pas', BookPath, Names) and (string.Join(',', Names) = 'Label1'), string.Join(',', Names));
+    Check('scope.book.file.unreadable.out.of.scope', ScopedNamesForBookFile(Sc, 'P\U.pas', TPath.Combine(BookDir, 'Missing.rules'), Names) and (Length(Names) = 0),
+      string.Join(',', Names));
+    Check('scope.book.file.other.unit.whole', not ScopedNamesForBookFile(Sc, 'P\V.pas', TPath.Combine(BookDir, 'Missing.rules'), Names) and (Length(Names) = 0));
+  finally
+    TDirectory.Delete(BookDir, True);
+  end; // try
+end;
+
+{ C12 Task 3: --only against the REAL engine (spec E9). Two labels, the book
+  converts TLabel, --only names one: that one converts, the other stays. Then
+  MEASURES what the engine does with a name that matches no instance (feeds the
+  engine ask N3) -- the outcome is printed as a MEASURE line, and only the
+  no-edit part is asserted. Fixture conventions copied from TestConvertRunnerLive. }
+procedure TestRunnerLiveOnly;
+const
+  LIB64 = 'C:\Projects\.drag-lint\library-Win64.sqlite';  // dl:ok hardcoded-absolute-path@6fd2 -- REVIEWED 2026-10-06 the real Win64 library index; the test Skip()s when it is absent
+  JSON_HEAD_CHARS = 600;
+var
+  Exe, Dir, Db, Dpr, Pas, Dfm, Book, Output, LJson, LDfm, LPasText: string;
+  Eng  : TEngineAdapter;
+  LCode: Integer;
+  LRow : TApplyRow;  // dl:ok duplicate-code@3a3a -- REVIEWED 2026-10-06 the live-runner prologue (ResolveExe / Skip / temp Dir / fixture paths) is copied from TestConvertRunnerLive on purpose (controller ruling R5); the .dpr writer is already shared (WriteFixDpr)
+begin
+  Exe:= ResolveExe;
+  if (Exe = '') or not TFile.Exists(LIB64) then
+  begin
+    Skip('runner.live.only', 'exe or library-Win64 absent');
+    Exit;
+  end;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-only-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Dpr := TPath.Combine(Dir, 'Fix.dpr');
+    Pas := TPath.Combine(Dir, 'FixUnit.pas');
+    Dfm := TPath.Combine(Dir, 'FixUnit.dfm');
+    Book:= TPath.Combine(Dir, 'Fix.rules');
+    Db  := TPath.Combine(Dir, 'Fix.sqlite');
+    WriteFixDpr(Dpr);
+    TFile.WriteAllText(Pas, 'unit FixUnit;' + sLineBreak + sLineBreak + 'interface' + sLineBreak + sLineBreak + 'uses' + sLineBreak +
+      '  Vcl.Forms, Vcl.StdCtrls, Vcl.Controls, System.Classes;' + sLineBreak + sLineBreak + 'type' + sLineBreak +
+      '  TFixForm = class(TForm)' + sLineBreak + '    Label1: TLabel;' + sLineBreak + '    Label2: TLabel;' + sLineBreak + '  end;' + sLineBreak + sLineBreak +
+      'var' + sLineBreak + '  FixForm: TFixForm;' + sLineBreak + sLineBreak + 'implementation' + sLineBreak + sLineBreak + '{$R *.dfm}' + sLineBreak + sLineBreak +
+      'end.' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Dfm, 'object FixForm: TFixForm' + sLineBreak + '  Left = 0' + sLineBreak + '  Top = 0' + sLineBreak + '  Caption = ''Fix''' + sLineBreak +
+      '  object Label1: TLabel' + sLineBreak + '    Left = 8' + sLineBreak + '    Top = 8' + sLineBreak + '    Caption = ''one''' + sLineBreak + '  end' + sLineBreak +
+      '  object Label2: TLabel' + sLineBreak + '    Left = 8' + sLineBreak + '    Top = 32' + sLineBreak + '    Caption = ''two''' + sLineBreak + '  end' + sLineBreak +
+      'end' + sLineBreak, TEncoding.ASCII);
+    TFile.WriteAllText(Book, '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls' + sLineBreak + '#link Caption <- Caption' + sLineBreak +
+      '#link Left <- Left' + sLineBreak + '#link Top <- Top' + sLineBreak, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(Exe, [Db, LIB64]);
+    try
+      Check('runner.live.only.index', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
+      LCode:= Eng.ApplyConversion(Pas, Book, [Db, LIB64], ['Label1'], LJson);
+      LRow := ParseApplyJson(LJson);
+      LDfm := TFile.ReadAllText(Dfm);
+      Check('runner.live.only.converts.named', (LCode = 0) and LRow.Ok and (Pos('Label1: TStaticText', LDfm) > 0), Copy(LJson, 1, JSON_HEAD_CHARS));
+      Check('runner.live.only.leaves.other', Pos('Label2: TLabel', LDfm) > 0, LDfm);
+      LPasText:= TFile.ReadAllText(Pas);
+      Check('runner.live.only.pas.partial', (Pos('Label1: TStaticText', LPasText) > 0) and (Pos('Label2: TLabel', LPasText) > 0), LPasText);
+      // convert-apply patches at the index's line ranges: reindex the changed unit first (R5)
+      Check('runner.live.only.reindex', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
+      // MEASURED FOR N3 -- the outcome goes into the task report, whatever it is:
+      LCode:= Eng.ApplyConversion(Pas, Book, [Db, LIB64], ['NoSuchName'], LJson);
+      LRow := ParseApplyJson(LJson);
+      Writeln(Format('MEASURE runner.live.only.unknown.name: exit=%d ok=%s refused=%s edits=%d remaining=%d reason=%s',
+        [LCode, BoolToStr(LRow.Ok, True), BoolToStr(LRow.Refused, True), LRow.EditsCount, Length(LRow.Remainder), LRow.Error]));
+      Writeln('MEASURE runner.live.only.unknown.name.json: ', StringReplace(Copy(LJson, 1, JSON_HEAD_CHARS), sLineBreak, ' ', [rfReplaceAll]));
+      Check('runner.live.only.unknown.name.no.edit', Pos('Label2: TLabel', TFile.ReadAllText(Dfm)) > 0);
+    finally
+      Eng.Free;
+    end; // try
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end; // procedure
+
 begin
   try
     if ResolveExe <> '' then
@@ -10938,6 +11666,14 @@ begin
     TestGlyphValidateMarks;
     TestGlyphLinkMerge;
     TestGlyphConvertTab;
+    TestConvertRequestParse;
+    TestConvertRequestValidate;
+    TestConvertRequestCaps;
+    TestConvertScope;
+    TestConvertRequestLaunch;
+    TestRunnerScope;
+    TestScopeForUnit;
+    TestRunnerLiveOnly;
 
     FreeAndNil(GParseBook);
 

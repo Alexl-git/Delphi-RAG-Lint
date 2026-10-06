@@ -87,6 +87,21 @@ type
     Instances: TArray<TInheritedInstance>;
   end;
 
+  /// <summary>One .dfm block header, whatever its opener (C12 scope).</summary>
+  TDfmInstance = record
+    /// <summary>The instance name ('Label1'); the root's name for the root.</summary>
+    Name    : string;
+    /// <summary>The class as written in the .dfm, without a '[n]' suffix.</summary>
+    TypeName: string;
+    /// <summary>1-based .dfm line of the header.</summary>
+    Line    : Integer;
+    /// <summary>The keyword that opened the block.</summary>
+    Opener  : TDfmOpener;
+    /// <summary>Nesting depth: 0 = the root (the form / data module itself), 1 = a
+    /// direct child of the root, and so on through panels and inline frames.</summary>
+    Depth   : Integer;
+  end;
+
   /// <summary>One field a class declares itself, with a From type.</summary>
   TFieldDecl = record
     /// <summary>Field name ('tblFtrs').</summary>
@@ -235,6 +250,18 @@ function ScanDfmInheritance(const AText: string): TDfmInheritance;
 /// <param name="ATypeName">Receives the class of the first match.</param>
 /// <returns>False when the .dfm does not open AName (or is binary).</returns>
 function FindDfmObject(const AText, AName: string; out AOpener: TDfmOpener; out ATypeName: string): Boolean;
+
+/// <summary>PURE: every block header of a text .dfm at any depth, in file order, the
+/// root included (Depth = 0).</summary>
+/// <param name="AText">The whole .dfm as text.</param>
+/// <returns>[] for a binary .dfm (BINARY_DFM_SIGNATURE), for '' and for text with
+/// no header.</returns>
+/// <remarks>The same depth-tracked walk as ScanDfmInheritance: collection items
+/// (`item` ... `end` inside `<` `>`), multi-line string / binary values and quoted
+/// text are not headers. Children of inline frames are listed (their Depth counts the
+/// frame). Anonymous blocks (no instance name) are listed with Name = ''. The C12
+/// form scope reads this list; the engine splices against the same headers.</remarks>
+function ListDfmInstances(const AText: string): TArray<TDfmInstance>;
 
 /// <summary>PURE: the last dotted segment of a class name ('Vcl.StdCtrls.TLabel' -> 'TLabel').</summary>
 /// <param name="AType">A bare or unit-qualified class name.</param>
@@ -784,6 +811,28 @@ begin
   AOpener  := LOpener;
   ATypeName:= LType;
   Result   := LFound;
+end;
+
+function ListDfmInstances(const AText: string): TArray<TDfmInstance>;
+var
+  LList: TArray<TDfmInstance>;
+begin
+  LList:= nil;
+  if not AText.StartsWith(BINARY_DFM_SIGNATURE) then
+    WalkDfmHeaders(AText,
+      procedure(const AHeader: THeader)
+      var
+        LItem: TDfmInstance;
+      begin
+        LItem:= Default(TDfmInstance);
+        LItem.Name    := AHeader.Name;
+        LItem.TypeName:= AHeader.TypeName;
+        LItem.Line    := AHeader.Line;
+        LItem.Opener  := AHeader.Opener;
+        LItem.Depth   := AHeader.Depth;
+        LList:= LList + [LItem];
+      end);
+  Result:= LList;
 end;
 
 function BareType(const AType: string): string;

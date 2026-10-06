@@ -43,6 +43,7 @@ uses
   , ConvRules.UnitStatus in 'ConvRules.UnitStatus.pas'
   , ConvRules.UnitMask in 'ConvRules.UnitMask.pas'
   , ConvRules.ConvertRun in 'ConvRules.ConvertRun.pas'
+  , ConvRules.ConvertRequest in 'ConvRules.ConvertRequest.pas'
   , ConvRules.ConvertRunner in 'ConvRules.ConvertRunner.pas'
   , ConvRules.Inheritance in 'ConvRules.Inheritance.pas'
   , ConvRules.InheritanceEngine in 'ConvRules.InheritanceEngine.pas'
@@ -99,7 +100,18 @@ end; // function
     --form <path>                      a .dfm/.pas to load at start-up; its sibling
                                        is loaded too, and its folder seeds the
                                        Open-form dialog
-    --project-db <path>                override the project index below
+    --project-db <path>                override the project index below; when absent
+                                       and --convert-request is given, the request's
+                                       project_db is ADOPTED (AdoptedProjectDb), else
+                                       the built-in ProjectDb
+    --convert-request <file>           the IDE's convert-request/1 file: after the
+                                       window shows, the Convert tab lists its unit,
+                                       checks the matching books and shows the scope
+                                       (never runs it; never deletes the file)
+    --rules-folder <dir>               the rules folder for a --convert-request whose
+                                       file has no rules_folder
+    --write-capabilities <file>        write editor-capabilities/1 to <file> and exit
+                                       (0 written, 1 not) -- no window, no engine child
 
   The library index directory and the project index. The FROM/TO platform (each
   selectable via --from-platform / --to-platform, default FROM=Win64, TO=Win64)
@@ -132,7 +144,8 @@ begin
 end;
 
 { The value following AFlag on the command line; '' when the flag is absent or is
-  the last argument. Used by --form and --project-db. }
+  the last argument. Used by --form, --project-db, --convert-request,
+  --rules-folder and --write-capabilities. }
 function ArgValue(const AFlag: string): string;
 var
   i: Integer;
@@ -214,15 +227,46 @@ begin
   end;
 end; // function
 
+{ The --convert-request file's text, for AdoptedProjectDb only; '' when there is
+  no request or it cannot be read (the form reports that when it applies it). }
+function RequestTextForAdoption(const APath: string): string;
+begin
+  Result:= '';
+  if APath = '' then
+    Exit;
+  try
+    Result:= TFile.ReadAllText(APath, TEncoding.UTF8);
+  except
+    on Exception do
+      Result:= ''; // the form's ApplyConvertRequest names the read failure in red
+  end; // try
+end;
+
+{ AdoptedProjectDb's file probe: a request's project_db is adopted only when it exists. }
+function FileExistsProbe(APath: string): Boolean; // TFunc's own shape: no const
+begin
+  Result:= TFile.Exists(APath);
+end;
+
 var
   Form: TConvRulesForm;
 begin
+  // --write-capabilities <file>: the IDE plugin's probe. Answered before any
+  // window or engine child exists, so an old build (which opens its window
+  // instead) and a new one are told apart by the file appearing within seconds.
+  if ArgValue('--write-capabilities') <> '' then
+  begin
+    ExitCode:= WriteCapabilitiesFile(ArgValue('--write-capabilities'));
+    Exit;
+  end;
   // Config the globals BEFORE CreateForm (the form's constructor reads them).
   GEditorExe   := ResolveDragLintExe;
   GEditorLibDir:= LibDir;
-  GEditorProjectDb:= ArgValue('--project-db');
-  if GEditorProjectDb = '' then
-    GEditorProjectDb:= ProjectDb;
+  GEditorConvertRequest:= ArgValue('--convert-request');
+  GEditorRulesFolderArg:= ArgValue('--rules-folder');
+  // An explicit --project-db wins; a request launch without one adopts the
+  // request's project_db instead of the built-in default -- only when that file exists.
+  GEditorProjectDb:= AdoptedProjectDb(ArgValue('--project-db'), RequestTextForAdoption(GEditorConvertRequest), ProjectDb, FileExistsProbe);
   GEditorFormPath:= ArgValue('--form');
   GEditorCastLib:= ResolveCastLib;
   GEditorFromPlatform:= ArgPlatform('--from-platform', DEFAULT_FROM_PLATFORM);
