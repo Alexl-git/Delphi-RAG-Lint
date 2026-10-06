@@ -982,7 +982,8 @@ begin
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
     'an inherited/inline .dfm object of a From type is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk; --only filters inherited[] too); ' +
     'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
-    'a plan the edit applier would refuse in part (overlapping delete ranges -- an engine defect) fails the WHOLE unit before anything is written, dry run too (1.25.1): exit 1, ''ERROR: refused N edit(s) to <file> -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written'', json ok=false with that error; a .dfm component nested in another converted one is spliced into its parent''s re-emit, and --only naming the parent converts it too (json only_included[] {name,parent}, text ''--only: <child> converts too -- nested in <parent>''); a collection property (FieldDefs = < item ... end>) whose item members the book links (#link X.Items.* <- X.Items.*, identity) is carried whole when the To type publishes X with the same collection type, else reported NOT carried with its item count and counted as dropped, #ignore X notwithstanding; ' +
+    'a plan the edit applier would refuse in part (overlapping delete ranges -- an engine defect) fails the WHOLE unit before anything is written, dry run too, and a write that fails part-way is ROLLED BACK byte-identical (exit 2, ''-- rolled back, unit not changed''; a failed rollback names the files it could not restore) (1.25.1): exit 1, ''ERROR: refused N edit(s) to <file> -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written'', json ok=false with that error; ' +
+    'a .dfm component nested in another converted one is spliced into its parent''s re-emit, and --only naming the parent converts it too (json only_included[] {name,parent}, text ''--only: <child> converts too -- nested in <parent>''); a collection property (FieldDefs = < item ... end>) whose item members the book links (#link X.Items.* <- X.Items.*, identity) is carried whole when the To type publishes X with the same collection type, else reported NOT carried with its item count and counted as dropped, #ignore X notwithstanding; ' +
     'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
     'a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed'') -- EXCEPT that with --only, when every such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); ' +
     '--only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); ' +
@@ -24978,6 +24979,56 @@ end;
   ranges -- after the .pas has already been written -- so a unit came out
   half-converted with exit 0. Checked on the dry run too, so the preview
   fails exactly as --apply would: Ok=False, exit 1, nothing written. }
+{ 1.25.1: True when two byte arrays hold the same bytes. }
+function SameBytes(const A, B: TBytes): Boolean;
+begin
+  Result:= (Length(A) = Length(B)) and ((Length(A) = 0) or CompareMem(@A[0], @B[0], Length(A)));
+end;
+
+{ 1.25.1: the backup file BackupFiles made for APath ('orig -> backup'
+  lines), or '' when none was made (--no-backup). }
+function BackupOf(const AMappings: TArray<string>; const APath: string): string;
+const
+  MAP_ARROW = ' -> ';
+begin
+  for var M: string in AMappings do
+  begin
+    var At: Integer:= Pos(MAP_ARROW, M);
+    if (At > 0) and SameText(Copy(M, 1, At - 1), APath) then Exit(Copy(M, At + Length(MAP_ARROW), MaxInt));
+  end;
+  Result:= '';
+end;
+
+{ 1.25.1 (all-or-nothing, write half): puts every file of a unit back the way
+  it was before a write that failed part-way. AOriginals[I] is AFiles[I] as read
+  just before the write; a file still holding those bytes is left alone, any
+  other is rewritten from its .BCK backup when one was made, else from
+  AOriginals, and then re-read and compared. Returns the files that could NOT
+  be restored byte-identical ([] = rolled back). Never raises.
+  TEST SEAM: DRAGLINT_TEST_FAIL_ROLLBACK=1 makes every restore fail, so the
+  rollback-failed report can be exercised (run_convert_apply_atomic.ps1). }
+function RollBackUnitFiles(const AFiles: TArray<string>; const AOriginals: TArray<TBytes>;
+  const AMappings: TArray<string>): TArray<string>;
+const
+  TEST_FAIL_ROLLBACK = 'DRAGLINT_TEST_FAIL_ROLLBACK';
+var
+  Src: TBytes;
+begin
+  Result:= nil;
+  for var I: Integer:= 0 to High(AFiles) do
+    try
+      if SameBytes(TFile.ReadAllBytes(AFiles[I]), AOriginals[I]) then Continue;
+      if GetEnvironmentVariable(TEST_FAIL_ROLLBACK) = '1' then
+        raise EInOutError.CreateFmt('%s=1: simulated restore failure', [TEST_FAIL_ROLLBACK]);
+      var Bck: string:= BackupOf(AMappings, AFiles[I]);
+      Src:= if (Bck <> '') and TFile.Exists(Bck) then TFile.ReadAllBytes(Bck) else AOriginals[I];
+      TFile.WriteAllBytes(AFiles[I], Src);
+      if not SameBytes(TFile.ReadAllBytes(AFiles[I]), AOriginals[I]) then Result:= Result + [AFiles[I]];
+    except
+      on Exception do Result:= Result + [AFiles[I]];
+    end;
+end;
+
 procedure RefuseUnapplicablePlan(var APlan: TApplyResult);
 var
   Refusal: string;
@@ -25098,6 +25149,7 @@ var
     Ed          : TTextEdit;
     Timestamp   : string;
     Mappings    : TArray<string>;
+    Originals   : TArray<TBytes>; { 1.25.1: each touched file's bytes before the write, for the rollback }
   begin
     { 1.20.6: a unit-rules-only run that changes nothing writes nothing -- no
       backup, no recovery record, no provenance stamp on an untouched unit, so
@@ -25119,9 +25171,7 @@ var
       // .pas found mid-way would leave the .dfm converted and the .pas not.
       // A refusal here leaves the unit byte-identical, with no .BCK and no
       // recovery record. (A failure AFTER this check -- a lock taken in
-      // between, a full disk -- can still leave the unit partly written; the
-      // backups and recovery.txt of step 2 are complete by then, and the
-      // error says so.)
+      // between, a full disk -- is ROLLED BACK since 1.25.1: see step 3.)
       for var F: string in TouchedFiles do
       begin
         if TFileAttribute.faReadOnly in TFile.GetAttributes(F) then
@@ -25143,6 +25193,11 @@ var
         WriteRecoveryRecord(ExtractFileDir(UnitPas), Timestamp, AArgs.RulesFile, Mappings);
       end;
 
+      { 1.25.1: the unit's files as they are now -- the .pas too, which step 4
+        stamps even when it carries no edit -- so a failed write rolls back }
+      if not TouchedSet.ContainsKey(UnitPas) then TouchedFiles.Add(UnitPas);
+      Originals:= nil;
+      for var F: string in TouchedFiles do Originals:= Originals + [TFile.ReadAllBytes(F)];
       try
         // 3. Perform the conversion write. AWriteBackups=False: our backup layer
         // (step 2) already backed up every touched file -- letting the applier
@@ -25155,10 +25210,20 @@ var
           PrependConvertComment(UnitPas, Timestamp, AArgs.RulesFile, Mappings);
       except
         on Ex: Exception do
-          raise EConvertApplyWrite.CreateFmt('write failed for %s: %s: %s -- the unit may be PARTLY converted; %s',
-            [ExtractFileName(UnitPas), Ex.ClassName, Ex.Message,
+        begin
+          { 1.25.1: all-or-nothing -- a write that fails part-way is ROLLED
+            BACK, every file of the unit restored byte-identical. Only a
+            rollback that itself fails leaves the unit partly converted, and
+            then the files it could not restore are named. }
+          var NotRestored: TArray<string>:= RollBackUnitFiles(TouchedFiles.ToArray, Originals, Mappings);
+          if Length(NotRestored) = 0 then
+            raise EConvertApplyWrite.CreateFmt('write failed for %s: %s: %s -- rolled back, unit not changed',
+              [ExtractFileName(UnitPas), Ex.ClassName, Ex.Message]);
+          raise EConvertApplyWrite.CreateFmt('write failed for %s: %s: %s -- rollback FAILED for %s: the unit may be PARTLY converted; %s',
+            [ExtractFileName(UnitPas), Ex.ClassName, Ex.Message, String.Join(', ', NotRestored),
              if AArgs.NoBackup then 'no backup was taken (--no-backup)'
              else 'restore it from the .BCK backups recorded in recovery.txt']);
+        end;
       end;
     finally
       TouchedFiles.Free;

@@ -46,7 +46,27 @@ No extractor or resolver change on top of 1.25.0: indexes do not re-parse.
   `unlinked[]`). On DMREADINGS all 12 are now reported -- TFDTable publishes neither
   FieldDefs nor IndexDefs -- as `TTable.FieldDefs ... dropped on 8 of 21` and
   `TTable.IndexDefs ... 4 of 21`; the other 2 of the 709 items are TQuery `ParamData`, which
-  was already warned. Guard: `run_convert_apply_collections.ps1`.
+  was already warned. Guard: `run_convert_apply_collections.ps1`. A bare `#ignore X` --
+  with no `#link X.*` item links -- still drops a non-empty collection SILENTLY: that is the
+  book author's deliberate acceptance of the drop, exactly as for any other `#ignore`d
+  property.
+- **A write that failed part-way left the unit half-converted.** After the writability
+  pre-check (a lock taken in between, a full disk) the applier could write the `.pas` and
+  fail on the `.dfm`; the error only pointed at the `.BCK` files. Now the unit is ROLLED
+  BACK: every file already written is restored byte-identical (from its `.BCK`, or under
+  `--no-backup` from the bytes read before the write), exit 2, `write failed for <unit>:
+  ... -- rolled back, unit not changed`. Only a rollback that itself fails keeps the
+  "PARTLY converted" message, now naming the files it could not restore. Test seams, inert
+  unless set: `DRAGLINT_TEST_FAIL_WRITE_AT=N` (the N-th file write raises) and
+  `DRAGLINT_TEST_FAIL_ROLLBACK=1`.
+- **What is atomic, exactly.** Per unit, across `.pas` and `.dfm`: an overlapping edit set
+  -- nothing written (dry run too), exit 1; a file not writable up front -- nothing
+  written, exit 2; a write failing part-way -- rolled back, exit 2; a failed rollback --
+  reported with the files it could not restore, exit 2.
+- **A re-emitted block wrote properties AFTER its nested components** (a resolved default
+  or a `#default` appended to a block holding persistent fields). The `.dfm` reader accepts
+  no property after a nested object, so such a form failed to load and failed the binary
+  conversion. Properties are now written first.
 - **`--only <parent>` left the form and the code disagreeing.** A kept parent's re-emit
   converts its nested From-type children in the `.dfm`, but the children's `.pas` fields
   stayed the From type. They now convert with the parent, `.pas` included, and are listed in

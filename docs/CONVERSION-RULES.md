@@ -709,9 +709,22 @@ the others; the process exits with the worst unit's code (2 > 1 > 0). Under
 or locked file fails that unit (exit 2, `ok: false`, `refused: false`,
 `cannot write <file>: ... -- unit not changed, nothing written`) with nothing
 written, no `.BCK` and no recovery record. A write that fails AFTER that check
-(a lock taken in between, a full disk) can leave the unit partly converted; its
-backups and `recovery.txt` entry are complete by then and the error says to
-restore from them. A single `--unit` reports either as `ERROR: ...`, exit 2.
+(a lock taken in between, a full disk) is ROLLED BACK (1.25.1): every file of
+the unit already written is restored byte-identical -- from its `.BCK`, or under
+`--no-backup` from the bytes read just before the write -- and the unit fails
+with `write failed for <unit>: <error> -- rolled back, unit not changed` (exit
+2; the `.BCK` files and the recovery record stay). Only when the rollback
+itself fails is the unit left partly converted: `... -- rollback FAILED for
+<files>: the unit may be PARTLY converted; restore it from the .BCK backups
+recorded in recovery.txt`. A single `--unit` reports either as `ERROR: ...`,
+exit 2.
+
+**What is atomic, exactly (1.25.1).** Per unit, across its `.pas` and `.dfm`:
+an edit set the applier would refuse (overlapping delete ranges) -- nothing is
+written, dry run and `--apply` alike, exit 1; a file not writable before the
+write -- nothing is written, exit 2; a write failing part-way -- rolled back,
+exit 2; a rollback failing -- reported with the files it could not restore, exit
+2. In batch mode each of these fails that unit only.
 `info --json` advertises it as `capabilities.batch_units: true`.
 
 **Which blocks are validated (1.20.6).** Before planning, `convert-apply`
@@ -775,7 +788,7 @@ TFDTable publishes neither FieldDefs nor IndexDefs) -- the collection is NOT
 carried, a reemit note says why with its item count, and it is COUNTED as
 dropped: `dropped FieldDefs`, the `dropped on N of M` warning and `unlinked[]`.
 A collection the book does not mention at all is dropped and counted the same
-way; only a bare `#ignore` with no item links accepts the drop silently.
+way. A bare `#ignore FieldDefs` with no item links accepts the drop SILENTLY, even for a non-empty collection -- a deliberate choice of the book, like any `#ignore`.
 
 **Descendant warnings** (1.25.0). Converting an ANCESTOR does not touch its
 descendants: each descendant `.dfm` still says `inherited X: TOld`, and VCL

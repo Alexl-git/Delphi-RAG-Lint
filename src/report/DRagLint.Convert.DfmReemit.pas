@@ -636,20 +636,24 @@ begin
     else
       Head:= Format('object %s', [ANode.Name]);
     SB.Append(Ind(AIndent)).Append(Head).Append(#13#10);
+    { 1.25.1: every PROPERTY first, then the nested components. The .dfm text
+      reader reads a block's properties until the first nested object and
+      after that accepts only objects -- a property written after one (a
+      resolved default or a #default appended to a block that holds persistent
+      fields) does not load, and the binary conversion fails. Order within
+      each group is kept. }
     for Child in ANode.Children do
-    begin
       case Child.Kind of
         dnkSubObject:
-          if Child.ClassName_ <> '' then
-            SB.Append(EmitBlock(Child, AIndent + 1))
-          else
-            EmitDotted(Child, Child.Name, AIndent + 1, SB);
+          if Child.ClassName_ = '' then EmitDotted(Child, Child.Name, AIndent + 1, SB);
         dnkScalar, dnkEvent, dnkBinary, dnkCollection:
           SB.Append(Ind(AIndent + 1))
             .Append(Child.Name).Append(' = ').Append(Child.ValueText)
             .Append(#13#10);
       end;
-    end;
+    for Child in ANode.Children do
+      if (Child.Kind = dnkSubObject) and (Child.ClassName_ <> '') then
+        SB.Append(EmitBlock(Child, AIndent + 1));
     SB.Append(Ind(AIndent)).Append('end').Append(#13#10);
     Result:= SB.ToString;
   finally

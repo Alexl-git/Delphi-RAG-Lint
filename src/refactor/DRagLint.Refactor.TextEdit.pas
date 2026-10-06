@@ -377,6 +377,19 @@ begin
   end;
 end;
 
+{ 1.25.1: TEST SEAM, inert unless the environment variable names it. With
+  DRAGLINT_TEST_FAIL_WRITE_AT=N, the N-th file write of one Apply call raises
+  EInOutError before a byte of it is written -- the only way a test can make a
+  write fail AFTER convert-apply's writability pre-check, which is what its
+  rollback exists for (run_convert_apply_atomic.ps1). }
+procedure FailWriteForTests(AWriteNo: Integer; const APath: string);
+const
+  TEST_FAIL_WRITE_AT = 'DRAGLINT_TEST_FAIL_WRITE_AT';
+begin
+  if GetEnvironmentVariable(TEST_FAIL_WRITE_AT) = IntToStr(AWriteNo) then
+    raise EInOutError.CreateFmt('%s=%d: simulated write failure on %s', [TEST_FAIL_WRITE_AT, AWriteNo, APath]);
+end;
+
 class function TTextEditApplier.RefusalOf(const AEdits: TArray<TTextEdit>): string;
 var
   FileMap: TObjectDictionary<string, TList<TTextEdit>>;
@@ -572,6 +585,7 @@ begin
             if I < Lines.Count - 1 then SB.Append(#13#10);
           end;
           if (Length(Content) > 0) and (Content[Length(Content)] = #10) then SB.Append(#13#10);
+          FailWriteForTests(Touched + 1, Pair.Key);
           TFile.WriteAllBytes(Pair.Key, TEncoding.ANSI.GetBytes(SB.ToString));
         finally
           SB.Free;

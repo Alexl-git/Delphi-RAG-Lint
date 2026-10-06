@@ -26,6 +26,16 @@
         .pas declarations follow -- reported in apply/1 only_included[]
         {name, parent} and a text line '--only: <child> converts too --
         nested in <parent>'. Siblings outside the parent stay untouched.
+    (e) a WRITE that fails after the writability pre-check (forced with the
+        test seam DRAGLINT_TEST_FAIL_WRITE_AT=2: the second file write raises)
+        is ROLLED BACK: exit 2, 'write failed for <unit>: ... -- rolled back,
+        unit not changed', every file byte-identical -- restored from its .BCK,
+        or under --no-backup from the bytes read before the write. A rollback
+        that itself fails (DRAGLINT_TEST_FAIL_ROLLBACK=1) names the files it
+        could not restore: '-- rollback FAILED for <file>: the unit may be
+        PARTLY converted; ...'.
+    Also: three-level nesting (table > field > field) and a parent holding a
+    converted child beside a plain one.
     (b) an edit set the applier would refuse fails the WHOLE unit before
         anything is written -- dry run and --apply alike: ok=false, exit 1,
         error 'refused N edit(s) to <file> -- overlapping delete ranges ...
@@ -90,6 +100,14 @@ type
   published
     property Caption: string read FCaption write FCaption;
     property Flag: Boolean read FFlag write FFlag default True;
+  end;
+
+  { not in any #convert block: a child that stays as it is }
+  TPlainChild = class(TComponent)
+  private
+    FCaption: string;
+  published
+    property Caption: string read FCaption write FCaption;
   end;
 
 implementation
@@ -175,6 +193,76 @@ object NestDM: TNestDM
   end
 end
 '@
+
+# ---- (a2) THREE levels, and a mixed parent: a converted child beside a plain one --
+Write-Ascii (P 'Nest3DM.pas') @'
+unit Nest3DM;
+
+interface
+
+uses
+  System.Classes, LibA;
+
+type
+  TNest3DM = class(TDataModule)
+    tbl: TSrcTable;
+    fld: TSrcField;
+    sub: TSrcField;
+    plain: TPlainChild;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'Nest3DM.dfm') @'
+object Nest3DM: TNest3DM
+  object tbl: TSrcTable
+    Caption = 't'
+    object fld: TSrcField
+      Caption = 'f'
+      object sub: TSrcField
+        Caption = 's'
+      end
+    end
+    object plain: TPlainChild
+      Caption = 'p'
+    end
+  end
+end
+'@
+
+# ---- (e) rollback: a write that fails after the pre-check -------------------------
+foreach ($rb in 'RollA', 'RollB', 'RollC') {
+  Write-Ascii (P "$rb.pas") @"
+unit $rb;
+
+interface
+
+uses
+  System.Classes, LibA;
+
+type
+  T$rb = class(TDataModule)
+    rt: TSrcTable;
+  end;
+
+implementation
+
+{`$R *.dfm}
+
+end.
+"@
+  Write-Ascii (P "$rb.dfm") @"
+object ${rb}: T$rb
+  object rt: TSrcTable
+    Caption = 'r'
+  end
+end
+"@
+}
 
 # ---- (c) the same module for --only: NestOnly ------------------------------------
 Write-Ascii (P 'NestOnly.pas') (([IO.File]::ReadAllText((P 'NestDM.pas'))) -replace 'NestDM', 'NestOnly')
@@ -283,6 +371,40 @@ Check 'A5 the .pas: every field retyped, LibB added ONCE, each access site rewri
   (($pas -match 'tbl: TDstTable;') -and ($pas -match 'tblID: TDstField;') -and ($pas -match 'tblName: TDstField;') -and `
    ($pas -match 'tbl2ID: TDstField;') -and (([regex]::Matches($pas, '\bLibB\b')).Count -eq 1) -and ($pas -match 'tbl\.Title := tblID\.Title \+ tbl2ID\.Title;')) $pas
 
+# ---- (a2) three levels and a mixed parent -----------------------------------------
+$r = ApplyTo @('Nest3DM.pas') 'nest.rules' @('--apply', '--no-backup')
+$dfm = Text 'Nest3DM.dfm'
+$pas = Text 'Nest3DM.pas'
+Check 'A6 three levels: tbl > fld > sub each converted once, the grandchild still inside the child, written by its own re-emit' `
+  (($r.Code -eq 0) -and $dfm.Contains("  object tbl: TDstTable`r`n    Title = 't'`r`n    object fld: TDstField`r`n      Title = 'f'`r`n      Flag2 = True`r`n      object sub: TDstField`r`n        Title = 's'`r`n        Flag2 = True`r`n      end`r`n    end`r`n") -and `
+   (([regex]::Matches($dfm, 'object sub:')).Count -eq 1)) ($r.Out + "`n" + $dfm)
+Check 'A7 the mixed parent keeps its plain child verbatim beside the converted one; the .pas agrees' `
+  ($dfm.Contains("    object plain: TPlainChild`r`n      Caption = 'p'`r`n    end`r`n  end`r`n") -and ($pas -match 'fld: TDstField;') -and ($pas -match 'sub: TDstField;') -and `
+   ($pas -match 'plain: TPlainChild;')) ($dfm + "`n" + $pas)
+
+# ---- (e) rollback ------------------------------------------------------------------
+# DRAGLINT_TEST_FAIL_WRITE_AT=2 makes the applier's SECOND file write raise -- one
+# file of the unit is already written by then.
+$hp = Hash 'RollA.pas'; $hd = Hash 'RollA.dfm'
+$env:DRAGLINT_TEST_FAIL_WRITE_AT = '2'
+try { $r = ApplyTo @('RollA.pas') 'nest.rules' @('--apply') } finally { Remove-Item Env:\DRAGLINT_TEST_FAIL_WRITE_AT -ErrorAction SilentlyContinue }
+Check 'E1 a write failing after the first file: exit 2, "rolled back, unit not changed"' `
+  (($r.Code -eq 2) -and ($r.Out -match 'write failed for RollA\.pas: EInOutError: .* -- rolled back, unit not changed')) $r.Out
+Check 'E2 ... both files byte-identical to the originals (restored from the .BCK backups)' (((Hash 'RollA.pas') -eq $hp) -and ((Hash 'RollA.dfm') -eq $hd)) $r.Out
+$bcks = @(Get-ChildItem $WorkDir -Filter 'RollA.*.BCK*')
+Check 'E3 ... the .BCK backups exist and equal the originals' `
+  (($bcks.Count -eq 2) -and (@($bcks | Where-Object { (Get-FileHash $_.FullName).Hash -notin @($hp, $hd) }).Count -eq 0)) (($bcks | ForEach-Object Name) -join ', ')
+$hp = Hash 'RollB.pas'; $hd = Hash 'RollB.dfm'
+$env:DRAGLINT_TEST_FAIL_WRITE_AT = '2'
+try { $r = ApplyTo @('RollB.pas') 'nest.rules' @('--apply', '--no-backup') } finally { Remove-Item Env:\DRAGLINT_TEST_FAIL_WRITE_AT -ErrorAction SilentlyContinue }
+Check 'E4 --no-backup: rolled back from the bytes read before the write, both files byte-identical, exit 2' `
+  (($r.Code -eq 2) -and ($r.Out -match 'rolled back, unit not changed') -and ((Hash 'RollB.pas') -eq $hp) -and ((Hash 'RollB.dfm') -eq $hd)) $r.Out
+$env:DRAGLINT_TEST_FAIL_WRITE_AT = '2'; $env:DRAGLINT_TEST_FAIL_ROLLBACK = '1'
+try { $r = ApplyTo @('RollC.pas') 'nest.rules' @('--apply') } finally {
+  Remove-Item Env:\DRAGLINT_TEST_FAIL_WRITE_AT -ErrorAction SilentlyContinue; Remove-Item Env:\DRAGLINT_TEST_FAIL_ROLLBACK -ErrorAction SilentlyContinue }
+Check 'E5 a rollback that itself fails: exit 2, "rollback FAILED for <the written file>", "PARTLY converted", the .BCK pointer' `
+  (($r.Code -eq 2) -and ($r.Out -match 'rollback FAILED for .*RollC\.(pas|dfm): the unit may be PARTLY converted; restore it from the \.BCK backups')) $r.Out
+
 # ---- (c) --only a parent: its nested children convert with it, .pas too ----------
 $r = ApplyTo @('NestOnly.pas') 'nest.rules' @('--only', 'tbl', '--format', 'json')
 $j = Json $r.Out
@@ -310,10 +432,12 @@ $r = ApplyTo @('DupForm.pas') 'nest.rules' @('--apply', '--no-backup')
 Check 'B2 --apply: exit 1, an ERROR line naming the refusal' `
   (($r.Code -eq 1) -and ($r.Out -match '(?m)^ERROR: .*overlapping delete ranges')) $r.Out
 Check 'B3 --apply wrote NOTHING: .pas and .dfm byte-identical' (((Hash 'DupForm.pas') -eq $hp) -and ((Hash 'DupForm.dfm') -eq $hd)) $r.Out
+$rec0 = if (Test-Path (P 'recovery.txt')) { Hash 'recovery.txt' } else { '' }   # (e) above leaves one
 $r = ApplyTo @('DupForm.pas') 'nest.rules' @('--apply')
-Check 'B4 --apply with backups: still nothing written, no .BCK, no recovery.txt' `
+$rec1 = if (Test-Path (P 'recovery.txt')) { Hash 'recovery.txt' } else { '' }
+Check 'B4 --apply with backups: still nothing written, no .BCK, no recovery record added' `
   (($r.Code -eq 1) -and ((Hash 'DupForm.pas') -eq $hp) -and ((Hash 'DupForm.dfm') -eq $hd) -and `
-   (@(Get-ChildItem $WorkDir -Filter 'DupForm.*.BCK*').Count -eq 0) -and -not (Test-Path (P 'recovery.txt'))) $r.Out
+   (@(Get-ChildItem $WorkDir -Filter 'DupForm.*.BCK*').Count -eq 0) -and ($rec1 -eq $rec0)) $r.Out
 $hq = Hash 'PlainDM.pas'
 $r = ApplyTo @('DupForm.pas', 'PlainDM.pas') 'nest.rules' @('--apply', '--no-backup', '--format', 'json')
 $j = Json $r.Out
@@ -325,7 +449,7 @@ Check 'B5 batch: only DupForm fails (exit 1), PlainDM is converted' `
 # ---- the nested conversion compiles --------------------------------------------
 if (-not $NoCompile) {
   $CRLF = "`r`n"
-  [IO.File]::WriteAllText((P 'P.dpr'), (@('program P;', '', 'uses', '  NestDM;', '', 'begin', 'end.') -join $CRLF) + $CRLF, [Text.Encoding]::ASCII)
+  [IO.File]::WriteAllText((P 'P.dpr'), (@('program P;', '', 'uses', '  NestDM, Nest3DM;', '', 'begin', 'end.') -join $CRLF) + $CRLF, [Text.Encoding]::ASCII)
   New-Item -ItemType Directory (P 'bin'), (P 'dcu') -Force | Out-Null
   $bat = P 'compile.bat'; $log = P 'compile.log'
   [IO.File]::WriteAllText($bat, (@('@echo off', "call `"$RsVars`"", "cd /d `"$WorkDir`"",
@@ -333,7 +457,7 @@ if (-not $NoCompile) {
   Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait | Out-Null
   $cl = Get-Content $log -Raw -ErrorAction SilentlyContinue
   $errLines = @(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' })
-  Check 'C1 the converted NestDM compiles with dcc64' (($cl -match 'BUILD_EXITCODE=0') -and ($errLines.Count -eq 0)) ($errLines -join ' | ')
+  Check 'C1 the converted NestDM and Nest3DM compile with dcc64' (($cl -match 'BUILD_EXITCODE=0') -and ($errLines.Count -eq 0)) ($errLines -join ' | ')
 }
 
 Write-Host ''
