@@ -812,6 +812,26 @@ begin
   if AClass.ResolvePath(AName, psDfm, N) then Result:= N.TypeName;
 end;
 
+// 1.25.2: True when every hop of the dotted AName is a PUBLISHED property --
+// the only kind a .dfm streams, so the only path a value may be written to.
+// psDfm resolution also passes a public class-typed hop (a collection's indexed
+// Items, TFieldDefs.ParentDef), and a resolved default written through one
+// ('FieldDefs.Items.Attributes = []') is a line the reader parses and the form
+// then cannot load.
+function PublishedChain(const AClass: TClassRef; const AName: string): Boolean;
+const
+  VIS_PUBLISHED = 'published';
+var
+  N   : TPropNode;
+  Segs: TArray<string>;
+begin
+  Segs:= AName.Split(['.']);
+  for var K: Integer:= 0 to High(Segs) do
+    if not AClass.ResolvePath(string.Join('.', Segs, 0, K + 1), psDfm, N) or not SameText(N.Visibility, VIS_PUBLISHED) then
+      Exit(False);
+  Result:= Length(Segs) > 0;
+end;
+
 // True when the property at AName is CLASS-TYPED on ATree (Font: TFont). Such a
 // property is a container: the .dfm never streams it as a leaf, only its
 // sub-leaves, so 'absent from the block' says nothing about it.
@@ -1891,6 +1911,8 @@ begin
         from this by needing the property to be streamed; 4b needs only that it
         be defaulted, so it must check for itself. }
       if LeafTypeOf(ATo, R.ToPath) = '' then Continue;
+      { 1.25.2: and a path the .dfm can stream -- see PublishedChain }
+      if not PublishedChain(ATo, R.ToPath) then Continue;
       if not LeafDefaultOf(AFrom, R.FromPath, ResolvedVal) then
       begin
         // Absent AND no `default` clause: such a property is ALWAYS streamed,

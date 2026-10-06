@@ -847,6 +847,12 @@ $ij = Json $o
 Check 'F1 info --json: capabilities.inherited_instances is the JSON literal true' `
   (($null -ne $ij) -and ($ij.capabilities.inherited_instances -is [bool]) -and ($ij.capabilities.inherited_instances -eq $true)) $o
 
+# ---- 1.25.2: the STANDING LOAD GUARD -- every .dfm this suite's --apply wrote
+# goes through Delphi's own reader (lib\DfmLoadCheck.ps1). A dry run proves the
+# PLAN, never the BYTES.
+. (Join-Path $PSScriptRoot 'lib\DfmLoadCheck.ps1')
+$loadFails = Test-DfmLoads @((P 'ChildForm.dfm'), (P 'AccForm.dfm'))
+Check 'LOAD1 every .dfm --apply wrote LOADS (text -> binary -> text -> binary)' ($loadFails.Count -eq 0) ($loadFails -join ' | ')
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
 } finally {

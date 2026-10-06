@@ -640,6 +640,8 @@ end;
 //                 PROPERTY directive and carries no value; array properties
 //                 are not DFM-streamed, so walking up is harmless.
 function ClassifyDefaultClause(const ADeclText: string; out AValue: string): TDefaultClause;
+const
+  KW_PROPERTY = 'property';
 var
   LowText: string ;
   P, i, j: Integer;
@@ -649,6 +651,19 @@ begin
   AValue := '';
   LowText:= LowerCase(ADeclText);
   if ADeclText = '' then Exit(dcAbsent);
+  { 1.25.2: a property's indexed span starts at its ATTRIBUTES. Bde.DBTables
+    declares `[Default(False)]` on the line above `property CachedUpdates:
+    Boolean ... default False;`, and the search below took the attribute's
+    `Default(` for the directive -- 'CachedUpdates = (False)]' went into the
+    .dfm and Delphi's reader refused it. Clauses are read from the `property`
+    keyword on; an attribute is never a clause. }
+  P:= 1;
+  repeat
+    P:= PosEx(KW_PROPERTY, LowText, P);
+    if (P = 0) or IsWholeWordAt(LowText, P, Length(KW_PROPERTY)) then Break;
+    Inc(P, Length(KW_PROPERTY));
+  until False;
+  if P > 1 then Exit(ClassifyDefaultClause(Copy(ADeclText, P, MaxInt), AValue));
   if HasWholeWord(LowText, 'nodefault') then Exit(dcNoDefault);
 
   { A `stored` clause other than `stored True` DESTROYS the sparse-DFM premise,

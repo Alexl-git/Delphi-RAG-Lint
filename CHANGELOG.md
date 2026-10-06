@@ -3,6 +3,41 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.25.2-alpha -- unreleased
+
+No extractor or resolver change on top of 1.25.1: indexes do not re-parse.
+
+### Fixed
+
+- **A converted `.dfm` Delphi could not load** (DMTEST's DMREADINGS, whole-book `--apply`:
+  `ObjectTextToBinary`: "Identifier expected", line 28; 1.25.0 and 1.25.1 alike). Three
+  causes, each fixed and pinned:
+  - **an attribute read as the `default` clause.** Bde.DBTables declares
+    `[Default(False)]` on the line above `property CachedUpdates: Boolean ... default False;`
+    and the property's indexed span starts at the attribute; the default-clause reader
+    took `Default(` for the directive and wrote `CachedUpdates = (False)]` (ObjectView too).
+    Clauses are now read from the `property` keyword on.
+  - **a resolved default written through a non-published hop.** psDfm resolution passes a
+    public class-typed hop -- a collection's indexed `Items`, `TFieldDefs.ParentDef` -- so
+    `FieldDefs.Items.Attributes = []` and its kin were written. A .dfm streams published
+    properties only; a resolved default is now written only to a path whose every hop is
+    published (`PublishedChain`).
+  - **two ADJACENT re-emitted blocks could land inside each other.** The second block's
+    `insert after L` and the first block's delete ending at L share the applier's sort key,
+    and `TList.Sort` is not stable: applied after the delete, the insert landed as many
+    lines too low as were deleted -- a table spliced into its neighbour. The insert now
+    always goes first.
+- **The standing .dfm LOAD guard.** `tests\autotest\lib\DfmLoadCheck.ps1` (+ `DfmLoadCheck.dpr`,
+  built once with dcc64) runs a .dfm through Delphi's own reader -- `ObjectTextToBinary`, then
+  binary -> text -> binary byte-identical. Every convert suite that WRITES a .dfm now checks
+  it: atomic, collections, inherited, descendants, and the new
+  `run_convert_apply_default_values.ps1` (one fixture per value kind: resolved Boolean /
+  enum / set / negative Integer defaults; streamed float, quoted string, multi-line string,
+  `#39`, binary, collection). A dry run proves the PLAN, never the BYTES. Limit, stated: the
+  guard proves the text PARSES and round-trips; a property the target class lacks is
+  caught only at form load, which needs the classes.
+  DMTEST copy: DMREADINGS whole-book `--apply` now passes the load guard (1415 objects in, 1415 out).
+
 ## v1.25.1-alpha -- unreleased
 
 No extractor or resolver change on top of 1.25.0: indexes do not re-parse.
