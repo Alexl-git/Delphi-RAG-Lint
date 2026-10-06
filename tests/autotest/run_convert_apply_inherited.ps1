@@ -758,14 +758,34 @@ Check 'E1 #unuse LibA with an inherited TSrcA left: refused, R26 text, file unto
    ($j.reason -eq '#unuse LibA would leave 1 unconverted instance(s) of TSrcA -- unit not changed') -and `
    ((Get-FileHash (P 'OutChild.pas')).Hash -eq $hp) -and (@($j.inherited).Count -eq 1)) $r.Out
 
+# ---- (b2) --only naming only an OWN instance excludes the inherited one ------
+$r = ApplyTo 'AccForm.pas' 'rename.rules' @('--only', 'accOwn', '--format', 'json')
+$j = Json $r.Out
+Check 'H4 --only accOwn: exit 0, accOwn converted, btnA (inherited) EXCLUDED -- inherited[] is empty' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and (@($j.converted).Count -eq 1) -and ((@($j.converted) -join ' ') -match 'accOwn') -and `
+   (@($j.inherited).Count -eq 0) -and (@($j.items | Where-Object { $_.kind -eq 'inherited-instance-skipped' }).Count -eq 0)) $r.Out
+
 # ---- (a) access sites ----------------------------------------------------------
+# The Touch body, with the converted own instance's line masked, must be
+# byte-identical before and after: every byte of the inherited receiver's
+# access site, and of everything around it, survives the --apply.
+function TouchRegionHash([string]$File) {
+  $ls = [IO.File]::ReadAllLines((P $File))
+  $a = [array]::IndexOf($ls, 'procedure TAccForm.Touch;')
+  if ($a -lt 0) { return '<no Touch>' }
+  $b = $a; while ($b -lt $ls.Count -and $ls[$b] -ne 'end;') { $b++ }
+  $region = @($ls[$a..$b] | ForEach-Object { if ($_ -match '\baccOwn\.') { '<own>' } else { $_ } }) -join "`r`n"
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try { return [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::ASCII.GetBytes($region))) } finally { $sha.Dispose() }
+}
+$touch0 = TouchRegionHash 'AccForm.pas'
 $r = ApplyTo 'AccForm.pas' 'rename.rules' @('--apply', '--no-backup')
 $acc = [IO.File]::ReadAllText((P 'AccForm.pas'))
 Check 'G1 --apply on AccForm exits 0' ($r.Code -eq 0) $r.Out
 Check 'G2 positive control: the converted own instance''s access site IS rewritten (accOwn.Title)' `
   (($acc -match "accOwn\.Title := 'y';") -and -not ($acc -match 'accOwn\.Caption')) $acc
-Check 'G3 the SKIPPED inherited receiver''s access site is byte-unchanged (btnA.Caption)' `
-  ($acc -match "(?m)^  btnA\.Caption := 'x';\r?$") $acc
+Check 'G3 the Touch body is byte-identical apart from the own instance''s line (btnA.Caption untouched)' `
+  (($touch0 -ne '<no Touch>') -and ((TouchRegionHash 'AccForm.pas') -eq $touch0)) $acc
 
 # ---- (b) --only naming an inherited instance ---------------------------------
 $h0 = (Get-FileHash (P 'ChildForm.pas')).Hash
