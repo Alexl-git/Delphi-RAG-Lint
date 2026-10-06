@@ -1080,6 +1080,19 @@ Step 'E-CI' {
   $script:ci3 = & "$SRC\Emit-ChangeImpact.ps1" -Target 'uSetupDefaultsFrm.TdlgSetupDefaults' -DbPath $DbCli -Depth 1 -OutDir $OutDir
   Chk 'A-CI3-MEMBERS'  $ci3.Members 1196
   if ((Dot $ci3) -notmatch 'from the type and its 1196 member\(s\)') { Fail 'A-CI3-MEMBERS' 'the chart does not disclose all 1196 members' }
+  # R24 fix round 1: the frontier cap counted the 1,197 SEEDS, so every type with
+  # more than 400 members read "CAPPED" whatever its radius -- at depth 1 here,
+  # with 1 affected routine. The cap now counts only nodes the walk reached.
+  Chk 'A-CI3-CAPPED'   "$($ci3.Capped)/$($ci3.Affected)" 'False/1'
+  if ((Dot $ci3) -match 'frontier CAPPED') { Fail 'A-CI3-CAPPED' 'a 1-routine radius claims the frontier was capped' }
+  $script:ci4 = & "$SRC\Emit-ChangeImpact.ps1" -Target 'uSetupDefaultsFrm.TdlgSetupDefaults' -DbPath $DbCli -OutDir $OutDir
+  # default depth 3, MEASURED: the one routine reached at hop 1 has no caller of its own,
+  # so the radius stays 1 routine / 1 unit and is NOT capped
+  Chk 'A-CI4-DEPTH3'   "$($ci4.Capped)/$($ci4.Affected)/$($ci4.Units)/$($ci4.MaxHop)" 'False/1/1/1'
+  # the cap still FIRES when the reached set really outgrows it: same target, -MaxNodes 0
+  $script:ci5 = & "$SRC\Emit-ChangeImpact.ps1" -Target 'uSetupDefaultsFrm.TdlgSetupDefaults' -DbPath $DbCli -Depth 3 -MaxNodes 0 -OutDir (Join-Path $OutDir 'ci-cap')
+  Chk 'A-CI5-CAPFIRES' "$($ci5.Capped)/$($ci5.Affected)" 'True/1'
+  if ((Dot $ci5) -notmatch 'frontier CAPPED at 0') { Fail 'A-CI5-CAPFIRES' 'the capped radius does not admit it' }
 }
 
 Note 'tested-by ...'

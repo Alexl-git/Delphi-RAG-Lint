@@ -87,6 +87,10 @@ if ($isType) {
 $dist = @{}
 foreach ($s in $seeds) { $dist[[int]$s] = 0 }
 $frontier = @($seeds | ForEach-Object { [int]$_ })
+# the cap counts nodes the walk REACHED, not the seeds (R24 fix round 1): with
+# all 1,197 seeds of TdlgSetupDefaults counted, every type over 400 members read
+# CAPPED whatever its radius
+$seedCount = $dist.Count
 $capped = $false
 
 for ($d = 1; $d -le $Depth; $d++) {
@@ -133,7 +137,7 @@ SELECT DISTINCT r.enclosing_symbol_id AS caller
       $off += 180
     }
   }
-  if ($dist.Count -gt $MaxNodes) { $capped = $true; break }
+  if (($dist.Count - $seedCount) -gt $MaxNodes) { $capped = $true; break }
   $frontier = @($next.ToArray())
 }
 
