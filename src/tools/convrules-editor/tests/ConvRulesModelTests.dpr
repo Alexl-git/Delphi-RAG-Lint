@@ -10008,6 +10008,47 @@ begin
   Check('glyph.split.case.sensitive', (not SplitGlyphExprOff(Path, Expr)) and (Path = 'Picture g[1/2]'), 'lower-case g[ is a path, as in the engine');
 end;
 
+{ C10 E11/E12: convert-apply and convert-validate are given --castlib when the adapter
+  knows an EXISTING cast library, and never otherwise (a missing file would make the
+  engine exit 2 on every call). A .cmd stand-in echoes its arguments. }
+procedure TestGlyphCastLibArgs;
+const
+  ECHO_CMD = '@echo %*'#13#10;
+var
+  Dir  : string;
+  Lib  : string;
+  Eng  : TEngineAdapter;
+  Json : string;
+  V    : TValidateResult;
+begin
+  Check('glyph.caps.name', CAPABILITY_GLYPH_STITCH = 'glyph_stitch', CAPABILITY_GLYPH_STITCH);
+  Dir:= TPath.Combine(TPath.GetTempPath, 'castlib-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'echo.cmd'), ECHO_CMD, TEncoding.ASCII);
+    Lib:= TPath.Combine(Dir, 'casts.castlib');
+    TFile.WriteAllText(Lib, '# empty'#13#10, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'echo.cmd'), []);
+    try
+      Check('glyph.castlib.default.empty', Eng.CastLibFile = '');
+      Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
+      Check('glyph.castlib.absent.no.arg', Pos('--castlib', Json) = 0, Json);
+      Eng.CastLibFile:= TPath.Combine(Dir, 'missing.castlib');
+      Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
+      Check('glyph.castlib.missing.no.arg', Pos('--castlib', Json) = 0, Json);
+      Eng.CastLibFile:= Lib;
+      Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
+      Check('glyph.castlib.apply.arg', Pos('--castlib "' + Lib + '"', Json) > 0, Json);
+      Check('glyph.castlib.apply.keeps.flags', (Pos('--apply', Json) > 0) and (Pos('--format json', Json) > 0), Json);
+      V:= Eng.ValidateText('#convert A -> B'#13#10, '', '', nil);
+      Check('glyph.castlib.validate.arg', Pos('--castlib "' + Lib + '"', V.Output) > 0, V.Output);
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
 { C10 E7/E8/E12-E14: the editor's own glyph decisions -- the live check goes through the
   ENGINE's parser (DRagLint.Convert.GlyphExpr, one parser for both), the two block-level
   rules carry the engine's wording, the count-target suggestion never guesses, and the
@@ -10355,6 +10396,7 @@ begin
     TestValidateScopeCancel;
     TestGlyphLinkParse;
     TestGlyphDecisions;
+    TestGlyphCastLibArgs;
     TestGlyphLinkMerge;
 
     FreeAndNil(GParseBook);
