@@ -790,6 +790,13 @@ declaring ancestor ALREADY has the block's To type is converted, not skipped:
   declares no field, so there is nothing to retype in its type section and no
   creator site).
 
+Every code rewrite -- own instances' and inherited ones' -- is scoped to the
+instance's FIELD (1.26.0): a member access is rewritten only when its receiver
+is bound by the resolver to the field the `.dfm`'s root class declares or
+inherits, or is unbound, bare or `Self.`-qualified, inside a routine of that
+class that declares no local or parameter of the same name. A local, a
+parameter or another class's same-named field is left alone.
+
 Code that uses a converted ancestor's field WITHOUT a `.dfm` block (N2a) is
 followed too: every access in the unit on a field an ancestor declares -- any
 number of levels up, bound to that field by the resolver (`refs.symbol_id`),

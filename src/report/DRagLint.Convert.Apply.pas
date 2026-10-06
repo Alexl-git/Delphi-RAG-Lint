@@ -2937,6 +2937,133 @@ begin
   end;
 end;
 
+// C8 N2 review (1.26.0): FindMemberAccessSites joins a member access to an
+// instance by the RECEIVER'S NAME only, so `<name>.Caption` was rewritten
+// wherever it appeared in the unit -- a local or parameter of that name in
+// another method, another class's same-named field included. This keeps a
+// site only when its receiver IS the instance's field:
+//   * the receiver reference is bound (refs.symbol_id) to the field named like
+//     the instance that the .dfm's ROOT class (declared in this unit)
+//     declares or inherits -- another class's same-named field is not it; or
+//   * it is unbound, written bare or as Self.X, and the routine it sits in
+//     (walked up through nested routines) declares no local / parameter of
+//     that name and belongs to the root class.
+// Everything else -- bound to anything else, unbound with another receiver,
+// shadowed, in an unrelated class -- is dropped. Applies to own instances and
+// to C8 N2 / N2a inherited ones alike. Reads the index; writes nothing.
+function BoundAccessSites(const AStore: ISymbolStore; AFileId: Int64; const ADfmPath: string;
+  const ASites: TArray<TAccessSite>): TArray<TAccessSite>;
+const
+  { how many parents a reference's routine is walked up to reach its class }
+  ROUTINE_HOPS = 4;
+  { the receiver text of an explicit Self.X access }
+  SELF_TEXT = 'Self';
+var
+  Refs     : TArray<TReference>;
+  Classes  : TArray<TSymbol>;
+  FieldIds : TDictionary<string, TArray<Int64>>; { UPPER name -> field ids }
+  OwnerIds : TDictionary<string, TArray<Int64>>; { UPPER name -> classes declaring / inheriting it }
+
+  function Has(const AIds: TArray<Int64>; AId: Int64): Boolean;
+  begin
+    for var X: Int64 in AIds do
+      if X = AId then Exit(True);
+    Result:= False;
+  end;
+
+  { the field named AName a class of this unit declares, or the nearest an ancestor does }
+  procedure ScopeOf(const AName: string; out AFields, AOwners: TArray<Int64>);
+  var
+    F: TSymbol;
+  begin
+    if FieldIds.TryGetValue(UpperCase(AName), AFields) then
+    begin
+      AOwners:= OwnerIds[UpperCase(AName)];
+      Exit;
+    end;
+    AFields:= nil;
+    AOwners:= nil;
+    for var C: TSymbol in Classes do
+    begin
+      F:= AStore.FindChildSymbolByName(C.Id, AName);
+      if (F.Id = 0) or (F.Kind <> skField) then
+      begin
+        F:= Default(TSymbol);
+        for var A: TTypeAncestor in AStore.GetTransitiveAncestors(C.Id) do
+        begin
+          if not A.Resolved or (A.SymbolId = 0) then Continue;
+          F:= AStore.FindChildSymbolByName(A.SymbolId, AName);
+          if (F.Id <> 0) and (F.Kind = skField) then Break;
+          F:= Default(TSymbol);
+        end;
+      end;
+      if F.Id = 0 then Continue;
+      if not Has(AFields, F.Id) then AFields:= AFields + [F.Id];
+      AOwners:= AOwners + [C.Id];
+    end;
+    FieldIds.Add(UpperCase(AName), AFields);
+    OwnerIds.Add(UpperCase(AName), AOwners);
+  end;
+
+  { the class a routine belongs to, 0 when a routine on the way declares AName }
+  function ClassOfRoutine(ARoutineId: Int64; const AName: string): Int64;
+  var
+    S: TSymbol;
+  begin
+    S:= AStore.GetSymbolById(ARoutineId);
+    for var Hop: Integer:= 1 to ROUTINE_HOPS do
+    begin
+      if S.Id = 0 then Break;
+      if S.Kind = skClass then Exit(S.Id);
+      if AStore.FindChildSymbolByName(S.Id, AName).Id <> 0 then Break;
+      S:= AStore.GetSymbolById(S.ParentId);
+    end;
+    Result:= 0;
+  end;
+
+  function SiteIsBound(const ASite: TAccessSite): Boolean;
+  var
+    Recv   : TReference;
+    Found  : Boolean;
+    Fields : TArray<Int64>;
+    Owners : TArray<Int64>;
+  begin
+    Found:= False;
+    Recv := Default(TReference);
+    for var R: TReference in Refs do
+      if (R.StartLine = ASite.Line) and (R.StartCol < ASite.Col) and SameText(R.NameText, ASite.InstanceName) and
+         ((not Found) or (R.StartCol > Recv.StartCol)) then
+      begin
+        Recv := R;
+        Found:= True;
+      end;
+    if not Found then Exit(False);
+    ScopeOf(ASite.InstanceName, Fields, Owners);
+    if Recv.SymbolId <> 0 then Exit(Has(Fields, Recv.SymbolId));
+    if (Recv.ReceiverText <> '') and not SameText(Recv.ReceiverText, SELF_TEXT) then Exit(False);
+    Result:= Has(Owners, ClassOfRoutine(Recv.EnclosingSymbolId, ASite.InstanceName));
+  end;
+
+begin
+  Result:= nil;
+  if (AFileId <= 0) or (Length(ASites) = 0) then Exit;
+  Refs:= AStore.GetReferencesFromFile(AFileId);
+  Classes:= nil;
+  var Root: string:= '';
+  if (ADfmPath <> '') and TFile.Exists(ADfmPath) then Root:= DfmRootClass(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)));
+  for var S: TSymbol in AStore.FindSymbolsByFile(AStore.GetFilePath(AFileId)) do
+    if (S.Kind = skClass) and SameText(S.Name, Root) then Classes:= Classes + [S];
+  FieldIds:= TDictionary<string, TArray<Int64>>.Create;
+  OwnerIds:= TDictionary<string, TArray<Int64>>.Create;
+  try
+    for var Site: TAccessSite in ASites do
+      if SiteIsBound(Site) then Result:= Result + [Site];
+  finally
+    OwnerIds.Free;
+    FieldIds.Free;
+  end;
+end;
+
 // C8 N2: the 'retyped' entries of AInherited as instances for BuildApplyPlan's
 // loop -- the .dfm spelling of the From type, the bare To type.
 function RetypedInstances(const AInherited: TArray<TInheritedInstance>): TArray<TConvertInstance>;
@@ -3009,7 +3136,7 @@ begin
   end;
 end;
 
-function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@38ad -- REVIEWED 2026-10-06: parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 now (1.25.1: the nested-instance splice call and the --only child include, each a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@3144 -- REVIEWED 2026-10-06: parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own
   const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean;
   var AInherited: TArray<TInheritedInstance>): TApplyResult;
@@ -3620,8 +3747,8 @@ var
            That is exactly how this block failed to build the first time. Note
            the same hazard exists here with the paren-star terminator, which is
            why neither delimiter is written out literally in this block. *)
-        var CastSites: TArray<TAccessSite>:= FindMemberAccessSites(PasStore, PasFileId, PasLines,
-          LinkRule.FromPath, ConvertedInstNames.ToArray);
+        var CastSites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
+          LinkRule.FromPath, ConvertedInstNames.ToArray));
         for var CSite in CastSites do
         begin
           var DstExpr: string:= CSite.InstanceName + '.' + LinkRule.ToPath;
@@ -3654,8 +3781,8 @@ var
       if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue; { identity rename -- nothing to rewrite }
       if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
 
-      var Sites: TArray<TAccessSite>:= FindMemberAccessSites(PasStore, PasFileId, PasLines,
-        LinkRule.FromPath, ConvertedInstNames.ToArray);
+      var Sites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
+        LinkRule.FromPath, ConvertedInstNames.ToArray));
       for var Site in Sites do
       begin
         E:= Default(TTextEdit);

@@ -92,6 +92,21 @@ type
   TBox = class(TComponent)
   end;
 
+  { a table and its field, for a retyped-inside-retyped block }
+  TSrcT = class(TComponent)
+  private
+    FCaption: string;
+  published
+    property Caption: string read FCaption write FCaption;
+  end;
+
+  TSrcF = class(TComponent)
+  private
+    FCaption: string;
+  published
+    property Caption: string read FCaption write FCaption;
+  end;
+
 implementation
 
 end.
@@ -117,6 +132,20 @@ type
     property Hint: string read FHint write FHint;
     property Size: Integer read FSize write FSize;
     property Color: Integer read FColor write FColor;
+  end;
+
+  TDstT = class(TComponent)
+  private
+    FTitle: string;
+  published
+    property Title: string read FTitle write FTitle;
+  end;
+
+  TDstF = class(TComponent)
+  private
+    FTitle: string;
+  published
+    property Title: string read FTitle write FTitle;
   end;
 
 implementation
@@ -340,6 +369,209 @@ inherited RShadow: TRShadow
 end
 '@
 
+# ---- SCOPE: a bound use, a shadowing local, another class's same-named field -----
+Write-Ascii (P 'RScope.pas') @'
+unit RScope;
+
+interface
+
+uses
+  System.Classes, Vcl.Forms, LibA, RMid;
+
+type
+  TRScope = class(TRMid)
+    procedure Touch;
+    procedure Other;
+  end;
+
+  THolder = class
+    rbtn: TSrcA;
+    procedure Use;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TRScope.Touch;
+begin
+  rbtn.Caption := 'bound';
+end;
+
+procedure TRScope.Other;
+var
+  rbtn: TSrcA;
+begin
+  rbtn := nil;
+  if rbtn <> nil then rbtn.Caption := 'local';
+end;
+
+procedure THolder.Use;
+begin
+  rbtn.Caption := 'holder';
+end;
+
+end.
+'@
+Write-Ascii (P 'RScope.dfm') @'
+inherited RScope: TRScope
+  inherited rbtn: TSrcA
+    Caption = 's'
+  end
+end
+'@
+# the same three shapes for an OWN instance
+Write-Ascii (P 'OScope.pas') @'
+unit OScope;
+
+interface
+
+uses
+  System.Classes, Vcl.Forms, LibA;
+
+type
+  TOScope = class(TForm)
+    obtn: TSrcA;
+    procedure Touch;
+    procedure Other;
+  end;
+
+  TOHolder = class
+    obtn: TSrcA;
+    procedure Use;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TOScope.Touch;
+begin
+  obtn.Caption := 'bound';
+end;
+
+procedure TOScope.Other;
+var
+  obtn: TSrcA;
+begin
+  obtn := nil;
+  if obtn <> nil then obtn.Caption := 'local';
+end;
+
+procedure TOHolder.Use;
+begin
+  obtn.Caption := 'holder';
+end;
+
+end.
+'@
+Write-Ascii (P 'OScope.dfm') @'
+object OScope: TOScope
+  object obtn: TSrcA
+    Caption = 'o'
+  end
+end
+'@
+
+# ---- NESTED: a retyped table holding a retyped field, ancestor converted ----------
+Write-Ascii (P 'RNBase.pas') @'
+unit RNBase;
+
+interface
+
+uses
+  System.Classes, Vcl.Forms, LibA, LibB;
+
+type
+  TRNBase = class(TForm)
+    nt: TDstT;
+    ntF: TDstF;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'RNBase.dfm') @'
+object RNBase: TRNBase
+  object nt: TDstT
+    Title = 'T'
+    object ntF: TDstF
+      Title = 'F'
+    end
+  end
+end
+'@
+Write-Ascii (P 'RNChild.pas') @'
+unit RNChild;
+
+interface
+
+uses
+  System.Classes, Vcl.Forms, LibA, RNBase;
+
+type
+  TRNChild = class(TRNBase)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'RNChild.dfm') @'
+inherited RNChild: TRNChild
+  inherited nt: TSrcT
+    Caption = 't2'
+    inherited ntF: TSrcF
+      Caption = 'f2'
+    end
+  end
+end
+'@
+Write-Ascii (P 'nested.rules') @'
+#convert LibA.TSrcT -> LibB.TDstT, LibB
+#link Title <- Caption
+#convert LibA.TSrcF -> LibB.TDstF, LibB
+#link Title <- Caption
+'@
+
+# ---- PLACEMENT: a code-only descendant with an implementation uses clause --------
+Write-Ascii (P 'RPlace.pas') @'
+unit RPlace;
+
+interface
+
+uses
+  System.Classes, Vcl.Forms, RMid;
+
+type
+  TRPlace = class(TRMid)
+    procedure Touch;
+  end;
+
+implementation
+
+uses
+  System.SysUtils;
+
+{$R *.dfm}
+
+procedure TRPlace.Touch;
+begin
+  rcode.Caption := IntToStr(1);
+end;
+
+end.
+'@
+Write-Ascii (P 'RPlace.dfm') @'
+inherited RPlace: TRPlace
+end
+'@
+
 Write-Ascii (P 'retype.rules') @'
 #convert LibA.TSrcA -> LibB.TDstB, LibB
 #link Title <- Caption
@@ -516,6 +748,42 @@ Check 'E1 batch RChild2 + RCode: exit 0, apply-batch/1, RChild2 retypes rbtn and
   (($r.Code -eq 0) -and ($null -ne $j) -and ($j.schema -eq 'apply-batch/1') -and ($null -ne $u0) -and `
    (@($u0.inherited | Where-Object { $_.action -eq 'retyped' }).Count -eq 2)) $r.Out
 
+# ---- SCOPE: only the access bound to the field is rewritten --------------------------
+$r = ApplyTo @('RScope.pas') 'retype.rules' @('--apply', '--no-backup')
+$t = [IO.File]::ReadAllText((P 'RScope.pas'))
+Check 'H1 positive control: the bound use in TRScope.Touch is rewritten (rbtn.Title := ''bound'')' `
+  (($r.Code -eq 0) -and ($t -match "rbtn\.Title := 'bound';")) ($r.Out + "`n" + $t)
+Check 'H2 a LOCAL rbtn in another method and THolder''s own rbtn field are left alone' `
+  (($t -match "if rbtn <> nil then rbtn\.Caption := 'local';") -and ($t -match "rbtn\.Caption := 'holder';")) $t
+$r = ApplyTo @('OScope.pas') 'retype.rules' @('--apply', '--no-backup')
+$t = [IO.File]::ReadAllText((P 'OScope.pas'))
+Check 'H3 own instance, same scoping: the bound use is rewritten, the local and TOHolder.obtn are not' `
+  (($r.Code -eq 0) -and ($t -match "obtn\.Title := 'bound';") -and ($t -match "obtn\.Caption := 'local';") -and `
+   ($t -match "obtn\.Caption := 'holder';") -and ($t -match 'obtn: TDstB;') -and ($t -match '(?m)^    obtn: TSrcA;\r?$')) $t
+
+# ---- NESTED: retyped inside retyped --------------------------------------------------
+$r = ApplyTo @('RNChild.pas') 'nested.rules' @('--format', 'json')
+$j = Json $r.Out
+Check 'I1 nested: nt and ntF both retyped (action retyped), ancestor RNBase' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and (@($j.inherited | Where-Object { $_.action -eq 'retyped' -and $_.ancestor_unit -eq 'RNBase' }).Count -eq 2)) $r.Out
+$r = ApplyTo @('RNChild.pas') 'nested.rules' @('--apply', '--no-backup')
+$t = [IO.File]::ReadAllText((P 'RNChild.dfm'))
+Check 'I2 nested --apply: ONE inherited nt: TDstT block holding ONE inherited ntF: TDstF, both converted, no refusal' `
+  (($r.Code -eq 0) -and $t.Contains("  inherited nt: TDstT`r`n    Title = 't2'`r`n    inherited ntF: TDstF`r`n      Title = 'f2'`r`n    end`r`n  end`r`n") -and `
+   (([regex]::Matches($t, 'ntF:')).Count -eq 1) -and -not ($r.Out -match 'refused')) ($r.Out + "`n" + $t)
+
+# ---- PLACEMENT ------------------------------------------------------------------------
+$r = ApplyTo @('RPlace.pas') 'retype.rules' @('--apply', '--no-backup')
+$t = [IO.File]::ReadAllText((P 'RPlace.pas'))
+Check 'J1 code-only descendant: LibB goes to the IMPLEMENTATION uses (no interface field needs it), the interface uses is untouched' `
+  (($r.Code -eq 0) -and $t.Contains("uses`r`n  System.Classes, Vcl.Forms, RMid;`r`n") -and $t.Contains("uses`r`n  System.SysUtils, LibB;`r`n") -and `
+   ($t -match 'rcode\.Title := IntToStr\(1\);')) ($r.Out + "`n" + $t)
+
+# ---- every .dfm this suite wrote LOADS -------------------------------------------------
+. (Join-Path $PSScriptRoot 'lib\DfmLoadCheck.ps1')
+$loadFails = Test-DfmLoads @((P 'RChild.dfm'), (P 'RCode.dfm'), (P 'RScope.dfm'), (P 'OScope.dfm'), (P 'RNChild.dfm'), (P 'RPlace.dfm'))
+Check 'LOAD1 every .dfm --apply wrote LOADS (text -> binary -> text -> binary)' ($loadFails.Count -eq 0) ($loadFails -join ' | ')
+
 # ---- the capability ----------------------------------------------------------------
 $o = (& $Exe info --json 2>$null) -join "`n"
 $ij = Json $o
@@ -523,10 +791,14 @@ Check 'F1 info --json: capabilities.inherited_retype is the JSON literal true' `
   (($null -ne $ij) -and ($ij.capabilities.inherited_retype -is [bool]) -and ($ij.capabilities.inherited_retype -eq $true)) $o
 
 # ---- the converted descendants compile against the converted ancestors -------------
-if (-not $NoCompile) {
+if ($NoCompile) {
+  Write-Host '  [SKIP] G1 dcc64 compile -- -NoCompile was passed (the battery never passes it)' -ForegroundColor Yellow
+} elseif (-not (Test-Path $RsVars)) {
+  Check 'G1 dcc64 compile: rsvars.bat present' $false "missing: $RsVars"
+} else {
   $CRLF = "`r`n"
   [IO.File]::WriteAllText((P 'P.dpr'), (@(
-    'program P;', '', 'uses', '  RChild, RCode, RShadow;', '',
+    'program P;', '', 'uses', '  RChild, RCode, RShadow, RScope, OScope, RNChild, RPlace;', '',
     'begin', 'end.') -join $CRLF) + $CRLF, [Text.Encoding]::ASCII)
   New-Item -ItemType Directory (P 'bin'), (P 'dcu') -Force | Out-Null
   $bat = P 'compile.bat'; $log = P 'compile.log'
@@ -535,7 +807,7 @@ if (-not $NoCompile) {
   Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait | Out-Null
   $cl = Get-Content $log -Raw -ErrorAction SilentlyContinue
   $errLines = @(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' })
-  Check 'G1 RChild and RCode compile with dcc64 after --apply (private -E/-NU)' (($cl -match 'BUILD_EXITCODE=0') -and ($errLines.Count -eq 0)) ($errLines -join ' | ')
+  Check 'G1 RChild, RCode, RShadow, RScope, OScope, RNChild, RPlace compile with dcc64 after --apply (private -E/-NU)' (($cl -match 'BUILD_EXITCODE=0') -and ($errLines.Count -eq 0)) ($errLines -join ' | ')
 }
 
 Write-Host ''

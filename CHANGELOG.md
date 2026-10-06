@@ -41,6 +41,16 @@ No extractor or resolver change on top of 1.25.0: indexes do not re-parse.
 
 ### Changed
 
+- **Access-site rewrites are scoped to the instance's FIELD, not its name.** The `.pas`
+  property/event rewrite matched a member access by its receiver's NAME only, so once a
+  unit converted `rbtn`, every `rbtn.Caption` in it was rewritten -- a local or parameter
+  named `rbtn` in another method, another class's same-named field included (a compile
+  error, or a silent wrong member). A site is now rewritten only when its receiver is
+  BOUND by the resolver to the field the `.dfm`'s root class declares or inherits, or is
+  unbound, bare or `Self.`-qualified, in a routine of that class that declares no local /
+  parameter of that name. Own instances and C8 N2 / N2a inherited ones alike; DMTEST's
+  DMREADINGS keeps all 32 of its sites. Pinned by run_convert_apply_inherited_retype.ps1
+  H1-H3 (a bound use, a shadowing local, another class's field; inherited and own).
 - **`.dfm` re-emit keeps the header keyword.** `ReemitComponent` used to write every block,
   nested ones included, as `object`; an `inline` frame or `inherited` child inside a
   converted block now keeps its keyword (written as `object` it would declare a second
