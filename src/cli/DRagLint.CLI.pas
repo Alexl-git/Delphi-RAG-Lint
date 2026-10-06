@@ -979,7 +979,7 @@ begin
     'with each path resolved segment by segment, no depth limit (a published leaf; each hop published, or public and class-typed; private never); ' +
     'a block whose type resolves in no --db is an error on its #convert line; json classes_built counts the classes whose members were resolved; ' +
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
-    'an inherited/inline .dfm object of a From type is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason}; ancestor_state unconverted|converted|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, or is in no --db); ' +
+    'an inherited/inline .dfm object of a From type is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk); ' +
     'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
     '--only filters instances, never unit rules, so a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed''); ' +
     'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
@@ -24754,7 +24754,7 @@ begin
 
     { 1.22.0 (C8 N1) -- one OBJECT per inherited / inline .dfm object of a From
       type: skipped, never converted; ancestor_state unconverted | converted |
-      outside, ancestor_unit '' when not known. ALWAYS present, [] when none;
+      mismatched | outside, ancestor_unit '' when not known. ALWAYS present, [] when none;
       warnings[] carries each one's 'line N: warning:' text too, and items[]
       its kind inherited-instance-skipped mirror. }
     var JInh: TJSONArray:= TJSONArray.Create;
@@ -24910,7 +24910,7 @@ end;
 /// any rule is checked). The .dfm is then read (FindInheritedInstances, 1.22.0, C8 N1/N3): an
 /// inherited/inline object of a From type is NOT converted and no longer refuses the unit -- it
 /// is skipped and reported with its declaring ancestor (apply/1 inherited[] {name, type, line,
-/// ancestor_unit, ancestor_state unconverted|converted|outside, reason}, a 'line N: warning:'
+/// ancestor_unit, ancestor_state unconverted|converted|mismatched|outside, reason}, a 'line N: warning:'
 /// line in warnings[], items[] kind inherited-instance-skipped), while the unit's own instances,
 /// code and unit rules convert; R26 counts it as left unconverted. Rules are then validated (ValidateConvertBook)
 /// BEFORE BuildApplyPlan runs -- EVERY block against its OWN From/To classes, each path resolved
@@ -25143,7 +25143,7 @@ begin
       inherited[], a 'line N: warning:' line) -- while the unit's own
       instances, code and unit rules convert. R26 still counts them as left
       unconverted, so a #unuse that would break them refuses the unit. }
-    JCtx.InheritedInsts:= FindInheritedInstances(Trees, UnitPas, DfmPath, Rules);
+    JCtx.InheritedInsts:= FindInheritedInstances(Trees, UnitPas, DfmPath, Rules, AArgs.OnlySections);
     { EVERY block is validated against its OWN From/To classes (1.20.6, Task 2
       and T2b) -- driven from the rules file's own #convert headers rather than
       --from/--to (convert-apply has neither). It used to take the first block's

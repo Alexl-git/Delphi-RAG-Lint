@@ -18,7 +18,10 @@ No extractor change: indexes do not re-parse.
   `{name, type, line, ancestor_unit, ancestor_state, reason}`. The declaring ancestor is the
   nearest class of the owner's ancestor chain (the root class, or an enclosing `inline` frame's
   class) whose `.dfm` opens the component with `object`; `ancestor_state` is `unconverted`,
-  `converted` (still skipped: retyping is N2) or `outside` (in no `--db`; never guessed).
+  `converted` (still skipped: retyping is N2), `mismatched` (a third type, named in `reason`)
+  or `outside` (not determinable: in no `--db`, or an ancestor `.dfm` on the way is missing
+  or binary, which stops the walk; `ancestor_unit` `""`; never guessed). `--only` filters
+  `inherited[]` too.
   R26 counts these instances as left unconverted. A `.dfm` whose only From-type instances are
   inherited reports `component_part: skipped-no-instances` and exits 0. Ruling R6's
   `inherited instances of <T> are not converted yet -- unit not changed` is gone.

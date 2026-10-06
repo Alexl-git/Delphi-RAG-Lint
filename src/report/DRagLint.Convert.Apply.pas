@@ -88,9 +88,11 @@ type
   /// The owner is the class of the nearest enclosing `inline` frame, else the
   /// .dfm's root class. AncestorState is 'unconverted' (that ancestor's object
   /// still has the From type), 'converted' (it has the block's To type; N1
-  /// still skips it -- retyping is N2) or 'outside' (no ancestor in the --db
-  /// declares it, or the chain leaves the index; never guessed, item N3).
-  /// AncestorUnit is the declaring unit, '' when it is not known.
+  /// still skips it -- retyping is N2), 'mismatched' (it has some third type)
+  /// or 'outside' (not determinable: no ancestor in the --db declares it, the
+  /// chain leaves the index, or an ancestor's .dfm is missing or binary;
+  /// never guessed, item N3). AncestorUnit is the declaring unit; '' exactly
+  /// when AncestorState is 'outside'.
   /// </remarks>
   TInheritedInstance = record
     Name         : string;  { the component name }
@@ -520,6 +522,7 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// <param name="ADfmPath">The unit's sibling .dfm; a missing file yields an
 /// empty result.</param>
 /// <param name="ARules">The parsed rule book.</param>
+/// <param name="AOnly">The --only instance allow-list; empty keeps every one.</param>
 /// <returns>One TInheritedInstance per such object, nested ones included, in
 /// .dfm order; empty when there is none.</returns>
 /// <remarks>
@@ -529,13 +532,18 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 /// itself first, so a frame's own .dfm counts) whose .dfm -- the class's unit
 /// with the extension changed -- opens the component with `object` or
 /// `inline`; a .dfm that only re-opens it with `inherited` is passed over.
-/// An owner class that resolves to no class or to several, a chain that
-/// leaves the index at an unresolved ancestor, or a chain with no declaring
-/// .dfm all give AncestorState 'outside' -- nothing is guessed. Reads the
-/// ancestors' .dfm files; writes nothing.
+/// The walk STOPS at an ancestor whose .dfm is missing, binary (TPF0) or not
+/// readable as text -- it might declare the component -- and reports
+/// 'outside' with a reason naming that file and why. An owner class that
+/// resolves to no class or to several (looked up case-insensitively), a chain
+/// that leaves the index at an unresolved ancestor, or a chain with no
+/// declaring .dfm also give 'outside' -- nothing is guessed. A declaring
+/// object of neither the From nor the To type gives 'mismatched'. AOnly
+/// filters the result like FindConvertInstances. Reads the ancestors' .dfm
+/// files; writes nothing.
 /// </remarks>
 function FindInheritedInstances(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet): TArray<TInheritedInstance>;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TArray<TInheritedInstance>;
 
 /// <summary>Reports skipped inherited instances in a convert-apply report:
 /// one `line N: warning: ...` per instance in Warnings and its typed mirror
@@ -1067,6 +1075,13 @@ const
   ANCESTOR_UNCONVERTED = 'unconverted';
   ANCESTOR_CONVERTED   = 'converted';
   ANCESTOR_OUTSIDE     = 'outside';
+  ANCESTOR_MISMATCHED  = 'mismatched';
+  { the filer signature a compiled (binary) .dfm starts with }
+  BINARY_DFM_SIGNATURE = 'TPF0';
+  { the first byte of a .dfm stored as a Windows RES resource }
+  RES_HEADER_FIRST_BYTE = $FF;
+  { a UTF-8 byte-order mark as an ANSI decode spells it }
+  UTF8_BOM_AS_ANSI = #$EF#$BB#$BF;
   { .dfm block keywords, without their trailing space }
   KW_OBJECT    = 'object';
   KW_INHERITED = 'inherited';
@@ -1173,6 +1188,27 @@ begin
   Result:= False;
 end;
 
+// True when ABytes are a compiled (binary) .dfm: the TPF0 filer signature, or
+// a Windows resource header (first byte $FF).
+function IsBinaryDfmBytes(const ABytes: TBytes): Boolean;
+begin
+  Result:= ((Length(ABytes) > 0) and (ABytes[0] = RES_HEADER_FIRST_BYTE)) or
+           ((Length(ABytes) >= Length(BINARY_DFM_SIGNATURE)) and
+            (TEncoding.ANSI.GetString(ABytes, 0, Length(BINARY_DFM_SIGNATURE)) = BINARY_DFM_SIGNATURE));
+end;
+
+// True when AText, past leading whitespace and a UTF-8 BOM, opens with a
+// text .dfm block header (object / inherited / inline).
+function StartsWithBlockHeader(const AText: string): Boolean;
+var
+  T: string;
+begin
+  T:= TrimLeft(AText);
+  if StartsStr(UTF8_BOM_AS_ANSI, T) then T:= TrimLeft(Copy(T, Length(UTF8_BOM_AS_ANSI) + 1, MaxInt));
+  if StartsStr(#$FEFF, T) then T:= TrimLeft(Copy(T, Length(#$FEFF) + 1, MaxInt));
+  Result:= StartsText(KW_OBJECT + ' ', T) or StartsText(KW_INHERITED + ' ', T) or StartsText(KW_INLINE + ' ', T);
+end;
+
 // True when two paths name the same file, case-insensitively; '' never matches.
 function SamePath(const APathA, APathB: string): Boolean;
 begin
@@ -1238,18 +1274,49 @@ begin
 end;
 
 function FindInheritedInstances(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet): TArray<TInheritedInstance>;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TArray<TInheritedInstance>;
 var
   DfmTexts: TDictionary<string, string>; { ancestor .dfm path (upper) -> text, read once per run }
   I       : Integer;
 
-  function DfmTextOf(const APath: string): string;
+  { True + the TEXT of an ancestor .dfm; False + why not ('is missing',
+    'is binary (TPF0)', 'is not a text .dfm', 'cannot be read: ...'). Texts
+    are cached per run; a failure is not, it ends the walk anyway. }
+  function TryAncestorDfmText(const APath: string; out AText, AWhy: string): Boolean;
+  var
+    Bytes: TBytes;
   begin
-    if not DfmTexts.TryGetValue(UpperCase(APath), Result) then
+    AWhy:= '';
+    if DfmTexts.TryGetValue(UpperCase(APath), AText) then Exit(True);
+    AText:= '';
+    if not TFile.Exists(APath) then
     begin
-      Result:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
-      DfmTexts.Add(UpperCase(APath), Result);
+      AWhy:= 'is missing';
+      Exit(False);
     end;
+    try
+      Bytes:= TFile.ReadAllBytes(APath);
+    except
+      on E: Exception do
+      begin
+        AWhy:= 'cannot be read: ' + E.Message;
+        Exit(False);
+      end;
+    end;
+    if IsBinaryDfmBytes(Bytes) then
+    begin
+      AWhy:= 'is binary (TPF0)';
+      Exit(False);
+    end;
+    AText:= TEncoding.ANSI.GetString(Bytes);
+    if not StartsWithBlockHeader(AText) then
+    begin
+      AText:= '';
+      AWhy := 'is not a text .dfm';
+      Exit(False);
+    end;
+    DfmTexts.Add(UpperCase(APath), AText);
+    Result:= True;
   end;
 
   procedure Resolve(var AInst: TInheritedInstance);
@@ -1257,6 +1324,7 @@ var
     Detail   : string;
     F, Dfm   : string;
     DeclClass: string;
+    Text, Why: string;
   begin
     AInst.AncestorState:= ANCESTOR_OUTSIDE;
     AInst.AncestorUnit := '';
@@ -1266,10 +1334,22 @@ var
     else
       for F in OwnerChainFiles(ATrees, AInst.OwnerClass, AUnitPas, Detail) do
       begin
-        if F = '' then Continue;
+        if F = '' then
+        begin
+          Detail:= Format('a class in the ancestor chain of %s has no source file in the index', [AInst.OwnerClass]);
+          Break;
+        end;
         Dfm:= TPath.ChangeExtension(F, '.dfm');
-        if SamePath(Dfm, ADfmPath) or not TFile.Exists(Dfm) then Continue;
-        if not DfmDeclaresComponent(DfmTextOf(Dfm), AInst.Name, DeclClass) then Continue;
+        if SamePath(Dfm, ADfmPath) then Continue;
+        { N3: an ancestor whose .dfm cannot be READ as text stops the walk --
+          it may declare the component, so crediting a farther ancestor would
+          be a guess }
+        if not TryAncestorDfmText(Dfm, Text, Why) then
+        begin
+          Detail:= Format('%s %s', [ExtractFileName(Dfm), Why]);
+          Break;
+        end;
+        if not DfmDeclaresComponent(Text, AInst.Name, DeclClass) then Continue;
         AInst.AncestorUnit:= TPath.GetFileNameWithoutExtension(F);
         if SameText(DeclClass, AInst.TypeName) then
         begin
@@ -1284,8 +1364,11 @@ var
             [AInst.AncestorUnit, DeclClass]);
         end
         else
-          AInst.Reason:= Format('declared in %s as %s, neither the From nor the To type -- not converted',
-            [AInst.AncestorUnit, DeclClass]);
+        begin
+          AInst.AncestorState:= ANCESTOR_MISMATCHED;
+          AInst.Reason:= Format('declared in %s as %s, neither %s nor %s -- not converted',
+            [AInst.AncestorUnit, DeclClass, AInst.TypeName, AInst.ToType]);
+        end;
         Exit;
       end;
     if Detail = '' then Detail:= Format('no ancestor .dfm of %s declares %s', [AInst.OwnerClass, AInst.Name]);
@@ -1295,8 +1378,9 @@ var
 begin
   Result:= nil;
   if (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
-  Result  := ScanInheritedConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules);
-  DfmTexts:=TDictionary<string, string>.Create;
+  for var Found: TInheritedInstance in ScanInheritedConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules) do
+    if InOnlyList(Found.Name, AOnly) then Result:= Result + [Found];
+  DfmTexts:= TDictionary<string, string>.Create;
   try
     for I:= 0 to High(Result) do Resolve(Result[I]);
   finally

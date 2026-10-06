@@ -33,6 +33,14 @@
         with no unit rules.
     R26 still applies: a #unuse of the unit declaring the From type of an
         inherited instance refuses the unit (nothing written).
+    N3  an ancestor whose .dfm is MISSING or BINARY stops the walk: outside,
+        the reason names the file -- a farther ancestor is never credited.
+        A declaring object of a third type is `mismatched` (ancestor_unit set).
+    Also: an access site on a skipped inherited receiver stays byte-unchanged
+        while a converted own instance's site is rewritten; --only filters
+        inherited[]; names match case-insensitively (component, type, root
+        class); the NEAREST `object` declarer wins; an inherited child under a
+        new `object` parent still resolves through the root class.
     N5  info --json: capabilities.inherited_instances is the JSON literal true.
 
   Fixture written fresh under a $PID scratch folder and indexed into a scratch
@@ -101,8 +109,10 @@ type
   TDstB = class(TComponent)
   private
     FCaption: string;
+    FTitle: string;
   published
     property Caption: string read FCaption write FCaption;
+    property Title: string read FTitle write FTitle;
   end;
 
 implementation
@@ -329,6 +339,323 @@ Write-Ascii (P 'unuse.rules') @'
 #link Caption <- Caption
 '@
 
+# ---- (a) access sites: a SKIPPED inherited receiver vs a converted own one ---
+Write-Ascii (P 'AccForm.pas') @'
+unit AccForm;
+
+interface
+
+uses
+  Classes, Forms, LibA, MidForm;
+
+type
+  TAccForm = class(TMidForm)
+    accOwn: TSrcA;
+    procedure Touch;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TAccForm.Touch;
+begin
+  btnA.Caption := 'x';
+  accOwn.Caption := 'y';
+end;
+
+end.
+'@
+Write-Ascii (P 'AccForm.dfm') @'
+inherited AccForm: TAccForm
+  inherited btnA: TSrcA
+    Caption = 'acc'
+  end
+  object accOwn: TSrcA
+    Caption = 'o'
+  end
+end
+'@
+Write-Ascii (P 'rename.rules') @'
+#convert LibA.TSrcA -> LibB.TDstB, LibB
+#link Title <- Caption
+'@
+
+# ---- (c) case variants: the component name, its type and the root class -----
+Write-Ascii (P 'CaseForm.pas') @'
+unit CaseForm;
+
+interface
+
+uses
+  Classes, Forms, LibA, MidForm;
+
+type
+  TCaseForm = class(TMidForm)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'CaseForm.dfm') @'
+inherited CaseForm: TCASEFORM
+  inherited BTNA: tsrca
+    Caption = 'case'
+  end
+end
+'@
+
+# ---- (d) declared with `object` at TWO levels: the NEAREST wins --------------
+Write-Ascii (P 'Dup2Base.pas') @'
+unit Dup2Base;
+
+interface
+
+uses
+  Classes, Forms, LibB;
+
+type
+  TDup2Base = class(TForm)
+    dup: TDstB;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'Dup2Base.dfm') @'
+object Dup2Base: TDup2Base
+  object dup: TDstB
+    Caption = 'far'
+  end
+end
+'@
+Write-Ascii (P 'Dup2Mid.pas') @'
+unit Dup2Mid;
+
+interface
+
+uses
+  Classes, Forms, LibA, Dup2Base;
+
+type
+  TDup2Mid = class(TDup2Base)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'Dup2Mid.dfm') @'
+inherited Dup2Mid: TDup2Mid
+  object dup: TSrcA
+    Caption = 'near'
+  end
+end
+'@
+Write-Ascii (P 'Dup2Child.pas') @'
+unit Dup2Child;
+
+interface
+
+uses
+  Classes, Forms, LibA, Dup2Mid;
+
+type
+  TDup2Child = class(TDup2Mid)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'Dup2Child.dfm') @'
+inherited Dup2Child: TDup2Child
+  inherited dup: TSrcA
+    Caption = 'c'
+  end
+end
+'@
+
+# ---- (e) an inherited child re-parented under a NEW (object) parent ----------
+Write-Ascii (P 'EForm.pas') @'
+unit EForm;
+
+interface
+
+uses
+  Classes, Forms, LibA, BaseForm;
+
+type
+  TEForm = class(TBaseForm)
+    pnlNew: TBox;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'EForm.dfm') @'
+inherited EForm: TEForm
+  object pnlNew: TBox
+    inherited btnA: TSrcA
+      Caption = 'e'
+    end
+  end
+end
+'@
+
+# ---- (f) an ancestor in the chain with NO .dfm, and one with a BINARY .dfm ---
+Write-Ascii (P 'NoDfmMid.pas') @'
+unit NoDfmMid;
+
+interface
+
+uses
+  Classes, Forms, LibA, BaseForm;
+
+type
+  TNoDfmMid = class(TBaseForm)
+  end;
+
+implementation
+
+end.
+'@
+Write-Ascii (P 'NoDfmChild.pas') @'
+unit NoDfmChild;
+
+interface
+
+uses
+  Classes, Forms, LibA, NoDfmMid;
+
+type
+  TNoDfmChild = class(TNoDfmMid)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'NoDfmChild.dfm') @'
+inherited NoDfmChild: TNoDfmChild
+  inherited btnA: TSrcA
+    Caption = 'nd'
+  end
+end
+'@
+Write-Ascii (P 'BinMid.pas') @'
+unit BinMid;
+
+interface
+
+uses
+  Classes, Forms, LibA, BaseForm;
+
+type
+  TBinMid = class(TBaseForm)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+# A compiled (binary) .dfm: the TPF0 filer signature, then streamed bytes.
+[IO.File]::WriteAllBytes((P 'BinMid.dfm'), [byte[]](0x54,0x50,0x46,0x30,0x07,0x54,0x42,0x69,0x6E,0x4D,0x69,0x64,0x00,0x00))
+Write-Ascii (P 'BinChild.pas') @'
+unit BinChild;
+
+interface
+
+uses
+  Classes, Forms, LibA, BinMid;
+
+type
+  TBinChild = class(TBinMid)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'BinChild.dfm') @'
+inherited BinChild: TBinChild
+  inherited btnA: TSrcA
+    Caption = 'bd'
+  end
+end
+'@
+
+# ---- (g) the declaring ancestor has a THIRD type: mismatched -----------------
+Write-Ascii (P 'MisBase.pas') @'
+unit MisBase;
+
+interface
+
+uses
+  Classes, Forms, LibA;
+
+type
+  TMisBase = class(TForm)
+    mis: TBox;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'MisBase.dfm') @'
+object MisBase: TMisBase
+  object mis: TBox
+  end
+end
+'@
+Write-Ascii (P 'MisChild.pas') @'
+unit MisChild;
+
+interface
+
+uses
+  Classes, Forms, LibA, MisBase;
+
+type
+  TMisChild = class(TMisBase)
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'MisChild.dfm') @'
+inherited MisChild: TMisChild
+  inherited mis: TSrcA
+    Caption = 'm'
+  end
+end
+'@
+
 $db = P 'fx.sqlite'
 $idx = & $Exe index $WorkDir --db $db 2>&1
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
@@ -430,6 +757,69 @@ Check 'E1 #unuse LibA with an inherited TSrcA left: refused, R26 text, file unto
   (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and `
    ($j.reason -eq '#unuse LibA would leave 1 unconverted instance(s) of TSrcA -- unit not changed') -and `
    ((Get-FileHash (P 'OutChild.pas')).Hash -eq $hp) -and (@($j.inherited).Count -eq 1)) $r.Out
+
+# ---- (a) access sites ----------------------------------------------------------
+$r = ApplyTo 'AccForm.pas' 'rename.rules' @('--apply', '--no-backup')
+$acc = [IO.File]::ReadAllText((P 'AccForm.pas'))
+Check 'G1 --apply on AccForm exits 0' ($r.Code -eq 0) $r.Out
+Check 'G2 positive control: the converted own instance''s access site IS rewritten (accOwn.Title)' `
+  (($acc -match "accOwn\.Title := 'y';") -and -not ($acc -match 'accOwn\.Caption')) $acc
+Check 'G3 the SKIPPED inherited receiver''s access site is byte-unchanged (btnA.Caption)' `
+  ($acc -match "(?m)^  btnA\.Caption := 'x';\r?$") $acc
+
+# ---- (b) --only naming an inherited instance ---------------------------------
+$h0 = (Get-FileHash (P 'ChildForm.pas')).Hash
+$r = ApplyTo 'ChildForm.pas' 'plain.rules' @('--only', 'btnA', '--format', 'json')
+$j = Json $r.Out
+Check 'H1 --only btnA: exit 0, ok, nothing converted, no edits' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and (@($j.converted).Count -eq 0) -and ($j.edits_count -eq 0)) $r.Out
+Check 'H2 --only btnA: inherited[] reports btnA alone' `
+  (($null -ne $j) -and (@($j.inherited).Count -eq 1) -and (@($j.inherited)[0].name -eq 'btnA')) ($j.inherited | ConvertTo-Json -Compress)
+Check 'H3 the dry run wrote nothing' ((Get-FileHash (P 'ChildForm.pas')).Hash -eq $h0)
+
+# ---- (c) case variants ---------------------------------------------------------
+$r = ApplyTo 'CaseForm.pas' 'plain.rules' @('--format', 'json')
+$j = Json $r.Out
+$c = if ($j) { @($j.inherited) } else { @() }
+Check 'I1 BTNA: tsrca under root TCASEFORM: one entry, BaseForm, unconverted' `
+  (($r.Code -eq 0) -and ($c.Count -eq 1) -and ($c[0].name -eq 'BTNA') -and ($c[0].type -eq 'tsrca') -and `
+   ($c[0].ancestor_unit -eq 'BaseForm') -and ($c[0].ancestor_state -eq 'unconverted')) $r.Out
+
+# ---- (d) nearest `object` declarer wins ---------------------------------------
+$r = ApplyTo 'Dup2Child.pas' 'plain.rules' @('--format', 'json')
+$j = Json $r.Out
+$c = if ($j) { @($j.inherited) } else { @() }
+Check 'J1 dup declared in Dup2Mid (TSrcA) and Dup2Base (TDstB): the NEAREST, Dup2Mid, unconverted' `
+  (($c.Count -eq 1) -and ($c[0].ancestor_unit -eq 'Dup2Mid') -and ($c[0].ancestor_state -eq 'unconverted')) $r.Out
+
+# ---- (e) inherited child under a new parent -----------------------------------
+$r = ApplyTo 'EForm.pas' 'plain.rules' @('--format', 'json')
+$j = Json $r.Out
+$c = if ($j) { @($j.inherited) } else { @() }
+Check 'K1 btnA re-parented under object pnlNew: still resolved through the root class, BaseForm, unconverted' `
+  (($r.Code -eq 0) -and ($c.Count -eq 1) -and ($c[0].ancestor_unit -eq 'BaseForm') -and ($c[0].ancestor_state -eq 'unconverted')) $r.Out
+
+# ---- (f) an ancestor with no readable text .dfm stops the walk -----------------
+$r = ApplyTo 'NoDfmChild.pas' 'plain.rules' @('--format', 'json')
+$j = Json $r.Out
+$c = if ($j) { @($j.inherited) } else { @() }
+Check 'L1 NoDfmMid has no .dfm: outside, ancestor_unit "", reason names NoDfmMid.dfm and "missing" -- BaseForm is NOT credited' `
+  (($c.Count -eq 1) -and ($c[0].ancestor_state -eq 'outside') -and ($c[0].ancestor_unit -eq '') -and `
+   ($c[0].reason -match 'NoDfmMid\.dfm') -and ($c[0].reason -match 'missing')) $r.Out
+$r = ApplyTo 'BinChild.pas' 'plain.rules' @('--format', 'json')
+$j = Json $r.Out
+$c = if ($j) { @($j.inherited) } else { @() }
+Check 'L2 BinMid.dfm is binary: outside, ancestor_unit "", reason names BinMid.dfm and "binary"' `
+  (($c.Count -eq 1) -and ($c[0].ancestor_state -eq 'outside') -and ($c[0].ancestor_unit -eq '') -and `
+   ($c[0].reason -match 'BinMid\.dfm') -and ($c[0].reason -match 'binary')) $r.Out
+
+# ---- (g) mismatched ------------------------------------------------------------
+$r = ApplyTo 'MisChild.pas' 'plain.rules' @('--format', 'json')
+$j = Json $r.Out
+$c = if ($j) { @($j.inherited) } else { @() }
+Check 'M1 MisBase declares mis as TBox: mismatched, ancestor_unit MisBase, reason names TBox' `
+  (($r.Code -eq 0) -and ($c.Count -eq 1) -and ($c[0].ancestor_state -eq 'mismatched') -and ($c[0].ancestor_unit -eq 'MisBase') -and `
+   ($c[0].reason -match 'TBox')) $r.Out
 
 # ---- N5: the capability --------------------------------------------------------
 $o = (& $Exe info --json 2>$null) -join "`n"

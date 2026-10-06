@@ -706,8 +706,13 @@ passed over. The owner is the form's root class, or the class of the nearest
 enclosing `inline` frame for a frame's children. `ancestor_state` is
 `unconverted` (that ancestor still has the From type -- convert it first),
 `converted` (it already has the To type; still skipped -- retyping an inherited
-instance is not supported yet) or `outside` (no ancestor in the `--db` declares
-it, or the chain leaves the index; `ancestor_unit` is then `""`, never guessed).
+instance is not supported yet), `mismatched` (it has a third type, named in
+`reason`; `ancestor_unit` set) or `outside` (not determinable: no ancestor in
+the `--db` declares it, the chain leaves the index, or an ancestor's `.dfm` on
+the way is missing or binary -- that STOPS the walk, since it might declare the
+component, and the reason names the file; `ancestor_unit` is then `""`, never
+guessed). The owner class and component names match case-insensitively, and
+`--only` filters `inherited[]` like the other instances.
 R26 (see *Refusals*) still counts every such instance as left unconverted. `info --json`
 advertises the behaviour as `capabilities.inherited_instances: true`; an engine
 without the key still refuses the unit.
