@@ -1480,6 +1480,69 @@ begin
   end; // try
 end; // procedure
 
+const
+  { The engine's own refusal line, verbatim (DRagLint.Refactor.TextEdit.pas:452,
+    Writeln(ErrOutput, ...)): the editor's capture appends stderr AFTER stdout,
+    so it follows the apply/1 document, before the "(loaded defaults ...)" line. }
+  HALF_DFM_LINE  = 'drag-lint: refused 74 edit(s) to C:\fix\DMREADINGS.dfm -- overlapping delete ranges (an engine defect; the file is left unchanged)';
+  HALF_OK_JSON   = '{"schema":"apply/1","mode":"apply","ok":true,"error":"","refused":false,"reason":"","rule_errors":[],"edits_count":74,' +
+    '"converted":["tblReadings: TTable -> TFDTable"],"todos":[],"reemit_notes":[],"warnings":[],"items":[],"component_part":"applied"}';
+  HALF_EDITS     = 74;  // edits_count in HALF_OK_JSON, and the N of HALF_DFM_LINE
+  HALF_DEFAULTS  = '(loaded defaults from C:\Projects\.drag-lint.json)';
+  { Engine 1.25.1+ (coordinator contract, 2026-10-06): the refusal is checked before
+    any write -- exit 1, ok=false, nothing written. The text-mode line, verbatim: }
+  NEW_REFUSED_LINE = 'ERROR: refused 74 edit(s) to C:\fix\DMREADINGS.dfm -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written';
+  NEW_REFUSED_JSON = '{"schema":"apply/1","mode":"apply","ok":false,"error":"refused 74 edit(s) to C:\\fix\\DMREADINGS.dfm -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written",' +
+    '"refused":false,"reason":"","rule_errors":[],"edits_count":74,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}';
+  NEW_REFUSED_NOTE = 'engine refused the unit as an engine defect (.dfm edits refused: 74 edit(s), overlapping delete ranges) -- unit not changed, nothing written';
+
+{ The half-apply guard (2026-10-06): convert-apply reported ok=true / exit 0 while
+  its applier refused the .dfm's edit set -- only the stderr line says so. }
+procedure TestApplyHalfWritten;
+var
+  Row: TApplyRow;
+begin
+  Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DFM_LINE + sLineBreak + HALF_DEFAULTS + sLineBreak);
+  Check('half.parse.still.ok', Row.Ok and (Row.EditsCount = HALF_EDITS), Row.Error);
+  Check('half.parse.refusal.read', (Length(Row.EditRefusals) = 1) and (Row.EditRefusals[0] = HALF_DFM_LINE), string.Join(' | ', Row.EditRefusals));
+  Check('half.detected', ApplyHalfWritten(Row));
+  Check('half.note', HalfWrittenNote(Row) = 'engine left the unit half-converted (.dfm edits refused: 74 edit(s), overlapping delete ranges) -- restored from backup; engine fix pending', HalfWrittenNote(Row));
+  // The same line BEFORE the document (another capture order) reads the same.
+  Row:= ParseApplyJson(HALF_DFM_LINE + sLineBreak + HALF_OK_JSON);
+  Check('half.detected.before.document', Row.Ok and ApplyHalfWritten(Row), string.Join(' | ', Row.EditRefusals));
+  // An ordinary success: nothing refused, nothing half-written.
+  Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DEFAULTS);
+  Check('half.ordinary.success', Row.Ok and (Length(Row.EditRefusals) = 0) and not ApplyHalfWritten(Row), string.Join(' | ', Row.EditRefusals));
+  // The phrase inside an unrelated warning is not the applier's refusal line.
+  Row:= ParseApplyJson(StringReplace(HALF_OK_JSON, '"warnings":[]',
+    '"warnings":["line 12: warning: Fields: overlapping delete ranges are not a property"]', []));
+  Check('half.phrase.in.warning.no.trigger', Row.Ok and not ApplyHalfWritten(Row), string.Join(' | ', Row.EditRefusals));
+  // The applier's line carried in warnings[] (a later engine) counts, once.
+  Row:= ParseApplyJson(StringReplace(HALF_OK_JSON, '"warnings":[]',
+    '"warnings":["' + StringReplace(HALF_DFM_LINE, '\', '\\', [rfReplaceAll]) + '"]', []) + sLineBreak + HALF_DFM_LINE);
+  Check('half.in.warnings.once', ApplyHalfWritten(Row) and (Length(Row.EditRefusals) = 1), string.Join(' | ', Row.EditRefusals));
+  // A failed row is not "half-written": it fails on its own already.
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}' + sLineBreak + HALF_DFM_LINE);
+  Check('half.not.ok.is.plain.failure', (not Row.Ok) and not ApplyHalfWritten(Row));
+  // Both files refused: one part each, in order.
+  Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DFM_LINE + sLineBreak +
+    'drag-lint: refused 3 edit(s) to C:\fix\DMREADINGS.pas -- overlapping delete ranges (an engine defect; the file is left unchanged)');
+  Check('half.note.two.files', HalfWrittenNote(Row) = 'engine left the unit half-converted (.dfm edits refused: 74 edit(s), overlapping delete ranges; ' +
+    '.pas edits refused: 3 edit(s), overlapping delete ranges) -- restored from backup; engine fix pending', HalfWrittenNote(Row));
+
+  // --- engine 1.25.1+: the plan is checked BEFORE any write; ok=false, exit 1, nothing written ---
+  Row:= ParseApplyJson(NEW_REFUSED_JSON + sLineBreak + HALF_DEFAULTS);
+  Check('editset.new.read.from.error', (not Row.Ok) and (not Row.Refused) and (Row.RuleErrorCount = 0) and ApplyEditSetRefused(Row) and not ApplyHalfWritten(Row),
+    string.Join(' | ', Row.EditRefusals));
+  Check('editset.new.note', EditSetRefusedNote(Row) = NEW_REFUSED_NOTE, EditSetRefusedNote(Row));
+  // The same line on stderr (text-mode prefix 'ERROR: ') after a generic document.
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"","rule_errors":[]}' + sLineBreak + NEW_REFUSED_LINE);
+  Check('editset.new.read.from.stderr', ApplyEditSetRefused(Row) and (EditSetRefusedNote(Row) = NEW_REFUSED_NOTE), string.Join(' | ', Row.EditRefusals));
+  // An ordinary failure is not an edit-set refusal.
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}');
+  Check('editset.plain.failure.no', not ApplyEditSetRefused(Row));
+end; // procedure
+
 { ConvRules.ConvertRun -- every decision the Convert tab makes before or after
   an engine call. The tab and the runner only execute what these return. }
 procedure TestConvertRun;
@@ -1601,6 +1664,7 @@ begin
   Check('apply.refused.false.is.failure', not Row.Refused);
   Check('status.text.refused', ConvertStatusText(csRefused) = 'refused -- not changed');
   Check('status.text.restore.failed.unchanged', ConvertStatusText(csRestoreFailed) = 'FAILED -- NOT restored');
+  TestApplyHalfWritten;
 
   // --- ExpandSources: .pas / folder / .dpr, deduped case-insensitively ---
   Dir:= TPath.Combine(TPath.GetTempPath, 'convrun-' + TPath.GetGUIDFileName);
@@ -1810,6 +1874,89 @@ var
       Describe(LRows) + Format(' | calls=%d', [LCalls]));
   end;
 
+  // The half-apply guard (2026-10-06): ok=true + exit 0, the .pas written, the .dfm's
+  // edits refused -- the unit must be restored, not kept as converted.
+  procedure CheckHalfWritten;
+  const
+    ORIG_DFM = 'object DmReadings: TDmReadings' + sLineBreak + '  object tblReadings: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  var
+    LPas : string;
+    LDfm : string;
+    LRows: TArray<TConvertRow>;
+    LSum : TRunTally;
+    // Writes the .pas only, as the engine does, and answers with the captured shape.
+    LHalf: TApplyFn;
+  begin
+    LHalf:= function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        TFile.WriteAllText(AUnitPas, 'CONVERTED-PAS-ONLY', TEncoding.ASCII);
+        AJson := HALF_OK_JSON + sLineBreak + HALF_DFM_LINE + sLineBreak + HALF_DEFAULTS;
+        Result:= 0;
+      end;
+    // --- the only book half-writes: FAILED -- restored, .pas and .dfm as they were ---
+    LPas:= TPath.Combine(Dir, 'H1.pas');
+    LDfm:= ChangeFileExt(LPas, '.dfm');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(LDfm, ORIG_DFM, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas], ['A.rules'], LHalf, Index, nil, nil);
+    Check('runner.half.failed.restored', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored)
+      and (TFile.ReadAllText(LPas) = ORIG) and (TFile.ReadAllText(LDfm) = ORIG_DFM), Describe(LRows) + ' | pas=' + TFile.ReadAllText(LPas));
+    Check('runner.half.note', (Length(LRows) = 1) and (Pos('engine left the unit half-converted (.dfm edits refused: 74 edit(s), overlapping delete ranges)', LRows[0].Note) > 0)
+      and (Pos('restored from backup; engine fix pending', LRows[0].Note) > 0), Describe(LRows));
+    Check('runner.half.backup.kept', (Length(LRows) = 1) and (LRows[0].Backup <> '') and TFile.Exists(LRows[0].Backup), Describe(LRows));
+    LSum:= TallyRows(LRows);
+    Check('runner.half.summary.failed', (LSum.Restored = 1) and (LSum.Converted = 0), Format('restored=%d converted=%d', [LSum.Restored, LSum.Converted]));
+
+    // --- an earlier book converted, the next half-writes: both undone ---
+    LPas:= TPath.Combine(Dir, 'H2.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas], ['A.rules', 'B.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        if not SameText(ExtractFileName(ARulesFile), 'A.rules') then
+          Exit(LHalf(AUnitPas, ARulesFile, AJson));
+        TFile.WriteAllText(AUnitPas, 'CONVERTED-A', TEncoding.ASCII);
+        AJson := OK_JSON;
+        Result:= 0;
+      end, Index, nil, nil);
+    // The unit is back to ORIG first: the .pas the half-apply wrote is gone too.
+    Check('runner.half.rolls.back', (TFile.ReadAllText(LPas) = ORIG) and (Length(LRows) = TWO_ROWS)
+      and (LRows[1].Status = csFailedRestored) and (LRows[0].Status = csRolledBack)
+      and (Pos('B.rules failed', LRows[0].Note) > 0), 'pas=' + TFile.ReadAllText(LPas) + ' | ' + Describe(LRows));
+
+    // --- an ordinary success is unchanged: converted, kept ---
+    LPas:= TPath.Combine(Dir, 'H3.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    LRows:= RunConversionUnits([LPas], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        TFile.WriteAllText(AUnitPas, 'CONVERTED-A', TEncoding.ASCII);
+        AJson := HALF_OK_JSON + sLineBreak + HALF_DEFAULTS;
+        Result:= 0;
+      end, Index, nil, nil);
+    Check('runner.half.ordinary.converted', (Length(LRows) = 1) and (LRows[0].Status = csConverted)
+      and (TFile.ReadAllText(LPas) = 'CONVERTED-A'), Describe(LRows));
+
+    // --- engine 1.25.1+: exit 1, ok=false, nothing written. A unit failure (never a
+    // book error), the note says the engine refused it as a defect; the next unit runs ---
+    LPas:= TPath.Combine(Dir, 'H4.pas');
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    var LPas5: string:= TPath.Combine(Dir, 'H5.pas');
+    TFile.WriteAllText(LPas5, ORIG, TEncoding.ASCII);
+    var LCalls5: Integer:= 0;
+    LRows:= RunConversionUnits([LPas, LPas5], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Inc(LCalls5);
+        AJson := NEW_REFUSED_JSON + sLineBreak + NEW_REFUSED_LINE + sLineBreak + HALF_DEFAULTS;
+        Result:= 1;
+      end, Index, nil, nil);
+    Check('runner.editset.new.unit.failure', (Length(LRows) = TWO_ROWS) and (LRows[0].Status = csFailedRestored)
+      and (LRows[1].Status = csFailedRestored) and (LCalls5 = TWO_ROWS) and (TFile.ReadAllText(LPas) = ORIG),
+      Describe(LRows) + Format(' | calls=%d', [LCalls5]));
+    Check('runner.editset.new.note', (Length(LRows) = TWO_ROWS) and (LRows[0].Note = NEW_REFUSED_NOTE), Describe(LRows));
+  end;
+
 begin
   Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-faults-' + TPath.GetGUIDFileName);
   TDirectory.CreateDirectory(Dir);
@@ -1834,6 +1981,7 @@ begin
     Check('runner.rollback.progress.order', Seen = 'A.rules=rolled back;B.rules=FAILED -- restored;', Seen);
 
     CheckRefusals;
+    CheckHalfWritten;
 
     // --- the backup cannot be taken: the unit is skipped, nothing left behind ---
     PasL:= TPath.Combine(Dir, 'L.pas');
