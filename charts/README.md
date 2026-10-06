@@ -42,6 +42,33 @@ pwsh -NoProfile -File $ar -Question <id> -Target <t> -Project <x.dproj>   (or -I
 * Give the target the way the verb takes it: `who-writes` wants `Blueprint4.ViewModel.TBlueprint_ViewModel.FSuppressEvents`, not `TBlueprint_ViewModel.FSuppressEvents`.
 * `-ResolveOnly` prints the indexes it would read; `-DbPath` / `-ServerDbPath` / `-SqlDbPath` override resolution. Tests: `src\Test-AskReport.ps1` (~70 s measured 2026-09-28, not in the gate). Several of its cases read the clones under `scratch\db` and need them FRESH (Ask-Report checks freshness first and answers exit 3 once a source file they index changes -- re-take the clones); `AR-STALE` needs the DL clone to stay stale.
 
+## Where the engine and Graphviz are found (R2, 2026-10-06)
+
+Every chart script (`Ask-Report.ps1`, `New-ExampleGallery.ps1`, every `Emit-*.ps1`) takes `-Engine` and,
+for the emitters, `-Dot` with an EMPTY default; `Resolve-DragLintEngine` / `Resolve-GraphvizDot` in
+`src\Emit-Common.ps1` take the first that exists:
+
+| | engine (`drag-lint.exe`) | Graphviz `dot.exe` |
+|---|---|---|
+| 1 | `-Engine <path>` | `-Dot <path>` |
+| 2 | `$env:DRAGLINT_ENGINE` | `$env:DRAGLINT_DOT` |
+| 3 | `%APPDATA%\drag-lint\settings.json` key `engine` | the same file, key `dot` |
+| 4 | `<app>\bin\drag-lint.exe` (installed layout) | `<app>\graphviz\bin\dot.exe` |
+| 5 | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` (the shared engine) | `dot.exe` on PATH |
+| 6 | `<repo>\third_party\dll-win64\drag-lint.exe` (a clone's own build) | `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe` |
+
+`<app>` / `<repo>` is the folder above `charts\`. A missing, unreadable or keyless `settings.json` is
+skipped. An explicit `-Engine` / `-Dot` that does not exist is an error (a typo never silently picks
+another file); when nothing exists the error names every place looked at, in order. The shared engine
+sits BEFORE the repo-relative one on purpose: a worktree's own `third_party\dll-win64` can hold an older
+build (this one held 1.16.0-alpha against a deployed 1.22.0-alpha), and taking it would give every chart
+an older parse. dot is resolved when a chart is drawn, so `round-trip` still delivers its text (with
+`NOTE the chart could not be drawn`) when no dot is found. Tests: `src\Test-PathResolver.ps1` (gate E-R2).
+
+`charts\report-pairs.json` is the owner's own pairing (absolute corpus paths). Without it no pairs are
+configured: the questions that read a SERVER or SQL index stop with exit 2 and say to copy
+`charts\report-pairs.example.json` to it (or to pass `-ServerDbPath` / `-SqlDbPath`).
+
 ## Graphviz -- present and verified 2026-09-22
 
 * `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe` -- version 16.1.0

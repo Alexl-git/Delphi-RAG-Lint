@@ -76,15 +76,15 @@ param(
   [int]       $Cap        = 12,       # rows shown per cluster; the rest disclosed
   [int]       $MaxCallers = 150,      # caller walk cap; reported when hit
   [hashtable] $SourceOverride,
-  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $Engine     = '',
+  [string] $Dot        = '',
   [string] $FontMono   = 'Consolas',
   [string] $FontSans   = 'Segoe UI'
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
-
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 $DbPath = Get-CloneDb $DbPath
 
 $PAL = @{

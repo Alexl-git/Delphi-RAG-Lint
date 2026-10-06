@@ -27,7 +27,8 @@ param(
   [string] $DbDir   = (Join-Path $PSScriptRoot '..\scratch\db'),
   [string] $OutRoot = (Join-Path $PSScriptRoot '..\docs\examples'),
   [string[]] $Only,                      # regenerate just these questions
-  [switch] $KeepGoing                    # report failures instead of stopping
+  [switch] $KeepGoing,                   # report failures instead of stopping
+  [string] $Engine = ''                  # '' = Resolve-DragLintEngine (Emit-Common.ps1), as every emitter finds it
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,7 +53,8 @@ foreach ($d in @($CLI, $SRV, $DC, $DL, $MT, $SQL)) {
 # final-review I3: the page states the engine and the clone stamps it READ now -- the engine's own --version and the
 # CLIENT clone's schema_meta fingerprints -- never a version written here by hand (one went stale at 1.18.0-alpha
 # while the deployed engine moved to 1.19.1-alpha)
-$EngineExe = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+. (Join-Path $PSScriptRoot 'Emit-Common.ps1')   # functions only; Resolve-DragLintEngine
+$EngineExe = Resolve-DragLintEngine $Engine
 $engVer = @(& $EngineExe --version 2>$null | Where-Object { $_ -match '^drag-lint \S+$' } | Select-Object -First 1)
 $engVer = $(if ($engVer.Count) { ($engVer[0] -replace '^drag-lint\s+', '').Trim() } else { 'unknown (--version printed no version line)' })
 $meta = @{}

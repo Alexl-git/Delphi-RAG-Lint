@@ -67,11 +67,13 @@ param(
   [switch] $Plain,
   [int]    $MaxRows = 80,
   [string] $PairsFile = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\report-pairs.json')),
-  [string] $Engine    = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+  # '' = found by Resolve-DragLintEngine (Emit-Common.ps1): DRAGLINT_ENGINE, settings.json, the installed or shared engine
+  [string] $Engine    = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $bundler = Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1'
+. (Join-Path $PSScriptRoot 'Emit-Common.ps1')   # functions only; Resolve-DragLintEngine
 . (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
 $answer = New-Object System.Collections.Generic.List[string]
 
@@ -120,6 +122,9 @@ function Get-ReindexCommand([string] $Db) {
 
 $exitCode = 0
 try {
+  # ---- the engine (R2): a missing one is a setup stop that says where it looked
+  try { $Engine = Resolve-DragLintEngine $Engine } catch { Stop-Ask 2 $_.Exception.Message }
+
   # ---- the question -------------------------------------------------------------------
   $valid = @((Get-Command $bundler).Parameters['Question'].Attributes |
              Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] } |
@@ -171,7 +176,8 @@ try {
         $orPass = "or pass $(if ($needServer) { '-ServerDbPath and ' })-SqlDbPath"
         if (-not $pairsFound) {
           Stop-Ask 2 ("$Question also reads $(if ($needServer) { 'the SERVER index and ' })the SQL-script index, and " +
-                      "$([IO.Path]::GetFileName($PairsFile)) not found at $PairsFile -- restore it (charts\report-pairs.json), $orPass")
+                      "$([IO.Path]::GetFileName($PairsFile)) not found at $PairsFile, so no pairs are configured -- copy " +
+                      "charts\report-pairs.example.json to that path and fill in client, server and sql (each checked with resolve-dbs), $orPass")
         }
         Stop-Ask 2 ("$Question also reads $(if ($needServer) { 'the SERVER index and ' })the SQL-script index, and $PairsFile " +
                     "has no entry for $DbPath -- add one (client, server, sql; check each with resolve-dbs), $orPass")

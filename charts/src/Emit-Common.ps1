@@ -50,6 +50,93 @@ function New-RowHref([string] $File, [int] $Line) {
   'draglint://open?file=' + [uri]::EscapeDataString($File) + '&amp;line=' + $Line
 }
 
+# ---- where the engine and dot are (R2: an installed copy is not C:\Projects) --
+
+# Every chart script declares `-Engine` / `-Dot` with an EMPTY default and asks
+# these two for the file. Each returns the first candidate that EXISTS, in order:
+#
+#   engine: -Engine -> $env:DRAGLINT_ENGINE -> settings.json "engine"
+#           -> <app>\bin\drag-lint.exe (installed layout)
+#           -> C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe (the shared engine)
+#           -> <repo>\third_party\dll-win64\drag-lint.exe (a clone's own build)
+#   dot:    -Dot -> $env:DRAGLINT_DOT -> settings.json "dot"
+#           -> <app>\graphviz\bin\dot.exe -> dot.exe on PATH
+#           -> C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe
+#
+# <app> and <repo> are both the folder above charts\ (-ChartsRoot, default the
+# folder above this file). settings.json is %APPDATA%\drag-lint\settings.json,
+# written by the installer; a missing, unreadable or keyless file is skipped,
+# never an error.
+#
+# WHY THE SHARED ENGINE COMES BEFORE THE REPO-RELATIVE ONE. In the main repo the
+# two are the same file. In a WORKTREE the repo-relative path is the worktree's
+# own, gitignored build -- and archify-ir held a 1.16.0-alpha there on
+# 2026-10-06 while the deployed engine was 1.22.0-alpha. Taking it would give
+# every chart on this machine an older parse: smaller, confident answers, no
+# error. So the repo-relative copy is only reached where the shared one is absent.
+#
+# An explicit -Engine / -Dot that does not exist THROWS rather than falling
+# through: a typo must not silently pick another engine. When nothing exists the
+# message names every place looked at, in order.
+function Get-DragLintSettingsPath {
+  if ($env:APPDATA) { Join-Path $env:APPDATA 'drag-lint\settings.json' } else { '' }
+}
+# [value, why-skipped] for one settings.json key; the value is '' when skipped
+function Get-DragLintSetting([string] $SettingsPath, [string] $Key) {
+  if (-not $SettingsPath) { return @('', 'no %APPDATA%') }
+  if (-not (Test-Path -LiteralPath $SettingsPath -PathType Leaf)) { return @('', 'file not found') }
+  try { $j = [IO.File]::ReadAllText($SettingsPath) | ConvertFrom-Json -ErrorAction Stop } catch { return @('', 'unreadable') }
+  if ($j -isnot [pscustomobject] -or -not $j.PSObject.Properties[$Key] -or -not "$($j.$Key)") { return @('', "no `"$Key`" key") }
+  @([string]$j.$Key, '')
+}
+# the shared walk: $Steps is an ordered list of @(label, path-or-'', why-empty)
+function Resolve-ChartTool([string] $What, [string] $ParamName, [string] $Explicit, [object[]] $Steps, [string] $Hint) {
+  if ($Explicit) {
+    if (Test-Path -LiteralPath $Explicit -PathType Leaf) { return $Explicit }
+    throw "$What not found: -$ParamName $Explicit does not exist"
+  }
+  $looked = New-Object System.Collections.Generic.List[string]
+  $looked.Add("-$ParamName (not given)")
+  foreach ($s in $Steps) {
+    if ($s[1] -and (Test-Path -LiteralPath $s[1] -PathType Leaf)) { return [IO.Path]::GetFullPath($s[1]) }
+    $looked.Add($(if ($s[1]) { "$($s[0]) $($s[1]) (does not exist)" } else { "$($s[0]) ($($s[2]))" }))
+  }
+  throw ("$What not found. Looked, in order: " + (($looked | ForEach-Object -Begin { $n = 0 } -Process { $n++; "$n) $_" }) -join '; ') + ". $Hint")
+}
+
+# Resolve-DragLintEngine -- the drag-lint engine the chart scripts run (order in the section header above).
+function Resolve-DragLintEngine([string] $Explicit,
+                                [string] $SettingsPath  = (Get-DragLintSettingsPath),
+                                [string] $ChartsRoot    = (Split-Path -Parent $PSScriptRoot),
+                                [string] $SharedDefault = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe') {
+  $set = Get-DragLintSetting $SettingsPath 'engine'
+  $app = [IO.Path]::GetFullPath((Join-Path $ChartsRoot '..'))
+  Resolve-ChartTool 'drag-lint engine' 'Engine' $Explicit @(
+    , @('$env:DRAGLINT_ENGINE', $env:DRAGLINT_ENGINE, 'not set')
+    , @("$(if ($SettingsPath) { "settings $SettingsPath" } else { 'settings.json' }) `"engine`"", $set[0], $set[1])
+    , @('installed', (Join-Path $app 'bin\drag-lint.exe'), '')
+    , @('shared', $SharedDefault, '')
+    , @('repo', (Join-Path $app 'third_party\dll-win64\drag-lint.exe'), '')
+  ) "Pass -Engine, set DRAGLINT_ENGINE, or add `"engine`" to $(if ($SettingsPath) { $SettingsPath } else { 'settings.json' })."
+}
+
+# Resolve-GraphvizDot -- the Graphviz dot.exe the chart scripts run (order in the section header above).
+function Resolve-GraphvizDot([string] $Explicit,
+                             [string] $SettingsPath  = (Get-DragLintSettingsPath),
+                             [string] $ChartsRoot    = (Split-Path -Parent $PSScriptRoot),
+                             [string] $SharedDefault = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe') {
+  $set = Get-DragLintSetting $SettingsPath 'dot'
+  $app = [IO.Path]::GetFullPath((Join-Path $ChartsRoot '..'))
+  $onPath = @(Get-Command 'dot.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1)
+  Resolve-ChartTool 'Graphviz dot' 'Dot' $Explicit @(
+    , @('$env:DRAGLINT_DOT', $env:DRAGLINT_DOT, 'not set')
+    , @("$(if ($SettingsPath) { "settings $SettingsPath" } else { 'settings.json' }) `"dot`"", $set[0], $set[1])
+    , @('installed', (Join-Path $app 'graphviz\bin\dot.exe'), '')
+    , @('dot.exe on PATH', $(if ($onPath.Count) { $onPath[0].Source } else { '' }), 'not on PATH')
+    , @('shared', $SharedDefault, '')
+  ) "Pass -Dot, set DRAGLINT_DOT, or add `"dot`" to $(if ($SettingsPath) { $SettingsPath } else { 'settings.json' })."
+}
+
 # ---- database safety ---------------------------------------------------------
 
 # Resolve a database path and REFUSE a live corpus DB.
@@ -2667,7 +2754,10 @@ function Invoke-DotRun([string] $DotFile, [string] $Svg, [string] $Plain, [strin
     }
   }
   foreach ($p in @($Svg, $Plain, $Png, $Pdf)) { if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force } }
-  $msgs = @(& $Dot -Tsvg -o $Svg -Tplain -o $Plain -Tpng -Gdpi=110 -o $Png -Tpdf -o $Pdf $DotFile 2>&1 |
+  # R2: resolved HERE, not at the top of each emitter, so a missing dot fails the dot step only -- round-trip
+  # catches that and still delivers its text with ChartError (owner answer 3). $Dot is the caller's -Dot ('' = the chain).
+  $dotExe = Resolve-GraphvizDot $Dot
+  $msgs = @(& $dotExe -Tsvg -o $Svg -Tplain -o $Plain -Tpng -Gdpi=110 -o $Png -Tpdf -o $Pdf $DotFile 2>&1 |
             Where-Object { $_ -notmatch 'Pango-WARNING' -and ([string]$_).Trim() -ne '' } |
             ForEach-Object { [string]$_ })
   $dotExit = $LASTEXITCODE

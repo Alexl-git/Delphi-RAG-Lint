@@ -13,7 +13,9 @@
     AR-ENV       DRAGLINT_CHARTS_ALLOW_LIVE_DB is restored -- to its old value, and to absent
     AR-RT        round-trip on the clones (overrides): stdout is BUNDLE, then the trace from `TRACE `
     AR-STALE     a stale index (the DL clone) stops with exit 3 before anything runs
-    AR-NOPAIRSFILE  a pairs file that does not exist is named as missing, not as "has no entry"
+    AR-NOPAIRSFILE  a pairs file that does not exist is named as missing, not as "has no entry",
+                 and the message says how to configure pairs (report-pairs.example.json, R2)
+    AR-NOENGINE  an -Engine that does not exist: exit 2, stderr names it (R2)
     AR-JSON      a note line starting with '[' before the engine's JSON does not break resolution
     AR-INDEX     every answer names the index(es) that answered, after BUNDLE
     AR-TARGET    a chart's own focus row is marked TARGET, not listed like a result
@@ -133,6 +135,14 @@ Step 'AR-NOPAIRSFILE' {
   $r = Invoke-Ask @('-Question', 'round-trip', '-Target', 'frmBlueprint4.dxDBGrid1FtrsVNum', '-Project', $PROJ, '-PairsFile', $missing)
   Chk 'AR-NOPAIRSFILE' $r.Exit 2
   if ($r.Err -notlike "*missing-pairs.json not found at $missing*" -or $r.Err -like '*has no entry*') { Fail 'AR-NOPAIRSFILE' "stderr: $($r.Err)" }
+  # R2: an installed copy ships only report-pairs.example.json -- the message says how to configure pairs from it
+  if ($r.Err -notlike '*no pairs are configured*report-pairs.example.json*') { Fail 'AR-NOPAIRSFILE-HOW' "stderr does not say how to configure pairs: $($r.Err)" }
+  if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot '..\report-pairs.example.json'))) { Fail 'AR-NOPAIRSFILE-HOW' 'charts\report-pairs.example.json is missing' }
+}
+Step 'AR-NOENGINE' {
+  # R2: an -Engine that does not exist is a setup stop (exit 2) that names it -- never a silent switch to another engine
+  $r = Invoke-Ask @('-Question', 'who-writes', '-Target', 'X.Y', '-Project', $PROJ, '-Engine', (Join-Path $OutDir 'no-such-engine.exe'), '-ResolveOnly')
+  Chk 'AR-NOENGINE' "$($r.Exit)|$($r.Err -like '*-Engine*no-such-engine.exe does not exist*')" '2|True'
 }
 Step 'AR-JSON' {
   # a stand-in engine whose stdout starts with a '[note]' line, then the JSON document

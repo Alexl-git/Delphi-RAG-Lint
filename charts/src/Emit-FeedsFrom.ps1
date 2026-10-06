@@ -55,15 +55,15 @@ param(
   [string]    $OutDir,
   [int]       $Cap = 12,                  # candidate / re-pointed rows shown; the rest disclosed
   [hashtable] $SourceOverride,
-  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $Engine     = '',
+  [string] $Dot        = '',
   [string] $FontMono   = 'Consolas',
   [string] $FontSans   = 'Segoe UI'
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
-
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 $DbPath    = Get-CloneDb $DbPath
 $SqlDbPath = Get-CloneDb $SqlDbPath
 

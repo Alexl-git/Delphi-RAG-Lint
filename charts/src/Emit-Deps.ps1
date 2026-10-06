@@ -30,8 +30,8 @@ param(
   [string] $OutDir,
   [switch] $IncludeExternal,
   [int]    $MaxRows   = 40,
-  [string] $Engine    = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot       = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $Engine    = '',
+  [string] $Dot       = '',
   [string] $FontMono  = 'Consolas',
   [string] $FontSans  = 'Segoe UI'
 )
@@ -43,7 +43,7 @@ $ErrorActionPreference = 'Stop'
 # local ones still win, so nothing about this emitter's behaviour changes; the
 # only thing taken from Common is Get-CloneDb.
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
-
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 # Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
 $DbPath = Get-CloneDb $DbPath
 

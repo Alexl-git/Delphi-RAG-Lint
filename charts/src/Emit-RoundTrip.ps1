@@ -53,12 +53,13 @@ param(
   [string]    $BoundaryPattern = 'Pipes.%|uPipe%|uBroadcast%',
   # the chart's size caps (Trace.Chart.ps1): Also / Rows / Nodes, each optional
   [hashtable] $ChartCaps = @{},
-  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe'
+  [string] $Engine     = '',
+  [string] $Dot        = ''
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 . (Join-Path $PSScriptRoot 'Trace.FormA.ps1')
 . (Join-Path $PSScriptRoot 'Trace.Walk.ps1')
 . (Join-Path $PSScriptRoot 'Trace.Chart.ps1')

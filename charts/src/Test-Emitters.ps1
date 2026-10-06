@@ -166,6 +166,38 @@ Step 'E-DEP' {
   if ((Dot $d) -match 'more .* not shown') { Fail 'A-DEP-TOTALS' 'a "more exist" row fires on a unit under the cap' }
 }
 
+# R2(a), 2026-10-06: -Engine / -Dot default to '' and are found by Resolve-DragLintEngine /
+# Resolve-GraphvizDot (Emit-Common). E-R2 forces every step of both chains on a fake layout;
+# E-R2-DEPS is the behavioural half: the same deps chart with -Engine OMITTED and
+# DRAGLINT_ENGINE pointing at the engine gives the same .dot as E-DEP, and DRAGLINT_ENGINE
+# pointing at a stand-in proves the variable is what the emitter ran (the stand-in leaves a
+# marker). The environment is restored exactly, absent staying absent.
+Note 'R2 path resolver ...'
+Step 'E-R2' {
+  $script:r2 = @(& "$SRC\Test-PathResolver.ps1" -OutDir $OutDir -Quiet)
+  foreach ($x in $r2) { Fail 'A-R2-RESOLVER' $x }
+}
+Step 'E-R2-DEPS' {
+  $prevEng = [Environment]::GetEnvironmentVariable('DRAGLINT_ENGINE', 'Process')
+  $r2Dir = Join-Path $OutDir 'r2-deps'
+  $marker = Join-Path $r2Dir 'stand-in-ran.txt'
+  $standIn = Join-Path $r2Dir 'stand-in.cmd'
+  New-Item -ItemType Directory -Force $r2Dir | Out-Null
+  [IO.File]::WriteAllText($standIn, "@echo off`r`necho ran>`"$marker`"`r`nexit /b 1`r`n", (New-Object Text.ASCIIEncoding))
+  try {
+    $env:DRAGLINT_ENGINE = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+    $script:dEnv = & "$SRC\Emit-Deps.ps1" -Unit 'Blueprint4.ViewModel' -DbPath $DbCli -OutDir $r2Dir
+    Chk 'A-R2-DEPS' "$($dEnv.UsedBy)/$($dEnv.Uses)/$($dEnv.Expected)" "$($d.UsedBy)/$($d.Uses)/$($d.Expected)"
+    if ((Dot $dEnv) -cne (Dot $d)) { Fail 'A-R2-DEPS' 'the .dot with -Engine omitted (DRAGLINT_ENGINE set) differs from E-DEP''s' }
+    $env:DRAGLINT_ENGINE = $standIn
+    try { $null = & "$SRC\Emit-Deps.ps1" -Unit 'Blueprint4.ViewModel' -DbPath $DbCli -OutDir (Join-Path $r2Dir 'stand-in') 6>$null } catch { }
+    if (-not (Test-Path -LiteralPath $marker)) { Fail 'A-R2-DEPS-ENV' 'with -Engine omitted the emitter did not run DRAGLINT_ENGINE' }
+  } finally {
+    if ($null -eq $prevEng) { Remove-Item Env:\DRAGLINT_ENGINE -ErrorAction SilentlyContinue } else { $env:DRAGLINT_ENGINE = $prevEng }
+  }
+  Chk 'A-R2-ENV-RESTORED' "$([Environment]::GetEnvironmentVariable('DRAGLINT_ENGINE', 'Process'))" "$prevEng"
+}
+
 # R24 (2026-10-05): deps kept LIMIT $MaxRows (40) with no "more exist" row, and
 # filtered the external units AFTER the limit -- so uMain (91 uses entries, 46 of
 # them project units; measured on the CLIENT clone) drew fewer than 40 of its 46
