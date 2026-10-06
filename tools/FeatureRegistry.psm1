@@ -23,7 +23,7 @@ $ErrorActionPreference = 'Stop'
 # The caption/verb harvest is SHARED with run_docs_sync_guard.ps1 (Task 2 adds
 # the file). Dot-sourced once at module load, from the module's own repo, so
 # Get-CaptionKey / Get-LiveMenuCaptions / Get-HelpVerbList / Test-CaptionKeyMatch
-# are one definition for both guards. Missing until Task 2 lands: tolerated.
+# are one definition for both guards. Get-LiveSurface re-loads it if absent.
 $script:HarvestLibPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'tests\autotest\lib\DocsSurfaceHarvest.ps1'
 if (Test-Path -LiteralPath $script:HarvestLibPath) { . $script:HarvestLibPath }
 
@@ -435,4 +435,75 @@ function Test-GroupsAndTeams {
   return [string[]]$p.ToArray()
 }
 
-Export-ModuleMember -Function Get-RegistryPaths, ConvertTo-OrderedObject, ConvertTo-CanonicalJson, Get-EntryKeyOrder, ConvertTo-CanonicalEntry, Get-EntryList, Test-AsciiCrlfFile, Read-FeatureEntry, Write-FeatureEntry, Test-EntryCanonicalBytes, Get-RegistryContext, Get-NearestCandidates, Test-FeatureEntry, Test-GroupsAndTeams
+# ---------------------------------------------------------------------------
+# The live surface (spec 3, 6.1): one object, every harvest non-empty or throw
+# ---------------------------------------------------------------------------
+function Get-LiveSurface {
+  param([Parameter(Mandatory)]$Paths)
+  . $Paths.SubMapLib
+  if (-not (Get-Command Get-CaptionKey -ErrorAction SilentlyContinue)) { . $script:HarvestLibPath }
+  if (-not (Test-Path -LiteralPath $Paths.Exe)) { throw "live surface: engine exe not found: $($Paths.Exe) (full path; a bare 'drag-lint' resolves off PATH to a stale build)" }
+  # stdout only: --version and --help put '(loaded defaults from ...)' on stderr.
+  $helpText = (& $Paths.Exe --help 2>$null | Out-String)
+  $helpVerbs = @(Get-HelpVerbList -HelpText $helpText)
+  if ($helpVerbs.Count -le 20) { throw "live surface: --help yielded $($helpVerbs.Count) verb(s); expected > 20 -- the harvest is broken, not the CLI" }
+  $cliSrc = Get-Content -LiteralPath $Paths.CliPas -Raw
+  $dispatch = @([regex]::Matches($cliSrc, "Args\.Command\s*=\s*'([a-z][a-z0-9-]*)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+  if ($dispatch.Count -le 20) { throw "live surface: dispatch scan yielded $($dispatch.Count) verb(s); expected > 20" }
+  $subMap = Get-CliVerbSubcommandMap -CliPath $Paths.CliPas
+  $captions = Get-LiveMenuCaptions -Repo $Paths.Repo
+  if ($captions.Count -lt 40) { throw "live surface: $($captions.Count) caption(s) harvested; expected >= 40" }
+  $captionKeys = @($captions | ForEach-Object { Get-CaptionKey -S $_ } | Where-Object { $_ })
+  $aboutSrc = Get-Content -LiteralPath (Join-Path $Paths.Repo 'src\delphi-plugin\DragLint.Plugin.AboutForm.pas') -Raw
+  $aboutButtons = @([regex]::Matches($aboutSrc, "Add(?:Proc)?Button\(\s*'([^']+)'") | ForEach-Object { $_.Groups[1].Value.Replace('&&', '&').Trim() } | Sort-Object -Unique)
+  $mcpSrc = Get-Content -LiteralPath $Paths.McpServer -Raw
+  $mcpTools = @([regex]::Matches($mcpSrc, "ToolDescriptor\(\s*'([a-z_]+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+  $mcpDispatch = @([regex]::Matches($mcpSrc, "ToolName\s*=\s*'([a-z_]+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+  if ($mcpTools.Count -eq 0) { throw 'live surface: 0 MCP tools harvested from HandleToolsList (ToolDescriptor calls)' }
+  $catText = (& $Paths.Exe rules --json 2>$null | Out-String)
+  $cat = $catText | ConvertFrom-Json
+  if ([int]$cat.summary.total -le 0) { throw 'live surface: rules --json reports total 0' }
+  $rt = Get-Content -LiteralPath $Paths.ReportText -Raw
+  $questions = New-Object 'System.Collections.Generic.List[object]'
+  foreach ($m in [regex]::Matches($rt, "\(Id:\s*'([a-z-]+)'\s*;\s*Caption:\s*'([^']+)'\s*;\s*Kind:\s*(rtk\w+)\s*\)")) {
+    $questions.Add([pscustomobject]@{ Id = $m.Groups[1].Value; Caption = $m.Groups[2].Value.Replace('&&', '&'); Kind = $m.Groups[3].Value })
+  }
+  if ($questions.Count -eq 0) { throw 'live surface: 0 REPORT_QUESTIONS rows harvested' }
+  $qc = [regex]::Match($rt, 'REPORT_QUESTION_COUNT\s*=\s*(\d+)')
+  if (-not $qc.Success) { throw 'live surface: REPORT_QUESTION_COUNT not found' }
+  $groupCaptions = @{}
+  foreach ($m in [regex]::Matches($rt, "\b(rtk\w+)\s*:\s*Result\s*:=\s*'([^']+)'")) { $groupCaptions[$m.Groups[1].Value] = $m.Groups[2].Value.Replace('&&', '&') }
+  # ReportGroupCaption's case has an 'else' arm (rtkName's header today): it
+  # captions every Kind the explicit arms do not name.
+  $ge = [regex]::Match($rt, "(?s)function ReportGroupCaption\b(?:(?!\b(?:function|procedure)\b).)*?\belse\s+Result\s*:=\s*'([^']+)'\s*;\s*end;")
+  if ($ge.Success) {
+    foreach ($q in $questions) { if (-not $groupCaptions.ContainsKey($q.Kind)) { $groupCaptions[$q.Kind] = $ge.Groups[1].Value.Replace('&&', '&') } }
+  }
+  $validateSet = @((Get-Command $Paths.ChartBundler).Parameters['Question'].Attributes |
+                   Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] } |
+                   ForEach-Object { $_.ValidValues })
+  if ($validateSet.Count -eq 0) { throw 'live surface: New-DiagramArtifact.ps1 -Question has no ValidateSet' }
+  $emitters = @(Get-ChildItem -LiteralPath $Paths.ChartsDir -Filter 'Emit-*.ps1' -File | Where-Object { $_.Name -ne 'Emit-Common.ps1' } | ForEach-Object { $_.Name } | Sort-Object)
+  $packText = Get-Content -LiteralPath $Paths.PackScript -Raw
+  $pm = [regex]::Match($packText, "foreach \(\`$need in '([^)]+)'\)")
+  $packExes = if ($pm.Success) { @($pm.Groups[1].Value -split "'\s*,\s*'" | ForEach-Object { $_.Trim("'") }) } else { @() }
+  if ($packExes.Count -eq 0) { throw 'live surface: pack-lint-release.ps1 payload exe list not found' }
+  $core = Get-Content -LiteralPath $Paths.CoreModel -Raw
+  $schemaPas = Get-Content -LiteralPath $Paths.SchemaPas -Raw
+  $vers = [pscustomobject]@{
+    Product   = [regex]::Match($core, "DRAGLINT_VERSION\s*=\s*'([^']+)'").Groups[1].Value
+    Extractor = [regex]::Match($core, "DRAGLINT_EXTRACTOR_VERSION\s*=\s*'([^']+)'").Groups[1].Value
+    Resolver  = [regex]::Match($core, "DRAGLINT_RESOLVER_VERSION\s*=\s*'([^']+)'").Groups[1].Value
+    Schema    = [regex]::Match($schemaPas, 'SCHEMA_VERSION\s*=\s*(\d+)').Groups[1].Value
+  }
+  if (-not $vers.Product) { throw 'live surface: DRAGLINT_VERSION not found in DRagLint.Core.Model.pas' }
+  return [pscustomobject]@{
+    HelpText = $helpText; HelpVerbs = $helpVerbs; DispatchVerbs = $dispatch; SubMap = $subMap
+    Captions = $captions; CaptionKeys = $captionKeys; AboutButtons = $aboutButtons
+    McpTools = $mcpTools; McpDispatch = $mcpDispatch; RuleCatalog = $cat
+    ReportQuestions = $questions; ReportQuestionCount = [int]$qc.Groups[1].Value; GroupCaptions = $groupCaptions
+    ChartValidateSet = $validateSet; EmitterFiles = $emitters; PackExes = $packExes; Versions = $vers
+  }
+}
+
+Export-ModuleMember -Function Get-RegistryPaths, ConvertTo-OrderedObject, ConvertTo-CanonicalJson, Get-EntryKeyOrder, ConvertTo-CanonicalEntry, Get-EntryList, Test-AsciiCrlfFile, Read-FeatureEntry, Write-FeatureEntry, Test-EntryCanonicalBytes, Get-RegistryContext, Get-NearestCandidates, Test-FeatureEntry, Test-GroupsAndTeams, Get-LiveSurface
