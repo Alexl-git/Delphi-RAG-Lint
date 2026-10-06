@@ -160,7 +160,8 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 function ConvertStatusText(AStatus: TConvertStatus): string;
 
 /// <summary>PURE: the units ARows converted (C8 R4: an ancestor converted EARLIER IN THE
-/// SAME RUN converts its descendants' inherited instances and code uses too).</summary>
+/// SAME RUN converts its descendants' code uses too, so the editor-side code-use note
+/// omits it; the engine's inherited[] is never filtered by this).</summary>
 /// <param name="ARows">A run's rows so far.</param>
 /// <returns>Unit names (file name without extension) of the csConverted rows, first-seen
 /// order, once each.</returns>
@@ -177,15 +178,15 @@ function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;
 function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>): Boolean;
 
 /// <summary>PURE: the run report's E10 lines for one row: one per inherited instance
-/// the converted unit left, minus those whose ancestor converted earlier in the run
-/// (R4). Same 8 tab-separated columns as every report row: Book, Unit,
+/// the engine says the converted unit left, UNFILTERED (controller ruling M4: the
+/// engine reports after the runner's reindex and is authoritative; R4 is the code-use
+/// note's alone). Same 8 tab-separated columns as every report row: Book, Unit,
 /// REPORT_STATUS_INHERITED_LEFT, four empty cells, InheritedReportNote.</summary>
 /// <param name="ARow">A run row.</param>
-/// <param name="AEarlier">The run's rows before it.</param>
 /// <param name="AInheritedSupported">The engine reported inherited_instances when the
 /// run started; False = no lines (an older engine's output is not this contract).</param>
 /// <returns>[] unless ARow is csConverted and AInheritedSupported.</returns>
-function InheritedReportLines(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; AInheritedSupported: Boolean): TArray<string>;
+function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported: Boolean): TArray<string>;
 
 implementation
 
@@ -234,12 +235,12 @@ begin
       Result:= False;
 end;
 
-function InheritedReportLines(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; AInheritedSupported: Boolean): TArray<string>;
+function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported: Boolean): TArray<string>;
 begin
   Result:= nil;
   if not AInheritedSupported or (ARow.Status <> csConverted) then
     Exit;
-  for var LLeft: TInheritedLeft in InheritedLeftOmitting(ARow.Apply.InheritedLeft, UnitsConvertedIn(AEarlier)) do
+  for var LLeft: TInheritedLeft in ARow.Apply.InheritedLeft do
     Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft)])];
 end;
 
@@ -496,8 +497,9 @@ var
     // older engine's output from being read as this contract.
     if AInheritedSupported then
     begin
-      // R4: an ancestor this run already converted is not "left" (Rows = earlier units only).
-      var LLeft: string:= InheritedLeftNote(Row.Apply.InheritedLeft, UnitsConvertedIn(Rows));
+      // Unfiltered (ruling M4): the engine answered after this unit's reindex, so its
+      // inherited[] already knows which ancestors this run converted.
+      var LLeft: string:= InheritedLeftNote(Row.Apply.InheritedLeft);
       if LLeft <> '' then
         Row.Note:= Row.Note + '; ' + LLeft;
     end;

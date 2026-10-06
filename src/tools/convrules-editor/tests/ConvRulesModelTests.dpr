@@ -8607,7 +8607,7 @@ end;
   whose .dfm never overrides tblFtrs). Same chain rule as E2a; no double count with a
   .dfm block; own fields, unknown names and converted fields are not uses; a walk
   that cannot decide makes the unit unknown, never outside. }
-procedure TestInheritanceCodeUses;  // dl:ok cyclomatic-complexity@520f -- REVIEWED 2026-10-06 straight-line assertion list: the count is the `and` chains inside Check conditions, there is no branching control flow to extract
+procedure TestInheritanceCodeUses;  // dl:ok cyclomatic-complexity@520f -- REVIEWED 2026-10-06 an assertion list plus a one-loop lookup helper (nested function V); the count is mostly the and-chains in Check conditions, and splitting the list would only scatter one fixture
 const
   BASE_PAS = 'fx\Base.pas';
   MID_PAS  = 'fx\Mid.pas';
@@ -9190,6 +9190,12 @@ begin
   Check('tab.gate.ask.error.only', (InheritanceGate(False, [FreshUnit('a\A.pas')], 'Fix.rules: locked', Q) = igAsk)
     and (Q = 'Could not check inherited instances for the listed units -- convert anyway?'), Q);
   Check('tab.gate.stop.text', InheritanceGateStopText('boom') = 'Convert cancelled: inherited instances could not be checked -- boom', InheritanceGateStopText('boom'));
+  // M2: a drop under a run, the analysis or one of its prompts is refused (OLE delivers
+  // drops inside a MessageDlg's modal loop); a run outranks a check.
+  Check('tab.add.refused.running', SourcesAddRefusal(True, False) = 'A conversion is running -- sources cannot be added until it finishes.', SourcesAddRefusal(True, False));
+  Check('tab.add.refused.running.wins', SourcesAddRefusal(True, True) = SourcesAddRefusal(True, False), SourcesAddRefusal(True, True));
+  Check('tab.add.refused.checking', SourcesAddRefusal(False, True) = 'Inherited instances are being checked -- add the sources again when it finishes.', SourcesAddRefusal(False, True));
+  Check('tab.add.allowed', SourcesAddRefusal(False, False) = '', SourcesAddRefusal(False, False));
 
   Row:= Default(TConvertRow);
   Row.UnitPas:= 'x\Desc.pas';
@@ -9209,27 +9215,27 @@ begin
   Row.Book   := 'B.rules';
   Row.Status := csConverted;
   Row.Apply  := ParseApplyJson(INH_JSON);
-  Lines:= InheritedReportLines(Row, [], True);
+  Lines:= InheritedReportLines(Row, True);
   Cols := if Length(Lines) > 0 then Lines[0].Split([#9]) else nil;
   LShape:= (Length(Lines) = Length(Row.Apply.InheritedLeft)) and (Length(Cols) = REPORT_COLS);
   Check('tab.report.lines.shape', LShape, Format('%d lines, %d cols', [Length(Lines), Length(Cols)]));
   if LShape then
     Check('tab.report.lines.text', (Cols[0] = 'B.rules') and (Cols[1] = 'x\Desc.pas') and (Cols[2] = REPORT_STATUS_INHERITED_LEFT) and (Cols[2] = 'inherited left')
       and (Cols[NOTE_COL] = InheritedReportNote(Row.Apply.InheritedLeft[0])), Lines[0]);
-  Earlier:= Default(TConvertRow);
-  Earlier.UnitPas:= 'x\PathToData.pas';
-  Earlier.Status := csConverted;
-  Lines:= InheritedReportLines(Row, [Earlier], True);
-  Check('tab.report.lines.r4', (Length(Lines) = 1) and (Pos('LibForms', Lines[0]) > 0), string.Join(' | ', Lines));
-  Check('tab.report.lines.gated', Length(InheritedReportLines(Row, [], False)) = 0);
+  // Controller ruling M4: the engine's inherited[] is authoritative (reported after the
+  // runner's reindex), so nothing filters it -- not even an ancestor converted earlier
+  // in the run (that case is tab.r4.runner.engine.unfiltered).
+  Check('tab.report.lines.engine.unfiltered', (Length(Lines) = Length(Row.Apply.InheritedLeft)) and (Length(Lines) > 0)
+    and (Pos('PathToData', Lines[0]) > 0), string.Join(' | ', Lines));
+  Check('tab.report.lines.gated', Length(InheritedReportLines(Row, False)) = 0);
   Row.Status:= csRolledBack;
-  Check('tab.report.lines.converted.only', Length(InheritedReportLines(Row, [], True)) = 0);
+  Check('tab.report.lines.converted.only', Length(InheritedReportLines(Row, True)) = 0);
 end;
 
 { C8 Task 6, ruling R4: an ancestor converted EARLIER IN THE SAME RUN converted its
-  descendants' inherited instances and code uses too, so neither the editor's code-use
-  note nor the engine's instance note counts them -- in the pure routines and in the
-  runner's converted-row note. }
+  descendants' code uses too, so the editor's code-use note omits it. The engine's own
+  inherited[] is NOT filtered (controller ruling M4: it is reported after the runner's
+  reindex and is authoritative) -- neither in the note nor in the runner's row. }
 procedure TestInheritanceTabR4;
 const
   INH_JSON  = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],'
@@ -9272,10 +9278,7 @@ begin
   Item.AncestorUnit := 'LibForms';
   Item.AncestorState:= 'outside';
   Items:= Items + [Item];
-  Check('tab.r4.left.omits.converted', InheritedLeftNote(Items, ['pathtodata']) = NOTE_LIB, InheritedLeftNote(Items, ['pathtodata']));
-  Check('tab.r4.left.none.converted', InheritedLeftNote(Items, ['Other']) = InheritedLeftNote(Items));
-  Check('tab.r4.left.omitting', (Length(InheritedLeftOmitting(Items, ['PATHTODATA'])) = 1) and (InheritedLeftOmitting(Items, ['PATHTODATA'])[0].AncestorUnit = 'LibForms')
-    and (Length(InheritedLeftOmitting(Items, nil)) = N_ROWS));
+  Check('tab.r4.left.engine.all', InheritedLeftNote(Items) = '1 inherited instance(s) left: ancestor PathToData not converted; ' + NOTE_LIB, InheritedLeftNote(Items));
 
   CRows:= nil;
   CRow:= Default(TConvertRow);
@@ -9307,7 +9310,7 @@ begin
         Result:= 0;
       end, Index, nil, nil, True);
     LShape:= (Length(CRows) = N_ROWS) and (CRows[1].Status = csConverted);
-    Check('tab.r4.runner.omits.converted.ancestor', LShape and CRows[1].Note.EndsWith('; ' + NOTE_LIB) and (Pos('PathToData', CRows[1].Note) = 0),
+    Check('tab.r4.runner.engine.unfiltered', LShape and CRows[1].Note.EndsWith('; ' + NOTE_LIB) and (Pos('ancestor PathToData not converted', CRows[1].Note) > 0),
       if Length(CRows) = N_ROWS then CRows[1].Note else IntToStr(Length(CRows)));
     CRows:= RunConversionUnits([TPath.Combine(Dir, 'Desc.pas')], ['A.rules'],
       function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
@@ -9530,7 +9533,7 @@ end;
   measured DMTEST shape: the leaf's tblFtrs is declared two levels up (Base), and
   the middle unit does not mention it; Mid re-opens tblOps; qryLib is declared by
   no project unit (the chain leaves the index at TDataModule -- outside). }
-procedure TestInheritanceWalk;  // dl:ok cyclomatic-complexity@cedf -- REVIEWED 2026-10-06 straight-line assertion list: the count is the `and` chains inside Check conditions, there is no branching control flow to extract
+procedure TestInheritanceWalk;  // dl:ok cyclomatic-complexity@cedf -- REVIEWED 2026-10-06 an assertion list plus a one-loop lookup helper (nested function V); the count is mostly the and-chains in Check conditions, and splitting the list would only scatter one fixture
 const
   BASE_PAS = 'fx\Base.pas';
   MID_PAS  = 'fx\Mid.pas';

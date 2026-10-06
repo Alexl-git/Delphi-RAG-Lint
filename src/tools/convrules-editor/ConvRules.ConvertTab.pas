@@ -14,6 +14,7 @@ uses
   System.SysUtils
   , System.Classes
   , System.Types
+  , System.UITypes // TMsgDlgType: AskBlockingDrops's signature; also MessageDlg's inline expansion, mrYes
   , System.Generics.Collections
   , Winapi.Windows // TOwnerDrawState / odSelected: SourcesDrawItem's signature
   , Vcl.Controls
@@ -65,6 +66,11 @@ type
     /// (the main form's wrapper around RunWithProgressDialog); may be nil = the call
     /// runs inline on the UI thread, with no window and no cancel.</summary>
     RunLongCall   : TLongCallRunner;
+    /// <summary>Called on the UI thread after the tab's own analysis reindexed the
+    /// project (the stale retry, through FEngineProbe); may be nil. The host drops what
+    /// it cached from the old index -- the main adapter's class resolutions -- as it
+    /// does when a run ends.</summary>
+    ProjectReindexed: TProc;
   end;
 
   /// <summary>The Convert tab: a checklist of rule books, a list of source
@@ -77,7 +83,8 @@ type
   /// worker while Analyze runs. That holds only because the runner (RunLongCall,
   /// RunWithProgressDialog) is MODAL -- the UI takes no input that could reach the
   /// probe until the worker has finished -- and because a drop, which OLE can still
-  /// deliver, is refused while FAnalyzing. A non-modal runner would break it.
+  /// deliver, is refused while FAnalyzing (and while FPrompting, see SourcesAddRefusal).
+  /// A non-modal runner would break it.
   /// Cancel is honoured between units (never mid-unit). The host must not
   /// close while Running is True: destroying the tab mid-run only raises the
   /// cancel flag -- the worker then reads freed memory for its cancel poll and
@@ -105,6 +112,7 @@ type
       FInheritError   : string;             // '' or why some unit could not be checked (status line)
       FAnalyzing      : Boolean;            // an analysis is running behind the progress window
       FAnalysisCancelled: Boolean;          // the last Analyze ended with ENGINE_OUTCOME_CANCELLED
+      FPrompting      : Boolean;            // a C8 prompt (E6 offer, gate, E7) is up: drops are refused
       FLockable       : TArray<TControl>;   // disabled while a run is in progress
       FTopPanel       : TPanel;
       FBottomPanel    : TPanel;
@@ -220,6 +228,13 @@ type
       /// <summary>Replaces the source list's items with AList, in order.</summary>
       /// <param name="AList">.pas paths.</param>
       procedure SetSources(const AList: TArray<string>);
+      /// <summary>MessageDlg with FPrompting set for its lifetime: a drop OLE delivers
+      /// inside the dialog's modal loop is then refused (SourcesAddRefusal), so the list
+      /// the prompt was built from is still the list its answer acts on.</summary>
+      /// <param name="AText">The question.</param>
+      /// <param name="AType">The dialog's icon.</param>
+      /// <returns>The MessageDlg result.</returns>
+      function AskBlockingDrops(const AText: string; AType: TMsgDlgType): Integer;
     public
       /// <summary>Builds the tab's controls; nothing is listed until RefreshBooks.</summary>
       /// <param name="AOwner">Owner (the main form).</param>
@@ -252,7 +267,6 @@ implementation
 uses
   System.IOUtils
   , System.StrUtils
-  , System.UITypes // MessageDlg's inline expansion, mrYes
   , Vcl.Dialogs
   , Vcl.Graphics
   , ConvRules.InheritanceEngine
@@ -641,16 +655,12 @@ var
   Added: TArray<string>;
 begin
   // The job holds its own copy of the units, but a list that changes under a
-  // running conversion misreports what ran (drops arrive whatever is enabled).
-  if FRunning then
+  // running conversion misreports what ran (drops arrive whatever is enabled); a drop
+  // can also arrive while the C8 check holds the progress window or one of its prompts.
+  var LRefusal: string:= SourcesAddRefusal(FRunning, FAnalyzing or FPrompting);
+  if LRefusal <> '' then
   begin
-    FHost.SetStatus('A conversion is running -- sources cannot be added until it finishes.', True);
-    Exit;
-  end;
-  // A drop can arrive while the inherited-instance check holds the progress window.
-  if FAnalyzing then
-  begin
-    FHost.SetStatus('Inherited instances are being checked -- add the sources again when it finishes.', True);
+    FHost.SetStatus(LRefusal, True);
     Exit;
   end;
   Added:= ExpandSources(APaths, Errs);
@@ -757,9 +767,11 @@ var
   LWork   : TStreamingWork;
   LText   : string;
   LCode   : Integer;
+  LReindexed: Boolean;
 begin
   Result:= True;
   FAnalysisCancelled:= False;
+  LReindexed:= False;
   if Length(APaths) = 0 then
     Exit;
   LPairs:= APairs;
@@ -806,6 +818,8 @@ begin
             else
             begin
               // The editor's OWN project (ProjectFileForDb), as the runner reindexes it.
+              // Even a failed reindex may have rewritten part of the DB.
+              LReindexed:= True;
               Result:= FEngineProbe.IndexProject(LProject, LDb, LOut) = 0;
               AError:= if Result then '' else Copy(Trim(LOut), 1, PROBLEM_HEAD);
             end;
@@ -838,6 +852,10 @@ begin
       end; // try
     finally
       FAnalyzing:= False;
+      // The main form's adapter cached class resolutions from the old index (C6 clears
+      // them after a run for the same reason). Read only here, after the modal wait.
+      if LReindexed and Assigned(FHost.ProjectReindexed) then
+        FHost.ProjectReindexed();
     end; // try
   end;
   for var LPath: string in APaths do
@@ -900,6 +918,16 @@ begin
   end; // try
 end;
 
+function TConvertTab.AskBlockingDrops(const AText: string; AType: TMsgDlgType): Integer;
+begin
+  FPrompting:= True;
+  try
+    Result:= MessageDlg(AText, AType, [mbYes, mbNo], 0);
+  finally
+    FPrompting:= False;
+  end; // try
+end;
+
 procedure TConvertTab.OfferAncestors(const AAdded: TArray<string>; const APairs: TArray<TTypePair>);
 var
   LChain  : TArray<string>;
@@ -918,7 +946,7 @@ begin
     // Mirrored on the status line: a TMessageForm's text is a TLabel with no window,
     // so the GUI driver reads the status bar while the dialog is up.
     FHost.SetStatus(LPrompt, False);
-    if MessageDlg(LPrompt, mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+    if AskBlockingDrops(LPrompt, mtConfirmation) <> mrYes then
       Continue;
     SetSources(InsertAncestors(LList, LPath, LChain));
     FHost.FeedHarvest(LMissing);
@@ -1062,7 +1090,7 @@ begin
     begin
       // Mirrored with the reason (a TMessageForm's text has no window); asked once, never a refusal (E9).
       FHost.SetStatus(LQuestion + ' Reason: ' + FInheritError, True);
-      if MessageDlg(LQuestion, mtWarning, [mbYes, mbNo], 0) <> mrYes then
+      if AskBlockingDrops(LQuestion, mtWarning) <> mrYes then
       begin
         FHost.SetStatus(InheritanceGateStopText(FInheritError), True);
         Exit(False);
@@ -1080,7 +1108,7 @@ begin
   if Length(LWarn) > 0 then
   begin
     FHost.SetStatus(string.Join(' ', LWarn), False); // mirrored for the GUI driver: a TMessageForm's text has no window
-    if MessageDlg(OrderWarningText(LWarn), mtWarning, [mbYes, mbNo], 0) <> mrYes then
+    if AskBlockingDrops(OrderWarningText(LWarn), mtWarning) <> mrYes then
     begin
       FHost.SetStatus(ORDER_CANCELLED, False);
       Exit(False);
@@ -1097,7 +1125,6 @@ var
   Err  : string;
   LExe : string;
 begin
-  Units:= FSources.Items.ToStringArray;
   // The open book on disk is what runs: make the user decide about unsaved edits first.
   var LOpen: string:= FHost.GetOpenBook();
   for var E: TBookEntry in FEntries do
@@ -1107,6 +1134,8 @@ begin
         Exit;
       Break;
     end;
+  // Read AFTER that prompt: OLE delivers drops inside its modal loop too.
+  Units:= FSources.Items.ToStringArray;
   if not FEngineProbe.ListIndexedFiles([FHost.GetProjectDb()], Idx, Err) then
   begin
     FIndexKnown:= False;
@@ -1130,23 +1159,24 @@ begin
     FHost.SetStatus('Convert refused: ' + string.Join(' ', Pre.Problems), True);
     Exit;
   end;
+  Job.ProjectDb  := FHost.GetProjectDb();
+  Job.ProjectFile:= FHost.GetProjectFile();
+  // Every unit and every book is followed by `index --project` on the DB's OWN
+  // project file: without it each apply would "fail" and every unit would be
+  // restored; another project's file would re-scope the DB. Checked BEFORE the C8
+  // checks: a refused run must not first ask its questions (or pay its analysis).
+  if (Job.ProjectFile = '') or not TFile.Exists(Job.ProjectFile) then
+  begin
+    FHost.SetStatus('Convert refused: ' + Format(NO_PROJECT_FILE_FMT, [Job.ProjectDb, if Job.ProjectFile = '' then NO_PROJECT_FILE_GUESS else Job.ProjectFile]) + '.', True);
+    Exit;
+  end;
   // C8: re-check, gate, refusal notes and the E7 order warning (after Preflight).
   if not InheritanceChecksPass(Units) then
     Exit;
   Job.Books      := Pre.Runnable;
   Job.Units      := Units;
   Job.Dbs        := FHost.GetDbs();
-  Job.ProjectDb  := FHost.GetProjectDb();
-  Job.ProjectFile:= FHost.GetProjectFile();
   Job.InheritedSupported:= FInheritedOk;
-  // Every unit and every book is followed by `index --project` on the DB's OWN
-  // project file: without it each apply would "fail" and every unit would be
-  // restored; another project's file would re-scope the DB.
-  if (Job.ProjectFile = '') or not TFile.Exists(Job.ProjectFile) then
-  begin
-    FHost.SetStatus('Convert refused: ' + Format(NO_PROJECT_FILE_FMT, [Job.ProjectDb, if Job.ProjectFile = '' then NO_PROJECT_FILE_GUESS else Job.ProjectFile]) + '.', True);
-    Exit;
-  end;
   LExe:= FHost.ExePath;
   // Captured now: the user may open or start another book mid-run, which moves
   // the live rules folder; the report belongs beside the books that ran.
@@ -1240,8 +1270,8 @@ begin
         if LRan then IntToStr(LRow.Apply.EditsCount) else '',
         if LRan then IntToStr(Length(LRow.Apply.Remainder)) else '',
         LRow.Backup, LRow.BackupDfm, LRow.Note]));
-      // C8 E10: one line per instance the converted unit left (R4 applied).
-      for var LLine: string in InheritedReportLines(LRow, Copy(FRunRows, 0, I), FRunInheritedOk) do
+      // C8 E10: one line per instance the engine says the converted unit left (unfiltered, ruling M4).
+      for var LLine: string in InheritedReportLines(LRow, FRunInheritedOk) do
         LLines.Add(LLine);
     end;
     for var LUnit: string in ANotReached do

@@ -169,27 +169,31 @@ function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles
 function ParseApplyJson(const AJson: string): TApplyRow;
 
 /// <summary>PURE: the converted row's note for what was left (spec E10).</summary>
-/// <param name="AItems">TApplyRow.InheritedLeft.</param>
-/// <param name="AConvertedUnits">Unit names (no path, no extension) converted EARLIER IN
-/// THE SAME RUN: an item whose ancestor_unit is one of them is not counted (spec E11 /
-/// N2a: that run converts it).</param>
+/// <param name="AItems">TApplyRow.InheritedLeft -- the engine's own inherited[],
+/// reported after the runner's reindex and shown UNFILTERED (controller ruling M4: the
+/// R4 omission of ancestors converted earlier in the run is the editor-side code-use
+/// note's alone).</param>
 /// <returns>'' for none; else per (ancestor, state) in first-seen order 'N inherited
 /// instance(s) left: ancestor &lt;U&gt; not converted' ('not in the index' for outside,
 /// the raw state otherwise), joined '; '.</returns>
-function InheritedLeftNote(const AItems: TArray<TInheritedLeft>; const AConvertedUnits: TArray<string> = nil): string;
+function InheritedLeftNote(const AItems: TArray<TInheritedLeft>): string;
 
 /// <summary>PURE: one run-report note for one left instance.</summary>
 /// <param name="AItem">The instance.</param>
 /// <returns>'&lt;name&gt;: &lt;type&gt; line N -- ancestor &lt;U&gt; &lt;state&gt; (&lt;reason&gt;)'.</returns>
 function InheritedReportNote(const AItem: TInheritedLeft): string;
 
-/// <summary>PURE: AItems without those whose ancestor_unit converted EARLIER IN THE SAME
-/// RUN (spec E11 / N2a: that run converts them too; ruling R4).</summary>
-/// <param name="AItems">TApplyRow.InheritedLeft.</param>
-/// <param name="AConvertedUnits">Unit names converted earlier in the run
-/// (ConvertRunner.UnitsConvertedIn); matched case-insensitively.</param>
-/// <returns>The kept items, AItems order.</returns>
-function InheritedLeftOmitting(const AItems: TArray<TInheritedLeft>; const AConvertedUnits: TArray<string>): TArray<TInheritedLeft>;
+/// <summary>PURE: why the Convert tab must not add sources right now, or '' when it may.</summary>
+/// <param name="ARunning">A conversion run is in progress.</param>
+/// <param name="AChecking">The inherited-instance check is busy: its analysis runs, or
+/// one of its prompts is up (the E6 offer, the Convert gate question, the E7 order
+/// warning).</param>
+/// <returns>The status-line refusal text; '' = the sources may be added.</returns>
+/// <remarks>OLE delivers a drop inside ANY modal loop, a MessageDlg included. A prompt
+/// was built from the list as it was when it opened, and its answer rewrites that list
+/// (E6) or runs it (the gate, E7), so a unit added under it would be lost or listed but
+/// not run: the prompt counts as busy. A run outranks a check.</remarks>
+function SourcesAddRefusal(ARunning, AChecking: Boolean): string;
 
 implementation
 
@@ -536,8 +540,10 @@ const
   WORDS_UNCONV    = 'not converted';
   WORDS_OUTSIDE   = 'not in the index';
   REPORT_LEFT_FMT = '%s: %s line %d -- ancestor %s %s (%s)';
+  SOURCES_REFUSED_RUNNING  = 'A conversion is running -- sources cannot be added until it finishes.';
+  SOURCES_REFUSED_CHECKING = 'Inherited instances are being checked -- add the sources again when it finishes.';
 
-function InheritedLeftNote(const AItems: TArray<TInheritedLeft>; const AConvertedUnits: TArray<string>): string;
+function InheritedLeftNote(const AItems: TArray<TInheritedLeft>): string;
 var
   LGroups: TArray<TInheritedLeft>; // one per (ancestor, state), first-seen order
   LCounts: TArray<Integer>;
@@ -547,7 +553,7 @@ var
 begin
   LGroups:= nil;
   LCounts:= nil;
-  for var LItem: TInheritedLeft in InheritedLeftOmitting(AItems, AConvertedUnits) do
+  for var LItem: TInheritedLeft in AItems do
   begin
     LIdx:= High(LGroups);
     while (LIdx >= 0) and not (SameText(LGroups[LIdx].AncestorUnit, LItem.AncestorUnit) and SameText(LGroups[LIdx].AncestorState, LItem.AncestorState)) do
@@ -573,17 +579,19 @@ begin
   Result:= string.Join('; ', LParts);
 end;
 
-function InheritedLeftOmitting(const AItems: TArray<TInheritedLeft>; const AConvertedUnits: TArray<string>): TArray<TInheritedLeft>;
-begin
-  Result:= nil;
-  for var LItem: TInheritedLeft in AItems do
-    if not MatchText(LItem.AncestorUnit, AConvertedUnits) then
-      Result:= Result + [LItem];
-end;
-
 function InheritedReportNote(const AItem: TInheritedLeft): string;
 begin
   Result:= Format(REPORT_LEFT_FMT, [AItem.Name, AItem.TypeName, AItem.Line, AItem.AncestorUnit, AItem.AncestorState, AItem.Reason]);
+end;
+
+function SourcesAddRefusal(ARunning, AChecking: Boolean): string;
+begin
+  if ARunning then
+    Result:= SOURCES_REFUSED_RUNNING
+  else if AChecking then
+    Result:= SOURCES_REFUSED_CHECKING
+  else
+    Result:= '';
 end;
 
 end.

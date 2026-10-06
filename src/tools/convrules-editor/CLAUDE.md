@@ -580,8 +580,8 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 ### Verification kit
 
 * **Model tests:** `tests\ConvRulesModelTests.exe` with `CONVRULES_TEST_ENGINE` =
-  the 1.21.1 pin -> **`model-tests: 1614 pass / 5 fail / 1 skip / 1620 total`**
-  (measured 2026-10-06 at the end of feat/c8-inherited-editor; 1422 / 5 / 0 before
+  the 1.21.1 pin -> **`model-tests: 1616 pass / 5 fail / 1 skip / 1622 total`**
+  (measured 2026-10-06 after the feat/c8-inherited-editor fix wave; 1422 / 5 / 0 before
   it; 1329 / 5 before C6); the skip is `inherited.live` (the engine lacks
   `inherited_instances`); the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
   `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
@@ -1019,6 +1019,11 @@ in the `c8-inherited` worktree.
   notes are all pure routines here. Two helpers are not pure: `DiskTextReader`
   (the real reader, `TFile.ReadAllText`, which drops a BOM) and `CachingLookup`
   (fills a caller-owned cache).
+* **Run-side decisions are NOT in `ConvRules.Inheritance`** (model-tested too):
+  `InheritedLeftNote` / `InheritedReportNote` (the engine's `inherited[]` as a row
+  note / a report note) and `SourcesAddRefusal` live in `ConvRules.ConvertRun`;
+  `InheritedReportLines`, `UnitsConvertedIn` and `CodeUseNoteDue` live in
+  `ConvRules.ConvertRunner`.
 * **The reader answers `TDfmRead`:** `drMissing` (no .dfm -- a class with no .dfm
   declares no component), `drUnreadable` (exists, read raised), `drRead`.
 * **Engine binders: `ConvRules.InheritanceEngine`** -- `EngineClassLookup`
@@ -1081,10 +1086,21 @@ in the `c8-inherited` worktree.
   cancellable). `FEngineProbe` is then used on the window's worker thread; that is
   safe only because the runner is MODAL and a drop is refused while `FAnalyzing`
   (class remarks of `TConvertTab`). A non-modal runner would break it.
+* **A drop is refused under ANY C8 prompt too** (fix wave M2): OLE delivers drops
+  inside a `MessageDlg`'s modal loop, and the E6 offer, the Convert gate and the E7
+  warning were each built from the list as it was when they opened -- a unit dropped
+  under the E6 prompt was wiped by Yes (`SetSources`), one dropped under the gate /
+  E7 was listed but not run. `AskBlockingDrops` sets `FPrompting` around each of the
+  three; `AddSources` asks `SourcesAddRefusal(FRunning, FAnalyzing or FPrompting)`
+  (pure, `tab.add.*`). `ConvertClick` also reads the list only AFTER the
+  open-book save prompt.
 * **A stale read triggers ONE incremental reindex of the editor's own project**
   (`ProjectFileForDb` of the project DB, as the runner does) and one retry of the
   stale units (`AnalyzeRetryingStale`); a second failure leaves them unknown with
-  `; reindex failed: ...` or the retry's own reason.
+  `; reindex failed: ...` or the retry's own reason. After any such reindex the tab
+  calls `TConvertHost.ProjectReindexed`, which clears the MAIN adapter's resolve cache
+  (`FEngine.ClearResolveCache`), as `RunStateChanged(False)` does after a run (M6;
+  wiring only, no automated check).
 * **Re-analysis cadence:** added units on add; the whole list when the CHECKED PAIRS
   change (`ReanalyzeAll(False)` is a no-op otherwise, so showing the tab costs
   nothing), always on Convert -- AFTER `Preflight`, so a refused run never pays the
@@ -1095,6 +1111,9 @@ in the `c8-inherited` worktree.
   chain unit, topmost first, goes directly before the earliest LISTED unit among the
   later chain units and the descendant (appended when none is listed); listed units
   never move, so a pre-existing misorder stays and E7 still warns about it.
+* **Convert order (fix wave M3):** the no-project-file refusal is checked right after
+  `Preflight` and BEFORE the C8 re-analysis, gate and E7 -- a run that will be refused
+  asks nothing.
 * **Convert gate (`InheritanceGate`):** a CANCELLED check stops the Convert
   (`GATE_CANCELLED_TEXT`, nothing runs); a FAILED check asks once
   `Could not check inherited instances for <units> -- convert anyway?` with the
@@ -1114,10 +1133,15 @@ in the `c8-inherited` worktree.
   note lists `N inherited instance(s) left: ancestor U not converted`
   (`InheritedLeftNote`) and the report adds one 8-column `inherited left` line per
   instance (`InheritedReportLines`).
-* **R4 -- an ancestor converted EARLIER IN THE SAME RUN is not "left":** both the
-  engine's `inherited[]` notes / report lines and the editor-side code-use note omit
-  it (`UnitsConvertedIn`). The code-use note (`N inherited code use(s) left: ...`,
-  `CodeUseLeftNote`) appears ONCE per unit (`CodeUseNoteDue`), not once per book.
+* **R4 -- an ancestor converted EARLIER IN THE SAME RUN is not "left" -- in the
+  editor-side code-use note ONLY** (`UnitsConvertedIn`). The code-use note
+  (`N inherited code use(s) left: ...`, `CodeUseLeftNote`) appears ONCE per unit
+  (`CodeUseNoteDue`), not once per book. **The engine's own `inherited[]` is shown
+  UNFILTERED** in the converted row's note and in the report's `inherited left` lines
+  (controller ruling, fix wave M4): the engine answers after the runner's reindex and
+  is authoritative. `InheritedLeftOmitting` was deleted with that ruling; guards
+  `tab.r4.runner.engine.unfiltered`, `tab.report.lines.engine.unfiltered`,
+  `tab.r4.left.engine.all`.
 * **Not built:** E4 (the index's inherited/inline `modifiers` flag) -- the .dfm text
   read is the only source. The E11 live test `inherited.live` SKIPs until the engine
   reports `inherited_instances`.
