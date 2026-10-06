@@ -16,7 +16,7 @@
 #   project_db that does not exist -> refused. An unindexed unit -> the status says Convert will refuse, in red.
 #   Probe: --write-capabilities writes within 5 s, no window.
 # -ProofNoRequest launches every request run WITHOUT --convert-request: the request checks FAIL (the proof they can).
-#   Expected 6 pass / 18 fail; the PROOF lines name the 6 passes: 4 positive controls and 2 checks that CANNOT
+#   Expected 6 pass / 19 fail; the PROOF lines name the 6 passes: 4 positive controls and 2 checks that CANNOT
 #   discriminate (req.label2.untouched, req.exit) -- they hold with or without a request, so they prove nothing.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
 param([string]$Exe, [switch]$ProofNoRequest)
@@ -574,6 +574,9 @@ try {
   if ($c.src -and $c.del) { [void][W]::Send($c.src, 0x0185, [IntPtr]1, [IntPtr]0); Click $c.del; Start-Sleep -Seconds 1 }
   $n = if ($c.src) { [int][W]::Send($c.src, 0x018B, [IntPtr]::Zero, [IntPtr]::Zero) } else { -1 }
   Check 'req.delete.resets.scope' ($clearBefore -and ($n -eq 0) -and -not [RQ]::IsWindowEnabled($c.clear)) "clear enabled before=$clearBefore; sources=$n"
+  # Fix wave Minor 4: a delete that cleared a scope says so on the status line.
+  $stDel = Status $main
+  Check 'req.delete.says.scope.cleared' ($stDel -like '*Scope cleared -- the whole unit will be converted.*') $stDel
 
   $null = [W]::InvokeMenu($main, 'File|Exit')
   $t0 = Get-Date; $prompt = ''

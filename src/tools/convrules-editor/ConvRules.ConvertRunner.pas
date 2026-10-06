@@ -135,6 +135,10 @@ type
   /// whole unit, no --only.</summary>
   TScopeFn = reference to function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean;
 
+  /// <summary>The note tail for a scoped apply that failed with no refusal and no edit
+  /// (UnmatchedOnlyHintFor with the job's scope bound).</summary>
+  TOnlyHintFn = reference to function(const AOnly: TArray<string>): string;
+
 /// <summary>Runs a whole job (AJob.Books over AJob.Units).</summary>
 /// <param name="AJob">The job.</param>
 /// <param name="AEngine">An adapter owned by the caller's thread.</param>
@@ -191,6 +195,8 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// <param name="ACancelled">May be nil; polled exactly once just before each unit; True stops the run there.</param>
 /// <param name="AInheritedSupported">See TConvertJob.InheritedSupported.</param>
 /// <param name="ARetypeSupported">See TConvertJob.RetypeSupported.</param>
+/// <param name="AOnlyHint">The unmatched-name note tail; nil = UnmatchedOnlyHint (the
+/// TConvertJob overload binds UnmatchedOnlyHintFor to the job's scope).</param>
 /// <returns>As the TApplyFn overload, plus csOutOfScope rows.</returns>
 /// <remarks>Everything the TApplyFn overload says holds. In addition: a book AScope
 /// scopes to NO name gets a csOutOfScope row with no engine call and no backup named,
@@ -198,8 +204,8 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// no backup). A scoped converted row's note is ScopedConvertedNote; a scoped refusal's
 /// note gets RefusalHint appended; a scoped apply that fails with no refusal and no edit
 /// (an --only name that matched nothing) stays a failure (restored) and its note gets
-/// UnmatchedOnlyHint. AScope raising counts as out of scope.</remarks>
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False): TArray<TConvertRow>; overload;
+/// AOnlyHint's tail. AScope raising counts as out of scope.</remarks>
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False; const AOnlyHint: TOnlyHintFn = nil): TArray<TConvertRow>; overload;
 
 /// <summary>Display text for a status.</summary>
 /// <param name="AStatus">The status.</param>
@@ -446,7 +452,12 @@ begin
     begin
       Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
     end,
-    LScope, AProgress, ACancelled, LJob.InheritedSupported, LJob.RetypeSupported);
+    LScope, AProgress, ACancelled, LJob.InheritedSupported, LJob.RetypeSupported,
+    // No "re-send it" when every --only name is inherited/inline (fix wave Minor 2).
+    function(const AOnly: TArray<string>): string
+    begin
+      Result:= UnmatchedOnlyHintFor(LJob.Scope, AOnly);
+    end);
 end;
 
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@8e04 -- REVIEWED 2026-10-06 the test-injection twin of the TConvertJob overload: two engine seams plus the job's two capability flags (InheritedSupported, RetypeSupported); a record for the two flags would be one more type used only here
@@ -468,7 +479,7 @@ begin
     AProgress, ACancelled, AInheritedSupported, ARetypeSupported);
 end;
 
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@8ff1 -- REVIEWED 2026-10-06 the ONE unit loop: three engine/scope seams, progress, cancel and the job's two capability flags; the TConvertJob overload is the record-shaped entry point
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@092f -- REVIEWED 2026-10-06 the ONE unit loop: four engine/scope seams (apply, index, scope, unmatched-name hint), progress, cancel and the job's two capability flags; the TConvertJob overload is the record-shaped entry point
 var
   Rows    : TArray<TConvertRow>;
   UnitRows: TArray<TConvertRow>; // the current unit's rows, emitted when it finishes
@@ -709,7 +720,7 @@ var
       if LScoped and Row.Apply.Refused then
         LReason:= LReason + RefusalHint(LReason)
       else if LScoped and (Row.Apply.EditsCount = 0) then
-        LReason:= LReason + UnmatchedOnlyHint(LOnly); // measured shape of an --only name that matches nothing
+        LReason:= LReason + (if Assigned(AOnlyHint) then AOnlyHint(LOnly) else UnmatchedOnlyHint(LOnly)); // measured shape of an --only name that matches nothing
       FailUnit(LReason, if Row.Apply.Refused then csRefused else csFailedRestored);
       Exit(False);
     end;

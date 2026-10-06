@@ -10047,7 +10047,13 @@ begin
       Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
       Check('glyph.castlib.apply.arg', Pos('--castlib "' + Lib + '"', Json) > 0, Json);
       Check('glyph.castlib.apply.keeps.flags', (Pos('--apply', Json) > 0) and (Pos('--format json', Json) > 0), Json);
-      V:= Eng.ValidateText('#convert A -> B'#13#10, '', '', nil);
+      // C12: the runner ALWAYS calls the --only overload (nil = unscoped), so the
+      // castlib must travel on THAT overload's command line, scoped and unscoped.
+      Eng.ApplyConversion('U.pas', 'B.rules', [], ['BtnA', 'BtnB'], Json);
+      Check('glyph.castlib.apply.only.scoped.arg', (Pos('--castlib "' + Lib + '"', Json) > 0) and (Pos('--only "BtnA,BtnB"', Json) > 0), Json);
+      Eng.ApplyConversion('U.pas', 'B.rules', [], nil, Json);
+      Check('glyph.castlib.apply.only.unscoped.arg', (Pos('--castlib "' + Lib + '"', Json) > 0) and (Pos('--only', Json) = 0), Json);
+      V:=Eng.ValidateText('#convert A -> B'#13#10, '', '', nil);
       Check('glyph.castlib.validate.arg', Pos('--castlib "' + Lib + '"', V.Output) > 0, V.Output);
     finally
       Eng.Free;
@@ -10988,9 +10994,13 @@ begin
   Names:= ScopedNamesForBook(Sc, TypePairsOfText('#convert TLabel -> ' + sLineBreak));
   Check('scope.selected.names.from.only.stub', Length(Names) = 0, Join(Names));
   Check('scope.selected.text', ScopeText(Sc) = 'Scope: 2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Gone', ScopeText(Sc));
+  Check('scope.selected.found.no.tail', EmptyScopeTail(Sc) = '', EmptyScopeTail(Sc));
   Check('scope.selected.status', ScopeStatusText(Sc, 2) = 'Request from the IDE: convert 2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Gone with 2 matching book(s) -- review and press Convert.', ScopeStatusText(Sc, 2));
   Sc:= BuildScope(ParseConvertRequest(REQ_ROOT).Request, DFM, Err);
   Check('scope.selected.root.not.instance', (Err = '') and (Length(Sc.Instances) = 0) and (Join(Sc.NotFound) = 'FormU'), Join(Sc.NotFound));
+  // Fix wave Minor 1: no instance found -> no empty list before ';', and the E5 tail says so.
+  Check('scope.selected.none.text', ScopeText(Sc) = 'Scope: 0 selected component(s) on U; not found on the form: FormU', ScopeText(Sc));
+  Check('scope.selected.none.tail', EmptyScopeTail(Sc) = ' Also: no requested instance is on the form.', EmptyScopeTail(Sc));
   // R9: a binary or missing .dfm is refused for BOTH scopes, naming the file.
   Sc:= BuildScope(ParseConvertRequest(REQ_SEL).Request, BINARY_DFM, Err);
   Check('scope.selected.binary.refused', (Pos('binary', Err) > 0) and (Pos(DFM_PATH, Err) > 0) and (Length(Sc.Instances) = 0), Err);
@@ -11007,6 +11017,7 @@ begin
   Check('scope.form.names.other.book', Length(Names) = 0, Join(Names));
   Sc:= BuildScope(ParseConvertRequest(StringReplace(REQ_FORM, '"type":"tlabel"', '"type":"TcxTreeList"', [])).Request, DFM, Err);
   Check('scope.form.none.found', (Err = '') and (Length(Sc.Instances) = 0) and (ScopeText(Sc) = 'Scope: all TcxTreeList instances on U (0 found)'), ScopeText(Sc));
+  Check('scope.form.none.tail', EmptyScopeTail(Sc) = ' Also: no requested instance is on the form.', EmptyScopeTail(Sc));
   Sc:= BuildScope(ParseConvertRequest(StringReplace(REQ_FORM, '"type":"tlabel"', '"type":"TFormU"', [])).Request, DFM, Err);
   Check('scope.form.root.never.instance', (Err = '') and (Length(Sc.Instances) = 0), InstNames(Sc.Instances));
   Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, DFM_ROOT_NAME, Err);
@@ -11042,13 +11053,21 @@ begin
   Check('scope.matches.units.empty', Pos(PAS_PATH, ScopeMatchesUnits(Sc, [])) > 0);
   Sc:= Default(TConvertScope);
   Check('scope.whole.unit.text', (ScopeText(Sc) = WHOLE_UNIT_SCOPE_TEXT) and (ScopeMatchesUnits(Sc, ['a', 'b']) = ''));
+  Check('scope.whole.unit.no.tail', EmptyScopeTail(Sc) = '', EmptyScopeTail(Sc));
+
+  // Fix wave Minor 2 (interim until only_matched[]): no "re-send it" when every --only
+  // name is inherited or inline -- the engine leaves those to the ancestor.
+  Sc:= BuildScope(ParseConvertRequest(REQ_FORM).Request, DFM, Err); // Label1/Label2 doObject, Label3 doInherited
+  Check('scope.hint.all.inherited.none', UnmatchedOnlyHintFor(Sc, ['label3']) = '', UnmatchedOnlyHintFor(Sc, ['label3']));
+  Check('scope.hint.mixed.kept', UnmatchedOnlyHintFor(Sc, ['Label1', 'Label3']) = UnmatchedOnlyHint(['Label1', 'Label3']), UnmatchedOnlyHintFor(Sc, ['Label1', 'Label3']));
+  Check('scope.hint.unknown.kept', UnmatchedOnlyHintFor(Sc, ['Gone']) = UnmatchedOnlyHint(['Gone']), UnmatchedOnlyHintFor(Sc, ['Gone']));
 end;
 
 { C12 Task 4: the launch decisions the .dpr and the main form make before any
   control is touched -- the project index a request launch adopts, the rules
   folder (ruling B1), the whole prepare chain, the report's Scope line and the
   run summary's out-of-scope count. Every path is FAKE (injected probes). }
-procedure TestConvertRequestLaunch;  // dl:ok cyclomatic-complexity@a140 -- REVIEWED 2026-10-06 an assertion list over one fake-probe fixture plus a one-line Row helper; the count is the and-chains in Check conditions, and splitting the list would only scatter the fixture
+procedure TestConvertRequestLaunch;  // dl:ok cyclomatic-complexity@c0ce -- REVIEWED 2026-10-06 an assertion list over one fake-probe fixture plus a one-line Row helper; the count is the and-chains in Check conditions, and splitting the list would only scatter the fixture
 const
   LAUNCH_DFM = 'object FormU: TFormU' + sLineBreak + '  object Label1: TLabel' + sLineBreak + '  end' + sLineBreak +
                '  object Btn1: TButton' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
@@ -11087,10 +11106,13 @@ var
 
 begin
   // The project index a launch uses: explicit > the request's > the default.
-  Check('launch.db.explicit.wins', AdoptedProjectDb(DEFAULT_DB, REQ_GOOD, 'X') = DEFAULT_DB);
-  Check('launch.db.adopts.request', AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB) = REQ_DB, AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB));
-  Check('launch.db.no.request', AdoptedProjectDb('', '', DEFAULT_DB) = DEFAULT_DB);
-  Check('launch.db.bad.request', AdoptedProjectDb('', 'not json', DEFAULT_DB) = DEFAULT_DB);
+  Check('launch.db.explicit.wins', AdoptedProjectDb(DEFAULT_DB, REQ_GOOD, 'X', Probe([], True)) = DEFAULT_DB);
+  Check('launch.db.adopts.request', AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([REQ_DB], False)) = REQ_DB, AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([REQ_DB], False)));
+  Check('launch.db.no.request', AdoptedProjectDb('', '', DEFAULT_DB, Probe([], True)) = DEFAULT_DB);
+  Check('launch.db.bad.request', AdoptedProjectDb('', 'not json', DEFAULT_DB, Probe([], True)) = DEFAULT_DB);
+  // Fix wave Minor 3: a request project_db that does not exist is not adopted.
+  Check('launch.db.missing.not.adopted', AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([DEFAULT_DB], False)) = DEFAULT_DB,
+    AdoptedProjectDb('', REQ_GOOD, DEFAULT_DB, Probe([DEFAULT_DB], False)));
 
   // B1: request > switch; a named folder that is missing is refused, never replaced.
   Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, '', ['TLabel'], Probe([], True), F);
@@ -11138,6 +11160,12 @@ begin
     FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.prepare.db.missing.refused', (not P.Ok)
     and (P.Error = 'the project index ' + REQ_DB + ' does not exist -- index the project first'), P.Error);
+  // Fix wave Minor 3: the request's own index is missing and was not adopted -- the
+  // refusal names THAT file, not a mismatch with the editor's (existing) default.
+  P:= PrepareConvertRequest(Req, TRequestEditorState.Make(DEFAULT_DB, REQ_ROOT + 'Default.dproj', '', ''), Probe([REQ_PAS, DEFAULT_DB], False), Probe([], True),
+    FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.request.db.missing.named', (not P.Ok)
+    and (P.Error = 'the project index ' + REQ_DB + ' does not exist -- index the project first'), P.Error);
   // Task-5 review carry: an editor with no project index says so, without a blank name.
   P:= PrepareConvertRequest(Req, TRequestEditorState.Make('', '', '', ''), Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.prepare.db.empty.refused', (not P.Ok)
@@ -11178,7 +11206,7 @@ end;
   engine call; a scoped book's names reach apply as --only; an all-out-of-scope
   unit keeps no backup; the engine's --only refusal gets the E10 hint; an --only
   that matched nothing stays a failure and says what was asked. }
-procedure TestRunnerScope;
+procedure TestRunnerScope;  // dl:ok cyclomatic-complexity@10c5 -- REVIEWED 2026-10-06 one fake-seam fixture walked case by case (out of scope, --only, refusal, unmatched name, injected hint); the count is the and-chains in Check conditions, and splitting would duplicate the temp-folder fixture
 const
   ORIG = 'unit F; interface implementation end.';
   OK_JSON      = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
@@ -11314,6 +11342,16 @@ begin
     LRows:= RunConversionUnits([LPas], ['Label.rules'],
       NoMatch, Index, Scope, nil, nil);
     Check('runner.scope.unknown.name.hint', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and LRows[0].Note.EndsWith(UNKNOWN_HINT)
+      and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows));
+    // Fix wave Minor 2: the job binds the hint to its scope; an empty tail drops it.
+    WriteUnit(LPas);
+    LRows:= RunConversionUnits([LPas], ['Label.rules'],
+      NoMatch, Index, Scope, nil, nil, False, False,
+      function(const AOnly: TArray<string>): string
+      begin
+        Result:= '';
+      end);
+    Check('runner.scope.hint.injected.empty', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and (Pos('re-send', LRows[0].Note) = 0)
       and (TFile.ReadAllText(LPas) = ORIG), Describe(LRows));
     WriteUnit(LPas);
     LRows:= RunConversionUnits([LPas], ['Label.rules'],

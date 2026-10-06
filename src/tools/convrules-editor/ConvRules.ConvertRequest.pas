@@ -24,6 +24,9 @@ const
   SCOPE_PROJECT_UNSUPPORTED = 'Project-wide scope is not supported by this editor version';
   /// <summary>The Scope line when no request scope is in force (spec E4).</summary>
   WHOLE_UNIT_SCOPE_TEXT = 'Scope: whole unit';
+  /// <summary>The status text when a request scope was cleared (Clear scope, or a drop
+  /// or delete that reset it).</summary>
+  SCOPE_CLEARED_TEXT = 'Scope cleared -- the whole unit will be converted.';
 
 type
   /// <summary>The request's scope. rsProject is parsed so the refusal can name it.</summary>
@@ -178,9 +181,19 @@ function BookMatchesTypes(const ARulesText: string; const ATypes: TArray<string>
 /// <summary>The Convert tab's Scope line (spec E4), with the 'Scope: ' prefix.</summary>
 /// <param name="AScope">The scope; Default(TConvertScope) for none.</param>
 /// <returns>WHOLE_UNIT_SCOPE_TEXT; 'Scope: N selected component(s) on U: a (T), ...'
+/// ('Scope: 0 selected component(s) on U' when none was found -- no empty list)
 /// plus '; not found on the form: x, y' when names were not found; or 'Scope: all
 /// T1, T2 instances on U (N found)'. U is the unit's file name without extension.</returns>
 function ScopeText(const AScope: TConvertScope): string;
+
+/// <summary>The E5 status tail for a request scope that holds no instance: every
+/// selected name is missing from the .dfm, or a form scope found none.</summary>
+/// <param name="AScope">The resolved scope.</param>
+/// <returns>' Also: no requested instance is on the form.' when AScope is skSelected or
+/// skForm with no Instances; else ''.</returns>
+/// <remarks>The caller shows the status in red when this is non-empty: such a run
+/// converts nothing (every book is out of scope).</remarks>
+function EmptyScopeTail(const AScope: TConvertScope): string;
 
 /// <summary>The status line after a request was applied (spec E5).</summary>
 /// <param name="AScope">The resolved scope.</param>
@@ -241,6 +254,15 @@ function ScopedNamesForBookFile(const AScope: TConvertScope; const AUnitPas, ABo
 /// -- re-send it'</returns>
 function UnmatchedOnlyHint(const AOnly: TArray<string>): string;
 
+/// <summary>UnmatchedOnlyHint, unless every --only name is an inherited or inline
+/// instance of the scope (interim until the engine's only_matched[] is adopted).</summary>
+/// <param name="AScope">The run's scope.</param>
+/// <param name="AOnly">The names passed as --only.</param>
+/// <returns>'' when AOnly is non-empty and every name (case-insensitive) is an
+/// AScope.Instances entry whose Opener is not doObject -- the engine leaves such an
+/// instance to its ancestor, so "re-send it" would be wrong; else UnmatchedOnlyHint(AOnly).</returns>
+function UnmatchedOnlyHintFor(const AScope: TConvertScope; const AOnly: TArray<string>): string;
+
 /// <summary>The E10 hint appended to the engine's --only refusal.</summary>
 /// <param name="AReason">The apply/1 reason.</param>
 /// <returns>' -- convert all &lt;Type&gt; instances on this form, or remove the #unuse /
@@ -250,8 +272,9 @@ function RefusalHint(const AReason: string): string;
 
 /// <summary>The converted row's note for a scoped run (spec E11).</summary>
 /// <param name="AOnly">The names passed as --only, in order.</param>
-/// <param name="AConvertedNote">The unscoped note (ConvertedRowNote: '&lt;edits&gt;
-/// edit(s), &lt;k&gt; remaining for manual work' and any C8 tail).</param>
+/// <param name="AConvertedNote">The unscoped note: ConvertedRowNote ('&lt;edits&gt;
+/// edit(s), &lt;k&gt; remaining for manual work' plus any C8 inherited/retype tail)
+/// followed by the C10 GlyphNoteSuffix.</param>
 /// <returns>'--only N instance(s): a, b; ' + AConvertedNote (spec E11 as amended by the
 /// controller ruling, fix round 1 of C12 Task 3).</returns>
 /// <remarks>States what was ASKED, never what converted: the engine does not report
@@ -273,12 +296,15 @@ function ScopeReportLine(const AScope: TConvertScope): string;
 /// <param name="ARequestJson">The request file's text; '' when there is no request
 /// or it could not be read.</param>
 /// <param name="ADefaultDb">The editor's built-in default index.</param>
+/// <param name="AFileExists">File probe (injected for the tests).</param>
 /// <returns>AExplicitDb when non-empty; else the request's project_db when the text
-/// parses as a request; else ADefaultDb.</returns>
+/// parses as a request AND that file exists; else ADefaultDb.</returns>
 /// <remarks>An explicit --project-db that differs from the request's is kept: the
 /// request is then refused by ValidateConvertRequest, never silently re-pointed. A
-/// request that does not parse adopts nothing; its refusal comes later.</remarks>
-function AdoptedProjectDb(const AExplicitDb, ARequestJson, ADefaultDb: string): string;
+/// request that does not parse, or names a project_db that does not exist, adopts
+/// nothing: the editor keeps its own index and the request's refusal (a project_db
+/// mismatch or a missing index) comes later and names the cause.</remarks>
+function AdoptedProjectDb(const AExplicitDb, ARequestJson, ADefaultDb: string; const AFileExists: TFunc<string, Boolean>): string;
 
 /// <summary>The rules folder a request runs with (controller ruling B1): the
 /// request's rules_folder, else --rules-folder, else the editor's in-session folder.</summary>
@@ -342,11 +368,12 @@ type
 /// <param name="AReader">Reads the unit's .dfm (the request's "dfm", else beside the
 /// .pas); anything but drRead counts as no text.</param>
 /// <returns>Ok with the request, scope and folder; else the first refusal in that
-/// order (parse, editor has no project index, validate, project index exists, rules
-/// folder, scope). An empty AEditor.ProjectDb is refused as 'the editor has no project
-/// index -- launch it with --project-db'; a project index that does not exist --
-/// adopted from the request or given -- as 'the project index X does not exist --
-/// index the project first'.</returns>
+/// order (parse, editor has no project index, the request's project index exists,
+/// validate, the editor's project index exists, rules folder, scope). An empty
+/// AEditor.ProjectDb is refused as 'the editor has no project index -- launch it with
+/// --project-db'; a project index that does not exist -- the request's (which
+/// AdoptedProjectDb then did not adopt) or the one given -- as 'the project index X
+/// does not exist -- index the project first'.</returns>
 /// <remarks>Never raises (the reader must not either). A refusal touches nothing: the
 /// caller shows it and stays on the Classes tab (E1).</remarks>
 function PrepareConvertRequest(const AJson: string; const AEditor: TRequestEditorState;
@@ -389,7 +416,9 @@ uses
 const
   SCOPE_PREFIX       = 'Scope: ';
   SCOPE_SELECTED_FMT = SCOPE_PREFIX + '%d selected component(s) on %s: %s';
+  SCOPE_SELECTED_NONE_FMT = SCOPE_PREFIX + '0 selected component(s) on %s';
   SCOPE_NOT_FOUND    = '; not found on the form: ';
+  EMPTY_SCOPE_TAIL   = ' Also: no requested instance is on the form.';
   SCOPE_FORM_FMT     = SCOPE_PREFIX + 'all %s instances on %s (%d found)';
   SCOPE_ITEM_FMT     = '%s (%s)';
   LIST_SEP           = ', ';
@@ -740,7 +769,10 @@ begin
         Items:= nil;
         for var I: TDfmInstance in AScope.Instances do
           Items:= Items + [Format(SCOPE_ITEM_FMT, [I.Name, I.TypeName])];
-        Result:= Format(SCOPE_SELECTED_FMT, [Length(AScope.Instances), UnitBase, string.Join(LIST_SEP, Items)]);
+        if Length(Items) = 0 then
+          Result:= Format(SCOPE_SELECTED_NONE_FMT, [UnitBase]) // no empty list before the not-found part
+        else
+          Result:= Format(SCOPE_SELECTED_FMT, [Length(AScope.Instances), UnitBase, string.Join(LIST_SEP, Items)]);
         if Length(AScope.NotFound) > 0 then
           Result:= Result + SCOPE_NOT_FOUND + string.Join(LIST_SEP, AScope.NotFound);
       end;
@@ -749,6 +781,11 @@ begin
     else
       Result:= WHOLE_UNIT_SCOPE_TEXT;
   end; // case
+end;
+
+function EmptyScopeTail(const AScope: TConvertScope): string;
+begin
+  Result:= if (AScope.Kind <> skWholeUnit) and (Length(AScope.Instances) = 0) then EMPTY_SCOPE_TAIL else '';
 end;
 
 function ScopeStatusText(const AScope: TConvertScope; AMatchingBooks: Integer): string;
@@ -802,6 +839,25 @@ begin
   Result:= Format(UNMATCHED_ONLY_FMT, [string.Join(LIST_SEP, AOnly)]);
 end;
 
+function UnmatchedOnlyHintFor(const AScope: TConvertScope; const AOnly: TArray<string>): string;
+var
+  LInherited: Boolean;
+begin
+  for var LName: string in AOnly do
+  begin
+    LInherited:= False;
+    for var I: TDfmInstance in AScope.Instances do
+      if SameText(I.Name, LName) and (I.Opener <> doObject) then
+      begin
+        LInherited:= True;
+        Break;
+      end;
+    if not LInherited then
+      Exit(UnmatchedOnlyHint(AOnly));
+  end;
+  Result:= if Length(AOnly) = 0 then UnmatchedOnlyHint(AOnly) else '';
+end;
+
 function RefusalHint(const AReason: string): string;
 var
   P, Q: Integer;
@@ -827,7 +883,7 @@ begin
   Result:= REPORT_SCOPE_HEAD + Copy(ScopeText(AScope), Length(SCOPE_PREFIX) + 1, MaxInt);
 end;
 
-function AdoptedProjectDb(const AExplicitDb, ARequestJson, ADefaultDb: string): string;
+function AdoptedProjectDb(const AExplicitDb, ARequestJson, ADefaultDb: string; const AFileExists: TFunc<string, Boolean>): string;
 var
   LOut: TRequestOutcome;
 begin
@@ -837,7 +893,7 @@ begin
   if ARequestJson = '' then
     Exit;
   LOut:= ParseConvertRequest(ARequestJson);
-  if LOut.Ok then
+  if LOut.Ok and AFileExists(LOut.Request.ProjectDb) then
     Result:= LOut.Request.ProjectDb;
 end;
 
@@ -879,6 +935,8 @@ begin
   Result.Error:= LOut.Error;
   if LOut.Ok and (Trim(AEditor.ProjectDb) = '') then
     Result.Error:= NO_PROJECT_DB
+  else if LOut.Ok and not AFileExists(LOut.Request.ProjectDb) then
+    Result.Error:= Format(DB_MISSING_FMT, [LOut.Request.ProjectDb]) // not adopted (AdoptedProjectDb): the cause, not a mismatch
   else if LOut.Ok then
     Result.Error:= ValidateConvertRequest(LOut.Request, AEditor.ProjectDb, AEditor.ProjectFile, AFileExists);
   if (Result.Error = '') and not AFileExists(AEditor.ProjectDb) then

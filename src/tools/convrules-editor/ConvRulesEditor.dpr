@@ -242,6 +242,12 @@ begin
   end; // try
 end;
 
+{ AdoptedProjectDb's file probe: a request's project_db is adopted only when it exists. }
+function FileExistsProbe(APath: string): Boolean; // TFunc's own shape: no const
+begin
+  Result:= TFile.Exists(APath);
+end;
+
 var
   Form: TConvRulesForm;
 begin
@@ -259,8 +265,8 @@ begin
   GEditorConvertRequest:= ArgValue('--convert-request');
   GEditorRulesFolderArg:= ArgValue('--rules-folder');
   // An explicit --project-db wins; a request launch without one adopts the
-  // request's project_db instead of the built-in default.
-  GEditorProjectDb:= AdoptedProjectDb(ArgValue('--project-db'), RequestTextForAdoption(GEditorConvertRequest), ProjectDb);
+  // request's project_db instead of the built-in default -- only when that file exists.
+  GEditorProjectDb:= AdoptedProjectDb(ArgValue('--project-db'), RequestTextForAdoption(GEditorConvertRequest), ProjectDb, FileExistsProbe);
   GEditorFormPath:= ArgValue('--form');
   GEditorCastLib:= ResolveCastLib;
   GEditorFromPlatform:= ArgPlatform('--from-platform', DEFAULT_FROM_PLATFORM);

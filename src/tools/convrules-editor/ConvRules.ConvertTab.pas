@@ -155,7 +155,9 @@ type
       procedure DeleteClick(Sender: TObject);
       /// <summary>Back to a whole-unit run: FScope = Default, the Scope line says so,
       /// Clear scope is disabled. Writes no status.</summary>
-      procedure ResetScope;
+      /// <returns>True when a request scope was in force and is now cleared (the caller
+      /// then says SCOPE_CLEARED_TEXT); False when the run was whole-unit already.</returns>
+      function ResetScope: Boolean;
       /// <summary>Clear scope: ResetScope plus a status line.</summary>
       /// <param name="Sender">FBtnClearScope.</param>
       procedure ClearScopeClick(Sender: TObject);
@@ -697,11 +699,12 @@ begin
     Exit;
   end;
   Added:= ExpandSources(APaths, Errs);
+  var LCleared: Boolean:= False;
   for var LPath: string in Added do
     if FSources.Items.IndexOf(LPath) < 0 then  // TListBox.IndexOf is case-insensitive
     begin
       FSources.Items.Add(LPath);
-      ResetScope; // E4: a changed source list is a whole-unit run (LoadRequest sets its scope after this)
+      LCleared:= ResetScope or LCleared; // E4: a changed source list is a whole-unit run (LoadRequest sets its scope after this)
     end;
   FInheritError:= '';
   if Length(Added) > 0 then
@@ -715,14 +718,15 @@ begin
   end;
   var LIndexErr: string;
   var LIndexOk: Boolean:= (FSources.Count = 0) or ReadIndex(LIndexErr);
+  var LScopeNote: string:= if LCleared then ' ' + SCOPE_CLEARED_TEXT else '';
   if FInheritError <> '' then
-    FHost.SetStatus(Format(INHERIT_FAIL_FMT, [SourcesSummary, FInheritError]), True)
+    FHost.SetStatus(Format(INHERIT_FAIL_FMT, [SourcesSummary, FInheritError]) + LScopeNote, True)
   else if Length(Errs) > 0 then
-    FHost.SetStatus(Format('%d source(s) added; %d problem(s): %s', [Length(Added), Length(Errs), string.Join(' | ', Errs)]), True)
+    FHost.SetStatus(Format('%d source(s) added; %d problem(s): %s', [Length(Added), Length(Errs), string.Join(' | ', Errs)]) + LScopeNote, True)
   else if not LIndexOk then
-    FHost.SetStatus(Format('%d source unit(s) listed; cannot read the project index, so unindexed units are not flagged: %s', [FSources.Count, LIndexErr]), True)
+    FHost.SetStatus(Format('%d source unit(s) listed; cannot read the project index, so unindexed units are not flagged: %s', [FSources.Count, LIndexErr]) + LScopeNote, True)
   else
-    FHost.SetStatus(SourcesSummary, False);
+    FHost.SetStatus(SourcesSummary + LScopeNote, False);
 end;
 
 procedure TConvertTab.RefreshIndex;
@@ -1037,15 +1041,17 @@ begin
 end;
 
 procedure TConvertTab.DeleteClick(Sender: TObject);
+var
+  LCleared: Boolean;
 begin
-  if FSources.SelCount > 0 then
-    ResetScope; // E4
+  LCleared:= (FSources.SelCount > 0) and ResetScope; // E4
   FSources.DeleteSelected;
-  FHost.SetStatus(SourcesSummary, False);
+  FHost.SetStatus(SourcesSummary + (if LCleared then ' ' + SCOPE_CLEARED_TEXT else ''), False);
 end;
 
-procedure TConvertTab.ResetScope;
+function TConvertTab.ResetScope: Boolean;
 begin
+  Result:= FScope.Kind <> skWholeUnit;
   FScope:= Default(TConvertScope);
   FLblScope.Caption     := WHOLE_UNIT_SCOPE_TEXT;
   FBtnClearScope.Enabled:= False;
@@ -1054,7 +1060,7 @@ end;
 procedure TConvertTab.ClearScopeClick(Sender: TObject);
 begin
   ResetScope;
-  FHost.SetStatus('Scope cleared -- the whole unit will be converted.', False);
+  FHost.SetStatus(SCOPE_CLEARED_TEXT, False);
 end;
 
 procedure TConvertTab.LoadRequest(const AReq: TConvertRequest; const AScope: TConvertScope);
@@ -1088,7 +1094,8 @@ begin
   FBtnClearScope.Enabled:= True;
   // What AddSources reported in red is kept, after the request's own text, and an
   // unindexed unit is named: Convert would refuse it (Task 4 review b).
-  LTail:= RequestStatusTail(AReq.Units[0].Pas, FIndexed, FIndexKnown, FInheritError);
+  // A scope that holds no instance converts nothing: said first, in red (fix wave Minor 1).
+  LTail:= EmptyScopeTail(FScope) + RequestStatusTail(AReq.Units[0].Pas, FIndexed, FIndexKnown, FInheritError);
   if LMatch = 0 then
     FHost.SetStatus(NoBookText(FHost.GetRulesFolder(), AScope.Types) + LTail, True)
   else
