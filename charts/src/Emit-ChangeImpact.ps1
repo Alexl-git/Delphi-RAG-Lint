@@ -75,7 +75,9 @@ $isType = $sel.Kind -in @('class', 'interface', 'record', 'type')
 $seeds = @($sel.Id)
 $memberCount = 0
 if ($isType) {
-  $mem = Invoke-IndexQuery "SELECT id FROM symbols WHERE parent_id = $($sel.Id)"
+  # PAGED (R24): TdlgSetupDefaults declares 1,196 members; unpaged, the 200-row
+  # cap seeded -- and the focus box disclosed -- 200 of them
+  $mem = Get-AllIndexRows "SELECT id FROM symbols WHERE parent_id = $($sel.Id)" 'id'
   $memberCount = $mem.Count
   foreach ($m in $mem) { $seeds += [int]$m.id }
   Write-Host "  type selection: seeded with $memberCount member(s) as well as the type itself"
@@ -268,6 +270,7 @@ $lay = Invoke-DotLayout $sb.ToString() $OutDir ('impact_' + ($sel.Qname -replace
   Pdf          = $lay.Pdf
   Qname        = $sel.Qname
   IsType       = $isType
+  Members      = $memberCount
   Affected     = $items.Count
   Units        = $units.Count
   Zones        = $zones.Count

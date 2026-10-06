@@ -519,8 +519,10 @@ function Get-PathZone([string] $Path, [int] $RootLen) {
 # and no edges, but only ONE has more than 35, and the next largest is 35. At 50
 # the detector fires on exactly the file the engine team named and on nothing
 # else. It is a heuristic and is described as one wherever it is printed.
+#
+# PAGED (R24): unpaged, a population past 200 files was silently cut to 200.
 function Get-EdgelessFiles([int] $MinCallRefs = 50) {
-  $rows = Invoke-IndexQuery @"
+  $rows = Get-AllIndexRows @"
 SELECT p, n FROM (
   SELECT f.path AS p,
          (SELECT COUNT(*) FROM refs r WHERE r.file_id = f.id AND r.kind = 'call') AS n,
@@ -528,8 +530,7 @@ SELECT p, n FROM (
            WHERE r2.file_id = f.id) AS e
     FROM files f)
  WHERE n >= $MinCallRefs AND e = 0
- ORDER BY n DESC
-"@
+"@ 'n DESC, p'
   , $rows
 }
 
@@ -1066,6 +1067,18 @@ function Get-SqlColumnState($SqlSet, [string] $Table, [string] $Col, [hashtable]
   $o.Label = "not extracted as a column by the SQL index ($newest); $quotedPart" +
              $(if ($SqlSearched) { "; no SQL for $($tbl.Name) in $SqlSearched names it" } else { '' })
   [pscustomobject]$o
+}
+
+# lands-where's column row for a property the SQL index does not extract (state
+# `no`). "computed or UI-only" is a claim about the FIELD, and it is earned only
+# when the server's own SQL for T was searched and did not name the column (the
+# STATIONS.GRIDS finding). With no TDataService_<T>_SERVER nothing was searched,
+# so the sentence says THAT instead (R24 item 8). $ServerSearched is the class
+# that was searched, '' when there was none. Pure, so the gate drives it.
+function Format-NotAColumnNote([string] $Prop, [string] $Table, [string] $Label, [string] $ServerSearched) {
+  if ($ServerSearched) { return "$Prop is not a column of $Table -- computed or UI-only: $Label; the database side is empty" }
+  "$Prop is not extracted as a column of ${Table}: $Label; no DataService was searched (no TDataService_${Table}_SERVER in the SERVER index), " +
+    'so whether it is computed, UI-only or written by server SQL is NOT known'
 }
 
 # consumers' reader / writer COUNTS (final wave, item 6). A consumers row key is

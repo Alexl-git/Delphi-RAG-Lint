@@ -109,7 +109,7 @@ cannot disagree, in this precedence order:
 | `older-only` | extracted only from an OLDER declaration of the table; not extracted from, nor quoted in, the newest |
 | `server-sql` | not extracted, not quoted, but SQL in the Delphi index names it (`STATIONS.GRIDS`; lands-where searches the server DataService, consumers every routine of `-DbPath` that names the table) -- the scripts lag the schema |
 | `[stale source]` | the newest declaration's script differs from the indexed copy, so it was NOT scanned for a quoted identifier -- whether it is a column is NOT known; never rendered as an absence |
-| `not-a-column` | not extracted, not quoted, named by none of the SQL searched: lands-where says computed or UI-only (`INSPRSLT.DistHist`), consumers refuses ("not extracted as a column by the SQL index ..."), feeds-from counts it `not-column` |
+| `not-a-column` | not extracted, not quoted, named by none of the SQL searched: lands-where says computed or UI-only (`INSPRSLT.DistHist`) -- or, with no TDataService_<T>_SERVER to search, that no DataService was searched and the field is NOT known, consumers refuses ("not extracted as a column by the SQL index ..."), feeds-from counts it `not-column` |
 
 **Twenty-six questions, TWENTY-THREE emitters** -- `what-it-calls` is a `-Direction`
 switch, `who-writes`/`who-reads` are one `-Mode` switch, and both

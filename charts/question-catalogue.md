@@ -123,7 +123,8 @@ real column reaches it; kept as a guard), **older-only** (extracted only from an
 **server-sql** (not extracted, not quoted, but SQL in the Delphi index names it),
 **[stale source]** (the script differs from the index: not scanned, NOT known --
 never shown as an absence), **not-a-column** (named by none of it: lands-where says
-computed or UI-only; consumers refuses, worded "not extracted as a column by the
+computed or UI-only -- or, when there is no TDataService_<T>_SERVER to search, that no
+DataService was searched and the field is NOT known; consumers refuses, worded "not extracted as a column by the
 SQL index").
 
 ## Branch policy for the trace questions -- decided 2026-09-22

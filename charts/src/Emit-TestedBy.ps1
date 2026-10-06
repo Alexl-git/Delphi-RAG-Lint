@@ -103,7 +103,8 @@ $isType = $sel.Kind -in @('class', 'interface', 'record', 'type')
 
 $seeds = @([int]$sel.Id)
 if ($isType) {
-  $mem = Invoke-IndexQuery "SELECT id FROM symbols WHERE parent_id = $($sel.Id)"
+  # PAGED (R24): a type with more than 200 members was seeded with the first 200
+  $mem = Get-AllIndexRows "SELECT id FROM symbols WHERE parent_id = $($sel.Id)" 'id'
   foreach ($m in $mem) { $seeds += [int]$m.id }
   Write-Host "  type selection: seeded with $($mem.Count) member(s)"
 }

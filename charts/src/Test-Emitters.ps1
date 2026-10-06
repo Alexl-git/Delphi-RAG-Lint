@@ -161,6 +161,25 @@ Step 'E-DEP' {
   Chk 'A-DEP-USEDBY' $d.UsedBy 3
   Chk 'A-DEP-USES'   $d.Uses 18
   Chk 'A-DEP-EXP'    $d.Expected 21
+  # R24: under the 40-row display cap on both sides, so nothing is disclosed
+  Chk 'A-DEP-TOTALS' "$($d.UsesTotal)/$($d.UsedByTotal) hidden $($d.UsesHidden)/$($d.UsedByHidden)" '18/3 hidden 0/0'
+  if ((Dot $d) -match 'more .* not shown') { Fail 'A-DEP-TOTALS' 'a "more exist" row fires on a unit under the cap' }
+}
+
+# R24 (2026-10-05): deps kept LIMIT $MaxRows (40) with no "more exist" row, and
+# filtered the external units AFTER the limit -- so uMain (91 uses entries, 46 of
+# them project units; measured on the CLIENT clone) drew fewer than 40 of its 46
+# and claimed that was all. The cap stays (a display limit); the remainder is
+# now counted and disclosed. uPipeClientConnection is used by 207 uses-clause
+# entries (measured), the used-by side of the same defect.
+Note 'deps R24 (display cap disclosed) ...'
+Step 'E-DEP-R24' {
+  $script:dR = & "$SRC\Emit-Deps.ps1" -Unit 'uMain' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-DEP-R24-USES'   "$($dR.Uses) of $($dR.UsesTotal), hidden $($dR.UsesHidden)" '40 of 46, hidden 6'
+  if ((Dot $dR) -notmatch '\+6 more units this uses not shown -- 40 of 46 drawn \(display cap 40\)') { Fail 'A-DEP-R24-USES' 'the hidden uses are not disclosed' }
+  $script:dR2 = & "$SRC\Emit-Deps.ps1" -Unit 'uPipeClientConnection' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-DEP-R24-USEDBY' "$($dR2.UsedBy) of $($dR2.UsedByTotal), hidden $($dR2.UsedByHidden)" '40 of 207, hidden 167'
+  if ((Dot $dR2) -notmatch '\+167 more units that use this not shown -- 40 of 207 drawn \(display cap 40\)') { Fail 'A-DEP-R24-USEDBY' 'the hidden users are not disclosed' }
 }
 
 Note 'who-calls SendDeltaOperation d2 ...'
@@ -1054,6 +1073,13 @@ Step 'E-CI' {
   Chk 'A-CI2-UNITS'    $ci2.Units 174
   Chk 'A-CI2-CAPPED'   $ci2.Capped $true
   if ((Dot $ci2) -notmatch 'frontier CAPPED') { Fail 'A-CI2-DISCLOSE' 'the capped radius does not admit it' }
+
+  # R24: the type-members seed query was unpaged. TdlgSetupDefaults declares
+  # 1,196 members (measured on the CLIENT clone), so the old query seeded -- and
+  # the chart disclosed -- 200 of them. Depth 1: the seed is the point here.
+  $script:ci3 = & "$SRC\Emit-ChangeImpact.ps1" -Target 'uSetupDefaultsFrm.TdlgSetupDefaults' -DbPath $DbCli -Depth 1 -OutDir $OutDir
+  Chk 'A-CI3-MEMBERS'  $ci3.Members 1196
+  if ((Dot $ci3) -notmatch 'from the type and its 1196 member\(s\)') { Fail 'A-CI3-MEMBERS' 'the chart does not disclose all 1196 members' }
 }
 
 Note 'tested-by ...'
@@ -1070,6 +1096,20 @@ Step 'E-TB' {
 
   $script:tb3 = & "$SRC\Emit-TestedBy.ps1" -Target 'uCompGroupTree.TCompGroupTree' -DbPath $DbMt -OutDir $OutDir
   Chk 'A-TB3-TESTS' $tb3.Tests 13
+}
+
+# R24: population queries that ran into the 200-row cap with no real trigger on
+# the clones (largest type in the TESTS index: 108 members; largest DataService:
+# 11 routines -- measured), so a behavioural test cannot fail on them. Guard the
+# SOURCE instead: the unpaged forms must not come back. change-impact's twin of
+# the tested-by query is tested behaviourally (A-CI3-MEMBERS).
+Note 'R24 paged population queries (source guard) ...'
+foreach ($g in @(
+    @('Emit-TestedBy.ps1',    'Invoke-IndexQuery "SELECT id FROM symbols WHERE parent_id'),
+    @('Emit-ChangeImpact.ps1','Invoke-IndexQuery "SELECT id FROM symbols WHERE parent_id'),
+    @('Emit-LandsWhere.ps1',  '$rts = Invoke-IndexQuery'),
+    @('Emit-LandsWhere.ps1',  '$pbnRows = Invoke-IndexQuery'))) {
+  if ([IO.File]::ReadAllText((Join-Path $SRC $g[0])).Contains($g[1])) { Fail 'A-R24-PAGED' "$($g[0]) still runs the unpaged population query: $($g[1])" }
 }
 
 Note 'negatives N20-N24 ...'
@@ -1987,6 +2027,12 @@ Step 'E-LW' {
   # Emit-Common resolves $Engine from the CALLER's scope (its header), so the block names it
   $script:ol = & { $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'; . "$SRC\Emit-Common.ps1"; "$((Get-OrmLinksState $DbCli).Rows)/$((Get-OrmLinksState $DbSrv).Rows)" }
   Chk 'A-OL-ROWS'       $ol '0/0'
+  # R24: Get-EdgelessFiles was unpaged. At its real threshold it returns 1 file, so
+  # drive the population with -MinCallRefs 0: every CLIENT file with no call edge
+  # at all -- 222, measured (SELECT COUNT(*) over the same predicate). Unpaged it
+  # returned the first 200.
+  $script:eg0 = & { $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'; . "$SRC\Emit-Common.ps1"; $DbPath = $DbCli; (Get-EdgelessFiles 0).Count }
+  Chk 'A-EDGELESS-PAGED' $eg0 222
 
   $script:lw1 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   # P35, measured on this run and printed on the chart (R10). 1,992 (was 1,991 at
@@ -2108,6 +2154,13 @@ Step 'LW-N31-QUOTED' {
   if (-not (HasLine $tlq 3848)) { Fail 'A-LW-QUOTED-RENDER' 'the quoted column is not anchored on its scanned line MS1.SQL:3848' }
   if ($tlq -notmatch '1,991 of 1,997 properties on table-named classes are extracted as a column of that table \(\+1 a QUOTED column the index does not extract\)') { Fail 'A-LW-QUOTED-RENDER' 'the convention grade does not add the quoted column' }
   if ($tlq -notmatch '6 are not extracted as a column by the SQL index; of those, FOLDERCOUNT\.TABLE is a QUOTED column the index does not extract') { Fail 'A-LW-QUOTED-RENDER' 'the coverage line does not name the quoted column' }
+  # R24 item 7: the focus line "N of 2,063 Tmc properties ... are a column" counted
+  # only the EXTRACTED columns (1,991 with TABLE hidden), one short of the columns
+  # the chart itself found -- the quoted FOLDERCOUNT.TABLE is a column too. It now
+  # counts what the grade line counts: 1,991 extracted + 1 quoted = 1,992, which is
+  # also what the unhidden run reports (A-LW0-CONV 2063/1997/1992).
+  if ($tlq -notmatch '1,992 of 2,063 Tmc properties in this index are a column of their class') { Fail 'A-LW-R24-COUNT' 'the focus count leaves out the quoted column' }
+  if ((Dot $lw31q) -notmatch '1,992 of 2,063 Tmc properties in this index are a column of their class') { Fail 'A-LW-R24-COUNT' 'the unhidden focus count moved' }
   if ($tlq -notmatch 'TEST CHART: FOLDERCOUNT\.TABLE taken OUT') { Fail 'A-LW-QUOTED-RENDER' 'a hook-driven chart does not say TEST CHART' }
   if (-not $coq) { Fail 'A-COLSTATE-AGREE' 'precondition: the consumers FOLDERCOUNT.TABLE run (E-CO) produced no result' }
   elseif ($coq.ColumnLabel -ne $lw31q.ColumnLabel) { Fail 'A-COLSTATE-AGREE' "consumers and lands-where label FOLDERCOUNT.TABLE differently: '$($coq.ColumnLabel)' vs '$($lw31q.ColumnLabel)'" }
@@ -2123,6 +2176,27 @@ Step 'LW-R17' {
   # computed-field name) as a SECOND candidate and turn this chain -- 73 controls, one-table
   # FOLDERS -- into "many". The match stays exact and the case-only literal is NAMED on the hop.
   if ($t17 -notmatch "the only upper-case table-name literal in uJobList\.ViewModel\.pas; 1 literal\(s\) equal a table name only case-insensitively and are not taken as one: 'DueIN' :301") { Fail 'A-LW-R17-CASE' 'the case-only table literal is not named on the table hop' }
+}
+# R24 item 9 (folded T3): a DFM chain that stops before a table. The server line
+# printed `no TDataService__SERVER in the SERVER index` and `Imc.` -- names built
+# around an empty table. It must say the table could not be determined.
+Step 'LW-R24-NOTABLE' {
+  $script:lwnt = & "$SRC\Emit-LandsWhere.ps1" -Field 'frmBlueprint4.edtF1' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW-R24-NOTABLE' "$($lwnt.ChainOutcome):$([string]$lwnt.Table):$($lwnt.ServerRows)" 'dangling::0'
+  $tnt = Dot $lwnt
+  if ($tnt -match 'TDataService__SERVER' -or $tnt -match 'Imc\.') { Fail 'A-LW-R24-NOTABLE' 'a name constructed around the empty table is printed' }
+  if ($tnt -notmatch 'server: the table could not be determined, so no DataService was looked up') { Fail 'A-LW-R24-NOTABLE' 'the unknown table is not said' }
+}
+# R24 item 8: "computed or UI-only" is a claim about the FIELD, and with no
+# TDataService_<T>_SERVER nothing on the server was searched. No real Tmc<T> sits
+# on such a table (the 6 tables without one -- DEFCTRPL, OPERATION and 4 FIB$ --
+# have no Tmc class; measured), so the sentence builder is driven directly.
+Step 'LW-R24-NODS' {
+  $script:nd = & { $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'; . "$SRC\Emit-Common.ps1"
+    [pscustomobject]@{ No = (Format-NotAColumnNote 'DistHist' 'INSPRSLT' 'LBL' ''); Yes = (Format-NotAColumnNote 'DistHist' 'INSPRSLT' 'LBL' 'TDataService_INSPRSLT_SERVER') } }
+  if ($nd.No -match 'computed or UI-only') { Fail 'A-LW-R24-NODS' "with no DataService searched the field is still called computed or UI-only: $($nd.No)" }
+  Chk 'A-LW-R24-NODS' $nd.No 'DistHist is not extracted as a column of INSPRSLT: LBL; no DataService was searched (no TDataService_INSPRSLT_SERVER in the SERVER index), so whether it is computed, UI-only or written by server SQL is NOT known'
+  Chk 'A-LW-R24-DS'   $nd.Yes 'DistHist is not a column of INSPRSLT -- computed or UI-only: LBL; the database side is empty'
 }
 NegTest 'LW-N32' 'not an ORM object property (class is not Tmc<T>) and not a DFM-bound field' 'landswhere_uPipeClientConnection_TPipeClientConnection_Connected' {
   & "$SRC\Emit-LandsWhere.ps1" -Field 'uPipeClientConnection.TPipeClientConnection.Connected' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
