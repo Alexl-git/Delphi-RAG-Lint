@@ -580,18 +580,18 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 ### Verification kit
 
 * **Model tests:** `tests\ConvRulesModelTests.exe` with `CONVRULES_TEST_ENGINE` =
-  the 1.21.1 pin -> **`model-tests: 1616 pass / 5 fail / 1 skip / 1622 total`**
-  (measured 2026-10-06 after the feat/c8-inherited-editor fix wave; 1422 / 5 / 0 before
-  it; 1329 / 5 before C6); the skip is `inherited.live` (the engine lacks
-  `inherited_instances`); the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
+  the 1.22.0 pin -> **`model-tests: 1646 pass / 5 fail / 0 skip / 1651 total`**
+  (measured 2026-10-06 after C8 Task 8; 1616 / 5 / 1 skip on the 1.21.1 pin after the
+  fix wave; 1422 / 5 / 0 before C8; 1329 / 5 before C6); `inherited.live` RUNS now
+  (the engine reports `inherited_instances`) and SKIPs on an older pin; the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
   `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
-  `.has.TOvcTable`). A full run measured 98 s on 2026-10-06 (recorded
+  `.has.TOvcTable`). A full run measured 98-178 s on 2026-10-06 (recorded
   earlier as ~6 min, the live runner test ~3 min of it); a build or redeploy of `dll-win64` mid-run kills it -- discard that run.
 * **GUI drivers** (`tests\gui\`, run by hand as `pwsh -NoProfile -File <driver>
   -Exe <ConvRulesEditor.exe>`, the exe beside a frozen `drag-lint.exe` whose
   Win64 library index answers -- a staged copy, never `dll-win64`). Expected
-  on the final build (measured 2026-10-06 on a staged copy of the 1.21.1 pin,
-  all 10 green):
+  on the final build (measured 2026-10-06 on a staged copy of the 1.22.0 pin,
+  all 10 green; the same counts on the 1.21.1 pin before C8 Task 8):
 
   | driver | checks | covers |
   |---|---|---|
@@ -604,14 +604,15 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   | `drive-book-depth.ps1` | 13 | depth combo shows the book's `#depth`, gated on `book_depth`, absent `#depth` not added on save, New file shows the default, `depth.change.*` (an engine without `book_depth` gives 10 + 1 SKIP line) |
   | `drive-convert-tab.ps1` | 20 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line; since C8 also: no E7 order dialog on a fixture with no inherited instance |
   | `drive-validate-scope.ps1` | 18 | scoped validation on Save (warnings, unchanged re-save fast), progress window + Cancel, owed block revalidated, Exit without a prompt, `automatch.*` |
-  | `drive-inherited-offer.ps1` | 15 | C8: ancestor-first prompt (No / Yes inserts above), row note on the status bar (incl. an E2b code-only use), order warning (No runs nothing), no-capability run note (`-ProofNoInheritance` control) |
+  | `drive-inherited-offer.ps1` | 15 | C8: ancestor-first prompt (No / Yes inserts above), row note on the status bar (incl. an E2b code-only use), order warning (No runs nothing), the E10 run note branching on the staged engine's `inherited_instances` (`engine.refusal.note.absent` on 1.22.0, `engine.refusal.note` on a 1.21.1 pin copy -- run BOTH stages; `-ProofNoInheritance` control) |
 
   `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 10 pass / 9
   fail is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
   the project index" (no DB), not at the unindexed refusal; that refusal is
   proven by `Loose.pas` in the normal run. `drive-inherited-offer.ps1
-  -ProofNoInheritance` gives 7 pass / 7 fail (measured 2026-10-06): the C8 checks
-  can fail.
+  -ProofNoInheritance` gives 8 pass / 6 fail on the 1.22.0 pin (7 / 7 on the 1.21.1
+  pin, where the E10 refusal note is the seventh FAIL; on 1.22.0 its `.absent` twin
+  passes vacuously): the C8 checks can fail.
 * **Driver traps recorded on this branch:** `LB_GETTEXT` is system-marshalled
   -- read it into a LOCAL buffer, not remote memory; screen capture of a CHILD
   window here returns another control's pixels -- use `PrintWindow(hwnd, dc,
@@ -1021,7 +1022,8 @@ in the `c8-inherited` worktree.
   (fills a caller-owned cache).
 * **Run-side decisions are NOT in `ConvRules.Inheritance`** (model-tested too):
   `InheritedLeftNote` / `InheritedReportNote` (the engine's `inherited[]` as a row
-  note / a report note) and `SourcesAddRefusal` live in `ConvRules.ConvertRun`;
+  note / a report note), `ConvertedRowNote` and `SourcesAddRefusal` live in
+  `ConvRules.ConvertRun`;
   `InheritedReportLines`, `UnitsConvertedIn` and `CodeUseNoteDue` live in
   `ConvRules.ConvertRunner`.
 * **The reader answers `TDfmRead`:** `drMissing` (no .dfm -- a class with no .dfm
@@ -1048,8 +1050,15 @@ in the `c8-inherited` worktree.
   `dmCPData`'s `inherited tblFtrs: TTable` is declared in `DMREADINGS`, two levels
   up; `PathToData.dfm` never mentions it. The walk continues past an ancestor that
   does not open the instance.
-* **`TAncestorState`: `asUnconverted` / `asConverted` / `asOutside` / `asUnknown`.**
-  `asUnknown` = the walk could not decide: the index could not be asked (failed or
+* **`TAncestorState`: `asUnconverted` / `asConverted` / `asMismatched` / `asOutside` /
+  `asUnknown`.** `asConverted` = the declaring object has the To type of a checked pair
+  whose From is the instance's type; **`asMismatched` (Task 8, 2026-10-06; REVERSES
+  preflight ruling C4, which read every non-From type as converted)** = it has neither
+  (the engine's `mismatched`; `TInstanceVerdict.FoundType` names the type). Its row note
+  is `inherits N <types> instance(s) from <Unit>, where they are <Found> -- not this
+  book's From or To type`; it is NOT offered (E6) and NOT warned about (E7) -- converting
+  that ancestor with this book would not help. `ResolveInstance` therefore takes the
+  pairs. `asUnknown` = the walk could not decide: the index could not be asked (failed or
   stale read), the chain loops or passes `MAX_CHAIN_DEPTH` (32), or an IN-INDEX
   ancestor's .dfm is binary (`TPF0`) or unreadable. The verdict's `Reason` names the
   cause; `AnalyzeUnit` then makes the unit `Known = False` with an `Error` carrying
@@ -1129,10 +1138,29 @@ in the `c8-inherited` worktree.
   `CapabilityNames` call in `RefreshBooks`; `TConvertJob.InheritedSupported` comes
   from that probe. Without it: `EngineRefusalNotes` says the engine will refuse each
   Known unit with a .dfm verdict (code uses do not count -- the engine does not
-  refuse on code), and the refusal path is unchanged. With it: a converted row's
-  note lists `N inherited instance(s) left: ancestor U not converted`
-  (`InheritedLeftNote`) and the report adds one 8-column `inherited left` line per
-  instance (`InheritedReportLines`).
+  refuse on code), and the refusal path is unchanged. With it (engine 1.22.0 on,
+  pin `1.22.0-alpha-20261006-040048`): the engine converts around inherited instances
+  and never refuses for them; a converted row's note (`ConvertedRowNote`) lists
+  `N inherited instance(s) left: <words>` (`InheritedLeftNote`) and the report adds
+  one 8-column `inherited left` line per instance (`InheritedReportLines`,
+  `<name>: <type> line N -- <words> (<reason>)`, the reason left out when the words
+  carry it). The words per `ancestor_state`:
+
+  | state | words |
+  |---|---|
+  | `unconverted` | `ancestor <U> not converted` |
+  | `converted` | `ancestor <U> converted -- retype pending (engine N2)` -- N1 still SKIPS it; the descendant's .dfm stays byte-unchanged |
+  | `mismatched` | `ancestor <U> has <Found> (neither <From> nor <To>)`, read from the engine's reason `declared in <U> as <Found>, neither <From> nor <To> -- ...`; any other reason shape gives `ancestor <U> has another type -- <reason>` |
+  | `outside` | `ancestor not determinable -- <reason>` (the engine sends `ancestor_unit` ""; a missing / binary ancestor .dfm lands here with the file named) |
+  | anything else | `ancestor <U>: <state>` |
+
+  Grouping is by the words, i.e. (state, unit) plus the type found / the reason.
+  A .dfm holding ONLY inherited instances answers `component_part:
+  "skipped-no-instances"`, ok, exit 0: a CONVERTED row with `; no component of its own
+  to convert` (`TApplyRow.ComponentPart`; `runner.inherited.skipped.no.instances`). Its
+  `.BCK<N>` is kept like any converted row's, although nothing changed. The editor's
+  own pre-run analysis keeps treating an unreadable / binary IN-INDEX ancestor .dfm as
+  unknown (status line); the engine's post-run `outside` reports it per instance.
 * **R4 -- an ancestor converted EARLIER IN THE SAME RUN is not "left" -- in the
   editor-side code-use note ONLY** (`UnitsConvertedIn`). The code-use note
   (`N inherited code use(s) left: ...`, `CodeUseLeftNote`) appears ONCE per unit
@@ -1143,8 +1171,11 @@ in the `c8-inherited` worktree.
   `tab.r4.runner.engine.unfiltered`, `tab.report.lines.engine.unfiltered`,
   `tab.r4.left.engine.all`.
 * **Not built:** E4 (the index's inherited/inline `modifiers` flag) -- the .dfm text
-  read is the only source. The E11 live test `inherited.live` SKIPs until the engine
-  reports `inherited_instances`.
+  read is the only source. The E11 live test `inherited.live` RUNS on the 1.22.0 pin
+  (6 checks; it SKIPs on an engine without `inherited_instances`). Its Task 6
+  expectation (descendant retyped) was a guess; a real run showed N1 leaves the
+  descendant's `inherited Label1: TLabel` byte-unchanged and reports it `converted`,
+  so the test now asserts that (Task 8).
 * **Deferred minors (ledger):** a multi-file drop of N descendants of one unlisted
   base prompts once per descendant on No (no "No to all"); the Convert gate's Yes /
   No has no GUI check; `drive-inherited-offer.ps1` still has a fixed 2 s sleep after

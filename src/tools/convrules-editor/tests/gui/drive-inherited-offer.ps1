@@ -15,6 +15,10 @@
 #   the offer / note / warning checks must then FAIL, which is the proof they can. With no warning a REAL conversion
 #   starts on Convert. Measured 2026-10-05: 7 pass / 7 fail -- the same 7 FAILs as above; sources.cleared PASSES
 #   (the run had finished before the list was cleared).
+# The E10 check branches on the staged engine's inherited_instances capability: with it (1.22.0 pin copy,
+#   measured 2026-10-06) engine.refusal.note.absent -- 15 / 0, and -ProofNoInheritance 8 / 6 (that check then
+#   passes vacuously); WITHOUT it (stage a 1.21.1 pin copy beside the same exe) engine.refusal.note -- 15 / 0.
+#   Run both stages: one stage proves only one branch.
 param([string]$Exe, [switch]$ProofNoInheritance)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
