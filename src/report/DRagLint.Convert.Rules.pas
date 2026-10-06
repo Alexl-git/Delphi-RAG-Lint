@@ -949,7 +949,8 @@ begin
       else if Directive('#migrate', Arg) then
       begin
         R.Kind:= rkMigrate;
-        ArrPos:= Pos(ARROW_MIGRATE, Arg);
+        { as #useswap: a From-only '#migrate Foo -> ' must read Old 'Foo' (R27) }
+        ArrPos:= Pos(ARROW_MIGRATE, Arg + ' ');
         if ArrPos > 0 then
         begin
           Lhs:= Trim(Copy(Arg, 1, ArrPos - 1));
