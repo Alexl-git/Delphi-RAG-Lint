@@ -69,7 +69,9 @@ type
     RuleErrorCount: Integer;
     /// <summary>converted[] -- one line per converted instance.</summary>
     Converted : TArray<string>;
-    /// <summary>todos[] + reemit_notes[] + warnings[] -- the manual remainder.</summary>
+    /// <summary>todos[] + reemit_notes[] + warnings[] -- the manual remainder. When inherited[]
+    /// is not empty, the engine's per-instance 'line N: warning: inherited instance ...'
+    /// warnings are left out: InheritedLeftNote already counts those instances.</summary>
     Remainder : TArray<string>;
     /// <summary>inherited[] -- the instances left unconverted; empty for an engine
     /// without inherited_instances (it refuses such a unit instead). A non-object
@@ -173,6 +175,8 @@ function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles
 function ParseApplyJson(const AJson: string): TApplyRow;
 
 /// <summary>PURE: the converted row's note for what was left (spec E10).</summary>
+/// <param name="ARetypeSupported">The engine reports inherited_retype (C8 N2). False
+/// (1.22.0) changes the converted words only (see returns).</param>
 /// <param name="AItems">TApplyRow.InheritedLeft -- the engine's own inherited[],
 /// reported after the runner's reindex and shown UNFILTERED (controller ruling M4: the
 /// R4 omission of ancestors converted earlier in the run is the editor-side code-use
@@ -180,31 +184,37 @@ function ParseApplyJson(const AJson: string): TApplyRow;
 /// <returns>'' for none; else 'N inherited instance(s) left: &lt;words&gt;' per distinct
 /// words, first-seen order, joined '; '. The words by ancestor_state: unconverted
 /// 'ancestor &lt;U&gt; not converted'; converted 'ancestor &lt;U&gt; converted -- retype
-/// pending (engine N2)'; mismatched 'ancestor &lt;U&gt; has &lt;Found&gt; (neither
+/// pending (engine N2)' with retype, else 'ancestor &lt;U&gt; converted -- this unit still has
+/// &lt;Type&gt; there and may not compile or load until the engine can retype inherited
+/// instances (N2)' (an inherited object of the From type under an ancestor that now
+/// declares the To type fails at load, and From-only member uses stop compiling); mismatched 'ancestor &lt;U&gt; has &lt;Found&gt; (neither
 /// &lt;From&gt; nor &lt;To&gt;)', the three types read from the engine's reason, or
 /// 'ancestor &lt;U&gt; has another type -- &lt;reason&gt;' when the reason has another
 /// shape; outside 'ancestor not determinable -- &lt;reason&gt;' (the engine sends no
 /// ancestor_unit); any other state 'ancestor &lt;U&gt;: &lt;state&gt;'.</returns>
 /// <remarks>Grouping is by the words, so it is by (state, unit), plus the type found for
 /// mismatched and the reason for outside.</remarks>
-function InheritedLeftNote(const AItems: TArray<TInheritedLeft>): string;
+function InheritedLeftNote(const AItems: TArray<TInheritedLeft>; ARetypeSupported: Boolean): string;
 
 /// <summary>PURE: one run-report note for one left instance.</summary>
 /// <param name="AItem">The instance.</param>
+/// <param name="ARetypeSupported">As for InheritedLeftNote.</param>
 /// <returns>'&lt;name&gt;: &lt;type&gt; line N -- &lt;words&gt; (&lt;reason&gt;)', the words as
 /// InheritedLeftNote's; ' (&lt;reason&gt;)' is left out when the reason is '' or the words
 /// already carry it (outside, and a mismatched reason that could not be read).</returns>
-function InheritedReportNote(const AItem: TInheritedLeft): string;
+function InheritedReportNote(const AItem: TInheritedLeft; ARetypeSupported: Boolean): string;
 
 /// <summary>PURE: the note of a csConverted row.</summary>
 /// <param name="AApply">The book's apply/1 answer (Ok).</param>
 /// <param name="AInheritedSupported">The engine reports inherited_instances: only then is
 /// inherited[] read as that contract (InheritedLeftNote is appended).</param>
+/// <param name="ARetypeSupported">The engine reports inherited_retype (passed to
+/// InheritedLeftNote).</param>
 /// <returns>'N edit(s), M remaining for manual work', then '; no component of its own to
 /// convert' when ComponentPart is 'skipped-no-instances' (the engine converted around a
 /// .dfm holding only inherited instances, exit 0 -- not a failure), then '; ' +
 /// InheritedLeftNote when supported and something was left.</returns>
-function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported: Boolean): string;
+function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported, ARetypeSupported: Boolean): string;
 
 /// <summary>PURE: why the Convert tab must not add sources right now, or '' when it may.</summary>
 /// <param name="ARunning">A conversion run is in progress.</param>
@@ -225,6 +235,7 @@ uses
   , System.IOUtils
   , System.JSON
   , System.Math
+  , System.RegularExpressions
   , System.StrUtils
   , ConvRules.Model
   , ConvRules.UsesHarvest
@@ -233,6 +244,9 @@ uses
 const
   BCK_TAG          = '.BCK';
   ERR_HEAD_CHARS   = 200;
+  // The engine's per-instance inherited warning (also an items[] inherited-instance-skipped):
+  // 'line N: warning: inherited instance <Name>: <Type> skipped -- <reason>'.
+  INHERITED_WARNING_PATTERN = '^line \d+: warning: inherited instance ';
   BCK_PROBE_WINDOW = 50;
 
 // The highest N with AFile + '.BCK' + N present; 0 when there is none.
@@ -502,6 +516,17 @@ function ParseApplyJson(const AJson: string): TApplyRow;
       end;
   end;
 
+  // AWarnings minus the engine's per-instance inherited warnings when inherited[] is
+  // there (AHasList): those are the "left" note's, so counting them as manual remainder
+  // too would count each instance twice. Without inherited[] they stay.
+  function OwnWarnings(const AWarnings: TArray<string>; AHasList: Boolean): TArray<string>;
+  begin
+    Result:= nil;
+    for var LWarn: string in AWarnings do
+      if not (AHasList and TRegEx.IsMatch(LWarn, INHERITED_WARNING_PATTERN)) then
+        Result:= Result + [LWarn];
+  end;
+
 var
   Root: TJSONValue;
   Obj : TJSONObject;
@@ -529,8 +554,8 @@ begin
     Result.Ok        := Obj.GetValue<Boolean>('ok', False);
     Result.EditsCount:= Obj.GetValue<Integer>('edits_count', 0);
     Result.Converted := Strings(Obj, 'converted');
-    Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + Strings(Obj, 'warnings');
     Result.InheritedLeft:= InheritedItems(Obj);
+    Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0);
     Result.ComponentPart:= Str(Obj, 'component_part');
     if Obj.TryGetValue<TJSONArray>('rule_errors', Errs) then
       Result.RuleErrorCount:= Errs.Count;
@@ -565,6 +590,7 @@ const
   STATE_OUTSIDE   = 'outside';
   WORDS_UNCONV    = 'ancestor %s not converted';
   WORDS_CONV      = 'ancestor %s converted -- retype pending (engine N2)';
+  WORDS_CONV_N1   = 'ancestor %s converted -- this unit still has %s there and may not compile or load until the engine can retype inherited instances (N2)';
   WORDS_MISMATCH  = 'ancestor %s has %s (neither %s nor %s)';
   WORDS_MIS_OTHER = 'ancestor %s has another type -- %s';
   WORDS_OUTSIDE   = 'ancestor not determinable -- %s';
@@ -616,14 +642,14 @@ begin
 end;
 
 // What was left, in words, per ancestor_state (see InheritedLeftNote).
-function LeftWords(const AItem: TInheritedLeft): string;
+function LeftWords(const AItem: TInheritedLeft; ARetypeSupported: Boolean): string;
 var
   LFound, LFrom, LTo: string;
 begin
   if SameText(AItem.AncestorState, STATE_UNCONV) then
     Result:= Format(WORDS_UNCONV, [AItem.AncestorUnit])
   else if SameText(AItem.AncestorState, STATE_CONV) then
-    Result:= Format(WORDS_CONV, [AItem.AncestorUnit])
+    Result:= if ARetypeSupported then Format(WORDS_CONV, [AItem.AncestorUnit]) else Format(WORDS_CONV_N1, [AItem.AncestorUnit, AItem.TypeName])
   else if SameText(AItem.AncestorState, STATE_MISMATCH) then
     Result:= if TryReadMismatch(AItem, LFound, LFrom, LTo) then Format(WORDS_MISMATCH, [AItem.AncestorUnit, LFound, LFrom, LTo])
       else Format(WORDS_MIS_OTHER, [AItem.AncestorUnit, AItem.Reason])
@@ -633,7 +659,7 @@ begin
     Result:= Format(WORDS_OTHER, [AItem.AncestorUnit, AItem.AncestorState]);
 end;
 
-function InheritedLeftNote(const AItems: TArray<TInheritedLeft>): string;
+function InheritedLeftNote(const AItems: TArray<TInheritedLeft>; ARetypeSupported: Boolean): string;
 var
   LWords : TArray<string>; // one per distinct LeftWords, first-seen order
   LCounts: TArray<Integer>;
@@ -648,7 +674,7 @@ begin
   // never merged under one count.
   for var LItem: TInheritedLeft in AItems do
   begin
-    LText:= LeftWords(LItem);
+    LText:= LeftWords(LItem, ARetypeSupported);
     LIdx := High(LWords);
     while (LIdx >= 0) and not SameText(LWords[LIdx], LText) do
       Dec(LIdx);
@@ -666,17 +692,17 @@ begin
   Result:= string.Join('; ', LParts);
 end;
 
-function InheritedReportNote(const AItem: TInheritedLeft): string;
+function InheritedReportNote(const AItem: TInheritedLeft; ARetypeSupported: Boolean): string;
 var
   LWords: string;
 begin
-  LWords:= LeftWords(AItem);
+  LWords:= LeftWords(AItem, ARetypeSupported);
   Result:= Format(REPORT_LEFT_FMT, [AItem.Name, AItem.TypeName, AItem.Line, LWords]);
   if (AItem.Reason <> '') and (Pos(AItem.Reason, LWords) = 0) then
     Result:= Result + Format(REPORT_REASON, [AItem.Reason]);
 end;
 
-function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported: Boolean): string;
+function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported, ARetypeSupported: Boolean): string;
 var
   LLeft: string;
 begin
@@ -685,7 +711,7 @@ begin
     Result:= Result + NOTE_NO_OWN_COMPONENT;
   // E10: only an engine with inherited_instances sends inherited[]; the gate keeps an
   // older engine's output from being read as this contract. Unfiltered (ruling M4).
-  LLeft:= if AInheritedSupported then InheritedLeftNote(AApply.InheritedLeft) else '';
+  LLeft:= if AInheritedSupported then InheritedLeftNote(AApply.InheritedLeft, ARetypeSupported) else '';
   if LLeft <> '' then
     Result:= Result + '; ' + LLeft;
 end;

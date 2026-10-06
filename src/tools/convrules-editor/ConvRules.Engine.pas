@@ -67,10 +67,15 @@ const
   /// lines (engine 1.20.6). An engine WITHOUT it exits 3 on the flag.</summary>
   CAPABILITY_PROGRESS_LINES = 'progress_lines';
   /// <summary>info --json capability: convert-apply converts a unit's own part when it
-  /// holds inherited / inline instances, reports them in apply/1 inherited[], and
-  /// retypes them once the declaring ancestor is converted (C8, engine N1-N5). Without
-  /// it the engine refuses such a unit.</summary>
+  /// holds inherited / inline instances and reports them in apply/1 inherited[] (C8,
+  /// engine N1 + N5, 1.22.0). Without it the engine refuses such a unit.</summary>
   CAPABILITY_INHERITED_INSTANCES = 'inherited_instances';
+  /// <summary>info --json capability: convert-apply RETYPES a descendant's inherited
+  /// instance once its declaring ancestor has the To type (C8 engine N2). PROPOSED key --
+  /// the engine stream confirms or renames it; this constant is the one place it lives.
+  /// Without it (1.22.0) an inherited instance under a converted ancestor stays the From
+  /// type, so the descendant may fail to compile or load.</summary>
+  CAPABILITY_INHERITED_RETYPE = 'inherited_retype';
   /// <summary>The words every C8 read's failure text carries when the engine marked
   /// its answer "stale" (a file changed on disk since it was indexed).</summary>
   /// <remarks>ConvRules.InheritanceEngine.IsStaleIndexError matches on it to decide

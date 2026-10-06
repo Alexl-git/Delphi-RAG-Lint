@@ -399,9 +399,14 @@ function DiskTextReader: TDfmTextReader;
 /// (declaring unit, type found) of its asMismatched verdicts 'inherits N &lt;types&gt;
 /// instance(s) from &lt;Unit&gt;, where they are &lt;Found&gt; -- not this book's From or
 /// To type', then each distinct OutsideNote of its asOutside verdicts; all joined '; '.</returns>
+/// <param name="ARetypeSupported">The engine reports inherited_retype (C8 N2). False
+/// (1.22.0): each 'convert it first (recommended)' part gains ' -- with this engine,
+/// converting it now breaks this unit until N2' -- converting that ancestor leaves this
+/// unit's inherited instances with the From type under an ancestor that has the To type.</param>
 /// <remarks>asConverted says nothing (the engine reports it after the run). asUnknown
-/// never yields a note: AnalyzeUnit makes such a unit Known = False.</remarks>
-function InheritanceRowNote(const AUnit: TUnitInheritance): string;
+/// never yields a note: AnalyzeUnit makes such a unit Known = False. The spec E5 wording
+/// itself stays verbatim (owner ruling).</remarks>
+function InheritanceRowNote(const AUnit: TUnitInheritance; ARetypeSupported: Boolean): string;
 
 /// <summary>PURE: the ancestor units to convert before AUnit (spec E2a / E6): the chain
 /// units of its asUnconverted verdicts -- the units whose .dfm declares or re-opens one of
@@ -425,8 +430,15 @@ function MissingAncestors(const AChain, AList: TArray<string>): TArray<string>;
 /// <param name="AChain">The units the offer would add: MissingAncestors(AncestorChain(unit),
 /// source list) -- the chain units not yet listed, topmost first. Not empty.</param>
 /// <param name="AUnitPas">The descendant.</param>
-/// <returns>'Add Base.pas, Mid.pas ahead of Leaf.pas?'.</returns>
-function OfferText(const AChain: TArray<string>; const AUnitPas: string): string;
+/// <param name="ATypes">UnconvertedTypes of the descendant's analysis.</param>
+/// <param name="ARetypeSupported">The engine reports inherited_retype (C8 N2).</param>
+/// <returns>'Add Base.pas, Mid.pas ahead of Leaf.pas?'; without retype, followed by '
+/// Converting Base.pas, Mid.pas leaves Leaf.pas''s inherited instance(s) as TTable,
+/// TQuery until engine N2 -- Leaf.pas may not compile or load.'</returns>
+/// <remarks>Ancestor-first stays the long-term order and the offer stays (owner ruling:
+/// never blocking); until N2 it says what converting the ancestor does to the
+/// descendant.</remarks>
+function OfferText(const AChain: TArray<string>; const AUnitPas: string; const ATypes: TArray<string>; ARetypeSupported: Boolean): string;
 
 /// <summary>PURE: AList with AChain's missing units inserted so every ancestor precedes its
 /// descendants (spec E6 Yes, as amended 2026-10-05).</summary>
@@ -444,17 +456,35 @@ function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; co
 /// listed BELOW it) pair (spec E7).</summary>
 /// <param name="AList">The source list, run order.</param>
 /// <param name="AUnits">The listed units' analyses (any order).</param>
-/// <returns>'&lt;Desc.pas&gt; is listed above its ancestor &lt;Anc.pas&gt;, which is not
-/// converted yet' lines, per unit in AUnits order, ancestors topmost first.</returns>
+/// <param name="ARetypeSupported">The engine reports inherited_retype (C8 N2).</param>
+/// <returns>Per unit in AUnits order, ancestors topmost first: with retype '&lt;Desc.pas&gt;
+/// is listed above its ancestor &lt;Anc.pas&gt;, which is not converted yet'; without it
+/// '&lt;Desc.pas&gt; is listed above its ancestor &lt;Anc.pas&gt;.' (the order does not
+/// change what this engine does -- OrderWarningText says so).</returns>
 /// <remarks>A warning, never a refusal: the run converts the descendant's own part
 /// either way (E9).</remarks>
-function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
+function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>; ARetypeSupported: Boolean): TArray<string>;
 
 /// <summary>PURE: the single E7 confirmation text.</summary>
 /// <param name="AWarnings">OrderWarnings' lines; not empty.</param>
-/// <returns>A heading line, the warnings one per line, a blank line, then 'Convert in
-/// this order anyway?'.</returns>
-function OrderWarningText(const AWarnings: TArray<string>): string;
+/// <param name="ARetypeSupported">The engine reports inherited_retype (C8 N2).</param>
+/// <returns>With retype: a heading line, the warnings one per line, a blank line, then
+/// 'Convert in this order anyway?'. Without it: the warnings one per line, a blank line,
+/// then 'With this engine the order does not change this run''s result: inherited
+/// instances are skipped either way. Run anyway?' -- no claim that reordering helps.</returns>
+function OrderWarningText(const AWarnings: TArray<string>; ARetypeSupported: Boolean): string;
+
+/// <summary>PURE: the status after No to the E7 warning.</summary>
+/// <param name="ARetypeSupported">The engine reports inherited_retype (C8 N2).</param>
+/// <returns>With retype 'Convert cancelled: reorder the source units (ancestors first)
+/// and press Convert again.'; without it 'Convert cancelled: nothing was run.'</returns>
+function OrderCancelledText(ARetypeSupported: Boolean): string;
+
+/// <summary>PURE: the distinct instance types of AUnit's asUnconverted verdicts,
+/// first-seen order (the E6 offer's types).</summary>
+/// <param name="AUnit">The unit's analysis.</param>
+/// <returns>Bare type names as the .dfm (or the declaring field) writes them.</returns>
+function UnconvertedTypes(const AUnit: TUnitInheritance): TArray<string>;
 
 /// <summary>PURE: the run notes for an engine WITHOUT inherited_instances: today's
 /// convert-apply refuses every unit holding an inherited From instance.</summary>
@@ -513,6 +543,16 @@ const
   ORDER_WARNING_FMT = '%s is listed above its ancestor %s, which is not converted yet';
   ORDER_HEAD        = 'Some units are listed above an ancestor that is not converted yet; their inherited instances will not convert in this run:';
   ORDER_TAIL        = 'Convert in this order anyway?';
+  // Until the engine retypes inherited instances (C8 N2): converting an ancestor leaves
+  // its descendants' inherited objects with the From type under an ancestor that declares
+  // the To type -- they fail at load (EClassNotFound / EReadError) and From-only member
+  // uses stop compiling -- and the order does not change what this engine does.
+  NOTE_BREAKS_UNTIL_N2 = ' -- with this engine, converting it now breaks this unit until N2';
+  OFFER_N1_FMT         = ' Converting %s leaves %s''s inherited instance(s) as %s until engine N2 -- %1:s may not compile or load.';
+  ORDER_WARNING_N1_FMT = '%s is listed above its ancestor %s.';
+  ORDER_TAIL_N1        = 'With this engine the order does not change this run''s result: inherited instances are skipped either way. Run anyway?';
+  ORDER_CANCELLED      = 'Convert cancelled: reorder the source units (ancestors first) and press Convert again.';
+  ORDER_CANCELLED_N1   = 'Convert cancelled: nothing was run.';
   REFUSAL_FMT       = '%s: %d inherited instance(s) of a From type -- this engine refuses such a unit (no inherited_instances capability), so it will be left unchanged';
 
 type
@@ -1370,7 +1410,7 @@ begin
     Result:= Format(NOTE_OUTSIDE, [AVerdict.DeclaringUnit]);
 end;
 
-function InheritanceRowNote(const AUnit: TUnitInheritance): string;
+function InheritanceRowNote(const AUnit: TUnitInheritance; ARetypeSupported: Boolean): string;
 var
   LParts: TArray<string>;
   LNote : string;
@@ -1383,7 +1423,8 @@ begin
     begin
       Result:= AVerdict.State = asUnconverted;
     end) do
-    LParts:= LParts + [Format(NOTE_UNCONVERTED, [LTally.Count, string.Join(TYPE_SEP, LTally.Types), LTally.UnitName])];
+    LParts:= LParts + [Format(NOTE_UNCONVERTED, [LTally.Count, string.Join(TYPE_SEP, LTally.Types), LTally.UnitName])
+      + (if ARetypeSupported then '' else NOTE_BREAKS_UNTIL_N2)];
   for var LTally: TUnitTally in TallyByUnit(AUnit.Verdicts,
     function(const AVerdict: TInstanceVerdict): Boolean
     begin
@@ -1445,7 +1486,7 @@ begin
       Result:= Result + [LPas];
 end;
 
-function OfferText(const AChain: TArray<string>; const AUnitPas: string): string;
+function OfferText(const AChain: TArray<string>; const AUnitPas: string; const ATypes: TArray<string>; ARetypeSupported: Boolean): string;
 var
   LNames: TArray<string>;
 begin
@@ -1453,6 +1494,8 @@ begin
   for var LPas: string in AChain do
     LNames:= LNames + [ExtractFileName(LPas)];
   Result:= Format(OFFER_FMT, [string.Join(TYPE_SEP, LNames), ExtractFileName(AUnitPas)]);
+  if not ARetypeSupported then
+    Result:= Result + Format(OFFER_N1_FMT, [string.Join(TYPE_SEP, LNames), ExtractFileName(AUnitPas), string.Join(TYPE_SEP, ATypes)]);
 end;
 
 function InsertAncestors(const AList: TArray<string>; const AUnitPas: string; const AChain: TArray<string>): TArray<string>;
@@ -1479,7 +1522,7 @@ begin
   end;
 end;
 
-function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>): TArray<string>;
+function OrderWarnings(const AList: TArray<string>; const AUnits: TArray<TUnitInheritance>; ARetypeSupported: Boolean): TArray<string>;
 var
   LPos: Integer;
 begin
@@ -1491,13 +1534,29 @@ begin
       Continue;
     for var LPas: string in AncestorChain(LUnit) do
       if PathIndex(LPas, AList) > LPos then
-        Result:= Result + [Format(ORDER_WARNING_FMT, [ExtractFileName(LUnit.UnitPas), ExtractFileName(LPas)])];
+        Result:= Result + [Format(if ARetypeSupported then ORDER_WARNING_FMT else ORDER_WARNING_N1_FMT, [ExtractFileName(LUnit.UnitPas), ExtractFileName(LPas)])];
   end;
 end;
 
-function OrderWarningText(const AWarnings: TArray<string>): string;
+function OrderWarningText(const AWarnings: TArray<string>; ARetypeSupported: Boolean): string;
 begin
-  Result:= ORDER_HEAD + sLineBreak + string.Join(sLineBreak, AWarnings) + sLineBreak + sLineBreak + ORDER_TAIL;
+  if ARetypeSupported then
+    Result:= ORDER_HEAD + sLineBreak + string.Join(sLineBreak, AWarnings) + sLineBreak + sLineBreak + ORDER_TAIL
+  else
+    Result:= string.Join(sLineBreak, AWarnings) + sLineBreak + sLineBreak + ORDER_TAIL_N1;
+end;
+
+function OrderCancelledText(ARetypeSupported: Boolean): string;
+begin
+  Result:= if ARetypeSupported then ORDER_CANCELLED else ORDER_CANCELLED_N1;
+end;
+
+function UnconvertedTypes(const AUnit: TUnitInheritance): TArray<string>;
+begin
+  Result:= nil;
+  for var LVerdict: TInstanceVerdict in AUnit.Verdicts do
+    if (LVerdict.State = asUnconverted) and not MatchText(LVerdict.Instance.TypeName, Result) then
+      Result:= Result + [LVerdict.Instance.TypeName];
 end;
 
 function EngineRefusalNotes(const AUnits: TArray<TUnitInheritance>; AInheritedSupported: Boolean): TArray<string>;

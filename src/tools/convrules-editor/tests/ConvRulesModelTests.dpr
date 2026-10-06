@@ -8661,7 +8661,7 @@ begin
     and (Length(V('tblOps').Chain) = CHAIN_OPS) and SameText(V('tblOps').Chain[0].PasPath, MID_PAS));
   Check('code.use.unknown.dropped', V('lblNoSuch').Instance.Name = '');
   Check('code.use.own.field.dropped', V('qryOwn').Instance.Name = '');
-  Check('code.use.note', InheritanceRowNote(U) = 'inherits 2 TTable instance(s) from Base -- convert it first (recommended)', InheritanceRowNote(U));
+  Check('code.use.note', InheritanceRowNote(U, True) = 'inherits 2 TTable instance(s) from Base -- convert it first (recommended)', InheritanceRowNote(U, True));
   Check('code.use.left.note', CodeUseLeftNote(U) = '2 inherited code use(s) left: ancestor Base not converted', CodeUseLeftNote(U));
 
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
@@ -8850,8 +8850,18 @@ const
     + '"todos":[],"reemit_notes":[],"warnings":["line 2: warning: inherited instance Label1: TLabel skipped -- ' + REASON_ANC + '"],'
     + '"component_part":"skipped-no-instances","inherited":[{"name":"Label1","type":"TLabel","line":2,"ancestor_unit":"Anc",'
     + '"ancestor_state":"converted","reason":"' + REASON_ANC + '"}]}';
-  NOTE_SKIPPED = '0 edit(s), 1 remaining for manual work; no component of its own to convert; '
+  // Fix round 1: the inherited warning is no longer counted in "remaining" (it is the
+  // "left" note's), and without inherited_retype the note says the unit may break.
+  NOTE_SKIPPED = '0 edit(s), 0 remaining for manual work; no component of its own to convert; '
+    + '1 inherited instance(s) left: ancestor Anc converted -- this unit still has TLabel there and may not compile or load '
+    + 'until the engine can retype inherited instances (N2)';
+  NOTE_SKIPPED_RETYPE = '0 edit(s), 0 remaining for manual work; no component of its own to convert; '
     + '1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)';
+  // One inherited warning and one other: only the other is manual remainder.
+  MIXED_JSON = '{"schema":"apply/1","ok":true,"edits_count":1,"warnings":["line 2: warning: inherited instance Label1: TLabel skipped -- x",'
+    + '"line 9: warning: something else"],"inherited":[{"name":"Label1","type":"TLabel","line":2,"ancestor_unit":"Anc","ancestor_state":"unconverted","reason":"x"}]}';
+  // No inherited[] (not this contract): an inherited-shaped warning is still remainder.
+  NO_LIST_JSON = '{"schema":"apply/1","ok":true,"edits_count":1,"warnings":["line 2: warning: inherited instance Label1: TLabel skipped -- x"]}';
   // A non-object entry is skipped; a wrongly-typed field reads as its default.
   BAD_ITEMS_JSON = '{"schema":"apply/1","ok":true,"edits_count":1,"inherited":[5,"x",null,{"name":"tblA","line":"four","type":7}]}';
   BAD_KEY_JSON   = '{"schema":"apply/1","ok":true,"edits_count":1,"inherited":{"name":"tblA"}}';
@@ -8895,21 +8905,25 @@ begin
     and (Bad.InheritedLeft[0].TypeName = ''), Format('ok=%s n=%d %s', [BoolToStr(Bad.Ok, True), Length(Bad.InheritedLeft), Bad.Error]));
   Bad:= ParseApplyJson(BAD_KEY_JSON);
   Check('apply.inherited.malformed.key', Bad.Ok and (Length(Bad.InheritedLeft) = 0), Bad.Error);
-  Check('apply.inherited.note', InheritedLeftNote(Row.InheritedLeft) = NOTE_LEFT, InheritedLeftNote(Row.InheritedLeft));
-  Check('apply.inherited.note.empty', InheritedLeftNote(nil) = '');
+  Check('apply.inherited.note', InheritedLeftNote(Row.InheritedLeft, True) = NOTE_LEFT, InheritedLeftNote(Row.InheritedLeft, True));
+  Check('apply.inherited.note.empty', InheritedLeftNote(nil, True) = '');
   if Length(Row.InheritedLeft) = ITEMS then
   begin
-    Check('apply.inherited.report', InheritedReportNote(Row.InheritedLeft[0]) = 'tblFtrs: TTable line 4 -- ancestor PathToData not converted (' + REASON_PTD + ')',
-      InheritedReportNote(Row.InheritedLeft[0]));
+    Check('apply.inherited.report', InheritedReportNote(Row.InheritedLeft[0], True) = 'tblFtrs: TTable line 4 -- ancestor PathToData not converted (' + REASON_PTD + ')',
+      InheritedReportNote(Row.InheritedLeft[0], True));
     // outside: the reason is already in the words, so it is not repeated in parentheses.
-    Check('apply.inherited.report.outside', InheritedReportNote(Row.InheritedLeft[2]) = 'qryLib: TQuery line 12 -- ancestor not determinable -- ' + REASON_LIB,
-      InheritedReportNote(Row.InheritedLeft[2]));
+    Check('apply.inherited.report.outside', InheritedReportNote(Row.InheritedLeft[2], True) = 'qryLib: TQuery line 12 -- ancestor not determinable -- ' + REASON_LIB,
+      InheritedReportNote(Row.InheritedLeft[2], True));
   end;
   Bad:= ParseApplyJson(SKIPPED_JSON);
   Check('apply.component.part', Bad.Ok and (Bad.ComponentPart = 'skipped-no-instances') and (ParseApplyJson(OLD_JSON).ComponentPart = ''), Bad.ComponentPart);
-  Check('apply.note.skipped', ConvertedRowNote(Bad, True) = NOTE_SKIPPED, ConvertedRowNote(Bad, True));
-  Check('apply.note.plain', ConvertedRowNote(ParseApplyJson(OLD_JSON), True) = '1 edit(s), 0 remaining for manual work', ConvertedRowNote(ParseApplyJson(OLD_JSON), True));
-  Check('apply.note.skipped.gated', ConvertedRowNote(Bad, False) = '0 edit(s), 1 remaining for manual work; no component of its own to convert', ConvertedRowNote(Bad, False));
+  Check('apply.note.skipped', ConvertedRowNote(Bad, True, False) = NOTE_SKIPPED, ConvertedRowNote(Bad, True, False));
+  Check('apply.note.skipped.retype', ConvertedRowNote(Bad, True, True) = NOTE_SKIPPED_RETYPE, ConvertedRowNote(Bad, True, True));
+  Check('apply.note.plain', ConvertedRowNote(ParseApplyJson(OLD_JSON), True, False) = '1 edit(s), 0 remaining for manual work', ConvertedRowNote(ParseApplyJson(OLD_JSON), True, False));
+  Check('apply.note.skipped.gated', ConvertedRowNote(Bad, False, False) = '0 edit(s), 0 remaining for manual work; no component of its own to convert', ConvertedRowNote(Bad, False, False));
+  Check('apply.remainder.excludes.inherited', (Length(Bad.Remainder) = 0) and (Length(ParseApplyJson(MIXED_JSON).Remainder) = 1)
+    and (ParseApplyJson(MIXED_JSON).Remainder[0] = 'line 9: warning: something else'), string.Join(' | ', ParseApplyJson(MIXED_JSON).Remainder));
+  Check('apply.remainder.no.list.keeps', Length(ParseApplyJson(NO_LIST_JSON).Remainder) = 1);
 
   Dir:= TPath.Combine(TPath.GetTempPath, 'c8apply-' + TPath.GetGUIDFileName);
   TDirectory.CreateDirectory(Dir);
@@ -8937,6 +8951,9 @@ begin
     // Engine 1.22.0: a .dfm with ONLY inherited instances is ok + exit 0 -- a converted row, never a failure.
     Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(SKIPPED_JSON), Index, nil, nil, True);
     Check('runner.inherited.skipped.no.instances', (Length(Rows) = 1) and (Rows[0].Status = csConverted) and (Rows[0].Note = NOTE_SKIPPED),
+      if Length(Rows) = 1 then Rows[0].Note else IntToStr(Length(Rows)));
+    Rows:= RunConversionUnits([Desc], ['A.rules'], ApplyWith(SKIPPED_JSON), Index, nil, nil, True, True);
+    Check('runner.inherited.retype.passed', (Length(Rows) = 1) and (Rows[0].Note = NOTE_SKIPPED_RETYPE),
       if Length(Rows) = 1 then Rows[0].Note else IntToStr(Length(Rows)));
 
     Log.Clear;
@@ -9014,6 +9031,7 @@ begin
       Job.ProjectDb         := Db;
       Job.ProjectFile       := Dpr;
       Job.InheritedSupported:= True;
+      Job.RetypeSupported   := Eng.HasCapability(CAPABILITY_INHERITED_RETYPE);
       Rows:= RunConversion(Job, Eng, nil, nil);
       Check('inherited.live.both.converted', (Length(Rows) = 2) and (Rows[0].Status = csConverted) and (Rows[1].Status = csConverted), Format('%d rows', [Length(Rows)]));
       Check('inherited.live.ancestor.retyped', Pos('object Label1: TStaticText', TFile.ReadAllText(ChangeFileExt(AncPas, '.dfm'))) > 0,
@@ -9021,13 +9039,17 @@ begin
       // Engine N1 (1.22.0): the descendant's inherited instance is SKIPPED even though its
       // ancestor now has the To type -- retyping it is N2. The .dfm stays byte-unchanged.
       // (Corrected 2026-10-06 from a real run: the Task 6 guess expected it retyped.)
+      // THIS CHECK PINS N1 BEHAVIOUR ON PURPOSE: when the engine ships N2 (retype) it goes
+      // RED -- that is the signal to re-adopt (retyped descendant, the retype texts), not a
+      // regression.
       Check('inherited.live.descendant.unchanged', TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')) = DescDfm, TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')));
       LShape:= (Length(Rows) = 2) and (Length(Rows[1].Apply.InheritedLeft) = 1);
       Check('inherited.live.descendant.left', LShape and (Rows[1].Apply.InheritedLeft[0].Name = 'Label1') and (Rows[1].Apply.InheritedLeft[0].AncestorUnit = 'Anc')
         and (Rows[1].Apply.InheritedLeft[0].AncestorState = 'converted') and (Rows[1].Apply.ComponentPart = 'skipped-no-instances'),
         if Length(Rows) = 2 then Format('%d left, part=%s', [Length(Rows[1].Apply.InheritedLeft), Rows[1].Apply.ComponentPart]) else '');
-      Check('inherited.live.descendant.note', (Length(Rows) = 2) and Rows[1].Note.EndsWith('; no component of its own to convert; '
-        + '1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)'), if Length(Rows) = 2 then Rows[1].Note else '');
+      Check('inherited.live.descendant.note', (Length(Rows) = 2) and not Job.RetypeSupported and Rows[1].Note.EndsWith('; no component of its own to convert; '
+        + '1 inherited instance(s) left: ancestor Anc converted -- this unit still has TLabel there and may not compile or load until the engine can '
+        + 'retype inherited instances (N2)'), if Length(Rows) = 2 then Rows[1].Note else '');
     finally
       Eng.Free;
     end; // try
@@ -9255,21 +9277,21 @@ begin
   Row.Book   := 'B.rules';
   Row.Status := csConverted;
   Row.Apply  := ParseApplyJson(INH_JSON);
-  Lines:= InheritedReportLines(Row, True);
+  Lines:= InheritedReportLines(Row, True, True);
   Cols := if Length(Lines) > 0 then Lines[0].Split([#9]) else nil;
   LShape:= (Length(Lines) = Length(Row.Apply.InheritedLeft)) and (Length(Cols) = REPORT_COLS);
   Check('tab.report.lines.shape', LShape, Format('%d lines, %d cols', [Length(Lines), Length(Cols)]));
   if LShape then
     Check('tab.report.lines.text', (Cols[0] = 'B.rules') and (Cols[1] = 'x\Desc.pas') and (Cols[2] = REPORT_STATUS_INHERITED_LEFT) and (Cols[2] = 'inherited left')
-      and (Cols[NOTE_COL] = InheritedReportNote(Row.Apply.InheritedLeft[0])), Lines[0]);
+      and (Cols[NOTE_COL] = InheritedReportNote(Row.Apply.InheritedLeft[0], True)), Lines[0]);
   // Controller ruling M4: the engine's inherited[] is authoritative (reported after the
   // runner's reindex), so nothing filters it -- not even an ancestor converted earlier
   // in the run (that case is tab.r4.runner.engine.unfiltered).
   Check('tab.report.lines.engine.unfiltered', (Length(Lines) = Length(Row.Apply.InheritedLeft)) and (Length(Lines) > 0)
     and (Pos('PathToData', Lines[0]) > 0), string.Join(' | ', Lines));
-  Check('tab.report.lines.gated', Length(InheritedReportLines(Row, False)) = 0);
+  Check('tab.report.lines.gated', Length(InheritedReportLines(Row, False, True)) = 0);
   Row.Status:= csRolledBack;
-  Check('tab.report.lines.converted.only', Length(InheritedReportLines(Row, True)) = 0);
+  Check('tab.report.lines.converted.only', Length(InheritedReportLines(Row, True, True)) = 0);
 end;
 
 { C8 Task 6, ruling R4: an ancestor converted EARLIER IN THE SAME RUN converted its
@@ -9320,7 +9342,7 @@ begin
   Item.AncestorState:= 'outside';
   Item.Reason       := REASON_LIB;
   Items:= Items + [Item];
-  Check('tab.r4.left.engine.all', InheritedLeftNote(Items) = '1 inherited instance(s) left: ancestor PathToData not converted; ' + NOTE_LIB, InheritedLeftNote(Items));
+  Check('tab.r4.left.engine.all', InheritedLeftNote(Items, True) = '1 inherited instance(s) left: ancestor PathToData not converted; ' + NOTE_LIB, InheritedLeftNote(Items, True));
 
   CRows:= nil;
   CRow:= Default(TConvertRow);
@@ -9380,6 +9402,8 @@ const
   REASON_OUT_B = 'declaring ancestor not found (no ancestor .dfm of TLeafDM declares qryLib) -- convert it from its own project';
   NOTE_MIS     = '2 inherited instance(s) left: ancestor Base has TADOTable (neither TTable nor TFDTable)';
   ITEM_LINE    = 3; // the 'line 3' of the report notes below
+  NOTE_CONV_N1 = '1 inherited instance(s) left: ancestor Anc converted -- this unit still has TTable there and may not compile or load until the engine '
+    + 'can retype inherited instances (N2)';
 var
   Items: TArray<TInheritedLeft>;
 
@@ -9395,30 +9419,43 @@ var
   end;
 
 begin
-  Check('state.converted', InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')]) = '1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)',
-    InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')]));
+  Check('state.converted', InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')], True) = '1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)',
+    InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')], True));
   Items:= [Item('tblA', 'Base', 'mismatched', REASON_MIS), Item('tblB', 'Base', 'mismatched', REASON_MIS)];
-  Check('state.mismatched', InheritedLeftNote(Items) = NOTE_MIS, InheritedLeftNote(Items));
+  Check('state.mismatched', InheritedLeftNote(Items, True) = NOTE_MIS, InheritedLeftNote(Items, True));
   Items:= Items + [Item('tblC', 'Base', 'mismatched', REASON_MIS_2)];
-  Check('state.mismatched.by.found.type', InheritedLeftNote(Items) = NOTE_MIS + '; 1 inherited instance(s) left: ancestor Base has TClientDataSet (neither TTable nor TFDTable)',
-    InheritedLeftNote(Items));
-  Check('state.mismatched.fallback', InheritedLeftNote([Item('tblA', 'Base', 'mismatched', REASON_ODD)]) = '1 inherited instance(s) left: ancestor Base has another type -- ' + REASON_ODD,
-    InheritedLeftNote([Item('tblA', 'Base', 'mismatched', REASON_ODD)]));
-  Check('state.mismatched.fallback.other.unit', Pos('has another type', InheritedLeftNote([Item('tblA', 'Mid', 'mismatched', REASON_MIS)])) > 0,
-    InheritedLeftNote([Item('tblA', 'Mid', 'mismatched', REASON_MIS)]));
+  Check('state.mismatched.by.found.type', InheritedLeftNote(Items, True) = NOTE_MIS + '; 1 inherited instance(s) left: ancestor Base has TClientDataSet (neither TTable nor TFDTable)',
+    InheritedLeftNote(Items, True));
+  Check('state.mismatched.fallback', InheritedLeftNote([Item('tblA', 'Base', 'mismatched', REASON_ODD)], True) = '1 inherited instance(s) left: ancestor Base has another type -- ' + REASON_ODD,
+    InheritedLeftNote([Item('tblA', 'Base', 'mismatched', REASON_ODD)], True));
+  Check('state.mismatched.fallback.other.unit', Pos('has another type', InheritedLeftNote([Item('tblA', 'Mid', 'mismatched', REASON_MIS)], True)) > 0,
+    InheritedLeftNote([Item('tblA', 'Mid', 'mismatched', REASON_MIS)], True));
   Items:= [Item('tblA', '', 'outside', REASON_OUT_A), Item('tblB', '', 'outside', REASON_OUT_B), Item('tblC', '', 'outside', REASON_OUT_A)];
-  Check('state.outside.by.reason', InheritedLeftNote(Items) = '2 inherited instance(s) left: ancestor not determinable -- ' + REASON_OUT_A
-    + '; 1 inherited instance(s) left: ancestor not determinable -- ' + REASON_OUT_B, InheritedLeftNote(Items));
-  Check('state.other', InheritedLeftNote([Item('tblA', 'Anc', 'frobbed', 'x')]) = '1 inherited instance(s) left: ancestor Anc: frobbed',
-    InheritedLeftNote([Item('tblA', 'Anc', 'frobbed', 'x')]));
-  Check('state.report.mismatched', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_MIS))
-    = 'tblA: TTable line 3 -- ancestor Base has TADOTable (neither TTable nor TFDTable) (' + REASON_MIS + ')', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_MIS)));
-  Check('state.report.fallback.once', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_ODD)) = 'tblA: TTable line 3 -- ancestor Base has another type -- ' + REASON_ODD,
-    InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_ODD)));
-  Check('state.report.converted', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why'))
-    = 'tblA: TTable line 3 -- ancestor Anc converted -- retype pending (engine N2) (why)', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why')));
-  Check('state.report.no.reason', InheritedReportNote(Item('tblA', 'Anc', 'unconverted', '')) = 'tblA: TTable line 3 -- ancestor Anc not converted',
-    InheritedReportNote(Item('tblA', 'Anc', 'unconverted', '')));
+  Check('state.outside.by.reason', InheritedLeftNote(Items, True) = '2 inherited instance(s) left: ancestor not determinable -- ' + REASON_OUT_A
+    + '; 1 inherited instance(s) left: ancestor not determinable -- ' + REASON_OUT_B, InheritedLeftNote(Items, True));
+  Check('state.other', InheritedLeftNote([Item('tblA', 'Anc', 'frobbed', 'x')], True) = '1 inherited instance(s) left: ancestor Anc: frobbed',
+    InheritedLeftNote([Item('tblA', 'Anc', 'frobbed', 'x')], True));
+  Check('state.report.mismatched', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_MIS), True)
+    = 'tblA: TTable line 3 -- ancestor Base has TADOTable (neither TTable nor TFDTable) (' + REASON_MIS + ')', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_MIS), True));
+  Check('state.report.fallback.once', InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_ODD), True) = 'tblA: TTable line 3 -- ancestor Base has another type -- ' + REASON_ODD,
+    InheritedReportNote(Item('tblA', 'Base', 'mismatched', REASON_ODD), True));
+  Check('state.report.converted', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why'), True)
+    = 'tblA: TTable line 3 -- ancestor Anc converted -- retype pending (engine N2) (why)', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why'), True));
+  Check('state.report.no.reason', InheritedReportNote(Item('tblA', 'Anc', 'unconverted', ''), True) = 'tblA: TTable line 3 -- ancestor Anc not converted',
+    InheritedReportNote(Item('tblA', 'Anc', 'unconverted', ''), True));
+
+  // Fix round 1 (controller ruling): until the engine retypes (N2) a converted ancestor
+  // leaves this unit with the From type there -- say it may not compile or load.
+  Check('state.converted.no.retype', InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')], False) = NOTE_CONV_N1,
+    InheritedLeftNote([Item('tblA', 'Anc', 'converted', 'x')], False));
+  Items:= [Item('tblA', 'Anc', 'converted', 'x'), Item('tblB', 'Anc', 'converted', 'y')];
+  Items[1].TypeName:= 'TQuery';
+  Check('state.converted.no.retype.by.type', InheritedLeftNote(Items, False) = NOTE_CONV_N1 + '; 1 inherited instance(s) left: ancestor Anc converted -- this unit still has '
+    + 'TQuery there and may not compile or load until the engine can retype inherited instances (N2)', InheritedLeftNote(Items, False));
+  Check('state.unconverted.same.both', InheritedLeftNote([Item('tblA', 'Anc', 'unconverted', 'x')], False) = InheritedLeftNote([Item('tblA', 'Anc', 'unconverted', 'x')], True));
+  Check('state.report.converted.no.retype', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why'), False)
+    = 'tblA: TTable line 3 -- ancestor Anc converted -- this unit still has TTable there and may not compile or load until the engine can retype inherited '
+    + 'instances (N2) (why)', InheritedReportNote(Item('tblA', 'Anc', 'converted', 'why'), False));
 end;
 
 { C8 Task 6: the real disk reader (missing, BOM stripped as TFile.ReadAllText does,
@@ -9563,18 +9600,18 @@ begin
     Verdict('tblFtrs', 'TTable', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)]),
     Verdict('qryX', 'TQuery', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_BASE)]),
     Verdict('qryLib', 'TQuery', asOutside, 'TDataModule', [])];
-  Check('inherit.note.text', InheritanceRowNote(Leaf) = 'inherits 3 TTable, TQuery instance(s) from Base -- convert it first (recommended); '
-    + 'inherits from TDataModule, which is not in this project''s index -- convert it from its own project', InheritanceRowNote(Leaf));
+  Check('inherit.note.text', InheritanceRowNote(Leaf, True) = 'inherits 3 TTable, TQuery instance(s) from Base -- convert it first (recommended); '
+    + 'inherits from TDataModule, which is not in this project''s index -- convert it from its own project', InheritanceRowNote(Leaf, True));
   NoAnc:= Leaf;
   NoAnc.Verdicts:= [Verdict('qryLib', 'TQuery', asOutside, OUTSIDE_NO_ANCESTOR, [])];
-  Check('inherit.note.outside.no.ancestor', (InheritanceRowNote(NoAnc) = OutsideNote(NoAnc.Verdicts[0]))
-    and not InheritanceRowNote(NoAnc).Contains(OUTSIDE_NO_ANCESTOR), InheritanceRowNote(NoAnc));
+  Check('inherit.note.outside.no.ancestor', (InheritanceRowNote(NoAnc, True) = OutsideNote(NoAnc.Verdicts[0]))
+    and not InheritanceRowNote(NoAnc, True).Contains(OUTSIDE_NO_ANCESTOR), InheritanceRowNote(NoAnc, True));
   Done:= Leaf;
   Done.Verdicts:= [Verdict('tblFtrs', 'TTable', asConverted, 'Base', [])];
-  Check('inherit.note.converted.silent', InheritanceRowNote(Done) = '', InheritanceRowNote(Done));
+  Check('inherit.note.converted.silent', InheritanceRowNote(Done, True) = '', InheritanceRowNote(Done, True));
   Unknown:= Leaf;
   Unknown.Known:= False;
-  Check('inherit.note.unknown.silent', InheritanceRowNote(Unknown) = '');
+  Check('inherit.note.unknown.silent', InheritanceRowNote(Unknown, True) = '');
 
   Check('inherit.chain.topmost.first', string.Join(',', AncestorChain(Leaf)) = BASE_PAS + ',' + MID_PAS, string.Join(',', AncestorChain(Leaf)));
   // Mid is first met at depth 1 (below Base), then at depth 3 as a frame above it: its largest Depth wins.
@@ -9583,8 +9620,8 @@ begin
     Verdict('qryFrm', 'TQuery', asUnconverted, 'Mid', [Link(MID_PAS, DEPTH_FRAME)])];
   Check('inherit.chain.max.depth', string.Join(',', AncestorChain(Framed)) = MID_PAS + ',' + BASE_PAS, string.Join(',', AncestorChain(Framed)));
   Check('inherit.chain.converted.empty', Length(AncestorChain(Done)) = 0);
-  Check('inherit.offer.text', OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS) = 'Add Base.pas, Mid.pas ahead of Leaf.pas?',
-    OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS));
+  Check('inherit.offer.text', OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS, UnconvertedTypes(Leaf), True) = 'Add Base.pas, Mid.pas ahead of Leaf.pas?',
+    OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS, UnconvertedTypes(Leaf), True));
   Check('inherit.offer.missing', string.Join(',', MissingAncestors([BASE_PAS, MID_PAS], ['FX\mid.pas', LEAF_PAS])) = BASE_PAS);
   Check('inherit.offer.none.when.listed', Length(MissingAncestors([BASE_PAS, MID_PAS], [MID_PAS, BASE_PAS, LEAF_PAS])) = 0);
 
@@ -9599,18 +9636,18 @@ begin
   MidU.UnitPas := MID_PAS;
   MidU.Known   := True;
   MidU.Verdicts:= [Verdict('tblOps', 'TTable', asUnconverted, 'Base', [Link(BASE_PAS, DEPTH_MID)])];
-  Check('inherit.insert.result.order.clean', Length(OrderWarnings(InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, AncestorChain(Leaf)), [Leaf, MidU])) = 0,
-    string.Join(' | ', OrderWarnings(InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, AncestorChain(Leaf)), [Leaf, MidU])));
+  Check('inherit.insert.result.order.clean', Length(OrderWarnings(InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, AncestorChain(Leaf)), [Leaf, MidU], True)) = 0,
+    string.Join(' | ', OrderWarnings(InsertAncestors([MID_PAS, LEAF_PAS], LEAF_PAS, AncestorChain(Leaf)), [Leaf, MidU], True)));
   Check('inherit.insert.unit.absent.appends', string.Join(',', InsertAncestors([X_PAS], LEAF_PAS, [BASE_PAS])) = string.Join(',', [X_PAS, BASE_PAS]));
 
-  Warn:= OrderWarnings([LEAF_PAS, BASE_PAS, MID_PAS], [Leaf]);
+  Warn:= OrderWarnings([LEAF_PAS, BASE_PAS, MID_PAS], [Leaf], True);
   Check('inherit.order.warns', (Length(Warn) = N_WARN) and (Warn[0] = 'Leaf.pas is listed above its ancestor Base.pas, which is not converted yet')
     and (Warn[1] = 'Leaf.pas is listed above its ancestor Mid.pas, which is not converted yet'), string.Join(' | ', Warn));
-  Check('inherit.order.ok', Length(OrderWarnings([BASE_PAS, MID_PAS, LEAF_PAS], [Leaf])) = 0);
-  Check('inherit.order.unlisted.ancestor', Length(OrderWarnings([LEAF_PAS], [Leaf])) = 0);
-  Check('inherit.order.converted.silent', Length(OrderWarnings([LEAF_PAS, BASE_PAS], [Done])) = 0);
-  Check('inherit.order.text', OrderWarningText(Warn).StartsWith('Some units are listed above an ancestor that is not converted yet')
-    and OrderWarningText(Warn).Contains(Warn[0]) and OrderWarningText(Warn).EndsWith('Convert in this order anyway?'), OrderWarningText(Warn));
+  Check('inherit.order.ok', Length(OrderWarnings([BASE_PAS, MID_PAS, LEAF_PAS], [Leaf], True)) = 0);
+  Check('inherit.order.unlisted.ancestor', Length(OrderWarnings([LEAF_PAS], [Leaf], True)) = 0);
+  Check('inherit.order.converted.silent', Length(OrderWarnings([LEAF_PAS, BASE_PAS], [Done], True)) = 0);
+  Check('inherit.order.text', OrderWarningText(Warn, True).StartsWith('Some units are listed above an ancestor that is not converted yet')
+    and OrderWarningText(Warn, True).Contains(Warn[0]) and OrderWarningText(Warn, True).EndsWith('Convert in this order anyway?'), OrderWarningText(Warn, True));
 
   Notes:= EngineRefusalNotes([Leaf, Done, Unknown], False);
   Check('inherit.refusal.notes', (Length(Notes) = N_NOTES)
@@ -9623,6 +9660,24 @@ begin
   CodeOnly.Verdicts[0].Instance.FromCode:= True;
   Check('inherit.refusal.notes.code.only.silent', Length(EngineRefusalNotes([CodeOnly], False)) = 0);
   Check('inherit.chain.code.use', string.Join(',', AncestorChain(CodeOnly)) = BASE_PAS);
+
+  // Fix round 1 (controller ruling): until the engine retypes inherited instances (N2),
+  // converting an ancestor first breaks the descendant, and the order does not change
+  // this run's result. E5 stays verbatim and gains a suffix; E6 gains a sentence; E7 no
+  // longer claims reordering helps. With retype, the texts above are unchanged.
+  Check('inherit.types.unconverted', string.Join(',', UnconvertedTypes(Leaf)) = 'TTable,TQuery', string.Join(',', UnconvertedTypes(Leaf)));
+  Check('inherit.note.text.no.retype', InheritanceRowNote(Leaf, False) = 'inherits 3 TTable, TQuery instance(s) from Base -- convert it first (recommended)'
+    + ' -- with this engine, converting it now breaks this unit until N2; '
+    + 'inherits from TDataModule, which is not in this project''s index -- convert it from its own project', InheritanceRowNote(Leaf, False));
+  Check('inherit.offer.text.no.retype', OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS, UnconvertedTypes(Leaf), False)
+    = 'Add Base.pas, Mid.pas ahead of Leaf.pas? Converting Base.pas, Mid.pas leaves Leaf.pas''s inherited instance(s) as TTable, TQuery until engine N2 '
+    + '-- Leaf.pas may not compile or load.', OfferText(MissingAncestors(AncestorChain(Leaf), [LEAF_PAS]), LEAF_PAS, UnconvertedTypes(Leaf), False));
+  Warn:= OrderWarnings([LEAF_PAS, BASE_PAS], [Leaf], False);
+  Check('inherit.order.warns.no.retype', (Length(Warn) = 1) and (Warn[0] = 'Leaf.pas is listed above its ancestor Base.pas.'), string.Join(' | ', Warn));
+  Check('inherit.order.text.no.retype', OrderWarningText(Warn, False) = 'Leaf.pas is listed above its ancestor Base.pas.' + sLineBreak + sLineBreak
+    + 'With this engine the order does not change this run''s result: inherited instances are skipped either way. Run anyway?', OrderWarningText(Warn, False));
+  Check('inherit.order.cancel.text', (OrderCancelledText(True) = 'Convert cancelled: reorder the source units (ancestors first) and press Convert again.')
+    and (OrderCancelledText(False) = 'Convert cancelled: nothing was run.'), OrderCancelledText(False));
 end;
 
 { C8 E2 / E3 / E8: the ancestor walk over a fake index. The fixture mirrors the
@@ -9702,7 +9757,7 @@ begin
   U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
     FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [LEAF_DFM, MID_DFM, BASE_DONE_DFM]));
   Check('inherit.walk.converted', (V('tblFtrs').State = asConverted) and (V('tblFtrs').DeclaringUnit = 'Base') and (Length(V('tblFtrs').Chain) = 0));
-  Check('inherit.note.converted.silent.walk', InheritanceRowNote(U) = NOTE_OUTSIDE_LIB, InheritanceRowNote(U));
+  Check('inherit.note.converted.silent.walk', InheritanceRowNote(U, True) = NOTE_OUTSIDE_LIB, InheritanceRowNote(U, True));
 
   // Task 8 (reverses preflight ruling C4): a declaring object of a THIRD type -- neither
   // the book's From (TTable) nor its To (TFDTable) -- is mismatched, as the engine says.
@@ -9711,9 +9766,9 @@ begin
   Check('inherit.walk.mismatched', (V('tblFtrs').State = asMismatched) and (V('tblFtrs').DeclaringUnit = 'Base') and (V('tblFtrs').FoundType = 'TADOTable')
     and (Length(V('tblFtrs').Chain) = 0), Format('state=%d found=%s', [Ord(V('tblFtrs').State), V('tblFtrs').FoundType]));
   Check('inherit.walk.mismatched.to.is.converted', V('tblOps').State = asConverted, IntToStr(Ord(V('tblOps').State)));
-  Check('inherit.note.mismatched', InheritanceRowNote(U) = NOTE_MISMATCHED + '; ' + NOTE_OUTSIDE_LIB, InheritanceRowNote(U));
+  Check('inherit.note.mismatched', InheritanceRowNote(U, True) = NOTE_MISMATCHED + '; ' + NOTE_OUTSIDE_LIB, InheritanceRowNote(U, True));
   Check('inherit.chain.mismatched.not.offered', Length(AncestorChain(U)) = 0, string.Join(',', AncestorChain(U)));
-  Check('inherit.order.mismatched.silent', Length(OrderWarnings([LEAF_PAS, BASE_PAS], [U])) = 0);
+  Check('inherit.order.mismatched.silent', Length(OrderWarnings([LEAF_PAS, BASE_PAS], [U], True)) = 0);
   Check('inherit.walk.mismatched.direct', ResolveInstance(V('tblFtrs').Instance, 'TMidDM', FakeLookup(Rows, nil),
     FakeReader(['fx\Mid.dfm', 'fx\Base.dfm'], [MID_DFM, BASE_MIS_DFM]), Pairs).State = asMismatched);
 

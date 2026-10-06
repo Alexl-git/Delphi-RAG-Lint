@@ -95,6 +95,10 @@ type
     /// lists the inherited instances it left (apply/1 inherited[]). False = today's
     /// handling (the engine refuses such a unit).</summary>
     InheritedSupported: Boolean;
+    /// <summary>The engine reports inherited_retype (C8 N2): an inherited instance under a
+    /// converted ancestor is retyped. False = the notes say the unit still has the From
+    /// type there and may not compile or load.</summary>
+    RetypeSupported: Boolean;
   end;
 
   /// <summary>Called once per row (worker thread!). A unit's rows arrive
@@ -138,6 +142,7 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// <param name="AProgress">May be nil.</param>
 /// <param name="ACancelled">May be nil; polled exactly once just before each unit; True stops the run there.</param>
 /// <param name="AInheritedSupported">See TConvertJob.InheritedSupported.</param>
+/// <param name="ARetypeSupported">See TConvertJob.RetypeSupported.</param>
 /// <returns>One row per unit x book attempted (a missing, not-reindexed or
 /// un-backed-up unit: one csUnitSkipped row); a unit whose books were all found
 /// invalid on earlier units gets no row, no reindex and no backup.</returns>
@@ -151,7 +156,7 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// on a unit nothing has changed yet, which restores nothing and drops the backup. Never
 /// raises: file I/O failures and exceptions from AApply / AIndex become row
 /// outcomes (see TConvertStatus).</remarks>
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False): TArray<TConvertRow>; overload;
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False): TArray<TConvertRow>; overload;
 
 /// <summary>Display text for a status.</summary>
 /// <param name="AStatus">The status.</param>
@@ -185,8 +190,10 @@ function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvert
 /// <param name="ARow">A run row.</param>
 /// <param name="AInheritedSupported">The engine reported inherited_instances when the
 /// run started; False = no lines (an older engine's output is not this contract).</param>
+/// <param name="ARetypeSupported">The engine reported inherited_retype when the run
+/// started (passed to InheritedReportNote).</param>
 /// <returns>[] unless ARow is csConverted and AInheritedSupported.</returns>
-function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported: Boolean): TArray<string>;
+function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported, ARetypeSupported: Boolean): TArray<string>;
 
 implementation
 
@@ -235,13 +242,13 @@ begin
       Result:= False;
 end;
 
-function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported: Boolean): TArray<string>;
+function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported, ARetypeSupported: Boolean): TArray<string>;
 begin
   Result:= nil;
   if not AInheritedSupported or (ARow.Status <> csConverted) then
     Exit;
   for var LLeft: TInheritedLeft in ARow.Apply.InheritedLeft do
-    Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft)])];
+    Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft, ARetypeSupported)])];
 end;
 
 function FileProbe: TFileProbe;
@@ -273,10 +280,10 @@ begin
     begin
       Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
     end,
-    AProgress, ACancelled, LJob.InheritedSupported);
+    AProgress, ACancelled, LJob.InheritedSupported, LJob.RetypeSupported);
 end;
 
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean): TArray<TConvertRow>;
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@8e04 -- REVIEWED 2026-10-06 the test-injection twin of the TConvertJob overload: two engine seams plus the job's two capability flags (InheritedSupported, RetypeSupported); a record for the two flags would be one more type used only here
 var
   Rows    : TArray<TConvertRow>;
   UnitRows: TArray<TConvertRow>; // the current unit's rows, emitted when it finishes
@@ -494,7 +501,7 @@ var
     Row.Status:= csConverted;
     // The engine's inherited[] is shown unfiltered (ruling M4): the unit was reindexed
     // before its first book, so the engine already knows which ancestors this run converted.
-    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported);
+    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported);
     Add;
   end;
 

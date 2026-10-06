@@ -22,7 +22,7 @@ uses
   , Vcl.CheckLst
   , Vcl.ComCtrls
   , Vcl.ExtCtrls
-  , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- CAPABILITY_INHERITED_INSTANCES is the engine contract the tab gates E10 on, so it travels with the adapter
+  , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- CAPABILITY_INHERITED_INSTANCES / _RETYPE are the engine contract the tab gates E10 and the N2 warnings on, so they travel with the adapter
   , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- ENGINE_OUTCOME_CANCELLED is the long-call runner's cancel contract the analysis work returns and reads back, so it travels with the runner
   , ConvRules.ConvertRun
   , ConvRules.ConvertRunner
@@ -107,6 +107,8 @@ type
       FIndexKnown     : Boolean;            // False = the index could not be read: flag nothing
       FInheritedOk    : Boolean;            // engine reports inherited_instances (C8 E10/E11)
       FRunInheritedOk : Boolean;            // FInheritedOk when Convert was pressed: the report follows the run
+      FRetypeOk       : Boolean;            // engine reports inherited_retype (C8 N2): the notes stop warning that a descendant breaks
+      FRunRetypeOk    : Boolean;            // FRetypeOk when Convert was pressed
       FInherit        : TDictionary<string, TUnitInheritance>; // C8 analyses, by upper-cased path
       FPairsKey       : string;             // the checked pairs FInherit was computed with
       FInheritError   : string;             // '' or why some unit could not be checked (status line)
@@ -298,7 +300,6 @@ const
   NO_PROJECT_FILE_GUESS = '<Project>.dproj beside its _D-RAG folder (the DB is not in one)';
   PAIRS_KEY_NONE        = '|none|'; // FPairsKey after a pass that did not complete: never equals a real key
   INHERIT_FAIL_FMT      = '%s Inherited instances could not be checked for every unit -- %s';
-  ORDER_CANCELLED       = 'Convert cancelled: reorder the source units (ancestors first) and press Convert again.';
 
 { TConvertTab }
 
@@ -512,10 +513,11 @@ begin
     Exit; // the run holds its own copy of the books; keep the list it started from
   if not FProbed then
   begin
-    // ONE info call for both keys (each HasCapability is its own info call).
+    // ONE info call for every key (each HasCapability is its own info call).
     var LCaps: TArray<string>:= FEngineProbe.CapabilityNames;
     FUnitRulesOk:= MatchText(CAPABILITY_UNIT_RULES, LCaps);
     FInheritedOk:= MatchText(CAPABILITY_INHERITED_INSTANCES, LCaps);
+    FRetypeOk   := MatchText(CAPABILITY_INHERITED_RETYPE, LCaps);
     FProbed     := True;
   end;
   Folder:= FHost.GetRulesFolder();
@@ -729,7 +731,7 @@ begin
   // C8 E5 / E8: the row notes, readable on the status bar (the list is owner-drawn).
   for var LPath: string in FSources.Items do
   begin
-    var LNote: string:= InheritanceRowNote(InheritanceOf(LPath));
+    var LNote: string:= InheritanceRowNote(InheritanceOf(LPath), FRetypeOk);
     if LNote <> '' then
       Result:= Result + ' | ' + ExtractFileName(LPath) + ': ' + LNote;
   end;
@@ -942,7 +944,7 @@ begin
     LMissing:= MissingAncestors(LChain, LList);
     if Length(LMissing) = 0 then
       Continue;
-    LPrompt:= OfferText(LMissing, LPath);
+    LPrompt:= OfferText(LMissing, LPath, UnconvertedTypes(InheritanceOf(LPath)), FRetypeOk);
     // Mirrored on the status line: a TMessageForm's text is a TLabel with no window,
     // so the GUI driver reads the status bar while the dialog is up.
     FHost.SetStatus(LPrompt, False);
@@ -963,7 +965,7 @@ begin
   // the display carries the flag.
   LText:= SourceRowText(FSources.Items[Index], FIndexed, FIndexKnown, LFlagged);
   // C8 E5 / E8: what the unit inherits; italic, not red -- it is advice, not a refusal.
-  var LNote: string:= InheritanceRowNote(InheritanceOf(FSources.Items[Index]));
+  var LNote: string:= InheritanceRowNote(InheritanceOf(FSources.Items[Index]), FRetypeOk);
   if LNote <> '' then
     LText:= LText + ' -- ' + LNote;
   FSources.Canvas.FillRect(Rect);
@@ -1104,13 +1106,14 @@ begin
     AddResultRow(['', '', 'note', '', '', '', '', LNote]);
   // C8 E7: a descendant listed above an unconverted ancestor converts without its
   // inherited instances. Warn once; never block (E9).
-  var LWarn: TArray<string>:= OrderWarnings(AUnits, InheritanceOfAll(AUnits));
+  var LWarn: TArray<string>:= OrderWarnings(AUnits, InheritanceOfAll(AUnits), FRetypeOk);
   if Length(LWarn) > 0 then
   begin
-    FHost.SetStatus(string.Join(' ', LWarn), False); // mirrored for the GUI driver: a TMessageForm's text has no window
-    if AskBlockingDrops(OrderWarningText(LWarn), mtWarning) <> mrYes then
+    var LText: string:= OrderWarningText(LWarn, FRetypeOk);
+    FHost.SetStatus(StringReplace(LText, sLineBreak, ' ', [rfReplaceAll]), False); // mirrored for the GUI driver: a TMessageForm's text has no window
+    if AskBlockingDrops(LText, mtWarning) <> mrYes then
     begin
-      FHost.SetStatus(ORDER_CANCELLED, False);
+      FHost.SetStatus(OrderCancelledText(FRetypeOk), False);
       Exit(False);
     end;
   end;
@@ -1177,11 +1180,13 @@ begin
   Job.Units      := Units;
   Job.Dbs        := FHost.GetDbs();
   Job.InheritedSupported:= FInheritedOk;
+  Job.RetypeSupported   := FRetypeOk;
   LExe:= FHost.ExePath;
   // Captured now: the user may open or start another book mid-run, which moves
   // the live rules folder; the report belongs beside the books that ran.
   FRunRulesFolder:= FHost.GetRulesFolder();
   FRunInheritedOk:= FInheritedOk;
+  FRunRetypeOk   := FRetypeOk;
   FCancelRequested:= False;
   SetRunning(True);
   FProgress.Max     := Length(Job.Books) * Length(Job.Units);
@@ -1271,7 +1276,7 @@ begin
         if LRan then IntToStr(Length(LRow.Apply.Remainder)) else '',
         LRow.Backup, LRow.BackupDfm, LRow.Note]));
       // C8 E10: one line per instance the engine says the converted unit left (unfiltered, ruling M4).
-      for var LLine: string in InheritedReportLines(LRow, FRunInheritedOk) do
+      for var LLine: string in InheritedReportLines(LRow, FRunInheritedOk, FRunRetypeOk) do
         LLines.Add(LLine);
     end;
     for var LUnit: string in ANotReached do

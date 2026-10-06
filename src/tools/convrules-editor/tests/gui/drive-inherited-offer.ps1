@@ -18,7 +18,9 @@
 # The E10 check branches on the staged engine's inherited_instances capability: with it (1.22.0 pin copy,
 #   measured 2026-10-06) engine.refusal.note.absent -- 15 / 0, and -ProofNoInheritance 8 / 6 (that check then
 #   passes vacuously); WITHOUT it (stage a 1.21.1 pin copy beside the same exe) engine.refusal.note -- 15 / 0.
-#   Run both stages: one stage proves only one branch.
+#   Run both stages: one stage proves only one branch. Re-measured after Task 8 fix round 1 (same exe on both):
+#   1.22.0 15 / 0 and proof 8 / 6; 1.21.1 15 / 0 and proof 7 / 7. The E6 / E7 / cancel texts branch on
+#   inherited_retype (engine N2, proposed key): absent on both pins, so the "until N2" wording is asserted.
 param([string]$Exe, [switch]$ProofNoInheritance)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
@@ -508,6 +510,12 @@ try {
   Check 'fixture.index' (($LASTEXITCODE -eq 0) -and (Test-Path -LiteralPath $db)) ((($out -split "`r?`n") | Where-Object { $_.Trim() } | Select-Object -Last 1))
   $caps = & { $ErrorActionPreference = 'Continue'; & $engine info --json 2>$null | Out-String }
   $inheritedCap = $caps -match '"inherited_instances"\s*:\s*true'
+  # Until the engine retypes inherited instances (N2, proposed key inherited_retype) the E6 / E7 /
+  # cancel texts say converting the ancestor breaks the descendant and the order changes nothing.
+  $retypeCap = $caps -match '"inherited_retype"\s*:\s*true'
+  $offerText = if ($retypeCap) { 'Add Anc.pas ahead of Desc.pas?' } else { 'Add Anc.pas ahead of Desc.pas? Converting Anc.pas leaves Desc.pas''s inherited instance(s) as TLabel until engine N2 -- Desc.pas may not compile or load.' }
+  $orderText = if ($retypeCap) { '*Desc.pas is listed above its ancestor Anc.pas, which is not converted yet*' } else { '*Desc.pas is listed above its ancestor Anc.pas.  With this engine the order does not change this run''s result: inherited instances are skipped either way. Run anyway?*' }
+  $cancelText = if ($retypeCap) { 'Convert cancelled: reorder the source units (ancestors first) and press Convert again.' } else { 'Convert cancelled: nothing was run.' }
 
   $p = Start-Process $Exe -ArgumentList "`"$book`" --project-db `"$db`"" -PassThru
   $main = [IntPtr]::Zero; $t0 = Get-Date
@@ -534,7 +542,7 @@ try {
   $e = PickFile $p.Id $add $desc
   $prompt = WaitCls $p.Id 'TMessageForm' 20
   $st = Status $main
-  Check 'offer.prompt' (($e -eq '') -and ($prompt -ne [IntPtr]::Zero) -and ($st -eq 'Add Anc.pas ahead of Desc.pas?')) "$e status: $st; forms: $(TopsNow $p.Id)"
+  Check 'offer.prompt' (($e -eq '') -and ($prompt -ne [IntPtr]::Zero) -and ($st -eq $offerText)) "$e status: $st; forms: $(TopsNow $p.Id)"
   if ($prompt -ne [IntPtr]::Zero) { $e = Answer $p.Id 'No'; Check 'offer.answer.no' ($e -eq '') $e }
   Start-Sleep -Seconds 2
   $items = [CT]::Items($src)
@@ -552,11 +560,11 @@ try {
   Click $conv
   $warn = WaitCls $p.Id 'TMessageForm' 30
   $st = Status $main
-  Check 'order.warning' (($warn -ne [IntPtr]::Zero) -and ($st -like '*Desc.pas is listed above its ancestor Anc.pas, which is not converted yet*')) "status: $st; forms: $(TopsNow $p.Id)"
+  Check 'order.warning' (($warn -ne [IntPtr]::Zero) -and ($st -like $orderText)) "status: $st; forms: $(TopsNow $p.Id)"
   if ($warn -ne [IntPtr]::Zero) { [void](Answer $p.Id 'No') }
   Start-Sleep -Seconds 2
   $st = Status $main
-  Check 'order.no.runs.nothing' (($st -eq 'Convert cancelled: reorder the source units (ancestors first) and press Convert again.') -and -not (Test-Path -LiteralPath ($desc + '.BCK1'))) $st
+  Check 'order.no.runs.nothing' (($st -eq $cancelText) -and -not (Test-Path -LiteralPath ($desc + '.BCK1'))) $st
   # --- E10 gate: without inherited_instances the run notes say the engine will refuse Desc ---
   $notes = @([W]::Column($lv, 7))
   if ($inheritedCap) { Check 'engine.refusal.note.absent' (-not ($notes -like '*refuses such a unit*')) ($notes -join ' | ') }
