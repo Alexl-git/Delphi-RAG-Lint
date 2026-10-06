@@ -66,12 +66,7 @@ function Get-ColumnFactNote($Cs, $SqlSet) {
 function Complete-AnchorFromDataSet($R, $Ds, [string] $Col, $SqlSet, [hashtable] $SourceOverride, [string] $BindGrade = '', [string] $BindNote = 'the anchor dataset') {
   $R.DataSet = $Ds
   [void]$R.Items.Add((New-TraceStep 'step' "BINDS $($Ds.Name) : $($Ds.Type)" (Get-TraceAnchorText $Ds.File $Ds.Line) $BindGrade '' $BindNote))
-  $lit = Invoke-IndexQuery @"
-SELECT sl.text AS t, MIN(sl.start_line) AS line, COUNT(*) AS n FROM string_literals sl
- WHERE sl.file_id = $($Ds.Fid) AND sl.kind = 'literal' AND sl.text IN ($(ConvertTo-SqlInList $SqlSet.Names))
-   AND EXISTS (SELECT 1 FROM refs r WHERE r.file_id = sl.file_id AND r.start_line = sl.start_line AND r.name_text = '$(ConvertTo-SqlText $Ds.Name)')
- GROUP BY sl.text ORDER BY MIN(sl.start_line), sl.text
-"@ 'round-trip (table literals)'
+  $lit = Get-DataSetTableLiterals $Ds $SqlSet      # Emit-Common: shared with feeds-from / lands-where
   if ($lit.Count -ne 1) {
     $R.Stop = $(if ($lit.Count -eq 0) { "no upper-case table-name literal shares a line with $($Ds.Name) in $(Get-UnitName $Ds.File) -- the table cannot be inferred" }
                 else { "$($lit.Count) tables share a line with $($Ds.Name) in $(Get-UnitName $Ds.File) ($((@($lit | ForEach-Object { [string]$_.t })) -join ', ')) -- cannot tell which" })
@@ -143,30 +138,14 @@ SELECT d.symbol_id AS sid, d.owner_name AS prop, d.start_line AS line, s.name AS
   $viaNote = $(if ($ch.Dangling) { "dangling: module $($ch.Module) is declared nowhere in this index" } else { '' })
   [void]$s1.Children.Add((New-TraceFacet 'VIA' "$via = $dsText" (Get-TraceAnchorText $dfm ([int]$dsProp.line)) $viaNote))
   [void]$R.Items.Add($s1)
-  # a `:= nil` re-point UN-binds the control (Blueprint4.pas:3213, in FormClose) -- it feeds
-  # nothing, as Get-DataSourceChain skips a nil DataSet assignment; a stale row has no RHS to test
-  $rp = @($ch.RePointedAt | Where-Object { $_.Control -eq $owner -and ($_.Stale -or $_.Rhs -ne 'nil') })
-  if ($ch.Grade -eq 'dangling') {
-    # a stale form unit hides the re-point (its receiver may be lost, P29): refuse, naming THAT file
-    $stRp = @($rp | Where-Object { $_.Stale })
-    if ($stRp.Count -or ($ch.PasFile -and -not $rp.Count -and -not (Test-SourceFresh $ch.PasFile $SourceOverride))) {
-      $sf = $(if ($stRp.Count) { [string]$stRp[0].File } else { [string]$ch.PasFile })
-      $R.StaleFile = $sf
-      $R.Stop = "$([IO.Path]::GetFileName($sf)) differs from the indexed copy -- the code re-point of $owner is not read"
-      $R.StopAnchor = $s1.Anchor
-      return $R
-    }
-    # T1-C2: the chain starts from the ONE assignment that re-points the control; several
-    # with different right-hand sides is a choice the index cannot make -- a named stop
-    $rhsSet = @($rp | ForEach-Object { ([string]$_.Rhs -replace '\s', '').ToUpperInvariant() } | Sort-Object -Unique)
-    if ($rhsSet.Count -gt 1) {
-      $R.Stop = "$owner is re-pointed at $($rp.Count) sites with $($rhsSet.Count) different right-hand sides ($((@($rp | ForEach-Object { "$([IO.Path]::GetFileName([string]$_.File)):$($_.Line)" })) -join ', ')) -- cannot tell which feeds the grid"
-      $R.StopAnchor = $s1.Anchor
-      return $R
-    }
-  }
-  if ($ch.Grade -eq 'dangling' -and $rp.Count) {
-    $rc = Get-RePointChain $rp[0] $SourceOverride
+  # the re-point rule (nil sites skipped, a stale form unit REFUSES, several different right-hand
+  # sides a named stop) is Get-RePointPick in Emit-Common -- ONE copy, shared with feeds-from and
+  # lands-where since 2026-10-05
+  $pk = $(if ($ch.Grade -eq 'dangling') { Get-RePointPick $ch $owner $SourceOverride } else { $null })
+  if ($pk -and $pk.Status -eq 'stale') { $R.StaleFile = $pk.StaleFile; $R.Stop = $pk.Stop; $R.StopAnchor = $s1.Anchor; return $R }
+  if ($pk -and $pk.Status -eq 'multi-rhs') { $R.Stop = $pk.Stop; $R.StopAnchor = $s1.Anchor; return $R }
+  if ($pk -and $pk.Status -eq 'follow') {
+    $rc = Get-RePointChain $pk.Rows[0] $SourceOverride
     foreach ($h in $rc.Hops) {
       $verb = $(switch ($h.Hop) { 're-point' { 'SETS' } 'member' { 'READS' } 'accessor' { 'CALLS' } 'field' { 'READS' } 'dataset' { 'SETS' } })
       $grade = $(if ($h.Grade -in 'by name', 'inferred') { $h.Grade } else { '' })

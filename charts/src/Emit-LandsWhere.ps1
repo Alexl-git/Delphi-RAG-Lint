@@ -15,7 +15,12 @@
       control feeds (controller ruling R17: the 13 uJobList controls bound to
       computed FOLDERS fields read "not a column of FOLDERS -- computed or
       UI-only" in both). A chain that resolves continues as the ORM case for the
-      resolved TABLE.COLUMN.
+      resolved TABLE.COLUMN. Past a DANGLING designer datasource the owner's
+      code re-point is followed (Task 2, 2026-10-05: Resolve-RePointTable, the
+      round-trip's own walk, computed once in Get-FieldBindingChains); its hops
+      are listed on the selection with their grades, several different
+      right-hand sides or no re-point site stop by name, and a stale file on
+      the way stops [stale source].
   Anything else refuses: "not an ORM object property (class is not Tmc<T>) and
   not a DFM-bound field".
 
@@ -340,14 +345,30 @@ if ($kind -eq 'orm') {
       } else { [void]$selRows.Add((New-NoteRow "$lbl -- $($h.Reason)")) }
     }
   }
+  # Task 2 (2026-10-05): past a DANGLING designer datasource the owner's code re-point is
+  # followed -- the SAME Resolve-RePointTable result feeds-from draws (Get-FieldBindingChains)
+  $rpr = $(if ($bindRow.RePointKey) { $ix.RePoints[$bindRow.RePointKey] } else { $null })
+  if ($rpr) {
+    foreach ($h in @($rpr.Hops)) {
+      $lbl = "[$($h.Grade)] $($h.Hop): $($h.Label)"
+      [void]$selRows.Add((New-Row $lbl $h.File ([int]$h.Line) "$($h.Label) -- $([IO.Path]::GetFileName($h.File)):$($h.Line)" (@(@($(if ($h.Routine) { "in $($h.Routine)" }), $h.Reason) | Where-Object { $_ }) -join '; ')))
+    }
+    if ($rpr.DataSet) {
+      $d = $rpr.DataSet
+      [void]$selRows.Add((New-Row "[certain] dataset field: $($d.Name) : $($d.Type)" $d.File ([int]$d.Line) "$($d.Name) : $($d.Type) -- $([IO.Path]::GetFileName($d.File)):$($d.Line)" 'the dataset the re-pointed datasource is given'))
+    }
+    if ($rpr.Table) {
+      [void]$selRows.Add((New-Row "[inferred] table: $($rpr.Table)" $rpr.DataSet.File $rpr.TableLine "'$($rpr.Table)' literal -- $([IO.Path]::GetFileName($rpr.DataSet.File)):$($rpr.TableLine)" "the table literal beside $($rpr.DataSet.Name) on $($rpr.TableLines) line(s)"))
+    }
+  }
   switch ($chainOutcome) {
     'column'     { $TName = $bindRow.Table; $Prop = $bindRow.Column }
     'not-column' { $TName = $bindRow.Table; $Prop = $bindRow.Column }
     'no-ds'      { $stop = "no DataSource on $($ctl.name) or its two enclosing components in the DFM -- the chain cannot start" }
-    'dangling'   { $stop = "the designer datasource $($bindRow.Ds) is dangling ($($chain.StopReason)) -- no table" }
+    'dangling'   { $stop = "the designer datasource $($bindRow.Ds) is dangling ($($chain.StopReason)) -- no table$(if ($rpr) { "; the code re-point: $($rpr.Stop)" })" }
     # stale with a table: the chain resolved, but the table's script is stale, so
     # the column's state is unknown -- step 4 says so ([stale source])
-    'stale'      { if ($bindRow.Table) { $TName = $bindRow.Table; $Prop = $bindRow.Column } else { $stop = "[stale source] $($chain.StopReason)" } }
+    'stale'      { if ($bindRow.Table) { $TName = $bindRow.Table; $Prop = $bindRow.Column } else { $stop = "[stale source] $(if ($rpr -and $rpr.Status -eq 'stale') { $rpr.Stop } else { $chain.StopReason })" } }
     default      { $stop = "the chain stops before a table ($($chain.Grade)): $($chain.StopReason)" }
   }
   if ($TName) { $ormSym = Find-OrmProperty "Tmc$TName" $Prop }
@@ -525,7 +546,7 @@ if ($COL) {
   $bindOther = @($bindAll | Where-Object { -not ($_.Table -and [string]::Equals([string]$_.Table, [string]$TName, [StringComparison]::OrdinalIgnoreCase)) })
 }
 $bindRowsOut = @($bindSame | Sort-Object Dfm, Line | ForEach-Object {
-  New-Row "$(Get-UnitName $_.Dfm).$($_.Control)" $_.Dfm $_.Line "$($_.Control).$($_.Prop) = '$($_.Column)' via $($_.Ds) -> $TName -- $([IO.Path]::GetFileName($_.Dfm)):$($_.Line)" "$($_.Ds)$(if ($_.Outcome -eq 'not-column') { '; not extracted as a column' } elseif ($_.Outcome -eq 'stale') { '; [stale source]' })" })
+  New-Row "$(Get-UnitName $_.Dfm).$($_.Control)" $_.Dfm $_.Line "$($_.Control).$($_.Prop) = '$($_.Column)' via $($_.Ds) -> $TName -- $([IO.Path]::GetFileName($_.Dfm)):$($_.Line)" "$($_.Ds)$(if ($_.RePoint -eq 'table') { '; dangling in the DFM, re-point followed' })$(if ($_.Outcome -eq 'not-column') { '; not extracted as a column' } elseif ($_.Outcome -eq 'stale') { '; [stale source]' })" })
 if ($TName) { Write-Host ("  client: {0} field-bound control(s) resolve to {1} with {2}; {3} other binding(s) of {2} counted" -f $bindSame.Count, $TName, $COL, $bindOther.Count) }
 
 # ---- 8. dot ------------------------------------------------------------------------------------

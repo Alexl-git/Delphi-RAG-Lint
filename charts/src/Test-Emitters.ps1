@@ -2024,9 +2024,23 @@ Step 'E-FF' {
   #   not-column 13 -- all uJobList on FOLDERS (DueInStr, LotStatusC, *VerdictStr,
   #                   Status_*Str ...): memtable-computed fields, not DB columns
   #   no-ds 1      -- CADFNotes.dxDBEdit1, whose DataSource is set only in code
-  Chk 'A-FF0-PERCTL'    "$($ff1.Controls):$($ff1.CtlTable)/$($ff1.CtlColumn)/$($ff1.CtlNotColumn)/$($ff1.CtlAmbiguous)/$($ff1.CtlStops)/$($ff1.CtlDangling)/$($ff1.CtlNoDs)/$($ff1.CtlStale)" '808:267/254/13/37/77/426/1/0'
-  if ($tf1 -notmatch 'per control: 808 field-bound controls; 267 resolve to one table \(33%\)') { Fail 'A-FF0-PERCTL' 'the per-control coverage is not printed on the chart' }
+  # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: the 204 dangling controls whose owner's code re-point reaches a\r
+  # table (Blueprint4_Model.dsrFtrs 154 -> MSCLIST, dsrOperation 50 -> OPERAT; A-FF-REPOINT-AGG) leave dangling:\r
+  # table 267 -> 471 (+204), column 254 -> 443 (+189), not-column 13 -> 28 (+15), dangling 426 -> 222 (-204); 33% -> 58.3%\r
+  Chk 'A-FF0-PERCTL'    "$($ff1.Controls):$($ff1.CtlTable)/$($ff1.CtlColumn)/$($ff1.CtlNotColumn)/$($ff1.CtlAmbiguous)/$($ff1.CtlStops)/$($ff1.CtlDangling)/$($ff1.CtlNoDs)/$($ff1.CtlStale)" '808:471/443/28/37/77/222/1/0'
+  if ($tf1 -notmatch 'per control: 808 field-bound controls; 471 resolve to one table \(58\.3%\)') { Fail 'A-FF0-PERCTL' 'the per-control coverage is not printed on the chart' }
   if ($tf1 -match '41 ?%') { Fail 'A-FF0-R9' 'the chart quotes the per-datasource 41%' }
+  # Task 2 (2026-10-05), the NEW aggregate: the 426 controls under a DANGLING designer datasource, by where
+  # their owner's code re-point goes (Resolve-RePointTable, order table/no-table/stops/multi-rhs/no-site/stale/
+  # no-owner). MEASURED on the CLIENT clone:
+  #   table 204     -- Blueprint4_Model.dsrFtrs 154 (dxDBGrid1FtrsV 134 + 20 edits) -> MSCLIST, dsrOperation 50 -> OPERAT
+  #                    (column 189, not-column 15: the 14 FtrsV / 1 OperationV fields MSCLIST / OPERAT do not hold)
+  #   stops 215     -- ControlPlan_Model.* 168 (`INIData.DataSet is never assigned in ControlPlan2.Model.Interfaces.pas`),
+  #                    dmlSystem2.dsrFolder 29 (re-pointed to a bare parameter `DS` -- no member to follow),
+  #                    dsrCustVendor 13 (GetpdsrCustomers reads 0 fields), dsrVarNames 4 + dsrOperNames 1 (LookupCache.Table( ))
+  #   multi-rhs 3   -- viewMachines, re-pointed at Blueprint4.pas:1073 AND :2334 with different right-hand sides
+  #   no-site 4     -- DBText13 1, lookupSPCCP 3: no code re-point of the owner at all
+  Chk 'A-FF-REPOINT-AGG' "$($ff1.CtlDanglingAll):$($ff1.CtlRePoint)" '426:204/0/215/3/4/0/0'
 
   # P33 tie-break: 4 candidates in literal order, 6 bound columns, one survivor
   $script:ff2 = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmMachineList.colMACHINEID' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
@@ -2061,7 +2075,27 @@ Step 'FF-N29' {
   if ($t29 -notmatch 'the DFM names dmlSystem2, which is not in this project') { Fail 'A-FF-N29' 'the dangling disclosure is missing' }
   # the DataField is ALSO re-bound in code (:1016) -- drawn, because the DFM
   # column is then not the runtime column
-  Chk 'A-FF-N29-ROWS'   "$($ff29.Grade):$($ff29.RePointedAt):$($ff29.Rebound):$($ff29.HopGrades)" 'dangling:Blueprint4.pas:1015:1:certain>dangling>stop'
+  # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: edtF1 -> the :1015 re-point hop [certain] (:= DS, a bare parameter),
+  # then Get-RePointChain stops (RHS DS names no member of DS); was certain>dangling>stop
+  Chk 'A-FF-N29-ROWS'   "$($ff29.Grade):$($ff29.RePointedAt):$($ff29.Rebound):$($ff29.HopGrades)" 'dangling:Blueprint4.pas:1015:1:certain>dangling>certain>stop'
+}
+# Task 2 (2026-10-05, owner: "close all the existing gaps"): feeds-from and lands-where FOLLOW the runtime
+# re-point past a DANGLING designer datasource, by the round-trip's own walk (Get-RePointPick ->
+# Get-RePointChain -> Get-DataSetTableLiterals, Emit-Common). frmBlueprint4.dxDBGrid1OperationVName:
+# Blueprint4_Model.dsrOperation dangles (Blueprint4.dfm:4497); its view is re-pointed at Blueprint4.pas:2282
+# := FBlueprint_ViewModel.pdsrOperation. The hops and grades are A-RT3-HOPS's (member :171 certain, accessor
+# :1263 by name, field :99 by name, DataSet := :657 certain), then FMTOperation (:78, certain) and the OPERAT
+# literal beside it (:769, [inferred]) -- the round-trip's anchor OPERAT.NAME (A-RT3-ANCHOR).
+Step 'FF-REPOINT' {
+  $script:ffrp = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-FF-REPOINT'      "$($ffrp.Grade):$($ffrp.RePoint):$($ffrp.TableColumn):$($ffrp.ColumnExists)" 'dangling:table:OPERAT.NAME:yes'
+  Chk 'A-FF-REPOINT-HOPS' $ffrp.HopGrades 'certain>dangling>certain>certain>by name>by name>certain>certain>inferred'
+  $trp = Dot $ffrp
+  foreach ($ln in 4497, 2282, 171, 1263, 99, 657, 78, 769, 2809) { if (-not (HasLine $trp $ln)) { Fail 'A-FF-REPOINT-HREF' "no row anchored on line $ln" } }
+  if ($trp -match 'that right-hand side is not followed') { Fail 'A-FF-REPOINT' 'the chart still says the re-point is not followed' }
+  $script:lwrp = & "$SRC\Emit-LandsWhere.ps1" -Field 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW-REPOINT'      "$($lwrp.ChainOutcome):$($lwrp.Table):$($lwrp.TableColumn):$($lwrp.ServerClass)" 'column:OPERAT:OPERAT.NAME:TDataService_OPERAT_SERVER'
+  foreach ($ln in 2282, 657, 769) { if (-not (HasLine (Dot $lwrp) $ln)) { Fail 'A-LW-REPOINT-HREF' "no selection row anchored on line $ln" } }
 }
 # N30: ambiguous after the tie-break -- exit 0, the candidates printed, NO TABLE.COLUMN
 Step 'FF-N30' {
@@ -2093,7 +2127,8 @@ Step 'FF-ART' {
   $artRoot = Join-Path $OutDir 'bundle-ff'
   $art = & "$SRC\New-DiagramArtifact.ps1" -Question feeds-from -Target 'frmCausFail.colREASON' -DbPath $DbCli -SqlDbPath $DbSql -OutRoot $artRoot
   $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
-  Chk 'A-FF-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount)" '5 chain rows / 267'
+  # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: rightCount is A-FF0-PERCTL's CtlTable, 267 -> 471 (+204 dangling controls whose re-point reaches a table)
+  Chk 'A-FF-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount)" '5 chain rows / 471'
   if ($meta.regenerate -notmatch '-SqlDbPath ') { Fail 'A-FF-ART' 'the regenerate command drops -SqlDbPath' }
 }
 # ---- PLAN-last-four-verbs, Task 4: lands-where -------------------------------------
@@ -2382,10 +2417,12 @@ $o = [pscustomobject]@{
   if ($line.Count -ne 1) { Fail 'A-LW-CACHE' "the child process returned no result (exit $LASTEXITCODE): $(($raw | Select-Object -Last 3) -join ' | ')" }
   else {
     $c = $line[0].Substring(9) | ConvertFrom-Json
-    Chk 'A-LW-CACHE-HID'   $c.Hid   'server-sql:1 not-column +6:253:True'
+    # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: IndexBindColumn +189 (the dangling controls whose re-point reaches
+    # a column of MSCLIST / OPERAT; A-FF0-PERCTL column 254 -> 443): hidden 253 -> 442, normal 254 -> 443, feeds 267/254 -> 471/443
+    Chk 'A-LW-CACHE-HID'   $c.Hid   'server-sql:1 not-column +6:442:True'
     Chk 'A-LW-CACHE-KEPT'  $c.Cache 0
-    Chk 'A-LW-CACHE-NORM'  $c.Norm  'yes:1 column +6:254:False'
-    Chk 'A-LW-CACHE-FEEDS' $c.Feeds 'CAUSFAIL.REASON:267/254'
+    Chk 'A-LW-CACHE-NORM'  $c.Norm  'yes:1 column +6:443:False'
+    Chk 'A-LW-CACHE-FEEDS' $c.Feeds 'CAUSFAIL.REASON:471/443'
   }
 }
 NegTest 'LW-ART-N' 'lands-where needs -ServerDbPath' 'never' {

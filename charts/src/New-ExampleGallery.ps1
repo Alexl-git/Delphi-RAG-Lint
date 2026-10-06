@@ -257,7 +257,7 @@ $CATALOGUE = @(
   @{ Q='consumers';       Sel='table/column';    St='shipped'
      Note='Derived (path A; <code>orm_links</code> and <code>fb_*</code> are 0 rows): SQL facts are [certain], upper-case SQL-verb literals [inferred], because <code>sql_reads</code> misses SQL passed through a VARIABLE (<code>SQL.Add(sTmp)</code>: 38 of the 40 SERVER DataService loads still without a read fact) -- the SQL.Add-across-lines case, engine D18, is fixed in extractor 1.19. The schema is the SQL SCRIPTS, not the live database: 5 live <code>PDF_*</code> tables are absent.' }
   @{ Q='feeds-from';      Sel='control';         St='shipped'
-     Note='DFM DataSource &rarr; dataset &rarr; view model &rarr; TABLE.COLUMN, every hop graded. It stops rather than guess on a dangling module, an interface-typed view model or several candidate tables; 267 of 808 field-bound CLIENT controls reach one table, and each chart prints that coverage.' }
+     Note='DFM DataSource &rarr; dataset &rarr; view model &rarr; TABLE.COLUMN, every hop graded. Past a dangling designer datasource it follows the code re-point, as the round-trip does; it stops rather than guess on a re-point with several right-hand sides, an interface-typed view model or several candidate tables; 471 of 808 field-bound CLIENT controls reach one table, and each chart prints that coverage.' }
   @{ Q='lands-where';     Sel='ORM property / field'; St='shipped'
      Note='The TABLE.COLUMN hop is a naming CONVENTION, drawn [inferred] with its measured coverage (1,992 of 1,997 table-named properties). Column states: column, older-only, quoted, server-sql, not-a-column. Reads three clones: CLIENT, SERVER and SQL.' }
 

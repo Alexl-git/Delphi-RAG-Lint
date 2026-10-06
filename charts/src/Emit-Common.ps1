@@ -1877,8 +1877,10 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line FROM string_literals sl
 # through Get-DataSetSites (an assignment line read from fresh source: certain)
 # -> the dataset field. A hop that cannot be made STOPS with its reason; a
 # stale file on the way sets StaleFile so the caller can REFUSE (AC-14).
-# Used by the round-trip trace ONLY (owner decision 3, 2026-09-27): feeds-from
-# and lands-where still stop at the dangling datasource.
+# Used by the round-trip trace AND, since 2026-10-05 (owner: "close all the
+# existing gaps"; it was round-trip ONLY under owner decision 3, 2026-09-27),
+# by feeds-from and lands-where through Resolve-RePointTable below. The row is
+# picked by Get-RePointPick, the ONE copy of the stale / several-RHS rule.
 # $RePoint is ONE row of Get-RePointSites (the caller picks the control's row).
 # Returns Hops[] {Hop, Grade, Label, File, Line, Routine, Reason, Ask}, DataSet
 # ($null | Name, Id, ClassId, File, Fid, Line, Type), StopReason ('' when the
@@ -1994,6 +1996,95 @@ SELECT DISTINCT r.name_text AS n FROM refs r
   Done '' ([pscustomobject]@{ Name = [string]$d.name; Id = [int]$d.id; ClassId = [int]$d.pid; File = [string]$d.path; Fid = [int]$d.fid; Line = [int]$d.line; Type = ([string]$d.sig).Trim() }) ''
 }
 
+# WHICH re-point a dangling chain follows -- the ONE copy of the rule (lifted
+# from the round-trip trace, Trace.Walk.ps1, 2026-10-05) that round-trip,
+# feeds-from and lands-where all apply:
+#   * only $Owner's sites count (the component that carries the DFM DataSource:
+#     the control, its parent or its grandparent), and a `:= nil` site does not
+#     -- it UN-binds the control (Blueprint4.pas:3213, in FormClose), as
+#     Get-DataSourceChain skips a nil DataSet assignment;
+#   * a stale site, or no site read from a form unit that is stale, REFUSES
+#     (AC-14): the receiver may be lost (P29), so the file is named;
+#   * several sites with DIFFERENT right-hand sides are a choice the index
+#     cannot make (T1-C2): a named stop, never "the first one".
+# $Ch is a Get-DataSourceChain result graded 'dangling'.
+# Returns Status ('follow' | 'no-site' | 'stale' | 'multi-rhs'), Rows (the
+# owner's counted sites; Rows[0] is the one to follow), NilSites (the owner's
+# `:= nil` sites), Stop ('' for follow / no-site), StaleFile.
+function Get-RePointPick($Ch, [string] $Owner, [hashtable] $SourceOverride) {
+  $mine = @($Ch.RePointedAt | Where-Object { $_.Control -eq $Owner })
+  $rp = @($mine | Where-Object { $_.Stale -or $_.Rhs -ne 'nil' })
+  $out = [pscustomobject]@{ Status = 'follow'; Rows = $rp; NilSites = ($mine.Count - $rp.Count); Stop = ''; StaleFile = '' }
+  $stRp = @($rp | Where-Object { $_.Stale })
+  if ($stRp.Count -or ($Ch.PasFile -and -not $rp.Count -and -not (Test-SourceFresh $Ch.PasFile $SourceOverride))) {
+    $out.Status = 'stale'
+    $out.StaleFile = $(if ($stRp.Count) { [string]$stRp[0].File } else { [string]$Ch.PasFile })
+    $out.Stop = "$([IO.Path]::GetFileName($out.StaleFile)) differs from the indexed copy -- the code re-point of $Owner is not read"
+    return $out
+  }
+  $rhsSet = @($rp | ForEach-Object { ([string]$_.Rhs -replace '\s', '').ToUpperInvariant() } | Sort-Object -Unique)
+  if ($rhsSet.Count -gt 1) {
+    $out.Status = 'multi-rhs'
+    $out.Stop = "$Owner is re-pointed at $($rp.Count) sites with $($rhsSet.Count) different right-hand sides ($((@($rp | ForEach-Object { "$([IO.Path]::GetFileName([string]$_.File)):$($_.Line)" })) -join ', ')) -- cannot tell which feeds the grid"
+    return $out
+  }
+  if (-not $rp.Count) { $out.Status = 'no-site' }
+  $out
+}
+
+# The table-name literals that share a line with a read of the dataset field $Ds
+# (Name, Fid) in its own unit -- the round-trip's dataset -> table hop, shared so
+# feeds-from and lands-where take the table from a re-pointed dataset the SAME
+# way. One row = the table ([inferred]: a shared line is the walk's inference,
+# never a fact); zero or several = a stop. Rows t, line (first), n (lines).
+function Get-DataSetTableLiterals($Ds, $SqlSet) {
+  Invoke-IndexQuery @"
+SELECT sl.text AS t, MIN(sl.start_line) AS line, COUNT(*) AS n FROM string_literals sl
+ WHERE sl.file_id = $($Ds.Fid) AND sl.kind = 'literal' AND sl.text IN ($(ConvertTo-SqlInList $SqlSet.Names))
+   AND EXISTS (SELECT 1 FROM refs r WHERE r.file_id = sl.file_id AND r.start_line = sl.start_line AND r.name_text = '$(ConvertTo-SqlText $Ds.Name)')
+ GROUP BY sl.text ORDER BY MIN(sl.start_line), sl.text
+"@ 'round-trip (table literals)'
+}
+
+# feeds-from / lands-where past a DANGLING designer datasource (Task 2,
+# 2026-10-05): Get-RePointPick, then Get-RePointChain from the picked site,
+# then the table beside the dataset (Get-DataSetTableLiterals) -- the hops and
+# grades the round-trip trace draws for the same control, so the three verbs
+# cannot disagree. Returns:
+#   Status   table     the dataset was reached and ONE table literal sits beside it
+#            no-table  the dataset was reached; zero or several table literals
+#            stops     Get-RePointChain stopped before the dataset (Stop says why)
+#            stale     a file on the way differs from the index (StaleFile; REFUSE)
+#            multi-rhs several sites, different right-hand sides (named stop)
+#            no-site   no non-nil re-point of $Owner in the form unit
+#   Owner, Sites (the counted re-point rows), NilSites, Hops (Get-RePointChain's,
+#   in order), DataSet, Table, TableLine, TableLines, Stop, StaleFile
+function Resolve-RePointTable($Ch, [string] $Owner, $SqlSet, [hashtable] $SourceOverride) {
+  $pk = Get-RePointPick $Ch $Owner $SourceOverride
+  $o = [pscustomobject]@{ Status = $pk.Status; Owner = $Owner; Sites = $pk.Rows; NilSites = $pk.NilSites; Hops = @(); DataSet = $null
+                          Table = $null; TableLine = 0; TableLines = 0; Stop = $pk.Stop; StaleFile = $pk.StaleFile }
+  if ($pk.Status -ne 'follow') {
+    if ($pk.Status -eq 'no-site') {
+      $o.Stop = $(if ($pk.NilSites) { "$Owner is re-pointed in code only to nil ($($pk.NilSites) site(s)) -- nothing to follow" } else { "no code re-point of $Owner in $(Get-UnitName $Ch.PasFile) -- nothing to follow" })
+    }
+    return $o
+  }
+  $rc = Get-RePointChain $pk.Rows[0] $SourceOverride
+  $o.Hops = $rc.Hops
+  if ($rc.StaleFile) { $o.Status = 'stale'; $o.StaleFile = $rc.StaleFile; $o.Stop = $rc.StopReason; return $o }
+  if ($rc.StopReason) { $o.Status = 'stops'; $o.Stop = $rc.StopReason; return $o }
+  $o.DataSet = $rc.DataSet
+  $lit = Get-DataSetTableLiterals $rc.DataSet $SqlSet
+  if ($lit.Count -ne 1) {
+    $o.Status = 'no-table'
+    $o.Stop = $(if ($lit.Count -eq 0) { "no upper-case table-name literal shares a line with $($rc.DataSet.Name) in $(Get-UnitName $rc.DataSet.File) -- the table cannot be inferred" }
+                else { "$($lit.Count) tables share a line with $($rc.DataSet.Name) in $(Get-UnitName $rc.DataSet.File) ($((@($lit | ForEach-Object { [string]$_.t })) -join ', ')) -- cannot tell which" })
+    return $o
+  }
+  $o.Status = 'table'; $o.Table = [string]$lit[0].t; $o.TableLine = [int]$lit[0].line; $o.TableLines = [int]$lit[0].n
+  $o
+}
+
 # The cache key of one chain: the DFM path and the datasource TEXT, case-folded.
 function Get-ChainKey([string] $Dfm, [string] $Ds) { "$Dfm|$Ds".ToUpperInvariant() }
 
@@ -2013,7 +2104,14 @@ function Get-ChainKey([string] $Dfm, [string] $Ds) { "$Dfm|$Ds".ToUpperInvariant
 #   not-column   chain resolves to one table, and the column is not extracted
 #                from it nor quoted in its newest declaration
 #   ambiguous    several candidate tables survive (grade many)
-#   dangling     the DFM datasource names a module this index does not hold
+#   dangling     the DFM datasource names a module this index does not hold, AND
+#                the code re-point of its owner does not reach a table (Task 2,
+#                2026-10-05). A dangling chain is followed through
+#                Resolve-RePointTable once per (chain, owner); one that reaches a
+#                table is classified column / not-column / stale like any other,
+#                and a stale file on the re-point walk is `stale`. Every row of a
+#                dangling chain carries RePoint (Resolve-RePointTable's Status, ''
+#                when no owner was found) and RePointKey (into .RePoints)
 #   stops        the chain stops before a table (none / no-type / no-assignment /
 #                dfm-dataset / no-datasource)
 #   stale        a source file on the chain differs from the indexed copy -- or
@@ -2055,21 +2153,37 @@ SELECT c.id AS id, c.name AS name, f.path AS path
 
   $binds = Get-AllIndexRows @"
 SELECT sl.id AS id, sl.start_line AS line, sl.owner_name AS prop, sl.text AS col, f.path AS dfm,
-       c.id AS cid, c.name AS ctl, $(Get-ControlDataSourceSql 'sl' 'c') AS ds
+       c.id AS cid, c.name AS ctl, c.parent_id AS pid, (SELECT g.parent_id FROM symbols g WHERE g.id = c.parent_id) AS gpid,
+       $(Get-ControlDataSourceSql 'sl' 'c') AS ds
   FROM string_literals sl JOIN files f ON f.id = sl.file_id LEFT JOIN symbols c ON c.id = sl.symbol_id
  WHERE sl.kind = 'dfm-prop' AND sl.owner_name IN ('DataBinding.FieldName','DataBinding.DataField','DataField')
 "@ 'sl.id'
   $rows = New-Object System.Collections.ArrayList
+  $rePoints = @{}
   foreach ($b in $binds) {
     $ds = [string]$b.ds
-    $outcome = 'no-ds'; $table = $null
+    $outcome = 'no-ds'; $table = $null; $rpKey = ''; $rpStatus = ''
     if ($ds) {
       $k = Get-ChainKey ([string]$b.dfm) $ds
       if (-not $chains.ContainsKey($k)) { $chains[$k] = Get-DataSourceChain ([string]$b.dfm) $ds $SqlSet $SourceOverride }
       $ch = $chains[$k]
       $table = $ch.ResolvedTable
+      if ($ch.Dangling) {
+        # Task 2 (2026-10-05): past a DANGLING designer datasource the code re-point is
+        # followed, per OWNER -- the component carrying the DataSource (the control, its
+        # parent or its grandparent, nearest first, as Get-ControlDataSourceSql picked it)
+        $ids = @(@($b.cid, $b.pid, $b.gpid) | Where-Object { $_ } | ForEach-Object { [int]$_ })
+        $own = @($ids | ForEach-Object { $i = $_; @($ch.Controls | Where-Object { -not $_.IsLookup -and $_.ControlId -eq $i }) } | Select-Object -First 1)
+        if ($own.Count) {
+          $rpKey = "$k|$($own[0].Control)".ToUpperInvariant()
+          if (-not $rePoints.ContainsKey($rpKey)) { $rePoints[$rpKey] = Resolve-RePointTable $ch ([string]$own[0].Control) $SqlSet $SourceOverride }
+          $rpStatus = $rePoints[$rpKey].Status
+          if ($rpStatus -eq 'table') { $table = $rePoints[$rpKey].Table }
+        }
+      }
       $outcome = if ($ch.Grade -eq 'stale source') { 'stale' }
-                 elseif ($ch.Dangling) { 'dangling' }
+                 elseif ($ch.Dangling -and $rpStatus -eq 'stale') { 'stale' }
+                 elseif ($ch.Dangling -and -not $table) { 'dangling' }
                  elseif ($table) {
                    # the SHARED column test: cheap first, the source scan only for a miss
                    if (Test-IsColumn $SqlSet.Tables[$table] ([string]$b.col)) { 'column' }
@@ -2087,11 +2201,11 @@ SELECT sl.id AS id, sl.start_line AS line, sl.owner_name AS prop, sl.text AS col
     [void]$rows.Add([pscustomobject]@{
       Id = [int]$b.id; Dfm = [string]$b.dfm; Line = [int]$b.line; Prop = [string]$b.prop; Column = [string]$b.col
       ControlId = $(if ($b.cid) { [int]$b.cid } else { 0 }); Control = [string]$b.ctl; Ds = $ds
-      Outcome = $outcome; Table = $table
+      Outcome = $outcome; Table = $table; Dangling = [bool]($ds -and $ch.Dangling); RePointKey = $rpKey; RePoint = $rpStatus
     })
   }
 
-  $o = [pscustomobject]@{ Chains = $chains; DataSources = $perDs.ToArray(); Bindings = $rows.ToArray() }
+  $o = [pscustomobject]@{ Chains = $chains; DataSources = $perDs.ToArray(); Bindings = $rows.ToArray(); RePoints = $rePoints }
   if ($key) { $global:DlFeedChains[$key] = $o }
   $o
 }

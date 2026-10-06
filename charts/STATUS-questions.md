@@ -58,7 +58,7 @@ interface / project / command constant / wire field / db column / any symbol.**
 
 | `exception-paths` | method | `Emit-ExceptionPaths.ps1` | BuildSchema: EDatabaseError caught at LoadAllAsync:632 (call inside the try); ReadBuffer: caught on 2 edges, escapes on 3 path ends; 140 callers walked, 139 evaluated for EReadError |
 | `consumers` | table / column | `Emit-Consumers.ps1` | CAUSFAIL (SERVER): 1 certain reader, 1 certain writer, 3 triggers; FOLDERS 3 inferred readers; FOLDERS 2 declarations, newest 79 columns. Multi-line `SQL.Add` (engine D18) is covered by the engine's `sql_reads` fact plus the column form's span search (gate `A-CO-D18-COVERED`; 0 statements left for a charts-side join, `A-CO-D18-LINES` 5/0). The column form REFUSES a column whose state is `[stale source]` (not extracted, and the newest declaration's script differs from the index, so it is NOT known): "consumers: cannot tell whether T.C is a column -- [stale source] not extracted as a column by the SQL index (...); X.SQL differs from the indexed copy, so it was not scanned for a quoted identifier -- whether C is a column of T is NOT known. Script-derived; the scripts may lag the live schema." (gate `CO-STALE-REFUSE`: INSPRSLT.DISTHIST over a manufactured stale MS1.SQL) |
-| `feeds-from` | control | `Emit-FeedsFrom.ps1` | colREASON: 5 graded hops to CAUSFAIL.REASON; 267 of 808 field-bound CLIENT controls reach one table |
+| `feeds-from` | control | `Emit-FeedsFrom.ps1` | colREASON: 5 graded hops to CAUSFAIL.REASON; 471 of 808 field-bound CLIENT controls reach one table (267 before the dangling-datasource re-point was followed, 2026-10-05) |
 | `lands-where` | ORM property / field / control | `Emit-LandsWhere.ps1` | TmcCAUSFAIL.REASON: 4 server rows, 1 trigger, 1 client binding; convention 1,992 of 1,997 |
 | `round-trip` | control / field / TABLE.COLUMN | `Emit-RoundTrip.ps1` | OPERAT.NAME from frmBlueprint4.dxDBGrid1OperationVName: 17/17 golden nodes matched, 3 golden facts disclosed (READ [28]-[29], transport helpers at uPipeSessionBuilder.pas:533/:534/:538), 12/12 guards; 76 steps / 31 conditions / 4 crossings / 2 unresolved (the statement for the posted row and the SELECT STOPS, both E4); ALSO 9 (owner-accepted 2026-09-28: all callers count; dataset scope; anchors only). Limits: guards see the innermost enclosing `if` only (E1); OMITS tests every enclosing `if` up to a loop or case arm; statement texts are FIB$ rows the clones do not hold (E4). A direction that stops after the anchor notes its un-walked tiers and the title claims only the walked direction (`RT-NOWIRE`: frmAssignGroups.grdFtrsColNum, 33/10/2/2). TEXT bundle (`trace.dlgraph`; the page links each anchor to the IDE, 126/126 here -- DOC-R1), no chart yet |
 | `round-trip` (holdout, AC-16) | control | `Emit-RoundTrip.ps1` | MSCLIST.NUM from frmBlueprint4.dxDBGrid1FtrsVNum through FMTFtrs / SendDeltaFtrs (a different dataset and sender than OPERAT.NAME; the re-point at Blueprint4.pas:2283 recovered from source, P29): 103 steps / 35 conditions / 4 crossings / 2 unresolved, pinned by gate `RT-HOLD`. Owner-accepted 2026-09-28: the owner checked the path's shape against the OPERAT.NAME trace and the golden, not every line. FtrName (the plan's default) was not used: it is one of 12 calculated fields added to FMTFtrs after BuildMemTable (Blueprint4.ViewModel.pas:748-761), no DB column -- its trace now OFFERS ITS SOURCES (calc-field brief, owner 2026-09-28) |
@@ -87,12 +87,20 @@ quoted:
   named, not drawn. The header counts reading / writing ROUTINES; unit-level
   SQL literals are counted per unit, apart.
 * `feeds-from` -- DFM DataSource -> dataset -> view model -> TABLE.COLUMN, every
-  hop graded; it STOPS (never guesses) on a dangling module, an interface-typed
-  view model or several candidate tables. Table-name literals match in UPPER
+  hop graded; past a DANGLING designer datasource it FOLLOWS the code re-point
+  (2026-10-05, Task 2: the round-trip's own walk, `Resolve-RePointTable` --
+  member, accessor, field, `DataSet :=`, the dataset, the table literal beside
+  it, each hop graded as round-trip grades it); it STOPS (never guesses) when
+  the owner is re-pointed at several sites with different right-hand sides,
+  when it has no re-point site, on an interface-typed view model or several
+  candidate tables, and a stale file on the way stops `[stale source]`. Table-name literals match in UPPER
   case (the SQL convention); a literal equal to a table name only
   case-insensitively (`'DueIN'`, a computed-field name) is named on the hop and
   not taken -- measured, every such literal on CLIENT is not a table reference. Measured coverage per control, not
-  per datasource: 267 of 808 reach one table, 426 sit under a dangling module.
+  per datasource: 471 of 808 reach one table (267 before the re-point was
+  followed). Of the 426 under a dangling module, 204 reach a table through the
+  re-point, 215 stop on the way, 3 are re-pointed with several different
+  right-hand sides, 4 have no re-point site (gate `A-FF-REPOINT-AGG`).
 * `lands-where` -- the TABLE.COLUMN hop is a naming CONVENTION
   (`Tmc<T>.P` -> `T.P`), drawn `[inferred]` with its coverage measured and
   printed on every chart (1,992 of 1,997). Reads THREE clones (CLIENT, SERVER,
@@ -329,6 +337,8 @@ conditions, (3) re-point hop in the new trace ONLY.** The decisions were:
 3. The code re-point hop lives only in the new trace (`Get-RePointChain`
    after a `dangling` chain); wiring it into feeds-from/lands-where re-grades
    ~30 pins (426 dangling controls) and is a separate later change.
+   **SUPERSEDED 2026-10-05** (owner: "close all the existing gaps"): wired into
+   feeds-from and lands-where (Task 2 of the R-items plan), see open item 2 below.
    (Informational: DISPATCH takes the first call after the constant INTO
    ANOTHER UNIT -- plain "first call" picks the unit-local ParseTableFromPayload.)
 
@@ -365,7 +375,14 @@ green (1072 s):
 2. **feeds-from / lands-where stop at a dangling designer datasource** and do
    not follow the runtime re-point (`Blueprint4.pas:2282`,
    `:= FBlueprint_ViewModel.pdsrOperation`) -- the one hop that would reach
-   `FMTOperation` -> `'OPERAT'`.
+   `FMTOperation` -> `'OPERAT'`. **DONE 2026-10-05 (Task 2):** both follow it
+   through `Resolve-RePointTable` (Emit-Common: `Get-RePointPick` -- the ONE copy
+   of the stale / several-right-hand-sides rule, lifted out of Trace.Walk --
+   then `Get-RePointChain`, then `Get-DataSetTableLiterals`). The Operation Name
+   column now reaches `FMTOperation` -> `OPERAT.NAME` (gate `A-FF-REPOINT`,
+   `A-LW-REPOINT`). Several sites with different right-hand sides stop with the
+   sites named ("cannot tell which feeds the grid"); a stale file on the way
+   stops `[stale source]` and no table is drawn.
 3. lands-where with no table prints `TDataService__SERVER` / `Imc.` with blank
    names (cosmetic).
 
