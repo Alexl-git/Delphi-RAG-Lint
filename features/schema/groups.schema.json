@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "drag-lint feature registry groups / teams",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "groups": { "$ref": "#/definitions/list" },
+    "teams":  { "$ref": "#/definitions/list" }
+  },
+  "definitions": {
+    "list": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false,
+              "required": ["id", "title", "order", "summary"],
+              "properties": { "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9-]*$" },
+                              "title": { "type": "string", "minLength": 3 },
+                              "order": { "type": "integer", "minimum": 1 },
+                              "summary": { "type": "string", "minLength": 10 } } } }
+  }
+}
