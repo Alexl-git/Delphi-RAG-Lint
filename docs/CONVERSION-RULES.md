@@ -578,9 +578,7 @@ block matches, gets its unit rules alone. The `apply/1` JSON reports them as
 ### Refusals (`refused` / `reason`, 1.20.6)
 
 Some units `convert-apply` will not touch at all, because no safe rewrite
-exists: a `.dfm` holding an `inherited`/`inline` object of a From type
-(`inherited instances of <Type> are not converted yet -- unit not changed`), and
-a unit whose uses entry to change sits in a `{$IF...}` region (the message
+exists: a unit whose uses entry to change sits in a `{$IF...}` region (the message
 names the entry and the clause), and a `.dfm` that changed after indexing: the
 line range the index recorded for an instance no longer opens `object <Name>:`
 (or `inherited`/`inline`), its first `end` at the opener's indent is not the
@@ -588,8 +586,9 @@ recorded end line (a block that lost lines now ends on a later sibling's `end`),
 or the `.dfm` was cut short so the range runs past its end
 (`<Name>: index is stale for this .dfm -- reindex`; reindex and run again), and
 (R26) a unit-rule removal -- `#unuse`, or `#useswap`'s Old -- of the unit that
-declares the From type of an instance that stays unconverted (skipped, or left
-out by `--only`, which filters instances and never unit rules): removing it would
+declares the From type of an instance that stays unconverted (skipped, an
+`inherited`/`inline` object, or left out by `--only`, which filters instances
+and never unit rules): removing it would
 break the compile (E2003), so the unit is refused with
 `<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed`
 (e.g. `#unuse LibA would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed`;
@@ -686,11 +685,32 @@ Validation and the plan share one member cache per `--db` (json
 `classes_built` = the classes whose members were resolved). A path error ends
 with the block it was checked in: `(#convert line N: From -> To)`.
 
-**Inherited forms.** `convert-apply` does not convert `inherited` / `inline`
-`.dfm` objects yet. If the unit's `.dfm` holds one whose class is a From type
-of the book, the whole unit is refused (exit 1, nothing written, unit rules
-included): `inherited instances of <Type> are not converted yet -- unit not
-changed`.
+**Inherited forms (1.22.0, C8).** `convert-apply` does not convert `inherited`
+/ `inline` `.dfm` objects: the component is DECLARED by an ancestor, which is
+where it has to be converted. Such an object whose class is a From type of the
+book is SKIPPED -- its `.dfm` lines are left as they are -- while the unit's own
+instances, its code and its unit rules convert as usual (until 1.21.1 the whole
+unit was refused). Each one is reported:
+
+* text: `line N: warning: inherited instance <Name>: <Type> skipped -- <reason>`
+  under `Warnings:` (N is its `.dfm` line);
+* JSON: the same text in `warnings[]`, an `items[]` entry of kind
+  `inherited-instance-skipped`, and one object in `inherited[]` (always present,
+  `[]` when none):
+  `{name, type, line, ancestor_unit, ancestor_state, reason}`.
+
+The **declaring ancestor** is the nearest class up the owner's ancestor chain
+(the index's `type_ancestors`, several levels up when needed) whose `.dfm` opens
+the component with `object`; a `.dfm` that only re-opens it with `inherited` is
+passed over. The owner is the form's root class, or the class of the nearest
+enclosing `inline` frame for a frame's children. `ancestor_state` is
+`unconverted` (that ancestor still has the From type -- convert it first),
+`converted` (it already has the To type; still skipped -- retyping an inherited
+instance is not supported yet) or `outside` (no ancestor in the `--db` declares
+it, or the chain leaves the index; `ancestor_unit` is then `""`, never guessed).
+R26 (see *Refusals*) still counts every such instance as left unconverted. `info --json`
+advertises the behaviour as `capabilities.inherited_instances: true`; an engine
+without the key still refuses the unit.
 
 `convert-apply` locates every `.dfm` component instance whose class matches a
 `#convert FromType` rule, then rewrites all **5 conversion surfaces** for each:

@@ -79,6 +79,30 @@ type
     ToType      : string;
   end;
 
+  /// <summary>One INHERITED or INLINE .dfm object whose class is the From type
+  /// of a #convert block -- an instance convert-apply skips and reports
+  /// (apply/1 inherited[], C8 engine item N1).</summary>
+  /// <remarks>
+  /// The component is DECLARED by an ancestor: the nearest class up the
+  /// owner's ancestor chain whose .dfm opens it with `object` (or `inline`).
+  /// The owner is the class of the nearest enclosing `inline` frame, else the
+  /// .dfm's root class. AncestorState is 'unconverted' (that ancestor's object
+  /// still has the From type), 'converted' (it has the block's To type; N1
+  /// still skips it -- retyping is N2) or 'outside' (no ancestor in the --db
+  /// declares it, or the chain leaves the index; never guessed, item N3).
+  /// AncestorUnit is the declaring unit, '' when it is not known.
+  /// </remarks>
+  TInheritedInstance = record
+    Name         : string;  { the component name }
+    TypeName     : string;  { its class as the .dfm spells it -- the block's From type }
+    ToType       : string;  { the block's To type, bare }
+    Line         : Integer; { 1-based line of its header in the unit's .dfm }
+    OwnerClass   : string;  { the class whose ancestry declares it }
+    AncestorUnit : string;  { the declaring ancestor's unit, or '' }
+    AncestorState: string;  { 'unconverted', 'converted' or 'outside' }
+    Reason       : string;  { why it was skipped, one sentence }
+  end;
+
   /// <summary>What one reported line of a convert-apply run IS, as a stable
   /// machine-readable token -- the dispatchable half of the report, so a
   /// consumer never has to pattern-match the prose.</summary>
@@ -136,11 +160,15 @@ type
     aikSubLeafCarried,       { a sub-leaf carried IMPLICITLY under an identity
                                #link (Font <- Font, both TFont) -- nobody typed
                                it, and the report says so (info). }
-    aikRulePathUnreachable); { a #link / #default / #mapping line whose path
+    aikRulePathUnreachable,  { a #link / #default / #mapping line whose path
                                names members that exist but are inaccessible on
                                the .dfm surface -- skipped, never applied (owner
                                ruling R12, T2h). Path and RuleLine are set; the
                                structured facts are apply/1 unreachable[]. }
+    aikInheritedInstanceSkipped); { an inherited / inline .dfm object of a
+                               From type, skipped -- its ancestor declares it
+                               (C8 N1). Instance and Line are set; the
+                               structured facts are apply/1 inherited[]. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -482,20 +510,43 @@ type
 /// </remarks>
 function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
 
-/// <summary>The From types of a book that a .dfm holds as INHERITED or INLINE
-/// objects -- instances convert-apply does not convert.</summary>
-/// <param name="ADfmText">The .dfm text.</param>
+/// <summary>The INHERITED and INLINE objects of a .dfm whose class is the From
+/// type of a #convert block, each with its declaring ancestor resolved -- the
+/// instances convert-apply skips and reports (C8 engine items N1, N3).</summary>
+/// <param name="ATrees">The run's tree cache; its Stores are searched for the
+/// owner class and its ancestor chain (GetTransitiveAncestors). Not owned.</param>
+/// <param name="AUnitPas">The unit being converted; a root class declared in
+/// it is preferred over a same-named class elsewhere.</param>
+/// <param name="ADfmPath">The unit's sibling .dfm; a missing file yields an
+/// empty result.</param>
 /// <param name="ARules">The parsed rule book.</param>
-/// <returns>Each such class name once (as the .dfm spells it), in the order
-/// first found; empty when there is none.</returns>
+/// <returns>One TInheritedInstance per such object, nested ones included, in
+/// .dfm order; empty when there is none.</returns>
 /// <remarks>
-/// FindConvertInstances only matches 'object' headers, so an inherited
-/// component of a From type is silently left unconverted while the book's
-/// unit rules (e.g. '#unuse BDE.DBTables') still act on the unit -- which can
-/// break its compile. convert-apply refuses such a unit whole (ruling R6,
-/// 2026-09-30). Pure.
+/// FindConvertInstances matches `object` headers only, so these are never
+/// converted; until 1.22.0 convert-apply refused their unit whole (ruling R6).
+/// The declaring ancestor is the nearest class of the owner's chain (the owner
+/// itself first, so a frame's own .dfm counts) whose .dfm -- the class's unit
+/// with the extension changed -- opens the component with `object` or
+/// `inline`; a .dfm that only re-opens it with `inherited` is passed over.
+/// An owner class that resolves to no class or to several, a chain that
+/// leaves the index at an unresolved ancestor, or a chain with no declaring
+/// .dfm all give AncestorState 'outside' -- nothing is guessed. Reads the
+/// ancestors' .dfm files; writes nothing.
 /// </remarks>
-function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConversionRuleSet): TArray<string>;
+function FindInheritedInstances(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+  const ARules: TConversionRuleSet): TArray<TInheritedInstance>;
+
+/// <summary>Reports skipped inherited instances in a convert-apply report:
+/// one `line N: warning: ...` per instance in Warnings and its typed mirror
+/// (kind inherited-instance-skipped) in Items.</summary>
+/// <param name="AInstances">The instances FindInheritedInstances returned.</param>
+/// <param name="ADfmPath">The .dfm their lines refer to (each item's FilePath).</param>
+/// <param name="AReport">The report to append to; Items stays equal to the sum
+/// of the six arrays (invariant 1).</param>
+/// <remarks>Pure apart from AReport.</remarks>
+procedure AppendInheritedReport(const AInstances: TArray<TInheritedInstance>; const ADfmPath: string;
+  var AReport: TApplyReport);
 
 /// <summary>Builds the full convert-apply plan for one unit: locates the
 /// component instances to convert in ADfmPath (via FindConvertInstances),
@@ -696,7 +747,8 @@ const
     'cast-not-applied', 'cast-applied', 'instance-skipped', 'field-decl-not-retyped',
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
     'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped',
-    'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable');
+    'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable',
+    'inherited-instance-skipped');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1009,28 +1061,269 @@ begin
     if C <> nil then Inc(Result, C.ClassesBuilt);
 end;
 
-function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConversionRuleSet): TArray<string>;
+const
+  { apply/1 inherited[].ancestor_state values (C8 N1 / N3) -- a compatibility
+    surface: the converter editor dispatches on these spellings. }
+  ANCESTOR_UNCONVERTED = 'unconverted';
+  ANCESTOR_CONVERTED   = 'converted';
+  ANCESTOR_OUTSIDE     = 'outside';
+  { .dfm block keywords, without their trailing space }
+  KW_OBJECT    = 'object';
+  KW_INHERITED = 'inherited';
+  KW_INLINE    = 'inline';
+  KW_ITEM      = 'item';
+  KW_END       = 'end';
+
+// The inherited / inline objects of ADfmText whose class is a From type, with
+// Name, TypeName, ToType, Line and OwnerClass set (the ancestor fields are
+// left empty). OwnerClass is the class of the nearest ENCLOSING `inline`
+// block, else the root block's class: a frame's children are declared by the
+// frame, everything else by the form's ancestry. Blocks are tracked on a
+// stack -- object / inherited / inline headers (with or without a class) and
+// collection `item`s open one, `end` / `end>` closes one. Pure.
+function ScanInheritedConvertInstances(const ADfmText: string; const ARules: TConversionRuleSet): TArray<TInheritedInstance>;
 var
-  L        : string;
-  Trimmed  : string;
-  ObjName  : string;
-  ObjClass : string;
-  ToType   : string;
-  Found    : TList<string>;
+  Lines  : TArray<string>;
+  Kinds  : TList<string>; { the open blocks' keywords, outermost first }
+  OpenClasses: TList<string>; { their OpenClasses, '' when the header names none }
+  Found  : TList<TInheritedInstance>;
+  I      : Integer;
+  T, Kw  : string;
+  ObjName, ObjClass, ToType: string;
+  Inst   : TInheritedInstance;
+
+  function KeywordOf(const ATrimmed: string): string;
+  begin
+    if StartsText(KW_OBJECT + ' ', ATrimmed) then Result:= KW_OBJECT
+    else if StartsText(KW_INHERITED + ' ', ATrimmed) then Result:= KW_INHERITED
+    else if StartsText(KW_INLINE + ' ', ATrimmed) then Result:= KW_INLINE
+    else Result:= '';
+  end;
+
+  function OwnerOf: string;
+  begin
+    for var K: Integer:= Kinds.Count - 1 downto 1 do
+      if Kinds[K] = KW_INLINE then Exit(OpenClasses[K]);
+    Result:= if OpenClasses.Count > 0 then OpenClasses[0] else '';
+  end;
+
 begin
-  Found:= TList<string>.Create;
+  Lines  := ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]);
+  Kinds  := TList<string>.Create;
+  OpenClasses:= TList<string>.Create;
+  Found  := TList<TInheritedInstance>.Create;
   try
-    for L in ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]) do
+    for I:= 0 to High(Lines) do
     begin
-      Trimmed:= Trim(L);
-      if not (TryParseHeaderAfter(Trimmed, 'inherited ', ObjName, ObjClass) or
-              TryParseHeaderAfter(Trimmed, 'inline ', ObjName, ObjClass)) then Continue;
-      if FindConvertRuleFor(ARules, ObjClass, ToType) and not Found.Contains(ObjClass) then
-        Found.Add(ObjClass);
+      T := Trim(Lines[I]);
+      Kw:= KeywordOf(T);
+      if Kw <> '' then
+      begin
+        if not TryParseHeaderAfter(T, Kw + ' ', ObjName, ObjClass) then ObjClass:= '';
+        if (Kw <> KW_OBJECT) and (Kinds.Count > 0) and (ObjClass <> '') and
+           FindConvertRuleFor(ARules, ObjClass, ToType) then
+        begin
+          Inst           := Default(TInheritedInstance);
+          Inst.Name      := ObjName;
+          Inst.TypeName  := ObjClass;
+          Inst.ToType    := ToType;
+          Inst.Line      := I + 1;
+          Inst.OwnerClass:= OwnerOf;
+          Found.Add(Inst);
+        end;
+        Kinds.Add(Kw);
+        OpenClasses.Add(ObjClass);
+      end
+      else if SameText(T, KW_ITEM) then
+      begin
+        Kinds.Add(KW_ITEM);
+        OpenClasses.Add('');
+      end
+      else if (Kinds.Count > 0) and (SameText(T, KW_END) or SameText(T, KW_END + '>')) then
+      begin
+        Kinds.Delete(Kinds.Count - 1);
+        OpenClasses.Delete(OpenClasses.Count - 1);
+      end;
     end;
     Result:= Found.ToArray;
   finally
     Found.Free;
+    OpenClasses.Free;
+    Kinds.Free;
+  end;
+end;
+
+// True + the header's class when ADfmText opens a block named AName with
+// `object` or `inline` -- i.e. DECLARES it rather than re-opening it with
+// `inherited`. Component names are unique within a form, so the first match
+// at any depth is the one.
+function DfmDeclaresComponent(const ADfmText, AName: string; out AClassName: string): Boolean;
+var
+  L, T, ObjName: string;
+begin
+  AClassName:= '';
+  for L in ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]) do
+  begin
+    T:= Trim(L);
+    if (TryParseHeaderAfter(T, KW_OBJECT + ' ', ObjName, AClassName) or
+        TryParseHeaderAfter(T, KW_INLINE + ' ', ObjName, AClassName)) and SameText(ObjName, AName) then
+      Exit(True);
+  end;
+  AClassName:= '';
+  Result:= False;
+end;
+
+// True when two paths name the same file, case-insensitively; '' never matches.
+function SamePath(const APathA, APathB: string): Boolean;
+begin
+  Result:= (APathA <> '') and (APathB <> '') and SameText(TPath.GetFullPath(APathA), TPath.GetFullPath(APathB));
+end;
+
+// The source files of AOwner's class and of each of its resolved class
+// ancestors, nearest first, from the one --db store that resolves AOwner. A
+// class declared in AUnitPas wins over same-named classes elsewhere; otherwise
+// exactly one candidate across the stores must exist. Empty + ADetail when the
+// owner does not resolve; ADetail is also set when the chain stops at an
+// unresolved ancestor (the files before it are still returned).
+function OwnerChainFiles(const ATrees: TConvertTreeCache; const AOwner, AUnitPas: string;
+  out ADetail: string): TArray<string>;
+var
+  St      : ISymbolStore;
+  S       : TSymbol;
+  A       : TTypeAncestor;
+  Count   : Integer;
+  OwnUnit : Boolean;
+  PickSt  : ISymbolStore;
+  PickSym : TSymbol;
+begin
+  Result := nil;
+  ADetail:= '';
+  Count  := 0;
+  OwnUnit:= False;
+  PickSt := nil;
+  PickSym:= Default(TSymbol);
+  for St in ATrees.Stores do
+    for S in St.FindSymbolsByExactName(AOwner) do
+    begin
+      if (S.Kind <> skClass) or OwnUnit then Continue;
+      Inc(Count);
+      OwnUnit:= SamePath(St.GetFilePath(S.FileId), AUnitPas);
+      if (Count = 1) or OwnUnit then
+      begin
+        PickSt := St;
+        PickSym:= S;
+      end;
+    end;
+  if Count = 0 then
+  begin
+    ADetail:= Format('class %s is in no --db', [AOwner]);
+    Exit;
+  end;
+  if (Count > 1) and not OwnUnit then
+  begin
+    ADetail:= Format('class %s is ambiguous across the --db', [AOwner]);
+    Exit;
+  end;
+  Result:= [PickSt.GetFilePath(PickSym.FileId)];
+  for A in PickSt.GetTransitiveAncestors(PickSym.Id) do
+  begin
+    if SameText(A.Kind, 'interface') then Continue;
+    if not A.Resolved then
+    begin
+      ADetail:= Format('the ancestor chain of %s leaves the index at %s', [AOwner, A.Name]);
+      Break;
+    end;
+    Result:= Result + [PickSt.GetFilePath(A.FileId)];
+  end;
+end;
+
+function FindInheritedInstances(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+  const ARules: TConversionRuleSet): TArray<TInheritedInstance>;
+var
+  DfmTexts: TDictionary<string, string>; { ancestor .dfm path (upper) -> text, read once per run }
+  I       : Integer;
+
+  function DfmTextOf(const APath: string): string;
+  begin
+    if not DfmTexts.TryGetValue(UpperCase(APath), Result) then
+    begin
+      Result:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(APath));
+      DfmTexts.Add(UpperCase(APath), Result);
+    end;
+  end;
+
+  procedure Resolve(var AInst: TInheritedInstance);
+  var
+    Detail   : string;
+    F, Dfm   : string;
+    DeclClass: string;
+  begin
+    AInst.AncestorState:= ANCESTOR_OUTSIDE;
+    AInst.AncestorUnit := '';
+    Detail:= '';
+    if AInst.OwnerClass = '' then
+      Detail:= 'the .dfm names no owner class'
+    else
+      for F in OwnerChainFiles(ATrees, AInst.OwnerClass, AUnitPas, Detail) do
+      begin
+        if F = '' then Continue;
+        Dfm:= TPath.ChangeExtension(F, '.dfm');
+        if SamePath(Dfm, ADfmPath) or not TFile.Exists(Dfm) then Continue;
+        if not DfmDeclaresComponent(DfmTextOf(Dfm), AInst.Name, DeclClass) then Continue;
+        AInst.AncestorUnit:= TPath.GetFileNameWithoutExtension(F);
+        if SameText(DeclClass, AInst.TypeName) then
+        begin
+          AInst.AncestorState:= ANCESTOR_UNCONVERTED;
+          AInst.Reason:= Format('declared in %s, which still has %s -- convert %s first (recommended)',
+            [AInst.AncestorUnit, DeclClass, AInst.AncestorUnit]);
+        end
+        else if SameText(DeclClass, AInst.ToType) then
+        begin
+          AInst.AncestorState:= ANCESTOR_CONVERTED;
+          AInst.Reason:= Format('declared in %s, which already has %s -- retyping an inherited instance is not supported yet',
+            [AInst.AncestorUnit, DeclClass]);
+        end
+        else
+          AInst.Reason:= Format('declared in %s as %s, neither the From nor the To type -- not converted',
+            [AInst.AncestorUnit, DeclClass]);
+        Exit;
+      end;
+    if Detail = '' then Detail:= Format('no ancestor .dfm of %s declares %s', [AInst.OwnerClass, AInst.Name]);
+    AInst.Reason:= Format('declaring ancestor not found (%s) -- convert it from its own project', [Detail]);
+  end;
+
+begin
+  Result:= nil;
+  if (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
+  Result  := ScanInheritedConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules);
+  DfmTexts:=TDictionary<string, string>.Create;
+  try
+    for I:= 0 to High(Result) do Resolve(Result[I]);
+  finally
+    DfmTexts.Free;
+  end;
+end;
+
+procedure AppendInheritedReport(const AInstances: TArray<TInheritedInstance>; const ADfmPath: string;
+  var AReport: TApplyReport);
+var
+  Inst: TInheritedInstance;
+  It  : TApplyItem;
+begin
+  for Inst in AInstances do
+  begin
+    It         := Default(TApplyItem);
+    It.Kind    := aikInheritedInstanceSkipped;
+    It.Field   := afWarnings;
+    It.Instance:= Inst.Name;
+    It.FromType:= Inst.TypeName;
+    It.ToType  := Inst.ToType;
+    It.FilePath:= ADfmPath;
+    It.Line    := Inst.Line;
+    It.Text    := Format('line %d: warning: inherited instance %s: %s skipped -- %s',
+                    [Inst.Line, Inst.Name, Inst.TypeName, Inst.Reason]);
+    AReport.Warnings:= AReport.Warnings + [It.Text];
+    AReport.Items   := AReport.Items + [It];
   end;
 end;
 
@@ -1440,8 +1733,8 @@ end;
 // or #useswap's Old) takes away the unit declaring the From type of a .dfm
 // instance that stays unconverted -- skipped, or left out by --only -- which
 // would break the compile (E2003); '' when no removal does. Every #convert
-// instance of ADfmText counts, --only ignored; AConverted names the ones the
-// plan converts. The text is '<rule> would leave <N> unconverted instance(s)
+// instance of ADfmText counts, --only ignored, inherited / inline ones too (C8
+// N1: they are always left); AConverted names the ones the plan converts. The text is '<rule> would leave <N> unconverted instance(s)
 // of <Type> -- unit not changed', <rule> as TUsesChange.Rule spells it.
 function RemovalLeavesUnconverted(const ATrees: TConvertTreeCache; const ADfmText: string;
   const ARules: TConversionRuleSet; const AConverted: TList<string>;
@@ -1467,6 +1760,17 @@ begin
         Order.Add(Inst.FromType);
       end;
       Left.AddOrSetValue(Inst.FromType, Count + 1);
+    end;
+    { C8 N1: an inherited / inline instance is never converted, so it always
+      counts as left unconverted }
+    for var Inh: TInheritedInstance in ScanInheritedConvertInstances(ADfmText, ARules) do
+    begin
+      if not Left.TryGetValue(Inh.TypeName, Count) then
+      begin
+        Count:= 0;
+        Order.Add(Inh.TypeName);
+      end;
+      Left.AddOrSetValue(Inh.TypeName, Count + 1);
     end;
     for Ch in AChanges do
     begin

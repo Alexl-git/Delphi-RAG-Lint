@@ -979,9 +979,9 @@ begin
     'with each path resolved segment by segment, no depth limit (a published leaf; each hop published, or public and class-typed; private never); ' +
     'a block whose type resolves in no --db is an error on its #convert line; json classes_built counts the classes whose members were resolved; ' +
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
-    'a .dfm holding an inherited/inline object of a From type is refused whole, unit rules included (exit 1); ' +
-    'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- that one; a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
-    '--only filters instances, never unit rules, so a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed''); ' +
+    'an inherited/inline .dfm object of a From type is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason}; ancestor_state unconverted|converted|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, or is in no --db); ' +
+    'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
+    '--only filters instances, never unit rules, so a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed''); ' +
     'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
@@ -16025,6 +16025,10 @@ begin
       JCap.AddPair('book_depth'    , TJSONBool.Create(True));
       JCap.AddPair('progress_lines', TJSONBool.Create(True));
       JCap.AddPair('lazy_validate' , TJSONBool.Create(True));
+      { 1.22.0 (C8 N5), same contract: convert-apply skips and reports
+        inherited / inline .dfm instances (apply/1 inherited[]) instead of
+        refusing the unit; an engine without the key still refuses (R6). }
+      JCap.AddPair('inherited_instances', TJSONBool.Create(True));
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
@@ -24542,12 +24546,16 @@ type
       Their messages are ALSO in Report.Warnings / Report.Items. }
     Unreachable: TArray<TUnreachablePath>;
     { 1.20.6 (T2f): True for a DELIBERATE refusal -- the unit cannot be
-      converted safely and nothing was written (ruling R6 inherited instances,
-      a unit-rules conditional-uses refusal, and any TApplyResult.Refusal) --
+      converted safely and nothing was written (a unit-rules conditional-uses
+      refusal, and any TApplyResult.Refusal) --
       apply/1 refused / reason. False for every other outcome, success and
       genuine failure alike. Reason is '' unless Refused. }
     Refused: Boolean;
     Reason : string;
+    { 1.22.0 (C8 N1): the inherited / inline .dfm objects of a From type the
+      run SKIPPED, each with its declaring ancestor -- apply/1 inherited[]. Their
+      'line N: warning:' text is ALSO in Report.Warnings / Report.Items. }
+    InheritedInsts: TArray<TInheritedInstance>;
   end;
 
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
@@ -24744,6 +24752,25 @@ begin
       message too, so a consumer reading only warnings[] still sees them. }
     JRoot.AddPair('unreachable', UnreachableJson(DistinctUnreachable(ACtx.Unreachable)));
 
+    { 1.22.0 (C8 N1) -- one OBJECT per inherited / inline .dfm object of a From
+      type: skipped, never converted; ancestor_state unconverted | converted |
+      outside, ancestor_unit '' when not known. ALWAYS present, [] when none;
+      warnings[] carries each one's 'line N: warning:' text too, and items[]
+      its kind inherited-instance-skipped mirror. }
+    var JInh: TJSONArray:= TJSONArray.Create;
+    for var Inh: TInheritedInstance in ACtx.InheritedInsts do
+    begin
+      var JI: TJSONObject:= TJSONObject.Create;
+      JI.AddPair('name'          , Inh.Name);
+      JI.AddPair('type'          , Inh.TypeName);
+      JI.AddPair('line'          , TJSONNumber.Create(Inh.Line));
+      JI.AddPair('ancestor_unit' , Inh.AncestorUnit);
+      JI.AddPair('ancestor_state', Inh.AncestorState);
+      JI.AddPair('reason'        , Inh.Reason);
+      JInh.AddElement(JI);
+    end;
+    JRoot.AddPair('inherited', JInh);
+
     WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
   finally
     JRoot.Free;
@@ -24755,15 +24782,18 @@ end; // procedure
   unless the book has UNIT rules and its component part has nothing to act
   on: 'skipped-no-dfm', 'skipped-no-convert-rules' (no #convert block) or
   'skipped-no-instances' (no .dfm instance a block matches, after --only). A
-  book with no unit rules is always 'applied', so its old errors stand. }
+  book with no unit rules is 'applied', so its old errors stand -- unless the
+  .dfm holds inherited / inline instances of a From type (AHasInherited, C8
+  N1): those are skipped and reported, so a .dfm with no OTHER instance is
+  'skipped-no-instances' and converts nothing rather than failing. }
 function ConvertApplyComponentPart(const ARules: TConversionRuleSet; const ADfmPath: string;
-  const AOnly: TArray<string>): string;
+  const AOnly: TArray<string>; AHasInherited: Boolean): string;
 var
   R         : TConversionRule;
   HasConvert: Boolean;
 begin
   Result:= 'applied';
-  if not BookHasUnitRules(ARules) then Exit;
+  if not BookHasUnitRules(ARules) and not AHasInherited then Exit;
   HasConvert:= False;
   for R in ARules.Rules do
     if R.Kind = rkConvert then HasConvert:= True;
@@ -24815,15 +24845,6 @@ begin
     end;
 end;
 
-{ 1.20.6: the From types the unit's .dfm holds as inherited/inline objects -- a
-  refusal (ruling R6), settled before any class is resolved. No .dfm: none. }
-function ConvertApplyInheritedTypes(const ARules: TConversionRuleSet; const ADfmPath: string): TArray<string>;
-begin
-  Result:= nil;
-  if TFile.Exists(ADfmPath) then
-    Result:= FindInheritedConvertTypes(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules);
-end;
-
 { 1.20.6: convert-apply's rule check. EVERY #convert block is validated against
   its own classes (ValidateConversionRulesPerBlock, classes from ATrees; T2b
   reverted ruling R5's per-unit scope, because resolving a path no longer costs
@@ -24872,9 +24893,9 @@ end;
 /// unlinked warnings; the json count and unlinked[] stay); DbPath/DbPaths=index(es).</param>
 /// <returns>0 on success (dry-run preview shown, or --apply wrote successfully); 1 on a
 /// hard error (missing .dfm when rules need it, invalid rules, a block whose type resolves in
-/// no --db, an inherited/inline .dfm object of a From type, BuildApplyPlan Ok=False, or
+/// no --db, BuildApplyPlan Ok=False, or
 /// --apply refused by the freshness guard -- a stale or unindexed type of any block; a deliberate
-/// refusal -- the inherited/inline object, a unit-rules {$IF...} uses entry, any
+/// refusal -- a unit-rules {$IF...} uses entry, any
 /// TApplyResult.Refusal -- goes through RefuseUnit: 'REFUSED: <reason>', apply/1 refused=true,
 /// reason, nothing written); 2 on bad args (missing --unit/--rules, file not
 /// found, no readable db (an explicit --db that is missing or stale is exit 2)).</returns>
@@ -24886,9 +24907,12 @@ end;
 /// otherwise folded into BuildApplyPlan's plan; a unit whose entry to remove sits in a
 /// conditional region is refused (exit 1, nothing written). Every readable --db is opened
 /// up front into Stores (not just the first; a stale explicit --db exits 2 here, before
-/// any rule is checked). The .dfm is then read (ConvertApplyInheritedTypes): a unit whose .dfm
-/// holds an inherited/inline object of a From type is REFUSED whole, unit rules included (exit 1,
-/// ruling R6), before any class is resolved. Rules are then validated (ValidateConvertBook)
+/// any rule is checked). The .dfm is then read (FindInheritedInstances, 1.22.0, C8 N1/N3): an
+/// inherited/inline object of a From type is NOT converted and no longer refuses the unit -- it
+/// is skipped and reported with its declaring ancestor (apply/1 inherited[] {name, type, line,
+/// ancestor_unit, ancestor_state unconverted|converted|outside, reason}, a 'line N: warning:'
+/// line in warnings[], items[] kind inherited-instance-skipped), while the unit's own instances,
+/// code and unit rules convert; R26 counts it as left unconverted. Rules are then validated (ValidateConvertBook)
 /// BEFORE BuildApplyPlan runs -- EVERY block against its OWN From/To classes, each path resolved
 /// segment by segment (1.20.6, T2b: no property tree is built, so validating the whole book is
 /// cheap and ruling R5's per-unit scope and --validate-all-blocks are gone), and a #mapping
@@ -24919,7 +24943,6 @@ var
   RuleErrors: TArray<TRuleError>;
   RE        : TRuleError        ;
   Trees     : TConvertTreeCache ; { one per run: validation and BuildApplyPlan share its member caches }
-  InhTypes  : TArray<string>    ; { From types the .dfm holds as inherited/inline objects }
   Dbs       : TArray<string>    ;
   Stores    : TArray<ISymbolStore>;
   RoOk      : Boolean           ;
@@ -25109,22 +25132,18 @@ begin
   end;
   if Length(Stores) = 0 then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
 
-  { 1.20.6 -- ruling R6. convert-apply does not convert inherited / inline .dfm
-    objects. A unit whose .dfm holds one of a From type is refused WHOLE, unit
-    rules included: converting its other parts (say '#unuse BDE.DBTables')
-    would leave those components behind and break the compile. Settled before
-    any class is resolved. }
-  InhTypes:= ConvertApplyInheritedTypes(Rules, DfmPath);
   JCtx.UnitPas:= UnitPas;
   JCtx.DfmPath:= DfmPath;
-  if Length(InhTypes) > 0 then
-  begin
-    S:= Format('inherited instances of %s are not converted yet -- unit not changed', [String.Join(', ', InhTypes)]);
-    Exit(RefuseUnit(S));
-  end;
 
   Trees:= TConvertTreeCache.Create(Stores);
   try
+    { 1.22.0 (C8 N1, N3; replaces 1.20.6's ruling-R6 refusal). Inherited /
+      inline .dfm objects of a From type are declared by an ANCESTOR, so they
+      are skipped -- each reported with its declaring ancestor (apply/1
+      inherited[], a 'line N: warning:' line) -- while the unit's own
+      instances, code and unit rules convert. R26 still counts them as left
+      unconverted, so a #unuse that would break them refuses the unit. }
+    JCtx.InheritedInsts:= FindInheritedInstances(Trees, UnitPas, DfmPath, Rules);
     { EVERY block is validated against its OWN From/To classes (1.20.6, Task 2
       and T2b) -- driven from the rules file's own #convert headers rather than
       --from/--to (convert-apply has neither). It used to take the first block's
@@ -25195,7 +25214,8 @@ begin
       no #convert block, or no .dfm instance a block matches; everywhere else
       BuildApplyPlan runs the whole book (its unit rules folded in). A book with
       no unit rules takes the old path unchanged, errors included. }
-    JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections);
+    JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections,
+      Length(JCtx.InheritedInsts) > 0);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
     if JCtx.ComponentPart = 'applied' then
       PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, TApplyBook.Create(Rules, JCtx.Unreachable),
@@ -25219,6 +25239,7 @@ begin
 
     JCtx.Ok       := True;
     MergeUnreachable(PlanRes.Report); { text mode prints them in its Warnings block }
+    AppendInheritedReport(JCtx.InheritedInsts, DfmPath, PlanRes.Report); { likewise }
     JCtx.Report   := PlanRes.Report;
     JCtx.EditCount:= Length(PlanRes.Edits);
 
