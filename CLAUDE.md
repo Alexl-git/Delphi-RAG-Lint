@@ -197,6 +197,21 @@ The scratchpad-copy-then-revert pattern is no longer needed: a stash IS the
 backup, and unlike a copy in `C:\TEMP` it survives in the repo and is visible to
 anyone who looks.
 
+### Commit with a pathspec -- the staging area is shared
+
+Several live sessions (engine, converter, charts) work in this ONE tree and
+share ONE git index. `git add <mine>` followed by a bare `git commit` commits
+whatever ELSE is staged too -- on 2026-10-05 an engine commit (a7a66e3d) swept
+in the converter's staged `docs\GLYPH-CLASSES.md` seconds after they announced
+it. So, always:
+
+```
+git commit -m "<message>" -- <path> <path> ...
+```
+
+Never `git commit -a`, never `git add -A`, never a commit without a pathspec.
+Announce a merge to main to the other sessions before making it.
+
 ## Two controllers on one tree, and the gate that cannot see backwards (2026-09-20)
 
 Two process rules, each written after a real loss on 2026-09-20. Both apply to
