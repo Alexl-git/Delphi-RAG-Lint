@@ -3,6 +3,72 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.26.0-alpha -- unreleased
+
+No extractor or resolver change on top of 1.25.0: indexes do not re-parse.
+
+### Added
+
+- **`convert-apply` retypes inherited instances of a converted ancestor (C8 N2).** An
+  `inherited` / `inline` `.dfm` object of a From type whose declaring ancestor ALREADY has
+  the block's To type is no longer skipped: its header becomes `inherited X: TTo` (keyword
+  kept; nested blocks and `inline`-frame children too), the properties the block overrides
+  convert per the book (`#link` / `#ignore` / casts, through the same re-emit as an own
+  instance), its code access sites are rewritten as for an own instance, and the To type's
+  unit is added (the C13 section rule). A property the block does not stream is INHERITED,
+  not defaulted, so for such a block no default is resolved, no `#default` is written and a
+  `#mapping` whose source it does not stream is skipped silently. There is no field
+  declaration or creator site to retype in the descendant. Unconverted / mismatched /
+  outside instances stay skipped exactly as in 1.22.0.
+- **Code-only uses follow a converted ancestor (C8 N2a).** Every access in the unit's code
+  on a field a converted ancestor declares -- several levels up, bound to that field by the
+  resolver (E5, `refs.symbol_id`), the ancestor `.dfm` opening it with the To type -- is
+  rewritten, whether or not the descendant `.dfm` re-opens the component. A local or
+  parameter of the same name binds to itself and is left alone.
+- **`apply/1` `inherited[]` gains `action`** -- `retyped`, `code` (an N2a entry: no `.dfm`
+  block; `line` is its first reference in the `.pas`) or `skipped`. The six existing keys
+  keep their meaning; `reason` of a retyped entry reads `... -- retyped to <TTo>`. A retyped
+  instance is one `converted[]` line, `<Name>: inherited <TFrom> -> <TTo> (declared in
+  <Unit>)`, with an `items[]` mirror of the new kind `inherited-instance-retyped` -- not a
+  warning; one whose block cannot be located or re-emitted falls back to `skipped` with that
+  reason. `--only` filters retyped and code entries by name, and a `--only` name that names
+  a code-only field counts as matched. R26 no longer counts a retyped instance as left
+  unconverted. `info --json` `capabilities.inherited_retype` (name agreed with the
+  converter). The descendant-warning text is unchanged -- it stays true: convert the
+  descendant next. Guard: `run_convert_apply_inherited_retype.ps1` (two-level chain, nested
+  block, inline frame, code-only use, a shadowing local, `--only`, batch, own-instance
+  positive control, and a dcc64 compile of the converted descendants).
+
+### Changed
+
+- **Access-site rewrites are scoped to the instance's FIELD, not its name.** The `.pas`
+  property/event rewrite matched a member access by its receiver's NAME only, so once a
+  unit converted `rbtn`, every `rbtn.Caption` in it was rewritten -- a local or parameter
+  named `rbtn` in another method, another class's same-named field included (a compile
+  error, or a silent wrong member). A site is now rewritten only when its receiver is
+  BOUND by the resolver to the field the `.dfm`'s root class declares or inherits, or is
+  unbound, bare or `Self.`-qualified, in a routine of that class that declares no local /
+  parameter of that name. Own instances and C8 N2 / N2a inherited ones alike; DMTEST's
+  DMREADINGS keeps all 32 of its sites. Pinned by run_convert_apply_inherited_retype.ps1
+  H1-H3 (a bound use, a shadowing local, another class's field; inherited and own).
+- **A missed rewrite is never silent.** Scoping makes the rewrite depend on the resolver's
+  binds, so: (1) a DB whose edges were derived by a resolver older than 1.12.0 (or that
+  carries no resolver stamp) is REFUSED, dry run and `--apply` alike -- `REFUSED: <db>:
+  edges were derived by resolver <ver>; convert-apply needs 1.12.0-alpha or newer (bound
+  field reads) -- re-derive first: drag-lint index --project <file.dproj> --db "<db>"
+  --resolve-only`; (2) a site the index cannot vouch for -- no reference for its receiver
+  on its line (a `.pas` edited since it was indexed), a member reached through `with X do`,
+  or an UNBOUND reference to a converted ancestor's field -- is not rewritten and is
+  REPORTED: `access site <file>:<line> <receiver>.<member> not verified against the index
+  -- not rewritten` (`... with X do ... not verified ...`, `... <field> not verified ...`),
+  `items[]` kind `access-site-unverified`, json `access_sites_unverified` (always present),
+  and `inherited[]` action `unverified` for the ancestor-field case. Pinned by
+  run_convert_apply_inherited_retype.ps1 K1-K4, S1-S6 (`Self.X.Prop`, `with X do`, a
+  nested routine, an unbound X in an unrelated class) and T1.
+- **`.dfm` re-emit keeps the header keyword.** `ReemitComponent` used to write every block,
+  nested ones included, as `object`; an `inline` frame or `inherited` child inside a
+  converted block now keeps its keyword (written as `object` it would declare a second
+  component of that name and fail at load).
 ## v1.25.2-alpha -- unreleased
 
 No extractor or resolver change on top of 1.25.1: indexes do not re-parse.

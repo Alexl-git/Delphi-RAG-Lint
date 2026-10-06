@@ -24,8 +24,9 @@
         A nested inherited block (btnN inside pnl) resolves the same way; a
         child of an `inline` frame resolves through the FRAME's class.
     N1  ancestor_state: `unconverted` (the ancestor still has the From type),
-        `converted` (it has the block's To type -- still SKIPPED in N1, the
-        reason says retyping is not supported yet).
+        `converted` (it has the block's To type -- RETYPED since 1.26.0, N2:
+        action `retyped`; run_convert_apply_inherited_retype.ps1 pins it).
+        Every other state carries action `skipped`.
     N3  `outside`: the ancestor chain leaves the --db (TExternalForm is in no
         index) -- skipped, never guessed; ancestor_unit is ''.
     N1  a unit whose only From-type instances are inherited converts nothing
@@ -689,8 +690,10 @@ Check 'A2 inherited[] holds exactly btnA, btnN, fbtn' `
   (($null -ne $j) -and (@($j.inherited).Count -eq 3) -and ((Inh $j 'btnA').Count -eq 1) -and `
    ((Inh $j 'btnN').Count -eq 1) -and ((Inh $j 'fbtn').Count -eq 1)) ($j.inherited | ConvertTo-Json -Compress)
 $keys = if ($j -and @($j.inherited).Count -gt 0) { (@($j.inherited)[0].PSObject.Properties.Name) -join ',' } else { '' }
-Check 'A3 each inherited[] object has exactly the keys name,type,line,ancestor_unit,ancestor_state,reason' `
-  ($keys -eq 'name,type,line,ancestor_unit,ancestor_state,reason') $keys
+Check 'A3 each inherited[] object has exactly the keys name,type,line,ancestor_unit,ancestor_state,reason,action (1.26.0 added action)' `
+  ($keys -eq 'name,type,line,ancestor_unit,ancestor_state,reason,action') $keys
+Check 'A3b every unconverted entry has action skipped' `
+  (($null -ne $j) -and (@($j.inherited | Where-Object { $_.action -ne 'skipped' }).Count -eq 0)) ($j.inherited | ConvertTo-Json -Compress)
 $a = Inh $j 'btnA'
 Check 'A4 plain inherited btnA: type TSrcA, its .dfm line, declared TWO levels up in BaseForm, unconverted' `
   (($a.Count -eq 1) -and ($a[0].type -eq 'TSrcA') -and ($a[0].line -eq $lnA) -and ($a[0].ancestor_unit -eq 'BaseForm') -and `
@@ -735,19 +738,21 @@ Check 'B5 the inherited blocks'' own property lines are unchanged' `
 $r = ApplyTo 'ConvChild.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
 $c = if ($j) { Inh $j 'cbtn' } else { @() }
-Check 'C1 ConvChild (only an inherited instance, book without unit rules): exit 0, ok, nothing converted' `
-  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and (@($j.converted).Count -eq 0) -and ($j.edits_count -eq 0)) $r.Out
-Check 'C2 component_part is skipped-no-instances' (($null -ne $j) -and ($j.component_part -eq 'skipped-no-instances')) "$($j.component_part)"
-Check 'C3 cbtn: ancestor ConvBase, state converted, reason says it is not retyped yet' `
+# 1.26.0 (C8 N2) SUPERSEDES N1 here: a converted ancestor's instance is now
+# RETYPED -- run_convert_apply_inherited_retype.ps1 pins the conversion itself.
+Check 'C1 ConvChild (only an inherited instance, book without unit rules): exit 0, ok, cbtn converted (N2)' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and (@($j.converted).Count -eq 1) -and ($j.edits_count -gt 0)) $r.Out
+Check 'C2 component_part is applied' (($null -ne $j) -and ($j.component_part -eq 'applied')) "$($j.component_part)"
+Check 'C3 cbtn: ancestor ConvBase, state converted, action retyped, reason says retyped' `
   (($c.Count -eq 1) -and ($c[0].ancestor_unit -eq 'ConvBase') -and ($c[0].ancestor_state -eq 'converted') -and `
-   ($c[0].reason -match 'not (supported|retyped|converted) yet')) ($c | ConvertTo-Json -Compress)
+   ($c[0].action -eq 'retyped') -and ($c[0].reason -match 'retyped to TDstB')) ($c | ConvertTo-Json -Compress)
 
 # ---- N3: an ancestor OUTSIDE every --db ---------------------------------------
 $r = ApplyTo 'OutChild.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
 $x = if ($j) { Inh $j 'xbtn' } else { @() }
-Check 'D1 OutChild: exit 0, xbtn reported outside with an empty ancestor_unit (never guessed)' `
-  (($r.Code -eq 0) -and ($x.Count -eq 1) -and ($x[0].ancestor_state -eq 'outside') -and ($x[0].ancestor_unit -eq '')) $r.Out
+Check 'D1 OutChild: exit 0, xbtn reported outside with an empty ancestor_unit (never guessed), action skipped' `
+  (($r.Code -eq 0) -and ($x.Count -eq 1) -and ($x[0].ancestor_state -eq 'outside') -and ($x[0].ancestor_unit -eq '') -and ($x[0].action -eq 'skipped')) $r.Out
 
 # ---- R26 still guards the inherited instances --------------------------------
 $hp = (Get-FileHash (P 'OutChild.pas')).Hash
@@ -837,8 +842,8 @@ Check 'L2 BinMid.dfm is binary: outside, ancestor_unit "", reason names BinMid.d
 $r = ApplyTo 'MisChild.pas' 'plain.rules' @('--format', 'json')
 $j = Json $r.Out
 $c = if ($j) { @($j.inherited) } else { @() }
-Check 'M1 MisBase declares mis as TBox: mismatched, ancestor_unit MisBase, reason names TBox' `
-  (($r.Code -eq 0) -and ($c.Count -eq 1) -and ($c[0].ancestor_state -eq 'mismatched') -and ($c[0].ancestor_unit -eq 'MisBase') -and `
+Check 'M1 MisBase declares mis as TBox: mismatched, ancestor_unit MisBase, reason names TBox, action skipped' `
+  (($r.Code -eq 0) -and ($c.Count -eq 1) -and ($c[0].ancestor_state -eq 'mismatched') -and ($c[0].ancestor_unit -eq 'MisBase') -and ($c[0].action -eq 'skipped') -and `
    ($c[0].reason -match 'TBox')) $r.Out
 
 # ---- N5: the capability --------------------------------------------------------
