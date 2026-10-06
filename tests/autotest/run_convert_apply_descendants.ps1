@@ -23,6 +23,10 @@
                   dfm | code | both;
         - items[] kind descendant-not-converted (field warnings).
     * a descendant re-opening only a DIFFERENT component is not reported;
+    * a code use BOUND by the resolver (E5) to the ancestor field is reported
+      (reason code); a descendant's OWN same-named field shadowing it is not;
+    * an unrelated form with its own `object X`, or hosting an UNRELATED
+      frame that re-opens a same-named X, is not reported;
     * --only filters descendants[] to the converted instances;
     * batch mode: each unit's apply/1 carries its own descendants[];
     * positive control: no descendants -> descendants[] = [] and no line;
@@ -337,6 +341,119 @@ object HostForm: THostForm
 end
 '@
 
+# ---- (8) a descendant whose OWN field btnX shadows the ancestor's ------------
+Write-Ascii (P 'Shadow.pas') @'
+unit Shadow;
+
+interface
+
+uses
+  Classes, Forms, LibA, AncForm;
+
+type
+  TShadow = class(TAncForm)
+    btnX: TSrcA;
+    procedure Touch;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TShadow.Touch;
+begin
+  btnX.Caption := 's';
+end;
+
+end.
+'@
+Write-Ascii (P 'Shadow.dfm') @'
+inherited Shadow: TShadow
+end
+'@
+
+# ---- (9) unrelated forms: an own `object btnX`, and an unrelated inline frame -
+Write-Ascii (P 'Stranger.pas') @'
+unit Stranger;
+
+interface
+
+uses
+  Classes, Forms, LibA;
+
+type
+  TStranger = class(TForm)
+    btnX: TSrcA;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'Stranger.dfm') @'
+object Stranger: TStranger
+  object btnX: TSrcA
+    Caption = 'mine'
+  end
+end
+'@
+Write-Ascii (P 'ZFrame.pas') @'
+unit ZFrame;
+
+interface
+
+uses
+  Classes, Forms, LibA;
+
+type
+  TZFrame = class(TFrame)
+    btnX: TSrcA;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'ZFrame.dfm') @'
+object ZFrame: TZFrame
+  object btnX: TSrcA
+    Caption = 'z'
+  end
+end
+'@
+Write-Ascii (P 'ZHost.pas') @'
+unit ZHost;
+
+interface
+
+uses
+  Classes, Forms, LibA, ZFrame;
+
+type
+  TZHost = class(TForm)
+    zf: TZFrame;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+end.
+'@
+Write-Ascii (P 'ZHost.dfm') @'
+object ZHost: TZHost
+  inline zf: TZFrame
+    inherited btnX: TSrcA
+      Caption = 'zh'
+    end
+  end
+end
+'@
+
 # ---- (7) positive control: no descendants -----------------------------------
 Write-Ascii (P 'Lonely.pas') @'
 unit Lonely;
@@ -373,6 +490,25 @@ Write-Ascii (P 'plain.rules') @'
 $db = P 'fx.sqlite'
 $idx = & $Exe index $WorkDir --db $db 2>&1
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
+
+# The btnX code refs and what the resolver bound them to (E5, resolver 1.12:
+# a bare read of an in-class or ancestor field binds). sql --json rows are
+# POSITIONAL arrays -- read them by column index.
+$q = "select f.path, r.symbol_id, s.qualified_name from refs r join files f on f.id = r.file_id " +
+     "left join symbols s on s.id = r.symbol_id where r.name_text = 'btnX' and f.path like '%.pas'"
+$sq = (& $Exe sql --db $db --query $q --json 2>$null) -join "`n"
+$sj = try { $sq | ConvertFrom-Json } catch { $null }
+function BoundOf([string]$Unit) {
+  if ($null -eq $sj) { return '<no sql>' }
+  foreach ($row in @($sj.rows)) { if ((Split-Path $row[0] -Leaf) -eq "$Unit.pas") { return "$($row[1])|$($row[2])" } }
+  return '<no ref>'
+}
+$bCode   = BoundOf 'CodeOnly'
+$bShadow = BoundOf 'Shadow'
+Check 'V2 CodeOnly''s btnX ref is BOUND by the resolver to the ANCESTOR field (symbol_id non-null)' `
+  ($bCode -match '^\d+\|AncForm\.TAncForm\.btnX$') "$bCode -- $sq"
+Check 'V3 Shadow''s btnX ref is BOUND to its OWN field, not the ancestor''s' `
+  ($bShadow -match '^\d+\|Shadow\.TShadow\.btnX$') "$bShadow -- $sq"
 
 function Run([string[]]$Units, [string[]]$Extra = @()) {
   $a = @()
@@ -425,6 +561,10 @@ Check 'A6 (3) CodeOnly uses btnX in code only: line = first code reference, reas
   (($d.Count -eq 1) -and ($d[0].line -eq $coX) -and ($d[0].reason -eq 'code')) ($d | ConvertTo-Json -Compress)
 Check 'A7 (5) Other re-opens a DIFFERENT component (pnl): not reported' `
   (($null -ne $j) -and (@($j.descendants | Where-Object { $_.unit -eq 'Other' }).Count -eq 0)) ($j.descendants | ConvertTo-Json -Compress)
+Check 'A7b (8) Shadow declares its OWN btnX and uses it: not reported' `
+  (($null -ne $j) -and (@($j.descendants | Where-Object { $_.unit -eq 'Shadow' }).Count -eq 0)) ($j.descendants | ConvertTo-Json -Compress)
+Check 'A7c (9) unrelated forms -- Stranger (own object btnX) and ZHost (inline TZFrame re-opening btnX) -- not reported' `
+  (($null -ne $j) -and (@($j.descendants | Where-Object { $_.unit -in @('Stranger', 'ZHost', 'ZFrame') }).Count -eq 0)) ($j.descendants | ConvertTo-Json -Compress)
 $w = @($j.warnings | Where-Object { $_ -match '^line \d+: warning: descendant ' })
 Check 'A8 warnings[] has the agreed text, N = the ANCESTOR .dfm line of the object block' `
   (($w.Count -eq 4) -and ($w -contains "line $ancX`: warning: descendant Desc1 still streams btnX as TSrcA -- convert it next (needs C8 N2)") -and `
@@ -448,8 +588,9 @@ Check 'C1 --only btnX: exit 0, YForm/btnY EXCLUDED, the three btnX descendants k
   ($j.descendants | ConvertTo-Json -Compress)
 $r = Run @('AncForm.pas') @('--only', 'btnY', '--format', 'json')
 $j = Json $r.Out
-Check 'C2 --only btnY: only YForm/btnY' `
-  (($r.Code -eq 0) -and ($null -ne $j) -and (@($j.descendants).Count -eq 1) -and ((Desc $j 'YForm' 'btnY').Count -eq 1)) ($j.descendants | ConvertTo-Json -Compress)
+Check 'C2 --only btnY: only YForm/btnY, at its .dfm line' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and (@($j.descendants).Count -eq 1) -and ((Desc $j 'YForm' 'btnY').Count -eq 1) -and `
+   ((Desc $j 'YForm' 'btnY')[0].line -eq $yfY)) ($j.descendants | ConvertTo-Json -Compress)
 
 # ---- (4) an inline frame ----------------------------------------------------
 $r = Run @('FrameA.pas') @('--format', 'json')
