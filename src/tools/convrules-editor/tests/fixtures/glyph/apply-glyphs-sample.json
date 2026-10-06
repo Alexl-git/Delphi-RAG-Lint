@@ -1,0 +1,9 @@
+{"schema":"apply/1","mode":"apply","unit":"U.pas","dfm":"U.dfm","rules_file":"B.rules","ok":true,"error":"","rule_errors":[],"edits_count":3,
+ "converted":["Btn1: TBitBtn -> TcxButton","Btn2: TBitBtn -> TcxButton"],"access_sites":[],"creator_sites":[],
+ "todos":["{ TODO(owner): drag-lint glyph: Btn2.Glyph N=2 matched no alternative of rule line 2 }"],"reemit_notes":[],"warnings":[],
+ "items":[],"resolved_defaults":[],"unreachable":[],
+ "glyphs":[
+  {"instance":"Btn1","from_path":"Glyph","to_path":"OptionsImage.Glyph","kind":"glyph-stitched","source_n":4,"alternative":"G[*/4]","dropped_slots":[],"rule_line":2,"message":"glyph-stitched: Glyph N=4 -> OptionsImage.Glyph G[*/4]"},
+  {"instance":"Btn2","from_path":"Glyph","to_path":"OptionsImage.Glyph","kind":"glyph-no-alternative","source_n":2,"alternative":"","dropped_slots":[],"rule_line":2,"message":"glyph-no-alternative: Btn2.Glyph N=2 matched no alternative of rule line 2; TODO written"},
+  {"instance":"Btn3","from_path":"Glyph","to_path":"OptionsImage.Glyph","kind":"glyph-stitched","source_n":5,"alternative":"G[1/5]G[2/5]G[3/5]G[4/5]","dropped_slots":[5],"rule_line":2,"message":"glyph-stitched: Glyph N=5 -> OptionsImage.Glyph G[1/5]G[2/5]G[3/5]G[4/5] (slot 5 dropped by rule line 2)"}
+ ]}

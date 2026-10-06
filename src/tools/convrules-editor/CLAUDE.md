@@ -583,8 +583,9 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 ### Verification kit
 
 * **Model tests:** `tests\ConvRulesModelTests.exe` with `CONVRULES_TEST_ENGINE` =
-  the 1.22.0 pin -> **`model-tests: 1660 pass / 5 fail / 0 skip / 1665 total`**
-  (measured 2026-10-06 after C8 Task 8 fix round 1; 1646 / 5 / 0 before it; 1616 / 5 / 1 skip on the 1.21.1 pin after the
+  the 1.22.0 pin -> **`model-tests: 1806 pass / 5 fail / 0 skip / 1811 total`**
+  (measured 2026-10-06 on C8 + C10 after the C10 final-review fix wave; 1793 / 5 / 0
+  right after the rebase onto C8; C8 alone 1660 / 5 / 0 after its Task 8 fix round 1, 1646 / 5 / 0 before it; 1616 / 5 / 1 skip on the 1.21.1 pin after the
   fix wave; 1422 / 5 / 0 before C8; 1329 / 5 before C6); `inherited.live` RUNS now
   (the engine reports `inherited_instances`) and SKIPs on an older pin; the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
   `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
@@ -593,8 +594,9 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 * **GUI drivers** (`tests\gui\`, run by hand as `pwsh -NoProfile -File <driver>
   -Exe <ConvRulesEditor.exe>`, the exe beside a frozen `drag-lint.exe` whose
   Win64 library index answers -- a staged copy, never `dll-win64`). Expected
-  on the final build (measured 2026-10-06 on a staged copy of the 1.22.0 pin,
-  all 10 green; the same counts on the 1.21.1 pin before C8 Task 8):
+  on the final build (re-measured 2026-10-06 on C8 + C10 after the C10 fix wave,
+  on a staged copy of the 1.22.0 pin: all 11 green with these exact counts;
+  `drive-inherited-offer.ps1` also 15 / 0 on a staged 1.21.1 copy):
 
   | driver | checks | covers |
   |---|---|---|
@@ -608,6 +610,7 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   | `drive-convert-tab.ps1` | 20 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line; since C8 also: no E7 order dialog on a fixture with no inherited instance |
   | `drive-validate-scope.ps1` | 18 | scoped validation on Save (warnings, unchanged re-save fast), progress window + Cancel, owed block revalidated, Exit without a prompt, `automatch.*` |
   | `drive-inherited-offer.ps1` | 15 | C8: ancestor-first prompt (No / Yes inserts above), row note on the status bar (incl. an E2b code-only use), order warning (No runs nothing), the E10 run note branching on the staged engine's `inherited_instances` (`engine.refusal.note.absent` on 1.22.0, `engine.refusal.note` on a 1.21.1 pin copy -- run BOTH stages; `-ProofNoInheritance` control) |
+  | `drive-glyph-link.ps1` | 23 | C10: Glyph expression menu item (disabled without a rule, enabled with one), Convert tab greys the G-link book and it stays unchecked through Check all / Space / a click (`Convert refused: No rule book is checked.`), the dialog's checked `Keep ... G[count]` box, Auto-Match + Save As keeps both G-link lines byte-exact with no duplicate, the bad book's Save shows `G-expression column` (`-ProofNoGlyph` control: 17 / 6) |
 
   `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 10 pass / 9
   fail is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
@@ -616,7 +619,13 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   -ProofNoInheritance` gives 8 pass / 6 fail on the 1.22.0 pin and 7 / 7 on the
   1.21.1 pin (both re-measured 2026-10-06 with the fix-round-1 exe; on 1.21.1 the E10
   refusal note is the seventh FAIL, on 1.22.0 its `.absent` twin passes vacuously):
-  the C8 checks can fail. The driver also branches its E6 / E7 / cancel expectations on
+  the C8 checks can fail. On the C8 + C10 build (C10 fix wave, 1.22.0) it measured
+  7 / 7 TWICE: the six C8 checks plus `sources.cleared` -- in proof mode Convert starts
+  a REAL two-unit run and the driver clears the list ~32 s later; both logs show the
+  status still `Converting 2 unit(s) with 1 book(s)...` 30 s after the click, so the
+  run had most likely not finished when the delete came (the earlier 8 / 6 measured a
+  run that had). Read it as the proof run's timing, not a C8 check -- unconfirmed
+  against a C8-only build. Not bent in the driver. The driver also branches its E6 / E7 / cancel expectations on
   the staged engine's `inherited_retype` (absent on both pins today).
 * **Driver traps recorded on this branch:** `LB_GETTEXT` is system-marshalled
   -- read it into a LOCAL buffer, not remote memory; screen capture of a CHILD
@@ -1009,7 +1018,7 @@ unchanged is presumed validated earlier."
 ## Inherited instances (C8) -- hand-over notes (feat/c8-inherited-editor, 2026-10-06)
 
 Spec: `docs\superpowers\specs\2026-10-05-c8-inherited-instances-design.md` (E1-E11;
-the engine half N1-N5 is the ENGINE stream's). Plan:
+the engine half C8 N1-N5 is the ENGINE stream's). Plan:
 `docs\superpowers\plans\2026-10-05-c8-inherited-instances-editor.md`. Ledger with
 every ruling: `.superpowers\sdd\2026-10-05-c8-inherited-instances-editor\progress.md`
 in the `c8-inherited` worktree.
@@ -1125,13 +1134,13 @@ in the `c8-inherited` worktree.
   chain unit, topmost first, goes directly before the earliest LISTED unit among the
   later chain units and the descendant (appended when none is listed); listed units
   never move, so a pre-existing misorder stays and E7 still warns about it.
-* **Ancestor-first is the LONG-TERM order -- and until engine N2 it breaks the
-  descendant (controller ruling, Task 8 fix round 1, binding).** Engine 1.22.0 (N1)
+* **Ancestor-first is the LONG-TERM order -- and until engine C8 N2 it breaks the
+  descendant (controller ruling, Task 8 fix round 1, binding).** Engine 1.22.0 (C8 N1)
   converts the ancestor and SKIPS the descendant's `inherited X: TOld`; that block under
   an ancestor that now declares TNew fails at load (EClassNotFound, or EReadError on a
   TOld-only property) and descendant code using TOld-only members stops compiling. So
   while the engine lacks `inherited_retype` (`CAPABILITY_INHERITED_RETYPE`, a PROPOSED
-  key for N2 -- the engine stream confirms or renames it; one constant), probed in the
+  key for C8 N2 -- the engine stream confirms or renames it; one constant), probed in the
   SAME `CapabilityNames` call as `inherited_instances` (`FRetypeOk`, `Job.RetypeSupported`):
   * E5 row note: `... -- convert it first (recommended)` stays verbatim (spec E5) plus
     ` -- with this engine, converting it now breaks this unit until N2`;
@@ -1214,3 +1223,158 @@ in the `c8-inherited` worktree.
   base prompts once per descendant on No (no "No to all"); the Convert gate's Yes /
   No has no GUI check; `drive-inherited-offer.ps1` still has a fixed 2 s sleep after
   an answer.
+
+## Glyph expressions on #link -- hand-over notes (feat/c10-glyph-editor, 2026-10-06)
+
+The editor half of the G[I/N] glyph grammar (spec
+`docs\superpowers\specs\2026-10-06-c10-split-merge-design.md`, over
+`2026-09-17-glyph-strip-G-grammar-design.md`): a `#link` may carry a glyph
+expression (`#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] :
+AssignGraphic`, `#link OptionsImage.NumGlyphs <- Glyph G[count]`). Built against
+engine 1.21.1, which VALIDATES expressions (CV-4) but does not yet APPLY them.
+Plan, ledger and per-task reports: `docs\superpowers\plans\2026-10-06-c10-split-merge-editor.md`
+(main tree) and `.superpowers\sdd\2026-10-06-c10-split-merge-editor\` in the
+`c10-glyph` worktree. The engine asks (C10 ask N1 `glyph_stitch`, N2, N3 `glyphs[]`,
+N5, N7 capture ...) are in `docs\superpowers\specs\2026-10-06-c10-engine-asks.md`.
+**Two N-series exist: "C8 N1/N2/N5" (inherited instances, the section above) and "C10
+ask N1/N2/N5" (glyphs, here) are DIFFERENT engine asks** -- always qualify which.
+Rebased onto `feat/c8-inherited-editor` on 2026-10-06 (merge order C8 -> C10 -> C12).
+
+### Model and grammar
+
+* **`TRuleNode.GlyphExpr` holds the expression VERBATIM** ('' = none). `ParseLine`
+  splits the cast suffix FIRST (the existing `LastIndexOf(':')` rule), then the
+  expression at the first `GLYPH_EXPR_START` = `' G['` (space, capital G, `[`;
+  case-SENSITIVE, as the engine's `SplitGlyphExpr` -- `Picture g[1/2]` is a path).
+  `SplitGlyphExprOff` is that second step. A count link has no `:`, so `Cast = ''`
+  and the expression is `G[count]` (`glyph.parse.count.link`). `Emit` writes the
+  CANONICAL form `#link To <- From Expr : Cast` for a dirty node; the byte-exact
+  load/save round trip comes from `Raw` on UNTOUCHED lines, not from `Emit`.
+* **Merge (`ConvRules.BlockOps`)**: `TBlockLink` carries `GlyphExpr`; two links to
+  ONE To that differ only in the expression are a merge CONFLICT, an identical pair
+  is a duplicate, two G-links from one From to different Tos both merge in.
+
+### `ConvRules.Glyph` -- the decision unit (pure, model-tested)
+
+* **The expression is checked by the ENGINE's parser**, `DRagLint.Convert.GlyphExpr`,
+  imported from `src\report` by both `.dpr`s (as `DRagLint.Convert.CastLib` is):
+  `CheckGlyphExprText` gives `column C: <message>` with the engine's wording.
+* **Block rules** the parser cannot see: `CountLinkIssueFor` (`G[count] needs exactly
+  one image link from <From>; found K`, plus an exact same-From-same-To duplicate
+  refusal -- slightly stricter than the engine, which has no duplicate check; parked
+  ruling), `StraightCountCarryHint` (the engine's straight-carry warning as a hint),
+  `SuggestCountTarget`, `FindCountLink`, `OrphanedCountLink`, `CountLinkStepFor`,
+  `GlyphAssignBlock`. **Every block-level routine takes ONE block's nodes**
+  (`ActiveLinks` / `LinksForBlock`), never the whole book.
+* **Convert-tab and report text** also lives here: `GLYPH_BOOK_PENDING_SUFFIX`,
+  `BookHasGlyphLinks`, `GlyphNoteSuffix`, `GlyphReportNote`, `GlyphRunSummary`,
+  `TGlyphOutcome`; and the grid's `GridMarkNodes` (below). The report LINES are
+  `GlyphReportLines` in `ConvRules.ConvertRunner`, beside C8's `InheritedReportLines`.
+
+### Grid, dialog, Assign, Auto-Match
+
+* **Grid column `Glyph`** (`GRID_GLYPH_COL`, after `cast`) shows the expression
+  verbatim. A validation mark paints its `[!] ` / `[w] ` prefix on the Cast AND the
+  Glyph cell (text unchanged). The G[count] link is **not a grid row** (ruling R4:
+  `FindLinkForFrom` returns the first link per From); its marks show in the Glyph
+  cell of the row it shares a From with, and it is edited through the image link's
+  dialog or the Raw DSL. **Which nodes a cell shows is ONE answer:**
+  `TConvRulesForm.RowMarkNodes(ARow, ACol)` over the pure `GridMarkNodes`
+  (`glyph.marks.*`), used by BOTH `GridDrawCell` and the hint (`GridMouseMove`), so
+  the hint names the count link's marks too. An EMPTY Glyph cell gets no mark prefix
+  (the Cast cell already carries the link's mark) UNLESS the hidden count link
+  carries it -- that is the only place its marks show.
+* **An OK that leaves the expression unchanged keeps the link's marks**; only a
+  changed expression clears them (`DoGlyphExpr`, final-review Minor 3).
+* **Mapping > Glyph expression...** (`DoGlyphExpr`) is DISABLED while no rule is
+  loaded (ruling B2, the Auto-Match gate). On the selected grid row it opens
+  `TGlyphExprForm` (`ConvRules.GlyphForm`, editor-only): caption `Glyph expression:
+  <From> -> <To>`, the edit prefilled, a live check line (`OK`, `enter an
+  expression, or Clear to remove it`, or the engine's error in red -- OK is disabled
+  until it reads OK), a box `Keep #link <To> <- <From> G[count]` (an existing count
+  link; unchecking removes it) or `Also add ...` (no count link and exactly one
+  `SuggestCountTarget`; hidden when there is none), the straight-carry hint, and
+  OK / Clear / Cancel. Statuses: `Glyph expression on <From> -> <To>: <Expr>` (+
+  ` -- added ...` / ` -- removed ...`), `Glyph expression removed from <From> ->
+  <To>.` (+ ` -- <count link> went with it`). Inserting the count link re-finds the
+  active header by NODE (ruling R3).
+* **Assign refuses on a G-link** or a From with several links
+  (`GlyphAssignBlock`, red status naming the existing link): the grid shows only the
+  first link per From, so a retarget would be silent. Unassign and Clear also drop a
+  G[count] link left with no image link from its From.
+* **Auto-Match never writes an expression**: it fills only From leaves with no
+  link, so a G-link is never touched or duplicated (`drive-glyph-link.ps1`
+  `glyph.saveas.no.duplicate`).
+
+### Engine arguments, gating, outcomes
+
+* **`--castlib` now reaches the engine.** `TEngineAdapter.CastLibFile` adds
+  `--castlib "<file>"` to `convert-apply` AND `convert-validate` when the file
+  EXISTS (`CastLibArgs`; a missing file would make the engine exit 2). The form
+  sets it from `GEditorCastLib`; the Convert tab passes `ExistingCastLib`, captured on
+  the UI thread when Convert is pressed. **Behaviour change, said out loud: enum
+  casts in `.castlib` blocks now EXECUTE in editor-driven runs**; before this branch
+  the editor never passed the castlib. `convert-validate` accepts `--castlib` and
+  IGNORES it -- no check may assume validate looks at cast names.
+* **`glyph_stitch` gating (C10 ask N1, NOT shipped in 1.21.1 NOR in 1.22.0 --
+  re-checked 2026-10-06 on the 1.22.0 pin's `info --json`).** The Convert tab probes
+  `info --json` ONCE for every key -- `apply_unit_rules`, C8's `inherited_instances`
+  and `inherited_retype`, and `glyph_stitch` (`CapabilityNames`, one call), again
+  only on the tab's Refresh. **Convert re-classifies the checked books from disk
+  after the open-book save prompt** (`ClassifiedEntry`, then `ShowBooks`), so a book
+  that just gained a G-link is greyed before the run (final-review Minor 2). Without
+  `glyph_stitch` a book with a G-link (`BookHasGlyphLinks`, set on BOTH the
+  list-build and reload paths) is listed
+  `<book>  (glyph links: engine support pending)`, disabled, and unchecked again
+  after Check all. `Preflight`'s `<book>: glyph links: engine support pending --
+  skipped` note is DEFENCE IN DEPTH -- the GUI never lets the book be checked, so no
+  driver expects it. **Today every G-link book is greyed**; the with-capability
+  paths (row note, report lines, red summary) are model-tested only, on
+  `tests\fixtures\glyph\apply-glyphs-sample.json`, which is HAND-WRITTEN to the
+  C10 ask N3 contract until C10 ask N7's real capture replaces it.
+* **`glyphs[]` (apply/1, C10 ask N3):** `{instance, from_path, to_path, kind,
+  source_n, alternative, dropped_slots[], rule_line, message}` ->
+  `TApplyRow.Glyphs`. `kind` `glyph-stitched` is a success; ANY other kind is a
+  to-do. Every key is optional and type-checked; a missing array or key, or a wrong
+  type, degrades and never raises (ruling R8).
+* **Report and status.** A converted row's note gets `; glyphs: N stitched, M
+  slot(s) dropped by rule, K TODO(s)` (after C8's `ConvertedRowNote`; C8's code-use
+  note, added by the tab, stays last). Per row the run report writes the row line,
+  then C8's `inherited left` lines, then one `glyph` line per outcome for CONVERTED
+  rows only (`GlyphReportLines`) -- in the report's ONE 8-column shape: Book, Unit,
+  `glyph`, four empty cells, Note = `<instance>.<from> -> <to>: <kind>, N=<n>[,
+  <alternative>][, dropped a,b][ -- <message>]` (`GlyphReportNote`; spec E13 amended
+  by the final-review ruling), and a `Castlib<TAB><path>` /
+  `(none)` line before `Final reindex`. When a unit has glyph to-dos the status goes
+  red with `N unit(s) have glyph TODOs -- each one's implementation section starts
+  with the TODO line; see the report`, AFTER a `RESTORE FAILED` lead
+  (`RunStatusLead`) -- the most severe outcome still comes first; C8's
+  `Inherited instances could not be re-checked` follows the body. The line is red
+  on the run's own problems, a failed re-read (C8) OR glyph to-dos. The summary
+  counts UNITS (ruling R5).
+
+### Verification kit additions
+
+* **Model tests:** the combined C8 + C10 count is in the Verification kit above
+  (C10 alone measured 1555 / 5 on the 1.21.1 pin before the rebase). `glyph.validate.*`
+  feeds the REAL pinned-engine capture `tests\fixtures\glyph\validate-glyph-bad.txt` /
+  `-ok.txt` (`convert-validate --rules <book>`, parse-only, no `--db`, stdout; stderr
+  empty) of the fixture books `tests\fixtures\glyph\BitBtn-glyph-bad.rules` /
+  `BitBtn-glyph.rules` through `RunScopedValidation` and asserts the error marks the
+  G-link node. Captured on the 1.21.1 pin; RE-CAPTURED on the 1.22.0 pin 2026-10-06:
+  byte-identical (exit 1 / exit 0).
+* **GUI driver `drive-glyph-link.ps1`** -- its row is in the Verification kit table above.
+  It writes its own fixture (a Fix project indexed with the engine beside the exe,
+  so the Convert tab can pre-flight) and needs no real project. On an engine with
+  `glyph_stitch` the two greying checks SKIP and `glyph.convert.book.listed`
+  asserts the book is checkable instead. `-ProofNoGlyph` (books without
+  expressions) fails 6: greyed, never.checked, the count box, both exact-line checks
+  and the bad-save error. On the pre-C10 editor (main `0383bb87`) it fails 6: the
+  three menu checks, greyed, never.checked and the count box -- the old editor
+  already kept both G-link lines byte-exact (the expression rode along in LinkFrom)
+  and its Auto-Match did not duplicate the link (the To was taken).
+* **Driver trap found here:** a process's `ParentProcessId` can name a REUSED PID --
+  a day-old `tail.exe` of another session read as the editor's engine child and a
+  wait-for-idle loop never finished. `drive-glyph-link.ps1` counts only children
+  created after the editor started; `drive-engine-wait.ps1`'s `WaitIdle` still has
+  the old filter.

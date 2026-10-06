@@ -10,6 +10,7 @@ interface
 
 uses
   System.SysUtils
+  , ConvRules.Glyph  // dl:unit ConvRules.Glyph accepted -- GLYPH_BOOK_PENDING_SUFFIX travels with BookHasGlyphLinks: the greyed-book text belongs to the glyph gate
   , ConvRules.UnitStatus
   ;
 
@@ -28,6 +29,8 @@ type
     Checked: Boolean;
     /// <summary>BookKindOfText of the file's text.</summary>
     Kind   : TBookKind;
+    /// <summary>True when the book holds a #link with a glyph expression (BookHasGlyphLinks); runnable only when the engine reports glyph_stitch.</summary>
+    HasGlyph: Boolean;
   end;
 
   /// <summary>One inherited / inline instance convert-apply left unconverted (apply/1
@@ -81,6 +84,8 @@ type
     /// ('skipped-no-instances': the .dfm holds no instance of its own, only inherited
     /// ones, engine C8 N1); '' when absent.</summary>
     ComponentPart: string;
+    /// <summary>glyphs[] -- one outcome per converted instance per G-link (engine ask N3); [] when the engine sends none.</summary>
+    Glyphs    : TArray<TGlyphOutcome>;
   end;
 
   /// <summary>The verdict before any file is touched.</summary>
@@ -110,6 +115,31 @@ function SharedBackupPaths(const AFiles: TArray<string>; const AExists: TFilePro
 /// <param name="ARulesText">The .rules text.</param>
 /// <returns>bkEmpty (no #convert, no unit rule), bkConvertOnly, bkUnitsOnly or bkMixed.</returns>
 function BookKindOfText(const ARulesText: string): TBookKind;
+
+/// <summary>AEntry with Kind and HasGlyph set from the book's text -- the ONE place
+/// the Convert tab classifies a book, on first listing and on every refresh alike.</summary>
+/// <param name="AEntry">The entry; Path and Checked are kept.</param>
+/// <param name="ARulesText">The .rules text.</param>
+/// <returns>The entry with Kind = BookKindOfText and HasGlyph = BookHasGlyphLinks of
+/// ARulesText (both recomputed, so an edit that removed the last G-link clears it).</returns>
+function ClassifiedEntry(const AEntry: TBookEntry; const ARulesText: string): TBookEntry;
+
+/// <summary>The checklist suffix for a book and whether its check box is enabled.</summary>
+/// <param name="AEntry">The classified entry.</param>
+/// <param name="AUnitRulesOk">The engine reports apply_unit_rules.</param>
+/// <param name="AGlyphOk">The engine reports glyph_stitch.</param>
+/// <param name="AEnabled">False = the book cannot be checked (unit-rules-only while
+/// apply_unit_rules is missing, or a G-link book while glyph_stitch is missing).</param>
+/// <returns>'  (empty)', '  (unit rules: engine support pending)' or '  (unit rules not
+/// applied: engine)' by Kind, then GLYPH_BOOK_PENDING_SUFFIX appended for a G-link book
+/// while glyph_stitch is missing; '' when nothing applies.</returns>
+function BookListSuffix(const AEntry: TBookEntry; AUnitRulesOk, AGlyphOk: Boolean; out AEnabled: Boolean): string;
+
+/// <summary>The castlib a Convert run records and passes: APath when that file exists.</summary>
+/// <param name="APath">The editor's resolved casts.castlib path; '' = none.</param>
+/// <returns>APath, or '' when it is '' or names no file (the adapter then passes no
+/// --castlib, so the report must not name one either).</returns>
+function ExistingCastLib(const APath: string): string;
 
 /// <summary>AEntries with entry AIndex moved ADelta places (clamped to the ends).</summary>
 /// <param name="AEntries">The checklist, in application order.</param>
@@ -162,11 +192,12 @@ function SourceRowText(const AUnitPas: string; const AIndexedFiles: TArray<strin
 /// <param name="AUnits">The source units (.pas paths).</param>
 /// <param name="AIndexedFiles">File paths in the project index (see UnitInIndex).</param>
 /// <param name="AUnitRulesSupported">The engine reports apply_unit_rules.</param>
+/// <param name="AGlyphSupported">The engine reports glyph_stitch; without it a book whose HasGlyph is True is skipped with a note.</param>
 /// <returns>Ok=False when no book is checked, no unit is listed, or a unit's
 /// FILE is not in the index (convert-apply would report a FALSE "could not
 /// locate .dfm object block" for it); Runnable = checked books minus empty ones
-/// and minus unit-rules-only ones while unsupported.</returns>
-function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
+/// minus unit-rules-only ones while unsupported, and minus G-link books while glyph_stitch is unsupported.</returns>
+function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported, AGlyphSupported: Boolean): TPreflight;
 
 /// <summary>Reads convert-apply's --format json output (schema apply/1).</summary>
 /// <param name="AJson">The engine's merged stdout+stderr; text before the first
@@ -303,6 +334,42 @@ begin
     Result:= bkEmpty;
 end;
 
+function ClassifiedEntry(const AEntry: TBookEntry; const ARulesText: string): TBookEntry;
+begin
+  Result:= AEntry;
+  Result.Kind    := BookKindOfText(ARulesText);
+  Result.HasGlyph:= BookHasGlyphLinks(ARulesText);
+end;
+
+function BookListSuffix(const AEntry: TBookEntry; AUnitRulesOk, AGlyphOk: Boolean; out AEnabled: Boolean): string;
+begin
+  AEnabled:= True;
+  Result  := '';
+  case AEntry.Kind of
+    bkEmpty:
+      Result:= '  (empty)';
+    bkUnitsOnly:
+      if not AUnitRulesOk then
+      begin
+        Result  := '  (unit rules: engine support pending)';
+        AEnabled:= False;
+      end;
+    bkMixed:
+      if not AUnitRulesOk then
+        Result:= '  (unit rules not applied: engine)';
+  end; // case
+  if AEntry.HasGlyph and not AGlyphOk then
+  begin
+    Result  := Result + GLYPH_BOOK_PENDING_SUFFIX;
+    AEnabled:= False;
+  end;
+end;
+
+function ExistingCastLib(const APath: string): string;
+begin
+  Result:= if (APath <> '') and TFile.Exists(APath) then APath else '';
+end;
+
 function MoveEntry(const AEntries: TArray<TBookEntry>; AIndex, ADelta: Integer): TArray<TBookEntry>;
 var
   Target: Integer;
@@ -421,7 +488,7 @@ begin
     Result:= Result + ' -- not in the project index';
 end;
 
-function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported: Boolean): TPreflight;
+function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported, AGlyphSupported: Boolean): TPreflight;
 var
   B       : TBookEntry;
   U       : string;
@@ -435,6 +502,11 @@ begin
     if not B.Checked then
       Continue;
     AnyCheck:= True;
+    if B.HasGlyph and not AGlyphSupported then
+    begin
+      Result.Notes:= Result.Notes + [ExtractFileName(B.Path) + ': glyph links: engine support pending -- skipped'];
+      Continue;
+    end;
     case B.Kind of
       bkEmpty:
         Result.Notes:= Result.Notes + [ExtractFileName(B.Path) + ': no #convert and no unit rule -- skipped'];
@@ -466,6 +538,71 @@ begin
   if AnyCheck and (Length(Result.Runnable) = 0) and (Length(Result.Problems) = 0) then
     Result.Problems:= Result.Problems + ['None of the checked rule books can run (see notes).'];
   Result.Ok:= Length(Result.Problems) = 0;
+end;
+
+{ glyphs[] (C10, engine ask N3). Every key is optional and every read is
+  type-checked: an older engine sends no array, a future one may add keys or change
+  a type, and a value of the wrong JSON type reads as its default -- nothing here
+  raises (GetValue<T> would, on a wrong type). }
+function GlyphOutcomes(AObj: TJSONObject): TArray<TGlyphOutcome>;
+
+  // A JSON string; TJSONNumber descends from TJSONString, so it is excluded.
+  function Str(AItem: TJSONObject; const AKey: string): string;
+  var
+    LVal: TJSONValue;
+  begin
+    LVal:= AItem.GetValue(AKey);
+    if (LVal is TJSONString) and not (LVal is TJSONNumber) then
+      Result:= TJSONString(LVal).Value
+    else
+      Result:= '';
+  end;
+
+  // A JSON number holding an integer; anything else (3.5, "3", true) is False.
+  function TryInt(AVal: TJSONValue; out AInt: Integer): Boolean;
+  begin
+    AInt:= 0;
+    Result:= (AVal is TJSONNumber) and TryStrToInt(TJSONNumber(AVal).Value, AInt);
+  end;
+
+  function Int(AItem: TJSONObject; const AKey: string): Integer;
+  begin
+    if not TryInt(AItem.GetValue(AKey), Result) then
+      Result:= 0;
+  end;
+
+var
+  LArr  : TJSONValue;
+  LSlots: TJSONValue;
+  LItem : TJSONObject;
+  LSlot : Integer;
+  O     : TGlyphOutcome;
+begin
+  Result:= nil;
+  LArr:= AObj.GetValue('glyphs');
+  if not (LArr is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(LArr) do
+  begin
+    if not (LVal is TJSONObject) then
+      Continue;
+    LItem:= TJSONObject(LVal);
+    O:= Default(TGlyphOutcome);
+    O.Instance   := Str(LItem, 'instance');
+    O.FromPath   := Str(LItem, 'from_path');
+    O.ToPath     := Str(LItem, 'to_path');
+    O.Kind       := Str(LItem, 'kind');
+    O.Alternative:= Str(LItem, 'alternative');
+    O.Message    := Str(LItem, 'message');
+    O.SourceN    := Int(LItem, 'source_n');
+    O.RuleLine   := Int(LItem, 'rule_line');
+    LSlots:= LItem.GetValue('dropped_slots');
+    if LSlots is TJSONArray then
+      for var LSlotVal: TJSONValue in TJSONArray(LSlots) do
+        if TryInt(LSlotVal, LSlot) then
+          O.DroppedSlots:= O.DroppedSlots + [LSlot];
+    Result:= Result + [O];
+  end;
 end;
 
 function ParseApplyJson(const AJson: string): TApplyRow;
@@ -557,6 +694,7 @@ begin
     Result.InheritedLeft:= InheritedItems(Obj);
     Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0);
     Result.ComponentPart:= Str(Obj, 'component_part');
+    Result.Glyphs    := GlyphOutcomes(Obj);
     if Obj.TryGetValue<TJSONArray>('rule_errors', Errs) then
       Result.RuleErrorCount:= Errs.Count;
     Result.Refused:= (not Result.Ok) and Obj.GetValue<Boolean>('refused', False);

@@ -19,6 +19,8 @@ uses
   , ConvRules.Casts in '..\ConvRules.Casts.pas'
   , ConvRules.ConvCatalog in '..\ConvRules.ConvCatalog.pas'
   , DRagLint.Convert.CastLib in '..\..\..\report\DRagLint.Convert.CastLib.pas'
+  , DRagLint.Convert.GlyphExpr in '..\..\..\report\DRagLint.Convert.GlyphExpr.pas'
+  , ConvRules.Glyph in '..\ConvRules.Glyph.pas'  // dl:unit ConvRules.Glyph accepted -- the tests read GLYPH_KIND_STITCHED to pin the stitched/to-do split, so the const travels with the unit under test
   , ConvRules.BlockFile in '..\ConvRules.BlockFile.pas'
   , ConvRules.BlockOps in '..\ConvRules.BlockOps.pas'
   , ConvRules.WorkingSet in '..\ConvRules.WorkingSet.pas'
@@ -1542,26 +1544,26 @@ begin
   Books[2].Checked:= True;
   Books[2].Kind:= bkMixed;
   // The index is a list of FILE PATHS (the project DB's files table).
-  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False, True);
   Check('convertrun.pre.ok', Pre.Ok, string.Join(' | ', Pre.Problems));
   Check('convertrun.pre.units.only.skipped', string.Join(',', Pre.Runnable) = 'Conv.rules,Mixed.rules', string.Join(',', Pre.Runnable));
   Check('convertrun.pre.notes', Length(Pre.Notes) = 2, string.Join(' | ', Pre.Notes));
-  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], True, True);
   Check('convertrun.pre.units.supported', Length(Pre.Runnable) = BOOK_COUNT, string.Join(',', Pre.Runnable));
-  Pre:= Preflight(Books, ['p\U1.pas', 'p\Loose.pas'], ['P\u1.PAS'], False);
+  Pre:= Preflight(Books, ['p\U1.pas', 'p\Loose.pas'], ['P\u1.PAS'], False, True);
   Check('convertrun.pre.unindexed.refused', (not Pre.Ok) and (Pos('Loose', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
   Check('convertrun.pre.index.nocase', Pos('U1', string.Join(' ', Pre.Problems)) = 0, string.Join(' | ', Pre.Problems));
   // The migration case: the project indexes ITS OWN U1.pas; a same-named unit
   // from another tree is not indexed -- the engine finds the .dfm by path.
-  Pre:= Preflight(Books, ['m2022\U1.pas'], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, ['m2022\U1.pas'], ['p\U1.pas'], False, True);
   Check('convertrun.pre.same.name.foreign.path', (not Pre.Ok) and (Pos('U1.pas', string.Join(' ', Pre.Problems)) > 0), string.Join(' | ', Pre.Problems));
   Books[0].Checked:= False;
   Books[1].Checked:= False;
   Books[2].Checked:= False;
-  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, ['p\U1.pas'], ['p\U1.pas'], False, True);
   Check('convertrun.pre.no.book', not Pre.Ok, string.Join(' | ', Pre.Problems));
   Books[0].Checked:= True;
-  Pre:= Preflight(Books, [], ['p\U1.pas'], False);
+  Pre:= Preflight(Books, [], ['p\U1.pas'], False, True);
   Check('convertrun.pre.no.unit', not Pre.Ok, string.Join(' | ', Pre.Problems));
 
   // --- ParseApplyJson (schema apply/1) ---
@@ -9933,6 +9935,817 @@ begin
   Check('inherit.resolve.unknown.state', (R.State = asUnknown) and ContainsText(R.Reason, 'TBroken') and (OutsideNote(R) = ''), R.Reason);
 end;
 
+{ C10 E1-E3: a #link's glyph expression is split off AFTER the cast suffix, at the
+  first ' G[', kept verbatim, found by its bare FromPath, and re-emitted canonically. }
+procedure TestGlyphLinkParse;
+const
+  LINE_IMG   = '#link OptionsImage.Glyph <- Picture G[*/4], G[1/5]G[2/5]G[3/5]G[4/5] : AssignGraphic';
+  LINE_COUNT = '#link OptionsImage.NumGlyphs <- Picture G[count]';
+  LINE_PLAIN = '#link Caption <- Caption';
+  LINE_TWO   = '#link SomeOtherGlyph <- Picture G[5/5]';
+  LINE_LOOSE = '#link Glyph2 <- Picture   G[5/5]   :   AssignGraphic';
+  BOOK_TEXT = '#convert Abcbtn.TabcToggleBtn -> cxButtons.TcxButton, cxButtons'#13#10 + LINE_IMG + #13#10 + LINE_COUNT + #13#10
+    + LINE_PLAIN + #13#10 + LINE_TWO + #13#10;
+  NODES_IN_BOOK = 5;
+  LINKS_IN_BOOK = 4;
+  IDX_IMG   = 1; // node index of LINE_IMG in BOOK_TEXT (0 is the #convert header)
+  IDX_COUNT = 2;
+  IDX_PLAIN = 3;
+  IDX_TWO   = 4;
+var
+  Book : TRuleBook;
+  Book2: TRuleBook;
+  N    : TRuleNode;
+  Path : string;
+  Expr : string;
+  Links: TArray<TRuleNode>;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BOOK_TEXT);
+    Check('glyph.parse.nodes', Book.Nodes.Count = NODES_IN_BOOK, IntToStr(Book.Nodes.Count));
+    if Book.Nodes.Count <> NODES_IN_BOOK then
+      Exit;
+    N:= Book.Nodes[IDX_IMG];
+    Check('glyph.parse.from.bare', N.LinkFrom = 'Picture', N.LinkFrom);
+    Check('glyph.parse.expr.verbatim', N.GlyphExpr = 'G[*/4], G[1/5]G[2/5]G[3/5]G[4/5]', N.GlyphExpr);
+    Check('glyph.parse.cast', N.Cast = 'AssignGraphic', N.Cast);
+    N:= Book.Nodes[IDX_COUNT];
+    Check('glyph.parse.count.link', (N.LinkFrom = 'Picture') and (N.GlyphExpr = 'G[count]') and (N.Cast = ''), N.GlyphExpr + '|' + N.Cast);
+    Check('glyph.parse.plain.empty', (Book.Nodes[IDX_PLAIN].GlyphExpr = '') and (Book.Nodes[IDX_PLAIN].LinkFrom = 'Caption'));
+    Check('glyph.roundtrip.untouched', Book.SaveToString = BOOK_TEXT);
+    Check('glyph.snapshot.clean', Book.Snapshot = BOOK_TEXT, 'a canonical G-link book must not read dirty');
+    Book.Nodes[IDX_IMG].Dirty:= True;
+    Book.Nodes[IDX_COUNT].Dirty:= True;
+    Book.Nodes[IDX_TWO].Dirty:= True;
+    Check('glyph.roundtrip.dirty', Book.SaveToString = BOOK_TEXT, Book.Nodes[IDX_IMG].Emit);
+    Check('glyph.links.for.block', Length(Book.LinksForBlock(0)) = LINKS_IN_BOOK, IntToStr(Length(Book.LinksForBlock(0))));
+    Check('glyph.links.two.from.same', (Book.Nodes[IDX_TWO].LinkFrom = 'Picture') and (Book.Nodes[IDX_TWO].GlyphExpr = 'G[5/5]'));
+    Links:= Book.LinksForBlock(0);
+    Check('glyph.links.two.from.same.distinct',
+      (Length(Links) = LINKS_IN_BOOK) and (Links[0] = Book.Nodes[IDX_IMG]) and (Links[LINKS_IN_BOOK - 1] = Book.Nodes[IDX_TWO])
+      and (Links[0].GlyphExpr <> Links[LINKS_IN_BOOK - 1].GlyphExpr),
+      'LinksForBlock must return both Picture G-links as separate nodes with their own expressions');
+  finally
+    Book.Free;
+  end;
+  Book2:= TRuleBook.Create;
+  try
+    Book2.LoadFromString(LINE_LOOSE + #13#10);
+    N:= Book2.Nodes[0];
+    Check('glyph.parse.loose', (N.LinkFrom = 'Picture') and (N.GlyphExpr = 'G[5/5]') and (N.Cast = 'AssignGraphic'), N.Raw);
+    Check('glyph.roundtrip.loose.raw', Book2.SaveToString = LINE_LOOSE + #13#10);
+    N.Dirty:= True;
+    Check('glyph.emit.canonical', N.Emit = '#link Glyph2 <- Picture G[5/5] : AssignGraphic', N.Emit);
+  finally
+    Book2.Free;
+  end;
+  Path:= 'Picture G[1/2]G[2/2]';
+  Check('glyph.split.helper', SplitGlyphExprOff(Path, Expr) and (Path = 'Picture') and (Expr = 'G[1/2]G[2/2]'), Path + '|' + Expr);
+  Path:= 'Font.Size';
+  Check('glyph.split.none', (not SplitGlyphExprOff(Path, Expr)) and (Path = 'Font.Size') and (Expr = ''));
+  Path:= 'Picture g[1/2]';
+  Check('glyph.split.case.sensitive', (not SplitGlyphExprOff(Path, Expr)) and (Path = 'Picture g[1/2]'), 'lower-case g[ is a path, as in the engine');
+end;
+
+{ C10 E11/E12: convert-apply and convert-validate are given --castlib when the adapter
+  knows an EXISTING cast library, and never otherwise (a missing file would make the
+  engine exit 2 on every call). A .cmd stand-in echoes its arguments. }
+procedure TestGlyphCastLibArgs;
+const
+  ECHO_CMD = '@echo %*'#13#10;
+var
+  Dir  : string;
+  Lib  : string;
+  Eng  : TEngineAdapter;
+  Json : string;
+  V    : TValidateResult;
+begin
+  Check('glyph.caps.name', CAPABILITY_GLYPH_STITCH = 'glyph_stitch', CAPABILITY_GLYPH_STITCH);
+  Dir:= TPath.Combine(TPath.GetTempPath, 'castlib-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    TFile.WriteAllText(TPath.Combine(Dir, 'echo.cmd'), ECHO_CMD, TEncoding.ASCII);
+    Lib:= TPath.Combine(Dir, 'casts.castlib');
+    TFile.WriteAllText(Lib, '# empty'#13#10, TEncoding.ASCII);
+    Eng:= TEngineAdapter.Create(TPath.Combine(Dir, 'echo.cmd'), []);
+    try
+      Check('glyph.castlib.default.empty', Eng.CastLibFile = '');
+      Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
+      Check('glyph.castlib.absent.no.arg', Pos('--castlib', Json) = 0, Json);
+      Eng.CastLibFile:= TPath.Combine(Dir, 'missing.castlib');
+      Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
+      Check('glyph.castlib.missing.no.arg', Pos('--castlib', Json) = 0, Json);
+      Eng.CastLibFile:= Lib;
+      Eng.ApplyConversion('U.pas', 'B.rules', [], Json);
+      Check('glyph.castlib.apply.arg', Pos('--castlib "' + Lib + '"', Json) > 0, Json);
+      Check('glyph.castlib.apply.keeps.flags', (Pos('--apply', Json) > 0) and (Pos('--format json', Json) > 0), Json);
+      V:= Eng.ValidateText('#convert A -> B'#13#10, '', '', nil);
+      Check('glyph.castlib.validate.arg', Pos('--castlib "' + Lib + '"', V.Output) > 0, V.Output);
+    finally
+      Eng.Free;
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
+{ C10 E13: ParseApplyJson reads glyphs[] whenever it is present (additive, not gated);
+  a missing array, a missing dropped_slots key, an unknown kind and wrongly-typed
+  values never raise. }
+procedure TestGlyphApplyParse;
+const
+  NO_SLOTS_KEY = '{"ok":true,"edits_count":1,"glyphs":[{"instance":"B","from_path":"Glyph","to_path":"X","kind":"glyph-weird","source_n":3,"alternative":"G[1]","rule_line":7,"message":"m"}]}';
+  BAD_TYPES = '{"ok":true,"edits_count":1,"glyphs":[7,"x",{"instance":5,"kind":["k"],"source_n":"3","rule_line":true,"dropped_slots":"5","message":"m2"},{"dropped_slots":[2,"z",null,{"a":1},3]}]}';
+  NOT_ARRAY = '{"ok":true,"edits_count":1,"glyphs":{"instance":"B"}}';
+  OUTCOMES = 3;
+  EDITS = 3;
+  N_FOUR = 4;
+  N_FIVE = 5;
+  SLOT_FIVE = 5;
+  SLOT_THREE = 3;
+  SLOT_TWO = 2;
+  LINE_TWO = 2;
+  TWO_ENTRIES = 2;
+var
+  P    : string;
+  Row  : TApplyRow;
+  Texts: Boolean;
+  Nums : Boolean;
+begin
+  P:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph\apply-glyphs-sample.json'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('glyph.apply.fixture', 'missing ' + P);
+    Exit;
+  end;
+  Row:= ParseApplyJson('(loaded defaults from x)'#13#10 + TFile.ReadAllText(P) + #13#10'(loaded defaults from y)');
+  Check('glyph.apply.ok', Row.Ok and (Row.EditsCount = EDITS), Row.Error);
+  Check('glyph.apply.count', Length(Row.Glyphs) = OUTCOMES, IntToStr(Length(Row.Glyphs)));
+  if Length(Row.Glyphs) = OUTCOMES then
+  begin
+    Texts:= (Row.Glyphs[0].Instance = 'Btn1') and (Row.Glyphs[0].Kind = GLYPH_KIND_STITCHED) and (Row.Glyphs[0].Alternative = 'G[*/4]');
+    Nums := (Row.Glyphs[0].SourceN = N_FOUR) and (Length(Row.Glyphs[0].DroppedSlots) = 0) and (Row.Glyphs[0].RuleLine = LINE_TWO);
+    Check('glyph.apply.stitched', Texts and Nums);
+    Check('glyph.apply.todo', (Row.Glyphs[1].Kind = 'glyph-no-alternative') and IsGlyphTodo(Row.Glyphs[1]) and (Pos('TODO written', Row.Glyphs[1].Message) > 0));
+    Check('glyph.apply.dropped', (Row.Glyphs[2].SourceN = N_FIVE) and (Length(Row.Glyphs[2].DroppedSlots) = 1) and (Row.Glyphs[2].DroppedSlots[0] = SLOT_FIVE)
+      and (Row.Glyphs[2].FromPath = 'Glyph') and (Row.Glyphs[2].ToPath = 'OptionsImage.Glyph'));
+    Check('glyph.apply.note', GlyphNoteSuffix(Row.Glyphs) = '; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', GlyphNoteSuffix(Row.Glyphs));
+  end;
+  Check('glyph.apply.remainder.unchanged', Length(Row.Remainder) = 1, 'todos[] still feeds Remainder');
+  Row:= ParseApplyJson('{"ok":true,"edits_count":0}');
+  Check('glyph.apply.absent.array', Row.Ok and (Length(Row.Glyphs) = 0));
+  Row:= ParseApplyJson(NO_SLOTS_KEY);
+  Check('glyph.apply.no.dropped.key', (Length(Row.Glyphs) = 1) and (Length(Row.Glyphs[0].DroppedSlots) = 0));
+  Check('glyph.apply.unknown.kind.is.todo', (Length(Row.Glyphs) = 1) and IsGlyphTodo(Row.Glyphs[0]) and (Row.Glyphs[0].Message = 'm'));
+  // R8: a wrongly-typed value degrades to its default; a non-object entry is skipped.
+  Row:= ParseApplyJson(BAD_TYPES);
+  Check('glyph.apply.bad.types.ok', Row.Ok and (Length(Row.Glyphs) = TWO_ENTRIES), IntToStr(Length(Row.Glyphs)));
+  if Length(Row.Glyphs) = TWO_ENTRIES then
+  begin
+    Texts:= (Row.Glyphs[0].Instance = '') and (Row.Glyphs[0].Kind = '') and (Row.Glyphs[0].Message = 'm2');
+    Nums := (Row.Glyphs[0].SourceN = 0) and (Row.Glyphs[0].RuleLine = 0) and (Length(Row.Glyphs[0].DroppedSlots) = 0);
+    Check('glyph.apply.bad.types.defaults', Texts and Nums);
+    Check('glyph.apply.bad.slots.skipped', (Length(Row.Glyphs[1].DroppedSlots) = TWO_ENTRIES) and (Row.Glyphs[1].DroppedSlots[0] = SLOT_TWO)
+      and (Row.Glyphs[1].DroppedSlots[1] = SLOT_THREE));
+  end;
+  Row:= ParseApplyJson(NOT_ARRAY);
+  Check('glyph.apply.not.array', Row.Ok and (Length(Row.Glyphs) = 0));
+end;
+
+{ C10 E12/E13: the runner's converted row carries the glyph suffix; Preflight skips a
+  G-link book while the engine lacks glyph_stitch and runs it when it has it. }
+procedure TestGlyphRunner;
+const
+  BOOKS_TWO = 2;
+var
+  P     : string;
+  Json  : string;
+  Rows  : TArray<TConvertRow>;
+  Dir   : string;
+  UnitP : string;
+  Books : TArray<TBookEntry>;
+  Pre   : TPreflight;
+begin
+  P:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph\apply-glyphs-sample.json'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('glyph.runner.fixture', 'missing ' + P);
+    Exit;
+  end;
+  Json:= TFile.ReadAllText(P);
+  Dir:= TPath.Combine(TPath.GetTempPath, 'glyphrun-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    UnitP:= TPath.Combine(Dir, 'U.pas');
+    TFile.WriteAllText(UnitP, 'unit U; interface implementation end.'#13#10, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Dir, 'U.dfm'), 'object F: TF'#13#10'end'#13#10, TEncoding.ASCII);
+    Rows:= RunConversionUnits([UnitP], [TPath.Combine(Dir, 'B.rules')],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson := Json;
+        Result:= 0;
+      end,
+      function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result := 0;
+      end,
+      nil, nil);
+    Check('glyph.runner.one.row', Length(Rows) = 1, IntToStr(Length(Rows)));
+    if Length(Rows) = 1 then
+    begin
+      Check('glyph.runner.converted', Rows[0].Status = csConverted, ConvertStatusText(Rows[0].Status) + ' ' + Rows[0].Note);
+      Check('glyph.runner.note', Rows[0].Note = '3 edit(s), 1 remaining for manual work; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', Rows[0].Note);
+      Check('glyph.runner.row.glyphs', Length(Rows[0].Apply.Glyphs) = Length(ParseApplyJson(Json).Glyphs));
+    end;
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+
+  SetLength(Books, BOOKS_TWO);
+  Books[0].Path    := 'b\Glyph.rules';
+  Books[0].Checked := True;
+  Books[0].Kind    := bkConvertOnly;
+  Books[0].HasGlyph:= True;
+  Books[1].Path    := 'b\Plain.rules';
+  Books[1].Checked := True;
+  Books[1].Kind    := bkConvertOnly;
+  Books[1].HasGlyph:= False;
+  Pre:= Preflight(Books, ['u\A.pas'], ['u\A.pas'], True, False);
+  Check('glyph.pre.unsupported.skipped', Pre.Ok and (Length(Pre.Runnable) = 1) and (Pre.Runnable[0] = Books[1].Path), string.Join(';', Pre.Runnable));
+  Check('glyph.pre.unsupported.note', (Length(Pre.Notes) = 1) and (Pre.Notes[0] = 'Glyph.rules: glyph links: engine support pending -- skipped'), string.Join(';', Pre.Notes));
+  Pre:= Preflight(Books, ['u\A.pas'], ['u\A.pas'], True, True);
+  Check('glyph.pre.supported.runs', Pre.Ok and (Length(Pre.Runnable) = BOOKS_TWO) and (Length(Pre.Notes) = 0), string.Join(';', Pre.Notes));
+  Books[1].Checked:= False;
+  Pre:= Preflight(Books, ['u\A.pas'], ['u\A.pas'], True, False);
+  Check('glyph.pre.only.glyph.book.refused', (not Pre.Ok) and (Length(Pre.Problems) = 1) and (Pre.Problems[0] = 'None of the checked rule books can run (see notes).'), string.Join(';', Pre.Problems));
+end;
+
+{ C10 E11/E12/E14 (Task 6): the Convert tab's decisions -- one classification sets
+  HasGlyph on first listing AND on refresh (else the glyph_stitch gate is inert), the
+  checklist greys a G-link book until glyph_stitch, a castlib that does not exist is
+  never recorded, and the red summary counts UNITS, not rows. }
+procedure TestGlyphConvertTab;
+const
+  GLYPH_BOOK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4] : AssignGraphic'#13#10;
+  PLAIN_BOOK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link Caption <- Caption'#13#10;
+  MIXED_GLYPH_BOOK = '#use cxButtons'#13#10 + GLYPH_BOOK;
+  UNITS_SUFFIX  = '  (unit rules: engine support pending)';
+  MIXED_SUFFIX  = '  (unit rules not applied: engine)';
+  TODO_UNITS    = 2;
+  GLYPH_LINES   = 2;
+  REPORT_COLS_GLYPH = 8; // the run report's column count (Book .. Note)
+  RESTORE_LEAD  = 'RESTORE FAILED for A.pas, B.pas -- may be half-converted; restore by hand from the backups its row names. ';
+var
+  E   : TBookEntry;
+  En  : Boolean;
+  S   : string;
+  Dir : string;
+  Lib : string;
+  Rows: TArray<TConvertRow>;
+  Todo: TGlyphOutcome;
+  Done: TGlyphOutcome;
+
+  function Row(const AUnit: string; AStatus: TConvertStatus; const AGlyphs: TArray<TGlyphOutcome>): TConvertRow;
+  begin
+    Result:= Default(TConvertRow);
+    Result.UnitPas:= AUnit;
+    Result.Status := AStatus;
+    Result.Apply.Glyphs:= AGlyphs;
+  end;
+
+begin
+  E:= Default(TBookEntry);
+  E.Path   := 'b\Glyph.rules';
+  E.Checked:= True;
+  E:= ClassifiedEntry(E, GLYPH_BOOK);
+  Check('glyph.tab.classify.glyph', E.HasGlyph and (E.Kind = bkConvertOnly) and E.Checked and (E.Path = 'b\Glyph.rules'));
+  E:= ClassifiedEntry(E, PLAIN_BOOK);
+  Check('glyph.tab.classify.refresh.clears', (not E.HasGlyph) and (E.Kind = bkConvertOnly), 'a refresh must recompute HasGlyph');
+  E:= ClassifiedEntry(E, MIXED_GLYPH_BOOK);
+  Check('glyph.tab.classify.mixed', E.HasGlyph and (E.Kind = bkMixed));
+
+  E:= ClassifiedEntry(Default(TBookEntry), GLYPH_BOOK);
+  S:= BookListSuffix(E, True, False, En);
+  Check('glyph.tab.suffix.pending', (S = GLYPH_BOOK_PENDING_SUFFIX) and (S = '  (glyph links: engine support pending)') and not En, S);
+  S:= BookListSuffix(E, True, True, En);
+  Check('glyph.tab.suffix.supported', (S = '') and En, S);
+  E:= ClassifiedEntry(Default(TBookEntry), MIXED_GLYPH_BOOK);
+  S:= BookListSuffix(E, False, False, En);
+  Check('glyph.tab.suffix.mixed.both', (S = MIXED_SUFFIX + GLYPH_BOOK_PENDING_SUFFIX) and not En, S);
+  S:= BookListSuffix(E, False, True, En);
+  Check('glyph.tab.suffix.mixed.units.only', (S = MIXED_SUFFIX) and En, S);
+  E:= ClassifiedEntry(Default(TBookEntry), '#use cxButtons'#13#10);
+  S:= BookListSuffix(E, False, False, En);
+  Check('glyph.tab.suffix.units.unchanged', (S = UNITS_SUFFIX) and not En, S);
+  E:= ClassifiedEntry(Default(TBookEntry), '');
+  S:= BookListSuffix(E, False, False, En);
+  Check('glyph.tab.suffix.empty.unchanged', (S = '  (empty)') and En, S);
+
+  Check('glyph.tab.castlib.none', ExistingCastLib('') = '');
+  Dir:= TPath.Combine(TPath.GetTempPath, 'tabcastlib-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Lib:= TPath.Combine(Dir, 'casts.castlib');
+    Check('glyph.tab.castlib.missing', ExistingCastLib(Lib) = '', ExistingCastLib(Lib));
+    TFile.WriteAllText(Lib, '# empty'#13#10, TEncoding.ASCII);
+    Check('glyph.tab.castlib.exists', ExistingCastLib(Lib) = Lib, ExistingCastLib(Lib));
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+
+  Todo:= Default(TGlyphOutcome);
+  Todo.Kind:= 'glyph-no-alternative';
+  Done:= Default(TGlyphOutcome);
+  Done.Kind:= GLYPH_KIND_STITCHED;
+  Rows:= [Row('u\A.pas', csConverted, [Todo]), Row('U\a.PAS', csConverted, [Done, Todo]),
+    Row('u\B.pas', csConverted, [Done]), Row('u\C.pas', csRolledBack, [Todo]),
+    Row('u\D.pas', csConverted, [Todo]), Row('u\E.pas', csRefused, [Todo])];
+  Check('glyph.tab.todo.units', GlyphTodoUnitCount(Rows) = TODO_UNITS, IntToStr(GlyphTodoUnitCount(Rows)));
+  Check('glyph.tab.todo.none', GlyphTodoUnitCount([Row('u\B.pas', csConverted, [Done])]) = 0);
+  Check('glyph.tab.todo.summary', GlyphRunSummary(GlyphTodoUnitCount(Rows)) <> '');
+
+  // Fix round 1: RESTORE FAILED (a half-converted unit) always leads; glyph to-dos next.
+  S:= RunStatusLead(['A.pas', 'B.pas'], GlyphRunSummary(1), 'Converted 1 of 2.');
+  Check('glyph.tab.lead.restore.first', S = RESTORE_LEAD + GlyphRunSummary(1) + '  Converted 1 of 2.', S);
+  S:= RunStatusLead([], GlyphRunSummary(1), 'Converted 1 of 2.');
+  Check('glyph.tab.lead.glyph.only', S = GlyphRunSummary(1) + '  Converted 1 of 2.', S);
+  S:= RunStatusLead(['A.pas', 'B.pas'], '', 'Converted 1 of 2.');
+  Check('glyph.tab.lead.restore.only', S = RESTORE_LEAD + 'Converted 1 of 2.', S);
+  S:= RunStatusLead([], '', 'Converted 1 of 2.');
+  Check('glyph.tab.lead.body.only', S = 'Converted 1 of 2.', S);
+
+  // Final-review ruling (E13 amended): ONE report shape -- each glyph line has the
+  // report's 8 columns, Status `glyph`, the outcome in the Note; converted rows only.
+  Todo.Instance:= 'Btn1';
+  Todo.FromPath:= 'Glyph';
+  Todo.ToPath  := 'OptionsImage.Glyph';
+  Todo.Message := 'matched no alternative';
+  var GRow: TConvertRow:= Row('u\A.pas', csConverted, [Done, Todo]);
+  GRow.Book:= 'B.rules';
+  var GLines: TArray<string>:= GlyphReportLines(GRow);
+  var GCols : TArray<string>:= if Length(GLines) = GLYPH_LINES then GLines[1].Split([#9]) else nil;
+  Check('glyph.report.lines.count', Length(GLines) = GLYPH_LINES, IntToStr(Length(GLines)));
+  Check('glyph.report.lines.shape', Length(GCols) = REPORT_COLS_GLYPH, IntToStr(Length(GCols)));
+  Check('glyph.report.status.text', REPORT_STATUS_GLYPH = 'glyph', REPORT_STATUS_GLYPH);
+  if Length(GCols) = REPORT_COLS_GLYPH then
+    Check('glyph.report.lines.text', GLines[1] = string.Join(#9, ['B.rules', 'u\A.pas', REPORT_STATUS_GLYPH, '', '', '', '', GlyphReportNote(Todo)]), GLines[1]);
+  GRow.Status:= csRolledBack;
+  Check('glyph.report.lines.converted.only', Length(GlyphReportLines(GRow)) = 0);
+  GRow.Status:= csConverted;
+  GRow.Apply.Glyphs:= nil;
+  Check('glyph.report.lines.none', Length(GlyphReportLines(GRow)) = 0);
+end;
+
+{ C10 E7/E8/E12-E14: the editor's own glyph decisions -- the live check goes through the
+  ENGINE's parser (DRagLint.Convert.GlyphExpr, one parser for both), the two block-level
+  rules carry the engine's wording, the count-target suggestion never guesses, and the
+  note / report / summary texts are pinned verbatim. }
+procedure TestGlyphDecisions;
+const
+  BLOCK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] : AssignGraphic'#13#10 +
+    '#link OptionsImage.NumGlyphs <- NumGlyphs'#13#10 +
+    '#link Caption <- Caption'#13#10;
+  BLOCK_TWO_IMAGES =
+    '#convert A -> B'#13#10 +
+    '#link Glyph1 <- Picture G[1/2]'#13#10 +
+    '#link Glyph2 <- Picture G[2/2]'#13#10;
+  BLOCK_NO_GLINK =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.NumGlyphs <- NumGlyphs'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph : AssignGraphic'#13#10;
+  BLOCK_CARRY_NOT_COUNT =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Spacing'#13#10;
+  EXPECT_HINT = '#link OptionsImage.NumGlyphs <- NumGlyphs is a straight carry of the source glyph count -- write "#link OptionsImage.NumGlyphs <- Glyph G[count]" instead';
+  N_FIVE = 5;
+  N_TWO  = 2;
+  LINE_IMG = 52;
+  IDX_CAPTION = 3;
+var
+  Book : TRuleBook;
+  Nodes: TArray<TRuleNode>;
+  Err  : string;
+  O    : TGlyphOutcome;
+  P    : TGlyphOutcome;
+  Line : string;
+begin
+  Check('glyph.check.ok', CheckGlyphExprText('G[*/4], G[1/5]G[2/5]', Err) and (Err = ''), Err);
+  Check('glyph.check.empty.ok', CheckGlyphExprText('', Err) and (Err = ''));
+  Check('glyph.check.syntax', (not CheckGlyphExprText('G[1/', Err)) and (Pos('column ', Err) = 1), Err);
+  Check('glyph.check.range', (not CheckGlyphExprText('G[5/4]', Err)) and (Pos('column ', Err) = 1) and (Pos('5', Err) > 0), Err);
+  Check('glyph.check.two.for.one.n', not CheckGlyphExprText('G[1/4], G[*/4]', Err), Err);
+
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BLOCK);
+    Nodes:= Book.Nodes.ToArray;
+    Check('glyph.image.link', IsImageGlyphLink(Nodes[1]) and not IsImageGlyphLink(Nodes[2]) and not IsImageGlyphLink(Nodes[IDX_CAPTION]));
+    Check('glyph.image.links.from', (ImageGlyphLinksFrom(Nodes, 'glyph') = 1) and (ImageGlyphLinksFrom(Nodes, 'Caption') = 0));
+    Check('glyph.count.issue.none', CountLinkIssueFor(Nodes, nil, 'Glyph', 'G[count]') = '', CountLinkIssueFor(Nodes, nil, 'Glyph', 'G[count]'));
+    Check('glyph.count.issue.not.count.expr', CountLinkIssueFor(Nodes, nil, 'Caption', 'G[1/2]') = '');
+    Check('glyph.count.issue.zero', CountLinkIssueFor(Nodes, nil, 'Caption', 'G[count]') = 'G[count] needs exactly one image link from Caption; found 0', CountLinkIssueFor(Nodes, nil, 'Caption', 'G[count]'));
+    Check('glyph.carry.hint', StraightCountCarryHint(Nodes) = EXPECT_HINT, StraightCountCarryHint(Nodes));
+    Check('glyph.suggest.one', SuggestCountTarget(['OptionsImage.Glyph', 'OptionsImage.NumGlyphs', 'Caption'], [Nodes[0], Nodes[1], Nodes[IDX_CAPTION]]) = 'OptionsImage.NumGlyphs');
+    Check('glyph.suggest.already.linked', SuggestCountTarget(['OptionsImage.Glyph', 'OptionsImage.NumGlyphs'], Nodes) = '', 'NumGlyphs is already a link target');
+    Check('glyph.suggest.ambiguous', SuggestCountTarget(['OptionsImage.NumGlyphs', 'Other.GlyphCount'], [Nodes[0], Nodes[1]]) = '', 'two candidates: never guess');
+    Check('glyph.suggest.none', SuggestCountTarget(['Caption', 'Width'], [Nodes[0], Nodes[1]]) = '');
+
+    Book.LoadFromString(BLOCK_TWO_IMAGES);
+    Nodes:= Book.Nodes.ToArray;
+    Check('glyph.count.two.image.links', CountLinkIssueFor(Nodes, nil, 'Picture', 'G[count]') = 'G[count] needs exactly one image link from Picture; found 2', CountLinkIssueFor(Nodes, nil, 'Picture', 'G[count]'));
+
+    Book.LoadFromString(BLOCK_NO_GLINK);
+    Check('glyph.carry.no.glink.silent', StraightCountCarryHint(Book.Nodes.ToArray) = '', StraightCountCarryHint(Book.Nodes.ToArray));
+    Book.LoadFromString(BLOCK_CARRY_NOT_COUNT);
+    Check('glyph.carry.not.count.prop', StraightCountCarryHint(Book.Nodes.ToArray) = '', StraightCountCarryHint(Book.Nodes.ToArray));
+  finally
+    Book.Free;
+  end;
+
+  Check('glyph.book.has', BookHasGlyphLinks(BLOCK) and BookHasGlyphLinks(BLOCK_TWO_IMAGES));
+  Check('glyph.book.has.not', (not BookHasGlyphLinks(BLOCK_NO_GLINK)) and (not BookHasGlyphLinks('')));
+  Check('glyph.last.segment', (LastSegment('OptionsImage.NumGlyphs') = 'NumGlyphs') and (LastSegment('Glyph') = 'Glyph') and (LastSegment('') = ''));
+
+  O:= Default(TGlyphOutcome);
+  O.Instance:= 'Btn1';
+  O.FromPath:= 'Picture';
+  O.ToPath:= 'OptionsImage.Glyph';
+  O.Kind:= GLYPH_KIND_STITCHED;
+  O.SourceN:= N_FIVE;
+  O.Alternative:= 'G[1/5]G[2/5]G[3/5]G[4/5]';
+  O.DroppedSlots:= [N_FIVE];
+  O.RuleLine:= LINE_IMG;
+  O.Message:= 'slot 5 dropped by rule line 52';
+  P:= O;
+  P.Instance:= 'Btn2';
+  P.Kind:= 'glyph-no-alternative';
+  P.SourceN:= N_TWO;
+  P.Alternative:= '';
+  P.DroppedSlots:= nil;
+  P.Message:= 'N=2 matched no alternative; TODO written';
+  Check('glyph.todo.kinds', (not IsGlyphTodo(O)) and IsGlyphTodo(P));
+  Check('glyph.todo.unknown.kind', GlyphTodoCount([O, P, Default(TGlyphOutcome)]) = 2, 'an unknown / empty kind is a TODO');
+  Check('glyph.note.suffix', GlyphNoteSuffix([O, P]) = '; glyphs: 1 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', GlyphNoteSuffix([O, P]));
+  Check('glyph.note.none', GlyphNoteSuffix(nil) = '');
+  Line:= GlyphReportNote(O);
+  Check('glyph.report.note', Line = 'Btn1.Picture -> OptionsImage.Glyph: glyph-stitched, N=5, G[1/5]G[2/5]G[3/5]G[4/5], dropped 5 -- slot 5 dropped by rule line 52', Line);
+  Line:= GlyphReportNote(P);
+  Check('glyph.report.note.todo', Line = 'Btn2.Picture -> OptionsImage.Glyph: glyph-no-alternative, N=2 -- N=2 matched no alternative; TODO written', Line);
+  P.Message:= '';
+  Line:= GlyphReportNote(P);
+  Check('glyph.report.note.no.message', Line = 'Btn2.Picture -> OptionsImage.Glyph: glyph-no-alternative, N=2', Line);
+  Check('glyph.report.note.no.tab', Pos(#9, GlyphReportNote(O)) = 0, 'the note is ONE report cell');
+  Check('glyph.summary', GlyphRunSummary(2) = '2 unit(s) have glyph TODOs -- each one''s implementation section starts with the TODO line; see the report', GlyphRunSummary(2));
+  Check('glyph.summary.none', GlyphRunSummary(0) = '');
+end;
+
+{ C10 Task 5: a plain Assign must never retarget a glyph link. FindLinkForFrom
+  returns the FIRST link per From, so on a G-link (or a From with several links)
+  AssignLink would rewrite LinkTo and silently keep the expression -- the guard
+  refuses instead and names the link. A plain single link is still re-assignable. }
+procedure TestGlyphAssignGuard;
+const
+  BLOCK =
+    '#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons'#13#10 +
+    '#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] : AssignGraphic'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Glyph G[count]'#13#10 +
+    '#link Caption <- Caption'#13#10 +
+    '#link Hint <- Tag'#13#10 +
+    '#link HelpKeyword <- Tag'#13#10;
+  EXPECT_GLINK = 'Blocked: #link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] is a glyph link -- change it through Mapping > Glyph expression... or the Raw DSL, or Unassign it first.';
+  EXPECT_TWO   = 'Blocked: Tag has 2 #link lines in this rule -- an assign would retarget only the first; edit them in the Raw DSL.';
+var
+  Book : TRuleBook;
+  Links: TArray<TRuleNode>;
+  S    : string;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BLOCK);
+    Links:= Book.LinksForBlock(0);
+    Check('glyph.assign.plain.ok', GlyphAssignBlock(Links, 'Caption') = '', GlyphAssignBlock(Links, 'Caption'));
+    Check('glyph.assign.unlinked.ok', GlyphAssignBlock(Links, 'Width') = '', GlyphAssignBlock(Links, 'Width'));
+    S:= GlyphAssignBlock(Links, 'glyph');
+    Check('glyph.assign.glink.refused', S = EXPECT_GLINK, S);
+    S:= GlyphAssignBlock(Links, 'Tag');
+    Check('glyph.assign.two.links.refused', S = EXPECT_TWO, S);
+    Check('glyph.assign.no.links.ok', GlyphAssignBlock(nil, 'Glyph') = '');
+    // R4: the count link is not a grid row; the image link's dialog finds it by From.
+    Check('glyph.count.link.found', (FindCountLink(Links, 'glyph') <> nil) and (FindCountLink(Links, 'glyph').LinkTo = 'OptionsImage.NumGlyphs'));
+    Check('glyph.count.link.none', (FindCountLink(Links, 'Caption') = nil) and (FindCountLink(nil, 'Glyph') = nil));
+  finally
+    Book.Free;
+  end;
+end;
+
+{ Final review Minor 1: the grid's cell painter and its hint ask ONE routine which rule
+  nodes' marks a cell shows -- the row's link, plus in the Glyph column the From's
+  G[count] link (no grid row of its own, ruling R4) -- so the hint can never name less
+  than the cell paints. }
+procedure TestGlyphGridMarkNodes;
+const
+  BLOCK =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link Caption <- Caption'#13#10;
+  IDX_COUNT   = 1;
+  IDX_CAPTION = 2;
+  WITH_COUNT  = 2;
+var
+  Book: TRuleBook;
+  L   : TArray<TRuleNode>;
+  R   : TArray<TRuleNode>;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(BLOCK);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.marks.no.link', Length(GridMarkNodes(L, nil, 'Picture', True)) = 0);
+    R:= GridMarkNodes(L, L[0], 'picture', True);
+    Check('glyph.marks.glyph.col.adds.count.link', (Length(R) = WITH_COUNT) and (R[0] = L[0]) and (R[1] = L[IDX_COUNT]), IntToStr(Length(R)));
+    R:= GridMarkNodes(L, L[0], 'Picture', False);
+    Check('glyph.marks.other.col.link.only', (Length(R) = 1) and (R[0] = L[0]), IntToStr(Length(R)));
+    R:= GridMarkNodes(L, L[IDX_COUNT], 'Picture', True);
+    Check('glyph.marks.count.row.once', (Length(R) = 1) and (R[0] = L[IDX_COUNT]), IntToStr(Length(R)));
+    R:= GridMarkNodes(L, L[IDX_CAPTION], 'Caption', True);
+    Check('glyph.marks.no.count.link', (Length(R) = 1) and (R[0] = L[IDX_CAPTION]), IntToStr(Length(R)));
+  finally
+    Book.Free;
+  end;
+end;
+{ C10 Task 5 fix 1: the dialog's G[count] rule must not count the link being EDITED
+  as its own image link; only a count link with NO image link left is an orphan.
+  Fix 2: the editor never refuses what the engine accepts -- several G[count] links
+  from one From to DIFFERENT Tos are engine-valid (CheckGlyphLink counts image links
+  only); only an exact duplicate (same From AND To) is refused, and the dialog never
+  AUTO-creates a count link beside an existing one. }
+procedure TestGlyphCountLinkEdit;
+const
+  ONE_IMAGE =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10;
+  COUNT_FIRST =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10;
+  TWO_IMAGES_COUNT =
+    '#convert A -> B'#13#10 +
+    '#link Glyph1 <- Picture G[1/2]'#13#10 +
+    '#link Glyph2 <- Picture G[2/2]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10;
+  COUNT_ONLY =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10;
+  TWO_COUNTS =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link Other.GlyphCount <- Picture G[count]'#13#10;
+  SAME_TO =
+    '#convert A -> B'#13#10 +
+    '#link OptionsImage.Glyph <- Picture G[*/4]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture G[count]'#13#10 +
+    '#link OptionsImage.NumGlyphs <- Picture'#13#10;
+  FOUND_0 = 'G[count] needs exactly one image link from Picture; found 0';
+  DUP     = 'G[count] from Picture is already linked: #link OptionsImage.NumGlyphs <- Picture G[count]';
+  IDX_THIRD = 2;
+  BOOKS: array[0..3] of string = (ONE_IMAGE, COUNT_FIRST, TWO_IMAGES_COUNT, TWO_COUNTS);
+  EXPRS: array[0..1] of string = ('G[count]', 'G[*/4]');
+var
+  Book    : TRuleBook;
+  L       : TArray<TRuleNode>;
+  Edited  : TRuleNode;
+  N       : TRuleNode;
+  Existing: TRuleNode;
+  Step    : TCountLinkStep;
+  Src     : string;
+  Expr    : string;
+  Want    : Boolean;
+  Counts  : Integer;
+  Worst   : Integer;
+begin
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(ONE_IMAGE);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.edit.self.excluded', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = FOUND_0, CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
+    Check('glyph.count.edit.image.ok', CountLinkIssueFor(L, L[0], 'Picture', 'G[*/2]') = '');
+    Check('glyph.count.find.exclude.other', FindCountLink(L, 'Picture', L[0]) = L[1]);
+
+    Book.LoadFromString(COUNT_FIRST);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.edit.count.first.ok', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
+    Check('glyph.count.find.exclude.self', FindCountLink(L, 'Picture', L[0]) = nil);
+
+    Book.LoadFromString(TWO_IMAGES_COUNT);
+    L:= Book.LinksForBlock(0);
+    // Glyph1 -> G[count] beside a count link to ANOTHER To: engine-valid, no refusal.
+    Check('glyph.count.edit.other.to.ok', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[0], 'Picture', 'G[count]'));
+    Check('glyph.count.orphan.images.left', OrphanedCountLink(L, 'Picture') = nil);
+    Check('glyph.count.orphan.one.image.left', OrphanedCountLink([L[1], L[IDX_THIRD]], 'Picture') = nil, 'unassigning one of several image links keeps the count link');
+
+    Book.LoadFromString(COUNT_ONLY);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.orphan.none.left', OrphanedCountLink(L, 'Picture') = L[0]);
+
+    Book.LoadFromString(TWO_COUNTS);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.two.tos.first.ok', CountLinkIssueFor(L, L[1], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[1], 'Picture', 'G[count]'));
+    Check('glyph.count.two.tos.second.ok', CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]') = '', CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]'));
+
+    Book.LoadFromString(SAME_TO);
+    L:= Book.LinksForBlock(0);
+    Check('glyph.count.edit.exact.duplicate', CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]') = DUP, CountLinkIssueFor(L, L[IDX_THIRD], 'Picture', 'G[count]'));
+  finally
+    Book.Free;
+  end;
+
+  Existing:= TRuleNode.Create;
+  try
+    Check('glyph.count.step.add', CountLinkStepFor(nil, 'G[*/4]', True) = clsAdd);
+    Check('glyph.count.step.keep', CountLinkStepFor(Existing, 'G[*/4]', True) = clsNone);
+    Check('glyph.count.step.remove', CountLinkStepFor(Existing, 'G[*/4]', False) = clsRemove);
+    Check('glyph.count.step.none', CountLinkStepFor(nil, 'G[*/4]', False) = clsNone);
+    Check('glyph.count.step.count.expr', (CountLinkStepFor(Existing, 'G[count]', False) = clsNone) and (CountLinkStepFor(nil, 'G[count]', True) = clsNone));
+  finally
+    Existing.Free;
+  end;
+
+  // Every edit the dialog can confirm (CountLinkIssueFor silent), on every link of
+  // every fixture, with the box either way: the dialog never AUTO-adds a count link
+  // when one from this From already exists after the edit (the edited link included).
+  // A book may hold several count links the user wrote; the dialog adds none beside them.
+  Worst:= 0;
+  Book:= TRuleBook.Create;
+  try
+    for Src in BOOKS do
+    begin
+      Book.LoadFromString(Src);
+      L:= Book.LinksForBlock(0);
+      for Edited in L do
+        for Expr in EXPRS do
+          for Want in [False, True] do
+          begin
+            if CountLinkIssueFor(L, Edited, 'Picture', Expr) <> '' then
+              Continue;
+            Existing:= FindCountLink(L, 'Picture', Edited);
+            Step:= CountLinkStepFor(Existing, Expr, Want);
+            Counts:= 0;
+            for N in L do
+              if (N <> Edited) and (N.GlyphExpr = 'G[count]') then
+                Inc(Counts);
+            if Expr = 'G[count]' then
+              Inc(Counts);
+            if Step = clsRemove then
+              Dec(Counts);
+            // Counts = count links after the edit, before any automatic insert.
+            if (Step = clsAdd) and (Counts > 0) then
+              Inc(Worst);
+          end;
+    end;
+  finally
+    Book.Free;
+  end;
+  Check('glyph.count.never.auto.second', Worst = 0, Format('%d edit(s) auto-added a count link beside an existing one', [Worst]));
+end;
+{ C10 fix round 1: the block merger must see a #link's glyph expression. Once the
+  expression left LinkFrom, two links to one To that differ ONLY in the expression
+  compared equal and the incoming one was dropped as a duplicate. They are a
+  CONFLICT (the user picks), an identical pair is still a duplicate, and two
+  G-links from one FromPath to different To paths both merge in. }
+procedure TestGlyphLinkMerge;
+const
+  HDR       = '#convert Abcbtn.TabcToggleBtn -> cxButtons.TcxButton'#13#10;
+  LINE_ALL  = '#link OptionsImage.Glyph <- Picture G[*/4]';
+  LINE_ONE  = '#link OptionsImage.Glyph <- Picture G[1/5]';
+  LINE_TWO  = '#link SomeOtherGlyph <- Picture G[5/5]';
+  LINE_CASE = '#link OptionsImage.Glyph <- Picture G[COUNT]';
+  LINE_LOW  = '#link OptionsImage.Glyph <- Picture G[count]';
+var
+  Plan  : TMergePlan       ;
+  Merged: TRuleBlocks      ;
+  Book  : TRuleBook        ;
+  Links : TArray<TRuleNode>;
+  BLinks: TArray<TBlockLink>;
+begin
+  BLinks:= BlockLinks(SplitRulesBlocks(HDR + LINE_ALL + #13#10)[0]);
+  Check('glyph.blocklinks.expr', (Length(BLinks) = 1) and (BLinks[0].LinkFrom = 'Picture') and (BLinks[0].GlyphExpr = 'G[*/4]'),
+    'BlockLinks must carry the glyph expression');
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_ALL + #13#10), SplitRulesBlocks(HDR + LINE_ONE + #13#10));
+  Check('glyph.merge.expr.differs.conflict', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maConflict),
+    'links differing only in the glyph expression must not be skipped as duplicates');
+  if Length(Plan.Items) = 1 then
+  begin
+    Check('glyph.merge.conflict.shows.expr', (Plan.Items[0].ExistingFrom = 'Picture G[*/4]') and (Plan.Items[0].IncomingFrom = 'Picture G[1/5]'),
+      Plan.Items[0].ExistingFrom + ' | ' + Plan.Items[0].IncomingFrom);
+    Merged:= ApplyMerge(Plan, [mrTakeIncoming]);
+    Check('glyph.merge.take.incoming', JoinBlocks(Merged) = HDR + LINE_ONE + #13#10, JoinBlocks(Merged));
+    Merged:= ApplyMerge(Plan, [mrKeepExisting]);
+    Check('glyph.merge.keep.existing', JoinBlocks(Merged) = HDR + LINE_ALL + #13#10, JoinBlocks(Merged));
+  end;
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_LOW + #13#10), SplitRulesBlocks(HDR + LINE_CASE + #13#10));
+  Check('glyph.merge.expr.case.sensitive', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maConflict),
+    'the expression compares case-SENSITIVELY, as the engine splits it');
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_ALL + #13#10), SplitRulesBlocks(HDR + LINE_ALL + #13#10));
+  Check('glyph.merge.identical.dedup', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maSkipDuplicate),
+    'an identical G-link is still a duplicate');
+
+  Plan:= PlanMerge(SplitRulesBlocks(HDR + LINE_ALL + #13#10), SplitRulesBlocks(HDR + LINE_TWO + #13#10));
+  Check('glyph.merge.two.from.same', (Length(Plan.Items) = 1) and (Plan.Items[0].Action = maMergeLink),
+    'a second G-link from the same FromPath to another To merges in');
+  Merged:= ApplyMerge(Plan, []);
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(JoinBlocks(Merged));
+    Links:= Book.LinksForBlock(0);
+    Check('glyph.merge.two.from.same.distinct',
+      (Length(Links) = 2) and (Links[0].GlyphExpr = 'G[*/4]') and (Links[1].GlyphExpr = 'G[5/5]')
+      and (Links[0].LinkFrom = 'Picture') and (Links[1].LinkFrom = 'Picture'),
+      JoinBlocks(Merged));
+  finally
+    Book.Free;
+  end;
+end;
+
+{ C10 E10: the engine's G-expression error marks the G-link node (so the Glyph cell
+  shows [!]) and a good book marks nothing. Real captured engine text (1.21.1 pin,
+  convert-validate --rules <book>, parse-only, no --db), injected as the validate
+  function exactly as TestValidateScopeRun feeds its captures. }
+procedure TestGlyphValidateMarks;
+var
+  Dir    : string;
+  Bad    : string;
+  Ok     : string;
+  Txt    : string;
+  Dropped: Integer;
+  Map    : TArray<TRuleNode>;
+  Fake   : TValidateFn;
+  Capture: string;
+  Book   : TRuleBook;
+  N      : TRuleNode;
+  Hits   : Integer;
+  Text   : string;
+begin
+  Dir:= TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph'));
+  if not (TFile.Exists(TPath.Combine(Dir, 'validate-glyph-bad.txt'))
+    and TFile.Exists(TPath.Combine(Dir, 'validate-glyph-ok.txt'))
+    and TFile.Exists(TPath.Combine(Dir, 'BitBtn-glyph-bad.rules'))
+    and TFile.Exists(TPath.Combine(Dir, 'BitBtn-glyph.rules'))) then
+  begin
+    Skip('glyph.validate.fixture', 'missing captures under ' + Dir);
+    Exit;
+  end;
+  Bad:= TFile.ReadAllText(TPath.Combine(Dir, 'validate-glyph-bad.txt'));
+  Ok:= TFile.ReadAllText(TPath.Combine(Dir, 'validate-glyph-ok.txt'));
+  Check('glyph.validate.capture.shape', Pos('G-expression column', Bad) > 0, Bad);
+  Fake:= function(const AText, AFrom, ATo: string): string
+    begin
+      Result:= Capture;
+    end;
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(TFile.ReadAllText(TPath.Combine(Dir, 'BitBtn-glyph-bad.rules')));
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    Capture:= Bad;
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, nil, RunScopedValidation(Txt, nil, Fake));
+    Hits:= 0;
+    Text:= '';
+    for N in Book.Nodes do
+      if (N.Kind = rnkLink) and (N.GlyphExpr <> '') and (Length(N.Marks) > 0) and not N.Marks[0].IsWarning then
+      begin
+        Inc(Hits);
+        Text:= N.Marks[0].Text;
+      end;
+    Check('glyph.validate.marks.link', Hits = 1, IntToStr(Hits));
+    Check('glyph.validate.marks.text', Pos('G-expression column', Text) > 0, Text);
+
+    Book.LoadFromString(TFile.ReadAllText(TPath.Combine(Dir, 'BitBtn-glyph.rules')));
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    Capture:= Ok;
+    ApplyValidateMarks(Book.Nodes.ToArray, Map, nil, RunScopedValidation(Txt, nil, Fake));
+    Hits:= 0;
+    for N in Book.Nodes do
+      Hits:= Hits + Length(N.Marks);
+    Check('glyph.validate.ok.no.marks', Hits = 0, IntToStr(Hits));
+  finally
+    Book.Free;
+  end;
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -10114,6 +10927,17 @@ begin
     TestValidateScopeRun;
     TestValidateTextStreams;
     TestValidateScopeCancel;
+    TestGlyphLinkParse;
+    TestGlyphDecisions;
+    TestGlyphAssignGuard;
+    TestGlyphCountLinkEdit;
+    TestGlyphGridMarkNodes;
+    TestGlyphCastLibArgs;
+    TestGlyphApplyParse;
+    TestGlyphRunner;
+    TestGlyphValidateMarks;
+    TestGlyphLinkMerge;
+    TestGlyphConvertTab;
 
     FreeAndNil(GParseBook);
 

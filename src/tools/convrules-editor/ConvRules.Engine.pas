@@ -81,6 +81,10 @@ const
   /// <remarks>ConvRules.InheritanceEngine.IsStaleIndexError matches on it to decide
   /// that ONE incremental reindex may fix the read.</remarks>
   INDEX_STALE_MARKER = 'the index is stale';
+  /// <summary>info --json capability: convert-apply realises #link glyph expressions
+  /// (C10, engine ask N1). Without it a G-link book is refused by the engine, so the
+  /// Convert tab greys such a book instead of running it.</summary>
+  CAPABILITY_GLYPH_STITCH = 'glyph_stitch';
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`
@@ -318,6 +322,7 @@ type
       FExePath: string        ;
       FDbList : TArray<string>;
       FTreeDepth     : Integer        ;
+      FCastLibFile   : string         ;
       FProgressLines : Boolean        ;
       FLongCallRunner: TLongCallRunner;
       FLastCancelled : Boolean        ;
@@ -412,6 +417,9 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgs: string; overload;
+      /// <summary>The --castlib argument for convert-apply / convert-validate.</summary>
+      /// <returns>' --castlib "&lt;file&gt;"' when CastLibFile names an existing file, else ''.</returns>
+      function CastLibArgs: string;
       /// <summary>Qualify a bare class name to its unit-qualified form (TcxButton ->
       /// cxButtons.TcxButton) via `query --name`, which is what `proptree --qname`
       /// requires. Discards the tie count; see the overload below.</summary>
@@ -1075,8 +1083,8 @@ type
       /// <remarks>Drains on the calling thread: from the UI thread the UI is
       /// frozen for up to ATimeoutMs.</remarks>
       function RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;
-      /// <summary>`convert-apply --unit AUnitPas --rules ARulesFile --apply
-      /// --no-backup --format json` against ADbs, bounded by CONVERT_TIMEOUT_MS.</summary>
+      /// <summary>`convert-apply --unit AUnitPas --rules ARulesFile [--castlib CastLibFile]
+      /// --apply --no-backup --format json` against ADbs, bounded by CONVERT_TIMEOUT_MS.</summary>
       /// <param name="AUnitPas">The .pas to convert in place (its .dfm goes with it).</param>
       /// <param name="ARulesFile">The .rules book.</param>
       /// <param name="ADbs">--db list; the unit must be indexed in one of them.</param>
@@ -1133,6 +1141,10 @@ type
       property ExePath: string read FExePath;
       /// <summary>--depth for proptree / convert-scaffold; 0 = omit (engine without book_depth).</summary>
       property TreeDepth: Integer read FTreeDepth write FTreeDepth;
+      /// <summary>The .castlib handed to convert-apply and convert-validate as
+      /// --castlib (C10 E11). '' or a missing file = no argument: the engine exits 2 on
+      /// a file it cannot read, which would fail every validate.</summary>
+      property CastLibFile: string read FCastLibFile write FCastLibFile;
       /// <summary>True = pass --progress-interval on proptree (engine reports progress_lines).</summary>
       property ProgressLines: Boolean read FProgressLines write FProgressLines;
       /// <summary>Runs proptree behind a progress window; nil = run inline, no cancel
@@ -1409,10 +1421,18 @@ begin
   Result:= RunCaptureTimed(AArgs, ENGINE_TIMEOUT_MS, AOutput);
 end;
 
+function TEngineAdapter.CastLibArgs: string;
+begin
+  if (FCastLibFile <> '') and TFile.Exists(FCastLibFile) then
+    Result:= Format(' --castlib "%s"', [FCastLibFile])
+  else
+    Result:= '';
+end;
+
 function TEngineAdapter.ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; out AJson: string): Integer;
 begin
-  Result:= RunCaptureTimed(Format('convert-apply --unit "%s" --rules "%s"%s --apply --no-backup --format json',
-    [AUnitPas, ARulesFile, DbArgsFor(ADbs)]), CONVERT_TIMEOUT_MS, AJson);
+  Result:= RunCaptureTimed(Format('convert-apply --unit "%s" --rules "%s"%s%s --apply --no-backup --format json',
+    [AUnitPas, ARulesFile, DbArgsFor(ADbs), CastLibArgs]), CONVERT_TIMEOUT_MS, AJson);
 end;
 
 function TEngineAdapter.IndexProject(const AProjectFile, AProjectDb: string; out AOutput: string): Integer;
@@ -3070,7 +3090,7 @@ begin
     Args:= Format('convert-validate --rules "%s"', [Tmp]);
     if (AFrom <> '') and (ATo <> '') then
       Args:= Args + Format(' --from "%s" --to "%s"', [AFrom, ATo]);
-    Args:= Args + DbArgs;
+    Args:= Args + DbArgs + CastLibArgs;
     // SEPARATE pipes, not RunCapture's merged one: the diagnostics are read line by
     // line, and a merged pipe interleaves stdout and stderr by CHUNK -- a driven Save
     // showed the tail of stderr's "resolver: ..." advisory, cut off from its head,

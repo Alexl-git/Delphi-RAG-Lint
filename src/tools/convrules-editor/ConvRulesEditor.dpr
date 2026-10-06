@@ -15,10 +15,12 @@ uses
   , Vcl.Styles
   , ConvRules.Theme in 'ConvRules.Theme.pas'
   , ConvRules.Model in 'ConvRules.Model.pas'
+  , ConvRules.Glyph in 'ConvRules.Glyph.pas'
   , ConvRules.Units in 'ConvRules.Units.pas'
   , ConvRules.Casts in 'ConvRules.Casts.pas'
 , ConvRules.ConvCatalog in 'ConvRules.ConvCatalog.pas'
   , DRagLint.Convert.CastLib in '..\..\report\DRagLint.Convert.CastLib.pas'
+  , DRagLint.Convert.GlyphExpr in '..\..\report\DRagLint.Convert.GlyphExpr.pas'
   , ConvRules.Engine in 'ConvRules.Engine.pas'
   , ConvRules.EngineProgress in 'ConvRules.EngineProgress.pas'
   , ConvRules.EngineWait in 'ConvRules.EngineWait.pas'
@@ -47,6 +49,7 @@ uses
   , ConvRules.DropTarget in 'ConvRules.DropTarget.pas'
   , ConvRules.ConvertTab in 'ConvRules.ConvertTab.pas'
   , ConvRules.ValidateScope in 'ConvRules.ValidateScope.pas'
+  , ConvRules.GlyphForm in 'ConvRules.GlyphForm.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
 

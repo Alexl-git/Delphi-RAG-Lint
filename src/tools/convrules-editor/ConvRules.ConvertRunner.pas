@@ -23,6 +23,9 @@ const
   /// <summary>The run report's Status column on an E10 `inherited left` line
   /// (InheritedReportLines).</summary>
   REPORT_STATUS_INHERITED_LEFT = 'inherited left';
+  /// <summary>The run report's Status column on a glyph outcome line
+  /// (GlyphReportLines).</summary>
+  REPORT_STATUS_GLYPH = 'glyph';
 
 type
   /// <summary>Outcome of one results-grid row.</summary>
@@ -195,11 +198,39 @@ function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvert
 /// <returns>[] unless ARow is csConverted and AInheritedSupported.</returns>
 function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported, ARetypeSupported: Boolean): TArray<string>;
 
+/// <summary>PURE: the run report's glyph lines for one row (spec E13, amended to the
+/// report's one shape): one per engine glyphs[] outcome, in the same 8 tab-separated
+/// columns as every report row -- Book, Unit, REPORT_STATUS_GLYPH, four empty cells,
+/// GlyphReportNote.</summary>
+/// <param name="ARow">A run row.</param>
+/// <returns>[] unless ARow is csConverted: a rolled-back row's to-do markers were
+/// restored away (the same rule as GlyphTodoUnitCount).</returns>
+function GlyphReportLines(const ARow: TConvertRow): TArray<string>;
+
+/// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
+/// <param name="ARows">The run's rows.</param>
+/// <returns>The number of distinct UnitPas (compared case-insensitively) with at least
+/// one csConverted row whose Apply.Glyphs holds a to-do (GlyphTodoCount &gt; 0). A unit
+/// two books converted counts once; a csRolledBack row counts nowhere -- its change,
+/// and the to-do marker it wrote, were restored away.</returns>
+function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
+
+/// <summary>The run summary's leading sentences, most severe first.</summary>
+/// <param name="ANotRestored">Units whose restore failed (may be half-converted); [] = none.</param>
+/// <param name="AGlyphSummary">GlyphRunSummary of the run; '' = no glyph to-dos.</param>
+/// <param name="ABody">The ordinary summary (counts, problems, report path).</param>
+/// <returns>'RESTORE FAILED for &lt;units&gt; -- may be half-converted; restore by hand from the
+/// backups its row names. ' when ANotRestored is not empty, then AGlyphSummary + two spaces
+/// when it is set, then ABody. A half-converted unit always leads; the glyph to-dos come
+/// next.</returns>
+function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
+
 implementation
 
 uses
   System.IOUtils
   , System.StrUtils
+  , ConvRules.Glyph
   , ConvRules.UnitStatus  // dl:ok unused-unit-in-uses@ec0d -- REVIEWED 2026-09-29 false positive: TFileProbe (FileProbe's return type) is declared here; removing the unit fails with E2003
   ;
 
@@ -249,6 +280,35 @@ begin
     Exit;
   for var LLeft: TInheritedLeft in ARow.Apply.InheritedLeft do
     Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft, ARetypeSupported)])];
+end;
+
+function GlyphReportLines(const ARow: TConvertRow): TArray<string>;
+begin
+  Result:= nil;
+  if ARow.Status <> csConverted then
+    Exit;
+  for var LG: TGlyphOutcome in ARow.Apply.Glyphs do
+    Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_GLYPH, '', '', '', '', GlyphReportNote(LG)])];
+end;
+
+function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
+var
+  LUnits: TArray<string>;
+begin
+  LUnits:= nil;
+  for var LRow: TConvertRow in ARows do
+    if (LRow.Status = csConverted) and (GlyphTodoCount(LRow.Apply.Glyphs) > 0) and not MatchText(LRow.UnitPas, LUnits) then
+      LUnits:= LUnits + [LRow.UnitPas];
+  Result:= Length(LUnits);
+end;
+
+function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
+begin
+  Result:= ABody;
+  if AGlyphSummary <> '' then
+    Result:= AGlyphSummary + '  ' + Result;
+  if Length(ANotRestored) > 0 then
+    Result:= Format('RESTORE FAILED for %s -- may be half-converted; restore by hand from the backups its row names. ', [string.Join(', ', ANotRestored)]) + Result;
 end;
 
 function FileProbe: TFileProbe;
@@ -501,7 +561,7 @@ var
     Row.Status:= csConverted;
     // The engine's inherited[] is shown unfiltered (ruling M4): the unit was reindexed
     // before its first book, so the engine already knows which ancestors this run converted.
-    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported);
+    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(Row.Apply.Glyphs);
     Add;
   end;
 
