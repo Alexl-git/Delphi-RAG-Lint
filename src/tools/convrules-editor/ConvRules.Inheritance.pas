@@ -59,6 +59,10 @@ type
     /// stopping at (and including) the innermost enclosing `inline` block; [] for a
     /// top-level object. ResolveInstance's frame fallback tries each in turn.</summary>
     Enclosing : TArray<string>;
+    /// <summary>True = an E2b CODE use (no .dfm block): Line is the first use in the
+    /// unit's .pas, Opener is doInherited, FrameClass and ParentType are '', Enclosing
+    /// is [].</summary>
+    FromCode  : Boolean;
   end;
 
   /// <summary>What one .dfm says about inheritance.</summary>
@@ -71,6 +75,14 @@ type
     Instances: TArray<TInheritedInstance>;
   end;
 
+  /// <summary>One field a class declares itself, with a From type.</summary>
+  TFieldDecl = record
+    /// <summary>Field name ('tblFtrs').</summary>
+    Name    : string;
+    /// <summary>Its class as declared ('TTable').</summary>
+    TypeName: string;
+  end;
+
   /// <summary>What the project index says about one class.</summary>
   TClassInfo = record
     /// <summary>Exactly one unit of the project index declares the class.</summary>
@@ -81,6 +93,9 @@ type
     PasPath    : string;
     /// <summary>The class's first ancestor as written ('TDataModule'); '' when none.</summary>
     ParentClass: string;
+    /// <summary>The From-typed fields the class ITSELF declares (not inherited ones);
+    /// what an E2b code use is matched against.</summary>
+    Fields     : TArray<TFieldDecl>;
   end;
 
   /// <summary>Asks the project index about a class (TEngineAdapter.LookupClass in the
@@ -94,6 +109,19 @@ type
 
   /// <summary>Reads a text file (a .dfm).</summary>
   TDfmTextReader = reference to function(const APath: string; out AText: string): TDfmRead;
+
+  /// <summary>One identifier the unit's own class methods use (TEngineAdapter.ListCodeRefs,
+  /// mapped through CodeUseName).</summary>
+  TCodeUse = record
+    /// <summary>The identifier: an implicit-Self name, or a receiver's first segment.</summary>
+    Name: string;
+    /// <summary>1-based .pas line.</summary>
+    Line: Integer;
+  end;
+
+  /// <summary>Asks the project index which identifiers AClassName's methods in AUnitPas use.</summary>
+  /// <remarks>False = the index could not answer (unknown, never "no uses").</remarks>
+  TCodeUseLookup = reference to function(const AUnitPas, AClassName: string; out AUses: TArray<TCodeUse>): Boolean;
 
   /// <summary>The declaring ancestor's state for one inherited instance (spec Terms).</summary>
   /// <remarks>asUnconverted: the ancestor's object still has the instance's (From)
@@ -210,15 +238,25 @@ function UnitNameOf(const APasPath: string): string;
 /// caller (AnalyzeUnit) turns that into Known = False, never into a report.</returns>
 function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup; const AReader: TDfmTextReader): TInstanceVerdict;
 
-/// <summary>PURE: the C8 analysis of one listed unit (spec E1-E3).</summary>
+/// <summary>PURE: the C8 analysis of one listed unit (spec E1-E3, E2b).</summary>
 /// <param name="AUnitPas">The listed .pas; its .dfm is ChangeFileExt(AUnitPas, DFM_EXT).</param>
 /// <param name="APairs">The checked books' pairs; empty = nothing is recorded (E3).</param>
-/// <param name="ALookup">The project index.</param>
+/// <param name="ALookup">The project index (class chain and declared From-typed fields).</param>
 /// <param name="AReader">The file system.</param>
+/// <param name="ACodeUses">The unit's code uses (E2b); nil = .dfm only.</param>
 /// <returns>Known = False when there is nothing to say (see TUnitInheritance.Known);
-/// otherwise one verdict per `inherited` instance whose class is a From type. `inline`
+/// otherwise one verdict per `inherited` .dfm instance whose class is a From type, then
+/// one per E2b code use (FromCode, asUnconverted) not already reported. `inline`
 /// instances are the unit's OWN frames and are not verdicts; their children are.</returns>
-function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader): TUnitInheritance;  // dl:ok unused-public-symbol@fe67 -- REVIEWED 2026-10-05 called by the model tests (inherit.walk.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+/// <remarks>A code use is an identifier the unit's own class's methods use that an
+/// ANCESTOR declares as a field of a From type (TClassInfo.Fields), found on the same
+/// walk as an instance; its Chain follows E2a (every ancestor whose .dfm opens it with a
+/// From type, plus the declaring unit). Dropped, not reported: a name the .dfm already
+/// reported, a field of the unit's own class, a name no project ancestor declares, and
+/// a field whose declared type is not a From type (a converted ancestor, E11). A code-use
+/// walk that cannot decide (asUnknown), or ACodeUses answering False, makes the unit
+/// Known = False with Error, like an instance.</remarks>
+function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader; const ACodeUses: TCodeUseLookup = nil): TUnitInheritance;  // dl:ok unused-public-symbol@af24 -- REVIEWED 2026-10-05 called by the model tests (inherit.walk.*, code.use.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
 
 /// <summary>PURE: the spec E8 note for one asOutside verdict.</summary>
 /// <param name="AVerdict">A verdict from ResolveInstance / AnalyzeUnit.</param>
@@ -234,6 +272,20 @@ function OutsideNote(const AVerdict: TInstanceVerdict): string;  // dl:ok unused
 /// <param name="ACache">Owned by the caller; clear it whenever the index changes.</param>
 /// <returns>A lookup that asks AInner once per class; a Failed answer is NOT cached.</returns>
 function CachingLookup(const AInner: TClassLookup; ACache: TDictionary<string, TClassInfo>): TClassLookup;  // dl:ok unused-public-symbol@867b -- REVIEWED 2026-10-05 called by the model tests (inherit.cache.*) only until the C8 Convert-tab tasks wire it into the editor; drop this marker when they do
+
+/// <summary>PURE: the identifier a `refs` row stands for: the receiver's first segment
+/// ('Self.' skipped; cut at '.', '[', '(' or a space), else the name itself.</summary>
+/// <param name="AName">refs.name_text.</param>
+/// <param name="AReceiver">refs.receiver_text; '' (or 'Self') for an implicit-Self use.</param>
+/// <returns>'tblFtrs' for ('IndexName', 'tblFtrs') and for ('Post', 'Self.tblFtrs').</returns>
+function CodeUseName(const AName, AReceiver: string): string;  // dl:ok unused-public-symbol@b129 -- REVIEWED 2026-10-05 called by the model tests (code.use.name, FakeCodeUses) only until the C8 ListCodeRefs task (Task 4) calls it from the engine adapter; drop this marker when it does
+
+/// <summary>PURE: the converted row's note for E2b code uses the run could not convert
+/// (spec E10, editor side -- the engine's inherited[] covers .dfm instances only).</summary>
+/// <param name="AUnit">The unit's analysis taken before the run.</param>
+/// <returns>'' for none; else per declaring unit, in first-seen order, 'N inherited code
+/// use(s) left: ancestor &lt;U&gt; not converted', joined '; '.</returns>
+function CodeUseLeftNote(const AUnit: TUnitInheritance): string;  // dl:ok unused-public-symbol@6a7d -- REVIEWED 2026-10-05 called by the model tests (code.use.left.note*) only until the C8 E10 row-note task wires it into the editor; drop this marker when it does
 
 /// <summary>A TDfmTextReader over the real file system (TFile.ReadAllText).</summary>
 /// <returns>A reader that answers drMissing for a missing file, drUnreadable when
@@ -267,21 +319,39 @@ const
   REASON_CYCLE  = 'the ancestor chain loops back to %s';
   REASON_DEPTH  = 'the ancestor chain is longer than %d classes (stopped at %s)';
   REASON_DFM    = 'the .dfm of %s (%s) is binary or cannot be read';
+  REASON_NO_CODE_USES = 'the project index could not list the code uses of %s';
+  REASON_OF     = '%s: %s';
+  NOTE_CODE_LEFT = '%d inherited code use(s) left: ancestor %s not converted';
+  NOTE_JOIN     = '; ';
+  SELF_WORD     = 'Self';
 
 type
-  // How one WalkChain ended: a .dfm declared the instance; a class is not in the
-  // index; an indexed class has no ancestor; the walk could not decide.
+  // How one WalkChain ended: a .dfm (or, for a code use, a field) declared the
+  // instance; a class is not in the index; an indexed class has no ancestor; the walk
+  // could not decide.
   TWalkEnd = (weDeclared, weLeftIndex, weNoAncestor, weUnknown);
 
   // How one class's .dfm treats an instance name.
   TDfmMatch = (dmNoDfm, dmUnusable, dmNotOpened, dmOpened);
 
-  // What every step of one instance's walk reads.
+  // What every step of one walk reads. Inst.FromCode selects the E2b rule: the
+  // declaration is a TClassInfo.Fields entry, and a .dfm joins the chain when it opens
+  // the name with any From type of Pairs (an instance's own type is not known yet).
   TWalkCtx = record
     Inst  : TInheritedInstance;
     Lookup: TClassLookup;
     Reader: TDfmTextReader;
+    Pairs : TArray<TTypePair>;
   end;
+
+  // One declaring unit and how many verdicts name it (TallyByUnit).
+  TUnitTally = record
+    UnitName: string;
+    Count   : Integer;
+  end;
+
+  // Which verdicts TallyByUnit counts.
+  TVerdictFilter = reference to function(const AVerdict: TInstanceVerdict): Boolean;
 
   // One block header as the walk meets it.
   THeader = record
@@ -543,14 +613,47 @@ begin
   end; // case
 end;
 
+// True when AInfo itself declares a field named AName (AType = its declared class).
+function DeclaresField(const AInfo: TClassInfo; const AName: string; out AType: string): Boolean;
+begin
+  for var LField: TFieldDecl in AInfo.Fields do
+    if SameText(LField.Name, AName) then
+    begin
+      AType:= LField.TypeName;
+      Exit(True);
+    end;
+  AType := '';
+  Result:= False;
+end;
+
+// E2b: AInfo declares the code use's field with AType. A From type is an unconverted
+// inherited use, and the declaring unit closes its Chain; any other type is a
+// converted ancestor (E11), which AnalyzeUnit drops.
+procedure DeclareField(const ACtx: TWalkCtx; const AInfo: TClassInfo; const AType: string; ADepth: Integer; var AVerdict: TInstanceVerdict);
+begin
+  AVerdict.Instance.TypeName:= AType;
+  AVerdict.DeclaringPas     := AInfo.PasPath;
+  AVerdict.DeclaringUnit    := UnitNameOf(AInfo.PasPath);
+  if not IsFromType(AType, ACtx.Pairs) then
+  begin
+    AVerdict.State:= asConverted;
+    Exit;
+  end;
+  AVerdict.State:= asUnconverted;
+  if (Length(AVerdict.Chain) = 0) or not SameText(AVerdict.Chain[High(AVerdict.Chain)].PasPath, AInfo.PasPath) then
+    AVerdict.Chain:= AVerdict.Chain + [ChainUnitOf(AInfo.PasPath, ADepth)];
+end;
+
 // One class of a walk at ADepth. weNoAncestor here means "go on to AParent" (''
 // when the class records no ancestor); weDeclared fills AVerdict's state; a unit
-// whose .dfm opens AInst with its own type joins AVerdict.Chain.
+// whose .dfm opens AInst with its own type (a code use: with a From type) joins
+// AVerdict.Chain. A code use is declared by a field (DeclareField), never by a .dfm.
 function VisitClass(const ACtx: TWalkCtx; const AClass: string; ADepth: Integer; var AVerdict: TInstanceVerdict; out AParent, AReason: string): TWalkEnd;
 var
   Info   : TClassInfo;
   Opener : TDfmOpener;
   ObjType: string;
+  FldType: string;
   Same   : Boolean;
 begin
   AParent:= '';
@@ -572,10 +675,10 @@ begin
     end;
     dmOpened:
     begin
-      Same:= SameText(BareType(ObjType), BareType(ACtx.Inst.TypeName));
+      Same:= if ACtx.Inst.FromCode then IsFromType(ObjType, ACtx.Pairs) else SameText(BareType(ObjType), BareType(ACtx.Inst.TypeName));
       if Same then
         AVerdict.Chain:= AVerdict.Chain + [ChainUnitOf(Info.PasPath, ADepth)];
-      if Opener = doObject then
+      if (Opener = doObject) and not ACtx.Inst.FromCode then
       begin
         AVerdict.DeclaringPas := Info.PasPath;
         AVerdict.DeclaringUnit:= UnitNameOf(Info.PasPath);
@@ -586,6 +689,11 @@ begin
     else
       ; // no .dfm, or it does not open AInst: go on up
   end; // case
+  if (Result = weNoAncestor) and ACtx.Inst.FromCode and DeclaresField(Info, ACtx.Inst.Name, FldType) then
+  begin
+    DeclareField(ACtx, Info, FldType, ADepth, AVerdict);
+    Result:= weDeclared;
+  end;
   AParent:= Info.ParentClass;
 end;
 
@@ -621,7 +729,10 @@ begin
   end;
 end;
 
-function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup; const AReader: TDfmTextReader): TInstanceVerdict;
+// The verdict on ACtx.Inst: the form chain from AStartClass, then the frame fallback
+// over ACtx.Inst.Enclosing ([] for a code use), then the walk's ending as a state
+// (see ResolveInstance). Instances and E2b code uses share it.
+function ResolveWalk(const ACtx: TWalkCtx; const AStartClass: string): TInstanceVerdict;
 var
   LEnd     : TWalkEnd;
   LFallEnd : TWalkEnd;
@@ -630,29 +741,25 @@ var
   LReason  : string;
   LDepth   : Integer;
   LFallback: TInstanceVerdict;
-  LCtx     : TWalkCtx;
 begin
   Result:= Default(TInstanceVerdict);
-  Result.Instance:= AInst;
-  LCtx.Inst  := AInst;
-  LCtx.Lookup:= ALookup;
-  LCtx.Reader:= AReader;
+  Result.Instance:= ACtx.Inst;
   LFallback  := Result;
   LDepth:= 0;
-  LEnd  := WalkChain(LCtx, AStartClass, LDepth, Result, LLast, LReason);
+  LEnd  := WalkChain(ACtx, AStartClass, LDepth, Result, LLast, LReason);
   // A child of an inherited FRAME is declared in the frame's own .dfm, which the form
   // chain never reads (FindDfmObject skips inline blocks): try each enclosing block's
   // class, innermost outward. Each try starts from the form chain's verdict, so the
   // forms that re-open the instance stay in Chain, below the frame (Depth counts on).
   LFallEnd:= weNoAncestor;
-  for var LClass: string in AInst.Enclosing do
+  for var LClass: string in ACtx.Inst.Enclosing do
   begin
     if (LEnd in [weDeclared, weUnknown]) or (LFallEnd in [weDeclared, weUnknown]) then
       Break;
     if SameText(LClass, AStartClass) then
       Continue;
     LFallback:= Result;
-    LFallEnd := WalkChain(LCtx, LClass, LDepth, LFallback, LIgnored, LReason);
+    LFallEnd := WalkChain(ACtx, LClass, LDepth, LFallback, LIgnored, LReason);
   end;
   if LFallEnd in [weDeclared, weUnknown] then
   begin
@@ -683,7 +790,114 @@ begin
   end; // case
 end;
 
-function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader): TUnitInheritance;
+function ResolveInstance(const AInst: TInheritedInstance; const AStartClass: string; const ALookup: TClassLookup; const AReader: TDfmTextReader): TInstanceVerdict;
+var
+  LCtx: TWalkCtx;
+begin
+  LCtx       := Default(TWalkCtx);
+  LCtx.Inst  := AInst;
+  LCtx.Lookup:= ALookup;
+  LCtx.Reader:= AReader;
+  Result:= ResolveWalk(LCtx, AStartClass);
+end;
+
+// E2b: the verdict on one code use, walked from AStartClass (the unit's own class's
+// parent) with ResolveWalk. asUnconverted = an inherited use; asUnknown = the walk could
+// not decide; asConverted / asOutside = not an inherited use.
+function ResolveCodeUse(const AUse: TCodeUse; const AStartClass: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup;
+  const AReader: TDfmTextReader): TInstanceVerdict;
+var
+  LCtx: TWalkCtx;
+begin
+  LCtx       := Default(TWalkCtx);
+  LCtx.Inst.Name    := AUse.Name;
+  LCtx.Inst.Line    := AUse.Line;
+  LCtx.Inst.Opener  := doInherited;
+  LCtx.Inst.FromCode:= True;
+  LCtx.Lookup:= ALookup;
+  LCtx.Reader:= AReader;
+  LCtx.Pairs := APairs;
+  Result:= ResolveWalk(LCtx, AStartClass);
+end;
+
+function CodeUseName(const AName, AReceiver: string): string;
+const
+  CUT_CHARS: array[0..3] of Char = ('.', '[', '(', ' ');
+var
+  LRest: string;
+  LCut : Integer;
+begin
+  LRest:= Trim(AReceiver);
+  if LRest.StartsWith(SELF_WORD + '.', True) then
+    LRest:= LRest.Substring(Length(SELF_WORD) + 1);
+  if (LRest = '') or SameText(LRest, SELF_WORD) then
+    Exit(AName);
+  LCut:= LRest.IndexOfAny(CUT_CHARS);
+  Result:= if LCut < 0 then LRest else LRest.Substring(0, LCut);
+end;
+
+// True when AVerdicts already holds an instance named AName (no double count).
+function Reported(const AVerdicts: TArray<TInstanceVerdict>; const AName: string): Boolean;
+begin
+  for var LV: TInstanceVerdict in AVerdicts do
+    if SameText(LV.Instance.Name, AName) then
+      Exit(True);
+  Result:= False;
+end;
+
+// One entry per name, at its first (lowest) line, in first-seen order.
+function FirstUses(const AUses: TArray<TCodeUse>): TArray<TCodeUse>;
+var
+  LIdx: Integer;
+begin
+  Result:= nil;
+  for var LUse: TCodeUse in AUses do
+  begin
+    LIdx:= -1;
+    for var I: Integer:= 0 to High(Result) do
+      if SameText(Result[I].Name, LUse.Name) then
+        LIdx:= I;
+    if LIdx < 0 then
+      Result:= Result + [LUse]
+    else if LUse.Line < Result[LIdx].Line then
+      Result[LIdx].Line:= LUse.Line;
+  end;
+end;
+
+// E2b: appends the unit's code uses on an ancestor's From-typed field to
+// AResult.Verdicts. False = unknown (AResult.Error says why): the code uses could not
+// be listed, or a use's walk could not decide.
+function AddCodeUses(var AResult: TUnitInheritance; const AOwn: TClassInfo; const ARootClass: string; const APairs: TArray<TTypePair>;
+  const ALookup: TClassLookup; const AReader: TDfmTextReader; const ACodeUses: TCodeUseLookup): Boolean;
+var
+  LUses   : TArray<TCodeUse>;
+  LVerdict: TInstanceVerdict;
+  LOwnType: string;
+begin
+  if not ACodeUses(AResult.UnitPas, ARootClass, LUses) then
+  begin
+    AResult.Error:= Format(REASON_NO_CODE_USES, [ARootClass]);
+    Exit(False);
+  end;
+  for var LUse: TCodeUse in FirstUses(LUses) do
+  begin
+    if Reported(AResult.Verdicts, LUse.Name) or DeclaresField(AOwn, LUse.Name, LOwnType) then
+      Continue; // the .dfm already reported it, or the unit's own class declares it
+    LVerdict:= ResolveCodeUse(LUse, AOwn.ParentClass, APairs, ALookup, AReader);
+    if LVerdict.State = asUnknown then
+    begin
+      AResult.Error:= Format(REASON_OF, [LUse.Name, LVerdict.Reason]);
+      Exit(False); // unknown is never reported as outside, nor dropped
+    end;
+    if LVerdict.State = asUnconverted then
+      AResult.Verdicts:= AResult.Verdicts + [LVerdict];
+    // asOutside (no project ancestor declares it) / asConverted (E11): not a use
+  end;
+  Result:= True;
+end;
+
+function AnalyzeUnit(const AUnitPas: string; const APairs: TArray<TTypePair>; const ALookup: TClassLookup; const AReader: TDfmTextReader;
+  const ACodeUses: TCodeUseLookup): TUnitInheritance;
 var
   LText   : string;
   LScan   : TDfmInheritance;
@@ -705,7 +919,7 @@ begin
   for var LInst: TInheritedInstance in LScan.Instances do
     if (LInst.Opener = doInherited) and IsFromType(LInst.TypeName, APairs) then
       LWanted:= LWanted + [LInst];
-  if Length(LWanted) = 0 then
+  if (Length(LWanted) = 0) and not Assigned(ACodeUses) then
   begin
     Result.Known:= True; // E3: known, and nothing to record
     Exit;
@@ -724,13 +938,55 @@ begin
     LVerdict:= ResolveInstance(LInst, LStart, ALookup, AReader);
     if LVerdict.State = asUnknown then
     begin
-      Result.Error   := LInst.Name + ': ' + LVerdict.Reason;
+      Result.Error   := Format(REASON_OF, [LInst.Name, LVerdict.Reason]);
       Result.Verdicts:= nil;
       Exit; // unknown is never reported as outside
     end;
     Result.Verdicts:= Result.Verdicts + [LVerdict];
   end;
-  Result.Known:= True;
+  Result.Known:= not Assigned(ACodeUses) or AddCodeUses(Result, LOwn, LScan.RootClass, APairs, ALookup, AReader, ACodeUses);
+  if not Result.Known then
+    Result.Verdicts:= nil; // AddCodeUses set Error: unknown, never a partial answer
+end;
+
+// Per declaring unit, in first-seen order, how many of AVerdicts AWanted accepts.
+function TallyByUnit(const AVerdicts: TArray<TInstanceVerdict>; const AWanted: TVerdictFilter): TArray<TUnitTally>;
+var
+  LIdx: Integer;
+  LNew: TUnitTally;
+begin
+  Result:= nil;
+  for var LVerdict: TInstanceVerdict in AVerdicts do
+  begin
+    if not AWanted(LVerdict) then
+      Continue;
+    LIdx:= -1;
+    for var I: Integer:= 0 to High(Result) do
+      if SameText(Result[I].UnitName, LVerdict.DeclaringUnit) then
+        LIdx:= I;
+    if LIdx < 0 then
+    begin
+      LNew.UnitName:= LVerdict.DeclaringUnit;
+      LNew.Count   := 0;
+      Result:= Result + [LNew];
+      LIdx  := High(Result);
+    end;
+    Inc(Result[LIdx].Count);
+  end;
+end;
+
+function CodeUseLeftNote(const AUnit: TUnitInheritance): string;
+var
+  LParts: TArray<string>;
+begin
+  LParts:= nil;
+  for var LTally: TUnitTally in TallyByUnit(AUnit.Verdicts,
+    function(const AVerdict: TInstanceVerdict): Boolean
+    begin
+      Result:= AVerdict.Instance.FromCode and (AVerdict.State = asUnconverted);
+    end) do
+    LParts:= LParts + [Format(NOTE_CODE_LEFT, [LTally.Count, LTally.UnitName])];
+  Result:= string.Join(NOTE_JOIN, LParts);
 end;
 
 function OutsideNote(const AVerdict: TInstanceVerdict): string;

@@ -8485,12 +8485,16 @@ begin
   Check('usage.ispropname.public', IsPropName('Title.Caption') and not IsPropName('''abc'));
 end;
 
-{ A fake project index for the C8 walk: each row 'Class|PasPath|Parent'; a row
-  'Class|!' answers Failed (the engine could not be asked). A class with no row is
-  not in the index. ACalls (may be nil) records every question asked. }
+{ A fake project index for the C8 walk: each row 'Class|PasPath|Parent[|f1:T1,f2:T2]'
+  (the 4th part: the From-typed fields the class itself declares); a row 'Class|!'
+  answers Failed (the engine could not be asked). A class with no row is not in the
+  index. ACalls (may be nil) records every question asked. }
 function FakeLookup(const ARows: TArray<string>; ACalls: TStringList): TClassLookup;
 const
   PARENT_FIELD = 2;
+  FIELDS_FIELD = 3;
+  FIELD_NAME   = 0;
+  FIELD_TYPE   = 1;
 var
   LRows: TArray<string>;
 begin
@@ -8498,6 +8502,8 @@ begin
   Result:= function(const AClassName: string): TClassInfo
     var
       LParts: TArray<string>;
+      LPair : TArray<string>;
+      LField: TFieldDecl;
     begin
       Result:= Default(TClassInfo);
       if ACalls <> nil then
@@ -8515,6 +8521,14 @@ begin
           Result.PasPath:= LParts[1];
           if Length(LParts) > PARENT_FIELD then
             Result.ParentClass:= LParts[PARENT_FIELD];
+          if Length(LParts) > FIELDS_FIELD then
+            for var LText: string in LParts[FIELDS_FIELD].Split([',']) do
+            begin
+              LPair          := LText.Split([':']);
+              LField.Name    := LPair[FIELD_NAME];
+              LField.TypeName:= LPair[FIELD_TYPE];
+              Result.Fields  := Result.Fields + [LField];
+            end;
         end;
         Exit;
       end;
@@ -8546,6 +8560,111 @@ begin
         end;
       Result:= drMissing;
     end;
+end;
+
+{ A fake `refs` answer for the C8 code-use scan: rows 'Name|Receiver|Line' for every
+  unit; AFail = the engine could not answer. }
+function FakeCodeUses(const ARows: TArray<string>; AFail: Boolean): TCodeUseLookup;
+const
+  NAME_FIELD     = 0;
+  RECEIVER_FIELD = 1;
+  LINE_FIELD     = 2;
+var
+  LRows: TArray<string>;
+begin
+  LRows:= ARows;
+  Result:= function(const AUnitPas, AClassName: string; out AUses: TArray<TCodeUse>): Boolean
+    var
+      LParts: TArray<string>;
+      LUse  : TCodeUse;
+    begin
+      AUses:= nil;
+      if AFail then
+        Exit(False);
+      for var LRow: string in LRows do
+      begin
+        LParts   := LRow.Split(['|']);
+        LUse.Name:= CodeUseName(LParts[NAME_FIELD], LParts[RECEIVER_FIELD]);
+        LUse.Line:= StrToInt(LParts[LINE_FIELD]);
+        AUses    := AUses + [LUse];
+      end;
+      Result:= True;
+    end;
+end;
+
+{ C8 E2b: descendant CODE on an ancestor's From-typed field counts as an inherited
+  use even with no .dfm block for it (spec: `tblFtrs.IndexName := ...` in a descendant
+  whose .dfm never overrides tblFtrs). Same chain rule as E2a; no double count with a
+  .dfm block; own fields, unknown names and converted fields are not uses; a walk
+  that cannot decide makes the unit unknown, never outside. }
+procedure TestInheritanceCodeUses;
+const
+  BASE_PAS = 'fx\Base.pas';
+  MID_PAS  = 'fx\Mid.pas';
+  LEAF_PAS = 'fx\Leaf.pas';
+  BASE_DFM = 'object BaseDM: TBaseDM' + sLineBreak + '  object tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak +
+    '  object tblOps: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  MID_DFM  = 'inherited MidDM: TMidDM' + sLineBreak + '  inherited tblOps: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  BARE_LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  Height = 200' + sLineBreak + 'end' + sLineBreak;
+  BLOCK_LEAF_DFM = 'inherited LeafDM: TLeafDM' + sLineBreak + '  inherited tblFtrs: TTable' + sLineBreak + '  end' + sLineBreak + 'end' + sLineBreak;
+  LINE_FIRST = 40;
+  DEPTH_BASE = 2;
+  CHAIN_OPS  = 2;
+  N_USES     = 2;
+var
+  Pairs : TArray<TTypePair>;
+  Rows  : TArray<string>;
+  Reader: TDfmTextReader;
+  U     : TUnitInheritance;
+  P     : TTypePair;
+
+  function V(const AName: string): TInstanceVerdict;
+  begin
+    Result:= Default(TInstanceVerdict);
+    for var LV: TInstanceVerdict in U.Verdicts do
+      if SameText(LV.Instance.Name, AName) then
+        Exit(LV);
+  end;
+
+begin
+  Check('code.use.name', (CodeUseName('IndexName', 'tblFtrs') = 'tblFtrs') and (CodeUseName('Post', 'Self.tblOps') = 'tblOps')
+    and (CodeUseName('Open', 'tblA.Fields[0]') = 'tblA') and (CodeUseName('tblX', '') = 'tblX') and (CodeUseName('Go', 'Self') = 'Go'));
+  P.FromType:= 'TTable';
+  P.ToType  := 'TFDTable';
+  Pairs:= [P];
+  Rows := ['TLeafDM|' + LEAF_PAS + '|TMidDM|qryOwn:TTable', 'TMidDM|' + MID_PAS + '|TBaseDM', 'TBaseDM|' + BASE_PAS + '|TDataModule|tblFtrs:TTable,tblOps:TTable'];
+  Reader:= FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BARE_LEAF_DFM, MID_DFM, BASE_DFM]);
+
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader,
+    FakeCodeUses(['IndexName|tblFtrs|41', 'tblFtrs||40', 'Post|Self.tblOps|50', 'Caption|lblNoSuch|60', 'Open|qryOwn|70'], False));
+  Check('code.use.no.dfm.block', U.Known and (Length(U.Verdicts) = N_USES), Format('known=%s n=%d %s', [BoolToStr(U.Known, True), Length(U.Verdicts), U.Error]));
+  Check('code.use.declared.two.up', V('tblFtrs').Instance.FromCode and (V('tblFtrs').State = asUnconverted) and (V('tblFtrs').DeclaringUnit = 'Base')
+    and (V('tblFtrs').Instance.TypeName = 'TTable') and (V('tblFtrs').Instance.Line = LINE_FIRST));
+  Check('code.use.chain.e2a', (Length(V('tblFtrs').Chain) = 1) and SameText(V('tblFtrs').Chain[0].PasPath, BASE_PAS) and (V('tblFtrs').Chain[0].Depth = DEPTH_BASE)
+    and (Length(V('tblOps').Chain) = CHAIN_OPS) and SameText(V('tblOps').Chain[0].PasPath, MID_PAS));
+  Check('code.use.unknown.dropped', V('lblNoSuch').Instance.Name = '');
+  Check('code.use.own.field.dropped', V('qryOwn').Instance.Name = '');
+  Check('code.use.left.note', CodeUseLeftNote(U) = '2 inherited code use(s) left: ancestor Base not converted', CodeUseLeftNote(U));
+
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil),
+    FakeReader(['fx\Leaf.dfm', 'fx\Mid.dfm', 'fx\Base.dfm'], [BLOCK_LEAF_DFM, MID_DFM, BASE_DFM]),
+    FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.no.double.count', (Length(U.Verdicts) = 1) and not U.Verdicts[0].Instance.FromCode, Format('%d verdicts', [Length(U.Verdicts)]));
+  Check('code.use.left.note.dfm.only', CodeUseLeftNote(U) = '');
+
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, FakeCodeUses([], True));
+  Check('code.use.lookup.failed', not U.Known and (U.Error <> '') and (Length(U.Verdicts) = 0), U.Error);
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(Rows, nil), Reader, nil);
+  Check('code.use.not.asked', U.Known and (Length(U.Verdicts) = 0));
+
+  // A walk that cannot decide (the index fails on TBaseDM) is unknown, never outside or dropped.
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|' + MID_PAS + '|TBaseDM', 'TBaseDM|!'], nil), Reader,
+    FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.walk.unknown', not U.Known and (Pos('TBaseDM', U.Error) > 0) and (Length(U.Verdicts) = 0), U.Error);
+  // A converted ancestor's field no longer has the From type: not a use (E11).
+  U:= AnalyzeUnit(LEAF_PAS, Pairs, FakeLookup(['TLeafDM|' + LEAF_PAS + '|TMidDM', 'TMidDM|' + MID_PAS + '|TBaseDM',
+    'TBaseDM|' + BASE_PAS + '|TDataModule|tblFtrs:TFDTable'], nil), Reader, FakeCodeUses(['IndexName|tblFtrs|41'], False));
+  Check('code.use.converted.dropped', U.Known and (Length(U.Verdicts) = 0), Format('n=%d %s', [Length(U.Verdicts), U.Error]));
 end;
 
 { C8 E2 / E3 / E8: the ancestor walk over a fake index. The fixture mirrors the
@@ -8922,6 +9041,7 @@ begin
     TestInheritancePairs;
     TestInheritanceWalk;
     TestInheritanceWalkEdges;
+    TestInheritanceCodeUses;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;
