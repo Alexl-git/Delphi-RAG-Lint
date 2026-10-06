@@ -19,6 +19,11 @@ uses
   , ConvRules.ConvertRun
   ;
 
+const
+  /// <summary>The run report's Status column on an E10 `inherited left` line
+  /// (InheritedReportLines).</summary>
+  REPORT_STATUS_INHERITED_LEFT = 'inherited left';
+
 type
   /// <summary>Outcome of one results-grid row.</summary>
   /// <remarks>
@@ -163,6 +168,25 @@ function ConvertStatusText(AStatus: TConvertStatus): string;
 /// csConverted, so it is not listed.</remarks>
 function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;
 
+/// <summary>PURE: True when ARow should carry the editor-side code-use "left" note:
+/// it is csConverted and no EARLIER csConverted row is for the same unit (one note per
+/// unit, not one per book).</summary>
+/// <param name="ARow">The row about to be shown.</param>
+/// <param name="AEarlier">The run's rows before it.</param>
+/// <returns>See summary; units compared by path, case-insensitively.</returns>
+function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>): Boolean;
+
+/// <summary>PURE: the run report's E10 lines for one row: one per inherited instance
+/// the converted unit left, minus those whose ancestor converted earlier in the run
+/// (R4). Same 8 tab-separated columns as every report row: Book, Unit,
+/// REPORT_STATUS_INHERITED_LEFT, four empty cells, InheritedReportNote.</summary>
+/// <param name="ARow">A run row.</param>
+/// <param name="AEarlier">The run's rows before it.</param>
+/// <param name="AInheritedSupported">The engine reported inherited_instances when the
+/// run started; False = no lines (an older engine's output is not this contract).</param>
+/// <returns>[] unless ARow is csConverted and AInheritedSupported.</returns>
+function InheritedReportLines(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; AInheritedSupported: Boolean): TArray<string>;
+
 implementation
 
 uses
@@ -200,6 +224,23 @@ begin
       if not MatchText(LName, Result) then
         Result:= Result + [LName];
     end;
+end;
+
+function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>): Boolean;
+begin
+  Result:= ARow.Status = csConverted;
+  for var LRow: TConvertRow in AEarlier do
+    if Result and (LRow.Status = csConverted) and SameText(LRow.UnitPas, ARow.UnitPas) then
+      Result:= False;
+end;
+
+function InheritedReportLines(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; AInheritedSupported: Boolean): TArray<string>;
+begin
+  Result:= nil;
+  if not AInheritedSupported or (ARow.Status <> csConverted) then
+    Exit;
+  for var LLeft: TInheritedLeft in InheritedLeftOmitting(ARow.Apply.InheritedLeft, UnitsConvertedIn(AEarlier)) do
+    Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft)])];
 end;
 
 function FileProbe: TFileProbe;

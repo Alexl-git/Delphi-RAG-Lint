@@ -9104,6 +9104,7 @@ begin
   Result.UnitPas:= APas;
   Result.Known  := True;
 end;
+
 { C8 Task 6, analysis pass: one .dfm read per PASS (not per unit), a cancel makes the
   unit unknown with "cancelled" without asking the index, and the status text for the
   units the analysis could not decide. ConvertTab.pas is outside this closure. }
@@ -9161,6 +9162,68 @@ begin
   Check('tab.unknown.text.none', UnknownUnitsText([FreshUnit('a\A.pas'), UnknownUnit('a\B.pas', '')]) = '');
   Check('tab.unknown.text.first.plus.more', UnknownUnitsText([FreshUnit('a\A.pas'), UnknownUnit('a\B.pas', 'boom'), UnknownUnit('a\C.pas', 'bang'), UnknownUnit('a\D.pas', 'pow')])
     = 'B.pas: boom (+2 more)', UnknownUnitsText([UnknownUnit('a\B.pas', 'boom'), UnknownUnit('a\C.pas', 'bang'), UnknownUnit('a\D.pas', 'pow')]));
+end;
+
+{ C8 Task 6 fix round 1: Convert's gate after its inherited-instance check (cancelled
+  = stop; any unit unchecked = ask once; else run), one code-use note per unit (not
+  per book), and the report's 8-column `inherited left` lines. }
+procedure TestInheritanceTabGate;
+const
+  REPORT_COLS = 8;
+  NOTE_COL    = REPORT_COLS - 1; // the Note column is the last
+  INH_JSON = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],'
+    + '"inherited":[{"name":"tblFtrs","type":"TTable","line":4,"ancestor_unit":"PathToData","ancestor_state":"unconverted","reason":"ancestor not converted"},'
+    + '{"name":"qryLib","type":"TQuery","line":12,"ancestor_unit":"LibForms","ancestor_state":"outside","reason":"ancestor not in any --db"}]}';
+var
+  Q      : string;
+  Row    : TConvertRow;
+  Earlier: TConvertRow;
+  Lines  : TArray<string>;
+  Cols   : TArray<string>;
+  LShape : Boolean;
+begin
+  Check('tab.gate.cancelled', (InheritanceGate(True, [UnknownUnit('a\A.pas', 'boom')], 'boom', Q) = igCancelled) and (Q = ''), Q);
+  Check('tab.gate.cancelled.text', GATE_CANCELLED_TEXT = 'Convert cancelled: the inherited-instance check was cancelled.');
+  Check('tab.gate.proceed', (InheritanceGate(False, [FreshUnit('a\A.pas'), UnknownUnit('a\B.pas', '')], '', Q) = igProceed) and (Q = ''), Q);
+  Check('tab.gate.ask.units', (InheritanceGate(False, [FreshUnit('a\A.pas'), UnknownUnit('a\B.pas', 'x'), UnknownUnit('a\C.pas', 'y')], 'x', Q) = igAsk)
+    and (Q = 'Could not check inherited instances for B.pas, C.pas -- convert anyway?'), Q);
+  Check('tab.gate.ask.error.only', (InheritanceGate(False, [FreshUnit('a\A.pas')], 'Fix.rules: locked', Q) = igAsk)
+    and (Q = 'Could not check inherited instances for the listed units -- convert anyway?'), Q);
+  Check('tab.gate.stop.text', InheritanceGateStopText('boom') = 'Convert cancelled: inherited instances could not be checked -- boom', InheritanceGateStopText('boom'));
+
+  Row:= Default(TConvertRow);
+  Row.UnitPas:= 'x\Desc.pas';
+  Row.Book   := 'B2.rules';
+  Row.Status := csConverted;
+  Earlier:= Row;
+  Earlier.Book:= 'B1.rules';
+  Check('tab.note.due.first', CodeUseNoteDue(Row, []));
+  Check('tab.note.due.once.per.unit', not CodeUseNoteDue(Row, [Earlier]));
+  Earlier.UnitPas:= 'x\Other.pas';
+  Check('tab.note.due.other.unit', CodeUseNoteDue(Row, [Earlier]));
+  Row.Status:= csRefused;
+  Check('tab.note.due.not.converted', not CodeUseNoteDue(Row, []));
+
+  Row:= Default(TConvertRow);
+  Row.UnitPas:= 'x\Desc.pas';
+  Row.Book   := 'B.rules';
+  Row.Status := csConverted;
+  Row.Apply  := ParseApplyJson(INH_JSON);
+  Lines:= InheritedReportLines(Row, [], True);
+  Cols := if Length(Lines) > 0 then Lines[0].Split([#9]) else nil;
+  LShape:= (Length(Lines) = Length(Row.Apply.InheritedLeft)) and (Length(Cols) = REPORT_COLS);
+  Check('tab.report.lines.shape', LShape, Format('%d lines, %d cols', [Length(Lines), Length(Cols)]));
+  if LShape then
+    Check('tab.report.lines.text', (Cols[0] = 'B.rules') and (Cols[1] = 'x\Desc.pas') and (Cols[2] = REPORT_STATUS_INHERITED_LEFT) and (Cols[2] = 'inherited left')
+      and (Cols[NOTE_COL] = InheritedReportNote(Row.Apply.InheritedLeft[0])), Lines[0]);
+  Earlier:= Default(TConvertRow);
+  Earlier.UnitPas:= 'x\PathToData.pas';
+  Earlier.Status := csConverted;
+  Lines:= InheritedReportLines(Row, [Earlier], True);
+  Check('tab.report.lines.r4', (Length(Lines) = 1) and (Pos('LibForms', Lines[0]) > 0), string.Join(' | ', Lines));
+  Check('tab.report.lines.gated', Length(InheritedReportLines(Row, [], False)) = 0);
+  Row.Status:= csRolledBack;
+  Check('tab.report.lines.converted.only', Length(InheritedReportLines(Row, [], True)) = 0);
 end;
 
 { C8 Task 6, ruling R4: an ancestor converted EARLIER IN THE SAME RUN converted its
@@ -9352,6 +9415,7 @@ begin
     end);
   Check('tab.stale.reindex.failed', (Reindex = 1) and (Length(Asked) = 1) and not Units[0].Known and Units[0].Error.EndsWith('; reindex failed: boom'), Units[0].Error);
 end;
+
 { C8 E5-E9 decisions, on hand-built verdicts (the walk itself is TestInheritanceWalk):
   the row note's exact text, the topmost-first chain, the offer, the insertion
   (dedupe, directly before the descendant), the ordering warning (never a block) and
@@ -9850,6 +9914,7 @@ begin
     TestInheritanceTabAnalysis;
     TestInheritanceTabR4;
     TestInheritanceTabDiskAndStale;
+    TestInheritanceTabGate;
     TestUnitPickPlatform;
     TestListUnitsPerDb;
     TestUsesHarvestText;

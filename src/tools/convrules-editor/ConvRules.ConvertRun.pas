@@ -580,6 +580,7 @@ begin
     if not MatchText(LItem.AncestorUnit, AConvertedUnits) then
       Result:= Result + [LItem];
 end;
+
 function InheritedReportNote(const AItem: TInheritedLeft): string;
 begin
   Result:= Format(REPORT_LEFT_FMT, [AItem.Name, AItem.TypeName, AItem.Line, AItem.AncestorUnit, AItem.AncestorState, AItem.Reason]);

@@ -293,6 +293,18 @@ function WaitStatus($main, $Before, $Seconds) {
   Status $main
 }
 
+# Waits for an add to settle instead of a fixed sleep: the Open dialog gone, no progress
+# window (TEngineWaitForm, the inherited-instance check), and the status line reporting
+# $count listed units -- or an editor message box (a prompt the check must not ask).
+function WaitAddSettled($procId, $main, $count, $sec = 120) {
+  $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $sec) {
+    $tops = @([W]::Tops($procId) | ForEach-Object { [W]::Cls($_) })
+    if ($tops -contains 'TMessageForm') { return }
+    if (($tops -notcontains '#32770') -and ($tops -notcontains 'TEngineWaitForm') -and ((Status $main) -like "$count source unit(s) listed*")) { return }
+    Start-Sleep -Milliseconds 250
+  }
+}
 function Answer($procId, $caption) {
   $dlg = WaitCls $procId 'TMessageForm' 20
   if ($dlg -eq [IntPtr]::Zero) { return "no message box (forms: $(TopsNow $procId))" }
@@ -529,7 +541,7 @@ try {
 
   # --- E7: the descendant ABOVE its ancestor warns once; No runs nothing ---
   $e = PickFile $p.Id $add $anc
-  Start-Sleep -Seconds 3
+  WaitAddSettled $p.Id $main 2
   Check 'anc.no.prompt' (($e -eq '') -and ((WaitCls $p.Id 'TMessageForm' 0) -eq [IntPtr]::Zero)) "$e forms: $(TopsNow $p.Id)"
   $items = [CT]::Items($src)
   Check 'order.desc.above.anc' (($items.Count -eq 2) -and ($items[0] -eq $desc) -and ($items[1] -eq $anc)) ($items -join ' | ')
@@ -558,7 +570,7 @@ try {
 
   # --- E2b: a CODE-only use is noted like an inherited instance (Anc is listed: no prompt) ---
   $e = PickFile $p.Id $add $desc2
-  Start-Sleep -Seconds 3
+  WaitAddSettled $p.Id $main 3
   $st = Status $main
   Check 'note.code.use' (($e -eq '') -and ((WaitCls $p.Id 'TMessageForm' 0) -eq [IntPtr]::Zero) -and ($st -like '*Desc2.pas: inherits 1 TLabel instance(s) from Anc -- convert it first (recommended)*')) "$e status: $st"
 }

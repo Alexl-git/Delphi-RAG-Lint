@@ -29,6 +29,9 @@ const
   /// the user cancelled: AnalyzeUnit appends it to the unit's Error, so the unit is
   /// Known = False and the status line says why.</summary>
   ANALYSIS_CANCELLED = 'cancelled';
+  /// <summary>The Convert tab's status when the user cancelled the inherited-instance
+  /// check that Convert runs first: nothing runs (InheritanceGate = igCancelled).</summary>
+  GATE_CANCELLED_TEXT = 'Convert cancelled: the inherited-instance check was cancelled.';
 
 type
   /// <summary>The keyword that opens a .dfm block.</summary>
@@ -180,6 +183,12 @@ type
     Chain        : TArray<TChainUnit>;
   end;
 
+  /// <summary>What Convert does after its inherited-instance check (InheritanceGate).</summary>
+  /// <remarks>igProceed: run. igCancelled: the user cancelled the check -- stop, nothing
+  /// runs. igAsk: some unit could not be checked -- ask ONCE whether to convert anyway
+  /// (never a refusal: the owner's E9 rule).</remarks>
+  TInheritanceGate = (igProceed, igCancelled, igAsk);
+
   /// <summary>One listed unit's C8 analysis.</summary>
   TUnitInheritance = record
     /// <summary>The listed .pas.</summary>
@@ -309,6 +318,23 @@ function CancellableCodeUses(const AInner: TCodeUseLookup; const ACancelled: TFu
 /// <returns>'' when no unit has an Error; else '&lt;Unit.pas&gt;: &lt;Error&gt;' for the
 /// first such unit, plus ' (+N more)' when N others have one too.</returns>
 function UnknownUnitsText(const AUnits: TArray<TUnitInheritance>): string;
+
+/// <summary>PURE: Convert's decision after its inherited-instance check.</summary>
+/// <param name="ACancelled">The check ended with ENGINE_OUTCOME_CANCELLED (the work's
+/// result, not a text match).</param>
+/// <param name="AUnits">The listed units' analyses.</param>
+/// <param name="AError">The tab's collected failure text ('' when none).</param>
+/// <param name="AQuestion">igAsk only: 'Could not check inherited instances for
+/// &lt;Unit.pas, ...&gt; -- convert anyway?' (the units with an Error; 'the listed units'
+/// when only AError says something failed); '' otherwise.</param>
+/// <returns>igCancelled when ACancelled; else igAsk when AError is not '' or a unit has
+/// an Error; else igProceed.</returns>
+function InheritanceGate(ACancelled: Boolean; const AUnits: TArray<TUnitInheritance>; const AError: string; out AQuestion: string): TInheritanceGate;
+
+/// <summary>PURE: the status after No to InheritanceGate's question.</summary>
+/// <param name="AReason">Why the check failed (the tab's collected failure text).</param>
+/// <returns>'Convert cancelled: inherited instances could not be checked -- &lt;reason&gt;'.</returns>
+function InheritanceGateStopText(const AReason: string): string;
 
 /// <summary>PURE: the spec E8 note for one asOutside verdict.</summary>
 /// <param name="AVerdict">A verdict from ResolveInstance / AnalyzeUnit.</param>
@@ -461,6 +487,9 @@ const
   TYPE_SEP      = ', ';
   NOTE_UNCONVERTED  = 'inherits %d %s instance(s) from %s -- convert it first (recommended)';
   OFFER_FMT         = 'Add %s ahead of %s?';
+  GATE_ASK_FMT      = 'Could not check inherited instances for %s -- convert anyway?';
+  GATE_ALL_UNITS    = 'the listed units';
+  GATE_STOP_FMT     = 'Convert cancelled: inherited instances could not be checked -- %s';
   ORDER_WARNING_FMT = '%s is listed above its ancestor %s, which is not converted yet';
   ORDER_HEAD        = 'Some units are listed above an ancestor that is not converted yet; their inherited instances will not convert in this run:';
   ORDER_TAIL        = 'Convert in this order anyway?';
@@ -1215,6 +1244,30 @@ begin
   end;
   if LMore > 0 then
     Result:= Result + Format(' (+%d more)', [LMore]);
+end;
+
+function InheritanceGate(ACancelled: Boolean; const AUnits: TArray<TUnitInheritance>; const AError: string; out AQuestion: string): TInheritanceGate;
+var
+  LNames: TArray<string>;
+begin
+  AQuestion:= '';
+  if ACancelled then
+    Exit(igCancelled);
+  LNames:= nil;
+  for var LUnit: TUnitInheritance in AUnits do
+    if LUnit.Error <> '' then
+      LNames:= LNames + [ExtractFileName(LUnit.UnitPas)];
+  if (Length(LNames) = 0) and (AError = '') then
+    Exit(igProceed);
+  if Length(LNames) = 0 then
+    LNames:= [GATE_ALL_UNITS];
+  AQuestion:= Format(GATE_ASK_FMT, [string.Join(TYPE_SEP, LNames)]);
+  Result:= igAsk;
+end;
+
+function InheritanceGateStopText(const AReason: string): string;
+begin
+  Result:= Format(GATE_STOP_FMT, [AReason]);
 end;
 
 // Per declaring unit, in first-seen order, how many of AVerdicts AWanted accepts and
