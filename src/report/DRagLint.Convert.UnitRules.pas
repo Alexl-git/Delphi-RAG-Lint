@@ -59,6 +59,10 @@ type
   /// for the change, normalised to '#unuse Old', '#use New' or
   /// '#useswap Old -&gt; New1, New2'. UnitName is spelled as written in the
   /// unit for a removal and as written in the book for an add.
+  /// Action 'skipped' (1.23.0, C13 N4) is a removal convert-apply did NOT make
+  /// because it would strand instances that --only left out; the row has no
+  /// edit behind it, Line/Section are the kept entry's, and Reason says why
+  /// ('would leave N unconverted instance(s) of T'). Reason is '' otherwise.
   /// </remarks>
   TUsesChange = record
     Action  : string;
@@ -66,6 +70,7 @@ type
     Section : string;
     Line    : Integer;
     Rule    : string;
+    Reason  : string;
   end;
 
   /// <summary>The outcome of PlanUnitRules for one unit.</summary>

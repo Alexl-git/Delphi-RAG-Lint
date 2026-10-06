@@ -16038,6 +16038,10 @@ begin
         once and converts every unit in ONE process -- one rule-book
         validation, one member cache -- emitting apply-batch/1 under JSON. }
       JCap.AddPair('batch_units', TJSONBool.Create(True));
+      { 1.23.0 (C13 N4), same contract: with --only, a #unuse / #useswap
+        removal that would strand ONLY instances --only left out is skipped
+        (apply/1 uses[] action 'skipped') instead of refusing the unit. }
+      JCap.AddPair('only_skips_unit_rules', TJSONBool.Create(True));
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
@@ -24503,12 +24507,19 @@ begin
   if Length(AReport.UsesChanges) > 0 then
   begin
     var NRemoved: Integer:= 0;
+    var NSkipped: Integer:= 0;
     for var UC: TUsesChange in AReport.UsesChanges do
-      if UC.Action = 'remove' then Inc(NRemoved);
+      if UC.Action = 'remove' then Inc(NRemoved)
+      else if UC.Action = 'skipped' then Inc(NSkipped);
     Writeln('');
-    Writeln(Format('Uses: %d removed, %d added', [NRemoved, Length(AReport.UsesChanges) - NRemoved]));
+    if NSkipped = 0 then
+      Writeln(Format('Uses: %d removed, %d added', [NRemoved, Length(AReport.UsesChanges) - NRemoved]))
+    else
+      Writeln(Format('Uses: %d removed, %d added, %d removal(s) skipped (--only)',
+        [NRemoved, Length(AReport.UsesChanges) - NRemoved - NSkipped, NSkipped]));
     for var UC: TUsesChange in AReport.UsesChanges do
-      Writeln(Format('  %s %s (%s, line %d) -- %s', [UC.Action, UC.UnitName, UC.Section, UC.Line, UC.Rule]));
+      Writeln(Format('  %s %s (%s, line %d) -- %s', [UC.Action, UC.UnitName, UC.Section, UC.Line, UC.Rule]) +
+        (if UC.Reason <> '' then ' (' + UC.Reason + ')' else ''));
   end;  { ResolvedDefaults -- a COUNT, not a listing, and that asymmetry is deliberate.
     Text mode used to print one line per resolved default under ReemitNotes,
     which on a real form is ~2,000 lines of "this worked" ahead of the handful
@@ -24570,6 +24581,12 @@ type
       object is appended to it instead (owned by the array) and nothing is
       written, so DoConvertApply can wrap every unit in one apply-batch/1. }
     Sink: TJSONArray;
+    { 1.23.0 (C13 N3): the --only names that name a .dfm object of a #convert
+      From type, and the ones that name none -- apply/1 only_matched[] /
+      only_unmatched[], spelled as given, in --only order; both [] without
+      --only. An unmatched name is ignored (never an error). }
+    OnlyMatched  : TArray<string>;
+    OnlyUnmatched: TArray<string>;
   end;
 
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
@@ -24742,13 +24759,15 @@ begin
     var JUses: TJSONArray:= TJSONArray.Create;
     for var UC: TUsesChange in ACtx.Report.UsesChanges do
     begin
-      if UC.Action = 'remove' then Inc(UsesRemoved) else Inc(UsesAdded);
+      if UC.Action = 'remove' then Inc(UsesRemoved)
+      else if UC.Action = 'add' then Inc(UsesAdded); { 'skipped' (C13 N4) is neither }
       var JUC: TJSONObject:= TJSONObject.Create;
       JUC.AddPair('action' , UC.Action);
       JUC.AddPair('unit'   , UC.UnitName);
       JUC.AddPair('section', UC.Section);
       JUC.AddPair('line'   , TJSONNumber.Create(UC.Line));
       JUC.AddPair('rule'   , UC.Rule);
+      JUC.AddPair('reason' , UC.Reason); { '' unless action is 'skipped' (C13 N4) }
       JUses.AddElement(JUC);
     end;
     JRoot.AddPair('uses', JUses);
@@ -24784,6 +24803,10 @@ begin
       JInh.AddElement(JI);
     end;
     JRoot.AddPair('inherited', JInh);
+
+    { 1.23.0 (C13 N3) -- ALWAYS present, [] without --only. }
+    JRoot.AddPair('only_matched'  , ArrOf(ACtx.OnlyMatched));
+    JRoot.AddPair('only_unmatched', ArrOf(ACtx.OnlyUnmatched));
 
     if Assigned(ACtx.Sink) then
     begin
@@ -25134,6 +25157,12 @@ var
     // Sibling .dfm: same base name + '.dfm', same folder as --unit.
     DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
     JCtx.DfmPath:= DfmPath;
+    { C13 N3: which --only names name an object of a #convert From type }
+    if Length(AArgs.OnlySections) > 0 then
+      SplitOnlyNames(if TFile.Exists(DfmPath) then TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)) else '',
+        Rules, AArgs.OnlySections, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
+    if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
+      Writeln('--only: no #convert instance named ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)');
     { 1.20.6: a missing .dfm is fatal only to a book with NO unit rules -- its
       #convert blocks have nothing to locate. A book with #unuse / #use /
       #useswap still has the unit's uses clauses to change, so it runs them and
@@ -25237,7 +25266,7 @@ var
       PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, TApplyBook.Create(Rules, JCtx.Unreachable),
         AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
     else
-      PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules);
+      PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections);
     JCtx.ClassesBuilt:= Trees.ClassesBuilt;
     if PlanRes.Refused then Exit(RefuseUnit(PlanRes.Error));
     if not PlanRes.Ok then
