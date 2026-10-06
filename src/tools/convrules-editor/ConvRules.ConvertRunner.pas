@@ -17,6 +17,7 @@ uses
   System.SysUtils
   , ConvRules.Engine
   , ConvRules.ConvertRun
+  , ConvRules.ConvertRequest
   ;
 
 const
@@ -54,8 +55,11 @@ type
   ///   had changed it (the refused book was its first, or every earlier one was
   ///   skipped), nothing is restored and the unneeded backup is DROPPED, as for
   ///   csBookSkipped: Backup / BackupDfm are '' on the row.
+  /// csOutOfScope: a scoped run (IDE request) found no selected instance of this
+  ///   book's From types on the unit; no engine call, no backup kept for it, the
+  ///   unit's later books still run.
   /// </remarks>
-  TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed, csRefused);
+  TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed, csRefused, csOutOfScope);
 
   /// <summary>One results-grid row: a book x unit, or a unit-level skip.</summary>
   TConvertRow = record
@@ -102,6 +106,10 @@ type
     /// converted ancestor is retyped. False = the notes say the unit still has the From
     /// type there and may not compile or load.</summary>
     RetypeSupported: Boolean;
+    /// <summary>The IDE request's scope; Kind = skWholeUnit for an ordinary run. It
+    /// binds Scope.UnitPas only (ScopedNamesForUnit): any other unit is converted
+    /// whole.</summary>
+    Scope: TConvertScope;
   end;
 
   /// <summary>Called once per row (worker thread!). A unit's rows arrive
@@ -115,6 +123,17 @@ type
   /// <summary>Refreshes the project index; the shape of
   /// TEngineAdapter.IndexProject with the project bound. 0 = success.</summary>
   TIndexFn = reference to function(out AOutput: string): Integer;
+
+  /// <summary>TApplyFn with the --only names: the shape of the AOnly overload of
+  /// TEngineAdapter.ApplyConversion with the --db list bound.</summary>
+  /// <remarks>AOnly = [] means the plain call, with no --only.</remarks>
+  TApplyOnlyFn = reference to function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer;
+
+  /// <summary>The scope decision for one unit x book (ScopedNamesForUnit with the
+  /// job's scope bound). True = scoped: ANames go to --only, and [] means the book
+  /// has nothing in scope on the unit (csOutOfScope, no engine call). False = the
+  /// whole unit, no --only.</summary>
+  TScopeFn = reference to function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean;
 
 /// <summary>Runs a whole job (AJob.Books over AJob.Units).</summary>
 /// <param name="AJob">The job.</param>
@@ -161,10 +180,30 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// outcomes (see TConvertStatus).</remarks>
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False): TArray<TConvertRow>; overload;
 
+/// <summary>The unit loop with the engine calls AND the scope injected (C12, spec
+/// E9-E11); the TApplyFn overload is this one with a whole-unit scope.</summary>
+/// <param name="AUnits">Source units.</param>
+/// <param name="ABooks">Validated books, application order.</param>
+/// <param name="AApply">Applies one book to one unit, with the --only names.</param>
+/// <param name="AIndex">As in the TApplyFn overload.</param>
+/// <param name="AScope">Asked once per unit x book, before the engine call.</param>
+/// <param name="AProgress">May be nil.</param>
+/// <param name="ACancelled">May be nil; polled exactly once just before each unit; True stops the run there.</param>
+/// <param name="AInheritedSupported">See TConvertJob.InheritedSupported.</param>
+/// <param name="ARetypeSupported">See TConvertJob.RetypeSupported.</param>
+/// <returns>As the TApplyFn overload, plus csOutOfScope rows.</returns>
+/// <remarks>Everything the TApplyFn overload says holds. In addition: a book AScope
+/// scopes to NO name gets a csOutOfScope row with no engine call and no backup named,
+/// and the unit's next book still runs (a unit whose every book is out of scope keeps
+/// no backup). A scoped converted row's note is ScopedConvertedNote; a scoped refusal's
+/// note gets RefusalHint appended. AScope raising counts as out of scope.</remarks>
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False): TArray<TConvertRow>; overload;
+
 /// <summary>Display text for a status.</summary>
 /// <param name="AStatus">The status.</param>
 /// <returns>'converted', 'FAILED -- restored', 'book skipped', 'unit skipped',
-/// 'rolled back', 'FAILED -- NOT restored', 'refused -- not changed'.</returns>
+/// 'rolled back', 'FAILED -- NOT restored', 'refused -- not changed',
+/// 'skipped -- not in scope'.</returns>
 function ConvertStatusText(AStatus: TConvertStatus): string;
 
 /// <summary>PURE: the units ARows converted (C8 R4: an ancestor converted EARLIER IN THE
@@ -247,6 +286,7 @@ begin
     csRolledBack    : Result:= 'rolled back';
     csRestoreFailed : Result:= 'FAILED -- NOT restored';
     csRefused       : Result:= 'refused -- not changed';
+    csOutOfScope    : Result:= 'skipped -- not in scope';
     else              Result:= 'FAILED -- NOT restored';
   end;
 end;
@@ -328,22 +368,58 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 var
   LJob   : TConvertJob;
   LEngine: TEngineAdapter;
+  LScope : TScopeFn;
 begin
   LJob   := AJob;
   LEngine:= AEngine;
-  Result:= RunConversionUnits(AUnits, ABooks,
-    function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+  // Read on the worker thread. An unreadable book scopes to no name: the row is
+  // csOutOfScope and its Book column names the book -- never a whole-unit apply.
+  LScope:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
+    var
+      LText: string;
     begin
-      Result:= LEngine.ApplyConversion(AUnitPas, ARulesFile, LJob.Dbs, AJson);
+      LText:= '';
+      if LJob.Scope.Kind <> skWholeUnit then
+        try
+          LText:= TFile.ReadAllText(ABook);
+        except // '' scopes the book to no name: its row is csOutOfScope and names the book
+          on Exception do
+            LText:= '';
+        end; // try
+      Result:= ScopedNamesForUnit(LJob.Scope, AUnitPas, LText, ANames);
+    end;
+  Result:= RunConversionUnits(AUnits, ABooks,
+    function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
+    begin
+      Result:= LEngine.ApplyConversion(AUnitPas, ARulesFile, LJob.Dbs, AOnly, AJson);
     end,
     function(out AOutput: string): Integer
     begin
       Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
     end,
-    AProgress, ACancelled, LJob.InheritedSupported, LJob.RetypeSupported);
+    LScope, AProgress, ACancelled, LJob.InheritedSupported, LJob.RetypeSupported);
 end;
 
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@8e04 -- REVIEWED 2026-10-06 the test-injection twin of the TConvertJob overload: two engine seams plus the job's two capability flags (InheritedSupported, RetypeSupported); a record for the two flags would be one more type used only here
+var
+  LApply: TApplyFn;
+begin
+  LApply:= AApply;
+  Result:= RunConversionUnits(AUnits, ABooks,
+    function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
+    begin
+      Result:= LApply(AUnitPas, ARulesFile, AJson);
+    end,
+    AIndex,
+    function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
+    begin
+      ANames:= nil;
+      Result:= False;
+    end,
+    AProgress, ACancelled, AInheritedSupported, ARetypeSupported);
+end;
+
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@8ff1 -- REVIEWED 2026-10-06 the ONE unit loop: three engine/scope seams, progress, cancel and the job's two capability flags; the TConvertJob overload is the record-shaped entry point
 var
   Rows    : TArray<TConvertRow>;
   UnitRows: TArray<TConvertRow>; // the current unit's rows, emitted when it finishes
@@ -513,11 +589,31 @@ var
     Result:= LCode = 0;
   end;
 
+  // True = the book is scoped on this unit (ANames may be []). A raising AScope
+  // scopes it to no name: no apply, never a whole-unit one.
+  function AskScope(const ABook: string; out ANames: TArray<string>): Boolean;
+  begin
+    try
+      Result:= AScope(CurUnit, ABook, ANames);
+    except // an out-of-scope row for the book (no engine call): the safe side of a failed decision
+      on Exception do
+      begin
+        ANames:= nil;
+        Result:= True;
+      end;
+    end; // try
+    if not Result then
+      ANames:= nil;
+  end;
+
   // False = the unit failed; its remaining books must not run.
   function RunBook(const ABook: string): Boolean;
   var
-    LJson : string;
-    LError: string;
+    LJson  : string;
+    LError : string;
+    LOnly  : TArray<string>;
+    LScoped: Boolean;
+    LReason: string;
   begin
     Result:= True;
     Row:= Default(TConvertRow);
@@ -525,9 +621,19 @@ var
     Row.Book     := ABook;
     Row.Backup   := BakPas;
     Row.BackupDfm:= BakDfm;
+    LScoped:= AskScope(ABook, LOnly);
+    if LScoped and (Length(LOnly) = 0) then
+    begin
+      Row.Backup   := ''; // the book made no change; the backups may yet be dropped
+      Row.BackupDfm:= '';
+      Row.Status   := csOutOfScope;
+      Row.Note     := 'no selected instance of this book''s From types on the unit';
+      Add;
+      Exit; // Result = True: the unit's next book still runs
+    end;
     try
       // A non-zero exit shows up as ok=false or unparseable text in ParseApplyJson.
-      AApply(CurUnit, ABook, LJson);
+      AApply(CurUnit, ABook, LOnly, LJson);
     except  // dl:ok try-except-swallowed@3c3c -- REVIEWED 2026-09-29 not swallowed: the message becomes unparseable apply output, so the unit is restored and the row names it
       on E: Exception do
         LJson:= 'engine call raised: ' + E.Message; // unparseable -> the unit is restored
@@ -549,7 +655,11 @@ var
     end;
     if not Row.Apply.Ok then
     begin
-      FailUnit(Row.Apply.Error, if Row.Apply.Refused then csRefused else csFailedRestored);
+      // The E10 hint only on a scoped run: an unscoped run never asked for --only.
+      LReason:= Row.Apply.Error;
+      if LScoped and Row.Apply.Refused then
+        LReason:= LReason + RefusalHint(LReason);
+      FailUnit(LReason, if Row.Apply.Refused then csRefused else csFailedRestored);
       Exit(False);
     end;
     if not TryReindex(LError) then
@@ -562,6 +672,8 @@ var
     // The engine's inherited[] is shown unfiltered (ruling M4): the unit was reindexed
     // before its first book, so the engine already knows which ancestors this run converted.
     Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(Row.Apply.Glyphs);
+    if LScoped then
+      Row.Note:= ScopedConvertedNote(LOnly, Row.Note);
     Add;
   end;
 
@@ -604,7 +716,7 @@ var
         Break;
     if Changed then
       Exit;
-    // Nothing touched the unit (every book invalid, or refused before any change): the fresh copies are
+    // Nothing touched the unit (every book invalid or out of scope, or refused before any change): the fresh copies are
     // identical to it and would only litter the folder.
     LError:= DropBackups;
     if (LError <> '') and (Length(UnitRows) > 0) then

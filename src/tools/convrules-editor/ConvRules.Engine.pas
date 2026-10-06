@@ -1093,7 +1093,20 @@ type
       /// <returns>The engine's exit code (see RunCaptureTimed).</returns>
       /// <remarks>--no-backup: the caller (ConvRules.ConvertRunner) owns the
       /// .BCK&lt;N&gt; restore point.</remarks>
-      function ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; out AJson: string): Integer;
+      function ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; out AJson: string): Integer; overload;
+      /// <summary>ApplyConversion with `--only a,b` appended: convert-apply then
+      /// touches only the named component instances (unit rules still run).</summary>
+      /// <param name="AUnitPas">The .pas to convert in place (its .dfm goes with it).</param>
+      /// <param name="ARulesFile">The .rules book.</param>
+      /// <param name="ADbs">--db list; the unit must be indexed in one of them.</param>
+      /// <param name="AOnly">Component names; [] = the plain call (no --only).</param>
+      /// <param name="AJson">The engine's output -- feed it to ParseApplyJson.</param>
+      /// <returns>The engine's exit code (see RunCaptureTimed).</returns>
+      /// <remarks>With --only, a #unuse / #useswap that would leave an instance of the
+      /// unit's From type unconverted makes the engine REFUSE the unit (apply/1
+      /// refused=true, 'would leave N unconverted instance(s) of T'). A name that matches
+      /// no instance: see the C12 Task 3 report (measured on 1.22.0).</remarks>
+      function ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; const AOnly: TArray<string>; out AJson: string): Integer; overload;
       /// <summary>`index --project AProjectFile --db AProjectDb` (incremental),
       /// bounded by CONVERT_TIMEOUT_MS.</summary>
       /// <param name="AProjectFile">The .dpr / .dproj that owns AProjectDb.</param>
@@ -1431,8 +1444,18 @@ end;
 
 function TEngineAdapter.ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; out AJson: string): Integer;
 begin
-  Result:= RunCaptureTimed(Format('convert-apply --unit "%s" --rules "%s"%s%s --apply --no-backup --format json',
-    [AUnitPas, ARulesFile, DbArgsFor(ADbs), CastLibArgs]), CONVERT_TIMEOUT_MS, AJson);
+  Result:= ApplyConversion(AUnitPas, ARulesFile, ADbs, nil, AJson);
+end;
+
+function TEngineAdapter.ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; const AOnly: TArray<string>; out AJson: string): Integer;
+var
+  LOnly: string;
+begin
+  LOnly:= '';
+  if Length(AOnly) > 0 then
+    LOnly:= Format(' --only "%s"', [string.Join(',', AOnly)]);
+  Result:= RunCaptureTimed(Format('convert-apply --unit "%s" --rules "%s"%s%s%s --apply --no-backup --format json',
+    [AUnitPas, ARulesFile, DbArgsFor(ADbs), LOnly, CastLibArgs]), CONVERT_TIMEOUT_MS, AJson);
 end;
 
 function TEngineAdapter.IndexProject(const AProjectFile, AProjectDb: string; out AOutput: string): Integer;

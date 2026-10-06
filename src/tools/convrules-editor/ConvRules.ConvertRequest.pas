@@ -155,7 +155,9 @@ function RequestedTypes(const AReq: TConvertRequest): TArray<string>;
 /// <remarks>A binary .dfm (TPF0) and a missing / header-less one are refused for
 /// BOTH scopes: neither can say which components exist, and resolving against
 /// nothing would silently report every name not found. The root (Depth 0) is never an
-/// instance, whatever its name or class.</remarks>
+/// instance, whatever its name or class. A request that does not list exactly one unit
+/// is refused (AError), never read past its end. A name selected more than once (any
+/// case) is listed once, in Instances or NotFound.</remarks>
 function BuildScope(const AReq: TConvertRequest; const ADfmText: string; out AError: string): TConvertScope;
 
 /// <summary>The scope's instance names one book converts (spec E6): those whose bare
@@ -202,6 +204,35 @@ function NoBookText(const ARulesFolder: string; const ATypes: TArray<string>): s
 /// UnitPas and the list's size.</returns>
 function ScopeMatchesUnits(const AScope: TConvertScope; const AUnits: TArray<string>): string;
 
+/// <summary>The runner's scope decision for one unit x book (spec E9; ruling B5: the
+/// scope binds the request's unit ONLY).</summary>
+/// <param name="AScope">The run's scope; Default(TConvertScope) for none.</param>
+/// <param name="AUnitPas">The unit about to be converted.</param>
+/// <param name="ARulesText">The book's text ('' when it could not be read).</param>
+/// <param name="ANames">The instance names to pass as --only (ScopedNamesForBook);
+/// [] when the result is False.</param>
+/// <returns>True = scoped: AUnitPas is AScope.UnitPas (case-insensitive after
+/// ExpandFileName) and AScope is not skWholeUnit; ANames may then be [] (the book
+/// converts no instance in scope, and the runner skips it). False = convert the
+/// unit whole, with no --only.</returns>
+function ScopedNamesForUnit(const AScope: TConvertScope; const AUnitPas, ARulesText: string; out ANames: TArray<string>): Boolean;
+
+/// <summary>The E10 hint appended to the engine's --only refusal.</summary>
+/// <param name="AReason">The apply/1 reason.</param>
+/// <returns>' -- convert all &lt;Type&gt; instances on this form, or remove the #unuse /
+/// #useswap from the book' when AReason holds 'unconverted instance(s) of &lt;Type&gt;';
+/// else ''.</returns>
+function RefusalHint(const AReason: string): string;
+
+/// <summary>The converted row's note for a scoped run (spec E11).</summary>
+/// <param name="AOnly">The names passed as --only, in order.</param>
+/// <param name="AConvertedNote">The unscoped note (ConvertedRowNote: '&lt;edits&gt;
+/// edit(s), &lt;k&gt; remaining for manual work' and any C8 tail).</param>
+/// <returns>'converted N of N scoped instance(s): a, b; ' + AConvertedNote.</returns>
+/// <remarks>Both numbers are the REQUEST count: the engine does not report per-name
+/// outcomes yet (engine ask N3, only_matched[]), so the note says what was asked.</remarks>
+function ScopedConvertedNote(const AOnly: TArray<string>; const AConvertedNote: string): string;
+
 /// <summary>The capabilities document, one line, no whitespace.</summary>
 /// <returns>{"schema":"editor-capabilities/1","convert_request":1}</returns>
 function CapabilitiesJson: string;
@@ -233,6 +264,16 @@ const
   UNITS_MISMATCH_FMT = 'the scope names %s but the source list holds %d unit(s) -- clear the scope or list only that unit';
   DFM_BINARY_FMT     = 'the .dfm %s is binary -- convert it to text in the IDE first';
   DFM_MISSING_FMT    = 'the .dfm %s is missing, unreadable or has no object header -- the component scope cannot be resolved';
+  UNIT_COUNT_FMT     = 'a %s request lists exactly one unit (got %d)';
+  REFUSAL_MARK       = 'unconverted instance(s) of ';
+  REFUSAL_HINT_FMT   = ' -- convert all %s instances on this form, or remove the #unuse / #useswap from the book';
+  SCOPED_NOTE_FMT    = 'converted %d of %d scoped instance(s): %s; ';
+
+{ The scope's word in a refusal: 'form' or 'selected'. }
+function ScopeWord(AScope: TRequestScope): string;
+begin
+  Result:= if AScope = rsForm then 'form' else 'selected';
+end;
 
 function Fail(const AText: string; out AError: string): Boolean;
 begin
@@ -438,7 +479,7 @@ begin
   if not SameText(ExpandFileName(AReq.ProjectFile), ExpandFileName(AProjectFile)) then
     Exit(Format('the request''s project file %s is not the one the project index belongs to (%s)', [AReq.ProjectFile, AProjectFile]));
   if Length(AReq.Units) <> 1 then
-    Exit(Format('a %s request lists exactly one unit (got %d)', [if AReq.Scope = rsForm then 'form' else 'selected', Length(AReq.Units)]));
+    Exit(Format(UNIT_COUNT_FMT, [ScopeWord(AReq.Scope), Length(AReq.Units)]));
   if not AFileExists(AReq.Units[0].Pas) then
     Exit(Format('the unit %s does not exist', [AReq.Units[0].Pas]));
 end;
@@ -471,6 +512,15 @@ begin
   Result:= False;
 end;
 
+{ True when AName (case-insensitive) is already one of AScope's instances or not-found names. }
+function InScopeAlready(const AScope: TConvertScope; const AName: string): Boolean;
+begin
+  for var I: TDfmInstance in AScope.Instances do
+    if SameText(I.Name, AName) then
+      Exit(True);
+  Result:= MatchText(AName, AScope.NotFound);
+end;
+
 function BuildScope(const AReq: TConvertRequest; const ADfmText: string; out AError: string): TConvertScope;
 var
   All : TArray<TDfmInstance>;
@@ -478,6 +528,11 @@ var
 begin
   AError:= '';
   Result:= Default(TConvertScope);
+  if Length(AReq.Units) <> 1 then
+  begin
+    AError:= Format(UNIT_COUNT_FMT, [ScopeWord(AReq.Scope), Length(AReq.Units)]);
+    Exit;
+  end;
   Result.UnitPas:= AReq.Units[0].Pas;
   Result.Types  := RequestedTypes(AReq);
   if ADfmText.StartsWith(BINARY_DFM_SIGNATURE) then
@@ -501,7 +556,9 @@ begin
   end;
   Result.Kind:= skSelected;
   for var C: TRequestComponent in AReq.Units[0].Components do
-    if FindBelowRoot(All, C.Name, Inst) then
+    if InScopeAlready(Result, C.Name) then
+      Continue // a name selected twice (any case) is listed once
+    else if FindBelowRoot(All, C.Name, Inst) then
       Result.Instances:= Result.Instances + [Inst] // the .dfm's own type and opener win over the request's
     else
       Result.NotFound:= Result.NotFound + [C.Name];
@@ -568,6 +625,34 @@ begin
   if (Length(AUnits) = 1) and SameText(ExpandFileName(AUnits[0]), ExpandFileName(AScope.UnitPas)) then
     Exit;
   Result:= Format(UNITS_MISMATCH_FMT, [AScope.UnitPas, Length(AUnits)]);
+end;
+
+function ScopedNamesForUnit(const AScope: TConvertScope; const AUnitPas, ARulesText: string; out ANames: TArray<string>): Boolean;
+begin
+  ANames:= nil;
+  Result:= (AScope.Kind <> skWholeUnit) and SameText(ExpandFileName(AUnitPas), ExpandFileName(AScope.UnitPas));
+  if Result then
+    ANames:= ScopedNamesForBook(AScope, TypePairsOfText(ARulesText));
+end;
+
+function RefusalHint(const AReason: string): string;
+var
+  P, Q: Integer;
+begin
+  Result:= '';
+  P:= Pos(REFUSAL_MARK, AReason);
+  if P = 0 then
+    Exit;
+  P:= P + Length(REFUSAL_MARK);
+  Q:= P;
+  while (Q <= Length(AReason)) and (AReason[Q] <> ' ') do
+    Inc(Q);
+  Result:= Format(REFUSAL_HINT_FMT, [Copy(AReason, P, Q - P)]);
+end;
+
+function ScopedConvertedNote(const AOnly: TArray<string>; const AConvertedNote: string): string;
+begin
+  Result:= Format(SCOPED_NOTE_FMT, [Length(AOnly), Length(AOnly), string.Join(LIST_SEP, AOnly)]) + AConvertedNote;
 end;
 
 function CapabilitiesJson: string;
