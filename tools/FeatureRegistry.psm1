@@ -7,7 +7,8 @@
   Spec: docs\superpowers\specs\2026-10-05-feature-registry-design.md
 
   Array-return convention (two shapes; do not mix them up at a call site):
-  * UNROLLED -- Get-EntryKeyOrder, Test-FeatureEntry, Test-GroupsAndTeams.
+  * UNROLLED -- Get-EntryKeyOrder, Test-FeatureEntry, Test-GroupsAndTeams,
+    Import-LintRuleFamily, Import-ChartQuestionFamily.
     The array goes down the pipeline element by element. Callers MUST wrap
     the call in @(...): an empty result is $null otherwise, and .Count on
     $null throws under StrictMode.
@@ -15,7 +16,12 @@
     Sort-OrdinalUnique. The array arrives as ONE object, intact even when
     empty or single-element. Assign it directly; wrapping it in @(...)
     yields a one-element array holding the array.
-  Sort-OrdinalUnique is module-internal (not exported).
+  * SINGLE OBJECT -- Read-FamilyDefinition and Get-RegistryChildren return one
+    [ordered] dictionary; Get-RegistryChildren's values are object[] child
+    lists (familyId -> children), already safe to .Count.
+  Sort-OrdinalUnique is module-internal (not exported). Family children carry
+  child-only keys (parent, subgroup, emitter, wikiAnchor) and are NEVER
+  written under features\entries\.
 #>
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -330,7 +336,11 @@ function Test-RepoRelativeExists($Paths, [string]$Rel) {
 }
 
 function Test-FeatureEntry {
-  param([Parameter(Mandatory)][System.Collections.IDictionary]$Entry, [Parameter(Mandatory)]$Context, [Parameter(Mandatory)][string]$Stem, [switch]$Child)
+  # -Child: an importer-generated family child. Its id is '<prefix>.<source id>'
+  # (rule.<id>, chart.<id>), so the schema's id pattern is applied to the part
+  # after the prefix. -SinceOverride: the child's 'since' came from a per-child
+  # override, which spec 7 exempts from the CHANGELOG-heading check.
+  param([Parameter(Mandatory)][System.Collections.IDictionary]$Entry, [Parameter(Mandatory)]$Context, [Parameter(Mandatory)][string]$Stem, [switch]$Child, [switch]$SinceOverride)
   $p = New-Object 'System.Collections.Generic.List[string]'
   $e = ConvertTo-OrderedObject $Entry
   $id = [string]$e['id']
@@ -338,6 +348,10 @@ function Test-FeatureEntry {
   $allowed = @($Context.KeyOrder) + $(if ($Child) { $script:ChildOnlyKeys } else { @() })
   foreach ($k in $e.Keys) { if ($allowed -notcontains $k) { $p.Add("${tag}: unknown key '$k' (not in entry.schema.json)") } }
   $probe = [ordered]@{}; foreach ($k in $e.Keys) { if ($Context.KeyOrder -contains $k) { $probe[$k] = $e[$k] } }
+  if ($Child -and $probe.Contains('id')) {
+    if ($id -match '^(?:rule|chart)\.(.+)$') { $probe['id'] = $Matches[1] }
+    else { $p.Add("${tag}: child id '$id' must be rule.<id> or chart.<id>") }
+  }
   $json = ConvertTo-CanonicalJson -Value $probe
   $jsonErr = $null
   $ok = Test-Json -Json $json -Schema $Context.SchemaJson -ErrorAction SilentlyContinue -ErrorVariable jsonErr
@@ -354,7 +368,7 @@ function Test-FeatureEntry {
   $inBacklog = $Context.SeedBacklog.Contains($id)
   $since = [string]$e['since']
   if ($status -eq 'shipped' -and -not $since) { $p.Add("${tag}: since is required for a shipped entry") }
-  if ($since -and -not $Context.ChangelogVersions.Contains($since)) {
+  if ($since -and -not ($Child -and $SinceOverride) -and -not $Context.ChangelogVersions.Contains($since)) {
     if (-not ($since -eq '0.0.0' -and $inBacklog)) { $p.Add("${tag}: since '$since' is not a '## v<version>' heading in CHANGELOG.md") }
   }
   $summary = [string]$e['summary']
@@ -506,4 +520,162 @@ function Get-LiveSurface {
   }
 }
 
-Export-ModuleMember -Function Get-RegistryPaths, ConvertTo-OrderedObject, ConvertTo-CanonicalJson, Get-EntryKeyOrder, ConvertTo-CanonicalEntry, Get-EntryList, Test-AsciiCrlfFile, Read-FeatureEntry, Write-FeatureEntry, Test-EntryCanonicalBytes, Get-RegistryContext, Get-NearestCandidates, Test-FeatureEntry, Test-GroupsAndTeams, Get-LiveSurface
+# ---------------------------------------------------------------------------
+# Families (spec 7): imported, never stored under features\entries\
+# ---------------------------------------------------------------------------
+$script:FamilyImporters = @('lint-rules', 'chart-questions')
+
+function Read-FamilyDefinition {
+  param([Parameter(Mandatory)][string]$Path)
+  $asc = Test-AsciiCrlfFile -Path $Path; if ($asc) { throw "family definition: $asc" }
+  $o = ConvertTo-OrderedObject ((Get-Content -LiteralPath $Path -Raw) | ConvertFrom-Json -AsHashtable -Depth 16)
+  foreach ($k in @('family', 'entry', 'children')) { if (-not $o.Contains($k)) { throw "$Path`: family definition is missing '$k'" } }
+  if (-not $o.Contains('defaults') -or $null -eq $o['defaults']) { $o['defaults'] = [ordered]@{} }
+  if ($null -eq $o['children']) { $o['children'] = [ordered]@{} }
+  return $o
+}
+
+function Get-OverrideValue([System.Collections.IDictionary]$Family, [string]$ChildId, [string]$Key, $Fallback) {
+  $ov = $Family['children'][$ChildId]
+  if ($null -ne $ov -and $ov.Contains($Key) -and -not (Test-EmptyValue $ov[$Key])) { return $ov[$Key] }
+  if ($Family['defaults'].Contains($Key) -and -not (Test-EmptyValue $Family['defaults'][$Key])) { return $Family['defaults'][$Key] }
+  return $Fallback
+}
+
+function Remove-EmptyKeys([System.Collections.IDictionary]$Obj) {
+  foreach ($k in @($Obj.Keys)) { if (Test-EmptyValue $Obj[$k]) { $Obj.Remove($k) } }
+  return $Obj
+}
+
+function Limit-Summary([string]$Text, [string]$Suffix) {
+  $t = $Text.TrimEnd('.', ' ')
+  $max = 160 - $Suffix.Length
+  if ($t.Length -gt $max) { $t = $t.Substring(0, $max - 3).TrimEnd() + '...' }
+  $s = $t + $Suffix
+  if ($s.Length -lt 20) { $s = $s + ' (lint rule)' }
+  return $s
+}
+
+function Import-LintRuleFamily {
+  param([Parameter(Mandatory)]$Live, [Parameter(Mandatory)][System.Collections.IDictionary]$Family, [Parameter(Mandatory)][System.Collections.IDictionary]$Parent)
+  $rules = @($Live.RuleCatalog.rules)
+  if ($rules.Count -eq 0) { throw 'lint-rules importer: 0 rules harvested' }
+  if ($rules.Count -ne [int]$Live.RuleCatalog.summary.total) { throw "lint-rules importer: $($rules.Count) rule rows vs summary.total $($Live.RuleCatalog.summary.total)" }
+  $ids = [string[]]@($rules | ForEach-Object { [string]$_.id })
+  foreach ($ov in @($Family['children'].Keys)) { if ($ids -cnotcontains $ov) { throw "lint-rules importer: override '$ov' names a rule that no longer exists in rules --json (did you mean: $((Get-NearestCandidates -Value $ov -Candidates $ids) -join ', '))" } }
+  $byId = @{}; foreach ($r0 in $rules) { $byId[[string]$r0.id] = $r0 }
+  $out = New-Object 'System.Collections.Generic.List[object]'
+  foreach ($id in (Sort-OrdinalUnique $ids)) {
+    $r = $byId[$id]
+    $suffix = ' (' + [string]$r.category + ', ' + [string]$r.default_severity + $(if ($r.fixable) { ', fixable' } else { '' }) + ')'
+    $c = [ordered]@{
+      id = 'rule.' + $id; title = $id; group = 'linting'; owner = [string]$Parent['owner']; status = 'shipped'
+      since = [string](Get-OverrideValue $Family $id 'since' $Parent['since'])
+      summary = Limit-Summary ([string]$r.title) $suffix
+      wikiPage = [string](Get-OverrideValue $Family $id 'wikiPage' 'rules')
+      surfaces = @([ordered]@{ type = 'cli'; verb = 'lint'; example = "drag-lint lint <file.pas> --rule $id" })
+      audience = 'both'
+      aliases = @(Get-OverrideValue $Family $id 'aliases' @()); related = @(Get-OverrideValue $Family $id 'related' @())
+      notes = [string](Get-OverrideValue $Family $id 'notes' '')
+      parent = [string]$Parent['id']; wikiAnchor = $id
+    }
+    $out.Add((Remove-EmptyKeys $c))
+  }
+  return [object[]]$out.ToArray()
+}
+
+function Import-ChartQuestionFamily {
+  param([Parameter(Mandatory)]$Live, [Parameter(Mandatory)][System.Collections.IDictionary]$Family, [Parameter(Mandatory)][System.Collections.IDictionary]$Parent, [Parameter(Mandatory)]$Paths)
+  # foreach, not @(...): @() over a List[object] throws 'Argument types do not
+  # match' on this pwsh (measured 2026-10-05).
+  $qs = [object[]]@(foreach ($x in $Live.ReportQuestions) { $x })
+  if ($qs.Count -eq 0) { throw 'chart-questions importer: 0 questions harvested from REPORT_QUESTIONS' }
+  if ($qs.Count -ne $Live.ReportQuestionCount) { throw "chart-questions importer: $($qs.Count) catalog rows vs REPORT_QUESTION_COUNT = $($Live.ReportQuestionCount)" }
+  $menuIds = [string[]]@($qs | ForEach-Object { $_.Id }); $setIds = [string[]]@($Live.ChartValidateSet)
+  $noMenu = @($setIds | Where-Object { $menuIds -cnotcontains $_ }); $noScript = @($menuIds | Where-Object { $setIds -cnotcontains $_ })
+  if ($noMenu.Count -or $noScript.Count) {
+    throw ("chart-questions importer: catalog and ValidateSet differ -- in New-DiagramArtifact.ps1 only: [{0}]; in REPORT_QUESTIONS only: [{1}]" -f ($noMenu -join ' '), ($noScript -join ' '))
+  }
+  foreach ($ov in @($Family['children'].Keys)) { if ($menuIds -cnotcontains $ov) { throw "chart-questions importer: override '$ov' names a question that no longer exists (did you mean: $((Get-NearestCandidates -Value $ov -Candidates $menuIds) -join ', '))" } }
+  $out = New-Object 'System.Collections.Generic.List[object]'
+  $named = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($q in $qs) {
+    $title = ($q.Caption -replace '\.\.\.$', '').Trim()
+    # Spec 7: the emitter is OPTIONAL per child and checked for existence when
+    # given. It is never derived from the id (who-writes and who-reads share
+    # Emit-MemberAccess.ps1); the two-way SET check below catches an emitter
+    # script on disk that no child names.
+    $emitter = [string](Get-OverrideValue $Family $q.Id 'emitter' '')
+    if ($emitter) {
+      if (-not (Test-RepoRelativeExists $Paths $emitter)) { throw "chart-questions importer: emitter '$emitter' for '$($q.Id)' does not exist" }
+      [void]$named.Add((Split-Path -Leaf $emitter))
+    }
+    if (-not $Live.GroupCaptions.ContainsKey($q.Kind)) { throw "chart-questions importer: no ReportGroupCaption for Kind $($q.Kind)" }
+    $sub = [string]$Live.GroupCaptions[$q.Kind]
+    # The submenu the questions hang under is family DATA (defaults.menuPrefix),
+    # so move-menu can relocate the whole family in one edit.
+    $prefix = [string](Get-OverrideValue $Family $q.Id 'menuPrefix' 'drag-lint > Reports')
+    $c = [ordered]@{
+      id = 'chart.' + $q.Id; title = $title; group = 'diagrams-charts'; owner = 'CHARTS'; status = 'shipped'
+      since = [string](Get-OverrideValue $Family $q.Id 'since' $Parent['since'])
+      summary = "$title -- chart question ($sub)"
+      wikiPage = [string](Get-OverrideValue $Family $q.Id 'wikiPage' ('ask-' + $q.Id))
+      surfaces = @(
+        [ordered]@{ type = 'ide-menu'; path = $prefix + ' > ' + $q.Caption },
+        [ordered]@{ type = 'script'; path = 'charts\src\Ask-Report.ps1'; args = '-Question ' + $q.Id },
+        [ordered]@{ type = 'script'; path = 'charts\src\New-DiagramArtifact.ps1'; args = '-Question ' + $q.Id })
+      audience = 'both'
+      requires = @(Get-OverrideValue $Family $q.Id 'requires' @())
+      aliases = @(Get-OverrideValue $Family $q.Id 'aliases' @()); related = @(Get-OverrideValue $Family $q.Id 'related' @())
+      notes = [string](Get-OverrideValue $Family $q.Id 'notes' '')
+      tests = @(Get-OverrideValue $Family $q.Id 'tests' @())
+      parent = [string]$Parent['id']; subgroup = $sub; emitter = $emitter
+    }
+    $ho = Get-OverrideValue $Family $q.Id 'homeOrder' $null
+    if ($null -ne $ho) { $c['homeOrder'] = [int]$ho }
+    $out.Add((Remove-EmptyKeys $c))
+  }
+  $disk = [string[]]@($Live.EmitterFiles)
+  $unnamed = @($disk | Where-Object { -not $named.Contains($_) })
+  $ghost = @(@($named) | Sort-Object | Where-Object { $disk -notcontains $_ })
+  if ($unnamed.Count -or $ghost.Count) { throw ("chart-questions importer: emitter set drift -- on disk but no child names it: [{0}]; named but not on disk: [{1}]" -f ($unnamed -join ' '), ($ghost -join ' ')) }
+  return [object[]]$out.ToArray()
+}
+
+function Get-RegistryChildren {
+  param([Parameter(Mandatory)]$Live, [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Entries, [Parameter(Mandatory)]$Paths)
+  $out = [ordered]@{}
+  $familyEntries = @($Entries | Where-Object { $_ -is [System.Collections.IDictionary] -and $_.Contains('family') })
+  $defs = @(if (Test-Path -LiteralPath $Paths.Families) { Get-ChildItem -LiteralPath $Paths.Families -Filter '*.json' -File | ForEach-Object { $_.BaseName } })
+  foreach ($fe in $familyEntries) {
+    $fam = [string]$fe['family']
+    if ($defs -cnotcontains $fam) { throw "family '$fam' (entry '$($fe['id'])') has no features\families\$fam.json" }
+  }
+  foreach ($d in $defs) { if ($script:FamilyImporters -cnotcontains $d) { throw "features\families\$d.json has no importer (known: $($script:FamilyImporters -join ', '))" } }
+  $parents = @{}
+  foreach ($fam in $script:FamilyImporters) {
+    if ($defs -cnotcontains $fam) { continue }
+    $def = Read-FamilyDefinition -Path (Join-Path $Paths.Families "$fam.json")
+    if ([string]$def['family'] -cne $fam) { throw "features\families\$fam.json declares family '$($def['family'])'; it must equal the file name" }
+    $parent = @($familyEntries | Where-Object { [string]$_['id'] -ceq [string]$def['entry'] -and [string]$_['family'] -ceq $fam })
+    if ($parent.Count -ne 1) { throw "features\families\$fam.json names entry '$($def['entry'])', but no hand entry with id '$($def['entry'])' and family '$fam' exists" }
+    $parents[$fam] = $parent[0]
+    $kids = if ($fam -eq 'lint-rules') { @(Import-LintRuleFamily -Live $Live -Family $def -Parent $parent[0]) } else { @(Import-ChartQuestionFamily -Live $Live -Family $def -Parent $parent[0] -Paths $Paths) }
+    $out[$fam] = $kids
+  }
+  $allIds = [string[]](@($Entries | ForEach-Object { [string]$_['id'] }) + @(foreach ($v in $out.Values) { foreach ($c in $v) { [string]$c['id'] } }))
+  $ctx = Get-RegistryContext -Paths $Paths -ExtraIds $allIds
+  $problems = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($fam in $out.Keys) {
+    foreach ($c in $out[$fam]) {
+      # A child's since that differs from its parent's came from a per-child
+      # override: exempt from the CHANGELOG-heading check (spec 7).
+      $ovSince = ([string]$c['since']) -cne ([string]$parents[$fam]['since'])
+      foreach ($x in @(Test-FeatureEntry -Entry $c -Context $ctx -Stem ([string]$c['id']) -Child -SinceOverride:$ovSince)) { $problems.Add($x) }
+    }
+  }
+  if ($problems.Count -gt 0) { throw ("family children failed validation:`n" + ($problems -join "`n")) }
+  return $out
+}
+
+Export-ModuleMember -Function Get-RegistryPaths, ConvertTo-OrderedObject, ConvertTo-CanonicalJson, Get-EntryKeyOrder, ConvertTo-CanonicalEntry, Get-EntryList, Test-AsciiCrlfFile, Read-FeatureEntry, Write-FeatureEntry, Test-EntryCanonicalBytes, Get-RegistryContext, Get-NearestCandidates, Test-FeatureEntry, Test-GroupsAndTeams, Get-LiveSurface, Read-FamilyDefinition, Import-LintRuleFamily, Import-ChartQuestionFamily, Get-RegistryChildren

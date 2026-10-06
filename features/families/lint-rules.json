@@ -1,0 +1,7 @@
+{
+  "family": "lint-rules",
+  "entry": "lint-rules",
+  "source": "drag-lint rules --json",
+  "defaults": {},
+  "children": {}
+}
