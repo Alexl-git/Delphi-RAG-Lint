@@ -109,6 +109,10 @@ function Get-RegistryPaths {
 # get_Keys(), never .Keys, on a dictionary whose keys are DATA: a shortcut
 # surface has a key named 'keys', and PowerShell member access then returns
 # that entry's VALUE instead of the key collection ({"Ctrl+Alt+F": null}).
+# The same holds for group ids, entry stems, family ids and file paths (a
+# group named 'keys' or 'values' is legal kebab-case). .Keys is left only on
+# dictionaries with a FIXED, code-literal key set: $script:SurfaceKeys (surface
+# types), the Feature-Index $sections and the generator's $outputs.
 function ConvertTo-OrderedObject {
   param([AllowNull()]$Value)
   if ($null -eq $Value) { return $null }
@@ -222,7 +226,7 @@ function ConvertTo-CanonicalEntry {
   param([Parameter(Mandatory)][System.Collections.IDictionary]$Entry, [Parameter(Mandatory)][string[]]$KeyOrder)
   $e = ConvertTo-OrderedObject $Entry
   $out = [ordered]@{}
-  $all = @($KeyOrder) + @($e.Keys | Where-Object { $KeyOrder -notcontains $_ } | Sort-Object)
+  $all = @($KeyOrder) + @($e.get_Keys() | Where-Object { $KeyOrder -notcontains $_ } | Sort-Object)
   foreach ($k in $all) {
     if ($k -eq 'surfaces' -and -not $e.Contains($k)) { $out[$k] = @(); continue }
     if (-not $e.Contains($k)) { continue }
@@ -381,8 +385,8 @@ function Test-FeatureEntry {
   $id = [string]$e['id']
   $tag = if ($Child) { "child $id" } else { "$Stem.json" }
   $allowed = @($Context.KeyOrder) + $(if ($Child) { $script:ChildOnlyKeys } else { @() })
-  foreach ($k in $e.Keys) { if ($allowed -notcontains $k) { $p.Add("${tag}: unknown key '$k' (not in entry.schema.json)") } }
-  $probe = [ordered]@{}; foreach ($k in $e.Keys) { if ($Context.KeyOrder -contains $k) { $probe[$k] = $e[$k] } }
+  foreach ($k in $e.get_Keys()) { if ($allowed -notcontains $k) { $p.Add("${tag}: unknown key '$k' (not in entry.schema.json)") } }
+  $probe = [ordered]@{}; foreach ($k in $e.get_Keys()) { if ($Context.KeyOrder -contains $k) { $probe[$k] = $e[$k] } }
   if ($Child -and $probe.Contains('id')) {
     if ($id -match '^(?:rule|chart)\.(.+)$') { $probe['id'] = $Matches[1] }
     else { $p.Add("${tag}: child id '$id' must be rule.<id> or chart.<id>") }
@@ -396,7 +400,7 @@ function Test-FeatureEntry {
     if ($id -like '*.*') { $p.Add("${tag}: id '$id' contains '.'; importers own rule.<id> and chart.<id>, hand ids never contain a dot") }
   }
   $group = [string]$e['group']
-  if (-not $Context.Groups.Contains($group)) { $p.Add("${tag}: group '$group' is not in groups.json (one of: $($Context.Groups.Keys -join ' '))") }
+  if (-not $Context.Groups.Contains($group)) { $p.Add("${tag}: group '$group' is not in groups.json (one of: $($Context.Groups.get_Keys() -join ' '))") }
   $owner = [string]$e['owner']
   if (-not $Context.Teams.Contains($owner)) { $p.Add("${tag}: owner '$owner' is not in teams.json (one of: $(@($Context.Teams) -join ' ')); add it with feature-registry.ps1 add -NewTeam") }
   $status = [string]$e['status']
@@ -468,7 +472,7 @@ function Test-GroupsAndTeams {
     if (-not (Test-Json -Json $raw -Schema $schema -ErrorAction SilentlyContinue -ErrorVariable err)) { foreach ($x in @($err)) { $p.Add("$file`: " + ($x.ToString() -replace '\s+', ' ')) } }
     $asc = Test-AsciiCrlfFile -Path $file; if ($asc) { $p.Add($asc) }
   }
-  $ids = @($Context.Groups.Keys); $orders = @($Context.Groups.Values | ForEach-Object { [int]$_.order })
+  $ids = @($Context.Groups.get_Keys()); $orders = @($Context.Groups.get_Values() | ForEach-Object { [int]$_.order })
   if (@($ids | Sort-Object -Unique).Count -ne $ids.Count) { $p.Add('groups.json: duplicate group id') }
   if (@($orders | Sort-Object -Unique).Count -ne $orders.Count) { $p.Add('groups.json: duplicate group order') }
   foreach ($g in $ids) { if ($g -notmatch '^[a-z][a-z0-9-]*$') { $p.Add("groups.json: group id '$g' is not kebab-case") } }
@@ -496,7 +500,12 @@ function Get-LiveSurface {
   $dispatch = @([regex]::Matches($cliSrc, "Args\.Command\s*=\s*'([a-z][a-z0-9-]*)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
   if ($dispatch.Count -le 20) { throw "live surface: dispatch scan yielded $($dispatch.Count) verb(s); expected > 20" }
   $subMap = Get-CliVerbSubcommandMap -CliPath $Paths.CliPas
-  $captions = Get-LiveMenuCaptions -Repo $Paths.Repo
+  # Dialog buttons (TButton / TBitBtn / TSpeedButton captions: 'Go To', 'Fix',
+  # 'Cancel') are harvested APART: they are not features, so check B never asks
+  # for them and no exemption is needed. Check C still accepts them as live for an
+  # ide-about surface (a button of the About window is a dialog button).
+  $captions = Get-LiveMenuCaptions -Repo $Paths.Repo -ExcludeDialogButtons
+  $dialogButtons = [string[]]@(Get-LiveDialogButtonCaptions -Repo $Paths.Repo)
   if ($captions.Count -lt 40) { throw "live surface: $($captions.Count) caption(s) harvested; expected >= 40" }
   $captionKeys = @($captions | ForEach-Object { Get-CaptionKey -S $_ } | Where-Object { $_ })
   $aboutSrc = Get-Content -LiteralPath (Join-Path $Paths.Repo 'src\delphi-plugin\DragLint.Plugin.AboutForm.pas') -Raw
@@ -555,7 +564,7 @@ function Get-LiveSurface {
   if (-not $vers.Product) { throw 'live surface: DRAGLINT_VERSION not found in DRagLint.Core.Model.pas' }
   return [pscustomobject]@{
     HelpText = $helpText; HelpVerbs = $helpVerbs; DispatchVerbs = $dispatch; SubMap = $subMap
-    Captions = $captions; CaptionKeys = $captionKeys; AboutButtons = $aboutButtons; ContextCaptions = $ctxCaps
+    Captions = $captions; CaptionKeys = $captionKeys; AboutButtons = $aboutButtons; DialogButtons = $dialogButtons; ContextCaptions = $ctxCaps
     McpTools = $mcpTools; McpDispatch = $mcpDispatch; RuleCatalog = $cat
     ReportQuestions = $questions; ReportQuestionCount = [int]$qc.Groups[1].Value; GroupCaptions = $groupCaptions
     ChartValidateSet = $validateSet; EmitterFiles = $emitters; PackExes = $packExes; Versions = $vers
@@ -578,7 +587,7 @@ function Read-FamilyDefinition {
   foreach ($k in @('family', 'entry', 'children', 'lastVerified')) { if (-not $o.Contains($k)) { throw "$Path`: family definition is missing '$k'" } }
   $lv = $o['lastVerified']
   if (-not ($lv -is [System.Collections.IDictionary])) { throw "$Path`: lastVerified must be an object { date, by, build }" }
-  foreach ($k in $lv.Keys) { if ($script:LastVerifiedKeys -notcontains $k) { throw "$Path`: lastVerified has unknown key '$k' (allowed: $($script:LastVerifiedKeys -join ', '))" } }
+  foreach ($k in $lv.get_Keys()) { if ($script:LastVerifiedKeys -notcontains $k) { throw "$Path`: lastVerified has unknown key '$k' (allowed: $($script:LastVerifiedKeys -join ', '))" } }
   foreach ($k in $script:LastVerifiedKeys) { if ([string]::IsNullOrWhiteSpace([string]$lv[$k])) { throw "$Path`: lastVerified.$k is missing or empty" } }
   if ($null -ne $Context) {
     $lvp = @(Test-LastVerifiedValue -Value $lv -Context $Context -Tag $Path)
@@ -597,7 +606,7 @@ function Get-OverrideValue([System.Collections.IDictionary]$Family, [string]$Chi
 }
 
 function Remove-EmptyKeys([System.Collections.IDictionary]$Obj) {
-  foreach ($k in @($Obj.Keys)) { if (Test-EmptyValue $Obj[$k]) { $Obj.Remove($k) } }
+  foreach ($k in @($Obj.get_Keys())) { if (Test-EmptyValue $Obj[$k]) { $Obj.Remove($k) } }
   return $Obj
 }
 
@@ -720,9 +729,9 @@ function Get-RegistryChildren {
     $kids = if ($fam -eq 'lint-rules') { @(Import-LintRuleFamily -Live $Live -Family $def -Parent $parent[0]) } else { @(Import-ChartQuestionFamily -Live $Live -Family $def -Parent $parent[0] -Paths $Paths) }
     $out[$fam] = $kids
   }
-  foreach ($v in $out.Values) { foreach ($c in $v) { [void]$ctx.KnownIds.Add([string]$c['id']) } }
+  foreach ($v in $out.get_Values()) { foreach ($c in $v) { [void]$ctx.KnownIds.Add([string]$c['id']) } }
   $problems = New-Object 'System.Collections.Generic.List[string]'
-  foreach ($fam in $out.Keys) {
+  foreach ($fam in $out.get_Keys()) {
     foreach ($c in $out[$fam]) {
       # A child's since that differs from its parent's came from a per-child
       # override: exempt from the CHANGELOG-heading check (spec 7).
@@ -778,7 +787,7 @@ function ConvertTo-RegistryListJson([string]$Key, [object[]]$Rows) {
   [void]$sb.Append("{`r`n  "); Write-JsonString $sb $Key; [void]$sb.Append(": [`r`n")
   for ($i = 0; $i -lt $Rows.Count; $i++) {
     $r = $Rows[$i]
-    foreach ($k in $r.Keys) { if ($script:ListRowKeys -notcontains $k) { throw "$Key[$i]: unknown key '$k' (allowed: $($script:ListRowKeys -join ', '))" } }
+    foreach ($k in $r.get_Keys()) { if ($script:ListRowKeys -notcontains $k) { throw "$Key[$i]: unknown key '$k' (allowed: $($script:ListRowKeys -join ', '))" } }
     [void]$sb.Append('    { ')
     $first = $true
     foreach ($k in $script:ListRowKeys) {
@@ -822,7 +831,7 @@ function Get-ChildIdsIfNeeded($Paths, [System.Collections.IDictionary]$Entry, $C
   if (@($needs | Where-Object { $_ -like 'rule.*' -or $_ -like 'chart.*' }).Count -eq 0) { return @() }
   $live = Get-LiveSurface -Paths $Paths
   $kids = Get-RegistryChildren -Live $live -Entries @($Context.Entries | ForEach-Object { $_.Entry }) -Paths $Paths
-  return @($kids.Values | ForEach-Object { $_ } | ForEach-Object { [string]$_['id'] })
+  return @($kids.get_Values() | ForEach-Object { $_ } | ForEach-Object { [string]$_['id'] })
 }
 
 function New-FeatureEntry {
@@ -838,7 +847,7 @@ function New-FeatureEntry {
   $listWrites = New-Object 'System.Collections.Generic.List[object]'
   $group = [string]$Fields['group']; $owner = [string]$Fields['owner']
   if ($group -and -not $ctx.Groups.Contains($group)) {
-    if (-not $NewGroup) { throw "add: unknown group '$group' (one of: $($ctx.Groups.Keys -join ' ')); pass -NewGroup -GroupTitle <t> -GroupSummary <s> to create it" }
+    if (-not $NewGroup) { throw "add: unknown group '$group' (one of: $($ctx.Groups.get_Keys() -join ' ')); pass -NewGroup -GroupTitle <t> -GroupSummary <s> to create it" }
     if (-not $GroupTitle -or -not $GroupSummary) { throw 'add: -NewGroup needs -GroupTitle and -GroupSummary' }
     $a = New-RegistryListAddition $Paths.Groups 'groups' $group $GroupTitle $GroupSummary
     $listWrites.Add($a); $ctx.Groups[$group] = [pscustomobject]$a.Row
@@ -874,7 +883,7 @@ function Update-FeatureEntry {
   if (-not (Test-Path -LiteralPath $file)) { throw "update: no entry '$Id' ($file)" }
   $r = Read-FeatureEntry -Path $file
   $e = $r.Entry
-  foreach ($k in $Set.Keys) { if ($null -eq $Set[$k] -or (Test-EmptyValue $Set[$k])) { $e.Remove($k) } else { $e[$k] = $Set[$k] } }
+  foreach ($k in $Set.get_Keys()) { if ($null -eq $Set[$k] -or (Test-EmptyValue $Set[$k])) { $e.Remove($k) } else { $e[$k] = $Set[$k] } }
   $ctx = Get-RegistryContext -Paths $Paths
   $ctx = Get-RegistryContext -Paths $Paths -ExtraIds (Get-ChildIdsIfNeeded $Paths $e $ctx)
   $problems = @(Test-FeatureEntry -Entry $e -Context $ctx -Stem $Id)
@@ -889,7 +898,7 @@ function Get-AllRegistryItems($Paths, [bool]$IncludeChildren) {
   if ($IncludeChildren) {
     $live = Get-LiveSurface -Paths $Paths
     $kids = Get-RegistryChildren -Live $live -Entries @($ctx.Entries | ForEach-Object { $_.Entry }) -Paths $Paths
-    foreach ($fam in $kids.Keys) { foreach ($c in $kids[$fam]) { $items += [pscustomobject]@{ Entry = $c; File = (Join-Path $Paths.Families "$fam.json") } } }
+    foreach ($fam in $kids.get_Keys()) { foreach ($c in $kids[$fam]) { $items += [pscustomobject]@{ Entry = $c; File = (Join-Path $Paths.Families "$fam.json") } } }
   }
   return ,$items
 }
@@ -957,7 +966,7 @@ function Get-FeatureBlastRadius {
       if (-not $byFamily.Contains($fp.Family)) { $byFamily[$fp.Family] = New-Object 'System.Collections.Generic.List[object]' }
       $byFamily[$fp.Family].Add($fp)
     }
-    foreach ($fam in $byFamily.Keys) {
+    foreach ($fam in $byFamily.get_Keys()) {
       $fps = $byFamily[$fam]; $pe = $fps[0].Parent
       $pv = { param($k) if ($null -ne $pe -and $pe.Contains($k)) { [string]$pe[$k] } else { '' } }
       if ($Group -and (& $pv 'group') -ne $Group) { continue }
@@ -1028,13 +1037,13 @@ function Move-FeatureMenuPath {
   if ($WhatIf) { return ,$rows.ToArray() }
   foreach ($w in $writes) { $w.Text = ConvertTo-CanonicalJson -Value (ConvertTo-CanonicalEntry -Entry $w.Entry -KeyOrder $ctx.KeyOrder) }
   $famTexts = [ordered]@{}
-  foreach ($f in $famEdits.Keys) {
+  foreach ($f in $famEdits.get_Keys()) {
     $raw = [IO.File]::ReadAllText($f); $ed = @($famEdits[$f] | Sort-Object Index -Descending)
     foreach ($x in $ed) { $raw = $raw.Remove($x.Index, $x.Length).Insert($x.Index, $x.Text) }
     $famTexts[$f] = $raw
   }
   foreach ($w in $writes) { [IO.File]::WriteAllText($w.File, $w.Text, [Text.Encoding]::ASCII) }
-  foreach ($f in $famTexts.Keys) { [IO.File]::WriteAllText($f, $famTexts[$f], [Text.Encoding]::ASCII) }
+  foreach ($f in $famTexts.get_Keys()) { [IO.File]::WriteAllText($f, $famTexts[$f], [Text.Encoding]::ASCII) }
   return ,$rows.ToArray()
 }
 
@@ -1142,7 +1151,7 @@ function Get-NearestCaption([string]$Key, [string[]]$Captions) {
     if ($ck.Length -gt $Key.Length) { $cut = $ck.Substring(0, $Key.Length); if (-not $pool.ContainsKey($cut)) { $pool[$cut] = $c } }
   }
   $seen = New-Object 'System.Collections.Generic.List[string]'
-  foreach ($n in (Get-NearestCandidates -Value $Key -Candidates ([string[]]@($pool.Keys)) -Top 12)) { $o = [string]$pool[$n]; if (-not $seen.Contains($o)) { $seen.Add($o) }; if ($seen.Count -ge 3) { break } }
+  foreach ($n in (Get-NearestCandidates -Value $Key -Candidates ([string[]]@($pool.get_Keys())) -Top 12)) { $o = [string]$pool[$n]; if (-not $seen.Contains($o)) { $seen.Add($o) }; if ($seen.Count -ge 3) { break } }
   return ,[string[]]$seen.ToArray()
 }
 
@@ -1203,7 +1212,7 @@ function Invoke-RegistryCheck {
     $letter = if ($m -like 'family children failed validation*') { 'A' } elseif ($m -like '*override*') { 'C' } else { 'B' }
     $fail.Add("${letter}: family import: $m")
   }
-  $childList = [object[]]@(foreach ($v in $children.Values) { foreach ($c in $v) { $c } })
+  $childList = [object[]]@(foreach ($v in $children.get_Values()) { foreach ($c in $v) { $c } })
   $allIds = [string[]]@(@(foreach ($e in $hand) { [string]$e['id'] }) + @(foreach ($c in $childList) { [string]$c['id'] }))
   $ctx = Get-RegistryContext -Paths $Paths -ExtraIds $allIds
   foreach ($e in $hand) { foreach ($pr in @(Test-FeatureEntry -Entry $e -Context $ctx -Stem ([string]$e['id']))) { $fail.Add("A: $pr") } }
@@ -1212,6 +1221,8 @@ function Invoke-RegistryCheck {
   # collection is not safe on this pwsh (see Import-ChartQuestionFamily).
   $captions = [string[]]@(@(foreach ($c in $Live.Captions) { $c }) + @($InjectCaptions))
   $liveKeys = [string[]]@(foreach ($c in $captions) { $k = Get-CaptionKey -S $c; if ($k) { $k } })
+  # An ide-about surface may name a dialog button of the About window.
+  $aboutKeys = [string[]]@(@($liveKeys) + @(foreach ($c in @(if ($Live.PSObject.Properties.Name -contains 'DialogButtons') { $Live.DialogButtons })) { $k = Get-CaptionKey -S $c; if ($k) { $k } }))
   $ctxCaptions = [ordered]@{}
   if ($Live.PSObject.Properties.Name -contains 'ContextCaptions') { foreach ($h in @($Live.ContextCaptions.get_Keys())) { $ctxCaptions[$h] = [string[]]@($Live.ContextCaptions[$h]) } }
   if (@($InjectContextCaptions).Count) { $ctxCaptions['Structure form'] = [string[]]@(@(if ($ctxCaptions.Contains('Structure form')) { $ctxCaptions['Structure form'] }) + @($InjectContextCaptions)) }
@@ -1316,7 +1327,7 @@ function Invoke-RegistryCheck {
         }
         { $_ -in @('ide-menu', 'ide-about', 'tool-window') } {
           $k = Get-LeafKey $s
-          if (-not (Test-RegistryCaptionMatch -Key $k -Keys $liveKeys)) {
+          if (-not (Test-RegistryCaptionMatch -Key $k -Keys $(if ([string]$s['type'] -eq 'ide-about') { $aboutKeys } else { $liveKeys }))) {
             $near = Get-NearestCaption -Key $k -Captions $captions
             $where = if ($s.Contains('path')) { $s['path'] } else { $s['caption'] }
             $fail.Add("C: $id`: $($s['type']) '$where' matches no live caption (nearest: $($near -join ' | ')) -- the usual cause is a renamed or moved menu item: tools\feature-registry.ps1 move-menu, or update the entry")
@@ -1332,7 +1343,7 @@ function Invoke-RegistryCheck {
     foreach ($team in $bl.teams.PSObject.Properties) {
       $remaining = 0
       foreach ($bid in @($team.Value)) {
-        if (-not $byStem.ContainsKey([string]$bid)) { $fail.Add("A: seed-backlog.json: '$bid' ($($team.Name)) is not an entry (nearest: $((Get-NearestCandidates -Value ([string]$bid) -Candidates @($byStem.Keys)) -join ', ')) -- delete it from the backlog"); continue }
+        if (-not $byStem.ContainsKey([string]$bid)) { $fail.Add("A: seed-backlog.json: '$bid' ($($team.Name)) is not an entry (nearest: $((Get-NearestCandidates -Value ([string]$bid) -Candidates @($byStem.get_Keys())) -join ', ')) -- delete it from the backlog"); continue }
         $be = $byStem[[string]$bid]
         $owed = (-not $be.Contains('intro')) -or (-not $be.Contains('lastVerified')) -or ([string]$be['since'] -eq '0.0.0')
         if ($owed) { $remaining++ } else { $fail.Add("A: seed-backlog.json: '$bid' now has intro, lastVerified and a real since -- delete it from the backlog (the list is a debt, not a suppression)") }
@@ -1403,7 +1414,7 @@ function Get-RegistryModel {
   # An empty registry (before the seed) has no parent entry for any family:
   # there is nothing to hang children on, so none are imported.
   $children = if ($entries.Count -eq 0) { [ordered]@{} } else { Get-RegistryChildren -Live $Live -Entries $entries -Paths $Paths }
-  $groups = [object[]]@($ctx.Groups.Values | Sort-Object { [int]$_.order })
+  $groups = [object[]]@($ctx.Groups.get_Values() | Sort-Object { [int]$_.order })
   $sorted = Sort-ByOrdinalKey $entries { param($e) ('{0:D6}|{1}|{2}' -f [int]$ctx.Groups[[string]$e['group']].order, ([string]$e['title']).ToLowerInvariant(), [string]$e['id']) }
   $related = [object[]]@((Get-Content -LiteralPath $Paths.RelatedProjects -Raw | ConvertFrom-Json).projects)
   return [pscustomobject]@{ Live = $Live; Context = $ctx; Entries = $sorted; Children = $children; Groups = $groups; Templates = $templates; Related = $related }
@@ -1450,7 +1461,7 @@ function Render-HomePage {
   [void]$sb.Append("| **[Features](Features)** | Everything it does, grouped |`r`n")
   [void]$sb.Append("| **[Feature Index](Feature-Index)** | Every feature by the surface it is reached from |`r`n")
   [void]$sb.Append("| **[Quick Help](Quick-Help)** | One line per feature, with the short help and the aliases people search for |`r`n")
-  $withHome = [object[]]@(@($Model.Entries | Where-Object { $_.Contains('homeOrder') }) + @(foreach ($list in $Model.Children.Values) { foreach ($c in $list) { if ($c.Contains('homeOrder')) { $c } } }))
+  $withHome = [object[]]@(@($Model.Entries | Where-Object { $_.Contains('homeOrder') }) + @(foreach ($list in $Model.Children.get_Values()) { foreach ($c in $list) { if ($c.Contains('homeOrder')) { $c } } }))
   foreach ($e in (Sort-ByOrdinalKey $withHome { param($x) ('{0:D6}|{1}' -f [int]$x['homeOrder'], [string]$x['id']) })) {
     [void]$sb.Append("| **[$($e['title'])]($($e['wikiPage']))** | $($e['summary']) |`r`n")
   }
@@ -1627,7 +1638,7 @@ function Render-Manifest {
     families = [ordered]@{}
   }
   $childOrder = [string[]]@($Model.Context.KeyOrder + $script:ChildOnlyKeys)
-  foreach ($fam in $Model.Children.Keys) { $m['families'][$fam] = @(foreach ($c in $Model.Children[$fam]) { Remove-ManifestVolatile (ConvertTo-CanonicalEntry -Entry $c -KeyOrder $childOrder) }) }
+  foreach ($fam in $Model.Children.get_Keys()) { $m['families'][$fam] = @(foreach ($c in $Model.Children[$fam]) { Remove-ManifestVolatile (ConvertTo-CanonicalEntry -Entry $c -KeyOrder $childOrder) }) }
   return (ConvertTo-CanonicalJson -Value $m)
 }
 

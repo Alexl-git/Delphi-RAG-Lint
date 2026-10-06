@@ -77,7 +77,7 @@ $shortLeaf = [ordered]@{ id = 'zz-short-leaf'; title = 'Short leaf entry'; group
   summary = 'Injected by the guard to prove a short leaf is not a prefix match'; intro = 'Control.'; wikiPage = 'Home'; surfaces = @([ordered]@{ type = 'ide-menu'; path = 'drag-lint > Uses Au' }); audience = 'both'
   lastVerified = [ordered]@{ date = (Get-Date -Format 'yyyy-MM-dd'); by = 'guard'; build = $live.Versions.Product } }
 $guid = [Guid]::NewGuid().ToString('N').Substring(0, 8)
-$ctl = Invoke-RegistryCheck -Paths $p -Level Full -Live $live -SkipGenerated -InjectEntries @($ghostEntry, $noIntroEntry, $ghostContext, $shortLeaf) -InjectHelpVerbs @("zz-not-a-verb-$guid") -InjectCaptions @('Zz Not A Real Menu Item', 'Refresh Zz Probe') -InjectContextCaptions @('Zz Not A Context Item')
+$ctl = Invoke-RegistryCheck -Paths $p -Level Full -Live $live -SkipGenerated -InjectEntries @($ghostEntry, $noIntroEntry, $ghostContext, $shortLeaf) -InjectHelpVerbs @("zz-not-a-verb-$guid") -InjectCaptions @('Zz Not A Real Menu Item', 'Refresh Zz Probe', 'OK') -InjectContextCaptions @('Zz Not A Context Item')
 Control 'an entry whose wikiPage does not exist is reported (C/A)' (@($ctl.Failures | Where-Object { $_ -like '*Zz-No-Such-Page*' }).Count -gt 0)
 Control 'an entry outside the seed backlog with no intro is reported (A)' (@($ctl.Failures | Where-Object { $_ -like 'A: zz-no-intro.json: intro is required*' }).Count -gt 0)
 Control 'an ide-context surface absent from its host menu is reported (C)' (@($ctl.Failures | Where-Object { $_ -like 'C: zz-ghost-context: ide-context*Zz Ghost Context Item*' }).Count -gt 0)
@@ -86,6 +86,9 @@ Control 'an unregistered --help verb is reported with a skeleton (B)' (@($ctl.Fa
 Control 'an unregistered caption is reported (B)' (@($ctl.Failures | Where-Object { $_ -like 'B: *Zz Not A Real Menu Item*' }).Count -gt 0)
 Control 'a caption that only starts with a short registered key is reported (B)' (@($ctl.Failures | Where-Object { $_ -like "B: *unregistered: 'Refresh Zz Probe'*" }).Count -gt 0)
 Control 'a short entry leaf that only prefixes a live caption is reported (C)' (@($ctl.Failures | Where-Object { $_ -like "C: zz-short-leaf: ide-menu 'drag-lint > Uses Au'*" }).Count -gt 0)
+# Dialog-button policy: the harvest classifies by the source construct, not by
+# the word -- a MENU caption that reads like a button ('OK') is still a feature.
+Control 'a menu caption that reads like a dialog button (OK) is still reported (B)' (@($ctl.Failures | Where-Object { $_ -like "B: *unregistered: 'OK'*" }).Count -gt 0)
 [void](Invoke-RegistryGenerate -Paths $p -OutDir $WorkDir)
 $fp = Join-Path $WorkDir 'docs\wiki\Quick-Help.md'
 $before = [IO.File]::ReadAllText($fp)
@@ -111,6 +114,13 @@ foreach ($letter in 'A', 'B', 'C', 'D') {
   Check $name ($f.Count -eq 0) "($($f.Count) failure(s))"
   foreach ($x in $f) { Write-Host ("        " + ($x -replace "`n", "`n        ")) -ForegroundColor Red }
 }
+# Dialog buttons (Go To, Fix, Cancel, ...) are not features: they are harvested
+# apart and need no exemption, so exemptions.json must not carry one.
+$dlg = if ($live.PSObject.Properties.Name -contains 'DialogButtons') { [string[]]@($live.DialogButtons) } else { [string[]]@() }
+$exCapNames = @((Get-Content -LiteralPath $p.Exemptions -Raw | ConvertFrom-Json -AsHashtable)['captions'].get_Keys())
+Check 'POLICY: dialog buttons are harvested apart (Go To, Fix)' (($dlg -contains 'Go To') -and ($dlg -contains 'Fix')) ($dlg -join ' | ')
+Check 'POLICY: exemptions.json carries no dialog-button caption' (@($exCapNames | Where-Object { $dlg -contains $_ }).Count -eq 0) ((@($exCapNames | Where-Object { $dlg -contains $_ })) -join ' | ')
+Check 'POLICY: no B failure names a dialog button' (@($res.Failures | Where-Object { $x = $_; $x.StartsWith('B: ') -and @($dlg | Where-Object { $x -like "*unregistered: '$_'*" }).Count }).Count -eq 0)
 $other = @($res.Failures | Where-Object { $_ -notmatch '^[ABCD]: ' })
 Check 'no uncategorised failure' ($other.Count -eq 0) ($other -join ' | ')
 

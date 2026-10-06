@@ -124,6 +124,18 @@ keys, LSP methods, the host of a right-click caption, a menu inside another exe,
 procedures. The periodic review exercises those. Submenu NESTING is not verified
 in v1 -- that needs the plugin's central menu table (a later plan).
 
+**Dialog buttons are not features, and need no exemption.** A caption assigned
+to a variable declared or created as a `TButton`, `TBitBtn` or `TSpeedButton` in
+the menu sources (`Go To` in the definition picker, `Fix` on an About-window
+diagnose row, `Cancel`, `OK`) is harvested apart from the menu items, so check B
+never asks for it. The split is by the SOURCE CONSTRUCT, not by the word: a menu
+item captioned `OK` is still a menu caption and still fails B until it is
+registered (the guard has a control for exactly that). Check C still accepts a
+dialog button as live for an `ide-about` surface. `exemptions.json` is for
+containers and headers only; the guard fails if it carries a dialog button.
+Limitation: receivers are matched by variable NAME across the menu units, so a
+button and a menu item sharing one variable name would both count as buttons.
+
 ## Files
 
 `features\groups.json`, `teams.json` (data; add through `-NewGroup` / `-NewTeam`),

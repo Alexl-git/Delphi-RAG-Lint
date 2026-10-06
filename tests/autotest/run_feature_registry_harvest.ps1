@@ -58,6 +58,27 @@ Check 'REVIEW FOCUS 5: product version read from source equals --version stdout'
 Check 'extractor, resolver and schema versions read' (($live.Versions.Extractor -match '^\d') -and ($live.Versions.Resolver -match '^\d') -and ([int]$live.Versions.Schema -gt 0)) "$($live.Versions.Extractor) / $($live.Versions.Resolver) / $($live.Versions.Schema)"
 Check 'About buttons harvested' ($live.AboutButtons.Count -ge 3) "($($live.AboutButtons.Count))"
 
+# --- dialog buttons are harvested APART from menu items (registry policy) ----
+# A '.Caption :=' on a variable declared or created as a TButton / TBitBtn /
+# TSpeedButton is a dialog button, not a feature: it needs no exemption.
+$dlgWant = @('Go To', 'Fix', 'Cancel', 'Copy to clipboard')
+Check 'dialog buttons harvested apart (Go To, Fix, Cancel, Copy to clipboard)' (($live.PSObject.Properties.Name -contains 'DialogButtons') -and (@($dlgWant | Where-Object { $live.DialogButtons -notcontains $_ }).Count -eq 0)) ($(if ($live.PSObject.Properties.Name -contains 'DialogButtons') { $live.DialogButtons -join ' | ' } else { 'no DialogButtons' }))
+Check 'and they are not main-menu captions' (@($dlgWant | Where-Object { $live.Captions.Contains($_) }).Count -eq 0)
+Check 'menu items assigned with .Caption := still are (control)' ($live.Captions.Contains('Reports') -and $live.Captions.Contains('drag-lint (!)'))
+$scr = Join-Path $env:TEMP "drag-lint-feature-registry-harvest-$PID"
+try {
+  New-Item -ItemType Directory -Path (Join-Path $scr 'src\delphi-plugin') -Force | Out-Null
+  $probe = "procedure P;`r`nvar`r`n  MiZz: TMenuItem;`r`n  BtnZz, BtnZz2: TButton;`r`nbegin`r`n  MiZz.Caption := 'Zz Menu Probe';`r`n  BtnZz.Caption := 'Zz Button Probe';`r`n  BtnZz2.Caption:= 'Zz Second Button';`r`n  var BitZz: TBitBtn:= TBitBtn.Create(nil);`r`n  BitZz.Caption := 'Zz Bit Probe';`r`n  FSpeedZz:= TSpeedButton.Create(nil);`r`n  FSpeedZz.Caption := 'Zz Speed Probe';`r`nend;`r`n"
+  [IO.File]::WriteAllText((Join-Path $scr 'src\delphi-plugin\DragLint.Plugin.Editor.pas'), $probe, [Text.Encoding]::ASCII)
+  $mc = Get-LiveMenuCaptions -Repo $scr -ExcludeDialogButtons
+  $db = @(Get-LiveDialogButtonCaptions -Repo $scr)
+  Check 'synthetic: a TMenuItem caption stays a menu caption (positive control)' ($mc.Contains('Zz Menu Probe')) ($mc -join ' | ')
+  Check 'synthetic: TButton (multi-var decl), TBitBtn (inline var) and TSpeedButton (.Create) captions are dialog buttons' ((($db | Sort-Object) -join '|') -ceq 'Zz Bit Probe|Zz Button Probe|Zz Second Button|Zz Speed Probe') ($db -join ' | ')
+  Check 'synthetic: and none of them is a menu caption' (@($db | Where-Object { $mc.Contains($_) }).Count -eq 0)
+  Check 'without -ExcludeDialogButtons the docs-sync harvest is unchanged (buttons included)' ((Get-LiveMenuCaptions -Repo $scr).Contains('Zz Button Probe'))
+} catch { Check 'dialog-button harvest functions exist and run' $false $_.Exception.Message }
+finally { if (Test-Path -LiteralPath $scr) { Remove-Item -LiteralPath $scr -Recurse -Force -ErrorAction SilentlyContinue } }
+
 # --- the shared guard still passes after the extraction ----------------------
 $ds = Join-Path $Repo 'tests\autotest\run_docs_sync_guard.ps1'
 $out = & pwsh -NoProfile -File $ds 2>&1 | Out-String
