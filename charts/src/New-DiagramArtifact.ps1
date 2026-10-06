@@ -15,8 +15,9 @@
     graph.dot      the dot we emitted (we never parse dot; it is our output)
     graph.png      raster export
     graph.pdf      document export
-    trace.dlgraph  round-trip only, INSTEAD of the graph.* files: a TEXT
-                   question ships its Form A document, shown in the shell
+    trace.dlgraph  round-trip only: its Form A document, shown in the shell BELOW
+                   the chart drawn from it (graph.*; R5) -- or, when dot failed,
+                   alone, with a line saying the chart could not be drawn
     index.html     the shell: opens in a browser, clicks are explained
     meta.json      index fingerprint + regenerate command (staleness detectable)
     xref.txt       the DocInsight <remarks> block to paste into the unit
@@ -161,7 +162,7 @@ try {
       if ($CounterpartDb) { $cb.CounterpartDb = $CounterpartDb }
       & (Join-Path $PSScriptRoot 'Emit-CrossesBoundary.ps1') @cb
     }
-    # the Interface report's trace core: CLIENT + SERVER + SQL, a TEXT bundle (trace.dlgraph, no svg)
+    # the Interface report's trace core: CLIENT + SERVER + SQL -- trace.dlgraph AND the chart drawn from it (R5)
     'round-trip'     { & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1')     -Target $Target -DbPath $DbPath -ServerDbPath $ServerDbPath -SqlDbPath $SqlDbPath -Depth $EffDepth -OutDir $dir }
   }
 } catch {
@@ -237,7 +238,7 @@ foreach ($pair in @(@($r.Svg,'graph.svg'), @($r.Plain,'graph.plain'), @($r.Dot,'
                     @($r.Png,'graph.png'), @($r.Pdf,'graph.pdf'))) {
   if ($pair[0] -and (Test-Path $pair[0])) { Move-Item $pair[0] (Join-Path $dir $pair[1]) -Force }
 }
-# a TEXT question ships its document, not a picture
+# a TEXT question ships its document (round-trip: beside the chart drawn from it, moved above)
 if ($r.PSObject.Properties['Trace'] -and $r.Trace -and (Test-Path $r.Trace)) { Move-Item $r.Trace (Join-Path $dir 'trace.dlgraph') -Force }
 
 # ---- 2. fingerprint the index, so staleness is DETECTABLE not merely visible -
@@ -272,7 +273,8 @@ $fp = [pscustomobject]@{
   # who-calls' NameOnly, event-wiring's DfmFallback, touches-tables' Unresolved.
   # (round-trip's Trace is a path the move above made stale, and its Text IS trace.dlgraph)
   # (and AnchorPaths is the page's link table, not a count)
-  emitter     = ($r | Select-Object -ExcludeProperty Dot, Svg, Plain, Png, Pdf, Trace, Text, AnchorPaths)
+  # (round-trip's ChartManifest and ChartModelDot are the renderer's working sets, not counts)
+  emitter     = ($r | Select-Object -ExcludeProperty Dot, Svg, Plain, Png, Pdf, Trace, Text, AnchorPaths, ChartManifest, ChartModelDot)
 }
 $fp | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $dir 'meta.json') -Encoding ascii
 
@@ -302,17 +304,25 @@ if ($isText) {
     $anc.Linked++
     '<a href="draglint://open?file=' + [uri]::EscapeDataString($full) + '&amp;line=' + $m.Groups[2].Value + '">' + $m.Value + '</a>'
   }, 'IgnoreCase')
-  $svg = '<pre style="margin:0;font:13px/1.5 var(--mono);white-space:pre">' + $esc + '</pre>'
+  $pre = '<pre style="margin:0;font:13px/1.5 var(--mono);white-space:pre">' + $esc + '</pre>'
+  # R5: the chart drawn from this text, above it; when dot failed, a line saying so (owner answer 3)
+  $chartErr = $(if ($r.PSObject.Properties['ChartError']) { [string]$r.ChartError } else { '' })
+  $svg = $(if (Test-Path $svgPath) { ([IO.File]::ReadAllText($svgPath) -replace '(?s)^.*?(?=<svg)', '') + '<hr style="border:0;border-top:1px solid var(--line);margin:16px 0">' + $pre }
+           elseif ($chartErr) { '<p class="k"><b>The chart could not be drawn:</b> ' + $chartErr.Replace('&', '&amp;').Replace('<', '&lt;') + '</p>' + $pre }
+           else { $pre })
   $anchorSpan = "<span><b>$($anc.Linked)</b> of <b>$($anc.Total)</b> @file:line anchors link to the IDE</span>"
-  $note = "    <p><b>This is a document, not a chart.</b> <code class=`"k`">$Question</code> answers in`n" +
+  $note = "    <p><b>The answer is the document; the picture is drawn from it.</b> <code class=`"k`">$Question</code> answers in`n" +
           "    Form A TEXT (<code class=`"k`">trace.dlgraph</code>; grammar:`n" +
           "    <code class=`"k`">charts\form-a-grammar-spec.md</code> section 8). Each step's anchor is`n" +
           "    written as <code class=`"k`">@File.pas:line</code>; an anchor whose file the indexes name exactly`n" +
           "    once is a <code class=`"k`">draglint://open?file=..&amp;line=..</code> link that opens the line in`n" +
           "    your running IDE, through the protocol handler`n" +
           "    (<code class=`"k`">charts\src\Register-DragLintProtocol.ps1</code>, once per user). An anchor left`n" +
-          "    as plain text names a file the indexes hold at zero or several paths. A chart drawn from this text is later work.</p>"
-  $footFiles = 'trace.dlgraph (Form A text) &middot; '
+          "    as plain text names a file the indexes hold at zero or several paths.</p>`n" +
+          "    <p style=`"margin-top:10px`">The picture above the text is drawn FROM it (no second walk): lanes client, pipe,`n" +
+          "    server, database; a numbered row per step, its WHEN / UNLESS guards under it verbatim; anything not drawn is`n" +
+          "    named in the chart's Legend. Its rows open the same lines in the IDE.</p>"
+  $footFiles = $(if (Test-Path $svgPath) { 'graph.svg &middot; graph.png &middot; graph.pdf &middot; graph.plain (geometry, same layout run) &middot; ' } else { '' }) + 'trace.dlgraph (Form A text) &middot; '
 } else {
   if (-not (Test-Path $svgPath)) { throw "$Question drew no chart: $svgPath is missing" }
   $svg = [IO.File]::ReadAllText($svgPath)

@@ -2899,6 +2899,47 @@ Step 'E-RT' {
   # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
   Chk 'A-RT7-CASE'      $rt0.TraceCaseCond 'UNLESS case ARequest of @uGenericTableRoute.pas:188 -- else arm at :192; ask E1'
 }
+# ---- round-trip, R5: the CHART drawn from the trace (spec 2026-10-05-R5-round-trip-chart-design.md) ----
+# MEASURED 2026-10-06 on the 1.21.1 clones, every value read from the files the runs WROTE (.dot / .svg), not from the
+# renderer's Manifest (Test-RoundTripHelpers section 12). Owner answers (spec section 10): the golden shows all 9 ALSO
+# rows (the fold is covered by A-R5-ALSOFOLD), a sub-walk both directions run is ONE row with both numbers.
+Note 'round-trip: the chart ...'
+Step 'E-R5' {
+  # every step drawn or disclosed, never both, together exactly 1..76; every condition drawn, verbatim, unquoted
+  Chk 'A-R5-COVER'      $rt0.R5Cover '76/0/0|both 0|extra 0'
+  Chk 'A-R5-CONDS'      $rt0.R5Conds '31/0/0'
+  Chk 'A-R5-VERBATIM'   $rt0.R5Verbatim '31/31'
+  Chk 'A-R5-NOQUOTE'    $rt0.R5NoQuote 0
+  # the golden's 17 nodes and 12 guards are DRAWN rows (not disclosures): matched/disclosed/missing
+  Chk 'A-R5-GOLDNODES'  $rt0.R5GoldNodes '17/0/'
+  Chk 'A-R5-GOLDGUARDS' $rt0.R5GoldGuards '12//'
+  # one crossing node per send anchor (:3985, :1136), each holding its request and its response
+  Chk 'A-R5-XING'       $rt0.R5Xing '2/4'
+  Chk 'A-R5-STOPS'      $rt0.R5Stops '2:E4,E4'
+  Chk 'A-R5-COUNTS'     $rt0.R5Counts 'identical'
+  Chk 'A-R5-FROMTEXT'   $rt0.R5FromText 'identical'
+  # nodes per lane client/pipe/server/database: client = anchor chain, event, DoAfterPostOperation, SendDeltaOperation,
+  # LoadAllForFolder, LoadOneTable, ALSO; pipe = the two crossings; server = 12 routine cards; database = 2 STOPS + the column
+  Chk 'A-R5-LANES'      $rt0.R5Lanes '7/2/12/3'
+  # one row, both numbers: the column OPERAT.NAME read by both directions, and LoadFromInternal's sub-walk
+  Chk 'A-R5-MERGE'      "$($rt0.R5Merged)|$($rt0.R5Column)" '[20]/[50],[21]/[51],[22]/[52],[23]/[53],[24]/[54],[09]/[60]|09,40,60'
+  # failure edges: the two Rollbacks of the write, the read Rollback, and CancelUpdates at :3999
+  Chk 'A-R5-FAILURE'    "$($rt0.R5Failure)/$($rt0.R5Cancel)" '4/1'
+  # every <a> of the svg is a linked row, plus ONE: the header's REGENERATE tooltip; no row unlinked on these clones
+  Chk 'A-R5-LINKS'      $rt0.R5Links '116=115+1/0'
+  Chk 'A-R5-ASCII'      $rt0.R5Ascii '0/0'
+  # owner answer 4: an ALSO cap of 6 on the same trace folds rows [74]-[76] into ONE disclosure row, repeated in the Legend
+  Chk 'A-R5-ALSOFOLD'   $rt0.R5AlsoFold '73/3/0|0 not in the Manifest|+3 more routes not shown -- [74]-[76], full text in trace.dlgraph || +3 more routes not shown in ALSO -- [74]-[76], full text in trace.dlgraph'
+  # the holdout MSCLIST.NUM: 103 steps drawn or disclosed, none missing; 35 of 35 conditions drawn; 4 CROSSES; 2 STOPS
+  Chk 'A-R5-HOLD'       $rt0.R5Hold '103/0|conds 35/35|xing 4|stops 2|lanes 7/2/13/3'
+  # the calculated field: its STOPS node and a DERIVED card of 18 rows, each REGENERATE in its row's tooltip; all 27 drawn
+  Chk 'A-R5-CALC'       $rt0.R5Calc '1/18|tooltip regenerate 18|27/0/0'
+  # a synthetic 300-step trace (150 routine cards): the ladder folds the cards with no protected row, missing 0, and the
+  # Legend says the chart is above the 45-node cap and drawn anyway
+  Chk 'A-R5-SIZE'       $rt0.R5Size 'cards|nodes 150|0/300/0|1 cap row'
+  # R19: an unknown section, and an actor outside the TIERS, throw -- never a default lane
+  Chk 'A-R5-UNKNOWN'    $rt0.R5Unknown 'refused/refused'
+}
 # ---- round-trip, the final review's fix wave (I1-I9, M2, M3, M7) ----
 Note 'round-trip: the final review ...'
 Step 'E-RTF' {
@@ -2954,6 +2995,10 @@ Step 'RT-N1' {
   if ($rtn1.Text -cnotmatch 'END TRACE  1 steps, 0 conditions, 0 crossings, 1 unresolved\.') { Fail 'A-RT-N1' 'END TRACE does not count the STOPS' }
   # I3: no reach claimed; all six later sections say they were not walked, naming the [01] STOPS
   Chk 'A-RT-N1-SHAPE'   (Get-StoppedTraceShape $rtn1.Text $rtn1.Trace) 'Why frmBlueprint4.cxGroupBox16 cannot be traced|WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|[01]|0|identical'
+  # A-R5-NOTBOUND: a one-step trace is a one-node chart, never an empty one -- the STOPS node alone (its ANCHOR has no
+  # chain rows), and the Legend names each of the six sections that were not walked
+  $n1d = [IO.File]::ReadAllText($rtn1.Dot)
+  Chk 'A-R5-NOTBOUND'   "$(([regex]::Matches($n1d, '(?m)^\s+n\d+ \[')).Count)/$(([regex]::Matches($n1d, 'shape=note')).Count)/$(([regex]::Matches($n1d, '[A-Z]+ -- not walked: the trace stopped at \[01\]')).Count)" '1/1/6'
 }
 # Review Focus 2: TABLE.COLUMN loaded by several datasets -> ONE STOPS naming all five (the brief said three: the
 # clone holds five, A-RT3-COLUMN), no throw
@@ -3027,7 +3072,35 @@ Step 'RT-STALE' {
   if (Get-ChildItem $stDir -Filter *.dlgraph) { Fail 'A-RT-STALE' 'left a .dlgraph behind after refusing' }
   $script:rtStale = $(if ($threw) { 'refused' } else { 'accepted' })
 }
-# the verb through the bundler: dispatch, a TEXT bundle (no svg), -ServerDbPath / -SqlDbPath / -Depth in the regenerate command
+# A-R5-STALE (R5 spec section 8): the same refusal into a folder PRE-SEEDED with an earlier run's text and picture -- under
+# the emitter's own names and the bundler's (trace.dlgraph, graph.*). The emitter removes its outputs FIRST, before the
+# walk, so the refusal leaves none of them for a bundle to find and mistake for the answer (before R5 all 12 stayed).
+Step 'RT-R5-STALE' {
+  $stDir = Join-Path $OutDir 'rt-r5-stale'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $vmp = 'C:\Projects\DB\ORM3\CLIENT\Blueprint4.ViewModel.pas'
+  $vl = [IO.File]::ReadAllLines($vmp); $vl[3949] = $vl[3949] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'Blueprint4.ViewModel.pas'), (($vl -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $seed = @('trace.dlgraph', 'graph.svg', 'graph.dot', 'graph.png', 'graph.pdf', 'graph.plain') + @('dlgraph', 'svg', 'dot', 'png', 'pdf', 'plain' | ForEach-Object { "roundtrip_frmBlueprint4_dxDBGrid1OperationVName.$_" })
+  foreach ($f in $seed) { [IO.File]::WriteAllText((Join-Path $stDir $f), 'an earlier run') }
+  $m = ''
+  try { & "$SRC\Emit-RoundTrip.ps1" -Target 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $stDir -SourceOverride @{ $vmp = (Join-Path $stDir 'Blueprint4.ViewModel.pas') } 6>$null | Out-Null; $m = 'accepted' }
+  catch { $m = $(if ($_.Exception.Message -clike '*Blueprint4.ViewModel.pas differs from the indexed copy*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) }
+  Chk 'A-R5-STALE' "$m/$(@($seed | Where-Object { Test-Path (Join-Path $stDir $_) }).Count)" 'refused/0'
+}
+# A-R5-DOTFAIL (owner answer 3): dot fails -> the text is still delivered, ChartError carries dot's own words, and no
+# chart output is left (no partial .svg). A stand-in dot.exe that prints an error and writes nothing; RT-N1's target
+# (one step) keeps it fast.
+Step 'RT-R5-DOTFAIL' {
+  $dfDir = Join-Path $OutDir 'rt-r5-dotfail'
+  New-Item -ItemType Directory -Force $dfDir | Out-Null
+  $fake = Join-Path $dfDir 'fake-dot.cmd'
+  [IO.File]::WriteAllText($fake, "@echo off`r`necho fake dot: syntax error near line 1 1>&2`r`nexit /b 1`r`n", (New-Object Text.ASCIIEncoding))
+  $df = & "$SRC\Emit-RoundTrip.ps1" -Target 'frmBlueprint4.cxGroupBox16' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $dfDir -Dot $fake 6>$null
+  $left = @(Get-ChildItem $dfDir | Where-Object { $_.Extension -in '.svg', '.dot', '.png', '.pdf', '.plain' }).Count
+  Chk 'A-R5-DOTFAIL' "$(Test-Path $df.Trace)|$($df.Steps)|$($df.ChartError -like '*dot produced no SVG*fake dot: syntax error*')|$([bool]$df.Svg)|$left" 'True|1|True|False|0'
+}
+# the verb through the bundler: dispatch, the text AND its chart (R5; no svg before), -ServerDbPath / -SqlDbPath / -Depth in the regenerate command
 # 6>$null: the emitter prints the whole trace (Write-Host), and its else notes quote 'OPERAT %s FAILED'
 Step 'RT-ART' {
   $artRoot = Join-Path $OutDir 'bundle-rt'
@@ -3038,11 +3111,14 @@ Step 'RT-ART' {
   Chk 'A-RT-ART-DEPTH'  $meta.depth 4
   foreach ($flag in '-ServerDbPath ', '-SqlDbPath ', '-Depth 4') { if ($meta.regenerate -cnotlike "*$flag*") { Fail 'A-RT-ART' "the regenerate command drops $flag" } }
   if (-not (Test-Path (Join-Path $art.Bundle 'trace.dlgraph'))) { Fail 'A-RT-ART' 'no trace.dlgraph in the bundle' }
-  if (Test-Path (Join-Path $art.Bundle 'graph.svg')) { Fail 'A-RT-ART' 'a graph.svg was written for a text question' }
   $html = [IO.File]::ReadAllText((Join-Path $art.Bundle 'index.html'))
   if ($html -cnotmatch '<pre[^>]*>TRACE OPERAT\.NAME') { Fail 'A-RT-ART' 'index.html does not show the trace' }
-  # fix round 1 (I2, T8-R3): the footer names the text as what it is -- no paste-unchanged promise, no graph.*
-  if ($html -cnotmatch '<footer>\s*trace\.dlgraph \(Form A text\) &middot; meta\.json' -or $html -cmatch 'graph\.svg|DocInsight') { Fail 'A-RT-ART-FOOT' 'the text bundle footer is not "trace.dlgraph (Form A text) &middot; meta.json ..."' }
+  # A-R5-BUNDLE (RE-PINNED by R5: a round-trip bundle held NO graph.svg before -- the chart is drawn from the text now): the
+  # bundle holds trace.dlgraph AND graph.svg, and the page shows both -- the chart, then the text
+  Chk 'A-R5-BUNDLE' "$(Test-Path (Join-Path $art.Bundle 'trace.dlgraph'))/$(Test-Path (Join-Path $art.Bundle 'graph.svg'))|$($html -cmatch '(?s)<svg.*</svg>.*<pre[^>]*>TRACE OPERAT\.NAME')" 'True/True|True'
+  # fix round 1 (I2, T8-R3): the footer names the text as what it is -- no paste-unchanged promise. RE-PINNED by R5: it
+  # names the chart files before it (it named the text alone while the bundle held no chart)
+  if ($html -cnotmatch '<footer>\s*graph\.svg &middot; graph\.png &middot; graph\.pdf &middot; graph\.plain \(geometry, same layout run\) &middot; trace\.dlgraph \(Form A text\) &middot; meta\.json' -or $html -cmatch 'DocInsight') { Fail 'A-RT-ART-FOOT' 'the round-trip bundle footer is not "graph.svg ... trace.dlgraph (Form A text) &middot; meta.json ..."' }
   # fix round 1 (I3): a text bundle is not a chart -- no "Every row" / "N click targets" chart wording
   if ($html -cmatch 'Every row is a real anchor|<b>\d+</b> click targets</span>|not click targets') { Fail 'A-RT-ART-NOTE' 'the text bundle page carries chart wording or the retired "not click targets" claim' }
   # DOC-R1 (supersedes T8-R1, 2026-09-28): every ` @File:line` anchor of the trace is a draglint:// link whose

@@ -10,10 +10,15 @@
   -ServerDbPath (SERVER), -SqlDbPath (the SQL scripts). Rows are zoned by FILE
   PATH, never by which index answered (COMMON is in both).
 
-  Output is ONE document, trace.dlgraph, in Form A (charts\form-a-grammar-spec.md
+  Output is the trace, trace.dlgraph, in Form A (charts\form-a-grammar-spec.md
   section 8): 7-bit ASCII, CRLF, every step anchored, a grade only when not
-  certain, STOPS for every hop the walk cannot make, END TRACE recomputed. It is
-  written LAST -- a refusal (a stale file: AC-14) leaves nothing behind.
+  certain, STOPS for every hop the walk cannot make, END TRACE recomputed -- AND
+  (R5, 2026-10-06) its CHART, drawn from the SAME bytes: Read-FormA of the text,
+  through Trace.Chart.ps1's ConvertTo-TraceChart, laid out once by Invoke-DotLayout
+  (.dot/.svg/.png/.pdf/.plain). This run's outputs are REMOVED FIRST, before the
+  walk, so a refusal (a stale file: AC-14) leaves neither an old text nor an old
+  picture behind (A-R5-STALE). If dot fails the text is still delivered, the
+  result carries ChartError, and no partial picture is left (owner answer 3).
 
   THE SHIM AND THE ASKS. The index holds tokens, not branches: conditions are
   quoted from FRESH source by Trace.Walk's Get-GuardCondition (E1). Dispatch is
@@ -46,6 +51,8 @@ param(
   [int]       $Depth = 4,
   [hashtable] $SourceOverride,
   [string]    $BoundaryPattern = 'Pipes.%|uPipe%|uBroadcast%',
+  # the chart's size caps (Trace.Chart.ps1): Also / Rows / Nodes, each optional
+  [hashtable] $ChartCaps = @{},
   [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
   [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe'
 )
@@ -54,12 +61,21 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
 . (Join-Path $PSScriptRoot 'Trace.FormA.ps1')
 . (Join-Path $PSScriptRoot 'Trace.Walk.ps1')
+. (Join-Path $PSScriptRoot 'Trace.Chart.ps1')
 
 $DbPath       = Get-CloneDb $DbPath
 $ServerDbPath = Get-CloneDb $ServerDbPath
 $SqlDbPath    = Get-CloneDb $SqlDbPath
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $PSScriptRoot '..\scratch' }
 New-Item -ItemType Directory -Force $OutDir | Out-Null
+# R5 (A-R5-STALE): this run's outputs go FIRST -- its own names and the names the bundler gives them in a bundle
+# folder (trace.dlgraph, graph.*) -- so a refusal below cannot leave an earlier run's text or picture to be found
+$base = 'roundtrip_' + ($Target -replace '[^A-Za-z0-9]', '_')
+$chartOut = @('dot', 'svg', 'png', 'pdf', 'plain')
+foreach ($f in @(@("$base.dlgraph", 'trace.dlgraph') + @($chartOut | ForEach-Object { "$base.$_"; "graph.$_" }))) {
+  $fp = Join-Path $OutDir $f
+  if (Test-Path -LiteralPath $fp) { Remove-Item -LiteralPath $fp -Force }
+}
 
 Write-Host "round-trip: $Target"
 
@@ -271,10 +287,7 @@ if (-not $A.Stop -and ($WStop -or $RStop)) {
                else { "How $Target goes back to $name (the way there stops at step $nR)" })
 }
 $text = Write-FormA $T
-$base = 'roundtrip_' + ($Target -replace '[^A-Za-z0-9]', '_')
 $path = Join-Path $OutDir "$base.dlgraph"
-[IO.File]::WriteAllText($path, $text, (New-Object Text.ASCIIEncoding))
-Write-Host $text
 $c = Get-TraceCounts $T
 # DOC-R1 (2026-09-28): each ` @<file>:<line>` anchor's FULL path, so the bundle page can make the anchor a
 # draglint:// link into the IDE. The text keeps the bare leaf (grammar spec section 8); the path is looked up
@@ -294,12 +307,38 @@ if ($leaves.Count) {
   }
   foreach ($k in $pathsOf.Keys) { if ($pathsOf[$k].Count -eq 1) { $anchorPaths[$k] = @($pathsOf[$k].Values)[0] } }
 }
+# ---- 8. the chart (R5): drawn from Read-FormA of the bytes just written, never from a second walk ------------------
+# The in-memory model is drawn too, ONLY so the gate can prove the two give the same dot (A-R5-FROMTEXT). A renderer
+# throw (R19: a section or lane it does not know) is loud and fails the run; a dot failure does not (owner answer 3):
+# the text is delivered, ChartError says why, and every chart output is removed so no partial picture remains.
+$chart = ConvertTo-TraceChart (Read-FormA $text) $anchorPaths $ChartCaps
+$chartModelDot = (ConvertTo-TraceChart $T $anchorPaths $ChartCaps).Dot
+$lay = $null; $chartError = ''
+try { $lay = Invoke-DotLayout $chart.Dot $OutDir $base }
+catch {
+  $chartError = $_.Exception.Message
+  foreach ($x in $chartOut) { $fp = Join-Path $OutDir "$base.$x"; if (Test-Path -LiteralPath $fp) { Remove-Item -LiteralPath $fp -Force } }
+  Write-Host "round-trip: the chart could not be drawn -- $chartError"
+}
+# the text LAST, so a refusal anywhere above leaves nothing behind
+[IO.File]::WriteAllText($path, $text, (New-Object Text.ASCIIEncoding))
+Write-Host $text
 $proof = "$((Invoke-IndexQuery 'SELECT COUNT(*) AS n FROM files')[0].n)/$((Invoke-OnDb $ServerDbPath { (Invoke-IndexQuery 'SELECT COUNT(*) AS n FROM files')[0].n }))"
 Write-Host ("  anchor={0}  steps={1}  conditions={2}  crossings={3}  unresolved={4}  write/read/also={5}/{6}/{7}" -f $name, $c.Steps, $c.Conditions, $c.Crossings, $c.Unresolved, $write, $read, $also)
 
 [pscustomobject]@{
   Trace        = $path
   Text         = $text
+  # R5: the chart, laid out from the same text ($null each when dot failed -- ChartError says why)
+  Dot          = $(if ($lay) { $lay.Dot } else { $null })
+  Svg          = $(if ($lay) { $lay.Svg } else { $null })
+  Plain        = $(if ($lay) { $lay.Plain } else { $null })
+  Png          = $(if ($lay) { $lay.Png } else { $null })
+  Pdf          = $(if ($lay) { $lay.Pdf } else { $null })
+  ChartError   = $chartError
+  ChartNodes   = $chart.Manifest.Nodes
+  ChartManifest = $chart.Manifest
+  ChartModelDot = $chartModelDot
   Title        = $T.Title
   # final-review I2: each section's generated note, `<SECTION>=<note>` (empty sections only)
   Notes        = (@($T.Sections | Where-Object { $_.Note } | ForEach-Object { "$($_.Name)=$($_.Note)" }) -join ' | ')
