@@ -1,0 +1,18 @@
+{
+  "id": "uses-deps-tab",
+  "title": "Uses & Deps Tab",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Open the Uses & Deps tab to review uses-clause fixes and apply them",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Uses & Deps Tab -- review & apply fixes..."
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page; seed: since unknown"
+}

@@ -714,6 +714,146 @@ reloads inside that window; `bench-context [--n N]` times N context bundles.
 
 ---
 
+### 2c. Registered verbs (generated from the feature registry)
+
+The table between the markers is written by `tools\build-feature-pages.ps1` from
+`features\entries\*.json` (entries whose `audience` is `agent` or `both` and that
+have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
+
+<!-- dl:registry:begin agent-verbs -->
+| Verb | Feature | Summary | Requires |
+|---|---|---|---|
+| `allow` | [allow](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/allow) | Records a dl:ok review of one finding, so it stops being reported without being fixed |  |
+| `allow` | [Allow this message](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Allow-this-message) | Records a dl:ok review of one finding, so it stops being reported without being fixed |  |
+| `ambiguous-calls` | [ambiguous-calls](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ambiguous-calls) | Resolver-coverage diagnostic that reports call sites the engine could not pin to exactly one target -- unresolved or ambiguous calls | index |
+| `bench-context` | [bench-context](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/bench-context) | Benchmarks the context command by building context bundles for a sample of symbols against a database |  |
+| `butterfly` | [butterfly](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/butterfly) | Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command | index |
+| `call-path` | [call-path](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/call-path) | Finds the shortest resolved call path from one symbol to another | index |
+| `callgraph` | [callgraph](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/callgraph) | Prints an N-deep resolved call tree for a symbol, in either direction | index |
+| `check-ast` | [Run AST Checks](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Run-AST-Checks) | Runs drag-lint's AST-level checks against a file |  |
+| `check-unit` | [Add Missing Units to uses (whole unit)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Add-Missing-Units-to-uses-whole-unit) | The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them |  |
+| `compile-check` | [compile-check](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compile-check) | Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result |  |
+| `context` | [context](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/context) | Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers |  |
+| `contrast-selftest` | [contrast-selftest](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Self-test for the hover contrast computation, driven by a test runner |  |
+| `convert-apply` | [convert-apply](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-apply) | Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add | index |
+| `convert-reemit` | [convert-reemit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | The DFM re-emit stage of the conversion pipeline, driven by convert-apply and by test runners |  |
+| `convert-scaffold` | [convert-scaffold](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-scaffold) | Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type | index |
+| `convert-validate` | [convert-validate](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-validate) | Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees |  |
+| `create-enum-helper` | [create-enum-helper](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/create-enum-helper) | Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type |  |
+| `create-enum-helper` | [Create helper class](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Create-helper-class) | Generates a Byte-family record helper for an enum type represented by a Structure-tree node |  |
+| `cycles` | [Circular Uses Report (cycles + fix plan)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Uses-Report-cycles-fix-plan) | Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them | index |
+| `deps-report` | [deps-report](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/deps-report) | Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on | index |
+| `diff` | [diff](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/diff) | Compares two index databases and reports what changed between them -- for example an index snapshot taken before and after a refactor | index |
+| `doc-drift` | [doc-drift](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/doc-drift) | Diagnostic that computes deterministic doc-vs-code drift findings for one symbol | index |
+| `doc-facts-selftest` | [doc-facts-selftest](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Self-test for the doc-facts renderer, driven by test runners |  |
+| `doc-forget` | [doc-forget](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply |  |
+| `document-all` | [document-all](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/document-all) | Documents every public declaration in every indexed unit, with no project scope |  |
+| `document` | [Auto-Document Whole Project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Auto-Document-Whole-Project) | Writes DocInsight documentation into every public declaration a project owns |  |
+| `document` | [Document it](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Document-it) | Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node |  |
+| `document` | [Document project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Document-project) | Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project |  |
+| `document` | [Document unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Document-unit) | Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only) |  |
+| `dump-call-edges` | [dump-call-edges](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-call-edges) | Diagnostic that dumps every resolved call edge in the index as refid|targetqname|confidence rows | index |
+| `dump-pp-eval` | [dump-pp-eval](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Diagnostic dump of preprocessor expression evaluation, paired with dump-pp-lex |  |
+| `dump-pp-lex` | [dump-pp-lex](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Diagnostic dump of the preprocessor lexer; the documented preprocessor verbs are preprocess-file and pp-profile |  |
+| `dump-refs` | [dump-refs](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/dump-refs) | Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution | index |
+| `exceptions-sync` | [exceptions-sync](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites |  |
+| `export enums` | [Export Enums (Delphi const)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Export-Enums-Delphi-const) | Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations | index |
+| `export obsidian` | [Export to Obsidian](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Export-to-Obsidian) | Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages | index |
+| `extract-method` | [extract-method](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/extract-method) | Pulls a run of statements out of a routine into a new method |  |
+| `fb-snapshot` | [fb-snapshot](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/fb-snapshot) | Connects to a Firebird database and captures a snapshot into a sqlite index | index |
+| `find-callees` | [find-callees](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-callees) | Lists the resolved outgoing calls of one routine | index |
+| `find-deadcode` | [Find Dead Code](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Find-Dead-Code) | Scans the index for code with no references -- candidates to delete |  |
+| `find-unit` | [find-unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-unit) | Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause | index |
+| `format` | [Format Whole Project with YADF](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Format-Whole-Project-with-YADF) | Runs YADF formatting across a project's files, with indexing involved as part of the same action |  |
+| `format` | [Format with YADF](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Format-with-YADF) | Reformats one Pascal unit by driving the external YADF formatter |  |
+| `forms-csv` | [Forms for testers (CSV)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Generate-Test-Helper-CSV) | Produces a spreadsheet-style CSV of a project's forms, one row per form, telling a human tester how to reach each form from the main form: the menu, ribbon | index |
+| `generate-docs` | [Doc Comment Stub (symbol)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Doc-Comment-Stub-symbol) | Uses generate-docs to produce a doc-comment stub for one qualified symbol |  |
+| `generate-test` | [Unit Test Stub (symbol)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Unit-Test-Stub-symbol) | Uses generate-test to produce a unit-test skeleton for one qualified symbol |  |
+| `ghost-check` | [ghost-check](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-check) | Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged |  |
+| `ghost-recover` | [ghost-recover](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ghost-recover) | Scans a project's hidden D-RAG folder for recovery journals left behind when a ghost-check overlay was interrupted by a crash |  |
+| `glyph-vacuum` | [glyph-vacuum](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Measure every streamed glyph or picture under a tree before writing a glyph rule |  |
+| `graph` | [Export Graph (DOT)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Export-Graph-DOT) | Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring | index |
+| `helpers-of` | [helpers-of](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/helpers-of) | Lists record/class helper edges targeting a given type, anywhere in the index | index |
+| `hover` | [Hover at Cursor](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Hover-at-Cursor) | Shows a hover card for the symbol under the editor caret: signature, documentation, and callers |  |
+| `ide-release` | [ide-release](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ide-release) | Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request |  |
+| `impact` | [Impact / Blast Radius (symbol)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Impact-Blast-Radius-symbol) | Reports what would be affected if a chosen symbol changes -- the set of code to retest |  |
+| `import-log` | [Import Build Log](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Import-Build-Log) | Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings | index |
+| `index` | [Auto-Document Whole Project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Auto-Document-Whole-Project) | Writes DocInsight documentation into every public declaration a project owns |  |
+| `index` | [Format Whole Project with YADF](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Format-Whole-Project-with-YADF) | Runs YADF formatting across a project's files, with indexing involved as part of the same action |  |
+| `index` | [Rebuild Index for This Project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Rebuild-Index-for-This-Project) | Walks a project's .dproj compile closure and (re)builds its index |  |
+| `info` | [About and Status](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/About-and-Status) | The plugin's status window -- versions, connection health, and which indexes are actually in use |  |
+| `info` | [info](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities |  |
+| `library-drift` | [Library Drift Check](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Library-Drift-Check) | Flags registered library roots that have source on disk but nothing in the index |  |
+| `link-orm` | [link-orm](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/link-orm) | Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both | index |
+| `lint-all` | [Fix all in project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Fix-all-in-project) | Applies autofixes for every fixable finding across the whole project, starting from the Structure form |  |
+| `lint-all` | [Run Lint All (Full Report)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Run-Lint-All-Full-Report) | Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check |  |
+| `lint-project` | [lint-project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-project) | Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol | index |
+| `lint-tree` | [lint-tree](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-tree) | Answers one question lint-all cannot: does an interface edit to this unit reach any dependent? |  |
+| `lint` | [Copy All Diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Copy-All-Diagnostics) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form |  |
+| `lint` | [Copy Diagnostics (Current File)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Copy-Diagnostics-Current-File) | Puts the current file's lint findings onto the clipboard |  |
+| `lint` | [Fix all in unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Fix-all-in-unit) | Applies autofixes for every fixable finding in the current unit, starting from the Structure form |  |
+| `lint` | [Fix it](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Fix-it) | Applies the autofix for the single lint finding represented by a Structure-tree node |  |
+| `lint` | [Lint Buffer (Unsaved)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Lint-Buffer-Unsaved) | Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first |  |
+| `lsp` | [lsp](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Starts the LSP (Language Server Protocol) stdio server | index |
+| `migrate-dbs` | [migrate-dbs](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/migrate-dbs) | Moves project index databases into each project's own D-RAG folder, matching the current index layout |  |
+| `outline` | [outline](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) | Prints the file-scoped symbol outline for one Pascal unit |  |
+| `pp-profile` | [pp-profile](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/pp-profile) | Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line |  |
+| `preprocess-file` | [preprocess-file](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/preprocess-file) | Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set |  |
+| `project-facts` | [project-facts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Report what the build does: defines that are on and what sets each, imports, output paths and packages |  |
+| `proptree` | [proptree](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/proptree) | Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties | index |
+| `purge-locals` | [purge-locals](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/purge-locals) | A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space | index |
+| `query ancestors` | [query ancestors](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-ancestors) | Resolves the transitive class/interface hierarchy of a type |  |
+| `query descendants` | [query descendants](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-descendants) | The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases |  |
+| `query find-callers` | [query find-callers](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-find-callers) | Lists callers of a routine by name, with an option to restrict results to precise, resolved callers |  |
+| `query find` | [Find Undocumented (public)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Find-Undocumented-public) | Uses query find to list indexed symbols filtered by documentation state, kind, or visibility |  |
+| `query hints` | [Compiler Hints](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Compiler-Hints) | Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity | index |
+| `query type-usage` | [query type-usage](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-type-usage) | Answers one question, of a list of type names, about one file |  |
+| `query typecat` | [query typecat](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-typecat) | Resolves a type's category -- float, string, class, interface, and so on |  |
+| `query unit-usage` | [query unit-usage](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-unit-usage) | Answers one question, about one unit and one file |  |
+| `query` | [query --kind --all](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-kind-all) | Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap |  |
+| `query` | [query --name-like](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-name-like) | Case-insensitive substring search over symbol names | index |
+| `query` | [Symbol Search](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Symbol-Search) | Searches symbols by name across the indexed projects |  |
+| `reconcile-project` | [Reconcile Project Members (.dpr/.dproj)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Reconcile-Project-Members-dpr-dproj) | Compares a project file's declared member list against what is on disk and in the compile closure |  |
+| `refresh-findings` | [Full Compile Sweep](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Full-Compile-Sweep) | Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold | index |
+| `register-project` | [register-project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Add a new project to the manifest so index --all and the IDE can see it |  |
+| `rename` | [Rename Symbol](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Rename-Symbol) | Renames a symbol across the whole indexed project | index |
+| `resolve-dbs` | [Show Resolved DBs (debug)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Show-Resolved-DBs-debug) | Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query |  |
+| `resolve-uses` | [resolve-uses](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | The diagnostic behind check-unit --resolve-uses; not a verb of its own |  |
+| `reverse-calltree` | [Call Graph (Butterfly)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Call-Graph-Butterfly) | Shows callers and callees of one symbol together in a single "butterfly" view | index |
+| `reverse-calltree` | [Reverse Call Tree (clickable, Messages window)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Reverse-Call-Tree-clickable-Messages-window) | The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller | index |
+| `reverse-calltree` | [Reverse Call Tree (who calls this, N-deep)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Reverse-Call-Tree-who-calls-this-N-deep) | Builds the tree of callers of a chosen symbol, transitively, to a chosen depth | index |
+| `reverse-calltree` | [Show in Call Graph](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Show-in-Call-Graph) | Opens the call graph rooted at the symbol represented by a Structure-tree node | index |
+| `rules` | [drag-lint: Project Rules](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/drag-lint-Project-Rules) | Shows the catalog of lint rules in the context of a specific project |  |
+| `rules` | [Lint rules](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/rules) | Every lint rule the engine ships, imported from rules --json |  |
+| `safe-delete` | [safe-delete](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/safe-delete) | Deletes a symbol if and only if it has zero references in the index | index |
+| `schema` | [schema](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/schema) | Prints the live schema of an index database: schemaversion, every table and column, and row counts | index |
+| `selftest` | [selftest](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Umbrella self-test dispatcher (manifest-merge, glob, closure, dbselect, drift) used by the test battery, not a user verb |  |
+| `serve` | [serve](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/serve) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | index |
+| `shared-unit` | [shared-unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/shared-unit) | Reads or extends the dl:shared marker on a unit, recording which projects share it |  |
+| `shutdown` | [shutdown](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features) | Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them |  |
+| `slice` | [Symbol Slice](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Symbol-Slice) | Shows the slice of code relevant to one symbol: its declaration, body, and immediate context |  |
+| `sql` | [sql](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/sql) | Runs one read-only SQL statement against an index database and prints the result set | index |
+| `surface` | [Class Surface](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Class-Surface) | Shows the public surface of a class: its members and signatures, without the method bodies |  |
+| `test-store-freshness` | [test-store-freshness](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Store-freshness probe used by a test runner; it needs --db and does nothing else |  |
+| `todos` | [Scan TODOs / FIXMEs](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Scan-TODOs-FIXMEs) | Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers |  |
+| `top` | [Top Symbols (fan-in)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Top-Symbols-fan-in) | Ranks indexed symbols by fan-in -- how many places reference them | index |
+| `typeat` | [Type at Cursor](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Type-at-Cursor) | Resolves the static type of the expression under the editor caret |  |
+| `usages` | [Find Usages](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Find-Usages-context) | Lists references to the symbol represented by a Structure-tree node |  |
+| `usages` | [usages](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/usages) | Finds usage sites of a named symbol, with a choice of report width |  |
+| `uses-audit` | [Uses Audit -- interface->impl moves + unused (this unit)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Uses-Audit-interface-impl-moves-unused-this-unit) | For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely | index |
+| `uses-fix` | [Uses Cleanup Preview (compiler-verified, this unit)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Uses-Cleanup-Preview-compiler-verified-this-unit) | The removals a Uses Audit suggests, but verified by actually compiling | index |
+| `uses-report` | [Uses Report (CSV)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Uses-Report-CSV) | Exports the project's unit-dependency data as a CSV file |  |
+| `wiki` | [wiki](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/wiki) | Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it | index |
+| `wiki` | [dl:wiki concept blocks](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Wiki-Blocks-Authoring) | The format of a dl:wiki block -- the concept notes the wiki verb reads | index |
+| `wiring` | [Show Wiring (Spring4D DI + DFM events)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Show-Wiring-Spring4D-DI-DFM-events) | Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type |  |
+| `workspace add` | [workspace add](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-add) | Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it |  |
+| `workspace index` | [workspace index](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-index) | Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass |  |
+| `workspace status` | [workspace status](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-status) | Reports the status of every project registered in a .drag-lint-workspace.json workspace config |  |
+<!-- dl:registry:end agent-verbs -->
+
+Every row links the feature's wiki page; `features\generated\manifest.json` holds the same data
+expanded (families included) for a tool that would rather read JSON than this table.
+
 ## 3. MCP mode (structured tools)
 
 Start the server (one per index):

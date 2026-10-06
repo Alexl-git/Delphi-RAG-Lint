@@ -1,0 +1,18 @@
+{
+  "id": "doc-forget",
+  "title": "doc-forget",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.17.0-alpha",
+  "summary": "Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "doc-forget"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page"
+}

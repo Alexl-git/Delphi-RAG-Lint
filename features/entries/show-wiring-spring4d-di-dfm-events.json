@@ -1,0 +1,21 @@
+{
+  "id": "show-wiring-spring4d-di-dfm-events",
+  "title": "Show Wiring (Spring4D DI + DFM events)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.21.0-alpha",
+  "summary": "Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type",
+  "wikiPage": "Show-Wiring-Spring4D-DI-DFM-events",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)..."
+    },
+    {
+      "type": "cli",
+      "verb": "wiring"
+    }
+  ],
+  "audience": "both"
+}

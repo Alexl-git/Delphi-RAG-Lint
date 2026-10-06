@@ -1,0 +1,18 @@
+{
+  "id": "link-orm",
+  "title": "link-orm",
+  "group": "database",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.40.5-alpha",
+  "summary": "Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both",
+  "wikiPage": "link-orm",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "link-orm"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

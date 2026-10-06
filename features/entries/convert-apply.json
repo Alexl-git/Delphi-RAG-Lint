@@ -1,0 +1,18 @@
+{
+  "id": "convert-apply",
+  "title": "convert-apply",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.2.0-alpha",
+  "summary": "Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add",
+  "wikiPage": "convert-apply",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "convert-apply"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

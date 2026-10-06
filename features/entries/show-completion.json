@@ -1,0 +1,17 @@
+{
+  "id": "show-completion",
+  "title": "Show Completion",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.21.0-alpha",
+  "summary": "Shows an index-backed completion list at the editor caret",
+  "wikiPage": "Show-Completion",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Show Completion"
+    }
+  ],
+  "audience": "both"
+}

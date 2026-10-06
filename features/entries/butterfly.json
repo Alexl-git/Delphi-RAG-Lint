@@ -1,0 +1,18 @@
+{
+  "id": "butterfly",
+  "title": "butterfly",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.99.0-alpha",
+  "summary": "Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command",
+  "wikiPage": "butterfly",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "butterfly"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

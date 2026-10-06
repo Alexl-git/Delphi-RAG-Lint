@@ -1,0 +1,18 @@
+{
+  "id": "query-type-usage",
+  "title": "query type-usage",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Answers one question, of a list of type names, about one file",
+  "wikiPage": "query-type-usage",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "sub": "type-usage"
+    }
+  ],
+  "audience": "both"
+}

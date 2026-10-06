@@ -1,0 +1,21 @@
+{
+  "id": "symbol-slice",
+  "title": "Symbol Slice",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.17.0-alpha",
+  "summary": "Shows the slice of code relevant to one symbol: its declaration, body, and immediate context",
+  "wikiPage": "Symbol-Slice",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Inspect Symbol > Symbol Slice..."
+    },
+    {
+      "type": "cli",
+      "verb": "slice"
+    }
+  ],
+  "audience": "both"
+}

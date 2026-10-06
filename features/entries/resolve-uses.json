@@ -1,0 +1,18 @@
+{
+  "id": "resolve-uses",
+  "title": "resolve-uses",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "0.41.0-alpha",
+  "summary": "The diagnostic behind check-unit --resolve-uses; not a verb of its own",
+  "wikiPage": "Maintenance",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "resolve-uses"
+    }
+  ],
+  "audience": "agent",
+  "notes": "internal: diagnostic behind the documented `check-unit --resolve-uses` flag; not a surface verb of its own.; seed: group guessed"
+}

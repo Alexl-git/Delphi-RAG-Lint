@@ -1,0 +1,21 @@
+{
+  "id": "lint-buffer-unsaved",
+  "title": "Lint Buffer (Unsaved)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first",
+  "wikiPage": "Lint-Buffer-Unsaved",
+  "surfaces": [
+    {
+      "type": "ide-about",
+      "caption": "Lint Buffer (Unsaved)"
+    },
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both"
+}

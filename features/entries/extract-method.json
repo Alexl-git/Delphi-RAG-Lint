@@ -1,0 +1,18 @@
+{
+  "id": "extract-method",
+  "title": "extract-method",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.85.0-alpha",
+  "summary": "Pulls a run of statements out of a routine into a new method",
+  "wikiPage": "extract-method",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "extract-method"
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319"
+}

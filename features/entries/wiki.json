@@ -1,0 +1,18 @@
+{
+  "id": "wiki",
+  "title": "wiki",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.7.0-alpha",
+  "summary": "Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it",
+  "wikiPage": "wiki",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "wiki"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

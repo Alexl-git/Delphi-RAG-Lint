@@ -183,6 +183,9 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 
 $Repo = (Resolve-Path $Repo).Path
+# Shared with tools\FeatureRegistry.psm1: ONE definition of the verb and caption
+# harvests, so the registry guard cannot fork these regexes silently.
+. (Join-Path $Repo 'tests\autotest\lib\DocsSurfaceHarvest.ps1')
 Write-Host '== documented CLI surface vs the real one ==' -ForegroundColor Cyan
 
 # Full path only. A bare `drag-lint` resolves off PATH to a frozen Win32 build on
@@ -230,8 +233,7 @@ $NeverProbe = [ordered]@{
 }
 
 $helpText  = (& $Exe --help 2>&1 | Out-String)
-$helpVerbs = @([regex]::Matches($helpText, '(?m)^\s{2}drag-lint\s+([a-z][a-z0-9-]*)') |
-                 ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+$helpVerbs = @(Get-HelpVerbList -HelpText $helpText)
 # Non-emptiness is the control: a help parse that yields nothing makes every
 # "is it documented?" comparison below trivially true.
 Check '--help verb list parsed' ($helpVerbs.Count -gt 20) "($($helpVerbs.Count) verb(s))"
@@ -694,39 +696,19 @@ foreach ($x in $skipped) { Write-Host ("         {0}" -f $x) -ForegroundColor Da
 Write-Host ''
 Write-Host '-- check 5: documented menu paths vs the registration' -ForegroundColor Cyan
 
-$editorPas = Join-Path $Repo 'src\delphi-plugin\DragLint.Plugin.Editor.pas'
-$aboutForm = Join-Path $Repo 'src\delphi-plugin\DragLint.Plugin.AboutForm.pas'
-# 2026-10-05: the Reports submenu's items are created through AddWrappedItem in
-# Editor.pas, but their CAPTIONS live in this unit's REPORT_QUESTIONS catalog and
-# its group headers in ReportGroupCaption -- a menu source like the other two.
-$reportTxt = Join-Path $Repo 'src\delphi-plugin\DragLint.Plugin.ReportText.pas'
-$menuSrc   = ''
-foreach ($p in @($editorPas, $aboutForm, $reportTxt)) {
-  if (Test-Path -LiteralPath $p) { $menuSrc += (Get-Content -LiteralPath $p -Raw) }
-}
-Check 'plugin menu sources located' ($menuSrc.Length -gt 0) `
-  "$([System.IO.Path]::GetFileName($editorPas)) + $([System.IO.Path]::GetFileName($aboutForm))"
+# The detail string keeps its pre-extraction wording (two file names, although
+# DragLint.Plugin.ReportText.pas is read too) so the guard's output is
+# byte-identical across the 2026-10-05 extraction into the shared lib.
+Check 'plugin menu sources located' ((Get-MenuSourceText -Repo $Repo).Length -gt 0) `
+  'DragLint.Plugin.Editor.pas + DragLint.Plugin.AboutForm.pas'
 
-# Captions the plugin actually creates: menu items, section headers, and the
-# About window's buttons (the seven diagnostics actions live there now, so a doc
-# naming them is correct only if the button still exists).
-$liveCaptions = New-Object System.Collections.Generic.HashSet[string]
-foreach ($rx in @(
-    "AddWrappedItem\(\s*\w+\s*,\s*'([^']+)'",
-    "AddSectionHeader\(\s*\w+\s*,\s*'([^']+)'",
-    "Add(?:Proc)?Button\(\s*'([^']+)'",
-    "\.Caption\s*:=\s*'([^']+)'",
-    "\bCaption:\s*'([^']+)'",                      # REPORT_QUESTIONS catalog rows
-    "\brtk\w+\s*:\s*Result\s*:=\s*'([^']+)'")) {   # ReportGroupCaption headers
-  foreach ($m in [regex]::Matches($menuSrc, $rx)) {
-    # '&&' is the Delphi escape for a literal '&' in a caption; docs write one.
-    [void]$liveCaptions.Add($m.Groups[1].Value.Replace('&&', '&').Trim())
-  }
-}
+# Captions the plugin actually creates -- harvested by the shared lib (menu
+# items, section headers, About buttons, REPORT_QUESTIONS rows, group headers).
+$liveCaptions = Get-LiveMenuCaptions -Repo $Repo
 Check 'live menu captions harvested' ($liveCaptions.Count -ge 40) "$($liveCaptions.Count) caption(s)"
 
-# Documented paths: "drag-lint > A > B" in any tracked doc, plus the feature
-# map's MenuPath column.
+# Documented paths: "drag-lint > A > B" in any tracked doc. (The feature map TSV
+# was retired 2026-10-05; the registry guard polices the registry side.)
 $menuDocs = @()
 foreach ($d in @('docs\wiki', 'docs')) {
   $dir = Join-Path $Repo $d
@@ -734,8 +716,6 @@ foreach ($d in @('docs\wiki', 'docs')) {
     $menuDocs += @(Get-ChildItem -LiteralPath $dir -Filter *.md -File -ErrorAction SilentlyContinue)
   }
 }
-$fmPath = Join-Path $Repo 'docs\wiki-featuremap.tsv'
-if (Test-Path -LiteralPath $fmPath) { $menuDocs += @(Get-Item -LiteralPath $fmPath) }
 Check 'docs to scan for menu paths located' ($menuDocs.Count -gt 0) "$($menuDocs.Count) file(s)"
 
 # PLAN-*, INBOX-* and RESUME-* are gitignored working notes: they record what
@@ -747,14 +727,8 @@ $menuDocs = @($menuDocs | Where-Object { $_.Name -notmatch '^(PLAN|INBOX|RESUME)
 # raw strings flags all of those, and a guard that flags correct prose is one
 # that gets switched off. So: normalise both sides, then accept a doc leaf that
 # is a PREFIX of a real caption. That still catches a caption that no longer
-# exists at all, which is the failure this check is for.
-function Get-CaptionKey([string]$S) {
-  $s = $S.Replace('&&', '&')
-  $s = $s -replace '\.\.\.', ' '          # trailing ellipsis is decoration
-  $s = $s -replace '[`*"]', ' '
-  $s = $s -replace '\s+', ' '
-  return $s.Trim().Trim('.', ',', ';', ':', ')', '(').ToLowerInvariant()
-}
+# exists at all, which is the failure this check is for. (Get-CaptionKey and
+# Test-CaptionKeyMatch live in tests\autotest\lib\DocsSurfaceHarvest.ps1.)
 
 $liveKeys = @($liveCaptions | ForEach-Object { Get-CaptionKey $_ } | Where-Object { $_ })
 
@@ -783,10 +757,7 @@ foreach ($f in $menuDocs) {
       # Graph (Butterfly)..."), and prose runs on past the caption ("Open Plugin
       # Log opens the..."). Either way the caption is present and correct; only a
       # name that matches nothing in either direction is genuinely dead.
-      $hit = $false
-      foreach ($lk in $liveKeys) {
-        if ($lk -eq $key -or $lk.StartsWith($key) -or $key.StartsWith($lk)) { $hit = $true; break }
-      }
+      $hit = Test-CaptionKeyMatch -Key $key -LiveKeys $liveKeys
       if (-not $hit) {
         $badPaths.Add(("{0}:{1}: drag-lint > ... > '{2}'" -f $f.Name, $lineNo, $leaf.Trim()))
       }

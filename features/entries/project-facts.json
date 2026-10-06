@@ -1,0 +1,18 @@
+{
+  "id": "project-facts",
+  "title": "project-facts",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.20.0-alpha",
+  "summary": "Report what the build does: defines that are on and what sets each, imports, output paths and packages",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "project-facts"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page"
+}

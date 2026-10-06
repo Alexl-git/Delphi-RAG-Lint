@@ -1,0 +1,17 @@
+{
+  "id": "convert-validate",
+  "title": "convert-validate",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.1.0-alpha",
+  "summary": "Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees",
+  "wikiPage": "convert-validate",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "convert-validate"
+    }
+  ],
+  "audience": "both"
+}

@@ -1,0 +1,19 @@
+{
+  "id": "lint-rules",
+  "title": "Lint rules",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.2.0-alpha",
+  "summary": "Every lint rule the engine ships, imported from rules --json",
+  "wikiPage": "rules",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "rules"
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.LintOptionsFrame.pas:88",
+  "family": "lint-rules"
+}

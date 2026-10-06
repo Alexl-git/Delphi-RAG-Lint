@@ -1,0 +1,23 @@
+{
+  "id": "compiler-hints",
+  "title": "Compiler Hints",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity",
+  "wikiPage": "Compiler-Hints",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Compiler Hints..."
+    },
+    {
+      "type": "cli",
+      "verb": "query",
+      "sub": "hints"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

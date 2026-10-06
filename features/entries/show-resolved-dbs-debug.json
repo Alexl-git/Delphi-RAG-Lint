@@ -1,0 +1,21 @@
+{
+  "id": "show-resolved-dbs-debug",
+  "title": "Show Resolved DBs (debug)",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.60.0-alpha",
+  "summary": "Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query",
+  "wikiPage": "Show-Resolved-DBs-debug",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Index & Maintenance > Show Resolved DBs (debug)..."
+    },
+    {
+      "type": "cli",
+      "verb": "resolve-dbs"
+    }
+  ],
+  "audience": "both"
+}

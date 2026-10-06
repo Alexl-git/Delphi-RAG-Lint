@@ -1,0 +1,40 @@
+{
+  "id": "feature-registry",
+  "title": "Feature registry",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.22.0-alpha",
+  "summary": "The machine-checked master list of every feature, and the generator of the index pages",
+  "intro": "Register a feature with tools\\feature-registry.ps1 add, regenerate the pages with tools\\build-feature-pages.ps1, and let the battery guard name what is missing. Needs PowerShell 7.3 and a repository clone.",
+  "wikiPage": "Feature-Registry",
+  "surfaces": [
+    {
+      "type": "script",
+      "path": "tools\\feature-registry.ps1",
+      "args": "add / update / find / blast-radius / move-menu / deprecate / normalise / check / generate"
+    },
+    {
+      "type": "script",
+      "path": "tools\\build-feature-pages.ps1",
+      "args": "-Check -OutDir -Normalise"
+    },
+    {
+      "type": "script",
+      "path": "tools\\publish-release.ps1",
+      "args": "-Version -DryRun"
+    },
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\Feature-Registry.md"
+    }
+  ],
+  "audience": "both",
+  "requires": ["powershell7", "repo-clone"],
+  "aliases": ["blast radius", "feature list", "quick help", "registry"],
+  "lastVerified": {
+    "date": "2026-10-05",
+    "by": "claude-task9",
+    "build": "1.21.1-alpha"
+  }
+}

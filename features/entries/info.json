@@ -1,0 +1,18 @@
+{
+  "id": "info",
+  "title": "info",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.19.0-alpha",
+  "summary": "Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities",
+  "wikiPage": "info",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "info"
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.About.pas:217"
+}

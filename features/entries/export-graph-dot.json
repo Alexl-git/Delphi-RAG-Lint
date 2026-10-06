@@ -1,0 +1,22 @@
+{
+  "id": "export-graph-dot",
+  "title": "Export Graph (DOT)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring",
+  "wikiPage": "Export-Graph-DOT",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Generate & Export > Export Graph (DOT)..."
+    },
+    {
+      "type": "cli",
+      "verb": "graph"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

@@ -1,0 +1,21 @@
+{
+  "id": "unit-test-stub-symbol",
+  "title": "Unit Test Stub (symbol)",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.27.0-alpha",
+  "summary": "Uses generate-test to produce a unit-test skeleton for one qualified symbol",
+  "wikiPage": "Unit-Test-Stub-symbol",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Generate & Export > Unit Test Stub (symbol)..."
+    },
+    {
+      "type": "cli",
+      "verb": "generate-test"
+    }
+  ],
+  "audience": "both"
+}

@@ -1,0 +1,23 @@
+{
+  "id": "export-to-obsidian",
+  "title": "Export to Obsidian",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages",
+  "wikiPage": "Export-to-Obsidian",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Generate & Export > Export to Obsidian..."
+    },
+    {
+      "type": "cli",
+      "verb": "export",
+      "sub": "obsidian"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

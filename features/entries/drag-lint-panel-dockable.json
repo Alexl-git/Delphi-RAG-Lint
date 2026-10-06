@@ -1,0 +1,18 @@
+{
+  "id": "drag-lint-panel-dockable",
+  "title": "drag-lint Panel (dockable)",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Opens the main drag-lint dockable tool window inside the IDE",
+  "wikiPage": "drag-lint-Panel-dockable",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > drag-lint Panel (dockable)"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

@@ -1,0 +1,16 @@
+{
+  "groups": [
+    { "id": "indexing", "title": "Indexing", "order": 10, "summary": "Build and maintain the per-project and library indexes." },
+    { "id": "search-navigation", "title": "Search and navigation", "order": 20, "summary": "Find symbols, callers, callees, text and types in the index." },
+    { "id": "linting", "title": "Linting", "order": 30, "summary": "Rules, autofix, suppression markers and project-wide checks." },
+    { "id": "documentation", "title": "Documentation", "order": 40, "summary": "DocInsight comments generated from the index, and drift detection." },
+    { "id": "refactoring", "title": "Refactoring and code generation", "order": 50, "summary": "Rename, extract, safe delete, uses cleanup and code stubs." },
+    { "id": "component-conversion", "title": "Component conversion", "order": 60, "summary": "Rule-driven migration of legacy component types." },
+    { "id": "graphs-reports", "title": "Graphs and reports", "order": 70, "summary": "Call graphs, dependency reports, dead code, tester spreadsheets." },
+    { "id": "diagrams-charts", "title": "Diagrams and charts", "order": 80, "summary": "Ask a question about a symbol and get a clickable chart." },
+    { "id": "compiler", "title": "Compiler integration", "order": 90, "summary": "Compile, fold compiler output into findings, preprocess." },
+    { "id": "database", "title": "Database and Firebird", "order": 100, "summary": "SQL scripts, live schema snapshots, ORM links." },
+    { "id": "editor-integration", "title": "Editor integration", "order": 110, "summary": "The RAD Studio plugin, the language server, MCP and workspaces." },
+    { "id": "maintenance", "title": "Maintenance and diagnostics", "order": 120, "summary": "Which databases cover what, drift checks, raw dumps, self-tests." }
+  ]
+}

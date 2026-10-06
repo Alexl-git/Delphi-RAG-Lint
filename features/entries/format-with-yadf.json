@@ -1,0 +1,21 @@
+{
+  "id": "format-with-yadf",
+  "title": "Format with YADF",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.16.0-alpha",
+  "summary": "Reformats one Pascal unit by driving the external YADF formatter",
+  "wikiPage": "Format-with-YADF",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Format with YADF"
+    },
+    {
+      "type": "cli",
+      "verb": "format"
+    }
+  ],
+  "audience": "both"
+}

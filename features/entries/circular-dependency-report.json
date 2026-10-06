@@ -1,0 +1,18 @@
+{
+  "id": "circular-dependency-report",
+  "title": "Circular Dependency Report (worked example)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "A worked example: a real four-unit uses cycle, and the report drag-lint produces for it",
+  "wikiPage": "Circular-Dependency-Report",
+  "surfaces": [
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\Circular-Dependency-Report.md"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

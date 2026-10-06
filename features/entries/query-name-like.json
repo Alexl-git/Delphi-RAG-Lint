@@ -1,0 +1,18 @@
+{
+  "id": "query-name-like",
+  "title": "query --name-like",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Case-insensitive substring search over symbol names",
+  "wikiPage": "query-name-like",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

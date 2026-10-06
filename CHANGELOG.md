@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## v1.22.0-alpha -- 2026-10-06 (branch feat/c8-engine-n1n5, unmerged)
+## v1.22.0-alpha -- unreleased
 
 No extractor change: indexes do not re-parse.
 
@@ -31,6 +31,18 @@ No extractor change: indexes do not re-parse.
 
 - **`info --json` `capabilities.inherited_instances: true` (C8 N5)**, so the converter editor
   can tell this engine from one that still refuses.
+- **Feature registry.** `features\entries\*.json` (one file per feature, canonical form) plus the
+  imported `lint-rules` and `chart-questions` families are the master list of everything drag-lint
+  ships. `tools\feature-registry.ps1` (add / update / find / blast-radius / move-menu / deprecate /
+  normalise / check / generate) is the only way teams write it; `tools\build-feature-pages.ps1`
+  generates `Home.md`, `Features.md`, `Feature-Index.md`, the new `Quick-Help.md`, a block in
+  README.md and in docs\AI-USAGE.md, and `features\generated\manifest.json`.
+  `tests\autotest\run_feature_registry_guard.ps1` fails the battery when a `--help` verb, a
+  subcommand, an IDE caption, a rule, a chart question or a release exe has no entry, when an
+  entry points at something that no longer exists, or when a generated page was hand-edited.
+  `docs\wiki-featuremap.tsv` is retired. `tools\publish-release.ps1` orders the publish steps and
+  restores the deployed Debug engine after `pack-lint-release.ps1` overwrites it. Page:
+  [Feature-Registry](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Feature-Registry).
 
 ## v1.21.1-alpha -- 2026-10-05
 

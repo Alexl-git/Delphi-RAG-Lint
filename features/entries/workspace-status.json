@@ -1,0 +1,18 @@
+{
+  "id": "workspace-status",
+  "title": "workspace status",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Reports the status of every project registered in a .drag-lint-workspace.json workspace config",
+  "wikiPage": "workspace-status",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "workspace",
+      "sub": "status"
+    }
+  ],
+  "audience": "both"
+}

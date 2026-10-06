@@ -1,0 +1,21 @@
+{
+  "id": "rebuild-index-for-this-project",
+  "title": "Rebuild Index for This Project",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Walks a project's .dproj compile closure and (re)builds its index",
+  "wikiPage": "Rebuild-Index-for-This-Project",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Index & Maintenance > Rebuild Index for This Project"
+    },
+    {
+      "type": "cli",
+      "verb": "index"
+    }
+  ],
+  "audience": "both"
+}

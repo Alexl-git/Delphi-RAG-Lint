@@ -1,0 +1,23 @@
+{
+  "id": "show-in-call-graph",
+  "title": "Show in Call Graph",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.96.0-alpha",
+  "summary": "Opens the call graph rooted at the symbol represented by a Structure-tree node",
+  "wikiPage": "Show-in-Call-Graph",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Show in Call Graph"
+    },
+    {
+      "type": "cli",
+      "verb": "reverse-calltree"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

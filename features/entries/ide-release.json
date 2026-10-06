@@ -1,0 +1,17 @@
+{
+  "id": "ide-release",
+  "title": "ide-release",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.13.0-alpha",
+  "summary": "Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request",
+  "wikiPage": "ide-release",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "ide-release"
+    }
+  ],
+  "audience": "both"
+}

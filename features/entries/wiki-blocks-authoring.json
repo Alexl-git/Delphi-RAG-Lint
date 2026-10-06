@@ -1,0 +1,22 @@
+{
+  "id": "wiki-blocks-authoring",
+  "title": "dl:wiki concept blocks",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.7.0-alpha",
+  "summary": "The format of a dl:wiki block -- the concept notes the wiki verb reads",
+  "wikiPage": "Wiki-Blocks-Authoring",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "wiki"
+    },
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\Wiki-Blocks-Authoring.md"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

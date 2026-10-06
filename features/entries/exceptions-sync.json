@@ -1,0 +1,18 @@
+{
+  "id": "exceptions-sync",
+  "title": "exceptions-sync",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.8.0-alpha",
+  "summary": "Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "exceptions-sync"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page"
+}

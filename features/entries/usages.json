@@ -1,0 +1,17 @@
+{
+  "id": "usages",
+  "title": "usages",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.33.0-alpha",
+  "summary": "Finds usage sites of a named symbol, with a choice of report width",
+  "wikiPage": "usages",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "usages"
+    }
+  ],
+  "audience": "both"
+}

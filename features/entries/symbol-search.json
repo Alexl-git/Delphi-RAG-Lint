@@ -1,0 +1,21 @@
+{
+  "id": "symbol-search",
+  "title": "Symbol Search",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Searches symbols by name across the indexed projects",
+  "wikiPage": "Symbol-Search",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Symbol Search..."
+    },
+    {
+      "type": "cli",
+      "verb": "query"
+    }
+  ],
+  "audience": "both"
+}
