@@ -1,0 +1,24 @@
+{
+  "id": "chart-questions",
+  "title": "Chart questions",
+  "group": "diagrams-charts",
+  "owner": "CHARTS",
+  "status": "shipped",
+  "since": "1.20.2-alpha",
+  "summary": "Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS",
+  "wikiPage": "Diagrams-and-Charts",
+  "surfaces": [
+    {
+      "type": "script",
+      "path": "charts\\src\\Ask-Report.ps1"
+    },
+    {
+      "type": "script",
+      "path": "charts\\src\\New-DiagramArtifact.ps1"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index", "powershell7", "graphviz"],
+  "family": "chart-questions",
+  "homeOrder": 44
+}

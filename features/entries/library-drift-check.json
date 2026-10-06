@@ -1,0 +1,22 @@
+{
+  "id": "library-drift-check",
+  "title": "Library Drift Check",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Flags registered library roots that have source on disk but nothing in the index",
+  "wikiPage": "Library-Drift-Check",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Index & Maintenance > Library Drift Check..."
+    },
+    {
+      "type": "cli",
+      "verb": "library-drift"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

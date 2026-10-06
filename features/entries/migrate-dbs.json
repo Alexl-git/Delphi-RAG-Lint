@@ -1,0 +1,17 @@
+{
+  "id": "migrate-dbs",
+  "title": "migrate-dbs",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.3.0-alpha",
+  "summary": "Moves project index databases into each project's own D-RAG folder, matching the current index layout",
+  "wikiPage": "migrate-dbs",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "migrate-dbs"
+    }
+  ],
+  "audience": "both"
+}

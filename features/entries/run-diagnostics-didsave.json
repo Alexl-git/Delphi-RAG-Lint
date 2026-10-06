@@ -1,0 +1,18 @@
+{
+  "id": "run-diagnostics-didsave",
+  "title": "Run Diagnostics (didSave)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification",
+  "wikiPage": "Run-Diagnostics-didSave",
+  "surfaces": [
+    {
+      "type": "ide-about",
+      "caption": "Run Diagnostics (didSave)"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

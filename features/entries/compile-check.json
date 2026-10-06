@@ -1,0 +1,18 @@
+{
+  "id": "compile-check",
+  "title": "compile-check",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.26.0-alpha",
+  "summary": "Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result",
+  "wikiPage": "compile-check",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "compile-check"
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:2037"
+}

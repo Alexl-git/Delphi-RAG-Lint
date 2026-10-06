@@ -1,0 +1,22 @@
+{
+  "id": "top-symbols-fan-in",
+  "title": "Top Symbols (fan-in)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Ranks indexed symbols by fan-in -- how many places reference them",
+  "wikiPage": "Top-Symbols-fan-in",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Top Symbols (fan-in)..."
+    },
+    {
+      "type": "cli",
+      "verb": "top"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

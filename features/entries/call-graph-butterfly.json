@@ -1,0 +1,22 @@
+{
+  "id": "call-graph-butterfly",
+  "title": "Call Graph (Butterfly)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.96.0-alpha",
+  "summary": "Shows callers and callees of one symbol together in a single \"butterfly\" view",
+  "wikiPage": "Call-Graph-Butterfly",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)..."
+    },
+    {
+      "type": "cli",
+      "verb": "reverse-calltree"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

@@ -1,0 +1,21 @@
+{
+  "id": "copy-diagnostics-current-file",
+  "title": "Copy Diagnostics (Current File)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Puts the current file's lint findings onto the clipboard",
+  "wikiPage": "Copy-Diagnostics-Current-File",
+  "surfaces": [
+    {
+      "type": "ide-about",
+      "caption": "Copy Diagnostics (Current File)"
+    },
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both"
+}

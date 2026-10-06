@@ -1,0 +1,18 @@
+{
+  "id": "create-enum-helper",
+  "title": "create-enum-helper",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.94.0-alpha",
+  "summary": "Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type",
+  "wikiPage": "create-enum-helper",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "create-enum-helper"
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1226"
+}

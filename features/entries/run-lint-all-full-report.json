@@ -1,0 +1,21 @@
+{
+  "id": "run-lint-all-full-report",
+  "title": "Run Lint All (Full Report)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.61.0-alpha",
+  "summary": "Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check",
+  "wikiPage": "Run-Lint-All-Full-Report",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Run Lint All (Full Report)..."
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all"
+    }
+  ],
+  "audience": "both"
+}

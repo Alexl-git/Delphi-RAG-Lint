@@ -1,0 +1,25 @@
+{
+  "id": "auto-document-whole-project",
+  "title": "Auto-Document Whole Project",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Writes DocInsight documentation into every public declaration a project owns",
+  "wikiPage": "Auto-Document-Whole-Project",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Generate & Export > Auto-Document Whole Project..."
+    },
+    {
+      "type": "cli",
+      "verb": "index"
+    },
+    {
+      "type": "cli",
+      "verb": "document"
+    }
+  ],
+  "audience": "both"
+}

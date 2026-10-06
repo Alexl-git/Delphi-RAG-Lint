@@ -1,0 +1,19 @@
+{
+  "id": "reverse-call-tree-clickable-messages-window",
+  "title": "Reverse Call Tree (clickable, Messages window)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.96.0-alpha",
+  "summary": "The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller",
+  "wikiPage": "Reverse-Call-Tree-clickable-Messages-window",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "reverse-calltree"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "notes": "No menu item of its own since 2026-09-07: drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)... asks where to render, and Yes picks the Messages window"
+}

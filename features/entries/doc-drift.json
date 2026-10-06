@@ -1,0 +1,18 @@
+{
+  "id": "doc-drift",
+  "title": "doc-drift",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.93.0-alpha",
+  "summary": "Diagnostic that computes deterministic doc-vs-code drift findings for one symbol",
+  "wikiPage": "doc-drift",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "doc-drift"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

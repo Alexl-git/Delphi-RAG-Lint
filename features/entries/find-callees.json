@@ -1,0 +1,18 @@
+{
+  "id": "find-callees",
+  "title": "find-callees",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.91.0-alpha",
+  "summary": "Lists the resolved outgoing calls of one routine",
+  "wikiPage": "find-callees",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "find-callees"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

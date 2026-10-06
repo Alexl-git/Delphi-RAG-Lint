@@ -1,0 +1,22 @@
+{
+  "id": "import-build-log",
+  "title": "Import Build Log",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.8.0-alpha",
+  "summary": "Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings",
+  "wikiPage": "Import-Build-Log",
+  "surfaces": [
+    {
+      "type": "ide-about",
+      "caption": "Import Build Log..."
+    },
+    {
+      "type": "cli",
+      "verb": "import-log"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

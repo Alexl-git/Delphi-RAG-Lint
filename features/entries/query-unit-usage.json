@@ -1,0 +1,18 @@
+{
+  "id": "query-unit-usage",
+  "title": "query unit-usage",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Answers one question, about one unit and one file",
+  "wikiPage": "query-unit-usage",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "sub": "unit-usage"
+    }
+  ],
+  "audience": "both"
+}

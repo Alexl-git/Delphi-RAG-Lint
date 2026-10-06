@@ -1,0 +1,22 @@
+{
+  "id": "full-compile-sweep",
+  "title": "Full Compile Sweep",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.2.0-alpha",
+  "summary": "Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold",
+  "wikiPage": "Full-Compile-Sweep",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Full Compile Sweep"
+    },
+    {
+      "type": "cli",
+      "verb": "refresh-findings"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

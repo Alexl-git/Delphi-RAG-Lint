@@ -1,0 +1,22 @@
+{
+  "id": "fix-it",
+  "title": "Fix it",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Applies the autofix for the single lint finding represented by a Structure-tree node",
+  "wikiPage": "Fix-it",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Fix it"
+    },
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both"
+}

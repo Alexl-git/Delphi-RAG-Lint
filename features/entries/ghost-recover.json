@@ -1,0 +1,17 @@
+{
+  "id": "ghost-recover",
+  "title": "ghost-recover",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.64.1-alpha",
+  "summary": "Scans a project's hidden D-RAG folder for recovery journals left behind when a ghost-check overlay was interrupted by a crash",
+  "wikiPage": "ghost-recover",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "ghost-recover"
+    }
+  ],
+  "audience": "both"
+}

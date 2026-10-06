@@ -1,0 +1,70 @@
+{
+  "id": "about-and-status",
+  "title": "About and Status",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.15.0-alpha",
+  "summary": "The plugin's status window -- versions, connection health, and which indexes are actually in use",
+  "wikiPage": "About-and-Status",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > About"
+    },
+    {
+      "type": "cli",
+      "verb": "info"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Check for Updates"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Close"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Copy Diagnostics (Current File)"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Copy Report"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Diagnose Current State"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Import Build Log..."
+    },
+    {
+      "type": "ide-about",
+      "caption": "Lint Buffer (Unsaved)"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Open Plugin Log"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Recover Buffer-Compile Files"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Refresh"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Run AST Checks"
+    },
+    {
+      "type": "ide-about",
+      "caption": "Run Diagnostics (didSave)"
+    }
+  ],
+  "audience": "both",
+  "homeOrder": 60
+}

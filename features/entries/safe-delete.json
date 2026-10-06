@@ -1,0 +1,18 @@
+{
+  "id": "safe-delete",
+  "title": "safe-delete",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.69.0-alpha",
+  "summary": "Deletes a symbol if and only if it has zero references in the index",
+  "wikiPage": "safe-delete",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "safe-delete"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

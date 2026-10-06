@@ -1,0 +1,18 @@
+{
+  "id": "callgraph",
+  "title": "callgraph",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.91.0-alpha",
+  "summary": "Prints an N-deep resolved call tree for a symbol, in either direction",
+  "wikiPage": "callgraph",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "callgraph"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

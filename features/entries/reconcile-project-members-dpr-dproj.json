@@ -1,0 +1,21 @@
+{
+  "id": "reconcile-project-members-dpr-dproj",
+  "title": "Reconcile Project Members (.dpr/.dproj)",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.18.0-alpha",
+  "summary": "Compares a project file's declared member list against what is on disk and in the compile closure",
+  "wikiPage": "Reconcile-Project-Members-dpr-dproj",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)..."
+    },
+    {
+      "type": "cli",
+      "verb": "reconcile-project"
+    }
+  ],
+  "audience": "both"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "rename-symbol",
+  "title": "Rename Symbol",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.24.0-alpha",
+  "summary": "Renames a symbol across the whole indexed project",
+  "wikiPage": "Rename-Symbol",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Rename Symbol..."
+    },
+    {
+      "type": "cli",
+      "verb": "rename"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

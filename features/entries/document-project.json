@@ -1,0 +1,22 @@
+{
+  "id": "document-project",
+  "title": "Document project",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.90.0-alpha",
+  "summary": "Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project",
+  "wikiPage": "Document-project",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Document project"
+    },
+    {
+      "type": "cli",
+      "verb": "document"
+    }
+  ],
+  "audience": "both"
+}

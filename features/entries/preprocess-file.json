@@ -1,0 +1,17 @@
+{
+  "id": "preprocess-file",
+  "title": "preprocess-file",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.92.0-alpha",
+  "summary": "Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set",
+  "wikiPage": "preprocess-file",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "preprocess-file"
+    }
+  ],
+  "audience": "both"
+}

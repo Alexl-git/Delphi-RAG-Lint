@@ -40,6 +40,29 @@ SAME change; do not "fix the docs later".
 If the guard is wrong, fix the guard deliberately -- do not weaken it to get
 green. A guard that only ever passes is the thing that produced the list above.
 
+## Feature registry (5 lines, every shipped change, however small)
+
+The registry is the master list of what drag-lint ships; the page is yours, the
+list is the registry's. Spec (local, gitignored design spec): `docs\superpowers\specs\2026-10-05-feature-registry-design.md`;
+page: `docs\wiki\Feature-Registry.md`.
+
+1. Register it: `tools\feature-registry.ps1 add -Id <id> -Title ... -Group ... -Owner ...
+   -Summary ... -Intro ... -WikiPage ... -Surface "<type>:<...> ;; <type>:<...>"` -- surfaces
+   carry the FULL menu path (`ide-menu:drag-lint > Submenu > Caption`), every level. Moving a
+   menu item? `blast-radius -MenuPath "<node>"` first, then `move-menu -From ... -To ...`, in
+   the same commit as the plugin change.
+2. Write or update the wiki page named in `wikiPage` -- you own it; the registry links to it.
+3. Run `tools\build-feature-pages.ps1 -Normalise` and commit the regenerated `docs\wiki` pages, the
+   README / AI-USAGE blocks and `features\generated\manifest.json` WITH the feature.
+4. Run `tests\autotest\run_feature_registry_guard.ps1` -- it names exactly what is missing and
+   prints the JSON skeleton; a red battery is the only reminder there is.
+5. Never hand-edit `Home.md`, `Features.md`, `Feature-Index.md`, `Quick-Help.md` or a
+   `dl:registry` block -- edit the entry or the template under `features\templates\` and
+   regenerate. Groups and teams are data (`-NewGroup` / `-NewTeam`), not an enum.
+
+`status: internal` is for accepted-but-unadvertised verbs; docs-sync check 1's
+`$UndocumentedOnPurpose` stays a separate list in v1 (owner decision 2026-10-05).
+
 ## Index layout (do not guess a path)
 
 A project's index is `<project folder>\_D-RAG\<project file base name>.sqlite` --

@@ -1,0 +1,18 @@
+{
+  "id": "shutdown",
+  "title": "shutdown",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "shutdown"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page"
+}

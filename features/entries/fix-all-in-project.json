@@ -1,0 +1,22 @@
+{
+  "id": "fix-all-in-project",
+  "title": "Fix all in project",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.61.0-alpha",
+  "summary": "Applies autofixes for every fixable finding across the whole project, starting from the Structure form",
+  "wikiPage": "Fix-all-in-project",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Fix all in project"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all"
+    }
+  ],
+  "audience": "both"
+}

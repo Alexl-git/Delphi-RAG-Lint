@@ -1,0 +1,21 @@
+{
+  "id": "hover-at-cursor",
+  "title": "Hover at Cursor",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.7.0-alpha",
+  "summary": "Shows a hover card for the symbol under the editor caret: signature, documentation, and callers",
+  "wikiPage": "Hover-at-Cursor",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Hover at Cursor"
+    },
+    {
+      "type": "cli",
+      "verb": "hover"
+    }
+  ],
+  "audience": "both"
+}

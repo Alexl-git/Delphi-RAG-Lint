@@ -1,0 +1,18 @@
+{
+  "id": "allow",
+  "title": "allow",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.54.0-alpha",
+  "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
+  "wikiPage": "allow",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "allow"
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1061"
+}

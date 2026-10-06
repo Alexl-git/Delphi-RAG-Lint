@@ -1,0 +1,22 @@
+{
+  "id": "document-unit",
+  "title": "Document unit",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.90.0-alpha",
+  "summary": "Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only)",
+  "wikiPage": "Document-unit",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Document unit"
+    },
+    {
+      "type": "cli",
+      "verb": "document"
+    }
+  ],
+  "audience": "both"
+}

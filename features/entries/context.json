@@ -1,0 +1,18 @@
+{
+  "id": "context",
+  "title": "context",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers",
+  "wikiPage": "context",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "context"
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:633"
+}

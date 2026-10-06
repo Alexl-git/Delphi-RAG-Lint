@@ -1,0 +1,17 @@
+{
+  "id": "shared-unit",
+  "title": "shared-unit",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.10.0-alpha",
+  "summary": "Reads or extends the dl:shared marker on a unit, recording which projects share it",
+  "wikiPage": "shared-unit",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "shared-unit"
+    }
+  ],
+  "audience": "both"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "class-surface",
+  "title": "Class Surface",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Shows the public surface of a class: its members and signatures, without the method bodies",
+  "wikiPage": "Class-Surface",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Inspect Symbol > Class Surface..."
+    },
+    {
+      "type": "cli",
+      "verb": "surface"
+    }
+  ],
+  "audience": "both"
+}

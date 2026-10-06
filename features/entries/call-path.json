@@ -1,0 +1,18 @@
+{
+  "id": "call-path",
+  "title": "call-path",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.91.0-alpha",
+  "summary": "Finds the shortest resolved call path from one symbol to another",
+  "wikiPage": "call-path",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "call-path"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

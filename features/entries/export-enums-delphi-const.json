@@ -1,0 +1,23 @@
+{
+  "id": "export-enums-delphi-const",
+  "title": "Export Enums (Delphi const)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations",
+  "wikiPage": "Export-Enums-Delphi-const",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Generate & Export > Export Enums (Delphi const)..."
+    },
+    {
+      "type": "cli",
+      "verb": "export",
+      "sub": "enums"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}
