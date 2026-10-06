@@ -2,6 +2,11 @@
   "family": "lint-rules",
   "entry": "lint-rules",
   "source": "drag-lint rules --json",
+  "lastVerified": {
+    "date": "2026-10-05",
+    "by": "session 23c4e8d0-e85c-4426-bcba-54e375729b0b",
+    "build": "1.21.1-alpha"
+  },
   "defaults": {},
   "children": {}
 }

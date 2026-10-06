@@ -16,6 +16,7 @@
     Sort-OrdinalUnique. The array arrives as ONE object, intact even when
     empty or single-element. Assign it directly; wrapping it in @(...)
     yields a one-element array holding the array.
+    Test-LastVerifiedValue (module-internal) is UNROLLED too.
   * SINGLE OBJECT -- Read-FamilyDefinition and Get-RegistryChildren return one
     [ordered] dictionary; Get-RegistryChildren's values are object[] child
     lists (familyId -> children), already safe to .Count.
@@ -335,6 +336,20 @@ function Test-RepoRelativeExists($Paths, [string]$Rel) {
   return (Test-Path -LiteralPath (Join-Path $Paths.Repo $Rel))
 }
 
+# Shared by entries (Test-FeatureEntry) and family definitions
+# (Read-FamilyDefinition -Context): a real yyyy-MM-dd date, not in the future,
+# and a build that is a '## v<version>' heading in CHANGELOG.md. The key SHAPE
+# (date/by/build, nothing else) is the schema's job for an entry and
+# Read-FamilyDefinition's for a family. Returns string[] (UNROLLED).
+function Test-LastVerifiedValue([System.Collections.IDictionary]$Value, $Context, [string]$Tag) {
+  $p = New-Object 'System.Collections.Generic.List[string]'
+  $d = [datetime]::MinValue
+  if (-not [datetime]::TryParseExact([string]$Value['date'], 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$d)) { $p.Add("${Tag}: lastVerified.date '$($Value['date'])' is not yyyy-MM-dd") }
+  elseif ($d.Date -gt (Get-Date).Date) { $p.Add("${Tag}: lastVerified.date '$($Value['date'])' is in the future") }
+  if (-not $Context.ChangelogVersions.Contains([string]$Value['build'])) { $p.Add("${Tag}: lastVerified.build '$($Value['build'])' is not a CHANGELOG version") }
+  return [string[]]$p.ToArray()
+}
+
 function Test-FeatureEntry {
   # -Child: an importer-generated family child. Its id is '<prefix>.<source id>'
   # (rule.<id>, chart.<id>), so the schema's id pattern is applied to the part
@@ -415,11 +430,7 @@ function Test-FeatureEntry {
   if ($e.Contains('supersededBy') -and -not $Context.KnownIds.Contains([string]$e['supersededBy'])) { $p.Add("${tag}: supersededBy '$($e['supersededBy'])' is not a registered id") }
   if ($e.Contains('family') -and -not (Test-Path -LiteralPath (Join-Path $Context.Paths.Families ([string]$e['family'] + '.json')))) { $p.Add("${tag}: family '$($e['family'])' has no features\families\<family>.json") }
   if ($e.Contains('lastVerified')) {
-    $lv = $e['lastVerified']
-    $d = [datetime]::MinValue
-    if (-not [datetime]::TryParseExact([string]$lv['date'], 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$d)) { $p.Add("${tag}: lastVerified.date '$($lv['date'])' is not yyyy-MM-dd") }
-    elseif ($d.Date -gt (Get-Date).Date) { $p.Add("${tag}: lastVerified.date '$($lv['date'])' is in the future") }
-    if (-not $Context.ChangelogVersions.Contains([string]$lv['build'])) { $p.Add("${tag}: lastVerified.build '$($lv['build'])' is not a CHANGELOG version") }
+    foreach ($x in @(Test-LastVerifiedValue -Value $e['lastVerified'] -Context $Context -Tag $tag)) { $p.Add($x) }
   } elseif (-not $Child -and $status -eq 'shipped' -and -not $inBacklog) {
     $p.Add("${tag}: lastVerified is required for a shipped entry (seeded entries are exempt while listed in seed-backlog.json)")
   }
@@ -525,11 +536,23 @@ function Get-LiveSurface {
 # ---------------------------------------------------------------------------
 $script:FamilyImporters = @('lint-rules', 'chart-questions')
 
+# lastVerified (spec 7: the family as a whole; the section-11 review samples by
+# it) is REQUIRED and must be exactly {date, by, build} with a non-empty 'by'.
+# With -Context the date and build are validated as for an entry
+# (Test-LastVerifiedValue); Get-RegistryChildren always passes it.
 function Read-FamilyDefinition {
-  param([Parameter(Mandatory)][string]$Path)
+  param([Parameter(Mandatory)][string]$Path, $Context = $null)
   $asc = Test-AsciiCrlfFile -Path $Path; if ($asc) { throw "family definition: $asc" }
   $o = ConvertTo-OrderedObject ((Get-Content -LiteralPath $Path -Raw) | ConvertFrom-Json -AsHashtable -Depth 16)
-  foreach ($k in @('family', 'entry', 'children')) { if (-not $o.Contains($k)) { throw "$Path`: family definition is missing '$k'" } }
+  foreach ($k in @('family', 'entry', 'children', 'lastVerified')) { if (-not $o.Contains($k)) { throw "$Path`: family definition is missing '$k'" } }
+  $lv = $o['lastVerified']
+  if (-not ($lv -is [System.Collections.IDictionary])) { throw "$Path`: lastVerified must be an object { date, by, build }" }
+  foreach ($k in $lv.Keys) { if ($script:LastVerifiedKeys -notcontains $k) { throw "$Path`: lastVerified has unknown key '$k' (allowed: $($script:LastVerifiedKeys -join ', '))" } }
+  foreach ($k in $script:LastVerifiedKeys) { if ([string]::IsNullOrWhiteSpace([string]$lv[$k])) { throw "$Path`: lastVerified.$k is missing or empty" } }
+  if ($null -ne $Context) {
+    $lvp = @(Test-LastVerifiedValue -Value $lv -Context $Context -Tag $Path)
+    if ($lvp.Count -gt 0) { throw ($lvp -join "`n") }
+  }
   if (-not $o.Contains('defaults') -or $null -eq $o['defaults']) { $o['defaults'] = [ordered]@{} }
   if ($null -eq $o['children']) { $o['children'] = [ordered]@{} }
   return $o
@@ -652,10 +675,13 @@ function Get-RegistryChildren {
     if ($defs -cnotcontains $fam) { throw "family '$fam' (entry '$($fe['id'])') has no features\families\$fam.json" }
   }
   foreach ($d in $defs) { if ($script:FamilyImporters -cnotcontains $d) { throw "features\families\$d.json has no importer (known: $($script:FamilyImporters -join ', '))" } }
+  # One context: built before the definitions are read (their lastVerified is
+  # validated against it), then extended with the child ids for 'related'.
+  $ctx = Get-RegistryContext -Paths $Paths -ExtraIds ([string[]]@($Entries | ForEach-Object { [string]$_['id'] }))
   $parents = @{}
   foreach ($fam in $script:FamilyImporters) {
     if ($defs -cnotcontains $fam) { continue }
-    $def = Read-FamilyDefinition -Path (Join-Path $Paths.Families "$fam.json")
+    $def = Read-FamilyDefinition -Path (Join-Path $Paths.Families "$fam.json") -Context $ctx
     if ([string]$def['family'] -cne $fam) { throw "features\families\$fam.json declares family '$($def['family'])'; it must equal the file name" }
     $parent = @($familyEntries | Where-Object { [string]$_['id'] -ceq [string]$def['entry'] -and [string]$_['family'] -ceq $fam })
     if ($parent.Count -ne 1) { throw "features\families\$fam.json names entry '$($def['entry'])', but no hand entry with id '$($def['entry'])' and family '$fam' exists" }
@@ -663,8 +689,7 @@ function Get-RegistryChildren {
     $kids = if ($fam -eq 'lint-rules') { @(Import-LintRuleFamily -Live $Live -Family $def -Parent $parent[0]) } else { @(Import-ChartQuestionFamily -Live $Live -Family $def -Parent $parent[0] -Paths $Paths) }
     $out[$fam] = $kids
   }
-  $allIds = [string[]](@($Entries | ForEach-Object { [string]$_['id'] }) + @(foreach ($v in $out.Values) { foreach ($c in $v) { [string]$c['id'] } }))
-  $ctx = Get-RegistryContext -Paths $Paths -ExtraIds $allIds
+  foreach ($v in $out.Values) { foreach ($c in $v) { [void]$ctx.KnownIds.Add([string]$c['id']) } }
   $problems = New-Object 'System.Collections.Generic.List[string]'
   foreach ($fam in $out.Keys) {
     foreach ($c in $out[$fam]) {

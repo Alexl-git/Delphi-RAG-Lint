@@ -2,6 +2,11 @@
   "family": "chart-questions",
   "entry": "chart-questions",
   "source": "REPORT_QUESTIONS in src\\delphi-plugin\\DragLint.Plugin.ReportText.pas, compared with the -Question ValidateSet of charts\\src\\New-DiagramArtifact.ps1",
+  "lastVerified": {
+    "date": "2026-10-05",
+    "by": "session 23c4e8d0-e85c-4426-bcba-54e375729b0b",
+    "build": "1.21.1-alpha"
+  },
   "defaults": {
     "menuPrefix": "drag-lint > Reports",
     "requires": ["index", "powershell7", "graphviz"],

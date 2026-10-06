@@ -98,6 +98,25 @@ Check '...and exempt with -SinceOverride (a per-child override)' (@(Test-Feature
 $dotted = ConvertTo-OrderedObject $parentLint; $dotted['id'] = 'rule.bare-except'
 Check 'a hand entry id with a dot is still rejected (child ids are importer-owned)' (@(Test-FeatureEntry -Entry $dotted -Context $ctx -Stem 'rule.bare-except' | Where-Object { $_ -like '*importers own rule.<id> and chart.<id>*' }).Count -ge 1)
 
+# --- family-level lastVerified (spec 7; the section-11 review samples by it) --
+$okLv = ''; try { foreach ($f in @($lrFile, $cqFile)) { Read-FamilyDefinition -Path $f -Context $ctx | Out-Null } } catch { $okLv = $_.Exception.Message }
+Check 'both family files carry a valid lastVerified' (($okLv -eq '') -and ($lr.Contains('lastVerified')) -and ($cq.Contains('lastVerified'))) $okLv
+$tmpDir = Join-Path ([IO.Path]::GetTempPath()) ('fr-families-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tmpDir | Out-Null
+try {
+  $noLv = ConvertTo-OrderedObject $cq; $noLv.Remove('lastVerified')
+  $noLvFile = Join-Path $tmpDir 'chart-questions.json'
+  [IO.File]::WriteAllText($noLvFile, (ConvertTo-CanonicalJson -Value $noLv), [Text.Encoding]::ASCII)
+  Expect-Throw 'a family file without lastVerified throws, naming it' { Read-FamilyDefinition -Path $noLvFile } "missing 'lastVerified'"
+  $futLv = ConvertTo-OrderedObject $cq; $futLv['lastVerified']['date'] = (Get-Date).AddDays(2).ToString('yyyy-MM-dd')
+  $futFile = Join-Path $tmpDir 'lint-rules.json'
+  [IO.File]::WriteAllText($futFile, (ConvertTo-CanonicalJson -Value $futLv), [Text.Encoding]::ASCII)
+  Expect-Throw 'a family lastVerified date in the future throws' { Read-FamilyDefinition -Path $futFile -Context $ctx } 'is in the future'
+  $badBuild = ConvertTo-OrderedObject $cq; $badBuild['lastVerified']['build'] = '9.9.9'
+  [IO.File]::WriteAllText($futFile, (ConvertTo-CanonicalJson -Value $badBuild), [Text.Encoding]::ASCII)
+  Expect-Throw 'a family lastVerified build that is no CHANGELOG version throws' { Read-FamilyDefinition -Path $futFile -Context $ctx } 'is not a CHANGELOG version'
+} finally { Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
+
 $lrBad = ConvertTo-OrderedObject ($lr | ConvertTo-Json -Depth 10 | ConvertFrom-Json); $lrBad.children['zz-no-such-rule'] = [ordered]@{ aliases = @('x') }
 Expect-Throw 'a lint override naming a missing rule throws' { Import-LintRuleFamily -Live $live -Family $lrBad -Parent $parentLint } 'zz-no-such-rule'
 
