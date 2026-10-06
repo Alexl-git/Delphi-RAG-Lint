@@ -11055,6 +11055,7 @@ const
   DEFAULT_DB  = REQ_ROOT + 'Default.sqlite';
   RULES_REQ   = REQ_ROOT + 'R1';
   RULES_SW    = REQ_ROOT + 'R2';
+  RULES_SESS  = REQ_ROOT + 'R3';
   FORMS_DFM   = REQ_ROOT + 'P\Forms\U.dfm';
   PAIRS_RUN   = 4;
   PAIRS_OTHER = 3;
@@ -11092,40 +11093,65 @@ begin
   Check('launch.db.bad.request', AdoptedProjectDb('', 'not json', DEFAULT_DB) = DEFAULT_DB);
 
   // B1: request > switch; a named folder that is missing is refused, never replaced.
-  Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, ['TLabel'], Probe([], True), F);
+  Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, '', ['TLabel'], Probe([], True), F);
   Check('launch.rules.request.wins', (Err = '') and (F = RULES_REQ), Err + F);
-  Err:= ResolveRequestRulesFolder('', RULES_SW, ['TLabel'], Probe([], True), F);
+  Err:= ResolveRequestRulesFolder('', RULES_SW, '', ['TLabel'], Probe([], True), F);
   Check('launch.rules.switch.fallback', (Err = '') and (F = RULES_SW), Err + F);
-  Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, ['TLabel'], Probe([RULES_SW], False), F);
+  Err:= ResolveRequestRulesFolder(RULES_REQ, RULES_SW, '', ['TLabel'], Probe([RULES_SW], False), F);
   Check('launch.rules.request.missing.refused', (F = '') and StartsText('No book in ' + RULES_REQ, Err) and (Pos('does not exist', Err) > 0)
     and (Pos(RULES_SW, Err) = 0), Err);
-  Err:= ResolveRequestRulesFolder('', '', ['TLabel', 'TButton'], Probe([], True), F);
+  Err:= ResolveRequestRulesFolder('', '', '', ['TLabel', 'TButton'], Probe([], True), F);
   Check('launch.rules.none.refused', (F = '') and StartsText('No book in ', Err) and (Pos('no rules folder', Err) > 0)
     and (Pos('TLabel, TButton', Err) > 0), Err);
+  // Task-4 review (a): the editor's in-session folder is the THIRD candidate.
+  Err:= ResolveRequestRulesFolder('', '', RULES_SESS, ['TLabel'], Probe([], True), F);
+  Check('launch.rules.session.fallback', (Err = '') and (F = RULES_SESS), Err + F);
+  Err:= ResolveRequestRulesFolder('', RULES_SW, RULES_SESS, ['TLabel'], Probe([], True), F);
+  Check('launch.rules.switch.beats.session', (Err = '') and (F = RULES_SW), Err + F);
+  Err:= ResolveRequestRulesFolder(RULES_REQ, '', RULES_SESS, ['TLabel'], Probe([RULES_SESS], False), F);
+  Check('launch.rules.request.missing.not.replaced.by.session', (F = '') and StartsText('No book in ' + RULES_REQ, Err), Err);
 
   // The whole chain.
   Req:= StringReplace(REQ_GOOD, '"platform":"Win64",', '"platform":"Win64","rules_folder":"C:\\R1",', []);
-  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.prepare.ok', P.Ok and (P.Error = '') and (P.Scope.Kind = skSelected) and (P.RulesFolder = RULES_REQ), P.Error);
   Check('launch.prepare.scope', (Length(P.Scope.Instances) = 2) and (Length(P.Scope.NotFound) = 1), ScopeText(P.Scope));
-  P:= PrepareConvertRequest(Req, REQ_ROOT + 'Other\_D-RAG\O.sqlite', REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([], []));
+  P:= PrepareConvertRequest(Req, REQ_ROOT + 'Other\_D-RAG\O.sqlite', REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([], []));
   Check('launch.prepare.validate.refused', (not P.Ok) and (Pos('project index', P.Error) > 0), P.Error);
-  P:= PrepareConvertRequest('{', REQ_DB, REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([], []));
+  P:= PrepareConvertRequest('{', REQ_DB, REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([], []));
   Check('launch.prepare.parse.refused', (not P.Ok) and (P.Error <> ''), P.Error);
-  P:= PrepareConvertRequest(REQ_GOOD, REQ_DB, REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  P:= PrepareConvertRequest(REQ_GOOD, REQ_DB, REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.prepare.no.folder.refused', (not P.Ok) and StartsText('No book in ', P.Error), P.Error);
-  P:= PrepareConvertRequest(REQ_GOOD, REQ_DB, REQ_PROJECT_FILE, RULES_SW, Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  P:= PrepareConvertRequest(REQ_GOOD, REQ_DB, REQ_PROJECT_FILE, RULES_SW, '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.prepare.switch.folder', P.Ok and (P.RulesFolder = RULES_SW), P.Error);
-  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([], []));
+  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([], []));
   Check('launch.prepare.dfm.missing.refused', (not P.Ok) and (Pos('missing', P.Error) > 0) and (Pos(REQ_ROOT + 'P\U.dfm', P.Error) > 0), P.Error);
   // The request's own "dfm" is read, not the .pas sibling.
-  P:= PrepareConvertRequest(StringReplace(Req, '"dfm":"C:\\P\\U.dfm"', '"dfm":"C:\\P\\Forms\\U.dfm"', []), REQ_DB, REQ_PROJECT_FILE, '',
+  P:= PrepareConvertRequest(StringReplace(Req, '"dfm":"C:\\P\\U.dfm"', '"dfm":"C:\\P\\Forms\\U.dfm"', []), REQ_DB, REQ_PROJECT_FILE, '', '',
     Probe([], True), Probe([], True), FakeReader([FORMS_DFM], [LAUNCH_DFM]));
   Check('launch.prepare.reads.request.dfm', P.Ok, P.Error);
+  P:= PrepareConvertRequest(REQ_GOOD, REQ_DB, REQ_PROJECT_FILE, '', RULES_SESS, Probe([], True), Probe([], True),
+    FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.session.folder', P.Ok and (P.RulesFolder = RULES_SESS), P.Error);
+  // Task-4 review (c): a project index that does not exist is refused before anything else is read.
+  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', '', Probe([REQ_PAS], False), Probe([], True),
+    FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  Check('launch.prepare.db.missing.refused', (not P.Ok)
+    and (P.Error = 'the project index ' + REQ_DB + ' does not exist -- index the project first'), P.Error);
+
+  // Task-4 review (b): the E5 status tail -- an unindexed unit is named and Convert will refuse it.
+  Check('launch.tail.indexed.empty', RequestStatusTail(REQ_PAS, [REQ_PAS], True, '') = '', RequestStatusTail(REQ_PAS, [REQ_PAS], True, ''));
+  Check('launch.tail.unindexed', RequestStatusTail(REQ_PAS, [REQ_DB], True, '') =
+    ' Also: ' + REQ_PAS + ' is not in the project index -- Convert will refuse.', RequestStatusTail(REQ_PAS, [REQ_DB], True, ''));
+  Check('launch.tail.index.unknown', RequestStatusTail(REQ_PAS, nil, False, '') =
+    ' Also: the project index could not be read, so unindexed units are not flagged.', RequestStatusTail(REQ_PAS, nil, False, ''));
+  Check('launch.tail.inherit.error.first', RequestStatusTail(REQ_PAS, nil, True, 'boom') =
+    ' Also: inherited instances could not be checked -- boom Also: ' + REQ_PAS + ' is not in the project index -- Convert will refuse.',
+    RequestStatusTail(REQ_PAS, nil, True, 'boom'));
 
   // E11: the report line.
   Check('launch.report.scope.whole', ScopeReportLine(Default(TConvertScope)) = 'Scope'#9'whole unit', ScopeReportLine(Default(TConvertScope)));
-  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
+  P:= PrepareConvertRequest(Req, REQ_DB, REQ_PROJECT_FILE, '', '', Probe([], True), Probe([], True), FakeReader([REQ_ROOT + 'P\U.dfm'], [LAUNCH_DFM]));
   Check('launch.report.scope.selected', ScopeReportLine(P.Scope) = 'Scope'#9'2 selected component(s) on U: Label1 (TLabel), Btn1 (TButton); not found on the form: Label2',
     ScopeReportLine(P.Scope));
 

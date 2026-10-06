@@ -1086,12 +1086,9 @@ begin
   FScope:= AScope;
   FLblScope.Caption     := ScopeText(FScope);
   FBtnClearScope.Enabled:= True;
-  // What AddSources reported in red is kept, after the request's own text.
-  LTail:= '';
-  if FInheritError <> '' then
-    LTail:= LTail + ' Also: inherited instances could not be checked -- ' + FInheritError;
-  if not FIndexKnown then
-    LTail:= LTail + ' Also: the project index could not be read, so unindexed units are not flagged.';
+  // What AddSources reported in red is kept, after the request's own text, and an
+  // unindexed unit is named: Convert would refuse it (Task 4 review b).
+  LTail:= RequestStatusTail(AReq.Units[0].Pas, FIndexed, FIndexKnown, FInheritError);
   if LMatch = 0 then
     FHost.SetStatus(NoBookText(FHost.GetRulesFolder(), AScope.Types) + LTail, True)
   else

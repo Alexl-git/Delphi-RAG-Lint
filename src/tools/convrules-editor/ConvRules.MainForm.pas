@@ -1979,7 +1979,8 @@ type
       procedure DoShowConvertTab(Sender: TObject);
       /// <summary>C12 E1-E5: reads the IDE's request file, prepares it
       /// (PrepareConvertRequest: parse, validate against this editor's project DB /
-      /// file, the rules folder, the .dfm scope) and hands it to the Convert tab.
+      /// file, the index's existence, the rules folder -- request, --rules-folder, else
+      /// RulesFolderNow -- and the .dfm scope) and hands it to the Convert tab.
       /// Queued from Create, so it runs once the window is up.</summary>
       /// <param name="APath">The --convert-request file.</param>
       /// <remarks>A refused request leaves the editor as a plain --form launch, on the
@@ -8076,7 +8077,7 @@ begin
       Exit;
     end;
   end; // try
-  LPrep:= PrepareConvertRequest(LText, GEditorProjectDb, ProjectFileForDb(GEditorProjectDb), GEditorRulesFolderArg,
+  LPrep:= PrepareConvertRequest(LText, GEditorProjectDb, ProjectFileForDb(GEditorProjectDb), GEditorRulesFolderArg, RulesFolderNow,
     function(P: string): Boolean
     begin
       Result:= TFile.Exists(P);

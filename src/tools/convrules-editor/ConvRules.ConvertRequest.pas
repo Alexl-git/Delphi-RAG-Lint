@@ -281,18 +281,20 @@ function ScopeReportLine(const AScope: TConvertScope): string;
 function AdoptedProjectDb(const AExplicitDb, ARequestJson, ADefaultDb: string): string;
 
 /// <summary>The rules folder a request runs with (controller ruling B1): the
-/// request's rules_folder, else --rules-folder.</summary>
+/// request's rules_folder, else --rules-folder, else the editor's in-session folder.</summary>
 /// <param name="ARequestFolder">TConvertRequest.RulesFolder; '' when absent.</param>
 /// <param name="ASwitchFolder">--rules-folder; '' when absent.</param>
+/// <param name="ASessionFolder">The folder the editor already works in (RulesFolderNow:
+/// the rescanned folder, else the open book's); '' when none.</param>
 /// <param name="ATypes">The requested types (RequestedTypes), for the refusal.</param>
 /// <param name="ADirExists">Folder probe (injected for the tests).</param>
 /// <param name="AFolder">The chosen folder; '' on a refusal.</param>
 /// <returns>'' when AFolder exists; else the E3 text (NoBookText) naming the missing
 /// folder, or saying that none was given.</returns>
 /// <remarks>The first non-empty candidate decides: a request folder that does not
-/// exist is refused, never replaced by the switch. The editor keeps no rules folder
-/// between sessions, so there is no third candidate.</remarks>
-function ResolveRequestRulesFolder(const ARequestFolder, ASwitchFolder: string; const ATypes: TArray<string>;
+/// exist is refused, never replaced by the switch or the session folder (C12 Task 4
+/// review a: the session folder is the third and last candidate).</remarks>
+function ResolveRequestRulesFolder(const ARequestFolder, ASwitchFolder, ASessionFolder: string; const ATypes: TArray<string>;
   const ADirExists: TFunc<string, Boolean>; out AFolder: string): string;
 
 type
@@ -317,16 +319,33 @@ type
 /// <param name="AProjectDb">GEditorProjectDb.</param>
 /// <param name="AProjectFile">ProjectFileForDb(GEditorProjectDb).</param>
 /// <param name="ASwitchFolder">--rules-folder; '' when absent.</param>
-/// <param name="AFileExists">File probe.</param>
+/// <param name="ASessionFolder">The editor's in-session rules folder; '' when none.</param>
+/// <param name="AFileExists">File probe; also asked for AProjectDb.</param>
 /// <param name="ADirExists">Folder probe.</param>
 /// <param name="AReader">Reads the unit's .dfm (the request's "dfm", else beside the
 /// .pas); anything but drRead counts as no text.</param>
 /// <returns>Ok with the request, scope and folder; else the first refusal in that
-/// order (parse, validate, rules folder, scope).</returns>
+/// order (parse, validate, project index exists, rules folder, scope). A project index
+/// that does not exist -- adopted from the request or given -- is refused as 'the
+/// project index X does not exist -- index the project first'.</returns>
 /// <remarks>Never raises (the reader must not either). A refusal touches nothing: the
 /// caller shows it and stays on the Classes tab (E1).</remarks>
-function PrepareConvertRequest(const AJson, AProjectDb, AProjectFile, ASwitchFolder: string;
+function PrepareConvertRequest(const AJson, AProjectDb, AProjectFile, ASwitchFolder, ASessionFolder: string;
   const AFileExists, ADirExists: TFunc<string, Boolean>; const AReader: TDfmTextReader): TPreparedRequest;
+
+/// <summary>What a request launch's E5 status line adds after its own text: the
+/// problems the Convert tab already knows about, each as ' Also: ...'.</summary>
+/// <param name="AUnitPas">The request's unit, as listed on the Convert tab.</param>
+/// <param name="AIndexedFiles">File paths in the project index (SourceRowText).</param>
+/// <param name="AIndexKnown">False when the project index could not be read.</param>
+/// <param name="AInheritError">The C8 analysis error; '' when none.</param>
+/// <returns>'' when there is nothing to add; else, in this order, the inherited-instance
+/// error, the unreadable-index note, and ' Also: AUnitPas is not in the project index
+/// -- Convert will refuse.' when SourceRowText flags the unit.</returns>
+/// <remarks>The caller shows the line in red exactly when the result is non-empty
+/// (Task 4 review b): a unit Convert will refuse must not read as ready to run.</remarks>
+function RequestStatusTail(const AUnitPas: string; const AIndexedFiles: TArray<string>; AIndexKnown: Boolean;
+  const AInheritError: string): string;
 
 /// <summary>The capabilities document, one line, no whitespace.</summary>
 /// <returns>{"schema":"editor-capabilities/1","convert_request":1}</returns>
@@ -344,6 +363,7 @@ uses
   System.IOUtils
   , System.JSON
   , System.StrUtils
+  , ConvRules.ConvertRun
   ;
 
 const
@@ -367,6 +387,10 @@ const
   REPORT_SCOPE_HEAD  = 'Scope'#9;
   NO_RULES_FOLDER    = '<no rules folder: the request has no rules_folder and no --rules-folder was given>';
   RULES_FOLDER_GONE  = '%s (the folder does not exist)';
+  DB_MISSING_FMT     = 'the project index %s does not exist -- index the project first';
+  TAIL_INHERIT       = ' Also: inherited instances could not be checked -- ';
+  TAIL_INDEX_UNKNOWN = ' Also: the project index could not be read, so unindexed units are not flagged.';
+  TAIL_UNINDEXED_FMT = ' Also: %s is not in the project index -- Convert will refuse.';
 
 { The scope's word in a refusal: 'form' or 'selected'. }
 function ScopeWord(AScope: TRequestScope): string;
@@ -796,7 +820,7 @@ begin
     Result:= LOut.Request.ProjectDb;
 end;
 
-function ResolveRequestRulesFolder(const ARequestFolder, ASwitchFolder: string; const ATypes: TArray<string>;
+function ResolveRequestRulesFolder(const ARequestFolder, ASwitchFolder, ASessionFolder: string; const ATypes: TArray<string>;
   const ADirExists: TFunc<string, Boolean>; out AFolder: string): string;
 var
   LCandidate: string;
@@ -806,6 +830,8 @@ begin
   if LCandidate = '' then
     LCandidate:= Trim(ASwitchFolder);
   if LCandidate = '' then
+    LCandidate:= Trim(ASessionFolder);
+  if LCandidate = '' then
     Exit(NoBookText(NO_RULES_FOLDER, ATypes));
   if not ADirExists(LCandidate) then
     Exit(NoBookText(Format(RULES_FOLDER_GONE, [LCandidate]), ATypes));
@@ -813,7 +839,7 @@ begin
   Result:= '';
 end;
 
-function PrepareConvertRequest(const AJson, AProjectDb, AProjectFile, ASwitchFolder: string;
+function PrepareConvertRequest(const AJson, AProjectDb, AProjectFile, ASwitchFolder, ASessionFolder: string;  // dl:ok too-many-parameters@2a07 -- REVIEWED 2026-10-06 the editor state the pure pass reads (DB, file, two folder candidates) plus three injected seams the tests replace; a record would exist for this one call
   const AFileExists, ADirExists: TFunc<string, Boolean>; const AReader: TDfmTextReader): TPreparedRequest;
 var
   LOut: TRequestOutcome;
@@ -824,16 +850,33 @@ begin
   Result.Error:= LOut.Error;
   if LOut.Ok then
     Result.Error:= ValidateConvertRequest(LOut.Request, AProjectDb, AProjectFile, AFileExists);
+  if (Result.Error = '') and not AFileExists(AProjectDb) then
+    Result.Error:= Format(DB_MISSING_FMT, [AProjectDb]);
   if Result.Error <> '' then
     Exit;
   Result.Request:= LOut.Request;
-  Result.Error:= ResolveRequestRulesFolder(LOut.Request.RulesFolder, ASwitchFolder, RequestedTypes(LOut.Request), ADirExists, Result.RulesFolder);
+  Result.Error:= ResolveRequestRulesFolder(LOut.Request.RulesFolder, ASwitchFolder, ASessionFolder, RequestedTypes(LOut.Request), ADirExists, Result.RulesFolder);
   if Result.Error <> '' then
     Exit;
   if AReader(DfmPathOf(LOut.Request.Units[0]), LDfm) <> drRead then
     LDfm:= ''; // BuildScope refuses '' as missing, naming the .dfm
   Result.Scope:= BuildScope(LOut.Request, LDfm, Result.Error);
   Result.Ok:= Result.Error = '';
+end;
+
+function RequestStatusTail(const AUnitPas: string; const AIndexedFiles: TArray<string>; AIndexKnown: Boolean;
+  const AInheritError: string): string;
+var
+  LFlagged: Boolean;
+begin
+  Result:= '';
+  if AInheritError <> '' then
+    Result:= Result + TAIL_INHERIT + AInheritError;
+  if not AIndexKnown then
+    Result:= Result + TAIL_INDEX_UNKNOWN;
+  SourceRowText(AUnitPas, AIndexedFiles, AIndexKnown, LFlagged);
+  if LFlagged then
+    Result:= Result + Format(TAIL_UNINDEXED_FMT, [AUnitPas]);
 end;
 
 function CapabilitiesJson: string;
