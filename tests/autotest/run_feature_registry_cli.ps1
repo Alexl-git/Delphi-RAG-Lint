@@ -213,22 +213,28 @@ $r = RunL @('add', '-Id', 'keys', '-Title', 'Keys probe', '-Group', 'keys', '-Ow
 Check "add -Id keys into a new group 'keys'" (($r.Code -eq 0) -and (Test-Path -LiteralPath (Join-Path $pl.Entries 'keys.json'))) ($r.Out.Trim() -split "`n" | Select-Object -First 1)
 $r = RunL @('add', '-Id', 'values', '-Title', 'Values probe', '-Group', 'values', '-Owner', 'ENGINE', '-Summary', 'An entry, a group and a stem literally named values', '-Intro', 'x', '-WikiPage', 'Maintenance', '-Surface', 'cli:info', '-NewGroup', '-GroupTitle', 'Values', '-GroupSummary', 'A group literally named values.')
 Check "add -Id values into a new group 'values'" (($r.Code -eq 0) -and (Test-Path -LiteralPath (Join-Path $pl.Entries 'values.json'))) ($r.Out.Trim() -split "`n" | Select-Object -First 1)
+$r = RunL @('add', '-Id', 'count', '-Title', 'Count probe', '-Group', 'count', '-Owner', 'ENGINE', '-Summary', 'An entry, a group and a stem literally named count', '-Intro', 'x', '-WikiPage', 'Maintenance', '-Surface', 'cli:info', '-NewGroup', '-GroupTitle', 'Count', '-GroupSummary', 'A group literally named count.')
+Check "add -Id count into a new group 'count' (a key named count shadows .Count)" (($r.Code -eq 0) -and (Test-Path -LiteralPath (Join-Path $pl.Entries 'count.json'))) ($r.Out.Trim() -split "`n" | Select-Object -First 1)
 $r = RunL @('add', '-Id', 'zz-unknown-group', '-Title', 'Unknown group', '-Group', 'no-such-group', '-Owner', 'ENGINE', '-Summary', 'Refused: the group does not exist', '-Intro', 'x', '-WikiPage', 'Maintenance', '-Surface', 'cli:info')
-Check "unknown-group refusal lists the ids 'keys' and 'values', not a group row" (($r.Code -eq 1) -and ($r.Out -match 'one of: [^\r\n]*\bkeys\b') -and ($r.Out -match 'one of: [^\r\n]*\bvalues\b') -and ($r.Out -notmatch '@\{')) ($r.Out.Trim() -split "`n" | Select-Object -First 1)
+Check "unknown-group refusal lists the ids 'keys' and 'values', not a group row" (($r.Code -eq 1) -and ($r.Out -match 'one of: [^\r\n]*\bkeys\b') -and ($r.Out -match 'one of: [^\r\n]*\bvalues\b') -and ($r.Out -match 'one of: [^\r\n]*\bcount\b') -and ($r.Out -notmatch '@\{')) ($r.Out.Trim() -split "`n" | Select-Object -First 1)
 # WellFormed has no child ids, so zz-related-ok's chart.* reference fails it
 # here by design; every OTHER failure would be one of ours.
 $wf = @((Invoke-RegistryCheck -Paths $pl -Level WellFormed).Failures | Where-Object { $_ -notlike 'A: zz-related-ok.json: related *' })
-Check "check WellFormed is clean for groups and entries named 'keys' and 'values'" ($wf.Count -eq 0) ($wf -join ' | ')
+Check "check WellFormed is clean for groups and entries named 'keys', 'values' and 'count'" ($wf.Count -eq 0) ($wf -join ' | ')
 Copy-Item -LiteralPath (Join-Path $Repo 'features\templates') -Destination (Join-Path $L 'features') -Recurse -Force
-[IO.File]::WriteAllText($pl.SeedBacklog, "{`r`n  `"deadline`": `"guard`",`r`n  `"teams`": { `"ENGINE`": [`"kees`"] }`r`n}`r`n", [Text.Encoding]::ASCII)
+[IO.File]::WriteAllText($pl.SeedBacklog, "{`r`n  `"deadline`": `"guard`",`r`n  `"teams`": { `"ENGINE`": [`"kees`", `"cuont`"] }`r`n}`r`n", [Text.Encoding]::ASCII)
 $liveL = Get-LiveSurface -Paths $pl
 $res = Invoke-RegistryCheck -Paths $pl -Level Full -Live $liveL -SkipGenerated
 $blF = @($res.Failures | Where-Object { $_ -like "A: seed-backlog.json: 'kees'*" })
+$blC = @($res.Failures | Where-Object { $_ -like "A: seed-backlog.json: 'cuont'*" })
+Check "seed-backlog nearest candidates name the entry stem 'count'" (($blC.Count -eq 1) -and ($blC[0] -match 'nearest: [^)]*\bcount\b')) ($blC -join ' | ')
+$stG = @($res.Stats.get_Keys() | Where-Object { $_ -eq 'group:count' })
+Check "check stats carry a group named 'count' (1 entry)" (($stG.Count -eq 1) -and ($res.Stats['group:count'] -eq 1)) "group:count=$($res.Stats['group:count'])"
 Check "seed-backlog nearest candidates name the entry stem 'keys'" (($blF.Count -eq 1) -and ($blF[0] -match 'nearest: [^)]*\bkeys\b')) ($blF -join ' | ')
 Remove-Item -LiteralPath $pl.SeedBacklog -Force
 $gIds = @((Get-RegistryModel -Paths $pl -Live $liveL).Groups | ForEach-Object { [string]$_.id })
 $gWant = @((Get-Content -LiteralPath $pl.Groups -Raw | ConvertFrom-Json).groups).Count
-Check "the page model keeps every group, 'keys' and 'values' included" (($gIds.Count -eq $gWant) -and ($gIds -contains 'keys') -and ($gIds -contains 'values')) "($($gIds.Count) of $gWant)"
+Check "the page model keeps every group, 'keys' and 'values' included" (($gIds.Count -eq $gWant) -and ($gIds -contains 'keys') -and ($gIds -contains 'values') -and ($gIds -contains 'count')) "($($gIds.Count) of $gWant)"
 # Family ids are bounded by the importer list, so a family named 'keys' cannot
 # be registered; the refusal must still name it (control, not a regression test).
 $famKeys = Join-Path $pl.Families 'keys.json'

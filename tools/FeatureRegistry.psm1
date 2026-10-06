@@ -112,7 +112,9 @@ function Get-RegistryPaths {
 # The same holds for group ids, entry stems, family ids and file paths (a
 # group named 'keys' or 'values' is legal kebab-case). .Keys is left only on
 # dictionaries with a FIXED, code-literal key set: $script:SurfaceKeys (surface
-# types), the Feature-Index $sections and the generator's $outputs.
+# types), the Feature-Index $sections and the generator's $outputs. A key named
+# 'count' shadows .Count the same way: never .Count a data-keyed dictionary
+# (audited 2026-10-06: every .Count here is on an array, List or HashSet).
 function ConvertTo-OrderedObject {
   param([AllowNull()]$Value)
   if ($null -eq $Value) { return $null }
