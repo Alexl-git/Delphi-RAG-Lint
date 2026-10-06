@@ -213,10 +213,10 @@ Write-Host ("  index: {0} datasources ({1} DFM / {2} code); one {3}, by-columns 
 # the controls under a DANGLING designer datasource, by where their code re-point went (Task 2)
 $dAll = @($bAll | Where-Object { $_.Dangling })
 $rpc = @{}; foreach ($b in $dAll) { $rpc[[string]$b.RePoint] = 1 + [int]$rpc[[string]$b.RePoint] }
-$RP_ORDER = @('table', 'no-table', 'stops', 'multi-rhs', 'no-site', 'stale', '')
+$RP_ORDER = @('table', 'no-table', 'stops', 'walk-limit', 'multi-rhs', 'no-site', 'stale', '')
 $rpAgg = (@($RP_ORDER | ForEach-Object { [int]$rpc[$_] }) -join '/')
-Write-Host ("  re-point: {0} controls under a dangling datasource -- reach a table {1}, the dataset only {2}, stop on the way {3}, several right-hand sides {4}, no re-point site {5}, stale {6}, no owner {7}" -f `
-  $dAll.Count, [int]$rpc['table'], [int]$rpc['no-table'], [int]$rpc['stops'], [int]$rpc['multi-rhs'], [int]$rpc['no-site'], [int]$rpc['stale'], [int]$rpc[''])
+Write-Host ("  re-point: {0} controls under a dangling datasource -- reach a table {1}, the dataset only {2}, stop on the way {3}, walk limit {8}, several right-hand sides {4}, no re-point site {5}, stale {6}, no owner {7}" -f `
+  $dAll.Count, [int]$rpc['table'], [int]$rpc['no-table'], [int]$rpc['stops'], [int]$rpc['multi-rhs'], [int]$rpc['no-site'], [int]$rpc['stale'], [int]$rpc[''], [int]$rpc['walk-limit'])
 
 # ---- 4. dot ----------------------------------------------------------------------------------
 $sb = New-Object System.Text.StringBuilder
@@ -356,15 +356,18 @@ if (-not $ch) {
           $rows = @((New-Row $ch.DsName $dfm ([int]$h.Line) "$($ch.DsName) -- $([IO.Path]::GetFileName($dfm)):$($h.Line)" "the DFM names $($ch.Module), which is not in this project"))
           [void](Add-Hop 'datasource' 'dangling' $rows $PAL.warnBorder $PAL.warnFill $PAL.warnHdr)
           # Task 2: the runtime re-point is FOLLOWED (Resolve-RePointTable); what it cannot do is a named stop
-          Add-RePointHops $rpr
           $dangWhy = "the designer datasource $($ch.DsName) is dangling (module $($ch.Module) is declared nowhere in this index)"
-          switch ($rpr.Status) {
+          # no re-point result (not expected for a dangling chain): the old dangling stop, never a claim that one was followed
+          if (-not $rpr) { $stop = $dangWhy }
+          else { Add-RePointHops $rpr }
+          if ($rpr) { switch ($rpr.Status) {
             'table'     { Add-TableHop $rpr.Table $rpr.DataSet.File $rpr.TableLine "'$($rpr.Table)' literal -- $([IO.Path]::GetFileName($rpr.DataSet.File)):$($rpr.TableLine)" "[inferred] the table literal beside $($rpr.DataSet.Name) on $($rpr.TableLines) line(s)" '' }
             'stale'     { $stop = "[stale source] $($rpr.Stop)" }
             'no-site'   { $stop = "$dangWhy; $($rpr.Stop)" }
             'multi-rhs' { $stop = "$dangWhy; $($rpr.Stop)" }
+            'walk-limit' { $stop = "the code re-point was followed to a shape this walk does not follow: $($rpr.Stop)" }
             default     { $stop = "the code re-point was followed and stops: $($rpr.Stop)" }
-          }
+          } }
         } elseif ($h.Grade -in 'certain', 'by name') {
           $rows = @((New-Row $h.Label $h.File ([int]$h.Line) "$($h.Label) -- $([IO.Path]::GetFileName($h.File)):$($h.Line)" $(if ($h.Reason) { $h.Reason } else { "declared in $([IO.Path]::GetFileName($h.File))" })))
           [void](Add-Hop 'datasource' $h.Grade $rows $PAL.dsBorder $PAL.dsFill $PAL.dsHdr)
@@ -444,7 +447,7 @@ Add-DisclosureRow $ftbl ("per control: $ctlTotal field-bound controls; $ctlTable
   "that table has ($pctCol%); ambiguous $([int]$oc['ambiguous']), chain stops $([int]$oc['stops']), dangling $([int]$oc['dangling']), " +
   "no datasource in the DFM $([int]$oc['no-ds'])$(if ([int]$oc['stale']) { ", stale source $([int]$oc['stale'])" })$(if ([int]$oc['not-column']) { "; $([int]$oc['not-column']) resolve to a table the SQL index extracts no such column from (not quoted there either)" })") $PAL.lineInk
 Add-DisclosureRow $ftbl ("past a dangling designer datasource the code re-point is followed (as the round-trip trace follows it): of $($dAll.Count) such controls " +
-  "$([int]$rpc['table']) reach a table, $([int]$rpc['no-table']) the dataset only, $([int]$rpc['stops']) stop on the way, " +
+  "$([int]$rpc['table']) reach a table, $([int]$rpc['no-table']) the dataset only, $([int]$rpc['stops']) stop on the way, $([int]$rpc['walk-limit']) reach a shape the walk does not follow, " +
   "$([int]$rpc['multi-rhs']) are re-pointed with several different right-hand sides (not chosen), $([int]$rpc['no-site']) have no re-point site" +
   "$(if ([int]$rpc['stale']) { ", $([int]$rpc['stale']) cross a stale file" })$(if ([int]$rpc['']) { ", $([int]$rpc['']) have no owner in the DFM" })") $PAL.lineInk
 Add-DisclosureRow $ftbl 'the table comes from string literals in the view model''s unit (past a re-point: the literal beside the dataset) -- [inferred], dashed; never a fact' $PAL.lineInk
@@ -478,7 +481,7 @@ $lay = Invoke-DotLayout $sb.ToString() $OutDir ('feedsfrom_' + ($sel -replace '[
   ChainRows      = $chainNodes.Count
   ResolvedTable  = $(if ($rpr -and $rpr.Table) { $rpr.Table } elseif ($ch) { $ch.ResolvedTable } else { $null })
   # Task 2: Resolve-RePointTable's Status for a dangling chain ('' otherwise), and the
-  # index-wide split of the dangling controls in $RP_ORDER (table/no-table/stops/multi-rhs/no-site/stale/no-owner)
+  # index-wide split of the dangling controls in $RP_ORDER (table/no-table/stops/walk-limit/multi-rhs/no-site/stale/no-owner)
   RePoint        = $(if ($rpr) { $rpr.Status } else { '' })
   CtlDanglingAll = $dAll.Count
   CtlRePoint     = $rpAgg

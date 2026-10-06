@@ -99,8 +99,11 @@ quoted:
   not taken -- measured, every such literal on CLIENT is not a table reference. Measured coverage per control, not
   per datasource: 471 of 808 reach one table (267 before the re-point was
   followed). Of the 426 under a dangling module, 204 reach a table through the
-  re-point, 215 stop on the way, 3 are re-pointed with several different
-  right-hand sides, 4 have no re-point site (gate `A-FF-REPOINT-AGG`).
+  re-point, 18 stop on a fact of the code, 197 reach a shape the walk does not
+  follow (a method returning a record, ControlPlan2 `INIData` 168; a local `DS`,
+  dsrFolder 29 -- named as such, never "never assigned"), 3 are re-pointed with
+  several different right-hand sides, 4 have no re-point site (gate
+  `A-FF-REPOINT-AGG`).
 * `lands-where` -- the TABLE.COLUMN hop is a naming CONVENTION
   (`Tmc<T>.P` -> `T.P`), drawn `[inferred]` with its coverage measured and
   printed on every chart (1,992 of 1,997). Reads THREE clones (CLIENT, SERVER,

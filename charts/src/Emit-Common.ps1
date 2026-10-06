@@ -1884,23 +1884,45 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line FROM string_literals sl
 # $RePoint is ONE row of Get-RePointSites (the caller picks the control's row).
 # Returns Hops[] {Hop, Grade, Label, File, Line, Routine, Reason, Ask}, DataSet
 # ($null | Name, Id, ClassId, File, Fid, Line, Type), StopReason ('' when the
-# dataset was reached), StaleFile ('' | the indexed path that differs).
+# dataset was reached), StaleFile ('' | the indexed path that differs), Limit ($true when the
+# stop is a shape this walk does not follow -- a bare local / parameter RHS, or a member that is not a
+# datasource field -- rather than a fact of the code).
 function Get-RePointChain($RePoint, [hashtable] $SourceOverride) {
   $hops = New-Object System.Collections.ArrayList
   function Hop($h, $g, $l, $f, $n, $r, $why, $ask) {
     [void]$hops.Add([pscustomobject]@{ Hop = $h; Grade = $g; Label = $l; File = $f; Line = $n; Routine = $r; Reason = $why; Ask = $ask })
   }
-  function Done([string] $stop, $ds, [string] $stale) { [pscustomobject]@{ Hops = $hops.ToArray(); DataSet = $ds; StopReason = $stop; StaleFile = $stale } }
+  # $limit: the stop is a limit of THIS WALK (a shape it does not follow), not a fact of the
+  # code -- callers count the two apart (fix round 1: "never assigned" was printed for a walk limit)
+  function Done([string] $stop, $ds, [string] $stale, [switch] $Limit) { [pscustomobject]@{ Hops = $hops.ToArray(); DataSet = $ds; StopReason = $stop; StaleFile = $stale; Limit = [bool]$Limit } }
   if ($RePoint.Stale) { return (Done "$([IO.Path]::GetFileName($RePoint.File)) differs from the indexed copy -- the re-point at :$($RePoint.Line) is not read" $null $RePoint.File) }
   $rn = (($RePoint.Routine -split '\.') | Select-Object -Last 1)
   Hop 're-point' 'certain' "$($RePoint.Control).$($RePoint.Prop) := $($RePoint.Rhs)" $RePoint.File $RePoint.Line $rn '' ''
   $rr = Get-RhsRoot $RePoint.Rhs
   if (-not $rr.Root) { return (Done $rr.Reason $null '') }
   $segs = @((($RePoint.Rhs.Trim() -replace '^Self\s*\.\s*', '') -replace '\s', '') -split '\.')
-  if ($segs.Count -lt 2) { return (Done "RHS $($RePoint.Rhs) names no member of $($rr.Root) -- a bare datasource is the designer case Get-DataSourceChain already follows" $null '') }
-  $member = $segs[1] -replace '\(.*$', ''
   [void](Get-IndexedFileShas)
   $fid = $script:DlFileIds[$DbPath][$RePoint.File]
+  if ($segs.Count -lt 2) {
+    # a bare identifier: say WHAT it is -- a local or parameter of the re-pointing routine
+    # (RepointJobHeaderToFolder's `DS`, Blueprint4.pas:984) is not followed; neither is a field
+    $bq = ConvertTo-SqlText $rr.Root
+    $bd = Invoke-IndexQuery @"
+SELECT s.kind AS kind, s.signature AS sig, s.start_line AS line, p.qualified_name AS pq FROM symbols s LEFT JOIN symbols p ON p.id = s.parent_id
+ WHERE s.file_id = $fid AND UPPER(s.name) = UPPER('$bq') AND s.kind IN ('param','local_var','field','var','property')
+ ORDER BY CASE WHEN p.qualified_name = '$(ConvertTo-SqlText $RePoint.Routine)' THEN 0 ELSE 1 END, s.start_line LIMIT 1
+"@
+    $what = $(if (-not $bd.Count) { "$($rr.Root) is not declared in $([IO.Path]::GetFileName($RePoint.File))" }
+              else {
+                $b0 = $bd[0]; $ty = (([string]$b0.sig) -replace '^\s*:\s*', '').Trim()
+                switch ([string]$b0.kind) {
+                  'param'     { "$($rr.Root) is a parameter of $rn ($ty, :$($b0.line)) -- the arguments its callers pass are not followed" }
+                  'local_var' { "$($rr.Root) is a local variable of $rn ($ty, :$($b0.line)) -- the value assigned to it there is not followed" }
+                  default     { "$($rr.Root) is a $($b0.kind) ($ty, :$($b0.line)) -- a bare datasource $($b0.kind) is not followed to where it is assigned" }
+                } })
+    return (Done $what $null '' -Limit)
+  }
+  $member = $segs[1] -replace '\(.*$', ''
   $mq = ConvertTo-SqlText $member
   # the member ref on the re-point line, RIGHT of the re-pointed property's own ref
   # (the Task 1 filter, T1-C2): the chain starts from this ONE assignment, never from
@@ -1974,7 +1996,18 @@ SELECT DISTINCT r.name_text AS n FROM refs r
     $fr = $fieldRow[0]
     Hop 'field' 'by name' "$([string]$fr.name) : $(([string]$fr.sig).Trim())" ([string]$fr.path) ([int]$fr.line) '' $fieldWhy $fieldAsk
   } else {
-    # the member IS the datasource field: the member hop above already stands on it
+    # the member IS the datasource field -- only when it is a FIELD of a datasource type. A method
+    # returning a record (ControlPlan2's `INIData : RControlPlan_INIData`, whose `.dsrFtrs` member
+    # is assigned in ControlPlan2.Model.pas:772-779) is a shape this walk does not follow: a
+    # named LIMIT, never "DataSet is never assigned" (fix round 1)
+    $mty = (([string]$m.tsig) -replace '^\s*:\s*', '').Trim()
+    if ([string]$m.tkind -ne 'field' -or $mty -notmatch '(?i)DataSource') {
+      $rest = $(if ($segs.Count -gt 2) { " -- the member .$((@($segs | Select-Object -Skip 2)) -join '.') after it is not followed" } else { ' -- not followed further' })
+      $mk = [string]$m.tkind
+      $desc = $(if (-not $mty) { "a $mk with no declared type" } elseif ($mk -in 'method', 'function') { "a $mk returning $mty" } else { "a $mk of type $mty" })
+      return (Done "the walk reached $member, $desc, not a datasource field$rest" $null '' -Limit)
+    }
+    # the member hop above already stands on it
     $fr = [pscustomobject]@{ id = [int]$m.tid; name = $member; sig = [string]$m.tsig; line = [int]$m.tline
                              path = [string]$m.tpath; fid = [int]$m.tfid; pid = [int]$m.tpid }
   }
@@ -2053,7 +2086,9 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line, COUNT(*) AS n FROM string_liter
 # cannot disagree. Returns:
 #   Status   table     the dataset was reached and ONE table literal sits beside it
 #            no-table  the dataset was reached; zero or several table literals
-#            stops     Get-RePointChain stopped before the dataset (Stop says why)
+#            stops     Get-RePointChain stopped before the dataset on a fact of the code (Stop says why)
+#            walk-limit Get-RePointChain stopped on a shape it does not follow (a bare local /
+#                      parameter, a method returning a record) -- a limit of the walk, not of the code
 #            stale     a file on the way differs from the index (StaleFile; REFUSE)
 #            multi-rhs several sites, different right-hand sides (named stop)
 #            no-site   no non-nil re-point of $Owner in the form unit
@@ -2072,7 +2107,7 @@ function Resolve-RePointTable($Ch, [string] $Owner, $SqlSet, [hashtable] $Source
   $rc = Get-RePointChain $pk.Rows[0] $SourceOverride
   $o.Hops = $rc.Hops
   if ($rc.StaleFile) { $o.Status = 'stale'; $o.StaleFile = $rc.StaleFile; $o.Stop = $rc.StopReason; return $o }
-  if ($rc.StopReason) { $o.Status = 'stops'; $o.Stop = $rc.StopReason; return $o }
+  if ($rc.StopReason) { $o.Status = $(if ($rc.Limit) { 'walk-limit' } else { 'stops' }); $o.Stop = $rc.StopReason; return $o }
   $o.DataSet = $rc.DataSet
   $lit = Get-DataSetTableLiterals $rc.DataSet $SqlSet
   if ($lit.Count -ne 1) {

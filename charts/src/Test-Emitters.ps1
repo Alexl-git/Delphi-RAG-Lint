@@ -2024,9 +2024,9 @@ Step 'E-FF' {
   #   not-column 13 -- all uJobList on FOLDERS (DueInStr, LotStatusC, *VerdictStr,
   #                   Status_*Str ...): memtable-computed fields, not DB columns
   #   no-ds 1      -- CADFNotes.dxDBEdit1, whose DataSource is set only in code
-  # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: the 204 dangling controls whose owner's code re-point reaches a\r
-  # table (Blueprint4_Model.dsrFtrs 154 -> MSCLIST, dsrOperation 50 -> OPERAT; A-FF-REPOINT-AGG) leave dangling:\r
-  # table 267 -> 471 (+204), column 254 -> 443 (+189), not-column 13 -> 28 (+15), dangling 426 -> 222 (-204); 33% -> 58.3%\r
+  # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: the 204 dangling controls whose owner's code re-point reaches a
+  # table (Blueprint4_Model.dsrFtrs 154 -> MSCLIST, dsrOperation 50 -> OPERAT; A-FF-REPOINT-AGG) leave dangling:
+  # table 267 -> 471 (+204), column 254 -> 443 (+189), not-column 13 -> 28 (+15), dangling 426 -> 222 (-204); 33% -> 58.3%
   Chk 'A-FF0-PERCTL'    "$($ff1.Controls):$($ff1.CtlTable)/$($ff1.CtlColumn)/$($ff1.CtlNotColumn)/$($ff1.CtlAmbiguous)/$($ff1.CtlStops)/$($ff1.CtlDangling)/$($ff1.CtlNoDs)/$($ff1.CtlStale)" '808:471/443/28/37/77/222/1/0'
   if ($tf1 -notmatch 'per control: 808 field-bound controls; 471 resolve to one table \(58\.3%\)') { Fail 'A-FF0-PERCTL' 'the per-control coverage is not printed on the chart' }
   if ($tf1 -match '41 ?%') { Fail 'A-FF0-R9' 'the chart quotes the per-datasource 41%' }
@@ -2035,12 +2035,18 @@ Step 'E-FF' {
   # no-owner). MEASURED on the CLIENT clone:
   #   table 204     -- Blueprint4_Model.dsrFtrs 154 (dxDBGrid1FtrsV 134 + 20 edits) -> MSCLIST, dsrOperation 50 -> OPERAT
   #                    (column 189, not-column 15: the 14 FtrsV / 1 OperationV fields MSCLIST / OPERAT do not hold)
-  #   stops 215     -- ControlPlan_Model.* 168 (`INIData.DataSet is never assigned in ControlPlan2.Model.Interfaces.pas`),
-  #                    dmlSystem2.dsrFolder 29 (re-pointed to a bare parameter `DS` -- no member to follow),
-  #                    dsrCustVendor 13 (GetpdsrCustomers reads 0 fields), dsrVarNames 4 + dsrOperNames 1 (LookupCache.Table( ))
+  #   stops 18      -- dsrCustVendor 13 (GetpdsrCustomers reads 0 fields), dsrVarNames 4 + dsrOperNames 1 (LookupCache.Table( ))
+  #   walk-limit 197 -- a shape the walk does not follow, NOT a fact of the code (fix round 1; these were stops reading
+  #                    falsely "INIData.DataSet is never assigned" / "a bare datasource is the designer case"):
+  #                    ControlPlan_Model.* 168 -- FControlPlan_ViewModel.INIData.dsrFtrs: INIData is a METHOD returning the
+  #                    record RControlPlan_INIData (ControlPlan2.Model.Interfaces.pas:108), whose .dsrX members ARE assigned
+  #                    (ControlPlan2.Model.pas:772-779); dmlSystem2.dsrFolder 29 -- re-pointed to the LOCAL DS of
+  #                    RepointJobHeaderToFolder (Blueprint4.pas:984)
   #   multi-rhs 3   -- viewMachines, re-pointed at Blueprint4.pas:1073 AND :2334 with different right-hand sides
   #   no-site 4     -- DBText13 1, lookupSPCCP 3: no code re-point of the owner at all
-  Chk 'A-FF-REPOINT-AGG' "$($ff1.CtlDanglingAll):$($ff1.CtlRePoint)" '426:204/0/215/3/4/0/0'
+  # RE-PINNED fix round 1: a walk-limit column after stops (order table/no-table/stops/walk-limit/multi-rhs/no-site/
+  # stale/no-owner); stops 215 -> 18 + walk-limit 197 (ControlPlan_Model 168 + dsrFolder 29), the others unchanged
+  Chk 'A-FF-REPOINT-AGG' "$($ff1.CtlDanglingAll):$($ff1.CtlRePoint)" '426:204/0/18/197/3/4/0/0'
 
   # P33 tie-break: 4 candidates in literal order, 6 bound columns, one survivor
   $script:ff2 = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmMachineList.colMACHINEID' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
@@ -2075,9 +2081,14 @@ Step 'FF-N29' {
   if ($t29 -notmatch 'the DFM names dmlSystem2, which is not in this project') { Fail 'A-FF-N29' 'the dangling disclosure is missing' }
   # the DataField is ALSO re-bound in code (:1016) -- drawn, because the DFM
   # column is then not the runtime column
-  # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: edtF1 -> the :1015 re-point hop [certain] (:= DS, a bare parameter),
-  # then Get-RePointChain stops (RHS DS names no member of DS); was certain>dangling>stop
+  # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: edtF1 -> the :1015 re-point hop [certain] (:= DS, a LOCAL variable),
+  # then Get-RePointChain stops (fix round 1: a walk limit, see A-FF-N29-STOP); was certain>dangling>stop
   Chk 'A-FF-N29-ROWS'   "$($ff29.Grade):$($ff29.RePointedAt):$($ff29.Rebound):$($ff29.HopGrades)" 'dangling:Blueprint4.pas:1015:1:certain>dangling>certain>stop'
+  # fix round 1 (Task 2): the stop says WHAT DS is -- a LOCAL variable of RepointJobHeaderToFolder (Blueprint4.pas:984,
+  # assigned DS:= FBlueprint_ViewModel.pdsrFolder at :989), which the walk does not follow -- not the false
+  # "a bare datasource is the designer case Get-DataSourceChain already follows", and graded a walk limit
+  Chk 'A-FF-N29-STOP'   "$($ff29.RePoint)|$($ff29.StopReason)" 'walk-limit|the code re-point was followed to a shape this walk does not follow: DS is a local variable of RepointJobHeaderToFolder (TDataSource, :984) -- the value assigned to it there is not followed'
+  if ((Dot $ff29) -match 'designer case Get-DataSourceChain already follows') { Fail 'A-FF-N29-STOP' 'the false designer-case sentence is still drawn' }
 }
 # Task 2 (2026-10-05, owner: "close all the existing gaps"): feeds-from and lands-where FOLLOW the runtime
 # re-point past a DANGLING designer datasource, by the round-trip's own walk (Get-RePointPick ->
@@ -2973,6 +2984,22 @@ Step 'RT-SRVSTOP' {
   $ssl = $rtss.Text -split "`r`n"
   Chk 'A-RT-SRVSTOP'      "$($rtss.Title)|$($rtss.Notes)" 'Where the trace between frmBlueprint4.dxDBGrid1OperationVName and OPERAT.NAME stops (steps 15 and 22)|DATABASE=not walked: the write direction stopped at [15]'
   Chk 'A-RT-SRVSTOP-SHAPE' "$($rtss.Steps)/$($rtss.Conditions)/$($rtss.Crossings)/$($rtss.Unresolved)|$(@($ssl | Where-Object { $_ -cmatch '^       WITH unknown, no server handler was reached @' }).Count)|$(@($ssl | Where-Object { $_ -cmatch '^\[\d+\] DATABASE |applied in  at|UPDATE statement' }).Count)" '35/8/4/2|2|0'
+}
+# Task 2 fix round 1: a stale file INSIDE the re-point walk (a copy of Blueprint4.ViewModel.pas, one trailing space)
+# stops BOTH verbs [stale source] -- feeds-from and lands-where keep their own stale convention (a named stop, no
+# table, exit 0; FF-STALE), the round-trip refuses (RT-STALE). The ViewModel holds the FDsrOperation.DataSet sites (:657).
+Step 'FF-REPOINT-STALE' {
+  $stDir = Join-Path $OutDir 'ff-repoint-stale'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $vmp = 'C:\Projects\DB\ORM3\CLIENT\Blueprint4.ViewModel.pas'
+  $vl = [IO.File]::ReadAllLines($vmp); $vl[3949] = $vl[3949] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'Blueprint4.ViewModel.pas'), (($vl -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $ov = @{ $vmp = (Join-Path $stDir 'Blueprint4.ViewModel.pas') }
+  $script:ffrs = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $stDir -SourceOverride $ov
+  Chk 'A-FF-REPOINT-STALE' "$($ffrs.RePoint)|$([string]$ffrs.ResolvedTable)|$($ffrs.TableColumn)|$($ffrs.StopReason)" 'stale|||[stale source] Blueprint4.ViewModel.pas differs from the indexed copy -- its 1 DataSet site(s) are not read'
+  $script:lwrs = & "$SRC\Emit-LandsWhere.ps1" -Field 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $stDir -SourceOverride $ov
+  Chk 'A-LW-REPOINT-STALE' "$($lwrs.ChainOutcome)|$([string]$lwrs.Table)|$($lwrs.TableColumn)|$($lwrs.ServerRows)|$($lwrs.StopReason)" 'stale|||0|[stale source] Blueprint4.ViewModel.pas differs from the indexed copy -- its 1 DataSet site(s) are not read'
+  if ((Dot $ffrs) -match 'OPERAT\.NAME') { Fail 'A-FF-REPOINT-STALE' 'a TABLE.COLUMN is drawn past a stale file' }
 }
 # AC-14: a stale view model (a COPY with one trailing space, never the source) -> REFUSED, the file named, NO .dlgraph
 Step 'RT-STALE' {
