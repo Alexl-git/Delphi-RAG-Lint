@@ -19,11 +19,12 @@ unit DRagLint.Convert.CastLib;
   yields decide castability and emit the ': <name>' suffix); it now imports it
   from src\report\ instead of owning it. One parser, two consumers, no drift.
 
-  The CLASS cast's realization hints (dfm/compat/pas/todo) remain EDITOR-SIDE:
-  the engine reads name/accepts/yields to know a cast exists, and still refuses
-  to rewrite a .pas access site for a link carrying one rather than renaming
-  without performing the conversion. The ENUM cast IS executed -- see
-  EnumCastValue.
+  The CLASS cast's realization hints are CONSUMED by convert-apply (row 6,
+  2026-09-16): `pas` is rendered at a .pas access site, `dfm
+  keep-bytes-if-compatible` carries a streamed graphic when its image format is
+  in `compat`, and `dfmdata` (1.26.2) names the TARGET property's filer framing
+  when the yields class is not a VCL graphic the engine knows. The ENUM cast IS
+  executed too -- see EnumCastValue.
 
   Pure + headless (no VCL, no engine, no store, no process spawn), so it is
   unit-tested against inline fixtures. }
@@ -41,8 +42,10 @@ type
   /// <remarks>
   /// Accepts/Yields are bare type names, matched case-insensitively by
   /// EXACT name (no ancestry walk in v1 -- list the concrete types). Dfm/Compat/
-  /// PasTemplate/Todo are engine realization hints; the editor stores them verbatim
-  /// and does not interpret them.
+  /// DfmData/PasTemplate/Todo are engine realization hints; the editor stores them
+  /// verbatim and does not interpret them. DfmData is the castlib `dfmdata` key:
+  /// the target's filer framing (graphic | bitmap | metafile | picture), '' when
+  /// the engine is to take it from the yields class.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Convert.CastLib.pas), DRagLint.Convert.Apply.BuildApplyPlan.PlanAccessSites (DRagLint.Convert.Apply.pas), DRagLint.Convert.CastLib.ClassCastFor (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.FindClassCast (DRagLint.Convert.CastLib.pas), DRagLint.Convert.CastLib.ParseCastLibText (DRagLint.Convert.CastLib.pas) (+2 more)</para>
   /// <para>Used in units: ConvRules.CastLib, ConvRules.MainForm, ConvRulesModelTests, DRagLint.Convert.Apply, DRagLint.Convert.CastLib, DRagLint.Convert.DfmReemit</para>
@@ -54,6 +57,7 @@ type
     Yields     : TArray<string>;
     Dfm        : string        ;
     Compat     : string        ;
+    DfmData    : string        ;
     PasTemplate: string        ;
     Todo       : string        ;
   end;
@@ -398,6 +402,8 @@ begin
           cur.Dfm:= Val
         else if Key = 'compat' then
           cur.Compat:= Val
+        else if Key = 'dfmdata' then
+          cur.DfmData:= Val
         else if Key = 'pas' then
           cur.PasTemplate:= Unquote(Val)
         else if Key = 'todo' then

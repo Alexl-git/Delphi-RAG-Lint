@@ -167,11 +167,14 @@ end
 $castlib = Join-Path $WorkDir 'fixture.castlib'
 Write-Ascii $castlib @'
 # fixture cast library -- strict 7-bit ASCII, CRLF
+# dfmdata graphic: TDstGlyph is a fixture class the engine has no filer framing
+# for, so the cast DECLARES it (1.26.2) -- its Data is the bare image file.
 
 cast AssignGraphic
   accepts TSrcPic
   yields  TDstGlyph
   dfm     keep-bytes-if-compatible
+  dfmdata graphic
   compat  png, bmp
   pas     '{dst}.Assign({src});'
   todo    'transfer the image from {src} by hand'

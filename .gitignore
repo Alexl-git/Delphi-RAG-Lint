@@ -61,6 +61,8 @@ build/release-artifacts-0.41/
 
 # Lint rules deployed next to the binary by the test harness (source of truth is rules/)
 third_party/*/rules/
+# casts.castlib staged beside the exe by build_draglint_win64.bat (1.26.2); source of truth is docs/examples/convrules/
+third_party/*/casts.castlib
 
 # Local build scratch at repo root (ad-hoc rsvars+msbuild wrappers; `> nul` redirect
 # artifact from Git Bash, where `nul` is not a device name). `nul` is a reserved

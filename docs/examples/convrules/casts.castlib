@@ -17,9 +17,30 @@
 # that was not there -- which is the exact failure the note was guarding against.
 #
 # The payload format is sniffed from the BYTES, not inferred from the property
-# name: a .dfm blob is a streamed TPicture (a length-prefixed class name, a size,
-# then the image), so the wrapper class is read first and the image magic is the
-# fallback.
+# name: a .dfm blob is a streamed TPicture (a length-prefixed class name, then
+# that graphic's own framing -- a size for TBitmap -- then the image), so the
+# wrapper class is read first and the image magic is the fallback.
+#
+# THE BYTES ARE RE-FRAMED, NOT COPIED (1.26.2). Each graphic class streams its
+# Data in its own FILER FRAMING, and the two sides of a cast rarely agree:
+# TPicture.Data is 07 'TBitmap' <Int32 size> BM..., TdxSmartGlyph.Data is the
+# bare BM... file. Carrying the TPicture bytes verbatim (1.25.2) produced glyphs
+# that loaded as text and raised 'Unsupported image format.' when read. The
+# engine unwraps the source (TPicture / TBitmap / bare image -- VCL framing,
+# fixed and known) and re-frames it for the TARGET, which it takes from:
+#   dfmdata graphic|bitmap|metafile|picture   -- declared here, or else
+#   the single `yields` class, when it is a VCL graphic (TPicture, TBitmap,
+#   TJPEGImage, TMetafile, TIcon, TPngImage, TGIFImage, TWICImage).
+#   graphic  = the bare image file (TGraphic.ReadData: TIcon, TPngImage,
+#              TGIFImage, TWICImage, TdxSmartImage, TdxSmartGlyph)
+#   bitmap   = [Int32 size][image] (TBitmap, TJPEGImage)
+#   metafile = [Int32 size counting itself][image] (TMetafile)
+#   picture  = TPicture: [len][class name][that class's framing]
+# A third-party yields class needs `dfmdata`: the engine does not guess whether
+# a class it never read overrides ReadData. Nothing is carried -- the instance
+# is reported with the reason and `todo` -- when the source wrapper names an
+# unknown graphic class, its size field disagrees with its bytes, the image
+# format is not in `compat`, or the target framing is unknown.
 #
 # Since 2026-09-04 the engine DOES split the ': <Name>' suffix off the #link FromPath
 # (it used to swallow it and then report the valid line as a missing path), and
@@ -31,6 +52,7 @@ cast AssignGraphic
   accepts TPicture, TBitmap, TGraphic, TPngImage, TIcon
   yields  TdxSmartGlyph
   dfm     keep-bytes-if-compatible
+  dfmdata graphic
   compat  png, bmp
   pas     '{dst}.Assign({src});'
   todo    'transfer image from {src} by hand (TBitmap/TPicture -> TdxSmartGlyph)'

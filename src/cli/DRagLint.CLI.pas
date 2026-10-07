@@ -244,7 +244,15 @@ type
     { '<file>: <key path>: expected <type>, got <type>' when the .drag-lint.json
       defaults file could not be read (LoadConfigDefaults); '' otherwise. Readers
       carry on with what was read; Run makes the WRITE verbs refuse. }
-    ConfigError     : string        ;
+    ConfigError     : string        ;    { 1.26.2: a convert-* verb does not read a .drag-lint.json. When the file it
+      ignored held keys the defaults reader applies, ConvertIgnoredFile names it,
+      ConvertIgnoredKeys lists them ('"db", "rule"'), and ConvertIgnoredIndexKey
+      is the first of "db" / "project" among them -- a key that would have chosen
+      the INDEX, so without an explicit --db the run is refused rather than left
+      to pick one on its own (CheckConvertIgnoredDefaults). '' otherwise. }
+    ConvertIgnoredFile    : string;
+    ConvertIgnoredKeys    : string;
+    ConvertIgnoredIndexKey: string;
     { v21: --library-db, repeatable. Extra indexes consulted ONLY for calls the
       primary index cannot resolve; a hit is recorded as a qualified NAME on
       refs.external_target. Explicit rather than auto-opened from the manifest
@@ -1161,6 +1169,9 @@ function MakeSiblingStoreResolver(const AArgs: TArgs;
 //               "implPrecedence": "interface" } }
 // CLI flags override config values. Missing file is silently ignored.
 procedure LoadConfigDefaults(var AArgs: TArgs);
+const
+  { every key read below -- the set a convert verb names when it ignores the file }
+  DefaultsKeys: array[0..5] of string = ('db', 'project', 'path', 'rule', 'watch', 'docs');
 var
   Dir      : string     ;
   Candidate: string     ;
@@ -1188,6 +1199,37 @@ begin
     Exit;
   end;
   if J = nil then Exit;
+  { CONVERT-* VERBS DO NOT READ A DEFAULTS FILE (1.26.2). The file is found by
+    walking up from the CWD, not from the exe, so a PINNED engine copy staged in
+    C:\TEMP and run from a project folder picked up C:\Projects\.drag-lint.json
+    and said so on every run -- and a "db" key there would have become an
+    EXPLICIT --db of convert-apply, letting a shared file choose the index a
+    form is rewritten on. A convert verb takes its databases, rules and units
+    from its own command line. When the file holds a key this reader would have
+    applied, one note names the file and the keys; a file contributing nothing
+    (the C:\Projects one) is silent. Every other verb is unchanged. }
+  {
+    The VERB is the parsed one (AArgs.Command, set by ParseArgs before this
+    runs), not a re-read of argv. What the ignored file held is RECORDED here and
+    judged in CheckConvertIgnoredDefaults once the command line is parsed: only
+    then is it known whether an explicit --db was given. }
+  if AArgs.Command.StartsWith('convert-', True) then
+  begin
+    try
+      for var Key: string in DefaultsKeys do
+        if J.GetValue(Key) <> nil then
+        begin
+          AArgs.ConvertIgnoredKeys:= AArgs.ConvertIgnoredKeys +
+            (if AArgs.ConvertIgnoredKeys = '' then '' else ', ') + '"' + Key + '"';
+          if (AArgs.ConvertIgnoredIndexKey = '') and MatchText(Key, ['db', 'project']) then
+            AArgs.ConvertIgnoredIndexKey:= '"' + Key + '"';
+        end;
+      if AArgs.ConvertIgnoredKeys <> '' then AArgs.ConvertIgnoredFile:= Candidate;
+    finally
+      J.Free;
+    end;
+    Exit;
+  end;
   try
     try
       { "db" is an EXPLICIT --db, so it goes into DbPaths too: every write verb
@@ -1219,7 +1261,7 @@ begin
       V:= J.GetValue('rule');
       if (V <> nil) and (V.Value <> '') and not HasSwitch('--rule') then
       begin
-        if SameText(ParamStr(1), 'lint') then
+        if SameText(AArgs.Command, 'lint') then
         begin
           AArgs.Rule:= V.Value;
           Writeln(ErrOutput, Format('drag-lint: note: this run is narrowed to rule "%s" by the "rule" key in %s' +
@@ -1228,7 +1270,7 @@ begin
         else
           Writeln(ErrOutput, Format('drag-lint: note: ignoring "rule": "%s" in %s for `%s` -- a defaults file ' +
             'does not narrow a whole-project run. Pass --rule %s to narrow it deliberately.',
-            [V.Value, Candidate, ParamStr(1), V.Value]));
+            [V.Value, Candidate, AArgs.Command, V.Value]));
       end;
       V:= J.GetValue('watch');
       if V is TJSONObject then
@@ -1277,6 +1319,30 @@ begin
     Writeln(ErrOutput, '(loaded defaults from ', Candidate, ')');
 end; // procedure
 
+type
+  /// <summary>A convert-* command line that cannot run as given (1.26.2): an
+  /// argument error, reported like every ParseArgs error (exit 3).</summary>
+  EConvertArgs = class(Exception);
+
+/// <summary>Judges a defaults file a convert-* verb ignored (1.26.2), once the
+/// command line is parsed: a refusal when the file held "db" or "project" and
+/// no --db was given, else one stderr note naming the file and its keys.</summary>
+/// <param name="AArgs">Parsed arguments; reads Command, DbPaths and the
+/// ConvertIgnored* fields LoadConfigDefaults recorded.</param>
+/// <exception cref="EConvertArgs">Raised -- an argument error, exit 3 -- when the
+/// ignored file names an index ("db" / "project") and no --db was passed:
+/// letting the verb resolve an index on its own could rewrite the form on a
+/// DIFFERENT database than the one that file names.</exception>
+procedure CheckConvertIgnoredDefaults(const AArgs: TArgs);
+begin
+  if AArgs.ConvertIgnoredFile = '' then Exit;
+  if (AArgs.ConvertIgnoredIndexKey <> '') and (Length(AArgs.DbPaths) = 0) then
+    raise EConvertArgs.CreateFmt('%s: %s holds %s, which a convert verb does not read -- and with no --db it ' +
+      'would resolve an index on its own, which may not be the one that file names. Pass --db explicitly.',
+      [AArgs.Command, AArgs.ConvertIgnoredFile, AArgs.ConvertIgnoredIndexKey]);
+  Writeln(ErrOutput, Format('drag-lint: note: ignoring %s in %s for `%s` -- a convert verb reads only its ' +
+    'own command line; pass --db explicitly.', [AArgs.ConvertIgnoredKeys, AArgs.ConvertIgnoredFile, AArgs.Command]));
+end;
 { THE ONE PLACE THAT DECIDES WHAT "ASK FOR HELP" LOOKS LIKE. INBOX
   `per-verb-help-fatals`. Three call sites in ParseArgs need this answer -- the
   first token, the optional subcommand slot, and the flag loop -- and the whole
@@ -1359,6 +1425,7 @@ begin
   Result.NoWriteBack        := False;      // proptree: auto write-back ON; --no-write-back forces read-only
   Result.MinVisibility      := '';        // proptree: --min-visibility unset = emit ALL leaves (back-compat)
   Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
+  if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -1849,6 +1916,7 @@ begin
     else raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
   end; // while
+  CheckConvertIgnoredDefaults(Result);
 end; // function
 
 { v0.47: parent-process exit watcher. When --parent-pid is passed (by the IDE

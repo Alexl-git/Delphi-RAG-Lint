@@ -3,6 +3,64 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.26.2-alpha -- unreleased
+
+No extractor or resolver change on top of 1.26.1: indexes do not re-parse.
+
+### Fixed
+
+- **A graphic carried by `dfm keep-bytes-if-compatible` is re-framed for the target, not
+  copied (HIGH).** 1.25.2 carried `Picture.Data` to `OptionsImage.Glyph.Data`
+  byte-identical, keeping TPicture's own filer framing (`07 'TBitmap'`, TBitmap's Int32
+  size, then `BM...`); TdxSmartGlyph does not override `TGraphic.ReadData` and reads the
+  bare image file, so all 20 converted buttons of ORM3 VARINSP raised `EdxException:
+  Unsupported image format.` when the glyph was read. `convert-apply` / `convert-reemit`
+  now unwrap the source (a TPicture stream -- the class name decides the inner framing --,
+  `[Int32 size][image]`, or a bare image), check the image format against `compat`, and
+  re-frame it for the target: the castlib's new `dfmdata graphic|bitmap|metafile|picture`
+  key, else the single `yields` class when it is a VCL graphic. Bytes that come out the
+  same keep their value text verbatim. NOT carried, and reported per instance with the
+  reason and the cast's `todo` (`mismatched <path>: ... -- bytes NOT carried`): an
+  unknown graphic class in the TPicture wrapper, a size field that disagrees with its bytes,
+  a format outside `compat`, or a target framing that is neither declared nor known (the
+  message names `dfmdata`). The shipped `docs\examples\convrules\casts.castlib` declares
+  `dfmdata graphic` on `AssignGraphic`; a private copy without it now refuses to carry
+  instead of writing unreadable glyphs. VARINSP re-run on a copy: 20/20 glyphs decode with
+  the original size (18 x 128x32 NumGlyphs 4, 2 x 64x16). New guard
+  `tests\autotest\run_convert_apply_glyph_framing.ps1` decodes the converted glyphs with
+  the real TdxSmartGlyph (`tests\autotest\lib\GlyphDecodeCheck.dpr`, which picks a form
+  root by the ROOT's own ClientHeight/ClientWidth), with the 1.25.2 bytes as its positive
+  control.
+- **convert-* verbs no longer read a `.drag-lint.json` defaults file.** It is found by
+  walking up from the CWD, so a pinned engine copy run from a project folder printed
+  `(loaded defaults from C:\Projects\.drag-lint.json)` on every run, and a `"db"` key
+  there would have become an EXPLICIT `--db` of `convert-apply`. A convert verb now takes
+  its databases, rules and units from its command line only; when the file holds a key the
+  defaults reader applies (`db`, `project`, `path`, `rule`, `watch`, `docs`), one
+  stderr note names the file and the ignored keys, and a file contributing nothing is
+  silent. A `"db"` or `"project"` key there with NO `--db` on the command line is an
+  ERROR (exit 3) naming the file and the key, rather than a silent fall back to an index
+  the verb would pick itself. The verb is judged from the parsed arguments after the
+  command line is read, so an explicit `--db` is known when the decision is made.
+- **`build\build_draglint_win64.bat` stages `casts.castlib` beside both exes**
+  (`src\cli\Win64\Debug`, `third_party\dll-win64`), as `pack-lint-release.ps1` already does
+  for the archive. The converter's editor reads it beside its exe and its pins copy
+  `dll-win64`, so without it the `dfmdata graphic` line never reached them. The battery
+  checks the staged copy against `docs\examples\convrules\casts.castlib`. Every other verb is unchanged. Guard: `run_convert_defaults_file_scope.ps1`.
+- **The `defaults may diverge` re-emit note names each property once.** A book with
+  several `#convert` blocks linking the same property listed it once per link (MEStats
+  `tblMet1`: `Name` seven times, every event three times).
+- **...and no longer lists `Name` or events at all.** `Name` streams in the object header
+  and always reaches the target; an absent event is unassigned, nil on both sides. Events
+  are recognised by the VCL type-naming convention (`...Event`), as the index records no
+  procedural-type kind.
+- **`glyph-vacuum` saves the true image of a TPngImage / TIcon / TGIFImage / TWICImage
+  picture.** `ParseStreamedGraphic` assumed an Int32 size after any TPicture class name, so
+  for the classes that write none the reported image offset was 4 bytes into the image and
+  the saved file was truncated. It now shares `UnwrapGraphicData`'s per-class framing; a
+  wrapper whose framing is unknown keeps its declared format and an offset of 0 (the whole
+  payload is saved) instead of a guessed one.
+
 ## v1.26.1-alpha -- unreleased
 
 No extractor or resolver change: indexes do not re-parse.
