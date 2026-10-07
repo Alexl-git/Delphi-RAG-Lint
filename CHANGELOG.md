@@ -3,6 +3,25 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.26.7-alpha -- unreleased
+
+No extractor or resolver change on top of 1.26.6: indexes do not re-parse.
+
+### Added
+
+- **Code-only uses of an UNCONVERTED ancestor's field are listed** (converter request). C8
+  N2a listed a field the descendant's code uses with no `.dfm` block only when the declaring
+  ancestor already had the block's To type. A field the ancestor still declares with the
+  block's FROM type is now listed too: `inherited[]` action `skipped`, `ancestor_state`
+  `unconverted`, `reason` exactly `ancestor not converted`, `line` its first `.pas`
+  reference, `ancestor_unit` the declaring unit -- and the usual `line N: warning: inherited
+  instance ...` line (file: the `.pas`). Bound references only, as before (an unbound one is
+  `unverified`); nothing is rewritten; a field the `.dfm` re-opens is not listed twice. A
+  unit whose only From-type use is such a field now reports `component_part`
+  `skipped-no-instances` (exit 0) instead of `no convertible instances` (exit 1). `info
+  --json` `capabilities.inherited_code_unconverted`. Pinned by
+  run_convert_apply_inherited_retype.ps1 U1-U4.
+
 ## v1.26.6-alpha -- unreleased
 
 No extractor or resolver change on top of 1.26.2: indexes do not re-parse. 

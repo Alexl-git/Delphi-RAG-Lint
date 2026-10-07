@@ -708,7 +708,9 @@ function UnitFileIdIn(const AStore: ISymbolStore; const APath: string): Int64;
 /// a field named there is not listed again.</param>
 /// <returns>One entry per field, in order of its first reference: Line is that
 /// reference's line in AUnitPas, AncestorState 'converted', Action 'code'.
-/// Empty when there is none.</returns>
+/// 1.26.7: a field the declaring ancestor still declares with a block's FROM
+/// type is listed too -- AncestorState 'unconverted', Action 'skipped', Reason
+/// 'ancestor not converted', nothing rewritten. Empty when there is none.</returns>
 /// <remarks>
 /// A reference counts only when the resolver BOUND it to the field
 /// (refs.symbol_id, E5): a local or parameter of the same name binds to
@@ -1824,6 +1826,8 @@ end;
 
 procedure AppendInheritedReport(const AInstances: TArray<TInheritedInstance>; const ADfmPath: string;
   var AReport: TApplyReport);
+const
+  UNIT_EXT = '.pas'; { a code-only entry carries its .pas in OwnerClass }
 var
   Inst: TInheritedInstance;
   It  : TApplyItem;
@@ -1853,7 +1857,7 @@ begin
     It.Instance:= Inst.Name;
     It.FromType:= Inst.TypeName;
     It.ToType  := Inst.ToType;
-    It.FilePath:= ADfmPath;
+    It.FilePath:= if SameText(ExtractFileExt(Inst.OwnerClass), UNIT_EXT) then Inst.OwnerClass else ADfmPath; { 1.26.7: a code-only entry's line is in the .pas }
     It.Line    := Inst.Line;
     It.Text    := Format('line %d: warning: inherited instance %s: %s skipped -- %s',
                     [Inst.Line, Inst.Name, Inst.TypeName, Inst.Reason]);
@@ -1928,13 +1932,48 @@ var
     DfmTexts.Add(UpperCase(APath), Result);
   end;
 
+  { 1.26.7 (converter request): -1, or the Found index of a new entry when
+    AField is a component field the declaring ancestor still declares with a
+    #convert block's FROM type. Action 'skipped' (an unbound reference keeps
+    AAction 'unverified'), AncestorState 'unconverted', Reason exactly
+    'ancestor not converted'; the code is not rewritten, so the descendant
+    simply follows its ancestor's conversion later. }
+  function UnconvertedCandidate(const AField: TSymbol; const AAction: string): Integer;
+  var
+    ToType, DeclClass, DeclPas: string;
+    Inst: TInheritedInstance;
+  begin
+    Result:= -1;
+    if (AField.Kind <> skField) or not AncIds.ContainsKey(ClassOf(AField)) then Exit;
+    if not InOnlyList(AField.Name, AOnly) then Exit;
+    for var Inh: TInheritedInstance in AInherited do
+      if SameText(Inh.Name, AField.Name) then Exit;
+    if not FindConvertRuleFor(ARules, BareTypeTail(AField.Signature), ToType) then Exit;
+    DeclPas:= St.GetFilePath(AField.FileId);
+    if not DfmDeclaresComponent(DfmTextOf(TPath.ChangeExtension(DeclPas, DFM_EXT)), AField.Name, DeclClass) or
+       not SameText(DeclClass, BareTypeTail(AField.Signature)) then Exit;
+    Inst              := Default(TInheritedInstance);
+    Inst.Name         := AField.Name;
+    Inst.TypeName     := DeclClass;
+    Inst.ToType       := ToType;
+    Inst.AncestorUnit := TPath.GetFileNameWithoutExtension(DeclPas);
+    Inst.AncestorState:= ANCESTOR_UNCONVERTED;
+    Inst.Action       := if AAction = INH_ACTION_UNVERIFIED then INH_ACTION_UNVERIFIED else INH_ACTION_SKIPPED;
+    Inst.OwnerClass   := AUnitPas; { the .pas the line refers to }
+    Inst.Reason       := 'ancestor not converted';
+    Result:= Found.Add(Inst);
+  end;
+
   { -1, or the Found index of a new entry when AField is a converted ancestor's
-    component field of a #convert To type }
+    component field of a #convert To type -- or (1.26.7) an UNCONVERTED one's,
+    still of the block's From type: listed 'skipped', never rewritten }
   function Candidate(const AField: TSymbol; const AAction: string = INH_ACTION_CODE): Integer;
   var
     FromType, DeclClass, DeclPas: string;
     Inst    : TInheritedInstance;
   begin
+    Result:= UnconvertedCandidate(AField, AAction);
+    if Result >= 0 then Exit;
     Result:= -1;
     if (AField.Kind <> skField) or not AncIds.ContainsKey(ClassOf(AField)) then Exit;
     if not InOnlyList(AField.Name, AOnly) then Exit;
