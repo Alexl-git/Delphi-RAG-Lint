@@ -3,6 +3,48 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.26.6-alpha -- unreleased
+
+No extractor or resolver change on top of 1.26.2: indexes do not re-parse. 
+
+1.26.4 are reserved for E17 and P8.)
+
+### Fixed
+
+- **A re-emitted `.dfm` header lost its `[n]` child-position marker -- the form loaded its
+  children in a DIFFERENT ORDER.** `inherited tblX: TStringField [5]` was written back as
+  `inherited tblX: TStringField` on every header the re-emit wrote: retyped inherited blocks
+  (C8 N2), their nested children, `inline`-frame children, and own instances re-emitted in a
+  descendant. The marker is the ffChildPos filer flag (TReader.ReadComponent ->
+  Parent.SetChildOrder); without it the 1.26.2 acceptance run measured PathToData 77 -> 0
+  markers, dmDrawData 45 -> 0, and the real VCL loader brought `tblOperation.Fields` up as
+  `Num Name SystemOP ...` instead of `Num Name pcsReady ...` -- code using `Fields[i]` breaks
+  silently. The marker is now parsed with the header and written back verbatim. Guard:
+  `run_convert_apply_child_pos.ps1`, with a new REAL chain loader
+  (`tests\autotest\lib\DfmChainLoad.ps1` + `.dpr`, dcc32 because BDE is Win32-only:
+  ancestor + descendant read into one root, Fields order printed) -- the converted chain loads
+  in the original order, and the same file with its markers stripped does not (positive
+  control).
+- **The stale-resolver refusal was skipped -- silently -- on a moved or copied tree, and so
+  was every access site.** A DB copied with a source tree stores the ORIGINAL paths. The
+  unit's symbols are found tolerantly (a unique basename), so the `.dfm` converted, but three
+  lookups asked for the file by exact path and got none: the refusal matched no `--db` and
+  never fired (exit 0 on an r=1.11 DB), BuildApplyPlan's reference file id was 0 so every
+  access and creator site was skipped (`access_sites` 0, no warning), and the C8 N2a code
+  scan listed nothing. All three now resolve the unit's file the way its symbols are found
+  (`UnitFileIdIn`), and when no `--db` holds the unit at all the refusal checks every
+  non-library `--db` -- the guard is never skipped. Guard: `run_convert_apply_moved_tree.ps1`
+  (moved tree + r=1.11 DB refused; the same tree on a current DB rewrites its access site).
+
+### Known limitations
+
+- **On a moved / copied tree the To unit is not added to uses.** The uses planner still looks the
+  unit up by exact path, so it reports `could not resolve a unit declaring "<T>" to add to uses`
+  (a warning, items[] kind `uses-unit-unresolved` -- not silent) and the unit needs the uses
+  entry added by hand, or a reindex of the moved tree first.
+- **run_lsp_proxy_lifecycle_guard.ps1 depends on run order** (pre-existing, not this change):
+  it needs `LspStubServer.exe`, which run_lsp_proxy_relay_guard.ps1 builds, and fails with
+  `FATAL: not found` when run first on a fresh tree -- identically on main c10479a9.
 ## v1.26.5-alpha -- unreleased
 
 No extractor or resolver change: indexes do not re-parse. (E17: 1.26.3 was

@@ -644,7 +644,7 @@ against each `.dfm` object's type token.
   `line N: warning: <inst>: <ToPath> '<v>' looks like a file path, not a <C.P / C.P> name (#check-ref line L)`
 * a value no listed `Class.Prop` carries in ANY `.dfm` of the project index
   (every unit, case-insensitive) -- kind `ref-dangling`:
-  `line N: warning: <inst>: <ToPath> '<v>' matches no <C.P / C.P> in the project's .dfm files -- the reference dangles (#check-ref line L)`
+  `line N: warning: <inst>: <ToPath> '<v>' matches no <C.P / C.P> in the project's .dfm files -- the reference dangles unless it is defined outside the project's .dfm files (e.g. a FireDAC connection definition) (#check-ref line L)`
   (a path-like value usually gets both lines);
 * when the project index holds no `.dfm` property facts at all (an index built
   before the text index, or a project whose `.dfm`s stream nothing), ONE line

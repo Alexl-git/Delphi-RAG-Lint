@@ -264,7 +264,7 @@ Check 'R1 a path-like value warns: tPath ConnectionName c:\micrnite\system' `
   ((@($pl).Count -eq 1) -and ($pl[0].instance -eq 'tPath') -and ($pl[0].value -eq 'c:\micrnite\system') -and `
    ($pl[0].text -eq "line 11: warning: tPath: ConnectionName 'c:\micrnite\system' looks like a file path, not a TSrcDb.DatabaseName / TDstConn.ConnectionName name (#check-ref line 10)"))(($pl | ConvertTo-Json -Compress))
 Check 'R2 a dangling name warns: tDang Nowhere (and tPath, whose path names no database either)' `
-  ((@($dg).Count -eq 2) -and (@($dg | Where-Object { $_.instance -eq 'tDang' -and $_.value -eq 'Nowhere' -and $_.text -match "^line \d+: warning: tDang: ConnectionName 'Nowhere' matches no TSrcDb\.DatabaseName / TDstConn\.ConnectionName in the project's \.dfm files -- the reference dangles \(#check-ref line 10\)$" }).Count -eq 1)) (($dg | ConvertTo-Json -Compress))
+  ((@($dg).Count -eq 2) -and (@($dg | Where-Object { $_.instance -eq 'tDang' -and $_.value -eq 'Nowhere' -and $_.text -match "^line \d+: warning: tDang: ConnectionName 'Nowhere' matches no TSrcDb\.DatabaseName / TDstConn\.ConnectionName in the project's \.dfm files -- the reference dangles unless it is defined outside the project's \.dfm files \(e\.g\. a FireDAC connection definition\) \(#check-ref line 10\)$" }).Count -eq 1)) (($dg | ConvertTo-Json -Compress))
 Check 'R3 positive control: a matching name in the SAME unit does not warn (tGood MainDB)' `
   (-not (@($pl + $dg) | Where-Object instance -eq 'tGood')) ''
 Check 'R4 a matching name in ANOTHER unit does not warn, case-insensitively (tOther otherdb ~ OtherDM OtherDB)' `
