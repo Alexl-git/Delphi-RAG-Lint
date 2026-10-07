@@ -40,7 +40,7 @@ dispatches on the resolved kind.
 | `who-reads` | field / property | fan-out tree of every read site | `member_accesses.mode=read`, `symbol_facts.reads_fields` | SHIP |
 | `who-calls` | method | N-deep caller tree, cycle-guarded | `reverse-calltree` (emits dot+mermaid) | SHIP |
 | `what-it-calls` | method | N-deep callee tree | `callgraph --direction callees` | SHIP |
-| `butterfly` | method | callers above + callees below in one chart | `butterfly` verb (dot+mermaid) | SHIP |
+| `butterfly` | method | callers above + callees below in one chart; also the neighbours of a routine: `butterfly -Depth N` (callers and callees to N hops) | `butterfly` verb (dot+mermaid) | SHIP |
 | `change-impact` | method / type | everything a change here could break | `impact` verb | SHIP |
 | `touches-tables` | method | which DB tables it reads and writes | `symbol_facts.sql_reads` / `sql_writes` -- **SERVER ONLY** (client has no FireDAC connection; 0/0 is correct) | SHIP* |
 | `tested-by` | any symbol | which tests cover this | COMPUTED, not stored -- see the covered_by note below | SHIP |

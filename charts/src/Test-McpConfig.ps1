@@ -175,7 +175,7 @@ try {
   Chk 'T9-LOG' ((Get-Content -LiteralPath $log) -join '#') "mcp add --scope user drag-lint -- $eng serve --db $db1"
   Chk 'T9-BAK' (Baks $f9).Count 1
   # an existing different entry: remove then add
-  [IO.File]::WriteAllText($f9, "{ `"mcpServers`": { `"drag-lint`": { `"type`": `"stdio`", `"command`": `"old.exe`", `"args`": [] } } }")
+  [IO.File]::WriteAllText($f9, "{ `"mcpServers`": { `"drag-lint`": { `"type`": `"stdio`", `"command`": `"C:\\old\\drag-lint.exe`", `"args`": [] } } }")
   Remove-Item -LiteralPath $log
   $r = Run @{ ClaudeCode = $true; ConfigPath = $f9; ClaudeCli = $fake; DbPath = $db1 }
   Chk 'T9-UPD' $r.Out[0].Action 'updated'
@@ -190,6 +190,85 @@ try {
   $r = Run @{ VSCode = $true; ConfigPath = (Join-Path $tmp 't10.json'); DbPath = (Join-Path $tmp 'nope.sqlite') }
   if ($r.Err -notmatch 'does not exist') { Fail 'T10-NODB' "got: $($r.Err)" }
   if (Test-Path -LiteralPath (Join-Path $tmp 't10.json')) { Fail 'T10-NOFILE' 'a refused run wrote the file' }
+
+  # ---- fix round 1 ------------------------------------------------------------------------
+  # T11 install detection: HOME always exists, so it proves nothing; -HomeDir / -AppDataDir are temp
+  # folders and -NoCli keeps PATH out of it (the real claude is on PATH on this machine)
+  Note 'T11 install detection (-All) ...'
+  $prevCcd = $env:CLAUDE_CONFIG_DIR
+  try {
+    if ($null -ne $prevCcd) { [Environment]::SetEnvironmentVariable('CLAUDE_CONFIG_DIR', $null, 'Process') }
+    $hm = Join-Path $tmp 'home1'; $ad = Join-Path $tmp 'appdata1'
+    New-Item -ItemType Directory -Force $hm, $ad | Out-Null
+    $r = Run @{ All = $true; HomeDir = $hm; AppDataDir = $ad; NoCli = $true }
+    Chk 'T11-ERR' $r.Err ''
+    Chk 'T11-SKIP' (($r.Out | ForEach-Object { "$($_.Target)=$($_.Action)" }) -join ',') 'ClaudeCode=skipped,VSCode=skipped'
+    if (Test-Path -LiteralPath (Join-Path $hm '.claude.json')) { Fail 'T11-NOCREATE' '-All created .claude.json with no Claude Code installed' }
+    $r = Run @{ ClaudeCode = $true; HomeDir = $hm; AppDataDir = $ad; NoCli = $true }
+    if ($r.Err -notmatch 'is the client installed') { Fail 'T11-NAMED' "an explicit -ClaudeCode on no install did not refuse: $($r.Err)" }
+    New-Item -ItemType Directory -Force (Join-Path $hm '.claude') | Out-Null
+    $r = Run @{ All = $true; HomeDir = $hm; AppDataDir = $ad; NoCli = $true }
+    Chk 'T11-DOTCLAUDE' (($r.Out | ForEach-Object { "$($_.Target)=$($_.Action)" }) -join ',') 'ClaudeCode=added,VSCode=skipped'
+    Chk 'T11-PATH' $r.Out[0].Path (Join-Path $hm '.claude.json')
+    $ccd = Join-Path $tmp 'ccd'; New-Item -ItemType Directory -Force $ccd | Out-Null
+    $env:CLAUDE_CONFIG_DIR = $ccd
+    $r = Run @{ ClaudeCode = $true; HomeDir = (Join-Path $tmp 'home-none'); AppDataDir = $ad; NoCli = $true }
+    Chk 'T11-CCD' "$($r.Out[0].Action)|$($r.Out[0].Path)" "added|$(Join-Path $ccd '.claude.json')"
+  } finally {
+    if ($null -eq $prevCcd) { Remove-Item Env:\CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue } else { $env:CLAUDE_CONFIG_DIR = $prevCcd }
+  }
+
+  # T12 CLI update keeps what the user added: env goes back as -e; any other key makes it a file edit
+  Note 'T12 CLI update keeps user keys ...'
+  $f12 = Join-Path $tmp 't12.json'
+  [IO.File]::WriteAllText($f12, "{ `"mcpServers`": { `"drag-lint`": { `"type`": `"stdio`", `"command`": `"C:\\old\\drag-lint.exe`", `"args`": [], `"env`": { `"MINE`": `"1`" } } } }")
+  if (Test-Path -LiteralPath $log) { Remove-Item -LiteralPath $log }
+  $r = Run @{ ClaudeCode = $true; ConfigPath = $f12; ClaudeCli = $fake; DbPath = $db1 }
+  Chk 'T12-ENV' "$($r.Out[0].Mode)|$((Get-Content -LiteralPath $log) -join '#')" "cli|mcp remove --scope user drag-lint#mcp add --scope user drag-lint -e MINE=1 -- $eng serve --db $db1"
+  [IO.File]::WriteAllText($f12, "{ `"mcpServers`": { `"drag-lint`": { `"type`": `"stdio`", `"command`": `"C:\\old\\drag-lint.exe`", `"args`": [], `"timeout`": 30 } } }")
+  Remove-Item -LiteralPath $log -ErrorAction SilentlyContinue
+  $r = Run @{ ClaudeCode = $true; ConfigPath = $f12; ClaudeCli = $fake; DbPath = $db1; DryRun = $true }
+  Chk 'T12-DRYMODE' $r.Out[0].Mode 'file'     # the preview names the path that will run
+  $r = Run @{ ClaudeCode = $true; ConfigPath = $f12; ClaudeCli = $fake; DbPath = $db1 }
+  Chk 'T12-FILE' "$($r.Out[0].Mode)|$($r.Out[0].Action)" 'file|updated'
+  if (Test-Path -LiteralPath $log) { Fail 'T12-NOCLI' 'the CLI ran for an entry with a non-env extra key' }
+  $j = J $f12
+  Chk 'T12-KEPT' "$($j.mcpServers.'drag-lint'.timeout)|$($j.mcpServers.'drag-lint'.args -join ' ')" "30|serve --db $db1"
+
+  # T13 an entry by our name that runs something else is not ours: update and remove both refuse
+  Note 'T13 foreign entry ...'
+  $f13 = Join-Path $tmp 't13.json'
+  [IO.File]::WriteAllText($f13, '{ "servers": { "drag-lint": { "type": "stdio", "command": "C:\\x\\other.exe", "args": [] } } }')
+  $h13 = (Get-FileHash $f13).Hash
+  $r = Run @{ VSCode = $true; ConfigPath = $f13; DbPath = $db1 }
+  if ($r.Err -notmatch "runs 'C:\\x\\other.exe', not drag-lint.exe, so it is not this script's to update") { Fail 'T13-UPD' "got: $($r.Err)" }
+  $r = Run @{ VSCode = $true; ConfigPath = $f13; Remove = $true }
+  if ($r.Err -notmatch "not this script's to remove") { Fail 'T13-REM' "got: $($r.Err)" }
+  Chk 'T13-BYTES' (Get-FileHash $f13).Hash $h13
+  Chk 'T13-NOBAK' (Baks $f13).Count 0
+
+  # T14 changed / appeared while running: the write is refused and what the client wrote survives
+  Note 'T14 changed while running ...'
+  $f14 = Join-Path $tmp 't14.json'; [IO.File]::WriteAllText($f14, '{ "servers": {} }')
+  $r = Run @{ VSCode = $true; ConfigPath = $f14; DbPath = $db1; BeforeWrite = { param($p) [IO.File]::WriteAllText($p, '{ "servers": {}, "client": 1 }') } }
+  if ($r.Err -notmatch 'changed while this ran') { Fail 'T14-MSG' "got: $($r.Err)" }
+  Chk 'T14-KEPT' ([IO.File]::ReadAllText($f14)) '{ "servers": {}, "client": 1 }'
+  Chk 'T14-NOBAK' (Baks $f14).Count 0
+  $f14b = Join-Path $tmp 't14b.json'
+  $r = Run @{ VSCode = $true; ConfigPath = $f14b; DbPath = $db1; BeforeWrite = { param($p) [IO.File]::WriteAllText($p, '{ "made": "by client" }') } }
+  if ($r.Err -notmatch 'appeared while this ran') { Fail 'T14b-MSG' "got: $($r.Err)" }
+  Chk 'T14b-KEPT' ([IO.File]::ReadAllText($f14b)) '{ "made": "by client" }'
+  Chk 'T14b-NOTMP' @(Get-ChildItem -LiteralPath $tmp -Filter 't14b.json.tmp-*').Count 0
+
+  # T15 a failing CLI command: clear message, the file untouched
+  Note 'T15 failing CLI ...'
+  $bad = Join-Path $tmp 'bad-claude.ps1'
+  [IO.File]::WriteAllText($bad, "Write-Output 'boom: not logged in'`r`nexit 3`r`n")
+  $f15 = Join-Path $tmp 't15.json'; [IO.File]::WriteAllText($f15, '{ "mcpServers": {} }')
+  $h15 = (Get-FileHash $f15).Hash
+  $r = Run @{ ClaudeCode = $true; ConfigPath = $f15; ClaudeCli = $bad; DbPath = $db1 }
+  if ($r.Err -notmatch 'failed \(exit 3\): boom: not logged in') { Fail 'T15-MSG' "got: $($r.Err)" }
+  Chk 'T15-BYTES' (Get-FileHash $f15).Hash $h15
 
   # ---- the script itself: 7-bit ASCII + CRLF
   foreach ($f in $SCRIPT, $PSCommandPath) {
@@ -212,5 +291,5 @@ if ($fail.Count) {
   foreach ($f in $fail) { Write-Host "  $f" }
   exit 1
 }
-Write-Host 'PASS -- Test-McpConfig: T1-T10 (dry-run, empty/missing, merge, backup, idempotence, update, remove, malformed/comments, CLI via fake, refusals)'
+Write-Host 'PASS -- Test-McpConfig: T1-T15 (dry-run, empty/missing, merge, backup, idempotence, update, remove, malformed/comments, CLI via fake, refusals, install detection, CLI keeps user keys, foreign entry, changed/appeared while running, failing CLI)'
 exit 0

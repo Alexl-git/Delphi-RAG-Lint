@@ -60,8 +60,17 @@ if ([string]::Equals($From, $To, [StringComparison]::OrdinalIgnoreCase)) {
   throw "path: name two different routines -- -From and -To are both $From"
 }
 foreach ($q in $From, $To) {
-  $n = Invoke-IndexQuery "SELECT COUNT(*) AS n FROM symbols WHERE qualified_name = '$(ConvertTo-SqlText $q)'"
-  if ([int]$n[0].n -eq 0) { throw "$q is not in this index (give the qualified name, Unit.Class.Method)" }
+  $cand = Invoke-IndexQuery "SELECT s.kind AS kind, s.start_line AS line, f.path AS path FROM symbols s JOIN files f ON f.id = s.file_id WHERE s.qualified_name = '$(ConvertTo-SqlText $q)' ORDER BY f.path, s.start_line LIMIT 12"
+  if ($cand.Count -eq 0) { throw "$q is not in this index (give the qualified name, Unit.Class.Method)" }
+  # fix round 1, item 3: an OVERLOADED name is several symbols, and call-path would start (or stop) at ALL of
+  # them -- the chart would draw their union while the Legend credits one routine. The index has no finer
+  # name for an overload (they share the qualified name), so the honest answer is a refusal that lists them.
+  if ($cand.Count -gt 1) {
+    $list = ($cand | ForEach-Object { "$($_.kind) @$([IO.Path]::GetFileName([string]$_.path)):$($_.line)" }) -join ', '
+    throw ("$q names $($cand.Count)$(if ($cand.Count -ge 12) { '+' }) symbols (an overload or a duplicate declaration): $list. " +
+           'path needs each end to be exactly ONE routine, and overloads share their qualified name, so no spelling picks one -- ' +
+           "ask butterfly or who-calls on $q instead, or start / end the path at a routine next to it.")
+  }
 }
 
 # ---- 1. the engine decides: found, and how long --------------------------------------
@@ -95,6 +104,14 @@ SELECT da.d AS hop, s.id AS src_id, s.qualified_name AS src, t.id AS dst_id, t.q
 "@
 $siteRows = Get-AllIndexRows $edgeSql 'hop, src, dst, src_id, dst_id, line, ref_id'
 if ($siteRows.Count -eq 0) { throw "call-path found a $L-call path but call_edges hold no call on any shortest path -- the two disagree (engine defect; nothing drawn)" }
+# fix round 1, item 4: membership is not enough -- SQL's OWN shortest distance A -> B must be call-path's L.
+# A shorter one means call-path missed a route; none within L means the two read different edges.
+$distSql = $edgeSql.Substring(0, $edgeSql.IndexOf('SELECT da.d AS hop')) +
+           "SELECT MIN(fw.d) AS dmin FROM fw WHERE fw.id IN (SELECT id FROM symbols WHERE qualified_name = '$tq')"
+$dmin = (Invoke-IndexQuery $distSql)[0].dmin
+if ($null -eq $dmin -or [int]$dmin -ne $L) {
+  throw "call-path says the shortest path is $L call(s), but call_edges give $(if ($null -eq $dmin) { "none within $L" } else { [int]$dmin }) -- the two disagree (engine defect; nothing drawn)"
+}
 
 # the shortest-path graph: node = symbol id; one pair per distinct (src, dst), its sites in order
 $name = @{}; $hopOf = @{}; $pairs = [ordered]@{}; $next = @{}

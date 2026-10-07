@@ -1285,6 +1285,10 @@ NegTest 'PA-N2' 'Blueprint4.ViewModel.TBlueprint_ViewModel.NoSuchRoutine is not 
   & "$SRC\Emit-Path.ps1" -From 'Blueprint4.ViewModel.TBlueprint_ViewModel.NoSuchRoutine' -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -OutDir $negDir }
 NegTest 'PA-N3' 'name two different routines' 'path_NextSeq__NextSeq' {
   & "$SRC\Emit-Path.ps1" -From 'uPipeClientConnection.TPipeClientConnection.NextSeq' -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -OutDir $negDir }
+# fix round 1, item 3: TPipeClientConnection.Log is TWO methods (an overload, measured: 2 rows, both kind method);
+# call-path would walk from both, so path refuses and lists them rather than drawing their union
+NegTest 'PA-N4' 'uPipeClientConnection.TPipeClientConnection.Log names 2 symbols (an overload or a duplicate declaration): method @uPipeClientConnection.pas:' 'path_Log__NextSeq' {
+  & "$SRC\Emit-Path.ps1" -From 'uPipeClientConnection.TPipeClientConnection.Log' -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -OutDir $negDir }
 
 # ---- PLAN-last-four-verbs, Task 0: the shared helpers ----------------------------
 # Every number below was measured on 2026-09-23 against the clones and is PINNED
@@ -3514,7 +3518,7 @@ if (-not $Quiet) {
   Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
   Write-Host ("  lands-where    : REASON {0} ({1} server rows, {2} trigger, {3} client); convention {4}/{5}/{6}; DataService {7}; ParamByName {8}/{9}; orm_links {10}" -f (V $lw1 'TableColumn'), (V $lw1 'ServerRows'), (V $lw1 'Triggers'), (V $lw1 'ClientBindings'), (V $lw1 'ConvProps'), (V $lw1 'ConvOnTable'), (V $lw1 'ConvColumn'), (V $lw1 'DsClasses'), (V $lw1 'ParamByNameDs'), (V $lw1 'ParamByNameCol'), $ol)
   Write-Host ("  round-trip     : golden nodes {0}/17 matched (disclosed: {1}); {9} golden facts disclosed ({10}): {11}; guards {2}/12 (disclosed: {3}); steps/conditions/crossings/unresolved {4}; ALSO {5}; N1 {6} step(s); stale {7}; holdout candidates {8}" -f (V $rt0 'GoldenMatched'), (V $rt0 'GoldenDisclosed'), (V $rt0 'GuardsMatched'), (V $rt0 'GuardsDisclosed'), (V $rt0 'RtCounts'), (V $rt0 'RtAlso'), (V $rtn1 'Steps'), $(if ($rtStale) { $rtStale } else { '?' }), (V $rt0 'HoldoutCandidates'), (V $rt0 'GoldenFactsDisclosedN'), (V $rt0 'GoldenFactsReason'), (V $rt0 'GoldenFactsDisclosed'))
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, PA-N1..N3, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, CO-STALE-REFUSE, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; RT-STALE (message AND absent .dlgraph); RT-N1, RT-N2 one-STOPS traces; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, PA-N1..N4, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, CO-STALE-REFUSE, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; RT-STALE (message AND absent .dlgraph); RT-N1, RT-N2 one-STOPS traces; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

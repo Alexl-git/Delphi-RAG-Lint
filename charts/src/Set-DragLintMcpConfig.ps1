@@ -34,6 +34,9 @@
     4. It is IDEMPOTENT: an entry whose type/command/args already match is "unchanged",
        nothing is written and no backup is made. Keys a user added to OUR entry (env, ...)
        are kept on an update.
+    4a. An entry named -Name whose command is not drag-lint.exe (nor the resolved engine) is not ours:
+       -Remove and an update refuse it, naming the command. A CLI update keeps a user-added `env` (-e);
+       any other extra key makes the update a file edit, so nothing a user added is dropped.
     5. The claude CLI is only ever run for the DEFAULT config file. With -ConfigPath it is
        never run unless -ClaudeCli names one explicitly (tests pass a fake), so a test
        pointed at a temp copy can never reach the real ~\.claude.json through the CLI.
@@ -46,7 +49,9 @@
   -ConfigPath points ONE target at another file (tests use temp copies; never the real
   ones). Output: one object per target -- Target, Path, Mode (file|cli), Action
   (added|updated|unchanged|removed|absent, prefixed would- under -DryRun; skipped when a
-  -All target's client is not installed), Backup, Before, After, Commands.
+  -All target's client is not installed -- Claude Code counts as installed only with a ~\.claude folder, an
+  existing CLAUDE_CONFIG_DIR, an existing file or a claude CLI; VS Code with %APPDATA%\Code\User), Backup,
+  Before, After, Commands. -HomeDir / -AppDataDir move where the default files are looked for (tests).
 
   Examples:
     pwsh -NoProfile -File Set-DragLintMcpConfig.ps1 -All -DryRun
@@ -68,7 +73,12 @@ param(
   [string] $ConfigPath = '',
   # '' = `claude` on PATH, used ONLY for the default Claude Code file (SAFETY 5)
   [string] $ClaudeCli  = '',
-  [switch] $NoCli
+  [switch] $NoCli,
+  # where the clients' DEFAULT files are looked for (tests point both at temp folders; never the real ones)
+  [string] $HomeDir    = $HOME,
+  [string] $AppDataDir = $env:APPDATA,
+  # TEST HOOK: run just before the changed-while-running re-check, to simulate a client rewriting the file
+  [scriptblock] $BeforeWrite
 )
 
 $ErrorActionPreference = 'Stop'
@@ -174,16 +184,40 @@ function Invoke-Target([string] $Target) {
   $isClaude  = $Target -eq 'ClaudeCode'
   $container = $(if ($isClaude) { 'mcpServers' } else { 'servers' })
   $default   = $(if ($isClaude) {
-                   Join-Path $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { $HOME }) '.claude.json'
-                 } else { Join-Path $env:APPDATA 'Code\User\mcp.json' })
+                   Join-Path $(if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { $HomeDir }) '.claude.json'
+                 } else { Join-Path $AppDataDir 'Code\User\mcp.json' })
   $path = $(if ($ConfigPath) { $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ConfigPath) } else { $default })
   $res = [ordered]@{ Target = $Target; Path = $path; Mode = 'file'; Action = ''; Backup = ''; Before = ''; After = ''; Commands = @() }
 
-  # a client that is not installed is skipped under -All, refused when asked for by name
+  # the claude CLI, if one may be used (SAFETY 5): explicit -ClaudeCli, else `claude` on PATH for the default file only
+  $cli = ''
+  if ($isClaude -and -not $NoCli) {
+    if ($ClaudeCli) { $cli = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ClaudeCli) }
+    elseif (-not $ConfigPath) {
+      $c = @(Get-Command 'claude' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1)
+      if ($c.Count) { $cli = $c[0].Source }
+    }
+  }
+
+  # a client that is not installed is skipped under -All, refused when asked for by name.
+  # Claude Code (fix round 1, item 1): its file sits in the HOME folder, which always exists, so the folder
+  # proves nothing -- it counts as installed only when ~\.claude exists, CLAUDE_CONFIG_DIR names an existing
+  # folder, the file itself exists, or a claude CLI was found (with -NoCli, PATH is not consulted).
   $dir = Split-Path -Parent $path
-  if (-not $ConfigPath -and -not (Test-Path -LiteralPath $dir -PathType Container) -and -not (Test-Path -LiteralPath $path)) {
-    if ($All) { $res.Action = 'skipped'; Write-Host "$Target -- skipped: $dir not found (client not installed)"; return [pscustomobject]$res }
-    throw "$Target -- $dir not found; is the client installed? (pass -ConfigPath to name the file)"
+  if (-not $ConfigPath) {
+    if ($isClaude) {
+      $installed = (Test-Path -LiteralPath $path -PathType Leaf) -or [bool]$cli -or
+                   ($env:CLAUDE_CONFIG_DIR -and (Test-Path -LiteralPath $env:CLAUDE_CONFIG_DIR -PathType Container)) -or
+                   (Test-Path -LiteralPath (Join-Path $HomeDir '.claude') -PathType Container)
+      $why = "no $(Join-Path $HomeDir '.claude') folder, no CLAUDE_CONFIG_DIR, no $path and no claude CLI"
+    } else {
+      $installed = (Test-Path -LiteralPath $dir -PathType Container) -or (Test-Path -LiteralPath $path)
+      $why = "$dir not found"
+    }
+    if (-not $installed) {
+      if ($All) { $res.Action = 'skipped'; Write-Host "$Target -- skipped: $why (client not installed)"; return [pscustomobject]$res }
+      throw "$Target -- $why; is the client installed? (pass -ConfigPath to name the file)"
+    }
   }
 
   $want = $null; if (-not $Remove) { $want = New-EntryNode $Target }
@@ -193,6 +227,18 @@ function Invoke-Target([string] $Target) {
   if ($null -ne $box -and $box -isnot [System.Text.Json.Nodes.JsonObject]) { throw "refusing $path -- `"$container`" is not a JSON object, so nothing was written" }
   $have = $null; if ($null -ne $box) { $have = Get-Member2 $box $Name }
   $res.Before = Get-NodeText $have
+
+  # fix round 1, item 5: an entry by this name that runs something else is NOT ours -- never update or remove it
+  if ($null -ne $have) {
+    $hcmd = ''
+    try { $hj = $have.ToJsonString() | ConvertFrom-Json -NoEnumerate; if ($hj.PSObject.Properties['command']) { $hcmd = [string]$hj.command } } catch { $hcmd = '' }
+    $ours = [bool]$hcmd -and (([IO.Path]::GetFileName($hcmd) -ieq 'drag-lint.exe') -or
+                              ($Engine -and [string]::Equals($hcmd, $Engine, [StringComparison]::OrdinalIgnoreCase)))
+    if (-not $ours) {
+      throw ("refusing $path -- the entry `"$Name`" runs '$hcmd', not drag-lint.exe, so it is not this script's to " +
+             "$(if ($Remove) { 'remove' } else { 'update' }). Nothing was written. Pass -Name for a different entry, or edit it by hand.")
+    }
+  }
 
   if ($Remove) {
     if ($null -eq $have) { $verb = 'absent' } else { $verb = 'removed' }
@@ -217,12 +263,26 @@ function Invoke-Target([string] $Target) {
   }
 
   # ---- CLI (Claude Code, default file only -- SAFETY 5) -------------------------
-  $cli = ''
-  if ($isClaude -and -not $NoCli) {
-    if ($ClaudeCli) { $cli = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ClaudeCli) }
-    elseif (-not $ConfigPath) {
-      $c = @(Get-Command 'claude' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1)
-      if ($c.Count) { $cli = $c[0].Source }
+  # fix round 1, item 2: an UPDATE through the CLI is remove + add, which keeps only what add is told. So an
+  # entry carrying keys beyond type/command/args goes through the CLI only when every extra key is an `env`
+  # of string values (passed back as -e KEY=VALUE); anything else is updated by FILE EDIT (backup,
+  # compare-before-write), and the dry-run shows whichever path will actually run.
+  $envPairs = @()
+  if ($cli -and $verb -eq 'updated') {
+    $extra = @(($have.ToJsonString() | ConvertFrom-Json -NoEnumerate).PSObject.Properties.Name | Where-Object { $_ -notin 'type', 'command', 'args' })
+    $envOk = $true
+    foreach ($k in $extra) {
+      if ($k -ne 'env') { $envOk = $false; break }
+      $ev = Get-Member2 $have 'env'
+      if ($ev -isnot [System.Text.Json.Nodes.JsonObject]) { $envOk = $false; break }
+      foreach ($kv in $ev) {
+        if ($kv.Value -isnot [System.Text.Json.Nodes.JsonValue] -or $kv.Value.GetValueKind() -ne [System.Text.Json.JsonValueKind]::String) { $envOk = $false; break }
+        $envPairs += "$($kv.Key)=$($kv.Value.GetValue[string]())"
+      }
+    }
+    if (-not $envOk) {
+      Write-Host "$Target -- $Name carries keys beyond type/command/args/env ($($extra -join ', ')); updating by file edit so they are kept"
+      $cli = ''
     }
   }
   $backup = $(if ($cfg.Exists) { Get-BackupPath $path } else { '' })
@@ -230,7 +290,11 @@ function Invoke-Target([string] $Target) {
     $res.Mode = 'cli'
     $cmds = New-Object System.Collections.Generic.List[object]
     if ($verb -in 'updated', 'removed') { $cmds.Add(@('mcp', 'remove', '--scope', 'user', $Name)) }
-    if ($verb -in 'added', 'updated')   { $cmds.Add(@('mcp', 'add', '--scope', 'user', $Name, '--', $Engine) + $args2) }
+    if ($verb -in 'added', 'updated')   {
+      $add = @('mcp', 'add', '--scope', 'user', $Name)
+      foreach ($ep in $envPairs) { $add += @('-e', $ep) }
+      $cmds.Add($add + @('--', $Engine) + $args2)
+    }
     $res.Commands = @($cmds | ForEach-Object { "`"$cli`" " + (($_ | ForEach-Object { if ($_ -match '[\s"]') { '"' + $_ + '"' } else { $_ } }) -join ' ') })
     if ($DryRun) {
       $res.Action = "would-$verb"
@@ -263,7 +327,9 @@ function Invoke-Target([string] $Target) {
     Write-Host "  would write $path ($([Text.Encoding]::UTF8.GetByteCount($text)) bytes, UTF-8 no BOM); backup $(if ($backup) { $backup } else { 'none: no file yet' })"
     return [pscustomobject]$res
   }
+  if ($BeforeWrite) { & $BeforeWrite $path }
   if ($cfg.Exists) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "$path was deleted while this ran -- nothing was written; run again" }
     $now = (Get-Item -LiteralPath $path).LastWriteTimeUtc
     if ($now -ne $cfg.Stamp -or [IO.File]::ReadAllText($path) -cne $cfg.Text) { throw "$path changed while this ran (a running client rewrote it?) -- nothing was written; run again" }
     [IO.File]::Copy($path, $backup, $false); $res.Backup = $backup
@@ -272,6 +338,12 @@ function Invoke-Target([string] $Target) {
   }
   $tmp = "$path.tmp-$PID"
   [IO.File]::WriteAllText($tmp, $text, [Text.UTF8Encoding]::new($false))
+  # fix round 1, item 6: a file that did not exist when read must still not exist now -- a client may have
+  # created it meanwhile, and the move would overwrite what it wrote
+  if (-not $cfg.Exists -and (Test-Path -LiteralPath $path)) {
+    [IO.File]::Delete($tmp)
+    throw "$path appeared while this ran (a client created it?) -- nothing was written; run again"
+  }
   [IO.File]::Move($tmp, $path, $true)
   $res.Action = $verb
   Write-Host "$Target -- $verb `"$container`".`"$Name`" in $path$(if ($backup) { " (backup $backup)" })"

@@ -89,14 +89,15 @@ pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -All -Remove
 
 * Targets: `-ClaudeCode` (user scope, top-level `mcpServers` in `~\.claude.json`; through the `claude mcp`
   CLI when it is on PATH, else a file edit), `-VSCode` (`servers` in `%APPDATA%\Code\User\mcp.json`), or `-All`
-  (a client that is not installed is skipped).
+  (a client that is not installed is skipped: Claude Code counts as installed only with a `~\.claude`
+  folder, an existing `CLAUDE_CONFIG_DIR`, an existing `.claude.json` or a `claude` CLI; VS Code with `%APPDATA%\Code\User`).
 * The entry is `{ "type": "stdio", "command": "<engine>", "args": ["serve", "--db", "<-DbPath>"] }` (Claude
   Code adds `"env": {}`). Without `-DbPath` the args are `["serve"]` and the engine picks the index from its
   manifest when the client starts it. `serve` answers from ONE index, so register one entry per index with
   `-Name`. The engine comes from `Resolve-DragLintEngine` (table above).
 * Safe on a real config: `-DryRun` writes nothing; a real write backs the file up to `<file>.bak-<timestamp>`,
   merges (other servers and keys untouched), is idempotent (a second run says "no change" and writes
-  nothing), and `-Remove` deletes only its own entry. Malformed JSON, or JSON with comments a rewrite would
+  nothing), and `-Remove` deletes only its own entry -- an entry by that name whose command is not drag-lint.exe is refused, never touched. A CLI update keeps a user-added `env`; any other key the user added makes it a file edit. Malformed JSON, or JSON with comments a rewrite would
   drop, is refused with nothing written. A file a running client rewrote while the script ran is not
   overwritten. JSON is written UTF-8 without BOM.
 * Tests: `src\Test-McpConfig.ps1` (seconds; temp copies via `-ConfigPath`, a fake `claude` for the CLI path;
