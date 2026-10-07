@@ -13,7 +13,9 @@
   THE RULE: a convert-* verb takes its databases, rules and units from its own
   command line only. A defaults file above the CWD is not loaded; when it holds
   a key the defaults reader would have applied, one stderr note names the file
-  and the ignored keys. Every other verb is unchanged (control C1).
+  and the ignored keys -- unless one of them is "db" or "project" and no --db
+  was given: then it is an ERROR, exit 3 (B1c/B3; B4 is the positive control).
+  Every other verb is unchanged (control C1).
 #>
 [CmdletBinding()]
 param(
@@ -44,9 +46,18 @@ Write-Ascii (Join-Path $inert '.drag-lint.json') '{ "_comment": ["nothing the de
 Write-Ascii (Join-Path $subDb 'U.pas') "unit U;`r`ninterface`r`nimplementation`r`nend.`r`n"
 Write-Ascii (Join-Path $subDb 'r.rules') "#convert TA -> TB, UB`r`n"
 
+Write-Ascii (Join-Path $subDb 'use.rules') "#use Classes`r`n"
+# a project key, in its own tree
+$withProj = Join-Path $WorkDir 'withproj'; $subProj = Join-Path $withProj 'sub'
+New-Item -ItemType Directory $subProj -Force | Out-Null
+Write-Ascii (Join-Path $withProj '.drag-lint.json') '{ "project": "C:\\nowhere\\x.dproj" }'
+Copy-Item (Join-Path $subDb 'U.pas'), (Join-Path $subDb 'r.rules') $subProj
+# a REAL index of U.pas for the positive control (built outside the tree with the file)
+$uDb = Join-Path $WorkDir 'u.sqlite'
+& $Exe index $subDb --db $uDb 2>&1 | Out-Null
 function Run([string]$Cwd, [string[]]$A) {
   Push-Location $Cwd
-  try { $o = (& $Exe @A 2>&1 | ForEach-Object { "$_" }) -join "`n" } finally { Pop-Location }
+  try { $o = (& $Exe @A 2>&1 | ForEach-Object { "$_" }) -join "`n"; $script:LastExit = $LASTEXITCODE } finally { Pop-Location }
   return $o
 }
 
@@ -55,13 +66,36 @@ $ctl = Run $subDb @('--version')
 Check 'C1 CONTROL a non-convert verb still loads the defaults file and says so' `
       ($ctl -match [regex]::Escape("(loaded defaults from $withDb\.drag-lint.json)")) $ctl
 
-# ---- B1: a "db" key does NOT become convert-apply's --db --------------------
+# ---- B1: a "db" key with NO explicit --db is an ERROR, not a silent fallback --
+# Ignoring the file and auto-selecting an index could rewrite the form on a
+# DIFFERENT database than the one the file names; the operator must choose.
 $b1 = Run $subDb @('convert-apply', '--unit', 'U.pas', '--rules', 'r.rules')
+$b1Exit = $script:LastExit
 Check 'B1 convert-apply prints no "(loaded defaults" banner' (-not ($b1 -match '\(loaded defaults from')) $b1
 Check 'B1b the config "db" is NOT used as an explicit --db' (-not ($b1 -match ('--db #\d+ of \d+ does not exist: ' + [regex]::Escape($cfgDb)))) $b1
-Check 'B1c one note names the file and the ignored key' `
-      ($b1 -match ('(?i)ignor[^\n]*' + [regex]::Escape("$withDb\.drag-lint.json") + '[^\n]*\bdb\b')) $b1
+Check 'B1c no --db + a "db" key in the ignored file -> exit 3' ($b1Exit -eq 3) "exit=$b1Exit`n$b1"
+Check 'B1d the error names the file, the key and --db' `
+      (($b1 -match [regex]::Escape("$withDb\.drag-lint.json")) -and ($b1 -match '"db"') -and ($b1 -match '--db explicitly')) $b1
 
+# ---- B3: a "project" key is the same refusal ---------------------------------
+$b3 = Run $subProj @('convert-apply', '--unit', 'U.pas', '--rules', 'r.rules')
+Check 'B3 no --db + a "project" key in the ignored file -> exit 3, naming "project"' `
+      (($script:LastExit -eq 3) -and ($b3 -match '"project"')) "exit=$($script:LastExit)`n$b3"
+
+# ---- B4 POSITIVE CONTROL: with an explicit --db the same file is only a NOTE --
+# and the verb runs to completion. Without this, B1c could pass because every
+# convert-apply in this folder fails.
+$b4 = Run $subDb @('convert-apply', '--unit', 'U.pas', '--rules', 'use.rules', '--db', $uDb)
+Check 'B4 POSITIVE CONTROL explicit --db: convert-apply runs (exit 0)' ($script:LastExit -eq 0) "exit=$($script:LastExit)`n$b4"
+Check 'B4b and the ignored file is named in one note' `
+      ($b4 -match ('(?i)note: ignoring "db" in ' + [regex]::Escape("$withDb\.drag-lint.json"))) $b4
+
+# ---- B5: the verb is the PARSED one -- a flag before it does not slip past ---
+# The parser takes token 1 as the verb, so `--quiet convert-apply` is not a
+# convert run at all: it must not convert, and must not use the config "db".
+$b5 = Run $subDb @('--quiet', 'convert-apply', '--unit', 'U.pas', '--rules', 'use.rules')
+Check 'B5 a leading flag does not run convert-apply on the config db' `
+      ((-not ($b5 -match 'convert-apply: ')) -and (-not ($b5 -match [regex]::Escape($cfgDb)))) $b5
 # ---- B2: a file contributing nothing is silent for convert-* ----------------
 $b2 = Run $subInert @('convert-validate', '--rules', 'nosuch.rules', '--db', 'nosuch.sqlite')
 Check 'B2 an inert defaults file is silent for convert-validate (no banner, no note)' `

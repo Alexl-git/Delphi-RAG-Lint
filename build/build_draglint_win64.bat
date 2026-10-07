@@ -69,6 +69,20 @@ for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
   if exist "%ROOT%\rules\builtin-symbols.txt" copy /Y "%ROOT%\rules\builtin-symbols.txt" "%%~D\rules\" >NUL
 )
 
+REM STAGE THE CAST LIBRARY BESIDE BOTH EXES (1.26.2). The converter's editor
+REM resolves casts.castlib BESIDE ITS EXE first, and the converter's engine pins
+REM copy the dll-win64 tree -- so a castlib that lives only under docs\ never
+REM reaches them. Missing it is not cosmetic: 1.26.2's `dfmdata graphic` line is
+REM what lets keep-bytes-if-compatible carry a TPicture glyph into TdxSmartGlyph;
+REM without it the engine (correctly) refuses to carry, and every glyph is a
+REM todo. pack-lint-release.ps1 already puts the same file at the archive root.
+for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
+  copy /Y "%ROOT%\docs\examples\convrules\casts.castlib" "%%~D\casts.castlib" >NUL
+  if errorlevel 1 (
+    echo ERROR: failed to stage casts.castlib into %%~D
+    exit /b 1
+  )
+)
 REM STAGE THE ENGINE. The plain copy stays FIRST and is the ordinary path: when
 REM nothing holds the target this is one copy and no PowerShell is launched.
 REM

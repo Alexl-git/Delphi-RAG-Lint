@@ -489,6 +489,23 @@ if ($staleRules.Count -gt 0) {
 } elseif ($missingRules.Count -eq 0) {
   Write-Host '  rule catalogue matches rules\ by content     : yes' -ForegroundColor Gray
 }
+# The CAST LIBRARY beside the exe (1.26.2): build_draglint_win64.bat stages
+# docs\examples\convrules\casts.castlib beside both exes, because the converter's
+# editor reads it there and its engine pins copy dll-win64. A stale copy keeps a
+# cast's old `dfmdata` (or none), and keep-bytes-if-compatible then refuses or
+# mis-frames every glyph. Same matched pair as the rules: the build makes it
+# right, this proves it stayed right.
+$castSrc = Join-Path $repoRoot 'docs\examples\convrules\casts.castlib'
+$staleCast = @($rulesDsts | ForEach-Object { Join-Path (Split-Path $_ -Parent) 'casts.castlib' } | Where-Object {
+  $p = Join-Path $repoRoot $_
+  (-not (Test-Path -LiteralPath $p)) -or ((Get-FileHash -LiteralPath $p).Hash -ne (Get-FileHash -LiteralPath $castSrc).Hash)
+})
+if ($staleCast.Count -gt 0) {
+  Write-Host ('  *** casts.castlib beside the exe is MISSING or STALE: {0} ***' -f ($staleCast -join ', ')) -ForegroundColor Red
+  Write-Host ('      Fix: rebuild with build\build_draglint_win64.bat, or Copy-Item "{0}" to each.' -f $castSrc) -ForegroundColor Red
+} else {
+  Write-Host '  casts.castlib beside the exe matches docs\   : yes' -ForegroundColor Gray
+}
 
 if ($missingRules.Count -gt 0) {
   Write-Host '  *** PRECONDITION MISSING: no rule catalogue beside the exe ***' -ForegroundColor Red

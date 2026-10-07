@@ -39,7 +39,15 @@ separate branch.)
   its databases, rules and units from its command line only; when the file holds a key the
   defaults reader applies (`db`, `project`, `path`, `rule`, `watch`, `docs`), one
   stderr note names the file and the ignored keys, and a file contributing nothing is
-  silent. Every other verb is unchanged. Guard: `run_convert_defaults_file_scope.ps1`.
+  silent. A `"db"` or `"project"` key there with NO `--db` on the command line is an
+  ERROR (exit 3) naming the file and the key, rather than a silent fall back to an index
+  the verb would pick itself. The verb is judged from the parsed arguments after the
+  command line is read, so an explicit `--db` is known when the decision is made.
+- **`build\build_draglint_win64.bat` stages `casts.castlib` beside both exes**
+  (`src\cli\Win64\Debug`, `third_party\dll-win64`), as `pack-lint-release.ps1` already does
+  for the archive. The converter's editor reads it beside its exe and its pins copy
+  `dll-win64`, so without it the `dfmdata graphic` line never reached them. The battery
+  checks the staged copy against `docs\examples\convrules\casts.castlib`. Every other verb is unchanged. Guard: `run_convert_defaults_file_scope.ps1`.
 - **The `defaults may diverge` re-emit note names each property once.** A book with
   several `#convert` blocks linking the same property listed it once per link (MEStats
   `tblMet1`: `Name` seven times, every event three times).
