@@ -2578,8 +2578,8 @@ begin
     'blockfile.trailing.bde.tbatchmove.clean', CountDirectiveIn(Blocks, LastConvert, '#migrate') = 0,
     'TBatchMove must no longer carry the tail: ' + IntToStr(CountDirectiveIn(Blocks, LastConvert, '#migrate')));
   Check(
-    'blockfile.trailing.bde.tbatchmove.keeps.ignore', CountDirectiveIn(Blocks, LastConvert, '#ignore') = 10,
-    'its own 10 #ignore lines must stay: ' + IntToStr(CountDirectiveIn(Blocks, LastConvert, '#ignore')));
+    'blockfile.trailing.bde.tbatchmove.keeps.ignore', CountDirectiveIn(Blocks, LastConvert, '#ignore') = 9,
+    'its own 9 #ignore lines must stay: ' + IntToStr(CountDirectiveIn(Blocks, LastConvert, '#ignore')));
 end; // procedure
 
 { Criterion 1b: the same byte-faithful round-trip for .castlib, whose blocks are
@@ -2831,23 +2831,23 @@ begin
   B:= SplitRulesBlocks(Text);
 
   Check('select.bde.blocks', Length(B) = 12, IntToStr(Length(B)));
-  Check('select.bde.trailer.start', (B[11].StartLine = 632) and (B[10].EndLine = 631), Format('trailer starts %d, TBatchMove ends %d', [B[11].StartLine, B[10].EndLine]));
+  Check('select.bde.trailer.start', (B[11].StartLine = 651) and (B[10].EndLine = 650), Format('trailer starts %d, TBatchMove ends %d', [B[11].StartLine, B[10].EndLine]));
 
-  { Nothing selected: 145 preamble + 76 trailer. }
-  Check('select.bde.none.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [])))) = 221, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, []))))));
+  { Nothing selected: 155 preamble + 76 trailer. }
+  Check('select.bde.none.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [])))) = 231, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, []))))));
   Check(
     'select.bde.none.content',
     (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#convert') = 0) and (CountDirectiveInText(JoinBlocks(SelectForCompose(B, [])), '#migrate') = 43),
     'file-scope only: no rules, all 43 #migrate');
 
-  { TDatabase is the block that carries '#apply BdeTransIsolation' (line 173) --
-    NOT TQuery, as the parent plan wrongly said. 145 + 39 + 76 = 260. }
-  Check('select.bde.tdatabase.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2])))) = 260, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2]))))));
+  { TDatabase is the block that carries '#apply BdeTransIsolation' (line 184) --
+    NOT TQuery, as the parent plan wrongly said. 155 + 41 + 76 = 272. }
+  Check('select.bde.tdatabase.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2])))) = 272, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [2]))))));
   Check('select.bde.tdatabase.carries.apply', Pos('#apply BdeTransIsolation', JoinBlocks(SelectForCompose(B, [2]))) > 0, 'the selected rule keeps its #apply');
   Check(
     'select.bde.tdatabase.carries.mapping', Pos('#mapping BdeTransIsolation from', JoinBlocks(SelectForCompose(B, [2]))) > 0,
     'and the preamble brought the declaration that #apply names');
-  Check('select.bde.tbatchmove.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [10])))) = 248, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [10]))))));
+  Check('select.bde.tbatchmove.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [10])))) = 260, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [10]))))));
 
   SetLength(All, 10);
   for i:= 0 to 9 do
@@ -3058,8 +3058,8 @@ begin
     Check('ws.sel.bde.bytype', (n = 2) and IdxEq(WS.Selected(0), [1, 2]), Format('n=%d sel=%s', [n, IdxStr(WS.Selected(0))]));
 
     t:= WS.ComposeSelected(Rep);
-    { 145 preamble + 20 TSession + 39 TDatabase + 76 trailer. }
-    Check('ws.sel.bde.lines', Length(SplitRawLines(t)) = 280, IntToStr(Length(SplitRawLines(t))));
+    { 155 preamble + 20 TSession + 41 TDatabase + 76 trailer. }
+    Check('ws.sel.bde.lines', Length(SplitRawLines(t)) = 292, IntToStr(Length(SplitRawLines(t))));
     Check('ws.sel.bde.integrity', CheckApplyIntegrity(t).OK, 'the composed job must be self-consistent: ' + CheckApplyIntegrity(t).Summary);
     Check('ws.sel.bde.smaller', Length(SplitRawLines(t)) < 707, 'and it must actually be a SUBSET of the book');
   finally
@@ -6902,6 +6902,110 @@ begin
     end; // for
     Check('convlib.bde2fd.removes.dont.strip.links', NBad = 0, Format('%d file-scope #remove/#link collision(s); first: %s', [NBad, Bad]));
   finally
+    Book.Free;
+  end; // try
+end; // procedure
+
+{ Property name a '#note - NEAR-MISS: <P> ...' line names, or '' when the note is not
+  a NEAR-MISS note. The name runs to the first blank or '('. }
+function NearMissProp(const ANote: string): string;
+const
+  NEAR_MISS_TAG = 'NEAR-MISS:';
+var
+  At : Integer;
+  Rest: string;
+  Stop: Integer;
+begin
+  Result:= '';
+  At:= Pos(NEAR_MISS_TAG, ANote);
+  if At = 0 then
+    Exit;
+  Rest:= TrimLeft(Copy(ANote, At + Length(NEAR_MISS_TAG), MaxInt));
+  Stop:= 1;
+  while (Stop <= Length(Rest)) and not CharInSet(Rest[Stop], [' ', '(']) do
+    Inc(Stop);
+  Result:= Copy(Rest, 1, Stop - 1);
+end;
+
+{ The NEAR-MISS-as-#ignore guard for the conversion library.
+
+  A '#note - NEAR-MISS: <P>' says the TARGET still has <P> and the property is an
+  unresolved MAPPING. Commit 0d16ffef nonetheless also emitted '#ignore <P>' for every
+  one of them, and #ignore is exactly what silences the engine's unlinked-property
+  warning -- so 'TableName' was dropped from every converted TFDTable without a word.
+  Invariant: inside one #convert block, no property named by a NEAR-MISS note is also
+  #ignore'd. It must be either #link'd or left bare so the engine reports it. The
+  positive control (at least one NEAR-MISS note found) keeps the check from passing
+  vacuously if the notes are ever renamed. }
+procedure TestConversionLibraryNearMissNotIgnored;
+var
+  P        : string     ;
+  Book     : TRuleBook  ;
+  n        : TRuleNode  ;
+  NearProps: TStringList;
+  Ignored  : TStringList;
+  Silenced : TStringList;
+  Prop     : string     ;
+  Block    : string     ;
+  NNear    : Integer    ;
+
+  procedure CloseBlock;
+  var
+    S: string;
+  begin
+    for S in NearProps do
+      if Ignored.IndexOf(S) >= 0 then
+        Silenced.Add(Block + ':' + S);
+    NearProps.Clear;
+    Ignored.Clear;
+  end;
+
+begin
+  P:= ConvRulesCorpusPath('BDE-to-FireDAC.rules');
+  if not TFile.Exists(P) then
+  begin
+    Check('convlib.bde2fd.near.miss.present', False, 'library file is missing: ' + P);
+    Exit;
+  end;
+
+  NNear:= 0;
+  Block:= '(file scope)';
+  Book     := TRuleBook.Create;
+  NearProps:= TStringList.Create;
+  Ignored  := TStringList.Create;
+  Silenced := TStringList.Create;
+  try
+    NearProps.CaseSensitive:= False;
+    Ignored.CaseSensitive  := False;
+    Book.LoadFromString(TFile.ReadAllText(P, TEncoding.ASCII));
+    for n in Book.Nodes do
+      case n.Kind of
+        rnkConvert:
+          begin
+            CloseBlock;
+            Block:= Trim(n.FromType);
+          end;
+        rnkNote:
+          begin
+            Prop:= NearMissProp(n.NoteText);
+            if Prop <> '' then
+            begin
+              Inc(NNear);
+              NearProps.Add(Prop);
+            end;
+          end;
+        rnkIgnore:
+          Ignored.Add(Trim(n.IgnorePath));
+      end; // case
+    CloseBlock;
+    Check('convlib.bde2fd.near.miss.found', NNear > 0, Format('%d NEAR-MISS note(s) found -- the guard below would be vacuous', [NNear]));
+    Check(
+      'convlib.bde2fd.near.miss.not.ignored', Silenced.Count = 0,
+      Format('%d NEAR-MISS propert(ies) also #ignore''d (silenced): %s', [Silenced.Count, string.Join(', ', Silenced.ToStringArray)]));
+  finally
+    Silenced.Free;
+    Ignored.Free;
+    NearProps.Free;
     Book.Free;
   end; // try
 end; // procedure
@@ -11678,6 +11782,7 @@ begin
     TestConversionLibraryLoads;
     TestConversionLibraryReconstructs;
     TestConversionLibraryRemovesAreSafe;
+    TestConversionLibraryNearMissNotIgnored;
     TestBlockSplitRulesRoundTrip;
     TestBlockSplitTrailing;
     TestBlockOpsSelection;
