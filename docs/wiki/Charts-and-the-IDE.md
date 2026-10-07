@@ -6,8 +6,10 @@ to jump from it into RAD Studio.** Companion to
 recipe on one field (the Blueprint Operation Name benchmark) from the drag-lint >
 Reports menu, see [Field Round-Trip Report](Field-Round-Trip-Report).
 
-Status, 5 October 2026: **26 of the 27 catalogue questions ship**; only
-`compare` does not (parked by the owner). The newest is `round-trip`. The chart
+Status, 6 October 2026: **27 of the 28 catalogue questions ship**; only
+`compare` does not (parked by the owner). The newest is `path` (every shortest
+call path from one routine to another; on the Reports menu with the plugin's next
+question-list update, from the scripts today). The chart
 tool-set lives in the `charts\` folder of the repository. **In RAD Studio every
 question is on the drag-lint > Reports menu** (below). The engine has no `ask`
 verb yet -- outside the IDE a question is asked with the PowerShell scripts below.
@@ -54,9 +56,15 @@ a text trace; every other question answers with a picture (Graphviz).
 ## What you need
 
 * PowerShell 7 (`pwsh`).
-* Graphviz 16.1 at `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe`
-  and the engine at `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`.
-  Both paths are the emitters' built-in defaults.
+* The engine (`drag-lint.exe`) and Graphviz (`dot.exe`, 16.1). Every chart script
+  finds them by the first of: `-Engine` / `-Dot`; `DRAGLINT_ENGINE` /
+  `DRAGLINT_DOT`; the `engine` / `dot` key of `%APPDATA%\drag-lint\settings.json`;
+  the installed layout beside the scripts; then the shared defaults
+  (`C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`, `dot.exe` on
+  PATH, `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe`). A path you SET that
+  does not exist is an error naming where it was set -- a typo never silently picks
+  another file. The full order is in `charts\README.md` ("Where the engine and
+  Graphviz are found").
 * For `New-DiagramArtifact.ps1`: an index **clone** under `charts\scratch\db\`
   (a copy of a project's `_D-RAG\<project>.sqlite`). The script refuses any
   other database so that a re-index cannot change a chart mid-run. To use a live
@@ -116,11 +124,15 @@ pwsh -NoProfile -File .\charts\src\Ask-Report.ps1 -Question round-trip `
   indexes that belong with it from `charts\report-pairs.json`.
 * It checks every index it will read for freshness first. A stale one stops the
   run (exit 3) with the incremental `index` command on stderr; it never indexes.
-* The bundle goes under `%TEMP%\drag-lint-reports`. Stdout is `BUNDLE <folder>`,
-  one `INDEX <db>` line per index read, then the answer: the whole trace for
-  `round-trip`, otherwise a `CHART` header with the counts and one
-  `<name> @File.pas:line` line per row, ending with a `... not shown (-Cap N;
-  raise -Cap to see them)` line when the chart drew fewer rows than it counted.
+* The bundle goes under `%TEMP%\drag-lint-reports`. By default stdout is a
+  DocInsight `/// <remarks>` block, byte for byte what the IDE's drag-lint >
+  Reports menu puts on the clipboard, ready to paste above a declaration; it
+  carries no `BUNDLE` / `INDEX` lines. With `-Plain` stdout is
+  `BUNDLE <folder>`, one `INDEX <db>` line per index read, then the answer:
+  the whole trace for `round-trip`, otherwise a `CHART` header with the
+  counts and one `<name> @File.pas:line` line per row, ending with a
+  `... not shown (-Cap N; raise -Cap to see them)` line when the chart drew
+  fewer rows than it counted.
 * Exit codes: 0 answered, 1 the question refused (reason on stderr), 2 setup
   (what to pass or edit), 3 stale.
 

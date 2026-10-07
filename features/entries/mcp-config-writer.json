@@ -1,0 +1,27 @@
+{
+  "id": "mcp-config-writer",
+  "title": "Register the MCP server (Claude Code, VS Code)",
+  "group": "editor-integration",
+  "owner": "CHARTS",
+  "status": "shipped",
+  "since": "1.26.1-alpha",
+  "summary": "Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable",
+  "intro": "Run Set-DragLintMcpConfig.ps1 -All (try -DryRun first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass -DbPath to pin one index per entry (-Name); -Remove takes only its own entry out again. Needs PowerShell 7 and the engine found by the charts' lookup.",
+  "wikiPage": "Register-MCP-Server",
+  "surfaces": [
+    {
+      "type": "script",
+      "path": "charts\\src\\Set-DragLintMcpConfig.ps1",
+      "args": "-All -DryRun"
+    }
+  ],
+  "audience": "both",
+  "requires": ["powershell7"],
+  "aliases": ["claude mcp add", "mcp setup", "mcp.json"],
+  "related": ["serve"],
+  "lastVerified": {
+    "date": "2026-10-06",
+    "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",
+    "build": "1.26.1-alpha"
+  }
+}

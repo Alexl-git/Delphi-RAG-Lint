@@ -252,8 +252,9 @@ Ask a question about a symbol and get a clickable chart.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [ask (engine verb)](Diagrams-and-Charts) |  | planned |
-| [Chart questions](Diagrams-and-Charts) | 25 questions; `charts\src\Ask-Report.ps1`; `charts\src\New-DiagramArtifact.ps1` |  |
+| [Chart questions](Diagrams-and-Charts) | 26 questions; `charts\src\Ask-Report.ps1`; `charts\src\New-DiagramArtifact.ps1` |  |
 | [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md` |  |
+| [Where the charts find the engine and Graphviz](Charts-and-the-IDE) | procedure: `charts\README.md` |  |
 
 ## Compiler integration
 
@@ -298,6 +299,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [ide-release](ide-release) | `ide-release` |  |
 | [Installation](Installation) | `drag-lint.exe`; procedure: `docs\wiki\Installation.md` |  |
 | [lsp](lsp) | `lsp` |  |
+| [Register the MCP server (Claude Code, VS Code)](Register-MCP-Server) | `charts\src\Set-DragLintMcpConfig.ps1 -All -DryRun` |  |
 | [serve](serve) | `serve` |  |
 | [workspace add](workspace-add) | `workspace add` |  |
 | [workspace index](workspace-index) | `workspace index` |  |

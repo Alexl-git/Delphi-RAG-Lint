@@ -15,7 +15,12 @@
       control feeds (controller ruling R17: the 13 uJobList controls bound to
       computed FOLDERS fields read "not a column of FOLDERS -- computed or
       UI-only" in both). A chain that resolves continues as the ORM case for the
-      resolved TABLE.COLUMN.
+      resolved TABLE.COLUMN. Past a DANGLING designer datasource the owner's
+      code re-point is followed (Task 2, 2026-10-05: Resolve-RePointTable, the
+      round-trip's own walk, computed once in Get-FieldBindingChains); its hops
+      are listed on the selection with their grades, several different
+      right-hand sides or no re-point site stop by name, and a stale file on
+      the way stops [stale source].
   Anything else refuses: "not an ORM object property (class is not Tmc<T>) and
   not a DFM-bound field".
 
@@ -102,15 +107,15 @@ param(
   # this emitter against the real, fresh script (see Hide-ExtractedColumns). A chart
   # drawn with it says TEST CHART on its focus box.
   [string[]]  $TestHideColumn,
-  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $Engine     = '',
+  [string] $Dot        = '',
   [string] $FontMono   = 'Consolas',
   [string] $FontSans   = 'Segoe UI'
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
-
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 $DbPath       = Get-CloneDb $DbPath
 $ServerDbPath = Get-CloneDb $ServerDbPath
 $SqlDbPath    = Get-CloneDb $SqlDbPath
@@ -340,14 +345,30 @@ if ($kind -eq 'orm') {
       } else { [void]$selRows.Add((New-NoteRow "$lbl -- $($h.Reason)")) }
     }
   }
+  # Task 2 (2026-10-05): past a DANGLING designer datasource the owner's code re-point is
+  # followed -- the SAME Resolve-RePointTable result feeds-from draws (Get-FieldBindingChains)
+  $rpr = $(if ($bindRow.RePointKey) { $ix.RePoints[$bindRow.RePointKey] } else { $null })
+  if ($rpr) {
+    foreach ($h in @($rpr.Hops)) {
+      $lbl = "[$($h.Grade)] $($h.Hop): $($h.Label)"
+      [void]$selRows.Add((New-Row $lbl $h.File ([int]$h.Line) "$($h.Label) -- $([IO.Path]::GetFileName($h.File)):$($h.Line)" (@(@($(if ($h.Routine) { "in $($h.Routine)" }), $h.Reason) | Where-Object { $_ }) -join '; ')))
+    }
+    if ($rpr.DataSet) {
+      $d = $rpr.DataSet
+      [void]$selRows.Add((New-Row "[certain] dataset field: $($d.Name) : $($d.Type)" $d.File ([int]$d.Line) "$($d.Name) : $($d.Type) -- $([IO.Path]::GetFileName($d.File)):$($d.Line)" 'the dataset the re-pointed datasource is given'))
+    }
+    if ($rpr.Table) {
+      [void]$selRows.Add((New-Row "[inferred] table: $($rpr.Table)" $rpr.DataSet.File $rpr.TableLine "'$($rpr.Table)' literal -- $([IO.Path]::GetFileName($rpr.DataSet.File)):$($rpr.TableLine)" "the table literal beside $($rpr.DataSet.Name) on $($rpr.TableLines) line(s)"))
+    }
+  }
   switch ($chainOutcome) {
     'column'     { $TName = $bindRow.Table; $Prop = $bindRow.Column }
     'not-column' { $TName = $bindRow.Table; $Prop = $bindRow.Column }
     'no-ds'      { $stop = "no DataSource on $($ctl.name) or its two enclosing components in the DFM -- the chain cannot start" }
-    'dangling'   { $stop = "the designer datasource $($bindRow.Ds) is dangling ($($chain.StopReason)) -- no table" }
+    'dangling'   { $stop = "the designer datasource $($bindRow.Ds) is dangling ($($chain.StopReason)) -- no table$(if ($rpr) { "; the code re-point: $($rpr.Stop)" })" }
     # stale with a table: the chain resolved, but the table's script is stale, so
     # the column's state is unknown -- step 4 says so ([stale source])
-    'stale'      { if ($bindRow.Table) { $TName = $bindRow.Table; $Prop = $bindRow.Column } else { $stop = "[stale source] $($chain.StopReason)" } }
+    'stale'      { if ($bindRow.Table) { $TName = $bindRow.Table; $Prop = $bindRow.Column } else { $stop = "[stale source] $(if ($rpr -and $rpr.Status -eq 'stale') { $rpr.Stop } else { $chain.StopReason })" } }
     default      { $stop = "the chain stops before a table ($($chain.Grade)): $($chain.StopReason)" }
   }
   if ($TName) { $ormSym = Find-OrmProperty "Tmc$TName" $Prop }
@@ -364,7 +385,6 @@ if ($TName) {
   $cs = Get-SqlColumnState $sqlSet $TName $Prop $SourceOverride
   $colState = $cs.State
 }
-Write-Host ("  selection: {0} ({1}); table {2}; column {3}" -f $sel, $kind, $(if ($TName) { $TName } else { '(none)' }), $colState)
 $hasColumn = [bool]($cs -and $cs.IsColumn)
 $COL = $(if ($Prop) { $Prop.ToUpperInvariant() } else { '' })
 
@@ -386,10 +406,12 @@ SELECT s.id AS id, s.qualified_name AS q FROM symbols s JOIN symbols p ON p.id =
 "@
     $rts = @(); $acc = @(); $pbnRows = @(); $lits = @(); $other = 0
     if ($cls.Count) {
-      $rts = Invoke-IndexQuery @"
+      # PAGED (R24), as are the ParamByName rows below: no DataService has more
+      # than 11 routines today, but an unpaged population is a silent cap
+      $rts = Get-AllIndexRows @"
 SELECT s.id AS id, s.name AS name, s.qualified_name AS q, s.impl_start_line AS a, s.impl_end_line AS b
   FROM symbols s WHERE s.parent_id = $([int]$cls[0].id) AND s.impl_start_line > 0 AND s.kind IN ($(ConvertTo-SqlInList $ROUTINE_KINDS))
-"@
+"@ 's.id'
       $ids = @($rts | ForEach-Object { [int]$_.id })
       if ($ids.Count) {
         if ($imp.Count) {
@@ -406,13 +428,12 @@ SELECT COUNT(*) AS n FROM refs r JOIN member_accesses ma ON ma.ref_id = r.id
           $other = [int]$o[0].n
         }
         if ($Prop) {
-          $pbnRows = Invoke-IndexQuery @"
+          $pbnRows = Get-AllIndexRows @"
 SELECT sl.start_line AS line, r.enclosing_symbol_id AS eid, sl.text AS txt
   FROM string_literals sl JOIN refs r ON r.file_id = sl.file_id AND r.start_line = sl.start_line AND r.name_text = 'ParamByName'
                                      AND r.kind = 'call' AND sl.start_col = r.end_col + 1
  WHERE r.enclosing_symbol_id IN ($($ids -join ',')) AND UPPER(sl.text) = UPPER('$(ConvertTo-SqlText $Prop)')
- ORDER BY sl.start_line
-"@
+"@ 'sl.start_line, sl.id, r.id'
           $lits = Get-AllIndexRows @"
 SELECT sl.id AS id, sl.start_line AS line, sl.text AS txt FROM string_literals sl
  WHERE sl.file_id = $([int]$cls[0].fid) AND sl.kind IN ('literal','format','const')
@@ -470,6 +491,9 @@ if ($colState -in 'no', 'stale') {
   $colState = $cs.State
   $hasColumn = $cs.IsColumn
 }
+# printed HERE, not at step 4 (Task 4 fix round 1): the server step can turn `no`
+# into `server-sql` (STATIONS.GRIDS), and the line names the FINAL state
+Write-Host ("  selection: {0} ({1}); table {2}; column {3}" -f $sel, $kind, $(if ($TName) { $TName } else { '(none)' }), (Get-ColumnStateName $colState))
 if ($cs -and $cs.IsColumn) {
   $cLabel = $(if ($colState -eq 'quoted') { "$TName.`"$COL`"" } else { "$TName.$COL" })
   $cTip = $(switch ($colState) {
@@ -479,9 +503,13 @@ if ($cs -and $cs.IsColumn) {
   $colRow = New-Row $cLabel $cs.File $cs.Line "$cTip -- $([IO.Path]::GetFileName($cs.File)):$($cs.Line)" $cs.Label
 }
 
-Write-Host ("  server: {0}; {1} write / {2} read / {3} other routine row(s); {4} access(es) to {5} outside it" -f `
-            $(if ($srvClass) { $srvClass } else { '(no DataService class)' }), $srvRows.write.Count, $srvRows.read.Count, $srvRows.other.Count, $srvElsewhere,
-            $(if ($srvImp) { $srvImp } else { "Imc$TName.$Prop" }))
+# R24 item 9: with no table, no name is built around the empty part
+if (-not $TName) { Write-Host '  server: the table could not be determined, so no DataService was looked up' }
+else {
+  Write-Host ("  server: {0}; {1} write / {2} read / {3} other routine row(s); {4} access(es) to {5} outside it" -f `
+              $(if ($srvClass) { $srvClass } else { '(no DataService class)' }), $srvRows.write.Count, $srvRows.read.Count, $srvRows.other.Count, $srvElsewhere,
+              $(if ($srvImp) { $srvImp } else { "Imc$TName.$Prop" }))
+}
 
 # ---- 6. the database side: triggers and procedures -------------------------------------------
 $trigRows = New-Object System.Collections.ArrayList; $procRows = New-Object System.Collections.ArrayList
@@ -508,7 +536,7 @@ if ($TName -and ($hasColumn -or $colState -eq 'stale')) {
     }
   }
 }
-Write-Host ("  database: {0} trigger(s) FOR {1} touching {2} ({3} stale); {4} procedure(s)" -f $trigRows.Count, $TName, $COL, $trigStale, $procRows.Count)
+if ($TName) { Write-Host ("  database: {0} trigger(s) FOR {1} touching {2} ({3} stale); {4} procedure(s)" -f $trigRows.Count, $TName, $COL, $trigStale, $procRows.Count) }
 
 # ---- 7. the client side: field-bound controls, the REVERSE of feeds-from -------------------
 $bindSame = @(); $bindOther = @()
@@ -518,8 +546,8 @@ if ($COL) {
   $bindOther = @($bindAll | Where-Object { -not ($_.Table -and [string]::Equals([string]$_.Table, [string]$TName, [StringComparison]::OrdinalIgnoreCase)) })
 }
 $bindRowsOut = @($bindSame | Sort-Object Dfm, Line | ForEach-Object {
-  New-Row "$(Get-UnitName $_.Dfm).$($_.Control)" $_.Dfm $_.Line "$($_.Control).$($_.Prop) = '$($_.Column)' via $($_.Ds) -> $TName -- $([IO.Path]::GetFileName($_.Dfm)):$($_.Line)" "$($_.Ds)$(if ($_.Outcome -eq 'not-column') { '; not extracted as a column' } elseif ($_.Outcome -eq 'stale') { '; [stale source]' })" })
-Write-Host ("  client: {0} field-bound control(s) resolve to {1} with {2}; {3} other binding(s) of {2} counted" -f $bindSame.Count, $TName, $COL, $bindOther.Count)
+  New-Row "$(Get-UnitName $_.Dfm).$($_.Control)" $_.Dfm $_.Line "$($_.Control).$($_.Prop) = '$($_.Column)' via $($_.Ds) -> $TName -- $([IO.Path]::GetFileName($_.Dfm)):$($_.Line)" "$($_.Ds)$(if ($_.RePoint -eq 'table') { '; dangling in the DFM, re-point followed' })$(if ($_.Outcome -eq 'not-column') { '; not extracted as a column' } elseif ($_.Outcome -eq 'stale') { '; [stale source]' })" })
+if ($TName) { Write-Host ("  client: {0} field-bound control(s) resolve to {1} with {2}; {3} other binding(s) of {2} counted" -f $bindSame.Count, $TName, $COL, $bindOther.Count) }
 
 # ---- 8. dot ------------------------------------------------------------------------------------
 $sb = New-Object System.Text.StringBuilder
@@ -577,8 +605,10 @@ if ($TName) {
   if ($colRow) { [void]$cRows.Add($colRow) }
   # R11: a stale scan is NOT an absence -- never "computed or UI-only" (final wave, item 5)
   elseif ($colState -eq 'stale') { [void]$cRows.Add((New-NoteRow "${Prop}: $($cs.Label)")) }
-  else { [void]$cRows.Add((New-NoteRow "$Prop is not a column of $TName -- computed or UI-only: $($cs.Label); the database side is empty")) }
-  $cTitle = $(if ($hasColumn) { "$TName.$COL" } elseif ($colState -eq 'stale') { "$TName.$COL [stale source]" } else { "$TName (no column $Prop)" })
+  # R24 item 8: "computed or UI-only" only when a DataService's SQL was searched
+  else { [void]$cRows.Add((New-NoteRow (Format-NotAColumnNote $Prop $TName $cs.Label $srvClass))) }
+  $cTitle = $(if ($hasColumn) { "$TName.$COL" } elseif ($colState -eq 'stale') { "$TName.$COL [stale source]" }
+              elseif ($srvClass) { "$TName (no column $Prop)" } else { "$TName ($Prop not extracted)" })
   $nCol = Add-Box $cTitle $CONV_GRADE $cRows.ToArray() 'db' $true
 } elseif ($stop) {
   $nCol = Add-Box 'chain stops here' '' @((New-NoteRow $stop)) 'stop' $false
@@ -640,7 +670,9 @@ $fnid = "n$($script:ni)"
 $ftbl = New-Object System.Text.StringBuilder
 [void]$ftbl.Append('<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="3" CELLPADDING="5">')
 [void]$ftbl.Append("<TR><TD ALIGN=`"LEFT`" BGCOLOR=`"$($PAL.focusHdr)`"><FONT COLOR=`"#FFFFFF`" FACE=`"$FontSans`" POINT-SIZE=`"14`"><B> lands-where &#183; $(ConvertTo-XmlText $sel) </B></FONT></TD></TR>")
-Add-DisclosureRow $ftbl "table by naming convention (Tmc<T>): $(Format-N $conv.Column) of $(Format-N $conv.Props) Tmc properties in this index are a column of their class's table" $PAL.lineInk
+# R24 item 7: a QUOTED column the index does not extract is still a column -- the
+# grade line adds it, so this count does too (it read one short of it before)
+Add-DisclosureRow $ftbl "table by naming convention (Tmc<T>): $(Format-N ($conv.Column + $nConvQuoted)) of $(Format-N $conv.Props) Tmc properties in this index are a column of their class's table" $PAL.lineInk
 Add-DisclosureRow $ftbl ("($(Format-N $conv.OnTable) sit on a table-named class; $($conv.OnTable - $conv.Column) are not extracted as a column by the SQL index" +
                          "$(if ($conv.Quoted) { "; of those, $($conv.Quoted) is a QUOTED column the index does not extract" })" +
                          "$(if ($conv.Stale) { "; not scanned for a quoted identifier [stale source]: $($conv.Stale)" }))") $PAL.lineInk
@@ -649,9 +681,14 @@ if ($kind -eq 'dfm') {
   Add-DisclosureRow $ftbl ("DFM-field selection: the feeds-from chain ($([int]$oc2['column']) of $($ix.Bindings.Count) field-bound controls reach a column of one table; " +
                            "outcome here: $chainOutcome)") $PAL.lineInk
 }
-Add-DisclosureRow $ftbl ("server: $(if ($srvClass) { "$srvClass (found by name; $nDsClasses DataService classes)" } else { "no TDataService_${TName}_SERVER in the SERVER index" }); " +
-                         "member accesses resolved to Imc$TName.$Prop are [certain], SQL / ParamByName literals [inferred]" +
-                         $(if ($srvElsewhere) { "; $srvElsewhere access(es) to it outside the DataService not drawn" } else { '' })) $PAL.lineInk
+# R24 item 9: an unknown table is said, not spelled TDataService__SERVER / Imc.
+if (-not $TName) {
+  Add-DisclosureRow $ftbl 'server: the table could not be determined, so no DataService was looked up' $PAL.lineInk
+} else {
+  Add-DisclosureRow $ftbl ("server: $(if ($srvClass) { "$srvClass (found by name; $nDsClasses DataService classes)" } else { "no TDataService_${TName}_SERVER in the SERVER index" }); " +
+                           "member accesses resolved to Imc$TName.$Prop are [certain], SQL / ParamByName literals [inferred]" +
+                           $(if ($srvElsewhere) { "; $srvElsewhere access(es) to it outside the DataService not drawn" } else { '' })) $PAL.lineInk
+}
 Add-DisclosureRow $ftbl 'positional Fields[i] / Params[i] reads are not shown -- they never name the column' $PAL.lineInk
 if ($TestHideColumn) { Add-DisclosureRow $ftbl "TEST CHART: $($TestHideColumn -join ', ') taken OUT of the SQL index's extracted columns (-TestHideColumn)" $PAL.lineInk }
 Add-DisclosureRow $ftbl "script-derived schema: $($sqlSet.TableCount) tables; $SCHEMA_NOTE" $PAL.lineInk

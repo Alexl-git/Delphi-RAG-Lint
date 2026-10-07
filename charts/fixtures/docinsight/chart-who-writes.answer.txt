@@ -1,0 +1,14 @@
+BUNDLE C:\Users\x\AppData\Local\Temp\drag-lint-reports\who-writes-Blueprint4_TfrmBlueprint4_FNoRecursion
+INDEX C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite
+CHART who-writes Blueprint4.TfrmBlueprint4.FNoRecursion {U+2014} 26 write sites / 26 routines
+  TARGET Blueprint4.TfrmBlueprint4.FNoRecursion @Blueprint4.pas:681
+  TfrmBlueprint4.FormShow @Blueprint4.pas:2290
+  TfrmBlueprint4.Grid{U+2192}Post @Blueprint4.pas:3001 -- a note with <angle> & ampersand, drag-lint:AUTO marker
+    deeper row @X.pas:1, @Y.inc; trailing{U+00A0}nbsp{U+2026}
+WARNING: something reached stdout
+ask-report: a refusal line on the shared pipe
+  ... +6 more routines (+6 more sites) not shown (-Cap 20; raise -Cap to see them)
+
+  a{U+0009}tab, an emoji {U+1F600} and an unknown {U+00E9} char, Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa end
+CHART no separator here
+  REGENERATE & 'x.ps1' -Question who-writes

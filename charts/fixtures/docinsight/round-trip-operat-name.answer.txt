@@ -1,0 +1,152 @@
+BUNDLE C:\Users\x\AppData\Local\Temp\drag-lint-reports\round-trip-frmBlueprint4_dxDBGrid1OperationVName
+INDEX C:\x\CLIENT-Micronite2027.sqlite
+INDEX C:\x\SERVER-MicroniteMW1Service.sqlite (server)
+INDEX C:\x\SQL-drag-lint-sql.sqlite (sql)
+TRACE OPERAT.NAME
+  TITLE "How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back"
+  FROM frmBlueprint4.dxDBGrid1OperationVName
+  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-10-05T16:25Z/2026-10-05T16:21Z/2026-10-05T16:11Z
+  REGENERATE & 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" -ServerDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" -SqlDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" -Depth 4
+  TIERS client -> pipe -> server -> database
+
+ANCHOR
+[01] BINDS dxDBGrid1OperationVName : TcxGridDBColumn ONTO Name @Blueprint4.dfm:4534 -- DataBinding.FieldName
+       VIA dxDBGrid1OperationV.DataController.DataSource = Blueprint4_Model.dsrOperation @Blueprint4.dfm:4497 -- dangling: module Blueprint4_Model is declared nowhere in this index
+[02] SETS dxDBGrid1OperationV.DataSource := FBlueprint_ViewModel.pdsrOperation @Blueprint4.pas:2282 -- in FormShow
+[03] READS pdsrOperation : TDataSource @Blueprint4.Interfaces.pas:171 -- in IBlueprint_ViewModel
+[04] CALLS GetpdsrOperation [by name] @Blueprint4.ViewModel.pas:1263 -- in TBlueprint_ViewModel; the read accessor of pdsrOperation, implemented once in a class whose heritage names IBlueprint_ViewModel; ask in-class-field-reads
+[05] READS FDsrOperation : TDataSource [by name] @Blueprint4.ViewModel.pas:99 -- an in-class read, unbound in this index; ask in-class-field-reads
+[06] SETS FDsrOperation.DataSet := FMTOperation @Blueprint4.ViewModel.pas:657 -- in Create
+[07] BINDS FMTOperation : TFDMemTable @Blueprint4.ViewModel.pas:78 -- the anchor dataset
+[08] READS OPERAT [inferred] @Blueprint4.ViewModel.pas:769 -- in BuildSchema; the table literal beside FMTOperation on 3 line(s)
+[09] READS OPERAT.NAME [inferred] @MS1.SQL:2809 -- NAME is a column of the newest of 2 OPERAT declarations (SQL index, MS1.SQL:2809); ask E4
+
+WRITE
+[10] FIRES FMTOperation.AfterPost -> DoAfterPostOperation [by name] @Blueprint4.ViewModel.pas:639 -- in Create; handler named on the wiring line; ask E3
+[11] CALLS TBlueprint_ViewModel.DoAfterPostOperation @Blueprint4.ViewModel.pas:3948 -- on FMTOperation.AfterPost, wired at :639 in Create
+       UNLESS FSuppressEvents @Blueprint4.ViewModel.pas:3950 -- ask E1
+[12] CALLS TBlueprint_ViewModel.SendDeltaOperation 'AfterPost' @Blueprint4.ViewModel.pas:3960 -- in TBlueprint_ViewModel.DoAfterPostOperation; from :3951
+       UNLESS FMTOperation.ChangeCount = 0 @Blueprint4.ViewModel.pas:3973 -- else Exit(True); ask E1
+       UNLESS not (Assigned(FConn) and FConn.Connected) @Blueprint4.ViewModel.pas:3974 -- ask E1
+[13] SERIALIZES FMTOperation.SaveToStream @Blueprint4.ViewModel.pas:3978 -- in TBlueprint_ViewModel.SendDeltaOperation
+[14] CROSSES process boundary @Blueprint4.ViewModel.pas:3985 -- in TBlueprint_ViewModel.SendDeltaOperation; cmdDelta via ExecuteCommand
+       FROM Micronite2027 -- the index this side was read from
+       TO MicroniteMW1Service -- the counterpart index, queried separately
+       OVER uPipeClientConnection.ExecuteCommand @uPipeClientConnection.pas:460 -- transport unit matched by naming convention
+       WITH cmdDelta 'TABLE=OPERAT|' + sfBinary stream @Blueprint4.ViewModel.pas:3985 -- payload inferred from the literals before the send
+       CONTRACT Pipes.Protocol.TCommandID.cmdDelta @Pipes.Protocol.pas:55
+       CONTRACT Pipes.Protocol.IPipeSessionBuilder.HandleDelta @Pipes.Protocol.pas:392 -- the far side, from the counterpart index
+
+SERVER
+[15] ROUTES cmdDelta TO IPipeSessionBuilder.HandleDelta @Pipes.Commands.pas:173 -- in DispatchCommand; the first cross-unit call after the constant, at :177; ask E2
+[16] CALLS TPipeSessionBuilder.HandleDelta [by name] @uPipeSessionBuilder.pas:1209 -- in DispatchCommand; from :177, the interface method resolved to its one implementation; ask E2
+[17] CALLS TGenericTableRoute.HandleDelta @uGenericTableRoute.pas:389 -- in TPipeSessionBuilder.HandleDelta; from :1213
+[18] CALLS SplitPayload @uGenericTableRoute.pas:244 -- in TGenericTableRoute.HandleDelta; from :409
+       UNLESS BarPos < 0 @uGenericTableRoute.pas:254 -- ask E1
+       UNLESS TableName = '' @uGenericTableRoute.pas:411 -- in TGenericTableRoute.HandleDelta; else 'cmdDelta: TABLE= prefix missing', responds rspError, the default set at :405; ask E1
+       UNLESS Length(StreamBytes) = 0 @uGenericTableRoute.pas:421 -- in TGenericTableRoute.HandleDelta; else 'cmdDelta: empty delta stream for ', responds rspError, the default set at :405; ask E1
+[19] CALLS TDatasetsDef.EnsureLoaded @uDatasetsDef.pas:92 -- in TGenericTableRoute.HandleDelta; from :429
+       WHEN not GDatasetsDef.Loaded @uGenericTableRoute.pas:429 -- in TGenericTableRoute.HandleDelta; ask E1
+       UNLESS FLoaded @uDatasetsDef.pas:94 -- ask E1
+[20] CALLS TDatasetsDef.LoadFromInternal @uDatasetsDef.pas:115 -- in TDatasetsDef.EnsureLoaded; from :97
+       WHEN not FLoaded @uDatasetsDef.pas:97 -- in TDatasetsDef.EnsureLoaded; ask E1
+[21] READS FROM FIB$DATASETS_INFO [inferred] @uDatasetsDef.pas:130 -- in TDatasetsDef.LoadFromInternal; a FIB$ literal in the body; ask E4
+[22] RUNS Q.Open @uDatasetsDef.pas:131 -- in TDatasetsDef.LoadFromInternal
+[23] READS FROM FIB$FIELDS_INFO [inferred] @uDatasetsDef.pas:167 -- in TDatasetsDef.LoadFromInternal; a FIB$ literal in the body; ask E4
+[24] RUNS Q.Open @uDatasetsDef.pas:169 -- in TDatasetsDef.LoadFromInternal
+[25] CALLS TDatasetsDef.GetTable @uDatasetsDef.pas:199 -- in TGenericTableRoute.HandleDelta; from :431
+       UNLESS not GDatasetsDef.GetTable(TableName, Def) @uGenericTableRoute.pas:431 -- in TGenericTableRoute.HandleDelta; else a literal at :434, responds rspError, the default set at :405; ask E1
+[26] DESERIALIZES Mem.LoadFromStream @uGenericTableRoute.pas:445 -- in TGenericTableRoute.HandleDelta
+       UNLESS Mem.LoadFromStream(MS, sfBinary) raises @uGenericTableRoute.pas:446 -- else 'cmdDelta: LoadFromStream failed for %s: %s', responds rspError, the default set at :405; ask E1
+[27] OMITS 11 step(s) in branches for other tables, every enclosing if read up to a loop or case arm @uGenericTableRoute.pas:468 -- in TGenericTableRoute.HandleDelta; not walked, the branch conditions: WHEN TableName = 'MSCLIST' @uGenericTableRoute.pas:468 / WHEN TableName = 'OPTRLIST' @uGenericTableRoute.pas:476 / WHEN (TableName = 'MSCLIST') and (Ctx.AppliedIns > 0) @uGenericTableRoute.pas:515 / WHEN (TableName = 'OPTRLIST') and (Length(RoleSyncItems) > 0) @uGenericTableRoute.pas:540; ask E1
+[28] ATTACHES Mem.OnUpdateRecord -> TGenericApplyContext.HandleUpdateRecord @uGenericTableRoute.pas:479 -- in TGenericTableRoute.HandleDelta
+[29] OPENS AThreadStorage.UpdateTransaction.StartTransaction @uGenericTableRoute.pas:492 -- in TGenericTableRoute.HandleDelta
+       WHEN not WasTxn @uGenericTableRoute.pas:492 -- ask E1
+[30] APPLIES Mem.ApplyUpdates @uGenericTableRoute.pas:494 -- in TGenericTableRoute.HandleDelta
+       UNLESS ApplyResult:= Mem.ApplyUpdates(0) ... raises @uGenericTableRoute.pas:570 -- else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:573, rspError, 'cmdDelta %s: %s'; ask E1
+[31] CALLS TGenericApplyContext.HandleUpdateRecord @uGenericTableRoute.pas:183 -- in TGenericTableRoute.HandleDelta; fired by Mem.ApplyUpdates at :494, attached as Mem.OnUpdateRecord at :479
+       UNLESS case ARequest of @uGenericTableRoute.pas:188 -- else arm at :192; ask E1
+       UNLESS SQL = '' @uGenericTableRoute.pas:196 -- ask E1
+[32] CALLS TGenericApplyContext.BindParams @uGenericTableRoute.pas:123 -- in TGenericApplyContext.HandleUpdateRecord; from :208
+[33] DESERIALIZES ACmd.Params[I].LoadFromStream @uGenericTableRoute.pas:169 -- in TGenericApplyContext.BindParams
+       WHEN Field is TBlobField @uGenericTableRoute.pas:157 -- ask E1
+       UNLESS IsOld or Field.IsNull @uGenericTableRoute.pas:160 -- ask E1
+[34] RUNS Cmd.Execute @uGenericTableRoute.pas:210 -- in TGenericApplyContext.HandleUpdateRecord
+[35] APPLIES Mem.CommitUpdates @uGenericTableRoute.pas:497 -- in TGenericTableRoute.HandleDelta
+       WHEN ApplyResult = 0 @uGenericTableRoute.pas:495 -- else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:562, rspError; ask E1
+[36] RUNS AThreadStorage.UpdateTransaction.Commit @uGenericTableRoute.pas:498 -- in TGenericTableRoute.HandleDelta
+       WHEN not WasTxn @uGenericTableRoute.pas:498 -- ask E1
+[37] CALLS TBroadcastServer.PushTableChanged @uBroadcastServer.pas:401 -- in TGenericTableRoute.HandleDelta; from :507
+       WHEN Assigned(GBroadcastServer) @uGenericTableRoute.pas:507 -- in TGenericTableRoute.HandleDelta; ask E1
+[38] SENDS rspOK @uGenericTableRoute.pas:553 -- in TGenericTableRoute.HandleDelta; overwrites the rspError default set at :405
+
+DATABASE
+[39] STOPS the statement for the posted OPERAT row is FDef.InsertSQL (loaded at uDatasetsDef.pas:148), FDef.UpdateSQL (loaded at uDatasetsDef.pas:149) or FDef.DeleteSQL (loaded at uDatasetsDef.pas:150), picked by the case over ARequest at :188, from FIB$DATASETS_INFO rows the index does not hold (fb_datasets has 0 rows in MicroniteMW1Service) @uGenericTableRoute.pas:190 -- in TGenericApplyContext.HandleUpdateRecord; the statement member is named here, in the routine that executes it; ask E4
+[40] WRITES OPERAT.NAME [inferred] @MS1.SQL:2809 -- NAME is a column of the newest of 2 OPERAT declarations (SQL index, MS1.SQL:2809); ask E4
+
+RESPONSE
+[41] CROSSES process boundary @Blueprint4.ViewModel.pas:3985 -- in TBlueprint_ViewModel.SendDeltaOperation; the response frame
+       FROM MicroniteMW1Service -- server index
+       TO Micronite2027 -- client index
+       WITH rspError or rspOK @Blueprint4.ViewModel.pas:3985
+[42] RECEIVES rspOK @Blueprint4.ViewModel.pas:3990 -- in TBlueprint_ViewModel.SendDeltaOperation
+       UNLESS (GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspOK) @Blueprint4.ViewModel.pas:3990 -- else FMTOperation.CancelUpdates @Blueprint4.ViewModel.pas:3999; ask E1
+[43] APPLIES FMTOperation.CommitUpdates @Blueprint4.ViewModel.pas:4010 -- in TBlueprint_ViewModel.SendDeltaOperation
+
+READ
+[44] LOADS FMTOperation VIA TBlueprint_ViewModel.LoadOneTable 'OPERAT' @Blueprint4.ViewModel.pas:1207 -- in TBlueprint_ViewModel.LoadAllForFolder; the fill call carrying the table literal
+[45] CALLS TBlueprint_ViewModel.LoadOneTable 'OPERAT' @Blueprint4.ViewModel.pas:1123 -- in TBlueprint_ViewModel.LoadAllForFolder; from :1207
+       UNLESS not (Assigned(FConn) and FConn.Connected) @Blueprint4.ViewModel.pas:1133 -- ask E1
+[46] CROSSES process boundary @Blueprint4.ViewModel.pas:1136 -- in TBlueprint_ViewModel.LoadOneTable; cmdTableLoad via ExecuteCommand
+       FROM Micronite2027 -- the index this side was read from
+       TO MicroniteMW1Service -- the counterpart index, queried separately
+       OVER uPipeClientConnection.ExecuteCommand @uPipeClientConnection.pas:460 -- transport unit matched by naming convention
+       WITH cmdTableLoad 'TABLE=' + ATableName + '|BLOBS=0|WHERE=' + AWhere @Blueprint4.ViewModel.pas:1136 -- payload quoted from the assignment at :1134
+       CONTRACT Pipes.Protocol.TCommandID.cmdTableLoad @Pipes.Protocol.pas:57
+       CONTRACT Pipes.Protocol.IPipeSessionBuilder.HandleTableLoad @Pipes.Protocol.pas:378 -- the far side, from the counterpart index
+[47] SERVER ROUTES cmdTableLoad TO IPipeSessionBuilder.HandleTableLoad @Pipes.Commands.pas:142 -- in DispatchCommand; the first cross-unit call after the constant, at :147; ask E2
+[48] SERVER CALLS TPipeSessionBuilder.HandleTableLoad [by name] @uPipeSessionBuilder.pas:502 -- in DispatchCommand; from :147, the interface method resolved to its one implementation; ask E2
+[49] SERVER CALLS TDatasetsDef.EnsureLoaded @uDatasetsDef.pas:92 -- in TPipeSessionBuilder.HandleTableLoad; from :523
+       WHEN not GDatasetsDef.Loaded @uPipeSessionBuilder.pas:523 -- in TPipeSessionBuilder.HandleTableLoad; ask E1
+       UNLESS FLoaded @uDatasetsDef.pas:94 -- ask E1
+[50] SERVER CALLS TDatasetsDef.LoadFromInternal @uDatasetsDef.pas:115 -- in TDatasetsDef.EnsureLoaded; from :97
+       WHEN not FLoaded @uDatasetsDef.pas:97 -- in TDatasetsDef.EnsureLoaded; ask E1
+[51] SERVER READS FROM FIB$DATASETS_INFO [inferred] @uDatasetsDef.pas:130 -- in TDatasetsDef.LoadFromInternal; a FIB$ literal in the body; ask E4
+[52] SERVER RUNS Q.Open @uDatasetsDef.pas:131 -- in TDatasetsDef.LoadFromInternal
+[53] SERVER READS FROM FIB$FIELDS_INFO [inferred] @uDatasetsDef.pas:167 -- in TDatasetsDef.LoadFromInternal; a FIB$ literal in the body; ask E4
+[54] SERVER RUNS Q.Open @uDatasetsDef.pas:169 -- in TDatasetsDef.LoadFromInternal
+[55] SERVER CALLS TDatasetsDef.GetTable @uDatasetsDef.pas:199 -- in TPipeSessionBuilder.HandleTableLoad; from :525
+       UNLESS not GDatasetsDef.GetTable(ATableName, Def) @uPipeSessionBuilder.pas:525 -- in TPipeSessionBuilder.HandleTableLoad; else a literal at :529, responds rspError, the default set at :519; ask E1
+[56] SERVER CALLS TryBuildSafeWhere @uPipeSessionBuilder.pas:434 -- in TPipeSessionBuilder.HandleTableLoad; from :549
+       UNLESS not TryBuildSafeWhere(WhereStr, Def, WhereSql, WhereVals) @uPipeSessionBuilder.pas:549 -- in TPipeSessionBuilder.HandleTableLoad; else a literal at :553, responds rspError, the default set at :519; ask E1
+[57] SERVER OPENS AThreadStorage.Transaction.StartTransaction @uPipeSessionBuilder.pas:590 -- in TPipeSessionBuilder.HandleTableLoad
+[58] SERVER RUNS Qry.Open @uPipeSessionBuilder.pas:594 -- in TPipeSessionBuilder.HandleTableLoad
+       UNLESS T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises @uPipeSessionBuilder.pas:605 -- else AThreadStorage.Transaction.Rollback @uPipeSessionBuilder.pas:608, responds rspError, the default set at :519; ask E1
+[59] DATABASE STOPS the SELECT statement for OPERAT is assembled in SQL at uPipeSessionBuilder.pas:544 (SQL:= 'SELECT ' + ColSQL + ' FROM ' + ATableName) and :556 (SQL:= SQL + ' WHERE ' + WhereSql), from values the index holds no text for, and the FIB$ rows the walk reads (FIB$DATASETS_INFO, FIB$FIELDS_INFO) are not in the index (fb_datasets has 0 rows, fb_field_info has 0 rows in MicroniteMW1Service) @uPipeSessionBuilder.pas:544 -- in TPipeSessionBuilder.HandleTableLoad; the statement is assembled here, in the routine that runs it; ask E4
+[60] DATABASE READS OPERAT.NAME [inferred] @MS1.SQL:2809 -- NAME is a column of the newest of 2 OPERAT declarations (SQL index, MS1.SQL:2809); ask E4
+[61] SERVER SERIALIZES Qry.SaveToStream @uPipeSessionBuilder.pas:597 -- in TPipeSessionBuilder.HandleTableLoad
+[62] SERVER RUNS AThreadStorage.Transaction.Commit @uPipeSessionBuilder.pas:604 -- in TPipeSessionBuilder.HandleTableLoad
+[63] SERVER SENDS rspData @uPipeSessionBuilder.pas:618 -- in TPipeSessionBuilder.HandleTableLoad; overwrites the rspError default set at :519
+[64] CROSSES process boundary @Blueprint4.ViewModel.pas:1136 -- in TBlueprint_ViewModel.LoadOneTable; the rows come back
+       FROM MicroniteMW1Service -- server index
+       TO Micronite2027 -- client index
+       WITH rspData or rspError @Blueprint4.ViewModel.pas:1136
+[65] CLIENT RECEIVES rspData @Blueprint4.ViewModel.pas:1137 -- in TBlueprint_ViewModel.LoadOneTable
+       UNLESS (GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspData) @Blueprint4.ViewModel.pas:1137 -- ask E1
+[66] CLIENT EMPTIES AMT.EmptyDataSet @Blueprint4.ViewModel.pas:1162 -- in TBlueprint_ViewModel.LoadOneTable
+       WHEN AMT.Active @Blueprint4.ViewModel.pas:1162 -- ask E1
+[67] CLIENT DESERIALIZES AMT.LoadFromStream @Blueprint4.ViewModel.pas:1167 -- in TBlueprint_ViewModel.LoadOneTable
+       WHEN Length(RspPayload) > 0 @Blueprint4.ViewModel.pas:1163 -- ask E1
+
+ALSO
+[68] FIRES FMTOperation.AfterDelete -> DoAfterDeleteOperation [by name] @Blueprint4.ViewModel.pas:640 -- in Create; another wiring on the same dataset; ask E3
+[69] CALLS TBlueprint_ViewModel.SendDeltaOperation @Blueprint4.ViewModel.pas:1853 -- in TBlueprint_ViewModel.ImportJenVICI; another caller of the traced sender
+[70] CALLS TBlueprint_ViewModel.SendDeltaOperation @Blueprint4.ViewModel.pas:2175 -- in TBlueprint_ViewModel.ImportLK; another caller of the traced sender
+[71] CALLS TBlueprint_ViewModel.SendDeltaOperation @Blueprint4.ViewModel.pas:2441 -- in TBlueprint_ViewModel.ImportNikon; another caller of the traced sender
+[72] CALLS TBlueprint_ViewModel.SendDeltaOperation @Blueprint4.ViewModel.pas:3124 -- in TBlueprint_ViewModel.ImportSheffield; another caller of the traced sender
+[73] CALLS TBlueprint_ViewModel.SendDeltaOperation @Blueprint4.ViewModel.pas:3416 -- in TBlueprint_ViewModel.ImportZEISS; another caller of the traced sender
+[74] CALLS TBlueprint_ViewModel.SendDeltaOperation @Blueprint4.ViewModel.pas:4099 -- in TBlueprint_ViewModel.AddOperation; another caller of the traced sender
+[75] CALLS TBlueprint_ViewModel.SendDeltaOperation @Blueprint4.ViewModel.pas:4273 -- in TBlueprint_ViewModel.VerifyAll; another caller of the traced sender
+[76] LOADS FMTOperation VIA TBlueprint_ViewModel.LoadOneTable 'OPERAT' @Blueprint4.ViewModel.pas:4306 -- in TBlueprint_ViewModel.VerifyAll; another fill route
+
+END TRACE  76 steps, 31 conditions, 4 crossings, 2 unresolved.

@@ -17920,8 +17920,14 @@ end;
   they cannot drift apart. Returns nil when nothing was skipped. }
 { L2 (2026-09-23): SAY WHICH OWN-ROOTS A RUN USED WHEN NOBODY DECLARED THEM.
 
-  <project>\_D-RAG\drag-lint-project.json is GITIGNORED, so a fresh clone or a
-  git worktree does not have it. TOwnRoots then defaults -- correctly, per the
+  <project>\_D-RAG\drag-lint-project.json is usually UNTRACKED, so a fresh
+  clone or a git worktree does not have it. It is not covered by a repository's
+  own .gitignore (this repo's ignores only *.sqlite*): what hides it is a
+  .gitignore of '*' INSIDE the _D-RAG folder, which DoMigrateDbs writes when it
+  moves a database there (this repo's src\cli\_D-RAG has one), and that file is
+  itself ignored, so a clone has neither. A _D-RAG folder created by a plain
+  index run has no such file, and its drag-lint-project.json shows up as
+  untracked. TOwnRoots then defaults -- correctly, per the
   house rule -- to the project file's own folder. For a project whose .dproj
   sits in a subfolder (this repo: src\cli) that default classifies nearly the
   whole codebase as third-party, and lint-all scanned a handful of files. The
@@ -17936,7 +17942,7 @@ begin
   if (not AOwn.Active) or AOwn.Declared then Exit;
   var Cfg: string:= TPath.Combine(TPath.Combine(AOwn.Anchor, DRAG_HOME_DIR), 'drag-lint-project.json');
   var Why: string:= if TFile.Exists(Cfg) then 'could not be read or declares no "ownRoots"'
-                    else 'does not exist (it is gitignored, so a fresh clone or a git worktree lacks it)';
+                    else 'does not exist (it is usually untracked, so a fresh clone or a git worktree lacks it)';
   if ASkippedCount = 0 then
     Result:= [Format('lint-all: ownRoots = %s (DEFAULT -- %s %s)', [AOwn.Anchor, Cfg, Why])]
   else

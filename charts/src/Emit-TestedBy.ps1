@@ -50,15 +50,15 @@ param(
   [string] $OutDir,
   [int]    $Depth = 6,                              # tests sit several hops up
   [int]    $Cap   = 10,
-  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $Engine     = '',
+  [string] $Dot        = '',
   [string] $FontMono   = 'Consolas',
   [string] $FontSans   = 'Segoe UI'
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
-
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 $DbPath = Get-CloneDb $DbPath
 
 $PAL = @{
@@ -103,7 +103,8 @@ $isType = $sel.Kind -in @('class', 'interface', 'record', 'type')
 
 $seeds = @([int]$sel.Id)
 if ($isType) {
-  $mem = Invoke-IndexQuery "SELECT id FROM symbols WHERE parent_id = $($sel.Id)"
+  # PAGED (R24): a type with more than 200 members was seeded with the first 200
+  $mem = Get-AllIndexRows "SELECT id FROM symbols WHERE parent_id = $($sel.Id)" 'id'
   foreach ($m in $mem) { $seeds += [int]$m.id }
   Write-Host "  type selection: seeded with $($mem.Count) member(s)"
 }

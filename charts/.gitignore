@@ -1,3 +1,7 @@
 scratch/
 artifacts/
-docs/examples/
+# generated example bundles are output (regenerate, never edit); only their
+# README-*.md is committed -- the dirs are re-included so that negation can apply
+docs/examples/**
+!docs/examples/**/
+!docs/examples/**/README-*.md

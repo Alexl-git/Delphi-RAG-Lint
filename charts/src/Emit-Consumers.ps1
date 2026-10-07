@@ -95,15 +95,15 @@ param(
   # this emitter against the real, fresh script (see Hide-ExtractedColumns). A chart
   # drawn with it says TEST CHART on its focus box.
   [string[]]  $TestHideColumn,
-  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $Engine     = '',
+  [string] $Dot        = '',
   [string] $FontMono   = 'Consolas',
   [string] $FontSans   = 'Segoe UI'
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
-
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 $DbPath    = Get-CloneDb $DbPath
 $SqlDbPath = Get-CloneDb $SqlDbPath
 
@@ -209,7 +209,7 @@ function Set-ColumnFromState {
   $script:colOlder = ($cs.State -eq 'older'); $script:colFile = $cs.File; $script:colLine = $cs.Line
   $decl = @($tbl.ColumnNames | Where-Object { [string]::Equals($_, $selCol, [StringComparison]::OrdinalIgnoreCase) })
   $script:colName = $(if ($decl.Count) { [string]$decl[0] } else { $cs.Column })
-  Write-Host "  column $tName.$($script:colName) ($($cs.State))"
+  Write-Host "  column $tName.$($script:colName) ($(Get-ColumnStateName $cs.State))"
 }
 if ($selCol) {
   $cs = Get-SqlColumnState $sqlSet $tName $selCol $SourceOverride
@@ -659,7 +659,7 @@ $anchored++
 Add-DisclosureRow $ftbl $declText $PAL.lineInk
 if ($colName) {
   # the SHARED label (Get-SqlColumnState): the same words lands-where and feeds-from print
-  Add-DisclosureRow $ftbl "column state $($cs.State): $($cs.Label)" $PAL.lineInk
+  Add-DisclosureRow $ftbl "column state $(Get-ColumnStateName $cs.State): $($cs.Label)" $PAL.lineInk
 } else {
   # "; a quoted column name is not extracted" used to close this row (engine
   # D19). Extractor 1.19 extracts quoted names, so the clause was dropped at the

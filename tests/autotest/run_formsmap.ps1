@@ -61,7 +61,8 @@ Check 'frmEdit row present'  ($null -ne (Row 'frmEdit'))
 Check 'data module excluded' (-not ($csv -match 'dmDemo'))
 # 7 forms + 1 column-header + 1 provenance-footer = 9.
 Check 'row count is 7 forms + 1 header + 1 footer' ($rows.Count -eq 9)
-Check 'provenance is footer (last row, in Notes col)' ($rows[-1] -match '^,{13}"# forms-csv algorithm v6 ')
+$algo = [regex]::Match([IO.File]::ReadAllText("$PSScriptRoot\..\..\src\forms\DRagLint.FormsMap.pas"), "FORMS_CSV_ALGORITHM\s*=\s*'(\d+)'").Groups[1].Value
+Check 'provenance is footer (last row, in Notes col)' ($algo -ne '' -and $rows[-1] -match ('^,{13}"# forms-csv algorithm v' + $algo + ' '))
 Check 'frmMain is root'               ((Row 'frmMain').'How to open' -eq 'Main form (opens at startup)')
 Check 'frmList via Lists'             ((Row 'frmList').'How to open' -eq 'Lists')
 Check 'frmEdit via Lists > Edit Item' ((Row 'frmEdit').'How to open' -eq 'Lists -> in frmList: Edit Item')

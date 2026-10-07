@@ -38,9 +38,70 @@ pwsh -NoProfile -File $ar -Question <id> -Target <t> -Project <x.dproj>   (or -I
 
 * Use it for a PATH or SET question (the ids in `question-catalogue.md`: `round-trip`, `who-writes`, `who-calls`, `lands-where`, `consumers` ...), not for one symbol's definition.
 * It resolves the project index with the engine's `resolve-dbs`, takes the SERVER and SQL indexes from `charts\report-pairs.json`, and writes the bundle under `%TEMP%\drag-lint-reports`. A stale index stops it (exit 3) with the incremental `index` command printed; it never indexes.
-* Read stdout: `BUNDLE <folder>`, one `INDEX <db>` line per index read (`(server)` / `(sql)` / `(counterpart)` after the first), then the answer -- the whole Form A trace for `round-trip`, else a `CHART` header with the counts, `TARGET <name> @File.pas:line` for the chart's own selection, one `<name> @File.pas:line` line per result row, and `... +N more ... not shown (-Cap N; raise -Cap to see them)` whenever the chart drew fewer rows than its header counts. Exit 1 = the question refused (reason on stderr), 2 = setup (what to pass or edit), 3 = stale.
+* Read stdout. By DEFAULT it is a DocInsight `/// <remarks>` block, byte for byte what the IDE's drag-lint > Reports menu puts on the clipboard (R5, owner 2026-10-05; `src\Report.DocInsight.ps1`, checked against the plugin's own formatter by `Test-AskReport` AR-DOC-*) -- ready to paste above a declaration. With `-Plain`: `BUNDLE <folder>`, one `INDEX <db>` line per index read (`(server)` / `(sql)` / `(counterpart)` after the first), then the answer -- the whole Form A trace for `round-trip` (plus `NOTE the chart could not be drawn: <why>` if dot failed), else a `CHART` header with the counts, `TARGET <name> @File.pas:line` for the chart's own selection, one `<name> @File.pas:line` line per result row, and `... +N more ... not shown (-Cap N; raise -Cap to see them)` whenever the chart drew fewer rows than its header counts. Exit 1 = the question refused (reason on stderr), 2 = setup (what to pass or edit), 3 = stale.
 * Give the target the way the verb takes it: `who-writes` wants `Blueprint4.ViewModel.TBlueprint_ViewModel.FSuppressEvents`, not `TBlueprint_ViewModel.FSuppressEvents`.
 * `-ResolveOnly` prints the indexes it would read; `-DbPath` / `-ServerDbPath` / `-SqlDbPath` override resolution. Tests: `src\Test-AskReport.ps1` (~70 s measured 2026-09-28, not in the gate). Several of its cases read the clones under `scratch\db` and need them FRESH (Ask-Report checks freshness first and answers exit 3 once a source file they index changes -- re-take the clones); `AR-STALE` needs the DL clone to stay stale.
+
+## Where the engine and Graphviz are found (R2, 2026-10-06)
+
+Every chart script (`Ask-Report.ps1`, `New-ExampleGallery.ps1`, every `Emit-*.ps1`) takes `-Engine` and,
+for the emitters, `-Dot` with an EMPTY default; `Resolve-DragLintEngine` / `Resolve-GraphvizDot` in
+`src\Emit-Common.ps1` take the first that exists:
+
+| | engine (`drag-lint.exe`) | Graphviz `dot.exe` |
+|---|---|---|
+| 1 | `-Engine <path>` | `-Dot <path>` |
+| 2 | `$env:DRAGLINT_ENGINE` | `$env:DRAGLINT_DOT` |
+| 3 | `%APPDATA%\drag-lint\settings.json` key `engine` | the same file, key `dot` |
+| 4 | `<scripts>\drag-lint.exe` (the FLAT install, owner D1) | `<scripts>\graphviz\bin\dot.exe` (flat) |
+| 5 | `<app>\bin\drag-lint.exe` (the earlier bin\ layout) | `<app>\graphviz\bin\dot.exe` |
+| 6 | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` (the shared engine) | `dot.exe` on PATH |
+| 7 | `<repo>\third_party\dll-win64\drag-lint.exe` (a clone's own build) | `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe` |
+
+`<scripts>` is the folder the chart scripts live in: in the flat install drag-lint.exe, its DLLs and the
+plugin BPL sit beside them; in the repo (`charts\src`) nothing does, so step 4 is skipped here.
+`<app>` / `<repo>` is the folder above `charts\`. A missing or unreadable `settings.json`, a missing
+key, or an unset variable is skipped. Any path someone SET -- `-Engine` / `-Dot`, `DRAGLINT_ENGINE` /
+`DRAGLINT_DOT`, or the `settings.json` key -- that does not exist is an error naming where it was set
+(a typo never silently picks another file); when nothing exists the error names every place looked at,
+in order. Relative paths are taken against the current PowerShell location and the full path is used.
+Ask-Report and New-ExampleGallery pass the engine they resolved to the charts they draw (through
+`DRAGLINT_ENGINE`, restored afterwards). The shared engine
+sits BEFORE the repo-relative one on purpose: a worktree's own `third_party\dll-win64` can hold an older
+build (this one held 1.16.0-alpha against a deployed 1.22.0-alpha), and taking it would give every chart
+an older parse. dot is resolved when a chart is drawn, so `round-trip` still delivers its text (with
+`NOTE the chart could not be drawn`) when no dot is found. Tests: `src\Test-PathResolver.ps1` (gate E-R2).
+
+`charts\report-pairs.json` is the owner's own pairing (absolute corpus paths). Without it no pairs are
+configured: the questions that read a SERVER or SQL index stop with exit 2 and say to copy
+`charts\report-pairs.example.json` to it (or to pass `-ServerDbPath` / `-SqlDbPath`).
+
+## Registering the MCP server with Claude Code and VS Code (R4, 2026-10-06)
+
+`src\Set-DragLintMcpConfig.ps1` adds drag-lint's MCP server (`drag-lint serve`) to the MCP clients'
+own config. The installer runs it with `-All` as an optional task.
+
+```
+pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -All -DryRun        (print the change, write nothing)
+pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -ClaudeCode -DbPath C:\Projects\MyApp\_D-RAG\MyApp.sqlite
+pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -All -Remove
+```
+
+* Targets: `-ClaudeCode` (user scope, top-level `mcpServers` in `~\.claude.json`; through the `claude mcp`
+  CLI when it is on PATH, else a file edit), `-VSCode` (`servers` in `%APPDATA%\Code\User\mcp.json`), or `-All`
+  (a client that is not installed is skipped: Claude Code counts as installed only with a `~\.claude`
+  folder, an existing `CLAUDE_CONFIG_DIR`, an existing `.claude.json` or a `claude` CLI; VS Code with `%APPDATA%\Code\User`).
+* The entry is `{ "type": "stdio", "command": "<engine>", "args": ["serve", "--db", "<-DbPath>"] }` (Claude
+  Code adds `"env": {}`). Without `-DbPath` the args are `["serve"]` and the engine picks the index from its
+  manifest when the client starts it. `serve` answers from ONE index, so register one entry per index with
+  `-Name`. The engine comes from `Resolve-DragLintEngine` (table above).
+* Safe on a real config: `-DryRun` writes nothing; a real write backs the file up to `<file>.bak-<timestamp>`,
+  merges (other servers and keys untouched), is idempotent (a second run says "no change" and writes
+  nothing), and `-Remove` deletes only its own entry -- an entry by that name whose command is not drag-lint.exe is refused, never touched. An entry carrying any key beyond type/command/args -- a user-added `env` included -- is updated by file edit, never the CLI, so an env value never lands on the `claude` command line; in every printed Before / After / Commands / dry-run line an env VALUE reads `***` (the keys stay). Malformed JSON, or JSON with comments a rewrite would
+  drop, is refused with nothing written. A file a running client rewrote while the script ran is not
+  overwritten. JSON is written UTF-8 without BOM.
+* Tests: `src\Test-McpConfig.ps1` (seconds; temp copies via `-ConfigPath`, a fake `claude` for the CLI path;
+  it never writes the real files).
 
 ## Graphviz -- present and verified 2026-09-22
 
@@ -100,10 +161,10 @@ set and each question's caveat is `question-catalogue.md`, the gate is
 examples into `docs\examples\index.html` -- 76 over the 25 shipped question
 names (26 rows; `protocol-trace` is two), three or four each, measured on a
 2026-09-28 run into a scratch `-OutRoot` (the copy under `docs\examples` on
-this machine is still from 2026-09-23/24, with no `round-trip` folder, until it
-is rebuilt).
-`round-trip`'s three are TEXT bundles (the trace in a `<pre>`;
-a bundle made since DOC-R1 links each `@file:line` anchor into the IDE); the rest are charts.
+this machine is from 2026-09-23/24, except `round-trip`, regenerated with its charts on
+2026-10-06 by `New-ExampleGallery.ps1 -Only round-trip`).
+`round-trip`'s three carry the trace in a `<pre>` (a bundle made since DOC-R1 links each
+`@file:line` anchor into the IDE) under the chart drawn from it (R5, 2026-10-06); the rest are charts.
 
 ### The last four (PLAN-last-four-verbs.md)
 
@@ -157,8 +218,10 @@ New-DiagramArtifact.ps1 -Question round-trip -Target <Form>.<Control> | <Unit>.<
   carries the generated note `-- not walked: the <write|read> direction stopped at [NN]`, and
   the title claims only the walked direction (gate `RT-NOWIRE` on the read-only listing
   `frmAssignGroups.grdFtrsColNum`, 33 steps / 10 conditions / 2 crossings / 2 unresolved;
-  `RT-SRVSTOP` for a server that stops). The bundle is `trace.dlgraph` + `index.html` (the trace in a
-  `<pre>`) + `meta.json` + `xref.txt`; no `graph.*`. The page is a document:
+  `RT-SRVSTOP` for a server that stops). The bundle is `trace.dlgraph` + the chart drawn from it, `graph.svg/.png/.pdf/.plain/.dot`
+  (R5, 2026-10-06: `src\Trace.Chart.ps1`, no second walk) + `index.html` (the chart, then the trace in a
+  `<pre>`) + `meta.json` + `xref.txt`; if dot fails the text is still delivered and the page says the
+  chart could not be drawn. In the text,
   each `@File.pas:line` anchor is a `draglint://` link that opens the line in the IDE
   (DOC-R1, 2026-09-28; a file leaf the three indexes hold at more than one path stays
   plain text; gate `A-RT-ART-LINKS`: 126 of 126 on OPERAT.NAME). Engine asks (E1-E4,

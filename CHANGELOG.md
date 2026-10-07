@@ -37,6 +37,50 @@ No extractor or resolver change on top of 1.26.2: indexes do not re-parse.
   (moved tree + r=1.11 DB refused; the same tree on a current DB rewrites its access site).
   Still open, reported not silent: on such a tree the To unit's uses-add says `could not
   resolve a unit declaring "<T>" to add to uses`.
+## v1.26.4-alpha -- unreleased
+
+The charts R-items branch (feat/charts-r-items) plus job P8. No extractor or
+resolver change: indexes do not re-parse. (1.26.3 is reserved for E17 on
+another branch.)
+
+**Deploy the exe and the IDE plugin TOGETHER.** forms-csv now writes algorithm
+v7 and the plugin expects v7; a v6 exe beside a v7 plugin (or the reverse) makes
+*Forms for testers (CSV)...* warn `STALE EXE?` (DragLint.Plugin.Editor).
+
+### Changed
+
+- **forms-csv algorithm v6 -> v7.** The columns are unchanged, but what several
+  cells MEAN changed, so the footer moves: popup forms come from the project's
+  `_D-RAG\drag-lint-project.json` (`popupForms`) instead of a name hard-coded in
+  the engine; Modal is read from the created variable, a method of the form or
+  the form's `.dfm` (`fsMDIChild` / `Visible = True`), and a `?` always carries
+  its reason in Notes (Micronite: 14 `?` rows -> 0); Before you start covers
+  every hop of a path, text-scan edges, and the guard messages a handler or
+  opener stops with. `FORMS_CSV_ALGORITHM` and the plugin's
+  `EXPECTED_FORMS_CSV_ALGO` are both 7; the forms-csv guards read the footer
+  version from the source instead of pinning it.
+
+### Added
+
+- **Chart question `path`** -- every shortest call path from routine A to
+  routine B (`-Target` A, `-To` B), call sites and grades. In the IDE:
+  *drag-lint > Reports > Call path from this routine to another...*; the caret
+  gives routine A and the menu asks for routine B.
+- Charts R2 path resolver (engine and dot found by `-Engine`/`-Dot`, env,
+  settings.json, installed layout), R3 `cycles` verdicts, R4
+  `Set-DragLintMcpConfig` (registers `drag-lint serve` with Claude Code and VS
+  Code), R5 round-trip chart drawn from its trace and size rules, R24 no silent
+  smaller answers (paged population queries, disclosed caps).
+
+### Fixed
+
+- **The Reports menu no longer double-wraps its answer.** The plugin builds its
+  own DocInsight block from Ask-Report.ps1's output; since Ask-Report answers
+  as DocInsight by default, the menu now passes `-Plain`.
+- A comment and a lint-all note in DRagLint.CLI said `drag-lint-project.json` is
+  gitignored. It is not covered by a repository's own ignore rules; only a
+  `_D-RAG` folder that `migrate-dbs` created carries a `.gitignore` of `*`.
+  The note now says "usually untracked".
 
 ## v1.26.2-alpha -- unreleased
 

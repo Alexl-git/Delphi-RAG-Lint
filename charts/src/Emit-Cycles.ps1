@@ -56,6 +56,14 @@
   cycles are implementation-only; the interface styling is carried for a corpus
   that has one.
 
+  `interface_cycle:true` is NOT an interface cycle either: the verb sets it when
+  ANY intra-group edge is interface-section. R3 (2026-10-06) verified DL's group
+  against the source: 1 of 7 edges is interface (Regions -> Facts, :42), every
+  loop crosses an implementation use, and the project compiles. So the group
+  keeps the interface styling (that coupling is real) but the verdict counts the
+  sections and says "interface cycle" only for an all-interface loop, and each
+  arrow is coloured by its OWN section.
+
   The one-line verdict per cycle comes from `cycles --plan`, the engine's own
   playbook, so this chart and that playbook cannot drift apart.
 #>
@@ -70,28 +78,28 @@ param(
   # OFF BY DEFAULT, and the reason is measured: on the CLIENT clone
   # `cycles --format json` takes 0.8s and `cycles --plan` takes 46.5s -- 58x the
   # whole cost of the chart, to supply ONE label per cycle. The fallback says the
-  # same thing in substance ("interface cycle" / "implementation-only") from the
-  # `interface_cycle` flag the JSON already carries.
+  # same thing in substance ("interface coupling" / "implementation-only") from
+  # the `interface_cycle` flag and the edge sections the chart already reads.
   #
   # This is a deliberate deviation from PLAN-next-five-verbs.md Task 2, which
   # specified `--plan` for the playbook text unconditionally. Pass -Playbook when
   # the engine's exact wording is wanted and the 46s is acceptable.
   [switch] $Playbook,
-  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $Engine     = '',
+  [string] $Dot        = '',
   [string] $FontMono   = 'Consolas',
   [string] $FontSans   = 'Segoe UI'
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
-
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 # Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
 $DbPath = Get-CloneDb $DbPath
 
 $PAL = @{
   implBorder  = '#B45309'; implFill  = '#FEF6EC'; implHdr  = '#B45309'   # implementation-only
-  intfBorder  = '#B02A37'; intfFill  = '#FDECEE'; intfHdr  = '#B02A37'   # interface cycle: costly
+  intfBorder  = '#B02A37'; intfFill  = '#FDECEE'; intfHdr  = '#B02A37'   # interface coupling: costly
   cleanBorder = '#0F766E'; cleanFill = '#E2F1EF'; cleanHdr = '#0F766E'   # no cycles
   focusBorder = '#3B5BDB'; focusFill = '#EDF2FF'; focusHdr = '#3B5BDB'
   rowInk      = '#1F2933'; lineInk   = '#8A94A6'
@@ -180,7 +188,10 @@ SELECT LOWER(su.qualified_name) AS src, LOWER(uu.unit_name) AS dst,
   }
 }
 
-# Every measured intra-group edge leaving a unit, in line order.
+# Every measured intra-group edge leaving a unit, in line order. Sorted, not left
+# in the verb's member order: the row anchors to the FIRST of these, and R3
+# measured the difference -- DL's SharedFacts uses Regions at :446 and
+# ProjectTags at :447, and member order anchored the row at :447.
 function Get-OutEdges([string] $From, [string[]] $Members) {
   $out = New-Object System.Collections.ArrayList
   foreach ($m in $Members) {
@@ -190,7 +201,7 @@ function Get-OutEdges([string] $From, [string[]] $Members) {
       [void]$out.Add([pscustomobject]@{ To = $m; Edge = $edgeKey[$k] })
     }
   }
-  , $out.ToArray()
+  , @($out | Sort-Object { [int]$_.Edge.line })
 }
 
 # ---- 6. dot ---------------------------------------------------------------------
@@ -205,6 +216,7 @@ $sb = New-Object System.Text.StringBuilder
 
 $nodeId = 0; $clusters = 0
 $anchored = 0; $unanchored = 0; $drawnEdges = 0; $unwalkable = 0
+$edgeList = New-Object System.Collections.ArrayList   # 'src->dst section line', for the pins
 $focusNote = New-Object System.Collections.ArrayList
 
 foreach ($item in $selected) {
@@ -261,8 +273,22 @@ foreach ($item in $selected) {
   # the same weight as an interface cycle.
   $style  = $(if ($isIntf) { 'rounded,filled' } else { 'rounded,filled,dashed' })
 
-  $verdict = $(if ($verdicts.ContainsKey($item.Ordinal)) { $verdicts[$item.Ordinal] }
-               elseif ($isIntf) { 'interface cycle' } else { 'implementation-only' })
+  # The fallback verdict counts the sections instead of echoing the flag: an
+  # "interface cycle" is a loop the compiler refuses, and a group with one
+  # interface edge among implementation ones is not that (R3, DL group 1).
+  $grpEdges = @(foreach ($u in $mem) { foreach ($o in (Get-OutEdges $u $mem)) { $o } })
+  $nIntf = @($grpEdges | Where-Object { [string]$_.Edge.section -eq 'interface' }).Count
+  $intfLoop = $isIntf -and (Test-InterfaceLoop $edgeKey $mem)
+  $counted = $(if (-not $isIntf) { 'implementation-only' }
+               elseif ($intfLoop) { "interface cycle: an all-interface loop, which the compiler refuses ($nIntf of $($grpEdges.Count) uses interface-section)" }
+               else { "interface coupling: $nIntf of $($grpEdges.Count) uses interface-section; every loop crosses an implementation use" })
+  # -Playbook: the engine's line is kept, but when this chart's own check finds
+  # no all-interface loop the counted clause goes FIRST -- the engine's Status
+  # says the units "use each other in their INTERFACE uses clauses" (engine job
+  # E14), and the chart must never print a claim its own check contradicts.
+  $verdict = $(if (-not $verdicts.ContainsKey($item.Ordinal)) { $counted }
+               elseif ($isIntf -and -not $intfLoop) { "$counted -- engine: $($verdicts[$item.Ordinal])" }
+               else { $verdicts[$item.Ordinal] })
   [void]$cells.Add((New-NoteRow $verdict))
 
   $nodeId++; $clusters++
@@ -281,10 +307,13 @@ foreach ($item in $selected) {
     foreach ($o in (Get-OutEdges $u $mem)) {
       if (-not ($portOf.ContainsKey($u) -and $portOf.ContainsKey($o.To))) { continue }
       $isIntfEdge = ([string]$o.Edge.section -eq 'interface')
-      $ecol = $(if ($isIntfEdge) { $PAL.intfBorder } else { $border })
+      # colour by the EDGE's section, not the group's: in a mixed group the one
+      # interface arrow must stand out from the implementation ones
+      $ecol = $(if ($isIntfEdge) { $PAL.intfBorder } else { $PAL.implBorder })
       $epen = $(if ($isIntfEdge) { '2.2' } else { '1.6' })
       [void]$sb.AppendLine("  $($portOf[$u]) -> $($portOf[$o.To]) [color=`"$ecol`", penwidth=$epen, label=`":$($o.Edge.line)`"];")
       $drawnEdges++
+      [void]$edgeList.Add("$u->$($o.To) $([string]$o.Edge.section) $([int]$o.Edge.line)")
     }
   }
 }
@@ -339,6 +368,7 @@ $lay = Invoke-DotLayout $sb.ToString() $OutDir $base
   Cycles       = $totalCycles
   Shown        = $selected.Count
   Edges        = $drawnEdges
+  EdgeList     = $edgeList.ToArray()
   Anchored     = $anchored
   Unanchored   = $unanchored
   Unwalkable   = $unwalkable

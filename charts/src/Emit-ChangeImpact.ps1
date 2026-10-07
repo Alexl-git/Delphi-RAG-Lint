@@ -44,15 +44,15 @@ param(
   [int]    $Depth    = 3,
   [int]    $MaxNodes = 400,          # frontier cap; reported when hit
   [int]    $Cap      = 8,            # rows shown per zone cluster
-  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $Engine     = '',
+  [string] $Dot        = '',
   [string] $FontMono   = 'Consolas',
   [string] $FontSans   = 'Segoe UI'
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
-
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 $DbPath = Get-CloneDb $DbPath
 
 $PAL = @{
@@ -75,7 +75,9 @@ $isType = $sel.Kind -in @('class', 'interface', 'record', 'type')
 $seeds = @($sel.Id)
 $memberCount = 0
 if ($isType) {
-  $mem = Invoke-IndexQuery "SELECT id FROM symbols WHERE parent_id = $($sel.Id)"
+  # PAGED (R24): TdlgSetupDefaults declares 1,196 members; unpaged, the 200-row
+  # cap seeded -- and the focus box disclosed -- 200 of them
+  $mem = Get-AllIndexRows "SELECT id FROM symbols WHERE parent_id = $($sel.Id)" 'id'
   $memberCount = $mem.Count
   foreach ($m in $mem) { $seeds += [int]$m.id }
   Write-Host "  type selection: seeded with $memberCount member(s) as well as the type itself"
@@ -85,6 +87,10 @@ if ($isType) {
 $dist = @{}
 foreach ($s in $seeds) { $dist[[int]$s] = 0 }
 $frontier = @($seeds | ForEach-Object { [int]$_ })
+# the cap counts nodes the walk REACHED, not the seeds (R24 fix round 1): with
+# all 1,197 seeds of TdlgSetupDefaults counted, every type over 400 members read
+# CAPPED whatever its radius
+$seedCount = $dist.Count
 $capped = $false
 
 for ($d = 1; $d -le $Depth; $d++) {
@@ -131,7 +137,7 @@ SELECT DISTINCT r.enclosing_symbol_id AS caller
       $off += 180
     }
   }
-  if ($dist.Count -gt $MaxNodes) { $capped = $true; break }
+  if (($dist.Count - $seedCount) -gt $MaxNodes) { $capped = $true; break }
   $frontier = @($next.ToArray())
 }
 
@@ -268,6 +274,7 @@ $lay = Invoke-DotLayout $sb.ToString() $OutDir ('impact_' + ($sel.Qname -replace
   Pdf          = $lay.Pdf
   Qname        = $sel.Qname
   IsType       = $isType
+  Members      = $memberCount
   Affected     = $items.Count
   Units        = $units.Count
   Zones        = $zones.Count

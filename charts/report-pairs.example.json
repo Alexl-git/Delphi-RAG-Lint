@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "EXAMPLE -- copy this file to report-pairs.json beside it and replace every placeholder path.",
+    "Ask-Report.ps1 reads report-pairs.json: which SERVER index and which SQL-script index belong with a CLIENT",
+    "project index, for the questions that read more than one (round-trip, lands-where: server + SQL;",
+    "consumers, feeds-from: SQL; crosses-boundary: the other side, optional). Without the file no pairs are",
+    "configured: those questions stop and say so, and every single-index question still works.",
+    "Take each path from the engine, never guess it:",
+    "  client  drag-lint resolve-dbs --project <client project>.dproj",
+    "  server  drag-lint resolve-dbs --project <server project>.dproj",
+    "  sql     drag-lint resolve-dbs --in <one of the .SQL scripts>   (sqlSection = that index's manifest section)",
+    "sqlSection is used only to print the SQL index's reindex command when it is stale.",
+    "Add a project: one more object in pairs."
+  ],
+  "pairs": [
+    {
+      "name": "MyApp",
+      "client": "C:\\path\\to\\Client\\_D-RAG\\Client.sqlite",
+      "server": "C:\\path\\to\\Server\\_D-RAG\\Server.sqlite",
+      "sql": "C:\\path\\to\\sql-index.sqlite",
+      "sqlSection": "SQL"
+    }
+  ]
+}

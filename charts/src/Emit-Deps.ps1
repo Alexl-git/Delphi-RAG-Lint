@@ -30,8 +30,8 @@ param(
   [string] $OutDir,
   [switch] $IncludeExternal,
   [int]    $MaxRows   = 40,
-  [string] $Engine    = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot       = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $Engine    = '',
+  [string] $Dot       = '',
   [string] $FontMono  = 'Consolas',
   [string] $FontSans  = 'Segoe UI'
 )
@@ -43,7 +43,7 @@ $ErrorActionPreference = 'Stop'
 # local ones still win, so nothing about this emitter's behaviour changes; the
 # only thing taken from Common is Get-CloneDb.
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
-
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 # Refuse a live corpus DB (see Get-CloneDb): charts run against the frozen clones.
 $DbPath = Get-CloneDb $DbPath
 
@@ -72,14 +72,23 @@ function Get-DirLeaf([string] $path) {
 
 Write-Host "deps: $Unit"
 
+# $MaxRows is a DISPLAY cap, not a population limit (R24): each side is also
+# COUNTED with the same predicate, and the remainder is disclosed on the chart.
+# The external filter is in the SQL, BEFORE the limit -- filtered after it, uMain
+# (91 entries, 46 project units) drew 39 and claimed that was all.
+$extFilter = $(if ($IncludeExternal) { '' } else { "AND t.path IS NOT NULL AND t.path <> ''" })
+
 # what THIS unit uses -- provenance is the uses-clause line in THIS unit
-$outSql = @"
-SELECT u.unit_name AS name, u.section AS section, u.start_line AS line,
-       f.path AS src, t.path AS target
+$outFrom = @"
   FROM unit_uses u
   JOIN files f ON f.id = u.file_id
   LEFT JOIN files t ON t.id = u.target_file_id
- WHERE f.path LIKE '%\$Unit.pas'
+ WHERE f.path LIKE '%\$Unit.pas' $extFilter
+"@
+$outSql = @"
+SELECT u.unit_name AS name, u.section AS section, u.start_line AS line,
+       f.path AS src, t.path AS target
+$outFrom
  ORDER BY u.section, u.unit_name
  LIMIT $MaxRows
 "@
@@ -92,23 +101,26 @@ SELECT u.unit_name AS name, u.section AS section, u.start_line AS line,
 # 'viewmodel'. Matching on it either misses everything (when you pass the full
 # dotted name, which never appears in that column) or over-matches across
 # namespaces. The resolved file id is unambiguous.
-$inSql = @"
-SELECT f.path AS src, u.section AS section, u.start_line AS line
+$inFrom = @"
   FROM unit_uses u
   JOIN files f ON f.id = u.file_id
   JOIN files t ON t.id = u.target_file_id
  WHERE t.path LIKE '%\$Unit.pas'
+"@
+$inSql = @"
+SELECT f.path AS src, u.section AS section, u.start_line AS line
+$inFrom
  ORDER BY f.path
  LIMIT $MaxRows
 "@
 
 $uses  = Invoke-IndexQuery $outSql
 $users = Invoke-IndexQuery $inSql
-
-if (-not $IncludeExternal) {
-  $uses = @($uses | Where-Object { $_.target -and $_.target -ne '' })
-}
-Write-Host ("  uses={0}  used-by={1}" -f $uses.Count, $users.Count)
+$usesTotal  = [int]((Invoke-IndexQuery "SELECT COUNT(*) AS n $outFrom")[0].n)
+$usersTotal = [int]((Invoke-IndexQuery "SELECT COUNT(*) AS n $inFrom")[0].n)
+$usesHidden  = $usesTotal - $uses.Count
+$usersHidden = $usersTotal - $users.Count
+Write-Host ("  uses={0} of {1}  used-by={2} of {3}" -f $uses.Count, $usesTotal, $users.Count, $usersTotal)
 
 # ---- dot ---------------------------------------------------------------------
 $sb = New-Object System.Text.StringBuilder
@@ -162,7 +174,13 @@ foreach ($g in ($userRows | Group-Object Dir | Sort-Object Name)) {
 [void]$sb.AppendLine('  subgraph cluster_root {')
 [void]$sb.AppendLine("    style=`"rounded,filled`"; color=`"$($PAL.rootBorder)`"; fillcolor=`"$($PAL.rootFill)`"; penwidth=3;")
 [void]$sb.AppendLine('    label=""; margin=12;')
-[void]$sb.AppendLine("    root [label=<<TABLE BORDER=`"0`" CELLBORDER=`"0`" CELLSPACING=`"3`" CELLPADDING=`"7`"><TR><TD ALIGN=`"LEFT`" BGCOLOR=`"$($PAL.rootHdr)`"><FONT COLOR=`"#FFFFFF`" FACE=`"$FontSans`" POINT-SIZE=`"14`"><B> unit &#183; focus </B></FONT></TD></TR><TR><TD><FONT COLOR=`"$($PAL.rootInk)`" POINT-SIZE=`"18`"><B>$(ConvertTo-XmlText $Unit)</B></FONT></TD></TR></TABLE>>];")
+$rootTbl = New-Object System.Text.StringBuilder
+[void]$rootTbl.Append("<TABLE BORDER=`"0`" CELLBORDER=`"0`" CELLSPACING=`"3`" CELLPADDING=`"7`"><TR><TD ALIGN=`"LEFT`" BGCOLOR=`"$($PAL.rootHdr)`"><FONT COLOR=`"#FFFFFF`" FACE=`"$FontSans`" POINT-SIZE=`"14`"><B> unit &#183; focus </B></FONT></TD></TR><TR><TD><FONT COLOR=`"$($PAL.rootInk)`" POINT-SIZE=`"18`"><B>$(ConvertTo-XmlText $Unit)</B></FONT></TD></TR>")
+# R24: the display cap admits itself -- a capped side never reads as the whole
+if ($usersHidden -gt 0) { Add-DisclosureRow $rootTbl "+$usersHidden more units that use this not shown -- $($users.Count) of $usersTotal drawn (display cap $MaxRows)" $PAL.lineInk }
+if ($usesHidden -gt 0)  { Add-DisclosureRow $rootTbl "+$usesHidden more units this uses not shown -- $($uses.Count) of $usesTotal drawn (display cap $MaxRows)" $PAL.lineInk }
+[void]$rootTbl.Append('</TABLE>')
+[void]$sb.AppendLine("    root [label=<$($rootTbl.ToString())>];")
 [void]$sb.AppendLine('  }')
 
 $useRows = @($uses | ForEach-Object {
@@ -217,6 +235,9 @@ $rows = $userRows.Count + $useRows.Count
   # paths, so the bundler moves outputs BY PROPERTY rather than guessing names
   Png = $pngO; Pdf = $pdfO
   UsedBy = $userRows.Count; Uses = $useRows.Count
+  # R24: the populations behind the display cap, and how many were not drawn
+  UsedByTotal = $usersTotal; UsesTotal = $usesTotal
+  UsedByHidden = $usersHidden; UsesHidden = $usesHidden
   ImplementationUses = @($useRows | Where-Object { $_.Section -eq 'implementation' }).Count
   ClickTargets = $anchors; Expected = $rows
   AllClickable = ($anchors -ge $rows)
