@@ -271,7 +271,6 @@ type
     function ResolveDefaultFor(const AClass, AProp: TSymbol; const APropName: string;
       out AValue: string): Boolean;
     function ResolveTypeInScope(const AName: string; AScopeFileId: Int64): TSymbol;
-    function ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
     function ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
     function ResolveInheritedVisibility(const AClass: TSymbol; const APropName: string): string;
     function ResolveInheritedPropAccess(const AClass: TSymbol; const APropName: string): string;
@@ -302,6 +301,13 @@ type
     /// body is indexed); Id = 0 when no class of that qualified name
     /// exists.</returns>
     function ResolveClassByQName(const AQName: string): TSymbol;
+    /// <summary>A class and its resolved ancestors, most-derived first.</summary>
+    /// <param name="ARoot">A class-kind symbol of this resolver's store.</param>
+    /// <returns>ARoot, then every ancestor class the index resolves or the
+    /// scope rule bridges; memoized per class id.</returns>
+    /// <remarks>Public since 1.26.1 for TPropMemberCache.DescendsFrom.
+    /// ToPersistent stops the climb as for a property tree.</remarks>
+    function ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
     /// <summary>The members of AClass, one level deep.</summary>
     /// <param name="AClass">A class-kind symbol of this resolver's store.</param>
     /// <param name="AMembers">Receives the property members (most-derived
