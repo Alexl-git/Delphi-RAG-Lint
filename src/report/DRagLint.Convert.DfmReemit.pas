@@ -960,6 +960,76 @@ begin
     Result:= StringReplace(Copy(Result, 2, Length(Result) - 2), QUOTE + QUOTE, QUOTE, [rfReplaceAll]);
 end;
 
+// 1.26.3: a #warn template expanded in ONE left-to-right pass -- '<value>',
+// '<name>' (case-insensitive) and '{Prop}' (a valid dotted identifier; its
+// value is AVals at Prop's index in ANames, '' when not listed) are replaced
+// where they occur in the TEMPLATE, and the text substituted is never scanned
+// again, so a value that itself contains '<name>' or '{X}' is reported as it
+// is. Anything else is copied.
+function ExpandWarnText(const ATemplate, AValue, AName: string;
+  const ANames, AVals: TArray<string>): string;
+const
+  PH_VALUE = '<value>';
+  PH_NAME  = '<name>';
+var
+  SB  : TStringBuilder;
+  I   : Integer;
+  Prop: string;
+
+  // The brace placeholder starting at AAt: its name and its closing brace,
+  // or False when the text there is not one.
+  function BraceAt(AAt: Integer; out AName: string; out AClose: Integer): Boolean;
+  begin
+    AName := '';
+    AClose:= 0;
+    if ATemplate[AAt] <> '{' then Exit(False);
+    AClose:= Pos('}', ATemplate, AAt + 1);
+    if AClose = 0 then Exit(False);
+    AName:= Copy(ATemplate, AAt + 1, AClose - AAt - 1);
+    Result:= IsValidIdent(AName, True);
+  end;
+
+  function ValueOf(const AProp: string): string;
+  begin
+    Result:= '';
+    for var K: Integer:= 0 to High(ANames) do
+      if SameText(ANames[K], AProp) then Exit(AVals[K]);
+  end;
+
+begin
+  SB:= TStringBuilder.Create;
+  try
+    I:= 1;
+    while I <= Length(ATemplate) do
+    begin
+      var Close: Integer;
+      if SameText(Copy(ATemplate, I, Length(PH_VALUE)), PH_VALUE) then
+      begin
+        SB.Append(AValue);
+        Inc(I, Length(PH_VALUE));
+      end
+      else if SameText(Copy(ATemplate, I, Length(PH_NAME)), PH_NAME) then
+      begin
+        SB.Append(AName);
+        Inc(I, Length(PH_NAME));
+      end
+      else if BraceAt(I, Prop, Close) then
+      begin
+        SB.Append(ValueOf(Prop));
+        I:= Close + 1;
+      end
+      else
+      begin
+        SB.Append(ATemplate[I]);
+        Inc(I);
+      end;
+    end;
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
 // 1.26.1 (F1): the rules ONE #convert block runs -- the file-scope rules
 // before the first #convert, the block's own rules, and every #convert,
 // #mapping and #note line of the book (the header gate and owned-part check
@@ -2032,6 +2102,8 @@ var
     Q    : TConversionRule;
     WVal : string;
     PhVal: string;
+    PhNames: TArray<string>;
+    PhVals : TArray<string>;
     BW   : TReemitBookWarning;
     RC   : TReemitRefCheck;
     CNode: TDfmNode;
@@ -2043,13 +2115,11 @@ var
         BW.FromPath:= Q.FromPath;
         BW.Value   := DfmValueText(WVal);
         BW.RuleLine:= Q.LineNo;
-        BW.Text    := StringReplace(StringReplace(Q.Text, '<value>', BW.Value, [rfReplaceAll, rfIgnoreCase]),
-                        '<name>', FRoot.Name, [rfReplaceAll, rfIgnoreCase]);
-        for var Ph: string in WarnPlaceholders(Q.Text) do
-        begin
-          if not FindLeafValue(Ph, PhVal) then PhVal:= '';
-          BW.Text:= StringReplace(BW.Text, '{' + Ph + '}', DfmValueText(PhVal), [rfReplaceAll, rfIgnoreCase]);
-        end;
+        PhNames:= WarnPlaceholders(Q.Text);
+        SetLength(PhVals, Length(PhNames));
+        for var K: Integer:= 0 to High(PhNames) do
+          PhVals[K]:= if FindLeafValue(PhNames[K], PhVal) then DfmValueText(PhVal) else '';
+        BW.Text:= ExpandWarnText(Q.Text, BW.Value, FRoot.Name, PhNames, PhVals);
         Result.Report.BookWarnings:= Result.Report.BookWarnings + [BW];
       end
       else if Q.Kind = rkCheckRef then

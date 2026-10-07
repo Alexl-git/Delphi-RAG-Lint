@@ -502,6 +502,38 @@ type
     Fresh  : Boolean;
     Reasons: TArray<string>;
   end;
+  /// <summary>The .dfm values one project index holds, for '#check-ref'
+  /// (1.26.3).</summary>
+  /// <remarks>Keys holds 'CLASS|PROP|VALUE' upper-cased, CLASS the bare .dfm
+  /// type token of the component that streams PROP = VALUE. Rows is how many
+  /// dfm-prop rows it was built from; 0 means the index has no facts to check
+  /// against. Owned by TConvertTreeCache; built once per store per run.</remarks>
+  TRefFacts = class
+  private
+    FKeys: TDictionary<string, Boolean>;
+    FRows: Integer;
+  public
+    /// <summary>Creates an empty fact set.</summary>
+    constructor Create;
+    /// <summary>Frees Keys.</summary>
+    destructor Destroy; override;
+    /// <summary>Records one dfm-prop row: AClass (the component's .dfm type
+    /// token) streams AProp = AValue.</summary>
+    /// <param name="AClass">The type token; qualified or bare.</param>
+    /// <param name="AProp">The property name.</param>
+    /// <param name="AValue">The streamed value text.</param>
+    procedure Add(const AClass, AProp, AValue: string);
+    /// <summary>Whether some .dfm streams AProp = AValue on a component of
+    /// class AClass (bare names, case-insensitive).</summary>
+    /// <param name="AClass">The class; qualified or bare.</param>
+    /// <param name="AProp">The property name.</param>
+    /// <param name="AValue">The value.</param>
+    /// <returns>True when such a row was added.</returns>
+    function Has(const AClass, AProp, AValue: string): Boolean;
+    /// <summary>The dfm-prop rows added; 0 = no facts to check against.</summary>
+    property Rows: Integer read FRows;
+  end;
+
   /// <summary>The classes one convert-apply run works from: each type name
   /// resolved ONCE, and one member cache per --db store, shared by rule
   /// validation and BuildApplyPlan.</summary>
@@ -534,6 +566,7 @@ type
     FResolved: TDictionary<string, TResolved>;
     FCaches  : TArray<TPropMemberCache>; { index-aligned with FStores; nil until first used }
     FOptions : TPropTreeOptions;
+    FRefFacts: TArray<TRefFacts>; { index-aligned with FStores; nil until first asked }
     function Lookup(const ATypeName: string): TResolved;
     function GetClassesBuilt: Integer;
   public
@@ -553,6 +586,15 @@ type
     /// <param name="AStore">An index into Stores.</param>
     /// <returns>The cache; nil when AStore is out of range.</returns>
     function CacheFor(AStore: Integer): TPropMemberCache;
+    /// <summary>The '#check-ref' facts of one store, built on first use and
+    /// kept for the run (1.26.3).</summary>
+    /// <param name="AStore">One of Stores.</param>
+    /// <returns>The facts, owned by this object; nil when AStore is not one
+    /// of Stores.</returns>
+    /// <remarks>Reads every .dfm's dfm-prop rows once, and the component
+    /// classes with one FindSymbolsByFile per .dfm. Shared by every unit of
+    /// a batch run.</remarks>
+    function RefFactsFor(const AStore: ISymbolStore): TRefFacts;
     /// <summary>ATypeName as one side of a conversion.</summary>
     /// <param name="ATypeName">A bare or qualified class name.</param>
     /// <returns>Its qualified name and the cache of the store it resolved in;
@@ -1248,8 +1290,71 @@ var
   C: TPropMemberCache;
 begin
   for C in FCaches do C.Free;
+  for var F: TRefFacts in FRefFacts do F.Free;
   FResolved.Free;
   inherited Destroy;
+end;
+
+constructor TRefFacts.Create;
+begin
+  inherited Create;
+  FKeys:= TDictionary<string, Boolean>.Create;
+end;
+
+destructor TRefFacts.Destroy;
+begin
+  FKeys.Free;
+  inherited Destroy;
+end;
+
+procedure TRefFacts.Add(const AClass, AProp, AValue: string);
+begin
+  Inc(FRows);
+  FKeys.AddOrSetValue(UpperCase(BareTypeTail(AClass) + '|' + AProp + '|' + AValue), True);
+end;
+
+function TRefFacts.Has(const AClass, AProp, AValue: string): Boolean;
+begin
+  Result:= FKeys.ContainsKey(UpperCase(BareTypeTail(AClass) + '|' + AProp + '|' + AValue));
+end;
+
+function TConvertTreeCache.RefFactsFor(const AStore: ISymbolStore): TRefFacts;
+const
+  KIND_PROP = 'dfm-prop';
+  EXT_DFM   = '.dfm';
+var
+  Ix     : Integer;
+  ClassOf: TDictionary<Int64, string>;
+  Path   : string;
+  Cls    : string;
+begin
+  Result:= nil;
+  Ix:= -1;
+  for var I: Integer:= 0 to High(FStores) do
+    if FStores[I] = AStore then Ix:= I;
+  if Ix < 0 then Exit;
+  if Length(FRefFacts) <> Length(FStores) then SetLength(FRefFacts, Length(FStores));
+  if FRefFacts[Ix] <> nil then Exit(FRefFacts[Ix]);
+  Result:= TRefFacts.Create;
+  FRefFacts[Ix]:= Result;
+  ClassOf:= TDictionary<Int64, string>.Create;
+  try
+    for var Fid: Int64 in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), EXT_DFM) then Continue;
+      ClassOf.Clear;
+      for var Sym: TSymbol in AStore.FindSymbolsByFile(Path) do
+        ClassOf.AddOrSetValue(Sym.Id, Sym.Signature);
+      for var PL: TStringLiteral in AStore.GetLiteralsByKind(Fid, KIND_PROP) do
+      begin
+        if not ClassOf.TryGetValue(PL.SymbolId, Cls) then Cls:= '';
+        Result.Add(Cls, PL.OwnerName, PL.Text);
+      end;
+    end;
+  finally
+    ClassOf.Free;
+  end;
 end;
 
 function TConvertTreeCache.Lookup(const ATypeName: string): TResolved;
@@ -3294,8 +3399,9 @@ var
   IntfToTypes : TDictionary<string, Boolean>; { ToType -> a retyped field of it is declared in the INTERFACE (C13 a) }
   ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
   InstFromType: TDictionary<string, string>; { 1.26.1: converted instance -> its From type, to pick its #convert block }
-  RefFacts    : TDictionary<string, Boolean>; { 1.26.3: 'CLASS|PROP|VALUE' (upper) carried by some .dfm; nil until a #check-ref needs it }
+  RefFacts    : TRefFacts; { 1.26.3: the project's .dfm values, borrowed from ATrees; nil until a #check-ref needs it }
   RefFactRows : Integer; { 1.26.3: dfm-prop rows RefFacts was built from; 0 = no facts to check against }
+  RefFactsAsked: Boolean; { 1.26.3: BuildRefFacts has run for this unit }
   E           : TTextEdit;
   It          : TApplyItem; { scratch for the main body's own Emit calls }
 
@@ -3372,45 +3478,20 @@ var
     Result.ToType  := Inst.ToType;
   end;
 
-  // Folds one instance's re-emit report into ReemitNotes, giving each entry the
-  // kind its SOURCE array implies rather than one inferred from its prose.
-  // ABlockLine is the instance's .dfm object-block header line: TDfmNode carries
-  // no line number, so it is the most precise anchor a re-emit-derived item can
-  // have. The prose is byte-identical to what this used to add inline.
-  // 1.26.3: RefFacts from the project index (PasStore) -- every string value a
-  // .dfm streams, keyed by its component's class (the .dfm type token, bare)
-  // and property. Built once per unit, on the first #check-ref value.
+  // 1.26.3: RefFacts of the project index (PasStore) -- every value a .dfm
+  // streams, keyed 'CLASS|PROP|VALUE' (upper; the component's .dfm type token,
+  // bare), borrowed. RUN-LEVEL: built once per store by TConvertTreeCache.RefFactsFor and reused
+  // by every unit of a batch; the component classes come from ONE
+  // FindSymbolsByFile per .dfm, not a lookup per row.
   procedure BuildRefFacts;
-  const
-    KIND_PROP = 'dfm-prop';
-    KIND_TYPE = 'dfm-type';
   var
-    ClassOf: TDictionary<Int64, string>;
+    Facts: TRefFacts;
   begin
-    RefFacts:= TDictionary<string, Boolean>.Create;
-    if PasStore = nil then Exit;
-    ClassOf:= TDictionary<Int64, string>.Create;
-    try
-      for var Fid: Int64 in PasStore.GetAllFileIds do
-      begin
-        if not SameText(ExtractFileExt(PasStore.GetFilePath(Fid)), DFM_EXT) then Continue;
-        for var TL: TStringLiteral in PasStore.GetLiteralsByKind(Fid, KIND_TYPE) do
-          if TL.SymbolId > 0 then ClassOf.AddOrSetValue(TL.SymbolId, TL.Text);
-        for var PL: TStringLiteral in PasStore.GetLiteralsByKind(Fid, KIND_PROP) do
-        begin
-          Inc(RefFactRows);
-          var Cls: string;
-          if not ClassOf.TryGetValue(PL.SymbolId, Cls) then
-          begin
-            Cls:= PasStore.GetSymbolById(PL.SymbolId).Signature;
-            ClassOf.AddOrSetValue(PL.SymbolId, Cls);
-          end;
-          RefFacts.AddOrSetValue(UpperCase(BareTypeTail(Cls) + '|' + PL.OwnerName + '|' + PL.Text), True);
-        end;
-      end;
-    finally
-      ClassOf.Free;
-    end;
+    Facts:= if PasStore <> nil then ATrees.RefFactsFor(PasStore) else nil;
+    RefFactsAsked:= True;
+    if Facts = nil then Exit;
+    RefFacts   := Facts;
+    RefFactRows:= Facts.Rows;
   end;
 
   // 1.26.3: the #warn and #check-ref outcomes of one instance's re-emit.
@@ -3446,7 +3527,7 @@ var
         It.RuleLine:= RC.RuleLine;
         Emit(It);
       end;
-      if RefFacts = nil then BuildRefFacts;
+      if not RefFactsAsked then BuildRefFacts;
       if RefFactRows = 0 then
       begin
         if not GRefNotCheckedSaid then
@@ -3464,7 +3545,7 @@ var
       for var Tg: string in RC.RefTargets do
       begin
         var Dot: Integer:= Tg.LastIndexOf('.') + 1;
-        if RefFacts.ContainsKey(UpperCase(BareTypeTail(Copy(Tg, 1, Dot - 1)) + '|' + Copy(Tg, Dot + 1, MaxInt) + '|' + RC.Value)) then
+        if RefFacts.Has(Copy(Tg, 1, Dot - 1), Copy(Tg, Dot + 1, MaxInt), RC.Value) then
           Found:= True;
       end;
       if Found then Continue;
@@ -3480,6 +3561,11 @@ var
     end;
   end;
 
+  // Folds one instance's re-emit report into ReemitNotes, giving each entry the
+  // kind its SOURCE array implies rather than one inferred from its prose.
+  // ABlockLine is the instance's .dfm object-block header line: TDfmNode carries
+  // no line number, so it is the most precise anchor a re-emit-derived item can
+  // have. The prose is byte-identical to what this used to add inline.
   procedure FoldReemitReport(const AReport: TReemitReport; ABlockLine: Integer);
     procedure FoldOne(const AEntries: TArray<string>; AKind: TApplyItemKind; const AFmt: string);
     var
@@ -4404,6 +4490,7 @@ begin
   InstFromType:= TDictionary<string, string>.Create;
   RefFacts    := nil;
   RefFactRows := 0;
+  RefFactsAsked:= False;
   try
     PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
 
@@ -4611,7 +4698,6 @@ begin
     IntfToTypes.Free;
     ToTypesSeen.Free;
     ConvertedInstNames.Free;
-    RefFacts.Free;
     InstFromType.Free;
   end;
 end;

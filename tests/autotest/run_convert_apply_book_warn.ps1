@@ -152,7 +152,7 @@ object WarnDM: TWarnDM
     DatabaseName = 'MainDB'
     IndexName = 'IX_A'
     TableName = 'Parts'
-    Note = 'n1'
+    Note = 'n1 <name> {TableName}'
   end
   object tPath: TSrcTable
     DatabaseName = 'c:\micrnite\system'
@@ -252,8 +252,8 @@ Check 'W2 #warn with the property ABSENT does not fire (tPath, tDang, tOther hav
   (@($bw | Where-Object { $_.path -eq 'IndexName' }).Count -eq 1) (($bw | ForEach-Object text) -join ' | ')
 Check 'W3 an absent {Prop} expands to empty: tPath "table T2 idx []"' `
   (@($w | Where-Object { $_ -match ': tPath: table T2 idx \[\]$' }).Count -eq 1) ($w -join ' | ')
-Check 'W4 a FILE-SCOPE #warn applies in every block whose instance streams it (tGood Note), once' `
-  ((@($w | Where-Object { $_ -match ': tGood: file-scope note on tGood: n1$' }).Count -eq 1) -and (@($bw | Where-Object path -eq 'Note').Count -eq 1)) ($w -join ' | ')
+Check 'W4 a FILE-SCOPE #warn applies in every block whose instance streams it (tGood Note), once; ONE-PASS expansion: a value holding <name> / {TableName} is not re-expanded' `
+  ((@($w | Where-Object { $_ -match ': tGood: file-scope note on tGood: n1 <name> \{TableName\}$' }).Count -eq 1) -and (@($bw | Where-Object path -eq 'Note').Count -eq 1)) ($w -join ' | ')
 $it = @($bw | Where-Object { $_.instance -eq 'tGood' -and $_.path -eq 'IndexName' }) | Select-Object -First 1
 Check 'W5 items[] book-warning carries instance, path, value, text, rule_line' `
   (($null -ne $it) -and ($it.value -eq 'IX_A') -and ($it.rule_line -eq 8) -and ($it.text -match 'index IX_A') -and ($it.field -eq 'warnings')) ($it | ConvertTo-Json -Compress)
