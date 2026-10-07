@@ -628,6 +628,20 @@ function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConv
 function FindInheritedInstances(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
   const ARules: TConversionRuleSet; const AOnly: TArray<string>): TArray<TInheritedInstance>;
 
+/// <summary>The id AStore gives the file APath -- found the way the unit's
+/// symbols are found, so a source tree moved or copied after indexing still
+/// resolves (1.26.5).</summary>
+/// <param name="AStore">The store to ask.</param>
+/// <param name="APath">The unit (or .dfm) as convert-apply was handed it.</param>
+/// <returns>The file id, or a value &lt;= 0 when the store holds no such file.</returns>
+/// <remarks>Exact path first, then the expanded path, then the file of the
+/// symbols FindSymbolsByFile returns -- which resolves tolerantly (a unique
+/// basename is accepted). Before 1.26.5 the reference lookups asked by exact
+/// path only while the symbols were found tolerantly: on a moved tree the .dfm
+/// converted but every access site was skipped without a word, and the
+/// stale-resolver refusal matched no --db and never fired.</remarks>
+function UnitFileIdIn(const AStore: ISymbolStore; const APath: string): Int64;
+
 /// <summary>The fields a CONVERTED ancestor declares that AUnitPas's code uses
 /// without its .dfm re-opening them (C8 N2a, 1.26.0) -- apply/1 inherited[]
 /// entries with action 'code', whose access sites BuildApplyPlan rewrites.</summary>
@@ -1675,6 +1689,18 @@ begin
   end;
 end;
 
+function UnitFileIdIn(const AStore: ISymbolStore; const APath: string): Int64;
+var
+  Syms: TArray<TSymbol>;
+begin
+  Result:= AStore.FindFileIdByPath(APath);
+  if Result > 0 then Exit;
+  Result:= AStore.FindFileIdByPath(TPath.GetFullPath(APath));
+  if Result > 0 then Exit;
+  Syms:= AStore.FindSymbolsByFile(APath);
+  Result:= if Length(Syms) > 0 then Syms[0].FileId else -1;
+end;
+
 procedure AppendInheritedReport(const AInstances: TArray<TInheritedInstance>; const ADfmPath: string;
   var AReport: TApplyReport);
 var
@@ -1895,8 +1921,7 @@ begin
   FileId:= 0;
   for var C: ISymbolStore in ATrees.Stores do
   begin
-    FileId:= C.FindFileIdByPath(AUnitPas);
-    if FileId <= 0 then FileId:= C.FindFileIdByPath(TPath.GetFullPath(AUnitPas));
+    FileId:= UnitFileIdIn(C, AUnitPas); { 1.26.5: a moved tree too }
     if FileId > 0 then
     begin
       St:= C;
@@ -4253,8 +4278,7 @@ begin
 
   { surface #5 needs the .pas file's own refs (GetReferencesFromFile is
     keyed by file id, not path) to find construction sites. }
-  PasFileId:= PasStore.FindFileIdByPath(AUnitPas);
-  if PasFileId <= 0 then PasFileId:= PasStore.FindFileIdByPath(TPath.GetFullPath(AUnitPas));
+  PasFileId:= UnitFileIdIn(PasStore, AUnitPas); { 1.26.5: found the way its symbols were }
 
   var DfmStore: ISymbolStore:= StoreForFile(ADfmPath);
   DfmFileSyms:= DfmStore.FindSymbolsByFile(ADfmPath);

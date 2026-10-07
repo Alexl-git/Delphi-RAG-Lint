@@ -25133,14 +25133,25 @@ function ResolverRefusal(const AStores: TArray<ISymbolStore>; const ADbs: TArray
   const AUnitPas: string): string;
 const
   MIN_RESOLVER = '1.12.0-alpha';
+var
+  Holders: TArray<Integer>;
 begin
   Result:= '';
+  { 1.26.5: the DBs that hold the unit, found the way its symbols are found
+    (UnitFileIdIn) -- a DB copied with a moved tree stores the OLD paths, and
+    the exact-path match this used to make found none and skipped the check
+    in silence. When still none holds it, every non-library --db is checked:
+    the guard is never skipped. }
+  Holders:= nil;
   for var I: Integer:= 0 to High(AStores) do
+    if (I <= High(ADbs)) and (UnitFileIdIn(AStores[I], AUnitPas) > 0) then Holders:= Holders + [I];
+  if Length(Holders) = 0 then
+    for var I: Integer:= 0 to High(AStores) do
+      if (I <= High(ADbs)) and not SameText(AStores[I].GetMetaValue(SCAN_TYPE_KEY), SCAN_TYPE_LIBRARY) then Holders:= Holders + [I];
+  for var I: Integer in Holders do
   begin
-    if I > High(ADbs) then Break;
-    if (AStores[I].FindFileIdByPath(AUnitPas) <= 0) and (AStores[I].FindFileIdByPath(TPath.GetFullPath(AUnitPas)) <= 0) then Continue;
     var Ver: string:= ResolverVersionOfFingerprint(AStores[I].GetMetaValue(RESOLVER_FP_KEY));
-    if (Ver <> '') and (CompareDottedVersions(Ver, MIN_RESOLVER) >= 0) then Exit;
+    if (Ver <> '') and (CompareDottedVersions(Ver, MIN_RESOLVER) >= 0) then Continue;
     Exit(Format('%s: edges were derived by resolver %s; convert-apply needs %s or newer (bound field reads) -- re-derive first: drag-lint %s',
       [ADbs[I], if Ver <> '' then Ver else '(none)', MIN_RESOLVER, IndexRemedyFor(AStores[I], ADbs[I], {AResolveOnly=}True)]));
   end;

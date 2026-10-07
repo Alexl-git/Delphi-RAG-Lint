@@ -67,6 +67,7 @@ type
     ValueText : string;  // dl:ok public-field@2fe3 -- internal parse-tree node, same rationale as Keyword below
     ClassName_: string;  // dl:ok public-field@dede -- internal parse-tree node, same rationale as Keyword below
     Keyword   : string; { 'object' | 'inherited' | 'inline' -- the object line's first token; '' for a property }  // dl:ok public-field@0660 -- TDfmNode is an internal parse-tree node whose public fields ARE its data surface, same shape as the class's four original fields; consumers are this unit's re-emit engine and GlyphVacuum
+    ChildPos  : string; { 1.26.5: the header's child-position marker as written, e.g. '[5]' (ffChildPos: where the parent loads this child); '' when it has none }  // dl:ok public-field@04e5 -- internal parse-tree node, same rationale as Keyword above
     /// <summary><!-- drag-lint:auto sum -->TDfmNode</summary>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -475,6 +476,29 @@ begin
   if P > 0 then Result:= LowerCase(Copy(T, 1, P - 1)) else Result:= '';
 end;
 
+// 1.26.5: the `[n]` child-position marker after an object header's class
+// (`inherited tblX: TStringField [5]`) -- the ffChildPos filer flag, which
+// TReader.ReadComponent hands to Parent.SetChildOrder. Read from the header
+// LINE (tree-sitter-dfm exposes no field for it); '' when the header has none.
+// Dropping it re-orders the parent's children at load: a dataset's Fields come
+// up in a different order, and code using Fields[i] breaks silently.
+function ChildPosOf(const ANode: TTSNode; const ASource: TBytes): string;
+var
+  Head    : string;
+  Colon   : Integer;
+  Open, Cl: Integer;
+begin
+  Result:= '';
+  Head:= NodeText(ANode, ASource);
+  Cl:= Pos(#10, Head);
+  if Cl > 0 then Head:= Copy(Head, 1, Cl - 1);
+  Head := TrimRight(Head);
+  Colon:= Pos(':', Head);
+  Open := Pos('[', Head);
+  if (Colon = 0) or (Open < Colon) or not Head.EndsWith(']') then Exit;
+  Result:= Copy(Head, Open, MaxInt);
+end;
+
 // Walks the named children of a tree-sitter object/source node, appending a
 // TDfmNode (owned by AParent) per nested `object` (recursed) or `property`.
 procedure WalkNodeInto(const ATsNode: TTSNode; const ASource: TBytes;
@@ -498,6 +522,7 @@ begin
       Sub:= TDfmNode.Create;
       Sub.Kind:= dnkSubObject;
       Sub.Keyword:= ObjectKeyword(Child, ASource);
+      Sub.ChildPos:= ChildPosOf(Child, ASource);
       NameNode := Child.ChildByField('name');
       ClassNode:= Child.ChildByField('class');
       if not NameNode.IsNull then Sub.Name:= NodeText(NameNode, ASource);
@@ -564,6 +589,7 @@ begin
     ARoot:= TDfmNode.Create;
     ARoot.Kind:= dnkSubObject;
     ARoot.Keyword:= ObjectKeyword(ObjNode, Src);
+    ARoot.ChildPos:= ChildPosOf(ObjNode, Src);
     NameNode := ObjNode.ChildByField('name');
     ClassNode:= ObjNode.ChildByField('class');
     if not NameNode.IsNull then ARoot.Name:= NodeText(NameNode, Src);
@@ -647,6 +673,8 @@ begin
       Head:= Format('%s %s: %s', [Kw, ANode.Name, ANode.ClassName_])
     else
       Head:= Format('%s %s', [Kw, ANode.Name]);
+    { 1.26.5: the child-position marker as parsed -- see ChildPosOf }
+    if ANode.ChildPos <> '' then Head:= Head + ' ' + ANode.ChildPos;
     SB.Append(Ind(AIndent)).Append(Head).Append(#13#10);
     { 1.25.1: every PROPERTY first, then the nested components. The .dfm text
       reader reads a block's properties until the first nested object and
@@ -783,6 +811,7 @@ begin
   Result.ValueText := ASrc.ValueText;
   Result.ClassName_:= ASrc.ClassName_;
   Result.Keyword   := ASrc.Keyword;
+  Result.ChildPos  := ASrc.ChildPos;
   for C in ASrc.Children do
     Result.Children.Add(CloneNode(C));
 end;
@@ -2087,6 +2116,7 @@ begin
     TRoot.Name      := FRoot.Name;
     TRoot.ClassName_:= BareTypeTail(ToType);
     TRoot.Keyword   := FRoot.Keyword;
+    TRoot.ChildPos  := FRoot.ChildPos;
     InheritedRoot   := SameText(FRoot.Keyword, KW_INHERITED) or SameText(FRoot.Keyword, KW_INLINE);
 
     { Do the supplied trees describe THIS block? The caller builds them for the
