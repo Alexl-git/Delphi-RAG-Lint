@@ -42,6 +42,9 @@ No extractor or resolver change on top of 1.26.2: indexes do not re-parse.
   unit up by exact path, so it reports `could not resolve a unit declaring "<T>" to add to uses`
   (a warning, items[] kind `uses-unit-unresolved` -- not silent) and the unit needs the uses
   entry added by hand, or a reindex of the moved tree first.
+- **A header with no class part loses its `[n]` marker.** `ChildPosOf` reads the marker only after
+  the `:` class part, so a hand-written `object X [3]` / `inherited X [3]` is re-emitted without it.
+  The Delphi form writer always emits a class, so streamed .dfm files are not affected.
 - **run_lsp_proxy_lifecycle_guard.ps1 depends on run order** (pre-existing, not this change):
   it needs `LspStubServer.exe`, which run_lsp_proxy_relay_guard.ps1 builds, and fails with
   `FATAL: not found` when run first on a fresh tree -- identically on main c10479a9.
