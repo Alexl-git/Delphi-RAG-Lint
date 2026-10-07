@@ -8373,6 +8373,9 @@ begin
 end;
 
 procedure TestValidate1262Note;
+const
+  NOTE_NEGATIVES = 3;  // 'line 12: NOTE: x', 'ERROR: ... NOTE: ...', 'note: z' -- all errors
+  NOTE_DIAG_LINE = 12;
 var
   Book   : TRuleBook;
   Txt    : string   ;
@@ -8384,6 +8387,12 @@ var
   Fake   : TValidateFn;
 begin
   Check('validate.1262.fixture.present', Pos('NOTE: --from and --to not both given', ValidateFixture('validate-1262-bde-syntax.stderr.txt')) = 1, 'validate-1262-bde-syntax.stderr.txt missing or reworded');
+  Check('validate.1262.note.in.diag.not.noise', not IsValidateNoise('line 12: NOTE: x'));
+  Check('validate.1262.error.with.note.not.noise', not IsValidateNoise('ERROR: bad flag -- NOTE: see --help'));
+  Check('validate.1262.lowercase.note.not.noise', not IsValidateNoise('note: x'));
+  D:= ParseValidateOutput('line ' + IntToStr(NOTE_DIAG_LINE) + ': NOTE: x'#13#10'ERROR: bad -- NOTE: y'#13#10'note: z'#13#10);
+  Check('validate.1262.note.negatives.diags', (Length(D) = NOTE_NEGATIVES) and (CountDiags(D, False) = NOTE_NEGATIVES) and (D[0].Line = NOTE_DIAG_LINE)
+    and (D[1].Line = 0) and (D[2].Line = 0), IntToStr(Length(D)));
   Check('validate.1262.note.is.noise', IsValidateNoise('NOTE: --from and --to not both given -- the book was PARSED only; #link/#default paths were not checked (convert-apply validates every block)'));
   D:= ParseValidateOutput('NOTE: something'#13#10'FATAL: cannot open --db x.sqlite'#13#10'ERROR: bad flag'#13#10);
   Check('validate.1262.fatal.error.still.errors', (Length(D) = 2) and (CountDiags(D, False) = 2) and HasLineZero(D), IntToStr(Length(D)));
@@ -9430,11 +9439,14 @@ const
   SAMPLE_CODE       = 3;
   SAMPLE_UNVERIFIED = 4;
   SAMPLE_LEFT_LINES = 3; // every entry but the two retyped ones
+  CODE_LINE         = 7; // a code use given a real line
+  CODE_NOTE_PARTS   = 2; // a note holding 'code use(s) left' ONCE splits in two
 var
   A    : TApplyRow;
   Row  : TConvertRow;
   Lines: TArray<string>;
   Joined: string;
+  Code : TInheritedLeft;
 begin
   // Pre-N2 (1.22.0, no action): today's behaviour, both capability states.
   A:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json'));
@@ -9461,11 +9473,28 @@ begin
   Check('inh.action.sample.parsed', Length(A.InheritedLeft) = SAMPLE_ENTRIES, IntToStr(Length(A.InheritedLeft)));
   Check('inh.action.retyped.note', InheritedRetypedNote(A.InheritedLeft) = '2 inherited instance(s) retyped', InheritedRetypedNote(A.InheritedLeft));
   Check('inh.action.sample.note', ConvertedRowNote(A, True, True) = SAMPLE_NOTE, ConvertedRowNote(A, True, True));
+  // The row the Convert tab shows (TConvertTab.AddRow): engine note, then the editor's
+  // own code-use note only when CodeUseNoteDue -- never with inherited_retype.
+  Row:= Default(TConvertRow);
+  Row.Status:= csConverted;
+  Row.Apply := A;
+  Row.Note  := ConvertedRowNote(A, True, True);
+  if CodeUseNoteDue(Row, [], True) then
+    Row.Note:= Row.Note + '; 1 inherited code use(s) left: ancestor Base not converted';
+  Check('inh.action.code.once', Length(Row.Note.Split(['code use(s) left'])) = CODE_NOTE_PARTS, Row.Note);
   Check('inh.action.gated', ConvertedRowNote(A, False, True) = '5 edit(s), 0 remaining for manual work', ConvertedRowNote(A, False, True));
   if Length(A.InheritedLeft) = SAMPLE_ENTRIES then
   begin
     Check('inh.action.skipped.left', not IsRetypedInstance(A.InheritedLeft[SAMPLE_SKIPPED]));
     Check('inh.action.code.left', not IsRetypedInstance(A.InheritedLeft[SAMPLE_CODE]));
+    Check('inh.action.code.report', InheritedReportNote(A.InheritedLeft[SAMPLE_CODE], True)
+      = 'C1: TLabel -- code use -- ancestor Base not converted (code use of Base''s TLabel field)', InheritedReportNote(A.InheritedLeft[SAMPLE_CODE], True));
+    Code:= A.InheritedLeft[SAMPLE_CODE];
+    Code.Line:= CODE_LINE;
+    Check('inh.action.code.report.line', Pos('C1: TLabel line 7 -- code use -- ', InheritedReportNote(Code, True)) = 1, InheritedReportNote(Code, True));
+    Code.AncestorState:= 'converted';
+    Check('inh.action.code.converted.n1', InheritedLeftNote([Code], False) = '1 inherited code use(s) left: ancestor Base (ancestor converted; retype needs engine N2)', InheritedLeftNote([Code], False));
+    Check('inh.action.code.converted.retype', InheritedLeftNote([Code], True) = '1 inherited code use(s) left: ancestor Base converted', InheritedLeftNote([Code], True));
     Check('inh.action.unverified.report', InheritedReportNote(A.InheritedLeft[SAMPLE_UNVERIFIED], True)
       = 'V1: TLabel line 11 -- ancestor field use not verified against the index (field use could not be checked)', InheritedReportNote(A.InheritedLeft[SAMPLE_UNVERIFIED], True));
   end;
@@ -9500,6 +9529,13 @@ begin
     if not Eng.HasCapability(CAPABILITY_INHERITED_INSTANCES) then
     begin
       Skip('inherited.live', 'engine lacks ' + CAPABILITY_INHERITED_INSTANCES);
+      Exit;
+    end;
+    // The checks below pin N2 (retyped descendant); a pre-1.26 engine's N1 answer is
+    // covered by TestInheritedActions over its real capture.
+    if not Eng.HasCapability(CAPABILITY_INHERITED_RETYPE) then
+    begin
+      Skip('inherited.live', 'engine lacks ' + CAPABILITY_INHERITED_RETYPE);
       Exit;
     end;
   finally
@@ -9771,12 +9807,15 @@ begin
   Row.Status := csConverted;
   Earlier:= Row;
   Earlier.Book:= 'B1.rules';
-  Check('tab.note.due.first', CodeUseNoteDue(Row, []));
-  Check('tab.note.due.once.per.unit', not CodeUseNoteDue(Row, [Earlier]));
+  Check('tab.note.due.first', CodeUseNoteDue(Row, [], False));
+  // An engine with inherited_retype lists code uses in inherited[] itself (C8 M4).
+  Check('tab.note.due.not.with.retype', not CodeUseNoteDue(Row, [], True));
+  Check('tab.note.due.once.per.unit', not CodeUseNoteDue(Row, [Earlier], False));
   Earlier.UnitPas:= 'x\Other.pas';
-  Check('tab.note.due.other.unit', CodeUseNoteDue(Row, [Earlier]));
+  Check('tab.note.due.other.unit', CodeUseNoteDue(Row, [Earlier], False));
+  Check('tab.note.due.other.unit.not.with.retype', not CodeUseNoteDue(Row, [Earlier], True));
   Row.Status:= csRefused;
-  Check('tab.note.due.not.converted', not CodeUseNoteDue(Row, []));
+  Check('tab.note.due.not.converted', not CodeUseNoteDue(Row, [], False));
 
   Row:= Default(TConvertRow);
   Row.UnitPas:= 'x\Desc.pas';

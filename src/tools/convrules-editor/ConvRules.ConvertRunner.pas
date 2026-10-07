@@ -262,11 +262,14 @@ function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;
 
 /// <summary>PURE: True when ARow should carry the editor-side code-use "left" note:
 /// it is csConverted and no EARLIER csConverted row is for the same unit (one note per
-/// unit, not one per book).</summary>
+/// unit, not one per book), and the run's engine does NOT report inherited_retype.</summary>
 /// <param name="ARow">The row about to be shown.</param>
 /// <param name="AEarlier">The run's rows before it.</param>
+/// <param name="ARetypeSupported">The run's engine reports inherited_retype (1.26.0 on):
+/// its inherited[] then lists code-only uses itself (action 'code', authoritative,
+/// ruling C8 M4), so the editor-side note would say the same thing twice.</param>
 /// <returns>See summary; units compared by path, case-insensitively.</returns>
-function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>): Boolean;
+function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; ARetypeSupported: Boolean): Boolean;
 
 /// <summary>PURE: the run report's E10 lines for one row: one per inherited instance
 /// the engine says the converted unit left, UNFILTERED (controller ruling M4: the
@@ -374,9 +377,9 @@ begin
     end;
 end;
 
-function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>): Boolean;
+function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; ARetypeSupported: Boolean): Boolean;
 begin
-  Result:= ARow.Status = csConverted;
+  Result:= (ARow.Status = csConverted) and not ARetypeSupported;
   for var LRow: TConvertRow in AEarlier do
     if Result and (LRow.Status = csConverted) and SameText(LRow.UnitPas, ARow.UnitPas) then
       Result:= False;

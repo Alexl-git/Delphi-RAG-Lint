@@ -264,8 +264,9 @@ function EditSetRefusedNote(const ARow: TApplyRow): string;
 /// <returns>'' for none; else 'N inherited instance(s) left: &lt;words&gt;' per distinct
 /// words, first-seen order, joined '; '. An action 'retyped' entry is NOT left and is
 /// not counted (IsRetypedInstance); an action 'code' entry counts as 'N inherited code
-/// use(s) left: &lt;words&gt;'; an action 'unverified' entry's words are 'ancestor field
-/// use not verified against the index'. The words by ancestor_state: unconverted
+/// use(s) left: &lt;words&gt;' (state converted: 'ancestor &lt;U&gt; converted' with retype,
+/// else 'ancestor &lt;U&gt; (ancestor converted; retype needs engine N2)'); an action
+/// 'unverified' entry's words are 'ancestor field use not verified against the index'. The words by ancestor_state: unconverted
 /// 'ancestor &lt;U&gt; not converted'; converted 'ancestor &lt;U&gt; converted -- retype
 /// pending (engine N2)' with retype, else 'ancestor &lt;U&gt; converted -- this unit still has
 /// &lt;Type&gt; there and may not compile or load until the engine can retype inherited
@@ -282,7 +283,9 @@ function InheritedLeftNote(const AItems: TArray<TInheritedLeft>; ARetypeSupporte
 /// <summary>PURE: one run-report note for one left instance.</summary>
 /// <param name="AItem">The instance.</param>
 /// <param name="ARetypeSupported">As for InheritedLeftNote.</param>
-/// <returns>'&lt;name&gt;: &lt;type&gt; line N -- &lt;words&gt; (&lt;reason&gt;)', the words as
+/// <returns>'&lt;name&gt;: &lt;type&gt; line N -- &lt;words&gt; (&lt;reason&gt;)' -- for an action 'code'
+/// entry '&lt;name&gt;: &lt;type&gt;[ line N] -- code use -- &lt;words&gt; (&lt;reason&gt;)', the line only
+/// when above 0 -- the words as
 /// InheritedLeftNote's; ' (&lt;reason&gt;)' is left out when the reason is '' or the words
 /// already carry it (outside, and a mismatched reason that could not be read).</returns>
 function InheritedReportNote(const AItem: TInheritedLeft; ARetypeSupported: Boolean): string;
@@ -888,6 +891,10 @@ const
   ACTION_CODE       = 'code';
   ACTION_UNVERIFIED = 'unverified';
   WORDS_UNVERIFIED  = 'ancestor field use not verified against the index';
+  WORDS_CODE_CONV    = 'ancestor %s converted';
+  WORDS_CODE_CONV_N1 = 'ancestor %s (ancestor converted; retype needs engine N2)';
+  REPORT_CODE_FMT    = '%s: %s%s -- code use -- %s';
+  REPORT_CODE_LINE   = ' line %d';
   STATE_UNCONV    = 'unconverted';
   STATE_CONV      = 'converted';
   STATE_MISMATCH  = 'mismatched';
@@ -952,6 +959,9 @@ var
 begin
   if SameText(AItem.Action, ACTION_UNVERIFIED) then
     Result:= WORDS_UNVERIFIED
+  else if SameText(AItem.Action, ACTION_CODE) and SameText(AItem.AncestorState, STATE_CONV) then
+    // A .pas use: the .dfm load-failure words of WORDS_CONV_N1 do not apply.
+    Result:= if ARetypeSupported then Format(WORDS_CODE_CONV, [AItem.AncestorUnit]) else Format(WORDS_CODE_CONV_N1, [AItem.AncestorUnit])
   else if SameText(AItem.AncestorState, STATE_UNCONV) then
     Result:= Format(WORDS_UNCONV, [AItem.AncestorUnit])
   else if SameText(AItem.AncestorState, STATE_CONV) then
@@ -1010,7 +1020,10 @@ var
   LWords: string;
 begin
   LWords:= LeftWords(AItem, ARetypeSupported);
-  Result:= Format(REPORT_LEFT_FMT, [AItem.Name, AItem.TypeName, AItem.Line, LWords]);
+  if SameText(AItem.Action, ACTION_CODE) then
+    Result:= Format(REPORT_CODE_FMT, [AItem.Name, AItem.TypeName, if AItem.Line > 0 then Format(REPORT_CODE_LINE, [AItem.Line]) else '', LWords])
+  else
+    Result:= Format(REPORT_LEFT_FMT, [AItem.Name, AItem.TypeName, AItem.Line, LWords]);
   if (AItem.Reason <> '') and (Pos(AItem.Reason, LWords) = 0) then
     Result:= Result + Format(REPORT_REASON, [AItem.Reason]);
 end;
