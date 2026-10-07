@@ -920,6 +920,13 @@ reference to a converted ancestor's field -- is not rewritten and is reported:
 -- not rewritten`, `items[]` kind `access-site-unverified`, json
 `access_sites_unverified`.
 
+Code that uses an UNCONVERTED ancestor's field without a `.dfm` block -- the
+ancestor still declares it with the block's From type -- is listed as well
+(1.26.7): `inherited[]` action `skipped`, `ancestor_state` `unconverted`,
+`reason` `ancestor not converted`, `line` its first `.pas` reference. Nothing is
+rewritten; convert the ancestor first. Gate on
+`capabilities.inherited_code_unconverted`.
+
 Code that uses a converted ancestor's field WITHOUT a `.dfm` block (N2a) is
 followed too: every access in the unit on a field an ancestor declares -- any
 number of levels up, bound to that field by the resolver (`refs.symbol_id`),

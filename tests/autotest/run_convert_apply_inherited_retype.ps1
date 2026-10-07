@@ -675,6 +675,69 @@ inherited RStale: TRStale
 end
 '@
 
+# ---- UNCONVERTED ancestor field used in code only (1.26.7) ----------------------
+Write-Ascii (P 'RUnconv.pas') @'
+unit RUnconv;
+
+interface
+
+uses
+  System.Classes, Vcl.Forms, RMid;
+
+type
+  TRUnconv = class(TRMid)
+    procedure Touch;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TRUnconv.Touch;
+begin
+  ubtn.Caption := 'u';
+  rcode.Caption := 'c';
+end;
+
+end.
+'@
+Write-Ascii (P 'RUnconv.dfm') @'
+inherited RUnconv: TRUnconv
+end
+'@
+# the same use, but the .dfm re-opens ubtn: listed ONCE (the .dfm entry)
+Write-Ascii (P 'RUnconv2.pas') @'
+unit RUnconv2;
+
+interface
+
+uses
+  System.Classes, Vcl.Forms, RMid;
+
+type
+  TRUnconv2 = class(TRMid)
+    procedure Touch;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TRUnconv2.Touch;
+begin
+  ubtn.Caption := 'u';
+end;
+
+end.
+'@
+Write-Ascii (P 'RUnconv2.dfm') @'
+inherited RUnconv2: TRUnconv2
+  inherited ubtn: TSrcA
+    Caption = 'u2'
+  end
+end
+'@
+
 Write-Ascii (P 'retype.rules') @'
 #convert LibA.TSrcA -> LibB.TDstB, LibB
 #link Title <- Caption
@@ -942,6 +1005,25 @@ Check 'T1 a site the index cannot vouch for (no receiver reference on its line):
 . (Join-Path $PSScriptRoot 'lib\DfmLoadCheck.ps1')
 $loadFails = Test-DfmLoads @((P 'RChild.dfm'), (P 'RCode.dfm'), (P 'RScope.dfm'), (P 'OScope.dfm'), (P 'RNChild.dfm'), (P 'RPlace.dfm'), (P 'RShapes.dfm'))
 Check 'LOAD1 every .dfm --apply wrote LOADS (text -> binary -> text -> binary)' ($loadFails.Count -eq 0) ($loadFails -join ' | ')
+
+# ---- UNCONVERTED ancestor, code only (1.26.7) ----------------------------------------
+$r = ApplyTo @('RUnconv.pas') 'retype.rules' @('--format', 'json')
+$j = Json $r.Out
+$uu = if ($j) { @($j.inherited | Where-Object { $_.name -eq 'ubtn' }) } else { @() }
+Check 'U1 a code-only use of an UNCONVERTED ancestor field (two levels up): one entry, action skipped, state unconverted, reason "ancestor not converted", line 19, ancestor RBase' `
+  (($r.Code -eq 0) -and ($uu.Count -eq 1) -and ($uu[0].action -eq 'skipped') -and ($uu[0].ancestor_state -eq 'unconverted') -and `
+   ($uu[0].reason -eq 'ancestor not converted') -and ($uu[0].line -eq 19) -and ($uu[0].ancestor_unit -eq 'RBase') -and ($uu[0].type -eq 'TSrcA')) ($r.Out)
+Check 'U2 positive control: the converted ancestor''s rcode stays action code, and nothing of ubtn is rewritten' `
+  ((@($j.inherited | Where-Object { $_.name -eq 'rcode' -and $_.action -eq 'code' }).Count -eq 1) -and `
+   (@($j.access_sites | Where-Object { $_ -match '^ubtn\.' }).Count -eq 0) -and (@($j.access_sites | Where-Object { $_ -match '^rcode\.Caption -> rcode\.Title' }).Count -eq 1)) ($r.Out)
+$r = ApplyTo @('RUnconv2.pas') 'retype.rules' @('--format', 'json')
+$j = Json $r.Out
+Check 'U3 positive control: a .dfm re-opened ubtn is listed ONCE (the .dfm entry, line 2), not again as a code use' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and (@($j.inherited | Where-Object { $_.name -eq 'ubtn' }).Count -eq 1) -and (@($j.inherited | Where-Object { $_.name -eq 'ubtn' })[0].line -eq 2)) ($r.Out)
+$o = (& $Exe info --json 2>$null) -join "`n"
+$ij = Json $o
+Check 'U4 info --json: capabilities.inherited_code_unconverted is the JSON literal true' `
+  (($null -ne $ij) -and ($ij.capabilities.inherited_code_unconverted -is [bool]) -and ($ij.capabilities.inherited_code_unconverted -eq $true)) $o
 
 # ---- the capability ----------------------------------------------------------------
 $o = (& $Exe info --json 2>$null) -join "`n"
