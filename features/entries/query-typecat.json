@@ -1,0 +1,18 @@
+{
+  "id": "query-typecat",
+  "title": "query typecat",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Resolves a type's category -- float, string, class, interface, and so on",
+  "wikiPage": "query-typecat",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "sub": "typecat"
+    }
+  ],
+  "audience": "both"
+}

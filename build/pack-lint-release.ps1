@@ -32,6 +32,12 @@ $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $rs = 'call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"'
 $dproj = Join-Path $repo "src\cli\drag-lint.dproj"
 
+# GATE (feature registry, 2026-10-05): the manual and the wiki pages in the
+# archive are built from generated lists; refuse to pack while they are stale.
+# Runs before -SkipBuild is honoured, so a payload check is gated too.
+& pwsh -NoProfile -File (Join-Path $repo "tools\build-feature-pages.ps1") -Check
+if ($LASTEXITCODE -ne 0) { Write-Host "PACK REFUSED: generated feature pages are not current -- run tools\build-feature-pages.ps1 and commit" -ForegroundColor Red; exit 1 }
+
 if ($SkipBuild) {
   Write-Host "-SkipBuild: staging from the binaries already on disk (NOT a releasable archive)" -ForegroundColor Yellow
 } else {
@@ -54,7 +60,7 @@ Copy-Item (Join-Path $repo "src\cli\Win64\Release\drag-lint.exe") (Join-Path $re
 # guards is the one the repo has already paid for once: a build script reporting
 # green for code that was never compiled.
 $edBat = Join-Path $repo "build\_build_convrules_editor_local.bat"
-$edOut = cmd /c "`"$edBat`"" 2>&1
+$edOut = cmd /c "`"$edBat`" stage" 2>&1  # stage: keep dll-win64's editor in step with the drag-lint.exe synced above
 if (($LASTEXITCODE -ne 0) -or -not ($edOut | Select-String -SimpleMatch "BUILD_EXITCODE=0" -Quiet)) {
   Write-Host "ConvRulesEditor BUILD FAILED:"; $edOut | Select-Object -Last 15; exit 1
 }

@@ -1,0 +1,22 @@
+{
+  "id": "copy-all-diagnostics",
+  "title": "Copy All Diagnostics",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Puts every lint finding for the current unit onto the clipboard, starting from the Structure form",
+  "wikiPage": "Copy-All-Diagnostics",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Copy All Diagnostics"
+    },
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both"
+}

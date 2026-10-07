@@ -45,8 +45,9 @@ on its own and the property trees come up empty and the class-cast list is blank
 no message saying why, because from the editor's point of view nothing failed.
 
 Building from source instead: `build\_build_convrules_editor_local.bat` (it compiles the
-VCL-style `.res` with `brcc32` first, then `dcc64`, then stages the exe next to
-`drag-lint.exe` in `third_party\dll-win64`).
+VCL-style `.res` with `brcc32` first, then `dcc64`; the exe stays in
+`src\tools\convrules-editor\`). Pass `stage` to also copy it next to `drag-lint.exe` in
+`third_party\dll-win64` -- the release pack does that; an ordinary build no longer does.
 
 ## Where rule books live
 

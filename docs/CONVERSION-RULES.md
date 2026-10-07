@@ -527,7 +527,7 @@ Real reFind sample lines (from the BDE2FD sample):
 | `#convert <From> -> <To> [, <unit> ...]` | declares the type-pair this block converts (groups the links; optional target uses-add). A From-only header -- `#convert TFoo -> ` (the editor writes it while authoring) or `#convert TFoo` -- parses as From `TFoo` with an EMPTY To, never as a class named `TFoo ->`, and is a `line N:` error: `#convert TFoo has no To type` (1.20.6, R27). Likewise `#useswap X -> ` with no New unit: `#useswap X has no replacement unit`. |
 | `#link <ToPath> <- <FromPath>` | deep property assignment. **Note the `<-` arrow** -- reversed vs `#migrate`'s `->`. Read it "target gets source." **Type-identity carry (2026-09-16):** when both sides are CLASS-TYPED and of the SAME class (`#link Font <- Font`, both `TFont`), every sub-leaf the `.dfm` streams under the source (`Font.Charset`, `Font.Name`, ...) is carried to the same leaf under the target automatically -- the five hand-written `Font.*` lines become one. When the types DIFFER (`OptionsImage.Glyph <- Picture`, `TdxSmartGlyph <- TPicture`) nothing is carried implicitly and every dotted leaf must be named, because an invented target path is how a form stops loading. An explicit per-leaf `#link` / `#ignore` / `#remove` always wins over the carry; a carried leaf is reported (`sub-leaf-carried` in `convert-apply --format json`, `report.carried[]` in `convert-reemit`) so the leaves nobody typed are visible. Not implemented: the "target type is an ancestor of the source type" case -- the engine has no class graph, so that still needs explicit leaves. |
 | `#default <ToPath> = <value>` | set a target property to a default when no source maps to it |
-| `#ignore <FromPath>` | acknowledge an F property/event is intentionally NOT mapped -- suppresses its unmapped-non-default warning (other unmapped props still warn). Added in Batch 2a-i for the re-emit engine. |
+| `#ignore <FromPath>` | acknowledge an F property/event is intentionally NOT mapped -- suppresses its unmapped-non-default warning (other unmapped props still warn). Added in Batch 2a-i for the re-emit engine. Scoped to its own `#convert` block (see *Rule scope* below). |
 | `#note <text>` | a human comment carried in the rule (the scaffolder emits `candidates:` and `DROPPED` notes) |
 | `#use <unit>` | add a unit to the PAS `uses` clause (the companion to reFind's `#unuse`) |
 | `#useswap <Old> -> <New1> [, <New2> ...]` | replace unit `<Old>` with one-or-more `<New>` units. Sugar for `#unuse Old` + `#use New1` + `#use New2` ... |
@@ -546,6 +546,56 @@ Example superset block:
 `#link`/`#default` **ToPath** must exist in the `--to` tree; `#link` **FromPath**
 must exist in the `--from` tree (unless it is the `???` stub). That is exactly what
 `convert-validate` checks.
+
+Without BOTH `--from` and `--to`, `convert-validate` only PARSES the book: no
+path is checked, it still prints `OK`, and (1.26.1) a `NOTE:` line on stderr
+says so. `convert-apply` validates every block against its own types.
+
+### Rule scope (1.26.1)
+
+A `#convert` block owns the lines from its `#convert` up to the next one. When
+`convert-apply` / `convert-reemit` converts a `.dfm` object, it runs that
+object's block (the first `#convert` whose From type is the object's class):
+
+- `#link`, `#ignore`, `#default`, `#remove` and `#apply` of **that block**, plus
+  the **file-scope** ones written before the first `#convert` (BDE-to-FireDAC's
+  `#remove` list);
+- every `#convert`, `#mapping` and `#note` line of the book (a `#mapping` is
+  named and `#apply`'d from any block; `#note owned:<Class>` marks a class).
+
+The `.pas` access-site rewrite follows the same scope: a site on instance X is
+rewritten only by the `#link`s of X's block (plus file-scope ones), so each
+site gets exactly one edit and two blocks may rename one path differently.
+A file-scope `#link` -- one with no `#convert` above it -- belongs to no
+block and rewrites the sites of EVERY converted instance, just as it applies
+to every block's `.dfm` objects.
+
+So an `#ignore ReadOnly` in the TDatabase block no longer suppresses the TTable
+block's `#link UpdateOptions.ReadOnly <- ReadOnly`, and two blocks may link the
+same source path to different targets. Until 1.26.0 the whole book ran in every
+block: the first `#link` of a path anywhere won, any `#ignore` anywhere
+suppressed it, and a `#default` was written into every block's instances.
+
+### Carried without a rule (1.26.1)
+
+Two `.dfm` entries are DefineProperties pseudo-properties, not published, so no
+rule can name them; `convert-apply` carries them unless a rule of the block names
+them first (`#ignore Left` still drops it):
+
+- **`Left` / `Top`** -- a non-visual component's designer position
+  (TComponent.DesignInfo). Carried verbatim, and ONLY when the From class does
+  not publish them: on a control (TLabel, ...) they are ordinary published
+  properties, so the book's `#link Left <- Left` carries them (once) and with
+  no link they are dropped and reported unlinked like any other property.
+- **`ParamData = < item ... end>`** -- how TQuery / TStoredProc (and TFDQuery /
+  TFDStoredProc / TFDCommand) stream `Params`. Carried under the same name; each
+  item member is mapped through the block's `#link Params.Items.<X>` (a renaming
+  link renames it; one with a cast is not applied inside a collection), else kept
+  when the target's `Params` item publishes the same member with the same type,
+  else NOT carried and reported per item:
+  `ParamData item <n> (<Name>): <line> not carried -- <why>` (reemit note). A
+  target with no `Params` property gets nothing, and `ParamData` counts as
+  dropped. An `#ignore Params.Items.<X>` drops that member silently.
 
 ### Unit replacement: `#use` / `#useswap`
 
@@ -578,9 +628,7 @@ block matches, gets its unit rules alone. The `apply/1` JSON reports them as
 ### Refusals (`refused` / `reason`, 1.20.6)
 
 Some units `convert-apply` will not touch at all, because no safe rewrite
-exists: a `.dfm` holding an `inherited`/`inline` object of a From type
-(`inherited instances of <Type> are not converted yet -- unit not changed`), and
-a unit whose uses entry to change sits in a `{$IF...}` region (the message
+exists: a unit whose uses entry to change sits in a `{$IF...}` region (the message
 names the entry and the clause), and a `.dfm` that changed after indexing: the
 line range the index recorded for an instance no longer opens `object <Name>:`
 (or `inherited`/`inline`), its first `end` at the opener's indent is not the
@@ -588,12 +636,26 @@ recorded end line (a block that lost lines now ends on a later sibling's `end`),
 or the `.dfm` was cut short so the range runs past its end
 (`<Name>: index is stale for this .dfm -- reindex`; reindex and run again), and
 (R26) a unit-rule removal -- `#unuse`, or `#useswap`'s Old -- of the unit that
-declares the From type of an instance that stays unconverted (skipped, or left
-out by `--only`, which filters instances and never unit rules): removing it would
+declares the From type of an instance that stays unconverted (skipped, an
+`inherited`/`inline` object, or left out by `--only`, which filters instances
+and never unit rules): removing it would
 break the compile (E2003), so the unit is refused with
 `<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed`
 (e.g. `#unuse LibA would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed`;
 the declaring unit is the From type's indexed declaring file).
+With `--only` (1.23.0, C12 N4), a removal whose stranded instances are ALL
+own instances `--only` left out is SKIPPED instead of refused -- the user chose
+the scope: the unit stays in uses, `uses[]` gets a row
+`{action: "skipped", unit, section, line, rule, reason: "would leave N unconverted instance(s) of <Type>"}`,
+and `warnings[]` / text `Warnings:` a `line N: warning: <rule> skipped -- ...`
+line (`items[]` kind `unit-rule-skipped`). A stranded instance left for any
+other reason (a failed re-emit, an `inherited`/`inline` object) keeps the
+refusal. `info --json`: `capabilities.only_skips_unit_rules: true`.
+A `#convert` From or To type that resolves in no `--db` (1.23.0, owner
+ruling) refuses the unit too, dry run and `--apply` alike, before any rule
+error is reported: the converter cannot convert a type it cannot see, and the
+cause is a parsing / index gap in the library or project index, not the book:
+`<Type> (line N) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting`.
 Every such refusal behaves the same way: exit
 1, NOTHING written (neither `.pas` nor `.dfm`), one text line
 `REFUSED: <reason>`, and in `apply/1` JSON `"ok": false`, `"refused": true`,
@@ -672,6 +734,49 @@ Without `--apply`, `convert-apply` is dry-run only: it prints the planned edits
 for real. `--only Name1,Name2,...` restricts the run to specific `.dfm` instance
 names; `--db` may repeat for a multi-DB index.
 
+**`--only` names (1.23.0).** Names match case-insensitively. A name that
+names no `.dfm` object of a `#convert` From type (own, `inherited` or
+`inline`) is IGNORED -- never an error, the exit code is unchanged -- and
+reported: `apply/1` carries `only_matched[]` and `only_unmatched[]` (spelled
+as given, in `--only` order, always present, `[]` without `--only`), and
+text mode prints `--only: no #convert instance named X, Y (ignored)`.
+
+**Batch (1.23.0).** `--unit` may repeat. Every unit then runs in ONE process:
+the book is validated once and every class's members are resolved once
+(measured on DMTEST with `BDE-to-FireDAC.rules`: 36-42 s per unit as
+separate processes, 45.7 s for three units batched). Text prints one
+`=== unit i of N: <path> ===` section per unit -- that unit's normal output --
+then `batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E`.
+JSON is one `apply-batch/1` document: `schema`, `mode`, `rules_file`,
+`units_count`, `ok` (every unit ok), `exit_code` (the worst unit's),
+`ok_count`, `refused_count`, `failed_count`, `classes_built` (the run's
+total) and `units[]` -- one ordinary `apply/1` object per unit, in `--unit`
+order, equal to that unit's single-unit `apply/1` (its `classes_built` is the
+unit's own: the book's validation set plus what its run added). A single
+`--unit` still emits a bare `apply/1`. A unit's refusal or failure never stops
+the others; the process exits with the worst unit's code (2 > 1 > 0). Under
+`--apply`, every file a unit would touch is checked writable FIRST: a read-only
+or locked file fails that unit (exit 2, `ok: false`, `refused: false`,
+`cannot write <file>: ... -- unit not changed, nothing written`) with nothing
+written, no `.BCK` and no recovery record. A write that fails AFTER that check
+(a lock taken in between, a full disk) is ROLLED BACK (1.25.1): every file of
+the unit already written is restored byte-identical -- from its `.BCK`, or under
+`--no-backup` from the bytes read just before the write -- and the unit fails
+with `write failed for <unit>: <error> -- rolled back, unit not changed` (exit
+2; the `.BCK` files and the recovery record stay). Only when the rollback
+itself fails is the unit left partly converted: `... -- rollback FAILED for
+<files>: the unit may be PARTLY converted; restore it from the .BCK backups
+recorded in recovery.txt`. A single `--unit` reports either as `ERROR: ...`,
+exit 2.
+
+**What is atomic, exactly (1.25.1).** Per unit, across its `.pas` and `.dfm`:
+an edit set the applier would refuse (overlapping delete ranges) -- nothing is
+written, dry run and `--apply` alike, exit 1; a file not writable before the
+write -- nothing is written, exit 2; a write failing part-way -- rolled back,
+exit 2; a rollback failing -- reported with the files it could not restore, exit
+2. In batch mode each of these fails that unit only.
+`info --json` advertises it as `capabilities.batch_units: true`.
+
 **Which blocks are validated (1.20.6).** Before planning, `convert-apply`
 validates the WHOLE book: every `#convert` block against its OWN From/To types,
 and each `#mapping` against the block(s) that `#apply` it -- each path resolved
@@ -681,16 +786,160 @@ property such as `Connection`) is a leaf here, so a path THROUGH it
 (`Connection.Params.X`) is not found -- the plan could not apply it either.
 Every block is also freshness-checked: a stale type behind ANY block warns on a
 dry run and refuses `--apply`, a unit-rules-only run included. A block whose
-From or To type resolves in no `--db` is an error on its `#convert` line.
+From or To type resolves in no `--db` REFUSES the unit (1.23.0, owner ruling;
+see *Refusals*): that is an index gap, not a rule-book error.
 Validation and the plan share one member cache per `--db` (json
 `classes_built` = the classes whose members were resolved). A path error ends
 with the block it was checked in: `(#convert line N: From -> To)`.
 
-**Inherited forms.** `convert-apply` does not convert `inherited` / `inline`
-`.dfm` objects yet. If the unit's `.dfm` holds one whose class is a From type
-of the book, the whole unit is refused (exit 1, nothing written, unit rules
-included): `inherited instances of <Type> are not converted yet -- unit not
-changed`.
+**Inherited forms (1.22.0, C8).** `convert-apply` does not convert `inherited`
+/ `inline` `.dfm` objects: the component is DECLARED by an ancestor, which is
+where it has to be converted. Such an object whose class is a From type of the
+book is SKIPPED -- its `.dfm` lines are left as they are -- while the unit's own
+instances, its code and its unit rules convert as usual (until 1.21.1 the whole
+unit was refused). Each one is reported:
+
+* text: `line N: warning: inherited instance <Name>: <Type> skipped -- <reason>`
+  under `Warnings:` (N is its `.dfm` line);
+* JSON: the same text in `warnings[]`, an `items[]` entry of kind
+  `inherited-instance-skipped`, and one object in `inherited[]` (always present,
+  `[]` when none):
+  `{name, type, line, ancestor_unit, ancestor_state, reason}`.
+
+The **declaring ancestor** is the nearest class up the owner's ancestor chain
+(the index's `type_ancestors`, several levels up when needed) whose `.dfm` opens
+the component with `object`; a `.dfm` that only re-opens it with `inherited` is
+passed over. The owner is the form's root class, or the class of the nearest
+enclosing `inline` frame for a frame's children. `ancestor_state` is
+`unconverted` (that ancestor still has the From type -- convert it first),
+`converted` (it already has the To type -- RETYPED since 1.26.0, below),
+`mismatched` (it has a third type, named in
+`reason`; `ancestor_unit` set) or `outside` (not determinable: no ancestor in
+the `--db` declares it, the chain leaves the index, or an ancestor's `.dfm` on
+the way is missing or binary -- that STOPS the walk, since it might declare the
+component, and the reason names the file; `ancestor_unit` is then `""`, never
+guessed). The owner class and component names match case-insensitively, and
+`--only` filters `inherited[]` like the other instances.
+R26 (see *Refusals*) still counts every such instance as left unconverted. `info --json`
+advertises the behaviour as `capabilities.inherited_instances: true`; an engine
+without the key still refuses the unit.
+
+**Retyping inherited instances** (1.26.0, C8 N2 / N2a). An instance whose
+declaring ancestor ALREADY has the block's To type is converted, not skipped:
+
+* the header becomes `inherited X: TTo` (or `inline X: TTo`) -- the keyword is
+  kept, and nested blocks and `inline`-frame children are retyped the same way;
+* the properties the block overrides convert per the book -- `#link`, `#ignore`,
+  `#remove`, casts -- through the same re-emit as an own instance. A property
+  the block does NOT stream is inherited from the ancestor, not at its declared
+  default, so for such a block no default is resolved, no `#default` is written
+  (the ancestor's own conversion wrote it, or a carried value superseded it),
+  and a `#mapping` whose source the block does not stream is skipped silently;
+* code access sites on X are rewritten exactly as for an own instance, and the
+  To type's unit is added to the uses (the usual section rule; the descendant
+  declares no field, so there is nothing to retype in its type section and no
+  creator site).
+
+Every code rewrite -- own instances' and inherited ones' -- is scoped to the
+instance's FIELD (1.26.0): a member access is rewritten only when its receiver
+is bound by the resolver to the field the `.dfm`'s root class declares or
+inherits, or is unbound, bare or `Self.`-qualified, inside a routine of that
+class that declares no local or parameter of the same name. A local, a
+parameter or another class's same-named field is left alone.
+
+Because the scoping relies on the resolver's binds, a `--db` whose edges were
+derived by a resolver older than 1.12.0 (or that has no resolver stamp) is
+REFUSED, dry run and `--apply` alike, with the `index ... --resolve-only`
+command that fixes it. A site the index cannot vouch for -- no reference for
+its receiver on its line, a member reached through `with X do`, an unbound
+reference to a converted ancestor's field -- is not rewritten and is reported:
+`access site <file>:<line> <receiver>.<member> not verified against the index
+-- not rewritten`, `items[]` kind `access-site-unverified`, json
+`access_sites_unverified`.
+
+Code that uses a converted ancestor's field WITHOUT a `.dfm` block (N2a) is
+followed too: every access in the unit on a field an ancestor declares -- any
+number of levels up, bound to that field by the resolver (`refs.symbol_id`),
+the ancestor's `.dfm` opening the component with the To type -- is rewritten.
+A local or parameter of the same name binds to itself and is left alone.
+
+`inherited[]` gains `action`: `retyped`, `code` (an N2a field; `line` is its
+first reference in the `.pas`) or `skipped` (every other state, and a retype
+whose block cannot be located or re-emitted -- `reason` says why). A retyped
+instance is one `converted[]` line, `<Name>: inherited <TFrom> -> <TTo>
+(declared in <Unit>)`, with an `items[]` entry of kind
+`inherited-instance-retyped` -- not a warning. `--only` filters retyped and
+code entries by name (a code-only name counts in `only_matched[]`); R26 does not
+count a retyped instance as left unconverted. `info --json` advertises it as
+`capabilities.inherited_retype: true`.
+**Resolved defaults are written to streamable paths only** (1.25.2). A
+`#link`'d source property absent from the block is written with its declared
+`default` -- only when every hop of the target path is a PUBLISHED property
+(the only kind a `.dfm` streams); a path through a public hop such as a
+collection's `Items` or `TFieldDefs.ParentDef` gets nothing. A property's
+attributes (`[Default(False)]`) are never read as its `default` clause.
+
+**The most-derived declaration wins** (1.26.1). The value written is the
+SOURCE's declared default -- the value the source component really had -- and
+it is written even when it equals the target's default (a deliberate choice,
+D3: Delphi trims a redundant default on the next save, while leaving a property
+absent silently adopts a value nobody chose). One exception: when the TARGET
+class redeclares the default of an inherited property, and the source's
+default comes from a class the target also descends from, the target's
+redeclaration is the more derived one and wins -- nothing is written and a
+reemit note says so (`N resolved default(s) not written -- <paths>: <T>
+redeclares the default, and the most-derived declaration wins, so the T default
+applies`). TAutoIncField -> TFDAutoIncField is the case: Data.DB.TField declares
+`AutoGenerateValue default arNone`, TFDAutoIncField redeclares `default
+arAutoInc`, and writing `arNone` turned auto-increment off. A default the source
+class redeclared itself is still written (it is the source's real value), as is
+one both classes share. Top-level, same-named paths only. The target's class
+chain is followed across units and through a generic ancestor
+(`TDstG = class(TGenBase<Integer>)`), as far as the index resolves it; an
+ancestor the index cannot resolve ends the chain, and the source default is
+then written.
+
+**Collections** (1.25.1). A collection-valued property (`FieldDefs = < item ...
+end>`) streams as ONE leaf. A whole-collection `#link FieldDefs <- FieldDefs`
+relocates it verbatim, as before. Links on its ITEM members --
+`#link FieldDefs.Items.Name <- FieldDefs.Items.Name` -- now take effect too, and
+ahead of an `#ignore FieldDefs` on the same block (they are the more specific
+rule): when every such link is an identity link and the To type publishes the
+property with the SAME collection type, the collection is carried verbatim
+(reemit note `collection FieldDefs carried, items unchanged (#link FieldDefs.*
+at line(s) ...; N item(s))`). When they cannot be honoured -- a renaming item
+link, another collection type, or none on the `.dfm` surface (FireDAC's
+TFDTable publishes neither FieldDefs nor IndexDefs) -- the collection is NOT
+carried, a reemit note says why with its item count, and it is COUNTED as
+dropped: `dropped FieldDefs`, the `dropped on N of M` warning and `unlinked[]`.
+A collection the book does not mention at all is dropped and counted the same
+way. A bare `#ignore FieldDefs` with no item links accepts the drop SILENTLY, even for a non-empty collection -- a deliberate choice of the book, like any `#ignore`.
+
+**Descendant warnings** (1.25.0). Converting an ANCESTOR does not touch its
+descendants: each descendant `.dfm` still says `inherited X: TOld`, and VCL
+streaming then fails at load (`EClassNotFound`, or `EReadError` on an
+overridden property the To type lacks); descendant code using From-only
+members no longer compiles. `convert-apply` SAYS so; converting the descendant next retypes them (C8 N2, 1.26.0).
+For every instance the run converts it lists each descendant unit -- a class
+descending from the unit's root class at any level (the index's
+`type_ancestors`), or a form hosting that class as an `inline` frame -- whose
+`.dfm` re-opens the instance (`inherited` / `inline`, still the From type) or
+whose code references the field (a method of a descendant class):
+
+```
+line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)
+```
+
+N is the line of the instance's `object` block in the converted (ancestor)
+`.dfm`. JSON: that string in `warnings[]`, `items[]` kind
+`descendant-not-converted`, and `descendants[]` (always present)
+`{unit, name, type, line, reason}` -- `line` is the descendant `.dfm`'s
+block, or its first code reference when the `.dfm` does not re-open it;
+`reason` is `dfm`, `code` or `both`. `--only` filters it; in batch mode each
+unit's `apply/1` carries its own. It is a WARNING: the unit is never refused
+because of it, and descendants are not edited. LIMIT: a descendant outside the
+`--db` set cannot be seen -- the list covers the project index only.
+`info --json`: `capabilities.descendant_warnings: true`.
 
 `convert-apply` locates every `.dfm` component instance whose class matches a
 `#convert FromType` rule, then rewrites all **5 conversion surfaces** for each:
@@ -698,7 +947,11 @@ changed`.
 1. **`.pas` declaration retype** -- `Name: FromType;` -> `Name: ToType;` on the
    instance's published field declaration.
 2. **`.pas` uses-add** -- adds ToType's declaring unit to the `.pas` `uses`
-   clause (once per distinct ToType), via `TFindUnitRefactoring.Build`.
+   clause (once per distinct ToType), via `TFindUnitRefactoring.Build` -- the
+   INTERFACE uses when the retyped field is declared in the interface section
+   (1.23.0; a form's published fields always are), else the implementation
+   uses when the unit has one. A To unit the unit already uses ONLY in its
+   implementation clause is MOVED to the interface clause in that case.
 3. **`.dfm` object-block re-emit** -- the instance's whole `object Name: Class
    ... end` block is replaced with the re-emitted T block from `ReemitComponent`
    (Batch 2a-i), including moved-depth properties and event renames. A hard

@@ -1,0 +1,6 @@
+// C10 fixture: a G-link book on classes the Win64 library index resolves.
+#convert Vcl.Buttons.TBitBtn -> cxButtons.TcxButton, cxButtons, dxCore
+#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] : AssignGraphic
+#link OptionsImage.NumGlyphs <- Glyph G[count]
+#link Caption <- Caption
+#link Enabled <- Enabled

@@ -1,0 +1,22 @@
+{
+  "id": "deps-report",
+  "title": "deps-report",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.95.0-alpha",
+  "summary": "Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on",
+  "wikiPage": "deps-report",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "deps-report"
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)..."
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

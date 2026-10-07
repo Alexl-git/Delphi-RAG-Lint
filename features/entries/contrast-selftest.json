@@ -1,0 +1,18 @@
+{
+  "id": "contrast-selftest",
+  "title": "contrast-selftest",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "0.0.0",
+  "summary": "Self-test for the hover contrast computation, driven by a test runner",
+  "wikiPage": "Maintenance",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "contrast-selftest"
+    }
+  ],
+  "audience": "agent",
+  "notes": "internal: self-test for the hover contrast computation; driven by a runner under tests\\.; seed: group guessed; seed: since unknown"
+}

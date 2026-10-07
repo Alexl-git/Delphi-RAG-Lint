@@ -3,6 +3,418 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.26.1-alpha -- unreleased
+
+No extractor or resolver change: indexes do not re-parse.
+
+### Fixed
+
+Four SILENT behaviour breaks in `convert-apply`, found by a real-data sweep of
+DMTEST (5 units, `BDE-to-FireDAC.rules`) with 1.25.2. Every converted `.dfm`
+loaded, exit 0, and the converted forms behaved differently.
+
+- **`#ignore` (and every property rule) is scoped to its own `#convert` block.**
+  The whole book ran in every block, so the TDatabase block's `#ignore ReadOnly`
+  suppressed the TTable block's `#link UpdateOptions.ReadOnly <- ReadOnly` and
+  the TAutoIncField block's `#link ReadOnly <- ReadOnly`. **Risk: 33 read-only
+  tables and fields converted WRITABLE** (e.g. SystemLookup `tblToolAssg`). The
+  same book-wide lookup let the FIRST `#link` of a path win in every block, so a
+  field's `ReadOnly` would have been written to `UpdateOptions.ReadOnly`, and a
+  `#default` of one block was written into every other block's instances.
+  `#link` / `#ignore` / `#default` / `#remove` / `#apply` now apply to their own
+  block plus the file-scope rules before the first `#convert`; `#convert`,
+  `#mapping` and `#note` lines stay book-wide. On DMTEST the TTable block's own
+  `#link Exclusive` and `#link UpdateOptions.ReadOnly` now also fire (67 each).
+- **The `.pas` access-site rewrite is scoped the same way.** Every block's
+  renaming `#link` rewrote every converted instance's sites: on DMTEST each of 79
+  `DatabaseName` sites was planned 4 times (316 rewrites; the 1.25.1 dedup kept
+  the output right), and **two blocks linking one path to different targets
+  wrote both into the same line**, which does not compile. A site on instance X
+  now takes only the `#link`s of X's block plus the file-scope ones: 79
+  rewrites, byte-identical `.pas` output on DMTEST.
+- **`convert-validate` says when it only parsed.** Without both `--from` and
+  `--to` no path is checked, yet it printed a bare `OK`; a `NOTE:` line on stderr
+  now says the book was parsed only (stdout unchanged).
+- **A target's redeclared default wins over the shared ancestor's.** A resolved
+  default is the source's declared default; TFDAutoIncField redeclares
+  `AutoGenerateValue default arAutoInc`, `ProviderFlags default [pfInWhere]` and
+  `ReadOnly default True` over Data.DB.TField's, which TAutoIncField only
+  inherits, and the engine wrote TField's values. **Risk: 49 auto-increment
+  fields lost auto-increment (`AutoGenerateValue = arNone`) and took
+  `pfInUpdate`.** The most-derived declaration now wins: such a default is not
+  written and a reemit note names it (`N resolved default(s) not written -- ...:
+  <T> redeclares the default, and the most-derived declaration wins`). A default
+  the source class redeclared itself, or one both sides share, is written as
+  before.
+- **Designer position (`Left` / `Top`) is carried.** On a non-visual component
+  they are TComponent.DefineProperties pseudo-properties, not published, so no
+  rule could name them. **Risk: 90 components lost their designer position**
+  (cosmetic, but every one was reported unlinked). Carried unless a rule of the
+  block names them, and only when the From class does NOT publish them: a
+  control's published Left/Top stay with the rules (once via `#link`, else
+  dropped and reported).
+- **`ParamData` is carried.** TQuery / TStoredProc stream their parameters as the
+  DefineProperties pseudo-property `ParamData = < item ... end>`, never as the
+  published `Params`. **Risk: 15 queries lost every parameter's type, kind and
+  value.** ParamData is carried under the same name (TFDQuery / TFDStoredProc
+  read it the same way); each item member goes through the block's `#link
+  Params.Items.<X>` (a renaming link renames it), else is kept when the target's
+  Params item publishes the same member with the same type, else is NOT carried
+  and reported per item (`ParamData item <n> (<Name>): <line> not carried --
+  <why>`). Verified with a real VCL `ReadRootComponent` load of the five
+  converted DMTEST `.dfm`s (0 errors; a bogus item member fails it).
+
+Guard: `run_convert_apply_semantics.ps1` (one fixture per defect, own-block
+`#ignore` positive control, a redeclared-default fixture with source-redeclared
+and shared-declaration controls, two blocks renaming one path differently, the
+written `.dfm` through `DfmLoadCheck`, the written `.pas` through dcc64) and
+`run_convert_apply_semantics_controls.ps1`: a converted ParamData loaded into the
+REAL FireDAC classes by the new `lib\FireDacLoad.ps1` (Params.Count and each
+Name/DataType/ParamType/Value; a malformed item fails it), a `#mapping` scoped to
+its block, file-scope rules in every block and on every `.pas` site, a visual
+component's published Left/Top, and the redeclared default across three units and
+through a generic ancestor.
+
+### Known limitations
+
+- Resolved defaults are still written even when equal to the target's own
+  default (D3, deliberate): on DMTEST 987 of 1,260 are such no-ops. Owner
+  question, not changed here.
+- Paradox table names (`TableName = 'Machines.DB'`) carry verbatim if a book
+  links `TableName`; whether FireDAC wants them stripped is a book question.
+
+## v1.26.0-alpha -- unreleased
+
+No extractor or resolver change on top of 1.25.0: indexes do not re-parse.
+
+### Added
+
+- **`convert-apply` retypes inherited instances of a converted ancestor (C8 N2).** An
+  `inherited` / `inline` `.dfm` object of a From type whose declaring ancestor ALREADY has
+  the block's To type is no longer skipped: its header becomes `inherited X: TTo` (keyword
+  kept; nested blocks and `inline`-frame children too), the properties the block overrides
+  convert per the book (`#link` / `#ignore` / casts, through the same re-emit as an own
+  instance), its code access sites are rewritten as for an own instance, and the To type's
+  unit is added (the C13 section rule). A property the block does not stream is INHERITED,
+  not defaulted, so for such a block no default is resolved, no `#default` is written and a
+  `#mapping` whose source it does not stream is skipped silently. There is no field
+  declaration or creator site to retype in the descendant. Unconverted / mismatched /
+  outside instances stay skipped exactly as in 1.22.0.
+- **Code-only uses follow a converted ancestor (C8 N2a).** Every access in the unit's code
+  on a field a converted ancestor declares -- several levels up, bound to that field by the
+  resolver (E5, `refs.symbol_id`), the ancestor `.dfm` opening it with the To type -- is
+  rewritten, whether or not the descendant `.dfm` re-opens the component. A local or
+  parameter of the same name binds to itself and is left alone.
+- **`apply/1` `inherited[]` gains `action`** -- `retyped`, `code` (an N2a entry: no `.dfm`
+  block; `line` is its first reference in the `.pas`) or `skipped`. The six existing keys
+  keep their meaning; `reason` of a retyped entry reads `... -- retyped to <TTo>`. A retyped
+  instance is one `converted[]` line, `<Name>: inherited <TFrom> -> <TTo> (declared in
+  <Unit>)`, with an `items[]` mirror of the new kind `inherited-instance-retyped` -- not a
+  warning; one whose block cannot be located or re-emitted falls back to `skipped` with that
+  reason. `--only` filters retyped and code entries by name, and a `--only` name that names
+  a code-only field counts as matched. R26 no longer counts a retyped instance as left
+  unconverted. `info --json` `capabilities.inherited_retype` (name agreed with the
+  converter). The descendant-warning text is unchanged -- it stays true: convert the
+  descendant next. Guard: `run_convert_apply_inherited_retype.ps1` (two-level chain, nested
+  block, inline frame, code-only use, a shadowing local, `--only`, batch, own-instance
+  positive control, and a dcc64 compile of the converted descendants).
+
+### Changed
+
+- **Access-site rewrites are scoped to the instance's FIELD, not its name.** The `.pas`
+  property/event rewrite matched a member access by its receiver's NAME only, so once a
+  unit converted `rbtn`, every `rbtn.Caption` in it was rewritten -- a local or parameter
+  named `rbtn` in another method, another class's same-named field included (a compile
+  error, or a silent wrong member). A site is now rewritten only when its receiver is
+  BOUND by the resolver to the field the `.dfm`'s root class declares or inherits, or is
+  unbound, bare or `Self.`-qualified, in a routine of that class that declares no local /
+  parameter of that name. Own instances and C8 N2 / N2a inherited ones alike; DMTEST's
+  DMREADINGS keeps all 32 of its sites. Pinned by run_convert_apply_inherited_retype.ps1
+  H1-H3 (a bound use, a shadowing local, another class's field; inherited and own).
+- **A missed rewrite is never silent.** Scoping makes the rewrite depend on the resolver's
+  binds, so: (1) a DB whose edges were derived by a resolver older than 1.12.0 (or that
+  carries no resolver stamp) is REFUSED, dry run and `--apply` alike -- `REFUSED: <db>:
+  edges were derived by resolver <ver>; convert-apply needs 1.12.0-alpha or newer (bound
+  field reads) -- re-derive first: drag-lint index --project <file.dproj> --db "<db>"
+  --resolve-only`; (2) a site the index cannot vouch for -- no reference for its receiver
+  on its line (a `.pas` edited since it was indexed), a member reached through `with X do`,
+  or an UNBOUND reference to a converted ancestor's field -- is not rewritten and is
+  REPORTED: `access site <file>:<line> <receiver>.<member> not verified against the index
+  -- not rewritten` (`... with X do ... not verified ...`, `... <field> not verified ...`),
+  `items[]` kind `access-site-unverified`, json `access_sites_unverified` (always present),
+  and `inherited[]` action `unverified` for the ancestor-field case. Pinned by
+  run_convert_apply_inherited_retype.ps1 K1-K4, S1-S6 (`Self.X.Prop`, `with X do`, a
+  nested routine, an unbound X in an unrelated class) and T1.
+- **`.dfm` re-emit keeps the header keyword.** `ReemitComponent` used to write every block,
+  nested ones included, as `object`; an `inline` frame or `inherited` child inside a
+  converted block now keeps its keyword (written as `object` it would declare a second
+  component of that name and fail at load).
+## v1.25.2-alpha -- unreleased
+
+No extractor or resolver change on top of 1.25.1: indexes do not re-parse.
+
+### Fixed
+
+- **A converted `.dfm` Delphi could not load** (DMTEST's DMREADINGS, whole-book `--apply`:
+  `ObjectTextToBinary`: "Identifier expected", line 28; 1.25.0 and 1.25.1 alike). Three
+  causes, each fixed and pinned:
+  - **an attribute read as the `default` clause.** Bde.DBTables declares
+    `[Default(False)]` on the line above `property CachedUpdates: Boolean ... default False;`
+    and the property's indexed span starts at the attribute; the default-clause reader
+    took `Default(` for the directive and wrote `CachedUpdates = (False)]` (ObjectView too).
+    Clauses are now read from the `property` keyword on.
+  - **a resolved default written through a non-published hop.** psDfm resolution passes a
+    public class-typed hop -- a collection's indexed `Items`, `TFieldDefs.ParentDef` -- so
+    `FieldDefs.Items.Attributes = []` and its kin were written. A .dfm streams published
+    properties only; a resolved default is now written only to a path whose every hop is
+    published (`PublishedChain`). A default skipped this way is REPORTED, one reemit note per
+    instance: `<N> resolved default(s) not written -- <paths>: the path runs through a
+    non-published member, which a .dfm cannot stream, so the T default applies (verify)`.
+  - **two ADJACENT re-emitted blocks could land inside each other.** The second block's
+    `insert after L` and the first block's delete ending at L share the applier's sort key,
+    and `TList.Sort` is not stable: applied after the delete, the insert landed as many
+    lines too low as were deleted -- a table spliced into its neighbour. The insert now
+    always goes first, and the applier's sort is STABLE: edits it still ties (two inserts at
+    one position) land in planned order.
+- **The standing .dfm LOAD guard.** `tests\autotest\lib\DfmLoadCheck.ps1` (+ `DfmLoadCheck.dpr`,
+  built once with dcc64) runs a .dfm through Delphi's own reader -- `ObjectTextToBinary`, then
+  binary -> text -> binary byte-identical. Every convert suite that WRITES a .dfm now checks
+  it: atomic, collections, inherited, descendants, and the new
+  `run_convert_apply_default_values.ps1` (one fixture per value kind: resolved Boolean /
+  enum / set / negative Integer defaults; streamed float, quoted string, multi-line string,
+  `#39`, binary, collection). A dry run proves the PLAN, never the BYTES. Limit, stated: the
+  guard proves the text PARSES and round-trips; a property the target class lacks is
+  caught only at form load, which needs the classes.
+  DMTEST copy: DMREADINGS whole-book `--apply` now passes the load guard (1415 objects in, 1415 out).
+
+## v1.25.1-alpha -- unreleased
+
+No extractor or resolver change on top of 1.25.0: indexes do not re-parse.
+
+### Fixed
+
+- **DATA-LOSS RISK: `convert-apply --apply` could write a HALF-converted unit and exit 0.**
+  A converted component owning converted children in its `.dfm` -- a `TTable` with
+  persistent `TField` objects, each a From type of its own `#convert` block (measured on
+  DMTEST's DMREADINGS: 37 instances) -- had its block re-emitted AND each child's block,
+  inside it, re-emitted again: two overlapping delete ranges. The edit applier refused the
+  whole `.dfm` (`refused 74 edit(s) to ...DMREADINGS.dfm -- overlapping delete ranges`, on
+  stderr only) after the `.pas` had already been written, so every field was retyped while
+  the `.dfm` still streamed the old classes -- a unit that no longer loads -- and the run
+  reported success. Two fixes:
+  - **a nested converted instance is SPLICED into its parent's re-emit**: one delete + insert
+    for the parent, the child's block in it written by the child's OWN re-emit (its own
+    trees: defaults resolved, remainder reported under its name, as before), its `.pas`
+    surfaces unchanged. A child the parent's text does not carry is skipped and warned.
+  - **an apply is all-or-nothing across the unit's files**: the plan is checked before
+    anything is written, dry run included; an edit set the applier would refuse fails the
+    unit -- `ok:false`, exit 1, `ERROR: refused N edit(s) to <file> -- overlapping delete
+    ranges (an engine defect) -- unit not changed, nothing written` -- with no file touched,
+    no `.BCK` and no `recovery.txt`. In batch mode only that unit fails.
+- **An identical in-line rewrite planned twice was spliced twice.** Two `#convert` blocks
+  sharing a renaming `#link` (`Title <- Caption` on a table and on its fields) rewrote the
+  same access site twice -- `tbl.Caption := tblID.Caption` became `tbl.Title= tblID.Title`
+  -- and two To types declared in one unit added it twice (`uses LibB, LibB`). Exact
+  duplicate in-line edits are now planned once, and a unit two To types share is added once.
+
+- **DATA-LOSS RISK: collection-valued properties vanished without a word.** A collection
+  (`FieldDefs = < item ... end>`) is one `.dfm` leaf, so `#link FieldDefs.Items.Name <-
+  FieldDefs.Items.Name` -- BDE-to-FireDAC.rules links every item member of FieldDefs and
+  IndexDefs -- named a path no leaf has, and the `#ignore FieldDefs` / `#ignore IndexDefs`
+  beside them in the TTable block dropped the collections with no line in any report
+  surface: on DMREADINGS 12 collections, 707 items. Item links now decide, ahead of
+  `#ignore`: all identity and the To type publishing the property with the SAME collection
+  type -> carried verbatim (reemit note `collection X carried, items unchanged (#link X.* at
+  line(s) ...; N item(s))`); otherwise -> NOT carried, a reemit note naming the reason and the
+  item count, and COUNTED as dropped (`dropped X`, the `dropped on N of M` warning,
+  `unlinked[]`). On DMREADINGS all 12 are now reported -- TFDTable publishes neither
+  FieldDefs nor IndexDefs -- as `TTable.FieldDefs ... dropped on 8 of 21` and
+  `TTable.IndexDefs ... 4 of 21`; the other 2 of the 709 items are TQuery `ParamData`, which
+  was already warned. Guard: `run_convert_apply_collections.ps1`. A bare `#ignore X` --
+  with no `#link X.*` item links -- still drops a non-empty collection SILENTLY: that is the
+  book author's deliberate acceptance of the drop, exactly as for any other `#ignore`d
+  property.
+- **A write that failed part-way left the unit half-converted.** After the writability
+  pre-check (a lock taken in between, a full disk) the applier could write the `.pas` and
+  fail on the `.dfm`; the error only pointed at the `.BCK` files. Now the unit is ROLLED
+  BACK: every file already written is restored byte-identical (from its `.BCK`, or under
+  `--no-backup` from the bytes read before the write), exit 2, `write failed for <unit>:
+  ... -- rolled back, unit not changed`. Only a rollback that itself fails keeps the
+  "PARTLY converted" message, now naming the files it could not restore. Test seams, inert
+  unless set: `DRAGLINT_TEST_FAIL_WRITE_AT=N` (the N-th file write raises) and
+  `DRAGLINT_TEST_FAIL_ROLLBACK=1`.
+- **What is atomic, exactly.** Per unit, across `.pas` and `.dfm`: an overlapping edit set
+  -- nothing written (dry run too), exit 1; a file not writable up front -- nothing
+  written, exit 2; a write failing part-way -- rolled back, exit 2; a failed rollback --
+  reported with the files it could not restore, exit 2.
+- **A re-emitted block wrote properties AFTER its nested components** (a resolved default
+  or a `#default` appended to a block holding persistent fields). The `.dfm` reader accepts
+  no property after a nested object, so such a form failed to load and failed the binary
+  conversion. Properties are now written first.
+- **`--only <parent>` left the form and the code disagreeing.** A kept parent's re-emit
+  converts its nested From-type children in the `.dfm`, but the children's `.pas` fields
+  stayed the From type. They now convert with the parent, `.pas` included, and are listed in
+  the new `apply/1` key `only_included[]` `{name, parent}` (always present, `[]` without
+  `--only`) and as a text line `--only: <child> converts too -- nested in <parent>`.
+
+Guard: `run_convert_apply_atomic.ps1` (nested table + fields, dry run and `--apply`, a dcc64
+compile; a forced overlapping plan leaves `.pas` and `.dfm` byte-identical with exit 1,
+dry run and batch included). DMTEST copy: DMREADINGS whole-book `--apply` now converts all
+37 instances (95 edits, was 147 with the duplicates) and writes both files.
+
+## v1.25.0-alpha -- unreleased
+
+No extractor or resolver change on top of 1.24.0: indexes do not re-parse.
+
+### Added
+
+- **`convert-apply` descendant warnings.** Converting an ANCESTOR leaves every descendant
+  `.dfm` saying `inherited X: TOld` (load fails: `EClassNotFound` / `EReadError`) and its
+  code untouched. For each converted instance the run now lists every descendant unit -- a
+  class descending from the unit's root class at any level, or a form hosting it `inline`
+  -- whose `.dfm` re-opens it or whose code references it: text
+  `line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next
+  (needs C8 N2)` (N = the object line in the ancestor `.dfm`); `apply/1` `descendants[]`
+  `{unit, name, type, line, reason}` (`reason` `dfm`/`code`/`both`), `items[]` kind
+  `descendant-not-converted`; `--only` filters it; per unit in batch mode. A warning, never
+  a refusal; only descendants in the `--db` index are seen. `info --json`
+  `capabilities.descendant_warnings`. Guard: `run_convert_apply_descendants.ps1`.
+
+## v1.24.0-alpha -- unreleased
+
+No extractor change: indexes do not re-parse. **Resolver 1.11.0 -> 1.12.0-alpha**: the next
+`index` of every database re-resolves on its own (resolver fingerprint); to do it at once,
+`index --all --resolve-only`.
+
+### Changed
+
+- **A bare read of a field of the enclosing class -- or of an ANCESTOR -- binds (E5 / DEC-19,
+  owner ruled YES 2026-10-05).** `if FConnected then`, `with tblFtrs do` and the receiver
+  `tblFtrs` of `tblFtrs.Post` inside a method whose class (or a grand-ancestor) declares the
+  field now get `refs.symbol_id` on that field and a `member_accesses` row (mode `read`, no
+  accessor, no call edge), exactly as `Self.FConnected` already did. Shadowing is Delphi's and
+  unchanged: a `with` target's member first, then a local / parameter / nested routine of the
+  routine or of its outer routines, then the class chain. Since 1.8.0 these reads declined
+  with reason `field` by design; that reason and its slot on the `calls member-reads:` log
+  line are gone. Measured on copies: DMTEST 23,338 reads newly bound (member_accesses 7,806 ->
+  31,144; `find-callers --name tblFtrs --resolved` 109 -> 160 rows, 18 -> 36 callers); this
+  repo's self-index 2,502. `lint-all` findings unchanged on both (byte-identical JSON).
+  Consumers counting member reads (charts who-reads) must re-baseline.
+  The class chain is walked NEAREST first over every member kind: a nearer method, class
+  const/var or nested type of the name HIDES a farther field and the read declines (new
+  `hidden` slot on the log line); an own field hides an ancestor's; an unresolved or
+  ambiguous parent ends the walk; an implemented interface's property is not in scope (the
+  1.8.0 bare-property read used to bind it). The rows written change `refs.symbol_id` and add
+  a `member_accesses` row only -- `kind`, `name_text` and `receiver_text` are untouched.
+  Guards: `run_in_class_field_bind.ps1` (new); `run_with_scope_bind.ps1` OWN-FIELD,
+  `run_parenless_call_bind.ps1` NEG-FIELD and `run_property_refs_resolve.ps1` E2 flipped
+  from "stays unbound" to "binds".
+
+## v1.23.0-alpha -- unreleased
+
+No extractor change: indexes do not re-parse.
+
+### Added
+
+- **`convert-apply` batch mode (C13 b2).** `--unit` may repeat; every unit runs in ONE
+  process with one rule-book validation and one member cache. Text: one
+  `=== unit i of N: <path> ===` section per unit, then
+  `batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E`. JSON: one
+  `apply-batch/1` document `{schema, mode, rules_file, units_count, ok, exit_code, ok_count,
+  refused_count, failed_count, classes_built, units[]}`, `units[]` = `apply/1` per unit;
+  a single `--unit` is unchanged. Per-unit refusal/failure never stops the others; exit =
+  worst unit. Measured on DMTEST (BDE-to-FireDAC.rules, dry run): 3 units 45.7 s batched vs
+  114.7 s as separate processes. `info --json` `capabilities.batch_units`.
+  Guard: `run_convert_apply_batch.ps1`.
+- **`--only` contract (C12 N3).** `apply/1` `only_matched[]` / `only_unmatched[]` (always
+  present); an unknown name is ignored, never an error; text
+  `--only: no #convert instance named X (ignored)`. Guard: `run_convert_apply_only.ps1`.
+
+### Changed
+
+- **An unresolved `#convert` type REFUSES the unit (C13 d, owner ruling).** Dry run and
+  `--apply` alike: `REFUSED: <Type> (line N) resolves in no --db -- index gap in the library
+  or project index; reindex, or report it, before converting`, `refused: true`. It was a
+  rule-validation error (`#convert From/To type not found in any --db`) before.
+  The C13 plan's "R26 silent when DeclaringUnitOf is empty" path is unreachable for such a
+  type: book validation (BuildBlockClasses, R7) finds it unresolved before any plan -- and
+  R26 -- runs, and now refuses the unit there.
+- **`--only` skips, rather than refuses, a unit rule it would strand (C12 N4).** A
+  `#unuse` / `#useswap` removal whose stranded instances are ALL ones `--only` left out is
+  skipped: unit kept, `uses[]` `{action: "skipped", ..., reason}`, a `line N: warning:` and
+  `items[]` kind `unit-rule-skipped`. Other stranded instances (failed re-emit, inherited)
+  still refuse (R26). `uses[]` rows gain `reason`. `capabilities.only_skips_unit_rules`.
+
+### Fixed
+
+- **Interface uses for an interface-declared retyped field (C13 a).** The To type's unit
+  went to the implementation uses whenever the unit had one, so a retyped form field failed
+  E2003. Both planners (no unit rules / unit rules) now put it in the interface uses, and a
+  To unit the unit already uses ONLY in its implementation clause is MOVED there (removed
+  from the implementation clause, no `uses[]` row: it is the `#convert` surface).
+  Plan size: when a unit rule already rewrites the interface clause, the adds now ride that
+  rewrite instead of a second implementation-clause rewrite -- dmToolStats
+  (BDE-to-FireDAC.rules) plans 38 edits, not 1.21.1's 40; the 2 gone are that clause's
+  delete + insert. Pinned by arm P (IntfFormU: 7 -> 5).
+  Guard: `run_convert_apply_interface_uses.ps1` (compiles the result).
+  A move whose implementation entry sits in a `{$IF...}` region is REFUSED (the existing
+  conditional-entry refusal; pinned by M7).
+- **`#migrate Foo -> ` (From-only) read Old `Foo ->` (C13 c, R27).**
+- **A file `convert-apply --apply` cannot write no longer aborts the run.** Every touched file
+  is checked writable before anything is written; a read-only or locked one fails THAT unit
+  (exit 2, `ok:false`, `refused:false`, `cannot write <file>: ... -- unit not changed, nothing
+  written`; no `.BCK`, no recovery record). A failure after that check can leave the unit
+  partly written -- its backups and `recovery.txt` are complete and the error says so. In a
+  batch the other units go on and `apply-batch/1` is still emitted. Batch `units[i].classes_built`
+  is now the unit's own (equal to its single-unit run), the wrapper's the run total.
+
+### Known limitations
+
+- The interface-uses MOVE decides "used only in the implementation" from the index's uses
+  (`UsedOnlyInImplementation`) while the uses planner reads the live file: a stale index can
+  miss a move (the convert-apply freshness guard covers most such staleness).
+
+## v1.22.0-alpha -- unreleased
+
+No extractor change: indexes do not re-parse.
+
+### Changed
+
+- **`convert-apply` no longer refuses a unit with inherited / inline instances (C8 N1, N3).**
+  An `inherited` / `inline` `.dfm` object of a From type is declared by an ancestor, so it is
+  SKIPPED -- its `.dfm` lines untouched -- while the unit's own instances, code and unit rules
+  convert. Each is reported as `line N: warning: inherited instance <Name>: <Type> skipped --
+  <reason>`, and in apply/1 as `warnings[]` text, an `items[]` entry of the new kind
+  `inherited-instance-skipped` and an object in the new, always-present `inherited[]`:
+  `{name, type, line, ancestor_unit, ancestor_state, reason}`. The declaring ancestor is the
+  nearest class of the owner's ancestor chain (the root class, or an enclosing `inline` frame's
+  class) whose `.dfm` opens the component with `object`; `ancestor_state` is `unconverted`,
+  `converted` (still skipped: retyping is N2), `mismatched` (a third type, named in `reason`)
+  or `outside` (not determinable: in no `--db`, or an ancestor `.dfm` on the way is missing
+  or binary, which stops the walk; `ancestor_unit` `""`; never guessed). `--only` filters
+  `inherited[]` too.
+  R26 counts these instances as left unconverted. A `.dfm` whose only From-type instances are
+  inherited reports `component_part: skipped-no-instances` and exits 0. Ruling R6's
+  `inherited instances of <T> are not converted yet -- unit not changed` is gone.
+  Guard: `run_convert_apply_inherited.ps1`; `run_convert_apply_multiblock.ps1` arm I updated.
+
+### Added
+
+- **`info --json` `capabilities.inherited_instances: true` (C8 N5)**, so the converter editor
+  can tell this engine from one that still refuses.
+- **Feature registry.** `features\entries\*.json` (one file per feature, canonical form) plus the
+  imported `lint-rules` and `chart-questions` families are the master list of everything drag-lint
+  ships. `tools\feature-registry.ps1` (add / update / find / blast-radius / move-menu / deprecate /
+  normalise / check / generate) is the only way teams write it; `tools\build-feature-pages.ps1`
+  generates `Home.md`, `Features.md`, `Feature-Index.md`, the new `Quick-Help.md`, a block in
+  README.md and in docs\AI-USAGE.md, and `features\generated\manifest.json`.
+  `tests\autotest\run_feature_registry_guard.ps1` fails the battery when a `--help` verb, a
+  subcommand, an IDE caption, a rule, a chart question or a release exe has no entry, when an
+  entry points at something that no longer exists, or when a generated page was hand-edited.
+  `docs\wiki-featuremap.tsv` is retired. `tools\publish-release.ps1` orders the publish steps and
+  restores the deployed Debug engine after `pack-lint-release.ps1` overwrites it. Page:
+  [Feature-Registry](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Feature-Registry).
+
 ## v1.21.1-alpha -- 2026-10-05
 
 EXTRACTOR BUMP 1.20.0 -> 1.21.1 (1.21.0 was never released): every index re-parses once

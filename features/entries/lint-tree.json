@@ -1,0 +1,17 @@
+{
+  "id": "lint-tree",
+  "title": "lint-tree",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.11.0-alpha",
+  "summary": "Answers one question lint-all cannot: does an interface edit to this unit reach any dependent?",
+  "wikiPage": "lint-tree",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-tree"
+    }
+  ],
+  "audience": "both"
+}

@@ -1,0 +1,18 @@
+{
+  "id": "go-to-implementation",
+  "title": "Go to Implementation",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.43.0-alpha",
+  "summary": "Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node",
+  "wikiPage": "Go-to-Implementation",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Go to Implementation"
+    }
+  ],
+  "audience": "both"
+}

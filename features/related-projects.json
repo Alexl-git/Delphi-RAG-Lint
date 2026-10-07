@@ -1,0 +1,6 @@
+{
+  "projects": [
+    { "name": "drag-lint-graph", "summary": "The interactive graph viewer (drag_lint_graph.exe), dockable in the IDE; a separate repository, linked here, not registered." },
+    { "name": "YADF", "summary": "The Delphi formatter drag-lint drives from the IDE menu (Format with YADF); a separate repository, linked here, not registered." }
+  ]
+}

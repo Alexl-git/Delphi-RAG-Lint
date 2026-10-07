@@ -1,0 +1,17 @@
+{
+  "id": "ghost-check",
+  "title": "ghost-check",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.8.0-alpha",
+  "summary": "Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged",
+  "wikiPage": "ghost-check",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "ghost-check"
+    }
+  ],
+  "audience": "both"
+}

@@ -1,0 +1,42 @@
+{
+  "family": "chart-questions",
+  "entry": "chart-questions",
+  "source": "REPORT_QUESTIONS in src\\delphi-plugin\\DragLint.Plugin.ReportText.pas, compared with the -Question ValidateSet of charts\\src\\New-DiagramArtifact.ps1",
+  "lastVerified": {
+    "date": "2026-10-05",
+    "by": "session 23c4e8d0-e85c-4426-bcba-54e375729b0b",
+    "build": "1.21.1-alpha"
+  },
+  "defaults": {
+    "menuPrefix": "drag-lint > Reports",
+    "requires": ["index", "powershell7", "graphviz"],
+    "tests": ["charts\\src\\Test-Emitters.ps1"]
+  },
+  "children": {
+    "butterfly":        { "emitter": "charts\\src\\Emit-Butterfly.ps1" },
+    "who-calls":        { "emitter": "charts\\src\\Emit-WhoCalls.ps1", "aliases": ["callers", "who uses"] },
+    "what-it-calls":    { "emitter": "charts\\src\\Emit-WhoCalls.ps1", "aliases": ["callees"] },
+    "effects":          { "emitter": "charts\\src\\Emit-Effects.ps1", "aliases": ["side effects", "purity"] },
+    "touches-tables":   { "emitter": "charts\\src\\Emit-TouchesTables.ps1" },
+    "exception-paths":  { "emitter": "charts\\src\\Emit-ExceptionPaths.ps1" },
+    "crosses-boundary": { "emitter": "charts\\src\\Emit-CrossesBoundary.ps1" },
+    "protocol-trace":   { "emitter": "charts\\src\\Emit-ProtocolTrace.ps1" },
+    "change-impact":    { "emitter": "charts\\src\\Emit-ChangeImpact.ps1", "requires": ["index", "powershell7"], "aliases": ["blast radius", "impact"] },
+    "tested-by":        { "emitter": "charts\\src\\Emit-TestedBy.ps1" },
+    "who-writes":       { "emitter": "charts\\src\\Emit-MemberAccess.ps1" },
+    "who-reads":        { "emitter": "charts\\src\\Emit-MemberAccess.ps1" },
+    "feeds-from":       { "emitter": "charts\\src\\Emit-FeedsFrom.ps1", "requires": ["index", "sql-index", "powershell7", "graphviz"] },
+    "lands-where":      { "emitter": "charts\\src\\Emit-LandsWhere.ps1", "requires": ["index", "sql-index", "powershell7", "graphviz"] },
+    "round-trip":       { "emitter": "charts\\src\\Emit-RoundTrip.ps1", "wikiPage": "Field-Round-Trip-Report", "requires": ["index", "sql-index", "powershell7"], "homeOrder": 50 },
+    "class-surface":    { "emitter": "charts\\src\\Emit-ClassSurface.ps1" },
+    "hierarchy":        { "emitter": "charts\\src\\Emit-Hierarchy.ps1" },
+    "wiring":           { "emitter": "charts\\src\\Emit-Wiring.ps1" },
+    "event-wiring":     { "emitter": "charts\\src\\Emit-EventWiring.ps1" },
+    "lifecycle":        { "emitter": "charts\\src\\Emit-Lifecycle.ps1" },
+    "deps":             { "emitter": "charts\\src\\Emit-Deps.ps1" },
+    "architecture":     { "emitter": "charts\\src\\Emit-Architecture.ps1" },
+    "cycles":           { "emitter": "charts\\src\\Emit-Cycles.ps1" },
+    "consumers":        { "emitter": "charts\\src\\Emit-Consumers.ps1" },
+    "shown-where":      { "emitter": "charts\\src\\Emit-ShownWhere.ps1" }
+  }
+}

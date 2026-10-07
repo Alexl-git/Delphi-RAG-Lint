@@ -1,0 +1,25 @@
+{
+  "id": "format-whole-project-with-yadf",
+  "title": "Format Whole Project with YADF",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Runs YADF formatting across a project's files, with indexing involved as part of the same action",
+  "wikiPage": "Format-Whole-Project-with-YADF",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Format Whole Project with YADF..."
+    },
+    {
+      "type": "cli",
+      "verb": "format"
+    },
+    {
+      "type": "cli",
+      "verb": "index"
+    }
+  ],
+  "audience": "both"
+}

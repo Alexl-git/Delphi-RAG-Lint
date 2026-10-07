@@ -17,15 +17,26 @@ uses
   System.SysUtils
   , ConvRules.Engine
   , ConvRules.ConvertRun
+  , ConvRules.ConvertRequest
   ;
+
+const
+  /// <summary>The run report's Status column on an E10 `inherited left` line
+  /// (InheritedReportLines).</summary>
+  REPORT_STATUS_INHERITED_LEFT = 'inherited left';
+  /// <summary>The run report's Status column on a glyph outcome line
+  /// (GlyphReportLines).</summary>
+  REPORT_STATUS_GLYPH = 'glyph';
 
 type
   /// <summary>Outcome of one results-grid row.</summary>
   /// <remarks>
   /// csConverted: the book converted the unit and the reindex after it succeeded.
-  /// csFailedRestored: the book's apply (or the reindex after it) failed; the
-  ///   unit and its .dfm were restored from this run's backup and the unit's
-  ///   remaining books did not run.
+  /// csFailedRestored: the book's apply (or the reindex after it) failed -- a
+  ///   half-written apply (ApplyHalfWritten: ok=true, but one file's edits refused)
+  ///   counts as failed; the unit and its .dfm were restored from this run's
+  ///   backup and the unit's remaining books did not run. An engine 1.25.1+
+  ///   edit-set refusal (ApplyEditSetRefused: nothing written) is csRefused.
   /// csBookSkipped: the book failed the engine's validation (rule_errors) and the
   ///   reply is not a refusal; the unit is untouched by it and the book is not
   ///   tried on any later unit.
@@ -38,16 +49,19 @@ type
   /// csRestoreFailed: a book failed AND the restore from the backup raised; the
   ///   unit may be half-converted, the Note names the backups (.pas and .dfm)
   ///   to restore by hand.
-  /// csRefused: the engine refused this book on the unit (TApplyRow.Refused),
-  ///   whether or not the reply also lists rule_errors; the book stays valid for
+  /// csRefused: the engine refused this book on the unit (TApplyRow.Refused, or
+  ///   an engine 1.25.1+ edit-set refusal, ApplyEditSetRefused), whether or not the reply also lists rule_errors; the book stays valid for
   ///   later units. The unit's remaining books do not run and it ends unchanged. When an
   ///   earlier book had converted the unit, it is restored like a failure (those
   ///   rows become csRolledBack) and the backup is kept and named. When nothing
   ///   had changed it (the refused book was its first, or every earlier one was
   ///   skipped), nothing is restored and the unneeded backup is DROPPED, as for
   ///   csBookSkipped: Backup / BackupDfm are '' on the row.
+  /// csOutOfScope: a scoped run (IDE request) found no selected instance of this
+  ///   book's From types on the unit; no engine call, no backup kept for it, the
+  ///   unit's later books still run.
   /// </remarks>
-  TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed, csRefused);
+  TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed, csRefused, csOutOfScope);
 
   /// <summary>One results-grid row: a book x unit, or a unit-level skip.</summary>
   TConvertRow = record
@@ -86,6 +100,18 @@ type
     /// project file (ProjectFileForDb), never the Unit Rules Destination: an
     /// `index --project` of another project would re-scope this DB.</summary>
     ProjectFile: string;
+    /// <summary>The engine reports inherited_instances (C8): a converted row's note then
+    /// lists the inherited instances it left (apply/1 inherited[]). False = today's
+    /// handling (the engine refuses such a unit).</summary>
+    InheritedSupported: Boolean;
+    /// <summary>The engine reports inherited_retype (C8 N2): an inherited instance under a
+    /// converted ancestor is retyped. False = the notes say the unit still has the From
+    /// type there and may not compile or load.</summary>
+    RetypeSupported: Boolean;
+    /// <summary>The IDE request's scope; Kind = skWholeUnit for an ordinary run. It
+    /// binds Scope.UnitPas only (ScopedNamesForUnit): any other unit is converted
+    /// whole.</summary>
+    Scope: TConvertScope;
   end;
 
   /// <summary>Called once per row (worker thread!). A unit's rows arrive
@@ -99,6 +125,21 @@ type
   /// <summary>Refreshes the project index; the shape of
   /// TEngineAdapter.IndexProject with the project bound. 0 = success.</summary>
   TIndexFn = reference to function(out AOutput: string): Integer;
+
+  /// <summary>TApplyFn with the --only names: the shape of the AOnly overload of
+  /// TEngineAdapter.ApplyConversion with the --db list bound.</summary>
+  /// <remarks>AOnly = [] means the plain call, with no --only.</remarks>
+  TApplyOnlyFn = reference to function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer;
+
+  /// <summary>The scope decision for one unit x book (ScopedNamesForUnit with the
+  /// job's scope bound). True = scoped: ANames go to --only, and [] means the book
+  /// has nothing in scope on the unit (csOutOfScope, no engine call). False = the
+  /// whole unit, no --only.</summary>
+  TScopeFn = reference to function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean;
+
+  /// <summary>The note tail for a scoped apply that failed with no refusal and no edit
+  /// (UnmatchedOnlyHintFor with the job's scope bound).</summary>
+  TOnlyHintFn = reference to function(const AOnly: TArray<string>): string;
 
 /// <summary>Runs a whole job (AJob.Books over AJob.Units).</summary>
 /// <param name="AJob">The job.</param>
@@ -128,6 +169,8 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// successful apply.</param>
 /// <param name="AProgress">May be nil.</param>
 /// <param name="ACancelled">May be nil; polled exactly once just before each unit; True stops the run there.</param>
+/// <param name="AInheritedSupported">See TConvertJob.InheritedSupported.</param>
+/// <param name="ARetypeSupported">See TConvertJob.RetypeSupported.</param>
 /// <returns>One row per unit x book attempted (a missing, not-reindexed or
 /// un-backed-up unit: one csUnitSkipped row); a unit whose books were all found
 /// invalid on earlier units gets no row, no reindex and no backup.</returns>
@@ -141,24 +184,142 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// on a unit nothing has changed yet, which restores nothing and drops the backup. Never
 /// raises: file I/O failures and exceptions from AApply / AIndex become row
 /// outcomes (see TConvertStatus).</remarks>
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>; overload;
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False): TArray<TConvertRow>; overload;
+
+/// <summary>The unit loop with the engine calls AND the scope injected (C12, spec
+/// E9-E11); the TApplyFn overload is this one with a whole-unit scope.</summary>
+/// <param name="AUnits">Source units.</param>
+/// <param name="ABooks">Validated books, application order.</param>
+/// <param name="AApply">Applies one book to one unit, with the --only names.</param>
+/// <param name="AIndex">As in the TApplyFn overload.</param>
+/// <param name="AScope">Asked once per unit x book, before the engine call.</param>
+/// <param name="AProgress">May be nil.</param>
+/// <param name="ACancelled">May be nil; polled exactly once just before each unit; True stops the run there.</param>
+/// <param name="AInheritedSupported">See TConvertJob.InheritedSupported.</param>
+/// <param name="ARetypeSupported">See TConvertJob.RetypeSupported.</param>
+/// <param name="AOnlyHint">The unmatched-name note tail; nil = UnmatchedOnlyHint (the
+/// TConvertJob overload binds UnmatchedOnlyHintFor to the job's scope).</param>
+/// <returns>As the TApplyFn overload, plus csOutOfScope rows.</returns>
+/// <remarks>Everything the TApplyFn overload says holds. In addition: a book AScope
+/// scopes to NO name gets a csOutOfScope row with no engine call and no backup named,
+/// and the unit's next book still runs (a unit whose every book is out of scope keeps
+/// no backup). A scoped converted row's note is ScopedConvertedNote; a scoped refusal's
+/// note gets RefusalHint appended; a scoped apply that fails with no refusal and no edit
+/// (an --only name that matched nothing) stays a failure (restored) and its note gets
+/// AOnlyHint's tail. AScope raising counts as out of scope.</remarks>
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False; const AOnlyHint: TOnlyHintFn = nil): TArray<TConvertRow>; overload;
 
 /// <summary>Display text for a status.</summary>
 /// <param name="AStatus">The status.</param>
 /// <returns>'converted', 'FAILED -- restored', 'book skipped', 'unit skipped',
-/// 'rolled back', 'FAILED -- NOT restored', 'refused -- not changed'.</returns>
+/// 'rolled back', 'FAILED -- NOT restored', 'refused -- not changed',
+/// 'skipped -- not in scope'.</returns>
 function ConvertStatusText(AStatus: TConvertStatus): string;
+
+type
+  /// <summary>A finished run's rows counted by status (the Convert tab's summary).</summary>
+  TRunTally = record
+    /// <summary>csConverted rows.</summary>
+    Converted  : Integer;
+    /// <summary>csFailedRestored rows.</summary>
+    Restored   : Integer;
+    /// <summary>csRolledBack rows.</summary>
+    RolledBack : Integer;
+    /// <summary>csBookSkipped rows.</summary>
+    BookSkips  : Integer;
+    /// <summary>csUnitSkipped rows.</summary>
+    UnitSkips  : Integer;
+    /// <summary>csRefused rows.</summary>
+    Refused    : Integer;
+    /// <summary>csOutOfScope rows: unit x book pairs a scoped run never applied.</summary>
+    OutOfScope : Integer;
+    /// <summary>File names of the csRestoreFailed rows' units, row order.</summary>
+    NotRestored: TArray<string>;
+  end;
+
+/// <summary>PURE: counts ARows by status.</summary>
+/// <param name="ARows">A run's rows.</param>
+/// <returns>The tally; every row lands in exactly one count (or NotRestored).</returns>
+function TallyRows(const ARows: TArray<TConvertRow>): TRunTally;
+
+/// <summary>PURE: the summary's lead sentence (C12 Task 3 carry): out-of-scope pairs
+/// are counted on their own and are NOT part of the "of M" denominator.</summary>
+/// <param name="ATally">TallyRows of the run.</param>
+/// <param name="APairs">Books x units of the job.</param>
+/// <returns>'Converted N of M unit x book pair(s); R failed and were restored.' with
+/// M = APairs - OutOfScope, plus ' K pair(s) skipped -- not in scope.' when K &gt; 0.</returns>
+function ConvertedSummaryText(const ATally: TRunTally; APairs: Integer): string;
+
+/// <summary>PURE: the units ARows converted (C8 R4: an ancestor converted EARLIER IN THE
+/// SAME RUN converts its descendants' code uses too, so the editor-side code-use note
+/// omits it; the engine's inherited[] is never filtered by this).</summary>
+/// <param name="ARows">A run's rows so far.</param>
+/// <returns>Unit names (file name without extension) of the csConverted rows, first-seen
+/// order, once each.</returns>
+/// <remarks>A unit whose conversion a later book on it rolled back is csRolledBack, not
+/// csConverted, so it is not listed.</remarks>
+function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;
+
+/// <summary>PURE: True when ARow should carry the editor-side code-use "left" note:
+/// it is csConverted and no EARLIER csConverted row is for the same unit (one note per
+/// unit, not one per book).</summary>
+/// <param name="ARow">The row about to be shown.</param>
+/// <param name="AEarlier">The run's rows before it.</param>
+/// <returns>See summary; units compared by path, case-insensitively.</returns>
+function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>): Boolean;
+
+/// <summary>PURE: the run report's E10 lines for one row: one per inherited instance
+/// the engine says the converted unit left, UNFILTERED (controller ruling M4: the
+/// engine reports after the runner's reindex and is authoritative; R4 is the code-use
+/// note's alone). Same 8 tab-separated columns as every report row: Book, Unit,
+/// REPORT_STATUS_INHERITED_LEFT, four empty cells, InheritedReportNote.</summary>
+/// <param name="ARow">A run row.</param>
+/// <param name="AInheritedSupported">The engine reported inherited_instances when the
+/// run started; False = no lines (an older engine's output is not this contract).</param>
+/// <param name="ARetypeSupported">The engine reported inherited_retype when the run
+/// started (passed to InheritedReportNote).</param>
+/// <returns>[] unless ARow is csConverted and AInheritedSupported.</returns>
+function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported, ARetypeSupported: Boolean): TArray<string>;
+
+/// <summary>PURE: the run report's glyph lines for one row (spec E13, amended to the
+/// report's one shape): one per engine glyphs[] outcome, in the same 8 tab-separated
+/// columns as every report row -- Book, Unit, REPORT_STATUS_GLYPH, four empty cells,
+/// GlyphReportNote.</summary>
+/// <param name="ARow">A run row.</param>
+/// <returns>[] unless ARow is csConverted: a rolled-back row's to-do markers were
+/// restored away (the same rule as GlyphTodoUnitCount).</returns>
+function GlyphReportLines(const ARow: TConvertRow): TArray<string>;
+
+/// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
+/// <param name="ARows">The run's rows.</param>
+/// <returns>The number of distinct UnitPas (compared case-insensitively) with at least
+/// one csConverted row whose Apply.Glyphs holds a to-do (GlyphTodoCount &gt; 0). A unit
+/// two books converted counts once; a csRolledBack row counts nowhere -- its change,
+/// and the to-do marker it wrote, were restored away.</returns>
+function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
+
+/// <summary>The run summary's leading sentences, most severe first.</summary>
+/// <param name="ANotRestored">Units whose restore failed (may be half-converted); [] = none.</param>
+/// <param name="AGlyphSummary">GlyphRunSummary of the run; '' = no glyph to-dos.</param>
+/// <param name="ABody">The ordinary summary (counts, problems, report path).</param>
+/// <returns>'RESTORE FAILED for &lt;units&gt; -- may be half-converted; restore by hand from the
+/// backups its row names. ' when ANotRestored is not empty, then AGlyphSummary + two spaces
+/// when it is set, then ABody. A half-converted unit always leads; the glyph to-dos come
+/// next.</returns>
+function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
 
 implementation
 
 uses
   System.IOUtils
   , System.StrUtils
+  , ConvRules.Glyph
   , ConvRules.UnitStatus  // dl:ok unused-unit-in-uses@ec0d -- REVIEWED 2026-09-29 false positive: TFileProbe (FileProbe's return type) is declared here; removing the unit fails with E2003
   ;
 
 const
   OUTPUT_HEAD_CHARS = 200;
+  NOTE_OUT_OF_SCOPE = 'no in-scope instance of this book''s From types on the unit';
 
 function ConvertStatusText(AStatus: TConvertStatus): string;
 begin
@@ -170,8 +331,92 @@ begin
     csRolledBack    : Result:= 'rolled back';
     csRestoreFailed : Result:= 'FAILED -- NOT restored';
     csRefused       : Result:= 'refused -- not changed';
+    csOutOfScope    : Result:= 'skipped -- not in scope';
     else              Result:= 'FAILED -- NOT restored';
   end;
+end;
+
+function TallyRows(const ARows: TArray<TConvertRow>): TRunTally;
+begin
+  Result:= Default(TRunTally);
+  for var LRow: TConvertRow in ARows do
+    case LRow.Status of
+      csConverted     : Inc(Result.Converted);
+      csFailedRestored: Inc(Result.Restored);
+      csRolledBack    : Inc(Result.RolledBack);
+      csBookSkipped   : Inc(Result.BookSkips);
+      csUnitSkipped   : Inc(Result.UnitSkips);
+      csRestoreFailed : Result.NotRestored:= Result.NotRestored + [ExtractFileName(LRow.UnitPas)];
+      csRefused       : Inc(Result.Refused);
+      csOutOfScope    : Inc(Result.OutOfScope);
+    end; // case
+end;
+
+function ConvertedSummaryText(const ATally: TRunTally; APairs: Integer): string;
+begin
+  Result:= Format('Converted %d of %d unit x book pair(s); %d failed and were restored.', [ATally.Converted, APairs - ATally.OutOfScope, ATally.Restored]);
+  if ATally.OutOfScope > 0 then
+    Result:= Result + Format(' %d pair(s) skipped -- not in scope.', [ATally.OutOfScope]);
+end;
+
+function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;
+var
+  LName: string;
+begin
+  Result:= nil;
+  for var LRow: TConvertRow in ARows do
+    if LRow.Status = csConverted then
+    begin
+      LName:= ChangeFileExt(ExtractFileName(LRow.UnitPas), '');
+      if not MatchText(LName, Result) then
+        Result:= Result + [LName];
+    end;
+end;
+
+function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>): Boolean;
+begin
+  Result:= ARow.Status = csConverted;
+  for var LRow: TConvertRow in AEarlier do
+    if Result and (LRow.Status = csConverted) and SameText(LRow.UnitPas, ARow.UnitPas) then
+      Result:= False;
+end;
+
+function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported, ARetypeSupported: Boolean): TArray<string>;
+begin
+  Result:= nil;
+  if not AInheritedSupported or (ARow.Status <> csConverted) then
+    Exit;
+  for var LLeft: TInheritedLeft in ARow.Apply.InheritedLeft do
+    Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft, ARetypeSupported)])];
+end;
+
+function GlyphReportLines(const ARow: TConvertRow): TArray<string>;
+begin
+  Result:= nil;
+  if ARow.Status <> csConverted then
+    Exit;
+  for var LG: TGlyphOutcome in ARow.Apply.Glyphs do
+    Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_GLYPH, '', '', '', '', GlyphReportNote(LG)])];
+end;
+
+function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
+var
+  LUnits: TArray<string>;
+begin
+  LUnits:= nil;
+  for var LRow: TConvertRow in ARows do
+    if (LRow.Status = csConverted) and (GlyphTodoCount(LRow.Apply.Glyphs) > 0) and not MatchText(LRow.UnitPas, LUnits) then
+      LUnits:= LUnits + [LRow.UnitPas];
+  Result:= Length(LUnits);
+end;
+
+function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
+begin
+  Result:= ABody;
+  if AGlyphSummary <> '' then
+    Result:= AGlyphSummary + '  ' + Result;
+  if Length(ANotRestored) > 0 then
+    Result:= Format('RESTORE FAILED for %s -- may be half-converted; restore by hand from the backups its row names. ', [string.Join(', ', ANotRestored)]) + Result;
 end;
 
 function FileProbe: TFileProbe;
@@ -191,22 +436,52 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 var
   LJob   : TConvertJob;
   LEngine: TEngineAdapter;
+  LScope : TScopeFn;
 begin
   LJob   := AJob;
   LEngine:= AEngine;
-  Result:= RunConversionUnits(AUnits, ABooks,
-    function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+  // The book is read on the worker thread; an unreadable one is out of scope.
+  LScope:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
     begin
-      Result:= LEngine.ApplyConversion(AUnitPas, ARulesFile, LJob.Dbs, AJson);
+      Result:= ScopedNamesForBookFile(LJob.Scope, AUnitPas, ABook, ANames);
+    end;
+  Result:= RunConversionUnits(AUnits, ABooks,
+    function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
+    begin
+      Result:= LEngine.ApplyConversion(AUnitPas, ARulesFile, LJob.Dbs, AOnly, AJson);
     end,
     function(out AOutput: string): Integer
     begin
       Result:= LEngine.IndexProject(LJob.ProjectFile, LJob.ProjectDb, AOutput);
     end,
-    AProgress, ACancelled);
+    LScope, AProgress, ACancelled, LJob.InheritedSupported, LJob.RetypeSupported,
+    // No "re-send it" when every --only name is inherited/inline (fix wave Minor 2).
+    function(const AOnly: TArray<string>): string
+    begin
+      Result:= UnmatchedOnlyHintFor(LJob.Scope, AOnly);
+    end);
 end;
 
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>;
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@8e04 -- REVIEWED 2026-10-06 the test-injection twin of the TConvertJob overload: two engine seams plus the job's two capability flags (InheritedSupported, RetypeSupported); a record for the two flags would be one more type used only here
+var
+  LApply: TApplyFn;
+begin
+  LApply:= AApply;
+  Result:= RunConversionUnits(AUnits, ABooks,
+    function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
+    begin
+      Result:= LApply(AUnitPas, ARulesFile, AJson);
+    end,
+    AIndex,
+    function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
+    begin
+      ANames:= nil;
+      Result:= False;
+    end,
+    AProgress, ACancelled, AInheritedSupported, ARetypeSupported);
+end;
+
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@092f -- REVIEWED 2026-10-06 the ONE unit loop: four engine/scope seams (apply, index, scope, unmatched-name hint), progress, cancel and the job's two capability flags; the TConvertJob overload is the record-shaped entry point
 var
   Rows    : TArray<TConvertRow>;
   UnitRows: TArray<TConvertRow>; // the current unit's rows, emitted when it finishes
@@ -376,11 +651,31 @@ var
     Result:= LCode = 0;
   end;
 
+  // True = the book is scoped on this unit (ANames may be []). A raising AScope
+  // scopes it to no name: no apply, never a whole-unit one.
+  function AskScope(const ABook: string; out ANames: TArray<string>): Boolean;
+  begin
+    try
+      Result:= AScope(CurUnit, ABook, ANames);
+    except // an out-of-scope row for the book (no engine call): the safe side of a failed decision
+      on Exception do
+      begin
+        ANames:= nil;
+        Result:= True;
+      end;
+    end; // try
+    if not Result then
+      ANames:= nil;
+  end;
+
   // False = the unit failed; its remaining books must not run.
   function RunBook(const ABook: string): Boolean;
   var
-    LJson : string;
-    LError: string;
+    LJson  : string;
+    LError : string;
+    LOnly  : TArray<string>;
+    LScoped: Boolean;
+    LReason: string;
   begin
     Result:= True;
     Row:= Default(TConvertRow);
@@ -388,9 +683,19 @@ var
     Row.Book     := ABook;
     Row.Backup   := BakPas;
     Row.BackupDfm:= BakDfm;
+    LScoped:= AskScope(ABook, LOnly);
+    if LScoped and (Length(LOnly) = 0) then
+    begin
+      Row.Backup   := ''; // the book made no change; the backups may yet be dropped
+      Row.BackupDfm:= '';
+      Row.Status   := csOutOfScope;
+      Row.Note     := NOTE_OUT_OF_SCOPE;
+      Add;
+      Exit; // Result = True: the unit's next book still runs
+    end;
     try
       // A non-zero exit shows up as ok=false or unparseable text in ParseApplyJson.
-      AApply(CurUnit, ABook, LJson);
+      AApply(CurUnit, ABook, LOnly, LJson);
     except  // dl:ok try-except-swallowed@3c3c -- REVIEWED 2026-09-29 not swallowed: the message becomes unparseable apply output, so the unit is restored and the row names it
       on E: Exception do
         LJson:= 'engine call raised: ' + E.Message; // unparseable -> the unit is restored
@@ -398,7 +703,8 @@ var
     Row.Apply:= ParseApplyJson(LJson);
     // A refusal is about THIS unit, even when it also lists rule_errors: it takes the
     // refused path below and leaves the book valid for the next unit.
-    if (not Row.Apply.Ok) and (Row.Apply.RuleErrorCount > 0) and not Row.Apply.Refused then
+    // An edit-set refusal (engine 1.25.1+) is a unit failure, never a book error.
+    if (not Row.Apply.Ok) and (Row.Apply.RuleErrorCount > 0) and not Row.Apply.Refused and not ApplyEditSetRefused(Row.Apply) then
     begin
       // The BOOK is invalid; the engine validates before writing, so this unit
       // is untouched by it. Skip the book for the rest of the run.
@@ -412,7 +718,23 @@ var
     end;
     if not Row.Apply.Ok then
     begin
-      FailUnit(Row.Apply.Error, if Row.Apply.Refused then csRefused else csFailedRestored);
+      // The E10 hint only on a scoped run: an unscoped run never asked for --only.
+      LReason:= if ApplyEditSetRefused(Row.Apply) then EditSetRefusedNote(Row.Apply) else Row.Apply.Error;
+      if LScoped and Row.Apply.Refused then
+        LReason:= LReason + RefusalHint(LReason)
+      else if LScoped and (Row.Apply.EditsCount = 0) and not ApplyEditSetRefused(Row.Apply) then
+        LReason:= LReason + (if Assigned(AOnlyHint) then AOnlyHint(LOnly) else UnmatchedOnlyHint(LOnly)); // measured shape of an --only name that matches nothing
+      // An edit-set refusal (1.25.1+) wrote nothing, like a refusal: FailUnit's
+      // csRefused path restores only when an earlier book changed the unit.
+      FailUnit(LReason, if Row.Apply.Refused or ApplyEditSetRefused(Row.Apply) then csRefused else csFailedRestored);
+      Exit(False);
+    end;
+    // ok=true and exit 0, but the engine refused one file's edit set and wrote the
+    // other: a half-converted unit is a failure, never a conversion (stop-gap until
+    // the engine applies all-or-nothing; see ApplyHalfWritten).
+    if ApplyHalfWritten(Row.Apply) then
+    begin
+      FailUnit(HalfWrittenNote(Row.Apply), csFailedRestored);
       Exit(False);
     end;
     if not TryReindex(LError) then
@@ -422,7 +744,11 @@ var
     end;
     Changed   := True;
     Row.Status:= csConverted;
-    Row.Note  := Format('%d edit(s), %d remaining for manual work', [Row.Apply.EditsCount, Length(Row.Apply.Remainder)]);
+    // The engine's inherited[] is shown unfiltered (ruling M4): the unit was reindexed
+    // before its first book, so the engine already knows which ancestors this run converted.
+    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(Row.Apply.Glyphs);
+    if LScoped then
+      Row.Note:= ScopedConvertedNote(LOnly, Row.Note);
     Add;
   end;
 
@@ -465,7 +791,7 @@ var
         Break;
     if Changed then
       Exit;
-    // Nothing touched the unit (every book invalid, or refused before any change): the fresh copies are
+    // Nothing touched the unit (every book invalid or out of scope, or refused before any change): the fresh copies are
     // identical to it and would only litter the folder.
     LError:= DropBackups;
     if (LError <> '') and (Length(UnitRows) > 0) then

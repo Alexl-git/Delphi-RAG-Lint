@@ -202,3 +202,22 @@ drag-lint index --all --only Library --jobs 0
 Expect a whole-database call-target resolve: new units bring new type names,
 which is exactly the condition that declines the scoped pass. It will announce
 itself with its reason. Budget accordingly, and let it finish.
+
+## Internal verbs
+
+`drag-lint` accepts a few verbs that `--help` does not list on purpose: they
+are self-tests and diagnostics driven by the test battery or by another verb,
+not part of the user surface. They are listed here so a name seen in a log or
+a script can be looked up. The reasons are the ones the docs-sync guard keeps
+in its `$UndocumentedOnPurpose` list.
+
+| Verb | What it is |
+|---|---|
+| `selftest` | Umbrella self-test dispatcher (manifest-merge, glob, closure, dbselect, drift, ...) used by runners under `tests\` |
+| `contrast-selftest` | Self-test for the hover contrast computation, driven by a test runner |
+| `doc-facts-selftest` | Self-test for the doc-facts renderer, driven by test runners |
+| `test-store-freshness` | Store-freshness probe used by a test runner; it needs `--db` and does nothing else |
+| `dump-pp-lex` | Preprocessor lexer dump. The documented preprocessor verbs are `preprocess-file` and `pp-profile` |
+| `dump-pp-eval` | Preprocessor expression-evaluation dump, paired with `dump-pp-lex` |
+| `resolve-uses` | The diagnostic behind `check-unit --resolve-uses`; not a verb of its own |
+| `convert-reemit` | The DFM re-emit stage of the conversion pipeline, driven by `convert-apply` and by test runners |

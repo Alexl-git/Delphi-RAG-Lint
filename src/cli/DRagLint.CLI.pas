@@ -492,6 +492,7 @@ type
     // Task 2: convert-apply's --unit (the .pas being converted) ALSO reuses
     // this field (same non-document-command routing as ghost-check).
     GhostUnit  : string; // --unit <real .pas to overlay | convert-apply target .pas>
+    ConvertUnits: TArray<string>; // every --unit in order (convert-apply batch mode, C13 b2); GhostUnit is the last
     GhostBuffer: string; // --buffer <temp file holding the buffer>
     // AutoDocument (whole-unit batch): --unit <file.pas> for the `document`
     // command means "document every public decl in this unit". It shares the
@@ -966,22 +967,30 @@ begin
     '--progress-interval S: see PROGRESS below)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book''s #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error, and so is a From-only header (''#convert TFoo -> '' or ''#convert TFoo'': ''#convert TFoo has no To type''; ''#useswap X -> '': ''#useswap X has no replacement unit''); ' +
     'and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; ' +
-    'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); no JSON mode)');
+    'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); ' +
+    'without BOTH --from and --to the book is only PARSED -- no path is checked -- and a ''NOTE:'' line on stderr says so; no JSON mode)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, ' +
     'expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)');
   Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (whole seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- ' +
     '{"progress":{"elapsed_s":12.3,"verb":"proptree","class":"<qname>","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}} -- stdout is unchanged; S not decimal digits (x, -1, +3) or missing exits 2; every stderr line is flushed BEFORE the stdout document, which is written in one piece (a merged pipe reads notes, then the whole document); ' +
     'convert-apply / convert-validate never emit progress and reject the flag as an unknown argument (exit 3); cancel = kill the process (the default write-back is kill-safe: each memoized type is its own SQLite statement)');
-  Writeln('  drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
+  Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
     'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; ' +
-    'the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule}, uses_removed, uses_added; ' +
+    'the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule,reason}, uses_removed, uses_added; the To type''s unit goes to the INTERFACE uses when the retyped field is declared in the interface, and is MOVED there from an implementation-only use (1.23.0);' +
     'EVERY #convert block is validated and freshness-checked -- each #link/#default against its own From/To types, each #mapping against the blocks that #apply it -- ' +
     'with each path resolved segment by segment, no depth limit (a published leaf; each hop published, or public and class-typed; private never); ' +
-    'a block whose type resolves in no --db is an error on its #convert line; json classes_built counts the classes whose members were resolved; ' +
+    'a #convert type that resolves in no --db REFUSES the unit, dry run and --apply alike -- an index gap, not a rule error (''<Type> (line N) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting''); json classes_built counts the classes whose members were resolved; ' +
     'a #link/#default/#mapping path through a member that exists but is inaccessible is SKIPPED, never applied and never an error -- the unit converts the rest -- and reported as a ''line N: warning: ...'' line (text: under Warnings; json: warnings[] strings, items[] kind rule-path-unreachable, and unreachable[] {line,path,member,visibility,class,reason,message}); ' +
-    'a .dfm holding an inherited/inline object of a From type is refused whole, unit rules included (exit 1); ' +
-    'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- that one; a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
-    '--only filters instances, never unit rules, so a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed''); ' +
+    'an inherited/inline .dfm object of a From type whose declaring ancestor is not converted is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason,action}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk; --only filters inherited[] too); ' +
+    'one whose declaring ancestor ALREADY has the To type is RETYPED (1.26.0, C8 N2): inherited X: TFrom -> inherited X: TTo, keyword kept, nested and inline-frame children too; the properties its block overrides convert per the book (what it does not stream it inherits: no default resolved, no #default written); its code access sites are rewritten as for an own instance and the To unit is added; every code access to a field a converted ancestor declares (bound by the resolver, any level up) is rewritten too, .dfm block or not (N2a) -- json inherited[].action retyped|code|skipped|unverified (code: line = its first .pas reference), a converted[] line and items[] kind inherited-instance-retyped, not a warning; --only filters both; info capability inherited_retype; ' +
+    'every code rewrite is scoped to the instance''s field (receiver bound to it, or unbound / bare / Self. in a routine of the .dfm root class with no same-named local); a site the index cannot vouch for is NOT rewritten and is reported (''access site <file>:<line> ... not verified against the index -- not rewritten'', items[] kind access-site-unverified, json access_sites_unverified); a --db resolved before resolver 1.12.0 is REFUSED, dry run too, naming the index ... --resolve-only fix; ' +
+    'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
+    'a plan the edit applier would refuse in part (overlapping delete ranges -- an engine defect) fails the WHOLE unit before anything is written, dry run too, and a write that fails part-way is ROLLED BACK byte-identical (exit 2, ''-- rolled back, unit not changed''; a failed rollback names the files it could not restore) (1.25.1): exit 1, ''ERROR: refused N edit(s) to <file> -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written'', json ok=false with that error; ' +
+    'a .dfm component nested in another converted one is spliced into its parent''s re-emit, and --only naming the parent converts it too (json only_included[] {name,parent}, text ''--only: <child> converts too -- nested in <parent>''); a collection property (FieldDefs = < item ... end>) whose item members the book links (#link X.Items.* <- X.Items.*, identity) is carried whole when the To type publishes X with the same collection type, else reported NOT carried with its item count and counted as dropped, #ignore X notwithstanding; ' +
+    'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
+    'a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed'') -- EXCEPT that with --only, when every such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); ' +
+    '--only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); ' +
+    '--unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; ' +
     'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
   Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
@@ -1762,7 +1771,11 @@ begin
       Inc(i);
       if (Result.Command = 'document') or (Result.Command = 'document-all') then Result.DocUnit:= ParamStr(i)
       else if Result.Command = 'query' then Result.UnitName:= ParamStr(i)
-      else Result.GhostUnit:= ParamStr(i);
+      else
+      begin
+        Result.GhostUnit   := ParamStr(i);
+        Result.ConvertUnits:= Result.ConvertUnits + [ParamStr(i)];
+      end;
     end
     // AutoDocument batch: --stubs opt-in (flips the facts-only default for
     // document / document --project / document-all).
@@ -16025,6 +16038,29 @@ begin
       JCap.AddPair('book_depth'    , TJSONBool.Create(True));
       JCap.AddPair('progress_lines', TJSONBool.Create(True));
       JCap.AddPair('lazy_validate' , TJSONBool.Create(True));
+      { 1.22.0 (C8 N5), same contract: convert-apply skips and reports
+        inherited / inline .dfm instances (apply/1 inherited[]) instead of
+        refusing the unit; an engine without the key still refuses (R6). }
+      JCap.AddPair('inherited_instances', TJSONBool.Create(True));
+      { 1.23.0 (C13 b2), same contract: convert-apply takes --unit more than
+        once and converts every unit in ONE process -- one rule-book
+        validation, one member cache -- emitting apply-batch/1 under JSON. }
+      JCap.AddPair('batch_units', TJSONBool.Create(True));
+      { 1.23.0 (C13 N4), same contract: with --only, a #unuse / #useswap
+        removal that would strand ONLY instances --only left out is skipped
+        (apply/1 uses[] action 'skipped') instead of refusing the unit. }
+      JCap.AddPair('only_skips_unit_rules', TJSONBool.Create(True));
+      { 1.25.0, same contract: convert-apply lists the descendant units that
+        still stream or use an instance it converts (apply/1 descendants[],
+        items[] kind descendant-not-converted) -- a warning, never a refusal. }
+      JCap.AddPair('descendant_warnings', TJSONBool.Create(True));
+      { 1.26.0 (C8 N2 / N2a; name agreed with the converter): an inherited /
+        inline instance whose declaring ancestor already has the To type is
+        RETYPED, its block and its code access sites converted, and a field a
+        converted ancestor declares is followed in code -- apply/1 inherited[]
+        gains `action` retyped | code | skipped, items[] kind
+        inherited-instance-retyped. }
+      JCap.AddPair('inherited_retype', TJSONBool.Create(True));
       JRoot.AddPair('capabilities', JCap);
       JRoot.AddPair('exe_path', ExePath);
       JRoot.AddPair('platform', Plat);
@@ -23872,6 +23908,11 @@ begin
   for E in ConversionRuleWarnings(RuleSet) do
     Writeln(Format('line %d: warning: %s', [E.LineNo, E.Message]));
 
+  { 1.26.1: without both types the paths were never checked -- say so (on
+    stderr, so the stdout contract 'OK' is unchanged), or a bare run reads as
+    a validated book. }
+  if (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
+    Writeln(ErrOutput, 'NOTE: --from and --to not both given -- the book was PARSED only; #link/#default paths were not checked (convert-apply validates every block)');
   if Length(Errors) > 0 then Exit(1);
   if not AArgs.PrintParsed then Writeln('OK');
   Result:= 0;
@@ -24490,12 +24531,19 @@ begin
   if Length(AReport.UsesChanges) > 0 then
   begin
     var NRemoved: Integer:= 0;
+    var NSkipped: Integer:= 0;
     for var UC: TUsesChange in AReport.UsesChanges do
-      if UC.Action = 'remove' then Inc(NRemoved);
+      if UC.Action = 'remove' then Inc(NRemoved)
+      else if UC.Action = 'skipped' then Inc(NSkipped);
     Writeln('');
-    Writeln(Format('Uses: %d removed, %d added', [NRemoved, Length(AReport.UsesChanges) - NRemoved]));
+    if NSkipped = 0 then
+      Writeln(Format('Uses: %d removed, %d added', [NRemoved, Length(AReport.UsesChanges) - NRemoved]))
+    else
+      Writeln(Format('Uses: %d removed, %d added, %d removal(s) skipped (--only)',
+        [NRemoved, Length(AReport.UsesChanges) - NRemoved - NSkipped, NSkipped]));
     for var UC: TUsesChange in AReport.UsesChanges do
-      Writeln(Format('  %s %s (%s, line %d) -- %s', [UC.Action, UC.UnitName, UC.Section, UC.Line, UC.Rule]));
+      Writeln(Format('  %s %s (%s, line %d) -- %s', [UC.Action, UC.UnitName, UC.Section, UC.Line, UC.Rule]) +
+        (if UC.Reason <> '' then ' (' + UC.Reason + ')' else ''));
   end;  { ResolvedDefaults -- a COUNT, not a listing, and that asymmetry is deliberate.
     Text mode used to print one line per resolved default under ReemitNotes,
     which on a real form is ~2,000 lines of "this worked" ahead of the handful
@@ -24542,12 +24590,33 @@ type
       Their messages are ALSO in Report.Warnings / Report.Items. }
     Unreachable: TArray<TUnreachablePath>;
     { 1.20.6 (T2f): True for a DELIBERATE refusal -- the unit cannot be
-      converted safely and nothing was written (ruling R6 inherited instances,
-      a unit-rules conditional-uses refusal, and any TApplyResult.Refusal) --
+      converted safely and nothing was written (a unit-rules conditional-uses
+      refusal, and any TApplyResult.Refusal) --
       apply/1 refused / reason. False for every other outcome, success and
       genuine failure alike. Reason is '' unless Refused. }
     Refused: Boolean;
     Reason : string;
+    { 1.22.0 (C8 N1): the inherited / inline .dfm objects of a From type the
+      run SKIPPED, each with its declaring ancestor -- apply/1 inherited[]. Their
+      'line N: warning:' text is ALSO in Report.Warnings / Report.Items. }
+    InheritedInsts: TArray<TInheritedInstance>;
+    { 1.25.0: the descendant units that still stream or use an instance this
+      run converts -- apply/1 descendants[]. Their 'line N: warning:' text is
+      ALSO in Report.Warnings / Report.Items. }
+    Descendants: TArray<TDescendantUse>;
+    { 1.23.0 (C13 b2): batch mode's collector. nil -> EmitApplyJson writes the
+      document to stdout (single --unit, unchanged); assigned -> the apply/1
+      object is appended to it instead (owned by the array) and nothing is
+      written, so DoConvertApply can wrap every unit in one apply-batch/1. }
+    Sink: TJSONArray;
+    { 1.23.0 (C13 N3): the --only names that name a .dfm object of a #convert
+      From type, and the ones that name none -- apply/1 only_matched[] /
+      only_unmatched[], spelled as given, in --only order; both [] without
+      --only. An unmatched name is ignored (never an error). }
+    OnlyMatched  : TArray<string>;
+    OnlyUnmatched: TArray<string>;
+    { 1.25.1: objects --only left out that convert with a kept parent }
+    OnlyIncluded : TArray<TNestedOnly>;
   end;
 
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
@@ -24705,6 +24774,12 @@ begin
     end;
     JRoot.AddPair('unlinked_source_properties', TJSONNumber.Create(Length(ACtx.Report.Unlinked)));
     JRoot.AddPair('unlinked_source_property_sites', TJSONNumber.Create(UnlinkedTotal));
+    { 1.26.0 (C8 N2 review): the code sites NOT rewritten because the index
+      could not tie them to the converted field (items[] access-site-unverified) }
+    var Unverified: Integer:= 0;
+    for var UIt: TApplyItem in ACtx.Report.Items do
+      if UIt.Kind = aikAccessSiteUnverified then Inc(Unverified);
+    JRoot.AddPair('access_sites_unverified', TJSONNumber.Create(Unverified));
     JRoot.AddPair('unlinked', JUnlinked);
 
     { 1.20.6 -- the unit rules. component_part says whether the #convert /
@@ -24720,13 +24795,15 @@ begin
     var JUses: TJSONArray:= TJSONArray.Create;
     for var UC: TUsesChange in ACtx.Report.UsesChanges do
     begin
-      if UC.Action = 'remove' then Inc(UsesRemoved) else Inc(UsesAdded);
+      if UC.Action = 'remove' then Inc(UsesRemoved)
+      else if UC.Action = 'add' then Inc(UsesAdded); { 'skipped' (C13 N4) is neither }
       var JUC: TJSONObject:= TJSONObject.Create;
       JUC.AddPair('action' , UC.Action);
       JUC.AddPair('unit'   , UC.UnitName);
       JUC.AddPair('section', UC.Section);
       JUC.AddPair('line'   , TJSONNumber.Create(UC.Line));
       JUC.AddPair('rule'   , UC.Rule);
+      JUC.AddPair('reason' , UC.Reason); { '' unless action is 'skipped' (C13 N4) }
       JUses.AddElement(JUC);
     end;
     JRoot.AddPair('uses', JUses);
@@ -24744,7 +24821,67 @@ begin
       message too, so a consumer reading only warnings[] still sees them. }
     JRoot.AddPair('unreachable', UnreachableJson(DistinctUnreachable(ACtx.Unreachable)));
 
-    WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
+    { 1.22.0 (C8 N1) -- one OBJECT per inherited / inline .dfm object of a From
+      type (1.26.0: and per code-only use of a converted ancestor's field):
+      action retyped | code | skipped; ancestor_state unconverted | converted |
+      mismatched | outside, ancestor_unit '' when not known. ALWAYS present, [] when none;
+      warnings[] carries each one's 'line N: warning:' text too, and items[]
+      its kind inherited-instance-skipped mirror. }
+    var JInh: TJSONArray:= TJSONArray.Create;
+    for var Inh: TInheritedInstance in ACtx.InheritedInsts do
+    begin
+      var JI: TJSONObject:= TJSONObject.Create;
+      JI.AddPair('name'          , Inh.Name);
+      JI.AddPair('type'          , Inh.TypeName);
+      JI.AddPair('line'          , TJSONNumber.Create(Inh.Line));
+      JI.AddPair('ancestor_unit' , Inh.AncestorUnit);
+      JI.AddPair('ancestor_state', Inh.AncestorState);
+      JI.AddPair('reason'        , Inh.Reason);
+      JI.AddPair('action'        , Inh.Action); { 1.26.0 (C8 N2): retyped | code | skipped }
+      JInh.AddElement(JI);
+    end;
+    JRoot.AddPair('inherited', JInh);
+
+    { 1.25.0 -- one OBJECT per (descendant unit, converted instance) the
+      descendant still streams (.dfm) or uses (code): reason dfm | code | both,
+      line in the descendant .dfm, else its first code reference. ALWAYS
+      present, [] when none; warnings[] carries each one's 'line N: warning:'
+      text too, and items[] its kind descendant-not-converted mirror. }
+    var JDesc: TJSONArray:= TJSONArray.Create;
+    for var Desc: TDescendantUse in ACtx.Descendants do
+    begin
+      var JD: TJSONObject:= TJSONObject.Create;
+      JD.AddPair('unit'  , Desc.UnitName);
+      JD.AddPair('name'  , Desc.Name);
+      JD.AddPair('type'  , Desc.TypeName);
+      JD.AddPair('line'  , TJSONNumber.Create(Desc.Line));
+      JD.AddPair('reason', Desc.Reason);
+      JDesc.AddElement(JD);
+    end;
+    JRoot.AddPair('descendants', JDesc);
+
+    { 1.23.0 (C13 N3) -- ALWAYS present, [] without --only. }
+    JRoot.AddPair('only_matched'  , ArrOf(ACtx.OnlyMatched));
+    JRoot.AddPair('only_unmatched', ArrOf(ACtx.OnlyUnmatched));
+    { 1.25.1 -- ALWAYS present, [] without --only: one (name, parent) object per object
+      --only did not name that converts because a kept parent contains it }
+    var JInc: TJSONArray:= TJSONArray.Create;
+    for var NO: TNestedOnly in ACtx.OnlyIncluded do
+    begin
+      var JN: TJSONObject:= TJSONObject.Create;
+      JN.AddPair('name'  , NO.Instance.InstanceName);
+      JN.AddPair('parent', NO.Parent);
+      JInc.AddElement(JN);
+    end;
+    JRoot.AddPair('only_included', JInc);
+
+    if Assigned(ACtx.Sink) then
+    begin
+      ACtx.Sink.AddElement(JRoot); { batch mode: the array owns it now }
+      JRoot:= nil;
+    end
+    else
+      WriteStdoutDocument(JRoot.ToJSON + sLineBreak); // after every stderr byte (T2i R18)
   finally
     JRoot.Free;
   end;
@@ -24755,15 +24892,20 @@ end; // procedure
   unless the book has UNIT rules and its component part has nothing to act
   on: 'skipped-no-dfm', 'skipped-no-convert-rules' (no #convert block) or
   'skipped-no-instances' (no .dfm instance a block matches, after --only). A
-  book with no unit rules is always 'applied', so its old errors stand. }
+  book with no unit rules is 'applied', so its old errors stand -- unless the
+  .dfm holds inherited / inline instances of a From type (AHasInherited, C8
+  N1): those are skipped and reported, so a .dfm with no OTHER instance is
+  'skipped-no-instances' and converts nothing rather than failing -- unless
+  one of them is retyped or a converted ancestor's field is used in code
+  (AHasRetype, C8 N2 / N2a, 1.26.0): then BuildApplyPlan runs, 'applied'. }
 function ConvertApplyComponentPart(const ARules: TConversionRuleSet; const ADfmPath: string;
-  const AOnly: TArray<string>): string;
+  const AOnly: TArray<string>; AHasInherited, AHasRetype: Boolean): string;
 var
   R         : TConversionRule;
   HasConvert: Boolean;
 begin
   Result:= 'applied';
-  if not BookHasUnitRules(ARules) then Exit;
+  if not BookHasUnitRules(ARules) and not AHasInherited then Exit;
   HasConvert:= False;
   for R in ARules.Rules do
     if R.Kind = rkConvert then HasConvert:= True;
@@ -24771,7 +24913,8 @@ begin
     Result:= 'skipped-no-dfm'
   else if not HasConvert then
     Result:= 'skipped-no-convert-rules'
-  else if Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0 then
+  else if (Length(FindConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules, AOnly)) = 0) and
+          not AHasRetype then
     Result:= 'skipped-no-instances';
 end;
 
@@ -24780,24 +24923,25 @@ end;
   the first #convert, left unset). Each side comes from ATrees (ClassFor), shared
   with BuildApplyPlan, so each class's members are resolved once per run and only
   when a path asks for them.
-  A block whose From or To type resolves in no --db is an ERROR on its #convert
-  line (added to AErrors, ruling R7) -- an unset side would skip every check of
-  the block and pass it silently. }
+  A block whose From or To type resolves in no --db goes to AUnresolved (its
+  #convert line, the type in Message) -- an unset side would skip every check
+  of the block and pass it silently (ruling R7). C13 d: that is an INDEX gap,
+  not a rule-book error, so the caller refuses the unit on it (UnresolvedReason). }
 function BuildBlockClasses(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
-  AErrors: TList<TRuleError>): TArray<TBlockClasses>;
+  AUnresolved: TList<TRuleError>): TArray<TBlockClasses>;
 var
   R    : TConversionRule;
   Block: Integer;
 
-  procedure RequireResolved(const AConv: TConversionRule; const ASide, AType: string);
+  procedure RequireResolved(const AConv: TConversionRule; const AType: string);
   var
     E: TRuleError;
   begin
     if (AType = '') or (ATrees.ResolveType(AType) <> '') then Exit;
     E        := Default(TRuleError);
     E.LineNo := AConv.LineNo;
-    E.Message:= Format('#convert %s type not found in any --db: %s', [ASide, AType]);
-    AErrors.Add(E);
+    E.Message:= AType;
+    AUnresolved.Add(E);
   end;
 
 begin
@@ -24808,46 +24952,148 @@ begin
     begin
       Inc(Block);
       SetLength(Result, Block + 1);
-      RequireResolved(R, 'From', R.FromType);
-      RequireResolved(R, 'To', R.ToType);
+      RequireResolved(R, R.FromType);
+      RequireResolved(R, R.ToType);
       Result[Block].FromClass:= ATrees.ClassFor(R.FromType);
       Result[Block].ToClass  := ATrees.ClassFor(R.ToType);
     end;
 end;
 
-{ 1.20.6: the From types the unit's .dfm holds as inherited/inline objects -- a
-  refusal (ruling R6), settled before any class is resolved. No .dfm: none. }
-function ConvertApplyInheritedTypes(const ARules: TConversionRuleSet; const ADfmPath: string): TArray<string>;
-begin
-  Result:= nil;
-  if TFile.Exists(ADfmPath) then
-    Result:= FindInheritedConvertTypes(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules);
-end;
-
 { 1.20.6: convert-apply's rule check. EVERY #convert block is validated against
   its own classes (ValidateConversionRulesPerBlock, classes from ATrees; T2b
   reverted ruling R5's per-unit scope, because resolving a path no longer costs
-  a tree), a block whose type resolves nowhere is an error on its #convert line
-  (BuildBlockClasses), and a #link carrying a glyph expression is refused
+  a tree), a block whose type resolves nowhere comes back in AUnresolved (C13 d:
+  the caller REFUSES the unit, see UnresolvedReason), and a #link carrying a glyph expression is refused
   (UnrealisedGlyphLinks). A path through a member that exists but is
   inaccessible is not an error: it comes back in AUnreachable (T2h, owner
   ruling R12), one record per block it is unreachable in -- print through
   DistinctUnreachable, filter per block through WithoutUnreachableRules. }
 function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
-  out AUnreachable: TArray<TUnreachablePath>): TArray<TRuleError>;
+  out AUnreachable: TArray<TUnreachablePath>; out AUnresolved: TArray<TRuleError>): TArray<TRuleError>;
 var
   TypeErrs: TList<TRuleError>;
   Classes : TArray<TBlockClasses>;
 begin
   TypeErrs:= TList<TRuleError>.Create;
   try
-    Classes:= BuildBlockClasses(ATrees, ARules, TypeErrs);
-    Result := ValidateConversionRulesPerBlock(ARules, Classes, AUnreachable) + TypeErrs.ToArray +
-              UnrealisedGlyphLinks(ARules);
+    Classes    := BuildBlockClasses(ATrees, ARules, TypeErrs);
+    AUnresolved:= TypeErrs.ToArray;
+    Result     := ValidateConversionRulesPerBlock(ARules, Classes, AUnreachable) + UnrealisedGlyphLinks(ARules);
   finally
     TypeErrs.Free;
   end;
 end;
+
+{ C13 d (owner ruling 2026-10-06): the REFUSED reason for #convert types that
+  resolve in no --db. Each is '<Type> (line N)', the block's #convert line; the
+  text says it is an index gap (library or project index), never a rule-book
+  error, because the converter cannot convert a type it cannot see. }
+function UnresolvedReason(const AUnresolved: TArray<TRuleError>): string;
+var
+  Parts: TArray<string>;
+  U    : TRuleError;
+begin
+  Parts:= nil;
+  for U in AUnresolved do Parts:= Parts + [Format('%s (line %d)', [U.Message, U.LineNo])];
+  Result:= Format('%s %s in no --db -- index gap in the library or project index; reindex, or report it, before converting',
+    [String.Join(', ', Parts), if Length(Parts) = 1 then 'resolves' else 'resolve']);
+end;
+
+{ 1.25.1 (the DMREADINGS defect): a plan the edit applier would refuse in
+  part fails the WHOLE unit before anything is written. TTextEditApplier.Apply
+  works file by file and refuses one file's edits whole on overlapping delete
+  ranges -- after the .pas has already been written -- so a unit came out
+  half-converted with exit 0. Checked on the dry run too, so the preview
+  fails exactly as --apply would: Ok=False, exit 1, nothing written. }
+{ 1.25.1: True when two byte arrays hold the same bytes. }
+function SameBytes(const A, B: TBytes): Boolean;
+begin
+  Result:= (Length(A) = Length(B)) and ((Length(A) = 0) or CompareMem(@A[0], @B[0], Length(A)));
+end;
+
+{ 1.25.1: the backup file BackupFiles made for APath ('orig -> backup'
+  lines), or '' when none was made (--no-backup). }
+function BackupOf(const AMappings: TArray<string>; const APath: string): string;
+const
+  MAP_ARROW = ' -> ';
+begin
+  for var M: string in AMappings do
+  begin
+    var At: Integer:= Pos(MAP_ARROW, M);
+    if (At > 0) and SameText(Copy(M, 1, At - 1), APath) then Exit(Copy(M, At + Length(MAP_ARROW), MaxInt));
+  end;
+  Result:= '';
+end;
+
+{ 1.25.1 (all-or-nothing, write half): puts every file of a unit back the way
+  it was before a write that failed part-way. AOriginals[I] is AFiles[I] as read
+  just before the write; a file still holding those bytes is left alone, any
+  other is rewritten from its .BCK backup when one was made, else from
+  AOriginals, and then re-read and compared. Returns the files that could NOT
+  be restored byte-identical ([] = rolled back). Never raises.
+  TEST SEAM: DRAGLINT_TEST_FAIL_ROLLBACK=1 makes every restore fail, so the
+  rollback-failed report can be exercised (run_convert_apply_atomic.ps1). }
+function RollBackUnitFiles(const AFiles: TArray<string>; const AOriginals: TArray<TBytes>;
+  const AMappings: TArray<string>): TArray<string>;
+const
+  TEST_FAIL_ROLLBACK = 'DRAGLINT_TEST_FAIL_ROLLBACK';
+var
+  Src: TBytes;
+begin
+  Result:= nil;
+  for var I: Integer:= 0 to High(AFiles) do
+    try
+      if SameBytes(TFile.ReadAllBytes(AFiles[I]), AOriginals[I]) then Continue;
+      if GetEnvironmentVariable(TEST_FAIL_ROLLBACK) = '1' then
+        raise EInOutError.CreateFmt('%s=1: simulated restore failure', [TEST_FAIL_ROLLBACK]);
+      var Bck: string:= BackupOf(AMappings, AFiles[I]);
+      Src:= if (Bck <> '') and TFile.Exists(Bck) then TFile.ReadAllBytes(Bck) else AOriginals[I];
+      TFile.WriteAllBytes(AFiles[I], Src);
+      if not SameBytes(TFile.ReadAllBytes(AFiles[I]), AOriginals[I]) then Result:= Result + [AFiles[I]];
+    except
+      on Exception do Result:= Result + [AFiles[I]];
+    end;
+end;
+
+{ 1.26.0 (C8 N2 review): the REFUSED reason when the --db that indexes AUnitPas
+  had its edges derived by a resolver older than convert-apply's access-site
+  scoping needs (E5 field binds, resolver 1.12.0), or carries no resolver stamp
+  -- '' otherwise. On such a DB a field read is left unbound, and the rewrite
+  would skip it as unverifiable: refusing is the honest answer, dry run and
+  --apply alike. The text names the DB and the exact re-derive command. }
+function ResolverRefusal(const AStores: TArray<ISymbolStore>; const ADbs: TArray<string>;
+  const AUnitPas: string): string;
+const
+  MIN_RESOLVER = '1.12.0-alpha';
+begin
+  Result:= '';
+  for var I: Integer:= 0 to High(AStores) do
+  begin
+    if I > High(ADbs) then Break;
+    if (AStores[I].FindFileIdByPath(AUnitPas) <= 0) and (AStores[I].FindFileIdByPath(TPath.GetFullPath(AUnitPas)) <= 0) then Continue;
+    var Ver: string:= ResolverVersionOfFingerprint(AStores[I].GetMetaValue(RESOLVER_FP_KEY));
+    if (Ver <> '') and (CompareDottedVersions(Ver, MIN_RESOLVER) >= 0) then Exit;
+    Exit(Format('%s: edges were derived by resolver %s; convert-apply needs %s or newer (bound field reads) -- re-derive first: drag-lint %s',
+      [ADbs[I], if Ver <> '' then Ver else '(none)', MIN_RESOLVER, IndexRemedyFor(AStores[I], ADbs[I], {AResolveOnly=}True)]));
+  end;
+end;
+
+procedure RefuseUnapplicablePlan(var APlan: TApplyResult);
+var
+  Refusal: string;
+begin
+  if not APlan.Ok then Exit;
+  Refusal:= TTextEditApplier.RefusalOf(APlan.Edits);
+  if Refusal = '' then Exit;
+  APlan.Ok   := False;
+  APlan.Error:= Refusal + ' -- unit not changed, nothing written';
+end;
+
+type
+  { 1.23.0 (C13): a unit's --apply write cannot be done (a read-only or locked
+    file, or a failure mid-write); DoConvertApply turns it into that unit's
+    failure, exit 2 }
+  EConvertApplyWrite = class(Exception);
 
 /// <summary>drag-lint convert-apply --unit F.pas --rules FILE --db PATH [--db ...]
 /// [--only Name1,Name2,...] [--apply] [--no-backup] [--no-warn-unlinked] [--format json] -- Track 3 sub-project B: locates the
@@ -24871,10 +25117,10 @@ end;
 /// --no-backup; NoWarnUnlinked=--no-warn-unlinked (silences the per-(source type, property)
 /// unlinked warnings; the json count and unlinked[] stay); DbPath/DbPaths=index(es).</param>
 /// <returns>0 on success (dry-run preview shown, or --apply wrote successfully); 1 on a
-/// hard error (missing .dfm when rules need it, invalid rules, a block whose type resolves in
-/// no --db, an inherited/inline .dfm object of a From type, BuildApplyPlan Ok=False, or
+/// hard error (missing .dfm when rules need it, invalid rules, BuildApplyPlan Ok=False, or
 /// --apply refused by the freshness guard -- a stale or unindexed type of any block; a deliberate
-/// refusal -- the inherited/inline object, a unit-rules {$IF...} uses entry, any
+/// refusal -- a #convert type that resolves in no --db (C13 d: an index gap, refused on dry run and
+/// --apply alike, before any rule error), a unit-rules {$IF...} uses entry, any
 /// TApplyResult.Refusal -- goes through RefuseUnit: 'REFUSED: <reason>', apply/1 refused=true,
 /// reason, nothing written); 2 on bad args (missing --unit/--rules, file not
 /// found, no readable db (an explicit --db that is missing or stale is exit 2)).</returns>
@@ -24886,14 +25132,19 @@ end;
 /// otherwise folded into BuildApplyPlan's plan; a unit whose entry to remove sits in a
 /// conditional region is refused (exit 1, nothing written). Every readable --db is opened
 /// up front into Stores (not just the first; a stale explicit --db exits 2 here, before
-/// any rule is checked). The .dfm is then read (ConvertApplyInheritedTypes): a unit whose .dfm
-/// holds an inherited/inline object of a From type is REFUSED whole, unit rules included (exit 1,
-/// ruling R6), before any class is resolved. Rules are then validated (ValidateConvertBook)
+/// any rule is checked). The .dfm is then read (FindInheritedInstances, 1.22.0, C8 N1/N3): an
+/// inherited/inline object of a From type is NOT converted and no longer refuses the unit -- it
+/// is skipped and reported with its declaring ancestor (apply/1 inherited[] {name, type, line,
+/// ancestor_unit, ancestor_state unconverted|converted|mismatched|outside, reason, action}, a 'line N: warning:'
+/// line in warnings[], items[] kind inherited-instance-skipped), while the unit's own instances,
+/// code and unit rules convert; R26 counts it as left unconverted. One whose ancestor already has
+/// the To type is RETYPED instead (1.26.0, C8 N2: action retyped), and a converted ancestor's field
+/// used only in code joins the access-site rewrite (N2a, FindInheritedCodeUses: action code). Rules are then validated (ValidateConvertBook)
 /// BEFORE BuildApplyPlan runs -- EVERY block against its OWN From/To classes, each path resolved
 /// segment by segment (1.20.6, T2b: no property tree is built, so validating the whole book is
 /// cheap and ruling R5's per-unit scope and --validate-all-blocks are gone), and a #mapping
-/// against the block(s) that #apply it; a block whose type resolves in no --db is an error on
-/// its #convert line (R7) -- and a rules error refuses (exit 1) rather than attempting a plan
+/// against the block(s) that #apply it; a block whose type resolves in no --db REFUSES the unit
+/// (C13 d, UnresolvedReason) -- and a rules error refuses (exit 1) rather than attempting a plan
 /// from a broken rule set. A #link / #default / #mapping path whose members all exist but one
 /// is inaccessible on the .dfm surface is NOT an error (T2h, owner ruling R12): it is skipped
 /// per block (WithoutUnreachableRules, inside each re-emit -- a #link / #default line is dropped,
@@ -24917,18 +25168,22 @@ var
   RulesText : string            ;
   Rules     : TConversionRuleSet;
   RuleErrors: TArray<TRuleError>;
-  RE        : TRuleError        ;
+  Unresolved: TArray<TRuleError>;
   Trees     : TConvertTreeCache ; { one per run: validation and BuildApplyPlan share its member caches }
-  InhTypes  : TArray<string>    ; { From types the .dfm holds as inherited/inline objects }
   Dbs       : TArray<string>    ;
   Stores    : TArray<ISymbolStore>;
   RoOk      : Boolean           ;
   LDb       : string            ;
   PlanRes   : TApplyResult      ;
-  S         : string            ;
   Freshness   : TFreshnessResult;
-  TouchedFiles: TList<string>   ;
-  TouchedSet  : TDictionary<string, Boolean>;
+  { 1.23.0 (C13 b2) batch state: every --unit; the book checks done once
+    (RunUnit); the apply/1 collector under batch JSON (nil otherwise) }
+  Units          : TArray<string>;
+  BookChecked    : Boolean;
+  FreshChecked   : Boolean;
+  BookUnreachable: TArray<TUnreachablePath>;
+  BatchJson      : TJSONArray;
+  BookBuilt      : Integer; { classes the book validation built (C13: per-unit classes_built) }
   { --format json / --json. Both are parsed globally (ParseArgs), so this verb
     only has to READ them. Under JSON every Writeln on the success and failure
     paths is suppressed -- one stray line and the document stops parsing. }
@@ -24945,6 +25200,7 @@ var
     Ed          : TTextEdit;
     Timestamp   : string;
     Mappings    : TArray<string>;
+    Originals   : TArray<TBytes>; { 1.25.1: each touched file's bytes before the write, for the rollback }
   begin
     { 1.20.6: a unit-rules-only run that changes nothing writes nothing -- no
       backup, no recovery record, no provenance stamp on an untouched unit, so
@@ -24961,6 +25217,24 @@ var
 
       Timestamp:= FormatDateTime('yyyy-mm-dd hh:nn:ss', Now);
 
+      // 1b. (1.23.0, C13) Every touched file must be writable BEFORE anything
+      // is written: the applier writes file by file, so a read-only or locked
+      // .pas found mid-way would leave the .dfm converted and the .pas not.
+      // A refusal here leaves the unit byte-identical, with no .BCK and no
+      // recovery record. (A failure AFTER this check -- a lock taken in
+      // between, a full disk -- is ROLLED BACK since 1.25.1: see step 3.)
+      for var F: string in TouchedFiles do
+      begin
+        if TFileAttribute.faReadOnly in TFile.GetAttributes(F) then
+          raise EConvertApplyWrite.CreateFmt('cannot write %s: the file is read-only -- unit not changed, nothing written', [F]);
+        try
+          TFileStream.Create(F, fmOpenReadWrite or fmShareExclusive).Free;
+        except
+          on Ex: Exception do
+            raise EConvertApplyWrite.CreateFmt('cannot write %s: %s -- unit not changed, nothing written', [F, Ex.Message]);
+        end;
+      end;
+
       // 2. Backup + recovery record BEFORE any conversion write. Writing the
       // recovery record first means a crash between here and the actual write
       // still leaves a complete recovery map alongside the untouched .BCK files.
@@ -24970,15 +25244,38 @@ var
         WriteRecoveryRecord(ExtractFileDir(UnitPas), Timestamp, AArgs.RulesFile, Mappings);
       end;
 
-      // 3. Perform the conversion write. AWriteBackups=False: our backup layer
-      // (step 2) already backed up every touched file -- letting the applier
-      // ALSO write its own .bak would double-backup.
-      TTextEditApplier.Apply(PlanRes.Edits, False);
+      { 1.25.1: the unit's files as they are now -- the .pas too, which step 4
+        stamps even when it carries no edit -- so a failed write rolls back }
+      if not TouchedSet.ContainsKey(UnitPas) then TouchedFiles.Add(UnitPas);
+      Originals:= nil;
+      for var F: string in TouchedFiles do Originals:= Originals + [TFile.ReadAllBytes(F)];
+      try
+        // 3. Perform the conversion write. AWriteBackups=False: our backup layer
+        // (step 2) already backed up every touched file -- letting the applier
+        // ALSO write its own .bak would double-backup.
+        TTextEditApplier.Apply(PlanRes.Edits, False);
 
-      // 4. Stamp the converted .pas with a provenance comment (skipped along
-      // with backups under --no-backup, per the brief: keep --no-backup simple).
-      if not AArgs.NoBackup then
-        PrependConvertComment(UnitPas, Timestamp, AArgs.RulesFile, Mappings);
+        // 4. Stamp the converted .pas with a provenance comment (skipped along
+        // with backups under --no-backup, per the brief: keep --no-backup simple).
+        if not AArgs.NoBackup then
+          PrependConvertComment(UnitPas, Timestamp, AArgs.RulesFile, Mappings);
+      except
+        on Ex: Exception do
+        begin
+          { 1.25.1: all-or-nothing -- a write that fails part-way is ROLLED
+            BACK, every file of the unit restored byte-identical. Only a
+            rollback that itself fails leaves the unit partly converted, and
+            then the files it could not restore are named. }
+          var NotRestored: TArray<string>:= RollBackUnitFiles(TouchedFiles.ToArray, Originals, Mappings);
+          if Length(NotRestored) = 0 then
+            raise EConvertApplyWrite.CreateFmt('write failed for %s: %s: %s -- rolled back, unit not changed',
+              [ExtractFileName(UnitPas), Ex.ClassName, Ex.Message]);
+          raise EConvertApplyWrite.CreateFmt('write failed for %s: %s: %s -- rollback FAILED for %s: the unit may be PARTLY converted; %s',
+            [ExtractFileName(UnitPas), Ex.ClassName, Ex.Message, String.Join(', ', NotRestored),
+             if AArgs.NoBackup then 'no backup was taken (--no-backup)'
+             else 'restore it from the .BCK backups recorded in recovery.txt']);
+        end;
+      end;
     finally
       TouchedFiles.Free;
       TouchedSet.Free;
@@ -25014,14 +25311,12 @@ var
   // Nothing has been written when this is called. Exit(RefuseUnit(S)).
   function RefuseUnit(const AReason: string): Integer;
   begin
+    JCtx.Ok     := False;
+    JCtx.Error  := AReason;
+    JCtx.Refused:= True; { set in text mode too: the batch summary counts it }
+    JCtx.Reason := AReason;
     if UseJson then
-    begin
-      JCtx.Ok     := False;
-      JCtx.Error  := AReason;
-      JCtx.Refused:= True;
-      JCtx.Reason := AReason;
-      EmitApplyJson(JCtx);
-    end
+      EmitApplyJson(JCtx)
     else
       Writeln('REFUSED: ' + AReason);
     Result:= 1;
@@ -25039,104 +25334,141 @@ var
       Writeln('no .dfm instance matches a #convert block -- component part skipped, unit rules only');
   end;
 
-begin
-  if not ExplicitDbsExist(AArgs, 'convert-apply') then Exit(2);
-  UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
-  JCtx   := Default(TApplyJsonCtx);
-  JCtx.Mode:= if AArgs.Apply then 'apply' else 'dry-run';
-  JCtx.RulesFile:= AArgs.RulesFile;
-  JCtx.Freshness.Fresh:= True;
-
-  if (AArgs.GhostUnit = '') or (AArgs.RulesFile = '') then
+  // ERROR: <AMsg> for one unit -- text, or under batch JSON an apply/1 object
+  // with ok=false -- and AExit as that unit's exit code.
+  function FailUnit(const AMsg: string; AExit: Integer): Integer;
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json]');
-    Exit(2);
-  end;
-  UnitPas:= AArgs.GhostUnit;
-  if not TFile.Exists(UnitPas) then
-  begin Writeln(Format('ERROR: unit not found: %s', [UnitPas])); Exit(2); end;
-  if not TFile.Exists(AArgs.RulesFile) then
-  begin Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile])); Exit(2); end;
-
-  // Sibling .dfm: same base name + '.dfm', same folder as --unit.
-  DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
-
-  try
-    RulesText:= TFile.ReadAllText(AArgs.RulesFile);
-  except
-    on Ex: Exception do
-    begin Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message])); Exit(2); end;
-  end;
-  Rules:= ParseConversionRules(RulesText);
-
-  { 1.20.6: a missing .dfm is fatal only to a book with NO unit rules -- its
-    #convert blocks have nothing to locate. A book with #unuse / #use /
-    #useswap still has the unit's uses clauses to change, so it runs them and
-    reports the component part as skipped (component_part skipped-no-dfm). }
-  if not TFile.Exists(DfmPath) and not BookHasUnitRules(Rules) then
-  begin
-    Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]));
-    Exit(1);
-  end;
-
-  Dbs:= ResolveConsumerDbs(AArgs);
-  if Length(Dbs) = 0 then begin Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.'); Exit(2); end;
-
-  // Open EVERY readable --db up front (not just the first) -- Bug 2: the
-  // From type, To type, and the form's own instances may each live in a
-  // DIFFERENT --db, so rule validation, the freshness guard and BuildApplyPlan
-  // all need cross-db type resolution (first-db-that-resolves-wins), while
-  // unit/instance-scoped lookups use whichever store actually has --unit/the
-  // .dfm indexed. This runs BEFORE the rules are validated, so a stale
-  // explicit --db exits 2 (StaleDbRefusesRun) rather than being skipped while
-  // the trees are built -- pinned by run_explicit_db_strict.ps1's T5 row.
-  var StoresList: TList<ISymbolStore>:= TList<ISymbolStore>.Create;
-  try
-    for LDb in Dbs do
+    if UseJson then
     begin
-      if not TFile.Exists(LDb) then Continue;
-      var St: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
-      if not RoOk then
-      begin
-        if StaleDbRefusesRun(AArgs, 'convert-apply', LDb) then Exit(2);
-        Continue; { manifest-resolved: stale DB reported, scan the rest }
-      end;
-      StoresList.Add(St);
+      JCtx.Ok   := False;
+      JCtx.Error:= AMsg;
+      EmitApplyJson(JCtx);
+    end
+    else
+      Writeln('ERROR: ' + AMsg);
+    Result:= AExit;
+  end;
+
+  // 1.23.0 (C13 b2): ONE unit's whole run -- its sibling .dfm, plan, writes and
+  // report -- against the shared Rules / Stores / Trees. The book is validated
+  // (and its freshness checked) the FIRST time a unit reaches that step, then
+  // reused: a single --unit run keeps its old order, a batch pays for both and
+  // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@0bf7 -- REVIEWED 2026-10-06: each Exit is a distinct per-unit outcome (refusal, rule errors, freshness, plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  var
+    UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
+    ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }
+
+    { apply/1 classes_built for THIS unit: the book's validation set plus what
+      this unit's own run added -- what a single-unit run of it reports }
+    function UnitClassesBuilt: Integer;
+    begin
+      Result:= BookBuilt + (Trees.ClassesBuilt - UnitStart) - ValHere;
     end;
-    Stores:= StoresList.ToArray;
-  finally
-    StoresList.Free;
-  end;
-  if Length(Stores) = 0 then begin Writeln('ERROR: no readable drag-lint index among --db path(s)'); Exit(2); end;
 
-  { 1.20.6 -- ruling R6. convert-apply does not convert inherited / inline .dfm
-    objects. A unit whose .dfm holds one of a From type is refused WHOLE, unit
-    rules included: converting its other parts (say '#unuse BDE.DBTables')
-    would leave those components behind and break the compile. Settled before
-    any class is resolved. }
-  InhTypes:= ConvertApplyInheritedTypes(Rules, DfmPath);
-  JCtx.UnitPas:= UnitPas;
-  JCtx.DfmPath:= DfmPath;
-  if Length(InhTypes) > 0 then
+    { C8 N2 / N2a: an inherited[] entry this run converts -- retyped or code }
+    function HasRetype: Boolean;
+    begin
+      for var Inh: TInheritedInstance in JCtx.InheritedInsts do
+        if (Inh.Action = INH_ACTION_RETYPED) or (Inh.Action = INH_ACTION_CODE) then Exit(True);
+      Result:= False;
+    end;
+
+    { C8 N2a: a --only name that names no .dfm object but a code-only entry
+      is MATCHED -- the split is redone in --only order }
+    procedure MatchCodeOnlyNames;
+    var
+      Matched, Unmatched: TArray<string>;
+    begin
+      Matched  := nil;
+      Unmatched:= nil;
+      for var N: string in AArgs.OnlySections do
+      begin
+        var IsCode: Boolean:= False;
+        for var Inh: TInheritedInstance in JCtx.InheritedInsts do
+          if (Inh.Action = INH_ACTION_CODE) and SameText(Inh.Name, N) then IsCode:= True;
+        if IsCode or MatchText(N, JCtx.OnlyMatched) then Matched:= Matched + [N]
+        else Unmatched:= Unmatched + [N];
+      end;
+      JCtx.OnlyMatched  := Matched;
+      JCtx.OnlyUnmatched:= Unmatched;
+    end;
+
   begin
-    S:= Format('inherited instances of %s are not converted yet -- unit not changed', [String.Join(', ', InhTypes)]);
-    Exit(RefuseUnit(S));
-  end;
+    UnitStart:= Trees.ClassesBuilt;
+    ValHere  := 0;
+    UnitPas:= AUnitPas;
+    PlanRes:= Default(TApplyResult);
+    JCtx   := Default(TApplyJsonCtx);
+    JCtx.Mode:= if AArgs.Apply then 'apply' else 'dry-run';
+    JCtx.RulesFile:= AArgs.RulesFile;
+    JCtx.Freshness.Fresh:= True;
+    JCtx.Sink   := BatchJson;
+    JCtx.UnitPas:= UnitPas;
+    if not TFile.Exists(UnitPas) then Exit(FailUnit(Format('unit not found: %s', [UnitPas]), 2));
+    { 1.26.0: a DB whose edges predate bound field reads is refused, dry run too }
+    var StaleResolver: string:= ResolverRefusal(Stores, Dbs, UnitPas);
+    if StaleResolver <> '' then Exit(RefuseUnit(StaleResolver));
+    // Sibling .dfm: same base name + '.dfm', same folder as --unit.
+    DfmPath:= TPath.ChangeExtension(UnitPas, '.dfm');
+    JCtx.DfmPath:= DfmPath;
+    { C13 N3: which --only names name an object of a #convert From type }
+    if Length(AArgs.OnlySections) > 0 then
+      SplitOnlyNames(if TFile.Exists(DfmPath) then TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)) else '',
+        Rules, AArgs.OnlySections, JCtx.OnlyMatched, JCtx.OnlyUnmatched);
+    { 1.25.1: a kept parent's nested From-type children convert with it
+      (the --only unmatched line is printed below, once C8 N2a's code-only
+      names have been matched) }
+    if (Length(AArgs.OnlySections) > 0) and TFile.Exists(DfmPath) then
+      JCtx.OnlyIncluded:= NestedOnlyInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath)), Rules, AArgs.OnlySections);
+    if not UseJson then
+      for var NO: TNestedOnly in JCtx.OnlyIncluded do
+        Writeln(Format('--only: %s converts too -- nested in %s', [NO.Instance.InstanceName, NO.Parent]));
+    { 1.20.6: a missing .dfm is fatal only to a book with NO unit rules -- its
+      #convert blocks have nothing to locate. A book with #unuse / #use /
+      #useswap still has the unit's uses clauses to change, so it runs them and
+      reports the component part as skipped (component_part skipped-no-dfm). }
+    if not TFile.Exists(DfmPath) and not BookHasUnitRules(Rules) then
+      Exit(FailUnit(Format('sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)', [DfmPath]), 1));
 
-  Trees:= TConvertTreeCache.Create(Stores);
-  try
+    { 1.22.0 (C8 N1, N3; replaces 1.20.6's ruling-R6 refusal). Inherited /
+      inline .dfm objects of a From type are declared by an ANCESTOR, so they
+      are skipped -- each reported with its declaring ancestor (apply/1
+      inherited[], a 'line N: warning:' line) -- while the unit's own
+      instances, code and unit rules convert. R26 still counts them as left
+      unconverted, so a #unuse that would break them refuses the unit. }
+    JCtx.InheritedInsts:= FindInheritedInstances(Trees, UnitPas, DfmPath, Rules, AArgs.OnlySections);
+    { 1.26.0 (C8 N2a): fields a converted ancestor declares that this unit's
+      code uses with no .dfm block -- inherited[] action 'code'. A --only name
+      that names one counts as matched. }
+    JCtx.InheritedInsts:= JCtx.InheritedInsts +
+      FindInheritedCodeUses(Trees, UnitPas, Rules, AArgs.OnlySections, JCtx.InheritedInsts);
+    if Length(JCtx.OnlyUnmatched) > 0 then MatchCodeOnlyNames;
+    if (Length(JCtx.OnlyUnmatched) > 0) and not UseJson then
+      Writeln('--only: no #convert instance named ' + String.Join(', ', JCtx.OnlyUnmatched) + ' (ignored)');
     { EVERY block is validated against its OWN From/To classes (1.20.6, Task 2
       and T2b) -- driven from the rules file's own #convert headers rather than
       --from/--to (convert-apply has neither). It used to take the first block's
       pair for the whole book, so every link of blocks 2..N failed. A valid
       G-expression passes validation, but nothing realises it yet (CV-2):
       refuse through the same path rather than carry the source image whole. }
-    RuleErrors:= ValidateConvertBook(Trees, Rules, JCtx.Unreachable);
-    JCtx.ClassesBuilt:= Trees.ClassesBuilt;
+    if not BookChecked then
+    begin
+      BookChecked:= True;
+      ValHere    := Trees.ClassesBuilt;
+      RuleErrors := ValidateConvertBook(Trees, Rules, BookUnreachable, Unresolved);
+      ValHere    := Trees.ClassesBuilt - ValHere;
+      BookBuilt  := ValHere;
+    end;
+    JCtx.Unreachable := BookUnreachable;
+    JCtx.ClassesBuilt:= UnitClassesBuilt;
     { T2h: an UNREACHABLE path warns and its rule is skipped (BuildApplyPlan
       below gets the book without those lines); it never fails the unit. On
       every JSON exit from here on, warnings[] carries the messages too. }
     MergeUnreachable(JCtx.Report);
+    { C13 d: a type no --db resolves is an index gap -- the unit is REFUSED,
+      dry run and --apply alike, before any rule error is reported }
+    if Length(Unresolved) > 0 then Exit(RefuseUnit(UnresolvedReason(Unresolved)));
     if Length(RuleErrors) > 0 then
     begin
       { A JSON consumer gets a parseable ok=false document naming every rule
@@ -25150,7 +25482,7 @@ begin
         Exit(1);
       end;
       Writeln('ERROR: conversion rules failed validation:');
-      for RE in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
+      for var RE: TRuleError in RuleErrors do Writeln(Format('  line %d: %s', [RE.LineNo, RE.Message]));
       for var UW: string in JCtx.Report.Warnings do Writeln('  ' + UW);
       Exit(1);
     end;
@@ -25162,7 +25494,11 @@ begin
     // dry-run: WARN and continue (so a user can still preview a plan while
     // reindexing). --apply: REFUSE outright -- writing a conversion built from
     // a stale/empty property tree could silently drop or mis-map properties.
-    Freshness:= CheckFreshness(Stores, Rules);
+    if not FreshChecked then
+    begin
+      FreshChecked:= True;
+      Freshness   := CheckFreshness(Stores, Rules);
+    end;
     JCtx.Freshness:= Freshness;
     if not Freshness.Fresh then
     begin
@@ -25178,7 +25514,7 @@ begin
           Exit(1);
         end;
         Writeln('ERROR: freshness guard failed -- refusing to --apply:');
-        for S in Freshness.Reasons do Writeln('  ' + S);
+        for var S: string in Freshness.Reasons do Writeln('  ' + S);
         Exit(1);
       end
       else if not UseJson then
@@ -25186,7 +25522,7 @@ begin
         { dry-run only warns. Under JSON the warning is NOT printed -- it is
           already carried structurally by freshness.fresh=false + reasons. }
         Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
-        for S in Freshness.Reasons do Writeln('  ' + S);
+        for var S: string in Freshness.Reasons do Writeln('  ' + S);
       end;
     end;
 
@@ -25195,14 +25531,16 @@ begin
       no #convert block, or no .dfm instance a block matches; everywhere else
       BuildApplyPlan runs the whole book (its unit rules folded in). A book with
       no unit rules takes the old path unchanged, errors included. }
-    JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections);
+    JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections,
+      Length(JCtx.InheritedInsts) > 0, HasRetype);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
     if JCtx.ComponentPart = 'applied' then
       PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, TApplyBook.Create(Rules, JCtx.Unreachable),
-        AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked)
+        AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked, JCtx.InheritedInsts)
     else
-      PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules);
-    JCtx.ClassesBuilt:= Trees.ClassesBuilt;
+      PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections);
+    RefuseUnapplicablePlan(PlanRes); { 1.25.1: all-or-nothing across .pas and .dfm }
+    JCtx.ClassesBuilt:= UnitClassesBuilt;
     if PlanRes.Refused then Exit(RefuseUnit(PlanRes.Error));
     if not PlanRes.Ok then
     begin
@@ -25219,6 +25557,15 @@ begin
 
     JCtx.Ok       := True;
     MergeUnreachable(PlanRes.Report); { text mode prints them in its Warnings block }
+    AppendInheritedReport(JCtx.InheritedInsts, DfmPath, PlanRes.Report); { likewise }
+    { 1.25.0: descendants that still stream / use an instance converted here.
+      A warning, never a refusal; only the instances the plan converted count. }
+    if JCtx.ComponentPart = 'applied' then
+    begin
+      JCtx.Descendants:= FindDescendantUses(Trees, UnitPas, DfmPath, Rules,
+        ConvertedInstancesOf(PlanRes.Report, DfmPath, Rules, AArgs.OnlySections));
+      AppendDescendantReport(JCtx.Descendants, DfmPath, PlanRes.Report);
+    end;
     JCtx.Report   := PlanRes.Report;
     JCtx.EditCount:= Length(PlanRes.Edits);
 
@@ -25239,7 +25586,13 @@ begin
       Exit(0);
     end;
 
-    PerformApplyWrites;
+    { a write failure fails THIS unit (exit 2) instead of the run: a batch
+      goes on with the next unit (see PerformApplyWrites for what is on disk) }
+    try
+      PerformApplyWrites;
+    except
+      on Ex: Exception do Exit(FailUnit(Ex.Message, 2));
+    end;
 
     if UseJson then
       EmitApplyJson(JCtx)
@@ -25248,10 +25601,160 @@ begin
       PrintComponentPart;
       PrintApplyReport(PlanRes.Report, Length(PlanRes.Edits), 'applied');
     end;
+    Result:= 0;
+  end;
+
+  // 1.23.0 (C13 b2): the apply-batch/1 wrapper -- one apply/1 object per unit,
+  // in --unit order, plus the run's totals. exit_code is the worst unit's.
+  procedure EmitBatchJson(AExit, AOk, ARefused: Integer);
+  var
+    JRoot: TJSONObject;
+  begin
+    JRoot:= TJSONObject.Create;
+    try
+      JRoot.AddPair('schema'       , 'apply-batch/1');
+      JRoot.AddPair('mode'         , if AArgs.Apply then 'apply' else 'dry-run');
+      JRoot.AddPair('rules_file'   , AArgs.RulesFile);
+      JRoot.AddPair('units_count'  , TJSONNumber.Create(BatchJson.Count));
+      JRoot.AddPair('ok'           , TJSONBool.Create(AOk = BatchJson.Count));
+      JRoot.AddPair('exit_code'    , TJSONNumber.Create(AExit));
+      JRoot.AddPair('ok_count'     , TJSONNumber.Create(AOk));
+      JRoot.AddPair('refused_count', TJSONNumber.Create(ARefused));
+      JRoot.AddPair('failed_count' , TJSONNumber.Create(BatchJson.Count - AOk - ARefused));
+      JRoot.AddPair('classes_built', TJSONNumber.Create(Trees.ClassesBuilt));
+      JRoot.AddPair('units'        , BatchJson);
+      BatchJson:= nil; { JRoot owns it now }
+      WriteStdoutDocument(JRoot.ToJSON + sLineBreak);
+    finally
+      JRoot.Free;
+    end;
+  end;
+
+begin
+  if not ExplicitDbsExist(AArgs, 'convert-apply') then Exit(2);
+  UseJson:= AArgs.AsJson or SameText(AArgs.Format, 'json');
+  { every --unit, in order (C13 b2); GhostUnit alone for a caller that set
+    only that field }
+  Units:= AArgs.ConvertUnits;
+  if (Length(Units) = 0) and (AArgs.GhostUnit <> '') then Units:= [AArgs.GhostUnit];
+
+  if (Length(Units) = 0) or (AArgs.RulesFile = '') then
+  begin
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json]');
+    Exit(2);
+  end;
+  { one unit keeps its old first check; a batch checks each unit in RunUnit }
+  if (Length(Units) = 1) and not TFile.Exists(Units[0]) then
+  begin
+    Writeln(Format('ERROR: unit not found: %s', [Units[0]]));  // dl:ok duplicate-code@f028
+    Exit(2);
+  end;
+  if not TFile.Exists(AArgs.RulesFile) then
+  begin
+    Writeln(Format('ERROR: rules file not found: %s', [AArgs.RulesFile]));
+    Exit(2);
+  end;
+
+  try
+    RulesText:= TFile.ReadAllText(AArgs.RulesFile);
+  except
+    on Ex: Exception do
+    begin
+      Writeln(Format('ERROR: cannot read rules file: %s (%s)', [AArgs.RulesFile, Ex.Message]));
+      Exit(2);
+    end;
+  end;
+  Rules:= ParseConversionRules(RulesText);
+
+  { one unit keeps its old order: a missing .dfm (book without unit rules)
+    fails before any --db is opened }
+  if (Length(Units) = 1) and not TFile.Exists(TPath.ChangeExtension(Units[0], '.dfm')) and not BookHasUnitRules(Rules) then
+  begin
+    Writeln(Format('ERROR: sibling .dfm not found: %s (every #convert rule needs .dfm instances to locate)',
+      [TPath.ChangeExtension(Units[0], '.dfm')]));
+    Exit(1);
+  end;
+
+  Dbs:= ResolveConsumerDbs(AArgs);
+  if Length(Dbs) = 0 then
+  begin
+    Writeln('ERROR: no drag-lint index found. Pass --db <file.sqlite> or build the index first.');
+    Exit(2);
+  end;
+
+  // Open EVERY readable --db up front (not just the first) -- Bug 2: the
+  // From type, To type, and the form's own instances may each live in a
+  // DIFFERENT --db, so rule validation, the freshness guard and BuildApplyPlan
+  // all need cross-db type resolution (first-db-that-resolves-wins), while
+  // unit/instance-scoped lookups use whichever store actually has --unit/the
+  // .dfm indexed. This runs BEFORE the rules are validated, so a stale
+  // explicit --db exits 2 (StaleDbRefusesRun) rather than being skipped while
+  // the trees are built -- pinned by run_explicit_db_strict.ps1's T5 row.
+  var StoresList: TList<ISymbolStore>:= TList<ISymbolStore>.Create;
+  var OpenedDbs: TArray<string>:= nil;
+  try
+    for LDb in Dbs do
+    begin
+      if not TFile.Exists(LDb) then Continue;
+      var St: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
+      if not RoOk then
+      begin
+        if StaleDbRefusesRun(AArgs, 'convert-apply', LDb) then Exit(2);
+        Continue; { manifest-resolved: stale DB reported, scan the rest }
+      end;
+      StoresList.Add(St);
+      OpenedDbs:= OpenedDbs + [LDb];
+    end;
+    Stores:= StoresList.ToArray;
+    Dbs   := OpenedDbs; { 1.26.0: index-aligned with Stores (ResolverRefusal names the DB) }
   finally
+    StoresList.Free;
+  end;
+  if Length(Stores) = 0 then
+  begin
+    Writeln('ERROR: no readable drag-lint index among --db path(s)');
+    Exit(2);
+  end;
+
+  BookBuilt   := 0;
+  BookChecked := False;
+  FreshChecked:= False;
+  BatchJson   := nil;
+  { batch JSON collects every unit's apply/1 object; one --unit keeps writing
+    its own apply/1 document, unchanged for existing callers }
+  if UseJson and (Length(Units) > 1) then BatchJson:= TJSONArray.Create;
+  Trees:= TConvertTreeCache.Create(Stores);
+  try
+    if Length(Units) = 1 then Exit(RunUnit(Units[0]));
+    { 1.23.0 (C13 b2): batch. A unit's refusal or failure never stops the
+      others; the exit code is the worst unit's (2 > 1 > 0). }
+    Result:= 0;
+    var NOk     : Integer:= 0;
+    var NRefused: Integer:= 0;
+    for var I: Integer:= 0 to High(Units) do
+    begin
+      if not UseJson then Writeln(Format('=== unit %d of %d: %s ===', [I + 1, Length(Units), Units[I]]));
+      var Code: Integer;
+      try
+        Code:= RunUnit(Units[I]);
+      except
+        { anything else a unit raises fails that unit, never the batch }
+        on Ex: Exception do
+          Code:= FailUnit(Format('%s: %s: %s -- unit not finished', [ExtractFileName(Units[I]), Ex.ClassName, Ex.Message]), 2);
+      end;
+      if Code > Result then Result:= Code;
+      if Code = 0 then Inc(NOk)
+      else if JCtx.Refused then Inc(NRefused);
+      if not UseJson then Writeln('');
+    end;
+    if UseJson then EmitBatchJson(Result, NOk, NRefused)
+    else
+      Writeln(Format('batch: %d unit(s) -- %d ok, %d refused, %d failed; classes_built %d; exit %d',
+        [Length(Units), NOk, NRefused, Length(Units) - NOk - NRefused, Trees.ClassesBuilt, Result]));
+  finally
+    BatchJson.Free;
     Trees.Free;
   end;
-  Result:= 0;
 end; // function
 
 // drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]

@@ -1,0 +1,19 @@
+{
+  "id": "diff",
+  "title": "diff",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.13.0-alpha",
+  "summary": "Compares two index databases and reports what changed between them -- for example an index snapshot taken before and after a refactor",
+  "wikiPage": "diff",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "diff"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "notes": "seed: group guessed"
+}

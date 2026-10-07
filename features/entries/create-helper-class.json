@@ -1,0 +1,22 @@
+{
+  "id": "create-helper-class",
+  "title": "Create helper class",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.94.0-alpha",
+  "summary": "Generates a Byte-family record helper for an enum type represented by a Structure-tree node",
+  "wikiPage": "Create-helper-class",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Create helper class"
+    },
+    {
+      "type": "cli",
+      "verb": "create-enum-helper"
+    }
+  ],
+  "audience": "both"
+}

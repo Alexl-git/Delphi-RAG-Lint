@@ -24,9 +24,10 @@
   same name cannot be what it names, so it never declines for one (SELF-*).
 
   D16a. A bare PROPERTY read inside its own class (`N := TotalP`) binds to the
-  property (member access, mode read, getter edge). A bare FIELD read in its own
-  class is deliberately left unbound (the population is every field read in the
-  corpus; binding it is a separate decision) -- pinned by OWN-FIELD.
+  property (member access, mode read, getter edge). DEC-19 (resolver 1.12.0,
+  owner ruled YES 2026-10-05): a bare FIELD read in its own class binds the field
+  too (mode read, no accessor) -- pinned by OWN-FIELD, which until 1.12.0 pinned
+  the opposite. The full DEC-19 matrix is run_in_class_field_bind.ps1.
 
   POSITIVE CONTROLS: CTRL-OUTSIDE and CTRL-ENUM are the same names outside any
   with and keep their ordinary binding. A resolver that simply refused to bind
@@ -163,8 +164,8 @@ try {
     (@($r | Where-Object { $_.sq -eq 'uWsUse.TWsHost.TotalP' -and $_.mode -eq 'read' -and
                           $_.aq -eq 'uWsUse.TWsHost.GetTotalP' -and $_.tq -eq 'uWsUse.TWsHost.GetTotalP' }).Count -eq 1) (Show $r)
   $r = RefsAt 'OWN-FIELD' 'FCountH'
-  Check 'OWN-FIELD  a bare own-class FIELD read stays unbound (by design)' `
-    (($r.Count -ge 1) -and (@($r | Where-Object { $_.kind -eq 'read' -and $null -ne $_.sq }).Count -eq 0)) (Show $r)
+  Check 'OWN-FIELD  a bare own-class FIELD read binds TWsHost.FCountH, mode read, no accessor (DEC-19)' `
+    (@($r | Where-Object { $_.kind -eq 'read' -and $_.sq -eq 'uWsUse.TWsHost.FCountH' -and $_.mode -eq 'read' -and $null -eq $_.aq }).Count -eq 1) (Show $r)
   $r = RefsAt 'OWN-SHADOW' 'TotalP'
   Check 'OWN-SHADOW  a local named TotalP shadows the property: unbound' `
     (($r.Count -ge 1) -and (@($r | Where-Object { $_.kind -eq 'read' -and $null -ne $_.sq }).Count -eq 0)) (Show $r)

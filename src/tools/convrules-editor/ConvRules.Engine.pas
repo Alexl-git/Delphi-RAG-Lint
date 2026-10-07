@@ -66,6 +66,25 @@ const
   /// <summary>info --json capability: --progress-interval and the stderr progress
   /// lines (engine 1.20.6). An engine WITHOUT it exits 3 on the flag.</summary>
   CAPABILITY_PROGRESS_LINES = 'progress_lines';
+  /// <summary>info --json capability: convert-apply converts a unit's own part when it
+  /// holds inherited / inline instances and reports them in apply/1 inherited[] (C8,
+  /// engine N1 + N5, 1.22.0). Without it the engine refuses such a unit.</summary>
+  CAPABILITY_INHERITED_INSTANCES = 'inherited_instances';
+  /// <summary>info --json capability: convert-apply RETYPES a descendant's inherited
+  /// instance once its declaring ancestor has the To type (C8 engine N2). PROPOSED key --
+  /// the engine stream confirms or renames it; this constant is the one place it lives.
+  /// Without it (1.22.0) an inherited instance under a converted ancestor stays the From
+  /// type, so the descendant may fail to compile or load.</summary>
+  CAPABILITY_INHERITED_RETYPE = 'inherited_retype';
+  /// <summary>The words every C8 read's failure text carries when the engine marked
+  /// its answer "stale" (a file changed on disk since it was indexed).</summary>
+  /// <remarks>ConvRules.InheritanceEngine.IsStaleIndexError matches on it to decide
+  /// that ONE incremental reindex may fix the read.</remarks>
+  INDEX_STALE_MARKER = 'the index is stale';
+  /// <summary>info --json capability: convert-apply realises #link glyph expressions
+  /// (C10, engine ask N1). Without it a G-link book is refused by the engine, so the
+  /// Convert tab greys such a book instead of running it.</summary>
+  CAPABILITY_GLYPH_STITCH = 'glyph_stitch';
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`
@@ -256,18 +275,54 @@ function ParseQueryLocation(const AJson, AWantedName: string; out AFile: string;
 function ParseEnumMembers(const ADeclText: string; out AMembers: TArray<string>): Boolean;
 
 type
+  /// <summary>TEngineAdapter.LookupClass's answer.</summary>
+  /// <remarks>cloAmbiguous: two or more files declare the name -- never guessed.
+  /// cloFailed: the engine could not answer (non-zero exit -- a missing, locked or
+  /// stale-schema index -- unparseable or truncated output); unknown, never absent.</remarks>
+  TClassLookupOutcome = (cloFound, cloAbsent, cloAmbiguous, cloFailed);
+
+  /// <summary>One field row from TEngineAdapter.ListClassFields.</summary>
+  TEngineField = record
+    /// <summary>symbols.name.</summary>
+    Name    : string;
+    /// <summary>symbols.signature -- the declared type as written.</summary>
+    TypeName: string;
+  end;
+
+  /// <summary>One refs row from TEngineAdapter.ListCodeRefs.</summary>
+  TEngineCodeRef = record
+    /// <summary>refs.name_text.</summary>
+    Name    : string;
+    /// <summary>refs.receiver_text; '' for an implicit-Self use.</summary>
+    Receiver: string;
+    /// <summary>refs.start_line (1-based .pas line).</summary>
+    Line    : Integer;
+  end;
+
   /// <summary>Adapter over a drag-lint executable + a set of index DBs.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: ConvRules.ConvertRunner.RunConversionUnits/6 (ConvRules.ConvertRunner.pas), ConvRules.ConvertTab.TConvertTab.ConvertClick (ConvRules.ConvertTab.pas), ConvRules.ConvertTab.TConvertTab.Create (ConvRules.ConvertTab.pas), declaration (ConvRules.ConvertRunner.pas), declaration (ConvRules.ConvertTab.pas) (+4 more)</para>
-  /// <para>Used in units: ConvRules.ConvertRunner, ConvRules.ConvertTab, ConvRules.MainForm, ConvRules.MappingForm</para>
+  /// <para>Used by: ConvRules.ConvertRunner.RunConversionUnits/6 (ConvRules.ConvertRunner.pas), ConvRules.ConvertTab.TConvertTab.ConvertClick (ConvRules.ConvertTab.pas), ConvRules.ConvertTab.TConvertTab.Create (ConvRules.ConvertTab.pas), declaration (ConvRules.ConvertRunner.pas), declaration (ConvRules.ConvertTab.pas) (+5 more)</para>
+  /// <para>Used in units: ConvRules.ConvertRunner, ConvRules.ConvertTab, ConvRules.InheritanceEngine, ConvRules.MainForm, ConvRules.MappingForm</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TEngineAdapter = class
     private
+      type
+        /// <summary>One cached ResolveClassQName answer.</summary>
+        TResolvedClass = record
+          QName    : string ; // the qualified name, or the bare one for "no such class"
+          Ambiguity: Integer;
+        end;
+    private
+      /// <summary>ResolveClassQName answers for this session, keyed on the upper-cased
+      /// name + #0 + DbArgs. Negative answers included; failures never. Guarded by
+      /// TMonitor on itself: lookups run on the progress window's worker.</summary>
+      FResolveCache: TDictionary<string, TResolvedClass>;
       FExePath: string        ;
       FDbList : TArray<string>;
       FTreeDepth     : Integer        ;
+      FCastLibFile   : string         ;
       FProgressLines : Boolean        ;
       FLongCallRunner: TLongCallRunner;
       FLastCancelled : Boolean        ;
@@ -278,13 +333,13 @@ type
       /// ENGINE_TIMEOUT_MS, AOutput).</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas) (+2 more)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListDescendantsOf/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.Scaffold (ConvRules.Engine.pas) (+2 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.RunCaptureTimed</para>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.RunCaptureTimed"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function RunCapture(const AArgs: string; out AOutput: string): Integer;
@@ -305,7 +360,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function QueryJsonFor(const AName: string; out AJson, AError: string): Boolean; overload;
@@ -342,15 +397,15 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.Create"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgsFor(const ADbs: TArray<string>): string; overload;
-      /// <returns><!-- drag-lint:auto -->string -- Observed: DbArgsFor(FDbList).</returns>
+      /// <returns><!-- drag-lint:auto type -->string</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.Scaffold (ConvRules.Engine.pas) (+1 more)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.OutlineClasses (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.QueryJsonFor/4 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/3 (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveUnitFile (ConvRules.Engine.pas) (+2 more)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgsFor</para>
       /// <para>Reads: FDbList</para>
       /// <para>Directives: overload</para>
@@ -358,10 +413,13 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function DbArgs: string; overload;
+      /// <summary>The --castlib argument for convert-apply / convert-validate.</summary>
+      /// <returns>' --castlib "&lt;file&gt;"' when CastLibFile names an existing file, else ''.</returns>
+      function CastLibArgs: string;
       /// <summary>Qualify a bare class name to its unit-qualified form (TcxButton ->
       /// cxButtons.TcxButton) via `query --name`, which is what `proptree --qname`
       /// requires. Discards the tie count; see the overload below.</summary>
@@ -378,7 +436,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string): string; overload;
@@ -390,7 +448,8 @@ type
       /// <param name="AError">'' when the name resolved OR when the index simply
       /// holds no such class (both are ordinary outcomes). Non-empty only when the
       /// query could not be answered at all -- an unusable --db list above all.</param>
-      /// <returns><!-- drag-lint:auto -->string -- Observed: AName; Sym.QualifiedName.</returns>
+      /// <returns><!-- drag-lint:auto -->string -- Observed: AName; LHit.QName;
+      /// Sym.QualifiedName.</returns>
       /// <remarks>
       /// The distinction is load-bearing. Without it a dead --db path and an
       /// unknown type are the same event to the caller, the bare name flows on to
@@ -400,15 +459,16 @@ type
       /// 2026-09-09; pinned by resolve.harderror.* in ConvRulesModelTests.
       /// <!-- drag-lint:auto BEGIN -->
       /// <para>Called from: ConvRules.Engine.TEngineAdapter.GetProptree (ConvRules.Engine.pas), ConvRules.Engine.TEngineAdapter.ResolveClassQName/2 (ConvRules.Engine.pas)</para>
-      /// <para>Calls: ConvRules.Engine.ParseQuerySymbols, ConvRules.Engine.SelectQuerySymbol, ConvRules.Engine.TEngineAdapter.QueryJsonFor/4, Pos, SameText</para>
+      /// <para>Calls: ConvRules.Engine.ParseQuerySymbols, ConvRules.Engine.SelectQuerySymbol, ConvRules.Engine.TEngineAdapter.CacheResolved, ConvRules.Engine.TEngineAdapter.DbArgs, ConvRules.Engine.TEngineAdapter.QueryJsonFor/4, Pos, SameText, UpperCase</para>
       /// <para>Overload 2 of 3</para>
+      /// <para>Reads: FResolveCache</para>
       /// <para>Mutates: AAmbiguity (out), AError (out)</para>
       /// <para>Directives: overload</para>
       /// <seealso cref="ConvRules.Engine.ParseQuerySymbols"/>
       /// <seealso cref="ConvRules.Engine.SelectQuerySymbol"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.DbArgs"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.QueryJsonFor"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer; out AError: string): string; overload;
@@ -445,7 +505,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveClassQName(const AName: string; out AAmbiguity: Integer): string; overload;
@@ -455,9 +515,24 @@ type
       /// <param name="AError">Receives the failure text; '' on success.</param>
       /// <returns>False when the engine could not answer from ADb.</returns>
       function AddUnitsOfDb(const ADb: string; ASeen: TStringList; out AError: string): Boolean;
+      /// <summary>Runs ASql against ADb alone: one read-only `sql --json` call with a
+      /// row cap of SQL_ROW_CAP (the verb's default cap is 200) and an engine-side
+      /// timeout of SQL_TIMEOUT_MS. The one runner every `sql` read here goes through;
+      /// the answer is read with ParseSqlRows into POSITIONAL rows of strings.</summary>
+      /// <param name="ADb">One index path.</param>
+      /// <param name="ASql">A SELECT; no double quote (it is passed inside one).</param>
+      /// <param name="AWhat">Names the read in AError ('class lookup of TFoo').</param>
+      /// <param name="ARequireFresh">True: an answer the engine marks "stale" (a file
+      /// changed on disk since it was indexed) is a failure -- a stale DB is not
+      /// authoritative. False: a stale answer is used as is (listings).</param>
+      /// <param name="ARows">Receives the rows; [] on failure.</param>
+      /// <param name="AError">Receives the failure text naming ADb; '' on success.</param>
+      /// <returns>False on a non-zero exit (2: missing --db or stale schema, "Nothing was
+      /// answered"; 3: FATAL or the watchdog), unparseable or truncated output, or a
+      /// stale answer when ARequireFresh.</returns>
+      function SqlRowsOfDb(const ADb, ASql, AWhat: string; ARequireFresh: Boolean; out ARows: TArray<TArray<string>>; out AError: string): Boolean;
       /// <summary>Adds the FIRST column of every row ASql returns from ADb to
-      /// ASeen, via one read-only `sql --json` call with a row cap of 1,000,000
-      /// (the verb's default cap is 200).</summary>
+      /// ASeen, via SqlRowsOfDb (a stale answer is accepted).</summary>
       /// <param name="ADb">One index path.</param>
       /// <param name="ASql">A one-column SELECT.</param>
       /// <param name="AWhat">Names the listing in AError ('unit listing').</param>
@@ -465,6 +540,11 @@ type
       /// <param name="AError">Receives the failure text; '' on success.</param>
       /// <returns>False when the engine could not answer from ADb.</returns>
       function AddSqlColumnOfDb(const ADb, ASql, AWhat: string; ASeen: TStringList; out AError: string): Boolean;
+      /// <summary>Store one ResolveClassQName answer under AKey (thread-safe).</summary>
+      /// <param name="AKey">Upper-cased name + #0 + DbArgs.</param>
+      /// <param name="AQName">The answer.</param>
+      /// <param name="AAmbiguity">How many classes carry the name.</param>
+      procedure CacheResolved(const AKey, AQName: string; AAmbiguity: Integer);
     public
       /// <summary>The .pas file that declares unit AUnit, via `query --name AUnit
       /// --json` (the kind=unit row's "file"). '' if the unit is not indexed.</summary>
@@ -518,6 +598,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetDbs(const ADbs: TArray<string>);
+      /// <summary>Forget every cached class-name resolution.</summary>
+      /// <remarks>ResolveClassQName caches its answers for the session -- each rule
+      /// click used to pay a 0.5-1.2 s `query` per class and flash the progress
+      /// window. SetDbs and IndexProject clear the cache themselves; call this when
+      /// the index changed some other way (the Convert tab's own adapter reindexed).</remarks>
+      procedure ClearResolveCache;
+      /// <summary>Frees the resolution cache.</summary>
+      destructor Destroy; override;
       /// <summary>The adapter's current default DB list (read-only view).</summary>
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed: FDbList.</returns>
       /// <remarks>
@@ -623,7 +711,7 @@ type
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddSqlColumnOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.AddUnitsOfDb"/>
       /// <seealso cref="ConvRules.Engine.TEngineAdapter.ApplyConversion"/>
-      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CapabilityNames"/>
+      /// <seealso cref="ConvRules.Engine.TEngineAdapter.CacheResolved"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ListDescendantsOf(const AAncestor: string; out ANames: TArray<string>; out AError: string): Boolean; overload;
@@ -639,7 +727,7 @@ type
       /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False; True.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
-      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListDescendantsOf/3 (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.LoadAllClasses (ConvRules.MainForm.pas)</para>
+      /// <para>Called from: ConvRules.Engine.TEngineAdapter.ListDescendantsOf/3 (ConvRules.Engine.pas), ConvRules.MainForm.TConvRulesForm.LoadAllClasses (ConvRules.MainForm.pas), TestPickerDatasource (ConvRulesModelTests.dpr), TestPlatformRescope (ConvRulesModelTests.dpr)</para>
       /// <para>Calls: ConvRules.Engine.TEngineAdapter.DbArgsFor, ConvRules.Engine.TEngineAdapter.RunCapture, Format, Pos, Trim</para>
       /// <para>Overload 2 of 2</para>
       /// <para>Mutates: AError (out), ANames (out)</para>
@@ -699,6 +787,55 @@ type
       /// tab's pre-flight and row flags match these paths, not unit names
       /// (ConvRules.ConvertRun.UnitInIndex).</remarks>
       function ListIndexedFiles(const ADbs: TArray<string>; out APaths: TArray<string>; out AError: string): Boolean;
+
+      /// <summary>The unit that declares class AClassName in ADb, and the class's first
+      /// ancestor -- one read-only `sql` over symbols (kind class), files and
+      /// type_ancestors (ordinal 0), the class name matched COLLATE NOCASE.</summary>
+      /// <param name="ADb">The PROJECT index (the authority for project classes).</param>
+      /// <param name="AClassName">A bare class name from a .dfm.</param>
+      /// <param name="APasPath">Receives the declaring unit's path as indexed; '' unless cloFound.</param>
+      /// <param name="AParentClass">Receives the first ancestor's name as written; '' when none.</param>
+      /// <param name="AError">Receives the failure text; '' unless cloFailed.</param>
+      /// <returns>See TClassLookupOutcome. A name that is not a plain identifier is
+      /// cloAbsent without an engine call (it came from .dfm text). A missing,
+      /// locked or stale-schema ADb (engine exit 2 / 3), or an answer the engine marks
+      /// stale, is cloFailed, never cloAbsent.</returns>
+      function LookupClass(const ADb, AClassName: string; out APasPath, AParentClass, AError: string): TClassLookupOutcome;
+      /// <summary>The fields class AClassName ITSELF declares in APasPath whose type is
+      /// one of AFromTypes (symbols kind field, parent_id = the class row, signature
+      /// compared COLLATE NOCASE) -- one read-only `sql`.</summary>
+      /// <param name="ADb">The PROJECT index.</param>
+      /// <param name="AClassName">A plain-identifier class name.</param>
+      /// <param name="APasPath">The declaring unit as LookupClass returned it; pins the
+      /// class row to that file (compared COLLATE NOCASE).</param>
+      /// <param name="AFromTypes">Bare From types; only plain identifiers are used.</param>
+      /// <param name="AFields">Receives the fields; [] on failure.</param>
+      /// <param name="AError">Receives the failure text; '' on success.</param>
+      /// <returns>False when the engine could not answer or the answer is stale. True
+      /// with [] and no engine call when AClassName is not a plain identifier or no
+      /// From type is.</returns>
+      /// <remarks>A field declared with a unit-qualified type ('DBTables.TTable') is
+      /// not matched: signature is compared whole.</remarks>
+      function ListClassFields(const ADb, AClassName, APasPath: string; const AFromTypes: TArray<string>; out AFields: TArray<TEngineField>; out AError: string): Boolean;
+      /// <summary>The identifiers used inside AClassName's methods in AUnitPas: refs of
+      /// kind read / write / member-access / call whose enclosing routine's qualified
+      /// name contains '.AClassName.', and whose symbol is unresolved or a FIELD -- a
+      /// resolved local or parameter is not a field use, and neither is an unresolved
+      /// ref whose name (implicit-Self) or receiver is a local / parameter of the
+      /// enclosing routine -- one read-only `sql`.</summary>
+      /// <param name="ADb">The PROJECT index.</param>
+      /// <param name="AUnitPas">The unit's path as indexed (compared COLLATE NOCASE).</param>
+      /// <param name="AClassName">The unit's form / data-module class.</param>
+      /// <param name="ARefs">Receives [name, receiver, line] rows; [] on failure.</param>
+      /// <param name="AError">Receives the failure text; '' on success.</param>
+      /// <returns>False when the engine could not answer, the answer is stale, or
+      /// AUnitPas is not in ADb's files (a second read, made only when no ref matched:
+      /// an unindexed unit is unknown, never "no uses"). True with [] and no engine
+      /// call when AClassName is not a plain identifier.</returns>
+      /// <remarks>Implicit-Self uses inside the class's own methods are UNRESOLVED in
+      /// the index (symbol_id NULL), so the filter is by enclosing class and name, not
+      /// by member_accesses (measured on DMTEST 2026-10-05).</remarks>
+      function ListCodeRefs(const ADb, AUnitPas, AClassName: string; out ARefs: TArray<TEngineCodeRef>; out AError: string): Boolean;
 
       /// <summary>The distinct component TYPES placed on AUnit's form, read from the
       /// unit's companion .dfm (`object &lt;Name&gt;: &lt;TType&gt;` lines) -- the
@@ -939,14 +1076,15 @@ type
       /// with ENGINE_TIMEOUT_MS.</summary>
       /// <param name="AArgs">The command line after the exe path.</param>
       /// <param name="ATimeoutMs">Watchdog; on expiry the child is terminated.</param>
-      /// <param name="AOutput">stdout AND stderr, merged into one pipe.</param>
+      /// <param name="AOutput">stdout, then stderr's lines after it -- separate pipes, so a
+      /// stderr line can never land inside a stdout line.</param>
       /// <returns>The engine's exit code; -1 when it could not be started; 3 on
       /// timeout.</returns>
       /// <remarks>Drains on the calling thread: from the UI thread the UI is
       /// frozen for up to ATimeoutMs.</remarks>
       function RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;
-      /// <summary>`convert-apply --unit AUnitPas --rules ARulesFile --apply
-      /// --no-backup --format json` against ADbs, bounded by CONVERT_TIMEOUT_MS.</summary>
+      /// <summary>`convert-apply --unit AUnitPas --rules ARulesFile [--castlib CastLibFile]
+      /// --apply --no-backup --format json` against ADbs, bounded by CONVERT_TIMEOUT_MS.</summary>
       /// <param name="AUnitPas">The .pas to convert in place (its .dfm goes with it).</param>
       /// <param name="ARulesFile">The .rules book.</param>
       /// <param name="ADbs">--db list; the unit must be indexed in one of them.</param>
@@ -955,7 +1093,20 @@ type
       /// <returns>The engine's exit code (see RunCaptureTimed).</returns>
       /// <remarks>--no-backup: the caller (ConvRules.ConvertRunner) owns the
       /// .BCK&lt;N&gt; restore point.</remarks>
-      function ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; out AJson: string): Integer;
+      function ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; out AJson: string): Integer; overload;
+      /// <summary>ApplyConversion with `--only a,b` appended: convert-apply then
+      /// touches only the named component instances (unit rules still run).</summary>
+      /// <param name="AUnitPas">The .pas to convert in place (its .dfm goes with it).</param>
+      /// <param name="ARulesFile">The .rules book.</param>
+      /// <param name="ADbs">--db list; the unit must be indexed in one of them.</param>
+      /// <param name="AOnly">Component names; [] = the plain call (no --only).</param>
+      /// <param name="AJson">The engine's output -- feed it to ParseApplyJson.</param>
+      /// <returns>The engine's exit code (see RunCaptureTimed).</returns>
+      /// <remarks>With --only, a #unuse / #useswap that would leave an instance of the
+      /// unit's From type unconverted makes the engine REFUSE the unit (apply/1
+      /// refused=true, 'would leave N unconverted instance(s) of T'). A name that matches
+      /// no instance: see the C12 Task 3 report (measured on 1.22.0).</remarks>
+      function ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; const AOnly: TArray<string>; out AJson: string): Integer; overload;
       /// <summary>`index --project AProjectFile --db AProjectDb` (incremental),
       /// bounded by CONVERT_TIMEOUT_MS.</summary>
       /// <param name="AProjectFile">The .dpr / .dproj that owns AProjectDb.</param>
@@ -1003,6 +1154,10 @@ type
       property ExePath: string read FExePath;
       /// <summary>--depth for proptree / convert-scaffold; 0 = omit (engine without book_depth).</summary>
       property TreeDepth: Integer read FTreeDepth write FTreeDepth;
+      /// <summary>The .castlib handed to convert-apply and convert-validate as
+      /// --castlib (C10 E11). '' or a missing file = no argument: the engine exits 2 on
+      /// a file it cannot read, which would fail every validate.</summary>
+      property CastLibFile: string read FCastLibFile write FCastLibFile;
       /// <summary>True = pass --progress-interval on proptree (engine reports progress_lines).</summary>
       property ProgressLines: Boolean read FProgressLines write FProgressLines;
       /// <summary>Runs proptree behind a progress window; nil = run inline, no cancel
@@ -1029,6 +1184,39 @@ function DepthArgs(ADepth: Integer; AProgress: Boolean): string;
 /// the last '}' (the "(loaded defaults ...)" line) is ignored.</param>
 /// <returns>The keys, in document order; [] when unparseable or no capabilities object.</returns>
 function ParseCapabilityNames(const AInfoOutput: string): TArray<string>;
+
+/// <summary>PURE: True for [A-Za-z_][A-Za-z0-9_]* -- the only class and type names
+/// LookupClass / ListClassFields / ListCodeRefs put into SQL.</summary>
+/// <param name="AName">Candidate class name.</param>
+/// <returns>False for '', dotted, quoted or otherwise decorated text.</returns>
+function IsPlainIdentifier(const AName: string): Boolean;
+
+/// <summary>PURE: reads LookupClass's `sql --json` output (rows [path, parent]).</summary>
+/// <param name="ASqlJson">Raw output; text around the JSON object is ignored.</param>
+/// <param name="APasPath">Receives the single declaring file; '' unless cloFound.</param>
+/// <param name="AParentClass">Receives the first non-empty parent among that file's
+/// rows; '' unless cloFound.</param>
+/// <returns>cloFound, cloAbsent (no row), cloAmbiguous (rows from two files) or
+/// cloFailed (unparseable, "truncated": true, or "stale": true).</returns>
+function ParseClassLookupRows(const ASqlJson: string; out APasPath, AParentClass: string): TClassLookupOutcome;  // dl:ok unused-public-symbol@8e9e -- REVIEWED 2026-10-05 the pure JSON entry point the model tests pin (lookup.rows.*, fields.rows*, refs.rows*); the adapter reaches the same row mapper through SqlRowsOfDb
+
+/// <summary>PURE: AText as a single-quoted SQL literal (embedded quotes doubled).</summary>
+/// <param name="AText">Any text (a path).</param>
+/// <returns>'...' ready to splice into a query.</returns>
+function SqlQuoted(const AText: string): string;
+
+/// <summary>PURE: ListClassFields' positional rows [name, type].</summary>
+/// <param name="ASqlJson">Raw `sql --json` output.</param>
+/// <param name="AFields">Receives the rows; [] when unparseable.</param>
+/// <returns>False when unparseable, truncated or stale.</returns>
+function ParseFieldRows(const ASqlJson: string; out AFields: TArray<TEngineField>): Boolean;  // dl:ok unused-public-symbol@16ac -- REVIEWED 2026-10-05 the pure JSON entry point the model tests pin (lookup.rows.*, fields.rows*, refs.rows*); the adapter reaches the same row mapper through SqlRowsOfDb
+
+/// <summary>PURE: ListCodeRefs' positional rows [name, receiver, line]; a JSON null
+/// reads as ''.</summary>
+/// <param name="ASqlJson">Raw `sql --json` output.</param>
+/// <param name="ARefs">Receives the rows; [] when unparseable.</param>
+/// <returns>False when unparseable, truncated or stale.</returns>
+function ParseCodeRefRows(const ASqlJson: string; out ARefs: TArray<TEngineCodeRef>): Boolean;  // dl:ok unused-public-symbol@9748 -- REVIEWED 2026-10-05 the pure JSON entry point the model tests pin (lookup.rows.*, fields.rows*, refs.rows*); the adapter reaches the same row mapper through SqlRowsOfDb
 
 /// <summary>PURE: the distinct class names in a `drag-lint outline --format json`
 /// payload, in document order.</summary>
@@ -1196,11 +1384,29 @@ begin
   FExePath:= AExePath;
   FDbList := ADbList;
   FInfoTimeoutMs:= INFO_TIMEOUT_MS;
+  FResolveCache:= TDictionary<string, TResolvedClass>.Create;
+end;
+
+destructor TEngineAdapter.Destroy;
+begin
+  FResolveCache.Free;
+  inherited Destroy;
 end;
 
 procedure TEngineAdapter.SetDbs(const ADbs: TArray<string>);
 begin
   FDbList:= ADbs;
+  ClearResolveCache; // the answers were given by the OLD database set
+end;
+
+procedure TEngineAdapter.ClearResolveCache;
+begin
+  TMonitor.Enter(FResolveCache);
+  try
+    FResolveCache.Clear;
+  finally
+    TMonitor.Exit(FResolveCache);
+  end;
 end;
 
 function TEngineAdapter.DbList: TArray<string>;
@@ -1228,16 +1434,35 @@ begin
   Result:= RunCaptureTimed(AArgs, ENGINE_TIMEOUT_MS, AOutput);
 end;
 
+function TEngineAdapter.CastLibArgs: string;
+begin
+  if (FCastLibFile <> '') and TFile.Exists(FCastLibFile) then
+    Result:= Format(' --castlib "%s"', [FCastLibFile])
+  else
+    Result:= '';
+end;
+
 function TEngineAdapter.ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; out AJson: string): Integer;
 begin
-  Result:= RunCaptureTimed(Format('convert-apply --unit "%s" --rules "%s"%s --apply --no-backup --format json',
-    [AUnitPas, ARulesFile, DbArgsFor(ADbs)]), CONVERT_TIMEOUT_MS, AJson);
+  Result:= ApplyConversion(AUnitPas, ARulesFile, ADbs, nil, AJson);
+end;
+
+function TEngineAdapter.ApplyConversion(const AUnitPas, ARulesFile: string; const ADbs: TArray<string>; const AOnly: TArray<string>; out AJson: string): Integer;
+var
+  LOnly: string;
+begin
+  LOnly:= '';
+  if Length(AOnly) > 0 then
+    LOnly:= Format(' --only "%s"', [string.Join(',', AOnly)]);
+  Result:= RunCaptureTimed(Format('convert-apply --unit "%s" --rules "%s"%s%s%s --apply --no-backup --format json',
+    [AUnitPas, ARulesFile, DbArgsFor(ADbs), LOnly, CastLibArgs]), CONVERT_TIMEOUT_MS, AJson);
 end;
 
 function TEngineAdapter.IndexProject(const AProjectFile, AProjectDb: string; out AOutput: string): Integer;
 begin
   // --project, never a folder: a folder target widens a project DB into a directory DB.
   Result:= RunCaptureTimed(Format('index --project "%s" --db "%s"', [AProjectFile, AProjectDb]), CONVERT_TIMEOUT_MS, AOutput);
+  ClearResolveCache; // the index may now declare (or no longer declare) a class
 end;
 
 function DepthArgs(ADepth: Integer; AProgress: Boolean): string;
@@ -1312,89 +1537,22 @@ begin
   Result:= CreateProcessW(nil, @CmdW[0], nil, nil, True, CREATE_NO_WINDOW, nil, nil, SI, API);
 end;
 
-function TEngineAdapter.RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;  // dl:ok deep-nesting@dc47 -- REVIEWED 2026-09-29 pre-existing RunCapture body, only renamed + parameterised; flattening the drain loop is out of scope
-var
-  SA       : TSecurityAttributes       ;
-  ReadPipe : THandle                   ;
-  WritePipe: THandle                   ;
-  PI       : TProcessInformation       ;
-  Buf      : array[0..4095] of AnsiChar;
-  BytesRead: DWORD                     ;
-  ExitCode : DWORD                     ;
-  SB       : TStringBuilder            ;
+function TEngineAdapter.RunCaptureTimed(const AArgs: string; ATimeoutMs: Cardinal; out AOutput: string): Integer;
+const
+  RUN_CAPTURE_TIMEOUT_CODE = 3; // this routine's own timeout code; its callers test for 3
 begin
-  Result:= -1;
-  AOutput:= '';
-  FillChar(SA, SizeOf(SA), 0);
-  SA.nLength:= SizeOf(SA);
-  SA.bInheritHandle:= True;
-  if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then
-    Exit;
-  try
-    if not StartHiddenProcess(Format('"%s" %s', [FExePath, AArgs]), WritePipe, WritePipe, PI) then
-      Exit;
-    CloseHandle(WritePipe);
-    WritePipe:= 0;
-
-    // Bounded, non-blocking drain: poll the pipe so a pathological engine call
-    // times out gracefully instead of freezing the editor's main thread on an
-    // INFINITE wait. See ENGINE_TIMEOUT_MS for why the bound is where it is.
-    var TimedOut: Boolean:= False;
-    SB:= TStringBuilder.Create;
-    try
-      var Deadline: UInt64:= GetTickCount64 + ATimeoutMs;
-      var Avail: DWORD:= 0                                     ;
-      repeat
-        if PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) and (Avail > 0) then
-        begin
-          BytesRead:= 0;
-          if not ReadFile(ReadPipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then
-            Break;
-          SB.Append(string(AnsiString(Copy(Buf, 0, BytesRead))));
-          Continue; // keep draining while bytes are ready
-        end;
-        if WaitForSingleObject(PI.hProcess, 40) = WAIT_OBJECT_0 then
-        begin
-          // process exited: drain any final buffered bytes, then stop
-          while PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) and (Avail > 0) do
-          begin
-            BytesRead:= 0;
-            if not ReadFile(ReadPipe, Buf, SizeOf(Buf), BytesRead, nil) or (BytesRead = 0) then
-              Break;
-            SB.Append(string(AnsiString(Copy(Buf, 0, BytesRead))));
-          end;
-          Break;
-        end; // if
-        if GetTickCount64 >= Deadline then
-        begin
-          TerminateProcess(PI.hProcess, DWORD(-1));
-          WaitForSingleObject(PI.hProcess, 2000);
-          TimedOut:= True;
-          Break;
-        end;
-      until False;
-      AOutput:= SB.ToString;
-    finally
-      SB.Free;
-    end; // try
-
-    if TimedOut then
-    begin
-      AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ATimeoutMs div MS_PER_SECOND]);
-      Result:= 3; // distinct code: timed out (not 0/1/2)
-    end
-    else if GetExitCodeProcess(PI.hProcess, ExitCode) then
-      Result:= Integer(ExitCode);
-    CloseHandle(PI.hProcess);
-    CloseHandle(PI.hThread );
-  finally
-    if ReadPipe <> 0 then
-      CloseHandle(ReadPipe);
-    if WritePipe <> 0 then
-      CloseHandle(WritePipe);
-  end; // try
+  // SEPARATE pipes (job C6, 2026-10-05). This used to hand the child ONE pipe for
+  // both streams, which interleaves them by CHUNK: a stderr line could land inside
+  // a stdout line and break the JSON / sql / query text every caller parses (seen
+  // on convert-validate as "Validate: s, not a re-parse). (+3 more)"). Now stdout
+  // comes first, whole, and stderr's lines follow it.
+  Result:= RunCaptureStreaming(AArgs, ATimeoutMs, nil, nil, AOutput);
+  if Result = ENGINE_OUTCOME_TIMEOUT then
+  begin
+    AOutput:= AOutput + sLineBreak + Format('[timeout: engine call exceeded %d s]', [ATimeoutMs div MS_PER_SECOND]);
+    Result:= RUN_CAPTURE_TIMEOUT_CODE;
+  end;
 end; // function
-
 function TEngineAdapter.RunCaptureStreaming(const AArgs: string; ATimeoutMs: Cardinal; const AOnProgress: TProgressProc; const ACancel: TCancelToken; out AOutput: string): Integer;
 const
   POLL_MS   = 40;
@@ -1590,24 +1748,9 @@ begin
   // First, before any early Exit: LastCancelled describes THIS call only. A reset
   // further down left a previous cancel standing through a resolve failure.
   FLastCancelled:= False;
-  // The pickers hand us a BARE class name (TcxButton); proptree --qname needs the
-  // unit-qualified form (cxButtons.TcxButton). Qualify it first (no-op if already
-  // qualified or not resolvable).
-  QN:= ResolveClassQName(AQname, Ambig, ResErr);
-  // A hard resolution failure is a fault in the ENGINE CALL, not in the type.
-  // Report it here: proptree tolerates a --db that does not exist and answers
-  // from the remaining indexes, so letting the unqualified name through would
-  // produce a confident "class not found" about a perfectly real class.
-  if ResErr <> '' then
-  begin
-    AError:= Format('cannot resolve "%s": %s', [AQname, ResErr]);
-    Exit(False);
-  end;
-  // Several classes carry that bare name -- TEdit, TButton and TLabel all have both an
-  // FMX and a VCL declaration -- and only the engine's row order chose between them.
-  // Silently returning an FMX property tree for a VCL form is the failure this reports.
-  if Ambig > 1 then
-    ANote:= Format('%s: %d classes carry that name; used %s.', [AQname, Ambig, QN]);
+  QN    := AQname;
+  Ambig := 0;
+  ResErr:= '';
   // Target surface (engine schema v17): --min-visibility published (DFM-streamable
   // props only) or public (adds public props + public fields); '' emits all leaves.
   // --refs-as-leaves IS on main (parsed in DRagLint.CLI.pas) and is passed on every
@@ -1626,16 +1769,29 @@ begin
   VisArg:= '';
   if AMinVisibility <> '' then
     VisArg:= ' --min-visibility ' + AMinVisibility;
-  var LArgs: string:= Format('proptree --qname "%s"%s --refs-as-leaves --format json%s%s',
-    [QN, VisArg, DepthArgs(FTreeDepth, FProgressLines), DbArgs]);
+  var LTail: string:= Format('%s --refs-as-leaves --format json%s%s', [VisArg, DepthArgs(FTreeDepth, FProgressLines), DbArgs]);
+  // The resolve AND the proptree run inside the long-call runner (job C6): the
+  // resolve is a `query` of 0.5-1 s that used to block the UI thread with no Cancel.
+  // Now the progress window covers both, its Cancel is honoured before either call
+  // starts, and the editor's runner counts FTreeLoads around the whole of it.
   var LWork: TStreamingWork:= function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
     begin
-      // CONVERT_TIMEOUT_MS: the user can Cancel now, so the watchdog is a backstop only.
-      Result:= RunCaptureStreaming(LArgs, CONVERT_TIMEOUT_MS, AOnProgress, ACancel, Output);
+      Result:= ENGINE_OUTCOME_CANCELLED;
+      if (ACancel = nil) or not ACancel.IsCancelled then
+      begin
+        // The pickers hand us a BARE class name (TcxButton); proptree --qname needs the
+        // unit-qualified form (cxButtons.TcxButton). No-op if already qualified.
+        QN:= ResolveClassQName(AQname, Ambig, ResErr);
+        if ResErr <> '' then
+          Result:= 0 // reported after the runner returns
+        else if (ACancel = nil) or not ACancel.IsCancelled then
+          // CONVERT_TIMEOUT_MS: the user can Cancel now, so the watchdog is a backstop only.
+          Result:= RunCaptureStreaming(Format('proptree --qname "%s"', [QN]) + LTail, CONVERT_TIMEOUT_MS, AOnProgress, ACancel, Output);
+      end;
     end;
   try
     if Assigned(FLongCallRunner) then
-      Code:= FLongCallRunner(Format('Loading property tree for %s', [QN]), LWork)
+      Code:= FLongCallRunner(Format('Loading property tree for %s', [AQname]), LWork)
     else
       Code:= LWork(nil, nil);
   except
@@ -1653,6 +1809,20 @@ begin
     AError:= Format('proptree cancelled for %s -- no tree loaded.', [AQname]);
     Exit(False);
   end;
+  // A hard resolution failure is a fault in the ENGINE CALL, not in the type.
+  // Report it here: proptree tolerates a --db that does not exist and answers
+  // from the remaining indexes, so letting the unqualified name through would
+  // produce a confident "class not found" about a perfectly real class.
+  if ResErr <> '' then
+  begin
+    AError:= Format('cannot resolve "%s": %s', [AQname, ResErr]);
+    Exit(False);
+  end;
+  // Several classes carry that bare name -- TEdit, TButton and TLabel all have both an
+  // FMX and a VCL declaration -- and only the engine's row order chose between them.
+  // Silently returning an FMX property tree for a VCL form is the failure this reports.
+  if Ambig > 1 then
+    ANote:= Format('%s: %d classes carry that name; used %s.', [AQname, Ambig, QN]);
   if Code = ENGINE_OUTCOME_TIMEOUT then
   begin
     // Name the Depth box only when it is usable: TreeDepth > 0 means the engine
@@ -1751,36 +1921,100 @@ begin
   Result:= AddSqlColumnOfDb(ADb, UNIT_SQL, 'unit listing', ASeen, AError);
 end; // function
 
-function TEngineAdapter.AddSqlColumnOfDb(const ADb, ASql, AWhat: string; ASeen: TStringList; out AError: string): Boolean;
 const
-  ROW_CAP    = 1000000;
-  TIMEOUT_MS = 120000 ;
+  // Row cap of every `sql` read (the verb's default is 200).
+  SQL_ROW_CAP = 1000000;
+  // The engine-side query timeout of every `sql` read, in milliseconds.
+  SQL_TIMEOUT_MS = 120000;
+  // How much of a failed call's output an error text quotes.
+  SQL_ERROR_HEAD_CHARS = 400;
+  // The failure text of a read that needs a fresh index and got a stale one.
+  SQL_STALE_TEXT = '%s failed for %s: ' + INDEX_STALE_MARKER + ' (%d file(s) changed since it was indexed) -- reindex the project first';
+
+type
+  { One `sql --json` answer: its POSITIONAL rows as strings, and the engine's own
+    freshness verdict ("stale": a file changed on disk since it was indexed). }
+  TSqlAnswer = record
+    Rows      : TArray<TArray<string>>;
+    Stale     : Boolean;
+    StaleFiles: Integer;
+  end;
+
+{ `sql --json`'s rows, POSITIONAL arrays one per row ([["Ap"], ["uMain"], ...]),
+  as strings; a JSON null reads as ''. False for unparseable output and for an
+  answer the engine marked "truncated" (an incomplete answer is not an answer).
+  "stale" is reported, not judged: the caller decides whether it may use it. }
+function ParseSqlRows(const ASqlJson: string; out AAnswer: TSqlAnswer): Boolean;
 var
-  Output: string    ;
-  Code  : Integer   ;
-  Root  : TJSONValue;
-  Rows  : TJSONArray;
-  Row   : TJSONValue;
+  LRoot     : TJSONValue;
+  LRows     : TJSONArray;
+  LTruncated: Boolean;
+  LCells    : TArray<string>;
 begin
-  AError:= '';
-  Code:= RunCapture(Format('sql --query "%s" --db "%s" --json --limit %d --timeout-ms %d', [ASql, ADb, ROW_CAP, TIMEOUT_MS]), Output);
-  Root:= nil;
-  if Code = 0 then
-    Root:= TJSONObject.ParseJSONValue(SliceJsonObject(Output));
+  AAnswer:= Default(TSqlAnswer);
+  LRoot:= TJSONObject.ParseJSONValue(SliceJsonObject(ASqlJson));
   try
-    if not (Root is TJSONObject) or not TJSONObject(Root).TryGetValue<TJSONArray>('rows', Rows) then
-    begin
-      AError:= Format('%s failed for %s (exit %d): %s', [AWhat, ADb, Code, Trim(Output)]);
-      Exit(False);
-    end;
-    // `sql --json` rows are POSITIONAL arrays, one per row: [["Ap"], ["uMain"], ...].
-    for Row in Rows do
-      if (Row is TJSONArray) and (TJSONArray(Row).Count > 0) then
-        ASeen.Add(TJSONArray(Row).Items[0].Value);
-    Result:= True;
+    Result:= (LRoot is TJSONObject) and TJSONObject(LRoot).TryGetValue<TJSONArray>('rows', LRows)
+      and not (TJSONObject(LRoot).TryGetValue<Boolean>('truncated', LTruncated) and LTruncated);
+    if not Result then
+      Exit;
+    if not TJSONObject(LRoot).TryGetValue<Boolean>('stale', AAnswer.Stale) then
+      AAnswer.Stale:= False;
+    if not TJSONObject(LRoot).TryGetValue<Integer>('stale_files', AAnswer.StaleFiles) then
+      AAnswer.StaleFiles:= 0;
+    for var LRow: TJSONValue in LRows do
+      if LRow is TJSONArray then
+      begin
+        LCells:= nil;
+        for var LCell: TJSONValue in TJSONArray(LRow) do
+          LCells:= LCells + [if LCell is TJSONNull then '' else LCell.Value];
+        AAnswer.Rows:= AAnswer.Rows + [LCells];
+      end;
   finally
-    Root.Free;
+    LRoot.Free;
   end; // try
+end;
+
+{ The failure text of one `sql` read: what, which DB, the exit code and the head of
+  the engine's output. }
+function SqlFailureText(const AWhat, ADb: string; ACode: Integer; const AOutput: string): string;
+begin
+  Result:= Format('%s failed for %s (exit %d): %s', [AWhat, ADb, ACode, Copy(Trim(AOutput), 1, SQL_ERROR_HEAD_CHARS)]);
+end;
+
+function TEngineAdapter.SqlRowsOfDb(const ADb, ASql, AWhat: string; ARequireFresh: Boolean; out ARows: TArray<TArray<string>>; out AError: string): Boolean;
+var
+  LOutput: string;
+  LCode  : Integer;
+  LAnswer: TSqlAnswer;
+begin
+  ARows := nil;
+  AError:= '';
+  LCode:= RunCapture(Format('sql --query "%s" --db "%s" --json --limit %d --timeout-ms %d', [ASql, ADb, SQL_ROW_CAP, SQL_TIMEOUT_MS]), LOutput);
+  if (LCode <> 0) or not ParseSqlRows(LOutput, LAnswer) then
+  begin
+    AError:= SqlFailureText(AWhat, ADb, LCode, LOutput);
+    Exit(False);
+  end;
+  if ARequireFresh and LAnswer.Stale then
+  begin
+    AError:= Format(SQL_STALE_TEXT, [AWhat, ADb, LAnswer.StaleFiles]);
+    Exit(False);
+  end;
+  ARows := LAnswer.Rows;
+  Result:= True;
+end;
+
+function TEngineAdapter.AddSqlColumnOfDb(const ADb, ASql, AWhat: string; ASeen: TStringList; out AError: string): Boolean;
+var
+  LRows: TArray<TArray<string>>;
+begin
+  // A listing for a picker or a pre-flight tolerates a stale index (as before C8).
+  Result:= SqlRowsOfDb(ADb, ASql, AWhat, False, LRows, AError);
+  if Result then
+    for var LRow: TArray<string> in LRows do
+      if Length(LRow) > 0 then
+        ASeen.Add(LRow[0]);
 end; // function
 
 function TEngineAdapter.ListUnits(const ADbs: TArray<string>; out ANames: TArray<string>; out AError: string): Boolean;
@@ -1827,6 +2061,190 @@ begin
     Seen.Free;
   end; // try
 end; // function
+
+const
+  // C8 reads (measured on DMTEST 2026-10-05, see the C8 plan's "Measured index
+  // shape"). Only IsPlainIdentifier names and SqlQuoted paths are spliced in.
+  CLASS_LOOKUP_SQL = 'SELECT f.path, COALESCE(a.ancestor_name, '''') FROM symbols s JOIN files f ON f.id = s.file_id '
+    + 'LEFT JOIN type_ancestors a ON a.symbol_id = s.id AND a.ordinal = 0 '
+    + 'WHERE s.kind = ''class'' AND s.name = ''%s'' COLLATE NOCASE';
+  FIELDS_SQL = 'SELECT fs.name, fs.signature FROM symbols c JOIN files f ON f.id = c.file_id JOIN symbols fs ON fs.parent_id = c.id '
+    + 'WHERE f.path = %s COLLATE NOCASE AND c.kind = ''class'' AND c.name = ''%s'' COLLATE NOCASE '
+    + 'AND fs.kind = ''field'' AND fs.signature COLLATE NOCASE IN (%s)';
+  CODE_REFS_SQL = 'SELECT r.name_text, COALESCE(r.receiver_text, ''''), r.start_line FROM refs r JOIN files f ON f.id = r.file_id '
+    + 'JOIN symbols es ON es.id = r.enclosing_symbol_id LEFT JOIN symbols rs ON rs.id = r.symbol_id '
+    + 'WHERE f.path = %s COLLATE NOCASE AND es.qualified_name LIKE ''%%.%s.%%'' '
+    + 'AND r.kind IN (''read'', ''write'', ''member-access'', ''call'') AND (r.symbol_id IS NULL OR rs.kind = ''field'') '
+    // The index leaves SOME uses of a local unresolved (1.21.1: `Tag:= Label2` reads a
+    // local Label2 with symbol_id NULL while `Label2:= 0` resolves), so a name the
+    // enclosing routine declares as a local or parameter is dropped by name too.
+    + 'AND NOT EXISTS (SELECT 1 FROM symbols l WHERE l.parent_id = r.enclosing_symbol_id AND l.kind IN (''local_var'', ''param'') '
+    + 'AND ((COALESCE(r.receiver_text, '''') = '''' AND l.name = r.name_text COLLATE NOCASE) OR l.name = r.receiver_text COLLATE NOCASE))';
+  FILE_INDEXED_SQL = 'SELECT COUNT(*) FROM files WHERE path = %s COLLATE NOCASE';
+  NOT_INDEXED_TEXT = '%s failed for %s: %s is not in the index';
+  // Column positions in the C8 reads' positional rows.
+  COL_FIRST  = 0;
+  COL_SECOND = 1;
+  COL_THIRD  = 2;
+
+function IsPlainIdentifier(const AName: string): Boolean;
+begin
+  Result:= (AName <> '') and CharInSet(AName[1], ['A'..'Z', 'a'..'z', '_']);
+  for var I: Integer:= 2 to Length(AName) do
+    if Result and not CharInSet(AName[I], ['A'..'Z', 'a'..'z', '0'..'9', '_']) then
+      Result:= False;
+end;
+
+{ ParseSqlRows for a C8 read: a stale answer is no answer (DB authority). }
+function ParseFreshRows(const ASqlJson: string; out ARows: TArray<TArray<string>>): Boolean;
+var
+  LAnswer: TSqlAnswer;
+begin
+  Result:= ParseSqlRows(ASqlJson, LAnswer) and not LAnswer.Stale;
+  ARows := if Result then LAnswer.Rows else nil;
+end;
+
+{ LookupClass's rows [path, parent] -> outcome; never cloFailed. }
+function ClassLookupOfRows(const ARows: TArray<TArray<string>>; out APasPath, AParentClass: string): TClassLookupOutcome;
+begin
+  APasPath    := '';
+  AParentClass:= '';
+  Result      := cloAbsent;
+  for var LRow: TArray<string> in ARows do
+  begin
+    if Length(LRow) <= COL_SECOND then
+      Continue;
+    if Result = cloAbsent then
+    begin
+      APasPath:= LRow[COL_FIRST];
+      Result  := cloFound;
+    end
+    else if not SameText(LRow[COL_FIRST], APasPath) then
+    begin
+      APasPath    := '';
+      AParentClass:= '';
+      Exit(cloAmbiguous);
+    end;
+    if AParentClass = '' then
+      AParentClass:= LRow[COL_SECOND];
+  end;
+end;
+
+{ ListClassFields' rows [name, type]. }
+function FieldsOfRows(const ARows: TArray<TArray<string>>): TArray<TEngineField>;
+var
+  LField: TEngineField;
+begin
+  Result:= nil;
+  for var LRow: TArray<string> in ARows do
+    if Length(LRow) > COL_SECOND then
+    begin
+      LField.Name    := LRow[COL_FIRST];
+      LField.TypeName:= LRow[COL_SECOND];
+      Result         := Result + [LField];
+    end;
+end;
+
+{ ListCodeRefs' rows [name, receiver, line]. }
+function CodeRefsOfRows(const ARows: TArray<TArray<string>>): TArray<TEngineCodeRef>;
+var
+  LRef: TEngineCodeRef;
+begin
+  Result:= nil;
+  for var LRow: TArray<string> in ARows do
+    if Length(LRow) > COL_THIRD then
+    begin
+      LRef.Name    := LRow[COL_FIRST];
+      LRef.Receiver:= LRow[COL_SECOND];
+      LRef.Line    := StrToIntDef(LRow[COL_THIRD], 0);
+      Result       := Result + [LRef];
+    end;
+end;
+
+function ParseClassLookupRows(const ASqlJson: string; out APasPath, AParentClass: string): TClassLookupOutcome;
+var
+  LRows: TArray<TArray<string>>;
+begin
+  APasPath    := '';
+  AParentClass:= '';
+  Result:= if ParseFreshRows(ASqlJson, LRows) then ClassLookupOfRows(LRows, APasPath, AParentClass) else cloFailed;
+end;
+
+function SqlQuoted(const AText: string): string;
+begin
+  Result:= '''' + StringReplace(AText, '''', '''''', [rfReplaceAll]) + '''';
+end;
+
+function ParseFieldRows(const ASqlJson: string; out AFields: TArray<TEngineField>): Boolean;
+var
+  LRows: TArray<TArray<string>>;
+begin
+  Result := ParseFreshRows(ASqlJson, LRows);
+  AFields:= FieldsOfRows(LRows);
+end;
+
+function ParseCodeRefRows(const ASqlJson: string; out ARefs: TArray<TEngineCodeRef>): Boolean;
+var
+  LRows: TArray<TArray<string>>;
+begin
+  Result:= ParseFreshRows(ASqlJson, LRows);
+  ARefs := CodeRefsOfRows(LRows);
+end;
+
+function TEngineAdapter.LookupClass(const ADb, AClassName: string; out APasPath, AParentClass, AError: string): TClassLookupOutcome;
+var
+  LRows: TArray<TArray<string>>;
+begin
+  APasPath    := '';
+  AParentClass:= '';
+  AError      := '';
+  if not IsPlainIdentifier(AClassName) then
+    Exit(cloAbsent);
+  if not SqlRowsOfDb(ADb, Format(CLASS_LOOKUP_SQL, [AClassName]), 'class lookup of ' + AClassName, True, LRows, AError) then
+    Exit(cloFailed);
+  Result:= ClassLookupOfRows(LRows, APasPath, AParentClass);
+end;
+
+function TEngineAdapter.ListClassFields(const ADb, AClassName, APasPath: string; const AFromTypes: TArray<string>; out AFields: TArray<TEngineField>; out AError: string): Boolean;
+var
+  LTypes: TArray<string>;
+  LRows : TArray<TArray<string>>;
+begin
+  AFields:= nil;
+  AError := '';
+  LTypes := nil;
+  for var LType: string in AFromTypes do
+    if IsPlainIdentifier(LType) then
+      LTypes:= LTypes + [SqlQuoted(LType)];
+  if not IsPlainIdentifier(AClassName) or (Length(LTypes) = 0) then
+    Exit(True);
+  Result:= SqlRowsOfDb(ADb, Format(FIELDS_SQL, [SqlQuoted(APasPath), AClassName, string.Join(', ', LTypes)]), 'field listing of ' + AClassName, True, LRows, AError);
+  AFields:= FieldsOfRows(LRows);
+end;
+
+function TEngineAdapter.ListCodeRefs(const ADb, AUnitPas, AClassName: string; out ARefs: TArray<TEngineCodeRef>; out AError: string): Boolean;
+var
+  LWhat : string;
+  LRows : TArray<TArray<string>>;
+  LCount: TArray<TArray<string>>;
+begin
+  ARefs := nil;
+  AError:= '';
+  if not IsPlainIdentifier(AClassName) then
+    Exit(True);
+  LWhat:= 'code-ref listing of ' + AClassName;
+  if not SqlRowsOfDb(ADb, Format(CODE_REFS_SQL, [SqlQuoted(AUnitPas), AClassName]), LWhat, True, LRows, AError) then
+    Exit(False);
+  ARefs:= CodeRefsOfRows(LRows);
+  if Length(ARefs) > 0 then
+    Exit(True);
+  // No rows: "no uses" only when the unit IS indexed; otherwise the index cannot say.
+  if not SqlRowsOfDb(ADb, Format(FILE_INDEXED_SQL, [SqlQuoted(AUnitPas)]), LWhat, True, LCount, AError) then
+    Exit(False);
+  Result:= (Length(LCount) > 0) and (Length(LCount[0]) > 0) and (StrToIntDef(LCount[0][COL_FIRST], 0) > 0);
+  if not Result then
+    AError:= Format(NOT_INDEXED_TEXT, [LWhat, ADb, AUnitPas]);
+end;
 
 function TEngineAdapter.ResolveUnitFile(const AUnit: string): string;
 var
@@ -1916,13 +2334,28 @@ begin
   // Already qualified (has a '.') or empty -> nothing to do.
   if (AName = '') or (Pos('.', AName) > 0) then
     Exit;
+  var LKey: string:= UpperCase(AName) + #0 + DbArgs;
+  var LHit: TResolvedClass;
+  TMonitor.Enter(FResolveCache);
+  try
+    if FResolveCache.TryGetValue(LKey, LHit) then
+    begin
+      AAmbiguity:= LHit.Ambiguity;
+      Exit(LHit.QName);
+    end;
+  finally
+    TMonitor.Exit(FResolveCache);
+  end;
   if not QueryJsonFor(AName, JSON, Err, Code) then
   begin
     // Exit 1 is "no such class" -- an ordinary answer, so leave AError empty and
-    // hand back the bare name as before. Any OTHER code means the query did not
-    // run; that must not masquerade as a miss.
+    // hand back the bare name as before (and cache it: it IS the answer). Any
+    // OTHER code means the query did not run; that must not masquerade as a miss,
+    // and it is not cached, so the next call asks again.
     if Code <> 1 then
-      AError:= Err;
+      AError:= Err
+    else
+      CacheResolved(LKey, AName, 0);
     Exit;
   end;
   Syms:= ParseQuerySymbols(JSON);
@@ -1942,12 +2375,28 @@ begin
   if not SelectQuerySymbol(Classes, AName, Sym, AAmbiguity) then
   begin
     AAmbiguity:= 0;
+    CacheResolved(LKey, AName, 0); // rows, but no class of that exact name: an answer
     Exit;
   end;
   if Sym.QualifiedName <> '' then
     Result:= Sym.QualifiedName
   else AAmbiguity:= 0; // a row with no qualified_name qualifies nothing
+  CacheResolved(LKey, Result, AAmbiguity);
 end; // function
+
+procedure TEngineAdapter.CacheResolved(const AKey, AQName: string; AAmbiguity: Integer);
+var
+  E: TResolvedClass;
+begin
+  E.QName    := AQName;
+  E.Ambiguity:= AAmbiguity;
+  TMonitor.Enter(FResolveCache);
+  try
+    FResolveCache.AddOrSetValue(AKey, E);
+  finally
+    TMonitor.Exit(FResolveCache);
+  end;
+end;
 
 function TEngineAdapter.DeclaringUnitOf(const ATypeName: string): string;
 var
@@ -2664,7 +3113,7 @@ begin
     Args:= Format('convert-validate --rules "%s"', [Tmp]);
     if (AFrom <> '') and (ATo <> '') then
       Args:= Args + Format(' --from "%s" --to "%s"', [AFrom, ATo]);
-    Args:= Args + DbArgs;
+    Args:= Args + DbArgs + CastLibArgs;
     // SEPARATE pipes, not RunCapture's merged one: the diagnostics are read line by
     // line, and a merged pipe interleaves stdout and stderr by CHUNK -- a driven Save
     // showed the tail of stderr's "resolver: ..." advisory, cut off from its head,

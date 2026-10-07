@@ -63,6 +63,22 @@ uses
   DRagLint.Convert.UnitRules,
   DRagLint.Refactor.TextEdit;
 
+const
+  /// <summary>apply/1 inherited[].action: the instance is left as it is (C8
+  /// N1). A compatibility surface, like the other two.</summary>
+  INH_ACTION_SKIPPED = 'skipped';
+  /// <summary>apply/1 inherited[].action: the .dfm block is retyped and
+  /// converted (C8 N2, 1.26.0).</summary>
+  INH_ACTION_RETYPED = 'retyped';
+  /// <summary>apply/1 inherited[].action: no .dfm block; only code access
+  /// sites follow the converted ancestor (C8 N2a, 1.26.0).</summary>
+  INH_ACTION_CODE = 'code';
+  /// <summary>apply/1 inherited[].action: a code reference to a converted
+  /// ancestor's field that the resolver did NOT bind -- not verified against
+  /// the index, so not rewritten; reported as access-site-unverified (C8 N2
+  /// review, 1.26.0).</summary>
+  INH_ACTION_UNVERIFIED = 'unverified';
+
 type
   /// <summary>One component instance selected for conversion: its DFM instance
   /// name, its current (From) class, and the class it is being converted to
@@ -77,6 +93,74 @@ type
     InstanceName: string;
     FromType    : string;
     ToType      : string;
+  end;
+
+  /// <summary>One .dfm object of a From type that --only did NOT name but that
+  /// converts anyway, because it is nested inside one --only did name (1.25.1;
+  /// apply/1 only_included[]).</summary>
+  /// <remarks>The parent's re-emit converts its nested From-type children
+  /// (the owned-part recursion), so leaving the child out would convert it in
+  /// the .dfm and not in the .pas -- form and code disagreeing. Parent is the
+  /// nearest enclosing converted instance's name.</remarks>
+  TNestedOnly = record
+    Instance: TConvertInstance;
+    Parent  : string;
+  end;
+
+  /// <summary>One INHERITED or INLINE .dfm object whose class is the From type
+  /// of a #convert block, or one field a converted ancestor declares that the
+  /// unit's code uses -- apply/1 inherited[] (C8 engine items N1, N2, N2a).</summary>
+  /// <remarks>
+  /// The component is DECLARED by an ancestor: the nearest class up the
+  /// owner's ancestor chain whose .dfm opens it with `object` (or `inline`).
+  /// The owner is the class of the nearest enclosing `inline` frame, else the
+  /// .dfm's root class. AncestorState is 'unconverted' (that ancestor's object
+  /// still has the From type), 'converted' (it has the block's To type),
+  /// 'mismatched' (it has some third type) or 'outside' (not determinable: no
+  /// ancestor in the --db declares it, the chain leaves the index, or an
+  /// ancestor's .dfm is missing or binary; never guessed, item N3).
+  /// AncestorUnit is the declaring unit; '' exactly when AncestorState is
+  /// 'outside'. Action (1.26.0) is what the run does with it: 'retyped' (N2:
+  /// state 'converted' -- the .dfm header is retyped to ToType, the block's
+  /// properties converted, code access sites rewritten), 'code' (N2a: no .dfm
+  /// block; a field a converted ancestor declares with ToType that the unit's
+  /// code uses -- Line is then the first such reference in the .pas, and only
+  /// code access sites are rewritten) or 'skipped' (every other state, and a
+  /// retype that could not be planned; Reason says why).
+  /// </remarks>
+  TInheritedInstance = record
+    Name         : string;  { the component name }
+    TypeName     : string;  { its class as the .dfm spells it -- the block's From type }
+    ToType       : string;  { the block's To type, bare }
+    Line         : Integer; { 1-based line of its header in the unit's .dfm ('code': in the .pas) }
+    OwnerClass   : string;  { the class whose ancestry declares it }
+    AncestorUnit : string;  { the declaring ancestor's unit, or '' }
+    AncestorState: string;  { 'unconverted', 'converted', 'mismatched' or 'outside' }
+    Reason       : string;  { what happens to it and why, one sentence }
+    Action       : string;  { 'retyped', 'code' or 'skipped' }
+  end;
+
+  /// <summary>One DESCENDANT unit that still streams or uses a component this
+  /// run converts in its ancestor (apply/1 descendants[], 1.25.0) -- the
+  /// descendant breaks at load or compile until C8 N2 retypes it.</summary>
+  /// <remarks>
+  /// A warning, never a refusal. UnitName is the descendant unit (a class
+  /// descending from the converted unit's root class, any number of levels
+  /// down, or a form hosting such a class as an `inline` frame). Reason is
+  /// 'dfm' (its .dfm re-opens the component with `inherited` / `inline` and
+  /// the From type), 'code' (a method of a descendant class references the
+  /// field) or 'both'. Line is the descendant .dfm's block header for 'dfm' and
+  /// 'both', else the first code reference in the descendant .pas.
+  /// AncestorLine is the line of the component's `object` block in the
+  /// CONVERTED unit's .dfm -- the N of the warning text.
+  /// </remarks>
+  TDescendantUse = record
+    UnitName    : string;  { the descendant unit }
+    Name        : string;  { the converted component }
+    TypeName    : string;  { its From type, as the ancestor .dfm spells it }
+    Line        : Integer; { 1-based; see the remarks }
+    Reason      : string;  { 'dfm', 'code' or 'both' }
+    AncestorLine: Integer; { 1-based line of its object header in the ancestor .dfm }
   end;
 
   /// <summary>What one reported line of a convert-apply run IS, as a stable
@@ -136,11 +220,38 @@ type
     aikSubLeafCarried,       { a sub-leaf carried IMPLICITLY under an identity
                                #link (Font <- Font, both TFont) -- nobody typed
                                it, and the report says so (info). }
-    aikRulePathUnreachable); { a #link / #default / #mapping line whose path
+    aikRulePathUnreachable,  { a #link / #default / #mapping line whose path
                                names members that exist but are inaccessible on
                                the .dfm surface -- skipped, never applied (owner
                                ruling R12, T2h). Path and RuleLine are set; the
                                structured facts are apply/1 unreachable[]. }
+    aikInheritedInstanceSkipped, { an inherited / inline .dfm object of a
+                               From type, skipped -- its ancestor declares it
+                               (C8 N1). Instance and Line are set; the
+                               structured facts are apply/1 inherited[]. }
+    aikUnitRuleSkipped,      { a #unuse / #useswap removal NOT made because it
+                               would strand instances --only left out (C13 N4).
+                               RuleLine is the book line, Line the kept uses
+                               entry's; the structured row is apply/1 uses[]
+                               action 'skipped'. }
+    aikDescendantNotConverted, { a descendant unit still streams or uses a
+                               converted instance (1.25.0). Instance is the
+                               component, Line its object line in the unit's
+                               .dfm; the structured row is apply/1
+                               descendants[]. }
+    aikInheritedInstanceRetyped, { an inherited / inline .dfm object whose
+                               declaring ancestor already has the To type,
+                               retyped and its block converted (C8 N2,
+                               1.26.0). Field converted; Instance and Line
+                               (its .dfm header) are set; the structured row
+                               is apply/1 inherited[] action 'retyped'. }
+    aikAccessSiteUnverified); { a code access a rename would touch whose
+                               receiver the index cannot tie to the converted
+                               field -- no receiver reference on its line, an
+                               unbound reference to a converted ancestor's
+                               field, or a member reached through a `with`
+                               block -- NOT rewritten (C8 N2 review, 1.26.0).
+                               Field warnings; Line and Instance set. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -482,20 +593,141 @@ type
 /// </remarks>
 function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
 
-/// <summary>The From types of a book that a .dfm holds as INHERITED or INLINE
-/// objects -- instances convert-apply does not convert.</summary>
-/// <param name="ADfmText">The .dfm text.</param>
+/// <summary>The INHERITED and INLINE objects of a .dfm whose class is the From
+/// type of a #convert block, each with its declaring ancestor resolved -- the
+/// instances convert-apply skips and reports (C8 engine items N1, N3).</summary>
+/// <param name="ATrees">The run's tree cache; its Stores are searched for the
+/// owner class and its ancestor chain (GetTransitiveAncestors). Not owned.</param>
+/// <param name="AUnitPas">The unit being converted; a root class declared in
+/// it is preferred over a same-named class elsewhere.</param>
+/// <param name="ADfmPath">The unit's sibling .dfm; a missing file yields an
+/// empty result.</param>
 /// <param name="ARules">The parsed rule book.</param>
-/// <returns>Each such class name once (as the .dfm spells it), in the order
-/// first found; empty when there is none.</returns>
+/// <param name="AOnly">The --only instance allow-list; empty keeps every one.</param>
+/// <returns>One TInheritedInstance per such object, nested ones included, in
+/// .dfm order; empty when there is none.</returns>
 /// <remarks>
-/// FindConvertInstances only matches 'object' headers, so an inherited
-/// component of a From type is silently left unconverted while the book's
-/// unit rules (e.g. '#unuse BDE.DBTables') still act on the unit -- which can
-/// break its compile. convert-apply refuses such a unit whole (ruling R6,
-/// 2026-09-30). Pure.
+/// FindConvertInstances matches `object` headers only, so these are never
+/// converted; until 1.22.0 convert-apply refused their unit whole (ruling R6).
+/// The declaring ancestor is the nearest class of the owner's chain (the owner
+/// itself first, so a frame's own .dfm counts) whose .dfm -- the class's unit
+/// with the extension changed -- opens the component with `object` or
+/// `inline`; a .dfm that only re-opens it with `inherited` is passed over.
+/// The walk STOPS at an ancestor whose .dfm is missing, binary (TPF0) or not
+/// readable as text -- it might declare the component -- and reports
+/// 'outside' with a reason naming that file and why. An owner class that
+/// resolves to no class or to several (looked up case-insensitively), a chain
+/// that leaves the index at an unresolved ancestor, or a chain with no
+/// declaring .dfm also give 'outside' -- nothing is guessed. A declaring
+/// object of neither the From nor the To type gives 'mismatched'. Action is
+/// 'retyped' for state 'converted' (C8 N2, 1.26.0; BuildApplyPlan demotes it to
+/// 'skipped' when the retype cannot be planned) and 'skipped' for every other
+/// state. AOnly filters the result like FindConvertInstances. Reads the
+/// ancestors' .dfm files; writes nothing.
 /// </remarks>
-function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConversionRuleSet): TArray<string>;
+function FindInheritedInstances(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TArray<TInheritedInstance>;
+
+/// <summary>The fields a CONVERTED ancestor declares that AUnitPas's code uses
+/// without its .dfm re-opening them (C8 N2a, 1.26.0) -- apply/1 inherited[]
+/// entries with action 'code', whose access sites BuildApplyPlan rewrites.</summary>
+/// <param name="ATrees">The run's tree cache; the store that indexes AUnitPas
+/// is searched. Not owned.</param>
+/// <param name="AUnitPas">The descendant unit.</param>
+/// <param name="ARules">The parsed rule book; a field counts when its type is
+/// the To type of a #convert block (TypeName is that block's From type -- the
+/// first such block when several share the To type).</param>
+/// <param name="AOnly">The --only allow-list; empty keeps every one.</param>
+/// <param name="AInherited">The unit's .dfm entries (FindInheritedInstances);
+/// a field named there is not listed again.</param>
+/// <returns>One entry per field, in order of its first reference: Line is that
+/// reference's line in AUnitPas, AncestorState 'converted', Action 'code'.
+/// Empty when there is none.</returns>
+/// <remarks>
+/// A reference counts only when the resolver BOUND it to the field
+/// (refs.symbol_id, E5): a local or parameter of the same name binds to
+/// itself and does not count, and an unbound reference is never guessed at.
+/// The field must belong to a class among the transitive ancestors of a class
+/// AUnitPas declares -- any number of levels up -- and the declaring unit's
+/// .dfm must open the component with `object` (or `inline`) and the To type,
+/// which is what 'converted' means here. Reads that .dfm; writes nothing.
+/// </remarks>
+function FindInheritedCodeUses(const ATrees: TConvertTreeCache; const AUnitPas: string;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>;
+  const AInherited: TArray<TInheritedInstance>): TArray<TInheritedInstance>;
+
+/// <summary>Reports SKIPPED inherited instances in a convert-apply report:
+/// one `line N: warning: ...` per instance whose Action is 'skipped' in
+/// Warnings and its typed mirror (kind inherited-instance-skipped) in Items.
+/// A 'retyped' or 'code' entry is not a warning and is not reported here.</summary>
+/// <param name="AInstances">The instances FindInheritedInstances returned.</param>
+/// <param name="ADfmPath">The .dfm their lines refer to (each item's FilePath).</param>
+/// <param name="AReport">The report to append to; Items stays equal to the sum
+/// of the six arrays (invariant 1).</param>
+/// <remarks>Pure apart from AReport.</remarks>
+procedure AppendInheritedReport(const AInstances: TArray<TInheritedInstance>; const ADfmPath: string;
+  var AReport: TApplyReport);
+
+/// <summary>The descendant units that still stream or use components this run
+/// converts in AUnitPas (apply/1 descendants[], 1.25.0) -- each will fail at
+/// load or compile until it is converted next (C8 N2).</summary>
+/// <param name="ATrees">The run's tree cache; every one of its Stores is
+/// searched. Not owned.</param>
+/// <param name="AUnitPas">The unit being converted (the ancestor).</param>
+/// <param name="ADfmPath">Its .dfm; its root block names the root class and
+/// gives each component's object line. A missing file yields an empty
+/// result.</param>
+/// <param name="ARules">The parsed rule book; a descendant block counts only
+/// when its class is still the instance's From type.</param>
+/// <param name="AConverted">The instances the run converts -- already
+/// filtered by --only and stripped of skipped instances by the caller.</param>
+/// <returns>One TDescendantUse per (descendant unit, converted component), in
+/// AConverted order, then by unit name; empty when there is none.</returns>
+/// <remarks>
+/// Descendants are the classes FindDescendantNames lists for the root class,
+/// kept only when their transitive ancestors include that class in AUnitPas
+/// (a same-named class elsewhere does not count), at every level. A unit
+/// counts by its .dfm when it holds an `inherited` / `inline` block named for
+/// the component, with the From type, whose owner (the root class, or the
+/// nearest enclosing `inline` frame's class -- so a form HOSTING the frame
+/// counts too) is the root class or a descendant, matched by class SYMBOL: the
+/// class of that name the candidate unit sees (declared in it, in a unit it
+/// uses, or the only one indexed), never by name alone. The candidate .dfm
+/// files are those the index holds a component symbol of that name in. A unit
+/// counts by its code when a method of a descendant class references the
+/// field by name -- resolved to the ancestor's field, or unresolved with no
+/// receiver or Self and no local / parameter of that name in the routine (or
+/// an enclosing one); a descendant's own same-named field binds to itself and
+/// does not count. Each descendant file's references are read once per call.
+/// Only what the --db stores index is seen: a descendant in another project is
+/// not listed. Reads .dfm files; writes nothing.
+/// </remarks>
+function FindDescendantUses(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+  const ARules: TConversionRuleSet; const AConverted: TArray<TConvertInstance>): TArray<TDescendantUse>;
+
+/// <summary>The instances a built plan CONVERTS: the .dfm's own From-type
+/// objects --only kept, less every instance the plan skipped whole.</summary>
+/// <param name="AReport">The plan's report; its instance-skipped items name
+/// the instances left out.</param>
+/// <param name="ADfmPath">The unit's .dfm; a missing file yields none.</param>
+/// <param name="ARules">The parsed rule book.</param>
+/// <param name="AOnly">The --only allow-list; empty keeps every one.</param>
+/// <returns>The converted instances, in .dfm order.</returns>
+/// <remarks>Reads ADfmPath; writes nothing.</remarks>
+function ConvertedInstancesOf(const AReport: TApplyReport; const ADfmPath: string;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TArray<TConvertInstance>;
+
+/// <summary>Reports descendant uses in a convert-apply report: one
+/// `line N: warning: descendant ...` per use in Warnings and its typed mirror
+/// (kind descendant-not-converted) in Items.</summary>
+/// <param name="AUses">The uses FindDescendantUses returned.</param>
+/// <param name="ADfmPath">The converted unit's .dfm, which N refers to (each
+/// item's FilePath).</param>
+/// <param name="AReport">The report to append to; Items stays equal to the sum
+/// of the six arrays (invariant 1).</param>
+/// <remarks>Pure apart from AReport.</remarks>
+procedure AppendDescendantReport(const AUses: TArray<TDescendantUse>; const ADfmPath: string;
+  var AReport: TApplyReport);
 
 /// <summary>Builds the full convert-apply plan for one unit: locates the
 /// component instances to convert in ADfmPath (via FindConvertInstances),
@@ -531,6 +763,18 @@ function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConver
 /// Default-on because the number earned it: measured 2 distinct gaps over 22
 /// sites on a real 36-link book, and the converter team's own test was "2 is
 /// a warning, 200 is a report".</param>
+/// <param name="AInherited">The unit's inherited[] entries
+/// (FindInheritedInstances, then FindInheritedCodeUses), already --only
+/// filtered (C8 N2 / N2a, 1.26.0). A 'retyped' entry is converted like an own
+/// instance -- its .dfm block re-emitted with its `inherited` / `inline`
+/// header kept (see ReemitComponent for what an inherited block does not
+/// get), its code access sites rewritten, its To type's unit added -- except
+/// that there is no field declaration and no creator site to retype in this
+/// unit. It is reported as one converted[] line (kind
+/// inherited-instance-retyped); when its block cannot be located or re-emitted
+/// its Action becomes 'skipped' with that reason, for AppendInheritedReport. A
+/// 'code' entry only joins the access-site rewrite and the uses add. Every
+/// other entry is ignored here.</param>
 /// <returns>A TApplyResult. Task 2 implements surface #1 (.pas declaration
 /// retype) and surface #2 (.pas uses-add): each located instance contributes a
 /// tekReplaceInLine edit swapping its FromType token for ToType, plus (once
@@ -552,7 +796,7 @@ function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConver
 /// site; Report.AccessSites lists each rewrite. An access on a receiver that
 /// is NOT a converted instance is left untouched -- see FindMemberAccessSites.
 /// Ok=False only on a hard failure (missing .pas/.dfm, zero instances
-/// matched, or -- 1.20.6 -- the book's unit rules refusing the unit, e.g. an
+/// matched and no 'retyped' / 'code' AInherited entry, or -- 1.20.6 -- the book's unit rules refusing the unit, e.g. an
 /// entry to remove inside a conditional region: then NOTHING is planned, the
 /// #convert edits included). Refused=True, nothing planned, also when an
 /// instance's indexed .dfm span no longer holds it -- lines added or removed,
@@ -561,7 +805,9 @@ function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConver
 /// removal targets the unit declaring the From type of a #convert instance
 /// that stays unconverted, skipped or left out by AOnly ('&lt;rule&gt; would
 /// leave &lt;N&gt; unconverted instance(s) of &lt;Type&gt; -- unit not
-/// changed'). When the book has unit rules (#unuse / #use /
+/// changed') -- unless every such instance is an own instance AOnly left out:
+/// then that removal is SKIPPED, not refused (C13 N4; a Report.UsesChanges row
+/// with Action 'skipped' and a unit-rule-skipped warning). When the book has unit rules (#unuse / #use /
 /// #useswap), surface #2's resolved units are handed to PlanUnitRules, which
 /// then plans every uses change to the unit (Report.UsesChanges). Ok=True
 /// with per-instance problems noted in Report.Warnings
@@ -582,7 +828,8 @@ function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConver
 /// </remarks>
 function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
   const ABook: TApplyBook; const AOnly: TArray<string>;
-  const ACastLib: TCastLib; AWarnUnlinked: Boolean): TApplyResult;
+  const ACastLib: TCastLib; AWarnUnlinked: Boolean;
+  var AInherited: TArray<TInheritedInstance>): TApplyResult;
 
 /// <summary>The convert-apply plan for a unit whose COMPONENT part is skipped
 /// -- no sibling .dfm, no #convert block in the book, or no .dfm instance any
@@ -595,6 +842,10 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
 /// when it has none.</param>
 /// <param name="ARules">The parsed, validated rule book; its #convert blocks
 /// only count toward the ADD-wins normalisation (see PlanUnitRules).</param>
+/// <param name="AOnly">The --only names (may be empty). When every instance a
+/// removal would strand was left out by it, the removal is SKIPPED (C13 N4):
+/// the unit stays in uses, Report.UsesChanges gets an Action 'skipped' row and
+/// Report.Warnings / Items a unit-rule-skipped line.</param>
 /// <returns>Ok=True with the uses-clause edits in Edits and one row per
 /// change in Report.UsesChanges (both empty when the book changes nothing
 /// here); every other report array empty. Ok=False with Error when the unit
@@ -609,7 +860,7 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
 /// lexed from the unit's own bytes; the index is consulted only for R26's
 /// declaring unit. Pinned by run_convert_apply_unit_rules.ps1 (arm R).</remarks>
 function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet): TApplyResult;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 
 /// <summary>Scans a .dfm's component headers (top-level and nested) and
 /// returns the instances that should be converted: those whose class matches
@@ -643,6 +894,38 @@ function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas,
 /// </remarks>
 function FindConvertInstances(const ADfmText: string; const ARules: TConversionRuleSet;
   const AOnly: TArray<string>): TArray<TConvertInstance>;
+
+/// <summary>The .dfm objects of a From type that --only left out but that sit
+/// inside an object --only kept (1.25.1) -- each converts with its parent.</summary>
+/// <param name="ADfmText">The unit's .dfm text.</param>
+/// <param name="ARules">The parsed rule book.</param>
+/// <param name="AOnly">The --only names; empty gives an empty result (every
+/// instance converts anyway).</param>
+/// <returns>One TNestedOnly per such object, in .dfm order, any depth below the
+/// kept parent -- a child included this way includes its own children too.</returns>
+/// <remarks>Only `object` blocks count, as in FindConvertInstances. Blocks are
+/// tracked on a stack: object / inherited / inline headers and collection
+/// `item`s open one, `end` / `end>` closes one. Pure.</remarks>
+function NestedOnlyInstances(const ADfmText: string; const ARules: TConversionRuleSet;
+  const AOnly: TArray<string>): TArray<TNestedOnly>;
+
+/// <summary>Splits convert-apply's --only names into the ones that name a .dfm
+/// object of a #convert From type and the ones that name none (C13 N3, apply/1
+/// only_matched[] / only_unmatched[]).</summary>
+/// <param name="ADfmText">The unit's .dfm text; '' when it has none (then every
+/// name is unmatched).</param>
+/// <param name="ARules">The parsed rule book; only its #convert From types
+/// count.</param>
+/// <param name="AOnly">The --only names, as given.</param>
+/// <param name="AMatched">The AOnly names that match an object -- own,
+/// inherited or inline -- case-insensitively, in AOnly order, spelled as given
+/// in AOnly.</param>
+/// <param name="AUnmatched">The rest, same order and spelling. A name that
+/// matches nothing is ignored by convert-apply (no error, exit unchanged);
+/// this is where it is reported.</param>
+/// <remarks>Pure; no I/O. Both arrays are empty when AOnly is.</remarks>
+procedure SplitOnlyNames(const ADfmText: string; const ARules: TConversionRuleSet;
+  const AOnly: TArray<string>; out AMatched, AUnmatched: TArray<string>);
 
 /// <summary>The stable wire name of an item kind, e.g. 'creator-verify'.</summary>
 /// <param name="AKind">The kind to spell.</param>
@@ -696,7 +979,9 @@ const
     'cast-not-applied', 'cast-applied', 'instance-skipped', 'field-decl-not-retyped',
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
     'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped',
-    'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable');
+    'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable',
+    'inherited-instance-skipped', 'unit-rule-skipped', 'descendant-not-converted',
+    'inherited-instance-retyped', 'access-site-unverified');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1009,28 +1294,1080 @@ begin
     if C <> nil then Inc(Result, C.ClassesBuilt);
 end;
 
-function FindInheritedConvertTypes(const ADfmText: string; const ARules: TConversionRuleSet): TArray<string>;
+const
+  { apply/1 inherited[].ancestor_state values (C8 N1 / N3) -- a compatibility
+    surface: the converter editor dispatches on these spellings. }
+  ANCESTOR_UNCONVERTED = 'unconverted';
+  ANCESTOR_CONVERTED   = 'converted';
+  ANCESTOR_OUTSIDE     = 'outside';
+  ANCESTOR_MISMATCHED  = 'mismatched';
+  { the filer signature a compiled (binary) .dfm starts with }
+  BINARY_DFM_SIGNATURE = 'TPF0';
+  { the first byte of a .dfm stored as a Windows RES resource }
+  RES_HEADER_FIRST_BYTE = $FF;
+  { a UTF-8 byte-order mark as an ANSI decode spells it }
+  UTF8_BOM_AS_ANSI = #$EF#$BB#$BF;
+  { .dfm block keywords, without their trailing space }
+  KW_OBJECT    = 'object';
+  KW_INHERITED = 'inherited';
+  KW_INLINE    = 'inline';
+  KW_ITEM      = 'item';
+  KW_END       = 'end';
+
+// The inherited / inline objects of ADfmText whose class is a From type, with
+// Name, TypeName, ToType, Line and OwnerClass set (the ancestor fields are
+// left empty). OwnerClass is the class of the nearest ENCLOSING `inline`
+// block, else the root block's class: a frame's children are declared by the
+// frame, everything else by the form's ancestry. Blocks are tracked on a
+// stack -- object / inherited / inline headers (with or without a class) and
+// collection `item`s open one, `end` / `end>` closes one. Pure.
+function ScanInheritedConvertInstances(const ADfmText: string; const ARules: TConversionRuleSet): TArray<TInheritedInstance>;
 var
-  L        : string;
-  Trimmed  : string;
-  ObjName  : string;
-  ObjClass : string;
-  ToType   : string;
-  Found    : TList<string>;
+  Lines  : TArray<string>;
+  Kinds  : TList<string>; { the open blocks' keywords, outermost first }
+  OpenClasses: TList<string>; { their OpenClasses, '' when the header names none }
+  Found  : TList<TInheritedInstance>;
+  I      : Integer;
+  T, Kw  : string;
+  ObjName, ObjClass, ToType: string;
+  Inst   : TInheritedInstance;
+
+  function KeywordOf(const ATrimmed: string): string;
+  begin
+    if StartsText(KW_OBJECT + ' ', ATrimmed) then Result:= KW_OBJECT
+    else if StartsText(KW_INHERITED + ' ', ATrimmed) then Result:= KW_INHERITED
+    else if StartsText(KW_INLINE + ' ', ATrimmed) then Result:= KW_INLINE
+    else Result:= '';
+  end;
+
+  function OwnerOf: string;
+  begin
+    for var K: Integer:= Kinds.Count - 1 downto 1 do
+      if Kinds[K] = KW_INLINE then Exit(OpenClasses[K]);
+    Result:= if OpenClasses.Count > 0 then OpenClasses[0] else '';
+  end;
+
 begin
-  Found:= TList<string>.Create;
+  Lines  := ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]);
+  Kinds  := TList<string>.Create;
+  OpenClasses:= TList<string>.Create;
+  Found  := TList<TInheritedInstance>.Create;
   try
-    for L in ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]) do
+    for I:= 0 to High(Lines) do
     begin
-      Trimmed:= Trim(L);
-      if not (TryParseHeaderAfter(Trimmed, 'inherited ', ObjName, ObjClass) or
-              TryParseHeaderAfter(Trimmed, 'inline ', ObjName, ObjClass)) then Continue;
-      if FindConvertRuleFor(ARules, ObjClass, ToType) and not Found.Contains(ObjClass) then
-        Found.Add(ObjClass);
+      T := Trim(Lines[I]);
+      Kw:= KeywordOf(T);
+      if Kw <> '' then
+      begin
+        if not TryParseHeaderAfter(T, Kw + ' ', ObjName, ObjClass) then ObjClass:= '';
+        if (Kw <> KW_OBJECT) and (Kinds.Count > 0) and (ObjClass <> '') and
+           FindConvertRuleFor(ARules, ObjClass, ToType) then
+        begin
+          Inst           := Default(TInheritedInstance);
+          Inst.Name      := ObjName;
+          Inst.TypeName  := ObjClass;
+          Inst.ToType    := ToType;
+          Inst.Line      := I + 1;
+          Inst.OwnerClass:= OwnerOf;
+          Found.Add(Inst);
+        end;
+        Kinds.Add(Kw);
+        OpenClasses.Add(ObjClass);
+      end
+      else if SameText(T, KW_ITEM) then
+      begin
+        Kinds.Add(KW_ITEM);
+        OpenClasses.Add('');
+      end
+      else if (Kinds.Count > 0) and (SameText(T, KW_END) or SameText(T, KW_END + '>')) then
+      begin
+        Kinds.Delete(Kinds.Count - 1);
+        OpenClasses.Delete(OpenClasses.Count - 1);
+      end;
     end;
     Result:= Found.ToArray;
   finally
     Found.Free;
+    OpenClasses.Free;
+    Kinds.Free;
+  end;
+end;
+
+function NestedOnlyInstances(const ADfmText: string; const ARules: TConversionRuleSet;
+  const AOnly: TArray<string>): TArray<TNestedOnly>;
+var
+  Open   : TList<string>; { per open block: the converting instance's name, '' when it converts nothing }
+  T, Kw  : string;
+  HdrName  : string;
+  HdrClass : string;
+  ToType : string;
+  Parent : string;
+  N      : TNestedOnly;
+begin
+  Result:= nil;
+  if Length(AOnly) = 0 then Exit;
+  Open:= TList<string>.Create;
+  try
+    for var L: string in ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]) do
+    begin
+      T:= Trim(L);
+      Kw:= '';
+      if StartsText(KW_OBJECT + ' ', T) then Kw:= KW_OBJECT + ' '
+      else if StartsText(KW_INHERITED + ' ', T) then Kw:= KW_INHERITED + ' '
+      else if StartsText(KW_INLINE + ' ', T) then Kw:= KW_INLINE + ' ';
+      if Kw <> '' then
+      begin
+        Parent:= '';
+        for var K: Integer:= Open.Count - 1 downto 0 do
+          if Open[K] <> '' then
+          begin
+            Parent:= Open[K];
+            Break;
+          end;
+        HdrName:= '';
+        if (Kw = KW_OBJECT + ' ') and TryParseHeaderAfter(T, Kw, HdrName, HdrClass) and FindConvertRuleFor(ARules, HdrClass, ToType) then
+        begin
+          if not InOnlyList(HdrName, AOnly) and (Parent <> '') then
+          begin
+            N:= Default(TNestedOnly);
+            N.Instance.InstanceName:= HdrName;
+            N.Instance.FromType    := HdrClass;
+            N.Instance.ToType      := ToType;
+            N.Parent               := Parent;
+            Result:= Result + [N];
+          end
+          else if not InOnlyList(HdrName, AOnly) then
+            HdrName:= '';
+        end
+        else
+          HdrName:= '';
+        Open.Add(HdrName);
+      end
+      else if SameText(T, KW_ITEM) then
+        Open.Add('')
+      else if (Open.Count > 0) and (SameText(T, KW_END) or SameText(T, KW_END + '>')) then
+        Open.Delete(Open.Count - 1);
+    end;
+  finally
+    Open.Free;
+  end;
+end;
+
+// True + the header's class when ADfmText opens a block named AName with
+// `object` or `inline` -- i.e. DECLARES it rather than re-opening it with
+// `inherited`. Component names are unique within a form, so the first match
+// at any depth is the one.
+function DfmDeclaresComponent(const ADfmText, AName: string; out AClassName: string): Boolean;
+var
+  L, T, ObjName: string;
+begin
+  AClassName:= '';
+  for L in ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]) do
+  begin
+    T:= Trim(L);
+    if (TryParseHeaderAfter(T, KW_OBJECT + ' ', ObjName, AClassName) or
+        TryParseHeaderAfter(T, KW_INLINE + ' ', ObjName, AClassName)) and SameText(ObjName, AName) then
+      Exit(True);
+  end;
+  AClassName:= '';
+  Result:= False;
+end;
+
+// True when ABytes are a compiled (binary) .dfm: the TPF0 filer signature, or
+// a Windows resource header (first byte $FF).
+function IsBinaryDfmBytes(const ABytes: TBytes): Boolean;
+begin
+  Result:= ((Length(ABytes) > 0) and (ABytes[0] = RES_HEADER_FIRST_BYTE)) or
+           ((Length(ABytes) >= Length(BINARY_DFM_SIGNATURE)) and
+            (TEncoding.ANSI.GetString(ABytes, 0, Length(BINARY_DFM_SIGNATURE)) = BINARY_DFM_SIGNATURE));
+end;
+
+// True when AText, past leading whitespace and a UTF-8 BOM, opens with a
+// text .dfm block header (object / inherited / inline).
+function StartsWithBlockHeader(const AText: string): Boolean;
+var
+  T: string;
+begin
+  T:= TrimLeft(AText);
+  if StartsStr(UTF8_BOM_AS_ANSI, T) then T:= TrimLeft(Copy(T, Length(UTF8_BOM_AS_ANSI) + 1, MaxInt));
+  if StartsStr(#$FEFF, T) then T:= TrimLeft(Copy(T, Length(#$FEFF) + 1, MaxInt));
+  Result:= StartsText(KW_OBJECT + ' ', T) or StartsText(KW_INHERITED + ' ', T) or StartsText(KW_INLINE + ' ', T);
+end;
+
+// True when two paths name the same file, case-insensitively; '' never matches.
+function SamePath(const APathA, APathB: string): Boolean;
+begin
+  Result:= (APathA <> '') and (APathB <> '') and SameText(TPath.GetFullPath(APathA), TPath.GetFullPath(APathB));
+end;
+
+// The source files of AOwner's class and of each of its resolved class
+// ancestors, nearest first, from the one --db store that resolves AOwner. A
+// class declared in AUnitPas wins over same-named classes elsewhere; otherwise
+// exactly one candidate across the stores must exist. Empty + ADetail when the
+// owner does not resolve; ADetail is also set when the chain stops at an
+// unresolved ancestor (the files before it are still returned).
+function OwnerChainFiles(const ATrees: TConvertTreeCache; const AOwner, AUnitPas: string;
+  out ADetail: string): TArray<string>;
+var
+  St      : ISymbolStore;
+  S       : TSymbol;
+  A       : TTypeAncestor;
+  Count   : Integer;
+  OwnUnit : Boolean;
+  PickSt  : ISymbolStore;
+  PickSym : TSymbol;
+begin
+  Result := nil;
+  ADetail:= '';
+  Count  := 0;
+  OwnUnit:= False;
+  PickSt := nil;
+  PickSym:= Default(TSymbol);
+  for St in ATrees.Stores do
+    for S in St.FindSymbolsByExactName(AOwner) do
+    begin
+      if (S.Kind <> skClass) or OwnUnit then Continue;
+      Inc(Count);
+      OwnUnit:= SamePath(St.GetFilePath(S.FileId), AUnitPas);
+      if (Count = 1) or OwnUnit then
+      begin
+        PickSt := St;
+        PickSym:= S;
+      end;
+    end;
+  if Count = 0 then
+  begin
+    ADetail:= Format('class %s is in no --db', [AOwner]);
+    Exit;
+  end;
+  if (Count > 1) and not OwnUnit then
+  begin
+    ADetail:= Format('class %s is ambiguous across the --db', [AOwner]);
+    Exit;
+  end;
+  Result:= [PickSt.GetFilePath(PickSym.FileId)];
+  for A in PickSt.GetTransitiveAncestors(PickSym.Id) do
+  begin
+    if SameText(A.Kind, 'interface') then Continue;
+    if not A.Resolved then
+    begin
+      ADetail:= Format('the ancestor chain of %s leaves the index at %s', [AOwner, A.Name]);
+      Break;
+    end;
+    Result:= Result + [PickSt.GetFilePath(A.FileId)];
+  end;
+end;
+
+function FindInheritedInstances(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TArray<TInheritedInstance>;
+var
+  DfmTexts: TDictionary<string, string>; { ancestor .dfm path (upper) -> text, read once per run }
+  I       : Integer;
+
+  { True + the TEXT of an ancestor .dfm; False + why not ('is missing',
+    'is binary (TPF0)', 'is not a text .dfm', 'cannot be read: ...'). Texts
+    are cached per run; a failure is not, it ends the walk anyway. }
+  function TryAncestorDfmText(const APath: string; out AText, AWhy: string): Boolean;
+  var
+    Bytes: TBytes;
+  begin
+    AWhy:= '';
+    if DfmTexts.TryGetValue(UpperCase(APath), AText) then Exit(True);
+    AText:= '';
+    if not TFile.Exists(APath) then
+    begin
+      AWhy:= 'is missing';
+      Exit(False);
+    end;
+    try
+      Bytes:= TFile.ReadAllBytes(APath);
+    except
+      on E: Exception do
+      begin
+        AWhy:= 'cannot be read: ' + E.Message;
+        Exit(False);
+      end;
+    end;
+    if IsBinaryDfmBytes(Bytes) then
+    begin
+      AWhy:= 'is binary (TPF0)';
+      Exit(False);
+    end;
+    AText:= TEncoding.ANSI.GetString(Bytes);
+    if not StartsWithBlockHeader(AText) then
+    begin
+      AText:= '';
+      AWhy := 'is not a text .dfm';
+      Exit(False);
+    end;
+    DfmTexts.Add(UpperCase(APath), AText);
+    Result:= True;
+  end;
+
+  procedure Resolve(var AInst: TInheritedInstance);
+  var
+    Detail   : string;
+    F, Dfm   : string;
+    DeclClass: string;
+    Text, Why: string;
+  begin
+    AInst.AncestorState:= ANCESTOR_OUTSIDE;
+    AInst.AncestorUnit := '';
+    AInst.Action       := INH_ACTION_SKIPPED;
+    Detail:= '';
+    if AInst.OwnerClass = '' then
+      Detail:= 'the .dfm names no owner class'
+    else
+      for F in OwnerChainFiles(ATrees, AInst.OwnerClass, AUnitPas, Detail) do
+      begin
+        if F = '' then
+        begin
+          Detail:= Format('a class in the ancestor chain of %s has no source file in the index', [AInst.OwnerClass]);
+          Break;
+        end;
+        Dfm:= TPath.ChangeExtension(F, '.dfm');
+        if SamePath(Dfm, ADfmPath) then Continue;
+        { N3: an ancestor whose .dfm cannot be READ as text stops the walk --
+          it may declare the component, so crediting a farther ancestor would
+          be a guess }
+        if not TryAncestorDfmText(Dfm, Text, Why) then
+        begin
+          Detail:= Format('%s %s', [ExtractFileName(Dfm), Why]);
+          Break;
+        end;
+        if not DfmDeclaresComponent(Text, AInst.Name, DeclClass) then Continue;
+        AInst.AncestorUnit:= TPath.GetFileNameWithoutExtension(F);
+        if SameText(DeclClass, AInst.TypeName) then
+        begin
+          AInst.AncestorState:= ANCESTOR_UNCONVERTED;
+          AInst.Reason:= Format('declared in %s, which still has %s -- convert %s first (recommended)',
+            [AInst.AncestorUnit, DeclClass, AInst.AncestorUnit]);
+        end
+        else if SameText(DeclClass, AInst.ToType) then
+        begin
+          AInst.AncestorState:= ANCESTOR_CONVERTED;
+          AInst.Action       := INH_ACTION_RETYPED;
+          AInst.Reason:= Format('declared in %s, which already has %s -- retyped to %s',
+            [AInst.AncestorUnit, DeclClass, AInst.ToType]);
+        end
+        else
+        begin
+          AInst.AncestorState:= ANCESTOR_MISMATCHED;
+          AInst.Reason:= Format('declared in %s as %s, neither %s nor %s -- not converted',
+            [AInst.AncestorUnit, DeclClass, AInst.TypeName, AInst.ToType]);
+        end;
+        Exit;
+      end;
+    if Detail = '' then Detail:= Format('no ancestor .dfm of %s declares %s', [AInst.OwnerClass, AInst.Name]);
+    AInst.Reason:= Format('declaring ancestor not found (%s) -- convert it from its own project', [Detail]);
+  end;
+
+begin
+  Result:= nil;
+  if (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
+  for var Found: TInheritedInstance in ScanInheritedConvertInstances(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules) do
+    if InOnlyList(Found.Name, AOnly) then Result:= Result + [Found];
+  DfmTexts:= TDictionary<string, string>.Create;
+  try
+    for I:= 0 to High(Result) do Resolve(Result[I]);
+  finally
+    DfmTexts.Free;
+  end;
+end;
+
+procedure AppendInheritedReport(const AInstances: TArray<TInheritedInstance>; const ADfmPath: string;
+  var AReport: TApplyReport);
+var
+  Inst: TInheritedInstance;
+  It  : TApplyItem;
+begin
+  for Inst in AInstances do
+  begin
+    if Inst.Action = INH_ACTION_UNVERIFIED then
+    begin
+      It         := Default(TApplyItem);
+      It.Kind    := aikAccessSiteUnverified;
+      It.Field   := afWarnings;
+      It.Instance:= Inst.Name;
+      It.FromType:= Inst.TypeName;
+      It.ToType  := Inst.ToType;
+      It.FilePath:= Inst.OwnerClass; { the .pas, carried here by FindInheritedCodeUses }
+      It.Line    := Inst.Line;
+      It.Text    := Format('access site %s:%d %s not verified against the index -- not rewritten',
+                      [ExtractFileName(Inst.OwnerClass), Inst.Line, Inst.Name]);
+      AReport.Warnings:= AReport.Warnings + [It.Text];
+      AReport.Items   := AReport.Items + [It];
+      Continue;
+    end;
+    if Inst.Action <> INH_ACTION_SKIPPED then Continue; { retyped / code: not a warning (C8 N2) }
+    It         := Default(TApplyItem);
+    It.Kind    := aikInheritedInstanceSkipped;
+    It.Field   := afWarnings;
+    It.Instance:= Inst.Name;
+    It.FromType:= Inst.TypeName;
+    It.ToType  := Inst.ToType;
+    It.FilePath:= ADfmPath;
+    It.Line    := Inst.Line;
+    It.Text    := Format('line %d: warning: inherited instance %s: %s skipped -- %s',
+                    [Inst.Line, Inst.Name, Inst.TypeName, Inst.Reason]);
+    AReport.Warnings:= AReport.Warnings + [It.Text];
+    AReport.Items   := AReport.Items + [It];
+  end;
+end;
+
+const
+  { apply/1 descendants[].reason values (1.25.0) -- a compatibility surface }
+  DESC_REASON_DFM  = 'dfm';
+  DESC_REASON_CODE = 'code';
+  DESC_REASON_BOTH = 'both';
+  { the receiver text of an explicit `Self.X` access }
+  SELF_RECEIVER = 'Self';
+  { how many parents a reference's enclosing routine is walked up to reach its
+    class -- a method, then up to three nested routines inside it }
+  ENCLOSING_CLASS_HOPS = 4;
+  { the source extension of a form file }
+  DFM_EXT = '.dfm';
+  { the source extension of a unit }
+  PAS_EXT = '.pas';
+
+function FindInheritedCodeUses(const ATrees: TConvertTreeCache; const AUnitPas: string;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>;
+  const AInherited: TArray<TInheritedInstance>): TArray<TInheritedInstance>;
+const
+  { how many parents a field symbol is walked up to reach its class }
+  FIELD_CLASS_HOPS = 3;
+var
+  St       : ISymbolStore;
+  FileId   : Int64;
+  OwnIds   : TDictionary<Int64, Boolean>;  { classes AUnitPas declares }
+  AncIds   : TDictionary<Int64, Boolean>;  { their transitive ancestors, minus the own ones }
+  Fields   : TDictionary<Int64, Integer>;  { field symbol id -> index into Found, -1 = not a candidate }
+  Found    : TList<TInheritedInstance>;
+  DfmTexts : TDictionary<string, string>;  { upper .dfm path -> text ('' when unreadable) }
+  S        : TSymbol;
+  R        : TReference;
+  Ix       : Integer;
+
+  { the class symbol a field belongs to, or 0 }
+  function ClassOf(const AField: TSymbol): Int64;
+  var
+    P: TSymbol;
+  begin
+    P:= AField;
+    for var Hop: Integer:= 1 to FIELD_CLASS_HOPS do
+    begin
+      if P.ParentId = 0 then Break;
+      P:= St.GetSymbolById(P.ParentId);
+      if P.Kind = skClass then Exit(P.Id);
+    end;
+    Result:= 0;
+  end;
+
+  { the text of a text .dfm, cached; '' when missing, binary or unreadable }
+  function DfmTextOf(const APath: string): string;
+  var
+    Bytes: TBytes;
+  begin
+    if DfmTexts.TryGetValue(UpperCase(APath), Result) then Exit;
+    Result:= '';
+    if TFile.Exists(APath) then
+    try
+      Bytes:= TFile.ReadAllBytes(APath);
+      if not IsBinaryDfmBytes(Bytes) then Result:= TEncoding.ANSI.GetString(Bytes);
+    except
+      on EInOutError do Result:= '';
+      on EFileStreamError do Result:= '';
+    end;
+    DfmTexts.Add(UpperCase(APath), Result);
+  end;
+
+  { -1, or the Found index of a new entry when AField is a converted ancestor's
+    component field of a #convert To type }
+  function Candidate(const AField: TSymbol; const AAction: string = INH_ACTION_CODE): Integer;
+  var
+    FromType, DeclClass, DeclPas: string;
+    Inst    : TInheritedInstance;
+  begin
+    Result:= -1;
+    if (AField.Kind <> skField) or not AncIds.ContainsKey(ClassOf(AField)) then Exit;
+    if not InOnlyList(AField.Name, AOnly) then Exit;
+    for var Inh: TInheritedInstance in AInherited do
+      if SameText(Inh.Name, AField.Name) then Exit;
+    FromType:= '';
+    for var CR: TConversionRule in ARules.Rules do
+      if (CR.Kind = rkConvert) and SameText(BareTypeTail(CR.ToType), BareTypeTail(AField.Signature)) then
+      begin
+        FromType:= BareTypeTail(CR.FromType);
+        Break;
+      end;
+    if FromType = '' then Exit;
+    DeclPas:= St.GetFilePath(AField.FileId);
+    if not DfmDeclaresComponent(DfmTextOf(TPath.ChangeExtension(DeclPas, DFM_EXT)), AField.Name, DeclClass) or
+       not SameText(DeclClass, BareTypeTail(AField.Signature)) then Exit;
+    Inst              := Default(TInheritedInstance);
+    Inst.Name         := AField.Name;
+    Inst.TypeName     := FromType;
+    Inst.ToType       := DeclClass;
+    Inst.AncestorUnit := TPath.GetFileNameWithoutExtension(DeclPas);
+    Inst.AncestorState:= ANCESTOR_CONVERTED;
+    Inst.Action       := AAction;
+    if AAction = INH_ACTION_UNVERIFIED then
+    begin
+      Inst.OwnerClass:= AUnitPas; { where the reference is, for the warning }
+      Inst.Reason    := Format('declared in %s, which already has %s -- an UNBOUND reference: not verified against the index, not rewritten',
+                          [Inst.AncestorUnit, DeclClass]);
+    end
+    else
+      Inst.Reason:= Format('declared in %s, which already has %s -- code access sites follow it (no .dfm block)',
+                      [Inst.AncestorUnit, DeclClass]);
+    Result:= Found.Add(Inst);
+  end;
+
+  { True when the routine ARoutineId sits in (nested routines walked up) belongs
+    to a class of this unit and declares no local / parameter named AName }
+  function InOwnClassUnshadowed(ARoutineId: Int64; const AName: string): Boolean;
+  var
+    P: TSymbol;
+  begin
+    P:= St.GetSymbolById(ARoutineId);
+    for var Hop: Integer:= 1 to ENCLOSING_CLASS_HOPS do
+    begin
+      if P.Id = 0 then Break;
+      if P.Kind = skClass then Exit(OwnIds.ContainsKey(P.Id));
+      if St.FindChildSymbolByName(P.Id, AName).Id <> 0 then Break;
+      P:= St.GetSymbolById(P.ParentId);
+    end;
+    Result:= False;
+  end;
+
+  { 1.26.0 (C8 N2 review): an UNBOUND bare / Self. reference whose name is a
+    converted ancestor's component field, in a routine of this unit's class
+    that does not shadow it -- the resolver could not tie it to the field, so
+    it is not rewritten, and it is REPORTED rather than dropped in silence.
+    A name some bound reference already made a 'code' entry is not repeated. }
+  procedure CollectUnbound(const ARefs: TArray<TReference>);
+  var
+    F    : TSymbol;
+    Seen : TDictionary<string, Boolean>;
+  begin
+    Seen:= TDictionary<string, Boolean>.Create;
+    try
+      for var E: TInheritedInstance in Found do Seen.AddOrSetValue(UpperCase(E.Name), True);
+      for var U: TReference in ARefs do
+      begin
+        if (U.SymbolId <> 0) or (U.EnclosingSymbolId = 0) then Continue;
+        if (U.ReceiverText <> '') and not SameText(U.ReceiverText, SELF_RECEIVER) then Continue;
+        if Seen.ContainsKey(UpperCase(U.NameText)) then
+        begin
+          for var K: Integer:= 0 to Found.Count - 1 do
+            if (Found[K].Action = INH_ACTION_UNVERIFIED) and SameText(Found[K].Name, U.NameText) and (U.StartLine < Found[K].Line) then
+            begin
+              var Hit: TInheritedInstance:= Found[K];
+              Hit.Line:= U.StartLine;
+              Found[K]:= Hit;
+            end;
+          Continue;
+        end;
+        if not InOwnClassUnshadowed(U.EnclosingSymbolId, U.NameText) then Continue;
+        F:= Default(TSymbol);
+        for var AncId: Int64 in AncIds.Keys do
+        begin
+          F:= St.FindChildSymbolByName(AncId, U.NameText);
+          if (F.Id <> 0) and (F.Kind = skField) then Break;
+          F:= Default(TSymbol);
+        end;
+        if F.Id = 0 then Continue;
+        var Ix2: Integer:= Candidate(F, INH_ACTION_UNVERIFIED);
+        if Ix2 < 0 then Continue;
+        var Hit: TInheritedInstance:= Found[Ix2];
+        Hit.Line:= U.StartLine;
+        Found[Ix2]:= Hit;
+        Seen.AddOrSetValue(UpperCase(U.NameText), True);
+      end;
+    finally
+      Seen.Free;
+    end;
+  end;
+
+begin
+  Result:= nil;
+  St:= nil;
+  FileId:= 0;
+  for var C: ISymbolStore in ATrees.Stores do
+  begin
+    FileId:= C.FindFileIdByPath(AUnitPas);
+    if FileId <= 0 then FileId:= C.FindFileIdByPath(TPath.GetFullPath(AUnitPas));
+    if FileId > 0 then
+    begin
+      St:= C;
+      Break;
+    end;
+  end;
+  if St = nil then Exit;
+  OwnIds  := TDictionary<Int64, Boolean>.Create;
+  AncIds  := TDictionary<Int64, Boolean>.Create;
+  Fields  := TDictionary<Int64, Integer>.Create;
+  Found   := TList<TInheritedInstance>.Create;
+  DfmTexts:= TDictionary<string, string>.Create;
+  try
+    for S in St.FindSymbolsByFile(St.GetFilePath(FileId)) do
+      if S.Kind = skClass then OwnIds.AddOrSetValue(S.Id, True);
+    for var OwnId: Int64 in OwnIds.Keys do
+      for var A: TTypeAncestor in St.GetTransitiveAncestors(OwnId) do
+        if A.Resolved and (A.SymbolId <> 0) and not OwnIds.ContainsKey(A.SymbolId) then
+          AncIds.AddOrSetValue(A.SymbolId, True);
+    if AncIds.Count = 0 then Exit;
+    var FileRefs: TArray<TReference>:= St.GetReferencesFromFile(FileId);
+    for R in FileRefs do
+    begin
+      if R.SymbolId = 0 then Continue;
+      if not Fields.TryGetValue(R.SymbolId, Ix) then
+      begin
+        Ix:= Candidate(St.GetSymbolById(R.SymbolId));
+        Fields.Add(R.SymbolId, Ix);
+      end;
+      if (Ix >= 0) and ((Found[Ix].Line = 0) or (R.StartLine < Found[Ix].Line)) then
+      begin
+        var Hit: TInheritedInstance:= Found[Ix];
+        Hit.Line:= R.StartLine;
+        Found[Ix]:= Hit;
+      end;
+    end;
+    CollectUnbound(FileRefs);
+    Found.Sort(TComparer<TInheritedInstance>.Construct(
+      function(const ALeft, ARight: TInheritedInstance): Integer
+      begin
+        Result:= ALeft.Line - ARight.Line;
+      end));
+    Result:= Found.ToArray;
+  finally
+    DfmTexts.Free;
+    Found.Free;
+    Fields.Free;
+    AncIds.Free;
+    OwnIds.Free;
+  end;
+end;
+
+
+// The class of ADfmText's root block -- its first object / inherited / inline
+// header -- or '' when the first non-blank line is no such header.
+function DfmRootClass(const ADfmText: string): string;
+var
+  L, T, ObjName: string;
+begin
+  Result:= '';
+  for L in ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]) do
+  begin
+    T:= Trim(L);
+    if StartsStr(UTF8_BOM_AS_ANSI, T) then T:= Trim(Copy(T, Length(UTF8_BOM_AS_ANSI) + 1, MaxInt));
+    if T = '' then Continue;
+    if not (TryParseHeaderAfter(T, KW_OBJECT + ' ', ObjName, Result) or
+            TryParseHeaderAfter(T, KW_INHERITED + ' ', ObjName, Result) or
+            TryParseHeaderAfter(T, KW_INLINE + ' ', ObjName, Result)) then Result:= '';
+    Exit;
+  end;
+end;
+
+// 1-based line of ADfmText's `object AName: ...` header, or 0.
+function DfmObjectLine(const ADfmText, AName: string): Integer;
+var
+  Lines        : TArray<string>;
+  I            : Integer;
+  ObjName, Cls : string;
+begin
+  Lines:= ADfmText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]);
+  for I:= 0 to High(Lines) do
+    if TryParseHeaderAfter(Trim(Lines[I]), KW_OBJECT + ' ', ObjName, Cls) and SameText(ObjName, AName) then
+      Exit(I + 1);
+  Result:= 0;
+end;
+
+function FindDescendantUses(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+  const ARules: TConversionRuleSet; const AConverted: TArray<TConvertInstance>): TArray<TDescendantUse>;
+type
+  TDescClass = record
+    Store  : Integer;  { index into ATrees.Stores }
+    Sym    : TSymbol;
+    PasPath: string;
+  end;
+  { one descendant's first code use of one converted name }
+  TCodeHit = record
+    Desc: Integer;     { index into Descs }
+    Line: Integer;
+  end;
+var
+  DfmText, Root: string;
+  Descs     : TList<TDescClass>;
+  OwnerIds  : TDictionary<string, Boolean>;   { '<store>:<id>' of the root class and every descendant }
+  Names     : TDictionary<string, Boolean>;   { upper converted instance names }
+  FieldIds  : TDictionary<string, Int64>;     { '<store>:<UPPER NAME>' -> the field AUnitPas declares }
+  CodeHits  : TObjectDictionary<string, TList<TCodeHit>>; { UPPER NAME -> per-descendant first use }
+  OwnerSeen : TDictionary<string, Boolean>;   { '<store>:<UPPER OWNER>:<UPPER .pas>' -> owner is ours }
+  Scans     : TDictionary<string, TArray<TInheritedInstance>>; { upper .dfm path -> its blocks }
+  Found     : TList<TDescendantUse>;
+  All       : TList<TDescendantUse>;          { every instance's entries, in order }
+  ByUnit    : TDictionary<string, Integer>;   { upper .pas path -> index into Found, per instance }
+  Inst      : TConvertInstance;
+  AncLine   : Integer;
+
+  function IdKey(AStore: Integer; AId: Int64): string;
+  begin
+    Result:= IntToStr(AStore) + ':' + IntToStr(AId);
+  end;
+
+  { True when ASymId's transitive ancestors include Root declared in AUnitPas }
+  function DescendsFromRoot(AStore: Integer; ASymId: Int64): Boolean;
+  var
+    A: TTypeAncestor;
+  begin
+    for A in ATrees.Stores[AStore].GetTransitiveAncestors(ASymId) do
+      if A.Resolved and SameText(A.Name, Root) and SamePath(ATrees.Stores[AStore].GetFilePath(A.FileId), AUnitPas) then
+        Exit(True);
+    Result:= False;
+  end;
+
+  { the root class, its descendants, and the fields AUnitPas declares under a converted name -- once per store }
+  procedure CollectClassesAndFields;
+  var
+    StIx : Integer;
+    DName: string;
+    S    : TSymbol;
+    D    : TDescClass;
+  begin
+    for StIx:= 0 to High(ATrees.Stores) do
+    begin
+      for S in ATrees.Stores[StIx].FindSymbolsByFile(AUnitPas) do
+        if (S.Kind = skClass) and SameText(S.Name, Root) then OwnerIds.AddOrSetValue(IdKey(StIx, S.Id), True)
+        else if (S.Kind = skField) and Names.ContainsKey(UpperCase(S.Name)) then
+          FieldIds.AddOrSetValue(IntToStr(StIx) + ':' + UpperCase(S.Name), S.Id);
+      for DName in ATrees.Stores[StIx].FindDescendantNames(Root) do
+        for S in ATrees.Stores[StIx].FindSymbolsByExactName(DName) do
+          if (S.Kind = skClass) and not OwnerIds.ContainsKey(IdKey(StIx, S.Id)) and DescendsFromRoot(StIx, S.Id) then
+          begin
+            D.Store  := StIx;
+            D.Sym    := S;
+            D.PasPath:= ATrees.Stores[StIx].GetFilePath(S.FileId);
+            OwnerIds.Add(IdKey(StIx, S.Id), True);
+            Descs.Add(D);
+          end;
+    end;
+  end;
+
+  { True when the class named AOwner that ACandPas sees -- declared in it, or
+    in a unit it uses, or the only class of that name -- is the root class or
+    a descendant. Cached per (store, owner, candidate). }
+  function OwnerIsOurs(AStore: Integer; const AOwner, ACandPas: string): Boolean;
+  var
+    Key     : string;
+    Cands   : TList<TSymbol>;
+    CandFile: Int64;
+    UsesSet : TDictionary<string, Boolean>;
+    Pick    : TSymbol;
+    Picked  : Integer;
+  begin
+    Key:= IntToStr(AStore) + ':' + UpperCase(AOwner) + ':' + UpperCase(ACandPas);
+    if OwnerSeen.TryGetValue(Key, Result) then Exit;
+    Result:= False;
+    Cands  := TList<TSymbol>.Create;
+    UsesSet:= TDictionary<string, Boolean>.Create;
+    try
+      for var S: TSymbol in ATrees.Stores[AStore].FindSymbolsByExactName(AOwner) do
+        if S.Kind = skClass then Cands.Add(S);
+      Pick  := Default(TSymbol);
+      Picked:= 0;
+      if Cands.Count = 1 then
+      begin
+        Pick  := Cands[0];
+        Picked:= 1;
+      end
+      else if Cands.Count > 1 then
+      begin
+        CandFile:= ATrees.Stores[AStore].FindFileIdByPath(ACandPas);
+        for var U: TUnitUse in ATrees.Stores[AStore].GetUnitUsesForFile(CandFile) do
+          UsesSet.AddOrSetValue(UpperCase(U.UnitName), True);
+        for var S: TSymbol in Cands do
+          if S.FileId = CandFile then
+          begin
+            Pick  := S;
+            Picked:= 1;
+            Break;
+          end
+          else if UsesSet.ContainsKey(UpperCase(TPath.GetFileNameWithoutExtension(ATrees.Stores[AStore].GetFilePath(S.FileId)))) then
+          begin
+            Pick:= S;
+            Inc(Picked);
+          end;
+      end;
+      Result:= (Picked = 1) and OwnerIds.ContainsKey(IdKey(AStore, Pick.Id));
+    finally
+      UsesSet.Free;
+      Cands.Free;
+    end;
+    OwnerSeen.Add(Key, Result);
+  end;
+
+  { the inherited / inline From-type blocks of one candidate .dfm, scanned once }
+  function ScanOf(const ADfm: string): TArray<TInheritedInstance>;
+  var
+    Bytes: TBytes;
+  begin
+    if Scans.TryGetValue(UpperCase(ADfm), Result) then Exit;
+    Result:= nil;
+    if TFile.Exists(ADfm) then
+    try
+      Bytes:= TFile.ReadAllBytes(ADfm);
+      if not IsBinaryDfmBytes(Bytes) then
+        Result:= ScanInheritedConvertInstances(TEncoding.ANSI.GetString(Bytes), ARules);
+    except
+      on EInOutError do Result:= nil;     { unreadable: it cannot be listed }
+      on EFileStreamError do Result:= nil;
+    end;
+    Scans.Add(UpperCase(ADfm), Result);
+  end;
+
+  { the Found index of AUnitPas's entry for Inst, created on first use }
+  function EntryFor(const AUnitPas2: string): Integer;
+  var
+    U: TDescendantUse;
+  begin
+    if ByUnit.TryGetValue(UpperCase(AUnitPas2), Result) then Exit;
+    U             := Default(TDescendantUse);
+    U.UnitName    := TPath.GetFileNameWithoutExtension(AUnitPas2);
+    U.Name        := Inst.InstanceName;
+    U.TypeName    := Inst.FromType;
+    U.AncestorLine:= AncLine;
+    Result:= Found.Add(U);
+    ByUnit.Add(UpperCase(AUnitPas2), Result);
+  end;
+
+  procedure AddDfmUses;
+  var
+    StIx: Integer;
+    S   : TSymbol;
+    Dfm : string;
+    Seen: TDictionary<string, Boolean>;
+    U   : TDescendantUse;
+    Ix  : Integer;
+  begin
+    Seen:= TDictionary<string, Boolean>.Create;
+    try
+      for StIx:= 0 to High(ATrees.Stores) do
+        for S in ATrees.Stores[StIx].FindSymbolsByExactName(Inst.InstanceName) do
+        begin
+          if S.Kind <> skComponent then Continue;
+          Dfm:= ATrees.Stores[StIx].GetFilePath(S.FileId);
+          if not SameText(ExtractFileExt(Dfm), DFM_EXT) or SamePath(Dfm, ADfmPath) or Seen.ContainsKey(UpperCase(Dfm)) then Continue;
+          Seen.Add(UpperCase(Dfm), True);
+          for var Blk: TInheritedInstance in ScanOf(Dfm) do
+            if SameText(Blk.Name, Inst.InstanceName) and SameText(Blk.TypeName, Inst.FromType) and
+               OwnerIsOurs(StIx, Blk.OwnerClass, TPath.ChangeExtension(Dfm, PAS_EXT)) then
+            begin
+              Ix:= EntryFor(TPath.ChangeExtension(Dfm, PAS_EXT));
+              U := Found[Ix];
+              if U.Reason = '' then
+              begin
+                U.Reason:= DESC_REASON_DFM;
+                U.Line  := Blk.Line;
+                Found[Ix]:= U;
+              end;
+              Break;
+            end;
+        end;
+    finally
+      Seen.Free;
+    end;
+  end;
+
+  { the class a routine belongs to, walking nested routines up; 0 when none,
+    or when a routine on the way declares a local / param named AName -- an
+    unresolved AName there is that local, not the ancestor's field }
+  function UnshadowedClassId(AStore: Integer; ARoutineId: Int64; const AName: string): Int64;
+  var
+    S   : TSymbol;
+    Hops: Integer;
+  begin
+    S:= ATrees.Stores[AStore].GetSymbolById(ARoutineId);
+    for Hops:= 1 to ENCLOSING_CLASS_HOPS do
+    begin
+      if S.Id = 0 then Break;
+      if S.Kind = skClass then Exit(S.Id);
+      if ATrees.Stores[AStore].FindChildSymbolByName(S.Id, AName).Id <> 0 then Break;
+      S:= ATrees.Stores[AStore].GetSymbolById(S.ParentId);
+    end;
+    Result:= 0;
+  end;
+
+  { every descendant's code uses of every converted name: each descendant
+    file's references read ONCE }
+  procedure CollectCodeUses;
+  var
+    DIx    : Integer;
+    D      : TDescClass;
+    R      : TReference;
+    Up     : string;
+    FieldId: Int64;
+    Hits   : TList<TCodeHit>;
+    Hit    : TCodeHit;
+    Done   : Boolean;
+    Refs   : TDictionary<string, TArray<TReference>>; { '<store>:<file id>' -> its refs }
+    FileRefs: TArray<TReference>;
+  begin
+    Refs:= TDictionary<string, TArray<TReference>>.Create;
+    try
+      for DIx:= 0 to Descs.Count - 1 do
+      begin
+        D:= Descs[DIx];
+        if not Refs.TryGetValue(IdKey(D.Store, D.Sym.FileId), FileRefs) then
+        begin
+          FileRefs:= ATrees.Stores[D.Store].GetReferencesFromFile(D.Sym.FileId);
+          Refs.Add(IdKey(D.Store, D.Sym.FileId), FileRefs);
+        end;
+        for R in FileRefs do
+        begin
+          Up:= UpperCase(R.NameText);
+          if not Names.ContainsKey(Up) or (R.EnclosingSymbolId = 0) then Continue;
+          if not FieldIds.TryGetValue(IntToStr(D.Store) + ':' + Up, FieldId) then FieldId:= 0;
+          if not (((FieldId <> 0) and (R.SymbolId = FieldId)) or
+                  ((R.SymbolId = 0) and ((R.ReceiverText = '') or SameText(R.ReceiverText, SELF_RECEIVER)))) then Continue;
+          if UnshadowedClassId(D.Store, R.EnclosingSymbolId, R.NameText) <> D.Sym.Id then Continue;
+          if not CodeHits.TryGetValue(Up, Hits) then
+          begin
+            Hits:= TList<TCodeHit>.Create;
+            CodeHits.Add(Up, Hits);
+          end;
+          Done:= False;
+          for var K: Integer:= 0 to Hits.Count - 1 do
+            if Hits[K].Desc = DIx then
+            begin
+              Hit:= Hits[K];
+              if R.StartLine < Hit.Line then Hit.Line:= R.StartLine;
+              Hits[K]:= Hit;
+              Done:= True;
+              Break;
+            end;
+          if not Done then
+          begin
+            Hit.Desc:= DIx;
+            Hit.Line:= R.StartLine;
+            Hits.Add(Hit);
+          end;
+        end;
+      end;
+    finally
+      Refs.Free;
+    end;
+  end;
+
+  procedure AddCodeUses;
+  var
+    Hits: TList<TCodeHit>;
+    Ix  : Integer;
+    U   : TDescendantUse;
+  begin
+    if not CodeHits.TryGetValue(UpperCase(Inst.InstanceName), Hits) then Exit;
+    for var Hit: TCodeHit in Hits do
+    begin
+      Ix:= EntryFor(Descs[Hit.Desc].PasPath);
+      U := Found[Ix];
+      if U.Reason = DESC_REASON_DFM then U.Reason:= DESC_REASON_BOTH
+      else if U.Reason = '' then
+      begin
+        U.Reason:= DESC_REASON_CODE;
+        U.Line  := Hit.Line;
+      end
+      else if (U.Reason = DESC_REASON_CODE) and (Hit.Line < U.Line) then U.Line:= Hit.Line;
+      Found[Ix]:= U;
+    end;
+  end;
+
+begin
+  Result:= nil;
+  if (Length(AConverted) = 0) or (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
+  DfmText:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
+  Root   := DfmRootClass(DfmText);
+  if Root = '' then Exit;
+  Descs    := TList<TDescClass>.Create;
+  OwnerIds := TDictionary<string, Boolean>.Create;
+  Names    := TDictionary<string, Boolean>.Create;
+  FieldIds := TDictionary<string, Int64>.Create;
+  CodeHits := TObjectDictionary<string, TList<TCodeHit>>.Create([doOwnsValues]);
+  OwnerSeen:= TDictionary<string, Boolean>.Create;
+  Scans    := TDictionary<string, TArray<TInheritedInstance>>.Create;
+  Found    := TList<TDescendantUse>.Create;
+  All      := TList<TDescendantUse>.Create;
+  ByUnit   := TDictionary<string, Integer>.Create;
+  try
+    for Inst in AConverted do Names.AddOrSetValue(UpperCase(Inst.InstanceName), True);
+    CollectClassesAndFields;
+    CollectCodeUses;
+    for Inst in AConverted do
+    begin
+      AncLine:= DfmObjectLine(DfmText, Inst.InstanceName);
+      Found.Clear;
+      ByUnit.Clear;
+      AddDfmUses;
+      AddCodeUses;
+      Found.Sort(TComparer<TDescendantUse>.Construct(
+        function(const ALeft, ARight: TDescendantUse): Integer
+        begin
+          Result:= CompareText(ALeft.UnitName, ARight.UnitName);
+        end));
+      All.AddRange(Found);
+    end;
+    Result:= All.ToArray;
+  finally
+    ByUnit.Free;
+    All.Free;
+    Found.Free;
+    Scans.Free;
+    OwnerSeen.Free;
+    CodeHits.Free;
+    FieldIds.Free;
+    Names.Free;
+    OwnerIds.Free;
+    Descs.Free;
+  end;
+end;
+
+function ConvertedInstancesOf(const AReport: TApplyReport; const ADfmPath: string;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TArray<TConvertInstance>;
+var
+  Skipped: Boolean;
+begin
+  Result:= nil;
+  if (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
+  var DfmText: string:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
+  var All: TArray<TConvertInstance>:= FindConvertInstances(DfmText, ARules, AOnly);
+  for var NO: TNestedOnly in NestedOnlyInstances(DfmText, ARules, AOnly) do All:= All + [NO.Instance];
+  for var Inst: TConvertInstance in All do
+  begin
+    Skipped:= False;
+    for var It: TApplyItem in AReport.Items do
+      if (It.Kind = aikInstanceSkipped) and SameText(It.Instance, Inst.InstanceName) then Skipped:= True;
+    if not Skipped then Result:= Result + [Inst];
+  end;
+end;
+
+procedure AppendDescendantReport(const AUses: TArray<TDescendantUse>; const ADfmPath: string;
+  var AReport: TApplyReport);
+var
+  U : TDescendantUse;
+  It: TApplyItem;
+begin
+  for U in AUses do
+  begin
+    It         := Default(TApplyItem);
+    It.Kind    := aikDescendantNotConverted;
+    It.Field   := afWarnings;
+    It.Instance:= U.Name;
+    It.FromType:= U.TypeName;
+    It.FilePath:= ADfmPath;
+    It.Line    := U.AncestorLine;
+    It.Text    := Format('line %d: warning: descendant %s still streams %s as %s -- convert it next (needs C8 N2)',
+                    [U.AncestorLine, U.UnitName, U.Name, U.TypeName]);
+    AReport.Warnings:= AReport.Warnings + [It.Text];
+    AReport.Items   := AReport.Items + [It];
   end;
 end;
 
@@ -1436,52 +2773,139 @@ begin
         Exit(TPath.GetFileNameWithoutExtension(St.GetFilePath(S.FileId)));
 end;
 
+procedure SplitOnlyNames(const ADfmText: string; const ARules: TConversionRuleSet;
+  const AOnly: TArray<string>; out AMatched, AUnmatched: TArray<string>);
+var
+  Names: TArray<string>;
+  N    : string;
+begin
+  AMatched  := nil;
+  AUnmatched:= nil;
+  if Length(AOnly) = 0 then Exit;
+  Names:= nil;
+  if ADfmText <> '' then
+  begin
+    for var Inst: TConvertInstance in FindConvertInstances(ADfmText, ARules, nil) do Names:= Names + [Inst.InstanceName];
+    for var Inh: TInheritedInstance in ScanInheritedConvertInstances(ADfmText, ARules) do Names:= Names + [Inh.Name];
+  end;
+  for N in AOnly do
+    if MatchText(N, Names) then AMatched:= AMatched + [N] else AUnmatched:= AUnmatched + [N];
+end;
+
 // R26 (1.20.6): the refusal reason when a planned unit-rule REMOVAL (#unuse,
 // or #useswap's Old) takes away the unit declaring the From type of a .dfm
 // instance that stays unconverted -- skipped, or left out by --only -- which
 // would break the compile (E2003); '' when no removal does. Every #convert
-// instance of ADfmText counts, --only ignored; AConverted names the ones the
-// plan converts. The text is '<rule> would leave <N> unconverted instance(s)
-// of <Type> -- unit not changed', <rule> as TUsesChange.Rule spells it.
+// instance of ADfmText counts, inherited / inline ones too (C8 N1: they are
+// left unless retyped, N2); AConverted names the ones the plan converts. The text is
+// '<rule> would leave <N> unconverted instance(s) of <Type> -- unit not
+// changed', <rule> as TUsesChange.Rule spells it.
+// C13 N4 (1.23.0): when AOnly is given and EVERY instance a removal would
+// strand is an own instance --only left out, the removal is not refused but
+// SKIPPED -- returned in ASkips as an Action 'skipped' row (Reason 'would
+// leave <N> unconverted instance(s) of <Type>') for the caller to keep the
+// unit and report it. A stranded instance left for any other reason (a failed
+// re-emit, an inherited / inline object, or no --only at all) keeps R26's
+// refusal.
 function RemovalLeavesUnconverted(const ATrees: TConvertTreeCache; const ADfmText: string;
-  const ARules: TConversionRuleSet; const AConverted: TList<string>;
-  const AChanges: TArray<TUsesChange>): string;
+  const ARules: TConversionRuleSet; const AConverted: TList<string>; const AOnly: TArray<string>;
+  const AChanges: TArray<TUsesChange>; out ASkips: TArray<TUsesChange>): string;
 var
   Left : TDictionary<string, Integer>; { From type as the .dfm spells it -> unconverted count }
+  Excl : TDictionary<string, Integer>; { the same, counting only own instances --only left out }
   Order: TList<string>;                { the same types, in .dfm order, so the reason is stable }
   Inst : TConvertInstance;
   Ch   : TUsesChange;
   Key  : string;
   Count: Integer;
+
+  procedure Bump(ADict: TDictionary<string, Integer>; const AType: string);
+  var
+    N: Integer;
+  begin
+    if not ADict.TryGetValue(AType, N) then N:= 0;
+    ADict.AddOrSetValue(AType, N + 1);
+  end;
+
 begin
   Result:= '';
+  ASkips:= nil;
   Left  := TDictionary<string, Integer>.Create;
+  Excl  := TDictionary<string, Integer>.Create;
   Order := TList<string>.Create;
   try
     for Inst in FindConvertInstances(ADfmText, ARules, nil) do
     begin
       if Assigned(AConverted) and AConverted.Contains(Inst.InstanceName) then Continue;
-      if not Left.TryGetValue(Inst.FromType, Count) then
-      begin
-        Count:= 0;
-        Order.Add(Inst.FromType);
-      end;
-      Left.AddOrSetValue(Inst.FromType, Count + 1);
+      if not Left.ContainsKey(Inst.FromType) then Order.Add(Inst.FromType);
+      Bump(Left, Inst.FromType);
+      if (Length(AOnly) > 0) and not InOnlyList(Inst.InstanceName, AOnly) then Bump(Excl, Inst.FromType);
+    end;
+    { C8 N1: an inherited / inline instance the plan does not retype (N2,
+      1.26.0) counts as left unconverted -- and never as left out by --only }
+    for var Inh: TInheritedInstance in ScanInheritedConvertInstances(ADfmText, ARules) do
+    begin
+      if Assigned(AConverted) and AConverted.Contains(Inh.Name) then Continue;
+      if not Left.ContainsKey(Inh.TypeName) then Order.Add(Inh.TypeName);
+      Bump(Left, Inh.TypeName);
     end;
     for Ch in AChanges do
     begin
       if Ch.Action <> 'remove' then Continue;
+      var Parts: TArray<string>:= nil;
+      var AllExcluded: Boolean:= True;
       for Key in Order do
         if SameText(DeclaringUnitOf(ATrees, Key), Ch.UnitName.Replace(' ', '').Replace(#9, '')) then
-          Exit(Format('%s would leave %d unconverted instance(s) of %s -- unit not changed',
-            [Ch.Rule, Left[Key], Key]));
+        begin
+          if not Excl.TryGetValue(Key, Count) then Count:= 0;
+          if Count < Left[Key] then AllExcluded:= False;
+          Parts:= Parts + [Format('%d unconverted instance(s) of %s', [Left[Key], Key])];
+        end;
+      if Length(Parts) = 0 then Continue;
+      var Stranded: string:= String.Join(', ', Parts);
+      if not AllExcluded then
+        Exit(Format('%s would leave %s -- unit not changed', [Ch.Rule, Stranded]));
+      var Skip: TUsesChange:= Ch;
+      Skip.Action:= 'skipped';
+      Skip.Reason:= 'would leave ' + Stranded;
+      ASkips:= ASkips + [Skip];
     end;
   finally
     Order.Free;
+    Excl.Free;
     Left.Free;
   end;
 end;
 
+// The book line of the #unuse / #useswap that removes AUnit, or 0.
+function UnitRuleLine(const ARules: TConversionRuleSet; const AUnit: string): Integer;
+begin
+  for var R: TConversionRule in ARules.Rules do
+    if (R.Kind in [rkUnuse, rkUseSwap]) and SameText(R.UnitName.Replace(' ', ''), AUnit.Replace(' ', '').Replace(#9, '')) then
+      Exit(R.LineNo);
+  Result:= 0;
+end;
+
+// C13 N4: the warnings[] text and items[] mirror for one skipped removal.
+function SkippedRuleItem(const ARules: TConversionRuleSet; const AUnitPas: string; const ASkip: TUsesChange): TApplyItem;
+begin
+  Result         := Default(TApplyItem);
+  Result.Kind    := aikUnitRuleSkipped;
+  Result.Field   := afWarnings;
+  Result.FilePath:= AUnitPas;
+  Result.Line    := ASkip.Line;
+  Result.RuleLine:= UnitRuleLine(ARules, ASkip.UnitName);
+  Result.Text    := Format('line %d: warning: %s skipped -- it %s left out by --only; %s kept in uses',
+    [Result.RuleLine, ASkip.Rule, ASkip.Reason, ASkip.UnitName]);
+end;
+
+// The units of ASkips, for PlanUnitRules' AExtraAdds: a unit there is never
+// removed (ADD wins) and, being present already, never added again.
+function SkippedUnits(const ASkips: TArray<TUsesChange>): TArray<string>;
+begin
+  Result:= nil;
+  for var S: TUsesChange in ASkips do Result:= Result + [S.UnitName];
+end;
 // Prefixes every line of AReemittedBlock (EmitBlock's CRLF-joined, column-1
 // output, trailing CRLF trimmed) with AIndent, so the replacement block lands
 // at the same indentation depth as the original.
@@ -1616,6 +3040,176 @@ begin
   end;
 end;
 
+// C8 N2 review (1.26.0): FindMemberAccessSites joins a member access to an
+// instance by the RECEIVER'S NAME only, so `<name>.Caption` was rewritten
+// wherever it appeared in the unit -- a local or parameter of that name in
+// another method, another class's same-named field included. This keeps a
+// site only when its receiver IS the instance's field:
+//   * the receiver reference is bound (refs.symbol_id) to the field named like
+//     the instance that the .dfm's ROOT class (declared in this unit)
+//     declares or inherits -- another class's same-named field is not it; or
+//   * it is unbound, written bare or as Self.X, and the routine it sits in
+//     (walked up through nested routines) declares no local / parameter of
+//     that name and belongs to the root class.
+// Everything else -- bound to anything else, unbound with another receiver,
+// shadowed, in an unrelated class -- is dropped. A site whose line holds NO
+// reference for its receiver cannot be checked at all (the .pas changed since
+// it was indexed, or the indexer did not record it): it is not rewritten and
+// goes to AUnverified, which the caller REPORTS. Applies to own instances and
+// to C8 N2 / N2a inherited ones alike. Reads the index; writes nothing.
+function BoundAccessSites(const AStore: ISymbolStore; AFileId: Int64; const ADfmPath: string;
+  const ASites: TArray<TAccessSite>; out AUnverified: TArray<TAccessSite>): TArray<TAccessSite>;
+const
+  { how many parents a reference's routine is walked up to reach its class }
+  ROUTINE_HOPS = 4;
+  { the receiver text of an explicit Self.X access }
+  SELF_TEXT = 'Self';
+var
+  Refs     : TArray<TReference>;
+  Classes  : TArray<TSymbol>;
+  FieldIds : TDictionary<string, TArray<Int64>>; { UPPER name -> field ids }
+  OwnerIds : TDictionary<string, TArray<Int64>>; { UPPER name -> classes declaring / inheriting it }
+
+  function Has(const AIds: TArray<Int64>; AId: Int64): Boolean;
+  begin
+    for var X: Int64 in AIds do
+      if X = AId then Exit(True);
+    Result:= False;
+  end;
+
+  { the field named AName a class of this unit declares, or the nearest an ancestor does }
+  procedure ScopeOf(const AName: string; out AFields, AOwners: TArray<Int64>);
+  var
+    F: TSymbol;
+  begin
+    if FieldIds.TryGetValue(UpperCase(AName), AFields) then
+    begin
+      AOwners:= OwnerIds[UpperCase(AName)];
+      Exit;
+    end;
+    AFields:= nil;
+    AOwners:= nil;
+    for var C: TSymbol in Classes do
+    begin
+      F:= AStore.FindChildSymbolByName(C.Id, AName);
+      if (F.Id = 0) or (F.Kind <> skField) then
+      begin
+        F:= Default(TSymbol);
+        for var A: TTypeAncestor in AStore.GetTransitiveAncestors(C.Id) do
+        begin
+          if not A.Resolved or (A.SymbolId = 0) then Continue;
+          F:= AStore.FindChildSymbolByName(A.SymbolId, AName);
+          if (F.Id <> 0) and (F.Kind = skField) then Break;
+          F:= Default(TSymbol);
+        end;
+      end;
+      if F.Id = 0 then Continue;
+      if not Has(AFields, F.Id) then AFields:= AFields + [F.Id];
+      AOwners:= AOwners + [C.Id];
+    end;
+    FieldIds.Add(UpperCase(AName), AFields);
+    OwnerIds.Add(UpperCase(AName), AOwners);
+  end;
+
+  { the class a routine belongs to, 0 when a routine on the way declares AName }
+  function ClassOfRoutine(ARoutineId: Int64; const AName: string): Int64;
+  var
+    S: TSymbol;
+  begin
+    S:= AStore.GetSymbolById(ARoutineId);
+    for var Hop: Integer:= 1 to ROUTINE_HOPS do
+    begin
+      if S.Id = 0 then Break;
+      if S.Kind = skClass then Exit(S.Id);
+      if AStore.FindChildSymbolByName(S.Id, AName).Id <> 0 then Break;
+      S:= AStore.GetSymbolById(S.ParentId);
+    end;
+    Result:= 0;
+  end;
+
+  function SiteIsBound(const ASite: TAccessSite; out AUnchecked: Boolean): Boolean;
+  var
+    Recv   : TReference;
+    Found  : Boolean;
+    Fields : TArray<Int64>;
+    Owners : TArray<Int64>;
+  begin
+    Found:= False;
+    Recv := Default(TReference);
+    for var R: TReference in Refs do
+      if (R.StartLine = ASite.Line) and (R.StartCol < ASite.Col) and SameText(R.NameText, ASite.InstanceName) and
+         ((not Found) or (R.StartCol > Recv.StartCol)) then
+      begin
+        Recv := R;
+        Found:= True;
+      end;
+    AUnchecked:= not Found;
+    if not Found then Exit(False);
+    ScopeOf(ASite.InstanceName, Fields, Owners);
+    if Recv.SymbolId <> 0 then Exit(Has(Fields, Recv.SymbolId));
+    if (Recv.ReceiverText <> '') and not SameText(Recv.ReceiverText, SELF_TEXT) then Exit(False);
+    Result:= Has(Owners, ClassOfRoutine(Recv.EnclosingSymbolId, ASite.InstanceName));
+  end;
+
+begin
+  Result     := nil;
+  AUnverified:= nil;
+  if (AFileId <= 0) or (Length(ASites) = 0) then Exit;
+  Refs:= AStore.GetReferencesFromFile(AFileId);
+  Classes:= nil;
+  var Root: string:= '';
+  if (ADfmPath <> '') and TFile.Exists(ADfmPath) then Root:= DfmRootClass(TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)));
+  for var S: TSymbol in AStore.FindSymbolsByFile(AStore.GetFilePath(AFileId)) do
+    if (S.Kind = skClass) and SameText(S.Name, Root) then Classes:= Classes + [S];
+  FieldIds:= TDictionary<string, TArray<Int64>>.Create;
+  OwnerIds:= TDictionary<string, TArray<Int64>>.Create;
+  try
+    for var Site: TAccessSite in ASites do
+    begin
+      var Unchecked: Boolean;
+      if SiteIsBound(Site, Unchecked) then Result:= Result + [Site]
+      else if Unchecked then AUnverified:= AUnverified + [Site];
+    end;
+  finally
+    OwnerIds.Free;
+    FieldIds.Free;
+  end;
+end;
+
+// C8 N2: the 'retyped' entries of AInherited as instances for BuildApplyPlan's
+// loop -- the .dfm spelling of the From type, the bare To type.
+function RetypedInstances(const AInherited: TArray<TInheritedInstance>): TArray<TConvertInstance>;
+begin
+  Result:= nil;
+  for var Inh: TInheritedInstance in AInherited do
+    if Inh.Action = INH_ACTION_RETYPED then
+    begin
+      var Inst: TConvertInstance:= Default(TConvertInstance);
+      Inst.InstanceName:= Inh.Name;
+      Inst.FromType    := Inh.TypeName;
+      Inst.ToType      := Inh.ToType;
+      Result:= Result + [Inst];
+    end;
+end;
+
+// The index of AInherited's entry named AName with action AAction, or -1.
+// Component names are unique within a form, so an own instance never shares
+// its name with an inherited one.
+function InheritedIndexOf(const AInherited: TArray<TInheritedInstance>; const AName, AAction: string): Integer;
+begin
+  for var K: Integer:= 0 to High(AInherited) do
+    if (AInherited[K].Action = AAction) and SameText(AInherited[K].Name, AName) then Exit(K);
+  Result:= -1;
+end;
+
+// True when some AInherited entry has action AAction.
+function HasInheritedAction(const AInherited: TArray<TInheritedInstance>; const AAction: string): Boolean;
+begin
+  for var Inh: TInheritedInstance in AInherited do
+    if Inh.Action = AAction then Exit(True);
+  Result:= False;
+end;
+
 class function TApplyBook.Create(const ARules: TConversionRuleSet;
   const AUnreachable: TArray<TUnreachablePath>): TApplyBook;
 begin
@@ -1623,9 +3217,41 @@ begin
   Result.Unreachable:= AUnreachable;
 end;
 
-function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+// 1.25.1: AEdits less every in-line edit (tekReplaceInLine / tekInsertInLine)
+// that repeats an earlier one exactly -- same file, line, columns and text.
+// Two #convert blocks carrying the same renaming #link (Title <- Caption on a
+// table and on its fields), or two instances of one type sharing a creator
+// site, planned the identical rewrite twice; applied twice, the second splice
+// lands on the already-rewritten line and corrupts it ('tbl.Title= tblID.Title
+// tbl2ID.Title'). Line deletes and inserts are kept as they are: a repeated
+// block edit is an overlap the all-or-nothing guard must see. Order kept.
+function DistinctInLineEdits(const AEdits: TArray<TTextEdit>): TArray<TTextEdit>;
+var
+  Seen: TDictionary<string, Boolean>;
+  Key : string;
+begin
+  Result:= nil;
+  Seen  := TDictionary<string, Boolean>.Create;
+  try
+    for var Ed: TTextEdit in AEdits do
+    begin
+      if Ed.Kind in [tekReplaceInLine, tekInsertInLine] then
+      begin
+        Key:= Format('%s|%d|%d|%d|%d|%s', [UpperCase(Ed.FilePath), Ord(Ed.Kind), Ed.Line, Ed.Col, Ed.EndCol, Ed.Text]);
+        if Seen.ContainsKey(Key) then Continue;
+        Seen.Add(Key, True);
+      end;
+      Result:= Result + [Ed];
+    end;
+  finally
+    Seen.Free;
+  end;
+end;
+
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@3144 -- REVIEWED 2026-10-06: parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own
   const ABook: TApplyBook; const AOnly: TArray<string>;
-  const ACastLib: TCastLib; AWarnUnlinked: Boolean): TApplyResult;
+  const ACastLib: TCastLib; AWarnUnlinked: Boolean;
+  var AInherited: TArray<TInheritedInstance>): TApplyResult;
 var
   Stores      : TArray<ISymbolStore>; { ATrees.Stores, in --db order }
   DfmText     : string;
@@ -1649,7 +3275,9 @@ var
   PasStore    : ISymbolStore; { the store that actually has AUnitPas indexed -- see StoreForFile }
   DoneUnits   : TDictionary<string, Boolean>; { ToType -> already handled (added or already-used) }
   ToTypesSeen : TList<string>;
+  IntfToTypes : TDictionary<string, Boolean>; { ToType -> a retyped field of it is declared in the INTERFACE (C13 a) }
   ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
+  InstFromType: TDictionary<string, string>; { 1.26.1: converted instance -> its From type, to pick its #convert block }
   E           : TTextEdit;
   It          : TApplyItem; { scratch for the main body's own Emit calls }
 
@@ -1868,6 +3496,37 @@ var
     end;
   end;
 
+  // Reports an instance skipped whole. A retyped inherited one (C8 N2) is not
+  // converted at all then -- it goes back to 'skipped' with AItem's text as
+  // the reason, and AppendInheritedReport warns about it instead.
+  procedure SkipInstance(const AItem: TApplyItem);
+  begin
+    var K: Integer:= InheritedIndexOf(AInherited, Inst.InstanceName, INH_ACTION_RETYPED);
+    if K < 0 then
+    begin
+      Emit(AItem);
+      Exit;
+    end;
+    AInherited[K].Action:= INH_ACTION_SKIPPED;
+    AInherited[K].Reason:= Format('declared in %s, which already has %s, but not retyped: %s',
+      [AInherited[K].AncestorUnit, AInherited[K].ToType, AItem.Text]);
+  end;
+
+  // C8 N2a: a field a converted ancestor declares, used in this unit's code
+  // only -- its access sites are rewritten like an own instance's, and its To
+  // type's unit is added like one. (A stale .dfm refuses the plan anyway.)
+  procedure AddCodeEntries;
+  begin
+    for var CE: TInheritedInstance in AInherited do
+    begin
+      if CE.Action <> INH_ACTION_CODE then Continue;
+      ConvertedInstNames.Add(CE.Name);
+      InstFromType.AddOrSetValue(CE.Name, CE.TypeName);
+      if DoneUnits.ContainsKey(CE.ToType) then Continue;
+      DoneUnits.Add(CE.ToType, True);
+      ToTypesSeen.Add(CE.ToType);
+    end;
+  end;
   // -- surface #1: locate the published field decl 'Name: FromType;' via the
   // field symbol (gives us the line range to scope the text search), then find
   // the exact FromType token span for a tekReplaceInLine edit.
@@ -1896,6 +3555,8 @@ var
         E.EndCol  := FEndCol;
         E.Text    := Inst.ToType;
         Edits.Add(E);
+        { C13 a: an interface field needs its To type's unit in the INTERFACE uses }
+        if SameText(Sym.Section, 'interface') then IntfToTypes.AddOrSetValue(Inst.ToType, True);
         It:= InstItem(aikFieldRetyped, afConverted,
           Format('%s: %s -> %s', [Inst.InstanceName, Inst.FromType, Inst.ToType]));
         It.FilePath:= AUnitPas;
@@ -1989,6 +3650,103 @@ var
     end;
   end;
 
+  // Surfaces #1 and #5 for an own instance. A retyped inherited one (C8 N2)
+  // has neither here -- its field is the ancestor's and nothing in this unit
+  // creates it -- so it gets its converted[] line instead, at ABlockLine.
+  procedure PlanDeclSurfaces(ABlockLine: Integer);
+  begin
+    var K: Integer:= InheritedIndexOf(AInherited, Inst.InstanceName, INH_ACTION_RETYPED);
+    if K < 0 then
+    begin
+      PlanFieldRetype;
+      PlanCreatorSites;
+      Exit;
+    end;
+    var RIt: TApplyItem:= InstItem(aikInheritedInstanceRetyped, afConverted,
+      Format('%s: inherited %s -> %s (declared in %s)',
+        [Inst.InstanceName, Inst.FromType, Inst.ToType, AInherited[K].AncestorUnit]));
+    RIt.FilePath:= ADfmPath;
+    RIt.Line    := ABlockLine;
+    Emit(RIt);
+  end;
+
+  // 1.25.1 (the DMREADINGS defect): an instance whose .dfm block lies INSIDE
+  // the block of an instance this run already re-emitted -- a TField of a
+  // converted TTable. Its own delete + insert used to be planned beside the
+  // parent's, which covers the same lines: two overlapping delete ranges, so
+  // the applier refused the whole .dfm AFTER the .pas had been written.
+  //
+  // The parent's re-emit already holds a converted copy of the child (the
+  // owned-part recursion, run with the PARENT's trees). The child's OWN
+  // re-emit (AReemit, its own trees: defaults resolved, remainder reported
+  // under its own name -- run_convert_apply.ps1 Phase 9) is the better text,
+  // so it REPLACES that copy inside the parent's insert. One delete + insert
+  // for the whole parent, the child's report and .pas surfaces as before.
+  // When the parent's text holds no `object <Name>: <ToType>` block the child
+  // is skipped and warned, its .pas left alone to match. Parents precede their
+  // children in .dfm order, so the parent's edits are already in Edits.
+  // False when the block is inside no re-emitted block.
+  function SpliceIntoParent(AStart, AEnd: Integer; const AReemit: TReemitResult): Boolean;
+  var
+    Outer, InsIx: Integer;
+    Lines       : TArray<string>;
+    Hdr, HdrEnd : Integer;
+    HdrName     : string;
+    HdrClass    : string;
+    Ed          : TTextEdit;
+  begin
+    Outer:= 0;
+    for Ed in Edits do
+      if (Ed.Kind = tekDeleteLines) and SamePath(Ed.FilePath, ADfmPath) and
+         (Ed.Line < AStart) and (Ed.EndLine >= AEnd) then Outer:= Ed.Line;
+    if Outer = 0 then Exit(False);
+    Result:= True;
+    InsIx:= -1;
+    for var K: Integer:= 0 to Edits.Count - 1 do
+      if (Edits[K].Kind = tekInsertLines) and SamePath(Edits[K].FilePath, ADfmPath) and (Edits[K].Line = Outer - 1) then
+        InsIx:= K;
+    Hdr:= -1;
+    Lines:= nil;
+    if InsIx >= 0 then
+    begin
+      Lines:= Edits[InsIx].Text.Replace(#13#10, #10).Split([#10]);
+      for var K: Integer:= 0 to High(Lines) do
+        if (TryParseHeaderAfter(Trim(Lines[K]), KW_OBJECT + ' ', HdrName, HdrClass) or
+            TryParseHeaderAfter(Trim(Lines[K]), KW_INHERITED + ' ', HdrName, HdrClass) or
+            TryParseHeaderAfter(Trim(Lines[K]), KW_INLINE + ' ', HdrName, HdrClass)) and
+           SameText(HdrName, Inst.InstanceName) and SameText(HdrClass, Inst.ToType) then
+        begin
+          Hdr:= K;
+          Break;
+        end;
+    end;
+    if Hdr < 0 then
+    begin
+      var SIt: TApplyItem:= InstItem(aikInstanceSkipped, afWarnings,
+        Format('%s: nested in a converted component whose .dfm re-emit does not carry it -- instance skipped',
+          [Inst.InstanceName]));
+      SIt.FilePath:= ADfmPath;
+      SIt.Line    := AStart;
+      SkipInstance(SIt); { C8 N2: a retyped inherited child goes back to 'skipped' }
+      Exit;
+    end;
+    { the copy's own `end` is the first one at its header's indent }
+    HdrEnd:= Hdr + 1;
+    while (HdrEnd < High(Lines)) and not ((Trim(Lines[HdrEnd]) = 'end') and
+          (LeadingIndent(Lines[HdrEnd]) = LeadingIndent(Lines[Hdr]))) do Inc(HdrEnd);
+    Ed:= Edits[InsIx];
+    Ed.Text:= String.Join(#13#10, Lines, 0, Hdr) + (if Hdr > 0 then #13#10 else '') +
+      ReindentBlock(AReemit.DfmText, LeadingIndent(Lines[Hdr])) +
+      (if HdrEnd < High(Lines) then #13#10 + String.Join(#13#10, Lines, HdrEnd + 1, High(Lines) - HdrEnd) else '');
+    Edits[InsIx]:= Ed;
+    ConvertedInstNames.Add(Inst.InstanceName);
+    InstFromType.AddOrSetValue(Inst.InstanceName, Inst.FromType);
+    FoldReemitReport(AReemit.Report, AStart);
+    PlanDeclSurfaces(AStart); { C8 N2: an inherited child has no field / creator here }
+    if DoneUnits.ContainsKey(Inst.ToType) then Exit;
+    DoneUnits.Add(Inst.ToType, True);
+    ToTypesSeen.Add(Inst.ToType);
+  end;
   // -- surface #4: instance-scoped property/event ACCESS rewrite, via ref-gap
   // G's 'member-access' refs. Runs ONCE over the whole unit per renaming
   // '#link ToMember <- FromMember' rule (not per-instance --
@@ -2004,9 +3762,107 @@ var
   // crash, just no rewrite -- the .dfm-side #link still applies via surface #3).
   procedure PlanAccessSites;
   var
-    E : TTextEdit;
-    It: TApplyItem;
+    E  : TTextEdit;
+    It : TApplyItem;
+    Unv: TArray<TAccessSite>;
+
+    { 1.26.0 (C8 N2 review): a site the index cannot vouch for is REPORTED,
+      once per (line, member), never dropped in silence }
+    procedure ReportUnverified(const AMember: string);
+    begin
+      for var U: TAccessSite in Unv do
+      begin
+        var Dup: Boolean:= False;
+        for var Prior: TApplyItem in Items do
+          if (Prior.Kind = aikAccessSiteUnverified) and (Prior.Line = U.Line) and SameText(Prior.Path, AMember) then Dup:= True;
+        if Dup then Continue;
+        var UIt: TApplyItem:= PlainItem(aikAccessSiteUnverified, afWarnings,
+          Format('access site %s:%d %s.%s not verified against the index -- not rewritten',
+            [ExtractFileName(AUnitPas), U.Line, U.InstanceName, AMember]));
+        UIt.Instance:= U.InstanceName;
+        UIt.FilePath:= AUnitPas;
+        UIt.Path    := AMember;
+        UIt.Line    := U.Line;
+        Emit(UIt);
+      end;
+    end;
+
+    { 1.26.0: `with X do Member := ...` reaches X's members with no receiver at
+      the site, so the rewrite cannot see them -- each `with` naming a converted
+      instance is REPORTED for hand conversion }
+    procedure ReportWithBlocks;
+    const
+      KW_WITH = 'with ';
+      KW_DO   = ' do';
+    begin
+      var Renames: Boolean:= False;
+      for var Q: TConversionRule in ABook.Rules.Rules do
+        if (Q.Kind = rkLink) and (Q.FromPath <> '') and (Q.ToPath <> '') and not SameText(Q.FromPath, Q.ToPath) then Renames:= True;
+      if not Renames then Exit; { nothing a with block could hide }
+      for var LineNo: Integer:= 1 to PasLines.Count do
+      begin
+        var Low: string:= LowerCase(PasLines[LineNo - 1]);
+        var WithAt: Integer:= Pos(KW_WITH, Low);
+        if (WithAt = 0) or ((WithAt > 1) and IsIdentChar(Low[WithAt - 1])) then Continue;
+        var After: string:= Copy(Low, WithAt + Length(KW_WITH), MaxInt);
+        var DoAt: Integer:= Pos(KW_DO, After);
+        var Targets: string:= if DoAt > 0 then Copy(After, 1, DoAt - 1) else After;
+        for var N: string in ConvertedInstNames do
+          for var Tg: string in Targets.Split([',']) do
+            if SameText(Trim(Tg), N) then
+            begin
+              var WIt: TApplyItem:= PlainItem(aikAccessSiteUnverified, afWarnings,
+                Format('access site %s:%d with %s do ... not verified against the index -- not rewritten (a member reached through a with block is converted by hand)',
+                  [ExtractFileName(AUnitPas), LineNo, N]));
+              WIt.Instance:= N;
+              WIt.FilePath:= AUnitPas;
+              WIt.Line    := LineNo;
+              Emit(WIt);
+            end;
+      end;
+    end;
+
+    // 1.26.1 (F1 on the .pas side): the converted instances a #link may
+    // rewrite -- those whose #convert block is the rule's own (the block the
+    // .dfm re-emit picks: the first #convert whose From type matches, else the
+    // first), or every one for a file-scope rule before the first #convert.
+    // Until 1.26.0 every block's #link rewrote every instance's sites: four
+    // identical DatabaseName edits per DMTEST site, and two blocks linking one
+    // path to different targets wrote both into the same line.
+    function NamesForLink(const ALink: TConversionRule): TArray<string>;
+    var
+      RuleBlock: Integer;
+      Block    : Integer;
+      First    : Integer;
+      Found    : Integer;
+      Q        : TConversionRule;
+      FromT    : string;
+    begin
+      RuleBlock:= 0;
+      for Q in ABook.Rules.Rules do
+        if (Q.Kind = rkConvert) and (Q.LineNo <= ALink.LineNo) then Inc(RuleBlock);
+      if RuleBlock = 0 then Exit(ConvertedInstNames.ToArray);
+      Result:= nil;
+      for var N: string in ConvertedInstNames do
+      begin
+        if not InstFromType.TryGetValue(N, FromT) then Continue;
+        Block:= 0;
+        First:= 0;
+        Found:= 0;
+        for Q in ABook.Rules.Rules do
+          if Q.Kind = rkConvert then
+          begin
+            Inc(Block);
+            if First = 0 then First:= Block;
+            if (Found = 0) and SameText(BareTypeTail(Q.FromType), BareTypeTail(FromT)) then Found:= Block;
+          end;
+        if Found = 0 then Found:= First;
+        if Found = RuleBlock then Result:= Result + [N];
+      end;
+    end;
+
   begin
+    ReportWithBlocks;
     { T2h: an UNREACHABLE #link is never applied -- on the .pas side either. }
     for var LinkRule in WithoutUnreachableRules(ABook.Rules, ABook.Unreachable, 0).Rules do
     begin
@@ -2104,8 +3960,9 @@ var
            That is exactly how this block failed to build the first time. Note
            the same hazard exists here with the paren-star terminator, which is
            why neither delimiter is written out literally in this block. *)
-        var CastSites: TArray<TAccessSite>:= FindMemberAccessSites(PasStore, PasFileId, PasLines,
-          LinkRule.FromPath, ConvertedInstNames.ToArray);
+        var CastSites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
+          LinkRule.FromPath, NamesForLink(LinkRule)), Unv);
+        ReportUnverified(LinkRule.FromPath);
         for var CSite in CastSites do
         begin
           var DstExpr: string:= CSite.InstanceName + '.' + LinkRule.ToPath;
@@ -2138,8 +3995,9 @@ var
       if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue; { identity rename -- nothing to rewrite }
       if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
 
-      var Sites: TArray<TAccessSite>:= FindMemberAccessSites(PasStore, PasFileId, PasLines,
-        LinkRule.FromPath, ConvertedInstNames.ToArray);
+      var Sites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
+        LinkRule.FromPath, NamesForLink(LinkRule)), Unv);
+      ReportUnverified(LinkRule.FromPath);
       for var Site in Sites do
       begin
         E:= Default(TTextEdit);
@@ -2178,25 +4036,56 @@ var
   // other one deletes. A unit already used is handed over too, so a #unuse of
   // it is overruled (ADD wins) rather than breaking the converted unit.
   // AUses is the unit-rule plan (Ok=True and empty when the book has none).
-  procedure PlanUsesAdditions(out AUses: TUsesPlan);
+  // C13 a: True when the unit uses AUnit in its implementation clause and NOT
+  // in its interface clause (as the index recorded the unit's uses).
+  function UsedOnlyInImplementation(const AUnit: string): Boolean;
+  var
+    InImpl, InIntf: Boolean;
+  begin
+    InImpl:= False;
+    InIntf:= False;
+    if PasFileId > 0 then
+      for var U: TUnitUse in PasStore.GetUnitUsesForFile(PasFileId) do
+        if SameText(U.UnitName, AUnit) then
+        begin
+          if U.Section = uusInterface then InIntf:= True else InImpl:= True;
+        end;
+    Result:= InImpl and not InIntf;
+  end;
+  procedure PlanUsesAdditions(out AUses: TUsesPlan; out AAdds, AIntfAdds: TArray<string>);
   var
     E : TTextEdit;
     It: TApplyItem;
   begin
     var UnitRules  : Boolean      := BookHasUnitRules(ABook.Rules);
+    var MoveNeeded : Boolean      := False;
+    var Pending    : TList<TTextEdit>:= TList<TTextEdit>.Create;
     var ConvertAdds: TList<string>:= TList<string>.Create;
+    var IntfAdds   : TList<string>:= TList<string>.Create;
     try
       for var ToType_ in ToTypesSeen do
       begin
         var ResolvedUnit: string;
         var AlreadyUsed : Boolean;
         var UseEdits: TArray<TTextEdit>;
+        var WantIntf: Boolean:= IntfToTypes.ContainsKey(ToType_);
         for var St in Stores do
         begin
-          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed);
+          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed, WantIntf);
           if AlreadyUsed or (Length(UseEdits) > 0) then Break;
         end;
-        if UnitRules and (AlreadyUsed or (Length(UseEdits) > 0)) then ConvertAdds.Add(ResolvedUnit);
+        { 1.25.1: two To types declared in ONE unit (TFDTable and
+          TFDAutoIncField) planned that unit's add twice -- 'uses LibB, LibB'
+          does not compile. The first type's add stands for both. }
+        if not AlreadyUsed and (Length(UseEdits) > 0) and MatchText(ResolvedUnit, ConvertAdds.ToArray) then Continue;
+        if AlreadyUsed or (Length(UseEdits) > 0) then
+        begin
+          ConvertAdds.Add(ResolvedUnit);
+          if WantIntf then IntfAdds.Add(ResolvedUnit);
+          { C13 a: used, but only in the implementation clause -- it has to
+            MOVE, which only the uses planner can do }
+          if WantIntf and AlreadyUsed and UsedOnlyInImplementation(ResolvedUnit) then MoveNeeded:= True;
+        end;
         if AlreadyUsed then Continue;
         if Length(UseEdits) = 0 then
         begin
@@ -2207,20 +4096,22 @@ var
           Emit(It);
           Continue;
         end;
-        if not UnitRules then
-          for E in UseEdits do Edits.Add(E);
+        for E in UseEdits do Pending.Add(E);
       end;
       AUses:= Default(TUsesPlan);
       AUses.Ok:= True;
-      if UnitRules then
-      begin
+      { the caller adds AUses.Edits after R26 -- a skipped removal (C13 N4)
+        re-plans the unit rules with AAdds / AIntfAdds first }
+      AAdds    := ConvertAdds.ToArray;
+      AIntfAdds:= IntfAdds.ToArray;
+      if UnitRules or MoveNeeded then
         AUses:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
-          ConvertAdds.ToArray);
-        if AUses.Ok then
-          for E in AUses.Edits do Edits.Add(E);
-      end;
-    finally
+          AAdds, AIntfAdds)
+      else
+        for E in Pending do Edits.Add(E);    finally
+      IntfAdds.Free;
       ConvertAdds.Free;
+      Pending.Free;
     end;
   end;
 
@@ -2334,7 +4225,13 @@ begin
 
   DfmText:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
   Instances:= FindConvertInstances(DfmText, ABook.Rules, AOnly);
-  if Length(Instances) = 0 then
+  { C8 N2 / N2a (1.26.0): a retyped inherited instance goes through the same
+    loop as an own one (InhIndex tells them apart); a code-only entry joins
+    the access-site and uses surfaces only }
+  Instances:= Instances + RetypedInstances(AInherited);
+  { 1.25.1: a child of a kept parent converts with it, .pas included }
+  for var NO: TNestedOnly in NestedOnlyInstances(DfmText, ABook.Rules, AOnly) do Instances:= Instances + [NO.Instance];
+  if (Length(Instances) = 0) and not HasInheritedAction(AInherited, INH_ACTION_CODE) then
   begin
     Result.Error:= 'no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)';
     Exit;
@@ -2380,7 +4277,9 @@ begin
   ResolvedDefaults:= TList<TApplyResolvedDefault>.Create;
   DoneUnits:= TDictionary<string, Boolean>.Create;
   ToTypesSeen:= TList<string>.Create;
+  IntfToTypes:= TDictionary<string, Boolean>.Create;
   ConvertedInstNames:= TList<string>.Create;
+  InstFromType:= TDictionary<string, string>.Create;
   try
     PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
 
@@ -2442,7 +4341,7 @@ begin
             [Inst.InstanceName, Inst.InstanceName, Inst.FromType, ADfmPath]);
         It:= InstItem(aikInstanceSkipped, afWarnings, SkipMsg);
         It.FilePath:= ADfmPath;
-        Emit(It);
+        SkipInstance(It);
         Continue;
       end;
 
@@ -2458,6 +4357,7 @@ begin
         Break;
       end;
 
+
       var BlockText: string:= String.Join(#13#10, DfmLines, BlockStart - 1, BlockEnd - BlockStart + 1);
       var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ABook.Rules, ATrees.ClassFor(Inst.FromType),
         ATrees.ClassFor(Inst.ToType), ACastLib, ABook.Unreachable);
@@ -2467,9 +4367,14 @@ begin
           Format('%s: .dfm re-emit failed (%s) -- instance skipped', [Inst.InstanceName, ReemitRes.Error]));
         It.FilePath:= ADfmPath;
         It.Line    := BlockStart;
-        Emit(It);
+        SkipInstance(It);
         Continue;
       end;
+
+      { 1.25.1: a block inside one this run already re-emitted -- a TField of a
+        converted TTable -- goes INTO that re-emit; its own delete + insert
+        would overlap the parent's (see SpliceIntoParent) }
+      if SpliceIntoParent(BlockStart, BlockEnd, ReemitRes) then Continue;
 
       { Instance has cleared the re-emit checkpoint -- it WILL get its #1/#2/#5
         edits below, so it is eligible for surface #4's instance-scoping too.
@@ -2477,6 +4382,7 @@ begin
         never enters the converted-instance set an access-site rewrite is
         scoped against. }
       ConvertedInstNames.Add(Inst.InstanceName);
+      InstFromType.AddOrSetValue(Inst.InstanceName, Inst.FromType);
 
       var Indent: string:= LeadingIndent(DfmLines[BlockStart - 1]);
       E:= Default(TTextEdit);
@@ -2495,9 +4401,7 @@ begin
 
       FoldReemitReport(ReemitRes.Report, BlockStart);
 
-      PlanFieldRetype;
-
-      PlanCreatorSites;
+      PlanDeclSurfaces(BlockStart);
 
       { -- surface #2: uses-add for each distinct ToType (once per type). }
       if not DoneUnits.ContainsKey(Inst.ToType) then
@@ -2507,8 +4411,13 @@ begin
       end;
     end;
 
+    AddCodeEntries; { C8 N2a }
+
     PlanAccessSites;
     var UsesPlan: TUsesPlan;
+    var UnitAdds    : TArray<string>:= nil;
+    var UnitIntfAdds: TArray<string>:= nil;
+    var Skips       : TArray<TUsesChange>:= nil;
     { a stale .dfm span is folded into the uses-plan refusal below, so
       BuildApplyPlan keeps one exit for it }
     if StaleDfm <> '' then
@@ -2517,11 +4426,25 @@ begin
       UsesPlan.Refused:= True;
       UsesPlan.Error  := StaleDfm;
     end
-    else PlanUsesAdditions(UsesPlan);
+    else PlanUsesAdditions(UsesPlan, UnitAdds, UnitIntfAdds);
     { R26: a removal must not take away the unit an unconverted instance needs }
     var Leaves: string:= '';
     if UsesPlan.Ok then
-      Leaves:= RemovalLeavesUnconverted(ATrees, DfmText, ABook.Rules, ConvertedInstNames, UsesPlan.Changes);
+      Leaves:= RemovalLeavesUnconverted(ATrees, DfmText, ABook.Rules, ConvertedInstNames, AOnly, UsesPlan.Changes, Skips);
+    { C13 N4: a removal that would strand only instances --only left out is
+      skipped, not refused -- re-plan keeping those units, then report each }
+    if UsesPlan.Ok and (Leaves = '') and (Length(Skips) > 0) then
+    begin
+      UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
+        UnitAdds + SkippedUnits(Skips), UnitIntfAdds);
+      if UsesPlan.Ok then
+      begin
+        UsesPlan.Changes:= UsesPlan.Changes + Skips;
+        for var Sk: TUsesChange in Skips do Emit(SkippedRuleItem(ABook.Rules, AUnitPas, Sk));
+      end;
+    end;
+    if UsesPlan.Ok then
+      for E in UsesPlan.Edits do Edits.Add(E);
     if Leaves <> '' then
     begin
       UsesPlan.Ok     := False;
@@ -2539,7 +4462,7 @@ begin
     Result.Report.UsesChanges:= UsesPlan.Changes;
     Result.Report.Unlinked:= SummarizeUnlinked;
 
-    Result.Edits          := Edits.ToArray;
+    Result.Edits          := DistinctInLineEdits(Edits.ToArray);
     Result.Report.Converted:= Converted.ToArray;
     Result.Report.Warnings := Warnings.ToArray;
     Result.Report.ReemitNotes:= ReemitNotes.ToArray;
@@ -2561,8 +4484,10 @@ begin
     Items.Free;
     ResolvedDefaults.Free;
     DoneUnits.Free;
+    IntfToTypes.Free;
     ToTypesSeen.Free;
     ConvertedInstNames.Free;
+    InstFromType.Free;
   end;
 end;
 
@@ -2574,10 +4499,11 @@ begin
 end;
 
 function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet): TApplyResult;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
 var
   UsesPlan: TUsesPlan;
   Leaves  : string;
+  Skips   : TArray<TUsesChange>;
 begin
   Result:= Default(TApplyResult);
   if not TFile.Exists(AUnitPas) then
@@ -2589,9 +4515,25 @@ begin
   { R26: every #convert instance of the .dfm stays unconverted here (--only
     left them all out), so no removal may take away a unit they need }
   Leaves:= '';
+  Skips := nil;
   if UsesPlan.Ok and (ADfmPath <> '') and TFile.Exists(ADfmPath) then
     Leaves:= RemovalLeavesUnconverted(ATrees, TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath)), ARules,
-      nil, UsesPlan.Changes);
+      nil, AOnly, UsesPlan.Changes, Skips);
+  { C13 N4: every instance was left out by --only -- skip, do not refuse }
+  if UsesPlan.Ok and (Leaves = '') and (Length(Skips) > 0) then
+  begin
+    UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules, SkippedUnits(Skips));
+    if UsesPlan.Ok then
+    begin
+      UsesPlan.Changes:= UsesPlan.Changes + Skips;
+      for var Sk: TUsesChange in Skips do
+      begin
+        var It: TApplyItem:= SkippedRuleItem(ARules, AUnitPas, Sk);
+        Result.Report.Warnings:= Result.Report.Warnings + [It.Text];
+        Result.Report.Items   := Result.Report.Items + [It];
+      end;
+    end;
+  end;
   if Leaves <> '' then
   begin
     UsesPlan:= Default(TUsesPlan); { a refusal plans nothing }

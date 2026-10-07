@@ -46,7 +46,8 @@ type
     rnkBlank, // empty / whitespace-only line
     rnkComment, // '//' or ';' comment line
     rnkConvert, // #convert From -> To [, unit ...]
-    rnkLink, // #link ToPath <- FromPath [: CastFn]
+    // #link ToPath <- FromPath [G-expr] [: CastFn]
+    rnkLink,
     rnkDefault, // #default ToPath = value
     rnkIgnore, // #ignore FromPath
     rnkRemove, // #remove property   OR   #remove DFM: property
@@ -131,6 +132,12 @@ type
       LinkTo  : string; // ToPath
       LinkFrom: string; // FromPath  (may be '???' stub)
       Cast    : string; // optional CastFn ('' = identity)
+      /// <summary>rnkLink only: the glyph expression after the FromPath ('G[*/4],
+      /// G[1/5]G[2/5]', spec 2026-09-17-glyph-strip-G-grammar-design.md), kept
+      /// VERBATIM; '' = none. Split off at the first ' G[' AFTER the cast suffix,
+      /// exactly as the engine's DRagLint.Convert.Rules does, so LinkFrom is the bare
+      /// source property the grid and FindLinkForFrom match on.</summary>
+      GlyphExpr: string;  // dl:ok public-field@f977 -- REVIEWED 2026-10-06 TRuleNode is a plain parse record by design; every sibling typed field is public the same way
 
       // rnkDefault
       DefTo   : string; // ToPath
@@ -589,6 +596,19 @@ const
   /// </remarks>
 function PropCellText(const APath, ATypeName: string): string;
 
+const
+  /// <summary>The text that starts a #link's glyph expression: space, capital G,
+  /// bracket. Case-sensitive, as in the engine.</summary>
+  GLYPH_EXPR_START = ' G[';
+
+/// <summary>PURE: splits a #link FromPath's glyph expression off at the first
+/// GLYPH_EXPR_START. Call it AFTER the cast suffix is removed.</summary>
+/// <param name="APath">In: the right-hand side of '&lt;-' minus any cast. Out: the
+/// bare FromPath, trimmed.</param>
+/// <param name="AExpr">The expression, trimmed, verbatim otherwise; '' when none.</param>
+/// <returns>True when an expression was split off.</returns>
+function SplitGlyphExprOff(var APath: string; out AExpr: string): Boolean;
+
 implementation
 
 function PropCellText(const APath, ATypeName: string): string;
@@ -604,6 +624,22 @@ end;
 function StripComment(const S: string): Boolean; inline;
 begin
   Result:= S.StartsWith('//') or S.StartsWith(';');
+end;
+
+function SplitGlyphExprOff(var APath: string; out AExpr: string): Boolean;
+var
+  At: Integer;
+begin
+  AExpr:= '';
+  At:= Pos(GLYPH_EXPR_START, APath);
+  Result:= At > 0;
+  if Result then
+  begin
+    AExpr:= Trim(Copy(APath, At + 1, MaxInt));
+    APath:= Trim(Copy(APath, 1, At - 1));
+  end
+  else
+    APath:= Trim(APath);
 end;
 
 { True when S is one or more '0'..'9' and nothing else -- the engine's own
@@ -736,6 +772,8 @@ begin
     rnkLink:
     begin
       Result:= Format('#link %s <- %s', [LinkTo, LinkFrom]);
+      if GlyphExpr <> '' then
+        Result:= Result + ' ' + GlyphExpr;
       if Cast <> '' then
         Result:= Result + ' : ' + Cast;
     end;
@@ -966,10 +1004,10 @@ begin
     if Dir = '#link' then
     begin
       N.Kind:= rnkLink;
-      // ToPath <- FromPath [: CastFn]
+      // ToPath <- FromPath [G-expr] [: CastFn] -- the cast is split off FIRST (a G-expr
+      // never holds a ':'), then the expression at the first ' G[' (C10 E1).
       if SplitArrow(Body, ARROW_LINK, N.LinkTo, Rest) then
       begin
-        // optional trailing ' : CastFn' on the FromPath side
         ColonP:= Rest.LastIndexOf(':');
         if ColonP >= 0 then
         begin
@@ -979,13 +1017,11 @@ begin
              and (Pos('<', Tail) = 0) then
           begin
             N.Cast:= Tail;
-            N.LinkFrom:= Trim(Rest.Substring(0, ColonP));
-          end
-          else
-            N.LinkFrom:= Trim(Rest);
-        end // if
-        else
-          N.LinkFrom:= Trim(Rest);
+            Rest:= Rest.Substring(0, ColonP);
+          end;
+        end; // if
+        SplitGlyphExprOff(Rest, N.GlyphExpr);
+        N.LinkFrom:= Rest;
       end; // if
       Exit(N);
     end; // if

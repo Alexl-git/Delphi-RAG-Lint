@@ -1,0 +1,26 @@
+{
+  "captions": {
+    "-": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "All resolved components look healthy.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Code Quality": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Compile & Analysis": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Diagnose report copied to the clipboard.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Field, property or grid column at the cursor": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "For testers": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Generate & Export": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Index & Maintenance": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Inspect Symbol": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Problems detected -- the red lines above are the ones that matter.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Reports": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Routine at the cursor": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Setting updated -- the groups above have been re-read.": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "This project": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "This unit": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "This unit / at the cursor": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Type at the cursor": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "Uses & Dependencies": "structural: submenu container, section header, report group header or dialog caption -- seeded 2026-10-05, no feature of its own; delete this line when it gains one",
+    "drag-lint (!)": "structural: the root menu caption shown while the LSP is in trouble (the '(!)' is the LSP-trouble indicator on the drag-lint root, not a separate item) -- the root itself is the container of every registered item; delete this line if the indicator ever becomes its own feature"
+  },
+  "exes": {},
+  "verbs": {}
+}

@@ -1,0 +1,22 @@
+{
+  "id": "document-it",
+  "title": "Document it",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.90.0-alpha",
+  "summary": "Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node",
+  "wikiPage": "Document-it",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Document it"
+    },
+    {
+      "type": "cli",
+      "verb": "document"
+    }
+  ],
+  "audience": "both"
+}

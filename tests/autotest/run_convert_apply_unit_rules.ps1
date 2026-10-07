@@ -28,6 +28,12 @@
       declares the From type of an instance left UNCONVERTED (skipped, or
       excluded by --only) refuses the unit: '<rule> would leave <N>
       unconverted instance(s) of <Type> -- unit not changed'.
+    * C13 N4 (1.23.0): when EVERY such instance is one --only left out, the
+      removal is skipped instead (unit kept; uses[] action 'skipped' with a
+      reason; a 'line N: warning:' / items[] kind unit-rule-skipped). Any
+      other stranded instance (e.g. inherited) still refuses.
+    * C13 d (1.23.0): a #convert type that resolves in no --db refuses the
+      unit as an index gap, dry run and --apply alike (arm Z).
 
   Fixtures live in tests\autotest\fixtures\unitrules and are COPIED to a
   $PID scratch folder, indexed into a scratch --db there. Nothing shared is
@@ -272,29 +278,48 @@ Check 'M2 LibA swapped out, LibB present EXACTLY once (not added by both the blo
 Check 'M3 the declaration was retyped by the #convert block' ($t -match 'btnTop: TDstBtn;') $t
 
 # ---- R26: a removal never takes away a unit an UNCONVERTED instance needs ---
-# --only filters instances, never unit rules, so '#unuse LibA' with btnTwo left
-# out would leave 'btnTwo: TSrcBtn' with LibA gone (E2003). The declaring unit
-# comes from the index (LibA.pas declares TSrcBtn), not from the name.
-$R26Unuse = '#unuse LibA would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed'
+# '#unuse LibA' with btnTwo unconverted would leave 'btnTwo: TSrcBtn' with LibA
+# gone (E2003). The declaring unit comes from the index (LibA.pas declares
+# TSrcBtn), not from the name.
+# C13 N4 (1.23.0): when every stranded instance is one --only LEFT OUT, the
+# removal is SKIPPED (unit kept, uses[] action 'skipped', a warning) instead of
+# refusing the unit -- the user chose the scope. A stranded instance left for
+# any other reason (here: an inherited object) still REFUSES. R1-R4 are dry
+# runs, so R26Form stays pristine for R7.
 $hRp = Hash 'R26Form.pas'; $hRd = Hash 'R26Form.dfm'
-$r = Apply 'R26Form.pas' 'r26unuse.rules' @('--only', 'btnOne', '--apply', '--no-backup', '--format', 'json')
+$r = Apply 'R26Form.pas' 'r26unuse.rules' @('--only', 'btnOne', '--format', 'json')
 $j = Json $r.Out
-Check 'R1 --only btnOne + #unuse LibA: exit 1, ok=false, refused=true, reason names the rule, count and type' `
-  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.refused -eq $true) -and ($j.reason -eq $R26Unuse)) $r.Out
-$r = Apply 'R26Form.pas' 'r26unuse.rules' @('--only', 'btnOne', '--apply', '--no-backup')
-Check 'R2 text: one REFUSED line with the same reason, no ERROR: line' `
-  (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape($R26Unuse) + '\r?$')) -and -not ($r.Out -match '(?m)^ERROR:')) $r.Out
-$r = Apply 'R26Form.pas' 'r26swap.rules' @('--only', 'btnOne', '--apply', '--no-backup', '--format', 'json')
+$sk = @($j.uses | Where-Object { $_.action -eq 'skipped' })
+Check 'R1 --only btnOne + #unuse LibA: exit 0, NOT refused, one uses[] row action skipped (LibA, #unuse LibA, reason)' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and ($j.refused -eq $false) -and ($sk.Count -eq 1) -and ($sk[0].unit -eq 'LibA') -and `
+   ($sk[0].rule -eq '#unuse LibA') -and ($sk[0].reason -eq 'would leave 1 unconverted instance(s) of TSrcBtn') -and ($j.uses_removed -eq 0)) $r.Out
+Check 'R1b ... btnOne converted, and warnings[] / items[] carry the line-3 skip warning (kind unit-rule-skipped)' `
+  (($null -ne $j) -and (@($j.converted).Count -eq 1) -and `
+   (@($j.warnings | Where-Object { $_ -match '^line 3: warning: #unuse LibA skipped -- it would leave 1 unconverted instance\(s\) of TSrcBtn left out by --only; LibA kept in uses$' }).Count -eq 1) -and `
+   (@($j.items | Where-Object { ($_.kind -eq 'unit-rule-skipped') -and ($_.field -eq 'warnings') -and ($_.rule_line -eq 3) }).Count -eq 1)) $r.Out
+$r = Apply 'R26Form.pas' 'r26unuse.rules' @('--only', 'btnOne')
+Check 'R2 text: no REFUSED line; the uses report says the removal was skipped' `
+  (($r.Code -eq 0) -and -not ($r.Out -match '(?m)^REFUSED') -and ($r.Out -match '(?m)^Uses: 0 removed, 0 added, 1 removal\(s\) skipped \(--only\)\r?$') -and `
+   ($r.Out -match '(?m)^\s+skipped LibA \(interface, line 6\) -- #unuse LibA \(would leave 1 unconverted instance\(s\) of TSrcBtn\)\r?$')) $r.Out
+$r = Apply 'R26Form.pas' 'r26swap.rules' @('--only', 'btnOne', '--format', 'json')
 $j = Json $r.Out
-Check 'R3 --only btnOne + #useswap LibA -> LibB: refused, the reason spells the swap rule' `
-  (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and `
-   ($j.reason -eq '#useswap LibA -> LibB would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed')) $r.Out
-$r = Apply 'R26Form.pas' 'r26unuse.rules' @('--only', 'btnNone', '--apply', '--no-backup', '--format', 'json')
+$sk = @($j.uses | Where-Object { $_.action -eq 'skipped' })
+Check 'R3 --only btnOne + #useswap LibA -> LibB: the removal is skipped (rule spelled as the swap), no remove row' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and ($j.refused -eq $false) -and ($sk.Count -eq 1) -and ($sk[0].rule -eq '#useswap LibA -> LibB') -and `
+   (@($j.uses | Where-Object { $_.action -eq 'remove' }).Count -eq 0) -and ($j.edits_count -ge 1)) $r.Out
+$r = Apply 'R26Form.pas' 'r26unuse.rules' @('--only', 'btnNone', '--format', 'json')
 $j = Json $r.Out
-Check 'R4 --only matching nothing (unit rules run alone, skipped-no-instances): refused for BOTH instances' `
-  (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and `
-   ($j.reason -eq '#unuse LibA would leave 2 unconverted instance(s) of TSrcBtn -- unit not changed')) $r.Out
+Check 'R4 --only matching nothing (unit rules run alone): the removal is skipped for BOTH instances, nothing refused' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and ($j.refused -eq $false) -and ($j.component_part -eq 'skipped-no-instances') -and `
+   (@($j.uses | Where-Object { ($_.action -eq 'skipped') -and ($_.reason -eq 'would leave 2 unconverted instance(s) of TSrcBtn') }).Count -eq 1) -and `
+   (@($j.warnings | Where-Object { $_ -match '^line 3: warning: #unuse LibA skipped' }).Count -eq 1)) $r.Out
 Check 'R5 R26Form.pas and R26Form.dfm are byte-identical after R1-R4' (((Hash 'R26Form.pas') -eq $hRp) -and ((Hash 'R26Form.dfm') -eq $hRd))
+$hIp = Hash 'R26Inh.pas'
+$r = Apply 'R26Inh.pas' 'r26unuse.rules' @('--only', 'btnThree', '--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+Check 'R5b --only does NOT soften R26 for an instance it did not leave out (an inherited btnTwo): still refused' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and `
+   ($j.reason -eq '#unuse LibA would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed') -and ((Hash 'R26Inh.pas') -eq $hIp)) $r.Out
 $r = Apply 'R26Other.pas' 'r26other.rules' @('--only', 'btnOne', '--apply', '--no-backup', '--format', 'json')
 $j = Json $r.Out
 $t = Text 'R26Other.pas'
@@ -306,6 +331,39 @@ $j = Json $r.Out
 $t = Text 'R26Form.pas'
 Check 'R7 positive control: every instance converted, #unuse LibA applies (exit 0, LibA gone)' `
   (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and (@($j.converted).Count -eq 2) -and -not ($t -match '\bLibA\b') -and ($t -match '\bLibB\b')) $r.Out
+
+# ---- (d) C13: a #convert type that resolves in NO --db refuses the unit ----
+# Owner ruling 2026-10-06: an unresolved type is an index gap (library or
+# project index), never a rule-book error and never a warning. Dry run AND
+# --apply refuse alike: exit 1, nothing written, ONE 'REFUSED: <reason>' line,
+# apply/1 refused=true. TGhostBtn is declared in GhostLib, which is NOT in the
+# index until the positive control writes it.
+$GhostReason = 'TGhostBtn (line 2) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting'
+$hGp = Hash 'GhostForm.pas'; $hGd = Hash 'GhostForm.dfm'
+$r = Apply 'GhostForm.pas' 'ghost.rules' @('--format', 'json')
+$j = Json $r.Out
+Check 'Z1 unresolved From type, json DRY RUN: exit 1, ok=false, refused=true, reason names type, line and index gap' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.refused -eq $true) -and ($j.reason -eq $GhostReason)) $r.Out
+$r = Apply 'GhostForm.pas' 'ghost.rules'
+Check 'Z2 text dry run: exactly one REFUSED line with that reason, no "failed validation" / ERROR: line' `
+  (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape($GhostReason) + '\r?$')) -and `
+   (@($r.Out -split "`n" | Where-Object { $_ -match '^REFUSED: ' }).Count -eq 1) -and -not ($r.Out -match 'failed validation') -and -not ($r.Out -match '(?m)^ERROR:')) $r.Out
+$r = Apply 'GhostForm.pas' 'ghost.rules' @('--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+Check 'Z3 --apply (json): refused the same way' `
+  (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and ($j.reason -eq $GhostReason)) $r.Out
+$r = Apply 'GhostForm.pas' 'ghost.rules' @('--apply', '--no-backup')
+Check 'Z4 --apply (text): one REFUSED line' (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape($GhostReason) + '\r?$'))) $r.Out
+Check 'Z5 GhostForm.pas and GhostForm.dfm are byte-identical after Z1-Z4' (((Hash 'GhostForm.pas') -eq $hGp) -and ((Hash 'GhostForm.dfm') -eq $hGd))
+# positive control: close the index gap (write GhostLib.pas, reindex) and the
+# SAME book converts -- the refusal was about the index, not the book.
+Copy-Item (P 'GhostLib.pas.txt') (P 'GhostLib.pas')
+& $Exe index $WorkDir --db $db 2>&1 | Out-Null
+$r = Apply 'GhostForm.pas' 'ghost.rules' @('--apply', '--no-backup', '--format', 'json')
+$j = Json $r.Out
+$t = Text 'GhostForm.pas'
+Check 'Z6 positive control: GhostLib indexed -> the same book converts (exit 0, refused=false, btnOne retyped, GhostLib removed)' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and $j.ok -and ($j.refused -eq $false) -and ($t -match 'btnOne: TDstBtn;') -and -not ($t -match '\bGhostLib\b')) $r.Out
 
 # ---- the backup path (default --apply) still works on a unit-rules-only run -
 $r = Apply 'Keep2U.pas' 'use.rules' @('--apply')

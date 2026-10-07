@@ -241,7 +241,14 @@ Check 'GetItem: NOT called (Items is only ever written)' ($gi.Count -eq 0) ($gi 
 Write-Host ''
 Write-Host '== E2: a FIELD accessor is USED by the access, with no call edge ==' -ForegroundColor Cyan
 $ff = Of (Resolved 'FFlag') 'uProv.TProvider.FFlag'
-Check 'FFlag: used by WriteIt (the Flag WRITE), as a write' ($ff.Count -eq 1 -and $ff[0].caller_qname -match 'WriteIt$' -and $ff[0].mode -eq 'write') ($ff | ConvertTo-Json -Compress)
+# DEC-19 (resolver 1.12.0-alpha, 2026-10-06): GetFlag's bare `Result := FFlag`
+# is an own-class FIELD read and now binds. Until 1.12.0 it declined by design
+# and this check pinned exactly 1 row; it now pins each row by caller and mode.
+$ffW = @($ff | Where-Object { $_.mode -eq 'write' } | ForEach-Object { ($_.caller_qname -split '\.')[-1] })
+$ffR = @($ff | Where-Object { $_.mode -eq 'read' }  | ForEach-Object { ($_.caller_qname -split '\.')[-1] })
+Check 'FFlag: used by WriteIt (the Flag WRITE), as a write' (($ffW -join ',') -eq 'WriteIt') ($ff | ConvertTo-Json -Compress)
+Check 'FFlag: read bare by GetFlag (DEC-19), as a read' (($ffR -join ',') -eq 'GetFlag') ($ff | ConvertTo-Json -Compress)
+Check 'FFlag: nothing else (2 rows = 1 write + 1 read)' ($ff.Count -eq 2) ($ff | ConvertTo-Json -Compress)
 $fc = Of (Resolved 'FCount') 'uProv.TProvider.FCount'
 # D31 (2026-09-24): FCount is ALSO written bare inside uProv -- `FCount :=
 # AValue` in SetCount and `FCount := 0` in DoWork. Resolver 1.8.0 (D13) binds

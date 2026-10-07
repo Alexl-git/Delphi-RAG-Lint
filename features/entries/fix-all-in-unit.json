@@ -1,0 +1,22 @@
+{
+  "id": "fix-all-in-unit",
+  "title": "Fix all in unit",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Applies autofixes for every fixable finding in the current unit, starting from the Structure form",
+  "wikiPage": "Fix-all-in-unit",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Fix all in unit"
+    },
+    {
+      "type": "cli",
+      "verb": "lint"
+    }
+  ],
+  "audience": "both"
+}

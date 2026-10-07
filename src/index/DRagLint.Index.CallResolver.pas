@@ -161,8 +161,9 @@ type
   TMemberReadStats = record
     /// <summary>Bound to a with target's property or field.</summary>
     BoundWith : Int64;
-    /// <summary>Bound to a member of the enclosing class: a property read bare
-    /// (D16a), or a property or field read as `Self.X`.</summary>
+    /// <summary>Bound to a member of the enclosing class or an ancestor: a
+    /// property (D16a) or field (DEC-19, resolver 1.12.0-alpha) read bare, or
+    /// either read as `Self.X`.</summary>
     BoundOwn  : Int64;
     /// <summary>Declined: the with scope was undecided.</summary>
     WithScope : Int64;
@@ -170,10 +171,12 @@ type
     NotMember : Int64;
     /// <summary>Declined: a local, parameter or nested routine shadows the name.</summary>
     Shadowed  : Int64;
-    /// <summary>Declined: the name is a FIELD of the enclosing class -- left unbound by design.</summary>
-    Field     : Int64;
-    /// <summary>Declined: no property of the name in scope.</summary>
+    /// <summary>Declined: no property or field of the name on the class chain.</summary>
     NotFound  : Int64;
+    /// <summary>Declined: the NEAREST member of the name on the class chain is
+    /// a method, class const/var or nested type, which hides any farther field
+    /// (E5 review, resolver 1.12.0-alpha).</summary>
+    Hidden    : Int64;
     /// <summary>Declined: a receiver other than Self qualifies the name.</summary>
     Qualified : Int64;
     /// <summary>Declined: the source line could not be read, or the file is stale.</summary>
@@ -593,6 +596,24 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function LookupMemberOnType(ATypeSymbolId: Int64; const AMemberName: string): TSymbol;
+    /// <summary>E5 review (resolver 1.12.0-alpha): the declaration a bare name
+    /// inside AClassId's methods meets FIRST on the class chain -- the type
+    /// itself, then its CLASS parent (the ordinal-0 heritage edge), then that
+    /// one's, nearest first -- of ANY member kind: field, property, method,
+    /// class const / var, nested type.</summary>
+    /// <param name="AClassId">The enclosing class, record or helper.</param>
+    /// <param name="AName">The bare name, compared case-insensitively.</param>
+    /// <returns>The nearest declaration, or an empty TSymbol (Id = 0) when the
+    /// chain declares no member of the name, or when the walk reaches an
+    /// ancestor it cannot resolve before finding one.</returns>
+    /// <remarks>Delphi's nearest member HIDES every farther one whatever their
+    /// kinds, so a caller binds only when the returned member is itself a value
+    /// it can bind -- a method or const of the name in TMid hides a field in
+    /// TBase. An unresolved (or ambiguous) parent ENDS the walk: it may declare
+    /// the name itself, so nothing beyond it is offered. Interfaces in the
+    /// heritage list are never walked -- their members are not in the class's
+    /// scope. Pure over the resolver's cached rows.</remarks>
+    function NearestClassMember(AClassId: Int64; const AName: string): TSymbol;
     /// <summary>E3: 'write' when the source after the member name (past any
     /// `[...]` indexer) is `:=`, else 'read'. '' when the line is unavailable.</summary>
     /// <param name="ARef"><!-- drag-lint:auto type -->const TReference</param>
@@ -1353,14 +1374,15 @@ type
     /// pass.</remarks>
     property ParenlessStats: TParenlessResolveStats read FParenlessStats;
 
-    /// <summary>D14 + D16a (2026-09-23, resolver 1.8.0-alpha): decide whether a
-    /// bare `read` ref names a PROPERTY or FIELD, and if so which -- a member of
-    /// an enclosing `with` target, or a property of the enclosing class.</summary>
+    /// <summary>D14 + D16a (2026-09-23, resolver 1.8.0-alpha) + DEC-19 (resolver
+    /// 1.12.0-alpha): decide whether a bare `read` ref names a PROPERTY or FIELD,
+    /// and if so which -- a member of an enclosing `with` target, or a member of
+    /// the enclosing class or one of its resolved ancestors.</summary>
     /// <param name="ARef">The candidate read ref. FileId, NameText, StartLine,
     /// StartCol and EnclosingSymbolId are consulted.</param>
     /// <param name="AReason">OUT: '' when the ref bound; otherwise the decline
     /// reason -- 'unreadable' | 'qualified' | 'with-scope' | 'not-member' |
-    /// 'shadowed' | 'field' | 'not-found'.</param>
+    /// 'shadowed' | 'not-found' | 'hidden'.</param>
     /// <returns>An edge whose TargetSymbolId is the property/field, MemberMode
     /// 'read', the accessor when the property names one, and
     /// ReceiverTypeSymbolId the with target's (or the class's) type; or
@@ -1371,14 +1393,23 @@ type
     /// shadow), then the enclosing class and its ancestors. A with target that
     /// cannot be typed, or whose surface is incomplete, declines.
     ///
-    /// A FIELD of the enclosing class read BARE is NOT bound ('field'),
-    /// deliberately: that population is every bare field read in a codebase,
-    /// and D16a asked for properties. A field of a WITH target is bound,
-    /// because the with scope is exactly where the enum-value collision (R7)
-    /// lives. An explicit `Self.X` (a `read` ref whose receiver is Self -- the
-    /// extractor's shape for it) binds a property OR a field, exactly as
-    /// `Obj.X` does, and is never declined for a same-named local: the local
-    /// cannot be what `Self.X` names.
+    /// A FIELD of the enclosing class or of an ancestor read BARE binds, exactly
+    /// as a property does but with no accessor (DEC-19, owner ruling
+    /// 2026-10-05; until 1.12.0 it declined 'field' by design): `if FConnected`,
+    /// `with tblFtrs do` and the receiver `tblFtrs` of `tblFtrs.Post` -- its own
+    /// `read` ref -- where a grand-ancestor declares tblFtrs. A field of a WITH
+    /// target is bound too.
+    ///
+    /// The class chain is walked NEAREST first (NearestClassMember): the first
+    /// class declaring ANY member of the name answers, and only a property or
+    /// field binds -- a nearer method, class const/var or nested type hides a
+    /// farther field ('hidden'). An unresolved parent ends the walk, and an
+    /// implemented interface's members are not in scope.
+    ///
+    /// An explicit `Self.X` (a `read` ref whose receiver is Self -- the
+    /// extractor's shape for it) binds a property OR a field exactly as `Obj.X`
+    /// does, and is never declined for a same-named local: the local cannot be
+    /// what `Self.X` names.
     /// Counted into MemberReadStats, one outcome per call.
     /// </remarks>
     function ResolveBareMemberRead(const ARef: TReference; out AReason: string): TCallEdge;
@@ -4225,16 +4256,18 @@ begin
       Scratch.Free;
     end;
   end;
-  { 3. The enclosing class and its ancestors: a PROPERTY binds (D16a); a BARE
-    field read is left alone by design -- see the declaration. An explicit
-    `Self.X` names the member exactly as `Obj.X` does, so it binds a field too,
-    and step 2 never ran for it: a local of the name cannot be what it names. }
+  { 3. The enclosing class and its ancestors, NEAREST member first: a PROPERTY
+    (D16a) or a FIELD (DEC-19) binds, bare or as `Self.X`; any other member
+    of the name -- method, class const/var, nested type -- HIDES every
+    farther one, so the read declines 'hidden' rather than binding a farther
+    field. Step 2 never ran for `Self.X`: a local of the name cannot be what
+    it names. }
   if (AReason = '') and not ByWith then
   begin
     EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
-    M:= LookupMemberOnType(ClassId, ARef.NameText);
+    M:= NearestClassMember(ClassId, ARef.NameText);
     if M.Id <= 0 then AReason:= 'not-found'
-    else if (M.Kind <> skProperty) and (Rcv = '') then AReason:= 'field'
+    else if not (M.Kind in [skProperty, skField]) then AReason:= 'hidden'
     else WType:= ClassId;
   end;
   if AReason = '' then
@@ -4257,8 +4290,8 @@ begin
   else if AReason = 'with-scope' then Inc(FMemberReadStats.WithScope)
   else if AReason = 'not-member' then Inc(FMemberReadStats.NotMember)
   else if AReason = 'shadowed' then Inc(FMemberReadStats.Shadowed)
-  else if AReason = 'field' then Inc(FMemberReadStats.Field)
   else if AReason = 'not-found' then Inc(FMemberReadStats.NotFound)
+  else if AReason = 'hidden' then Inc(FMemberReadStats.Hidden)
   else if AReason = 'qualified' then Inc(FMemberReadStats.Qualified)
   else Inc(FMemberReadStats.Unreadable);
 end;
@@ -4408,6 +4441,32 @@ begin
     if not A.Resolved or (A.SymbolId <= 0) then Continue;
     Result:= FindChildOfKind(A.SymbolId, AMemberName, MEMBER_KINDS);
     if Result.Id > 0 then Exit;
+  end;
+end;
+
+function TCallResolver.NearestClassMember(AClassId: Int64; const AName: string): TSymbol;
+var
+  AnyMember: TSymbolKindSet       ;
+  Cur      : Int64                ;
+  Depth    : Integer              ;
+  Anc      : TArray<TTypeAncestor>;
+begin
+  { Typed constants cannot be combined in a const expression, hence a local. }
+  AnyMember:= METHOD_KINDS + TYPE_KINDS + [skProperty, skField, skVarDecl, skConstDecl, skTypeAlias, skEnum];
+  Result:= Default(TSymbol);
+  Cur   := AClassId;
+  Depth := 0;
+  while (Cur > 0) and (Depth < MAX_LEXICAL_DEPTH) do
+  begin
+    Inc(Depth);
+    Result:= FindChildOfKind(Cur, AName, AnyMember);
+    if Result.Id > 0 then Exit;
+    { AncestorsOf is the transitive BFS, so its FIRST row is Cur's own
+      ordinal-0 heritage edge -- the class parent, when there is one. }
+    Anc:= AncestorsOf(Cur);
+    Cur:= 0;
+    if (Length(Anc) > 0) and (Anc[0].Ordinal = 0) and Anc[0].Resolved and (Anc[0].SymbolId > 0)
+       and (SymbolById(Anc[0].SymbolId).Kind <> skInterface) then Cur:= Anc[0].SymbolId;
   end;
 end;
 

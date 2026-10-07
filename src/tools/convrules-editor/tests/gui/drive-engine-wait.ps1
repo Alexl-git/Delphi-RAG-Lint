@@ -1,5 +1,5 @@
 # Driven GUI check for the engine progress window (feat/engine-1206-adoption, Task 4,
-# 2026-09-30): a slow property-tree load shows TEngineWaitForm, one Cancel closes it and
+# 2026-09-30; re-load check job C6): a slow property-tree load shows TEngineWaitForm, one Cancel closes it and
 # stops the WHOLE block load (no second window for the To tree), and a fast load shows
 # nothing at all.
 # Usage: pwsh -File drive-engine-wait.ps1 -Exe <path\ConvRulesEditor.exe>  (put a frozen drag-lint.exe beside it).
@@ -236,12 +236,16 @@ $fast = Join-Path $tmp 'Fast.rules'
 # reload until 2026-10-05 (ParseLine trimmed away the arrow's space; fixed, guarded
 # by model.convert.from.only.roundtrip); the measured form is kept. A two-class rule
 # (X -> Y) makes TWO calls, and the second one measured 533-748 ms in 3 of 5 runs.
-[IO.File]::WriteAllText($fast, "#convert TNoSuchClassXyz -> , NoSuchUnitXyz`r`n#link Caption <- Caption`r`n", [Text.Encoding]::ASCII)
+# Since job C6 the bare From name is first resolved by a `query` (0.5-1.2 s) inside
+# the progress window's runner, so the FIRST load of a bare name may show the window.
+# The editor caches that answer for the session; a second rule (TOtherXyz) lets the
+# driver move off the block and back, so the RE-load is the one that must be fast.
+[IO.File]::WriteAllText($fast, "#convert TNoSuchClassXyz -> , NoSuchUnitXyz`r`n#link Caption <- Caption`r`n#convert TOtherXyz -> , NoSuchUnitXyz`r`n#link Caption <- Caption`r`n", [Text.Encoding]::ASCII)
 # Opening a book selects no rule, so nothing loads on its own. A form holding the
 # class puts it in the Classes list; a double-click on that row is the user's
 # "open this class's rule", which loads the grid (FormTypeDblClick).
 $dfm = Join-Path $tmp 'Fx.dfm'
-[IO.File]::WriteAllText($dfm, "object Fx: TFx`r`n  object B1: TcxButton`r`n  end`r`n  object N1: TNoSuchClassXyz`r`n  end`r`nend`r`n", [Text.Encoding]::ASCII)
+[IO.File]::WriteAllText($dfm, "object Fx: TFx`r`n  object B1: TcxButton`r`n  end`r`n  object N1: TNoSuchClassXyz`r`n  end`r`n  object N2: TOtherXyz`r`n  end`r`nend`r`n", [Text.Encoding]::ASCII)
 
 function StatusText($main) { (@(Find $main 'TStatusBar' $null) | ForEach-Object { [W]::Txt($_) }) -join ' | ' }
 
@@ -265,6 +269,8 @@ try {
   Start-Sleep -Seconds 2
   $e = OpenClass $main 'TcxButton'
   $dlg = WaitCls $p.Id 'TEngineWaitForm' 20
+  # Positive control for section 2: the FIRST (uncached) load of the slow class shows
+  # the window -- the cache must not have hidden it.
   Check 'wait.window.appears' ($dlg -ne [IntPtr]::Zero) $e
   $btn = @(Find $dlg 'TButton' 'Cancel')[0]
   Check 'wait.cancel.button' ($btn -ne $null)
@@ -288,10 +294,13 @@ try {
   while ((((Get-Date) - $t0).TotalSeconds -lt 3) -and (@([W]::Tops($p.Id)) -contains $dlg2)) { Start-Sleep -Milliseconds 100 }
 } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
 
-# --- 2. fast load: no window flashes ---
-# Positive control: the ENGINE must actually run. The load's two engine children
-# (the class-name query, then proptree) are counted by PID from the drag-lint.exe
-# beside the editor; and the open path must finish (status 'Loaded TNoSuchClassXyz').
+# --- 2. a RE-load of a cheap block shows no window ---
+# The property that matters: the user clicks back to a rule already resolved in this
+# session. Load the fast block once (it may show the window: its bare class name is
+# resolved by a query -- not asserted), move to the other rule, come back, and the
+# re-load must be under SHOW_DELAY_MS. Its engine children are counted by PID from
+# the drag-lint.exe beside the editor: exactly ONE (proptree) proves the class-name
+# query was answered from the cache, and >= 1 proves the engine really ran.
 $engineExe = Join-Path (Split-Path $Exe) 'drag-lint.exe'
 $p = Start-Process $Exe -ArgumentList "`"$fast`" --form `"$dfm`"" -PassThru
 try {
@@ -300,12 +309,15 @@ try {
   # The editor's own start-up engine calls (the class lists: three `query
   # descendants` runs, ~1 s each on the shared box, started AFTER the window shows)
   # must be finished first: overlapping them made the fast load take >400 ms and
-  # counted a third child (measured 2026-09-30, Task 5 fix round 1).
+  # counted an extra child (measured 2026-09-30, Task 5 fix round 1).
   $t0 = Get-Date
   while (((Get-Date) - $t0).TotalSeconds -lt 60 -and @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($p.Id)").Count -gt 0) { Start-Sleep -Milliseconds 200 }
   Start-Sleep -Milliseconds 500
+  function WaitIdle { $t1 = Get-Date; while (((Get-Date) - $t1).TotalSeconds -lt 60 -and (@(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($p.Id)").Count -gt 0 -or ([W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TEngineWaitForm' }))) { Start-Sleep -Milliseconds 200 }; Start-Sleep -Milliseconds 500 }
+  $e1 = OpenClass $main 'TNoSuchClassXyz'; WaitIdle   # first load: uncached, not asserted
+  $e2 = OpenClass $main 'TOtherXyz'; WaitIdle         # move off the block
   [ChildWatch]::Start($engineExe)
-  $e = OpenClass $main 'TNoSuchClassXyz'
+  $e = OpenClass $main 'TNoSuchClassXyz'              # the re-load under test
   # No StatusText inside the loop: WM_GETTEXT blocks while the editor's UI thread
   # waits on the engine, which would stall the window poll for the whole call.
   $t0 = Get-Date; $seen = $false; $loaded = $false
@@ -315,8 +327,8 @@ try {
   }
   $kids = [ChildWatch]::Stop()
   $st = StatusText $main; if ($st -match 'Loaded TNoSuchClassXyz') { $loaded = $true }
-  Check 'wait.fast.no.window' ($loaded -and ($kids -ge 2) -and -not $seen) ("load ran: $loaded; engine children: $kids; window seen: $seen; $e $st")
-} finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
-[IO.Directory]::Delete($tmp, $true)
+  Check 'wait.reload.no.window' ($loaded -and ($kids -ge 1) -and -not $seen) ("load ran: $loaded; engine children: $kids; window seen: $seen; $e1 $e2 $e $st")
+  Check 'wait.reload.query.cached' ($kids -eq 1) ("engine children on the re-load: $kids (1 = proptree only)")
+} finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }[IO.Directory]::Delete($tmp, $true)
 "RESULT pass=$script:pass fail=$script:fail"
 if ($script:fail -gt 0) { exit 1 }

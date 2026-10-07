@@ -1,0 +1,18 @@
+{
+  "id": "selftest",
+  "title": "selftest",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "1.13.0-alpha",
+  "summary": "Umbrella self-test dispatcher (manifest-merge, glob, closure, dbselect, drift) used by the test battery, not a user verb",
+  "wikiPage": "Maintenance",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "selftest"
+    }
+  ],
+  "audience": "agent",
+  "notes": "internal: umbrella self-test dispatcher (manifest-merge / glob / closure / dbselect / drift / ...). 35 references under tests\\. Not a user verb.; seed: group guessed"
+}

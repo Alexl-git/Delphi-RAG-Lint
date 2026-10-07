@@ -271,7 +271,6 @@ type
     function ResolveDefaultFor(const AClass, AProp: TSymbol; const APropName: string;
       out AValue: string): Boolean;
     function ResolveTypeInScope(const AName: string; AScopeFileId: Int64): TSymbol;
-    function ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
     function ResolveInheritedType(const AClass: TSymbol; const APropName: string): string;
     function ResolveInheritedVisibility(const AClass: TSymbol; const APropName: string): string;
     function ResolveInheritedPropAccess(const AClass: TSymbol; const APropName: string): string;
@@ -302,6 +301,13 @@ type
     /// body is indexed); Id = 0 when no class of that qualified name
     /// exists.</returns>
     function ResolveClassByQName(const AQName: string): TSymbol;
+    /// <summary>A class and its resolved ancestors, most-derived first.</summary>
+    /// <param name="ARoot">A class-kind symbol of this resolver's store.</param>
+    /// <returns>ARoot, then every ancestor class the index resolves or the
+    /// scope rule bridges; memoized per class id.</returns>
+    /// <remarks>Public since 1.26.1 for TPropMemberCache.DescendsFrom.
+    /// ToPersistent stops the climb as for a property tree.</remarks>
+    function ClassChain(const ARoot: TSymbol): TArray<TSymbol>;
     /// <summary>The members of AClass, one level deep.</summary>
     /// <param name="AClass">A class-kind symbol of this resolver's store.</param>
     /// <param name="AMembers">Receives the property members (most-derived
@@ -640,6 +646,8 @@ end;
 //                 PROPERTY directive and carries no value; array properties
 //                 are not DFM-streamed, so walking up is harmless.
 function ClassifyDefaultClause(const ADeclText: string; out AValue: string): TDefaultClause;
+const
+  KW_PROPERTY = 'property';
 var
   LowText: string ;
   P, i, j: Integer;
@@ -649,6 +657,19 @@ begin
   AValue := '';
   LowText:= LowerCase(ADeclText);
   if ADeclText = '' then Exit(dcAbsent);
+  { 1.25.2: a property's indexed span starts at its ATTRIBUTES. Bde.DBTables
+    declares `[Default(False)]` on the line above `property CachedUpdates:
+    Boolean ... default False;`, and the search below took the attribute's
+    `Default(` for the directive -- 'CachedUpdates = (False)]' went into the
+    .dfm and Delphi's reader refused it. Clauses are read from the `property`
+    keyword on; an attribute is never a clause. }
+  P:= 1;
+  repeat
+    P:= PosEx(KW_PROPERTY, LowText, P);
+    if (P = 0) or IsWholeWordAt(LowText, P, Length(KW_PROPERTY)) then Break;
+    Inc(P, Length(KW_PROPERTY));
+  until False;
+  if P > 1 then Exit(ClassifyDefaultClause(Copy(ADeclText, P, MaxInt), AValue));
   if HasWholeWord(LowText, 'nodefault') then Exit(dcNoDefault);
 
   { A `stored` clause other than `stored True` DESTROYS the sparse-DFM premise,

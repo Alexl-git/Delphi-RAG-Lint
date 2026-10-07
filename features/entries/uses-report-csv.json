@@ -1,0 +1,21 @@
+{
+  "id": "uses-report-csv",
+  "title": "Uses Report (CSV)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.40.5-alpha",
+  "summary": "Exports the project's unit-dependency data as a CSV file",
+  "wikiPage": "Uses-Report-CSV",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Uses Report (CSV)..."
+    },
+    {
+      "type": "cli",
+      "verb": "uses-report"
+    }
+  ],
+  "audience": "both"
+}

@@ -603,10 +603,14 @@ end
 $hr = Book 'h.rules' "$Hdr`n#link Hue <- Shade`n#link Deep <- P1.P2.Leaf2`n#link Title <- P1.P2.P3.Leaf3`n#convert LibLazy.TPartF -> LibLazy.TPartT, LibLazy`n#link Hue <- Shade`n"
 $o = (& $Exe convert-reemit --from-block (P 'h.dfm') --rules $hr --from LibLazy.TLazySrc --to LibLazy.TLazyDst --db $db 2>$null) -join "`n"
 $hj = Json $o
-# Captured from the 14396852 engine (depth-6 trees) on this block and book.
-$golden = "object src1: TLazyDst`r`n  Hue = 7`r`n  Deep = 9`r`n  object part1: TPartT`r`n    Hue = 4`r`n  end`r`n  Title = 11`r`nend"
+# Captured from the 14396852 engine (depth-6 trees) on this block and book --
+# with ONE deliberate change, 1.25.1: that engine wrote 'Title = 11' AFTER the
+# nested part1 block, and the .dfm reader accepts no property after a nested
+# object (the binary conversion fails). Properties now come first; the values
+# and everything else are the old engine's, byte for byte.
+$golden = "object src1: TLazyDst`r`n  Hue = 7`r`n  Deep = 9`r`n  Title = 11`r`n  object part1: TPartT`r`n    Hue = 4`r`n  end`r`nend"
 $got = if ($hj) { ([string]$hj.dfm).TrimEnd() } else { '<no json>' }
-Check 'H1 convert-reemit output is byte-identical to the old engine''s' ($got -ceq $golden) ("got: " + ($got -replace "`r`n", '|'))
+Check 'H1 convert-reemit output equals the old engine''s, properties ahead of the nested part (1.25.1)' ($got -ceq $golden) ("got: " + ($got -replace "`r`n", '|'))
 
 # ---- R: the real BDE book --------------------------------------------------
 if ($RealBook) {

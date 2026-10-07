@@ -135,6 +135,18 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function RenderDryRun(const AEdits: TArray<TTextEdit>): string;
+    /// <summary>Why Apply would refuse part of an edit set, or '' when it
+    /// would apply every file's edits (1.25.1).</summary>
+    /// <param name="AEdits">The whole plan, every file's edits.</param>
+    /// <returns>'' or, for the first file whose edits Apply would refuse
+    /// whole, 'refused N edit(s) to &lt;file&gt; -- overlapping delete ranges
+    /// (an engine defect)'.</returns>
+    /// <remarks>The same overlap test Apply makes per file, without reading
+    /// or writing anything, so a caller can refuse a multi-file plan BEFORE
+    /// any file is written -- Apply works file by file and cannot undo a file
+    /// it already wrote. Stale-anchor edits are not considered: they are
+    /// skipped one by one by design. Pure.</remarks>
+    class function RefusalOf(const AEdits: TArray<TTextEdit>): string;
   end;
 
   /// <remarks>
@@ -181,6 +193,12 @@ type
     /// <param name="AInFile"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AResolvedUnit"><!-- drag-lint:auto type -->out string</param>
     /// <param name="AAlreadyUsed"><!-- drag-lint:auto type -->out Boolean</param>
+    /// <param name="APreferInterface">False (default): the section rule above.
+    /// True: target the INTERFACE uses -- appended after its last entry, or a
+    /// fresh 'uses X;' after the 'interface' keyword when it has none. convert-
+    /// apply passes True when the retyped field is declared in the interface
+    /// section, where an implementation-only uses would not compile (E2003). A
+    /// unit already used in EITHER section is still AAlreadyUsed.</param>
     /// <returns><!-- drag-lint:auto -->TArray&lt;TTextEdit&gt; -- Observed: nil; [Edit].</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
@@ -199,7 +217,7 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Build(const ANameStore, AUnitStore: ISymbolStore; const AName, AInFile: string;
-      out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>; overload;
+      out AResolvedUnit: string; out AAlreadyUsed: Boolean; APreferInterface: Boolean = False): TArray<TTextEdit>; overload;
   end;
 
   /// <remarks>
@@ -359,6 +377,47 @@ begin
   end;
 end;
 
+{ 1.25.1: TEST SEAM, inert unless the environment variable names it. With
+  DRAGLINT_TEST_FAIL_WRITE_AT=N, the N-th file write of one Apply call raises
+  EInOutError before a byte of it is written -- the only way a test can make a
+  write fail AFTER convert-apply's writability pre-check, which is what its
+  rollback exists for (run_convert_apply_atomic.ps1). }
+procedure FailWriteForTests(AWriteNo: Integer; const APath: string);
+const
+  TEST_FAIL_WRITE_AT = 'DRAGLINT_TEST_FAIL_WRITE_AT';
+begin
+  if GetEnvironmentVariable(TEST_FAIL_WRITE_AT) = IntToStr(AWriteNo) then
+    raise EInOutError.CreateFmt('%s=%d: simulated write failure on %s', [TEST_FAIL_WRITE_AT, AWriteNo, APath]);
+end;
+
+class function TTextEditApplier.RefusalOf(const AEdits: TArray<TTextEdit>): string;
+var
+  FileMap: TObjectDictionary<string, TList<TTextEdit>>;
+  Group  : TList<TTextEdit>;
+  Paths  : TArray<string>;
+begin
+  Result := '';
+  FileMap:= TObjectDictionary<string, TList<TTextEdit>>.Create([doOwnsValues]);
+  try
+    Paths:= nil;
+    for var E: TTextEdit in AEdits do
+    begin
+      if not FileMap.TryGetValue(E.FilePath, Group) then
+      begin
+        Group:= TList<TTextEdit>.Create;
+        FileMap.Add(E.FilePath, Group);
+        Paths:= Paths + [E.FilePath];
+      end;
+      Group.Add(E);
+    end;
+    for var P: string in Paths do
+      if DeletesOverlap(FileMap[P]) then
+        Exit(Format('refused %d edit(s) to %s -- overlapping delete ranges (an engine defect)', [FileMap[P].Count, P]));
+  finally
+    FileMap.Free;
+  end;
+end;
+
 class function TTextEditApplier.Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer;
 var
   Skipped: Integer;
@@ -409,9 +468,35 @@ begin
         function(const A, B: TTextEdit): Integer
         begin
           Result:= EditTopLine(B) - EditTopLine(A);
+          { 1.25.2: an `insert after L` and a delete ENDING at L share the key L
+            -- two ADJACENT re-emitted blocks: the second's insert after the
+            first's last line. The insert must go first: run after the delete,
+            its index L lands as many lines too low as were deleted, inside a
+            later block (DMREADINGS: tables spliced into their neighbours, a
+            .dfm Delphi refused). TList.Sort is not stable, so the order is
+            stated, never left to the sort. }
+          if Result = 0 then Result:= Ord(A.Kind <> tekInsertLines) - Ord(B.Kind <> tekInsertLines);
           if Result = 0 then Result:= B.Col - A.Col; // same line: larger column first (back-to-front)
         end);
-      Group.Sort(Cmp);
+      { 1.25.2: STABLE. Edits the comparer ties (two inserts at one line and
+        column) are applied in REVERSE planned order, so they land in the file
+        in planned order: each later insert at the same index goes above the
+        earlier one. TList.Sort alone left it to the sort. }
+      var Planned: TArray<TTextEdit>:= Group.ToArray;
+      var Order: TList<Integer>:= TList<Integer>.Create;
+      try
+        for var K: Integer:= 0 to High(Planned) do Order.Add(K);
+        Order.Sort(TComparer<Integer>.Construct(
+          function(const IA, IB: Integer): Integer
+          begin
+            Result:= Cmp.Compare(Planned[IA], Planned[IB]);
+            if Result = 0 then Result:= IB - IA;
+          end));
+        Group.Clear;
+        for var K: Integer in Order do Group.Add(Planned[K]);
+      finally
+        Order.Free;
+      end;
 
       Lines:= TStringList.Create;
       try
@@ -526,6 +611,7 @@ begin
             if I < Lines.Count - 1 then SB.Append(#13#10);
           end;
           if (Length(Content) > 0) and (Content[Length(Content)] = #10) then SB.Append(#13#10);
+          FailWriteForTests(Touched + 1, Pair.Key);
           TFile.WriteAllBytes(Pair.Key, TEncoding.ANSI.GetBytes(SB.ToString));
         finally
           SB.Free;
@@ -571,7 +657,8 @@ begin
 end;
 
 class function TFindUnitRefactoring.Build(const ANameStore, AUnitStore: ISymbolStore;
-  const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean): TArray<TTextEdit>;
+  const AName, AInFile: string; out AResolvedUnit: string; out AAlreadyUsed: Boolean;
+  APreferInterface: Boolean): TArray<TTextEdit>;
 var
   Syms : TArray<TSymbol>;
   S    : TSymbol;
@@ -638,7 +725,9 @@ begin
       if U.Section = uusImplementation then HasImpl:= True;
       if U.Section = uusInterface then HasIntf:= True;
     end;
-    if HasImpl then TargetSection:= uusImplementation
+    { C13 a: a caller retyping an INTERFACE declaration needs the unit there }
+    if APreferInterface then TargetSection:= uusInterface
+    else if HasImpl then TargetSection:= uusImplementation
     else if HasIntf then TargetSection:= uusInterface
     else TargetSection:= uusImplementation; { fresh block goes to implementation }
 

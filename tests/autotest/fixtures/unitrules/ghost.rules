@@ -1,0 +1,3 @@
+#unuse GhostLib
+#convert TGhostBtn -> TDstBtn
+#link Caption <- Caption

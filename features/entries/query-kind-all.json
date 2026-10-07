@@ -1,0 +1,18 @@
+{
+  "id": "query-kind-all",
+  "title": "query --kind --all",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap",
+  "wikiPage": "query-kind-all",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "example": "drag-lint query --kind <k> --all"
+    }
+  ],
+  "audience": "both"
+}

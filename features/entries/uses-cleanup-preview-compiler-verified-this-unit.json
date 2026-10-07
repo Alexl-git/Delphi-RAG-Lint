@@ -1,0 +1,22 @@
+{
+  "id": "uses-cleanup-preview-compiler-verified-this-unit",
+  "title": "Uses Cleanup Preview (compiler-verified, this unit)",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.43.0-alpha",
+  "summary": "The removals a Uses Audit suggests, but verified by actually compiling",
+  "wikiPage": "Uses-Cleanup-Preview-compiler-verified-this-unit",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)..."
+    },
+    {
+      "type": "cli",
+      "verb": "uses-fix"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

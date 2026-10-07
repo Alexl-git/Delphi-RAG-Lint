@@ -1,0 +1,21 @@
+{
+  "id": "scan-todos-fixmes",
+  "title": "Scan TODOs / FIXMEs",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.12.0-alpha",
+  "summary": "Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers",
+  "wikiPage": "Scan-TODOs-FIXMEs",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Scan TODOs / FIXMEs..."
+    },
+    {
+      "type": "cli",
+      "verb": "todos"
+    }
+  ],
+  "audience": "both"
+}

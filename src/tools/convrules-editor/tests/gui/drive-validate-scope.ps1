@@ -169,7 +169,19 @@ public static class W {
     }
     return false;
   }
-  public static string MenuCaptions(IntPtr main) {
+  /* "Top|Item" -> True when the item is enabled (neither MF_GRAYED nor MF_DISABLED);
+     False when it is disabled or not found. */
+  public static bool MenuEnabled(IntPtr main, string path) {
+    var parts = path.Split('|'); IntPtr m = MenuOf(main);
+    for (int p = 0; p < parts.Length; p++) {
+      int n = GetMenuItemCount(m), hit = -1;
+      for (int i = 0; i < n; i++) if (Clean(m, i) == parts[p]) { hit = i; break; }
+      if (hit < 0) return false;
+      if (p == parts.Length - 1) return (GetMenuState(m, (uint)hit, 0x400) & 0x3) == 0;
+      m = GetSubMenu(m, hit);
+    }
+    return false;
+  }  public static string MenuCaptions(IntPtr main) {
     var sb = new StringBuilder(); IntPtr bar = MenuOf(main);
     for (int t = 0; t < GetMenuItemCount(bar); t++) {
       IntPtr sub = GetSubMenu(bar, t);
@@ -235,6 +247,8 @@ try {
   $main = WaitCls $p.Id 'TConvRulesForm' 60
   Check 'main.window' ($main -ne [IntPtr]::Zero)
   Start-Sleep -Seconds 2
+  # No rule is loaded yet: Auto-Match has nothing to match (job C6).
+  Check 'automatch.disabled.no.rule' (-not [W]::MenuEnabled($main, 'Mapping|Auto-Match'))
   # New Conversion TTable -> TFDTable into the open book: a NEW block, so the save
   # below has exactly one changed block. New Conversion auto-matches the links.
   $pick = @(Find $main 'TButton' 'Pick...')[0]
@@ -247,6 +261,7 @@ try {
   Check 'newconv.where.yes' (($m1 -ne [IntPtr]::Zero) -and (ClickIn $m1 '&Yes')) (TopsNow $p.Id)
   $s = WaitStatus $main 'set and auto-matched|cancelled|not indexed' $SLOW_SEC
   Check 'newconv.done' ($s -match 'set and auto-matched') $s
+  Check 'automatch.enabled.with.rule' ([W]::MenuEnabled($main, 'Mapping|Auto-Match'))
 
   # Save 1, CANCELLED: the pair pass of the one changed block is slow (10-40 s), so
   # the progress window appears; Cancel stops it. The book is on disk regardless.
