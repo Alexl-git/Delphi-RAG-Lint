@@ -358,7 +358,9 @@ begin
     DP.EmitUsageRefs:= True;  { a project index is deep: usage refs included }
     Parser:= DP;
   end;
-  Result:= Parser.Parse(TEncoding.ANSI.GetBytes(AText), APath);
+  { the parsers take UTF-8 (the indexer transcodes with EnsureUtf8Bytes first):
+    ANSI bytes of a CP1252 '(c)' raised EEncodingError on real data (JobLayout) }
+  Result:= Parser.Parse(TEncoding.UTF8.GetBytes(AText), APath);
 end;
 
 { ---- the reconciler ----------------------------------------------------------- }

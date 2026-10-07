@@ -300,6 +300,15 @@ function Obj([string]$N, [string]$T, [string]$Kw = 'object') { return "  $Kw ${N
 function Bare([string]$N, [string]$T, [string]$Kw = 'object') { return "  $Kw ${N}: $T`n  end" }
 
 Form 'W1Form' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+# ENC: a CP1252 byte (0xA9, a copyright sign) in a comment -- valid ANSI, invalid
+# UTF-8. Real data (ORM3 JobLayout) had one; the in-memory re-index must
+# transcode it, not degrade. Written as raw bytes so this script stays ASCII.
+Form 'EncForm' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+$encBytes = [Text.Encoding]::ASCII.GetBytes((Text 'EncForm.pas').Replace('implementation', "implementation`r`n`r`n{ COPYRIGHT_MARK 2026 }"))
+$encList = [Collections.Generic.List[byte]]::new($encBytes)
+$at = [Text.Encoding]::ASCII.GetString($encBytes).IndexOf('COPYRIGHT_MARK')
+$encList.RemoveRange($at, 'COPYRIGHT_MARK'.Length); $encList.Insert($at, [byte]0xA9)
+[IO.File]::WriteAllBytes((P 'EncForm.pas'), $encList.ToArray())
 Form 'W2Form' 'Classes, LibOld' @('Old1: TOld;') 'SysUtils' @('procedure Run;', 'procedure Run2;') @'
 procedure TW2Form.Run2;
 begin
@@ -353,7 +362,7 @@ end;
 W 'P.dpr' (@('program P;', '', 'uses',
   '  LibOld, LibNew, Scope.LibAl, Fx.DB, LibTieA, LibTieB, LibPicOld, LibPicNew, LibEnum, LibCast, LibAmbA, LibAmbB,',
   '  W1Form, W2Form, W3Form, W4Form, W5Form, W6Form, W6bForm, W7Form, W8Form, U1Form, D1Form, D2Form, O1Form,',
-  '  TieForm, BaseForm, DescForm, CastForm, CastEForm, AmbForm, AmbUForm;', '', 'begin', 'end.') -join "`n")
+  '  TieForm, BaseForm, DescForm, CastForm, CastEForm, AmbForm, AmbUForm, EncForm;', '', 'begin', 'end.') -join "`n")
 
 # ---- books ------------------------------------------------------------------
 W 'old.rules'   "#convert TOld -> TNew`n#link Caption <- Caption`n#unuse LibOld`n"
@@ -409,6 +418,10 @@ Check 'W1 every TOld converts: LibOld REMOVED (remove row, source rule)' `
   (($r.Code -eq 0) -and ($rm.Count -eq 1) -and ($rm[0].unit -eq 'LibOld') -and ($rm[0].source -eq 'rule') -and ($r.J.uses_reconcile -eq 'on')) $r.Out
 Check 'W1 ... apply/1 carries uses_kept / uses_moved / uses_unresolved, always' `
   (($null -ne $r.J) -and ($r.J.uses_kept -eq 0) -and ($r.J.uses_moved -eq 0) -and ($null -ne $r.J.uses_unresolved) -and (@($r.J.uses_unresolved).Count -eq 0)) $r.Out
+
+$r = J 'EncForm.pas' 'old.rules'
+Check 'ENC a CP1252 byte in the unit: re-index stays on (not degraded), LibOld removed' `
+  (($r.Code -eq 0) -and ($r.J.uses_reconcile -eq 'on') -and ((Rows $r 'remove').Count -eq 1)) $r.Out
 
 $r = J 'W2Form.pas' 'old.rules'
 $rm = Rows $r 'remove'
