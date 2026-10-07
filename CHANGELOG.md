@@ -25,6 +25,16 @@ loaded, exit 0, and the converted forms behaved differently.
   block plus the file-scope rules before the first `#convert`; `#convert`,
   `#mapping` and `#note` lines stay book-wide. On DMTEST the TTable block's own
   `#link Exclusive` and `#link UpdateOptions.ReadOnly` now also fire (67 each).
+- **The `.pas` access-site rewrite is scoped the same way.** Every block's
+  renaming `#link` rewrote every converted instance's sites: on DMTEST each of 79
+  `DatabaseName` sites was planned 4 times (316 rewrites; the 1.25.1 dedup kept
+  the output right), and **two blocks linking one path to different targets
+  wrote both into the same line**, which does not compile. A site on instance X
+  now takes only the `#link`s of X's block plus the file-scope ones: 79
+  rewrites, byte-identical `.pas` output on DMTEST.
+- **`convert-validate` says when it only parsed.** Without both `--from` and
+  `--to` no path is checked, yet it printed a bare `OK`; a `NOTE:` line on stderr
+  now says the book was parsed only (stdout unchanged).
 - **A target's redeclared default wins over the shared ancestor's.** A resolved
   default is the source's declared default; TFDAutoIncField redeclares
   `AutoGenerateValue default arAutoInc`, `ProviderFlags default [pfInWhere]` and
@@ -54,7 +64,16 @@ loaded, exit 0, and the converted forms behaved differently.
 
 Guard: `run_convert_apply_semantics.ps1` (one fixture per defect, own-block
 `#ignore` positive control, a redeclared-default fixture with source-redeclared
-and shared-declaration controls, the written `.dfm` through `DfmLoadCheck`).
+and shared-declaration controls, two blocks renaming one path differently, the
+written `.dfm` through `DfmLoadCheck`, the written `.pas` through dcc64).
+
+### Known limitations
+
+- Resolved defaults are still written even when equal to the target's own
+  default (D3, deliberate): on DMTEST 987 of 1,260 are such no-ops. Owner
+  question, not changed here.
+- Paradox table names (`TableName = 'Machines.DB'`) carry verbatim if a book
+  links `TableName`; whether FireDAC wants them stripped is a book question.
 
 ## v1.26.0-alpha -- unreleased
 

@@ -171,18 +171,22 @@ uses
 type
   TDstConn = class(TComponent)
   private
-    FHost: string;
+    FHost  : string;
+    FLocked: Boolean;
   published
     property Host: string read FHost write FHost;
+    property Locked: Boolean read FLocked write FLocked default False;
   end;
 
   TDstTbl = class(TComponent)
   private
-    FOpts: TOpts;
-    FNote: string;
+    FOpts  : TOpts;
+    FNote  : string;
+    FFrozen: Boolean;
   published
     property UpdateOptions: TOpts read FOpts write FOpts;
     property Note: string read FNote write FNote;
+    property Frozen: Boolean read FFrozen write FFrozen default False;
   end;
 
   TDstAuto = class(TBaseFld)
@@ -320,6 +324,56 @@ Write-Ascii (P 'sem.rules') @'
 #link Params.Items.Value <- Params.Items.Value
 '@
 
+# F5 (.pas access sites): two blocks link the SAME source path (ReadOnly) to
+# DIFFERENT targets; each instance's code must get its own block's target.
+Write-Ascii (P 'SiteDM.pas') @'
+unit SiteDM;
+
+interface
+
+uses
+  System.Classes, LibS;
+
+type
+  TSiteDM = class(TDataModule)
+    db: TSrcDb;
+    tbl: TSrcTbl;
+  public
+    procedure Lock;
+  end;
+
+implementation
+
+{$R *.dfm}
+
+procedure TSiteDM.Lock;
+begin
+  db.ReadOnly := True;
+  tbl.ReadOnly := True;
+end;
+
+end.
+'@
+Write-Ascii (P 'SiteDM.dfm') @'
+object SiteDM: TSiteDM
+  object db: TSrcDb
+    Host = 'h'
+  end
+  object tbl: TSrcTbl
+    Note = 'n'
+  end
+end
+'@
+Write-Ascii (P 'sites.rules') @'
+#convert LibS.TSrcDb -> LibT.TDstConn, LibT
+#link Host <- Host
+#link Locked <- ReadOnly
+
+#convert LibS.TSrcTbl -> LibT.TDstTbl, LibT
+#link Frozen <- ReadOnly
+#ignore Note
+'@
+
 $db = P 'fx.sqlite'
 $idx = & $Exe index $WorkDir --db $db 2>&1
 Check 'V the fixture index was built' (($LASTEXITCODE -eq 0) -and (Test-Path $db)) "exit=$LASTEXITCODE; $($idx -join ' | ')"
@@ -375,8 +429,38 @@ Check 'F4d ... and is REPORTED item by item (item 2 CODE: Size = 4)' `
 Check 'F4e ParamData is no longer reported unlinked' `
   (-not (@($j.unlinked | Where-Object { "$_" -match 'ParamData' }).Count)) (($j.unlinked | ConvertTo-Json -Compress -Depth 4))
 
+# ---- F5: .pas access sites use their own block's #link -----------------------
+$o = (& $Exe convert-apply --unit (P 'SiteDM.pas') --rules (P 'sites.rules') --db $db --format json 2>&1) -join "`n"
+$js = $null; try { $js = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+$sites = @($js.items | Where-Object { $_.kind -eq 'access-site-rewritten' })
+Check 'F5a exactly ONE access-site rewrite per site: db and tbl one each (2 in all)' `
+  (($sites.Count -eq 2) -and (@($sites | Where-Object instance -eq 'db').Count -eq 1) -and (@($sites | Where-Object instance -eq 'tbl').Count -eq 1)) (($sites | ForEach-Object text) -join ' | ')
+$r = (& $Exe convert-apply --unit (P 'SiteDM.pas') --rules (P 'sites.rules') --db $db --apply --no-backup 2>&1) -join "`n"
+$ps = [IO.File]::ReadAllText((P 'SiteDM.pas'))
+Check 'F5b each instance gets its OWN block''s target: db.Locked, tbl.Frozen' `
+  (($LASTEXITCODE -eq 0) -and ($ps -match 'db\.Locked := True;') -and ($ps -match 'tbl\.Frozen := True;') -and -not ($ps -match 'ReadOnly')) ($r + "`n" + $ps)
+
+$RsVars = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
+$CRLF = "`r`n"
+[IO.File]::WriteAllText((P 'P.dpr'), (@('program P;', '', 'uses', '  LibS, LibT, SemDM, SiteDM;', '', 'begin', 'end.') -join $CRLF) + $CRLF, [Text.Encoding]::ASCII)
+New-Item -ItemType Directory (P 'bin'), (P 'dcu') -Force | Out-Null
+$bat = P 'compile.bat'; $log = P 'compile.log'
+[IO.File]::WriteAllText($bat, (@('@echo off', "call `"$RsVars`"", "cd /d `"$WorkDir`"",
+  "dcc64 -Q -B -NSSystem -E`"$WorkDir\bin`" -NU`"$WorkDir\dcu`" P.dpr", 'echo BUILD_EXITCODE=%ERRORLEVEL%') -join $CRLF), [Text.Encoding]::ASCII)
+Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait | Out-Null
+$cl = Get-Content $log -Raw -ErrorAction SilentlyContinue
+$errLines = @(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' })
+Check 'F5c the converted SemDM and SiteDM compile with dcc64 (private -E/-NU)' (($cl -match 'BUILD_EXITCODE=0') -and ($errLines.Count -eq 0)) ($errLines -join ' | ')
+
+# ---- convert-validate says when it only parsed -------------------------------
+$vo = & $Exe convert-validate --rules (P 'sites.rules') --db $db 2>&1 | Out-String
+Check 'V1 convert-validate with no --from/--to prints OK and a NOTE that it only parsed' `
+  (($vo -match '(?m)^OK\r?$') -and ($vo -match 'NOTE: --from and --to not both given -- the book was PARSED only')) $vo
+$vo = & $Exe convert-validate --rules (P 'sites.rules') --from LibS.TSrcDb --to LibT.TDstConn --db $db 2>&1 | Out-String
+Check 'V2 ... and no such NOTE when both are given' (-not ($vo -cmatch 'NOTE: --from and --to')) $vo
+
 # ---- load -------------------------------------------------------------------
-$fails = Test-DfmLoads @((P 'SemDM.dfm'))
+$fails = Test-DfmLoads @((P 'SemDM.dfm'), (P 'SiteDM.dfm'))
 Check 'L the converted .dfm LOADS (text -> binary -> text -> binary)' ($fails.Count -eq 0) ($fails -join ' | ')
 
 Write-Host ''

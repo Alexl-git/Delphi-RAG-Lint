@@ -547,6 +547,10 @@ Example superset block:
 must exist in the `--from` tree (unless it is the `???` stub). That is exactly what
 `convert-validate` checks.
 
+Without BOTH `--from` and `--to`, `convert-validate` only PARSES the book: no
+path is checked, it still prints `OK`, and (1.26.1) a `NOTE:` line on stderr
+says so. `convert-apply` validates every block against its own types.
+
 ### Rule scope (1.26.1)
 
 A `#convert` block owns the lines from its `#convert` up to the next one. When
@@ -558,6 +562,10 @@ object's block (the first `#convert` whose From type is the object's class):
   `#remove` list);
 - every `#convert`, `#mapping` and `#note` line of the book (a `#mapping` is
   named and `#apply`'d from any block; `#note owned:<Class>` marks a class).
+
+The `.pas` access-site rewrite follows the same scope: a site on instance X is
+rewritten only by the `#link`s of X's block (plus file-scope ones), so each
+site gets exactly one edit and two blocks may rename one path differently.
 
 So an `#ignore ReadOnly` in the TDatabase block no longer suppresses the TTable
 block's `#link UpdateOptions.ReadOnly <- ReadOnly`, and two blocks may link the

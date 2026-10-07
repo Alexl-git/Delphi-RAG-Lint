@@ -967,7 +967,8 @@ begin
     '--progress-interval S: see PROGRESS below)');
   Writeln('  drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...]   (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book''s #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error, and so is a From-only header (''#convert TFoo -> '' or ''#convert TFoo'': ''#convert TFoo has no To type''; ''#useswap X -> '': ''#useswap X has no replacement unit''); ' +
     'and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; ' +
-    'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); no JSON mode)');
+    'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); ' +
+    'without BOTH --from and --to the book is only PARSED -- no path is checked -- and a ''NOTE:'' line on stderr says so; no JSON mode)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, ' +
     'expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)');
   Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (whole seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- ' +
@@ -23907,6 +23908,11 @@ begin
   for E in ConversionRuleWarnings(RuleSet) do
     Writeln(Format('line %d: warning: %s', [E.LineNo, E.Message]));
 
+  { 1.26.1: without both types the paths were never checked -- say so (on
+    stderr, so the stdout contract 'OK' is unchanged), or a bare run reads as
+    a validated book. }
+  if (AArgs.CallFrom = '') or (AArgs.RenameTo = '') then
+    Writeln(ErrOutput, 'NOTE: --from and --to not both given -- the book was PARSED only; #link/#default paths were not checked (convert-apply validates every block)');
   if Length(Errors) > 0 then Exit(1);
   if not AArgs.PrintParsed then Writeln('OK');
   Result:= 0;
