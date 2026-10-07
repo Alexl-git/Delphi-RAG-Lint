@@ -2831,7 +2831,7 @@ begin
   B:= SplitRulesBlocks(Text);
 
   Check('select.bde.blocks', Length(B) = 12, IntToStr(Length(B)));
-  Check('select.bde.trailer.start', (B[11].StartLine = 651) and (B[10].EndLine = 650), Format('trailer starts %d, TBatchMove ends %d', [B[11].StartLine, B[10].EndLine]));
+  Check('select.bde.trailer.start', (B[11].StartLine = 654) and (B[10].EndLine = 653), Format('trailer starts %d, TBatchMove ends %d', [B[11].StartLine, B[10].EndLine]));
 
   { Nothing selected: 155 preamble + 76 trailer. }
   Check('select.bde.none.lines', Length(SplitRawLines(JoinBlocks(SelectForCompose(B, [])))) = 231, IntToStr(Length(SplitRawLines(JoinBlocks(SelectForCompose(B, []))))));
@@ -6927,39 +6927,126 @@ begin
   Result:= Copy(Rest, 1, Stop - 1);
 end;
 
+{ Every NEAR-MISS property the book silences, as 'Block:Prop' entries joined by ', '
+  ('' = none); ANear receives the number of NEAR-MISS notes seen.
+
+  Silencing has three forms: an #ignore in the SAME #convert block as the note; a
+  file-scope #ignore (before the first #convert) naming it; and a bare file-scope
+  '#remove <P>' whose root names it -- #remove takes a bare name and strips it from
+  EVERY component. '#remove DFM: <P>' drops only the persisted .dfm value and keeps
+  the property, so it is not silencing. The two file-scope forms are matched against
+  the NEAR-MISS properties of EVERY block. }
+function NearMissSilenced(const AText: string; out ANear: Integer): string;
+var
+  Book     : TRuleBook  ;
+  n        : TRuleNode  ;
+  NearProps: TStringList;
+  AllNear  : TStringList;
+  Ignored  : TStringList;
+  FileScope: TStringList;
+  Silenced : TStringList;
+  Prop     : string     ;
+  Block    : string     ;
+  S        : string     ;
+  Dot      : Integer    ;
+  InBlock  : Boolean    ;
+
+  procedure CloseBlock;
+  var
+    Q: string;
+  begin
+    for Q in NearProps do
+      if Ignored.IndexOf(Q) >= 0 then
+        Silenced.Add(Block + ':' + Q);
+    NearProps.Clear;
+    Ignored.Clear;
+  end;
+
+begin
+  ANear  := 0;
+  Block  := '(file scope)';
+  InBlock:= False;
+  Book     := TRuleBook.Create;
+  NearProps:= TStringList.Create;
+  AllNear  := TStringList.Create;
+  Ignored  := TStringList.Create;
+  FileScope:= TStringList.Create;
+  Silenced := TStringList.Create;
+  try
+    NearProps.CaseSensitive:= False;
+    AllNear.CaseSensitive  := False;
+    Ignored.CaseSensitive  := False;
+    FileScope.CaseSensitive:= False;
+    Book.LoadFromString(AText);
+    for n in Book.Nodes do
+      case n.Kind of
+        rnkConvert:
+          begin
+            CloseBlock;
+            Block  := Trim(n.FromType);
+            InBlock:= True;
+          end;
+        rnkNote:
+          begin
+            Prop:= NearMissProp(n.NoteText);
+            if Prop <> '' then
+            begin
+              Inc(ANear);
+              NearProps.Add(Prop);
+              AllNear.Add(Prop);
+            end;
+          end;
+        rnkIgnore:
+          if InBlock then
+            Ignored.Add(Trim(n.IgnorePath))
+          else
+            FileScope.Add('#ignore ' + Trim(n.IgnorePath));
+        rnkRemove:
+          if not n.RemoveDfmOnly then
+          begin
+            Prop:= Trim(n.RemoveProp);
+            Dot := Pos('.', Prop);
+            if Dot > 0 then
+              Prop:= Copy(Prop, 1, Dot - 1);
+            if Prop <> '' then
+              FileScope.Add('#remove ' + Prop);
+          end;
+      end; // case
+    CloseBlock;
+    for S in FileScope do
+      if AllNear.IndexOf(Copy(S, Pos(' ', S) + 1, MaxInt)) >= 0 then
+        Silenced.Add('(file scope ' + S + ')');
+    Result:= string.Join(', ', Silenced.ToStringArray);
+  finally
+    Silenced.Free;
+    FileScope.Free;
+    Ignored.Free;
+    AllNear.Free;
+    NearProps.Free;
+    Book.Free;
+  end; // try
+end;
+
 { The NEAR-MISS-as-#ignore guard for the conversion library.
 
   A '#note - NEAR-MISS: <P>' says the TARGET still has <P> and the property is an
   unresolved MAPPING. Commit 0d16ffef nonetheless also emitted '#ignore <P>' for every
   one of them, and #ignore is exactly what silences the engine's unlinked-property
   warning -- so 'TableName' was dropped from every converted TFDTable without a word.
-  Invariant: inside one #convert block, no property named by a NEAR-MISS note is also
-  #ignore'd. It must be either #link'd or left bare so the engine reports it. The
-  positive control (at least one NEAR-MISS note found) keeps the check from passing
-  vacuously if the notes are ever renamed. }
+  Invariant: no NEAR-MISS property is silenced -- not by an #ignore in its block, not
+  by a file-scope #ignore, not by a bare file-scope #remove (NearMissSilenced). It must
+  be either #link'd or left bare so the engine reports it. The positive control pins
+  the NEAR-MISS note count, and two in-memory variants of the book (a preamble
+  '#remove TableName', a file-scope '#ignore TableName') must each be caught. }
 procedure TestConversionLibraryNearMissNotIgnored;
+const
+  NEAR_MISS_NOTES = 13;
+  PREAMBLE_ANCHOR = '#remove PrivateDir' + sLineBreak;
 var
-  P        : string     ;
-  Book     : TRuleBook  ;
-  n        : TRuleNode  ;
-  NearProps: TStringList;
-  Ignored  : TStringList;
-  Silenced : TStringList;
-  Prop     : string     ;
-  Block    : string     ;
-  NNear    : Integer    ;
-
-  procedure CloseBlock;
-  var
-    S: string;
-  begin
-    for S in NearProps do
-      if Ignored.IndexOf(S) >= 0 then
-        Silenced.Add(Block + ':' + S);
-    NearProps.Clear;
-    Ignored.Clear;
-  end;
-
+  P     : string ;
+  Txt   : string ;
+  Got   : string ;
+  NNear : Integer;
 begin
   P:= ConvRulesCorpusPath('BDE-to-FireDAC.rules');
   if not TFile.Exists(P) then
@@ -6968,46 +7055,18 @@ begin
     Exit;
   end;
 
-  NNear:= 0;
-  Block:= '(file scope)';
-  Book     := TRuleBook.Create;
-  NearProps:= TStringList.Create;
-  Ignored  := TStringList.Create;
-  Silenced := TStringList.Create;
-  try
-    NearProps.CaseSensitive:= False;
-    Ignored.CaseSensitive  := False;
-    Book.LoadFromString(TFile.ReadAllText(P, TEncoding.ASCII));
-    for n in Book.Nodes do
-      case n.Kind of
-        rnkConvert:
-          begin
-            CloseBlock;
-            Block:= Trim(n.FromType);
-          end;
-        rnkNote:
-          begin
-            Prop:= NearMissProp(n.NoteText);
-            if Prop <> '' then
-            begin
-              Inc(NNear);
-              NearProps.Add(Prop);
-            end;
-          end;
-        rnkIgnore:
-          Ignored.Add(Trim(n.IgnorePath));
-      end; // case
-    CloseBlock;
-    Check('convlib.bde2fd.near.miss.found', NNear > 0, Format('%d NEAR-MISS note(s) found -- the guard below would be vacuous', [NNear]));
-    Check(
-      'convlib.bde2fd.near.miss.not.ignored', Silenced.Count = 0,
-      Format('%d NEAR-MISS propert(ies) also #ignore''d (silenced): %s', [Silenced.Count, string.Join(', ', Silenced.ToStringArray)]));
-  finally
-    Silenced.Free;
-    Ignored.Free;
-    NearProps.Free;
-    Book.Free;
-  end; // try
+  Txt:= TFile.ReadAllText(P, TEncoding.ASCII);
+  Got:= NearMissSilenced(Txt, NNear);
+  Check(
+    'convlib.bde2fd.near.miss.found', NNear = NEAR_MISS_NOTES,
+    Format('%d NEAR-MISS note(s), want %d -- a changed count must be a deliberate edit of NEAR_MISS_NOTES', [NNear, NEAR_MISS_NOTES]));
+  Check('convlib.bde2fd.near.miss.not.ignored', Got = '', 'NEAR-MISS propert(ies) silenced: ' + Got);
+
+  Check('convlib.bde2fd.near.miss.anchor', Pos(PREAMBLE_ANCHOR, Txt) > 0, 'the preamble anchor line is gone: ' + Trim(PREAMBLE_ANCHOR));
+  Got:= NearMissSilenced(StringReplace(Txt, PREAMBLE_ANCHOR, PREAMBLE_ANCHOR + '#remove TableName' + sLineBreak, []), NNear);
+  Check('convlib.bde2fd.near.miss.catches.file.remove', Pos('(file scope #remove TableName)', Got) > 0, 'a preamble #remove TableName was not caught: ' + Got);
+  Got:= NearMissSilenced(StringReplace(Txt, PREAMBLE_ANCHOR, PREAMBLE_ANCHOR + '#ignore TableName' + sLineBreak, []), NNear);
+  Check('convlib.bde2fd.near.miss.catches.file.ignore', Pos('(file scope #ignore TableName)', Got) > 0, 'a file-scope #ignore TableName was not caught: ' + Got);
 end; // procedure
 
 function HarvestNames(const AUnits: TArray<THarvestedUnit>): string;

@@ -296,16 +296,20 @@
 #link FieldDefList.FieldDefs.Name <- FieldDefList.FieldDefs.Name
 #link Name <- Name
 #link Tag <- Tag
+#note hand-linked -- NEAR-MISS properties resolved 2026-10-06; review like any link.
+#link TableName <- TableName
+#link UpdateObject <- UpdateObject
+#note UpdateObject: the TUpdateSQL it names must be converted in the SAME run, or the form fails to load on a type mismatch.
 #note unmapped -- each line below is a decision, not an omission:
 #note - 6 also #remove'd file-wide (unmapped everywhere, read by no #link).
 #note - 1 already decided by the corpus's own file-scope #remove -- NOT
 #note - counted as work, and deliberately not #remove'd a second time.
-#note - NEAR-MISS: TableName (TFileName) -> TableName (String): LINKED BY HAND below.
+#note - NEAR-MISS: TableName (TFileName) -> TableName (String): LINKED BY HAND above.
 #note - TFileName is a string alias; Auto-Match declined only because the two type
 #note - names do not bridge. Ignoring it dropped TableName from every converted
 #note - TFDTable, which then cannot open.
 #note - NEAR-MISS: UpdateObject (TDataSetUpdateObject) -> UpdateObject (TFDCustomUpdateObject):
-#note - LINKED BY HAND below. The value is a component reference; the TUpdateSQL it
+#note - LINKED BY HAND above. The value is a component reference; the TUpdateSQL it
 #note - names is converted to TFDUpdateSQL by this same book, so it stays valid.
 #note - NEAR-MISS: OnUpdateError (TUpdateErrorEvent) -> OnUpdateError (TFDUpdateErrorEvent):
 #note - LEFT UNLINKED, and deliberately NOT #ignore'd and NOT #remove'd. The event
@@ -314,9 +318,6 @@
 #note - NEAR-MISS: OnUpdateRecord (TUpdateRecordEvent) -> OnUpdateRecord (TFDUpdateRecordEvent):
 #note - LEFT UNLINKED, and deliberately NOT #ignore'd and NOT #remove'd -- same
 #note - reason as OnUpdateError above.
-#note hand-linked -- NEAR-MISS properties resolved 2026-10-06; review like any link.
-#link TableName <- TableName
-#link UpdateObject <- UpdateObject
 #note - CONFLICT: FieldDefs is unmapped here but #link'd in TQuery, TStoredProc -- NO #remove
 #note - emitted (it is file-scoped and would strip it there too). Decide by hand.
 #note - CONFLICT: IndexDefs is unmapped as a whole, but IndexDefs.* sub-properties ARE
@@ -410,12 +411,15 @@
 #link FieldDefList.FieldDefs.Name <- FieldDefList.FieldDefs.Name
 #link Name <- Name
 #link Tag <- Tag
+#note hand-linked -- NEAR-MISS property resolved 2026-10-06; review like any link.
+#link UpdateObject <- UpdateObject
+#note UpdateObject: the TUpdateSQL it names must be converted in the SAME run, or the form fails to load on a type mismatch.
 #note unmapped -- each line below is a decision, not an omission:
 #note - 3 also #remove'd file-wide (unmapped everywhere, read by no #link).
 #note - 1 already decided by the corpus's own file-scope #remove -- NOT
 #note - counted as work, and deliberately not #remove'd a second time.
 #note - NEAR-MISS: UpdateObject (TDataSetUpdateObject) -> UpdateObject (TFDCustomUpdateObject):
-#note - LINKED BY HAND below. The value is a component reference; the TUpdateSQL it
+#note - LINKED BY HAND above. The value is a component reference; the TUpdateSQL it
 #note - names is converted to TFDUpdateSQL by this same book, so it stays valid.
 #note - NEAR-MISS: OnUpdateError (TUpdateErrorEvent) -> OnUpdateError (TFDUpdateErrorEvent):
 #note - LEFT UNLINKED, and deliberately NOT #ignore'd and NOT #remove'd. The event
@@ -424,8 +428,6 @@
 #note - NEAR-MISS: OnUpdateRecord (TUpdateRecordEvent) -> OnUpdateRecord (TFDUpdateRecordEvent):
 #note - LEFT UNLINKED, and deliberately NOT #ignore'd and NOT #remove'd -- same
 #note - reason as OnUpdateError above.
-#note hand-linked -- NEAR-MISS property resolved 2026-10-06; review like any link.
-#link UpdateObject <- UpdateObject
 #note - CONFLICT: Params is unmapped here but #link'd in TStoredProc -- NO #remove
 #note - emitted (it is file-scoped and would strip it there too). Decide by hand.
 #ignore Constrained
@@ -519,16 +521,20 @@
 #link FieldDefList.FieldDefs.Name <- FieldDefList.FieldDefs.Name
 #link Name <- Name
 #link Tag <- Tag
+#note hand-linked -- NEAR-MISS properties resolved 2026-10-06; review like any link.
+#link ParamBindMode <- ParamBindMode
+#link UpdateObject <- UpdateObject
+#note UpdateObject: the TUpdateSQL it names must be converted in the SAME run, or the form fails to load on a type mismatch.
 #note unmapped -- each line below is a decision, not an omission:
 #note - 1 also #remove'd file-wide (unmapped everywhere, read by no #link).
 #note - 1 already decided by the corpus's own file-scope #remove -- NOT
 #note - counted as work, and deliberately not #remove'd a second time.
 #note - NEAR-MISS: ParamBindMode (TParamBindMode) -> ParamBindMode (TFDParamBindMode):
-#note - LINKED BY HAND below, no #mapping needed. Both enums are exactly
+#note - LINKED BY HAND above, no #mapping needed. Both enums are exactly
 #note - (pbByName, pbByNumber) -- Bde.DBTables.pas:1080 and FireDAC.Stan.Param.pas:123,
 #note - checked against library-Win64 2026-10-06 -- so every value maps 1:1 by name.
 #note - NEAR-MISS: UpdateObject (TDataSetUpdateObject) -> UpdateObject (TFDCustomUpdateObject):
-#note - LINKED BY HAND below. The value is a component reference; the TUpdateSQL it
+#note - LINKED BY HAND above. The value is a component reference; the TUpdateSQL it
 #note - names is converted to TFDUpdateSQL by this same book, so it stays valid.
 #note - NEAR-MISS: OnUpdateError (TUpdateErrorEvent) -> OnUpdateError (TFDUpdateErrorEvent):
 #note - LEFT UNLINKED, and deliberately NOT #ignore'd and NOT #remove'd. The event
@@ -537,9 +543,6 @@
 #note - NEAR-MISS: OnUpdateRecord (TUpdateRecordEvent) -> OnUpdateRecord (TFDUpdateRecordEvent):
 #note - LEFT UNLINKED, and deliberately NOT #ignore'd and NOT #remove'd -- same
 #note - reason as OnUpdateError above.
-#note hand-linked -- NEAR-MISS properties resolved 2026-10-06; review like any link.
-#link ParamBindMode <- ParamBindMode
-#link UpdateObject <- UpdateObject
 #note - CONFLICT: Params is unmapped here but #link'd in TQuery -- NO #remove
 #note - emitted (it is file-scoped and would strip it there too). Decide by hand.
 #ignore Params

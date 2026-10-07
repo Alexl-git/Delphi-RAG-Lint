@@ -61,7 +61,7 @@
     R2 convert-apply dry run of the WHOLE, UNEDITED book (every block
        validated) on the TQuery unit in < 60 s: exit 0, ok=true, qry1
        converted, no rule errors, exactly 16 unreachable warnings (lines
-       287-290, 389-392, 494-501); with those commented out (a scratch copy --
+       287-290, 390-393, 496-503); with those commented out (a scratch copy --
        the book itself is not edited), exit 0, ok=true, qry1 converted;
     R3 (with -OldDumpDir: the old engine's `proptree --depth 6|4|2
        --refs-as-leaves --no-write-back --json` dumps, one file per type,
@@ -664,7 +664,7 @@ end
     # FieldOptions and Constraints protected; TQuery republishes Constraints,
     # TTable/TStoredProc publish neither), so no .dfm can stream it. The editor's
     # Auto-Match filtered only the LEAF by visibility, which is how they got in.
-    $R8Rejected = @(287, 288, 289, 290, 389, 390, 391, 392, 494, 495, 496, 497, 498, 499, 500, 501)
+    $R8Rejected = @(287, 288, 289, 290, 390, 391, 392, 393, 496, 497, 498, 499, 500, 501, 502, 503)
     function R8Stripped([string[]]$Src, [int]$FirstLine) {
       $out = New-Object System.Collections.Generic.List[string]
       for ($k = 0; $k -lt $Src.Count; $k++) {
