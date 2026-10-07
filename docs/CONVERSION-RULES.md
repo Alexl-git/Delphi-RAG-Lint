@@ -501,7 +501,7 @@ is captured as a parse error (never raised).
 
 | Directive | Meaning |
 |---|---|
-| `#unuse <unit>` | remove a unit from the PAS `uses` clause |
+| `#unuse <unit>` | remove a unit from the PAS `uses` clause. **convert-apply 1.27.0 (C9):** a WATCH LIST entry -- kept while a component the converted `.dfm` still streams has a class declared in it (`kept` row + warning), removed when only `.pas` code needs it (dangling references named on the row), kept when no `--db` knows it; scope-alias aware (`#unuse DBTables` matches `Bde.DBTables`). `--no-reconcile-uses` = the unconditional 1.26 removal. |
 | `#remove <property>` | remove a property from PAS and DFM |
 | `#remove DFM: <property>` | remove a property from the DFM only |
 | `#migrate [<Class>:] [<obj>.] <old> -> <new> [, <unit> ...]` | replace `old` with `new`; optional class-scope / object-scope; optional uses-add(s) |

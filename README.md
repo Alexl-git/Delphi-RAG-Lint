@@ -554,7 +554,17 @@ Old and adds each New once into the section Old was in -- never a duplicate, a u
 both added and removed is kept, and an entry inside a `{$IF...}` region refuses the
 unit rather than guess. A unit with no `.dfm` (or nothing a `#convert` block
 matches) gets its unit rules alone; `info --json` advertises this as
-`capabilities.apply_unit_rules: true`. A book can also REPORT without writing
+`capabilities.apply_unit_rules: true`. **Uses reconciliation (1.27.0, default on;
+`--no-reconcile-uses` restores 1.26.6):** the converted `.pas`/`.dfm` are re-indexed in
+memory and `#unuse` becomes a WATCH LIST -- a unit is KEPT (a `kept` row + warning naming
+the components) while a component the converted `.dfm` still streams needs it, REMOVED
+when only `.pas` code needs it (the dangling references are named; the compile errors
+are the intended signal), and kept when no `--db` knows it; presence is scope-alias aware
+(`#unuse DBTables` matches `Bde.DBTables`, `#use DB` is satisfied by `Data.DB`); a name
+the conversion introduces (a cast template's routine or enum value) gets its unit added,
+and a name two units declare is reported (`uses_unresolved`), never picked. After
+`--apply` the unit's own project DB is refreshed (`index --project`, child process;
+`--no-reindex` skips it). `capabilities.uses_reconcile: true`. A book can also REPORT without writing
 anything (1.26.5): `#warn <FromPath> "<text>"` warns once per converted instance
 whose source `.dfm` streams the property (`<value>`, `<name>`, `{Prop}`
 placeholders), and `#check-ref <ToPath> <Class>.<Prop>[, ...]` warns when the

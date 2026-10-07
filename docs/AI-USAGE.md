@@ -301,7 +301,10 @@ published while `modifiers` says `public` for both.
 >   streaming or using a converted instance in `descendants[]`; `book_warn` and
 >   `check_ref` -- JSON `true` since 1.26.5: the book's `#warn` and `#check-ref`
 >   directives (items[] kinds `book-warning`, `ref-path-like`, `ref-dangling`,
->   `ref-not-checked`); `inherited_retype`
+>   `ref-not-checked`); `uses_reconcile` -- JSON `true` since 1.27.0: convert-apply
+>   reconciles uses (watch list kept by `.dfm` needs, introduced names added,
+>   ambiguity in `uses_unresolved[]`, `kept`/`moved` rows, `uses_reindex`;
+>   `--no-reconcile-uses`, `--no-reindex`); `inherited_retype`
 >   -- JSON `true` since 1.26.0: an inherited instance of a converted ancestor is
 >   retyped, and its fields followed in code, `inherited[].action`). Read-only. This is what the IDE
 >   Help>About box calls. Each `--db <index>` adds that index's freshness

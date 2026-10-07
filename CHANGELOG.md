@@ -3,6 +3,48 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.27.0-alpha -- unreleased
+
+No extractor or resolver change: indexes do not re-parse. (C9, CONV-4: uses
+reconciliation inside convert-apply. Spec
+`docs\superpowers\specs\2026-10-07-c9-uses-reconciliation-design.md` as superseded
+by its OWNER RULINGS 2026-10-06.)
+
+### Changed
+
+- **`convert-apply` RECONCILES the unit's uses clauses (default on).** The converted
+  `.pas` and `.dfm` are re-indexed IN MEMORY with the indexer's own extractor (no DB is
+  written, so the dry run shows exactly what `--apply` writes), and:
+  * `#unuse` / `#useswap Old` are a WATCH LIST. A watched unit is KEPT while a component
+    the converted `.dfm` still streams has a class declared in it -- an unconverted
+    instance, a second component type of that unit, an inherited instance the ancestor
+    has not converted. apply/1 `uses[]` row action `kept`, `needed_by` naming the
+    components, and a `line N: warning: <rule> kept <unit> -- still needed by .dfm
+    component(s) ...` (items[] `unit-rule-kept`). **R26's refusal is subsumed:** the rest
+    of the unit now converts. The `--only` `skipped` row (C13 N4) is unchanged.
+  * A need from `.pas` code ONLY (an exception class, a local `TTable`, a type-helper
+    member) no longer keeps anything (owner ruling 1): the unit is REMOVED, the remove
+    row's `needed_by` names the dangling references and `unit-rule-dangling` warns --
+    the compile errors are the intended signal.
+  * A watched unit no `--db` indexes is KEPT (`unit-rule-unverified`).
+  * Presence is scope-alias aware: `#unuse DBTables` removes `Bde.DBTables`, `#use DB`
+    is satisfied by `Data.DB` (no second, E2004 entry).
+  * A name the conversion INTRODUCES -- a cast template's routine or enum value -- gets
+    its declaring unit added (interface uses when referenced above `implementation`;
+    `source` `reconcile`). A name, or a #convert To type, that two units declare is
+    REPORTED in `uses_unresolved[]` with every candidate (`uses-unit-ambiguous`) and
+    never picked; a `#use` of one candidate resolves it on the next run.
+  * The C13 interface move is now a `uses[]` row, action `moved`.
+  * `uses[]` rows gain `source` (rule | reconcile | convert) and `needed_by[]`; new
+    top-level `uses_kept`, `uses_moved`, `uses_unresolved[]`, `uses_reconcile`
+    (on | off | degraded), `uses_reindex`. `info --json` capability `uses_reconcile`.
+  * `--no-reconcile-uses` restores 1.26.6 exactly (it is also every test's negative
+    control).
+- **`convert-apply --apply` re-indexes the unit's OWN project DB afterwards** -- the one
+  `--db` that indexes the unit, a project index holding one `.dproj`/`.dpr` -- with
+  `index --project <it> --db <it>` in a child process (apply/1 `uses_reindex`
+  {status, db, project, ms, reason}). Any other shape is `skipped` with a reason; no
+  other DB is ever written. `--no-reindex` skips it.
 ## v1.26.6-alpha -- unreleased
 
 No extractor or resolver change on top of 1.26.2: indexes do not re-parse. 
