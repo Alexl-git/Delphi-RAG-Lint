@@ -61,6 +61,7 @@ uses
   DRagLint.Convert.PropTree,
   DRagLint.Convert.PropCache,
   DRagLint.Convert.UnitRules,
+  DRagLint.Convert.UsesReconcile,
   DRagLint.Refactor.TextEdit;
 
 const
@@ -259,8 +260,17 @@ type
                                a file path, not a name (1.26.5). Path = ToPath. }
     aikRefDangling,          { a '#check-ref' value no listed Class.Prop of
                                any .dfm in the project index carries (1.26.5). }
-    aikRefNotChecked);       { '#check-ref' could not check: the project index
+    aikRefNotChecked,        { '#check-ref' could not check: the project index
                                holds no .dfm property facts. Once per run. }
+    aikUnitRuleKept,         { C9: a watched unit KEPT -- a .dfm component still
+                               needs it (owner ruling 2); a WARNING (Q5).
+                               RuleLine the book line, Line the uses entry's. }
+    aikUsesUnitAmbiguous,    { C9 R8/R8a: a name two or more units declare --
+                               none added; candidates in uses_unresolved[]. }
+    aikUnitRuleUnverified,   { C9 Q3: a watched unit no --db indexes -- kept. }
+    aikUnitRuleDangling);    { C9 ruling 1: a removal leaves .pas references
+                               dangling -- the unit will not compile until that
+                               code is converted. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -424,6 +434,13 @@ type
       (see DRagLint.Convert.UnitRules.TUsesChange). Empty when the book has no
       unit rules; the #convert blocks' own uses-add never appears here. }
     UsesChanges     : TArray<TUsesChange>;
+    { C9 (1.27.0): names the conversion introduced whose unit was not added
+      (ambiguous / not-found) -- apply/1 uses_unresolved[]. }
+    UsesUnresolved  : TArray<TUsesUnresolved>;
+    { C9: 'on', 'off' (--no-reconcile-uses) or 'degraded' (the re-index of
+      the converted output failed: every watched unit kept) -- apply/1
+      uses_reconcile. }
+    UsesReconcile   : string;
   end;
 
   /// <summary>The outcome of BuildApplyPlan: the full set of text edits to
@@ -469,6 +486,9 @@ type
   TApplyBook = record
     Rules      : TConversionRuleSet;
     Unreachable: TArray<TUnreachablePath>;
+    /// <summary>C9: reconcile the unit's uses clauses (default on in the CLI;
+    /// False reproduces 1.26.6 exactly).</summary>
+    Reconcile  : Boolean;
     /// <summary>Pairs a rule set with its unreachable records.</summary>
     /// <param name="ARules">The parsed, validated rules.</param>
     /// <param name="AUnreachable">ValidateConversionRulesPerBlock's records.</param>
@@ -567,6 +587,8 @@ type
     FCaches  : TArray<TPropMemberCache>; { index-aligned with FStores; nil until first used }
     FOptions : TPropTreeOptions;
     FRefFacts: TArray<TRefFacts>; { index-aligned with FStores; nil until first asked }
+    FUnitIndex: TUsesUnitIndex;   { C9; nil until first asked }
+    FDbPaths : TArray<string>;
     function Lookup(const ATypeName: string): TResolved;
     function GetClassesBuilt: Integer;
   public
@@ -608,6 +630,13 @@ type
     /// <summary>How many classes the member caches have resolved, summed over
     /// the stores (apply/1 classes_built).</summary>
     property ClassesBuilt: Integer read GetClassesBuilt;
+    /// <summary>The run's indexed unit set for the uses reconciliation (C9),
+    /// built on first use and shared by every unit of a batch.</summary>
+    /// <returns>The index, owned by this object.</returns>
+    function UnitIndex: TUsesUnitIndex;
+    /// <summary>The --db paths, index-aligned with Stores (C9: they name the
+    /// db of a uses_unresolved candidate). Set by the caller; may be empty.</summary>
+    property DbPaths: TArray<string> read FDbPaths write FDbPaths;
   end;
 
 
@@ -924,9 +953,16 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
 /// unit not changed'.</returns>
 /// <remarks>Reads the unit and the .dfm; writes nothing. The uses clauses are
 /// lexed from the unit's own bytes; the index is consulted only for R26's
-/// declaring unit. Pinned by run_convert_apply_unit_rules.ps1 (arm R).</remarks>
+/// declaring unit. Pinned by run_convert_apply_unit_rules.ps1 (arm R).
+/// AReconcile (C9, 1.27.0): the uses are RECONCILED instead -- the .dfm as it
+/// stands is re-indexed, a watched unit one of its components needs is KEPT
+/// (a 'kept' row and a warning, never the R26 refusal), one only .pas code
+/// needs is removed with its dangling references reported, an unknown one is
+/// kept (unit-rule-unverified); the --only 'skipped' row is unchanged.
+/// False is the 1.26.6 behaviour above, exactly. Pinned by
+/// run_convert_apply_uses_reconcile.ps1.</remarks>
 function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>; AReconcile: Boolean = False): TApplyResult;
 
 /// <summary>Scans a .dfm's component headers (top-level and nested) and
 /// returns the instances that should be converted: those whose class matches
@@ -1053,7 +1089,8 @@ const
     'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable',
     'inherited-instance-skipped', 'unit-rule-skipped', 'descendant-not-converted',
     'inherited-instance-retyped', 'access-site-unverified',
-    'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked');
+    'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked',
+    'unit-rule-kept', 'uses-unit-ambiguous', 'unit-rule-unverified', 'unit-rule-dangling');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1305,8 +1342,15 @@ var
 begin
   for C in FCaches do C.Free;
   for var F: TRefFacts in FRefFacts do F.Free;
+  FUnitIndex.Free;
   FResolved.Free;
   inherited Destroy;
+end;
+
+function TConvertTreeCache.UnitIndex: TUsesUnitIndex;
+begin
+  if FUnitIndex = nil then FUnitIndex:= TUsesUnitIndex.Create(FStores, FDbPaths);
+  Result:= FUnitIndex;
 end;
 
 constructor TRefFacts.Create;
@@ -3052,7 +3096,166 @@ begin
   Result:= nil;
   for var S: TUsesChange in ASkips do Result:= Result + [S.UnitName];
 end;
-// Prefixes every line of AReemittedBlock (EmitBlock's CRLF-joined, column-1
+
+{ C9: what ReconcileUnitUses hands back besides the plan. }
+type
+  TReconcileOutcome = record
+    Plan       : TUsesPlan;
+    UsePlanner : Boolean;                 { False: the caller keeps its own (Pending) uses edits }
+    Items      : TArray<TApplyItem>;      { warnings to Emit, in order }
+    Unresolved : TArray<TUsesUnresolved>;
+    Status     : string;                  { 'on' / 'degraded' }
+  end;
+
+// C9: a uses[] row's NeededBy names, joined for a warning line ('A, B (+N more)'
+// is not needed: NeededBy is capped at NEEDED_BY_MAX by the reconciler).
+function NeedNames(const ANeeds: TArray<TUsesNeed>): string;
+begin
+  Result:= '';
+  for var N: TUsesNeed in ANeeds do
+    Result:= Result + (if Result = '' then '' else ', ') + N.Name;
+end;
+
+// C9: the instance name of a 'Name: Class' needed_by entry.
+function NeedInstance(const ANeed: TUsesNeed): string;
+begin
+  Result:= ANeed.Name;
+  if Result.Contains(':') then Result:= Trim(Result.Substring(0, Result.IndexOf(':')));
+end;
+
+// C9 / C13 N4 compatibility: a kept unit whose EVERY keeping component is an
+// own #convert instance --only left out is the 1.23.0 'skipped' row, text and
+// all -- RemovalLeavesUnconverted still words it, so the two cannot drift.
+procedure DemoteOnlySkips(const ATrees: TConvertTreeCache; const ADfmText: string; const ARules: TConversionRuleSet;
+  const AConverted: TList<string>; const AOnly: TArray<string>; const AEntries: TArray<TUsesEntryInfo>;
+  var ANeeds: TUsesNeeds);
+var
+  Own  : TArray<string>;
+  Skips: TArray<TUsesChange>;
+begin
+  if (Length(AOnly) = 0) or (ADfmText = '') then Exit;
+  Own:= nil;
+  for var Inst: TConvertInstance in FindConvertInstances(ADfmText, ARules, nil) do
+    if not InOnlyList(Inst.InstanceName, AOnly) then Own:= Own + [Inst.InstanceName];
+  for var I: Integer:= 0 to High(ANeeds.Keeps) do
+  begin
+    var K: TUsesKeep:= ANeeds.Keeps[I];
+    if (K.Reason <> KEEP_REASON_DFM) or (Length(K.NeededBy) = 0) then Continue;
+    var AllOnly: Boolean:= True;
+    for var N: TUsesNeed in K.NeededBy do
+      if not MatchText(NeedInstance(N), Own) then AllOnly:= False;
+    if not AllOnly then Continue;
+    for var E: TUsesEntryInfo in AEntries do
+      if SameText(E.Name, K.UnitName) then
+        for var W: TWatchUnit in UnitRuleWatchList(ARules, nil, ATrees.UnitIndex.SameUnit) do
+          if ATrees.UnitIndex.SameUnit(W.UnitName, E.Name) then
+          begin
+            var Ch: TUsesChange:= Default(TUsesChange);
+            Ch.Action  := 'remove';
+            Ch.UnitName:= E.Name;
+            Ch.Section := E.Section;
+            Ch.Line    := E.Line;
+            Ch.Rule    := W.Rule;
+            if (RemovalLeavesUnconverted(ATrees, ADfmText, ARules, AConverted, AOnly, [Ch], Skips) = '') and
+               (Length(Skips) = 1) then
+            begin
+              K.Action  := 'skipped';
+              K.Reason  := Skips[0].Reason;
+              K.NeededBy:= nil;
+              ANeeds.Keeps[I]:= K;
+            end;
+            Break;
+          end;
+  end;
+end;
+
+// C9 (1.27.0): the RECONCILED uses plan for one unit -- the converted text
+// (AEdits applied in memory) is re-indexed and ReconcileUses decides keep /
+// remove / add; PlanUnitRules then plans the edits. APlannerNeeded: the unit
+// has unit rules or a C13 move, so the planner owns every uses edit; otherwise
+// it is used only when the reconciliation itself adds a unit (UsePlanner), and
+// the caller keeps its own #convert uses-add edits. Never refuses by itself.
+function ReconcileUnitUses(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
+  const ARules: TConversionRuleSet; const AEdits: TArray<TTextEdit>; const AConverted: TList<string>;
+  const AOnly, AAdds, AIntfAdds, AHandled: TArray<string>; APlannerNeeded: Boolean): TReconcileOutcome;
+var
+  In_    : TUsesReconcileInput;
+  Res    : TUsesReconcileResult;
+  OrigDfm: string;
+  Entries: TArray<TUsesEntryInfo>;
+
+  procedure Warn(AKind: TApplyItemKind; ALine, ARuleLine: Integer; const AText: string);
+  var
+    It: TApplyItem;
+  begin
+    It         := Default(TApplyItem);
+    It.Kind    := AKind;
+    It.Field   := afWarnings;
+    It.FilePath:= AUnitPas;
+    It.Line    := ALine;
+    It.RuleLine:= ARuleLine;
+    It.Text    := AText;
+    Result.Items:= Result.Items + [It];
+  end;
+
+begin
+  Result:= Default(TReconcileOutcome);
+  In_   := Default(TUsesReconcileInput);
+  In_.UnitPas     := AUnitPas;
+  In_.OrigPas     := TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
+  In_.ConvPas     := TTextEditApplier.ApplyToText(AUnitPas, In_.OrigPas, AEdits);
+  In_.Rules       := ARules;
+  In_.ExtraAdds   := AAdds;
+  In_.HandledNames:= AHandled;
+  OrigDfm:= '';
+  if (ADfmPath <> '') and TFile.Exists(ADfmPath) then
+  begin
+    OrigDfm    := TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
+    In_.ConvDfm:= TTextEditApplier.ApplyToText(ADfmPath, OrigDfm, AEdits);
+  end;
+  Res:= ReconcileUses(ATrees.UnitIndex, In_);
+  Result.Status    := Res.Status;
+  Result.Unresolved:= Res.Unresolved;
+  ReadUsesEntries(AUnitPas, In_.OrigPas, Entries);
+  DemoteOnlySkips(ATrees, OrigDfm, ARules, AConverted, AOnly, Entries, Res.Needs);
+  Result.UsePlanner:= APlannerNeeded or (Length(Res.Needs.Adds) > 0);
+  Result.Plan:= Default(TUsesPlan);
+  Result.Plan.Ok:= True;
+  if Result.UsePlanner then
+    Result.Plan:= PlanUnitRules(AUnitPas, In_.OrigPas, ARules, AAdds, AIntfAdds, Res.Needs);
+  if not Result.Plan.Ok then Exit;
+  for var Ch: TUsesChange in Result.Plan.Changes do
+  begin
+    var RL: Integer:= UnitRuleLine(ARules, Ch.UnitName);
+    if RL = 0 then
+      for var W: TWatchUnit in UnitRuleWatchList(ARules, AAdds, ATrees.UnitIndex.SameUnit) do
+        if ATrees.UnitIndex.SameUnit(W.UnitName, Ch.UnitName) and (RL = 0) then RL:= UnitRuleLine(ARules, W.UnitName);
+    if Ch.Action = 'skipped' then
+      Result.Items:= Result.Items + [SkippedRuleItem(ARules, AUnitPas, Ch)]
+    else if (Ch.Action = 'kept') and (Ch.Reason = KEEP_REASON_UNVERIFIED) then
+      Warn(aikUnitRuleUnverified, Ch.Line, RL, Format('line %d: warning: %s kept %s -- no --db indexes that unit, so whether anything still needs it is unknown',
+        [RL, Ch.Rule, Ch.UnitName]))
+    else if (Ch.Action = 'kept') and (Ch.Reason = KEEP_REASON_DEGRADED) then
+      Warn(aikUnitRuleKept, Ch.Line, RL, Format('line %d: warning: %s kept %s -- the re-index of the converted output failed (%s)',
+        [RL, Ch.Rule, Ch.UnitName, Res.Detail]))
+    else if Ch.Action = 'kept' then
+      Warn(aikUnitRuleKept, Ch.Line, RL, Format('line %d: warning: %s kept %s -- still needed by .dfm component(s) %s',
+        [RL, Ch.Rule, Ch.UnitName, NeedNames(Ch.NeededBy)]))
+    else if (Ch.Action = 'remove') and (Length(Ch.NeededBy) > 0) then
+      Warn(aikUnitRuleDangling, Ch.Line, RL, Format('line %d: warning: %s removed %s while .pas code still references %s -- the unit will not compile until that code is converted',
+        [RL, Ch.Rule, Ch.UnitName, NeedNames(Ch.NeededBy)]));
+  end;
+  for var U: TUsesUnresolved in Res.Unresolved do
+  begin
+    var Units: string:= '';
+    for var C: TUsesCandidate in U.Candidates do Units:= Units + (if Units = '' then '' else ', ') + C.UnitName;
+    if U.Reason = UNRESOLVED_AMBIGUOUS then
+      Warn(aikUsesUnitAmbiguous, U.Line, 0, Format('line %d: warning: "%s" is declared in %d units (%s) -- none added to uses; add #use <unit> to the book to choose',
+        [U.Line, U.Name, Length(U.Candidates), Units]))
+    else
+      Warn(aikUsesUnitUnresolved, U.Line, 0, Format('line %d: warning: could not resolve a unit declaring "%s" to add to uses', [U.Line, U.Name]));
+  end;
+end;// Prefixes every line of AReemittedBlock (EmitBlock's CRLF-joined, column-1
 // output, trailing CRLF trimmed) with AIndent, so the replacement block lands
 // at the same indentation depth as the original.
 function ReindentBlock(const AReemittedBlock, AIndent: string): string;
@@ -3359,6 +3562,7 @@ end;
 class function TApplyBook.Create(const ARules: TConversionRuleSet;
   const AUnreachable: TArray<TUnreachablePath>): TApplyBook;
 begin
+  Result            := Default(TApplyBook);
   Result.Rules      := ARules;
   Result.Unreachable:= AUnreachable;
 end;
@@ -4302,6 +4506,30 @@ var
         var AlreadyUsed : Boolean;
         var UseEdits: TArray<TTextEdit>;
         var WantIntf: Boolean:= IntfToTypes.ContainsKey(ToType_);
+        { C9 R8a: a To type two units declare is REPORTED, never decided by
+          dictionary order }
+        if ABook.Reconcile then
+        begin
+          var Amb: TArray<TUsesCandidate>:= ATrees.UnitIndex.DeclaringUnits(BareTypeTail(ToType_), True);
+          if Length(Amb) > 1 then
+          begin
+            var Un: TUsesUnresolved:= Default(TUsesUnresolved);
+            Un.Name      := ToType_;
+            Un.Section   := if WantIntf then 'interface' else 'implementation';
+            Un.Reason    := UNRESOLVED_AMBIGUOUS;
+            Un.Candidates:= Amb;
+            Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + [Un];
+            var Units: string:= '';
+            for var C: TUsesCandidate in Amb do Units:= Units + (if Units = '' then '' else ', ') + C.UnitName;
+            It:= PlainItem(aikUsesUnitAmbiguous, afWarnings,
+              Format('"%s" is declared in %d units (%s) -- none added to uses; add #use <unit> to the book to choose',
+                [ToType_, Length(Amb), Units]));
+            It.ToType  := ToType_;
+            It.FilePath:= AUnitPas;
+            Emit(It);
+            Continue;
+          end;
+        end;
         for var St in Stores do
         begin
           UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed, WantIntf);
@@ -4337,11 +4565,26 @@ var
         re-plans the unit rules with AAdds / AIntfAdds first }
       AAdds    := ConvertAdds.ToArray;
       AIntfAdds:= IntfAdds.ToArray;
-      if UnitRules or MoveNeeded then
+      if ABook.Reconcile then
+      begin
+        { C9: the re-indexed converted text decides keep / remove / add }
+        var Handled: TArray<string>:= nil;
+        for var TT in ToTypesSeen do Handled:= Handled + [BareTypeTail(TT)];
+        var Rec: TReconcileOutcome:= ReconcileUnitUses(ATrees, AUnitPas, ADfmPath, ABook.Rules, DistinctInLineEdits(Edits.ToArray),
+          ConvertedInstNames, AOnly, AAdds, AIntfAdds, Handled, UnitRules or MoveNeeded);
+        for var RIt: TApplyItem in Rec.Items do Emit(RIt);
+        Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + Rec.Unresolved;
+        Result.Report.UsesReconcile := Rec.Status;
+        AUses:= Rec.Plan;
+        if not Rec.UsePlanner then
+          for E in Pending do Edits.Add(E);
+      end
+      else if UnitRules or MoveNeeded then
         AUses:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
           AAdds, AIntfAdds)
       else
-        for E in Pending do Edits.Add(E);    finally
+        for E in Pending do Edits.Add(E);
+    finally
       IntfAdds.Free;
       ConvertAdds.Free;
       Pending.Free;
@@ -4662,9 +4905,10 @@ begin
       UsesPlan.Error  := StaleDfm;
     end
     else PlanUsesAdditions(UsesPlan, UnitAdds, UnitIntfAdds);
-    { R26: a removal must not take away the unit an unconverted instance needs }
+    { R26: a removal must not take away the unit an unconverted instance needs
+      -- C9: subsumed by the reconciliation, which KEEPS such a unit }
     var Leaves: string:= '';
-    if UsesPlan.Ok then
+    if UsesPlan.Ok and not ABook.Reconcile then
       Leaves:= RemovalLeavesUnconverted(ATrees, DfmText, ABook.Rules, ConvertedInstNames, AOnly, UsesPlan.Changes, Skips);
     { C13 N4: a removal that would strand only instances --only left out is
       skipped, not refused -- re-plan keeping those units, then report each }
@@ -4734,7 +4978,7 @@ begin
 end;
 
 function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>; AReconcile: Boolean): TApplyResult;
 var
   UsesPlan: TUsesPlan;
   Leaves  : string;
@@ -4744,6 +4988,25 @@ begin
   if not TFile.Exists(AUnitPas) then
   begin
     Result.Error:= Format('unit .pas not found: %s', [AUnitPas]);
+    Exit;
+  end;
+  if AReconcile then
+  begin
+    { C9: nothing converts here, so the .dfm as it is decides what stays }
+    var Rec: TReconcileOutcome:= ReconcileUnitUses(ATrees, AUnitPas, ADfmPath, ARules, nil, nil, AOnly, nil, nil, nil, True);
+    Result.Ok                   := Rec.Plan.Ok;
+    Result.Refused              := Rec.Plan.Refused;
+    Result.Error                := Rec.Plan.Error;
+    Result.Edits                := Rec.Plan.Edits;
+    Result.Report.UsesChanges   := Rec.Plan.Changes;
+    Result.Report.UsesUnresolved:= Rec.Unresolved;
+    Result.Report.UsesReconcile := Rec.Status;
+    if Rec.Plan.Ok then
+      for var It: TApplyItem in Rec.Items do
+      begin
+        Result.Report.Warnings:= Result.Report.Warnings + [It.Text];
+        Result.Report.Items   := Result.Report.Items + [It];
+      end;
     Exit;
   end;
   UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules, nil);

@@ -414,7 +414,7 @@ $r = J 'W2Form.pas' 'old.rules'
 $rm = Rows $r 'remove'
 Check 'W2 (ruling 1/2) only .pas code (on E: ELibOld) needs LibOld: REMOVED anyway' (($r.Code -eq 0) -and ($rm.Count -eq 1) -and ($rm[0].unit -eq 'LibOld')) $r.Out
 Check 'W2 ... the remove row names the dangling reference: needed_by ELibOld with its line' `
-  (($rm.Count -eq 1) -and ((Need $rm[0]) -eq 'ELibOld') -and ($rm[0].needed_by[0].line -eq 25) -and ($rm[0].needed_by[0].section -eq 'implementation')) ($rm | ConvertTo-Json -Depth 5)
+  (($rm.Count -eq 1) -and ((Need $rm[0]) -eq 'ELibOld') -and ($rm[0].needed_by[0].line -eq 31) -and ($rm[0].needed_by[0].section -eq 'implementation')) ($rm | ConvertTo-Json -Depth 5)
 Check 'W2 ... and warns unit-rule-dangling' ((Kinds $r) -contains 'unit-rule-dangling') ((Kinds $r) -join ',')
 
 $r = J 'W3Form.pas' 'old.rules'
@@ -497,9 +497,12 @@ Check 'A2 ... with `#use LibAmbA` in the book: resolved, no warning, LibAmbA add
 $r = J 'W2Form.pas' 'old.rules' @('--no-reconcile-uses')
 Check 'N1 --no-reconcile-uses: uses_reconcile off, plain remove row, no needed_by, no dangling warning' `
   (($r.Code -eq 0) -and ($r.J.uses_reconcile -eq 'off') -and ((Rows $r 'remove').Count -eq 1) -and (@((Rows $r 'remove')[0].needed_by).Count -eq 0) -and -not ((Kinds $r) -contains 'unit-rule-dangling')) $r.Out
-$r = Run 'W4Form.pas' 'old.rules' @('--no-reconcile-uses')
-Check 'N1 ... W4 refused by R26 exactly as 1.26.6' `
-  (($r.Code -eq 1) -and ($r.Out -match [regex]::Escape('REFUSED: #unuse LibOld would leave 1 unconverted instance(s) of TOld2 -- unit not changed'))) $r.Out
+$r = J 'W4Form.pas' 'old.rules' @('--no-reconcile-uses')
+Check 'N1 ... W4: 1.26.6 REMOVES LibOld although Old2: TOld2 still streams (R26 only counts #convert types) -- the defect W4 pins' `
+  (($r.Code -eq 0) -and ((Rows $r 'remove').Count -eq 1) -and ((Rows $r 'kept').Count -eq 0)) $r.Out
+$r = Run 'DescForm.pas' 'old.rules' @('--no-reconcile-uses')
+Check 'N1 ... DESC refused by R26 exactly as 1.26.6' `
+  (($r.Code -eq 1) -and ($r.Out -match [regex]::Escape('REFUSED: #unuse LibOld would leave 1 unconverted instance(s) of TOld -- unit not changed'))) $r.Out
 $r = J 'D2Form.pas' 'old.rules' @('--no-reconcile-uses')
 Check 'N1 ... D2 move has no uses[] row (1.26.6)' (($r.Code -eq 0) -and (@($r.J.uses).Count -eq 1) -and ((Rows $r 'moved').Count -eq 0)) $r.Out
 

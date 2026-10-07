@@ -64,6 +64,20 @@ type
   /// edit behind it, Line/Section are the kept entry's, and Reason says why
   /// ('would leave N unconverted instance(s) of T'). Reason is '' otherwise.
   /// </remarks>
+  /// <summary>One reason a uses entry is still needed, or still referenced:
+  /// a name and where it sits (C9, apply/1 uses[].needed_by).</summary>
+  /// <remarks>For a `kept` row Name is a .dfm component, 'Name: Class', and
+  /// Line its object header line in the .dfm; for a reconcile `add` it is the
+  /// introduced name and its line in the converted .pas; for a `remove` row it
+  /// is a .pas reference the removal leaves dangling (owner ruling 1: the
+  /// compile error is the intended signal). Section is the .pas section of the
+  /// reference ('interface' / 'implementation'), or 'dfm'.</remarks>
+  TUsesNeed = record
+    Name   : string;
+    Line   : Integer;
+    Section: string;
+  end;
+
   TUsesChange = record
     Action  : string;
     UnitName: string;
@@ -71,6 +85,66 @@ type
     Line    : Integer;
     Rule    : string;
     Reason  : string;
+    /// <summary>C9: 'rule' (a book line asked for it), 'reconcile' (a name the
+    /// conversion introduced needs it) or 'convert' (the #convert surface's own
+    /// To-type add, reported only when it MOVES a unit).</summary>
+    Source  : string;
+    /// <summary>C9: why the row exists -- see TUsesNeed. Empty unless kept,
+    /// a reconcile add, or a removal that leaves references dangling.</summary>
+    NeededBy: TArray<TUsesNeed>;
+  end;
+
+  /// <summary>True when two uses-entry spellings name ONE unit (C9 R9: scope
+  /// aliases, 'DB' and 'Data.DB').</summary>
+  TSameUnitFunc = reference to function(const A, B: string): Boolean;
+
+  /// <summary>A watched entry the reconciler decided to KEEP (C9).</summary>
+  /// <remarks>UnitName is the entry as written in the unit. Action is 'kept'
+  /// or 'skipped' (the C13 N4 --only shape, kept byte-compatible).</remarks>
+  TUsesKeep = record
+    UnitName: string;
+    Action  : string;
+    Reason  : string;
+    NeededBy: TArray<TUsesNeed>;
+  end;
+
+  /// <summary>A unit the reconciler adds because a name the conversion
+  /// introduced resolves to it (C9 R7).</summary>
+  TUsesReconAdd = record
+    UnitName : string;
+    ToInterface: Boolean;
+    NeededBy   : TArray<TUsesNeed>;
+  end;
+
+  /// <summary>The reconciler's verdicts, handed to PlanUnitRules (C9).</summary>
+  /// <remarks>Enabled=False (Default) is the 1.26 planner exactly. With
+  /// Enabled: a watched entry named in Keeps is not removed and gets a row of
+  /// its own; Adds are requested like #use (into their section, a move when
+  /// present in the implementation only); Dangling carries the needed_by of
+  /// remove rows (UnitName = entry); SameUnit makes presence, removal and the
+  /// ADD-wins normalisation scope-alias aware (nil = case-insensitive equality).
+  /// A C13 move is reported as a 'moved' row.</remarks>
+  TUsesNeeds = record
+    Enabled : Boolean;
+    SameUnit: TSameUnitFunc;
+    Keeps   : TArray<TUsesKeep>;
+    Adds    : TArray<TUsesReconAdd>;
+    Dangling: TArray<TUsesKeep>;
+  end;
+
+  /// <summary>One entry of a unit's uses clauses as the planner reads it.</summary>
+  TUsesEntryInfo = record
+    Name       : string;
+    Section    : string;
+    Line       : Integer;
+    Conditional: Boolean;
+  end;
+
+  /// <summary>One unit the book removes (the WATCH LIST, C9) and the rule
+  /// text that removes it, after the ADD-wins normalisation.</summary>
+  TWatchUnit = record
+    UnitName: string;
+    Rule    : string;
   end;
 
   /// <summary>The outcome of PlanUnitRules for one unit.</summary>
@@ -134,7 +208,39 @@ function BookHasUnitRules(const ARules: TConversionRuleSet): Boolean;
 /// contract (remove Old, add each New once in any case, keep Old's section) is
 /// pinned by tests\autotest\run_convert_apply_unit_rules.ps1.</remarks>
 function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionRuleSet;
-  const AExtraAdds: TArray<string>; const AInterfaceAdds: TArray<string> = nil): TUsesPlan;
+  const AExtraAdds: TArray<string>; const AInterfaceAdds: TArray<string> = nil): TUsesPlan; overload;
+
+/// <summary>PlanUnitRules with the C9 reconciler's verdicts (see TUsesNeeds).</summary>
+/// <param name="AUnitPas">As the other overload.</param>
+/// <param name="AText">As the other overload.</param>
+/// <param name="ARules">As the other overload.</param>
+/// <param name="AExtraAdds">As the other overload.</param>
+/// <param name="AInterfaceAdds">As the other overload.</param>
+/// <param name="ANeeds">The verdicts; Default(TUsesNeeds) is the other overload.</param>
+/// <returns>The plan. Rows gain Source / NeededBy; a kept entry plans no edit
+/// and never refuses (a {$IF} entry included).</returns>
+/// <remarks>Pure. Pinned by tests\autotest\run_convert_apply_uses_reconcile.ps1.</remarks>
+function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionRuleSet;
+  const AExtraAdds, AInterfaceAdds: TArray<string>; const ANeeds: TUsesNeeds): TUsesPlan; overload;
+
+/// <summary>The entries of a unit's interface and implementation uses
+/// clauses, read with the planner's own lexer (C9).</summary>
+/// <param name="AUnitPas">The unit's path (for the error text only).</param>
+/// <param name="AText">The unit's text.</param>
+/// <param name="AEntries">Out: every entry, interface first, in order.</param>
+/// <returns>False when the text cannot be read as a unit (AEntries empty).</returns>
+/// <remarks>Pure.</remarks>
+function ReadUsesEntries(const AUnitPas, AText: string; out AEntries: TArray<TUsesEntryInfo>): Boolean;
+
+/// <summary>The units ARules removes -- every #unuse and #useswap Old -- after
+/// the ADD-wins normalisation PlanUnitRules applies (C9 watch list).</summary>
+/// <param name="ARules">The parsed rule book.</param>
+/// <param name="AExtraAdds">Units the #convert surface adds (never watched).</param>
+/// <param name="ASameUnit">Alias predicate for ADD wins; nil = equality.</param>
+/// <returns>One entry per watched unit, book spelling, in book order.</returns>
+/// <remarks>Pure.</remarks>
+function UnitRuleWatchList(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>;
+  const ASameUnit: TSameUnitFunc): TArray<TWatchUnit>;
 
 implementation
 
@@ -494,11 +600,20 @@ type
     FAdds      : array[0..1] of TList<TUsesChange>;
     FError     : string;
     FRefused   : Boolean;
+    FNeeds     : TUsesNeeds;                    { C9; Enabled=False = the 1.26 planner }
+    FMoved     : TDictionary<string, Boolean>;  { C9: units a C13 move relocates }
     function ReadUnit: Boolean;
     procedure Normalise(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>);
+    function Same(const A, B: string): Boolean;
+    function InAddSet(const AName: string): Boolean;
+    function RuleFor(const AEntry: string; out ARule: string): Boolean;
+    function IsKept(const AEntry: string): Boolean;
+    function DanglingOf(const AEntry: string): TArray<TUsesNeed>;
+    procedure RecordKeeps;
     function IsPresent(const AName: string): Boolean;
     function SectionOf(const AName: string): Integer;
-    procedure RequestAdd(const AName: string; ASection: Integer; const ARule: string);
+    procedure RequestAdd(const AName: string; ASection: Integer; const ARule: string;
+      const ASource: string = ''; const ANeededBy: TArray<TUsesNeed> = nil);
     procedure RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>);
     procedure PlanMoves(const AInterfaceAdds: TArray<string>);
     function Refuse(const AMsg: string): Boolean;
@@ -510,9 +625,11 @@ type
       AAdds: TList<TUsesChange>; AAddLine, AEmitted: Integer): Boolean;
     function PlanClause(AIdx: Integer): Boolean;
   public
-    constructor Create(const AUnitPas, AText: string);
+    constructor Create(const AUnitPas, AText: string; const ANeeds: TUsesNeeds);
     destructor Destroy; override;
     function Run(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>): TUsesPlan;
+    function Entries(out AEntries: TArray<TUsesEntryInfo>): Boolean;
+    function WatchList(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>): TArray<TWatchUnit>;
   end;
 
 function SwapRuleText(const R: TConversionRule): string;
@@ -520,9 +637,11 @@ begin
   Result:= '#useswap ' + R.UnitName + ' -> ' + String.Join(', ', R.UnitsAdd);
 end;
 
-constructor TUnitRulePlanner.Create(const AUnitPas, AText: string);
+constructor TUnitRulePlanner.Create(const AUnitPas, AText: string; const ANeeds: TUsesNeeds);
 begin
   inherited Create;
+  FNeeds  := ANeeds;
+  FMoved  := TDictionary<string, Boolean>.Create(TIStringComparer.Ordinal);
   FUnitPas:= AUnitPas;
   FUnit   := TUnitText.Create(AUnitPas, AText);
   FText   := FUnit.Text;
@@ -543,6 +662,7 @@ destructor TUnitRulePlanner.Destroy;
 begin
   FAdds[1].Free;
   FAdds[0].Free;
+  FMoved.Free;
   FAddSet.Free;
   FRemoveRule.Free;
   FChanges.Free;
@@ -659,25 +779,96 @@ begin
     end;
   for U in AExtraAdds do FAddSet.AddOrSetValue(U, True);
   for R in ARules.Rules do
-    if (R.UnitName <> '') and not FAddSet.ContainsKey(R.UnitName) and not FRemoveRule.ContainsKey(R.UnitName) then
+    if (R.UnitName <> '') and not InAddSet(R.UnitName) and not FRemoveRule.ContainsKey(R.UnitName) then
       case R.Kind of
         rkUnuse  : FRemoveRule.Add(R.UnitName, '#unuse ' + R.UnitName);
         rkUseSwap: FRemoveRule.Add(R.UnitName, SwapRuleText(R));
       end;
 end;
 
+{ C9: two spellings name one unit -- scope-alias aware when the reconciler
+  handed a predicate, plain case-insensitive equality otherwise (1.26). }
+function TUnitRulePlanner.Same(const A, B: string): Boolean;
+begin
+  if FNeeds.Enabled and Assigned(FNeeds.SameUnit) then Result:= FNeeds.SameUnit(A, B)
+  else Result:= SameText(A, B);
+end;
+
+function TUnitRulePlanner.InAddSet(const AName: string): Boolean;
+begin
+  Result:= FAddSet.ContainsKey(AName);
+  if Result or not FNeeds.Enabled then Exit;
+  for var K: string in FAddSet.Keys do
+    if Same(K, AName) then Exit(True);
+end;
+
+{ The removal rule that names the entry AEntry -- the exact spelling first (a
+  C13 move is keyed by the entry itself, rule ''), then, under C9, any watched
+  unit the entry is an alias of. False when nothing removes it. }
+function TUnitRulePlanner.RuleFor(const AEntry: string; out ARule: string): Boolean;
+begin
+  Result:= FRemoveRule.TryGetValue(AEntry, ARule);
+  if Result or not FNeeds.Enabled then Exit;
+  for var P: TPair<string, string> in FRemoveRule do
+    if (P.Value <> '') and Same(P.Key, AEntry) then
+    begin
+      ARule:= P.Value;
+      Exit(True);
+    end;
+end;
+
+function TUnitRulePlanner.IsKept(const AEntry: string): Boolean;
+begin
+  if FNeeds.Enabled then
+    for var K: TUsesKeep in FNeeds.Keeps do
+      if SameText(K.UnitName, AEntry) then Exit(True);
+  Result:= False;
+end;
+
+function TUnitRulePlanner.DanglingOf(const AEntry: string): TArray<TUsesNeed>;
+begin
+  Result:= nil;
+  for var D: TUsesKeep in FNeeds.Dangling do
+    if SameText(D.UnitName, AEntry) then Exit(D.NeededBy);
+end;
+
+{ C9: one row per watched entry the reconciler KEPT -- no edit behind it,
+  Line/Section the entry's own, after every edit-backed row. }
+procedure TUnitRulePlanner.RecordKeeps;
+var
+  Rule: string;
+begin
+  for var K: TUsesKeep in FNeeds.Keeps do
+    for var S: Integer:= 0 to 1 do
+      for var E: TUsesEntry in FClauses[S].Entries do
+        if SameText(E.Name, K.UnitName) and RuleFor(E.Name, Rule) and (Rule <> '') then
+        begin
+          var Ch: TUsesChange:= Default(TUsesChange);
+          Ch.Action  := K.Action;
+          Ch.UnitName:= E.Name;
+          Ch.Section := FClauses[S].Section;
+          Ch.Line    := FUnit.LineOf(E.Start);
+          Ch.Rule    := Rule;
+          Ch.Reason  := K.Reason;
+          Ch.Source  := 'rule';
+          Ch.NeededBy:= K.NeededBy;
+          FChanges.Add(Ch);
+        end;
+end;
+
 function TUnitRulePlanner.IsPresent(const AName: string): Boolean;
 var
-  S: Integer;
-  E: TUsesEntry;
-  C: TUsesChange;
+  S   : Integer;
+  E   : TUsesEntry;
+  C   : TUsesChange;
+  Rule: string;
 begin
   for S:= 0 to 1 do
   begin
     for E in FClauses[S].Entries do
-      if SameText(E.Name, AName) and not FRemoveRule.ContainsKey(E.Name) then Exit(True);
+      if Same(E.Name, AName) and (IsKept(E.Name) or not RuleFor(E.Name, Rule)) then Exit(True);
     for C in FAdds[S] do
-      if SameText(C.UnitName, AName) then Exit(True);
+      if Same(C.UnitName, AName) then Exit(True);
   end;
   Result:= False;
 end;
@@ -691,11 +882,12 @@ var
 begin
   for S:= 0 to 1 do
     for E in FClauses[S].Entries do
-      if SameText(E.Name, AName) then Exit(S);
+      if Same(E.Name, AName) then Exit(S);
   Result:= -1;
 end;
 
-procedure TUnitRulePlanner.RequestAdd(const AName: string; ASection: Integer; const ARule: string);
+procedure TUnitRulePlanner.RequestAdd(const AName: string; ASection: Integer; const ARule: string;
+  const ASource: string; const ANeededBy: TArray<TUsesNeed>);
 var
   C: TUsesChange;
 begin
@@ -705,6 +897,8 @@ begin
   C.UnitName:= Trim(AName);
   C.Section := FClauses[ASection].Section;
   C.Rule    := ARule;
+  C.Source  := if (ASource = '') and (ARule <> '') then 'rule' else ASource;
+  C.NeededBy:= ANeededBy;
   FAdds[ASection].Add(C);
 end;
 
@@ -715,12 +909,24 @@ end;
 procedure TUnitRulePlanner.PlanMoves(const AInterfaceAdds: TArray<string>);
 var
   U: string;
-  E: TUsesEntry;
+
+  procedure Move(const AUnit: string);
+  begin
+    if SectionOf(AUnit) <> 1 then Exit;
+    for var E: TUsesEntry in FClauses[1].Entries do
+      if Same(E.Name, AUnit) then
+      begin
+        FRemoveRule.AddOrSetValue(E.Name, '');
+        FMoved.AddOrSetValue(AUnit, True);
+      end;
+  end;
+
 begin
-  for U in AInterfaceAdds do
-    if SectionOf(U) = 1 then
-      for E in FClauses[1].Entries do
-        if SameText(E.Name, U) then FRemoveRule.AddOrSetValue(E.Name, '');
+  for U in AInterfaceAdds do Move(U);
+  { C9: a reconcile add an interface declaration needs moves the same way }
+  if FNeeds.Enabled then
+    for var A: TUsesReconAdd in FNeeds.Adds do
+      if A.ToInterface then Move(A.UnitName);
 end;
 
 procedure TUnitRulePlanner.RequestAdds(const ARules: TConversionRuleSet; const AExtraAdds, AInterfaceAdds: TArray<string>);
@@ -748,6 +954,10 @@ begin
   S:= 1;
   if (Length(FClauses[1].Entries) = 0) and (Length(FClauses[0].Entries) > 0) then S:= 0;
   for U in AExtraAdds do RequestAdd(U, S, '');
+  { C9 R7: units a name the conversion introduced resolves to }
+  if FNeeds.Enabled then
+    for var A: TUsesReconAdd in FNeeds.Adds do
+      RequestAdd(A.UnitName, if A.ToInterface then 0 else 1, '', 'reconcile', A.NeededBy);
 end;
 
 { The spans that remove entry AIdx and ONE adjacent comma: the following comma
@@ -900,13 +1110,15 @@ end;
 function TUnitRulePlanner.MarkRemovals(const AC: TUsesClause; out ARemoved: TArray<Boolean>;
   out ALastKept: Integer): Boolean;
 var
-  I: Integer;
+  I   : Integer;
+  Rule: string;
 begin
   SetLength(ARemoved, Length(AC.Entries));
   ALastKept:= -1;
   for I:= 0 to High(AC.Entries) do
   begin
-    ARemoved[I]:= FRemoveRule.ContainsKey(AC.Entries[I].Name);
+    { C9 R12: an entry the reconciler KEEPS plans no edit, so it never refuses }
+    ARemoved[I]:= RuleFor(AC.Entries[I].Name, Rule) and not IsKept(AC.Entries[I].Name);
     if ARemoved[I] and (AC.Entries[I].Depth > 0) then
       Exit(Refuse(Format('"%s" sits inside a conditional ({$IF...}) region of the %s uses clause',
         [AC.Entries[I].Name, AC.Section])));
@@ -921,9 +1133,10 @@ end;
 function TUnitRulePlanner.RecordChanges(const AC: TUsesClause; const ARemoved: TArray<Boolean>;
   AAdds: TList<TUsesChange>; AAddLine, AEmitted: Integer): Boolean;
 var
-  I : Integer;
-  Ch: TUsesChange;
-  A : TUsesChange;
+  I   : Integer;
+  Ch  : TUsesChange;
+  A   : TUsesChange;
+  Rule: string;
 begin
   if AEmitted = 0 then
   begin
@@ -933,19 +1146,39 @@ begin
     Exit;
   end;
   for I:= 0 to High(AC.Entries) do
-    { a C13 move (FRemoveRule value '') is the #convert surface: no row }
-    if ARemoved[I] and (FRemoveRule[AC.Entries[I].Name] <> '') then
+  begin
+    if not ARemoved[I] then Continue;
+    RuleFor(AC.Entries[I].Name, Rule);
+    Ch:= Default(TUsesChange);
+    Ch.UnitName:= AC.Entries[I].Name;
+    Ch.Section := AC.Section;
+    Ch.Line    := FUnit.LineOf(AC.Entries[I].Start);
+    Ch.Rule    := Rule;
+    if Rule <> '' then
     begin
-      Ch:= Default(TUsesChange);
       Ch.Action  := 'remove';
-      Ch.UnitName:= AC.Entries[I].Name;
-      Ch.Section := AC.Section;
-      Ch.Line    := FUnit.LineOf(AC.Entries[I].Start);
-      Ch.Rule    := FRemoveRule[AC.Entries[I].Name];
+      Ch.Source  := 'rule';
+      Ch.NeededBy:= DanglingOf(Ch.UnitName);
+      FChanges.Add(Ch);
+    end
+    else if FNeeds.Enabled then
+    begin
+      { C9 R10: the C13 move is reported -- a 'moved' row naming its
+        destination; 1.26 kept it silent as the #convert surface }
+      Ch.Action := 'moved';
+      Ch.Section:= SECTION_INTF;
+      Ch.Source := 'convert';
+      for var RA: TUsesReconAdd in FNeeds.Adds do
+        if RA.ToInterface and Same(RA.UnitName, Ch.UnitName) then
+        begin
+          Ch.Source  := 'reconcile';
+          Ch.NeededBy:= RA.NeededBy;
+        end;
       FChanges.Add(Ch);
     end;
+  end;
   for Ch in AAdds do
-    if Ch.Rule <> '' then
+    if ((Ch.Rule <> '') or (Ch.Source = 'reconcile')) and not FMoved.ContainsKey(Ch.UnitName) then
     begin
       A:= Ch;
       A.Line:= AAddLine;
@@ -1059,6 +1292,7 @@ begin
     RequestAdds(ARules, AExtraAdds, AInterfaceAdds);
     if PlanClause(0) and PlanClause(1) then
     begin
+      if FNeeds.Enabled then RecordKeeps;
       Result.Ok     := True;
       Result.Edits  := FEdits.ToArray;
       Result.Changes:= FChanges.ToArray;
@@ -1078,14 +1312,84 @@ begin
   Result:= False;
 end;
 
+function TUnitRulePlanner.Entries(out AEntries: TArray<TUsesEntryInfo>): Boolean;
+begin
+  AEntries:= nil;
+  if not ReadUnit then Exit(False);
+  for var S: Integer:= 0 to 1 do
+    for var E: TUsesEntry in FClauses[S].Entries do
+    begin
+      var Info: TUsesEntryInfo:= Default(TUsesEntryInfo);
+      Info.Name       := E.Name;
+      Info.Section    := FClauses[S].Section;
+      Info.Line       := FUnit.LineOf(E.Start);
+      Info.Conditional:= E.Depth > 0;
+      AEntries:= AEntries + [Info];
+    end;
+  Result:= True;
+end;
+
+function TUnitRulePlanner.WatchList(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>): TArray<TWatchUnit>;
+begin
+  Result:= nil;
+  Normalise(ARules, AExtraAdds);
+  { book order: FRemoveRule is a dictionary, so walk the rules again }
+  for var R: TConversionRule in ARules.Rules do
+    if (R.Kind in [rkUnuse, rkUseSwap]) and FRemoveRule.ContainsKey(R.UnitName) then
+    begin
+      var W: TWatchUnit;
+      W.UnitName:= R.UnitName;
+      W.Rule    := FRemoveRule[R.UnitName];
+      var Dup: Boolean:= False;
+      for var X: TWatchUnit in Result do
+        if SameText(X.UnitName, W.UnitName) then Dup:= True;
+      if not Dup then Result:= Result + [W];
+    end;
+end;
+
 function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionRuleSet;
   const AExtraAdds: TArray<string>; const AInterfaceAdds: TArray<string>): TUsesPlan;
+begin
+  Result:= PlanUnitRules(AUnitPas, AText, ARules, AExtraAdds, AInterfaceAdds, Default(TUsesNeeds));
+end;
+
+function PlanUnitRules(const AUnitPas, AText: string; const ARules: TConversionRuleSet;
+  const AExtraAdds, AInterfaceAdds: TArray<string>; const ANeeds: TUsesNeeds): TUsesPlan;
 var
   Planner: TUnitRulePlanner;
 begin
-  Planner:= TUnitRulePlanner.Create(AUnitPas, AText);
+  Planner:= TUnitRulePlanner.Create(AUnitPas, AText, ANeeds);
   try
     Result:= Planner.Run(ARules, AExtraAdds, AInterfaceAdds);
+  finally
+    Planner.Free;
+  end;
+end;
+
+function ReadUsesEntries(const AUnitPas, AText: string; out AEntries: TArray<TUsesEntryInfo>): Boolean;
+var
+  Planner: TUnitRulePlanner;
+begin
+  Planner:= TUnitRulePlanner.Create(AUnitPas, AText, Default(TUsesNeeds));
+  try
+    Result:= Planner.Entries(AEntries);
+  finally
+    Planner.Free;
+  end;
+end;
+
+function UnitRuleWatchList(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>;
+  const ASameUnit: TSameUnitFunc): TArray<TWatchUnit>;
+var
+  Planner: TUnitRulePlanner;
+  Needs  : TUsesNeeds;
+begin
+  Needs:= Default(TUsesNeeds);
+  Needs.Enabled := Assigned(ASameUnit);
+  Needs.SameUnit:= ASameUnit;
+  Planner:= TUnitRulePlanner.Create('', '', Needs);
+  try
+    Result:= Planner.WatchList(ARules, AExtraAdds);
   finally
     Planner.Free;
   end;
