@@ -97,7 +97,7 @@ pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -All -Remove
   `-Name`. The engine comes from `Resolve-DragLintEngine` (table above).
 * Safe on a real config: `-DryRun` writes nothing; a real write backs the file up to `<file>.bak-<timestamp>`,
   merges (other servers and keys untouched), is idempotent (a second run says "no change" and writes
-  nothing), and `-Remove` deletes only its own entry -- an entry by that name whose command is not drag-lint.exe is refused, never touched. A CLI update keeps a user-added `env`; any other key the user added makes it a file edit. Malformed JSON, or JSON with comments a rewrite would
+  nothing), and `-Remove` deletes only its own entry -- an entry by that name whose command is not drag-lint.exe is refused, never touched. An entry carrying any key beyond type/command/args -- a user-added `env` included -- is updated by file edit, never the CLI, so an env value never lands on the `claude` command line; in every printed Before / After / Commands / dry-run line an env VALUE reads `***` (the keys stay). Malformed JSON, or JSON with comments a rewrite would
   drop, is refused with nothing written. A file a running client rewrote while the script ran is not
   overwritten. JSON is written UTF-8 without BOM.
 * Tests: `src\Test-McpConfig.ps1` (seconds; temp copies via `-ConfigPath`, a fake `claude` for the CLI path;

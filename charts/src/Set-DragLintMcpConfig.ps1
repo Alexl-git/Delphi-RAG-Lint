@@ -23,7 +23,9 @@
 
   SAFETY -- this edits a real user's configuration, so:
     1. -DryRun prints the exact change (the entry before and after, the file and the
-       backup it would write, or the exact CLI commands) and writes NOTHING.
+       backup it would write, or the exact CLI commands) and writes NOTHING. In every printed
+       or returned text (Before, After, Commands, the paste hint) an `env` VALUE reads ***;
+       the keys stay. Values may be secrets, and the installer logs this output.
     2. A real write first copies the file to <file>.bak-<yyyyMMdd-HHmmss>, then writes a
        temp file beside it and moves it into place. The file is re-checked just before
        the move: if it changed since it was read (a running client rewrote it), nothing
@@ -35,8 +37,10 @@
        nothing is written and no backup is made. Keys a user added to OUR entry (env, ...)
        are kept on an update.
     4a. An entry named -Name whose command is not drag-lint.exe (nor the resolved engine) is not ours:
-       -Remove and an update refuse it, naming the command. A CLI update keeps a user-added `env` (-e);
-       any other extra key makes the update a file edit, so nothing a user added is dropped.
+       -Remove and an update refuse it, naming the command. An entry carrying ANY key beyond
+       type/command/args (a user-added `env` included; an empty env {} does not count) is updated by
+       FILE EDIT, never the CLI, so nothing a user added is dropped and an env value is never passed
+       as `-e KEY=VALUE` on the claude command line.
     5. The claude CLI is only ever run for the DEFAULT config file. With -ConfigPath it is
        never run unless -ClaudeCli names one explicitly (tests pass a fake), so a test
        pointed at a temp copy can never reach the real ~\.claude.json through the CLI.
@@ -166,8 +170,18 @@ function New-EntryNode([string] $Target) {
   , [System.Text.Json.Nodes.JsonNode]::Parse(($h | ConvertTo-Json -Depth 5 -Compress))
 }
 
+# the entry as printed text (Before / After / the paste hint): an `env` object's VALUES read *** -- they may be
+# secrets, and this text is printed and logged by the installer. The keys stay, so the change is still readable.
 function Get-NodeText($Node) {
   if ($null -eq $Node) { return '(none)' }
+  if ($Node -is [System.Text.Json.Nodes.JsonObject]) {
+    $ev = Get-Member2 $Node 'env'
+    if ($ev -is [System.Text.Json.Nodes.JsonObject] -and $ev.Count) {
+      $Node = $Node.DeepClone()
+      $masked = $Node['env']
+      foreach ($k in @($masked | ForEach-Object { $_.Key })) { $masked[$k] = '***' }
+    }
+  }
   $o = [System.Text.Json.JsonSerializerOptions]::new()
   $o.Encoder = [System.Text.Encodings.Web.JavaScriptEncoder]::UnsafeRelaxedJsonEscaping
   $Node.ToJsonString($o)
@@ -263,25 +277,20 @@ function Invoke-Target([string] $Target) {
   }
 
   # ---- CLI (Claude Code, default file only -- SAFETY 5) -------------------------
-  # fix round 1, item 2: an UPDATE through the CLI is remove + add, which keeps only what add is told. So an
-  # entry carrying keys beyond type/command/args goes through the CLI only when every extra key is an `env`
-  # of string values (passed back as -e KEY=VALUE); anything else is updated by FILE EDIT (backup,
-  # compare-before-write), and the dry-run shows whichever path will actually run.
-  $envPairs = @()
+  # an UPDATE through the CLI is remove + add, which keeps only what add is told. So an entry carrying ANY key
+  # beyond type/command/args -- a user-added `env` included -- is updated by FILE EDIT (backup,
+  # compare-before-write), which keeps every key verbatim. env is never re-sent as `-e KEY=VALUE`: that would
+  # put its values (often secrets) on the claude process command line and in the printed Commands. An EMPTY
+  # env {} holds nothing to keep (add writes one itself), so it does not count. The dry-run shows whichever
+  # path will actually run.
   if ($cli -and $verb -eq 'updated') {
-    $extra = @(($have.ToJsonString() | ConvertFrom-Json -NoEnumerate).PSObject.Properties.Name | Where-Object { $_ -notin 'type', 'command', 'args' })
-    $envOk = $true
-    foreach ($k in $extra) {
-      if ($k -ne 'env') { $envOk = $false; break }
-      $ev = Get-Member2 $have 'env'
-      if ($ev -isnot [System.Text.Json.Nodes.JsonObject]) { $envOk = $false; break }
-      foreach ($kv in $ev) {
-        if ($kv.Value -isnot [System.Text.Json.Nodes.JsonValue] -or $kv.Value.GetValueKind() -ne [System.Text.Json.JsonValueKind]::String) { $envOk = $false; break }
-        $envPairs += "$($kv.Key)=$($kv.Value.GetValue[string]())"
-      }
-    }
-    if (-not $envOk) {
-      Write-Host "$Target -- $Name carries keys beyond type/command/args/env ($($extra -join ', ')); updating by file edit so they are kept"
+    $extra = @(foreach ($kv in $have) {
+      if ($kv.Key -in 'type', 'command', 'args') { continue }
+      if ($kv.Key -eq 'env' -and $kv.Value -is [System.Text.Json.Nodes.JsonObject] -and $kv.Value.Count -eq 0) { continue }
+      $kv.Key
+    })
+    if ($extra.Count) {
+      Write-Host "$Target -- $Name carries keys beyond type/command/args ($($extra -join ', ')); updating by file edit so they are kept"
       $cli = ''
     }
   }
@@ -291,9 +300,7 @@ function Invoke-Target([string] $Target) {
     $cmds = New-Object System.Collections.Generic.List[object]
     if ($verb -in 'updated', 'removed') { $cmds.Add(@('mcp', 'remove', '--scope', 'user', $Name)) }
     if ($verb -in 'added', 'updated')   {
-      $add = @('mcp', 'add', '--scope', 'user', $Name)
-      foreach ($ep in $envPairs) { $add += @('-e', $ep) }
-      $cmds.Add($add + @('--', $Engine) + $args2)
+      $cmds.Add(@('mcp', 'add', '--scope', 'user', $Name, '--', $Engine) + $args2)
     }
     $res.Commands = @($cmds | ForEach-Object { "`"$cli`" " + (($_ | ForEach-Object { if ($_ -match '[\s"]') { '"' + $_ + '"' } else { $_ } }) -join ' ') })
     if ($DryRun) {

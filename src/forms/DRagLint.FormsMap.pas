@@ -22,7 +22,7 @@ uses
   , Data.DB
   , FireDAC .Comp   .Client
   , FireDAC .Stan   .Param
-  , DRagLint.Core   .Model
+  , DRagLint.Core   .Model // dl:unit DRagLint.Core.Model accepted -- DRAG_HOME_DIR: the _D-RAG folder name travels with the model that defines the index layout, so popupForms is read from the same folder every other verb uses
   , DRagLint.Storage.SQLite
   , DRagLint.Lint   .ProjectChecks.Parse
   ;
@@ -31,7 +31,7 @@ type
   /// <summary>One navigable form (a .dfm root that descends from a form base).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.BuildHookMap (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.ProcessSite (DRagLint.FormsMap.pas), DRagLint.FormsMap.LoadInventory (DRagLint.FormsMap.pas) (+9 more)</para>
+  /// <para>Used by: DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.CaptionForHandler (DRagLint.FormsMap.pas), DRagLint.FormsMap.FindFormViaHook (DRagLint.FormsMap.pas), DRagLint.FormsMap.FindNearestFormCaller (DRagLint.FormsMap.pas), DRagLint.FormsMap.LoadInventory (DRagLint.FormsMap.pas) (+19 more)</para>
   /// <para>Used in units: DRagLint.FormsMap</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -50,7 +50,7 @@ type
   /// control binds the launching routine.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.TryAddEdge (DRagLint.FormsMap.pas), DRagLint.FormsMap.DetectRoot (DRagLint.FormsMap.pas), DRagLint.FormsMap.TNavBuilder.AddTextEdges (DRagLint.FormsMap.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.ProcessSite (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.TryAddEdge (DRagLint.FormsMap.pas), DRagLint.FormsMap.DetectRoot (DRagLint.FormsMap.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.FormsMap</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -1968,7 +1968,12 @@ begin
   ANote:= '';
   Result:= '?';
   Lines:= LinesOf(AL.Path);
-  if (ALaunchLine < 1) or (ALaunchLine > Length(Lines)) then Exit;
+  if (ALaunchLine < 1) or (ALaunchLine > Length(Lines)) then
+  begin
+    ANote:= Format('modal unknown: launch line %d is outside %s (%d lines) -- the source changed since indexing; reindex',
+      [ALaunchLine, ExtractFileName(AL.Path), Length(Lines)]);
+    Exit;
+  end;
   Last:= AL.ImplEnd;
   if (Last < ALaunchLine) or (Last > Length(Lines)) then Last:= ALaunchLine;
   L:= Lines[ALaunchLine - 1];

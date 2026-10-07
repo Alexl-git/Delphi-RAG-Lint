@@ -63,7 +63,7 @@ note instead of `no caller found`:
 (default `opened as a popup (declared in drag-lint-project.json)`). A missing
 file or key is normal; a malformed file is ignored with one line on stderr, and a bad entry (no `form`, or a `form` that is not a string) skips only that entry, with its own stderr line. The CSV is produced in every case.
 
-`drag-lint-project.json` normally lives OUTSIDE version control (the `_D-RAG` folder is treated as gitignored; Micronite's CLIENT repository ignores it), so `popupForms` is a per-machine setting: a fresh clone or a new worktree does not have it, and each machine that runs `forms-csv` needs its own copy -- unless your repository deliberately tracks the file.
+`drag-lint-project.json` normally lives OUTSIDE version control (check your repository's ignore rules), so `popupForms` is a per-machine setting: a fresh clone or a new worktree does not have it, and each machine that runs `forms-csv` needs its own copy -- unless your repository deliberately tracks the file.
 The engine carries no project's form names of its own.
 
 The last line is a provenance footer in the `Notes` column:

@@ -25,7 +25,7 @@ pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -All -Remove
 * `-DryRun` writes nothing.
 * A real write backs the file up to `<file>.bak-<timestamp>`, merges (other servers and keys untouched) and is idempotent: a second run says "no change" and writes nothing.
 * `-Remove` deletes only its own entry; an entry by that name whose command is not `drag-lint.exe` is refused, never touched.
-* A CLI update keeps a user-added `env`; any other key the user added makes it a file edit.
+* An entry carrying any key beyond type/command/args -- a user-added `env` included -- is updated by file edit, never the CLI, so an env value never lands on the `claude` command line; in every printed Before / After / Commands / dry-run line an env VALUE reads `***` (the keys stay).
 * Malformed JSON, or JSON with comments a rewrite would drop, is refused with nothing written. A file a running client rewrote while the script ran is not overwritten. JSON is written UTF-8 without BOM.
 
 ## Related

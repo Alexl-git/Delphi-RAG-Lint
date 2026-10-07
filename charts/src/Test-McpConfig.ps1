@@ -218,13 +218,21 @@ try {
     if ($null -eq $prevCcd) { Remove-Item Env:\CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue } else { $env:CLAUDE_CONFIG_DIR = $prevCcd }
   }
 
-  # T12 CLI update keeps what the user added: env goes back as -e; any other key makes it a file edit
-  Note 'T12 CLI update keeps user keys ...'
+  # T12 an update keeps what the user added: ANY extra key, env included, makes it a file edit (env is never
+  # re-sent as -e, which would put its values on the claude command line); an EMPTY env {} is not extra
+  Note 'T12 update keeps user keys ...'
   $f12 = Join-Path $tmp 't12.json'
   [IO.File]::WriteAllText($f12, "{ `"mcpServers`": { `"drag-lint`": { `"type`": `"stdio`", `"command`": `"C:\\old\\drag-lint.exe`", `"args`": [], `"env`": { `"MINE`": `"1`" } } } }")
   if (Test-Path -LiteralPath $log) { Remove-Item -LiteralPath $log }
   $r = Run @{ ClaudeCode = $true; ConfigPath = $f12; ClaudeCli = $fake; DbPath = $db1 }
-  Chk 'T12-ENV' "$($r.Out[0].Mode)|$((Get-Content -LiteralPath $log) -join '#')" "cli|mcp remove --scope user drag-lint#mcp add --scope user drag-lint -e MINE=1 -- $eng serve --db $db1"
+  Chk 'T12-ENV' "$($r.Out[0].Mode)|$($r.Out[0].Action)" 'file|updated'
+  if (Test-Path -LiteralPath $log) { Fail 'T12-ENVNOCLI' 'the CLI ran for an entry carrying a user env' }
+  $j = J $f12
+  Chk 'T12-ENVKEPT' "$($j.mcpServers.'drag-lint'.env.MINE)|$($j.mcpServers.'drag-lint'.args -join ' ')" "1|serve --db $db1"
+  [IO.File]::WriteAllText($f12, "{ `"mcpServers`": { `"drag-lint`": { `"type`": `"stdio`", `"command`": `"C:\\old\\drag-lint.exe`", `"args`": [], `"env`": {} } } }")
+  Remove-Item -LiteralPath $log -ErrorAction SilentlyContinue
+  $r = Run @{ ClaudeCode = $true; ConfigPath = $f12; ClaudeCli = $fake; DbPath = $db1 }
+  Chk 'T12-EMPTYENV' "$($r.Out[0].Mode)|$((Get-Content -LiteralPath $log) -join '#')" "cli|mcp remove --scope user drag-lint#mcp add --scope user drag-lint -- $eng serve --db $db1"
   [IO.File]::WriteAllText($f12, "{ `"mcpServers`": { `"drag-lint`": { `"type`": `"stdio`", `"command`": `"C:\\old\\drag-lint.exe`", `"args`": [], `"timeout`": 30 } } }")
   Remove-Item -LiteralPath $log -ErrorAction SilentlyContinue
   $r = Run @{ ClaudeCode = $true; ConfigPath = $f12; ClaudeCli = $fake; DbPath = $db1; DryRun = $true }
@@ -270,6 +278,37 @@ try {
   if ($r.Err -notmatch 'failed \(exit 3\): boom: not logged in') { Fail 'T15-MSG' "got: $($r.Err)" }
   Chk 'T15-BYTES' (Get-FileHash $f15).Hash $h15
 
+  # T16 an env VALUE never leaves the file: not in Before/After/Commands, not in any printed line (dry-run and
+  # real, file and CLI paths), not on the fake claude's command line. Keys stay visible, values read ***
+  Note 'T16 env values are masked ...'
+  $secret = 'S3cr3t-Value-T16'
+  $f16 = Join-Path $tmp 't16.json'
+  $seed16 = "{ `"mcpServers`": { `"drag-lint`": { `"type`": `"stdio`", `"command`": `"C:\\old\\drag-lint.exe`", `"args`": [], `"env`": { `"API_KEY`": `"$secret`" } } } }"
+  if (Test-Path -LiteralPath $log) { Remove-Item -LiteralPath $log }
+  $seen = New-Object System.Collections.Generic.List[string]
+  foreach ($dry in $true, $false) {
+    [IO.File]::WriteAllText($f16, $seed16)
+    $all = @(& $SCRIPT -ClaudeCode -ConfigPath $f16 -ClaudeCli $fake -DbPath $db1 -Engine $eng -DryRun:$dry *>&1)
+    foreach ($o in $all) {
+      if ($o -is [System.Management.Automation.InformationRecord]) { $seen.Add([string]$o.MessageData) }
+      elseif ($o -is [pscustomobject]) {
+        $seen.Add([string]$o.Before); $seen.Add([string]$o.After); foreach ($c in @($o.Commands)) { $seen.Add([string]$c) }
+        if ($o.Before -notlike '*"API_KEY":"`*`*`*"*') { Fail 'T16-KEY' "Before does not show the key with a masked value: $($o.Before)" }
+      } else { $seen.Add([string]$o) }
+    }
+  }
+  # the VS Code path prints Before/After too
+  $f16v = Join-Path $tmp 't16v.json'
+  [IO.File]::WriteAllText($f16v, "{ `"servers`": { `"drag-lint`": { `"type`": `"stdio`", `"command`": `"C:\\old\\drag-lint.exe`", `"args`": [], `"env`": { `"API_KEY`": `"$secret`" } } } }")
+  foreach ($o in @(& $SCRIPT -VSCode -ConfigPath $f16v -DbPath $db1 -Engine $eng -DryRun *>&1)) {
+    if ($o -is [System.Management.Automation.InformationRecord]) { $seen.Add([string]$o.MessageData) }
+    elseif ($o -is [pscustomobject]) { $seen.Add([string]$o.Before); $seen.Add([string]$o.After) } else { $seen.Add([string]$o) }
+  }
+  $leaks = @($seen | Where-Object { $_ -like "*$secret*" })
+  if ($leaks.Count) { Fail 'T16-OUTPUT' "an env value was printed: $($leaks[0])" }
+  if ((Test-Path -LiteralPath $log) -and ((Get-Content -LiteralPath $log -Raw) -like "*$secret*")) { Fail 'T16-CLIARGS' 'an env value reached the claude command line' }
+  Chk 'T16-KEPT' (J $f16).mcpServers.'drag-lint'.env.API_KEY $secret
+
   # ---- the script itself: 7-bit ASCII + CRLF
   foreach ($f in $SCRIPT, $PSCommandPath) {
     $t = [IO.File]::ReadAllText($f)
@@ -291,5 +330,5 @@ if ($fail.Count) {
   foreach ($f in $fail) { Write-Host "  $f" }
   exit 1
 }
-Write-Host 'PASS -- Test-McpConfig: T1-T15 (dry-run, empty/missing, merge, backup, idempotence, update, remove, malformed/comments, CLI via fake, refusals, install detection, CLI keeps user keys, foreign entry, changed/appeared while running, failing CLI)'
+Write-Host 'PASS -- Test-McpConfig: T1-T16 (dry-run, empty/missing, merge, backup, idempotence, update, remove, malformed/comments, CLI via fake, refusals, install detection, updates keep user keys by file edit, foreign entry, changed/appeared while running, failing CLI, env values masked)'
 exit 0

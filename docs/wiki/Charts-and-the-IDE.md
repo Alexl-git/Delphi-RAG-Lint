@@ -124,11 +124,15 @@ pwsh -NoProfile -File .\charts\src\Ask-Report.ps1 -Question round-trip `
   indexes that belong with it from `charts\report-pairs.json`.
 * It checks every index it will read for freshness first. A stale one stops the
   run (exit 3) with the incremental `index` command on stderr; it never indexes.
-* The bundle goes under `%TEMP%\drag-lint-reports`. Stdout is `BUNDLE <folder>`,
-  one `INDEX <db>` line per index read, then the answer: the whole trace for
-  `round-trip`, otherwise a `CHART` header with the counts and one
-  `<name> @File.pas:line` line per row, ending with a `... not shown (-Cap N;
-  raise -Cap to see them)` line when the chart drew fewer rows than it counted.
+* The bundle goes under `%TEMP%\drag-lint-reports`. By default stdout is a
+  DocInsight `/// <remarks>` block, byte for byte what the IDE's drag-lint >
+  Reports menu puts on the clipboard, ready to paste above a declaration; it
+  carries no `BUNDLE` / `INDEX` lines. With `-Plain` stdout is
+  `BUNDLE <folder>`, one `INDEX <db>` line per index read, then the answer:
+  the whole trace for `round-trip`, otherwise a `CHART` header with the
+  counts and one `<name> @File.pas:line` line per row, ending with a
+  `... not shown (-Cap N; raise -Cap to see them)` line when the chart drew
+  fewer rows than it counted.
 * Exit codes: 0 answered, 1 the question refused (reason on stderr), 2 setup
   (what to pass or edit), 3 stale.
 
