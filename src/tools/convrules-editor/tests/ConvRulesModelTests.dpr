@@ -6931,11 +6931,13 @@ end;
   ('' = none); ANear receives the number of NEAR-MISS notes seen.
 
   Silencing has three forms: an #ignore in the SAME #convert block as the note; a
-  file-scope #ignore (before the first #convert) naming it; and a bare file-scope
-  '#remove <P>' whose root names it -- #remove takes a bare name and strips it from
-  EVERY component. '#remove DFM: <P>' drops only the persisted .dfm value and keeps
-  the property, so it is not silencing. The two file-scope forms are matched against
-  the NEAR-MISS properties of EVERY block. }
+  file-scope #ignore (before the first #convert) naming it; and a '#remove <P>' or
+  '#remove DFM: <P>' whose root names it. #remove takes a bare name and acts on EVERY
+  component, wherever it is written -- a #remove inside a #convert block is still
+  file-scoped in this DSL -- so every #remove is matched against the NEAR-MISS
+  properties of EVERY block, as is a file-scope #ignore. The DFM: form counts here,
+  unlike in TestConversionLibraryRemovesAreSafe: it drops the persisted .dfm value,
+  and losing TableName's .dfm value IS the defect this guard exists for. }
 function NearMissSilenced(const AText: string; out ANear: Integer): string;
 var
   Book     : TRuleBook  ;
@@ -7002,19 +7004,18 @@ begin
           else
             FileScope.Add('#ignore ' + Trim(n.IgnorePath));
         rnkRemove:
-          if not n.RemoveDfmOnly then
           begin
             Prop:= Trim(n.RemoveProp);
             Dot := Pos('.', Prop);
             if Dot > 0 then
               Prop:= Copy(Prop, 1, Dot - 1);
             if Prop <> '' then
-              FileScope.Add('#remove ' + Prop);
+              FileScope.Add(IfThen(n.RemoveDfmOnly, '#remove DFM: ', '#remove ') + Prop);
           end;
       end; // case
     CloseBlock;
     for S in FileScope do
-      if AllNear.IndexOf(Copy(S, Pos(' ', S) + 1, MaxInt)) >= 0 then
+      if AllNear.IndexOf(Copy(S, LastDelimiter(' ', S) + 1, MaxInt)) >= 0 then
         Silenced.Add('(file scope ' + S + ')');
     Result:= string.Join(', ', Silenced.ToStringArray);
   finally
@@ -7065,6 +7066,8 @@ begin
   Check('convlib.bde2fd.near.miss.anchor', Pos(PREAMBLE_ANCHOR, Txt) > 0, 'the preamble anchor line is gone: ' + Trim(PREAMBLE_ANCHOR));
   Got:= NearMissSilenced(StringReplace(Txt, PREAMBLE_ANCHOR, PREAMBLE_ANCHOR + '#remove TableName' + sLineBreak, []), NNear);
   Check('convlib.bde2fd.near.miss.catches.file.remove', Pos('(file scope #remove TableName)', Got) > 0, 'a preamble #remove TableName was not caught: ' + Got);
+  Got:= NearMissSilenced(StringReplace(Txt, PREAMBLE_ANCHOR, PREAMBLE_ANCHOR + '#remove DFM: TableName' + sLineBreak, []), NNear);
+  Check('convlib.bde2fd.near.miss.catches.file.remove.dfm', Pos('(file scope #remove DFM: TableName)', Got) > 0, 'a preamble #remove DFM: TableName was not caught: ' + Got);
   Got:= NearMissSilenced(StringReplace(Txt, PREAMBLE_ANCHOR, PREAMBLE_ANCHOR + '#ignore TableName' + sLineBreak, []), NNear);
   Check('convlib.bde2fd.near.miss.catches.file.ignore', Pos('(file scope #ignore TableName)', Got) > 0, 'a file-scope #ignore TableName was not caught: ' + Got);
 end; // procedure
