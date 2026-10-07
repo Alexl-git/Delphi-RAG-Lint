@@ -363,16 +363,12 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// Report.DefaultsResolved, no divergence note), no #default is written, and a
 /// #mapping whose source it does not stream is skipped silently.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
-/// <para>Calls: ApplyInScope, ApplySets, Byte, CarryLinkFor, CharInSet, ClassCastUnderPath, CloneNode, CompatHas, Copy, Default (+38 more)</para>
-/// <para>Returns: Default(TReemitResult)</para>
-/// <para>Complexity: 28 (cyclomatic, outer body), 1042 lines (full implementation)</para>
-/// <para>Pure</para>
-/// <seealso cref="DRagLint.Convert.DfmReemit.BareTypeTail"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.EmitBlock"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.FindAtPath"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.LeafDefaultOf"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.LeafIsClassTyped"/>
+/// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: DRagLint.Convert.DfmReemit.ConvertBlockFor, DRagLint.Convert.DfmReemit.ParseDfmBlock, DRagLint.Convert.DfmReemit.ReemitBlock, DRagLint.Convert.Rules.WithoutUnreachableRules</para>
+/// <seealso cref="DRagLint.Convert.DfmReemit.ConvertBlockFor"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.ParseDfmBlock"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.ReemitBlock"/>
+/// <seealso cref="DRagLint.Convert.Rules.WithoutUnreachableRules"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
@@ -404,7 +400,8 @@ uses
   System.Classes,
   TreeSitter,
   TreeSitterLib,
-  DRagLint.Parser.DFM; // for tree_sitter_dfm (external decl lives there)
+  DRagLint.Parser.DFM, // for tree_sitter_dfm (external decl lives there)
+  DRagLint.Convert.GlyphStrip;
 
 const
   { .dfm block keywords, as ObjectKeyword spells them }
@@ -1133,97 +1130,6 @@ var
     end;
   end;
 
-  // The streamed payload's format, sniffed from the leading bytes of a DFM
-  // binary blob, lowercase, or '' when nothing matches.
-  //
-  // SNIFFED, NEVER ASSUMED FROM THE PROPERTY NAME. A property called Picture
-  // says nothing about what was streamed into it, and guessing is exactly the
-  // failure the converter team asked to avoid: "rather have a loud
-  // could-not-carry than a silent re-encode."
-  function SniffPayloadFormat(const AValueText: string): string;
-  var
-    Hex : string;
-    C   : Char;
-    B   : TBytes;
-    I, N: Integer;
-    Cls : string;
-
-    function MagicAt(AOfs: Integer): string;
-      function StartsWith(const AHexSig: string): Boolean;
-      var K: Integer;
-      begin
-        Result:= False;
-        if (AOfs * 2) + Length(AHexSig) > Length(Hex) then Exit;
-        for K:= 1 to Length(AHexSig) do
-          if Hex[(AOfs * 2) + K] <> AHexSig[K] then Exit;
-        Result:= True;
-      end;
-    begin
-      Result:= '';
-      if StartsWith('89504E47') then Exit('png');
-      if StartsWith('424D'    ) then Exit('bmp');
-      if StartsWith('FFD8FF'  ) then Exit('jpg');
-      if StartsWith('47494638') then Exit('gif');
-      if StartsWith('00000100') then Exit('ico');
-    end;
-
-  begin
-    Result:= '';
-    Hex   := '';
-    for C in AValueText do
-    begin
-      if CharInSet(C, ['0'..'9', 'A'..'F', 'a'..'f']) then Hex:= Hex + UpCase(C);
-      if Length(Hex) >= 128 then Break;
-    end;
-    if Length(Hex) < 4 then Exit;
-
-    { A raw image, sniffed at offset 0. }
-    Result:= MagicAt(0);
-    if Result <> '' then Exit;
-
-    (* A DELPHI FILER PREAMBLE, WHICH IS WHAT A REAL .dfm ACTUALLY HOLDS.
-       Measured on ORM3 CLIENT\VARINSP.dfm:
-
-         07 "TBitmap" 76 08 00 00 42 4D ...
-         ^^ ^^^^^^^^^ ^^^^^^^^^^^ ^^^^^
-         |  class     stream size  BM -- the real payload starts HERE
-
-       A `Picture.Data` blob is a STREAMED TPicture, not a bare image: one
-       length byte, that many class-name bytes, a four-byte size, then the
-       image. Sniffing at offset 0 sees the length byte and reports
-       "unrecognised", which is how twenty BMPs -- a format that IS in the
-       compat list -- were refused as incompatible.
-
-       THE CLASS NAME IS THE BETTER ANSWER, and is taken first: it is what the
-       writer declared, where magic bytes are an inference about the same thing.
-       It is also the vocabulary the castlib's `accepts` list speaks, so a cast
-       accepting TBitmap / TPngImage / TIcon is matched on its own terms. The
-       magic-byte sniff after the preamble remains as the fallback for a class
-       this does not know. *)
-    SetLength(B, Length(Hex) div 2);
-    for I:= 0 to High(B) do B[I]:= Byte(StrToIntDef('$' + Copy(Hex, (I * 2) + 1, 2), 0));
-    if Length(B) < 2 then Exit;
-    N:= B[0];
-    if (N < 1) or (N > 63) or (Length(B) < 1 + N) then Exit;
-    Cls:= '';
-    for I:= 1 to N do
-    begin
-      if (B[I] < 32) or (B[I] > 126) then Exit; { not a class name -- give up }
-      Cls:= Cls + Chr(B[I]);
-    end;
-
-    if SameText(Cls, 'TBitmap'   ) then Exit('bmp');
-    if SameText(Cls, 'TPngImage' ) then Exit('png');
-    if SameText(Cls, 'TPNGObject') then Exit('png');
-    if SameText(Cls, 'TJPEGImage') then Exit('jpg');
-    if SameText(Cls, 'TIcon'     ) then Exit('ico');
-    if SameText(Cls, 'TMetafile' ) then Exit('wmf');
-
-    { Unknown wrapper class: fall back to the magic bytes after the preamble
-      (1 length byte + N class bytes + 4 size bytes). }
-    Result:= MagicAt(1 + N + 4);
-  end;
-
   // Is AItem one of the comma-separated entries of AList, case-insensitively?
   //
   // Local rather than CastLib's Has, which is implementation-only there. Adding
@@ -1236,6 +1142,83 @@ var
     if (Trim(AList) = '') or (Trim(AItem) = '') then Exit;
     for S in AList.Split([',']) do
       if SameText(Trim(S), Trim(AItem)) then Exit(True);
+  end;
+
+  // The whitespace a binary value's hex lines start with, so a re-encoded
+  // value keeps the block's layout; two spaces when the value is one line.
+  function HexIndentOf(const AValueText: string): string;
+  var
+    Start: Integer;
+    P    : Integer;
+  begin
+    Start:= Pos(#10, AValueText) + 1;
+    if Start = 1 then Exit('  ');
+    P:= Start;
+    while (P <= Length(AValueText)) and CharInSet(AValueText[P], [' ', #9]) do Inc(P);
+    Result:= Copy(AValueText, Start, P - Start);
+  end;
+
+  (* THE KEPT BYTES ARE TRANSFORMED BETWEEN FILER FORMATS, NOT COPIED (1.26.2).
+
+     A graphic property streams its image inside its OWN class's framing (see
+     TGraphicDataFraming in Convert.GlyphStrip): TPicture.Data is [len]
+     class-name, then that graphic's framing -- `07 'TBitmap' 76080000 424D...`
+     on VARINSP -- while TdxSmartGlyph, which does not override
+     TGraphic.ReadData, reads the bare image file. 1.25.2 carried the TPicture
+     bytes verbatim: every converted glyph parsed, and every one raised
+     `Unsupported image format.` when read (20 of 20 on VARINSP).
+
+     So the payload is unwrapped to the bare file, its format is checked against
+     the cast's compat list, and it is re-framed for the TARGET -- by the
+     castlib's `dfmdata` when given, else by the framing of the cast's single
+     yields class when that is a VCL graphic. VCL framing is fixed knowledge and
+     lives in the engine; a third-party target's is DECLARED in the castlib,
+     because the engine cannot know whether a class it never read overrides
+     ReadData. Every failure is a reason and nothing is carried: an unknown
+     wrapper class, a size field that disagrees with its bytes, a format outside
+     compat, a target framing nobody declared. Bytes that come out identical
+     (same framing both sides) keep their value text verbatim. *)
+  function TranscodeKeptBytes(const AValueText: string; const ACast: TCastDef;
+    out ACarry, AWhy: string): Boolean;
+  var
+    Payload: TBytes;
+    Image  : TBytes;
+    Framed : TBytes;
+    Fmt    : string;
+    Wrapper: string;
+    Framing: TGraphicDataFraming;
+  begin
+    Result:= False;
+    ACarry:= '';
+    Payload:= DecodeDfmHex(AValueText);
+    if not UnwrapGraphicData(Payload, Image, Fmt, Wrapper, AWhy) then Exit;
+    if not CompatHas(ACast.Compat, Fmt) then
+    begin
+      AWhy:= Format('payload format %s is not in the compat list (%s)',
+        [Fmt, if Trim(ACast.Compat) <> '' then ACast.Compat else 'none declared']);
+      Exit;
+    end;
+    if Trim(ACast.DfmData) <> '' then
+      Framing:= ParseDataFraming(ACast.DfmData)
+    else if Length(ACast.Yields) = 1 then
+      Framing:= GraphicClassFraming(ACast.Yields[0])
+    else
+      Framing:= gdfUnknown;
+    if Framing = gdfUnknown then
+    begin
+      if Trim(ACast.DfmData) <> '' then
+        AWhy:= Format('dfmdata "%s" is not a filer format (graphic, bitmap, metafile, picture)', [Trim(ACast.DfmData)])
+      else
+        AWhy:= Format('the filer format of the cast target (%s) is not known to the engine -- ' +
+          'declare it with dfmdata graphic|bitmap|metafile|picture', [string.Join(', ', ACast.Yields)]);
+      Exit;
+    end;
+    if not WrapGraphicData(Image, Fmt, Framing, Framed, AWhy) then Exit;
+    if (Length(Framed) = Length(Payload)) and CompareMem(Pointer(Framed), Pointer(Payload), Length(Framed)) then
+      ACarry:= AValueText
+    else
+      ACarry:= EncodeDfmHex(Framed, HexIndentOf(AValueText));
+    Result:= True;
   end;
 
   // Translate AValue through the ENUM cast named by a #link's ': Cast' suffix.
@@ -1894,16 +1877,18 @@ var
 
        A class-valued property streams its payload on a nested leaf that carries
        no rule of its own, so it reaches here even though its PARENT is linked.
-       A cast whose dfm verb is keep-bytes-if-compatible says: carry those bytes
-       verbatim to the matching path under the target, provided the payload's
-       format is one the target accepts.
+       A cast whose dfm verb is keep-bytes-if-compatible says: carry the IMAGE to
+       the matching path under the target, provided its format is one the target
+       accepts -- re-framed for the target's filer format (TranscodeKeptBytes),
+       never pixel-re-encoded.
 
        THREE OUTCOMES AGAIN, and none of them silent:
-         - format recognised AND in compat -> carried verbatim. PlaceAtPath
-           records it in Created, so it is reported rather than merely happening.
-         - format not in compat, or unrecognised -> the cast's own todo, into
-           Mismatched (WARN). NOT re-encoded and NOT quietly dropped: a wrong
-           image is worse than an absent one the operator was told about.
+         - unwrapped, format in compat, target framing known -> carried.
+           PlaceAtPath records it in Created, so it is reported rather than
+           merely happening.
+         - any of those three not so -> the reason and the cast's own todo, into
+           Mismatched (WARN). NOT carried and NOT quietly dropped: a wrong image
+           is worse than an absent one the operator was told about.
          - no cast, or a different dfm verb -> falls through to Dropped, exactly
            as before. *)
     if ALeaf.Kind = dnkBinary then
@@ -1915,10 +1900,11 @@ var
          and SameText(Trim(CastDef.Dfm), 'keep-bytes-if-compatible')
          and (ToPrefix <> '') and (Remainder <> '') then
       begin
-        var Fmt: string:= SniffPayloadFormat(ALeaf.ValueText);
-        if (Fmt <> '') and CompatHas(CastDef.Compat, Fmt) then
+        var Carry: string;
+        var Why  : string;
+        if TranscodeKeptBytes(ALeaf.ValueText, CastDef, Carry, Why) then
         begin
-          PlaceAtPath(TRoot, ToPrefix + '.' + Remainder, ALeaf.ValueText, dnkBinary, Created);
+          PlaceAtPath(TRoot, ToPrefix + '.' + Remainder, Carry, dnkBinary, Created);
           Exit;
         end;
         { The cast's own todo is written for the operator, so its placeholders
@@ -1927,12 +1913,7 @@ var
         var TodoText: string:= StringReplace(CastDef.Todo, '{src}', AFromPath, [rfReplaceAll]);
         TodoText:= StringReplace(TodoText, '{dst}', ToPrefix + '.' + Remainder, [rfReplaceAll]);
         Result.Report.Mismatched:= Result.Report.Mismatched +
-          [Format('%s: payload format %s is not in the compat list (%s) for cast %s -- bytes NOT carried. %s',
-             [AFromPath,
-              (if Fmt <> '' then Fmt else 'unrecognised'),
-              (if Trim(CastDef.Compat) <> '' then CastDef.Compat else 'none declared'),
-              CastDef.Name,
-              TodoText])];
+          [Format('%s: %s for cast %s -- bytes NOT carried. %s', [AFromPath, Why, CastDef.Name, TodoText])];
         Exit;
       end;
     end;
@@ -2224,8 +2205,26 @@ begin
         // about this block, and counting them would make the divergence note
         // list a child's every property while converting the parent.
         // LeafTypeOf returns '' only when the path is not on F at all.
+        //
+        // ONCE per property (1.26.2): several #links -- one per #convert block of
+        // a book like BDE-to-FireDAC.rules -- can name the same FromPath, and the
+        // note read "Name, Name, ... Name" (MEStats tblMet1).
+        //
+        // NOT a divergence either (1.26.2), and so not listed: `Name`, the
+        // component's identity, which streams in the object HEADER and always
+        // reaches T; and an EVENT, whose absence means unassigned -- nil on both
+        // sides. An event is recognised by its type's VCL naming convention
+        // (TNotifyEvent, TDataSetNotifyEvent, TFilterRecordEvent ...): the index
+        // records no procedural-type kind, and this unit is pure.
+        if SameText(R.FromPath, 'Name') or LeafTypeOf(AFrom, R.FromPath).EndsWith('Event', True) then
+          Continue;
         if LeafTypeOf(AFrom, R.FromPath) <> '' then
-          Unresolved:= Unresolved + [R.FromPath];
+        begin
+          var Seen: Boolean:= False;
+          for var U: string in Unresolved do
+            if SameText(U, R.FromPath) then Seen:= True;
+          if not Seen then Unresolved:= Unresolved + [R.FromPath];
+        end;
         Continue;
       end;
       // Never clobber a value already on the target: two #links can name the

@@ -53,7 +53,16 @@ function New-PicturePayload([string]$Class,[byte[]]$Img){
   $Img.CopyTo($b, 1+$c.Length+4)
   return ,$b
 }
-# Render bytes as a .dfm binary-property block: { hex, 64 chars per line }.
+# TIcon / TPngImage / TGIFImage / TWICImage do NOT override TGraphic.WriteData,
+# so inside a TPicture their image follows the class name with NO size field:
+# [len]Class bytes (Vcl.Graphics, Vcl.Imaging.pngimage; 1.26.2).
+function New-RawPicturePayload([string]$Class,[byte[]]$Img){
+  $c = [Text.Encoding]::ASCII.GetBytes($Class)
+  $b = New-Object byte[] (1 + $c.Length + $Img.Length)
+  $b[0] = [byte]$c.Length; $c.CopyTo($b,1)
+  $Img.CopyTo($b, 1+$c.Length)
+  return ,$b
+}# Render bytes as a .dfm binary-property block: { hex, 64 chars per line }.
 function ConvertTo-DfmHex([byte[]]$B){
   $hex = ([BitConverter]::ToString($B)).Replace('-','')
   $lines = @(); for($i=0;$i -lt $hex.Length;$i+=64){ $lines += ('    ' + $hex.Substring($i,[math]::Min(64,$hex.Length-$i))) }
@@ -91,7 +100,8 @@ end
 $strip2 = New-StripBmp 64 32 2                      # really 2 glyphs
 $pay2   = New-PicturePayload 'TBitmap' $strip2
 $ico    = [byte[]](0x00,0x00,0x01,0x00,0x01,0x00,0x10,0x10,0x00,0x00,0x01,0x00,0x20,0x00,0x68,0x04,0x00,0x00,0x16,0x00,0x00,0x00) + (New-Object byte[] 1128)
-$payIco = New-PicturePayload 'TIcon' $ico
+$payIco = New-RawPicturePayload 'TIcon' $ico
+$icoBytes = $ico   # $ico is reused below for the BtnIco row
 $blob   = New-Object byte[] 40; for($i=0;$i -lt 40;$i++){ $blob[$i]=[byte]($i*3) }   # not a picture: an image-list blob
 Write-Ascii (Join-Path $src 'FrmB.dfm') @"
 inherited FrmB: TFrmB
@@ -153,6 +163,10 @@ $payBare1   = $stripBare1
 # length check always fires first for this shape). Either way the payload must
 # never be reported as an image: format/wrapper stay empty.
 $collPay = [byte[]](0x08,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00)
+# 1.26.2: a PNG inside a TPicture -- [len]'TPngImage' then the bare PNG, no size
+# field. ImageOffset must be 1+9 = 10, the true image start, not 14.
+$png    = [byte[]](0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A) + [byte[]](1..40 | ForEach-Object { [byte]($_ * 5) })
+$payPng = New-RawPicturePayload 'TPngImage' $png
 
 Write-Ascii (Join-Path $src 'FrmD.dfm') @"
 object FrmD: TFrmD
@@ -173,6 +187,9 @@ object FrmD: TFrmD
   object Bare1: TImage
     Picture.Data = $(ConvertTo-DfmHex $payBare1)
   end
+  object Png1: TImage
+    Picture.Data = $(ConvertTo-DfmHex $payPng)
+  end
   object Coll1: TPanel
     Blob.Data = $(ConvertTo-DfmHex $collPay)
   end
@@ -184,7 +201,7 @@ $o = & $Exe glyph-vacuum --root $src --out $out 2>&1 | Out-String
 $code = $LASTEXITCODE
 Write-Host "--- raw stdout ---"; Write-Host $o
 Check 'T1 exit 0 on a completed walk' ($code -eq 0) "exit=$code"
-Check 'T1 summary line names the counts' ($o -match 'glyph-vacuum: dfm=3 graphics=11 distinct=10 skipped=0') $o
+Check 'T1 summary line names the counts' ($o -match 'glyph-vacuum: dfm=3 graphics=12 distinct=11 skipped=0') $o
 
 $inst = Join-Path $out 'instances.tsv'
 Check 'T1 instances.tsv written' (Test-Path $inst)
@@ -228,7 +245,16 @@ if (Test-Path $inst) {
   $ec  = $rows | Where-Object { $_.object_path -eq 'EmfCtl' }
   $ba  = $rows | Where-Object { $_.object_path -eq 'Bare1' }
   $cl  = $rows | Where-Object { $_.object_path -eq 'Coll1' }
-  Check 'T2 eleven rows' ($rows.Count -eq 11) "rows=$($rows.Count)"
+  $pg  = $rows | Where-Object { $_.object_path -eq 'Png1' }
+  # 1.26.2: the saved image is the TRUE image -- the class name stripped and
+  # NO size field assumed for a class that writes none (TPngImage, TIcon).
+  Check 'T2c Png1 wrapper TPngImage, format png' ($pg.wrapper -eq 'TPngImage' -and $pg.format -eq 'png') "$($pg.wrapper)/$($pg.format)"
+  $pgImg = if ($pg.image_file) { Join-Path $out $pg.image_file } else { '' }
+  Check 'T2c Png1 image file is exactly the PNG (image starts right after the class name)' `
+    (($pgImg -ne '') -and (Test-Path $pgImg) -and ([Convert]::ToBase64String([IO.File]::ReadAllBytes($pgImg)) -eq [Convert]::ToBase64String($png))) $pgImg
+  $icImg = if ($ico.image_file) { Join-Path $out $ico.image_file } else { '' }
+  Check 'T2c BtnIco image file is exactly the ICO (no 4-byte size assumed)' `
+    (($icImg -ne '') -and (Test-Path $icImg) -and ([Convert]::ToBase64String([IO.File]::ReadAllBytes($icImg)) -eq [Convert]::ToBase64String($icoBytes))) $icImg  Check 'T2 twelve rows' ($rows.Count -eq 12) "rows=$($rows.Count)"
   Check 'T2 Btn1 count_prop NumGlyphs'     ($a1.count_prop -eq 'NumGlyphs') $a1.count_prop
   Check 'T2 Btn1 count_value 4'           ($a1.count_value -eq '4') $a1.count_value
   Check 'T2 Btn1 count_effective 4 (no db: from the value)' ($a1.count_effective -eq '4') $a1.count_effective
@@ -474,12 +500,12 @@ $outA = Join-Path $WorkDir 'out-append'
 $n1 = (Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t").Count
 & $Exe glyph-vacuum --root $src --out $outA --append | Out-Null
 $n2 = (Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t").Count
-Check 'T6 append of the same root is idempotent' ($n1 -eq 11 -and $n2 -eq 11) "n1=$n1 n2=$n2"
+Check 'T6 append of the same root is idempotent' ($n1 -eq 12 -and $n2 -eq 12) "n1=$n1 n2=$n2"
 & $Exe glyph-vacuum --root $src3 --out $outA --append | Out-Null
 $rowsA = Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t"
-Check 'T6 append of a second root adds its rows' ($rowsA.Count -eq 12) "n=$($rowsA.Count)"
+Check 'T6 append of a second root adds its rows' ($rowsA.Count -eq 13) "n=$($rowsA.Count)"
 Check 'T6 merged classes.tsv counts both roots' (((Import-Csv (Join-Path $outA 'classes.tsv') -Delimiter "`t") | Where-Object { $_.component_class -eq 'TabcToggleBtn' }).instances -eq '3')
-Check 'T6 images dir holds one file per distinct sha (10)' ((Get-ChildItem (Join-Path $outA 'images')).Count -eq 10)
+Check 'T6 images dir holds one file per distinct sha (11)' ((Get-ChildItem (Join-Path $outA 'images')).Count -eq 11)
 & $Exe glyph-vacuum --root $src3 --out $outA | Out-Null
 Check 'T6 without --append the file is REPLACED' ((@(Import-Csv (Join-Path $outA 'instances.tsv') -Delimiter "`t")).Count -eq 1)
 
