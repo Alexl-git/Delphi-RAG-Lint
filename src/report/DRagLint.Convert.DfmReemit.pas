@@ -203,6 +203,31 @@ type
     TypeName: string;  { the shared property type, bare (TFont) }
   end;
 
+  /// <summary>One fired '#warn' (1.26.3): the SOURCE block streams FromPath, so
+  /// the book's text is reported, expanded, for this instance.</summary>
+  /// <remarks>Value is the streamed value (a simple quoted string unquoted);
+  /// Text the template with &lt;value&gt;, &lt;name&gt; and every brace
+  /// placeholder replaced (an absent placeholder property expands to '').
+  /// REMAINDER: convert-apply reports it as a warning.</remarks>
+  TReemitBookWarning = record
+    FromPath: string;
+    Value   : string;
+    Text    : string;
+    RuleLine: Integer;
+  end;
+
+  /// <summary>One '#check-ref' value to verify (1.26.3): the CONVERTED block
+  /// carries Value at ToPath. The re-emit is pure, so it only reports what it
+  /// wrote; convert-apply checks it against the project index.</summary>
+  /// <remarks>Value is unquoted like TReemitBookWarning.Value. RefTargets is
+  /// the rule's 'Class.Prop' list.</remarks>
+  TReemitRefCheck = record
+    ToPath    : string;
+    Value     : string;
+    RefTargets: TArray<string>;
+    RuleLine  : Integer;
+  end;
+
   /// <summary>A structured report of what the re-emit did and what needs human
   /// attention. WARN-level: Dropped, Mismatched, OwnedParts. Silent: Ignored (an
   /// acknowledged #ignore).</summary>
@@ -274,6 +299,12 @@ type
     /// nothing was written for them.</summary>
     EnumUnmapped      : TArray<TReemitEnumUnmapped>;
     Notes       : TArray<string>;
+    /// <summary>Remainder (1.26.3): the block's '#warn' rules whose source
+    /// property this block streams.</summary>
+    BookWarnings: TArray<TReemitBookWarning>;
+    /// <summary>To verify (1.26.3): the block's '#check-ref' paths that carry a
+    /// value in the converted block.</summary>
+    RefChecks   : TArray<TReemitRefCheck>;
   end;
 
   /// <summary>The result of ReemitComponent: the emitted T object block plus the
@@ -914,6 +945,19 @@ begin
       if Result = 0 then Result:= Block; // the fallback: the first #convert
       if SameText(BareTypeTail(R.FromType), AClassName) then Exit(Block);
     end;
+end;
+
+// 1.26.3: a .dfm value as a reader sees it -- one simple quoted string
+// ('abc', 'it''s') unquoted, anything else (identifiers, numbers, sets,
+// #-coded or '+'-joined strings) trimmed and kept verbatim.
+function DfmValueText(const ARaw: string): string;
+const
+  QUOTE = '''';
+begin
+  Result:= Trim(ARaw);
+  if (Length(Result) >= 2) and (Result[1] = QUOTE) and (Result[Length(Result)] = QUOTE) and
+     (Pos(QUOTE + '#', Result) = 0) and (Pos(QUOTE + ' +', Result) = 0) then
+    Result:= StringReplace(Copy(Result, 2, Length(Result) - 2), QUOTE + QUOTE, QUOTE, [rfReplaceAll]);
 end;
 
 // 1.26.1 (F1): the rules ONE #convert block runs -- the file-scope rules
@@ -1978,6 +2022,48 @@ var
         RemapLeaf(Child, APrefix + '.' + Child.Name);
   end;
 
+  // 1.26.3: #warn fires when the SOURCE block streams its path (a .dfm streams
+  // only non-default values, so present = non-default) and carries nothing;
+  // #check-ref reports the value the CONVERTED block holds at its path, for
+  // convert-apply to verify against the project index. Runs after the T block
+  // is complete, so a #check-ref sees links, #defaults and resolved defaults.
+  procedure ReportBookChecks;
+  var
+    Q    : TConversionRule;
+    WVal : string;
+    PhVal: string;
+    BW   : TReemitBookWarning;
+    RC   : TReemitRefCheck;
+    CNode: TDfmNode;
+  begin
+    for Q in ARules.Rules do
+      if Q.Kind = rkWarn then
+      begin
+        if not FindLeafValue(Q.FromPath, WVal) or (Trim(WVal) = '') then Continue;
+        BW.FromPath:= Q.FromPath;
+        BW.Value   := DfmValueText(WVal);
+        BW.RuleLine:= Q.LineNo;
+        BW.Text    := StringReplace(StringReplace(Q.Text, '<value>', BW.Value, [rfReplaceAll, rfIgnoreCase]),
+                        '<name>', FRoot.Name, [rfReplaceAll, rfIgnoreCase]);
+        for var Ph: string in WarnPlaceholders(Q.Text) do
+        begin
+          if not FindLeafValue(Ph, PhVal) then PhVal:= '';
+          BW.Text:= StringReplace(BW.Text, '{' + Ph + '}', DfmValueText(PhVal), [rfReplaceAll, rfIgnoreCase]);
+        end;
+        Result.Report.BookWarnings:= Result.Report.BookWarnings + [BW];
+      end
+      else if Q.Kind = rkCheckRef then
+      begin
+        CNode:= FindAtPath(TRoot, Q.ToPath);
+        if not Assigned(CNode) or (CNode.Kind <> dnkScalar) or (Trim(CNode.ValueText) = '') then Continue;
+        RC.ToPath    := Q.ToPath;
+        RC.Value     := DfmValueText(CNode.ValueText);
+        RC.RefTargets:= Q.RefTargets;
+        RC.RuleLine  := Q.LineNo;
+        Result.Report.RefChecks:= Result.Report.RefChecks + [RC];
+      end;
+  end;
+
   procedure HandleNested(const ASub: TDfmNode);
   var
     PartResult: TReemitResult;
@@ -2002,6 +2088,8 @@ var
           Result.Report.Created := Result.Report.Created + PartResult.Report.Created;
           Result.Report.Dropped := Result.Report.Dropped + PartResult.Report.Dropped;
           Result.Report.Carried := Result.Report.Carried + PartResult.Report.Carried;
+          Result.Report.BookWarnings:= Result.Report.BookWarnings + PartResult.Report.BookWarnings;
+          Result.Report.RefChecks   := Result.Report.RefChecks + PartResult.Report.RefChecks;
         end;
       end;
     end
@@ -2315,6 +2403,9 @@ begin
       Result.Report.Notes:= Result.Report.Notes +
         [Format('property defaults may diverge between %s and %s -- %s absent from the F DFM with no default clause to resolve, so the T default applies (verify)',
           [AFrom.RootType, ATo.RootType, string.Join(', ', Unresolved)])];
+
+    // 7. 1.26.3: #warn / #check-ref -- see ReportBookChecks.
+    ReportBookChecks;
 
     // Fold the local accumulators into the report (do NOT clobber Task-6 appends).
     Result.Report.Created:= Result.Report.Created + Created;
