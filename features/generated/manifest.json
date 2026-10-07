@@ -1,5 +1,5 @@
 {
-  "product": "1.26.2-alpha",
+  "product": "1.26.4-alpha",
   "extractor": "1.21.1-alpha",
   "resolver": "1.12.0-alpha",
   "schema": 23,
@@ -2005,7 +2005,8 @@
       "owner": "CHARTS",
       "status": "shipped",
       "since": "0.44.0-alpha",
-      "summary": "Produces a spreadsheet-style CSV of a project's forms, one row per form, telling a human tester how to reach each form from the main form: the menu, ribbon",
+      "summary": "A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form",
+      "intro": "Hand a tester one spreadsheet that says how to reach every form: drag-lint > Reports > Forms for testers (CSV)... or drag-lint forms-csv --project <dproj> --db <db>. Each row gives the menu, ribbon or tab path, the control, the handler, the modal flag and the preconditions per hop; popup forms the index cannot trace go under popupForms in drag-lint-project.json. Needs the project index.",
       "wikiPage": "Generate-Test-Helper-CSV",
       "surfaces": [
         {
@@ -2197,6 +2198,7 @@
       "owner": "CHARTS",
       "status": "planned",
       "summary": "Ask the index a question, get a chart back",
+      "intro": "Planned: one engine verb, drag-lint ask --question <id> --at <file:line:col>, answering every chart question. Not shipped yet -- ask today from drag-lint > Reports, or with charts\\src\\Ask-Report.ps1 or New-DiagramArtifact.ps1.",
       "wikiPage": "Diagrams-and-Charts",
       "surfaces": [],
       "audience": "both",
@@ -2210,6 +2212,7 @@
       "status": "shipped",
       "since": "1.20.2-alpha",
       "summary": "Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS",
+      "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run charts\\src\\Ask-Report.ps1 -Question <id> -Target <name> -Project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index, PowerShell 7, and Graphviz for the pictures.",
       "wikiPage": "Diagrams-and-Charts",
       "surfaces": [
         {
@@ -2232,8 +2235,9 @@
       "group": "diagrams-charts",
       "owner": "CHARTS",
       "status": "shipped",
-      "since": "0.0.0",
+      "since": "1.20.1-alpha",
       "summary": "Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio",
+      "intro": "Read this when you first ask a chart question: how to ask one from drag-lint > Reports or a script, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a repository clone and PowerShell 7.",
       "wikiPage": "Charts-and-the-IDE",
       "surfaces": [
         {
@@ -2242,8 +2246,28 @@
         }
       ],
       "audience": "both",
-      "notes": "seed: since unknown",
       "homeOrder": 45
+    },
+    {
+      "id": "chart-engine-dot-lookup",
+      "title": "Where the charts find the engine and Graphviz",
+      "group": "diagrams-charts",
+      "owner": "CHARTS",
+      "status": "shipped",
+      "since": "1.26.1-alpha",
+      "summary": "Every chart script finds drag-lint.exe and dot.exe by -Engine/-Dot, env, settings.json, the installed layout, then the shared defaults",
+      "intro": "Point the charts at a different engine or Graphviz without editing a script: pass -Engine / -Dot, set DRAGLINT_ENGINE / DRAGLINT_DOT, or put engine / dot keys in %APPDATA%\\drag-lint\\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then the shared defaults.",
+      "wikiPage": "Charts-and-the-IDE",
+      "surfaces": [
+        {
+          "type": "workflow",
+          "doc": "charts\\README.md"
+        }
+      ],
+      "audience": "both",
+      "requires": ["powershell7"],
+      "aliases": ["DRAGLINT_DOT", "DRAGLINT_ENGINE", "settings.json"],
+      "related": ["chart-questions"]
     },
     {
       "id": "add-missing-units-to-uses-whole-unit",
@@ -2668,6 +2692,28 @@
       "audience": "both",
       "requires": ["index"],
       "notes": "issued by the plugin from DragLint.Plugin.LspClient.pas:297"
+    },
+    {
+      "id": "mcp-config-writer",
+      "title": "Register the MCP server (Claude Code, VS Code)",
+      "group": "editor-integration",
+      "owner": "CHARTS",
+      "status": "shipped",
+      "since": "1.26.1-alpha",
+      "summary": "Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable",
+      "intro": "Run Set-DragLintMcpConfig.ps1 -All (try -DryRun first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass -DbPath to pin one index per entry (-Name); -Remove takes only its own entry out again. Needs PowerShell 7 and the engine found by the charts' lookup.",
+      "wikiPage": "Register-MCP-Server",
+      "surfaces": [
+        {
+          "type": "script",
+          "path": "charts\\src\\Set-DragLintMcpConfig.ps1",
+          "args": "-All -DryRun"
+        }
+      ],
+      "audience": "both",
+      "requires": ["powershell7"],
+      "aliases": ["claude mcp add", "mcp setup", "mcp.json"],
+      "related": ["serve"]
     },
     {
       "id": "serve",
@@ -7060,6 +7106,39 @@
         "parent": "chart-questions",
         "subgroup": "Routine at the cursor",
         "emitter": "charts\\src\\Emit-WhoCalls.ps1"
+      },
+      {
+        "id": "chart.path",
+        "title": "Call path from this routine to another",
+        "group": "diagrams-charts",
+        "owner": "CHARTS",
+        "status": "shipped",
+        "since": "1.20.2-alpha",
+        "summary": "Call path from this routine to another -- chart question (Routine at the cursor)",
+        "wikiPage": "ask-path",
+        "surfaces": [
+          {
+            "type": "ide-menu",
+            "path": "drag-lint > Reports > Call path from this routine to another..."
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\Ask-Report.ps1",
+            "args": "-Question path"
+          },
+          {
+            "type": "script",
+            "path": "charts\\src\\New-DiagramArtifact.ps1",
+            "args": "-Question path"
+          }
+        ],
+        "audience": "both",
+        "requires": ["index", "powershell7", "graphviz"],
+        "aliases": ["call path", "route"],
+        "tests": ["charts\\src\\Test-Emitters.ps1"],
+        "parent": "chart-questions",
+        "subgroup": "Routine at the cursor",
+        "emitter": "charts\\src\\Emit-Path.ps1"
       },
       {
         "id": "chart.effects",

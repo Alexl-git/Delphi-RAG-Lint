@@ -223,12 +223,13 @@ Step 'AR-DOC-PORT' {
 }
 Step 'AR-DOC-CAPTIONS' {
   . (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
-  $pas = 'C:\Projects\Delphi-RAG-lint\src\delphi-plugin\DragLint.Plugin.ReportText.pas'
+  # this checkout's plugin source, not a fixed main-tree path: a worktree must compare against its OWN catalog
+  $pas = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\src\delphi-plugin\DragLint.Plugin.ReportText.pas'))
   if (-not (Test-Path -LiteralPath $pas)) { Write-Host "  AR-DOC-CAPTIONS skipped: $pas is not on this machine" }
   else {
     $pq = @([regex]::Matches([IO.File]::ReadAllText($pas), "\(Id: '([^']+)'\s*; Caption: '((?:[^']|'')*)'") | ForEach-Object { "$($_.Groups[1].Value)=$($_.Groups[2].Value -replace "''", "'")" })
     $mine = @($script:ReportCaptions.Keys | ForEach-Object { "$_=$($script:ReportCaptions[$_])" })
-    Chk 'AR-DOC-CAPTIONS' "$($pq.Count)|$(($pq -join ';') -ceq ($mine -join ';'))" '25|True'
+    Chk 'AR-DOC-CAPTIONS' "$($pq.Count)|$(($pq -join ';') -ceq ($mine -join ';'))" '26|True'
   }
 }
 

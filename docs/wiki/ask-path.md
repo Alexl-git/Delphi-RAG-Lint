@@ -10,7 +10,7 @@
 New-DiagramArtifact.ps1 -Question path -Target MyApp.Orders.TOrderService.Post -To MyApp.Db.TConnection.Commit -DbPath <project.sqlite>
 ```
 
-The drag-lint > Reports menu entry for this question arrives with the IDE plugin's next question-list update; until then use the script.
+In the IDE: drag-lint > Reports > **Call path from this routine to another...** with the caret on routine A; the menu then asks for routine B (a qualified name).
 
 ## You select
 

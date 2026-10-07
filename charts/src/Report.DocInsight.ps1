@@ -20,6 +20,7 @@ $script:ReportCaptions = [ordered]@{
   'butterfly'        = 'Callers and callees (butterfly chart)...'
   'who-calls'        = 'Who calls this routine...'
   'what-it-calls'    = 'What this routine calls...'
+  'path'             = 'Call path from this routine to another...'
   'effects'          = 'What this routine changes (side effects)...'
   'touches-tables'   = 'Which tables this routine touches...'
   'exception-paths'  = 'Which exceptions escape this routine...'

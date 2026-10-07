@@ -25,7 +25,7 @@ An index IS required. The project's DB lives at
 `drag-lint resolve-dbs --project <X.dproj>` if unsure. The form `.dfm` files
 are also read directly (text `.dfm` only) to work out menu and tab paths.
 
-## Columns (algorithm v6)
+## Columns (algorithm v7)
 
 | Column | Meaning |
 |---|---|
@@ -63,11 +63,11 @@ note instead of `no caller found`:
 (default `opened as a popup (declared in drag-lint-project.json)`). A missing
 file or key is normal; a malformed file is ignored with one line on stderr, and a bad entry (no `form`, or a `form` that is not a string) skips only that entry, with its own stderr line. The CSV is produced in every case.
 
-`drag-lint-project.json` normally lives OUTSIDE version control (check your repository's ignore rules), so `popupForms` is a per-machine setting: a fresh clone or a new worktree does not have it, and each machine that runs `forms-csv` needs its own copy -- unless your repository deliberately tracks the file.
+`drag-lint-project.json` normally lives OUTSIDE version control (a `_D-RAG` folder that `migrate-dbs` created carries its own `.gitignore` of `*`; one a plain `index` run created does not, so check your repository's ignore rules), so `popupForms` is a per-machine setting: a fresh clone or a new worktree does not have it, and each machine that runs `forms-csv` needs its own copy -- unless your repository deliberately tracks the file.
 The engine carries no project's form names of its own.
 
 The last line is a provenance footer in the `Notes` column:
-`# forms-csv algorithm v6 | db: <path> | schema v<n> | <timestamp>`. The IDE
+`# forms-csv algorithm v7 | db: <path> | schema v<n> | <timestamp>`. The IDE
 plugin warns about a stale engine when this version differs from what it
 expects.
 

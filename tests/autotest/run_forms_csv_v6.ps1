@@ -78,7 +78,13 @@ Check 'rows are CRLF-terminated' ($raw.EndsWith("`r`n") -and -not ($raw -match "
 $lines = @($raw -split "`r`n" | Where-Object { $_ -ne '' })
 $header = '#,Form,Unit,How to open,Click,Control type,Handler,Opened by,Modal,Before you start,Other ways in,Confidence,Tester result,Notes'
 Check 'v6 header is row 1' ($lines[0] -ceq $header) $lines[0]
-Check 'footer names algorithm v6' ($lines[-1] -match '^,{13}"# forms-csv algorithm v6 \|') $lines[-1]
+# The footer must carry the engine's FORMS_CSV_ALGORITHM, read from the source
+# rather than pinned here: the guard is about the v6 COLUMNS, and the algorithm
+# moves on (v7, 2026-10-06: cell meanings changed under an unchanged footer).
+$algoSrc = [IO.File]::ReadAllText("$PSScriptRoot\..\..\src\forms\DRagLint.FormsMap.pas")
+$algo = [regex]::Match($algoSrc, "FORMS_CSV_ALGORITHM\s*=\s*'(\d+)'").Groups[1].Value
+Check 'FORMS_CSV_ALGORITHM read from FormsMap.pas' ($algo -ne '') "got [$algo]"
+Check "footer names algorithm v$algo" ($algo -ne '' -and $lines[-1] -match ('^,{13}"# forms-csv algorithm v' + $algo + ' \|')) $lines[-1]
 
 # ConvertFrom-Csv skips a line starting with '#' as a comment, so the header
 # row cannot be its own header; parse the data rows against the known names.

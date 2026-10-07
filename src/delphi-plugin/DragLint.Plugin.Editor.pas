@@ -3757,7 +3757,7 @@ end; // procedure
 /// so the version is parsed as the digit run right after the literal
 /// "algorithm v". Reads the file as ANSI to match the engine's output encoding.</remarks>
 const
-  EXPECTED_FORMS_CSV_ALGO = '6'; // keep in lockstep with FormsMap.FORMS_CSV_ALGORITHM
+  EXPECTED_FORMS_CSV_ALGO = '7'; // keep in lockstep with FormsMap.FORMS_CSV_ALGORITHM
 procedure WarnIfStaleFormsCsv(const ACsvPath: string);
 var
   Lines   : TArray<string>;

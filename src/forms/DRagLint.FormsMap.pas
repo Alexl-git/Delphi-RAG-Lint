@@ -1,6 +1,6 @@
 unit DRagLint.FormsMap;
 
-/// <summary>Builds a per-form tester CSV for a project (algorithm v6): how a
+/// <summary>Builds a per-form tester CSV for a project (algorithm v7): how a
 /// tester reaches each form from the application's root form -- the menu /
 /// ribbon / tab path, the control, its handler, the routine that opens the form,
 /// modality and a confidence. Edges come from the index first (refs to the form
@@ -8,7 +8,12 @@ unit DRagLint.FormsMap;
 /// the v5 text scan as the fallback; control locations come from the .dfm tree
 /// (DRagLint.FormsMap.Dfm).</summary>
 /// <remarks>Engine only. The CLI command forms-csv and the IDE menu item are thin
-/// wrappers. Not thread-safe; single-shot per call.</remarks>
+/// wrappers. Not thread-safe; single-shot per call. v7 (2026-10-06) keeps the v6
+/// columns but changes what cells MEAN: Modal is read from the created variable,
+/// a form method or the .dfm and a '?' always carries its reason in Notes;
+/// Before you start covers every hop, text-scan edges and guard messages; popup
+/// forms come from drag-lint-project.json. The plugin's EXPECTED_FORMS_CSV_ALGO
+/// must move with FORMS_CSV_ALGORITHM, and the exe and plugin deploy together.</remarks>
 
 interface
 
@@ -187,7 +192,7 @@ const
   // v6: index-first edges (refs + call_edges) with the text scan as fallback, a
   // .dfm-tree location per control (menu / bar / ribbon / tab path), and the
   // tester columns (Click, Handler, Opened by, Modal, Confidence ...).
-  FORMS_CSV_ALGORITHM = '6'; // bump when the edge or path algorithm changes
+  FORMS_CSV_ALGORITHM = '7'; // bump when the edge or path algorithm, or a cell's meaning, changes
 
   POPUP_FORMS_KEY  = 'popupForms'; // R1: key in <project>\_D-RAG\drag-lint-project.json
   POPUP_NOTE_DEFAULT = 'opened as a popup (declared in drag-lint-project.json)';
