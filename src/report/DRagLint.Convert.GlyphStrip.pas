@@ -23,7 +23,7 @@ type
   /// an empty Wrapper. Width/Height/BitCount/PaletteEntries are filled for BMP
   /// only; every other format, including SVG, leaves them 0.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ReadDibHeader (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.SaveImage (DRagLint.Convert.GlyphVacuum.pas)</para>
   /// <para>Used in units: DRagLint.Convert.GlyphStrip, DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -46,9 +46,8 @@ type
 /// <returns>The decoded bytes; empty for an empty or non-hex value.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.GlyphVacuum.HarvestCollection (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.HarvestObject (DRagLint.Convert.GlyphVacuum.pas)</para>
+/// <para>Called from: DRagLint.Convert.DfmReemit.ReemitBlock.TranscodeKeptBytes (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.GlyphVacuum.HarvestCollection (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.HarvestObject (DRagLint.Convert.GlyphVacuum.pas)</para>
 /// <para>Calls: Byte, CharInSet, Copy, StrToIntDef, UpCase</para>
-/// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DecodeDfmHex(const AValueText: string): TBytes;
@@ -59,10 +58,9 @@ function DecodeDfmHex(const AValueText: string): TBytes;
 /// <returns>'bmp' | 'ico' | 'wmf' | 'emf' | 'png' | 'jpg' | 'gif' | 'svg' | '' (unrecognised).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Called from: DRagLint.Convert.GlyphStrip.IsLengthPrefixedImage (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.UnwrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
 /// <para>Calls: DRagLint.Convert.GlyphStrip.IsEmfSignature, DRagLint.Convert.GlyphStrip.LooksLikeSvg, DRagLint.Convert.GlyphStrip.StartsWith</para>
 /// <para>Returns: ''</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Convert.GlyphStrip.IsEmfSignature"/>
 /// <seealso cref="DRagLint.Convert.GlyphStrip.LooksLikeSvg"/>
 /// <seealso cref="DRagLint.Convert.GlyphStrip.StartsWith"/>
@@ -89,6 +87,74 @@ function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParseStreamedGraphic(const APayload: TBytes): TStreamedGraphic;
+
+type
+  /// <summary>The FILER FRAMING a graphic property's binary <c>Data</c> uses:
+  /// what surrounds the image file when the property is streamed into a .dfm.
+  /// It differs per graphic class, so a payload is carried between two
+  /// properties by unwrapping one framing and wrapping the other -- never by
+  /// copying the bytes.</summary>
+  /// <remarks>
+  /// Read from the sources (RAD Studio 37 Vcl.Graphics / Vcl.Imaging.*,
+  /// DevExpress RS37 dxSmartImage / dxGDIPlusClasses), not inferred:
+  /// <para>gdfGraphic -- TGraphic.WriteData / ReadData: the bare image file
+  /// (SaveToStream / LoadFromStream). TIcon, TPngImage, TGIFImage and TWICImage
+  /// do not override it; nor do TdxSmartImage / TdxSmartGlyph, whose Data is
+  /// therefore the bare file too.</para>
+  /// <para>gdfSized -- [Int32 LE size][image]: TBitmap.WriteData, TJPEGImage.WriteData.</para>
+  /// <para>gdfSizedInclusive -- [Int32 LE size, counting itself][image]: TMetafile.</para>
+  /// <para>gdfPicture -- TPicture.WriteData: one length byte, the graphic's class
+  /// name, then THAT class's own framing.</para>
+  /// <para>gdfUnknown -- not known; never guessed.</para>
+  /// </remarks>
+  TGraphicDataFraming = (gdfUnknown, gdfGraphic, gdfSized, gdfSizedInclusive, gdfPicture);
+
+/// <summary>The filer framing of a VCL graphic class's <c>Data</c>.</summary>
+/// <param name="AClassName">A class name, bare or unit-qualified (Vcl.Graphics.TBitmap).</param>
+/// <returns>The framing for TPicture, TBitmap, TJPEGImage, TMetafile, TIcon,
+/// TPngImage, TGIFImage, TWICImage; gdfUnknown for any other class.</returns>
+/// <remarks>VCL classes ONLY. A third-party class's framing is declared by the
+/// cast library (`dfmdata`, see ParseDataFraming), because the engine has no
+/// way to know whether a class it never read overrides ReadData.</remarks>
+function GraphicClassFraming(const AClassName: string): TGraphicDataFraming;
+
+/// <summary>A castlib `dfmdata` keyword as a framing.</summary>
+/// <param name="AKeyword">'graphic' | 'bitmap' | 'metafile' | 'picture', any case.</param>
+/// <returns>The framing; gdfUnknown for any other text.</returns>
+function ParseDataFraming(const AKeyword: string): TGraphicDataFraming;
+
+/// <summary>Strip a streamed graphic payload down to the bare image file.</summary>
+/// <param name="APayload">The property value, decoded from hex.</param>
+/// <param name="AImage">The image file bytes on success; empty otherwise.</param>
+/// <param name="AFormat">The image format sniffed from AImage ('bmp', 'png', ...).</param>
+/// <param name="AWrapper">The TPicture wrapper's class name; '' when there was none.</param>
+/// <param name="AReason">Why the payload could not be unwrapped; '' on success.</param>
+/// <returns>True when AImage is a recognised image file.</returns>
+/// <remarks>Accepts three shapes: a bare image file; [Int32 size][image]
+/// (a TBitmap-typed property); and a TPicture stream, whose class name decides
+/// the inner framing (GraphicClassFraming). REFUSES -- never guesses -- an
+/// unknown class name, a size field that disagrees with the bytes that follow,
+/// and inner bytes that are not a recognised image.</remarks>
+function UnwrapGraphicData(const APayload: TBytes; out AImage: TBytes;
+  out AFormat, AWrapper, AReason: string): Boolean;
+
+/// <summary>Frame a bare image file for a property of the given filer framing.</summary>
+/// <param name="AImage">The image file bytes.</param>
+/// <param name="AFormat">Its format as UnwrapGraphicData reported it.</param>
+/// <param name="AFraming">The TARGET property's framing.</param>
+/// <param name="AData">The bytes to stream on success.</param>
+/// <param name="AReason">Why it could not be framed; '' on success.</param>
+/// <returns>False for gdfUnknown, and for gdfPicture when no VCL graphic class
+/// holds AFormat.</returns>
+function WrapGraphicData(const AImage: TBytes; const AFormat: string;
+  AFraming: TGraphicDataFraming; out AData: TBytes; out AReason: string): Boolean;
+
+/// <summary>Bytes as a .dfm binary property value, the way Delphi writes one:
+/// '{', then 32 bytes (64 hex digits) per line, the closing '}' on the last.</summary>
+/// <param name="ABytes">The bytes to encode.</param>
+/// <param name="AIndent">The whitespace each hex line starts with.</param>
+/// <returns>The value text, CRLF line breaks; '{}' for no bytes.</returns>
+function EncodeDfmHex(const ABytes: TBytes; const AIndent: string): string;
 
 implementation
 
@@ -323,6 +389,210 @@ begin
   end;
 
   if Result.Format = 'bmp' then ReadDibHeader(APayload, Result.ImageOffset, Result);
+end;
+
+function BareClassName(const AClassName: string): string;
+begin
+  Result:= Trim(AClassName);
+  if Result.LastIndexOf('.') >= 0 then Result:= Result.Substring(Result.LastIndexOf('.') + 1);
+end;
+
+function GraphicClassFraming(const AClassName: string): TGraphicDataFraming;
+var
+  Cls: string;
+begin
+  Cls:= BareClassName(AClassName);
+  if SameText(Cls, 'TPicture') then
+    Result:= gdfPicture
+  else if SameText(Cls, 'TBitmap') or SameText(Cls, 'TJPEGImage') then
+    Result:= gdfSized
+  else if SameText(Cls, 'TMetafile') then
+    Result:= gdfSizedInclusive
+  else if SameText(Cls, 'TIcon') or SameText(Cls, 'TPngImage') or SameText(Cls, 'TGIFImage') or
+          SameText(Cls, 'TWICImage') then
+    Result:= gdfGraphic
+  else
+    Result:= gdfUnknown;
+end;
+
+function ParseDataFraming(const AKeyword: string): TGraphicDataFraming;
+var
+  K: string;
+begin
+  K:= Trim(AKeyword);
+  if SameText(K, 'graphic') then
+    Result:= gdfGraphic
+  else if SameText(K, 'bitmap') then
+    Result:= gdfSized
+  else if SameText(K, 'metafile') then
+    Result:= gdfSizedInclusive
+  else if SameText(K, 'picture') then
+    Result:= gdfPicture
+  else
+    Result:= gdfUnknown;
+end;
+
+// The VCL class TPicture.WriteData names for an image of this format, or ''.
+function PictureClassForFormat(const AFormat: string): string;
+begin
+  if AFormat = 'bmp' then
+    Result:= 'TBitmap'
+  else if AFormat = 'png' then
+    Result:= 'TPngImage'
+  else if AFormat = 'ico' then
+    Result:= 'TIcon'
+  else if AFormat = 'jpg' then
+    Result:= 'TJPEGImage'
+  else if AFormat = 'gif' then
+    Result:= 'TGIFImage'
+  else if (AFormat = 'emf') or (AFormat = 'wmf') then
+    Result:= 'TMetafile'
+  else
+    Result:= '';
+end;
+
+function Int32Bytes(AValue: Integer): TBytes;
+begin
+  SetLength(Result, Int32ByteLen);
+  Result[0]         := Byte(AValue);
+  Result[Byte1Index]:= Byte(AValue shr Byte1Shift);
+  Result[Byte2Index]:= Byte(AValue shr Byte2Shift);
+  Result[Byte3Index]:= Byte(AValue shr Byte3Shift);
+end;
+
+// [Int32 size][image]: how a TBitmap-typed property (TBitBtn.Glyph.Data) streams.
+function IsLengthPrefixedImage(const APayload: TBytes): Boolean;
+begin
+  Result:= (Length(APayload) >= MinLengthPrefixedPayload) and
+           (ReadInt32LE(APayload, 0) = Length(APayload) - PreambleSizeBytes) and
+           (SniffImageFormat(APayload, PreambleSizeBytes) <> '');
+end;
+
+// The TPicture preamble's class name: one length byte, then that many printable
+// ASCII bytes. False when APayload does not open with one.
+function ReadPictureClassName(const APayload: TBytes; out AWrapper: string): Boolean;
+var
+  N: Integer;
+begin
+  AWrapper:= '';
+  N:= if Length(APayload) > 0 then APayload[0] else 0;
+  Result:= (N >= 1) and (N <= MaxClassNameLen) and (Length(APayload) >= 1 + N);
+  for var I: Integer:= 1 to N do
+    if Result and ((APayload[I] < MinPrintableAscii) or (APayload[I] > MaxPrintableAscii)) then
+      Result:= False;
+  if Result then AWrapper:= TEncoding.ASCII.GetString(APayload, 1, N);
+end;
+
+// The image inside a TPicture stream whose class name AWrapper was read: that
+// class's own framing decides. AReason is '' on success.
+procedure UnwrapPictureInner(const APayload: TBytes; const AWrapper: string;
+  out AImage: TBytes; out AReason: string);
+var
+  Rest   : Integer;
+  Size   : Integer;
+  Framing: TGraphicDataFraming;
+begin
+  AImage := nil;
+  AReason:= '';
+  Rest   := 1 + Length(AWrapper);
+  Framing:= GraphicClassFraming(AWrapper);
+  case Framing of
+    gdfGraphic:
+      AImage:= Copy(APayload, Rest, MaxInt);
+    gdfSized, gdfSizedInclusive:
+      if Length(APayload) < Rest + PreambleSizeBytes then
+        AReason:= Format('the %s payload is cut short before its size field', [AWrapper])
+      else
+      begin
+        Size:= ReadInt32LE(APayload, Rest);
+        if Framing = gdfSizedInclusive then Dec(Size, PreambleSizeBytes);
+        if Size <> Length(APayload) - Rest - PreambleSizeBytes then
+          AReason:= Format('the %s size field says %d byte(s) but %d follow',
+            [AWrapper, Size, Length(APayload) - Rest - PreambleSizeBytes])
+        else
+          AImage:= Copy(APayload, Rest + PreambleSizeBytes, MaxInt);
+      end;
+  else
+    AReason:= Format('unknown graphic class %s in the TPicture wrapper -- its filer format is not known', [AWrapper]);
+  end;
+end;
+
+function UnwrapGraphicData(const APayload: TBytes; out AImage: TBytes;
+  out AFormat, AWrapper, AReason: string): Boolean;
+begin
+  AImage  := nil;
+  AFormat := '';
+  AWrapper:= '';
+  AReason := '';
+  if Length(APayload) = 0 then
+    AReason:= 'the payload is empty'
+  else if SniffImageFormat(APayload, 0) <> '' then
+    AImage:= Copy(APayload)                                  { already a bare image file }
+  else if IsLengthPrefixedImage(APayload) then
+    AImage:= Copy(APayload, PreambleSizeBytes, MaxInt)
+  else if ReadPictureClassName(APayload, AWrapper) then
+    UnwrapPictureInner(APayload, AWrapper, AImage, AReason)
+  else
+    AReason:= 'the payload is not a TPicture or TGraphic stream (no image signature, no class-name preamble)';
+  if AReason = '' then
+  begin
+    AFormat:= SniffImageFormat(AImage, 0);
+    if AFormat = '' then
+    begin
+      AReason:= Format('the %s payload is not a recognised image', [AWrapper]);
+      AImage := nil;
+    end;
+  end;
+  Result:= AReason = '';
+end;
+
+function WrapGraphicData(const AImage: TBytes; const AFormat: string;
+  AFraming: TGraphicDataFraming; out AData: TBytes; out AReason: string): Boolean;
+var
+  Cls  : string;
+  Inner: TBytes;
+begin
+  AData  := nil;
+  AReason:= '';
+  Result := True;
+  case AFraming of
+    gdfGraphic       : AData:= Copy(AImage);
+    gdfSized         : AData:= Int32Bytes(Length(AImage)) + AImage;
+    gdfSizedInclusive: AData:= Int32Bytes(Length(AImage) + PreambleSizeBytes) + AImage;
+    gdfPicture:
+    begin
+      Cls:= PictureClassForFormat(AFormat);
+      Result:= (Cls <> '') and WrapGraphicData(AImage, AFormat, GraphicClassFraming(Cls), Inner, AReason);
+      if Result then
+        AData:= TBytes.Create(Byte(Length(Cls))) + TEncoding.ASCII.GetBytes(Cls) + Inner
+      else if AReason = '' then
+        AReason:= Format('no VCL graphic class holds a %s image in a TPicture', [AFormat]);
+    end;
+  else
+    AReason:= 'the target filer format is not known';
+    Result := False;
+  end;
+end;
+
+function EncodeDfmHex(const ABytes: TBytes; const AIndent: string): string;
+const
+  BytesPerLine = 32;
+var
+  SB: TStringBuilder;
+begin
+  SB:= TStringBuilder.Create;
+  try
+    SB.Append('{');
+    for var I: Integer:= 0 to High(ABytes) do
+    begin
+      if I mod BytesPerLine = 0 then SB.Append(#13#10).Append(AIndent);
+      SB.Append(IntToHex(ABytes[I], 2));
+    end;
+    SB.Append('}');
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
 end;
 
 end.

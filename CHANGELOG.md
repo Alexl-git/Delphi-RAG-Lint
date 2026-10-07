@@ -3,6 +3,47 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.26.2-alpha -- unreleased
+
+No extractor or resolver change on top of 1.26.0: indexes do not re-parse. (1.26.1 is a
+separate branch.)
+
+### Fixed
+
+- **A graphic carried by `dfm keep-bytes-if-compatible` is re-framed for the target, not
+  copied (HIGH).** 1.25.2 carried `Picture.Data` to `OptionsImage.Glyph.Data`
+  byte-identical, keeping TPicture's own filer framing (`07 'TBitmap'`, TBitmap's Int32
+  size, then `BM...`); TdxSmartGlyph does not override `TGraphic.ReadData` and reads the
+  bare image file, so all 20 converted buttons of ORM3 VARINSP raised `EdxException:
+  Unsupported image format.` when the glyph was read. `convert-apply` / `convert-reemit`
+  now unwrap the source (a TPicture stream -- the class name decides the inner framing --,
+  `[Int32 size][image]`, or a bare image), check the image format against `compat`, and
+  re-frame it for the target: the castlib's new `dfmdata graphic|bitmap|metafile|picture`
+  key, else the single `yields` class when it is a VCL graphic. Bytes that come out the
+  same keep their value text verbatim. NOT carried, and reported per instance with the
+  reason and the cast's `todo` (`mismatched <path>: ... -- bytes NOT carried`): an
+  unknown graphic class in the TPicture wrapper, a size field that disagrees with its bytes,
+  a format outside `compat`, or a target framing that is neither declared nor known (the
+  message names `dfmdata`). The shipped `docs\examples\convrules\casts.castlib` declares
+  `dfmdata graphic` on `AssignGraphic`; a private copy without it now refuses to carry
+  instead of writing unreadable glyphs. VARINSP re-run on a copy: 20/20 glyphs decode with
+  the original size (18 x 128x32 NumGlyphs 4, 2 x 64x16). New guard
+  `tests\autotest\run_convert_apply_glyph_framing.ps1` decodes the converted glyphs with
+  the real TdxSmartGlyph (`tests\autotest\lib\GlyphDecodeCheck.dpr`, which picks a form
+  root by the ROOT's own ClientHeight/ClientWidth), with the 1.25.2 bytes as its positive
+  control.
+- **convert-* verbs no longer read a `.drag-lint.json` defaults file.** It is found by
+  walking up from the CWD, so a pinned engine copy run from a project folder printed
+  `(loaded defaults from C:\Projects\.drag-lint.json)` on every run, and a `"db"` key
+  there would have become an EXPLICIT `--db` of `convert-apply`. A convert verb now takes
+  its databases, rules and units from its command line only; when the file holds a key the
+  defaults reader applies (`db`, `project`, `path`, `rule`, `watch`, `docs`), one
+  stderr note names the file and the ignored keys, and a file contributing nothing is
+  silent. Every other verb is unchanged. Guard: `run_convert_defaults_file_scope.ps1`.
+- **The `defaults may diverge` re-emit note names each property once.** A book with
+  several `#convert` blocks linking the same property listed it once per link (MEStats
+  `tblMet1`: `Name` seven times, every event three times).
+
 ## v1.26.0-alpha -- unreleased
 
 No extractor or resolver change on top of 1.25.0: indexes do not re-parse.

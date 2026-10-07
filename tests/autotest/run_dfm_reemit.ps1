@@ -685,6 +685,19 @@ Check 'stored-veto: nothing is carried for a conditionally-stored source' `
 Check 'stored-veto: it is REPORTED as unresolved rather than dropped in silence' `
   (@($j29.report.notes) -match 'may diverge.*Guarded') "notes=$($j29.report.notes -join ' | ')"
 
+# 29b: the divergence note names each property ONCE (1.26.2). A rule set
+# carries every #convert in the book with no per-block scoping, so a FromPath
+# linked by several blocks was listed once per link -- MEStats' tblMet1 read
+# "Name, Name, ... OnPostError, Name, ... Name, Name, Name, Name".
+$r29b = "#convert TFromD -> TToD`r`n#link Guarded2 <- Guarded`r`n" +
+        "#convert TOldColD -> TNewColD`r`n#link Guarded2 <- Guarded`r`n#link Guarded2 <- Guarded`r`n"
+$o29b = Reemit $b29 $r29b 'ReemitFix.TFromD' 'ReemitFix.TToD'
+$j29b = $o29b | ConvertFrom-Json
+$div29b = @(@($j29b.report.notes) | Where-Object { $_ -match 'may diverge' }) -join ' | '
+Check 'diverge-dedup: CONTROL -- the note still fires and names Guarded' ($div29b -match 'Guarded') "notes=$($j29b.report.notes -join ' | ')"
+Check 'diverge-dedup: Guarded is named exactly ONCE although three #links name it' `
+  ([regex]::Matches($div29b, '\bGuarded\b').Count -eq 1) "note=$div29b"
+
 # 30: #remove must beat default-resolution. RemapLeaf checks it first for a
 # streamed leaf; without the same check here a removed property was resurrected
 # whenever it happened to sit at its default -- so its fate depended on the

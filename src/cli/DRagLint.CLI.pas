@@ -1160,6 +1160,9 @@ function MakeSiblingStoreResolver(const AArgs: TArgs;
 //               "implPrecedence": "interface" } }
 // CLI flags override config values. Missing file is silently ignored.
 procedure LoadConfigDefaults(var AArgs: TArgs);
+const
+  { every key read below -- the set a convert verb names when it ignores the file }
+  DefaultsKeys: array[0..5] of string = ('db', 'project', 'path', 'rule', 'watch', 'docs');
 var
   Dir      : string     ;
   Candidate: string     ;
@@ -1187,6 +1190,29 @@ begin
     Exit;
   end;
   if J = nil then Exit;
+  { CONVERT-* VERBS DO NOT READ A DEFAULTS FILE (1.26.2). The file is found by
+    walking up from the CWD, not from the exe, so a PINNED engine copy staged in
+    C:\TEMP and run from a project folder picked up C:\Projects\.drag-lint.json
+    and said so on every run -- and a "db" key there would have become an
+    EXPLICIT --db of convert-apply, letting a shared file choose the index a
+    form is rewritten on. A convert verb takes its databases, rules and units
+    from its own command line. When the file holds a key this reader would have
+    applied, one note names the file and the keys; a file contributing nothing
+    (the C:\Projects one) is silent. Every other verb is unchanged. }
+  if ParamStr(1).StartsWith('convert-', True) then
+  begin
+    try
+      var Ignored: string:= '';
+      for var Key: string in DefaultsKeys do
+        if J.GetValue(Key) <> nil then Ignored:= Ignored + (if Ignored = '' then '' else ', ') + '"' + Key + '"';
+      if Ignored <> '' then
+        Writeln(ErrOutput, Format('drag-lint: note: ignoring %s in %s for `%s` -- a convert verb reads only its ' +
+          'own command line; pass --db explicitly.', [Ignored, Candidate, ParamStr(1)]));
+    finally
+      J.Free;
+    end;
+    Exit;
+  end;
   try
     try
       { "db" is an EXPLICIT --db, so it goes into DbPaths too: every write verb
