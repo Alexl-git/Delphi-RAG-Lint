@@ -566,6 +566,9 @@ object's block (the first `#convert` whose From type is the object's class):
 The `.pas` access-site rewrite follows the same scope: a site on instance X is
 rewritten only by the `#link`s of X's block (plus file-scope ones), so each
 site gets exactly one edit and two blocks may rename one path differently.
+A file-scope `#link` -- one with no `#convert` above it -- belongs to no
+block and rewrites the sites of EVERY converted instance, just as it applies
+to every block's `.dfm` objects.
 
 So an `#ignore ReadOnly` in the TDatabase block no longer suppresses the TTable
 block's `#link UpdateOptions.ReadOnly <- ReadOnly`, and two blocks may link the
@@ -580,8 +583,10 @@ rule can name them; `convert-apply` carries them unless a rule of the block name
 them first (`#ignore Left` still drops it):
 
 - **`Left` / `Top`** -- a non-visual component's designer position
-  (TComponent.DesignInfo); on a control they are published under the same
-  names, so the line loads on any target. Carried verbatim.
+  (TComponent.DesignInfo). Carried verbatim, and ONLY when the From class does
+  not publish them: on a control (TLabel, ...) they are ordinary published
+  properties, so the book's `#link Left <- Left` carries them (once) and with
+  no link they are dropped and reported unlinked like any other property.
 - **`ParamData = < item ... end>`** -- how TQuery / TStoredProc (and TFDQuery /
   TFDStoredProc / TFDCommand) stream `Params`. Carried under the same name; each
   item member is mapped through the block's `#link Params.Items.<X>` (a renaming
@@ -888,7 +893,11 @@ applies`). TAutoIncField -> TFDAutoIncField is the case: Data.DB.TField declares
 `AutoGenerateValue default arNone`, TFDAutoIncField redeclares `default
 arAutoInc`, and writing `arNone` turned auto-increment off. A default the source
 class redeclared itself is still written (it is the source's real value), as is
-one both classes share. Top-level, same-named paths only.
+one both classes share. Top-level, same-named paths only. The target's class
+chain is followed across units and through a generic ancestor
+(`TDstG = class(TGenBase<Integer>)`), as far as the index resolves it; an
+ancestor the index cannot resolve ends the chain, and the source default is
+then written.
 
 **Collections** (1.25.1). A collection-valued property (`FieldDefs = < item ...
 end>`) streams as ONE leaf. A whole-collection `#link FieldDefs <- FieldDefs`

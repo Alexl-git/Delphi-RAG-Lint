@@ -50,7 +50,9 @@ loaded, exit 0, and the converted forms behaved differently.
   they are TComponent.DefineProperties pseudo-properties, not published, so no
   rule could name them. **Risk: 90 components lost their designer position**
   (cosmetic, but every one was reported unlinked). Carried unless a rule of the
-  block names them.
+  block names them, and only when the From class does NOT publish them: a
+  control's published Left/Top stay with the rules (once via `#link`, else
+  dropped and reported).
 - **`ParamData` is carried.** TQuery / TStoredProc stream their parameters as the
   DefineProperties pseudo-property `ParamData = < item ... end>`, never as the
   published `Params`. **Risk: 15 queries lost every parameter's type, kind and
@@ -65,7 +67,13 @@ loaded, exit 0, and the converted forms behaved differently.
 Guard: `run_convert_apply_semantics.ps1` (one fixture per defect, own-block
 `#ignore` positive control, a redeclared-default fixture with source-redeclared
 and shared-declaration controls, two blocks renaming one path differently, the
-written `.dfm` through `DfmLoadCheck`, the written `.pas` through dcc64).
+written `.dfm` through `DfmLoadCheck`, the written `.pas` through dcc64) and
+`run_convert_apply_semantics_controls.ps1`: a converted ParamData loaded into the
+REAL FireDAC classes by the new `lib\FireDacLoad.ps1` (Params.Count and each
+Name/DataType/ParamType/Value; a malformed item fails it), a `#mapping` scoped to
+its block, file-scope rules in every block and on every `.pas` site, a visual
+component's published Left/Top, and the redeclared default across three units and
+through a generic ancestor.
 
 ### Known limitations
 

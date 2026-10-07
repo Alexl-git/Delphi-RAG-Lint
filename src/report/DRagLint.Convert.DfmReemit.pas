@@ -1940,10 +1940,14 @@ var
     { 1.26.1 (F6): designer position. On a non-visual component `Left` / `Top`
       are not published properties but TComponent.DefineProperties' DesignInfo
       pseudo-properties, so no rule can name them; on a control they are
-      published under the same names. Either way the same name loads on any
-      TComponent target, so they are carried unless a rule of this block said
-      otherwise (it has already left this routine). }
-    if SameText(AFromPath, 'Left') or SameText(AFromPath, 'Top') then
+      published under the same names. Only the PSEUDO-property is carried here:
+      when the F class publishes Left/Top (a control) they are ordinary
+      properties the rules decide, so an unlinked one stays dropped and
+      reported. The same name loads on any TComponent target. A rule of this
+      block that names them has already left this routine. Gated on
+      TreesDescribeThisBlock: in an owned-part pass AFrom is the parent. }
+    if (SameText(AFromPath, 'Left') or SameText(AFromPath, 'Top')) and
+       not (TreesDescribeThisBlock and (LeafTypeOf(AFrom, AFromPath) <> '')) then
     begin
       PlaceAtPath(TRoot, AFromPath, ALeaf.ValueText, ALeaf.Kind, Created);
       Exit;
