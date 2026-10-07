@@ -45,6 +45,7 @@ New-DiagramArtifact.ps1 -Question <id> -Target <Unit.TType.Member | Unit | proje
 | [`butterfly`](ask-butterfly) | method | callers and callees in one chart |
 | [`who-calls`](ask-who-calls) | method | N-deep caller tree, cycle-guarded |
 | [`what-it-calls`](ask-what-it-calls) | method | N-deep callee tree |
+| [`path`](ask-path) | method A + method B (`-To`) | every shortest call path A -> B, each call with its site and grade |
 | [`who-writes`](ask-who-writes) | field / property | every routine that assigns it |
 | [`who-reads`](ask-who-reads) | field / property | every routine that reads it |
 | [`change-impact`](ask-change-impact) | method / type | everything a change here could break, by zone and hop |

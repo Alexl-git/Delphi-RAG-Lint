@@ -27,7 +27,8 @@ param(
   [string] $DbDir   = (Join-Path $PSScriptRoot '..\scratch\db'),
   [string] $OutRoot = (Join-Path $PSScriptRoot '..\docs\examples'),
   [string[]] $Only,                      # regenerate just these questions
-  [switch] $KeepGoing                    # report failures instead of stopping
+  [switch] $KeepGoing,                   # report failures instead of stopping
+  [string] $Engine = ''                  # '' = Resolve-DragLintEngine (Emit-Common.ps1), as every emitter finds it
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,7 +53,8 @@ foreach ($d in @($CLI, $SRV, $DC, $DL, $MT, $SQL)) {
 # final-review I3: the page states the engine and the clone stamps it READ now -- the engine's own --version and the
 # CLIENT clone's schema_meta fingerprints -- never a version written here by hand (one went stale at 1.18.0-alpha
 # while the deployed engine moved to 1.19.1-alpha)
-$EngineExe = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+. (Join-Path $PSScriptRoot 'Emit-Common.ps1')   # functions only; Resolve-DragLintEngine
+$EngineExe = Resolve-DragLintEngine $Engine
 $engVer = @(& $EngineExe --version 2>$null | Where-Object { $_ -match '^drag-lint \S+$' } | Select-Object -First 1)
 $engVer = $(if ($engVer.Count) { ($engVer[0] -replace '^drag-lint\s+', '').Trim() } else { 'unknown (--version printed no version line)' })
 $meta = @{}
@@ -178,7 +180,7 @@ $EX = @(
   @{ Q='lands-where';      T='uFOLDERCOUNT.TmcFOLDERCOUNT.TABLE';  D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='declared as the quoted identifier "TABLE" in MS1.SQL:3848 -- extracted since extractor 1.19 (engine D19), so an ordinary column; before that it was the one real column in the quoted state' }
   @{ Q='lands-where';      T='uINSPRSLT.TmcINSPRSLT.DistHist';     D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='column state not-a-column: named by no script and no server SQL -- computed or UI-only, and the DB side stays unanchored' }
 
-  # round-trip (spec 2026-09-27) is a TEXT question: its bundle is trace.dlgraph shown in a <pre>, not a chart.
+  # round-trip (spec 2026-09-27) answers in TEXT: its bundle is trace.dlgraph shown in a <pre>, under the chart drawn from it (R5).
   # The three targets are the gate's (E-RT0 / RT-N1 / RT-N2), so the numbers below are the gate's numbers.
   @{ Q='round-trip';       T='frmBlueprint4.dxDBGrid1OperationVName'; D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a grid column to OPERAT.NAME and both ways through the pipe: 76 steps, 31 conditions, 4 crossings, 2 unresolved (the statement for the posted row and the SELECT text live in FIB$ rows the clones do not hold, E4); ALSO 9 rows, owner-accepted 2026-09-28 (all callers count; dataset scope; anchors only)' }
   @{ Q='round-trip';       T='frmBlueprint4.cxGroupBox16';            D=$CLI; A=@{ServerDbPath=$SRV; SqlDbPath=$SQL}; Why='a control that is NOT data-bound: one STOPS saying why, and every later section notes it was not walked -- the title claims no reach' }
@@ -189,6 +191,11 @@ if ($Only) { $EX = @($EX | Where-Object { $Only -contains $_.Q }) }
 
 $made = New-Object System.Collections.ArrayList
 $failed = New-Object System.Collections.ArrayList
+# the charts are drawn by the SAME engine the page names (fix round 1): every emitter resolves DRAGLINT_ENGINE first,
+# so it is set to the resolved full path for the loop and restored after (absent stays absent)
+$prevEngEnv = [Environment]::GetEnvironmentVariable('DRAGLINT_ENGINE', 'Process')
+$env:DRAGLINT_ENGINE = $EngineExe
+try {
 foreach ($e in $EX) {
   $dir = Join-Path $OutRoot $e.Q
   New-Item -ItemType Directory -Force $dir | Out-Null
@@ -210,6 +217,9 @@ foreach ($e in $EX) {
     Write-Host ("  FAIL {0}  -- {1}" -f $label, $_.Exception.Message)
     if (-not $KeepGoing) { throw }
   }
+}
+} finally {
+  if ($null -eq $prevEngEnv) { Remove-Item Env:\DRAGLINT_ENGINE -ErrorAction SilentlyContinue } else { $env:DRAGLINT_ENGINE = $prevEngEnv }
 }
 
 # ---- the central index -------------------------------------------------------
@@ -257,12 +267,12 @@ $CATALOGUE = @(
   @{ Q='consumers';       Sel='table/column';    St='shipped'
      Note='Derived (path A; <code>orm_links</code> and <code>fb_*</code> are 0 rows): SQL facts are [certain], upper-case SQL-verb literals [inferred], because <code>sql_reads</code> misses SQL passed through a VARIABLE (<code>SQL.Add(sTmp)</code>: 38 of the 40 SERVER DataService loads still without a read fact) -- the SQL.Add-across-lines case, engine D18, is fixed in extractor 1.19. The schema is the SQL SCRIPTS, not the live database: 5 live <code>PDF_*</code> tables are absent.' }
   @{ Q='feeds-from';      Sel='control';         St='shipped'
-     Note='DFM DataSource &rarr; dataset &rarr; view model &rarr; TABLE.COLUMN, every hop graded. It stops rather than guess on a dangling module, an interface-typed view model or several candidate tables; 267 of 808 field-bound CLIENT controls reach one table, and each chart prints that coverage.' }
+     Note='DFM DataSource &rarr; dataset &rarr; view model &rarr; TABLE.COLUMN, every hop graded. Past a dangling designer datasource it follows the code re-point, as the round-trip does; it stops rather than guess on a re-point with several right-hand sides, an interface-typed view model or several candidate tables; 471 of 808 field-bound CLIENT controls reach one table, and each chart prints that coverage.' }
   @{ Q='lands-where';     Sel='ORM property / field'; St='shipped'
      Note='The TABLE.COLUMN hop is a naming CONVENTION, drawn [inferred] with its measured coverage (1,992 of 1,997 table-named properties). Column states: column, older-only, quoted, server-sql, not-a-column. Reads three clones: CLIENT, SERVER and SQL.' }
 
   @{ Q='round-trip';      Sel='control / field / TABLE.COLUMN'; St='shipped'
-     Note='A TEXT question: the answer is a Form A document (<code>trace.dlgraph</code>), not a chart, and each <code>@File.pas:line</code> anchor is a <code>draglint://</code> link into the IDE. Conditions are source text from sha256-fresh files (the try/except and case-header forms are marked); guards see only the innermost enclosing <code>if</code> (engine ask E1), and OMITS reads every enclosing <code>if</code> up to a loop or case arm; a direction that stops after the anchor leaves its later sections noted &ldquo;not walked&rdquo; and the title claims only the walked direction; a hop the index cannot make is a numbered STOPS counted as unresolved; ALSO is owner-accepted (2026-09-28): all callers count; dataset scope; anchors only.' }
+     Note='The answer is a Form A document (<code>trace.dlgraph</code>) and, since R5 (2026-10-06), the chart drawn FROM it (lanes client / pipe / server / database, every guard verbatim under its step, anything not drawn named in the Legend); each <code>@File.pas:line</code> anchor is a <code>draglint://</code> link into the IDE. Conditions are source text from sha256-fresh files (the try/except and case-header forms are marked); guards see only the innermost enclosing <code>if</code> (engine ask E1), and OMITS reads every enclosing <code>if</code> up to a loop or case arm; a direction that stops after the anchor leaves its later sections noted &ldquo;not walked&rdquo; and the title claims only the walked direction; a hop the index cannot make is a numbered STOPS counted as unresolved; ALSO is owner-accepted (2026-09-28): all callers count; dataset scope; anchors only.' }
 
   @{ Q='compare';         Sel='two index runs';  St='parked'
      Note='Parked by owner decision, and genuinely dependent on the IR: there is no <code>ir</code> or <code>compare</code> verb in the deployed engine, confirmed against a deliberate fake control.' }

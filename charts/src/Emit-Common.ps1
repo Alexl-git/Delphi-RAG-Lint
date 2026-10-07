@@ -50,6 +50,116 @@ function New-RowHref([string] $File, [int] $Line) {
   'draglint://open?file=' + [uri]::EscapeDataString($File) + '&amp;line=' + $Line
 }
 
+# ---- where the engine and dot are (R2: an installed copy is not C:\Projects) --
+
+# Every chart script declares `-Engine` / `-Dot` with an EMPTY default and asks
+# these two for the file. Each returns the first candidate that EXISTS, in order:
+#
+#   engine: -Engine -> $env:DRAGLINT_ENGINE -> settings.json "engine"
+#           -> <scripts>\drag-lint.exe (the FLAT installed layout, owner D1)
+#           -> <app>\bin\drag-lint.exe (the earlier proposed bin\ layout)
+#           -> C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe (the shared engine)
+#           -> <repo>\third_party\dll-win64\drag-lint.exe (a clone's own build)
+#   dot:    -Dot -> $env:DRAGLINT_DOT -> settings.json "dot"
+#           -> <scripts>\graphviz\bin\dot.exe (flat) -> <app>\graphviz\bin\dot.exe -> dot.exe on PATH
+#           -> C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe
+#
+# <scripts> is the folder the chart scripts (and this file) live in (-ScriptDir,
+# default this file's folder): in the flat install drag-lint.exe, its DLLs and
+# the plugin BPL sit right there; in the repo (charts\src) nothing does, so the
+# step is skipped. <app> and <repo> are both the folder above charts\
+# (-ChartsRoot, default the folder above this file). settings.json is %APPDATA%\drag-lint\settings.json,
+# written by the installer; a MISSING or UNREADABLE file, or one without the key,
+# is skipped, never an error.
+#
+# WHY THE SHARED ENGINE COMES BEFORE THE REPO-RELATIVE ONE. In the main repo the
+# two are the same file. In a WORKTREE the repo-relative path is the worktree's
+# own, gitignored build -- and archify-ir held a 1.16.0-alpha there on
+# 2026-10-06 while the deployed engine was 1.22.0-alpha. Taking it would give
+# every chart on this machine an older parse: smaller, confident answers, no
+# error. So the repo-relative copy is only reached where the shared one is absent
+# (controller ruling, Task 9a review).
+#
+# EXPLICIT SETTINGS NEVER FALL THROUGH (controller ruling, fix round 1). A path
+# someone SET -- -Engine / -Dot, DRAGLINT_ENGINE / DRAGLINT_DOT, or the settings
+# key -- that does not exist THROWS, naming where it was set and the path: a typo
+# must not silently pick another file. Only an UNSET variable, an absent or
+# unreadable settings file, or a missing key is a skip. When nothing exists the
+# message names every place looked at, in order.
+#
+# Every path is made FULL against the PowerShell location
+# (GetUnresolvedProviderPathFromPSPath) before it is tested, and the full path is
+# returned: a bare `-Engine drag-lint.exe` would otherwise pass Test-Path for a
+# file in the current folder and then be run from PATH by `& $Engine`.
+function Get-DragLintSettingsPath {
+  if ($env:APPDATA) { Join-Path $env:APPDATA 'drag-lint\settings.json' } else { '' }
+}
+# [value, why-skipped] for one settings.json key; the value is '' when skipped
+function Get-DragLintSetting([string] $SettingsPath, [string] $Key) {
+  if (-not $SettingsPath) { return @('', 'no %APPDATA%') }
+  if (-not (Test-Path -LiteralPath $SettingsPath -PathType Leaf)) { return @('', 'file not found') }
+  try { $j = [IO.File]::ReadAllText($SettingsPath) | ConvertFrom-Json -ErrorAction Stop } catch { return @('', 'unreadable') }
+  if ($j -isnot [pscustomobject] -or -not $j.PSObject.Properties[$Key] -or -not "$($j.$Key)") { return @('', "no `"$Key`" key") }
+  @([string]$j.$Key, '')
+}
+# the shared walk: $Steps is an ordered list of @(label, path-or-'', why-empty, set-by). A step
+# with a set-by (who SET that path) throws when its path is missing; the others are just candidates.
+function Resolve-ChartTool([string] $What, [string] $ParamName, [string] $Explicit, [object[]] $Steps, [string] $Hint) {
+  if ($Explicit) {
+    $x = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Explicit)
+    if (Test-Path -LiteralPath $x -PathType Leaf) { return $x }
+    throw "$What not found: -$ParamName $Explicit does not exist ($x)"
+  }
+  $looked = New-Object System.Collections.Generic.List[string]
+  $looked.Add("-$ParamName (not given)")
+  foreach ($s in $Steps) {
+    if ($s[1]) {
+      $x = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($s[1])
+      if (Test-Path -LiteralPath $x -PathType Leaf) { return $x }
+      if ($s.Count -gt 3 -and $s[3]) { throw "$What not found: $($s[3]) names $($s[1]), which does not exist ($x) -- fix or remove it" }
+    }
+    $looked.Add($(if ($s[1]) { "$($s[0]) $($s[1]) (does not exist)" } else { "$($s[0]) ($($s[2]))" }))
+  }
+  throw ("$What not found. Looked, in order: " + (($looked | ForEach-Object -Begin { $n = 0 } -Process { $n++; "$n) $_" }) -join '; ') + ". $Hint")
+}
+
+# Resolve-DragLintEngine -- the drag-lint engine the chart scripts run (order in the section header above).
+function Resolve-DragLintEngine([string] $Explicit,
+                                [string] $SettingsPath  = (Get-DragLintSettingsPath),
+                                [string] $ChartsRoot    = (Split-Path -Parent $PSScriptRoot),
+                                [string] $ScriptDir     = $PSScriptRoot,
+                                [string] $SharedDefault = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe') {
+  $set = Get-DragLintSetting $SettingsPath 'engine'
+  $app = [IO.Path]::GetFullPath((Join-Path $ChartsRoot '..'))
+  Resolve-ChartTool 'drag-lint engine' 'Engine' $Explicit @(
+    , @('$env:DRAGLINT_ENGINE', $env:DRAGLINT_ENGINE, 'not set', '$env:DRAGLINT_ENGINE')
+    , @("$(if ($SettingsPath) { "settings $SettingsPath" } else { 'settings.json' }) `"engine`"", $set[0], $set[1], "settings.json $SettingsPath key `"engine`"")
+    , @('beside the scripts', (Join-Path $ScriptDir 'drag-lint.exe'), '')
+    , @('installed', (Join-Path $app 'bin\drag-lint.exe'), '')
+    , @('shared', $SharedDefault, '')
+    , @('repo', (Join-Path $app 'third_party\dll-win64\drag-lint.exe'), '')
+  ) "Pass -Engine, set DRAGLINT_ENGINE, or add `"engine`" to $(if ($SettingsPath) { $SettingsPath } else { 'settings.json' })."
+}
+
+# Resolve-GraphvizDot -- the Graphviz dot.exe the chart scripts run (order in the section header above).
+function Resolve-GraphvizDot([string] $Explicit,
+                             [string] $SettingsPath  = (Get-DragLintSettingsPath),
+                             [string] $ChartsRoot    = (Split-Path -Parent $PSScriptRoot),
+                             [string] $ScriptDir     = $PSScriptRoot,
+                             [string] $SharedDefault = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe') {
+  $set = Get-DragLintSetting $SettingsPath 'dot'
+  $app = [IO.Path]::GetFullPath((Join-Path $ChartsRoot '..'))
+  $onPath = @(Get-Command 'dot.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1)
+  Resolve-ChartTool 'Graphviz dot' 'Dot' $Explicit @(
+    , @('$env:DRAGLINT_DOT', $env:DRAGLINT_DOT, 'not set', '$env:DRAGLINT_DOT')
+    , @("$(if ($SettingsPath) { "settings $SettingsPath" } else { 'settings.json' }) `"dot`"", $set[0], $set[1], "settings.json $SettingsPath key `"dot`"")
+    , @('beside the scripts', (Join-Path $ScriptDir 'graphviz\bin\dot.exe'), '')
+    , @('installed', (Join-Path $app 'graphviz\bin\dot.exe'), '')
+    , @('dot.exe on PATH', $(if ($onPath.Count) { $onPath[0].Source } else { '' }), 'not on PATH')
+    , @('shared', $SharedDefault, '')
+  ) "Pass -Dot, set DRAGLINT_DOT, or add `"dot`" to $(if ($SettingsPath) { $SettingsPath } else { 'settings.json' })."
+}
+
 # ---- database safety ---------------------------------------------------------
 
 # Resolve a database path and REFUSE a live corpus DB.
@@ -519,8 +629,10 @@ function Get-PathZone([string] $Path, [int] $RootLen) {
 # and no edges, but only ONE has more than 35, and the next largest is 35. At 50
 # the detector fires on exactly the file the engine team named and on nothing
 # else. It is a heuristic and is described as one wherever it is printed.
+#
+# PAGED (R24): unpaged, a population past 200 files was silently cut to 200.
 function Get-EdgelessFiles([int] $MinCallRefs = 50) {
-  $rows = Invoke-IndexQuery @"
+  $rows = Get-AllIndexRows @"
 SELECT p, n FROM (
   SELECT f.path AS p,
          (SELECT COUNT(*) FROM refs r WHERE r.file_id = f.id AND r.kind = 'call') AS n,
@@ -528,8 +640,7 @@ SELECT p, n FROM (
            WHERE r2.file_id = f.id) AS e
     FROM files f)
  WHERE n >= $MinCallRefs AND e = 0
- ORDER BY n DESC
-"@
+"@ 'n DESC, p'
   , $rows
 }
 
@@ -989,6 +1100,19 @@ function Test-IsColumn($Tbl, [string] $Col) {
   $Tbl.Columns.Contains($Col) -or $Tbl.OlderOnlyColumns.Contains($Col.ToUpperInvariant())
 }
 
+# The names in $Cols that table $Table does NOT hold -- Get-DataSourceChain's
+# by-columns tie-break. Judged by THE column test
+# (Task 4 item 3): `.Columns.Contains` alone said no to a quoted column and to
+# an older-only one, which every other verb calls a column. The cheap test
+# first; only a name it rejects pays for Get-SqlColumnState's source scan. A
+# `stale` column (not known) is not held: it cannot prove a candidate fits.
+# Unwrapped on purpose: callers take @(...) of it, which would NEST a
+# `, $array` return.
+function Get-ColumnsNotHeld($SqlSet, [string] $Table, $Cols, [hashtable] $SourceOverride) {
+  $t = $SqlSet.Tables[$Table]
+  $Cols | Where-Object { -not (Test-IsColumn $t $_) -and -not (Get-SqlColumnState $SqlSet $Table $_ $SourceOverride).IsColumn }
+}
+
 # A QUOTED identifier `"COL"` opening a line of T's newest declaration, read from
 # fresh source; $null when there is none; Stale when the script differs from the
 # indexed copy (the scan is then NOT run).
@@ -1004,6 +1128,20 @@ function Find-QuotedColumn($SqlSet, $Tbl, [string] $Col, [hashtable] $SourceOver
     if ($m.Success) { return [pscustomobject]@{ Stale = $false; Line = $i; Text = $lines[$i - 1].Trim() } }
   }
   $null
+}
+
+# The name a chart PRINTS for a Get-SqlColumnState state: the words
+# STATUS-questions.md and question-catalogue.md use (Task 4 item 1). The
+# internal values (`yes` / `older` / `no` / `stale`) stay what code and
+# summaries compare on; only rendered text goes through here.
+function Get-ColumnStateName([string] $State) {
+  switch ($State) {
+    'yes'   { 'column' }
+    'older' { 'older-only' }
+    'no'    { 'not-a-column' }
+    'stale' { '[stale source]' }
+    default { $State }
+  }
 }
 
 function Get-SqlColumnState($SqlSet, [string] $Table, [string] $Col, [hashtable] $SourceOverride,
@@ -1066,6 +1204,18 @@ function Get-SqlColumnState($SqlSet, [string] $Table, [string] $Col, [hashtable]
   $o.Label = "not extracted as a column by the SQL index ($newest); $quotedPart" +
              $(if ($SqlSearched) { "; no SQL for $($tbl.Name) in $SqlSearched names it" } else { '' })
   [pscustomobject]$o
+}
+
+# lands-where's column row for a property the SQL index does not extract (state
+# `no`). "computed or UI-only" is a claim about the FIELD, and it is earned only
+# when the server's own SQL for T was searched and did not name the column (the
+# STATIONS.GRIDS finding). With no TDataService_<T>_SERVER nothing was searched,
+# so the sentence says THAT instead (R24 item 8). $ServerSearched is the class
+# that was searched, '' when there was none. Pure, so the gate drives it.
+function Format-NotAColumnNote([string] $Prop, [string] $Table, [string] $Label, [string] $ServerSearched) {
+  if ($ServerSearched) { return "$Prop is not a column of $Table -- computed or UI-only: $Label; the database side is empty" }
+  "$Prop is not extracted as a column of ${Table}: $Label; no DataService was searched (no TDataService_${Table}_SERVER in the SERVER index), " +
+    'so whether it is computed, UI-only or written by server SQL is NOT known'
 }
 
 # consumers' reader / writer COUNTS (final wave, item 6). A consumers row key is
@@ -1545,7 +1695,7 @@ SELECT r.start_line AS line, r.start_col AS col, r.end_col AS ecol, r.enclosing_
 #   DataSetSites[]  Kind ('dfm'|'assign'|'read'|'stale'), File, Line, Routine, Rhs
 #   RhsType         $null | Rhs, Root, RootKind, TypeName, TypeKind, TypeFile, TypeLine
 #   CandidateTables[] (first-literal order, EXACT upper-case match), CandidateLines{table -> line},
-#   BoundColumns[], ColumnMatch[], MissingColumns[]
+#   BoundColumns[], ColumnMatch[]
 #   CaseOnlyLiterals[] "'Text' :line" -- literals equal to a table name only
 #                   case-insensitively; named on the hop, never taken (hop 4)
 #   ResolvedTable   string | $null
@@ -1612,7 +1762,7 @@ SELECT sl.owner_name AS prop, sl.start_line AS line, c.id AS cid, c.name AS ctl,
     Module = ''; Dangling = $false; DataSource = $null
     Controls = $controls; RePointedAt = @($repoint)
     DataSetSites = @(); RhsType = $null
-    CandidateTables = @(); CandidateLines = @{}; BoundColumns = @(); ColumnMatch = @(); MissingColumns = @()
+    CandidateTables = @(); CandidateLines = @{}; BoundColumns = @(); ColumnMatch = @()
     CaseOnlyLiterals = @()
     ResolvedTable = $null; Grade = ''; Hops = $null; StopReason = ''
   }
@@ -1806,13 +1956,13 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line FROM string_literals sl
     Add-Hop 'table' 'unresolved' $typeName ([string]$ts[0].path) ([int]$ts[0].line) $why
     return (Complete 'none' $why)
   }
-  $fits = @($cand | Where-Object { $t = $SqlSet.Tables[$_]; -not @($o.BoundColumns | Where-Object { -not $t.Columns.Contains($_) }).Count })
   if ($cand.Count -eq 1) {
     $o.ResolvedTable = $cand[0]
-    $o.MissingColumns = @($o.BoundColumns | Where-Object { -not $SqlSet.Tables[$cand[0]].Columns.Contains($_) })
     Add-Hop 'table' 'inferred' $cand[0] $typeFile $o.CandidateLines[$cand[0]] "the only upper-case table-name literal in $unit$caseNote"
     return (Complete 'one-table' '')
   }
+  # after the one-table return: a single candidate needs no tie-break (and no source scan)
+  $fits = @($cand | Where-Object { -not @(Get-ColumnsNotHeld $SqlSet $_ $o.BoundColumns $SourceOverride).Count })
   $o.ColumnMatch = $fits
   if ($o.BoundColumns.Count -and $fits.Count -eq 1) {
     $o.ResolvedTable = $fits[0]
@@ -1837,28 +1987,52 @@ SELECT sl.text AS t, MIN(sl.start_line) AS line FROM string_literals sl
 # through Get-DataSetSites (an assignment line read from fresh source: certain)
 # -> the dataset field. A hop that cannot be made STOPS with its reason; a
 # stale file on the way sets StaleFile so the caller can REFUSE (AC-14).
-# Used by the round-trip trace ONLY (owner decision 3, 2026-09-27): feeds-from
-# and lands-where still stop at the dangling datasource.
+# Used by the round-trip trace AND, since 2026-10-05 (owner: "close all the
+# existing gaps"; it was round-trip ONLY under owner decision 3, 2026-09-27),
+# by feeds-from and lands-where through Resolve-RePointTable below. The row is
+# picked by Get-RePointPick, the ONE copy of the stale / several-RHS rule.
 # $RePoint is ONE row of Get-RePointSites (the caller picks the control's row).
 # Returns Hops[] {Hop, Grade, Label, File, Line, Routine, Reason, Ask}, DataSet
 # ($null | Name, Id, ClassId, File, Fid, Line, Type), StopReason ('' when the
-# dataset was reached), StaleFile ('' | the indexed path that differs).
+# dataset was reached), StaleFile ('' | the indexed path that differs), Limit ($true when the
+# stop is a shape this walk does not follow -- a bare local / parameter RHS, or a member that is not a
+# datasource field -- rather than a fact of the code).
 function Get-RePointChain($RePoint, [hashtable] $SourceOverride) {
   $hops = New-Object System.Collections.ArrayList
   function Hop($h, $g, $l, $f, $n, $r, $why, $ask) {
     [void]$hops.Add([pscustomobject]@{ Hop = $h; Grade = $g; Label = $l; File = $f; Line = $n; Routine = $r; Reason = $why; Ask = $ask })
   }
-  function Done([string] $stop, $ds, [string] $stale) { [pscustomobject]@{ Hops = $hops.ToArray(); DataSet = $ds; StopReason = $stop; StaleFile = $stale } }
+  # $limit: the stop is a limit of THIS WALK (a shape it does not follow), not a fact of the
+  # code -- callers count the two apart (fix round 1: "never assigned" was printed for a walk limit)
+  function Done([string] $stop, $ds, [string] $stale, [switch] $Limit) { [pscustomobject]@{ Hops = $hops.ToArray(); DataSet = $ds; StopReason = $stop; StaleFile = $stale; Limit = [bool]$Limit } }
   if ($RePoint.Stale) { return (Done "$([IO.Path]::GetFileName($RePoint.File)) differs from the indexed copy -- the re-point at :$($RePoint.Line) is not read" $null $RePoint.File) }
   $rn = (($RePoint.Routine -split '\.') | Select-Object -Last 1)
   Hop 're-point' 'certain' "$($RePoint.Control).$($RePoint.Prop) := $($RePoint.Rhs)" $RePoint.File $RePoint.Line $rn '' ''
   $rr = Get-RhsRoot $RePoint.Rhs
   if (-not $rr.Root) { return (Done $rr.Reason $null '') }
   $segs = @((($RePoint.Rhs.Trim() -replace '^Self\s*\.\s*', '') -replace '\s', '') -split '\.')
-  if ($segs.Count -lt 2) { return (Done "RHS $($RePoint.Rhs) names no member of $($rr.Root) -- a bare datasource is the designer case Get-DataSourceChain already follows" $null '') }
-  $member = $segs[1] -replace '\(.*$', ''
   [void](Get-IndexedFileShas)
   $fid = $script:DlFileIds[$DbPath][$RePoint.File]
+  if ($segs.Count -lt 2) {
+    # a bare identifier: say WHAT it is -- a local or parameter of the re-pointing routine
+    # (RepointJobHeaderToFolder's `DS`, Blueprint4.pas:984) is not followed; neither is a field
+    $bq = ConvertTo-SqlText $rr.Root
+    $bd = Invoke-IndexQuery @"
+SELECT s.kind AS kind, s.signature AS sig, s.start_line AS line, p.qualified_name AS pq FROM symbols s LEFT JOIN symbols p ON p.id = s.parent_id
+ WHERE s.file_id = $fid AND UPPER(s.name) = UPPER('$bq') AND s.kind IN ('param','local_var','field','var','property')
+ ORDER BY CASE WHEN p.qualified_name = '$(ConvertTo-SqlText $RePoint.Routine)' THEN 0 ELSE 1 END, s.start_line LIMIT 1
+"@
+    $what = $(if (-not $bd.Count) { "$($rr.Root) is not declared in $([IO.Path]::GetFileName($RePoint.File))" }
+              else {
+                $b0 = $bd[0]; $ty = (([string]$b0.sig) -replace '^\s*:\s*', '').Trim()
+                switch ([string]$b0.kind) {
+                  'param'     { "$($rr.Root) is a parameter of $rn ($ty, :$($b0.line)) -- the arguments its callers pass are not followed" }
+                  'local_var' { "$($rr.Root) is a local variable of $rn ($ty, :$($b0.line)) -- the value assigned to it there is not followed" }
+                  default     { "$($rr.Root) is a $($b0.kind) ($ty, :$($b0.line)) -- a bare datasource $($b0.kind) is not followed to where it is assigned" }
+                } })
+    return (Done $what $null '' -Limit)
+  }
+  $member = $segs[1] -replace '\(.*$', ''
   $mq = ConvertTo-SqlText $member
   # the member ref on the re-point line, RIGHT of the re-pointed property's own ref
   # (the Task 1 filter, T1-C2): the chain starts from this ONE assignment, never from
@@ -1932,7 +2106,18 @@ SELECT DISTINCT r.name_text AS n FROM refs r
     $fr = $fieldRow[0]
     Hop 'field' 'by name' "$([string]$fr.name) : $(([string]$fr.sig).Trim())" ([string]$fr.path) ([int]$fr.line) '' $fieldWhy $fieldAsk
   } else {
-    # the member IS the datasource field: the member hop above already stands on it
+    # the member IS the datasource field -- only when it is a FIELD of a datasource type. A method
+    # returning a record (ControlPlan2's `INIData : RControlPlan_INIData`, whose `.dsrFtrs` member
+    # is assigned in ControlPlan2.Model.pas:772-779) is a shape this walk does not follow: a
+    # named LIMIT, never "DataSet is never assigned" (fix round 1)
+    $mty = (([string]$m.tsig) -replace '^\s*:\s*', '').Trim()
+    if ([string]$m.tkind -ne 'field' -or $mty -notmatch '(?i)DataSource') {
+      $rest = $(if ($segs.Count -gt 2) { " -- the member .$((@($segs | Select-Object -Skip 2)) -join '.') after it is not followed" } else { ' -- not followed further' })
+      $mk = [string]$m.tkind
+      $desc = $(if (-not $mty) { "a $mk with no declared type" } elseif ($mk -in 'method', 'function') { "a $mk returning $mty" } else { "a $mk of type $mty" })
+      return (Done "the walk reached $member, $desc, not a datasource field$rest" $null '' -Limit)
+    }
+    # the member hop above already stands on it
     $fr = [pscustomobject]@{ id = [int]$m.tid; name = $member; sig = [string]$m.tsig; line = [int]$m.tline
                              path = [string]$m.tpath; fid = [int]$m.tfid; pid = [int]$m.tpid }
   }
@@ -1954,6 +2139,97 @@ SELECT DISTINCT r.name_text AS n FROM refs r
   Done '' ([pscustomobject]@{ Name = [string]$d.name; Id = [int]$d.id; ClassId = [int]$d.pid; File = [string]$d.path; Fid = [int]$d.fid; Line = [int]$d.line; Type = ([string]$d.sig).Trim() }) ''
 }
 
+# WHICH re-point a dangling chain follows -- the ONE copy of the rule (lifted
+# from the round-trip trace, Trace.Walk.ps1, 2026-10-05) that round-trip,
+# feeds-from and lands-where all apply:
+#   * only $Owner's sites count (the component that carries the DFM DataSource:
+#     the control, its parent or its grandparent), and a `:= nil` site does not
+#     -- it UN-binds the control (Blueprint4.pas:3213, in FormClose), as
+#     Get-DataSourceChain skips a nil DataSet assignment;
+#   * a stale site, or no site read from a form unit that is stale, REFUSES
+#     (AC-14): the receiver may be lost (P29), so the file is named;
+#   * several sites with DIFFERENT right-hand sides are a choice the index
+#     cannot make (T1-C2): a named stop, never "the first one".
+# $Ch is a Get-DataSourceChain result graded 'dangling'.
+# Returns Status ('follow' | 'no-site' | 'stale' | 'multi-rhs'), Rows (the
+# owner's counted sites; Rows[0] is the one to follow), NilSites (the owner's
+# `:= nil` sites), Stop ('' for follow / no-site), StaleFile.
+function Get-RePointPick($Ch, [string] $Owner, [hashtable] $SourceOverride) {
+  $mine = @($Ch.RePointedAt | Where-Object { $_.Control -eq $Owner })
+  $rp = @($mine | Where-Object { $_.Stale -or $_.Rhs -ne 'nil' })
+  $out = [pscustomobject]@{ Status = 'follow'; Rows = $rp; NilSites = ($mine.Count - $rp.Count); Stop = ''; StaleFile = '' }
+  $stRp = @($rp | Where-Object { $_.Stale })
+  if ($stRp.Count -or ($Ch.PasFile -and -not $rp.Count -and -not (Test-SourceFresh $Ch.PasFile $SourceOverride))) {
+    $out.Status = 'stale'
+    $out.StaleFile = $(if ($stRp.Count) { [string]$stRp[0].File } else { [string]$Ch.PasFile })
+    $out.Stop = "$([IO.Path]::GetFileName($out.StaleFile)) differs from the indexed copy -- the code re-point of $Owner is not read"
+    return $out
+  }
+  $rhsSet = @($rp | ForEach-Object { ([string]$_.Rhs -replace '\s', '').ToUpperInvariant() } | Sort-Object -Unique)
+  if ($rhsSet.Count -gt 1) {
+    $out.Status = 'multi-rhs'
+    $out.Stop = "$Owner is re-pointed at $($rp.Count) sites with $($rhsSet.Count) different right-hand sides ($((@($rp | ForEach-Object { "$([IO.Path]::GetFileName([string]$_.File)):$($_.Line)" })) -join ', ')) -- cannot tell which feeds the grid"
+    return $out
+  }
+  if (-not $rp.Count) { $out.Status = 'no-site' }
+  $out
+}
+
+# The table-name literals that share a line with a read of the dataset field $Ds
+# (Name, Fid) in its own unit -- the round-trip's dataset -> table hop, shared so
+# feeds-from and lands-where take the table from a re-pointed dataset the SAME
+# way. One row = the table ([inferred]: a shared line is the walk's inference,
+# never a fact); zero or several = a stop. Rows t, line (first), n (lines).
+function Get-DataSetTableLiterals($Ds, $SqlSet) {
+  Invoke-IndexQuery @"
+SELECT sl.text AS t, MIN(sl.start_line) AS line, COUNT(*) AS n FROM string_literals sl
+ WHERE sl.file_id = $($Ds.Fid) AND sl.kind = 'literal' AND sl.text IN ($(ConvertTo-SqlInList $SqlSet.Names))
+   AND EXISTS (SELECT 1 FROM refs r WHERE r.file_id = sl.file_id AND r.start_line = sl.start_line AND r.name_text = '$(ConvertTo-SqlText $Ds.Name)')
+ GROUP BY sl.text ORDER BY MIN(sl.start_line), sl.text
+"@ 'round-trip (table literals)'
+}
+
+# feeds-from / lands-where past a DANGLING designer datasource (Task 2,
+# 2026-10-05): Get-RePointPick, then Get-RePointChain from the picked site,
+# then the table beside the dataset (Get-DataSetTableLiterals) -- the hops and
+# grades the round-trip trace draws for the same control, so the three verbs
+# cannot disagree. Returns:
+#   Status   table     the dataset was reached and ONE table literal sits beside it
+#            no-table  the dataset was reached; zero or several table literals
+#            stops     Get-RePointChain stopped before the dataset on a fact of the code (Stop says why)
+#            walk-limit Get-RePointChain stopped on a shape it does not follow (a bare local /
+#                      parameter, a method returning a record) -- a limit of the walk, not of the code
+#            stale     a file on the way differs from the index (StaleFile; REFUSE)
+#            multi-rhs several sites, different right-hand sides (named stop)
+#            no-site   no non-nil re-point of $Owner in the form unit
+#   Owner, Sites (the counted re-point rows), NilSites, Hops (Get-RePointChain's,
+#   in order), DataSet, Table, TableLine, TableLines, Stop, StaleFile
+function Resolve-RePointTable($Ch, [string] $Owner, $SqlSet, [hashtable] $SourceOverride) {
+  $pk = Get-RePointPick $Ch $Owner $SourceOverride
+  $o = [pscustomobject]@{ Status = $pk.Status; Owner = $Owner; Sites = $pk.Rows; NilSites = $pk.NilSites; Hops = @(); DataSet = $null
+                          Table = $null; TableLine = 0; TableLines = 0; Stop = $pk.Stop; StaleFile = $pk.StaleFile }
+  if ($pk.Status -ne 'follow') {
+    if ($pk.Status -eq 'no-site') {
+      $o.Stop = $(if ($pk.NilSites) { "$Owner is re-pointed in code only to nil ($($pk.NilSites) site(s)) -- nothing to follow" } else { "no code re-point of $Owner in $(Get-UnitName $Ch.PasFile) -- nothing to follow" })
+    }
+    return $o
+  }
+  $rc = Get-RePointChain $pk.Rows[0] $SourceOverride
+  $o.Hops = $rc.Hops
+  if ($rc.StaleFile) { $o.Status = 'stale'; $o.StaleFile = $rc.StaleFile; $o.Stop = $rc.StopReason; return $o }
+  if ($rc.StopReason) { $o.Status = $(if ($rc.Limit) { 'walk-limit' } else { 'stops' }); $o.Stop = $rc.StopReason; return $o }
+  $o.DataSet = $rc.DataSet
+  $lit = Get-DataSetTableLiterals $rc.DataSet $SqlSet
+  if ($lit.Count -ne 1) {
+    $o.Status = 'no-table'
+    $o.Stop = $(if ($lit.Count -eq 0) { "no upper-case table-name literal shares a line with $($rc.DataSet.Name) in $(Get-UnitName $rc.DataSet.File) -- the table cannot be inferred" }
+                else { "$($lit.Count) tables share a line with $($rc.DataSet.Name) in $(Get-UnitName $rc.DataSet.File) ($((@($lit | ForEach-Object { [string]$_.t })) -join ', ')) -- cannot tell which" })
+    return $o
+  }
+  $o.Status = 'table'; $o.Table = [string]$lit[0].t; $o.TableLine = [int]$lit[0].line; $o.TableLines = [int]$lit[0].n
+  $o
+}
+
 # The cache key of one chain: the DFM path and the datasource TEXT, case-folded.
 function Get-ChainKey([string] $Dfm, [string] $Ds) { "$Dfm|$Ds".ToUpperInvariant() }
 
@@ -1973,7 +2249,14 @@ function Get-ChainKey([string] $Dfm, [string] $Ds) { "$Dfm|$Ds".ToUpperInvariant
 #   not-column   chain resolves to one table, and the column is not extracted
 #                from it nor quoted in its newest declaration
 #   ambiguous    several candidate tables survive (grade many)
-#   dangling     the DFM datasource names a module this index does not hold
+#   dangling     the DFM datasource names a module this index does not hold, AND
+#                the code re-point of its owner does not reach a table (Task 2,
+#                2026-10-05). A dangling chain is followed through
+#                Resolve-RePointTable once per (chain, owner); one that reaches a
+#                table is classified column / not-column / stale like any other,
+#                and a stale file on the re-point walk is `stale`. Every row of a
+#                dangling chain carries RePoint (Resolve-RePointTable's Status, ''
+#                when no owner was found) and RePointKey (into .RePoints)
 #   stops        the chain stops before a table (none / no-type / no-assignment /
 #                dfm-dataset / no-datasource)
 #   stale        a source file on the chain differs from the indexed copy -- or
@@ -2015,21 +2298,37 @@ SELECT c.id AS id, c.name AS name, f.path AS path
 
   $binds = Get-AllIndexRows @"
 SELECT sl.id AS id, sl.start_line AS line, sl.owner_name AS prop, sl.text AS col, f.path AS dfm,
-       c.id AS cid, c.name AS ctl, $(Get-ControlDataSourceSql 'sl' 'c') AS ds
+       c.id AS cid, c.name AS ctl, c.parent_id AS pid, (SELECT g.parent_id FROM symbols g WHERE g.id = c.parent_id) AS gpid,
+       $(Get-ControlDataSourceSql 'sl' 'c') AS ds
   FROM string_literals sl JOIN files f ON f.id = sl.file_id LEFT JOIN symbols c ON c.id = sl.symbol_id
  WHERE sl.kind = 'dfm-prop' AND sl.owner_name IN ('DataBinding.FieldName','DataBinding.DataField','DataField')
 "@ 'sl.id'
   $rows = New-Object System.Collections.ArrayList
+  $rePoints = @{}
   foreach ($b in $binds) {
     $ds = [string]$b.ds
-    $outcome = 'no-ds'; $table = $null
+    $outcome = 'no-ds'; $table = $null; $rpKey = ''; $rpStatus = ''
     if ($ds) {
       $k = Get-ChainKey ([string]$b.dfm) $ds
       if (-not $chains.ContainsKey($k)) { $chains[$k] = Get-DataSourceChain ([string]$b.dfm) $ds $SqlSet $SourceOverride }
       $ch = $chains[$k]
       $table = $ch.ResolvedTable
+      if ($ch.Dangling) {
+        # Task 2 (2026-10-05): past a DANGLING designer datasource the code re-point is
+        # followed, per OWNER -- the component carrying the DataSource (the control, its
+        # parent or its grandparent, nearest first, as Get-ControlDataSourceSql picked it)
+        $ids = @(@($b.cid, $b.pid, $b.gpid) | Where-Object { $_ } | ForEach-Object { [int]$_ })
+        $own = @($ids | ForEach-Object { $i = $_; @($ch.Controls | Where-Object { -not $_.IsLookup -and $_.ControlId -eq $i }) } | Select-Object -First 1)
+        if ($own.Count) {
+          $rpKey = "$k|$($own[0].Control)".ToUpperInvariant()
+          if (-not $rePoints.ContainsKey($rpKey)) { $rePoints[$rpKey] = Resolve-RePointTable $ch ([string]$own[0].Control) $SqlSet $SourceOverride }
+          $rpStatus = $rePoints[$rpKey].Status
+          if ($rpStatus -eq 'table') { $table = $rePoints[$rpKey].Table }
+        }
+      }
       $outcome = if ($ch.Grade -eq 'stale source') { 'stale' }
-                 elseif ($ch.Dangling) { 'dangling' }
+                 elseif ($ch.Dangling -and $rpStatus -eq 'stale') { 'stale' }
+                 elseif ($ch.Dangling -and -not $table) { 'dangling' }
                  elseif ($table) {
                    # the SHARED column test: cheap first, the source scan only for a miss
                    if (Test-IsColumn $SqlSet.Tables[$table] ([string]$b.col)) { 'column' }
@@ -2047,11 +2346,11 @@ SELECT sl.id AS id, sl.start_line AS line, sl.owner_name AS prop, sl.text AS col
     [void]$rows.Add([pscustomobject]@{
       Id = [int]$b.id; Dfm = [string]$b.dfm; Line = [int]$b.line; Prop = [string]$b.prop; Column = [string]$b.col
       ControlId = $(if ($b.cid) { [int]$b.cid } else { 0 }); Control = [string]$b.ctl; Ds = $ds
-      Outcome = $outcome; Table = $table
+      Outcome = $outcome; Table = $table; Dangling = [bool]($ds -and $ch.Dangling); RePointKey = $rpKey; RePoint = $rpStatus
     })
   }
 
-  $o = [pscustomobject]@{ Chains = $chains; DataSources = $perDs.ToArray(); Bindings = $rows.ToArray() }
+  $o = [pscustomobject]@{ Chains = $chains; DataSources = $perDs.ToArray(); Bindings = $rows.ToArray(); RePoints = $rePoints }
   if ($key) { $global:DlFeedChains[$key] = $o }
   $o
 }
@@ -2478,7 +2777,10 @@ function Invoke-DotRun([string] $DotFile, [string] $Svg, [string] $Plain, [strin
     }
   }
   foreach ($p in @($Svg, $Plain, $Png, $Pdf)) { if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force } }
-  $msgs = @(& $Dot -Tsvg -o $Svg -Tplain -o $Plain -Tpng -Gdpi=110 -o $Png -Tpdf -o $Pdf $DotFile 2>&1 |
+  # R2: resolved HERE, not at the top of each emitter, so a missing dot fails the dot step only -- round-trip
+  # catches that and still delivers its text with ChartError (owner answer 3). $Dot is the caller's -Dot ('' = the chain).
+  $dotExe = Resolve-GraphvizDot $Dot
+  $msgs = @(& $dotExe -Tsvg -o $Svg -Tplain -o $Plain -Tpng -Gdpi=110 -o $Png -Tpdf -o $Pdf $DotFile 2>&1 |
             Where-Object { $_ -notmatch 'Pango-WARNING' -and ([string]$_).Trim() -ne '' } |
             ForEach-Object { [string]$_ })
   $dotExit = $LASTEXITCODE
@@ -2583,4 +2885,28 @@ function Add-RowCluster {
   [void]$Sb.AppendLine("    $Nid [label=<$($tbl.ToString())>];")
   [void]$Sb.AppendLine('  }')
   , $ports.ToArray()
+}
+
+# True when the INTERFACE-section edges alone close a loop among the members --
+# the shape the compiler refuses (F2047). `cycles` sets `interface_cycle:true`
+# when ONE intra-group edge is interface-section (R3: DL's group has 1 of 7 and
+# compiles), so Emit-Cycles' verdict must not be read off that flag alone.
+# pEdgeMap: 'src|dst' (lowercased unit names) -> an object with a .section.
+# Pinned on synthetic graphs in Test-Emitters (A-CY-ILOOP-*).
+function Test-InterfaceLoop([hashtable] $pEdgeMap, [string[]] $pMembers) {
+  $state = @{}   # 1 = on the DFS path, 2 = done
+  $visit = {
+    param([string] $u)
+    $state[$u] = 1
+    foreach ($m in $pMembers) {
+      $e = $pEdgeMap[$u + '|' + $m]
+      if (-not $e -or [string]$e.section -ne 'interface') { continue }
+      if ($state[$m] -eq 1) { return $true }
+      if (-not $state[$m] -and (& $visit $m)) { return $true }
+    }
+    $state[$u] = 2
+    $false
+  }
+  foreach ($u in $pMembers) { if (-not $state[$u] -and (& $visit $u)) { return $true } }
+  $false
 }

@@ -521,38 +521,39 @@ read from that code and MEASURED on the gate's trace
   `ANCHOR` when, and only when, the anchor is a CALCULATED field (8.5).
 * Header attributes: `FROM <selection>` and `REGENERATE <command>` join `TITLE` / `INDEX` / `TIERS`.
 * `STOPS <reason> @anchor` is a NUMBERED step (counted in steps) that also counts as unresolved -- the construct OQ-7 asked for.
-* `WHEN "<cond>"` / `UNLESS "<cond>"` under a step are conditions, counted where `GUARD` counts; `END TRACE` accepts `conditions` as a synonym of `guards`. The condition is written in double quotes (owner decision 2026-09-27: Pascal's `''` stays as it is inside them, e.g. `UNLESS "SQL = ''"`). For an `if` it is the source text VERBATIM; the `try` / `except` and `case` forms below add GENERATED words to source text, and say so. `WHEN` continues when it is true, `UNLESS` when it is false, and the other branch is the `-- else ...` note.
-  Nothing is ever escaped: a condition that itself carries a double quote is
-  refused by `New-TraceCond`, and the walk (the shim's `unknown` form) turns
-  that hop into a `STOPS` naming E1 instead -- see the header of `Trace.FormA.ps1`.
-  **Owner decision for the next spec (the round-trip chart), not built yet:** drop
-  the quotes around conditions -- the parser takes `WHEN` / `UNLESS` ... up to the
-  final `@File:line`. This section describes the code as it is.
+* `WHEN <cond> @File:line` / `UNLESS <cond> @File:line` under a step are conditions, counted where `GUARD` counts; `END TRACE` accepts `conditions` as a synonym of `guards`. The condition is written WITHOUT quotes (owner decision, landed 2026-10-06 as R5 Part 0; from 2026-09-27 it was double-quoted): the parser takes everything after the keyword up to the final ` @<leaf>:<line>` (before any ` -- ` note), so Pascal's `''` and a `"` are ordinary text, e.g. `UNLESS SQL = '' @uGenericTableRoute.pas:196`. For an `if` it is the source text VERBATIM; the `try` / `except` and `case` forms below add GENERATED words to source text, and say so. `WHEN` continues when it is true, `UNLESS` when it is false, and the other branch is the `-- else ...` note.
+  Nothing is ever escaped: a condition that carries ` @` followed by an anchor
+  shape, or ` -- ` (or ends in ` --`) -- the two tokens that would make the line
+  ambiguous -- is refused by `New-TraceCond` (`Get-TraceCondProblem`), and the
+  walk (the shim's `unknown` form) turns that hop into a `STOPS` naming E1
+  instead -- see the header of `Trace.FormA.ps1`. The round-trip CHART draws
+  the same condition the same way: verbatim, never quoted.
 * The `try` / `except` form (`Trace.Walk.ps1` shim, `:315-317` and `:526-532`): an Exit in an
-  except handler is guarded by `UNLESS "<statements> raises"`. The statement texts are
+  except handler is guarded by `UNLESS <statements> raises`. The statement texts are
   source text, verbatim; ` raises` is GENERATED. One statement is quoted whole
-  (`UNLESS "Mem.LoadFromStream(MS, sfBinary) raises" @uGenericTableRoute.pas:446`);
+  (`UNLESS Mem.LoadFromStream(MS, sfBinary) raises @uGenericTableRoute.pas:446`);
   several are `S1 ... Sn raises` -- first and last verbatim, ` ... ` (never ` .. `,
   Pascal's range operator; ruling T4-R3) standing for the statements between
-  (`UNLESS "T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises"
+  (`UNLESS T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises
   @uPipeSessionBuilder.pas:605`). A LAST statement of more than three code lines is
   left out -- `S1 ... raises`, the connector standing for the statements after S1
-  (Task 5 fix round 1, e.g. `UNLESS "ApplyResult:= Mem.ApplyUpdates(0) ... raises"
+  (Task 5 fix round 1, e.g. `UNLESS ApplyResult:= Mem.ApplyUpdates(0) ... raises
   @uGenericTableRoute.pas:570`); a compound FIRST statement makes the form a named
   unknown, i.e. a `STOPS` naming E1. Which statement raises is not in the source.
 * The `case` form (`Trace.Walk.ps1:318-319`, ruling T4-C3): an Exit in a `case` `else`
-  arm is guarded by `UNLESS "case <X> of"` -- the case header, verbatim -- and the note
-  names the arm in generated text: `UNLESS "case ARequest of" @uGenericTableRoute.pas:188
+  arm is guarded by `UNLESS case <X> of` -- the case header, verbatim -- and the note
+  names the arm in generated text: `UNLESS case ARequest of @uGenericTableRoute.pas:188
   -- else arm at :192`.
 * OPEN QUESTION for the owner (ruling T8-R3, 2026-09-28): the bundle footer once
   promised that `trace.dlgraph` pastes "into a DocInsight remarks block unchanged".
   It does not: the trace quotes Pascal that carries `<` (e.g.
-  `UNLESS "(GLE <> ERROR_SUCCESS) or ..." @Blueprint4.ViewModel.pas:3990`), which is
+  `UNLESS (GLE <> ERROR_SUCCESS) or ... @Blueprint4.ViewModel.pas:3990`), which is
   invalid as XML doc-comment text, and every line of a paste needs a `///` prefix. The writer does neither today (no escaping, no
   prefix). Whether Form A gains a DocInsight rendering (escape `<` / `&`, prefix
   `///`) is the owner's call; the footer now says only `trace.dlgraph (Form A text)`.
-  **ANSWERED for the next spec (not built yet):** DocInsight-ready text becomes the
-  default output, with an option for other docs.
+  **ANSWERED and built (R5, 2026-10-06):** `Ask-Report.ps1`'s default answer is the
+  DocInsight `/// <remarks>` block the IDE's Reports menu makes (`Report.DocInsight.ps1`,
+  a byte-for-byte port of the plugin's formatter); `-Plain` gives the Form A text.
 * Certainty gains `[by name]` (a name match) beside `[certain]` / `[inferred]`; it is two tokens and the checker drops it as a phrase.
 * Gutters may be two OR three digits.
 * The canonical emitter (`Trace.FormA.ps1`) numbers every item, anchors every step INCLUDING `CROSSES` (at the send line), and never writes an epilogue. `Read-FormA` reads only the canonical layout; the golden stays hand-aligned and is checked, not parsed.
@@ -622,14 +623,14 @@ Measured: `TITLE "Why frmBlueprint4.cxGroupBox16 cannot be traced"` (gate
 **not** unresolved (it is a `step`, not a `STOPS`). One per section at most
 (T5-R1), at the first omitted line; the `<n>` it states is the count of STEPS
 the omitted branches would have yielded (T5-R6), and its note lists each distinct
-branch condition with its anchor (`Trace.Walk.ps1:1087-1100`): quoted verbatim,
-`<KEYWORD> "<cond>" @<file>:<line>`, unless the condition contains `; ` (or a line
-break), which a note cannot carry -- then it is named by its anchor only,
+branch condition with its anchor (`New-OmitStep` in `Trace.Walk.ps1`): verbatim and unquoted,
+`<KEYWORD> <cond> @<file>:<line>`, unless the condition contains `; ` (or a line
+break), which a note cannot carry, or what a condition line refuses -- then it is named by its anchor only,
 `<KEYWORD> at <file>:<line>`. The `in <Routine>; ` prefix is written only when every
 omitted record lies in ONE routine; otherwise the note starts at `not walked`:
 
 ```
-[NN] OMITS <n> step(s) in branches for other tables, every enclosing if read up to a loop or case arm @<file>:<line> -- [in <Routine>; ]not walked, the branch conditions: WHEN "<cond>" @<file>:<line> / WHEN at <file>:<line> / ...; ask E1
+[NN] OMITS <n> step(s) in branches for other tables, every enclosing if read up to a loop or case arm @<file>:<line> -- [in <Routine>; ]not walked, the branch conditions: WHEN <cond> @<file>:<line> / WHEN at <file>:<line> / ...; ask E1
 ```
 
 Final review I5: EVERY `if` of a line's enclosing chain is tested, innermost first, and the
@@ -685,8 +686,8 @@ REGENERATE commands shortened here; fix round 1 wording):
 
 ```
 [09] STOPS FtrName is a calculated field of FMTFtrs (created (FieldKind fkCalculated) at :756, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index @Blueprint4.ViewModel.pas:986 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735; ask E3
-       UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973
-       WHEN "Assigned(FfFtrs_FtrName)" @Blueprint4.ViewModel.pas:985
+       UNLESS DataSet.State = dsInsert @Blueprint4.ViewModel.pas:973 -- else Exit at :973
+       WHEN Assigned(FfFtrs_FtrName) @Blueprint4.ViewModel.pas:985
        VIA FtrNameString @MSCTYPES.PAS:840 -- computed by this call at :986, its body is not walked, nor are those of TagOf
 
 DERIVED

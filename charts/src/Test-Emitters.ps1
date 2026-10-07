@@ -161,6 +161,57 @@ Step 'E-DEP' {
   Chk 'A-DEP-USEDBY' $d.UsedBy 3
   Chk 'A-DEP-USES'   $d.Uses 18
   Chk 'A-DEP-EXP'    $d.Expected 21
+  # R24: under the 40-row display cap on both sides, so nothing is disclosed
+  Chk 'A-DEP-TOTALS' "$($d.UsesTotal)/$($d.UsedByTotal) hidden $($d.UsesHidden)/$($d.UsedByHidden)" '18/3 hidden 0/0'
+  if ((Dot $d) -match 'more .* not shown') { Fail 'A-DEP-TOTALS' 'a "more exist" row fires on a unit under the cap' }
+}
+
+# R2(a), 2026-10-06: -Engine / -Dot default to '' and are found by Resolve-DragLintEngine /
+# Resolve-GraphvizDot (Emit-Common). E-R2 forces every step of both chains on a fake layout;
+# E-R2-DEPS is the behavioural half: the same deps chart with -Engine OMITTED and
+# DRAGLINT_ENGINE pointing at the engine gives the same .dot as E-DEP, and DRAGLINT_ENGINE
+# pointing at a stand-in proves the variable is what the emitter ran (the stand-in leaves a
+# marker). The environment is restored exactly, absent staying absent.
+Note 'R2 path resolver ...'
+Step 'E-R2' {
+  $script:r2 = @(& "$SRC\Test-PathResolver.ps1" -OutDir $OutDir -Quiet)
+  foreach ($x in $r2) { Fail 'A-R2-RESOLVER' $x }
+}
+Step 'E-R2-DEPS' {
+  $prevEng = [Environment]::GetEnvironmentVariable('DRAGLINT_ENGINE', 'Process')
+  $r2Dir = Join-Path $OutDir 'r2-deps'
+  $marker = Join-Path $r2Dir 'stand-in-ran.txt'
+  $standIn = Join-Path $r2Dir 'stand-in.cmd'
+  New-Item -ItemType Directory -Force $r2Dir | Out-Null
+  [IO.File]::WriteAllText($standIn, "@echo off`r`necho ran>`"$marker`"`r`nexit /b 1`r`n", (New-Object Text.ASCIIEncoding))
+  try {
+    $env:DRAGLINT_ENGINE = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+    $script:dEnv = & "$SRC\Emit-Deps.ps1" -Unit 'Blueprint4.ViewModel' -DbPath $DbCli -OutDir $r2Dir
+    Chk 'A-R2-DEPS' "$($dEnv.UsedBy)/$($dEnv.Uses)/$($dEnv.Expected)" "$($d.UsedBy)/$($d.Uses)/$($d.Expected)"
+    if ((Dot $dEnv) -cne (Dot $d)) { Fail 'A-R2-DEPS' 'the .dot with -Engine omitted (DRAGLINT_ENGINE set) differs from E-DEP''s' }
+    $env:DRAGLINT_ENGINE = $standIn
+    try { $null = & "$SRC\Emit-Deps.ps1" -Unit 'Blueprint4.ViewModel' -DbPath $DbCli -OutDir (Join-Path $r2Dir 'stand-in') 6>$null } catch { }
+    if (-not (Test-Path -LiteralPath $marker)) { Fail 'A-R2-DEPS-ENV' 'with -Engine omitted the emitter did not run DRAGLINT_ENGINE' }
+  } finally {
+    if ($null -eq $prevEng) { Remove-Item Env:\DRAGLINT_ENGINE -ErrorAction SilentlyContinue } else { $env:DRAGLINT_ENGINE = $prevEng }
+  }
+  Chk 'A-R2-ENV-RESTORED' "$([Environment]::GetEnvironmentVariable('DRAGLINT_ENGINE', 'Process'))" "$prevEng"
+}
+
+# R24 (2026-10-05): deps kept LIMIT $MaxRows (40) with no "more exist" row, and
+# filtered the external units AFTER the limit -- so uMain (91 uses entries, 46 of
+# them project units; measured on the CLIENT clone) drew fewer than 40 of its 46
+# and claimed that was all. The cap stays (a display limit); the remainder is
+# now counted and disclosed. uPipeClientConnection is used by 207 uses-clause
+# entries (measured), the used-by side of the same defect.
+Note 'deps R24 (display cap disclosed) ...'
+Step 'E-DEP-R24' {
+  $script:dR = & "$SRC\Emit-Deps.ps1" -Unit 'uMain' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-DEP-R24-USES'   "$($dR.Uses) of $($dR.UsesTotal), hidden $($dR.UsesHidden)" '40 of 46, hidden 6'
+  if ((Dot $dR) -notmatch '\+6 more units this uses not shown -- 40 of 46 drawn \(display cap 40\)') { Fail 'A-DEP-R24-USES' 'the hidden uses are not disclosed' }
+  $script:dR2 = & "$SRC\Emit-Deps.ps1" -Unit 'uPipeClientConnection' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-DEP-R24-USEDBY' "$($dR2.UsedBy) of $($dR2.UsedByTotal), hidden $($dR2.UsedByHidden)" '40 of 207, hidden 167'
+  if ((Dot $dR2) -notmatch '\+167 more units that use this not shown -- 40 of 207 drawn \(display cap 40\)') { Fail 'A-DEP-R24-USEDBY' 'the hidden users are not disclosed' }
 }
 
 Note 'who-calls SendDeltaOperation d2 ...'
@@ -770,12 +821,73 @@ Step 'E-CY' {
   # `regions`, every edge must still be drawn. 7 edges / 5 members, was 5 / 4 at
   # 1.18: the DL clone re-indexes the engine's own source, and 1.19 added the unit
   # DRagLint.Doc.ProjectTags, which joins the SCC -- ProjectTags uses Regions
-  # (:267) and SharedFacts uses ProjectTags (:431). A SOURCE change, diffed
-  # against the pre-1.19 clone; the other 5 are the 1.18 edges (2 at new lines).
+  # (:304) and SharedFacts uses ProjectTags (:447), lines as of this clone,
+  # verified in R3. A SOURCE change, diffed against the pre-1.19 clone; the other
+  # 5 are the 1.18 edges (2 at new lines).
   $script:cy2 = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDl -OutDir $OutDir
   Chk 'A-CY2-GROUPS' $cy2.Cycles 1
   Chk 'A-CY2-EDGES'  $cy2.Edges 7
   Chk 'A-CY2-GAPS'   $cy2.Unwalkable 0
+
+  # R3 (2026-10-06): the DL SCC is the largest real multi-unit cycle in the clones
+  # (5 units; CLIENT's groups are 3 and 2), and every edge below was checked by
+  # hand against C:\Projects\Delphi-RAG-lint\src\doc\*.pas, each file's sha256
+  # equal to the clone's files.sha256: the uses entry is on that line, in that
+  # section. A change in edge extraction, section tagging or the cycle walk moves
+  # this set and fails here.
+  $cy2Want = @(
+    'draglint.doc.facts->draglint.doc.harvest implementation 977'
+    'draglint.doc.harvest->draglint.doc.regions implementation 206'
+    'draglint.doc.projecttags->draglint.doc.regions implementation 304'
+    'draglint.doc.regions->draglint.doc.facts interface 42'
+    'draglint.doc.regions->draglint.doc.sharedfacts implementation 933'
+    'draglint.doc.sharedfacts->draglint.doc.projecttags implementation 447'
+    'draglint.doc.sharedfacts->draglint.doc.regions implementation 446'
+  ) -join '; '
+  Chk 'A-CY2-EDGESET' ((@($cy2.EdgeList) | Sort-Object) -join '; ') $cy2Want
+  $t2 = Dot $cy2
+  # A row anchors to its FIRST intra-group uses entry. SharedFacts uses Regions at
+  # :446 and ProjectTags at :447; the walk used to follow the verb's member order
+  # and anchored the row at :447.
+  if ($t2 -notmatch 'DRagLint\.Doc\.SharedFacts\.pas&amp;line=446"') {
+    Fail 'A-CY2-FIRST-USE' 'SharedFacts is not anchored to its first intra-group uses entry (:446)' }
+  # interface_cycle:true means ONE interface edge, not an interface-only loop:
+  # Regions -> Facts (:42) is the only one, so every loop crosses an
+  # implementation use and the compiler accepts the group. Calling it an
+  # "interface cycle" is the claim the source contradicts.
+  # Positive on the EXACT default text, negative with no closing '<': a wrong
+  # Test-InterfaceLoop would print "interface cycle: an all-interface loop ...
+  # (1 of 7 uses interface-section)", which a '>interface cycle<' / '1 of 7'
+  # pair would both have let through (fix round 1, I1).
+  $cyCounted = 'interface coupling: 1 of 7 uses interface-section; every loop crosses an implementation use'
+  if ($t2 -match '>interface cycle') { Fail 'A-CY2-VERDICT' 'the group is still called an interface cycle' }
+  if (-not $t2.Contains(">$cyCounted<")) { Fail 'A-CY2-VERDICT-N' "the verdict is not exactly '$cyCounted'" }
+  # Edge colour says the section: 1 interface arrow, 6 implementation arrows.
+  Chk 'A-CY2-INTF-ARROWS' ([regex]::Matches($t2, '-> n\d+:p\d+ \[color="#B02A37"')).Count 1
+  Chk 'A-CY2-IMPL-ARROWS' ([regex]::Matches($t2, '-> n\d+:p\d+ \[color="#B45309"')).Count 6
+
+  # -Playbook: the engine's Status line ("units of this cycle use each other in
+  # their INTERFACE uses clauses" -- engine job E14) is kept, but the counted
+  # clause goes AHEAD of it, so the chart never prints a claim its own check
+  # contradicts. --plan on the DL clone measured ~5.5s. Own folder: the base name
+  # is the same as cy2's.
+  $script:cy2p = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDl -OutDir (Join-Path $OutDir 'cy-playbook') -Playbook
+  $t2p = Dot $cy2p
+  if (-not $t2p.Contains(">$cyCounted -- engine: interface coupling -- units of this cycle use each other in their INTERFACE uses clauses.<")) {
+    Fail 'A-CY2P-VERDICT' 'the -Playbook verdict does not lead with the counted clause ahead of the engine line' }
+  if ($t2p -match '>interface cycle') { Fail 'A-CY2P-NOCYCLE' 'the -Playbook verdict calls the group an interface cycle' }
+
+  # Test-InterfaceLoop on synthetic graphs (fix round 1, item 3): the branch no
+  # clone exercises -- no compiling project has an all-interface loop.
+  $script:cyLoop = & {
+    . "$SRC\Emit-Common.ps1"
+    $i = [pscustomobject]@{ section = 'interface' }; $m = [pscustomobject]@{ section = 'implementation' }
+    $ring  = @{ 'a|b' = $i; 'b|c' = $i; 'c|a' = $i }
+    $mixIn = @{ 'a|b' = $i; 'b|a' = $m; 'b|c' = $i; 'c|b' = $i }   # SCC whose b<->c sub-loop is all-interface
+    $mixNo = @{ 'a|b' = $i; 'b|c' = $i; 'c|a' = $m }               # every loop crosses an implementation use
+    '{0}/{1}/{2}' -f (Test-InterfaceLoop $ring @('a','b','c')), (Test-InterfaceLoop $mixIn @('a','b','c')), (Test-InterfaceLoop $mixNo @('a','b','c'))
+  }
+  Chk 'A-CY-ILOOP' $cyLoop 'True/True/False'
 
   # N18: no cycles is an ANSWER -- it renders and exits 0.
   $script:cy3 = & "$SRC\Emit-Cycles.ps1" -DbPath $DbDc -OutDir $OutDir
@@ -1054,6 +1166,26 @@ Step 'E-CI' {
   Chk 'A-CI2-UNITS'    $ci2.Units 174
   Chk 'A-CI2-CAPPED'   $ci2.Capped $true
   if ((Dot $ci2) -notmatch 'frontier CAPPED') { Fail 'A-CI2-DISCLOSE' 'the capped radius does not admit it' }
+
+  # R24: the type-members seed query was unpaged. TdlgSetupDefaults declares
+  # 1,196 members (measured on the CLIENT clone), so the old query seeded -- and
+  # the chart disclosed -- 200 of them. Depth 1: the seed is the point here.
+  $script:ci3 = & "$SRC\Emit-ChangeImpact.ps1" -Target 'uSetupDefaultsFrm.TdlgSetupDefaults' -DbPath $DbCli -Depth 1 -OutDir $OutDir
+  Chk 'A-CI3-MEMBERS'  $ci3.Members 1196
+  if ((Dot $ci3) -notmatch 'from the type and its 1196 member\(s\)') { Fail 'A-CI3-MEMBERS' 'the chart does not disclose all 1196 members' }
+  # R24 fix round 1: the frontier cap counted the 1,197 SEEDS, so every type with
+  # more than 400 members read "CAPPED" whatever its radius -- at depth 1 here,
+  # with 1 affected routine. The cap now counts only nodes the walk reached.
+  Chk 'A-CI3-CAPPED'   "$($ci3.Capped)/$($ci3.Affected)" 'False/1'
+  if ((Dot $ci3) -match 'frontier CAPPED') { Fail 'A-CI3-CAPPED' 'a 1-routine radius claims the frontier was capped' }
+  $script:ci4 = & "$SRC\Emit-ChangeImpact.ps1" -Target 'uSetupDefaultsFrm.TdlgSetupDefaults' -DbPath $DbCli -OutDir $OutDir
+  # default depth 3, MEASURED: the one routine reached at hop 1 has no caller of its own,
+  # so the radius stays 1 routine / 1 unit and is NOT capped
+  Chk 'A-CI4-DEPTH3'   "$($ci4.Capped)/$($ci4.Affected)/$($ci4.Units)/$($ci4.MaxHop)" 'False/1/1/1'
+  # the cap still FIRES when the reached set really outgrows it: same target, -MaxNodes 0
+  $script:ci5 = & "$SRC\Emit-ChangeImpact.ps1" -Target 'uSetupDefaultsFrm.TdlgSetupDefaults' -DbPath $DbCli -Depth 3 -MaxNodes 0 -OutDir (Join-Path $OutDir 'ci-cap')
+  Chk 'A-CI5-CAPFIRES' "$($ci5.Capped)/$($ci5.Affected)" 'True/1'
+  if ((Dot $ci5) -notmatch 'frontier CAPPED at 0') { Fail 'A-CI5-CAPFIRES' 'the capped radius does not admit it' }
 }
 
 Note 'tested-by ...'
@@ -1072,6 +1204,63 @@ Step 'E-TB' {
   Chk 'A-TB3-TESTS' $tb3.Tests 13
 }
 
+# path (R4, Task 8): every SHORTEST call path A -> B. The engine's call-path verb answers
+# found / not found and ONE shortest path; the emitter enumerates all of them over the same
+# resolved call_edges and asserts call-path's own path is among them. MEASURED 2026-10-06 on
+# the CLIENT clone (engine 1.25.1-alpha): AddOperation reaches NextSeq in 3 calls by TWO
+# routes -- through ReserveNextID (:4084, then :4030) and through SendDeltaOperation (:4099,
+# then :3985) -- both into ExecuteCommand, which calls NextSeq at uPipeClientConnection.pas:470
+# (butterfly's hop-2 row, A-BF-CALLEES). Every site is grade certain.
+Note 'path ...'
+Step 'E-PATH' {
+  $script:pa1 = & "$SRC\Emit-Path.ps1" -From 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation' `
+                  -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-PA1-COUNTS' "$($pa1.Paths)/$($pa1.PathsShown)/$($pa1.Hops)/$($pa1.Routines)/$($pa1.Edges)/$($pa1.Sites)/$($pa1.Ambiguous)" '2/2/3/5/5/5/0'
+  Chk 'A-PA1-ENGINE' $pa1.EnginePath 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation -> Blueprint4.ViewModel.TBlueprint_ViewModel.ReserveNextID -> uPipeClientConnection.TPipeClientConnection.ExecuteCommand -> uPipeClientConnection.TPipeClientConnection.NextSeq'
+  # 5 routine rows + 5 call-site rows on the edges, each one anchor
+  Chk 'A-PA1-CLICKS' "$($pa1.ClickTargets)/$($pa1.AllClickable)" '10/True'
+  $tp1 = Dot $pa1
+  foreach ($ln in 4084, 4099, 4030, 3985, 470) { if (-not (HasLine $tp1 $ln)) { Fail 'A-PA1-SITES' "call site line $ln is not anchored" } }
+  if ($tp1 -notmatch 'Blueprint4\.ViewModel\.pas:4084 &#183; certain') { Fail 'A-PA1-LABEL' 'the edge label does not carry its call site and grade' }
+  if ($tp1 -match 'not shown') { Fail 'A-PA1-NODISC' 'an uncapped answer discloses hidden paths' }
+
+  # the cap is DISCLOSED, never silent: -Cap 1 draws one route and says the other exists
+  $script:pa2 = & "$SRC\Emit-Path.ps1" -From 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation' `
+                  -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -Cap 1 -OutDir (Join-Path $OutDir 'path-cap')
+  Chk 'A-PA2-COUNTS' "$($pa2.Paths)/$($pa2.PathsShown)/$($pa2.Routines)/$($pa2.Edges)" '2/1/4/3'
+  if ((Dot $pa2) -notmatch '\+1 more shortest path not shown') { Fail 'A-PA2-DISC' 'the capped path is not disclosed' }
+
+  # one call, TWO sites, both grade ambiguous (resolved to this routine, more than one candidate
+  # on the type chain): ImportJenVICI -> GetLastPersistError at Blueprint4.ViewModel.pas:1841 and :1843
+  $script:pa3 = & "$SRC\Emit-Path.ps1" -From 'Blueprint4.ViewModel.TBlueprint_ViewModel.ImportJenVICI' `
+                  -To 'Blueprint4.ViewModel.TBlueprint_ViewModel.GetLastPersistError' -DbPath $DbCli -OutDir $OutDir
+  Chk 'A-PA3-COUNTS' "$($pa3.Paths)/$($pa3.Hops)/$($pa3.Routines)/$($pa3.Edges)/$($pa3.Sites)/$($pa3.Ambiguous)" '1/1/2/1/2/2'
+  $tp3 = Dot $pa3
+  if ($tp3 -notmatch 'Blueprint4\.ViewModel\.pas:1841 &#183; ambiguous' -or -not (HasLine $tp3 1843)) { Fail 'A-PA3-SITES' 'both ambiguous sites must be labelled and anchored' }
+
+  # the bundle: -To travels into the slug, meta.json and the regenerate command
+  $art = & "$SRC\New-DiagramArtifact.ps1" -Question path -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.ImportJenVICI' `
+           -To 'Blueprint4.ViewModel.TBlueprint_ViewModel.GetLastPersistError' -DbPath $DbCli -OutRoot (Join-Path $OutDir 'bundle-path')
+  $pm = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
+  Chk 'A-PA-META' "$($pm.leftCount) $($pm.leftLabel) / $($pm.rightCount) $($pm.rightLabel)" '1 shortest paths / 1 calls on each path'
+  if ($pm.regenerate -notmatch ' -To Blueprint4\.ViewModel\.TBlueprint_ViewModel\.GetLastPersistError' -or $pm.regenerate -notmatch ' -Cap 20') { Fail 'A-PA-REGEN' "regenerate lacks -To / -Cap: $($pm.regenerate)" }
+  if ((Split-Path -Leaf $art.Bundle) -notmatch 'GetLastPersistError') { Fail 'A-PA-SLUG' "the bundle folder does not name B: $($art.Bundle)" }
+}
+
+# R24: population queries that ran into the 200-row cap with no real trigger on
+# the clones (largest type in the TESTS index: 108 members; largest DataService:
+# 11 routines -- measured), so a behavioural test cannot fail on them. Guard the
+# SOURCE instead: the unpaged forms must not come back. change-impact's twin of
+# the tested-by query is tested behaviourally (A-CI3-MEMBERS).
+Note 'R24 paged population queries (source guard) ...'
+foreach ($g in @(
+    @('Emit-TestedBy.ps1',    'Invoke-IndexQuery "SELECT id FROM symbols WHERE parent_id'),
+    @('Emit-ChangeImpact.ps1','Invoke-IndexQuery "SELECT id FROM symbols WHERE parent_id'),
+    @('Emit-LandsWhere.ps1',  '$rts = Invoke-IndexQuery'),
+    @('Emit-LandsWhere.ps1',  '$pbnRows = Invoke-IndexQuery'))) {
+  if ([IO.File]::ReadAllText((Join-Path $SRC $g[0])).Contains($g[1])) { Fail 'A-R24-PAGED' "$($g[0]) still runs the unpaged population query: $($g[1])" }
+}
+
 Note 'negatives N20-N24 ...'
 # SERVER has no data-aware UI. "Not applicable to this index" and "0 found" are
 # different claims and the emitter must make the first one.
@@ -1088,6 +1277,18 @@ NegTest 'N23' '0 callers at any depth' 'impact_uMain_TfrmMAIN_FormCreate' {
   & "$SRC\Emit-ChangeImpact.ps1" -Target 'uMain.TfrmMAIN.FormCreate' -DbPath $DbCli -OutDir $negDir }
 NegTest 'N24' 'references no enum constant at all' 'prototrace_gammafunc_LnGamma' {
   & "$SRC\Emit-ProtocolTrace.ps1" -Target 'gammafunc.LnGamma' -DbPath $DbCli -OutDir $negDir }
+# path: the reverse direction has NO path (call-path exit 1, found:false) -- an answer, said
+# plainly, and no chart; an unknown routine and A = B are refused before the engine runs.
+NegTest 'PA-N1' 'no call path from uPipeClientConnection.TPipeClientConnection.NextSeq to Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation' 'path_NextSeq__AddOperation' {
+  & "$SRC\Emit-Path.ps1" -From 'uPipeClientConnection.TPipeClientConnection.NextSeq' -To 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation' -DbPath $DbCli -OutDir $negDir }
+NegTest 'PA-N2' 'Blueprint4.ViewModel.TBlueprint_ViewModel.NoSuchRoutine is not in this index' 'path_NoSuchRoutine__NextSeq' {
+  & "$SRC\Emit-Path.ps1" -From 'Blueprint4.ViewModel.TBlueprint_ViewModel.NoSuchRoutine' -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -OutDir $negDir }
+NegTest 'PA-N3' 'name two different routines' 'path_NextSeq__NextSeq' {
+  & "$SRC\Emit-Path.ps1" -From 'uPipeClientConnection.TPipeClientConnection.NextSeq' -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -OutDir $negDir }
+# fix round 1, item 3: TPipeClientConnection.Log is TWO methods (an overload, measured: 2 rows, both kind method);
+# call-path would walk from both, so path refuses and lists them rather than drawing their union
+NegTest 'PA-N4' 'uPipeClientConnection.TPipeClientConnection.Log names 2 symbols (an overload or a duplicate declaration): method @uPipeClientConnection.pas:' 'path_Log__NextSeq' {
+  & "$SRC\Emit-Path.ps1" -From 'uPipeClientConnection.TPipeClientConnection.Log' -To 'uPipeClientConnection.TPipeClientConnection.NextSeq' -DbPath $DbCli -OutDir $negDir }
 
 # ---- PLAN-last-four-verbs, Task 0: the shared helpers ----------------------------
 # Every number below was measured on 2026-09-23 against the clones and is PINNED
@@ -1128,10 +1329,13 @@ Step 'E-T0' {
   if ($null -eq $t0.VerbCaseFailures) { Fail 'A-CO0-VERB' 'VerbCaseFailures is null -- the verb-case check did not run' }
   elseif (@($t0.VerbCaseFailures).Count) { Fail 'A-CO0-VERB' (@($t0.VerbCaseFailures) -join '; ') }
 
-  # P2 through Get-SourceContext: of 430 candidate refs, 168 reads sit after
+  # RE-PINNED 2026-10-05 (re-clone at extractor 1.21.1): 430 -> 433. Ref-gap F -- a routine declared only in the
+  # implementation section now records its parameter types -- adds three `E: Exception` type_uses (EExtraExceptionInfo:231,
+  # ControlPlan2:1140, Blueprint4.ViewModel:1493; source sha identical). None is after `raise`/`on`, so 168/185 hold.
+  # P2 through Get-SourceContext: of 433 candidate refs, 168 reads sit after
   # `raise` and 185 type_uses after `on [E:]` -- with 0 stale files among them
   # and 0 refs whose stripped token is not the ref's own name (column alignment).
-  Chk 'A-EP0-CAND'      $t0.ExcCandidates 430
+  Chk 'A-EP0-CAND'      $t0.ExcCandidates 433
   Chk 'A-EP0-CLASSIFY'  "$($t0.ExcRaise)/$($t0.ExcHandle)" '168/185'
   Chk 'A-EP0-FRESH'     $t0.ExcStale 0
   Chk 'A-EP0-TOKEN'     $t0.ExcTokenMiss 0
@@ -1291,9 +1495,11 @@ Step 'E-EP' {
   # the names declared only as non-classes (P5), each classified by source token
   Chk 'A-EP0-CANDS'     "$($ep1.IndexRaise)/$($ep1.IndexHandle)" '168/185'
   Chk 'A-EP0-ROUTINES'  "$($ep1.IndexRaiseRoutines)/$($ep1.IndexHandleRoutines)" '120/106'
-  # 30 decl + 17 class( + 8 is + 2 as + 8 call-cast + 7 member-access; 425 = 168 + 185 + 72
-  Chk 'A-EP0-DROPPED'   $ep1.IndexDropped 72
-  Chk 'A-EP0-CANDCOUNT' $ep1.IndexCandidates 425
+  # 30 decl + 17 class( + 8 is + 2 as + 8 call-cast + 7 member-access; 425 = 168 + 185 + 72 at 1.20.
+  # RE-PINNED 2026-10-05 (extractor 1.21.1, Ref-gap F): +3 parameter-type Exception refs, all dropped (a decl-site
+  # type_use is neither raise nor handle): 428 = 168 + 185 + 75
+  Chk 'A-EP0-DROPPED'   $ep1.IndexDropped 75
+  Chk 'A-EP0-CANDCOUNT' $ep1.IndexCandidates 428
 
   Chk 'A-EP1-RAISES'    $ep1.Raises 6
   Chk 'A-EP1-LINES'     $ep1.RaiseLines '1624,1653,1667,1679,1691,1707'
@@ -1641,6 +1847,43 @@ Step 'E-CO' {
   # population definition, not the data, differs.
   Chk 'A-CO-IDX'        "$($co1.IndexReadFacts)/$($co1.IndexWriteFacts)/$($co1.IndexFactSymbols)" '112/148/250'
   Chk 'A-CO-LITS'       "$($co1.IndexVerbLiterals)/$($co1.IndexFromJoinTables)/$($co1.IndexFactReadTables)" '791/133/104'
+  # Task 4 item 4 (fix round 1: the charts-side joiner was REVERTED -- controller
+  # ruling). A statement split over SQL.Add lines (engine D18) is COVERED by the
+  # engine's sql_reads fact, which 1.19+ assembles across SQL.Add lines, plus the
+  # column form's span search over every routine in $rtIds (Emit-Consumers 3/3b/6).
+  # The real case, measured: PrepareLoadQuery builds `SELECT` :108 / the column
+  # list :109 / `FROM CAUSFAIL` :110 over separate SQL.Add lines, its fact reads
+  # CAUSFAIL, and the column form finds REASON on :109 (A-CO2-SRV pins it).
+  # What a charts-side join could add, measured: 5 SERVER verb literals END on a
+  # verb (uPipeSessionBuilder.pas :544 :658 :1525 x2 :3004), and none has a next
+  # line opening on a table of the set -- every one is `' FROM ' + <variable>` or
+  # `INSERT INTO ' + '(` -- so 0 statements are left over.
+  $script:cod18 = & {
+    $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'
+    . "$SRC\Emit-Common.ps1"
+    $S = Get-SqlTableSet $DbSql
+    $DbPath = $DbSrv
+    $rt = Invoke-IndexQuery @"
+SELECT s.file_id AS fid, s.impl_start_line AS a, s.impl_end_line AS b, sf.sql_reads AS r
+  FROM symbols s JOIN symbol_facts sf ON sf.symbol_id = s.id
+ WHERE s.qualified_name = 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareLoadQuery'
+"@
+    $lits = Get-AllIndexRows "SELECT sl.id AS id, sl.start_line AS line, sl.text AS text FROM string_literals sl WHERE sl.file_id = $([int]$rt[0].fid) AND sl.kind IN ('literal','format','const') AND sl.start_line BETWEEN $([int]$rt[0].a) AND $([int]$rt[0].b)" 'sl.start_line, sl.id'
+    $fromL = @($lits | Where-Object { [regex]::IsMatch([string]$_.text, '(?<![A-Za-z0-9_$])FROM\s+CAUSFAIL(?![A-Za-z0-9_$])') } | ForEach-Object { $_.line }) -join '+'
+    $colL  = @($lits | Where-Object { [regex]::IsMatch([string]$_.text, '(?<![A-Za-z0-9_$])REASON(?![A-Za-z0-9_$])') } | ForEach-Object { $_.line }) -join '+'
+    $verbRx = '(?<![A-Za-z0-9_$])(SELECT|INSERT|UPDATE|DELETE|FROM|JOIN|INTO|EXECUTE)(?![A-Za-z0-9_$])'
+    $glob = (@('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'FROM', 'JOIN', 'INTO', 'EXECUTE') | ForEach-Object { "sl.text GLOB '*$_*'" }) -join ' OR '
+    $pre = Get-AllIndexRows "SELECT sl.id AS id, sl.file_id AS fid, sl.start_line AS line, sl.text AS text FROM string_literals sl WHERE sl.source = 'pas' AND sl.kind IN ('literal','format') AND ($glob)" 'sl.id'
+    $ending = @($pre | Where-Object { [regex]::IsMatch([string]$_.text, $verbRx) -and [regex]::IsMatch([string]$_.text, '(?<![A-Za-z0-9_$.])(FROM|JOIN|INTO|UPDATE|PROCEDURE)\s*$') })
+    $cross = 0
+    foreach ($e in $ending) {
+      $nx = Invoke-IndexQuery "SELECT sl.text AS text FROM string_literals sl WHERE sl.file_id = $([int]$e.fid) AND sl.start_line = $([int]$e.line + 1) AND sl.kind IN ('literal','format') ORDER BY sl.start_col LIMIT 1"
+      if ($nx.Count) { $m = [regex]::Match([string]$nx[0].text, '^\s*([A-Z][A-Z0-9_$]*)'); if ($m.Success -and $S.Tables.ContainsKey($m.Groups[1].Value)) { $cross++ } }
+    }
+    [pscustomobject]@{ Covered = "reads=$($rt[0].r) col=$colL from=$fromL"; Leftover = "$($ending.Count)/$cross" }
+  }
+  Chk 'A-CO-D18-COVERED' $cod18.Covered 'reads=CAUSFAIL col=109 from=110'
+  Chk 'A-CO-D18-LINES'  $cod18.Leftover '5/0'
 
   $script:co2 = & "$SRC\Emit-Consumers.ps1" -Column 'CAUSFAIL.REASON' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO2-SRV'       $co2.ServerRoutineNames 'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareLoadQuery,uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareSaveQuery'
@@ -1652,6 +1895,11 @@ Step 'E-CO' {
   Chk 'A-CO2-BIND'      "$($co2c.IndexBindings)/$($co2c.DrawnBindings)" '7/1'
   Chk 'A-CO2-BINDROW'   $co2c.DrawnBindingRows 'uCausFailForm.dfm:60:colREASON'
   Chk 'A-CO2-BINDELSE'  "$($co2c.BindingsElsewhere)/$($co2c.BindingsUnresolved)" '6/0'
+  # Task 4 item 1: the focus box names the state as the docs do (`column`), never
+  # the internal `yes` / `older` / `no` -- the summary's ColumnState stays internal
+  $tc2c = Dot $co2c
+  if ($tc2c -notmatch 'column state column: \[certain\] a column of the newest') { Fail 'A-CO-STATENAME' 'the focus box does not say "column state column:"' }
+  if ($tc2c -match 'column state (yes|older|no):') { Fail 'A-CO-STATENAME' 'the focus box still prints an internal state name' }
 
   $script:co3 = & "$SRC\Emit-Consumers.ps1" -Column 'DRA1.FLDRID' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   Chk 'A-CO3-SRV'       $co3.ServerRoutineNames 'uDRA1_SERVER.TDataService_DRA1_SERVER.PrepareLoadQuery,uDRA1_SERVER.TDataService_DRA1_SERVER.PrepareSaveQuery,uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation'
@@ -1721,13 +1969,26 @@ Step 'E-CO' {
     $q2 = Get-SqlColumnState $fake 'IPCHART' 'ACTION' $null $null ''
     # the cached real set is untouched by the hide
     $untouched = $real.Tables['FOLDERCOUNT'].Columns.Contains('TABLE') -and $real.Tables['IPCHART'].Columns.Contains('ACTION')
+    # Task 4 item 3: Get-DataSourceChain's by-columns tie-break (Get-ColumnsNotHeld)
+    # used `.Columns.Contains`, which says NO to a quoted column (TABLE, hidden
+    # here) and to an older-only one (GONOFF.OFF: MEASURED older-only, the newest
+    # GONOFF declaration does not extract it) -- both of which Get-SqlColumnState
+    # calls a column. NOSUCHCOL is the control: not held either way.
+    $nh = @(Get-ColumnsNotHeld $fake 'FOLDERCOUNT' @('TABLE', 'NOSUCHCOL') $null) + @(Get-ColumnsNotHeld $real 'GONOFF' @('OFF') $null)
+    $oldNh = @(@('TABLE', 'NOSUCHCOL') | Where-Object { -not $fake.Tables['FOLDERCOUNT'].Columns.Contains($_) }) + @(@('OFF') | Where-Object { -not $real.Tables['GONOFF'].Columns.Contains($_) })
     [pscustomobject]@{ Q1 = "$($q1.State):$([IO.Path]::GetFileName($q1.File)):$($q1.Line):$($q1.QuotedScan)"; L1 = $q1.Label
+                       NotHeld = "$($nh -join ',')|old=$($oldNh -join ',')"
+                       # Task 4 item 1: the RENDERED state names are the documented ones
+                       # (STATUS-questions.md / question-catalogue.md); the internal values stay
+                       StateNames = (@('yes', 'quoted', 'older', 'server-sql', 'stale', 'no') | ForEach-Object { Get-ColumnStateName $_ }) -join ','
                        Q2 = "$($q2.State):$([IO.Path]::GetFileName($q2.File)):$($q2.Line)"; L2 = $q2.Label
                        Untouched = $untouched
                        # feeds-from's column-hop label (no real chain can end on a quoted column)
                        Hop = "$(Get-ColumnHopLabel $q1) / $(Get-ColumnHopLabel ([pscustomobject]@{ State = 'yes'; Column = 'REASON' }))" }
   }
   Chk 'A-COLSTATE-QUOTED' "$($cqs.Q1) $($cqs.Q2) $($cqs.Untouched)" 'quoted:MS1.SQL:3848:hit quoted:MS1.SQL:2243 True'
+  Chk 'A-DS-TIEBREAK-COLTEST' $cqs.NotHeld 'NOSUCHCOL|old=TABLE,NOSUCHCOL,OFF'
+  Chk 'A-COLSTATE-NAMES' $cqs.StateNames 'column,quoted,older-only,server-sql,[stale source],not-a-column'
   # FIX ROUND 1 (item 11): the label no longer says the index "does not extract a
   # quoted name" -- false as a general statement since 1.19 -- only that THIS one
   # was not extracted
@@ -1839,6 +2100,20 @@ Step 'CO-STALE-COL' {
     Fail 'A-CO-STALE-COL' 'the stale trigger is dropped from the column form without a word' }
   if ($tsc -notmatch '77 of 168 procedure bodies not scanned') { Fail 'A-CO-STALE-COL' 'the column form does not say which procedure bodies were not scanned' }
 }
+# Task 4 item 2: the column form REFUSES when the column's state is [stale
+# source] -- not extracted, and the newest declaration's script (a MANUFACTURED
+# stale MS1.SQL, as A-LW-STALE-Q) could not be scanned, so whether it is a column
+# is NOT known. The docs (question-catalogue.md, STATUS-questions.md) quote this
+# message; measured on the clones, verbatim. Own scratch path (freshness cache).
+# The brackets are backtick-escaped: NegTest matches with -like, where a bare
+# [stale source] is a one-character class.
+NegTest 'CO-STALE-REFUSE' 'consumers: cannot tell whether INSPRSLT.DISTHIST is a column -- `[stale source`] not extracted as a column by the SQL index (144 columns extracted from the newest of 2 declaration(s), MS1.SQL:2073); MS1.SQL differs from the indexed copy, so it was not scanned for a quoted identifier -- whether DISTHIST is a column of INSPRSLT is NOT known. Script-derived; the scripts may lag the live schema.' 'consumers_INSPRSLT_DISTHIST' {
+  $stDir = Join-Path $OutDir 'co-stale-refuse'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $ms1 = 'C:\Projects\DB\SQL\MS1.SQL'
+  $l = [IO.File]::ReadAllLines($ms1); $l[0] = $l[0] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'MS1.SQL'), (($l -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  & "$SRC\Emit-Consumers.ps1" -Column 'INSPRSLT.DISTHIST' -DbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir -SourceOverride @{ $ms1 = (Join-Path $stDir 'MS1.SQL') } }
 # ---- PLAN-last-four-verbs, Task 3: feeds-from --------------------------------------
 # CLIENT (-DbPath) + the SQL-SCRIPT clone (-SqlDbPath). Every number measured
 # 2026-09-23 and PINNED (R5); where a pin differs from the plan the comment names
@@ -1897,9 +2172,29 @@ Step 'E-FF' {
   #   not-column 13 -- all uJobList on FOLDERS (DueInStr, LotStatusC, *VerdictStr,
   #                   Status_*Str ...): memtable-computed fields, not DB columns
   #   no-ds 1      -- CADFNotes.dxDBEdit1, whose DataSource is set only in code
-  Chk 'A-FF0-PERCTL'    "$($ff1.Controls):$($ff1.CtlTable)/$($ff1.CtlColumn)/$($ff1.CtlNotColumn)/$($ff1.CtlAmbiguous)/$($ff1.CtlStops)/$($ff1.CtlDangling)/$($ff1.CtlNoDs)/$($ff1.CtlStale)" '808:267/254/13/37/77/426/1/0'
-  if ($tf1 -notmatch 'per control: 808 field-bound controls; 267 resolve to one table \(33%\)') { Fail 'A-FF0-PERCTL' 'the per-control coverage is not printed on the chart' }
+  # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: the 204 dangling controls whose owner's code re-point reaches a
+  # table (Blueprint4_Model.dsrFtrs 154 -> MSCLIST, dsrOperation 50 -> OPERAT; A-FF-REPOINT-AGG) leave dangling:
+  # table 267 -> 471 (+204), column 254 -> 443 (+189), not-column 13 -> 28 (+15), dangling 426 -> 222 (-204); 33% -> 58.3%
+  Chk 'A-FF0-PERCTL'    "$($ff1.Controls):$($ff1.CtlTable)/$($ff1.CtlColumn)/$($ff1.CtlNotColumn)/$($ff1.CtlAmbiguous)/$($ff1.CtlStops)/$($ff1.CtlDangling)/$($ff1.CtlNoDs)/$($ff1.CtlStale)" '808:471/443/28/37/77/222/1/0'
+  if ($tf1 -notmatch 'per control: 808 field-bound controls; 471 resolve to one table \(58\.3%\)') { Fail 'A-FF0-PERCTL' 'the per-control coverage is not printed on the chart' }
   if ($tf1 -match '41 ?%') { Fail 'A-FF0-R9' 'the chart quotes the per-datasource 41%' }
+  # Task 2 (2026-10-05), the NEW aggregate: the 426 controls under a DANGLING designer datasource, by where
+  # their owner's code re-point goes (Resolve-RePointTable, order table/no-table/stops/multi-rhs/no-site/stale/
+  # no-owner). MEASURED on the CLIENT clone:
+  #   table 204     -- Blueprint4_Model.dsrFtrs 154 (dxDBGrid1FtrsV 134 + 20 edits) -> MSCLIST, dsrOperation 50 -> OPERAT
+  #                    (column 189, not-column 15: the 14 FtrsV / 1 OperationV fields MSCLIST / OPERAT do not hold)
+  #   stops 18      -- dsrCustVendor 13 (GetpdsrCustomers reads 0 fields), dsrVarNames 4 + dsrOperNames 1 (LookupCache.Table( ))
+  #   walk-limit 197 -- a shape the walk does not follow, NOT a fact of the code (fix round 1; these were stops reading
+  #                    falsely "INIData.DataSet is never assigned" / "a bare datasource is the designer case"):
+  #                    ControlPlan_Model.* 168 -- FControlPlan_ViewModel.INIData.dsrFtrs: INIData is a METHOD returning the
+  #                    record RControlPlan_INIData (ControlPlan2.Model.Interfaces.pas:108), whose .dsrX members ARE assigned
+  #                    (ControlPlan2.Model.pas:772-779); dmlSystem2.dsrFolder 29 -- re-pointed to the LOCAL DS of
+  #                    RepointJobHeaderToFolder (Blueprint4.pas:984)
+  #   multi-rhs 3   -- viewMachines, re-pointed at Blueprint4.pas:1073 AND :2334 with different right-hand sides
+  #   no-site 4     -- DBText13 1, lookupSPCCP 3: no code re-point of the owner at all
+  # RE-PINNED fix round 1: a walk-limit column after stops (order table/no-table/stops/walk-limit/multi-rhs/no-site/
+  # stale/no-owner); stops 215 -> 18 + walk-limit 197 (ControlPlan_Model 168 + dsrFolder 29), the others unchanged
+  Chk 'A-FF-REPOINT-AGG' "$($ff1.CtlDanglingAll):$($ff1.CtlRePoint)" '426:204/0/18/197/3/4/0/0'
 
   # P33 tie-break: 4 candidates in literal order, 6 bound columns, one survivor
   $script:ff2 = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmMachineList.colMACHINEID' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
@@ -1934,7 +2229,32 @@ Step 'FF-N29' {
   if ($t29 -notmatch 'the DFM names dmlSystem2, which is not in this project') { Fail 'A-FF-N29' 'the dangling disclosure is missing' }
   # the DataField is ALSO re-bound in code (:1016) -- drawn, because the DFM
   # column is then not the runtime column
-  Chk 'A-FF-N29-ROWS'   "$($ff29.Grade):$($ff29.RePointedAt):$($ff29.Rebound):$($ff29.HopGrades)" 'dangling:Blueprint4.pas:1015:1:certain>dangling>stop'
+  # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: edtF1 -> the :1015 re-point hop [certain] (:= DS, a LOCAL variable),
+  # then Get-RePointChain stops (fix round 1: a walk limit, see A-FF-N29-STOP); was certain>dangling>stop
+  Chk 'A-FF-N29-ROWS'   "$($ff29.Grade):$($ff29.RePointedAt):$($ff29.Rebound):$($ff29.HopGrades)" 'dangling:Blueprint4.pas:1015:1:certain>dangling>certain>stop'
+  # fix round 1 (Task 2): the stop says WHAT DS is -- a LOCAL variable of RepointJobHeaderToFolder (Blueprint4.pas:984,
+  # assigned DS:= FBlueprint_ViewModel.pdsrFolder at :989), which the walk does not follow -- not the false
+  # "a bare datasource is the designer case Get-DataSourceChain already follows", and graded a walk limit
+  Chk 'A-FF-N29-STOP'   "$($ff29.RePoint)|$($ff29.StopReason)" 'walk-limit|the code re-point was followed to a shape this walk does not follow: DS is a local variable of RepointJobHeaderToFolder (TDataSource, :984) -- the value assigned to it there is not followed'
+  if ((Dot $ff29) -match 'designer case Get-DataSourceChain already follows') { Fail 'A-FF-N29-STOP' 'the false designer-case sentence is still drawn' }
+}
+# Task 2 (2026-10-05, owner: "close all the existing gaps"): feeds-from and lands-where FOLLOW the runtime
+# re-point past a DANGLING designer datasource, by the round-trip's own walk (Get-RePointPick ->
+# Get-RePointChain -> Get-DataSetTableLiterals, Emit-Common). frmBlueprint4.dxDBGrid1OperationVName:
+# Blueprint4_Model.dsrOperation dangles (Blueprint4.dfm:4497); its view is re-pointed at Blueprint4.pas:2282
+# := FBlueprint_ViewModel.pdsrOperation. The hops and grades are A-RT3-HOPS's (member :171 certain, accessor
+# :1263 by name, field :99 by name, DataSet := :657 certain), then FMTOperation (:78, certain) and the OPERAT
+# literal beside it (:769, [inferred]) -- the round-trip's anchor OPERAT.NAME (A-RT3-ANCHOR).
+Step 'FF-REPOINT' {
+  $script:ffrp = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-FF-REPOINT'      "$($ffrp.Grade):$($ffrp.RePoint):$($ffrp.TableColumn):$($ffrp.ColumnExists)" 'dangling:table:OPERAT.NAME:yes'
+  Chk 'A-FF-REPOINT-HOPS' $ffrp.HopGrades 'certain>dangling>certain>certain>by name>by name>certain>certain>inferred'
+  $trp = Dot $ffrp
+  foreach ($ln in 4497, 2282, 171, 1263, 99, 657, 78, 769, 2809) { if (-not (HasLine $trp $ln)) { Fail 'A-FF-REPOINT-HREF' "no row anchored on line $ln" } }
+  if ($trp -match 'that right-hand side is not followed') { Fail 'A-FF-REPOINT' 'the chart still says the re-point is not followed' }
+  $script:lwrp = & "$SRC\Emit-LandsWhere.ps1" -Field 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW-REPOINT'      "$($lwrp.ChainOutcome):$($lwrp.Table):$($lwrp.TableColumn):$($lwrp.ServerClass)" 'column:OPERAT:OPERAT.NAME:TDataService_OPERAT_SERVER'
+  foreach ($ln in 2282, 657, 769) { if (-not (HasLine (Dot $lwrp) $ln)) { Fail 'A-LW-REPOINT-HREF' "no selection row anchored on line $ln" } }
 }
 # N30: ambiguous after the tie-break -- exit 0, the candidates printed, NO TABLE.COLUMN
 Step 'FF-N30' {
@@ -1966,7 +2286,8 @@ Step 'FF-ART' {
   $artRoot = Join-Path $OutDir 'bundle-ff'
   $art = & "$SRC\New-DiagramArtifact.ps1" -Question feeds-from -Target 'frmCausFail.colREASON' -DbPath $DbCli -SqlDbPath $DbSql -OutRoot $artRoot
   $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
-  Chk 'A-FF-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount)" '5 chain rows / 267'
+  # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: rightCount is A-FF0-PERCTL's CtlTable, 267 -> 471 (+204 dangling controls whose re-point reaches a table)
+  Chk 'A-FF-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount)" '5 chain rows / 471'
   if ($meta.regenerate -notmatch '-SqlDbPath ') { Fail 'A-FF-ART' 'the regenerate command drops -SqlDbPath' }
 }
 # ---- PLAN-last-four-verbs, Task 4: lands-where -------------------------------------
@@ -1982,6 +2303,12 @@ Step 'E-LW' {
   # Emit-Common resolves $Engine from the CALLER's scope (its header), so the block names it
   $script:ol = & { $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'; . "$SRC\Emit-Common.ps1"; "$((Get-OrmLinksState $DbCli).Rows)/$((Get-OrmLinksState $DbSrv).Rows)" }
   Chk 'A-OL-ROWS'       $ol '0/0'
+  # R24: Get-EdgelessFiles was unpaged. At its real threshold it returns 1 file, so
+  # drive the population with -MinCallRefs 0: every CLIENT file with no call edge
+  # at all -- 222, measured (SELECT COUNT(*) over the same predicate). Unpaged it
+  # returned the first 200.
+  $script:eg0 = & { $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'; . "$SRC\Emit-Common.ps1"; $DbPath = $DbCli; (Get-EdgelessFiles 0).Count }
+  Chk 'A-EDGELESS-PAGED' $eg0 222
 
   $script:lw1 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
   # P35, measured on this run and printed on the chart (R10). 1,992 (was 1,991 at
@@ -2060,15 +2387,24 @@ NegTest 'LW-N31-BRIEF' 'uFOLDERS.TmcFOLDERS.TABLE resolves to no property or fie
 # N31 on a TRUE non-column: INSPRSLT.DistHist is in no script AND no server SQL
 # -> "not a column", no DB side, no trigger rows, exits 0 with a chart
 Step 'LW-N31' {
-  $script:lw31 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uINSPRSLT.TmcINSPRSLT.DistHist' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  $script:lw31 = & "$SRC\Emit-LandsWhere.ps1" -Field 'uINSPRSLT.TmcINSPRSLT.DistHist' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir -InformationVariable lw31Info
   Chk 'A-LW-N31'        "$($lw31.ColumnState):$([string]$lw31.TableColumn):$($lw31.Triggers):$($lw31.Procedures):$($lw31.ServerRows)" 'no::0:0:0'
+  # Task 4 item 1: the printed selection line names the state as the docs do;
+  # the summary's ColumnState above stays the internal `no`
+  $selLine = @($lw31Info | ForEach-Object { "$_" } | Where-Object { $_ -like '*selection:*' })
+  Chk 'A-LW-STATENAME'  $(if ($selLine.Count) { $selLine[0].Trim() } else { '(no selection line)' }) 'selection: uINSPRSLT.TmcINSPRSLT.DistHist (orm); table INSPRSLT; column not-a-column'
   if ((Dot $lw31) -notmatch 'DistHist is not a column of INSPRSLT -- computed or UI-only') { Fail 'A-LW-N31' 'no "not a column of INSPRSLT" row' }
   if (-not (Test-Path $lw31.Svg)) { Fail 'A-LW-N31' 'no .svg' }
 }
 # FINDING: STATIONS.GRIDS is in no script, but uSTATIONS_SERVER.PAS:129 writes it
 # (`UPDATE OR INSERT INTO STATIONS (... GRIDS ...)`) -- NOT "computed or UI-only"
 Step 'LW-N31-SRVSQL' {
-  $script:lw31g = & "$SRC\Emit-LandsWhere.ps1" -Field 'uSTATIONS.TmcSTATIONS.GRIDS' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  $script:lw31g = & "$SRC\Emit-LandsWhere.ps1" -Field 'uSTATIONS.TmcSTATIONS.GRIDS' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir -InformationVariable lw31gInfo
+  # Task 4 fix round 1: the printed selection line names the FINAL state. It was
+  # printed before the server step, which turns `no` into `server-sql` here, so it
+  # said `not-a-column` for a column the chart draws as server-sql.
+  $selG = @($lw31gInfo | ForEach-Object { "$_" } | Where-Object { $_ -like '*selection:*' })
+  Chk 'A-LW-STATENAME-FINAL' $(if ($selG.Count) { $selG[0].Trim() } else { '(no selection line)' }) 'selection: uSTATIONS.TmcSTATIONS.GRIDS (orm); table STATIONS; column server-sql'
   Chk 'A-LW-N31-SRVSQL' "$($lw31g.ColumnState):$($lw31g.TableColumn):W=$($lw31g.ServerWrite) R=$($lw31g.ServerRead)" 'server-sql:STATIONS.GRIDS:W=PrepareSaveQuery:129,Save:271 R=PrepareLoadQuery:110,Load:176'
   $tg = Dot $lw31g
   if ($tg -match 'computed or UI-only') { Fail 'A-LW-N31-SRVSQL' 'a server-persisted column is called computed or UI-only' }
@@ -2103,6 +2439,13 @@ Step 'LW-N31-QUOTED' {
   if (-not (HasLine $tlq 3848)) { Fail 'A-LW-QUOTED-RENDER' 'the quoted column is not anchored on its scanned line MS1.SQL:3848' }
   if ($tlq -notmatch '1,991 of 1,997 properties on table-named classes are extracted as a column of that table \(\+1 a QUOTED column the index does not extract\)') { Fail 'A-LW-QUOTED-RENDER' 'the convention grade does not add the quoted column' }
   if ($tlq -notmatch '6 are not extracted as a column by the SQL index; of those, FOLDERCOUNT\.TABLE is a QUOTED column the index does not extract') { Fail 'A-LW-QUOTED-RENDER' 'the coverage line does not name the quoted column' }
+  # R24 item 7: the focus line "N of 2,063 Tmc properties ... are a column" counted
+  # only the EXTRACTED columns (1,991 with TABLE hidden), one short of the columns
+  # the chart itself found -- the quoted FOLDERCOUNT.TABLE is a column too. It now
+  # counts what the grade line counts: 1,991 extracted + 1 quoted = 1,992, which is
+  # also what the unhidden run reports (A-LW0-CONV 2063/1997/1992).
+  if ($tlq -notmatch '1,992 of 2,063 Tmc properties in this index are a column of their class') { Fail 'A-LW-R24-COUNT' 'the focus count leaves out the quoted column' }
+  if ((Dot $lw31q) -notmatch '1,992 of 2,063 Tmc properties in this index are a column of their class') { Fail 'A-LW-R24-COUNT' 'the unhidden focus count moved' }
   if ($tlq -notmatch 'TEST CHART: FOLDERCOUNT\.TABLE taken OUT') { Fail 'A-LW-QUOTED-RENDER' 'a hook-driven chart does not say TEST CHART' }
   if (-not $coq) { Fail 'A-COLSTATE-AGREE' 'precondition: the consumers FOLDERCOUNT.TABLE run (E-CO) produced no result' }
   elseif ($coq.ColumnLabel -ne $lw31q.ColumnLabel) { Fail 'A-COLSTATE-AGREE' "consumers and lands-where label FOLDERCOUNT.TABLE differently: '$($coq.ColumnLabel)' vs '$($lw31q.ColumnLabel)'" }
@@ -2118,6 +2461,27 @@ Step 'LW-R17' {
   # computed-field name) as a SECOND candidate and turn this chain -- 73 controls, one-table
   # FOLDERS -- into "many". The match stays exact and the case-only literal is NAMED on the hop.
   if ($t17 -notmatch "the only upper-case table-name literal in uJobList\.ViewModel\.pas; 1 literal\(s\) equal a table name only case-insensitively and are not taken as one: 'DueIN' :301") { Fail 'A-LW-R17-CASE' 'the case-only table literal is not named on the table hop' }
+}
+# R24 item 9 (folded T3): a DFM chain that stops before a table. The server line
+# printed `no TDataService__SERVER in the SERVER index` and `Imc.` -- names built
+# around an empty table. It must say the table could not be determined.
+Step 'LW-R24-NOTABLE' {
+  $script:lwnt = & "$SRC\Emit-LandsWhere.ps1" -Field 'frmBlueprint4.edtF1' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $OutDir
+  Chk 'A-LW-R24-NOTABLE' "$($lwnt.ChainOutcome):$([string]$lwnt.Table):$($lwnt.ServerRows)" 'dangling::0'
+  $tnt = Dot $lwnt
+  if ($tnt -match 'TDataService__SERVER' -or $tnt -match 'Imc\.') { Fail 'A-LW-R24-NOTABLE' 'a name constructed around the empty table is printed' }
+  if ($tnt -notmatch 'server: the table could not be determined, so no DataService was looked up') { Fail 'A-LW-R24-NOTABLE' 'the unknown table is not said' }
+}
+# R24 item 8: "computed or UI-only" is a claim about the FIELD, and with no
+# TDataService_<T>_SERVER nothing on the server was searched. No real Tmc<T> sits
+# on such a table (the 6 tables without one -- DEFCTRPL, OPERATION and 4 FIB$ --
+# have no Tmc class; measured), so the sentence builder is driven directly.
+Step 'LW-R24-NODS' {
+  $script:nd = & { $Engine = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe'; . "$SRC\Emit-Common.ps1"
+    [pscustomobject]@{ No = (Format-NotAColumnNote 'DistHist' 'INSPRSLT' 'LBL' ''); Yes = (Format-NotAColumnNote 'DistHist' 'INSPRSLT' 'LBL' 'TDataService_INSPRSLT_SERVER') } }
+  if ($nd.No -match 'computed or UI-only') { Fail 'A-LW-R24-NODS' "with no DataService searched the field is still called computed or UI-only: $($nd.No)" }
+  Chk 'A-LW-R24-NODS' $nd.No 'DistHist is not extracted as a column of INSPRSLT: LBL; no DataService was searched (no TDataService_INSPRSLT_SERVER in the SERVER index), so whether it is computed, UI-only or written by server SQL is NOT known'
+  Chk 'A-LW-R24-DS'   $nd.Yes 'DistHist is not a column of INSPRSLT -- computed or UI-only: LBL; the database side is empty'
 }
 NegTest 'LW-N32' 'not an ORM object property (class is not Tmc<T>) and not a DFM-bound field' 'landswhere_uPipeClientConnection_TPipeClientConnection_Connected' {
   & "$SRC\Emit-LandsWhere.ps1" -Field 'uPipeClientConnection.TPipeClientConnection.Connected' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $negDir }
@@ -2212,10 +2576,12 @@ $o = [pscustomobject]@{
   if ($line.Count -ne 1) { Fail 'A-LW-CACHE' "the child process returned no result (exit $LASTEXITCODE): $(($raw | Select-Object -Last 3) -join ' | ')" }
   else {
     $c = $line[0].Substring(9) | ConvertFrom-Json
-    Chk 'A-LW-CACHE-HID'   $c.Hid   'server-sql:1 not-column +6:253:True'
+    # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: IndexBindColumn +189 (the dangling controls whose re-point reaches
+    # a column of MSCLIST / OPERAT; A-FF0-PERCTL column 254 -> 443): hidden 253 -> 442, normal 254 -> 443, feeds 267/254 -> 471/443
+    Chk 'A-LW-CACHE-HID'   $c.Hid   'server-sql:1 not-column +6:442:True'
     Chk 'A-LW-CACHE-KEPT'  $c.Cache 0
-    Chk 'A-LW-CACHE-NORM'  $c.Norm  'yes:1 column +6:254:False'
-    Chk 'A-LW-CACHE-FEEDS' $c.Feeds 'CAUSFAIL.REASON:267/254'
+    Chk 'A-LW-CACHE-NORM'  $c.Norm  'yes:1 column +6:443:False'
+    Chk 'A-LW-CACHE-FEEDS' $c.Feeds 'CAUSFAIL.REASON:471/443'
   }
 }
 NegTest 'LW-ART-N' 'lands-where needs -ServerDbPath' 'never' {
@@ -2233,14 +2599,16 @@ Step 'E-RT0' {
   $script:rt0 = & "$SRC\Test-RoundTripHelpers.ps1" -DbCli $DbCli -DbSrv $DbSrv -DbSql $DbSql -OutDir $OutDir
   # GetTable has one implementation. RE-PINNED 2026-09-28 (resolver 1.11, RB-1): every call site on the
   # unit var GDatasetsDef now BINDS to TDatasetsDef.GetTable (151229) -- was -1 (unbound) at all four,
-  # which the walk resolved BY NAME (ask receiver-typed-calls)
-  Chk 'A-RT0-GETTABLE'  $rt0.GetTableCalls 'uGenericTableRoute.pas:431:151229,uPipeSessionBuilder.pas:525:151229,uPipeSessionBuilder.pas:649:151229,uPipeSessionBuilder.pas:1301:151229'
+  # which the walk resolved BY NAME (ask receiver-typed-calls). RE-PINNED 2026-10-05 (1.21.1 full re-parse renumbers
+  # symbols): 151229 -> 107698, still TDatasetsDef.GetTable (method, decl line 59); the binding did not move.
+  Chk 'A-RT0-GETTABLE'  $rt0.GetTableCalls 'uGenericTableRoute.pas:431:107698,uPipeSessionBuilder.pas:525:107698,uPipeSessionBuilder.pas:649:107698,uPipeSessionBuilder.pas:1301:107698'
   Chk 'A-RT0-GETIMPL'   $rt0.GetTableImpls 'uDatasetsDef.TDatasetsDef.GetTable:199'
   Chk 'A-RT0-GLOBALS'   $rt0.GlobalVars 'var:TBroadcastServer:136,var:TDatasetsDef:66'
   # the post-commit broadcast: one call in HandleDelta, one implementation (golden node 13 cites :120, the declaration area).
   # RE-PINNED 2026-09-28 (resolver 1.11, RB-1): the call on the unit var GBroadcastServer now BINDS to
-  # TBroadcastServer.PushTableChanged (151569) -- was -1 (unbound)
-  Chk 'A-RT0-PUSH'      $rt0.PushCalls 'uGenericTableRoute.pas:507:151569:HandleDelta'
+  # TBroadcastServer.PushTableChanged (151569) -- was -1 (unbound). RE-PINNED 2026-10-05 (full re-parse renumbers):
+  # 151569 -> 108038, still PushTableChanged (decl line 124, = PUSHIMPL's decl124).
+  Chk 'A-RT0-PUSH'      $rt0.PushCalls 'uGenericTableRoute.pas:507:108038:HandleDelta'
   Chk 'A-RT0-PUSHIMPL'  $rt0.PushImpl 'uBroadcastServer.TBroadcastServer.PushTableChanged:401:decl124'
   # the Exit lines the 12 golden guards hang on (plus 4004, 193 and 612, which are branch ends, not golden guards;
   # 612 is HandleTableLoad's except-handler Exit after Rollback -- the plan's probe read 515-560 only, and 612 is on the 1.8 clone too)
@@ -2272,10 +2640,12 @@ Step 'E-RT0' {
   Chk 'A-RT2-FORMA'     "$($rt0.FormAChecker)/$($rt0.FormACheckerMut)" '0/1'
   Chk 'A-RT2-NONASCII'  $rt0.FormANonAscii 'refused'
   Chk 'A-RT2-BADNOTE'   $rt0.FormABadNote 'refused'
-  # P16: a condition is quoted verbatim, so a double-quote inside one is refused by the model
-  Chk 'A-RT2-QUOTE'     $rt0.FormAQuote 'refused'
+  # RE-PINNED 2026-10-06 (R5 Part 0; was P16's 'refused'): conditions are written UNQUOTED, so a double-quote is
+  # ordinary text -- written as is, read back the same, counted by the checker (with a `--` inside a word too); a
+  # condition carrying ' @<file>:<line>', ' -- ' or a trailing ' --' (what would make the line ambiguous) is refused
+  Chk 'A-RT2-QUOTE'     $rt0.FormAQuote 'verbatim/refused/refused/refused'
   # P7: seven STOPS, one per section, five behind an actor word ([NN] SERVER STOPS twice): checker exit 0 =
-  # it counted all 7 unresolved; the round trip holds; UNLESS "SQL = ''" is written verbatim
+  # it counted all 7 unresolved; the round trip holds; UNLESS SQL = '' is written verbatim
   Chk 'A-RT2-STOPSALL'  $rt0.FormAStopsAll '0/8/1/0/7/identical/2/verbatim'
   # fix round 1: a double-quote in the TITLE is refused (New-Trace / Write-FormA); the model refuses every
   # text its own parser or the checker would misread (16 cases), and not the three look-alikes that are safe
@@ -2344,11 +2714,14 @@ Step 'E-RT0' {
   # Review Focus 3 on a stripped file: a wrapped line's trailing comment is dropped and the string's two spaces kept;
   # `end else begin` is WHEN; an Exit on the line after `then`; then the named results (Reason) for a `"`, a loop,
   # a case arm and an Exit in no branch -- each becomes a STOPS naming E1 in the walk, never a guess or a throw
+  # RE-PINNED 2026-10-06 (R5 Part 0): the :25 condition holding a `"` is quoted as written now (inline UNLESS; it was a
+  # named unknown while conditions were double-quoted); the refusal arm moved to P8 (:46), a condition holding ' -- '
   Chk 'A-RT4-SHAPES'    $rt0.ShimShapes ("block:UNLESS:(S = 'a  b') or (T = 1):3:5-7:|block:WHEN:C:11:14-16:|block:UNLESS:D:20:21-21:|" +
-                                         'unknown:::0:0-0:the condition over the Exit at :25 holds a double-quote, which a Form A condition cannot carry verbatim|' +
+                                         'inline:UNLESS:S = ''"'':25:25-25:|' +
                                          'unknown:::0:0-0:the Exit at :30 sits under a while statement, a shape the source shim does not read|' +
                                          'unknown:::0:0-0:the Exit at :36 sits in a case arm, a shape the source shim does not read|' +
-                                         'unknown:::0:0-0:the Exit at :42 is not inside a branch, a shape the source shim does not read')
+                                         'unknown:::0:0-0:the Exit at :42 is not inside a branch, a shape the source shim does not read|' +
+                                         "unknown:::0:0-0:the condition over the Exit at :46 carries ' -- ', which reads as its note -- a Form A condition cannot carry it verbatim")
   # fix round 1: two Exits on the anchored line; a comment wrapping across a condition's lines (`{` with an
   # apostrophe in its tail, `(*` with `//` in its tail); a {$IFDEF}/{$ELSE}/{$ENDIF} choice between the guard and
   # the Exit (one line, wrapped) -- each a NAMED unknown (pre-fix: UNLESS A, "A and 't } B ", "A and", B, B).
@@ -2417,11 +2790,11 @@ Step 'E-RT0' {
   # FIX ROUND 1 moved it again, 50/12/2/2 -> 45/15/2/2: five SERVER lines are no longer path steps -- the :405
   # rspError DEFAULT (overwritten by :553 rspOK), the else of `if ApplyResult = 0` (:562 Rollback, :566 rspError)
   # and the except handler (:573 Rollback, :576 rspError) -- and three conditions say where they went:
-  # WHEN "ApplyResult = 0" (its else note), UNLESS "<try body> raises" (the handler), WHEN "not WasTxn" (the Commit)
-  # FIX ROUND 2 (T5-R12): 45/15 -> 45/21 -- every path step inside a readable if now carries it: WHEN "not WasTxn"
-  # on OPENS (:492), WHEN "not GDatasetsDef.Loaded" on EnsureLoaded (:429), WHEN "not FLoaded" on LoadFromInternal
-  # (:97), WHEN "Field is TBlobField" + UNLESS "IsOld or Field.IsNull" on BindParams' LoadFromStream (:157/:160),
-  # WHEN "Assigned(GBroadcastServer)" on PushTableChanged (:507). No step moved
+  # WHEN ApplyResult = 0 (its else note), UNLESS <try body> raises (the handler), WHEN not WasTxn (the Commit)
+  # FIX ROUND 2 (T5-R12): 45/15 -> 45/21 -- every path step inside a readable if now carries it: WHEN not WasTxn
+  # on OPENS (:492), WHEN not GDatasetsDef.Loaded on EnsureLoaded (:429), WHEN not FLoaded on LoadFromInternal
+  # (:97), WHEN Field is TBlobField + UNLESS IsOld or Field.IsNull on BindParams' LoadFromStream (:157/:160),
+  # WHEN Assigned(GBroadcastServer) on PushTableChanged (:507). No step moved
   # READ SECTION ADDED (Task 6, ruling P6): 45/21/2/2 -> 76/31/4/2. The READ placeholder STOPS (1 step, 1 unresolved)
   # and the lone ALSO row are replaced by READ's 24 steps (fill call, callee, send, 15 SERVER, 2 DATABASE, rows back,
   # 3 CLIENT) and ALSO's 9 rows (A-RT6-ALSO): 45 - 2 + 24 + 9 = 76. Conditions +10 (A-RT6-READCONDS), crossings +2
@@ -2437,11 +2810,12 @@ Step 'E-RT0' {
   # MSCLIST`, was a routine-level sql fact, dropped by the fact filter, not a line of these branches.)
   # RE-PINNED by final-review I5 (every if of a line's enclosing chain is tested, not only the innermost): the text no
   # longer states the innermost-if limit; the count stays 11 -- no line of HandleDelta sits one if deeper in these branches
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
   Chk 'A-RT5-OMITS'     $rt0.RtOmits ("OMITS 11 step(s) in branches for other tables, every enclosing if read up to a loop or case arm @uGenericTableRoute.pas:468 -- in TGenericTableRoute.HandleDelta; " +
-                                      "not walked, the branch conditions: WHEN `"TableName = 'MSCLIST'`" @uGenericTableRoute.pas:468 / " +
-                                      "WHEN `"TableName = 'OPTRLIST'`" @uGenericTableRoute.pas:476 / " +
-                                      "WHEN `"(TableName = 'MSCLIST') and (Ctx.AppliedIns > 0)`" @uGenericTableRoute.pas:515 / " +
-                                      "WHEN `"(TableName = 'OPTRLIST') and (Length(RoleSyncItems) > 0)`" @uGenericTableRoute.pas:540; ask E1")
+                                      "not walked, the branch conditions: WHEN TableName = 'MSCLIST' @uGenericTableRoute.pas:468 / " +
+                                      "WHEN TableName = 'OPTRLIST' @uGenericTableRoute.pas:476 / " +
+                                      "WHEN (TableName = 'MSCLIST') and (Ctx.AppliedIns > 0) @uGenericTableRoute.pas:515 / " +
+                                      "WHEN (TableName = 'OPTRLIST') and (Length(RoleSyncItems) > 0) @uGenericTableRoute.pas:540; ask E1")
   # the enclosing-condition reader on synthetic lines: then -> WHEN, through begin/try -> WHEN, else -> UNLESS, no branch -> unknown
   Chk 'A-RT5-ENCLOSING' $rt0.RtEnclosing "block:WHEN:T = 'MSCLIST':3 | block:WHEN:(T = 'X') and (N > 0):5 | block:UNLESS:(T = 'X') and (N > 0):5 | unknown:::0"
   # the prune rule: only WHEN + `= '<known other table>'`; UNLESS, <>, or, a non-table literal, the anchor's table all keep the step
@@ -2461,14 +2835,15 @@ Step 'E-RT0' {
   # the condition model's new routine field reads back: the written trace round-trips byte for byte
   Chk 'A-RT5-ROUNDTRIP' $rt0.RtRoundTrip 'identical'
   # Fix round 1, Important 1 (failed 5 before): no SERVER step from the :405 default, the else of `if ApplyResult = 0`
-  # or the except handler; the success branch carries WHEN "ApplyResult = 0" whose else note names the Rollback and
-  # rspError; the handler is the note of UNLESS "<try body> raises" (the body's last statement is a 75-line if, so the
+  # or the except handler; the success branch carries WHEN ApplyResult = 0 whose else note names the Rollback and
+  # rspError; the handler is the note of UNLESS <try body> raises (the body's last statement is a 75-line if, so the
   # quote is `S1 ... raises`); the rspOK says what it overwrites. Protocol constants only in an else note (not mtError)
   Chk 'A-RT5-BRANCHSTEPS' $rt0.RtBranchSteps 0
   # FIX ROUND 2 (T5-R11): the else of :495 quotes no literal (its :563 text goes to a local, the payload line :565
   # has none); the handler quotes :575's payload literal, not :574's DeltaDiagLog text
   Chk 'A-RT5-APPLYWHEN' $rt0.RtApplyWhen "else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:562, rspError; ask E1"
-  Chk 'A-RT5-EXCEPTCOND' $rt0.RtExceptCond "UNLESS `"ApplyResult:= Mem.ApplyUpdates(0) ... raises`" @uGenericTableRoute.pas:570 -- else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:573, rspError, 'cmdDelta %s: %s'; ask E1"
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RT5-EXCEPTCOND' $rt0.RtExceptCond "UNLESS ApplyResult:= Mem.ApplyUpdates(0) ... raises @uGenericTableRoute.pas:570 -- else AThreadStorage.UpdateTransaction.Rollback @uGenericTableRoute.pas:573, rspError, 'cmdDelta %s: %s'; ask E1"
   Chk 'A-RT5-RSPOKNOTE' $rt0.RtRspOkNote 'in TGenericTableRoute.HandleDelta; overwrites the rspError default set at :405'
   # the enclosing CHAIN reader (synthetic): if inside an else, an except handler, a then branch
   Chk 'A-RT5-CHAIN'     $rt0.RtChain "inline:WHEN:W:11 > block:UNLESS:R = 0:5 | except:WHEN:R:= Apply ... raises:13 | block:WHEN:R = 0:5"
@@ -2489,15 +2864,16 @@ Step 'E-RT0' {
   Chk 'A-RT5-PATHSIDE'  $rt0.RtPathSide 'then,else,both,none,False'
   # T5-R11 (picked the logger's literal before): the literal on the parameter-writing line; a logger-only block quotes none
   Chk 'A-RT5-ELSEPICK'  $rt0.RtElsePick "[else 'sent back to the caller'] []"
-  # T5-R12 (only the Commit carried it before): the transaction's OPENS AND its Commit both carry WHEN "not WasTxn";
+  # T5-R12 (only the Commit carried it before): the transaction's OPENS AND its Commit both carry WHEN not WasTxn;
   # EnsureLoaded and PushTableChanged gained the ifs they sit under (named in HandleDelta, T5-R2) -- EnsureLoaded
   # also keeps its own `FLoaded` guard, hung there as the callee's
   Chk 'A-RT5-WASTXN'    $rt0.RtWasTxn 'OPENS AThreadStorage.UpdateTransaction.StartTransaction@uGenericTableRoute.pas:492 | RUNS AThreadStorage.UpdateTransaction.Commit@uGenericTableRoute.pas:498'
   # RE-PINNED by final-review I6 (caller condition before callee guards: the enclosing if is evaluated before the call
-  # runs); was UNLESS "FLoaded" first, then WHEN "not GDatasetsDef.Loaded"
-  Chk 'A-RT5-CONDENSURE' $rt0.RtCondEnsure ('CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: WHEN "not GDatasetsDef.Loaded" @uGenericTableRoute.pas:429 | ' +
-                                          'CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: UNLESS "FLoaded" @uDatasetsDef.pas:94 | ' +
-                                          'CALLS TBroadcastServer.PushTableChanged@uBroadcastServer.pas:401 :: WHEN "Assigned(GBroadcastServer)" @uGenericTableRoute.pas:507')
+  # runs); was UNLESS FLoaded first, then WHEN not GDatasetsDef.Loaded
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RT5-CONDENSURE' $rt0.RtCondEnsure ('CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: WHEN not GDatasetsDef.Loaded @uGenericTableRoute.pas:429 | ' +
+                                          'CALLS TDatasetsDef.EnsureLoaded@uDatasetsDef.pas:92 :: UNLESS FLoaded @uDatasetsDef.pas:94 | ' +
+                                          'CALLS TBroadcastServer.PushTableChanged@uBroadcastServer.pas:401 :: WHEN Assigned(GBroadcastServer) @uGenericTableRoute.pas:507')
   # Task 6: the READ direction and ALSO. AC-6 both directions (green since Task 5's placeholder -- ruling P11: the RED
   # step was A-RT6-READ, which read the placeholder STOPS). AC-9: four crossings -- cmdDelta out and its response,
   # cmdTableLoad out and its rows -- on the CLIENT and SERVER clones queried separately (Invoke-OnDb, A-RT5-ONDB)
@@ -2510,7 +2886,7 @@ Step 'E-RT0' {
   # [by name], TryBuildSafeWhere (a step because the :549 guard turns on it; in a uPipe* unit, so not descended),
   # the read transaction, the query, SaveToStream, Commit, and rspData overwriting the :519 rspError default.
   # DATABASE: the SELECT STOPS (A-RT6-READSTOPS) and the column [inferred]. Then the rows back and the CLIENT
-  # load: RECEIVES rspData, EmptyDataSet (under WHEN "AMT.Active"), LoadFromStream.
+  # load: RECEIVES rspData, EmptyDataSet (under WHEN AMT.Active), LoadFromStream.
   # FIX ROUND 1 moved it: T6-R1 -- EmptyDataSet's verb is EMPTIES (was LOADS: it empties the dataset); M4 -- the two
   # DATABASE steps stand right after the RUNS that executes the query (Qry.Open :594), in source order, no longer after
   # SENDS rspData :618
@@ -2529,15 +2905,16 @@ Step 'E-RT0' {
   Chk 'A-RT6-READGUARDS' $rt0.RtReadGuards 'Blueprint4.ViewModel.pas:1133,uPipeSessionBuilder.pas:525,uPipeSessionBuilder.pas:549,uPipeSessionBuilder.pas:605,Blueprint4.ViewModel.pas:1137'
   # every READ condition verbatim: the five guards above plus the branch conditions of their steps (EnsureLoaded's own
   # FLoaded Exit, the ifs around EnsureLoaded / LoadFromInternal, around EmptyDataSet and LoadFromStream)
-  # RE-PINNED by final-review I6 (caller condition before callee guards): WHEN "not GDatasetsDef.Loaded" @:523 now
-  # stands ahead of EnsureLoaded's own UNLESS "FLoaded" @:94 (was the reverse)
-  Chk 'A-RT6-READCONDS' $rt0.RtReadConds ('UNLESS "not (Assigned(FConn) and FConn.Connected)" @Blueprint4.ViewModel.pas:1133 | WHEN "not GDatasetsDef.Loaded" @uPipeSessionBuilder.pas:523 | ' +
-                                          'UNLESS "FLoaded" @uDatasetsDef.pas:94 | WHEN "not FLoaded" @uDatasetsDef.pas:97 | ' +
-                                          'UNLESS "not GDatasetsDef.GetTable(ATableName, Def)" @uPipeSessionBuilder.pas:525 | ' +
-                                          'UNLESS "not TryBuildSafeWhere(WhereStr, Def, WhereSql, WhereVals)" @uPipeSessionBuilder.pas:549 | ' +
-                                          'UNLESS "T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises" @uPipeSessionBuilder.pas:605 | ' +
-                                          'UNLESS "(GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspData)" @Blueprint4.ViewModel.pas:1137 | ' +
-                                          'WHEN "AMT.Active" @Blueprint4.ViewModel.pas:1162 | WHEN "Length(RspPayload) > 0" @Blueprint4.ViewModel.pas:1163')
+  # RE-PINNED by final-review I6 (caller condition before callee guards): WHEN not GDatasetsDef.Loaded @:523 now
+  # stands ahead of EnsureLoaded's own UNLESS FLoaded @:94 (was the reverse)
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RT6-READCONDS' $rt0.RtReadConds ('UNLESS not (Assigned(FConn) and FConn.Connected) @Blueprint4.ViewModel.pas:1133 | WHEN not GDatasetsDef.Loaded @uPipeSessionBuilder.pas:523 | ' +
+                                          'UNLESS FLoaded @uDatasetsDef.pas:94 | WHEN not FLoaded @uDatasetsDef.pas:97 | ' +
+                                          'UNLESS not GDatasetsDef.GetTable(ATableName, Def) @uPipeSessionBuilder.pas:525 | ' +
+                                          'UNLESS not TryBuildSafeWhere(WhereStr, Def, WhereSql, WhereVals) @uPipeSessionBuilder.pas:549 | ' +
+                                          'UNLESS T0Open:= GetTickCount64 ... AThreadStorage.Transaction.Commit raises @uPipeSessionBuilder.pas:605 | ' +
+                                          'UNLESS (GLE <> ERROR_SUCCESS) or (TCommandID(RspHdr.CommandID) <> rspData) @Blueprint4.ViewModel.pas:1137 | ' +
+                                          'WHEN AMT.Active @Blueprint4.ViewModel.pas:1162 | WHEN Length(RspPayload) > 0 @Blueprint4.ViewModel.pas:1163')
   # AC-12: the SELECT text is a numbered STOPS. It says only what was queried: WHERE the statement is assembled, and the
   # FIB$ tables the READ walk reads have no snapshot rows in the SERVER clone. FIX ROUND 1 (M3) moved the text: it names
   # EVERY assignment to the variable the SELECT literal goes into -- :544 and the :556 ' WHERE ' extension -- each quoted
@@ -2667,7 +3044,84 @@ Step 'E-RT' {
   Chk 'A-RT7-ANCHORS'   $rt0.TraceAnchors '0/118/True'
   Chk 'A-RT7-ANCHORCUT' $rt0.TraceAnchorsCut '1/True'
   # T4-C3: the case guard quotes `case ARequest of` verbatim; the else arm is generated text (was "case ARequest of else")
-  Chk 'A-RT7-CASE'      $rt0.TraceCaseCond 'UNLESS "case ARequest of" @uGenericTableRoute.pas:188 -- else arm at :192; ask E1'
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RT7-CASE'      $rt0.TraceCaseCond 'UNLESS case ARequest of @uGenericTableRoute.pas:188 -- else arm at :192; ask E1'
+}
+# ---- round-trip, R5: the CHART drawn from the trace (spec 2026-10-05-R5-round-trip-chart-design.md) ----
+# MEASURED 2026-10-06 on the 1.21.1 clones, every value read from the files the runs WROTE (.dot / .svg), not from the
+# renderer's Manifest (Test-RoundTripHelpers section 12). Owner answers (spec section 10): the golden shows all 9 ALSO
+# rows (the fold is covered by A-R5-ALSOFOLD), a sub-walk both directions run is ONE row with both numbers.
+Note 'round-trip: the chart ...'
+Step 'E-R5' {
+  # every step drawn or disclosed, never both, together exactly 1..76; every condition drawn, verbatim, unquoted
+  Chk 'A-R5-COVER'      $rt0.R5Cover '76/0/0|both 0|extra 0'
+  # fix round 1 (I2): checked PER STEP -- each condition against the guard rows under ITS step (it was a set test over
+  # every guard row, blind to a guard drawn on the wrong step), the disclosed count measured (it was a literal 0)
+  Chk 'A-R5-CONDS'      $rt0.R5Conds '31/0/0'
+  Chk 'A-R5-VERBATIM'   $rt0.R5Verbatim '31/31'
+  # facets the same way: drawn / in the row's tooltip (REGENERATE) / disclosed / missing
+  Chk 'A-R5-FACETS'     $rt0.R5Facets '19/0/0/0'
+  # ... and RED on a guard moved to another step: [11]'s UNLESS FSuppressEvents drawn under [13]
+  Chk 'A-R5-CONDMUT'    $rt0.R5CondMut '30/0/1 [11] UNLESS @Blueprint4.ViewModel.pas:3950'
+  # fix round 1 (I1): each edge into a crossing names what crosses -- the request's command, the response's WHOLE
+  # alternative set (it read `[41] rspError`, the first WITH word: the failure code on the success path)
+  Chk 'A-R5-CROSSLABEL' $rt0.R5CrossLabels '[14] cmdDelta | [41] rspError or rspOK | [46] cmdTableLoad | [64] rspData or rspError'
+  # fix round 1 (5): a call edge carries `from :<line>` (spec 3.3); a row on a leaf not held at one path stays unlinked
+  # with the "ambiguous file name" tooltip (spec 5) -- the golden drawn without uDatasetsDef.pas in the path map
+  Chk 'A-R5-CALLFROM'   $rt0.R5CallFrom '[12] from :3951'
+  Chk 'A-R5-AMBIGUOUS'  $rt0.R5Ambiguous '12 rows|12 unlinked with the tooltip|manifest 12'
+  # fix round 1 (3): a step text past 5 lines is cut in its BODY, its grade kept (synthetic, 60 words, [inferred])
+  Chk 'A-R5-SHORTEN'    $rt0.R5Shorten 'Word40 ... [inferred] @X.pas:1|5 lines|1 legend row'
+  Chk 'A-R5-NOQUOTE'    $rt0.R5NoQuote 0
+  # the golden's 17 nodes and 12 guards are DRAWN rows (not disclosures): matched/disclosed/missing
+  Chk 'A-R5-GOLDNODES'  $rt0.R5GoldNodes '17/0/'
+  Chk 'A-R5-GOLDGUARDS' $rt0.R5GoldGuards '12//'
+  # one crossing node per send anchor (:3985, :1136), each holding its request and its response
+  Chk 'A-R5-XING'       $rt0.R5Xing '2/4'
+  Chk 'A-R5-STOPS'      $rt0.R5Stops '2:E4,E4'
+  Chk 'A-R5-COUNTS'     $rt0.R5Counts 'identical'
+  Chk 'A-R5-FROMTEXT'   $rt0.R5FromText 'identical'
+  # nodes per lane client/pipe/server/database: client = anchor chain, event, DoAfterPostOperation, SendDeltaOperation,
+  # LoadAllForFolder, LoadOneTable, ALSO; pipe = the two crossings; server = 12 routine cards; database = 2 STOPS + the column
+  Chk 'A-R5-LANES'      $rt0.R5Lanes '7/2/12/3'
+  # one row, both numbers: the column OPERAT.NAME read by both directions, and LoadFromInternal's sub-walk
+  Chk 'A-R5-MERGE'      "$($rt0.R5Merged)|$($rt0.R5Column)" '[20]/[50],[21]/[51],[22]/[52],[23]/[53],[24]/[54],[09]/[60]|09,40,60'
+  # failure edges: the two Rollbacks of the write, the read Rollback, and CancelUpdates at :3999
+  Chk 'A-R5-FAILURE'    "$($rt0.R5Failure)/$($rt0.R5Cancel)" '4/1'
+  # every <a> of the svg is a linked row, plus ONE: the header's REGENERATE tooltip; no row unlinked on these clones
+  Chk 'A-R5-LINKS'      $rt0.R5Links '116=115+1/0'
+  Chk 'A-R5-ASCII'      $rt0.R5Ascii '0/0'
+  # owner answer 4: an ALSO cap of 6 on the same trace folds rows [74]-[76] into ONE disclosure row, repeated in the Legend
+  Chk 'A-R5-ALSOFOLD'   $rt0.R5AlsoFold '73/3/0|0 not in the Manifest|+3 more routes not shown -- [74]-[76], full text in trace.dlgraph || +3 more routes not shown in ALSO -- [74]-[76], full text in trace.dlgraph'
+  # the holdout MSCLIST.NUM: 103 steps drawn or disclosed, none missing; 35 of 35 conditions drawn; 4 CROSSES; 2 STOPS
+  # RE-PINNED fix round 1 (I2): conditions per step, drawn/disclosed/missing of all 35 (was a set count, '35/35')
+  Chk 'A-R5-HOLD'       $rt0.R5Hold '103/0|conds 35/0/0 of 35|xing 4|stops 2|lanes 7/2/13/3'
+  # the calculated field: its STOPS node and a DERIVED card of 18 rows, each REGENERATE in its row's tooltip
+  # RE-PINNED fix round 1 (I2): + its facets per step -- 2 drawn (the anchor's VIA at [01], the STOPS' VIA FtrNameString)
+  # RE-PINNED Task 5b (owner 2026-10-06: DERIVED card capped like its components): 18 plain rows past the 14-row cap --
+  # 14 drawn (14 REGENERATE in tooltips), the last 4 folded into the card's disclosure row (their 4 REGENERATE disclosed);
+  # was '1/18|tooltip regenerate 18|27/0/0|facets 2/18/0/0' while DERIVED was exempt
+  Chk 'A-R5-CALC'       $rt0.R5Calc '1/14|tooltip regenerate 14|23/4/0|facets 2/14/4/0'
+  # a synthetic 300-step trace (150 routine cards of 2 steps): the ladder engages (150 nodes > 45) and the Legend says the
+  # chart is drawn anyway. RE-PINNED Task 5b (owner 2026-10-06, a fold that saves no row is not made): a 2-row card folded
+  # is header + 1 disclosure row + 1 Legend row, so no card folds -- all 300 drawn, ladder empty (was 'cards|...|0/300/0')
+  Chk 'A-R5-SIZE'       $rt0.R5Size '|nodes 150|300/0/0|1 cap row'
+  # Task 5b rule 1 (owner 2026-10-06, "1 row summary is OK"): 100 cards of 3 steps all fold under the ladder; above the
+  # 5-fold threshold the Legend holds ONE summary row, its ranges measured exact against the undrawn steps (a mutated
+  # range reads 'ranges mismatch' -- measured, not assumed)
+  Chk 'A-R5-SUMMARY'    $rt0.R5Summary '1 legend fold row|0/300/0|summary ranges exact|100 cards folded (300 rows not shown) -- [01]-[300] -- the full trace is in the text answer|mut ranges mismatch'
+  # ... cards alternating 3 and 2 steps: the 2-step cards stay whole, the 60 folded cards' ranges exceed one row, so the
+  # summary carries only the count -- 180 = exactly the undrawn steps (a mutated count reads 'counts mismatch')
+  Chk 'A-R5-SUMCOUNT'   $rt0.R5SumCount '1 legend fold row|120/180/0|summary counts exact|60 cards folded (180 rows not shown) -- 180 steps -- the full trace is in the text answer|mut counts mismatch'
+  # ... the threshold: 5 folds keep 5 per-fold Legend rows; 6 folds become 1 summary row, coverage still exact
+  Chk 'A-R5-FOLDTHRESH' $rt0.R5FoldThresh '5 cards: 5 per-fold/0 summary|6 cards: 0 per-fold/1 summary|cover 0 missing, summary counts exact'
+  # ... a fold that saves no row is not made: at a row cap of 2 a 4-step card stays whole, a 5-step card folds 3
+  Chk 'A-R5-NOSAVE'     $rt0.R5NoSave 'TSyn.R1: 4 drawn + 0 disclosure | TSyn.R2: 2 drawn + 1 disclosure'
+  # Task 5b rule 2 (owner 2026-10-06, "calculated fields get same treatment as their components"): a DERIVED card over the
+  # 14-row cap folds with a disclosure row; under the cap it is unchanged
+  Chk 'A-R5-DERIVEDCAP' $rt0.R5DerivedCap '20: 14 drawn + +6 more steps not shown -- [15]-[20]|missing 0 || 10: 10 drawn + |missing 0'
+  # R19: an unknown section, and an actor outside the TIERS, throw -- never a default lane
+  Chk 'A-R5-UNKNOWN'    $rt0.R5Unknown 'refused/refused'
 }
 # ---- round-trip, the final review's fix wave (I1-I9, M2, M3, M7) ----
 Note 'round-trip: the final review ...'
@@ -2683,8 +3137,9 @@ Step 'E-RTF' {
   # I4: the WRITE direction starts at AfterPost even when an AfterDelete (or a BeforePost) is wired above it
   Chk 'A-RTF-I4-WIRING' $rt0.FinI4Wiring 'AfterPost@15,AfterPost@20,BeforePost@5,AfterDelete@10'
   # I5 (synthetic walk): a call one if DEEPER in another table's branch is omitted too (it was a path step)
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
   Chk 'A-RTF-I5-OMITS'  $rt0.FinI5Omits ("OMITS 1 step(s) in branches for other tables, every enclosing if read up to a loop or case arm -- not walked, the branch conditions: " +
-                                        "WHEN `"T = 'MSCLIST'`" @fin-i5.pas:3 > APPLIES FMT.CommitUpdates")
+                                        "WHEN T = 'MSCLIST' @fin-i5.pas:3 > APPLIES FMT.CommitUpdates")
   # RC-R6 (synthetic walk): a transport-convention callee whose body calls WriteFile is KEPT as a CALLS step (not
   # descended); a logger-shaped transport callee is skipped; a non-transport callee with an empty body is pruned
   Chk 'A-RC-R6-OUTWARD' $rt0.RcR6Outward 'CALLS TB.PushX [] || pending: '
@@ -2695,8 +3150,9 @@ Step 'E-RTF' {
   # M3: AS OF is each index's own schema_meta indexed_at_unix (CLIENT / SERVER / SQL, UTC to the minute) -- it was the
   # CLIENT clone FILE's UTC date, 2026-09-28, a stamp the header did not read
   # RE-PINNED 2026-09-28 (re-clone): the new clones' indexed_at_unix 1790633987 / 1790633975 / 1790633871 (was
-  # 02:46Z / 02:46Z / 02:45Z on the r=1.9 clones)
-  Chk 'A-RTF-M3-ASOF'   $rt0.FinM3AsOf '  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-09-28T22:19Z/2026-09-28T22:19Z/2026-09-28T22:17Z'
+  # 02:46Z / 02:46Z / 02:45Z on the r=1.9 clones). RE-PINNED 2026-10-05 (re-clone at 1.21.1): indexed_at_unix
+  # 1791217538 / 1791217275 / 1791216661 (was 2026-09-28T22:19Z/22:19Z/22:17Z)
+  Chk 'A-RTF-M3-ASOF'   $rt0.FinM3AsOf '  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-10-05T16:25Z/2026-10-05T16:21Z/2026-10-05T16:11Z'
 }
 
 Note 'round-trip negatives ...'
@@ -2722,6 +3178,10 @@ Step 'RT-N1' {
   if ($rtn1.Text -cnotmatch 'END TRACE  1 steps, 0 conditions, 0 crossings, 1 unresolved\.') { Fail 'A-RT-N1' 'END TRACE does not count the STOPS' }
   # I3: no reach claimed; all six later sections say they were not walked, naming the [01] STOPS
   Chk 'A-RT-N1-SHAPE'   (Get-StoppedTraceShape $rtn1.Text $rtn1.Trace) 'Why frmBlueprint4.cxGroupBox16 cannot be traced|WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|[01]|0|identical'
+  # A-R5-NOTBOUND: a one-step trace is a one-node chart, never an empty one -- the STOPS node alone (its ANCHOR has no
+  # chain rows), and the Legend names each of the six sections that were not walked
+  $n1d = [IO.File]::ReadAllText($rtn1.Dot)
+  Chk 'A-R5-NOTBOUND'   "$(([regex]::Matches($n1d, '(?m)^\s+n\d+ \[')).Count)/$(([regex]::Matches($n1d, 'shape=note')).Count)/$(([regex]::Matches($n1d, '[A-Z]+ -- not walked: the trace stopped at \[01\]')).Count)" '1/1/6'
 }
 # Review Focus 2: TABLE.COLUMN loaded by several datasets -> ONE STOPS naming all five (the brief said three: the
 # clone holds five, A-RT3-COLUMN), no throw
@@ -2764,6 +3224,22 @@ Step 'RT-SRVSTOP' {
   Chk 'A-RT-SRVSTOP'      "$($rtss.Title)|$($rtss.Notes)" 'Where the trace between frmBlueprint4.dxDBGrid1OperationVName and OPERAT.NAME stops (steps 15 and 22)|DATABASE=not walked: the write direction stopped at [15]'
   Chk 'A-RT-SRVSTOP-SHAPE' "$($rtss.Steps)/$($rtss.Conditions)/$($rtss.Crossings)/$($rtss.Unresolved)|$(@($ssl | Where-Object { $_ -cmatch '^       WITH unknown, no server handler was reached @' }).Count)|$(@($ssl | Where-Object { $_ -cmatch '^\[\d+\] DATABASE |applied in  at|UPDATE statement' }).Count)" '35/8/4/2|2|0'
 }
+# Task 2 fix round 1: a stale file INSIDE the re-point walk (a copy of Blueprint4.ViewModel.pas, one trailing space)
+# stops BOTH verbs [stale source] -- feeds-from and lands-where keep their own stale convention (a named stop, no
+# table, exit 0; FF-STALE), the round-trip refuses (RT-STALE). The ViewModel holds the FDsrOperation.DataSet sites (:657).
+Step 'FF-REPOINT-STALE' {
+  $stDir = Join-Path $OutDir 'ff-repoint-stale'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $vmp = 'C:\Projects\DB\ORM3\CLIENT\Blueprint4.ViewModel.pas'
+  $vl = [IO.File]::ReadAllLines($vmp); $vl[3949] = $vl[3949] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'Blueprint4.ViewModel.pas'), (($vl -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $ov = @{ $vmp = (Join-Path $stDir 'Blueprint4.ViewModel.pas') }
+  $script:ffrs = & "$SRC\Emit-FeedsFrom.ps1" -Control 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -SqlDbPath $DbSql -OutDir $stDir -SourceOverride $ov
+  Chk 'A-FF-REPOINT-STALE' "$($ffrs.RePoint)|$([string]$ffrs.ResolvedTable)|$($ffrs.TableColumn)|$($ffrs.StopReason)" 'stale|||[stale source] Blueprint4.ViewModel.pas differs from the indexed copy -- its 1 DataSet site(s) are not read'
+  $script:lwrs = & "$SRC\Emit-LandsWhere.ps1" -Field 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $stDir -SourceOverride $ov
+  Chk 'A-LW-REPOINT-STALE' "$($lwrs.ChainOutcome)|$([string]$lwrs.Table)|$($lwrs.TableColumn)|$($lwrs.ServerRows)|$($lwrs.StopReason)" 'stale|||0|[stale source] Blueprint4.ViewModel.pas differs from the indexed copy -- its 1 DataSet site(s) are not read'
+  if ((Dot $ffrs) -match 'OPERAT\.NAME') { Fail 'A-FF-REPOINT-STALE' 'a TABLE.COLUMN is drawn past a stale file' }
+}
 # AC-14: a stale view model (a COPY with one trailing space, never the source) -> REFUSED, the file named, NO .dlgraph
 Step 'RT-STALE' {
   $stDir = Join-Path $OutDir 'rt-stale'
@@ -2779,7 +3255,38 @@ Step 'RT-STALE' {
   if (Get-ChildItem $stDir -Filter *.dlgraph) { Fail 'A-RT-STALE' 'left a .dlgraph behind after refusing' }
   $script:rtStale = $(if ($threw) { 'refused' } else { 'accepted' })
 }
-# the verb through the bundler: dispatch, a TEXT bundle (no svg), -ServerDbPath / -SqlDbPath / -Depth in the regenerate command
+# A-R5-STALE (R5 spec section 8): the same refusal into a folder PRE-SEEDED with an earlier run's text and picture -- under
+# the emitter's own names and the bundler's (trace.dlgraph, graph.*). The emitter removes its outputs FIRST, before the
+# walk, so the refusal leaves none of them for a bundle to find and mistake for the answer (before R5 all 12 stayed).
+Step 'RT-R5-STALE' {
+  $stDir = Join-Path $OutDir 'rt-r5-stale'
+  New-Item -ItemType Directory -Force $stDir | Out-Null
+  $vmp = 'C:\Projects\DB\ORM3\CLIENT\Blueprint4.ViewModel.pas'
+  $vl = [IO.File]::ReadAllLines($vmp); $vl[3949] = $vl[3949] + ' '
+  [IO.File]::WriteAllText((Join-Path $stDir 'Blueprint4.ViewModel.pas'), (($vl -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
+  $seed = @('trace.dlgraph', 'graph.svg', 'graph.dot', 'graph.png', 'graph.pdf', 'graph.plain') + @('dlgraph', 'svg', 'dot', 'png', 'pdf', 'plain' | ForEach-Object { "roundtrip_frmBlueprint4_dxDBGrid1OperationVName.$_" })
+  foreach ($f in $seed) { [IO.File]::WriteAllText((Join-Path $stDir $f), 'an earlier run') }
+  $m = ''
+  try { & "$SRC\Emit-RoundTrip.ps1" -Target 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $stDir -SourceOverride @{ $vmp = (Join-Path $stDir 'Blueprint4.ViewModel.pas') } 6>$null | Out-Null; $m = 'accepted' }
+  catch { $m = $(if ($_.Exception.Message -clike '*Blueprint4.ViewModel.pas differs from the indexed copy*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) }
+  Chk 'A-R5-STALE' "$m/$(@($seed | Where-Object { Test-Path (Join-Path $stDir $_) }).Count)" 'refused/0'
+}
+# A-R5-DOTFAIL (owner answer 3): dot fails -> the text is still delivered, ChartError carries dot's own words, and no
+# chart output is left (no partial .svg). A stand-in dot.exe that prints an error and writes nothing; RT-N1's target
+# (one step) keeps it fast. Fix round 1 (4): the stand-in writes a PARTIAL .svg before it fails -- the half-made
+# picture a real dot can leave -- and the run must remove it (it is the .svg a bundle would otherwise show).
+Step 'RT-R5-DOTFAIL' {
+  $dfDir = Join-Path $OutDir 'rt-r5-dotfail'
+  New-Item -ItemType Directory -Force $dfDir | Out-Null
+  $fake = Join-Path $dfDir 'fake-dot.cmd'
+  # dot's arguments: -Tsvg -o <svg> ...; %3 is the svg path
+  [IO.File]::WriteAllText($fake, "@echo off`r`necho ^<svg partial^> > `"%~3`"`r`necho fake dot: syntax error near line 1 1>&2`r`nexit /b 1`r`n", (New-Object Text.ASCIIEncoding))
+  $df = & "$SRC\Emit-RoundTrip.ps1" -Target 'frmBlueprint4.cxGroupBox16' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $dfDir -Dot $fake 6>$null
+  $left = @(Get-ChildItem $dfDir | Where-Object { $_.Extension -in '.svg', '.dot', '.png', '.pdf', '.plain' }).Count
+  # the svg existed when dot exited (Invoke-DotRun's "dot exited 1"), so the removal is what proves no partial picture
+  Chk 'A-R5-DOTFAIL' "$(Test-Path $df.Trace)|$($df.Steps)|$($df.ChartError -like '*dot exited 1*fake dot: syntax error*')|$([bool]$df.Svg)|$left" 'True|1|True|False|0'
+}
+# the verb through the bundler: dispatch, the text AND its chart (R5; no svg before), -ServerDbPath / -SqlDbPath / -Depth in the regenerate command
 # 6>$null: the emitter prints the whole trace (Write-Host), and its else notes quote 'OPERAT %s FAILED'
 Step 'RT-ART' {
   $artRoot = Join-Path $OutDir 'bundle-rt'
@@ -2790,11 +3297,14 @@ Step 'RT-ART' {
   Chk 'A-RT-ART-DEPTH'  $meta.depth 4
   foreach ($flag in '-ServerDbPath ', '-SqlDbPath ', '-Depth 4') { if ($meta.regenerate -cnotlike "*$flag*") { Fail 'A-RT-ART' "the regenerate command drops $flag" } }
   if (-not (Test-Path (Join-Path $art.Bundle 'trace.dlgraph'))) { Fail 'A-RT-ART' 'no trace.dlgraph in the bundle' }
-  if (Test-Path (Join-Path $art.Bundle 'graph.svg')) { Fail 'A-RT-ART' 'a graph.svg was written for a text question' }
   $html = [IO.File]::ReadAllText((Join-Path $art.Bundle 'index.html'))
   if ($html -cnotmatch '<pre[^>]*>TRACE OPERAT\.NAME') { Fail 'A-RT-ART' 'index.html does not show the trace' }
-  # fix round 1 (I2, T8-R3): the footer names the text as what it is -- no paste-unchanged promise, no graph.*
-  if ($html -cnotmatch '<footer>\s*trace\.dlgraph \(Form A text\) &middot; meta\.json' -or $html -cmatch 'graph\.svg|DocInsight') { Fail 'A-RT-ART-FOOT' 'the text bundle footer is not "trace.dlgraph (Form A text) &middot; meta.json ..."' }
+  # A-R5-BUNDLE (RE-PINNED by R5: a round-trip bundle held NO graph.svg before -- the chart is drawn from the text now): the
+  # bundle holds trace.dlgraph AND graph.svg, and the page shows both -- the chart, then the text
+  Chk 'A-R5-BUNDLE' "$(Test-Path (Join-Path $art.Bundle 'trace.dlgraph'))/$(Test-Path (Join-Path $art.Bundle 'graph.svg'))|$($html -cmatch '(?s)<svg.*</svg>.*<pre[^>]*>TRACE OPERAT\.NAME')" 'True/True|True'
+  # fix round 1 (I2, T8-R3): the footer names the text as what it is -- no paste-unchanged promise. RE-PINNED by R5: it
+  # names the chart files before it (it named the text alone while the bundle held no chart)
+  if ($html -cnotmatch '<footer>\s*graph\.svg &middot; graph\.png &middot; graph\.pdf &middot; graph\.plain \(geometry, same layout run\) &middot; trace\.dlgraph \(Form A text\) &middot; meta\.json' -or $html -cmatch 'DocInsight') { Fail 'A-RT-ART-FOOT' 'the round-trip bundle footer is not "graph.svg ... trace.dlgraph (Form A text) &middot; meta.json ..."' }
   # fix round 1 (I3): a text bundle is not a chart -- no "Every row" / "N click targets" chart wording
   if ($html -cmatch 'Every row is a real anchor|<b>\d+</b> click targets</span>|not click targets') { Fail 'A-RT-ART-NOTE' 'the text bundle page carries chart wording or the retired "not click targets" claim' }
   # DOC-R1 (supersedes T8-R1, 2026-09-28): every ` @File:line` anchor of the trace is a draglint:// link whose
@@ -2834,8 +3344,9 @@ Step 'RT-HOLD' {
   # SELECT STOPS (both E4), as for OPERAT.NAME
   Chk 'A-RT9-COUNTS'  $rt0.HoldCounts '103/35/4/2'
   # final-review I6: [27] CoerceMSCLISTPlanIds -- the caller's branch condition first, then the callee's own guards
-  # (was UNLESS "FieldCnt = 0", UNLESS "Wanted.Count = 0", then WHEN "TableName = 'MSCLIST'")
-  Chk 'A-RT9-CONDORDER' $rt0.HoldCoerceConds "WHEN `"TableName = 'MSCLIST'`" @uGenericTableRoute.pas:468 | UNLESS `"FieldCnt = 0`" @uGenericTableRoute.pas:310 | UNLESS `"Wanted.Count = 0`" @uGenericTableRoute.pas:336"
+  # (was UNLESS FieldCnt = 0, UNLESS Wanted.Count = 0, then WHEN TableName = 'MSCLIST')
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RT9-CONDORDER' $rt0.HoldCoerceConds "WHEN TableName = 'MSCLIST' @uGenericTableRoute.pas:468 | UNLESS FieldCnt = 0 @uGenericTableRoute.pas:310 | UNLESS Wanted.Count = 0 @uGenericTableRoute.pas:336"
 }
 # calc-field brief (owner, 2026-09-28, URGENT): a CALCULATED anchor says so and offers its source fields. The owner's
 # pick FtrName stopped at [09] "MSCLIST.FTRNAME: not extracted as a column ..." (9/0/0/1) -- true, not WHY. Now: the
@@ -2861,7 +3372,8 @@ Step 'RT-CALC' {
   Chk 'A-RTC-FTR-TITLE'  $rt0.CalcFtrTitle 'Why frmBlueprint4.dxDBGrid1FtrsVFtrName cannot be traced -- it is calculated'
   Chk 'A-RTC-FTR-STOP'   $rt0.CalcFtrStop ('STOPS FtrName is a calculated field of FMTFtrs (created (FieldKind fkCalculated) at :756, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index ' +
                                            '@Blueprint4.ViewModel.pas:986 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735; ask E3')
-  Chk 'A-RTC-FTR-GUARDS' $rt0.CalcFtrChildren ('UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN "Assigned(FfFtrs_FtrName)" @Blueprint4.ViewModel.pas:985 | ' +
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RTC-FTR-GUARDS' $rt0.CalcFtrChildren ('UNLESS DataSet.State = dsInsert @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN Assigned(FfFtrs_FtrName) @Blueprint4.ViewModel.pas:985 | ' +
                                                'VIA FtrNameString @MSCTYPES.PAS:840 -- computed by this call at :986, its body is not walked, nor are those of TagOf')
   Chk 'A-RTC-FTR-NOTE'   $rt0.CalcFtrNote "FtrName is calculated from 18 fields -- trace one of them instead (every binding below: $bindWhy):"
   # every candidate and its column, in source order (:987-993, FtrType's row at its read :990); each target is the TField variable
@@ -2886,7 +3398,8 @@ Step 'RT-CALC' {
   Chk 'A-RTC-TOL-STOP'   $rt0.CalcTolStop ('STOPS Tolerance is a calculated field of FMTFtrs (created (FieldKind fkCalculated) at :760, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index ' +
                                            '@Blueprint4.ViewModel.pas:1045 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735, ' +
                                            'the formula is chosen by the case at :1043 (writes at :1045, :1046, :1047, :1049, :1050) and the case at :1044 (writes at :1045, :1046, :1047), their selectors are offered below; ask E3')
-  Chk 'A-RTC-TOL-GUARDS' $rt0.CalcTolChildren 'UNLESS "DataSet.State = dsInsert" @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN "Assigned(FfFtrs_Tolerance)" @Blueprint4.ViewModel.pas:1041'
+  # RE-PINNED 2026-10-06 (R5 Part 0): conditions are written unquoted -- the same conditions, the quotes gone; no count moved
+  Chk 'A-RTC-TOL-GUARDS' $rt0.CalcTolChildren 'UNLESS DataSet.State = dsInsert @Blueprint4.ViewModel.pas:973 -- else Exit at :973 | WHEN Assigned(FfFtrs_Tolerance) @Blueprint4.ViewModel.pas:1041'
   Chk 'A-RTC-TOL-OFFER'  "$($rt0.CalcTolNote)|$($rt0.CalcTolRows)" ("Tolerance is calculated from 4 fields, and the value is chosen by 2 more (case at :1043, :1044) -- trace one of them instead (every binding below: $bindWhy):|" +
                                                                     ((@(@('USL', 'LSL', 'UpperTol', 'LowerTol') | ForEach-Object { "FROM MSCLIST.$($_.ToUpperInvariant()) VIA FfFtrs_$_ => $vm.FfFtrs_$_" }) +
                                                                       "FROM MSCLIST.SPECTYPE VIA FfFtrs_SpecType, chooses the value (case at :1043) => $vm.FfFtrs_SpecType" +
@@ -2997,6 +3510,7 @@ if (-not $Quiet) {
   Write-Host ("  shown-where    : {0} bindings on {1} forms, of {2} index-wide over {3} columns" -f (V $sw1 'Bindings'), (V $sw1 'Forms'), (V $sw1 'IndexRows'), (V $sw1 'IndexColumns'))
   Write-Host ("  change-impact  : {0} routines / {1} unit; a TYPE reaches {2} over {3} units (capped {4})" -f (V $ci1 'Affected'), (V $ci1 'Units'), (V $ci2 'Affected'), (V $ci2 'Units'), (V $ci2 'Capped'))
   Write-Host ("  tested-by      : {0} / {1} / {2} covering tests, from {3} test methods" -f (V $tb1 'Tests'), (V $tb2 'Tests'), (V $tb3 'Tests'), (V $tb1 'TestMethods'))
+  Write-Host ("  path           : {0} shortest paths of {1} calls ({2} routines, {3} sites); cap 1 draws {4} + discloses 1; ambiguous pair {5} sites" -f (V $pa1 'Paths'), (V $pa1 'Hops'), (V $pa1 'Routines'), (V $pa1 'Sites'), (V $pa2 'PathsShown'), (V $pa3 'Ambiguous'))
   Write-Host ("  task-0 helpers : SQL {0}/{1} tables, {2}/{3} trigger bodies; raise/handle {4}/{5}; datasources {6}/{7}/{8} resolve {9}/{10}/{11}; dangling {12}/{13}" -f (V $t0 'SqlTables'), (V $t0 'SqlDeclarations'), (V $t0 'TriggerBodies'), (V $t0 'Triggers'), (V $t0 'ExcRaise'), (V $t0 'ExcHandle'), (V $t0 'DsTotal'), (V $t0 'DsDfmWired'), (V $t0 'DsCodeSite'), (V $t0 'DsOne'), (V $t0 'DsMany'), (V $t0 'DsNone'), (V $t0 'DanglingRows'), (V $t0 'RePointedAny'))
   Write-Host ("  disk vs index  : CLIENT files differing today (informational, not pinned): {0}" -f (V $t0 'DiskStaleCli'))
   Write-Host ("  exception-paths: {0} raises / {1} callers / {2} caught; index {3}/{4}; source bare/on/reraise/var {5}/{6}/{7}/{8}" -f (V $ep1 'Raises'), (V $ep1 'Callers'), (V $ep1 'Caught'), (V $ep1 'IndexRaise'), (V $ep1 'IndexHandle'), (V $ex0 'BareExcept'), (V $ex0 'OnExcept'), (V $ex0 'Reraise'), (V $ex0 'RaiseVar'))
@@ -3004,7 +3518,7 @@ if (-not $Quiet) {
   Write-Host ("  feeds-from     : colREASON {0} ({1} rows, {2}); datasources {3}/{4}/{5}; per control {6} of {7} resolve to one table ({8}%), {9} to a column" -f (V $ff1 'TableColumn'), (V $ff1 'ChainRows'), (V $ff1 'HopGrades'), (V $ff1 'IndexDs'), (V $ff1 'IndexDsDfm'), (V $ff1 'IndexDsCode'), (V $ff1 'CtlTable'), (V $ff1 'Controls'), (V $ff1 'CoveragePct'), (V $ff1 'CtlColumn'))
   Write-Host ("  lands-where    : REASON {0} ({1} server rows, {2} trigger, {3} client); convention {4}/{5}/{6}; DataService {7}; ParamByName {8}/{9}; orm_links {10}" -f (V $lw1 'TableColumn'), (V $lw1 'ServerRows'), (V $lw1 'Triggers'), (V $lw1 'ClientBindings'), (V $lw1 'ConvProps'), (V $lw1 'ConvOnTable'), (V $lw1 'ConvColumn'), (V $lw1 'DsClasses'), (V $lw1 'ParamByNameDs'), (V $lw1 'ParamByNameCol'), $ol)
   Write-Host ("  round-trip     : golden nodes {0}/17 matched (disclosed: {1}); {9} golden facts disclosed ({10}): {11}; guards {2}/12 (disclosed: {3}); steps/conditions/crossings/unresolved {4}; ALSO {5}; N1 {6} step(s); stale {7}; holdout candidates {8}" -f (V $rt0 'GoldenMatched'), (V $rt0 'GoldenDisclosed'), (V $rt0 'GuardsMatched'), (V $rt0 'GuardsDisclosed'), (V $rt0 'RtCounts'), (V $rt0 'RtAlso'), (V $rtn1 'Steps'), $(if ($rtStale) { $rtStale } else { '?' }), (V $rt0 'HoldoutCandidates'), (V $rt0 'GoldenFactsDisclosedN'), (V $rt0 'GoldenFactsReason'), (V $rt0 'GoldenFactsDisclosed'))
-  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; RT-STALE (message AND absent .dlgraph); RT-N1, RT-N2 one-STOPS traces; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
+  Write-Host ("  negatives      : N1-N12b, N14, N15, N18b, N19, N20-N24, PA-N1..N4, N33, N35, EP-N20, CO-N25, CO-N26, CO-N26b, CO-N34, CO-STALE-REFUSE, FF-N28, FF-N28b, FF-N34, LW-N31-BRIEF, LW-N32, LW-FIB, LW-MEMCTL, LW-PERSIST, LW-ROLES/2, LW-N34, LW-ART-N, N-MAXPATH, W-* (R19 wrappers), each asserting message AND absent .svg; RT-STALE (message AND absent .dlgraph); RT-N1, RT-N2 one-STOPS traces; N13/N16/N17, EP-N21..N23, CO-N24/N27/STALE/STALE-COL, FF-N29/N30/STALE, LW-N31/SRVSQL/QUOTED/R17/STALE/STALE-Q draw")
   Write-Host ("  output         : {0}" -f $OutDir)
   Write-Host ''
 }

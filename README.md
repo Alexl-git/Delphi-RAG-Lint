@@ -703,10 +703,10 @@ and more (see [MCP tools](#mcp-tools-15) below).
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 7 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
 | [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 19 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
-| [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 3 (+ 25 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
+| [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 4 (+ 26 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
-| [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 13 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
+| [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 14 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
 | [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 20 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
 <!-- dl:registry:end feature-summary -->
 
@@ -959,7 +959,7 @@ reason with no stamp, an invalid or future date, or a stamp older than
 | [`deps-report`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/deps-report) `--db <db>` | Third-party dependency rollup | `--edges`, `--format text\|json\|csv` |
 | `uses-report --output <f.csv>` | Uses graph as CSV | `--depth N`, `--include-external`, `--all-sources` (every unit across every `--db`, not just the first DB's files; `deps-report` takes it too), `--name <pattern>` (substring on the unit stem; a pattern matching NO source unit exits 2 with `ERROR: uses-report: no index passed contains a source unit named ...` and writes nothing, the same refusal `outline` gives an unindexed file) |
 | `find-deadcode` | Symbols with no callers outside their own unit | `--kind`, `--include-private` |
-| `forms-csv --project <dproj> --db <db>` | Tester CSV, one row per form: menu/ribbon/tab path from the main form, control, handler, opening routine, modal, confidence (algorithm v6) | `--output <f.csv>`, `--root <TfrmMAIN>` |
+| `forms-csv --project <dproj> --db <db>` | Tester CSV, one row per form: menu/ribbon/tab path from the main form, control, handler, opening routine, modal, before-you-start preconditions for every hop, confidence (algorithm v7; a `?` modal always carries its reason in Notes; popup forms the index cannot trace are declared under `popupForms` in the project's `_D-RAG\drag-lint-project.json` -- see docs\wiki\Generate-Test-Helper-CSV.md) | `--output <f.csv>`, `--root <TfrmMAIN>` |
 | `export enums --db <db>` | Export enums | `--format firebird-sql\|csv\|json\|delphi-const`, `--output <file>` |
 | `export obsidian --db <db> --output-dir <dir>` | Export the index into an Obsidian vault | `--open` |
 | [`diff`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/diff) `--db <old> --db <new>` | Diff two index snapshots | `--json` |

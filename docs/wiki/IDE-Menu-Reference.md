@@ -105,6 +105,7 @@ job; ask again when it finishes.
 | **Callers and callees (butterfly chart)...** | [butterfly](ask-butterfly) |
 | **Who calls this routine...** | [who-calls](ask-who-calls) |
 | **What this routine calls...** | [what-it-calls](ask-what-it-calls) |
+| **Call path from this routine to another...** | [path](ask-path) -- the caret gives routine A; you are then asked for routine B |
 | **What this routine changes (side effects)...** | [effects](ask-effects) |
 | **Which tables this routine touches...** | [touches-tables](ask-touches-tables) |
 | **Which exceptions escape this routine...** | [exception-paths](ask-exception-paths) |

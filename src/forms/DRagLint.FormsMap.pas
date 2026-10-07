@@ -1,6 +1,6 @@
 unit DRagLint.FormsMap;
 
-/// <summary>Builds a per-form tester CSV for a project (algorithm v6): how a
+/// <summary>Builds a per-form tester CSV for a project (algorithm v7): how a
 /// tester reaches each form from the application's root form -- the menu /
 /// ribbon / tab path, the control, its handler, the routine that opens the form,
 /// modality and a confidence. Edges come from the index first (refs to the form
@@ -8,7 +8,12 @@ unit DRagLint.FormsMap;
 /// the v5 text scan as the fallback; control locations come from the .dfm tree
 /// (DRagLint.FormsMap.Dfm).</summary>
 /// <remarks>Engine only. The CLI command forms-csv and the IDE menu item are thin
-/// wrappers. Not thread-safe; single-shot per call.</remarks>
+/// wrappers. Not thread-safe; single-shot per call. v7 (2026-10-06) keeps the v6
+/// columns but changes what cells MEAN: Modal is read from the created variable,
+/// a form method or the .dfm and a '?' always carries its reason in Notes;
+/// Before you start covers every hop, text-scan edges and guard messages; popup
+/// forms come from drag-lint-project.json. The plugin's EXPECTED_FORMS_CSV_ALGO
+/// must move with FORMS_CSV_ALGORITHM, and the exe and plugin deploy together.</remarks>
 
 interface
 
@@ -22,7 +27,7 @@ uses
   , Data.DB
   , FireDAC .Comp   .Client
   , FireDAC .Stan   .Param
-  , DRagLint.Core   .Model
+  , DRagLint.Core   .Model // dl:unit DRagLint.Core.Model accepted -- DRAG_HOME_DIR: the _D-RAG folder name travels with the model that defines the index layout, so popupForms is read from the same folder every other verb uses
   , DRagLint.Storage.SQLite
   , DRagLint.Lint   .ProjectChecks.Parse
   ;
@@ -31,7 +36,7 @@ type
   /// <summary>One navigable form (a .dfm root that descends from a form base).</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.BuildHookMap (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.ProcessSite (DRagLint.FormsMap.pas), DRagLint.FormsMap.LoadInventory (DRagLint.FormsMap.pas) (+9 more)</para>
+  /// <para>Used by: DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.CaptionForHandler (DRagLint.FormsMap.pas), DRagLint.FormsMap.FindFormViaHook (DRagLint.FormsMap.pas), DRagLint.FormsMap.FindNearestFormCaller (DRagLint.FormsMap.pas), DRagLint.FormsMap.LoadInventory (DRagLint.FormsMap.pas) (+19 more)</para>
   /// <para>Used in units: DRagLint.FormsMap</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -50,7 +55,7 @@ type
   /// control binds the launching routine.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.TryAddEdge (DRagLint.FormsMap.pas), DRagLint.FormsMap.DetectRoot (DRagLint.FormsMap.pas), DRagLint.FormsMap.TNavBuilder.AddTextEdges (DRagLint.FormsMap.pas) (+2 more)</para>
+  /// <para>Used by: declaration (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.ProcessSite (DRagLint.FormsMap.pas), DRagLint.FormsMap.BuildEdges.TryAddEdge (DRagLint.FormsMap.pas), DRagLint.FormsMap.DetectRoot (DRagLint.FormsMap.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.FormsMap</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -61,6 +66,8 @@ type
     Handler  : string; // v6: routine in FromClass that starts the chain (bare name)
     OpenedBy : string; // v6: Owner.Routine / Unit.Routine holding the Create/Show line
     Modal    : string; // v6: Yes / No / ? read from the launch line
+    LaunchPath: string;  // R1: file holding the Create/Show line ('' when unknown)
+    LaunchLine: Integer; // R1: 1-based line of that Create/Show (0 when unknown)
   end;
 
 /// <summary>Generates the navigation-map CSV text.</summary>
@@ -113,6 +120,7 @@ implementation
 
 uses
   System.RegularExpressions
+  , System.JSON
   , DRagLint.FormsMap.Dfm
   ;
 
@@ -184,15 +192,109 @@ const
   // v6: index-first edges (refs + call_edges) with the text scan as fallback, a
   // .dfm-tree location per control (menu / bar / ribbon / tab path), and the
   // tester columns (Click, Handler, Opened by, Modal, Confidence ...).
-  FORMS_CSV_ALGORITHM = '6'; // bump when the edge or path algorithm changes
+  FORMS_CSV_ALGORITHM = '7'; // bump when the edge or path algorithm, or a cell's meaning, changes
 
-type
-  TKnownPopupEntry = record Name: string; Note: string; end;
+  POPUP_FORMS_KEY  = 'popupForms'; // R1: key in <project>\_D-RAG\drag-lint-project.json
+  POPUP_NOTE_DEFAULT = 'opened as a popup (declared in drag-lint-project.json)';
 
-const
-  KnownPopupForms: array[0..0] of TKnownPopupEntry = (
-    (Name: 'frmgridlayout'; Note: 'popup via TGridMenuPopup (Save/Load Layout)')
-  );
+/// <summary>R1: reads the popup forms a project declares in
+/// &lt;project folder&gt;\_D-RAG\drag-lint-project.json under "popupForms":
+/// [{"form": "frmX", "note": "popup via ..."}]. A popup form is opened by a
+/// mechanism the index cannot trace (a shared right-click menu, a component's
+/// own popup); the note is what the CSV prints instead of "no caller found".</summary>
+/// <param name="AProjectFile">The .dproj/.dpr; its folder anchors the json.</param>
+/// <returns>A new dictionary, lower-case form name -> note; empty when the file
+/// or the key is absent. The caller owns it.</returns>
+/// <remarks>A missing file is normal. A malformed file or entry is ignored with
+/// one stderr line (the CSV must still be produced), never guessed at. An entry
+/// without "note" gets POPUP_NOTE_DEFAULT.</remarks>
+function LoadPopupForms(const AProjectFile: string): TDictionary<string, string>;
+var
+  CfgPath: string     ;
+  JVal   : TJSONValue ;
+  V      : TJSONValue ;
+  Arr    : TJSONArray ;
+  Item   : TJSONValue ;
+  FormVal: TJSONValue ;
+  NoteVal: TJSONValue ;
+  Form   : string     ;
+  Note   : string     ;
+begin
+  // Everything that can raise runs before the dictionary exists, so nothing leaks.
+  CfgPath:= '';
+  if AProjectFile <> '' then
+    CfgPath:= TPath.Combine(TPath.Combine(ExtractFileDir(ExpandFileName(AProjectFile)), DRAG_HOME_DIR), 'drag-lint-project.json');
+  Result:= TDictionary<string, string>.Create;
+  if (CfgPath = '') or not TFile.Exists(CfgPath) then Exit;
+  try
+    JVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(CfgPath));
+    try
+      if not (JVal is TJSONObject) then
+        raise EJSONException.Create('the file is not a JSON object');
+      V:= TJSONObject(JVal).GetValue(POPUP_FORMS_KEY);
+      if V = nil then Exit;
+      if not (V is TJSONArray) then
+        raise EJSONException.Create('"' + POPUP_FORMS_KEY + '" is not an array');
+      Arr:= TJSONArray(V);
+      for Item in Arr do
+      begin
+        // One bad entry skips that entry only, with its own stderr line.
+        FormVal:= nil;
+        NoteVal:= nil;
+        if Item is TJSONObject then
+        begin
+          FormVal:= TJSONObject(Item).GetValue('form');
+          NoteVal:= TJSONObject(Item).GetValue('note');
+        end;
+        if (FormVal <> nil) and not (FormVal is TJSONString) then
+        begin
+          Writeln(ErrOutput, 'forms-csv: ' + CfgPath + ': a "' + POPUP_FORMS_KEY + '" entry whose "form" is not a string -- skipped');
+          Continue;
+        end;
+        Form:= if FormVal <> nil then Trim(FormVal.Value) else '';
+        if Form = '' then
+        begin
+          Writeln(ErrOutput, 'forms-csv: ' + CfgPath + ': a "' + POPUP_FORMS_KEY + '" entry has no "form" -- skipped');
+          Continue;
+        end;
+        Note:= if NoteVal is TJSONString then Trim(NoteVal.Value) else '';
+        if Note = '' then Note:= POPUP_NOTE_DEFAULT;
+        Result.AddOrSetValue(LowerCase(Form), Note);
+      end;
+    finally
+      JVal.Free;
+    end;
+  except
+    on E: Exception do
+      Writeln(ErrOutput, 'forms-csv: ' + CfgPath + ': "' + POPUP_FORMS_KEY + '" ignored (' + E.Message + ')');
+  end;
+end;
+
+/// <summary>R1: why the .dfm alone settles that a form is shown non-modally
+/// as soon as it is created: 'FormStyle = fsMDIChild' (an MDI child is shown on
+/// creation and can never be modal) or 'Visible = True' (shown on creation;
+/// ShowModal on a visible form raises). '' when neither root property is set.</summary>
+/// <param name="ADfmPath">Path to a text .dfm.</param>
+/// <returns>The deciding property as it reads in the .dfm, or ''.</returns>
+/// <remarks>Reads only the root object's own properties (up to its first child
+/// object). An inherited form whose ancestor sets the property is not seen.</remarks>
+function DfmShownOnCreate(const ADfmPath: string): string;
+var
+  Lines: TArray<string>;
+  I    : Integer;
+  T    : string;
+begin
+  Result:= '';
+  if (ADfmPath = '') or not TFile.Exists(ADfmPath) then Exit;
+  Lines:= TFile.ReadAllLines(ADfmPath, TEncoding.ANSI);
+  for I:= 1 to High(Lines) do
+  begin
+    T:= Trim(Lines[I]);
+    if StartsText('object ', T) or StartsText('inherited ', T) or StartsText('inline ', T) or SameText(T, 'end') then Exit;
+    if SameText(StringReplace(T, ' ', '', [rfReplaceAll]), 'FormStyle=fsMDIChild') then Exit('FormStyle = fsMDIChild');
+    if SameText(StringReplace(T, ' ', '', [rfReplaceAll]), 'Visible=True') then Result:= 'Visible = True';
+  end;
+end;
 
 /// <summary>Reads the immediate ancestor class name from a .pas class
 /// declaration at the given 1-based line (handles "T = class(TAncestor)").</summary>
@@ -1048,7 +1150,8 @@ var
     end;
   end;
 
-  procedure TryAddEdge(const AFrom, ATo, ACaption, AHandler, AOpenedBy, AModal: string);
+  /// <summary>ALaunch carries OpenedBy, Modal, LaunchPath and LaunchLine.</summary>
+  procedure TryAddEdge(const AFrom, ATo, ACaption, AHandler: string; const ALaunch: TFormEdge);
   var EKey: string; E: TFormEdge;
   begin
     EKey:= AFrom + #1 + ATo + #1 + ACaption + #1 + AHandler;
@@ -1059,8 +1162,10 @@ var
     E.ToClass  := ATo;
     E.Caption  := ACaption;
     E.Handler  := AHandler;
-    E.OpenedBy := AOpenedBy;
-    E.Modal    := AModal;
+    E.OpenedBy := ALaunch.OpenedBy;
+    E.Modal    := ALaunch.Modal;
+    E.LaunchPath:= ALaunch.LaunchPath;
+    E.LaunchLine:= ALaunch.LaunchLine;
     Result.Add(E);
   end;
 
@@ -1079,7 +1184,7 @@ var
     FormRout: string        ;
     XN      : TFormNode     ;
     Opener  : string        ;
-    Modal   : string        ;
+    Launch  : TFormEdge     ;
   begin
     Arr:= FileLines(APasFileId, APath);
     if (ALaunchLine < 1) or (ALaunchLine > Length(Arr)) then Exit;
@@ -1096,7 +1201,11 @@ var
     // v6: who holds the launch line, and whether it is modal, for the tester columns.
     if OC <> '' then Opener:= OC + '.' + Rout
     else Opener:= TPath.GetFileNameWithoutExtension(APath) + '.' + Rout;
-    Modal:= LineModal(Arr[ALaunchLine - 1]);
+    Launch:= Default(TFormEdge);
+    Launch.OpenedBy  := Opener;
+    Launch.Modal     := LineModal(Arr[ALaunchLine - 1]);
+    Launch.LaunchPath:= APath;
+    Launch.LaunchLine:= ALaunchLine;
     if OC = '' then
     begin
       // Call site is inside a standalone function (no class owner).
@@ -1134,10 +1243,10 @@ var
             Vis3s.Free;
           end;
           if Cap = '' then Cap:= '(via ' + Rout + ')';
-          TryAddEdge(FormCls, ATargetClass, Cap, FormRout, Opener, Modal);
+          TryAddEdge(FormCls, ATargetClass, Cap, FormRout, Launch);
         end
         else
-          TryAddEdge(Opener, ATargetClass, '(via hook)', Rout, Opener, Modal);
+          TryAddEdge(Opener, ATargetClass, '(via hook)', Rout, Launch);
       finally
         Vis2s.Free;
       end;
@@ -1153,7 +1262,7 @@ var
         Vis1.Free;
       end;
       if Cap = '' then Cap:= '(via ' + Rout + ')';
-      TryAddEdge(OC, ATargetClass, Cap, Rout, Opener, Modal);
+      TryAddEdge(OC, ATargetClass, Cap, Rout, Launch);
     end
     else
     begin
@@ -1173,7 +1282,7 @@ var
             Vis3.Free;
           end;
           if Cap = '' then Cap:= '(via ' + Rout + ')';
-          TryAddEdge(FormCls, ATargetClass, Cap, FormRout, Opener, Modal);
+          TryAddEdge(FormCls, ATargetClass, Cap, FormRout, Launch);
         end;
       finally
         Vis2.Free;
@@ -1359,6 +1468,7 @@ const
   CONF_TRACED            = 'traced';
   CONF_HANDLER_ONLY      = 'handler-only';
   CONF_UNRESOLVED        = 'unresolved';
+  IDENT_RX               = '[A-Za-z_][A-Za-z0-9_]*'; // R1: a Delphi identifier, for TRegEx patterns
 
 type
   /// <summary>v6: one way into a form as found by the index pass or the text
@@ -1372,6 +1482,7 @@ type
     Method   : string; // METHOD_INDEX / METHOD_TEXT
     Hint     : string; // "Before you start"
     Note     : string;
+    ModalNote: string; // R1: where a dfm-derived Modal came from, or why it is '?'
     Ways     : TArray<TNavWay>;
   end;
 
@@ -1386,6 +1497,14 @@ type
     StartLine    : Integer;
     ImplStart    : Integer;
     ImplEnd      : Integer;
+  end;
+
+  /// <summary>R1: one launch site found by the index pass.</summary>
+  TLaunchSite = record
+    Info     : TRoutineInfo; // the routine holding the Create/Show line
+    Line     : Integer;      // 1-based line of that Create/Show
+    Modal    : string;
+    ModalNote: string;
   end;
 
   /// <summary>v6 edge builder: index-first (refs + call_edges + the .dfm tree),
@@ -1411,8 +1530,15 @@ type
     function BodyModal(const AInfo: TRoutineInfo): string;
     function IsFormField(AStore: TSQLiteSymbolStore; const AFormClass, AName: string): Boolean;
     function SelectionHint(AStore: TSQLiteSymbolStore; const AFormClass: string; const AInfos: array of TRoutineInfo): string;
+    function EnclosingRoutine(AStore: TSQLiteSymbolStore; const APath: string; ALine: Integer): TRoutineInfo;
+    function DfmModal(const AY: TFormNode; out ANote: string): string;
+    procedure VarModal(AStore: TSQLiteSymbolStore; const ALine, AVar: string; const AY: TFormNode; var AYes, ANo: Boolean);
+    function CallLine(const AInfo: TRoutineInfo; const AName: string): Integer;
+    function LaunchModal(AStore: TSQLiteSymbolStore; const AL: TRoutineInfo; ALaunchLine: Integer; const AY: TFormNode; out ANote: string): string;
+    function GuardMessages(const AInfo: TRoutineInfo; AUpToLine: Integer): TArray<string>;
+    function BeforeYouStart(AStore: TSQLiteSymbolStore; const AH, AL: TRoutineInfo; ALaunchLine: Integer; const ANextName: string): string;
     procedure AddEdge(const AEdge: TNavEdge);
-    procedure TraceLaunch(AStore: TSQLiteSymbolStore; const AY: TFormNode; const AL: TRoutineInfo; const AModal: string);
+    procedure TraceLaunch(AStore: TSQLiteSymbolStore; const AY: TFormNode; const ASite: TLaunchSite);
     procedure IndexPassFor(AStore: TSQLiteSymbolStore; const AY: TFormNode);
   public
     constructor Create(const AStores: TArray<TSQLiteSymbolStore>; ANodes: TList<TFormNode>; AClassToNode: TDictionary<string, TFormNode>);
@@ -1693,6 +1819,338 @@ begin
         end;
 end;
 
+/// <summary>R1: the innermost routine whose implementation spans APath:ALine
+/// (a text-scan edge knows its launch line but not its routine).</summary>
+function TNavBuilder.EnclosingRoutine(AStore: TSQLiteSymbolStore; const APath: string; ALine: Integer): TRoutineInfo;
+var
+  Q: TFDQuery;
+begin
+  Result:= Default(TRoutineInfo);
+  if (APath = '') or (ALine < 1) then Exit;
+  Q:= TFDQuery.Create(nil);
+  try
+    Q.Connection:= AStore.GetConnection;
+    Q.SQL.Text:=
+      'SELECT s.id AS id FROM symbols s JOIN files f ON f.id = s.file_id ' +
+      'WHERE f.path = :p AND s.impl_start_line > 0 AND s.impl_start_line <= :l AND s.impl_end_line >= :l ' +
+      'AND s.kind IN (''function'', ''procedure'', ''method'', ''constructor'', ''destructor'') ' +
+      'ORDER BY s.impl_end_line - s.impl_start_line LIMIT 1';
+    Q.ParamByName('p').AsString := APath;
+    Q.ParamByName('l').AsInteger:= ALine;
+    Q.Open;
+    if not Q.IsEmpty then Result:= Routine(AStore, Q.FieldByName('id').AsLargeInt);
+  finally
+    Q.Free;
+  end;
+end;
+
+/// <summary>R1: 'No' when the form's .dfm settles it (see DfmShownOnCreate),
+/// with ANote naming the file and property; '?' and ANote '' otherwise.</summary>
+function TNavBuilder.DfmModal(const AY: TFormNode; out ANote: string): string;
+var
+  Why: string;
+begin
+  ANote:= '';
+  Result:= '?';
+  Why:= DfmShownOnCreate(AY.DfmPath);
+  if Why = '' then Exit;
+  ANote := 'modal from ' + ExtractFileName(AY.DfmPath) + ': ' + Why;
+  Result:= 'No';
+end;
+
+/// <summary>R1: True when ALine calls a bare ShowModal (AModal) or a bare
+/// Show (not AModal). Inside "with F do" that is F's; Self.ShowModal there is
+/// the OUTER form's and is deliberately not matched.</summary>
+function BareShow(const ALine: string; AModal: Boolean): Boolean;
+begin
+  if AModal then Result:= TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])ShowModal\b', [roIgnoreCase])
+  else Result:= TRegEx.IsMatch(ALine, '(?<![A-Za-z0-9_.])Show\s*(;|$)', [roIgnoreCase]);
+end;
+
+/// <summary>R1: 'Yes' / 'No' / '?' for a line inside a form's OWN method,
+/// where a bare or Self. ShowModal / Show shows that form.</summary>
+function SelfModal(const ALine: string): string;
+begin
+  if BareShow(ALine, True) or TRegEx.IsMatch(ALine, '\bSelf\.ShowModal\b', [roIgnoreCase]) then Result:= 'Yes'
+  else if BareShow(ALine, False) or TRegEx.IsMatch(ALine, '\bSelf\.Show\b', [roIgnoreCase]) then Result:= 'No'
+  else Result:= '?';
+end;
+
+/// <summary>R1: the lines of a "with ... do" body. ARest is the text after
+/// "do" on line AIndex (0-based into ALines). A body that starts with begin or
+/// try runs to its matching end; otherwise it is the single statement after
+/// "do", or on the next non-blank line when "do" ends its line.</summary>
+function WithBody(const ALines: TArray<string>; AIndex: Integer; const ARest: string): TArray<string>;
+var
+  Depth: Integer;
+  I    : Integer;
+  L    : string ;
+begin
+  Result:= [];
+  I:= AIndex;
+  L:= ARest;
+  if Trim(L) = '' then
+  begin
+    repeat
+      Inc(I);
+    until (I > High(ALines)) or (Trim(ALines[I]) <> '');
+    if I > High(ALines) then Exit;
+    L:= ALines[I];
+  end;
+  if not TRegEx.IsMatch(L, '^\s*(begin|try)\b', [roIgnoreCase]) then
+  begin
+    Result:= [L]; // a single statement
+    Exit;
+  end;
+  Depth:= 0;
+  repeat
+    Result:= Result + [L];
+    Depth:= Depth + TRegEx.Matches(L, '\b(begin|try|case|asm)\b', [roIgnoreCase]).Count - TRegEx.Matches(L, '\bend\b', [roIgnoreCase]).Count;
+    Inc(I);
+    if I <= High(ALines) then L:= ALines[I];
+  until (Depth <= 0) or (I > High(ALines));
+end;
+
+/// <summary>R1: records a bare ShowModal / Show anywhere in the "with" body
+/// starting at ARest on line AIndex.</summary>
+procedure WithScan(const ALines: TArray<string>; AIndex: Integer; const ARest: string; var AYes, ANo: Boolean);
+var
+  L: string;
+begin
+  for L in WithBody(ALines, AIndex, ARest) do
+  begin
+    if BareShow(L, True) then AYes:= True;
+    if BareShow(L, False) then ANo:= True;
+  end;
+end;
+
+/// <summary>R1: records what ALine shows for form variable AVar: AVar.ShowModal
+/// (AYes), AVar.Show (ANo), or AVar.Method where Method is a method of AY whose
+/// own body shows it (F.Execute -> ShowModal).</summary>
+procedure TNavBuilder.VarModal(AStore: TSQLiteSymbolStore; const ALine, AVar: string; const AY: TFormNode; var AYes, ANo: Boolean);
+var
+  M   : TMatch;
+  Meth: TRoutineInfo;
+  ML  : string;
+  R   : string;
+begin
+  if TRegEx.IsMatch(ALine, '\b' + AVar + '\.ShowModal\b', [roIgnoreCase]) then AYes:= True;
+  if TRegEx.IsMatch(ALine, '\b' + AVar + '\.Show\b', [roIgnoreCase]) then ANo:= True;
+  for M in TRegEx.Matches(ALine, '\b' + AVar + '\.(' + IDENT_RX + ')', [roIgnoreCase]) do
+  begin
+    if SameText(M.Groups[1].Value, 'ShowModal') or SameText(M.Groups[1].Value, 'Show') then Continue;
+    Meth:= FindMethod(AStore, AY.FormClass, M.Groups[1].Value);
+    if Meth.ImplStart = 0 then Continue; // a field or property, not a method
+    R:= '?';
+    for ML in Body(Meth) do
+      if R = '?' then R:= SelfModal(ML);
+    if R = 'Yes' then AYes:= True
+    else if R = 'No' then ANo:= True;
+  end;
+end;
+
+/// <summary>R1: modality of form AY at its launch site in routine AL, read
+/// from the code from the launch line to the end of AL: a ShowModal / Show on
+/// the variable the form was created into (or its global instance), a bare one
+/// INSIDE "with F do" / "with TfrmX.Create(..) do", or a method of the form
+/// called on that variable whose own body shows it (F.Execute -> ShowModal).
+/// A variable assigned again stops counting. Shown both ways -> '?'. Nothing
+/// in the code -> the .dfm (MDI child or Visible). '?' always sets ANote.</summary>
+function TNavBuilder.LaunchModal(AStore: TSQLiteSymbolStore; const AL: TRoutineInfo; ALaunchLine: Integer; const AY: TFormNode; out ANote: string): string;
+var
+  Lines   : TArray<string>;
+  Last    : Integer;
+  I       : Integer;
+  J       : Integer;
+  L       : string ;
+  P       : Integer;
+  Vars    : TStringList;
+  M       : TMatch ;
+  Created : Boolean;
+  SawYes  : Boolean;
+  SawNo   : Boolean;
+begin
+  ANote:= '';
+  Result:= '?';
+  Lines:= LinesOf(AL.Path);
+  if (ALaunchLine < 1) or (ALaunchLine > Length(Lines)) then
+  begin
+    ANote:= Format('modal unknown: launch line %d is outside %s (%d lines) -- the source changed since indexing; reindex',
+      [ALaunchLine, ExtractFileName(AL.Path), Length(Lines)]);
+    Exit;
+  end;
+  Last:= AL.ImplEnd;
+  if (Last < ALaunchLine) or (Last > Length(Lines)) then Last:= ALaunchLine;
+  L:= Lines[ALaunchLine - 1];
+  Created:= IsLaunchLine(L, AY.FormClass);
+  SawYes := False;
+  SawNo  := False;
+  Vars:= TStringList.Create;
+  try
+    Vars.CaseSensitive:= False;
+    Vars.Add(AY.FormName);
+    // The launch line itself: TfrmX.Create(..).ShowModal, "X:= TfrmX.Create",
+    // "var X: TfrmX:= TfrmX.Create", CreateForm(TfrmX, X), with TfrmX.Create do.
+    P:= Pos(LowerCase(AY.FormClass) + '.create', LowerCase(L));
+    if P > 0 then
+    begin
+      SawYes:= LineModal(Copy(L, P, MaxInt)) = 'Yes';
+      SawNo := LineModal(Copy(L, P, MaxInt)) = 'No';
+    end;
+    M:= TRegEx.Match(L, '(' + IDENT_RX + ')\s*(?::\s*[A-Za-z_][A-Za-z0-9_.]*\s*)?:=\s*' + AY.FormClass + '\.Create', [roIgnoreCase]);
+    if M.Success then Vars.Add(M.Groups[1].Value);
+    M:= TRegEx.Match(L, 'CreateForm\s*\(\s*' + AY.FormClass + '\s*,\s*(' + IDENT_RX + ')', [roIgnoreCase]);
+    if M.Success then Vars.Add(M.Groups[1].Value);
+    M:= TRegEx.Match(L, '\bwith\s+' + AY.FormClass + '\.Create\b.*?\bdo\b(.*)$', [roIgnoreCase]);
+    if M.Success then WithScan(Lines, ALaunchLine - 1, M.Groups[1].Value, SawYes, SawNo);
+    for I:= ALaunchLine - 1 to Last - 1 do
+    begin
+      L:= Lines[I];
+      // A variable assigned again after the launch line no longer holds this form.
+      if I > ALaunchLine - 1 then
+        for J:= Vars.Count - 1 downto 0 do
+          if TRegEx.IsMatch(L, '\b' + Vars[J] + '\s*(?::\s*[A-Za-z_][A-Za-z0-9_.]*\s*)?:=', [roIgnoreCase]) then Vars.Delete(J);
+      for J:= 0 to Vars.Count - 1 do
+      begin
+        VarModal(AStore, L, Vars[J], AY, SawYes, SawNo);
+        M:= TRegEx.Match(L, '\bwith\s+' + Vars[J] + '\s+do\b(.*)$', [roIgnoreCase]);
+        if M.Success then WithScan(Lines, I, M.Groups[1].Value, SawYes, SawNo);
+      end;
+    end;
+  finally
+    Vars.Free;
+  end;
+  if SawYes and SawNo then ANote:= 'modal unknown: shown both modally and modelessly'
+  else if SawYes then Result:= 'Yes'
+  else if SawNo then Result:= 'No'
+  else
+  begin
+    Result:= DfmModal(AY, ANote);
+    if Result <> '?' then Exit;
+    if Created then ANote:= 'modal unknown: ' + RoutineDisplay(AL) + ' creates ' + AY.FormName + ' but does not show it there'
+    else ANote:= 'modal unknown: ' + RoutineDisplay(AL) + ' reaches ' + AY.FormName + ' but does not show it there';
+  end;
+end;
+
+/// <summary>R1: 1-based line of the first line of AInfo's body (after its
+/// header) that mentions AName as a word -- where a handler calls the next
+/// routine on the path. 0 when AName is '' or not found.</summary>
+function TNavBuilder.CallLine(const AInfo: TRoutineInfo; const AName: string): Integer;
+var
+  Lines: TArray<string>;
+  I    : Integer;
+  Last : Integer;
+begin
+  Result:= 0;
+  if (AName = '') or (AInfo.ImplStart < 1) then Exit;
+  Lines:= LinesOf(AInfo.Path);
+  Last:= AInfo.ImplEnd;
+  if Last > Length(Lines) then Last:= Length(Lines);
+  for I:= AInfo.ImplStart + 1 to Last do
+    if TRegEx.IsMatch(Lines[I - 1], '\b' + AName + '\b', [roIgnoreCase]) then Exit(I);
+end;
+
+/// <summary>R1: the messages a routine stops with before the launch -- a
+/// conditional "raise E.Create('...')", or a ShowMessage literal (or an
+/// mtError / mtWarning MessageDlg that is not compared with an mrXxx result)
+/// followed by Exit. Lines from the routine's start up to (not including)
+/// AUpToLine; 0 = the whole body.</summary>
+function TNavBuilder.GuardMessages(const AInfo: TRoutineInfo; AUpToLine: Integer): TArray<string>;
+const
+  LIT = '''((?:[^'']|'''')*)''';
+var
+  Lines : TArray<string>;
+  First : Integer;
+  Last  : Integer;
+  I     : Integer;
+  L     : string ;
+  Prev  : string ;
+  M     : TMatch ;
+  Cond  : Boolean;
+  Msg   : string ;
+begin
+  Result:= [];
+  if (AInfo.Path = '') or (AInfo.ImplStart < 1) then Exit;
+  Lines:= LinesOf(AInfo.Path);
+  First:= AInfo.ImplStart;
+  Last := AInfo.ImplEnd;
+  if (AUpToLine > 0) and (AUpToLine - 1 < Last) then Last:= AUpToLine - 1;
+  if Last > Length(Lines) then Last:= Length(Lines);
+  Prev:= '';
+  for I:= First to Last do
+  begin
+    L:= Lines[I - 1];
+    Cond:= TRegEx.IsMatch(L, '\bif\b', [roIgnoreCase]) or TRegEx.IsMatch(Prev, '\bthen\s*(begin\s*)?$', [roIgnoreCase]);
+    Msg:= '';
+    if Cond then
+    begin
+      M:= TRegEx.Match(L, '\braise\s+[A-Za-z_][A-Za-z0-9_.]*\.Create(?:Fmt|Res)?\s*\(\s*' + LIT, [roIgnoreCase]);
+      if M.Success then Msg:= M.Groups[1].Value
+      else
+      begin
+        // MessageDlg counts only as an mtError / mtWarning notice: a confirmation
+        // ('Delete this job?' ... <> mrYes) is a question, not a precondition.
+        M:= TRegEx.Match(L, '\b(?:ShowMessage|ShowMessageFmt)\s*\(\s*' + LIT, [roIgnoreCase]);
+        if not M.Success and TRegEx.IsMatch(L, '\bmt(Error|Warning)\b', [roIgnoreCase]) and not TRegEx.IsMatch(L, '\bmr[A-Za-z]+\b', [roIgnoreCase]) then
+          M:= TRegEx.Match(L, '\bMessageDlg\s*\(\s*' + LIT, [roIgnoreCase]);
+        if M.Success and (TRegEx.IsMatch(L, '\bExit\b', [roIgnoreCase]) or ((I < Length(Lines)) and TRegEx.IsMatch(Lines[I], '\bExit\b', [roIgnoreCase]))) then
+          Msg:= M.Groups[1].Value;
+      end;
+    end;
+    if Msg <> '' then Result:= Result + [StringReplace(Msg, '''''', '''', [rfReplaceAll])];
+    if Trim(L) <> '' then Prev:= Trim(L);
+  end;
+end;
+
+/// <summary>R1: the "Before you start" text for one hop: the selection the
+/// handler (and an opener on the same form) reads, then each message the
+/// handler or the opener stops with before the launch line. Prefixed with the
+/// handler's form, where the tester is standing. '' when nothing is derivable.</summary>
+function TNavBuilder.BeforeYouStart(AStore: TSQLiteSymbolStore; const AH, AL: TRoutineInfo; ALaunchLine: Integer; const ANextName: string): string;
+var
+  N    : TFormNode;
+  Parts: TStringList;
+  Msgs : TArray<string>;
+  Added: Integer;
+  CallAt: Integer;
+  Msg  : string;
+  Sel  : string;
+begin
+  Result:= '';
+  if not FClassToNode.TryGetValue(AH.Owner, N) then Exit;
+  Parts:= TStringList.Create;
+  try
+    if SameText(AL.Owner, AH.Owner) and (AL.Id <> AH.Id) then Sel:= SelectionHint(AStore, AH.Owner, [AH, AL])
+    else Sel:= SelectionHint(AStore, AH.Owner, [AH]);
+    if Sel <> '' then Parts.Add(Sel);
+    // The handler's own guards (when it is not also the opener), then the
+    // opener's guards above its launch line; at most FORMS_ALSO_MAX messages.
+    Msgs:= [];
+    Added:= 0;
+    // A handler that is not the opener counts only ABOVE its call to the next
+    // routine on the path (ANextName): a check after that call is not a
+    // precondition. When the call line cannot be found, the handler adds none.
+    if AL.Id <> AH.Id then
+    begin
+      CallAt:= CallLine(AH, ANextName);
+      if CallAt > 0 then Msgs:= GuardMessages(AH, CallAt);
+    end;
+    Msgs:= Msgs + GuardMessages(AL, ALaunchLine);
+    for Msg in Msgs do
+    begin
+      Sel:= N.FormName + ': it refuses with "' + Msg + '" until that is set up';
+      if (Parts.IndexOf(Sel) < 0) and (Added < FORMS_ALSO_MAX) then
+      begin
+        Parts.Add(Sel);
+        Inc(Added);
+      end;
+    end;
+    Result:= string.Join('; ', Parts.ToStringArray);
+  finally
+    Parts.Free;
+  end;
+end;
+
 procedure TNavBuilder.AddEdge(const AEdge: TNavEdge);
 var
   Key: string;
@@ -1703,12 +2161,12 @@ begin
   FEdges.Add(AEdge);
 end;
 
-procedure TNavBuilder.TraceLaunch(AStore: TSQLiteSymbolStore; const AY: TFormNode; const AL: TRoutineInfo; const AModal: string);
+procedure TNavBuilder.TraceLaunch(AStore: TSQLiteSymbolStore; const AY: TFormNode; const ASite: TLaunchSite);
 type
   TItem = record Id: Int64; Depth: Integer; end;
 var
   Queue    : TQueue<TItem>;
-  Visited  : TDictionary<Int64, Boolean>;
+  Visited  : TDictionary<Int64, string>; // routine id -> the name its body calls next on the path ('' for the opener)
   Cur      : TItem;
   Nxt      : TItem;
   S        : TRoutineInfo;
@@ -1727,26 +2185,26 @@ var
     Result.FromClass:= AH.Owner;
     Result.ToClass  := AY.FormClass;
     Result.Handler  := AH.Name;
-    Result.OpenedBy := RoutineDisplay(AL);
-    Result.Modal    := AModal;
+    Result.OpenedBy := RoutineDisplay(ASite.Info);
+    Result.Modal    := ASite.Modal;
+    Result.ModalNote:= ASite.ModalNote;
     Result.Method   := METHOD_INDEX;
     Result.Ways     := AWays;
-    if SameText(AL.Owner, AH.Owner) and (AL.Id <> AH.Id) then Result.Hint:= SelectionHint(AStore, AH.Owner, [AH, AL])
-    else Result.Hint:= SelectionHint(AStore, AH.Owner, [AH]);
+    Result.Hint     := BeforeYouStart(AStore, AH, ASite.Info, ASite.Line, Visited[AH.Id]);
   end;
 
 begin
   Queue  := TQueue<TItem>.Create;
-  Visited:= TDictionary<Int64, Boolean>.Create;
+  Visited:= TDictionary<Int64, string>.Create;
   try
     HaveCand:= False;
     Traced  := False;
     Cand    := Default(TRoutineInfo);
     CandWays:= [];
-    Cur.Id:= AL.Id;
+    Cur.Id:= ASite.Info.Id;
     Cur.Depth:= 0;
     Queue.Enqueue(Cur);
-    Visited.Add(AL.Id, True);
+    Visited.Add(ASite.Info.Id, '');
     while Queue.Count > 0 do
     begin
       Cur:= Queue.Dequeue;
@@ -1773,7 +2231,7 @@ begin
             for C in ActionInvokerIds(AStore, S.Owner, W.CompName) do
               if not Visited.ContainsKey(C) then
               begin
-                Visited.Add(C, True);
+                Visited.Add(C, W.CompName); // it calls actX.Execute
                 Nxt.Id   := C;
                 Nxt.Depth:= Cur.Depth + 1;
                 Queue.Enqueue(Nxt);
@@ -1783,7 +2241,7 @@ begin
       for C in CallerIds(AStore, Cur.Id) do
         if not Visited.ContainsKey(C) then
         begin
-          Visited.Add(C, True);
+          Visited.Add(C, S.Name);
           Nxt.Id   := C;
           Nxt.Depth:= Cur.Depth + 1;
           Queue.Enqueue(Nxt);
@@ -1813,14 +2271,13 @@ var
   Lines  : TArray<string>;
   Line   : string ;
   SL     : Integer;
-  Modal  : string ;
   Member : string ;
   Seen   : TDictionary<Int64, Boolean>;
-  Sites  : TList<TPair<TRoutineInfo, string>>;
-  Site   : TPair<TRoutineInfo, string>;
+  Sites  : TList<TLaunchSite>;
+  Site   : TLaunchSite;
 begin
   Seen := TDictionary<Int64, Boolean>.Create;
-  Sites:= TList<TPair<TRoutineInfo, string>>.Create;
+  Sites:= TList<TLaunchSite>.Create;
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= AStore.GetConnection;
@@ -1854,17 +2311,25 @@ begin
       Member:= MemberAfter(Line, AY.FormClass);
       CM:= Default(TRoutineInfo);
       if (Member <> '') and not StartsText('Create', Member) then CM:= FindMethod(AStore, AY.FormClass, Member);
-      if CM.Id <> 0 then Modal:= BodyModal(CM)
-      else if IsLaunchLine(Line, AY.FormClass) or IsShowLine(Line, AY.FormName) then Modal:= BodyModal(L)
+      Site:= Default(TLaunchSite);
+      Site.Info:= L;
+      Site.Line:= SL;
+      if CM.Id <> 0 then
+      begin
+        Site.Modal:= BodyModal(CM);
+        if Site.Modal = '?' then Site.Modal:= DfmModal(AY, Site.ModalNote);
+        if Site.Modal = '?' then Site.ModalNote:= 'modal unknown: ' + RoutineDisplay(CM) + ' does not show ' + AY.FormName + ' itself';
+      end
+      else if IsLaunchLine(Line, AY.FormClass) or IsShowLine(Line, AY.FormName) then Site.Modal:= LaunchModal(AStore, L, SL, AY, Site.ModalNote)
       else Continue;
       Seen.Add(L.Id, True);
-      Sites.Add(TPair<TRoutineInfo, string>.Create(L, Modal));
+      Sites.Add(Site);
     end;
   finally
     Q.Free;
   end;
   try
-    for Site in Sites do TraceLaunch(AStore, AY, Site.Key, Site.Value);
+    for Site in Sites do TraceLaunch(AStore, AY, Site);
   finally
     Sites.Free;
     Seen.Free;
@@ -1906,7 +2371,12 @@ end;
 /// control in the source form's .dfm by handler, then by the v5 caption.</summary>
 procedure TNavBuilder.AddTextEdge(const T: TFormEdge);
 var
-  E: TNavEdge;
+  E  : TNavEdge;
+  St : TSQLiteSymbolStore;
+  HSt: TSQLiteSymbolStore;
+  L  : TRoutineInfo;
+  H : TRoutineInfo;
+  Y : TFormNode;
 begin
   E:= Default(TNavEdge);
   E.FromClass:= T.FromClass;
@@ -1915,6 +2385,38 @@ begin
   E.OpenedBy := T.OpenedBy;
   E.Modal    := T.Modal;
   E.Method   := METHOD_TEXT;
+  // R1: the text scan read modality from the launch line alone; read it from
+  // the launching routine the way the index pass does, and give the edge the
+  // same Before-you-start content.
+  if FClassToNode.TryGetValue(T.ToClass, Y) then
+  begin
+    L:= Default(TRoutineInfo);
+    for St in FStores do
+      if (St <> nil) and (L.Id = 0) then
+      begin
+        L:= EnclosingRoutine(St, T.LaunchPath, T.LaunchLine);
+        if L.Id <> 0 then
+        begin
+          E.Modal:= LaunchModal(St, L, T.LaunchLine, Y, E.ModalNote);
+          // The handler may live in another store than the launch routine.
+          for HSt in FStores do
+            if HSt <> nil then
+            begin
+              H:= FindMethod(HSt, T.FromClass, T.Handler);
+              if H.Id <> 0 then
+              begin
+                E.Hint:= BeforeYouStart(HSt, H, L, T.LaunchLine, L.Name);
+                Break;
+              end;
+            end;
+        end;
+      end;
+    if (L.Id = 0) and (E.Modal = '?') then
+    begin
+      E.Modal:= DfmModal(Y, E.ModalNote);
+      if E.Modal = '?' then E.ModalNote:= 'modal unknown: the launch line is not inside an indexed routine';
+    end;
+  end;
   if FClassToNode.ContainsKey(T.FromClass) then
   begin
     E.Ways:= TreeFor(T.FromClass).WaysForHandler(T.Handler);
@@ -2049,6 +2551,9 @@ var
   OtherWays  : Integer                       ;
   Parts      : TArray<string>                ;
   AlsoShown  : TArray<string>                ;
+  Hint       : string                        ;
+  Hints      : TStringList                   ;
+  Popups     : TDictionary<string, string>   ;
 begin
   Sb:= TStringBuilder.Create;
   try
@@ -2065,7 +2570,11 @@ begin
       Builder:= TNavBuilder.Create(Stores, Nodes, ClassToNode);
       WayKeys:= TStringList.Create;
       Also   := TStringList.Create;
+      Hints  := nil;
+      Popups := nil;
       try
+        Hints := TStringList.Create;  // dl:ok create-inside-try@3da8 -- Hints and Popups are set to nil before the try, so a raising constructor leaves nil and the finally's Free is a no-op
+        Popups:= LoadPopupForms(AProjectFile);
         // v6: index-first edges, then the v5 text scan merged in as a fallback
         // (AddEdge keeps the first edge per From/To/Handler, so index wins).
         Builder.RunIndexPass;
@@ -2102,6 +2611,7 @@ begin
           HasEdge:= False;
           Notes:= '';
           OtherWays:= 0;
+          Hints.Clear;
           if SameText(N.FormClass, RootClass) then
           begin
             How := 'Main form (opens at startup)';
@@ -2120,6 +2630,9 @@ begin
             begin
               SetLength(Parts, Length(Path));
               for I:= 0 to High(Path) do Parts[I]:= HopText(Builder.Edges[Path[I]], ClassToNode, I = 0);
+              // R1: the tester walks every hop, so every hop's precondition counts.
+              for I:= 0 to High(Path) do
+                if (Builder.Edges[Path[I]].Hint <> '') and (Hints.IndexOf(Builder.Edges[Path[I]].Hint) < 0) then Hints.Add(Builder.Edges[Path[I]].Hint);
               How:= string.Join(' -> ', Parts);
               E:= Builder.Edges[Path[High(Path)]];
               HasEdge:= True;
@@ -2189,6 +2702,7 @@ begin
             OtherWays:= Also.Count;
             Parts:= ['found by: ' + E.Method];
             if E.Note <> '' then Parts:= Parts + [E.Note];
+            if E.ModalNote <> '' then Parts:= Parts + [E.ModalNote];
             if Also.Count > 0 then
             begin
               // Up to FORMS_ALSO_MAX listed; the rest only counted.
@@ -2200,15 +2714,12 @@ begin
           end
           else if Conf = CONF_UNRESOLVED then
           begin
-            for var KP in KnownPopupForms do
-              if KP.Name = LowerCase(N.FormName) then
-              begin
-                Notes:= KP.Note;
-                Break;
-              end;
-            if Notes = '' then Notes:= 'no caller found (index or text scan)';
+            // R1: a popup form the project declares in its drag-lint-project.json.
+            if not Popups.TryGetValue(LowerCase(N.FormName), Notes) then Notes:= 'no caller found (index or text scan)';
           end;
 
+          if Hints.Count > 0 then Hint:= string.Join('; ', Hints.ToStringArray)
+          else Hint:= E.Hint;
           if HasEdge and ClassToNode.ContainsKey(E.FromClass) then Handler:= E.FromClass + '.' + E.Handler
           else Handler:= E.Handler;
           Sb.Append(Idx).Append(',')
@@ -2222,7 +2733,7 @@ begin
           Sb.Append(CsvText(Handler)).Append(',')
             .Append(CsvText(E.OpenedBy)).Append(',')
             .Append(CsvText(E.Modal)).Append(',')
-            .Append(CsvText(E.Hint)).Append(',')
+            .Append(CsvText(Hint)).Append(',')
             .Append(OtherWays).Append(',')
             .Append(CsvText(Conf)).Append(',')
             .Append(',') // Tester result: left blank for the tester
@@ -2246,6 +2757,8 @@ begin
           .Append(#13#10);
         Result:= Sb.ToString;
       finally
+        Popups.Free;
+        Hints.Free;
         Also.Free;
         WayKeys.Free;
         Builder.Free;

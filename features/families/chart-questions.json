@@ -3,9 +3,9 @@
   "entry": "chart-questions",
   "source": "REPORT_QUESTIONS in src\\delphi-plugin\\DragLint.Plugin.ReportText.pas, compared with the -Question ValidateSet of charts\\src\\New-DiagramArtifact.ps1",
   "lastVerified": {
-    "date": "2026-10-05",
-    "by": "session 23c4e8d0-e85c-4426-bcba-54e375729b0b",
-    "build": "1.21.1-alpha"
+    "date": "2026-10-06",
+    "by": "agent-p8 (job P8, feat/p8-plain)",
+    "build": "1.26.4-alpha"
   },
   "defaults": {
     "menuPrefix": "drag-lint > Reports",
@@ -16,6 +16,7 @@
     "butterfly":        { "emitter": "charts\\src\\Emit-Butterfly.ps1" },
     "who-calls":        { "emitter": "charts\\src\\Emit-WhoCalls.ps1", "aliases": ["callers", "who uses"] },
     "what-it-calls":    { "emitter": "charts\\src\\Emit-WhoCalls.ps1", "aliases": ["callees"] },
+    "path":             { "emitter": "charts\\src\\Emit-Path.ps1", "aliases": ["call path", "route"] },
     "effects":          { "emitter": "charts\\src\\Emit-Effects.ps1", "aliases": ["side effects", "purity"] },
     "touches-tables":   { "emitter": "charts\\src\\Emit-TouchesTables.ps1" },
     "exception-paths":  { "emitter": "charts\\src\\Emit-ExceptionPaths.ps1" },

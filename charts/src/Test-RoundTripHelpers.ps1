@@ -191,8 +191,24 @@ $stn = New-TraceStep 'step' 'CALLS X' 'X.pas:1'
 $res.FormANonAscii = $(try { Write-FormA $Tn | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*not 7-bit ASCII*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
 # a note with '; ' would break the parser's split -- refused up front
 $res.FormABadNote = $(try { $Tb = New-Trace 'X' 'x' 'x' 'A' '2026-09-27' 'x' 'client'; $sb2 = Add-TraceSection $Tb 'WRITE'; [void]$sb2.Items.Add((New-TraceStep 'step' 'CALLS X' 'X.pas:1' '' '' 'a; b')); Write-FormA $Tb | Out-Null; 'accepted' } catch { 'refused' })
-# P16: a condition is quoted VERBATIM, so one carrying a double-quote cannot be quoted -- the model refuses it
-$res.FormAQuote = $(try { New-TraceCond 'WHEN' 'S = "x"' 'X.pas:1' | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*double-quote*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+# R5 Part 0 (was P16's 'refused'): conditions are written VERBATIM and UNQUOTED, so a double-quote is ordinary text --
+# accepted, written as is, read back the same, and the checker counts it (a `--` inside a word too); what would make
+# the line ambiguous -- ` @<file>:<line>` or ` -- ` inside it, or a trailing ` --` -- is refused by the model
+$qT = New-Trace 'X' 'x' 'x' 'A' '2026-10-06' 'x' 'client'
+$qS = New-TraceStep 'step' 'CALLS X' 'X.pas:1'
+[void]$qS.Children.Add((New-TraceCond 'WHEN' 'S = "x"' 'X.pas:2'))
+[void]$qS.Children.Add((New-TraceCond 'UNLESS' 'I--1 > 0' 'X.pas:3' 'else Exit'))
+[void](Add-TraceSection $qT 'WRITE').Items.Add($qS)
+$qTxt = Write-FormA $qT
+[IO.File]::WriteAllText((Join-Path $work 'model-unquoted.dlgraph'), $qTxt, (New-Object Text.ASCIIEncoding))
+& (Join-Path $PSScriptRoot 'Test-FormA.ps1') -Fixture (Join-Path $work 'model-unquoted.dlgraph') -Quiet 6>$null | Out-Null
+$qBack = Read-FormA $qTxt
+$q1 = $(if ($qTxt.Contains("       WHEN S = `"x`" @X.pas:2`r`n       UNLESS I--1 > 0 @X.pas:3 -- else Exit`r`n") -and (Write-FormA $qBack) -ceq $qTxt -and
+           $qBack.Sections[0].Items[0].Children[0].Condition -ceq 'S = "x"' -and $LASTEXITCODE -eq 0) { 'verbatim' } else { "rewritten (checker $LASTEXITCODE)" })
+$qR = foreach ($qc in @(@('A @X.pas:3', '*reads as its anchor*'), @('A -- B', '*reads as its note*'), @('A --', '*reads as its note*'))) {
+  $(try { New-TraceCond 'WHEN' $qc[0] 'X.pas:1' | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like $qc[1]) { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+}
+$res.FormAQuote = "$q1/$($qR -join '/')"
 # Fix round 1 / P16: a TITLE is quoted too, so a double-quote in it is refused (it was written raw and
 # read back un-doubled -- bytes differed); both at New-Trace and at Write-FormA (the property is mutable)
 $ttl1 = $(try { New-Trace 'X' 'a"b' 'x' 'A' '2026-09-28' 'x' 'client' | Out-Null; 'accepted' } catch { $(if ($_.Exception.Message -like '*double-quote*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
@@ -239,7 +255,7 @@ $exS = $LASTEXITCODE
 $cS = Get-TraceCounts $Ts
 $rtS = $(if ((Write-FormA (Read-FormA $textS)) -ceq $textS) { 'identical' } else { 'differs' })
 $srvS = @($textS -split "\r\n" | Where-Object { $_ -cmatch '^\[\d+\] SERVER STOPS ' }).Count
-$vbS = $(if ($textS.Contains('UNLESS "SQL = ''''" @uGenericTableRoute.pas:196')) { 'verbatim' } else { 'rewritten' })
+$vbS = $(if ($textS.Contains('UNLESS SQL = '''' @uGenericTableRoute.pas:196')) { 'verbatim' } else { 'rewritten' })
 $res.FormAStopsAll = "$exS/$($cS.Steps)/$($cS.Conditions)/$($cS.Crossings)/$($cS.Unresolved)/$rtS/$srvS/$vbS"
 
 # ---- 3. the anchor: the hop feeds-from misses (AC-15), and the non-data-bound / TABLE.COLUMN forms (AC-13) ----
@@ -342,7 +358,8 @@ $res.ShimSynthetic = "$($g1.Form):$($g1.Keyword):$($g1.Condition):$($g1.IfLine)|
 # The shapes the line-count walk of the plan's draft misread, on a real file so comments and strings are
 # stripped as in the corpus: a wrapped `if` whose first line ends in a comment and whose condition holds a
 # string with two spaces (joined, never collapsed); an Exit in an `end else begin` block (WHEN); an `if`
-# whose Exit is on the NEXT line (no begin); a `"` in the condition (named, not thrown, not rewritten);
+# whose Exit is on the NEXT line (no begin); a `"` in the condition (R5 Part 0: quoted as written -- it was a named
+# unknown while conditions were double-quoted); a ` -- ` in it (named, not thrown, not rewritten);
 # and the shapes the shim does not read -- a loop, a case arm, an Exit in no branch -- as named results
 $shp = @(
   'procedure P1;', 'begin', "  if (S = 'a  b') or  // why", "     (T = 1) then", '  begin', '    Exit;', '  end;', 'end;',                   # 1-8
@@ -351,11 +368,12 @@ $shp = @(
   'procedure P4;', 'begin', "  if S = '""' then Exit;", 'end;',                                                                       # 23-26
   'procedure P5;', 'begin', '  while X do begin', '    Exit;', '  end;', 'end;',                                                      # 27-32
   'procedure P6;', 'begin', '  case K of', '    1: Exit;', '  end;', 'end;',                                                          # 33-38
-  'procedure P7;', 'begin', '  if A then Y;', '  Exit;', 'end;')                                                                      # 39-43
+  'procedure P7;', 'begin', '  if A then Y;', '  Exit;', 'end;',                                                                      # 39-43
+  'procedure P8;', 'begin', "  if S = 'a -- b' then Exit;", 'end;')                                                         # 44-47
 $shpPas = Join-Path $work 'shim-shapes.pas'
 [IO.File]::WriteAllText($shpPas, (($shp -join "`r`n") + "`r`n"), (New-Object Text.ASCIIEncoding))
 $shR = [IO.File]::ReadAllLines($shpPas); $shS = Get-StrippedSourceLines $shpPas
-$sh = foreach ($q in @(@(6, 1), @(15, 9), @(21, 18), @(25, 23), @(30, 27), @(36, 33), @(42, 39))) {
+$sh = foreach ($q in @(@(6, 1), @(15, 9), @(21, 18), @(25, 23), @(30, 27), @(36, 33), @(42, 39), @(46, 44))) {
   $o = Get-GuardConditionFromLines $shR $shS $q[0] $q[1]
   "$($o.Form):$($o.Keyword):$($o.Condition):$($o.IfLine):$($o.BlockStart)-$($o.BlockEnd):$($o.Reason)"
 }
@@ -398,7 +416,7 @@ $res.RtCounts = "$($rt.Steps)/$($rt.Conditions)/$($rt.Crossings)/$($rt.Unresolve
 $lines = $txt -split "\r\n"
 function LinesLike([string] $rx) { , @($lines | Where-Object { $_ -match $rx }) }
 # AC-8: the response guard carries the failure branch naming CancelUpdates
-$res.RtCancel = (LinesLike 'UNLESS ".*<> rspOK\)" @Blueprint4\.ViewModel\.pas:3990 -- else .*FMTOperation\.CancelUpdates @Blueprint4\.ViewModel\.pas:3999').Count
+$res.RtCancel = (LinesLike 'UNLESS .*<> rspOK\) @Blueprint4\.ViewModel\.pas:3990 -- else .*FMTOperation\.CancelUpdates @Blueprint4\.ViewModel\.pas:3999').Count
 # AC-9: client -> server -> database, on separately queried indexes. CROSSES STEP lines only (ruling P4):
 # the request and the response are both anchored at the one ExecuteCommand call that carries both
 $res.RtCrossOut = (LinesLike '^\[\d+\] CROSSES process boundary @Blueprint4\.ViewModel\.pas:3985').Count
@@ -445,10 +463,10 @@ $res.RtOtherTableRule = $(try {
     ForEach-Object { Test-OtherTableBranch $_[0] $_[1] 'OPERAT' $tabs }) -join ','
 } catch { "threw: $($_.Exception.Message)" })
 # T5-R2: a condition hung on a CALLS step of ANOTHER routine names its own routine (411 / 421 hang on CALLS SplitPayload)
-$res.RtCondRoutine = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @uGenericTableRoute\.pas:(411|421) ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
+$res.RtCondRoutine = (@($lines | Where-Object { $_ -match '^       UNLESS .* @uGenericTableRoute\.pas:(411|421) ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
 # T5-R3: an else note quotes a literal VERBATIM with Pascal's doubled '' (the index stores it unescaped); one the
 # writer cannot carry (a double quote, the note separator) is named by its line, never rewritten
-$res.RtElse431 = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @uGenericTableRoute\.pas:431 ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
+$res.RtElse431 = (@($lines | Where-Object { $_ -match '^       UNLESS .* @uGenericTableRoute\.pas:431 ' } | ForEach-Object { ($_ -replace '^.* -- ', '') }) -join ' | ')
 $res.RtElseLits = $(try {
   $eF = [pscustomobject]@{ Path = 'X.pas'; Refs = @([pscustomobject]@{ kind = 'write'; tkind = 'param'; line = 5; nm = 'AOut' }); Lits = @() }   # line 5 writes a parameter: the payload line (T5-R11)
   $eG = [pscustomobject]@{ BlockStart = 4; BlockEnd = 6; ExitArg = '' }
@@ -469,8 +487,8 @@ function NoteOf([string] $l) { $(if ($l -match ' -- (.*)$') { $Matches[1] } else
 # Important 1: the else of `if ApplyResult = 0` (:557-569) and the except handler (:570-579) are not steps
 # of the path, and the :405 `ARspCmd:= rspError` is a default the :553 rspOK overwrites, not a SENDS
 $res.RtBranchSteps = @($secLines['SERVER'] | Where-Object { $_ -match '^\[\d+\] .*@uGenericTableRoute\.pas:(405|562|566|573|576)( |$)' }).Count
-$res.RtApplyWhen = (@($lines | Where-Object { $_ -match '^       WHEN "ApplyResult = 0" @uGenericTableRoute\.pas:495' } | ForEach-Object { NoteOf $_ }) -join ' | ')
-$res.RtExceptCond = (@($lines | Where-Object { $_ -match '^       UNLESS ".*" @uGenericTableRoute\.pas:570' } | ForEach-Object { $_.Trim() }) -join ' | ')
+$res.RtApplyWhen = (@($lines | Where-Object { $_ -match '^       WHEN ApplyResult = 0 @uGenericTableRoute\.pas:495' } | ForEach-Object { NoteOf $_ }) -join ' | ')
+$res.RtExceptCond = (@($lines | Where-Object { $_ -match '^       UNLESS .* @uGenericTableRoute\.pas:570' } | ForEach-Object { $_.Trim() }) -join ' | ')
 $res.RtRspOkNote = (@($secLines['SERVER'] | Where-Object { $_ -match '^\[\d+\] SENDS rspOK ' } | ForEach-Object { NoteOf $_ }) -join ' | ')
 # the chain of enclosing conditions of a line, innermost first (synthetic): else of an if, an except handler
 $chSrc = @('procedure P;', 'begin', '  try', '    R:= Apply;', '    if R = 0 then', '    begin', '      Send(1);', '    end', '    else', '    begin',
@@ -525,13 +543,13 @@ $res.RtElsePick = $(try {
   "[$a1] [$a2]"
 } catch { "threw: $($_.Exception.Message)" })
 # T5-R12: every path step inside a readable if carries it -- the transaction's OPENS and its Commit both say
-# WHEN "not WasTxn"; and what EnsureLoaded / PushTableChanged now carry
+# WHEN not WasTxn; and what EnsureLoaded / PushTableChanged now carry
 $condsOf = @(); $lastHead = ''
 foreach ($ln in $secLines['SERVER']) {
   if ($ln -match '^\[\d+\] ') { $lastHead = ($ln -replace '^\[\d+\] ', '') -replace ' @(\S+).*$', '@$1'; continue }
   if ($ln -match '^       (WHEN|UNLESS) ') { $condsOf += [pscustomobject]@{ Head = $lastHead; Cond = (($ln.Trim()) -replace ' -- .*$', '') } }
 }
-$res.RtWasTxn = (@($condsOf | Where-Object { $_.Cond -like 'WHEN "not WasTxn"*' } | ForEach-Object { $_.Head }) -join ' | ')
+$res.RtWasTxn = (@($condsOf | Where-Object { $_.Cond -like 'WHEN not WasTxn @*' } | ForEach-Object { $_.Head }) -join ' | ')
 $res.RtCondEnsure = (@($condsOf | Where-Object { $_.Head -like 'CALLS TDatasetsDef.EnsureLoaded*' -or $_.Head -like 'CALLS TBroadcastServer.PushTableChanged*' } | ForEach-Object { "$($_.Head -replace ' \[by name\]', '') :: $($_.Cond)" }) -join ' | ')
 
 # ---- 6. READ and ALSO (AC-6, AC-9, AC-10; Review Focus 1) ----------------------------------
@@ -544,7 +562,7 @@ $res.RtRead = (@($secLines['READ'] | Where-Object { $_ -match '^\[\d+\] ' } | Fo
 # AC-7 on the READ path, in walk order (ruling P9 + T1-C1): the client connection guard (:1133), the server's
 # missing-definition (:525) and unsafe-WHERE (:549) guards, the except handler whose Exit is :612 (its condition
 # anchors at the `except` line, :605), the response guard (:1137)
-$res.RtReadGuards = (@($secLines['READ'] | Where-Object { $_ -match '^       UNLESS ".*" @(Blueprint4\.ViewModel\.pas:(1133|1137)|uPipeSessionBuilder\.pas:(525|549|605))( |$)' } | ForEach-Object { $(if ($_ -match '" @(\S+)') { $Matches[1] }) }) -join ',')
+$res.RtReadGuards = (@($secLines['READ'] | Where-Object { $_ -match '^       UNLESS .* @(Blueprint4\.ViewModel\.pas:(1133|1137)|uPipeSessionBuilder\.pas:(525|549|605))( |$)' } | ForEach-Object { $(if ($_ -match ' @([A-Za-z0-9_$.\-]+:\d+)(?: -- |$)') { $Matches[1] }) }) -join ',')
 # every condition of the READ section, verbatim, with its anchor
 $res.RtReadConds = (@($secLines['READ'] | Where-Object { $_ -match '^       (WHEN|UNLESS) ' } | ForEach-Object { ($_.Trim()) -replace ' -- .*$', '' }) -join ' | ')
 # AC-12: the SELECT statement text is a numbered STOPS naming the empty fb_field_info
@@ -892,7 +910,7 @@ $res.TraceAnchors = "$(@(Get-TraceUnclickable $txt).Count)/$($rt.ClickTargets)/$
 $cut = $txt -replace ' @Blueprint4\.ViewModel\.pas:78 -- the anchor dataset', ' -- the anchor dataset'
 $res.TraceAnchorsCut = "$(@(Get-TraceUnclickable $cut).Count)/$($cut -ne $txt)"
 # T4-C3: a case guard quotes its source line verbatim through `of`; the else arm is the generated note
-$res.TraceCaseCond = (@($txt -split "\r\n" | Where-Object { $_ -match '^       (WHEN|UNLESS) "case ' } | ForEach-Object { $_.Trim() }) -join ' | ')
+$res.TraceCaseCond = (@($txt -split "\r\n" | Where-Object { $_ -match '^       (WHEN|UNLESS) case ' } | ForEach-Object { $_.Trim() }) -join ' | ')
 # I4 (replaces the `not (` heuristic): every condition quoted verbatim from the fresh source at its anchor line
 $cv = Measure-CondVerbatim (Get-GoldenRows $T7) @($DbCli, $DbSrv)
 $res.TraceNegated = "$($cv.Bad)/$($cv.Checked)/$($cv.Skipped)$(if ($cv.Which) { " $($cv.Which)" })"
@@ -917,7 +935,7 @@ $res.HoldCounts = "$($rh.Steps)/$($rh.Conditions)/$($rh.Crossings)/$($rh.Unresol
 $res.HoldAnchor = "$($rh.TableColumn):$($rh.DataSet)"
 $hl = $rh.Text -split "\r\n"
 $res.HoldSender = (@($hl | Where-Object { $_ -match "^\[\d+\] CALLS TBlueprint_ViewModel\.SendDeltaFtrs 'AfterPost' @Blueprint4\.ViewModel\.pas:3565 -- " })).Count
-$res.HoldCancel = (@($hl | Where-Object { $_ -match '^       UNLESS ".*<> rspOK\)" @Blueprint4\.ViewModel\.pas:3599 -- else .*FMTFtrs\.CancelUpdates @Blueprint4\.ViewModel\.pas:3611' })).Count
+$res.HoldCancel = (@($hl | Where-Object { $_ -match '^       UNLESS .*<> rspOK\) @Blueprint4\.ViewModel\.pas:3599 -- else .*FMTFtrs\.CancelUpdates @Blueprint4\.ViewModel\.pas:3611' })).Count
 $res.HoldRePoint = (@($hl | Where-Object { $_ -match '^\[\d+\] SETS dxDBGrid1FtrsV\.DataSource := FBlueprint_ViewModel\.pdsrFtrs @Blueprint4\.pas:2283 -- in FormShow$' })).Count
 # fix wave (FW-R1): the same per-statement load lines as OPERAT.NAME's A-RT5-STOPS, on a DIFFERENT anchor table
 # (MSCLIST) -- proves the derivation is generic, not hard-coded to OPERAT's :148/:149/:150
@@ -965,7 +983,7 @@ function Format-SynthWalk($W) {
   "$($it -join ' > ') || pending: $((@($W.Conds | ForEach-Object { & $fc $_ })) -join ', ')"
 }
 # I1: an Exit guard's IfLine is walked for its CONDITION only. `if X then begin FMT.CancelUpdates; Exit; end;`
-# wrote APPLIES FMT.CancelUpdates as a path step with UNLESS "X" hung on it (inverted) AND named it in the else
+# wrote APPLIES FMT.CancelUpdates as a path step with UNLESS X hung on it (inverted) AND named it in the else
 # note; an `ARspCmd:= rspError` after the `then` was a SENDS. P2: a WHEN guard (Exit in the else) keeps its then
 # branch as the path, and its else note names only the else branch.
 $res.FinI1Walk = $(try {
@@ -1198,5 +1216,314 @@ $res.CalcSynInherited = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCa
 $ifSrc = @('procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', "  if FfB.AsInteger > 0 then FfA.AsString:= 'Yes'", "  else FfA.AsString:= 'No';", 'end;')
 $ifSpec = @{ 3 = @('read:FfB', 'member-access:AsInteger:FfB', 'read:FfA', 'member-access:AsString:FfA'); 4 = @('read:FfA', 'member-access:AsString:FfA') }
 $res.CalcSynIfChooser = $(try { Format-SynthCalc (Resolve-CalcField (New-SynthCalcFacts 'calc-if' $ifSrc $ifSpec)) } catch { "threw: $($_.Exception.Message)" })
+
+
+# ---- 12. R5: the round-trip CHART (spec 2026-10-05-R5-round-trip-chart-design.md, owner answers section 10) ----
+# Every value below is read from the files the runs above WROTE -- the .dot, the .svg, the trace -- never from the
+# renderer's Manifest, except where a pin checks the Manifest against the file (A-R5-COVER's disclosed numbers).
+. (Join-Path $PSScriptRoot 'Trace.Chart.ps1')
+# R5 (A-R5-*): what the CHART FILE holds -- read from the .dot the run wrote, never from the renderer's Manifest
+# (the renderer does not mark its own homework). One cell = one <TD>; its text is the label with each
+# <BR ALIGN="LEFT"/> read back as the ONE space it replaced, tags dropped, entities decoded. A cell is a STEP row
+# (`[NN]` or `[NN]/[MM]` first), a GUARD row (`WHEN` / `UNLESS` first), a FACET row (a facet head first), a
+# DISCLOSURE row (`+N more ...`, every `[NN]` / `[aa]-[bb]` in it disclosed), or other text (titles, notes, the
+# Legend's END TRACE line). Nodes are read per lane cluster. Fix round 1 (I2): each guard / facet cell is attached
+# to the STEP cell above it in its node (Step: that cell's numbers), so a check can ask "is THIS step's guard drawn
+# under THIS step" -- a set test over every guard cell could not see a guard drawn on the wrong step.
+function Measure-TraceChart([string] $DotPath) {
+  $dot = [IO.File]::ReadAllText($DotPath)
+  $cells = New-Object System.Collections.ArrayList
+  $nodes = New-Object System.Collections.ArrayList
+  $edges = New-Object System.Collections.ArrayList
+  $lane = ''
+  foreach ($ln in ($dot -split "`r`n")) {
+    if ($ln -match '^\s*subgraph cluster_lane_(\w+) \{') { $lane = $Matches[1].ToUpperInvariant(); continue }
+    if ($ln -match '^  \}$') { $lane = ''; continue }
+    if ($ln -match '^\s*(n\d+|f\d+|hdr|legend) \[(.*?)label=<(.*)>(?:, tooltip="[^"]*")?\];$') {
+      $id = $Matches[1]; $attr = $Matches[2]; $html = $Matches[3]
+      $nc = @(); $cur = @()
+      foreach ($m in [regex]::Matches($html, '<TD([^>]*)>(.*?)</TD>')) {
+        $txt = [Net.WebUtility]::HtmlDecode((($m.Groups[2].Value -replace '<BR[^>]*/>', ' ') -replace '<[^>]+>', ''))
+        $tt = $(if ($m.Groups[1].Value -match ' TITLE="([^"]*)"') { [Net.WebUtility]::HtmlDecode($Matches[1]) } else { '' })
+        $c = [pscustomobject]@{ Node = $id; Lane = $lane; Text = $txt; Href = ($m.Groups[1].Value -match ' HREF="'); Title = ($m.Groups[1].Value -match ' TITLE="'); TitleText = $tt; Kind = 'other'; Nums = @(); Step = @(); Counted = -1 }
+        if ($txt -match '^((?:\[\d{2,3}\])(?:/\[\d{2,3}\])*) ') { $c.Kind = 'step'; $c.Nums = @([regex]::Matches($Matches[1], '\d+') | ForEach-Object { [int]$_.Value }); $cur = $c.Nums }
+        elseif ($txt -cmatch '^(WHEN|UNLESS) ') { $c.Kind = 'cond'; $c.Step = $cur }
+        elseif ($txt -cmatch '^(VIA|ONTO|AT|CONTRACT|FROM|TO|OVER|WITH|REGENERATE) ') { $c.Kind = 'facet'; $c.Step = $cur }
+        elseif ($txt -cmatch '^\d+ cards folded \(\d+ rows not shown\) -- (.+) -- the full trace is in the text answer$') {
+          # Task 5b (owner 2026-10-06): the ONE Legend summary row -- it names the folded steps' ranges, or only their count
+          $c.Kind = 'summary'; $mid = $Matches[1]
+          if ($mid -cmatch '^(\d+) steps$') { $c.Counted = [int]$Matches[1] }
+          else { $c.Nums = @(foreach ($r in [regex]::Matches($mid, '\[(\d{2,3})\](?:-\[(\d{2,3})\])?')) { $a = [int]$r.Groups[1].Value; $b = $(if ($r.Groups[2].Success) { [int]$r.Groups[2].Value } else { $a }); $a..$b }) }
+        }
+        elseif ($txt -match '^\+\d+ more ') {
+          $c.Kind = 'disclosure'
+          $c.Nums = @(foreach ($r in [regex]::Matches($txt, '\[(\d{2,3})\](?:-\[(\d{2,3})\])?')) { $a = [int]$r.Groups[1].Value; $b = $(if ($r.Groups[2].Success) { [int]$r.Groups[2].Value } else { $a }); $a..$b })
+        }
+        [void]$cells.Add($c); $nc += $c
+      }
+      $title = @($nc | Select-Object -First 1 | ForEach-Object { $_.Text })
+      [void]$nodes.Add([pscustomobject]@{ Id = $id; Lane = $lane; Attr = $attr; Title = [string]$title[0]; Cells = $nc
+                                          Shape = $(if ($attr -match 'shape=(\w+)') { $Matches[1] } else { '' }) })
+      continue
+    }
+    if ($ln -match '^\s*(\w+)(?::(\w+))? -> (\w+) \[(.*)\];$') { [void]$edges.Add([pscustomobject]@{ From = $Matches[1]; Port = $Matches[2]; To = $Matches[3]; Attr = $Matches[4] }) }
+  }
+  [pscustomobject]@{ Cells = $cells; Nodes = $nodes; Edges = $edges; Dot = $dot }
+}
+
+# A-R5-COVER: every step number either on a drawn row or in a disclosure row -- disjoint, and together exactly 1..N
+# Task 5b: a Legend SUMMARY row is measured, never assumed -- one naming ranges must name exactly the steps not drawn
+# ('ranges exact'), one carrying only a count must count exactly them ('counts exact', and then it accounts for them);
+# Summary is '' when the chart has no summary row
+function Get-TraceChartCover($Chart, [int] $Steps) {
+  $drawn = @($Chart.Cells | Where-Object { $_.Kind -eq 'step' } | ForEach-Object { $_.Nums } | Sort-Object -Unique)
+  $undrawn = @(1..$Steps | Where-Object { $drawn -notcontains $_ })
+  $sumv = @(foreach ($s in @($Chart.Cells | Where-Object { $_.Kind -eq 'summary' })) {
+    if ($s.Counted -ge 0) { $(if ($s.Counted -eq $undrawn.Count) { 'counts exact' } else { 'counts mismatch' }) }
+    else { $(if (((@($s.Nums | Sort-Object -Unique)) -join ',') -ceq ($undrawn -join ',')) { 'ranges exact' } else { 'ranges mismatch' }) }
+  })
+  $byCount = @(if ($sumv -contains 'counts exact') { $undrawn })
+  $disc = @(@($Chart.Cells | Where-Object { $_.Kind -in 'disclosure', 'summary' } | ForEach-Object { $_.Nums }) + $byCount | Sort-Object -Unique)
+  $both = @($drawn | Where-Object { $disc -contains $_ })
+  $all = @(@($drawn) + @($disc) | Sort-Object -Unique)
+  $missing = @(1..$Steps | Where-Object { $all -notcontains $_ })
+  $extra = @($all | Where-Object { $_ -lt 1 -or $_ -gt $Steps })
+  [pscustomobject]@{ Drawn = $drawn.Count; Disclosed = $disc.Count; Missing = $missing.Count; Both = $both.Count; Extra = $extra.Count; DisclosedNums = $disc; MissingNums = $missing; Summary = ($sumv -join ',') }
+}
+
+# a drawn guard row read back as Form A: keyword, condition (rejoined), anchor, and the step numbers it hangs under
+function Get-TraceChartConds($Chart) {
+  @($Chart.Cells | Where-Object { $_.Kind -eq 'cond' } | ForEach-Object {
+    $s = $_.Step
+    if ($_.Text -cmatch '^(WHEN|UNLESS) (.+?) @([A-Za-z0-9_$.\-]+:\d+)(?: -- (.*))?$') { [pscustomobject]@{ Keyword = $Matches[1]; Condition = $Matches[2]; Anchor = $Matches[3]; Node = $_.Node; Step = $s } }
+  })
+}
+# Fix round 1 (I2, spec 6): every condition and facet of the MODEL, step by step, against the cells drawn under THAT
+# step -- conditions by (step, keyword, anchor), facets by (step, head, anchor -- or text when it has none); a cell
+# serves one child per step (a merged row serves each of its steps). A REGENERATE facet is carried by its step
+# row's tooltip. Not drawn: DISCLOSED when the step's number is in a disclosure row, else MISSING. All MEASURED.
+function Get-TraceChartChildCheck($Chart, $Model) {
+  $disc = @($Chart.Cells | Where-Object { $_.Kind -in 'disclosure', 'summary' } | ForEach-Object { $_.Nums })
+  $conds = @(Get-TraceChartConds $Chart)
+  $facets = @($Chart.Cells | Where-Object { $_.Kind -eq 'facet' } | ForEach-Object {
+    $s = $_.Step
+    if ($_.Text -cmatch '^(\S+) (.*?)(?: @([A-Za-z0-9_$.\-]+:\d+))?$') { [pscustomobject]@{ Head = $Matches[1]; Text = $Matches[2]; Anchor = [string]$Matches[3]; Step = $s } }
+  })
+  $o = [ordered]@{ CDrawn = 0; CVerbatim = 0; CDisc = 0; CMiss = 0; CTotal = 0; FDrawn = 0; FTip = 0; FDisc = 0; FMiss = 0; FTotal = 0; Missing = @() }
+  foreach ($s in $Model.Sections) {
+    foreach ($i in $s.Items) {
+      $n = [int]$i.Number; $used = @{}
+      foreach ($ch in $i.Children) {
+        if ($ch.Kind -eq 'cond') {
+          $o.CTotal++
+          $hit = $null
+          for ($q = 0; $q -lt $conds.Count; $q++) { $x = $conds[$q]; if (-not $used.ContainsKey("c$q") -and $x.Step -contains $n -and $x.Keyword -ceq $ch.Keyword -and $x.Anchor -ceq $ch.Anchor) { $hit = $q; break } }
+          if ($null -ne $hit) { $used["c$hit"] = 1; $o.CDrawn++; if ($conds[$hit].Condition -ceq $ch.Condition) { $o.CVerbatim++ } }
+          elseif ($disc -contains $n) { $o.CDisc++ } else { $o.CMiss++; $o.Missing += "[{0:00}] $($ch.Keyword) @$($ch.Anchor)" -f $n }
+        } elseif ($ch.Head -ceq 'REGENERATE') {
+          $o.FTotal++
+          if (@($Chart.Cells | Where-Object { $_.Kind -eq 'step' -and $_.Nums -contains $n -and $_.TitleText.Contains("REGENERATE $($ch.Text)") }).Count) { $o.FTip++ }
+          elseif ($disc -contains $n) { $o.FDisc++ } else { $o.FMiss++; $o.Missing += "[{0:00}] REGENERATE" -f $n }
+        } else {
+          $o.FTotal++
+          $hit = $null
+          for ($q = 0; $q -lt $facets.Count; $q++) { $x = $facets[$q]; if (-not $used.ContainsKey("f$q") -and $x.Step -contains $n -and $x.Head -ceq $ch.Head -and $(if ($ch.Anchor) { $x.Anchor -ceq $ch.Anchor } else { $x.Text -ceq $ch.Text })) { $hit = $q; break } }
+          if ($null -ne $hit) { $used["f$hit"] = 1; $o.FDrawn++ }
+          elseif ($disc -contains $n) { $o.FDisc++ } else { $o.FMiss++; $o.Missing += "[{0:00}] $($ch.Head) @$($ch.Anchor)" -f $n }
+        }
+      }
+    }
+  }
+  [pscustomobject]$o
+}
+# the golden: OPERAT.NAME
+$ch = Measure-TraceChart $rt.Dot
+$cv = Get-TraceChartCover $ch $rt.Steps
+$res.R5Cover = "$($cv.Drawn)/$($cv.Disclosed)/$($cv.Missing)|both $($cv.Both)|extra $($cv.Extra)"
+$tc = @(Get-TraceChartConds $ch)
+$textConds = @(foreach ($s in $T7.Sections) { foreach ($i in $s.Items) { foreach ($c in @($i.Children | Where-Object { $_.Kind -eq 'cond' })) { [pscustomobject]@{ N = $i.Number; Keyword = $c.Keyword; Condition = $c.Condition; Anchor = $c.Anchor } } } })
+# fix round 1 (I2): per STEP -- each condition under its own step, drawn / disclosed / missing all measured
+$cc1 = Get-TraceChartChildCheck $ch $T7
+$res.R5Conds = "$($cc1.CDrawn)/$($cc1.CDisc)/$($cc1.CMiss)"
+# A-R5-VERBATIM: the guard row under its step, its pieces rejoined with one space, equals the model's Condition exactly
+$res.R5Verbatim = "$($cc1.CVerbatim)/$($cc1.CTotal)"
+# facets the same way (spec 6): drawn / in the row's tooltip (REGENERATE) / disclosed / missing
+$res.R5Facets = "$($cc1.FDrawn)/$($cc1.FTip)/$($cc1.FDisc)/$($cc1.FMiss)"
+# ... and the check goes RED when a guard is drawn on the WRONG step: [11]'s UNLESS FSuppressEvents moved onto [13]
+$res.R5CondMut = $(try {
+  $Tw = Read-FormA $rt.Text
+  $all = @($Tw.Sections | ForEach-Object { $_.Items })
+  $s11 = @($all | Where-Object { $_.Number -eq 11 })[0]; $s13 = @($all | Where-Object { $_.Number -eq 13 })[0]
+  $mv = @($s11.Children | Where-Object { $_.Kind -eq 'cond' })[0]
+  [void]$s11.Children.Remove($mv); [void]$s13.Children.Add($mv)
+  $wp = Join-Path $work 'r5-cond-mut.dot'
+  [IO.File]::WriteAllText($wp, (ConvertTo-TraceChart $Tw $rt.AnchorPaths @{}).Dot, (New-Object Text.ASCIIEncoding))
+  $mc = Get-TraceChartChildCheck (Measure-TraceChart $wp) (Read-FormA $rt.Text)
+  "$($mc.CDrawn)/$($mc.CDisc)/$($mc.CMiss) $($mc.Missing -join ',')"
+} catch { "threw: $($_.Exception.Message)" })
+$res.R5NoQuote = @($tc | Where-Object { $_.Condition -match '^".*"$' }).Count
+# crossings: nodes titled `process boundary`, and the numbered CROSSES rows in them
+$xn = @($ch.Nodes | Where-Object { $_.Title -like 'process boundary @*' })
+$res.R5Xing = "$($xn.Count)/$(@($xn | ForEach-Object { $_.Cells } | Where-Object { $_.Kind -eq 'step' -and $_.Text -match '^\S+ CROSSES ' } | ForEach-Object { $_.Nums }).Count)"
+# STOPS: note-shaped nodes, each with its `ask <E>` row
+$sn = @($ch.Nodes | Where-Object { $_.Shape -eq 'note' })
+$res.R5Stops = "$($sn.Count):$((@($sn | ForEach-Object { @($_.Cells | Where-Object { $_.Text -match '^ask (\S+)$' } | ForEach-Object { $_.Text -replace '^ask ', '' })[0] })) -join ',')"
+# the Legend's END TRACE line against the text's
+$endTxt = @($rt.Text -split "\r\n" | Where-Object { $_ -clike 'END TRACE*' })[0]
+$res.R5Counts = $(if (@($ch.Nodes | Where-Object { $_.Id -eq 'legend' } | ForEach-Object { $_.Cells } | Where-Object { $_.Text -ceq $endTxt }).Count -eq 1) { 'identical' } else { 'differs' })
+# A-R5-FROMTEXT: the emitter drew the chart from Read-FormA of the bytes it wrote; drawing its in-memory model gives the same dot
+$res.R5FromText = $(if ($rt.ChartModelDot -ceq ($ch.Dot -replace "`r`n", "`n" -replace "`n", "`r`n")) { 'identical' } else { 'differs' })
+# nodes per lane cluster (failure nodes f* not counted: they are the else arm's target, not a step's node)
+$res.R5Lanes = (@('CLIENT', 'PIPE', 'SERVER', 'DATABASE') | ForEach-Object { $ln = $_; @($ch.Nodes | Where-Object { $_.Lane -eq $ln -and $_.Id -like 'n*' }).Count }) -join '/'
+$res.R5Merged = (@($ch.Cells | Where-Object { $_.Kind -eq 'step' -and $_.Nums.Count -gt 1 } | ForEach-Object { ($_.Text -split ' ')[0] })) -join ','
+$res.R5Column = (@($ch.Nodes | Where-Object { $_.Shape -eq 'cylinder' } | ForEach-Object { @($_.Cells | Where-Object { $_.Kind -eq 'step' } | ForEach-Object { $_.Nums }) | Sort-Object | ForEach-Object { '{0:00}' -f $_ } }) -join ',')
+# failure edges: a guard row's port -> a failure node
+$fe = @($ch.Edges | Where-Object { $_.To -like 'f*' })
+$res.R5Failure = $fe.Count
+$res.R5Cancel = @($fe | Where-Object { $t = $_.To; @($ch.Nodes | Where-Object { $_.Id -eq $t -and $_.Cells[0].Text -ceq 'else FMTOperation.CancelUpdates @Blueprint4.ViewModel.pas:3999' }).Count }).Count
+# links: every <a> of the svg is an HREF row, plus the header's REGENERATE tooltip; no row left unlinked
+$svg = [IO.File]::ReadAllText($rt.Svg)
+$res.R5Links = "$(([regex]::Matches($svg, '<a[\s>]')).Count)=$(@($ch.Cells | Where-Object { $_.Href }).Count)+1/$($rt.ChartManifest.Unlinked)"
+$db = [IO.File]::ReadAllBytes($rt.Dot)
+$res.R5Ascii = "$(@($db | Where-Object { $_ -ne 0x0D -and $_ -ne 0x0A -and ($_ -lt 0x20 -or $_ -gt 0x7E) }).Count)/$(([regex]::Matches($ch.Dot, '(?<!\r)\n')).Count)"
+# A-R5-GOLDNODES / GOLDGUARDS: each golden node's matching row (MatchedBy) and each golden guard's condition is DRAWN
+$gn = @(foreach ($e in ($gm7.MatchedBy -split ',')) {
+  if ($e -notmatch '^(\d+)=(\d+)(?:/(cond|facet))?@(\d+)$') { "?$e"; continue }
+  $nn = [int]$Matches[1]; $st = [int]$Matches[2]; $kd = $Matches[3]; $gl = $Matches[4]
+  $file = [string](@($inv.Nodes | Where-Object { [int]$_.N -eq $nn })[0].File)
+  $ok = $(switch ($kd) {
+    'cond'  { @($tc | Where-Object { $_.Anchor -ceq "${file}:$gl" }).Count -gt 0 }
+    'facet' { @($ch.Cells | Where-Object { $_.Kind -eq 'facet' -and $_.Text -cmatch " @$([regex]::Escape("${file}:$gl"))$" }).Count -gt 0 }
+    default { @($ch.Cells | Where-Object { $_.Kind -eq 'step' -and $_.Nums -contains $st }).Count -gt 0 } })
+  $(if ($ok) { 'drawn' } elseif ($cv.DisclosedNums -contains $st) { 'disclosed' } else { "missing:$nn" })
+})
+$res.R5GoldNodes = "$(@($gn | Where-Object { $_ -eq 'drawn' }).Count)/$(@($gn | Where-Object { $_ -eq 'disclosed' }).Count)/$((@($gn | Where-Object { $_ -clike 'missing*' -or $_ -clike '[?]*' })) -join ',')"
+$gg = @(foreach ($g in $inv.Guards) { $(if (@($tc | Where-Object { $_.Anchor -ceq "$($g.File):$($g.Line)" -and $_.Condition.Contains([string]$g.Word) }).Count) { 'drawn' } else { "missing:$($g.G)" }) })
+$res.R5GoldGuards = "$(@($gg | Where-Object { $_ -eq 'drawn' }).Count)//$((@($gg | Where-Object { $_ -like 'missing*' })) -join ',')"
+# fix round 1 (I1): the label of each edge INTO a crossing node -- the request's command, the response's whole
+# alternative set (it was `[41] rspError`: the first WITH word, the failure code on the success path)
+$xIds = @($xn | ForEach-Object { $_.Id })
+$res.R5CrossLabels = (@($ch.Edges | Where-Object { $xIds -contains $_.To } | ForEach-Object { if ($_.Attr -match 'label="([^"]*)"') { $Matches[1] } }) -join ' | ')
+# fix round 1 (5, spec 3.3): a call edge carries the line it is called from -- [12] DoAfterPostOperation -> SendDeltaOperation
+$res.R5CallFrom = (@($ch.Edges | Where-Object { $_.Attr -match 'label="\[12\][^"]*"' } | ForEach-Object { if ($_.Attr -match 'label="([^"]*)"') { $Matches[1] } }) -join ' | ')
+# fix round 1 (5, spec 5): a row whose leaf the indexes do NOT hold at one path stays unlinked, with the tooltip saying so --
+# the golden drawn with uDatasetsDef.pas taken out of the path map: every row on that leaf, no HREF, the tooltip, counted
+$apM = @{}; foreach ($k in $rt.AnchorPaths.Keys) { if ($k -ne 'uDatasetsDef.pas') { $apM[$k] = $rt.AnchorPaths[$k] } }
+$amb = ConvertTo-TraceChart $T7 $apM @{}
+$ambP = Join-Path $work 'r5-ambiguous.dot'; [IO.File]::WriteAllText($ambP, $amb.Dot, (New-Object Text.ASCIIEncoding))
+$ambC = @((Measure-TraceChart $ambP).Cells | Where-Object { $_.Text -match ' @uDatasetsDef\.pas:\d+( |$)' })
+$res.R5Ambiguous = "$($ambC.Count) rows|$(@($ambC | Where-Object { -not $_.Href -and $_.TitleText -ceq 'ambiguous file name -- the indexes hold uDatasetsDef.pas at zero or several paths; see trace.dlgraph' }).Count) unlinked with the tooltip|manifest $($amb.Manifest.Unlinked)"
+# fix round 1 (3): a step text past 5 wrapped lines is shortened in its BODY and keeps its grade (cutting a trailing
+# [inferred] off would read as a certain step)
+$lgT = New-Trace 'LG' 'a long graded step' 'X.Y' 'A' '2026-10-06' 'x' 'client -> pipe -> server -> database'
+[void](Add-TraceSection $lgT 'WRITE').Items.Add((New-TraceStep 'step' ('READS ' + ((1..60 | ForEach-Object { "Word$_" }) -join ' ')) 'X.pas:1' 'inferred' 'TX.R'))
+[void](Write-FormA $lgT)
+$lgP = Join-Path $work 'r5-shorten.dot'; [IO.File]::WriteAllText($lgP, (ConvertTo-TraceChart $lgT @{} @{}).Dot, (New-Object Text.ASCIIEncoding))
+$lgC = @((Measure-TraceChart $lgP).Cells | Where-Object { $_.Kind -eq 'step' })[0]
+$lgLines = ([regex]::Match([IO.File]::ReadAllText($lgP), '<TD PORT="p1"[^>]*>(.*?)</TD>').Groups[1].Value -split '<BR').Count
+$res.R5Shorten = "$($lgC.Text -creplace '^.* (\S+ \.\.\. \[inferred\] @X\.pas:1)$', '$1')|$lgLines lines|$(@((Measure-TraceChart $lgP).Cells | Where-Object { $_.Text -like '*label(s) shortened*' }).Count) legend row"# the ALSO fold (owner answer 4: the golden shows all 9 ALSO rows; only an unusually long list folds) -- the SAME
+# trace drawn with an ALSO cap of 6: 3 rows fold into ONE disclosure row, the Legend repeats it, the Manifest names it
+$af = ConvertTo-TraceChart $T7 $rt.AnchorPaths @{ Also = 6 }
+$afPath = Join-Path $work 'r5-also-fold.dot'
+[IO.File]::WriteAllText($afPath, $af.Dot, (New-Object Text.ASCIIEncoding))
+$afc = Measure-TraceChart $afPath; $afv = Get-TraceChartCover $afc $rt.Steps
+$afRows = @($afc.Cells | Where-Object { $_.Kind -eq 'disclosure' } | ForEach-Object { $_.Text })
+$res.R5AlsoFold = "$($afv.Drawn)/$($afv.Disclosed)/$($afv.Missing)|$(@($afv.DisclosedNums | Where-Object { $af.Manifest.Steps[[int]$_] -notlike 'disclosed:*' }).Count) not in the Manifest|$($afRows -join ' || ')"
+# the holdout MSCLIST.NUM, drawn by the same run
+$hc = Measure-TraceChart $rh.Dot; $hv = Get-TraceChartCover $hc $rh.Steps
+$hk = Get-TraceChartChildCheck $hc (Read-FormA $rh.Text)   # fix round 1 (I2): per step
+$res.R5Hold = "$($hv.Drawn + $hv.Disclosed)/$($hv.Missing)|conds $($hk.CDrawn)/$($hk.CDisc)/$($hk.CMiss) of $($hk.CTotal)|xing $(@($hc.Cells | Where-Object { $_.Kind -eq 'step' -and $_.Text -match '^\S+ CROSSES ' } | ForEach-Object { $_.Nums }).Count)|stops $(@($hc.Nodes | Where-Object { $_.Shape -eq 'note' }).Count)|lanes $((@('CLIENT', 'PIPE', 'SERVER', 'DATABASE') | ForEach-Object { $ln = $_; @($hc.Nodes | Where-Object { $_.Lane -eq $ln -and $_.Id -like 'n*' }).Count }) -join '/')"
+# A-R5-CALC: the calculated field -- its STOPS node and the DERIVED card of source-field rows
+$cc = Measure-TraceChart $rcF.Dot
+$dvn = @($cc.Nodes | Where-Object { $_.Title -like 'DERIVED*' })
+$ccv = Get-TraceChartCover $cc $rcF.Steps
+$ck5 = Get-TraceChartChildCheck $cc (Read-FormA $rcF.Text)
+$res.R5Calc = "$(@($cc.Nodes | Where-Object { $_.Shape -eq 'note' }).Count)/$(@($dvn | ForEach-Object { $_.Cells } | Where-Object { $_.Kind -eq 'step' }).Count)|tooltip regenerate $(@([regex]::Matches($cc.Dot, 'TITLE="[^"]*REGENERATE ')).Count)|$($ccv.Drawn)/$($ccv.Disclosed)/$($ccv.Missing)|facets $($ck5.FDrawn)/$($ck5.FTip)/$($ck5.FDisc)/$($ck5.FMiss)"
+# A-R5-SIZE: a synthetic 300-step trace (NO index) -- 150 routines of two steps each: the ladder engages, nothing is missing;
+# Task 5b: a 2-row card folded saves no row, so none folds and all 300 are drawn
+$sz = New-Trace 'SYN.SIZE' 'a synthetic trace of 300 steps' 'X.Y' 'A' '2026-10-06' 'x' 'client -> pipe -> server -> database'
+$szW = Add-TraceSection $sz 'WRITE'
+for ($q = 1; $q -le 150; $q++) {
+  [void]$szW.Items.Add((New-TraceStep 'step' "CALLS TSyn.R$q" "uSyn.pas:$($q * 10)" '' "TSyn.R$($q - 1)"))
+  [void]$szW.Items.Add((New-TraceStep 'step' "READS F$q" "uSyn.pas:$($q * 10 + 1)" '' "TSyn.R$q"))
+}
+[void](Write-FormA $sz)
+$szc = ConvertTo-TraceChart $sz @{} @{}
+$szPath = Join-Path $work 'r5-size.dot'
+[IO.File]::WriteAllText($szPath, $szc.Dot, (New-Object Text.ASCIIEncoding))
+$szm = Measure-TraceChart $szPath; $szv = Get-TraceChartCover $szm 300
+$res.R5Size = "$($szc.Manifest.Ladder)|nodes $($szc.Manifest.Nodes)|$($szv.Drawn)/$($szv.Disclosed)/$($szv.Missing)|$(@($szm.Cells | Where-Object { $_.Text -like '*readability cap*' }).Count) cap row"
+# ---- Task 5b: the owner's size rules (2026-10-06) -- every value below read from the .dot written, never the Manifest ----
+# the Legend's fold rows: a per-fold disclosure row (`+N more ... in <card>`) or the one summary row
+function Get-TraceChartLegendFolds($Chart) { @($Chart.Nodes | Where-Object { $_.Id -eq 'legend' } | ForEach-Object { $_.Cells } | Where-Object { $_.Kind -in 'disclosure', 'summary' }) }
+# a synthetic trace of $Routines routines in one WRITE section; routine q holds $Rows.Invoke(q) steps (a CALLS, then READS)
+function New-SynthSizeTrace([string] $Name, [int] $Routines, [scriptblock] $Rows, [string] $Section = 'WRITE') {
+  $t = New-Trace $Name "a synthetic trace ($Name)" 'X.Y' 'A' '2026-10-06' 'x' 'client -> pipe -> server -> database'
+  $s = Add-TraceSection $t $Section
+  for ($q = 1; $q -le $Routines; $q++) {
+    $k = [int](& $Rows $q)
+    [void]$s.Items.Add((New-TraceStep 'step' "CALLS TSyn.R$q" "uSyn.pas:$($q * 10)" '' "TSyn.R$($q - 1)"))
+    for ($j = 2; $j -le $k; $j++) { [void]$s.Items.Add((New-TraceStep 'step' "READS F${q}x$j" "uSyn.pas:$($q * 10 + $j)" '' "TSyn.R$q")) }
+  }
+  [void](Write-FormA $t)
+  $t
+}
+function Save-SynthChart($Trace, [hashtable] $Caps, [string] $Leaf) {
+  $p = Join-Path $work $Leaf
+  [IO.File]::WriteAllText($p, (ConvertTo-TraceChart $Trace @{} $Caps).Dot, (New-Object Text.ASCIIEncoding))
+  $p
+}
+# A-R5-SUMMARY (rule 1): 100 routines of THREE steps -- the ladder folds every card (each fold saves a row), 100 folds are
+# above the summary threshold, so the Legend holds ONE summary row naming the ranges; coverage measured from that row
+$suT = New-SynthSizeTrace 'SYN.SUM' 100 { 3 }
+$suP = Save-SynthChart $suT @{} 'r5-summary.dot'
+$suM = Measure-TraceChart $suP; $suV = Get-TraceChartCover $suM 300
+$suL = Get-TraceChartLegendFolds $suM
+$suMut = $(try {
+  $mp = Join-Path $work 'r5-summary-mut.dot'
+  [IO.File]::WriteAllText($mp, ([IO.File]::ReadAllText($suP).Replace('-- [01]-[300] --', '-- [01]-[299] --')), (New-Object Text.ASCIIEncoding))
+  (Get-TraceChartCover (Measure-TraceChart $mp) 300).Summary
+} catch { "threw: $($_.Exception.Message)" })
+$res.R5Summary = "$(@($suL).Count) legend fold row|$($suV.Drawn)/$($suV.Disclosed)/$($suV.Missing)|summary $($suV.Summary)|$(@($suL | ForEach-Object { $_.Text }) -join ' || ')|mut $suMut"
+# A-R5-SUMCOUNT (rule 1): routines alternate THREE and TWO steps -- the 2-step cards stay whole (a fold that saves no row is
+# not made), the 60 folded cards' ranges do not fit one row, so the summary row carries only the counts -- still measured
+$scT = New-SynthSizeTrace 'SYN.SUMC' 120 { param($q) $(if ($q % 2) { 3 } else { 2 }) }
+$scP = Save-SynthChart $scT @{} 'r5-sumcount.dot'
+$scM = Measure-TraceChart $scP; $scV = Get-TraceChartCover $scM 300
+$scL = Get-TraceChartLegendFolds $scM
+$scMut = $(try {
+  $mp = Join-Path $work 'r5-sumcount-mut.dot'
+  [IO.File]::WriteAllText($mp, ([IO.File]::ReadAllText($scP).Replace('-- 180 steps --', '-- 179 steps --')), (New-Object Text.ASCIIEncoding))
+  (Get-TraceChartCover (Measure-TraceChart $mp) 300).Summary
+} catch { "threw: $($_.Exception.Message)" })
+$res.R5SumCount = "$(@($scL).Count) legend fold row|$($scV.Drawn)/$($scV.Disclosed)/$($scV.Missing)|summary $($scV.Summary)|$(@($scL | ForEach-Object { $_.Text }) -join ' || ')|mut $scMut"
+# A-R5-FOLDTHRESH (rule 1): at a row cap of 2, five 5-step cards fold 3 rows each -- five Legend rows, one per fold (at the
+# threshold); six such cards -- ONE summary row
+$ft5 = Measure-TraceChart (Save-SynthChart (New-SynthSizeTrace 'SYN.F5' 5 { 5 }) @{ Rows = 2 } 'r5-fold5.dot')
+$ft6 = Measure-TraceChart (Save-SynthChart (New-SynthSizeTrace 'SYN.F6' 6 { 5 }) @{ Rows = 2 } 'r5-fold6.dot')
+$res.R5FoldThresh = "5 cards: $(@(Get-TraceChartLegendFolds $ft5 | Where-Object { $_.Kind -eq 'disclosure' }).Count) per-fold/$(@(Get-TraceChartLegendFolds $ft5 | Where-Object { $_.Kind -eq 'summary' }).Count) summary|6 cards: $(@(Get-TraceChartLegendFolds $ft6 | Where-Object { $_.Kind -eq 'disclosure' }).Count) per-fold/$(@(Get-TraceChartLegendFolds $ft6 | Where-Object { $_.Kind -eq 'summary' }).Count) summary|cover $((Get-TraceChartCover $ft6 30).Missing) missing, summary $((Get-TraceChartCover $ft6 30).Summary)"
+# A-R5-NOSAVE (rule 1): at a row cap of 2, a 4-step card would fold 2 rows into 1 disclosure row + 1 Legend row -- not made,
+# all 4 drawn; a 5-step card folds 3
+$ns = Measure-TraceChart (Save-SynthChart (New-SynthSizeTrace 'SYN.NS' 2 { param($q) 3 + $q }) @{ Rows = 2 } 'r5-nosave.dot')
+$res.R5NoSave = (@($ns.Nodes | Where-Object { $_.Title -like 'TSyn.R*' } | ForEach-Object { "$($_.Title): $(@($_.Cells | Where-Object { $_.Kind -eq 'step' }).Count) drawn + $(@($_.Cells | Where-Object { $_.Kind -eq 'disclosure' }).Count) disclosure" })) -join ' | '
+# A-R5-DERIVEDCAP (rule 2, owner 2026-10-06: the DERIVED card is capped like its components): 20 DERIVED rows at the default
+# cap of 14 -- 14 drawn and one disclosure row naming [15]-[20]; 10 rows -- unchanged, all drawn
+function New-SynthDerived([string] $Name, [int] $N) {
+  $t = New-Trace $Name 'a synthetic calculated field' 'X.Y' 'A' '2026-10-06' 'x' 'client -> pipe -> server -> database'
+  $s = Add-TraceSection $t 'DERIVED'
+  for ($q = 1; $q -le $N; $q++) { [void]$s.Items.Add((New-TraceStep 'step' "READS TSyn.F$q" "uSyn.pas:$q" '' 'TSyn.CalcFields')) }
+  [void](Write-FormA $t)
+  $t
+}
+$res.R5DerivedCap = (@(20, 10) | ForEach-Object {
+  $dm = Measure-TraceChart (Save-SynthChart (New-SynthDerived "SYN.D$_" $_) @{} "r5-derived-$_.dot")
+  $dc = @($dm.Nodes | Where-Object { $_.Title -like 'DERIVED*' } | ForEach-Object { $_.Cells })
+  "${_}: $(@($dc | Where-Object { $_.Kind -eq 'step' }).Count) drawn + $(@($dc | Where-Object { $_.Kind -eq 'disclosure' } | ForEach-Object { $_.Text -replace ', full text.*$', '' }) -join ';')|missing $((Get-TraceChartCover $dm $_).Missing)"
+}) -join ' || '
+# R19: an unknown section and an actor outside the TIERS throw, naming why
+$res.R5Unknown = (@(
+  $(try { $u = New-Trace 'U' 'u' 'x' 'A' '2026-10-06' 'x' 'client'; [void](Add-TraceSection $u 'LATER').Items.Add((New-TraceStep 'step' 'CALLS X' 'X.pas:1')); [void](Write-FormA $u); [void](ConvertTo-TraceChart $u @{} @{}); 'drawn' } catch { $(if ($_.Exception.Message -like "*unknown section 'LATER'*") { 'refused' } else { "wrong: $($_.Exception.Message)" }) }),
+  $(try { $u = New-Trace 'U' 'u' 'x' 'A' '2026-10-06' 'x' 'client -> pipe'; [void](Add-TraceSection $u 'READ').Items.Add((New-TraceStep 'step' 'CALLS X' 'X.pas:1' '' '' '' '' 'SERVER')); [void](Write-FormA $u); [void](ConvertTo-TraceChart $u @{} @{}); 'drawn' } catch { $(if ($_.Exception.Message -like '*lane SERVER*does not name*') { 'refused' } else { "wrong: $($_.Exception.Message)" }) })
+)) -join '/'
 
 [pscustomobject]$res
