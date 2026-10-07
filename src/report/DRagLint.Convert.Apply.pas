@@ -3277,6 +3277,7 @@ var
   ToTypesSeen : TList<string>;
   IntfToTypes : TDictionary<string, Boolean>; { ToType -> a retyped field of it is declared in the INTERFACE (C13 a) }
   ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
+  InstFromType: TDictionary<string, string>; { 1.26.1: converted instance -> its From type, to pick its #convert block }
   E           : TTextEdit;
   It          : TApplyItem; { scratch for the main body's own Emit calls }
 
@@ -3520,6 +3521,7 @@ var
     begin
       if CE.Action <> INH_ACTION_CODE then Continue;
       ConvertedInstNames.Add(CE.Name);
+      InstFromType.AddOrSetValue(CE.Name, CE.TypeName);
       if DoneUnits.ContainsKey(CE.ToType) then Continue;
       DoneUnits.Add(CE.ToType, True);
       ToTypesSeen.Add(CE.ToType);
@@ -3738,6 +3740,7 @@ var
       (if HdrEnd < High(Lines) then #13#10 + String.Join(#13#10, Lines, HdrEnd + 1, High(Lines) - HdrEnd) else '');
     Edits[InsIx]:= Ed;
     ConvertedInstNames.Add(Inst.InstanceName);
+    InstFromType.AddOrSetValue(Inst.InstanceName, Inst.FromType);
     FoldReemitReport(AReemit.Report, AStart);
     PlanDeclSurfaces(AStart); { C8 N2: an inherited child has no field / creator here }
     if DoneUnits.ContainsKey(Inst.ToType) then Exit;
@@ -3816,6 +3819,45 @@ var
               WIt.Line    := LineNo;
               Emit(WIt);
             end;
+      end;
+    end;
+
+    // 1.26.1 (F1 on the .pas side): the converted instances a #link may
+    // rewrite -- those whose #convert block is the rule's own (the block the
+    // .dfm re-emit picks: the first #convert whose From type matches, else the
+    // first), or every one for a file-scope rule before the first #convert.
+    // Until 1.26.0 every block's #link rewrote every instance's sites: four
+    // identical DatabaseName edits per DMTEST site, and two blocks linking one
+    // path to different targets wrote both into the same line.
+    function NamesForLink(const ALink: TConversionRule): TArray<string>;
+    var
+      RuleBlock: Integer;
+      Block    : Integer;
+      First    : Integer;
+      Found    : Integer;
+      Q        : TConversionRule;
+      FromT    : string;
+    begin
+      RuleBlock:= 0;
+      for Q in ABook.Rules.Rules do
+        if (Q.Kind = rkConvert) and (Q.LineNo <= ALink.LineNo) then Inc(RuleBlock);
+      if RuleBlock = 0 then Exit(ConvertedInstNames.ToArray);
+      Result:= nil;
+      for var N: string in ConvertedInstNames do
+      begin
+        if not InstFromType.TryGetValue(N, FromT) then Continue;
+        Block:= 0;
+        First:= 0;
+        Found:= 0;
+        for Q in ABook.Rules.Rules do
+          if Q.Kind = rkConvert then
+          begin
+            Inc(Block);
+            if First = 0 then First:= Block;
+            if (Found = 0) and SameText(BareTypeTail(Q.FromType), BareTypeTail(FromT)) then Found:= Block;
+          end;
+        if Found = 0 then Found:= First;
+        if Found = RuleBlock then Result:= Result + [N];
       end;
     end;
 
@@ -3919,7 +3961,7 @@ var
            the same hazard exists here with the paren-star terminator, which is
            why neither delimiter is written out literally in this block. *)
         var CastSites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
-          LinkRule.FromPath, ConvertedInstNames.ToArray), Unv);
+          LinkRule.FromPath, NamesForLink(LinkRule)), Unv);
         ReportUnverified(LinkRule.FromPath);
         for var CSite in CastSites do
         begin
@@ -3954,7 +3996,7 @@ var
       if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
 
       var Sites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
-        LinkRule.FromPath, ConvertedInstNames.ToArray), Unv);
+        LinkRule.FromPath, NamesForLink(LinkRule)), Unv);
       ReportUnverified(LinkRule.FromPath);
       for var Site in Sites do
       begin
@@ -4237,6 +4279,7 @@ begin
   ToTypesSeen:= TList<string>.Create;
   IntfToTypes:= TDictionary<string, Boolean>.Create;
   ConvertedInstNames:= TList<string>.Create;
+  InstFromType:= TDictionary<string, string>.Create;
   try
     PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
 
@@ -4339,6 +4382,7 @@ begin
         never enters the converted-instance set an access-site rewrite is
         scoped against. }
       ConvertedInstNames.Add(Inst.InstanceName);
+      InstFromType.AddOrSetValue(Inst.InstanceName, Inst.FromType);
 
       var Indent: string:= LeadingIndent(DfmLines[BlockStart - 1]);
       E:= Default(TTextEdit);
@@ -4443,6 +4487,7 @@ begin
     IntfToTypes.Free;
     ToTypesSeen.Free;
     ConvertedInstNames.Free;
+    InstFromType.Free;
   end;
 end;
 

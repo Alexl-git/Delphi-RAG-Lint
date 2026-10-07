@@ -916,6 +916,36 @@ begin
     end;
 end;
 
+// 1.26.1 (F1): the rules ONE #convert block runs -- the file-scope rules
+// before the first #convert, the block's own rules, and every #convert,
+// #mapping and #note line of the book (the header gate and owned-part check
+// read every #convert, a #mapping is named and #apply'd from any block, and
+// `#note owned:` marks a class, not a block). Until 1.26.0 the whole book ran
+// in every block: BDE-to-FireDAC.rules' TDatabase `#ignore ReadOnly`
+// suppressed the TTable and TAutoIncField `#link ... <- ReadOnly`, and the
+// first #link of a path in the book won in every block.
+function RulesOfBlock(const ARules: TConversionRuleSet; ABlock: Integer): TConversionRuleSet;
+var
+  R    : TConversionRule;
+  Block: Integer;
+  Kept : TList<TConversionRule>;
+begin
+  Result:= ARules;
+  Block := 0;
+  Kept  := TList<TConversionRule>.Create;
+  try
+    for R in ARules.Rules do
+    begin
+      if R.Kind = rkConvert then Inc(Block);
+      if (Block = 0) or (Block = ABlock) or (R.Kind in [rkConvert, rkMapping, rkNote]) then
+        Kept.Add(R);
+    end;
+    Result.Rules:= Kept.ToArray;
+  finally
+    Kept.Free;
+  end;
+end;
+
 { The re-emit itself (ReemitComponent's documented behaviour). ARules is the
   rule set THIS block runs -- already through WithoutUnreachableRules;
   AAllRules / AUnreachable are the whole book and its records, handed on
@@ -1584,6 +1614,205 @@ var
     AHandled:= True;
   end;
 
+  // 1.26.1 (F2): True when the TARGET class redeclares the default of an
+  // inherited property more derived than the declaration the source's default
+  // comes from -- TFDAutoIncField's `property AutoGenerateValue default
+  // arAutoInc` over Data.DB.TField's `default arNone`, which TAutoIncField
+  // only inherits. The most-derived declaration wins: writing the shared
+  // ancestor's value would switch the target's own behaviour off. A default
+  // the source class redeclared itself is the source's real value and is
+  // written as before (its declaring class is not in the target's chain), as
+  // is one both sides share. Top-level identity-named paths only: a dotted
+  // path's declaration belongs to a sub-object, not to the target's chain.
+  function TargetRedeclaresDefault(const AFromPath, AToPath: string): Boolean;
+  var NS, NT: TPropNode;
+  begin
+    Result:= False;
+    if (Pos('.', AToPath) > 0) or not SameText(AFromPath, AToPath) then Exit;
+    if not (AFrom.ResolvePath(AFromPath, psDfm, NS) and ATo.ResolvePath(AToPath, psDfm, NT)) then Exit;
+    if not NT.HasDefault or (NS.DeclaredIn = '') or SameText(NS.DeclaredIn, NT.DeclaredIn) then Exit;
+    Result:= ATo.DescendsFrom(NS.DeclaredIn);
+  end;
+
+  // 1.26.1 (F4): `ParamData = < item ... end>` is how TQuery / TStoredProc
+  // (and FireDAC's TFDQuery / TFDStoredProc / TFDCommand) stream `Params`:
+  // a DefineProperties pseudo-property, never a published one, so no #link
+  // can name it and every query lost its parameters. It is carried under the
+  // same name, each item member mapped through the block's `#link
+  // Params.Items.<X>` (an #ignore of one accepts its drop), else kept when the
+  // target's Params item publishes the same member with the same type, else
+  // NOT carried and reported item by item. A target with no Params property
+  // gets nothing, and the collection counts as dropped.
+  procedure CarryParamData(const ALeaf: TDfmNode);
+  const
+    ITEMS_PFX = 'Params.Items.';
+  type
+    TItemProp = record
+      Name : string;
+      Lines: TArray<string>;
+    end;
+  var
+    SrcLines  : TArray<string>;
+    Kept      : TStringBuilder;
+    Props     : TArray<TItemProp>;
+    PropIndent: Integer;
+    ItemNo    : Integer;
+    Carried   : Integer;
+    Dropped1  : Integer;
+    LinkLines : string;
+    L, T      : string;
+
+    function IndentOf(const S: string): Integer;
+    begin
+      Result:= 0;
+      while (Result < Length(S)) and (S[Result + 1] = ' ') do Inc(Result);
+    end;
+
+    function PropNameOf(const S: string): string;
+    var
+      K : Integer;
+      St: string;
+    begin
+      Result:= '';
+      St:= TrimLeft(S);
+      K:= 1;
+      while (K <= Length(St)) and CharInSet(St[K], ['A'..'Z', 'a'..'z', '0'..'9', '_']) do Inc(K);
+      if (K > 1) and (Trim(Copy(St, K, MaxInt)).StartsWith('=')) then Result:= Copy(St, 1, K - 1);
+    end;
+
+    procedure FlushItem;
+    var
+      P       : TItemProp;
+      ToName  : string;
+      Why     : string;
+      ToPath  : string;
+      ItemName: string;
+      SrcType : string;
+      DstType : string;
+      First   : string;
+    begin
+      ItemName:= '';
+      for P in Props do
+        if SameText(P.Name, 'Name') then ItemName:= Trim(Copy(TrimLeft(P.Lines[0]), Length(P.Name) + 1, MaxInt)).TrimLeft(['=', ' ']).Trim(['''']);
+      for P in Props do
+      begin
+        ToName:= '';
+        Why   := '';
+        if IsIgnored(ITEMS_PFX + P.Name) then
+        begin
+          Ignored:= Ignored + ['ParamData.Items.' + P.Name];
+          Continue;
+        end;
+        if FindLinkFor(ITEMS_PFX + P.Name, ToPath) then
+        begin
+          var LinkLine: Integer;
+          if LinkCastFor(ITEMS_PFX + P.Name, LinkLine) <> '' then
+            Why:= Format('#link at line %d has a cast, which is not applied inside a collection', [LinkLine])
+          else if ToPath.StartsWith(ITEMS_PFX, True) and (Pos('.', Copy(ToPath, Length(ITEMS_PFX) + 1, MaxInt)) = 0) then
+          begin
+            ToName:= Copy(ToPath, Length(ITEMS_PFX) + 1, MaxInt);
+            if Pos(IntToStr(LinkLine), LinkLines) = 0 then
+              LinkLines:= LinkLines + (if LinkLines = '' then '' else ', ') + IntToStr(LinkLine);
+          end
+          else
+            Why:= Format('#link at line %d targets %s, not a Params item member', [LinkLine, ToPath]);
+        end
+        else
+        begin
+          SrcType:= LeafTypeOf(AFrom, ITEMS_PFX + P.Name);
+          DstType:= LeafTypeOf(ATo, ITEMS_PFX + P.Name);
+          if DstType = '' then
+            Why:= Format('the %s Params item has no %s', [ATo.RootType, P.Name])
+          else if (SrcType = '') or not SameText(BareTypeTail(SrcType), BareTypeTail(DstType)) then
+            Why:= Format('F type %s, T type %s', [if SrcType <> '' then SrcType else '?', DstType])
+          else
+            ToName:= P.Name;
+        end;
+        if ToName = '' then
+        begin
+          First:= Trim(P.Lines[0]);
+          Result.Report.Mismatched:= Result.Report.Mismatched +
+            [Format('ParamData item %d (%s): %s not carried -- %s', [ItemNo, ItemName, First, Why])];
+          Inc(Dropped1);
+          Continue;
+        end;
+        { the member's first line, renamed when a #link renames it }
+        First:= P.Lines[0];
+        Kept.Append(Copy(First, 1, IndentOf(First))).Append(ToName)
+            .Append(Copy(TrimLeft(First), Length(P.Name) + 1, MaxInt)).Append(#13#10);
+        for var K: Integer:= 1 to High(P.Lines) do Kept.Append(P.Lines[K]).Append(#13#10);
+        Inc(Carried);
+      end;
+      Props:= nil;
+    end;
+
+  begin
+    if LeafTypeOf(ATo, 'Params') = '' then
+    begin
+      Result.Report.Mismatched:= Result.Report.Mismatched +
+        [Format('collection ParamData: %s has no Params property -- NOT carried, %d item(s)',
+          [ATo.RootType, CountCollectionItems(ALeaf.ValueText)])];
+      Dropped:= Dropped + ['ParamData'];
+      Exit;
+    end;
+    SrcLines  := ALeaf.ValueText.Replace(#13#10, #10).Split([#10]);
+    if Length(SrcLines) < 2 then { `<>`: nothing to map }
+    begin
+      PlaceAtPath(TRoot, 'ParamData', ALeaf.ValueText, dnkCollection, Created);
+      Exit;
+    end;
+    Props     := nil;
+    PropIndent:= -1;
+    ItemNo    := 0;
+    Carried   := 0;
+    Dropped1  := 0;
+    LinkLines := '';
+    Kept:= TStringBuilder.Create;
+    try
+      for var I: Integer:= 0 to High(SrcLines) do
+      begin
+        L:= SrcLines[I];
+        T:= Trim(L);
+        if I = 0 then
+        begin
+          Kept.Append(L).Append(#13#10); { '<' -- Delphi writes the items on their own lines }
+          Continue;
+        end;
+        if SameText(T, KW_ITEM) then
+        begin
+          Inc(ItemNo);
+          Kept.Append(L).Append(#13#10);
+          Continue;
+        end;
+        if T.StartsWith('end', True) and ((PropIndent < 0) or (IndentOf(L) < PropIndent)) then
+        begin
+          FlushItem;
+          Kept.Append(L);
+          if I < High(SrcLines) then Kept.Append(#13#10);
+          Continue;
+        end;
+        if PropIndent < 0 then PropIndent:= IndentOf(L);
+        if (IndentOf(L) = PropIndent) and (PropNameOf(L) <> '') then
+        begin
+          var NP: TItemProp;
+          NP.Name := PropNameOf(L);
+          NP.Lines:= [L];
+          Props:= Props + [NP];
+        end
+        else if Length(Props) > 0 then
+          Props[High(Props)].Lines:= Props[High(Props)].Lines + [L]
+        else
+          Kept.Append(L).Append(#13#10);
+      end;
+      PlaceAtPath(TRoot, 'ParamData', Kept.ToString, dnkCollection, Created);
+    finally
+      Kept.Free;
+    end;
+    Result.Report.Relocated:= Result.Report.Relocated +
+      [Format('collection ParamData carried (%d item(s), %d member(s) carried, %d not carried%s)',
+        [ItemNo, Carried, Dropped1, if LinkLines <> '' then '; #link Params.Items.* at line(s) ' + LinkLines else ''])];
+  end;
+
   procedure RemapLeaf(const ALeaf: TDfmNode; const AFromPath: string);
   var
     ToPath : string;
@@ -1708,6 +1937,27 @@ var
       end;
     end;
 
+    { 1.26.1 (F6): designer position. On a non-visual component `Left` / `Top`
+      are not published properties but TComponent.DefineProperties' DesignInfo
+      pseudo-properties, so no rule can name them; on a control they are
+      published under the same names. Only the PSEUDO-property is carried here:
+      when the F class publishes Left/Top (a control) they are ordinary
+      properties the rules decide, so an unlinked one stays dropped and
+      reported. The same name loads on any TComponent target. A rule of this
+      block that names them has already left this routine. Gated on
+      TreesDescribeThisBlock: in an owned-part pass AFrom is the parent. }
+    if (SameText(AFromPath, 'Left') or SameText(AFromPath, 'Top')) and
+       not (TreesDescribeThisBlock and (LeafTypeOf(AFrom, AFromPath) <> '')) then
+    begin
+      PlaceAtPath(TRoot, AFromPath, ALeaf.ValueText, ALeaf.Kind, Created);
+      Exit;
+    end;
+    if SameText(AFromPath, 'ParamData') and (ALeaf.Kind = dnkCollection) then
+    begin
+      CarryParamData(ALeaf);
+      Exit;
+    end;
+
     // UNMAPPED + present in the DFM == non-default -> genuine potential loss.
     Dropped:= Dropped + [AFromPath];
   end;
@@ -1794,9 +2044,13 @@ var
   { 1.25.2: rule-referenced paths whose resolved default was NOT written --
     a hop is not published, so the .dfm cannot stream it (PublishedChain) }
   Unstreamable: TArray<string>;
+  { 1.26.1 (F2): resolved defaults left to the target's own redeclared
+    default -- see TargetRedeclaresDefault }
+  Redeclared  : TArray<string>;
 begin
   Result:= Default(TReemitResult);
   FRoot := nil; TRoot:= nil;
+  Redeclared  := nil;
   Created     := nil;
   Dropped     := nil;
   Ignored     := nil;
@@ -1978,6 +2232,11 @@ begin
       // same ToPath, and a STREAMED value must outrank a resolved default --
       // the same precedence D0 established for #default.
       if Assigned(FindAtPath(TRoot, R.ToPath)) then Continue;
+      if TargetRedeclaresDefault(R.FromPath, R.ToPath) then
+      begin
+        Redeclared:= Redeclared + [R.ToPath];
+        Continue;
+      end;
       { A resolved default goes through the same enum cast a streamed value
         would: the value's PROVENANCE does not change what type it must become. }
       var DefWrite: Boolean;
@@ -2048,6 +2307,10 @@ begin
       Result.Report.Notes:= Result.Report.Notes +
         [Format('%d resolved default(s) not written -- %s: the path runs through a non-published member, which a .dfm cannot stream, so the T default applies (verify)',
           [Length(Unstreamable), string.Join(', ', Unstreamable)])];
+    if Length(Redeclared) > 0 then
+      Result.Report.Notes:= Result.Report.Notes +
+        [Format('%d resolved default(s) not written -- %s: %s redeclares the default, and the most-derived declaration wins, so the T default applies',
+          [Length(Redeclared), string.Join(', ', Redeclared), ATo.RootType])];
     if Length(Unresolved) > 0 then
       Result.Report.Notes:= Result.Report.Notes +
         [Format('property defaults may diverge between %s and %s -- %s absent from the F DFM with no default clause to resolve, so the T default applies (verify)',
@@ -2076,12 +2339,12 @@ begin
   Block:= 0;
   Root := nil;
   try
-    if (Length(AUnreachable) > 0) and ParseDfmBlock(AFromBlock, Root) then
+    if ParseDfmBlock(AFromBlock, Root) then
       Block:= ConvertBlockFor(ARules, Root.ClassName_);
   finally
     Root.Free;
   end;
-  Result:= ReemitBlock(AFromBlock, WithoutUnreachableRules(ARules, AUnreachable, Block), AFrom, ATo, ACastLib,
-    ARules, AUnreachable);
+  Result:= ReemitBlock(AFromBlock, RulesOfBlock(WithoutUnreachableRules(ARules, AUnreachable, Block), Block),
+    AFrom, ATo, ACastLib, ARules, AUnreachable);
 end;
 end.

@@ -3,6 +3,86 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.26.1-alpha -- unreleased
+
+No extractor or resolver change: indexes do not re-parse.
+
+### Fixed
+
+Four SILENT behaviour breaks in `convert-apply`, found by a real-data sweep of
+DMTEST (5 units, `BDE-to-FireDAC.rules`) with 1.25.2. Every converted `.dfm`
+loaded, exit 0, and the converted forms behaved differently.
+
+- **`#ignore` (and every property rule) is scoped to its own `#convert` block.**
+  The whole book ran in every block, so the TDatabase block's `#ignore ReadOnly`
+  suppressed the TTable block's `#link UpdateOptions.ReadOnly <- ReadOnly` and
+  the TAutoIncField block's `#link ReadOnly <- ReadOnly`. **Risk: 33 read-only
+  tables and fields converted WRITABLE** (e.g. SystemLookup `tblToolAssg`). The
+  same book-wide lookup let the FIRST `#link` of a path win in every block, so a
+  field's `ReadOnly` would have been written to `UpdateOptions.ReadOnly`, and a
+  `#default` of one block was written into every other block's instances.
+  `#link` / `#ignore` / `#default` / `#remove` / `#apply` now apply to their own
+  block plus the file-scope rules before the first `#convert`; `#convert`,
+  `#mapping` and `#note` lines stay book-wide. On DMTEST the TTable block's own
+  `#link Exclusive` and `#link UpdateOptions.ReadOnly` now also fire (67 each).
+- **The `.pas` access-site rewrite is scoped the same way.** Every block's
+  renaming `#link` rewrote every converted instance's sites: on DMTEST each of 79
+  `DatabaseName` sites was planned 4 times (316 rewrites; the 1.25.1 dedup kept
+  the output right), and **two blocks linking one path to different targets
+  wrote both into the same line**, which does not compile. A site on instance X
+  now takes only the `#link`s of X's block plus the file-scope ones: 79
+  rewrites, byte-identical `.pas` output on DMTEST.
+- **`convert-validate` says when it only parsed.** Without both `--from` and
+  `--to` no path is checked, yet it printed a bare `OK`; a `NOTE:` line on stderr
+  now says the book was parsed only (stdout unchanged).
+- **A target's redeclared default wins over the shared ancestor's.** A resolved
+  default is the source's declared default; TFDAutoIncField redeclares
+  `AutoGenerateValue default arAutoInc`, `ProviderFlags default [pfInWhere]` and
+  `ReadOnly default True` over Data.DB.TField's, which TAutoIncField only
+  inherits, and the engine wrote TField's values. **Risk: 49 auto-increment
+  fields lost auto-increment (`AutoGenerateValue = arNone`) and took
+  `pfInUpdate`.** The most-derived declaration now wins: such a default is not
+  written and a reemit note names it (`N resolved default(s) not written -- ...:
+  <T> redeclares the default, and the most-derived declaration wins`). A default
+  the source class redeclared itself, or one both sides share, is written as
+  before.
+- **Designer position (`Left` / `Top`) is carried.** On a non-visual component
+  they are TComponent.DefineProperties pseudo-properties, not published, so no
+  rule could name them. **Risk: 90 components lost their designer position**
+  (cosmetic, but every one was reported unlinked). Carried unless a rule of the
+  block names them, and only when the From class does NOT publish them: a
+  control's published Left/Top stay with the rules (once via `#link`, else
+  dropped and reported).
+- **`ParamData` is carried.** TQuery / TStoredProc stream their parameters as the
+  DefineProperties pseudo-property `ParamData = < item ... end>`, never as the
+  published `Params`. **Risk: 15 queries lost every parameter's type, kind and
+  value.** ParamData is carried under the same name (TFDQuery / TFDStoredProc
+  read it the same way); each item member goes through the block's `#link
+  Params.Items.<X>` (a renaming link renames it), else is kept when the target's
+  Params item publishes the same member with the same type, else is NOT carried
+  and reported per item (`ParamData item <n> (<Name>): <line> not carried --
+  <why>`). Verified with a real VCL `ReadRootComponent` load of the five
+  converted DMTEST `.dfm`s (0 errors; a bogus item member fails it).
+
+Guard: `run_convert_apply_semantics.ps1` (one fixture per defect, own-block
+`#ignore` positive control, a redeclared-default fixture with source-redeclared
+and shared-declaration controls, two blocks renaming one path differently, the
+written `.dfm` through `DfmLoadCheck`, the written `.pas` through dcc64) and
+`run_convert_apply_semantics_controls.ps1`: a converted ParamData loaded into the
+REAL FireDAC classes by the new `lib\FireDacLoad.ps1` (Params.Count and each
+Name/DataType/ParamType/Value; a malformed item fails it), a `#mapping` scoped to
+its block, file-scope rules in every block and on every `.pas` site, a visual
+component's published Left/Top, and the redeclared default across three units and
+through a generic ancestor.
+
+### Known limitations
+
+- Resolved defaults are still written even when equal to the target's own
+  default (D3, deliberate): on DMTEST 987 of 1,260 are such no-ops. Owner
+  question, not changed here.
+- Paradox table names (`TableName = 'Machines.DB'`) carry verbatim if a book
+  links `TableName`; whether FireDAC wants them stripped is a book question.
+
 ## v1.26.0-alpha -- unreleased
 
 No extractor or resolver change on top of 1.25.0: indexes do not re-parse.

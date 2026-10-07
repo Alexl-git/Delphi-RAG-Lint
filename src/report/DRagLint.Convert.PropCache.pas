@@ -134,6 +134,15 @@ type
     /// <remarks>Cached by class id: each class is resolved once per cache, an
     /// unresolved name is remembered too.</remarks>
     function MembersOf(const AClassQName: string): TClassMembers;
+    /// <summary>Whether a class is, or descends from, another.</summary>
+    /// <param name="AClassQName">The fully-qualified class asked about.</param>
+    /// <param name="AAncestorQName">The fully-qualified candidate ancestor.</param>
+    /// <returns>True when AAncestorQName is AClassQName or a class in its
+    /// resolved ancestor chain (compared case-insensitively); False when
+    /// either name is empty or AClassQName resolves to no class.</returns>
+    /// <remarks>1.26.1 (F2): decides whether a target's redeclared default is
+    /// more derived than the source's.</remarks>
+    function DescendsFrom(const AClassQName, AAncestorQName: string): Boolean;
     /// <summary>Resolves a dotted member path from a root class, one segment
     /// at a time.</summary>
     /// <param name="ARootQName">The fully-qualified root class.</param>
@@ -228,6 +237,10 @@ type
     /// <returns>Outcome poNotFound when unset; otherwise the cache's
     /// answer.</returns>
     function ResolvePathEx(const APath: string; ASurface: TPropSurface): TPathResolution;
+    /// <summary>TPropMemberCache.DescendsFrom for this class.</summary>
+    /// <param name="AAncestorQName">The fully-qualified candidate ancestor.</param>
+    /// <returns>False when unset; otherwise the cache's answer.</returns>
+    function DescendsFrom(const AAncestorQName: string): Boolean;
   end;
 
 /// <summary>Enumerates the deep (recursively flattened) property tree of a class,
@@ -404,6 +417,19 @@ begin
   FIdByQName.Add(Key, Sym.Id);
   if Sym.Id <= 0 then Exit(Default(TClassMembers));
   Result:= MembersOfSym(Sym);
+end;
+
+function TPropMemberCache.DescendsFrom(const AClassQName, AAncestorQName: string): Boolean;
+var
+  Sym: TSymbol;
+  C  : TSymbol;
+begin
+  Result:= False;
+  if (Trim(AClassQName) = '') or (Trim(AAncestorQName) = '') then Exit;
+  Sym:= FResolver.ResolveClassByQName(Trim(AClassQName));
+  if Sym.Id <= 0 then Exit;
+  for C in FResolver.ClassChain(Sym) do
+    if SameText(C.QualifiedName, Trim(AAncestorQName)) then Exit(True);
 end;
 
 // Ruling R8 -- see TPropSurface.
@@ -699,6 +725,12 @@ begin
     Exit;
   end;
   Result:= Cache.ResolvePathEx(QName, APath, ASurface);
+end;
+
+function TClassRef.DescendsFrom(const AAncestorQName: string): Boolean;
+begin
+  if (QName = '') or (Cache = nil) then Exit(False);
+  Result:= Cache.DescendsFrom(QName, AAncestorQName);
 end;
 
 end.
