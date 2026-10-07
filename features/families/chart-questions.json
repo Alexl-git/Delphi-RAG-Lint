@@ -16,6 +16,7 @@
     "butterfly":        { "emitter": "charts\\src\\Emit-Butterfly.ps1" },
     "who-calls":        { "emitter": "charts\\src\\Emit-WhoCalls.ps1", "aliases": ["callers", "who uses"] },
     "what-it-calls":    { "emitter": "charts\\src\\Emit-WhoCalls.ps1", "aliases": ["callees"] },
+    "path":             { "emitter": "charts\\src\\Emit-Path.ps1", "aliases": ["call path", "route"] },
     "effects":          { "emitter": "charts\\src\\Emit-Effects.ps1", "aliases": ["side effects", "purity"] },
     "touches-tables":   { "emitter": "charts\\src\\Emit-TouchesTables.ps1" },
     "exception-paths":  { "emitter": "charts\\src\\Emit-ExceptionPaths.ps1" },
