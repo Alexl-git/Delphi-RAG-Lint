@@ -45,7 +45,7 @@ does **not** run the exe in that folder. Always use `.\drag-lint.exe` or a full
 path. This is not hypothetical: it once produced 33,626 findings against the real
 14,764, silently, because an old binary answered.
 
-**Status: alpha** (current release v1.26.4-alpha; extractor 1.21.1-alpha, resolver 1.12.0-alpha, index schema 23). Expect breaking changes. The index format is stable within a schema version; the CLI surface is not yet frozen.
+**Status: alpha** (current release v1.26.5-alpha; extractor 1.21.1-alpha, resolver 1.12.0-alpha, index schema 23). Expect breaking changes. The index format is stable within a schema version; the CLI surface is not yet frozen.
 
 ## Start here
 

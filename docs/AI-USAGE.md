@@ -298,7 +298,10 @@ published while `modifiers` says `public` for both.
 >   `only_skips_unit_rules` -- JSON `true` since 1.23.0: repeatable`--unit`,
 >   and `--only` skips a strand-only-excluded unit-rule removal; `descendant_warnings`
 >   -- JSON `true` since 1.25.0: convert-apply lists descendant units still
->   streaming or using a converted instance in `descendants[]`; `inherited_retype`
+>   streaming or using a converted instance in `descendants[]`; `book_warn` and
+>   `check_ref` -- JSON `true` since 1.26.5: the book's `#warn` and `#check-ref`
+>   directives (items[] kinds `book-warning`, `ref-path-like`, `ref-dangling`,
+>   `ref-not-checked`); `inherited_retype`
 >   -- JSON `true` since 1.26.0: an inherited instance of a converted ancestor is
 >   retyped, and its fields followed in code, `inherited[].action`). Read-only. This is what the IDE
 >   Help>About box calls. Each `--db <index>` adds that index's freshness

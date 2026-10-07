@@ -66,12 +66,16 @@ type
   /// named mapping within the enclosing #convert block's scope).
   /// rkDepth=#depth (the book's property-tree expansion depth for proptree and
   /// convert-scaffold; Depth holds the value; conversion ignores it).
+  /// rkWarn=#warn (1.26.3: a book-authored warning when the SOURCE .dfm streams
+  /// FromPath; Text holds the template; carries nothing). rkCheckRef=#check-ref
+  /// (1.26.3: the converted ToPath value must name a value some .dfm of the
+  /// project carries on a Class.Prop listed in RefTargets).
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Convert.Rules.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TRuleKind = (rkUnuse, rkRemove, rkMigrate, rkConvert, rkLink, rkDefault, rkNote, rkPcre, rkIgnore, rkUse, rkUseSwap,
-               rkMapping, rkApply, rkDepth);
+               rkMapping, rkApply, rkDepth, rkWarn, rkCheckRef);
 
   /// <summary>One '&lt;ToPath&gt; = &lt;Value&gt;' assignment from a #mapping
   /// branch's set list.</summary>
@@ -167,6 +171,10 @@ type
     /// out-of-range or non-integer value is a parse error and makes no
     /// rule).</summary>
     Depth    : Integer;
+    /// <summary>rkCheckRef only: the '&lt;Class&gt;.&lt;Prop&gt;' targets after
+    /// the ToPath, in book order; the LAST dot splits class from
+    /// property.</summary>
+    RefTargets: TArray<string>;
   end;
 
   /// <summary>One parse-or-validation error, anchored to a source line.</summary>
@@ -435,6 +443,17 @@ function ValidateConversionRulesPerBlock(const ARules: TConversionRuleSet;
 /// </remarks>
 function WithoutUnreachableRules(const ARules: TConversionRuleSet;
   const AUnreachable: TArray<TUnreachablePath>; ABlock: Integer): TConversionRuleSet;
+
+/// <summary>The property names a #warn text references as brace placeholders
+/// (1.26.3).</summary>
+/// <param name="AText">The #warn template text.</param>
+/// <returns>Each name between an opening and the next closing brace that is a
+/// valid (dotted) identifier, in text order, duplicates kept; empty when
+/// none. The literal placeholders &lt;value&gt; and &lt;name&gt; are not brace
+/// forms and never appear here.</returns>
+/// <remarks>Pure. convert-validate checks every name against the block's From
+/// type; the re-emit reads each from the source block.</remarks>
+function WarnPlaceholders(const AText: string): TArray<string>;
 
 /// <summary>AUnreachable with each message once, in first-seen order -- what
 /// every surface prints and emits.</summary>
@@ -783,6 +802,77 @@ var
     Rules.Add(R);
   end;
 
+  { 1.26.3: '#warn <FromPath> "<text>"'. The path is the first token; the text
+    runs from the first double quote to the LAST one, so a quote inside the
+    text needs no escape. Anything else is a line error and makes no rule. }
+  procedure ParseWarnDirective(const AArg: string);
+  const
+    QUOTE = '"';
+  var
+    W    : TConversionRule;
+    SpAt : Integer;
+    Rest : string;
+  begin
+    W:= Default(TConversionRule);
+    W.Kind:= rkWarn;
+    SpAt:= Pos(' ', AArg);
+    if SpAt > 0 then
+    begin
+      W.FromPath:= Trim(Copy(AArg, 1, SpAt - 1));
+      Rest      := Trim(Copy(AArg, SpAt + 1, MaxInt));
+    end
+    else
+    begin
+      W.FromPath:= Trim(AArg);
+      Rest      := '';
+    end;
+    if (W.FromPath = '') or W.FromPath.StartsWith(QUOTE) or (Length(Rest) < 2) or
+       not Rest.StartsWith(QUOTE) or not Rest.EndsWith(QUOTE) then
+    begin
+      AddError('#warn needs <FromPath> "<text>"');
+      Exit;
+    end;
+    W.Text:= Copy(Rest, 2, Length(Rest) - 2);
+    if Trim(W.Text) = '' then
+    begin
+      AddError('#warn text is empty');
+      Exit;
+    end;
+    AddRule(W);
+  end;
+
+  { 1.26.3: '#check-ref <ToPath> <Class>.<Prop>[, <Class>.<Prop> ...]'. Each
+    target needs a dot with a name on both sides of the last one. }
+  procedure ParseCheckRefDirective(const AArg: string);
+  var
+    C   : TConversionRule;
+    SpAt: Integer;
+    T   : string;
+    Dot : Integer;
+  begin
+    C:= Default(TConversionRule);
+    C.Kind:= rkCheckRef;
+    SpAt:= Pos(' ', AArg);
+    if SpAt = 0 then
+    begin
+      AddError('#check-ref needs <ToPath> <Class>.<Prop>[, <Class>.<Prop> ...]');
+      Exit;
+    end;
+    C.ToPath:= Trim(Copy(AArg, 1, SpAt - 1));
+    for var S: string in Copy(AArg, SpAt + 1, MaxInt).Split([',']) do
+    begin
+      T  := Trim(S);
+      Dot:= T.LastIndexOf('.') + 1;
+      if (Dot <= 1) or (Dot >= Length(T)) or (Pos(' ', T) > 0) then
+      begin
+        AddError(Format('#check-ref target "%s" is not <Class>.<Prop>', [T]));
+        Exit;
+      end;
+      C.RefTargets:= C.RefTargets + [T];
+    end;
+    AddRule(C);
+  end;
+
   { Parse ONE '#mapping ...' line. AArg is everything after the directive.
 
     Three FLAT SIBLING line forms, tied together only by <Name> -- there is no
@@ -1022,6 +1112,10 @@ begin
         R.FromPath:= Arg;
         AddRule(R);
       end
+      else if Directive('#warn', Arg) then
+        ParseWarnDirective(Arg)
+      else if Directive('#check-ref', Arg) then
+        ParseCheckRefDirective(Arg)
       else if Directive('#note', Arg) then
       begin
         R.Kind:= rkNote;
@@ -1122,6 +1216,23 @@ function UnreachableMessage(ALineNo: Integer; const APath, AMember, AVisibility,
 begin
   Result:= Format('line %d: warning: %s: %s is %s in %s; never applied unless a descendant class changes its visibility',
     [ALineNo, APath, AMember, AVisibility, AClass]);
+end;
+
+function WarnPlaceholders(const AText: string): TArray<string>;
+var
+  I, J: Integer;
+  Name: string;
+begin
+  Result:= nil;
+  I:= Pos('{', AText);
+  while I > 0 do
+  begin
+    J:= Pos('}', AText, I + 1);
+    if J = 0 then Break;
+    Name:= Copy(AText, I + 1, J - I - 1);
+    if IsValidIdent(Name, True) then Result:= Result + [Name];
+    I:= Pos('{', AText, J + 1);
+  end;
 end;
 
 // The #convert block of every rule, index-aligned with ARules.Rules: 0 before
@@ -1371,6 +1482,20 @@ begin
           CheckLinkOrDefault(R, Blocks[I]);
           if (R.Kind = rkLink) and (R.GlyphExpr <> '') then CheckGlyphLink(I);
         end;
+        rkWarn:
+        begin
+          // 1.26.3: the path and every brace placeholder must name a member
+          // of the block's From type, exactly as a #link FromPath must.
+          var WT: TBlockClasses:= ClassesOf(Blocks[I]);
+          if Missing(WT.FromClass, R.FromPath, R.LineNo, Blocks[I], False) then
+            Add(R.LineNo, Format('warn FromPath not found in --from tree: %s', [R.FromPath]) + Where(Blocks[I]));
+          for var Ph: string in WarnPlaceholders(R.Text) do
+            if Missing(WT.FromClass, Ph, R.LineNo, Blocks[I], False) then
+              Add(R.LineNo, Format('warn placeholder {%s} not found in --from tree', [Ph]) + Where(Blocks[I]));
+        end;
+        rkCheckRef:
+          if Missing(ClassesOf(Blocks[I]).ToClass, R.ToPath, R.LineNo, Blocks[I], False) then
+            Add(R.LineNo, Format('check-ref ToPath not found in --to tree: %s', [R.ToPath]) + Where(Blocks[I]));
         rkMapping:
           for B in MappingBlocks(I) do CheckMapping(R, B);
         rkApply:
