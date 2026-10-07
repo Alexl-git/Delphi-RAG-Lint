@@ -159,6 +159,8 @@ type
     FAnchors: TOptsD;
     FGuarded: Integer;
     FVisible: Boolean;
+    FName   : string;
+    FOnPing : TNotifyEvent;
   published
     property Mode : TDefMode read FMode  write FMode  default dmA;
     property Same : Boolean  read FSame  write FSame  default True;
@@ -173,6 +175,11 @@ type
       That is what makes the owned-part case a wrong-VALUE test, not just a
       wrong-place test. }
     property Visible: Boolean read FVisible write FVisible default False;
+    { 29c: the component's identity and an event -- neither is a default that
+      can diverge (Name streams in the object header, an unassigned event is
+      nil on both sides) }
+    property Name  : string read FName write FName;
+    property OnPing: TNotifyEvent read FOnPing write FOnPing;
   end;
 
   TToD = class(TPersistent)
@@ -183,6 +190,8 @@ type
     FAnchors2: TOptsD;
     FGuarded2: Integer;
     FMode3   : TDstMode;
+    FName    : string;
+    FOnPing  : TNotifyEvent;
   published
     property Mode2 : TDefMode read FMode2  write FMode2  default dmC;
     property Same2 : Boolean  read FSame2  write FSame2  default True;
@@ -190,6 +199,8 @@ type
     property Anchors2: TOptsD  read FAnchors2 write FAnchors2 default [odC];
     property Mode3   : TDstMode read FMode3 write FMode3;
     property Guarded2: Integer read FGuarded2 write FGuarded2 default 1;
+    property Name    : string read FName write FName;
+    property OnPing  : TNotifyEvent read FOnPing write FOnPing;
     { NOTE: TToD deliberately has NO `Shown`. A #link naming Shown belongs to
       the owned part's #convert, and applying it here must emit nothing. }
   end;
@@ -698,6 +709,17 @@ Check 'diverge-dedup: CONTROL -- the note still fires and names Guarded' ($div29
 Check 'diverge-dedup: Guarded is named exactly ONCE although three #links name it' `
   ([regex]::Matches($div29b, '\bGuarded\b').Count -eq 1) "note=$div29b"
 
+# 29c: Name and events are NOT divergences (1.26.2). Name streams in the object
+# HEADER, so the target always receives it; an event absent from the block is
+# unassigned, which is nil on both sides. MEStats' tblMet1 listed Name and every
+# dataset event as "may diverge" -- noise that buried the real entry.
+$r29c = "#convert TFromD -> TToD`r`n#link Name <- Name`r`n#link OnPing <- OnPing`r`n#link Guarded2 <- Guarded`r`n"
+$o29c = Reemit $b29 $r29c 'ReemitFix.TFromD' 'ReemitFix.TToD'
+$j29c = $o29c | ConvertFrom-Json
+$div29c = @(@($j29c.report.notes) | Where-Object { $_ -match 'may diverge' }) -join ' | '
+Check 'diverge-identity: CONTROL -- the note still names Guarded' ($div29c -match '\bGuarded\b') "notes=$($j29c.report.notes -join ' | ')"
+Check 'diverge-identity: Name is not listed' (-not ($div29c -match '\bName\b')) "note=$div29c"
+Check 'diverge-identity: the event OnPing is not listed' (-not ($div29c -match '\bOnPing\b')) "note=$div29c"
 # 30: #remove must beat default-resolution. RemapLeaf checks it first for a
 # streamed leaf; without the same check here a removed property was resurrected
 # whenever it happened to sit at its default -- so its fate depended on the

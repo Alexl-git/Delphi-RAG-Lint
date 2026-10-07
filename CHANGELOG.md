@@ -43,6 +43,16 @@ separate branch.)
 - **The `defaults may diverge` re-emit note names each property once.** A book with
   several `#convert` blocks linking the same property listed it once per link (MEStats
   `tblMet1`: `Name` seven times, every event three times).
+- **...and no longer lists `Name` or events at all.** `Name` streams in the object header
+  and always reaches the target; an absent event is unassigned, nil on both sides. Events
+  are recognised by the VCL type-naming convention (`...Event`), as the index records no
+  procedural-type kind.
+- **`glyph-vacuum` saves the true image of a TPngImage / TIcon / TGIFImage / TWICImage
+  picture.** `ParseStreamedGraphic` assumed an Int32 size after any TPicture class name, so
+  for the classes that write none the reported image offset was 4 bytes into the image and
+  the saved file was truncated. It now shares `UnwrapGraphicData`'s per-class framing; a
+  wrapper whose framing is unknown keeps its declared format and an offset of 0 (the whole
+  payload is saved) instead of a guessed one.
 
 ## v1.26.0-alpha -- unreleased
 

@@ -14,8 +14,13 @@ type
   /// its bytes -- never inferred from the property name.</summary>
   /// <remarks>
   /// A .dfm `Picture.Data` blob is a streamed TPicture: one length
-  /// byte, that many class-name bytes, a little-endian Int32 image size, then
-  /// the image. A bare image (no preamble) is recognised by its magic bytes at
+  /// byte, that many class-name bytes, then that graphic class's own framing --
+  /// an Int32 size before the image for TBitmap / TJPEGImage, none for TIcon /
+  /// TPngImage / TGIFImage / TWICImage (TGraphicDataFraming; one source of truth
+  /// with UnwrapGraphicData since 1.26.2). ImageOffset / ImageLength locate the
+  /// TRUE image; both are 0 when the wrapper names a class whose framing is not
+  /// known, or whose bytes do not hold a recognised image -- the offset is then
+  /// not guessed, and Format comes from the class name alone. A bare image (no preamble) is recognised by its magic bytes at
   /// offset 0 -- or, when it starts with '&lt;?xml'/'&lt;svg' (an optional UTF-8
   /// BOM and whitespace skipped), as SVG text -- and reported with an empty
   /// Wrapper. A TBitmap-typed property streams as [Int32 LE length][image bytes]
@@ -58,7 +63,7 @@ function DecodeDfmHex(const AValueText: string): TBytes;
 /// <returns>'bmp' | 'ico' | 'wmf' | 'emf' | 'png' | 'jpg' | 'gif' | 'svg' | '' (unrecognised).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Convert.GlyphStrip.IsLengthPrefixedImage (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.ParseStreamedGraphic (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.UnwrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
+/// <para>Called from: DRagLint.Convert.GlyphStrip.IsLengthPrefixedImage (DRagLint.Convert.GlyphStrip.pas), DRagLint.Convert.GlyphStrip.UnwrapGraphicData (DRagLint.Convert.GlyphStrip.pas)</para>
 /// <para>Calls: DRagLint.Convert.GlyphStrip.IsEmfSignature, DRagLint.Convert.GlyphStrip.LooksLikeSvg, DRagLint.Convert.GlyphStrip.StartsWith</para>
 /// <para>Returns: ''</para>
 /// <seealso cref="DRagLint.Convert.GlyphStrip.IsEmfSignature"/>
@@ -77,13 +82,12 @@ function SniffImageFormat(const ABytes: TBytes; AOffset: Integer): string;
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas)</para>
-/// <para>Calls: Default, DRagLint.Convert.GlyphStrip.ReadDibHeader, DRagLint.Convert.GlyphStrip.ReadInt32LE, DRagLint.Convert.GlyphStrip.SniffImageFormat, SameText</para>
+/// <para>Calls: Default, DRagLint.Convert.GlyphStrip.FormatDeclaredBy, DRagLint.Convert.GlyphStrip.ReadDibHeader, DRagLint.Convert.GlyphStrip.ReadPictureClassName, DRagLint.Convert.GlyphStrip.UnwrapGraphicData</para>
 /// <para>Returns: Default(TStreamedGraphic)</para>
-/// <para>Complexity: 20 (cyclomatic, outer body), 61 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.FormatDeclaredBy"/>
 /// <seealso cref="DRagLint.Convert.GlyphStrip.ReadDibHeader"/>
-/// <seealso cref="DRagLint.Convert.GlyphStrip.ReadInt32LE"/>
-/// <seealso cref="DRagLint.Convert.GlyphStrip.SniffImageFormat"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.ReadPictureClassName"/>
+/// <seealso cref="DRagLint.Convert.GlyphStrip.UnwrapGraphicData"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ParseStreamedGraphic(const APayload: TBytes): TStreamedGraphic;
@@ -328,69 +332,6 @@ begin
     AG.PaletteEntries:= 0;
 end;
 
-function ParseStreamedGraphic(const APayload: TBytes): TStreamedGraphic;
-var
-  N       : Integer;
-  I       : Integer;
-  Cls     : string;
-  InnerFmt: string;
-begin
-  Result:= Default(TStreamedGraphic);
-  if Length(APayload) = 0 then Exit;
-
-  { A bare image, sniffed at offset 0 (magic bytes, or SVG text). }
-  Result.Format:= SniffImageFormat(APayload, 0);
-  if Result.Format <> '' then
-  begin
-    Result.Ok         := True;
-    Result.ImageOffset:= 0;
-    Result.ImageLength:= Length(APayload);
-  end
-  else
-  begin
-    { TBitmap-typed properties stream with no class name: [Int32 LE length][image].
-      Checked before the class-name preamble below -- a size byte in 1..63 there
-      could otherwise be misread as a class-name length. }
-    InnerFmt:= '';
-    if Length(APayload) >= MinLengthPrefixedPayload then
-      if ReadInt32LE(APayload, 0) = Length(APayload) - PreambleSizeBytes then
-        InnerFmt:= SniffImageFormat(APayload, PreambleSizeBytes);
-    if InnerFmt <> '' then
-    begin
-      Result.Wrapper    := '';
-      Result.ImageOffset:= PreambleSizeBytes;
-      Result.ImageLength:= Length(APayload) - PreambleSizeBytes;
-      Result.Format     := InnerFmt;
-      Result.Ok         := True;
-    end
-    else
-    begin
-      { The Delphi filer preamble: [len] class-name [Int32 size] image. }
-      N:= APayload[0];
-      if (N < 1) or (N > MaxClassNameLen) or (Length(APayload) < 1 + N + PreambleSizeBytes) then Exit;
-      for I:= 1 to N do
-        if (APayload[I] < MinPrintableAscii) or (APayload[I] > MaxPrintableAscii) then Exit; { not a class name }
-      Cls:= TEncoding.ASCII.GetString(APayload, 1, N);
-      Result.Wrapper    := Cls;
-      Result.ImageOffset:= 1 + N + PreambleSizeBytes;
-      Result.ImageLength:= Length(APayload) - Result.ImageOffset;
-      Result.Format     := SniffImageFormat(APayload, Result.ImageOffset);
-      if Result.Format = '' then
-      begin
-        { The writer's declaration decides when the magic does not. }
-        if SameText(Cls, 'TBitmap')    then Result.Format:= 'bmp'
-        else if SameText(Cls, 'TIcon') then Result.Format:= 'ico'
-        else if SameText(Cls, 'TMetafile') then Result.Format:= 'wmf'
-        else if SameText(Cls, 'TPngImage') or SameText(Cls, 'TPNGObject') then Result.Format:= 'png'
-        else if SameText(Cls, 'TJPEGImage') then Result.Format:= 'jpg';
-      end;
-      Result.Ok:= True;
-    end;
-  end;
-
-  if Result.Format = 'bmp' then ReadDibHeader(APayload, Result.ImageOffset, Result);
-end;
-
 function BareClassName(const AClassName: string): string;
 begin
   Result:= Trim(AClassName);
@@ -544,6 +485,56 @@ begin
     end;
   end;
   Result:= AReason = '';
+end;
+
+// The image format a TPicture class name DECLARES, for a wrapper whose bytes
+// could not be unwrapped: the writer's declaration is all there is.
+function FormatDeclaredBy(const AClassName: string): string;
+var
+  Cls: string;
+begin
+  Cls:= BareClassName(AClassName);
+  if SameText(Cls, 'TBitmap') then
+    Result:= 'bmp'
+  else if SameText(Cls, 'TIcon') then
+    Result:= 'ico'
+  else if SameText(Cls, 'TMetafile') then
+    Result:= 'wmf'
+  else if SameText(Cls, 'TPngImage') or SameText(Cls, 'TPNGObject') then
+    Result:= 'png'
+  else if SameText(Cls, 'TJPEGImage') then
+    Result:= 'jpg'
+  else
+    Result:= '';
+end;
+
+// ONE SOURCE OF TRUTH WITH UnwrapGraphicData (1.26.2). This used to assume an
+// Int32 size after ANY wrapper class, so a TPngImage / TIcon / TGIFImage /
+// TWICImage picture -- which write none -- got an ImageOffset 4 bytes into the
+// image, and glyph-vacuum saved a truncated file.
+function ParseStreamedGraphic(const APayload: TBytes): TStreamedGraphic;
+var
+  Image: TBytes;
+  Fmt  : string;
+  Cls  : string;
+  Why  : string;
+begin
+  Result:= Default(TStreamedGraphic);
+  if UnwrapGraphicData(APayload, Image, Fmt, Cls, Why) then
+  begin
+    Result.Ok         := True;
+    Result.Wrapper    := Cls;
+    Result.Format     := Fmt;
+    Result.ImageLength:= Length(Image);
+    Result.ImageOffset:= Length(APayload) - Length(Image); { the image is always the payload's tail }
+  end
+  else if ReadPictureClassName(APayload, Cls) then
+  begin
+    Result.Ok     := True;
+    Result.Wrapper:= Cls;
+    Result.Format := FormatDeclaredBy(Cls);
+  end;
+  if (Result.Format = 'bmp') and (Result.ImageLength > 0) then ReadDibHeader(APayload, Result.ImageOffset, Result);
 end;
 
 function WrapGraphicData(const AImage: TBytes; const AFormat: string;

@@ -53,7 +53,7 @@ type
   /// --append. Every value is written verbatim with tabs/newlines replaced by
   /// spaces.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.LoadExistingRows (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.WriteClassesTsv (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.WriteGalleryHtml (DRagLint.Convert.GlyphVacuum.pas) (+1 more)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.AddRow (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.FillDerived (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.RowLine (DRagLint.Convert.GlyphVacuum.pas), DRagLint.Convert.GlyphVacuum.WriteClassesTsv (DRagLint.Convert.GlyphVacuum.pas) (+5 more)</para>
   /// <para>Used in units: DRagLint.Convert.GlyphVacuum</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

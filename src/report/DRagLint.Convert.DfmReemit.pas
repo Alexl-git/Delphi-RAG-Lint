@@ -363,16 +363,12 @@ function ParseDfmBlock(const ABlockText: string; out ARoot: TDfmNode): Boolean;
 /// Report.DefaultsResolved, no divergence note), no #default is written, and a
 /// #mapping whose source it does not stream is skipped silently.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
-/// <para>Calls: ApplyInScope, ApplySets, Byte, CarryLinkFor, CharInSet, ClassCastUnderPath, CloneNode, CompatHas, Copy, Default (+38 more)</para>
-/// <para>Returns: Default(TReemitResult)</para>
-/// <para>Complexity: 28 (cyclomatic, outer body), 1042 lines (full implementation)</para>
-/// <para>Pure</para>
-/// <seealso cref="DRagLint.Convert.DfmReemit.BareTypeTail"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.EmitBlock"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.FindAtPath"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.LeafDefaultOf"/>
-/// <seealso cref="DRagLint.Convert.DfmReemit.LeafIsClassTyped"/>
+/// <para>Called from: DRagLint.CLI.DoConvertReemit (DRagLint.CLI.pas), DRagLint.Convert.Apply.BuildApplyPlan (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.HandleNested (DRagLint.Convert.DfmReemit.pas)</para>
+/// <para>Calls: DRagLint.Convert.DfmReemit.ConvertBlockFor, DRagLint.Convert.DfmReemit.ParseDfmBlock, DRagLint.Convert.DfmReemit.ReemitBlock, DRagLint.Convert.Rules.WithoutUnreachableRules</para>
+/// <seealso cref="DRagLint.Convert.DfmReemit.ConvertBlockFor"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.ParseDfmBlock"/>
+/// <seealso cref="DRagLint.Convert.DfmReemit.ReemitBlock"/>
+/// <seealso cref="DRagLint.Convert.Rules.WithoutUnreachableRules"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ReemitComponent(const AFromBlock: string; const ARules: TConversionRuleSet;
@@ -1959,6 +1955,15 @@ begin
         // ONCE per property (1.26.2): several #links -- one per #convert block of
         // a book like BDE-to-FireDAC.rules -- can name the same FromPath, and the
         // note read "Name, Name, ... Name" (MEStats tblMet1).
+        //
+        // NOT a divergence either (1.26.2), and so not listed: `Name`, the
+        // component's identity, which streams in the object HEADER and always
+        // reaches T; and an EVENT, whose absence means unassigned -- nil on both
+        // sides. An event is recognised by its type's VCL naming convention
+        // (TNotifyEvent, TDataSetNotifyEvent, TFilterRecordEvent ...): the index
+        // records no procedural-type kind, and this unit is pure.
+        if SameText(R.FromPath, 'Name') or LeafTypeOf(AFrom, R.FromPath).EndsWith('Event', True) then
+          Continue;
         if LeafTypeOf(AFrom, R.FromPath) <> '' then
         begin
           var Seen: Boolean:= False;
