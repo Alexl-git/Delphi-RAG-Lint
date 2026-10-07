@@ -92,7 +92,10 @@ type
 /// <summary>Is ALine output noise rather than a diagnostic?</summary>
 /// <param name="ALine">One output line, untrimmed.</param>
 /// <returns>True for a blank line, the bare "OK", the "(loaded defaults from ...)"
-/// banner and the engine's "resolver: edges were derived by ..." advisory.</returns>
+/// banner, the engine's "resolver: edges were derived by ..." advisory and a line that,
+/// trimmed, starts with exactly "NOTE:" (case-sensitive; "line N: NOTE: ..." and
+/// "note: ..." are not noise). Engine 1.26.x prints "NOTE: --from and --to not both
+/// given -- the book was PARSED only; ..." on every syntax-only pass.</returns>
 function IsValidateNoise(const ALine: string): Boolean;
 
 /// <summary>Parse convert-validate's text output into diagnostics.</summary>
@@ -208,6 +211,8 @@ const
   LINE_PREFIX = 'line ';
   /// <summary>The engine's warning marker, after "line N: " or on its own.</summary>
   WARNING_PREFIX = 'warning:';
+  /// <summary>The engine's informational marker, case-sensitive (noise, see IsValidateNoise).</summary>
+  NOTE_PREFIX = 'NOTE:';
 
 type
   /// <summary>One #convert block as found in a text.</summary>
@@ -337,7 +342,11 @@ begin
   T:= Trim(ALine);
   // "resolver: edges were derived by ..." is the engine's advisory about the
   // library index's resolve stamp -- about the DB, never about the book.
-  Result:= (T = '') or SameText(T, 'OK') or T.StartsWith('(loaded defaults from', True) or T.StartsWith('resolver:', True);
+  // "NOTE: --from and --to not both given -- the book was PARSED only; ..." (engine
+  // 1.26.x, stderr, every syntax-only pass) is information about the pass, not a
+  // diagnostic; FATAL / ERROR lines stay errors.
+  Result:= (T = '') or SameText(T, 'OK') or T.StartsWith('(loaded defaults from', True) or T.StartsWith('resolver:', True)
+    or T.StartsWith(NOTE_PREFIX); // case-SENSITIVE: the engine writes it upper-case
 end;
 
 function ParseValidateOutput(const AOutput: string): TArray<TValidateDiag>;

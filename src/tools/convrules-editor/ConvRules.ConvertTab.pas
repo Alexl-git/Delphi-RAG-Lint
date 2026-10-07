@@ -1120,8 +1120,9 @@ begin
   LRow:= ARow;
   // C8 E10, editor side: E2b code uses the run left, from the analysis taken BEFORE
   // the run (RunFinished reanalyses only after every row is in). An ancestor this run
-  // converted earlier converted them too (R4).
-  if CodeUseNoteDue(LRow, FRunRows) then
+  // converted earlier converted them too (R4). An engine with inherited_retype lists
+  // code-only uses in inherited[] itself (authoritative, C8 M4): no second note then.
+  if CodeUseNoteDue(LRow, FRunRows, FRunRetypeOk) then
   begin
     var LLeft: string:= CodeUseLeftNote(InheritanceOf(LRow.UnitPas), UnitsConvertedIn(FRunRows));
     if LLeft <> '' then

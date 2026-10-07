@@ -8348,6 +8348,88 @@ end;
   stderr "resolver: ... (minutes, not a re-parse)." advisory, split from its head by
   a stdout chunk, parsed as an ERROR. Stand-in: stdout, stderr, stdout. Separate
   pipes put every stdout line first and the stderr line after them, whole. }
+{ Engine 1.26.2 (pin 1.26.2-alpha-20261006-205908) prints, on STDERR, for a
+  convert-validate without --from/--to:
+    NOTE: --from and --to not both given -- the book was PARSED only; ...
+  1.25.2 did not, and the parser read it as a line-0 ERROR, so every Save said
+  "failed". The validate-1262-*.stdout.txt / *.stderr.txt fixtures are REAL 1.26.2
+  captures, each stream on its own (2026-10-06): bde-syntax and bad-syntax without
+  a pair; bde-ttable with --from Bde.DBTables.TTable --to
+  FireDAC.Comp.Client.TFDTable --db library-Win64 (exit 1, stderr = the resolver
+  advisory only). RunCaptureStreaming hands the validator stdout, then stderr. }
+function Validate1262(const AStem: string): string;
+begin
+  Result:= ValidateFixture('validate-1262-' + AStem + '.stdout.txt') + ValidateFixture('validate-1262-' + AStem + '.stderr.txt');
+end;
+
+function HasLineZero(const ADiags: TArray<TValidateDiag>): Boolean;
+var
+  D: TValidateDiag;
+begin
+  Result:= False;
+  for D in ADiags do
+    if D.Line = 0 then
+      Exit(True);
+end;
+
+procedure TestValidate1262Note;
+const
+  NOTE_NEGATIVES = 3;  // 'line 12: NOTE: x', 'ERROR: ... NOTE: ...', 'note: z' -- all errors
+  NOTE_DIAG_LINE = 12;
+var
+  Book   : TRuleBook;
+  Txt    : string   ;
+  Old    : string   ;
+  Dropped: Integer  ;
+  Map    : TArray<TRuleNode>;
+  D      : TArray<TValidateDiag>;
+  R      : TScopedValidation;
+  Fake   : TValidateFn;
+begin
+  Check('validate.1262.fixture.present', Pos('NOTE: --from and --to not both given', ValidateFixture('validate-1262-bde-syntax.stderr.txt')) = 1, 'validate-1262-bde-syntax.stderr.txt missing or reworded');
+  Check('validate.1262.note.in.diag.not.noise', not IsValidateNoise('line 12: NOTE: x'));
+  Check('validate.1262.error.with.note.not.noise', not IsValidateNoise('ERROR: bad flag -- NOTE: see --help'));
+  Check('validate.1262.lowercase.note.not.noise', not IsValidateNoise('note: x'));
+  D:= ParseValidateOutput('line ' + IntToStr(NOTE_DIAG_LINE) + ': NOTE: x'#13#10'ERROR: bad -- NOTE: y'#13#10'note: z'#13#10);
+  Check('validate.1262.note.negatives.diags', (Length(D) = NOTE_NEGATIVES) and (CountDiags(D, False) = NOTE_NEGATIVES) and (D[0].Line = NOTE_DIAG_LINE)
+    and (D[1].Line = 0) and (D[2].Line = 0), IntToStr(Length(D)));
+  Check('validate.1262.note.is.noise', IsValidateNoise('NOTE: --from and --to not both given -- the book was PARSED only; #link/#default paths were not checked (convert-apply validates every block)'));
+  D:= ParseValidateOutput('NOTE: something'#13#10'FATAL: cannot open --db x.sqlite'#13#10'ERROR: bad flag'#13#10);
+  Check('validate.1262.fatal.error.still.errors', (Length(D) = 2) and (CountDiags(D, False) = 2) and HasLineZero(D), IntToStr(Length(D)));
+
+  D:= ParseValidateOutput(Validate1262('bde-syntax'));
+  Check('validate.1262.syntax.ok.is.empty', Length(D) = 0, IntToStr(Length(D)));
+  D:= ParseValidateOutput(Validate1262('bad-syntax'));
+  Check('validate.1262.bad.two.errors.no.line0', (Length(D) = 2) and (CountDiags(D, False) = 2) and not HasLineZero(D), IntToStr(Length(D)));
+  D:= ParseValidateOutput(Validate1262('bde-ttable'));
+  Check('validate.1262.ttable.counts', (CountDiags(D, True) = TTABLE_CAPTURE_WARNINGS) and (CountDiags(D, False) = TTABLE_CAPTURE_ERRORS) and not HasLineZero(D),
+    Format('%d warn %d err', [CountDiags(D, True), CountDiags(D, False)]));
+
+  Fake:= function(const AText, AFrom, ATo: string): string
+    begin
+      if AFrom = '' then
+        Result:= Validate1262('bde-syntax')
+      else if AFrom = 'Bde.DBTables.TTable' then
+        Result:= Validate1262('bde-ttable')
+      else
+        Result:= 'FATAL: unexpected pair ' + AFrom;
+    end;
+  Book:= TRuleBook.Create;
+  try
+    Book.LoadFromString(ValidateFixture('BDE-to-FireDAC.rules'));
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    R:= RunScopedValidation(Txt, nil, Fake);
+    Check('validate.1262.run.unchanged.ok', (R.Errors = 0) and (R.Warnings = 0) and (ValidateVerdict(R) = 'OK'), ValidateVerdict(R));
+    Book.Nodes[BDE_UNREACHABLE_LINK - 1].Raw:= Book.Nodes[BDE_UNREACHABLE_LINK - 1].Raw + ' ';
+    Old:= Txt;
+    Txt:= Book.SaveCompleteWithMap(Dropped, Map);
+    R:= RunScopedValidation(Txt, ChangedBlockJobs(Old, Txt), Fake);
+    Check('validate.1262.run.changed.warnings', ValidateVerdict(R) = 'OK, 4 warning(s) -- see marked rules', ValidateVerdict(R));
+  finally
+    Book.Free;
+  end; // try
+end;
+
 procedure TestValidateTextStreams;
 const
   STANDIN_CMD = '@echo off'#13#10'echo line 1: warning: first'#13#10'echo   resolver: edges were derived by r=1 (minutes, not a re-parse). 1>&2'#13#10 +
@@ -9332,9 +9414,100 @@ begin
   end; // try
 end;
 
-{ C8 E11 live, ONLY against an engine that reports inherited_instances (1.22.0 on):
-  Anc then Desc in one run; Anc's Label1 is retyped, Desc's inherited Label1 is left
-  as it is (N1 skips it; retype is N2) and reported as left with state converted. }
+{ inherited[] `action` (engine 1.26.0 on, with inherited_retype). fixtures\inherited\:
+    apply-desc-1220-n1.json        REAL 1.22.0 capture (pre-N2, no action): the
+                                   inherited.live fixture's Desc.pas, Label1 SKIPPED
+    apply-desc-1262-retyped.json   REAL 1.26.2 capture of the same run: Label1 RETYPED
+    apply-inherited-actions-sample.json  HAND-WRITTEN, one entry per action value
+  Temp paths in the captures were replaced by C:\fix\. }
+function InheritedFixture(const AName: string): string;
+begin
+  Result:= TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\inherited\' + AName)));
+end;
+
+procedure TestInheritedActions;
+const
+  N1_NOTE = '0 edit(s), 0 remaining for manual work; no component of its own to convert; 1 inherited instance(s) left: ancestor Anc converted -- '
+    + 'this unit still has TLabel there and may not compile or load until the engine can retype inherited instances (N2)';
+  N1_NOTE_RETYPE = '0 edit(s), 0 remaining for manual work; no component of its own to convert; 1 inherited instance(s) left: ancestor Anc converted -- '
+    + 'retype pending (engine N2)';
+  SAMPLE_NOTE = '5 edit(s), 0 remaining for manual work; 2 inherited instance(s) retyped; 1 inherited instance(s) left: ancestor Base not converted; '
+    + '1 inherited code use(s) left: ancestor Base not converted; 1 inherited instance(s) left: ancestor field use not verified against the index';
+  { apply-inherited-actions-sample.json: inherited[] in this order. }
+  SAMPLE_ENTRIES    = 5; // retyped, retyped, skipped, code, unverified
+  SAMPLE_SKIPPED    = 2;
+  SAMPLE_CODE       = 3;
+  SAMPLE_UNVERIFIED = 4;
+  SAMPLE_LEFT_LINES = 3; // every entry but the two retyped ones
+  CODE_LINE         = 7; // a code use given a real line
+  CODE_NOTE_PARTS   = 2; // a note holding 'code use(s) left' ONCE splits in two
+var
+  A    : TApplyRow;
+  Row  : TConvertRow;
+  Lines: TArray<string>;
+  Joined: string;
+  Code : TInheritedLeft;
+begin
+  // Pre-N2 (1.22.0, no action): today's behaviour, both capability states.
+  A:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json'));
+  Check('inh.action.n1.parsed', A.Ok and (Length(A.InheritedLeft) = 1) and (A.InheritedLeft[0].Action = '') and not IsRetypedInstance(A.InheritedLeft[0]));
+  Check('inh.action.n1.note', ConvertedRowNote(A, True, False) = N1_NOTE, ConvertedRowNote(A, True, False));
+  Check('inh.action.missing.is.left', ConvertedRowNote(A, True, True) = N1_NOTE_RETYPE, ConvertedRowNote(A, True, True));
+  Row:= Default(TConvertRow);
+  Row.Status:= csConverted;
+  Row.Apply := A;
+  Check('inh.action.n1.report.line', Length(InheritedReportLines(Row, True, False)) = 1);
+
+  // N2 (1.26.2): the descendant's instance was RETYPED -- not left.
+  A:= ParseApplyJson(InheritedFixture('apply-desc-1262-retyped.json'));
+  Check('inh.action.n2.parsed', A.Ok and (Length(A.InheritedLeft) = 1) and (A.InheritedLeft[0].Action = 'retyped') and (A.InheritedLeft[0].AncestorState = 'converted'));
+  Check('inh.action.retyped.is.retyped', (Length(A.InheritedLeft) = 1) and IsRetypedInstance(A.InheritedLeft[0]));
+  Check('inh.action.n2.note', ConvertedRowNote(A, True, True) = '3 edit(s), 0 remaining for manual work; 1 inherited instance(s) retyped', ConvertedRowNote(A, True, True));
+  Check('inh.action.n2.no.n2.text', (Pos('N2', ConvertedRowNote(A, True, True)) = 0) and (Pos('N2', ConvertedRowNote(A, True, False)) = 0), ConvertedRowNote(A, True, False));
+  Check('inh.action.n2.left.empty', InheritedLeftNote(A.InheritedLeft, True) = '', InheritedLeftNote(A.InheritedLeft, True));
+  Row.Apply:= A;
+  Check('inh.action.n2.no.report.line', Length(InheritedReportLines(Row, True, True)) = 0, string.Join(' | ', InheritedReportLines(Row, True, True)));
+
+  // One entry per action value (hand-written sample).
+  A:= ParseApplyJson(InheritedFixture('apply-inherited-actions-sample.json'));
+  Check('inh.action.sample.parsed', Length(A.InheritedLeft) = SAMPLE_ENTRIES, IntToStr(Length(A.InheritedLeft)));
+  Check('inh.action.retyped.note', InheritedRetypedNote(A.InheritedLeft) = '2 inherited instance(s) retyped', InheritedRetypedNote(A.InheritedLeft));
+  Check('inh.action.sample.note', ConvertedRowNote(A, True, True) = SAMPLE_NOTE, ConvertedRowNote(A, True, True));
+  // The row the Convert tab shows (TConvertTab.AddRow): engine note, then the editor's
+  // own code-use note only when CodeUseNoteDue -- never with inherited_retype.
+  Row:= Default(TConvertRow);
+  Row.Status:= csConverted;
+  Row.Apply := A;
+  Row.Note  := ConvertedRowNote(A, True, True);
+  if CodeUseNoteDue(Row, [], True) then
+    Row.Note:= Row.Note + '; 1 inherited code use(s) left: ancestor Base not converted';
+  Check('inh.action.code.once', Length(Row.Note.Split(['code use(s) left'])) = CODE_NOTE_PARTS, Row.Note);
+  Check('inh.action.gated', ConvertedRowNote(A, False, True) = '5 edit(s), 0 remaining for manual work', ConvertedRowNote(A, False, True));
+  if Length(A.InheritedLeft) = SAMPLE_ENTRIES then
+  begin
+    Check('inh.action.skipped.left', not IsRetypedInstance(A.InheritedLeft[SAMPLE_SKIPPED]));
+    Check('inh.action.code.left', not IsRetypedInstance(A.InheritedLeft[SAMPLE_CODE]));
+    Check('inh.action.code.report', InheritedReportNote(A.InheritedLeft[SAMPLE_CODE], True)
+      = 'C1: TLabel -- code use -- ancestor Base not converted (code use of Base''s TLabel field)', InheritedReportNote(A.InheritedLeft[SAMPLE_CODE], True));
+    Code:= A.InheritedLeft[SAMPLE_CODE];
+    Code.Line:= CODE_LINE;
+    Check('inh.action.code.report.line', Pos('C1: TLabel line 7 -- code use -- ', InheritedReportNote(Code, True)) = 1, InheritedReportNote(Code, True));
+    Code.AncestorState:= 'converted';
+    Check('inh.action.code.converted.n1', InheritedLeftNote([Code], False) = '1 inherited code use(s) left: ancestor Base (ancestor converted; retype needs engine N2)', InheritedLeftNote([Code], False));
+    Check('inh.action.code.converted.retype', InheritedLeftNote([Code], True) = '1 inherited code use(s) left: ancestor Base converted', InheritedLeftNote([Code], True));
+    Check('inh.action.unverified.report', InheritedReportNote(A.InheritedLeft[SAMPLE_UNVERIFIED], True)
+      = 'V1: TLabel line 11 -- ancestor field use not verified against the index (field use could not be checked)', InheritedReportNote(A.InheritedLeft[SAMPLE_UNVERIFIED], True));
+  end;
+  Row.Apply:= A;
+  Lines:= InheritedReportLines(Row, True, True);
+  Joined:= string.Join(' | ', Lines);
+  Check('inh.action.sample.report.lines', (Length(Lines) = SAMPLE_LEFT_LINES) and (Pos('S1:', Joined) > 0) and (Pos('C1:', Joined) > Pos('S1:', Joined))
+    and (Pos('V1:', Joined) > Pos('C1:', Joined)) and (Pos('A1:', Joined) = 0), Joined);
+end;
+
+{ C8 E11 live, ONLY against an engine that reports inherited_instances: Anc then Desc
+  in one run; Anc's Label1 is converted, and (N2, inherited_retype, 1.26.0 on) Desc's
+  inherited Label1 is retyped too and reported as retyped, not left. }
 procedure TestInheritedRunLive;
 var
   Exe, Dir, Db, Dpr, AncPas, DescPas, Book, Output: string;
@@ -9343,6 +9516,7 @@ var
   Job : TConvertJob;
   Rows: TArray<TConvertRow>;
   LShape: Boolean;
+  LEntry: Boolean;
 begin
   Exe:= ResolveExe;
   if (Exe = '') or not TFile.Exists(LibWin64) then
@@ -9355,6 +9529,13 @@ begin
     if not Eng.HasCapability(CAPABILITY_INHERITED_INSTANCES) then
     begin
       Skip('inherited.live', 'engine lacks ' + CAPABILITY_INHERITED_INSTANCES);
+      Exit;
+    end;
+    // The checks below pin N2 (retyped descendant); a pre-1.26 engine's N1 answer is
+    // covered by TestInheritedActions over its real capture.
+    if not Eng.HasCapability(CAPABILITY_INHERITED_RETYPE) then
+    begin
+      Skip('inherited.live', 'engine lacks ' + CAPABILITY_INHERITED_RETYPE);
       Exit;
     end;
   finally
@@ -9396,20 +9577,21 @@ begin
       Check('inherited.live.both.converted', (Length(Rows) = 2) and (Rows[0].Status = csConverted) and (Rows[1].Status = csConverted), Format('%d rows', [Length(Rows)]));
       Check('inherited.live.ancestor.retyped', Pos('object Label1: TStaticText', TFile.ReadAllText(ChangeFileExt(AncPas, '.dfm'))) > 0,
         TFile.ReadAllText(ChangeFileExt(AncPas, '.dfm')));
-      // Engine N1 (1.22.0): the descendant's inherited instance is SKIPPED even though its
-      // ancestor now has the To type -- retyping it is N2. The .dfm stays byte-unchanged.
-      // (Corrected 2026-10-06 from a real run: the Task 6 guess expected it retyped.)
-      // THIS CHECK PINS N1 BEHAVIOUR ON PURPOSE: when the engine ships N2 (retype) it goes
-      // RED -- that is the signal to re-adopt (retyped descendant, the retype texts), not a
-      // regression.
-      Check('inherited.live.descendant.unchanged', TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')) = DescDfm, TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')));
+      // Engine N2 (1.26.0 on, inherited_retype): the descendant's inherited instance is
+      // RETYPED in place; inherited[] still lists it, ancestor_state converted, action
+      // retyped -- and it is NOT left. The pre-N2 (1.22.0) behaviour -- skipped, .dfm
+      // byte-unchanged, "left ... (N2)" -- is pinned by TestInheritedActions over a real
+      // 1.22.0 capture. This live test now pins N2 and goes RED on an older engine.
+      Check('inherited.live.retype.capability', Job.RetypeSupported, 'engine lacks ' + CAPABILITY_INHERITED_RETYPE);
+      Check('inherited.live.descendant.retyped', TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')) = DescDfm.Replace('inherited Label1: TLabel', 'inherited Label1: TStaticText'),
+        TFile.ReadAllText(ChangeFileExt(DescPas, '.dfm')));
       LShape:= (Length(Rows) = 2) and (Length(Rows[1].Apply.InheritedLeft) = 1);
-      Check('inherited.live.descendant.left', LShape and (Rows[1].Apply.InheritedLeft[0].Name = 'Label1') and (Rows[1].Apply.InheritedLeft[0].AncestorUnit = 'Anc')
-        and (Rows[1].Apply.InheritedLeft[0].AncestorState = 'converted') and (Rows[1].Apply.ComponentPart = 'skipped-no-instances'),
-        if Length(Rows) = 2 then Format('%d left, part=%s', [Length(Rows[1].Apply.InheritedLeft), Rows[1].Apply.ComponentPart]) else '');
-      Check('inherited.live.descendant.note', (Length(Rows) = 2) and not Job.RetypeSupported and Rows[1].Note.EndsWith('; no component of its own to convert; '
-        + '1 inherited instance(s) left: ancestor Anc converted -- this unit still has TLabel there and may not compile or load until the engine can '
-        + 'retype inherited instances (N2)'), if Length(Rows) = 2 then Rows[1].Note else '');
+      LEntry:= LShape and (Rows[1].Apply.InheritedLeft[0].Name = 'Label1') and (Rows[1].Apply.InheritedLeft[0].AncestorUnit = 'Anc')
+        and (Rows[1].Apply.InheritedLeft[0].AncestorState = 'converted');
+      Check('inherited.live.descendant.none.left', LEntry and IsRetypedInstance(Rows[1].Apply.InheritedLeft[0]) and (InheritedLeftNote(Rows[1].Apply.InheritedLeft, True) = ''),
+        if LShape then Format('action=%s, part=%s', [Rows[1].Apply.InheritedLeft[0].Action, Rows[1].Apply.ComponentPart]) else '');
+      Check('inherited.live.descendant.note', (Length(Rows) = 2) and Rows[1].Note.EndsWith('0 remaining for manual work; 1 inherited instance(s) retyped')
+        and (Pos('N2', Rows[1].Note) = 0), if Length(Rows) = 2 then Rows[1].Note else '');
     finally
       Eng.Free;
     end; // try
@@ -9625,12 +9807,15 @@ begin
   Row.Status := csConverted;
   Earlier:= Row;
   Earlier.Book:= 'B1.rules';
-  Check('tab.note.due.first', CodeUseNoteDue(Row, []));
-  Check('tab.note.due.once.per.unit', not CodeUseNoteDue(Row, [Earlier]));
+  Check('tab.note.due.first', CodeUseNoteDue(Row, [], False));
+  // An engine with inherited_retype lists code uses in inherited[] itself (C8 M4).
+  Check('tab.note.due.not.with.retype', not CodeUseNoteDue(Row, [], True));
+  Check('tab.note.due.once.per.unit', not CodeUseNoteDue(Row, [Earlier], False));
   Earlier.UnitPas:= 'x\Other.pas';
-  Check('tab.note.due.other.unit', CodeUseNoteDue(Row, [Earlier]));
+  Check('tab.note.due.other.unit', CodeUseNoteDue(Row, [Earlier], False));
+  Check('tab.note.due.other.unit.not.with.retype', not CodeUseNoteDue(Row, [Earlier], True));
   Row.Status:= csRefused;
-  Check('tab.note.due.not.converted', not CodeUseNoteDue(Row, []));
+  Check('tab.note.due.not.converted', not CodeUseNoteDue(Row, [], False));
 
   Row:= Default(TConvertRow);
   Row.UnitPas:= 'x\Desc.pas';
@@ -11980,6 +12165,7 @@ begin
     TestClassLookup;
     TestClassLookupLive;
     TestInheritedApply;
+    TestInheritedActions;
     TestInheritedRunLive;
     TestCodeRefs;
     TestCodeRefsLive;
@@ -12011,6 +12197,7 @@ begin
     TestProptreeResolveInRunner;
     TestResolveCache;
     TestValidateParse;
+    TestValidate1262Note;
     TestValidateScopeBlocks;
     TestValidateScopeRun;
     TestValidateTextStreams;
