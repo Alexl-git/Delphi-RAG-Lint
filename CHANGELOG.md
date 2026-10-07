@@ -3,6 +3,34 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.26.5-alpha -- unreleased
+
+No extractor or resolver change: indexes do not re-parse. (E17: 1.26.3 was
+reserved for it and 1.26.4 shipped first, so it ships as 1.26.5. 1.26.2 is the
+glyph framing release on another branch.)
+
+### Added
+
+- **`#warn <FromPath> "<text>"` (E17, agreed with the converter).** A
+  book-authored warning: once per converted instance whose SOURCE `.dfm` streams
+  `<FromPath>` (never when it is absent), placeholders `<value>`, `<name>` and
+  `{Prop}` (another source property, empty when absent). Block-scoped (file scope
+  = every block), carries nothing, independent of `#link`. `warnings[]`
+  `line N: warning: <inst>: <text>`; `items[]` kind `book-warning` with the new
+  `value` key. `convert-validate`: a path or `{Prop}` naming no member, and a
+  malformed line, are `line N` errors.
+- **`#check-ref <ToPath> <Class>.<Prop>[, ...]` (owner rule F7, generic).** The
+  converted `<ToPath>` value is checked: containing `\` or `:` -> `ref-path-like`;
+  carried by no listed `Class.Prop` in ANY `.dfm` of the project index ->
+  `ref-dangling`; an index with no `.dfm` property facts -> one `ref-not-checked`
+  per run. For ConnectionName the book line is
+  `#check-ref ConnectionName TDatabase.DatabaseName, TFDConnection.ConnectionName`
+  (the book is the converter team's; not added here). DMTEST with that line: 1
+  path-like (`inspFldr` `tblOsublottmp`, `'c:\micrnite\system'`) and 88 dangling
+  (87 `'MicroniteSystem'` -- a BDE alias no `.dfm` defines -- and the path).
+- `info --json` `capabilities.book_warn` and `capabilities.check_ref`.
+  Guard: `run_convert_apply_book_warn.ps1`.
+
 ## v1.26.4-alpha -- unreleased
 
 The charts R-items branch (feat/charts-r-items) plus job P8. No extractor or
@@ -47,33 +75,6 @@ v7 and the plugin expects v7; a v6 exe beside a v7 plugin (or the reverse) makes
   gitignored. It is not covered by a repository's own ignore rules; only a
   `_D-RAG` folder that `migrate-dbs` created carries a `.gitignore` of `*`.
   The note now says "usually untracked".
-
-## v1.26.3-alpha -- unreleased
-
-No extractor or resolver change: indexes do not re-parse. (1.26.2 is the glyph
-framing release on another branch.)
-
-### Added
-
-- **`#warn <FromPath> "<text>"` (E17, agreed with the converter).** A
-  book-authored warning: once per converted instance whose SOURCE `.dfm` streams
-  `<FromPath>` (never when it is absent), placeholders `<value>`, `<name>` and
-  `{Prop}` (another source property, empty when absent). Block-scoped (file scope
-  = every block), carries nothing, independent of `#link`. `warnings[]`
-  `line N: warning: <inst>: <text>`; `items[]` kind `book-warning` with the new
-  `value` key. `convert-validate`: a path or `{Prop}` naming no member, and a
-  malformed line, are `line N` errors.
-- **`#check-ref <ToPath> <Class>.<Prop>[, ...]` (owner rule F7, generic).** The
-  converted `<ToPath>` value is checked: containing `\` or `:` -> `ref-path-like`;
-  carried by no listed `Class.Prop` in ANY `.dfm` of the project index ->
-  `ref-dangling`; an index with no `.dfm` property facts -> one `ref-not-checked`
-  per run. For ConnectionName the book line is
-  `#check-ref ConnectionName TDatabase.DatabaseName, TFDConnection.ConnectionName`
-  (the book is the converter team's; not added here). DMTEST with that line: 1
-  path-like (`inspFldr` `tblOsublottmp`, `'c:\micrnite\system'`) and 88 dangling
-  (87 `'MicroniteSystem'` -- a BDE alias no `.dfm` defines -- and the path).
-- `info --json` `capabilities.book_warn` and `capabilities.check_ref`.
-  Guard: `run_convert_apply_book_warn.ps1`.
 
 ## v1.26.2-alpha -- unreleased
 

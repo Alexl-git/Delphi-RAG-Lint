@@ -1,5 +1,5 @@
 <#
-  run_convert_apply_book_warn.ps1 -- '#warn' and '#check-ref' (E17, 1.26.3).
+  run_convert_apply_book_warn.ps1 -- '#warn' and '#check-ref' (E17, 1.26.5).
 
   #warn <FromPath> "<text>": block-scoped (file scope = every block); fires
   once per converted instance whose SOURCE block streams <FromPath>, never when

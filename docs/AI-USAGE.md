@@ -299,7 +299,7 @@ published while `modifiers` says `public` for both.
 >   and `--only` skips a strand-only-excluded unit-rule removal; `descendant_warnings`
 >   -- JSON `true` since 1.25.0: convert-apply lists descendant units still
 >   streaming or using a converted instance in `descendants[]`; `book_warn` and
->   `check_ref` -- JSON `true` since 1.26.3: the book's `#warn` and `#check-ref`
+>   `check_ref` -- JSON `true` since 1.26.5: the book's `#warn` and `#check-ref`
 >   directives (items[] kinds `book-warning`, `ref-path-like`, `ref-dangling`,
 >   `ref-not-checked`); `inherited_retype`
 >   -- JSON `true` since 1.26.0: an inherited instance of a converted ancestor is

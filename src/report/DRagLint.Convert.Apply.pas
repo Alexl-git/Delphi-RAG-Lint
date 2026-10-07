@@ -253,12 +253,12 @@ type
                                block -- NOT rewritten (C8 N2 review, 1.26.0).
                                Field warnings; Line and Instance set. }
     aikBookWarning,          { a '#warn' whose source property the instance
-                               streams (1.26.3). Field warnings; Instance, Path
+                               streams (1.26.5). Field warnings; Instance, Path
                                (the FromPath), Value, RuleLine, Line set. }
     aikRefPathLike,          { a '#check-ref' value containing '\' or ':' --
-                               a file path, not a name (1.26.3). Path = ToPath. }
+                               a file path, not a name (1.26.5). Path = ToPath. }
     aikRefDangling,          { a '#check-ref' value no listed Class.Prop of
-                               any .dfm in the project index carries (1.26.3). }
+                               any .dfm in the project index carries (1.26.5). }
     aikRefNotChecked);       { '#check-ref' could not check: the project index
                                holds no .dfm property facts. Once per run. }
 
@@ -303,7 +303,7 @@ type
     Text    : string;  { the human-readable line, verbatim }
     Line    : Integer; { 1-based line in FilePath, or 0 }
     RuleLine: Integer; { 1-based line in the rules file, or 0 }
-    Value   : string;  { 1.26.3: the value a book-warning / ref-* item is about; '' otherwise }
+    Value   : string;  { 1.26.5: the value a book-warning / ref-* item is about; '' otherwise }
   end;
 
   /// <summary>One F property that was absent from the .dfm because it sat at its
@@ -503,7 +503,7 @@ type
     Reasons: TArray<string>;
   end;
   /// <summary>The .dfm values one project index holds, for '#check-ref'
-  /// (1.26.3).</summary>
+  /// (1.26.5).</summary>
   /// <remarks>Keys holds 'CLASS|PROP|VALUE' upper-cased, CLASS the bare .dfm
   /// type token of the component that streams PROP = VALUE. Rows is how many
   /// dfm-prop rows it was built from; 0 means the index has no facts to check
@@ -587,7 +587,7 @@ type
     /// <returns>The cache; nil when AStore is out of range.</returns>
     function CacheFor(AStore: Integer): TPropMemberCache;
     /// <summary>The '#check-ref' facts of one store, built on first use and
-    /// kept for the run (1.26.3).</summary>
+    /// kept for the run (1.26.5).</summary>
     /// <param name="AStore">One of Stores.</param>
     /// <returns>The facts, owned by this object; nil when AStore is not one
     /// of Stores.</returns>
@@ -1019,7 +1019,7 @@ uses
   System.DateUtils;
 
 var
-  { 1.26.3: '#check-ref not checked' is said ONCE PER RUN (a batch of units is
+  { 1.26.5: '#check-ref not checked' is said ONCE PER RUN (a batch of units is
     one process), not per instance or per unit. }
   GRefNotCheckedSaid: Boolean = False;
 
@@ -3399,9 +3399,9 @@ var
   IntfToTypes : TDictionary<string, Boolean>; { ToType -> a retyped field of it is declared in the INTERFACE (C13 a) }
   ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
   InstFromType: TDictionary<string, string>; { 1.26.1: converted instance -> its From type, to pick its #convert block }
-  RefFacts    : TRefFacts; { 1.26.3: the project's .dfm values, borrowed from ATrees; nil until a #check-ref needs it }
-  RefFactRows : Integer; { 1.26.3: dfm-prop rows RefFacts was built from; 0 = no facts to check against }
-  RefFactsAsked: Boolean; { 1.26.3: BuildRefFacts has run for this unit }
+  RefFacts    : TRefFacts; { 1.26.5: the project's .dfm values, borrowed from ATrees; nil until a #check-ref needs it }
+  RefFactRows : Integer; { 1.26.5: dfm-prop rows RefFacts was built from; 0 = no facts to check against }
+  RefFactsAsked: Boolean; { 1.26.5: BuildRefFacts has run for this unit }
   E           : TTextEdit;
   It          : TApplyItem; { scratch for the main body's own Emit calls }
 
@@ -3478,7 +3478,7 @@ var
     Result.ToType  := Inst.ToType;
   end;
 
-  // 1.26.3: RefFacts of the project index (PasStore) -- every value a .dfm
+  // 1.26.5: RefFacts of the project index (PasStore) -- every value a .dfm
   // streams, keyed 'CLASS|PROP|VALUE' (upper; the component's .dfm type token,
   // bare), borrowed. RUN-LEVEL: built once per store by TConvertTreeCache.RefFactsFor and reused
   // by every unit of a batch; the component classes come from ONE
@@ -3494,7 +3494,7 @@ var
     RefFactRows:= Facts.Rows;
   end;
 
-  // 1.26.3: the #warn and #check-ref outcomes of one instance's re-emit.
+  // 1.26.5: the #warn and #check-ref outcomes of one instance's re-emit.
   procedure FoldBookChecks(const AReport: TReemitReport; ABlockLine: Integer);
   const
     PATH_CHARS: array[0..1] of Char = ('\', ':');

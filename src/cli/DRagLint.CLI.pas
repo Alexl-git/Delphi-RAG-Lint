@@ -977,7 +977,7 @@ begin
     'and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; ''line N: warning:'' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; ' +
     'a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: ''line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility'' -- only a segment naming no member is "not found" (exit 1); ' +
     'without BOTH --from and --to the book is only PARSED -- no path is checked -- and a ''NOTE:'' line on stderr says so; ' +
-    'a #warn path or {Prop} placeholder, or a #check-ref ToPath, naming no member is a line N error, and so is a malformed #warn / #check-ref (1.26.3); no JSON mode)');
+    'a #warn path or {Prop} placeholder, or a #check-ref ToPath, naming no member is a line N error, and so is a malformed #warn / #check-ref (1.26.5); no JSON mode)');
   Writeln('  drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...]   (auto-generate a VALID conversion-rules file from the real F/T property trees, ' +
     'expanded to --depth N, else the --rules book''s #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)');
   Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (whole seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- ' +
@@ -993,7 +993,7 @@ begin
     'an inherited/inline .dfm object of a From type whose declaring ancestor is not converted is SKIPPED, never converted, while the unit''s own instances, code and unit rules convert (1.22.0) -- each reported as a ''line N: warning: ...'' line (json: warnings[], items[] kind inherited-instance-skipped, and inherited[] {name,type,line,ancestor_unit,ancestor_state,reason,action}; ancestor_state unconverted|converted|mismatched|outside: the declaring ancestor -- the nearest ancestor class whose .dfm opens it with object -- still has the From type, already has the To type, has a third type, or is not determinable: in no --db, or an ancestor .dfm on the way is missing or binary, which stops the walk; --only filters inherited[] too); ' +
     'one whose declaring ancestor ALREADY has the To type is RETYPED (1.26.0, C8 N2): inherited X: TFrom -> inherited X: TTo, keyword kept, nested and inline-frame children too; the properties its block overrides convert per the book (what it does not stream it inherits: no default resolved, no #default written); its code access sites are rewritten as for an own instance and the To unit is added; every code access to a field a converted ancestor declares (bound by the resolver, any level up) is rewritten too, .dfm block or not (N2a) -- json inherited[].action retyped|code|skipped|unverified (code: line = its first .pas reference), a converted[] line and items[] kind inherited-instance-retyped, not a warning; --only filters both; info capability inherited_retype; ' +
     'the book''s #warn <FromPath> "<text>" fires once per converted instance whose SOURCE .dfm streams FromPath (<value>, <name>, {Prop} expanded) -- ''line N: warning: <inst>: <text>'', items[] kind book-warning with value; ' +
-    '#check-ref <ToPath> <Class>.<Prop>[, ...] warns when the converted ToPath value contains \ or : (ref-path-like) or no listed Class.Prop of any .dfm in the project index carries it (ref-dangling), and once per run ref-not-checked when the index holds no .dfm property facts; info capabilities book_warn, check_ref (1.26.3); ' +
+    '#check-ref <ToPath> <Class>.<Prop>[, ...] warns when the converted ToPath value contains \ or : (ref-path-like) or no listed Class.Prop of any .dfm in the project index carries it (ref-dangling), and once per run ref-not-checked when the index holds no .dfm property facts; info capabilities book_warn, check_ref (1.26.5); ' +
     'every code rewrite is scoped to the instance''s field (receiver bound to it, or unbound / bare / Self. in a routine of the .dfm root class with no same-named local); a site the index cannot vouch for is NOT rewritten and is reported (''access site <file>:<line> ... not verified against the index -- not rewritten'', items[] kind access-site-unverified, json access_sites_unverified); a --db resolved before resolver 1.12.0 is REFUSED, dry run too, naming the index ... --resolve-only fix; ' +
     'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
     'a plan the edit applier would refuse in part (overlapping delete ranges -- an engine defect) fails the WHOLE unit before anything is written, dry run too, and a write that fails part-way is ROLLED BACK byte-identical (exit 2, ''-- rolled back, unit not changed''; a failed rollback names the files it could not restore) (1.25.1): exit 1, ''ERROR: refused N edit(s) to <file> -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written'', json ok=false with that error; ' +
@@ -16132,7 +16132,7 @@ begin
         gains `action` retyped | code | skipped, items[] kind
         inherited-instance-retyped. }
       JCap.AddPair('inherited_retype', TJSONBool.Create(True));
-      { 1.26.3 (E17): the '#warn' and '#check-ref' directives -- items[] kinds
+      { 1.26.5 (E17): the '#warn' and '#check-ref' directives -- items[] kinds
         book-warning, ref-path-like, ref-dangling, ref-not-checked. }
       JCap.AddPair('book_warn', TJSONBool.Create(True));
       JCap.AddPair('check_ref', TJSONBool.Create(True));
@@ -24747,7 +24747,7 @@ procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
     Result.AddPair('text'     , AItem.Text);
     Result.AddPair('line'     , TJSONNumber.Create(AItem.Line));
     Result.AddPair('rule_line', TJSONNumber.Create(AItem.RuleLine));
-    { 1.26.3: additive, and only on the kinds that are ABOUT a value }
+    { 1.26.5: additive, and only on the kinds that are ABOUT a value }
     if AItem.Kind in [aikBookWarning, aikRefPathLike, aikRefDangling] then
       Result.AddPair('value', AItem.Value);
   end;

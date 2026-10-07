@@ -555,7 +555,7 @@ both added and removed is kept, and an entry inside a `{$IF...}` region refuses 
 unit rather than guess. A unit with no `.dfm` (or nothing a `#convert` block
 matches) gets its unit rules alone; `info --json` advertises this as
 `capabilities.apply_unit_rules: true`. A book can also REPORT without writing
-anything (1.26.3): `#warn <FromPath> "<text>"` warns once per converted instance
+anything (1.26.5): `#warn <FromPath> "<text>"` warns once per converted instance
 whose source `.dfm` streams the property (`<value>`, `<name>`, `{Prop}`
 placeholders), and `#check-ref <ToPath> <Class>.<Prop>[, ...]` warns when the
 converted value looks like a file path or names nothing any `.dfm` of the
