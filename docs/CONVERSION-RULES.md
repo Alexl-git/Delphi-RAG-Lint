@@ -528,6 +528,8 @@ Real reFind sample lines (from the BDE2FD sample):
 | `#link <ToPath> <- <FromPath>` | deep property assignment. **Note the `<-` arrow** -- reversed vs `#migrate`'s `->`. Read it "target gets source." **Type-identity carry (2026-09-16):** when both sides are CLASS-TYPED and of the SAME class (`#link Font <- Font`, both `TFont`), every sub-leaf the `.dfm` streams under the source (`Font.Charset`, `Font.Name`, ...) is carried to the same leaf under the target automatically -- the five hand-written `Font.*` lines become one. When the types DIFFER (`OptionsImage.Glyph <- Picture`, `TdxSmartGlyph <- TPicture`) nothing is carried implicitly and every dotted leaf must be named, because an invented target path is how a form stops loading. An explicit per-leaf `#link` / `#ignore` / `#remove` always wins over the carry; a carried leaf is reported (`sub-leaf-carried` in `convert-apply --format json`, `report.carried[]` in `convert-reemit`) so the leaves nobody typed are visible. Not implemented: the "target type is an ancestor of the source type" case -- the engine has no class graph, so that still needs explicit leaves. |
 | `#default <ToPath> = <value>` | set a target property to a default when no source maps to it |
 | `#ignore <FromPath>` | acknowledge an F property/event is intentionally NOT mapped -- suppresses its unmapped-non-default warning (other unmapped props still warn). Added in Batch 2a-i for the re-emit engine. Scoped to its own `#convert` block (see *Rule scope* below). |
+| `#warn <FromPath> "<text>"` | 1.26.5: a book-authored WARNING, once per converted instance whose SOURCE `.dfm` streams `<FromPath>` (a `.dfm` streams only non-default values, so present = non-default; absent never fires). Carries nothing and is independent of `#link`. See *Book warnings and reference checks* below. |
+| `#check-ref <ToPath> <Class>.<Prop>[, ...]` | 1.26.5: the CONVERTED block's `<ToPath>` value must be a name some `.dfm` of the project carries on a listed `<Class>.<Prop>`. See below. |
 | `#note <text>` | a human comment carried in the rule (the scaffolder emits `candidates:` and `DROPPED` notes) |
 | `#use <unit>` | add a unit to the PAS `uses` clause (the companion to reFind's `#unuse`) |
 | `#useswap <Old> -> <New1> [, <New2> ...]` | replace unit `<Old>` with one-or-more `<New>` units. Sugar for `#unuse Old` + `#use New1` + `#use New2` ... |
@@ -596,6 +598,67 @@ them first (`#ignore Left` still drops it):
   `ParamData item <n> (<Name>): <line> not carried -- <why>` (reemit note). A
   target with no `Params` property gets nothing, and `ParamData` counts as
   dropped. An `#ignore Params.Items.<X>` drops that member silently.
+
+### Book warnings and reference checks (1.26.5)
+
+Both directives are block-scoped like every property rule (a file-scope one,
+before the first `#convert`, applies in every block) and change nothing that
+is written -- they only report.
+
+**`#warn <FromPath> "<text>"`** fires once per converted instance whose SOURCE
+`.dfm` block streams `<FromPath>`; it never fires when the property is absent.
+The text runs from the first to the last double quote (no escaping). In it:
+
+| Placeholder | Becomes |
+|---|---|
+| `<value>` | the streamed source value (a simple quoted string unquoted) |
+| `<name>` | the instance name |
+| `{Prop}` | another SOURCE property of the same instance; empty when it is absent |
+
+```
+#warn IndexName "index <value> must exist on table {TableName} in the target database"
+```
+
+`convert-apply` reports `line N: warning: <inst>: <expanded text>` (N = the
+instance's `.dfm` object line) in `warnings[]`, and an `items[]` entry of kind
+`book-warning` with `instance`, `path` (the FromPath), `value`, `text` and
+`rule_line`. `convert-validate` makes it a `line N:` error when the FromPath or
+a `{Prop}` names no member of the block's From type (`warn FromPath not found
+in --from tree: X`, `warn placeholder {X} not found in --from tree`), and when
+the directive is malformed (`#warn needs <FromPath> "<text>"`). A file-scope
+`#warn` is checked only in single-pair mode (`--from`/`--to`), like a
+file-scope `#link`.
+
+**`#check-ref <ToPath> <Class>.<Prop>[, <Class>.<Prop> ...]`** checks the
+value the CONVERTED block holds at `<ToPath>` (whether it came from a `#link`,
+a `#default` or a resolved default); nothing happens when it holds none. The
+last dot splits class from property; the class is matched by its bare name
+against each `.dfm` object's type token.
+
+```
+#check-ref ConnectionName TDatabase.DatabaseName, TFDConnection.ConnectionName
+```
+
+* a value containing `\` or `:` is a file path, not a name -- kind
+  `ref-path-like`:
+  `line N: warning: <inst>: <ToPath> '<v>' looks like a file path, not a <C.P / C.P> name (#check-ref line L)`
+* a value no listed `Class.Prop` carries in ANY `.dfm` of the project index
+  (every unit, case-insensitive) -- kind `ref-dangling`:
+  `line N: warning: <inst>: <ToPath> '<v>' matches no <C.P / C.P> in the project's .dfm files -- the reference dangles unless it is defined outside the project's .dfm files (e.g. a FireDAC connection definition) (#check-ref line L)`
+  (a path-like value usually gets both lines);
+* when the project index holds no `.dfm` property facts at all (an index built
+  before the text index, or a project whose `.dfm`s stream nothing), ONE line
+  per run, kind `ref-not-checked`:
+  `line L: warning: #check-ref not checked -- the project index holds no .dfm property facts (reindex it with this engine)`.
+
+The facts are the index's `.dfm` property values (`string_literals` kind
+`dfm-prop`), read from the `--db` that holds the unit, so a name defined only
+outside the project (a BDE alias, a FireDAC connection definition file) is
+reported as dangling: on DMTEST every `'MicroniteSystem'` dataset is (87).
+`convert-validate` errors on a ToPath naming no member of the block's To type
+and on a malformed line; the `Class.Prop` targets are not checked (the class
+may live in no `--db`). `items[]` entries carry `value`. `info --json`:
+`capabilities.book_warn`, `capabilities.check_ref`.
 
 ### Unit replacement: `#use` / `#useswap`
 

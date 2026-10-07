@@ -245,13 +245,22 @@ type
                                1.26.0). Field converted; Instance and Line
                                (its .dfm header) are set; the structured row
                                is apply/1 inherited[] action 'retyped'. }
-    aikAccessSiteUnverified); { a code access a rename would touch whose
+    aikAccessSiteUnverified, { a code access a rename would touch whose
                                receiver the index cannot tie to the converted
                                field -- no receiver reference on its line, an
                                unbound reference to a converted ancestor's
                                field, or a member reached through a `with`
                                block -- NOT rewritten (C8 N2 review, 1.26.0).
                                Field warnings; Line and Instance set. }
+    aikBookWarning,          { a '#warn' whose source property the instance
+                               streams (1.26.5). Field warnings; Instance, Path
+                               (the FromPath), Value, RuleLine, Line set. }
+    aikRefPathLike,          { a '#check-ref' value containing '\' or ':' --
+                               a file path, not a name (1.26.5). Path = ToPath. }
+    aikRefDangling,          { a '#check-ref' value no listed Class.Prop of
+                               any .dfm in the project index carries (1.26.5). }
+    aikRefNotChecked);       { '#check-ref' could not check: the project index
+                               holds no .dfm property facts. Once per run. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -294,6 +303,7 @@ type
     Text    : string;  { the human-readable line, verbatim }
     Line    : Integer; { 1-based line in FilePath, or 0 }
     RuleLine: Integer; { 1-based line in the rules file, or 0 }
+    Value   : string;  { 1.26.5: the value a book-warning / ref-* item is about; '' otherwise }
   end;
 
   /// <summary>One F property that was absent from the .dfm because it sat at its
@@ -492,6 +502,38 @@ type
     Fresh  : Boolean;
     Reasons: TArray<string>;
   end;
+  /// <summary>The .dfm values one project index holds, for '#check-ref'
+  /// (1.26.5).</summary>
+  /// <remarks>Keys holds 'CLASS|PROP|VALUE' upper-cased, CLASS the bare .dfm
+  /// type token of the component that streams PROP = VALUE. Rows is how many
+  /// dfm-prop rows it was built from; 0 means the index has no facts to check
+  /// against. Owned by TConvertTreeCache; built once per store per run.</remarks>
+  TRefFacts = class
+  private
+    FKeys: TDictionary<string, Boolean>;
+    FRows: Integer;
+  public
+    /// <summary>Creates an empty fact set.</summary>
+    constructor Create;
+    /// <summary>Frees Keys.</summary>
+    destructor Destroy; override;
+    /// <summary>Records one dfm-prop row: AClass (the component's .dfm type
+    /// token) streams AProp = AValue.</summary>
+    /// <param name="AClass">The type token; qualified or bare.</param>
+    /// <param name="AProp">The property name.</param>
+    /// <param name="AValue">The streamed value text.</param>
+    procedure Add(const AClass, AProp, AValue: string);
+    /// <summary>Whether some .dfm streams AProp = AValue on a component of
+    /// class AClass (bare names, case-insensitive).</summary>
+    /// <param name="AClass">The class; qualified or bare.</param>
+    /// <param name="AProp">The property name.</param>
+    /// <param name="AValue">The value.</param>
+    /// <returns>True when such a row was added.</returns>
+    function Has(const AClass, AProp, AValue: string): Boolean;
+    /// <summary>The dfm-prop rows added; 0 = no facts to check against.</summary>
+    property Rows: Integer read FRows;
+  end;
+
   /// <summary>The classes one convert-apply run works from: each type name
   /// resolved ONCE, and one member cache per --db store, shared by rule
   /// validation and BuildApplyPlan.</summary>
@@ -524,6 +566,7 @@ type
     FResolved: TDictionary<string, TResolved>;
     FCaches  : TArray<TPropMemberCache>; { index-aligned with FStores; nil until first used }
     FOptions : TPropTreeOptions;
+    FRefFacts: TArray<TRefFacts>; { index-aligned with FStores; nil until first asked }
     function Lookup(const ATypeName: string): TResolved;
     function GetClassesBuilt: Integer;
   public
@@ -543,6 +586,15 @@ type
     /// <param name="AStore">An index into Stores.</param>
     /// <returns>The cache; nil when AStore is out of range.</returns>
     function CacheFor(AStore: Integer): TPropMemberCache;
+    /// <summary>The '#check-ref' facts of one store, built on first use and
+    /// kept for the run (1.26.5).</summary>
+    /// <param name="AStore">One of Stores.</param>
+    /// <returns>The facts, owned by this object; nil when AStore is not one
+    /// of Stores.</returns>
+    /// <remarks>Reads every .dfm's dfm-prop rows once, and the component
+    /// classes with one FindSymbolsByFile per .dfm. Shared by every unit of
+    /// a batch run.</remarks>
+    function RefFactsFor(const AStore: ISymbolStore): TRefFacts;
     /// <summary>ATypeName as one side of a conversion.</summary>
     /// <param name="ATypeName">A bare or qualified class name.</param>
     /// <returns>Its qualified name and the cache of the store it resolved in;
@@ -980,6 +1032,11 @@ uses
   System.Hash,
   System.DateUtils;
 
+var
+  { 1.26.5: '#check-ref not checked' is said ONCE PER RUN (a batch of units is
+    one process), not per instance or per unit. }
+  GRefNotCheckedSaid: Boolean = False;
+
 function ApplyItemKindName(AKind: TApplyItemKind): string;
 const
   { Positional against TApplyItemKind -- keep the two in step. A new kind is
@@ -995,7 +1052,8 @@ const
     'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped',
     'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable',
     'inherited-instance-skipped', 'unit-rule-skipped', 'descendant-not-converted',
-    'inherited-instance-retyped', 'access-site-unverified');
+    'inherited-instance-retyped', 'access-site-unverified',
+    'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1246,8 +1304,71 @@ var
   C: TPropMemberCache;
 begin
   for C in FCaches do C.Free;
+  for var F: TRefFacts in FRefFacts do F.Free;
   FResolved.Free;
   inherited Destroy;
+end;
+
+constructor TRefFacts.Create;
+begin
+  inherited Create;
+  FKeys:= TDictionary<string, Boolean>.Create;
+end;
+
+destructor TRefFacts.Destroy;
+begin
+  FKeys.Free;
+  inherited Destroy;
+end;
+
+procedure TRefFacts.Add(const AClass, AProp, AValue: string);
+begin
+  Inc(FRows);
+  FKeys.AddOrSetValue(UpperCase(BareTypeTail(AClass) + '|' + AProp + '|' + AValue), True);
+end;
+
+function TRefFacts.Has(const AClass, AProp, AValue: string): Boolean;
+begin
+  Result:= FKeys.ContainsKey(UpperCase(BareTypeTail(AClass) + '|' + AProp + '|' + AValue));
+end;
+
+function TConvertTreeCache.RefFactsFor(const AStore: ISymbolStore): TRefFacts;
+const
+  KIND_PROP = 'dfm-prop';
+  EXT_DFM   = '.dfm';
+var
+  Ix     : Integer;
+  ClassOf: TDictionary<Int64, string>;
+  Path   : string;
+  Cls    : string;
+begin
+  Result:= nil;
+  Ix:= -1;
+  for var I: Integer:= 0 to High(FStores) do
+    if FStores[I] = AStore then Ix:= I;
+  if Ix < 0 then Exit;
+  if Length(FRefFacts) <> Length(FStores) then SetLength(FRefFacts, Length(FStores));
+  if FRefFacts[Ix] <> nil then Exit(FRefFacts[Ix]);
+  Result:= TRefFacts.Create;
+  FRefFacts[Ix]:= Result;
+  ClassOf:= TDictionary<Int64, string>.Create;
+  try
+    for var Fid: Int64 in AStore.GetAllFileIds do
+    begin
+      Path:= AStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), EXT_DFM) then Continue;
+      ClassOf.Clear;
+      for var Sym: TSymbol in AStore.FindSymbolsByFile(Path) do
+        ClassOf.AddOrSetValue(Sym.Id, Sym.Signature);
+      for var PL: TStringLiteral in AStore.GetLiteralsByKind(Fid, KIND_PROP) do
+      begin
+        if not ClassOf.TryGetValue(PL.SymbolId, Cls) then Cls:= '';
+        Result.Add(Cls, PL.OwnerName, PL.Text);
+      end;
+    end;
+  finally
+    ClassOf.Free;
+  end;
 end;
 
 function TConvertTreeCache.Lookup(const ATypeName: string): TResolved;
@@ -3303,6 +3424,9 @@ var
   IntfToTypes : TDictionary<string, Boolean>; { ToType -> a retyped field of it is declared in the INTERFACE (C13 a) }
   ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
   InstFromType: TDictionary<string, string>; { 1.26.1: converted instance -> its From type, to pick its #convert block }
+  RefFacts    : TRefFacts; { 1.26.5: the project's .dfm values, borrowed from ATrees; nil until a #check-ref needs it }
+  RefFactRows : Integer; { 1.26.5: dfm-prop rows RefFacts was built from; 0 = no facts to check against }
+  RefFactsAsked: Boolean; { 1.26.5: BuildRefFacts has run for this unit }
   E           : TTextEdit;
   It          : TApplyItem; { scratch for the main body's own Emit calls }
 
@@ -3379,6 +3503,89 @@ var
     Result.ToType  := Inst.ToType;
   end;
 
+  // 1.26.5: RefFacts of the project index (PasStore) -- every value a .dfm
+  // streams, keyed 'CLASS|PROP|VALUE' (upper; the component's .dfm type token,
+  // bare), borrowed. RUN-LEVEL: built once per store by TConvertTreeCache.RefFactsFor and reused
+  // by every unit of a batch; the component classes come from ONE
+  // FindSymbolsByFile per .dfm, not a lookup per row.
+  procedure BuildRefFacts;
+  var
+    Facts: TRefFacts;
+  begin
+    Facts:= if PasStore <> nil then ATrees.RefFactsFor(PasStore) else nil;
+    RefFactsAsked:= True;
+    if Facts = nil then Exit;
+    RefFacts   := Facts;
+    RefFactRows:= Facts.Rows;
+  end;
+
+  // 1.26.5: the #warn and #check-ref outcomes of one instance's re-emit.
+  procedure FoldBookChecks(const AReport: TReemitReport; ABlockLine: Integer);
+  const
+    PATH_CHARS: array[0..1] of Char = ('\', ':');
+  var
+    It: TApplyItem;
+  begin
+    for var BW: TReemitBookWarning in AReport.BookWarnings do
+    begin
+      It:= InstItem(aikBookWarning, afWarnings,
+        Format('line %d: warning: %s: %s', [ABlockLine, Inst.InstanceName, BW.Text]));
+      It.FilePath:= ADfmPath;
+      It.Line    := ABlockLine;
+      It.Path    := BW.FromPath;
+      It.Value   := BW.Value;
+      It.RuleLine:= BW.RuleLine;
+      Emit(It);
+    end;
+    for var RC: TReemitRefCheck in AReport.RefChecks do
+    begin
+      var Names: string:= string.Join(' / ', RC.RefTargets);
+      if (Pos(PATH_CHARS[0], RC.Value) > 0) or (Pos(PATH_CHARS[1], RC.Value) > 0) then
+      begin
+        It:= InstItem(aikRefPathLike, afWarnings,
+          Format('line %d: warning: %s: %s ''%s'' looks like a file path, not a %s name (#check-ref line %d)',
+            [ABlockLine, Inst.InstanceName, RC.ToPath, RC.Value, Names, RC.RuleLine]));
+        It.FilePath:= ADfmPath;
+        It.Line    := ABlockLine;
+        It.Path    := RC.ToPath;
+        It.Value   := RC.Value;
+        It.RuleLine:= RC.RuleLine;
+        Emit(It);
+      end;
+      if not RefFactsAsked then BuildRefFacts;
+      if RefFactRows = 0 then
+      begin
+        if not GRefNotCheckedSaid then
+        begin
+          GRefNotCheckedSaid:= True;
+          It:= PlainItem(aikRefNotChecked, afWarnings,
+            Format('line %d: warning: #check-ref not checked -- the project index holds no .dfm property facts (reindex it with this engine)',
+              [RC.RuleLine]));
+          It.RuleLine:= RC.RuleLine;
+          Emit(It);
+        end;
+        Continue;
+      end;
+      var Found: Boolean:= False;
+      for var Tg: string in RC.RefTargets do
+      begin
+        var Dot: Integer:= Tg.LastIndexOf('.') + 1;
+        if RefFacts.Has(Copy(Tg, 1, Dot - 1), Copy(Tg, Dot + 1, MaxInt), RC.Value) then
+          Found:= True;
+      end;
+      if Found then Continue;
+      It:= InstItem(aikRefDangling, afWarnings,
+        Format('line %d: warning: %s: %s ''%s'' matches no %s in the project''s .dfm files -- the reference dangles unless it is defined outside the project''s .dfm files (e.g. a FireDAC connection definition) (#check-ref line %d)',
+          [ABlockLine, Inst.InstanceName, RC.ToPath, RC.Value, Names, RC.RuleLine]));
+      It.FilePath:= ADfmPath;
+      It.Line    := ABlockLine;
+      It.Path    := RC.ToPath;
+      It.Value   := RC.Value;
+      It.RuleLine:= RC.RuleLine;
+      Emit(It);
+    end;
+  end;
+
   // Folds one instance's re-emit report into ReemitNotes, giving each entry the
   // kind its SOURCE array implies rather than one inferred from its prose.
   // ABlockLine is the instance's .dfm object-block header line: TDfmNode carries
@@ -3405,6 +3612,7 @@ var
       '<instance>: dropped <prop>' back out of prose would be a measurement of
       the message rather than of the fact. FoldOne stays as it is because its
       other callers pass whole sentences, which are not paths. }
+    FoldBookChecks(AReport, ABlockLine);
     for var DN: string in AReport.Dropped do
     begin
       var DIt: TApplyItem:= InstItem(aikUnmappedProperty, afReemitNotes,
@@ -4304,6 +4512,9 @@ begin
   IntfToTypes:= TDictionary<string, Boolean>.Create;
   ConvertedInstNames:= TList<string>.Create;
   InstFromType:= TDictionary<string, string>.Create;
+  RefFacts    := nil;
+  RefFactRows := 0;
+  RefFactsAsked:= False;
   try
     PasLines.Text:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
 

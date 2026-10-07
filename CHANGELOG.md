@@ -35,8 +35,44 @@ No extractor or resolver change on top of 1.26.2: indexes do not re-parse.
   (`UnitFileIdIn`), and when no `--db` holds the unit at all the refusal checks every
   non-library `--db` -- the guard is never skipped. Guard: `run_convert_apply_moved_tree.ps1`
   (moved tree + r=1.11 DB refused; the same tree on a current DB rewrites its access site).
-  Still open, reported not silent: on such a tree the To unit's uses-add says `could not
-  resolve a unit declaring "<T>" to add to uses`.
+
+### Known limitations
+
+- **On a moved / copied tree the To unit is not added to uses.** The uses planner still looks the
+  unit up by exact path, so it reports `could not resolve a unit declaring "<T>" to add to uses`
+  (a warning, items[] kind `uses-unit-unresolved` -- not silent) and the unit needs the uses
+  entry added by hand, or a reindex of the moved tree first.
+- **run_lsp_proxy_lifecycle_guard.ps1 depends on run order** (pre-existing, not this change):
+  it needs `LspStubServer.exe`, which run_lsp_proxy_relay_guard.ps1 builds, and fails with
+  `FATAL: not found` when run first on a fresh tree -- identically on main c10479a9.
+## v1.26.5-alpha -- unreleased
+
+No extractor or resolver change: indexes do not re-parse. (E17: 1.26.3 was
+reserved for it and 1.26.4 shipped first, so it ships as 1.26.5. 1.26.2 is the
+glyph framing release on another branch.)
+
+### Added
+
+- **`#warn <FromPath> "<text>"` (E17, agreed with the converter).** A
+  book-authored warning: once per converted instance whose SOURCE `.dfm` streams
+  `<FromPath>` (never when it is absent), placeholders `<value>`, `<name>` and
+  `{Prop}` (another source property, empty when absent). Block-scoped (file scope
+  = every block), carries nothing, independent of `#link`. `warnings[]`
+  `line N: warning: <inst>: <text>`; `items[]` kind `book-warning` with the new
+  `value` key. `convert-validate`: a path or `{Prop}` naming no member, and a
+  malformed line, are `line N` errors.
+- **`#check-ref <ToPath> <Class>.<Prop>[, ...]` (owner rule F7, generic).** The
+  converted `<ToPath>` value is checked: containing `\` or `:` -> `ref-path-like`;
+  carried by no listed `Class.Prop` in ANY `.dfm` of the project index ->
+  `ref-dangling`; an index with no `.dfm` property facts -> one `ref-not-checked`
+  per run. For ConnectionName the book line is
+  `#check-ref ConnectionName TDatabase.DatabaseName, TFDConnection.ConnectionName`
+  (the book is the converter team's; not added here). DMTEST with that line: 1
+  path-like (`inspFldr` `tblOsublottmp`, `'c:\micrnite\system'`) and 88 dangling
+  (87 `'MicroniteSystem'` -- a BDE alias no `.dfm` defines -- and the path).
+- `info --json` `capabilities.book_warn` and `capabilities.check_ref`.
+  Guard: `run_convert_apply_book_warn.ps1`.
+
 ## v1.26.4-alpha -- unreleased
 
 The charts R-items branch (feat/charts-r-items) plus job P8. No extractor or
