@@ -272,7 +272,8 @@ function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvert
 /// the engine says the converted unit left, UNFILTERED (controller ruling M4: the
 /// engine reports after the runner's reindex and is authoritative; R4 is the code-use
 /// note's alone). Same 8 tab-separated columns as every report row: Book, Unit,
-/// REPORT_STATUS_INHERITED_LEFT, four empty cells, InheritedReportNote.</summary>
+/// REPORT_STATUS_INHERITED_LEFT, four empty cells, InheritedReportNote. An instance the
+/// engine RETYPED (IsRetypedInstance) was not left and gets no line.</summary>
 /// <param name="ARow">A run row.</param>
 /// <param name="AInheritedSupported">The engine reported inherited_instances when the
 /// run started; False = no lines (an older engine's output is not this contract).</param>
@@ -387,7 +388,8 @@ begin
   if not AInheritedSupported or (ARow.Status <> csConverted) then
     Exit;
   for var LLeft: TInheritedLeft in ARow.Apply.InheritedLeft do
-    Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft, ARetypeSupported)])];
+    if not IsRetypedInstance(LLeft) then
+      Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft, ARetypeSupported)])];
 end;
 
 function GlyphReportLines(const ARow: TConvertRow): TArray<string>;

@@ -1,0 +1,9 @@
+{"schema":"apply/1","_note":"HAND-WRITTEN to the engine's 2026-10-06 inherited[] action contract (retyped | code | skipped | unverified); not a capture","mode":"apply","unit":"U.pas","dfm":"U.dfm","rules_file":"B.rules","ok":true,"error":"","refused":false,"reason":"","rule_errors":[],"edits_count":5,
+ "converted":["A1: inherited TLabel -> TStaticText (declared in Anc)","A2: inherited TLabel -> TStaticText (declared in Anc)"],"todos":[],"reemit_notes":[],"warnings":[],"component_part":"applied",
+ "inherited":[
+  {"name":"A1","type":"TLabel","line":2,"ancestor_unit":"Anc","ancestor_state":"converted","reason":"declared in Anc, which already has TStaticText -- retyped to TStaticText","action":"retyped"},
+  {"name":"A2","type":"TLabel","line":5,"ancestor_unit":"Anc","ancestor_state":"converted","reason":"declared in Anc, which already has TStaticText -- retyped to TStaticText","action":"retyped"},
+  {"name":"S1","type":"TLabel","line":8,"ancestor_unit":"Base","ancestor_state":"unconverted","reason":"declared in Base, which still has TLabel","action":"skipped"},
+  {"name":"C1","type":"TLabel","line":0,"ancestor_unit":"Base","ancestor_state":"unconverted","reason":"code use of Base's TLabel field","action":"code"},
+  {"name":"V1","type":"TLabel","line":11,"ancestor_unit":"Anc","ancestor_state":"converted","reason":"field use could not be checked","action":"unverified"}
+ ]}
