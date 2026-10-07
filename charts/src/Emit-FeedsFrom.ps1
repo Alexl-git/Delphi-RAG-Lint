@@ -31,6 +31,13 @@
   its module is not in the index, and a side cluster of [re-pointed at
   routine:line] rows anchored to the line even when receiver_text lost the
   control. A DataField / FieldName re-bound in code is drawn the same way.
+  FOLLOWED since 2026-10-05 (Task 2): past a dangling datasource the owner's
+  re-point is walked by the round-trip's own code (Resolve-RePointTable ->
+  Get-RePointPick, Get-RePointChain, Get-DataSetTableLiterals) -- member,
+  accessor, field, `DataSet :=`, the dataset field, then the table literal
+  beside it, each hop graded as round-trip grades it. Several sites with
+  different right-hand sides stop by name (the index cannot choose); a stale
+  file on the way stops [stale source] and draws no table.
 
   COVERAGE, MEASURED AT BUILD TIME (R9): the focus box prints the per-DATASOURCE
   split AND the per-CONTROL one (Get-FieldBindingChains). The 41% of the plan
@@ -48,15 +55,15 @@ param(
   [string]    $OutDir,
   [int]       $Cap = 12,                  # candidate / re-pointed rows shown; the rest disclosed
   [hashtable] $SourceOverride,
-  [string] $Engine     = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe',
-  [string] $Dot        = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe',
+  [string] $Engine     = '',
+  [string] $Dot        = '',
   [string] $FontMono   = 'Consolas',
   [string] $FontSans   = 'Segoe UI'
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')
-
+$Engine = Resolve-DragLintEngine $Engine   # R2: '' = DRAGLINT_ENGINE, settings.json, installed, shared (Emit-Common)
 $DbPath    = Get-CloneDb $DbPath
 $SqlDbPath = Get-CloneDb $SqlDbPath
 
@@ -173,9 +180,13 @@ if ($ch) { $repoint = @($ch.RePointedAt | Where-Object { $_.Control -eq $owner }
 elseif ($pas) { $repoint = Get-RePointSites $pas @($ctlName) @('DataSource') $SourceOverride }   # assigned DIRECTLY: @(...) nests the `, $array` return
 $rebound = @()
 if ($pas -and $field.Count) { $rebound = Get-RePointSites $pas @($ctlName) @('DataField', 'FieldName') $SourceOverride }
-Write-Host ("  {0} ({1}); field {2}; datasource {3}{4}; chain {5}" -f $qualified, $ctype,
+# Task 2 (2026-10-05): past a DANGLING designer datasource, the owner's code re-point is
+# followed by the round-trip's own walk (Resolve-RePointTable, Emit-Common)
+$rpr = $(if ($ch -and $ch.Grade -eq 'dangling') { Resolve-RePointTable $ch $owner $sqlSet $SourceOverride } else { $null })
+Write-Host ("  {0} ({1}); field {2}; datasource {3}{4}; chain {5}{6}" -f $qualified, $ctype,
             $(if ($field.Count) { [string]$field[0].col } else { '(none)' }), $(if ($dsText) { $dsText } else { '(none in DFM)' }),
-            $(if ($dsProp -and $dsProp.sid -ne $cid) { " via $owner" } else { '' }), $(if ($ch) { $ch.Grade } else { 'no-ds' }))
+            $(if ($dsProp -and $dsProp.sid -ne $cid) { " via $owner" } else { '' }), $(if ($ch) { $ch.Grade } else { 'no-ds' }),
+            $(if ($rpr) { "; re-point $($rpr.Status)$(if ($rpr.Table) { " -> $($rpr.Table)" })" } else { '' }))
 
 # ---- 3. index-wide coverage, per datasource AND per control (R9) --------------------------
 $ix = Get-FieldBindingChains $sqlSet $SourceOverride
@@ -199,6 +210,13 @@ $pctCol = $(if ($ctlTotal) { [Math]::Round(100.0 * [int]$oc['column'] / $ctlTota
 Write-Host ("  index: {0} datasources ({1} DFM / {2} code); one {3}, by-columns {4}, many {5}, none {6}, other {7}; controls {8}: column {9}, not-column {10}, ambiguous {11}, stops {12}, dangling {13}, no-ds {14}, stale {15}" -f `
   $stat.Ds, $stat.DsDfm, $stat.DsCode, $stat.DsOne, $stat.DsByCol, $stat.DsMany, $stat.DsNone, $stat.DsOther, $ctlTotal,
   [int]$oc['column'], [int]$oc['not-column'], [int]$oc['ambiguous'], [int]$oc['stops'], [int]$oc['dangling'], [int]$oc['no-ds'], [int]$oc['stale'])
+# the controls under a DANGLING designer datasource, by where their code re-point went (Task 2)
+$dAll = @($bAll | Where-Object { $_.Dangling })
+$rpc = @{}; foreach ($b in $dAll) { $rpc[[string]$b.RePoint] = 1 + [int]$rpc[[string]$b.RePoint] }
+$RP_ORDER = @('table', 'no-table', 'stops', 'walk-limit', 'multi-rhs', 'no-site', 'stale', '')
+$rpAgg = (@($RP_ORDER | ForEach-Object { [int]$rpc[$_] }) -join '/')
+Write-Host ("  re-point: {0} controls under a dangling datasource -- reach a table {1}, the dataset only {2}, stop on the way {3}, walk limit {8}, several right-hand sides {4}, no re-point site {5}, stale {6}, no owner {7}" -f `
+  $dAll.Count, [int]$rpc['table'], [int]$rpc['no-table'], [int]$rpc['stops'], [int]$rpc['multi-rhs'], [int]$rpc['no-site'], [int]$rpc['stale'], [int]$rpc[''], [int]$rpc['walk-limit'])
 
 # ---- 4. dot ----------------------------------------------------------------------------------
 $sb = New-Object System.Text.StringBuilder
@@ -278,6 +296,55 @@ if ($codeRows.Count) {
 # -- hops from the chain -----------------------------------------------------------------------
 $stop = ''; $stopRows = New-Object System.Collections.ArrayList
 $columnState = 'n/a'; $tableCol = ''
+# the TABLE hop and its column row: the datasource chain's table, or the table beside a
+# re-pointed dataset (Task 2) -- ONE drawing, so the two read the same
+function Add-TableHop([string] $TableName, [string] $File, [int] $Line, [string] $Tip, [string] $Note, [string] $CandNote) {
+  $rows = New-Object System.Collections.ArrayList
+  [void]$rows.Add((New-Row "table $TableName" $File $Line $Tip $Note))
+  if ($CandNote) { [void]$rows.Add((New-NoteRow $CandNote)) }
+  if ($field.Count) {
+    $col = [string]$field[0].col
+    $script:tableCol = "$TableName.$($col.ToUpperInvariant())"
+    # the SHARED column state (Emit-Common): the label says what was read --
+    # "not extracted as a column by the SQL index", never "not in the scripts"
+    $cs = Get-SqlColumnState $sqlSet $TableName $col $SourceOverride
+    $script:columnState = $cs.State
+    if ($cs.IsColumn) {
+      $cl = Get-ColumnHopLabel $cs      # Emit-Common; the quoted form is gate-driven (A-FF-QUOTED)
+      [void]$rows.Add((New-Row $cl $cs.File $cs.Line "$($script:tableCol) -- $([IO.Path]::GetFileName($cs.File)):$($cs.Line)" $cs.Label))
+    } elseif ($script:columnState -eq 'stale') {
+      [void]$rows.Add((New-NoteRow "$($cs.Column): $($cs.Label)"))
+    } else {
+      [void]$rows.Add((New-NoteRow "$($cs.Column) is $($cs.Label) -- computed, UI-only, or the scripts lag the schema"))
+    }
+    if ($script:rtNote) { [void]$rows.Add((New-NoteRow $script:rtNote)) }
+    $title = $(switch ($script:columnState) { 'no' { "$TableName (column not extracted)" } 'stale' { "$($script:tableCol) [stale source]" } default { $script:tableCol } })
+  } else {
+    [void]$rows.Add((New-NoteRow 'the control binds no column itself'))
+    $title = $TableName
+  }
+  [void](Add-Hop $title 'inferred' $rows.ToArray() $PAL.dbBorder $PAL.dbFill $PAL.dbHdr)
+}
+# the hops Get-RePointChain walked (Task 2), each with the grade the round-trip gives it
+$RP_HOP = @{
+  're-point' = @('re-pointed in code', 'codeBorder', 'codeFill', 'codeHdr'); 'member' = @('view-model member', 'typeBorder', 'typeFill', 'typeHdr')
+  'accessor' = @('read accessor', 'typeBorder', 'typeFill', 'typeHdr');      'field'  = @('datasource field', 'dsBorder', 'dsFill', 'dsHdr')
+  'dataset'  = @('dataset', 'setBorder', 'setFill', 'setHdr')
+}
+function Add-RePointHops($Rp) {
+  foreach ($rh in @($Rp.Hops)) {
+    $m = $RP_HOP[[string]$rh.Hop]
+    $note = @()
+    if ($rh.Routine) { $note += "in $($rh.Routine)" }
+    if ($rh.Reason) { $note += $rh.Reason }
+    $row = New-Row $rh.Label $rh.File ([int]$rh.Line) "$($rh.Label) -- $([IO.Path]::GetFileName($rh.File)):$($rh.Line)" ($note -join '; ')
+    [void](Add-Hop $m[0] $rh.Grade @($row) $PAL[$m[1]] $PAL[$m[2]] $PAL[$m[3]])
+  }
+  if ($Rp.DataSet) {
+    $d = $Rp.DataSet
+    [void](Add-Hop 'dataset field' 'certain' @((New-Row "$($d.Name) : $($d.Type)" $d.File ([int]$d.Line) "$($d.Name) : $($d.Type) -- $([IO.Path]::GetFileName($d.File)):$($d.Line)" 'the dataset the re-pointed datasource is given')) $PAL.setBorder $PAL.setFill $PAL.setHdr)
+  }
+}
 if (-not $ch) {
   $stop = "no datasource in the DFM for $ctlName$(if ($repoint.Count) { '; it is re-pointed in code (see the code rows) -- that right-hand side is not followed' } else { '' })"
 } else {
@@ -288,7 +355,19 @@ if (-not $ch) {
         if ($h.Grade -eq 'dangling') {
           $rows = @((New-Row $ch.DsName $dfm ([int]$h.Line) "$($ch.DsName) -- $([IO.Path]::GetFileName($dfm)):$($h.Line)" "the DFM names $($ch.Module), which is not in this project"))
           [void](Add-Hop 'datasource' 'dangling' $rows $PAL.warnBorder $PAL.warnFill $PAL.warnHdr)
-          $stop = "the designer datasource $($ch.DsName) is dangling (module $($ch.Module) is declared nowhere in this index)$(if ($repoint.Count) { "; the control is re-pointed in code at runtime ($($repoint.Count) site(s)) -- that right-hand side is not followed" } else { '' })"
+          # Task 2: the runtime re-point is FOLLOWED (Resolve-RePointTable); what it cannot do is a named stop
+          $dangWhy = "the designer datasource $($ch.DsName) is dangling (module $($ch.Module) is declared nowhere in this index)"
+          # no re-point result (not expected for a dangling chain): the old dangling stop, never a claim that one was followed
+          if (-not $rpr) { $stop = $dangWhy }
+          else { Add-RePointHops $rpr }
+          if ($rpr) { switch ($rpr.Status) {
+            'table'     { Add-TableHop $rpr.Table $rpr.DataSet.File $rpr.TableLine "'$($rpr.Table)' literal -- $([IO.Path]::GetFileName($rpr.DataSet.File)):$($rpr.TableLine)" "[inferred] the table literal beside $($rpr.DataSet.Name) on $($rpr.TableLines) line(s)" '' }
+            'stale'     { $stop = "[stale source] $($rpr.Stop)" }
+            'no-site'   { $stop = "$dangWhy; $($rpr.Stop)" }
+            'multi-rhs' { $stop = "$dangWhy; $($rpr.Stop)" }
+            'walk-limit' { $stop = "the code re-point was followed to a shape this walk does not follow: $($rpr.Stop)" }
+            default     { $stop = "the code re-point was followed and stops: $($rpr.Stop)" }
+          } }
         } elseif ($h.Grade -in 'certain', 'by name') {
           $rows = @((New-Row $h.Label $h.File ([int]$h.Line) "$($h.Label) -- $([IO.Path]::GetFileName($h.File)):$($h.Line)" $(if ($h.Reason) { $h.Reason } else { "declared in $([IO.Path]::GetFileName($h.File))" })))
           [void](Add-Hop 'datasource' $h.Grade $rows $PAL.dsBorder $PAL.dsFill $PAL.dsHdr)
@@ -314,33 +393,8 @@ if (-not $ch) {
       }
       'table' {
         if ($ch.ResolvedTable) {
-          $rows = New-Object System.Collections.ArrayList
-          [void]$rows.Add((New-Row "table $($ch.ResolvedTable)" $h.File ([int]$h.Line) "'$($ch.ResolvedTable)' literal -- $([IO.Path]::GetFileName($h.File)):$($h.Line)" "[inferred] $($h.Reason)"))
-          if ($ch.Grade -eq 'by-columns') {
-            [void]$rows.Add((New-NoteRow "candidates: $($ch.CandidateTables -join ', ') -- tie broken by $($ch.BoundColumns.Count) bound column(s)"))
-          }
-          if ($field.Count) {
-            $col = [string]$field[0].col
-            $tableCol = "$($ch.ResolvedTable).$($col.ToUpperInvariant())"
-            # the SHARED column state (Emit-Common): the label says what was read --
-            # "not extracted as a column by the SQL index", never "not in the scripts"
-            $cs = Get-SqlColumnState $sqlSet $ch.ResolvedTable $col $SourceOverride
-            $columnState = $cs.State
-            if ($cs.IsColumn) {
-              $cl = Get-ColumnHopLabel $cs      # Emit-Common; the quoted form is gate-driven (A-FF-QUOTED)
-              [void]$rows.Add((New-Row $cl $cs.File $cs.Line "$tableCol -- $([IO.Path]::GetFileName($cs.File)):$($cs.Line)" $cs.Label))
-            } elseif ($columnState -eq 'stale') {
-              [void]$rows.Add((New-NoteRow "$($cs.Column): $($cs.Label)"))
-            } else {
-              [void]$rows.Add((New-NoteRow "$($cs.Column) is $($cs.Label) -- computed, UI-only, or the scripts lag the schema"))
-            }
-            if ($script:rtNote) { [void]$rows.Add((New-NoteRow $script:rtNote)) }
-            $title = $(switch ($columnState) { 'no' { "$($ch.ResolvedTable) (column not extracted)" } 'stale' { "$tableCol [stale source]" } default { $tableCol } })
-          } else {
-            [void]$rows.Add((New-NoteRow 'the control binds no column itself'))
-            $title = $ch.ResolvedTable
-          }
-          [void](Add-Hop $title 'inferred' $rows.ToArray() $PAL.dbBorder $PAL.dbFill $PAL.dbHdr)
+          Add-TableHop $ch.ResolvedTable $h.File ([int]$h.Line) "'$($ch.ResolvedTable)' literal -- $([IO.Path]::GetFileName($h.File)):$($h.Line)" "[inferred] $($h.Reason)" `
+            $(if ($ch.Grade -eq 'by-columns') { "candidates: $($ch.CandidateTables -join ', ') -- tie broken by $($ch.BoundColumns.Count) bound column(s)" } else { '' })
         } else {
           $stop = $h.Reason
           $list = @($(if ($ch.Grade -eq 'many' -and $ch.BoundColumns.Count -and $ch.ColumnMatch.Count -gt 1) { $ch.ColumnMatch } else { $ch.CandidateTables }))
@@ -392,7 +446,11 @@ Add-DisclosureRow $ftbl ("datasources in this index: $($stat.Ds) ($($stat.DsDfm)
 Add-DisclosureRow $ftbl ("per control: $ctlTotal field-bound controls; $ctlTable resolve to one table ($pct%), $([int]$oc['column']) of them to a column " +
   "that table has ($pctCol%); ambiguous $([int]$oc['ambiguous']), chain stops $([int]$oc['stops']), dangling $([int]$oc['dangling']), " +
   "no datasource in the DFM $([int]$oc['no-ds'])$(if ([int]$oc['stale']) { ", stale source $([int]$oc['stale'])" })$(if ([int]$oc['not-column']) { "; $([int]$oc['not-column']) resolve to a table the SQL index extracts no such column from (not quoted there either)" })") $PAL.lineInk
-Add-DisclosureRow $ftbl 'the table comes from string literals in the view model''s unit -- [inferred], dashed; never a fact' $PAL.lineInk
+Add-DisclosureRow $ftbl ("past a dangling designer datasource the code re-point is followed (as the round-trip trace follows it): of $($dAll.Count) such controls " +
+  "$([int]$rpc['table']) reach a table, $([int]$rpc['no-table']) the dataset only, $([int]$rpc['stops']) stop on the way, $([int]$rpc['walk-limit']) reach a shape the walk does not follow, " +
+  "$([int]$rpc['multi-rhs']) are re-pointed with several different right-hand sides (not chosen), $([int]$rpc['no-site']) have no re-point site" +
+  "$(if ([int]$rpc['stale']) { ", $([int]$rpc['stale']) cross a stale file" })$(if ([int]$rpc['']) { ", $([int]$rpc['']) have no owner in the DFM" })") $PAL.lineInk
+Add-DisclosureRow $ftbl 'the table comes from string literals in the view model''s unit (past a re-point: the literal beside the dataset) -- [inferred], dashed; never a fact' $PAL.lineInk
 Add-DisclosureRow $ftbl "the column is checked against the SQL scripts ($($sqlSet.TableCount) tables) -- a script-derived schema, not the live one" $PAL.lineInk
 if ($ch -and $ch.Dangling) { Add-DisclosureRow $ftbl "the DFM names $($ch.Module), which is not in this project" $PAL.lineInk }
 [void]$ftbl.Append('</TABLE>')
@@ -421,7 +479,12 @@ $lay = Invoke-DotLayout $sb.ToString() $OutDir ('feedsfrom_' + ($sel -replace '[
   Grade          = $(if ($ch) { $ch.Grade } else { 'no-ds' })
   HopGrades      = (@($chainNodes | ForEach-Object { $_.Grade }) -join '>')
   ChainRows      = $chainNodes.Count
-  ResolvedTable  = $(if ($ch) { $ch.ResolvedTable } else { $null })
+  ResolvedTable  = $(if ($rpr -and $rpr.Table) { $rpr.Table } elseif ($ch) { $ch.ResolvedTable } else { $null })
+  # Task 2: Resolve-RePointTable's Status for a dangling chain ('' otherwise), and the
+  # index-wide split of the dangling controls in $RP_ORDER (table/no-table/stops/walk-limit/multi-rhs/no-site/stale/no-owner)
+  RePoint        = $(if ($rpr) { $rpr.Status } else { '' })
+  CtlDanglingAll = $dAll.Count
+  CtlRePoint     = $rpAgg
   TableColumn    = $tableCol
   ColumnExists   = $columnState
   Candidates     = $(if ($ch) { @($ch.CandidateTables) -join ',' } else { '' })

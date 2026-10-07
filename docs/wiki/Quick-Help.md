@@ -119,7 +119,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **Export Graph (DOT)** -- Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring. [More](Export-Graph-DOT)
 * **Export to Obsidian** -- Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages. [More](Export-to-Obsidian)
 * **Find Dead Code** -- Scans the index for code with no references -- candidates to delete. [More](Find-Dead-Code)
-* **Forms for testers (CSV)** -- Produces a spreadsheet-style CSV of a project's forms, one row per form, telling a human tester how to reach each form from the main form: the menu, ribbon. [More](Generate-Test-Helper-CSV)
+* **Forms for testers (CSV)** -- A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form. Hand a tester one spreadsheet that says how to reach every form: drag-lint > Reports > Forms for testers (CSV)... or drag-lint forms-csv --project <dproj> --db <db>. Each row gives the menu, ribbon or tab path, the control, the handler, the modal flag and the preconditions per hop; popup forms the index cannot trace go under popupForms in drag-lint-project.json. Needs the project index. [More](Generate-Test-Helper-CSV)
 * **Impact / Blast Radius (symbol)** -- Reports what would be affected if a chosen symbol changes -- the set of code to retest. [More](Impact-Blast-Radius-symbol)
 * **Reverse Call Tree (clickable, Messages window)** -- The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller. [More](Reverse-Call-Tree-clickable-Messages-window)
 * **Reverse Call Tree (who calls this, N-deep)** -- Builds the tree of callers of a chosen symbol, transitively, to a chosen depth. [More](Reverse-Call-Tree-who-calls-this-N-deep)
@@ -131,9 +131,11 @@ One line per feature, grouped as on [Features](Features), with the short help an
 
 ## Diagrams and charts
 
-* **ask (engine verb)** (planned) -- Ask the index a question, get a chart back. [More](Diagrams-and-Charts)
-* **Chart questions** -- 25 questions. Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS. [More](Diagrams-and-Charts)
-* **Charts and the IDE** -- Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio. [More](Charts-and-the-IDE)
+* **ask (engine verb)** (planned) -- Ask the index a question, get a chart back. Planned: one engine verb, drag-lint ask --question <id> --at <file:line:col>, answering every chart question. Not shipped yet -- ask today from drag-lint > Reports, or with charts\src\Ask-Report.ps1 or New-DiagramArtifact.ps1. [More](Diagrams-and-Charts)
+* **Chart questions** -- 26 questions. Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS. [More](Diagrams-and-Charts)
+* **Charts and the IDE** -- Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio. Read this when you first ask a chart question: how to ask one from drag-lint > Reports or a script, where the answer lands, how to read a round-trip trace, and the one-time draglint:// registration that makes a chart row open its line in RAD Studio. Needs a repository clone and PowerShell 7. [More](Charts-and-the-IDE)
+* **Where the charts find the engine and Graphviz** -- Every chart script finds drag-lint.exe and dot.exe by -Engine/-Dot, env, settings.json, the installed layout, then the shared defaults. Point the charts at a different engine or Graphviz without editing a script: pass -Engine / -Dot, set DRAGLINT_ENGINE / DRAGLINT_DOT, or put engine / dot keys in %APPDATA%\drag-lint\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then the shared defaults. [More](Charts-and-the-IDE)
+  aliases: DRAGLINT_DOT, DRAGLINT_ENGINE, settings.json
 
 ## Compiler integration
 
@@ -166,6 +168,8 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **ide-release** -- Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request. [More](ide-release)
 * **Installation** -- Getting the CLI, the IDE plugin, or the LSP running. [More](Installation)
 * **lsp** -- Starts the LSP (Language Server Protocol) stdio server. [More](lsp)
+* **Register the MCP server (Claude Code, VS Code)** -- Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable. Run Set-DragLintMcpConfig.ps1 -All (try -DryRun first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass -DbPath to pin one index per entry (-Name); -Remove takes only its own entry out again. Needs PowerShell 7 and the engine found by the charts' lookup. [More](Register-MCP-Server)
+  aliases: claude mcp add, mcp setup, mcp.json
 * **serve** -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index. [More](serve)
 * **workspace add** -- Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it. [More](workspace-add)
 * **workspace index** -- Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass. [More](workspace-index)
@@ -220,6 +224,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Installation: procedure docs\wiki\Installation.md
 * Maintenance: procedure docs\wiki\Maintenance.md
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
+* Where the charts find the engine and Graphviz: procedure charts\README.md
 * dl:wiki concept blocks: procedure docs\wiki\Wiki-Blocks-Authoring.md
 * drag-lint: Project Rules: host 'Project Manager' (the caption is verified, the host is declared)
 

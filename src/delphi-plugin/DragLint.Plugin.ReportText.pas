@@ -70,7 +70,7 @@ const
   REPORT_DOC_MAX_LINE = 100;
 
   /// <summary>Number of questions in REPORT_QUESTIONS.</summary>
-  REPORT_QUESTION_COUNT = 25;
+  REPORT_QUESTION_COUNT = 26;
 
   /// <summary>Every question of charts\src\New-DiagramArtifact.ps1's
   /// ValidateSet, in menu order within each group. Grouping follows the "You
@@ -81,6 +81,7 @@ const
     (Id: 'butterfly'       ; Caption: 'Callers and callees (butterfly chart)...'              ; Kind: rtkRoutine),
     (Id: 'who-calls'       ; Caption: 'Who calls this routine...'                             ; Kind: rtkRoutine),
     (Id: 'what-it-calls'   ; Caption: 'What this routine calls...'                            ; Kind: rtkRoutine),
+    (Id: 'path'            ; Caption: 'Call path from this routine to another...'             ; Kind: rtkRoutine),
     (Id: 'effects'         ; Caption: 'What this routine changes (side effects)...'           ; Kind: rtkRoutine),
     (Id: 'touches-tables'  ; Caption: 'Which tables this routine touches...'                  ; Kind: rtkRoutine),
     (Id: 'exception-paths' ; Caption: 'Which exceptions escape this routine...'               ; Kind: rtkRoutine),
@@ -178,6 +179,13 @@ function QNameUnitName(const pQName: string): string;
 /// <returns>True for feeds-from, lands-where and round-trip.</returns>
 function QuestionTakesFormControl(const pQuestionId: string): Boolean;
 
+/// <summary>True for the questions that need a second routine (-To) besides
+/// the target.</summary>
+/// <param name="pQuestionId">The question id.</param>
+/// <returns>True for path (routine A is the target, routine B is -To).</returns>
+/// <remarks>The caret supplies routine A only; the menu prompts for B.</remarks>
+function QuestionTakesSecondRoutine(const pQuestionId: string): Boolean;
+
 /// <summary>Whether a typed target may be sent at all.</summary>
 /// <param name="pTarget">The target from the prompt.</param>
 /// <returns>False for an empty or blank target and for one containing a double
@@ -192,9 +200,16 @@ function IsValidReportTarget(const pTarget: string): Boolean;
 /// <param name="pInFile">The active file, passed as -In so the script resolves
 /// the project index itself.</param>
 /// <param name="pEngine">The drag-lint.exe the plugin uses, passed as -Engine.</param>
-/// <returns>A quoted command line ending in -Open, so a chart opens in the
-/// browser.</returns>
-function BuildAskReportCmdLine(const pPwsh, pScript, pQuestionId, pTarget, pInFile, pEngine: string): string;
+/// <param name="pTo">Routine B for a question that takes one (see
+/// QuestionTakesSecondRoutine), passed as -To; '' omits -To. Must pass
+/// IsValidReportTarget when given.</param>
+/// <returns>A quoted command line carrying -Plain and ending in -Open, so a
+/// chart opens in the browser.</returns>
+/// <remarks>-Plain is load-bearing: HandleReportDone wraps the answer in its
+/// own DocInsight block (FormatReportAsDocInsight), and without -Plain
+/// Ask-Report.ps1 would print a block of its own, wrapped twice.</remarks>
+function BuildAskReportCmdLine(const pPwsh, pScript, pQuestionId, pTarget, pInFile, pEngine: string;
+  const pTo: string = ''): string;
 
 /// <summary>The reason Ask-Report.ps1 gave for a non-zero exit.</summary>
 /// <param name="pOutput">The captured stdout+stderr.</param>
@@ -523,15 +538,22 @@ begin
   Result:= MatchText(pQuestionId, ['feeds-from', 'lands-where', 'round-trip']);
 end;
 
+function QuestionTakesSecondRoutine(const pQuestionId: string): Boolean;
+begin
+  Result:= SameText(pQuestionId, 'path');
+end;
+
 function IsValidReportTarget(const pTarget: string): Boolean;
 begin
   Result:= (Trim(pTarget) <> '') and (Pos('"', pTarget) = 0);
 end;
 
-function BuildAskReportCmdLine(const pPwsh, pScript, pQuestionId, pTarget, pInFile, pEngine: string): string;
+function BuildAskReportCmdLine(const pPwsh, pScript, pQuestionId, pTarget, pInFile, pEngine: string;
+  const pTo: string = ''): string;
 begin
-  Result:= Format('"%s" -NoProfile -NonInteractive -File "%s" -Question %s -Target "%s" -In "%s" -Engine "%s" -Open',
-                  [pPwsh, pScript, pQuestionId, Trim(pTarget), pInFile, pEngine]);
+  var ToArg: string:= if Trim(pTo) = '' then '' else Format(' -To "%s"', [Trim(pTo)]);
+  Result:= Format('"%s" -NoProfile -NonInteractive -File "%s" -Question %s -Target "%s"%s -In "%s" -Engine "%s" -Plain -Open',
+                  [pPwsh, pScript, pQuestionId, Trim(pTarget), ToArg, pInFile, pEngine]);
 end;
 
 function AskReportReason(const pOutput: string): string;

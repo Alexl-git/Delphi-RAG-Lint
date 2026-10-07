@@ -5,8 +5,14 @@
   "owner": "CHARTS",
   "status": "planned",
   "summary": "Ask the index a question, get a chart back",
+  "intro": "Planned: one engine verb, drag-lint ask --question <id> --at <file:line:col>, answering every chart question. Not shipped yet -- ask today from drag-lint > Reports, or with charts\\src\\Ask-Report.ps1 or New-DiagramArtifact.ps1.",
   "wikiPage": "Diagrams-and-Charts",
   "surfaces": [],
   "audience": "both",
-  "notes": "one engine verb for every chart question; planned, not shipped (Features.md 2026-10-05)"
+  "notes": "one engine verb for every chart question; planned, not shipped (Features.md 2026-10-05)",
+  "lastVerified": {
+    "date": "2026-10-06",
+    "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",
+    "build": "1.26.1-alpha"
+  }
 }

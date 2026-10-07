@@ -321,6 +321,22 @@ begin
   Result:= IsValidReportTarget(pTarget);
 end;
 
+{ path: the caret gives routine A only, so routine B (-To) is typed. }
+function PromptSecondRoutine(const pQuestion: TReportQuestion; const pFrom: string; out pTo: string): Boolean;
+begin
+  pTo:= '';
+  Result:= InputQuery('drag-lint Reports', pQuestion.Caption.TrimRight(['.']) + ' -- from ' + pFrom +
+                      sLineBreak + 'to routine (qualified name):', pTo);
+  if not Result then Exit;
+  pTo:= Trim(pTo);
+  if Pos('"', pTo) > 0 then
+  begin
+    ShowMessage(MSG_PREFIX + 'the routine must not contain a double-quote (").');
+    Exit(False);
+  end;
+  Result:= IsValidReportTarget(pTo);
+end;
+
 function ChooseTarget(const pQuestion: TReportQuestion; const pInFile: string; out pTarget: string): Boolean;
 var
   View: IOTAEditView;
@@ -489,13 +505,17 @@ var
   Pwsh  : string;
   InFile: string;
   Target: string;
+  ToName: string;
 begin
   if not (Sender is TMenuItem) then Exit;
   var Idx: Integer:= TMenuItem(Sender).Tag;
   if (Idx < Low(REPORT_QUESTIONS)) or (Idx > High(REPORT_QUESTIONS)) then Exit;
   var Q: TReportQuestion:= REPORT_QUESTIONS[Idx];
-  if ResolveRunTools(Exe, Script, Pwsh, InFile) and ChooseTarget(Q, InFile, Target) then
-    EnqueueReport(Q.Id, Target, BuildAskReportCmdLine(Pwsh, Script, Q.Id, Target, InFile, Exe));
+  if not (ResolveRunTools(Exe, Script, Pwsh, InFile) and ChooseTarget(Q, InFile, Target)) then Exit;
+  ToName:= '';
+  if QuestionTakesSecondRoutine(Q.Id) and not PromptSecondRoutine(Q, Target, ToName) then Exit;
+  var Shown: string:= if ToName = '' then Target else Target + ' -> ' + ToName;
+  EnqueueReport(Q.Id, Shown, BuildAskReportCmdLine(Pwsh, Script, Q.Id, Target, InFile, Exe, ToName));
 end;
 
 end.

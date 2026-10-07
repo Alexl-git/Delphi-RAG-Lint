@@ -57,7 +57,7 @@ them, and each carries its caveat on the chart:
 * `lands-where` (`-Target <Tmc/Imc property | field | Form.Control> -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL>`)
   -- TABLE.COLUMN by naming convention, `[inferred]`, coverage printed.
 
-The twenty-sixth is a TEXT question (a `trace.dlgraph` bundle, no picture yet):
+The twenty-sixth answers in TEXT (a `trace.dlgraph` bundle) and, since R5, with a chart drawn from that text:
 
 * `round-trip` (`-Target <control | field | TABLE.COLUMN> -DbPath <CLIENT> -ServerDbPath <SERVER> -SqlDbPath <SQL>`)
   -- the Interface report's trace core: Form A text, conditions from fresh source (an `if` verbatim; the `try` / `except` and `case` forms marked), STOPS where the index ends.

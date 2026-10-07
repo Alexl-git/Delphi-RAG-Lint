@@ -67,6 +67,8 @@ type
     [Test] procedure OnlyControlQuestionsConvert;
     [Test] procedure TargetValidation;
     [Test] procedure CmdLineCarriesEveryArgument;
+    [Test] procedure CmdLineCarriesToOnlyWhenGiven;
+    [Test] procedure OnlyPathTakesSecondRoutine;
     [Test] procedure ReasonStripsPrefix;
     [Test] procedure ReindexCommandsAreParsed;
     [Test] procedure FolderTargetIndexIsNeverAccepted;
@@ -125,7 +127,8 @@ const
     'hierarchy', 'class-surface', 'event-wiring', 'touches-tables', 'lifecycle',
     'cycles', 'wiring', 'effects', 'architecture', 'protocol-trace',
     'crosses-boundary', 'shown-where', 'change-impact', 'tested-by',
-    'exception-paths', 'consumers', 'feeds-from', 'lands-where', 'round-trip');
+    'exception-paths', 'consumers', 'feeds-from', 'lands-where', 'round-trip',
+    'path');
 var
   Q: TReportQuestion;
 begin
@@ -431,6 +434,27 @@ begin
   Assert.Contains(Cmd, '-In "C:\P\Unit.pas"');
   Assert.Contains(Cmd, '-Engine "C:\E\drag-lint.exe"');
   Assert.Contains(Cmd, '-Open');
+  { the menu wraps the answer in its own DocInsight block, so the script must
+    answer plain or the block is wrapped twice }
+  Assert.Contains(Cmd, ' -Plain');
+end;
+
+procedure TReportGlueTests.CmdLineCarriesToOnlyWhenGiven;
+var
+  Cmd: string;
+begin
+  Cmd:= BuildAskReportCmdLine('p.exe', 'a.ps1', 'path', 'U.TA.Run', 'U.pas', 'e.exe', 'U.TB.Stop');
+  Assert.Contains(Cmd, '-Target "U.TA.Run"');
+  Assert.Contains(Cmd, '-To "U.TB.Stop"');
+  Cmd:= BuildAskReportCmdLine('p.exe', 'a.ps1', 'who-calls', 'U.TA.Run', 'U.pas', 'e.exe');
+  Assert.AreEqual(0, Pos('-To ', Cmd), Cmd);
+end;
+
+procedure TReportGlueTests.OnlyPathTakesSecondRoutine;
+begin
+  Assert.IsTrue(QuestionTakesSecondRoutine('path'));
+  Assert.IsFalse(QuestionTakesSecondRoutine('who-calls'));
+  Assert.IsFalse(QuestionTakesSecondRoutine('butterfly'));
 end;
 
 procedure TReportGlueTests.ReasonStripsPrefix;

@@ -5,7 +5,8 @@
   "owner": "CHARTS",
   "status": "shipped",
   "since": "0.44.0-alpha",
-  "summary": "Produces a spreadsheet-style CSV of a project's forms, one row per form, telling a human tester how to reach each form from the main form: the menu, ribbon",
+  "summary": "A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form",
+  "intro": "Hand a tester one spreadsheet that says how to reach every form: drag-lint > Reports > Forms for testers (CSV)... or drag-lint forms-csv --project <dproj> --db <db>. Each row gives the menu, ribbon or tab path, the control, the handler, the modal flag and the preconditions per hop; popup forms the index cannot trace go under popupForms in drag-lint-project.json. Needs the project index.",
   "wikiPage": "Generate-Test-Helper-CSV",
   "surfaces": [
     {
@@ -18,5 +19,10 @@
     }
   ],
   "audience": "both",
-  "requires": ["index"]
+  "requires": ["index"],
+  "lastVerified": {
+    "date": "2026-10-06",
+    "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",
+    "build": "1.26.1-alpha"
+  }
 }

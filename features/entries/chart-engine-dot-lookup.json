@@ -1,0 +1,26 @@
+{
+  "id": "chart-engine-dot-lookup",
+  "title": "Where the charts find the engine and Graphviz",
+  "group": "diagrams-charts",
+  "owner": "CHARTS",
+  "status": "shipped",
+  "since": "1.26.1-alpha",
+  "summary": "Every chart script finds drag-lint.exe and dot.exe by -Engine/-Dot, env, settings.json, the installed layout, then the shared defaults",
+  "intro": "Point the charts at a different engine or Graphviz without editing a script: pass -Engine / -Dot, set DRAGLINT_ENGINE / DRAGLINT_DOT, or put engine / dot keys in %APPDATA%\\drag-lint\\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then the shared defaults.",
+  "wikiPage": "Charts-and-the-IDE",
+  "surfaces": [
+    {
+      "type": "workflow",
+      "doc": "charts\\README.md"
+    }
+  ],
+  "audience": "both",
+  "requires": ["powershell7"],
+  "aliases": ["DRAGLINT_DOT", "DRAGLINT_ENGINE", "settings.json"],
+  "related": ["chart-questions"],
+  "lastVerified": {
+    "date": "2026-10-06",
+    "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",
+    "build": "1.26.1-alpha"
+  }
+}

@@ -1,0 +1,5 @@
+/// <remarks>
+/// Report (drag-lint report no-such-question) for X, asked on 2026-10-06.
+///
+/// The report returned no findings.
+/// </remarks>

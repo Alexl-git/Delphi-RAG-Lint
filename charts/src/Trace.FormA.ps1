@@ -24,7 +24,7 @@
       -- <note>                    (an EMPTY section only, instead of any step: T6-R2 --
                                     or DERIVED's lead-in, above its rows: 8.5)
     [NN] [<ACTOR> ]<text>[ [by name]|[inferred]] @<file>:<line>[ -- <note>]
-           WHEN|UNLESS "<condition>" @<file>:<line>[ -- <note>]
+           WHEN|UNLESS <condition> @<file>:<line>[ -- <note>]
            <FACET> <text>[ @<file>:<line>][ -- <note>]   (FACET: VIA ONTO AT CONTRACT FROM TO OVER WITH REGENERATE)
     [NN] [<ACTOR> ]CROSSES <text> @<file>:<line>[ -- <note>]
     [NN] [<ACTOR> ]STOPS <reason> @<file>:<line>[ -- <note>]
@@ -37,12 +37,16 @@
   or ` -- ` -- the model refuses both, which is what keeps the line regexes
   unambiguous. No field may hold a CR or LF (it would split the line).
 
-  Conditions are quoted VERBATIM (owner decision 2026-09-27: double quotes,
-  because Pascal's '' breaks single ones): the writer never shortens, negates
-  or rewrites one, and never escapes a quote inside one. A condition that
-  CARRIES a double-quote therefore cannot be quoted and New-TraceCond refuses
-  it; the walk turns such a hop into a STOPS step instead. The TITLE is quoted
-  the same way and refused the same way (New-Trace and Write-FormA).
+  Conditions are written VERBATIM and WITHOUT quotes (owner decision 2026-10-05,
+  R5 Part 0; they were double-quoted from 2026-09-27): the writer never shortens,
+  negates or rewrites one, and the parser takes everything after the keyword up
+  to the final ` @<leaf>:<line>` (before any ` -- ` note). So a condition may
+  carry a double-quote now; what it must not carry is what would make the line
+  ambiguous -- ` @` followed by an anchor shape, or ` -- ` (or a trailing ` --`,
+  which the line turns into ` -- `). New-TraceCond refuses those
+  (Get-TraceCondProblem) and the walk turns such a hop into a STOPS step
+  instead, the mechanism the double-quote refusal used. The TITLE stays quoted
+  and refuses a double-quote (New-Trace and Write-FormA).
 
   A step text also must not open with a word the checker COUNTS or the parser
   reads as an actor/kind, nor end in ' --' (Test-TraceText -Head, fix round 1):
@@ -111,14 +115,24 @@ function New-TraceStep([string] $Kind, [string] $Text, [string] $Anchor, [string
                      Routine = $Routine; Note = $Note; Ask = $Ask; Children = (New-Object System.Collections.ArrayList) }
 }
 
-# The condition is kept VERBATIM; one carrying a double-quote or a line break is refused (see the header).
+# Why a condition cannot be written unquoted and read back verbatim ('' when it can): it carries ` @` followed by
+# an anchor shape, or the note separator ` -- ` (a trailing ` --` becomes one on the line). R5 Part 0; shared by
+# New-TraceCond, the shim (Trace.Walk New-ShimResult) and the OMITS note, so the three refuse the same text.
+function Get-TraceCondProblem([string] $Condition) {
+  if ($Condition -match ' @[A-Za-z0-9_$.\-]+:\d+') { return "carries ' @<file>:<line>', which reads as its anchor" }
+  if ($Condition.Contains(' -- ') -or $Condition.EndsWith(' --')) { return "carries ' -- ', which reads as its note" }
+  ''
+}
+
+# The condition is kept VERBATIM; one Get-TraceCondProblem names, or one with a line break, is refused (see the header).
 # $Routine: set when the condition hangs on a step of ANOTHER routine (a CALLS step), so it does not
 # read as the callee's -- written as the note's `in <Routine>` part (Task 5 ruling T5-R2).
 function New-TraceCond([string] $Keyword, [string] $Condition, [string] $Anchor, [string] $Note = '', [string] $Ask = '', [string] $Routine = '') {
   if ($Keyword -cnotin $script:FormAConds) { throw "New-TraceCond: '$Keyword' is not WHEN/UNLESS" }
   if ($Anchor -notmatch $script:FormAAnchor) { throw "New-TraceCond: '$Condition' has no anchor; got '$Anchor'" }
   if ([string]::IsNullOrWhiteSpace($Condition)) { throw 'New-TraceCond: empty condition' }
-  if ($Condition.Contains('"')) { throw "New-TraceCond: the condition carries a double-quote, so it cannot be quoted verbatim: $Condition" }
+  $why = Get-TraceCondProblem $Condition
+  if ($why) { throw "New-TraceCond: the condition $why, so it cannot be written verbatim: $Condition" }
   if ($Condition -match '[\r\n]') { throw "New-TraceCond: the condition must not contain a line break (join a wrapped condition first): $Condition" }
   [pscustomobject]@{ Kind = 'cond'; Keyword = $Keyword; Condition = $Condition; Anchor = $Anchor; Note = $Note; Ask = $Ask; Routine = $Routine }
 }
@@ -129,6 +143,10 @@ function New-TraceFacet([string] $Head, [string] $Text, [string] $Anchor = '', [
   Test-TraceText $Text 'facet text'
   [pscustomobject]@{ Kind = 'facet'; Head = $Head; Text = $Text; Anchor = $Anchor; Note = $Note; Ask = '' }
 }
+
+# The END TRACE line of counts $C (Get-TraceCounts) -- ONE builder, so the text and the chart's Legend (R5,
+# A-R5-COUNTS) cannot word it two ways.
+function Format-TraceEndLine($C) { "END TRACE  $($C.Steps) steps, $($C.Conditions) conditions, $($C.Crossings) crossings, $($C.Unresolved) unresolved." }
 
 # Recomputed from the items, never stored (AC-3).
 function Get-TraceCounts($Trace) {
@@ -237,8 +255,8 @@ function Write-FormA($Trace) {
       foreach ($ch in $i.Children) {
         $cn = Format-TraceNote $(if ($ch.Kind -eq 'cond') { $ch.Routine } else { '' }) $ch.Note $ch.Ask
         if ($ch.Kind -eq 'cond') {
-          # verbatim: no truncation, no quote rewriting (New-TraceCond refused a '"' already)
-          & $L ("       $($ch.Keyword) `"$($ch.Condition)`" @$($ch.Anchor)" + $(if ($cn) { " -- $cn" } else { '' }))
+          # verbatim and unquoted: no truncation, no rewriting (New-TraceCond refused what the parser would misread)
+          & $L ("       $($ch.Keyword) $($ch.Condition) @$($ch.Anchor)" + $(if ($cn) { " -- $cn" } else { '' }))
         } else {
           & $L ("       $($ch.Head) $($ch.Text)" + $(if ($ch.Anchor) { " @$($ch.Anchor)" } else { '' }) + $(if ($cn) { " -- $cn" } else { '' }))
         }
@@ -247,7 +265,7 @@ function Write-FormA($Trace) {
   }
   $c = Get-TraceCounts $Trace
   & $L ''
-  & $L "END TRACE  $($c.Steps) steps, $($c.Conditions) conditions, $($c.Crossings) crossings, $($c.Unresolved) unresolved."
+  & $L (Format-TraceEndLine $c)
   $text = $sb.ToString()
   $bad = [regex]::Match($text, '[^\x0D\x0A\x20-\x7E]')
   if ($bad.Success) {
@@ -267,7 +285,8 @@ function Read-FormA([string] $Text) {
   $lines = $Text -split "\r\n"
   $lines = $lines[0..($lines.Count - 2)]
   $rxStep  = '^\[(\d{2,3})\] (?:(USER|CLIENT|SERVER|DATABASE) )?(?:(CROSSES|STOPS) )?(.*?)(?: \[(by name|inferred)\])?(?: @(\S+))?(?: -- (.*))?$'
-  $rxCond  = '^       (WHEN|UNLESS) "([^"]*)" @(\S+)(?: -- (.*))?$'
+  # a condition runs to the FIRST ` @<anchor>` that ends the line or opens its note (R5 Part 0: unquoted)
+  $rxCond  = '^       (WHEN|UNLESS) (.+?) @([A-Za-z0-9_$.\-]+:\d+)(?: -- (.*))?$'
   $rxFacet = '^       (VIA|ONTO|AT|CONTRACT|FROM|TO|OVER|WITH|REGENERATE) (.*?)(?: @(\S+))?(?: -- (.*))?$'
   $rxEnd   = '^END TRACE  (\d+) steps, (\d+) conditions, (\d+) crossings, (\d+) unresolved\.$'
   $T = New-Trace 'x' 'x' 'x' 'x' 'x' 'x' 'x'
