@@ -653,15 +653,37 @@ type
     property Rows: Integer read FRows;
   end;
 
+  /// <summary>A class name as one unit's scope resolves it (1.28.2,
+  /// pas_uses[]; the #convert classes too since the link-scope fix).</summary>
+  /// <remarks>QName is set only when Resolution is PAS_RES_RESOLVED;
+  /// Candidates (the declaring units, sorted) only when it is
+  /// PAS_RES_AMBIGUOUS. Resolution '' means the name was never asked
+  /// about.</remarks>
+  TScopedClass = record
+    /// <summary>The qualified class; '' unless Resolution is
+    /// PAS_RES_RESOLVED.</summary>
+    QName     : string;
+    /// <summary>PAS_RES_RESOLVED / PAS_RES_AMBIGUOUS /
+    /// PAS_RES_CLASS_NOT_FOUND; '' = not asked.</summary>
+    Resolution: string;
+    /// <summary>The declaring units, PAS_RES_AMBIGUOUS only.</summary>
+    Candidates: TArray<string>;
+  end;
+
   /// <summary>The classes one convert-apply run works from: each type name
-  /// resolved ONCE, and one member cache per --db store, shared by rule
-  /// validation and BuildApplyPlan.</summary>
+  /// resolved ONCE per unit scope, and one member cache per --db store, shared
+  /// by rule validation and BuildApplyPlan.</summary>
   /// <remarks>
   /// A type name (a #convert header or a .dfm object's class) is resolved to a
-  /// qualified class name across Stores in order, first store that resolves it
-  /// wins: a BARE name through ResolveClassQName (the first class of that
-  /// name), a QUALIFIED name only to a class whose qualified name is exactly
-  /// that, so 'LibX.TNope' never resolves to another unit's TNope. ClassFor
+  /// qualified class name. A QUALIFIED name resolves only to a class whose
+  /// qualified name is exactly that, first store that holds it wins, so
+  /// 'LibX.TNope' never resolves to another unit's TNope. A BARE name resolves
+  /// through ScopedClass -- the same in-scope rule as pas_uses[]
+  /// (ResolveClassInScope) in the unit SetScope named: the unit's own class,
+  /// the last uses entry declaring it, a lone unit-level declarer. A nested
+  /// class is never a declarer, and a bare name the scope cannot settle
+  /// resolves to NOTHING (it used to be the first class of that name across
+  /// the stores -- FMX.StdCtrls.TLabel for a VCL unit). ClassFor
   /// pairs that name with the TPropMemberCache of its store, so a bare and a
   /// qualified spelling of one type share one cache entry. 1.20.6 (T2b): no
   /// property tree is built any more -- every rule path and every dotted .dfm
@@ -688,6 +710,12 @@ type
     FRefFacts: TArray<TRefFacts>; { index-aligned with FStores; nil until first asked }
     FUnitIndex: TUsesUnitIndex;   { C9; nil until first asked }
     FDbPaths : TArray<string>;
+    FScopeStore : ISymbolStore;                        { SetScope's unit: the store indexing it }
+    FScopeFileId: Int64;                               { ... and its file id there; 0 = no scope }
+    FScopePath  : string;                              { ... the path SetScope was given }
+    FScoped     : TDictionary<string, TScopedClass>;   { UPPER name|hint -> ScopedClass's answer }
+    FToOnly     : TArray<string>;                      { bare #convert To names that are no block's From }
+    FBookUnits  : TArray<string>;                      { the units the unit uses AFTER the book (BookChosenUnits) }
     function Lookup(const ATypeName: string): TResolved;
     function GetClassesBuilt: Integer;
   public
@@ -699,8 +727,9 @@ type
     destructor Destroy; override;
     /// <summary>The qualified class name ATypeName resolves to.</summary>
     /// <param name="ATypeName">A bare or qualified class name.</param>
-    /// <returns>The qualified name, or '' when no store has such a
-    /// class.</returns>
+    /// <returns>The qualified name, or '' when no store has such a class or
+    /// a bare name is ambiguous in the SetScope unit (see
+    /// ScopedClass).</returns>
     /// <remarks>Cheap (a name lookup, no tree build); cached.</remarks>
     function ResolveType(const ATypeName: string): string;
     /// <summary>The member cache of one store, created on first use.</summary>
@@ -743,6 +772,37 @@ type
     /// <summary>The --db paths, index-aligned with Stores (C9: they name the
     /// db of a uses_unresolved candidate). Set by the caller; may be empty.</summary>
     property DbPaths: TArray<string> read FDbPaths write FDbPaths;
+    /// <summary>Names the unit whose scope a BARE type name resolves in from
+    /// now on, and the book converting it.</summary>
+    /// <param name="AUnitPas">The converted unit's .pas; '' clears the scope
+    /// (a bare name then resolves only through a lone unit-level declarer or
+    /// a hint).</param>
+    /// <param name="ARules">The book. A bare #convert To type that is no
+    /// block's From is a class of the unit AFTER conversion: when several
+    /// units declare it, the one the book makes the unit use (a #use, a
+    /// #convert block's trailing unit, a #useswap New whose Old the unit uses,
+    /// a uses entry the book does not remove -- the uses reconciliation's own
+    /// tie rule, C9 A8-1) settles it before the unit's current scope
+    /// does.</param>
+    /// <remarks>Finds the store that indexes AUnitPas; a unit no store
+    /// indexes is no scope. A different unit forgets every cached
+    /// resolution -- a bare name can name another class there. The same unit
+    /// again is a no-op.</remarks>
+    procedure SetScope(const AUnitPas: string; const ARules: TConversionRuleSet);
+    /// <summary>ATypeName as the SetScope unit sees it -- the one resolution
+    /// rule every #convert class, ClassFor / ResolveType included, goes
+    /// through (ResolveClassInScope).</summary>
+    /// <param name="ATypeName">A bare or qualified class name.</param>
+    /// <param name="AHint">A qualified spelling of the same class (the
+    /// book's #convert line), used only when the scope does not settle a bare
+    /// name; '' for none.</param>
+    /// <returns>A qualified name: PAS_RES_RESOLVED exactly when a class of
+    /// that qualified name exists. A bare name: PAS_RES_RESOLVED with the
+    /// class, PAS_RES_AMBIGUOUS with the declaring units in Candidates (none
+    /// picked), or PAS_RES_CLASS_NOT_FOUND. A nested class is never a
+    /// declarer.</returns>
+    /// <remarks>Cached per name and hint until the scope changes.</remarks>
+    function ScopedClass(const ATypeName: string; const AHint: string = ''): TScopedClass;
   end;
 
 
@@ -1233,8 +1293,7 @@ end;
 // fully qualified ('LibA.TSrcBtn') -- convert-scaffold and the rule editor
 // emit both forms -- but a .dfm object header is ALWAYS bare ('object btn1:
 // TSrcBtn', never 'object btn1: LibA.TSrcBtn') and FindSymbolsByExactName /
-// the .pas field-decl type token match against the bare name column too (see
-// ResolveClassQName's own remarks). Bug 1 fix: without this, a qualified
+// the .pas field-decl type token match against the bare name column too. Bug 1 fix: without this, a qualified
 // FromType header matched zero .dfm instances ("no convertible instances
 // found").
 function BareTypeTail(const AQName: string): string;
@@ -1391,24 +1450,64 @@ begin
   Result:= False;
 end;
 
-// Resolves a bare class name (as it appears in a #convert rule / .dfm object
-// header, e.g. 'TOldEdit') to its fully-qualified name (e.g. 'OldEditUnit.
-// TOldEdit') for BuildPropTree, which resolves AClassQName via an EXACT
-// qualified_name match. Filters FindSymbolsByExactName to skClass so an
-// unrelated same-named property/field never wins. '' when unresolved.
-function ResolveClassQName(const AStore: ISymbolStore; const AClassName: string): string;
-var
-  Cands: TArray<TSymbol>;
-  S    : TSymbol;
+// Defined with pas_uses[] below; TConvertTreeCache.ScopedClass shares them.
+function ResolveClassInScope(ATrees: TConvertTreeCache; const AScope: ISymbolStore; AScopeFileId: Int64;
+  const AName: string; AIntfOnly: Boolean; const AHint: string): TScopedClass; forward;
+procedure CollectClassDeclarers(ATrees: TConvertTreeCache; const AName, AScopePath: string;
+  AQNames, AStems: TList<string>); forward;
+
+type
+  // C9 A8-1: one unit the converted unit uses after the book's unit rules.
+  TBookUnit = record
+    Spelling : string;
+    Preferred: Boolean;  { a uses entry of the unit, spelled as the unit writes it }
+  end;
+
+// C9 A8-1 (shared since the link-scope fix): every unit that settles a To-type
+// tie, in the order PickTieCandidate has always chosen them -- a #use, a
+// #convert block's trailing units, a #useswap New whose Old the unit uses,
+// then each uses entry of the unit (AUnitUses) the book does not remove
+// (review F2: an entry going away settles nothing).
+function BookChosenUnits(const ARules: TConversionRuleSet; const AUnitUses: TArray<TUnitUse>;
+  const ASameUnit: TSameUnitFunc): TArray<TBookUnit>;
+
+  function MakeBookUnit(const ASpelling: string; APreferred: Boolean): TBookUnit;
+  begin
+    Result.Spelling := ASpelling;
+    Result.Preferred:= APreferred;
+  end;
+
+  function UsesUnit(const AUnit: string): Boolean;
+  begin
+    for var U: TUnitUse in AUnitUses do
+      if ASameUnit(U.UnitName, AUnit) then Exit(True);
+    Result:= False;
+  end;
+
 begin
-  Result:= '';
-  Cands:= AStore.FindSymbolsByExactName(AClassName);
-  for S in Cands do
-    if S.Kind = skClass then Exit(S.QualifiedName);
+  Result:= nil;
+  var Watched: TArray<TWatchUnit>:= UnitRuleWatchList(ARules, nil, ASameUnit);
+  for var R: TConversionRule in ARules.Rules do
+    case R.Kind of
+      rkUse: Result:= Result + [MakeBookUnit(R.UnitName, False)];
+      rkConvert:
+        for var U: string in R.UnitsAdd do Result:= Result + [MakeBookUnit(U, False)];
+      rkUseSwap:
+        { the swap's New is added only when the unit uses Old }
+        if UsesUnit(R.UnitName) then
+          for var U: string in R.UnitsAdd do Result:= Result + [MakeBookUnit(U, False)];
+    end;
+  for var U: TUnitUse in AUnitUses do
+  begin
+    var Removed: Boolean:= False;
+    for var W: TWatchUnit in Watched do
+      if ASameUnit(W.UnitName, U.UnitName) then Removed:= True;
+    if not Removed then Result:= Result + [MakeBookUnit(U.UnitName, True)];
+  end;
 end;
+
 // The qualified name of the class named exactly AQName ('Unit.TType') in
-// AStore, or '' -- unlike ResolveClassQName, never a same-named class of
-// another unit.
+// AStore, or '' -- never a same-named class of another unit.
 function QualifiedClassIn(const AStore: ISymbolStore; const AQName: string): string;
 var
   S: TSymbol;
@@ -1423,6 +1522,7 @@ begin
   inherited Create;
   FStores  := AStores;
   FResolved:= TDictionary<string, TResolved>.Create;
+  FScoped  := TDictionary<string, TScopedClass>.Create;
   SetLength(FCaches, Length(AStores));
   FOptions := Default(TPropTreeOptions);
   FOptions.ToPersistent:= True;
@@ -1452,6 +1552,7 @@ begin
   for C in FCaches do C.Free;
   for var F: TRefFacts in FRefFacts do F.Free;
   FUnitIndex.Free;
+  FScoped.Free;
   FResolved.Free;
   inherited Destroy;
 end;
@@ -1535,18 +1636,99 @@ begin
   if FResolved.TryGetValue(Key, Result) then Exit;
   Result.QName:= '';
   Result.Store:= -1;
-  if Name <> '' then
+  if Pos('.', Name) > 0 then
+  begin
     for I:= 0 to High(FStores) do
     begin
-      Result.QName:= if Pos('.', Name) > 0 then QualifiedClassIn(FStores[I], Name)
-                     else ResolveClassQName(FStores[I], Name);
+      Result.QName:= QualifiedClassIn(FStores[I], Name);
       if Result.QName <> '' then
       begin
         Result.Store:= I;
         Break;
       end;
     end;
-  FResolved.Add(Key, Result);
+  end
+  else if Name <> '' then
+  begin
+    { a bare name: the unit's scope, never the first class of that name }
+    var Scoped: TScopedClass:= ScopedClass(Name);
+    if Scoped.Resolution = PAS_RES_RESOLVED then Result:= Lookup(Scoped.QName);
+  end;
+  FResolved.AddOrSetValue(Key, Result);
+end;
+
+procedure TConvertTreeCache.SetScope(const AUnitPas: string; const ARules: TConversionRuleSet);
+begin
+  if (FScopePath <> '') and SameText(FScopePath, AUnitPas) then Exit;
+  FScopePath  := AUnitPas;
+  FScopeStore := nil;
+  FScopeFileId:= 0;
+  FToOnly     := nil;
+  FBookUnits  := nil;
+  if AUnitPas <> '' then
+    for var St: ISymbolStore in FStores do
+    begin
+      var Fid: Int64:= UnitFileIdIn(St, AUnitPas);
+      if Fid > 0 then
+      begin
+        FScopeStore := St;
+        FScopeFileId:= Fid;
+        Break;
+      end;
+    end;
+  var Froms: TArray<string>:= nil;
+  for var R: TConversionRule in ARules.Rules do
+    if R.Kind = rkConvert then Froms:= Froms + [BareTypeTail(R.FromType)];
+  for var R: TConversionRule in ARules.Rules do
+    if (R.Kind = rkConvert) and (R.ToType <> '') and (Pos('.', R.ToType) = 0) and
+       not MatchText(R.ToType, Froms) and not MatchText(R.ToType, FToOnly) then
+      FToOnly:= FToOnly + [R.ToType];
+  if Length(FToOnly) > 0 then
+    for var B: TBookUnit in BookChosenUnits(ARules,
+      if FScopeFileId > 0 then FScopeStore.GetUnitUsesForFile(FScopeFileId) else nil, UnitIndex.SameUnit) do
+      FBookUnits:= FBookUnits + [B.Spelling];
+  FResolved.Clear;
+  FScoped.Clear;
+end;
+
+function TConvertTreeCache.ScopedClass(const ATypeName, AHint: string): TScopedClass;
+begin
+  var Name: string:= Trim(ATypeName);
+  var Key : string:= UpperCase(Name + '|' + Trim(AHint));
+  if FScoped.TryGetValue(Key, Result) then Exit;
+  Result:= Default(TScopedClass);
+  { a To type of the unit AFTER conversion: the unit the book makes it use
+    settles a tie first (C9 A8-1, the uses reconciliation's own rule) }
+  if MatchText(Name, FToOnly) and (Length(FBookUnits) > 0) then
+  begin
+    var QNames: TList<string>:= TList<string>.Create;
+    var Stems : TList<string>:= TList<string>.Create;
+    try
+      CollectClassDeclarers(Self, Name, if FScopeFileId > 0 then FScopeStore.GetFilePath(FScopeFileId) else '',
+        QNames, Stems);
+      var Pick: Integer:= -1;
+      var Picks: Integer:= 0;
+      if Stems.Count > 1 then
+        for var I: Integer:= 0 to Stems.Count - 1 do
+          for var B: string in FBookUnits do
+            if UnitIndex.SameUnit(B, Stems[I]) and (Pick <> I) then
+            begin
+              Pick:= I;
+              Inc(Picks);
+            end;
+      if Picks = 1 then
+      begin
+        Result.QName     := QNames[Pick];
+        Result.Resolution:= PAS_RES_RESOLVED;
+      end;
+    finally
+      Stems.Free;
+      QNames.Free;
+    end;
+  end;
+  if Result.Resolution = '' then
+    Result:= ResolveClassInScope(Self, FScopeStore, FScopeFileId, Name, False, Trim(AHint));
+  FScoped.AddOrSetValue(Key, Result);
 end;
 
 function TConvertTreeCache.ResolveType(const ATypeName: string): string;
@@ -3835,14 +4017,6 @@ begin
   end;
 end;
 
-type
-  // 1.28.2 (pas_uses[]): a class name as one unit's scope resolves it.
-  TScopedClass = record
-    QName     : string;          { the qualified class; '' unless Resolution is PAS_RES_RESOLVED }
-    Resolution: string;          { PAS_RES_RESOLVED / PAS_RES_AMBIGUOUS / PAS_RES_CLASS_NOT_FOUND; '' = not asked }
-    Candidates: TArray<string>;  { the declaring units, PAS_RES_AMBIGUOUS only }
-  end;
-
 // 1.28.2: the unit-level classes named AName in any of ATrees' stores, one
 // per qualified name, appended to AQNames with their unit stems in AStems
 // (index-aligned). An implementation-section class counts only when it is
@@ -3899,7 +4073,9 @@ end;
 // AIntfOnly: interface entries only, for a name used above implementation;
 // an entry naming two -- 'StdCtrls' for FMX.StdCtrls and Vcl.StdCtrls -- is
 // ambiguous, not a pick); else the one AHint (the book's qualification)
-// names; else a lone declarer. Anything else is PAS_RES_AMBIGUOUS.
+// names; else a lone declarer. Anything else is PAS_RES_AMBIGUOUS. The ONE
+// in-scope rule: TConvertTreeCache.ScopedClass resolves every #convert From /
+// To class through it too (AScopeFileId 0 = no unit: hint, then lone declarer).
 function ResolveClassInScope(ATrees: TConvertTreeCache; const AScope: ISymbolStore; AScopeFileId: Int64;
   const AName: string; AIntfOnly: Boolean; const AHint: string): TScopedClass;
 var
@@ -5521,44 +5697,15 @@ var
         end;
     end;
 
-  var
-    UnitUses  : TArray<TUnitUse>;
-    Watched: TArray<TWatchUnit>;
-
-    function UsesUnit(const AUnit: string): Boolean;
-    begin
-      for var U: TUnitUse in UnitUses do
-        if ATrees.UnitIndex.SameUnit(U.UnitName, AUnit) then Exit(True);
-      Result:= False;
-    end;
-
-    function BookRemoves(const AUnit: string): Boolean;
-    begin
-      for var W: TWatchUnit in Watched do
-        if ATrees.UnitIndex.SameUnit(W.UnitName, AUnit) then Exit(True);
-      Result:= False;
-    end;
-
   begin
     Picked  := nil;
     Spelling:= '';
-    UnitUses   := if PasFileId > 0 then PasStore.GetUnitUsesForFile(PasFileId) else nil;
-    { the units the book REMOVES after ADD wins -- an entry among them is going
-      away, so it settles nothing (review F2: picking it fed ADD wins and
-      cancelled the book's own #unuse) }
-    Watched := UnitRuleWatchList(ABook.Rules, nil, ATrees.UnitIndex.SameUnit);
-    for var R: TConversionRule in ABook.Rules.Rules do
-      case R.Kind of
-        rkUse: Choose(R.UnitName, False);
-        rkConvert:
-          for var U: string in R.UnitsAdd do Choose(U, False);
-        rkUseSwap:
-          { the swap's New is added only when the unit uses Old }
-          if UsesUnit(R.UnitName) then
-            for var U: string in R.UnitsAdd do Choose(U, False);
-      end;
-    for var U: TUnitUse in UnitUses do
-      if not BookRemoves(U.UnitName) then Choose(U.UnitName, True);
+    { BookChosenUnits: the book's adds, then the unit's own entries the book
+      does not remove (review F2) -- shared with TConvertTreeCache.ScopedClass,
+      so the class validated is the class whose unit is added }
+    for var B: TBookUnit in BookChosenUnits(ABook.Rules,
+      if PasFileId > 0 then PasStore.GetUnitUsesForFile(PasFileId) else nil, ATrees.UnitIndex.SameUnit) do
+      Choose(B.Spelling, B.Preferred);
     Result:= if Length(Picked) = 1 then Spelling else '';
   end;
   // C9 A8-2: the line the conversion writes ToType onto in the unit (its first
@@ -5833,6 +5980,7 @@ begin
   Result:= Default(TApplyResult);
   Result.Ok:= False;
   Stores:= ATrees.Stores;
+  ATrees.SetScope(AUnitPas, ABook.Rules);  { bare #convert / .dfm class names resolve in THIS unit }
 
   if not TFile.Exists(AUnitPas) then
   begin Result.Error:= Format('unit .pas not found: %s', [AUnitPas]); Exit; end;
@@ -5980,7 +6128,12 @@ begin
 
 
       var BlockText: string:= String.Join(#13#10, DfmLines, BlockStart - 1, BlockEnd - BlockStart + 1);
-      var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ABook.Rules, ATrees.ClassFor(Inst.FromType),
+      { the From class is the BLOCK's -- the book's #convert spelling, as the
+        rule validation resolved it -- not the .dfm header's bare class name }
+      var BookFrom, BookTo: string;
+      ConvertRuleSpelling(ABook.Rules, BareTypeTail(Inst.FromType), BookFrom, BookTo);
+      var ReemitRes: TReemitResult:= ReemitComponent(BlockText, ABook.Rules,
+        ATrees.ClassFor(if BookFrom <> '' then BookFrom else Inst.FromType),
         ATrees.ClassFor(Inst.ToType), ACastLib, ABook.Unreachable);
       if not ReemitRes.Ok then
       begin

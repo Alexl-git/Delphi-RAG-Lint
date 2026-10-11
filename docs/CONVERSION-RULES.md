@@ -719,6 +719,18 @@ ruling) refuses the unit too, dry run and `--apply` alike, before any rule
 error is reported: the converter cannot convert a type it cannot see, and the
 cause is a parsing / index gap in the library or project index, not the book:
 `<Type> (line N) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting`.
+A BARE `#convert` From or To type (`#convert TLabel -> ...`) is resolved in
+the converted unit's own scope -- the class every `#link` / `#default` /
+`#ignore` path of that block is checked against, and the one the `.dfm` block
+is re-emitted from -- by the same rule as `pas_uses[]`: the unit's own class,
+else the LAST uses entry that declares it, else a lone unit-level declarer.
+A nested class (`LibNest.TNestHost.TSolo`) is never a declarer, and the first
+class of that name across the `--db` files is never taken (it used to be: a
+VCL unit's `#convert TLabel` was checked against `FMX.StdCtrls.TLabel`). A
+qualified type (`#convert Vcl.StdCtrls.TLabel`) is always exactly that class.
+A bare type the unit's scope cannot settle REFUSES the unit, naming the
+candidates; nothing is validated against a guess:
+`<Type> (line N) is ambiguous in this unit's scope -- declared by <Unit>, <Unit> -- qualify the #convert line (e.g. #convert Unit.TType); the block was not validated against a guess`.
 Every such refusal behaves the same way: exit
 1, NOTHING written (neither `.pas` nor `.dfm`), one text line
 `REFUSED: <reason>`, and in `apply/1` JSON `"ok": false`, `"refused": true`,
@@ -727,6 +739,12 @@ and `reason` are always present: `false` and `""` on success and on every
 genuine failure -- rule errors, the freshness guard, a missing file. The editor
 keys its "refused -- not changed" row on `refused == true`. An unreachable-path
 warning is not a refusal. Schema stays `apply/1` (additive).
+`convert-validate` and `convert-reemit` resolve a bare `--from` / `--to` by
+the same rule with no unit: the book's own qualification of it (the first
+`#convert` whose From -- or To -- has that bare name), else a lone unit-level
+declarer (a bare name used to resolve to nothing there, so `convert-validate`
+printed `OK` without checking a path). An ambiguous one exits 1 with
+`ERROR: --from <Type> is ambiguous -- declared by <Unit>, <Unit>; qualify it (--from Unit.<Type>) or the book's #convert line. Nothing was validated against a guess`.
 
 ## End-to-end workflow
 

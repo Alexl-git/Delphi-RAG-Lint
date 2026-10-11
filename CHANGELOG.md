@@ -3,6 +3,29 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Fixed
+
+- **convert-apply / convert-validate / convert-reemit: a `#convert` From/To class is resolved in
+  SCOPE, never "first class of that name wins".** After 1.28.2 the `#link` / `#default` /
+  `#ignore` path validation (and the `.dfm` re-emit) still resolved a bare `#convert` type
+  through `TConvertTreeCache.Lookup` -> `ResolveClassQName`: the first `skClass` of that name
+  across the `--db` stores. With `FMX.StdCtrls.TLabel` indexed first, a VCL unit's
+  `#link Wrap <- WordWrap` was "FromPath not found" and an FMX-only path was accepted; a bare To
+  type landed on a NESTED class of the same name (`LibNest.TNestHost.TSolo`). Lookup now resolves
+  a bare name through the same `ResolveClassInScope` as `pas_uses[]` (new
+  `TConvertTreeCache.SetScope` / `ScopedClass`): the converted unit's own class, its last uses
+  entry declaring it, a lone unit-level declarer; nested classes never count. A bare type the
+  scope cannot settle REFUSES the unit naming the candidates (`... is ambiguous in this unit's
+  scope -- declared by ... -- qualify the #convert line ...`). A batch validates the book again
+  for a unit whose #convert classes resolve differently. The re-emit takes the block's From class
+  (the book's spelling), not the `.dfm` header's bare name. `convert-validate` / `convert-reemit`
+  resolve a bare `--from` / `--to` by the book's own qualification, else a lone declarer, and
+  refuse an ambiguous one (exit 1) -- a bare `--from` used to resolve to nothing, so
+  `convert-validate` printed `OK` without checking a single path. `ResolveClassQName` is
+  deleted. Guard: run_convert_link_class_scope.ps1.
+
 ## v1.28.2-alpha -- unreleased
 
 ### Fixed
