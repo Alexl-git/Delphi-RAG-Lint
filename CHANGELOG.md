@@ -32,7 +32,7 @@ breaking changes** until v1.0.
   fix** (owner ruling 2026-10-11). After the unit's scope and the book's own units, a bare class
   several units declare is inferred when exactly one candidate survives: (a) the project's
   framework (`.dproj` `FrameworkType`, else `DCC_Namespace`) drops `Vcl.*` / `FMX.*` candidates
-  of the other framework; (b) a candidate that does not declare a property the unit's `.dfm`
+  of the other framework; (a2) the form file's kind -- a `.dfm` form is VCL, a `.fmx` form FMX -- excludes a candidate of the other framework; (b) a candidate that does not declare a property the unit's `.dfm`
   streams on objects of that class -- and another candidate does -- is dropped. An inference
   converts with a warning (`items[]` kind `convert-class-inferred`) naming the evidence and the
   line to paste. Otherwise the refusal now names the line and its text, the bare name, every

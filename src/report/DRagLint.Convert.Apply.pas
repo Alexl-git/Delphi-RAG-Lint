@@ -866,7 +866,9 @@ type
     /// candidate survives (owner ruling 2026-10-11): first the project's
     /// framework (the .dproj beside the scope unit's project file --
     /// FrameworkType, else DCC_Namespace -- drops a Vcl.* or FMX.* candidate of
-    /// the other framework), then the .dfm evidence (a candidate that does not
+    /// the other framework), then the form file's kind (a .dfm form is VCL, a
+    /// .fmx form FMX: a candidate of the other framework is dropped), then
+    /// the .dfm evidence (a candidate that does not
     /// declare a property the scope unit's .dfm streams on an object of that
     /// class, and another candidate does, is dropped). Inferred then names
     /// the evidence; Why says why each other candidate was dropped.</remarks>
@@ -1973,6 +1975,31 @@ var
     if Dropped then Evidence:= Evidence + ['the project framework ' + Source];
   end;
 
+  { (a2) the form file's kind: a .dfm form is VCL, a .fmx form FMX (each
+    framework streams its own), so a candidate of the other one is excluded }
+  procedure DropByFormKind;
+  begin
+    if (AliveCount < 2) or (FScopePath = '') then Exit;
+    var Form: string:= ChangeFileExt(FScopePath, '.dfm');
+    var Fw  : string:= 'VCL';
+    if not TFile.Exists(Form) then
+    begin
+      Form:= ChangeFileExt(FScopePath, '.fmx');
+      Fw  := 'FMX';
+      if not TFile.Exists(Form) then Exit;
+    end;
+    var Dropped: Boolean:= False;
+    for var I: Integer:= 0 to High(Alive) do
+    begin
+      var CandFw: string:= FrameworkOf(AScoped.Candidates[I]);
+      if not Alive[I] or (CandFw = '') or (CandFw = Fw) then Continue;
+      Alive[I]      := False;
+      Dropped       := True;
+      AScoped.Why[I]:= Format('form-file mismatch: %s is a %s form', [ExtractFileName(Form), Fw]);
+    end;
+    if Dropped then Evidence:= Evidence + [Format('the form file %s (%s)', [ExtractFileName(Form), Fw])];
+  end;
+
   { whether live candidate AIndex declares each of AProps on the .dfm surface }
   function DeclaresRow(AIndex: Integer; const AProps: TArray<string>): TArray<Boolean>;
   begin
@@ -2032,6 +2059,7 @@ begin
   for var I: Integer:= 0 to High(Alive) do Alive[I]:= True;
   Evidence:= nil;
   DropByFramework;
+  DropByFormKind;
   DropByDfm;
   if AliveCount <> 1 then
   begin

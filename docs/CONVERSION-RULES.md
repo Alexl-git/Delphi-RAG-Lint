@@ -739,7 +739,7 @@ this order: (a) the project's framework -- the `.dproj` beside the project
 file the unit's index holds (or the one `.dproj` in the unit's folder):
 `<FrameworkType>VCL|FMX</FrameworkType>`, else a `DCC_Namespace` naming `Vcl`
 but not `FMX` (or the reverse) -- drops a `Vcl.*` / `FMX.*` candidate of the
-other framework; (b) the `.dfm` evidence -- the properties the unit's `.dfm`
+other framework; (a2) the form file's kind -- a `.dfm` form is VCL and a `.fmx` form FMX (each framework streams its own), so a candidate of the other framework is excluded; (b) the `.dfm` evidence -- the properties the unit's `.dfm`
 streams directly on objects of that class: a candidate that does not declare
 one that another candidate does is dropped (a property NO candidate declares,
 such as `ExplicitLeft`, tells nothing and is ignored). An inference converts,
@@ -748,7 +748,7 @@ with a warning (`items[]` kind `convert-class-inferred`):
 Zero or several survivors REFUSE the unit, in detail -- the line and its
 text, the bare name, every candidate and why it was not chosen
 (`not in the unit's uses`, `tie: the uses entry X names another candidate
-too`, `framework mismatch: the project is VCL (P.dproj)`, `.dfm property X not
+too`, `framework mismatch: the project is VCL (P.dproj)`, `form-file mismatch: U.dfm is a VCL form`, `.dfm property X not
 declared`, `tie: fits ... as well as another candidate`), and what to do:
 `REFUSED: #convert TLabel -> TSolo (line 1): the bare name TLabel is ambiguous in this unit's scope -- candidates FMX.StdCtrls.TLabel (not in the unit's uses), Vcl.StdCtrls.TLabel (not in the unit's uses) -- qualify the #convert line (paste one of the suggested lines, apply/1 qualify_fixes[]) or add the declaring unit to the unit's uses; nothing was validated against a guess`,
 followed in text mode by the qualified lines, ready to paste:

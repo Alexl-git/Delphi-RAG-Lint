@@ -423,19 +423,19 @@ Check 'C5 POSITIVE CONTROL: uses FMX.StdCtrls -- WordWrap IS the FMX TLabel''s' 
 $x = Row $c 'Label1' 'Layout'
 Check 'C6 ... and Layout, which the FMX TLabel lacks, is member-not-found there' `
   (($null -ne $x) -and ($x.resolution -eq 'member-not-found') -and ($x.declaring_unit -eq '')) (Show $x)
-# OWNER RULING 2026-10-11: a bare #convert From the unit's scope cannot settle
-# (and no framework / .dfm evidence infers) is REFUSED -- the block was never
-# to be validated or converted against a guessed class, so no pas_uses[] row is
-# produced for it; the refusal names both candidates and carries
-# qualify_fixes[] (run_convert_link_class_scope.ps1 pins its exact shape).
+# OWNER RULING 2026-10-11 (and its follow-up): a bare #convert From the unit's
+# scope cannot settle is never guessed -- it is INFERRED from hard evidence or
+# REFUSED. CNone's form is a .dfm, so it is a VCL form and FMX.StdCtrls.TLabel
+# is excluded: the block converts as Vcl.StdCtrls.TLabel with a
+# convert-class-inferred warning, and pas_uses[] rows agree with that class.
+# (The refusal shape is pinned in run_convert_link_class_scope.ps1 G1-G2b.)
 $c = CRun 'CNone' 'c.rules'
-Check 'C7 (owner ruling 2026-10-11) GENUINELY AMBIGUOUS (no uses entry declares TLabel, the book is bare): the unit is REFUSED with both candidates, pas_uses [] -- nothing picked' `
-  (($null -ne $c.J) -and ($c.J.refused -eq $true) -and (@($c.J.pas_uses).Count -eq 0) -and
-   ((@($c.J.qualify_fixes[0].suggestions | ForEach-Object { $_.candidate }) -join ',') -eq 'FMX.StdCtrls.TLabel,Vcl.StdCtrls.TLabel')) $c.Out
+Check 'C7 (owner ruling 2026-10-11) no uses entry declares TLabel, the book is bare, the form is a .dfm: inferred VCL -- WordWrap is Vcl.StdCtrls / TCustomLabel, never an FMX guess' `
+  (($null -ne $c.J) -and ($c.J.refused -eq $false) -and (IsVcl (Row $c 'Label1' 'WordWrap') 'property') -and
+   ($c.J.qualify_fixes[0].outcome -eq 'inferred') -and ($c.J.qualify_fixes[0].chosen -eq 'Vcl.StdCtrls.TLabel')) $c.Out
 $t = (& $Exe convert-apply --unit (P 'capp\CNone.pas') --rules (P 'c.rules') --db (P 'capp.sqlite') --db (P 'clib.sqlite') 2>$null) -join "`n"
-Check 'C8 (owner ruling 2026-10-11) text: the REFUSED line names the ambiguity and the qualified lines are printed ready to paste' `
-  (($t -match '(?m)^REFUSED: #convert TLabel -> TStaticText \(line 1\): the bare name TLabel is ambiguous') -and
-   ($t -match '(?m)^    #convert Vcl\.StdCtrls\.TLabel -> TStaticText    \{')) $t
+Check 'C8 (owner ruling 2026-10-11) text: the warning names the inference and the line to paste' `
+  ($t -match '#convert TLabel resolved to Vcl\.StdCtrls\.TLabel \(line 1\): inferred from the form file CNone\.dfm \(VCL\); qualify the line to silence this: #convert Vcl\.StdCtrls\.TLabel -> TStaticText') $t
 $c = CRun 'CNone' 'cq.rules'
 Check 'C9 the BOOK''s own qualification (#convert Vcl.StdCtrls.TLabel) settles what the unit''s scope cannot' `
   (IsVcl (Row $c 'Label1' 'Layout') 'property') (Show (Row $c 'Label1' 'Layout'))

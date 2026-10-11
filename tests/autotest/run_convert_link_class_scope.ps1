@@ -143,11 +143,18 @@ function Form([string]$Name, [string]$Uses) {
 Form 'UVcl'  "uses`n  Vcl.StdCtrls;"
 Form 'UFmx'  "uses`n  FMX.StdCtrls;"
 Form 'UNone' "uses`n  LibSolo;"
-# owner ruling 2026-10-11 (b): a unit whose .dfm STREAMS a property only one
-# candidate TLabel declares -- WordWrap is the VCL one's
-Form 'UDfm'  "uses`n  LibSolo;"
-W 'app\UDfm.dfm' "object UDfm: TUDfm`n  object Label1: TLabel`n    WordWrap = True`n  end`nend`n"
-W 'app\P.dpr' "program P;`n`nuses`n  UVcl, UFmx, UNone, UDfm;`n`nbegin`nend.`n"
+# TWO VCL declarers of TTwin: the form-file kind cannot tell them apart --
+# UTwin streams nothing (still ambiguous: refused), UTwinP streams AOnly, which
+# only Vcl.TwinA.TTwin declares (owner ruling 2026-10-11 (b): .dfm evidence)
+W 'lib\Vcl.TwinA.pas' "unit Vcl.TwinA;`n`ninterface`n`ntype`n  TTwin = class`n  private`n    FAOnly: Boolean;`n  published`n    property AOnly: Boolean read FAOnly write FAOnly;`n  end;`n`nimplementation`n`nend.`n"
+W 'lib\Vcl.TwinB.pas' "unit Vcl.TwinB;`n`ninterface`n`ntype`n  TTwin = class`n  private`n    FBOnly: Boolean;`n  published`n    property BOnly: Boolean read FBOnly write FBOnly;`n  end;`n`nimplementation`n`nend.`n"
+foreach ($u in 'UTwin', 'UTwinP') {
+  W "app\$u.pas" "unit $u;`n`ninterface`n`nuses`n  LibSolo;`n`ntype`n  T$u = class`n    Twin1: TTwin;`n  end;`n`nimplementation`n`n{`$R *.dfm}`n`nend.`n"
+}
+W 'app\UTwin.dfm'  "object UTwin: TUTwin`n  object Twin1: TTwin`n  end`nend`n"
+W 'app\UTwinP.dfm' "object UTwinP: TUTwinP`n  object Twin1: TTwin`n    AOnly = True`n  end`nend`n"
+W 'app\P.dpr' "program P;`n`nuses`n  UVcl, UFmx, UNone, UTwin, UTwinP;`n`nbegin`nend.`n"
+W 'twin.rules' "#convert TTwin -> TSolo`n#link Wrap <- AOnly`n"
 # owner ruling 2026-10-11 (a): a second project whose .dproj says VCL; its unit
 # names no TLabel declarer and its .dfm streams nothing to tell them apart
 New-Item -ItemType Directory (P 'app2') -Force | Out-Null
@@ -209,26 +216,40 @@ Check 'Q3 convert-validate --from FMX.StdCtrls.TLabel: FmxOnly validates (OK)' (
 $r = Validate 'q_fmx_bad.rules' 'FMX.StdCtrls.TLabel' 'LibSolo.TSolo'
 Check 'Q4 convert-validate --from FMX.StdCtrls.TLabel: WordWrap rejected' (($r.Code -eq 1) -and ($r.Out -match '(?m)^line 2: .*WordWrap')) $r.Out
 
+# ---- F: the FORM FILE's kind (owner ruling 2026-10-11, follow-up) -----------
+# A .dfm form is VCL (FMX streams .fmx), so an FMX.* candidate is excluded:
+# UNone (no .dproj, no uses declarer, nothing streamed) converts as VCL.
+$j = ApplyJ 'UNone' 'bare_vcl.rules'
+$fx = if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() }
+Check 'F1 no .dproj, ambiguous bare TLabel, a .dfm form: inferred Vcl.StdCtrls.TLabel from the form file, converts, exit 0' `
+  (($j.Code -eq 0) -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.StdCtrls.TLabel') -and
+   ($fx[0].inference -eq 'the form file UNone.dfm (VCL)') -and ($fx[0].suggestions[1].candidate -eq 'FMX.StdCtrls.TLabel') -and
+   ($fx[0].suggestions[1].why -eq 'form-file mismatch: UNone.dfm is a VCL form')) $j.Out
+$want = '#convert TLabel resolved to Vcl.StdCtrls.TLabel (line 1): inferred from the form file UNone.dfm (VCL); qualify the line to silence this: #convert Vcl.StdCtrls.TLabel -> TSolo'
+Check 'F2 ... the convert-class-inferred WARNING names the form-file evidence' `
+  (($null -ne $j.J) -and (@($j.J.warnings) -contains $want) -and (@($j.J.items | Where-Object { $_.kind -eq 'convert-class-inferred' -and $_.text -eq $want }).Count -eq 1)) $j.Out
+
 # ---- G: genuinely ambiguous bare name -> REFUSED, in detail, with the fix ---
 # owner ruling 2026-10-11: the refusal names the line and its text, the bare
 # name, every candidate with WHY it was not chosen, and what to do; the JSON
-# carries qualify_fixes[] with ready-to-paste lines.
-$r = Apply 'UNone' 'bare_vcl.rules'
-Check 'G1 convert-apply, a unit whose scope declares no TLabel, bare book, no framework or .dfm evidence: REFUSED -- line, text, both candidates with why, what to do' `
-  (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: #convert TLabel -> TSolo \(line 1\): the bare name TLabel is ambiguous in this unit''s scope -- candidates ' +
-     'FMX\.StdCtrls\.TLabel \(not in the unit''s uses\), Vcl\.StdCtrls\.TLabel \(not in the unit''s uses\) -- qualify the #convert line'))) $r.Out
+# carries qualify_fixes[] with ready-to-paste lines. POSITIVE CONTROL for F:
+# two VCL candidates -- the .dfm form kind excludes neither -- stay ambiguous.
+$r = Apply 'UTwin' 'twin.rules'
+Check 'G1 convert-apply, two VCL declarers of TTwin, no uses / framework / .dfm-property evidence: REFUSED -- line, text, both candidates with why, what to do' `
+  (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: #convert TTwin -> TSolo \(line 1\): the bare name TTwin is ambiguous in this unit''s scope -- candidates ' +
+     'Vcl\.TwinA\.TTwin \(not in the unit''s uses\), Vcl\.TwinB\.TTwin \(not in the unit''s uses\) -- qualify the #convert line'))) $r.Out
 Check 'G1b ... text: the qualified lines are printed ready to paste, then the alternative' `
-  (($r.Out -match '(?m)^    #convert FMX\.StdCtrls\.TLabel -> TSolo    \{ not in the unit''s uses \}\s*$') -and
-   ($r.Out -match '(?m)^    #convert Vcl\.StdCtrls\.TLabel -> TSolo    \{ not in the unit''s uses \}\s*$') -and
-   ($r.Out -match '(?m)^  or: add FMX\.StdCtrls to the unit''s uses\s*$')) $r.Out
-$j = ApplyJ 'UNone' 'bare_vcl.rules'
+  (($r.Out -match '(?m)^    #convert Vcl\.TwinA\.TTwin -> TSolo    \{ not in the unit''s uses \}\s*$') -and
+   ($r.Out -match '(?m)^    #convert Vcl\.TwinB\.TTwin -> TSolo    \{ not in the unit''s uses \}\s*$') -and
+   ($r.Out -match '(?m)^  or: add Vcl\.TwinA to the unit''s uses\s*$')) $r.Out
+$j = ApplyJ 'UTwin' 'twin.rules'
 Check 'G2 ... JSON: ok=false, refused=true, the reason names the candidates' `
-  (($j.Code -eq 1) -and ($null -ne $j.J) -and ($j.J.ok -eq $false) -and ($j.J.refused -eq $true) -and ($j.J.reason -match 'FMX\.StdCtrls\.TLabel.*Vcl\.StdCtrls\.TLabel')) $j.Out
-$wantFix = [ordered]@{ rule_line = 1; current = '#convert TLabel -> TSolo'; name = 'TLabel'; side = 'from'; outcome = 'refused'; chosen = ''; inference = '';
+  (($j.Code -eq 1) -and ($null -ne $j.J) -and ($j.J.ok -eq $false) -and ($j.J.refused -eq $true) -and ($j.J.reason -match 'Vcl\.TwinA\.TTwin.*Vcl\.TwinB\.TTwin')) $j.Out
+$wantFix = [ordered]@{ rule_line = 1; current = '#convert TTwin -> TSolo'; name = 'TTwin'; side = 'from'; outcome = 'refused'; chosen = ''; inference = '';
   suggestions = @(
-    [ordered]@{ replacement = '#convert FMX.StdCtrls.TLabel -> TSolo'; candidate = 'FMX.StdCtrls.TLabel'; why = 'not in the unit''s uses'; alternative = 'add FMX.StdCtrls to the unit''s uses' },
-    [ordered]@{ replacement = '#convert Vcl.StdCtrls.TLabel -> TSolo'; candidate = 'Vcl.StdCtrls.TLabel'; why = 'not in the unit''s uses'; alternative = 'add Vcl.StdCtrls to the unit''s uses' });
-  alternative = 'add FMX.StdCtrls to the unit''s uses' }
+    [ordered]@{ replacement = '#convert Vcl.TwinA.TTwin -> TSolo'; candidate = 'Vcl.TwinA.TTwin'; why = 'not in the unit''s uses'; alternative = 'add Vcl.TwinA to the unit''s uses' },
+    [ordered]@{ replacement = '#convert Vcl.TwinB.TTwin -> TSolo'; candidate = 'Vcl.TwinB.TTwin'; why = 'not in the unit''s uses'; alternative = 'add Vcl.TwinB to the unit''s uses' });
+  alternative = 'add Vcl.TwinA to the unit''s uses' }
 $got  = if ($null -ne $j.J) { ConvertTo-Json -InputObject @($j.J.qualify_fixes) -Depth 6 -Compress } else { '' }
 $want = ConvertTo-Json -InputObject @($wantFix) -Depth 6 -Compress
 Check 'G2b ... JSON qualify_fixes[] is EXACTLY one refused fix with both suggestions (replacement, candidate, why, alternative)' ($got -eq $want) ("got:  $got`nwant: $want")
@@ -244,12 +265,12 @@ Check 'I1 (a) project framework: Q.dproj says VCL -- the bare TLabel converts as
 $want = '#convert TLabel resolved to Vcl.StdCtrls.TLabel (line 1): inferred from the project framework VCL (Q.dproj); qualify the line to silence this: #convert Vcl.StdCtrls.TLabel -> TSolo'
 Check 'I2 ... a WARNING names the inference and the line to paste; items[] kind convert-class-inferred' `
   (($null -ne $ij) -and (@($ij.warnings) -contains $want) -and (@($ij.items | Where-Object { $_.kind -eq 'convert-class-inferred' -and $_.text -eq $want -and $_.rule_line -eq 1 }).Count -eq 1)) $r
-$j = ApplyJ 'UDfm' 'bare_vcl.rules'
+$j = ApplyJ 'UTwinP' 'twin.rules'
 $fx = if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() }
-Check 'I3 (b) .dfm evidence: Label1 streams WordWrap, which only Vcl.StdCtrls.TLabel declares -- inferred, converts, exit 0' `
-  (($j.Code -eq 0) -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.StdCtrls.TLabel') -and
-   ($fx[0].inference -eq '.dfm properties WordWrap') -and ($fx[0].suggestions[1].candidate -eq 'FMX.StdCtrls.TLabel') -and
-   ($fx[0].suggestions[1].why -eq '.dfm property WordWrap not declared')) $j.Out
+Check 'I3 (b) .dfm evidence: Twin1 streams AOnly, which only Vcl.TwinA.TTwin declares -- inferred, converts, exit 0' `
+  (($j.Code -eq 0) -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.TwinA.TTwin') -and
+   ($fx[0].inference -eq '.dfm properties AOnly') -and ($fx[0].suggestions[1].candidate -eq 'Vcl.TwinB.TTwin') -and
+   ($fx[0].suggestions[1].why -eq '.dfm property AOnly not declared')) $j.Out
 $j = ApplyJ 'UVcl' 'q_fmx_ok.rules'
 Check 'I4 POSITIVE CONTROL: a qualified #convert -- no inference warning, no refusal, qualify_fixes [] (present)' `
   (($j.Code -eq 0) -and ($null -ne $j.J) -and ($null -ne $j.J.qualify_fixes) -and (@($j.J.qualify_fixes).Count -eq 0) -and
