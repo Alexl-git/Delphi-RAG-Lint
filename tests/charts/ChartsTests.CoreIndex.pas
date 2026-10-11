@@ -27,6 +27,7 @@ type
     [Test] procedure ResolveWrongKindThrowsWithHint;
     [Test] procedure ResolveMissingAllowedReturnsNotFound;
     [Test] procedure ForwardDeclarationsCollapse;
+    [Test] procedure DeclarationGroupsSortedLikeGroupObject;
     [Test] procedure AllRowsOrderIsStable;
     [Test] procedure EdgelessDisclosureSentence;
     [Test] procedure SqlQuotingHelpers;
@@ -232,6 +233,46 @@ begin
     end;
   finally
     Twice.Free;
+  end;
+end;
+
+{ One synthetic symbol row: id, qualified_name, generic_params, start_line, end_line. }
+function DeclRow(const pId, pQName, pGeneric, pStart, pEnd: string): TIndexRow;
+begin
+  Result:= TIndexRow.Create(['id', 'qualified_name', 'generic_params', 'start_line', 'end_line'],
+    [pId, pQName, pGeneric, pStart, pEnd], [False, False, pGeneric = '', False, False]);
+end;
+
+procedure TCoreIndexTests.DeclarationGroupsSortedLikeGroupObject;
+begin
+  { PS 7 Group-Object returns its groups SORTED BY KEY with a culture-aware,
+    case-insensitive compare (ICU root order: '_' < '.' < '|' < digits < letters),
+    not in first-seen order. Rows arrive in SQL binary order (uppercase first);
+    every expectation below differs from that order, and the '_'/'.' and '|'/'X'
+    pairs also differ from an ordinal-ignore-case (CompareText) sort. }
+  var Rows:= TObjectList<TIndexRow>.Create(True);
+  try
+    Rows.Add(DeclRow('1', 'ABC.ID', '', '10', '10'));
+    Rows.Add(DeclRow('2', 'Ap.Greater.ID', '', '1', '1'));
+    Rows.Add(DeclRow('3', 'Ap.Greater_Eq.ID', '', '1', '1'));
+    Rows.Add(DeclRow('4', 'MSCTYPES.ID', '', '1', '1'));
+    Rows.Add(DeclRow('5', 'abc.ID', '', '20', '25'));
+    Rows.Add(DeclRow('9', 'bar.ID', '', '1', '1'));
+    Rows.Add(DeclRow('6', 'uFoo.ID', '', '1', '1'));
+    Rows.Add(DeclRow('7', 'uFoo.ID', 'T', '1', '1'));
+    Rows.Add(DeclRow('8', 'uFoo.IDX', '', '1', '1'));
+    var Decls:= TChartsIndex.SelectDeclarationRows(Rows);
+    try
+      var Ids: TArray<string>;
+      for var R in Decls do
+        Ids:= Ids + [R.S('id')];
+      { ABC.ID and abc.ID are ONE group (case-insensitive); the wider span (5) wins }
+      Assert.AreEqual('5,3,2,9,4,6,7,8', string.Join(',', Ids));
+    finally
+      Decls.Free;
+    end;
+  finally
+    Rows.Free;
   end;
 end;
 

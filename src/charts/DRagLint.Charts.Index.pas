@@ -140,6 +140,14 @@ type
     /// <returns>The quoted, comma-joined list; '' for no values.</returns>
     /// <remarks>Port of ConvertTo-SqlInList (Emit-Common.ps1:400).</remarks>
     class function SqlInList(const pValues: TArray<string>): string;
+    /// <summary>Collapses a type's forward declarations to its one real declaration row.</summary>
+    /// <param name="pRows">Symbol rows carrying qualified_name, generic_params, start_line and end_line.</param>
+    /// <returns>A new list the caller frees; it BORROWS its rows from pRows (pRows must outlive it).
+    /// One row per (qualified_name, generic_params) group, case-insensitively: the widest
+    /// end_line - start_line span, then the smallest start_line, then the first seen.</returns>
+    /// <remarks>Port of Select-DeclarationRows (Emit-Common.ps1:448). The groups come out
+    /// SORTED BY KEY, not in first-seen order -- see the implementation note.</remarks>
+    class function SelectDeclarationRows(const pRows: TObjectList<TIndexRow>): TList<TIndexRow>;
     /// <summary>Where a qualified name lives, preferring the body line.</summary>
     /// <param name="pQName">Exact qualified name (SQL '=' -- case-sensitive, as in the PS).</param>
     /// <returns>The first matching symbol's location.</returns>
@@ -160,7 +168,8 @@ type
     /// and '; +N more'); or the wrong kind (with pHint).</exception>
     /// <remarks>Port of Resolve-MemberSelection (Emit-Common.ps1:486) and Select-DeclarationRows
     /// (:448). PS traps closed: Group-Object on "qualified_name|generic_params" is
-    /// case-insensitive (TIStringComparer.Ordinal dictionary, groups in first-seen order);
+    /// case-insensitive (TIStringComparer.Ordinal dictionary), and Group-Object sorts its groups by key,
+    /// case-insensitively (ICU root order, not first-seen -- so the six named candidates match);
     /// `-eq` for the exact qualified hit and `-contains` / `-notcontains` for kinds are
     /// case-insensitive (SameText); the qualified-name grouping behind "they share a
     /// qualified name" is case-insensitive too.</remarks>
@@ -342,12 +351,64 @@ begin
   end;
 end;
 
+const
+  { Group-Object's key order for 7-bit ASCII. PS TRAP: Group-Object SORTS ITS GROUPS BY KEY,
+    case-insensitively and culture-aware (String.Compare with CurrentCulture + IgnoreCase,
+    which on .NET 5+ is ICU root collation) -- it does NOT keep first-seen order. ICU root is
+    neither ordinal nor CompareText nor Windows NLS (AnsiCompareText): '_' sorts before '.',
+    and every punctuation mark and '|' before the digits and letters. This string is that
+    order for printable ASCII, letters case-folded; measured 2026-10-11 by sorting 0x20..0x7E
+    with [string]::Compare(a, b, en-US, IgnoreCase) under pwsh 7.6, and verified to reproduce
+    Group-Object's order exactly on all 160k (qualified_name|generic_params) keys of the nine
+    charts\scratch\db clones (OrdinalIgnoreCase disagreed on 38k of CLIENT's). }
+  GROUP_KEY_ORDER = ' _-,;:!?.''"()[]{}@*/\&#%`^+<=>|~$0123456789abcdefghijklmnopqrstuvwxyz';
+  { Weight base for any character outside GROUP_KEY_ORDER above the control range: after
+    every ASCII weight, by code point. An approximation of ICU for non-ASCII -- index keys
+    are identifiers and none of the 160k measured carried one. }
+  GROUP_KEY_OTHER_BASE = 1000;
+
+{ The ICU-root primary weight of one character, case-folded (see GROUP_KEY_ORDER).
+  Control characters weigh their code point, below the space. }
+function GroupKeyWeight(const pC: Char): Integer;
+begin
+  if Ord(pC) < Ord(' ') then
+    Exit(Ord(pC));
+  var C:= if CharInSet(pC, ['A'..'Z']) then Chr(Ord(pC) + (Ord('a') - Ord('A'))) else pC;
+  var At:= Pos(C, GROUP_KEY_ORDER);
+  Result:= if At > 0 then Ord(' ') + At else GROUP_KEY_OTHER_BASE + Ord(pC);
+end;
+
+{ Group-Object's key comparison: weight by weight, then the shorter key first. Zero only
+  for keys equal ignoring ASCII case -- which Select-DeclarationRows has merged already. }
+function CompareGroupKeys(const pA, pB: string): Integer;
+begin
+  var N:= if Length(pA) < Length(pB) then Length(pA) else Length(pB);
+  for var K:= 1 to N do
+  begin
+    Result:= GroupKeyWeight(pA[K]) - GroupKeyWeight(pB[K]);
+    if Result <> 0 then
+      Exit;
+  end;
+  Result:= Length(pA) - Length(pB);
+end;
+
+{ The Select-DeclarationRows group key: "qualified_name|generic_params". }
+function DeclGroupKey(const pRow: TIndexRow): string;
+begin
+  Result:= pRow.S('qualified_name') + '|' + pRow.S('generic_params');
+end;
+
 { Select-DeclarationRows (Emit-Common.ps1:448): per (qualified_name, generic_params) group
-  -- case-insensitive, as Group-Object is, groups in first-seen order -- the row with the
-  widest end_line - start_line span, then the smallest start_line. A linear pick of that
-  minimum keeps the first of equal rows, exactly what [0] of the PS's stable two-key
-  Sort-Object returns. Rows are borrowed from pRows, not copied. }
-function SelectDeclarationRows(const pRows: TObjectList<TIndexRow>): TList<TIndexRow>;
+  -- case-insensitive, as Group-Object is -- the row with the widest end_line - start_line
+  span, then the smallest start_line. A linear pick of that minimum keeps the first of
+  equal rows, exactly what [0] of the PS's stable two-key Sort-Object returns (a group's
+  members stay in input order). The groups are then SORTED BY KEY with CompareGroupKeys,
+  because Group-Object sorts its groups by key, case-insensitively -- NOT first-seen order,
+  which here would be the SQL's binary ORDER BY (uppercase before lowercase) and put e.g.
+  MSCTYPES.ID ahead of abc.ID in the ambiguity refusal's six named candidates. Keys are
+  unique per group, so the unstable TList.Sort cannot reorder ties. Rows are borrowed
+  from pRows, not copied. }
+class function TChartsIndex.SelectDeclarationRows(const pRows: TObjectList<TIndexRow>): TList<TIndexRow>;
 var
   Slot: TDictionary<string, Integer>;
 begin
@@ -356,7 +417,7 @@ begin
   try
     for var R in pRows do
     begin
-      var Key:= R.S('qualified_name') + '|' + R.S('generic_params');
+      var Key:= DeclGroupKey(R);
       var At: Integer;
       if not Slot.TryGetValue(Key, At) then
       begin
@@ -370,6 +431,11 @@ begin
       if (Span > BestSpan) or ((Span = BestSpan) and (R.I('start_line') < Best.I('start_line'))) then
         Result[At]:= R;
     end;
+    Result.Sort(TComparer<TIndexRow>.Construct(
+      function(const pLeft, pRight: TIndexRow): Integer
+      begin
+        Result:= CompareGroupKeys(DeclGroupKey(pLeft), DeclGroupKey(pRight));
+      end));
   finally
     Slot.Free;
   end;
