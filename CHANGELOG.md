@@ -43,6 +43,23 @@ breaking changes** until v1.0.
   ruling R8a for a `#convert` To type: an unsettled tie is refused, no longer converted against
   the first declarer with the tie only reported (run_convert_apply_uses_reconcile.ps1 A3 / A8-2 /
   F-minor and run_convert_apply_pas_uses.ps1 C7 / C8 updated to the ruling).
+- **document / doc-drift: a `TObject` receiver no longer drops an unverified "Called from" edge.**
+  The C14 foreign-receiver gate (`ForeignReceiverType`) treated a receiver type this index does
+  not declare as a library type, so `AHost.Ping` with `AHost: TObject` was skipped as "a TObject,
+  not TZeiss or a descendant" and the reachable unverified bucket came out empty
+  (run_calledfrom_uses_scope.ps1, `INCLUDES nearunit.Poke`). `TObject` is the implicit ancestor
+  of every class, so it is kept as untypable; TListView-style receivers are still dropped.
+  RED 1 failing check, GREEN 7/7; run_doc_callers_foreign_receiver.ps1 stays green (19/19).
+- **tests: run_proptree_output_speed.ps1 `e` arms follow 1.26.2 and C9 (test-only).** The convert
+  arms expected the "(loaded defaults ...)" banner, which a convert-* verb has deliberately not
+  printed since 1.26.2; the fixture's defaults file now carries `"docs"` and the convert arms expect
+  the one "note: ignoring ..." line instead -- still a stderr line that must precede the document.
+  The dry-run arm passes `--no-reconcile-uses`, since C9 keeps an unindexed `OldUnit`.
+  RED 4 failing checks, GREEN 34/34.
+- **tests: run_ownroots_default_note.ps1 A2 matches the 1.26.4 wording (test-only).** 47ac0b86
+  corrected the lint-all note to "usually untracked, so a fresh clone or a git worktree lacks it"
+  (the repo never gitignored drag-lint-project.json); A2 still looked for "gitignored".
+  RED 1 failing check, GREEN 10/10.
 
 ## v1.28.2-alpha -- unreleased
 

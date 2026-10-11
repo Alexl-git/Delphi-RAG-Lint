@@ -1391,8 +1391,11 @@ end;
   skipped. Answers '' (keep the edge, as before) whenever the type cannot be
   established: no receiver, Self, a dotted / indexed / cast receiver, a name
   not declared in scope, a declaration with no plain type, a generic
-  parameter, an interface (dispatch is not decidable here), or a name this
-  index declares in some other shape (an alias, say).
+  parameter, an interface (dispatch is not decidable here), a name this
+  index declares in some other shape (an alias, say), or TObject -- the
+  implicit root of every class, so an ancestor of the owner even when the
+  owner's declaration names none and no index declares it (1.28.3: a TObject
+  receiver is UNTYPABLE, not foreign; dropping it emptied the bucket).
 
   "Known" includes a type this index does not declare at all, and that is a
   deliberate inference, not a lookup: a project DB holds the project's compile
@@ -1466,6 +1469,8 @@ end;
 
 function ForeignReceiverType(const AStore: ISymbolStore; const ARC: TResolvedCaller;
   const AOwnerLeaf: string): string;
+const
+  ROOT_CLASS = 'TObject'; { every class's implicit ancestor -- never foreign }
 var
   Rcv     : string;
   Decl    : TSymbol;
@@ -1482,7 +1487,8 @@ begin
   TypeName:= '';
   if (Decl.Id > 0) and (Decl.Kind in [skField, skLocalVar, skParam, skVarDecl]) then
     TypeName:= DeclaredTypeName(Decl.Signature);
-  if (TypeName = '') or SameText(TypeName, AOwnerLeaf) or IsGenericParam(TypeName, Generics) then Exit;
+  if (TypeName = '') or SameText(TypeName, AOwnerLeaf) or IsGenericParam(TypeName, Generics)
+     or SameText(TypeName, ROOT_CLASS) then Exit;
   TypeSym:= AStore.ResolveTypeNameToClass(TypeName, Decl.FileId);
   if TypeSym.Id > 0 then
     { in this index: unrelated unless an interface (dispatch undecidable here)
