@@ -43,6 +43,13 @@ breaking changes** until v1.0.
   ruling R8a for a `#convert` To type: an unsettled tie is refused, no longer converted against
   the first declarer with the tie only reported (run_convert_apply_uses_reconcile.ps1 A3 / A8-2 /
   F-minor and run_convert_apply_pas_uses.ps1 C7 / C8 updated to the ruling).
+- **document / doc-drift: a `TObject` receiver no longer drops an unverified "Called from" edge.**
+  The C14 foreign-receiver gate (`ForeignReceiverType`) treated a receiver type this index does
+  not declare as a library type, so `AHost.Ping` with `AHost: TObject` was skipped as "a TObject,
+  not TZeiss or a descendant" and the reachable unverified bucket came out empty
+  (run_calledfrom_uses_scope.ps1, `INCLUDES nearunit.Poke`). `TObject` is the implicit ancestor
+  of every class, so it is kept as untypable; TListView-style receivers are still dropped.
+  RED 1 failing check, GREEN 7/7; run_doc_callers_foreign_receiver.ps1 stays green (19/19).
 
 ## v1.28.2-alpha -- unreleased
 
