@@ -121,7 +121,9 @@ foreach ($u in $units) {
   if (-not $zoneUnits.ContainsKey($z)) { $zoneUnits[$z] = New-Object System.Collections.ArrayList }
   [void]$zoneUnits[$z].Add($u)
 }
-$zones = @($zoneUnits.Keys | Sort-Object { $zoneUnits[$_].Count } -Descending)
+# N5: $zoneUnits is a [hashtable]; its key order follows .NET string hashing,
+# which is randomised PER PROCESS, so zones of equal size must tie-break on name.
+$zones = @($zoneUnits.Keys | Sort-Object @{ E = { $zoneUnits[$_].Count }; Descending = $true }, @{ E = { [string]$_ }; Descending = $false })
 Write-Host ("  root: $rootPath")
 foreach ($z in $zones) { Write-Host ("    zone $z : $($zoneUnits[$z].Count) units") }
 
@@ -244,7 +246,7 @@ foreach ($z in $zones) {
 $backKey = @{}
 foreach ($b in $backEdges) { $backKey["$($b.From)|$($b.To)"] = $b }
 $drawn = 0
-foreach ($k in $matrix.Keys) {
+foreach ($k in @($matrix.Keys | Sort-Object)) {   # N5: hashtable key order is per-process; sort for a stable dot
   $parts = $k -split '\|', 2
   $a = $parts[0]; $b = $parts[1]
   if ($a -eq $b) { continue }                       # self-dependency is not a layering fact
