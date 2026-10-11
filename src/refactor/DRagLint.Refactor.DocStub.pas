@@ -62,6 +62,29 @@ type
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExtractParamList(const ASig: string): string;
+/// <summary>Returns the indexed signature ASig of the routine declared at
+/// ADeclLine of AFilePath with every comment inside it removed, so that
+/// <see cref="ExtractParamList"/> and <see cref="ParseParamNames"/> never read
+/// comment text as parameter text.</summary>
+/// <param name="ASig">The indexed signature, e.g. <c>'(const A: Integer): Integer'</c>.
+/// For a declaration split over several lines the index JOINS the lines with a
+/// space and keeps their comments.</param>
+/// <param name="AFilePath">The declaring unit; read only when ASig holds a
+/// <c>//</c> comment.</param>
+/// <param name="ADeclLine">1-based line of the declaration in AFilePath.</param>
+/// <returns>ASig unchanged when it holds no comment opener. With <c>{ }</c> or
+/// <c>(* *)</c> comments only: ASig with them (and the contents of string
+/// literals) blanked. With a <c>//</c> comment: the header re-read from the
+/// source -- from the first <c>(</c> up to the <c>;</c> ending the heading --
+/// with comments stripped line by line, because the line break that ended the
+/// comment is not in ASig. When the source cannot be read, or its heading does
+/// not start like ASig (a stale index), or a comment is left unclosed: ASig
+/// unchanged.</returns>
+/// <remarks>Shared by the doc-drift CHECKER and the document WRITER, so the
+/// two always parse the same parameter list. Comment and string syntax is
+/// <c>StripCommentsAndStrings</c> in DRagLint.Analysis.Purity -- one masker,
+/// not a second hand-rolled scan.</remarks>
+function SignatureWithoutComments(const ASig, AFilePath: string; ADeclLine: Integer): string;
 /// <summary><!-- drag-lint:auto sum -->ParseParamNames: parses a param-list string such
 /// as "const A, B: string; C: Boolean; D: Integer" and returns an array of bare param
 /// names (A, B, C, D). Handles const/var/out/in prefixes and grouped names (A, B: T).</summary>
@@ -204,6 +227,8 @@ implementation
 
 uses
   System.IOUtils
+  , System.Math                 { Min -- SignatureWithoutComments' line window }
+  , DRagLint.Analysis.Purity    { StripCommentsAndStrings -- the one comment masker }
   ;
 
 // ---------------------------------------------------------------------------
@@ -222,6 +247,104 @@ begin
   ClosePos:= LastDelimiter(')', ASig);
   if ClosePos <= OpenPos then Exit('');
   Result:= Trim(Copy(ASig, OpenPos + 1, ClosePos - OpenPos - 1));
+end;
+
+{ C14. Collapses every whitespace run to one space and trims. }
+function CollapseSpaces(const S: string): string;
+begin
+  Result:= Trim(TRegEx.Replace(S, '\s+', ' '));
+end;
+
+{ C14. The text before the first ':' of S, whitespace-collapsed and lowercased:
+  '(const AUnitPas' for both the indexed signature and the re-read heading. It is
+  the sanity check that the source line still holds the declaration the index
+  saw; a stale index answers differently and the caller keeps its old text. }
+function SigLead(const S: string): string;
+var
+  C: Integer;
+begin
+  C:= Pos(':', S);
+  if C = 0 then C:= Length(S) + 1;
+  Result:= LowerCase(CollapseSpaces(Copy(S, 1, C - 1)));
+end;
+
+{ C14. In AText (already comment-stripped), the routine heading from the first
+  '(' up to, not including, the ';' that follows its balanced ')'. False while
+  the heading is still incomplete. AGiveUp is set when the text cannot be a
+  parameterised heading at all (a ';' before any '('), so the caller stops
+  reading instead of picking up a '(' from a later declaration. }
+function HeadingFrom(const AText: string; out AHeading: string; out AGiveUp: Boolean): Boolean;
+var
+  Open : Integer;
+  Semi : Integer;
+  I    : Integer;
+  Depth: Integer;
+begin
+  Result := False;
+  AGiveUp:= False;
+  AHeading:= '';
+  Open:= Pos('(', AText);
+  Semi:= Pos(';', AText);
+  if (Open = 0) or ((Semi > 0) and (Semi < Open)) then
+  begin
+    AGiveUp:= Semi > 0;
+    Exit;
+  end;
+  Depth:= 0;
+  for I:= Open to Length(AText) do
+  begin
+    if AText[I] = '(' then Inc(Depth)
+    else if AText[I] = ')' then Dec(Depth)
+    else if (AText[I] = ';') and (Depth = 0) then
+    begin
+      AHeading:= CollapseSpaces(Copy(AText, Open, I - Open));
+      Exit(True);
+    end;
+  end;
+end;
+
+function SignatureWithoutComments(const ASig, AFilePath: string; ADeclLine: Integer): string;
+const
+  MAX_HEADING_LINES = 64; { a heading longer than this is not worth the read }
+var
+  Lines   : TArray<string>;
+  InBrace : Boolean;
+  InParen : Boolean;
+  Acc     : string;
+  Heading : string;
+  GiveUp  : Boolean;
+  I       : Integer;
+begin
+  Result:= ASig;
+  if (Pos('//', ASig) = 0) and (Pos('{', ASig) = 0) and (Pos('(*', ASig) = 0) then Exit;
+  InBrace:= False;
+  InParen:= False;
+  if Pos('//', ASig) = 0 then
+  begin
+    { Block comments are wholly inside ASig: strip them where they stand. }
+    Acc:= StripCommentsAndStrings(ASig, InBrace, InParen);
+    if not (InBrace or InParen) then Result:= CollapseSpaces(Acc);
+    Exit;
+  end;
+  { A line comment ended at a line break the index joined away: only the source
+    knows where. }
+  if (AFilePath = '') or (ADeclLine <= 0) or (not TFile.Exists(AFilePath)) then Exit;
+  try
+    Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+  except  // dl:ok try-except-swallowed -- an unreadable unit has no better heading to offer: the indexed signature, exactly what this routine returned before C14, is the answer
+    on Exception do Exit;
+  end;
+  Acc:= '';
+  for I:= ADeclLine to Min(ADeclLine + MAX_HEADING_LINES - 1, Length(Lines)) do
+  begin
+    Acc:= Acc + ' ' + StripCommentsAndStrings(Lines[I - 1], InBrace, InParen);
+    if HeadingFrom(Acc, Heading, GiveUp) then
+    begin
+      if SigLead(Heading) = SigLead(ASig) then Result:= Heading;
+      Exit;
+    end;
+    if GiveUp then Exit;
+  end;
 end;
 
 // IsFunction: true when the signature starts with 'function' or 'constructor'.

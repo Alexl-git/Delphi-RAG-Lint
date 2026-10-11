@@ -986,7 +986,9 @@ begin
   end;
 
   // Signature-derived params.
-  Sig      := Trim(ASym.Signature);
+  // C14: comments inside a (split) parameter list are not parameter text --
+  // the same helper the checker (TDocDrift.Analyze) parses with.
+  Sig      := SignatureWithoutComments(Trim(ASym.Signature), Path, ASym.StartLine);
   SigParams:= ParseParamNames(ExtractParamList(Sig));
 
   { AIncludeCalleeRaises = True, and only here. This is the WRITER: it is the

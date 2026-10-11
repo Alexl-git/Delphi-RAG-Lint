@@ -17,6 +17,17 @@ No extractor or resolver change: indexes do not re-parse or re-resolve.
   the returning predecessors only. `Halt` and `Abort` previously fell through; they now end
   the path like `raise`. Plain `Exit;` still returns and still fires; `Exit(value)` assigns.
   Pinned by run_function_result_noreturn_paths.ps1 (8 must-not-fire, 4 positive controls).
+- **`doc-drift` no longer reads a comment inside a parameter list as a parameter**
+  (converter-filed false positive). The indexed signature of a declaration split over
+  several lines is the lines joined with a space, comments included, so a trailing `//`
+  comment ran into the next line and its text became a "signature param ... has no
+  <param> tag" (plus "documented param ... not in signature" for the real one). The
+  checker and the `document` writer now parse the signature through one helper,
+  `SignatureWithoutComments` (DRagLint.Refactor.DocStub): `{ }` / `(* *)` comments are
+  stripped in place; a `//` comment makes it re-read the heading from the source, where
+  the line break is, and it keeps the indexed text if the source no longer matches.
+  Read-time only: the stored signature is unchanged. Pinned by
+  run_doc_drift_split_signature_comments.ps1.
 
 ## v1.26.7-alpha -- unreleased
 
