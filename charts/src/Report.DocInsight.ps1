@@ -105,9 +105,20 @@ function Format-ReportAsDocInsight([string] $QuestionId, [string] $Target, [date
   if ($phrase -eq 'Report') { foreach ($k in $script:ReportCaptions.Keys) { if ([string]::Equals($k, $QuestionId, [StringComparison]::OrdinalIgnoreCase)) { $phrase = $script:ReportCaptions[$k].TrimEnd('.') } } }
   $sb = New-Object System.Text.StringBuilder
   [void]$sb.Append("/// <remarks>`r`n")
-  Add-ReportWrapped $sb '' (ConvertTo-ReportXml (ConvertTo-ReportAscii ("{0} (drag-lint report {1}) for {2}, asked on {3}." -f $phrase, $QuestionId, $Target, $Date.ToString('yyyy-MM-dd'))))
+  $lines = @($Answer.Replace("`r`n", "`n").Replace("`r", "`n") -split "`n")
+  # the header lines (contract section 3); -cmatch: the contract is case-sensitive (PS -match is not)
+  $hdrRx = '^\S.* \(drag-lint report [a-z0-9-]+\) for .+, asked on \d{4}-\d{2}-\d{2} \d{2}:\d{2}, engine \S+\.$'
+  $skip = 0
+  if ($lines.Count -gt 0 -and (ConvertTo-ReportAscii $lines[0]) -cmatch $hdrRx) {
+    Add-ReportWrapped $sb '' (ConvertTo-ReportXml (ConvertTo-ReportAscii $lines[0])); $skip = 1
+    if ($lines.Count -gt 1 -and $lines[1].StartsWith('COMMAND ', [StringComparison]::Ordinal)) {
+      [void]$sb.Append('/// ').Append((ConvertTo-ReportXml (ConvertTo-ReportAscii $lines[1]))).Append("`r`n"); $skip = 2   # never wrapped (H3)
+    }
+  } else {
+    Add-ReportWrapped $sb '' (ConvertTo-ReportXml (ConvertTo-ReportAscii ("{0} (drag-lint report {1}) for {2}, asked on {3}." -f $phrase, $QuestionId, $Target, $Date.ToString('yyyy-MM-dd'))))
+  }
   $findings = 0; $pend = $true
-  foreach ($raw in ($Answer.Replace("`r`n", "`n").Replace("`r", "`n") -split "`n")) {
+  foreach ($raw in @($lines | Select-Object -Skip $skip)) {
     $line = ConvertTo-ReportAscii (Get-ReportTrimEnd $raw)
     if ((Get-ReportTrim $line) -eq '') { $pend = $true; continue }
     $trimmed = Get-ReportTrim $line

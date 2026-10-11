@@ -21,7 +21,9 @@
        the same bytes the IDE's drag-lint > Reports menu puts on the clipboard (owner answer 2,
        R5; the formatter is Report.DocInsight.ps1, a port of the plugin's FormatReportAsDocInsight,
        checked against the plugin's own output by Test-AskReport AR-DOC-*). -Plain gives the plain
-       answer instead: `BUNDLE <folder>`, one `INDEX <db>[ (server|sql|counterpart)]` line per
+       answer instead: two header lines (a sentence "<Phrase> (drag-lint report <id>) for <target>, asked on
+       <date> <time>, engine <version>." and a `COMMAND <id> -Target ...` line naming the arguments as given, never a
+       display switch or an index override), then `BUNDLE <folder>`, one `INDEX <db>[ (server|sql|counterpart)]` line per
        index read, then the TEXT to read -- the whole trace.dlgraph for round-trip (plus a `NOTE the
        chart could not be drawn: <why>` line when dot failed), else a `CHART`
        header (the counts), `TARGET <name> @File.pas:line` for the chart's own selection, one
@@ -67,6 +69,8 @@ param(
   [switch] $ResolveOnly,
   # the plain answer (the BUNDLE / INDEX lines and the text) instead of the default DocInsight block
   [switch] $Plain,
+  # the old side of a compare may be an old index copy, stale on purpose: report it, do not stop
+  [switch] $AllowStale,
   [int]    $MaxRows = 80,
   [string] $PairsFile = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\report-pairs.json')),
   # '' = found by Resolve-DragLintEngine (Emit-Common.ps1): DRAGLINT_ENGINE, settings.json, the installed or shared engine
@@ -120,6 +124,26 @@ function Get-ReindexCommand([string] $Db) {
     }
   }
   $null
+}
+
+# the COMMAND line (header contract, H2): the question, the target, the project or unit and every
+# argument that changes the answer, as GIVEN; never a display switch, never an index override (R5)
+function Get-ReportCommandLine([string] $Question, [string] $Target, [hashtable] $Bound) {
+  $sb = New-Object System.Text.StringBuilder
+  [void]$sb.Append("COMMAND $Question -Target `"$Target`"")
+  if ($Bound.ContainsKey('To') -and $Bound['To'])           { [void]$sb.Append(" -To `"$($Bound['To'])`"") }
+  if ($Bound.ContainsKey('Project') -and $Bound['Project']) { [void]$sb.Append(" -Project `"$([IO.Path]::GetFullPath($Bound['Project']))`"") }
+  elseif ($Bound.ContainsKey('In') -and $Bound['In'])       { [void]$sb.Append(" -In `"$([IO.Path]::GetFullPath($Bound['In']))`"") }
+  foreach ($n in 'Depth', 'Cap', 'SurfaceCap') { if ($Bound.ContainsKey($n)) { [void]$sb.Append(" -$n $($Bound[$n])") } }
+  if ($Bound.ContainsKey('Control') -and $Bound['Control']) { [void]$sb.Append(" -Control `"$($Bound['Control'])`"") }
+  if ($Bound.ContainsKey('Mode') -and $Bound['Mode'])       { [void]$sb.Append(" -Mode $($Bound['Mode'])") }
+  if ($Bound.ContainsKey('MaxRows'))                        { [void]$sb.Append(" -MaxRows $($Bound['MaxRows'])") }
+  $sb.ToString()
+}
+function Get-EngineVersion {
+  $rr = Invoke-Engine @('info', '--json')
+  $o = $(if ($rr.Exit -eq 0) { ConvertFrom-EngineJson $rr.Text })
+  if ($o -and $o.version) { [string]$o.version } else { 'unknown' }
 }
 
 $exitCode = 0
@@ -233,7 +257,8 @@ try {
         "  $($s.Db): $($s.Files) file(s) changed since it was indexed"
         $(if ($cmd) { "    $cmd" } else { "    no reindex command can be derived for it (not a <project>\_D-RAG\<name>.sqlite the manifest resolves; a clone under charts\scratch\db is re-taken, not reindexed)" })
       }
-      Stop-Ask 3 ("stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:`n" + ($lines -join "`n"))
+      if ($AllowStale) { [Console]::Error.WriteLine("ask-report: note -- stale index allowed by -AllowStale: " + (($stale | ForEach-Object { "$($_.Db): $($_.Files) file(s)" }) -join '; ')) }
+      else { Stop-Ask 3 ("stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:`n" + ($lines -join "`n")) }
     }
 
     # ---- 4. the bundle ----------------------------------------------------------------------
@@ -257,6 +282,12 @@ try {
     }
 
     # ---- 5. the text to read ----------------------------------------------------------------
+    # the header (contract section 3): the sentence with time + engine, then the COMMAND that reruns it
+    $sentTarget = $(if ($To) { "$Target -> $To" } else { $Target })
+    $phrase = $(if ($script:ReportCaptions.Contains($Question)) { $script:ReportCaptions[$Question].TrimEnd('.') } else { 'Report' })
+    $answer.Add(('{0} (drag-lint report {1}) for {2}, asked on {3}, engine {4}.' -f $phrase, $Question, $sentTarget, (Get-Date).ToString('yyyy-MM-dd HH:mm'), (Get-EngineVersion)))
+    $bound = @{}; foreach ($k in $PSBoundParameters.Keys) { $bound[$k] = $PSBoundParameters[$k] }   # a dictionary, not a hashtable
+    $answer.Add((Get-ReportCommandLine $Question $Target $bound))
     $answer.Add("BUNDLE $($art.Bundle)")
     # which index(es) answered (fix round 1, M-1): the project index, then any other the question read
     $answer.Add("INDEX $DbPath")

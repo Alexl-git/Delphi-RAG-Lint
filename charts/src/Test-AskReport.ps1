@@ -27,6 +27,11 @@
     AR-DOC-CAPTIONS  its caption table equals the plugin's REPORT_QUESTIONS (read from the plugin source)
     AR-DOC-RT    the DEFAULT answer (no -Plain) is the DocInsight block of the -Plain answer (owner answer 2, R5)
 
+    AR-HDR       -Plain starts with the report sentence (date, time, engine) and a COMMAND line (no -DbPath, R5)
+    AR-HDR-CMD   Get-ReportCommandLine in isolation (fixed order, display switches and index overrides dropped)
+    AR-HDR-DOC   the default block holds the COMMAND once, unwrapped
+    AR-ALLOWSTALE  -AllowStale on the stale DL clone answers (exit 0) and says so on stderr
+
   Every check of the answer's plain shape passes -Plain; the default is the DocInsight block.
 
   FRESH CLONES NEEDED: AR-OUTROOT, AR-CHART, AR-CAP and AR-RT read the CLIENT / SERVER / SQL clones under
@@ -107,13 +112,13 @@ Step 'AR-OUTROOT' {
     $env:TEMP = $oldTemp
     if ($null -eq $oldLive) { Remove-Item Env:\DRAGLINT_CHARTS_ALLOW_LIVE_DB -ErrorAction SilentlyContinue } else { $env:DRAGLINT_CHARTS_ALLOW_LIVE_DB = $oldLive }
   }
-  Chk 'AR-OUTROOT' "$e1|$(@($o1)[0])" "0|BUNDLE $tmp\drag-lint-reports\who-reads-Blueprint4_TfrmBlueprint4_FNoRecursion"
+  Chk 'AR-OUTROOT' "$e1|$(@($o1)[2])" "0|BUNDLE $tmp\drag-lint-reports\who-reads-Blueprint4_TfrmBlueprint4_FNoRecursion"
   if (-not (Test-Path (Join-Path $tmp 'drag-lint-reports\who-reads-Blueprint4_TfrmBlueprint4_FNoRecursion\index.html'))) { Fail 'AR-OUTROOT' 'no index.html under the default OutRoot' }
   if (Test-Path (Join-Path $PSScriptRoot '..\artifacts\who-reads-Blueprint4_TfrmBlueprint4_FNoRecursion\meta.json') -NewerThan (Get-Date).AddMinutes(-5)) { Fail 'AR-OUTROOT' 'a bundle was written under charts\artifacts' }
   Chk 'AR-ENV' "$live1|$(if ($null -eq $live2) { 'absent' } else { "[$live2]" })|$e2" 'sentinel|absent|0'
   # the chart form of the text: a CHART header, then anchored rows
-  Chk 'AR-INDEX' "$(@($o1)[1])" "INDEX $([IO.Path]::GetFullPath($DbCli))"
-  Chk 'AR-CHART' "$(@($o1)[2])" 'CHART who-reads Blueprint4.TfrmBlueprint4.FNoRecursion -- 0 resolved read sites reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas / 0 routines reported by find-callers'
+  Chk 'AR-INDEX' "$(@($o1)[3])" "INDEX $([IO.Path]::GetFullPath($DbCli))"
+  Chk 'AR-CHART' "$(@($o1)[4])" 'CHART who-reads Blueprint4.TfrmBlueprint4.FNoRecursion -- 0 resolved read sites reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas / 0 routines reported by find-callers'
   if (@($o1 | Where-Object { $_ -cmatch '^  \S.* @[A-Za-z0-9_.]+\.pas(:\d+)?( -- .*)?$' }).Count -lt 1) { Fail 'AR-CHART' "no anchored row in: $($o1 -join ' | ')" }
   # AR-TARGET (same run): the focus row is marked, and only once
   $tg = @($o1 | Where-Object { $_ -clike '  TARGET *' })
@@ -170,7 +175,7 @@ Step 'AR-NODOT-NOTE' {
     if ($null -eq $prevDot) { Remove-Item Env:\DRAGLINT_DOT -ErrorAction SilentlyContinue } else { $env:DRAGLINT_DOT = $prevDot }
   }
   Chk 'AR-NODOT-EXIT' "$($r.Exit)|$($r.Err)" '0|'
-  if ("$($r.Out[4])" -cnotlike 'TRACE *') { Fail 'AR-NODOT-NOTE' "the text does not begin with TRACE: $($r.Out[4])" }
+  if ("$($r.Out[6])" -cnotlike 'TRACE *') { Fail 'AR-NODOT-NOTE' "the text does not begin with TRACE: $($r.Out[6])" }
   $note = @($r.Out | Where-Object { $_ -clike 'NOTE the chart could not be drawn:*' })
   if ($note.Count -ne 1 -or $note[0] -notlike '*DRAGLINT_DOT*no-such-dot.exe*') { Fail 'AR-NODOT-NOTE' "no NOTE naming the unresolved dot: $($note -join ' | ')" }
 }
@@ -188,18 +193,51 @@ Write-Host 'round-trip on the clones (about a minute) ...'
 Step 'AR-RT' {
   $r = Invoke-Ask @('-Question', 'round-trip', '-Target', 'frmBlueprint4.dxDBGrid1FtrsVNum', '-DbPath', $DbCli, '-ServerDbPath', $DbSrv, '-SqlDbPath', $DbSql, '-OutRoot', (Join-Path $OutDir 'rt'), '-Plain')
   Chk 'AR-RT-EXIT' "$($r.Exit)|$($r.Err)" '0|'
-  $b = "$($r.Out[0])"
-  if ($b -cnotlike 'BUNDLE *') { Fail 'AR-RT' "line 1 is not BUNDLE <folder>: $b" }
-  Chk 'AR-INDEX-RT' (($r.Out[1..3]) -join '|') ("INDEX $([IO.Path]::GetFullPath($DbCli))|INDEX $([IO.Path]::GetFullPath($DbSrv)) (server)|INDEX $([IO.Path]::GetFullPath($DbSql)) (sql)")
-  if ("$($r.Out[4])" -cnotlike 'TRACE *') { Fail 'AR-RT' "the text does not begin with TRACE: $($r.Out[4])" }
+  $b = "$($r.Out[2])"
+  if ($b -cnotlike 'BUNDLE *') { Fail 'AR-RT' "line 3 is not BUNDLE <folder>: $b" }
+  Chk 'AR-INDEX-RT' (($r.Out[3..5]) -join '|') ("INDEX $([IO.Path]::GetFullPath($DbCli))|INDEX $([IO.Path]::GetFullPath($DbSrv)) (server)|INDEX $([IO.Path]::GetFullPath($DbSql)) (sql)")
+  if ("$($r.Out[6])" -cnotlike 'TRACE *') { Fail 'AR-RT' "the text does not begin with TRACE: $($r.Out[6])" }
   $tr = Join-Path $b.Substring(7) 'trace.dlgraph'
   if (-not (Test-Path $tr)) { Fail 'AR-RT' "no trace.dlgraph in $b" }
-  elseif ((($r.Out | Select-Object -Skip 4) -join "`r`n") -cne [IO.File]::ReadAllText($tr).TrimEnd("`r", "`n")) { Fail 'AR-RT' 'stdout after BUNDLE is not the whole trace.dlgraph' }
+  elseif ((($r.Out | Select-Object -Skip 6) -join "`r`n") -cne [IO.File]::ReadAllText($tr).TrimEnd("`r", "`n")) { Fail 'AR-RT' 'stdout after BUNDLE is not the whole trace.dlgraph' }
   # AR-DOC-RT: the same question WITHOUT -Plain answers the DocInsight block the IDE's Reports menu makes of that text
   $d = Invoke-Ask @('-Question', 'round-trip', '-Target', 'frmBlueprint4.dxDBGrid1FtrsVNum', '-DbPath', $DbCli, '-ServerDbPath', $DbSrv, '-SqlDbPath', $DbSql, '-OutRoot', (Join-Path $OutDir 'rt-doc'))
   . (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
   $want = (Format-ReportAsDocInsight 'round-trip' 'frmBlueprint4.dxDBGrid1FtrsVNum' (Get-Date) ($r.Out -join "`r`n")).TrimEnd("`r", "`n")
-  Chk 'AR-DOC-RT' "$($d.Exit)|$(@($d.Out)[0])|$(@($d.Out)[-1])|$((($d.Out) -join "`r`n") -ceq $want)" '0|/// <remarks>|/// </remarks>|True'
+  # the two runs are minutes apart: the header's time of day is the one thing that legitimately differs
+  $tm = { param($s) $s -replace 'asked on (\d{4}-\d{2}-\d{2}) \d{2}:\d{2}', 'asked on $1 HH:MM' }
+  Chk 'AR-DOC-RT' "$($d.Exit)|$(@($d.Out)[0])|$(@($d.Out)[-1])|$((& $tm (($d.Out) -join "`r`n")) -ceq (& $tm $want))" '0|/// <remarks>|/// </remarks>|True'
+}
+
+Write-Host 'header contract (section 3) ...'
+Step 'AR-HDR' {
+  $r = Invoke-Ask @('-Question', 'who-reads', '-Target', $Q_FNR, '-DbPath', $DbCli, '-AllowStale', '-OutRoot', (Join-Path $OutDir 'hdr'), '-Plain')
+  . (Join-Path $PSScriptRoot 'Emit-Common.ps1')   # Resolve-DragLintEngine
+  $ver = (& (Resolve-DragLintEngine '') info --json | ConvertFrom-Json).version
+  $sentOk = $r.Out[0] -cmatch ('^Who reads this field \(drag-lint report who-reads\) for ' + [regex]::Escape($Q_FNR) + ', asked on \d{4}-\d{2}-\d{2} \d{2}:\d{2}, engine ' + [regex]::Escape($ver) + '\.$')
+  # R5: the COMMAND never carries -DbPath (or any index override)
+  Chk 'AR-HDR' "$($r.Exit)|$sentOk|$($r.Out[1])|$($r.Out[2] -clike 'BUNDLE *')" "0|True|COMMAND who-reads -Target `"$Q_FNR`"|True"
+}
+Step 'AR-HDR-CMD' {
+  # the builder in isolation: dot-source only the function out of Ask-Report.ps1 (the script itself runs on load)
+  $src = [IO.File]::ReadAllText($AR)
+  $m = [regex]::Match($src, '(?ms)^function Get-ReportCommandLine.*?^\}\r?$')
+  if (-not $m.Success) { Fail 'AR-HDR-CMD' 'Get-ReportCommandLine is not defined in Ask-Report.ps1' }
+  else {
+    . ([scriptblock]::Create($m.Value))
+    Chk 'AR-HDR-CMD' (Get-ReportCommandLine 'who-writes' 'T' @{ Project = 'C:\P\A.dproj'; Depth = 3; Open = $true; Plain = $true }) 'COMMAND who-writes -Target "T" -Project "C:\P\A.dproj" -Depth 3'
+    Chk 'AR-HDR-CMD-ALL' (Get-ReportCommandLine 'path' 'A' @{ To = 'B'; In = 'C:\P\u.pas'; Cap = 5; SurfaceCap = 6; Control = 'c1'; Mode = 'x'; MaxRows = 7; DbPath = 'zz' }) 'COMMAND path -Target "A" -To "B" -In "C:\P\u.pas" -Cap 5 -SurfaceCap 6 -Control "c1" -Mode x -MaxRows 7'
+  }
+}
+Step 'AR-HDR-DOC' {
+  $r = Invoke-Ask @('-Question', 'who-reads', '-Target', $Q_FNR, '-DbPath', $DbCli, '-AllowStale', '-OutRoot', (Join-Path $OutDir 'hdrdoc'))
+  $ci = @(0..($r.Out.Count - 1) | Where-Object { $r.Out[$_] -clike '/// COMMAND who-reads -Target *' })
+  $nextOk = $ci.Count -eq 1 -and $r.Out[$ci[0] + 1] -ceq '///'
+  Chk 'AR-HDR-DOC' "$($r.Exit)|$($r.Out[1] -clike '/// Who reads this field (drag-lint report who-reads) for *')|$($ci.Count)|$nextOk" '0|True|1|True'
+}
+Step 'AR-ALLOWSTALE' {
+  $r = Invoke-Ask @('-Question', 'deps', '-Target', 'DRagLint.CLI', '-DbPath', $DbDl, '-AllowStale', '-OutRoot', (Join-Path $OutDir 'allowstale'), '-Plain')
+  Chk 'AR-ALLOWSTALE' "$($r.Exit)|$($r.Err -like '*ask-report: note -- stale index allowed by -AllowStale*')" '0|True'
 }
 
 Write-Host 'the DocInsight formatter against the plugin ...'
@@ -213,7 +251,7 @@ Step 'AR-DOC-PORT' {
     $a = [regex]::Replace([IO.File]::ReadAllText((Join-Path $fx $c[0])), '\{U\+([0-9A-F]{4,5})\}', { param($m) [char]::ConvertFromUtf32([Convert]::ToInt32($m.Groups[1].Value, 16)) })
     if ((Format-ReportAsDocInsight $c[1] $c[2] ([datetime]'2026-10-06') $a) -ceq [IO.File]::ReadAllText((Join-Path $fx $c[3]))) { $same++ } else { $diff += $c[3] }
   }
-  Chk 'AR-DOC-PORT' "$same/$n$(if ($diff) { ' differ: ' + ($diff -join ',') })" '4/4'
+  Chk 'AR-DOC-PORT' "$same/$n$(if ($diff) { ' differ: ' + ($diff -join ',') })" '5/5'
   # the port must go red when it drifts: one byte of the wrap width changed
   $script:ReportDocMaxLine = 99
   $c = (Get-Content (Join-Path $fx 'cases.txt') | Where-Object { $_ -like 'chart-who-writes*' }) -split '\|'
