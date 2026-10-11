@@ -13,14 +13,19 @@ unit DragLint.Plugin.ReportText;
     the DocInsight formatter -- the stdout answer as a /// <remarks> block
       that is strict 7-bit ASCII, wrapped, and NEVER carries the autodoc
       provenance marker (autodoc keeps unmarked content byte-for-byte, so a
-      pasted answer survives Auto Doc runs only while it stays unmarked);
+      pasted answer survives Auto Doc runs only while it stays unmarked).
+      The formatter itself lives in src\charts\DRagLint.Charts.DocInsight
+      (the engine must not link a plugin unit); this unit only adds the
+      catalog caption and forwards;
     the small parsers -- typeat JSON, a DFM root object line, Ask-Report's
       refusal reason and its stale-index reindex commands. }
 
 interface
 
 uses
-  System.SysUtils;
+  System.SysUtils
+  , DRagLint.Charts.DocInsight
+  ;
 
 type
   /// <summary>What the user has to select before a report question can be
@@ -64,10 +69,10 @@ type
   end;
 
 const
-  /// <summary>Longest line FormatReportAsDocInsight emits, '/// ' included.
-  /// Well under the 120-column ceiling so a pasted block never needs
-  /// re-wrapping in an indented declaration.</summary>
-  REPORT_DOC_MAX_LINE = 100;
+  /// <summary>Longest line FormatReportAsDocInsight emits, '/// ' included --
+  /// except a report header's COMMAND line, which is never wrapped. An alias of
+  /// DRagLint.Charts.DocInsight.DOCINSIGHT_MAX_LINE, kept for existing callers.</summary>
+  REPORT_DOC_MAX_LINE = DOCINSIGHT_MAX_LINE;
 
   /// <summary>Number of questions in REPORT_QUESTIONS.</summary>
   REPORT_QUESTION_COUNT = 26;
@@ -134,7 +139,14 @@ function FindReportQuestion(const pId: string; out pQuestion: TReportQuestion): 
 /// '... +N more ... not shown' disclosure is kept. Dropped: the BUNDLE and
 /// top-level INDEX header lines, a trace's REGENERATE line, and any
 /// 'ask-report:' or 'WARNING:' line that reached the shared stdout/stderr
-/// pipe. An answer with nothing left says so in a sentence.</remarks>
+/// pipe. An answer with nothing left says so in a sentence.
+/// An answer whose first line is the report header sentence
+/// (charts\src\Ask-Report.ps1, spec section 3) keeps it, and its COMMAND line is
+/// emitted on ONE line, unwrapped -- the only line allowed past
+/// REPORT_DOC_MAX_LINE, because the line must rerun as typed.
+/// A thin forwarder: looks pQuestionId's caption up in REPORT_QUESTIONS
+/// (case-insensitive) and calls DRagLint.Charts.DocInsight.FormatAnswerAsDocInsight,
+/// which owns the format.</remarks>
 function FormatReportAsDocInsight(const pQuestionId, pTarget: string; pDate: TDateTime; const pAnswer: string): string;
 
 /// <summary>Reads the "resolved" field of `drag-lint typeat --format json`.</summary>
@@ -236,18 +248,8 @@ uses
   ;
 
 const
-  DOC_PREFIX = '/// ';
-  DOC_EMPTY = '///';
   CRLF = #13#10;
-  { The autodoc provenance marker, assembled so this unit's own source never
-    contains it as one literal. }
-  AUTODOC_MARKER = 'drag-lint' + ':auto';
-  AUTODOC_MARKER_SAFE = 'drag-lint auto';
   ASK_PREFIX = 'ask-report:';
-  { leading spaces above which a trace line is a continuation of the one above }
-  CONTINUATION_INDENT = 2;
-  WRAP_INDENT = '  ';
-  ROW_INDENT = '  ';
   { Unit + Class + Member: the fewest dotted parts a member qname has }
   QNAME_MEMBER_PARTS = 3;
 
@@ -276,203 +278,21 @@ begin
   Result:= False;
 end;
 
-{ ---- formatter helpers ---- }
-
-type
-  TCharSubst = record
-    Code: Char;
-    Text: string;
-  end;
-
-const
-  { The non-ASCII characters an answer is known to carry (the chart labels and
-    the trace use dashes, arrows and typographic quotes), each with a readable
-    ASCII stand-in. Anything else outside 7-bit becomes '?'. }
-  CHAR_SUBSTS: array[0..19] of TCharSubst = (
-    (Code: #$00A0; Text: ' '  ), (Code: #$00B7; Text: '*'  ), (Code: #$2022; Text: '*'  ),
-    (Code: #$00D7; Text: 'x'  ), (Code: #$2010; Text: '-'  ), (Code: #$2011; Text: '-'  ),
-    (Code: #$2012; Text: '--' ), (Code: #$2013; Text: '--' ), (Code: #$2014; Text: '--' ),
-    (Code: #$2015; Text: '--' ), (Code: #$2018; Text: '''' ), (Code: #$2019; Text: '''' ),
-    (Code: #$201A; Text: '''' ), (Code: #$201C; Text: '"'  ), (Code: #$201D; Text: '"'  ),
-    (Code: #$201E; Text: '"'  ), (Code: #$2026; Text: '...'), (Code: #$2190; Text: '<-' ),
-    (Code: #$2192; Text: '->' ), (Code: #$21D2; Text: '=>' ));
-
-function ScrubChar(pC: Char): string;
-begin
-  if (pC >= ' ') and (pC <= '~') then Exit(pC);
-  if pC < ' ' then Exit(' '); { tab and any other control character }
-  for var S: TCharSubst in CHAR_SUBSTS do
-    if S.Code = pC then Exit(S.Text);
-  Result:= '?';
-end;
-
-{ One line at a time, so the caller never has to think about CR/LF here. }
-function ScrubLine(const pLine: string): string;
-var
-  SB: TStringBuilder;
-begin
-  SB:= TStringBuilder.Create;
-  try
-    for var C: Char in pLine do SB.Append(ScrubChar(C));
-    Result:= SB.ToString;
-  finally
-    SB.Free;
-  end;
-end;
-
-function RemoveAutodocMarker(const pText: string): string;
-begin
-  Result:= pText;
-  while ContainsText(Result, AUTODOC_MARKER) do
-    Result:= StringReplace(Result, AUTODOC_MARKER, AUTODOC_MARKER_SAFE, [rfReplaceAll, rfIgnoreCase]);
-end;
-
-function XmlEscape(const pText: string): string;
-begin
-  Result:= StringReplace(pText , '&', '&amp;', [rfReplaceAll]);
-  Result:= StringReplace(Result, '<', '&lt;' , [rfReplaceAll]);
-end;
-
-{ ' @File.pas:12' -> ' (File.pas:12)'; only a token that looks like a file. }
-function RenderAnchors(const pLine: string): string;
-begin
-  Result:= TRegEx.Replace(pLine, '(^|\s)@([^\s@]+\.[A-Za-z0-9]+(?::\d+)?)(?=$|[\s,;])', '$1($2)');
-end;
-
-function LeadingSpaces(const pLine: string): Integer;
-begin
-  Result:= 0;
-  while (Result < Length(pLine)) and (pLine[Result + 1] = ' ') do Inc(Result);
-end;
+{ ---- formatter: forwards to DRagLint.Charts.DocInsight ---- }
 
 function SplitLines(const pText: string): TArray<string>;
 begin
   Result:= StringReplace(StringReplace(pText, #13#10, #10, [rfReplaceAll]), #13, #10, [rfReplaceAll]).Split([#10]);
 end;
 
-{ Word-wraps one logical line into /// lines no longer than REPORT_DOC_MAX_LINE.
-  Continuation lines get two more spaces of indent; a token longer than the
-  room left is cut, never dropped. }
-procedure EmitWrapped(pOut: TStringBuilder; const pIndent, pText: string);
-var
-  Room   : Integer;
-  Current: string;
-  Lead   : string;
-
-  procedure Flush;
-  begin
-    pOut.Append(DOC_PREFIX).Append(Lead).Append(Current).Append(CRLF);
-    Current:= '';
-    Lead:= pIndent + WRAP_INDENT;
-  end;
-
-begin
-  Lead:= pIndent;
-  Current:= '';
-  for var Word0: string in pText.Split([' '], TStringSplitOptions.ExcludeEmpty) do
-  begin
-    var Word: string:= Word0;
-    repeat
-      Room:= REPORT_DOC_MAX_LINE - Length(DOC_PREFIX) - Length(Lead);
-      if Current = '' then
-      begin
-        if Length(Word) <= Room then
-        begin
-          Current:= Word;
-          Word:= '';
-        end
-        else
-        begin
-          Current:= Copy(Word, 1, Room);
-          Word:= Copy(Word, Room + 1, MaxInt);
-          Flush;
-        end;
-      end
-      else if Length(Current) + 1 + Length(Word) <= Room then
-      begin
-        Current:= Current + ' ' + Word;
-        Word:= '';
-      end
-      else Flush;
-    until Word = '';
-  end;
-  if Current <> '' then Flush;
-end;
-
-{ One answer line -> the text to emit for it, its indent, and whether it is
-  kept at all. }
-function RenderAnswerLine(const pRaw: string; out pIndent, pText: string): Boolean;
-var
-  Trimmed: string;
-begin
-  pIndent:= '';
-  pText:= '';
-  Trimmed:= Trim(pRaw);
-  Result:= False;
-  if StartsText(ASK_PREFIX, Trimmed) or StartsText('WARNING:', Trimmed) then Exit;
-  { top-level BUNDLE / INDEX lines name Ask-Report's own temp folder and the
-    databases -- provenance for a terminal, noise in a doc comment. A trace's
-    OWN '  INDEX <names> AS OF' line is indented, and kept. }
-  if StartsStr('BUNDLE ', pRaw) or StartsStr('INDEX ', pRaw) then Exit;
-  if StartsStr('REGENERATE ', Trimmed) then Exit;
-  if StartsStr('CHART ', pRaw) then
-  begin
-    var P: Integer:= Pos(' -- ', pRaw);
-    if P = 0 then Exit;
-    pText:= 'Totals: ' + Trim(Copy(pRaw, P + Length(' -- '), MaxInt)) + '.';
-    Exit(True);
-  end;
-  if StartsStr('TARGET ', Trimmed) then
-    pText:= 'Selected: ' + RenderAnchors(Trim(Copy(Trimmed, Length('TARGET ') + 1, MaxInt)))
-  else
-    pText:= RenderAnchors(Trimmed);
-  if LeadingSpaces(pRaw) > CONTINUATION_INDENT then pIndent:= ROW_INDENT;
-  Result:= pText <> '';
-end;
-
 function FormatReportAsDocInsight(const pQuestionId, pTarget: string; pDate: TDateTime; const pAnswer: string): string;
 var
-  SB       : TStringBuilder;
-  Q        : TReportQuestion;
-  Phrase   : string;
-  Indent   : string;
-  Text     : string;
-  Findings : Integer;
-  PendBreak: Boolean;
+  Q     : TReportQuestion;
+  Phrase: string;
 begin
-  if FindReportQuestion(pQuestionId, Q) then Phrase:= Q.Caption.TrimRight(['.'])
-  else Phrase:= 'Report';
-  SB:= TStringBuilder.Create;
-  try
-    SB.Append(DOC_PREFIX).Append('<remarks>').Append(CRLF);
-    EmitWrapped(SB, '', XmlEscape(ScrubLine(Format('%s (drag-lint report %s) for %s, asked on %s.',
-      [Phrase, pQuestionId, pTarget, FormatDateTime('yyyy-mm-dd', pDate)]))));
-    Findings:= 0;
-    PendBreak:= True;
-    for var Raw: string in SplitLines(pAnswer) do
-    begin
-      var Line: string:= ScrubLine(TrimRight(Raw));
-      if Trim(Line) = '' then
-      begin
-        PendBreak:= True;
-        Continue;
-      end;
-      if not RenderAnswerLine(Line, Indent, Text) then Continue;
-      if PendBreak then SB.Append(DOC_EMPTY).Append(CRLF);
-      PendBreak:= False;
-      EmitWrapped(SB, Indent, XmlEscape(Text));
-      Inc(Findings);
-    end;
-    if Findings = 0 then
-    begin
-      SB.Append(DOC_EMPTY).Append(CRLF);
-      EmitWrapped(SB, '', 'The report returned no findings.');
-    end;
-    SB.Append(DOC_PREFIX).Append('</remarks>').Append(CRLF);
-    Result:= RemoveAutodocMarker(SB.ToString);
-  finally
-    SB.Free;
-  end;
+  Phrase:= '';
+  if FindReportQuestion(pQuestionId, Q) then Phrase:= Q.Caption.TrimRight(['.']);
+  Result:= FormatAnswerAsDocInsight(Phrase, pQuestionId, pTarget, pDate, pAnswer);
 end;
 
 { ---- glue parsers ---- }

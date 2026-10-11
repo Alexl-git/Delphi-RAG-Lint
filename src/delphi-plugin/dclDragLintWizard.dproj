@@ -143,6 +143,7 @@
         <DCCReference Include="..\core\DRagLint.Core.StudioEnv.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
         <DCCReference Include="DragLint.Plugin.About.pas"/>
+        <DCCReference Include="..\charts\DRagLint.Charts.DocInsight.pas"/>
         <DCCReference Include="DragLint.Plugin.ReportText.pas"/>
         <DCCReference Include="DragLint.Plugin.Reports.pas"/>
         <BuildConfiguration Include="Base">

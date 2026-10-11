@@ -22,6 +22,8 @@ uses
   , ChartsTests.Diff in 'ChartsTests.Diff.pas'
   , DRagLint.Charts.ReportHeader in '..\..\src\charts\DRagLint.Charts.ReportHeader.pas'
   , ChartsTests.ReportHeader in 'ChartsTests.ReportHeader.pas'
+  , DRagLint.Charts.DocInsight in '..\..\src\charts\DRagLint.Charts.DocInsight.pas'
+  , ChartsTests.DocInsight in 'ChartsTests.DocInsight.pas'
   ;
 
 const
