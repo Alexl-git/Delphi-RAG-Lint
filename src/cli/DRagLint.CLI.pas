@@ -24794,6 +24794,31 @@ type
     OnlyIncluded : TArray<TNestedOnly>;
   end;
 
+/// <summary>apply/1 pas_uses[] (1.27.0): one object per TApplyPasUse.</summary>
+/// <param name="AUses">The report's PasUses.</param>
+/// <returns>A new array; the caller owns it (AddPair takes it over).</returns>
+function PasUsesJson(const AUses: TArray<TApplyPasUse>): TJSONArray;
+begin
+  Result:= TJSONArray.Create;
+  for var PU: TApplyPasUse in AUses do
+  begin
+    var JP: TJSONObject:= TJSONObject.Create;
+    JP.AddPair('instance'      , PU.Instance);
+    JP.AddPair('from_type'     , PU.FromType);
+    JP.AddPair('to_type'       , PU.ToType);
+    JP.AddPair('member'        , PU.Member);
+    JP.AddPair('kind'          , PU.Kind);
+    JP.AddPair('visibility'    , PU.Visibility);
+    JP.AddPair('declaring_unit', PU.DeclaringUnit);
+    JP.AddPair('declared_in'   , PU.DeclaredIn);
+    JP.AddPair('status'        , PU.Status);
+    var JL: TJSONArray:= TJSONArray.Create;
+    for var L: Integer in PU.Lines do JL.Add(L);
+    JP.AddPair('lines'         , JL);
+    JP.AddPair('count'         , TJSONNumber.Create(Length(PU.Lines)));
+    Result.AddElement(JP);
+  end;
+end;
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
 /// <param name="ACtx">The run to report.</param>
 /// <remarks>
@@ -25041,26 +25066,7 @@ begin
       instance, then one per global from a unit the reconciliation removes.
       ALWAYS present, [] when none. status mapped | cast-refused | same-name |
       unmapped | global-dangling; the editor filters on it. }
-    var JPas: TJSONArray:= TJSONArray.Create;
-    for var PU: TApplyPasUse in ACtx.Report.PasUses do
-    begin
-      var JP: TJSONObject:= TJSONObject.Create;
-      JP.AddPair('instance'      , PU.Instance);
-      JP.AddPair('from_type'     , PU.FromType);
-      JP.AddPair('to_type'       , PU.ToType);
-      JP.AddPair('member'        , PU.Member);
-      JP.AddPair('kind'          , PU.Kind);
-      JP.AddPair('visibility'    , PU.Visibility);
-      JP.AddPair('declaring_unit', PU.DeclaringUnit);
-      JP.AddPair('declared_in'   , PU.DeclaredIn);
-      JP.AddPair('status'        , PU.Status);
-      var JL: TJSONArray:= TJSONArray.Create;
-      for var L: Integer in PU.Lines do JL.Add(L);
-      JP.AddPair('lines'         , JL);
-      JP.AddPair('count'         , TJSONNumber.Create(Length(PU.Lines)));
-      JPas.AddElement(JP);
-    end;
-    JRoot.AddPair('pas_uses', JPas);
+    JRoot.AddPair('pas_uses', PasUsesJson(ACtx.Report.PasUses));
     { 1.20.6 (T2b) -- the classes whose members the run resolved, summed over
       the --db stores. No property tree is built; this is the whole cost. }
     JRoot.AddPair('classes_built', TJSONNumber.Create(ACtx.ClassesBuilt));
