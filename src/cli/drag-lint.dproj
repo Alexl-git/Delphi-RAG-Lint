@@ -250,6 +250,20 @@
     <DCCReference Include="..\analysis\DRagLint.Analysis.SurfaceFingerprint.pas"/>
     <DCCReference Include="..\analysis\DRagLint.Analysis.SurfaceAdapters.pas"/>
     <DCCReference Include="..\project\DRagLint.Project.Facts.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Diff.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.ReportHeader.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.DocInsight.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Adapter.Text.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Adapter.FormsCsv.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Adapter.Graph.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Adapters.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Process.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Producer.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Producer.PowerShell.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Remarks.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Snapshot.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Compare.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Render.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

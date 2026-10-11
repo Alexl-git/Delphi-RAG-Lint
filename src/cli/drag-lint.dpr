@@ -192,6 +192,20 @@ uses
   DRagLint.Analysis.SurfaceFingerprint in '..\analysis\DRagLint.Analysis.SurfaceFingerprint.pas',
   DRagLint.Analysis.SurfaceAdapters in '..\analysis\DRagLint.Analysis.SurfaceAdapters.pas',
   DRagLint.Project.Facts in '..\project\DRagLint.Project.Facts.pas',
+  DRagLint.Charts.Diff in '..\charts\DRagLint.Charts.Diff.pas',
+  DRagLint.Charts.ReportHeader in '..\charts\DRagLint.Charts.ReportHeader.pas',
+  DRagLint.Charts.DocInsight in '..\charts\DRagLint.Charts.DocInsight.pas',
+  DRagLint.Charts.Adapter.Text in '..\charts\DRagLint.Charts.Adapter.Text.pas',
+  DRagLint.Charts.Adapter.FormsCsv in '..\charts\DRagLint.Charts.Adapter.FormsCsv.pas',
+  DRagLint.Charts.Adapter.Graph in '..\charts\DRagLint.Charts.Adapter.Graph.pas',
+  DRagLint.Charts.Adapters in '..\charts\DRagLint.Charts.Adapters.pas',
+  DRagLint.Charts.Process in '..\charts\DRagLint.Charts.Process.pas',
+  DRagLint.Charts.Producer in '..\charts\DRagLint.Charts.Producer.pas',
+  DRagLint.Charts.Producer.PowerShell in '..\charts\DRagLint.Charts.Producer.PowerShell.pas',
+  DRagLint.Charts.Remarks in '..\charts\DRagLint.Charts.Remarks.pas',
+  DRagLint.Charts.Snapshot in '..\charts\DRagLint.Charts.Snapshot.pas',
+  DRagLint.Charts.Compare in '..\charts\DRagLint.Charts.Compare.pas',
+  DRagLint.Charts.Render in '..\charts\DRagLint.Charts.Render.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin
