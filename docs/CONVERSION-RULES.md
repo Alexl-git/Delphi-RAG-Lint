@@ -719,6 +719,57 @@ ruling) refuses the unit too, dry run and `--apply` alike, before any rule
 error is reported: the converter cannot convert a type it cannot see, and the
 cause is a parsing / index gap in the library or project index, not the book:
 `<Type> (line N) resolves in no --db -- index gap in the library or project index; reindex, or report it, before converting`.
+A BARE `#convert` From or To type (`#convert TLabel -> ...`) is resolved in
+the converted unit's own scope -- the class every `#link` / `#default` /
+`#ignore` path of that block is checked against, and the one the `.dfm` block
+is re-emitted from -- by the same rule as `pas_uses[]`: the unit's own class,
+else the LAST uses entry that declares it, else a lone unit-level declarer.
+A nested class (`LibNest.TNestHost.TSolo`) is never a declarer, and the first
+class of that name across the `--db` files is never taken (it used to be: a
+VCL unit's `#convert TLabel` was checked against `FMX.StdCtrls.TLabel`). A
+qualified type (`#convert Vcl.StdCtrls.TLabel`) is always exactly that class.
+A bare To type that is no block's From is a class of the unit AFTER
+conversion, so the unit the book makes it use settles a tie first (a `#use`, a
+`#convert` line's trailing unit, a `#useswap` New whose Old the unit uses, a
+uses entry the book does not remove -- the uses reconciliation's own rule).
+
+**Inference, then refusal** (owner ruling 2026-10-11). A bare type the scope
+still leaves ambiguous is INFERRED when exactly one candidate survives, in
+this order: (a) the project's framework -- the `.dproj` beside the project
+file the unit's index holds (or the one `.dproj` in the unit's folder):
+`<FrameworkType>VCL|FMX</FrameworkType>`, else a `DCC_Namespace` naming `Vcl`
+but not `FMX` (or the reverse) -- drops a `Vcl.*` / `FMX.*` candidate of the
+other framework; (a2) the form file's kind -- a `.dfm` form is VCL and a `.fmx` form FMX (each framework streams its own), so a candidate of the other framework is excluded; (b) the `.dfm` evidence -- the properties the unit's `.dfm`
+streams directly on objects of that class: a candidate that does not declare
+one that another candidate does is dropped (a property NO candidate declares,
+such as `ExplicitLeft`, tells nothing and is ignored). An inference converts,
+with a warning (`items[]` kind `convert-class-inferred`):
+`#convert TLabel resolved to Vcl.StdCtrls.TLabel (line 1): inferred from the project framework VCL (P.dproj); qualify the line to silence this: #convert Vcl.StdCtrls.TLabel -> TSolo`.
+Zero or several survivors REFUSE the unit, in detail -- the line and its
+text, the bare name, every candidate and why it was not chosen
+(`not in the unit's uses`, `tie: the uses entry X names another candidate
+too`, `framework mismatch: the project is VCL (P.dproj)`, `form-file mismatch: U.dfm is a VCL form`, `.dfm property X not
+declared`, `tie: fits ... as well as another candidate`), and what to do:
+`REFUSED: #convert TLabel -> TSolo (line 1): the bare name TLabel is ambiguous in this unit's scope -- candidates FMX.StdCtrls.TLabel (not in the unit's uses), Vcl.StdCtrls.TLabel (not in the unit's uses) -- qualify the #convert line (paste one of the suggested lines, apply/1 qualify_fixes[]) or add the declaring unit to the unit's uses; nothing was validated against a guess`,
+followed in text mode by the qualified lines, ready to paste:
+
+```
+  line 1 of book.rules -- replace "#convert TLabel -> TSolo" with one of:
+    #convert FMX.StdCtrls.TLabel -> TSolo    { not in the unit's uses }
+    #convert Vcl.StdCtrls.TLabel -> TSolo    { not in the unit's uses }
+  or: add FMX.StdCtrls to the unit's uses
+```
+
+`apply/1` carries the same as `qualify_fixes[]` (always present; `[]` when
+nothing was ambiguous), one object per ambiguous `#convert` side, refused or
+inferred: `{rule_line, current, name, side: "from"|"to", outcome:
+"refused"|"inferred", chosen, inference, suggestions: [{replacement,
+candidate, why, alternative}], alternative}` -- `replacement` is the whole
+line with the name qualified (the inferred class first), `alternative` is
+`#use <Unit>` for a To type and `add <Unit> to the unit's uses` for a From
+type. Gate on `info --json` `capabilities.convert_qualify_fix`. This
+supersedes ruling R8a for a `#convert` To type: an unsettled tie is no longer
+converted with the tie merely reported in `uses_unresolved[]`.
 Every such refusal behaves the same way: exit
 1, NOTHING written (neither `.pas` nor `.dfm`), one text line
 `REFUSED: <reason>`, and in `apply/1` JSON `"ok": false`, `"refused": true`,
@@ -727,6 +778,14 @@ and `reason` are always present: `false` and `""` on success and on every
 genuine failure -- rule errors, the freshness guard, a missing file. The editor
 keys its "refused -- not changed" row on `refused == true`. An unreachable-path
 warning is not a refusal. Schema stays `apply/1` (additive).
+`convert-validate` and `convert-reemit` resolve a bare `--from` / `--to` by
+the same rule with no unit: the book's own qualification of it (the first
+`#convert` whose From -- or To -- has that bare name), else a lone unit-level
+declarer (a bare name used to resolve to nothing there, so `convert-validate`
+printed `OK` without checking a path). There is no unit, so nothing is
+inferred: an ambiguous one exits 1 with
+`ERROR: --from <Type> is ambiguous -- declared by <Unit>, <Unit> (no unit to scope it; the book does not qualify it). Qualify it, or qualify the book's #convert line. Nothing was validated against a guess`
+and one `  use: --from <Unit>.<Type>` line per candidate.
 
 ## End-to-end workflow
 

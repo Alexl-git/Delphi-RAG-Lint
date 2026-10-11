@@ -16222,6 +16222,10 @@ begin
         resolved | ambiguous | class-not-found | member-not-found |
         kind-unknown with candidates[] -- never an empty kind as a fact. }
       JCap.AddPair('pas_uses_resolution', TJSONBool.Create(True));
+  { owner ruling 2026-10-11: convert-apply infers an ambiguous bare #convert
+    class (project framework, .dfm properties) or refuses it with apply/1
+    qualify_fixes[] -- ready-to-paste qualified lines }
+  JCap.AddPair('convert_qualify_fix', TJSONBool.Create(True));
       { 1.27.0 (C15), same contract: the castlib `value strip-db` VALUE cast
         (#link X <- X : StripDB) rewrites a trailing .db off string literals in
         the .dfm and in .pas literal assignments -- items[] value-cast-applied
@@ -23868,6 +23872,61 @@ begin
   Result:= 0;
 end; // function
 
+{ convert-validate / convert-reemit: the --from / --to name AName as the
+  #convert classes of convert-apply resolve it, with no unit to scope it
+  (TConvertTreeCache.ScopedClass with no SetScope): a qualified name is taken
+  as written; a bare one is settled by the book's own qualification of it (the
+  first #convert whose From -- AToSide: To -- has that bare tail), else by a
+  lone unit-level declarer. Returns the qualified name, or AName unchanged when
+  it is qualified or resolves nowhere (the verbs' exact-name lookup then
+  decides, as before). AScoped carries the answer; PAS_RES_AMBIGUOUS means
+  the caller must refuse. Opens ADbs read-only; a DB that does not open is
+  skipped (ConvertClassIn reports it). }
+function QualifyConvertArg(const ADbs: TArray<string>; const ARules: TConversionRuleSet;
+  const AName: string; AToSide: Boolean; out AScoped: TScopedClass): string;
+var
+  Stores: TArray<ISymbolStore>;
+begin
+  Result := AName;
+  AScoped:= Default(TScopedClass);
+  if (Trim(AName) = '') or (Pos('.', AName) > 0) then Exit;
+  var Hint: string:= '';
+  for var R: TConversionRule in ARules.Rules do
+    if (R.Kind = rkConvert) and (Hint = '') then
+    begin
+      var Spelled: string:= if AToSide then R.ToType else R.FromType;
+      if SameText(Copy(Spelled, LastDelimiter('.', Spelled) + 1, MaxInt), Trim(AName)) then Hint:= Spelled;
+    end;
+  Stores:= nil;
+  for var LDb: string in ADbs do
+  begin
+    if not TFile.Exists(LDb) then Continue;
+    var RoOk: Boolean;
+    var St: ISymbolStore:= OpenReadOnlyStore(LDb, RoOk);
+    if RoOk then Stores:= Stores + [St];
+  end;
+  var Trees: TConvertTreeCache:= TConvertTreeCache.Create(Stores);
+  try
+    AScoped:= Trees.ScopedClass(AName, Hint);
+  finally
+    Trees.Free;
+  end;
+  if AScoped.Resolution = PAS_RES_RESOLVED then Result:= AScoped.QName;
+end;
+
+{ The refusal for an ambiguous --from / --to (QualifyConvertArg; owner ruling
+  2026-10-11: detailed, with the fix): an 'ERROR:' line naming the candidates,
+  then one ready-to-use argument per candidate. }
+function AmbiguousArgMessage(const AFlag, AName: string; const AScoped: TScopedClass): string;
+begin
+  var QNames: TArray<string>:= nil;
+  for var C: string in AScoped.Candidates do QNames:= QNames + [C + '.' + AName];
+  Result:= Format('ERROR: %s %s is ambiguous -- declared by %s (no unit to scope it; the book does not qualify it). ' +
+    'Qualify it, or qualify the book''s #convert line. Nothing was validated against a guess',
+    [AFlag, AName, String.Join(', ', AScoped.Candidates)]);
+  for var Q: string in QNames do Result:= Result + sLineBreak + Format('  use: %s %s', [AFlag, Q]);
+end;
+
 { convert-validate / convert-reemit: the class AQName names in the first of ADbs
   whose index has it (a stale explicit --db sets AStale and stops, as
   StaleDbRefusesRun rules; a stale manifest DB is skipped). Each store opened
@@ -24082,11 +24141,23 @@ begin
   StaleExplicitDb:= False; { a local Boolean is not zero-initialised }
   Caches  := TObjectList<TPropMemberCache>.Create(True);
   try
-  FromCls := ClassFor(AArgs.CallFrom); // --from reuses CallFrom
-  ToCls   := ClassFor(AArgs.RenameTo); // --to   reuses RenameTo
+  { a bare --from / --to resolves as convert-apply's #convert classes do --
+    the book's own qualification, else a lone unit-level declarer -- and an
+    ambiguous one is refused below, never guessed }
+  var FromScoped, ToScoped: TScopedClass;
+  var FromName: string:= QualifyConvertArg(Dbs, RuleSet, AArgs.CallFrom, False, FromScoped);
+  var ToName  : string:= QualifyConvertArg(Dbs, RuleSet, AArgs.RenameTo, True, ToScoped);
+  FromCls := ClassFor(FromName); // --from reuses CallFrom
+  ToCls   := ClassFor(ToName);   // --to   reuses RenameTo
   { ClassFor cannot Exit(2) from inside a function returning a class, so the
     refusal it could only flag is enforced here. }
   if StaleExplicitDb then Exit(2);
+  if (FromScoped.Resolution = PAS_RES_AMBIGUOUS) or (ToScoped.Resolution = PAS_RES_AMBIGUOUS) then
+  begin
+    if FromScoped.Resolution = PAS_RES_AMBIGUOUS then Writeln(AmbiguousArgMessage('--from', AArgs.CallFrom, FromScoped));
+    if ToScoped.Resolution = PAS_RES_AMBIGUOUS then Writeln(AmbiguousArgMessage('--to', AArgs.RenameTo, ToScoped));
+    Exit(1);
+  end;
 
   Errors:= ValidateConversionRules(RuleSet, FromCls, ToCls, Unreach);
   finally
@@ -24215,9 +24286,19 @@ begin
   StaleExplicitDb:= False; { a local Boolean is not zero-initialised }
   Caches  := TObjectList<TPropMemberCache>.Create(True);
   try
-  FromCls := ConvertClassIn(AArgs, 'convert-reemit', Dbs, AArgs.CallFrom, Opts, Caches, StaleExplicitDb); // --from reuses CallFrom
-  ToCls   := ConvertClassIn(AArgs, 'convert-reemit', Dbs, AArgs.RenameTo, Opts, Caches, StaleExplicitDb); // --to   reuses RenameTo
+  { a bare --from / --to: convert-validate's rule (QualifyConvertArg) }
+  var FromScoped, ToScoped: TScopedClass;
+  var FromName: string:= QualifyConvertArg(Dbs, Rules, AArgs.CallFrom, False, FromScoped);
+  var ToName  : string:= QualifyConvertArg(Dbs, Rules, AArgs.RenameTo, True, ToScoped);
+  FromCls := ConvertClassIn(AArgs, 'convert-reemit', Dbs, FromName, Opts, Caches, StaleExplicitDb); // --from reuses CallFrom
+  ToCls   := ConvertClassIn(AArgs, 'convert-reemit', Dbs, ToName, Opts, Caches, StaleExplicitDb);   // --to   reuses RenameTo
   if StaleExplicitDb then Exit(2);
+  if (FromScoped.Resolution = PAS_RES_AMBIGUOUS) or (ToScoped.Resolution = PAS_RES_AMBIGUOUS) then
+  begin
+    if FromScoped.Resolution = PAS_RES_AMBIGUOUS then Writeln(AmbiguousArgMessage('--from', AArgs.CallFrom, FromScoped));
+    if ToScoped.Resolution = PAS_RES_AMBIGUOUS then Writeln(AmbiguousArgMessage('--to', AArgs.RenameTo, ToScoped));
+    Exit(1);
+  end;
 
   { T2h (owner ruling R12): a #link / #default / #mapping path through a member
     that exists but is inaccessible is skipped, as in convert-apply. Only the
@@ -24899,6 +24980,10 @@ type
     OnlyUnmatched: TArray<string>;
     { 1.25.1: objects --only left out that convert with a kept parent }
     OnlyIncluded : TArray<TNestedOnly>;
+    { owner ruling 2026-10-11: the #convert lines whose bare class name had
+      several declarers -- refused, or inferred and warned about --
+      apply/1 qualify_fixes[] (capability convert_qualify_fix) }
+    QualifyFixes : TArray<TQualifyFix>;
   end;
 
 /// <summary>apply/1 pas_uses[] (1.27.0): one object per TApplyPasUse.</summary>
@@ -25245,6 +25330,35 @@ begin
       JInc.AddElement(JN);
     end;
     JRoot.AddPair('only_included', JInc);
+    { owner ruling 2026-10-11 -- ALWAYS present, [] when every #convert class
+      resolved without inference: one object per ambiguous #convert line, with
+      the ready-to-paste qualified lines the editor offers as a one-click fix }
+    var JFixes: TJSONArray:= TJSONArray.Create;
+    for var QF: TQualifyFix in ACtx.QualifyFixes do
+    begin
+      var JF: TJSONObject:= TJSONObject.Create;
+      JF.AddPair('rule_line', TJSONNumber.Create(QF.RuleLine));
+      JF.AddPair('current'  , QF.Current);
+      JF.AddPair('name'     , QF.Name);
+      JF.AddPair('side'     , QF.Side);
+      JF.AddPair('outcome'  , QF.Outcome);
+      JF.AddPair('chosen'   , QF.Chosen);
+      JF.AddPair('inference', QF.Inference);
+      var JSug: TJSONArray:= TJSONArray.Create;
+      for var QS: TQualifySuggestion in QF.Suggestions do
+      begin
+        var JS: TJSONObject:= TJSONObject.Create;
+        JS.AddPair('replacement', QS.Replacement);
+        JS.AddPair('candidate'  , QS.Candidate);
+        JS.AddPair('why'        , QS.Why);
+        JS.AddPair('alternative', QS.Alternative);
+        JSug.AddElement(JS);
+      end;
+      JF.AddPair('suggestions', JSug);
+      JF.AddPair('alternative', QF.Alternative);
+      JFixes.AddElement(JF);
+    end;
+    JRoot.AddPair('qualify_fixes', JFixes);
 
     if Assigned(ACtx.Sink) then
     begin
@@ -25297,18 +25411,29 @@ end;
   A block whose From or To type resolves in no --db goes to AUnresolved (its
   #convert line, the type in Message) -- an unset side would skip every check
   of the block and pass it silently (ruling R7). C13 d: that is an INDEX gap,
-  not a rule-book error, so the caller refuses the unit on it (UnresolvedReason). }
+  not a rule-book error, so the caller refuses the unit on it (UnresolvedReason).
+  A BARE type resolves in ATrees' SetScope unit (ScopedClass, the pas_uses[]
+  rule, then inference -- owner ruling 2026-10-11). One settled by INFERENCE, and
+  one still ambiguous, each add a TQualifyFix to AFixes (the #convert line from
+  ARuleLines): 'inferred' converts with a warning, 'refused' is never guessed --
+  the caller refuses the unit (AmbiguousReason). }
 function BuildBlockClasses(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
-  AUnresolved: TList<TRuleError>): TArray<TBlockClasses>;
+  const ARuleLines: TArray<string>; AUnresolved: TList<TRuleError>; AFixes: TList<TQualifyFix>): TArray<TBlockClasses>;
 var
   R    : TConversionRule;
   Block: Integer;
 
-  procedure RequireResolved(const AConv: TConversionRule; const AType: string);
+  procedure RequireResolved(const AConv: TConversionRule; const AType, ASide: string);
   var
     E: TRuleError;
   begin
-    if (AType = '') or (ATrees.ResolveType(AType) <> '') then Exit;
+    if AType = '' then Exit;
+    var Scoped: TScopedClass:= ATrees.ScopedClass(AType);
+    var Text  : string:= if (AConv.LineNo >= 1) and (AConv.LineNo <= Length(ARuleLines)) then ARuleLines[AConv.LineNo - 1]
+                         else Format('#convert %s -> %s', [AConv.FromType, AConv.ToType]);
+    if (Scoped.Resolution = PAS_RES_AMBIGUOUS) or (Scoped.Inferred <> '') then
+      AFixes.Add(MakeQualifyFix(Text, AConv.LineNo, AType, ASide, Scoped));
+    if Scoped.Resolution <> PAS_RES_CLASS_NOT_FOUND then Exit;
     E        := Default(TRuleError);
     E.LineNo := AConv.LineNo;
     E.Message:= AType;
@@ -25323,8 +25448,8 @@ begin
     begin
       Inc(Block);
       SetLength(Result, Block + 1);
-      RequireResolved(R, R.FromType);
-      RequireResolved(R, R.ToType);
+      RequireResolved(R, R.FromType, 'from');
+      RequireResolved(R, R.ToType, 'to');
       Result[Block].FromClass:= ATrees.ClassFor(R.FromType);
       Result[Block].ToClass  := ATrees.ClassFor(R.ToType);
     end;
@@ -25334,27 +25459,61 @@ end;
   its own classes (ValidateConversionRulesPerBlock, classes from ATrees; T2b
   reverted ruling R5's per-unit scope, because resolving a path no longer costs
   a tree), a block whose type resolves nowhere comes back in AUnresolved (C13 d:
-  the caller REFUSES the unit, see UnresolvedReason), and a #link carrying a glyph expression is refused
+  the caller REFUSES the unit, see UnresolvedReason), a bare type the scope left
+  ambiguous in AFixes (refused or inferred, see BuildBlockClasses), and a #link carrying a glyph expression is refused
   (UnrealisedGlyphLinks). A path through a member that exists but is
   inaccessible is not an error: it comes back in AUnreachable (T2h, owner
   ruling R12), one record per block it is unreachable in -- print through
   DistinctUnreachable, filter per block through WithoutUnreachableRules. }
-function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet;
-  out AUnreachable: TArray<TUnreachablePath>; out AUnresolved: TArray<TRuleError>): TArray<TRuleError>;
+function ValidateConvertBook(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet; const ARuleLines: TArray<string>;
+  out AUnreachable: TArray<TUnreachablePath>; out AUnresolved: TArray<TRuleError>;
+  out AFixes: TArray<TQualifyFix>): TArray<TRuleError>;
 var
   TypeErrs: TList<TRuleError>;
+  Fixes   : TList<TQualifyFix>;
   Classes : TArray<TBlockClasses>;
 begin
   TypeErrs:= TList<TRuleError>.Create;
+  Fixes   := TList<TQualifyFix>.Create;
   try
-    Classes    := BuildBlockClasses(ATrees, ARules, TypeErrs);
+    Classes    := BuildBlockClasses(ATrees, ARules, ARuleLines, TypeErrs, Fixes);
     AUnresolved:= TypeErrs.ToArray;
+    AFixes     := Fixes.ToArray;
     Result     := ValidateConversionRulesPerBlock(ARules, Classes, AUnreachable) + UnrealisedGlyphLinks(ARules);
   finally
+    Fixes.Free;
     TypeErrs.Free;
   end;
 end;
 
+{ Owner ruling 2026-10-11: the REFUSED reason for bare #convert types the unit's
+  scope and inference cannot settle -- every 'refused' fix's QualifyRefusalText
+  (the line, the name, each candidate and why, what to do), joined. '' when
+  AFixes holds none. }
+function AmbiguousReason(const AFixes: TArray<TQualifyFix>): string;
+begin
+  var Parts: TArray<string>:= nil;
+  for var F: TQualifyFix in AFixes do
+    if F.Outcome = 'refused' then Parts:= Parts + [QualifyRefusalText(F)];
+  Result:= String.Join('; ', Parts);
+end;
+
+{ The scope key of a book's #convert classes in ATrees' current unit: every
+  block's From and To as ScopedClass resolves them (an inference included).
+  Two units with the same key validate identically, so a batch validates the
+  book once per distinct key. }
+function BookScopeKey(ATrees: TConvertTreeCache; const ARules: TConversionRuleSet): string;
+begin
+  Result:= '';
+  for var R: TConversionRule in ARules.Rules do
+    if R.Kind = rkConvert then
+      for var T: string in [R.FromType, R.ToType] do
+      begin
+        var S: TScopedClass:= ATrees.ScopedClass(T);
+        Result:= Result + S.Resolution + ':' + S.QName + ':' + String.Join(',', S.Candidates) + ':' +
+          S.Inferred + ':' + String.Join(',', S.Why) + ';';
+      end;
+end;
 { C13 d (owner ruling 2026-10-06): the REFUSED reason for #convert types that
   resolve in no --db. Each is '<Type> (line N)', the block's #convert line; the
   text says it is an index gap (library or project index), never a rule-book
@@ -25650,7 +25809,10 @@ type
 /// segment by segment (1.20.6, T2b: no property tree is built, so validating the whole book is
 /// cheap and ruling R5's per-unit scope and --validate-all-blocks are gone), and a #mapping
 /// against the block(s) that #apply it; a block whose type resolves in no --db REFUSES the unit
-/// (C13 d, UnresolvedReason) -- and a rules error refuses (exit 1) rather than attempting a plan
+/// (C13 d, UnresolvedReason); a BARE #convert type resolves in the unit's own scope (the unit,
+/// its last uses entry declaring it, a lone unit-level declarer -- never a nested class, never
+/// the first class of that name), and one that scope cannot settle REFUSES the unit naming the
+/// candidates (AmbiguousReason: qualify the #convert line) -- and a rules error refuses (exit 1) rather than attempting a plan
 /// from a broken rule set. A #link / #default / #mapping path whose members all exist but one
 /// is inaccessible on the .dfm surface is NOT an error (T2h, owner ruling R12): it is skipped
 /// per block (WithoutUnreachableRules, inside each re-emit -- a #link / #default line is dropped,
@@ -25675,6 +25837,7 @@ var
   Rules     : TConversionRuleSet;
   RuleErrors: TArray<TRuleError>;
   Unresolved: TArray<TRuleError>;
+  QualifyFixes: TArray<TQualifyFix>; { bare #convert types refused or inferred (owner ruling 2026-10-11) }
   Trees     : TConvertTreeCache ; { one per run: validation and BuildApplyPlan share its member caches }
   Dbs       : TArray<string>    ;
   Stores    : TArray<ISymbolStore>;
@@ -25686,6 +25849,7 @@ var
     (RunUnit); the apply/1 collector under batch JSON (nil otherwise) }
   Units          : TArray<string>;
   BookChecked    : Boolean;
+  BookKey        : string;  { BookScopeKey of the unit the book was last validated for }
   FreshChecked   : Boolean;
   BookUnreachable: TArray<TUnreachablePath>;
   BatchJson      : TJSONArray;
@@ -25812,6 +25976,41 @@ var
     end;
   end;
 
+  // Owner ruling 2026-10-11: each #convert class settled by INFERENCE becomes
+  // one warnings[] line (QualifyInferredText) and its items[] mirror (kind
+  // convert-class-inferred); the structured row is JCtx.QualifyFixes.
+  procedure MergeInferred(var AReport: TApplyReport);
+  begin
+    for var QF: TQualifyFix in JCtx.QualifyFixes do
+      if QF.Outcome = 'inferred' then
+      begin
+        var It: TApplyItem:= Default(TApplyItem);
+        It.Kind    := aikConvertClassInferred;
+        It.Field   := afWarnings;
+        It.FilePath:= AArgs.RulesFile;
+        It.Path    := QF.Name;
+        It.Text    := QualifyInferredText(QF);
+        It.Line    := QF.RuleLine;
+        It.RuleLine:= QF.RuleLine;
+        AReport.Warnings:= AReport.Warnings + [It.Text];
+        AReport.Items   := AReport.Items + [It];
+      end;
+  end;
+
+  // Owner ruling 2026-10-11: text mode, after a refusal -- every suggested
+  // replacement line, ready to paste over the rules file's line.
+  procedure PrintQualifyFixes;
+  begin
+    for var QF: TQualifyFix in JCtx.QualifyFixes do
+      if QF.Outcome = 'refused' then
+      begin
+        Writeln(Format('  line %d of %s -- replace "%s" with one of:', [QF.RuleLine, AArgs.RulesFile, QF.Current]));
+        for var QS: TQualifySuggestion in QF.Suggestions do
+          Writeln(Format('    %s    { %s }', [QS.Replacement, QS.Why]));
+        Writeln(Format('  or: %s', [QF.Alternative]));
+      end;
+  end;
+
   // 1.20.6 (T2f): the ONE exit for a deliberate refusal. JSON: ok=false,
   // refused=true, reason (and error) = AReason. Text: one 'REFUSED: ' line.
   // Nothing has been written when this is called. Exit(RefuseUnit(S)).
@@ -25912,6 +26111,8 @@ var
     JCtx.Sink   := BatchJson;
     JCtx.UnitPas:= UnitPas;
     if not TFile.Exists(UnitPas) then Exit(FailUnit(Format('unit not found: %s', [UnitPas]), 2));
+    { a bare #convert / .dfm class name resolves in THIS unit's scope }
+    Trees.SetScope(UnitPas, Rules);
     { 1.26.0: a DB whose edges predate bound field reads is refused, dry run too }
     var StaleResolver: string:= ResolverRefusal(Stores, Dbs, UnitPas);
     if StaleResolver <> '' then Exit(RefuseUnit(StaleResolver));
@@ -25958,23 +26159,40 @@ var
       pair for the whole book, so every link of blocks 2..N failed. A valid
       G-expression passes validation, but nothing realises it yet (CV-2):
       refuse through the same path rather than carry the source image whole. }
-    if not BookChecked then
+    { the book's classes resolve in each unit's scope: a unit whose #convert
+      classes resolve differently from the last one validated is validated
+      again (BookScopeKey); a batch of like units still validates once }
+    var ScopeKey: string:= BookScopeKey(Trees, Rules);
+    if not BookChecked or (ScopeKey <> BookKey) then
     begin
       BookChecked:= True;
+      BookKey    := ScopeKey;
       ValHere    := Trees.ClassesBuilt;
-      RuleErrors := ValidateConvertBook(Trees, Rules, BookUnreachable, Unresolved);
+      RuleErrors := ValidateConvertBook(Trees, Rules, RulesText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]),
+        BookUnreachable, Unresolved, QualifyFixes);
       ValHere    := Trees.ClassesBuilt - ValHere;
-      BookBuilt  := ValHere;
+      BookBuilt  := BookBuilt + ValHere;
     end;
     JCtx.Unreachable := BookUnreachable;
+    JCtx.QualifyFixes:= QualifyFixes;
     JCtx.ClassesBuilt:= UnitClassesBuilt;
     { T2h: an UNREACHABLE path warns and its rule is skipped (BuildApplyPlan
       below gets the book without those lines); it never fails the unit. On
       every JSON exit from here on, warnings[] carries the messages too. }
     MergeUnreachable(JCtx.Report);
+    MergeInferred(JCtx.Report);
     { C13 d: a type no --db resolves is an index gap -- the unit is REFUSED,
       dry run and --apply alike, before any rule error is reported }
     if Length(Unresolved) > 0 then Exit(RefuseUnit(UnresolvedReason(Unresolved)));
+    { a bare #convert type this unit's scope cannot settle is REFUSED, never
+      validated against a guessed class }
+    var Ambiguity: string:= AmbiguousReason(QualifyFixes);
+    if Ambiguity <> '' then
+    begin
+      var Code: Integer:= RefuseUnit(Ambiguity);
+      if not UseJson then PrintQualifyFixes;
+      Exit(Code);
+    end;
     if Length(RuleErrors) > 0 then
     begin
       { A JSON consumer gets a parseable ok=false document naming every rule
@@ -26079,6 +26297,7 @@ var
 
     JCtx.Ok       := True;
     MergeUnreachable(PlanRes.Report); { text mode prints them in its Warnings block }
+    MergeInferred(PlanRes.Report);    { likewise }
     AppendInheritedReport(JCtx.InheritedInsts, DfmPath, PlanRes.Report); { likewise }
     { 1.25.0: descendants that still stream / use an instance converted here.
       A warning, never a refusal; only the instances the plan converted count. }
