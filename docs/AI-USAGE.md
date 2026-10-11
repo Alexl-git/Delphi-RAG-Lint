@@ -313,7 +313,10 @@ published while `modifiers` says `public` for both.
 >   castlib `value strip-db` VALUE cast (`#link X <- X : StripDB`), items[]
 >   `value-cast-applied` / `value-cast-check`; `pas_uses` -- JSON `true` since 1.27.0: apply/1
 >   `pas_uses[]` lists what the `.pas` still uses that the map does not cover
->   (status `mapped` / `cast-refused` / `not-rewritten` / `same-name` / `unmapped` / `global-dangling`); `inherited_retype`
+>   (status `mapped` / `cast-refused` / `not-rewritten` / `same-name` / `unmapped` / `global-dangling`); `pas_uses_resolution`
+>   -- JSON `true` since 1.28.2: each `pas_uses[]` row carries `resolution` (`resolved` / `ambiguous` /
+>   `class-not-found` / `member-not-found` / `kind-unknown`) and `candidates[]`; the From class is
+>   resolved through the unit's uses scope, never by bare name; `inherited_retype`
 >   -- JSON `true` since 1.26.0: an inherited instance of a converted ancestor is
 >   retyped, and its fields followed in code, `inherited[].action`). Read-only. This is what the IDE
 >   Help>About box calls. Each `--db <index>` adds that index's freshness

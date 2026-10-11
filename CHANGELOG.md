@@ -3,6 +3,23 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Fixed
+
+- **convert-apply `pas_uses[]`: the From class is resolved through the UNIT'S SCOPE, never by bare
+  name.** Converter report 2026-10-11: a VCL `Label1: TLabel` listed `WordWrap` as declared in
+  `FMX.StdCtrls.TLabel` and `Layout` with an EMPTY kind -- `CollectPasUses` looked the bare
+  `TLabel` up across the `--db` stores and the first one won. Now (`ResolveClassInScope`): the
+  unit itself, then the LAST uses entry declaring the name (an interface field sees the interface
+  uses only), then the book's qualified `#convert` From, then a lone declarer; an ancestor the
+  class's own store cannot resolve goes through the declaring unit's scope the same way, and the
+  To-type `same-name` check too. New per-row `resolution` (`resolved` / `ambiguous` /
+  `class-not-found` / `member-not-found` / `kind-unknown`) and `candidates[]`: several declarers
+  left over are reported, never picked, and an empty kind is never presented as a fact. `kind`
+  adds `enum-value` (a global-dangling `bkOK` had kind `''`). Capability `pas_uses_resolution`.
+  Guard: run_convert_apply_pas_uses.ps1 C0-C10, K2.
+
 ## v1.28.1-alpha -- unreleased
 
 ### Fixed
