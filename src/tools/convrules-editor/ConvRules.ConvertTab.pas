@@ -16,6 +16,7 @@ uses
   , System.Types
   , System.UITypes // TMsgDlgType: AskBlockingDrops's signature; also MessageDlg's inline expansion, mrYes
   , System.Generics.Collections
+  , System.Diagnostics // TStopwatch: FStepWatch
   , Winapi.Windows // TOwnerDrawState / odSelected: SourcesDrawItem's signature
   , Vcl.Controls
   , Vcl.StdCtrls
@@ -134,6 +135,11 @@ type
       FBtnConvert     : TButton;
       FBtnCancel      : TButton;
       FProgress       : TProgressBar;
+      FLblRunStep     : TLabel;             // C16: the run's progress line (named LblRunStep), '' when no run
+      FStepTimer      : TTimer;             // C16: re-renders the progress line once a second while a run is in progress
+      FLastStep       : TRunStep;           // C16: the step the worker reported last
+      FStepWatch      : TStopwatch;         // C16: started when FLastStep arrived
+      FHasStep        : Boolean;            // C16: FLastStep is from the current run
       FResults        : TListView;
       function NewButton(AParent: TWinControl; const ACaption: string; AAlign: TAlign; AOnClick: TNotifyEvent): TButton;
       procedure BuildBooks;
@@ -178,6 +184,15 @@ type
       /// <param name="ARow">The row, copied into the queued call.</param>
       /// <param name="ADone">Rows so far; becomes the progress position.</param>
       procedure QueueRow(const ARow: TConvertRow; ADone: Integer);
+      /// <summary>Worker thread: hands one run step to the UI thread (C16).</summary>
+      /// <param name="AStep">The step, copied into the queued call.</param>
+      procedure QueueStep(const AStep: TRunStep);
+      /// <summary>UI thread: writes the progress line for FLastStep, advanced by the time
+      /// since it arrived, to the tab's line and the status line.</summary>
+      procedure RenderStep;
+      /// <summary>FStepTimer.OnTimer: RenderStep while a step is known.</summary>
+      /// <param name="Sender">FStepTimer.</param>
+      procedure StepTimerTick(Sender: TObject);
       /// <summary>UI thread, after the worker ends: report file, re-harvest,
       /// summary status.</summary>
       /// <param name="AJob">The job that ran (books x units, for the totals).</param>
@@ -327,9 +342,7 @@ const
   CAP_CANCELLING  = 'Cancelling after this unit...';
   STATUS_NOT_REACHED = 'not reached (cancelled)'; // a unit a cancel kept from running
   CAPABILITY_UNIT_RULES = 'apply_unit_rules';
-  // The project index without its project file: the run refuses, the stale retry skips its reindex.
-  NO_PROJECT_FILE_FMT   = 'the project index %s has no project file on disk -- expected %s';
-  NO_PROJECT_FILE_GUESS = '<Project>.dproj beside its _D-RAG folder (the DB is not in one)';
+  STEP_TICK_MS    = 1000; // the progress line's clock refresh while one phase runs (C16)
   PAIRS_KEY_NONE        = '|none|'; // FPairsKey after a pass that did not complete: never equals a real key
   INHERIT_FAIL_FMT      = '%s Inherited instances could not be checked for every unit -- %s';
 
@@ -483,6 +496,19 @@ begin
   FProgress.Parent          := LRow;
   FProgress.Align           := alClient;
   FProgress.AlignWithMargins:= True;
+
+  // C16: the step line under the buttons (a TLabel: the GUI driver reads the status bar).
+  FLblRunStep:= TLabel.Create(Self);
+  FLblRunStep.Parent          := FBottomPanel;
+  FLblRunStep.Name            := 'LblRunStep';
+  FLblRunStep.Align           := alTop;
+  FLblRunStep.Top             := LRow.Top + LRow.Height; // below the button row
+  FLblRunStep.AlignWithMargins:= True;
+  FLblRunStep.Caption         := '';
+  FStepTimer:= TTimer.Create(Self);
+  FStepTimer.Enabled := False;
+  FStepTimer.Interval:= STEP_TICK_MS;
+  FStepTimer.OnTimer := StepTimerTick;
 
   FResults:= TListView.Create(Self);
   FResults.Parent          := FBottomPanel;
@@ -854,7 +880,7 @@ begin
             if LCancelled() then
               AError:= ANALYSIS_CANCELLED
             else if (LProject = '') or not TFile.Exists(LProject) then
-              AError:= Format(NO_PROJECT_FILE_FMT, [LDb, if LProject = '' then NO_PROJECT_FILE_GUESS else LProject])
+              AError:= NoProjectFileText(LDb, LProject)
             else
             begin
               // The editor's OWN project (ProjectFileForDb), as the runner reindexes it.
@@ -1152,9 +1178,41 @@ begin
     end);
 end;
 
+procedure TConvertTab.QueueStep(const AStep: TRunStep);
+var
+  LStep: TRunStep;
+begin
+  LStep:= AStep;
+  TThread.Queue(nil,
+    procedure
+    begin
+      FLastStep := LStep;
+      FStepWatch:= TStopwatch.StartNew;
+      FHasStep  := True;
+      RenderStep;
+    end);
+end;
+
+procedure TConvertTab.RenderStep;
+begin
+  var LText: string:= RunStepText(AdvanceStep(FLastStep, FStepWatch.ElapsedMilliseconds));
+  FLblRunStep.Caption:= LText;
+  FHost.SetStatus(LText, False);
+end;
+
+procedure TConvertTab.StepTimerTick(Sender: TObject);
+begin
+  if FRunning and FHasStep then
+    RenderStep;
+end;
+
 procedure TConvertTab.SetRunning(ARunning: Boolean);
 begin
   FRunning:= ARunning;
+  // C16: a new run starts without a step; the line is cleared when the run ends.
+  FHasStep:= False;
+  FLblRunStep.Caption:= '';
+  FStepTimer.Enabled := ARunning;
   for var LCtl: TControl in FLockable do
     LCtl.Enabled:= not ARunning;
   FBtnClearScope.Enabled:= (not ARunning) and (FScope.Kind <> skWholeUnit); // lockable, but only with a scope
@@ -1288,7 +1346,7 @@ begin
   // checks: a refused run must not first ask its questions (or pay its analysis).
   if (Job.ProjectFile = '') or not TFile.Exists(Job.ProjectFile) then
   begin
-    FHost.SetStatus('Convert refused: ' + Format(NO_PROJECT_FILE_FMT, [Job.ProjectDb, if Job.ProjectFile = '' then NO_PROJECT_FILE_GUESS else Job.ProjectFile]) + '.', True);
+    FHost.SetStatus('Convert refused: ' + NoProjectFileText(Job.ProjectDb, Job.ProjectFile) + '.', True);
     Exit;
   end;
   // C8: re-check, gate, refusal notes and the E7 order warning (after Preflight).
@@ -1325,7 +1383,10 @@ begin
       LPolls  : Integer;
       LStopAt : Integer;
       LFinal  : string;
+      LWatch  : TStopwatch;
+      LStep   : TRunStep;
     begin
+      LWatch  := TStopwatch.StartNew;
       LProblem:= '';
       LPolls  := 0;
       LStopAt := -1;
@@ -1350,7 +1411,18 @@ begin
               if Result and (LStopAt < 0) then
                 LStopAt:= LPolls;
               Inc(LPolls);
+            end,
+            procedure(const AStep: TRunStep)
+            begin
+              QueueStep(AStep);
             end);
+          // C16: the closing refresh is a step too (the runner never emits it).
+          LStep:= Default(TRunStep);
+          LStep.Phase         := rpFinalReindex;
+          LStep.UnitCount     := Length(Job.Units);
+          LStep.BookCount     := Length(Job.Books);
+          LStep.TotalElapsedMs:= LWatch.ElapsedMilliseconds;
+          QueueStep(LStep);
           // Final refresh: restored units are back to their old text.
           if LEng.IndexProject(Job.ProjectFile, Job.ProjectDb, LOut) = 0 then
             LFinal:= 'ok'

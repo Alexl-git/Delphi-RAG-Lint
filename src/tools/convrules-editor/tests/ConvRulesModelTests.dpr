@@ -1739,7 +1739,7 @@ begin
     Job:= Default(TConvertJob);
     Job.Books:= [];            // no book survives validation -> nothing may run
     Job.Units:= ['C:\nowhere\Gone.pas'];  // dl:ok hardcoded-absolute-path@1575 -- REVIEWED 2026-09-29 deliberately non-existent unit (missing-unit row)
-    Rows:= RunConversion(Job, Eng, nil, nil);
+    Rows:= RunConversion(Job, Eng, nil, nil, nil);
     Check('runner.no.books.nothing.runs', Length(Rows) = 0, IntToStr(Length(Rows)));
 
     Calls:= 0;
@@ -2134,6 +2134,245 @@ begin
     '  Application.Run;' + sLineBreak + 'end.' + sLineBreak, TEncoding.ASCII);
 end;
 
+// C16 test helper: 'u<k>/<N>[ b<j>/<M>] <phase>;' for one runner step.
+function RunStepCode(const AStep: TRunStep): string;
+const
+  CODES: array[TRunPhase] of string = ('rb', 'bk', 'ap', 'ra', 'rs', 'fr');
+begin
+  Result:= Format('u%d/%d', [AStep.UnitNo, AStep.UnitCount]);
+  if AStep.BookNo > 0 then
+    Result:= Result + Format(' b%d/%d', [AStep.BookNo, AStep.BookCount]);
+  Result:= Result + ' ' + CODES[AStep.Phase] + ';';
+end;
+
+// C16 test helper: a path's file name without extension.
+function FileStem(const APath: string): string;
+begin
+  Result:= ChangeFileExt(ExtractFileName(APath), '');
+end;
+
+{ C16: the runner's step callback, with the engine calls faked. Pins the exact
+  phase order (2 units x 2 books), a failure plus restore, a failed reindex after
+  apply, a refusal that restores nothing, and a cancel; that each unit's rows reach
+  AProgress before the next unit's first step; and the elapsed fields' invariants. }
+procedure TestRunSteps;
+const
+  OK_JSON   = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":1,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
+  FAIL_JSON = '{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[],"edits_count":0}';
+  REFUSED_JSON = '{"schema":"apply/1","ok":false,"refused":true,"reason":"no","rule_errors":[],"edits_count":0}';
+  ORIG      = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
+var
+  Dir, P1, P2, Log: string;
+  Steps    : TArray<TRunStep>;
+  OkIndex  : TIndexFn;
+  OnStep   : TRunStepFn;
+  OnRow    : TConvertProgress;
+  ApplyOk  : TApplyFn;
+  Polls    : Integer;
+
+
+  function Fresh(const AName: string): string;
+  begin
+    Result:= TPath.Combine(Dir, AName);
+    TFile.WriteAllText(Result, ORIG, TEncoding.ASCII);
+  end;
+
+  // Elapsed invariants over Steps: 0 <= unit <= total, total never decreases.
+  function ElapsedSane: Boolean;
+  var
+    LLast: Int64;
+  begin
+    Result:= True;
+    LLast := 0;
+    for var LStep: TRunStep in Steps do
+    begin
+      if (LStep.UnitElapsedMs < 0) or (LStep.UnitElapsedMs > LStep.TotalElapsedMs) or (LStep.TotalElapsedMs < LLast) then
+        Exit(False);
+      LLast:= LStep.TotalElapsedMs;
+    end;
+  end;
+
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-steps-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    OkIndex:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result := 0;
+      end;
+    OnStep:= procedure(const AStep: TRunStep)
+      begin
+        Steps:= Steps + [AStep];
+        Log  := Log + RunStepCode(AStep);
+      end;
+    OnRow:= procedure(const ARow: TConvertRow; ADone, ATotal: Integer)
+      begin
+        Log:= Log + 'row:' + FileStem(ARow.UnitPas) + '/' + FileStem(ARow.Book) + ';';
+      end;
+    ApplyOk:= function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson := OK_JSON;
+        Result:= 0;
+      end;
+
+    // --- 2 units x 2 books, all succeed: the exact order; rows per unit, before the next unit ---
+    P1:= Fresh('S1.pas');
+    P2:= Fresh('S2.pas');
+    Log:= '';
+    Steps:= nil;
+    RunConversionUnitsStepped([P1, P2], ['A.rules', 'B.rules'], ApplyOk, OkIndex, OnRow, nil, OnStep);
+    Check('steps.order.2x2', Log = 'u1/2 rb;u1/2 bk;u1/2 b1/2 ap;u1/2 b1/2 ra;u1/2 b2/2 ap;u1/2 b2/2 ra;row:S1/A;row:S1/B;'
+      + 'u2/2 rb;u2/2 bk;u2/2 b1/2 ap;u2/2 b1/2 ra;u2/2 b2/2 ap;u2/2 b2/2 ra;row:S2/A;row:S2/B;', Log);
+    Check('steps.names', (Length(Steps) > 2) and (Steps[0].UnitPas = P1) and (Steps[0].Book = '') and (Steps[2].Book = 'A.rules')
+      and (Steps[High(Steps)].UnitPas = P2) and (Steps[High(Steps)].Book = 'B.rules'), IntToStr(Length(Steps)));
+    Check('steps.elapsed.sane', ElapsedSane, IntToStr(Length(Steps)));
+
+    // --- a later book fails: its apply is followed by the restore ---
+    Log:= '';
+    Steps:= nil;
+    RunConversionUnitsStepped([Fresh('S3.pas')], ['A.rules', 'B.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson := if SameText(ARulesFile, 'A.rules') then OK_JSON else FAIL_JSON;
+        Result:= if SameText(ARulesFile, 'A.rules') then 0 else 1;
+      end, OkIndex, OnRow, nil, OnStep);
+    Check('steps.failure.restore', Log = 'u1/1 rb;u1/1 bk;u1/1 b1/2 ap;u1/1 b1/2 ra;u1/1 b2/2 ap;u1/1 b2/2 rs;row:S3/A;row:S3/B;', Log);
+
+    // --- the reindex after an apply fails: restore after it ---
+    Log:= '';
+    var LIndexCalls: Integer:= 0;
+    RunConversionUnitsStepped([Fresh('S4.pas')], ['A.rules'], ApplyOk,
+      function(out AOutput: string): Integer
+      begin
+        Inc(LIndexCalls);
+        AOutput:= 'idx failed';
+        Result := if LIndexCalls = 1 then 0 else 1;
+      end, OnRow, nil, OnStep);
+    Check('steps.reindex.after.fails.restore', Log = 'u1/1 rb;u1/1 bk;u1/1 b1/1 ap;u1/1 b1/1 ra;u1/1 b1/1 rs;row:S4/A;', Log);
+
+    // --- a refusal on a unit nothing changed: no restore step (nothing is restored) ---
+    Log:= '';
+    RunConversionUnitsStepped([Fresh('S5.pas')], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        AJson := REFUSED_JSON;
+        Result:= 1;
+      end, OkIndex, OnRow, nil, OnStep);
+    Check('steps.refused.no.restore', Log = 'u1/1 rb;u1/1 bk;u1/1 b1/1 ap;row:S5/A;', Log);
+
+    // --- cancel before the second unit: no step for it ---
+    Log  := '';
+    Polls:= 0;
+    RunConversionUnitsStepped([Fresh('S6.pas'), Fresh('S7.pas')], ['A.rules'], ApplyOk, OkIndex, OnRow,
+      function: Boolean
+      begin
+        Inc(Polls);
+        Result:= Polls > 1;
+      end, OnStep);
+    Check('steps.cancel', Log = 'u1/2 rb;u1/2 bk;u1/2 b1/1 ap;u1/2 b1/1 ra;row:S6/A;', Log);
+
+    // --- nil step callback: the run is unchanged ---
+    var LRows: TArray<TConvertRow>:= RunConversionUnitsStepped([Fresh('S8.pas')], ['A.rules'], ApplyOk, OkIndex, nil, nil, nil);
+    Check('steps.nil.callback', (Length(LRows) = 1) and (LRows[0].Status = csConverted), IntToStr(Length(LRows)));
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+end; // procedure
+
+{ C16: the progress line's text. }
+procedure TestRunStepText;
+const
+  MS_42S     = 42000;
+  MS_3M10S   = 190000;
+  MS_3S      = 3000;
+  MS_5S      = 5000;
+  MS_59999   = 59999;
+  MS_1H2M3S  = 3723000;
+var
+  S: TRunStep;
+begin
+  Check('elapsed.zero', FormatElapsed(0) = '0:00', FormatElapsed(0));
+  Check('elapsed.59s', FormatElapsed(MS_59999) = '0:59', FormatElapsed(MS_59999));
+  Check('elapsed.negative', FormatElapsed(-1) = '0:00', FormatElapsed(-1));
+  Check('elapsed.hours', FormatElapsed(MS_1H2M3S) = '1:02:03', FormatElapsed(MS_1H2M3S));
+  S:= Default(TRunStep);
+  S.Phase:= rpApply;
+  S.UnitNo:= 2;
+  S.UnitCount:= 5;
+  S.UnitPas:= 'C:\x\SystemData2.pas';  // dl:ok hardcoded-absolute-path -- REVIEWED 2026-10-10 text only: no file is touched
+  S.BookNo:= 1;
+  S.BookCount:= 2;
+  S.Book:= 'C:\r\BDE-to-FireDAC.rules';  // dl:ok hardcoded-absolute-path -- REVIEWED 2026-10-10 text only: no file is touched
+  S.UnitElapsedMs:= MS_42S;
+  S.TotalElapsedMs:= MS_3M10S;
+  Check('steptext.apply', RunStepText(S) = 'Unit 2 of 5: SystemData2 -- book 1 of 2 BDE-to-FireDAC: applying (0:42, total 3:10)', RunStepText(S));
+  Check('steptext.advance', RunStepText(AdvanceStep(S, MS_5S)) = 'Unit 2 of 5: SystemData2 -- book 1 of 2 BDE-to-FireDAC: applying (0:47, total 3:15)', RunStepText(AdvanceStep(S, MS_5S)));
+  S.Phase:= rpReindexAfter;
+  Check('steptext.reindex.after', RunStepText(S) = 'Unit 2 of 5: SystemData2 -- book 1 of 2 BDE-to-FireDAC: reindexing after apply (0:42, total 3:10)', RunStepText(S));
+  S.Phase:= rpRestore;
+  Check('steptext.restore', RunStepText(S) = 'Unit 2 of 5: SystemData2 -- book 1 of 2 BDE-to-FireDAC: restoring from backup (0:42, total 3:10)', RunStepText(S));
+  S.Phase:= rpReindexBefore;
+  S.BookNo:= 0;
+  S.Book:= '';
+  S.UnitElapsedMs:= MS_3S;
+  Check('steptext.reindex.before', RunStepText(S) = 'Unit 2 of 5: SystemData2: reindexing before apply (0:03, total 3:10)', RunStepText(S));
+  S.Phase:= rpBackup;
+  Check('steptext.backup', RunStepText(S) = 'Unit 2 of 5: SystemData2: backing up (0:03, total 3:10)', RunStepText(S));
+  S:= Default(TRunStep);
+  S.Phase:= rpFinalReindex;
+  S.TotalElapsedMs:= MS_1H2M3S;
+  Check('steptext.final', RunStepText(S) = 'Final reindex (total 1:02:03)', RunStepText(S));
+end; // procedure
+
+{ C17: Conversion > Reindex project -- the summary-line parser, the refusal and
+  the outcome text. }
+procedure TestReindexProject;
+const
+  SECTION_LINE = '=== Fix -> C:\x\_D-RAG\Fix.sqlite : files=40 symbols=5937 refs=37493 walked=38 attempted=2 up-to-date=36 [1.2s, n/a] ===';
+  DIRECT_OUT   = 'Database: C:\x\_D-RAG\Fix.sqlite' + sLineBreak + 'Compile closure: 3 file(s):' + sLineBreak + '  C:\x\A.pas' + sLineBreak
+    + 'Done. Files: 4, Symbols: 10, Refs: 20, skipped 3 up-to-date, 0.14s' + sLineBreak;
+  DONE_ONLY    = 'Done. Files: 4, Symbols: 10, Refs: 20, 0.14s';
+  DB           = 'C:\p\_D-RAG\P.sqlite';  // dl:ok hardcoded-absolute-path -- REVIEWED 2026-10-10 text only: no file is touched
+  PROJ         = 'C:\p\P.dproj';           // dl:ok hardcoded-absolute-path -- REVIEWED 2026-10-10 text only: no file is touched
+  MS_3S        = 3000;
+  FILES_40     = 40;
+  WALKED_38    = 38;
+  FILES_4      = 4;
+  WALKED_3     = 3;
+var
+  Files, Walked: Integer;
+  IsErr        : Boolean;
+  Text         : string;
+begin
+  Check('reindex.parse.section', ParseIndexSummary('noise' + sLineBreak + SECTION_LINE + sLineBreak, Files, Walked)
+    and (Files = FILES_40) and (Walked = WALKED_38), Format('%d/%d', [Files, Walked]));
+  Check('reindex.parse.direct', ParseIndexSummary(DIRECT_OUT, Files, Walked) and (Files = FILES_4) and (Walked = WALKED_3), Format('%d/%d', [Files, Walked]));
+  Check('reindex.parse.done.only', ParseIndexSummary(DONE_ONLY, Files, Walked) and (Files = FILES_4) and (Walked = -1), Format('%d/%d', [Files, Walked]));
+  Check('reindex.parse.none', not ParseIndexSummary('FATAL: cannot open', Files, Walked) and (Files = -1) and (Walked = -1), Format('%d/%d', [Files, Walked]));
+
+  Check('reindex.refuse.running', ReindexRefusal(True, DB, PROJ, True) = 'Reindex refused: a conversion is running -- reindex after it finishes.', ReindexRefusal(True, DB, PROJ, True));
+  Check('reindex.refuse.missing', ReindexRefusal(False, DB, PROJ, False)
+    = 'Reindex refused: the project index C:\p\_D-RAG\P.sqlite has no project file on disk -- expected C:\p\P.dproj.', ReindexRefusal(False, DB, PROJ, False));
+  // The SAME text the Convert tab refuses with (NoProjectFileText).
+  Check('reindex.refuse.same.as.convert', ReindexRefusal(False, DB, '', False) = 'Reindex refused: ' + NoProjectFileText(DB, '') + '.', ReindexRefusal(False, DB, '', False));
+  Check('reindex.refuse.no.file.guess', Pos('<Project>.dproj beside its _D-RAG folder', NoProjectFileText(DB, '')) > 0, NoProjectFileText(DB, ''));
+  Check('reindex.refuse.none', ReindexRefusal(False, DB, PROJ, True) = '', ReindexRefusal(False, DB, PROJ, True));
+
+  Text:= ReindexOutcomeText(0, DIRECT_OUT, PROJ, MS_3S, IsErr);
+  Check('reindex.outcome.ok', (Text = 'Reindexed P.dproj: files=4 walked=3 (0:03)') and not IsErr, Text);
+  Text:= ReindexOutcomeText(0, DONE_ONLY, PROJ, MS_3S, IsErr);
+  Check('reindex.outcome.ok.no.walked', (Text = 'Reindexed P.dproj: files=4 walked=? (0:03)') and not IsErr, Text);
+  Text:= ReindexOutcomeText(0, 'nothing useful', PROJ, MS_3S, IsErr);
+  Check('reindex.outcome.ok.no.summary', (Text = 'Reindexed P.dproj (0:03); the engine printed no summary line.') and not IsErr, Text);
+  Text:= ReindexOutcomeText(1, 'ERROR: cannot open db' + sLineBreak + 'more', PROJ, MS_3S, IsErr);
+  Check('reindex.outcome.failed', (Text = 'Reindex of P.dproj failed (exit 1): ERROR: cannot open db more') and IsErr, Text);
+  Text:= ReindexOutcomeText(ENGINE_OUTCOME_CANCELLED, '', PROJ, MS_3S, IsErr);
+  Check('reindex.outcome.cancelled', (Text = 'Reindex of P.dproj cancelled after 0:03 -- the index may be partly refreshed; run it again.') and not IsErr, Text);
+  Text:= ReindexOutcomeText(ENGINE_OUTCOME_TIMEOUT, '', PROJ, MS_3S, IsErr);
+  Check('reindex.outcome.timeout', (Text = 'Reindex of P.dproj failed: the engine did not finish in time (0:03).') and IsErr, Text);
+end; // procedure
+
 { The real engine on a 3-file fixture (one TLabel, a one-#convert book) -- the
   shape measured converting on 2026-09-29 (dry run 106 s; the bad book 93 s).
   Two jobs, one apply each -- the slowest test in the runner:
@@ -2192,13 +2431,13 @@ begin
 
       var LBefore: string:= TFile.ReadAllText(Pas);
       Job.Books:= [Bad];
-      Rows:= RunConversion(Job, Eng, nil, nil);
+      Rows:= RunConversion(Job, Eng, nil, nil, nil);
       Check('runner.invalid.book.skipped', (Length(Rows) = 1) and (Rows[0].Status = csBookSkipped) and SameText(Rows[0].Book, Bad), Format('%d rows', [Length(Rows)]));
       Check('runner.invalid.book.unit.untouched', TFile.ReadAllText(Pas) = LBefore);
       Check('runner.invalid.book.no.backup', not TFile.Exists(Pas + '.BCK1') and not TFile.Exists(Dfm + '.BCK1'));
 
       Job.Books:= [Book];
-      Rows:= RunConversion(Job, Eng, nil, nil);
+      Rows:= RunConversion(Job, Eng, nil, nil, nil);
       Check('runner.live.converted', (Length(Rows) = 1) and (Rows[0].Status = csConverted), Format('%d rows', [Length(Rows)]));
       Check('runner.live.pas.changed', Pos('TStaticText', TFile.ReadAllText(Pas)) > 0);
       Check('runner.live.bck1', TFile.Exists(Pas + '.BCK1') and (Pos('TLabel', TFile.ReadAllText(Pas + '.BCK1')) > 0));
@@ -9573,7 +9812,7 @@ begin
       Job.ProjectFile       := Dpr;
       Job.InheritedSupported:= True;
       Job.RetypeSupported   := Eng.HasCapability(CAPABILITY_INHERITED_RETYPE);
-      Rows:= RunConversion(Job, Eng, nil, nil);
+      Rows:= RunConversion(Job, Eng, nil, nil, nil);
       Check('inherited.live.both.converted', (Length(Rows) = 2) and (Rows[0].Status = csConverted) and (Rows[1].Status = csConverted), Format('%d rows', [Length(Rows)]));
       Check('inherited.live.ancestor.retyped', Pos('object Label1: TStaticText', TFile.ReadAllText(ChangeFileExt(AncPas, '.dfm'))) > 0,
         TFile.ReadAllText(ChangeFileExt(AncPas, '.dfm')));
@@ -12155,6 +12394,9 @@ begin
     TestConvertSourceRow;
     TestConvertRunner;
     TestConvertRunnerFaults;
+    TestRunSteps;
+    TestRunStepText;
+    TestReindexProject;
     TestConvertRunnerLive;
     TestInheritanceScan;
     TestInheritancePairs;
