@@ -19,7 +19,7 @@ unit DRagLint.Charts.Render;
 interface
 
 uses
-  DRagLint.Charts.Adapters, DRagLint.Charts.Compare;
+  DRagLint.Charts.Adapters, DRagLint.Charts.Compare; // dl:unit DRagLint.Charts.Compare accepted -- the COMPARE_EXIT_* codes travel with the TCompareResult they classify
 
 /// <summary>The terminal text of a compare (spec O1).</summary>
 /// <param name="pR">The result of RunCompare.</param>
@@ -88,7 +88,7 @@ uses
   Winapi.Windows, Winapi.ShellAPI, System.SysUtils, System.Classes, System.IOUtils,
   System.JSON, System.RegularExpressions, System.Generics.Collections,
   System.Generics.Defaults, System.Character,
-  DRagLint.Charts.Diff, DRagLint.Charts.ReportHeader, DRagLint.Charts.Adapter.Graph,
+  DRagLint.Charts.Diff, DRagLint.Charts.ReportHeader, DRagLint.Charts.Adapter.Graph, // dl:unit DRagLint.Charts.Diff accepted -- DIFF_NO_INDEX is the diff core's own no-counterpart sentinel
   DRagLint.Charts.Adapter.Text;
 
 const

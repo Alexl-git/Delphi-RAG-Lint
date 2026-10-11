@@ -84,19 +84,6 @@ type
 /// leaves Command empty and is not counted in HeaderLines. Pure; thread-safe.</remarks>
 function ParseReportHeader(const pLines: TArray<string>; out pHeader: TReportHeader): Boolean;
 
-/// <summary>Builds the header sentence of the contract.</summary>
-/// <param name="pPhrase">Caption without its trailing '...'.</param>
-/// <param name="pQuestionId">Question id, e.g. 'who-writes'.</param>
-/// <param name="pTarget">Target; 'A -> B' for path.</param>
-/// <param name="pAskedAt">When the question was asked (local time).</param>
-/// <param name="pEngineVersion">Engine version; '' omits the ', engine v' clause.</param>
-/// <returns>'&lt;Phrase&gt; (drag-lint report &lt;id&gt;) for &lt;target&gt;, asked on
-/// yyyy-MM-dd HH:mm, engine &lt;v&gt;.' -- unwrapped.</returns>
-/// <remarks>The timestamp is locale-independent: '-' and ':' separators and a 24-hour
-/// clock whatever the user's regional settings.</remarks>
-function FormatHeaderSentence(const pPhrase, pQuestionId, pTarget: string; pAskedAt: TDateTime;
-  const pEngineVersion: string): string;
-
 /// <summary>Parses a COMMAND line.</summary>
 /// <param name="pText">The line, with or without the 'COMMAND ' prefix (ordinal).</param>
 /// <param name="pCmd">The command; empty when the result is False.</param>
@@ -169,8 +156,6 @@ const
   GROUP_TARGET = 3;
   GROUP_ASKED = 4;
   GROUP_ENGINE = 5;
-  /// Quoted separators keep the stamp locale-proof; 'hh' is 24-hour without an AM/PM spec.
-  ASKED_FORMAT = 'yyyy"-"mm"-"dd hh":"nn';
   /// Canonical order and spelling of the COMMAND arguments (header contract).
   KNOWN_NAMES: array[0..9] of string = ('Target', 'To', 'Project', 'In', 'Depth', 'Cap',
     'SurfaceCap', 'Control', 'Mode', 'MaxRows');
@@ -366,16 +351,6 @@ begin
   finally
     SB.Free;
   end;
-end;
-
-function FormatHeaderSentence(const pPhrase, pQuestionId, pTarget: string; pAskedAt: TDateTime;
-  const pEngineVersion: string): string;
-begin
-  var Asked:= FormatDateTime(ASKED_FORMAT, pAskedAt, TFormatSettings.Invariant);
-  Result:= pPhrase + ' (drag-lint report ' + pQuestionId + ') for ' + pTarget + ', asked on ' + Asked;
-  if pEngineVersion <> '' then
-    Result:= Result + ', engine ' + pEngineVersion;
-  Result:= Result + '.';
 end;
 
 function ParseCommandLine(const pText: string; out pCmd: TReportCommand): Boolean;

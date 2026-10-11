@@ -360,9 +360,12 @@ procedure TAdapterTextTests.FormIsDetected;
 var
   Form: TReportForm;
 begin
-  Assert.AreEqual(Ord(rfDocInsight), Ord(DetectReportForm(BOM + CRLF + '  /// <remarks>' + CRLF)));
-  Assert.AreEqual(Ord(rfPlain), Ord(DetectReportForm('BUNDLE x' + CRLF + '/// y')));
-  Assert.AreEqual(Ord(rfPlain), Ord(DetectReportForm('')));
+  ReportLogicalLines(BOM + CRLF + '  /// <remarks>' + CRLF, Form);
+  Assert.AreEqual(Ord(rfDocInsight), Ord(Form), 'BOM and leading blank line skipped');
+  ReportLogicalLines('BUNDLE x' + CRLF + '/// y', Form);
+  Assert.AreEqual(Ord(rfPlain), Ord(Form), 'first non-blank line decides');
+  ReportLogicalLines('', Form);
+  Assert.AreEqual(Ord(rfPlain), Ord(Form), 'empty text is plain');
   var L:= ReportLogicalLines(Fixture('who-writes.doc.txt'), Form);
   Assert.AreEqual(Ord(rfDocInsight), Ord(Form));
   Assert.AreEqual('Totals: 26 write sites / 26 routines.', L[0], 'header and remarks are not logical lines');

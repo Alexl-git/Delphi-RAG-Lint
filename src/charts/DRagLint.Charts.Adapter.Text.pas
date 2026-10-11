@@ -22,18 +22,13 @@ interface
 uses
   DRagLint.Charts.Diff, DRagLint.Charts.ReportHeader;
 
-/// <summary>Tells a DocInsight report from a plain one.</summary>
-/// <param name="pText">The whole report; CRLF, LF or CR line ends; a leading UTF-8 BOM
-/// (U+FEFF) is ignored.</param>
-/// <returns>rfDocInsight when the first non-blank line is a '///' comment (leading
-/// whitespace allowed); rfPlain otherwise, an empty text included.</returns>
-function DetectReportForm(const pText: string): TReportForm;
-
 /// <summary>The report's logical lines: what a reader would call one line of the
 /// answer, in the DocInsight rendering.</summary>
 /// <param name="pText">The whole report; CRLF, LF or CR line ends; a leading BOM is
 /// ignored; trailing whitespace on any line is ignored.</param>
-/// <param name="pForm">Receives DetectReportForm(pText).</param>
+/// <param name="pForm">Receives rfDocInsight when the first non-blank line is a '///'
+/// comment (leading whitespace allowed; a leading UTF-8 BOM, U+FEFF, is ignored); rfPlain
+/// otherwise, an empty text included.</param>
 /// <returns>One string per logical line, trimmed, in order. Never included: the header
 /// sentence and COMMAND line ParseReportHeader consumes, the '&lt;remarks&gt;' and
 /// '&lt;/remarks&gt;' lines, blank lines, and the plain lines the formatter drops.</returns>
@@ -80,7 +75,7 @@ implementation
 
 uses
   System.SysUtils, System.StrUtils, System.Generics.Collections, System.RegularExpressions,
-  DRagLint.Charts.DocInsight;
+  DRagLint.Charts.DocInsight; // dl:unit DRagLint.Charts.DocInsight accepted -- DOCINSIGHT_MAX_LINE is the width the formatter wrapped with, so rejoining wrapped lines cannot drift from it
 
 const
   CRLF = #13#10;
@@ -279,11 +274,6 @@ begin
   finally
     List.Free;
   end;
-end;
-
-function DetectReportForm(const pText: string): TReportForm;
-begin
-  Result:= DetectFormOf(SplitPhysical(pText));
 end;
 
 function ReportLogicalLines(const pText: string; out pForm: TReportForm): TArray<string>;

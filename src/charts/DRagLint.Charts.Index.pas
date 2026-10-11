@@ -98,7 +98,7 @@ type
   end;
 
   /// <summary>A refused index question; the message is the PS `throw` text, verbatim.</summary>
-  EChartsIndex = class(Exception); // dl:ok type-name-prefix@4903 -- Delphi exception classes take the E prefix (RTL convention, EChartsIndex as the task interface names it)
+  EChartsIndex = class(Exception);
 
   /// <summary>Read-only, in-process access to one drag-lint index for the chart emitters.</summary>
   /// <remarks>Owns a TSQLiteSymbolStore opened read-only and runs SQL on its FireDAC

@@ -410,16 +410,16 @@ end;
 procedure TRemarksSnapshotTests.LatestAutoPicksNewestStamp;
 begin
   var Auto:= TPath.Combine(FTemp, 'auto');
-  Assert.AreEqual('', LatestAutoSnapshot(Auto, 'who-writes', 'OPERAT.NAME'), 'no folder, none');
+  Assert.AreEqual('', LatestAutoSnapshotAnyFormat(Auto, 'who-writes', 'OPERAT.NAME'), 'no folder, none');
   ForceDirectories(Auto);
-  Assert.AreEqual('', LatestAutoSnapshot(Auto, 'who-writes', 'OPERAT.NAME'), 'empty folder, none');
+  Assert.AreEqual('', LatestAutoSnapshotAnyFormat(Auto, 'who-writes', 'OPERAT.NAME'), 'empty folder, none');
   var Base:= ISO8601ToDate(BASE_STAMP);
   // Written newest-first, so file time order is the opposite of stamp order.
   var Newest:= TPath.Combine(Auto, SnapshotFileName('who-writes', 'OPERAT.NAME', Base + NEWER / DAY_MINUTES));
   TFile.WriteAllText(Newest, 'x');
   TFile.WriteAllText(TPath.Combine(Auto, SnapshotFileName('who-writes', 'OPERAT.NAME', Base)), 'x');
   TFile.WriteAllText(TPath.Combine(Auto, SnapshotFileName('who-writes', 'OTHER', Base + OTHER_TARGET_NEWEST / DAY_MINUTES)), 'x');
-  Assert.AreEqual(Newest, LatestAutoSnapshot(Auto, 'who-writes', 'OPERAT.NAME'));
+  Assert.AreEqual(Newest, LatestAutoSnapshotAnyFormat(Auto, 'who-writes', 'OPERAT.NAME'));
 end;
 
 initialization

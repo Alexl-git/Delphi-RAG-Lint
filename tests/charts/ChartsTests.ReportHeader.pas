@@ -26,14 +26,13 @@ type
     [Test] procedure SameQuestionIgnoresOrderQuotingAndCase;
     [Test] procedure SameQuestionNamesEachDifference;
     [Test] procedure DifferentQuestionIdIsNotSame;
-    [Test] procedure FormatSentenceMatchesContract;
     [Test] procedure XmlUnescapeHandlesEntities;
   end;
 
 implementation
 
 uses
-  System.SysUtils, System.DateUtils, DRagLint.Charts.ReportHeader;
+  System.SysUtils, DRagLint.Charts.ReportHeader;
 
 const
   CRLF = #13#10;
@@ -59,12 +58,6 @@ const
   WRAPPED_SENTENCE_HEADER_LINES = 3;
   WRAPPED_COMMAND_HEADER_LINES = 4;
   NOT_A_REPORT = 'unit Foo;' + CRLF + CRLF + 'interface' + CRLF;
-
-  ASKED_YEAR = 2026;
-  ASKED_MONTH = 10;
-  ASKED_DAY = 10;
-  ASKED_HOUR = 14;
-  ASKED_MINUTE = 32;
 
 function Lines(const pText: string): TArray<string>;
 begin
@@ -167,12 +160,6 @@ procedure TReportHeaderTests.DifferentQuestionIdIsNotSame;
 begin
   var Differing: TArray<string>;
   Assert.IsFalse(SameQuestion(Cmd('who-writes -Target "a"'), Cmd('who-reads -Target "a"'), Differing));
-end;
-
-procedure TReportHeaderTests.FormatSentenceMatchesContract;
-begin
-  var AskedAt:= EncodeDateTime(ASKED_YEAR, ASKED_MONTH, ASKED_DAY, ASKED_HOUR, ASKED_MINUTE, 0, 0);
-  Assert.AreEqual(PLAIN_SENTENCE, FormatHeaderSentence('Who writes this field', 'who-writes', 'OPERAT.NAME', AskedAt, '1.27.0'));
 end;
 
 procedure TReportHeaderTests.XmlUnescapeHandlesEntities;

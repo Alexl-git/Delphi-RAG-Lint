@@ -12,7 +12,7 @@ interface
 
 uses
   DRagLint.Charts.Diff, DRagLint.Charts.ReportHeader, DRagLint.Charts.Adapters,
-  DRagLint.Charts.Adapter.Graph, DRagLint.Charts.Producer;
+  DRagLint.Charts.Adapter.Graph, DRagLint.Charts.Producer; // dl:unit DRagLint.Charts.Producer accepted -- PRODUCER_EXIT_STALE travels with the producer seam that returns it; compare maps it to its own stale exit
 
 const
   /// <summary>The C2 warning: the old report carries no COMMAND line.</summary>
@@ -154,8 +154,8 @@ implementation
 
 uses
   System.SysUtils, System.IOUtils, System.DateUtils,
-  DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness,
-  DRagLint.Charts.Remarks, DRagLint.Charts.Snapshot, DRagLint.Charts.DocInsight;
+  DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness, // dl:unit DRagLint.Index.Freshness accepted -- INDEXED_AT_KEY names the meta row the freshness module writes, so the --old-db age check reads the same key
+  DRagLint.Charts.Remarks, DRagLint.Charts.Snapshot, DRagLint.Charts.DocInsight; // dl:unit DRagLint.Charts.Snapshot, DRagLint.Charts.DocInsight accepted -- the three snapshot extensions name the formats Snapshot writes; DOCINSIGHT_UNKNOWN_PHRASE is the phrase the formatter writes for an unknown question
 
 const
   CRLF = #13#10;

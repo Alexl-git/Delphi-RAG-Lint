@@ -665,7 +665,7 @@ type
     SnapshotDir   : string ; // --snapshot-dir <dir>
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@58bf -- REVIEWED 2026-10-11 (compare lines added): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@11fa -- REVIEWED 2026-10-11 (461 lines: 1.27.x banner lines merged from main + compare lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -1957,13 +1957,41 @@ begin
     // WorkspaceConfig from the shared arg handlers above).
     else if (A = '--dproj') and (i < ParamCount) then begin Inc(i); Result.PpDproj:= ParamStr(i); end
     // compare (charts step 1)
-    else if (A = '--old') and (i < ParamCount) then begin Inc(i); Result.CompareOld:= ParamStr(i); end
-    else if (A = '--new') and (i < ParamCount) then begin Inc(i); Result.CompareNew:= ParamStr(i); end
-    else if (A = '--old-db') and (i < ParamCount) then begin Inc(i); Result.CompareOldDb:= ParamStr(i); end
-    else if (A = '--command') and (i < ParamCount) then begin Inc(i); Result.CompareCommand:= ParamStr(i); end
-    else if (A = '--question') and (i < ParamCount) then begin Inc(i); Result.Question:= ParamStr(i); end
-    else if (A = '--show') and (i < ParamCount) then begin Inc(i); Result.CompareShow:= ParamStr(i); end
-    else if (A = '--snapshot-dir') and (i < ParamCount) then begin Inc(i); Result.SnapshotDir:= ParamStr(i); end
+    else if (A = '--old') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CompareOld:= ParamStr(i);
+    end
+    else if (A = '--new') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CompareNew:= ParamStr(i);
+    end
+    else if (A = '--old-db') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CompareOldDb:= ParamStr(i);
+    end
+    else if (A = '--command') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CompareCommand:= ParamStr(i);
+    end
+    else if (A = '--question') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Question:= ParamStr(i);
+    end
+    else if (A = '--show') and (i < ParamCount) then  // dl:ok duplicate-code@b8ae -- REVIEWED 2026-10-11: the ParseArgs value-flag arm shape (Inc(i); Result.X:= ParamStr(i)) shared with --castlib; one arm per compare flag extends the chain
+    begin
+      Inc(i);
+      Result.CompareShow:= ParamStr(i);
+    end
+    else if (A = '--snapshot-dir') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.SnapshotDir:= ParamStr(i);
+    end
     else if A = '--auto' then Result.CompareAuto:= True
     else if A = '--save' then Result.CompareSave:= True
     else if A = '--update-doc' then Result.UpdateDoc:= True

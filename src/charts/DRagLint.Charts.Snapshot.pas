@@ -75,15 +75,6 @@ function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarg
 procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: Integer = 20;
   const pExt: string = SNAPSHOT_EXT_REPORT);
 
-/// <summary>The newest auto snapshot of one routine.</summary>
-/// <param name="pAutoDir">The auto folder itself.</param>
-/// <param name="pQuestion">Question id.</param>
-/// <param name="pTarget">Target (sanitised here).</param>
-/// <param name="pExt">Only files with this extension count.</param>
-/// <returns>Full path of the snapshot with the greatest stamp, or '' when none.</returns>
-function LatestAutoSnapshot(const pAutoDir, pQuestion, pTarget: string;
-  const pExt: string = SNAPSHOT_EXT_REPORT): string;
-
 /// <summary>The newest auto snapshot of one routine, whatever its format.</summary>
 /// <param name="pAutoDir">The auto folder itself.</param>
 /// <param name="pQuestion">Question id.</param>
@@ -99,7 +90,7 @@ implementation
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.Generics.Collections,
-  System.Generics.Defaults, System.Math, DRagLint.Core.Model, DRagLint.Project.OwnRoots;
+  System.Generics.Defaults, System.Math, DRagLint.Core.Model, DRagLint.Project.OwnRoots; // dl:unit DRagLint.Core.Model accepted -- DRAG_HOME_DIR: the _D-RAG folder name travels with the model that defines the index layout
 
 const
   DEFAULT_DIR = 'drag-lint-reports';
@@ -217,12 +208,6 @@ begin
   var Files:= StampedFiles(pAutoDir, pQuestion, pTarget, pExt);
   for var I:= Max(0, pKeep) to High(Files) do
     DeleteFile(Files[I].Value); // False (locked file) is fine: the next prune retries it
-end;
-
-function LatestAutoSnapshot(const pAutoDir, pQuestion, pTarget, pExt: string): string;
-begin
-  var Files:= StampedFiles(pAutoDir, pQuestion, pTarget, pExt);
-  Result:= if Length(Files) > 0 then Files[0].Value else '';
 end;
 
 function LatestAutoSnapshotAnyFormat(const pAutoDir, pQuestion, pTarget: string): string;

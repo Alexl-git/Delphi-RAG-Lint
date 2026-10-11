@@ -224,7 +224,7 @@ begin
   inherited Destroy;
 end;
 
-function TSourceReader.IndexedFileShas: TDictionary<string, string>;  // dl:ok function-result-not-set@5b47 -- rule FP (INBOX-2026-10-05): the nil-index raise guard is counted as a path; every other path ends in Result:= FShas
+function TSourceReader.IndexedFileShas: TDictionary<string, string>;
 begin
   if FShas = nil then
   begin
@@ -266,7 +266,7 @@ begin
   end;
 end;
 
-function TSourceReader.SourceFresh(const pPath: string): Boolean;  // dl:ok function-result-not-set@0cb0 -- rule FP (INBOX-2026-10-05): the not-in-index raise guard is counted as a path; the rest is Exit(False), the TryGetValue out param or Result:= SameText
+function TSourceReader.SourceFresh(const pPath: string): Boolean;
 var
   Sha: string;
 begin
@@ -317,7 +317,7 @@ begin
   Result:= ContextOfLines(pPath, StrippedSourceLines(ReadPath(pPath)), pLine, pCol, pLen, pFollowing);
 end;
 
-class function TSourceReader.ContextOfLines(const pPath: string; const pLines: TArray<string>;  // dl:ok function-result-not-set@833d -- rule FP (INBOX-2026-10-05): the line-out-of-range raise guard is counted as a path; Result:= Default(...) follows it unconditionally
+class function TSourceReader.ContextOfLines(const pPath: string; const pLines: TArray<string>;
   pLine, pCol, pLen: Integer; pFollowing: Integer): TSourceContext;
 begin
   var Count:= Integer(Length(pLines));
