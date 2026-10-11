@@ -1038,7 +1038,7 @@ because of it, and descendants are not edited. LIMIT: a descendant outside the
    unit -- an access on an unconverted receiver (e.g. `Other.Caption` when `Other`
    has no `#convert` rule) is left untouched.
 
-   **A `#link` carrying a cast never rewrites a `.pas` access site** (1.27.0,
+   **A `#link` carrying a CLASS cast never rewrites a `.pas` access site** (1.27.0,
    interim owner decision until a member-replacement feature is designed). A
    cast's `pas` template is a STATEMENT (`{dst}.Assign({src});`) and an access
    site is the member token INSIDE an expression (`pic1.Picture.Data := 'seed'`):
@@ -1058,6 +1058,41 @@ because of it, and descendants are not edited. LIMIT: a descendant outside the
    at exactly those sites, and the uses reconciliation has no template routine
    to add. `info --json`: `capabilities.cast_site_refusal: true`.
 
+**Value casts: `StripDB`** (1.27.0, C15). A castlib `cast` block with a
+`value <transform>` line is a VALUE cast: a transform built into the engine
+that rewrites a linked STRING value. It is not a class cast -- no `pas`
+template, never refused like one. The one transform is `strip-db`, shipped as
+
+```
+cast StripDB
+  accepts string
+  yields  string
+  value   strip-db
+  todo    'TableName kept its .db where it was not one string literal -- check by hand'
+end
+```
+
+and named in a book as `#link TableName <- TableName : StripDB`. It removes ONE
+trailing `.db`, any case (`'MET1.db'` -> `'MET1'`, `'X.DB'` -> `'X'`); every
+other value is left exactly as it is (`'A.dbf'`, `'A.db.bak'`, `'MET1'`, `''`).
+No patterns and no parameters. An unknown `value` keyword is a castlib LOAD
+ERROR: convert-apply fails the unit (exit 2) naming the file, the line and the
+keyword, because a cast silently not performed is the worse outcome.
+On the `.dfm` side the value of each converted instance is rewritten when that
+changes it. On the `.pas` side only `<instance>.<Prop> := '<one literal>';`
+(the literal followed by `;` or the end of a line no `+` continues) has the
+literal rewritten, quotes re-escaped; any other right-hand side (a
+concatenation, a variable, a call, `Format(...)`) and every read of the
+property get NO edit and a warning, and a `with` block is out of scope. Report:
+`items[]` kind `value-cast-applied` (field `access_sites`; `old_value`, `value`,
+`file`, `line` -- for the `.dfm` the property's own line) and
+`value-cast-check` (field `warnings`, e.g. `line 2: warning: SForm.pas:28
+t2.TableName -- value cast StripDB: non-literal assignment, check by hand`);
+text `value casts: N value(s) changed (.dfm D, .pas P), W site(s) to check by
+hand`. A renaming value-cast link (`#link To <- From : StripDB`, To <> From)
+renames the member like a plain link and reports its literals for checking.
+`info --json`: `capabilities.value_cast_strip_db: true`.
+
 **What the `.pas` still uses (`pas_uses[]`, 1.27.0).** Every run -- dry run
 and `--apply` -- lists what the unit's code uses that the book does not
 convert, so the next rule to write is visible. One row per (instance, member)
@@ -1071,8 +1106,8 @@ reconciliation removes:
  "declared_in":"TPicOld","status":"unmapped","lines":[26,28],"count":2}
 ```
 
-`status`: `mapped` (a `#link` whose From path starts with the member covers it,
-for that instance's `#convert` block), `cast-refused` (a cast `#link` covers it:
+`status`: `mapped` (a `#link` whose From path starts with the member covers it -- a value cast such as StripDB included --
+for that instance's `#convert` block), `cast-refused` (a CLASS-cast `#link` covers it:
 its sites are refused, above), `same-name` (no link, but the To type or one of
 its ancestors has a member of that name -- carried implicitly), `unmapped` (no
 link and no such member: the work list) and `global-dangling` (a routine,

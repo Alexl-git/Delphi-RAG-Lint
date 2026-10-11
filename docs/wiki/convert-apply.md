@@ -26,6 +26,13 @@ as a `cast-not-applied` warning naming the file, line, instance and cast --
 "convert this access site by hand". The unit will not compile until you do;
 that compile error is the signal.
 
+## StripDB: dropping a Paradox .db (1.27.0)
+`#link TableName <- TableName : StripDB` (with `--castlib` pointing at the
+shipped `casts.castlib`) turns `'MET1.db'` into `'MET1'` -- in the `.dfm`, and
+in code where the table name is assigned one plain string. Anything else in
+code (a concatenation, a variable, a read) is left alone and listed as a
+warning to check by hand. Values without `.db` are never touched.
+
 ## What is left to convert (1.27.0)
 Every run also lists what the unit's code still uses: each member reached
 through a converted instance, and each global from a unit the run removes.

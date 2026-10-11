@@ -81,8 +81,9 @@ const
   INH_ACTION_UNVERIFIED = 'unverified';
   /// <summary>apply/1 pas_uses[].status: a #link covers the member (1.27.0).</summary>
   PAS_USE_MAPPED = 'mapped';
-  /// <summary>apply/1 pas_uses[].status: a cast-carrying #link covers the
-  /// member, so its .pas sites are refused (cast-not-applied).</summary>
+  /// <summary>apply/1 pas_uses[].status: a CLASS-cast #link covers the member,
+  /// so its .pas sites are refused (cast-not-applied). A value cast (StripDB)
+  /// counts as PAS_USE_MAPPED.</summary>
   PAS_USE_CAST_REFUSED = 'cast-refused';
   /// <summary>apply/1 pas_uses[].status: no #link, but the To type (or an
   /// ancestor of it) has a member of that name -- carried implicitly.</summary>
@@ -282,9 +283,16 @@ type
     aikUsesUnitAmbiguous,    { C9 R8/R8a: a name two or more units declare --
                                none added; candidates in uses_unresolved[]. }
     aikUnitRuleUnverified,   { C9 Q3: a watched unit no --db indexes -- kept. }
-    aikUnitRuleDangling);    { C9 ruling 1: a removal leaves .pas references
+    aikUnitRuleDangling,     { C9 ruling 1: a removal leaves .pas references
                                dangling -- the unit will not compile until that
                                code is converted. }
+    aikValueCastApplied,     { 1.27.0 (C15): a VALUE cast (castlib `value`,
+                               StripDB) rewrote a string literal in the .dfm or
+                               the .pas -- field access_sites either way.
+                               OldValue -> Value, FilePath, Line set. }
+    aikValueCastCheck);      { 1.27.0 (C15): a value-cast site with no edit --
+                               a .dfm value or .pas right-hand side that is not
+                               ONE string literal, or a read. A warning. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -327,7 +335,8 @@ type
     Text    : string;  { the human-readable line, verbatim }
     Line    : Integer; { 1-based line in FilePath, or 0 }
     RuleLine: Integer; { 1-based line in the rules file, or 0 }
-    Value   : string;  { 1.26.5: the value a book-warning / ref-* item is about; 1.27.0: the cast of a cast-not-applied item; '' otherwise }
+    Value   : string;  { 1.26.5: the value a book-warning / ref-* item is about; 1.27.0: the cast of a cast-not-applied item, the NEW literal of a value-cast-applied one; '' otherwise }
+    OldValue: string;  { 1.27.0: the literal a value-cast-applied item replaced; '' otherwise }
   end;
 
   /// <summary>One F property that was absent from the .dfm because it sat at its
@@ -1152,7 +1161,8 @@ const
     'inherited-instance-skipped', 'unit-rule-skipped', 'descendant-not-converted',
     'inherited-instance-retyped', 'access-site-unverified',
     'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked',
-    'unit-rule-kept', 'uses-unit-ambiguous', 'unit-rule-unverified', 'unit-rule-dangling');
+    'unit-rule-kept', 'uses-unit-ambiguous', 'unit-rule-unverified', 'unit-rule-dangling',
+    'value-cast-applied', 'value-cast-check');
 begin
   Result:= NAMES[AKind];
 end;
@@ -3791,6 +3801,7 @@ type
     Book     : TApplyBook;
     Converted: TList<string>;                 { instances the plan converts }
     FromTypes: TDictionary<string, string>;   { instance -> From type }
+    CastLib  : TCastLib;                      { 1.27.0 (C15): a value-cast link is mapped }
     ToTypes  : TDictionary<string, string>;   { instance -> To type }
   end;
 
@@ -3830,7 +3841,9 @@ begin
       begin
         var K: string:= UpperCase(N + '|' + Head);
         { a cast link wins: whatever else covers the member, its sites are refused }
-        if L.Cast <> '' then Cover.AddOrSetValue(K, PAS_USE_CAST_REFUSED)
+        var VD: TCastDef;
+        var ClassCast: Boolean:= (L.Cast <> '') and not (FindClassCast(AIn.CastLib, L.Cast, VD) and (VD.Value <> ''));
+        if ClassCast then Cover.AddOrSetValue(K, PAS_USE_CAST_REFUSED)
         else if not Cover.ContainsKey(K) then Cover.Add(K, PAS_USE_MAPPED);
       end;
     end;
@@ -3906,6 +3919,192 @@ begin
       Result:= CompareText(A.Member, B.Member);
     end));
 end;
+// 1.27.0 (C15): the .dfm half of a VALUE cast as items -- one
+// value-cast-applied per rewritten value (Value the new literal, OldValue the
+// old), one value-cast-check per value that is not ONE string literal. Line is
+// the property's own line in the instance's block when it is found there,
+// else the block header.
+function ValueCastDfmItems(const AVCs: TArray<TReemitValueCast>; const AInst: TConvertInstance;
+  const ADfmPath: string; const ADfmLines: TArray<string>; ABlockLine: Integer): TArray<TApplyItem>;
+const
+  BLOCK_END = 'end';
+begin
+  Result:= nil;
+  for var VC: TReemitValueCast in AVCs do
+  begin
+    var It: TApplyItem:= Default(TApplyItem);
+    It.Instance:= AInst.InstanceName;
+    It.FromType:= AInst.FromType;
+    It.ToType  := AInst.ToType;
+    It.FilePath:= ADfmPath;
+    It.Path    := VC.FromPath;
+    It.RuleLine:= VC.RuleLine;
+    It.Line    := ABlockLine;
+    if (ABlockLine >= 1) and (ABlockLine <= Length(ADfmLines)) then
+    begin
+      var Indent: string:= LeadingIndent(ADfmLines[ABlockLine - 1]);
+      for var I: Integer:= ABlockLine to High(ADfmLines) do
+      begin
+        if (LeadingIndent(ADfmLines[I]) = Indent) and SameText(Trim(ADfmLines[I]), BLOCK_END) then Break;
+        if StartsText(VC.FromPath + ' =', Trim(ADfmLines[I])) then
+        begin
+          It.Line:= I + 1;
+          Break;
+        end;
+      end;
+    end;
+    if VC.Changed then
+    begin
+      It.Kind    := aikValueCastApplied;
+      It.Field   := afAccessSites; { done work, but not an instance line: converted[] counts instances }
+      It.OldValue:= VC.OldValue;
+      It.Value   := VC.NewValue;
+      It.Text    := Format('%s: value cast %s: %s %s -> %s (.dfm line %d)',
+        [AInst.InstanceName, VC.CastName, VC.ToPath, VC.OldValue, VC.NewValue, It.Line]);
+    end
+    else
+    begin
+      It.Kind := aikValueCastCheck;
+      It.Field:= afWarnings;
+      It.Value:= VC.OldValue;
+      It.Text := Format('line %d: warning: %s: value cast %s: %s = %s is not one string literal, check by hand',
+        [It.Line, AInst.InstanceName, VC.CastName, VC.FromPath, Trim(VC.OldValue)]);
+    end;
+    Result:= Result + [It];
+  end;
+end;
+
+type
+  // 1.27.0 (C15): what the code at a value-cast access site does with the member.
+  TValueCastSiteKind = (vskLiteral, vskNonLiteral, vskRead);
+
+// 1.27.0 (C15): the column just past the string literal opening at AStart in
+// AText ('' a doubled quote), or 0 when the line ends before it closes.
+function LiteralEnd(const AText: string; AStart: Integer): Integer;
+const
+  Q = '''';
+var
+  P: Integer;
+begin
+  Result:= 0;
+  P:= AStart + 1;
+  while (P <= Length(AText)) and (Result = 0) do
+    if (AText[P] = Q) and (P < Length(AText)) and (AText[P + 1] = Q) then Inc(P, 2)
+    else
+    begin
+      if AText[P] = Q then Result:= P + 1;
+      Inc(P);
+    end;
+end;
+
+// 1.27.0 (C15): True when the first non-blank line after ALine (1-based)
+// continues an expression ('+' or a '#nn' character code).
+function NextLineContinues(const APasLines: TStringList; ALine: Integer): Boolean;
+begin
+  for var N: Integer:= ALine to APasLines.Count - 1 do
+  begin
+    var T: string:= Trim(APasLines[N]);
+    if T <> '' then Exit(CharInSet(T[1], ['+', '#']));
+  end;
+  Result:= False;
+end;
+
+// 1.27.0 (C15): a `:=` whose right-hand side is ONE string literal, ending at
+// a ';' or at the end of the line with no continuation on the next one (its
+// [ALitCol, ALitEnd) span returned), any other assignment, or a read.
+function ClassifyValueCastSite(const APasLines: TStringList; ALine, ACol: Integer;
+  out ALitCol, ALitEnd: Integer): TValueCastSiteKind;
+const
+  ASSIGN_OP = ':=';
+var
+  S: string;
+  P: Integer;
+begin
+  ALitCol:= 0;
+  ALitEnd:= 0;
+  if (ALine < 1) or (ALine > APasLines.Count) then Exit(vskRead);
+  S:= APasLines[ALine - 1];
+  P:= ACol;
+  while (P <= Length(S)) and IsIdentChar(S[P]) do Inc(P);
+  while (P <= Length(S)) and (S[P] = ' ') do Inc(P);
+  if Copy(S, P, Length(ASSIGN_OP)) <> ASSIGN_OP then Exit(vskRead);
+  Result:= vskNonLiteral;
+  Inc(P, Length(ASSIGN_OP));
+  while (P <= Length(S)) and (S[P] = ' ') do Inc(P);
+  if (P <= Length(S)) and (S[P] = '''') and (LiteralEnd(S, P) > 0) then
+  begin
+    ALitCol:= P;
+    ALitEnd:= LiteralEnd(S, P);
+    P:= ALitEnd;
+    while (P <= Length(S)) and (S[P] = ' ') do Inc(P);
+    if ((P <= Length(S)) and (S[P] = ';')) or ((P > Length(S)) and not NextLineContinues(APasLines, ALine)) then
+      Result:= vskLiteral;
+  end;
+end;
+// 1.27.0 (C15): the .pas half of a VALUE cast for one #link: each bound site
+// whose assignment has ONE string-literal right-hand side gets that literal
+// rewritten when the transform changes it (an identity link only); every
+// other assignment and every read gets no edit and a value-cast-check
+// warning naming its line. A literal the transform leaves alone: nothing.
+procedure PlanValueCastSites(const ASites: TArray<TAccessSite>; const ALink: TConversionRule;
+  const ADef: TCastDef; const AUnitPas: string; const APasLines: TStringList;
+  out AEdits: TArray<TTextEdit>; out AItems: TArray<TApplyItem>);
+var
+  LitCol, LitEnd: Integer;
+  NewLit        : string;
+  Why           : string;
+begin
+  AEdits:= nil;
+  AItems:= nil;
+  var Renamed: Boolean:= not SameText(ALink.ToPath, ALink.FromPath);
+  for var S: TAccessSite in ASites do
+  begin
+    var It: TApplyItem:= Default(TApplyItem);
+    It.Instance:= S.InstanceName;
+    It.FilePath:= AUnitPas;
+    It.Path    := ALink.FromPath;
+    It.RuleLine:= ALink.LineNo;
+    It.Line    := S.Line;
+    Why:= '';
+    case ClassifyValueCastSite(APasLines, S.Line, S.Col, LitCol, LitEnd) of
+      vskRead      : Why:= Format('read of %s', [ALink.FromPath]);
+      vskNonLiteral: Why:= 'non-literal assignment';
+      vskLiteral:
+        begin
+          var Lit: string:= Copy(APasLines[S.Line - 1], LitCol, LitEnd - LitCol);
+          if ApplyValueCast(ADef, Lit, NewLit) <> vcoChanged then Continue;
+          if Renamed then Why:= 'renamed link, the literal is not rewritten'
+          else
+          begin
+            var E: TTextEdit:= Default(TTextEdit);
+            E.FilePath:= AUnitPas;
+            E.Kind    := tekReplaceInLine;
+            E.Line    := S.Line;
+            E.Col     := LitCol;
+            E.EndCol  := LitEnd;
+            E.Text    := NewLit;
+            AEdits:= AEdits + [E];
+            It.Kind    := aikValueCastApplied;
+            It.Field   := afAccessSites;
+            It.OldValue:= Lit;
+            It.Value   := NewLit;
+            It.Text    := Format('line %d: #link %s <- %s : %s -- %s:%d %s.%s := %s -> %s',
+              [ALink.LineNo, ALink.ToPath, ALink.FromPath, ALink.Cast, ExtractFileName(AUnitPas), S.Line,
+               S.InstanceName, ALink.FromPath, Lit, NewLit]);
+          end;
+        end;
+    end;
+    if Why <> '' then
+    begin
+      It.Kind := aikValueCastCheck;
+      It.Field:= afWarnings;
+      It.Value:= ALink.Cast;
+      It.Text := Format('line %d: warning: %s:%d %s.%s -- value cast %s: %s, check by hand',
+        [ALink.LineNo, ExtractFileName(AUnitPas), S.Line, S.InstanceName, ALink.FromPath, ALink.Cast, Why]);
+    end;
+    AItems:= AItems + [It];
+  end;
+end;
 // C8 N2: the 'retyped' entries of AInherited as instances for BuildApplyPlan's
 // loop -- the .dfm spelling of the From type, the bare To type.
 function RetypedInstances(const AInherited: TArray<TInheritedInstance>): TArray<TConvertInstance>;
@@ -3979,7 +4178,7 @@ begin
   end;
 end;
 
-function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@3144 -- REVIEWED 2026-10-06: parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@f7cd -- REVIEWED 2026-10-10 (297 lines: +InstToType and the 1.27.0 pas_uses input record, the surfaces themselves live outside it): parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own
   const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean;
   var AInherited: TArray<TInheritedInstance>): TApplyResult;
@@ -4199,6 +4398,7 @@ var
       the message rather than of the fact. FoldOne stays as it is because its
       other callers pass whole sentences, which are not paths. }
     FoldBookChecks(AReport, ABlockLine);
+    for var VI: TApplyItem in ValueCastDfmItems(AReport.ValueCasts, Inst, ADfmPath, DfmLines, ABlockLine) do Emit(VI);
     for var DN: string in AReport.Dropped do
     begin
       var DIt: TApplyItem:= InstItem(aikUnmappedProperty, afReemitNotes,
@@ -4664,7 +4864,22 @@ var
         what keeps it closed. It is loud (a warning naming the rule and its cast)
         rather than silent, because a skipped conversion the operator never hears
         about is the same class of defect. }
-      if LinkRule.Cast <> '' then
+      { 1.27.0 (C15): a VALUE cast (castlib `value`, StripDB) is not a class
+        cast -- it rewrites a string literal and is never refused below. A
+        renaming one falls through to the identifier rewrite too. }
+      var VDef: TCastDef;
+      if (LinkRule.Cast <> '') and FindClassCast(ACastLib, LinkRule.Cast, VDef) and (VDef.Value <> '') then
+      begin
+        var VEdits: TArray<TTextEdit>;
+        var VItems: TArray<TApplyItem>;
+        PlanValueCastSites(BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
+          LinkRule.FromPath, LinkScopeNames(ABook.Rules, ConvertedInstNames, InstFromType, LinkRule)), Unv), LinkRule, VDef, AUnitPas, PasLines, VEdits, VItems);
+        ReportUnverified(LinkRule.FromPath);
+        for var VE: TTextEdit in VEdits do Edits.Add(VE);
+        for var VI: TApplyItem in VItems do Emit(VI);
+        if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue;
+      end
+      else if LinkRule.Cast <> '' then
       begin
         { THREE OUTCOMES, NEVER TWO, AND NEVER SILENCE.
 
@@ -4728,8 +4943,9 @@ var
           Continue;
         end;
 
-        (* Outcome 1 -- the cast is FOUND with a pas template, and every .pas
-           access site is still REFUSED: no edit, one warning per site
+        (* Outcome 1 -- a CLASS cast (a castlib block whose pas line is a
+           STATEMENT template, AssignGraphic) is FOUND, and every .pas access
+           site is still REFUSED -- a VALUE cast never gets here, see above: no edit, one warning per site
            (1.27.0, owner decision -- interim, until a member-replacement
            feature is designed).
 
@@ -5252,6 +5468,7 @@ begin
     PU.Converted:= ConvertedInstNames;
     PU.FromTypes:= InstFromType;
     PU.ToTypes  := InstToType;
+    PU.CastLib  := ACastLib;
     Result.Report.PasUses:= CollectPasUses(PU); { 1.27.0; PlanUsesAdditions appends the globals }
     var UsesPlan: TUsesPlan;
     var UnitAdds    : TArray<string>:= nil;

@@ -80,10 +80,29 @@ by its OWNER RULINGS 2026-10-06.)
   (`access-site-unverified`) are not listed; an inherited RTL/VCL member is
   classified only when its library `--db` is passed (else kind '' and `unmapped`).
 
+- **The `StripDB` VALUE cast** (C15, owner ruling 2026-10-10). `#link TableName <-
+  TableName : StripDB` removes ONE trailing `.db`, any case, from the linked string
+  (`'MET1.db'` -> `'MET1'`, `'X.DB'` -> `'X'`; `'A.dbf'`, `'A.db.bak'`, `'MET1'` and `''`
+  unchanged). One fixed, named transform -- no regex, no parameters. Declared in the
+  shipped `casts.castlib` as `cast StripDB` with the new castlib key `value strip-db`
+  (a built-in transform; an unknown `value` keyword is a load error and convert-apply
+  fails the unit, exit 2), so the editor lists it like any cast. `.dfm`: the value is
+  rewritten on each converted instance when that changes it. `.pas`: only
+  `<inst>.<Prop> := '<one literal>';` has its literal rewritten (quote escaping
+  kept); any other right-hand side and every read get no edit and a warning
+  (`value cast StripDB: non-literal assignment, check by hand` / `read of <Prop>`);
+  a `with` block is out of scope. Items `value-cast-applied` (field access_sites,
+  `old_value` -> `value`, file, line -- the `.dfm` line is the property's own) and
+  `value-cast-check` (warnings); text `value casts: N value(s) changed (.dfm D, .pas P),
+  W site(s) to check by hand`; `pas_uses[]` counts a member a StripDB link covers as
+  `mapped`. A renaming value-cast link renames the member as a plain link would and
+  reports its literals for checking. `info --json` capability `value_cast_strip_db`.
+  The class-cast refusal below applies to CLASS casts only.
+
 ### Fixed
 
 - **A `#link` carrying a cast no longer writes a `.pas` access site** (shipped defect,
-  came in with 52d9a1b9). A cast whose `.castlib` entry has a `pas` template was
+  came in with 52d9a1b9). A CLASS cast (a castlib block whose `pas` line is a statement template) whose `.castlib` entry has a `pas` template was
   "realized" by splicing the template -- a STATEMENT such as `{dst}.Assign({src});` --
   over the member token alone, so `pic1.Picture.Data := 'seed'` became
   `pic1.pic1.Glyph.Assign(CastPic(pic1.Picture));.Data := 'seed'`, which does not

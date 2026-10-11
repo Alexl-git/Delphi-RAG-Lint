@@ -1,6 +1,8 @@
 # Shipped class-cast library for the conversion editor.
 # Each 'cast <Name> ... end' block defines a class-to-class cast the DSL names as the
 # '#link To <- From : <Name>' suffix. The editor uses name/accepts/yields.
+# A block with a 'value <transform>' line is a VALUE cast instead (1.27.0, see
+# StripDB below): a built-in string transform, not a class cast.
 #
 # The realization hints (dfm/compat/pas/todo) ARE CONSUMED by the engine as of
 # 2026-09-16 (row 6): convert-apply renders `pas` at a .pas access site, and
@@ -44,8 +46,10 @@
 #
 # Since 2026-09-04 the engine DOES split the ': <Name>' suffix off the #link FromPath
 # (it used to swallow it and then report the valid line as a missing path), and
-# convert-apply refuses to rewrite a .pas access site for a link carrying a cast
-# rather than renaming without performing the conversion.
+# convert-apply refuses to rewrite a .pas access site for a link carrying a CLASS
+# cast rather than renaming without performing the conversion (since 1.27.0 even
+# when the cast has a `pas` template: a statement cannot be spliced into an
+# expression -- each site is reported, convert it by hand).
 # Strict 7-bit ASCII, CRLF.
 
 cast AssignGraphic
@@ -56,6 +60,27 @@ cast AssignGraphic
   compat  png, bmp
   pas     '{dst}.Assign({src});'
   todo    'transfer image from {src} by hand (TBitmap/TPicture -> TdxSmartGlyph)'
+end
+
+# ---------------------------------------------------------------------------
+# VALUE casts (1.27.0). A `cast` block with a `value <transform>` line names a
+# transform BUILT INTO the engine that rewrites a linked STRING value -- not a
+# class-to-class cast, so it has no `pas` template and its .pas sites are not
+# refused the way a class cast's are. Known transforms (an unknown one is a
+# load error; convert-apply fails the unit rather than not perform the cast):
+#   strip-db  removes ONE trailing '.db', any case: 'MET1.db' -> 'MET1',
+#             'X.DB' -> 'X'; 'A.dbf', 'A.db.bak', 'MET1' and '' are unchanged.
+# Applied to the .dfm value of each converted instance, and in the .pas only
+# to `<instance>.<Prop> := '<one literal>';` -- any other right-hand side and
+# every read is reported for checking by hand, never edited. No parameters,
+# no patterns: one fixed, named transform per keyword.
+# ---------------------------------------------------------------------------
+
+cast StripDB
+  accepts string
+  yields  string
+  value   strip-db
+  todo    'TableName kept its .db where it was not one string literal -- check by hand'
 end
 
 # ---------------------------------------------------------------------------

@@ -646,7 +646,7 @@ type
     AppendOut     : Boolean; // glyph-vacuum: --append
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@4fc5 -- REVIEWED 2026-10-05: run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@4a9e -- REVIEWED 2026-10-10 (451 lines, 1.27.0 banner lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -999,6 +999,7 @@ begin
     '#check-ref <ToPath> <Class>.<Prop>[, ...] warns when the converted ToPath value contains \ or : (ref-path-like) or no listed Class.Prop of any .dfm in the project index carries it (ref-dangling), and once per run ref-not-checked when the index holds no .dfm property facts; info capabilities book_warn, check_ref (1.26.5); ' +
     'every code rewrite is scoped to the instance''s field (receiver bound to it, or unbound / bare / Self. in a routine of the .dfm root class with no same-named local); a site the index cannot vouch for is NOT rewritten and is reported (''access site <file>:<line> ... not verified against the index -- not rewritten'', items[] kind access-site-unverified, json access_sites_unverified); a --db resolved before resolver 1.12.0 is REFUSED, dry run too, naming the index ... --resolve-only fix; ' +
     'a #link carrying a cast never rewrites a .pas access site (1.27.0, interim): the cast''s pas template is a statement with no correct splice inside an expression, so each bound site is reported -- ''line N: #link To <- From : Cast -- access site <file>:<line> <inst>.<From> not rewritten: ... convert this access site by hand'', items[] kind cast-not-applied with instance, file, line and value (the cast); no .pas edit, the .dfm half of the cast unchanged; kind cast-applied is retired; info capability cast_site_refusal; ' +
+    'a VALUE cast -- a castlib block with ''value strip-db'' (shipped: StripDB, #link TableName <- TableName : StripDB) -- removes one trailing .db, any case, from the linked string: in the .dfm of each converted instance, and in .pas assignments whose right-hand side is ONE string literal; any other assignment and every read get no edit and a warning (items[] value-cast-applied {old_value,value} / value-cast-check; text ''value casts: N value(s) changed ...''); an unknown value keyword fails the run; info capability value_cast_strip_db (1.27.0); ' +
     'json pas_uses[] (1.27.0, dry run and --apply; info capability pas_uses) lists what the .pas still uses that the map does not cover: one row per (instance, member) the code reaches through a converted instance -- the access-site rewrite''s own bound sites -- and one per global (routine/const/var/type) from a unit the reconciliation removes: {instance,from_type,to_type,member,kind method|property|field|event|const|var|type|routine,visibility,declaring_unit,declared_in,status mapped|cast-refused|same-name|unmapped|global-dangling,lines[],count}; text prints ''pas uses: N unmapped, M global-dangling, K same-name, J mapped, C cast-refused'' and one line per unmapped member; ' +
     'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
     'a plan the edit applier would refuse in part (overlapping delete ranges -- an engine defect) fails the WHOLE unit before anything is written, dry run too, and a write that fails part-way is ROLLED BACK byte-identical (exit 2, ''-- rolled back, unit not changed''; a failed rollback names the files it could not restore) (1.25.1): exit 1, ''ERROR: refused N edit(s) to <file> -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written'', json ok=false with that error; ' +
@@ -16144,6 +16145,11 @@ begin
         uses that the map does not cover (status mapped | cast-refused |
         same-name | unmapped | global-dangling), dry run and --apply. }
       JCap.AddPair('pas_uses', TJSONBool.Create(True));
+      { 1.27.0 (C15), same contract: the castlib `value strip-db` VALUE cast
+        (#link X <- X : StripDB) rewrites a trailing .db off string literals in
+        the .dfm and in .pas literal assignments -- items[] value-cast-applied
+        (old_value, value) and value-cast-check (no edit, check by hand). }
+      JCap.AddPair('value_cast_strip_db', TJSONBool.Create(True));
       { 1.25.0, same contract: convert-apply lists the descendant units that
         still stream or use an instance it converts (apply/1 descendants[],
         items[] kind descendant-not-converted) -- a warning, never a refusal. }
@@ -24687,8 +24693,21 @@ begin
     Block('ResolvedDefaults',
       [Format('%d property value(s) carried from their declared defaults (--format json lists each)',
               [Length(AReport.ResolvedDefaults)])]);
-  { 1.27.0 -- pas_uses[]: one summary line, then the work list (unmapped
-    members) with their lines; nothing when the code uses nothing }
+  { 1.27.0 (C15): the value casts (StripDB) -- one count line per unit }
+  var VDfm : Integer:= 0;
+  var VPas : Integer:= 0;
+  var VChk : Integer:= 0;
+  for var VI: TApplyItem in AReport.Items do
+    if VI.Kind = aikValueCastCheck then Inc(VChk)
+    else if (VI.Kind = aikValueCastApplied) and SameText(ExtractFileExt(VI.FilePath), '.dfm') then Inc(VDfm)
+    else if VI.Kind = aikValueCastApplied then Inc(VPas);
+  if VDfm + VPas + VChk > 0 then
+  begin
+    Writeln('');
+    Writeln(Format('value casts: %d value(s) changed (.dfm %d, .pas %d), %d site(s) to check by hand',
+      [VDfm + VPas, VDfm, VPas, VChk]));
+  end;
+  { 1.27.0 -- pas_uses[]: one summary line, then the work list (unmapped    members) with their lines; nothing when the code uses nothing }
   if Length(AReport.PasUses) > 0 then
   begin
     var NUnm : Integer:= 0;
@@ -24863,8 +24882,11 @@ procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
     Result.AddPair('line'     , TJSONNumber.Create(AItem.Line));
     Result.AddPair('rule_line', TJSONNumber.Create(AItem.RuleLine));
     { 1.26.5: additive, and only on the kinds that are ABOUT a value }
-    if AItem.Kind in [aikBookWarning, aikRefPathLike, aikRefDangling, aikCastNotApplied] then
+    if AItem.Kind in [aikBookWarning, aikRefPathLike, aikRefDangling, aikCastNotApplied, aikValueCastApplied, aikValueCastCheck] then
       Result.AddPair('value', AItem.Value);
+    { 1.27.0 (C15): the literal a value cast replaced }
+    if AItem.Kind = aikValueCastApplied then
+      Result.AddPair('old_value', AItem.OldValue);
   end;
 
 var
@@ -25746,7 +25768,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@0bf7 -- REVIEWED 2026-10-06: each Exit is a distinct per-unit outcome (refusal, rule errors, freshness, plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@a8c9 -- REVIEWED 2026-10-10: each Exit is a distinct per-unit outcome (refusal, rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }
@@ -25926,12 +25948,17 @@ var
     JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections,
       Length(JCtx.InheritedInsts) > 0, HasRetype);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
+    { 1.27.0 (C15): a castlib the engine cannot execute (an unknown value
+      transform) fails the unit -- a cast silently not performed is the worse outcome }
+    var CastLib: TCastLib:= ParseCastLib(AArgs.CastLibFile);
+    if Length(CastLib.Errors) > 0 then
+      Exit(FailUnit(Format('castlib %s: %s', [AArgs.CastLibFile, String.Join('; ', CastLib.Errors)]), 2));
     if JCtx.ComponentPart = 'applied' then
     begin
       var Book: TApplyBook:= TApplyBook.Create(Rules, JCtx.Unreachable);
       Book.Reconcile:= not AArgs.NoReconcileUses; { C9, default on }
       PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, Book,
-        AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked, JCtx.InheritedInsts);
+        AArgs.OnlySections, CastLib, not AArgs.NoWarnUnlinked, JCtx.InheritedInsts);
     end
     else
       PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections, not AArgs.NoReconcileUses);
