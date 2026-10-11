@@ -16,13 +16,14 @@ unit ChartsTests.RemarksSnapshot;
 interface
 
 uses
-  DUnitX.TestFramework;
+  System.SysUtils, DUnitX.TestFramework;
 
 type
   [TestFixture]
   TRemarksSnapshotTests = class
   private
     FTemp: string;
+    procedure CheckMiddleReplace(pEnc: TEncoding; const pEol: string);
   public
     [Setup] procedure Setup;
     [TearDown] procedure TearDown;
@@ -32,6 +33,11 @@ type
     [Test] procedure ReplaceKeepsIndentAndOtherBlocks;
     [Test] procedure LastBlockWithoutTrailingNewline;
     [Test] procedure Utf8BomIsPreservedByteForByte;
+    [Test] procedure AnsiHighByteOutsideBlockIsUntouched;
+    [Test] procedure Utf8WithoutBomIsKeptWithoutBom;
+    [Test] procedure LfOnlyFileStaysLfOnly;
+    [Test] procedure NegativeKeepDoesNotRaiseAndZeroRemovesAll;
+    [Test] procedure SaveOlderThanTheNewestTwentyReturnsFalse;
     [Test] procedure SnapshotNameMatchesF2;
     [Test] procedure ReportsDirKeyOverridesDefault;
     [Test] procedure DefaultIsProjectFolderDragLintReports;
@@ -42,7 +48,7 @@ type
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.DateUtils,
+  System.Classes, System.IOUtils, System.DateUtils,
   DRagLint.Charts.ReportHeader, DRagLint.Charts.Remarks, DRagLint.Charts.Snapshot;
 
 const
@@ -64,6 +70,10 @@ const
   FILES_BEFORE = 22;
   DAY_MINUTES = 1440;
   EACUTE = #$E9;
+  CODEPAGE_ANSI = 1252;
+  LF = #10;
+  SINGLE_FILE = 1;
+  NEGATIVE_KEEP = -SINGLE_FILE;
   AFTERNOON_STAMP = '2026-10-10T14:32:00';
   MORNING_STAMP = '2026-10-10T09:05:00';
   BASE_STAMP = '2026-10-01T00:00:00';
@@ -235,6 +245,91 @@ begin
   finally
     Enc.Free;
   end;
+end;
+
+{ Builds TwoBlocks.pas in pEnc with pEol line ends and an e-acute OUTSIDE the block, replaces
+  block 2 (the middle of the file) and requires every byte outside it to be identical. }
+procedure TRemarksSnapshotTests.CheckMiddleReplace(pEnc: TEncoding; const pEol: string);
+begin
+  var Path:= TPath.Combine(FTemp, 'Middle.pas');
+  var Lines:= TFile.ReadAllLines(Fixture('TwoBlocks.pas'));
+  Lines[LINE_OUTSIDE - 1]:= 'const S = ''caf' + EACUTE + ''';';
+  var Orig:= '';
+  var Expected:= '';
+  for var I:= 1 to Length(Lines) do
+  begin
+    Orig:= Orig + Lines[I - 1] + pEol;
+    if I = BLOCK2_START then
+      Expected:= Expected + '  /// <remarks>' + pEol + '  /// Replaced sentence line.' + pEol
+        + '  /// </remarks>' + pEol
+    else if (I < BLOCK2_START) or (I > BLOCK2_END) then
+      Expected:= Expected + Lines[I - 1] + pEol;
+  end;
+  TFile.WriteAllBytes(Path, pEnc.GetPreamble + pEnc.GetBytes(Orig));
+  var Block: TRemarksBlock;
+  var Why: string;
+  Assert.IsTrue(FindRemarksBlockAt(TFile.ReadAllLines(Path, pEnc), BLOCK2_CARET, Block, Why), Why);
+  Assert.IsTrue(ReplaceRemarksBlockInFile(Path, Block, NEW_BLOCK, Why), Why);
+  Assert.IsTrue(BytesEqual(pEnc.GetPreamble + pEnc.GetBytes(Expected), TFile.ReadAllBytes(Path)),
+    'every byte outside the block is identical');
+  Assert.IsFalse(TFile.Exists(Path + '.tmp'), 'temp file is gone');
+end;
+
+procedure TRemarksSnapshotTests.AnsiHighByteOutsideBlockIsUntouched;
+begin
+  // A lone $E9 is invalid UTF-8: the strict decode must refuse it so the file stays ANSI.
+  var Enc:= TEncoding.GetEncoding(CODEPAGE_ANSI);
+  try
+    CheckMiddleReplace(Enc, CRLF);
+  finally
+    Enc.Free;
+  end;
+end;
+
+procedure TRemarksSnapshotTests.Utf8WithoutBomIsKeptWithoutBom;
+begin
+  var Enc:= TUTF8Encoding.Create(False);
+  try
+    CheckMiddleReplace(Enc, CRLF);
+  finally
+    Enc.Free;
+  end;
+  Assert.IsTrue(TFile.ReadAllBytes(TPath.Combine(FTemp, 'Middle.pas'))[0] <> BOM_FIRST_BYTE, 'still no BOM');
+end;
+
+procedure TRemarksSnapshotTests.LfOnlyFileStaysLfOnly;
+begin
+  CheckMiddleReplace(TEncoding.ASCII, LF);
+  Assert.IsFalse(TFile.ReadAllText(TPath.Combine(FTemp, 'Middle.pas')).Contains(#13), 'no CR introduced');
+end;
+
+procedure TRemarksSnapshotTests.NegativeKeepDoesNotRaiseAndZeroRemovesAll;
+begin
+  var Auto:= TPath.Combine(FTemp, 'auto');
+  ForceDirectories(Auto);
+  var Name:= TPath.Combine(Auto, SnapshotFileName('who-writes', 'T', ISO8601ToDate(BASE_STAMP)));
+  TFile.WriteAllText(Name, 'x');
+  PruneAutoSnapshots(Auto, 'who-writes', 'T', NEGATIVE_KEEP);
+  Assert.IsFalse(TFile.Exists(Name), 'negative keep behaves as 0');
+  TFile.WriteAllText(Name, 'x');
+  PruneAutoSnapshots(Auto, 'who-writes', 'T', 0);
+  Assert.IsFalse(TFile.Exists(Name), '0 removes all');
+end;
+
+procedure TRemarksSnapshotTests.SaveOlderThanTheNewestTwentyReturnsFalse;
+begin
+  var Auto:= TPath.Combine(FTemp, 'auto');
+  ForceDirectories(Auto);
+  var Base:= ISO8601ToDate(BASE_STAMP);
+  for var I:= 1 to KEEP_TWENTY do
+    TFile.WriteAllText(TPath.Combine(Auto, SnapshotFileName('who-writes', 'T', Base + I / DAY_MINUTES)), 'x');
+  var Path: string;
+  Assert.IsFalse(SaveSnapshot(FTemp, True, 'who-writes', 'T', 'old', Base, Path), 'retention removed it');
+  Assert.AreEqual('', Path);
+  Assert.AreEqual(KEEP_TWENTY, Integer(Length(TDirectory.GetFiles(Auto, '*.txt'))));
+  // A newer one still succeeds and its path exists.
+  Assert.IsTrue(SaveSnapshot(FTemp, True, 'who-writes', 'T', 'new', Base + SINGLE_FILE, Path));
+  Assert.IsTrue(TFile.Exists(Path));
 end;
 
 procedure TRemarksSnapshotTests.SnapshotNameMatchesF2;

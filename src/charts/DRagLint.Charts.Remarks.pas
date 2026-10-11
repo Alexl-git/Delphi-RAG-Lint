@@ -61,7 +61,7 @@ function RemarksBlockIsReport(const pBlock: TRemarksBlock; out pHeader: TReportH
 /// with no BOM that is valid UTF-8 and has high bytes stays UTF-8 without BOM; anything
 /// else is ANSI. Line ends: the file's own (the first line end found; CRLF when it has
 /// none); the block's last line keeps whatever terminator it had, so a block at the end
-/// of a file with no final newline gets none. Every new line gets pBlock.Indent. Refuses
+/// of a file with no final newline gets none. The file is written to <path>.tmp and swapped in with MoveFileEx(replace-existing), so a failed write leaves the unit untouched. Every new line gets pBlock.Indent. Refuses
 /// (file untouched) when the file cannot be read, the lines StartLine..EndLine no longer
 /// equal pBlock.Lines, or the write fails. Not thread-safe per file.</remarks>
 function ReplaceRemarksBlockInFile(const pPath: string; const pBlock: TRemarksBlock;
@@ -70,7 +70,7 @@ function ReplaceRemarksBlockInFile(const pPath: string; const pBlock: TRemarksBl
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils;
+  Winapi.Windows, System.SysUtils, System.Classes, System.IOUtils;
 
 const
   DOC_PREFIX = '///';
@@ -81,6 +81,7 @@ const
   ASCII_LIMIT = $7F;
   FIRST_LINE = 1;
   MISSING = -1;
+  TEMP_EXT = '.tmp';
 
 type
   TFileEncoding = (feAnsi, feUtf8, feUtf8Bom);
@@ -298,11 +299,16 @@ begin
   end
   else
     Output:= Body;
+  // Write beside the unit, then swap: a crash or full disk leaves the old unit whole.
+  var Temp:= pPath + TEMP_EXT;
   try
-    TFile.WriteAllBytes(pPath, Output);
+    TFile.WriteAllBytes(Temp, Output);
+    if not MoveFileEx(PChar(Temp), PChar(pPath), MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then
+      RaiseLastOSError;
   except
     on E: Exception do
     begin
+      DeleteFile(Temp);
       pWhyNot:= 'cannot write ' + pPath + ': ' + E.Message;
       Exit;
     end;

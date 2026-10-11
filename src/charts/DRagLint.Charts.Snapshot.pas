@@ -44,7 +44,7 @@ function SnapshotFileName(const pQuestion, pTarget: string; pWhen: TDateTime): s
 /// <param name="pPath">The file written; '' when the result is False.</param>
 /// <returns>False when the folder or file cannot be written.</returns>
 /// <remarks>Written as UTF-8 without BOM with CRLF line ends. A second snapshot of the
-/// same question and target in the same minute replaces the first. Creates the folder.
+/// same question and target in the same minute replaces the first. Creates the folder. For pAuto, returns False (pPath '') when the 20-snapshot retention immediately removed the new file because 20 newer ones exist; the file is then gone.
 /// </remarks>
 function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarget, pPlainText: string;
   pWhen: TDateTime; out pPath: string): Boolean;
@@ -53,7 +53,7 @@ function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarg
 /// <param name="pAutoDir">The auto folder itself.</param>
 /// <param name="pQuestion">Question id.</param>
 /// <param name="pTarget">Target (sanitised here).</param>
-/// <param name="pKeep">How many to keep; default 20.</param>
+/// <param name="pKeep">How many to keep; default 20. 0 removes every snapshot of the routine; a negative value is treated as 0 and never raises.</param>
 /// <remarks>Only files named exactly '&lt;question&gt;--&lt;target&gt;--&lt;stamp&gt;.txt'
 /// with a digit stamp count, so another target that merely shares the prefix is never
 /// touched. Ordered by the stamp in the name, never by file time; oldest removed first.
@@ -71,7 +71,7 @@ implementation
 
 uses
   System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.Generics.Collections,
-  System.Generics.Defaults, DRagLint.Core.Model, DRagLint.Project.OwnRoots;
+  System.Generics.Defaults, System.Math, DRagLint.Core.Model, DRagLint.Project.OwnRoots;
 
 const
   DEFAULT_DIR = 'drag-lint-reports';
@@ -188,7 +188,7 @@ end;
 procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: Integer);
 begin
   var Files:= StampedFiles(pAutoDir, pQuestion, pTarget);
-  for var I:= pKeep to High(Files) do
+  for var I:= Max(0, pKeep) to High(Files) do
     DeleteFile(Files[I].Value); // False (locked file) is fine: the next prune retries it
 end;
 
@@ -220,7 +220,15 @@ begin
     end;
     pPath:= Path;
     if pAuto then
+    begin
       PruneAutoSnapshots(Dir, pQuestion, pTarget, AUTO_KEEP);
+      // pWhen older than the newest 20: retention removed the file just written.
+      if not TFile.Exists(Path) then
+      begin
+        pPath:= '';
+        Exit;
+      end;
+    end;
     Result:= True;
   except
     on Exception do
