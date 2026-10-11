@@ -20,8 +20,11 @@
     * Names the conversion INTRODUCES (a cast template's routine or enum value)
       get their declaring unit added; a name two units declare is REPORTED in
       uses_unresolved (ambiguous) and never picked; a #use of one candidate
-      resolves it on the next run. A1 / A1b / A2. The To-type tie too. A3.
-      A name no --db declares is reported not-found, nothing added. A4.
+      resolves it on the next run. The To-type tie too. A3. A name no --db
+      declares is reported not-found, nothing added. (1.27.0: a cast link
+      writes no .pas access site, so a cast template introduces nothing any
+      more -- A1 pins the per-site refusal and the ABSENCE of those adds; the
+      cast forms parse and fail only at the refused site, C3.)
     * Tree-sitter byte columns are read as characters: non-ASCII text before
       a reference does not index past the line (ERangeError). ENC2.
     * The C13 move is a `moved` row. D2.
@@ -545,26 +548,27 @@ Check 'A3 (R8a) the To type TTie is declared in two units: none added, reported 
   (($un.Count -eq 1) -and ($un[0].name -eq 'TTie') -and ($un[0].reason -eq 'ambiguous') -and ((@($un[0].candidates | ForEach-Object { $_.unit }) | Sort-Object) -join ',') -eq 'LibTieA,LibTieB' -and
    ((Kinds $r) -contains 'uses-unit-ambiguous') -and -not ((Text 'TieForm.pas') -match 'LibTie')) $r.Out
 
-$r = J 'CastForm.pas' 'cast.rules'
-$ad = @(Rows $r 'add' | Where-Object { $_.unit -eq 'LibCast' })
-Check 'A1 a cast template introduces CastPic: LibCast added (implementation, source reconcile, needed_by CastPic)' `
-  (($ad.Count -eq 1) -and ($ad[0].section -eq 'implementation') -and ($ad[0].source -eq 'reconcile') -and ((Need $ad[0]) -eq 'CastPic')) $r.Out
-$r = J 'CastEForm.pas' 'caste.rules'
-$ad = @(Rows $r 'add' | ForEach-Object { $_.unit })
-Check 'A1b ... CastPicMode + the enum value cmFancy: LibCast AND LibEnum added' (($ad -contains 'LibCast') -and ($ad -contains 'LibEnum')) $r.Out
-$r = J 'AmbForm.pas' 'amb.rules'
-$un = @($r.J.uses_unresolved)
-Check 'A2 AmbPic is declared in LibAmbA and LibAmbB: no add, uses_unresolved ambiguous with both' `
-  (($un.Count -eq 1) -and ($un[0].name -eq 'AmbPic') -and ($un[0].reason -eq 'ambiguous') -and (@($un[0].candidates).Count -eq 2) -and
-   (@(Rows $r 'add' | Where-Object { $_.unit -like 'LibAmb*' }).Count -eq 0) -and ((Kinds $r) -contains 'uses-unit-ambiguous')) $r.Out
-$r = J 'AmbUForm.pas' 'ambu.rules'
-Check 'A2 ... with `#use LibAmbA` in the book: resolved, no warning, LibAmbA added once' `
-  ((@($r.J.uses_unresolved).Count -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@(Rows $r 'add' | Where-Object { $_.unit -eq 'LibAmbA' }).Count -eq 1)) $r.Out
-$r = J 'NfForm.pas' 'nf.rules'
-$un = @($r.J.uses_unresolved)
-Check 'A4 NoSuchPic is declared by no --db: no add, uses_unresolved not-found with no candidates, no ambiguity warning' `
-  (($r.Code -eq 0) -and ($un.Count -eq 1) -and ($un[0].name -eq 'NoSuchPic') -and ($un[0].reason -eq 'not-found') -and (@($un[0].candidates).Count -eq 0) -and
-   ($un[0].section -eq 'implementation') -and (@(Rows $r 'add' | Where-Object { $_.source -eq 'reconcile' }).Count -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous')) $r.Out
+# 1.27.0 (cast-link refusal, owner decision): a cast link writes NO .pas access
+# site, so a cast template's routine (CastPic, CastPicMode + cmFancy, AmbPic,
+# NoSuchPic) never reaches the converted .pas and the reconciliation has no
+# introduced name to add, report ambiguous or report not-found. Until 1.26.x
+# A1 / A1b / A2 / A4 asserted those adds and uses_unresolved rows; they now
+# assert their ABSENCE deliberately, plus the per-site refusal that replaced
+# the template. The reconcile-add path (PlanNewNames) has no convert-apply
+# route left -- see the known gap in the 1.27.0 CHANGELOG; A3 below still pins
+# the ambiguity reporting of the #convert surface's To type.
+function CastRefused($r) { return @(if ($r.J) { $r.J.items | Where-Object { $_.kind -eq 'cast-not-applied' -and $_.instance -eq 'pic1' -and $_.line -eq 20 } }) }
+foreach ($x in @(@('CastForm','cast.rules','CastA'), @('CastEForm','caste.rules','CastE'), @('AmbForm','amb.rules','CastAmb'),
+                 @('AmbUForm','ambu.rules','CastAmb'), @('NfForm','nf.rules','CastNf'))) {
+  $r = J "$($x[0]).pas" $x[1]
+  $cr = CastRefused $r
+  Check "A1 $($x[0]): the cast link's access site pic1.Picture (line 20) is REFUSED, one cast-not-applied naming $($x[2])" `
+    (($r.Code -eq 0) -and ($cr.Count -eq 1) -and ($cr[0].value -eq $x[2]) -and ($cr[0].text -match "$($x[0])\.pas:20 pic1\.Picture") -and
+     ($cr[0].text -match 'convert this access site by hand')) $r.Out
+  Check "A1 ... $($x[0]): so no reconcile add and no uses_unresolved row (the template never reaches the .pas)" `
+    ((@(Rows $r 'add' | Where-Object { $_.source -eq 'reconcile' }).Count -eq 0) -and (@($r.J.uses_unresolved).Count -eq 0) -and
+     -not ((Kinds $r) -contains 'uses-unit-ambiguous') -and -not ((Kinds $r) -contains 'cast-applied')) $r.Out
+}
 
 # ---- N1: --no-reconcile-uses is 1.26.6 --------------------------------------
 $r = J 'W2Form.pas' 'old.rules' @('--no-reconcile-uses')
@@ -671,19 +675,33 @@ function Dcc([string]$Dpr, [string[]]$Units) {
   Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait | Out-Null
   return (Get-Content $log -Raw -ErrorAction SilentlyContinue)
 }
-# CastForm / CastEForm are NOT in this set: the cast access-site rewrite
-# replaces only the member token (`pic1.Picture` -> `pic1.<statement>.Data`),
-# so their converted Setup body does not parse -- a defect of the cast
-# realisation (Apply.pas Outcome 1), not of the uses reconciliation.
 $cl = Dcc 'CGood' @('W1Form', 'W4Form', 'W6Form', 'W6bForm', 'W7Form', 'D1Form', 'D2Form', 'BaseForm', 'DescForm', 'O1Form')
 Check 'C1 the reconciled units compile (dcc64)' (($cl -match 'BUILD_EXITCODE=0') -and -not ($cl -match '(?m)Error')) (@(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' }) -join ' | ')
+# CastForm / CastEForm: until 1.26.x they were EXCLUDED here because the cast
+# realisation spliced a statement over the member token (`pic1.pic1.Glyph.
+# Assign(CastPic(pic1.Picture));.Data`) and the unit did not parse. 1.27.0
+# refuses the site instead, so the converted unit PARSES and its one error is
+# the refused access site itself -- pic1 is a TPicNew, which has no Picture --
+# exactly the hand-conversion the cast-not-applied warning names (ruling 1:
+# the compile error is the signal). Any other error, a syntax error above all,
+# fails this check.
+foreach ($cf in @('CastForm', 'CastEForm')) {
+  $cl = Dcc ("CCast" + $cf) @($cf)
+  $errs = @(($cl -split "`r?`n") | Where-Object { $_ -match '\b(Error|Fatal)\b' })
+  Check "C3 (cast refusal) $cf parses; its only error is the refused site: E2003 Picture at $cf.pas(20)" `
+    (($cl -match 'BUILD_EXITCODE=1') -and ($errs.Count -ge 1) -and
+     (@($errs | Where-Object { $_ -notmatch ("$cf\.pas\(20\).*E2003.*\bPicture\b") -and $_ -notmatch 'F2063|Fatal: F2613|Could not compile used unit' }).Count -eq 0) -and
+     (@($errs | Where-Object { $_ -match ("$cf\.pas\(20\).*E2003.*\bPicture\b") }).Count -eq 1)) ($errs -join ' | ')
+}
 foreach ($x in @(@('W2Form','ELibOld'), @('W3Form','TOld'), @('W5Form','OldUpper'))) {
   $cl = Dcc ("CBad" + $x[0]) @($x[0])
   Check "C2 (ruling 1) $($x[0]) does NOT compile, and the error names $($x[1])" (($cl -match 'BUILD_EXITCODE=1') -and ($cl -match ("E2003.*\b" + $x[1] + "\b"))) (@(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' }) -join ' | ')
 }
 
 # ---- I2: idempotence of the add / move / alias-removal paths -----------------
-# CastForm / CastEForm took reconcile ADDs (A1 / A1b), D2Form a MOVE, W6Form an
+# CastForm / CastEForm took reconcile ADDs until 1.26.x (since 1.27.0 a cast link
+# writes no .pas site, so they take none -- CastEForm still a #unuse removal),
+# D2Form a MOVE, W6Form an
 # alias REMOVAL; each was applied above (index refreshed). A second run plans no
 # uses add / remove / moved row.
 foreach ($x in @(@('CastForm','cast.rules'), @('CastEForm','caste.rules'), @('D2Form','old.rules'), @('W6Form','al.rules'))) {

@@ -29,8 +29,8 @@ by its OWNER RULINGS 2026-10-06.)
   * A watched unit no `--db` indexes is KEPT (`unit-rule-unverified`).
   * Presence is scope-alias aware: `#unuse DBTables` removes `Bde.DBTables`, `#use DB`
     is satisfied by `Data.DB` (no second, E2004 entry).
-  * A name the conversion INTRODUCES -- a cast template's routine or enum value -- gets
-    its declaring unit added (interface uses when referenced above `implementation`;
+  * A name the conversion INTRODUCES into the `.pas` gets its declaring unit added
+    (since the cast-link fix below no 1.27.0 surface introduces one; the path is kept) (interface uses when referenced above `implementation`;
     `source` `reconcile`). A name, or a #convert To type, that two units declare is
     REPORTED in `uses_unresolved[]` with every candidate (`uses-unit-ambiguous`) and
     never picked; a `#use` of one candidate resolves it on the next run.
@@ -54,6 +54,33 @@ by its OWNER RULINGS 2026-10-06.)
   ends convert-apply with `FATAL`. Tree-sitter's UTF-8 byte columns are converted to
   character columns, so non-ASCII text before a reference on its line (CP1252 in a
   string) no longer raised `ERangeError`.
+
+### Fixed
+
+- **A `#link` carrying a cast no longer writes a `.pas` access site** (shipped defect,
+  came in with 52d9a1b9). A cast whose `.castlib` entry has a `pas` template was
+  "realized" by splicing the template -- a STATEMENT such as `{dst}.Assign({src});` --
+  over the member token alone, so `pic1.Picture.Data := 'seed'` became
+  `pic1.pic1.Glyph.Assign(CastPic(pic1.Picture));.Data := 'seed'`, which does not
+  parse (a real book hits it: `TabcToggleBtn-to-TcxButton.rules:52  #link
+  OptionsImage.Glyph <- Picture : AssignGraphic`). Owner decision, interim until a
+  member-replacement feature is designed: **every** `.pas` access site of a
+  cast-carrying link is REFUSED -- no `.pas` edit, one warning per site:
+  `line N: #link To <- From : Cast -- access site <file>:<line> <inst>.<From> not
+  rewritten: the cast's pas template is a statement and has no correct splice inside
+  an expression; convert this access site by hand` (items[] kind `cast-not-applied`
+  with `instance`, `file`, `line`, `path` and `value` = the cast). The `.dfm` half of
+  the cast is unchanged. The kind `cast-applied` is retired (never emitted). A cast
+  that is unknown, or found with no `pas` template, keeps its one per-rule
+  `cast-not-applied` (the no-template one no longer advises adding a `pas` line).
+  `info --json` capability `cast_site_refusal`.
+  * Consequence for the uses reconciliation: a cast template's routine or enum value
+    never reaches the converted `.pas` any more, so nothing a `#convert` book can
+    write today introduces a bare name, and the reconcile ADD / `uses_unresolved`
+    path for introduced names (`PlanNewNames`) has no convert-apply route left. It
+    is KEPT for the member-replacement feature; its arms now assert the absence of
+    those rows, and the To-type ambiguity report (A3) remains its only live
+    positive control. Known gap.
 
 ## v1.26.7-alpha -- unreleased
 

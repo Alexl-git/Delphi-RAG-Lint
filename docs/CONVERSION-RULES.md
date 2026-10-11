@@ -1037,6 +1037,26 @@ because of it, and descendants are not edited. LIMIT: a descendant outside the
    non-`Self` receiver), scoped to receivers that are converted instances of THIS
    unit -- an access on an unconverted receiver (e.g. `Other.Caption` when `Other`
    has no `#convert` rule) is left untouched.
+
+   **A `#link` carrying a cast never rewrites a `.pas` access site** (1.27.0,
+   interim owner decision until a member-replacement feature is designed). A
+   cast's `pas` template is a STATEMENT (`{dst}.Assign({src});`) and an access
+   site is the member token INSIDE an expression (`pic1.Picture.Data := 'seed'`):
+   there is no correct splice, and `{src}` would read the From member the
+   retyped instance no longer has. 1.26.x spliced it anyway and wrote
+   `pic1.pic1.Glyph.Assign(CastPic(pic1.Picture));.Data := 'seed'`. Now every
+   bound site is left as it is and reported once:
+   `line N: #link To <- From : Cast -- access site <file>:<line> <inst>.<From>
+   not rewritten: the cast's pas template is a statement and has no correct
+   splice inside an expression; convert this access site by hand` -- a warning,
+   `items[]` kind `cast-not-applied` with `instance`, `file`, `line`, `path`
+   (the From member) and `value` (the cast). A cast the `--castlib` does not
+   know, or one with no `pas` template, keeps its single per-rule
+   `cast-not-applied`. The `.dfm` half of the cast (`dfm` hints, `dfmdata`,
+   `compat`) is unchanged. The 1.26.x kind `cast-applied` is retired. Because
+   a template no longer reaches the `.pas`, the converted unit fails to compile
+   at exactly those sites, and the uses reconciliation has no template routine
+   to add. `info --json`: `capabilities.cast_site_refusal: true`.
 5. **Runtime-creator retype + TODO marker** -- every explicit `FromType.Xxx(...)`
    construction (e.g. `Edit1 := TOldEdit.Create(Self);`) gets its type token
    rewritten to ToType, PLUS an unconditional `{ TODO: drag-lint convert --

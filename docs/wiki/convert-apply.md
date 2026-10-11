@@ -17,6 +17,15 @@ that writes nothing. `--apply` writes for real, with backups and a
 `recovery.txt`, unless `--no-backup` is also given. `--db PATH` is required
 and may be repeated.
 
+## Cast links in code (1.27.0)
+A `#link To <- From : Cast` converts the `.dfm` as before, but never rewrites
+a `.pas` access site: a cast's `pas` template is a statement, and there is no
+correct place to put a statement inside an expression such as
+`pic1.Picture.Data := 'seed'`. Each such site is left as it is and reported
+as a `cast-not-applied` warning naming the file, line, instance and cast --
+"convert this access site by hand". The unit will not compile until you do;
+that compile error is the signal.
+
 ## Reaching it in the IDE
 No IDE surface -- this is a CLI-only feature.
 

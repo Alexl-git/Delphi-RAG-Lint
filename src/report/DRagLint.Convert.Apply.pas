@@ -197,12 +197,12 @@ type
     aikCollectionRelocated,  { collection moved verbatim to a new path (info) }
     aikDefaultsMayDiverge,   { a rule-referenced source is absent AND has no
                                usable default, so the T default applies }
-    aikCastNotApplied,       { #link carrying a cast, refused on the .pas side }
-    aikCastApplied,          { #link carrying a cast, REALIZED from the castlib's
-                               `pas` template at a .pas access site. Sits
-                               immediately after aikCastNotApplied because the
-                               two are the same question answered both ways, and
-                               NAMES below is POSITIONAL -- keep the two in step. }
+    aikCastNotApplied,       { #link carrying a cast, refused on the .pas side:
+                               once per rule when the cast is unknown or has no
+                               pas template, else once per access site (1.27.0:
+                               a pas template is never realized -- Instance,
+                               FilePath, Line set; Value is the cast). The
+                               1.26.x kind 'cast-applied' is retired. }
     aikInstanceSkipped,      { whole instance skipped before any edit }
     aikFieldDeclNotRetyped,  { shared multi-declarator line, not retyped }
     aikUsesUnitUnresolved,   { no unit found declaring T, uses not added }
@@ -313,7 +313,7 @@ type
     Text    : string;  { the human-readable line, verbatim }
     Line    : Integer; { 1-based line in FilePath, or 0 }
     RuleLine: Integer; { 1-based line in the rules file, or 0 }
-    Value   : string;  { 1.26.5: the value a book-warning / ref-* item is about; '' otherwise }
+    Value   : string;  { 1.26.5: the value a book-warning / ref-* item is about; 1.27.0: the cast of a cast-not-applied item; '' otherwise }
   end;
 
   /// <summary>One F property that was absent from the .dfm because it sat at its
@@ -1085,7 +1085,7 @@ const
     'dfm-path-created', 'creator-verify', 'creator-unverified',
     'unmapped-property', 'binary-type-mismatch', 'owned-part-unconverted',
     'link-stub-unfilled', 'collection-relocated', 'defaults-may-diverge',
-    'cast-not-applied', 'cast-applied', 'instance-skipped', 'field-decl-not-retyped',
+    'cast-not-applied', 'instance-skipped', 'field-decl-not-retyped',
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
     'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped',
     'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable',
@@ -4387,7 +4387,8 @@ var
 
           The three cases need telling apart because two of them need OPPOSITE
           fixes by the operator:
-            1. resolved + `pas` template -> realize it here.
+            1. resolved + `pas` template -> 1.26.x realized it here; since 1.27.0
+               every access site is REFUSED one by one (see Outcome 1 below).
             2. resolved + EMPTY template -> still by hand, but the fix is to the
                .castlib, so the message must say the cast was FOUND.
             3. name resolves to nothing  -> the fix is to the rule book or the
@@ -4416,6 +4417,7 @@ var
               [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast]));
           It.Path    := LinkRule.FromPath;
           It.RuleLine:= LinkRule.LineNo;
+          It.Value   := LinkRule.Cast;
           Emit(It);
           Continue;
         end;
@@ -4428,60 +4430,50 @@ var
           It:= PlainItem(aikCastNotApplied, afWarnings,
             Format('line %d: #link %s <- %s : %s SKIPPED on the .pas side -- ' +
               'the cast WAS FOUND in the cast library but carries no pas template, so there is ' +
-              'nothing to emit. Add a `pas` line to cast %s in the .castlib, or convert this ' +
-              'access site by hand.%s',
-              [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast, LinkRule.Cast,
+              'nothing to emit. Convert this access site by hand.%s',
+              [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast,
                (if Trim(CastDef.Todo) <> '' then ' TODO: ' + CastDef.Todo else '')]));
           It.Path    := LinkRule.FromPath;
           It.RuleLine:= LinkRule.LineNo;
+          It.Value   := LinkRule.Cast;
           Emit(It);
           Continue;
         end;
 
-        (* Outcome 1 -- realize it, once per access site.
+        (* Outcome 1 -- the cast is FOUND with a pas template, and every .pas
+           access site is still REFUSED: no edit, one warning per site
+           (1.27.0, owner decision -- interim, until a member-replacement
+           feature is designed).
 
-           The dst placeholder is the REWRITTEN target expression (instance plus
-           the dotted ToPath); the src placeholder is the ORIGINAL source
-           expression, so the emitted statement can still read the old value.
-           The template is a STATEMENT, so the whole access-site expression is
-           replaced by it -- deliberately NOT the tekReplaceInLine identifier
-           swap the no-cast path below uses, which would splice a statement into
-           the middle of an expression.
+           Why no site can be realized: the template is a STATEMENT
+           (dst.Assign(src);) while an access site is the member token INSIDE
+           an expression (pic1.Picture.Data := 'seed'). There is no correct
+           splice of a statement into an expression -- 52d9a1b9 spliced it over
+           the member token and wrote pic1.pic1.Glyph.Assign(...);.Data, which
+           does not parse. Replacing the whole statement instead is no better:
+           the src placeholder reads the FROM member, which the retyped
+           instance no longer has, so the emitted code reads a property that
+           does not exist. The .dfm half of the cast is unaffected.
 
-           WRITTEN AS A PAREN-STAR COMMENT ON PURPOSE: the placeholders are
-           spelled with braces, and a literal closing brace inside a brace
-           comment ENDS THE COMMENT -- the prose after it then compiles as code.
-           That is exactly how this block failed to build the first time. Note
-           the same hazard exists here with the paren-star terminator, which is
-           why neither delimiter is written out literally in this block. *)
+           WRITTEN AS A PAREN-STAR COMMENT ON PURPOSE: a literal closing brace
+           inside a brace comment ENDS THE COMMENT, so the placeholders are not
+           spelled with their braces here. *)
         var CastSites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
           LinkRule.FromPath, NamesForLink(LinkRule)), Unv);
         ReportUnverified(LinkRule.FromPath);
         for var CSite in CastSites do
         begin
-          var DstExpr: string:= CSite.InstanceName + '.' + LinkRule.ToPath;
-          var SrcExpr: string:= CSite.InstanceName + '.' + LinkRule.FromPath;
-          var Rendered: string:= StringReplace(CastDef.PasTemplate, '{dst}', DstExpr, [rfReplaceAll]);
-          Rendered:= StringReplace(Rendered, '{src}', SrcExpr, [rfReplaceAll]);
-
-          E:= Default(TTextEdit);
-          E.FilePath:= AUnitPas;
-          E.Kind    := tekReplaceInLine;
-          E.Line    := CSite.Line;
-          E.Col     := CSite.Col;
-          E.EndCol  := CSite.EndCol;
-          E.Text    := Rendered;
-          Edits.Add(E);
-
-          It:= PlainItem(aikCastApplied, afAccessSites,
-            Format('line %d: #link %s <- %s : %s -> %s (L%d)',
+          It:= PlainItem(aikCastNotApplied, afWarnings,
+            Format('line %d: #link %s <- %s : %s -- access site %s:%d %s.%s not rewritten: the cast''s pas template is a ' +
+              'statement and has no correct splice inside an expression; convert this access site by hand',
               [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast,
-               Rendered, CSite.Line]));
+               ExtractFileName(AUnitPas), CSite.Line, CSite.InstanceName, LinkRule.FromPath]));
           It.Instance:= CSite.InstanceName;
           It.FilePath:= AUnitPas;
           It.Path    := LinkRule.FromPath;
           It.RuleLine:= LinkRule.LineNo;
           It.Line    := CSite.Line;
+          It.Value   := LinkRule.Cast;
           Emit(It);
         end;
         Continue;
