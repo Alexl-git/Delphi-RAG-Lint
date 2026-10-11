@@ -41,6 +41,10 @@ uses
   , ChartsTests.Compare in 'ChartsTests.Compare.pas'
   , DRagLint.Charts.Render in '..\..\src\charts\DRagLint.Charts.Render.pas'
   , ChartsTests.Render in 'ChartsTests.Render.pas'
+  , DRagLint.Charts.Text in '..\..\src\charts\DRagLint.Charts.Text.pas'
+  , ChartsTests.CoreText in 'ChartsTests.CoreText.pas'
+  , DRagLint.Charts.Index in '..\..\src\charts\DRagLint.Charts.Index.pas'
+  , ChartsTests.CoreIndex in 'ChartsTests.CoreIndex.pas'
   ;
 
 const

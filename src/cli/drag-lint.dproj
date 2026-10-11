@@ -264,6 +264,8 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Snapshot.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Compare.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Render.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Text.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Index.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>
