@@ -478,7 +478,7 @@ type
   /// emitted only when BuildApplyPlan's AWarnUnlinked is True -- so a caller
   /// that silences the warning still gets the count.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

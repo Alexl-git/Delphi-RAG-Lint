@@ -209,7 +209,7 @@ type
   /// converter team wants to dispatch on 'nobody typed this leaf'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.RemapLeaf (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.RemapLeaf (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

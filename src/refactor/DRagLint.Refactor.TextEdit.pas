@@ -101,10 +101,12 @@ type
     /// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas) (+3 more)</para>
     /// <para>Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Pure</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
-    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyOneEdit"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RefusalOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer; overload;
