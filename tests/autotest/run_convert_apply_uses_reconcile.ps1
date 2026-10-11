@@ -673,13 +673,19 @@ Check 'A3 (R8a) the To type TTie is declared in two units: none added, reported 
 Check 'A8-2 ... the uses_unresolved row carries the line of the retyped field (10), not 0' `
   (($un.Count -eq 1) -and ($un[0].line -eq 10) -and ($un[0].section -eq 'interface')) ($un | ConvertTo-Json -Depth 5)
 
-# ---- A8-1: a #use resolves the To-type tie, in the INTERFACE ----------
+# ---- A8-1 / A8-4: a #use resolves the To-type tie, in the INTERFACE ----------
 $r = J 'TieUForm.pas' 'tieu.rules'
 $ad = @(Rows $r 'add' | Where-Object { $_.unit -eq 'LibTieA' })
 Check 'A8-1 #use LibTieA resolves the TTie tie: no ambiguity warning, no uses_unresolved row' `
   (($r.Code -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@($r.J.uses_unresolved).Count -eq 0)) $r.Out
 Check 'A8-1 ... LibTieA is added ONCE, to the INTERFACE uses (the retyped field is declared there), rule #use LibTieA' `
   (($ad.Count -eq 1) -and ($ad[0].section -eq 'interface') -and ($ad[0].rule -eq '#use LibTieA')) ($r.J.uses | ConvertTo-Json -Depth 5)
+$r = J 'TieMForm.pas' 'tieu.rules'
+$mv = Rows $r 'moved'
+Check 'A8-4 LibTieA used only in the implementation: MOVED to the interface (moved row), no ambiguity, no add' `
+  (($r.Code -eq 0) -and ($mv.Count -eq 1) -and ($mv[0].unit -eq 'LibTieA') -and ($mv[0].section -eq 'interface') -and
+   ((Rows $r 'add').Count -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous')) $r.Out
+
 # ---- A8-3: 'implementation{comment}' is still the implementation keyword -----
 $r = J 'W2iForm.pas' 'old.rules'
 $rm = Rows $r 'remove'
@@ -791,7 +797,7 @@ $written = @('W1Form.dfm', 'W4Form.dfm')
 foreach ($x in @(@('W2Form','old.rules'), @('W3Form','old.rules'), @('W5Form','old.rules'), @('W6Form','al.rules'), @('W6bForm','al.rules'),
                  @('W7Form','old.rules'), @('D1Form','db.rules'), @('D2Form','old.rules'), @('DescForm','old.rules'),
                  @('CastForm','cast.rules'), @('CastEForm','caste.rules'),
-                 @('TieUForm','tieu.rules'))) {
+                 @('TieUForm','tieu.rules'), @('TieMForm','tieu.rules'))) {
   $r = Run "$($x[0]).pas" $x[1] @('--apply', '--no-backup')
   Check "X $($x[0]) --apply exits 0" ($r.Code -eq 0) $r.Out
   $written += "$($x[0]).dfm"
@@ -815,10 +821,12 @@ function Dcc([string]$Dpr, [string[]]$Units) {
   return (Get-Content $log -Raw -ErrorAction SilentlyContinue)
 }
 Check 'X TieUForm LibTieA written into the INTERFACE uses' ((Text 'TieUForm.pas') -match "interface\s+uses\s+Classes, LibOld, LibTieA;") (Text 'TieUForm.pas')
-# A8-1: this must COMPILE -- an interface field typed by a
+Check 'X TieMForm LibTieA moved: in the interface uses, no longer in the implementation' `
+  (((Text 'TieMForm.pas') -match "interface\s+uses\s+Classes, LibOld, LibTieA;") -and -not ((Text 'TieMForm.pas') -match "implementation\s+uses")) (Text 'TieMForm.pas')
+# A8-1 / A8-4: these must COMPILE -- an interface field typed by a
 # unit in the implementation uses (the A8-1 defect) is E2003.
 $cl = Dcc 'CGood' @('W1Form', 'W4Form', 'W6Form', 'W6bForm', 'W7Form', 'D1Form', 'D2Form', 'BaseForm', 'DescForm', 'O1Form',
-                    'TieUForm')
+                    'TieUForm', 'TieMForm')
 Check 'C1 the reconciled units compile (dcc64)' (($cl -match 'BUILD_EXITCODE=0') -and -not ($cl -match '(?m)Error')) (@(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' }) -join ' | ')
 # CastForm / CastEForm: until 1.26.x they were EXCLUDED here because the cast
 # realisation spliced a statement over the member token (`pic1.pic1.Glyph.
@@ -848,7 +856,7 @@ foreach ($x in @(@('W2Form','ELibOld'), @('W3Form','TOld'), @('W5Form','OldUpper
 # alias REMOVAL; each was applied above (index refreshed). A second run plans no
 # uses add / remove / moved row.
 foreach ($x in @(@('CastForm','cast.rules'), @('CastEForm','caste.rules'), @('D2Form','old.rules'), @('W6Form','al.rules'),
-                 @('TieUForm','tieu.rules'))) {
+                 @('TieUForm','tieu.rules'), @('TieMForm','tieu.rules'))) {
   $r = J "$($x[0]).pas" $x[1]
   Check "I2 second run on the converted $($x[0]): no uses add/remove/moved row, no ambiguity warning" `
     (($null -ne $r.J) -and (-not $r.J.refused) -and (@($r.J.uses | Where-Object { $_.action -in @('add','remove','moved') }).Count -eq 0) -and

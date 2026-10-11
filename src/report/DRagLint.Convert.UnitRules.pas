@@ -961,7 +961,9 @@ var
 
 begin
   for U in AInterfaceAdds do Move(U);
-  { C9: a reconcile add an interface declaration needs moves the same way }
+  { C9: a reconcile add an interface declaration needs moves the same way.
+    Unreachable through convert-apply since 1.27.0: no .pas surface writes a
+    name the reconciler adds (see UsesReconcile.TReconciler.PlanNewNames) }
   if FNeeds.Enabled then
     for var A: TUsesReconAdd in FNeeds.Adds do
       if A.ToInterface then Move(A.UnitName);

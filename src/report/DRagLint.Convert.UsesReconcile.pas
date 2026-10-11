@@ -632,7 +632,20 @@ begin
   Result:= False;
 end;
 
-{ R7 / R8: a bare name the converted .pas references and the original did not. }
+{ R7 / R8: a bare name the converted .pas references and the original did not.
+
+  UNREACHABLE THROUGH convert-apply since 1.27.0 (C9 A8-5, measured
+  2026-10-11), kept for the day a .pas surface writes a new bare name. What
+  each .pas surface writes: the field and creator retypes write the To type
+  (HandledNames, skipped below); the access-site rewrite writes a member token
+  after a '.', never bare; a value cast writes a string literal (no reference);
+  the creator TODO marker is a comment; a cast link writes no .pas site at all
+  (cast-not-applied). Enum casts act on the .dfm only. So no name reaches the
+  add / ambiguous / not-found verdicts here, and the ToInterface placement and
+  the PlanMoves reconcile branch they feed are unreachable too -- the live
+  interface placement and move are the #convert surface's (IntfAdds, A8-1/4).
+  The unit tests of these verdicts were the cast-template arms A1 / A1b / A2 /
+  A4, retired in 1.27.0. }
 procedure TReconciler.PlanNewNames;
 var
   Adds: TList<TUsesReconAdd>;

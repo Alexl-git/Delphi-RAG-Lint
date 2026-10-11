@@ -21,6 +21,13 @@ breaking changes** until v1.0.
   The reconciler matched the keyword by line text, missed a comment glued to it and then counted
   every reference as an interface reference (needed_by sections). It now uses the uses planner's
   own lexer (`ImplementationKeywordLine`). A8-3.
+- **convert-apply (C9 A8-4 / A8-5): reachability recorded.** The MOVE of a To type's unit from the
+  implementation to the interface uses is reachable since A8-1 and pinned (A8-4, TieMForm: `moved`
+  row, dcc64). The reconciler's own reconcile-add path (`PlanNewNames`, its ToInterface placement
+  and the PlanMoves reconcile branch) has NO convert-apply route since the 1.27.0 cast-link
+  refusal: no `.pas` surface writes a new bare name (retypes write the handled To type, access
+  rewrites write a member after a `.`, a value cast writes a literal, a cast link writes no site).
+  Documented in the code; no feature invented for it.
 
 No extractor or resolver change: indexes do not re-parse or re-resolve.
 
