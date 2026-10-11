@@ -61,6 +61,7 @@ uses
   DRagLint.Convert.PropTree,
   DRagLint.Convert.PropCache,
   DRagLint.Convert.UnitRules,
+  DRagLint.Convert.UsesReconcile,  // dl:unit DRagLint.Convert.UsesReconcile accepted -- the KEEP_REASON_* / UNRESOLVED_* constants are its row vocabulary, read where the rows become warnings
   DRagLint.Refactor.TextEdit;
 
 const
@@ -78,6 +79,29 @@ const
   /// the index, so not rewritten; reported as access-site-unverified (C8 N2
   /// review, 1.26.0).</summary>
   INH_ACTION_UNVERIFIED = 'unverified';
+  /// <summary>apply/1 pas_uses[].status: a #link covers the member and
+  /// convert-apply handles its .pas sites -- renamed, or nothing to rename
+  /// (1.27.0).</summary>
+  PAS_USE_MAPPED = 'mapped';
+  /// <summary>apply/1 pas_uses[].status: a #link covers the member, but
+  /// convert-apply makes NO .pas edit for that link shape -- a dotted To or
+  /// From path (`#link Properties.X <- X`), so the site still names the From
+  /// member and may not compile (1.27.0 review fix wave). Outranks
+  /// PAS_USE_MAPPED; PAS_USE_CAST_REFUSED outranks it.</summary>
+  PAS_USE_NOT_REWRITTEN = 'not-rewritten';
+  /// <summary>apply/1 pas_uses[].status: a CLASS-cast #link covers the member,
+  /// so its .pas sites are refused (cast-not-applied). A value cast (StripDB)
+  /// counts as PAS_USE_MAPPED (PAS_USE_NOT_REWRITTEN on a dotted path).</summary>
+  PAS_USE_CAST_REFUSED = 'cast-refused';
+  /// <summary>apply/1 pas_uses[].status: no #link, but the To type (or an
+  /// ancestor of it) has a member of that name -- carried implicitly.</summary>
+  PAS_USE_SAME_NAME = 'same-name';
+  /// <summary>apply/1 pas_uses[].status: no #link and no such member on the
+  /// To type -- the work list.</summary>
+  PAS_USE_UNMAPPED = 'unmapped';
+  /// <summary>apply/1 pas_uses[].status: a global the .pas uses from a unit
+  /// the reconciliation removes.</summary>
+  PAS_USE_GLOBAL_DANGLING = 'global-dangling';
 
 type
   /// <summary>One component instance selected for conversion: its DFM instance
@@ -196,12 +220,12 @@ type
     aikCollectionRelocated,  { collection moved verbatim to a new path (info) }
     aikDefaultsMayDiverge,   { a rule-referenced source is absent AND has no
                                usable default, so the T default applies }
-    aikCastNotApplied,       { #link carrying a cast, refused on the .pas side }
-    aikCastApplied,          { #link carrying a cast, REALIZED from the castlib's
-                               `pas` template at a .pas access site. Sits
-                               immediately after aikCastNotApplied because the
-                               two are the same question answered both ways, and
-                               NAMES below is POSITIONAL -- keep the two in step. }
+    aikCastNotApplied,       { #link carrying a cast, refused on the .pas side:
+                               once per rule when the cast is unknown or has no
+                               pas template, else once per access site (1.27.0:
+                               a pas template is never realized -- Instance,
+                               FilePath, Line set; Value is the cast). The
+                               1.26.x kind 'cast-applied' is retired. }
     aikInstanceSkipped,      { whole instance skipped before any edit }
     aikFieldDeclNotRetyped,  { shared multi-declarator line, not retyped }
     aikUsesUnitUnresolved,   { no unit found declaring T, uses not added }
@@ -259,8 +283,24 @@ type
                                a file path, not a name (1.26.5). Path = ToPath. }
     aikRefDangling,          { a '#check-ref' value no listed Class.Prop of
                                any .dfm in the project index carries (1.26.5). }
-    aikRefNotChecked);       { '#check-ref' could not check: the project index
+    aikRefNotChecked,        { '#check-ref' could not check: the project index
                                holds no .dfm property facts. Once per run. }
+    aikUnitRuleKept,         { C9: a watched unit KEPT -- a .dfm component still
+                               needs it (owner ruling 2); a WARNING (Q5).
+                               RuleLine the book line, Line the uses entry's. }
+    aikUsesUnitAmbiguous,    { C9 R8/R8a: a name two or more units declare --
+                               none added; candidates in uses_unresolved[]. }
+    aikUnitRuleUnverified,   { C9 Q3: a watched unit no --db indexes -- kept. }
+    aikUnitRuleDangling,     { C9 ruling 1: a removal leaves .pas references
+                               dangling -- the unit will not compile until that
+                               code is converted. }
+    aikValueCastApplied,     { 1.27.0 (C15): a VALUE cast (castlib `value`,
+                               StripDB) rewrote a string literal in the .dfm or
+                               the .pas -- field access_sites either way.
+                               OldValue -> Value, FilePath, Line set. }
+    aikValueCastCheck);      { 1.27.0 (C15): a value-cast site with no edit --
+                               a .dfm value or .pas right-hand side that is not
+                               ONE string literal, or a read. A warning. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -303,7 +343,8 @@ type
     Text    : string;  { the human-readable line, verbatim }
     Line    : Integer; { 1-based line in FilePath, or 0 }
     RuleLine: Integer; { 1-based line in the rules file, or 0 }
-    Value   : string;  { 1.26.5: the value a book-warning / ref-* item is about; '' otherwise }
+    Value   : string;  { 1.26.5: the value a book-warning / ref-* item is about; 1.27.0: the cast of a cast-not-applied item, the NEW literal of a value-cast-applied one; '' otherwise }
+    OldValue: string;  { 1.27.0: the literal a value-cast-applied item replaced; '' otherwise }
   end;
 
   /// <summary>One F property that was absent from the .dfm because it sat at its
@@ -372,6 +413,41 @@ type
     Instances: Integer; { converted instances of FromType, the denominator }
   end;
 
+  /// <summary>One thing the unit's .pas still uses that a conversion must
+  /// account for (apply/1 pas_uses[], 1.27.0): a member reached through a
+  /// converted instance, or a global from a unit the reconciliation
+  /// removes.</summary>
+  /// <remarks>
+  /// <para>A MEMBER row is keyed by (Instance, Member). Its sites are the
+  /// access-site rewrite's own (FindMemberAccessSites + BoundAccessSites), so
+  /// a member reached with no receiver at the site (a `with` block) or on a
+  /// site the index cannot vouch for is NOT listed. Kind, Visibility,
+  /// DeclaredIn and DeclaringUnit describe the member as the From type -- or
+  /// the nearest ancestor of it that declares it, across the --db stores --
+  /// has it; all four are '' when no store holds it.</para>
+  /// <para>A GLOBAL row (Status PAS_USE_GLOBAL_DANGLING) has Instance,
+  /// FromType, ToType and Visibility ''; it is the reconciliation's own
+  /// dangling verdict (TUsesReconcileResult.Dangling), uncapped, so it exists
+  /// only when the reconciliation ran (not with --no-reconcile-uses, nor when
+  /// it degraded).</para>
+  /// <para>Lines are 1-based lines of the unit as read, distinct and sorted.
+  /// Kind is one of method, property, field, event, const, var, type,
+  /// routine, or '' when unknown; an event is a property named On + a capital
+  /// letter.</para>
+  /// </remarks>
+  TApplyPasUse = record
+    Instance     : string;  { the converted instance; '' for a global }
+    FromType     : string;
+    ToType       : string;
+    Member       : string;  { the member, or the global's name }
+    Kind         : string;
+    Visibility   : string;  { the member's declared visibility; '' when unknown or global }
+    DeclaringUnit: string;
+    DeclaredIn   : string;  { the class declaring the member (maybe an ancestor of FromType); a helper type for a global }
+    Status       : string;  { a PAS_USE_* constant }
+    Lines        : TArray<Integer>;
+  end;
+
   /// <summary>Human-readable summary of one convert-apply run, grouped by
   /// surface: Converted lists one line per instance actually rewritten;
   /// AccessSites and CreatorSites list the .pas property/event-access and
@@ -402,7 +478,7 @@ type
   /// emitted only when BuildApplyPlan's AWarnUnlinked is True -- so a caller
   /// that silences the warning still gets the count.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Convert.Apply.pas), DRagLint.CLI.DoConvertApply.MergeUnreachable (DRagLint.CLI.pas), DRagLint.CLI.PrintApplyReport (DRagLint.CLI.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Convert.Apply</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -424,6 +500,17 @@ type
       (see DRagLint.Convert.UnitRules.TUsesChange). Empty when the book has no
       unit rules; the #convert blocks' own uses-add never appears here. }
     UsesChanges     : TArray<TUsesChange>;
+    { C9 (1.27.0): names the conversion introduced whose unit was not added
+      (ambiguous / not-found) -- apply/1 uses_unresolved[]. }
+    UsesUnresolved  : TArray<TUsesUnresolved>;
+    { C9: 'on', 'off' (--no-reconcile-uses) or 'degraded' (the re-index of
+      the converted output failed: every watched unit kept) -- apply/1
+      uses_reconcile. }
+    UsesReconcile   : string;
+    { 1.27.0: disjoint likewise. What the .pas still uses that the map does
+      not cover -- member rows (sorted by instance, then member) followed by
+      global-dangling rows (sorted by name); see TApplyPasUse. }
+    PasUses         : TArray<TApplyPasUse>;
   end;
 
   /// <summary>The outcome of BuildApplyPlan: the full set of text edits to
@@ -469,6 +556,9 @@ type
   TApplyBook = record
     Rules      : TConversionRuleSet;
     Unreachable: TArray<TUnreachablePath>;
+    /// <summary>C9: reconcile the unit's uses clauses (default on in the CLI;
+    /// False reproduces 1.26.6 exactly).</summary>
+    Reconcile  : Boolean;
     /// <summary>Pairs a rule set with its unreachable records.</summary>
     /// <param name="ARules">The parsed, validated rules.</param>
     /// <param name="AUnreachable">ValidateConversionRulesPerBlock's records.</param>
@@ -567,6 +657,8 @@ type
     FCaches  : TArray<TPropMemberCache>; { index-aligned with FStores; nil until first used }
     FOptions : TPropTreeOptions;
     FRefFacts: TArray<TRefFacts>; { index-aligned with FStores; nil until first asked }
+    FUnitIndex: TUsesUnitIndex;   { C9; nil until first asked }
+    FDbPaths : TArray<string>;
     function Lookup(const ATypeName: string): TResolved;
     function GetClassesBuilt: Integer;
   public
@@ -603,11 +695,25 @@ type
     /// <remarks>Cheap: a name lookup. Members are resolved lazily, when a path
     /// is asked for.</remarks>
     function ClassFor(const ATypeName: string): TClassRef;
+    /// <summary>The class symbol ATypeName resolves to, and the store
+    /// holding it (1.27.0, pas_uses[]).</summary>
+    /// <param name="ATypeName">A bare or qualified class name.</param>
+    /// <param name="AStore">The store the class was resolved in; nil when
+    /// none.</param>
+    /// <returns>The class symbol; Id = 0 when no store has such a class.</returns>
+    function ClassSymbol(const ATypeName: string; out AStore: ISymbolStore): TSymbol;
     /// <summary>The stores this cache resolves against, in --db order.</summary>
     property Stores: TArray<ISymbolStore> read FStores;
     /// <summary>How many classes the member caches have resolved, summed over
     /// the stores (apply/1 classes_built).</summary>
     property ClassesBuilt: Integer read GetClassesBuilt;
+    /// <summary>The run's indexed unit set for the uses reconciliation (C9),
+    /// built on first use and shared by every unit of a batch.</summary>
+    /// <returns>The index, owned by this object.</returns>
+    function UnitIndex: TUsesUnitIndex;
+    /// <summary>The --db paths, index-aligned with Stores (C9: they name the
+    /// db of a uses_unresolved candidate). Set by the caller; may be empty.</summary>
+    property DbPaths: TArray<string> read FDbPaths write FDbPaths;
   end;
 
 
@@ -926,9 +1032,16 @@ function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPat
 /// unit not changed'.</returns>
 /// <remarks>Reads the unit and the .dfm; writes nothing. The uses clauses are
 /// lexed from the unit's own bytes; the index is consulted only for R26's
-/// declaring unit. Pinned by run_convert_apply_unit_rules.ps1 (arm R).</remarks>
+/// declaring unit. Pinned by run_convert_apply_unit_rules.ps1 (arm R).
+/// AReconcile (C9, 1.27.0): the uses are RECONCILED instead -- the .dfm as it
+/// stands is re-indexed, a watched unit one of its components needs is KEPT
+/// (a 'kept' row and a warning, never the R26 refusal), one only .pas code
+/// needs is removed with its dangling references reported, an unknown one is
+/// kept (unit-rule-unverified); the --only 'skipped' row is unchanged.
+/// False is the 1.26.6 behaviour above, exactly. Pinned by
+/// run_convert_apply_uses_reconcile.ps1.</remarks>
 function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>; AReconcile: Boolean = False): TApplyResult;
 
 /// <summary>Scans a .dfm's component headers (top-level and nested) and
 /// returns the instances that should be converted: those whose class matches
@@ -1049,13 +1162,15 @@ const
     'dfm-path-created', 'creator-verify', 'creator-unverified',
     'unmapped-property', 'binary-type-mismatch', 'owned-part-unconverted',
     'link-stub-unfilled', 'collection-relocated', 'defaults-may-diverge',
-    'cast-not-applied', 'cast-applied', 'instance-skipped', 'field-decl-not-retyped',
+    'cast-not-applied', 'instance-skipped', 'field-decl-not-retyped',
     'uses-unit-unresolved', 'mapping-source-absent', 'mapping-not-applied',
     'default-rule-superseded', 'default-resolved', 'enum-cast-unmapped',
     'unlinked-source-property', 'sub-leaf-carried', 'rule-path-unreachable',
     'inherited-instance-skipped', 'unit-rule-skipped', 'descendant-not-converted',
     'inherited-instance-retyped', 'access-site-unverified',
-    'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked');
+    'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked',
+    'unit-rule-kept', 'uses-unit-ambiguous', 'unit-rule-unverified', 'unit-rule-dangling',
+    'value-cast-applied', 'value-cast-check');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1307,8 +1422,15 @@ var
 begin
   for C in FCaches do C.Free;
   for var F: TRefFacts in FRefFacts do F.Free;
+  FUnitIndex.Free;
   FResolved.Free;
   inherited Destroy;
+end;
+
+function TConvertTreeCache.UnitIndex: TUsesUnitIndex;
+begin
+  if FUnitIndex = nil then FUnitIndex:= TUsesUnitIndex.Create(FStores, FDbPaths);
+  Result:= FUnitIndex;
 end;
 
 constructor TRefFacts.Create;
@@ -1420,6 +1542,19 @@ begin
   if R.Store < 0 then Exit;
   Result.QName:= R.QName;
   Result.Cache:= CacheFor(R.Store);
+end;
+
+function TConvertTreeCache.ClassSymbol(const ATypeName: string; out AStore: ISymbolStore): TSymbol;
+var
+  R: TResolved;
+begin
+  Result:= Default(TSymbol);
+  AStore:= nil;
+  R:= Lookup(ATypeName);
+  if R.Store < 0 then Exit;
+  AStore:= FStores[R.Store];
+  for var S: TSymbol in AStore.FindSymbolsByExactName(BareTypeTail(R.QName)) do
+    if (S.Kind = skClass) and SameText(S.QualifiedName, R.QName) then Exit(S);
 end;
 
 function TConvertTreeCache.GetClassesBuilt: Integer;
@@ -3091,7 +3226,186 @@ begin
   Result:= nil;
   for var S: TUsesChange in ASkips do Result:= Result + [S.UnitName];
 end;
-// Prefixes every line of AReemittedBlock (EmitBlock's CRLF-joined, column-1
+
+{ C9: what ReconcileUnitUses hands back besides the plan. }
+type
+  TReconcileOutcome = record
+    Plan       : TUsesPlan;
+    UsePlanner : Boolean;                 { False: the caller keeps its own (Pending) uses edits }
+    Items      : TArray<TApplyItem>;      { warnings to Emit, in order }
+    Unresolved : TArray<TUsesUnresolved>;
+    Status     : string;                  { 'on' / 'degraded' }
+    Dangling   : TArray<TUsesDangling>;   { 1.27.0: uncapped, for pas_uses[] }
+  end;
+
+// C9: a uses[] row's NeededBy names, joined for a warning line ('A, B (+N more)'
+// is not needed: NeededBy is capped at NEEDED_BY_MAX by the reconciler).
+function NeedNames(const ANeeds: TArray<TUsesNeed>): string;
+begin
+  Result:= '';
+  for var N: TUsesNeed in ANeeds do
+    Result:= Result + (if Result = '' then '' else ', ') + N.Name;
+end;
+
+// C9: the instance name of a 'Name: Class' needed_by entry.
+function NeedInstance(const ANeed: TUsesNeed): string;
+begin
+  Result:= ANeed.Name;
+  if Result.Contains(':') then Result:= Trim(Result.Substring(0, Result.IndexOf(':')));
+end;
+
+// C9 / C13 N4 compatibility: a kept unit whose EVERY keeping component is an
+// own #convert instance --only left out is the 1.23.0 'skipped' row, text and
+// all -- RemovalLeavesUnconverted still words it, so the two cannot drift.
+procedure DemoteOnlySkips(const ATrees: TConvertTreeCache; const ADfmText: string; const ARules: TConversionRuleSet;
+  const AConverted: TList<string>; const AOnly: TArray<string>; const AEntries: TArray<TUsesEntryInfo>;
+  var ANeeds: TUsesNeeds);
+var
+  Own  : TArray<string>;
+  Skips: TArray<TUsesChange>;
+begin
+  if (Length(AOnly) = 0) or (ADfmText = '') then Exit;
+  Own:= nil;
+  for var Inst: TConvertInstance in FindConvertInstances(ADfmText, ARules, nil) do
+    if not InOnlyList(Inst.InstanceName, AOnly) then Own:= Own + [Inst.InstanceName];
+  for var I: Integer:= 0 to High(ANeeds.Keeps) do
+  begin
+    var K: TUsesKeep:= ANeeds.Keeps[I];
+    if (K.Reason <> KEEP_REASON_DFM) or (Length(K.NeededBy) = 0) then Continue;
+    var AllOnly: Boolean:= True;
+    for var N: TUsesNeed in K.NeededBy do
+      if not MatchText(NeedInstance(N), Own) then AllOnly:= False;
+    if not AllOnly then Continue;
+    for var E: TUsesEntryInfo in AEntries do
+      if SameText(E.Name, K.UnitName) then
+        for var W: TWatchUnit in UnitRuleWatchList(ARules, nil, ATrees.UnitIndex.SameUnit) do
+          if ATrees.UnitIndex.SameUnit(W.UnitName, E.Name) then
+          begin
+            var Ch: TUsesChange:= Default(TUsesChange);
+            Ch.Action  := 'remove';
+            Ch.UnitName:= E.Name;
+            Ch.Section := E.Section;
+            Ch.Line    := E.Line;
+            Ch.Rule    := W.Rule;
+            if (RemovalLeavesUnconverted(ATrees, ADfmText, ARules, AConverted, AOnly, [Ch], Skips) = '') and
+               (Length(Skips) = 1) then
+            begin
+              K.Action  := 'skipped';
+              K.Reason  := Skips[0].Reason;
+              K.NeededBy:= nil;
+              ANeeds.Keeps[I]:= K;
+            end;
+            Break;
+          end;
+  end;
+end;
+
+// C9 (1.27.0): the RECONCILED uses plan for one unit -- the converted text
+// (AArgs.Edits applied in memory) is re-indexed and ReconcileUses decides keep /
+// remove / add; PlanUnitRules then plans the edits. PlannerNeeded: the unit
+// has unit rules or a C13 move, so the planner owns every uses edit; otherwise
+// it is used only when the reconciliation itself adds a unit (UsePlanner), and
+// the caller keeps its own #convert uses-add edits. Never refuses by itself.
+type
+  { C9: everything ReconcileUnitUses needs about the unit and its plan. }
+  TReconcileUnitArgs = record
+    UnitPas, DfmPath: string;
+    Rules           : TConversionRuleSet;
+    Edits           : TArray<TTextEdit>;   { the plan's non-uses edits }
+    Converted       : TList<string>;       { instances the plan converts; may be nil }
+    Only            : TArray<string>;
+    Adds, IntfAdds  : TArray<string>;      { the #convert surface's To units }
+    Handled         : TArray<string>;      { To type names that surface resolves }
+    PlannerNeeded   : Boolean;             { unit rules or a C13 move: the planner owns every edit }
+  end;
+
+function ReconcileUnitUses(const ATrees: TConvertTreeCache; const AArgs: TReconcileUnitArgs): TReconcileOutcome;
+var
+  UnitIn : TUsesReconcileInput;
+  UnitPas, DfmPath: string;
+  Rules  : TConversionRuleSet;
+  Adds   : TArray<string>;
+  Res    : TUsesReconcileResult;
+  OrigDfm: string;
+  Entries: TArray<TUsesEntryInfo>;
+
+  procedure Warn(AKind: TApplyItemKind; ALine, ARuleLine: Integer; const AText: string);
+  var
+    It: TApplyItem;
+  begin
+    It         := Default(TApplyItem);
+    It.Kind    := AKind;
+    It.Field   := afWarnings;
+    It.FilePath:= UnitPas;
+    It.Line    := ALine;
+    It.RuleLine:= ARuleLine;
+    It.Text    := AText;
+    Result.Items:= Result.Items + [It];
+  end;
+
+begin
+  UnitPas:= AArgs.UnitPas;
+  DfmPath:= AArgs.DfmPath;
+  Rules  := AArgs.Rules;
+  Adds   := AArgs.Adds;
+  Result:= Default(TReconcileOutcome);
+  UnitIn:= Default(TUsesReconcileInput);
+  UnitIn.UnitPas     := UnitPas;
+  UnitIn.OrigPas     := TEncoding.ANSI.GetString(TFile.ReadAllBytes(UnitPas));
+  UnitIn.ConvPas     := TTextEditApplier.ApplyToText(UnitPas, UnitIn.OrigPas, AArgs.Edits);
+  UnitIn.Rules       := Rules;
+  UnitIn.ExtraAdds   := Adds;
+  UnitIn.HandledNames:= AArgs.Handled;
+  OrigDfm:= '';
+  if (DfmPath <> '') and TFile.Exists(DfmPath) then
+  begin
+    OrigDfm    := TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath));
+    UnitIn.ConvDfm:= TTextEditApplier.ApplyToText(DfmPath, OrigDfm, AArgs.Edits);
+  end;
+  Res:= ReconcileUses(ATrees.UnitIndex, UnitIn);
+  Result.Status    := Res.Status;
+  Result.Unresolved:= Res.Unresolved;
+  Result.Dangling  := Res.Dangling;
+  ReadUsesEntries(UnitPas, UnitIn.OrigPas, Entries);
+  DemoteOnlySkips(ATrees, OrigDfm, Rules, AArgs.Converted, AArgs.Only, Entries, Res.Needs);
+  Result.UsePlanner:= AArgs.PlannerNeeded or (Length(Res.Needs.Adds) > 0);
+  Result.Plan:= Default(TUsesPlan);
+  Result.Plan.Ok:= True;
+  if Result.UsePlanner then
+    Result.Plan:= PlanUnitRules(UnitPas, UnitIn.OrigPas, Rules, Adds, AArgs.IntfAdds, Res.Needs);
+  if not Result.Plan.Ok then Exit;
+  for var Ch: TUsesChange in Result.Plan.Changes do
+  begin
+    var RL: Integer:= UnitRuleLine(Rules, Ch.UnitName);
+    if RL = 0 then
+      for var W: TWatchUnit in UnitRuleWatchList(Rules, Adds, ATrees.UnitIndex.SameUnit) do
+        if ATrees.UnitIndex.SameUnit(W.UnitName, Ch.UnitName) and (RL = 0) then RL:= UnitRuleLine(Rules, W.UnitName);
+    if Ch.Action = 'skipped' then
+      Result.Items:= Result.Items + [SkippedRuleItem(Rules, UnitPas, Ch)]
+    else if (Ch.Action = 'kept') and (Ch.Reason = KEEP_REASON_UNVERIFIED) then
+      Warn(aikUnitRuleUnverified, Ch.Line, RL, Format('line %d: warning: %s kept %s -- no --db indexes that unit, so whether anything still needs it is unknown',
+        [RL, Ch.Rule, Ch.UnitName]))
+    else if (Ch.Action = 'kept') and (Ch.Reason = KEEP_REASON_DEGRADED) then
+      Warn(aikUnitRuleKept, Ch.Line, RL, Format('line %d: warning: %s kept %s -- the re-index of the converted output failed (%s)',
+        [RL, Ch.Rule, Ch.UnitName, Res.Detail]))
+    else if Ch.Action = 'kept' then
+      Warn(aikUnitRuleKept, Ch.Line, RL, Format('line %d: warning: %s kept %s -- still needed by .dfm component(s) %s',
+        [RL, Ch.Rule, Ch.UnitName, NeedNames(Ch.NeededBy)]))
+    else if (Ch.Action = 'remove') and (Length(Ch.NeededBy) > 0) then
+      Warn(aikUnitRuleDangling, Ch.Line, RL, Format('line %d: warning: %s removed %s while .pas code still references %s -- the unit will not compile until that code is converted',
+        [RL, Ch.Rule, Ch.UnitName, NeedNames(Ch.NeededBy)]));
+  end;
+  for var U: TUsesUnresolved in Res.Unresolved do
+  begin
+    var Units: string:= '';
+    for var C: TUsesCandidate in U.Candidates do Units:= Units + (if Units = '' then '' else ', ') + C.UnitName;
+    if U.Reason = UNRESOLVED_AMBIGUOUS then
+      Warn(aikUsesUnitAmbiguous, U.Line, 0, Format('line %d: warning: "%s" is declared in %d units (%s) -- none added to uses; add #use <unit> to the book to choose',
+        [U.Line, U.Name, Length(U.Candidates), Units]))
+    else
+      Warn(aikUsesUnitUnresolved, U.Line, 0, Format('line %d: warning: could not resolve a unit declaring "%s" to add to uses', [U.Line, U.Name]));
+  end;
+end;// Prefixes every line of AReemittedBlock (EmitBlock's CRLF-joined, column-1
 // output, trailing CRLF trimmed) with AIndent, so the replacement block lands
 // at the same indentation depth as the original.
 function ReindentBlock(const AReemittedBlock, AIndent: string): string;
@@ -3126,6 +3440,7 @@ type
   TAccessSite = record
     Line, Col, EndCol: Integer;
     InstanceName: string; // the receiver, e.g. 'Edit1'
+    Member      : string; // the member token as written (1.27.0, pas_uses[])
   end;
 
 // Whole-word identifier-char test shared by the receiver scan below (mirrors
@@ -3177,7 +3492,8 @@ end;
 // SAME line the ref itself was recorded at) matches one of AInstanceNames
 // (case-insensitively -- the .dfm/.pas instance-name spelling is preserved
 // verbatim by FindConvertInstances, so an exact SameText match is correct
-// here, not a substring/prefix match). A member-access whose receiver is
+// here, not a substring/prefix match). AFromMember = '' takes EVERY member
+// (1.27.0, pas_uses[]). A member-access whose receiver is
 // NOT in AInstanceNames (e.g. 'Other.Caption' when Other is a different,
 // unconverted object) is silently skipped -- this instance-scoping is the
 // whole point of joining through the receiver, not just matching on member
@@ -3195,14 +3511,14 @@ var
   N   : string;
 begin
   Result:= nil;
-  if (AFileId <= 0) or (AFromMember = '') then Exit;
+  if AFileId <= 0 then Exit;
   Refs:= AStore.GetReferencesFromFile(AFileId);
   List:= TList<TAccessSite>.Create;
   try
     for R in Refs do
     begin
       if not SameText(R.Kind, 'member-access') then Continue;
-      if not SameText(R.NameText, AFromMember) then Continue;
+      if (AFromMember <> '') and not SameText(R.NameText, AFromMember) then Continue;
 
       Receiver:= ResolveMemberAccessReceiver(APasLines, R.StartLine, R.StartCol);
       if Receiver = '' then Continue;
@@ -3217,6 +3533,7 @@ begin
       Site.Col         := R.StartCol;
       Site.EndCol      := R.EndCol;
       Site.InstanceName:= Receiver;
+      Site.Member      := R.NameText;
       List.Add(Site);
     end;
     Result:= List.ToArray;
@@ -3254,6 +3571,9 @@ var
   Classes  : TArray<TSymbol>;
   FieldIds : TDictionary<string, TArray<Int64>>; { UPPER name -> field ids }
   OwnerIds : TDictionary<string, TArray<Int64>>; { UPPER name -> classes declaring / inheriting it }
+  ByLine   : TDictionary<Integer, TArray<Integer>>; { line -> indexes into Refs }
+  Bound    : TList<TAccessSite>;
+  Unbound  : TList<TAccessSite>;
 
   function Has(const AIds: TArray<Int64>; AId: Int64): Boolean;
   begin
@@ -3321,12 +3641,17 @@ var
   begin
     Found:= False;
     Recv := Default(TReference);
-    for var R: TReference in Refs do
-      if (R.StartLine = ASite.Line) and (R.StartCol < ASite.Col) and SameText(R.NameText, ASite.InstanceName) and
-         ((not Found) or (R.StartCol > Recv.StartCol)) then
+    var OnLine: TArray<Integer>;
+    if ByLine.TryGetValue(ASite.Line, OnLine) then
+      for var I: Integer in OnLine do
       begin
-        Recv := R;
-        Found:= True;
+        var R: TReference:= Refs[I];
+        if (R.StartCol < ASite.Col) and SameText(R.NameText, ASite.InstanceName) and
+           ((not Found) or (R.StartCol > Recv.StartCol)) then
+        begin
+          Recv := R;
+          Found:= True;
+        end;
       end;
     AUnchecked:= not Found;
     if not Found then Exit(False);
@@ -3348,19 +3673,654 @@ begin
     if (S.Kind = skClass) and SameText(S.Name, Root) then Classes:= Classes + [S];
   FieldIds:= TDictionary<string, TArray<Int64>>.Create;
   OwnerIds:= TDictionary<string, TArray<Int64>>.Create;
+  ByLine  := TDictionary<Integer, TArray<Integer>>.Create;
+  Bound   := TList<TAccessSite>.Create;
+  Unbound := TList<TAccessSite>.Create;
   try
+    { review fix wave: the refs bucketed by line ONCE -- a site looks only at
+      its own line, not at every ref of the file (was O(sites x refs)) }
+    for var I: Integer:= 0 to High(Refs) do
+    begin
+      var OnLine: TArray<Integer>;
+      if not ByLine.TryGetValue(Refs[I].StartLine, OnLine) then OnLine:= nil;
+      ByLine.AddOrSetValue(Refs[I].StartLine, OnLine + [I]);
+    end;
     for var Site: TAccessSite in ASites do
     begin
       var Unchecked: Boolean;
-      if SiteIsBound(Site, Unchecked) then Result:= Result + [Site]
-      else if Unchecked then AUnverified:= AUnverified + [Site];
+      if SiteIsBound(Site, Unchecked) then Bound.Add(Site)
+      else if Unchecked then Unbound.Add(Site);
     end;
+    Result     := Bound.ToArray;
+    AUnverified:= Unbound.ToArray;
   finally
+    Unbound.Free;
+    Bound.Free;
+    ByLine.Free;
     OwnerIds.Free;
     FieldIds.Free;
   end;
 end;
 
+// 1.26.1 (F1 on the .pas side): the converted instances a #link may rewrite --
+// those whose #convert block is the rule's own (the block the .dfm re-emit
+// picks: the first #convert whose From type matches, else the first), or every
+// one for a file-scope rule before the first #convert. Until 1.26.0 every
+// block's #link rewrote every instance's sites: four identical DatabaseName
+// edits per DMTEST site, and two blocks linking one path to different targets
+// wrote both into the same line. 1.27.0: lifted out of PlanAccessSites so
+// pas_uses[] scopes a link exactly as the rewrite does.
+// The #convert block (1-based) a #link belongs to: the number of #convert
+// rules at or before its line; 0 for a file-scope link before the first.
+function LinkRuleBlock(const ARules: TConversionRuleSet; const ALink: TConversionRule): Integer;
+begin
+  Result:= 0;
+  for var Q: TConversionRule in ARules.Rules do
+    if (Q.Kind = rkConvert) and (Q.LineNo <= ALink.LineNo) then Inc(Result);
+end;
+
+// The #convert block (1-based) the .dfm re-emit picks for each converted
+// instance: the first #convert whose From type matches, else the first. An
+// instance with no known From type has no entry. The caller frees the result.
+// Review fix wave: lifted out of LinkScopeNames so a caller asking for MANY
+// links (CollectPasUses) computes it once, not once per link.
+function InstanceConvertBlocks(const ARules: TConversionRuleSet; AConverted: TList<string>;
+  AFromTypes: TDictionary<string, string>): TDictionary<string, Integer>;
+var
+  Block, First, Found: Integer;
+  FromT: string;
+begin
+  Result:= TDictionary<string, Integer>.Create;
+  for var N: string in AConverted do
+  begin
+    if not AFromTypes.TryGetValue(N, FromT) then Continue;
+    Block:= 0;
+    First:= 0;
+    Found:= 0;
+    for var Q: TConversionRule in ARules.Rules do
+      if Q.Kind = rkConvert then
+      begin
+        Inc(Block);
+        if First = 0 then First:= Block;
+        if (Found = 0) and SameText(BareTypeTail(Q.FromType), BareTypeTail(FromT)) then Found:= Block;
+      end;
+    Result.AddOrSetValue(N, if Found = 0 then First else Found);
+  end;
+end;
+
+// The converted instances whose block (ABlocks) is ARuleBlock, in AConverted
+// order; every one of them when ARuleBlock is 0 (a file-scope link).
+function ScopeFromBlocks(AConverted: TList<string>; ABlocks: TDictionary<string, Integer>;
+  ARuleBlock: Integer): TArray<string>;
+var
+  B: Integer;
+begin
+  if ARuleBlock = 0 then Exit(AConverted.ToArray);
+  var Names: TList<string>:= TList<string>.Create;
+  try
+    for var N: string in AConverted do
+      if ABlocks.TryGetValue(N, B) and (B = ARuleBlock) then Names.Add(N);
+    Result:= Names.ToArray;
+  finally
+    Names.Free;
+  end;
+end;
+
+function LinkScopeNames(const ARules: TConversionRuleSet; AConverted: TList<string>;
+  AFromTypes: TDictionary<string, string>; const ALink: TConversionRule): TArray<string>;
+begin
+  var RuleBlock: Integer:= LinkRuleBlock(ARules, ALink);
+  if RuleBlock = 0 then Exit(AConverted.ToArray);
+  var Blocks: TDictionary<string, Integer>:= InstanceConvertBlocks(ARules, AConverted, AFromTypes);
+  try
+    Result:= ScopeFromBlocks(AConverted, Blocks, RuleBlock);
+  finally
+    Blocks.Free;
+  end;
+end;
+
+// 1.27.0 (pas_uses[]): the pas_uses kind of a symbol. AMember: it is a member
+// of a type (a method then, never a routine).
+function PasUseKind(AKind: TSymbolKind; const AName: string; AMember: Boolean): string;
+const
+  EVENT_PREFIX = 'On';
+begin
+  case AKind of
+    skMethod, skConstructor, skDestructor: Result:= 'method';
+    skProcedure, skFunction: Result:= if AMember then 'method' else 'routine';
+    skProperty:
+      Result:= if StartsText(EVENT_PREFIX, AName) and (Length(AName) > Length(EVENT_PREFIX)) and
+                  CharInSet(AName[Length(EVENT_PREFIX) + 1], ['A'..'Z']) then 'event' else 'property';
+    skField: Result:= 'field';
+    skConstDecl: Result:= 'const';
+    skVarDecl: Result:= 'var';
+    skClass, skInterface, skRecord, skEnum, skTypeAlias: Result:= 'type';
+  else
+    Result:= '';
+  end;
+end;
+
+// 1.27.0 (pas_uses[]): the member AName of class ATypeName, declared by the
+// class itself or by its nearest ancestor that declares it. An ancestor the
+// class's store cannot resolve (TComponent of a project class) is followed in
+// the store ATrees resolves it in. AOwner is the declaring class, AUnit its
+// unit. False when no store holds such a member.
+function FindClassMember(ATrees: TConvertTreeCache; const ATypeName, AName: string;
+  out AMember: TSymbol; out AOwner, AUnit: string): Boolean;
+const
+  MAX_HOPS = 32;
+  MEMBER_KINDS: set of TSymbolKind = [skMethod, skConstructor, skDestructor, skProcedure, skFunction,
+                                      skProperty, skField, skConstDecl, skVarDecl,
+                                      skClass, skInterface, skRecord, skEnum, skTypeAlias];
+var
+  Seen: TList<string>;
+
+  function TryIn(const AStore: ISymbolStore; const AClass: TSymbol): Boolean;
+  begin
+    var M: TSymbol:= AStore.FindChildSymbolByName(AClass.Id, AName);
+    Result:= (M.Id <> 0) and (M.Kind in MEMBER_KINDS);
+    if not Result then Exit;
+    AMember:= M;
+    AOwner := AClass.Name;
+    AUnit  := TPath.GetFileNameWithoutExtension(AStore.GetFilePath(M.FileId));
+  end;
+
+  function Search(const AStore: ISymbolStore; const AClass: TSymbol; ADepth: Integer): Boolean;
+  begin
+    Result:= False;
+    if (AStore = nil) or (AClass.Id = 0) or (ADepth > MAX_HOPS) or Seen.Contains(UpperCase(AClass.QualifiedName)) then Exit;
+    Seen.Add(UpperCase(AClass.QualifiedName));
+    if TryIn(AStore, AClass) then Exit(True);
+    for var A: TTypeAncestor in AStore.GetTransitiveAncestors(AClass.Id) do
+    begin
+      if A.Resolved and (A.SymbolId <> 0) then
+      begin
+        if TryIn(AStore, AStore.GetSymbolById(A.SymbolId)) then Exit(True);
+        Continue;
+      end;
+      var Other: ISymbolStore;
+      var C: TSymbol:= ATrees.ClassSymbol(A.Name, Other);
+      if Search(Other, C, ADepth + 1) then Exit(True);
+    end;
+  end;
+
+begin
+  AMember:= Default(TSymbol);
+  AOwner := '';
+  AUnit  := '';
+  Seen:= TList<string>.Create;
+  try
+    var St: ISymbolStore;
+    var Cls: TSymbol:= ATrees.ClassSymbol(ATypeName, St);
+    Result:= Search(St, Cls, 0);
+  finally
+    Seen.Free;
+  end;
+end;
+
+type
+  // 1.27.0: what CollectPasUses needs about one unit's plan.
+  TPasUsesInput = record
+    Trees    : TConvertTreeCache;
+    Store    : ISymbolStore;                  { the store indexing the unit }
+    FileId   : Int64;
+    PasLines : TStringList;
+    DfmPath  : string;
+    Book     : TApplyBook;
+    Converted: TList<string>;                 { instances the plan converts }
+    FromTypes: TDictionary<string, string>;   { instance -> From type }
+    CastLib  : TCastLib;                      { 1.27.0 (C15): a value-cast link is mapped }
+    ToTypes  : TDictionary<string, string>;   { instance -> To type }
+  end;
+
+// The distinct values of ALines, ascending.
+function DistinctSortedLines(const ALines: TArray<Integer>): TArray<Integer>;
+begin
+  var Sorted: TArray<Integer>:= Copy(ALines);
+  TArray.Sort<Integer>(Sorted);
+  var Kept: Integer:= 0;
+  for var I: Integer:= 0 to High(Sorted) do
+    if (Kept = 0) or (Sorted[I] <> Sorted[Kept - 1]) then
+    begin
+      Sorted[Kept]:= Sorted[I];
+      Inc(Kept);
+    end;
+  SetLength(Sorted, Kept);
+  Result:= Sorted;
+end;
+
+// 1.27.0 review fix wave: the pas_uses status one #link gives the member its
+// FromPath head names -- the access-site planner's own decision, mirrored
+// branch for branch (PlanAccessSites):
+//   * a CLASS cast, or a cast the library does not hold -> cast-refused
+//     (Outcomes 1-3: refused per site, or skipped with one warning);
+//   * a dotted To or From path -> not-rewritten (the planner's
+//     "nested .dfm path" Continue; a value cast on a dotted path finds no
+//     member token either), except an identity link of a plain path;
+//   * otherwise -> mapped (renamed, or an identity link: nothing to rename;
+//     a value cast's literals are rewritten or checked).
+function LinkPasStatus(const ALink: TConversionRule; const ACastLib: TCastLib): string;
+begin
+  var Dotted  : Boolean:= (Pos('.', ALink.ToPath) > 0) or (Pos('.', ALink.FromPath) > 0);
+  var Identity: Boolean:= SameText(ALink.ToPath, ALink.FromPath);
+  if ALink.Cast <> '' then
+  begin
+    var VD: TCastDef;
+    if not (FindClassCast(ACastLib, ALink.Cast, VD) and (VD.Value <> '')) then Exit(PAS_USE_CAST_REFUSED);
+    Exit(if Dotted then PAS_USE_NOT_REWRITTEN else PAS_USE_MAPPED);
+  end;
+  Result:= if Dotted and not Identity then PAS_USE_NOT_REWRITTEN else PAS_USE_MAPPED;
+end;
+
+// The precedence of the link-given pas_uses statuses (higher wins).
+function PasStatusRank(const AStatus: string): Integer;
+const
+  RANK_MAPPED        = 0;
+  RANK_NOT_REWRITTEN = 1;
+  RANK_CAST_REFUSED  = 2;
+begin
+  if AStatus = PAS_USE_CAST_REFUSED then Result:= RANK_CAST_REFUSED
+  else if AStatus = PAS_USE_NOT_REWRITTEN then Result:= RANK_NOT_REWRITTEN
+  else Result:= RANK_MAPPED;
+end;
+
+type
+  // review fix wave: one cached FindClassMember answer (CollectPasUses).
+  TMemberHit = record
+    Found   : Boolean;
+    Member  : TSymbol;
+    Owner   : string;
+    DeclUnit: string;
+  end;
+
+// 1.27.0: apply/1 pas_uses[] member rows -- every member the unit's code
+// reaches through a converted instance, on the access-site rewrite's own
+// bound sites, with what the map does about it (see TApplyPasUse).
+function CollectPasUses(const AIn: TPasUsesInput): TArray<TApplyPasUse>;
+var
+  Cover   : TDictionary<string, string>;      { UPPER instance|member -> a link-given status }
+  Index   : TDictionary<string, Integer>;     { UPPER instance|member -> row }
+  Rows    : TList<TApplyPasUse>;
+  RowLines: TObjectList<TList<Integer>>;      { per row, its lines as found }
+  Hits    : TDictionary<string, TMemberHit>;  { UPPER type|member -> FindClassMember's answer }
+  Blocks  : TDictionary<string, Integer>;     { instance -> its #convert block, once for every link }
+  Unv     : TArray<TAccessSite>;
+  Status  : string;
+
+  { review fix wave: FindClassMember walks ancestors across every --db; many
+    instances share a type, so each (type, member) is asked ONCE }
+  function Lookup(const AType, AMember: string): TMemberHit;
+  begin
+    var Key: string:= UpperCase(AType + '|' + AMember);
+    if Hits.TryGetValue(Key, Result) then Exit;
+    Result:= Default(TMemberHit);
+    Result.Found:= FindClassMember(AIn.Trees, AType, AMember, Result.Member, Result.Owner, Result.DeclUnit);
+    Hits.Add(Key, Result);
+  end;
+
+begin
+  Result:= nil;
+  if (AIn.FileId <= 0) or (AIn.Converted = nil) or (AIn.Converted.Count = 0) then Exit;
+  Cover   := TDictionary<string, string>.Create;
+  Index   := TDictionary<string, Integer>.Create;
+  Rows    := TList<TApplyPasUse>.Create;
+  RowLines:= TObjectList<TList<Integer>>.Create(True);
+  Hits    := TDictionary<string, TMemberHit>.Create;
+  Blocks  := InstanceConvertBlocks(AIn.Book.Rules, AIn.Converted, AIn.FromTypes);
+  try
+    for var L: TConversionRule in WithoutUnreachableRules(AIn.Book.Rules, AIn.Book.Unreachable, 0).Rules do
+    begin
+      if (L.Kind <> rkLink) or (L.FromPath = '') or (L.ToPath = '') then Continue;
+      var Head: string:= L.FromPath;
+      if Head.Contains('.') then Head:= Head.Substring(0, Head.IndexOf('.'));
+      var LinkStatus: string:= LinkPasStatus(L, AIn.CastLib);
+      for var N: string in ScopeFromBlocks(AIn.Converted, Blocks, LinkRuleBlock(AIn.Book.Rules, L)) do
+      begin
+        var K: string:= UpperCase(N + '|' + Head);
+        { the strongest claim wins: cast-refused > not-rewritten > mapped }
+        var Prior: string;
+        if not Cover.TryGetValue(K, Prior) or (PasStatusRank(LinkStatus) > PasStatusRank(Prior)) then
+          Cover.AddOrSetValue(K, LinkStatus);
+      end;
+    end;
+    for var S: TAccessSite in BoundAccessSites(AIn.Store, AIn.FileId, AIn.DfmPath,
+      FindMemberAccessSites(AIn.Store, AIn.FileId, AIn.PasLines, '', AIn.Converted.ToArray), Unv) do
+    begin
+      var Inst: string:= S.InstanceName;
+      for var N: string in AIn.Converted do
+        if SameText(N, S.InstanceName) then Inst:= N;
+      var K: string:= UpperCase(Inst + '|' + S.Member);
+      var At: Integer;
+      if Index.TryGetValue(K, At) then
+      begin
+        RowLines[At].Add(S.Line);
+        Continue;
+      end;
+      var R: TApplyPasUse:= Default(TApplyPasUse);
+      R.Instance:= Inst;
+      R.Member  := S.Member;
+      if not AIn.FromTypes.TryGetValue(Inst, R.FromType) then R.FromType:= '';
+      if not AIn.ToTypes.TryGetValue(Inst, R.ToType) then R.ToType:= '';
+      var Hit: TMemberHit:= Lookup(R.FromType, S.Member);
+      if Hit.Found then
+      begin
+        R.Kind         := PasUseKind(Hit.Member.Kind, Hit.Member.Name, True);
+        R.Visibility   := Trim(Hit.Member.Modifiers);
+        R.DeclaredIn   := Hit.Owner;
+        R.DeclaringUnit:= Hit.DeclUnit;
+      end;
+      if not Cover.TryGetValue(K, Status) then
+        Status:= if (R.ToType <> '') and Lookup(R.ToType, S.Member).Found then PAS_USE_SAME_NAME else PAS_USE_UNMAPPED;
+      R.Status:= Status;
+      Index.Add(K, Rows.Count);
+      Rows.Add(R);
+      RowLines.Add(TList<Integer>.Create);
+      RowLines.Last.Add(S.Line);
+    end;
+    Result:= Rows.ToArray;
+    for var I: Integer:= 0 to High(Result) do Result[I].Lines:= DistinctSortedLines(RowLines[I].ToArray);
+    TArray.Sort<TApplyPasUse>(Result, TComparer<TApplyPasUse>.Construct(
+      function(const A, B: TApplyPasUse): Integer
+      begin
+        Result:= CompareText(A.Instance, B.Instance);
+        if Result = 0 then Result:= CompareText(A.Member, B.Member);
+      end));
+  finally
+    Blocks.Free;
+    Hits.Free;
+    RowLines.Free;
+    Rows.Free;
+    Index.Free;
+    Cover.Free;
+  end;
+end;
+
+// 1.27.0: apply/1 pas_uses[] global rows -- the reconciliation's dangling
+// verdicts, sorted by name.
+function DanglingPasUses(const ADangling: TArray<TUsesDangling>): TArray<TApplyPasUse>;
+begin
+  Result:= nil;
+  for var D: TUsesDangling in ADangling do
+  begin
+    var R: TApplyPasUse:= Default(TApplyPasUse);
+    R.Member       := D.Name;
+    R.Kind         := if D.KindKnown then PasUseKind(D.Kind, D.Name, D.DeclaredIn <> '') else '';
+    R.DeclaringUnit:= D.DeclUnit;
+    R.DeclaredIn   := D.DeclaredIn;
+    R.Status       := PAS_USE_GLOBAL_DANGLING;
+    R.Lines        := D.Lines;
+    Result:= Result + [R];
+  end;
+  TArray.Sort<TApplyPasUse>(Result, TComparer<TApplyPasUse>.Construct(
+    function(const A, B: TApplyPasUse): Integer
+    begin
+      Result:= CompareText(A.Member, B.Member);
+    end));
+end;
+// 1.27.0 (C15): the .dfm half of a VALUE cast as items -- one
+// value-cast-applied per rewritten value (Value the new literal, OldValue the
+// old), one value-cast-check per value that is not ONE string literal. Line is
+// the property's own line in the instance's block when it is found there,
+// else the block header.
+function ValueCastDfmItems(const AVCs: TArray<TReemitValueCast>; const AInst: TConvertInstance;
+  const ADfmPath: string; const ADfmLines: TArray<string>; ABlockLine: Integer): TArray<TApplyItem>;
+const
+  BLOCK_END = 'end';
+begin
+  Result:= nil;
+  for var VC: TReemitValueCast in AVCs do
+  begin
+    var It: TApplyItem:= Default(TApplyItem);
+    It.Instance:= AInst.InstanceName;
+    It.FromType:= AInst.FromType;
+    It.ToType  := AInst.ToType;
+    It.FilePath:= ADfmPath;
+    It.Path    := VC.FromPath;
+    It.RuleLine:= VC.RuleLine;
+    It.Line    := ABlockLine;
+    if (ABlockLine >= 1) and (ABlockLine <= Length(ADfmLines)) then
+    begin
+      var Indent: string:= LeadingIndent(ADfmLines[ABlockLine - 1]);
+      for var I: Integer:= ABlockLine to High(ADfmLines) do
+      begin
+        if (LeadingIndent(ADfmLines[I]) = Indent) and SameText(Trim(ADfmLines[I]), BLOCK_END) then Break;
+        if StartsText(VC.FromPath + ' =', Trim(ADfmLines[I])) then
+        begin
+          It.Line:= I + 1;
+          Break;
+        end;
+      end;
+    end;
+    if VC.Changed then
+    begin
+      It.Kind    := aikValueCastApplied;
+      It.Field   := afAccessSites; { done work, but not an instance line: converted[] counts instances }
+      It.OldValue:= VC.OldValue;
+      It.Value   := VC.NewValue;
+      It.Text    := Format('%s: value cast %s: %s %s -> %s (.dfm line %d)',
+        [AInst.InstanceName, VC.CastName, VC.ToPath, VC.OldValue, VC.NewValue, It.Line]);
+    end
+    else
+    begin
+      It.Kind := aikValueCastCheck;
+      It.Field:= afWarnings;
+      It.Value:= VC.OldValue;
+      It.Text := Format('line %d: warning: %s: value cast %s: %s = %s is not one string literal, check by hand',
+        [It.Line, AInst.InstanceName, VC.CastName, VC.FromPath, Trim(VC.OldValue)]);
+    end;
+    Result:= Result + [It];
+  end;
+end;
+
+type
+  // 1.27.0 (C15): what the code at a value-cast access site does with the member.
+  TValueCastSiteKind = (vskLiteral, vskNonLiteral, vskRead);
+
+// 1.27.0 (C15): the column just past the string literal opening at AStart in
+// AText ('' a doubled quote), or 0 when the line ends before it closes.
+function LiteralEnd(const AText: string; AStart: Integer): Integer;
+const
+  Q = '''';
+var
+  P: Integer;
+begin
+  Result:= 0;
+  P:= AStart + 1;
+  while (P <= Length(AText)) and (Result = 0) do
+    if (AText[P] = Q) and (P < Length(AText)) and (AText[P + 1] = Q) then Inc(P, 2)
+    else
+    begin
+      if AText[P] = Q then Result:= P + 1;
+      Inc(P);
+    end;
+end;
+
+// 1.27.0 review fix wave: the column of the first character at or after AP in
+// AText that is neither a blank (space, tab) nor inside a comment closed on
+// the same line ({..}, (*..*)). A '//' comment, or one left open, runs to the
+// end of the line: Length(AText) + 1 is returned.
+function SkipBlanksAndComments(const AText: string; AP: Integer): Integer;
+const
+  PAREN_STAR_OPEN  = '(*';
+  PAREN_STAR_CLOSE = '*)';
+  LINE_COMMENT     = '//';
+begin
+  Result:= AP;
+  while Result <= Length(AText) do
+  begin
+    if CharInSet(AText[Result], [' ', #9]) then Inc(Result)
+    else if AText[Result] = '{' then
+    begin
+      var Close: Integer:= Pos('}', AText, Result + 1);
+      if Close = 0 then Exit(Length(AText) + 1);
+      Result:= Close + 1;
+    end
+    else if Copy(AText, Result, Length(PAREN_STAR_OPEN)) = PAREN_STAR_OPEN then
+    begin
+      var Close: Integer:= Pos(PAREN_STAR_CLOSE, AText, Result + Length(PAREN_STAR_OPEN));
+      if Close = 0 then Exit(Length(AText) + 1);
+      Result:= Close + Length(PAREN_STAR_CLOSE);
+    end
+    else if Copy(AText, Result, Length(LINE_COMMENT)) = LINE_COMMENT then Exit(Length(AText) + 1)
+    else Exit;
+  end;
+end;
+
+// 1.27.0 (C15): a `:=` whose right-hand side is ONE string literal (its
+// [ALitCol, ALitEnd) span returned), any other assignment, or a read. Review
+// fix wave: STRICT -- the literal must be followed, on the SAME line, by
+// nothing but blanks / closed comments and then ';'. A literal that ends the
+// line (a continuation may follow, even behind a comment line), one followed
+// by '#nn', '+', a comment running to the line end, or a statement ended by
+// `else` / `end` without ';' is vskNonLiteral, never rewritten. Blanks, tabs
+// and closed comments between the member and ':=' are allowed.
+function ClassifyValueCastSite(const APasLines: TStringList; ALine, ACol: Integer;
+  out ALitCol, ALitEnd: Integer): TValueCastSiteKind;
+const
+  ASSIGN_OP = ':=';
+  QUOTE     = '''';
+  STMT_END  = ';';
+var
+  S: string;
+  P: Integer;
+begin
+  ALitCol:= 0;
+  ALitEnd:= 0;
+  if (ALine < 1) or (ALine > APasLines.Count) then Exit(vskRead);
+  S:= APasLines[ALine - 1];
+  P:= ACol;
+  while (P <= Length(S)) and IsIdentChar(S[P]) do Inc(P);
+  P:= SkipBlanksAndComments(S, P);
+  if Copy(S, P, Length(ASSIGN_OP)) <> ASSIGN_OP then Exit(vskRead);
+  Result:= vskNonLiteral;
+  P:= SkipBlanksAndComments(S, P + Length(ASSIGN_OP));
+  if (P > Length(S)) or (S[P] <> QUOTE) or (LiteralEnd(S, P) = 0) then Exit;
+  var LitEnd: Integer:= LiteralEnd(S, P);
+  var After: Integer:= SkipBlanksAndComments(S, LitEnd);
+  if (After > Length(S)) or (S[After] <> STMT_END) then Exit;
+  ALitCol:= P;
+  ALitEnd:= LitEnd;
+  Result := vskLiteral;
+end;
+// 1.27.0 (C15): the .pas half of a VALUE cast for one #link: each bound site
+// whose assignment has ONE string-literal right-hand side ending the statement
+// on its line (ClassifyValueCastSite) gets that literal
+// rewritten when the transform changes it (an identity link only); every
+// other assignment and every read gets no edit and a value-cast-check
+// warning naming its line. A literal the transform leaves alone: nothing.
+procedure PlanValueCastSites(const ASites: TArray<TAccessSite>; const ALink: TConversionRule;
+  const ADef: TCastDef; const AUnitPas: string; const APasLines: TStringList;
+  out AEdits: TArray<TTextEdit>; out AItems: TArray<TApplyItem>);
+var
+  LitCol, LitEnd: Integer;
+  NewLit        : string;
+  Why           : string;
+begin
+  AEdits:= nil;
+  AItems:= nil;
+  var Renamed: Boolean:= not SameText(ALink.ToPath, ALink.FromPath);
+  for var S: TAccessSite in ASites do
+  begin
+    var It: TApplyItem:= Default(TApplyItem);
+    It.Instance:= S.InstanceName;
+    It.FilePath:= AUnitPas;
+    It.Path    := ALink.FromPath;
+    It.RuleLine:= ALink.LineNo;
+    It.Line    := S.Line;
+    Why:= '';
+    case ClassifyValueCastSite(APasLines, S.Line, S.Col, LitCol, LitEnd) of
+      vskRead      : Why:= Format('read of %s', [ALink.FromPath]);
+      vskNonLiteral: Why:= 'non-literal assignment';
+      vskLiteral:
+        begin
+          var Lit: string:= Copy(APasLines[S.Line - 1], LitCol, LitEnd - LitCol);
+          if ApplyValueCast(ADef, Lit, NewLit) <> vcoChanged then Continue;
+          if Renamed then Why:= 'renamed link, the literal is not rewritten'
+          else
+          begin
+            var E: TTextEdit:= Default(TTextEdit);
+            E.FilePath:= AUnitPas;
+            E.Kind    := tekReplaceInLine;
+            E.Line    := S.Line;
+            E.Col     := LitCol;
+            E.EndCol  := LitEnd;
+            E.Text    := NewLit;
+            AEdits:= AEdits + [E];
+            It.Kind    := aikValueCastApplied;
+            It.Field   := afAccessSites;
+            It.OldValue:= Lit;
+            It.Value   := NewLit;
+            It.Text    := Format('line %d: #link %s <- %s : %s -- %s:%d %s.%s := %s -> %s',
+              [ALink.LineNo, ALink.ToPath, ALink.FromPath, ALink.Cast, ExtractFileName(AUnitPas), S.Line,
+               S.InstanceName, ALink.FromPath, Lit, NewLit]);
+          end;
+        end;
+    end;
+    if Why <> '' then
+    begin
+      It.Kind := aikValueCastCheck;
+      It.Field:= afWarnings;
+      It.Value:= ALink.Cast;
+      It.Text := Format('line %d: warning: %s:%d %s.%s -- value cast %s: %s, check by hand',
+        [ALink.LineNo, ExtractFileName(AUnitPas), S.Line, S.InstanceName, ALink.FromPath, ALink.Cast, Why]);
+    end;
+    AItems:= AItems + [It];
+  end;
+end;
+
+// 1.27.0 review fix wave: the .pas references to a value-cast link's member
+// that the access-site binding did NOT resolve to a converted instance -- a
+// `with X do TableName := ...` (no receiver at the site), a receiver the index
+// cannot vouch for, any other object's same-named member. The .dfm value is
+// rewritten regardless, so each is a value-cast-check warning naming its line,
+// never an edit and never silence. One item per (line, column); ABound are the
+// sites PlanValueCastSites already reports. A dotted FromPath has no single
+// member token and yields nothing here (pas_uses says not-rewritten).
+function UnresolvedValueCastSites(const AStore: ISymbolStore; AFileId: Int64; const AUnitPas: string;
+  const ALink: TConversionRule; const ABound: TArray<TAccessSite>): TArray<TApplyItem>;
+var
+  Seen: TDictionary<Int64, Boolean>;
+  Items: TList<TApplyItem>;
+
+  function PosKey(ALine, ACol: Integer): Int64;
+  const
+    LINE_SHIFT = 32; { the line in the high 32 bits, the column in the low }
+  begin
+    Result:= (Int64(ALine) shl LINE_SHIFT) or Cardinal(ACol);
+  end;
+
+begin
+  Result:= nil;
+  if (AFileId <= 0) or (ALink.FromPath = '') or (Pos('.', ALink.FromPath) > 0) then Exit;
+  Seen := TDictionary<Int64, Boolean>.Create;
+  Items:= TList<TApplyItem>.Create;
+  try
+    for var B: TAccessSite in ABound do Seen.AddOrSetValue(PosKey(B.Line, B.Col), True);
+    for var R: TReference in AStore.GetReferencesFromFile(AFileId) do
+    begin
+      if not SameText(R.NameText, ALink.FromPath) or Seen.ContainsKey(PosKey(R.StartLine, R.StartCol)) then Continue;
+      Seen.Add(PosKey(R.StartLine, R.StartCol), True);
+      var It: TApplyItem:= Default(TApplyItem);
+      It.Kind    := aikValueCastCheck;
+      It.Field   := afWarnings;
+      It.Instance:= R.ReceiverText;
+      It.FilePath:= AUnitPas;
+      It.Path    := ALink.FromPath;
+      It.RuleLine:= ALink.LineNo;
+      It.Line    := R.StartLine;
+      It.Value   := ALink.Cast;
+      It.Text    := Format('line %d: warning: %s:%d %s -- value cast %s: the receiver is not resolved to a converted ' +
+        'instance (a with block, or a site the index cannot vouch for), not rewritten; the .dfm value is, check by hand',
+        [ALink.LineNo, ExtractFileName(AUnitPas), R.StartLine,
+         (if R.ReceiverText <> '' then R.ReceiverText + '.' + ALink.FromPath else ALink.FromPath), ALink.Cast]);
+      Items.Add(It);
+    end;
+    Result:= Items.ToArray;
+  finally
+    Items.Free;
+    Seen.Free;
+  end;
+end;
 // C8 N2: the 'retyped' entries of AInherited as instances for BuildApplyPlan's
 // loop -- the .dfm spelling of the From type, the bare To type.
 function RetypedInstances(const AInherited: TArray<TInheritedInstance>): TArray<TConvertInstance>;
@@ -3398,6 +4358,7 @@ end;
 class function TApplyBook.Create(const ARules: TConversionRuleSet;
   const AUnreachable: TArray<TUnreachablePath>): TApplyBook;
 begin
+  Result            := Default(TApplyBook);
   Result.Rules      := ARules;
   Result.Unreachable:= AUnreachable;
 end;
@@ -3433,7 +4394,7 @@ begin
   end;
 end;
 
-function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@3144 -- REVIEWED 2026-10-06: parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@f7cd -- REVIEWED 2026-10-10 (297 lines: +InstToType and the 1.27.0 pas_uses input record, the surfaces themselves live outside it): parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own
   const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean;
   var AInherited: TArray<TInheritedInstance>): TApplyResult;
@@ -3463,6 +4424,7 @@ var
   IntfToTypes : TDictionary<string, Boolean>; { ToType -> a retyped field of it is declared in the INTERFACE (C13 a) }
   ConvertedInstNames: TList<string>; { instances that survived the .dfm re-emit -- see surface #4 remarks below }
   InstFromType: TDictionary<string, string>; { 1.26.1: converted instance -> its From type, to pick its #convert block }
+  InstToType  : TDictionary<string, string>; { 1.27.0: converted instance -> its To type (pas_uses[]) }
   RefFacts    : TRefFacts; { 1.26.5: the project's .dfm values, borrowed from ATrees; nil until a #check-ref needs it }
   RefFactRows : Integer; { 1.26.5: dfm-prop rows RefFacts was built from; 0 = no facts to check against }
   RefFactsAsked: Boolean; { 1.26.5: BuildRefFacts has run for this unit }
@@ -3652,6 +4614,7 @@ var
       the message rather than of the fact. FoldOne stays as it is because its
       other callers pass whole sentences, which are not paths. }
     FoldBookChecks(AReport, ABlockLine);
+    for var VI: TApplyItem in ValueCastDfmItems(AReport.ValueCasts, Inst, ADfmPath, DfmLines, ABlockLine) do Emit(VI);
     for var DN: string in AReport.Dropped do
     begin
       var DIt: TApplyItem:= InstItem(aikUnmappedProperty, afReemitNotes,
@@ -3794,6 +4757,7 @@ var
       if CE.Action <> INH_ACTION_CODE then Continue;
       ConvertedInstNames.Add(CE.Name);
       InstFromType.AddOrSetValue(CE.Name, CE.TypeName);
+      InstToType.AddOrSetValue(CE.Name, CE.ToType);
       if DoneUnits.ContainsKey(CE.ToType) then Continue;
       DoneUnits.Add(CE.ToType, True);
       ToTypesSeen.Add(CE.ToType);
@@ -4013,6 +4977,7 @@ var
     Edits[InsIx]:= Ed;
     ConvertedInstNames.Add(Inst.InstanceName);
     InstFromType.AddOrSetValue(Inst.InstanceName, Inst.FromType);
+    InstToType.AddOrSetValue(Inst.InstanceName, Inst.ToType);
     FoldReemitReport(AReemit.Report, AStart);
     PlanDeclSurfaces(AStart); { C8 N2: an inherited child has no field / creator here }
     if DoneUnits.ContainsKey(Inst.ToType) then Exit;
@@ -4094,45 +5059,6 @@ var
       end;
     end;
 
-    // 1.26.1 (F1 on the .pas side): the converted instances a #link may
-    // rewrite -- those whose #convert block is the rule's own (the block the
-    // .dfm re-emit picks: the first #convert whose From type matches, else the
-    // first), or every one for a file-scope rule before the first #convert.
-    // Until 1.26.0 every block's #link rewrote every instance's sites: four
-    // identical DatabaseName edits per DMTEST site, and two blocks linking one
-    // path to different targets wrote both into the same line.
-    function NamesForLink(const ALink: TConversionRule): TArray<string>;
-    var
-      RuleBlock: Integer;
-      Block    : Integer;
-      First    : Integer;
-      Found    : Integer;
-      Q        : TConversionRule;
-      FromT    : string;
-    begin
-      RuleBlock:= 0;
-      for Q in ABook.Rules.Rules do
-        if (Q.Kind = rkConvert) and (Q.LineNo <= ALink.LineNo) then Inc(RuleBlock);
-      if RuleBlock = 0 then Exit(ConvertedInstNames.ToArray);
-      Result:= nil;
-      for var N: string in ConvertedInstNames do
-      begin
-        if not InstFromType.TryGetValue(N, FromT) then Continue;
-        Block:= 0;
-        First:= 0;
-        Found:= 0;
-        for Q in ABook.Rules.Rules do
-          if Q.Kind = rkConvert then
-          begin
-            Inc(Block);
-            if First = 0 then First:= Block;
-            if (Found = 0) and SameText(BareTypeTail(Q.FromType), BareTypeTail(FromT)) then Found:= Block;
-          end;
-        if Found = 0 then Found:= First;
-        if Found = RuleBlock then Result:= Result + [N];
-      end;
-    end;
-
   begin
     ReportWithBlocks;
     { T2h: an UNREACHABLE #link is never applied -- on the .pas side either. }
@@ -4154,7 +5080,28 @@ var
         what keeps it closed. It is loud (a warning naming the rule and its cast)
         rather than silent, because a skipped conversion the operator never hears
         about is the same class of defect. }
-      if LinkRule.Cast <> '' then
+      { 1.27.0 (C15): a VALUE cast (castlib `value`, StripDB) is not a class
+        cast -- it rewrites a string literal and is never refused below. A
+        renaming one falls through to the identifier rewrite too. }
+      var VDef: TCastDef;
+      if (LinkRule.Cast <> '') and FindClassCast(ACastLib, LinkRule.Cast, VDef) and (VDef.Value <> '') then
+      begin
+        var VEdits: TArray<TTextEdit>;
+        var VItems: TArray<TApplyItem>;
+        var VScope: TArray<string>:= LinkScopeNames(ABook.Rules, ConvertedInstNames, InstFromType, LinkRule);
+        var VSites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath,
+          FindMemberAccessSites(PasStore, PasFileId, PasLines, LinkRule.FromPath, VScope), Unv);
+        PlanValueCastSites(VSites, LinkRule, VDef, AUnitPas, PasLines, VEdits, VItems);
+        ReportUnverified(LinkRule.FromPath);
+        for var VE: TTextEdit in VEdits do Edits.Add(VE);
+        for var VI: TApplyItem in VItems do Emit(VI);
+        { review fix wave: every other reference to the member -- a with block,
+          an unverified site -- is a check, never silence }
+        if Length(VScope) > 0 then
+          for var VU: TApplyItem in UnresolvedValueCastSites(PasStore, PasFileId, AUnitPas, LinkRule, VSites) do Emit(VU);
+        if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue;
+      end
+      else if LinkRule.Cast <> '' then
       begin
         { THREE OUTCOMES, NEVER TWO, AND NEVER SILENCE.
 
@@ -4165,7 +5112,8 @@ var
 
           The three cases need telling apart because two of them need OPPOSITE
           fixes by the operator:
-            1. resolved + `pas` template -> realize it here.
+            1. resolved + `pas` template -> 1.26.x realized it here; since 1.27.0
+               every access site is REFUSED one by one (see Outcome 1 below).
             2. resolved + EMPTY template -> still by hand, but the fix is to the
                .castlib, so the message must say the cast was FOUND.
             3. name resolves to nothing  -> the fix is to the rule book or the
@@ -4194,6 +5142,7 @@ var
               [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast]));
           It.Path    := LinkRule.FromPath;
           It.RuleLine:= LinkRule.LineNo;
+          It.Value   := LinkRule.Cast;
           Emit(It);
           Continue;
         end;
@@ -4206,60 +5155,51 @@ var
           It:= PlainItem(aikCastNotApplied, afWarnings,
             Format('line %d: #link %s <- %s : %s SKIPPED on the .pas side -- ' +
               'the cast WAS FOUND in the cast library but carries no pas template, so there is ' +
-              'nothing to emit. Add a `pas` line to cast %s in the .castlib, or convert this ' +
-              'access site by hand.%s',
-              [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast, LinkRule.Cast,
+              'nothing to emit. Convert this access site by hand.%s',
+              [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast,
                (if Trim(CastDef.Todo) <> '' then ' TODO: ' + CastDef.Todo else '')]));
           It.Path    := LinkRule.FromPath;
           It.RuleLine:= LinkRule.LineNo;
+          It.Value   := LinkRule.Cast;
           Emit(It);
           Continue;
         end;
 
-        (* Outcome 1 -- realize it, once per access site.
+        (* Outcome 1 -- a CLASS cast (a castlib block whose pas line is a
+           STATEMENT template, AssignGraphic) is FOUND, and every .pas access
+           site is still REFUSED -- a VALUE cast never gets here, see above: no edit, one warning per site
+           (1.27.0, owner decision -- interim, until a member-replacement
+           feature is designed).
 
-           The dst placeholder is the REWRITTEN target expression (instance plus
-           the dotted ToPath); the src placeholder is the ORIGINAL source
-           expression, so the emitted statement can still read the old value.
-           The template is a STATEMENT, so the whole access-site expression is
-           replaced by it -- deliberately NOT the tekReplaceInLine identifier
-           swap the no-cast path below uses, which would splice a statement into
-           the middle of an expression.
+           Why no site can be realized: the template is a STATEMENT
+           (dst.Assign(src);) while an access site is the member token INSIDE
+           an expression (pic1.Picture.Data := 'seed'). There is no correct
+           splice of a statement into an expression -- 52d9a1b9 spliced it over
+           the member token and wrote pic1.pic1.Glyph.Assign(...);.Data, which
+           does not parse. Replacing the whole statement instead is no better:
+           the src placeholder reads the FROM member, which the retyped
+           instance no longer has, so the emitted code reads a property that
+           does not exist. The .dfm half of the cast is unaffected.
 
-           WRITTEN AS A PAREN-STAR COMMENT ON PURPOSE: the placeholders are
-           spelled with braces, and a literal closing brace inside a brace
-           comment ENDS THE COMMENT -- the prose after it then compiles as code.
-           That is exactly how this block failed to build the first time. Note
-           the same hazard exists here with the paren-star terminator, which is
-           why neither delimiter is written out literally in this block. *)
+           WRITTEN AS A PAREN-STAR COMMENT ON PURPOSE: a literal closing brace
+           inside a brace comment ENDS THE COMMENT, so the placeholders are not
+           spelled with their braces here. *)
         var CastSites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
-          LinkRule.FromPath, NamesForLink(LinkRule)), Unv);
+          LinkRule.FromPath, LinkScopeNames(ABook.Rules, ConvertedInstNames, InstFromType, LinkRule)), Unv);
         ReportUnverified(LinkRule.FromPath);
         for var CSite in CastSites do
         begin
-          var DstExpr: string:= CSite.InstanceName + '.' + LinkRule.ToPath;
-          var SrcExpr: string:= CSite.InstanceName + '.' + LinkRule.FromPath;
-          var Rendered: string:= StringReplace(CastDef.PasTemplate, '{dst}', DstExpr, [rfReplaceAll]);
-          Rendered:= StringReplace(Rendered, '{src}', SrcExpr, [rfReplaceAll]);
-
-          E:= Default(TTextEdit);
-          E.FilePath:= AUnitPas;
-          E.Kind    := tekReplaceInLine;
-          E.Line    := CSite.Line;
-          E.Col     := CSite.Col;
-          E.EndCol  := CSite.EndCol;
-          E.Text    := Rendered;
-          Edits.Add(E);
-
-          It:= PlainItem(aikCastApplied, afAccessSites,
-            Format('line %d: #link %s <- %s : %s -> %s (L%d)',
+          It:= PlainItem(aikCastNotApplied, afWarnings,
+            Format('line %d: #link %s <- %s : %s -- access site %s:%d %s.%s not rewritten: the cast''s pas template is a ' +
+              'statement and has no correct splice inside an expression; convert this access site by hand',
               [LinkRule.LineNo, LinkRule.ToPath, LinkRule.FromPath, LinkRule.Cast,
-               Rendered, CSite.Line]));
+               ExtractFileName(AUnitPas), CSite.Line, CSite.InstanceName, LinkRule.FromPath]));
           It.Instance:= CSite.InstanceName;
           It.FilePath:= AUnitPas;
           It.Path    := LinkRule.FromPath;
           It.RuleLine:= LinkRule.LineNo;
           It.Line    := CSite.Line;
+          It.Value   := LinkRule.Cast;
           Emit(It);
         end;
         Continue;
@@ -4268,7 +5208,7 @@ var
       if (Pos('.', LinkRule.ToPath) > 0) or (Pos('.', LinkRule.FromPath) > 0) then Continue; { nested .dfm path, not a .pas access site }
 
       var Sites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
-        LinkRule.FromPath, NamesForLink(LinkRule)), Unv);
+        LinkRule.FromPath, LinkScopeNames(ABook.Rules, ConvertedInstNames, InstFromType, LinkRule)), Unv);
       ReportUnverified(LinkRule.FromPath);
       for var Site in Sites do
       begin
@@ -4341,6 +5281,30 @@ var
         var AlreadyUsed : Boolean;
         var UseEdits: TArray<TTextEdit>;
         var WantIntf: Boolean:= IntfToTypes.ContainsKey(ToType_);
+        { C9 R8a: a To type two units declare is REPORTED, never decided by
+          dictionary order }
+        if ABook.Reconcile then
+        begin
+          var Amb: TArray<TUsesCandidate>:= ATrees.UnitIndex.DeclaringUnits(BareTypeTail(ToType_), True);
+          if Length(Amb) > 1 then
+          begin
+            var Un: TUsesUnresolved:= Default(TUsesUnresolved);
+            Un.Name      := ToType_;
+            Un.Section   := if WantIntf then 'interface' else 'implementation';
+            Un.Reason    := UNRESOLVED_AMBIGUOUS;
+            Un.Candidates:= Amb;
+            Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + [Un];
+            var Units: string:= '';
+            for var C: TUsesCandidate in Amb do Units:= Units + (if Units = '' then '' else ', ') + C.UnitName;
+            It:= PlainItem(aikUsesUnitAmbiguous, afWarnings,
+              Format('"%s" is declared in %d units (%s) -- none added to uses; add #use <unit> to the book to choose',
+                [ToType_, Length(Amb), Units]));
+            It.ToType  := ToType_;
+            It.FilePath:= AUnitPas;
+            Emit(It);
+            Continue;
+          end;
+        end;
         for var St in Stores do
         begin
           UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed, WantIntf);
@@ -4376,11 +5340,37 @@ var
         re-plans the unit rules with AAdds / AIntfAdds first }
       AAdds    := ConvertAdds.ToArray;
       AIntfAdds:= IntfAdds.ToArray;
-      if UnitRules or MoveNeeded then
+      if ABook.Reconcile then
+      begin
+        { C9: the re-indexed converted text decides keep / remove / add }
+        var Handled: TArray<string>:= nil;
+        for var TT in ToTypesSeen do Handled:= Handled + [BareTypeTail(TT)];
+        var RA: TReconcileUnitArgs:= Default(TReconcileUnitArgs);
+        RA.UnitPas      := AUnitPas;
+        RA.DfmPath      := ADfmPath;
+        RA.Rules        := ABook.Rules;
+        RA.Edits        := DistinctInLineEdits(Edits.ToArray);
+        RA.Converted    := ConvertedInstNames;
+        RA.Only         := AOnly;
+        RA.Adds         := AAdds;
+        RA.IntfAdds     := AIntfAdds;
+        RA.Handled      := Handled;
+        RA.PlannerNeeded:= UnitRules or MoveNeeded;
+        var Rec: TReconcileOutcome:= ReconcileUnitUses(ATrees, RA);
+        for var RIt: TApplyItem in Rec.Items do Emit(RIt);
+        Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + Rec.Unresolved;
+        Result.Report.PasUses       := Result.Report.PasUses + DanglingPasUses(Rec.Dangling);
+        Result.Report.UsesReconcile := Rec.Status;
+        AUses:= Rec.Plan;
+        if not Rec.UsePlanner then
+          for E in Pending do Edits.Add(E);
+      end
+      else if UnitRules or MoveNeeded then
         AUses:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ABook.Rules,
           AAdds, AIntfAdds)
       else
-        for E in Pending do Edits.Add(E);    finally
+        for E in Pending do Edits.Add(E);
+    finally
       IntfAdds.Free;
       ConvertAdds.Free;
       Pending.Free;
@@ -4551,6 +5541,7 @@ begin
   IntfToTypes:= TDictionary<string, Boolean>.Create;
   ConvertedInstNames:= TList<string>.Create;
   InstFromType:= TDictionary<string, string>.Create;
+  InstToType  := TDictionary<string, string>.Create;
   RefFacts    := nil;
   RefFactRows := 0;
   RefFactsAsked:= False;
@@ -4657,6 +5648,7 @@ begin
         scoped against. }
       ConvertedInstNames.Add(Inst.InstanceName);
       InstFromType.AddOrSetValue(Inst.InstanceName, Inst.FromType);
+      InstToType.AddOrSetValue(Inst.InstanceName, Inst.ToType);
 
       var Indent: string:= LeadingIndent(DfmLines[BlockStart - 1]);
       E:= Default(TTextEdit);
@@ -4688,6 +5680,18 @@ begin
     AddCodeEntries; { C8 N2a }
 
     PlanAccessSites;
+    var PU: TPasUsesInput:= Default(TPasUsesInput);
+    PU.Trees    := ATrees;
+    PU.Store    := PasStore;
+    PU.FileId   := PasFileId;
+    PU.PasLines := PasLines;
+    PU.DfmPath  := ADfmPath;
+    PU.Book     := ABook;
+    PU.Converted:= ConvertedInstNames;
+    PU.FromTypes:= InstFromType;
+    PU.ToTypes  := InstToType;
+    PU.CastLib  := ACastLib;
+    Result.Report.PasUses:= CollectPasUses(PU); { 1.27.0; PlanUsesAdditions appends the globals }
     var UsesPlan: TUsesPlan;
     var UnitAdds    : TArray<string>:= nil;
     var UnitIntfAdds: TArray<string>:= nil;
@@ -4701,9 +5705,10 @@ begin
       UsesPlan.Error  := StaleDfm;
     end
     else PlanUsesAdditions(UsesPlan, UnitAdds, UnitIntfAdds);
-    { R26: a removal must not take away the unit an unconverted instance needs }
+    { R26: a removal must not take away the unit an unconverted instance needs
+      -- C9: subsumed by the reconciliation, which KEEPS such a unit }
     var Leaves: string:= '';
-    if UsesPlan.Ok then
+    if UsesPlan.Ok and not ABook.Reconcile then
       Leaves:= RemovalLeavesUnconverted(ATrees, DfmText, ABook.Rules, ConvertedInstNames, AOnly, UsesPlan.Changes, Skips);
     { C13 N4: a removal that would strand only instances --only left out is
       skipped, not refused -- re-plan keeping those units, then report each }
@@ -4762,6 +5767,7 @@ begin
     ToTypesSeen.Free;
     ConvertedInstNames.Free;
     InstFromType.Free;
+    InstToType.Free;
   end;
 end;
 
@@ -4773,7 +5779,7 @@ begin
 end;
 
 function BuildUnitRulesOnlyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet; const AOnly: TArray<string>): TApplyResult;
+  const ARules: TConversionRuleSet; const AOnly: TArray<string>; AReconcile: Boolean): TApplyResult;
 var
   UsesPlan: TUsesPlan;
   Leaves  : string;
@@ -4783,6 +5789,32 @@ begin
   if not TFile.Exists(AUnitPas) then
   begin
     Result.Error:= Format('unit .pas not found: %s', [AUnitPas]);
+    Exit;
+  end;
+  if AReconcile then
+  begin
+    { C9: nothing converts here, so the .dfm as it is decides what stays }
+    var RA: TReconcileUnitArgs:= Default(TReconcileUnitArgs);
+    RA.UnitPas      := AUnitPas;
+    RA.DfmPath      := ADfmPath;
+    RA.Rules        := ARules;
+    RA.Only         := AOnly;
+    RA.PlannerNeeded:= True;
+    var Rec: TReconcileOutcome:= ReconcileUnitUses(ATrees, RA);
+    Result.Ok                   := Rec.Plan.Ok;
+    Result.Refused              := Rec.Plan.Refused;
+    Result.Error                := Rec.Plan.Error;
+    Result.Edits                := Rec.Plan.Edits;
+    Result.Report.UsesChanges   := Rec.Plan.Changes;
+    Result.Report.UsesUnresolved:= Rec.Unresolved;
+    Result.Report.UsesReconcile := Rec.Status;
+    Result.Report.PasUses       := DanglingPasUses(Rec.Dangling);
+    if Rec.Plan.Ok then
+      for var It: TApplyItem in Rec.Items do
+      begin
+        Result.Report.Warnings:= Result.Report.Warnings + [It.Text];
+        Result.Report.Items   := Result.Report.Items + [It];
+      end;
     Exit;
   end;
   UsesPlan:= PlanUnitRules(AUnitPas, TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas)), ARules, nil);

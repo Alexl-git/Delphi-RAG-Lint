@@ -501,7 +501,7 @@ is captured as a parse error (never raised).
 
 | Directive | Meaning |
 |---|---|
-| `#unuse <unit>` | remove a unit from the PAS `uses` clause |
+| `#unuse <unit>` | remove a unit from the PAS `uses` clause. **convert-apply 1.27.0 (C9):** a WATCH LIST entry -- kept while a component the converted `.dfm` still streams has a class declared in it (`kept` row + warning), removed when only `.pas` code needs it (dangling references named on the row), kept when no `--db` knows it; scope-alias aware (`#unuse DBTables` matches `Bde.DBTables`). `--no-reconcile-uses` = the unconditional 1.26 removal. |
 | `#remove <property>` | remove a property from PAS and DFM |
 | `#remove DFM: <property>` | remove a property from the DFM only |
 | `#migrate [<Class>:] [<obj>.] <old> -> <new> [, <unit> ...]` | replace `old` with `new`; optional class-scope / object-scope; optional uses-add(s) |
@@ -1037,6 +1037,106 @@ because of it, and descendants are not edited. LIMIT: a descendant outside the
    non-`Self` receiver), scoped to receivers that are converted instances of THIS
    unit -- an access on an unconverted receiver (e.g. `Other.Caption` when `Other`
    has no `#convert` rule) is left untouched.
+
+   **A `#link` carrying a CLASS cast never rewrites a `.pas` access site** (1.27.0,
+   interim owner decision until a member-replacement feature is designed). A
+   cast's `pas` template is a STATEMENT (`{dst}.Assign({src});`) and an access
+   site is the member token INSIDE an expression (`pic1.Picture.Data := 'seed'`):
+   there is no correct splice, and `{src}` would read the From member the
+   retyped instance no longer has. 1.26.x spliced it anyway and wrote
+   `pic1.pic1.Glyph.Assign(CastPic(pic1.Picture));.Data := 'seed'`. Now every
+   bound site is left as it is and reported once:
+   `line N: #link To <- From : Cast -- access site <file>:<line> <inst>.<From>
+   not rewritten: the cast's pas template is a statement and has no correct
+   splice inside an expression; convert this access site by hand` -- a warning,
+   `items[]` kind `cast-not-applied` with `instance`, `file`, `line`, `path`
+   (the From member) and `value` (the cast). A cast the `--castlib` does not
+   know, or one with no `pas` template, keeps its single per-rule
+   `cast-not-applied`. The `.dfm` half of the cast (`dfm` hints, `dfmdata`,
+   `compat`) is unchanged. The 1.26.x kind `cast-applied` is retired. Because
+   a template no longer reaches the `.pas`, the converted unit fails to compile
+   at exactly those sites, and the uses reconciliation has no template routine
+   to add. `info --json`: `capabilities.cast_site_refusal: true`.
+
+**Value casts: `StripDB`** (1.27.0, C15). A castlib `cast` block with a
+`value <transform>` line is a VALUE cast: a transform built into the engine
+that rewrites a linked STRING value. It is not a class cast -- no `pas`
+template, never refused like one. The one transform is `strip-db`, shipped as
+
+```
+cast StripDB
+  accepts string
+  yields  string
+  value   strip-db
+  todo    'TableName kept its .db where it was not one string literal -- check by hand'
+end
+```
+
+and named in a book as `#link TableName <- TableName : StripDB`. It removes ONE
+trailing `.db`, any case (`'MET1.db'` -> `'MET1'`, `'X.DB'` -> `'X'`); every
+other value is left exactly as it is (`'A.dbf'`, `'A.db.bak'`, `'MET1'`, `''`).
+No patterns and no parameters. An unknown `value` keyword is a castlib LOAD
+ERROR: convert-apply fails the unit (exit 2) naming the file, the line and the
+keyword, because a cast silently not performed is the worse outcome.
+On the `.dfm` side the value of each converted instance is rewritten when that
+changes it. On the `.pas` side only `<instance>.<Prop> := '<one literal>';`
+has the literal rewritten, quotes re-escaped -- STRICTLY: the literal must be
+followed on the SAME line by nothing but blanks / closed comments and `;`
+(blanks, tabs and `{comments}` between the property and `:=` are fine). A
+literal that ends its line (a continuation may follow, even behind a comment
+line), one followed by `#nn` or `+`, and a statement ended by `else` / `end`
+without `;` are CHECKS, never rewrites. Any other right-hand side (a
+concatenation, a variable, a call, `Format(...)`) and every read of the
+property get NO edit and a warning. Every OTHER reference to the property in
+the unit -- `with t1 do TableName := 'W.db';`, a site the index cannot vouch
+for, another object's same-named member -- is a `value-cast-check` naming its
+line (`... the receiver is not resolved to a converted instance (a with block,
+or a site the index cannot vouch for), not rewritten; the .dfm value is, check
+by hand`): the `.dfm` value changes regardless, so silence is not an option.
+A `.dfm` value that is not ONE string literal (a multi-line `'A' + 'B.db'`, a
+`'X.db'#0` char code) is a `value-cast-check` too, left as it is. Report:
+`items[]` kind `value-cast-applied` (field `access_sites`; `old_value`, `value`,
+`file`, `line` -- for the `.dfm` the property's own line) and
+`value-cast-check` (field `warnings`, e.g. `line 2: warning: SForm.pas:28
+t2.TableName -- value cast StripDB: non-literal assignment, check by hand`);
+text `value casts: N value(s) changed (.dfm D, .pas P), W site(s) to check by
+hand`. A renaming value-cast link (`#link To <- From : StripDB`, To <> From)
+renames the member like a plain link and reports its literals for checking.
+`info --json`: `capabilities.value_cast_strip_db: true`.
+
+**What the `.pas` still uses (`pas_uses[]`, 1.27.0).** Every run -- dry run
+and `--apply` -- lists what the unit's code uses that the book does not
+convert, so the next rule to write is visible. One row per (instance, member)
+the code reaches through a converted instance (the same bound sites surface #4
+rewrites), then one per global the unit uses from a unit the uses
+reconciliation removes:
+
+```
+{"instance":"pic1","from_type":"TPicOld","to_type":"TPicNew","member":"DoOld",
+ "kind":"method","visibility":"public","declaring_unit":"LibOld",
+ "declared_in":"TPicOld","status":"unmapped","lines":[26,28],"count":2}
+```
+
+`status`: `mapped` (a `#link` whose From path starts with the member covers it -- a value cast such as StripDB included --
+for that instance's `#convert` block, and convert-apply handles its sites),
+`cast-refused` (a CLASS-cast `#link` covers it: its sites are refused, above),
+`not-rewritten` (a `#link` covers it, but convert-apply makes NO `.pas` edit
+for that link shape -- a dotted To or From path, e.g. the Orpheus->cx `#link
+Properties.X <- X`: the site still names the From member and may not compile;
+precedence cast-refused > not-rewritten > mapped), `same-name` (no link, but the To type or one of
+its ancestors has a member of that name -- carried implicitly), `unmapped` (no
+link and no such member: the work list) and `global-dangling` (a routine,
+const, var or type from a removed unit -- the remove row's `needed_by`,
+uncapped; only when the reconciliation ran). `declared_in` names the class that
+declares the member, an ancestor of the From type included, followed across the
+`--db` stores; `kind`/`visibility`/`declared_in`/`declaring_unit` are `''`
+when no `--db` holds the member (pass the library index for inherited RTL/VCL
+members). Lines are the unit's own, sorted. Text mode prints `pas uses: N
+unmapped, M global-dangling, K same-name, J mapped, C cast-refused, R
+not-rewritten` and one `<status> <inst>.<member> (<kind>, <visibility>, <class>
+in <unit>) -- line(s) ...` per unmapped and per not-rewritten member. Not listed: a member reached with no receiver (`with
+X do`) and a site the index cannot vouch for. `info --json`:
+`capabilities.pas_uses: true`.
 5. **Runtime-creator retype + TODO marker** -- every explicit `FromType.Xxx(...)`
    construction (e.g. `Edit1 := TOldEdit.Create(Self);`) gets its type token
    rewritten to ToType, PLUS an unconditional `{ TODO: drag-lint convert --
