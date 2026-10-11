@@ -51,10 +51,15 @@ No extractor or resolver change: indexes do not re-parse or re-resolve.
   included -- or unit var) and drops the edge when its declared type is neither the
   method's class nor a descendant: a project class shown unrelated, or a type this index
   does not declare at all (a library type cannot descend from a project class). Interfaces,
-  generic parameters, aliases and undeclared or dotted receivers are kept as before.
-  `document` reports each refused edge on stderr (`drag-lint: note: skipped caller edge
-  ...`); `TDocFacts.SkippedCallers` carries them. Read-time only: no resolver change, no
-  re-resolve. Pinned by run_doc_callers_foreign_receiver.ps1.
+  generic parameters, aliases and undeclared or dotted receivers are kept as before, and
+  so is a receiver typed as a descendant of the method's class or as an ancestor the
+  class names (an override may dispatch there). The refused edges of a whole run are
+  reported in ONE stderr line at exit (`drag-lint: note: skipped N unverified caller
+  edge(s) whose receiver has an unrelated type: <first three>; (+M more)`), from
+  `document`, `doc-drift --fix` and the doc lint rules alike; `TDocFacts.SkippedCallers`
+  carries them. Read-time only: no resolver change, no re-resolve. Pinned by
+  run_doc_callers_foreign_receiver.ps1, whose keep-path arms use calls the resolver
+  left unbound.
 
 ## v1.26.7-alpha -- unreleased
 

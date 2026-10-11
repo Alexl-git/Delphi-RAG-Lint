@@ -25,8 +25,19 @@
     OtherPopup     field  FOther: TOtherThing    MUST NOT be listed (project class, unrelated)
     DoClearSpecial field  FSpecial: TSpecialSet  listed (positive control, descendant)
     TBox<T>.Run    field  FItem: T               listed with '?' (type unknown: kept)
-  Plus: each skipped edge is reported on stderr, and doc-drift agrees with the
+  Plus: the skipped edges are reported on stderr in ONE summary line per run\r
+  (count + the first few), and doc-drift agrees with the
   block the writer produced (no drift right after --apply + reindex).
+
+  KEEP PATHS ON CALLS THE RESOLVER LEFT UNBOUND (C14 review fix 5). DoClearSpecial
+  above is resolver-bound, so it never reaches ForeignReceiverType. These do --
+  each was proven able to fail by deleting its keep term once (see the commit):
+  (document --qname Sets2.TAncSet.Recompute; TAncSet = class(TCustomListView))
+    DescNested.Inner  outer local N: TAncKid   listed (descendant, in the index)
+    IntfCall          field FIntf: IOtherIntf  listed (interface: dispatch undecidable)
+    AncestorCall      field FBase: TCustomListView
+                                               listed (an ancestor the owner names)
+    ViewCall          field FView: TListView   MUST NOT be listed (gate live on this target)
 #>
 [CmdletBinding()]
 param(
@@ -157,7 +168,95 @@ end;
 
 end.
 '@
-  foreach ($p in @(@('WorkingSet.pas', $ws), @('MainForm.pas', $mf))) {
+  $s2 = @'
+unit Sets2;
+
+interface
+
+uses
+  Vcl.ComCtrls;
+
+type
+  /// <summary>A set whose ancestor lives in a library.</summary>
+  TAncSet = class(TCustomListView)
+  public
+    /// <summary>Recomputes.</summary>
+    procedure Recompute;
+  end;
+
+  /// <summary>A descendant.</summary>
+  TAncKid = class(TAncSet)
+  end;
+
+  /// <summary>An interface that does not declare Recompute.</summary>
+  IOtherIntf = interface
+    ['{6C0F2A51-1A55-4E0B-9C2E-1F6B0D7A3E10}']
+    procedure Other;
+  end;
+
+implementation
+
+procedure TAncSet.Recompute;
+begin
+end;
+
+end.
+'@
+  $c2u = @'
+unit Callers2;
+
+interface
+
+uses
+  Vcl.ComCtrls, Sets2;
+
+type
+  TCaller2 = class
+  private
+    FBase: TCustomListView;
+    FIntf: IOtherIntf;
+    FView: TListView;
+  public
+    procedure DescNested;
+    procedure IntfCall;
+    procedure AncestorCall;
+    procedure ViewCall;
+  end;
+
+implementation
+
+procedure TCaller2.DescNested;
+var
+  N: TAncKid;
+
+  procedure Inner;
+  begin
+    N.Recompute;
+  end;
+
+begin
+  N := nil;
+  Inner;
+end;
+
+procedure TCaller2.IntfCall;
+begin
+  FIntf.Recompute;
+end;
+
+procedure TCaller2.AncestorCall;
+begin
+  FBase.Recompute;
+end;
+
+procedure TCaller2.ViewCall;
+begin
+  FView.Recompute;
+end;
+
+end.
+'@
+  foreach ($p in @(@('WorkingSet.pas', $ws), @('MainForm.pas', $mf), @('Sets2.pas', $s2), @('Callers2.pas', $c2u))) {
     $norm = $p[1] -replace "`r`n", "`n" -replace "`n", "`r`n"
     [System.IO.File]::WriteAllText((Join-Path $srcDir $p[0]), $norm, [System.Text.Encoding]::ASCII)
   }
@@ -197,6 +296,23 @@ end.
     ($c1.Err -match 'UnitPopup') -and ($c1.Err -match 'TListView') -and ($c1.Err -match 'skipped'))
   Check 'skipped project-class edge reported on stderr' (
     ($c2.Err -match 'OtherPopup') -and ($c2.Err -match 'TOtherThing'))
+  # C14 review fix 7: ONE summary line per run, not one line per skipped edge.
+  # ClearSelection skips two edges (UnitPopup, LocalPopup).
+  $skipLines = @(($c1.Err -split "`r?`n") | Where-Object { $_ -match 'skipped' })
+  Check 'two skipped edges -> exactly one stderr summary line' ($skipLines.Count -eq 1) ($skipLines -join ' | ')
+  Check 'the summary line counts both edges and names both callers' (
+    ($skipLines.Count -eq 1) -and ($skipLines[0] -match '\b2\b') -and ($skipLines[0] -match 'UnitPopup') -and ($skipLines[0] -match 'LocalPopup'))
+
+  Write-Host ''
+  Write-Host 'Keep paths, on calls the resolver left unbound' -ForegroundColor Cyan
+  $edges = (& $Exe dump-call-edges --db $db 2>$null) -join "`n"
+  Check 'no Recompute call is resolver-bound (shape check: each reaches the gate)' (-not ($edges -match 'TAncSet\.Recompute'))
+  $c3 = Get-Called 'Sets2.TAncSet.Recompute'
+  Check 'DescNested.Inner (outer local N: TAncKid, descendant) listed' ($c3.Called -match 'DescNested\.Inner \(')
+  Check 'IntfCall (FIntf: IOtherIntf, interface) listed' ($c3.Called -match 'TCaller2\.IntfCall \(')
+  Check 'AncestorCall (FBase: TCustomListView, owner names it) listed' ($c3.Called -match 'TCaller2\.AncestorCall \(')
+  Check 'ViewCall (FView: TListView) not listed (gate live)' (-not ($c3.Called -match 'ViewCall'))
+
   Write-Host ''
   Write-Host 'Checker agrees with the writer' -ForegroundColor Cyan
   & $Exe document --qname $qn --db $db --apply --no-backup 2>$null | Out-Null
