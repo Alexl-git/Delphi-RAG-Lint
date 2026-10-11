@@ -25356,7 +25356,7 @@ begin
   SI.wShowWindow:= SW_HIDE;
   Watch:= TStopwatch.StartNew;
   UniqueString(Cmd);
-  if not CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute -- ParamStr(0) is this engine; the paths are this run's own --db and the project file it records
+  if not CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute@d2cc -- ParamStr(0) is this engine; the paths are this run's own --db and the project file it records
   begin
     ARx.Status:= 'failed';
     ARx.Reason:= Format('could not start the re-index (%s) -- run: drag-lint index --project "%s" --db "%s"',

@@ -61,7 +61,7 @@ uses
   DRagLint.Convert.PropTree,
   DRagLint.Convert.PropCache,
   DRagLint.Convert.UnitRules,
-  DRagLint.Convert.UsesReconcile,
+  DRagLint.Convert.UsesReconcile,  // dl:unit DRagLint.Convert.UsesReconcile accepted -- the KEEP_REASON_* / UNRESOLVED_* constants are its row vocabulary, read where the rows become warnings
   DRagLint.Refactor.TextEdit;
 
 const
@@ -3170,16 +3170,30 @@ begin
 end;
 
 // C9 (1.27.0): the RECONCILED uses plan for one unit -- the converted text
-// (AEdits applied in memory) is re-indexed and ReconcileUses decides keep /
-// remove / add; PlanUnitRules then plans the edits. APlannerNeeded: the unit
+// (AArgs.Edits applied in memory) is re-indexed and ReconcileUses decides keep /
+// remove / add; PlanUnitRules then plans the edits. PlannerNeeded: the unit
 // has unit rules or a C13 move, so the planner owns every uses edit; otherwise
 // it is used only when the reconciliation itself adds a unit (UsePlanner), and
 // the caller keeps its own #convert uses-add edits. Never refuses by itself.
-function ReconcileUnitUses(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;
-  const ARules: TConversionRuleSet; const AEdits: TArray<TTextEdit>; const AConverted: TList<string>;
-  const AOnly, AAdds, AIntfAdds, AHandled: TArray<string>; APlannerNeeded: Boolean): TReconcileOutcome;
+type
+  { C9: everything ReconcileUnitUses needs about the unit and its plan. }
+  TReconcileUnitArgs = record
+    UnitPas, DfmPath: string;
+    Rules           : TConversionRuleSet;
+    Edits           : TArray<TTextEdit>;   { the plan's non-uses edits }
+    Converted       : TList<string>;       { instances the plan converts; may be nil }
+    Only            : TArray<string>;
+    Adds, IntfAdds  : TArray<string>;      { the #convert surface's To units }
+    Handled         : TArray<string>;      { To type names that surface resolves }
+    PlannerNeeded   : Boolean;             { unit rules or a C13 move: the planner owns every edit }
+  end;
+
+function ReconcileUnitUses(const ATrees: TConvertTreeCache; const AArgs: TReconcileUnitArgs): TReconcileOutcome;
 var
-  In_    : TUsesReconcileInput;
+  UnitIn : TUsesReconcileInput;
+  UnitPas, DfmPath: string;
+  Rules  : TConversionRuleSet;
+  Adds   : TArray<string>;
   Res    : TUsesReconcileResult;
   OrigDfm: string;
   Entries: TArray<TUsesEntryInfo>;
@@ -3191,7 +3205,7 @@ var
     It         := Default(TApplyItem);
     It.Kind    := AKind;
     It.Field   := afWarnings;
-    It.FilePath:= AUnitPas;
+    It.FilePath:= UnitPas;
     It.Line    := ALine;
     It.RuleLine:= ARuleLine;
     It.Text    := AText;
@@ -3199,39 +3213,43 @@ var
   end;
 
 begin
+  UnitPas:= AArgs.UnitPas;
+  DfmPath:= AArgs.DfmPath;
+  Rules  := AArgs.Rules;
+  Adds   := AArgs.Adds;
   Result:= Default(TReconcileOutcome);
-  In_   := Default(TUsesReconcileInput);
-  In_.UnitPas     := AUnitPas;
-  In_.OrigPas     := TEncoding.ANSI.GetString(TFile.ReadAllBytes(AUnitPas));
-  In_.ConvPas     := TTextEditApplier.ApplyToText(AUnitPas, In_.OrigPas, AEdits);
-  In_.Rules       := ARules;
-  In_.ExtraAdds   := AAdds;
-  In_.HandledNames:= AHandled;
+  UnitIn:= Default(TUsesReconcileInput);
+  UnitIn.UnitPas     := UnitPas;
+  UnitIn.OrigPas     := TEncoding.ANSI.GetString(TFile.ReadAllBytes(UnitPas));
+  UnitIn.ConvPas     := TTextEditApplier.ApplyToText(UnitPas, UnitIn.OrigPas, AArgs.Edits);
+  UnitIn.Rules       := Rules;
+  UnitIn.ExtraAdds   := Adds;
+  UnitIn.HandledNames:= AArgs.Handled;
   OrigDfm:= '';
-  if (ADfmPath <> '') and TFile.Exists(ADfmPath) then
+  if (DfmPath <> '') and TFile.Exists(DfmPath) then
   begin
-    OrigDfm    := TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath));
-    In_.ConvDfm:= TTextEditApplier.ApplyToText(ADfmPath, OrigDfm, AEdits);
+    OrigDfm    := TEncoding.ANSI.GetString(TFile.ReadAllBytes(DfmPath));
+    UnitIn.ConvDfm:= TTextEditApplier.ApplyToText(DfmPath, OrigDfm, AArgs.Edits);
   end;
-  Res:= ReconcileUses(ATrees.UnitIndex, In_);
+  Res:= ReconcileUses(ATrees.UnitIndex, UnitIn);
   Result.Status    := Res.Status;
   Result.Unresolved:= Res.Unresolved;
-  ReadUsesEntries(AUnitPas, In_.OrigPas, Entries);
-  DemoteOnlySkips(ATrees, OrigDfm, ARules, AConverted, AOnly, Entries, Res.Needs);
-  Result.UsePlanner:= APlannerNeeded or (Length(Res.Needs.Adds) > 0);
+  ReadUsesEntries(UnitPas, UnitIn.OrigPas, Entries);
+  DemoteOnlySkips(ATrees, OrigDfm, Rules, AArgs.Converted, AArgs.Only, Entries, Res.Needs);
+  Result.UsePlanner:= AArgs.PlannerNeeded or (Length(Res.Needs.Adds) > 0);
   Result.Plan:= Default(TUsesPlan);
   Result.Plan.Ok:= True;
   if Result.UsePlanner then
-    Result.Plan:= PlanUnitRules(AUnitPas, In_.OrigPas, ARules, AAdds, AIntfAdds, Res.Needs);
+    Result.Plan:= PlanUnitRules(UnitPas, UnitIn.OrigPas, Rules, Adds, AArgs.IntfAdds, Res.Needs);
   if not Result.Plan.Ok then Exit;
   for var Ch: TUsesChange in Result.Plan.Changes do
   begin
-    var RL: Integer:= UnitRuleLine(ARules, Ch.UnitName);
+    var RL: Integer:= UnitRuleLine(Rules, Ch.UnitName);
     if RL = 0 then
-      for var W: TWatchUnit in UnitRuleWatchList(ARules, AAdds, ATrees.UnitIndex.SameUnit) do
-        if ATrees.UnitIndex.SameUnit(W.UnitName, Ch.UnitName) and (RL = 0) then RL:= UnitRuleLine(ARules, W.UnitName);
+      for var W: TWatchUnit in UnitRuleWatchList(Rules, Adds, ATrees.UnitIndex.SameUnit) do
+        if ATrees.UnitIndex.SameUnit(W.UnitName, Ch.UnitName) and (RL = 0) then RL:= UnitRuleLine(Rules, W.UnitName);
     if Ch.Action = 'skipped' then
-      Result.Items:= Result.Items + [SkippedRuleItem(ARules, AUnitPas, Ch)]
+      Result.Items:= Result.Items + [SkippedRuleItem(Rules, UnitPas, Ch)]
     else if (Ch.Action = 'kept') and (Ch.Reason = KEEP_REASON_UNVERIFIED) then
       Warn(aikUnitRuleUnverified, Ch.Line, RL, Format('line %d: warning: %s kept %s -- no --db indexes that unit, so whether anything still needs it is unknown',
         [RL, Ch.Rule, Ch.UnitName]))
@@ -4570,8 +4588,18 @@ var
         { C9: the re-indexed converted text decides keep / remove / add }
         var Handled: TArray<string>:= nil;
         for var TT in ToTypesSeen do Handled:= Handled + [BareTypeTail(TT)];
-        var Rec: TReconcileOutcome:= ReconcileUnitUses(ATrees, AUnitPas, ADfmPath, ABook.Rules, DistinctInLineEdits(Edits.ToArray),
-          ConvertedInstNames, AOnly, AAdds, AIntfAdds, Handled, UnitRules or MoveNeeded);
+        var RA: TReconcileUnitArgs:= Default(TReconcileUnitArgs);
+        RA.UnitPas      := AUnitPas;
+        RA.DfmPath      := ADfmPath;
+        RA.Rules        := ABook.Rules;
+        RA.Edits        := DistinctInLineEdits(Edits.ToArray);
+        RA.Converted    := ConvertedInstNames;
+        RA.Only         := AOnly;
+        RA.Adds         := AAdds;
+        RA.IntfAdds     := AIntfAdds;
+        RA.Handled      := Handled;
+        RA.PlannerNeeded:= UnitRules or MoveNeeded;
+        var Rec: TReconcileOutcome:= ReconcileUnitUses(ATrees, RA);
         for var RIt: TApplyItem in Rec.Items do Emit(RIt);
         Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + Rec.Unresolved;
         Result.Report.UsesReconcile := Rec.Status;
@@ -4993,7 +5021,13 @@ begin
   if AReconcile then
   begin
     { C9: nothing converts here, so the .dfm as it is decides what stays }
-    var Rec: TReconcileOutcome:= ReconcileUnitUses(ATrees, AUnitPas, ADfmPath, ARules, nil, nil, AOnly, nil, nil, nil, True);
+    var RA: TReconcileUnitArgs:= Default(TReconcileUnitArgs);
+    RA.UnitPas      := AUnitPas;
+    RA.DfmPath      := ADfmPath;
+    RA.Rules        := ARules;
+    RA.Only         := AOnly;
+    RA.PlannerNeeded:= True;
+    var Rec: TReconcileOutcome:= ReconcileUnitUses(ATrees, RA);
     Result.Ok                   := Rec.Plan.Ok;
     Result.Refused              := Rec.Plan.Refused;
     Result.Error                := Rec.Plan.Error;

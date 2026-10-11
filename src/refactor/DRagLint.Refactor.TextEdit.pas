@@ -64,6 +64,7 @@ type
   /// </remarks>
   TTextEditApplier = class
   private
+    class procedure ApplyOneEdit(ALines: TStringList; const AEdit: TTextEdit; var AApplied, ASkippedEdits: Integer);
     class function ApplyGroup(const AFilePath, AContent: string; AGroup: TList<TTextEdit>;
       AQuiet: Boolean; var ASkippedEdits: Integer; out AApplied: Integer): string;
   public
@@ -440,6 +441,72 @@ begin
   Result:= Apply(AEdits, AWriteBackups, Skipped);
 end;
 
+{ One kept edit applied to ALines (the per-kind half of ApplyGroup). }
+class procedure TTextEditApplier.ApplyOneEdit(ALines: TStringList; const AEdit: TTextEdit; var AApplied, ASkippedEdits: Integer);
+begin
+  case AEdit.Kind of
+    tekDeleteLines:
+      begin
+        var LHi: Integer:= AEdit.EndLine;
+        var LLo: Integer:= AEdit.Line;
+        if LLo < 1 then LLo:= 1;
+        if LHi > ALines.Count then LHi:= ALines.Count;
+        for var L: Integer:= LHi downto LLo do
+          if (L >= 1) and (L <= ALines.Count) then
+          begin
+            ALines.Delete(L - 1);
+            Inc(AApplied);
+          end;
+      end;
+    tekInsertLines:
+      begin
+        var Idx: Integer:= AEdit.Line; { insert AFTER 1-based Line => 0-based index Line }
+        if Idx < 0 then Idx:= 0;
+        if Idx > ALines.Count then Idx:= ALines.Count;
+        { split Text on CRLF/LF so multi-line inserts keep separate lines }
+        var Parts: TArray<string>:= AEdit.Text.Replace(#13#10, #10).Split([#10]);
+        for var PIdx: Integer:= High(Parts) downto 0 do
+          ALines.Insert(Idx, Parts[PIdx]);
+        Inc(AApplied);
+      end;
+    tekInsertInLine:
+      begin
+        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then
+        begin
+          var S: string:= ALines[AEdit.Line - 1];
+          var C: Integer:= AEdit.Col;
+          if C < 1 then C:= 1;
+          if C > Length(S) + 1 then C:= Length(S) + 1;
+          ALines[AEdit.Line - 1]:= Copy(S, 1, C - 1) + AEdit.Text + Copy(S, C, MaxInt);
+          Inc(AApplied);
+        end
+        else
+          Inc(ASkippedEdits);   { line does not exist: silently dropped before }
+      end;
+    tekReplaceInLine:
+      begin
+        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then
+        begin
+          var S: string:= ALines[AEdit.Line - 1];
+          if not ReplaceEditIsValid(AEdit, S) then
+            Inc(ASkippedEdits)
+          else
+          begin
+            var C: Integer:= AEdit.Col;
+            if C < 1 then C:= 1;
+            var EC: Integer:= AEdit.EndCol;
+            if EC < C then EC:= C;
+            if EC > Length(S) + 1 then EC:= Length(S) + 1;
+            ALines[AEdit.Line - 1]:= Copy(S, 1, C - 1) + AEdit.Text + Copy(S, EC, MaxInt);
+            Inc(AApplied);
+          end;
+        end
+        else
+          Inc(ASkippedEdits);   { line does not exist: out of range, never written }
+      end;
+  end;
+end;
+
 { 1.27.0 (C9): ONE file's edits applied to its text -- the shared core of Apply
   and ApplyToText, so the in-memory preview convert-apply re-indexes is, by
   construction, the text Apply writes. AApplied is the number of edits that
@@ -474,7 +541,8 @@ begin
         .dfm Delphi refused). TList.Sort is not stable, so the order is
         stated, never left to the sort. }
       if Result = 0 then Result:= Ord(A.Kind <> tekInsertLines) - Ord(B.Kind <> tekInsertLines);
-      if Result = 0 then Result:= B.Col - A.Col; // same line: larger column first (back-to-front)
+      { same line: larger column first (back-to-front) }
+      if Result = 0 then Result:= B.Col - A.Col;
     end);
   { 1.25.2: STABLE. Edits the comparer ties (two inserts at one line and
     column) are applied in REVERSE planned order, so they land in the file
@@ -532,62 +600,7 @@ begin
         Kept.Clear;
       end;
 
-    for E in Kept do
-    begin
-      case E.Kind of
-        tekDeleteLines:
-          begin
-            var LHi: Integer:= E.EndLine; var LLo: Integer:= E.Line;
-            if LLo < 1 then LLo:= 1;
-            if LHi > Lines.Count then LHi:= Lines.Count;
-            for var L: Integer:= LHi downto LLo do
-              if (L >= 1) and (L <= Lines.Count) then begin Lines.Delete(L - 1); Inc(AppliedInFile); end;
-          end;
-        tekInsertLines:
-          begin
-            var Idx: Integer:= E.Line; { insert AFTER 1-based Line => 0-based index Line }
-            if Idx < 0 then Idx:= 0;
-            if Idx > Lines.Count then Idx:= Lines.Count;
-            { split Text on CRLF/LF so multi-line inserts keep separate lines }
-            var Parts: TArray<string>:= E.Text.Replace(#13#10, #10).Split([#10]);
-            for var PIdx: Integer:= High(Parts) downto 0 do
-              Lines.Insert(Idx, Parts[PIdx]);
-            Inc(AppliedInFile);
-          end;
-        tekInsertInLine:
-          begin
-            if (E.Line >= 1) and (E.Line <= Lines.Count) then
-            begin
-              var S: string:= Lines[E.Line - 1];
-              var C: Integer:= E.Col; if C < 1 then C:= 1;
-              if C > Length(S) + 1 then C:= Length(S) + 1;
-              Lines[E.Line - 1]:= Copy(S, 1, C - 1) + E.Text + Copy(S, C, MaxInt);
-              Inc(AppliedInFile);
-            end
-            else
-              Inc(ASkippedEdits);   { line does not exist: silently dropped before }
-          end;
-        tekReplaceInLine:
-          begin
-            if (E.Line >= 1) and (E.Line <= Lines.Count) then
-            begin
-              var S: string:= Lines[E.Line - 1];
-              if not ReplaceEditIsValid(E, S) then
-                Inc(ASkippedEdits)
-              else
-              begin
-                var C: Integer:= E.Col;    if C < 1 then C:= 1;
-                var EC: Integer:= E.EndCol; if EC < C then EC:= C;
-                if EC > Length(S) + 1 then EC:= Length(S) + 1;
-                Lines[E.Line - 1]:= Copy(S, 1, C - 1) + E.Text + Copy(S, EC, MaxInt);
-                Inc(AppliedInFile);
-              end;
-            end
-            else
-              Inc(ASkippedEdits);   { line does not exist: out of range, never written }
-          end;
-      end;
-    end;
+    for E in Kept do ApplyOneEdit(Lines, E, AppliedInFile, ASkippedEdits);
     finally
       Kept.Free;
     end;
@@ -601,7 +614,7 @@ begin
         SB.Append(Lines[I]);
         if I < Lines.Count - 1 then SB.Append(#13#10);
       end;
-      if (Length(Content) > 0) and (Content[Length(Content)] = #10) then SB.Append(#13#10);
+      if (Content <> '') and (Content[Length(Content)] = #10) then SB.Append(#13#10);
       Result:= SB.ToString;
     finally
       SB.Free;

@@ -164,7 +164,7 @@ function ReconcileUses(AIndex: TUsesUnitIndex; const AIn: TUsesReconcileInput): 
 /// (.dfm -> TDFMParser, else TDelphi13Parser with usage refs).</param>
 /// <param name="AText">The text to parse.</param>
 /// <returns>The parse result.</returns>
-/// <exception cref="Exception">Whatever the parser raises.</exception>
+/// <remarks>A parser failure propagates; ReconcileUses turns it into 'degraded'.</remarks>
 function ReindexText(const APath, AText: string): TParseResult;
 
 implementation
@@ -266,8 +266,16 @@ begin
   LA:= LowerCase(Trim(A));
   LB:= LowerCase(Trim(B));
   if LA = LB then Exit(True);
-  if EndsStr('.' + LB, LA) then begin Long:= LA; Short:= LB; end
-  else if EndsStr('.' + LA, LB) then begin Long:= LB; Short:= LA; end
+  if EndsStr('.' + LB, LA) then
+  begin
+    Long := LA;
+    Short:= LB;
+  end
+  else if EndsStr('.' + LA, LB) then
+  begin
+    Long := LB;
+    Short:= LA;
+  end
   else Exit(False);
   Build;
   { 'DB' and 'Data.DB' are one unit -- unless the index holds BOTH as units }
@@ -390,7 +398,6 @@ type
     FOwn     : TDictionary<string, Boolean>;
     function WatchedBy(const AEntry: string): Boolean;
     procedure CollectNames(const AText: string; const AParse: TParseResult; ADict: TDictionary<string, TNameUse>);
-    function ImplementationLine(const AText: string): Integer;
     procedure DecideWatch(const ADfm: TParseResult; ADfmOk: Boolean);
     procedure BuildPostPlan;
     function Reachable(const ACands: TArray<TUsesCandidate>): Boolean;
@@ -407,6 +414,20 @@ begin
   Result.Name   := AName;
   Result.Line   := ALine;
   Result.Section:= ASection;
+end;
+
+{ The line of the 'implementation' keyword (MaxInt when none): a reference above it is in the interface. }
+function ImplementationLine(const AText: string): Integer;
+var
+  Lines: TArray<string>;
+begin
+  Lines:= AText.Replace(#13#10, #10).Split([#10]);
+  for var I: Integer:= 0 to High(Lines) do
+  begin
+    var T: string:= LowerCase(Trim(Lines[I]));
+    if (T = SECTION_IMPL) or T.StartsWith(SECTION_IMPL + ' ') then Exit(I + 1);
+  end;
+  Result:= MaxInt;
 end;
 
 constructor TReconciler.Create(AIndex: TUsesUnitIndex; const AIn: TUsesReconcileInput);
@@ -438,18 +459,6 @@ begin
   Result:= False;
 end;
 
-function TReconciler.ImplementationLine(const AText: string): Integer;
-var
-  Lines: TArray<string>;
-begin
-  Lines:= AText.Replace(#13#10, #10).Split([#10]);
-  for var I: Integer:= 0 to High(Lines) do
-  begin
-    var T: string:= LowerCase(Trim(Lines[I]));
-    if (T = SECTION_IMPL) or T.StartsWith(SECTION_IMPL + ' ') then Exit(I + 1);
-  end;
-  Result:= MaxInt;
-end;
 
 { Every name a ref of AParse names, with its first line, whether one
   occurrence is BARE (the character before it, blanks skipped, is not a '.')
