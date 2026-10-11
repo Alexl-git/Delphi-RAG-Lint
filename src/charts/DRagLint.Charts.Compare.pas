@@ -124,6 +124,13 @@ type
     SnapshotPath: string;
     /// <summary>The unit update-doc rewrote, '' when none.</summary>
     UpdatedFile: string;
+    /// <summary>Where the old side came from (copied from the request; for the renderers).</summary>
+    OldSource  : TCompareSource;
+    /// <summary>csFile / csTwoFiles / csRemarks: the old path; csOldIndex: the old index copy;
+    /// csAutoSnapshot: the snapshot file found.</summary>
+    OldPath    : string;
+    /// <summary>csRemarks: the 1-based line the caller named; 0 otherwise.</summary>
+    OldLine    : Integer;
   end;
 
 /// <summary>Runs one compare (spec C1-C6, D8, S1, S3, S4a).</summary>
@@ -440,6 +447,7 @@ begin
     Exit(Refuse(pResult, COMPARE_EXIT_SETUP, Format('no auto snapshot for %s %s under %s',
       [Locator.Question, TargetWithTo(Locator), AutoDir])));
   var Why: string;
+  pResult.OldPath:= Latest;
   if not LoadSide(Latest, pResult.OldText, pResult.OldSvgPath, pResult.Format, Why) then
     Exit(Refuse(pResult, COMPARE_EXIT_SETUP, Why));
   Result:= True;
@@ -620,6 +628,9 @@ function RunCompare(const pRequest: TCompareRequest): TCompareResult;
 begin
   var R:= Default(TCompareResult);
   R.ExitCode:= COMPARE_EXIT_SETUP;
+  R.OldSource:= pRequest.Source;
+  R.OldPath:= if pRequest.Source = csOldIndex then pRequest.OldDb else pRequest.OldPath;
+  R.OldLine:= if pRequest.Source = csRemarks then pRequest.OldLine else 0;
   var Run:= Default(TCompareRun);
   if ValidateRequest(pRequest, R) and LoadOldSide(pRequest, R, Run) and LoadNewSide(pRequest, R, Run) then
   begin

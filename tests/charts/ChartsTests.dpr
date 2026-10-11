@@ -39,6 +39,8 @@ uses
   , ChartsTests.RemarksSnapshot in 'ChartsTests.RemarksSnapshot.pas'
   , DRagLint.Charts.Compare in '..\..\src\charts\DRagLint.Charts.Compare.pas'
   , ChartsTests.Compare in 'ChartsTests.Compare.pas'
+  , DRagLint.Charts.Render in '..\..\src\charts\DRagLint.Charts.Render.pas'
+  , ChartsTests.Render in 'ChartsTests.Render.pas'
   ;
 
 const
