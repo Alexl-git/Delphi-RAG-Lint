@@ -98,6 +98,10 @@ const
   /// <summary>info --json capability: apply/1 pas_uses[] -- what the .pas still uses
   /// that the map does not cover (engine 1.27.0).</summary>
   CAPABILITY_PAS_USES = 'pas_uses';
+  /// <summary>info --json capability: each apply/1 pas_uses[] row carries resolution
+  /// (resolved / ambiguous / class-not-found / member-not-found / kind-unknown) and
+  /// candidates[] -- the From class is resolved in the unit's scope (engine 1.28.2).</summary>
+  CAPABILITY_PAS_USES_RESOLUTION = 'pas_uses_resolution';
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`

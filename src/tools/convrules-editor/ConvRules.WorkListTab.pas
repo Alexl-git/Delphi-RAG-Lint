@@ -13,7 +13,7 @@ interface
 uses
   System.SysUtils
   , System.Classes
-  , Vcl.Controls  // dl:ok unused-unit-in-uses@19cd -- REVIEWED 2026-10-11 false positive: alTop / alLeft / alClient / bvNone are declared here; removing the unit fails with E2003
+  , Vcl.Controls
   , Vcl.StdCtrls
   , Vcl.CheckLst
   , Vcl.ComCtrls

@@ -11550,6 +11550,12 @@ begin
   Check('glyph.tab.lead.restore.only', S = RESTORE_LEAD + 'Converted 1 of 2.', S);
   S:= RunStatusLead([], '', 'Converted 1 of 2.');
   Check('glyph.tab.lead.body.only', S = 'Converted 1 of 2.', S);
+  // editor-1270 final fix wave: a castlib stop (exit 6) follows the RESTORE FAILED lead
+  // -- most severe first -- with ONE '. ', and never doubles a period it already has.
+  S:= RunStatusLead(['A.pas', 'B.pas'], GlyphRunSummary(1), 'Converted 1 of 2.', 'Convert stopped: X');
+  Check('convert.tab.lead.restore.before.stop', S = RESTORE_LEAD + 'Convert stopped: X. ' + GlyphRunSummary(1) + '  Converted 1 of 2.', S);
+  S:= RunStatusLead([], '', 'Converted 1 of 2.', 'Convert stopped: X.');
+  Check('convert.tab.lead.stop.one.period', S = 'Convert stopped: X. Converted 1 of 2.', S);
 
   // Final-review ruling (E13 amended): ONE report shape -- each glyph line has the
   // report's 8 columns, Status `glyph`, the outcome in the Note; converted rows only.
@@ -12976,6 +12982,7 @@ const
   RUN_A      = 4;
   RUN_B      = 5;
   CONV_ROWS  = 3;  // converted, failed-restored, a second converted book on the same unit
+  STOP_ROWS  = 2;  // converted, then the castlib stop
   LINE_COUNT = 40;
   SHORT_FILE = 10;
 var
@@ -12985,6 +12992,7 @@ var
   Row  : TPasUseRow;
   GoTo1: TWorkGoTo;
   Unit1: string;
+  Only : Boolean;
 begin
   // WorkRunOf -- converted rows only, stamped, exact repeats once; the two empty states.
   Pas  := ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json'));
@@ -13009,13 +13017,29 @@ begin
   Run:= WorkRunOf(Conv, RUN_B, True);
   Check('worklist.run.of.no.converted', (Run.State = wlsNoConverted) and (Length(Run.Rows) = 0) and (WorkListSummary(Run.Rows, Run.State) = WORK_NO_CONVERTED));
 
+  // worklist.run.of.stopped -- a castlib stop (exit 6) on Unit2 keeps Unit1's converted rows.
+  Conv:= nil;
+  SetLength(Conv, STOP_ROWS);
+  Conv[0].UnitPas:= Unit1;
+  Conv[0].Status := csConverted;
+  Conv[0].Apply  := Pas;
+  Conv[High(Conv)].UnitPas   := WORK_FIX_DIR + 'Unit2.pas';
+  Conv[High(Conv)].Status    := csConfigError;
+  Conv[High(Conv)].StoppedRun:= True;
+  Conv[High(Conv)].Apply     := Pas;
+  Run := WorkRunOf(Conv, RUN_B, True);
+  Only:= (Run.State = wlsRows) and (Length(Run.Rows) = WORK_REAL_ROWS);
+  for var LRow: TPasUseRow in Run.Rows do
+    Only:= Only and (LRow.UnitPas = Unit1);
+  Check('worklist.run.of.stopped', Only, IntToStr(Length(Run.Rows)) + ' rows');
+
   // WorkGoTo -- double-click: copy, missing file, past EOF, no line.
   if Length(Pas.PasUses) <> WORK_REAL_ROWS then
     Exit;
   Row:= Pas.PasUses[WORK_KIND_ROW];
   Row.UnitPas:= Unit1;
   GoTo1:= WorkGoTo(Row, True, LINE_COUNT);
-  Check('worklist.goto.copy', GoTo1.Ok and (GoTo1.Clip = Unit1 + '(28)') and (GoTo1.Status = 'Copied Unit1.pas(28) -- paste into the IDE''s Go to line'),
+  Check('worklist.goto.copy', GoTo1.Ok and (GoTo1.Clip = Unit1 + '(28)') and (GoTo1.Status = 'Copied Unit1.pas(28) to the clipboard -- line 28'),
     GoTo1.Clip + ' / ' + GoTo1.Status);
   GoTo1:= WorkGoTo(Row, False, 0);
   Check('worklist.goto.missing.file', (not GoTo1.Ok) and (GoTo1.Status = Unit1 + ' not found') and (GoTo1.Clip = ''), GoTo1.Status);
@@ -13025,6 +13049,98 @@ begin
   Row.Lines:= nil;
   GoTo1:= WorkGoTo(Row, True, LINE_COUNT);
   Check('worklist.goto.no.line', GoTo1.Ok and (GoTo1.Clip = Unit1) and (Pos('no line', GoTo1.Status) > 0), GoTo1.Status);
+end;
+
+{ editor-1270 final fix wave: engine 1.28.2 pas_uses_resolution. The Work list never
+    shows a guessed declaring unit as fact. REAL capture
+    fixtures\apply1270\apply-pas-uses-resolution-1282.json (its _note: a BARE TLabel book
+    on a unit whose uses clause names no StdCtrls unit): Caption same-name and WordWrap
+    unmapped, both ambiguous between FMX.StdCtrls and Vcl.StdCtrls, kind ''. The other
+    resolutions are HAND-WRITTEN rows to the same contract (RES_JSON). }
+procedure TestWorkListResolution;
+const
+  RES_JSON = '[{"member":"A","kind":"property","declaring_unit":"Vcl.StdCtrls","declared_in":"TLabel","status":"unmapped","resolution":"class-not-found"},'
+    + ' {"member":"B","kind":"","declaring_unit":"Vcl.StdCtrls","declared_in":"TLabel","status":"unmapped","resolution":"member-not-found"},'
+    + ' {"member":"C","kind":"","declaring_unit":"Vcl.StdCtrls","declared_in":"TLabel","status":"unmapped","resolution":"kind-unknown"},'
+    + ' {"member":"D","kind":"property","declaring_unit":"Vcl.StdCtrls","declared_in":"TLabel","status":"mapped","resolution":"resolved"},'
+    + ' {"member":"E","declaring_unit":"Vcl.StdCtrls","status":"unmapped","resolution":"brand-new","candidates":["X",5,"Y",null,true]},'
+    + ' {"member":5,"kind":1.5,"status":"unmapped","resolution":7,"candidates":"Vcl.StdCtrls"}]';
+  RES_CLASS    = 0;
+  RES_MEMBER   = 1;
+  RES_KIND     = 2;
+  RES_RESOLVED = 3;
+  RES_OTHER    = 4;
+  RES_NUMBER   = 5;
+  RES_ROWS     = 6;
+  REAL_ROWS    = 2;
+  COL_KIND     = 4;
+  COL_DECLARED = 7;
+  KEY_ROWS     = 2;
+var
+  Real  : TArray<TPasUseRow>;
+  Gated : TArray<TPasUseRow>;
+  Res   : TArray<TPasUseRow>;
+  Arr   : TJSONArray;
+  Raised: Boolean;
+  Shown : string;
+  Conv  : TArray<TConvertRow>;
+  Twin  : TPasUseRow;
+begin
+  // worklist.resolution.ambiguous -- the real capture: candidates named, nothing guessed.
+  Real:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-resolution-1282.json')).PasUses;
+  Shown:= if Length(Real) = REAL_ROWS then string.Join('|', RowDisplay(Real[High(Real)])) else IntToStr(Length(Real)) + ' rows';
+  Check('worklist.resolution.ambiguous', Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap|(unknown)|unmapped|25|ambiguous: FMX.StdCtrls, Vcl.StdCtrls', Shown);
+  Check('worklist.resolution.ambiguous.fields', (Length(Real) = REAL_ROWS) and (Real[0].Resolution = PAS_RES_AMBIGUOUS)
+    and (string.Join(',', Real[0].Candidates) = 'FMX.StdCtrls,Vcl.StdCtrls'));
+
+  // worklist.resolution.gated.off -- an engine without pas_uses_resolution: both cleared.
+  Gated:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-resolution-1282.json'), [afPasUses]).PasUses;
+  Shown:= if Length(Gated) = REAL_ROWS then string.Join('|', RowDisplay(Gated[High(Gated)])) else IntToStr(Length(Gated)) + ' rows';
+  Check('worklist.resolution.gated.off', (Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap||unmapped|25|') and (Length(Gated) = REAL_ROWS)
+    and (Gated[0].Resolution = '') and (Length(Gated[0].Candidates) = 0), Shown);
+
+  Raised:= False;
+  Res   := nil;
+  try
+    Arr:= TJSONObject.ParseJSONValue(RES_JSON) as TJSONArray;
+    try
+      Res:= ParsePasUses(Arr, 'U.pas', WORK_RUN_OLD);
+    finally
+      Arr.Free;
+    end; // try
+  except
+    on Exception do
+      Raised:= True; // catch-and-check: the next Check fails when anything raised
+  end; // try
+  Check('worklist.resolution.parse', (not Raised) and (Length(Res) = RES_ROWS), IntToStr(Length(Res)));
+  if Length(Res) <> RES_ROWS then
+    Exit;
+  Check('worklist.resolution.class.not.found', (RowDisplay(Res[RES_CLASS])[COL_DECLARED] = '(class not found)')
+    and (RowDisplay(Res[RES_CLASS])[COL_KIND] = 'property'), RowDisplay(Res[RES_CLASS])[COL_DECLARED]);
+  Check('worklist.resolution.member.not.found', DeclaredInText(Res[RES_MEMBER]) = '(member not found)', DeclaredInText(Res[RES_MEMBER]));
+  Shown:= string.Join('|', RowDisplay(Res[RES_KIND]));
+  Check('worklist.resolution.kind.unknown.not.fact', (DeclaredInText(Res[RES_KIND]) = '(kind unknown)')
+    and (RowDisplay(Res[RES_KIND])[COL_KIND] = '(unknown)') and (Pos('Vcl.StdCtrls', Shown) = 0), Shown);
+  Check('worklist.resolution.resolved.fact', DeclaredInText(Res[RES_RESOLVED]) = 'Vcl.StdCtrls.TLabel', DeclaredInText(Res[RES_RESOLVED]));
+  Check('worklist.resolution.other.word', (DeclaredInText(Res[RES_OTHER]) = '(brand-new)') and (string.Join(',', Res[RES_OTHER].Candidates) = 'X,Y'),
+    DeclaredInText(Res[RES_OTHER]) + ' / ' + string.Join(',', Res[RES_OTHER].Candidates));
+  // worklist.json.number.not.string -- TJSONNumber descends from TJSONString: 5 is not a name.
+  Check('worklist.json.number.not.string', (Res[RES_NUMBER].Member = '') and (Res[RES_NUMBER].Kind = '') and (Res[RES_NUMBER].Resolution = '')
+    and (Length(Res[RES_NUMBER].Candidates) = 0), Res[RES_NUMBER].Member + '/' + Res[RES_NUMBER].Kind + '/' + Res[RES_NUMBER].Resolution);
+
+  // worklist.run.of.key.resolution -- two books on one unit naming different candidates are two rows.
+  if Length(Real) <> REAL_ROWS then
+    Exit;
+  Twin:= Real[0];
+  Twin.Candidates:= ['Vcl.StdCtrls'];
+  SetLength(Conv, KEY_ROWS);
+  Conv[0].UnitPas:= WORK_FIX_DIR + 'Unit1.pas';
+  Conv[0].Status := csConverted;
+  Conv[0].Apply.PasUses:= [Real[0]];
+  Conv[High(Conv)].UnitPas:= Conv[0].UnitPas;
+  Conv[High(Conv)].Status := csConverted;
+  Conv[High(Conv)].Apply.PasUses:= [Twin];
+  Check('worklist.run.of.key.resolution', Length(WorkRunOf(Conv, WORK_RUN_NEW, True).Rows) = KEY_ROWS, IntToStr(Length(WorkRunOf(Conv, WORK_RUN_NEW, True).Rows)));
 end;
 
 begin
@@ -13245,6 +13361,7 @@ begin
     TestWorkListSortFilter;
     TestWorkListSummaryMerge;
     TestWorkListRunGoTo;
+    TestWorkListResolution;
 
     FreeAndNil(GParseBook);
 

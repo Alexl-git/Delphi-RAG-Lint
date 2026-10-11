@@ -106,8 +106,10 @@ type
   /// <remarks>afCastSiteRefusal: cast_site_refusal (items[] cast-not-applied, one per
   /// .pas site); afValueStripDb: value_cast_strip_db (value-cast-applied /
   /// value-cast-check); afUsesReconcile: uses_reconcile (uses[] rows, uses_unresolved[],
-  /// uses_reindex); afPasUses: pas_uses (pas_uses[]).</remarks>
-  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses);
+  /// uses_reindex); afPasUses: pas_uses (pas_uses[]); afPasUsesResolution:
+  /// pas_uses_resolution (engine 1.28.2: each pas_uses[] row's resolution and
+  /// candidates[]; without it both are cleared).</remarks>
+  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses, afPasUsesResolution);
   /// <summary>The apply/1 features the run's engine reported.</summary>
   TApplyFeatures = set of TApplyFeature;
 
@@ -306,7 +308,8 @@ function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures = [Low(TA
 /// <param name="ACapNames">The capability names info --json reported true
 /// (TEngineAdapter.CapabilityNames).</param>
 /// <returns>One feature per matching name, case-insensitive: cast_site_refusal,
-/// value_cast_strip_db, uses_reconcile, pas_uses (ConvRules.Engine CAPABILITY_*).</returns>
+/// value_cast_strip_db, uses_reconcile, pas_uses, pas_uses_resolution (ConvRules.Engine
+/// CAPABILITY_*).</returns>
 function ApplyFeaturesOf(const ACapNames: TArray<string>): TApplyFeatures;
 
 /// <summary>PURE: the converted row's StripDB part.</summary>
@@ -905,6 +908,8 @@ begin
     Include(Result, afUsesReconcile);
   if MatchText(CAPABILITY_PAS_USES, ACapNames) then
     Include(Result, afPasUses);
+  if MatchText(CAPABILITY_PAS_USES_RESOLUTION, ACapNames) then
+    Include(Result, afPasUsesResolution);
 end;
 
 function ValueCastNote(const ARow: TApplyRow): string;
@@ -1264,11 +1269,19 @@ begin
     end;
     if (afPasUses in AFeatures) and (Obj.Values['pas_uses'] is TJSONArray) then
       Result.PasUses:= ParsePasUses(TJSONArray(Obj.Values['pas_uses']), Str(Obj, 'unit'), 0);
+    // Engine 1.28.2: resolution / candidates[] are this contract only with the capability.
+    if not (afPasUsesResolution in AFeatures) then
+      for var I: Integer:= 0 to High(Result.PasUses) do
+      begin
+        Result.PasUses[I].Resolution:= '';
+        Result.PasUses[I].Candidates:= nil;
+      end;
     // Each to-do is counted ONCE, in its own note part (controller ruling: items[] is
     // the union the six arrays partition). A cast site / value check is also a
     // warnings[] line, so it leaves the manual remainder when its array holds it.
     Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes')
-      + WithoutItemTexts(OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0), Result.CastSites + Result.ValueChecks);    // The applier's refusal reaches us on stderr, outside the document (no apply/1
+      + WithoutItemTexts(OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0), Result.CastSites + Result.ValueChecks);
+    // The applier's refusal reaches us on stderr, outside the document (no apply/1
     // key carries it, up to engine 1.25.0); warnings[] / error are read as well.
     AddRefusals(AJson.Split([#10]), Result.EditRefusals);
     AddRefusals(Strings(Obj, 'warnings'), Result.EditRefusals);

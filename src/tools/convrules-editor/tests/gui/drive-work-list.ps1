@@ -496,7 +496,7 @@ try {
   [void][W]::PostMessage($lv, 0x0203, [IntPtr]1, [W]::RowClientPoint($lv, 0))
   $st = WaitLike $main 'Copied *' 10
   $clip = Get-Clipboard -Raw
-  Check 'worklist.dblclick.status' ($st -eq "Copied FixUnit.pas($line0) -- paste into the IDE's Go to line") $st
+  Check 'worklist.dblclick.status' ($st -eq "Copied FixUnit.pas($line0) to the clipboard -- line $line0") $st
   Check 'worklist.dblclick.clipboard' ($clip -eq "$pas($line0)") "clipboard: $clip"
 
   # --- 5. the same double-click with the file gone: a status-bar error, never an exception ---

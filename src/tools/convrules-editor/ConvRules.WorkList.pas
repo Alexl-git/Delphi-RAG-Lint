@@ -31,6 +31,19 @@ const
   /// <summary>pas_uses status: a #link renamed (or identity-mapped) the member.</summary>
   PAS_USE_MAPPED          = 'mapped';
 
+  /// <summary>pas_uses resolution (engine 1.28.2, capability pas_uses_resolution): the
+  /// From class was resolved in the unit's scope; declaring_unit / declared_in are facts.</summary>
+  PAS_RES_RESOLVED         = 'resolved';
+  /// <summary>pas_uses resolution: several units declare the From class and the unit's
+  /// scope does not choose one; candidates[] names them.</summary>
+  PAS_RES_AMBIGUOUS        = 'ambiguous';
+  /// <summary>pas_uses resolution: no unit in scope declares the From class.</summary>
+  PAS_RES_CLASS_NOT_FOUND  = 'class-not-found';
+  /// <summary>pas_uses resolution: the class was found, the member was not.</summary>
+  PAS_RES_MEMBER_NOT_FOUND = 'member-not-found';
+  /// <summary>pas_uses resolution: the member's kind could not be determined.</summary>
+  PAS_RES_KIND_UNKNOWN     = 'kind-unknown';
+
   /// <summary>Instance column text of a global row (Instance '').</summary>
   WORK_GLOBAL_INSTANCE = '(global)';
   /// <summary>From -&gt; To column text of a global row.</summary>
@@ -81,6 +94,13 @@ type
     Lines        : TArray<Integer>;
     /// <summary>count -- the number of uses; Length(Lines) when absent or not a number.</summary>
     Count        : Integer;
+    /// <summary>resolution -- how the engine found the declaring unit: one of the
+    /// PAS_RES_* values, or a newer engine's word; '' when the engine did not say (an
+    /// engine without pas_uses_resolution: ParseApplyJson clears it).</summary>
+    Resolution   : string;
+    /// <summary>candidates -- the units that could declare the From class (ambiguous);
+    /// string entries only, others skipped; [] when absent.</summary>
+    Candidates   : TArray<string>;
   end;
 
   /// <summary>What the Work list shows. An empty field means "all".</summary>
@@ -140,7 +160,9 @@ type
 /// <param name="ARunId">Stamped on every row as RunId.</param>
 /// <returns>One row per object entry, in the engine's order; never raises. A
 /// non-object entry is skipped; a missing or wrongly-typed field reads as '' / [] /
-/// 0, and Count falls back to Length(Lines).</returns>
+/// 0 (a JSON number is never a string), and Count falls back to Length(Lines).
+/// resolution and candidates[] (string entries only) are read whatever the engine;
+/// ParseApplyJson clears them for an engine without pas_uses_resolution.</returns>
 function ParsePasUses(const AArr: TJSONArray; const AUnitPas: string; ARunId: Integer): TArray<TPasUseRow>;
 
 /// <summary>PURE: True for the statuses that are work to do -- unmapped,
@@ -190,11 +212,20 @@ function FilterRows(const ARows: TArray<TPasUseRow>; const AFilter: TWorkFilter)
 /// case-insensitive. Stable for equal keys.</remarks>
 procedure SortRows(var ARows: TArray<TPasUseRow>);
 
+/// <summary>PURE: a row's Declared in cell -- never a guessed unit presented as fact.</summary>
+/// <param name="ARow">The row.</param>
+/// <returns>Resolution '' or resolved: DeclaringUnit.DeclaredIn, or whichever of the two
+/// is set; ambiguous: 'ambiguous: ' + the candidates joined by ', '; class-not-found /
+/// member-not-found / kind-unknown: '(class not found)' / '(member not found)' / '(kind
+/// unknown)'; any other value: '(' + Resolution + ')'.</returns>
+function DeclaredInText(const ARow: TPasUseRow): string;
+
 /// <summary>PURE: a row's grid cells.</summary>
 /// <param name="ARow">The row.</param>
 /// <returns>Unit (file name) | Instance | From -&gt; To | Member | Kind | Status |
-/// Lines (comma-separated) | Declared in (DeclaringUnit.DeclaredIn, or DeclaringUnit
-/// alone). A global row shows Instance '(global)' and From -&gt; To '--'.</returns>
+/// Lines (comma-separated) | Declared in (DeclaredInText). Kind shows '(unknown)' when
+/// the engine sent no kind but did send a resolution. A global row shows Instance
+/// '(global)' and From -&gt; To '--'.</returns>
 function RowDisplay(const ARow: TPasUseRow): TArray<string>;
 
 /// <summary>PURE: the column captions RowDisplay fills.</summary>
@@ -228,7 +259,8 @@ function WorkUnits(const ARows: TArray<TPasUseRow>): TArray<string>;
 /// <param name="AFileExists">ARow.UnitPas exists on disk.</param>
 /// <param name="ALineCount">The file's line count (read by the caller).</param>
 /// <returns>Ok with Clip '&lt;path&gt;(&lt;first line&gt;)' and Status 'Copied
-/// &lt;file&gt;(&lt;line&gt;) -- paste into the IDE''s Go to line'; not Ok with Status
+/// &lt;file&gt;(&lt;line&gt;) to the clipboard -- line &lt;line&gt;' (the clipboard holds
+/// the compiler-message form; the IDE's Go to line takes only the number); not Ok with Status
 /// '&lt;path&gt; not found' for a missing file, or '&lt;path&gt; has only N line(s) --
 /// line L is past its end (the file changed since the run)'.</returns>
 function WorkGoTo(const ARow: TPasUseRow; AFileExists: Boolean; ALineCount: Integer): TWorkGoTo;
@@ -259,18 +291,47 @@ const
   PAIR_FMT     = '%s -> %s';
   OTHER_FMT    = ', %d other';
   GOTO_FMT     = '%s(%d)';
-  COPIED_FMT   = 'Copied %s -- paste into the IDE''s Go to line';
+  COPIED_FMT   = 'Copied %s to the clipboard -- line %d';
+  // DeclaredInText / RowDisplay: an unresolved row's cells -- never a guessed unit.
+  AMBIGUOUS_PREFIX        = 'ambiguous: ';
+  CLASS_NOT_FOUND_CELL    = '(class not found)';
+  MEMBER_NOT_FOUND_CELL   = '(member not found)';
+  KIND_UNKNOWN_DECL_CELL  = '(kind unknown)';
+  OTHER_RESOLUTION_FMT    = '(%s)';
+  KIND_UNKNOWN_CELL       = '(unknown)';
   COPIED_NO_LINE_FMT = 'Copied %s -- the engine recorded no line for this use';
   NOT_FOUND_FMT = '%s not found';
   PAST_EOF_FMT  = '%s has only %d line(s) -- line %d is past its end (the file changed since the run)';
 
+// A string value's text; '' for any other JSON type. The TJSONNumber test is defensive:
+// TJSONNumber descended from TJSONString in older RTLs (Delphi 13's does not), and a
+// number is never a name.
+function JText(AVal: TJSONValue): string;
+begin
+  if (AVal is TJSONString) and not (AVal is TJSONNumber) then
+    Result:= TJSONString(AVal).Value
+  else
+    Result:= '';
+end;
+
 // A string field; '' when absent or not a JSON string.
 function JStr(AObj: TJSONObject; const AKey: string): string;
 begin
-  if AObj.Values[AKey] is TJSONString then
-    Result:= TJSONString(AObj.Values[AKey]).Value
-  else
-    Result:= '';
+  Result:= JText(AObj.Values[AKey]);
+end;
+
+// The string entries of an array field; non-strings are skipped, a non-array reads as [].
+function JStrings(AObj: TJSONObject; const AKey: string): TArray<string>;
+var
+  LVal: TJSONValue;
+begin
+  Result:= nil;
+  LVal:= AObj.Values[AKey];
+  if not (LVal is TJSONArray) then
+    Exit;
+  for var LItem: TJSONValue in TJSONArray(LVal) do
+    if (LItem is TJSONString) and not (LItem is TJSONNumber) then
+      Result:= Result + [JText(LItem)];
 end;
 
 // AVal as an Integer: a JSON number whose text is an Integer. TJSONNumber.AsInt is
@@ -324,6 +385,8 @@ begin
     LRow.Lines        := JLines(LObj.Values['lines']);
     if not JInt(LObj.Values['count'], LRow.Count) then
       LRow.Count:= Length(LRow.Lines);
+    LRow.Resolution   := JStr(LObj, 'resolution');
+    LRow.Candidates   := JStrings(LObj, 'candidates');
     Result:= Result + [LRow];
   end;
 end;
@@ -457,11 +520,32 @@ begin
   Result:= string.Join(', ', LParts);
 end;
 
+function DeclaredInText(const ARow: TPasUseRow): string;
+begin
+  if (ARow.Resolution = '') or SameText(ARow.Resolution, PAS_RES_RESOLVED) then
+  begin
+    if (ARow.DeclaringUnit <> '') and (ARow.DeclaredIn <> '') then
+      Result:= ARow.DeclaringUnit + '.' + ARow.DeclaredIn
+    else
+      Result:= ARow.DeclaringUnit + ARow.DeclaredIn;
+  end
+  else if SameText(ARow.Resolution, PAS_RES_AMBIGUOUS) then
+    Result:= AMBIGUOUS_PREFIX + string.Join(', ', ARow.Candidates)
+  else if SameText(ARow.Resolution, PAS_RES_CLASS_NOT_FOUND) then
+    Result:= CLASS_NOT_FOUND_CELL
+  else if SameText(ARow.Resolution, PAS_RES_MEMBER_NOT_FOUND) then
+    Result:= MEMBER_NOT_FOUND_CELL
+  else if SameText(ARow.Resolution, PAS_RES_KIND_UNKNOWN) then
+    Result:= KIND_UNKNOWN_DECL_CELL
+  else
+    Result:= Format(OTHER_RESOLUTION_FMT, [ARow.Resolution]);
+end;
+
 function RowDisplay(const ARow: TPasUseRow): TArray<string>;
 var
   LInstance : string;
   LPair     : string;
-  LDeclared : string;
+  LKind     : string;
 begin
   if ARow.Instance = '' then
   begin
@@ -473,11 +557,8 @@ begin
     LInstance:= ARow.Instance;
     LPair    := Format(PAIR_FMT, [ARow.FromType, ARow.ToType]);
   end;
-  if (ARow.DeclaringUnit <> '') and (ARow.DeclaredIn <> '') then
-    LDeclared:= ARow.DeclaringUnit + '.' + ARow.DeclaredIn
-  else
-    LDeclared:= ARow.DeclaringUnit + ARow.DeclaredIn;
-  Result:= [ExtractFileName(ARow.UnitPas), LInstance, LPair, ARow.Member, ARow.Kind, ARow.Status, LinesText(ARow.Lines), LDeclared];
+  LKind:= if (ARow.Kind = '') and (ARow.Resolution <> '') then KIND_UNKNOWN_CELL else ARow.Kind;
+  Result:= [ExtractFileName(ARow.UnitPas), LInstance, LPair, ARow.Member, LKind, ARow.Status, LinesText(ARow.Lines), DeclaredInText(ARow)];
 end;
 
 function WorkColumns: TArray<string>;
@@ -554,7 +635,7 @@ begin
   end;
   Result.Ok    := True;
   Result.Clip  := Format(GOTO_FMT, [ARow.UnitPas, LLine]);
-  Result.Status:= Format(COPIED_FMT, [Format(GOTO_FMT, [ExtractFileName(ARow.UnitPas), LLine])]);
+  Result.Status:= Format(COPIED_FMT, [Format(GOTO_FMT, [ExtractFileName(ARow.UnitPas), LLine]), LLine]);
 end;
 
 end.

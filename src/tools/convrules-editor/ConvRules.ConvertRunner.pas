@@ -79,7 +79,7 @@ type
   ///   only when an earlier book had changed it (its rows become csRolledBack); else
   ///   nothing is restored and the backup is dropped, as for a first-book refusal.
   ///   Note = the engine's error text. TConvertRow.StoppedRun marks the stop, also when a
-///   failed restore turns the row into csRestoreFailed.
+  ///   failed restore turns the row into csRestoreFailed.
   /// </remarks>
   TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed, csRefused, csOutOfScope, csConfigError);
 
@@ -441,11 +441,13 @@ function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
 /// <param name="ANotRestored">Units whose restore failed (may be half-converted); [] = none.</param>
 /// <param name="AGlyphSummary">GlyphRunSummary of the run; '' = no glyph to-dos.</param>
 /// <param name="ABody">The ordinary summary (counts, problems, report path).</param>
+/// <param name="AStop">CastLibStopText of the run; '' = the run did not stop.</param>
 /// <returns>'RESTORE FAILED for &lt;units&gt; -- may be half-converted; restore by hand from the
-/// backups its row names. ' when ANotRestored is not empty, then AGlyphSummary + two spaces
-/// when it is set, then ABody. A half-converted unit always leads; the glyph to-dos come
-/// next.</returns>
-function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
+/// backups its row names. ' when ANotRestored is not empty, then AStop + '. ' when it is
+/// set (no second '.' when AStop already ends with one), then AGlyphSummary + two spaces
+/// when it is set, then ABody. A half-converted unit always leads; the run's stop comes
+/// next, then the glyph to-dos.</returns>
+function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string; const AStop: string = ''): string;
 
 /// <summary>PURE: a finished run's Work list (engine 1.27.0 pas_uses[]).</summary>
 /// <param name="ARows">The run's rows.</param>
@@ -620,11 +622,13 @@ begin
   Result:= Length(LUnits);
 end;
 
-function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
+function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string; const AStop: string): string;
 begin
   Result:= ABody;
   if AGlyphSummary <> '' then
     Result:= AGlyphSummary + '  ' + Result;
+  if AStop <> '' then
+    Result:= (if AStop.EndsWith('.') then AStop + ' ' else AStop + '. ') + Result;
   if Length(ANotRestored) > 0 then
     Result:= Format('RESTORE FAILED for %s -- may be half-converted; restore by hand from the backups its row names. ', [string.Join(', ', ANotRestored)]) + Result;
 end;
@@ -1149,7 +1153,7 @@ end;
 function PasUseKey(const ARow: TPasUseRow; const ALines: string): string;
 begin
   Result:= string.Join(#9, [ARow.UnitPas, ARow.Instance, ARow.FromType, ARow.ToType, ARow.Member, ARow.Kind,
-    ARow.Visibility, ARow.Status, ARow.DeclaringUnit, ARow.DeclaredIn, ALines]);
+    ARow.Visibility, ARow.Status, ARow.DeclaringUnit, ARow.DeclaredIn, ALines, ARow.Resolution, string.Join(',', ARow.Candidates)]);
 end;
 
 function WorkRunOf(const ARows: TArray<TConvertRow>; ARunId: Integer; APasUses: Boolean): TWorkRun;

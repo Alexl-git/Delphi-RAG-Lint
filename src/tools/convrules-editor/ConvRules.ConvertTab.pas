@@ -1566,9 +1566,8 @@ begin
   // (spec E14, counted per UNIT -- R5) come next: converted, but each such unit's
   // implementation section starts with a to-do line the user must act on.
   var LGlyphSummary: string:= GlyphRunSummary(GlyphTodoUnitCount(FRunRows));
-  Msg:= RunStatusLead(Tally.NotRestored, LGlyphSummary, Msg);
-  if LStop <> '' then
-    Msg:= LStop + '.  ' + Msg;
+  // RESTORE FAILED leads, then the castlib stop, then the glyph to-dos.
+  Msg:= RunStatusLead(Tally.NotRestored, LGlyphSummary, Msg, LStop);
   if AProblem <> '' then
     Msg:= Msg + ' Also: ' + AProblem + '.';
   if WriteReport(NotReached, AFinalIndex, Report, RepErr) then

@@ -29,9 +29,9 @@ a member / instance text filter. Rows sort by status, then unit, then instance
 
 ## Going to the code
 Double-click a row: the full path and line, `<path>(<line>)`, are copied to the
-clipboard and the status bar says `Copied <file>(<line>) -- paste into the IDE's
-Go to line`. A file that is gone, or a line past its end, is reported on the
-status bar instead.
+clipboard and the status bar says `Copied <file>(<line>) to the clipboard --
+line <N>`. The IDE's Go to line dialog takes only the line number. A file that is
+gone, or a line past its end, is reported on the status bar instead.
 
 ## What it needs
 An engine that reports `pas_uses` in `info --json` (drag-lint 1.27.0 and
@@ -41,5 +41,10 @@ converted)`; before any run it says `no work list yet -- run Convert first`.
 
 ## Limits
 The list is what the engine reported for the units that CONVERTED; a failed,
-refused or rolled-back unit contributes nothing. The "Declared in" text is the
-engine's own and is shown verbatim.
+refused or rolled-back unit contributes nothing. "Declared in" names a unit only
+when the engine resolved the class in the unit's scope. With drag-lint 1.28.2 and
+later (`pas_uses_resolution`) an unresolved row says so instead of guessing:
+`ambiguous: FMX.StdCtrls, Vcl.StdCtrls` (the units that could declare it),
+`(class not found)`, `(member not found)` or `(kind unknown)`, and its Kind reads
+`(unknown)` when the engine could not tell. An older engine's text is shown as it
+came.
