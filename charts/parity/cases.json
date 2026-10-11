@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "Parity cases for charts/src/Test-Parity.ps1: one entry per Ask-Report question id (26).",
+    "Harvested from charts/src/Test-Emitters.ps1 (the first emitter call of each Step 'E-*' block: its",
+    "target and the DbPath / ServerDbPath / SqlDbPath / CounterpartDb it passes) and Test-AskReport.ps1.",
+    "db, serverDb, sqlDb, counterpartDb are file names under charts/scratch/db (the frozen clones); '' = not passed.",
+    "extra holds Ask-Report arguments that have no field of their own (path needs -To).",
+    "cycles and architecture select the PROJECT: the literal target 'project' (New-DiagramArtifact.ps1)."
+  ],
+  "cases": [
+    { "question": "butterfly", "target": "Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "deps", "target": "DRagLint.CLI", "db": "DL-drag-lint.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "who-calls", "target": "Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "what-it-calls", "target": "Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "who-writes", "target": "Blueprint4.TfrmBlueprint4.FNoRecursion", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "who-reads", "target": "Blueprint4.TfrmBlueprint4.FNoRecursion", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "hierarchy", "target": "TBlueprint_ViewModel", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "class-surface", "target": "Blueprint4.ViewModel.TBlueprint_ViewModel", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "event-wiring", "target": "uMain.TfrmMAIN", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "touches-tables", "target": "uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation", "db": "SERVER-MicroniteMW1Service.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "lifecycle", "target": "uMain.TfrmMAIN", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "cycles", "target": "project", "db": "DL-drag-lint.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "wiring", "target": "IABZLoggingSys", "db": "SERVER-MicroniteMW1Service.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "effects", "target": "Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "architecture", "target": "project", "db": "DL-drag-lint.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "protocol-trace", "target": "cmdDelta", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "crosses-boundary", "target": "Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "SERVER-MicroniteMW1Service.sqlite", "extra": [] },
+    { "question": "shown-where", "target": "FTRNAMESTR", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "change-impact", "target": "Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "tested-by", "target": "uCompGroupTree.TCompGroupTree.Build", "db": "TESTS-MicroniteTests.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "exception-paths", "target": "Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": [] },
+    { "question": "consumers", "target": "MSCLIST", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "SQL-drag-lint-sql.sqlite", "counterpartDb": "", "extra": [] },
+    { "question": "feeds-from", "target": "frmCausFail.colREASON", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "SQL-drag-lint-sql.sqlite", "counterpartDb": "", "extra": [] },
+    { "question": "lands-where", "target": "uCAUSFAIL.TmcCAUSFAIL.REASON", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "SERVER-MicroniteMW1Service.sqlite", "sqlDb": "SQL-drag-lint-sql.sqlite", "counterpartDb": "", "extra": [] },
+    { "question": "round-trip", "target": "frmBlueprint4.dxDBGrid1FtrsVNum", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "SERVER-MicroniteMW1Service.sqlite", "sqlDb": "SQL-drag-lint-sql.sqlite", "counterpartDb": "", "extra": [] },
+    { "question": "path", "target": "Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation", "db": "CLIENT-Micronite2027.sqlite", "serverDb": "", "sqlDb": "", "counterpartDb": "", "extra": ["-To", "uPipeClientConnection.TPipeClientConnection.NextSeq"] }
+  ]
+}
