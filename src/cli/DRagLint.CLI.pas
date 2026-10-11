@@ -30070,100 +30070,11 @@ begin
   if AArgs.Open then OpenInBrowser(APath);
 end;
 
-{ --show renders ONE thing; any old side, rerun or action beside it is a usage error. }
-function CompareShowHasOtherSource(const AArgs: TArgs): Boolean;
-begin
-  var Sides:= (AArgs.CompareOld <> '') or (AArgs.CompareNew <> '') or (AArgs.CompareOldDb <> '') or (AArgs.InFile <> '');
-  var Actions:= AArgs.CompareAuto or AArgs.CompareSave or AArgs.UpdateDoc;
-  Result:= Sides or Actions or (AArgs.Question <> '') or (AArgs.CompareCommand <> '');
-end;
-
-{ F4: any report, CSV or bundle folder as the same HTML page the compare view uses. }
-function CompareShowPage(const AArgs: TArgs): Integer;
-begin
-  if CompareShowHasOtherSource(AArgs) then
-  begin
-    Writeln(ErrOutput, COMPARE_USAGE);
-    Writeln(ErrOutput, 'ERROR: --show takes no other source or action');
-    Exit(COMPARE_EXIT_SETUP);
-  end;
-  var Path:= ExpandFileName(AArgs.CompareShow);
-  var Svg: string:= '';
-  var TextFile:= Path;
-  if TDirectory.Exists(Path) then
-  begin
-    TextFile:= TPath.Combine(Path, 'graph.dot');
-    if TFile.Exists(TPath.Combine(Path, 'graph.svg')) then Svg:= TPath.Combine(Path, 'graph.svg');
-  end
-  else if SameText(ExtractFileExt(Path), '.dot') and TFile.Exists(ChangeFileExt(Path, '.svg')) then
-    Svg:= ChangeFileExt(Path, '.svg');
-  if not TFile.Exists(TextFile) then
-  begin
-    Writeln(ErrOutput, 'ERROR: cannot read ' + AArgs.CompareShow);
-    Exit(2);
-  end;
-  var Fmt:= DetectFormat(Path, True);
-  var Title:= ExtractFileName(ExcludeTrailingPathDelimiter(Path));
-  var Page:= RenderReportHtml(Title, CompareReadText(TextFile), Fmt, Svg);
-  var Dest:= AArgs.Output;
-  if Dest = '' then
-    Dest:= TPath.Combine(TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
-      'show-' + SanitiseTargetForFileName(Title) + '-' + FormatDateTime(COMPARE_STAMP, Now) + '.html');
-  CompareWriteFile(Dest, Page);
-  CompareOpenOrReport(AArgs, Dest);
-  Result:= 0;
-end;
-
-{ --save with no old side to compare against: run the question once and keep the answer. }
-function CompareTakeSnapshot(const AArgs: TArgs; const ACmd: TReportCommand; const AOpts: TProduceOptions): Integer;
-begin
-  var Cmd:= ACmd;
-  var Asker:= TPowerShellProducer.Create as IReportProducer;
-  var Prod:= Asker.Produce(Cmd, AOpts);
-  if Prod.ExitCode = PRODUCER_EXIT_STALE then
-  begin
-    Writeln(ErrOutput, 'ERROR: the index is stale, so there is no current answer to keep: ' + Prod.Reason);
-    Exit(COMPARE_EXIT_STALE);
-  end;
-  if not Prod.Ok then
-  begin
-    Writeln(ErrOutput, Format('ERROR: the question failed (exit %d): %s', [Prod.ExitCode, Prod.Reason]));
-    Exit(COMPARE_EXIT_SETUP);
-  end;
-  var Fmt:= DetectFormat(Prod.Text, False);
-  var Body:= Prod.Text;
-  var Ext:= SNAPSHOT_EXT_REPORT;
-  if Fmt = cfFormsCsv then Ext:= SNAPSHOT_EXT_FORMS
-  else if Fmt = cfGraph then
-  begin
-    var Dot:= TPath.Combine(Prod.BundlePath, 'graph.dot');
-    if (Prod.BundlePath = '') or not TFile.Exists(Dot) then
-    begin
-      Writeln(ErrOutput, 'ERROR: the chart could not be read from ' + Prod.BundlePath);
-      Exit(2);
-    end;
-    Body:= CompareReadText(Dot);
-    Ext:= SNAPSHOT_EXT_GRAPH;
-  end;
-  var Dir:= AArgs.SnapshotDir;
-  if Dir = '' then
-    Dir:= ResolveSnapshotDir(if AArgs.ProjectPath <> '' then AArgs.ProjectPath else Cmd.Get('Project'),
-      if Length(Prod.IndexPaths) > 0 then Prod.IndexPaths[0] else '');
-  var Saved: string;
-  if not SaveSnapshot(Dir, AArgs.CompareAuto, Cmd.Question, CompareTargetOf(Cmd), Body, Now, Saved, Ext) then
-  begin
-    Writeln(ErrOutput, 'ERROR: cannot keep the snapshot under ' + Dir);
-    Exit(2);
-  end;
-  Writeln('snapshot: ', Saved);
-  Result:= 0;
-end;
-
 { Only the temp copy Compare itself made for the old chart (name + folder both checked) is deleted. }
 procedure CompareDropTempSvg(const AResult: TCompareResult);
 begin
   var Svg:= AResult.OldSvgPath;
-  if (Svg <> '') and SameText(ExtractFileName(Svg).Substring(0, Length(COMPARE_TEMP_SVG_PREFIX)), COMPARE_TEMP_SVG_PREFIX) and
+  if (Svg <> '') and StartsText(COMPARE_TEMP_SVG_PREFIX, ExtractFileName(Svg)) and
      SameText(ExcludeTrailingPathDelimiter(ExtractFilePath(Svg)), ExcludeTrailingPathDelimiter(TPath.GetTempPath)) then
     DeleteFile(Svg); // a temp file that cannot be deleted is the OS's to reap
 end;
@@ -30220,12 +30131,103 @@ begin
   if Length(AArgs.DbPaths) > 0 then Result.DbOverride:= AArgs.DbPaths[0];
 end;
 
-function CompareUsageError(const AMessage: string): Integer;
+{ ONE refusal path for every exit 2 / 3 the verb decides itself: builds the refused result and sends it
+  through CompareEmit, so stderr gets ERROR (flushed) and, with --format json, stdout still gets the
+  compare/1 envelope. AUsage adds the usage line to stderr. An INVALID --format value cannot say what
+  the caller wanted, so that one refusal is emitted as text (stderr only). }
+function CompareRefuse(const AArgs: TArgs; const AFormat: string; ACode: Integer; const AMessage: string;
+  AUsage: Boolean): Integer;
 begin
-  Writeln(ErrOutput, COMPARE_USAGE);
-  Writeln(ErrOutput, 'ERROR: ' + AMessage);
-  Result:= COMPARE_EXIT_SETUP;
+  var R:= Default(TCompareResult);
+  R.ExitCode:= ACode;
+  R.Message:= AMessage;
+  if AUsage then Writeln(ErrOutput, COMPARE_USAGE);
+  Result:= CompareEmit(AArgs, Default(TCompareRequest), R, AFormat);
 end;
+{ --show renders ONE thing; any old side, rerun or action beside it is a usage error. }
+function CompareShowHasOtherSource(const AArgs: TArgs): Boolean;
+begin
+  var Sides:= (AArgs.CompareOld <> '') or (AArgs.CompareNew <> '') or (AArgs.CompareOldDb <> '') or (AArgs.InFile <> '');
+  var Actions:= AArgs.CompareAuto or AArgs.CompareSave or AArgs.UpdateDoc;
+  Result:= Sides or Actions or (AArgs.Question <> '') or (AArgs.CompareCommand <> '');
+end;
+
+{ F4: any report, CSV or bundle folder as the same HTML page the compare view uses. }
+function CompareShowPage(const AArgs: TArgs; const AFormat: string): Integer;
+begin
+  if CompareShowHasOtherSource(AArgs) then
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP, '--show takes no other source or action', True));
+  var Path:= ExpandFileName(AArgs.CompareShow);
+  var Svg: string:= '';
+  var TextFile:= Path;
+  if TDirectory.Exists(Path) then
+  begin
+    TextFile:= TPath.Combine(Path, 'graph.dot');
+    if TFile.Exists(TPath.Combine(Path, 'graph.svg')) then Svg:= TPath.Combine(Path, 'graph.svg');
+  end
+  else if SameText(ExtractFileExt(Path), '.dot') and TFile.Exists(ChangeFileExt(Path, '.svg')) then
+    Svg:= ChangeFileExt(Path, '.svg');
+  if not TFile.Exists(TextFile) then
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP, 'cannot read ' + AArgs.CompareShow, False));
+  var Fmt:= DetectFormat(Path, True);
+  var Title:= ExtractFileName(ExcludeTrailingPathDelimiter(Path));
+  var Page:= RenderReportHtml(Title, CompareReadText(TextFile), Fmt, Svg);
+  var Dest:= AArgs.Output;
+  if Dest = '' then
+    Dest:= TPath.Combine(TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
+      'show-' + SanitiseTargetForFileName(Title) + '-' + FormatDateTime(COMPARE_STAMP, Now) + '.html');
+  CompareWriteFile(Dest, Page);
+  CompareOpenOrReport(AArgs, Dest);
+  Result:= 0;
+end;
+
+{ --save with no old side to compare against: run the question once and keep the answer. }
+function CompareTakeSnapshot(const AArgs: TArgs; const ACmd: TReportCommand; const AOpts: TProduceOptions;
+  const AFormat: string): Integer;
+begin
+  { R19: a snapshot-only run has no diff, no unit to rewrite and no page to render -- say so
+    instead of silently ignoring the flags. }
+  if AArgs.UpdateDoc or (AArgs.CompareNew <> '') or (AFormat <> 'text') then
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP,
+      '--save without an old side only takes a snapshot; it cannot be combined with --update-doc, --new or --format json|html', True));
+  var Cmd:= ACmd;
+  var Asker:= TPowerShellProducer.Create as IReportProducer;
+  var Prod:= Asker.Produce(Cmd, AOpts);
+  if Prod.ExitCode = PRODUCER_EXIT_STALE then
+  begin
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_STALE, 'the index is stale, so there is no current answer to keep: ' + Prod.Reason, False));
+  end;
+  if not Prod.Ok then
+  begin
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP, Format('the question failed (exit %d): %s', [Prod.ExitCode, Prod.Reason]), False));
+  end;
+  var Fmt:= DetectFormat(Prod.Text, False);
+  var Body:= Prod.Text;
+  var Ext:= SNAPSHOT_EXT_REPORT;
+  if Fmt = cfFormsCsv then Ext:= SNAPSHOT_EXT_FORMS
+  else if Fmt = cfGraph then
+  begin
+    var Dot:= TPath.Combine(Prod.BundlePath, 'graph.dot');
+    if (Prod.BundlePath = '') or not TFile.Exists(Dot) then
+    begin
+      Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP, 'the chart could not be read from ' + Prod.BundlePath, False));
+    end;
+    Body:= CompareReadText(Dot);
+    Ext:= SNAPSHOT_EXT_GRAPH;
+  end;
+  var Dir:= AArgs.SnapshotDir;
+  if Dir = '' then
+    Dir:= ResolveSnapshotDir(if AArgs.ProjectPath <> '' then AArgs.ProjectPath else Cmd.Get('Project'),
+      if Length(Prod.IndexPaths) > 0 then Prod.IndexPaths[0] else '');
+  var Saved: string;
+  if not SaveSnapshot(Dir, AArgs.CompareAuto, Cmd.Question, CompareTargetOf(Cmd), Body, Now, Saved, Ext) then
+  begin
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP, 'cannot keep the snapshot under ' + Dir, False));
+  end;
+  Writeln('snapshot: ', Saved);
+  Result:= 0;
+end;
+
 
 { --save with no old side at all (a question to keep), or --auto --save before the first auto snapshot exists. }
 function CompareIsSnapshotOnly(const AArgs: TArgs; const ACmd: TReportCommand): Boolean;
@@ -30242,6 +30244,17 @@ begin
   end;
 end;
 
+{ The usage mistakes that need no engine to see; '' when the flags hang together. Also builds the command. }
+function CompareUsageProblem(const AArgs: TArgs; out ACmd: TReportCommand): string;
+begin
+  if not CompareBuildCommand(AArgs, ACmd, Result) then Exit;
+  if (AArgs.CompareNew <> '') and (AArgs.CompareOld = '') then Result:= '--new needs --old'
+  else if (AArgs.InFile <> '') and (AArgs.RefLine <= 0) then Result:= '--in needs --line <L> (a line inside the remarks block)'
+  else if (AArgs.CompareOldDb <> '') and ACmd.IsEmpty then
+    Result:= '--old-db needs the question: --command "<id> -Target ..." or --question <id> --target <T>'
+  else Result:= '';
+end;
+
 /// <summary>Runs `drag-lint compare` (charts step 1): reruns a report's COMMAND and shows before / delta / after.</summary>
 /// <param name="AArgs">The parsed command line; see the verb's lines in --help.</param>
 /// <returns>0 same, 1 differences, 2 usage or setup error, 3 stale index (also 2 for a bad usage).</returns>
@@ -30251,19 +30264,21 @@ function DoCompare(const AArgs: TArgs): Integer;
 begin
   var Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
   if AArgs.Open and (AArgs.Format = '') then Fmt:= 'html';
-  if not MatchStr(Fmt, ['text', 'json', 'html']) then Exit(CompareUsageError('--format must be text, json or html'));
-  if AArgs.CompareShow <> '' then Exit(CompareShowPage(AArgs));
+  if not MatchStr(Fmt, ['text', 'json', 'html']) then
+    Exit(CompareRefuse(AArgs, 'text', COMPARE_EXIT_SETUP, '--format must be text, json or html', True));
+  if AArgs.CompareShow <> '' then Exit(CompareShowPage(AArgs, Fmt));
 
   var Err: string;
   var Req:= Default(TCompareRequest);
-  if not CompareBuildCommand(AArgs, Req.Command, Err) then Exit(CompareUsageError(Err));
+  Err:= CompareUsageProblem(AArgs, Req.Command);
+  if Err <> '' then Exit(CompareRefuse(AArgs, Fmt, COMPARE_EXIT_SETUP, Err, True));
   Req.ProjectFile:= AArgs.ProjectPath;
   Req.SnapshotDir:= AArgs.SnapshotDir;
   Req.SaveSnapshot:= AArgs.CompareSave;
   Req.UpdateDoc:= AArgs.UpdateDoc;
   Req.Options:= CompareProduceOptions(AArgs);
-  if CompareIsSnapshotOnly(AArgs, Req.Command) then Exit(CompareTakeSnapshot(AArgs, Req.Command, Req.Options));
-  if not CompareChooseSource(AArgs, Req.Source, Err) then Exit(CompareUsageError(Err));
+  if CompareIsSnapshotOnly(AArgs, Req.Command) then Exit(CompareTakeSnapshot(AArgs, Req.Command, Req.Options, Fmt));
+  if not CompareChooseSource(AArgs, Req.Source, Err) then Exit(CompareRefuse(AArgs, Fmt, COMPARE_EXIT_SETUP, Err, True));
   case Req.Source of
     csRemarks:
       begin

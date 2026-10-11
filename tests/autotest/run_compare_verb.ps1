@@ -164,6 +164,24 @@ try {
   $r = Invoke-Compare @('compare','--auto','--question','who-writes','--target','Unit1.TFoo.Name','--project',$Proj,'--snapshot-dir',$snaps)
   Check 'C-AUTO compares against the snapshot' ($r.Code -eq 0 -and $r.Out -match 'no differences') "exit=$($r.Code) err=$($r.Err) out=$($r.Out)"
 
+  # C-USAGE: every exit 2/3 the verb decides itself still prints the compare/1 envelope in json mode
+  $r = Invoke-Compare @('compare','--format','json')
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  Check 'C-NOCMD json envelope (exit 2 + message)' ($r.Code -eq 2 -and $j -and $j.schema -eq 'compare/1' -and $j.exit_code -eq 2 -and $j.message) "exit=$($r.Code) out=$($r.Out)"
+  $r = Invoke-Compare @('compare','--show',(Join-Path $Work 'no-such-file.txt'),'--format','json')
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  Check 'C-SHOW refusal json envelope' ($r.Code -eq 2 -and $j -and $j.exit_code -eq 2 -and $j.message) "exit=$($r.Code) out=$($r.Out)"
+  $r = Invoke-Compare @('compare','--question','who-writes','--format','json')
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  Check 'C-USAGE --question without --target: json envelope' ($r.Code -eq 2 -and $j -and $j.exit_code -eq 2) "exit=$($r.Code) out=$($r.Out)"
+  $r = Invoke-Compare @('compare','--question','who-writes','--target','T','--save','--update-doc','--snapshot-dir',$snaps)
+  Check 'C-USAGE snapshot-only refuses --update-doc' ($r.Code -eq 2 -and $r.Err -match 'only takes a snapshot') "exit=$($r.Code) err=$($r.Err)"
+  $r = Invoke-Compare @('compare','--question','who-writes','--target','T','--save','--format','json','--snapshot-dir',$snaps)
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  Check 'C-USAGE snapshot-only refuses --format json (envelope)' ($r.Code -eq 2 -and $j -and $j.exit_code -eq 2) "exit=$($r.Code) out=$($r.Out)"
+  Check 'C-USAGE --new without --old' ((Invoke-Compare @('compare','--new',$Old)).Code -eq 2)
+  Check 'C-USAGE --old-db without a command' ((Invoke-Compare @('compare','--old-db',$Old)).Code -eq 2)
+  Check 'C-USAGE --in without --line' ((Invoke-Compare @('compare','--in',$unit)).Code -eq 2)
   # C-HELP
   $r = Invoke-Compare @('compare','--help')
   Check 'C-HELP exit 0 and banner lists the verb' ($r.Code -eq 0 -and $r.Out -match '(?m)^  drag-lint compare ') "exit=$($r.Code)"
