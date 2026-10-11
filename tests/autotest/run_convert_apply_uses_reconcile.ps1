@@ -359,6 +359,10 @@ implementation
 
 end.
 '@
+# F3 (review): the same nested-vs-unit-level shape with the names and the
+# .dpr order SWAPPED -- the chosen unit must not depend on hash order.
+W 'LibZSolo2.pas' ((Text 'LibTieA.pas') -replace 'unit LibTieA;', 'unit LibZSolo2;' -replace 'TTie', 'TSolo2')
+W 'LibANest2.pas' ((Text 'LibNest.pas') -replace 'unit LibNest;', 'unit LibANest2;' -replace 'TSolo', 'TSolo2')
 W 'LibDupI.pas' @'
 unit LibDupI;
 
@@ -509,6 +513,21 @@ end;
 Form 'SecForm' 'Classes, LibOldS' @('Old1: TOldS;', 'X: TShared;') 'LibDupI' @() '' @((Obj 'Old1' 'TOldS'))
 # A7-9 control: the same TShared referenced only in the IMPLEMENTATION, where
 # LibDupI is visible -- not dangling.
+# F1 (review): a tie settled ONLY by a #convert block's trailing unit.
+Form 'TieCForm' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+# F2 (review): the unit already uses LibTieB, which the same book #unuse's.
+Form 'TieRForm' 'Classes, LibOld, LibTieB' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+Form 'TieR2Form' 'Classes, LibOld, LibTieB' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+# F-minor: a #useswap whose Old the unit does not use settles nothing.
+Form 'TieSForm' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+Form 'Solo2Form' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+# F-minor: an escaped &implementation identifier above the real keyword.
+Form 'AmpForm' 'Classes, LibOld' @('&implementation: Integer;', 'E1: ELibOld;', 'Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+# F4 (converter capture 1.27.0): a #convert header's trailing unit is WRITTEN
+# into the uses clause -- it must be an add row, counted by uses_added.
+Form 'CvForm' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+Form 'CvUForm' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
+Form 'CvPForm' 'Classes, LibOld, LibNew' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
 Form 'SecIForm' 'Classes, LibOldS' @('Old1: TOldS;') 'LibDupI' @('procedure Run;') @'
 procedure TSecIForm.Run;
 var
@@ -532,7 +551,8 @@ W 'P.dpr' (@('program P;', '', 'uses',
   '  W1Form, W2Form, W3Form, W4Form, W5Form, W6Form, W6bForm, W7Form, W8Form, U1Form, D1Form, D2Form, O1Form,',
   '  LibSolo, LibNest, LibHelp2, LibOldS, LibDupI,',
   '  TieForm, BaseForm, DescForm, CastForm, CastEForm, AmbForm, AmbUForm, EncForm, Enc2Form, NfForm, Base2Form, Desc2Form,',
-  '  TieUForm, TieMForm, W2iForm, O2Form, SoloForm, W5bForm, SecForm, SecIForm;', '', 'begin', 'end.') -join "`n")
+  '  TieUForm, TieMForm, W2iForm, O2Form, SoloForm, W5bForm, SecForm, SecIForm,',
+  '  LibANest2, LibZSolo2, TieCForm, TieRForm, TieR2Form, TieSForm, Solo2Form, AmpForm, CvForm, CvUForm, CvPForm;', '', 'begin', 'end.') -join "`n")
 
 # ---- books ------------------------------------------------------------------
 W 'old.rules'   "#convert TOld -> TNew`n#link Caption <- Caption`n#unuse LibOld`n"
@@ -547,6 +567,13 @@ W 'ambu.rules'  "#convert TPicOld -> TPicNew`n#link Glyph <- Picture : CastAmb`n
 W 'nf.rules'    "#convert TPicOld -> TPicNew`n#link Glyph <- Picture : CastNf`n"
 W 'tieu.rules'  "#convert TOld -> TTie`n#link Caption <- Caption`n#use LibTieA`n"
 W 'solo.rules'  "#convert TOld -> TSolo`n#link Caption <- Caption`n"
+W 'tiec.rules'  "#convert TOld -> TTie, LibTieA`n#link Caption <- Caption`n"
+W 'tier.rules'  "#convert TOld -> TTie`n#link Caption <- Caption`n#unuse LibTieB`n"
+W 'tier2.rules' "#convert TOld -> TTie`n#link Caption <- Caption`n#unuse LibTieB`n#use LibTieA`n"
+W 'ties.rules'  "#convert TOld -> TTie`n#link Caption <- Caption`n#useswap LibAmbA -> LibTieA`n"
+W 'solo2.rules' "#convert TOld -> TSolo2`n#link Caption <- Caption`n"
+W 'cv.rules'    "#convert TOld -> TNew, LibNew`n#link Caption <- Caption`n"
+W 'cvu.rules'   "#unuse LibOld`n#convert TOld -> TNew, LibNew`n#link Caption <- Caption`n"
 W 'olds.rules'  "#convert TOldS -> TNew`n#link Caption <- Caption`n#unuse LibOldS`n"
 W 'fx.castlib' @'
 cast CastA
@@ -721,6 +748,42 @@ $rm = Rows $r 'remove'
 Check 'A7-8 S.OldUpper also provided by LibHelp2 (kept): LibOld removed with NO needed_by, no unit-rule-dangling' `
   (($rm.Count -eq 1) -and (@($rm[0].needed_by).Count -eq 0) -and -not ((Kinds $r) -contains 'unit-rule-dangling')) $r.Out
 
+# ---- review fix wave ---------------------------------------------------------
+$r = J 'TieCForm.pas' 'tiec.rules'
+Check 'F1 a tie settled only by the #convert block unit (LibTieA): no ambiguity, nothing unresolved (the write is checked in X F1 / C1 -- the #convert surface''s own add has no uses[] row)' `
+  (($r.Code -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@($r.J.uses_unresolved).Count -eq 0)) $r.Out
+$r = J 'TieRForm.pas' 'tier.rules'
+Check 'F2 #unuse LibTieB on a unit using LibTieB: LibTieB does not settle the tie (ambiguity reported) and its #unuse is not cancelled (a remove or kept row for it)' `
+  (((Kinds $r) -contains 'uses-unit-ambiguous') -and (@($r.J.uses | Where-Object { $_.unit -eq 'LibTieB' -and $_.action -in @('remove','kept') }).Count -eq 1)) $r.Out
+$r = J 'TieR2Form.pas' 'tier2.rules'
+Check 'F2 ... + #use LibTieA: the tie goes to LibTieA (interface), LibTieB REMOVED, no ambiguity' `
+  (-not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@(Rows $r 'remove' | Where-Object { $_.unit -eq 'LibTieB' }).Count -eq 1) -and
+   (@(Rows $r 'add' | Where-Object { $_.unit -eq 'LibTieA' -and $_.section -eq 'interface' }).Count -eq 1)) $r.Out
+$r = J 'TieSForm.pas' 'ties.rules'
+Check 'F-minor #useswap LibAmbA -> LibTieA on a unit without LibAmbA settles nothing: the tie is reported, LibTieA not added' `
+  (((Kinds $r) -contains 'uses-unit-ambiguous') -and (@(Rows $r 'add' | Where-Object { $_.unit -eq 'LibTieA' }).Count -eq 0)) $r.Out
+$r = J 'Solo2Form.pas' 'solo2.rules'
+Check 'F3 swapped names / order (LibANest2 nested, LibZSolo2 unit level): no ambiguity, the unit added is LibZSolo2' `
+  (-not ((Kinds $r) -contains 'uses-unit-ambiguous') -and ($r.J.items | Where-Object { $_.kind -eq 'field-retyped' }) -and
+   -not ($r.Out -match 'LibANest2')) $r.Out
+$r = J 'AmpForm.pas' 'old.rules'
+$rm = Rows $r 'remove'
+Check 'F-minor &implementation (an escaped identifier) is not the keyword: E1: ELibOld dangles in the INTERFACE' `
+  (($rm.Count -eq 1) -and ((Need $rm[0]) -eq 'ELibOld') -and ($rm[0].needed_by[0].section -eq 'interface')) $r.Out
+function AddRows($r) { return @(Rows $r 'add') }
+$r = J 'CvForm.pas' 'cv.rules'
+$ad = AddRows $r
+Check 'F4 #convert TOld -> TNew, LibNew (no unit rules): ONE add row -- LibNew, interface, line 6, rule #convert, source rule -- and uses_added 1' `
+  (($r.Code -eq 0) -and ($ad.Count -eq 1) -and ($ad[0].unit -eq 'LibNew') -and ($ad[0].section -eq 'interface') -and ($ad[0].line -eq 6) -and
+   ($ad[0].rule -eq '#convert') -and ($ad[0].source -eq 'rule') -and ($r.J.uses_added -eq 1)) ($r.J.uses | ConvertTo-Json -Depth 5)
+$r = J 'CvUForm.pas' 'cvu.rules'
+$ad = AddRows $r
+Check 'F4 ... with #unuse LibOld (the capture shape): remove LibOld AND add LibNew (interface, #convert, rule), uses_added 1, uses_removed 1' `
+  (($r.Code -eq 0) -and ($ad.Count -eq 1) -and ($ad[0].unit -eq 'LibNew') -and ($ad[0].section -eq 'interface') -and ($ad[0].rule -eq '#convert') -and
+   ($ad[0].source -eq 'rule') -and ($r.J.uses_added -eq 1) -and ($r.J.uses_removed -eq 1)) ($r.J.uses | ConvertTo-Json -Depth 5)
+$r = J 'CvPForm.pas' 'cv.rules'
+Check 'F4 control: LibNew already in the uses -- no add row, uses_added 0' `
+  (($r.Code -eq 0) -and ((AddRows $r).Count -eq 0) -and ($r.J.uses_added -eq 0)) ($r.J.uses | ConvertTo-Json -Depth 5)
 # ---- A7-9: an interface name is not satisfied by an implementation-only unit -
 $r = J 'SecForm.pas' 'olds.rules'
 $rm = Rows $r 'remove'
@@ -836,7 +899,8 @@ $written = @('W1Form.dfm', 'W4Form.dfm')
 foreach ($x in @(@('W2Form','old.rules'), @('W3Form','old.rules'), @('W5Form','old.rules'), @('W6Form','al.rules'), @('W6bForm','al.rules'),
                  @('W7Form','old.rules'), @('D1Form','db.rules'), @('D2Form','old.rules'), @('DescForm','old.rules'),
                  @('CastForm','cast.rules'), @('CastEForm','caste.rules'),
-                 @('TieUForm','tieu.rules'), @('TieMForm','tieu.rules'), @('SoloForm','solo.rules'), @('W5bForm','old.rules'), @('SecIForm','olds.rules'))) {
+                 @('TieUForm','tieu.rules'), @('TieMForm','tieu.rules'), @('SoloForm','solo.rules'), @('W5bForm','old.rules'), @('SecIForm','olds.rules'),
+                 @('TieCForm','tiec.rules'), @('TieR2Form','tier2.rules'), @('Solo2Form','solo2.rules'), @('CvForm','cv.rules'))) {
   $r = Run "$($x[0]).pas" $x[1] @('--apply', '--no-backup')
   Check "X $($x[0]) --apply exits 0" ($r.Code -eq 0) $r.Out
   $written += "$($x[0]).dfm"
@@ -863,10 +927,13 @@ Check 'X TieUForm LibTieA written into the INTERFACE uses' ((Text 'TieUForm.pas'
 Check 'X TieMForm LibTieA moved: in the interface uses, no longer in the implementation' `
   (((Text 'TieMForm.pas') -match "interface\s+uses\s+Classes, LibOld, LibTieA;") -and -not ((Text 'TieMForm.pas') -match "implementation\s+uses")) (Text 'TieMForm.pas')
 Check 'X SoloForm LibSolo added, LibNest not' (((Text 'SoloForm.pas') -match '\bLibSolo\b') -and -not ((Text 'SoloForm.pas') -match 'LibNest')) (Text 'SoloForm.pas')
+Check 'X F1 TieCForm LibTieA written into the INTERFACE uses' ((Text 'TieCForm.pas') -match "interface\s+uses\s+Classes, LibOld, LibTieA;") (Text 'TieCForm.pas')
+Check 'X F2 TieR2Form LibTieB gone, LibTieA in the interface' (((Text 'TieR2Form.pas') -match "interface\s+uses\s+Classes, LibOld, LibTieA;") -and -not ((Text 'TieR2Form.pas') -match 'LibTieB')) (Text 'TieR2Form.pas')
+Check 'X F3 Solo2Form LibZSolo2 added, LibANest2 not' (((Text 'Solo2Form.pas') -match '\bLibZSolo2\b') -and -not ((Text 'Solo2Form.pas') -match 'LibANest2')) (Text 'Solo2Form.pas')
 # A8-1 / A8-4 / A7-7 / A7-8 / A7-9 control: these must COMPILE -- an interface field typed by a
 # unit in the implementation uses (the A8-1 defect) is E2003.
 $cl = Dcc 'CGood' @('W1Form', 'W4Form', 'W6Form', 'W6bForm', 'W7Form', 'D1Form', 'D2Form', 'BaseForm', 'DescForm', 'O1Form',
-                    'TieUForm', 'TieMForm', 'SoloForm', 'W5bForm', 'SecIForm')
+                    'TieUForm', 'TieMForm', 'SoloForm', 'W5bForm', 'SecIForm', 'TieCForm', 'TieR2Form', 'Solo2Form', 'CvForm')
 Check 'C1 the reconciled units compile (dcc64)' (($cl -match 'BUILD_EXITCODE=0') -and -not ($cl -match '(?m)Error')) (@(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' }) -join ' | ')
 # CastForm / CastEForm: until 1.26.x they were EXCLUDED here because the cast
 # realisation spliced a statement over the member token (`pic1.pic1.Glyph.

@@ -47,7 +47,10 @@ units, none is picked: it is reported in `uses_unresolved` (with the line of
 the retyped field) and as a `uses-unit-ambiguous` warning -- add `#use <unit>`
 to the book to choose. That `#use` then puts the unit where the retyped field
 needs it: the INTERFACE uses when the field is declared there, moved there when
-the unit used it only in its implementation (a `moved` row). After `--apply`
+the unit used it only in its implementation (a `moved` row). Every unit the
+conversion itself writes into the uses clause (a To type's unit, or a unit
+named after the To type on a `#convert` line) is an `add` row with rule
+`#convert`, counted in `uses_added`. After `--apply`
 the unit's own project index is refreshed (`--no-reindex` skips it).
 `--no-reconcile-uses` restores the 1.26 behaviour exactly.
 

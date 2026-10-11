@@ -43,6 +43,33 @@ breaking changes** until v1.0.
   --platform Win32|Win64)".
   A7-12: `docs\wiki\convert-apply.md` covers the uses rules, C9 reconciliation and the exit codes.
   Guards: run_convert_apply_uses_reconcile.ps1 A7-6..A7-10, X SoloForm, C1.
+- **convert-apply (C9 review fix wave).**
+  F1: a To-type tie settled ONLY by a `#convert` block's trailing unit (`#convert TOld -> TTie,
+  LibTieA`, no unit rules) was picked but never written -- the field was retyped, no unit added,
+  no warning (E2003). The uses planner now writes every picked tie unit.
+  F2: a uses entry the same book removes (`#unuse` / `#useswap` Old, after ADD wins) no longer
+  settles a tie -- picking it fed ADD wins and cancelled the book's own `#unuse`. A To type a
+  `#use` settled also keeps only that unit: the other declarer no longer keeps a watched unit.
+  F3: with ONE unit-level declarer of the To type (a nested type of the same name elsewhere),
+  that unit is used, not `TFindUnitRefactoring.Build`'s pick, which scored class members and
+  broke the tie by hash order.
+  A `#useswap Old -> New` settles a tie only when the unit uses Old (the swap's own condition).
+  An escaped identifier `&implementation` is not taken for the implementation keyword (the uses
+  lexer marks `&ident` tokens; `IsWord` rejects them).
+  Guards: run_convert_apply_uses_reconcile.ps1 F1, F2 x2, F3, F-minor x2, X F1/F2/F3, C1.
+
+### Changed (JSON consumers)
+
+- **apply/1 `uses[]` reports EVERY unit the `#convert` surface writes into the uses clause** (a To
+  type's unit, a `#convert ... -> T, Unit` header's trailing unit): one `add` row per unit actually
+  added -- `rule` `#convert`, `source` rule, the section it is written to -- and `uses_added`
+  counts it; a unit already present gives no row (converter report, real 1.27.0 capture
+  `apply-cast-site-1270.json`: cxButtons written, `uses_added` 0). With reconciliation on, the uses
+  planner now writes these adds. When a book rule (an editor-derived `#use <To unit>`) asks for
+  the same unit, that rule owns the row instead. `--no-reconcile-uses` keeps 1.26.6 exactly (no
+  row). Text mode prints the row (`add X (interface, line N) -- #convert`). Guards:
+  run_convert_apply_uses_reconcile.ps1 F4 (+ control), run_convert_apply_unit_rules.ps1 R2
+  (expected text updated: `Uses: 0 removed, 1 added, ...`).
 
 No extractor or resolver change: indexes do not re-parse or re-resolve.
 

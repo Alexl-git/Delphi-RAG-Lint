@@ -5289,17 +5289,44 @@ var
         end;
     end;
 
+  var
+    UnitUses  : TArray<TUnitUse>;
+    Watched: TArray<TWatchUnit>;
+
+    function UsesUnit(const AUnit: string): Boolean;
+    begin
+      for var U: TUnitUse in UnitUses do
+        if ATrees.UnitIndex.SameUnit(U.UnitName, AUnit) then Exit(True);
+      Result:= False;
+    end;
+
+    function BookRemoves(const AUnit: string): Boolean;
+    begin
+      for var W: TWatchUnit in Watched do
+        if ATrees.UnitIndex.SameUnit(W.UnitName, AUnit) then Exit(True);
+      Result:= False;
+    end;
+
   begin
     Picked  := nil;
     Spelling:= '';
+    UnitUses   := if PasFileId > 0 then PasStore.GetUnitUsesForFile(PasFileId) else nil;
+    { the units the book REMOVES after ADD wins -- an entry among them is going
+      away, so it settles nothing (review F2: picking it fed ADD wins and
+      cancelled the book's own #unuse) }
+    Watched := UnitRuleWatchList(ABook.Rules, nil, ATrees.UnitIndex.SameUnit);
     for var R: TConversionRule in ABook.Rules.Rules do
       case R.Kind of
         rkUse: Choose(R.UnitName, False);
-        rkUseSwap, rkConvert:
+        rkConvert:
           for var U: string in R.UnitsAdd do Choose(U, False);
+        rkUseSwap:
+          { the swap's New is added only when the unit uses Old }
+          if UsesUnit(R.UnitName) then
+            for var U: string in R.UnitsAdd do Choose(U, False);
       end;
-    if PasFileId > 0 then
-      for var U: TUnitUse in PasStore.GetUnitUsesForFile(PasFileId) do Choose(U.UnitName, True);
+    for var U: TUnitUse in UnitUses do
+      if not BookRemoves(U.UnitName) then Choose(U.UnitName, True);
     Result:= if Length(Picked) = 1 then Spelling else '';
   end;
   // C9 A8-2: the line the conversion writes ToType onto in the unit (its first
@@ -5311,6 +5338,51 @@ var
       if (E.Kind = tekReplaceInLine) and SameText(E.FilePath, AUnitPas) and SameText(E.Text, AToType) and
          ((Result = 0) or (E.Line < Result)) then Result:= E.Line;
   end;
+  // C9 R8a: a To-type tie nothing settles is REPORTED -- a uses_unresolved row
+  // (with the retyped field's line, A8-2) and a uses-unit-ambiguous warning.
+  procedure ReportTie(const AToType: string; AWantIntf: Boolean; const ACands: TArray<TUsesCandidate>);
+  var
+    Un   : TUsesUnresolved;
+    Units: string;
+    TieIt: TApplyItem;
+  begin
+    Un:= Default(TUsesUnresolved);
+    Un.Name      := AToType;
+    Un.Line      := ToTypeLine(AToType);
+    Un.Section   := if AWantIntf then 'interface' else 'implementation';
+    Un.Reason    := UNRESOLVED_AMBIGUOUS;
+    Un.Candidates:= ACands;
+    Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + [Un];
+    Units:= '';
+    for var C: TUsesCandidate in ACands do Units:= Units + (if Units = '' then '' else ', ') + C.UnitName;
+    TieIt:= PlainItem(aikUsesUnitAmbiguous, afWarnings,
+      Format('"%s" is declared in %d units (%s) -- none added to uses; add #use <unit> to the book to choose',
+        [AToType, Length(ACands), Units]));
+    TieIt.ToType  := AToType;
+    TieIt.FilePath:= AUnitPas;
+    TieIt.Line    := Un.Line;
+    Emit(TieIt);
+  end;
+  // Surface #2's find-unit for one To type: the first store that resolves it
+  // (Build's edits / already-used answer). Returns the unit to use INSTEAD of
+  // Build's pick, '' to keep it: review F3 -- when ONE unit declares the To
+  // type at unit level (AUnitLevel), Build also scores class members (a
+  // nested type of the same name) and lets hash order break that tie.
+  function BuildToTypeAdd(const AToType: string; AWantIntf: Boolean; const AUnitLevel: TArray<TUsesCandidate>;
+    out AResolved: string; out AAlreadyUsed: Boolean; out AEdits: TArray<TTextEdit>): string;
+  begin
+    AResolved   := '';
+    AAlreadyUsed:= False;
+    AEdits      := nil;
+    for var St in Stores do
+    begin
+      AEdits:= TFindUnitRefactoring.Build(St, PasStore, AToType, AUnitPas, AResolved, AAlreadyUsed, AWantIntf);
+      if AAlreadyUsed or (Length(AEdits) > 0) then Break;
+    end;
+    Result:= '';
+    if (Length(AUnitLevel) = 1) and not ATrees.UnitIndex.SameUnit(AResolved, AUnitLevel[0].UnitName) then
+      Result:= AUnitLevel[0].UnitName;
+  end;
   procedure PlanUsesAdditions(out AUses: TUsesPlan; out AAdds, AIntfAdds: TArray<string>);
   var
     E : TTextEdit;
@@ -5318,6 +5390,7 @@ var
   begin
     var UnitRules  : Boolean      := BookHasUnitRules(ABook.Rules);
     var MoveNeeded : Boolean      := False;
+    var TiePlanned : Boolean      := False;  { review F1: a picked tie unit is written by the planner }
     var Pending    : TList<TTextEdit>:= TList<TTextEdit>.Create;
     var ConvertAdds: TList<string>:= TList<string>.Create;
     var IntfAdds   : TList<string>:= TList<string>.Create;
@@ -5330,9 +5403,11 @@ var
         var WantIntf: Boolean:= IntfToTypes.ContainsKey(ToType_);
         { C9 R8a: a To type two units declare is REPORTED, never decided by
           dictionary order }
+        var TieUnit: string:= '';
+        var Amb    : TArray<TUsesCandidate>:= nil;
         if ABook.Reconcile then
         begin
-          var Amb: TArray<TUsesCandidate>:= ATrees.UnitIndex.DeclaringUnits(BareTypeTail(ToType_), True);
+          Amb:= ATrees.UnitIndex.DeclaringUnits(BareTypeTail(ToType_), True);
           if Length(Amb) > 1 then
           begin
             { A8-1: a tie the book's #use (or the unit's own uses) settles is
@@ -5340,37 +5415,24 @@ var
               as an unambiguous To type, so an INTERFACE field's unit goes to
               the interface uses (or is moved there), never to where a bare
               #use would put it (the implementation: E2003) }
-            var Picked: string:= PickTieCandidate(Amb);
-            if Picked <> '' then
+            TieUnit:= PickTieCandidate(Amb);
+            if TieUnit = '' then
             begin
-              if not MatchText(Picked, ConvertAdds.ToArray) then ConvertAdds.Add(Picked);
-              if WantIntf and not MatchText(Picked, IntfAdds.ToArray) then IntfAdds.Add(Picked);
-              if WantIntf and UsedOnlyInImplementation(Picked) then MoveNeeded:= True;
+              ReportTie(ToType_, WantIntf, Amb);
               Continue;
             end;
-            var Un: TUsesUnresolved:= Default(TUsesUnresolved);
-            Un.Name      := ToType_;
-            Un.Line      := ToTypeLine(ToType_);
-            Un.Section   := if WantIntf then 'interface' else 'implementation';
-            Un.Reason    := UNRESOLVED_AMBIGUOUS;
-            Un.Candidates:= Amb;
-            Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + [Un];
-            var Units: string:= '';
-            for var C: TUsesCandidate in Amb do Units:= Units + (if Units = '' then '' else ', ') + C.UnitName;
-            It:= PlainItem(aikUsesUnitAmbiguous, afWarnings,
-              Format('"%s" is declared in %d units (%s) -- none added to uses; add #use <unit> to the book to choose',
-                [ToType_, Length(Amb), Units]));
-            It.ToType  := ToType_;
-            It.FilePath:= AUnitPas;
-            It.Line    := Un.Line;
-            Emit(It);
-            Continue;
           end;
         end;
-        for var St in Stores do
+        if TieUnit = '' then
+          TieUnit:= BuildToTypeAdd(ToType_, WantIntf, Amb, ResolvedUnit, AlreadyUsed, UseEdits);
+        if TieUnit <> '' then
         begin
-          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed, WantIntf);
-          if AlreadyUsed or (Length(UseEdits) > 0) then Break;
+          { review F1: the uses PLANNER writes it -- a book with no unit rule
+            has no Pending edit for this unit, so nothing else would }
+          if not MatchText(TieUnit, ConvertAdds.ToArray) then ConvertAdds.Add(TieUnit);
+          if WantIntf and not MatchText(TieUnit, IntfAdds.ToArray) then IntfAdds.Add(TieUnit);
+          TiePlanned:= True;
+          Continue;
         end;
         { 1.25.1: two To types declared in ONE unit (TFDTable and
           TFDAutoIncField) planned that unit's add twice -- 'uses LibB, LibB'
@@ -5417,7 +5479,7 @@ var
         RA.Adds         := AAdds;
         RA.IntfAdds     := AIntfAdds;
         RA.Handled      := Handled;
-        RA.PlannerNeeded:= UnitRules or MoveNeeded;
+        RA.PlannerNeeded:= UnitRules or MoveNeeded or TiePlanned or (Pending.Count > 0);  { review: the planner also reports the #convert adds as rows }
         var Rec: TReconcileOutcome:= ReconcileUnitUses(ATrees, RA);
         for var RIt: TApplyItem in Rec.Items do Emit(RIt);
         Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + Rec.Unresolved;

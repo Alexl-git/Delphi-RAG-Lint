@@ -487,6 +487,7 @@ type
     procedure Degrade(const AReason: string);
     procedure Reconcile;
     procedure CollectNames(const AText: string; const AParse: TParseResult; ADict: TDictionary<string, TNameUse>);
+    function ComponentUnits(const AClass: string): TArray<TUsesCandidate>;
     procedure DecideWatch(const ADfm: TParseResult; ADfmOk: Boolean);
     procedure BuildPostPlan;
     function Reachable(const ACands: TArray<TUsesCandidate>; AIntf: Boolean): Boolean;
@@ -605,6 +606,27 @@ begin
   end;
 end;
 
+{ The units a .dfm component's class AClass can come from. When several units
+  declare it and the #convert surface settled it to one of them (ExtraAdds --
+  a To type whose tie a #use picked, review F2), only that one: the other
+  declarer does not keep a unit the book removes. }
+function TReconciler.ComponentUnits(const AClass: string): TArray<TUsesCandidate>;
+var
+  Settled: TArray<TUsesCandidate>;
+begin
+  Result:= FIx.DeclaringUnits(AClass, True);
+  if Length(Result) < 2 then Exit;
+  Settled:= nil;
+  for var C: TUsesCandidate in Result do
+    for var U: string in FIn.ExtraAdds do
+      if FIx.SameUnit(C.UnitName, U) then
+      begin
+        Settled:= Settled + [C];
+        Break;
+      end;
+  if Length(Settled) > 0 then Result:= Settled;
+end;
+
 procedure TReconciler.DecideWatch(const ADfm: TParseResult; ADfmOk: Boolean);
 var
   Keeps: TList<TUsesKeep>;
@@ -626,7 +648,7 @@ begin
         for var S: TSymbol in ADfm.Symbols do
         begin
           if S.Kind <> skComponent then Continue;
-          for var C: TUsesCandidate in FIx.DeclaringUnits(S.Signature, True) do
+          for var C: TUsesCandidate in ComponentUnits(S.Signature) do
             if FIx.SameUnit(C.UnitName, E.Name) then
             begin
               K.Reason:= KEEP_REASON_DFM;

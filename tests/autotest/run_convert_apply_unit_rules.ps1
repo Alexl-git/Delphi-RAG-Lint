@@ -298,8 +298,9 @@ Check 'R1b ... btnOne converted, and warnings[] / items[] carry the line-3 skip 
    (@($j.warnings | Where-Object { $_ -match '^line 3: warning: #unuse LibA skipped -- it would leave 1 unconverted instance\(s\) of TSrcBtn left out by --only; LibA kept in uses$' }).Count -eq 1) -and `
    (@($j.items | Where-Object { ($_.kind -eq 'unit-rule-skipped') -and ($_.field -eq 'warnings') -and ($_.rule_line -eq 3) }).Count -eq 1)) $r.Out
 $r = Apply 'R26Form.pas' 'r26unuse.rules' @('--only', 'btnOne')
-Check 'R2 text: no REFUSED line; the uses report says the removal was skipped' `
-  (($r.Code -eq 0) -and -not ($r.Out -match '(?m)^REFUSED') -and ($r.Out -match '(?m)^Uses: 0 removed, 0 added, 1 removal\(s\) skipped \(--only\)\r?$') -and `
+Check 'R2 text: no REFUSED line; the uses report says the removal was skipped (and, C9 review F4, reports the #convert add of LibB)' `
+  (($r.Code -eq 0) -and -not ($r.Out -match '(?m)^REFUSED') -and ($r.Out -match '(?m)^Uses: 0 removed, 1 added, 1 removal\(s\) skipped \(--only\)\r?$') -and `
+   ($r.Out -match '(?m)^\s+add LibB \(interface, line 6\) -- #convert\r?$') -and `
    ($r.Out -match '(?m)^\s+skipped LibA \(interface, line 6\) -- #unuse LibA \(would leave 1 unconverted instance\(s\) of TSrcBtn\)\r?$')) $r.Out
 $r = Apply 'R26Form.pas' 'r26swap.rules' @('--only', 'btnOne', '--format', 'json')
 $j = Json $r.Out
