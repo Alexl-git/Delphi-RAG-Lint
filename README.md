@@ -563,8 +563,8 @@ are the intended signal), and kept when no `--db` knows it; presence is scope-al
 (`#unuse DBTables` matches `Bde.DBTables`, `#use DB` is satisfied by `Data.DB`); a name
 the conversion introduces (a cast template's routine or enum value) gets its unit added,
 and a name two units declare is reported (`uses_unresolved`), never picked. After
-`--apply` the unit's own project DB is refreshed (`index --project`, child process;
-`--no-reindex` skips it). `capabilities.uses_reconcile: true`. A book can also REPORT without writing
+`--apply` the unit's own project DB is refreshed (`index --project`, child process,
+terminated as `failed` after 10 minutes; `--no-reindex` skips it). `capabilities.uses_reconcile: true`. A book can also REPORT without writing
 anything (1.26.5): `#warn <FromPath> "<text>"` warns once per converted instance
 whose source `.dfm` streams the property (`<value>`, `<name>`, `{Prop}`
 placeholders), and `#check-ref <ToPath> <Class>.<Prop>[, ...]` warns when the

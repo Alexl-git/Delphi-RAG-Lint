@@ -303,7 +303,8 @@ published while `modifiers` says `public` for both.
 >   directives (items[] kinds `book-warning`, `ref-path-like`, `ref-dangling`,
 >   `ref-not-checked`); `uses_reconcile` -- JSON `true` since 1.27.0: convert-apply
 >   reconciles uses (watch list kept by `.dfm` needs, introduced names added,
->   ambiguity in `uses_unresolved[]`, `kept`/`moved` rows, `uses_reindex`;
+>   ambiguity in `uses_unresolved[]`, `kept`/`moved` rows, `uses_reindex` -- a
+>   re-index child still running after 10 minutes is terminated, `failed`;
 >   `--no-reconcile-uses`, `--no-reindex`); `inherited_retype`
 >   -- JSON `true` since 1.26.0: an inherited instance of a converted ancestor is
 >   retyped, and its fields followed in code, `inherited[].action`). Read-only. This is what the IDE

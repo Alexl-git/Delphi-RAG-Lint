@@ -1006,7 +1006,7 @@ begin
     'USES RECONCILIATION (1.27.0, C9, default on; --no-reconcile-uses = the 1.26.6 rules above, exactly): the converted .pas/.dfm are RE-INDEXED IN MEMORY (the indexer''s own extractor, no DB written, so the dry run shows the --apply plan) and every #unuse / #useswap Old is a WATCH LIST -- the unit is KEPT while a component the converted .dfm still streams has a class declared in it (an unconverted instance, a second component type of that unit, an inherited instance the ancestor has not converted: R26''s refusal becomes this, the --only skipped row is unchanged), REMOVED when only .pas code needs it (its dangling references named, the compile errors are the signal), KEPT when no --db indexes it; ' +
     'presence is scope-alias aware (#unuse DBTables matches Bde.DBTables, #use DB is satisfied by Data.DB); a name the conversion INTRODUCES (a cast template''s routine or enum value) gets its declaring unit added -- interface uses when referenced above implementation -- and a name (or To type) two units declare is REPORTED, never picked (add #use <unit> to choose); the C13 move is a row; ' +
     'json: uses[] action remove|add|skipped|kept|moved with source rule|reconcile|convert and needed_by[] {name,line,section}, uses_kept, uses_moved, uses_unresolved[] {name,line,section,reason ambiguous|not-found,candidates[] {unit,db}}, uses_reconcile on|off|degraded, items[] kinds unit-rule-kept, unit-rule-dangling, unit-rule-unverified, uses-unit-ambiguous (all warnings); ' +
-    'after --apply the unit''s OWN project DB -- the one --db that indexes it, a project index holding one .dproj/.dpr -- is refreshed with ''index --project <it> --db <it>'' in a child process (json uses_reindex {status done|skipped|failed|dry-run|off,db,project,ms,reason}; --no-reindex skips it; no other DB is ever written); info capability uses_reconcile; ' +
+    'after --apply the unit''s OWN project DB -- the one --db that indexes it, a project index holding one .dproj/.dpr -- is refreshed with ''index --project <it> --db <it>'' in a child process (json uses_reindex {status done|skipped|failed|dry-run|off,db,project,ms,reason}; a child still running after 10 minutes is terminated: failed; --no-reindex skips it; no other DB is ever written); info capability uses_reconcile; ' +
     '--only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); ' +
     '--unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; ' +
     'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
@@ -25344,13 +25344,29 @@ end;
   never reach convert-apply's stdout (a JSON document). ARx must come from
   ReindexPreview with Status 'dry-run'; it ends 'done' or 'failed' (the exit
   code in Reason). Never raises; a failure leaves the converted files as
-  written -- only the index is behind, and Reason names the command. }
+  written -- only the index is behind, and Reason names the command. A child
+  still running after REINDEX_TIMEOUT_MS is TERMINATED and reported 'failed'
+  (a hung re-index must not hang convert-apply, nor a batch's later units);
+  SQLite rolls its open transaction back, so the DB is left as it was before
+  the child's last commit. }
 procedure RefreshProjectIndex(var ARx: TUsesReindex);
+const
+  { An incremental `index --project` after one unit changed takes seconds
+    (fixture) to about a minute (a large project's resolve pass); ten
+    minutes is far past either and still bounds a hung child. }
+  REINDEX_TIMEOUT_MS   = 600000;
+  { how long to wait for a terminated child to actually exit }
+  REINDEX_KILL_WAIT_MS = 5000;
+  { the exit code a terminated child is given }
+  REINDEX_KILLED_EXIT  = 1;
+  MS_PER_SECOND        = 1000;
 var
   SI      : TStartupInfo;
   PI      : TProcessInformation;
   Cmd     : string;
   ExitCode: Cardinal;
+  WaitRes : Cardinal;
+  WaitErr : string;
   Watch   : TStopwatch;
 begin
   Cmd:= Format('"%s" index --project "%s" --db "%s"', [ParamStr(0), ARx.Project, ARx.Db]);
@@ -25367,15 +25383,30 @@ begin
       [SysErrorMessage(GetLastError), ARx.Project, ARx.Db]);
     Exit;
   end;
+  ExitCode:= 0;
   try
-    WaitForSingleObject(PI.hProcess, INFINITE);
-    GetExitCodeProcess(PI.hProcess, ExitCode);
+    WaitRes:= WaitForSingleObject(PI.hProcess, REINDEX_TIMEOUT_MS);
+    WaitErr:= if WaitRes = WAIT_FAILED then SysErrorMessage(GetLastError) else '';
+    if WaitRes = WAIT_OBJECT_0 then
+      GetExitCodeProcess(PI.hProcess, ExitCode)
+    else
+    begin
+      TerminateProcess(PI.hProcess, REINDEX_KILLED_EXIT);
+      WaitForSingleObject(PI.hProcess, REINDEX_KILL_WAIT_MS);
+    end;
   finally
     CloseHandle(PI.hThread);
     CloseHandle(PI.hProcess);
   end;
   ARx.Ms:= Watch.ElapsedMilliseconds;
-  if ExitCode = 0 then ARx.Status:= 'done'
+  if WaitRes <> WAIT_OBJECT_0 then
+  begin
+    ARx.Status:= 'failed';
+    ARx.Reason:= Format('%s -- the child was terminated; run: drag-lint index --project "%s" --db "%s"',
+      [if WaitRes = WAIT_TIMEOUT then Format('index did not finish within %d s', [REINDEX_TIMEOUT_MS div MS_PER_SECOND])
+       else 'waiting for the index failed (' + WaitErr + ')', ARx.Project, ARx.Db]);
+  end
+  else if ExitCode = 0 then ARx.Status:= 'done'
   else
   begin
     ARx.Status:= 'failed';

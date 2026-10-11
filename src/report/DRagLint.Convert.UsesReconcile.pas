@@ -171,6 +171,7 @@ implementation
 
 uses
   System.StrUtils,
+  System.Math,
   System.IOUtils,
   System.Generics.Defaults,
   DRagLint.Parser.Delphi13,
@@ -180,6 +181,8 @@ const
   SECTION_INTF = 'interface';
   SECTION_IMPL = 'implementation';
   IMPLICIT_UNITS: array[0..1] of string = ('System', 'SysInit');
+  STATUS_ON       = 'on';
+  STATUS_DEGRADED = 'degraded';
 
 { ---- TUsesUnitIndex ---------------------------------------------------------- }
 
@@ -384,7 +387,7 @@ type
     InIntf   : Boolean;
   end;
 
-  TReconciler = class
+  TReconciler = class  // dl:ok high-response@0a35 -- REVIEWED 2026-10-10: 57 since the fail-safe Degrade path (Reconcile/Degrade/SpelledSame) joined; one unit's verdicts over shared parse state -- splitting it would pass that state between classes
   private
     FIx      : TUsesUnitIndex;
     FIn      : TUsesReconcileInput;
@@ -396,7 +399,10 @@ type
     FConvUses: TDictionary<string, TNameUse>;
     FOrigUses: TDictionary<string, TNameUse>;
     FOwn     : TDictionary<string, Boolean>;
+    FPlain   : Boolean;                 { degraded past the index: match watched entries by spelling }
     function WatchedBy(const AEntry: string): Boolean;
+    procedure Degrade(const AReason: string);
+    procedure Reconcile;
     procedure CollectNames(const AText: string; const AParse: TParseResult; ADict: TDictionary<string, TNameUse>);
     procedure DecideWatch(const ADfm: TParseResult; ADfmOk: Boolean);
     procedure BuildPostPlan;
@@ -452,13 +458,30 @@ begin
   inherited Destroy;
 end;
 
+{ Two uses spellings name one unit by text alone: equal, or one is '<scope>.<other>'. }
+function SpelledSame(const A, B: string): Boolean;
+begin
+  Result:= SameText(A, B) or EndsText('.' + B, A) or EndsText('.' + A, B);
+end;
+
 function TReconciler.WatchedBy(const AEntry: string): Boolean;
 begin
   for var W: TWatchUnit in FWatch do
-    if FIx.SameUnit(W.UnitName, AEntry) then Exit(True);
+    if (if FPlain then SpelledSame(W.UnitName, AEntry) else FIx.SameUnit(W.UnitName, AEntry)) then Exit(True);
   Result:= False;
 end;
 
+
+{ The 1-based character column of a tree-sitter column in ALine. The parsers
+  are fed UTF-8 (ReindexText), so AByteCol counts BYTES: each non-ASCII
+  character before it (a CP1252 copyright sign in a string) adds one or more. }
+function CharColumn(const ALine: string; AByteCol: Integer): Integer;
+var
+  Bytes: TBytes;
+begin
+  Bytes := TEncoding.UTF8.GetBytes(ALine);
+  Result:= TEncoding.UTF8.GetCharCount(Bytes, 0, EnsureRange(AByteCol - 1, 0, Length(Bytes))) + 1;
+end;
 
 { Every name a ref of AParse names, with its first line, whether one
   occurrence is BARE (the character before it, blanks skipped, is not a '.')
@@ -476,7 +499,7 @@ begin
   begin
     if (R.NameText = '') or (R.StartLine < 1) or (R.StartLine > Length(Lines)) then Continue;
     var S: string:= Lines[R.StartLine - 1];
-    var P: Integer:= R.StartCol - 1;
+    var P: Integer:= Min(CharColumn(S, R.StartCol) - 1, Length(S));
     while (P >= 1) and CharInSet(S[P], [' ', #9]) do Dec(P);
     var IsBare: Boolean:= not ((P >= 1) and (S[P] = '.'));
     var Key: string:= LowerCase(R.NameText);
@@ -662,42 +685,57 @@ begin
   end;
 end;
 
-function TReconciler.Run: TUsesReconcileResult;
-var
-  ConvParse, OrigParse, DfmParse: TParseResult;
-  DfmOk: Boolean;
+{ Fail-safe KEEP: every watched entry is kept, nothing is added and no
+  reference is reported dangling. When the unit index itself is what failed,
+  the watched entries are matched by spelling alone (FPlain). }
+procedure TReconciler.Degrade(const AReason: string);
 begin
-  FRes:= Default(TUsesReconcileResult);
-  FRes.Status:= 'on';
-  FRes.Needs.Enabled := True;
-  FRes.Needs.SameUnit:= FIx.SameUnit;
-  if not ReadUsesEntries(FIn.UnitPas, FIn.OrigPas, FEntries) then Exit(FRes);
-  FWatch:= UnitRuleWatchList(FIn.Rules, FIn.ExtraAdds, FIx.SameUnit);
-  DfmOk:= True;
-  DfmParse:= Default(TParseResult);
+  FRes.Status       := STATUS_DEGRADED;
+  FRes.Detail       := AReason;
+  FRes.Needs.Keeps  := nil;
+  FRes.Needs.Adds   := nil;
+  FRes.Needs.Dangling:= nil;
+  FRes.Unresolved   := nil;
+  FRemoved.Clear;
   try
-    ConvParse:= ReindexText(FIn.UnitPas, FIn.ConvPas);
-    OrigParse:= ReindexText(FIn.UnitPas, FIn.OrigPas);
-    if FIn.ConvDfm <> '' then
-    begin
-      DfmParse:= ReindexText(ChangeFileExt(FIn.UnitPas, '.dfm'), FIn.ConvDfm);
-      DfmOk:= False;
-      for var S: TSymbol in DfmParse.Symbols do
-        if S.Kind = skForm then DfmOk:= True;
-      if not DfmOk then FRes.Detail:= 'the converted .dfm yields no root object';
-    end;
+    DecideWatch(Default(TParseResult), False);
   except
     on Ex: Exception do
     begin
-      DfmOk:= False;
-      FRes.Detail:= Ex.ClassName + ': ' + Ex.Message;
+      FRes.Detail:= Format('%s; the unit index failed too (%s: %s) -- watched units matched by spelling',
+        [FRes.Detail, Ex.ClassName, Ex.Message]);
+      FRemoved.Clear;
+      FPlain:= True;
+      FWatch:= UnitRuleWatchList(FIn.Rules, FIn.ExtraAdds, nil);
+      DecideWatch(Default(TParseResult), False);
     end;
   end;
-  if not DfmOk then
+end;
+
+procedure TReconciler.Reconcile;
+var
+  ConvParse, OrigParse, DfmParse: TParseResult;
+begin
+  if not ReadUsesEntries(FIn.UnitPas, FIn.OrigPas, FEntries) then
   begin
-    FRes.Status:= 'degraded';
-    DecideWatch(DfmParse, False);
-    Exit(FRes);
+    Degrade('the uses clauses of the unit could not be read');
+    Exit;
+  end;
+  FWatch:= UnitRuleWatchList(FIn.Rules, FIn.ExtraAdds, FIx.SameUnit);
+  DfmParse:= Default(TParseResult);
+  ConvParse:= ReindexText(FIn.UnitPas, FIn.ConvPas);
+  OrigParse:= ReindexText(FIn.UnitPas, FIn.OrigPas);
+  if FIn.ConvDfm <> '' then
+  begin
+    DfmParse:= ReindexText(ChangeFileExt(FIn.UnitPas, '.dfm'), FIn.ConvDfm);
+    var HasRoot: Boolean:= False;
+    for var S: TSymbol in DfmParse.Symbols do
+      if S.Kind = skForm then HasRoot:= True;
+    if not HasRoot then
+    begin
+      Degrade('the converted .dfm yields no root object');
+      Exit;
+    end;
   end;
   for var S: TSymbol in ConvParse.Symbols do
     if S.Name <> '' then FOwn.AddOrSetValue(LowerCase(S.Name), True);
@@ -707,6 +745,19 @@ begin
   BuildPostPlan;
   PlanNewNames;
   PlanDangling;
+end;
+
+function TReconciler.Run: TUsesReconcileResult;
+begin
+  FRes:= Default(TUsesReconcileResult);
+  FRes.Status        := STATUS_ON;
+  FRes.Needs.Enabled := True;
+  FRes.Needs.SameUnit:= FIx.SameUnit;
+  try
+    Reconcile;
+  except
+    on Ex: Exception do Degrade(Ex.ClassName + ': ' + Ex.Message);
+  end;
   Result:= FRes;
 end;
 

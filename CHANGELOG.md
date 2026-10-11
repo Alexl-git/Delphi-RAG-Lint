@@ -44,7 +44,16 @@ by its OWNER RULINGS 2026-10-06.)
   `--db` that indexes the unit, a project index holding one `.dproj`/`.dpr` -- with
   `index --project <it> --db <it>` in a child process (apply/1 `uses_reindex`
   {status, db, project, ms, reason}). Any other shape is `skipped` with a reason; no
-  other DB is ever written. `--no-reindex` skips it.
+  other DB is ever written. `--no-reindex` skips it. A child still running after 10
+  minutes is terminated and reported `failed` (reason `index did not finish within
+  600 s -- the child was terminated; run: ...`), so a hung re-index cannot hang
+  convert-apply or the rest of a batch.
+- **The reconciliation never raises.** Any failure inside it -- the uses clauses
+  unreadable, a parser or index error -- degrades the unit (`uses_reconcile`
+  `degraded`, every watched unit kept with the reason in its warning); it no longer
+  ends convert-apply with `FATAL`. Tree-sitter's UTF-8 byte columns are converted to
+  character columns, so non-ASCII text before a reference on its line (CP1252 in a
+  string) no longer raised `ERangeError`.
 
 ## v1.26.7-alpha -- unreleased
 

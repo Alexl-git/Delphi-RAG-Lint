@@ -48,22 +48,6 @@ uses
   DRagLint.Refactor.TextEdit;
 
 type
-  /// <summary>One uses-clause change a unit rule makes to the unit being
-  /// converted -- one row of convert-apply's apply/1 'uses' array.</summary>
-  /// <remarks>
-  /// Action is 'remove' or 'add'. Section is 'interface' or 'implementation'.
-  /// Line is 1-based in the unit AS READ, before any edit: a removed entry's
-  /// own line; for an add, the line the name is written onto (the entry it is
-  /// appended after, or the first entry it replaces), or the section keyword's
-  /// line when a new uses clause is created. Rule is the book line that asked
-  /// for the change, normalised to '#unuse Old', '#use New' or
-  /// '#useswap Old -&gt; New1, New2'. UnitName is spelled as written in the
-  /// unit for a removal and as written in the book for an add.
-  /// Action 'skipped' (1.23.0, C13 N4) is a removal convert-apply did NOT make
-  /// because it would strand instances that --only left out; the row has no
-  /// edit behind it, Line/Section are the kept entry's, and Reason says why
-  /// ('would leave N unconverted instance(s) of T'). Reason is '' otherwise.
-  /// </remarks>
   /// <summary>One reason a uses entry is still needed, or still referenced:
   /// a name and where it sits (C9, apply/1 uses[].needed_by).</summary>
   /// <remarks>For a `kept` row Name is a .dfm component, 'Name: Class', and
@@ -78,6 +62,34 @@ type
     Section: string;
   end;
 
+  /// <summary>One uses-clause change convert-apply makes, or decides not to
+  /// make, to the unit being converted -- one row of apply/1 'uses'.</summary>
+  /// <remarks>
+  /// Action is one of:
+  /// 'remove' -- an entry taken out (a #unuse / #useswap Old, or a C9 watched
+  /// unit nothing the converted .dfm streams still needs);
+  /// 'add' -- an entry written (a #use / #useswap New, or a C9 reconcile add);
+  /// 'kept' (C9) -- a watched entry NOT removed: Reason says why (a .dfm
+  /// component still needs it, no --db indexes it, or the re-index failed),
+  /// NeededBy names the components; no edit behind the row;
+  /// 'moved' (C9) -- the C13 move of an entry from the implementation to the
+  /// interface uses, Section 'interface';
+  /// 'skipped' (1.23.0, C13 N4) -- a removal NOT made because it would strand
+  /// instances --only left out; no edit behind it, Line/Section are the kept
+  /// entry's, Reason 'would leave N unconverted instance(s) of T'.
+  /// Section is 'interface' or 'implementation'. Line is 1-based in the unit
+  /// AS READ, before any edit: a removed or kept entry's own line; for an add,
+  /// the line the name is written onto (the entry it is appended after, or the
+  /// first entry it replaces), or the section keyword's line when a new uses
+  /// clause is created. Rule is the book line behind the row, normalised to
+  /// '#unuse Old', '#use New' or '#useswap Old -&gt; New1, New2', '' for a
+  /// row no rule asked for. UnitName is spelled as written in the unit for a
+  /// removal, kept or moved row and as written in the book for an add.
+  /// Reason is '' unless kept or skipped. Source (C9) says what produced the
+  /// row: 'rule' (a book line), 'reconcile' (a name the conversion introduced)
+  /// or 'convert' (the #convert surface's own To-type add, reported only when
+  /// it MOVES a unit). NeededBy (C9) is why the row exists -- see TUsesNeed.
+  /// </remarks>
   TUsesChange = record
     Action  : string;
     UnitName: string;

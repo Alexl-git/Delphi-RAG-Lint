@@ -21,13 +21,19 @@
       get their declaring unit added; a name two units declare is REPORTED in
       uses_unresolved (ambiguous) and never picked; a #use of one candidate
       resolves it on the next run. A1 / A1b / A2. The To-type tie too. A3.
+      A name no --db declares is reported not-found, nothing added. A4.
+    * Tree-sitter byte columns are read as characters: non-ASCII text before
+      a reference does not index past the line (ERangeError). ENC2.
     * The C13 move is a `moved` row. D2.
     * --only keeps its C13 N4 `skipped` row byte-identical. O1.
     * --no-reconcile-uses is 1.26.6 exactly. N1.
     * The decision runs on an IN-MEMORY re-index of the converted output (dry
       run = --apply plan); --apply then refreshes ONLY the unit's own project
       DB. R1 / R2.
-    * A second --apply plans no uses add/remove/moved row. I1.
+    * A second --apply plans no uses add/remove/moved row. I1; and for the
+      reconcile adds, the move and the alias removal. I2.
+    * A batch --apply equals single runs although the project DB is
+      re-indexed between its units; --no-reindex is the positive control. B2.
     * The converted units compile (dcc64), W2/W3/W5 fail to (ruling 1), and
       every written .dfm loads (DfmLoadCheck).
 
@@ -350,7 +356,37 @@ Form 'O1Form' 'Classes, LibOld' @('Old1: TOld;', 'Old2: TOld;') '' @() '' @((Obj
 Form 'TieForm' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
 Form 'BaseForm' 'Classes, LibOld' @('Old1: TOld;') '' @() '' @((Obj 'Old1' 'TOld'))
 Form 'DescForm' 'Classes, LibOld, BaseForm' @('Old3: TOld;') '' @() '' @((Obj 'Old1' 'TOld' 'inherited'), (Obj 'Old3' 'TOld')) 'TBaseForm'
-foreach ($cf in @('CastForm', 'CastEForm', 'AmbForm', 'AmbUForm')) {
+# ENC2: tree-sitter columns are UTF-8 BYTES. Eight CP1252 0xA9 bytes (16 UTF-8
+# bytes) before `Run2;` put the byte column 8 past the character column -- past
+# the end of the line, so indexing the line with it raised ERangeError.
+Form 'Enc2Form' 'Classes, LibOld' @('Old1: TOld;') '' @('procedure Run;', 'procedure Run2;') @'
+procedure TEnc2Form.Run2;
+begin
+end;
+
+procedure TEnc2Form.Run;
+var
+  S: string;
+begin
+  S:= 'EIGHT_MARKS'; Run2;
+end;
+'@ @((Obj 'Old1' 'TOld'))
+$encBytes = [Text.Encoding]::ASCII.GetBytes((Text 'Enc2Form.pas'))
+$encList = [Collections.Generic.List[byte]]::new($encBytes)
+$at = [Text.Encoding]::ASCII.GetString($encBytes).IndexOf('EIGHT_MARKS')
+$encList.RemoveRange($at, 'EIGHT_MARKS'.Length); $encList.InsertRange($at, [byte[]](@(0xA9) * 8))
+[IO.File]::WriteAllBytes((P 'Enc2Form.pas'), $encList.ToArray())
+# B2: Desc2Form uses its ancestor's Old2 in CODE only -- what convert-apply makes
+# of that is read from the project DB (the field's declared type), so it is what
+# a stale view of Base2Form would change.
+Form 'Base2Form' 'Classes, LibOld' @('Old1: TOld;', 'Old2: TOld;') '' @() '' @((Obj 'Old1' 'TOld'), (Obj 'Old2' 'TOld'))
+Form 'Desc2Form' 'Classes, LibOld, Base2Form' @('Old3: TOld;') '' @('procedure Run;') @'
+procedure TDesc2Form.Run;
+begin
+  Old2.Caption:= 'x';
+end;
+'@ @((Obj 'Old1' 'TOld' 'inherited'), (Obj 'Old3' 'TOld')) 'TBase2Form'
+foreach ($cf in @('CastForm', 'CastEForm', 'AmbForm', 'AmbUForm', 'NfForm')) {
   Form $cf 'Classes, LibPicOld' @('pic1: TPicOld;') '' @('procedure Setup;') @"
 procedure T$cf.Setup;
 begin
@@ -362,7 +398,7 @@ end;
 W 'P.dpr' (@('program P;', '', 'uses',
   '  LibOld, LibNew, Scope.LibAl, Fx.DB, LibTieA, LibTieB, LibPicOld, LibPicNew, LibEnum, LibCast, LibAmbA, LibAmbB,',
   '  W1Form, W2Form, W3Form, W4Form, W5Form, W6Form, W6bForm, W7Form, W8Form, U1Form, D1Form, D2Form, O1Form,',
-  '  TieForm, BaseForm, DescForm, CastForm, CastEForm, AmbForm, AmbUForm, EncForm;', '', 'begin', 'end.') -join "`n")
+  '  TieForm, BaseForm, DescForm, CastForm, CastEForm, AmbForm, AmbUForm, EncForm, Enc2Form, NfForm, Base2Form, Desc2Form;', '', 'begin', 'end.') -join "`n")
 
 # ---- books ------------------------------------------------------------------
 W 'old.rules'   "#convert TOld -> TNew`n#link Caption <- Caption`n#unuse LibOld`n"
@@ -374,6 +410,7 @@ W 'cast.rules'  "#convert TPicOld -> TPicNew`n#link Glyph <- Picture : CastA`n"
 W 'caste.rules' "#convert TPicOld -> TPicNew`n#link Glyph <- Picture : CastE`n#unuse LibPicOld`n"
 W 'amb.rules'   "#convert TPicOld -> TPicNew`n#link Glyph <- Picture : CastAmb`n"
 W 'ambu.rules'  "#convert TPicOld -> TPicNew`n#link Glyph <- Picture : CastAmb`n#use LibAmbA`n"
+W 'nf.rules'    "#convert TPicOld -> TPicNew`n#link Glyph <- Picture : CastNf`n"
 W 'fx.castlib' @'
 cast CastA
   accepts TSrcPic
@@ -392,7 +429,22 @@ cast CastAmb
   yields  TDstGlyph
   pas     '{dst}.Assign(AmbPic({src}));'
 end
+
+cast CastNf
+  accepts TSrcPic
+  yields  TDstGlyph
+  pas     '{dst}.Assign(NoSuchPic({src}));'
+end
 '@
+
+# B2: three untouched copies of the fixture, taken before anything is applied,
+# each indexed into its own project DB below.
+$b2 = @{}
+foreach ($k in @('batch', 'single', 'ctl')) {
+  $b2[$k] = P "b2$k"
+  New-Item -ItemType Directory $b2[$k] -Force | Out-Null
+  Get-ChildItem -LiteralPath $WorkDir -File | Copy-Item -Destination $b2[$k]
+}
 
 $db = P 'fx.sqlite'
 & $Exe index --project (P 'P.dpr') --db $db 2>&1 | Out-Null
@@ -421,6 +473,9 @@ Check 'W1 ... apply/1 carries uses_kept / uses_moved / uses_unresolved, always' 
 
 $r = J 'EncForm.pas' 'old.rules'
 Check 'ENC a CP1252 byte in the unit: re-index stays on (not degraded), LibOld removed' `
+  (($r.Code -eq 0) -and ($r.J.uses_reconcile -eq 'on') -and ((Rows $r 'remove').Count -eq 1)) $r.Out
+$r = J 'Enc2Form.pas' 'old.rules'
+Check 'ENC2 eight CP1252 bytes before a reference: byte columns read as characters, not past the line end (on, LibOld removed)' `
   (($r.Code -eq 0) -and ($r.J.uses_reconcile -eq 'on') -and ((Rows $r 'remove').Count -eq 1)) $r.Out
 
 $r = J 'W2Form.pas' 'old.rules'
@@ -505,6 +560,11 @@ Check 'A2 AmbPic is declared in LibAmbA and LibAmbB: no add, uses_unresolved amb
 $r = J 'AmbUForm.pas' 'ambu.rules'
 Check 'A2 ... with `#use LibAmbA` in the book: resolved, no warning, LibAmbA added once' `
   ((@($r.J.uses_unresolved).Count -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@(Rows $r 'add' | Where-Object { $_.unit -eq 'LibAmbA' }).Count -eq 1)) $r.Out
+$r = J 'NfForm.pas' 'nf.rules'
+$un = @($r.J.uses_unresolved)
+Check 'A4 NoSuchPic is declared by no --db: no add, uses_unresolved not-found with no candidates, no ambiguity warning' `
+  (($r.Code -eq 0) -and ($un.Count -eq 1) -and ($un[0].name -eq 'NoSuchPic') -and ($un[0].reason -eq 'not-found') -and (@($un[0].candidates).Count -eq 0) -and
+   ($un[0].section -eq 'implementation') -and (@(Rows $r 'add' | Where-Object { $_.source -eq 'reconcile' }).Count -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous')) $r.Out
 
 # ---- N1: --no-reconcile-uses is 1.26.6 --------------------------------------
 $r = J 'W2Form.pas' 'old.rules' @('--no-reconcile-uses')
@@ -545,10 +605,50 @@ Check 'B1 batch W2+W3: each units[] uses[] equals its single run' `
   (($null -ne $bj) -and (($bj.units[0].uses | ConvertTo-Json -Depth 6) -eq ($singles['W2Form'].uses | ConvertTo-Json -Depth 6)) -and
    (($bj.units[1].uses | ConvertTo-Json -Depth 6) -eq ($s2.uses | ConvertTo-Json -Depth 6))) $b
 
+# ---- B2: a batch --apply equals single runs (the refresh between units) -----
+# Unit 1 (Base2Form) is written and its project DB re-indexed by a child process
+# while this run keeps its stores and caches open; unit 2 (Desc2Form) inherits
+# from it, so its entry depends on what the run sees of the CONVERTED ancestor.
+# Compared without uses_reindex (ms differs; status asserted on its own) and
+# classes_built (a per-unit cost counter: a batch reuses the classes unit 1
+# already resolved). Paths are normalised to the copy's folder.
+function ApplyJ([string]$Dir, [string[]]$Units, [string[]]$Extra = @()) {
+  $a = @('convert-apply')
+  foreach ($u in $Units) { $a += @('--unit', (Join-Path $Dir "$u.pas")) }
+  $a += @('--rules', (Join-Path $Dir 'old.rules'), '--db', (Join-Path $Dir 'fx.sqlite'), '--apply', '--no-backup', '--format', 'json') + $Extra
+  $o = (& $Exe @a 2>$null) -join "`n"
+  try { return ($o.Substring($o.IndexOf('{')) | ConvertFrom-Json) } catch { return $null }
+}
+function Norm($Entry, [string]$Dir) {
+  if ($null -eq $Entry) { return '<null>' }
+  $c = $Entry | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+  $c.PSObject.Properties.Remove('uses_reindex')
+  $c.PSObject.Properties.Remove('classes_built')
+  return (($c | ConvertTo-Json -Depth 10 -Compress).Replace(($Dir -replace '\\', '\\'), '<D>'))
+}
+foreach ($k in $b2.Keys) { & $Exe index --project (Join-Path $b2[$k] 'P.dpr') --db (Join-Path $b2[$k] 'fx.sqlite') 2>&1 | Out-Null }
+$bb = ApplyJ $b2['batch'] @('Base2Form', 'Desc2Form')
+$sb = ApplyJ $b2['single'] @('Base2Form')
+$sd = ApplyJ $b2['single'] @('Desc2Form')
+$nb = if ($null -ne $bb) { Norm $bb.units[1] $b2['batch'] } else { '<null>' }
+$ns = Norm $sd $b2['single']
+Check 'B2 batch --apply Base2Form+Desc2Form: both units refreshed their project DB (uses_reindex done), single runs too' `
+  (($null -ne $bb) -and ($bb.units[0].uses_reindex.status -eq 'done') -and ($bb.units[1].uses_reindex.status -eq 'done') -and
+   ($sb.uses_reindex.status -eq 'done') -and ($sd.uses_reindex.status -eq 'done')) "batch: $($bb.units.uses_reindex | ConvertTo-Json -Compress) single: $($sd.uses_reindex | ConvertTo-Json -Compress)"
+Check 'B2 ... Desc2Form''s batch entry equals its single run made after BaseForm was applied' ($nb -eq $ns) "batch : $nb`n      single: $ns"
+Check 'B2 ... and the written Desc2Form.pas / .dfm are byte-identical' `
+  (([IO.File]::ReadAllText((Join-Path $b2['batch'] 'Desc2Form.pas')) -eq [IO.File]::ReadAllText((Join-Path $b2['single'] 'Desc2Form.pas'))) -and
+   ([IO.File]::ReadAllText((Join-Path $b2['batch'] 'Desc2Form.dfm')) -eq [IO.File]::ReadAllText((Join-Path $b2['single'] 'Desc2Form.dfm'))))
+$cb = ApplyJ $b2['ctl'] @('Base2Form', 'Desc2Form') @('--no-reindex')
+$nc = if ($null -ne $cb) { Norm $cb.units[1] $b2['ctl'] } else { '<null>' }
+Check 'B2 positive control: the same batch with --no-reindex gives a DIFFERENT Desc2Form entry (the comparison can fail)' `
+  (($null -ne $cb) -and ($cb.units[1].uses_reindex.status -eq 'off') -and ($nc -ne $ns)) "control: $nc"
+
 # ---- --apply the rest, then compile and load --------------------------------
 $written = @('W1Form.dfm', 'W4Form.dfm')
 foreach ($x in @(@('W2Form','old.rules'), @('W3Form','old.rules'), @('W5Form','old.rules'), @('W6Form','al.rules'), @('W6bForm','al.rules'),
-                 @('W7Form','old.rules'), @('D1Form','db.rules'), @('D2Form','old.rules'), @('DescForm','old.rules'))) {
+                 @('W7Form','old.rules'), @('D1Form','db.rules'), @('D2Form','old.rules'), @('DescForm','old.rules'),
+                 @('CastForm','cast.rules'), @('CastEForm','caste.rules'))) {
   $r = Run "$($x[0]).pas" $x[1] @('--apply', '--no-backup')
   Check "X $($x[0]) --apply exits 0" ($r.Code -eq 0) $r.Out
   $written += "$($x[0]).dfm"
@@ -571,11 +671,25 @@ function Dcc([string]$Dpr, [string[]]$Units) {
   Start-Process cmd.exe -ArgumentList '/c', "`"$bat`"" -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -Wait | Out-Null
   return (Get-Content $log -Raw -ErrorAction SilentlyContinue)
 }
+# CastForm / CastEForm are NOT in this set: the cast access-site rewrite
+# replaces only the member token (`pic1.Picture` -> `pic1.<statement>.Data`),
+# so their converted Setup body does not parse -- a defect of the cast
+# realisation (Apply.pas Outcome 1), not of the uses reconciliation.
 $cl = Dcc 'CGood' @('W1Form', 'W4Form', 'W6Form', 'W6bForm', 'W7Form', 'D1Form', 'D2Form', 'BaseForm', 'DescForm', 'O1Form')
 Check 'C1 the reconciled units compile (dcc64)' (($cl -match 'BUILD_EXITCODE=0') -and -not ($cl -match '(?m)Error')) (@(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' }) -join ' | ')
 foreach ($x in @(@('W2Form','ELibOld'), @('W3Form','TOld'), @('W5Form','OldUpper'))) {
   $cl = Dcc ("CBad" + $x[0]) @($x[0])
   Check "C2 (ruling 1) $($x[0]) does NOT compile, and the error names $($x[1])" (($cl -match 'BUILD_EXITCODE=1') -and ($cl -match ("E2003.*\b" + $x[1] + "\b"))) (@(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' }) -join ' | ')
+}
+
+# ---- I2: idempotence of the add / move / alias-removal paths -----------------
+# CastForm / CastEForm took reconcile ADDs (A1 / A1b), D2Form a MOVE, W6Form an
+# alias REMOVAL; each was applied above (index refreshed). A second run plans no
+# uses add / remove / moved row.
+foreach ($x in @(@('CastForm','cast.rules'), @('CastEForm','caste.rules'), @('D2Form','old.rules'), @('W6Form','al.rules'))) {
+  $r = J "$($x[0]).pas" $x[1]
+  Check "I2 second run on the converted $($x[0]): no uses add/remove/moved row" `
+    (($null -ne $r.J) -and (-not $r.J.refused) -and (@($r.J.uses | Where-Object { $_.action -in @('add','remove','moved') }).Count -eq 0)) $r.Out
 }
 
 # ---- capability -------------------------------------------------------------
