@@ -112,7 +112,9 @@ type
     OldGraph   : TGraphModel;
     /// <summary>cfGraph only: the new chart.</summary>
     NewGraph   : TGraphModel;
-    /// <summary>cfGraph only: the old chart's SVG, '' when none.</summary>
+    /// <summary>cfGraph only: the old chart's SVG, '' when none. After a rerun this is a
+    /// temp copy taken before the rerun (the bundle folder may be rewritten); the caller may
+    /// delete it.</summary>
     OldSvgPath : string;
     /// <summary>cfGraph only: the new chart's SVG, '' when none.</summary>
     NewSvgPath : string;
@@ -130,8 +132,12 @@ type
 /// new index, each with Message.</returns>
 /// <remarks>The command run is the old report's COMMAND, or the caller's when the old one
 /// is missing (warning WARN_NO_COMMAND) or differs (a warning naming each differing
-/// argument; the caller's wins). A graph's old DOT is read into memory before the rerun,
-/// because a rerun may overwrite the bundle folder. Snapshot and update-doc happen only on
+/// argument; the caller's wins); an auto snapshot's own COMMAND counts as the old one, the
+/// caller's command only locating the snapshot. The new run never passes AllowStale, whatever
+/// pRequest.Options says (only the S4 old side does). A graph's old DOT is read into memory
+/// and its SVG copied to a temp file before the rerun, because a rerun may overwrite the
+/// bundle folder. --save with csTwoFiles is refused. A snapshot is saved with the extension
+/// its format is detected by (.txt, .csv, .dot). Snapshot and update-doc happen only on
 /// exit 0 or 1; a failed snapshot is a warning, a failed update-doc is exit 2 with the rest
 /// of the result intact. Calls the producer from the calling thread; not thread-safe for
 /// two calls that update the same unit.</remarks>
@@ -154,6 +160,7 @@ const
   STAMP_FORMAT = 'yyyy-mm-dd hh:nn';
   MB_ERR_INVALID_CHARS = 8;
   UTF8_BOM: array[0..2] of Byte = ($EF, $BB, $BF);
+  SVG_EXT = '.svg';
   RERUN_HINT = ' -- pass --command "<id> -Target ... -Project ..."';
 
 procedure AddWarning(var pResult: TCompareResult; const pText: string);
@@ -333,12 +340,38 @@ begin
 end;
 
 
+{ R18: a snapshot keeps the extension its format is detected by. }
+function SnapshotExtFor(pFormat: TChartsFormat): string;
+begin
+  case pFormat of
+    cfGraph   : Result:= SNAPSHOT_EXT_GRAPH;
+    cfFormsCsv: Result:= SNAPSHOT_EXT_FORMS;
+  else
+    Result:= SNAPSHOT_EXT_REPORT;
+  end;
+end;
+
+{ A rerun may rewrite the bundle folder the old chart came from, graph.svg included: the
+  old SVG is copied to a temp file first and OldSvgPath points at the copy. }
+function ProtectOldSvg(var pResult: TCompareResult): Boolean;
+begin
+  var Copy_:= TPath.Combine(TPath.GetTempPath, 'drag-lint-compare-old-' + TGUID.NewGuid.ToString + SVG_EXT);
+  try
+    TFile.Copy(pResult.OldSvgPath, Copy_);
+  except
+    on E: Exception do
+      Exit(Refuse(pResult, COMPARE_EXIT_SETUP, 'cannot keep the old chart ' + pResult.OldSvgPath + ': ' + E.Message));
+  end;
+  pResult.OldSvgPath:= Copy_;
+  Result:= True;
+end;
+
 type
   { The state the steps of one RunCompare share. }
   TCompareRun = record
     Block    : TRemarksBlock;   // csRemarks: the block the old side came from
     Cmd      : TReportCommand;  // the command that is run
-    CmdChosen: Boolean;         // Cmd was fixed by the old-side step (csAutoSnapshot, csOldIndex)
+    CmdChosen: Boolean;         // Cmd was fixed by the old-side step (csOldIndex)
     NewFormat: TChartsFormat;   // the format the new side is in
     FirstDb  : string;          // the first index the new run read ('' when none)
   end;
@@ -349,17 +382,20 @@ begin
   if pRequest.UpdateDoc and (pRequest.Source <> csRemarks) then
     Result:= Refuse(pResult, COMPARE_EXIT_SETUP,
       'update-doc needs a remarks block to update -- name the unit and a line inside the block')
+  else if pRequest.SaveSnapshot and (pRequest.Source = csTwoFiles) then
+    Result:= Refuse(pResult, COMPARE_EXIT_SETUP,
+      'save needs a rerun -- comparing two files produces no new answer to keep')
   else if (pRequest.Source <> csTwoFiles) and (pRequest.Producer = nil) then
     Result:= Refuse(pResult, COMPARE_EXIT_SETUP, 'no report producer to rerun the question with');
 end;
 
-{ csAutoSnapshot / csOldIndex have no old report to take a COMMAND from: the caller's is
-  the question, fixed before the old side is loaded. }
-function TakeGivenCommand(const pRequest: TCompareRequest; const pWhat: string;
-  var pResult: TCompareResult; var pRun: TCompareRun): Boolean;
+{ csOldIndex has no old report to take a COMMAND from: the caller's is the question,
+  fixed before the old side is produced. }
+function TakeGivenCommand(const pRequest: TCompareRequest; var pResult: TCompareResult;
+  var pRun: TCompareRun): Boolean;
 begin
   if pRequest.Command.IsEmpty then
-    Exit(Refuse(pResult, COMPARE_EXIT_SETUP, 'an ' + pWhat + ' compare needs the question' + RERUN_HINT));
+    Exit(Refuse(pResult, COMPARE_EXIT_SETUP, 'an old-index compare needs the question' + RERUN_HINT));
   pRun.Cmd:= pRequest.Command;
   ApplyProject(pRun.Cmd, pRequest.ProjectFile, pResult);
   pRun.CmdChosen:= True;
@@ -388,17 +424,21 @@ begin
   Result:= True;
 end;
 
-{ S3: the old side is the newest auto snapshot of the question. }
-function LoadAutoSnapshotSide(const pRequest: TCompareRequest; var pResult: TCompareResult;
-  var pRun: TCompareRun): Boolean;
+{ S3: the old side is the newest auto snapshot of the question. The caller's command only
+  LOCATES it (question, target, -Project or --project for the folder); the snapshot's own
+  COMMAND then meets the caller's in ChooseCommand like any saved report (R16). }
+function LoadAutoSnapshotSide(const pRequest: TCompareRequest; var pResult: TCompareResult): Boolean;
 begin
-  if not TakeGivenCommand(pRequest, 'auto-snapshot', pResult, pRun) then
-    Exit(False);
-  var AutoDir:= TPath.Combine(SnapshotDirFor(pRequest, pRun.Cmd, ''), AUTO_SUBDIR);
-  var Latest:= LatestAutoSnapshot(AutoDir, pRun.Cmd.Question, TargetWithTo(pRun.Cmd));
+  if pRequest.Command.IsEmpty then
+    Exit(Refuse(pResult, COMPARE_EXIT_SETUP, 'an auto-snapshot compare needs the question' + RERUN_HINT));
+  var Locator:= pRequest.Command;
+  if pRequest.ProjectFile <> '' then
+    SetArg(Locator, ARG_PROJECT, pRequest.ProjectFile);
+  var AutoDir:= TPath.Combine(SnapshotDirFor(pRequest, Locator, ''), AUTO_SUBDIR);
+  var Latest:= LatestAutoSnapshot(AutoDir, Locator.Question, TargetWithTo(Locator));
   if Latest = '' then
     Exit(Refuse(pResult, COMPARE_EXIT_SETUP, Format('no auto snapshot for %s %s under %s',
-      [pRun.Cmd.Question, TargetWithTo(pRun.Cmd), AutoDir])));
+      [Locator.Question, TargetWithTo(Locator), AutoDir])));
   var Why: string;
   if not LoadSide(Latest, pResult.OldText, pResult.OldSvgPath, pResult.Format, Why) then
     Exit(Refuse(pResult, COMPARE_EXIT_SETUP, Why));
@@ -410,7 +450,7 @@ end;
 function LoadOldIndexSide(const pRequest: TCompareRequest; var pResult: TCompareResult;
   var pRun: TCompareRun): Boolean;
 begin
-  if not TakeGivenCommand(pRequest, 'old-index', pResult, pRun) then
+  if not TakeGivenCommand(pRequest, pResult, pRun) then
     Exit(False);
   var OldOpts:= pRequest.Options;
   OldOpts.DbOverride:= pRequest.OldDb;
@@ -439,16 +479,19 @@ begin
     csRemarks:
       Result:= LoadRemarksSide(pRequest, pResult, pRun);
     csAutoSnapshot:
-      Result:= LoadAutoSnapshotSide(pRequest, pResult, pRun);
+      Result:= LoadAutoSnapshotSide(pRequest, pResult);
   else
     Result:= LoadOldIndexSide(pRequest, pResult, pRun);
   end;
   if Result and (pResult.Format = cfUnknown) then
-    Result:= Refuse(pResult, COMPARE_EXIT_SETUP, 'cannot tell what ' + pRequest.OldPath + ' holds');
+    Result:= Refuse(pResult, COMPARE_EXIT_SETUP, 'cannot tell what ' +
+      (if pRequest.Source = csOldIndex then 'the old run''s answer from ' + pRequest.OldDb else pRequest.OldPath) + ' holds');
   if Result and (pResult.Format = cfReportText) and (pRequest.Source <> csRemarks) then
     pResult.OldHeader:= HeaderOf(pResult.OldText);
   if Result and (pResult.Format = cfGraph) then
     pResult.OldGraph:= ParseDot(pResult.OldText);
+  if Result and (pResult.Format = cfGraph) and (pRequest.Source <> csTwoFiles) and (pResult.OldSvgPath <> '') then
+    Result:= ProtectOldSvg(pResult);
 end;
 
 { Steps 3 and 4: choose the command (C2, C3), rerun it, refuse a stale index (C4), and
@@ -463,8 +506,11 @@ begin
       Exit(Refuse(pResult, COMPARE_EXIT_SETUP, 'no COMMAND in the old report and none given' + RERUN_HINT));
     ApplyProject(pRun.Cmd, pRequest.ProjectFile, pResult);
   end;
-  var NewRun:= pRequest.Producer.Produce(pRun.Cmd, pRequest.Options);
-  if NewRun.ExitCode = COMPARE_EXIT_STALE then
+  // R17 / C4: the new run never answers from a stale index, whatever the caller's options.
+  var NewOpts:= pRequest.Options;
+  NewOpts.AllowStale:= False;
+  var NewRun:= pRequest.Producer.Produce(pRun.Cmd, NewOpts);
+  if NewRun.ExitCode = PRODUCER_EXIT_STALE then
     Exit(Refuse(pResult, COMPARE_EXIT_STALE,
       'the index is stale for the new run, so there is no current answer to compare: ' + NewRun.Reason));
   if not NewRun.Ok then
@@ -483,8 +529,11 @@ begin
   pResult.NewText:= NewRun.Text;
   pRun.NewFormat:= DetectFormat(NewRun.Text, False);
   var Dot, Svg: string;
-  if (pResult.Format = cfGraph) and (NewRun.BundlePath <> '') and LoadGraphSource(NewRun.BundlePath, Dot, Svg) then
+  if pResult.Format = cfGraph then
   begin
+    if not LoadGraphSource(NewRun.BundlePath, Dot, Svg) then
+      Exit(Refuse(pResult, COMPARE_EXIT_SETUP, 'the new run''s chart could not be read from ' +
+        (if NewRun.BundlePath = '' then '(the answer has no BUNDLE line)' else NewRun.BundlePath)));
     pRun.NewFormat:= cfGraph;
     pResult.NewText:= Dot;
     pResult.NewSvgPath:= Svg;
@@ -557,7 +606,7 @@ begin
     var Dir:= SnapshotDirFor(pRequest, pRun.Cmd, pRun.FirstDb);
     var Saved: string;
     if SaveSnapshot(Dir, pRequest.Source = csAutoSnapshot, pRun.Cmd.Question, TargetWithTo(pRun.Cmd),
-      pResult.NewText, pWhen, Saved) then
+      pResult.NewText, pWhen, Saved, SnapshotExtFor(pResult.Format)) then
       pResult.SnapshotPath:= Saved
     else
       AddWarning(pResult, 'The new answer was not kept as a snapshot under ' + Dir +

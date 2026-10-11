@@ -7,6 +7,14 @@ unit DRagLint.Charts.Snapshot;
 
 interface
 
+const
+  /// <summary>The extension of a report snapshot.</summary>
+  SNAPSHOT_EXT_REPORT = '.txt';
+  /// <summary>The extension of a forms-CSV snapshot, so DetectFormat sees a forms CSV.</summary>
+  SNAPSHOT_EXT_FORMS = '.csv';
+  /// <summary>The extension of a chart snapshot (its DOT text), so DetectFormat sees a chart (R18).</summary>
+  SNAPSHOT_EXT_GRAPH = '.dot';
+
 /// <summary>Where a project's snapshots are kept (F1).</summary>
 /// <param name="pProjectFile">The .dproj; its folder is the anchor when pDbPath says
 /// none.</param>
@@ -29,9 +37,12 @@ function SanitiseTargetForFileName(const pTarget: string): string;
 /// <param name="pQuestion">Question id, e.g. 'who-writes'.</param>
 /// <param name="pTarget">The target (sanitised here).</param>
 /// <param name="pWhen">When the question was asked.</param>
-/// <returns>'&lt;question&gt;--&lt;target&gt;--&lt;yyyymmdd-hhmm&gt;.txt', with a
+/// <param name="pExt">The extension, dot included: SNAPSHOT_EXT_REPORT for a report,
+/// SNAPSHOT_EXT_FORMS for a forms CSV, SNAPSHOT_EXT_GRAPH for a chart's DOT text.</param>
+/// <returns>'&lt;question&gt;--&lt;target&gt;--&lt;yyyymmdd-hhmm&gt;&lt;pExt&gt;', with a
 /// 24-hour clock whatever the regional settings.</returns>
-function SnapshotFileName(const pQuestion, pTarget: string; pWhen: TDateTime): string;
+function SnapshotFileName(const pQuestion, pTarget: string; pWhen: TDateTime;
+  const pExt: string = SNAPSHOT_EXT_REPORT): string;
 
 /// <summary>Saves an answer as a snapshot file.</summary>
 /// <param name="pDir">The snapshot folder (ResolveSnapshotDir).</param>
@@ -42,30 +53,36 @@ function SnapshotFileName(const pQuestion, pTarget: string; pWhen: TDateTime): s
 /// <param name="pPlainText">The answer in plain form, full header included.</param>
 /// <param name="pWhen">When the question was asked.</param>
 /// <param name="pPath">The file written; '' when the result is False.</param>
+/// <param name="pExt">The file extension (SnapshotFileName); retention for pAuto only
+/// counts files with this extension.</param>
 /// <returns>False when the folder or file cannot be written.</returns>
 /// <remarks>Written as UTF-8 without BOM with CRLF line ends. A second snapshot of the
 /// same question and target in the same minute replaces the first. Creates the folder. For pAuto, returns False (pPath '') when the 20-snapshot retention immediately removed the new file because 20 newer ones exist; the file is then gone.
 /// </remarks>
 function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarget, pPlainText: string;
-  pWhen: TDateTime; out pPath: string): Boolean;
+  pWhen: TDateTime; out pPath: string; const pExt: string = SNAPSHOT_EXT_REPORT): Boolean;
 
 /// <summary>Keeps the newest snapshots of one routine and deletes the rest (S3b).</summary>
 /// <param name="pAutoDir">The auto folder itself.</param>
 /// <param name="pQuestion">Question id.</param>
 /// <param name="pTarget">Target (sanitised here).</param>
 /// <param name="pKeep">How many to keep; default 20. 0 removes every snapshot of the routine; a negative value is treated as 0 and never raises.</param>
-/// <remarks>Only files named exactly '&lt;question&gt;--&lt;target&gt;--&lt;stamp&gt;.txt'
+/// <param name="pExt">Only files with this extension count.</param>
+/// <remarks>Only files named exactly '&lt;question&gt;--&lt;target&gt;--&lt;stamp&gt;&lt;pExt&gt;'
 /// with a digit stamp count, so another target that merely shares the prefix is never
 /// touched. Ordered by the stamp in the name, never by file time; oldest removed first.
 /// A file that cannot be deleted is skipped.</remarks>
-procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: Integer = 20);
+procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: Integer = 20;
+  const pExt: string = SNAPSHOT_EXT_REPORT);
 
 /// <summary>The newest auto snapshot of one routine.</summary>
 /// <param name="pAutoDir">The auto folder itself.</param>
 /// <param name="pQuestion">Question id.</param>
 /// <param name="pTarget">Target (sanitised here).</param>
+/// <param name="pExt">Only files with this extension count.</param>
 /// <returns>Full path of the snapshot with the greatest stamp, or '' when none.</returns>
-function LatestAutoSnapshot(const pAutoDir, pQuestion, pTarget: string): string;
+function LatestAutoSnapshot(const pAutoDir, pQuestion, pTarget: string;
+  const pExt: string = SNAPSHOT_EXT_REPORT): string;
 
 implementation
 
@@ -82,7 +99,6 @@ const
   STAMP_FORMAT = 'yyyymmdd-hhnn';
   STAMP_LEN = 13;
   STAMP_DASH = 9;
-  FILE_EXT = '.txt';
   REPLACEMENT = '_';
 
 function ReadReportsDirKey(const pJsonPath: string): string;
@@ -137,17 +153,17 @@ begin
     + SanitiseTargetForFileName(pTarget) + PART_SEPARATOR;
 end;
 
-function SnapshotFileName(const pQuestion, pTarget: string; pWhen: TDateTime): string;
+function SnapshotFileName(const pQuestion, pTarget: string; pWhen: TDateTime; const pExt: string): string;
 begin
-  Result:= NamePrefix(pQuestion, pTarget) + FormatDateTime(STAMP_FORMAT, pWhen) + FILE_EXT;
+  Result:= NamePrefix(pQuestion, pTarget) + FormatDateTime(STAMP_FORMAT, pWhen) + pExt;
 end;
 
-function StampOf(const pFileName, pPrefix: string): string;
+function StampOf(const pFileName, pPrefix, pExt: string): string;
 begin
   Result:= '';
-  if not pFileName.StartsWith(pPrefix, True) or not pFileName.EndsWith(FILE_EXT, True) then
+  if not pFileName.StartsWith(pPrefix, True) or not pFileName.EndsWith(pExt, True) then
     Exit;
-  var Stamp:= Copy(pFileName, Length(pPrefix) + 1, Length(pFileName) - Length(pPrefix) - Length(FILE_EXT));
+  var Stamp:= Copy(pFileName, Length(pPrefix) + 1, Length(pFileName) - Length(pPrefix) - Length(pExt));
   if Length(Stamp) <> STAMP_LEN then
     Exit;
   for var I:= 1 to STAMP_LEN do
@@ -159,16 +175,16 @@ begin
 end;
 
 { The routine's snapshots as stamp/path pairs, newest first. }
-function StampedFiles(const pAutoDir, pQuestion, pTarget: string): TArray<TPair<string, string>>;
+function StampedFiles(const pAutoDir, pQuestion, pTarget, pExt: string): TArray<TPair<string, string>>;
 begin
   var List:= TList<TPair<string, string>>.Create;
   try
     if TDirectory.Exists(pAutoDir) then
     begin
       var Prefix:= NamePrefix(pQuestion, pTarget);
-      for var Path in TDirectory.GetFiles(pAutoDir, '*' + FILE_EXT) do
+      for var Path in TDirectory.GetFiles(pAutoDir, '*' + pExt) do
       begin
-        var Stamp:= StampOf(ExtractFileName(Path), Prefix);
+        var Stamp:= StampOf(ExtractFileName(Path), Prefix, pExt);
         if Stamp <> '' then
           List.Add(TPair<string, string>.Create(Stamp, Path));
       end;
@@ -185,21 +201,21 @@ begin
   end;
 end;
 
-procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: Integer);
+procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: Integer; const pExt: string);
 begin
-  var Files:= StampedFiles(pAutoDir, pQuestion, pTarget);
+  var Files:= StampedFiles(pAutoDir, pQuestion, pTarget, pExt);
   for var I:= Max(0, pKeep) to High(Files) do
     DeleteFile(Files[I].Value); // False (locked file) is fine: the next prune retries it
 end;
 
-function LatestAutoSnapshot(const pAutoDir, pQuestion, pTarget: string): string;
+function LatestAutoSnapshot(const pAutoDir, pQuestion, pTarget, pExt: string): string;
 begin
-  var Files:= StampedFiles(pAutoDir, pQuestion, pTarget);
+  var Files:= StampedFiles(pAutoDir, pQuestion, pTarget, pExt);
   Result:= if Length(Files) > 0 then Files[0].Value else '';
 end;
 
-function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarget, pPlainText: string;
-  pWhen: TDateTime; out pPath: string): Boolean;
+function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarget, pPlainText: string; // dl:ok too-many-parameters@14b1 -- the 8th is pExt, a defaulted extension added for R18 so every existing caller keeps its call; a record would break them all
+  pWhen: TDateTime; out pPath: string; const pExt: string): Boolean;
 const
   AUTO_KEEP = 20;
 begin
@@ -211,7 +227,7 @@ begin
     var Text:= StringReplace(pPlainText, #13#10, #10, [rfReplaceAll]);
     Text:= StringReplace(Text, #13, #10, [rfReplaceAll]);
     Text:= StringReplace(Text, #10, #13#10, [rfReplaceAll]);
-    var Path:= TPath.Combine(Dir, SnapshotFileName(pQuestion, pTarget, pWhen));
+    var Path:= TPath.Combine(Dir, SnapshotFileName(pQuestion, pTarget, pWhen, pExt));
     var Enc:= TUTF8Encoding.Create(False);
     try
       TFile.WriteAllText(Path, Text, Enc);
@@ -221,7 +237,7 @@ begin
     pPath:= Path;
     if pAuto then
     begin
-      PruneAutoSnapshots(Dir, pQuestion, pTarget, AUTO_KEEP);
+      PruneAutoSnapshots(Dir, pQuestion, pTarget, AUTO_KEEP, pExt);
       // pWhen older than the newest 20: retention removed the file just written.
       if not TFile.Exists(Path) then
       begin

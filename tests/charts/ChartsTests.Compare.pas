@@ -43,6 +43,11 @@ type
     [Test] procedure TwoCsvFilesCompareWithoutProducer;
     [Test] procedure TwoBundlesCompareGraphs;
     [Test] procedure DifferentFormatsRefused;
+    [Test] procedure AutoSnapshotCommandMeetsGivenCommand;
+    [Test] procedure GraphRerunKeepsOldSvgAndSavesDot;
+    [Test] procedure AllowStaleNeverReachesTheNewRun;
+    [Test] procedure SaveWithTwoFilesRefused;
+    [Test] procedure UnchangedRemarksBlockIsExitZero;
   end;
 
 implementation
@@ -51,7 +56,7 @@ uses
   Winapi.Windows, System.SysUtils, System.Classes, System.IOUtils, System.DateUtils,
   DRagLint.Charts.Diff, DRagLint.Charts.ReportHeader, DRagLint.Charts.Adapters,
   DRagLint.Charts.Producer, DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Remarks,
-  DRagLint.Charts.Snapshot, DRagLint.Charts.Compare;
+  DRagLint.Charts.Snapshot, DRagLint.Charts.DocInsight, DRagLint.Charts.Compare;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
@@ -59,6 +64,12 @@ const
   FIXTURE_PROBE = 'producer\Stub-AskReport.ps1';
   VARIANT_ENV = 'STUB_VARIANT';
   VARIANT_B = 'B';
+  BUNDLE_ENV = 'STUB_BUNDLE';
+  STUB_NEW_SVG = '<svg>NEW</svg>';
+  COMMAND_NO_DEPTH = 'who-writes -Target "OPERAT.NAME" -Project "C:\P\A.dproj"';
+  PHRASE = 'Who writes this field';
+  UNIT_BLOCK_LINE = 4;
+  GRAPH_NODES_A = 21;
   ENGINE_FIXTURE = 'C:\X\drag-lint.exe'; // dl:ok hardcoded-absolute-path@7ebd -- synthetic test input: never touches the filesystem
   COMMAND_STUB = 'who-writes -Target "OPERAT.NAME" -Project "C:\P\A.dproj" -Depth 3';
   COMMAND_DEPTH5 = 'who-writes -Target "OPERAT.NAME" -Project "C:\P\A.dproj" -Depth 5';
@@ -173,11 +184,13 @@ begin
   FTemp:= TPath.Combine(TPath.GetTempPath, 'drag-lint-charts-cmp-' + TGUID.NewGuid.ToString);
   ForceDirectories(FTemp);
   SetEnvironmentVariable(VARIANT_ENV, nil);
+  SetEnvironmentVariable(BUNDLE_ENV, nil);
 end;
 
 procedure TCompareTests.TearDown;
 begin
   SetEnvironmentVariable(VARIANT_ENV, nil);
+  SetEnvironmentVariable(BUNDLE_ENV, nil);
   if TDirectory.Exists(FTemp) then
     TDirectory.Delete(FTemp, True);
 end;
@@ -359,6 +372,7 @@ begin
   CountEdits(R.Edits, Eq, Del, Ins);
   Assert.AreEqual(ONE, Del, 'the variant row is gone');
   Assert.AreEqual(0, Ins, 'nothing new');
+  Assert.AreEqual(0, Integer(Length(R.Warnings)), 'the snapshot''s COMMAND equals the given one: ' + JoinWarnings(R.Warnings));
   // none to compare against: exit 2 naming the folder
   var Req2:= StubRequest(csAutoSnapshot, TPath.Combine(FTemp, 'empty'));
   Req2.Command:= Cmd(COMMAND_STUB);
@@ -431,6 +445,98 @@ begin
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Message);
   Assert.AreEqual('cannot compare a forms-csv with a report', R.Message);
   Assert.AreEqual(0, Integer(Length(R.Edits)), 'no diff');
+end;
+
+procedure TCompareTests.AutoSnapshotCommandMeetsGivenCommand;
+begin
+  // R16: the snapshot's own COMMAND (-Depth 3) meets the caller's (no -Depth) like a saved report's
+  var Saved: string;
+  Assert.IsTrue(SaveSnapshot(FTemp, True, QUESTION, TARGET, StubText(COMMAND_STUB), IncDay(AskedAt, -ONE), Saved), 'seed snapshot');
+  var Req:= StubRequest(csAutoSnapshot, FTemp);
+  Req.Command:= Cmd(COMMAND_NO_DEPTH);
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_SAME, R.ExitCode, R.Message);
+  Assert.AreEqual('3', R.OldHeader.Command.Get('Depth'), 'the snapshot''s header was parsed');
+  Assert.AreEqual(ONE, Integer(Length(R.Warnings)), JoinWarnings(R.Warnings));
+  Assert.IsTrue(R.Warnings[0].Contains('Depth: 3 vs (absent)'), R.Warnings[0]);
+  Assert.IsFalse(R.NewHeader.Command.Has('Depth'), 'the GIVEN command was run');
+end;
+
+procedure TCompareTests.GraphRerunKeepsOldSvgAndSavesDot;
+begin
+  var Bundle:= TPath.Combine(FTemp, 'bundle');
+  ForceDirectories(Bundle);
+  TFile.Copy(Fixture('graph', 'who-writes-a.dot'), TPath.Combine(Bundle, 'graph.dot'));
+  TFile.Copy(Fixture('graph', 'who-writes-a.svg'), TPath.Combine(Bundle, 'graph.svg'));
+  var OldSvg:= TFile.ReadAllText(TPath.Combine(Bundle, 'graph.svg'));
+  var Req:= StubRequest(csFile, TPath.Combine(FTemp, 'snap'));
+  Req.OldPath:= Bundle;
+  Req.Command:= Cmd(COMMAND_STUB);
+  Req.SaveSnapshot:= True;
+  // no bundle from the rerun: the refusal names the chart it could not read
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Message);
+  Assert.IsTrue(R.Message.StartsWith('the new run''s chart could not be read from '), R.Message);
+  DeleteFile(R.OldSvgPath); // the temp copy taken before the rerun; False when there is none
+  // the rerun rewrites the very bundle folder the old chart came from
+  SetEnvironmentVariable(BUNDLE_ENV, PChar(Bundle));
+  R:= RunCompare(Req);
+  try
+    Assert.AreEqual(EXIT_DIFFERENT, R.ExitCode, R.Message);
+    Assert.IsTrue(R.Format = cfGraph, 'chart-graph');
+    Assert.AreEqual(GRAPH_NODES_A, Integer(Length(R.OldGraph.Nodes)), 'the old DOT was read before the rerun');
+    Assert.AreEqual(STUB_NEW_SVG, TFile.ReadAllText(TPath.Combine(Bundle, 'graph.svg')), 'the stub did rewrite the bundle');
+    Assert.AreEqual(OldSvg, TFile.ReadAllText(R.OldSvgPath), 'OldSvgPath still holds the OLD svg');
+    Assert.AreEqual(STUB_NEW_SVG, TFile.ReadAllText(R.NewSvgPath), 'NewSvgPath is the new svg');
+    // R18: a chart snapshot is a .dot, so a later compare detects a chart
+    Assert.IsTrue(R.SnapshotPath.EndsWith(SNAPSHOT_EXT_GRAPH), R.SnapshotPath);
+    Assert.IsTrue(DetectFormat(R.SnapshotPath, True) = cfGraph, 'detected as a chart');
+  finally
+    DeleteFile(R.OldSvgPath); // the temp copy; False when there is none
+  end;
+end;
+
+procedure TCompareTests.AllowStaleNeverReachesTheNewRun;
+begin
+  // R17: AllowStale is for the OLD side of S4 only
+  var Req:= StubRequest(csFile, FTemp);
+  Req.OldPath:= WriteTemp(FTemp, 'old.txt', StubText(COMMAND_STUB));
+  Req.Command:= Cmd(COMMAND_STALE);
+  Req.Options.AllowStale:= True;
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_STALE, R.ExitCode, R.Message);
+  Assert.AreEqual(0, Integer(Length(R.Edits)), 'no diff');
+end;
+
+procedure TCompareTests.SaveWithTwoFilesRefused;
+begin
+  var Req:= Default(TCompareRequest);
+  Req.Source:= csTwoFiles;
+  Req.OldPath:= Fixture('forms', 'a.csv');
+  Req.NewPath:= Fixture('forms', 'b.csv');
+  Req.SaveSnapshot:= True;
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Message);
+  Assert.IsTrue(R.Message.StartsWith('save needs a rerun'), R.Message);
+  Assert.AreEqual(0, Integer(Length(R.Edits)), 'no diff');
+end;
+
+procedure TCompareTests.UnchangedRemarksBlockIsExitZero;
+begin
+  // a block pasted from the same answer, rerun with the same variant: nothing changed
+  var Block:= FormatAnswerAsDocInsight(PHRASE, QUESTION, TARGET, AskedAt, StubText(COMMAND_STUB));
+  var Unit_:= WriteTemp(FTemp, 'U.pas', 'unit U;' + #13#10 + 'interface' + #13#10 + Block +
+    'procedure P;' + #13#10 + 'implementation' + #13#10 + 'procedure P; begin end;' + #13#10 + 'end.' + #13#10);
+  var Req:= StubRequest(csRemarks, FTemp);
+  Req.OldPath:= Unit_;
+  Req.OldLine:= UNIT_BLOCK_LINE;
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_SAME, R.ExitCode, R.Message);
+  var Eq, Del, Ins: Integer;
+  CountEdits(R.Edits, Eq, Del, Ins);
+  Assert.AreEqual(0, Del + Ins, 'zero changed edits');
+  Assert.IsTrue(Eq > 0, 'the block has items');
+  Assert.AreEqual(0, Integer(Length(R.Warnings)), JoinWarnings(R.Warnings));
 end;
 
 initialization

@@ -11,6 +11,10 @@
     -Target REFUSE                               -> stderr "ask-report: no such symbol", exit 1
     $env:STUB_VARIANT -eq 'B'                    -> the body carries one more row (so a Compare
                                                     test can force a difference)
+    $env:STUB_BUNDLE = <folder>                 -> writes graph.dot (edge "StubA" -> "StubB") and graph.svg
+                                                    (<svg>NEW</svg>) into that folder and names it on
+                                                    the BUNDLE line, overwriting what is there (so a
+                                                    Compare test sees a rerun rewrite the old bundle)
 
   Parameters the real script takes but the stub ignores are accepted so a command line
   built for the real script runs unchanged.
@@ -58,7 +62,17 @@ $index = $(if ($DbPath) { $DbPath } else { 'C:\stub\index.sqlite' })
 $lines = New-Object System.Collections.Generic.List[string]
 $lines.Add("Who writes this field (drag-lint report $Question) for $sentTarget, asked on 2026-10-10 14:32, engine 1.27.0.")
 $lines.Add($cmd)
-$lines.Add('BUNDLE C:\stub\bundle')
+$bundle = 'C:\stub\bundle'
+if ($env:STUB_BUNDLE) {
+  $bundle = $env:STUB_BUNDLE
+  New-Item -ItemType Directory -Force -Path $bundle | Out-Null
+  [IO.File]::WriteAllText((Join-Path $bundle 'graph.dot'), "digraph G {
+  ""StubA"" -> ""StubB"";
+}
+", [Text.Encoding]::ASCII)
+  [IO.File]::WriteAllText((Join-Path $bundle 'graph.svg'), '<svg>NEW</svg>', [Text.Encoding]::ASCII)
+}
+$lines.Add("BUNDLE $bundle")
 $lines.Add("INDEX $index")
 $lines.Add('Totals: 2 write sites / 2 routines.')
 $lines.Add('  Unit1.TFoo.SetName (Unit1.pas:10)')

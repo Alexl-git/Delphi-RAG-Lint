@@ -11,6 +11,11 @@ interface
 uses
   DRagLint.Charts.ReportHeader;
 
+const
+  /// <summary>TProduceResult.ExitCode when the index is stale and AllowStale was not set
+  /// (Ask-Report's exit 3).</summary>
+  PRODUCER_EXIT_STALE = 3;
+
 type
   /// <summary>How a producer should run one question.</summary>
   TProduceOptions = record
