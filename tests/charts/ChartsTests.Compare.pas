@@ -48,6 +48,7 @@ type
     [Test] procedure AllowStaleNeverReachesTheNewRun;
     [Test] procedure SaveWithTwoFilesRefused;
     [Test] procedure UnchangedRemarksBlockIsExitZero;
+    [Test] procedure AutoGraphSnapshotIsFoundNextTime;
   end;
 
 implementation
@@ -537,6 +538,31 @@ begin
   Assert.AreEqual(0, Del + Ins, 'zero changed edits');
   Assert.IsTrue(Eq > 0, 'the block has items');
   Assert.AreEqual(0, Integer(Length(R.Warnings)), JoinWarnings(R.Warnings));
+end;
+
+procedure TCompareTests.AutoGraphSnapshotIsFoundNextTime;
+begin
+  // seed an auto CHART snapshot (.dot), older than the run below
+  var Seeded: string;
+  Assert.IsTrue(SaveSnapshot(FTemp, True, QUESTION, TARGET, TFile.ReadAllText(Fixture('graph', 'who-writes-a.dot')),
+    IncDay(AskedAt, -ONE), Seeded, SNAPSHOT_EXT_GRAPH), 'seed snapshot');
+  var Bundle:= TPath.Combine(FTemp, 'bundle');
+  SetEnvironmentVariable(BUNDLE_ENV, PChar(Bundle));
+  // run 1: --auto --save of a chart writes a .dot into auto\
+  var Req:= StubRequest(csAutoSnapshot, FTemp);
+  Req.Command:= Cmd(COMMAND_STUB);
+  Req.SaveSnapshot:= True;
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_DIFFERENT, R.ExitCode, R.Message);
+  Assert.IsTrue(R.Format = cfGraph, 'run 1 compared charts');
+  Assert.IsTrue(R.SnapshotPath.EndsWith(SNAPSHOT_EXT_GRAPH), R.SnapshotPath);
+  DeleteFile(R.OldSvgPath); // a temp copy when the seed had an svg; False when there is none
+  // run 2: the auto lookup finds that .dot as the old side
+  Req.SaveSnapshot:= False;
+  R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_SAME, R.ExitCode, R.Message);
+  Assert.IsTrue(R.Format = cfGraph, 'run 2 found the chart snapshot');
+  Assert.IsTrue(R.OldText.Contains('StubA'), 'the old side is run 1''s snapshot, not the seed');
 end;
 
 initialization

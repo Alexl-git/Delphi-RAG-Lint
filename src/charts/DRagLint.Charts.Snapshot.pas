@@ -84,6 +84,17 @@ procedure PruneAutoSnapshots(const pAutoDir, pQuestion, pTarget: string; pKeep: 
 function LatestAutoSnapshot(const pAutoDir, pQuestion, pTarget: string;
   const pExt: string = SNAPSHOT_EXT_REPORT): string;
 
+/// <summary>The newest auto snapshot of one routine, whatever its format.</summary>
+/// <param name="pAutoDir">The auto folder itself.</param>
+/// <param name="pQuestion">Question id.</param>
+/// <param name="pTarget">Target (sanitised here).</param>
+/// <returns>Full path of the snapshot with the greatest stamp across SNAPSHOT_EXT_REPORT,
+/// SNAPSHOT_EXT_GRAPH and SNAPSHOT_EXT_FORMS files, or '' when none. On equal stamps the
+/// report wins, then the graph, then the forms CSV.</returns>
+/// <remarks>Compare saves an auto snapshot with the extension its format is detected by
+/// (R18), so the auto lookup must see all three.</remarks>
+function LatestAutoSnapshotAnyFormat(const pAutoDir, pQuestion, pTarget: string): string;
+
 implementation
 
 uses
@@ -212,6 +223,22 @@ function LatestAutoSnapshot(const pAutoDir, pQuestion, pTarget, pExt: string): s
 begin
   var Files:= StampedFiles(pAutoDir, pQuestion, pTarget, pExt);
   Result:= if Length(Files) > 0 then Files[0].Value else '';
+end;
+
+function LatestAutoSnapshotAnyFormat(const pAutoDir, pQuestion, pTarget: string): string;
+begin
+  Result:= '';
+  var BestStamp:= '';
+  for var Ext in [SNAPSHOT_EXT_REPORT, SNAPSHOT_EXT_GRAPH, SNAPSHOT_EXT_FORMS] do
+  begin
+    var Files:= StampedFiles(pAutoDir, pQuestion, pTarget, Ext);
+    // Strictly greater: on a tie the extension listed first keeps it.
+    if (Length(Files) > 0) and (CompareStr(Files[0].Key, BestStamp) > 0) then
+    begin
+      BestStamp:= Files[0].Key;
+      Result:= Files[0].Value;
+    end;
+  end;
 end;
 
 function SaveSnapshot(const pDir: string; pAuto: Boolean; const pQuestion, pTarget, pPlainText: string; // dl:ok too-many-parameters@14b1 -- the 8th is pExt, a defaulted extension added for R18 so every existing caller keeps its call; a record would break them all

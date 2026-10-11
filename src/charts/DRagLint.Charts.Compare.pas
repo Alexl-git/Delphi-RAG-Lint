@@ -435,7 +435,7 @@ begin
   if pRequest.ProjectFile <> '' then
     SetArg(Locator, ARG_PROJECT, pRequest.ProjectFile);
   var AutoDir:= TPath.Combine(SnapshotDirFor(pRequest, Locator, ''), AUTO_SUBDIR);
-  var Latest:= LatestAutoSnapshot(AutoDir, Locator.Question, TargetWithTo(Locator));
+  var Latest:= LatestAutoSnapshotAnyFormat(AutoDir, Locator.Question, TargetWithTo(Locator));
   if Latest = '' then
     Exit(Refuse(pResult, COMPARE_EXIT_SETUP, Format('no auto snapshot for %s %s under %s',
       [Locator.Question, TargetWithTo(Locator), AutoDir])));
