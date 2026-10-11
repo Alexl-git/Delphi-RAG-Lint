@@ -25,7 +25,7 @@
     OtherPopup     field  FOther: TOtherThing    MUST NOT be listed (project class, unrelated)
     DoClearSpecial field  FSpecial: TSpecialSet  listed (positive control, descendant)
     TBox<T>.Run    field  FItem: T               listed with '?' (type unknown: kept)
-  Plus: the skipped edges are reported on stderr in ONE summary line per run\r
+  Plus: the skipped edges are reported on stderr in ONE summary line per run
   (count + the first few), and doc-drift agrees with the
   block the writer produced (no drift right after --apply + reindex).
 

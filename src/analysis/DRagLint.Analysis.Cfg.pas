@@ -86,7 +86,7 @@ type
     /// -- an object still open when the process ends is not a leak a Free could
     /// fix. A <c>raise</c> block is NOT one: an exception unwinds into the
     /// caller, and the object is lost.</remarks>
-    EndsProcess: Boolean;  // dl:ok public-field -- same data-surface shape as NoReturn above
+    EndsProcess: Boolean;  // dl:ok public-field@53da -- same data-surface shape as NoReturn above
     /// <summary><!-- drag-lint:auto sum -->TCfgBlock</summary>
     /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
@@ -706,12 +706,12 @@ type
     { C14: >0 while emitting the BODY of a try..except whose handler is empty.
       A raise / Abort there is swallowed and control returns to the caller, so
       it is not marked NoReturn -- see TCfgBlock.NoReturn. }
-    SwallowDepth: Integer;
+    SwallowDepth: Integer; // dl:ok public-field@dc7b -- TBuilderState is implementation-private; every field is public builder state, like Cfg/Loops/DivertBlocks
     { C14: whether a BARE `Abort` / `Halt` in this routine may be a user routine
       rather than the RTL one. Computed on first need (a bare Abort/Halt is rare
       and the answer walks the whole unit): 0 = not yet, 1 = RTL, 2 = maybe user. }
-    BareAbortKind: Integer;
-    BareHaltKind : Integer;
+    BareAbortKind: Integer; // dl:ok public-field@b4cf -- TBuilderState is implementation-private; every field is public builder state, like Cfg/Loops/DivertBlocks
+    BareHaltKind : Integer; // dl:ok public-field@f42b -- TBuilderState is implementation-private; every field is public builder state, like Cfg/Loops/DivertBlocks
     function BareIsRtl(const AName: string): Boolean;
     constructor Create(ACfg: TCfg);
     destructor Destroy; override;
@@ -726,17 +726,21 @@ type
   '.': 'TBox<T>.Get' -> ['tbox', 'get']. }
 function DottedSegments(const AText: string): TArray<string>;
 var
-  S    : string;
+  SB   : TStringBuilder;
   Depth: Integer;
   Ch   : Char;
 begin
-  S    := '';
   Depth:= 0;
-  for Ch in LowerCase(AText) do
-    if Ch = '<' then Inc(Depth)
-    else if Ch = '>' then Dec(Depth)
-    else if (Depth = 0) and (Ch > ' ') then S := S + Ch;
-  Result := S.Split(['.']);
+  SB   := TStringBuilder.Create(Length(AText));
+  try
+    for Ch in LowerCase(AText) do
+      if Ch = '<' then Inc(Depth)
+      else if Ch = '>' then Dec(Depth)
+      else if (Depth = 0) and (Ch > ' ') then SB.Append(Ch);
+    Result := SB.ToString.Split(['.']);
+  finally
+    SB.Free;
+  end;
 end;
 
 { C14. The last segment of a (possibly qualified, possibly generic) name. }
