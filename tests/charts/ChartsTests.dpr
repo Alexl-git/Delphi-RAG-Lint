@@ -20,6 +20,8 @@ uses
   , DUnitX.Loggers.Console
   , DRagLint.Charts.Diff in '..\..\src\charts\DRagLint.Charts.Diff.pas'
   , ChartsTests.Diff in 'ChartsTests.Diff.pas'
+  , DRagLint.Charts.ReportHeader in '..\..\src\charts\DRagLint.Charts.ReportHeader.pas'
+  , ChartsTests.ReportHeader in 'ChartsTests.ReportHeader.pas'
   ;
 
 const
