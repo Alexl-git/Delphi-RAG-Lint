@@ -18,6 +18,7 @@ uses
   , ConvRules.Engine
   , ConvRules.ConvertRun
   , ConvRules.ConvertRequest
+  , ConvRules.WorkList
   ;
 
 const
@@ -27,6 +28,19 @@ const
   /// <summary>The run report's Status column on a glyph outcome line
   /// (GlyphReportLines).</summary>
   REPORT_STATUS_GLYPH = 'glyph';
+  /// <summary>The run report's Status column on a cast-not-applied line (ApplyItemReportLines).</summary>
+  REPORT_STATUS_CAST_SITE = 'cast site';
+  /// <summary>The run report's Status column on a value-cast-applied line.</summary>
+  REPORT_STATUS_VALUE_CAST = 'value cast';
+  /// <summary>The run report's Status column on a value-cast-check line.</summary>
+  REPORT_STATUS_VALUE_CHECK = 'value check';
+  /// <summary>The run report's Status column on a uses[] line is this + the row's action
+  /// ('uses add', 'uses kept', ...); an unresolved entry is 'uses unresolved'.</summary>
+  REPORT_STATUS_USES = 'uses ';
+  /// <summary>convert-apply's exit code for a CONFIGURATION error -- an unusable cast
+  /// library (engine 1.28.0; 2 stays write failure / rollback, 1 a unit failure). It
+  /// stops the whole run: every later apply would fail the same way.</summary>
+  ENGINE_EXIT_CONFIG = 6;
 
 type
   /// <summary>Outcome of one results-grid row.</summary>
@@ -60,8 +74,14 @@ type
   /// csOutOfScope: a scoped run (IDE request) found no selected instance of this
   ///   book's From types on the unit; no engine call, no backup kept for it, the
   ///   unit's later books still run.
+  /// csConfigError: convert-apply exited ENGINE_EXIT_CONFIG (the cast library is
+  ///   unusable). The RUN stops: no later book or unit is tried. The unit is restored
+  ///   only when an earlier book had changed it (its rows become csRolledBack); else
+  ///   nothing is restored and the backup is dropped, as for a first-book refusal.
+  ///   Note = the engine's error text. TConvertRow.StoppedRun marks the stop, also when a
+  ///   failed restore turns the row into csRestoreFailed.
   /// </remarks>
-  TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed, csRefused, csOutOfScope);
+  TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed, csRefused, csOutOfScope, csConfigError);
 
   /// <summary>One results-grid row: a book x unit, or a unit-level skip.</summary>
   TConvertRow = record
@@ -84,6 +104,10 @@ type
     Status : TConvertStatus;
     /// <summary>The engine's report when convert-apply ran.</summary>
     Apply  : TApplyRow;
+    /// <summary>True on the row whose apply exited ENGINE_EXIT_CONFIG: the RUN stopped
+    /// here. Set whatever the restore did -- the row is csConfigError, or
+    /// csRestoreFailed when the restore of an earlier book's change failed.</summary>
+    StoppedRun: Boolean;
   end;
 
   /// <summary>Everything a run needs; built by the Convert tab.</summary>
@@ -112,6 +136,12 @@ type
     /// binds Scope.UnitPas only (ScopedNamesForUnit): any other unit is converted
     /// whole.</summary>
     Scope: TConvertScope;
+    /// <summary>The engine's 1.27.0 apply/1 features (ApplyFeaturesOf the tab's
+    /// capability probe); [] = an older engine, read as before.</summary>
+    ApplyFeatures: TApplyFeatures;
+    /// <summary>The Convert tab's run counter (1, 2, ...); the run's Work list rows
+    /// carry it (WorkRunOf), so a new run replaces the list and never mixes with it.</summary>
+    RunId: Integer;
   end;
 
   /// <summary>Called once per row (worker thread!). A unit's rows arrive
@@ -215,9 +245,12 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// its .dfm (SharedBackupPaths), deleted again when no book changed the unit.
 /// A failed or refused apply, or a failed reindex, restores the unit, rewrites its earlier
 /// csConverted rows to csRolledBack and stops its remaining books -- except a refusal
-/// on a unit nothing has changed yet, which restores nothing and drops the backup. Never
-/// raises: file I/O failures and exceptions from AApply / AIndex become row
-/// outcomes (see TConvertStatus).</remarks>
+/// on a unit nothing has changed yet, which restores nothing and drops the backup. An
+/// apply returning ENGINE_EXIT_CONFIG gives a csConfigError row and stops the RUN (no
+/// later book or unit). This test seam reads the apply/1 output with every 1.27.0
+/// feature (ParseApplyJson's default); the TConvertJob overload uses
+/// TConvertJob.ApplyFeatures. Never raises: file I/O failures and exceptions from
+/// AApply / AIndex become row outcomes (see TConvertStatus).</remarks>
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False): TArray<TConvertRow>; overload;
 
 /// <summary>The TApplyFn overload with a step callback (C16): the test seam of the
@@ -284,7 +317,7 @@ function AdvanceStep(const AStep: TRunStep; AMs: Int64): TRunStep;
 /// <param name="AStatus">The status.</param>
 /// <returns>'converted', 'FAILED -- restored', 'book skipped', 'unit skipped',
 /// 'rolled back', 'FAILED -- NOT restored', 'refused -- not changed',
-/// 'skipped -- not in scope'.</returns>
+/// 'skipped -- not in scope', 'stopped -- cast library unusable'.</returns>
 function ConvertStatusText(AStatus: TConvertStatus): string;
 
 type
@@ -306,6 +339,8 @@ type
     OutOfScope : Integer;
     /// <summary>File names of the csRestoreFailed rows' units, row order.</summary>
     NotRestored: TArray<string>;
+    /// <summary>csConfigError rows (0 or 1: the first one stops the run).</summary>
+    ConfigErrors: Integer;
   end;
 
 /// <summary>PURE: counts ARows by status.</summary>
@@ -365,6 +400,35 @@ function InheritedReportLines(const ARow: TConvertRow; AInheritedSupported, ARet
 /// restored away (the same rule as GlyphTodoUnitCount).</returns>
 function GlyphReportLines(const ARow: TConvertRow): TArray<string>;
 
+/// <summary>PURE: the run report's engine 1.27.0 lines for one row, in the same 8
+/// tab-separated columns as every report row -- Book, Unit, Status, four empty cells,
+/// Note: one per CastSites entry (REPORT_STATUS_CAST_SITE), ValueCasts entry
+/// (REPORT_STATUS_VALUE_CAST) and ValueChecks entry (REPORT_STATUS_VALUE_CHECK), Note
+/// ApplyItemReportNote; then one per UsesRows row (REPORT_STATUS_USES + its action, Note
+/// UsesReportNote) and one per UsesUnresolved entry ('uses unresolved', Note the
+/// entry).</summary>
+/// <param name="ARow">A run row.</param>
+/// <returns>[] unless ARow is csConverted (a rolled-back row's changes were restored
+/// away, as for GlyphReportLines).</returns>
+function ApplyItemReportLines(const ARow: TConvertRow): TArray<string>;
+
+/// <summary>PURE: the run-level error of a run a cast library stopped (exit
+/// ENGINE_EXIT_CONFIG).</summary>
+/// <param name="ARows">The run's rows.</param>
+/// <param name="ACastLib">The cast library the run passed ('' = none).</param>
+/// <returns>'' when no row has StoppedRun; else 'Convert stopped: the cast library
+/// &lt;path&gt; is unusable -- &lt;engine text&gt;', the text being that row's Apply.Error (also
+/// when its restore failed and it is csRestoreFailed) and the path '(none)' when ACastLib
+/// is ''.</returns>
+function CastLibStopText(const ARows: TArray<TConvertRow>; const ACastLib: string): string;
+
+/// <summary>PURE: the units a configuration stop kept from running.</summary>
+/// <param name="ARows">The run's rows.</param>
+/// <param name="AUnits">The job's units, run order.</param>
+/// <returns>The units after the StoppedRun row's unit, in AUnits order; [] when no row has
+/// StoppedRun (or its unit is not in AUnits).</returns>
+function NotReachedAfterStop(const ARows: TArray<TConvertRow>; const AUnits: TArray<string>): TArray<string>;
+
 /// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
 /// <param name="ARows">The run's rows.</param>
 /// <returns>The number of distinct UnitPas (compared case-insensitively) with at least
@@ -377,11 +441,25 @@ function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
 /// <param name="ANotRestored">Units whose restore failed (may be half-converted); [] = none.</param>
 /// <param name="AGlyphSummary">GlyphRunSummary of the run; '' = no glyph to-dos.</param>
 /// <param name="ABody">The ordinary summary (counts, problems, report path).</param>
+/// <param name="AStop">CastLibStopText of the run; '' = the run did not stop.</param>
 /// <returns>'RESTORE FAILED for &lt;units&gt; -- may be half-converted; restore by hand from the
-/// backups its row names. ' when ANotRestored is not empty, then AGlyphSummary + two spaces
-/// when it is set, then ABody. A half-converted unit always leads; the glyph to-dos come
-/// next.</returns>
-function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
+/// backups its row names. ' when ANotRestored is not empty, then AStop + '. ' when it is
+/// set (no second '.' when AStop already ends with one), then AGlyphSummary + two spaces
+/// when it is set, then ABody. A half-converted unit always leads; the run's stop comes
+/// next, then the glyph to-dos.</returns>
+function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string; const AStop: string = ''): string;
+
+/// <summary>PURE: a finished run's Work list (engine 1.27.0 pas_uses[]).</summary>
+/// <param name="ARows">The run's rows.</param>
+/// <param name="ARunId">The run's id (TConvertJob.RunId).</param>
+/// <param name="APasUses">The run's engine reports pas_uses (afPasUses in the job's
+/// ApplyFeatures).</param>
+/// <returns>State wlsNoCapability without APasUses; else wlsNoConverted when no row is
+/// csConverted; else wlsRows with the Apply.PasUses of every csConverted row, each
+/// stamped with ARunId and that row's full UnitPas. A row repeated exactly (two books on
+/// one unit reporting the same global) is kept once. A csRolledBack row counts nowhere:
+/// its change was restored away.</returns>
+function WorkRunOf(const ARows: TArray<TConvertRow>; ARunId: Integer; APasUses: Boolean): TWorkRun;
 
 implementation
 
@@ -390,7 +468,7 @@ uses
   , System.StrUtils
   , System.Diagnostics
   , ConvRules.Glyph
-  , ConvRules.UnitStatus  // dl:ok unused-unit-in-uses@ec0d -- REVIEWED 2026-09-29 false positive: TFileProbe (FileProbe's return type) is declared here; removing the unit fails with E2003
+  , ConvRules.UnitStatus  // TFileProbe (FileProbe's return type) is declared here
   ;
 
 const
@@ -408,6 +486,7 @@ begin
     csRestoreFailed : Result:= 'FAILED -- NOT restored';
     csRefused       : Result:= 'refused -- not changed';
     csOutOfScope    : Result:= 'skipped -- not in scope';
+    csConfigError   : Result:= 'stopped -- cast library unusable';
     else              Result:= 'FAILED -- NOT restored';
   end;
 end;
@@ -425,6 +504,7 @@ begin
       csRestoreFailed : Result.NotRestored:= Result.NotRestored + [ExtractFileName(LRow.UnitPas)];
       csRefused       : Inc(Result.Refused);
       csOutOfScope    : Inc(Result.OutOfScope);
+      csConfigError   : Inc(Result.ConfigErrors);
     end; // case
 end;
 
@@ -476,6 +556,61 @@ begin
     Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_GLYPH, '', '', '', '', GlyphReportNote(LG)])];
 end;
 
+function ApplyItemReportLines(const ARow: TConvertRow): TArray<string>;
+
+  function Line(const AStatus, ANote: string): string;
+  begin
+    Result:= string.Join(#9, [ARow.Book, ARow.UnitPas, AStatus, '', '', '', '', ANote]);
+  end;
+
+begin
+  Result:= nil;
+  if ARow.Status <> csConverted then
+    Exit;
+  for var LItem: TApplyItem in ARow.Apply.CastSites do
+    Result:= Result + [Line(REPORT_STATUS_CAST_SITE, ApplyItemReportNote(LItem))];
+  for var LItem: TApplyItem in ARow.Apply.ValueCasts do
+    Result:= Result + [Line(REPORT_STATUS_VALUE_CAST, ApplyItemReportNote(LItem))];
+  for var LItem: TApplyItem in ARow.Apply.ValueChecks do
+    Result:= Result + [Line(REPORT_STATUS_VALUE_CHECK, ApplyItemReportNote(LItem))];
+  for var LUses: TUsesRow in ARow.Apply.UsesRows do
+    Result:= Result + [Line(REPORT_STATUS_USES + LUses.Action, UsesReportNote(LUses))];
+  for var LText: string in ARow.Apply.UsesUnresolved do
+    Result:= Result + [Line(REPORT_STATUS_USES + 'unresolved', LText)];
+end;
+
+// The index of the row that stopped the run (StoppedRun); -1 when there is none.
+function ConfigErrorAt(const ARows: TArray<TConvertRow>): Integer;
+begin
+  for var I: Integer:= 0 to High(ARows) do
+    if ARows[I].StoppedRun then
+      Exit(I);
+  Result:= -1;
+end;
+
+function CastLibStopText(const ARows: TArray<TConvertRow>; const ACastLib: string): string;
+var
+  LAt: Integer;
+begin
+  LAt:= ConfigErrorAt(ARows);
+  if LAt < 0 then
+    Exit('');
+  Result:= Format('Convert stopped: the cast library %s is unusable -- %s', [if ACastLib = '' then '(none)' else ACastLib, ARows[LAt].Apply.Error]);
+end;
+
+function NotReachedAfterStop(const ARows: TArray<TConvertRow>; const AUnits: TArray<string>): TArray<string>;
+var
+  LAt: Integer;
+begin
+  Result:= nil;
+  LAt:= ConfigErrorAt(ARows);
+  if LAt < 0 then
+    Exit;
+  for var I: Integer:= 0 to High(AUnits) do
+    if SameText(AUnits[I], ARows[LAt].UnitPas) then
+      Exit(Copy(AUnits, I + 1, Length(AUnits) - I - 1));
+end;
+
 function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
 var
   LUnits: TArray<string>;
@@ -487,11 +622,13 @@ begin
   Result:= Length(LUnits);
 end;
 
-function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
+function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string; const AStop: string): string;
 begin
   Result:= ABody;
   if AGlyphSummary <> '' then
     Result:= AGlyphSummary + '  ' + Result;
+  if AStop <> '' then
+    Result:= (if AStop.EndsWith('.') then AStop + ' ' else AStop + '. ') + Result;
   if Length(ANotRestored) > 0 then
     Result:= Format('RESTORE FAILED for %s -- may be half-converted; restore by hand from the backups its row names. ', [string.Join(', ', ANotRestored)]) + Result;
 end;
@@ -525,7 +662,7 @@ begin
 end;
 
 // The ONE unit loop (the public TApplyOnlyFn overload is it without a step callback).
-function RunUnitLoop(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn; const AOnStep: TRunStepFn): TArray<TConvertRow>; forward;
+function RunUnitLoop(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn; const AOnStep: TRunStepFn; AFeatures: TApplyFeatures): TArray<TConvertRow>; forward;
 
 // The TConvertJob overload's body, with the step callback.
 function RunJobUnits(const AUnits, ABooks: TArray<string>; const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn): TArray<TConvertRow>; forward;
@@ -567,7 +704,7 @@ begin
     function(const AOnly: TArray<string>): string
     begin
       Result:= UnmatchedOnlyHintFor(LJob.Scope, AOnly);
-    end, AOnStep);
+    end, AOnStep, LJob.ApplyFeatures);
 end;
 
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@8e04 -- REVIEWED 2026-10-06 the test-injection twin of the TConvertJob overload: two engine seams plus the job's two capability flags (InheritedSupported, RetypeSupported); a record for the two flags would be one more type used only here
@@ -591,15 +728,15 @@ begin
       ANames:= nil;
       Result:= False;
     end,
-    AProgress, ACancelled, AInheritedSupported, ARetypeSupported, nil, AOnStep);
+    AProgress, ACancelled, AInheritedSupported, ARetypeSupported, nil, AOnStep, [Low(TApplyFeature)..High(TApplyFeature)]);
 end;
 
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@092f -- REVIEWED 2026-10-10 the public scope-seam entry point, unchanged since C12 (its 2026-10-06 review moved with the body to RunUnitLoop)
 begin
-  Result:= RunUnitLoop(AUnits, ABooks, AApply, AIndex, AScope, AProgress, ACancelled, AInheritedSupported, ARetypeSupported, AOnlyHint, nil);
+  Result:= RunUnitLoop(AUnits, ABooks, AApply, AIndex, AScope, AProgress, ACancelled, AInheritedSupported, ARetypeSupported, AOnlyHint, nil, [Low(TApplyFeature)..High(TApplyFeature)]);
 end;
 
-function RunUnitLoop(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn; const AOnStep: TRunStepFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@ace4 -- REVIEWED 2026-10-10 (C16: + the step callback) the ONE unit loop: four engine/scope seams (apply, index, scope, unmatched-name hint), progress, cancel and the job's two capability flags; the TConvertJob overload is the record-shaped entry point
+function RunUnitLoop(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn; const AOnStep: TRunStepFn; AFeatures: TApplyFeatures): TArray<TConvertRow>;  // dl:ok too-many-parameters@5a9d -- REVIEWED 2026-10-11 (C16: + the step callback; editor-1270: + the apply/1 feature set) the ONE unit loop: four engine/scope seams (apply, index, scope, unmatched-name hint), progress, cancel and the job's capability flags and feature set; the TConvertJob overload is the record-shaped entry point
 var
   Rows    : TArray<TConvertRow>;
   UnitRows: TArray<TConvertRow>; // the current unit's rows, emitted when it finishes
@@ -616,6 +753,7 @@ var
   UnitAt  : Int64;          // Watch's milliseconds when CurUnit started
   BookNo  : Integer;        // 1-based position in ABooks of the book running now; 0 = none
   StepsOff: Boolean;        // AOnStep raised once: no further steps this run
+  Stopped : Boolean;        // an apply exited ENGINE_EXIT_CONFIG: no further unit runs
 
   // C16: tells AOnStep that APhase starts now. Advisory: a raising callback never
   // stops the run (this routine never raises, see the declaration).
@@ -745,20 +883,24 @@ var
   end;
 
   // Row is the failing book's row; restore the unit and account for its earlier rows.
-  // AStatus is the failing row's status: csFailedRestored, or csRefused.
+  // AStatus is the failing row's status: csFailedRestored, csRefused or csConfigError.
   procedure FailUnit(const AReason: string; AStatus: TConvertStatus);
   var
     LError: string;
     LVerb : string;
   begin
-    // A refusal leaves the file untouched (engine contract). When no earlier book
-    // changed the unit either, there is nothing to restore and the backup is not
+    // The run stop is recorded on the row whatever the restore below does: a failed
+    // restore makes the row csRestoreFailed, and the stop must not be lost with it.
+    Row.StoppedRun:= AStatus = csConfigError;
+    // A refusal leaves the file untouched (engine contract), and so does a castlib
+    // configuration error (the engine stops before it plans an edit). When no earlier
+    // book changed the unit either, there is nothing to restore and the backup is not
     // needed: RunUnit drops it, as for a skipped book (owner decision, 2026-10-04).
-    if (AStatus = csRefused) and not Changed then
+    if (AStatus in [csRefused, csConfigError]) and not Changed then
     begin
       Row.Backup   := '';
       Row.BackupDfm:= '';
-      Row.Status   := csRefused;
+      Row.Status   := AStatus;
       Row.Note     := AReason;
       Add;
       Exit;
@@ -773,7 +915,11 @@ var
       Add;
       Exit;
     end;
-    LVerb:= if AStatus = csRefused then 'was refused' else 'failed';
+    case AStatus of
+      csRefused    : LVerb:= 'was refused';
+      csConfigError: LVerb:= 'stopped the run (cast library unusable)';
+      else           LVerb:= 'failed';
+    end; // case
     for var I: Integer:= 0 to High(UnitRows) do
       if UnitRows[I].Status = csConverted then
       begin
@@ -793,7 +939,7 @@ var
   begin
     try
       LCode:= AIndex(LOutput);
-    except  // dl:ok try-except-swallowed@6298 -- REVIEWED 2026-09-29 not swallowed: becomes a failed reindex, so the unit is restored (or skipped) and the row carries the message
+    except  // not swallowed: becomes a failed reindex, so the unit is restored (or skipped) and the row carries the message
       on E: Exception do
       begin
         LOutput:= 'reindex raised: ' + E.Message;
@@ -829,6 +975,7 @@ var
     LOnly  : TArray<string>;
     LScoped: Boolean;
     LReason: string;
+    LCode  : Integer;
   begin
     Result:= True;
     Row:= Default(TConvertRow);
@@ -847,18 +994,21 @@ var
       Exit; // Result = True: the unit's next book still runs
     end;
     Step(rpApply);
+    LCode:= -1;
     try
-      // A non-zero exit shows up as ok=false or unparseable text in ParseApplyJson.
-      AApply(CurUnit, ABook, LOnly, LJson);
-    except  // dl:ok try-except-swallowed@3c3c -- REVIEWED 2026-09-29 not swallowed: the message becomes unparseable apply output, so the unit is restored and the row names it
+      // A non-zero exit shows up as ok=false or unparseable text in ParseApplyJson;
+      // only ENGINE_EXIT_CONFIG is read from the code itself.
+      LCode:= AApply(CurUnit, ABook, LOnly, LJson);
+    except  // not swallowed: the message becomes unparseable apply output, so the unit is restored and the row names it
       on E: Exception do
         LJson:= 'engine call raised: ' + E.Message; // unparseable -> the unit is restored
     end; // try
-    Row.Apply:= ParseApplyJson(LJson);
+    Row.Apply:= ParseApplyJson(LJson, AFeatures);
     // A refusal is about THIS unit, even when it also lists rule_errors: it takes the
     // refused path below and leaves the book valid for the next unit.
     // An edit-set refusal (engine 1.25.1+) is a unit failure, never a book error.
-    if (not Row.Apply.Ok) and (Row.Apply.RuleErrorCount > 0) and not Row.Apply.Refused and not ApplyEditSetRefused(Row.Apply) then
+    // Engine 1.28.0 exit ENGINE_EXIT_CONFIG outranks both (see below).
+    if (LCode <> ENGINE_EXIT_CONFIG) and (not Row.Apply.Ok) and (Row.Apply.RuleErrorCount > 0) and not Row.Apply.Refused and not ApplyEditSetRefused(Row.Apply) then
     begin
       // The BOOK is invalid; the engine validates before writing, so this unit
       // is untouched by it. Skip the book for the rest of the run.
@@ -870,17 +1020,27 @@ var
       Add;
       Exit;
     end;
-    if not Row.Apply.Ok then
+    if (LCode = ENGINE_EXIT_CONFIG) or not Row.Apply.Ok then
     begin
-      // The E10 hint only on a scoped run: an unscoped run never asked for --only.
-      LReason:= if ApplyEditSetRefused(Row.Apply) then EditSetRefusedNote(Row.Apply) else Row.Apply.Error;
-      if LScoped and Row.Apply.Refused then
-        LReason:= LReason + RefusalHint(LReason)
-      else if LScoped and (Row.Apply.EditsCount = 0) and not ApplyEditSetRefused(Row.Apply) then
-        LReason:= LReason + (if Assigned(AOnlyHint) then AOnlyHint(LOnly) else UnmatchedOnlyHint(LOnly)); // measured shape of an --only name that matches nothing
-      // An edit-set refusal (1.25.1+) wrote nothing, like a refusal: FailUnit's
-      // csRefused path restores only when an earlier book changed the unit.
-      FailUnit(LReason, if Row.Apply.Refused or ApplyEditSetRefused(Row.Apply) then csRefused else csFailedRestored);
+      if LCode = ENGINE_EXIT_CONFIG then
+      begin
+        // Engine 1.28.0: an unusable cast library is the RUN's configuration error,
+        // never a unit or book error -- the next apply would fail the same way.
+        Stopped:= True;
+        FailUnit(Row.Apply.Error, csConfigError);
+      end
+      else
+      begin
+        // The E10 hint only on a scoped run: an unscoped run never asked for --only.
+        LReason:= if ApplyEditSetRefused(Row.Apply) then EditSetRefusedNote(Row.Apply) else Row.Apply.Error;
+        if LScoped and Row.Apply.Refused then
+          LReason:= LReason + RefusalHint(LReason)
+        else if LScoped and (Row.Apply.EditsCount = 0) and not ApplyEditSetRefused(Row.Apply) then
+          LReason:= LReason + (if Assigned(AOnlyHint) then AOnlyHint(LOnly) else UnmatchedOnlyHint(LOnly)); // measured shape of an --only name that matches nothing
+        // An edit-set refusal (1.25.1+) wrote nothing, like a refusal: FailUnit's
+        // csRefused path restores only when an earlier book changed the unit.
+        FailUnit(LReason, if Row.Apply.Refused or ApplyEditSetRefused(Row.Apply) then csRefused else csFailedRestored);
+      end;
       Exit(False);
     end;
     // ok=true and exit 0, but the engine refused one file's edit set and wrote the
@@ -972,6 +1132,7 @@ begin
   UnitAt:= 0;
   BookNo:= 0;
   StepsOff:= False;
+  Stopped := False;
   for CurUnit in AUnits do
   begin
     Inc(UnitNo);
@@ -981,8 +1142,56 @@ begin
       Break;
     RunUnit;
     Flush;
+    if Stopped then
+      Break; // a castlib configuration error: every later apply would fail the same way
   end; // for units
   Result:= Rows;
+end;
+
+// WorkRunOf's identity of a row: the unit and every pas_uses field, so only an exact
+// repeat is dropped (compared case-insensitively, as Pascal names are).
+function PasUseKey(const ARow: TPasUseRow; const ALines: string): string;
+begin
+  Result:= string.Join(#9, [ARow.UnitPas, ARow.Instance, ARow.FromType, ARow.ToType, ARow.Member, ARow.Kind,
+    ARow.Visibility, ARow.Status, ARow.DeclaringUnit, ARow.DeclaredIn, ALines, ARow.Resolution, string.Join(',', ARow.Candidates)]);
+end;
+
+function WorkRunOf(const ARows: TArray<TConvertRow>; ARunId: Integer; APasUses: Boolean): TWorkRun;
+var
+  LSeen : TArray<string>;
+  LKey  : string;
+  LLines: string;
+  LUse  : TPasUseRow;
+begin
+  Result:= Default(TWorkRun);
+  Result.RunId:= ARunId;
+  if not APasUses then
+  begin
+    Result.State:= wlsNoCapability;
+    Exit;
+  end;
+  Result.State:= wlsNoConverted;
+  LSeen:= nil;
+  for var LRow: TConvertRow in ARows do
+  begin
+    if LRow.Status <> csConverted then
+      Continue;
+    Result.State:= wlsRows;
+    for var LParsed: TPasUseRow in LRow.Apply.PasUses do
+    begin
+      LUse:= LParsed;
+      LUse.RunId  := ARunId;
+      LUse.UnitPas:= LRow.UnitPas;
+      LLines:= '';
+      for var LLine: Integer in LUse.Lines do
+        LLines:= LLines + IntToStr(LLine) + ',';
+      LKey:= PasUseKey(LUse, LLines);
+      if MatchText(LKey, LSeen) then
+        Continue;
+      LSeen:= LSeen + [LKey];
+      Result.Rows:= Result.Rows + [LUse];
+    end;
+  end;
 end;
 
 end.
