@@ -15,7 +15,9 @@ unit DRagLint.Charts.Adapter.Graph;
   PORT (the focus box) maps `nid` to its first such identity; a node with no HREF
   cells maps to its id. Edge statements `A[:pN] -> B[:pM] [...]` resolve through that
   map (an unknown port or a bare id with no single identity falls back to the id
-  itself, so a hand-written edge is still compared, just under its DOT name).
+  itself, so a hand-written edge is still compared, just under its DOT name). A node id or
+  port is a bare word (`nw`) or a double-quoted string (`"nw box"`); the quotes are not part
+  of the identity.
 
   Item keys are ordinal: the emitter prints qualified names exactly as the index stores
   them. PS trap handled: PowerShell hashtable keys, -eq and Sort-Object are
@@ -62,7 +64,8 @@ type
 /// <param name="pDotText">The whole graph.dot; single-line HTML labels as the emitters
 /// write them; CRLF or LF line ends.</param>
 /// <returns>The model. Text that is not such a DOT gives an empty model, never an
-/// exception.</returns>
+/// exception; an entity that is not a character (a lone surrogate, past U+10FFFF) is kept
+/// as written.</returns>
 /// <remarks>Duplicate nodes and edges (same identity) collapse into one: a chart is a
 /// set. Pure; thread-safe.</remarks>
 function ParseDot(const pDotText: string): TGraphModel;
@@ -97,20 +100,24 @@ const
   BUNDLE_SVG = 'graph.svg';
   EXT_DOT = '.dot';
   EXT_SVG = '.svg';
-  RE_NODE = '^\s*(\w+)\s*\[label=<(.*)>\];';
+  // a DOT id is a bare word or a double-quoted string; the quotes are not part of it
+  RE_NODE = '^\s*(\w+|"[^"]*")\s*\[label=<(.*)>\];';
   RE_CELL = '<TD([^>]*)>(.*?)</TD>';
   RE_PORT = '\bPORT="([^"]*)"';
   RE_HREF = '\bHREF="([^"]*)"';
   RE_TITLE = '\bTITLE="([^"]*)"';
   RE_FONT = '<FONT[^>]*>(.*?)</FONT>';
   RE_TAG = '<[^>]*>';
-  RE_EDGE = '^\s*(\w+)(?::(\w+))?\s*->\s*(\w+)(?::(\w+))?';
+  RE_EDGE = '^\s*(\w+|"[^"]*")(?::(\w+|"[^"]*"))?\s*->\s*(\w+|"[^"]*")(?::(\w+|"[^"]*"))?';
   RE_ENTITY = '&(#x[0-9A-Fa-f]+|#[0-9]+|amp|lt|gt|quot|apos);';
   HEX_BASE = '$';
   ENT_HEX = 'x';
   ENT_KIND_AT = 2;
   ENT_HEX_FROM = 3;
   MAX_CODE_POINT = $10FFFF;
+  SURROGATE_FIRST = $D800;
+  SURROGATE_LAST = $DFFF;
+  G_FROM_ID = 1;
   G_FROM_PORT = 2;
   G_TO_ID = 3;
   G_TO_PORT = 4;
@@ -126,10 +133,18 @@ begin
   else Result:= '';
 end;
 
-{ A trailing optional group that did not take part is absent from Groups, not empty. }
+{ A DOT id without its quotes: '"nw box"' is the id 'nw box'; a bare id is itself. }
+function Unquote(const pId: string): string;
+begin
+  if (Length(pId) >= 2) and (pId[1] = '"') and (pId[Length(pId)] = '"') then Result:= Copy(pId, 2, Length(pId) - 2)
+  else Result:= pId;
+end;
+
+{ A trailing optional group that did not take part is absent from Groups, not empty. The id
+  it holds is returned unquoted. }
 function GroupOf(const pMatch: TMatch; pIndex: Integer): string;
 begin
-  if pIndex < pMatch.Groups.Count then Result:= pMatch.Groups[pIndex].Value
+  if pIndex < pMatch.Groups.Count then Result:= Unquote(pMatch.Groups[pIndex].Value)
   else Result:= '';
 end;
 
@@ -144,7 +159,9 @@ begin
   var Code: Integer;
   if (Length(Name) > 1) and (Name[ENT_KIND_AT] = ENT_HEX) then Code:= StrToIntDef(HEX_BASE + Copy(Name, ENT_HEX_FROM, MaxInt), -1)
   else Code:= StrToIntDef(Copy(Name, 2, MaxInt), -1);
-  if (Code > 0) and (Code <= MAX_CODE_POINT) then Result:= Char.ConvertFromUtf32(Code)
+  // a lone surrogate is not a character, and ConvertFromUtf32 raises on one: keep it as written
+  if (Code > 0) and (Code <= MAX_CODE_POINT) and ((Code < SURROGATE_FIRST) or (Code > SURROGATE_LAST)) then
+    Result:= Char.ConvertFromUtf32(Code)
   else Result:= pMatch.Value;
 end;
 
@@ -209,7 +226,7 @@ begin
     begin
       var NM:= TRegEx.Match(Line, RE_NODE);
       if not NM.Success then Continue;
-      var Nid:= NM.Groups[1].Value;
+      var Nid:= Unquote(NM.Groups[1].Value);
       var HrefCells:= 0;
       for var CM in TRegEx.Matches(NM.Groups[2].Value, RE_CELL, [roSingleLine]) do
       begin
@@ -250,8 +267,8 @@ begin
       if TRegEx.IsMatch(Line, RE_NODE) then Continue;
       var EM:= TRegEx.Match(Line, RE_EDGE);
       if not EM.Success then Continue;
-      var FromId:= Resolve(EM.Groups[1].Value, GroupOf(EM, G_FROM_PORT));
-      var ToId:= Resolve(EM.Groups[G_TO_ID].Value, GroupOf(EM, G_TO_PORT));
+      var FromId:= Resolve(GroupOf(EM, G_FROM_ID), GroupOf(EM, G_FROM_PORT));
+      var ToId:= Resolve(GroupOf(EM, G_TO_ID), GroupOf(EM, G_TO_PORT));
       var Key:= FromId + EDGE_ARROW + ToId;
       if EdgeIds.ContainsKey(Key) then Continue;
       EdgeIds.Add(Key, True);

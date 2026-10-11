@@ -28,12 +28,13 @@ type
     [Test] procedure HtmlFadesRemovedNodeInOldSvg;
     [Test] procedure HtmlEscapesReportText;
     [Test] procedure ShowAsPageRendersPlainReport;
+    [Test] procedure HostileSvgIsDefusedOnBothPages;
   end;
 
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.JSON,
+  System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.RegularExpressions,
   DRagLint.Charts.Diff, DRagLint.Charts.ReportHeader, DRagLint.Charts.Adapters,
   DRagLint.Charts.Adapter.Graph, DRagLint.Charts.DocInsight, DRagLint.Charts.Compare,
   DRagLint.Charts.Render;
@@ -62,6 +63,11 @@ const
   CLASS_REMOVED = 'class="dl-removed"';
   EDGE_ADDED = 'class="edge dl-added"';
   EDGE_REMOVED = 'class="edge dl-removed"';
+  HOSTILE_SVG = 'hostile.svg';
+  KEEP_TEXT = 'KEEP-NODE';
+  RE_HANDLER_ATTR = '\son\w+\s*=';
+  PAYLOAD_REACH = 80;
+  CSP_META = '<meta http-equiv="Content-Security-Policy" content="default-src ''none''; style-src ''unsafe-inline''; img-src data:">';
 
 { The fixture folder: $DRAGLINT_REPO_ROOT, else the first ancestor of the current
   directory that holds it. '' when not found. }
@@ -384,6 +390,28 @@ begin
   var C:= RenderReportHtml('A csv', 'a,b' + CRLF + '"1,5","x ""q"""' + CRLF, cfFormsCsv, '');
   Assert.IsTrue(Pos('<table class="csv">', C) > 0, 'csv table');
   Assert.IsTrue(Pos('<td>1,5</td>', C) > 0, 'quoted comma stays one cell');
+end;
+
+procedure TRenderTests.HostileSvgIsDefusedOnBothPages;
+begin
+  // hostile.svg: script elements, on* handlers, javascript: links, a foreignObject, markup
+  // after </svg>, and surrogate entities (&#xD800;) in the titles MarkSvg decodes.
+  var R:= GraphResult('who-writes-a.dot', 'who-writes-b.dot', HOSTILE_SVG, True);
+  var Pages: TArray<string>:= [RenderCompareHtml(R),
+    RenderReportHtml('A chart', TFile.ReadAllText(GraphFixture('who-writes-a.dot')), cfGraph, GraphFixture(HOSTILE_SVG))];
+  for var H in Pages do
+  begin
+    var L:= LowerCase(H);
+    Assert.IsTrue(Pos(CSP_META, H) > 0, 'CSP meta in the head');
+    Assert.IsTrue(Pos(KEEP_TEXT, H) > 0, 'the chart itself is kept');
+    Assert.AreEqual(0, Pos('<script', L), 'no script element');
+    Assert.AreEqual(0, Pos('<foreignobject', L), 'no foreignObject');
+    Assert.AreEqual(0, Pos('javascript:', L), 'no javascript: URL');
+    Assert.AreEqual(0, Pos('alert(', L), 'no payload survives: ' + Copy(H, Pos('alert(', L) - PAYLOAD_REACH, 2 * PAYLOAD_REACH));
+    var Handler:= TRegEx.Match(H, RE_HANDLER_ATTR, [roIgnoreCase]);
+    Assert.IsFalse(Handler.Success, 'no on* handler attribute: ' + Handler.Value);
+    Assert.AreEqual(0, Pos('<img', L), 'nothing after </svg>');
+  end;
 end;
 
 initialization

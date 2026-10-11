@@ -49,6 +49,7 @@ type
     [Test] procedure SaveWithTwoFilesRefused;
     [Test] procedure UnchangedRemarksBlockIsExitZero;
     [Test] procedure AutoGraphSnapshotIsFoundNextTime;
+    [Test] procedure EmptyChartIsRefusedNotSame;
   end;
 
 implementation
@@ -71,6 +72,8 @@ const
   PHRASE = 'Who writes this field';
   UNIT_BLOCK_LINE = 4;
   GRAPH_NODES_A = 21;
+  STUB_NEW_NODES = 2;
+  EMPTY_DOT = 'digraph G {' + #13#10 + '  rankdir=LR;' + #13#10 + '  a -- b;' + #13#10 + '}' + #13#10;
   ENGINE_FIXTURE = 'C:\X\drag-lint.exe'; // dl:ok hardcoded-absolute-path@7ebd -- synthetic test input: never touches the filesystem
   COMMAND_STUB = 'who-writes -Target "OPERAT.NAME" -Project "C:\P\A.dproj" -Depth 3';
   COMMAND_DEPTH5 = 'who-writes -Target "OPERAT.NAME" -Project "C:\P\A.dproj" -Depth 5';
@@ -486,6 +489,7 @@ begin
     Assert.AreEqual(EXIT_DIFFERENT, R.ExitCode, R.Message);
     Assert.IsTrue(R.Format = cfGraph, 'chart-graph');
     Assert.AreEqual(GRAPH_NODES_A, Integer(Length(R.OldGraph.Nodes)), 'the old DOT was read before the rerun');
+    Assert.AreEqual(STUB_NEW_NODES, Integer(Length(R.NewGraph.Nodes)), 'the rerun''s DOT parsed (emitter dialect): StubA, StubB');
     Assert.AreEqual(STUB_NEW_SVG, TFile.ReadAllText(TPath.Combine(Bundle, 'graph.svg')), 'the stub did rewrite the bundle');
     Assert.AreEqual(OldSvg, TFile.ReadAllText(R.OldSvgPath), 'OldSvgPath still holds the OLD svg');
     Assert.AreEqual(STUB_NEW_SVG, TFile.ReadAllText(R.NewSvgPath), 'NewSvgPath is the new svg');
@@ -563,6 +567,27 @@ begin
   Assert.AreEqual(EXIT_SAME, R.ExitCode, R.Message);
   Assert.IsTrue(R.Format = cfGraph, 'run 2 found the chart snapshot');
   Assert.IsTrue(R.OldText.Contains('StubA'), 'the old side is run 1''s snapshot, not the seed');
+end;
+
+procedure TCompareTests.EmptyChartIsRefusedNotSame;
+begin
+  // a DOT the adapter cannot read gives no nodes and no edges: comparing two of those would
+  // report "no differences" for two different charts, so it is refused, naming the file
+  var Empty1:= WriteTemp(FTemp, 'empty1.dot', EMPTY_DOT);
+  var Empty2:= WriteTemp(FTemp, 'empty2.dot', EMPTY_DOT.Replace('a -- b', 'c -- d'));
+  var Good:= TPath.Combine(FTemp, 'good.dot');
+  TFile.Copy(Fixture('graph', 'who-writes-a.dot'), Good);
+  var Req:= Default(TCompareRequest);
+  Req.Source:= csTwoFiles;
+  Req.OldPath:= Empty1;
+  Req.NewPath:= Empty2;
+  var R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Message);
+  Assert.AreEqual('the chart ' + Empty1 + ' parsed as empty -- cannot compare', R.Message);
+  Req.OldPath:= Good;
+  R:= RunCompare(Req);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Message);
+  Assert.AreEqual('the chart ' + Empty2 + ' parsed as empty -- cannot compare', R.Message);
 end;
 
 initialization

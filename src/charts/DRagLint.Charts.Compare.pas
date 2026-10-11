@@ -381,7 +381,17 @@ type
     CmdChosen: Boolean;         // Cmd was fixed by the old-side step (csOldIndex)
     NewFormat: TChartsFormat;   // the format the new side is in
     FirstDb  : string;          // the first index the new run read ('' when none)
+    NewChart : string;          // the file or folder the new chart came from
   end;
+
+{ D6(c): a non-blank DOT that yields no node and no edge was not read (a dialect the adapter
+  does not know). Comparing it would call two different charts the same, so it is refused. }
+function ChartReadable(const pModel: TGraphModel; const pText, pWhere: string; var pResult: TCompareResult): Boolean;
+begin
+  Result:= (Trim(pText) = '') or (Length(pModel.Nodes) > 0) or (Length(pModel.Edges) > 0);
+  if not Result then
+    Refuse(pResult, COMPARE_EXIT_SETUP, 'the chart ' + pWhere + ' parsed as empty -- cannot compare');
+end;
 
 function ValidateRequest(const pRequest: TCompareRequest; var pResult: TCompareResult): Boolean;
 begin
@@ -497,7 +507,10 @@ begin
   if Result and (pResult.Format = cfReportText) and (pRequest.Source <> csRemarks) then
     pResult.OldHeader:= HeaderOf(pResult.OldText);
   if Result and (pResult.Format = cfGraph) then
+  begin
     pResult.OldGraph:= ParseDot(pResult.OldText);
+    Result:= ChartReadable(pResult.OldGraph, pResult.OldText, pResult.OldPath, pResult);
+  end;
   if Result and (pResult.Format = cfGraph) and (pRequest.Source <> csTwoFiles) and (pResult.OldSvgPath <> '') then
     Result:= ProtectOldSvg(pResult);
 end;
@@ -543,6 +556,7 @@ begin
       Exit(Refuse(pResult, COMPARE_EXIT_SETUP, 'the new run''s chart could not be read from ' +
         (if NewRun.BundlePath = '' then '(the answer has no BUNDLE line)' else NewRun.BundlePath)));
     pRun.NewFormat:= cfGraph;
+    pRun.NewChart:= NewRun.BundlePath;
     pResult.NewText:= Dot;
     pResult.NewSvgPath:= Svg;
   end;
@@ -568,7 +582,12 @@ begin
     Exit(Refuse(pResult, COMPARE_EXIT_SETUP,
       'cannot compare a ' + FormatName(pResult.Format) + ' with a ' + FormatName(pRun.NewFormat)));
   if pResult.Format = cfGraph then
+  begin
     pResult.NewGraph:= ParseDot(pResult.NewText);
+    if not ChartReadable(pResult.NewGraph, pResult.NewText,
+      if pRequest.Source = csTwoFiles then pRequest.NewPath else pRun.NewChart, pResult) then
+      Exit(False);
+  end;
   Result:= True;
 end;
 

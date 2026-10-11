@@ -112,12 +112,23 @@ const
   OP_DELETE = '-';
   OP_INSERT = '+';
   MAX_CODE_POINT = $10FFFF;
+  SURROGATE_FIRST = $D800;
+  SURROGATE_LAST = $DFFF;
   HEX_BASE = '$';
   ENT_KIND_AT = 2;
   ENT_HEX_FROM = 3;
   RE_ENTITY = '&(#[xX][0-9A-Fa-f]+|#[0-9]+|amp|lt|gt|quot|apos);';
   RE_MARKER = '\{\{(\w+)\}\}';
   RE_XMLNS = '\s+xmlns(:\w+)?="[^"]*"';
+  // SVG defusing (O3): the page runs no script, so none may arrive inside a graph.svg either
+  RE_SVG_CLOSE = '</svg\s*>';
+  RE_ACTIVE_ELEMENT = '<(script|foreignObject)\b[^>]*>.*?</\1\s*>';
+  RE_ACTIVE_TAG = '</?(script|foreignObject)\b[^>]*>';
+  RE_QUOTED_TAG = '<(?:[^>"'']|"[^"]*"|''[^'']*'')*>';
+  RE_ATTR = '\s+([\w:.-]+)\s*=\s*("[^"]*"|''[^'']*''|[^\s"''>]+)';
+  RE_BLANKS = '[\s\x00-\x1F]+';
+  HANDLER_PREFIX = 'on';
+  SCRIPT_SCHEME = 'javascript:';
   RE_TAG = '<[^>]*>';
   RE_XLINK_TITLE = 'xlink:title="([^"]*)"';
   RE_FIRST_TEXT = '<text[^>]*>(.*?)</text>';
@@ -143,6 +154,7 @@ const
     '<head>' + CRLF +
     '<meta charset="utf-8">' + CRLF +
     '<meta name="viewport" content="width=device-width, initial-scale=1">' + CRLF +
+    '<meta http-equiv="Content-Security-Policy" content="default-src ''none''; style-src ''unsafe-inline''; img-src data:">' + CRLF +
     '<title>{{TITLE}}</title>' + CRLF +
     '<style>' + CRLF +
     ':root{--bg:#ffffff;--fg:#1f2933;--del:#ffe3e3;--ins:#d8f5dc;--eq:#f5f7fa;--muted:#6b7280}' + CRLF +
@@ -200,7 +212,9 @@ begin
   var Code: Integer;
   if CharInSet(Name[ENT_KIND_AT], ['x', 'X']) then Code:= StrToIntDef(HEX_BASE + Copy(Name, ENT_HEX_FROM, MaxInt), -1)
   else Code:= StrToIntDef(Copy(Name, ENT_KIND_AT, MaxInt), -1);
-  if (Code > 0) and (Code <= MAX_CODE_POINT) then Result:= Char.ConvertFromUtf32(Code)
+  // a lone surrogate is not a character, and ConvertFromUtf32 raises on one: keep it as written
+  if (Code > 0) and (Code <= MAX_CODE_POINT) and ((Code < SURROGATE_FIRST) or (Code > SURROGATE_LAST)) then
+    Result:= Char.ConvertFromUtf32(Code)
   else Result:= pMatch.Value;
 end;
 
@@ -576,9 +590,49 @@ end;
 
 { ---------- SVG (D7) ---------- }
 
+{ Whether one attribute of an SVG tag could run script: an on* event handler, or a value that
+  is a javascript: URL once entities, blanks and control characters are taken out. }
+function IsActiveAttr(const pName, pValue: string): Boolean;
+begin
+  if LowerCase(pName).StartsWith(HANDLER_PREFIX) then Exit(True);
+  var Plain:= LowerCase(TRegEx.Replace(DecodeXml(pValue), RE_BLANKS, ''));
+  Result:= Pos(SCRIPT_SCHEME, Plain) > 0;
+end;
+
+{ The SVG with nothing that could run: cut after the LAST '</svg>' (whatever follows is not the
+  chart), script and foreignObject elements removed, and every on* handler and javascript: URL
+  attribute removed from every tag. A graphviz SVG carries none of these, so it is unchanged. }
+function DefuseSvg(const pSvg: string): string;
+begin
+  Result:= pSvg;
+  var CloseAt:= 0;
+  var CloseLen:= 0;
+  for var M in TRegEx.Matches(Result, RE_SVG_CLOSE, [roIgnoreCase]) do
+  begin
+    CloseAt:= M.Index;
+    CloseLen:= M.Length;
+  end;
+  if CloseAt > 0 then
+    Result:= Copy(Result, 1, CloseAt + CloseLen - 1);
+  Result:= TRegEx.Replace(Result, RE_ACTIVE_ELEMENT, '', [roIgnoreCase, roSingleLine]);
+  Result:= TRegEx.Replace(Result, RE_ACTIVE_TAG, '', [roIgnoreCase]);
+  Result:= ReplaceMatches(Result, RE_QUOTED_TAG, [],
+    function(pTag: TMatch): string
+    begin
+      Result:= ReplaceMatches(pTag.Value, RE_ATTR, [],
+        function(pAttr: TMatch): string
+        begin
+          var Value:= pAttr.Groups[2].Value;
+          if CharInSet(Value[1], ['"', '''']) then Value:= Copy(Value, 2, Length(Value) - 2);
+          Result:= if IsActiveAttr(pAttr.Groups[1].Value, Value) then '' else pAttr.Value;
+        end);
+    end);
+end;
+
 { The SVG as page markup: read as UTF-8, everything before '<svg' (prolog, DOCTYPE,
-  generator comments) dropped, and the xmlns attributes of the root removed -- inline SVG in
-  HTML needs none, and the page then holds no URL at all. '' when there is no file. }
+  generator comments) dropped, defused (DefuseSvg), and the xmlns attributes of the root
+  removed -- inline SVG in HTML needs none, and the page then holds no URL at all. '' when
+  there is no file. }
 function SvgMarkup(const pPath: string): string;
 begin
   Result:= '';
@@ -588,7 +642,7 @@ begin
     var Text:= TFile.ReadAllText(pPath, TEncoding.UTF8);
     var Start:= Pos(SVG_OPEN, Text);
     if Start = 0 then Exit;
-    Text:= Copy(Text, Start, MaxInt);
+    Text:= DefuseSvg(Copy(Text, Start, MaxInt));
     var TagEnd:= Pos('>', Text);
     if TagEnd = 0 then Exit;
     Result:= TRegEx.Replace(Copy(Text, 1, TagEnd), RE_XMLNS, '') + Copy(Text, TagEnd + 1, MaxInt);

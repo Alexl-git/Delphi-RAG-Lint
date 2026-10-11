@@ -11,7 +11,8 @@
     -Target REFUSE                               -> stderr "ask-report: no such symbol", exit 1
     $env:STUB_VARIANT -eq 'B'                    -> the body carries one more row (so a Compare
                                                     test can force a difference)
-    $env:STUB_BUNDLE = <folder>                 -> writes graph.dot (edge "StubA" -> "StubB") and graph.svg
+    $env:STUB_BUNDLE = <folder>                 -> writes graph.dot (nodes StubA, StubB and the edge between them, in the emitters'
+                                                    dialect: bare ids, HTML-table labels) and graph.svg
                                                     (<svg>NEW</svg>) into that folder and names it on
                                                     the BUNDLE line, overwriting what is there (so a
                                                     Compare test sees a rerun rewrite the old bundle)
@@ -66,10 +67,16 @@ $bundle = 'C:\stub\bundle'
 if ($env:STUB_BUNDLE) {
   $bundle = $env:STUB_BUNDLE
   New-Item -ItemType Directory -Force -Path $bundle | Out-Null
-  [IO.File]::WriteAllText((Join-Path $bundle 'graph.dot'), "digraph G {
-  ""StubA"" -> ""StubB"";
+  $dot = @"
+digraph stub {
+  node  [shape=plaintext, fontname="Consolas", fontsize=14];
+  sa [label=<<TABLE BORDER="0" CELLBORDER="0"><TR><TD PORT="p1" ALIGN="LEFT" HREF="draglint://open?file=Unit1.pas&amp;line=10" TITLE="1 write site: 10:3"><FONT COLOR="#1F2933">StubA</FONT></TD></TR></TABLE>>];
+  sb [label=<<TABLE BORDER="0" CELLBORDER="0"><TR><TD PORT="p1" ALIGN="LEFT" HREF="draglint://open?file=Unit1.pas&amp;line=42" TITLE="1 write site: 42:3"><FONT COLOR="#1F2933">StubB</FONT></TD></TR></TABLE>>];
+  sa:p1 -> sb:p1 [color="#8A94A6"];
 }
-", [Text.Encoding]::ASCII)
+
+"@
+  [IO.File]::WriteAllText((Join-Path $bundle 'graph.dot'), $dot, [Text.Encoding]::ASCII)
   [IO.File]::WriteAllText((Join-Path $bundle 'graph.svg'), '<svg>NEW</svg>', [Text.Encoding]::ASCII)
 }
 $lines.Add("BUNDLE $bundle")

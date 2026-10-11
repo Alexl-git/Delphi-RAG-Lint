@@ -33,6 +33,8 @@ type
     [Test] procedure DotNodesAreKeyedByIdentityNotLine;
     [Test] procedure DotRemovedAndAddedNodesAndEdges;
     [Test] procedure DotReorderIsNoChange;
+    [Test] procedure DotQuotedIdsParseNodesAndEdges;
+    [Test] procedure DotSurrogateEntityDoesNotRaise;
     [Test] procedure BundleFolderResolvesGraphDotAndSvg;
     [Test] procedure DetectFormatByContentAndExtension;
     [Test] procedure DifferentFormatsAreRefusedByName;
@@ -57,6 +59,16 @@ const
   QUOTED_NOTE = '"Click ""Save"", then wait"';
   NODE_REMOVED = 'N TfrmBlueprint4.btnAddOperationClick';
   NODE_ADDED = 'N TfrmBlueprint4.btnBrandNewClick';
+  QUOTED_DOT = 'digraph G {' + CRLF +
+    '  "nw box" [label=<<TABLE><TR><TD PORT="p1" HREF="h" TITLE="X.Y -- 1 site"><FONT>X.Y</FONT></TD></TR></TABLE>>];' + CRLF +
+    '  "A" -> "B";' + CRLF +
+    '  "nw box":"p1" -> "B" [color=red];' + CRLF +
+    '  B -> "C D":p2;' + CRLF +
+    '}' + CRLF;
+  SURROGATE_DOT = 'digraph G {' + CRLF +
+    '  nw [label=<<TABLE><TR><TD PORT="p1" HREF="h&#xD800;" TITLE="&#xD800;&#56320;&#x110000; -- t"><FONT>A</FONT></TD></TR></TABLE>>];' + CRLF +
+    '  nw:p1 -> b;' + CRLF +
+    '}' + CRLF;
   NODE_LINE_CHANGED = 'N TfrmBlueprint4.btnApplyActiveFieldClick';
   NODE_FOCUS = 'N Blueprint4.TfrmBlueprint4.FNoRecursion';
   EDGE_PREFIX_NW = '  nw:p';
@@ -65,6 +77,7 @@ const
   UNCHANGED_ROWS: Integer = 3;
   ONE: Integer = 1;
   TWO: Integer = 2;
+  QUOTED_NODES: Integer = 4;
 
 { The fixture folder: $DRAGLINT_REPO_ROOT, else the first ancestor of the current
   directory that holds it (the ReportTextTests convention). '' when not found. }
@@ -292,6 +305,29 @@ begin
   Assert.IsTrue(Contains(Deleted, NODE_REMOVED), 'the removed routine');
   Assert.IsTrue(Contains(Deleted, 'E TfrmBlueprint4.btnAddOperationClick -> Blueprint4.TfrmBlueprint4.FNoRecursion'), 'its edge, resolved through the port map');
   Assert.IsTrue(Contains(Inserted, NODE_ADDED), 'the added routine');
+end;
+
+procedure TAdaptersTests.DotQuotedIdsParseNodesAndEdges;
+begin
+  // quoted ids are DOT's other id form: the quotes are not part of the identity
+  var Model:= ParseDot(QUOTED_DOT);
+  var Texts: TArray<string>;
+  for var Item in GraphItems(Model) do
+    Texts:= Texts + [Item.Text];
+  Assert.IsTrue(Contains(Texts, 'N X.Y'), 'quoted HTML-label node: ' + string.Join('|', Texts));
+  Assert.IsTrue(Contains(Texts, 'E A -> B'), 'quoted ends: ' + string.Join('|', Texts));
+  Assert.IsTrue(Contains(Texts, 'E X.Y -> B'), 'quoted id and quoted port resolve through the port map: ' + string.Join('|', Texts));
+  Assert.IsTrue(Contains(Texts, 'E B -> C D'), 'bare to quoted with a port: ' + string.Join('|', Texts));
+  Assert.AreEqual(QUOTED_NODES, Integer(Length(Model.Nodes)), 'X.Y, A, B, C D');
+end;
+
+procedure TAdaptersTests.DotSurrogateEntityDoesNotRaise;
+begin
+  // a lone surrogate (or a code point past U+10FFFF) is not a character: kept as written, never raised
+  var Model:= ParseDot(SURROGATE_DOT);
+  Assert.AreEqual(TWO, Integer(Length(Model.Nodes)), 'the cell node and b');
+  Assert.AreEqual('&#xD800;&#56320;&#x110000;', Model.Nodes[0].Id, 'the entities stay as written');
+  Assert.AreEqual('h&#xD800;', Model.Nodes[0].Href, 'href entity stays as written');
 end;
 
 procedure TAdaptersTests.DotReorderIsNoChange;

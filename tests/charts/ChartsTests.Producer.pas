@@ -24,6 +24,7 @@ type
   public
     [Test] procedure CommandLineCarriesEveryArgumentAndPlain;
     [Test] procedure DbOverrideAddsDbPathAndAllowStale;
+    [Test] procedure QuotedValuesSurviveCommandLineToArgvW;
     [Test] procedure ScriptResolutionNamesEveryPlaceLooked;
     [Test] procedure StubProducesHeaderAndIndexLines;
     [Test] procedure StubStaleMapsToExit3;
@@ -34,7 +35,7 @@ type
 implementation
 
 uses
-  System.SysUtils, System.IOUtils,
+  Winapi.Windows, Winapi.ShellAPI, System.SysUtils, System.IOUtils,
   DRagLint.Charts.ReportHeader, DRagLint.Charts.Producer, DRagLint.Charts.Producer.PowerShell;
 
 const
@@ -53,6 +54,10 @@ const
   STUB_TIMEOUT_MS = 120000;
   SCRIPT_PLACES = 5;
   SNIPPET_LEN = 120;
+  SPACED_PROJECT = 'C:\My Projects\A B.dproj'; // dl:ok hardcoded-absolute-path@bdb5 -- synthetic test input: never touches the filesystem
+  SLASH_END_PROJECT = 'C:\dir\'; // dl:ok hardcoded-absolute-path@b310 -- synthetic test input: never touches the filesystem
+  SPACED_ENGINE = 'C:\Program Files\dl\drag-lint.exe'; // dl:ok hardcoded-absolute-path@4250 -- synthetic test input: never touches the filesystem
+  SLASH_QUOTE_TARGET = 'a\"b';
 
 { The fixture folder: $DRAGLINT_REPO_ROOT, else the first ancestor of the current
   directory that holds it (the Adapters convention). '' when not found. }
@@ -120,6 +125,64 @@ begin
   Opts.AllowStale:= True;
   var Line:= BuildProducerCommandLine(PWSH_FIXTURE, SCRIPT_FIXTURE, ENGINE_FIXTURE, Cmd(COMMAND_STUB), Opts);
   Assert.IsTrue(Line.EndsWith(' -Plain -DbPath "D:\old\A.sqlite" -AllowStale'), Line);
+end;
+
+{$POINTERMATH ON}
+{ The command line split back the way the child process will split it. }
+function SplitArgv(const pLine: string): TArray<string>;
+begin
+  var Count: Integer;
+  var Argv:= CommandLineToArgvW(PChar(pLine), Count);
+  Assert.IsTrue(Argv <> nil, 'CommandLineToArgvW failed');
+  try
+    SetLength(Result, Count);
+    for var I:= 0 to Count - 1 do
+      Result[I]:= Argv[I];
+  finally
+    LocalFree(HLOCAL(Argv));
+  end;
+end;
+{$POINTERMATH OFF}
+
+function ArgCmd(const pTarget, pProject: string): TReportCommand;
+begin
+  Result:= Default(TReportCommand);
+  Result.Question:= 'who-writes';
+  var T: TCommandArg;
+  T.Name:= 'Target';
+  T.Value:= pTarget;
+  var P: TCommandArg;
+  P.Name:= 'Project';
+  P.Value:= pProject;
+  Result.Args:= [T, P];
+end;
+
+{ The value that follows -pName in pArgv; fails when -pName is absent. }
+function ArgAfter(const pArgv: TArray<string>; const pName: string): string;
+begin
+  Result:= '';
+  for var I:= 0 to High(pArgv) - 1 do
+    if pArgv[I] = '-' + pName then Exit(pArgv[I + 1]);
+  Assert.Fail('-' + pName + ' missing from ' + string.Join(' | ', pArgv));
+end;
+
+procedure TProducerTests.QuotedValuesSurviveCommandLineToArgvW;
+begin
+  // a path with spaces, a value ending in a backslash right before -Engine, an engine path with
+  // spaces, and a backslash before an embedded quote: each must come back exactly as given
+  var Line:= BuildProducerCommandLine(PWSH_FIXTURE, SCRIPT_FIXTURE, SPACED_ENGINE,
+    ArgCmd(SLASH_QUOTE_TARGET, SPACED_PROJECT), DefaultProduceOptions);
+  Assert.IsTrue(Line.Contains(' -Target "a\\\"b" '), 'backslash then quote: 2n+1 backslashes: ' + Line);
+  var Argv:= SplitArgv(Line);
+  Assert.AreEqual(SLASH_QUOTE_TARGET, ArgAfter(Argv, 'Target'), 'a\"b round trip');
+  Assert.AreEqual(SPACED_PROJECT, ArgAfter(Argv, 'Project'), 'spaced project');
+  Assert.AreEqual(SPACED_ENGINE, ArgAfter(Argv, 'Engine'), 'spaced engine');
+  Line:= BuildProducerCommandLine(PWSH_FIXTURE, SCRIPT_FIXTURE, ENGINE_FIXTURE,
+    ArgCmd('T', SLASH_END_PROJECT), DefaultProduceOptions);
+  Assert.IsTrue(Line.Contains(' -Project "C:\dir\\" -Engine '), 'trailing backslash doubled: ' + Line);
+  Argv:= SplitArgv(Line);
+  Assert.AreEqual(SLASH_END_PROJECT, ArgAfter(Argv, 'Project'), 'trailing backslash round trip');
+  Assert.AreEqual(ENGINE_FIXTURE, ArgAfter(Argv, 'Engine'), '-Engine is still its own argument');
 end;
 
 procedure TProducerTests.ScriptResolutionNamesEveryPlaceLooked;

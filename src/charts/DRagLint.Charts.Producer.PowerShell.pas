@@ -9,9 +9,9 @@ unit DRagLint.Charts.Producer.PowerShell;
 
   PS trap handled: names and values are handed to PowerShell as separate, individually quoted
   arguments, so none of PowerShell's own splitting, '-eq' coercion or case-insensitive
-  parameter matching can change what was asked. Known gap: pwsh writes redirected stdout in
-  the console output code page, so a non-ASCII character in a report is decoded here as
-  UTF-8 only if the script set [Console]::OutputEncoding itself; plain reports are ASCII. }
+  parameter matching can change what was asked. Encoding: stdout is decoded as UTF-8, which
+  is what pwsh 7 writes to a redirected stdout (measured on pwsh 7.6); no charts script emits a
+  non-ASCII character today, so the choice is not exercised by a real report yet. }
 
 interface
 
@@ -88,8 +88,9 @@ const
   PLACE_LABELS: array[0..4] of string = ('explicit path', 'environment variable DRAGLINT_ASK_REPORT',
     'beside the exe', 'two folders up, charts\src', 'four folders up, charts\src');
 
-{ Quotes one argument for CreateProcess: backslashes before a quote (or before the closing
-  quote) are doubled and an embedded quote is escaped. }
+{ Quotes one argument for CreateProcess the way CommandLineToArgvW splits it: n backslashes
+  before an embedded quote become 2n+1 (each doubled, plus one escaping the quote), n before the
+  closing quote become 2n, and backslashes anywhere else stay as they are. }
 function QuoteArg(const pValue: string): string;
 var
   Slashes: Integer;
@@ -104,7 +105,7 @@ begin
         Inc(Slashes)
       else
       begin
-        if C = QUOTE then SB.Append(BACKSLASH, Slashes + 1)
+        if C = QUOTE then SB.Append(BACKSLASH, Slashes * 2 + 1)
         else SB.Append(BACKSLASH, Slashes);
         Slashes:= 0;
         SB.Append(C);

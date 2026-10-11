@@ -288,7 +288,7 @@ try {
     # the header (contract section 3): the sentence with time + engine, then the COMMAND that reruns it
     $sentTarget = $(if ($To) { "$Target -> $To" } else { $Target })
     $phrase = $(if ($script:ReportCaptions.Contains($Question)) { $script:ReportCaptions[$Question].TrimEnd('.') } else { 'Report' })
-    $answer.Add(('{0} (drag-lint report {1}) for {2}, asked on {3}, engine {4}.' -f $phrase, $Question, $sentTarget, (Get-Date).ToString('yyyy-MM-dd HH:mm'), (Get-EngineVersion)))
+    $answer.Add(('{0} (drag-lint report {1}) for {2}, asked on {3}, engine {4}.' -f $phrase, $Question, $sentTarget, (Get-Date).ToString('yyyy-MM-dd HH:mm', [Globalization.CultureInfo]::InvariantCulture), (Get-EngineVersion)))
     $bound = @{}; foreach ($k in $PSBoundParameters.Keys) { $bound[$k] = $PSBoundParameters[$k] }   # a dictionary, not a hashtable
     $answer.Add((Get-ReportCommandLine $Question $Target $bound))
     $answer.Add("BUNDLE $($art.Bundle)")

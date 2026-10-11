@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- hostile.svg: a graph.svg that tries to run script in the compare / --show page.
+     Every payload here must be gone from the rendered page; the chart text KEEP-NODE stays. -->
+<svg width="200pt" height="100pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" onload="alert(0)">
+<g id="graph0" class="graph">
+<g id="node1" class="node">
+<title>nw&#xD800;</title>
+<a xlink:href="javascript:alert(3)" xlink:title="Bad&#xDFFF; &#45;&#45; title">
+<text x="1" y="1" onclick = 'alert(4)'>KEEP-NODE</text>
+</a>
+</g>
+<g id="edge1" class="edge">
+<title>nw:p1&#45;&gt;focus&#xD800;</title>
+<path d="M0,0L1,1" onmouseover=alert(6) />
+</g>
+<a href=" JavaScript:alert(7)"><text>link</text></a>
+<script type="text/javascript">alert(1)</script>
+<SCRIPT>alert(5)</SCRIPT>
+<foreignObject width="10" height="10"><div>alert(8)</div></foreignObject>
+</g>
+</svg><img src=x onerror=alert(2)><script>alert(9)</script>

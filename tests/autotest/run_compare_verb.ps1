@@ -19,6 +19,13 @@
     C-SHOW      --show report        -> HTML page
     C-CSV       two forms CSVs       -> exit 1
     C-GRAPH     two bundle folders   -> exit 1, graph counts in the JSON
+    C-HOSTILE   graph.svg with script / on* / javascript: / markup after </svg>
+                                     -> compare and --show pages carry none of it, plus a CSP meta
+    C-ENTITY    &#xD800; in a DOT TITLE and in the SVG -> exit 0/1 (never the stale code 3)
+    C-QUOTED    quoted DOT ids ("A" -> "B") -> read, so two different charts are exit 1
+    C-EMPTY     a non-blank DOT that parses to nothing -> exit 2 'parsed as empty', not 'same'
+    C-THROW     an exception inside the verb (--output is a folder) -> exit 2, ERROR: <class>,
+                                     JSON envelope on stdout (exit 3 stays 'stale index' only)
     C-SAVE      --question --save    -> a snapshot file; --auto then compares against it
     C-HELP      compare --help       -> the banner names the verb
 
@@ -154,6 +161,57 @@ try {
   $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
   Check 'C-GRAPH exit 1' ($r.Code -eq 1) "exit=$($r.Code) err=$($r.Err)"
   Check 'C-GRAPH json has graph counts' ($j -and $null -ne $j.graph.nodes_added) $r.Out
+
+  # C-HOSTILE: a graph.svg is data from disk; nothing in it may run in the page (O3)
+  $ha = Join-Path $Work 'ha'; $hb = Join-Path $Work 'hb'
+  New-Item -ItemType Directory -Force -Path $ha, $hb | Out-Null
+  Copy-Item (Join-Path $Fix 'graph\who-writes-a.dot') (Join-Path $ha 'graph.dot')
+  Copy-Item (Join-Path $Fix 'graph\hostile.svg') (Join-Path $ha 'graph.svg')
+  Copy-Item (Join-Path $Fix 'graph\who-writes-b.dot') (Join-Path $hb 'graph.dot')
+  Copy-Item (Join-Path $Fix 'graph\hostile.svg') (Join-Path $hb 'graph.svg')
+  $csp = '<meta http-equiv="Content-Security-Policy" content="default-src ''none''; style-src ''unsafe-inline''; img-src data:">'
+  $hpage = Join-Path $Work 'hostile.html'
+  $r = Invoke-Compare @('compare','--old',$ha,'--new',$hb,'--format','html','--output',$hpage)
+  $spage = Join-Path $Work 'hostile-show.html'
+  $r2 = Invoke-Compare @('compare','--show',$ha,'--output',$spage)
+  foreach ($pg in @(@('compare', $r, $hpage), @('show', $r2, $spage))) {
+    $h = $(if (Test-Path $pg[2]) { [IO.File]::ReadAllText($pg[2]) } else { '' })
+    Check "C-HOSTILE $($pg[0]) page written" ($pg[1].Code -le 1 -and $h -ne '') "exit=$($pg[1].Code) err=$($pg[1].Err)"
+    Check "C-HOSTILE $($pg[0]) no script / handler / javascript: / payload" ($h -ne '' -and $h -notmatch '(?i)<script|<foreignobject|javascript:|alert\(|\son\w+\s*=') ([regex]::Match($h, '(?i).{0,60}(<script|javascript:|alert\(|\son\w+\s*=).{0,60}').Value)
+    Check "C-HOSTILE $($pg[0]) CSP meta" ($h.Contains($csp))
+  }
+
+  # C-ENTITY: a lone surrogate entity is not a character; it must not kill the verb with exit 3
+  $ea = Join-Path $Work 'ea'
+  New-Item -ItemType Directory -Force -Path $ea | Out-Null
+  $dotE = [IO.File]::ReadAllText((Join-Path $Fix 'graph\who-writes-b.dot')) -replace 'TITLE="6 write sites', 'TITLE="&#xD800; -- 6 write sites'
+  [IO.File]::WriteAllText((Join-Path $ea 'graph.dot'), $dotE, [Text.Encoding]::ASCII)
+  Copy-Item (Join-Path $Fix 'graph\hostile.svg') (Join-Path $ea 'graph.svg')
+  foreach ($fmt in 'json', 'html') {
+    $out = Join-Path $Work "entity.$fmt"
+    $r = Invoke-Compare @('compare','--old',$ha,'--new',$ea,'--format',$fmt,'--output',$out)
+    $j = $null; if ($fmt -eq 'json' -and (Test-Path $out)) { try { $j = Get-Content $out -Raw | ConvertFrom-Json } catch { } }
+    $ok = ($r.Code -in 0, 1) -or ($r.Code -eq 2 -and $r.Err -match '(?m)^ERROR: ' -and ($fmt -ne 'json' -or $j))
+    Check "C-ENTITY $fmt not exit 3" ($ok -and $r.Code -ne 3) "exit=$($r.Code) err=$($r.Err)"
+  }
+
+  # C-QUOTED / C-EMPTY: a DOT the adapter could not read must never compare as "same"
+  $qa = Join-Path $Work 'qa.dot'; $qb = Join-Path $Work 'qb.dot'
+  [IO.File]::WriteAllText($qa, "digraph G {`r`n  ""A"" -> ""B"";`r`n}`r`n", [Text.Encoding]::ASCII)
+  [IO.File]::WriteAllText($qb, "digraph G {`r`n  ""A"" -> ""C"";`r`n}`r`n", [Text.Encoding]::ASCII)
+  $r = Invoke-Compare @('compare','--old',$qa,'--new',$qb)
+  Check 'C-QUOTED different quoted-id charts are exit 1' ($r.Code -eq 1) "exit=$($r.Code) out=$($r.Out) err=$($r.Err)"
+  $ma = Join-Path $Work 'ma.dot'; $mb = Join-Path $Work 'mb.dot'
+  [IO.File]::WriteAllText($ma, "graph G {`r`n  a -- b;`r`n}`r`n", [Text.Encoding]::ASCII)
+  [IO.File]::WriteAllText($mb, "graph G {`r`n  c -- d;`r`n}`r`n", [Text.Encoding]::ASCII)
+  $r = Invoke-Compare @('compare','--old',$ma,'--new',$mb,'--format','json')
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  Check 'C-EMPTY unreadable chart refused, exit 2 + envelope' ($r.Code -eq 2 -and $r.Err -match 'parsed as empty' -and $j -and $j.exit_code -eq 2) "exit=$($r.Code) err=$($r.Err)"
+
+  # C-THROW: writing --output into a folder raises; that is a setup error, never the stale exit
+  $r = Invoke-Compare @('compare','--old',$ga,'--new',$gb,'--format','json','--output',$Work)
+  $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
+  Check 'C-THROW exit 2 + ERROR class + envelope' ($r.Code -eq 2 -and $r.Err -match '(?m)^ERROR: E\w+: ' -and $j -and $j.exit_code -eq 2) "exit=$($r.Code) err=$($r.Err) out=$($r.Out)"
 
   # C-SAVE / C-AUTO
   $snaps = Join-Path $Work 'snaps'
