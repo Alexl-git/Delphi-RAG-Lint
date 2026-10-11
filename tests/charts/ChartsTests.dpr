@@ -34,6 +34,9 @@ uses
   , DRagLint.Charts.Producer in '..\..\src\charts\DRagLint.Charts.Producer.pas'
   , DRagLint.Charts.Producer.PowerShell in '..\..\src\charts\DRagLint.Charts.Producer.PowerShell.pas'
   , ChartsTests.Producer in 'ChartsTests.Producer.pas'
+  , DRagLint.Charts.Remarks in '..\..\src\charts\DRagLint.Charts.Remarks.pas'
+  , DRagLint.Charts.Snapshot in '..\..\src\charts\DRagLint.Charts.Snapshot.pas'
+  , ChartsTests.RemarksSnapshot in 'ChartsTests.RemarksSnapshot.pas'
   ;
 
 const
