@@ -9,6 +9,20 @@ No extractor or resolver change on top of 1.26.6: indexes do not re-parse.
 
 ### Added
 
+- **`compare` verb (charts step 1)** -- `drag-lint compare` answers "is this report still
+  true?": it reruns a report's `COMMAND` line through `charts\src\Ask-Report.ps1 -Plain`
+  against the current index and diffs the normalised text (a forms CSV by row, a chart by
+  nodes and edges). Four old sides: a saved file or bundle folder (`--old`), the
+  `/// <remarks>` block at a caret (`--in U.pas --line L`, with `--update-doc` to rewrite
+  only that block), the newest auto snapshot (`--auto`), or the same question answered from
+  an old index copy (`--old-db`, asked with `-AllowStale`); `--old` with `--new` compares
+  two saved outputs; `--show` renders any report as the page; `--save` keeps a snapshot
+  under `drag-lint-reports\` (`auto\` for `--auto`). Exit 0 same, 1 differences, 2 usage or
+  setup, 3 stale index (the new run never accepts a stale index). `--format text|json|html`
+  (`compare/1` JSON; a light/dark self-contained page, `--open`). The answer header gains a
+  `COMMAND` line and a time and engine on the sentence; a legacy header without them still
+  parses and compare warns that the command is unknown. New units: `src\charts\DRagLint.Charts.*`.
+  Pinned by run_compare_verb.ps1 and run_compare_real.ps1.
 - **Code-only uses of an UNCONVERTED ancestor's field are listed** (converter request). C8
   N2a listed a field the descendant's code uses with no `.dfm` block only when the declaring
   ancestor already had the block's To type. A field the ancestor still declares with the
