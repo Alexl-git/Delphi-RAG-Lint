@@ -19,7 +19,11 @@ breaking changes** until v1.0.
   left over are reported, never picked, and an empty kind is never presented as a fact. `kind`
   adds `enum-value` (a global-dangling `bkOK` had kind `''`). Capability `pas_uses_resolution`.
   Guard: run_convert_apply_pas_uses.ps1 C0-C10, K2.
-
+- **lint `unused-unit-in-uses`: an ENUM VALUE is a use of the unit declaring its enum.** A unit
+  using `Vcl.Controls` only through `alTop` / `bvNone` was called a dead import (removing it
+  fails E2003). The extractor already records those refs; the rule's export set held the unit's
+  interface-level names only, and an enum value sits one level below, under its enum. Read-time
+  fix in `ExportNamesFor`; no extractor or resolver change. Guard: run_unused_unit_enum_values.ps1.
 ## v1.28.1-alpha -- unreleased
 
 ### Fixed
