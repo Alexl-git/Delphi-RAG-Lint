@@ -1029,7 +1029,9 @@ begin
     'every code rewrite is scoped to the instance''s field (receiver bound to it, or unbound / bare / Self. in a routine of the .dfm root class with no same-named local); a site the index cannot vouch for is NOT rewritten and is reported (''access site <file>:<line> ... not verified against the index -- not rewritten'', items[] kind access-site-unverified, json access_sites_unverified); a --db resolved before resolver 1.12.0 is REFUSED, dry run too, naming the index ... --resolve-only fix; ' +
     'a #link carrying a cast never rewrites a .pas access site (1.27.0, interim): the cast''s pas template is a statement with no correct splice inside an expression, so each bound site is reported -- ''line N: #link To <- From : Cast -- access site <file>:<line> <inst>.<From> not rewritten: ... convert this access site by hand'', items[] kind cast-not-applied with instance, file, line and value (the cast); no .pas edit, the .dfm half of the cast unchanged; kind cast-applied is retired; info capability cast_site_refusal; ' +
     'a VALUE cast -- a castlib block with ''value strip-db'' (shipped: StripDB, #link TableName <- TableName : StripDB) -- removes one trailing .db, any case, from the linked string: in the .dfm of each converted instance, and in .pas assignments whose right-hand side is ONE string literal; any other assignment and every read get no edit and a warning (items[] value-cast-applied {old_value,value} / value-cast-check; text ''value casts: N value(s) changed ...''); an unknown value keyword fails the run; info capability value_cast_strip_db (1.27.0); ' +
-    'json pas_uses[] (1.27.0, dry run and --apply; info capability pas_uses) lists what the .pas still uses that the map does not cover: one row per (instance, member) the code reaches through a converted instance -- the access-site rewrite''s own bound sites -- and one per global (routine/const/var/type) from a unit the reconciliation removes: {instance,from_type,to_type,member,kind method|property|field|event|const|var|type|routine,visibility,declaring_unit,declared_in,status mapped|cast-refused|same-name|unmapped|global-dangling,lines[],count}; text prints ''pas uses: N unmapped, M global-dangling, K same-name, J mapped, C cast-refused'' and one line per unmapped member; ' +
+    'json pas_uses[] (1.27.0, dry run and --apply; info capability pas_uses) lists what the .pas still uses that the map does not cover: one row per (instance, member) the code reaches through a converted instance -- the access-site rewrite''s own bound sites -- and one per global (routine/const/var/type) from a unit the reconciliation removes: {instance,from_type,to_type,member,kind method|property|field|event|const|var|type|routine|enum-value,visibility,declaring_unit,declared_in,status mapped|cast-refused|same-name|unmapped|global-dangling,lines[],count,resolution resolved|ambiguous|class-not-found|member-not-found|kind-unknown,candidates[]}; ' +
+    'the From class is resolved through the unit''s scope (the unit itself, then the LAST uses entry declaring it, then the book''s qualified #convert From, then a lone declarer) -- several declarers left over is resolution ambiguous with candidates[] units and empty kind/declarer, never a pick (1.28.2, info capability pas_uses_resolution); ' +
+    'text prints ''pas uses: N unmapped, M global-dangling, K same-name, J mapped, C cast-refused'' and one line per unmapped member; ' +
     'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
     'a plan the edit applier would refuse in part (overlapping delete ranges -- an engine defect) fails the WHOLE unit before anything is written, dry run too, and a write that fails part-way is ROLLED BACK byte-identical (exit 2, ''-- rolled back, unit not changed''; a failed rollback names the files it could not restore) (1.25.1): exit 1, ''ERROR: refused N edit(s) to <file> -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written'', json ok=false with that error; ' +
     'a .dfm component nested in another converted one is spliced into its parent''s re-emit, and --only naming the parent converts it too (json only_included[] {name,parent}, text ''--only: <child> converts too -- nested in <parent>''); a collection property (FieldDefs = < item ... end>) whose item members the book links (#link X.Items.* <- X.Items.*, identity) is carried whole when the To type publishes X with the same collection type, else reported NOT carried with its item count and counted as dropped, #ignore X notwithstanding; ' +
@@ -16215,6 +16217,11 @@ begin
         uses that the map does not cover (status mapped | cast-refused |
         same-name | unmapped | global-dangling), dry run and --apply. }
       JCap.AddPair('pas_uses', TJSONBool.Create(True));
+      { 1.28.2: pas_uses[] member rows resolve the From class through the
+        unit's scope (uses order, book qualification) and carry resolution
+        resolved | ambiguous | class-not-found | member-not-found |
+        kind-unknown with candidates[] -- never an empty kind as a fact. }
+      JCap.AddPair('pas_uses_resolution', TJSONBool.Create(True));
       { 1.27.0 (C15), same contract: the castlib `value strip-db` VALUE cast
         (#link X <- X : StripDB) rewrites a trailing .db off string literals in
         the .dfm and in .pas literal assignments -- items[] value-cast-applied
@@ -24802,9 +24809,16 @@ begin
       if (PU.Status <> PAS_USE_UNMAPPED) and (PU.Status <> PAS_USE_NOT_REWRITTEN) then Continue;
       var Ls: string:= '';
       for var L: Integer in PU.Lines do Ls:= Ls + (if Ls = '' then '' else ', ') + IntToStr(L);
-      Writeln(Format('  %s %s.%s (%s, %s, %s in %s) -- %s %s',
-        [PU.Status, PU.Instance, PU.Member, PU.Kind, PU.Visibility, PU.DeclaredIn, PU.DeclaringUnit,
-         if Length(PU.Lines) = 1 then 'line' else 'lines', Ls]));
+      { 1.28.2: an unresolved declarer is SAID, never printed as empty facts }
+      var Decl: string;
+      if PU.Resolution = PAS_RES_AMBIGUOUS then
+        Decl:= 'declaring class ambiguous: ' + string.Join(', ', PU.Candidates)
+      else if PU.Resolution = PAS_RES_RESOLVED then
+        Decl:= Format('%s, %s, %s in %s', [PU.Kind, PU.Visibility, PU.DeclaredIn, PU.DeclaringUnit])
+      else
+        Decl:= PU.Resolution;
+      Writeln(Format('  %s %s.%s (%s) -- %s %s',
+        [PU.Status, PU.Instance, PU.Member, Decl, if Length(PU.Lines) = 1 then 'line' else 'lines', Ls]));
     end;
   end;
 end; // procedure
@@ -24909,6 +24923,10 @@ begin
     for var L: Integer in PU.Lines do JL.Add(L);
     JP.AddPair('lines'         , JL);
     JP.AddPair('count'         , TJSONNumber.Create(Length(PU.Lines)));
+    JP.AddPair('resolution'    , PU.Resolution);   { 1.28.2 }
+    var JC: TJSONArray:= TJSONArray.Create;
+    for var C: string in PU.Candidates do JC.Add(C);
+    JP.AddPair('candidates'    , JC);
     Result.AddElement(JP);
   end;
 end;

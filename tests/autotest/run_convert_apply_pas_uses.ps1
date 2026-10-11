@@ -370,10 +370,80 @@ Check 'A1 --apply: exit 0 and pas_uses equals the dry run''s' `
   (($a.Code -eq 0) -and (@($a.J.pas_uses).Count -eq 10) -and (($a.J.pas_uses | ConvertTo-Json -Depth 5 -Compress) -eq ($r.J.pas_uses | ConvertTo-Json -Depth 5 -Compress))) `
   ("apply: " + ($a.J.pas_uses | ConvertTo-Json -Depth 5 -Compress))
 
+# ---- SAME-NAMED CLASSES: the From class comes through the UNIT'S SCOPE ------
+# Converter report 2026-10-11 (INBOX ...-pas-uses-declared-in-fmx): a VCL
+# Label1: TLabel listed WordWrap as declared in FMX.StdCtrls.TLabel and Layout
+# with an EMPTY kind -- the From class was looked up by BARE NAME across the
+# --db stores and the first TLabel won. The library here holds both TLabels;
+# FMX.StdCtrls is indexed first, so a by-name lookup lands on it (premise C0).
+New-Item -ItemType Directory (P 'clib'), (P 'capp') -Force | Out-Null
+W 'clib\FMX.StdCtrls.pas' "unit FMX.StdCtrls;`n`ninterface`n`ntype`n  TLabel = class`n  private`n    FWordWrap: Boolean;`n  public`n    property WordWrap: Boolean read FWordWrap write FWordWrap;`n  end;`n`nimplementation`n`nend.`n"
+W 'clib\Vcl.StdCtrls.pas' "unit Vcl.StdCtrls;`n`ninterface`n`ntype`n  TTextLayout = (tlTop, tlCenter, tlBottom);`n`n  TCustomLabel = class`n  private`n    FLayout: TTextLayout;`n    FWordWrap: Boolean;`n  public`n    property Layout: TTextLayout read FLayout write FLayout;`n    property WordWrap: Boolean read FWordWrap write FWordWrap;`n  end;`n`n  TLabel = class(TCustomLabel)`n  end;`n`n  TStaticText = class`n  end;`n`nimplementation`n`nend.`n"
+# one form per uses shape; with a two-line uses clause Run's body is lines 20-22
+function CForm([string]$Name, [string]$Uses) {
+  W "capp\$Name.pas" ("unit $Name;`n`ninterface`n`n$Uses`n`ntype`n  T$Name = class`n    Label1: TLabel;`n    procedure Run;`n  end;`n`nimplementation`n`n{`$R *.dfm}`n`nprocedure T$Name.Run;`nbegin`n  Label1.Layout := tlCenter;`n  Label1.WordWrap := True;`n  Label1.Ghost;`nend;`n`nend.`n")
+  W "capp\$Name.dfm" "object ${Name}: T$Name`n  object Label1: TLabel`n  end`nend`n"
+}
+CForm 'CVcl'   "uses`n  Vcl.StdCtrls;"
+CForm 'COrder' "uses`n  Vcl.StdCtrls, FMX.StdCtrls,`n  Vcl.StdCtrls;"
+CForm 'CFmx'   "uses`n  FMX.StdCtrls;"
+CForm 'CNone'  "uses`n  CVcl;"
+W 'capp\P.dpr' "program P;`n`nuses`n  CVcl, COrder, CFmx, CNone;`n`nbegin`nend.`n"
+W 'c.rules'  "#convert TLabel -> TStaticText`n"
+W 'cq.rules' "#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText`n"
+& $Exe index (P 'clib') --db (P 'clib.sqlite') 2>&1 | Out-Null
+& $Exe index --project (P 'capp\P.dpr') --db (P 'capp.sqlite') 2>&1 | Out-Null
+$c0 = (& $Exe sql --db (P 'clib.sqlite') --query "select qualified_name from symbols where name = 'TLabel' and kind = 'class' order by id" 2>$null) -join "`n"
+Check 'C0 premise: the library holds BOTH TLabels and the FMX one comes first (a by-name lookup lands on it)' `
+  ($c0 -match '(?s)FMX\.StdCtrls\.TLabel.*Vcl\.StdCtrls\.TLabel') $c0
+function CRun([string]$Unit, [string]$Rules) {
+  $o = (& $Exe convert-apply --unit (P "capp\$Unit.pas") --rules (P $Rules) --db (P 'capp.sqlite') --db (P 'clib.sqlite') --format json 2>$null) -join "`n"
+  $r = [pscustomobject]@{ J = $null; Out = $o }; try { $r.J = $o.Substring($o.IndexOf('{')) | ConvertFrom-Json } catch {}
+  return $r
+}
+function IsVcl($x, [string]$Kind) {
+  return (($null -ne $x) -and ($x.resolution -eq 'resolved') -and ($x.declaring_unit -eq 'Vcl.StdCtrls') -and
+          ($x.declared_in -eq 'TCustomLabel') -and ($x.kind -eq $Kind) -and (@($x.candidates).Count -eq 0))
+}
+$c = CRun 'CVcl' 'c.rules'
+Check 'C1 uses Vcl.StdCtrls: Label1.WordWrap is declared in Vcl.StdCtrls / TCustomLabel, not FMX.StdCtrls.TLabel' `
+  (IsVcl (Row $c 'Label1' 'WordWrap') 'property') (Show (Row $c 'Label1' 'WordWrap'))
+Check 'C2 ... and Label1.Layout (absent from the FMX TLabel) gets its REAL kind and declarer' `
+  (IsVcl (Row $c 'Label1' 'Layout') 'property') (Show (Row $c 'Label1' 'Layout'))
+$x = Row $c 'Label1' 'Ghost'
+Check 'C3 a member NO class declares says so: resolution member-not-found, kind '''' -- never an empty kind as a fact' `
+  (($null -ne $x) -and ($x.resolution -eq 'member-not-found') -and ($x.kind -eq '') -and ($x.declaring_unit -eq '') -and ($x.status -eq 'unmapped')) (Show $x)
+$c = CRun 'COrder' 'c.rules'
+Check 'C4 uses Vcl.StdCtrls, FMX.StdCtrls, Vcl.StdCtrls: the LAST entry declaring it wins (Delphi scope order) -- Vcl' `
+  (IsVcl (Row $c 'Label1' 'Layout') 'property') (Show (Row $c 'Label1' 'Layout'))
+$c = CRun 'CFmx' 'c.rules'
+$x = Row $c 'Label1' 'WordWrap'
+Check 'C5 POSITIVE CONTROL: uses FMX.StdCtrls -- WordWrap IS the FMX TLabel''s' `
+  (($null -ne $x) -and ($x.resolution -eq 'resolved') -and ($x.declaring_unit -eq 'FMX.StdCtrls') -and ($x.declared_in -eq 'TLabel')) (Show $x)
+$x = Row $c 'Label1' 'Layout'
+Check 'C6 ... and Layout, which the FMX TLabel lacks, is member-not-found there' `
+  (($null -ne $x) -and ($x.resolution -eq 'member-not-found') -and ($x.declaring_unit -eq '')) (Show $x)
+$c = CRun 'CNone' 'c.rules'
+$x = Row $c 'Label1' 'WordWrap'
+Check 'C7 GENUINELY AMBIGUOUS (no uses entry declares TLabel, the book is bare): resolution ambiguous, both candidates, nothing picked' `
+  (($null -ne $x) -and ($x.resolution -eq 'ambiguous') -and ((@($x.candidates) | Sort-Object) -join ',') -eq 'FMX.StdCtrls,Vcl.StdCtrls' -and
+   ($x.kind -eq '') -and ($x.declaring_unit -eq '') -and ($x.declared_in -eq '')) (Show $x)
+$t = (& $Exe convert-apply --unit (P 'capp\CNone.pas') --rules (P 'c.rules') --db (P 'capp.sqlite') --db (P 'clib.sqlite') 2>$null) -join "`n"
+Check 'C8 text: the work-list line names the ambiguity instead of an empty declarer' `
+  ($t -match '(?m)^  unmapped Label1\.WordWrap \(declaring class ambiguous: FMX\.StdCtrls, Vcl\.StdCtrls\) -- line 21\s*$') $t
+$c = CRun 'CNone' 'cq.rules'
+Check 'C9 the BOOK''s own qualification (#convert Vcl.StdCtrls.TLabel) settles what the unit''s scope cannot' `
+  (IsVcl (Row $c 'Label1' 'Layout') 'property') (Show (Row $c 'Label1' 'Layout'))
+$c = CRun 'CVcl' 'c.rules'
+Check 'C10 every member row carries a resolution (X1''s cross-db ancestor too)' `
+  ((@($c.J.pas_uses | Where-Object { $_.instance -ne '' -and -not $_.resolution }).Count -eq 0) -and ((Row $xr 'a1' 'XTag').resolution -eq 'resolved')) `
+  (($c.J.pas_uses | ConvertTo-Json -Depth 4 -Compress))
+
 # ---- capability -------------------------------------------------------------
 $info = (& $Exe info --json 2>$null) -join "`n"
 $ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
 Check 'K info --json: capabilities.pas_uses is true' (($null -ne $ij) -and ($ij.capabilities.pas_uses -eq $true)) ''
+Check 'K2 info --json: capabilities.pas_uses_resolution is true' (($null -ne $ij) -and ($ij.capabilities.pas_uses_resolution -eq $true)) ''
 
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

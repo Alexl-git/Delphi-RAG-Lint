@@ -75,8 +75,10 @@ by hand, naming its line. Values without `.db` are never touched.
 ## What is left to convert (1.27.0)
 Every run also lists what the unit's code still uses: each member reached
 through a converted instance, and each global from a unit the run removes.
-JSON `pas_uses[]` gives one row per member with its kind, where it is declared,
-its lines and a status -- `mapped`, `cast-refused`, `not-rewritten` (a rule
+JSON `pas_uses[]` gives one row per member with its kind, where it is declared
+(the From class found through the unit's own uses, so a VCL `TLabel` is never
+read as the FMX one; when nothing settles it the row says `resolution:
+ambiguous` and lists the `candidates`, 1.28.2), its lines and a status -- `mapped`, `cast-refused`, `not-rewritten` (a rule
 covers it, but convert-apply does not edit the code for that rule's shape -- a
 dotted path such as `#link Properties.X <- X` -- so the code still names the
 old member), `same-name` (the new type has the same name, so it carries over),

@@ -3,6 +3,27 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.28.2-alpha -- unreleased
+
+### Fixed
+
+- **convert-apply `pas_uses[]`: the From class is resolved through the UNIT'S SCOPE, never by bare
+  name.** Converter report 2026-10-11: a VCL `Label1: TLabel` listed `WordWrap` as declared in
+  `FMX.StdCtrls.TLabel` and `Layout` with an EMPTY kind -- `CollectPasUses` looked the bare
+  `TLabel` up across the `--db` stores and the first one won. Now (`ResolveClassInScope`): the
+  unit itself, then the LAST uses entry declaring the name (an interface field sees the interface
+  uses only), then the book's qualified `#convert` From, then a lone declarer; an ancestor the
+  class's own store cannot resolve goes through the declaring unit's scope the same way, and the
+  To-type `same-name` check too. New per-row `resolution` (`resolved` / `ambiguous` /
+  `class-not-found` / `member-not-found` / `kind-unknown`) and `candidates[]`: several declarers
+  left over are reported, never picked, and an empty kind is never presented as a fact. `kind`
+  adds `enum-value` (a global-dangling `bkOK` had kind `''`). Capability `pas_uses_resolution`.
+  Guard: run_convert_apply_pas_uses.ps1 C0-C10, K2.
+- **lint `unused-unit-in-uses`: an ENUM VALUE is a use of the unit declaring its enum.** A unit
+  using `Vcl.Controls` only through `alTop` / `bvNone` was called a dead import (removing it
+  fails E2003). The extractor already records those refs; the rule's export set held the unit's
+  interface-level names only, and an enum value sits one level below, under its enum. Read-time
+  fix in `ExportNamesFor`; no extractor or resolver change. Guard: run_unused_unit_enum_values.ps1.
 ## v1.28.1-alpha -- unreleased
 
 ### Fixed
