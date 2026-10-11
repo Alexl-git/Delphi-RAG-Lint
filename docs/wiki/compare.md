@@ -96,11 +96,14 @@ it is not.
 |---|---|
 | 0 | No differences. |
 | 1 | Differences found. |
-| 2 | Usage or setup error (no old side, no `COMMAND`, unreadable file, mixed formats, the producer failed). |
+| 2 | Usage or setup error (no old side, no `COMMAND`, unreadable file, mixed formats, a chart that parses as empty, the producer failed, or any unexpected error inside the verb). |
 | 3 | The index of the new run is stale. |
 
 On 2 and 3 `ERROR: <message>` goes to stderr first and, with `--format json`, the JSON
-document is still written to stdout, so a machine caller always gets the envelope.
+document is still written to stdout, so a machine caller always gets the envelope. An
+unexpected error inside the verb is reported as `ERROR: <class>: <message>` with exit 2
+(never 3, which means only "stale index"), and its envelope goes to stdout even when
+`--output` was given, since writing `--output` may be what failed.
 
 ## Output formats
 
@@ -109,7 +112,10 @@ document is still written to stdout, so a machine caller always gets the envelop
   `result: ... (exit N)`. For a chart, four lists: nodes and edges added and removed.
 * **json** -- one line, schema `compare/1`. Every key is always present.
 * **html** -- a self-contained page (no script, no external resource) that follows the
-  light or dark setting of the browser. A chart is shown with the added nodes and
+  light or dark setting of the browser. Its `Content-Security-Policy` meta allows inline
+  styles and `data:` images only. A chart's `graph.svg` is cut after its last `</svg>`,
+  and `<script>`, `<foreignObject>`, every `on*` attribute and every `javascript:` URL
+  are removed before it is inlined (the same for `--show`). A chart is shown with the added nodes and
   edges marked, and the old chart in a collapsed section with the removed ones faded.
   Written to `--output`, else
   `%TEMP%\drag-lint-reports\compare-<question>-<target>-<yyyymmdd-hhmm>.html`; the path
@@ -131,12 +137,22 @@ question and target, newest 20, and are a local convenience, not a record.
 * In a chart, edges are identified by their endpoint titles, so two different edges
   between the same pair of nodes count as one.
 * The new answer comes from `charts\src\Ask-Report.ps1 -Plain` run in a PowerShell 7
-  child process; without `pwsh` the verb exits `2` with the reason. A non-ASCII
-  character in a report depends on that script's console encoding.
+  child process; without `pwsh` the verb exits `2` with the reason. Its stdout is read
+  as UTF-8, which is what pwsh 7 writes to a redirected stdout (measured on pwsh 7.6);
+  no charts script emits a non-ASCII character today.
+* A forms CSV is compared only as two saved files (`--old a.csv --new b.csv`): no
+  question reruns into a CSV, so `--old a.csv` alone has nothing to compare it with.
+* `--save --open` is refused: `--save` with no old side only takes a snapshot, and a
+  snapshot alone cannot render a page.
+* A `COMMAND` line recorded from a `-DbPath` run carries no `-Project` or `-In`, so its
+  rerun needs `--project <P.dproj>` or `--db <index>` on the compare command line.
+* A chart DOT is read in the emitters' dialect (one node statement per box with an HTML
+  label; bare or double-quoted ids). A non-blank DOT that yields no node and no edge is
+  refused (exit 2, "parsed as empty") rather than compared as "no differences".
 
 ## Determinism (N5) status
 
-N5: the same question asked twice on the same index must compare empty; a non-empty diff is a defect in the report, not in Compare. Measured 2026-10-11 by `charts\src\Test-Parity.ps1 -Mode Determinism` on the frozen clones: **26/26 deterministic**. `architecture` failed the first run (zones of equal size were ordered by per-process hashtable key order) and was fixed by an ordering-only tie-break in `Emit-Architecture.ps1`; see `INBOX-Done\INBOX-2026-10-11-charts-n5-architecture.md`. Seconds are the PowerShell producer's wall time per run.
+N5: the same question asked twice on the same index must compare empty; a non-empty diff is a defect in the report, not in Compare. Measured 2026-10-11 by `charts\src\Test-Parity.ps1 -Mode Determinism` on the frozen clones: **26/26 deterministic**. `architecture` failed the first run (zones of equal size were ordered by per-process hashtable key order) and was fixed by an ordering-only tie-break in `Emit-Architecture.ps1` (commit b2da70e9). Seconds are the PowerShell producer's wall time per run.
 
 | question | run 1 s | run 2 s | N5 |
 |---|---|---|---|
