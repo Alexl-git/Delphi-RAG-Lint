@@ -354,6 +354,13 @@ Check '--help: no "decimal seconds"' (-not ($help -match 'decimal seconds')) ''
 #     "(loaded defaults ...)" banner to stderr -- the note the editor actually
 #     sees. RED on ed5cdd4c: that banner sat in ErrOutput's buffer and landed
 #     AFTER the document on all six verbs.
+#     Since 1.26.2 a convert-* verb does NOT read the defaults file: it prints no
+#     banner, and when the file holds a key the reader would have applied it
+#     prints ONE "ignoring ..." note instead. So the file carries "docs" (a key
+#     harmless to the other verbs), and the convert arms expect that note --
+#     still a stderr line that must land before the document. The dry-run arm
+#     passes --no-reconcile-uses: since C9 (1.27) an unindexed OldUnit is KEPT,
+#     and this arm checks the merged stream, not uses reconciliation.
 Write-Host ''
 Write-Host 'e: merged stream on convert-apply / convert-reemit / info / query / outline / sql (R18)' -ForegroundColor Cyan
 $ex = P 'ex'
@@ -388,7 +395,7 @@ end.
 Write-Ascii (Join-Path $ex 'u.rules') "#useswap OldUnit -> NewUnit`n"
 Write-Ascii (Join-Path $ex 'r.rules') "#convert EdFix.TSrcComp -> EdFix.TDstComp`n#link Caption <- Caption`n"
 Write-Ascii (Join-Path $ex 'blk.txt') "object S1: TSrcComp`n  Caption = 'x'`nend`n"
-Write-Ascii (Join-Path $ex '.drag-lint.json') '{}'
+Write-Ascii (Join-Path $ex '.drag-lint.json') '{"docs":{}}'
 $exDb = Join-Path $ex 'ex.sqlite'
 $null = & $Exe index $ex --db $exDb 2>&1
 # convert-apply --apply edits the unit: it runs on its own indexed copy, one per engine run.
@@ -426,7 +433,7 @@ function SliceBy([string]$S, [char]$Open, [char]$Close) {
   try { return (ConvertFrom-Json -InputObject $S.Substring($a, $b - $a + 1) -NoEnumerate) } catch { return $null }
 }
 $edCases = @(
-  @{ N = 'convert-apply (dry run)'; Open = '{'; Close = '}'; A = { param($t) @('convert-apply', '--unit', (Join-Path $ex 'EdFix.pas'), '--rules', (Join-Path $ex 'u.rules'), '--db', $exDb, '--format', 'json') };
+  @{ N = 'convert-apply (dry run)'; Open = '{'; Close = '}'; A = { param($t) @('convert-apply', '--unit', (Join-Path $ex 'EdFix.pas'), '--rules', (Join-Path $ex 'u.rules'), '--db', $exDb, '--format', 'json', '--no-reconcile-uses') };
      Ok = { param($j) $j.schema -eq 'apply/1' -and $j.mode -eq 'dry-run' -and $j.ok -eq $true -and $j.uses_removed -eq 1 } },
   @{ N = 'convert-apply --apply'; Open = '{'; Close = '}'; A = { param($t) $u = ApplyCopy $t; @('convert-apply', '--unit', $u, '--rules', (Join-Path $ex 'u.rules'), '--db', (Join-Path (Split-Path $u) 'c.sqlite'), '--apply', '--no-backup', '--format', 'json') };
      Ok = { param($j) $j.schema -eq 'apply/1' -and $j.mode -ne 'dry-run' -and $null -ne $j.ok -and $null -ne $j.uses } },
@@ -447,8 +454,9 @@ foreach ($c in $edCases) {
   $sep = RunRawIn $ex $Exe (& $c.A "s$ci")
   $mrg = RunMergedIn $ex $Exe (& $c.A "m$ci")
   $errTxt = Ascii $sep.Err
+  $banner = if ($c.N -like 'convert-*') { 'note: ignoring "docs" in .*a convert verb reads only' } else { 'loaded defaults' }
   Check "e $($c.N): separate run exits 0 and writes the banner to stderr" `
-    (($sep.Code -eq 0) -and ($errTxt -match 'loaded defaults')) "exit=$($sep.Code) stderr=$($errTxt.Trim())"
+    (($sep.Code -eq 0) -and ($errTxt -match $banner)) "exit=$($sep.Code) stderr=$($errTxt.Trim())"
   $tail = ((Ascii $mrg).TrimEnd() -split "`n" | Select-Object -Last 1)
   # The --apply case runs on per-run copies (s<i> / m<i>): the copy's directory
   # name is the only byte allowed to differ.

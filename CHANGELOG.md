@@ -50,6 +50,12 @@ breaking changes** until v1.0.
   (run_calledfrom_uses_scope.ps1, `INCLUDES nearunit.Poke`). `TObject` is the implicit ancestor
   of every class, so it is kept as untypable; TListView-style receivers are still dropped.
   RED 1 failing check, GREEN 7/7; run_doc_callers_foreign_receiver.ps1 stays green (19/19).
+- **tests: run_proptree_output_speed.ps1 `e` arms follow 1.26.2 and C9 (test-only).** The convert
+  arms expected the "(loaded defaults ...)" banner, which a convert-* verb has deliberately not
+  printed since 1.26.2; the fixture's defaults file now carries `"docs"` and the convert arms expect
+  the one "note: ignoring ..." line instead -- still a stderr line that must precede the document.
+  The dry-run arm passes `--no-reconcile-uses`, since C9 keeps an unindexed `OldUnit`.
+  RED 4 failing checks, GREEN 34/34.
 
 ## v1.28.2-alpha -- unreleased
 
