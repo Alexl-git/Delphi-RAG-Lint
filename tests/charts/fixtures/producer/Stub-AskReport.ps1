@@ -6,6 +6,8 @@
   index or an engine.
 
     -DbPath ...stale.sqlite  without -AllowStale -> stderr "ask-report: stale index", exit 3
+    -Project ...stale.dproj  without -AllowStale -> stderr "ask-report: stale index", exit 3 (the NEW-run
+                                                    stale case of a Compare test, no -DbPath)
     -Target REFUSE                               -> stderr "ask-report: no such symbol", exit 1
     $env:STUB_VARIANT -eq 'B'                    -> the body carries one more row (so a Compare
                                                     test can force a difference)
@@ -38,6 +40,10 @@ if ($Target -eq 'REFUSE') {
 }
 if ($DbPath -and ($DbPath -like '*stale.sqlite') -and -not $AllowStale) {
   [Console]::Error.WriteLine('ask-report: stale index: ' + $DbPath)
+  exit 3
+}
+if ($Project -and ($Project -like '*stale.dproj') -and -not $AllowStale) {
+  [Console]::Error.WriteLine('ask-report: stale index for ' + $Project)
   exit 3
 }
 $sentTarget = $(if ($To) { "$Target -> $To" } else { $Target })
