@@ -20,12 +20,15 @@ type
   public
     [Test] procedure PlainAndDocInsightOfSameAnswerAreEqual;
     [Test] procedure RewrappedDocInsightIsEqual;
+    [Test] procedure NarrowerRewrapOfIndentedRowIsEqual;
+    [Test] procedure NarrowerRewrapOfTopLevelLineIsAKnownLimit;
     [Test] procedure LegacyAndNewHeaderBodiesAreEqual;
     [Test] procedure LineEndsAndBomDoNotDiff;
     [Test] procedure TrailingSpaceHeaderSentenceIsNotAnItem;
     [Test] procedure CommandWithoutBlankLineAfterItIsNotOverJoined;
     [Test] procedure AnchorLineNumbersAreIgnored;
     [Test] procedure StepNumbersAreIgnored;
+    [Test] procedure LaterTableCellNumberIsAChange;
     [Test] procedure VolatileLinesAreDropped;
     [Test] procedure BlankRunsCollapse;
     [Test] procedure ShownTextIsOriginal;
@@ -61,6 +64,10 @@ const
   ONE_ITEM = 1;
   { who-writes.doc.txt logical lines: Totals, Selected, FormShow, then the wrapped Grid->Post row }
   L_GRID_POST = 3;
+  { a column a wiki or an editor might re-wrap a block at, narrower than the formatter's 100 }
+  NARROW_WIDTH = 72;
+  ROW_TEXT = 'TfrmBlueprint4.Grid->Post (Blueprint4.pas:3001) -- a note that is long enough ' +
+    'to wrap twice at seventy-two columns, and then a little more so the third line is there too';
   { the two forms an old report may have been saved in }
   FOREIGN_FIXTURES: array[0..1] of string = ('who-writes.doc.txt', 'who-writes.plain.txt');
 
@@ -130,6 +137,27 @@ begin
   Assert.IsTrue(Eq > 0, pWhat + ': nothing compared');
 end;
 
+{ Greedy word wrap of one logical line into '///' lines of at most pWidth columns;
+  continuation lines get two more spaces, as EmitWrapped does (no token cutting). }
+function WrapDoc(const pText, pIndent: string; pWidth: Integer): string;
+begin
+  Result:= '';
+  var Lead:= pIndent;
+  var Current:= '';
+  for var Word in pText.Split([' '], TStringSplitOptions.ExcludeEmpty) do
+    if Current = '' then
+      Current:= Word
+    else if Length('/// ' + Lead + Current + ' ' + Word) <= pWidth then
+      Current:= Current + ' ' + Word
+    else
+    begin
+      Result:= Result + '/// ' + Lead + Current + CRLF;
+      Lead:= pIndent + '  ';
+      Current:= Word;
+    end;
+  Result:= Result + '/// ' + Lead + Current + CRLF;
+end;
+
 function HasKeyContaining(const pItems: TArray<TDiffItem>; const pPart: string): Boolean;
 begin
   for var Item in pItems do
@@ -152,6 +180,30 @@ procedure TAdapterTextTests.RewrappedDocInsightIsEqual;
 begin
   { the rewrapped copy moved one word UP per wrapped line (a wider wrap column) }
   AssertSameAnswer(Fixture('who-writes.doc.txt'), Fixture('who-writes.doc.rewrapped.txt'), 'rewrapped');
+end;
+
+procedure TAdapterTextTests.NarrowerRewrapOfIndentedRowIsEqual;
+begin
+  { ruling R11: under an indented row a four-space line is always a continuation }
+  var Plain:= 'TOP line' + CRLF + '    ' + ROW_TEXT + CRLF;
+  var Doc:= FormatAnswerAsDocInsight('P', 'who-writes', 'T', Date, Plain);
+  var Narrow:= '/// TOP line' + CRLF + WrapDoc(ROW_TEXT, '  ', NARROW_WIDTH);
+  Assert.IsTrue(Pos('///     ', Narrow) > 0, 'the narrow copy really wraps: ' + Narrow);
+  AssertSameAnswer(Doc, Narrow, 'indented row at 72 columns');
+  AssertSameAnswer(Plain, Narrow, 'plain vs indented row at 72 columns');
+end;
+
+procedure TAdapterTextTests.NarrowerRewrapOfTopLevelLineIsAKnownLimit;
+begin
+  { accepted limit: an unindented line re-wrapped narrower is not joined, because a
+    two-space row under an unindented line is a real shape; the inverse wrap rule decides }
+  var Plain:= ROW_TEXT + CRLF;
+  var Narrow:= WrapDoc(ROW_TEXT, '', NARROW_WIDTH);
+  var Eq, Del, Ins: Integer;
+  Assert.IsTrue(CountEdits(MyersDiff(ReportItems(Plain), ReportItems(Narrow)), Eq, Del, Ins),
+    'known limit: a top-level narrower re-wrap diffs');
+  { the formatter's own wrap of the same line still compares equal }
+  AssertSameAnswer(Plain, FormatAnswerAsDocInsight('P', 'who-writes', 'T', Date, Plain), 'formatter wrap');
 end;
 
 procedure TAdapterTextTests.LegacyAndNewHeaderBodiesAreEqual;
@@ -214,6 +266,14 @@ begin
   Assert.AreEqual('see step N', NormaliseKey('see step 12'));
   Assert.AreEqual(NormaliseKey('see step 3 then'), NormaliseKey('see step 12 then'));
   Assert.AreEqual('engine 1.27.0', NormaliseKey('engine 1.27.0'), 'a version is not a step number');
+end;
+
+procedure TAdapterTextTests.LaterTableCellNumberIsAChange;
+begin
+  { ruling R12: only the first cell is a step number }
+  Assert.AreNotEqual(NormaliseKey('| 1 | write sites | 26 |'), NormaliseKey('| 1 | write sites | 27 |'));
+  Assert.AreEqual(NormaliseKey('| 3 | write sites | 26 |'), NormaliseKey('| 12 | write sites | 26 |'));
+  Assert.AreEqual('| write sites | 26 |', NormaliseKey('| 12 | write sites | 26 |'));
 end;
 
 procedure TAdapterTextTests.VolatileLinesAreDropped;

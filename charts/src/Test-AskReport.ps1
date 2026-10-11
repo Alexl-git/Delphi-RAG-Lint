@@ -28,6 +28,7 @@
     AR-DOC-RT    the DEFAULT answer (no -Plain) is the DocInsight block of the -Plain answer (owner answer 2, R5)
 
     AR-HDR       -Plain starts with the report sentence (date, time, engine) and a COMMAND line (no -DbPath, R5)
+    AR-HDR-CASE  -Question Who-Reads (any case) emits the ValidateSet id lower-cased in the sentence and the COMMAND (R13)
     AR-HDR-CMD   Get-ReportCommandLine in isolation (fixed order, display switches and index overrides dropped)
     AR-HDR-DOC   the default block holds the COMMAND once, unwrapped
     AR-ALLOWSTALE  -AllowStale on the stale DL clone answers (exit 0) and says so on stderr
@@ -217,6 +218,12 @@ Step 'AR-HDR' {
   $sentOk = $r.Out[0] -cmatch ('^Who reads this field \(drag-lint report who-reads\) for ' + [regex]::Escape($Q_FNR) + ', asked on \d{4}-\d{2}-\d{2} \d{2}:\d{2}, engine ' + [regex]::Escape($ver) + '\.$')
   # R5: the COMMAND never carries -DbPath (or any index override)
   Chk 'AR-HDR' "$($r.Exit)|$sentOk|$($r.Out[1])|$($r.Out[2] -clike 'BUNDLE *')" "0|True|COMMAND who-reads -Target `"$Q_FNR`"|True"
+}
+Step 'AR-HDR-CASE' {
+  # R13: the header names the MATCHED ValidateSet id, lower-cased -- never the caller's spelling, so two
+  # answers to the same question carry the same id and ParseReportHeader ([a-z0-9-]+) reads both
+  $r = Invoke-Ask @('-Question', 'Who-Reads', '-Target', $Q_FNR, '-DbPath', $DbCli, '-AllowStale', '-OutRoot', (Join-Path $OutDir 'hdrcase'), '-Plain')
+  Chk 'AR-HDR-CASE' "$($r.Exit)|$($r.Out[0] -clike '* (drag-lint report who-reads) for *')|$($r.Out[1])" "0|True|COMMAND who-reads -Target `"$Q_FNR`""
 }
 Step 'AR-HDR-CMD' {
   # the builder in isolation: dot-source only the function out of Ask-Report.ps1 (the script itself runs on load)

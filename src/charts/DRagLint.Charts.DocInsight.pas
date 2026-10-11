@@ -60,6 +60,65 @@ const
 function FormatAnswerAsDocInsight(const pPhrase, pQuestionId, pTarget: string; pDate: TDateTime;
   const pAnswer: string): string;
 
+{ The building blocks FormatAnswerAsDocInsight applies to each answer line,
+  public so the compare adapter (DRagLint.Charts.Adapter.Text) maps a plain
+  answer EXACTLY as this formatter does instead of keeping a copy that drifts. }
+
+/// <summary>Scrubs one line to strict 7-bit ASCII.</summary>
+/// <param name="pLine">One line, no line end.</param>
+/// <returns>pLine with the known dashes, arrows, quotes, bullets and the
+/// no-break space replaced by ASCII stand-ins (-- -> ' " * and so on), any other
+/// character outside 7-bit replaced by '?', and every control character (tab
+/// included) replaced by a space. A character above U+FFFF is two UTF-16
+/// surrogates and becomes '??'.</returns>
+/// <remarks>Pure; thread-safe.</remarks>
+function ScrubLine(const pLine: string): string;
+
+/// <summary>Defuses the autodoc provenance marker.</summary>
+/// <param name="pText">Any text.</param>
+/// <returns>pText with every occurrence of the marker (matched
+/// case-insensitively) replaced by 'drag-lint auto', so a pasted block is never
+/// mistaken for generated documentation.</returns>
+/// <remarks>Pure; thread-safe.</remarks>
+function RemoveAutodocMarker(const pText: string): string;
+
+/// <summary>Renders a row's file anchors the DocInsight way.</summary>
+/// <param name="pLine">One answer line.</param>
+/// <returns>pLine with each '@File.ext' or '@File.ext:12' token (preceded by
+/// the line start or whitespace, followed by the line end, whitespace, ',' or
+/// ';') rewritten as '(File.ext)' / '(File.ext:12)'.</returns>
+/// <remarks>Case-sensitive TRegEx; [A-Za-z0-9] covers both cases of the
+/// extension. Pure; thread-safe.</remarks>
+function RenderAnchors(const pLine: string): string;
+
+/// <summary>Counts the leading spaces of a line.</summary>
+/// <param name="pLine">One line.</param>
+/// <returns>The number of ' ' characters before the first other character
+/// (tabs are not counted).</returns>
+function LeadingSpaces(const pLine: string): Integer;
+
+/// <summary>Splits a text into lines on CRLF, CR or LF.</summary>
+/// <param name="pText">The text.</param>
+/// <returns>The lines without their line ends; a final line end yields a final
+/// empty element. A BOM is NOT removed.</returns>
+function SplitAnswerLines(const pText: string): TArray<string>;
+
+/// <summary>Maps ONE answer line to what the formatter emits for it, before
+/// wrapping.</summary>
+/// <param name="pRaw">The line, already scrubbed (ScrubLine) and right-trimmed;
+/// its leading spaces are significant (see remarks).</param>
+/// <param name="pIndent">Receives the row indent: two spaces when pRaw is
+/// indented more than two spaces, else ''.</param>
+/// <param name="pText">Receives the rendered text, trimmed, NOT XML-escaped and
+/// with the autodoc marker NOT yet defused (the formatter does both on its
+/// output).</param>
+/// <returns>False when the line is dropped: an 'ask-report:' or 'WARNING:' line
+/// (case-insensitive), an UNINDENTED 'BUNDLE ' or 'INDEX ' line, a 'REGENERATE '
+/// line at any indent, a 'CHART ' line without ' -- ', or a line left empty.</returns>
+/// <remarks>'CHART x -- rest' becomes 'Totals: rest.', 'TARGET x' becomes
+/// 'Selected: x', and anchors are rendered by RenderAnchors. Pure; thread-safe.</remarks>
+function RenderAnswerLine(const pRaw: string; out pIndent, pText: string): Boolean;
+
 implementation
 
 uses
@@ -153,7 +212,7 @@ begin
   while (Result < Length(pLine)) and (pLine[Result + 1] = ' ') do Inc(Result);
 end;
 
-function SplitLines(const pText: string): TArray<string>;
+function SplitAnswerLines(const pText: string): TArray<string>;
 begin
   Result:= StringReplace(StringReplace(pText, #13#10, #10, [rfReplaceAll]), #13, #10, [rfReplaceAll]).Split([#10]);
 end;
@@ -251,7 +310,7 @@ begin
   SB:= TStringBuilder.Create;
   try
     SB.Append(DOC_PREFIX).Append('<remarks>').Append(CRLF);
-    var Lines: TArray<string>:= SplitLines(pAnswer);
+    var Lines: TArray<string>:= SplitAnswerLines(pAnswer);
     var Skip: Integer:= 0;
     if (Length(Lines) > 0) and TRegEx.IsMatch(ScrubLine(Lines[0]), HEADER_SENTENCE_RX) then
     begin

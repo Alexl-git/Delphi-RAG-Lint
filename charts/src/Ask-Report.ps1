@@ -156,6 +156,9 @@ try {
              Where-Object { $_ -is [System.Management.Automation.ValidateSetAttribute] } |
              ForEach-Object { $_.ValidValues })
   if ($valid -notcontains $Question) { Stop-Ask 2 "unknown question '$Question' -- one of: $($valid -join ', ')" }
+  # R13: from here on the question is the MATCHED ValidateSet id, lower-cased. PS trap: -notcontains above is
+  # case-insensitive, so 'Who-Reads' passed it and would otherwise reach the header sentence and COMMAND as typed.
+  $Question = @($valid | Where-Object { $_ -eq $Question })[0].ToLowerInvariant()
   $needServer = $Question -in 'round-trip', 'lands-where'
   $needSql    = $Question -in 'round-trip', 'lands-where', 'consumers', 'feeds-from'
   $wantOther  = $Question -eq 'crosses-boundary'
