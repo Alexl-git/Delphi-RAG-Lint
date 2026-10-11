@@ -29,6 +29,7 @@ uses
   , ConvRules.ConvertRunner
   , ConvRules.ConvertRequest  // dl:unit ConvRules.ConvertRequest accepted -- WHOLE_UNIT_SCOPE_TEXT is the E4 Scope line ScopeText returns for no scope; it travels with ScopeText so the reset caption cannot drift from it
   , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- ANALYSIS_CANCELLED is the analysis's own cancel text, reused for a reindex skipped by the same cancel
+  , ConvRules.WorkList  // TWorkRun: TConvertHost.WorkListReady's parameter
   ;
 
 type
@@ -77,6 +78,10 @@ type
     /// thread when Convert is pressed; the run passes and reports it only when the
     /// file exists (ExistingCastLib).</summary>
     GetCastLib    : TFunc<string>;
+    /// <summary>Receives a finished run's Work list (WorkRunOf: the pas_uses rows of every
+    /// converted unit, keyed by the run's id), once per run, from RunFinished on the UI
+    /// thread; may be nil.</summary>
+    WorkListReady : TProc<TWorkRun>;
   end;
 
   /// <summary>The Convert tab: a checklist of rule books, a list of source
@@ -118,6 +123,7 @@ type
       FRetypeOk       : Boolean;            // engine reports inherited_retype (C8 N2): the notes stop warning that a descendant breaks
       FRunRetypeOk    : Boolean;            // FRetypeOk when Convert was pressed
       FApplyFeatures  : TApplyFeatures;     // engine 1.27.0 apply/1 features (ApplyFeaturesOf the same probe); [] = an older engine
+      FRunId          : Integer;            // the session's run counter: TConvertJob.RunId, the Work list's key
       FScope          : TConvertScope;      // C12: the IDE request's scope; Default = whole unit
       FRunScope       : TConvertScope;      // FScope when Convert was pressed: the report's Scope line (Clear scope may run mid-run)
       FInherit        : TDictionary<string, TUnitInheritance>; // C8 analyses, by upper-cased path
@@ -1365,6 +1371,8 @@ begin
   Job.RetypeSupported   := FRetypeOk;
   Job.ApplyFeatures     := FApplyFeatures;
   Job.Scope             := FScope; // copied: Clear scope mid-run does not reach the worker
+  Inc(FRunId);
+  Job.RunId             := FRunId; // keys this run's Work list rows (WorkRunOf)
   LExe:= FHost.ExePath;
   // Captured now: the user may open or start another book mid-run, which moves
   // the live rules folder; the report belongs beside the books that ran.
@@ -1578,6 +1586,9 @@ begin
     Msg:= Msg + ' Inherited instances could not be re-checked: ' + FInheritError;
   // Re-harvest the converted code so the Unit Rules MISSING list is current.
   FHost.FeedHarvest(AJob.Units);
+  // Task 3 (1.27.0): the Work list -- replaced by this run's rows, whatever the run did.
+  if Assigned(FHost.WorkListReady) then
+    FHost.WorkListReady(WorkRunOf(FRunRows, AJob.RunId, afPasUses in AJob.ApplyFeatures));
   // Red when the run went wrong, a re-read after it failed (C8), or units hold glyph to-dos (C10).
   var LRunProblem : Boolean:= (Tally.Restored + Tally.BookSkips + Tally.UnitSkips + Tally.ConfigErrors + Length(Tally.NotRestored) > 0) or (AProblem <> '') or (RepErr <> '');
   var LReadProblem: Boolean:= (LIndexErr <> '') or (FInheritError <> '');

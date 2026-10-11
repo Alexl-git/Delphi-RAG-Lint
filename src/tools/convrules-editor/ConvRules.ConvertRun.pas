@@ -12,6 +12,7 @@ uses
   System.SysUtils
   , ConvRules.Glyph  // dl:unit ConvRules.Glyph accepted -- GLYPH_BOOK_PENDING_SUFFIX travels with BookHasGlyphLinks: the greyed-book text belongs to the glyph gate
   , ConvRules.UnitStatus
+  , ConvRules.WorkList
   ;
 
 type
@@ -173,6 +174,10 @@ type
     /// <summary>uses_reindex (afUsesReconcile): its status (done, skipped, failed,
     /// dry-run), plus ': &lt;reason&gt;' when the engine gave one; '' when absent.</summary>
     UsesReindex: string;
+    /// <summary>pas_uses[] (afPasUses), via ParsePasUses: what the unit's code still
+    /// uses from the old components -- the Work list. UnitPas is apply/1 'unit' and
+    /// RunId 0 until the Convert tab stamps them (WorkRunOf); [] without the feature.</summary>
+    PasUses: TArray<TPasUseRow>;
   end;
 
   /// <summary>The verdict before any file is touched.</summary>
@@ -1257,6 +1262,8 @@ begin
       Result.UsesUnresolved:= UsesUnresolved(Obj);
       Result.UsesReindex   := UsesReindex(Obj);
     end;
+    if (afPasUses in AFeatures) and (Obj.Values['pas_uses'] is TJSONArray) then
+      Result.PasUses:= ParsePasUses(TJSONArray(Obj.Values['pas_uses']), Str(Obj, 'unit'), 0);
     // Each to-do is counted ONCE, in its own note part (controller ruling: items[] is
     // the union the six arrays partition). A cast site / value check is also a
     // warnings[] line, so it leaves the manual remainder when its array holds it.

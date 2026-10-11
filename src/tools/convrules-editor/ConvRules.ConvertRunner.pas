@@ -18,6 +18,7 @@ uses
   , ConvRules.Engine
   , ConvRules.ConvertRun
   , ConvRules.ConvertRequest
+  , ConvRules.WorkList
   ;
 
 const
@@ -138,6 +139,9 @@ type
     /// <summary>The engine's 1.27.0 apply/1 features (ApplyFeaturesOf the tab's
     /// capability probe); [] = an older engine, read as before.</summary>
     ApplyFeatures: TApplyFeatures;
+    /// <summary>The Convert tab's run counter (1, 2, ...); the run's Work list rows
+    /// carry it (WorkRunOf), so a new run replaces the list and never mixes with it.</summary>
+    RunId: Integer;
   end;
 
   /// <summary>Called once per row (worker thread!). A unit's rows arrive
@@ -442,6 +446,18 @@ function GlyphTodoUnitCount(const ARows: TArray<TConvertRow>): Integer;
 /// when it is set, then ABody. A half-converted unit always leads; the glyph to-dos come
 /// next.</returns>
 function RunStatusLead(const ANotRestored: TArray<string>; const AGlyphSummary, ABody: string): string;
+
+/// <summary>PURE: a finished run's Work list (engine 1.27.0 pas_uses[]).</summary>
+/// <param name="ARows">The run's rows.</param>
+/// <param name="ARunId">The run's id (TConvertJob.RunId).</param>
+/// <param name="APasUses">The run's engine reports pas_uses (afPasUses in the job's
+/// ApplyFeatures).</param>
+/// <returns>State wlsNoCapability without APasUses; else wlsNoConverted when no row is
+/// csConverted; else wlsRows with the Apply.PasUses of every csConverted row, each
+/// stamped with ARunId and that row's full UnitPas. A row repeated exactly (two books on
+/// one unit reporting the same global) is kept once. A csRolledBack row counts nowhere:
+/// its change was restored away.</returns>
+function WorkRunOf(const ARows: TArray<TConvertRow>; ARunId: Integer; APasUses: Boolean): TWorkRun;
 
 implementation
 
@@ -1126,6 +1142,52 @@ begin
       Break; // a castlib configuration error: every later apply would fail the same way
   end; // for units
   Result:= Rows;
+end;
+
+// WorkRunOf's identity of a row: the unit and every pas_uses field, so only an exact
+// repeat is dropped (compared case-insensitively, as Pascal names are).
+function PasUseKey(const ARow: TPasUseRow; const ALines: string): string;
+begin
+  Result:= string.Join(#9, [ARow.UnitPas, ARow.Instance, ARow.FromType, ARow.ToType, ARow.Member, ARow.Kind,
+    ARow.Visibility, ARow.Status, ARow.DeclaringUnit, ARow.DeclaredIn, ALines]);
+end;
+
+function WorkRunOf(const ARows: TArray<TConvertRow>; ARunId: Integer; APasUses: Boolean): TWorkRun;
+var
+  LSeen : TArray<string>;
+  LKey  : string;
+  LLines: string;
+  LUse  : TPasUseRow;
+begin
+  Result:= Default(TWorkRun);
+  Result.RunId:= ARunId;
+  if not APasUses then
+  begin
+    Result.State:= wlsNoCapability;
+    Exit;
+  end;
+  Result.State:= wlsNoConverted;
+  LSeen:= nil;
+  for var LRow: TConvertRow in ARows do
+  begin
+    if LRow.Status <> csConverted then
+      Continue;
+    Result.State:= wlsRows;
+    for var LParsed: TPasUseRow in LRow.Apply.PasUses do
+    begin
+      LUse:= LParsed;
+      LUse.RunId  := ARunId;
+      LUse.UnitPas:= LRow.UnitPas;
+      LLines:= '';
+      for var LLine: Integer in LUse.Lines do
+        LLines:= LLines + IntToStr(LLine) + ',';
+      LKey:= PasUseKey(LUse, LLines);
+      if MatchText(LKey, LSeen) then
+        Continue;
+      LSeen:= LSeen + [LKey];
+      Result.Rows:= Result.Rows + [LUse];
+    end;
+  end;
 end;
 
 end.

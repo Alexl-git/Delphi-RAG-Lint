@@ -12,6 +12,7 @@ uses
   , System.Classes
   , System.StrUtils
   , System.Generics.Collections
+  , System.JSON
   , Winapi.Windows
   , ConvRules.Model in '..\ConvRules.Model.pas'  // dl:unit ConvRules.Model accepted -- the tests read BOOK_DEPTH_DEFAULT to pin the model's own default, so the const travels with the unit under test
   , ConvRules.Mappings in '..\ConvRules.Mappings.pas'
@@ -35,6 +36,7 @@ uses
   , ConvRules.UsesHarvest in '..\ConvRules.UsesHarvest.pas'
   , ConvRules.UnitStatus in '..\ConvRules.UnitStatus.pas'
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
+  , ConvRules.WorkList in '..\ConvRules.WorkList.pas'  // dl:unit ConvRules.WorkList accepted -- the tests read the PAS_USE_* statuses and WORK_* texts to pin the unit's own contract, so the consts travel with the unit under test
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
   , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
@@ -12738,6 +12740,260 @@ begin
   end; // try
 end; // procedure
 
+{ Work list over apply/1 pas_uses[] (editor-1270 Task 3). Real capture
+    fixtures\apply1270\apply-pas-uses-1270.json (its _note gives the command and the
+    engine sha): 2 unmapped, 1 not-rewritten, 1 mapped, 1 same-name, 2 global-dangling
+    on Unit1.pas, engine order Caption, Click, Kind, NumGlyphs, Spacing, bkOK, TBitBtnKind. }
+const
+  WORK_FIX_DIR   = 'C:\fix\';  // dl:ok hardcoded-absolute-path@416c -- REVIEWED 2026-10-11 text only: the Work list tests touch no file
+  WORK_REAL_ROWS = 7;
+  WORK_PAIR_N    = 2;  // unmapped rows, global rows, mapped + same-name rows in the real capture
+  WORK_KIND_ROW  = 2;  // Rows[] index of BitBtn1.Kind (unmapped, line 28)
+  WORK_KIND_LINE = 28;
+  WORK_SHOWN_N   = 5;  // the real capture's work rows (and its BitBtn1 rows)
+  WORK_RUN_OLD   = 1;
+  WORK_RUN_NEW   = 2;
+
+function WorkRow(const AUnit, AInstance, AMember, AStatus: string; ARunId: Integer = WORK_RUN_OLD): TPasUseRow;
+begin
+  Result:= Default(TPasUseRow);
+  Result.RunId   := ARunId;
+  Result.UnitPas := AUnit;
+  Result.Instance:= AInstance;
+  Result.Member  := AMember;
+  Result.Status  := AStatus;
+end;
+
+function WorkKeys(const ARows: TArray<TPasUseRow>): string;
+var
+  LParts: TArray<string>;
+begin
+  LParts:= nil;
+  for var LRow: TPasUseRow in ARows do
+    LParts:= LParts + [LRow.Member];
+  Result:= string.Join(',', LParts);
+end;
+
+function StatusCount(const ARows: TArray<TPasUseRow>; const AStatus: string): Integer;
+begin
+  Result:= 0;
+  for var LRow: TPasUseRow in ARows do
+    if LRow.Status = AStatus then
+      Inc(Result);
+end;
+
+function WorkRealRows: TArray<TPasUseRow>;
+begin
+  Result:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json')).PasUses;
+end;
+
+procedure TestWorkListParse;
+var
+  Rows : TArray<TPasUseRow>;
+  Kind : TPasUseRow;
+  Glob : TArray<string>;
+  Who  : Boolean;
+  Where: Boolean;
+  Count: Boolean;
+begin
+  // worklist.parse.real -- through ParseApplyJson, gated on afPasUses.
+  Rows := WorkRealRows;
+  Count:= (StatusCount(Rows, PAS_USE_UNMAPPED) = WORK_PAIR_N) and (StatusCount(Rows, PAS_USE_GLOBAL_DANGLING) = WORK_PAIR_N);
+  Who  := (StatusCount(Rows, PAS_USE_NOT_REWRITTEN) = 1) and (StatusCount(Rows, PAS_USE_MAPPED) = 1) and (StatusCount(Rows, PAS_USE_SAME_NAME) = 1);
+  Check('worklist.parse.real', (Length(Rows) = WORK_REAL_ROWS) and Count and Who, IntToStr(Length(Rows)) + ' rows: ' + WorkKeys(Rows));
+  if Length(Rows) = WORK_REAL_ROWS then
+  begin
+    Kind := Rows[WORK_KIND_ROW];
+    Who  := (Kind.Instance = 'BitBtn1') and (Kind.Member = 'Kind') and (Kind.FromType = 'TBitBtn') and (Kind.ToType = 'TPanel');
+    Where:= (Kind.DeclaringUnit = 'Vcl.Buttons') and (Kind.DeclaredIn = 'TBitBtn') and (Kind.UnitPas = 'Unit1.pas');
+    Count:= (Length(Kind.Lines) = 1) and (Kind.Lines[0] = WORK_KIND_LINE) and (Kind.Count = 1);
+    Check('worklist.parse.real.fields', Who and Where and Count and (Kind.Kind = 'property'), Kind.Member + ' ' + Kind.UnitPas);
+    Check('worklist.member.row', string.Join('|', RowDisplay(Kind)) = 'Unit1.pas|BitBtn1|TBitBtn -> TPanel|Kind|property|unmapped|28|Vcl.Buttons.TBitBtn',
+      string.Join('|', RowDisplay(Kind)));
+  end;
+  Check('worklist.parse.gated', Length(ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json'), [afUsesReconcile]).PasUses) = 0);
+  Who  := StatusCount(ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json')).PasUses, PAS_USE_CAST_REFUSED) = 1;
+  Where:= StatusCount(ParseApplyJson(Apply1270Fixture('apply-uses-1270.json')).PasUses, PAS_USE_GLOBAL_DANGLING) = WORK_PAIR_N;
+  Check('worklist.parse.other.captures', Who and Where);
+
+  // worklist.global.row -- instance '' renders as a global.
+  Glob:= nil;
+  for var LRow: TPasUseRow in Rows do
+    if LRow.Member = 'bkOK' then
+      Glob:= RowDisplay(LRow);
+  Check('worklist.global.row', string.Join('|', Glob) = 'Unit1.pas|' + WORK_GLOBAL_INSTANCE + '|' + WORK_GLOBAL_PAIR + '|bkOK||global-dangling|26|Vcl.Buttons',
+    string.Join('|', Glob));
+  Check('worklist.columns', string.Join('|', WorkColumns) = 'Unit|Instance|From -> To|Member|Kind|Status|Lines|Declared in', string.Join('|', WorkColumns));
+end;
+
+procedure TestWorkListSortFilter;
+var
+  Sorted: TArray<TPasUseRow>;
+  Mixed : TArray<TPasUseRow>;
+  Filter: TWorkFilter;
+  Work  : Boolean;
+  Plain : Boolean;
+begin
+  // worklist.sort.order -- status rank, then unit, globals last within a unit, then member.
+  Sorted:= WorkRealRows;
+  SortRows(Sorted);
+  Check('worklist.sort.order', WorkKeys(Sorted) = 'Kind,NumGlyphs,bkOK,TBitBtnKind,Spacing,Click,Caption', WorkKeys(Sorted));
+  Mixed:= [WorkRow('B.pas', '', 'G1', PAS_USE_UNMAPPED), WorkRow('B.pas', 'X', 'Z9', PAS_USE_UNMAPPED),
+    WorkRow('A.pas', 'X', 'Y', 'brand-new-status'), WorkRow('a.pas', '', 'G0', PAS_USE_UNMAPPED),
+    WorkRow('A.pas', 'X', 'Y', PAS_USE_CAST_REFUSED), WorkRow('A.pas', 'b', 'M', PAS_USE_UNMAPPED)];
+  SortRows(Mixed);
+  Check('worklist.sort.globals.last.unknown.last', WorkKeys(Mixed) = 'M,G0,Z9,G1,Y,Y', WorkKeys(Mixed));
+  Check('worklist.sort.unknown.status.last', (Length(Mixed) > 0) and (Mixed[High(Mixed)].Status = 'brand-new-status'));
+
+  // worklist.filter.default.work.only
+  Check('worklist.filter.default.work.only', WorkKeys(FilterRows(Sorted, DefaultWorkFilter)) = 'Kind,NumGlyphs,bkOK,TBitBtnKind,Spacing',
+    WorkKeys(FilterRows(Sorted, DefaultWorkFilter)));
+  Check('worklist.default.statuses', string.Join(',', DefaultWorkFilter.Statuses) = 'unmapped,global-dangling,cast-refused,not-rewritten');
+  Check('worklist.statuses.six', string.Join(',', WorkStatuses) = 'unmapped,global-dangling,cast-refused,not-rewritten,same-name,mapped');
+  Work := IsWorkStatus('UNMAPPED') and IsWorkStatus(PAS_USE_NOT_REWRITTEN);
+  Plain:= not IsWorkStatus(PAS_USE_SAME_NAME) and not IsWorkStatus('brand-new-status');
+  Check('worklist.is.work', Work and Plain);
+  Work := (WorkStyleOf(PAS_USE_UNMAPPED) = wsBoldRed) and (WorkStyleOf(PAS_USE_GLOBAL_DANGLING) = wsBoldRed);
+  Plain:= (WorkStyleOf(PAS_USE_CAST_REFUSED) = wsBold) and (WorkStyleOf(PAS_USE_NOT_REWRITTEN) = wsBold) and (WorkStyleOf(PAS_USE_MAPPED) = wsPlain);
+  Check('worklist.style', Work and Plain);
+
+  // worklist.filter.unit -- one run over two units.
+  Mixed:= [WorkRow(WORK_FIX_DIR + 'A.pas', 'X', 'Y', PAS_USE_UNMAPPED), WorkRow(WORK_FIX_DIR + 'B.pas', 'X', 'Z', PAS_USE_MAPPED),
+    WorkRow(WORK_FIX_DIR + 'a.PAS', '', 'G', PAS_USE_GLOBAL_DANGLING)];
+  Filter:= Default(TWorkFilter);
+  Filter.UnitPas:= WORK_FIX_DIR + 'A.pas';
+  Check('worklist.filter.unit', WorkKeys(FilterRows(Mixed, Filter)) = 'Y,G', WorkKeys(FilterRows(Mixed, Filter)));
+  Check('worklist.filter.all', WorkKeys(FilterRows(Mixed, Default(TWorkFilter))) = 'Y,Z,G');
+  Check('worklist.units', string.Join(',', WorkUnits(Mixed)) = WORK_FIX_DIR + 'A.pas,' + WORK_FIX_DIR + 'B.pas', string.Join(',', WorkUnits(Mixed)));
+
+  // worklist.filter.text -- member or instance, case-insensitive; globals too.
+  Filter:= Default(TWorkFilter);
+  Filter.Text:= 'glyph';
+  Check('worklist.filter.text', WorkKeys(FilterRows(Sorted, Filter)) = 'NumGlyphs', WorkKeys(FilterRows(Sorted, Filter)));
+  Filter.Text:= 'BITBTN1';
+  Check('worklist.filter.text.instance', Length(FilterRows(Sorted, Filter)) = WORK_SHOWN_N, WorkKeys(FilterRows(Sorted, Filter)));
+  Filter.Text:= 'K';
+  Filter.Statuses:= [PAS_USE_GLOBAL_DANGLING];
+  Check('worklist.filter.text.and.status', WorkKeys(FilterRows(Sorted, Filter)) = 'bkOK,TBitBtnKind', WorkKeys(FilterRows(Sorted, Filter)));
+end;
+
+procedure TestWorkListSummaryMerge;
+const
+  BAD_JSON = '[1, "x", null, {"member":"M1","status":"unmapped","lines":"12","count":"3"},'
+    + ' {"member":"M2","instance":7,"lines":[5,"a",7],"count":2,"status":["x"]}, []]';
+  BAD_DOC  = '{"schema":"apply/1","ok":true,"pas_uses":{"member":"x"}}';
+  BAD_RUN  = 3;
+  BAD_LINE = 7;
+var
+  Rows  : TArray<TPasUseRow>;
+  Arr   : TJSONArray;
+  Bad   : TArray<TPasUseRow>;
+  Raised: Boolean;
+  Kept  : Boolean;
+  Lines : Boolean;
+  Merged: TArray<TPasUseRow>;
+begin
+  Rows:= WorkRealRows;
+  Check('worklist.summary.counts', WorkListSummary(Rows) = '5 to work on (2 unmapped, 2 global, 0 cast-refused, 1 not-rewritten), 2 mapped / same-name',
+    WorkListSummary(Rows));
+  Check('worklist.summary.empty.rows', WorkListSummary(nil) = '0 to work on (0 unmapped, 0 global, 0 cast-refused, 0 not-rewritten), 0 mapped / same-name',
+    WorkListSummary(nil));
+  Check('worklist.summary.no.converted', WorkListSummary(nil, wlsNoConverted) = 'no work list (no unit converted)', WorkListSummary(nil, wlsNoConverted));
+  Check('worklist.summary.no.capability', WorkListSummary(Rows, wlsNoCapability) = 'no work list (engine has no pas_uses)', WorkListSummary(Rows, wlsNoCapability));
+  Check('worklist.summary.no.run', WorkListSummary(nil, wlsNoRun) = WORK_NO_RUN);
+
+  // worklist.bad.json.no.raise -- non-objects skipped, wrong types read as nothing.
+  Raised:= False;
+  Bad   := nil;
+  try
+    Arr:= TJSONObject.ParseJSONValue(BAD_JSON) as TJSONArray;
+    try
+      Bad:= ParsePasUses(Arr, 'U.pas', BAD_RUN);
+    finally
+      Arr.Free;
+    end; // try
+    Check('worklist.bad.json.doc.no.raise', (ParseApplyJson(BAD_DOC).Ok) and (Length(ParseApplyJson(BAD_DOC).PasUses) = 0));
+    Check('worklist.bad.json.nil.array', Length(ParsePasUses(nil, 'U.pas', WORK_RUN_OLD)) = 0);
+  except
+    on Exception do
+      Raised:= True; // catch-and-check: the next Check fails when anything raised
+  end; // try
+  Check('worklist.bad.json.no.raise', (not Raised) and (Length(Bad) = WORK_PAIR_N), IntToStr(Length(Bad)));
+  if Length(Bad) = WORK_PAIR_N then
+  begin
+    Kept := (Bad[0].Member = 'M1') and (Bad[0].Status = PAS_USE_UNMAPPED) and (Bad[0].UnitPas = 'U.pas') and (Bad[0].RunId = BAD_RUN);
+    Lines:= (Length(Bad[0].Lines) = 0) and (Bad[0].Count = 0);
+    Check('worklist.bad.json.kept', Kept and Lines);
+    Lines:= (Length(Bad[1].Lines) = WORK_PAIR_N) and (Bad[1].Lines[1] = BAD_LINE) and (Bad[1].Count = WORK_PAIR_N);
+    Check('worklist.bad.json.lines.numbers.only', Lines and (Bad[1].Instance = '') and (Bad[1].Status = ''));
+    Check('worklist.bad.json.renders', Length(RowDisplay(Bad[0])) = Length(WorkColumns));
+  end;
+
+  // worklist.replace.on.new.run -- a new run never mixes with the old one.
+  Merged:= MergeRun([WorkRow('A.pas', 'X', 'Old1', PAS_USE_UNMAPPED), WorkRow('A.pas', 'X', 'Old2', PAS_USE_UNMAPPED)],
+    [WorkRow('A.pas', 'X', 'New1', PAS_USE_UNMAPPED, WORK_RUN_NEW)], WORK_RUN_NEW);
+  Check('worklist.replace.on.new.run', WorkKeys(Merged) = 'New1', WorkKeys(Merged));
+  Check('worklist.replace.on.empty.run', Length(MergeRun([WorkRow('A.pas', 'X', 'Old1', PAS_USE_UNMAPPED)], nil, WORK_RUN_NEW)) = 0);
+  Merged:= MergeRun(nil, [WorkRow('A.pas', 'X', 'Stale', PAS_USE_UNMAPPED), WorkRow('A.pas', 'X', 'New', PAS_USE_UNMAPPED, WORK_RUN_NEW)], WORK_RUN_NEW);
+  Check('worklist.replace.drops.stale.rows', WorkKeys(Merged) = 'New', WorkKeys(Merged));
+end;
+
+procedure TestWorkListRunGoTo;
+const
+  RUN_A      = 4;
+  RUN_B      = 5;
+  CONV_ROWS  = 3;  // converted, failed-restored, a second converted book on the same unit
+  LINE_COUNT = 40;
+  SHORT_FILE = 10;
+var
+  Pas  : TApplyRow;
+  Conv : TArray<TConvertRow>;
+  Run  : TWorkRun;
+  Row  : TPasUseRow;
+  GoTo1: TWorkGoTo;
+  Unit1: string;
+begin
+  // WorkRunOf -- converted rows only, stamped, exact repeats once; the two empty states.
+  Pas  := ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json'));
+  Unit1:= WORK_FIX_DIR + 'Unit1.pas';
+  SetLength(Conv, CONV_ROWS);
+  Conv[0].UnitPas:= Unit1;
+  Conv[0].Status := csConverted;
+  Conv[0].Apply  := Pas;
+  Conv[1].UnitPas:= WORK_FIX_DIR + 'Unit2.pas';
+  Conv[1].Status := csFailedRestored;
+  Conv[1].Apply  := Pas;
+  Conv[High(Conv)].UnitPas:= Unit1; // a second book on Unit1 reporting the same rows
+  Conv[High(Conv)].Status := csConverted;
+  Conv[High(Conv)].Apply  := Pas;
+  Run:= WorkRunOf(Conv, RUN_A, True);
+  Check('worklist.run.of.converted', (Run.State = wlsRows) and (Run.RunId = RUN_A) and (Length(Run.Rows) = WORK_REAL_ROWS), IntToStr(Length(Run.Rows)));
+  if Length(Run.Rows) > 0 then
+    Check('worklist.run.of.stamped', (Run.Rows[0].UnitPas = Unit1) and (Run.Rows[0].RunId = RUN_A));
+  Check('worklist.run.of.no.capability', WorkRunOf(Conv, RUN_A, False).State = wlsNoCapability);
+  Conv[0].Status:= csRolledBack;
+  Conv[High(Conv)].Status:= csRefused;
+  Run:= WorkRunOf(Conv, RUN_B, True);
+  Check('worklist.run.of.no.converted', (Run.State = wlsNoConverted) and (Length(Run.Rows) = 0) and (WorkListSummary(Run.Rows, Run.State) = WORK_NO_CONVERTED));
+
+  // WorkGoTo -- double-click: copy, missing file, past EOF, no line.
+  if Length(Pas.PasUses) <> WORK_REAL_ROWS then
+    Exit;
+  Row:= Pas.PasUses[WORK_KIND_ROW];
+  Row.UnitPas:= Unit1;
+  GoTo1:= WorkGoTo(Row, True, LINE_COUNT);
+  Check('worklist.goto.copy', GoTo1.Ok and (GoTo1.Clip = Unit1 + '(28)') and (GoTo1.Status = 'Copied Unit1.pas(28) -- paste into the IDE''s Go to line'),
+    GoTo1.Clip + ' / ' + GoTo1.Status);
+  GoTo1:= WorkGoTo(Row, False, 0);
+  Check('worklist.goto.missing.file', (not GoTo1.Ok) and (GoTo1.Status = Unit1 + ' not found') and (GoTo1.Clip = ''), GoTo1.Status);
+  GoTo1:= WorkGoTo(Row, True, SHORT_FILE);
+  Check('worklist.goto.past.eof', (not GoTo1.Ok) and (GoTo1.Status = Unit1 + ' has only 10 line(s) -- line 28 is past its end (the file changed since the run)'),
+    GoTo1.Status);
+  Row.Lines:= nil;
+  GoTo1:= WorkGoTo(Row, True, LINE_COUNT);
+  Check('worklist.goto.no.line', GoTo1.Ok and (GoTo1.Clip = Unit1) and (Pos('no line', GoTo1.Status) > 0), GoTo1.Status);
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -12952,6 +13208,10 @@ begin
     TestRunnerExit6;
     TestRunnerExit6Stops;
     TestApply1270Remainder;
+    TestWorkListParse;
+    TestWorkListSortFilter;
+    TestWorkListSummaryMerge;
+    TestWorkListRunGoTo;
 
     FreeAndNil(GParseBook);
 

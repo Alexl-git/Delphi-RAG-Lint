@@ -235,7 +235,7 @@ try {
   Check 'main.window' ($main -ne [IntPtr]::Zero)
   Start-Sleep -Seconds 2
   $caps = [W]::MenuCaptions($main)
-  Check 'menubar.items' (($caps -match 'File\|Open\.\.\.') -and ($caps -match 'Conversion\|New Conversion') -and ($caps -match 'Conversion\|Reindex project') -and ($caps -match 'Mapping\|Auto-Match') -and ($caps -match 'Uses Units\|Swap\.\.\.') -and ($caps -match 'View\|Theme')) $caps
+  Check 'menubar.items' (($caps -match 'File\|Open\.\.\.') -and ($caps -match 'Conversion\|New Conversion') -and ($caps -match 'Conversion\|Reindex project') -and ($caps -match 'Mapping\|Auto-Match') -and ($caps -match 'Uses Units\|Swap\.\.\.') -and ($caps -match 'View\|Theme') -and ($caps -match 'View\|Work list')) $caps
   Check 'toolbar.gone' (@(Find $main 'TToolBar' $null).Count -eq 0)
 
   # --- 1. + New Conversion adds #unuse <From unit> and #use <To unit> ---
