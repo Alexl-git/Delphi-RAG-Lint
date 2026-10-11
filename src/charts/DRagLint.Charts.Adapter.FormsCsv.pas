@@ -5,13 +5,15 @@ unit DRagLint.Charts.Adapter.FormsCsv;
   CRLF rows, every non-empty text cell quoted, a quoted cell may hold commas, doubled
   quotes and line breaks) becomes the TDiffItem list the diff core compares.
 
-  A row is one item. Text is the raw row exactly as read. Key is the row's identity:
-  Form|Unit|How to open|Click|Handler -- the five cells that say WHICH way into WHICH
-  form -- parsed as quoted CSV, trimmed, joined with '|'. The step number (#), the
-  confidence, the tester's result and the notes are NOT identity, so a renumbered or
-  reordered row is not a change, a changed Handler is a delete plus an insert, and a
-  tester filling in a column changes nothing. Items are sorted by Key ordinally, so
-  row order never matters.
+  A row is one item. Text is the raw row exactly as read. IDENTITY DRIVES ORDER, CONTENT
+  DRIVES EQUALITY. Items are sorted by the identity columns Form|Unit|How to open|Click|
+  Handler (the cells that say WHICH way into WHICH form), so a reordered row is no
+  change. Key = the identity columns + every content column (Control type, Opened by,
+  Modal, Before you start, Other ways in, Confidence), parsed as quoted CSV, trimmed,
+  joined with '|', compared ordinally: a change in any of them is a delete plus an
+  insert. Only the volatile '#' row number and the tester-filled 'Tester result' and
+  'Notes' columns are left out, so a renumbering or a tester filling in a column
+  changes nothing.
 
   The provenance footer (a row with no Form whose last cell starts with '# ') carries
   a timestamp and a db path, so it is not an item.
@@ -40,9 +42,11 @@ function IsFormsCsv(const pText: string): Boolean;
 /// <summary>A forms CSV as diff items.</summary>
 /// <param name="pText">The whole CSV, CRLF, LF or CR line ends; a leading BOM is ignored.</param>
 /// <returns>One item per data row (the header, blank rows and the provenance footer are
-/// not items): Text = the raw row as read, Key = Form|Unit|How to open|Click|Handler
-/// parsed as quoted CSV, trimmed. Sorted by Key ordinally (then by Text), so row order
-/// never matters. A row with fewer cells reads the missing ones as empty.</returns>
+/// not items): Text = the raw row as read, Key = identity columns (Form, Unit, How to
+/// open, Click, Handler) + content columns (Control type, Opened by, Modal, Before you
+/// start, Other ways in, Confidence), trimmed, '|'-joined; '#', Tester result and Notes are
+/// not in the Key. Sorted by the identity columns ordinally (then Key, then Text), so row
+/// order never matters. A row with fewer cells reads the missing ones as empty.</returns>
 /// <remarks>The parser is a small state machine: a quote toggles quoted mode, a doubled
 /// quote inside quotes is one quote, commas and line ends split only outside quotes, so
 /// a quoted cell holding a comma, a doubled quote or a line break stays one cell of one
@@ -68,6 +72,13 @@ const
   COL_HOW = 3;
   COL_CLICK = 4;
   COL_HANDLER = 6;
+  { content columns: part of Key (equality) but not of the sort order }
+  COL_CONTROL = 5;
+  COL_OPENED_BY = 7;
+  COL_MODAL = 8;
+  COL_BEFORE = 9;
+  COL_OTHER_WAYS = 10;
+  COL_CONFIDENCE = 11;
   { the footer's cell, the last of the 14 columns }
   COL_NOTES = 13;
 
@@ -186,7 +197,7 @@ end;
 
 function FormsCsvItems(const pText: string): TArray<TDiffItem>;
 begin
-  var Items:= TList<TDiffItem>.Create;
+  var Items:= TList<TPair<string, TDiffItem>>.Create;
   try
     var Records:= ParseRecords(pText);
     for var I:= 1 to High(Records) do
@@ -194,17 +205,22 @@ begin
       var F:= Records[I].Fields;
       if (Length(F) = 1) and (Trim(F[0]) = '') then Continue;
       if IsFooter(F) then Continue;
-      var Key:= string.Join(KEY_SEP, [CellAt(F, COL_FORM), CellAt(F, COL_UNIT), CellAt(F, COL_HOW),
+      var Identity:= string.Join(KEY_SEP, [CellAt(F, COL_FORM), CellAt(F, COL_UNIT), CellAt(F, COL_HOW),
         CellAt(F, COL_CLICK), CellAt(F, COL_HANDLER)]);
-      Items.Add(TDiffItem.Make(Records[I].Raw, Key));
+      var Content:= string.Join(KEY_SEP, [CellAt(F, COL_CONTROL), CellAt(F, COL_OPENED_BY), CellAt(F, COL_MODAL),
+        CellAt(F, COL_BEFORE), CellAt(F, COL_OTHER_WAYS), CellAt(F, COL_CONFIDENCE)]);
+      Items.Add(TPair<string, TDiffItem>.Create(Identity, TDiffItem.Make(Records[I].Raw, Identity + KEY_SEP + Content)));
     end;
-    Items.Sort(TComparer<TDiffItem>.Construct(
-      function(const pLeft, pRight: TDiffItem): Integer
+    Items.Sort(TComparer<TPair<string, TDiffItem>>.Construct(
+      function(const pLeft, pRight: TPair<string, TDiffItem>): Integer
       begin
         Result:= string.CompareOrdinal(pLeft.Key, pRight.Key);
-        if Result = 0 then Result:= string.CompareOrdinal(pLeft.Text, pRight.Text);
+        if Result = 0 then Result:= string.CompareOrdinal(pLeft.Value.Key, pRight.Value.Key);
+        if Result = 0 then Result:= string.CompareOrdinal(pLeft.Value.Text, pRight.Value.Text);
       end));
-    Result:= Items.ToArray;
+    SetLength(Result, Items.Count);
+    for var N:= 0 to Items.Count - 1 do
+      Result[N]:= Items[N].Value;
   finally
     Items.Free;
   end;

@@ -26,7 +26,7 @@ type
 /// -- a folder holding graph.dot or a .dot file is cfGraph, .csv is cfFormsCsv, .txt .md
 /// .pas .log .text or no extension is cfReportText, anything else cfUnknown. False when it
 /// is the text: IsFormsCsv is cfFormsCsv, a text whose first non-blank line starts with
-/// 'digraph' or 'graph' (any case) is cfGraph, everything else -- an empty text too, an
+/// 'digraph' or 'graph' (any case) AND carries a '{' on that line is cfGraph, everything else -- an empty text too, an
 /// empty report being a legitimate answer -- is cfReportText.</param>
 /// <returns>The format; cfUnknown only for a path.</returns>
 function DetectFormat(const pPathOrText: string; pIsPath: Boolean): TChartsFormat;
@@ -71,7 +71,13 @@ begin
   for var Word in GRAPH_WORDS do
     if SameText(Copy(pText, Start, Length(Word)), Word) and
        ((Start + Length(Word) > Length(pText)) or CharInSet(pText[Start + Length(Word)], [#9, #10, #13, ' ', '{'])) then
-      Exit(True);
+    begin
+      // a DOT opens its body with '{' on that same line; prose that starts with 'Graph of ...' does not
+      var LineEnd:= Start;
+      while (LineEnd <= Length(pText)) and (pText[LineEnd] <> #10) and (pText[LineEnd] <> #13) do
+        Inc(LineEnd);
+      if Pos('{', Copy(pText, Start, LineEnd - Start)) > 0 then Exit(True);
+    end;
 end;
 
 function DetectByPath(const pPath: string): TChartsFormat;

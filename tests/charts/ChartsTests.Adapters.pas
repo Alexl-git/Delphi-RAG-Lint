@@ -27,6 +27,8 @@ type
     [Test] procedure ReorderedRowsAreNoChange;
     [Test] procedure ChangedHandlerIsDeletePlusInsert;
     [Test] procedure AddedAndRemovedRowsAreCounted;
+    [Test] procedure ContentColumnChangeIsDeletePlusInsert;
+    [Test] procedure VolatileColumnChangesAreNoChange;
     [Test] procedure QuotedCellsWithCommasAndQuotes;
     [Test] procedure DotNodesAreKeyedByIdentityNotLine;
     [Test] procedure DotRemovedAndAddedNodesAndEdges;
@@ -192,6 +194,40 @@ begin
   Assert.AreEqual(TWO, Ins, 'inserted: the added row and the new-handler row');
 end;
 
+procedure TAdaptersTests.ContentColumnChangeIsDeletePlusInsert;
+  procedure ExpectOneChange(const pFrom, pTo: string);
+  begin
+    var A:= ReadFixture('forms', 'a.csv');
+    var Changed:= StringReplace(A, pFrom, pTo, []);
+    Assert.AreNotEqual(A, Changed, 'the fixture holds ' + pFrom);
+    var Eq, Del, Ins: Integer;
+    Counts(FormsCsvItems(A), FormsCsvItems(Changed), Eq, Del, Ins);
+    Assert.AreEqual(ONE, Del, 'deleted: ' + pFrom);
+    Assert.AreEqual(ONE, Ins, 'inserted: ' + pFrom);
+    Assert.AreEqual(DATA_ROWS_A - ONE, Eq, 'equal: ' + pFrom);
+  end;
+begin
+  // Modal, Before you start and Control type, each on one row
+  ExpectOneChange('"TfrmMAIN.btnOrdersClick","TfrmMAIN","modal"', '"TfrmMAIN.btnOrdersClick","TfrmMAIN",""');
+  ExpectOneChange('"Pick a customer first"', '"Pick a vendor first"');
+  ExpectOneChange('"TdxBarButton","TfrmMAIN.btnCustomersClick"', '"TButton","TfrmMAIN.btnCustomersClick"');
+end;
+
+procedure TAdaptersTests.VolatileColumnChangesAreNoChange;
+begin
+  var A:= ReadFixture('forms', 'a.csv');
+  // Notes of the Main row, the '#' of the Orders row, the Tester result of the Main row
+  var Changed:= StringReplace(A, 'main form of the application', 'a tester wrote this', []);
+  Changed:= StringReplace(Changed, CRLF + '2,"TfrmOrders"', CRLF + '9,"TfrmOrders"', []);
+  Changed:= StringReplace(Changed, '"root",,"a tester', '"root","passed","a tester', []);
+  Assert.IsTrue(Changed.Contains('"passed"') and Changed.Contains('9,"TfrmOrders"'), 'the fixture was edited');
+  var Eq, Del, Ins: Integer;
+  Counts(FormsCsvItems(A), FormsCsvItems(Changed), Eq, Del, Ins);
+  Assert.AreEqual(0, Del, 'deleted');
+  Assert.AreEqual(0, Ins, 'inserted');
+  Assert.AreEqual(DATA_ROWS_A, Eq, 'equal');
+end;
+
 procedure TAdaptersTests.QuotedCellsWithCommasAndQuotes;
 begin
   var Items:= FormsCsvItems(ReadFixture('forms', 'b.csv'));
@@ -206,13 +242,13 @@ begin
     end;
   Assert.IsTrue(Found, 'the TfrmHelp row is an item');
   Assert.IsTrue(Help.Text.EndsWith(QUOTED_NOTE, False), 'Text is the raw row, quotes and all: ' + Help.Text);
-  Assert.AreEqual('TfrmHelp|Help.pas|Help > About|About|TfrmMAIN.miAboutClick', Help.Key);
+  Assert.AreEqual('TfrmHelp|Help.pas|Help > About|About|TfrmMAIN.miAboutClick|TMenuItem|TfrmMAIN|||0|traced', Help.Key);
   // a quoted cell holding a line break is still one row of one item
   var Multi:= FORMS_CSV_HEADER + CRLF +
     '1,"TfrmA","A.pas","open","","","TfrmA.H","","","",0,"traced",,"line one' + CRLF + 'line two, with a comma"' + CRLF;
   var MultiItems:= FormsCsvItems(Multi);
   Assert.AreEqual(ONE, Integer(Length(MultiItems)), 'a quoted line break does not split the row');
-  Assert.AreEqual('TfrmA|A.pas|open||TfrmA.H', MultiItems[0].Key);
+  Assert.AreEqual('TfrmA|A.pas|open||TfrmA.H|||||0|traced', MultiItems[0].Key);
   // ordinal: two forms differing only by case are two items
   var Cased:= FormsCsvItems(FORMS_CSV_HEADER + CRLF + '1,"TfrmA","A.pas","o","","","H"' + CRLF + '2,"tfrma","A.pas","o","","","H"' + CRLF);
   Assert.AreEqual(TWO, Integer(Length(Cased)), 'case matters');
@@ -313,6 +349,8 @@ begin
   Assert.AreEqual(Ord(cfGraph), Ord(DetectFormat(CRLF + '  DiGraph g {}', False)), 'dot text, blank lead and any case');
   Assert.AreEqual(Ord(cfReportText), Ord(DetectFormat('Totals: 3 sites' + CRLF, False)), 'report text');
   Assert.AreEqual(Ord(cfReportText), Ord(DetectFormat('digraphy is a word', False)), 'a word that merely starts like digraph');
+  Assert.AreEqual(Ord(cfReportText), Ord(DetectFormat('Graph of callers for OPERAT.NAME' + CRLF + 'Totals: 3', False)), 'prose starting with Graph');
+  Assert.AreEqual(Ord(cfGraph), Ord(DetectFormat('graph g {' + CRLF + '}', False)), 'an undirected DOT');
   Assert.AreEqual(Ord(cfReportText), Ord(DetectFormat('', False)), 'an empty report is a report');
   Assert.AreEqual(Ord(cfFormsCsv), Ord(DetectFormat('Forms.CSV', True)), 'csv path, any case');
   Assert.AreEqual(Ord(cfGraph), Ord(DetectFormat('x.dot', True)), 'dot path');
