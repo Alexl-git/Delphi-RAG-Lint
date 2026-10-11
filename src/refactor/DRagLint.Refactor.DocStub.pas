@@ -303,6 +303,18 @@ begin
   end;
 end;
 
+{ C14. The lines of AFilePath, or nil when there is no file to read. }
+function SourceLinesOrNil(const AFilePath: string): TArray<string>;
+begin
+  Result:= nil;
+  if (AFilePath <> '') and TFile.Exists(AFilePath) then
+  try
+    Result:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+  except  // an unreadable unit has no better heading to offer: nil makes SignatureWithoutComments return the indexed signature, exactly what it returned before C14
+    on Exception do Result:= nil;
+  end;
+end;
+
 function SignatureWithoutComments(const ASig, AFilePath: string; ADeclLine: Integer): string;
 const
   MAX_HEADING_LINES = 64; { a heading longer than this is not worth the read }
@@ -313,40 +325,40 @@ var
   Acc     : string;
   Heading : string;
   GiveUp  : Boolean;
+  Done    : Boolean;
   I       : Integer;
 begin
-  Result:= ASig;
-  if (Pos('//', ASig) = 0) and (Pos('{', ASig) = 0) and (Pos('(*', ASig) = 0) then Exit;
+  Result := ASig;
   InBrace:= False;
   InParen:= False;
-  if Pos('//', ASig) = 0 then
+  if Pos('//', ASig) > 0 then
+  begin
+    { A line comment ended at a line break the index joined away: only the
+      source knows where. }
+    if ADeclLine > 0 then Lines:= SourceLinesOrNil(AFilePath) else Lines:= nil;
+    Acc := '';
+    Done:= False;
+    I   := ADeclLine;
+    while (not Done) and (I >= 1) and (I <= Min(ADeclLine + MAX_HEADING_LINES - 1, Length(Lines))) do
+    begin
+      Acc:= Acc + ' ' + StripCommentsAndStrings(Lines[I - 1], InBrace, InParen);
+      if HeadingFrom(Acc, Heading, GiveUp) then
+      begin
+        if SigLead(Heading) = SigLead(ASig) then Result:= Heading;
+        Done:= True;
+      end
+      else
+        Done:= GiveUp;
+      Inc(I);
+    end;
+  end
+  else if (Pos('{', ASig) > 0) or (Pos('(*', ASig) > 0) then
   begin
     { Block comments are wholly inside ASig: strip them where they stand. }
     Acc:= StripCommentsAndStrings(ASig, InBrace, InParen);
     if not (InBrace or InParen) then Result:= CollapseSpaces(Acc);
-    Exit;
-  end;
-  { A line comment ended at a line break the index joined away: only the source
-    knows where. }
-  if (AFilePath = '') or (ADeclLine <= 0) or (not TFile.Exists(AFilePath)) then Exit;
-  try
-    Lines:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
-  except  // dl:ok try-except-swallowed -- an unreadable unit has no better heading to offer: the indexed signature, exactly what this routine returned before C14, is the answer
-    on Exception do Exit;
-  end;
-  Acc:= '';
-  for I:= ADeclLine to Min(ADeclLine + MAX_HEADING_LINES - 1, Length(Lines)) do
-  begin
-    Acc:= Acc + ' ' + StripCommentsAndStrings(Lines[I - 1], InBrace, InParen);
-    if HeadingFrom(Acc, Heading, GiveUp) then
-    begin
-      if SigLead(Heading) = SigLead(ASig) then Result:= Heading;
-      Exit;
-    end;
-    if GiveUp then Exit;
   end;
 end;
-
 // IsFunction: true when the signature starts with 'function' or 'constructor'.
 // Also returns true for 'method' kind when the text contains 'function ' keyword
 // before the identifier.
