@@ -220,6 +220,7 @@ Rule-driven migration of legacy component types.
 | [glyph-vacuum](Features) | `glyph-vacuum` |  |
 | [proptree](proptree) | `proptree` |  |
 | [Reindex project](convrules-editor-reindex-project) | `ConvRulesEditor.exe` (Conversion > Reindex project) |  |
+| [Work list](convrules-editor-work-list) | `ConvRulesEditor.exe` (View > Work list) |  |
 
 ## Graphs and reports
 

@@ -3281,7 +3281,7 @@ begin
 
   try
     V:= TJSONObject.ParseJSONValue(Body);
-  except // dl:ok try-except-swallowed@6149 -- deliberate: malformed JSON must yield [] not raise, per this function's docstring contract and test outline.classes.garbage
+  except // deliberate: malformed JSON must yield [] not raise, per this function's docstring contract and test outline.classes.garbage
     on E: Exception do
       V:= nil;
   end;

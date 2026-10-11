@@ -1752,7 +1752,7 @@ begin
     try
       try
         Srcs:= ExpandSources([TPath.Combine(Dir, 'P.dpr')], Errs);
-      except  // dl:ok try-except-swallowed@aa6b -- not swallowed: the exception text lands in Raised and the next Check fails on it; catching keeps the rest of the run alive
+      except  // not swallowed: the exception text lands in Raised and the next Check fails on it; catching keeps the rest of the run alive
         on E: Exception do
           Raised:= E.ClassName + ': ' + E.Message;
       end; // try
@@ -2097,7 +2097,7 @@ begin
             AJson := OK_JSON;
             Result:= 0;
           end, Index, nil, nil);
-      except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-29 not swallowed: the text lands in Raised and the next Check fails on it
+      except  // not swallowed: the text lands in Raised and the next Check fails on it
         on E: Exception do
           Raised:= E.ClassName + ': ' + E.Message;
       end; // try
@@ -2117,7 +2117,7 @@ begin
       try
         Rows:= RunConversionUnits([PasF], ['A.rules', 'B.rules'],
           ApplyAThenFailB(procedure(AUnitPas: string) begin FileSetAttr(AUnitPas, faReadOnly); end), Index, nil, nil);
-      except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-29 not swallowed: the text lands in Raised and the next Check fails on it
+      except  // not swallowed: the text lands in Raised and the next Check fails on it
         on E: Exception do
           Raised:= E.ClassName + ': ' + E.Message;
       end; // try
@@ -7931,7 +7931,7 @@ begin
     Raised:= False;
     try
       B.SetDepth(DEPTH_OVER);
-    except  // dl:ok try-except-swallowed@af95 -- REVIEWED 2026-09-30 not swallowed: the catch sets Raised and the next Check fails when it is not set
+    except  // not swallowed: the catch sets Raised and the next Check fails when it is not set
       on EArgumentOutOfRangeException do
         Raised:= True;
     end;
@@ -8110,7 +8110,7 @@ begin
   Parsed:= False;
   try
     Parsed:= TryParseProgressLine(LINE_WRONG_TYPES, P);
-  except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-30 not swallowed: the text lands in Raised and the progress.wrong.type.no.raise Check fails on it
+  except  // not swallowed: the text lands in Raised and the progress.wrong.type.no.raise Check fails on it
     on E: Exception do
       Raised:= E.ClassName + ': ' + E.Message;
   end;
@@ -8301,7 +8301,7 @@ begin
         begin
           raise EAbort.Create('sink failed');
         end, nil, Output);
-    except  // dl:ok try-except-swallowed@ab61 -- REVIEWED 2026-09-30 not swallowed: Raised is asserted by stream.raise.kills just below
+    except  // not swallowed: Raised is asserted by stream.raise.kills just below
       on EAbort do
         Raised:= True;
     end;
@@ -8381,7 +8381,7 @@ begin
     Ok    := True;
     try
       Ok:= Eng.GetProptree('U.TFoo', Tree, Err, Note);
-    except  // dl:ok try-except-swallowed@ee67 -- not swallowed: Raised is asserted by engine.proptree.runner.raise.is.error just below
+    except  // not swallowed: Raised is asserted by engine.proptree.runner.raise.is.error just below
       on Exception do
         Raised:= True;
     end;
@@ -12464,7 +12464,7 @@ end;
   engine call; a scoped book's names reach apply as --only; an all-out-of-scope
   unit keeps no backup; the engine's --only refusal gets the E10 hint; an --only
   that matched nothing stays a failure and says what was asked. }
-procedure TestRunnerScope;  // dl:ok cyclomatic-complexity@10c5 -- REVIEWED 2026-10-06 one fake-seam fixture walked case by case (out of scope, --only, refusal, unmatched name, injected hint); the count is the and-chains in Check conditions, and splitting would duplicate the temp-folder fixture
+procedure TestRunnerScope;  // dl:ok cyclomatic-complexity@db5f -- REVIEWED 2026-10-11 (re-read; 1.28.1 measures 34 and re-hashes it) one fake-seam fixture walked case by case (out of scope, --only, refusal, unmatched name, injected hint); the count is the and-chains in Check conditions, and splitting would duplicate the temp-folder fixture
 const
   ORIG = 'unit F; interface implementation end.';
   OK_JSON      = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';

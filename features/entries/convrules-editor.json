@@ -5,7 +5,7 @@
   "owner": "CONVERTER",
   "status": "shipped",
   "since": "0.0.0",
-  "summary": "Visual rulebook editor for the component-conversion rules",
+  "summary": "Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27)",
   "wikiPage": "Features",
   "surfaces": [
     {

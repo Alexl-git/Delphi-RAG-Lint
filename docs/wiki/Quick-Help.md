@@ -104,10 +104,11 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **convert-reemit** (internal) -- The DFM re-emit stage of the conversion pipeline, driven by convert-apply and by test runners. [More](Maintenance)
 * **convert-scaffold** -- Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type. [More](convert-scaffold)
 * **convert-validate** -- Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees. [More](convert-validate)
-* **ConvRulesEditor** -- Visual rulebook editor for the component-conversion rules. [More](Features)
+* **ConvRulesEditor** -- Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27). [More](Features)
 * **glyph-vacuum** -- Measure every streamed glyph or picture under a tree before writing a glyph rule. [More](Features)
 * **proptree** -- Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties. [More](proptree)
 * **Reindex project** -- ConvRulesEditor command: incremental index --project of the editor's project index, cancellable. Refresh the project index after IDE edits or between conversion stages. [More](convrules-editor-reindex-project)
+* **Work list** -- ConvRulesEditor tab: what the last Convert run's converted code still uses from the old components (engine pas_uses). Get the manual to-do list of a conversion: unmapped members, dangling globals, refused casts. [More](convrules-editor-work-list)
 
 ## Graphs and reports
 
@@ -230,6 +231,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Reindex project: menu 'Conversion > Reindex project' inside ConvRulesEditor.exe
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
 * Where the charts find the engine and Graphviz: procedure charts\README.md
+* Work list: menu 'View > Work list' inside ConvRulesEditor.exe
 * dl:wiki concept blocks: procedure docs\wiki\Wiki-Blocks-Authoring.md
 * drag-lint: Project Rules: host 'Project Manager' (the caption is verified, the host is declared)
 

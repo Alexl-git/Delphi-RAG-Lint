@@ -466,7 +466,7 @@ uses
   , System.StrUtils
   , System.Diagnostics
   , ConvRules.Glyph
-  , ConvRules.UnitStatus  // dl:ok unused-unit-in-uses@ec0d -- REVIEWED 2026-09-29 false positive: TFileProbe (FileProbe's return type) is declared here; removing the unit fails with E2003
+  , ConvRules.UnitStatus  // TFileProbe (FileProbe's return type) is declared here
   ;
 
 const
@@ -935,7 +935,7 @@ var
   begin
     try
       LCode:= AIndex(LOutput);
-    except  // dl:ok try-except-swallowed@6298 -- REVIEWED 2026-09-29 not swallowed: becomes a failed reindex, so the unit is restored (or skipped) and the row carries the message
+    except  // not swallowed: becomes a failed reindex, so the unit is restored (or skipped) and the row carries the message
       on E: Exception do
       begin
         LOutput:= 'reindex raised: ' + E.Message;
@@ -995,7 +995,7 @@ var
       // A non-zero exit shows up as ok=false or unparseable text in ParseApplyJson;
       // only ENGINE_EXIT_CONFIG is read from the code itself.
       LCode:= AApply(CurUnit, ABook, LOnly, LJson);
-    except  // dl:ok try-except-swallowed@3c3c -- REVIEWED 2026-09-29 not swallowed: the message becomes unparseable apply output, so the unit is restored and the row names it
+    except  // not swallowed: the message becomes unparseable apply output, so the unit is restored and the row names it
       on E: Exception do
         LJson:= 'engine call raised: ' + E.Message; // unparseable -> the unit is restored
     end; // try
