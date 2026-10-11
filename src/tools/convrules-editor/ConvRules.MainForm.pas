@@ -52,6 +52,7 @@ uses
   , ConvRules.UnitStatus  // dl:unit ConvRules.UnitStatus accepted -- TDestinationResolver types a field; STATUS_MISSING_TEXT travels with StatusText so the bold-MISSING draw cannot drift from the text it matches
   , ConvRules.UnitMask    // TUnitRow: a field's type
   , ConvRules.ConvertTab  // TConvertTab: a field's type
+  , ConvRules.WorkListTab // TWorkListTab: a field's type
   , ConvRules.ValidateScope // TValidateJob: a method parameter's type, so INTERFACE-visible
   ;
 
@@ -120,6 +121,8 @@ type
       FTabUnits      : TTabSheet             ; // the Unit Rules page; "is it active?" checks
       FTabConvert    : TTabSheet             ; // the Convert page; drops go to FConvertTab while it is active
       FConvertTab    : TConvertTab           ; // checked rule books x source units
+      FTabWorkList   : TTabSheet             ; // the Work list page (Task 3, engine 1.27.0 pas_uses)
+      FWorkListTab   : TWorkListTab          ; // what the last run's converted code still uses
       FHarvestStrip  : TPanel                ; // the control strip above FUnitList
       FHarvestBtnRow : TFlowPanel            ; // Add source / Paste / Clear row (Task 7 adds none; Task 6 adds rows below)
       FDropTarget    : IDropTarget           ; // OLE target on the form's window; re-registered by CreateWnd
@@ -1978,6 +1981,12 @@ type
       /// <summary>Conversion &gt; Convert...: shows the Convert tab.</summary>
       /// <param name="Sender">The menu item.</param>
       procedure DoShowConvertTab(Sender: TObject);
+      /// <summary>The Work list tab became visible: its summary goes to the status line.</summary>
+      /// <param name="Sender">FTabWorkList.</param>
+      procedure WorkListTabShow(Sender: TObject);
+      /// <summary>View &gt; Work list: shows the Work list tab.</summary>
+      /// <param name="Sender">The menu item.</param>
+      procedure DoShowWorkList(Sender: TObject);
       /// <summary>Conversion &gt; Reindex project (C17): an incremental `index --project`
       /// of ProjectFileForDb(GEditorProjectDb) behind the cancellable progress window.
       /// Refused (ReindexRefusal, red) while a Convert run is in progress or when the
@@ -2636,6 +2645,7 @@ uses
   , ConvRules.ConvertRequest // C12: PrepareConvertRequest / TPreparedRequest
   , ConvRules.Inheritance    // C12: DiskTextReader, the .dfm reader the request's scope is built from
   , ConvRules.ConvertRun     // C17: ReindexRefusal / ReindexOutcomeText
+  , ConvRules.WorkList       // Task 3: TWorkRun, the Convert host's WorkListReady parameter
   , System.Diagnostics       // C17: TStopwatch, the reindex's elapsed time
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
@@ -2902,6 +2912,8 @@ begin
     FMnuTheme[P].OnClick:= ThemeMenuClick;
     LTheme.Add(FMnuTheme[P]);
   end;
+  // Task 3: no shortcut (a main-menu shortcut fires inside every edit control).
+  AddMenuCmd(LView, '&Work list', 'Show what the last Convert run''s converted units still use from the old components (engine pas_uses)', DoShowWorkList);
 
   Menu:= LMenu;
 end; // procedure
@@ -3521,10 +3533,31 @@ begin
         Dec(FTreeLoads);
       end; // try
     end;
+  // Task 3: each finished run REPLACES the Work list (rows keyed by run id).
+  LHost.WorkListReady:= procedure(ARun: TWorkRun)
+    begin
+      FWorkListTab.ShowRun(ARun);
+    end;
   FConvertTab:= TConvertTab.Create(Self, LHost);
   FConvertTab.Parent:= FTabConvert;
   FConvertTab.Align := alClient;
   FTabConvert.OnShow:= ConvertTabShow;
+
+  // --- Work list tab (Task 3): what the last run's converted code still uses ---
+  FTabWorkList:= TTabSheet.Create(FTabs);
+  FTabWorkList.PageControl:= FTabs;
+  FTabWorkList.Caption:= 'Work list';
+  FWorkListTab:= TWorkListTab.Create(Self,
+    procedure(AText: string; AIsError: Boolean)
+    begin
+      if AIsError then
+        SetError(AText)
+      else
+        SetStatus(AText);
+    end);
+  FWorkListTab.Parent:= FTabWorkList;
+  FWorkListTab.Align := alClient;
+  FTabWorkList.OnShow:= WorkListTabShow;
 
   // Classes is the default tab (OWNER AMENDMENT 2026-09-20) -- explicit rather
   // than relying on "index 0 happens to be first created", which TabRules.
@@ -8074,6 +8107,20 @@ end;
 procedure TConvRulesForm.DoShowConvertTab(Sender: TObject);
 begin
   FTabs.ActivePage:= FTabConvert;
+end;
+
+procedure TConvRulesForm.DoShowWorkList(Sender: TObject);
+begin
+  // OnShow does not fire for the page that is already active.
+  if FTabs.ActivePage = FTabWorkList then
+    WorkListTabShow(FTabWorkList)
+  else
+    FTabs.ActivePage:= FTabWorkList;
+end;
+
+procedure TConvRulesForm.WorkListTabShow(Sender: TObject);
+begin
+  SetStatus('Work list: ' + FWorkListTab.SummaryText);
 end;
 
 procedure TConvRulesForm.DoReindexProject(Sender: TObject);

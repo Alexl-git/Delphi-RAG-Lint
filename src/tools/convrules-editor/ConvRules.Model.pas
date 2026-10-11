@@ -839,7 +839,7 @@ begin
   Result:= ANode;
 end;
 
-function TRuleBook.ParseLine(const ALine: string): TRuleNode;  // dl:ok method-too-long@ed95, too-many-exit-points@94ac, cyclomatic-complexity@0f40, cognitive-complexity@383b -- REVIEWED 2026-09-30 (re-read in the fix wave): a flat one-arm-per-directive dispatcher (each arm sets Kind and Exits); every new directive necessarily adds one arm, one branch and one exit -- #depth, with its engine-identical digits-only check, took it to 257 lines / 20 exits / cyclomatic 44 / cognitive 103 -- and splitting the arms apart is a refactor outside this change
+function TRuleBook.ParseLine(const ALine: string): TRuleNode;  // dl:ok method-too-long@87fa, too-many-exit-points@94ac, cyclomatic-complexity@0f40, cognitive-complexity@383b -- REVIEWED 2026-10-11 (re-read after the C10 G-expression split moved it to 255 lines; first reviewed 2026-09-30): a flat one-arm-per-directive dispatcher (each arm sets Kind and Exits); every new directive necessarily adds one arm, one branch and one exit -- #depth, with its engine-identical digits-only check, took it to 257 lines / 20 exits / cyclomatic 44 / cognitive 103 -- and splitting the arms apart is a refactor outside this change
 var
   N     : TRuleNode;
   T     : string   ;
@@ -1353,7 +1353,7 @@ begin
   Result:= bdsValid;
 end; // function
 
-function TRuleBook.SetDepth(AValue: Integer): TRuleNode;  // dl:ok function-result-not-set@f2d5 -- REVIEWED 2026-09-30 false positive: both branches assign Result; the rule counts the leading range-check raise as a path that skips it (probe: same body without the raise guard reports 0)
+function TRuleBook.SetDepth(AValue: Integer): TRuleNode;
 var
   L    : TArray<TRuleNode>;
   Heads: TArray<Integer>  ;

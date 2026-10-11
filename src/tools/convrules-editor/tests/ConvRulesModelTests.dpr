@@ -12,6 +12,7 @@ uses
   , System.Classes
   , System.StrUtils
   , System.Generics.Collections
+  , System.JSON
   , Winapi.Windows
   , ConvRules.Model in '..\ConvRules.Model.pas'  // dl:unit ConvRules.Model accepted -- the tests read BOOK_DEPTH_DEFAULT to pin the model's own default, so the const travels with the unit under test
   , ConvRules.Mappings in '..\ConvRules.Mappings.pas'
@@ -35,6 +36,7 @@ uses
   , ConvRules.UsesHarvest in '..\ConvRules.UsesHarvest.pas'
   , ConvRules.UnitStatus in '..\ConvRules.UnitStatus.pas'
   , ConvRules.UnitMask in '..\ConvRules.UnitMask.pas'
+  , ConvRules.WorkList in '..\ConvRules.WorkList.pas'  // dl:unit ConvRules.WorkList accepted -- the tests read the PAS_USE_* statuses and WORK_* texts to pin the unit's own contract, so the consts travel with the unit under test
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
   , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
@@ -998,6 +1000,65 @@ begin
   Check('convcat.text.hascast', Pos('AssignGraphic', ConvOptionText(Opt)) > 0, ConvOptionText(Opt));
 end;
 
+{ 1.27.0 VALUE casts in the catalog (StripDB). A value cast keeps the type and
+  changes the value, so its target type is the From type itself -- and the old
+  one-entry-per-target-type dedupe let identity `string [same]` swallow it
+  (measured on the re-pin probe 2026-10-11). Parsed from the SHIPPED castlib
+  beside the test engine (the pin's), else the repo copy it is deployed from. }
+procedure TestConvCatalogValueCast;
+var
+  P   : string;
+  Lib : TCastLib;
+  Opts: TArray<TConvOption>;
+  Opt : TConvOption;
+
+  function FindCast(const ACastName: string; out AOpt: TConvOption): Boolean;
+  var
+    o: TConvOption;
+  begin
+    for o in Opts do
+      if SameText(o.CastName, ACastName) then
+      begin
+        AOpt := o;
+        Exit(True);
+      end;
+    AOpt := Default(TConvOption);
+    Result := False;
+  end;
+
+begin
+  P := '';
+  if ResolveExe <> '' then
+    P := TPath.Combine(ExtractFilePath(ResolveExe), 'casts.castlib');
+  if (P = '') or not TFile.Exists(P) then
+    P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+      '..\..\..\..\docs\examples\convrules\casts.castlib'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('catalog.value.cast', 'casts.castlib not found: ' + P);
+    Exit;
+  end;
+  Lib := ParseCastLib(P);
+
+  Opts := ConversionsFor('string', Lib.Casts, Lib.Enums);
+  Check('catalog.value.cast.offered', FindCast('StripDB', Opt)
+    and (Opt.Kind = ckValue) and SameText(Opt.ToType, 'string'),
+    Format('%d option(s); StripDB kind=%s to=%s from %s',
+      [Length(Opts), ConvKindLabel(Opt.Kind), Opt.ToType, P]));
+  Check('catalog.value.cast.identity.kept', (Length(Opts) > 0)
+    and (Opts[0].Kind = ckIdentity) and SameText(Opts[0].ToType, 'string')
+    and (Opts[0].CastName = ''),
+    'identity string [same] must stay first');
+
+  Opts := ConversionsFor('TPicture', Lib.Casts, Lib.Enums);
+  Check('catalog.class.cast.not.value', FindCast('AssignGraphic', Opt)
+    and (Opt.Kind = ckClass), ConvKindLabel(Opt.Kind));
+
+  Opts := ConversionsFor('Integer', Lib.Casts, Lib.Enums);
+  Check('catalog.value.cast.not.for.integer', not FindCast('StripDB', Opt),
+    'StripDB accepts string only');
+end;
+
 procedure TestControlTypesFromNonProjectUnit;
 var
   Exe    : string        ;
@@ -1691,7 +1752,7 @@ begin
     try
       try
         Srcs:= ExpandSources([TPath.Combine(Dir, 'P.dpr')], Errs);
-      except  // dl:ok try-except-swallowed@aa6b -- not swallowed: the exception text lands in Raised and the next Check fails on it; catching keeps the rest of the run alive
+      except  // not swallowed: the exception text lands in Raised and the next Check fails on it; catching keeps the rest of the run alive
         on E: Exception do
           Raised:= E.ClassName + ': ' + E.Message;
       end; // try
@@ -2036,7 +2097,7 @@ begin
             AJson := OK_JSON;
             Result:= 0;
           end, Index, nil, nil);
-      except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-29 not swallowed: the text lands in Raised and the next Check fails on it
+      except  // not swallowed: the text lands in Raised and the next Check fails on it
         on E: Exception do
           Raised:= E.ClassName + ': ' + E.Message;
       end; // try
@@ -2056,7 +2117,7 @@ begin
       try
         Rows:= RunConversionUnits([PasF], ['A.rules', 'B.rules'],
           ApplyAThenFailB(procedure(AUnitPas: string) begin FileSetAttr(AUnitPas, faReadOnly); end), Index, nil, nil);
-      except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-29 not swallowed: the text lands in Raised and the next Check fails on it
+      except  // not swallowed: the text lands in Raised and the next Check fails on it
         on E: Exception do
           Raised:= E.ClassName + ': ' + E.Message;
       end; // try
@@ -3934,7 +3995,7 @@ var
   WS: TWorkingSet;
 begin
   Check('grammar.rules', GrammarOf('C:\x\book.rules') = rgRules, 'the DSL grammar');
-  Check('grammar.castlib', GrammarOf('C:\x\casts.castlib') = rgCastLib, 'the catalog grammar');
+  Check('grammar.castlib', GrammarOf('casts.castlib') = rgCastLib, 'the catalog grammar');
   Check('grammar.castlib.case', GrammarOf('C:\x\CASTS.CASTLIB') = rgCastLib, 'the extension test is case-insensitive, exactly as SplitBlocksFor does it');
   Check('grammar.refind', GrammarOf('C:\x\refind.txt') = rgRules, 'SplitBlocksFor reads everything that is not .castlib with the DSL grammar');
   Check('grammar.name.differ', GrammarName(rgRules) <> GrammarName(rgCastLib), 'a refusal message has to be able to name both sides');
@@ -7870,7 +7931,7 @@ begin
     Raised:= False;
     try
       B.SetDepth(DEPTH_OVER);
-    except  // dl:ok try-except-swallowed@af95 -- REVIEWED 2026-09-30 not swallowed: the catch sets Raised and the next Check fails when it is not set
+    except  // not swallowed: the catch sets Raised and the next Check fails when it is not set
       on EArgumentOutOfRangeException do
         Raised:= True;
     end;
@@ -8049,7 +8110,7 @@ begin
   Parsed:= False;
   try
     Parsed:= TryParseProgressLine(LINE_WRONG_TYPES, P);
-  except  // dl:ok try-except-swallowed@aa6b -- REVIEWED 2026-09-30 not swallowed: the text lands in Raised and the progress.wrong.type.no.raise Check fails on it
+  except  // not swallowed: the text lands in Raised and the progress.wrong.type.no.raise Check fails on it
     on E: Exception do
       Raised:= E.ClassName + ': ' + E.Message;
   end;
@@ -8240,7 +8301,7 @@ begin
         begin
           raise EAbort.Create('sink failed');
         end, nil, Output);
-    except  // dl:ok try-except-swallowed@ab61 -- REVIEWED 2026-09-30 not swallowed: Raised is asserted by stream.raise.kills just below
+    except  // not swallowed: Raised is asserted by stream.raise.kills just below
       on EAbort do
         Raised:= True;
     end;
@@ -8320,7 +8381,7 @@ begin
     Ok    := True;
     try
       Ok:= Eng.GetProptree('U.TFoo', Tree, Err, Note);
-    except  // dl:ok try-except-swallowed@ee67 -- not swallowed: Raised is asserted by engine.proptree.runner.raise.is.error just below
+    except  // not swallowed: Raised is asserted by engine.proptree.runner.raise.is.error just below
       on Exception do
         Raised:= True;
     end;
@@ -10858,6 +10919,408 @@ begin
   end;
 end;
 
+{ Engine 1.27.0 apply/1 items (editor-1270 Task 2). fixtures\apply1270\:
+    apply-cast-site-1270.json      REAL 1.27.0 capture: one cast-not-applied, a kept uses row
+    apply-stripdb-1270.json        REAL 1.27.0 capture: 3 value-cast-applied, 1 value-cast-check, a remove row
+    apply-uses-1270.json           REAL 1.27.0 capture: remove (dangling refs) + add rows
+    apply-exit6-castlib-1280.json  REAL 1.28.0 capture, exit 6 (unknown castlib value keyword)
+    apply-missing-fields-sample.json  HAND-WRITTEN malformed entries (its _note says which)
+  Temp paths in the captures were replaced by C:\fix\. }
+function Apply1270Fixture(const AName: string): string;
+begin
+  Result:= TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\apply1270\' + AName)));
+end;
+
+procedure TestApply1270Items;
+const
+  VALUE_CASTS = 3;
+  CAST_LINE   = 25;
+  CAST_RULE   = 4;
+  STRIP_RULE  = 300;
+  DFM_LINE    = 10;
+  CHECK_LINE  = 253;
+  PAS_CAST    = 2; // the third value cast: the .pas literal
+var
+  Cast  : TApplyRow;
+  Strip : TApplyRow;
+  Where : Boolean;
+  What  : Boolean;
+begin
+  Check('apply1270.features.of', ApplyFeaturesOf(['uses_reconcile', 'PAS_USES', 'glyph_stitch']) = [afUsesReconcile, afPasUses]);
+  Check('apply1270.features.of.all', ApplyFeaturesOf(['cast_site_refusal', 'value_cast_strip_db', 'uses_reconcile', 'pas_uses'])
+    = [afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses]);
+
+  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Check('apply1270.cast.site.parsed', Cast.Ok and (Length(Cast.CastSites) = 1), IntToStr(Length(Cast.CastSites)));
+  if Length(Cast.CastSites) = 1 then
+  begin
+    Where:= (Cast.CastSites[0].FileName = 'Unit1.pas') and (Cast.CastSites[0].Line = CAST_LINE) and (Cast.CastSites[0].RuleLine = CAST_RULE);
+    What := (Cast.CastSites[0].Instance = 'BitBtn1') and (Cast.CastSites[0].Path = 'Glyph') and (Cast.CastSites[0].Value = 'AssignGraphic');
+    Check('apply1270.cast.site.fields', Where and What and (Cast.CastSites[0].Kind = 'cast-not-applied'),
+      Cast.CastSites[0].FileName + ':' + IntToStr(Cast.CastSites[0].Line) + ' rule ' + IntToStr(Cast.CastSites[0].RuleLine));
+  end;
+  Check('apply1270.cast.site.note', CastSiteNote(Cast) = '; 1 cast site(s) to convert by hand', CastSiteNote(Cast));
+  Strip:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  Check('apply1270.value.cast.parsed', Strip.Ok and (Length(Strip.ValueCasts) = VALUE_CASTS), IntToStr(Length(Strip.ValueCasts)));
+  if Length(Strip.ValueCasts) = VALUE_CASTS then
+  begin
+    What := (Strip.ValueCasts[0].OldValue = '''ToolAdj.DB''') and (Strip.ValueCasts[0].Value = '''ToolAdj''');
+    Where:= (Strip.ValueCasts[0].Line = DFM_LINE) and (Strip.ValueCasts[0].RuleLine = STRIP_RULE) and (Strip.ValueCasts[0].FileName = 'dmToolStats.dfm');
+    Check('apply1270.value.cast.fields', What and Where, Strip.ValueCasts[0].OldValue + ' -> ' + Strip.ValueCasts[0].Value);
+    Check('apply1270.value.cast.pas', (Strip.ValueCasts[PAS_CAST].FileName = 'dmToolStats.pas') and (Strip.ValueCasts[PAS_CAST].OldValue = '''ToolFldr.db'''));
+  end;
+  Check('apply1270.value.check.parsed', Length(Strip.ValueChecks) = 1, IntToStr(Length(Strip.ValueChecks)));
+  if Length(Strip.ValueChecks) = 1 then
+  begin
+    Where:= (Strip.ValueChecks[0].Line = CHECK_LINE) and (Strip.ValueChecks[0].Instance = 'tblToolStats');
+    Check('apply1270.value.check.fields', Where and (Strip.ValueChecks[0].OldValue = '') and (Pos('non-literal assignment', Strip.ValueChecks[0].Text) > 0));
+  end;
+  Check('apply1270.value.note', ValueCastNote(Strip) = '; StripDB: 3 value(s) changed, 1 to check by hand', ValueCastNote(Strip));
+  Check('apply1270.value.no.cast.site', (Length(Strip.CastSites) = 0) and (CastSiteNote(Strip) = ''));
+end;
+
+procedure TestApply1270Uses;
+var
+  Cast : TApplyRow;
+  Uses1: TApplyRow;
+  Where: Boolean;
+begin
+  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Check('apply1270.cast.uses.kept', (Length(Cast.UsesRows) = 1) and (Cast.UsesRows[0].Action = 'kept') and (Cast.UsesRows[0].UnitName = 'Vcl.Buttons'));
+  if Length(Cast.UsesRows) = 1 then
+    Check('apply1270.cast.uses.needed.by', (string.Join(',', Cast.UsesRows[0].NeededBy) = 'SpeedButton1: TSpeedButton') and (Length(Cast.UsesRows[0].Dangling) = 0),
+      string.Join(',', Cast.UsesRows[0].NeededBy));
+  Check('apply1270.cast.uses.note.kept.only', UsesNote(Cast) = '', UsesNote(Cast));
+  Check('apply1270.cast.reindex', Cast.UsesReindex = 'done', Cast.UsesReindex);
+
+  Uses1:= ParseApplyJson(Apply1270Fixture('apply-uses-1270.json'));
+  Check('apply1270.uses.rows.parsed', (Length(Uses1.UsesRows) = 2) and (Uses1.UsesRows[0].Action = 'remove') and (Uses1.UsesRows[1].Action = 'add'),
+    IntToStr(Length(Uses1.UsesRows)));
+  if Length(Uses1.UsesRows) = 2 then
+  begin
+    Where:= (Uses1.UsesRows[1].UnitName = 'Vcl.ExtCtrls') and (Uses1.UsesRows[1].Section = 'implementation') and (Uses1.UsesRows[0].Source = 'rule');
+    Check('apply1270.uses.rows.fields', Where);
+    Check('apply1270.uses.dangling', (string.Join(',', Uses1.UsesRows[0].Dangling) = 'TBitBtnKind,bkOK') and (Length(Uses1.UsesRows[0].NeededBy) = 0),
+      string.Join(',', Uses1.UsesRows[0].Dangling));
+  end;
+  Check('apply1270.uses.note', UsesNote(Uses1) = '; uses: +1 -1 moved 0', UsesNote(Uses1));
+end;
+
+procedure TestApply1270Notes;
+const
+  CAST_RULE  = 4;
+  DFM_LINE   = 10;
+  SAMPLE_ROWS = 3;
+  NOTE_ORDER = '2 edit(s), 0 remaining for manual work; 1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)'
+    + '; StripDB: 3 value(s) changed, 1 to check by hand; 1 cast site(s) to convert by hand; uses: +1 -1 moved 0'
+    + '; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)';
+var
+  Strip : TApplyRow;
+  Bad   : TApplyRow;
+  Gated : TApplyRow;
+  Comb  : TApplyRow;
+  Old   : TApplyRow;
+  Raised: string;
+  Empty : Boolean;
+  Kept  : Boolean;
+begin
+  Strip:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  // Every part, in the runner's order: C8, then StripDB, cast sites, uses, then C10's glyph suffix.
+  Comb:= Default(TApplyRow);
+  Comb.Ok        := True;
+  Comb.EditsCount:= 2;
+  Comb.InheritedLeft:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json')).InheritedLeft;
+  Comb.ValueCasts := Strip.ValueCasts;
+  Comb.ValueChecks:= Strip.ValueChecks;
+  Comb.CastSites  := ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json')).CastSites;
+  Comb.UsesRows   := ParseApplyJson(Apply1270Fixture('apply-uses-1270.json')).UsesRows;
+  Comb.Glyphs     := ParseApplyJson(TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph\apply-glyphs-sample.json')))).Glyphs;
+  Check('apply1270.note.order', ConvertedRowNote(Comb, True, True) + GlyphNoteSuffix(Comb.Glyphs) = NOTE_ORDER, ConvertedRowNote(Comb, True, True) + GlyphNoteSuffix(Comb.Glyphs));
+
+  // Hand-written malformed entries: kept with what is known; nothing raises.
+  Raised:= '';
+  try
+    Bad:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'));
+  except
+    on E: Exception do
+      Raised:= E.ClassName + ': ' + E.Message;
+  end;
+  Check('apply1270.missing.fields.no.raise', Raised = '', Raised);
+  Check('apply1270.missing.fields.cast.kept', Length(Bad.CastSites) = 1);
+  if Length(Bad.CastSites) = 1 then
+    Check('apply1270.missing.fields.cast.known', (Bad.CastSites[0].Line = 0) and (Bad.CastSites[0].FileName = '') and (Bad.CastSites[0].Instance = 'Btn1')
+      and (Bad.CastSites[0].RuleLine = CAST_RULE));
+  Check('apply1270.missing.fields.value.kept', (Length(Bad.ValueCasts) = 1) and (Length(Bad.ValueChecks) = 1));
+  if (Length(Bad.ValueCasts) = 1) and (Length(Bad.ValueChecks) = 1) then
+    Check('apply1270.missing.fields.value.known', (Bad.ValueCasts[0].OldValue = '') and (Bad.ValueCasts[0].RuleLine = 0) and (Bad.ValueCasts[0].Line = DFM_LINE)
+      and (Bad.ValueChecks[0].Line = 0));
+  Check('apply1270.missing.fields.uses', Length(Bad.UsesRows) = SAMPLE_ROWS, IntToStr(Length(Bad.UsesRows)));
+  if Length(Bad.UsesRows) = SAMPLE_ROWS then
+    Check('apply1270.missing.fields.uses.known', (string.Join(',', Bad.UsesRows[0].Dangling) = 'bkOK') and (Bad.UsesRows[1].Action = 'moved')
+      and (Bad.UsesRows[SAMPLE_ROWS - 1].Action = '') and (Bad.UsesRows[SAMPLE_ROWS - 1].UnitName = ''));
+  Check('apply1270.missing.fields.unresolved', (Length(Bad.UsesUnresolved) = 2)
+    and (Bad.UsesUnresolved[0] = 'TFDQuery line 12: ambiguous (FireDAC.Comp.Client, Other.Client)') and (Bad.UsesUnresolved[1] = 'not-found'),
+    string.Join(' | ', Bad.UsesUnresolved));
+  Check('apply1270.missing.fields.reindex', Bad.UsesReindex = 'failed: index --project exited 3', Bad.UsesReindex);
+  Check('apply1270.reindex.failed.note', UsesNote(Bad) = '; uses: +0 -1 moved 1 (reindex failed: index --project exited 3)', UsesNote(Bad));
+
+  // An older engine: no feature, no new field, the old note byte-identical.
+  Old:= ParseApplyJson(InheritedFixture('apply-desc-1262-retyped.json'), ApplyFeaturesOf([]));
+  Empty:= (Length(Old.CastSites) + Length(Old.ValueCasts) + Length(Old.ValueChecks) + Length(Old.UsesRows) + Length(Old.UsesUnresolved) = 0) and (Old.UsesReindex = '');
+  Check('apply1270.old.engine.unchanged', Empty and (ConvertedRowNote(Old, True, True) = '3 edit(s), 0 remaining for manual work; 1 inherited instance(s) retyped'),
+    ConvertedRowNote(Old, True, True));
+  Old:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json'));
+  Check('apply1270.old.capture.all.features.empty', Length(Old.CastSites) + Length(Old.ValueCasts) + Length(Old.UsesRows) + Length(Old.UsesUnresolved) = 0);
+  // A 1.27.0 document read without the features (the probe said no) keeps today's note.
+  Gated:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), []);
+  Empty:= (Length(Gated.ValueCasts) + Length(Gated.ValueChecks) + Length(Gated.UsesRows) = 0) and (Gated.UsesReindex = '');
+  Kept := ConvertedRowNote(Gated, True, True) = Format('%d edit(s), %d remaining for manual work', [Gated.EditsCount, Length(Gated.Remainder)]);
+  Check('apply1270.gated.no.feature', Empty and Kept, ConvertedRowNote(Gated, True, True));
+  Gated:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), [afValueStripDb]);
+  Check('apply1270.gated.per.feature', (Length(Gated.ValueCasts) = Length(Strip.ValueCasts)) and (Length(Gated.UsesRows) = 0));
+end;
+
+procedure TestApply1270Report;
+const
+  SAMPLE_REPORT = 8; // 1 cast + 1 value + 1 check + 3 uses rows + 2 unresolved
+  STRIP_REPORT  = 5; // 3 value casts + 1 check + 1 uses row
+  LINE_CHECK    = 3; // after the three value casts
+  HEAD = 'B.rules'#9'dmToolStats.pas'#9;
+var
+  Row  : TConvertRow;
+  Lines: TArray<string>;
+  Cast : TApplyRow;
+begin
+  Row:= Default(TConvertRow);
+  Row.Book   := 'B.rules';
+  Row.UnitPas:= 'dmToolStats.pas';
+  Row.Status := csConverted;
+  Row.Apply  := ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  Lines:= ApplyItemReportLines(Row);
+  Check('apply1270.report.count', Length(Lines) = STRIP_REPORT, string.Join(' | ', Lines));
+  if Length(Lines) = STRIP_REPORT then
+  begin
+    Check('apply1270.report.value', Lines[0] = HEAD + 'value cast'#9#9#9#9#9'dmToolStats.dfm:10 tblToolAdj.TableName: ''ToolAdj.DB'' -> ''ToolAdj''', Lines[0]);
+    Check('apply1270.report.check', Lines[LINE_CHECK] = HEAD + 'value check'#9#9#9#9#9 + Row.Apply.ValueChecks[0].Text, Lines[LINE_CHECK]);
+    Check('apply1270.report.uses', Lines[High(Lines)] = HEAD + 'uses remove'#9#9#9#9#9'Bde.DBTables (interface, source rule)', Lines[High(Lines)]);
+  end;
+  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Row.Apply:= Cast;
+  Lines:= ApplyItemReportLines(Row);
+  Check('apply1270.report.cast.count', (Length(Lines) = 2) and (Length(Cast.CastSites) = 1), string.Join(' | ', Lines));
+  if (Length(Lines) = 2) and (Length(Cast.CastSites) = 1) then
+    Check('apply1270.report.cast', (Lines[0] = HEAD + 'cast site'#9#9#9#9#9 + Cast.CastSites[0].Text)
+      and (Lines[1] = HEAD + 'uses kept'#9#9#9#9#9'Vcl.Buttons (interface, source rule); needed by: SpeedButton1: TSpeedButton'), string.Join(' | ', Lines));
+  Row.Apply:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'));
+  Lines:= ApplyItemReportLines(Row);
+  Check('apply1270.report.unresolved', (Length(Lines) = SAMPLE_REPORT) and (Lines[High(Lines)] = HEAD + 'uses unresolved'#9#9#9#9#9'not-found'),
+    string.Join(' | ', Lines));
+  Row.Status:= csRolledBack;
+  Check('apply1270.report.rolled.back.none', Length(ApplyItemReportLines(Row)) = 0);
+end;
+{ Engine 1.28.0: convert-apply exits 6 for an unusable cast library -- a RUN-level
+  configuration error, never a unit or book error. }
+procedure TestRunnerExit6;
+const
+  ORIG    = 'unit U; interface implementation end.'#13#10;
+  CHANGED = 'unit U; { converted } interface implementation end.'#13#10;
+  OK_JSON = '{"schema":"apply/1","ok":true,"edits_count":1}';
+  STOP_TEXT = 'Convert stopped: the cast library casts.castlib is unusable -- castlib bad.castlib: line 88: cast StripDB: unknown value transform "strip-dbx" (known: strip-db)';
+var
+  Dir  : string;
+  U1   : string;
+  U2   : string;
+  Json6: string;
+  Rows : TArray<TConvertRow>;
+  Calls: TStringList;
+  Index: TIndexFn;
+begin
+  Json6:= Apply1270Fixture('apply-exit6-castlib-1280.json');
+  Dir:= TPath.Combine(TPath.GetTempPath, 'exit6-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  Calls:= TStringList.Create;
+  try
+    U1:= TPath.Combine(Dir, 'U1.pas');
+    U2:= TPath.Combine(Dir, 'U2.pas');
+    TFile.WriteAllText(U1, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.ChangeExtension(U1, '.dfm'), 'object F: TF'#13#10'end'#13#10, TEncoding.ASCII);
+    TFile.WriteAllText(U2, ORIG, TEncoding.ASCII);
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result := 0;
+      end;
+
+    // Exit 6 on the very first apply: the run stops, nothing restored, no backup kept.
+    Rows:= RunConversionUnits([U1, U2], ['A.rules', 'B.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Calls.Add(ExtractFileName(AUnitPas) + ' ' + ARulesFile);
+        AJson := Json6;
+        Result:= ENGINE_EXIT_CONFIG;
+      end, Index, nil, nil);
+    Check('runner.exit6.castlib.config.error', (Length(Rows) = 1) and (Rows[0].Status = csConfigError) and (Calls.CommaText = '"U1.pas A.rules"'),
+      Calls.CommaText + ' / ' + IntToStr(Length(Rows)));
+    if Length(Rows) = 1 then
+      Check('runner.exit6.note.engine.text', Pos('unknown value transform "strip-dbx"', Rows[0].Note) > 0, Rows[0].Note);
+    Check('runner.exit6.no.backup', (Length(TDirectory.GetFiles(Dir, '*.BCK*')) = 0) and (TFile.ReadAllText(U1) = ORIG),
+      string.Join(',', TDirectory.GetFiles(Dir, '*.BCK*')));
+    Check('runner.exit6.stop.text', CastLibStopText(Rows, 'casts.castlib') = STOP_TEXT, CastLibStopText(Rows, 'casts.castlib'));
+    Check('runner.exit6.stop.text.none', CastLibStopText(Rows, '') = StringReplace(STOP_TEXT, 'library casts.castlib', 'library (none)', []));
+    Check('runner.exit6.not.reached', string.Join(',', NotReachedAfterStop(Rows, [U1, U2])) = U2, string.Join(',', NotReachedAfterStop(Rows, [U1, U2])));
+    Check('runner.exit6.tally', (TallyRows(Rows).ConfigErrors = 1) and (TallyRows(Rows).Restored = 0) and (TallyRows(Rows).Refused = 0));
+    Check('runner.exit6.status.text', ConvertStatusText(csConfigError) = 'stopped -- cast library unusable');
+
+    // Exit 6 on the SECOND book, after the first converted the unit: restored, the first rolled back.
+    Calls.Clear;
+    Rows:= RunConversionUnits([U1, U2], ['A.rules', 'B.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Calls.Add(ExtractFileName(AUnitPas) + ' ' + ARulesFile);
+        if ARulesFile = 'A.rules' then
+        begin
+          TFile.WriteAllText(AUnitPas, CHANGED, TEncoding.ASCII);
+          AJson := OK_JSON;
+          Result:= 0;
+        end
+        else
+        begin
+          AJson := Json6;
+          Result:= ENGINE_EXIT_CONFIG;
+        end;
+      end, Index, nil, nil);
+    Check('runner.exit6.after.change.restored', (Length(Rows) = 2) and (Rows[0].Status = csRolledBack) and (Rows[1].Status = csConfigError)
+      and (TFile.ReadAllText(U1) = ORIG) and (Calls.Count = 2), Calls.CommaText);
+    // No stop: a run with no csConfigError row says nothing.
+    Check('runner.exit6.no.stop.empty', (CastLibStopText(nil, 'x') = '') and (Length(NotReachedAfterStop(nil, [U1])) = 0));
+  finally
+    Calls.Free;
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ Fix round 1: the run stop survives a failed restore, and a stop on a LATER unit's
+  first book leaves that unit untouched. Fake TApplyFn throughout. }
+procedure TestRunnerExit6Stops;
+const
+  ORIG      = 'unit U; interface implementation end.'#13#10;
+  CHANGED   = 'unit U; { converted } interface implementation end.'#13#10;
+  OK_JSON   = '{"schema":"apply/1","ok":true,"edits_count":1}';
+  STOP_TEXT = 'Convert stopped: the cast library casts.castlib is unusable -- castlib bad.castlib: line 88: cast StripDB: unknown value transform "strip-dbx" (known: strip-db)';
+  TWO_ROWS  = 2;
+var
+  Dir  : string;
+  U1   : string;
+  U2   : string;
+  U3   : string;
+  Json6: string;
+  Rows : TArray<TConvertRow>;
+  Calls: TStringList;
+  Index: TIndexFn;
+  Shape: Boolean;
+begin
+  Json6:= Apply1270Fixture('apply-exit6-castlib-1280.json');
+  Index:= function(out AOutput: string): Integer
+    begin
+      AOutput:= '';
+      Result := 0;
+    end;
+  Calls:= TStringList.Create;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'exit6b-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    U1:= TPath.Combine(Dir, 'U1.pas');
+    U2:= TPath.Combine(Dir, 'U2.pas');
+    U3:= TPath.Combine(Dir, 'U3.pas');
+    for var LU: string in [U1, U2, U3] do
+      TFile.WriteAllText(LU, ORIG, TEncoding.ASCII);
+
+    // (a) book A changes U1 and makes it read-only, book B exits 6: the restore FAILS.
+    try
+      Rows:= RunConversionUnits([U1, U2, U3], ['A.rules', 'B.rules'],
+        function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+        begin
+          Calls.Add(ExtractFileName(AUnitPas) + ' ' + ARulesFile);
+          if ARulesFile = 'A.rules' then
+          begin
+            TFile.WriteAllText(AUnitPas, CHANGED, TEncoding.ASCII);
+            FileSetAttr(AUnitPas, faReadOnly);
+            AJson := OK_JSON;
+            Result:= 0;
+          end
+          else
+          begin
+            AJson := Json6;
+            Result:= ENGINE_EXIT_CONFIG;
+          end;
+        end, Index, nil, nil);
+    finally
+      FileSetAttr(U1, faNormal);
+    end; // try
+    Shape:= (Length(Rows) = TWO_ROWS) and (Rows[1].Status = csRestoreFailed) and Rows[1].StoppedRun;
+    Check('runner.exit6.restore.failed.keeps.stop', Shape and (Calls.CommaText = '"U1.pas A.rules","U1.pas B.rules"'), Calls.CommaText);
+    // The report's 'Run<TAB>stopped' line and the status lead are both CastLibStopText <> ''.
+    Check('runner.exit6.restore.failed.stop.text', CastLibStopText(Rows, 'casts.castlib') = STOP_TEXT, CastLibStopText(Rows, 'casts.castlib'));
+    Check('runner.exit6.restore.failed.not.reached', string.Join(',', NotReachedAfterStop(Rows, [U1, U2, U3])) = U2 + ',' + U3,
+      string.Join(',', NotReachedAfterStop(Rows, [U1, U2, U3])));
+
+    // (b) U1 converted by its only book, then U2's FIRST apply exits 6.
+    for var LU: string in [U1, U2, U3] do
+      TFile.WriteAllText(LU, ORIG, TEncoding.ASCII);
+    for var LBak: string in TDirectory.GetFiles(Dir, '*.BCK*') do
+      TFile.Delete(LBak);
+    Calls.Clear;
+    Rows:= RunConversionUnits([U1, U2, U3], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Calls.Add(ExtractFileName(AUnitPas));
+        if SameText(AUnitPas, U1) then
+        begin
+          TFile.WriteAllText(AUnitPas, CHANGED, TEncoding.ASCII);
+          AJson := OK_JSON;
+          Result:= 0;
+        end
+        else
+        begin
+          AJson := Json6;
+          Result:= ENGINE_EXIT_CONFIG;
+        end;
+      end, Index, nil, nil);
+    Shape:= (Length(Rows) = TWO_ROWS) and (Rows[0].Status = csConverted) and (Rows[1].Status = csConfigError) and Rows[1].StoppedRun;
+    Check('runner.exit6.later.unit.rows', Shape and (Calls.CommaText = 'U1.pas,U2.pas'), Calls.CommaText);
+    Check('runner.exit6.later.unit.untouched', (TFile.ReadAllText(U2) = ORIG) and (Length(TDirectory.GetFiles(Dir, 'U2.pas.BCK*')) = 0)
+      and (TFile.ReadAllText(U1) = CHANGED) and TFile.Exists(U1 + '.BCK1'), string.Join(',', TDirectory.GetFiles(Dir, '*.BCK*')));
+    Check('runner.exit6.later.unit.stop.text', CastLibStopText(Rows, 'casts.castlib') = STOP_TEXT, CastLibStopText(Rows, 'casts.castlib'));
+    Check('runner.exit6.later.unit.not.reached', string.Join(',', NotReachedAfterStop(Rows, [U1, U2, U3])) = U3,
+      string.Join(',', NotReachedAfterStop(Rows, [U1, U2, U3])));
+  finally
+    Calls.Free;
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ Fix round 1: a cast site / value check is counted ONCE -- its warnings[] line leaves
+  the manual remainder (real 1.27.0 captures). }
+procedure TestApply1270Remainder;
+const
+  CAST_REMAINDER  = 11; // 5 reemit_notes + 7 warnings - the 1 cast-site warning
+  STRIP_REMAINDER = 27; // 11 reemit_notes + 17 warnings - the 1 value-check warning
+  CAST_ALL        = 12;
+  STRIP_ALL       = 28;
+var
+  A: TApplyRow;
+begin
+  A:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Check('apply1270.remainder.cast.once', Length(A.Remainder) = CAST_REMAINDER, IntToStr(Length(A.Remainder)));
+  Check('apply1270.remainder.cast.note', ConvertedRowNote(A, True, True) = '5 edit(s), 11 remaining for manual work; 1 cast site(s) to convert by hand',
+    ConvertedRowNote(A, True, True));
+  Check('apply1270.remainder.cast.gated', Length(ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), []).Remainder) = CAST_ALL);
+  A:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  Check('apply1270.remainder.check.once', Length(A.Remainder) = STRIP_REMAINDER, IntToStr(Length(A.Remainder)));
+  Check('apply1270.remainder.check.note', ConvertedRowNote(A, True, True) = '19 edit(s), 27 remaining for manual work; StripDB: 3 value(s) changed, 1 to check by hand; uses: +0 -1 moved 0',
+    ConvertedRowNote(A, True, True));
+  Check('apply1270.remainder.check.gated', Length(ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), []).Remainder) = STRIP_ALL);
+end;
 { C10 E13: ParseApplyJson reads glyphs[] whenever it is present (additive, not gated);
   a missing array, a missing dropped_slots key, an unknown kind and wrongly-typed
   values never raise. }
@@ -11087,6 +11550,12 @@ begin
   Check('glyph.tab.lead.restore.only', S = RESTORE_LEAD + 'Converted 1 of 2.', S);
   S:= RunStatusLead([], '', 'Converted 1 of 2.');
   Check('glyph.tab.lead.body.only', S = 'Converted 1 of 2.', S);
+  // editor-1270 final fix wave: a castlib stop (exit 6) follows the RESTORE FAILED lead
+  // -- most severe first -- with ONE '. ', and never doubles a period it already has.
+  S:= RunStatusLead(['A.pas', 'B.pas'], GlyphRunSummary(1), 'Converted 1 of 2.', 'Convert stopped: X');
+  Check('convert.tab.lead.restore.before.stop', S = RESTORE_LEAD + 'Convert stopped: X. ' + GlyphRunSummary(1) + '  Converted 1 of 2.', S);
+  S:= RunStatusLead([], '', 'Converted 1 of 2.', 'Convert stopped: X.');
+  Check('convert.tab.lead.stop.one.period', S = 'Convert stopped: X. Converted 1 of 2.', S);
 
   // Final-review ruling (E13 amended): ONE report shape -- each glyph line has the
   // report's 8 columns, Status `glyph`, the outcome in the Note; converted rows only.
@@ -12001,7 +12470,7 @@ end;
   engine call; a scoped book's names reach apply as --only; an all-out-of-scope
   unit keeps no backup; the engine's --only refusal gets the E10 hint; an --only
   that matched nothing stays a failure and says what was asked. }
-procedure TestRunnerScope;  // dl:ok cyclomatic-complexity@10c5 -- REVIEWED 2026-10-06 one fake-seam fixture walked case by case (out of scope, --only, refusal, unmatched name, injected hint); the count is the and-chains in Check conditions, and splitting would duplicate the temp-folder fixture
+procedure TestRunnerScope;  // dl:ok cyclomatic-complexity@db5f -- REVIEWED 2026-10-11 (re-read; 1.28.1 measures 34 and re-hashes it) one fake-seam fixture walked case by case (out of scope, --only, refusal, unmatched name, injected hint); the count is the and-chains in Check conditions, and splitting would duplicate the temp-folder fixture
 const
   ORIG = 'unit F; interface implementation end.';
   OK_JSON      = '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}';
@@ -12277,6 +12746,403 @@ begin
   end; // try
 end; // procedure
 
+{ Work list over apply/1 pas_uses[] (editor-1270 Task 3). Real capture
+    fixtures\apply1270\apply-pas-uses-1270.json (its _note gives the command and the
+    engine sha): 2 unmapped, 1 not-rewritten, 1 mapped, 1 same-name, 2 global-dangling
+    on Unit1.pas, engine order Caption, Click, Kind, NumGlyphs, Spacing, bkOK, TBitBtnKind. }
+const
+  WORK_FIX_DIR   = 'C:\fix\';  // dl:ok hardcoded-absolute-path@416c -- REVIEWED 2026-10-11 text only: the Work list tests touch no file
+  WORK_REAL_ROWS = 7;
+  WORK_PAIR_N    = 2;  // unmapped rows, global rows, mapped + same-name rows in the real capture
+  WORK_KIND_ROW  = 2;  // Rows[] index of BitBtn1.Kind (unmapped, line 28)
+  WORK_KIND_LINE = 28;
+  WORK_SHOWN_N   = 5;  // the real capture's work rows (and its BitBtn1 rows)
+  WORK_RUN_OLD   = 1;
+  WORK_RUN_NEW   = 2;
+
+function WorkRow(const AUnit, AInstance, AMember, AStatus: string; ARunId: Integer = WORK_RUN_OLD): TPasUseRow;
+begin
+  Result:= Default(TPasUseRow);
+  Result.RunId   := ARunId;
+  Result.UnitPas := AUnit;
+  Result.Instance:= AInstance;
+  Result.Member  := AMember;
+  Result.Status  := AStatus;
+end;
+
+function WorkKeys(const ARows: TArray<TPasUseRow>): string;
+var
+  LParts: TArray<string>;
+begin
+  LParts:= nil;
+  for var LRow: TPasUseRow in ARows do
+    LParts:= LParts + [LRow.Member];
+  Result:= string.Join(',', LParts);
+end;
+
+function StatusCount(const ARows: TArray<TPasUseRow>; const AStatus: string): Integer;
+begin
+  Result:= 0;
+  for var LRow: TPasUseRow in ARows do
+    if LRow.Status = AStatus then
+      Inc(Result);
+end;
+
+function WorkRealRows: TArray<TPasUseRow>;
+begin
+  Result:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json')).PasUses;
+end;
+
+procedure TestWorkListParse;
+var
+  Rows : TArray<TPasUseRow>;
+  Kind : TPasUseRow;
+  Glob : TArray<string>;
+  Who  : Boolean;
+  Where: Boolean;
+  Count: Boolean;
+begin
+  // worklist.parse.real -- through ParseApplyJson, gated on afPasUses.
+  Rows := WorkRealRows;
+  Count:= (StatusCount(Rows, PAS_USE_UNMAPPED) = WORK_PAIR_N) and (StatusCount(Rows, PAS_USE_GLOBAL_DANGLING) = WORK_PAIR_N);
+  Who  := (StatusCount(Rows, PAS_USE_NOT_REWRITTEN) = 1) and (StatusCount(Rows, PAS_USE_MAPPED) = 1) and (StatusCount(Rows, PAS_USE_SAME_NAME) = 1);
+  Check('worklist.parse.real', (Length(Rows) = WORK_REAL_ROWS) and Count and Who, IntToStr(Length(Rows)) + ' rows: ' + WorkKeys(Rows));
+  if Length(Rows) = WORK_REAL_ROWS then
+  begin
+    Kind := Rows[WORK_KIND_ROW];
+    Who  := (Kind.Instance = 'BitBtn1') and (Kind.Member = 'Kind') and (Kind.FromType = 'TBitBtn') and (Kind.ToType = 'TPanel');
+    Where:= (Kind.DeclaringUnit = 'Vcl.Buttons') and (Kind.DeclaredIn = 'TBitBtn') and (Kind.UnitPas = 'Unit1.pas');
+    Count:= (Length(Kind.Lines) = 1) and (Kind.Lines[0] = WORK_KIND_LINE) and (Kind.Count = 1);
+    Check('worklist.parse.real.fields', Who and Where and Count and (Kind.Kind = 'property'), Kind.Member + ' ' + Kind.UnitPas);
+    Check('worklist.member.row', string.Join('|', RowDisplay(Kind)) = 'Unit1.pas|BitBtn1|TBitBtn -> TPanel|Kind|property|unmapped|28|Vcl.Buttons.TBitBtn',
+      string.Join('|', RowDisplay(Kind)));
+  end;
+  Check('worklist.parse.gated', Length(ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json'), [afUsesReconcile]).PasUses) = 0);
+  Who  := StatusCount(ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json')).PasUses, PAS_USE_CAST_REFUSED) = 1;
+  Where:= StatusCount(ParseApplyJson(Apply1270Fixture('apply-uses-1270.json')).PasUses, PAS_USE_GLOBAL_DANGLING) = WORK_PAIR_N;
+  Check('worklist.parse.other.captures', Who and Where);
+
+  // worklist.global.row -- instance '' renders as a global.
+  Glob:= nil;
+  for var LRow: TPasUseRow in Rows do
+    if LRow.Member = 'bkOK' then
+      Glob:= RowDisplay(LRow);
+  Check('worklist.global.row', string.Join('|', Glob) = 'Unit1.pas|' + WORK_GLOBAL_INSTANCE + '|' + WORK_GLOBAL_PAIR + '|bkOK||global-dangling|26|Vcl.Buttons',
+    string.Join('|', Glob));
+  Check('worklist.columns', string.Join('|', WorkColumns) = 'Unit|Instance|From -> To|Member|Kind|Status|Lines|Declared in', string.Join('|', WorkColumns));
+end;
+
+procedure TestWorkListSortFilter;
+var
+  Sorted: TArray<TPasUseRow>;
+  Mixed : TArray<TPasUseRow>;
+  Filter: TWorkFilter;
+  Work  : Boolean;
+  Plain : Boolean;
+begin
+  // worklist.sort.order -- status rank, then unit, globals last within a unit, then member.
+  Sorted:= WorkRealRows;
+  SortRows(Sorted);
+  Check('worklist.sort.order', WorkKeys(Sorted) = 'Kind,NumGlyphs,bkOK,TBitBtnKind,Spacing,Click,Caption', WorkKeys(Sorted));
+  Mixed:= [WorkRow('B.pas', '', 'G1', PAS_USE_UNMAPPED), WorkRow('B.pas', 'X', 'Z9', PAS_USE_UNMAPPED),
+    WorkRow('A.pas', 'X', 'Y', 'brand-new-status'), WorkRow('a.pas', '', 'G0', PAS_USE_UNMAPPED),
+    WorkRow('A.pas', 'X', 'Y', PAS_USE_CAST_REFUSED), WorkRow('A.pas', 'b', 'M', PAS_USE_UNMAPPED)];
+  SortRows(Mixed);
+  Check('worklist.sort.globals.last.unknown.last', WorkKeys(Mixed) = 'M,G0,Z9,G1,Y,Y', WorkKeys(Mixed));
+  Check('worklist.sort.unknown.status.last', (Length(Mixed) > 0) and (Mixed[High(Mixed)].Status = 'brand-new-status'));
+
+  // worklist.filter.default.work.only
+  Check('worklist.filter.default.work.only', WorkKeys(FilterRows(Sorted, DefaultWorkFilter)) = 'Kind,NumGlyphs,bkOK,TBitBtnKind,Spacing',
+    WorkKeys(FilterRows(Sorted, DefaultWorkFilter)));
+  Check('worklist.default.statuses', string.Join(',', DefaultWorkFilter.Statuses) = 'unmapped,global-dangling,cast-refused,not-rewritten,' + WORK_STATUS_OTHER);
+  Check('worklist.filter.entries', string.Join(',', WorkFilterEntries) = 'unmapped,global-dangling,cast-refused,not-rewritten,same-name,mapped,(other)');
+  Check('worklist.statuses.six', string.Join(',', WorkStatuses) = 'unmapped,global-dangling,cast-refused,not-rewritten,same-name,mapped');
+  Work := IsWorkStatus('UNMAPPED') and IsWorkStatus(PAS_USE_NOT_REWRITTEN);
+  Plain:= not IsWorkStatus(PAS_USE_SAME_NAME) and not IsWorkStatus('brand-new-status');
+  Check('worklist.is.work', Work and Plain);
+  Work := (WorkStyleOf(PAS_USE_UNMAPPED) = wsBoldRed) and (WorkStyleOf(PAS_USE_GLOBAL_DANGLING) = wsBoldRed);
+  Plain:= (WorkStyleOf(PAS_USE_CAST_REFUSED) = wsBold) and (WorkStyleOf(PAS_USE_NOT_REWRITTEN) = wsBold) and (WorkStyleOf(PAS_USE_MAPPED) = wsPlain);
+  Check('worklist.style', Work and Plain);
+
+  // worklist.filter.unit -- one run over two units.
+  Mixed:= [WorkRow(WORK_FIX_DIR + 'A.pas', 'X', 'Y', PAS_USE_UNMAPPED), WorkRow(WORK_FIX_DIR + 'B.pas', 'X', 'Z', PAS_USE_MAPPED),
+    WorkRow(WORK_FIX_DIR + 'a.PAS', '', 'G', PAS_USE_GLOBAL_DANGLING)];
+  Filter:= Default(TWorkFilter);
+  Filter.UnitPas:= WORK_FIX_DIR + 'A.pas';
+  Check('worklist.filter.unit', WorkKeys(FilterRows(Mixed, Filter)) = 'Y,G', WorkKeys(FilterRows(Mixed, Filter)));
+  Check('worklist.filter.all', WorkKeys(FilterRows(Mixed, Default(TWorkFilter))) = 'Y,Z,G');
+  Check('worklist.units', string.Join(',', WorkUnits(Mixed)) = WORK_FIX_DIR + 'A.pas,' + WORK_FIX_DIR + 'B.pas', string.Join(',', WorkUnits(Mixed)));
+
+  // worklist.filter.text -- member or instance, case-insensitive; globals too.
+  Filter:= Default(TWorkFilter);
+  Filter.Text:= 'glyph';
+  Check('worklist.filter.text', WorkKeys(FilterRows(Sorted, Filter)) = 'NumGlyphs', WorkKeys(FilterRows(Sorted, Filter)));
+  Filter.Text:= 'BITBTN1';
+  Check('worklist.filter.text.instance', Length(FilterRows(Sorted, Filter)) = WORK_SHOWN_N, WorkKeys(FilterRows(Sorted, Filter)));
+  Filter.Text:= 'K';
+  Filter.Statuses:= [PAS_USE_GLOBAL_DANGLING];
+  Check('worklist.filter.text.and.status', WorkKeys(FilterRows(Sorted, Filter)) = 'bkOK,TBitBtnKind', WorkKeys(FilterRows(Sorted, Filter)));
+
+  // Fix round 1: a status outside the six is never invisible; nothing checked shows nothing.
+  Mixed:= [WorkRow('A.pas', 'X', 'New', 'brand-new-status'), WorkRow('A.pas', 'X', 'Blank', ''),
+    WorkRow('A.pas', 'X', 'Map', PAS_USE_MAPPED), WorkRow('A.pas', 'X', 'Un', PAS_USE_UNMAPPED)];
+  Check('worklist.filter.other.default.shown', WorkKeys(FilterRows(Mixed, DefaultWorkFilter)) = 'New,Blank,Un', WorkKeys(FilterRows(Mixed, DefaultWorkFilter)));
+  Check('worklist.filter.other.only', WorkKeys(FilterRows(Mixed, WorkFilterOf([WORK_STATUS_OTHER], '', ''))) = 'New,Blank',
+    WorkKeys(FilterRows(Mixed, WorkFilterOf([WORK_STATUS_OTHER], '', ''))));
+  Check('worklist.filter.none.checked.empty', Length(FilterRows(Mixed, WorkFilterOf(nil, '', ''))) = 0, WorkKeys(FilterRows(Mixed, WorkFilterOf(nil, '', ''))));
+  Check('worklist.filter.of.fields', (WorkFilterOf([PAS_USE_MAPPED], 'A.pas', '  x ').Text = 'x') and (WorkFilterOf([PAS_USE_MAPPED], 'A.pas', '').UnitPas = 'A.pas'));
+end;
+
+procedure TestWorkListSummaryMerge;
+const
+  BAD_JSON = '[1, "x", null, {"member":"M1","status":"unmapped","lines":"12","count":"3"},'
+    + ' {"member":"M2","instance":7,"lines":[5,"a",7],"count":2,"status":["x"]}, []]';
+  BAD_DOC  = '{"schema":"apply/1","ok":true,"pas_uses":{"member":"x"}}';
+  // Fix round 1: numbers that are not Integers (TJSONNumber.AsInt RAISES on these).
+  BAD_NUMS = '[{"member":"F","lines":[12.5, 1e3, 99999999999, 4],"count":12.5},'
+    + ' {"member":"E","lines":1e3,"count":1e3}, {"member":"H","lines":[4],"count":99999999999}]';
+  NUM_LINE = 4;
+  NUM_ROWS = 3;
+  BAD_RUN  = 3;
+  BAD_LINE = 7;
+var
+  Rows  : TArray<TPasUseRow>;
+  Arr   : TJSONArray;
+  Bad   : TArray<TPasUseRow>;
+  Nums  : TArray<TPasUseRow>;
+  Raised: Boolean;
+  Kept  : Boolean;
+  Lines : Boolean;
+  Merged: TArray<TPasUseRow>;
+begin
+  Rows:= WorkRealRows;
+  Check('worklist.summary.counts', WorkListSummary(Rows) = '5 to work on (2 unmapped, 2 global, 0 cast-refused, 1 not-rewritten), 2 mapped / same-name',
+    WorkListSummary(Rows));
+  Check('worklist.summary.empty.rows', WorkListSummary(nil) = '0 to work on (0 unmapped, 0 global, 0 cast-refused, 0 not-rewritten), 0 mapped / same-name',
+    WorkListSummary(nil));
+  Check('worklist.summary.no.converted', WorkListSummary(nil, wlsNoConverted) = 'no work list (no unit converted)', WorkListSummary(nil, wlsNoConverted));
+  Check('worklist.summary.no.capability', WorkListSummary(Rows, wlsNoCapability) = 'no work list (engine has no pas_uses)', WorkListSummary(Rows, wlsNoCapability));
+  Check('worklist.summary.no.run', WorkListSummary(nil, wlsNoRun) = WORK_NO_RUN);
+  Check('worklist.summary.other.counted', WorkListSummary([WorkRow('A.pas', 'X', 'N', 'brand-new-status'), WorkRow('A.pas', 'X', 'B', ''),
+    WorkRow('A.pas', 'X', 'U', PAS_USE_UNMAPPED)]) = '1 to work on (1 unmapped, 0 global, 0 cast-refused, 0 not-rewritten), 0 mapped / same-name, 2 other',
+    WorkListSummary([WorkRow('A.pas', 'X', 'N', 'brand-new-status'), WorkRow('A.pas', 'X', 'B', ''), WorkRow('A.pas', 'X', 'U', PAS_USE_UNMAPPED)]));
+
+  // worklist.bad.json.no.raise -- non-objects skipped, wrong types read as nothing.
+  Raised:= False;
+  Bad   := nil;
+  Nums  := nil;
+  try
+    Arr:= TJSONObject.ParseJSONValue(BAD_JSON) as TJSONArray;
+    try
+      Bad:= ParsePasUses(Arr, 'U.pas', BAD_RUN);
+    finally
+      Arr.Free;
+    end; // try
+    Check('worklist.bad.json.doc.no.raise', (ParseApplyJson(BAD_DOC).Ok) and (Length(ParseApplyJson(BAD_DOC).PasUses) = 0));
+    Check('worklist.bad.json.nil.array', Length(ParsePasUses(nil, 'U.pas', WORK_RUN_OLD)) = 0);
+    Arr:= TJSONObject.ParseJSONValue(BAD_NUMS) as TJSONArray;
+    try
+      Nums:= ParsePasUses(Arr, 'U.pas', WORK_RUN_OLD);
+    finally
+      Arr.Free;
+    end; // try
+  except
+    on Exception do
+      Raised:= True; // catch-and-check: the next Check fails when anything raised
+  end; // try
+  Check('worklist.bad.json.no.raise', (not Raised) and (Length(Bad) = WORK_PAIR_N), IntToStr(Length(Bad)));
+  Check('worklist.json.numbers.no.raise', (not Raised) and (Length(Nums) = NUM_ROWS), IntToStr(Length(Nums)));
+  if Length(Nums) = NUM_ROWS then
+  begin
+    Kept := (Length(Nums[0].Lines) = 1) and (Nums[0].Lines[0] = NUM_LINE) and (Nums[0].Count = 1);
+    Lines:= (Length(Nums[1].Lines) = 0) and (Nums[1].Count = 0) and (Nums[High(Nums)].Count = 1);
+    Check('worklist.json.numbers.skipped', Kept and Lines, Format('%d lines, count %d / %d', [Length(Nums[0].Lines), Nums[0].Count, Nums[High(Nums)].Count]));
+  end;
+  if Length(Bad) = WORK_PAIR_N then
+  begin
+    Kept := (Bad[0].Member = 'M1') and (Bad[0].Status = PAS_USE_UNMAPPED) and (Bad[0].UnitPas = 'U.pas') and (Bad[0].RunId = BAD_RUN);
+    Lines:= (Length(Bad[0].Lines) = 0) and (Bad[0].Count = 0);
+    Check('worklist.bad.json.kept', Kept and Lines);
+    Lines:= (Length(Bad[1].Lines) = WORK_PAIR_N) and (Bad[1].Lines[1] = BAD_LINE) and (Bad[1].Count = WORK_PAIR_N);
+    Check('worklist.bad.json.lines.numbers.only', Lines and (Bad[1].Instance = '') and (Bad[1].Status = ''));
+    Check('worklist.bad.json.renders', Length(RowDisplay(Bad[0])) = Length(WorkColumns));
+  end;
+
+  // worklist.replace.on.new.run -- a new run never mixes with the old one.
+  Merged:= MergeRun([WorkRow('A.pas', 'X', 'Old1', PAS_USE_UNMAPPED), WorkRow('A.pas', 'X', 'Old2', PAS_USE_UNMAPPED)],
+    [WorkRow('A.pas', 'X', 'New1', PAS_USE_UNMAPPED, WORK_RUN_NEW)], WORK_RUN_NEW);
+  Check('worklist.replace.on.new.run', WorkKeys(Merged) = 'New1', WorkKeys(Merged));
+  Check('worklist.replace.on.empty.run', Length(MergeRun([WorkRow('A.pas', 'X', 'Old1', PAS_USE_UNMAPPED)], nil, WORK_RUN_NEW)) = 0);
+  Merged:= MergeRun(nil, [WorkRow('A.pas', 'X', 'Stale', PAS_USE_UNMAPPED), WorkRow('A.pas', 'X', 'New', PAS_USE_UNMAPPED, WORK_RUN_NEW)], WORK_RUN_NEW);
+  Check('worklist.replace.drops.stale.rows', WorkKeys(Merged) = 'New', WorkKeys(Merged));
+end;
+
+procedure TestWorkListRunGoTo;
+const
+  RUN_A      = 4;
+  RUN_B      = 5;
+  CONV_ROWS  = 3;  // converted, failed-restored, a second converted book on the same unit
+  STOP_ROWS  = 2;  // converted, then the castlib stop
+  LINE_COUNT = 40;
+  SHORT_FILE = 10;
+var
+  Pas  : TApplyRow;
+  Conv : TArray<TConvertRow>;
+  Run  : TWorkRun;
+  Row  : TPasUseRow;
+  GoTo1: TWorkGoTo;
+  Unit1: string;
+  Only : Boolean;
+begin
+  // WorkRunOf -- converted rows only, stamped, exact repeats once; the two empty states.
+  Pas  := ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json'));
+  Unit1:= WORK_FIX_DIR + 'Unit1.pas';
+  SetLength(Conv, CONV_ROWS);
+  Conv[0].UnitPas:= Unit1;
+  Conv[0].Status := csConverted;
+  Conv[0].Apply  := Pas;
+  Conv[1].UnitPas:= WORK_FIX_DIR + 'Unit2.pas';
+  Conv[1].Status := csFailedRestored;
+  Conv[1].Apply  := Pas;
+  Conv[High(Conv)].UnitPas:= Unit1; // a second book on Unit1 reporting the same rows
+  Conv[High(Conv)].Status := csConverted;
+  Conv[High(Conv)].Apply  := Pas;
+  Run:= WorkRunOf(Conv, RUN_A, True);
+  Check('worklist.run.of.converted', (Run.State = wlsRows) and (Run.RunId = RUN_A) and (Length(Run.Rows) = WORK_REAL_ROWS), IntToStr(Length(Run.Rows)));
+  if Length(Run.Rows) > 0 then
+    Check('worklist.run.of.stamped', (Run.Rows[0].UnitPas = Unit1) and (Run.Rows[0].RunId = RUN_A));
+  Check('worklist.run.of.no.capability', WorkRunOf(Conv, RUN_A, False).State = wlsNoCapability);
+  Conv[0].Status:= csRolledBack;
+  Conv[High(Conv)].Status:= csRefused;
+  Run:= WorkRunOf(Conv, RUN_B, True);
+  Check('worklist.run.of.no.converted', (Run.State = wlsNoConverted) and (Length(Run.Rows) = 0) and (WorkListSummary(Run.Rows, Run.State) = WORK_NO_CONVERTED));
+
+  // worklist.run.of.stopped -- a castlib stop (exit 6) on Unit2 keeps Unit1's converted rows.
+  Conv:= nil;
+  SetLength(Conv, STOP_ROWS);
+  Conv[0].UnitPas:= Unit1;
+  Conv[0].Status := csConverted;
+  Conv[0].Apply  := Pas;
+  Conv[High(Conv)].UnitPas   := WORK_FIX_DIR + 'Unit2.pas';
+  Conv[High(Conv)].Status    := csConfigError;
+  Conv[High(Conv)].StoppedRun:= True;
+  Conv[High(Conv)].Apply     := Pas;
+  Run := WorkRunOf(Conv, RUN_B, True);
+  Only:= (Run.State = wlsRows) and (Length(Run.Rows) = WORK_REAL_ROWS);
+  for var LRow: TPasUseRow in Run.Rows do
+    Only:= Only and (LRow.UnitPas = Unit1);
+  Check('worklist.run.of.stopped', Only, IntToStr(Length(Run.Rows)) + ' rows');
+
+  // WorkGoTo -- double-click: copy, missing file, past EOF, no line.
+  if Length(Pas.PasUses) <> WORK_REAL_ROWS then
+    Exit;
+  Row:= Pas.PasUses[WORK_KIND_ROW];
+  Row.UnitPas:= Unit1;
+  GoTo1:= WorkGoTo(Row, True, LINE_COUNT);
+  Check('worklist.goto.copy', GoTo1.Ok and (GoTo1.Clip = Unit1 + '(28)') and (GoTo1.Status = 'Copied Unit1.pas(28) to the clipboard -- line 28'),
+    GoTo1.Clip + ' / ' + GoTo1.Status);
+  GoTo1:= WorkGoTo(Row, False, 0);
+  Check('worklist.goto.missing.file', (not GoTo1.Ok) and (GoTo1.Status = Unit1 + ' not found') and (GoTo1.Clip = ''), GoTo1.Status);
+  GoTo1:= WorkGoTo(Row, True, SHORT_FILE);
+  Check('worklist.goto.past.eof', (not GoTo1.Ok) and (GoTo1.Status = Unit1 + ' has only 10 line(s) -- line 28 is past its end (the file changed since the run)'),
+    GoTo1.Status);
+  Row.Lines:= nil;
+  GoTo1:= WorkGoTo(Row, True, LINE_COUNT);
+  Check('worklist.goto.no.line', GoTo1.Ok and (GoTo1.Clip = Unit1) and (Pos('no line', GoTo1.Status) > 0), GoTo1.Status);
+end;
+
+{ editor-1270 final fix wave: engine 1.28.2 pas_uses_resolution. The Work list never
+    shows a guessed declaring unit as fact. REAL capture
+    fixtures\apply1270\apply-pas-uses-resolution-1282.json (its _note: a BARE TLabel book
+    on a unit whose uses clause names no StdCtrls unit): Caption same-name and WordWrap
+    unmapped, both ambiguous between FMX.StdCtrls and Vcl.StdCtrls, kind ''. The other
+    resolutions are HAND-WRITTEN rows to the same contract (RES_JSON). }
+procedure TestWorkListResolution;
+const
+  RES_JSON = '[{"member":"A","kind":"property","declaring_unit":"Vcl.StdCtrls","declared_in":"TLabel","status":"unmapped","resolution":"class-not-found"},'
+    + ' {"member":"B","kind":"","declaring_unit":"Vcl.StdCtrls","declared_in":"TLabel","status":"unmapped","resolution":"member-not-found"},'
+    + ' {"member":"C","kind":"","declaring_unit":"Vcl.StdCtrls","declared_in":"TLabel","status":"unmapped","resolution":"kind-unknown"},'
+    + ' {"member":"D","kind":"property","declaring_unit":"Vcl.StdCtrls","declared_in":"TLabel","status":"mapped","resolution":"resolved"},'
+    + ' {"member":"E","declaring_unit":"Vcl.StdCtrls","status":"unmapped","resolution":"brand-new","candidates":["X",5,"Y",null,true]},'
+    + ' {"member":5,"kind":1.5,"status":"unmapped","resolution":7,"candidates":"Vcl.StdCtrls"}]';
+  RES_CLASS    = 0;
+  RES_MEMBER   = 1;
+  RES_KIND     = 2;
+  RES_RESOLVED = 3;
+  RES_OTHER    = 4;
+  RES_NUMBER   = 5;
+  RES_ROWS     = 6;
+  REAL_ROWS    = 2;
+  COL_KIND     = 4;
+  COL_DECLARED = 7;
+  KEY_ROWS     = 2;
+var
+  Real  : TArray<TPasUseRow>;
+  Gated : TArray<TPasUseRow>;
+  Res   : TArray<TPasUseRow>;
+  Arr   : TJSONArray;
+  Raised: Boolean;
+  Shown : string;
+  Conv  : TArray<TConvertRow>;
+  Twin  : TPasUseRow;
+begin
+  // worklist.resolution.ambiguous -- the real capture: candidates named, nothing guessed.
+  Real:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-resolution-1282.json')).PasUses;
+  Shown:= if Length(Real) = REAL_ROWS then string.Join('|', RowDisplay(Real[High(Real)])) else IntToStr(Length(Real)) + ' rows';
+  Check('worklist.resolution.ambiguous', Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap|(unknown)|unmapped|25|ambiguous: FMX.StdCtrls, Vcl.StdCtrls', Shown);
+  Check('worklist.resolution.ambiguous.fields', (Length(Real) = REAL_ROWS) and (Real[0].Resolution = PAS_RES_AMBIGUOUS)
+    and (string.Join(',', Real[0].Candidates) = 'FMX.StdCtrls,Vcl.StdCtrls'));
+
+  // worklist.resolution.gated.off -- an engine without pas_uses_resolution: both cleared.
+  Gated:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-resolution-1282.json'), [afPasUses]).PasUses;
+  Shown:= if Length(Gated) = REAL_ROWS then string.Join('|', RowDisplay(Gated[High(Gated)])) else IntToStr(Length(Gated)) + ' rows';
+  Check('worklist.resolution.gated.off', (Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap||unmapped|25|') and (Length(Gated) = REAL_ROWS)
+    and (Gated[0].Resolution = '') and (Length(Gated[0].Candidates) = 0), Shown);
+
+  Raised:= False;
+  Res   := nil;
+  try
+    Arr:= TJSONObject.ParseJSONValue(RES_JSON) as TJSONArray;
+    try
+      Res:= ParsePasUses(Arr, 'U.pas', WORK_RUN_OLD);
+    finally
+      Arr.Free;
+    end; // try
+  except
+    on Exception do
+      Raised:= True; // catch-and-check: the next Check fails when anything raised
+  end; // try
+  Check('worklist.resolution.parse', (not Raised) and (Length(Res) = RES_ROWS), IntToStr(Length(Res)));
+  if Length(Res) <> RES_ROWS then
+    Exit;
+  Check('worklist.resolution.class.not.found', (RowDisplay(Res[RES_CLASS])[COL_DECLARED] = '(class not found)')
+    and (RowDisplay(Res[RES_CLASS])[COL_KIND] = 'property'), RowDisplay(Res[RES_CLASS])[COL_DECLARED]);
+  Check('worklist.resolution.member.not.found', DeclaredInText(Res[RES_MEMBER]) = '(member not found)', DeclaredInText(Res[RES_MEMBER]));
+  Shown:= string.Join('|', RowDisplay(Res[RES_KIND]));
+  Check('worklist.resolution.kind.unknown.not.fact', (DeclaredInText(Res[RES_KIND]) = '(kind unknown)')
+    and (RowDisplay(Res[RES_KIND])[COL_KIND] = '(unknown)') and (Pos('Vcl.StdCtrls', Shown) = 0), Shown);
+  Check('worklist.resolution.resolved.fact', DeclaredInText(Res[RES_RESOLVED]) = 'Vcl.StdCtrls.TLabel', DeclaredInText(Res[RES_RESOLVED]));
+  Check('worklist.resolution.other.word', (DeclaredInText(Res[RES_OTHER]) = '(brand-new)') and (string.Join(',', Res[RES_OTHER].Candidates) = 'X,Y'),
+    DeclaredInText(Res[RES_OTHER]) + ' / ' + string.Join(',', Res[RES_OTHER].Candidates));
+  // worklist.json.number.not.string -- TJSONNumber descends from TJSONString: 5 is not a name.
+  Check('worklist.json.number.not.string', (Res[RES_NUMBER].Member = '') and (Res[RES_NUMBER].Kind = '') and (Res[RES_NUMBER].Resolution = '')
+    and (Length(Res[RES_NUMBER].Candidates) = 0), Res[RES_NUMBER].Member + '/' + Res[RES_NUMBER].Kind + '/' + Res[RES_NUMBER].Resolution);
+
+  // worklist.run.of.key.resolution -- two books on one unit naming different candidates are two rows.
+  if Length(Real) <> REAL_ROWS then
+    Exit;
+  Twin:= Real[0];
+  Twin.Candidates:= ['Vcl.StdCtrls'];
+  SetLength(Conv, KEY_ROWS);
+  Conv[0].UnitPas:= WORK_FIX_DIR + 'Unit1.pas';
+  Conv[0].Status := csConverted;
+  Conv[0].Apply.PasUses:= [Real[0]];
+  Conv[High(Conv)].UnitPas:= Conv[0].UnitPas;
+  Conv[High(Conv)].Status := csConverted;
+  Conv[High(Conv)].Apply.PasUses:= [Twin];
+  Check('worklist.run.of.key.resolution', Length(WorkRunOf(Conv, WORK_RUN_NEW, True).Rows) = KEY_ROWS, IntToStr(Length(WorkRunOf(Conv, WORK_RUN_NEW, True).Rows)));
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -12366,6 +13232,7 @@ begin
     TestResolveHardFailureIsReported;
     TestControlTypesFromNonProjectUnit;
   TestConvCatalog;
+  TestConvCatalogValueCast;
     TestAcceptanceTcxButtonToPool;
     TestQueryLocationParse;
     TestQuerySymbolTieBreak;
@@ -12483,6 +13350,18 @@ begin
     TestRunnerScope;
     TestScopeForUnit;
     TestRunnerLiveOnly;
+    TestApply1270Items;
+    TestApply1270Uses;
+    TestApply1270Notes;
+    TestApply1270Report;
+    TestRunnerExit6;
+    TestRunnerExit6Stops;
+    TestApply1270Remainder;
+    TestWorkListParse;
+    TestWorkListSortFilter;
+    TestWorkListSummaryMerge;
+    TestWorkListRunGoTo;
+    TestWorkListResolution;
 
     FreeAndNil(GParseBook);
 

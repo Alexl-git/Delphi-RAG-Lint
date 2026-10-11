@@ -1757,7 +1757,7 @@
       "owner": "CONVERTER",
       "status": "shipped",
       "since": "0.0.0",
-      "summary": "Visual rulebook editor for the component-conversion rules",
+      "summary": "Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27)",
       "wikiPage": "Features",
       "surfaces": [
         {
@@ -1824,6 +1824,26 @@
           "type": "exe",
           "name": "ConvRulesEditor.exe",
           "menu": "Conversion > Reindex project"
+        }
+      ],
+      "audience": "both",
+      "related": ["convrules-editor"]
+    },
+    {
+      "id": "convrules-work-list",
+      "title": "Work list",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.28.2-alpha",
+      "summary": "ConvRulesEditor tab: what the last Convert run's converted code still uses from the old components (engine pas_uses)",
+      "intro": "Get the manual to-do list of a conversion: unmapped members, dangling globals, refused casts.",
+      "wikiPage": "convrules-editor-work-list",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "View > Work list"
         }
       ],
       "audience": "both",

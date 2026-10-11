@@ -583,7 +583,7 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 ### Verification kit
 
 * **Model tests:** `tests\ConvRulesModelTests.exe` with `CONVRULES_TEST_ENGINE` =
-  the 1.26.7 pin -> **`model-tests: 2055 pass / 5 fail / 0 skip / 2060 total`** -- 2026-10-11, feat/convert-progress-reindex (C16 + C17); before it, on the 1.26.2 pin, `2021 pass / 5 fail / 0 skip / 2026 total` -- 2026-10-07, fix/editor-1262-adoption; earlier, on the 1.22.0 pin, `1951 pass / 5 fail / 0 skip / 1956 total`
+  the 1.27.0 pin -> **`model-tests: 2194 pass / 5 fail / 0 skip / 2199 total`** -- 2026-10-11, feat/editor-1270-adoption after its final fix wave (identical on a 1.28.2 copy; 2180 / 5 / 0 before the fix wave, identical on 1.28.1); before it, on the 1.26.7 pin, `2055 pass / 5 fail / 0 skip / 2060 total` -- 2026-10-11, feat/convert-progress-reindex (C16 + C17); before that, on the 1.26.2 pin, `2021 pass / 5 fail / 0 skip / 2026 total` -- 2026-10-07, fix/editor-1262-adoption; earlier, on the 1.22.0 pin, `1951 pass / 5 fail / 0 skip / 1956 total`
   (measured 2026-10-06 on C8 + C10 + C12 after the C12 final-review fix wave, 148 s;
   1938 / 5 / 0 right after the C12 rebase onto C10; C12 on C8 alone 1792 / 5 / 0;
   C8 + C10 1806 / 5 / 0 after the C10 fix wave, 1793 / 5 / 0 right after the C10 rebase onto C8; C8 alone 1660 / 5 / 0 after its Task 8 fix round 1, 1646 / 5 / 0 before it; 1616 / 5 / 1 skip on the 1.21.1 pin after the
@@ -595,13 +595,18 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 * **GUI drivers** (`tests\gui\`, run by hand as `pwsh -NoProfile -File <driver>
   -Exe <ConvRulesEditor.exe>`, the exe beside a frozen `drag-lint.exe` whose
   Win64 library index answers -- a staged copy, never `dll-win64`). Expected
-  on the final build (re-measured 2026-10-06 on C8 + C10 + C12 after the C12 fix wave,
-  on a staged copy of the 1.22.0 pin: all 12 green with these exact counts, each on
-  its first run; `drive-inherited-offer.ps1` also 15 / 0 on a staged 1.21.1 copy):
+  on the final build (re-measured 2026-10-11 on feat/editor-1270-adoption, on a staged
+  copy of the 1.27.0 pin: all 13 green with these exact counts; `drive-unit-harvest.ps1`
+  on a rerun -- its first run lost the clipboard to another program, which the editor
+  reported correctly. After the branch's final fix wave `drive-work-list.ps1` (13 / 0)
+  and `drive-convert-tab.ps1` (23 / 0) were re-run on the 1.27.0 pin, and
+  `drive-work-list.ps1` also gave 13 / 0 on a staged 1.28.2 copy. Earlier, on C8 + C10
+  + C12 and the 1.22.0 pin, the then 12 were green and `drive-inherited-offer.ps1` also
+  15 / 0 on a staged 1.21.1 copy):
 
   | driver | checks | covers |
   |---|---|---|
-  | `drive-unit-rules-toolbar.ps1` | 41 | menu bar items (incl. `Conversion|Reindex project` since C17), toolbar gone, Uses Units commands, Swap flow |
+  | `drive-unit-rules-toolbar.ps1` | 41 | menu bar items (incl. `Conversion|Reindex project` since C17, `View|Work list` since the 1.27.0 adoption), toolbar gone, Uses Units commands, Swap flow |
   | `drive-unit-picker.ps1` | 20 | unit picker |
   | `drive-unit-harvest.ps1` | 21 | Unit Rules harvest (`-ProofNoDestination` control) |
   | `drive-file-menu.ps1` | 19 | New / Save As / Exit, the guard, delete-in-place makes dirty |
@@ -613,6 +618,7 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
   | `drive-inherited-offer.ps1` | 15 | C8: ancestor-first prompt (No / Yes inserts above), row note on the status bar (incl. an E2b code-only use), order warning (No runs nothing), the E10 run note branching on the staged engine's `inherited_instances` (`engine.refusal.note.absent` on 1.22.0, `engine.refusal.note` on a 1.21.1 pin copy -- run BOTH stages; `-ProofNoInheritance` control) |
   | `drive-glyph-link.ps1` | 23 | C10: Glyph expression menu item (disabled without a rule, enabled with one), Convert tab greys the G-link book and it stays unchecked through Check all / Space / a click (`Convert refused: No rule book is checked.`), the dialog's checked `Keep ... G[count]` box, Auto-Match + Save As keeps both G-link lines byte-exact with no duplicate, the bad book's Save shows `G-expression column` (`-ProofNoGlyph` control: 17 / 6) |
   | `drive-convert-request.ps1` | 25 | C12: `--convert-request` opens the Convert tab with the unit listed, only the matching book checked, the E5 status, `Clear scope` enabled; Convert converts the selected instance only (`--only`), report `Scope` line + `--only` note; Delete resets the scope and says `Scope cleared` on the status bar; Exit without a prompt; `form` scope; E3 no-rules-folder refusal (editor stays usable); missing project index refused; unindexed unit named in red; `--write-capabilities` within 5 s, no window (`-ProofNoRequest` control) |
+  | `drive-work-list.ps1` | 13 | 1.27.0 adoption: Work list tab after a real run (summary, status filter list incl. `(other)`, grid rows, double-click status + clipboard `<path>(<line>)`, missing file reported on the status bar; `-ProofNoPasUses` on a 1.26.7 copy: 9 / 5) |
 
   `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 12 pass / 10 fail since C16/C17 (10 / 9 before; the two reindex checks PASS in proof mode -- Reindex project builds the missing DB, so they cannot discriminate there; their RED is the pre-C16 editor's 18 / 5)
   is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
@@ -1684,3 +1690,173 @@ hand-written request file, which is exactly what `drive-convert-request.ps1` doe
   tighten this to that exit contract and drop the text match. Blind spot: the
   applier's other silent drops (stale anchor, invalid replace, out-of-range
   line) print nothing, so they cannot be seen from here.
+
+## Engine 1.27.0 adoption -- hand-over notes (feat/editor-1270-adoption, 2026-10-11)
+
+The editor side of engine 1.27.0 (and the 1.28.0 exit 6): the StripDB value cast,
+the new apply/1 arrays on the Convert tab, a run-level stop on an unusable cast
+library, and a **Work list** tab over `pas_uses[]`. Plan
+`docs\superpowers\plans\2026-10-11-editor-1270-adoption.md`; ledger and per-task
+reports `.superpowers\sdd\2026-10-11-editor-1270-adoption\` in the `editor-1270`
+worktree. Test engine: a staged copy of the **1.27.0 pin**
+(`1.27.0-alpha-20261011-050359`, sha256 16B97F99...).
+
+### StripDB in the cast list (C15, editor side)
+
+* **`TConvKind` gained `ckValue`** (`ConvRules.ConvCatalog`, label `value`): a castlib
+  block with a `value` transform (`TCastDef.Value`, e.g. `strip-db`) is offered as
+  `ckValue` with Detail `value transform: <value>`; class casts stay `ckClass`.
+  `ConversionsFor` dedupes by (To type, cast name) -- not by To type alone, which let
+  the identity option swallow StripDB. Two DIFFERENT class casts to one type are now
+  both listed (none exists in the shipped castlib).
+* **`BDE-to-FireDAC.rules` line 300** is `#link TableName <- TableName : StripDB`
+  (the line count is unchanged, 729, so no `select.bde.*` / `convlib.bde2fd.*` pin
+  moved). Dry run on a dmToolStats copy: two `value-cast-applied` items
+  (`'ToolAdj.DB'` -> `'ToolAdj'`, `'toolstat.db'` -> `'toolstat'`).
+* Deferred: the picker does not offer StripDB for a `TFileName` From (string alias);
+  the option's Detail text is never shown; `TestConvCatalogValueCast` SKIPs its 4
+  checks when `casts.castlib` is absent beside the test engine.
+
+### The new apply/1 arrays (Convert tab)
+
+* **Capability gates -- probed in the SAME single `CapabilityNames` call the tab
+  already makes**: `cast_site_refusal`, `value_cast_strip_db`, `uses_reconcile`,
+  `pas_uses`, and (engine 1.28.2) `pas_uses_resolution` (`CAPABILITY_*` in
+  `ConvRules.Engine`). `ApplyFeaturesOf` turns them into `TApplyFeatures`
+  (`afCastSiteRefusal`, `afValueStripDb`, `afUsesReconcile`, `afPasUses`,
+  `afPasUsesResolution`), carried as `TConvertJob.ApplyFeatures`. `ParseApplyJson(AJson,
+  AFeatures)` reads an array ONLY when its feature is in the set; without the key the
+  row is exactly today's. The test seams (`TApplyFn` / `TApplyOnlyFn`) pass every
+  feature. Deferred minor: `ParseApplyJson`'s default `AFeatures` = all is a trap
+  for a future caller.
+* **`TApplyRow` gained** `CastSites`, `ValueCasts`, `ValueChecks` (`TApplyItem`:
+  Kind, Instance, FileName, Path, Value, OldValue, Text, Line, RuleLine), `UsesRows`
+  (`TUsesRow`: Action, Section, UnitName, Source, NeededBy, Dangling),
+  `UsesUnresolved` and `UsesReindex`. Keys came from the REAL captures and the
+  engine's contract literal (`DRagLint.CLI.pas`): apply/1 `unit` -> UnitName;
+  `needed_by[]` is `{name,line,section}` -- names go to `Dangling` on a remove row,
+  to `NeededBy` otherwise; `uses_unresolved[]` entries read as `'<name> line N:
+  <reason> (<units>)'`; `uses_reindex {status,reason}` as `status[: reason]`.
+  Every read is type-checked (ruling R8): a non-object entry is skipped, a
+  wrong-typed field reads '' / 0, nothing raises.
+* **Counted ONCE.** `items[]` is the union and the arrays partition it; a cast site /
+  value check is also a `warnings[]` line with the SAME text. `ParseApplyJson`
+  builds `Remainder` after the arrays and drops (`WithoutItemTexts`) every warning
+  that is exactly the `Text` of a CastSites / ValueChecks entry -- an exact match,
+  because no other key ties the two. So `remaining for manual work` excludes them;
+  their own note parts carry them (as C8 excludes inherited warnings).
+* **Row note order:** `<edits> edit(s), <k> remaining for manual work`, C8's
+  retyped / left parts, then `ValueCastNote` (`; StripDB: N value(s) changed, M to
+  check by hand`), `CastSiteNote` (`; N cast site(s) to convert by hand`),
+  `UsesNote` (`; uses: +A -R moved M`, plus ` (reindex failed: <reason>)`) --
+  all in `ConvertedRowNote`; the runner then adds C10's glyph suffix, and the tab
+  C8's code-use note last. **Report lines** (converted rows only,
+  `ApplyItemReportLines`): status `cast site`, `value cast`, `value check`,
+  `uses <action>`, `uses unresolved`, written AFTER the C8 and C10 lines -- a
+  different order from the note (deferred minor).
+* **Exit 6 = the cast library is unusable (engine 1.28.0) and STOPS THE RUN.**
+  `ENGINE_EXIT_CONFIG = 6`, status `csConfigError` (`stopped -- cast library
+  unusable`). The unit takes `FailUnit`'s path (restore only when an earlier book
+  changed it, else the `.BCK<N>` is dropped), `TConvertRow.StoppedRun` is set FIRST
+  -- before the restore -- so a failed restore (row `csRestoreFailed`) still stops
+  the run (fix round, I1). `CastLibStopText` takes the engine text from
+  `Apply.Error`, never the row note. The red status leads with `Convert stopped: the
+  cast library <path> is unusable -- <engine text>. ` -- right AFTER a `RESTORE
+  FAILED` lead when there is one (most severe first; `RunStatusLead`'s `AStop`, one
+  `. `, no doubled period; final fix wave, `convert.tab.lead.*stop*`) -- marks the rest
+  `not reached (stopped)` and writes `Run<TAB>stopped -- the cast library is
+  unusable, N unit(s) not reached`. Tests `runner.exit6.*` (fake TApplyFn).
+  Deferred: `Converted N of M` still counts the pairs never run after a stop.
+* **Fixtures** `tests\fixtures\apply1270\`: four REAL 1.27.0 captures (cast-site,
+  StripDB, uses, pas_uses) plus one 1.28.0 exit-6 capture; ONE hand-written sample
+  (`apply-missing-fields-sample.json`, marked in its `_note`). Each has a `_note`
+  with the command; temp paths are `C:\fix\`. **Engine 1.28.1 changed the uses
+  rows** (a `#convert` header's units now get `uses[]` add rows; a book `#use` into
+  the INTERFACE yields one), so a re-capture there may show one more add row. The
+  fixtures stay 1.27.0 captures -- re-capture on the re-pin, do not bend the tests.
+
+### Work list tab (pas_uses)
+
+* **Pure: `ConvRules.WorkList`** (both `.dpr`s): `TPasUseRow`, `ParsePasUses`
+  (never raises; `JInt` = `TJSONNumber` + `TryStrToInt`, so a non-Integer `lines`
+  entry is skipped and a bad `count` falls back to `Length(Lines)`), `FilterRows`,
+  `SortRows` (status rank, unit, instance with globals LAST, member;
+  case-insensitive, stable), `RowDisplay` / `WorkColumns` (`Unit, Instance, From ->
+  To, Member, Kind, Status, Lines, Declared in`; a global shows `(global)` and
+  `--`), `DeclaredInText`, `WorkListSummary`, `MergeRun`, `WorkGoTo`. A JSON
+  number is never read as a string (`JText`; note that Delphi 13's `TJSONNumber`
+  descends from `TJSONValue`, NOT `TJSONString` -- `System.JSON.pas:424` -- so the
+  `is TJSONNumber` exclusion is defensive, for an RTL where it descends from
+  `TJSONString`; `ConvRules.ConvertRun.JsonStr` says the same). **UI: `ConvRules.WorkListTab`**
+  (editor-only `TPanel`; its items are filled in `CreateWnd` because the host sets
+  `Parent` after `Create` -- the first build died at start-up without that).
+* **Statuses:** work = `unmapped`, `global-dangling`, `cast-refused`,
+  `not-rewritten` (bold; unmapped and global red); plain = `same-name`, `mapped`.
+  `(other)` (`WORK_STATUS_OTHER`, parenthesised so it cannot collide with an engine
+  word) stands for every status outside the six, '' included, and is checked by
+  default so a newer engine's status is never hidden; the summary adds `, K other`.
+  No box checked = nothing shown (`TWorkFilter.NoStatus`).
+* **States (`TWorkListState`):** `no work list yet -- run Convert first` (no run),
+  `no work list (engine has no pas_uses)`, `no work list (no unit converted)` --
+  every unit failed / was refused / rolled back, NEVER an empty grid that reads as
+  "nothing to do" -- else rows.
+* **One run at a time.** `TConvertJob.RunId` (the tab's `FRunId` counter, set in
+  `ConvertClick`); `WorkRunOf(rows, runId, afPasUses in features)` takes the
+  `PasUses` of every `csConverted` row, stamped with the run id and the row's full
+  unit path, exact repeats dropped. `RunFinished` hands it to
+  `TConvertHost.WorkListReady` -> `ShowRun` -> `MergeRun`, which keeps only the new
+  run's rows. Deferred: two books on one unit can list a global twice at shifted
+  lines; a preflight-refused Convert keeps the previous list.
+* **Double-click** copies `<full path>(<line>)` to the clipboard (the compiler-message
+  form) and says `Copied <file>(<line>) to the clipboard -- line <N>` (controller
+  ruling, final review: the IDE's Go to line takes only the number, so the status no
+  longer tells the user to paste it there); a missing file, a line past EOF, an I/O
+  error or a held clipboard is a status-bar error, never an exception.
+* **Menu:** `View > Work list` (no shortcut); showing the tab writes `Work list:
+  <summary>` to the status line. Feature registry `convrules-work-list`, wiki page
+  `docs\wiki\convrules-editor-work-list.md`.
+* **Driver `tests\gui\drive-work-list.ps1`** -- 13 checks on a temp fixture (TLabel
+  -> TStaticText): summary, filter statuses, grid rows, double-click status +
+  clipboard, missing file. `-ProofNoPasUses` against a staged 1.26.7 copy gives
+  9 / 5 (`proof.no.pas_uses` passes; the content checks fail).
+  `drive-unit-rules-toolbar.ps1` `menubar.items` now also requires `View|Work list`
+  (still 41).
+* **Engine defect seen through the driver -- FIXED in engine 1.28.2:** `pas_uses`
+  reported TLabel's `WordWrap` as declared in `FMX.StdCtrls` and `Layout` with an
+  empty declaring unit
+  (`docs\INBOX-2026-10-11-converter-to-engine-pas-uses-declared-in-fmx.md`). 1.28.2
+  resolves the From class in the unit's scope and says how
+  (`pas_uses_resolution`, below).
+* **Resolution (engine 1.28.2, capability `pas_uses_resolution`, final fix wave):**
+  each row carries `resolution` (`resolved` / `ambiguous` / `class-not-found` /
+  `member-not-found` / `kind-unknown`, `PAS_RES_*`) and `candidates[]` (strings
+  only; other entries skipped). `ParseApplyJson` CLEARS both unless
+  `afPasUsesResolution` is in the features (`ApplyFeaturesOf`, the same single
+  `CapabilityNames` probe in `RefreshBooks`). The Work list never presents a guessed
+  unit as fact: `DeclaredInText` gives the declaring unit only for '' / `resolved`;
+  `ambiguous: <candidates>` (`ambiguous: FMX.StdCtrls, Vcl.StdCtrls` for a bare
+  `TLabel` book on a unit naming no StdCtrls unit -- REAL capture
+  `tests\fixtures\apply1270\apply-pas-uses-resolution-1282.json`); `(class not
+  found)` / `(member not found)` / `(kind unknown)`; any other word `(<word>)`. The
+  Kind cell reads `(unknown)` when the engine sent no kind but did send a
+  resolution. `PasUseKey` includes both, so two books naming different candidates
+  stay two rows. Tests `worklist.resolution.*`, `worklist.run.of.key.resolution`.
+
+### Lint housekeeping in this batch (engine 1.28.1 = C14)
+
+Engine lint changes up to 1.28.1 (C14 among them) made several held findings stop
+firing, so their markers were removed or re-hashed (judged with `--enable multiple-statements-per-line,magic-literal,
+commented-out-code,review-marker-stale` on a staged 1.28.1 copy): `SetDepth`'s
+`function-result-not-set`; the `try-except-swallowed` reviews in `ConvertRunner`
+(2), `Engine` (1) and the tests `.dpr` (7) -- each keeps its "not swallowed" reason
+as a plain comment; `ConvertRunner`'s `unused-unit-in-uses` on `ConvRules.UnitStatus`
+(the unit stays); `ParseLine`'s `method-too-long` and `TestRunnerScope`'s
+`cyclomatic-complexity` re-hashed and re-stamped. `WorkingSet.ClearSelection`'s
+autodoc dropped a wrong `UnitPopupPopup` caller (that is `TListView.ClearSelection`)
+by hand -- never `doc-drift --fix --apply` here. Result: lint-all editor 971, tests
+413, nothing on the branch's lines. An engine before 1.27.1 (C14) reports
+`SetDepth`'s finding again -- judge markers with 1.28.1 or later. Engine 1.28.2
+counts an enum VALUE as a use of its unit, so `ConvRules.WorkListTab`'s
+`unused-unit-in-uses` review on `Vcl.Controls` (alTop / bvNone ...) read
+`review-marker-unused` and was deleted in the final fix wave; the unit stays. Re-judged
+on a staged 1.28.2 copy: lint-all editor 971, tests 413, 0 on the branch's lines.

@@ -85,6 +85,23 @@ const
   /// (C10, engine ask N1). Without it a G-link book is refused by the engine, so the
   /// Convert tab greys such a book instead of running it.</summary>
   CAPABILITY_GLYPH_STITCH = 'glyph_stitch';
+  /// <summary>info --json capability: a class-cast #link never rewrites a .pas access
+  /// site; apply/1 items[] has one cast-not-applied per site (engine 1.27.0).</summary>
+  CAPABILITY_CAST_SITE_REFUSAL = 'cast_site_refusal';
+  /// <summary>info --json capability: the castlib StripDB value cast; apply/1 items[]
+  /// value-cast-applied / value-cast-check (engine 1.27.0, C15).</summary>
+  CAPABILITY_VALUE_CAST_STRIP_DB = 'value_cast_strip_db';
+  /// <summary>info --json capability: convert-apply reconciles the uses clauses; apply/1
+  /// uses[] rows with source and needed_by[], uses_unresolved[], uses_reindex (engine
+  /// 1.27.0, C9).</summary>
+  CAPABILITY_USES_RECONCILE = 'uses_reconcile';
+  /// <summary>info --json capability: apply/1 pas_uses[] -- what the .pas still uses
+  /// that the map does not cover (engine 1.27.0).</summary>
+  CAPABILITY_PAS_USES = 'pas_uses';
+  /// <summary>info --json capability: each apply/1 pas_uses[] row carries resolution
+  /// (resolved / ambiguous / class-not-found / member-not-found / kind-unknown) and
+  /// candidates[] -- the From class is resolved in the unit's scope (engine 1.28.2).</summary>
+  CAPABILITY_PAS_USES_RESOLUTION = 'pas_uses_resolution';
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`
@@ -3268,7 +3285,7 @@ begin
 
   try
     V:= TJSONObject.ParseJSONValue(Body);
-  except // dl:ok try-except-swallowed@6149 -- deliberate: malformed JSON must yield [] not raise, per this function's docstring contract and test outline.classes.garbage
+  except // deliberate: malformed JSON must yield [] not raise, per this function's docstring contract and test outline.classes.garbage
     on E: Exception do
       V:= nil;
   end;
