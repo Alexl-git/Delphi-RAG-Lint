@@ -12,11 +12,21 @@ No extractor or resolver change: indexes do not re-parse or re-resolve.
 - **`function-result-not-set` / `out-param-not-set` no longer count a path that never
   returns** (converter-filed false positive). A leading guard `if A > 99 then raise ...;`
   followed by full assignment reported "Function Result is not assigned on every path".
-  The CFG marks a block ending in `raise` (including a bare re-raise), a bare `Halt` /
-  `Halt(n)` or a bare `Abort` as NoReturn, and the two rules take their meet at Exit over
+  The CFG marks a block ending in `raise` (including a bare re-raise), the RTL `Halt` /
+  `Halt(n)` or the RTL `Abort` as NoReturn, and the two rules take their meet at Exit over
   the returning predecessors only. `Halt` and `Abort` previously fell through; they now end
   the path like `raise`. Plain `Exit;` still returns and still fires; `Exit(value)` assigns.
-  Pinned by run_function_result_noreturn_paths.ps1 (8 must-not-fire, 4 positive controls).
+  A BARE `Abort` / `Halt` is the RTL one only when the unit cannot have redeclared it: not
+  a member of the method's class or of an in-unit ancestor, not a unit-level or local
+  routine, no ancestor outside the unit, not inside a `with` -- otherwise it is an
+  ordinary call that falls through (a `TJob.Abort` method no longer cuts `L.Free` out of
+  the CFG and fakes an `object-leak` / `write-only-local`). `System.SysUtils.Abort`,
+  `SysUtils.Abort` and `System.Halt` are always the RTL. A `raise` / `Abort` inside a
+  try..except whose handler is EMPTY is swallowed and returns, so it is not NoReturn (the
+  missed `try if A > 0 then raise ...; Result := 1; except end;` fires again). A path
+  ending in `Halt` is left out of `object-leak`'s meet at Exit: the process ends there.
+  Pinned by run_function_result_noreturn_paths.ps1 (8 + 6 must-not-fire, 4 + 7 positive
+  controls).
 - **`doc-drift` no longer reads a comment inside a parameter list as a parameter**
   (converter-filed false positive). The indexed signature of a declaration split over
   several lines is the lines joined with a space, comments included, so a trailing `//`
