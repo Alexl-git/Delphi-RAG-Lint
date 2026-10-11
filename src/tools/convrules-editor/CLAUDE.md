@@ -583,7 +583,7 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 ### Verification kit
 
 * **Model tests:** `tests\ConvRulesModelTests.exe` with `CONVRULES_TEST_ENGINE` =
-  the 1.22.0 pin -> **`model-tests: 1951 pass / 5 fail / 0 skip / 1956 total`**
+  the 1.26.2 pin -> **`model-tests: 2021 pass / 5 fail / 0 skip / 2026 total`** -- 2026-10-07, fix/editor-1262-adoption; earlier, on the 1.22.0 pin, `1951 pass / 5 fail / 0 skip / 1956 total`
   (measured 2026-10-06 on C8 + C10 + C12 after the C12 final-review fix wave, 148 s;
   1938 / 5 / 0 right after the C12 rebase onto C10; C12 on C8 alone 1792 / 5 / 0;
   C8 + C10 1806 / 5 / 0 after the C10 fix wave, 1793 / 5 / 0 right after the C10 rebase onto C8; C8 alone 1660 / 5 / 0 after its Task 8 fix round 1, 1646 / 5 / 0 before it; 1616 / 5 / 1 skip on the 1.21.1 pin after the
@@ -952,7 +952,12 @@ unchanged is presumed validated earlier."
   CLI: 10-15 s per block). **File > Validate** = syntax pass + the ACTIVE block.
 * **OK / failed comes from the kept diagnostics, never the exit code.** A
   non-`line N:` line that is not noise (`OK`, `(loaded defaults ...)`,
-  `resolver: ...`) is an error on line 0 (FATAL etc.). Status:
+  `resolver: ...`, `NOTE: ...`) is an error on line 0 (FATAL etc.). **Engine
+  1.26.x prints `NOTE: --from and --to not both given -- the book was PARSED only;
+  ...` on stderr for EVERY syntax-only pass**; read as an error it made every Save
+  say failed (fix/editor-1262-adoption, 2026-10-07; real 1.26.2 captures, each stream
+  on its own, `tests\fixtures\validate\validate-1262-*`, tests `validate.1262.*`). A
+  pair pass prints nothing new (the `resolver:` advisory only). Status:
   `Validate: OK, N warning(s) -- see marked rules`, or the first error +
   `(+N more)` through `SetError` (it stays red across the post-save rescan).
 * **Pure logic: `ConvRules.ValidateScope`** (parse, blocks, changed blocks,
@@ -1223,13 +1228,28 @@ in the `c8-inherited` worktree.
   `tab.r4.runner.engine.unfiltered`, `tab.report.lines.engine.unfiltered`,
   `tab.r4.left.engine.all`.
 * **Not built:** E4 (the index's inherited/inline `modifiers` flag) -- the .dfm text
-  read is the only source. The E11 live test `inherited.live` RUNS on the 1.22.0 pin
-  (6 checks; it SKIPs on an engine without `inherited_instances`). Its Task 6
-  expectation (descendant retyped) was a guess; a real run showed N1 leaves the
-  descendant's `inherited Label1: TLabel` byte-unchanged and reports it `converted`,
-  so the test now asserts that (Task 8). **`inherited.live.descendant.unchanged` pins
-  N1 on purpose: it goes RED when the engine ships N2 -- the signal to re-adopt
-  (retyped descendant, the retype texts), not a regression.**
+  read is the only source.
+* **N2 ADOPTED (fix/editor-1262-adoption, 2026-10-07).** Since engine 1.26.0 every
+  `inherited[]` entry carries `action`: `retyped` | `code` | `skipped` | `unverified`
+  (`TInheritedLeft.Action`; '' = a pre-1.26 engine = today's behaviour). A `retyped`
+  entry (ancestor_state `converted`) is NOT left: `IsRetypedInstance`, the row note
+  says `N inherited instance(s) retyped` (`InheritedRetypedNote`, before any left
+  note) and the report writes no `inherited left` line for it. `code` counts as
+  `N inherited code use(s) left: <words>`; `unverified`'s words are `ancestor field
+  use not verified against the index`; `skipped` is as before. The live test
+  `inherited.live` now PINS N2 (descendant `.dfm` retyped to `inherited Label1:
+  TStaticText`, nothing left, a `retyped` note, no `N2` text) and SKIPs on a pin
+  without `inherited_retype` (pre-1.26.0) -- run it on 1.26.2+; the N1 expectations live on in `TestInheritedActions` over a REAL
+  1.22.0 capture (`tests\fixtures\inherited\apply-desc-1220-n1.json`) beside the
+  1.26.2 one and a HAND-WRITTEN per-action sample. **With `inherited_retype` the
+  editor-side E2b code-use note is NOT added** (`CodeUseNoteDue(..., ARetypeSupported)`,
+  fix wave 1, C8 M4): the engine's `code` entries are authoritative, and both notes
+  said the same thing twice. Without the capability nothing changed; the pre-run E5
+  row note stays (advice, not a result). A `code` report line reads
+  `C1: TLabel[ line N] -- code use -- <words>` (no `line 0`); a `code` entry under a
+  converted ancestor reads `ancestor <U> (ancestor converted; retype needs engine N2)`.
+  `IsValidateNoise` matches `NOTE:` CASE-SENSITIVELY at the start of the trimmed line. Note 1.26.2's descendant row is
+  `component_part: applied`, 3 edits -- no longer `skipped-no-instances`.
 * **Deferred minors (ledger):** a multi-file drop of N descendants of one unlisted
   base prompts once per descendant on No (no "No to all"); the Convert gate's Yes /
   No has no GUI check; `drive-inherited-offer.ps1` still has a fixed 2 s sleep after

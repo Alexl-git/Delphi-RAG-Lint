@@ -1,0 +1,1 @@
+  resolver: edges were derived by r=1.11.0-alpha;schema=23, this build is r=1.12.0-alpha;schema=23 -- re-derive with `index <dir> --db "C:\Projects\.drag-lint\library-Win64.sqlite" --resolve-only` (minutes, not a re-parse).

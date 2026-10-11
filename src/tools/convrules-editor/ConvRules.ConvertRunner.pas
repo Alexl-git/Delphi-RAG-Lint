@@ -262,17 +262,21 @@ function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;
 
 /// <summary>PURE: True when ARow should carry the editor-side code-use "left" note:
 /// it is csConverted and no EARLIER csConverted row is for the same unit (one note per
-/// unit, not one per book).</summary>
+/// unit, not one per book), and the run's engine does NOT report inherited_retype.</summary>
 /// <param name="ARow">The row about to be shown.</param>
 /// <param name="AEarlier">The run's rows before it.</param>
+/// <param name="ARetypeSupported">The run's engine reports inherited_retype (1.26.0 on):
+/// its inherited[] then lists code-only uses itself (action 'code', authoritative,
+/// ruling C8 M4), so the editor-side note would say the same thing twice.</param>
 /// <returns>See summary; units compared by path, case-insensitively.</returns>
-function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>): Boolean;
+function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; ARetypeSupported: Boolean): Boolean;
 
 /// <summary>PURE: the run report's E10 lines for one row: one per inherited instance
 /// the engine says the converted unit left, UNFILTERED (controller ruling M4: the
 /// engine reports after the runner's reindex and is authoritative; R4 is the code-use
 /// note's alone). Same 8 tab-separated columns as every report row: Book, Unit,
-/// REPORT_STATUS_INHERITED_LEFT, four empty cells, InheritedReportNote.</summary>
+/// REPORT_STATUS_INHERITED_LEFT, four empty cells, InheritedReportNote. An instance the
+/// engine RETYPED (IsRetypedInstance) was not left and gets no line.</summary>
 /// <param name="ARow">A run row.</param>
 /// <param name="AInheritedSupported">The engine reported inherited_instances when the
 /// run started; False = no lines (an older engine's output is not this contract).</param>
@@ -373,9 +377,9 @@ begin
     end;
 end;
 
-function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>): Boolean;
+function CodeUseNoteDue(const ARow: TConvertRow; const AEarlier: TArray<TConvertRow>; ARetypeSupported: Boolean): Boolean;
 begin
-  Result:= ARow.Status = csConverted;
+  Result:= (ARow.Status = csConverted) and not ARetypeSupported;
   for var LRow: TConvertRow in AEarlier do
     if Result and (LRow.Status = csConverted) and SameText(LRow.UnitPas, ARow.UnitPas) then
       Result:= False;
@@ -387,7 +391,8 @@ begin
   if not AInheritedSupported or (ARow.Status <> csConverted) then
     Exit;
   for var LLeft: TInheritedLeft in ARow.Apply.InheritedLeft do
-    Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft, ARetypeSupported)])];
+    if not IsRetypedInstance(LLeft) then
+      Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_INHERITED_LEFT, '', '', '', '', InheritedReportNote(LLeft, ARetypeSupported)])];
 end;
 
 function GlyphReportLines(const ARow: TConvertRow): TArray<string>;
