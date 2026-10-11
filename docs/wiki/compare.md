@@ -133,3 +133,36 @@ question and target, newest 20, and are a local convenience, not a record.
 * The new answer comes from `charts\src\Ask-Report.ps1 -Plain` run in a PowerShell 7
   child process; without `pwsh` the verb exits `2` with the reason. A non-ASCII
   character in a report depends on that script's console encoding.
+
+## Determinism (N5) status
+
+N5: the same question asked twice on the same index must compare empty; a non-empty diff is a defect in the report, not in Compare. Measured 2026-10-11 by `charts\src\Test-Parity.ps1 -Mode Determinism` on the frozen clones: **26/26 deterministic**. `architecture` failed the first run (zones of equal size were ordered by per-process hashtable key order) and was fixed by an ordering-only tie-break in `Emit-Architecture.ps1`; see `INBOX-Done\INBOX-2026-10-11-charts-n5-architecture.md`. Seconds are the PowerShell producer's wall time per run.
+
+| question | run 1 s | run 2 s | N5 |
+|---|---|---|---|
+| butterfly | 4.4 | 3.6 | PASS |
+| deps | 3.6 | 4.1 | PASS |
+| who-calls | 4 | 3.2 | PASS |
+| what-it-calls | 3.7 | 3.1 | PASS |
+| who-writes | 4.7 | 5 | PASS |
+| who-reads | 3.5 | 4.1 | PASS |
+| hierarchy | 4 | 3.2 | PASS |
+| class-surface | 4.1 | 4.4 | PASS |
+| event-wiring | 4.6 | 4.3 | PASS |
+| touches-tables | 3.8 | 3.6 | PASS |
+| lifecycle | 4.3 | 4 | PASS |
+| cycles | 3.3 | 3.7 | PASS |
+| wiring | 3.9 | 4.1 | PASS |
+| effects | 3.6 | 2.9 | PASS |
+| architecture | 6.8 | 6.5 | FAIL, fixed b2da70e9; re-run 7.9 / 6.1 PASS (x3) |
+| protocol-trace | 4.6 | 4.3 | PASS |
+| crosses-boundary | 5 | 5.1 | PASS |
+| shown-where | 3.3 | 3.5 | PASS |
+| change-impact | 5.4 | 4.7 | PASS |
+| tested-by | 3.9 | 3.8 | PASS |
+| exception-paths | 10.2 | 10.8 | PASS |
+| consumers | 12.9 | 12.2 | PASS |
+| feeds-from | 111.5 | 112.8 | PASS |
+| lands-where | 119 | 116.3 | PASS |
+| round-trip | 61.9 | 58.7 | PASS |
+| path | 4.3 | 4.6 | PASS |
