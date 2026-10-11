@@ -2690,7 +2690,18 @@ var
           end;
         end;
 
-        ExitVal := AIn[Cfg.ExitIdx];
+        { C14. What the CALLER sees on return: the meet over the predecessors of
+          Exit that actually RETURN. A block marked NoReturn (raise / re-raise /
+          Halt / Abort) keeps its Exit edge for the leak and liveness analyses,
+          but nothing comes back from it, so it must not make a guard clause
+          (`if A > 99 then raise ...;`) look like a path that returns an
+          unassigned Result. Plain `Exit;` is NOT NoReturn and still counts.
+          When every predecessor is NoReturn the routine never returns and the
+          meet stays Bottom (Must = all assigned), which is the right answer. }
+        ExitVal := Ana.Bottom;
+        for var PIx in Cfg.Blocks[Cfg.ExitIdx].Pred do
+          if not Cfg.Blocks[PIx].NoReturn then
+            ExitVal := Ana.Join(ExitVal, AOut[PIx]);
 
         { ---- function-result-not-set ---- }
         Idx := Vars.IndexOf('result');

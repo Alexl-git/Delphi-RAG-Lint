@@ -3,6 +3,21 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased (C14)
+
+No extractor or resolver change: indexes do not re-parse or re-resolve.
+
+### Fixed
+
+- **`function-result-not-set` / `out-param-not-set` no longer count a path that never
+  returns** (converter-filed false positive). A leading guard `if A > 99 then raise ...;`
+  followed by full assignment reported "Function Result is not assigned on every path".
+  The CFG marks a block ending in `raise` (including a bare re-raise), a bare `Halt` /
+  `Halt(n)` or a bare `Abort` as NoReturn, and the two rules take their meet at Exit over
+  the returning predecessors only. `Halt` and `Abort` previously fell through; they now end
+  the path like `raise`. Plain `Exit;` still returns and still fires; `Exit(value)` assigns.
+  Pinned by run_function_result_noreturn_paths.ps1 (8 must-not-fire, 4 positive controls).
+
 ## v1.26.7-alpha -- unreleased
 
 No extractor or resolver change on top of 1.26.6: indexes do not re-parse.

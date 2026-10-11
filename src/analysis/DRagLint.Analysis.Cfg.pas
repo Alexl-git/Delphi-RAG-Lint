@@ -62,6 +62,15 @@ type
     EntryDefs: TArray<string>;
     Succ     : TList<Integer>;
     Pred     : TList<Integer>;
+    /// <summary>True when this block ends in a statement that never returns
+    /// to the caller normally -- <c>raise</c> (including a bare re-raise),
+    /// <c>Halt</c> or <c>Abort</c>.</summary>
+    /// <remarks>Such a block still carries its edge to the synthetic Exit
+    /// block (the leak and liveness analyses rely on it), so an analysis
+    /// asking "what does the CALLER see on return" -- function-result-not-set,
+    /// out-param-not-set -- must leave these predecessors out of its meet at
+    /// Exit. Plain <c>Exit</c> is NOT a no-return: it returns.</remarks>
+    NoReturn : Boolean;  // dl:ok public-field@f60f -- TCfgBlock is a plain CFG node whose public fields ARE its data surface, same shape as Index/Items/Succ/Pred above
     /// <summary><!-- drag-lint:auto sum -->TCfgBlock</summary>
     /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
@@ -1234,6 +1243,7 @@ begin
   begin
     Cfg.Blocks[ACur].AddItem(ANode, WithDepth > 0);
     Cfg.Blocks[ACur].AddSucc(Cfg.ExitIdx);
+    Cfg.Blocks[ACur].NoReturn := True; { C14 -- see TCfgBlock.NoReturn }
     Exit(-1);
   end;
 
@@ -1248,6 +1258,17 @@ begin
       opened INSIDE their loop. }
     if EntTxt = 'exit' then
     begin Cfg.Blocks[ACur].AddSucc(DivertVia(Cfg.ExitIdx, 0)); Exit(-1); end;
+    { C14. A bare `Halt` / `Halt(n)` ends the process and a bare `Abort` raises
+      EAbort: neither falls through. Modelled exactly like `raise` -- an edge to
+      Exit marked NoReturn. Only the BARE identifier counts; `Obj.Abort` is a
+      method call (an exprDot, whose text is never 'abort') and still falls
+      through. }
+    if (EntTxt = 'halt') or (EntTxt = 'abort') then
+    begin
+      Cfg.Blocks[ACur].AddSucc(Cfg.ExitIdx);
+      Cfg.Blocks[ACur].NoReturn := True;
+      Exit(-1);
+    end;
     if (EntTxt = 'break') and (Loops.Count > 0) then
     begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.BreakIdx, Loops.Peek.FinallyDepth)); Exit(-1); end;
     if (EntTxt = 'continue') and (Loops.Count > 0) then
