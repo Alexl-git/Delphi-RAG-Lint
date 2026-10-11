@@ -97,7 +97,8 @@ Check 'M1 #convert-only book, LibB already in the implementation uses: exit 0' (
 Check 'M2 ... LibB MOVED to the interface uses' ($t.Contains("interface$CRLF$CRLF" + "uses$CRLF  Classes, LibA, LibB;$CRLF")) $t
 Check 'M3 ... and removed from the implementation uses (ImplU kept), exactly once in the file' `
   ($t.Contains("implementation$CRLF$CRLF" + "uses$CRLF  ImplU;$CRLF") -and (([regex]::Matches($t, '\bLibB\b')).Count -eq 1)) $t
-Check 'M4 ... no uses[] row for the move (it is the #convert surface)' (($null -ne $j) -and (@($j.uses).Count -eq 0)) $r.Out
+Check 'M4 ... (C9, 1.27.0) the move is ONE uses[] row: moved LibB to the interface, source convert' `
+  (($null -ne $j) -and (@($j.uses).Count -eq 1) -and ($j.uses[0].action -eq 'moved') -and ($j.uses[0].unit -eq 'LibB') -and ($j.uses[0].source -eq 'convert')) $r.Out
 $r = Apply 'IntfMoveR.pas' 'convertuse.rules' @('--apply', '--no-backup')
 $t = Text 'IntfMoveR.pas'
 Check 'M5 book with #use: LibB moved to the interface, ExtraU added to the implementation beside ImplU' `

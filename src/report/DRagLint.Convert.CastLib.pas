@@ -60,6 +60,11 @@ type
     DfmData    : string        ;
     PasTemplate: string        ;
     Todo       : string        ;
+    /// <summary>1.27.0: the castlib `value` key -- the BUILT-IN value
+    /// transform this cast names (VALUE_CAST_STRIP_DB), '' for a class cast.
+    /// A value cast rewrites a string VALUE; it has no pas template and is
+    /// never refused the way a class cast's .pas access site is.</summary>
+    Value      : string        ;
   end;
 
   /// <summary>One member pair of an enum cast: the source member name and the
@@ -124,9 +129,18 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCastLib = record
-    Casts: TArray<TCastDef>;
-    Enums: TArray<TEnumDef>;
+    Casts : TArray<TCastDef>;
+    Enums : TArray<TEnumDef>;
+    /// <summary>1.27.0: load errors, 'line N: ...' -- an unknown `value`
+    /// keyword. A consumer that executes casts must refuse a library with any.</summary>
+    Errors: TArray<string>;
   end;
+
+  /// <summary>What ApplyValueCast did with one value (1.27.0).</summary>
+  TValueCastOutcome = (
+    vcoChanged,     { the transform changed the value }
+    vcoUnchanged,   { a single literal the transform leaves as it is }
+    vcoNotLiteral); { not ONE string literal -- nothing can be said }
 
 /// <summary>PURE: parse .castlib text into cast definitions. Tolerant -- skips blank
 /// lines, '#' comments, and unknown keys; a malformed block (missing name or 'end')
@@ -265,10 +279,30 @@ function FindEnumCast(const ALib: TCastLib; const AName: string; out ADef: TEnum
 /// </remarks>
 function EnumCastValue(const ADef: TEnumDef; const AValue: string; out AResult: string): Boolean;
 
+const
+  /// <summary>The castlib `value` keyword of the StripDB value cast (1.27.0):
+  /// removes ONE trailing '.db', case-insensitively; any other value is left
+  /// as it is. The only built-in value transform -- an unknown keyword is a
+  /// load error (TCastLib.Errors).</summary>
+  VALUE_CAST_STRIP_DB = 'strip-db';
+
+/// <summary>PURE (1.27.0): apply a VALUE cast to one string-literal text as
+/// it is written in a .dfm or .pas ('MET1.db' with its quotes).</summary>
+/// <param name="ADef">A cast whose Value names a built-in transform.</param>
+/// <param name="ALiteral">The value text: exactly one Pascal string literal,
+/// '' doubling a quote, surrounding blanks allowed.</param>
+/// <param name="ANewLiteral">The rewritten literal, quotes re-escaped; set
+/// only for vcoChanged, else ''.</param>
+/// <returns>vcoChanged, vcoUnchanged, or vcoNotLiteral when ALiteral is not one
+/// plain literal (a concatenation, #nn codes, an identifier) or ADef is not a
+/// value cast.</returns>
+function ApplyValueCast(const ADef: TCastDef; const ALiteral: string; out ANewLiteral: string): TValueCastOutcome;
+
 implementation
 
 uses
   System.IOUtils
+  , System.StrUtils
   ;
 
 { Split 'a, b ,c' -> ['a','b','c'], trimmed, empties dropped. }
@@ -339,10 +373,12 @@ var
   inEnum: Boolean        ;
   Casts : TList<TCastDef>;
   Enums : TList<TEnumDef>;
+  Errors: TList<string>  ;
 begin
   Result:= Default(TCastLib);
   Casts:= TList<TCastDef>.Create;
   Enums:= TList<TEnumDef>.Create;
+  Errors:= TList<string>.Create;
   SL:= TStringList.Create;
   try
     SL.Text:= AText;
@@ -407,7 +443,14 @@ begin
         else if Key = 'pas' then
           cur.PasTemplate:= Unquote(Val)
         else if Key = 'todo' then
-          cur.Todo:= Unquote(Val);
+          cur.Todo:= Unquote(Val)
+        else if Key = 'value' then
+        begin
+          { 1.27.0: a built-in value transform; an unknown one is a load error,
+            never a silent pass-through }
+          if SameText(Val, VALUE_CAST_STRIP_DB) then cur.Value:= VALUE_CAST_STRIP_DB
+          else Errors.Add(Format('line %d: cast %s: unknown value transform "%s" (known: %s)', [i + 1, cur.Name, Val, VALUE_CAST_STRIP_DB]));
+        end;
         // unknown keys tolerated (skipped)
       end // if
       else if inEnum then
@@ -435,12 +478,54 @@ begin
     end; // for
     Result.Casts:= Casts.ToArray;
     Result.Enums:= Enums.ToArray;
+    Result.Errors:= Errors.ToArray;
   finally
     SL.Free;
     Casts.Free;
     Enums.Free;
+    Errors.Free;
   end; // try
 end; // function
+
+{ The value of ALiteral when it is exactly ONE Pascal string literal ('' a
+  doubled quote), blanks around it allowed; False for anything else. }
+function TryLiteralValue(const ALiteral: string; out AValue: string): Boolean;
+const
+  Q = '''';
+var
+  S: string;
+  I: Integer;
+begin
+  AValue:= '';
+  S:= Trim(ALiteral);
+  if (Length(S) < 2) or (S[1] <> Q) or (S[Length(S)] <> Q) then Exit(False);
+  I:= 2;
+  while I < Length(S) do
+  begin
+    if S[I] = Q then
+    begin
+      if S[I + 1] <> Q then Exit(False); { a lone quote closes the literal early }
+      Inc(I);
+    end;
+    Inc(I);
+  end;
+  Result:= I = Length(S);
+  if Result then AValue:= StringReplace(Copy(S, 2, Length(S) - 2), Q + Q, Q, [rfReplaceAll]);
+end;
+
+function ApplyValueCast(const ADef: TCastDef; const ALiteral: string; out ANewLiteral: string): TValueCastOutcome;
+const
+  DB_EXT = '.db';
+var
+  V: string;
+begin
+  ANewLiteral:= '';
+  if (ADef.Value <> VALUE_CAST_STRIP_DB) or not TryLiteralValue(ALiteral, V) then Exit(vcoNotLiteral);
+  if not EndsText(DB_EXT, V) then Exit(vcoUnchanged);
+  V:= Copy(V, 1, Length(V) - Length(DB_EXT));
+  ANewLiteral:= '''' + StringReplace(V, '''', '''''', [rfReplaceAll]) + '''';
+  Result:= vcoChanged;
+end;
 
 function LoadCastLibText(const AText: string): TArray<TCastDef>;
 begin

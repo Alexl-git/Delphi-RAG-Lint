@@ -755,10 +755,17 @@ Check 'D1 OutChild: exit 0, xbtn reported outside with an empty ancestor_unit (n
   (($r.Code -eq 0) -and ($x.Count -eq 1) -and ($x[0].ancestor_state -eq 'outside') -and ($x[0].ancestor_unit -eq '') -and ($x[0].action -eq 'skipped')) $r.Out
 
 # ---- R26 still guards the inherited instances --------------------------------
+# 1.27.0 (C9): under the default uses reconciliation the unit is KEPT instead
+# (a kept row + warning; run_convert_apply_uses_reconcile.ps1 pins it), so the
+# 1.26 refusal is asserted under --no-reconcile-uses -- its exact negative control.
 $hp = (Get-FileHash (P 'OutChild.pas')).Hash
-$r = ApplyTo 'OutChild.pas' 'unuse.rules' @('--apply', '--no-backup', '--format', 'json')
+$r = ApplyTo 'OutChild.pas' 'unuse.rules' @('--format', 'json')
 $j = Json $r.Out
-Check 'E1 #unuse LibA with an inherited TSrcA left: refused, R26 text, file untouched, inherited[] still reported' `
+Check 'E0 (C9) #unuse LibA with an inherited TSrcA left: LibA KEPT (kept row naming xbtn), not refused' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and (-not $j.refused) -and (@($j.uses | Where-Object { $_.action -eq 'kept' -and $_.unit -eq 'LibA' }).Count -eq 1)) $r.Out
+$r = ApplyTo 'OutChild.pas' 'unuse.rules' @('--apply', '--no-backup', '--no-reconcile-uses', '--format', 'json')
+$j = Json $r.Out
+Check 'E1 --no-reconcile-uses: #unuse LibA with an inherited TSrcA left: refused, R26 text, file untouched, inherited[] still reported' `
   (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and `
    ($j.reason -eq '#unuse LibA would leave 1 unconverted instance(s) of TSrcA -- unit not changed') -and `
    ((Get-FileHash (P 'OutChild.pas')).Hash -eq $hp) -and (@($j.inherited).Count -eq 1)) $r.Out

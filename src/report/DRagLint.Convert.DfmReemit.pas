@@ -188,12 +188,28 @@ type
     RuleLine: Integer; { the #link line }
   end;
 
+  /// <summary>One value a VALUE cast (castlib `value`, 1.27.0 -- StripDB)
+  /// looked at on the .dfm side.</summary>
+  /// <remarks>Changed: the value was rewritten (OldValue -> NewValue, both
+  /// literal texts as written). Not Changed: the value is not ONE string
+  /// literal, so nothing was written and the operator checks it by hand. A
+  /// literal the transform leaves as it is produces no record.</remarks>
+  TReemitValueCast = record
+    CastName: string;
+    FromPath: string;
+    ToPath  : string;
+    OldValue: string;
+    NewValue: string;
+    Changed : Boolean;
+    RuleLine: Integer;
+  end;
+
   /// <summary>One sub-leaf carried implicitly under a type-identity #link. See
   /// TReemitReport.Carried for why it is structured rather than prose: the
   /// converter team wants to dispatch on 'nobody typed this leaf'.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitComponent.RemapLeaf (DRagLint.Convert.DfmReemit.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Convert.DfmReemit.pas), DRagLint.Convert.Apply.BuildApplyPlan.FoldReemitReport (DRagLint.Convert.Apply.pas), DRagLint.Convert.DfmReemit.ReemitBlock.RemapLeaf (DRagLint.Convert.DfmReemit.pas)</para>
   /// <para>Used in units: DRagLint.Convert.Apply, DRagLint.Convert.DfmReemit</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -299,6 +315,8 @@ type
     /// <summary>Remainder: values a named enum cast could not translate, so
     /// nothing was written for them.</summary>
     EnumUnmapped      : TArray<TReemitEnumUnmapped>;
+    /// <summary>1.27.0: what a value cast did (TReemitValueCast).</summary>
+    ValueCasts        : TArray<TReemitValueCast>;
     Notes       : TArray<string>;
     /// <summary>Remainder (1.26.3): the block's '#warn' rules whose source
     /// property this block streams.</summary>
@@ -1107,6 +1125,8 @@ var
     ApplyEnumCast cannot reach the function Result; folded into the report at
     the end with Created/Dropped/Ignored. }
   EnumUnmapped : TArray<TReemitEnumUnmapped>;
+  { 1.27.0: what a value cast did -- folded in like EnumUnmapped. }
+  ValueCasts   : TArray<TReemitValueCast>;
   { True when AFrom/ATo actually describe THIS block's class pair.
     HandleNested re-enters this function for an owned part with the PARENT's
     classes, and a default read from the wrong class is a wrong VALUE, not a
@@ -1389,7 +1409,32 @@ var
     Result:= AValue;
     CastName:= LinkCastFor(AFromPath, RuleLine);
     if CastName = '' then Exit;
-    if not FindEnumCast(ACastLib, CastName, Def) then Exit; // class cast, or unknown
+    if not FindEnumCast(ACastLib, CastName, Def) then
+    begin
+      { 1.27.0: a VALUE cast (castlib `value`, StripDB) rewrites a string
+        literal, and only when that changes it; a CLASS cast, or an unknown
+        name, passes the value through as before }
+      var VDef: TCastDef;
+      var NewLit: string;
+      if not FindClassCast(ACastLib, CastName, VDef) or (VDef.Value = '') then Exit;
+      var VC: TReemitValueCast:= Default(TReemitValueCast);
+      VC.CastName:= CastName;
+      VC.FromPath:= AFromPath;
+      VC.ToPath  := AToPath;
+      VC.OldValue:= AValue;
+      VC.RuleLine:= RuleLine;
+      case ApplyValueCast(VDef, AValue, NewLit) of
+        vcoChanged:
+          begin
+            VC.Changed := True;
+            VC.NewValue:= NewLit;
+            Result     := NewLit;
+          end;
+        vcoUnchanged: Exit;
+      end;
+      ValueCasts:= ValueCasts + [VC];
+      Exit;
+    end;
     if EnumCastValue(Def, AValue, Mapped) then Exit(Mapped);
     Rec:= Default(TReemitEnumUnmapped);
     Rec.CastName:= CastName;
@@ -2225,6 +2270,7 @@ begin
   Unresolved  := nil;
   Unstreamable:= nil;
   EnumUnmapped:= nil;
+  ValueCasts  := nil;
 
   // 1. Parse the F block FIRST (moved ahead of the #convert gate below): the gate
   // needs FRoot.ClassName_ to pick the RIGHT #convert when the rule set holds more
@@ -2511,6 +2557,7 @@ begin
     Result.Report.Dropped:= Result.Report.Dropped + Dropped;
     Result.Report.Ignored:= Result.Report.Ignored + Ignored;
     Result.Report.EnumUnmapped:= Result.Report.EnumUnmapped + EnumUnmapped;
+  Result.Report.ValueCasts  := Result.Report.ValueCasts + ValueCasts;
     Result.DfmText:= EmitBlock(TRoot, 0);
     Result.Ok:= True;
   finally

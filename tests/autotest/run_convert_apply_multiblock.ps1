@@ -483,8 +483,16 @@ Check 'I1 json dry run: exit 0, ok=true, refused=false, no R6 text' `
 Check 'I2 json: inherited[] reports btn1 (TSrcA) declared in MyForm, unconverted' `
   (($null -ne $j) -and (@($j.inherited).Count -eq 1) -and (@($j.inherited)[0].name -eq 'btn1') -and `
    (@($j.inherited)[0].ancestor_unit -eq 'MyForm') -and (@($j.inherited)[0].ancestor_state -eq 'unconverted')) ($j.inherited | ConvertTo-Json -Compress)
-$r = ApplyTo 'InhForm.pas' 'inh.rules' @('--apply', '--no-backup')
-Check 'I3 --apply: exit 0, no REFUSED line; the #unuse Classes ran (Classes gone from InhForm.pas)' `
+# 1.27.0 (C9): Classes is indexed by no --db here, so the default uses
+# reconciliation KEEPS it (owner ruling Q3, unit-rule-unverified); the 1.26
+# unconditional removal this arm pins is --no-reconcile-uses.
+$r = ApplyTo 'InhForm.pas' 'inh.rules' @('--format', 'json')
+$j = Json $r.Out
+Check 'I3a (C9) default: Classes no --db knows is KEPT with unit-rule-unverified' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and (@($j.uses | Where-Object { $_.action -eq 'kept' -and $_.unit -eq 'Classes' }).Count -eq 1) -and
+   (@($j.items | Where-Object { $_.kind -eq 'unit-rule-unverified' }).Count -eq 1)) $r.Out
+$r = ApplyTo 'InhForm.pas' 'inh.rules' @('--apply', '--no-backup', '--no-reconcile-uses')
+Check 'I3 --apply --no-reconcile-uses: exit 0, no REFUSED line; the #unuse Classes ran (Classes gone from InhForm.pas)' `
   (($r.Code -eq 0) -and -not ($r.Out -match '(?m)^REFUSED') -and -not ([IO.File]::ReadAllText((P 'InhForm.pas')) -match '\bClasses\b')) $r.Out
 Check 'I4 InhForm.dfm is byte-identical (the inherited block is not touched)' ((Get-FileHash (P 'InhForm.dfm')).Hash -eq $hd)
 # Controls: a genuine failure and a success are NOT refusals.

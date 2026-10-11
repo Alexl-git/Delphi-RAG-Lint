@@ -315,9 +315,17 @@ Check 'R4 --only matching nothing (unit rules run alone): the removal is skipped
    (@($j.warnings | Where-Object { $_ -match '^line 3: warning: #unuse LibA skipped' }).Count -eq 1)) $r.Out
 Check 'R5 R26Form.pas and R26Form.dfm are byte-identical after R1-R4' (((Hash 'R26Form.pas') -eq $hRp) -and ((Hash 'R26Form.dfm') -eq $hRd))
 $hIp = Hash 'R26Inh.pas'
-$r = Apply 'R26Inh.pas' 'r26unuse.rules' @('--only', 'btnThree', '--apply', '--no-backup', '--format', 'json')
+# 1.27.0 (C9): the default uses reconciliation KEEPS LibA for the inherited
+# btnTwo (a kept row, not the --only skipped one -- --only did not leave it out);
+# the 1.26 refusal is pinned under --no-reconcile-uses.
+$r = Apply 'R26Inh.pas' 'r26unuse.rules' @('--only', 'btnThree', '--format', 'json')
 $j = Json $r.Out
-Check 'R5b --only does NOT soften R26 for an instance it did not leave out (an inherited btnTwo): still refused' `
+Check 'R5a (C9) default: LibA KEPT for the inherited btnTwo -- a kept row, no skipped row, not refused' `
+  (($r.Code -eq 0) -and ($null -ne $j) -and (-not $j.refused) -and (@($j.uses | Where-Object { $_.action -eq 'kept' -and $_.unit -eq 'LibA' }).Count -eq 1) -and
+   (@($j.uses | Where-Object { $_.action -eq 'skipped' }).Count -eq 0)) $r.Out
+$r = Apply 'R26Inh.pas' 'r26unuse.rules' @('--only', 'btnThree', '--apply', '--no-backup', '--no-reconcile-uses', '--format', 'json')
+$j = Json $r.Out
+Check 'R5b --no-reconcile-uses: --only does NOT soften R26 for an instance it did not leave out (an inherited btnTwo): still refused' `
   (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and `
    ($j.reason -eq '#unuse LibA would leave 1 unconverted instance(s) of TSrcBtn -- unit not changed') -and ((Hash 'R26Inh.pas') -eq $hIp)) $r.Out
 $r = Apply 'R26Other.pas' 'r26other.rules' @('--only', 'btnOne', '--apply', '--no-backup', '--format', 'json')
