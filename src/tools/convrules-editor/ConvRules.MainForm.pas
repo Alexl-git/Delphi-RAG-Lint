@@ -155,6 +155,7 @@ type
       FMiFileSave    : TMenuItem  ; // File > Save / Save As / Curate: disabled while a
       FMiFileSaveAs  : TMenuItem  ; //   Convert run is in progress (the run's later units
       FMiFileCurate  : TMenuItem  ; //   would otherwise see a changed book)
+      FMiReindex     : TMenuItem  ; // Conversion > Reindex project (C17): disabled while a Convert run is in progress
       FMiAssign      : TMenuItem  ; // Mapping: gated by UpdateMenuEnabled
       FMiUnassign    : TMenuItem  ;
       FMiGlyphExpr   : TMenuItem  ; // Mapping > Glyph expression...: needs a loaded rule (C10, ruling B2)
@@ -1977,6 +1978,13 @@ type
       /// <summary>Conversion &gt; Convert...: shows the Convert tab.</summary>
       /// <param name="Sender">The menu item.</param>
       procedure DoShowConvertTab(Sender: TObject);
+      /// <summary>Conversion &gt; Reindex project (C17): an incremental `index --project`
+      /// of ProjectFileForDb(GEditorProjectDb) behind the cancellable progress window.
+      /// Refused (ReindexRefusal, red) while a Convert run is in progress or when the
+      /// project file is missing; afterwards the resolve cache is cleared and the Convert
+      /// tab re-reads which units are indexed. Status: ReindexOutcomeText.</summary>
+      /// <param name="Sender">The menu item.</param>
+      procedure DoReindexProject(Sender: TObject);
       /// <summary>C12 E1-E5: reads the IDE's request file, prepares it
       /// (PrepareConvertRequest: parse, validate against this editor's project DB /
       /// file, the index's existence, the rules folder -- request, --rules-folder, else
@@ -2627,6 +2635,8 @@ uses
   , ConvRules.GlyphForm // C10: the glyph-expression dialog
   , ConvRules.ConvertRequest // C12: PrepareConvertRequest / TPreparedRequest
   , ConvRules.Inheritance    // C12: DiskTextReader, the .dfm reader the request's scope is built from
+  , ConvRules.ConvertRun     // C17: ReindexRefusal / ReindexOutcomeText
+  , System.Diagnostics       // C17: TStopwatch, the reindex's elapsed time
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
 const { VCL style names as they are recorded INSIDE the .vsf files linked by
@@ -2855,6 +2865,8 @@ begin
   FMiClearExamine:= AddMenuCmd(FMnuConversion, '&Clear marks', 'Drop the current examination and unmark all rows', DoClearExamine);
   AddMenuCmd(FMnuConversion, '-', '', nil);
   AddMenuCmd(FMnuConversion, 'Con&vert...', 'Open the Convert tab: apply checked rule books to a list of source units', DoShowConvertTab);
+  // C17: no shortcut (a main-menu shortcut fires inside every edit control).
+  FMiReindex:= AddMenuCmd(FMnuConversion, '&Reindex project', ReindexMenuHint(GEditorProjectDb), DoReindexProject);
 
   LMapping:= Top('&Mapping');
   FMiAutoMatch:= AddMenuCmd(LMapping, 'Auto-&Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
@@ -3486,6 +3498,7 @@ begin
       FMiFileSave.Enabled  := not ARunning;
       FMiFileSaveAs.Enabled:= not ARunning;
       FMiFileCurate.Enabled:= not ARunning;
+      FMiReindex.Enabled   := not ARunning; // C17: the run reindexes through its own adapter
       // The run reindexed the project through its OWN adapter: a class this one
       // resolved before may now be declared elsewhere, or not at all.
       if not ARunning then
@@ -8061,6 +8074,52 @@ end;
 procedure TConvRulesForm.DoShowConvertTab(Sender: TObject);
 begin
   FTabs.ActivePage:= FTabConvert;
+end;
+
+procedure TConvRulesForm.DoReindexProject(Sender: TObject);
+var
+  LDb     : string;
+  LProject: string;
+  LOut    : string;
+  LText   : string;
+  LCode   : Integer;
+  LIsError: Boolean;
+  LWatch  : TStopwatch;
+  LWork   : TStreamingWork;
+begin
+  LDb     := GEditorProjectDb;
+  LProject:= ProjectFileForDb(LDb);
+  LText:= ReindexRefusal((FConvertTab <> nil) and FConvertTab.Running, LDb, LProject, (LProject <> '') and TFile.Exists(LProject));
+  if LText <> '' then
+  begin
+    SetError(LText);
+    Exit;
+  end;
+  LOut := '';
+  LWork:= function(const AOnProgress: TProgressProc; const ACancel: TCancelToken): Integer
+    begin
+      Result:= FEngine.IndexProject(LProject, LDb, ACancel, LOut);
+    end;
+  SetStatus(Format('Reindexing %s...', [ExtractFileName(LProject)]));
+  LWatch:= TStopwatch.StartNew;
+  try
+    LCode:= FEngine.LongCallRunner(Format('Reindexing project %s', [ExtractFileName(LProject)]), LWork);
+  except
+    on E: Exception do
+    begin
+      LCode:= -1;
+      LOut := 'the reindex stopped on an error: ' + E.Message;
+    end;
+  end; // try
+  LText:= ReindexOutcomeText(LCode, LOut, LProject, LDb, LWatch.ElapsedMilliseconds, LIsError);
+  // IndexProject has already cleared FEngine's resolve cache (as a Convert run's end does);
+  // the Convert tab's unindexed-unit flags read the index.
+  if FConvertTab <> nil then
+    FConvertTab.RefreshIndex;
+  if LIsError then
+    SetError(LText)
+  else
+    SetStatus(LText);
 end;
 
 procedure TConvRulesForm.ApplyConvertRequest(const APath: string);

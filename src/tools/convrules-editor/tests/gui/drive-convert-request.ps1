@@ -293,7 +293,9 @@ function Click($h) { [void][W]::PostMessage($h, 0x00F5, [IntPtr]::Zero, [IntPtr]
 function Status($main) { (@(Find $main 'TStatusBar' $null) | ForEach-Object { [W]::Txt($_) }) -join ' | ' }
 function WriteAscii($path, $text) { [IO.File]::WriteAllText($path, ($text -replace "`r?`n", "`r`n"), [Text.ASCIIEncoding]::new()) }
 # Waits until the status line differs from $Before and is not the run's own
-# 'Converting ...' line, or an editor dialog appears; returns the final status text.
+# 'Converting ...' line or a C16 progress line (RunInProgress), or an editor dialog appears;
+# returns the final status text.
+function RunInProgress($st) { ($st -like 'Converting *') -or ($st -match '^Unit \d+ of \d+: ') -or ($st -like 'Final reindex (total *') }
 function WaitStatus($main, $Before, $Seconds) {
   $t0 = Get-Date; $st = $Before; $script:dlg = ''
   while (((Get-Date) - $t0).TotalSeconds -lt $Seconds) {
@@ -301,7 +303,7 @@ function WaitStatus($main, $Before, $Seconds) {
     $d = @(Forms $p.Id | Where-Object { [W]::Cls($_) -in 'TMessageForm', '#32770' })
     if ($d.Count -gt 0) { $script:dlg = TopsNow $p.Id; break }
     $st = Status $main
-    if ($st -ne $Before -and $st -notlike 'Converting *') { break }
+    if ($st -ne $Before -and -not (RunInProgress $st)) { break }
   }
   $script:waited = ((Get-Date) - $t0).TotalSeconds
   Start-Sleep -Milliseconds 300

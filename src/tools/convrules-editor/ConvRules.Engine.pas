@@ -1115,7 +1115,20 @@ type
       /// <returns>The engine's exit code (see RunCaptureTimed).</returns>
       /// <remarks>Never a folder target: that widens a project DB into a
       /// directory DB.</remarks>
-      function IndexProject(const AProjectFile, AProjectDb: string; out AOutput: string): Integer;
+      function IndexProject(const AProjectFile, AProjectDb: string; out AOutput: string): Integer; overload;
+      /// <summary>IndexProject, cancellable (C17, Conversion &gt; Reindex project): the same
+      /// incremental index --project through RunCaptureStreaming, bounded by
+      /// CONVERT_TIMEOUT_MS.</summary>
+      /// <param name="AProjectFile">The .dpr / .dproj that owns AProjectDb.</param>
+      /// <param name="AProjectDb">The project index to refresh.</param>
+      /// <param name="ACancel">Polled while the engine runs; set = the engine is terminated. May be nil.</param>
+      /// <param name="AOutput">stdout, then stderr's lines.</param>
+      /// <returns>The engine's exit code, or ENGINE_OUTCOME_CANCELLED / ENGINE_OUTCOME_TIMEOUT
+      /// (see RunCaptureStreaming).</returns>
+      /// <remarks>Clears the resolve cache, as the other overload does. A cancel stops the
+      /// engine part way: files it already re-parsed stay re-parsed, the rest stay as they
+      /// were -- run it again to finish.</remarks>
+      function IndexProject(const AProjectFile, AProjectDb: string; const ACancel: TCancelToken; out AOutput: string): Integer; overload;
       /// <summary>True when `info --json` reports capabilities.AName = true. The key
       /// is matched case-insensitively (MatchText over CapabilityNames).</summary>
       /// <param name="AName">Capability key, e.g. apply_unit_rules; any letter case.</param>
@@ -1463,6 +1476,13 @@ begin
   // --project, never a folder: a folder target widens a project DB into a directory DB.
   Result:= RunCaptureTimed(Format('index --project "%s" --db "%s"', [AProjectFile, AProjectDb]), CONVERT_TIMEOUT_MS, AOutput);
   ClearResolveCache; // the index may now declare (or no longer declare) a class
+end;
+
+function TEngineAdapter.IndexProject(const AProjectFile, AProjectDb: string; const ACancel: TCancelToken; out AOutput: string): Integer;
+begin
+  // --project, never a folder (see the other overload).
+  Result:= RunCaptureStreaming(Format('index --project "%s" --db "%s"', [AProjectFile, AProjectDb]), CONVERT_TIMEOUT_MS, nil, ACancel, AOutput);
+  ClearResolveCache; // even a cancelled run may have rewritten part of the index
 end;
 
 function DepthArgs(ADepth: Integer; AProgress: Boolean): string;

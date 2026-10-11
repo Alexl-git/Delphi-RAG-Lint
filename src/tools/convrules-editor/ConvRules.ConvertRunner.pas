@@ -141,14 +141,48 @@ type
   /// (UnmatchedOnlyHintFor with the job's scope bound).</summary>
   TOnlyHintFn = reference to function(const AOnly: TArray<string>): string;
 
+  /// <summary>What a Convert run is doing right now (C16).</summary>
+  /// <remarks>Per unit: rpReindexBefore, rpBackup, then per book rpApply and, after a
+  /// successful apply, rpReindexAfter; rpRestore follows the step that failed when the
+  /// unit is copied back from its backup. rpFinalReindex is the closing refresh the
+  /// Convert tab runs after the unit loop -- the runner never emits it.</remarks>
+  TRunPhase = (rpReindexBefore, rpBackup, rpApply, rpReindexAfter, rpRestore, rpFinalReindex);
+
+  /// <summary>One progress step of a run: emitted as the phase STARTS.</summary>
+  TRunStep = record
+    /// <summary>The phase starting now.</summary>
+    Phase         : TRunPhase;
+    /// <summary>1-based position of the unit in the job; 0 on rpFinalReindex.</summary>
+    UnitNo        : Integer;
+    /// <summary>Units in the job.</summary>
+    UnitCount     : Integer;
+    /// <summary>The unit's .pas path; '' on rpFinalReindex.</summary>
+    UnitPas       : string;
+    /// <summary>1-based position of the book in the job's book list; 0 on a unit-level
+    /// phase (rpReindexBefore, rpBackup) and on rpFinalReindex.</summary>
+    BookNo        : Integer;
+    /// <summary>Books in the job.</summary>
+    BookCount     : Integer;
+    /// <summary>The book's .rules path; '' when BookNo = 0.</summary>
+    Book          : string;
+    /// <summary>Milliseconds since the unit's first step.</summary>
+    UnitElapsedMs : Int64;
+    /// <summary>Milliseconds since the run started; never less than UnitElapsedMs.</summary>
+    TotalElapsedMs: Int64;
+  end;
+
+  /// <summary>Receives each TRunStep (worker thread!).</summary>
+  TRunStepFn = reference to procedure(const AStep: TRunStep);
+
 /// <summary>Runs a whole job (AJob.Books over AJob.Units).</summary>
 /// <param name="AJob">The job.</param>
 /// <param name="AEngine">An adapter owned by the caller's thread.</param>
 /// <param name="AProgress">May be nil.</param>
 /// <param name="ACancelled">May be nil; polled exactly once just before each unit (never between two books of one unit); True stops the run there.</param>
+/// <param name="AOnStep">May be nil; receives every TRunStep (C16).</param>
 /// <returns>One row per unit x book attempted; an invalid book yields one
 /// csBookSkipped row (on the first unit that tried it) and is not tried again.</returns>
-function RunConversion(const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>;
+function RunConversion(const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn): TArray<TConvertRow>;
 
 /// <summary>The unit loop of RunConversion, for books already validated,
 /// against the real engine (AJob.Dbs, AJob.ProjectFile, AJob.ProjectDb).</summary>
@@ -186,6 +220,27 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// outcomes (see TConvertStatus).</remarks>
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False): TArray<TConvertRow>; overload;
 
+/// <summary>The TApplyFn overload with a step callback (C16): the test seam of the
+/// progress sequence; RunConversion uses the same loop.</summary>
+/// <param name="AUnits">Source units.</param>
+/// <param name="ABooks">Validated books, application order.</param>
+/// <param name="AApply">Applies one book to one unit.</param>
+/// <param name="AIndex">As in the TApplyFn overload.</param>
+/// <param name="AProgress">May be nil.</param>
+/// <param name="ACancelled">May be nil; polled exactly once just before each unit; True stops the run there.</param>
+/// <param name="AOnStep">May be nil; receives every TRunStep (C16), in run order and
+/// before the step's work: per unit rpReindexBefore, rpBackup, then per book rpApply,
+/// rpReindexAfter after a successful apply, and rpRestore when the unit is copied back.
+/// A unit's rows reach AProgress before the next unit's first step. No step for a unit
+/// a cancel kept from running, for a missing unit beyond its check, or for an
+/// out-of-scope book (no engine call).</param>
+/// <param name="AInheritedSupported">See TConvertJob.InheritedSupported.</param>
+/// <param name="ARetypeSupported">See TConvertJob.RetypeSupported.</param>
+/// <returns>As the TApplyFn overload of RunConversionUnits.</returns>
+/// <remarks>A separate name, not one more default parameter: a defaulted anonymous-method
+/// parameter on these overloads made dcc64 reject existing calls (E2250).</remarks>
+function RunConversionUnitsStepped(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False): TArray<TConvertRow>;
+
 /// <summary>The unit loop with the engine calls AND the scope injected (C12, spec
 /// E9-E11); the TApplyFn overload is this one with a whole-unit scope.</summary>
 /// <param name="AUnits">Source units.</param>
@@ -208,6 +263,22 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: 
 /// (an --only name that matched nothing) stays a failure (restored) and its note gets
 /// AOnlyHint's tail. AScope raising counts as out of scope.</remarks>
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False; const AOnlyHint: TOnlyHintFn = nil): TArray<TConvertRow>; overload;
+
+/// <summary>PURE: the progress line for one step (status bar and the Convert tab).</summary>
+/// <param name="AStep">The step.</param>
+/// <returns>'Unit 2 of 5: SystemData2 -- book 1 of 2 BDE-to-FireDAC: applying (0:42,
+/// total 3:10)' for a book-level phase; 'Unit 2 of 5: SystemData2: backing up (0:03, total
+/// 3:10)' for a unit-level one; 'Final reindex (total 3:10)' for rpFinalReindex. Unit and
+/// book are file names without extension. Phase words: reindexing before apply, backing
+/// up, applying, reindexing after apply, restoring from backup.</returns>
+function RunStepText(const AStep: TRunStep): string;
+
+/// <summary>PURE: AStep with AMs added to both elapsed fields -- the tab's once-a-second
+/// refresh while one phase runs.</summary>
+/// <param name="AStep">The step as the runner emitted it.</param>
+/// <param name="AMs">Milliseconds since it was received.</param>
+/// <returns>The advanced copy.</returns>
+function AdvanceStep(const AStep: TRunStep; AMs: Int64): TRunStep;
 
 /// <summary>Display text for a status.</summary>
 /// <param name="AStatus">The status.</param>
@@ -317,6 +388,7 @@ implementation
 uses
   System.IOUtils
   , System.StrUtils
+  , System.Diagnostics
   , ConvRules.Glyph
   , ConvRules.UnitStatus  // dl:ok unused-unit-in-uses@ec0d -- REVIEWED 2026-09-29 false positive: TFileProbe (FileProbe's return type) is declared here; removing the unit fails with E2003
   ;
@@ -424,6 +496,26 @@ begin
     Result:= Format('RESTORE FAILED for %s -- may be half-converted; restore by hand from the backups its row names. ', [string.Join(', ', ANotRestored)]) + Result;
 end;
 
+function RunStepText(const AStep: TRunStep): string;
+const
+  PHASE_WORDS: array[TRunPhase] of string = ('reindexing before apply', 'backing up', 'applying',
+    'reindexing after apply', 'restoring from backup', 'final reindex');
+begin
+  if AStep.Phase = rpFinalReindex then
+    Exit(Format('Final reindex (total %s)', [FormatElapsed(AStep.TotalElapsedMs)]));
+  Result:= Format('Unit %d of %d: %s', [AStep.UnitNo, AStep.UnitCount, ChangeFileExt(ExtractFileName(AStep.UnitPas), '')]);
+  if AStep.BookNo > 0 then
+    Result:= Result + Format(' -- book %d of %d %s', [AStep.BookNo, AStep.BookCount, ChangeFileExt(ExtractFileName(AStep.Book), '')]);
+  Result:= Result + Format(': %s (%s, total %s)', [PHASE_WORDS[AStep.Phase], FormatElapsed(AStep.UnitElapsedMs), FormatElapsed(AStep.TotalElapsedMs)]);
+end;
+
+function AdvanceStep(const AStep: TRunStep; AMs: Int64): TRunStep;
+begin
+  Result:= AStep;
+  Inc(Result.UnitElapsedMs, AMs);
+  Inc(Result.TotalElapsedMs, AMs);
+end;
+
 function FileProbe: TFileProbe;
 begin
   Result:= function(const APath: string): Boolean
@@ -432,12 +524,23 @@ begin
     end;
 end;
 
-function RunConversion(const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>;
+// The ONE unit loop (the public TApplyOnlyFn overload is it without a step callback).
+function RunUnitLoop(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn; const AOnStep: TRunStepFn): TArray<TConvertRow>; forward;
+
+// The TConvertJob overload's body, with the step callback.
+function RunJobUnits(const AUnits, ABooks: TArray<string>; const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn): TArray<TConvertRow>; forward;
+
+function RunConversion(const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn): TArray<TConvertRow>;
 begin
-  Result:= RunConversionUnits(AJob.Units, AJob.Books, AJob, AEngine, AProgress, ACancelled);
+  Result:= RunJobUnits(AJob.Units, AJob.Books, AJob, AEngine, AProgress, ACancelled, AOnStep);
 end;
 
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>): TArray<TConvertRow>;
+begin
+  Result:= RunJobUnits(AUnits, ABooks, AJob, AEngine, AProgress, ACancelled, nil);
+end;
+
+function RunJobUnits(const AUnits, ABooks: TArray<string>; const AJob: TConvertJob; AEngine: TEngineAdapter; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn): TArray<TConvertRow>;
 var
   LJob   : TConvertJob;
   LEngine: TEngineAdapter;
@@ -450,7 +553,7 @@ begin
     begin
       Result:= ScopedNamesForBookFile(LJob.Scope, AUnitPas, ABook, ANames);
     end;
-  Result:= RunConversionUnits(AUnits, ABooks,
+  Result:= RunUnitLoop(AUnits, ABooks,
     function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
     begin
       Result:= LEngine.ApplyConversion(AUnitPas, ARulesFile, LJob.Dbs, AOnly, AJson);
@@ -464,15 +567,20 @@ begin
     function(const AOnly: TArray<string>): string
     begin
       Result:= UnmatchedOnlyHintFor(LJob.Scope, AOnly);
-    end);
+    end, AOnStep);
 end;
 
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@8e04 -- REVIEWED 2026-10-06 the test-injection twin of the TConvertJob overload: two engine seams plus the job's two capability flags (InheritedSupported, RetypeSupported); a record for the two flags would be one more type used only here
+begin
+  Result:= RunConversionUnitsStepped(AUnits, ABooks, AApply, AIndex, AProgress, ACancelled, nil, AInheritedSupported, ARetypeSupported);
+end;
+
+function RunConversionUnitsStepped(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@4138 -- REVIEWED 2026-10-10 the TApplyFn test seam plus the C16 step callback: the same seams as its twin, one more
 var
   LApply: TApplyFn;
 begin
   LApply:= AApply;
-  Result:= RunConversionUnits(AUnits, ABooks,
+  Result:= RunUnitLoop(AUnits, ABooks,
     function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
     begin
       Result:= LApply(AUnitPas, ARulesFile, AJson);
@@ -483,10 +591,15 @@ begin
       ANames:= nil;
       Result:= False;
     end,
-    AProgress, ACancelled, AInheritedSupported, ARetypeSupported);
+    AProgress, ACancelled, AInheritedSupported, ARetypeSupported, nil, AOnStep);
 end;
 
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@092f -- REVIEWED 2026-10-06 the ONE unit loop: four engine/scope seams (apply, index, scope, unmatched-name hint), progress, cancel and the job's two capability flags; the TConvertJob overload is the record-shaped entry point
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@092f -- REVIEWED 2026-10-10 the public scope-seam entry point, unchanged since C12 (its 2026-10-06 review moved with the body to RunUnitLoop)
+begin
+  Result:= RunUnitLoop(AUnits, ABooks, AApply, AIndex, AScope, AProgress, ACancelled, AInheritedSupported, ARetypeSupported, AOnlyHint, nil);
+end;
+
+function RunUnitLoop(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn; const AOnStep: TRunStepFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@ace4 -- REVIEWED 2026-10-10 (C16: + the step callback) the ONE unit loop: four engine/scope seams (apply, index, scope, unmatched-name hint), progress, cancel and the job's two capability flags; the TConvertJob overload is the record-shaped entry point
 var
   Rows    : TArray<TConvertRow>;
   UnitRows: TArray<TConvertRow>; // the current unit's rows, emitted when it finishes
@@ -498,6 +611,40 @@ var
   Dfm     : string;
   Invalid : TArray<string>; // books whose rules failed the engine's validation this run
   Changed : Boolean;        // the unit's backup is still needed (a change, or a failed book)
+  Watch   : TStopwatch;     // since the run started (C16 step elapsed)
+  UnitNo  : Integer;        // 1-based position of CurUnit in AUnits
+  UnitAt  : Int64;          // Watch's milliseconds when CurUnit started
+  BookNo  : Integer;        // 1-based position in ABooks of the book running now; 0 = none
+  StepsOff: Boolean;        // AOnStep raised once: no further steps this run
+
+  // C16: tells AOnStep that APhase starts now. Advisory: a raising callback never
+  // stops the run (this routine never raises, see the declaration).
+  procedure Step(APhase: TRunPhase);
+  var
+    LStep: TRunStep;
+  begin
+    if not Assigned(AOnStep) or StepsOff then
+      Exit;
+    LStep:= Default(TRunStep);
+    LStep.Phase    := APhase;
+    LStep.UnitNo   := UnitNo;
+    LStep.UnitCount:= Length(AUnits);
+    LStep.UnitPas  := CurUnit;
+    LStep.BookCount:= Length(ABooks);
+    if APhase in [rpApply, rpReindexAfter, rpRestore] then
+    begin
+      LStep.BookNo:= BookNo;
+      LStep.Book  := ABooks[BookNo - 1];
+    end;
+    LStep.TotalElapsedMs:= Watch.ElapsedMilliseconds;
+    LStep.UnitElapsedMs := LStep.TotalElapsedMs - UnitAt;
+    try
+      AOnStep(LStep);
+    except  // dl:ok try-except-swallowed@76ff -- REVIEWED 2026-10-10 progress is advisory: a display callback that raises must not turn into a unit failure or escape a routine documented as never raising; it is not asked again
+      on Exception do
+        StepsOff:= True;
+    end; // try
+  end;
 
   procedure Add;
   begin
@@ -617,6 +764,7 @@ var
       Exit;
     end;
     Changed:= True; // the backup is the restore point the rows name -- keep it
+    Step(rpRestore);
     if not TryRestore(LError) then
     begin
       // Earlier csConverted rows stay: their change may still be on disk.
@@ -698,6 +846,7 @@ var
       Add;
       Exit; // Result = True: the unit's next book still runs
     end;
+    Step(rpApply);
     try
       // A non-zero exit shows up as ok=false or unparseable text in ParseApplyJson.
       AApply(CurUnit, ABook, LOnly, LJson);
@@ -742,6 +891,7 @@ var
       FailUnit(HalfWrittenNote(Row.Apply), csFailedRestored);
       Exit(False);
     end;
+    Step(rpReindexAfter);
     if not TryReindex(LError) then
     begin
       FailUnit('reindex after apply failed: ' + LError, csFailedRestored);
@@ -775,6 +925,8 @@ var
     // convert-apply patches the .dfm at the index's line ranges: a unit edited
     // (in the IDE, say) since the last index must be re-read first. A failed
     // refresh touches nothing -- no backup, no apply -- and the run goes on.
+    UnitAt:= Watch.ElapsedMilliseconds;
+    Step(rpReindexBefore);
     if not TryReindex(LError) then
     begin
       Row.Status:= csUnitSkipped;
@@ -783,6 +935,7 @@ var
       Exit;
     end;
     // One restore point per unit per run, taken before the first book touches it.
+    Step(rpBackup);
     if not TakeBackups(LError) then
     begin
       Row.Status:= csUnitSkipped;
@@ -791,9 +944,13 @@ var
       Exit;
     end;
     Changed:= False;
-    for var LBook: string in ABooks do
-      if not MatchText(LBook, Invalid) and not RunBook(LBook) then
+    for var I: Integer:= 0 to High(ABooks) do
+    begin
+      BookNo:= I + 1;
+      if not MatchText(ABooks[I], Invalid) and not RunBook(ABooks[I]) then
         Break;
+    end;
+    BookNo:= 0;
     if Changed then
       Exit;
     // Nothing touched the unit (every book invalid or out of scope, or refused before any change): the fresh copies are
@@ -810,8 +967,14 @@ begin
   if Length(ABooks) = 0 then
     Exit(nil); // no book, no backup
   Total:= Length(AUnits) * Length(ABooks);
+  Watch := TStopwatch.StartNew;
+  UnitNo:= 0;
+  UnitAt:= 0;
+  BookNo:= 0;
+  StepsOff:= False;
   for CurUnit in AUnits do
   begin
+    Inc(UnitNo);
     // Cancel is honoured BETWEEN units only: a unit is never left with some of
     // its books applied and the rest not.
     if Assigned(ACancelled) and ACancelled() then
