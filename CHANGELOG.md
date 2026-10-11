@@ -3,6 +3,31 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.28.0-alpha -- unreleased
+
+### Changed
+
+- **convert-apply: an unusable castlib exits 6** (owner 2026-10-11). A castlib the engine cannot load or execute (e.g. an unknown `value` keyword) used to exit 2, which on convert-apply also means a write failure or rollback. Exit 6 is a configuration error of its own; a batch still exits with the worst unit's code (6 > 2 > 1 > 0). Guard: run_convert_apply_strip_db.ps1 L1.
+
+No extractor or resolver change: indexes do not re-parse or re-resolve.
+
+### Added
+
+- **`compare` verb (charts step 1)** -- `drag-lint compare` answers "is this report still
+  true?": it reruns a report's `COMMAND` line through `charts\src\Ask-Report.ps1 -Plain`
+  against the current index and diffs the normalised text (a forms CSV by row, a chart by
+  nodes and edges). Four old sides: a saved file or bundle folder (`--old`), the
+  `/// <remarks>` block at a caret (`--in U.pas --line L`, with `--update-doc` to rewrite
+  only that block), the newest auto snapshot (`--auto`), or the same question answered from
+  an old index copy (`--old-db`, asked with `-AllowStale`); `--old` with `--new` compares
+  two saved outputs; `--show` renders any report as the page; `--save` keeps a snapshot
+  under `drag-lint-reports\` (`auto\` for `--auto`). Exit 0 same, 1 differences, 2 usage or
+  setup, 3 stale index (the new run never accepts a stale index). `--format text|json|html`
+  (`compare/1` JSON; a light/dark self-contained page, `--open`). The answer header gains a
+  `COMMAND` line and a time and engine on the sentence; a legacy header without them still
+  parses and compare warns that the command is unknown. New units: `src\charts\DRagLint.Charts.*`.
+  Pinned by run_compare_verb.ps1 and run_compare_real.ps1.
+
 ## v1.27.1-alpha -- unreleased
 
 No extractor or resolver change: indexes do not re-parse or re-resolve.

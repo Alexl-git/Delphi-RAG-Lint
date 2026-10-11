@@ -53,6 +53,10 @@ type
     [Test] procedure HeaderAndNoiseLinesAreDropped;
     [Test] procedure XmlSpecialCharsAreEscaped;
     [Test] procedure RoundTripTraceStaysReadable;
+    [Test] procedure HeaderSentenceFromAnswerIsUsed;
+    [Test] procedure CommandLineIsEmittedUnwrappedAndEscaped;
+    [Test] procedure LegacyAnswerIsUnchanged;
+    [Test] procedure HeaderFixtureMatchesPowerShellPort;
   end;
 
   [TestFixture]
@@ -80,6 +84,9 @@ uses
   System.SysUtils
   , System.StrUtils
   , System.Classes
+  , System.IOUtils
+  , System.Character
+  , System.RegularExpressions
   , DragLint.Plugin.ReportText
   ;
 
@@ -341,8 +348,150 @@ begin
   Assert.IsTrue(SawBlankBeforeAnchor, 'paragraph break before ANCHOR');
 end;
 
-{ ---- glue ---- }
+{ ---- report header lines (charts spec section 3) ---- }
 
+const
+  HDR_SENTENCE = 'Who writes this field (drag-lint report who-writes) for OPERAT.NAME, asked on 2026-10-10 14:32, engine 1.27.0.';
+  HDR_SENTENCE_LINE1 = '/// Who writes this field (drag-lint report who-writes) for OPERAT.NAME, asked on 2026-10-10 14:32,';
+  HDR_COMMAND = 'COMMAND who-writes -Target "OPERAT.NAME" -Project "C:\Projects\R&D Tools\A Rather Long Folder Name\Client Side\Micronite2027.dproj" -Depth 3 -Cap 20 -MaxRows 500';
+  { the contract allows exactly this one line past the wrap width }
+  HDR_COMMAND_MIN_LEN = 140;
+  { the date the fixture expectations were written with (cases.txt) }
+  FIXTURE_DATE_Y = 2026;
+  FIXTURE_DATE_M = 10;
+  FIXTURE_DATE_D = 6;
+  FIXTURE_DIR = 'charts\fixtures\docinsight';
+  FIXTURE_CASES = 'cases.txt';
+  REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
+  HEADER_FIXTURE = 'header-who-writes.answer.txt';
+  { cases.txt columns: answer | question | target | expected }
+  CASE_COLUMNS = 4;
+  COL_ANSWER = 0;
+  COL_QUESTION = 1;
+  COL_TARGET = 2;
+  COL_EXPECTED = 3;
+  HEX_BASE = '$';
+
+{ The fixture folder: $DRAGLINT_REPO_ROOT (set by tests\plugin\run_reports_text.ps1),
+  else the first ancestor of the current directory that holds it. '' when not found. }
+function FixtureDir: string;
+begin
+  var Root: string:= GetEnvironmentVariable(REPO_ROOT_ENV);
+  if (Root <> '') and TFile.Exists(TPath.Combine(TPath.Combine(Root, FIXTURE_DIR), FIXTURE_CASES)) then
+    Exit(TPath.Combine(Root, FIXTURE_DIR));
+  var Dir: string:= GetCurrentDir;
+  while Dir <> '' do
+  begin
+    if TFile.Exists(TPath.Combine(TPath.Combine(Dir, FIXTURE_DIR), FIXTURE_CASES)) then
+      Exit(TPath.Combine(Dir, FIXTURE_DIR));
+    var Up: string:= ExtractFileDir(ExcludeTrailingPathDelimiter(Dir));
+    if SameText(Up, Dir) then Break;
+    Dir:= Up;
+  end;
+  Result:= '';
+end;
+
+(* cases.txt: '{U+XXXX}' in an answer file stands for that character (4 or 5 hex
+  digits; above U+FFFF it becomes a surrogate pair, as [char]::ConvertFromUtf32
+  makes it in the PowerShell port). *)
+function ExpandCodePoints(const pText: string): string;
+var
+  SB  : TStringBuilder;
+  Last: Integer;
+begin
+  SB:= TStringBuilder.Create;
+  try
+    Last:= 0;
+    for var M: TMatch in TRegEx.Matches(pText, '\{U\+([0-9A-F]{4,5})\}') do
+    begin
+      SB.Append(Copy(pText, Last + 1, M.Index - 1 - Last));
+      SB.Append(Char.ConvertFromUtf32(StrToInt(HEX_BASE + M.Groups[1].Value)));
+      Last:= M.Index - 1 + M.Length;
+    end;
+    SB.Append(Copy(pText, Last + 1, MaxInt));
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+{ Formats one cases.txt row and compares it with its expected file byte for byte.
+  pOnlyAnswer: the answer file to run; '' runs every row except the header one. }
+procedure CheckFixtureRows(const pOnlyAnswer: string);
+begin
+  var Dir: string:= FixtureDir;
+  if Dir = '' then Assert.Fail('fixture folder ' + FIXTURE_DIR + ' not found (set ' + REPO_ROOT_ENV + ')');
+  var Ran: Integer:= 0;
+  for var Row: string in TFile.ReadAllLines(TPath.Combine(Dir, FIXTURE_CASES), TEncoding.ASCII) do
+  begin
+    if (Trim(Row) = '') or StartsStr('#', Row) then Continue;
+    var C: TArray<string>:= Row.Split(['|']);
+    if Length(C) <> CASE_COLUMNS then Assert.Fail('bad cases.txt row: ' + Row);
+    if pOnlyAnswer = '' then
+    begin
+      if SameText(C[COL_ANSWER], HEADER_FIXTURE) then Continue;
+    end
+    else if not SameText(C[COL_ANSWER], pOnlyAnswer) then Continue;
+    var Answer: string:= ExpandCodePoints(TFile.ReadAllText(TPath.Combine(Dir, C[COL_ANSWER]), TEncoding.ASCII));
+    var Expected: string:= TFile.ReadAllText(TPath.Combine(Dir, C[COL_EXPECTED]), TEncoding.ASCII);
+    var Actual: string:= FormatReportAsDocInsight(C[COL_QUESTION], C[COL_TARGET],
+      EncodeDate(FIXTURE_DATE_Y, FIXTURE_DATE_M, FIXTURE_DATE_D), Answer);
+    Assert.AreEqual(Expected, Actual, C[COL_EXPECTED]);
+    Inc(Ran);
+  end;
+  Assert.IsTrue(Ran > 0, 'no cases.txt row matched ' + pOnlyAnswer);
+end;
+
+procedure TReportFormatterTests.HeaderSentenceFromAnswerIsUsed;
+var
+  Lines: TArray<string>;
+  Text : string;
+begin
+  Text:= FormatReportAsDocInsight('who-writes', 'OPERAT.NAME', TestDate,
+    HDR_SENTENCE + CRLF + HDR_COMMAND + CRLF + CHART_ANSWER);
+  Lines:= SplitOut(Text);
+  Assert.AreEqual(HDR_SENTENCE_LINE1, Lines[1]);
+  Assert.AreEqual('///   engine 1.27.0.', Lines[2]);
+  Assert.AreEqual(0, Pos('asked on 2026-10-05', Text), 'the composed sentence is not added as well');
+  Assert.Contains(Text, 'Totals: 14 writers / 3 readers.', 'the body still follows');
+end;
+
+procedure TReportFormatterTests.CommandLineIsEmittedUnwrappedAndEscaped;
+var
+  Lines   : TArray<string>;
+  Commands: Integer;
+begin
+  Assert.IsTrue(Length(HDR_COMMAND) >= HDR_COMMAND_MIN_LEN, 'the fixture command is long enough to need wrapping');
+  Lines:= SplitOut(FormatReportAsDocInsight('who-writes', 'OPERAT.NAME', TestDate,
+    HDR_SENTENCE + CRLF + HDR_COMMAND + CRLF + CHART_ANSWER));
+  Commands:= 0;
+  for var L: string in Lines do
+  begin
+    if StartsStr('/// COMMAND ', L) then
+    begin
+      Inc(Commands);
+      Assert.AreEqual('/// ' + StringReplace(HDR_COMMAND, '&', '&amp;', [rfReplaceAll]), L);
+      Assert.IsTrue(Length(L) > REPORT_DOC_MAX_LINE, 'the COMMAND line is never wrapped');
+    end;
+    Assert.IsFalse(StartsStr('///   -', L), 'no wrapped COMMAND continuation: ' + L);
+  end;
+  Assert.AreEqual(1, Commands, 'exactly one COMMAND line');
+end;
+
+procedure TReportFormatterTests.LegacyAnswerIsUnchanged;
+begin
+  { every pre-header fixture (chart-who-writes, the two empty cases, round-trip):
+    an answer without the header lines is formatted exactly as before }
+  CheckFixtureRows('');
+end;
+
+procedure TReportFormatterTests.HeaderFixtureMatchesPowerShellPort;
+begin
+  { the same bytes charts\src\Report.DocInsight.ps1 produces (Test-AskReport AR-DOC-PORT) }
+  CheckFixtureRows(HEADER_FIXTURE);
+end;
+
+{ ---- glue ---- }
 procedure TReportGlueTests.TypeAtResolvedIsRead;
 const
   OUT_JSON =

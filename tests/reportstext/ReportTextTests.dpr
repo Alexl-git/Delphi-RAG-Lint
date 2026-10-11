@@ -16,6 +16,7 @@ uses
   System.SysUtils
   , DUnitX.TestFramework
   , DUnitX.Loggers.Console
+  , DRagLint.Charts.DocInsight in '..\..\src\charts\DRagLint.Charts.DocInsight.pas'
   , DragLint.Plugin.ReportText in '..\..\src\delphi-plugin\DragLint.Plugin.ReportText.pas'
   , ReportTextTests.Cases in 'ReportTextTests.Cases.pas'
   ;

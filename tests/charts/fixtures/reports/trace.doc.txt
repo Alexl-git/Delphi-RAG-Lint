@@ -1,0 +1,95 @@
+/// <remarks>
+/// Field round-trip (grid -> server -> SQL) (drag-lint report round-trip) for
+///   frmBlueprint4.dxDBGrid1OperationVName, asked on 2026-10-06.
+///
+/// TRACE OPERAT.NAME
+/// TITLE "How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back"
+/// FROM frmBlueprint4.dxDBGrid1OperationVName
+/// INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF
+///   2026-10-05T16:25Z/2026-10-05T16:21Z/2026-10-05T16:11Z
+/// TIERS client -> pipe -> server -> database
+///
+/// ANCHOR
+/// [01] BINDS dxDBGrid1OperationVName : TcxGridDBColumn ONTO Name (Blueprint4.dfm:4534) --
+///   DataBinding.FieldName
+///   VIA dxDBGrid1OperationV.DataController.DataSource = Blueprint4_Model.dsrOperation
+///     (Blueprint4.dfm:4497) -- dangling: module Blueprint4_Model is declared nowhere in this index
+/// [02] SETS dxDBGrid1OperationV.DataSource := FBlueprint_ViewModel.pdsrOperation
+///   (Blueprint4.pas:2282) -- in FormShow
+/// [03] READS pdsrOperation : TDataSource (Blueprint4.Interfaces.pas:171) -- in
+///   IBlueprint_ViewModel
+/// [04] CALLS GetpdsrOperation [by name] (Blueprint4.ViewModel.pas:1263) -- in
+///   TBlueprint_ViewModel; the read accessor of pdsrOperation, implemented once in a class whose
+///   heritage names IBlueprint_ViewModel; ask in-class-field-reads
+/// [05] READS FDsrOperation : TDataSource [by name] (Blueprint4.ViewModel.pas:99) -- an in-class
+///   read, unbound in this index; ask in-class-field-reads
+/// [06] SETS FDsrOperation.DataSet := FMTOperation (Blueprint4.ViewModel.pas:657) -- in Create
+/// [07] BINDS FMTOperation : TFDMemTable (Blueprint4.ViewModel.pas:78) -- the anchor dataset
+/// [08] READS OPERAT [inferred] (Blueprint4.ViewModel.pas:769) -- in BuildSchema; the table literal
+///   beside FMTOperation on 3 line(s)
+/// [09] READS OPERAT.NAME [inferred] (MS1.SQL:2809) -- NAME is a column of the newest of 2 OPERAT
+///   declarations (SQL index, MS1.SQL:2809); ask E4
+///
+/// WRITE
+/// [10] FIRES FMTOperation.AfterPost -> DoAfterPostOperation [by name]
+///   (Blueprint4.ViewModel.pas:639) -- in Create; handler named on the wiring line; ask E3
+/// [11] CALLS TBlueprint_ViewModel.DoAfterPostOperation (Blueprint4.ViewModel.pas:3948) -- on
+///   FMTOperation.AfterPost, wired at :639 in Create
+///   UNLESS FSuppressEvents (Blueprint4.ViewModel.pas:3950) -- ask E1
+/// [12] CALLS TBlueprint_ViewModel.SendDeltaOperation 'AfterPost' (Blueprint4.ViewModel.pas:3960)
+///   -- in TBlueprint_ViewModel.DoAfterPostOperation; from :3951
+///   UNLESS FMTOperation.ChangeCount = 0 (Blueprint4.ViewModel.pas:3973) -- else Exit(True); ask E1
+///   UNLESS not (Assigned(FConn) and FConn.Connected) (Blueprint4.ViewModel.pas:3974) -- ask E1
+/// [13] SERIALIZES FMTOperation.SaveToStream (Blueprint4.ViewModel.pas:3978) -- in
+///   TBlueprint_ViewModel.SendDeltaOperation
+/// [14] CROSSES process boundary (Blueprint4.ViewModel.pas:3985) -- in
+///   TBlueprint_ViewModel.SendDeltaOperation; cmdDelta via ExecuteCommand
+///   FROM Micronite2027 -- the index this side was read from
+///   TO MicroniteMW1Service -- the counterpart index, queried separately
+///   OVER uPipeClientConnection.ExecuteCommand (uPipeClientConnection.pas:460) -- transport unit
+///     matched by naming convention
+///   WITH cmdDelta 'TABLE=OPERAT|' + sfBinary stream (Blueprint4.ViewModel.pas:3985) -- payload
+///     inferred from the literals before the send
+///   CONTRACT Pipes.Protocol.TCommandID.cmdDelta (Pipes.Protocol.pas:55)
+///   CONTRACT Pipes.Protocol.IPipeSessionBuilder.HandleDelta (Pipes.Protocol.pas:392) -- the far
+///     side, from the counterpart index
+///
+/// SERVER
+/// [15] ROUTES cmdDelta TO IPipeSessionBuilder.HandleDelta (Pipes.Commands.pas:173) -- in
+///   DispatchCommand; the first cross-unit call after the constant, at :177; ask E2
+/// [16] CALLS TPipeSessionBuilder.HandleDelta [by name] (uPipeSessionBuilder.pas:1209) -- in
+///   DispatchCommand; from :177, the interface method resolved to its one implementation; ask E2
+/// [17] CALLS TGenericTableRoute.HandleDelta (uGenericTableRoute.pas:389) -- in
+///   TPipeSessionBuilder.HandleDelta; from :1213
+/// [18] CALLS SplitPayload (uGenericTableRoute.pas:244) -- in TGenericTableRoute.HandleDelta; from
+///   :409
+///   UNLESS BarPos &lt; 0 (uGenericTableRoute.pas:254) -- ask E1
+///   UNLESS TableName = '' (uGenericTableRoute.pas:411) -- in TGenericTableRoute.HandleDelta; else
+///     'cmdDelta: TABLE= prefix missing', responds rspError, the default set at :405; ask E1
+///   UNLESS Length(StreamBytes) = 0 (uGenericTableRoute.pas:421) -- in
+///     TGenericTableRoute.HandleDelta; else 'cmdDelta: empty delta stream for ', responds rspError,
+///     the default set at :405; ask E1
+/// [19] CALLS TDatasetsDef.EnsureLoaded (uDatasetsDef.pas:92) -- in TGenericTableRoute.HandleDelta;
+///   from :429
+///   WHEN not GDatasetsDef.Loaded (uGenericTableRoute.pas:429) -- in
+///     TGenericTableRoute.HandleDelta; ask E1
+///   UNLESS FLoaded (uDatasetsDef.pas:94) -- ask E1
+/// [20] CALLS TDatasetsDef.LoadFromInternal (uDatasetsDef.pas:115) -- in TDatasetsDef.EnsureLoaded;
+///   from :97
+///   WHEN not FLoaded (uDatasetsDef.pas:97) -- in TDatasetsDef.EnsureLoaded; ask E1
+/// [21] READS FROM FIB$DATASETS_INFO [inferred] (uDatasetsDef.pas:130) -- in
+///   TDatasetsDef.LoadFromInternal; a FIB$ literal in the body; ask E4
+/// [22] RUNS Q.Open (uDatasetsDef.pas:131) -- in TDatasetsDef.LoadFromInternal
+/// [23] READS FROM FIB$FIELDS_INFO [inferred] (uDatasetsDef.pas:167) -- in
+///   TDatasetsDef.LoadFromInternal; a FIB$ literal in the body; ask E4
+/// [24] RUNS Q.Open (uDatasetsDef.pas:169) -- in TDatasetsDef.LoadFromInternal
+/// [25] CALLS TDatasetsDef.GetTable (uDatasetsDef.pas:199) -- in TGenericTableRoute.HandleDelta;
+///   from :431
+///   UNLESS not GDatasetsDef.GetTable(TableName, Def) (uGenericTableRoute.pas:431) -- in
+///     TGenericTableRoute.HandleDelta; else a literal at :434, responds rspError, the default set
+///     at :405; ask E1
+/// [26] DESERIALIZES Mem.LoadFromStream (uGenericTableRoute.pas:445) -- in
+///   TGenericTableRoute.HandleDelta
+///   UNLESS Mem.LoadFromStream(MS, sfBinary) raises (uGenericTableRoute.pas:446) -- else 'cmdDelta:
+///     LoadFromStream failed for %s: %s', responds rspError, the default set at :405; ask E1
+/// </remarks>

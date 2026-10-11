@@ -228,6 +228,13 @@ uses
   , DRagLint.Convert   .UsesReconcile
   , DRagLint.Query     .Callers    { v(hover bundle): shared with the LSP -- find-callers renders from it }
   , DRagLint.Query     .HoverModel { v(hover bundle): shared with the LSP -- hover --format json builds from it }
+  , DRagLint.Charts    .ReportHeader { charts step 1: `compare` -- ParseCommandLine for --command / --question }
+  , DRagLint.Charts    .Adapters     { DetectFormat / TChartsFormat -- `compare --show` and the snapshot-only path }
+  , DRagLint.Charts    .Producer     // dl:unit DRagLint.Charts.Producer accepted -- IReportProducer / TProduceOptions; the producer exit-code constant travels with the seam it belongs to
+  , DRagLint.Charts    .Producer.PowerShell { TPowerShellProducer: runs charts\src\Ask-Report.ps1 -Plain }
+  , DRagLint.Charts    .Snapshot     // dl:unit DRagLint.Charts.Snapshot accepted -- ResolveSnapshotDir / SaveSnapshot for `compare --save`; the three extension constants name the formats it writes
+  , DRagLint.Charts    .Compare      // dl:unit DRagLint.Charts.Compare accepted -- RunCompare + the request/result records; the exit-code constants travel with it and `compare` uses only the two refusal codes it prints itself
+  , DRagLint.Charts    .Render       { RenderCompareText / Json / Html, RenderReportHtml, OpenInBrowser }
   ;
 
 type
@@ -644,9 +651,21 @@ type
     // glyph-vacuum: --append merges this run into an existing --output (rows keyed
     // on dfm_path+object_path+property, images keyed on sha) instead of replacing it.
     AppendOut     : Boolean; // glyph-vacuum: --append
+    // compare (charts step 1): the old-side sources and the actions. --in/--file, --line,
+    // --project, --target, --format, --output, --open and --db are the existing fields.
+    CompareOld    : string ; // --old <report|csv|.dot|bundle dir>
+    CompareNew    : string ; // --new <same kinds> (two saved outputs; no rerun)
+    CompareOldDb  : string ; // --old-db <old.sqlite> (S4)
+    CompareCommand: string ; // --command "<id> -Target ... -Project ..."
+    Question      : string ; // --question <id>  (with --target; builds the command)
+    CompareAuto   : Boolean; // --auto  (old side = newest auto snapshot; with --save writes one)
+    CompareSave   : Boolean; // --save
+    CompareShow   : string ; // --show <report|csv|bundle> (F4)
+    UpdateDoc     : Boolean; // --update-doc (with --in/--line)
+    SnapshotDir   : string ; // --snapshot-dir <dir>
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@4a9e -- REVIEWED 2026-10-10 (451 lines, 1.27.0 banner lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@11fa -- REVIEWED 2026-10-11 (461 lines: 1.27.x banner lines merged from main + compare lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -672,6 +691,7 @@ begin
   Writeln('COMMON QUESTIONS -- the shortest command for each. Full reference below.');
   Writeln('');
   Writeln('  What is in this unit?                 drag-lint outline --file <U.pas> --db <db>');
+  Writeln('  Is this report still true?            drag-lint compare --in <U.pas> --line <L>');
   Writeln('  Which unit declares X?                drag-lint find-unit --name X --in <U.pas> --db <db>');
   Writeln('       ^ for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database');
   Writeln('         (resolve-dbs --platform win64) -- a project DB holds only that project''s units.');
@@ -794,6 +814,15 @@ begin
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
   Writeln('  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]');
   Writeln('                               unit outline; backs the IDE Structure form.');
+  Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
+  Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
+  Writeln('                               [--format text|json|html] [--output <file>] [--open]');
+  Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
+  Writeln('  drag-lint compare            --show <report|csv|bundle> [--output <f.html>] [--open]   any report as the HTML page');
+  Writeln('  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot');
+  Writeln('                               Reruns the old report''s COMMAND (charts\src\Ask-Report.ps1 -Plain) and diffs the normalised');
+  Writeln('                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,');
+  Writeln('                               :line anchors, the header date/engine, BUNDLE/INDEX/AS OF/REGENERATE lines and wrapping.');
   Writeln('  drag-lint query type-usage   --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]');
   Writeln('                               of these type names, which does THIS file actually REFERENCE? Answers a');
   Writeln('                               LIST in one pass (an RTL surface, say). Counts declarations, X.Create');
@@ -1927,6 +1956,45 @@ begin
     // defines to resolve (--platform reuses CheckPlatform, --config reuses
     // WorkspaceConfig from the shared arg handlers above).
     else if (A = '--dproj') and (i < ParamCount) then begin Inc(i); Result.PpDproj:= ParamStr(i); end
+    // compare (charts step 1)
+    else if (A = '--old') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CompareOld:= ParamStr(i);
+    end
+    else if (A = '--new') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CompareNew:= ParamStr(i);
+    end
+    else if (A = '--old-db') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CompareOldDb:= ParamStr(i);
+    end
+    else if (A = '--command') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.CompareCommand:= ParamStr(i);
+    end
+    else if (A = '--question') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Question:= ParamStr(i);
+    end
+    else if (A = '--show') and (i < ParamCount) then  // dl:ok duplicate-code@b8ae -- REVIEWED 2026-10-11: the ParseArgs value-flag arm shape (Inc(i); Result.X:= ParamStr(i)) shared with --castlib; one arm per compare flag extends the chain
+    begin
+      Inc(i);
+      Result.CompareShow:= ParamStr(i);
+    end
+    else if (A = '--snapshot-dir') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.SnapshotDir:= ParamStr(i);
+    end
+    else if A = '--auto' then Result.CompareAuto:= True
+    else if A = '--save' then Result.CompareSave:= True
+    else if A = '--update-doc' then Result.UpdateDoc:= True
     else if (Result.Path = '') and (not A.StartsWith('--')) then Result.Path:= A
     else raise Exception.CreateFmt('Unknown argument: %s', [A]);
     Inc(i);
@@ -15687,7 +15755,7 @@ function tree_sitter_dfm: PTSLanguage; cdecl;
 external 'tree-sitter-dfm';
 
 const
-  CLI_VERB_COUNT = 60; // informational only, not load-bearing; approximate verb count
+  CLI_VERB_COUNT = 61; // informational only, not load-bearing; approximate verb count
 
 /// <summary>Returns the tree-sitter ABI version for the given grammar, or
 /// 'unknown' if the grammar's entry point cannot be called (never fabricated).</summary>
@@ -25953,10 +26021,13 @@ var
       Length(JCtx.InheritedInsts) > 0, HasRetype);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
     { 1.27.0 (C15): a castlib the engine cannot execute (an unknown value
-      transform) fails the unit -- a cast silently not performed is the worse outcome }
+      transform) fails the unit -- a cast silently not performed is the worse outcome.
+      1.28.0 (owner 2026-10-11): its own exit code 6, a CONFIGURATION error; 2 means a
+      write failure / rollback on this verb and must not be read as one. }
+    const EXIT_CASTLIB_UNUSABLE = 6;
     var CastLib: TCastLib:= ParseCastLib(AArgs.CastLibFile);
     if Length(CastLib.Errors) > 0 then
-      Exit(FailUnit(Format('castlib %s: %s', [AArgs.CastLibFile, String.Join('; ', CastLib.Errors)]), 2));
+      Exit(FailUnit(Format('castlib %s: %s', [AArgs.CastLibFile, String.Join('; ', CastLib.Errors)]), EXIT_CASTLIB_UNUSABLE));
     if JCtx.ComponentPart = 'applied' then
     begin
       var Book: TApplyBook:= TApplyBook.Create(Rules, JCtx.Unreachable);
@@ -26167,7 +26238,7 @@ begin
     Trees.DbPaths:= Dbs; { C9: names the db of a uses_unresolved candidate }
     if Length(Units) = 1 then Exit(RunUnit(Units[0]));
     { 1.23.0 (C13 b2): batch. A unit's refusal or failure never stops the
-      others; the exit code is the worst unit's (2 > 1 > 0). }
+      others; the exit code is the worst unit's (6 > 2 > 1 > 0; 6 = an unusable castlib, 1.28.0). }
     Result:= 0;
     var NOk     : Integer:= 0;
     var NRefused: Integer:= 0;
@@ -30272,6 +30343,364 @@ begin
   Result:= 0;
 end; // function
 
+{ ---- compare (charts step 1) -------------------------------------------------
+  `drag-lint compare` is thin on purpose: DRagLint.Charts.Compare decides and diffs,
+  DRagLint.Charts.Render prints; this section only maps flags onto a TCompareRequest,
+  routes the output (stdout, --output, an HTML file) and picks the exit code.
+  PS trap handled: flag values are case-sensitive here (ParamStr compares exactly), but the
+  question id and argument names inside a command are matched case-insensitively by
+  ParseCommandLine / SameQuestion, exactly as Ask-Report.ps1 does. }
+
+const
+  COMPARE_USAGE = 'Usage: drag-lint compare --old <report|csv|bundle> [--command "<id> ..."] | --in <U.pas> --line <L> [--update-doc] | ' +
+    '--show <report|csv|bundle> | --question <id> --target <T> --project <P.dproj> --save [--auto]  (drag-lint --help lists every flag)';
+  COMPARE_HTML_DIR = 'drag-lint-reports';
+  COMPARE_TEMP_SVG_PREFIX = 'drag-lint-compare-old-';
+  COMPARE_SVG_EXT = '.svg';
+  COMPARE_STAMP = 'yyyymmdd-hhnn';
+
+function CompareReadText(const APath: string): string;
+begin
+  var Bytes:= TFile.ReadAllBytes(APath);
+  var Enc: TEncoding:= TEncoding.UTF8;
+  var Skip:= TEncoding.GetBufferEncoding(Bytes, Enc, TEncoding.UTF8);
+  Result:= Enc.GetString(Bytes, Skip, Length(Bytes) - Skip);
+end;
+
+{ Text/JSON/HTML are Delphi strings; the HTML declares utf-8, so every file is UTF-8 without BOM. }
+procedure CompareWriteFile(const APath, AText: string);
+begin
+  var Dir:= ExtractFilePath(ExpandFileName(APath));
+  if Dir <> '' then ForceDirectories(Dir);
+  TFile.WriteAllText(APath, AText, TUTF8Encoding.Create(False));
+end;
+
+function CompareTargetOf(const ACmd: TReportCommand): string;
+begin
+  Result:= ACmd.Get('Target');
+  if ACmd.Has('To') then Result:= Result + ' -> ' + ACmd.Get('To');
+end;
+
+{ The command the caller gave: --command wins over --question/--target (+ -Project from --project). }
+function CompareBuildCommand(const AArgs: TArgs; out ACmd: TReportCommand; out AErr: string): Boolean;
+begin
+  ACmd:= Default(TReportCommand);
+  AErr:= '';
+  Result:= True;
+  if AArgs.CompareCommand <> '' then
+  begin
+    Result:= ParseCommandLine(AArgs.CompareCommand, ACmd);
+    if not Result then
+      AErr:= 'cannot read --command "' + AArgs.CompareCommand + '" -- it must start with the question id';
+  end
+  else if AArgs.Question <> '' then
+  begin
+    if AArgs.Target = '' then
+    begin
+      AErr:= '--question needs --target';
+      Exit(False);
+    end;
+    var Text:= Format('%s -Target "%s"', [AArgs.Question, AArgs.Target]);
+    if AArgs.ProjectPath <> '' then Text:= Text + Format(' -Project "%s"', [ExpandFileName(AArgs.ProjectPath)]);
+    if not ParseCommandLine(Text, ACmd) then
+    begin
+      AErr:= 'cannot build a command from --question "' + AArgs.Question + '"';
+      Exit(False);
+    end;
+  end;
+end;
+
+{ Which old side the flags name; exactly one of --in, --old-db, --old, --auto. }
+function CompareChooseSource(const AArgs: TArgs; out ASource: TCompareSource; out AErr: string): Boolean;
+begin
+  AErr:= '';
+  ASource:= csFile;
+  var Named:= Ord(AArgs.InFile <> '') + Ord(AArgs.CompareOldDb <> '') + Ord(AArgs.CompareOld <> '') + Ord(AArgs.CompareAuto);
+  Result:= False;
+  if Named = 0 then AErr:= 'no old side -- give --old, --in/--line, --old-db or --auto'
+  else if Named > 1 then AErr:= 'give only one old side: --old, --in/--line, --old-db or --auto'
+  else if (AArgs.InFile <> '') and (AArgs.RefLine <= 0) then AErr:= '--in needs --line <L> (a line inside the remarks block)'
+  else if (AArgs.CompareNew <> '') and (AArgs.CompareOld = '') then AErr:= '--new needs --old'
+  else if (AArgs.UpdateDoc) and (AArgs.InFile = '') then AErr:= '--update-doc needs --in <U.pas> --line <L>'
+  else
+  begin
+    Result:= True;
+    if AArgs.InFile <> '' then ASource:= csRemarks
+    else if AArgs.CompareOldDb <> '' then ASource:= csOldIndex
+    else if AArgs.CompareAuto then ASource:= csAutoSnapshot
+    else if AArgs.CompareNew <> '' then ASource:= csTwoFiles
+    else ASource:= csFile;
+  end;
+end;
+
+procedure CompareOpenOrReport(const AArgs: TArgs; const APath: string);
+begin
+  Writeln(APath);
+  if AArgs.Open then OpenInBrowser(APath);
+end;
+
+{ Only the temp copy named for the old chart (name + folder both checked) is deleted; a path
+  that was never written is not there to delete. }
+procedure CompareDropTempSvg(const ASvg: string);
+begin
+  var Svg:= ASvg;
+  if (Svg <> '') and StartsText(COMPARE_TEMP_SVG_PREFIX, ExtractFileName(Svg)) and
+     SameText(ExcludeTrailingPathDelimiter(ExtractFilePath(Svg)), ExcludeTrailingPathDelimiter(TPath.GetTempPath)) then
+    DeleteFile(Svg); // a temp file that cannot be deleted is the OS's to reap
+end;
+
+function CompareHtmlPath(const AArgs: TArgs; const AReq: TCompareRequest; const AResult: TCompareResult): string;
+begin
+  Result:= AArgs.Output;
+  if Result <> '' then Exit;
+  var Q:= AReq.Command.Question;
+  var T:= CompareTargetOf(AReq.Command);
+  if Q = '' then Q:= AResult.NewHeader.QuestionId;
+  if Q = '' then Q:= AResult.OldHeader.QuestionId;
+  if T = '' then T:= AResult.NewHeader.Target;
+  if T = '' then T:= AResult.OldHeader.Target;
+  if Q = '' then Q:= 'compare';
+  Result:= TPath.Combine(TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
+    'compare-' + SanitiseTargetForFileName(Q) + '-' + SanitiseTargetForFileName(T) + '-' + FormatDateTime(COMPARE_STAMP, Now) + '.html');
+end;
+
+{ Sends the result where the caller asked; returns the exit code. On exit 2/3 the refusal goes
+  to stderr first and is flushed, so a machine caller reading --format json still gets the
+  envelope on stdout afterwards (the rule `sql` follows). }
+function CompareEmit(const AArgs: TArgs; const AReq: TCompareRequest; const AResult: TCompareResult; const AFormat: string): Integer;
+begin
+  Result:= AResult.ExitCode;
+  var Refused:= AResult.ExitCode in [COMPARE_EXIT_SETUP, COMPARE_EXIT_STALE];
+  if Refused then
+  begin
+    for var W in AResult.Warnings do Writeln(ErrOutput, 'WARNING: ' + W);
+    Writeln(ErrOutput, 'ERROR: ' + AResult.Message);
+    Flush(ErrOutput);
+  end;
+  if SameText(AFormat, 'html') then
+  begin
+    if Refused then Exit;
+    var Dest:= CompareHtmlPath(AArgs, AReq, AResult);
+    CompareWriteFile(Dest, RenderCompareHtml(AResult));
+    CompareOpenOrReport(AArgs, Dest);
+    Exit;
+  end;
+  var Doc:= '';
+  if SameText(AFormat, 'json') then Doc:= RenderCompareJson(AResult) + sLineBreak
+  else if not Refused then Doc:= RenderCompareText(AResult);
+  if Doc = '' then Exit;
+  if AArgs.Output <> '' then CompareWriteFile(AArgs.Output, Doc)
+  else Write(Doc);
+end;
+
+{ Option set common to every rerun: the running exe is the engine; --db pins the new run's index. }
+function CompareProduceOptions(const AArgs: TArgs): TProduceOptions;
+begin
+  Result:= DefaultProduceOptions;
+  Result.EnginePath:= ParamStr(0);
+  if Length(AArgs.DbPaths) > 0 then Result.DbOverride:= AArgs.DbPaths[0];
+end;
+
+{ ONE refusal path for every exit 2 / 3 the verb decides itself: builds the refused result and sends it
+  through CompareEmit, so stderr gets ERROR (flushed) and, with --format json, stdout still gets the
+  compare/1 envelope. AUsage adds the usage line to stderr. An INVALID --format value cannot say what
+  the caller wanted, so that one refusal is emitted as text (stderr only). }
+function CompareRefuse(const AArgs: TArgs; const AFormat: string; ACode: Integer; const AMessage: string;
+  AUsage: Boolean): Integer;
+begin
+  var R:= Default(TCompareResult);
+  R.ExitCode:= ACode;
+  R.Message:= AMessage;
+  if AUsage then Writeln(ErrOutput, COMPARE_USAGE);
+  Result:= CompareEmit(AArgs, Default(TCompareRequest), R, AFormat);
+end;
+{ --show renders ONE thing; any old side, rerun or action beside it is a usage error. }
+function CompareShowHasOtherSource(const AArgs: TArgs): Boolean;
+begin
+  var Sides:= (AArgs.CompareOld <> '') or (AArgs.CompareNew <> '') or (AArgs.CompareOldDb <> '') or (AArgs.InFile <> '');
+  var Actions:= AArgs.CompareAuto or AArgs.CompareSave or AArgs.UpdateDoc;
+  Result:= Sides or Actions or (AArgs.Question <> '') or (AArgs.CompareCommand <> '');
+end;
+
+{ F4: any report, CSV or bundle folder as the same HTML page the compare view uses. }
+function CompareShowPage(const AArgs: TArgs; const AFormat: string): Integer;
+begin
+  if CompareShowHasOtherSource(AArgs) then
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP, '--show takes no other source or action', True));
+  var Path:= ExpandFileName(AArgs.CompareShow);
+  var Svg: string:= '';
+  var TextFile:= Path;
+  if TDirectory.Exists(Path) then
+  begin
+    TextFile:= TPath.Combine(Path, 'graph.dot');
+    if TFile.Exists(TPath.Combine(Path, 'graph.svg')) then Svg:= TPath.Combine(Path, 'graph.svg');
+  end
+  else if SameText(ExtractFileExt(Path), '.dot') and TFile.Exists(ChangeFileExt(Path, '.svg')) then
+    Svg:= ChangeFileExt(Path, '.svg');
+  if not TFile.Exists(TextFile) then
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP, 'cannot read ' + AArgs.CompareShow, False));
+  var Fmt:= DetectFormat(Path, True);
+  var Title:= ExtractFileName(ExcludeTrailingPathDelimiter(Path));
+  var Page:= RenderReportHtml(Title, CompareReadText(TextFile), Fmt, Svg);
+  var Dest:= AArgs.Output;
+  if Dest = '' then
+    Dest:= TPath.Combine(TPath.Combine(TPath.GetTempPath, COMPARE_HTML_DIR),
+      'show-' + SanitiseTargetForFileName(Title) + '-' + FormatDateTime(COMPARE_STAMP, Now) + '.html');
+  CompareWriteFile(Dest, Page);
+  CompareOpenOrReport(AArgs, Dest);
+  Result:= 0;
+end;
+
+{ --save with no old side to compare against: run the question once and keep the answer. }
+function CompareTakeSnapshot(const AArgs: TArgs; const ACmd: TReportCommand; const AOpts: TProduceOptions;
+  const AFormat: string): Integer;
+begin
+  { R19: a snapshot-only run has no diff, no unit to rewrite and no page to render -- say so
+    instead of silently ignoring the flags. }
+  if AArgs.UpdateDoc or (AArgs.CompareNew <> '') or (AFormat <> 'text') then
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP,
+      '--save without an old side only takes a snapshot; it cannot be combined with --update-doc, --new or --format json|html', True));
+  var Cmd:= ACmd;
+  var Asker:= TPowerShellProducer.Create as IReportProducer;
+  var Prod:= Asker.Produce(Cmd, AOpts);
+  if Prod.ExitCode = PRODUCER_EXIT_STALE then
+  begin
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_STALE, 'the index is stale, so there is no current answer to keep: ' + Prod.Reason, False));
+  end;
+  if not Prod.Ok then
+  begin
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP, Format('the question failed (exit %d): %s', [Prod.ExitCode, Prod.Reason]), False));
+  end;
+  var Fmt:= DetectFormat(Prod.Text, False);
+  var Body:= Prod.Text;
+  var Ext:= SNAPSHOT_EXT_REPORT;
+  if Fmt = cfFormsCsv then Ext:= SNAPSHOT_EXT_FORMS
+  else if Fmt = cfGraph then
+  begin
+    var Dot:= TPath.Combine(Prod.BundlePath, 'graph.dot');
+    if (Prod.BundlePath = '') or not TFile.Exists(Dot) then
+    begin
+      Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP, 'the chart could not be read from ' + Prod.BundlePath, False));
+    end;
+    Body:= CompareReadText(Dot);
+    Ext:= SNAPSHOT_EXT_GRAPH;
+  end;
+  var Dir:= AArgs.SnapshotDir;
+  if Dir = '' then
+    Dir:= ResolveSnapshotDir(if AArgs.ProjectPath <> '' then AArgs.ProjectPath else Cmd.Get('Project'),
+      if Length(Prod.IndexPaths) > 0 then Prod.IndexPaths[0] else '');
+  var Saved: string;
+  if not SaveSnapshot(Dir, AArgs.CompareAuto, Cmd.Question, CompareTargetOf(Cmd), Body, Now, Saved, Ext) then
+  begin
+    Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP, 'cannot keep the snapshot under ' + Dir, False));
+  end;
+  Writeln('snapshot: ', Saved);
+  Result:= 0;
+end;
+
+
+{ --save with no old side at all (a question to keep), or --auto --save before the first auto snapshot exists. }
+function CompareIsSnapshotOnly(const AArgs: TArgs; const ACmd: TReportCommand): Boolean;
+begin
+  Result:= False;
+  if (not AArgs.CompareSave) or ACmd.IsEmpty then Exit;
+  var HasOldSide:= (AArgs.InFile <> '') or (AArgs.CompareOldDb <> '') or (AArgs.CompareOld <> '') or AArgs.CompareAuto;
+  if not HasOldSide then Exit(True);
+  if AArgs.CompareAuto then
+  begin
+    var SnapDir:= AArgs.SnapshotDir;
+    if SnapDir = '' then SnapDir:= ResolveSnapshotDir(if AArgs.ProjectPath <> '' then AArgs.ProjectPath else ACmd.Get('Project'), '');
+    Result:= LatestAutoSnapshotAnyFormat(TPath.Combine(SnapDir, 'auto'), ACmd.Question, CompareTargetOf(ACmd)) = '';
+  end;
+end;
+
+{ The usage mistakes that need no engine to see; '' when the flags hang together. Also builds the command. }
+function CompareUsageProblem(const AArgs: TArgs; out ACmd: TReportCommand): string;
+begin
+  if not CompareBuildCommand(AArgs, ACmd, Result) then Exit;
+  if (AArgs.CompareNew <> '') and (AArgs.CompareOld = '') then Result:= '--new needs --old'
+  else if (AArgs.InFile <> '') and (AArgs.RefLine <= 0) then Result:= '--in needs --line <L> (a line inside the remarks block)'
+  else if (AArgs.CompareOldDb <> '') and ACmd.IsEmpty then
+    Result:= '--old-db needs the question: --command "<id> -Target ..." or --question <id> --target <T>'
+  else Result:= '';
+end;
+
+/// <summary>Runs `drag-lint compare` (charts step 1): reruns a report's COMMAND and shows before / delta / after.</summary>
+/// <param name="AArgs">The parsed command line; see the verb's lines in --help.</param>
+/// <returns>0 same, 1 differences, 2 usage or setup error, 3 stale index (also 2 for a bad usage,
+/// and 2 for any exception raised inside the verb: ERROR: &lt;class&gt;: &lt;message&gt;).</returns>
+/// <remarks>Output: text or JSON to stdout (or --output), HTML always to a file whose path is printed.
+/// The new run never accepts a stale index. The old chart's temp SVG copy is deleted on every path,
+/// and an exception while reporting an exception still ends in one ERROR line and exit 2.
+/// Not thread-safe (it may rewrite a unit for --update-doc).</remarks>
+function DoCompare(const AArgs: TArgs): Integer;
+begin
+  var Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
+  if AArgs.Open and (AArgs.Format = '') then Fmt:= 'html';
+  if not MatchStr(Fmt, ['text', 'json', 'html']) then
+    Exit(CompareRefuse(AArgs, 'text', COMPARE_EXIT_SETUP, '--format must be text, json or html', True));
+  // R26: the old chart's temp copy is named here, so it is deleted on every path below --
+  // an exception raised inside RunCompare after the copy was taken included.
+  var Req:= Default(TCompareRequest);
+  Req.OldSvgCopy:= TPath.Combine(TPath.GetTempPath, COMPARE_TEMP_SVG_PREFIX + TGUID.NewGuid.ToString + COMPARE_SVG_EXT);
+  // C6 keeps exit 3 for a stale index: an exception escaping to Run would print FATAL and exit 3,
+  // so anything unexpected inside the verb is a setup refusal (exit 2) with the same envelope.
+  try
+    try
+      if AArgs.CompareShow <> '' then Exit(CompareShowPage(AArgs, Fmt));
+
+      var Err: string;
+      Err:= CompareUsageProblem(AArgs, Req.Command);
+      if Err <> '' then Exit(CompareRefuse(AArgs, Fmt, COMPARE_EXIT_SETUP, Err, True));
+      Req.ProjectFile:= AArgs.ProjectPath;
+      Req.SnapshotDir:= AArgs.SnapshotDir;
+      Req.SaveSnapshot:= AArgs.CompareSave;
+      Req.UpdateDoc:= AArgs.UpdateDoc;
+      Req.Options:= CompareProduceOptions(AArgs);
+      if CompareIsSnapshotOnly(AArgs, Req.Command) then Exit(CompareTakeSnapshot(AArgs, Req.Command, Req.Options, Fmt));
+      if not CompareChooseSource(AArgs, Req.Source, Err) then Exit(CompareRefuse(AArgs, Fmt, COMPARE_EXIT_SETUP, Err, True));
+      case Req.Source of
+        csRemarks:
+          begin
+            Req.OldPath:= AArgs.InFile;
+            Req.OldLine:= AArgs.RefLine;
+          end;
+        csOldIndex: Req.OldDb:= AArgs.CompareOldDb;
+        csTwoFiles:
+          begin
+            Req.OldPath:= AArgs.CompareOld;
+            Req.NewPath:= AArgs.CompareNew;
+          end;
+        csFile: Req.OldPath:= AArgs.CompareOld;
+      end;
+      if Req.Source <> csTwoFiles then Req.Producer:= TPowerShellProducer.Create;
+
+      Result:= CompareEmit(AArgs, Req, RunCompare(Req), Fmt);
+    except
+      on E: Exception do
+      begin
+        // the envelope goes to stdout: the exception may have come from writing --output itself
+        var ToStdout:= AArgs;
+        ToStdout.Output:= '';
+        Result:= COMPARE_EXIT_SETUP;
+        try
+          Result:= CompareRefuse(ToStdout, Fmt, COMPARE_EXIT_SETUP, E.ClassName + ': ' + E.Message, False);
+        except
+          on Exception do
+          try
+            // the envelope itself failed: one plain stderr line, still exit 2, never FATAL
+            Writeln(ErrOutput, 'ERROR: ' + E.ClassName + ': ' + E.Message);
+          except
+            on Exception do Result:= COMPARE_EXIT_SETUP; // stderr is gone too: the exit code is all that is left
+          end;
+        end;
+      end;
+    end;
+  finally
+    CompareDropTempSvg(Req.OldSvgCopy);
+  end;
+end;
+
 function Run: Integer;
 var
   Args: TArgs;
@@ -30374,6 +30803,7 @@ begin
     else if Args.Command = 'wiring'            then Result:= DoWiring          (Args)
     else if Args.Command = 'surface'           then Result:= DoSurface         (Args)
     else if Args.Command = 'outline'           then Result:= DoOutline         (Args)
+    else if Args.Command = 'compare'           then Result:= DoCompare         (Args)
     else if Args.Command = 'usages'            then Result:= DoUsages          (Args)
     else if Args.Command = 'slice'             then Result:= DoSlice           (Args)
     else if Args.Command = 'context'           then Result:= DoContext         (Args)

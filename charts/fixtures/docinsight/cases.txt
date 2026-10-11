@@ -1,7 +1,10 @@
 # answer file | -Question | -Target | expected file -- the expected files were written by the IDE plugin's own
 # FormatReportAsDocInsight (DragLint.Plugin.ReportText.pas, compiled into a scratch console, date fixed 2026-10-06).
 # {U+XXXX} in an answer file stands for that character (the fixtures stay 7-bit ASCII).
+# header-who-writes: its expected file was written from the header contract (the two header lines), not by the plugin; the plugin's
+# ReportTextTests (Task 4) formats the SAME answer text and must give the same bytes.
 chart-who-writes.answer.txt|who-writes|Blueprint4.TfrmBlueprint4.FNoRecursion|chart-who-writes.expected.txt
 empty.answer.txt|Round-Trip|frmX.ctlY|empty-case.expected.txt
 empty.answer.txt|no-such-question|X|empty-unknown.expected.txt
 round-trip-operat-name.answer.txt|round-trip|frmBlueprint4.dxDBGrid1OperationVName|round-trip-operat-name.expected.txt
+header-who-writes.answer.txt|who-writes|Blueprint4.TfrmBlueprint4.FNoRecursion|header-who-writes.expected.txt

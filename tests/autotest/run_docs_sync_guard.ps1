@@ -1119,7 +1119,6 @@ $FlagUndocumentedOnPurpose = [ordered]@{
   '--selftest-schema' = '(c) pre-dispatch self-test, same'
   '--use-ignore'      = '(b) no-op alias of the DEFAULT; --no-use-ignore is the documented switch'
   '--dir'             = '(b) alias of the positional <path> every verb documents'
-  '--target'          = '(b) alias of the positional <target> on compile-check/ghost-check/check-unit'
   '--out'             = '(b) alias of --output, silent by owner ruling 2026-09-22 (docs\INBOX-output-flag-canonicalisation.md)'
 }
 # The ONE exempt flag a prose doc may name, and the doc that may name it. The

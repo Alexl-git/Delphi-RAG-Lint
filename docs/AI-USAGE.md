@@ -28,6 +28,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 | Question | Command |
 |---|---|
 | What is in this unit? | `drag-lint outline --file <U.pas> --db <db>` |
+| Is this report still true? | `drag-lint compare --in <U.pas> --line <L>` |
 | Which unit declares `X`? | `drag-lint find-unit --name X --in <U.pas> --db <db>` |
 | Where is `X`, what is its signature? | `drag-lint query --name X --db <db>` |
 | Who calls `X`? | `drag-lint query find-callers --name X --db <db>` |
@@ -365,6 +366,7 @@ pure-diagnostic verbs are broken out in 2b.
 | `find-unit --name X --in F` | add the declaring unit to F's `uses` clause |
 | `usages --name X` | every read/write/use of X (`--width narrow\|wide\|very-wide`) |
 | `outline --file F.pas` | all symbols declared in one file. Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`). A forward stub row is tagged `[forward -> line N]` (`forward_target_line` in JSON); both rows are listed. |
+| `compare --old R --command "<id> -Target T -Project P"` / `--in U.pas --line L [--update-doc]` | is this report still true? Reruns the report's COMMAND (`charts\src\Ask-Report.ps1 -Plain`) against the current index and diffs the normalised text (forms CSV by row, chart by nodes and edges). Exit 0 same, 1 differs, 2 usage/setup, 3 stale index (the new run never accepts a stale index). `--new F` (two saved outputs, no rerun) / `--question ID --target T` / `--old-db` / `--auto` / `--save` / `--snapshot-dir D` / `--show` / `--format text\|json\|html` / `--open`; `--format json` is schema `compare/1`. Page: [compare](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) |
 | `surface --qname U.T` | class surface / member signatures (`--include-impl`, `--all-visibility`) |
 | `slice --qname U.T.M` | one symbol's source body |
 | `typeat F:L:C` | resolve the identifier at a cursor position |
@@ -752,6 +754,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `callgraph` | [callgraph](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/callgraph) | Prints an N-deep resolved call tree for a symbol, in either direction | index |
 | `check-ast` | [Run AST Checks](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Run-AST-Checks) | Runs drag-lint's AST-level checks against a file |  |
 | `check-unit` | [Add Missing Units to uses (whole unit)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Add-Missing-Units-to-uses-whole-unit) | The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them |  |
+| `compare` | [Compare a report with current code](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) | Reruns a saved or pasted report and shows before / delta / after | index, powershell7 |
 | `compile-check` | [compile-check](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compile-check) | Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result |  |
 | `context` | [context](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/context) | Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers |  |
 | `contrast-selftest` | [contrast-selftest](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Self-test for the hover contrast computation, driven by a test runner |  |

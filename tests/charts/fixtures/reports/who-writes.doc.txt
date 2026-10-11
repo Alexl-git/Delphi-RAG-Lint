@@ -1,0 +1,17 @@
+/// <remarks>
+/// Who writes this field (drag-lint report who-writes) for Blueprint4.TfrmBlueprint4.FNoRecursion,
+///   asked on 2026-10-10 14:32, engine 1.27.0.
+/// COMMAND who-writes -Target "Blueprint4.TfrmBlueprint4.FNoRecursion" -Project "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" -Depth 3
+///
+/// Totals: 26 write sites / 26 routines.
+/// Selected: Blueprint4.TfrmBlueprint4.FNoRecursion (Blueprint4.pas:681)
+/// TfrmBlueprint4.FormShow (Blueprint4.pas:2290)
+/// TfrmBlueprint4.Grid->Post (Blueprint4.pas:3001) -- a note with &lt;angle> &amp; ampersand,
+///   drag-lint auto marker
+///   deeper row (X.pas:1), (Y.inc); trailing nbsp...
+/// ... +6 more routines (+6 more sites) not shown (-Cap 20; raise -Cap to see them)
+///
+/// a tab, an emoji ?? and an unknown ? char,
+///   Aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+///   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa end
+/// </remarks>

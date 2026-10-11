@@ -223,8 +223,10 @@ Check 'PC POSITIVE CONTROL: the same fixture without : StripDB converts and keep
 $bad = Join-Path $WorkDir 'bad.castlib'
 W $WorkDir 'bad.castlib' "cast StripZip`n  value strip-zip`nend`n"
 $b = Run $ctl @('--format', 'json') $bad
-Check 'L1 a castlib with an unknown value keyword fails the run, naming the line and the keyword' `
-  (($b.Code -ne 0) -and ($b.Out -match 'bad\.castlib') -and ($b.Out -match 'line 2') -and ($b.Out -match 'strip-zip')) $b.Out
+# 1.28.0 (owner 2026-10-11): exit 6, a configuration error of its own -- 2 is a
+# write failure / rollback on convert-apply and must not be read as one.
+Check 'L1 a castlib with an unknown value keyword fails the run with exit 6, naming the line and the keyword' `
+  (($b.Code -eq 6) -and ($b.Out -match 'bad\.castlib') -and ($b.Out -match 'line 2') -and ($b.Out -match 'strip-zip')) $b.Out
 
 # ---- 1.27.0 review fix wave: the .pas literal is rewritten ONLY when it is the
 # whole value -- the literal, then on the SAME line optional blanks/comments and

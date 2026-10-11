@@ -65,6 +65,8 @@ if ($buildOut -notmatch 'BUILD_EXITCODE=0') {
 $exe = Join-Path $WorkDir ([System.IO.Path]::GetFileNameWithoutExtension($DprName) + '.exe')
 if (-not (Test-Path $exe)) { Write-Host "FATAL: exe not produced: $exe" -ForegroundColor Red; exit 2 }
 
+# the formatter cases read charts\fixtures\docinsight (the PowerShell port's cross-check pairs)
+$env:DRAGLINT_REPO_ROOT = (Resolve-Path "$PSScriptRoot\..\..").Path
 $out = & $exe 2>&1 | Out-String
 $rc  = $LASTEXITCODE
 Write-Host $out.TrimEnd()

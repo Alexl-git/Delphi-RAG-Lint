@@ -1,0 +1,30 @@
+{
+  "id": "compare",
+  "title": "Compare a report with current code",
+  "group": "diagrams-charts",
+  "owner": "CHARTS",
+  "status": "shipped",
+  "since": "1.28.0-alpha",
+  "summary": "Reruns a saved or pasted report and shows before / delta / after",
+  "intro": "Read this when a DocInsight report, a tester sheet or a chart may have gone stale: compare reruns its COMMAND against the current index and diffs the normalised text, a forms CSV by row, or a chart by nodes and edges.",
+  "wikiPage": "compare",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "compare",
+      "example": "drag-lint compare --in U.pas --line 120"
+    },
+    {
+      "type": "script",
+      "path": "charts\\src\\Ask-Report.ps1",
+      "args": "-Plain prints the report header"
+    }
+  ],
+  "audience": "both",
+  "requires": ["index", "powershell7"],
+  "lastVerified": {
+    "date": "2026-10-11",
+    "by": "alexanderl",
+    "build": "1.26.7-alpha"
+  }
+}
