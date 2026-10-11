@@ -45,6 +45,8 @@ uses
   , ChartsTests.CoreText in 'ChartsTests.CoreText.pas'
   , DRagLint.Charts.Index in '..\..\src\charts\DRagLint.Charts.Index.pas'
   , ChartsTests.CoreIndex in 'ChartsTests.CoreIndex.pas'
+  , DRagLint.Charts.Source in '..\..\src\charts\DRagLint.Charts.Source.pas'
+  , ChartsTests.CoreSource in 'ChartsTests.CoreSource.pas'
   ;
 
 const

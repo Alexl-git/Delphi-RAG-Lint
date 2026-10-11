@@ -208,6 +208,7 @@ uses
   DRagLint.Charts.Render in '..\charts\DRagLint.Charts.Render.pas',
   DRagLint.Charts.Text in '..\charts\DRagLint.Charts.Text.pas',
   DRagLint.Charts.Index in '..\charts\DRagLint.Charts.Index.pas',
+  DRagLint.Charts.Source in '..\charts\DRagLint.Charts.Source.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin
