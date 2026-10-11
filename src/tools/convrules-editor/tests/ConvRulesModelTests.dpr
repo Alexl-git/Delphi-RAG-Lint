@@ -2390,7 +2390,8 @@ begin
   Check('reindex.outcome.cancelled', (Text = 'Reindex of P.dproj (P.sqlite) cancelled after 0:03 -- the index may be partly refreshed; run it again.') and not IsErr, Text);
   Text:= ReindexOutcomeText(ENGINE_OUTCOME_TIMEOUT, '', PROJ, DB, MS_3S, IsErr);
   Check('reindex.outcome.timeout', (Text = 'Reindex of P.dproj (P.sqlite) failed: the engine did not finish in time (0:03).') and IsErr, Text);
-  Check('reindex.menu.hint.names.db', ReindexMenuHint(DB) = 'Refresh the project index C:\p\_D-RAG\P.sqlite (incremental index --project) -- after IDE edits, or between conversion stages', ReindexMenuHint(DB));end; // procedure
+  Check('reindex.menu.hint.names.db', ReindexMenuHint(DB) = 'Refresh the project index C:\p\_D-RAG\P.sqlite (incremental index --project) -- after IDE edits, or between conversion stages', ReindexMenuHint(DB));
+end; // procedure
 
 { The real engine on a 3-file fixture (one TLabel, a one-#convert book) -- the
   shape measured converting on 2026-09-29 (dry run 106 s; the bad book 93 s).
