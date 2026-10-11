@@ -328,6 +328,66 @@ function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported, ARetypeS
 /// not run: the prompt counts as busy. A run outranks a check.</remarks>
 function SourcesAddRefusal(ARunning, AChecking: Boolean): string;
 
+/// <summary>PURE: why the project index has no project file to reindex with -- the ONE
+/// text Convert and Conversion &gt; Reindex project refuse with.</summary>
+/// <param name="AProjectDb">The project index.</param>
+/// <param name="AProjectFile">ProjectFileForDb of it; '' when the DB is not in a _D-RAG
+/// folder.</param>
+/// <returns>'the project index &lt;db&gt; has no project file on disk -- expected
+/// &lt;file&gt;' (a description of the expected place when AProjectFile is ''); no
+/// leading verb, no final full stop.</returns>
+function NoProjectFileText(const AProjectDb, AProjectFile: string): string;
+
+/// <summary>PURE: elapsed time for the progress line.</summary>
+/// <param name="AMs">Milliseconds; a negative value reads as 0.</param>
+/// <returns>'m:ss' below an hour ('0:42', '3:10'), 'h:mm:ss' from an hour on
+/// ('1:02:03'); seconds are truncated.</returns>
+function FormatElapsed(AMs: Int64): string;
+
+/// <summary>PURE: reads the counts out of the direct `index --project X --db Y` run (C17).</summary>
+/// <param name="AOutput">The engine's output.</param>
+/// <param name="AFiles">N of 'Done. Files: N, ...' -- rows in the index; -1 when absent.</param>
+/// <param name="AClosure">N of 'Compile closure: N file(s):' -- the project's closure list;
+/// -1 when absent.</param>
+/// <returns>True when AFiles was found.</returns>
+/// <remarks>Deliberately NOT the `index --all` section line: its walked= is the run's
+/// admitted walk, a different number, and files &gt; walked there means REBUILD -- the
+/// closure count must never be shown under that name.</remarks>
+function ParseIndexSummary(const AOutput: string; out AFiles, AClosure: Integer): Boolean;
+
+/// <summary>PURE: the decision behind Conversion &gt; Reindex project (C17).</summary>
+/// <param name="ARunning">A Convert run is in progress.</param>
+/// <param name="AProjectDb">The editor's project index.</param>
+/// <param name="AProjectFile">ProjectFileForDb of it ('' = none derivable).</param>
+/// <param name="AProjectFileExists">AProjectFile exists on disk.</param>
+/// <returns>'' = go; else the status-line refusal: 'Reindex refused: a conversion is
+/// running -- reindex after it finishes.', or 'Reindex refused: ' + NoProjectFileText +
+/// '.'.</returns>
+function ReindexRefusal(ARunning: Boolean; const AProjectDb, AProjectFile: string; AProjectFileExists: Boolean): string;
+
+/// <summary>PURE: the Reindex project menu hint, naming the index it refreshes.</summary>
+/// <param name="AProjectDb">The editor's project index.</param>
+/// <returns>'Refresh the project index &lt;db&gt; (incremental index --project) -- after IDE
+/// edits, or between conversion stages'.</returns>
+function ReindexMenuHint(const AProjectDb: string): string;
+
+/// <summary>PURE: the status line after a Reindex project call (C17).</summary>
+/// <param name="ACode">The call's result: the engine's exit code, ENGINE_OUTCOME_CANCELLED
+/// or ENGINE_OUTCOME_TIMEOUT.</param>
+/// <param name="AOutput">The engine's output.</param>
+/// <param name="AProjectFile">The project file reindexed.</param>
+/// <param name="AProjectDb">The index refreshed.</param>
+/// <param name="AElapsedMs">Wall time of the call.</param>
+/// <param name="AIsError">True for a failure or a timeout (SetError, red).</param>
+/// <returns>&lt;P&gt; below is '&lt;project file name&gt; (&lt;db file name&gt;)'. 0: 'Reindexed
+/// &lt;P&gt;: N file(s) in the index, compile closure M (m:ss)' (', compile closure M' left out
+/// when unknown; '... (m:ss); the engine printed no summary line.' when neither).
+/// Cancelled: 'Reindex of &lt;P&gt; cancelled after m:ss -- the index may be partly refreshed;
+/// run it again.' Timeout: 'Reindex of &lt;P&gt; failed: the engine did not finish in time
+/// (m:ss).' Any other code: 'Reindex of &lt;P&gt; failed (exit N): ' + the output's first
+/// 200 characters, line breaks as spaces.</returns>
+function ReindexOutcomeText(ACode: Integer; const AOutput, AProjectFile, AProjectDb: string; AElapsedMs: Int64; out AIsError: Boolean): string;
+
 implementation
 
 uses
@@ -339,6 +399,7 @@ uses
   , System.StrUtils
   , ConvRules.Model
   , ConvRules.UsesHarvest
+  , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- ENGINE_OUTCOME_CANCELLED / _TIMEOUT are the long-call runner's outcome contract ReindexOutcomeText reads, so they travel with the runner
   ;
 
 const
@@ -1069,6 +1130,104 @@ begin
     Result:= SOURCES_REFUSED_CHECKING
   else
     Result:= '';
+end;
+
+const
+  // The project index without its project file: Convert and Reindex project refuse, the
+  // tab's stale retry skips its reindex.
+  NO_PROJECT_FILE_FMT   = 'the project index %s has no project file on disk -- expected %s';
+  NO_PROJECT_FILE_GUESS = '<Project>.dproj beside its _D-RAG folder (the DB is not in one)';
+  REINDEX_REFUSED_RUNNING = 'Reindex refused: a conversion is running -- reindex after it finishes.';
+  // The direct index --project --db run's two lines. NOT index --all's section line: its
+  // files= / walked= are a different population (walked= is not the closure count).
+  DIRECT_DONE_RE    = '^\s*Done\. Files: (\d+),';
+  DIRECT_CLOSURE_RE = '^Compile closure: (\d+) file\(s\):';
+  REINDEX_HEAD_CHARS = 200;
+  REINDEX_HINT_FMT   = 'Refresh the project index %s (incremental index --project) -- after IDE edits, or between conversion stages';
+  ENGINE_EXIT_OK     = 0;
+
+function FormatElapsed(AMs: Int64): string;
+const
+  MS_PER_S  = 1000;
+  S_PER_MIN = 60;
+  S_PER_H   = 3600;
+var
+  LSec: Int64;
+begin
+  LSec:= if AMs > 0 then AMs div MS_PER_S else 0;
+  if LSec >= S_PER_H then
+    Result:= Format('%d:%.2d:%.2d', [LSec div S_PER_H, (LSec mod S_PER_H) div S_PER_MIN, LSec mod S_PER_MIN])
+  else
+    Result:= Format('%d:%.2d', [LSec div S_PER_MIN, LSec mod S_PER_MIN]);
+end;
+
+function NoProjectFileText(const AProjectDb, AProjectFile: string): string;
+begin
+  Result:= Format(NO_PROJECT_FILE_FMT, [AProjectDb, if AProjectFile = '' then NO_PROJECT_FILE_GUESS else AProjectFile]);
+end;
+
+function ParseIndexSummary(const AOutput: string; out AFiles, AClosure: Integer): Boolean;
+var
+  LMatch: TMatch;
+begin
+  AFiles  := -1;
+  AClosure:= -1;
+  LMatch:= TRegEx.Match(AOutput, DIRECT_DONE_RE, [roMultiLine]);
+  if not LMatch.Success then
+    Exit(False);
+  AFiles:= StrToInt(LMatch.Groups[1].Value);
+  LMatch:= TRegEx.Match(AOutput, DIRECT_CLOSURE_RE, [roMultiLine]);
+  if LMatch.Success then
+    AClosure:= StrToInt(LMatch.Groups[1].Value);
+  Result:= True;
+end;
+
+function ReindexRefusal(ARunning: Boolean; const AProjectDb, AProjectFile: string; AProjectFileExists: Boolean): string;
+begin
+  if ARunning then
+    Result:= REINDEX_REFUSED_RUNNING
+  else if (AProjectFile = '') or not AProjectFileExists then
+    Result:= 'Reindex refused: ' + NoProjectFileText(AProjectDb, AProjectFile) + '.'
+  else
+    Result:= '';
+end;
+
+function ReindexMenuHint(const AProjectDb: string): string;
+begin
+  Result:= Format(REINDEX_HINT_FMT, [AProjectDb]);
+end;
+
+function ReindexOutcomeText(ACode: Integer; const AOutput, AProjectFile, AProjectDb: string; AElapsedMs: Int64; out AIsError: Boolean): string;
+var
+  LName   : string;
+  LFiles  : Integer;
+  LClosure: Integer;
+begin
+  // The DB is named on every outcome: the editor's default index may not be the one meant.
+  LName   := Format('%s (%s)', [ExtractFileName(AProjectFile), ExtractFileName(AProjectDb)]);
+  AIsError:= False;
+  case ACode of
+    ENGINE_EXIT_OK:
+      if not ParseIndexSummary(AOutput, LFiles, LClosure) then
+        Result:= Format('Reindexed %s (%s); the engine printed no summary line.', [LName, FormatElapsed(AElapsedMs)])
+      else if LClosure < 0 then
+        Result:= Format('Reindexed %s: %d file(s) in the index (%s)', [LName, LFiles, FormatElapsed(AElapsedMs)])
+      else
+        Result:= Format('Reindexed %s: %d file(s) in the index, compile closure %d (%s)', [LName, LFiles, LClosure, FormatElapsed(AElapsedMs)]);
+    ENGINE_OUTCOME_CANCELLED:
+      Result:= Format('Reindex of %s cancelled after %s -- the index may be partly refreshed; run it again.', [LName, FormatElapsed(AElapsedMs)]);
+    ENGINE_OUTCOME_TIMEOUT:
+    begin
+      AIsError:= True;
+      Result  := Format('Reindex of %s failed: the engine did not finish in time (%s).', [LName, FormatElapsed(AElapsedMs)]);
+    end;
+    else
+    begin
+      AIsError:= True;
+      Result  := Format('Reindex of %s failed (exit %d): %s', [LName, ACode,
+        Copy(Trim(StringReplace(StringReplace(AOutput, #13#10, ' ', [rfReplaceAll]), #10, ' ', [rfReplaceAll])), 1, REINDEX_HEAD_CHARS)]);
+    end;
+  end; // case
 end;
 
 end.

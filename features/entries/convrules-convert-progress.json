@@ -1,0 +1,25 @@
+{
+  "id": "convrules-convert-progress",
+  "title": "Convert progress",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.26.7-alpha",
+  "summary": "ConvRulesEditor Convert tab: per-step progress (unit, book, phase, elapsed) on the status bar and the tab",
+  "intro": "See where a long Convert run is and how long each unit takes.",
+  "wikiPage": "convrules-editor-convert-progress",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Convert tab progress line"
+    }
+  ],
+  "audience": "both",
+  "related": ["convrules-editor"],
+  "lastVerified": {
+    "date": "2026-10-11",
+    "by": "alexanderl",
+    "build": "1.26.7-alpha"
+  }
+}
