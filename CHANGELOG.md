@@ -28,6 +28,19 @@ No extractor or resolver change: indexes do not re-parse or re-resolve.
   the line break is, and it keeps the indexed text if the source no longer matches.
   Read-time only: the stored signature is unchanged. Pinned by
   run_doc_drift_split_signature_comments.ps1.
+- **"Called from:" no longer claims a call on a receiver of an unrelated, known type**
+  (converter-filed wrong edge). `FUnitList.ClearSelection` (FUnitList: TListView) is
+  correctly left unresolved by the resolver, but the doc-facts builder's unverified
+  by-name bucket attributed it to the project's `TWorkingSet.ClearSelection`, and
+  `doc-drift --fix` / `document --apply` wrote it into that unit's managed block. The
+  builder now looks up the receiver's declaration (local, param, field -- inherited
+  included -- or unit var) and drops the edge when its declared type is neither the
+  method's class nor a descendant: a project class shown unrelated, or a type this index
+  does not declare at all (a library type cannot descend from a project class). Interfaces,
+  generic parameters, aliases and undeclared or dotted receivers are kept as before.
+  `document` reports each refused edge on stderr (`drag-lint: note: skipped caller edge
+  ...`); `TDocFacts.SkippedCallers` carries them. Read-time only: no resolver change, no
+  re-resolve. Pinned by run_doc_callers_foreign_receiver.ps1.
 
 ## v1.26.7-alpha -- unreleased
 

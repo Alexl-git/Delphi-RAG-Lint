@@ -1004,6 +1004,10 @@ begin
                                   {AIncludeCalleeRaises=}True,
                                   TSharedFacts.WantsWholeInboundLists(
                                     TSharedFacts.StoredBlockBody(Existing.Remarks), AStore, Path));
+  // C14: say which unverified caller edges were refused, and why -- on stderr,
+  // so stdout (the proposed block, or --json) keeps its shape.
+  for var Skip in Facts.SkippedCallers do
+    Writeln(ErrOutput, 'drag-lint: note: skipped caller edge for ' + ASym.QualifiedName + ': ' + Skip);
 
   // Has a return value? The indexed Signature holds only '(params): RetType'
   // (no leading 'function' keyword), so SignatureHasReturn misses it, and class
