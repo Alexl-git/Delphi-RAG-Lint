@@ -177,6 +177,7 @@ uses
   DRagLint.Convert.Apply in '..\report\DRagLint.Convert.Apply.pas',
   DRagLint.Convert.Backup in '..\report\DRagLint.Convert.Backup.pas',
   DRagLint.Convert.UnitRules in '..\report\DRagLint.Convert.UnitRules.pas',
+  DRagLint.Convert.UsesReconcile in '..\report\DRagLint.Convert.UsesReconcile.pas',
   DRagLint.Convert.DfmReemit in '..\report\DRagLint.Convert.DfmReemit.pas',
   DRagLint.Convert.PropTree in '..\report\DRagLint.Convert.PropTree.pas',
   DRagLint.Convert.PropCache in '..\report\DRagLint.Convert.PropCache.pas',

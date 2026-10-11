@@ -63,7 +63,23 @@ type
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TTextEditApplier = class
+  private
+    class procedure ApplyOneEdit(ALines: TStringList; const AEdit: TTextEdit; var AApplied, ASkippedEdits: Integer);
+    class function ApplyGroup(const AFilePath, AContent: string; AGroup: TList<TTextEdit>;
+      AQuiet: Boolean; var ASkippedEdits: Integer; out AApplied: Integer): string;
   public
+    /// <summary>The text Apply would write for one file, computed in memory
+    /// (1.27.0, C9): the same sort, stale-anchor and overlap checks and the
+    /// same CRLF re-serialisation, without touching the disk.</summary>
+    /// <param name="AFilePath">The file the edits target; only edits whose
+    /// FilePath equals it (case-insensitively) are applied.</param>
+    /// <param name="AContent">The file's current text.</param>
+    /// <param name="AEdits">The edit set; edits for other files are ignored.</param>
+    /// <returns>The edited text, or AContent unchanged when no edit applies
+    /// (Apply would then leave the file alone).</returns>
+    /// <remarks>Pure. convert-apply re-indexes this text to reconcile the
+    /// converted unit's uses clauses before anything is written.</remarks>
+    class function ApplyToText(const AFilePath, AContent: string; const AEdits: TArray<TTextEdit>): string;
     /// <summary>Applies edits per file, back-to-front by line, preserving ANSI
     /// + CRLF + (optional) .bak backup. Returns files touched.</summary>
     /// <param name="AEdits"><!-- drag-lint:auto type -->const TArray&lt;TTextEdit&gt;</param>
@@ -85,10 +101,12 @@ type
     /// <para>Called from: DRagLint.CLI.DoConvertApply.PerformApplyWrites (DRagLint.CLI.pas), DRagLint.CLI.DoCreateEnumHelper (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentStripQName (DRagLint.CLI.pas), DRagLint.CLI.DoDocumentUnit (DRagLint.CLI.pas), DRagLint.CLI.DoExtractMethod (DRagLint.CLI.pas) (+3 more)</para>
     /// <para>Calls: DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/3</para>
     /// <para>Overload 1 of 2</para>
-    /// <para>Pure</para>
     /// <para>Directives: overload</para>
     /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.Apply"/>
-    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RenderDryRun"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyGroup"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyOneEdit"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.ApplyToText"/>
+    /// <seealso cref="DRagLint.Refactor.TextEdit.TTextEditApplier.RefusalOf"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean): Integer; overload;
@@ -425,6 +443,206 @@ begin
   Result:= Apply(AEdits, AWriteBackups, Skipped);
 end;
 
+{ One kept edit applied to ALines (the per-kind half of ApplyGroup). }
+class procedure TTextEditApplier.ApplyOneEdit(ALines: TStringList; const AEdit: TTextEdit; var AApplied, ASkippedEdits: Integer);
+begin
+  case AEdit.Kind of
+    tekDeleteLines:
+      begin
+        var LHi: Integer:= AEdit.EndLine;
+        var LLo: Integer:= AEdit.Line;
+        if LLo < 1 then LLo:= 1;
+        if LHi > ALines.Count then LHi:= ALines.Count;
+        for var L: Integer:= LHi downto LLo do
+          if (L >= 1) and (L <= ALines.Count) then
+          begin
+            ALines.Delete(L - 1);
+            Inc(AApplied);
+          end;
+      end;
+    tekInsertLines:
+      begin
+        var Idx: Integer:= AEdit.Line; { insert AFTER 1-based Line => 0-based index Line }
+        if Idx < 0 then Idx:= 0;
+        if Idx > ALines.Count then Idx:= ALines.Count;
+        { split Text on CRLF/LF so multi-line inserts keep separate lines }
+        var Parts: TArray<string>:= AEdit.Text.Replace(#13#10, #10).Split([#10]);
+        for var PIdx: Integer:= High(Parts) downto 0 do
+          ALines.Insert(Idx, Parts[PIdx]);
+        Inc(AApplied);
+      end;
+    tekInsertInLine:
+      begin
+        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then
+        begin
+          var S: string:= ALines[AEdit.Line - 1];
+          var C: Integer:= AEdit.Col;
+          if C < 1 then C:= 1;
+          if C > Length(S) + 1 then C:= Length(S) + 1;
+          ALines[AEdit.Line - 1]:= Copy(S, 1, C - 1) + AEdit.Text + Copy(S, C, MaxInt);
+          Inc(AApplied);
+        end
+        else
+          Inc(ASkippedEdits);   { line does not exist: silently dropped before }
+      end;
+    tekReplaceInLine:
+      begin
+        if (AEdit.Line >= 1) and (AEdit.Line <= ALines.Count) then
+        begin
+          var S: string:= ALines[AEdit.Line - 1];
+          if not ReplaceEditIsValid(AEdit, S) then
+            Inc(ASkippedEdits)
+          else
+          begin
+            var C: Integer:= AEdit.Col;
+            if C < 1 then C:= 1;
+            var EC: Integer:= AEdit.EndCol;
+            if EC < C then EC:= C;
+            if EC > Length(S) + 1 then EC:= Length(S) + 1;
+            ALines[AEdit.Line - 1]:= Copy(S, 1, C - 1) + AEdit.Text + Copy(S, EC, MaxInt);
+            Inc(AApplied);
+          end;
+        end
+        else
+          Inc(ASkippedEdits);   { line does not exist: out of range, never written }
+      end;
+  end;
+end;
+
+{ 1.27.0 (C9): ONE file's edits applied to its text -- the shared core of Apply
+  and ApplyToText, so the in-memory preview convert-apply re-indexes is, by
+  construction, the text Apply writes. AApplied is the number of edits that
+  changed the lines (0 = Apply leaves the file alone). AQuiet suppresses the
+  overlapping-delete note on stderr (a preview is not a refusal). }
+class function TTextEditApplier.ApplyGroup(const AFilePath, AContent: string; AGroup: TList<TTextEdit>;
+  AQuiet: Boolean; var ASkippedEdits: Integer; out AApplied: Integer): string;
+var
+  Group  : TList<TTextEdit>;
+  E      : TTextEdit;
+  Content: string;
+  Lines  : TStringList;
+  Cmp    : IComparer<TTextEdit>;
+  Kept   : TList<TTextEdit>;
+  AppliedInFile: Integer;
+begin
+  Group  := AGroup;
+  Content:= AContent;
+  Result := AContent;
+  AppliedInFile:= 0;
+  AApplied:= 0;
+  { back-to-front: largest top-line first so indices stay valid }
+  Cmp:= TComparer<TTextEdit>.Construct(
+    function(const A, B: TTextEdit): Integer
+    begin
+      Result:= EditTopLine(B) - EditTopLine(A);
+      { 1.25.2: an `insert after L` and a delete ENDING at L share the key L
+        -- two ADJACENT re-emitted blocks: the second's insert after the
+        first's last line. The insert must go first: run after the delete,
+        its index L lands as many lines too low as were deleted, inside a
+        later block (DMREADINGS: tables spliced into their neighbours, a
+        .dfm Delphi refused). TList.Sort is not stable, so the order is
+        stated, never left to the sort. }
+      if Result = 0 then Result:= Ord(A.Kind <> tekInsertLines) - Ord(B.Kind <> tekInsertLines);
+      { same line: larger column first (back-to-front) }
+      if Result = 0 then Result:= B.Col - A.Col;
+    end);
+  { 1.25.2: STABLE. Edits the comparer ties (two inserts at one line and
+    column) are applied in REVERSE planned order, so they land in the file
+    in planned order: each later insert at the same index goes above the
+    earlier one. TList.Sort alone left it to the sort. }
+  var Planned: TArray<TTextEdit>:= Group.ToArray;
+  var Order: TList<Integer>:= TList<Integer>.Create;
+  try
+    for var K: Integer:= 0 to High(Planned) do Order.Add(K);
+    Order.Sort(TComparer<Integer>.Construct(
+      function(const IA, IB: Integer): Integer
+      begin
+        Result:= Cmp.Compare(Planned[IA], Planned[IB]);
+        if Result = 0 then Result:= IB - IA;
+      end));
+    Group.Clear;
+    for var K: Integer in Order do Group.Add(Planned[K]);
+  finally
+    Order.Free;
+  end;
+
+  Lines:= TStringList.Create;
+  try
+    Lines.Text:= Content;
+
+    { v(PHASE A2): STALE-ANCHOR PRE-PASS, over the file AS FOUND.
+
+      It runs BEFORE any edit is applied, and that is not a stylistic
+      choice. Edits are applied back-to-front, and the doc repair path emits
+      a DELETE of the old comment span plus an INSERT of the merged one --
+      the delete is processed first, which shifts every line below it. An
+      anchor checked mid-loop would therefore be read at the wrong offset
+      for the insert, and the pair could half-apply: the existing comment
+      deleted, its replacement dropped. Validating everything against the
+      unmutated snapshot makes a pair fail or survive TOGETHER, since both
+      carry the same anchor.
+
+      Only ExpectLine-bearing edits are affected; every historic caller
+      leaves it 0 and reaches the loop below exactly as before. }
+    Kept:= TList<TTextEdit>.Create;
+    try
+      for E in Group do
+        if AnchorIsValid(E, Lines) then Kept.Add(E)
+        else Inc(ASkippedEdits);
+
+      { 2026-09-29: an engine that plans overlapping deletes has a defect,
+        and applying its plan destroys lines it never meant to touch. Refuse
+        the file's edits WHOLE -- a partial application is how a repair
+        becomes a loss -- and say so, since the file is left as found. }
+      if DeletesOverlap(Kept) then
+      begin
+        if not AQuiet then Writeln(ErrOutput, Format('drag-lint: refused %d edit(s) to %s -- overlapping delete ranges ' +
+          '(an engine defect; the file is left unchanged)', [Kept.Count, AFilePath]));
+        Inc(ASkippedEdits, Kept.Count);
+        Kept.Clear;
+      end;
+
+    for E in Kept do ApplyOneEdit(Lines, E, AppliedInFile, ASkippedEdits);
+    finally
+      Kept.Free;
+    end;
+    AApplied:= AppliedInFile;
+    if AppliedInFile = 0 then Exit;
+    { re-encode CRLF, preserve a trailing newline if the original had one }
+    var SB: TStringBuilder:= TStringBuilder.Create;
+    try
+      for var I: Integer:= 0 to Lines.Count - 1 do
+      begin
+        SB.Append(Lines[I]);
+        if I < Lines.Count - 1 then SB.Append(#13#10);
+      end;
+      if (Content <> '') and (Content[Length(Content)] = #10) then SB.Append(#13#10);
+      Result:= SB.ToString;
+    finally
+      SB.Free;
+    end;
+  finally
+    Lines.Free;
+  end;
+end;
+
+class function TTextEditApplier.ApplyToText(const AFilePath, AContent: string; const AEdits: TArray<TTextEdit>): string;
+var
+  Group  : TList<TTextEdit>;
+  Skipped: Integer;
+  Applied: Integer;
+begin
+  Group:= TList<TTextEdit>.Create;
+  try
+    for var E: TTextEdit in AEdits do
+      if SameText(E.FilePath, AFilePath) then Group.Add(E);
+    Skipped:= 0;
+    Result := ApplyGroup(AFilePath, AContent, Group, True, Skipped, Applied);
+  finally
+    Group.Free;
+  end;
+end;
+
 class function TTextEditApplier.Apply(const AEdits: TArray<TTextEdit>; AWriteBackups: Boolean;
   out ASkippedEdits: Integer): Integer;
 var
@@ -433,11 +651,8 @@ var
   Group   : TList<TTextEdit>;
   Pair    : TPair<string, TList<TTextEdit>>;
   RawBytes: TBytes;
-  Content : string;
-  Lines   : TStringList;
+  NewText : string;
   Touched : Integer;
-  Cmp     : IComparer<TTextEdit>;
-  Kept    : TList<TTextEdit>;   { v(PHASE A2): the edits that survived the stale-anchor pre-pass }
   AppliedInFile: Integer;
 begin
   Touched:= 0;
@@ -455,171 +670,20 @@ begin
     begin
       if not TFile.Exists(Pair.Key) then Continue;
       RawBytes:= TFile.ReadAllBytes(Pair.Key);
-      Content := TEncoding.ANSI.GetString(RawBytes);
-      { The .bak used to be written HERE, before a single edit had been
-        evaluated -- so a file whose every edit the guard rejected still got a
-        backup, was still rewritten, and still counted as touched. RawBytes holds
-        the original, so the backup can wait until we know something changed. }
-
-      Group:= Pair.Value;
-      AppliedInFile:= 0;
-      { back-to-front: largest top-line first so indices stay valid }
-      Cmp:= TComparer<TTextEdit>.Construct(
-        function(const A, B: TTextEdit): Integer
-        begin
-          Result:= EditTopLine(B) - EditTopLine(A);
-          { 1.25.2: an `insert after L` and a delete ENDING at L share the key L
-            -- two ADJACENT re-emitted blocks: the second's insert after the
-            first's last line. The insert must go first: run after the delete,
-            its index L lands as many lines too low as were deleted, inside a
-            later block (DMREADINGS: tables spliced into their neighbours, a
-            .dfm Delphi refused). TList.Sort is not stable, so the order is
-            stated, never left to the sort. }
-          if Result = 0 then Result:= Ord(A.Kind <> tekInsertLines) - Ord(B.Kind <> tekInsertLines);
-          if Result = 0 then Result:= B.Col - A.Col; // same line: larger column first (back-to-front)
-        end);
-      { 1.25.2: STABLE. Edits the comparer ties (two inserts at one line and
-        column) are applied in REVERSE planned order, so they land in the file
-        in planned order: each later insert at the same index goes above the
-        earlier one. TList.Sort alone left it to the sort. }
-      var Planned: TArray<TTextEdit>:= Group.ToArray;
-      var Order: TList<Integer>:= TList<Integer>.Create;
-      try
-        for var K: Integer:= 0 to High(Planned) do Order.Add(K);
-        Order.Sort(TComparer<Integer>.Construct(
-          function(const IA, IB: Integer): Integer
-          begin
-            Result:= Cmp.Compare(Planned[IA], Planned[IB]);
-            if Result = 0 then Result:= IB - IA;
-          end));
-        Group.Clear;
-        for var K: Integer in Order do Group.Add(Planned[K]);
-      finally
-        Order.Free;
-      end;
-
-      Lines:= TStringList.Create;
-      try
-        Lines.Text:= Content;
-
-        { v(PHASE A2): STALE-ANCHOR PRE-PASS, over the file AS FOUND.
-
-          It runs BEFORE any edit is applied, and that is not a stylistic
-          choice. Edits are applied back-to-front, and the doc repair path emits
-          a DELETE of the old comment span plus an INSERT of the merged one --
-          the delete is processed first, which shifts every line below it. An
-          anchor checked mid-loop would therefore be read at the wrong offset
-          for the insert, and the pair could half-apply: the existing comment
-          deleted, its replacement dropped. Validating everything against the
-          unmutated snapshot makes a pair fail or survive TOGETHER, since both
-          carry the same anchor.
-
-          Only ExpectLine-bearing edits are affected; every historic caller
-          leaves it 0 and reaches the loop below exactly as before. }
-        Kept:= TList<TTextEdit>.Create;
-        try
-          for E in Group do
-            if AnchorIsValid(E, Lines) then Kept.Add(E)
-            else Inc(ASkippedEdits);
-
-          { 2026-09-29: an engine that plans overlapping deletes has a defect,
-            and applying its plan destroys lines it never meant to touch. Refuse
-            the file's edits WHOLE -- a partial application is how a repair
-            becomes a loss -- and say so, since the file is left as found. }
-          if DeletesOverlap(Kept) then
-          begin
-            Writeln(ErrOutput, Format('drag-lint: refused %d edit(s) to %s -- overlapping delete ranges ' +
-              '(an engine defect; the file is left unchanged)', [Kept.Count, Pair.Key]));
-            Inc(ASkippedEdits, Kept.Count);
-            Kept.Clear;
-          end;
-
-        for E in Kept do
-        begin
-          case E.Kind of
-            tekDeleteLines:
-              begin
-                var LHi: Integer:= E.EndLine; var LLo: Integer:= E.Line;
-                if LLo < 1 then LLo:= 1;
-                if LHi > Lines.Count then LHi:= Lines.Count;
-                for var L: Integer:= LHi downto LLo do
-                  if (L >= 1) and (L <= Lines.Count) then begin Lines.Delete(L - 1); Inc(AppliedInFile); end;
-              end;
-            tekInsertLines:
-              begin
-                var Idx: Integer:= E.Line; { insert AFTER 1-based Line => 0-based index Line }
-                if Idx < 0 then Idx:= 0;
-                if Idx > Lines.Count then Idx:= Lines.Count;
-                { split Text on CRLF/LF so multi-line inserts keep separate lines }
-                var Parts: TArray<string>:= E.Text.Replace(#13#10, #10).Split([#10]);
-                for var PIdx: Integer:= High(Parts) downto 0 do
-                  Lines.Insert(Idx, Parts[PIdx]);
-                Inc(AppliedInFile);
-              end;
-            tekInsertInLine:
-              begin
-                if (E.Line >= 1) and (E.Line <= Lines.Count) then
-                begin
-                  var S: string:= Lines[E.Line - 1];
-                  var C: Integer:= E.Col; if C < 1 then C:= 1;
-                  if C > Length(S) + 1 then C:= Length(S) + 1;
-                  Lines[E.Line - 1]:= Copy(S, 1, C - 1) + E.Text + Copy(S, C, MaxInt);
-                  Inc(AppliedInFile);
-                end
-                else
-                  Inc(ASkippedEdits);   { line does not exist: silently dropped before }
-              end;
-            tekReplaceInLine:
-              begin
-                if (E.Line >= 1) and (E.Line <= Lines.Count) then
-                begin
-                  var S: string:= Lines[E.Line - 1];
-                  if not ReplaceEditIsValid(E, S) then
-                    Inc(ASkippedEdits)
-                  else
-                  begin
-                    var C: Integer:= E.Col;    if C < 1 then C:= 1;
-                    var EC: Integer:= E.EndCol; if EC < C then EC:= C;
-                    if EC > Length(S) + 1 then EC:= Length(S) + 1;
-                    Lines[E.Line - 1]:= Copy(S, 1, C - 1) + E.Text + Copy(S, EC, MaxInt);
-                    Inc(AppliedInFile);
-                  end;
-                end
-                else
-                  Inc(ASkippedEdits);   { line does not exist: out of range, never written }
-              end;
-          end;
-        end;
-        finally
-          Kept.Free;
-        end;
-
-        { Nothing survived validation for this file: leave it exactly as found --
-          no backup, no rewrite, not counted. The re-serialization below is NOT
-          byte-preserving (TStringList + forced CRLF), so writing here would edit
-          a file on behalf of zero applied edits. }
-        if AppliedInFile = 0 then Continue;
-
-        if AWriteBackups then TFile.WriteAllBytes(Pair.Key + '.bak', RawBytes);
-
-        { re-encode ANSI + CRLF, preserve a trailing newline if the original had one }
-        var SB: TStringBuilder:= TStringBuilder.Create;
-        try
-          for var I: Integer:= 0 to Lines.Count - 1 do
-          begin
-            SB.Append(Lines[I]);
-            if I < Lines.Count - 1 then SB.Append(#13#10);
-          end;
-          if (Length(Content) > 0) and (Content[Length(Content)] = #10) then SB.Append(#13#10);
-          FailWriteForTests(Touched + 1, Pair.Key);
-          TFile.WriteAllBytes(Pair.Key, TEncoding.ANSI.GetBytes(SB.ToString));
-        finally
-          SB.Free;
-        end;
-        Inc(Touched);
-      finally
-        Lines.Free;
-      end;
+      { The .bak used to be written before a single edit had been evaluated --
+        so a file whose every edit the guard rejected still got a backup, was
+        still rewritten, and still counted as touched. RawBytes holds the
+        original, so the backup waits until something changed. }
+      NewText:= ApplyGroup(Pair.Key, TEncoding.ANSI.GetString(RawBytes), Pair.Value, False, ASkippedEdits, AppliedInFile);
+      { Nothing survived validation for this file: leave it exactly as found --
+        no backup, no rewrite, not counted. The re-serialization is NOT
+        byte-preserving (TStringList + forced CRLF), so writing here would edit
+        a file on behalf of zero applied edits. }
+      if AppliedInFile = 0 then Continue;
+      if AWriteBackups then TFile.WriteAllBytes(Pair.Key + '.bak', RawBytes);
+      FailWriteForTests(Touched + 1, Pair.Key);
+      TFile.WriteAllBytes(Pair.Key, TEncoding.ANSI.GetBytes(NewText));
+      Inc(Touched);
     end;
   finally
     for Pair in FileMap do Pair.Value.Free;

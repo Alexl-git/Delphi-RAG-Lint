@@ -247,6 +247,50 @@ uses
   DRagLint.Parser.DocComments, DRagLint.Refactor.DocStub,
   DRagLint.Doc.SharedFacts;
 
+{ C14: the caller edges TDocFactsBuilder refused this RUN (see
+  TDocFacts.SkippedCallers), reported as ONE stderr line when the unit
+  finalizes -- not one line per edge, which flooded `document` and
+  `doc-drift --fix` (and `lint`, whose doc rules build the same facts) on a
+  large unit. Only the count and the first few are kept. Guarded by a monitor:
+  the doc lint rules may run on several threads. }
+const
+  SKIPPED_CALLER_SAMPLES = 3; { how many refused edges the summary names }
+var
+  GSkippedLock   : TObject;
+  GSkippedCount  : Integer;
+  GSkippedSamples: TArray<string>;
+
+procedure NoteSkippedCallers(const AQName: string; const ASkips: TArray<string>);
+begin
+  if Length(ASkips) = 0 then Exit;
+  TMonitor.Enter(GSkippedLock);
+  try
+    for var Skip in ASkips do
+    begin
+      Inc(GSkippedCount);
+      if Length(GSkippedSamples) < SKIPPED_CALLER_SAMPLES then
+        GSkippedSamples:= GSkippedSamples + [AQName + ' <- ' + Skip];
+    end;
+  finally
+    TMonitor.Exit(GSkippedLock);
+  end;
+end;
+
+procedure ReportSkippedCallers;
+var
+  More: string;
+begin
+  if GSkippedCount = 0 then Exit;
+  if GSkippedCount > Length(GSkippedSamples) then
+    More:= Format('; (+%d more)', [GSkippedCount - Length(GSkippedSamples)])
+  else
+    More:= '';
+  Writeln(ErrOutput, Format('drag-lint: note: skipped %d unverified caller edge(s) whose receiver has an unrelated type: %s%s',
+    [GSkippedCount, string.Join('; ', GSkippedSamples), More]));
+  GSkippedCount  := 0;
+  GSkippedSamples:= nil;
+end;
+
 // Splits S into lines (normalizing CRLF/CR -> LF first), Trims each line, and
 // drops trailing empty lines. Used to compare the current source-comment span
 // against the merged comment apples-to-apples: BOTH sides are /// -prefixed
@@ -986,7 +1030,9 @@ begin
   end;
 
   // Signature-derived params.
-  Sig      := Trim(ASym.Signature);
+  // C14: comments inside a (split) parameter list are not parameter text --
+  // the same helper the checker (TDocDrift.Analyze) parses with.
+  Sig      := SignatureWithoutComments(Trim(ASym.Signature), ASym.Name, Path, ASym.StartLine);
   SigParams:= ParseParamNames(ExtractParamList(Sig));
 
   { AIncludeCalleeRaises = True, and only here. This is the WRITER: it is the
@@ -1002,6 +1048,10 @@ begin
                                   {AIncludeCalleeRaises=}True,
                                   TSharedFacts.WantsWholeInboundLists(
                                     TSharedFacts.StoredBlockBody(Existing.Remarks), AStore, Path));
+  // C14: say which unverified caller edges were refused, and why -- on stderr,
+  // so stdout (the proposed block, or --json) keeps its shape; one summary line
+  // per run, see ReportSkippedCallers.
+  NoteSkippedCallers(ASym.QualifiedName, Facts.SkippedCallers);
 
   // Has a return value? The indexed Signature holds only '(params): RetType'
   // (no leading 'function' keyword), so SignatureHasReturn misses it, and class
@@ -1437,5 +1487,12 @@ begin
     Result.Action:= daCreated;
   end;
 end;
+
+initialization
+  GSkippedLock:= TObject.Create;
+
+finalization
+  ReportSkippedCallers;
+  GSkippedLock.Free;
 
 end.

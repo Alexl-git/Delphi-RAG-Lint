@@ -211,6 +211,7 @@ Rule-driven migration of legacy component types.
 
 | Feature | Surfaces | Status |
 |---|---|---|
+| [Convert progress](convrules-editor-convert-progress) | `ConvRulesEditor.exe` (Convert tab progress line) |  |
 | [convert-apply](convert-apply) | `convert-apply` |  |
 | [convert-reemit](Maintenance) | `convert-reemit` | internal |
 | [convert-scaffold](convert-scaffold) | `convert-scaffold` |  |
@@ -218,6 +219,7 @@ Rule-driven migration of legacy component types.
 | [ConvRulesEditor](Features) | `ConvRulesEditor.exe`; `ConvRulesEditor.exe` (Convert tab (--convert-request <file>; the IDE plugin probes --write-capabilities <file>)) |  |
 | [glyph-vacuum](Features) | `glyph-vacuum` |  |
 | [proptree](proptree) | `proptree` |  |
+| [Reindex project](convrules-editor-reindex-project) | `ConvRulesEditor.exe` (Conversion > Reindex project) |  |
 
 ## Graphs and reports
 

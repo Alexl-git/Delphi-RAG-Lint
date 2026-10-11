@@ -555,7 +555,17 @@ Old and adds each New once into the section Old was in -- never a duplicate, a u
 both added and removed is kept, and an entry inside a `{$IF...}` region refuses the
 unit rather than guess. A unit with no `.dfm` (or nothing a `#convert` block
 matches) gets its unit rules alone; `info --json` advertises this as
-`capabilities.apply_unit_rules: true`. A book can also REPORT without writing
+`capabilities.apply_unit_rules: true`. **Uses reconciliation (1.27.0, default on;
+`--no-reconcile-uses` restores 1.26.6):** the converted `.pas`/`.dfm` are re-indexed in
+memory and `#unuse` becomes a WATCH LIST -- a unit is KEPT (a `kept` row + warning naming
+the components) while a component the converted `.dfm` still streams needs it, REMOVED
+when only `.pas` code needs it (the dangling references are named; the compile errors
+are the intended signal), and kept when no `--db` knows it; presence is scope-alias aware
+(`#unuse DBTables` matches `Bde.DBTables`, `#use DB` is satisfied by `Data.DB`); a name
+the conversion introduces into the `.pas` gets its unit added (none since 1.27.0: a cast link no longer writes a `.pas` site, one `cast-not-applied` per site instead); a `#link X <- X : StripDB` value cast (shipped castlib, `value strip-db`) drops a trailing `.db` from the string in the `.dfm` and in single-literal `.pas` assignments ending the statement on their line, reporting every other site (a `with` block included) (capability `value_cast_strip_db`); every run lists what the `.pas` still uses that the map does not cover in `pas_uses[]` (status `mapped` / `cast-refused` / `not-rewritten` / `same-name` / `unmapped` / `global-dangling`, capability `pas_uses`),
+and a name two units declare is reported (`uses_unresolved`), never picked. After
+`--apply` the unit's own project DB is refreshed (`index --project`, child process,
+terminated as `failed` after 10 minutes; `--no-reindex` skips it). `capabilities.uses_reconcile: true`. A book can also REPORT without writing
 anything (1.26.5): `#warn <FromPath> "<text>"` warns once per converted instance
 whose source `.dfm` streams the property (`<value>`, `<name>`, `{Prop}`
 placeholders), and `#check-ref <ToPath> <Class>.<Prop>[, ...]` warns when the
@@ -708,7 +718,7 @@ and more (see [MCP tools](#mcp-tools-15) below).
 | [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 16 (+ 189 rules, 23 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
-| [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 7 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
+| [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 9 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
 | [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 19 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
 | [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 5 (+ 26 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |

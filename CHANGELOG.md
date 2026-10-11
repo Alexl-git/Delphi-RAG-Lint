@@ -3,9 +3,9 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## v1.26.7-alpha -- unreleased
+## Unreleased
 
-No extractor or resolver change on top of 1.26.6: indexes do not re-parse.
+No extractor or resolver change: indexes do not re-parse or re-resolve.
 
 ### Added
 
@@ -23,6 +23,209 @@ No extractor or resolver change on top of 1.26.6: indexes do not re-parse.
   `COMMAND` line and a time and engine on the sentence; a legacy header without them still
   parses and compare warns that the command is unknown. New units: `src\charts\DRagLint.Charts.*`.
   Pinned by run_compare_verb.ps1 and run_compare_real.ps1.
+
+## v1.27.1-alpha -- unreleased
+
+No extractor or resolver change: indexes do not re-parse or re-resolve.
+
+### Fixed
+
+- **`function-result-not-set` / `out-param-not-set` no longer count a path that never
+  returns** (converter-filed false positive). A leading guard `if A > 99 then raise ...;`
+  followed by full assignment reported "Function Result is not assigned on every path".
+  The CFG marks a block ending in `raise` (including a bare re-raise), the RTL `Halt` /
+  `Halt(n)` or the RTL `Abort` as NoReturn, and the two rules take their meet at Exit over
+  the returning predecessors only. `Halt` and `Abort` previously fell through; they now end
+  the path like `raise`. Plain `Exit;` still returns and still fires; `Exit(value)` assigns.
+  A BARE `Abort` / `Halt` is the RTL one only when the unit cannot have redeclared it: not
+  a member of the method's class or of an in-unit ancestor, not a unit-level or local
+  routine, no ancestor outside the unit, not inside a `with` -- otherwise it is an
+  ordinary call that falls through (a `TJob.Abort` method no longer cuts `L.Free` out of
+  the CFG and fakes an `object-leak` / `write-only-local`). `System.SysUtils.Abort`,
+  `SysUtils.Abort` and `System.Halt` are always the RTL. A `raise` / `Abort` inside a
+  try..except whose handler is EMPTY is swallowed and returns, so it is not NoReturn (the
+  missed `try if A > 0 then raise ...; Result := 1; except end;` fires again). A path
+  ending in `Halt` is left out of `object-leak`'s meet at Exit: the process ends there.
+  Pinned by run_function_result_noreturn_paths.ps1 (8 + 6 must-not-fire, 4 + 7 positive
+  controls).
+- **`doc-drift` no longer reads a comment inside a parameter list as a parameter**
+  (converter-filed false positive). The indexed signature of a declaration split over
+  several lines is the lines joined with a space, comments included, so a trailing `//`
+  comment ran into the next line and its text became a "signature param ... has no
+  <param> tag" (plus "documented param ... not in signature" for the real one). The
+  checker and the `document` writer now parse the signature through one helper,
+  `SignatureWithoutComments` (DRagLint.Refactor.DocStub): `{ }` / `(* *)` comments are
+  stripped in place; for a `//` comment it reads the heading's source lines, where the
+  line break is, and cuts each comment's text out of the INDEXED signature -- the
+  parameter text always comes from the index, which has already applied the
+  preprocessor, so a parameter inside a false `{$IFDEF}` does not come back. The source
+  line must name the routine followed by its `(` (so a comment between `(` and the first
+  `:` is handled too), and every comment must be found verbatim in the indexed text;
+  otherwise the indexed text is kept. Read-time only: the stored signature is unchanged.
+  Pinned by run_doc_drift_split_signature_comments.ps1.
+- **"Called from:" no longer claims a call on a receiver of an unrelated, known type**
+  (converter-filed wrong edge). `FUnitList.ClearSelection` (FUnitList: TListView) is
+  correctly left unresolved by the resolver, but the doc-facts builder's unverified
+  by-name bucket attributed it to the project's `TWorkingSet.ClearSelection`, and
+  `doc-drift --fix` / `document --apply` wrote it into that unit's managed block. The
+  builder now looks up the receiver's declaration (local, param, field -- inherited
+  included -- or unit var) and drops the edge when its declared type is neither the
+  method's class nor a descendant: a project class shown unrelated, or a type this index
+  does not declare at all (a library type cannot descend from a project class). Interfaces,
+  generic parameters, aliases and undeclared or dotted receivers are kept as before, and
+  so is a receiver typed as a descendant of the method's class or as an ancestor the
+  class names (an override may dispatch there). The refused edges of a whole run are
+  reported in ONE stderr line at exit (`drag-lint: note: skipped N unverified caller
+  edge(s) whose receiver has an unrelated type: <first three>; (+M more)`), from
+  `document`, `doc-drift --fix` and the doc lint rules alike; `TDocFacts.SkippedCallers`
+  carries them. Read-time only: no resolver change, no re-resolve. Pinned by
+  run_doc_callers_foreign_receiver.ps1, whose keep-path arms use calls the resolver
+  left unbound.
+
+## v1.27.0-alpha -- unreleased
+
+No extractor or resolver change: indexes do not re-parse. (C9, CONV-4: uses
+reconciliation inside convert-apply. Spec
+`docs\superpowers\specs\2026-10-07-c9-uses-reconciliation-design.md` as superseded
+by its OWNER RULINGS 2026-10-06.)
+
+### Changed
+
+- **`convert-apply` RECONCILES the unit's uses clauses (default on).** The converted
+  `.pas` and `.dfm` are re-indexed IN MEMORY with the indexer's own extractor (no DB is
+  written, so the dry run shows exactly what `--apply` writes), and:
+  * `#unuse` / `#useswap Old` are a WATCH LIST. A watched unit is KEPT while a component
+    the converted `.dfm` still streams has a class declared in it -- an unconverted
+    instance, a second component type of that unit, an inherited instance the ancestor
+    has not converted. apply/1 `uses[]` row action `kept`, `needed_by` naming the
+    components, and a `line N: warning: <rule> kept <unit> -- still needed by .dfm
+    component(s) ...` (items[] `unit-rule-kept`). **R26's refusal is subsumed:** the rest
+    of the unit now converts. The `--only` `skipped` row (C13 N4) is unchanged.
+  * A need from `.pas` code ONLY (an exception class, a local `TTable`, a type-helper
+    member) no longer keeps anything (owner ruling 1): the unit is REMOVED, the remove
+    row's `needed_by` names the dangling references and `unit-rule-dangling` warns --
+    the compile errors are the intended signal.
+  * A watched unit no `--db` indexes is KEPT (`unit-rule-unverified`).
+  * Presence is scope-alias aware: `#unuse DBTables` removes `Bde.DBTables`, `#use DB`
+    is satisfied by `Data.DB` (no second, E2004 entry).
+  * A name the conversion INTRODUCES into the `.pas` gets its declaring unit added
+    (since the cast-link fix below no 1.27.0 surface introduces one; the path is kept) (interface uses when referenced above `implementation`;
+    `source` `reconcile`). A name, or a #convert To type, that two units declare is
+    REPORTED in `uses_unresolved[]` with every candidate (`uses-unit-ambiguous`) and
+    never picked; a `#use` of one candidate resolves it on the next run.
+  * The C13 interface move is now a `uses[]` row, action `moved`.
+  * `uses[]` rows gain `source` (rule | reconcile | convert) and `needed_by[]`; new
+    top-level `uses_kept`, `uses_moved`, `uses_unresolved[]`, `uses_reconcile`
+    (on | off | degraded), `uses_reindex`. `info --json` capability `uses_reconcile`.
+  * `--no-reconcile-uses` restores 1.26.6 exactly (it is also every test's negative
+    control).
+- **`convert-apply --apply` re-indexes the unit's OWN project DB afterwards** -- the one
+  `--db` that indexes the unit, a project index holding one `.dproj`/`.dpr` -- with
+  `index --project <it> --db <it>` in a child process (apply/1 `uses_reindex`
+  {status, db, project, ms, reason}). Any other shape is `skipped` with a reason; no
+  other DB is ever written. `--no-reindex` skips it. A child still running after 10
+  minutes is terminated and reported `failed` (reason `index did not finish within
+  600 s -- the child was terminated; run: ...`), so a hung re-index cannot hang
+  convert-apply or the rest of a batch.
+- **The reconciliation never raises.** Any failure inside it -- the uses clauses
+  unreadable, a parser or index error -- degrades the unit (`uses_reconcile`
+  `degraded`, every watched unit kept with the reason in its warning); it no longer
+  ends convert-apply with `FATAL`. Tree-sitter's UTF-8 byte columns are converted to
+  character columns, so non-ASCII text before a reference on its line (CP1252 in a
+  string) no longer raised `ERangeError`.
+
+### Added
+
+- **`convert-apply` reports what the `.pas` still uses that the map does not cover**
+  (owner request: "list methods and properties and public and globals not mentioned and
+  not converted ... so we could see what else is there to work on"). New apply/1 array
+  `pas_uses[]`, dry run and `--apply`, always present (`[]` when none), one row per
+  (instance, member) the unit's code reaches through a CONVERTED instance -- the
+  access-site rewrite's own bound sites (`FindMemberAccessSites` + `BoundAccessSites`)
+  -- then one per global the unit uses from a unit the reconciliation REMOVES:
+  `{instance, from_type, to_type, member, kind, visibility, declaring_unit,
+  declared_in, status, lines[], count}`. `kind` method | property | field | event |
+  const | var | type | routine ('' when no `--db` holds the member); `declared_in` is
+  the class that declares it -- an ancestor of the From type included, followed into
+  another `--db` (TComponent in the library index); `status` `mapped` (a `#link`
+  covers it and convert-apply handles its sites), `cast-refused` (a cast `#link`
+  covers it, its sites refused), `not-rewritten` (a `#link` covers it but
+  convert-apply makes NO `.pas` edit for that link shape -- a dotted To or From path
+  such as `#link Properties.X <- X`, so the site still names the From member and
+  may not compile; precedence cast-refused > not-rewritten > mapped),
+  `same-name` (no link; the To type or an ancestor has the name), `unmapped` (the
+  work list) or `global-dangling` (the reconciliation's own dangling verdict --
+  the remove row's `needed_by`, uncapped and with every line; absent with
+  `--no-reconcile-uses` or when degraded). Text: `pas uses: N unmapped, M
+  global-dangling, K same-name, J mapped, C cast-refused, R not-rewritten` and one
+  line per unmapped and per not-rewritten member. `info --json` capability
+  `pas_uses`. Cost: the access-site binding buckets the unit's references by line
+  once, and each (type, member) and each instance's `#convert` block is resolved
+  once -- on INSPFLDR (DMTEST, 235 sites, 106 rows) pas_uses costs ~0.8 s, down
+  from ~3.3 s. Known gaps: a member reached with no
+  receiver (`with pic1 do Caption := ...`) and a site the index cannot vouch for
+  (`access-site-unverified`) are not listed; an inherited RTL/VCL member is
+  classified only when its library `--db` is passed (else kind '' and `unmapped`).
+
+- **The `StripDB` VALUE cast** (C15, owner ruling 2026-10-10). `#link TableName <-
+  TableName : StripDB` removes ONE trailing `.db`, any case, from the linked string
+  (`'MET1.db'` -> `'MET1'`, `'X.DB'` -> `'X'`; `'A.dbf'`, `'A.db.bak'`, `'MET1'` and `''`
+  unchanged). One fixed, named transform -- no regex, no parameters. Declared in the
+  shipped `casts.castlib` as `cast StripDB` with the new castlib key `value strip-db`
+  (a built-in transform; an unknown `value` keyword is a load error and convert-apply
+  fails the unit, exit 2), so the editor lists it like any cast. `.dfm`: the value is
+  rewritten on each converted instance when that changes it. `.pas`: only
+  `<inst>.<Prop> := '<one literal>';` has its literal rewritten (quote escaping
+  kept) -- STRICTLY: the literal must be followed on the SAME line by nothing but
+  blanks / closed comments and `;` (blanks, tabs and comments before `:=` are
+  fine). A literal ending its line (a continuation may follow, even behind a comment
+  line), one followed by `#nn` or `+`, and a statement ended by `else` / `end`
+  without `;` are checks. Any other right-hand side and every read get no edit and
+  a warning (`value cast StripDB: non-literal assignment, check by hand` / `read of
+  <Prop>`). Every OTHER reference to the member -- a `with t1 do TableName := ...`,
+  a site the index cannot vouch for, another object's same-named member -- is a
+  `value-cast-check` naming its line (`the receiver is not resolved to a converted
+  instance ...`), never an edit and never silence. Items `value-cast-applied` (field access_sites,
+  `old_value` -> `value`, file, line -- the `.dfm` line is the property's own) and
+  `value-cast-check` (warnings); text `value casts: N value(s) changed (.dfm D, .pas P),
+  W site(s) to check by hand`; `pas_uses[]` counts a member a StripDB link covers as
+  `mapped` (`not-rewritten` when its path is dotted). A renaming value-cast link renames the member as a plain link would and
+  reports its literals for checking. `info --json` capability `value_cast_strip_db`.
+  The class-cast refusal below applies to CLASS casts only.
+
+### Fixed
+
+- **A `#link` carrying a cast no longer writes a `.pas` access site** (shipped defect,
+  came in with 52d9a1b9). A CLASS cast (a castlib block whose `pas` line is a statement template) whose `.castlib` entry has a `pas` template was
+  "realized" by splicing the template -- a STATEMENT such as `{dst}.Assign({src});` --
+  over the member token alone, so `pic1.Picture.Data := 'seed'` became
+  `pic1.pic1.Glyph.Assign(CastPic(pic1.Picture));.Data := 'seed'`, which does not
+  parse (a real book hits it: `TabcToggleBtn-to-TcxButton.rules:52  #link
+  OptionsImage.Glyph <- Picture : AssignGraphic`). Owner decision, interim until a
+  member-replacement feature is designed: **every** `.pas` access site of a
+  cast-carrying link is REFUSED -- no `.pas` edit, one warning per site:
+  `line N: #link To <- From : Cast -- access site <file>:<line> <inst>.<From> not
+  rewritten: the cast's pas template is a statement and has no correct splice inside
+  an expression; convert this access site by hand` (items[] kind `cast-not-applied`
+  with `instance`, `file`, `line`, `path` and `value` = the cast). The `.dfm` half of
+  the cast is unchanged. The kind `cast-applied` is retired (never emitted). A cast
+  that is unknown, or found with no `pas` template, keeps its one per-rule
+  `cast-not-applied` (the no-template one no longer advises adding a `pas` line).
+  `info --json` capability `cast_site_refusal`.
+  * Consequence for the uses reconciliation: a cast template's routine or enum value
+    never reaches the converted `.pas` any more, so nothing a `#convert` book can
+    write today introduces a bare name, and the reconcile ADD / `uses_unresolved`
+    path for introduced names (`PlanNewNames`) has no convert-apply route left. It
+    is KEPT for the member-replacement feature; its arms now assert the absence of
+    those rows, and the To-type ambiguity report (A3) remains its only live
+    positive control. Known gap.
+
+## v1.26.7-alpha -- unreleased
+
+No extractor or resolver change on top of 1.26.6: indexes do not re-parse.
+
+### Added
+
 - **Code-only uses of an UNCONVERTED ancestor's field are listed** (converter request). C8
   N2a listed a field the descendant's code uses with no `.dfm` block only when the declaring
   ancestor already had the block's To type. A field the ancestor still declares with the

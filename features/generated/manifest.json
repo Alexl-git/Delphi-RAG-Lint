@@ -1,5 +1,5 @@
 {
-  "product": "1.26.7-alpha",
+  "product": "1.27.1-alpha",
   "extractor": "1.21.1-alpha",
   "resolver": "1.12.0-alpha",
   "schema": 23,
@@ -1660,6 +1660,26 @@
       "requires": ["index"]
     },
     {
+      "id": "convrules-convert-progress",
+      "title": "Convert progress",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.26.7-alpha",
+      "summary": "ConvRulesEditor Convert tab: per-step progress (unit, book, phase, elapsed) on the status bar and the tab",
+      "intro": "See where a long Convert run is and how long each unit takes.",
+      "wikiPage": "convrules-editor-convert-progress",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "Convert tab progress line"
+        }
+      ],
+      "audience": "both",
+      "related": ["convrules-editor"]
+    },
+    {
       "id": "convert-apply",
       "title": "convert-apply",
       "group": "component-conversion",
@@ -1788,6 +1808,26 @@
       ],
       "audience": "both",
       "requires": ["index"]
+    },
+    {
+      "id": "convrules-reindex-project",
+      "title": "Reindex project",
+      "group": "component-conversion",
+      "owner": "CONVERTER",
+      "status": "shipped",
+      "since": "1.26.7-alpha",
+      "summary": "ConvRulesEditor command: incremental index --project of the editor's project index, cancellable",
+      "intro": "Refresh the project index after IDE edits or between conversion stages.",
+      "wikiPage": "convrules-editor-reindex-project",
+      "surfaces": [
+        {
+          "type": "exe",
+          "name": "ConvRulesEditor.exe",
+          "menu": "Conversion > Reindex project"
+        }
+      ],
+      "audience": "both",
+      "related": ["convrules-editor"]
     },
     {
       "id": "butterfly",

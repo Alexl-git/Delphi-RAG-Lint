@@ -10,6 +10,8 @@
 # Then: Conversion > Convert..., Check all, Add Loose.pas -> Convert is REFUSED (unindexed) and nothing is
 # backed up; delete it; Add FixUnit.pas -> Convert converts it in place (.BCK1 for .pas and .dfm, both named
 # in the grid and the report; the report is UTF-8 without a BOM and records the final reindex). One convert-apply on this fixture takes ~90-110 s; the wait is 600 s.
+# C16 (2026-10-10): mid-run the status bar shows the progress line (run.progress.status), Reindex project is locked.
+# C17: Conversion > Reindex project after the run (reindex.status) and with Fix.dproj renamed away (reindex.refused.no.project.file).
 # -ProofNoIndex skips the index step: the conversion checks must then FAIL, which is the proof they can.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
 param([string]$Exe, [switch]$ProofNoIndex)
@@ -275,7 +277,9 @@ function AddViaDialog($procId, $addBtn, $path) {
   return ''
 }
 # Waits until the status line differs from $Before and is not the run's own
-# 'Converting ...' line, or an editor dialog appears; returns the final status text.
+# 'Converting ...' line or a C16 progress line (RunInProgress), or an editor dialog appears;
+# returns the final status text.
+function RunInProgress($st) { ($st -like 'Converting *') -or ($st -match '^Unit \d+ of \d+: ') -or ($st -like 'Final reindex (total *') }
 function WaitStatus($main, $Before, $Seconds) {
   $t0 = Get-Date; $st = $Before; $script:dlg = ''
   while (((Get-Date) - $t0).TotalSeconds -lt $Seconds) {
@@ -283,7 +287,7 @@ function WaitStatus($main, $Before, $Seconds) {
     $d = @(Forms $p.Id | Where-Object { [W]::Cls($_) -in 'TMessageForm', '#32770' })
     if ($d.Count -gt 0) { $script:dlg = TopsNow $p.Id; break }
     $st = Status $main
-    if ($st -ne $Before -and $st -notlike 'Converting *') { break }
+    if ($st -ne $Before -and -not (RunInProgress $st)) { break }
   }
   $script:waited = ((Get-Date) - $t0).TotalSeconds
   Start-Sleep -Milliseconds 300
@@ -469,14 +473,19 @@ try {
   Check 'fixunit.added' (($e -eq '') -and ($items -contains $pas)) ("$e items: " + ($items -join ' | ') + '; status: ' + (Status $main))
   $before = Status $main
   Click $conv
-  # --- 7a. mid-run: File > Save / Save As / Curate are locked, Open is not ---
-  $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt 20 -and (Status $main) -notlike 'Converting *') { Start-Sleep -Milliseconds 250 }
-  $lockPaths = 'File|Save', 'File|Save As...', 'File|Curate...', 'File|Open...'
+  # --- 7a. mid-run: File > Save / Save As / Curate and Conversion > Reindex project (C17) are locked, Open is not ---
+  $t0 = Get-Date; while (((Get-Date) - $t0).TotalSeconds -lt 20 -and -not (RunInProgress (Status $main))) { Start-Sleep -Milliseconds 250 }
+  $lockPaths = 'File|Save', 'File|Save As...', 'File|Curate...', 'File|Open...', 'Conversion|Reindex project'
   $midRun = @($lockPaths | ForEach-Object { [W]::MenuEnabled($main, $_) })
-  Check 'run.locks.file.menu' ((Status $main) -like 'Converting *' -and ($midRun -join ',') -eq '0,0,0,1') ("Save,SaveAs,Curate,Open = " + ($midRun -join ',') + "; status: " + (Status $main))
+  Check 'run.locks.file.menu' ((RunInProgress (Status $main)) -and ($midRun -join ',') -eq '0,0,0,1,0') ("Save,SaveAs,Curate,Open,Reindex = " + ($midRun -join ',') + "; status: " + (Status $main))
+  # --- 7b. C16: the status bar names the unit, the book, the phase and both clocks while the apply runs ---
+  $progressRe = '^Unit 1 of 1: FixUnit -- book 1 of 1 Fix: applying \(\d+:\d\d, total \d+:\d\d\)$'
+  $seen = ''; $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt 120 -and $seen -eq '') { $s = Status $main; if ($s -match $progressRe) { $seen = $s } elseif (-not (RunInProgress $s)) { break }; Start-Sleep -Milliseconds 250 }
+  Check 'run.progress.status' ($seen -ne '') "seen: $seen; last: $(Status $main)"
   $st = WaitStatus $main $before 600
   $afterRun = @($lockPaths | ForEach-Object { [W]::MenuEnabled($main, $_) })
-  Check 'run.unlocks.file.menu' (($afterRun -join ',') -eq '1,1,1,1') ("Save,SaveAs,Curate,Open = " + ($afterRun -join ','))
+  Check 'run.unlocks.file.menu' (($afterRun -join ',') -eq '1,1,1,1,1') ("Save,SaveAs,Curate,Open,Reindex = " + ($afterRun -join ','))
   # Results grid: Book / Unit / Status / Edits / Remaining / Backup / Backup .dfm / Note.
   $cols = @(0..7 | ForEach-Object { , @([W]::Column($lv, $_)) })
   "  run: {0:N0}s; status: {1}" -f $script:waited, $st
@@ -503,6 +512,35 @@ try {
   $bom = ($repBytes.Length -ge 3) -and ($repBytes[0] -eq 0xEF) -and ($repBytes[1] -eq 0xBB) -and ($repBytes[2] -eq 0xBF)
   Check 'convert.report.content' ((-not $bom) -and ($repText -match 'FixUnit\.dfm\.BCK1') -and ($repText -match "Final reindex`tok") -and ($repText -match "Run`tcompleted")) `
     ("bom=$bom bytes=$($repBytes.Length) dfmBackup=$($repText -match 'FixUnit\.dfm\.BCK1') final=$($repText -match "Final reindex`t\S+")")
+
+  # --- 9. C17: Conversion > Reindex project on the fixture ---
+  # Waits for a reindex outcome: a status that DIFFERS from $Before (an earlier '[!]' line
+  # must not pass) and is a reindex outcome or an error, not the 'Reindexing ...' line.
+  function WaitReindex($main, $Before, $Seconds) {
+    $t0 = Get-Date
+    while (((Get-Date) - $t0).TotalSeconds -lt $Seconds) {
+      Start-Sleep -Milliseconds 300
+      $s = Status $main
+      if ($s -eq $Before) { continue }
+      # Re-read after a pause: WM_GETTEXTLENGTH and WM_GETTEXT are two messages, and a status
+      # written between them came back cut to the OLD length ('Reindexed Fix.dproj: fi').
+      if ($s -like 'Reindexed *' -or $s -like 'Reindex of *' -or $s -like '`[!`] *') { Start-Sleep -Milliseconds 500; return (Status $main) }
+    }
+    Status $main
+  }
+  $before = Status $main
+  $invoked = [W]::InvokeMenu($main, 'Conversion|Reindex project')
+  $st = WaitReindex $main $before 120
+  Check 'reindex.status' ($invoked -and ($st -match '^Reindexed Fix\.dproj \(Fix\.sqlite\): \d+ file\(s\) in the index, compile closure \d+ \(\d+:\d\d\)$')) "invoked=$invoked status: $st"
+  # The refusal: the project file gone (renamed away and back).
+  $off = $dproj + '.off'
+  [IO.File]::Move($dproj, $off)
+  try {
+    $before = Status $main
+    [void][W]::InvokeMenu($main, 'Conversion|Reindex project')
+    $st = WaitReindex $main $before 20
+    Check 'reindex.refused.no.project.file' ($st -like ('`[!`] Reindex refused: the project index ' + $db + ' has no project file on disk -- expected ' + $dproj + '.')) $st
+  } finally { [IO.File]::Move($off, $dproj) }
 }
 finally {
   if ($null -ne $p -and -not $p.HasExited) { $p.Kill($true); [void]$p.WaitForExit(15000) }

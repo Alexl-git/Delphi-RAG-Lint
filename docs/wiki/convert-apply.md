@@ -17,6 +17,36 @@ that writes nothing. `--apply` writes for real, with backups and a
 `recovery.txt`, unless `--no-backup` is also given. `--db PATH` is required
 and may be repeated.
 
+## Cast links in code (1.27.0)
+A `#link To <- From : Cast` converts the `.dfm` as before, but never rewrites
+a `.pas` access site: a cast's `pas` template is a statement, and there is no
+correct place to put a statement inside an expression such as
+`pic1.Picture.Data := 'seed'`. Each such site is left as it is and reported
+as a `cast-not-applied` warning naming the file, line, instance and cast --
+"convert this access site by hand". The unit will not compile until you do;
+that compile error is the signal.
+
+## StripDB: dropping a Paradox .db (1.27.0)
+`#link TableName <- TableName : StripDB` (with `--castlib` pointing at the
+shipped `casts.castlib`) turns `'MET1.db'` into `'MET1'` -- in the `.dfm`, and
+in code where the table name is assigned one plain string that ends the
+statement on its line (`t1.TableName := 'MET1.db';`). Anything else in code
+(a concatenation, a variable, a read, a string split over lines, a
+`with t1 do TableName := ...`) is left alone and listed as a warning to check
+by hand, naming its line. Values without `.db` are never touched.
+
+## What is left to convert (1.27.0)
+Every run also lists what the unit's code still uses: each member reached
+through a converted instance, and each global from a unit the run removes.
+JSON `pas_uses[]` gives one row per member with its kind, where it is declared,
+its lines and a status -- `mapped`, `cast-refused`, `not-rewritten` (a rule
+covers it, but convert-apply does not edit the code for that rule's shape -- a
+dotted path such as `#link Properties.X <- X` -- so the code still names the
+old member), `same-name` (the new type has the same name, so it carries over),
+`unmapped` (no rule and no such member: your work list) or `global-dangling`.
+Text mode prints a one-line count and the unmapped and not-rewritten members
+with their lines.
+
 ## Reaching it in the IDE
 No IDE surface -- this is a CLI-only feature.
 

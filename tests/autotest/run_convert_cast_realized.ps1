@@ -16,7 +16,13 @@
   THREE OUTCOMES, NEVER TWO, AND NEVER SILENCE. This is the whole contract, and
   the reason this guard has a case for each:
 
-    1. cast resolves AND has a `pas` template  -> APPLIED  (`cast-applied`)
+    1. cast resolves AND has a `pas` template  -> 1.26.x APPLIED it (`cast-applied`);
+       since 1.27.0 every .pas access site is REFUSED instead -- one
+       `cast-not-applied` per site naming file, line, instance and cast, and no
+       .pas edit (owner decision, interim). The template is a STATEMENT and has
+       no correct splice inside an expression: 52d9a1b9 turned
+       `btn1.Picture.Data := 'seed'` into `btn1.btn1.OptionsImage.Glyph.Assign(
+       btn1.Picture);.Data := 'seed'`, which does not parse.
     2. cast resolves, `pas` template is EMPTY  -> still `cast-not-applied`, but
        the message must say the cast was FOUND and carries no template, so the
        operator fixes the .castlib instead of hunting a missing rule
@@ -235,23 +241,29 @@ Check 'P1 POSITIVE CONTROL the fixture converts when no cast is involved' `
       (($noCast.J -ne $null) -and ($noCast.J.converted.Count -ge 1)) `
       ("the fixture does not convert, so nothing below proves anything:`n" + $noCast.Raw)
 
-# ---- OUTCOME 1: cast resolves AND has a pas template -> APPLIED ------------
+# ---- OUTCOME 1: cast resolves AND has a pas template -> REFUSED PER SITE ----
+# 1.27.0 (owner decision): T1-T3 asserted `cast-applied` and the rendered
+# statement until 1.26.x. That realization spliced a statement over the member
+# token and wrote source that does not parse, so they now assert the refusal
+# deliberately -- one warning per access site, and (W6 below) no .pas edit.
 $good = ApplyJson $rulesGood
-Check 'T1 a cast with a pas template is APPLIED, not refused' `
-      ((KindsOf $good) -contains 'cast-applied') `
-      ("kinds: " + ((KindsOf $good) -join ', ') + "`n" + (TextOfKind $good 'cast-not-applied'))
+$site = @(if ($good.J) { $good.J.items | Where-Object { $_.kind -eq 'cast-not-applied' -and $_.instance -eq 'btn1' } })
+Check 'T1 a cast WITH a pas template is refused at its access site: one cast-not-applied for btn1, line 21' `
+      (($site.Count -eq 1) -and ($site[0].line -eq 21) -and ($site[0].field -eq 'warnings') -and ($site[0].file -like '*MyForm.pas')) `
+      ("kinds: " + ((KindsOf $good) -join ', ') + "`n" + ($site | ConvertTo-Json -Depth 4))
 
-Check 'T2 the rendered statement substitutes BOTH {dst} and {src}' `
-      ((TextOfKind $good 'cast-applied') -match 'btn1\.OptionsImage\.Glyph\.Assign\(btn1\.Picture\);') `
-      ("cast-applied text was: " + (TextOfKind $good 'cast-applied'))
+Check 'T2 the refusal names the file, line, instance and cast, and says to convert the site by hand' `
+      (($site.Count -eq 1) -and ($site[0].text -match 'MyForm\.pas:21 btn1\.Picture') -and ($site[0].text -match ': AssignGraphic') -and
+       ($site[0].text -match 'convert this access site by hand') -and ($site[0].value -eq 'AssignGraphic') -and ($site[0].path -eq 'Picture')) `
+      ("refusal was: " + ($site | ConvertTo-Json -Depth 4))
 
-Check 'T2b no placeholder survives into the emitted statement' `
-      (-not ((TextOfKind $good 'cast-applied') -match '\{dst\}|\{src\}')) `
-      ("a placeholder was emitted verbatim: " + (TextOfKind $good 'cast-applied'))
+Check 'T2b no rendered template reaches the report' `
+      (-not ((TextOfKind $good 'cast-not-applied') -match 'Assign\(|\{dst\}|\{src\}')) `
+      ("a rendered or raw template leaked: " + (TextOfKind $good 'cast-not-applied'))
 
-Check 'T3 the applied case does NOT also emit the refusal' `
-      (-not ((KindsOf $good) -contains 'cast-not-applied')) `
-      ("both outcomes emitted for one link -- the operator cannot tell what happened:`n" + (TextOfKind $good 'cast-not-applied'))
+Check 'T3 the retired kind cast-applied is never emitted' `
+      (-not ((KindsOf $good) -contains 'cast-applied')) `
+      ("kinds: " + ((KindsOf $good) -join ', '))
 
 # ---- OUTCOME 2: cast resolves, NO pas template ------------------------------
 $noPas = ApplyJson $rulesNoPas
@@ -473,6 +485,30 @@ for ($i = 0; $i -lt $wb.Length; $i++) {
 Check 'W5 the written .dfm is strict 7-bit ASCII with CRLF' `
       ((($wb | Where-Object { $_ -gt 127 }).Count -eq 0) -and ($bareLf -eq 0)) `
       "nonAscii=$((($wb | Where-Object { $_ -gt 127 }).Count)) bareLf=$bareLf"
+
+# ---- W6 1.27.0: a cast link writes NO .pas access site ---------------------
+# The .dfm half of the cast still converts (TDstBtn, W6b); the .pas line that
+# 1.26.x corrupted is left byte-identical for the operator to convert by hand.
+$myPas = Join-Path $appW 'MyForm.pas'
+$myBefore = [IO.File]::ReadAllText($myPas)
+Push-Location $appW
+try {
+  $mRaw = (& $Exe convert-apply --unit 'MyForm.pas' --rules $rulesGood --castlib $castlib `
+             --db $dbW --db $dbA --db $dbB --apply --no-backup 2>&1) -join "`n"
+  $mExit = $LASTEXITCODE
+} finally { Pop-Location }
+$myAfter = [IO.File]::ReadAllText($myPas)
+Check 'W6 --apply with a cast link: exit 0 and the access-site line is untouched' `
+      (($mExit -eq 0) -and $myAfter.Contains("  btn1.Picture.Data := 'seed';") -and -not ($myAfter -match 'Assign\(')) `
+      ("exit=$mExit`n$mRaw`n$myAfter")
+Check 'W6b ... while the .dfm half of the cast still converted (positive control)' `
+      (([IO.File]::ReadAllText((Join-Path $appW 'MyForm.dfm')) -match 'object btn1: TDstBtn') -and ($myAfter -ne $myBefore)) `
+      ("the unit did not convert at all, so W6 proves nothing:`n$mRaw")
+
+# ---- K the editor's gate ----------------------------------------------------
+$info = (& $Exe info --json 2>$null) -join "`n"
+$ij = $null; try { $ij = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+Check 'K info --json: capabilities.cast_site_refusal is true' (($null -ne $ij) -and ($ij.capabilities.cast_site_refusal -eq $true)) ''
 
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

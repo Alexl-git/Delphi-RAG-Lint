@@ -225,6 +225,7 @@ uses
   , DRagLint.Convert   .Apply
   , DRagLint.Convert   .Backup
   , DRagLint.Convert   .UnitRules
+  , DRagLint.Convert   .UsesReconcile
   , DRagLint.Query     .Callers    { v(hover bundle): shared with the LSP -- find-callers renders from it }
   , DRagLint.Query     .HoverModel { v(hover bundle): shared with the LSP -- hover --format json builds from it }
   , DRagLint.Charts    .ReportHeader { charts step 1: `compare` -- ParseCommandLine for --command / --question }
@@ -632,6 +633,8 @@ type
     RulesFile     : string ; // --rules <file>  (conversion-rules DSL)
     CastLibFile   : string ; // --castlib <file>  (class + enum cast library)
     NoWarnUnlinked: Boolean; // --no-warn-unlinked  (convert-apply: keep the unlinked count, drop the warnings)
+    NoReconcileUses: Boolean; // --no-reconcile-uses (convert-apply, C9: the 1.26.6 unit rules exactly)
+    NoReindex     : Boolean; // --no-reindex (convert-apply, C9: do not refresh the unit's project DB after --apply)
     PrintParsed   : Boolean; // --print-parsed  (dump parsed rule count + lines)
     // Track 3 Batch 2a-i (Task 8): convert-reemit HIDDEN test verb. FromBlockFile
     // is the --from-block path (one F DFM `object` block, verbatim text).
@@ -1012,7 +1015,7 @@ begin
   Writeln('    PROGRESS (proptree, convert-scaffold): --progress-interval S (whole seconds; default 0 = OFF) writes one JSON line to STDERR at most every S seconds while the tree is built -- ' +
     '{"progress":{"elapsed_s":12.3,"verb":"proptree","class":"<qname>","depth":2,"max_depth":5,"classes_done":41,"classes_queued":7,"nodes":3114}} -- stdout is unchanged; S not decimal digits (x, -1, +3) or missing exits 2; every stderr line is flushed BEFORE the stdout document, which is written in one piece (a merged pipe reads notes, then the whole document); ' +
     'convert-apply / convert-validate never emit progress and reject the flag as an unknown argument (exit 3); cancel = kill the process (the default write-back is kill-safe: each memoized type is its own SQLite statement)');
-  Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
+  Writeln('  drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--format json|--json]   (locates .dfm component instances matching a #convert rule and rewrites all 5 surfaces: declaration retype + uses-add + .dfm re-emit + property/event access-site rewrite + runtime-creator retype/TODO markers; ' +
     'without --apply this is DRY-RUN ONLY (preview, writes nothing); --apply writes for real with backups + a recovery.txt unless --no-backup; --format json emits schema apply/1 -- the six report surfaces plus a typed items[] carrying a machine-readable kind per line, so the conversion REMAINDER can be dispatched on instead of parsed out of prose, plus resolved_defaults[] (informational receipts, kept OUT of items[] because on a real form they run to thousands and would bury the remainder); --castlib names the .castlib whose enum blocks translate a #link value when the link carries a cast suffix; a source property some converted instance carries that no #link carries and no #ignore acknowledges is warned ONCE per (source type, property) as "dropped on N of M converted instance(s)" -- a minority count is the stronger signal -- and counted in json as unlinked_source_properties / unlinked_source_property_sites / unlinked[]; --no-warn-unlinked drops the warnings and keeps the count; ' +
     'the book''s UNIT rules act on the unit too: #unuse Old removes it, #use New adds it to the implementation uses when absent from both clauses, #useswap Old -> New1[, New2] removes Old and adds each New once into the section Old was in (a unit that does not use Old gets no edit from the swap) -- a unit both added and removed is kept, an entry inside a {$IF...} region refuses the unit (exit 1, nothing written); with no sibling .dfm, no #convert block or no matching instance the unit rules run alone (component part skipped; a book with no unit rules still needs the .dfm, exit 1); json adds component_part, uses[] {action,unit,section,line,rule,reason}, uses_removed, uses_added; the To type''s unit goes to the INTERFACE uses when the retyped field is declared in the interface, and is MOVED there from an implementation-only use (1.23.0);' +
     'EVERY #convert block is validated and freshness-checked -- each #link/#default against its own From/To types, each #mapping against the blocks that #apply it -- ' +
@@ -1024,11 +1027,18 @@ begin
     'the book''s #warn <FromPath> "<text>" fires once per converted instance whose SOURCE .dfm streams FromPath (<value>, <name>, {Prop} expanded) -- ''line N: warning: <inst>: <text>'', items[] kind book-warning with value; ' +
     '#check-ref <ToPath> <Class>.<Prop>[, ...] warns when the converted ToPath value contains \ or : (ref-path-like) or no listed Class.Prop of any .dfm in the project index carries it (ref-dangling), and once per run ref-not-checked when the index holds no .dfm property facts; info capabilities book_warn, check_ref (1.26.5); ' +
     'every code rewrite is scoped to the instance''s field (receiver bound to it, or unbound / bare / Self. in a routine of the .dfm root class with no same-named local); a site the index cannot vouch for is NOT rewritten and is reported (''access site <file>:<line> ... not verified against the index -- not rewritten'', items[] kind access-site-unverified, json access_sites_unverified); a --db resolved before resolver 1.12.0 is REFUSED, dry run too, naming the index ... --resolve-only fix; ' +
+    'a #link carrying a cast never rewrites a .pas access site (1.27.0, interim): the cast''s pas template is a statement with no correct splice inside an expression, so each bound site is reported -- ''line N: #link To <- From : Cast -- access site <file>:<line> <inst>.<From> not rewritten: ... convert this access site by hand'', items[] kind cast-not-applied with instance, file, line and value (the cast); no .pas edit, the .dfm half of the cast unchanged; kind cast-applied is retired; info capability cast_site_refusal; ' +
+    'a VALUE cast -- a castlib block with ''value strip-db'' (shipped: StripDB, #link TableName <- TableName : StripDB) -- removes one trailing .db, any case, from the linked string: in the .dfm of each converted instance, and in .pas assignments whose right-hand side is ONE string literal; any other assignment and every read get no edit and a warning (items[] value-cast-applied {old_value,value} / value-cast-check; text ''value casts: N value(s) changed ...''); an unknown value keyword fails the run; info capability value_cast_strip_db (1.27.0); ' +
+    'json pas_uses[] (1.27.0, dry run and --apply; info capability pas_uses) lists what the .pas still uses that the map does not cover: one row per (instance, member) the code reaches through a converted instance -- the access-site rewrite''s own bound sites -- and one per global (routine/const/var/type) from a unit the reconciliation removes: {instance,from_type,to_type,member,kind method|property|field|event|const|var|type|routine,visibility,declaring_unit,declared_in,status mapped|cast-refused|same-name|unmapped|global-dangling,lines[],count}; text prints ''pas uses: N unmapped, M global-dangling, K same-name, J mapped, C cast-refused'' and one line per unmapped member; ' +
     'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
     'a plan the edit applier would refuse in part (overlapping delete ranges -- an engine defect) fails the WHOLE unit before anything is written, dry run too, and a write that fails part-way is ROLLED BACK byte-identical (exit 2, ''-- rolled back, unit not changed''; a failed rollback names the files it could not restore) (1.25.1): exit 1, ''ERROR: refused N edit(s) to <file> -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written'', json ok=false with that error; ' +
     'a .dfm component nested in another converted one is spliced into its parent''s re-emit, and --only naming the parent converts it too (json only_included[] {name,parent}, text ''--only: <child> converts too -- nested in <parent>''); a collection property (FieldDefs = < item ... end>) whose item members the book links (#link X.Items.* <- X.Items.*, identity) is carried whole when the To type publishes X with the same collection type, else reported NOT carried with its item count and counted as dropped, #ignore X notwithstanding; ' +
     'a deliberate refusal writes nothing and prints one ''REFUSED: <reason>'' line -- a uses entry to change inside a {$IF...} region; an instance whose indexed .dfm span no longer holds it (lines added or removed, a block shrunk onto a sibling''s end, or the .dfm cut short: ''<Name>: index is stale for this .dfm -- reindex''); ' +
     'a #unuse / #useswap removing the unit that declares the From type of an instance left unconverted (skipped, inherited/inline, or excluded by --only) is refused too (''<rule> would leave <N> unconverted instance(s) of <Type> -- unit not changed'') -- EXCEPT that with --only, when every such instance is one --only left out, the removal is SKIPPED (1.23.0: unit kept; json uses[] action skipped with a reason, a ''line N: warning:'' line, items[] kind unit-rule-skipped; info capability only_skips_unit_rules); ' +
+    'USES RECONCILIATION (1.27.0, C9, default on; --no-reconcile-uses = the 1.26.6 rules above, exactly): the converted .pas/.dfm are RE-INDEXED IN MEMORY (the indexer''s own extractor, no DB written, so the dry run shows the --apply plan) and every #unuse / #useswap Old is a WATCH LIST -- the unit is KEPT while a component the converted .dfm still streams has a class declared in it (an unconverted instance, a second component type of that unit, an inherited instance the ancestor has not converted: R26''s refusal becomes this, the --only skipped row is unchanged), REMOVED when only .pas code needs it (its dangling references named, the compile errors are the signal), KEPT when no --db indexes it; ' +
+    'presence is scope-alias aware (#unuse DBTables matches Bde.DBTables, #use DB is satisfied by Data.DB); a bare name the conversion INTRODUCES into the .pas gets its declaring unit added -- interface uses when referenced above implementation -- and a name (or To type) two units declare is REPORTED, never picked (add #use <unit> to choose); the C13 move is a row; ' +
+    'json: uses[] action remove|add|skipped|kept|moved with source rule|reconcile|convert and needed_by[] {name,line,section}, uses_kept, uses_moved, uses_unresolved[] {name,line,section,reason ambiguous|not-found,candidates[] {unit,db}}, uses_reconcile on|off|degraded, items[] kinds unit-rule-kept, unit-rule-dangling, unit-rule-unverified, uses-unit-ambiguous (all warnings); ' +
+    'after --apply the unit''s OWN project DB -- the one --db that indexes it, a project index holding one .dproj/.dpr -- is refreshed with ''index --project <it> --db <it>'' in a child process (json uses_reindex {status done|skipped|failed|dry-run|off,db,project,ms,reason}; a child still running after 10 minutes is terminated: failed; --no-reindex skips it; no other DB is ever written); info capability uses_reconcile; ' +
     '--only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); ' +
     '--unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; ' +
     'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
@@ -1754,6 +1764,8 @@ begin
       Result.CastLibFile:= ParamStr(i);
     end
     else if (A = '--from-block') and (i < ParamCount) then begin Inc(i); Result.FromBlockFile:= ParamStr(i); end // convert-reemit: F DFM object block file
+    else if A = '--no-reconcile-uses' then Result.NoReconcileUses:= True // convert-apply (C9): no uses reconciliation
+    else if A = '--no-reindex' then Result.NoReindex:= True // convert-apply (C9): skip the post-apply project-DB refresh
     else if A = '--no-warn-unlinked' then Result.NoWarnUnlinked:= True // convert-apply: silence the per-(type,property) unlinked warnings; the json count stays
     else if A = '--print-parsed' then Result.PrintParsed:= True // convert-validate: dump parsed rules
     else if (A = '--task') and (i < ParamCount) then
@@ -16161,6 +16173,23 @@ begin
         removal that would strand ONLY instances --only left out is skipped
         (apply/1 uses[] action 'skipped') instead of refusing the unit. }
       JCap.AddPair('only_skips_unit_rules', TJSONBool.Create(True));
+      { 1.27.0 (C9): convert-apply reconciles uses (watch list kept by .dfm needs,
+        introduced names added, ambiguity reported, apply/1 kept/moved rows,
+        uses_unresolved, uses_reconcile, uses_reindex) }
+      JCap.AddPair('uses_reconcile', TJSONBool.Create(True));
+      { 1.27.0, same contract: a #link carrying a cast never writes a .pas
+        access site -- one items[] cast-not-applied per site (instance, file,
+        line, value = the cast); the 1.26.x kind cast-applied is retired. }
+      JCap.AddPair('cast_site_refusal', TJSONBool.Create(True));
+      { 1.27.0, same contract: apply/1 pas_uses[] -- what the unit's .pas still
+        uses that the map does not cover (status mapped | cast-refused |
+        same-name | unmapped | global-dangling), dry run and --apply. }
+      JCap.AddPair('pas_uses', TJSONBool.Create(True));
+      { 1.27.0 (C15), same contract: the castlib `value strip-db` VALUE cast
+        (#link X <- X : StripDB) rewrites a trailing .db off string literals in
+        the .dfm and in .pas literal assignments -- items[] value-cast-applied
+        (old_value, value) and value-cast-check (no edit, check by hand). }
+      JCap.AddPair('value_cast_strip_db', TJSONBool.Create(True));
       { 1.25.0, same contract: convert-apply lists the descendant units that
         still stream or use an instance it converts (apply/1 descendants[],
         items[] kind descendant-not-converted) -- a warning, never a refusal. }
@@ -24661,18 +24690,35 @@ begin
   begin
     var NRemoved: Integer:= 0;
     var NSkipped: Integer:= 0;
+    var NAdded  : Integer:= 0;
+    var NOther  : Integer:= 0; { C9: kept + moved }
     for var UC: TUsesChange in AReport.UsesChanges do
       if UC.Action = 'remove' then Inc(NRemoved)
-      else if UC.Action = 'skipped' then Inc(NSkipped);
+      else if UC.Action = 'skipped' then Inc(NSkipped)
+      else if UC.Action = 'add' then Inc(NAdded)
+      else Inc(NOther);
     Writeln('');
-    if NSkipped = 0 then
-      Writeln(Format('Uses: %d removed, %d added', [NRemoved, Length(AReport.UsesChanges) - NRemoved]))
-    else
-      Writeln(Format('Uses: %d removed, %d added, %d removal(s) skipped (--only)',
-        [NRemoved, Length(AReport.UsesChanges) - NRemoved - NSkipped, NSkipped]));
+    var Head: string:= Format('Uses: %d removed, %d added', [NRemoved, NAdded]);
+    if NSkipped > 0 then Head:= Head + Format(', %d removal(s) skipped (--only)', [NSkipped]);
+    if NOther > 0 then Head:= Head + Format(', %d kept/moved', [NOther]);
+    Writeln(Head);
     for var UC: TUsesChange in AReport.UsesChanges do
-      Writeln(Format('  %s %s (%s, line %d) -- %s', [UC.Action, UC.UnitName, UC.Section, UC.Line, UC.Rule]) +
-        (if UC.Reason <> '' then ' (' + UC.Reason + ')' else ''));
+    begin
+      var Need: string:= '';
+      for var N: TUsesNeed in UC.NeededBy do Need:= Need + (if Need = '' then '' else ', ') + Format('%s (line %d)', [N.Name, N.Line]);
+      Writeln(Format('  %s %s (%s, line %d) -- %s', [UC.Action, UC.UnitName, UC.Section, UC.Line,
+        if UC.Rule <> '' then UC.Rule else UC.Source]) +
+        (if UC.Reason <> '' then ' (' + UC.Reason + ')' else '') +
+        (if Need <> '' then ' [' + Need + ']' else ''));
+    end;
+  end;
+  { C9: names the conversion introduced whose unit was not added }
+  for var UU: TUsesUnresolved in AReport.UsesUnresolved do
+  begin
+    var Units: string:= '';
+    for var C: TUsesCandidate in UU.Candidates do Units:= Units + (if Units = '' then '' else ', ') + C.UnitName;
+    Writeln(Format('  unresolved %s (%s, line %d) -- %s%s', [UU.Name, UU.Section, UU.Line, UU.Reason,
+      if Units <> '' then ': ' + Units else '']));
   end;  { ResolvedDefaults -- a COUNT, not a listing, and that asymmetry is deliberate.
     Text mode used to print one line per resolved default under ReemitNotes,
     which on a real form is ~2,000 lines of "this worked" ahead of the handful
@@ -24687,9 +24733,68 @@ begin
     Block('ResolvedDefaults',
       [Format('%d property value(s) carried from their declared defaults (--format json lists each)',
               [Length(AReport.ResolvedDefaults)])]);
+  { 1.27.0 (C15): the value casts (StripDB) -- one count line per unit }
+  var VDfm : Integer:= 0;
+  var VPas : Integer:= 0;
+  var VChk : Integer:= 0;
+  for var VI: TApplyItem in AReport.Items do
+    if VI.Kind = aikValueCastCheck then Inc(VChk)
+    else if (VI.Kind = aikValueCastApplied) and SameText(ExtractFileExt(VI.FilePath), '.dfm') then Inc(VDfm)
+    else if VI.Kind = aikValueCastApplied then Inc(VPas);
+  if VDfm + VPas + VChk > 0 then
+  begin
+    Writeln('');
+    Writeln(Format('value casts: %d value(s) changed (.dfm %d, .pas %d), %d site(s) to check by hand',
+      [VDfm + VPas, VDfm, VPas, VChk]));
+  end;
+  { 1.27.0 -- pas_uses[]: one summary line, then the work list (unmapped and
+    not-rewritten members) with their lines; nothing when the code uses nothing }
+  if Length(AReport.PasUses) > 0 then
+  begin
+    var NUnm : Integer:= 0;
+    var NGlob: Integer:= 0;
+    var NSame: Integer:= 0;
+    var NMap : Integer:= 0;
+    var NCast: Integer:= 0;
+    var NNotW: Integer:= 0;
+    for var PU: TApplyPasUse in AReport.PasUses do
+      if PU.Status = PAS_USE_UNMAPPED then Inc(NUnm)
+      else if PU.Status = PAS_USE_GLOBAL_DANGLING then Inc(NGlob)
+      else if PU.Status = PAS_USE_SAME_NAME then Inc(NSame)
+      else if PU.Status = PAS_USE_MAPPED then Inc(NMap)
+      else if PU.Status = PAS_USE_NOT_REWRITTEN then Inc(NNotW)
+      else Inc(NCast);
+    Writeln('');
+    Writeln(Format('pas uses: %d unmapped, %d global-dangling, %d same-name, %d mapped, %d cast-refused, %d not-rewritten',
+      [NUnm, NGlob, NSame, NMap, NCast, NNotW]));
+    for var PU: TApplyPasUse in AReport.PasUses do
+    begin
+      if (PU.Status <> PAS_USE_UNMAPPED) and (PU.Status <> PAS_USE_NOT_REWRITTEN) then Continue;
+      var Ls: string:= '';
+      for var L: Integer in PU.Lines do Ls:= Ls + (if Ls = '' then '' else ', ') + IntToStr(L);
+      Writeln(Format('  %s %s.%s (%s, %s, %s in %s) -- %s %s',
+        [PU.Status, PU.Instance, PU.Member, PU.Kind, PU.Visibility, PU.DeclaredIn, PU.DeclaringUnit,
+         if Length(PU.Lines) = 1 then 'line' else 'lines', Ls]));
+    end;
+  end;
 end; // procedure
 
 type
+  /// <summary>The post-apply refresh of the unit's project index (C9,
+  /// apply/1 uses_reindex).</summary>
+  /// <remarks>Status: 'done', 'skipped' (Reason says why: no single project
+  /// DB holds the unit, nothing was written), 'failed' (the child index
+  /// run's exit code is in Reason), 'dry-run' (Db / Project name what --apply
+  /// would refresh) or 'off' (--no-reindex / --no-reconcile-uses). Ms is the
+  /// child run's wall time.</remarks>
+  TUsesReindex = record
+    Status : string;
+    Db     : string;
+    Project: string;
+    Reason : string;
+    Ms     : Int64;
+  end;
+
   /// <summary>Everything schema apply/1 reports about one convert-apply run.
   /// A record rather than nine parameters, per too-many-parameters (max 7).</summary>
   /// <remarks>Populated on the SUCCESS path and on both failure paths (rule
@@ -24738,6 +24843,10 @@ type
       object is appended to it instead (owned by the array) and nothing is
       written, so DoConvertApply can wrap every unit in one apply-batch/1. }
     Sink: TJSONArray;
+    { 1.27.0 (C9): apply/1 uses_reconcile ('on' | 'off' | 'degraded') and the
+      post-apply project-index refresh (uses_reindex). }
+    UsesReconcile: string;
+    Reindex      : TUsesReindex;
     { 1.23.0 (C13 N3): the --only names that name a .dfm object of a #convert
       From type, and the ones that name none -- apply/1 only_matched[] /
       only_unmatched[], spelled as given, in --only order; both [] without
@@ -24748,6 +24857,31 @@ type
     OnlyIncluded : TArray<TNestedOnly>;
   end;
 
+/// <summary>apply/1 pas_uses[] (1.27.0): one object per TApplyPasUse.</summary>
+/// <param name="AUses">The report's PasUses.</param>
+/// <returns>A new array; the caller owns it (AddPair takes it over).</returns>
+function PasUsesJson(const AUses: TArray<TApplyPasUse>): TJSONArray;
+begin
+  Result:= TJSONArray.Create;
+  for var PU: TApplyPasUse in AUses do
+  begin
+    var JP: TJSONObject:= TJSONObject.Create;
+    JP.AddPair('instance'      , PU.Instance);
+    JP.AddPair('from_type'     , PU.FromType);
+    JP.AddPair('to_type'       , PU.ToType);
+    JP.AddPair('member'        , PU.Member);
+    JP.AddPair('kind'          , PU.Kind);
+    JP.AddPair('visibility'    , PU.Visibility);
+    JP.AddPair('declaring_unit', PU.DeclaringUnit);
+    JP.AddPair('declared_in'   , PU.DeclaredIn);
+    JP.AddPair('status'        , PU.Status);
+    var JL: TJSONArray:= TJSONArray.Create;
+    for var L: Integer in PU.Lines do JL.Add(L);
+    JP.AddPair('lines'         , JL);
+    JP.AddPair('count'         , TJSONNumber.Create(Length(PU.Lines)));
+    Result.AddElement(JP);
+  end;
+end;
 /// <summary>Writes the whole convert-apply run as schema apply/1 JSON.</summary>
 /// <param name="ACtx">The run to report.</param>
 /// <remarks>
@@ -24792,8 +24926,11 @@ procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
     Result.AddPair('line'     , TJSONNumber.Create(AItem.Line));
     Result.AddPair('rule_line', TJSONNumber.Create(AItem.RuleLine));
     { 1.26.5: additive, and only on the kinds that are ABOUT a value }
-    if AItem.Kind in [aikBookWarning, aikRefPathLike, aikRefDangling] then
+    if AItem.Kind in [aikBookWarning, aikRefPathLike, aikRefDangling, aikCastNotApplied, aikValueCastApplied, aikValueCastCheck] then
       Result.AddPair('value', AItem.Value);
+    { 1.27.0 (C15): the literal a value cast replaced }
+    if AItem.Kind = aikValueCastApplied then
+      Result.AddPair('old_value', AItem.OldValue);
   end;
 
 var
@@ -24924,24 +25061,78 @@ begin
     JRoot.AddPair('component_part', ACtx.ComponentPart);
     var UsesRemoved: Integer:= 0;
     var UsesAdded  : Integer:= 0;
+    var UsesKept   : Integer:= 0;
+    var UsesMoved  : Integer:= 0;
     var JUses: TJSONArray:= TJSONArray.Create;
     for var UC: TUsesChange in ACtx.Report.UsesChanges do
     begin
       if UC.Action = 'remove' then Inc(UsesRemoved)
-      else if UC.Action = 'add' then Inc(UsesAdded); { 'skipped' (C13 N4) is neither }
+      else if UC.Action = 'add' then Inc(UsesAdded) { 'skipped' (C13 N4) is neither }
+      else if UC.Action = 'kept' then Inc(UsesKept)
+      else if UC.Action = 'moved' then Inc(UsesMoved);
       var JUC: TJSONObject:= TJSONObject.Create;
       JUC.AddPair('action' , UC.Action);
       JUC.AddPair('unit'   , UC.UnitName);
       JUC.AddPair('section', UC.Section);
       JUC.AddPair('line'   , TJSONNumber.Create(UC.Line));
       JUC.AddPair('rule'   , UC.Rule);
-      JUC.AddPair('reason' , UC.Reason); { '' unless action is 'skipped' (C13 N4) }
+      JUC.AddPair('reason' , UC.Reason); { '' unless skipped (C13 N4) or kept (C9) }
+      { 1.27.0 (C9) -- additive: who asked (rule | reconcile | convert) and why
+        the row exists (kept: the .dfm components; reconcile add: the
+        introduced names; remove: the .pas references left dangling) }
+      JUC.AddPair('source' , UC.Source);
+      var JNeed: TJSONArray:= TJSONArray.Create;
+      for var N: TUsesNeed in UC.NeededBy do
+      begin
+        var JN: TJSONObject:= TJSONObject.Create;
+        JN.AddPair('name'   , N.Name);
+        JN.AddPair('line'   , TJSONNumber.Create(N.Line));
+        JN.AddPair('section', N.Section);
+        JNeed.AddElement(JN);
+      end;
+      JUC.AddPair('needed_by', JNeed);
       JUses.AddElement(JUC);
     end;
     JRoot.AddPair('uses', JUses);
     JRoot.AddPair('uses_removed', TJSONNumber.Create(UsesRemoved));
     JRoot.AddPair('uses_added'  , TJSONNumber.Create(UsesAdded));
-
+    { 1.27.0 (C9) -- ALWAYS present, like every array here }
+    JRoot.AddPair('uses_kept'   , TJSONNumber.Create(UsesKept));
+    JRoot.AddPair('uses_moved'  , TJSONNumber.Create(UsesMoved));
+    var JUnres: TJSONArray:= TJSONArray.Create;
+    for var UU: TUsesUnresolved in ACtx.Report.UsesUnresolved do
+    begin
+      var JU: TJSONObject:= TJSONObject.Create;
+      JU.AddPair('name'   , UU.Name);
+      JU.AddPair('line'   , TJSONNumber.Create(UU.Line));
+      JU.AddPair('section', UU.Section);
+      JU.AddPair('reason' , UU.Reason);
+      var JC: TJSONArray:= TJSONArray.Create;
+      for var C: TUsesCandidate in UU.Candidates do
+      begin
+        var JCO: TJSONObject:= TJSONObject.Create;
+        JCO.AddPair('unit', C.UnitName);
+        JCO.AddPair('db'  , C.Db);
+        JC.AddElement(JCO);
+      end;
+      JU.AddPair('candidates', JC);
+      JUnres.AddElement(JU);
+    end;
+    JRoot.AddPair('uses_unresolved', JUnres);
+    JRoot.AddPair('uses_reconcile', ACtx.UsesReconcile);
+    var JRx: TJSONObject:= TJSONObject.Create;
+    JRx.AddPair('status' , ACtx.Reindex.Status);
+    JRx.AddPair('db'     , ACtx.Reindex.Db);
+    JRx.AddPair('project', ACtx.Reindex.Project);
+    JRx.AddPair('ms'     , TJSONNumber.Create(ACtx.Reindex.Ms));
+    JRx.AddPair('reason' , ACtx.Reindex.Reason);
+    JRoot.AddPair('uses_reindex', JRx);
+    { 1.27.0 -- what the .pas still uses that the conversion map does not
+      cover: one row per (instance, member) reached through a converted
+      instance, then one per global from a unit the reconciliation removes.
+      ALWAYS present, [] when none. status mapped | cast-refused | same-name |
+      unmapped | global-dangling; the editor filters on it. }
+    JRoot.AddPair('pas_uses', PasUsesJson(ACtx.Report.PasUses));
     { 1.20.6 (T2b) -- the classes whose members the run resolved, summed over
       the --db stores. No property tree is built; this is the whole cost. }
     JRoot.AddPair('classes_built', TJSONNumber.Create(ACtx.ClassesBuilt));
@@ -25232,6 +25423,130 @@ begin
   APlan.Error:= Refusal + ' -- unit not changed, nothing written';
 end;
 
+{ 1.27.0 (C9): the index a convert-apply --apply refreshes for AUnitPas, and
+  why not when it does not -- Status 'dry-run' with Db / Project set, 'off'
+  (--no-reindex, --no-reconcile-uses) or 'skipped' with Reason. THE GUARANTEE:
+  only a --db of this run that (a) indexes the unit, (b) is a PROJECT index
+  (scan_type) and (c) holds exactly one project file (.dproj, else .dpr) is
+  ever chosen -- the unit's own project DB. Two holders, a library holder, or
+  none: skipped, nothing written. }
+function ReindexPreview(const AStores: TArray<ISymbolStore>; const ADbs: TArray<string>;
+  const AUnitPas: string; const AArgs: TArgs): TUsesReindex;
+var
+  Holders: TArray<Integer>;
+  Proj   : TArray<string>;
+begin
+  Result:= Default(TUsesReindex);
+  if AArgs.NoReindex or AArgs.NoReconcileUses then
+  begin
+    Result.Status:= 'off';
+    Exit;
+  end;
+  Result.Status:= 'skipped';
+  Holders:= nil;
+  for var I: Integer:= 0 to High(AStores) do
+    if (I <= High(ADbs)) and (UnitFileIdIn(AStores[I], AUnitPas) > 0) then Holders:= Holders + [I];
+  if Length(Holders) <> 1 then
+  begin
+    Result.Reason:= if Length(Holders) = 0 then 'no --db indexes the unit'
+                    else Format('%d --db indexes hold the unit -- refusing to guess which is its project DB', [Length(Holders)]);
+    Exit;
+  end;
+  var St: ISymbolStore:= AStores[Holders[0]];
+  Result.Db:= ADbs[Holders[0]];
+  if not SameText(St.GetMetaValue(SCAN_TYPE_KEY), SCAN_TYPE_PROJECT) then
+  begin
+    Result.Reason:= Format('%s is not a project index (scan_type "%s")', [Result.Db, St.GetMetaValue(SCAN_TYPE_KEY)]);
+    Exit;
+  end;
+  for var Ext: string in ['.dproj', '.dpr'] do
+    if Length(Proj) = 0 then
+      for var FS: TFileStamp in St.GetAllFileStamps do
+        if SameText(ExtractFileExt(FS.Path), Ext) then Proj:= Proj + [FS.Path];
+  if Length(Proj) <> 1 then
+  begin
+    Result.Reason:= Format('%s holds %d project files -- cannot name the one to re-index', [Result.Db, Length(Proj)]);
+    Exit;
+  end;
+  Result.Project:= Proj[0];
+  Result.Status := 'dry-run';
+end;
+
+{ 1.27.0 (C9): runs `<this exe> index --project <P> --db <D>` -- the
+  incremental, sanctioned refresh -- as a CHILD process, so its progress lines
+  never reach convert-apply's stdout (a JSON document). ARx must come from
+  ReindexPreview with Status 'dry-run'; it ends 'done' or 'failed' (the exit
+  code in Reason). Never raises; a failure leaves the converted files as
+  written -- only the index is behind, and Reason names the command. A child
+  still running after REINDEX_TIMEOUT_MS is TERMINATED and reported 'failed'
+  (a hung re-index must not hang convert-apply, nor a batch's later units);
+  SQLite rolls its open transaction back, so the DB is left as it was before
+  the child's last commit. }
+procedure RefreshProjectIndex(var ARx: TUsesReindex);
+const
+  { An incremental `index --project` after one unit changed takes seconds
+    (fixture) to about a minute (a large project's resolve pass); ten
+    minutes is far past either and still bounds a hung child. }
+  REINDEX_TIMEOUT_MS   = 600000;
+  { how long to wait for a terminated child to actually exit }
+  REINDEX_KILL_WAIT_MS = 5000;
+  { the exit code a terminated child is given }
+  REINDEX_KILLED_EXIT  = 1;
+  MS_PER_SECOND        = 1000;
+var
+  SI      : TStartupInfo;
+  PI      : TProcessInformation;
+  Cmd     : string;
+  ExitCode: Cardinal;
+  WaitRes : Cardinal;
+  WaitErr : string;
+  Watch   : TStopwatch;
+begin
+  Cmd:= Format('"%s" index --project "%s" --db "%s"', [ParamStr(0), ARx.Project, ARx.Db]);
+  FillChar(SI, SizeOf(SI), 0);
+  SI.cb         := SizeOf(SI);
+  SI.dwFlags    := STARTF_USESHOWWINDOW;
+  SI.wShowWindow:= SW_HIDE;
+  Watch:= TStopwatch.StartNew;
+  UniqueString(Cmd);
+  if not CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute@d2cc -- ParamStr(0) is this engine; the paths are this run's own --db and the project file it records
+  begin
+    ARx.Status:= 'failed';
+    ARx.Reason:= Format('could not start the re-index (%s) -- run: drag-lint index --project "%s" --db "%s"',
+      [SysErrorMessage(GetLastError), ARx.Project, ARx.Db]);
+    Exit;
+  end;
+  ExitCode:= 0;
+  try
+    WaitRes:= WaitForSingleObject(PI.hProcess, REINDEX_TIMEOUT_MS);
+    WaitErr:= if WaitRes = WAIT_FAILED then SysErrorMessage(GetLastError) else '';
+    if WaitRes = WAIT_OBJECT_0 then
+      GetExitCodeProcess(PI.hProcess, ExitCode)
+    else
+    begin
+      TerminateProcess(PI.hProcess, REINDEX_KILLED_EXIT);
+      WaitForSingleObject(PI.hProcess, REINDEX_KILL_WAIT_MS);
+    end;
+  finally
+    CloseHandle(PI.hThread);
+    CloseHandle(PI.hProcess);
+  end;
+  ARx.Ms:= Watch.ElapsedMilliseconds;
+  if WaitRes <> WAIT_OBJECT_0 then
+  begin
+    ARx.Status:= 'failed';
+    ARx.Reason:= Format('%s -- the child was terminated; run: drag-lint index --project "%s" --db "%s"',
+      [if WaitRes = WAIT_TIMEOUT then Format('index did not finish within %d s', [REINDEX_TIMEOUT_MS div MS_PER_SECOND])
+       else 'waiting for the index failed (' + WaitErr + ')', ARx.Project, ARx.Db]);
+  end
+  else if ExitCode = 0 then ARx.Status:= 'done'
+  else
+  begin
+    ARx.Status:= 'failed';
+    ARx.Reason:= Format('index exited %d -- run: drag-lint index --project "%s" --db "%s"', [ExitCode, ARx.Project, ARx.Db]);
+  end;
+end;
+
 type
   { 1.23.0 (C13): a unit's --apply write cannot be done (a read-only or locked
     file, or a failure mid-write); DoConvertApply turns it into that unit's
@@ -25497,7 +25812,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@0bf7 -- REVIEWED 2026-10-06: each Exit is a distinct per-unit outcome (refusal, rule errors, freshness, plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@a8c9 -- REVIEWED 2026-10-10: each Exit is a distinct per-unit outcome (refusal, rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }
@@ -25677,11 +25992,24 @@ var
     JCtx.ComponentPart:= ConvertApplyComponentPart(Rules, DfmPath, AArgs.OnlySections,
       Length(JCtx.InheritedInsts) > 0, HasRetype);
     if JCtx.ComponentPart = 'skipped-no-dfm' then JCtx.DfmPath:= '';
+    { 1.27.0 (C15): a castlib the engine cannot execute (an unknown value
+      transform) fails the unit -- a cast silently not performed is the worse outcome }
+    var CastLib: TCastLib:= ParseCastLib(AArgs.CastLibFile);
+    if Length(CastLib.Errors) > 0 then
+      Exit(FailUnit(Format('castlib %s: %s', [AArgs.CastLibFile, String.Join('; ', CastLib.Errors)]), 2));
     if JCtx.ComponentPart = 'applied' then
-      PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, TApplyBook.Create(Rules, JCtx.Unreachable),
-        AArgs.OnlySections, ParseCastLib(AArgs.CastLibFile), not AArgs.NoWarnUnlinked, JCtx.InheritedInsts)
+    begin
+      var Book: TApplyBook:= TApplyBook.Create(Rules, JCtx.Unreachable);
+      Book.Reconcile:= not AArgs.NoReconcileUses; { C9, default on }
+      PlanRes:= BuildApplyPlan(Trees, UnitPas, DfmPath, Book,
+        AArgs.OnlySections, CastLib, not AArgs.NoWarnUnlinked, JCtx.InheritedInsts);
+    end
     else
-      PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections);
+      PlanRes:= BuildUnitRulesOnlyPlan(Trees, UnitPas, JCtx.DfmPath, Rules, AArgs.OnlySections, not AArgs.NoReconcileUses);
+    JCtx.UsesReconcile:= if AArgs.NoReconcileUses then 'off'
+                         else if PlanRes.Report.UsesReconcile <> '' then PlanRes.Report.UsesReconcile
+                         else 'on';
+    JCtx.Reindex:= ReindexPreview(Stores, Dbs, UnitPas, AArgs);
     RefuseUnapplicablePlan(PlanRes); { 1.25.1: all-or-nothing across .pas and .dfm }
     JCtx.ClassesBuilt:= UnitClassesBuilt;
     if PlanRes.Refused then Exit(RefuseUnit(PlanRes.Error));
@@ -25736,6 +26064,14 @@ var
     except
       on Ex: Exception do Exit(FailUnit(Ex.Message, 2));
     end;
+    { C9: re-index after convert -- the unit's OWN project DB only }
+    if (JCtx.ComponentPart <> 'applied') and (Length(PlanRes.Edits) = 0) and (JCtx.Reindex.Status = 'dry-run') then
+    begin
+      JCtx.Reindex.Status:= 'skipped';
+      JCtx.Reindex.Reason:= 'nothing was written';
+    end
+    else if JCtx.Reindex.Status = 'dry-run' then
+      RefreshProjectIndex(JCtx.Reindex);
 
     if UseJson then
       EmitApplyJson(JCtx)
@@ -25783,7 +26119,7 @@ begin
 
   if (Length(Units) = 0) or (AArgs.RulesFile = '') then
   begin
-    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--format json]');
+    Writeln('Usage: drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db PATH [--db ...] [--only Name1,Name2,...] [--castlib <file>] [--apply] [--no-backup] [--no-warn-unlinked] [--no-reconcile-uses] [--no-reindex] [--format json]');
     Exit(2);
   end;
   { one unit keeps its old first check; a batch checks each unit in RunUnit }
@@ -25868,6 +26204,7 @@ begin
   if UseJson and (Length(Units) > 1) then BatchJson:= TJSONArray.Create;
   Trees:= TConvertTreeCache.Create(Stores);
   try
+    Trees.DbPaths:= Dbs; { C9: names the db of a uses_unresolved candidate }
     if Length(Units) = 1 then Exit(RunUnit(Units[0]));
     { 1.23.0 (C13 b2): batch. A unit's refusal or failure never stops the
       others; the exit code is the worst unit's (2 > 1 > 0). }
