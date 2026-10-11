@@ -62,6 +62,31 @@ type
     EntryDefs: TArray<string>;
     Succ     : TList<Integer>;
     Pred     : TList<Integer>;
+    /// <summary>True when this block ends in a statement that never returns
+    /// to the caller normally -- <c>raise</c> (including a bare re-raise),
+    /// the RTL <c>Halt</c> or the RTL <c>Abort</c>.</summary>
+    /// <remarks>Such a block still carries its edge to the synthetic Exit
+    /// block (the leak and liveness analyses rely on it), so an analysis
+    /// asking "what does the CALLER see on return" -- function-result-not-set,
+    /// out-param-not-set -- must leave these predecessors out of its meet at
+    /// Exit. Plain <c>Exit</c> is NOT a no-return: it returns.
+    /// <para>NOT set for a <c>raise</c> or <c>Abort</c> inside the body of a
+    /// try..except whose handler is EMPTY: that handler swallows the exception
+    /// and control returns to the caller, and the empty handler emits no block
+    /// that could carry the state there. Not set for a bare <c>Abort</c> /
+    /// <c>Halt</c> the unit could have redeclared (a method of the enclosing
+    /// class or a visible ancestor, a unit-level or local routine of that name,
+    /// an ancestor outside the unit, or inside a <c>with</c>) -- then it is an
+    /// ordinary call that falls through. <c>System.SysUtils.Abort</c>,
+    /// <c>SysUtils.Abort</c> and <c>System.Halt</c> are always the RTL.</para></remarks>
+    NoReturn : Boolean;  // dl:ok public-field@f60f -- TCfgBlock is a plain CFG node whose public fields ARE its data surface, same shape as Index/Items/Succ/Pred above
+    /// <summary>True when this block ends in the RTL <c>Halt</c>: the process
+    /// ends here. Always implies <see cref="NoReturn"/>.</summary>
+    /// <remarks>object-leak leaves these predecessors out of its meet at Exit
+    /// -- an object still open when the process ends is not a leak a Free could
+    /// fix. A <c>raise</c> block is NOT one: an exception unwinds into the
+    /// caller, and the object is lost.</remarks>
+    EndsProcess: Boolean;  // dl:ok public-field@53da -- same data-surface shape as NoReturn above
     /// <summary><!-- drag-lint:auto sum -->TCfgBlock</summary>
     /// <param name="AIndex"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
@@ -678,6 +703,16 @@ type
       analysed twice on ONE path (measured: 5 phantom double-frees on DataCopy
       CSVRoutines.pas, where each object is freed exactly once). }
     DivertBlocks: TDictionary<Integer, Boolean>;
+    { C14: >0 while emitting the BODY of a try..except whose handler is empty.
+      A raise / Abort there is swallowed and control returns to the caller, so
+      it is not marked NoReturn -- see TCfgBlock.NoReturn. }
+    SwallowDepth: Integer; // dl:ok public-field@dc7b -- TBuilderState is implementation-private; every field is public builder state, like Cfg/Loops/DivertBlocks
+    { C14: whether a BARE `Abort` / `Halt` in this routine may be a user routine
+      rather than the RTL one. Computed on first need (a bare Abort/Halt is rare
+      and the answer walks the whole unit): 0 = not yet, 1 = RTL, 2 = maybe user. }
+    BareAbortKind: Integer; // dl:ok public-field@b4cf -- TBuilderState is implementation-private; every field is public builder state, like Cfg/Loops/DivertBlocks
+    BareHaltKind : Integer; // dl:ok public-field@f42b -- TBuilderState is implementation-private; every field is public builder state, like Cfg/Loops/DivertBlocks
+    function BareIsRtl(const AName: string): Boolean;
     constructor Create(ACfg: TCfg);
     destructor Destroy; override;
     function EmitStmt(ACur: Integer; const ANode: TTSNode): Integer;
@@ -686,6 +721,173 @@ type
     /// finally on the way.</summary>
     function DivertVia(ATarget, AFromDepth: Integer): Integer;
   end;
+
+{ C14. AText lowercased with every generic argument list removed and split on
+  '.': 'TBox<T>.Get' -> ['tbox', 'get']. }
+function DottedSegments(const AText: string): TArray<string>;
+var
+  SB   : TStringBuilder;
+  Depth: Integer;
+  Ch   : Char;
+begin
+  Depth:= 0;
+  SB   := TStringBuilder.Create(Length(AText));
+  try
+    for Ch in LowerCase(AText) do
+      if Ch = '<' then Inc(Depth)
+      else if Ch = '>' then Dec(Depth)
+      else if (Depth = 0) and (Ch > ' ') then SB.Append(Ch);
+    Result := SB.ToString.Split(['.']);
+  finally
+    SB.Free;
+  end;
+end;
+
+{ C14. The last segment of a (possibly qualified, possibly generic) name. }
+function LastSegment(const AText: string): string;
+var
+  Parts: TArray<string>;
+begin
+  Parts := DottedSegments(AText);
+  if Length(Parts) = 0 then Result := '' else Result := Parts[High(Parts)];
+end;
+
+{ C14. True when a routine declared in the tree under ARoot is named AName
+  (lowercase). With AUnitLevel only UNIT-LEVEL routines count: class members
+  and method bodies are skipped, and a routine body is not entered (its
+  nested routines are local to it). Without it, every declaration under ARoot
+  counts -- the members of one class, or the local routines of one routine.
+  A wrong True only keeps a bare Abort/Halt an ordinary call, which is the
+  pre-C14 behaviour; a wrong False would cut a real path out of the CFG. }
+function TreeDeclaresRoutine(const ARoot: TTSNode; const ASrc: TBytes; const AName: string;
+  AUnitLevel: Boolean): Boolean;
+var
+  I    : Integer;
+  Parts: TArray<string>;
+begin
+  Result := False;
+  if ARoot.IsNull then Exit;
+  if ARoot.NodeType = 'declProc' then
+  begin
+    Parts := DottedSegments(NodeStr(ARoot.ChildByField('name'), ASrc));
+    Exit((Length(Parts) > 0) and (Parts[High(Parts)] = AName)
+         and ((not AUnitLevel) or (Length(Parts) = 1)));
+  end;
+  if AUnitLevel and (ARoot.NodeType = 'declClass') then Exit;
+  if AUnitLevel and (ARoot.NodeType = 'defProc') then
+    Exit(TreeDeclaresRoutine(ARoot.ChildByField('header'), ASrc, AName, True));
+  for I := 0 to ARoot.NamedChildCount - 1 do
+    if TreeDeclaresRoutine(ARoot.NamedChild(I), ASrc, AName, AUnitLevel) then Exit(True);
+end;
+
+{ C14. The declClass node of the class type named AClass (lowercase, bare)
+  declared anywhere under ARoot, or a null node. }
+function FindClassDecl(const ARoot: TTSNode; const ASrc: TBytes; const AClass: string): TTSNode;
+var
+  I       : Integer;
+  TypeNode: TTSNode;
+begin
+  Result := Default(TTSNode);
+  if ARoot.IsNull then Exit;
+  if (ARoot.NodeType = 'declType')
+     and (LastSegment(NodeStr(ARoot.ChildByField('name'), ASrc)) = AClass) then
+  begin
+    TypeNode := ARoot.ChildByField('type');
+    if not TypeNode.IsNull then
+      for I := 0 to TypeNode.ChildCount - 1 do
+        if TypeNode.Child(I).NodeType = 'declClass' then Exit(TypeNode.Child(I));
+  end;
+  for I := 0 to ARoot.NamedChildCount - 1 do
+  begin
+    Result := FindClassDecl(ARoot.NamedChild(I), ASrc, AClass);
+    if not Result.IsNull then Exit;
+  end;
+end;
+
+{ C14. True when every ancestor of the class named AClass is declared in the
+  unit under ARoot, up to an implicit or explicit TObject / TInterfacedObject
+  (neither declares Abort or Halt), and no class on that chain declares a
+  member named AName. False when the chain leaves the unit, or the class
+  itself is not found: the members it inherits there are unknown. }
+function ClassChainLacks(const ARoot: TTSNode; const ASrc: TBytes; const AClass, AName: string): Boolean;
+const
+  MAX_CHAIN = 32; { a cycle guard; no real hierarchy in one unit is this deep }
+var
+  Name, Parent: string;
+  Decl        : TTSNode;
+  Hop, I      : Integer;
+begin
+  Result := False;
+  Name   := AClass;
+  for Hop := 1 to MAX_CHAIN do
+  begin
+    Decl := FindClassDecl(ARoot, ASrc, Name);
+    if Decl.IsNull or TreeDeclaresRoutine(Decl, ASrc, AName, False) then Exit;
+    Parent := '';
+    for I := 0 to Decl.NamedChildCount - 1 do
+      if Decl.NamedChild(I).NodeType = 'typeref' then
+      begin
+        Parent := LastSegment(NodeStr(Decl.NamedChild(I), ASrc));
+        Break;
+      end;
+    if (Parent = '') or (Parent = 'tobject') or (Parent = 'tinterfacedobject') then Exit(True);
+    Name := Parent;
+  end;
+end;
+
+{ C14. The callee of a dotted call statement, lowercased with whitespace
+  removed -- 'system.sysutils.abort' for `System.SysUtils.Abort;` and
+  'system.halt' for `System.Halt(1)` -- or '' when ANode is not one. }
+function DottedCalleeText(const ANode: TTSNode; const ASrc: TBytes): string;
+var
+  C: TTSNode;
+begin
+  Result := '';
+  C := ANode;
+  if (C.NodeType = 'statement') and (C.NamedChildCount > 0) then C := C.NamedChild(0);
+  if C.NodeType = 'exprCall' then C := C.ChildByField('entity');
+  if (not C.IsNull) and (C.NodeType = 'exprDot') then
+    Result := string.Join('.', DottedSegments(NodeStr(C, ASrc)));
+end;
+
+function TBuilderState.BareIsRtl(const AName: string): Boolean;
+var
+  Root, Outer, P: TTSNode;
+  Parts         : TArray<string>;
+  Kind          : Integer;
+begin
+  if AName = 'abort' then Kind := BareAbortKind else Kind := BareHaltKind;
+  if Kind = 0 then
+  begin
+    { The unit root, and the OUTERMOST routine: a nested routine inherits the
+      class scope of the method it is nested in. }
+    Root  := Cfg.RoutineNode;
+    Outer := Cfg.RoutineNode;
+    P     := Root.Parent;
+    while not P.IsNull do
+    begin
+      if P.NodeType = 'defProc' then Outer := P;
+      Root := P;
+      P    := P.Parent;
+    end;
+    { Maybe a user routine when the unit declares one at unit level, the
+      outermost routine has a local one (or is itself a method that cannot be
+      told apart), or the method's class chain declares or may inherit one. }
+    Kind := 1;
+    if TreeDeclaresRoutine(Root, Cfg.Src, AName, True)
+       or TreeDeclaresRoutine(Outer, Cfg.Src, AName, False) then Kind := 2
+    else
+    begin
+      P := Outer.ChildByField('header');
+      if P.IsNull then Parts := nil
+      else Parts := DottedSegments(NodeStr(P.ChildByField('name'), Cfg.Src));
+      if (Length(Parts) >= 2) and not ClassChainLacks(Root, Cfg.Src, Parts[High(Parts) - 1], AName) then
+        Kind := 2;
+    end;
+    if AName = 'abort' then BareAbortKind := Kind else BareHaltKind := Kind;
+  end;
+  Result := Kind = 1;
+end;
 
 constructor TBuilderState.Create(ACfg: TCfg);
 begin
@@ -1088,15 +1290,39 @@ begin
       block created while the body is emitted belongs to the body -- BodyIdx and
       FollowIdx both already exist, so neither is caught by this range. }
     var BodyFirst: Integer := Cfg.Blocks.Count;
-    if FinNode.IsNull then TryAfter := EmitStmt(BodyIdx, TryNode)
-    else
+    { C14: an `except end` with NO handler swallows every exception, and emits no
+      handler block below to carry the "raised part-way" state on to the follow
+      block. Inside its body a raise therefore stays an ordinary edge to Exit
+      (not NoReturn) -- the pre-C14 model, under which that state still reaches
+      the caller's view. See TCfgBlock.NoReturn. }
+    var Swallows := False;
+    if FinNode.IsNull then
     begin
-      Finallys.Add(FinNode);
-      try
-        TryAfter := EmitStmt(BodyIdx, TryNode);
-      finally
-        Finallys.Delete(Finallys.Count - 1);
+      var InExcept := False;
+      for I := 0 to ANode.NamedChildCount - 1 do
+        if ANode.NamedChild(I).NodeType = 'kExcept' then
+        begin
+          InExcept := True;
+          Swallows := True;
+        end
+        else if InExcept and ((ANode.NamedChild(I).NodeType = 'exceptionHandler')
+                              or (ANode.NamedChild(I).NodeType = 'statements')) then
+          Swallows := False;
+    end;
+    if Swallows then Inc(SwallowDepth);
+    try
+      if FinNode.IsNull then TryAfter := EmitStmt(BodyIdx, TryNode)
+      else
+      begin
+        Finallys.Add(FinNode);
+        try
+          TryAfter := EmitStmt(BodyIdx, TryNode);
+        finally
+          Finallys.Delete(Finallys.Count - 1);
+        end;
       end;
+    finally
+      if Swallows then Dec(SwallowDepth);
     end;
     var BodyLast: Integer := Cfg.Blocks.Count - 1;
     if not FinNode.IsNull then
@@ -1234,6 +1460,7 @@ begin
   begin
     Cfg.Blocks[ACur].AddItem(ANode, WithDepth > 0);
     Cfg.Blocks[ACur].AddSucc(Cfg.ExitIdx);
+    Cfg.Blocks[ACur].NoReturn := SwallowDepth = 0; { C14 -- see TCfgBlock.NoReturn }
     Exit(-1);
   end;
 
@@ -1248,6 +1475,26 @@ begin
       opened INSIDE their loop. }
     if EntTxt = 'exit' then
     begin Cfg.Blocks[ACur].AddSucc(DivertVia(Cfg.ExitIdx, 0)); Exit(-1); end;
+    { C14. The RTL `Halt` / `Halt(n)` ends the process and the RTL `Abort`
+      raises EAbort: neither falls through. Modelled like `raise` -- an edge to
+      Exit marked NoReturn (Halt also EndsProcess). A BARE name is the RTL one
+      only when nothing in the unit could redeclare it (BareIsRtl) and no `with`
+      could bring a member of that name into scope; otherwise it is an ordinary
+      call. `System.SysUtils.Abort` / `SysUtils.Abort` / `System.Halt` are always
+      the RTL; `Self.Abort` / `Obj.Abort` never are. }
+    var Dotted := DottedCalleeText(ANode, Cfg.Src);
+    var IsHalt  := (Dotted = 'system.halt')
+                   or ((EntTxt = 'halt') and (WithDepth = 0) and BareIsRtl('halt'));
+    var IsAbort := (Dotted = 'system.sysutils.abort') or (Dotted = 'sysutils.abort')
+                   or ((EntTxt = 'abort') and (WithDepth = 0) and BareIsRtl('abort'));
+    if IsHalt or IsAbort then
+    begin
+      Cfg.Blocks[ACur].AddSucc(Cfg.ExitIdx);
+      { Abort raises, so an empty handler swallows it; Halt raises nothing. }
+      Cfg.Blocks[ACur].NoReturn    := IsHalt or (SwallowDepth = 0);
+      Cfg.Blocks[ACur].EndsProcess := IsHalt;
+      Exit(-1);
+    end;
     if (EntTxt = 'break') and (Loops.Count > 0) then
     begin Cfg.Blocks[ACur].AddSucc(DivertVia(Loops.Peek.BreakIdx, Loops.Peek.FinallyDepth)); Exit(-1); end;
     if (EntTxt = 'continue') and (Loops.Count > 0) then

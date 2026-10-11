@@ -3,6 +3,64 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.27.1-alpha -- unreleased
+
+No extractor or resolver change: indexes do not re-parse or re-resolve.
+
+### Fixed
+
+- **`function-result-not-set` / `out-param-not-set` no longer count a path that never
+  returns** (converter-filed false positive). A leading guard `if A > 99 then raise ...;`
+  followed by full assignment reported "Function Result is not assigned on every path".
+  The CFG marks a block ending in `raise` (including a bare re-raise), the RTL `Halt` /
+  `Halt(n)` or the RTL `Abort` as NoReturn, and the two rules take their meet at Exit over
+  the returning predecessors only. `Halt` and `Abort` previously fell through; they now end
+  the path like `raise`. Plain `Exit;` still returns and still fires; `Exit(value)` assigns.
+  A BARE `Abort` / `Halt` is the RTL one only when the unit cannot have redeclared it: not
+  a member of the method's class or of an in-unit ancestor, not a unit-level or local
+  routine, no ancestor outside the unit, not inside a `with` -- otherwise it is an
+  ordinary call that falls through (a `TJob.Abort` method no longer cuts `L.Free` out of
+  the CFG and fakes an `object-leak` / `write-only-local`). `System.SysUtils.Abort`,
+  `SysUtils.Abort` and `System.Halt` are always the RTL. A `raise` / `Abort` inside a
+  try..except whose handler is EMPTY is swallowed and returns, so it is not NoReturn (the
+  missed `try if A > 0 then raise ...; Result := 1; except end;` fires again). A path
+  ending in `Halt` is left out of `object-leak`'s meet at Exit: the process ends there.
+  Pinned by run_function_result_noreturn_paths.ps1 (8 + 6 must-not-fire, 4 + 7 positive
+  controls).
+- **`doc-drift` no longer reads a comment inside a parameter list as a parameter**
+  (converter-filed false positive). The indexed signature of a declaration split over
+  several lines is the lines joined with a space, comments included, so a trailing `//`
+  comment ran into the next line and its text became a "signature param ... has no
+  <param> tag" (plus "documented param ... not in signature" for the real one). The
+  checker and the `document` writer now parse the signature through one helper,
+  `SignatureWithoutComments` (DRagLint.Refactor.DocStub): `{ }` / `(* *)` comments are
+  stripped in place; for a `//` comment it reads the heading's source lines, where the
+  line break is, and cuts each comment's text out of the INDEXED signature -- the
+  parameter text always comes from the index, which has already applied the
+  preprocessor, so a parameter inside a false `{$IFDEF}` does not come back. The source
+  line must name the routine followed by its `(` (so a comment between `(` and the first
+  `:` is handled too), and every comment must be found verbatim in the indexed text;
+  otherwise the indexed text is kept. Read-time only: the stored signature is unchanged.
+  Pinned by run_doc_drift_split_signature_comments.ps1.
+- **"Called from:" no longer claims a call on a receiver of an unrelated, known type**
+  (converter-filed wrong edge). `FUnitList.ClearSelection` (FUnitList: TListView) is
+  correctly left unresolved by the resolver, but the doc-facts builder's unverified
+  by-name bucket attributed it to the project's `TWorkingSet.ClearSelection`, and
+  `doc-drift --fix` / `document --apply` wrote it into that unit's managed block. The
+  builder now looks up the receiver's declaration (local, param, field -- inherited
+  included -- or unit var) and drops the edge when its declared type is neither the
+  method's class nor a descendant: a project class shown unrelated, or a type this index
+  does not declare at all (a library type cannot descend from a project class). Interfaces,
+  generic parameters, aliases and undeclared or dotted receivers are kept as before, and
+  so is a receiver typed as a descendant of the method's class or as an ancestor the
+  class names (an override may dispatch there). The refused edges of a whole run are
+  reported in ONE stderr line at exit (`drag-lint: note: skipped N unverified caller
+  edge(s) whose receiver has an unrelated type: <first three>; (+M more)`), from
+  `document`, `doc-drift --fix` and the doc lint rules alike; `TDocFacts.SkippedCallers`
+  carries them. Read-time only: no resolver change, no re-resolve. Pinned by
+  run_doc_callers_foreign_receiver.ps1, whose keep-path arms use calls the resolver
+  left unbound.
+
 ## v1.27.0-alpha -- unreleased
 
 No extractor or resolver change: indexes do not re-parse. (C9, CONV-4: uses

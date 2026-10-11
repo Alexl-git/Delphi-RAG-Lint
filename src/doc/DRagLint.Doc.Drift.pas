@@ -771,7 +771,10 @@ begin
     // sig/param/return computation and the finding emission) on routine kinds.
     if ASym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then
     begin
-      Sig       := EffectiveSignature(AStore, ASym);
+      // C14: comments inside a (split) parameter list are not parameter text --
+      // the same helper the writer (TDocumenter.BuildForSymbol) parses with.
+      Sig       := SignatureWithoutComments(EffectiveSignature(AStore, ASym), ASym.Name,
+                                            AStore.GetFilePath(ASym.FileId), ASym.StartLine);
       ParamList := ExtractParamList(Sig);
       SigNames  := ParseParamNames(ParamList);
       Groups    := SplitParamGroups(ParamList);

@@ -62,6 +62,34 @@ type
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ExtractParamList(const ASig: string): string;
+/// <summary>Returns the indexed signature ASig of the routine declared at
+/// ADeclLine of AFilePath with every comment inside it removed, so that
+/// <see cref="ExtractParamList"/> and <see cref="ParseParamNames"/> never read
+/// comment text as parameter text.</summary>
+/// <param name="ASig">The indexed signature, e.g. <c>'(const A: Integer): Integer'</c>.
+/// For a declaration split over several lines the index JOINS the lines with a
+/// space and keeps their comments.</param>
+/// <param name="AName">The routine's bare name. The source line at ADeclLine
+/// must name it, followed by its <c>(</c>, before that line is trusted.</param>
+/// <param name="AFilePath">The declaring unit; read only when ASig holds a
+/// <c>//</c> comment outside a string literal.</param>
+/// <param name="ADeclLine">1-based line of the declaration in AFilePath.</param>
+/// <returns>ASig unchanged when it holds no comment opener. With <c>{ }</c> or
+/// <c>(* *)</c> comments: ASig with them (and the contents of string literals)
+/// blanked. With a <c>//</c> comment: ASig with the text of each <c>//</c>
+/// comment cut out, the text taken from the source lines of the heading,
+/// because the line break that ended the comment is not in ASig. The
+/// parameter text itself always comes from ASig, which the indexer has
+/// already preprocessed: a parameter inside a false <c>{$IFDEF}</c> never
+/// comes back. ASig unchanged when the source cannot be read, its line at
+/// ADeclLine does not name the routine, a <c>//</c> comment of ASig is not
+/// found on the heading's source lines (a stale index), or a block comment
+/// is left unclosed.</returns>
+/// <remarks>Shared by the doc-drift CHECKER and the document WRITER, so the
+/// two always parse the same parameter list. Comment and string masking is
+/// <c>StripCommentsAndStrings</c> in DRagLint.Analysis.Purity; a column scan
+/// only locates where a <c>//</c> comment starts.</remarks>
+function SignatureWithoutComments(const ASig, AName, AFilePath: string; ADeclLine: Integer): string;
 /// <summary><!-- drag-lint:auto sum -->ParseParamNames: parses a param-list string such
 /// as "const A, B: string; C: Boolean; D: Integer" and returns an array of bare param
 /// names (A, B, C, D). Handles const/var/out/in prefixes and grouped names (A, B: T).</summary>
@@ -204,6 +232,8 @@ implementation
 
 uses
   System.IOUtils
+  , System.Math                 { Min -- SignatureWithoutComments' line window }
+  , DRagLint.Analysis.Purity    { StripCommentsAndStrings -- the one comment masker }
   ;
 
 // ---------------------------------------------------------------------------
@@ -224,6 +254,178 @@ begin
   Result:= Trim(Copy(ASig, OpenPos + 1, ClosePos - OpenPos - 1));
 end;
 
+{ C14. Collapses every whitespace run to one space and trims. }
+function CollapseSpaces(const S: string): string;
+begin
+  Result:= Trim(TRegEx.Replace(S, '\s+', ' '));
+end;
+
+{ C14. The 1-based column where a `//` line comment starts in ALine, or 0.
+  AInBrace / AInParen are the comment states the line STARTS in (a brace or
+  paren-star comment opened on an earlier line); string literals are skipped, so
+  the `//` of `'http://x'` is not a comment. Only the column is wanted here --
+  the line is still masked by StripCommentsAndStrings, the one masker. }
+function LineCommentPos(const ALine: string; AInBrace, AInParen: Boolean): Integer;
+var
+  I    : Integer;
+  InStr: Boolean;
+begin
+  Result:= 0;
+  InStr := False;
+  I     := 1;
+  while I <= Length(ALine) do
+  begin
+    if AInBrace then AInBrace:= ALine[I] <> '}'
+    else if AInParen then
+    begin
+      if (ALine[I] = '*') and (I < Length(ALine)) and (ALine[I + 1] = ')') then
+      begin
+        AInParen:= False;
+        Inc(I);
+      end;
+    end
+    else if InStr then InStr:= ALine[I] <> ''''
+    else if ALine[I] = '''' then InStr:= True
+    else if ALine[I] = '{' then AInBrace:= True
+    else if (ALine[I] = '(') and (I < Length(ALine)) and (ALine[I + 1] = '*') then
+    begin
+      AInParen:= True;
+      Inc(I);
+    end
+    else if (ALine[I] = '/') and (I < Length(ALine)) and (ALine[I + 1] = '/') then
+      Exit(I);
+    Inc(I);
+  end;
+end;
+
+{ C14. True once AText (already comment-stripped) holds a complete routine
+  heading: a '(' whose balanced ')' is followed by the ';' that ends it.
+  AGiveUp is set when the text cannot be a parameterised heading at all (a ';'
+  before any '('), so the caller stops reading instead of running into a later
+  declaration. }
+function HeadingComplete(const AText: string; out AGiveUp: Boolean): Boolean;
+var
+  Open : Integer;
+  Semi : Integer;
+  I    : Integer;
+  Depth: Integer;
+begin
+  Result := False;
+  AGiveUp:= False;
+  Open:= Pos('(', AText);
+  Semi:= Pos(';', AText);
+  if (Open = 0) or ((Semi > 0) and (Semi < Open)) then
+  begin
+    AGiveUp:= Semi > 0;
+    Exit;
+  end;
+  Depth:= 0;
+  for I:= Open to Length(AText) do
+  begin
+    if AText[I] = '(' then Inc(Depth)
+    else if AText[I] = ')' then Dec(Depth)
+    else if (AText[I] = ';') and (Depth = 0) then Exit(True);
+  end;
+end;
+
+{ C14. The lines of AFilePath, or nil when there is no file to read. }
+function SourceLinesOrNil(const AFilePath: string): TArray<string>;
+begin
+  Result:= nil;
+  if (AFilePath <> '') and TFile.Exists(AFilePath) then
+  try
+    Result:= TFile.ReadAllLines(AFilePath, TEncoding.ANSI);
+  except  // an unreadable unit has no better heading to offer: nil makes SignatureWithoutComments return the indexed signature, exactly what it returned before C14
+    on Exception do Result:= nil;
+  end;
+end;
+
+{ C14. ASig with every `//` comment of the declaration's source lines cut out
+  of it, or ASig itself when the source cannot account for them. The PARAMETER
+  text always comes from the index -- which has already applied the
+  preprocessor -- and only the comment text comes from the source, so a
+  parameter in a false IFDEF branch, which the index dropped, cannot come back. The line at
+  ADeclLine must name the routine followed by its '(' (the moved-line guard);
+  each comment must be found verbatim in ASig, in order (the overload guard: a
+  different overload has different text). A comment absent from ASig sat on a
+  line the preprocessor removed, and is skipped. }
+function CutLineComments(const ASig, AName, AFilePath: string; ADeclLine: Integer): string;
+const
+  MAX_HEADING_LINES = 64; { a heading longer than this is not worth the read }
+var
+  Lines   : TArray<string>;
+  InBrace : Boolean;
+  InParen : Boolean;
+  Acc     : string;
+  Work    : string;
+  GiveUp  : Boolean;
+  Done    : Boolean;
+  I       : Integer;
+  At      : Integer;
+  Found   : Integer;
+  Cursor  : Integer;
+begin
+  Result:= ASig;
+  if (ADeclLine < 1) or (AName = '') then Exit;
+  Lines:= SourceLinesOrNil(AFilePath);
+  if (ADeclLine > Length(Lines))
+     or not TRegEx.IsMatch(Lines[ADeclLine - 1],
+              '(^|[^A-Za-z0-9_])' + TRegEx.Escape(AName) + '\s*(<[^>]*>)?\s*\(', [roIgnoreCase]) then
+    Exit;
+  InBrace:= False;
+  InParen:= False;
+  Acc    := '';
+  Work    := ASig;
+  Cursor := 1;
+  Done   := False;
+  I      := ADeclLine;
+  while (not Done) and (I <= Min(ADeclLine + MAX_HEADING_LINES - 1, Length(Lines))) do
+  begin
+    At:= LineCommentPos(Lines[I - 1], InBrace, InParen);
+    if At > 0 then
+    begin
+      Found:= Pos(TrimRight(Copy(Lines[I - 1], At, MaxInt)), Work, Cursor);
+      if Found > 0 then
+      begin
+        Cursor:= Found + 1;
+        Work   := Copy(Work, 1, Found - 1) + ' '
+                 + Copy(Work, Found + Length(TrimRight(Copy(Lines[I - 1], At, MaxInt))), MaxInt);
+      end;
+    end;
+    Acc := Acc + ' ' + StripCommentsAndStrings(Lines[I - 1], InBrace, InParen);
+    Done:= HeadingComplete(Acc, GiveUp) or GiveUp;
+    Inc(I);
+  end;
+  { Every `//` in ASig must be one the source accounted for; one left over
+    means the index and the source disagree, and ASig is all there is. }
+  if Done and (LineCommentPos(Work, False, False) = 0) then Result:= Work;
+end;
+
+function SignatureWithoutComments(const ASig, AName, AFilePath: string; ADeclLine: Integer): string;
+var
+  InBrace: Boolean;
+  InParen: Boolean;
+  Acc    : string;
+begin
+  Result := ASig;
+  InBrace:= False;
+  InParen:= False;
+  { A line comment ended at a line break the index joined away: only the
+    source knows where it stops. }
+  if LineCommentPos(Result, False, False) > 0 then
+  begin
+    Result:= CutLineComments(ASig, AName, AFilePath, ADeclLine);
+    if LineCommentPos(Result, False, False) > 0 then Exit(ASig);
+  end;
+  { Block comments are wholly inside the text: strip them where they stand. }
+  if (Pos('{', Result) > 0) or (Pos('(*', Result) > 0) then
+  begin
+    Acc:= StripCommentsAndStrings(Result, InBrace, InParen);
+    if InBrace or InParen then Exit(ASig);
+    Result:= Acc;
+  end;
+  if Result <> ASig then Result:= CollapseSpaces(Result);
+end;
 // IsFunction: true when the signature starts with 'function' or 'constructor'.
 // Also returns true for 'method' kind when the text contains 'function ' keyword
 // before the identifier.

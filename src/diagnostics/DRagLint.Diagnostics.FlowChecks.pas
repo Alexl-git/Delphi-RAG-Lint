@@ -2690,7 +2690,18 @@ var
           end;
         end;
 
-        ExitVal := AIn[Cfg.ExitIdx];
+        { C14. What the CALLER sees on return: the meet over the predecessors of
+          Exit that actually RETURN. A block marked NoReturn (raise / re-raise /
+          Halt / Abort) keeps its Exit edge for the leak and liveness analyses,
+          but nothing comes back from it, so it must not make a guard clause
+          (`if A > 99 then raise ...;`) look like a path that returns an
+          unassigned Result. Plain `Exit;` is NOT NoReturn and still counts.
+          When every predecessor is NoReturn the routine never returns and the
+          meet stays Bottom (Must = all assigned), which is the right answer. }
+        ExitVal := Ana.Bottom;
+        for var PIx in Cfg.Blocks[Cfg.ExitIdx].Pred do
+          if not Cfg.Blocks[PIx].NoReturn then
+            ExitVal := Ana.Join(ExitVal, AOut[PIx]);
 
         { ---- function-result-not-set ---- }
         Idx := Vars.IndexOf('result');
@@ -3079,8 +3090,22 @@ var
             Both are decided from the DECLARED TYPE, which the routine var table
             already carries -- no new analysis, and no chance of hiding a real
             leak, because neither shape can leak by construction. }
+          { C14. A block ending in the RTL Halt reaches Exit only because the
+            process ends there; nothing a Free could fix is lost on that path,
+            so it stays out of the meet. A raise path stays IN: the exception
+            unwinds into the caller and the object is gone. }
+          var LeakAtExit := EIn2[Cfg.ExitIdx];
+          for var PIx in Cfg.Blocks[Cfg.ExitIdx].Pred do
+            if Cfg.Blocks[PIx].EndsProcess then
+            begin
+              LeakAtExit := EscAna.Bottom;
+              for var QIx in Cfg.Blocks[Cfg.ExitIdx].Pred do
+                if not Cfg.Blocks[QIx].EndsProcess then
+                  LeakAtExit := EscAna.Join(LeakAtExit, EOut2[QIx]);
+              Break;
+            end;
           for I := 0 to Vars.Count - 1 do
-            if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and EIn2[Cfg.ExitIdx][I]
+            if (Vars.Get(I).Kind = vkLocal) and (CreateRow[I] > 0) and LeakAtExit[I]
                { An inline `var X := T.Create(..)` has NO declared type, so the
                  value/interface narrowing below had nothing to read and every
                  such local was a leak candidate regardless of its kind. Fall

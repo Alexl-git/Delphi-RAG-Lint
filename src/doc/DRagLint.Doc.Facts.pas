@@ -203,6 +203,14 @@ type
     // AMaxReturnCases <= 0 (enumeration disabled -> bare TODO at emit).
     ReturnCases    : TArray<string>     ;
     CalledFromTotal: Integer            ;
+    /// <summary>Unverified by-name caller edges the builder REFUSED, one line
+    /// each -- '<caller> (<file>): receiver <R> is a <Type>, not <Owner> or a
+    /// descendant'.</summary>
+    /// <remarks>C14. An unresolved call site whose receiver has a KNOWN declared
+    /// type unrelated to the documented method's class is not a caller of it,
+    /// so it is left out of CalledFrom and CalledFromTotal and listed here
+    /// instead, for the writer to report. Never rendered into a doc block.</remarks>
+    SkippedCallers : TArray<string>     ;
     CallsTotal     : Integer            ;
     UsedInTotal    : Integer            ;
     // v(ADF T3): ground-truth from the Pascal 'deprecated' DIRECTIVE on the decl
@@ -1344,6 +1352,153 @@ begin
   if P < 0 then Exit;
   Head:= Copy(AQualifiedName, 1, P); { drop the member leaf }
   Result:= LastSeg(Head);
+end;
+
+{ C14: the bare type name a field / local / param / var declaration's stored
+  Signature names -- 'TListView' from 'TListView', ': TListView' or
+  'const TListView'; the last segment of a dotted name. '' for anything that is
+  not one plain identifier (an array, a pointer, an inline record, a generic
+  instance), which the caller treats as "type unknown". }
+function DeclaredTypeName(const ASignature: string): string;
+var
+  S: string;
+  P: Integer;
+begin
+  Result:= '';
+  S:= Trim(ASignature);
+  if S.StartsWith(':') then S:= Trim(Copy(S, 2, MaxInt));
+  for var Q in ['const ', 'var ', 'out ', 'in '] do
+    if S.ToLower.StartsWith(Q) then S:= Trim(Copy(S, Length(Q) + 1, MaxInt));
+  P:= S.IndexOfAny([';', '=', ' ']);
+  if P >= 0 then S:= Copy(S, 1, P);
+  S:= LastSeg(S);
+  if IsValidIdent(S) then Result:= S;
+end;
+
+{ C14 -- THE FOREIGN-RECEIVER GATE on the unverified NAME bucket.
+
+  The bucket holds call sites the resolver could NOT bind, matched to this symbol
+  by leaf name. The store's receiver filter (FindUnresolvedNameCallers) keeps
+  every receiver that names a VALUE, because a value's name says nothing about
+  its type. But the value's DECLARED type is in the index, and it can say a
+  great deal: `FUnitList.ClearSelection` with `FUnitList: TListView` cannot be
+  a call of TWorkingSet.ClearSelection, and attributing it there is how
+  `doc-drift --fix` wrote a VCL list view's call into another unit's managed
+  block (INBOX 2026-09-30, doc-drift wrong caller edge).
+
+  Answers the receiver's declared type name when it is KNOWN and is neither
+  AOwnerLeaf nor a descendant of it -- the caller drops the edge and reports it
+  skipped. Answers '' (keep the edge, as before) whenever the type cannot be
+  established: no receiver, Self, a dotted / indexed / cast receiver, a name
+  not declared in scope, a declaration with no plain type, a generic
+  parameter, an interface (dispatch is not decidable here), or a name this
+  index declares in some other shape (an alias, say).
+
+  "Known" includes a type this index does not declare at all, and that is a
+  deliberate inference, not a lookup: a project DB holds the project's compile
+  closure, so a type absent from it is declared in a library -- and a library
+  type cannot descend from a project class. AOwnerLeaf is the target's own
+  class in THIS store, so the inference holds for every symbol the builder
+  documents.
+
+  Scope walk: the enclosing routine (locals/params), then each enclosing
+  container upward (class -> unit), checking a class's resolved ancestors for an
+  inherited field. Read-time only -- the index is not touched. }
+{ C14: the declaration the bare identifier ARcv names in the scope of routine
+  AEnclosingId -- the routine (locals/params), then each enclosing container
+  upward (class -> unit), with a class's resolved ancestors checked for an
+  inherited field. Default(TSymbol) when not found. AGenerics collects every
+  generic parameter list met on the way, for ForeignReceiverType. }
+function ReceiverDeclaration(const AStore: ISymbolStore; AEnclosingId: Int64;
+  const ARcv: string; out AGenerics: string): TSymbol;
+const
+  MAX_SCOPE_HOPS = 16; { routine -> class -> (nested class) -> unit; a cap, not a depth }
+var
+  Cur : TSymbol;
+  Hops: Integer;
+begin
+  Result   := Default(TSymbol);
+  AGenerics:= '';
+  Cur      := AStore.GetSymbolById(AEnclosingId);
+  Hops     := 0;
+  while (Cur.Id > 0) and (Result.Id = 0) and (Hops < MAX_SCOPE_HOPS) do
+  begin
+    AGenerics:= AGenerics + ',' + Cur.GenericParams;
+    Result:= AStore.FindChildSymbolByName(Cur.Id, ARcv);
+    if (Result.Id = 0) and (Cur.Kind in [skClass, skRecord]) then
+      for var Anc in AStore.GetTransitiveAncestors(Cur.Id) do
+        if (Result.Id = 0) and Anc.Resolved and (Anc.SymbolId > 0) then
+          Result:= AStore.FindChildSymbolByName(Anc.SymbolId, ARcv);
+    if Cur.ParentId > 0 then Cur:= AStore.GetSymbolById(Cur.ParentId) else Cur:= Default(TSymbol);
+    Inc(Hops);
+  end;
+end;
+
+{ C14: True when ATypeName is one of the generic parameters in AGenerics
+  (TBox<T>.FItem: T) -- a placeholder, not a type. }
+function IsGenericParam(const ATypeName, AGenerics: string): Boolean;
+begin
+  Result:= False;
+  for var G in AGenerics.Split([',', ';', ' ', '<', '>', ':']) do
+    if SameText(Trim(G), ATypeName) then Result:= True;
+end;
+
+{ C14: the Delphi convention for an interface name -- 'I' then an upper-case
+  letter (IUnknown, IInterface, IFooService). Used only where the index cannot
+  say what kind of type a name is. }
+function LooksLikeInterfaceName(const ATypeName: string): Boolean;
+begin
+  Result:= (Length(ATypeName) >= 2) and (ATypeName[1] = 'I') and CharInSet(ATypeName[2], ['A'..'Z']);
+end;
+
+{ C14: True when the owner class AOwnerLeaf (resolved index-wide) lists ATypeName anywhere in its ancestor closure, resolved
+  or name-only (a library interface it implements, say). }
+function OwnerNamesAncestor(const AStore: ISymbolStore; const AOwnerLeaf, ATypeName: string): Boolean;
+var
+  Owner: TSymbol;
+begin
+  Result:= False;
+  Owner:= AStore.ResolveTypeNameToClass(AOwnerLeaf, 0);
+  if Owner.Id > 0 then
+    for var Anc in AStore.GetTransitiveAncestors(Owner.Id) do
+      if SameText(LastSeg(Anc.Name), ATypeName) then Result:= True;
+end;
+
+function ForeignReceiverType(const AStore: ISymbolStore; const ARC: TResolvedCaller;
+  const AOwnerLeaf: string): string;
+var
+  Rcv     : string;
+  Decl    : TSymbol;
+  Generics: string;
+  TypeName: string;
+  TypeSym : TSymbol;
+  Known   : Boolean;
+begin
+  Result:= '';
+  Rcv:= Trim(ARC.ReceiverText);
+  if (AOwnerLeaf = '') or (ARC.EnclosingSymbolId <= 0) or (not IsValidIdent(Rcv))
+     or SameText(Rcv, 'Self') then Exit;
+  Decl:= ReceiverDeclaration(AStore, ARC.EnclosingSymbolId, Rcv, Generics);
+  TypeName:= '';
+  if (Decl.Id > 0) and (Decl.Kind in [skField, skLocalVar, skParam, skVarDecl]) then
+    TypeName:= DeclaredTypeName(Decl.Signature);
+  if (TypeName = '') or SameText(TypeName, AOwnerLeaf) or IsGenericParam(TypeName, Generics) then Exit;
+  TypeSym:= AStore.ResolveTypeNameToClass(TypeName, Decl.FileId);
+  if TypeSym.Id > 0 then
+    { in this index: unrelated unless an interface (dispatch undecidable here)
+      or a descendant of the owner }
+    Known:= (TypeSym.Kind <> skInterface)
+            and not AStore.IsDescendantOf(TypeSym.Name, AOwnerLeaf, Decl.FileId)
+  else
+    { not a class here: known-foreign only if this index declares the name in
+      no shape at all (an alias or enum would be found), it does not LOOK like
+      an interface (a library interface can be implemented by the owner or a
+      descendant, so a call through it may well dispatch here), and the owner
+      does not name it among its own ancestors. }
+    Known:= (AStore.FindSymbolByExactNameAnywhere(TypeName).Id = 0)
+            and not LooksLikeInterfaceName(TypeName)
+            and not OwnerNamesAncestor(AStore, AOwnerLeaf, TypeName);
+  if Known then Result:= TypeName;
 end;
 
 { True when ALeaf names exactly ONE call-target symbol in the index, i.e. when an
@@ -3552,6 +3707,7 @@ var
   Key       : string                 ;
   Shown     : Integer                ;
   I         : Integer                ;
+  Skipped   : TArray<string>         ; { C14 -- Result.SkippedCallers, see SkipForeignReceiver }
 
   // Map one resolved-caller row to a display ref. Display is the enclosing
   // routine's qualified name (or the same fallback the name-based path used when
@@ -3603,6 +3759,21 @@ var
     if Seen.ContainsKey(Key) then Exit;
     Seen.Add(Key, True);
     Distinct.Add(AFR);
+  end;
+
+  // C14: True when ARC's receiver has a known type unrelated to ASym's class;
+  // the edge is then recorded in Result.SkippedCallers instead of being added.
+  // AOwningStore is the store ARC came from -- its ids are meaningful only there.
+  function SkipForeignReceiver(const AOwningStore: ISymbolStore; const ARC: TResolvedCaller): Boolean;
+  var
+    Foreign: string;
+  begin
+    Foreign:= ForeignReceiverType(AOwningStore, ARC, OwnerTypeLeaf(ASym.Kind, ASym.QualifiedName));
+    Result := Foreign <> '';
+    if Result then
+      Skipped:= Skipped + [Format('%s (%s): receiver %s is a %s, not %s or a descendant',
+        [ARC.EnclosingQName, ARC.Location, Trim(ARC.ReceiverText), Foreign,
+         OwnerTypeLeaf(ASym.Kind, ASym.QualifiedName)])];
   end;
 
 begin
@@ -3782,6 +3953,7 @@ begin
       Inc(GCUnresPrimary);
       for RC in ResCallers do
       begin
+        if SkipForeignReceiver(AStore, RC) then Continue; { C14 -- see ForeignReceiverType }
         FR:= ToFactRef(AStore, RC); { primary store's rows -> primary store's ids }
         FR.Confidence:= 'unverified'; // enforce the '?' marker regardless of store value
         AddDistinct(FR);
@@ -3891,6 +4063,7 @@ begin
       Inc(GCUnresExtra);
       for RC in ResCallers do
       begin
+        if SkipForeignReceiver(ExStore, RC) then Continue; { C14 -- the row's ids belong to ExStore }
         { THE FIX: ExStore, not AStore. These rows came from the extra store, so
           their EnclosingSymbolId is only meaningful there -- handing the primary
           store that id had OverloadArityTag answer about whichever unrelated
@@ -3910,6 +4083,7 @@ begin
     // renderer's MoreSuffix appends '(+N more)' from CalledFromTotal.
     Inc(GBUnresolved, BTick - TB0);
     Result.CalledFromTotal:= Distinct.Count;
+    Result.SkippedCallers := Skipped;
     if Distinct.Count > AMaxCallers then Shown:= AMaxCallers else Shown:= Distinct.Count;
     // v(Q0, 2026-08-14): NO CAP ON A `dl:shared` UNIT. This is an INBOUND fact --
     // its entries come from OUTSIDE the unit, so each project that compiles the
