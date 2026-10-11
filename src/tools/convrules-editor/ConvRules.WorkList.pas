@@ -42,6 +42,10 @@ const
   WORK_NO_CONVERTED    = 'no work list (no unit converted)';
   /// <summary>Summary before the first Convert run of the session.</summary>
   WORK_NO_RUN          = 'no work list yet -- run Convert first';
+  /// <summary>The status-filter entry for every status outside the six PAS_USE_* values
+  /// (a newer engine's word, or '' when the engine sent none). The parentheses keep it
+  /// from colliding with an engine status, which is a lower-case hyphenated word.</summary>
+  WORK_STATUS_OTHER    = '(other)';
 
 type
   /// <summary>One pas_uses[] entry: a member or global the unit's code uses, and
@@ -81,8 +85,12 @@ type
 
   /// <summary>What the Work list shows. An empty field means "all".</summary>
   TWorkFilter = record
-    /// <summary>The statuses shown (exact, case-insensitive); [] = every status.</summary>
+    /// <summary>The statuses shown (exact, case-insensitive); WORK_STATUS_OTHER matches
+    /// every status outside the six PAS_USE_* values, '' included; [] = every status
+    /// unless NoStatus.</summary>
     Statuses: TArray<string>;
+    /// <summary>True = no status is chosen (every box unchecked): nothing is shown.</summary>
+    NoStatus: Boolean;
     /// <summary>The unit shown (UnitPas, case-insensitive); '' = every unit.</summary>
     UnitPas : string;
     /// <summary>A case-insensitive substring of Member or Instance; '' = no text filter.</summary>
@@ -100,6 +108,10 @@ type
   TWorkListState = (wlsNoRun, wlsNoCapability, wlsNoConverted, wlsRows);
 
   /// <summary>One run's Work list, handed from the Convert tab to the host.</summary>
+  /// <remarks>Known limits (deferred to the final review): two books on one unit that
+  /// report the same global at shifted lines give two rows (WorkRunOf drops exact repeats
+  /// only). A Convert that is refused before it runs (Preflight, a gate) hands no TWorkRun,
+  /// so the Work list keeps the previous run's rows.</remarks>
   TWorkRun = record
     /// <summary>The Convert tab's run counter; every row carries it.</summary>
     RunId: Integer;
@@ -144,12 +156,25 @@ function IsWorkStatus(const AStatus: string): Boolean;
 function WorkStyleOf(const AStatus: string): TWorkStyle;
 
 /// <summary>PURE: the six known statuses, in sort order (unmapped first).</summary>
-/// <returns>The PAS_USE_* values the tab's status filter lists.</returns>
+/// <returns>The PAS_USE_* values, in STATUS order.</returns>
 function WorkStatuses: TArray<string>;
 
+/// <summary>PURE: the entries of the tab's status filter.</summary>
+/// <returns>WorkStatuses, then WORK_STATUS_OTHER.</returns>
+function WorkFilterEntries: TArray<string>;
+
 /// <summary>PURE: the filter the tab starts with.</summary>
-/// <returns>Statuses = the four work statuses (IsWorkStatus), every unit, no text.</returns>
+/// <returns>Statuses = the four work statuses (IsWorkStatus) and WORK_STATUS_OTHER (an
+/// unknown status is never hidden by default), every unit, no text.</returns>
 function DefaultWorkFilter: TWorkFilter;
+
+/// <summary>PURE: the filter of the tab's controls.</summary>
+/// <param name="AChecked">The checked status-filter entries (WorkFilterEntries).</param>
+/// <param name="AUnitPas">The chosen unit; '' = every unit.</param>
+/// <param name="AText">The text box; trimmed.</param>
+/// <returns>Statuses = AChecked; NoStatus when AChecked is empty, so an all-unchecked
+/// filter shows nothing rather than everything.</returns>
+function WorkFilterOf(const AChecked: TArray<string>; const AUnitPas, AText: string): TWorkFilter;
 
 /// <summary>PURE: the rows AFilter lets through, order kept.</summary>
 /// <param name="ARows">The run's rows.</param>
@@ -180,8 +205,9 @@ function WorkColumns: TArray<string>;
 /// <param name="ARows">The run's rows (unfiltered).</param>
 /// <param name="AState">Why the list holds what it holds; wlsRows by default.</param>
 /// <returns>For wlsRows: 'N to work on (U unmapped, G global, C cast-refused, R
-/// not-rewritten), M mapped / same-name'; else WORK_NO_RUN, WORK_NO_CAPABILITY or
-/// WORK_NO_CONVERTED. Rows of an unknown status are counted in neither part.</returns>
+/// not-rewritten), M mapped / same-name', then ', K other' when K &gt; 0 rows have a
+/// status outside the six (counted in neither part); else WORK_NO_RUN,
+/// WORK_NO_CAPABILITY or WORK_NO_CONVERTED.</returns>
 function WorkListSummary(const ARows: TArray<TPasUseRow>; AState: TWorkListState = wlsRows): string;
 
 /// <summary>PURE: the rows a new run leaves on the Work list.</summary>
@@ -231,6 +257,7 @@ const
   WORK_STATUS_COUNT = RANK_SAME_NAME;
   SUMMARY_FMT  = '%d to work on (%d unmapped, %d global, %d cast-refused, %d not-rewritten), %d mapped / same-name';
   PAIR_FMT     = '%s -> %s';
+  OTHER_FMT    = ', %d other';
   GOTO_FMT     = '%s(%d)';
   COPIED_FMT   = 'Copied %s -- paste into the IDE''s Go to line';
   COPIED_NO_LINE_FMT = 'Copied %s -- the engine recorded no line for this use';
@@ -246,17 +273,27 @@ begin
     Result:= '';
 end;
 
-// The integers of a 'lines' value: an array's numbers (others skipped), or one number.
+// AVal as an Integer: a JSON number whose text is an Integer. TJSONNumber.AsInt is
+// StrToInt and RAISES on 12.5, 1e3 or a value beyond Integer -- never call it here.
+function JInt(AVal: TJSONValue; out AInt: Integer): Boolean;
+begin
+  AInt:= 0;
+  Result:= (AVal is TJSONNumber) and TryStrToInt(AVal.Value, AInt);
+end;
+
+// The integers of a 'lines' value: an array's Integer entries (others skipped), or one.
 function JLines(AVal: TJSONValue): TArray<Integer>;
+var
+  LInt: Integer;
 begin
   Result:= nil;
-  if AVal is TJSONNumber then
-    Exit(TArray<Integer>.Create(TJSONNumber(AVal).AsInt));
+  if JInt(AVal, LInt) then
+    Exit(TArray<Integer>.Create(LInt));
   if not (AVal is TJSONArray) then
     Exit;
   for var LItem: TJSONValue in TJSONArray(AVal) do
-    if LItem is TJSONNumber then
-      Result:= Result + [TJSONNumber(LItem).AsInt];
+    if JInt(LItem, LInt) then
+      Result:= Result + [LInt];
 end;
 
 function ParsePasUses(const AArr: TJSONArray; const AUnitPas: string; ARunId: Integer): TArray<TPasUseRow>;
@@ -285,7 +322,8 @@ begin
     LRow.DeclaredIn   := JStr(LObj, 'declared_in');
     LRow.Status       := JStr(LObj, 'status');
     LRow.Lines        := JLines(LObj.Values['lines']);
-    LRow.Count:= if LObj.Values['count'] is TJSONNumber then TJSONNumber(LObj.Values['count']).AsInt else Length(LRow.Lines);
+    if not JInt(LObj.Values['count'], LRow.Count) then
+      LRow.Count:= Length(LRow.Lines);
     Result:= Result + [LRow];
   end;
 end;
@@ -321,16 +359,43 @@ begin
     Result:= Result + [LStatus];
 end;
 
+function WorkFilterEntries: TArray<string>;
+begin
+  Result:= WorkStatuses + [WORK_STATUS_OTHER];
+end;
+
 function DefaultWorkFilter: TWorkFilter;
 begin
   Result:= Default(TWorkFilter);
-  Result.Statuses:= Copy(WorkStatuses, 0, WORK_STATUS_COUNT);
+  Result.Statuses:= Copy(WorkStatuses, 0, WORK_STATUS_COUNT) + [WORK_STATUS_OTHER];
+end;
+
+function WorkFilterOf(const AChecked: TArray<string>; const AUnitPas, AText: string): TWorkFilter;
+begin
+  Result:= Default(TWorkFilter);
+  Result.Statuses:= Copy(AChecked);
+  Result.NoStatus:= Length(AChecked) = 0;
+  Result.UnitPas := AUnitPas;
+  Result.Text    := Trim(AText);
+end;
+
+// AFilter's statuses let a row of AStatus through: an exact entry, or WORK_STATUS_OTHER
+// for a status outside the six.
+function StatusPasses(const AStatus: string; const AFilter: TWorkFilter): Boolean;
+begin
+  if AFilter.NoStatus then
+    Exit(False);
+  if Length(AFilter.Statuses) = 0 then
+    Exit(True);
+  if StatusRank(AStatus) = Length(STATUS_ORDER) then
+    Exit(MatchText(WORK_STATUS_OTHER, AFilter.Statuses));
+  Result:= MatchText(AStatus, AFilter.Statuses);
 end;
 
 // AFilter lets ARow through.
 function Passes(const ARow: TPasUseRow; const AFilter: TWorkFilter): Boolean;
 begin
-  if (Length(AFilter.Statuses) > 0) and not MatchText(ARow.Status, AFilter.Statuses) then
+  if not StatusPasses(ARow.Status, AFilter) then
     Exit(False);
   if (AFilter.UnitPas <> '') and not SameText(ARow.UnitPas, AFilter.UnitPas) then
     Exit(False);
@@ -424,6 +489,7 @@ function WorkListSummary(const ARows: TArray<TPasUseRow>; AState: TWorkListState
 var
   LCount: array[RANK_UNMAPPED..RANK_MAPPED] of Integer;
   LRank : Integer;
+  LOther: Integer;
 begin
   case AState of
     wlsNoRun       : Exit(WORK_NO_RUN);
@@ -431,15 +497,20 @@ begin
     wlsNoConverted : Exit(WORK_NO_CONVERTED);
   end;
   FillChar(LCount, SizeOf(LCount), 0);
+  LOther:= 0;
   for var LRow: TPasUseRow in ARows do
   begin
     LRank:= StatusRank(LRow.Status);
     if LRank <= High(LCount) then
-      Inc(LCount[LRank]);
+      Inc(LCount[LRank])
+    else
+      Inc(LOther);
   end;
   Result:= Format(SUMMARY_FMT, [LCount[RANK_UNMAPPED] + LCount[RANK_GLOBAL] + LCount[RANK_CAST_REFUSED] + LCount[RANK_NOT_REWRITTEN],
     LCount[RANK_UNMAPPED], LCount[RANK_GLOBAL], LCount[RANK_CAST_REFUSED], LCount[RANK_NOT_REWRITTEN],
     LCount[RANK_SAME_NAME] + LCount[RANK_MAPPED]]);
+  if LOther > 0 then
+    Result:= Result + Format(OTHER_FMT, [LOther]);
 end;
 
 function MergeRun(const AOld, ANew: TArray<TPasUseRow>; ANewRunId: Integer): TArray<TPasUseRow>;

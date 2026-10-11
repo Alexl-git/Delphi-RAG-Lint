@@ -482,7 +482,7 @@ try {
   if ($filter.Count -eq 1) { $lv = @(Find ([CT]::Parent([CT]::Parent($filter[0]))) 'TListView' $null)[0] }
   Check 'worklist.controls' ($null -ne $lv) "status filters: $($filter.Count)"
   if ($null -eq $lv) { return }
-  Check 'worklist.filter.statuses' (([CT]::Items($filter[0]) -join ',') -eq 'unmapped,global-dangling,cast-refused,not-rewritten,same-name,mapped') ([CT]::Items($filter[0]) -join ',')
+  Check 'worklist.filter.statuses' (([CT]::Items($filter[0]) -join ',') -eq 'unmapped,global-dangling,cast-refused,not-rewritten,same-name,mapped,(other)') ([CT]::Items($filter[0]) -join ',')
   # Grid: Unit / Instance / From -> To / Member / Kind / Status / Lines / Declared in. The default filter
   # shows the work statuses only, so the mapped Caption row is hidden.
   $members = @([W]::Column($lv, 3)); $statuses = @([W]::Column($lv, 5)); $lines = @([W]::Column($lv, 6))

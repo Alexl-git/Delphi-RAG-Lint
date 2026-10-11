@@ -79,7 +79,7 @@ uses
 
 const
   FILTER_HEIGHT   = 30;
-  STATUS_LIST_W   = 560;
+  STATUS_LIST_W   = 640;
   UNIT_COMBO_W    = 200;
   TEXT_EDIT_W     = 160;
   LABEL_GAP       = 6;
@@ -110,13 +110,13 @@ begin
   LRow.Height    := FILTER_HEIGHT;
   LRow.BevelOuter:= bvNone;
 
-  // Six statuses side by side; the work statuses start checked (DefaultWorkFilter).
+  // Six statuses and '(other)' side by side; the work statuses and '(other)' start checked (DefaultWorkFilter).
   FStatuses:= TCheckListBox.Create(Self);
   FStatuses.Parent          := LRow;
   FStatuses.Align           := alLeft;
   FStatuses.AlignWithMargins:= True;
   FStatuses.Width           := STATUS_LIST_W;
-  FStatuses.Columns         := Length(WorkStatuses);
+  FStatuses.Columns         := Length(WorkFilterEntries);
   FStatuses.OnClickCheck    := FilterChanged; // the items need a window: CreateWnd fills them
 
   FUnits:= TComboBox.Create(Self);
@@ -162,7 +162,7 @@ begin
   // recreates the windows and VCL carries the items (and their checks) across.
   if FStatuses.Items.Count > 0 then
     Exit;
-  for var LStatus: string in WorkStatuses do
+  for var LStatus: string in WorkFilterEntries do
     FStatuses.Checked[FStatuses.Items.Add(LStatus)]:= MatchText(LStatus, DefaultWorkFilter.Statuses);
   RefreshUnits;
 end;
@@ -191,17 +191,17 @@ begin
 end;
 
 function TWorkListTab.CurrentFilter: TWorkFilter;
+var
+  LChecked: TArray<string>;
+  LUnit   : string;
 begin
-  Result:= Default(TWorkFilter);
+  LChecked:= nil;
   for var I: Integer:= 0 to FStatuses.Items.Count - 1 do
     if FStatuses.Checked[I] then
-      Result.Statuses:= Result.Statuses + [FStatuses.Items[I]];
-  // Nothing checked shows nothing: [] would read as "every status".
-  if Length(Result.Statuses) = 0 then
-    Result.Statuses:= [''];
-  if FUnits.ItemIndex > 0 then
-    Result.UnitPas:= FUnits.Items[FUnits.ItemIndex];
-  Result.Text:= Trim(FText.Text);
+      LChecked:= LChecked + [FStatuses.Items[I]];
+  LUnit:= if FUnits.ItemIndex > 0 then FUnits.Items[FUnits.ItemIndex] else '';
+  // WorkFilterOf: nothing checked shows nothing; '(other)' covers unknown statuses.
+  Result:= WorkFilterOf(LChecked, LUnit, FText.Text);
 end;
 
 procedure TWorkListTab.RefreshUnits;

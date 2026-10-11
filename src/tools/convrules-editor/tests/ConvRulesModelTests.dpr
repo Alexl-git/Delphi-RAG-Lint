@@ -12848,7 +12848,8 @@ begin
   // worklist.filter.default.work.only
   Check('worklist.filter.default.work.only', WorkKeys(FilterRows(Sorted, DefaultWorkFilter)) = 'Kind,NumGlyphs,bkOK,TBitBtnKind,Spacing',
     WorkKeys(FilterRows(Sorted, DefaultWorkFilter)));
-  Check('worklist.default.statuses', string.Join(',', DefaultWorkFilter.Statuses) = 'unmapped,global-dangling,cast-refused,not-rewritten');
+  Check('worklist.default.statuses', string.Join(',', DefaultWorkFilter.Statuses) = 'unmapped,global-dangling,cast-refused,not-rewritten,' + WORK_STATUS_OTHER);
+  Check('worklist.filter.entries', string.Join(',', WorkFilterEntries) = 'unmapped,global-dangling,cast-refused,not-rewritten,same-name,mapped,(other)');
   Check('worklist.statuses.six', string.Join(',', WorkStatuses) = 'unmapped,global-dangling,cast-refused,not-rewritten,same-name,mapped');
   Work := IsWorkStatus('UNMAPPED') and IsWorkStatus(PAS_USE_NOT_REWRITTEN);
   Plain:= not IsWorkStatus(PAS_USE_SAME_NAME) and not IsWorkStatus('brand-new-status');
@@ -12875,6 +12876,15 @@ begin
   Filter.Text:= 'K';
   Filter.Statuses:= [PAS_USE_GLOBAL_DANGLING];
   Check('worklist.filter.text.and.status', WorkKeys(FilterRows(Sorted, Filter)) = 'bkOK,TBitBtnKind', WorkKeys(FilterRows(Sorted, Filter)));
+
+  // Fix round 1: a status outside the six is never invisible; nothing checked shows nothing.
+  Mixed:= [WorkRow('A.pas', 'X', 'New', 'brand-new-status'), WorkRow('A.pas', 'X', 'Blank', ''),
+    WorkRow('A.pas', 'X', 'Map', PAS_USE_MAPPED), WorkRow('A.pas', 'X', 'Un', PAS_USE_UNMAPPED)];
+  Check('worklist.filter.other.default.shown', WorkKeys(FilterRows(Mixed, DefaultWorkFilter)) = 'New,Blank,Un', WorkKeys(FilterRows(Mixed, DefaultWorkFilter)));
+  Check('worklist.filter.other.only', WorkKeys(FilterRows(Mixed, WorkFilterOf([WORK_STATUS_OTHER], '', ''))) = 'New,Blank',
+    WorkKeys(FilterRows(Mixed, WorkFilterOf([WORK_STATUS_OTHER], '', ''))));
+  Check('worklist.filter.none.checked.empty', Length(FilterRows(Mixed, WorkFilterOf(nil, '', ''))) = 0, WorkKeys(FilterRows(Mixed, WorkFilterOf(nil, '', ''))));
+  Check('worklist.filter.of.fields', (WorkFilterOf([PAS_USE_MAPPED], 'A.pas', '  x ').Text = 'x') and (WorkFilterOf([PAS_USE_MAPPED], 'A.pas', '').UnitPas = 'A.pas'));
 end;
 
 procedure TestWorkListSummaryMerge;
@@ -12882,12 +12892,18 @@ const
   BAD_JSON = '[1, "x", null, {"member":"M1","status":"unmapped","lines":"12","count":"3"},'
     + ' {"member":"M2","instance":7,"lines":[5,"a",7],"count":2,"status":["x"]}, []]';
   BAD_DOC  = '{"schema":"apply/1","ok":true,"pas_uses":{"member":"x"}}';
+  // Fix round 1: numbers that are not Integers (TJSONNumber.AsInt RAISES on these).
+  BAD_NUMS = '[{"member":"F","lines":[12.5, 1e3, 99999999999, 4],"count":12.5},'
+    + ' {"member":"E","lines":1e3,"count":1e3}, {"member":"H","lines":[4],"count":99999999999}]';
+  NUM_LINE = 4;
+  NUM_ROWS = 3;
   BAD_RUN  = 3;
   BAD_LINE = 7;
 var
   Rows  : TArray<TPasUseRow>;
   Arr   : TJSONArray;
   Bad   : TArray<TPasUseRow>;
+  Nums  : TArray<TPasUseRow>;
   Raised: Boolean;
   Kept  : Boolean;
   Lines : Boolean;
@@ -12901,10 +12917,14 @@ begin
   Check('worklist.summary.no.converted', WorkListSummary(nil, wlsNoConverted) = 'no work list (no unit converted)', WorkListSummary(nil, wlsNoConverted));
   Check('worklist.summary.no.capability', WorkListSummary(Rows, wlsNoCapability) = 'no work list (engine has no pas_uses)', WorkListSummary(Rows, wlsNoCapability));
   Check('worklist.summary.no.run', WorkListSummary(nil, wlsNoRun) = WORK_NO_RUN);
+  Check('worklist.summary.other.counted', WorkListSummary([WorkRow('A.pas', 'X', 'N', 'brand-new-status'), WorkRow('A.pas', 'X', 'B', ''),
+    WorkRow('A.pas', 'X', 'U', PAS_USE_UNMAPPED)]) = '1 to work on (1 unmapped, 0 global, 0 cast-refused, 0 not-rewritten), 0 mapped / same-name, 2 other',
+    WorkListSummary([WorkRow('A.pas', 'X', 'N', 'brand-new-status'), WorkRow('A.pas', 'X', 'B', ''), WorkRow('A.pas', 'X', 'U', PAS_USE_UNMAPPED)]));
 
   // worklist.bad.json.no.raise -- non-objects skipped, wrong types read as nothing.
   Raised:= False;
   Bad   := nil;
+  Nums  := nil;
   try
     Arr:= TJSONObject.ParseJSONValue(BAD_JSON) as TJSONArray;
     try
@@ -12914,11 +12934,24 @@ begin
     end; // try
     Check('worklist.bad.json.doc.no.raise', (ParseApplyJson(BAD_DOC).Ok) and (Length(ParseApplyJson(BAD_DOC).PasUses) = 0));
     Check('worklist.bad.json.nil.array', Length(ParsePasUses(nil, 'U.pas', WORK_RUN_OLD)) = 0);
+    Arr:= TJSONObject.ParseJSONValue(BAD_NUMS) as TJSONArray;
+    try
+      Nums:= ParsePasUses(Arr, 'U.pas', WORK_RUN_OLD);
+    finally
+      Arr.Free;
+    end; // try
   except
     on Exception do
       Raised:= True; // catch-and-check: the next Check fails when anything raised
   end; // try
   Check('worklist.bad.json.no.raise', (not Raised) and (Length(Bad) = WORK_PAIR_N), IntToStr(Length(Bad)));
+  Check('worklist.json.numbers.no.raise', (not Raised) and (Length(Nums) = NUM_ROWS), IntToStr(Length(Nums)));
+  if Length(Nums) = NUM_ROWS then
+  begin
+    Kept := (Length(Nums[0].Lines) = 1) and (Nums[0].Lines[0] = NUM_LINE) and (Nums[0].Count = 1);
+    Lines:= (Length(Nums[1].Lines) = 0) and (Nums[1].Count = 0) and (Nums[High(Nums)].Count = 1);
+    Check('worklist.json.numbers.skipped', Kept and Lines, Format('%d lines, count %d / %d', [Length(Nums[0].Lines), Nums[0].Count, Nums[High(Nums)].Count]));
+  end;
   if Length(Bad) = WORK_PAIR_N then
   begin
     Kept := (Bad[0].Member = 'M1') and (Bad[0].Status = PAS_USE_UNMAPPED) and (Bad[0].UnitPas = 'U.pas') and (Bad[0].RunId = BAD_RUN);
