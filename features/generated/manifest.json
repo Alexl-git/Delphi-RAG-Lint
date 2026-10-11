@@ -1835,7 +1835,7 @@
       "group": "component-conversion",
       "owner": "CONVERTER",
       "status": "shipped",
-      "since": "1.28.0-alpha",
+      "since": "1.28.2-alpha",
       "summary": "ConvRulesEditor tab: what the last Convert run's converted code still uses from the old components (engine pas_uses)",
       "intro": "Get the manual to-do list of a conversion: unmapped members, dangling globals, refused casts.",
       "wikiPage": "convrules-editor-work-list",

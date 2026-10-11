@@ -303,9 +303,10 @@ const
   NOT_FOUND_FMT = '%s not found';
   PAST_EOF_FMT  = '%s has only %d line(s) -- line %d is past its end (the file changed since the run)';
 
-// A string value's text; '' for any other JSON type. The TJSONNumber test is defensive:
-// TJSONNumber descended from TJSONString in older RTLs (Delphi 13's does not), and a
-// number is never a name.
+// A string value's text; '' for any other JSON type. Delphi 13's System.JSON declares
+// TJSONNumber = class(TJSONValue), so the TJSONNumber test never fires here; it is
+// defensive, for an RTL where TJSONNumber descends from TJSONString -- a number is
+// never a name.
 function JText(AVal: TJSONValue): string;
 begin
   if (AVal is TJSONString) and not (AVal is TJSONNumber) then

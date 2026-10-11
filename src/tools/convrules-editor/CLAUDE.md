@@ -1786,7 +1786,8 @@ worktree. Test engine: a staged copy of the **1.27.0 pin**
   `--`), `DeclaredInText`, `WorkListSummary`, `MergeRun`, `WorkGoTo`. A JSON
   number is never read as a string (`JText`; note that Delphi 13's `TJSONNumber`
   descends from `TJSONValue`, NOT `TJSONString` -- `System.JSON.pas:424` -- so the
-  `is TJSONNumber` exclusion is defensive, for older RTLs). **UI: `ConvRules.WorkListTab`**
+  `is TJSONNumber` exclusion is defensive, for an RTL where it descends from
+  `TJSONString`; `ConvRules.ConvertRun.JsonStr` says the same). **UI: `ConvRules.WorkListTab`**
   (editor-only `TPanel`; its items are filled in `CreateWnd` because the host sets
   `Parent` after `Create` -- the first build died at start-up without that).
 * **Statuses:** work = `unmapped`, `global-dangling`, `cast-refused`,

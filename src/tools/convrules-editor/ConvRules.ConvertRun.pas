@@ -980,8 +980,9 @@ end;
   a missing key, a wrong JSON type or a non-object entry degrades to ''/0 or is
   skipped -- nothing raises. }
 
-// A JSON string member's text; '' when absent or of another JSON type
-// (TJSONNumber descends from TJSONString, so it is excluded by name).
+// A JSON string member's text; '' when absent or of another JSON type. Delphi 13's
+// System.JSON declares TJSONNumber = class(TJSONValue), so it is never a TJSONString
+// here; the TJSONNumber exclusion is defensive, for RTLs where it descended from it.
 function JsonStr(AObj: TJSONObject; const AKey: string): string;
 var
   LVal: TJSONValue;
