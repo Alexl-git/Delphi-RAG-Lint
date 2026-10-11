@@ -26,6 +26,10 @@ uses
   , ChartsTests.DocInsight in 'ChartsTests.DocInsight.pas'
   , DRagLint.Charts.Adapter.Text in '..\..\src\charts\DRagLint.Charts.Adapter.Text.pas'
   , ChartsTests.AdapterText in 'ChartsTests.AdapterText.pas'
+  , DRagLint.Charts.Adapter.FormsCsv in '..\..\src\charts\DRagLint.Charts.Adapter.FormsCsv.pas'
+  , DRagLint.Charts.Adapter.Graph in '..\..\src\charts\DRagLint.Charts.Adapter.Graph.pas'
+  , DRagLint.Charts.Adapters in '..\..\src\charts\DRagLint.Charts.Adapters.pas'
+  , ChartsTests.Adapters in 'ChartsTests.Adapters.pas'
   ;
 
 const

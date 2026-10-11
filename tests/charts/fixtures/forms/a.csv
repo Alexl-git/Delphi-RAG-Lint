@@ -1,0 +1,7 @@
+#,Form,Unit,How to open,Click,Control type,Handler,Opened by,Modal,Before you start,Other ways in,Confidence,Tester result,Notes
+1,"TfrmMAIN","Main.pas","main form","","","","","","",0,"root",,"main form of the application"
+2,"TfrmOrders","Orders.pas","Orders > Open","Open","TdxBarButton","TfrmMAIN.btnOrdersClick","TfrmMAIN","modal","",1,"traced",,"found by: ast"
+3,"TfrmCustomers","Customers.pas","Customers > Open","Open","TdxBarButton","TfrmMAIN.btnCustomersClick","TfrmMAIN","","",0,"traced",,"found by: ast"
+4,"TfrmReports","Reports.pas","Reports > Print","Print","TButton","TfrmMAIN.btnReportsClick","TfrmMAIN","modal","Pick a customer first",2,"traced",,"found by: ast; also: in TfrmOrders: btnReportClick"
+5,"TfrmSettings","Settings.pas","Tools > Settings","Settings","TMenuItem","TfrmMAIN.miSettingsClick","TfrmMAIN","modal","",0,"traced",,"found by: ast"
+,,,,,,,,,,,,,"# forms-csv algorithm v7 | db: C:\x\Micronite2027.sqlite | schema v12 | 2026-10-10 14:32:00"
