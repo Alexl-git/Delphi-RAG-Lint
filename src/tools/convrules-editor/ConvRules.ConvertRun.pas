@@ -391,7 +391,7 @@ uses
   , System.StrUtils
   , ConvRules.Model
   , ConvRules.UsesHarvest
-  , ConvRules.EngineProgress
+  , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- ENGINE_OUTCOME_CANCELLED / _TIMEOUT are the long-call runner's outcome contract ReindexOutcomeText reads, so they travel with the runner
   ;
 
 const
@@ -1135,6 +1135,7 @@ const
   DIRECT_DONE_RE    = '^\s*Done\. Files: (\d+),';
   DIRECT_CLOSURE_RE = '^Compile closure: (\d+) file\(s\):';
   REINDEX_HEAD_CHARS = 200;
+  ENGINE_EXIT_OK     = 0;
 
 function FormatElapsed(AMs: Int64): string;
 const
@@ -1198,7 +1199,7 @@ begin
   LName   := ExtractFileName(AProjectFile);
   AIsError:= False;
   case ACode of
-    0:
+    ENGINE_EXIT_OK:
       if not ParseIndexSummary(AOutput, LFiles, LWalked) then
         Result:= Format('Reindexed %s (%s); the engine printed no summary line.', [LName, FormatElapsed(AElapsedMs)])
       else

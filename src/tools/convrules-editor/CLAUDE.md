@@ -583,7 +583,7 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 ### Verification kit
 
 * **Model tests:** `tests\ConvRulesModelTests.exe` with `CONVRULES_TEST_ENGINE` =
-  the 1.26.2 pin -> **`model-tests: 2021 pass / 5 fail / 0 skip / 2026 total`** -- 2026-10-07, fix/editor-1262-adoption; earlier, on the 1.22.0 pin, `1951 pass / 5 fail / 0 skip / 1956 total`
+  the 1.26.7 pin -> **`model-tests: 2055 pass / 5 fail / 0 skip / 2060 total`** -- 2026-10-11, feat/convert-progress-reindex (C16 + C17); before it, on the 1.26.2 pin, `2021 pass / 5 fail / 0 skip / 2026 total` -- 2026-10-07, fix/editor-1262-adoption; earlier, on the 1.22.0 pin, `1951 pass / 5 fail / 0 skip / 1956 total`
   (measured 2026-10-06 on C8 + C10 + C12 after the C12 final-review fix wave, 148 s;
   1938 / 5 / 0 right after the C12 rebase onto C10; C12 on C8 alone 1792 / 5 / 0;
   C8 + C10 1806 / 5 / 0 after the C10 fix wave, 1793 / 5 / 0 right after the C10 rebase onto C8; C8 alone 1660 / 5 / 0 after its Task 8 fix round 1, 1646 / 5 / 0 before it; 1616 / 5 / 1 skip on the 1.21.1 pin after the
@@ -601,21 +601,21 @@ per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
 
   | driver | checks | covers |
   |---|---|---|
-  | `drive-unit-rules-toolbar.ps1` | 41 | menu bar items, toolbar gone, Uses Units commands, Swap flow |
+  | `drive-unit-rules-toolbar.ps1` | 41 | menu bar items (incl. `Conversion|Reindex project` since C17), toolbar gone, Uses Units commands, Swap flow |
   | `drive-unit-picker.ps1` | 20 | unit picker |
   | `drive-unit-harvest.ps1` | 21 | Unit Rules harvest (`-ProofNoDestination` control) |
   | `drive-file-menu.ps1` | 19 | New / Save As / Exit, the guard, delete-in-place makes dirty |
   | `drive-owning-open.ps1` | 6 | cross-book double-click goes through `ConfirmDiscard` |
   | `drive-engine-wait.ps1` | 9 | progress window: appears after `SHOW_DELAY_MS`, Cancel closes it and stops the To tree, retry after cancel, a fast load shows no window, a re-load is cached (`wait.reload.*`) |
   | `drive-book-depth.ps1` | 13 | depth combo shows the book's `#depth`, gated on `book_depth`, absent `#depth` not added on save, New file shows the default, `depth.change.*` (an engine without `book_depth` gives 10 + 1 SKIP line) |
-  | `drive-convert-tab.ps1` | 20 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line; since C8 also: no E7 order dialog on a fixture with no inherited instance |
+  | `drive-convert-tab.ps1` | 23 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line; since C8 also: no E7 order dialog on a fixture with no inherited instance; since C16/C17 (2026-10-11): the mid-run status bar shows the progress line (`run.progress.status`), `Conversion|Reindex project` is locked mid-run, and after the run it answers `Reindexed Fix.dproj: files=N walked=M (m:ss)` (`reindex.status`) and refuses with `Fix.dproj` renamed away (`reindex.refused.no.project.file`). The pre-C16 editor (1.26.7 pin) gives 18 / 5 |
   | `drive-validate-scope.ps1` | 18 | scoped validation on Save (warnings, unchanged re-save fast), progress window + Cancel, owed block revalidated, Exit without a prompt, `automatch.*` |
   | `drive-inherited-offer.ps1` | 15 | C8: ancestor-first prompt (No / Yes inserts above), row note on the status bar (incl. an E2b code-only use), order warning (No runs nothing), the E10 run note branching on the staged engine's `inherited_instances` (`engine.refusal.note.absent` on 1.22.0, `engine.refusal.note` on a 1.21.1 pin copy -- run BOTH stages; `-ProofNoInheritance` control) |
   | `drive-glyph-link.ps1` | 23 | C10: Glyph expression menu item (disabled without a rule, enabled with one), Convert tab greys the G-link book and it stays unchecked through Check all / Space / a click (`Convert refused: No rule book is checked.`), the dialog's checked `Keep ... G[count]` box, Auto-Match + Save As keeps both G-link lines byte-exact with no duplicate, the bad book's Save shows `G-expression column` (`-ProofNoGlyph` control: 17 / 6) |
   | `drive-convert-request.ps1` | 25 | C12: `--convert-request` opens the Convert tab with the unit listed, only the matching book checked, the E5 status, `Clear scope` enabled; Convert converts the selected instance only (`--only`), report `Scope` line + `--only` note; Delete resets the scope and says `Scope cleared` on the status bar; Exit without a prompt; `form` scope; E3 no-rules-folder refusal (editor stays usable); missing project index refused; unindexed unit named in red; `--write-capabilities` within 5 s, no window (`-ProofNoRequest` control) |
 
-  `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 10 pass / 9
-  fail is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
+  `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 12 pass / 10 fail since C16/C17 (10 / 9 before; the two reindex checks PASS in proof mode -- Reindex project builds the missing DB, so they cannot discriminate there; their RED is the pre-C16 editor's 18 / 5)
+  is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
   the project index" (no DB), not at the unindexed refusal; that refusal is
   proven by `Loose.pas` in the normal run. `drive-inherited-offer.ps1
   -ProofNoInheritance` gave 8 pass / 6 fail on the 1.22.0 pin and 7 / 7 on the
@@ -1410,6 +1410,59 @@ Rebased onto `feat/c8-inherited-editor` on 2026-10-06 (merge order C8 -> C10 -> 
   created after the editor started; `drive-engine-wait.ps1`'s `WaitIdle` still has
   the old filter.
 
+## Convert progress + Reindex project -- hand-over notes (feat/convert-progress-reindex, C16 + C17, 2026-10-11)
+
+* **C16 -- the runner reports steps.** `TRunPhase` / `TRunStep` / `TRunStepFn` live in
+  `ConvRules.ConvertRunner`. Per unit: `rpReindexBefore`, `rpBackup`; per book `rpApply`,
+  `rpReindexAfter` after a successful apply, `rpRestore` when the unit is copied back; the tab
+  adds `rpFinalReindex` itself (the runner never emits it). A step is emitted as the phase
+  STARTS and carries unit k/N, book j/M (0 on unit-level phases), and ms elapsed for the unit and
+  the run. No step for an out-of-scope book, a unit a cancel kept from running, or a refusal on an
+  unchanged unit's restore (nothing is restored). A raising step callback is ignored and not
+  called again (advisory; the loop still never raises).
+* **The entry points are NEW NAMES, not defaulted parameters.** `RunConversionUnitsStepped` (the
+  TApplyFn test seam + step) and `RunConversion(..., AOnStep)` (required). Adding a defaulted
+  anonymous-method parameter to the existing `RunConversionUnits` overloads made dcc64 reject
+  ten EXISTING calls with E2250 -- do not "simplify" back to a default. The body is the
+  implementation-only `RunUnitLoop`; the public overloads pass `nil`.
+* **Text: `RunStepText` (pure)** -- `Unit 2 of 5: SystemData2 -- book 1 of 2 BDE-to-FireDAC:
+  applying (0:42, total 3:10)`; unit-level `Unit 2 of 5: SystemData2: backing up (...)`;
+  `Final reindex (total 3:10)`. `FormatElapsed` (`m:ss` / `h:mm:ss`) is in
+  `ConvRules.ConvertRun`; `AdvanceStep` adds the time since receipt.
+* **Display:** `TConvertTab.QueueStep` (`TThread.Queue`) stores the step; `RenderStep` writes
+  it to the new `LblRunStep` label under the Convert / Cancel row AND the status bar, and a 1 s
+  `FStepTimer` re-renders it while one phase runs, so the clocks tick during a long apply. The
+  timer stops and the label clears in `SetRunning`; queued steps all land before `RunFinished`
+  (FIFO). The first status after Convert is still `Converting N unit(s) with M book(s)...`,
+  replaced by the first step at once. **Drivers:** `WaitStatus` in `drive-convert-tab`,
+  `drive-convert-request` and `drive-inherited-offer` now treat `RunInProgress` (Converting /
+  `Unit k of N:` / `Final reindex (total`) as still running -- without it they returned on the
+  first progress line. `drive-convert-request` / `drive-inherited-offer` were NOT re-run on this
+  branch.
+* **Rows per unit were already live:** the runner's `Flush` hands each unit's rows to
+  `AProgress` when the unit finishes and the tab queues them -- `steps.order.2x2` pins that a
+  unit's rows arrive before the next unit's first step. Nothing changed there.
+* **Engine progress lines are NOT fed into the apply phase.** `ApplyConversion` still runs on
+  `RunCaptureTimed` (no streaming); convert-apply's `--progress-interval` was not checked.
+  Optional per the job; left for later.
+* **C17 -- Conversion > Reindex project** (`FMiReindex`, `DoReindexProject`, no shortcut):
+  `index --project <ProjectFileForDb(GEditorProjectDb)> --db <GEditorProjectDb>` through the
+  NEW cancellable `TEngineAdapter.IndexProject(..., ACancel, ...)` overload
+  (`RunCaptureStreaming`) on `FEngine.LongCallRunner` (progress window, Cancel, FTreeLoads
+  counted). Disabled mid-run (`RunStateChanged`); `ReindexRefusal` refuses while running and,
+  with `NoProjectFileText` -- now the ONE text Convert and the tab's stale retry use too -- when
+  the project file is missing. Afterwards `FEngine.ClearResolveCache` and
+  `FConvertTab.RefreshIndex` (skipped while the source list is empty).
+* **Status (`ReindexOutcomeText`):** `Reindexed <P>: files=N walked=M (m:ss)`; failure red via
+  `SetError` (`Reindex of <P> failed (exit N): <first 200 chars>`, or `... did not finish in
+  time`); cancel `... cancelled after m:ss -- the index may be partly refreshed; run it again.`
+  **The direct `index --project --db` run prints NO `files= walked=` line** -- that section
+  line is `index --all` only. `ParseIndexSummary` reads either: the section line, or
+  `Done. Files: N` + `Compile closure: M file(s):`. So `walked` here is the CLOSURE count and
+  can exceed `files` (the fixture: `files=3 walked=4`) -- it is not the engine's `walked=`.
+* **Driver trap:** `WM_GETTEXTLENGTH` then `WM_GETTEXT` on the status bar are two messages; a
+  status written between them came back cut to the OLD length (`Reindexed Fix.dproj: fi`). The
+  reindex wait re-reads after 500 ms.
 ## IDE hand-off -- hand-over notes (feat/c12-convert-request, 2026-10-06)
 
 The editor half of C12: the IDE plugin writes a request file and launches the

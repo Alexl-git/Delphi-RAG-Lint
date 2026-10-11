@@ -574,7 +574,7 @@ begin
   Result:= RunConversionUnitsStepped(AUnits, ABooks, AApply, AIndex, AProgress, ACancelled, nil, AInheritedSupported, ARetypeSupported);
 end;
 
-function RunConversionUnitsStepped(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;
+function RunConversionUnitsStepped(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; const AOnStep: TRunStepFn; AInheritedSupported, ARetypeSupported: Boolean): TArray<TConvertRow>;  // dl:ok too-many-parameters@4138 -- REVIEWED 2026-10-10 the TApplyFn test seam plus the C16 step callback: the same seams as its twin, one more
 var
   LApply: TApplyFn;
 begin
@@ -593,12 +593,12 @@ begin
     AProgress, ACancelled, AInheritedSupported, ARetypeSupported, nil, AOnStep);
 end;
 
-function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn): TArray<TConvertRow>;
+function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@092f -- REVIEWED 2026-10-10 the public scope-seam entry point, unchanged since C12 (its 2026-10-06 review moved with the body to RunUnitLoop)
 begin
   Result:= RunUnitLoop(AUnits, ABooks, AApply, AIndex, AScope, AProgress, ACancelled, AInheritedSupported, ARetypeSupported, AOnlyHint, nil);
 end;
 
-function RunUnitLoop(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn; const AOnStep: TRunStepFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@092f -- REVIEWED 2026-10-06 the ONE unit loop: four engine/scope seams (apply, index, scope, unmatched-name hint), progress, cancel and the job's two capability flags; the TConvertJob overload is the record-shaped entry point
+function RunUnitLoop(const AUnits, ABooks: TArray<string>; const AApply: TApplyOnlyFn; const AIndex: TIndexFn; const AScope: TScopeFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported, ARetypeSupported: Boolean; const AOnlyHint: TOnlyHintFn; const AOnStep: TRunStepFn): TArray<TConvertRow>;  // dl:ok too-many-parameters@ace4 -- REVIEWED 2026-10-10 (C16: + the step callback) the ONE unit loop: four engine/scope seams (apply, index, scope, unmatched-name hint), progress, cancel and the job's two capability flags; the TConvertJob overload is the record-shaped entry point
 var
   Rows    : TArray<TConvertRow>;
   UnitRows: TArray<TConvertRow>; // the current unit's rows, emitted when it finishes
@@ -614,6 +614,7 @@ var
   UnitNo  : Integer;        // 1-based position of CurUnit in AUnits
   UnitAt  : Int64;          // Watch's milliseconds when CurUnit started
   BookNo  : Integer;        // 1-based position in ABooks of the book running now; 0 = none
+  StepsOff: Boolean;        // AOnStep raised once: no further steps this run
 
   // C16: tells AOnStep that APhase starts now. Advisory: a raising callback never
   // stops the run (this routine never raises, see the declaration).
@@ -621,7 +622,7 @@ var
   var
     LStep: TRunStep;
   begin
-    if not Assigned(AOnStep) then
+    if not Assigned(AOnStep) or StepsOff then
       Exit;
     LStep:= Default(TRunStep);
     LStep.Phase    := APhase;
@@ -638,9 +639,9 @@ var
     LStep.UnitElapsedMs := LStep.TotalElapsedMs - UnitAt;
     try
       AOnStep(LStep);
-    except  // dl:ok try-except-swallowed -- REVIEWED 2026-10-10 progress is advisory: a display callback that raises must not turn into a unit failure or escape a routine documented as never raising
+    except  // dl:ok try-except-swallowed@76ff -- REVIEWED 2026-10-10 progress is advisory: a display callback that raises must not turn into a unit failure or escape a routine documented as never raising; it is not asked again
       on Exception do
-        ;
+        StepsOff:= True;
     end; // try
   end;
 
@@ -969,6 +970,7 @@ begin
   UnitNo:= 0;
   UnitAt:= 0;
   BookNo:= 0;
+  StepsOff:= False;
   for CurUnit in AUnits do
   begin
     Inc(UnitNo);

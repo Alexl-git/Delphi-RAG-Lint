@@ -2224,7 +2224,8 @@ begin
     RunConversionUnitsStepped([P1, P2], ['A.rules', 'B.rules'], ApplyOk, OkIndex, OnRow, nil, OnStep);
     Check('steps.order.2x2', Log = 'u1/2 rb;u1/2 bk;u1/2 b1/2 ap;u1/2 b1/2 ra;u1/2 b2/2 ap;u1/2 b2/2 ra;row:S1/A;row:S1/B;'
       + 'u2/2 rb;u2/2 bk;u2/2 b1/2 ap;u2/2 b1/2 ra;u2/2 b2/2 ap;u2/2 b2/2 ra;row:S2/A;row:S2/B;', Log);
-    Check('steps.names', (Length(Steps) > 2) and (Steps[0].UnitPas = P1) and (Steps[0].Book = '') and (Steps[2].Book = 'A.rules')
+    var LFirstOk: Boolean:= (Length(Steps) > 2) and (Steps[0].UnitPas = P1) and (Steps[0].Book = '') and (Steps[2].Book = 'A.rules');
+    Check('steps.names', LFirstOk
       and (Steps[High(Steps)].UnitPas = P2) and (Steps[High(Steps)].Book = 'B.rules'), IntToStr(Length(Steps)));
     Check('steps.elapsed.sane', ElapsedSane, IntToStr(Length(Steps)));
 
@@ -2289,6 +2290,7 @@ const
   MS_5S      = 5000;
   MS_59999   = 59999;
   MS_1H2M3S  = 3723000;
+  UNITS_5    = 5;
 var
   S: TRunStep;
 begin
@@ -2299,11 +2301,11 @@ begin
   S:= Default(TRunStep);
   S.Phase:= rpApply;
   S.UnitNo:= 2;
-  S.UnitCount:= 5;
-  S.UnitPas:= 'C:\x\SystemData2.pas';  // dl:ok hardcoded-absolute-path -- REVIEWED 2026-10-10 text only: no file is touched
+  S.UnitCount:= UNITS_5;
+  S.UnitPas:= 'C:\x\SystemData2.pas';  // dl:ok hardcoded-absolute-path@8a0d -- REVIEWED 2026-10-10 text only: no file is touched
   S.BookNo:= 1;
   S.BookCount:= 2;
-  S.Book:= 'C:\r\BDE-to-FireDAC.rules';  // dl:ok hardcoded-absolute-path -- REVIEWED 2026-10-10 text only: no file is touched
+  S.Book:= 'C:\r\BDE-to-FireDAC.rules';  // dl:ok hardcoded-absolute-path@5f39 -- REVIEWED 2026-10-10 text only: no file is touched
   S.UnitElapsedMs:= MS_42S;
   S.TotalElapsedMs:= MS_3M10S;
   Check('steptext.apply', RunStepText(S) = 'Unit 2 of 5: SystemData2 -- book 1 of 2 BDE-to-FireDAC: applying (0:42, total 3:10)', RunStepText(S));
@@ -2333,8 +2335,8 @@ const
   DIRECT_OUT   = 'Database: C:\x\_D-RAG\Fix.sqlite' + sLineBreak + 'Compile closure: 3 file(s):' + sLineBreak + '  C:\x\A.pas' + sLineBreak
     + 'Done. Files: 4, Symbols: 10, Refs: 20, skipped 3 up-to-date, 0.14s' + sLineBreak;
   DONE_ONLY    = 'Done. Files: 4, Symbols: 10, Refs: 20, 0.14s';
-  DB           = 'C:\p\_D-RAG\P.sqlite';  // dl:ok hardcoded-absolute-path -- REVIEWED 2026-10-10 text only: no file is touched
-  PROJ         = 'C:\p\P.dproj';           // dl:ok hardcoded-absolute-path -- REVIEWED 2026-10-10 text only: no file is touched
+  DB           = 'C:\p\_D-RAG\P.sqlite';  // dl:ok hardcoded-absolute-path@f05e -- REVIEWED 2026-10-10 text only: no file is touched
+  PROJ         = 'C:\p\P.dproj';           // dl:ok hardcoded-absolute-path@b439 -- REVIEWED 2026-10-10 text only: no file is touched
   MS_3S        = 3000;
   FILES_40     = 40;
   WALKED_38    = 38;
