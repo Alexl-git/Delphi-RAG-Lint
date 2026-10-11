@@ -24,6 +24,8 @@ uses
   , ChartsTests.ReportHeader in 'ChartsTests.ReportHeader.pas'
   , DRagLint.Charts.DocInsight in '..\..\src\charts\DRagLint.Charts.DocInsight.pas'
   , ChartsTests.DocInsight in 'ChartsTests.DocInsight.pas'
+  , DRagLint.Charts.Adapter.Text in '..\..\src\charts\DRagLint.Charts.Adapter.Text.pas'
+  , ChartsTests.AdapterText in 'ChartsTests.AdapterText.pas'
   ;
 
 const
