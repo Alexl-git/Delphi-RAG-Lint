@@ -2,7 +2,7 @@
   run_ownroots_default_note.ps1 -- when <project>\_D-RAG\drag-lint-project.json
   is ABSENT, lint-all must say which ownRoots it defaulted to (L2).
 
-  THE DEFECT. The declaration file is gitignored, so a fresh clone or a git
+  THE DEFECT. The declaration file is usually untracked, so a fresh clone or a git
   worktree does not have it. TOwnRoots then defaults -- correctly, per the
   house rule -- to the project file's own folder. For a project whose .dproj
   sits in a SUBFOLDER (this repo's src\cli) that default classifies almost the
@@ -107,7 +107,9 @@ Write-Host 'A. no declaration, a member outside the project folder' -ForegroundC
 $a = LintAll
 Check 'A0 CONTROL: the outside member was skipped' ($a -match '1 file\(s\) outside the project''s own roots skipped') 'if not, the fixture does not have the worktree shape'
 Check 'A1 the NOTE names the missing declaration' ($a -match 'NOTE: .*drag-lint-project\.json does not exist') 'RED = the default was applied in silence'
-Check 'A2 and says it is gitignored / absent in a worktree' ($a -match 'gitignored') ''
+# 1.26.4 (47ac0b86) corrected the note: the repo does not gitignore the file, it
+# is usually UNTRACKED. The assertion follows the corrected wording.
+Check 'A2 and says it is untracked / absent in a worktree' ($a -match 'usually untracked, so a fresh clone or a git worktree lacks it') ''
 Check 'A3 and names the DEFAULTED root' ($a -match ('ownRoots DEFAULTED to the project folder ' + [regex]::Escape($app))) ''
 Check 'A4 and the skipped count' ($a -match 'the 1 file\(s\) outside it were treated as third-party') ''
 Check 'A5 U2 was not linted' (-not ($a -match 'U2\.pas:\d+:\d+')) ''

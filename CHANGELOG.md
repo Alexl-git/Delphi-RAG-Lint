@@ -56,6 +56,10 @@ breaking changes** until v1.0.
   the one "note: ignoring ..." line instead -- still a stderr line that must precede the document.
   The dry-run arm passes `--no-reconcile-uses`, since C9 keeps an unindexed `OldUnit`.
   RED 4 failing checks, GREEN 34/34.
+- **tests: run_ownroots_default_note.ps1 A2 matches the 1.26.4 wording (test-only).** 47ac0b86
+  corrected the lint-all note to "usually untracked, so a fresh clone or a git worktree lacks it"
+  (the repo never gitignored drag-lint-project.json); A2 still looked for "gitignored".
+  RED 1 failing check, GREEN 10/10.
 
 ## v1.28.2-alpha -- unreleased
 
