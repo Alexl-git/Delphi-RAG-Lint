@@ -998,6 +998,65 @@ begin
   Check('convcat.text.hascast', Pos('AssignGraphic', ConvOptionText(Opt)) > 0, ConvOptionText(Opt));
 end;
 
+{ 1.27.0 VALUE casts in the catalog (StripDB). A value cast keeps the type and
+  changes the value, so its target type is the From type itself -- and the old
+  one-entry-per-target-type dedupe let identity `string [same]` swallow it
+  (measured on the re-pin probe 2026-10-11). Parsed from the SHIPPED castlib
+  beside the test engine (the pin's), else the repo copy it is deployed from. }
+procedure TestConvCatalogValueCast;
+var
+  P   : string;
+  Lib : TCastLib;
+  Opts: TArray<TConvOption>;
+  Opt : TConvOption;
+
+  function FindCast(const ACastName: string; out AOpt: TConvOption): Boolean;
+  var
+    o: TConvOption;
+  begin
+    for o in Opts do
+      if SameText(o.CastName, ACastName) then
+      begin
+        AOpt := o;
+        Exit(True);
+      end;
+    AOpt := Default(TConvOption);
+    Result := False;
+  end;
+
+begin
+  P := '';
+  if ResolveExe <> '' then
+    P := TPath.Combine(ExtractFilePath(ResolveExe), 'casts.castlib');
+  if (P = '') or not TFile.Exists(P) then
+    P := TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)),
+      '..\..\..\..\docs\examples\convrules\casts.castlib'));
+  if not TFile.Exists(P) then
+  begin
+    Skip('catalog.value.cast', 'casts.castlib not found: ' + P);
+    Exit;
+  end;
+  Lib := ParseCastLib(P);
+
+  Opts := ConversionsFor('string', Lib.Casts, Lib.Enums);
+  Check('catalog.value.cast.offered', FindCast('StripDB', Opt)
+    and (Opt.Kind = ckValue) and SameText(Opt.ToType, 'string'),
+    Format('%d option(s); StripDB kind=%s to=%s from %s',
+      [Length(Opts), ConvKindLabel(Opt.Kind), Opt.ToType, P]));
+  Check('catalog.value.cast.identity.kept', (Length(Opts) > 0)
+    and (Opts[0].Kind = ckIdentity) and SameText(Opts[0].ToType, 'string')
+    and (Opts[0].CastName = ''),
+    'identity string [same] must stay first');
+
+  Opts := ConversionsFor('TPicture', Lib.Casts, Lib.Enums);
+  Check('catalog.class.cast.not.value', FindCast('AssignGraphic', Opt)
+    and (Opt.Kind = ckClass), ConvKindLabel(Opt.Kind));
+
+  Opts := ConversionsFor('Integer', Lib.Casts, Lib.Enums);
+  Check('catalog.value.cast.not.for.integer', not FindCast('StripDB', Opt),
+    'StripDB accepts string only');
+end;
+
 procedure TestControlTypesFromNonProjectUnit;
 var
   Exe    : string        ;
@@ -12366,6 +12425,7 @@ begin
     TestResolveHardFailureIsReported;
     TestControlTypesFromNonProjectUnit;
   TestConvCatalog;
+  TestConvCatalogValueCast;
     TestAcceptanceTcxButtonToPool;
     TestQueryLocationParse;
     TestQuerySymbolTieBreak;

@@ -38,12 +38,14 @@ type
   /// <para>ckScalar   -- ConvRules.Casts TCastFn (IntToStr, Trunc, ...).</para>
   /// <para>ckClass    -- a .castlib 'cast' block (AssignGraphic, ...).</para>
   /// <para>ckEnum     -- a .castlib 'enum' block (ButtonLayout, ...).</para>
+  /// <para>ckValue    -- a .castlib value cast (a 'cast' block with a 'value'
+  /// line, StripDB): same type in and out, a different value.</para>
   /// <para>The members carry no trailing comments on purpose: the linter's
   /// inline-comment-in-multiline-args rule fires on any '//' inside a
   /// parenthesised list, because a reformatter may reflow the next element up
   /// into it -- and this folder is now YADF-formatted.</para>
   /// </remarks>
-  TConvKind = (ckIdentity, ckScalar, ckClass, ckEnum);
+  TConvKind = (ckIdentity, ckScalar, ckClass, ckEnum, ckValue);
 
   /// <summary>One thing the selected property could be converted INTO.</summary>
   /// <remarks>ToType is what the user picks; CastName is the suffix that would
@@ -61,7 +63,10 @@ type
   end;
 
 /// <summary>Every conversion available FROM AFromType, merged from all three
-/// sources, in a stable order: identity first, then scalar, class, enum.</summary>
+/// sources, in a stable order: identity first, then scalar, class/value (in
+/// .castlib order), enum. One entry per (target type, cast name), so a value
+/// cast to the From type itself (StripDB: string -> string) is listed beside
+/// identity, never swallowed by it.</summary>
 /// <param name="AFromType">The selected property's type. '' or 'unknown'
 /// yields [] -- an unresolved type cannot be reasoned about.</param>
 /// <param name="ACastDefs">The loaded .castlib 'cast' blocks (may be []).</param>
@@ -71,7 +76,8 @@ function ConversionsFor(const AFromType: string;
   const ACastDefs: TArray<TCastDef>;
   const AEnumDefs: TArray<TEnumDef>): TArray<TConvOption>;
 
-/// <summary>The badge text for a kind -- 'same', 'scalar', 'class', 'enum'.</summary>
+/// <summary>The badge text for a kind -- 'same', 'scalar', 'class', 'enum',
+/// 'value'.</summary>
 /// <param name="AKind">The kind to label.</param>
 /// <returns>A short lower-case word for the UI badge; never ''.</returns>
 function ConvKindLabel(AKind: TConvKind): string;
@@ -94,6 +100,7 @@ begin
     ckIdentity: Result := 'same';
     ckScalar  : Result := 'scalar';
     ckClass   : Result := 'class';
+    ckValue   : Result := 'value';
   else
     Result := 'enum';
   end;
@@ -157,17 +164,22 @@ var
   T    : string;
   A    : string;
 
-  { One entry per target type. A later source never displaces an earlier one:
-    the ordering below (identity, scalar, class, enum) IS the precedence, and
-    an identity link must never be relabelled as a cast. }
+  { One entry per (target type, cast name). A later source never displaces an
+    earlier one: the ordering below (identity, scalar, class/value, enum) IS the
+    precedence, and an identity link must never be relabelled as a cast. The key
+    includes the cast name because a VALUE cast (StripDB) targets the From type
+    itself: keyed on the type alone, identity `string [same]` swallowed it. }
   procedure AddOnce(const AToType, ACastName: string; AKind: TConvKind;
     const ADetail: string);
+  var
+    Key: string;
   begin
     if Trim(AToType) = '' then
       Exit;
-    if Seen.IndexOf(LowerCase(AToType)) >= 0 then
+    Key := LowerCase(AToType) + #9 + LowerCase(ACastName);
+    if Seen.IndexOf(Key) >= 0 then
       Exit;
-    Seen.Add(LowerCase(AToType));
+    Seen.Add(Key);
     Opt.ToType   := AToType;
     Opt.CastName := ACastName;
     Opt.Kind     := AKind;
@@ -202,8 +214,9 @@ begin
           AddOnce(T, '', ckScalar, Detail);
       end;
 
-    // 3. Class casts from the .castlib: every block that ACCEPTS this type
-    //    offers each of its yields.
+    // 3. Class and value casts from the .castlib: every block that ACCEPTS this
+    //    type offers each of its yields. A block with a `value` line (TCastDef.
+    //    Value, e.g. strip-db) is a value transform, not a class cast.
     for d in ACastDefs do
     begin
       var Accepted: Boolean := False;
@@ -216,7 +229,10 @@ begin
       if not Accepted then
         Continue;
       for Y in d.Yields do
-        AddOnce(Y, d.Name, ckClass, d.PasTemplate);
+        if d.Value <> '' then
+          AddOnce(Y, d.Name, ckValue, 'value transform: ' + d.Value)
+        else
+          AddOnce(Y, d.Name, ckClass, d.PasTemplate);
     end;
 
     // 4. Enum casts, matched on the block's declared from-type.

@@ -297,14 +297,14 @@
 #link Name <- Name
 #link Tag <- Tag
 #note hand-linked -- NEAR-MISS properties resolved 2026-10-06; review like any link.
-#link TableName <- TableName
+#link TableName <- TableName : StripDB
 #link UpdateObject <- UpdateObject
 #note UpdateObject: the referenced TUpdateSQL must be converted in the same run, or the form fails to load.
 #note unmapped -- each line below is a decision, not an omission:
 #note - 6 also #remove'd file-wide (unmapped everywhere, read by no #link).
 #note - 1 already decided by the corpus's own file-scope #remove -- NOT
 #note - counted as work, and deliberately not #remove'd a second time.
-#note - NEAR-MISS: TableName (TFileName) -> TableName (String): LINKED BY HAND above.
+#note - NEAR-MISS: TableName (TFileName) -> TableName (String): LINKED BY HAND above, through the StripDB value cast (a trailing .db is dropped: BDE named a Paradox file, FireDAC names a table).
 #note - TFileName is a string alias; Auto-Match declined only because the two type
 #note - names do not bridge. Ignoring it dropped TableName from every converted
 #note - TFDTable, which then cannot open.
