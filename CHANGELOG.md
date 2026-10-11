@@ -3,7 +3,7 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.28.2-alpha -- unreleased
 
 ### Fixed
 
