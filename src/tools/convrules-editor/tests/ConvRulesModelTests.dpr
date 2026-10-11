@@ -3993,7 +3993,7 @@ var
   WS: TWorkingSet;
 begin
   Check('grammar.rules', GrammarOf('C:\x\book.rules') = rgRules, 'the DSL grammar');
-  Check('grammar.castlib', GrammarOf('C:\x\casts.castlib') = rgCastLib, 'the catalog grammar');
+  Check('grammar.castlib', GrammarOf('casts.castlib') = rgCastLib, 'the catalog grammar');
   Check('grammar.castlib.case', GrammarOf('C:\x\CASTS.CASTLIB') = rgCastLib, 'the extension test is case-insensitive, exactly as SplitBlocksFor does it');
   Check('grammar.refind', GrammarOf('C:\x\refind.txt') = rgRules, 'SplitBlocksFor reads everything that is not .castlib with the DSL grammar');
   Check('grammar.name.differ', GrammarName(rgRules) <> GrammarName(rgCastLib), 'a refusal message has to be able to name both sides');
@@ -10917,6 +10917,286 @@ begin
   end;
 end;
 
+{ Engine 1.27.0 apply/1 items (editor-1270 Task 2). fixtures\apply1270\:
+    apply-cast-site-1270.json      REAL 1.27.0 capture: one cast-not-applied, a kept uses row
+    apply-stripdb-1270.json        REAL 1.27.0 capture: 3 value-cast-applied, 1 value-cast-check, a remove row
+    apply-uses-1270.json           REAL 1.27.0 capture: remove (dangling refs) + add rows
+    apply-exit6-castlib-1280.json  REAL 1.28.0 capture, exit 6 (unknown castlib value keyword)
+    apply-missing-fields-sample.json  HAND-WRITTEN malformed entries (its _note says which)
+  Temp paths in the captures were replaced by C:\fix\. }
+function Apply1270Fixture(const AName: string): string;
+begin
+  Result:= TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\apply1270\' + AName)));
+end;
+
+procedure TestApply1270Items;
+const
+  VALUE_CASTS = 3;
+  CAST_LINE   = 25;
+  CAST_RULE   = 4;
+  STRIP_RULE  = 300;
+  DFM_LINE    = 10;
+  CHECK_LINE  = 253;
+  PAS_CAST    = 2; // the third value cast: the .pas literal
+var
+  Cast  : TApplyRow;
+  Strip : TApplyRow;
+  Where : Boolean;
+  What  : Boolean;
+begin
+  Check('apply1270.features.of', ApplyFeaturesOf(['uses_reconcile', 'PAS_USES', 'glyph_stitch']) = [afUsesReconcile, afPasUses]);
+  Check('apply1270.features.of.all', ApplyFeaturesOf(['cast_site_refusal', 'value_cast_strip_db', 'uses_reconcile', 'pas_uses'])
+    = [afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses]);
+
+  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Check('apply1270.cast.site.parsed', Cast.Ok and (Length(Cast.CastSites) = 1), IntToStr(Length(Cast.CastSites)));
+  if Length(Cast.CastSites) = 1 then
+  begin
+    Where:= (Cast.CastSites[0].FileName = 'Unit1.pas') and (Cast.CastSites[0].Line = CAST_LINE) and (Cast.CastSites[0].RuleLine = CAST_RULE);
+    What := (Cast.CastSites[0].Instance = 'BitBtn1') and (Cast.CastSites[0].Path = 'Glyph') and (Cast.CastSites[0].Value = 'AssignGraphic');
+    Check('apply1270.cast.site.fields', Where and What and (Cast.CastSites[0].Kind = 'cast-not-applied'),
+      Cast.CastSites[0].FileName + ':' + IntToStr(Cast.CastSites[0].Line) + ' rule ' + IntToStr(Cast.CastSites[0].RuleLine));
+  end;
+  Check('apply1270.cast.site.note', CastSiteNote(Cast) = '; 1 cast site(s) to convert by hand', CastSiteNote(Cast));
+  Strip:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  Check('apply1270.value.cast.parsed', Strip.Ok and (Length(Strip.ValueCasts) = VALUE_CASTS), IntToStr(Length(Strip.ValueCasts)));
+  if Length(Strip.ValueCasts) = VALUE_CASTS then
+  begin
+    What := (Strip.ValueCasts[0].OldValue = '''ToolAdj.DB''') and (Strip.ValueCasts[0].Value = '''ToolAdj''');
+    Where:= (Strip.ValueCasts[0].Line = DFM_LINE) and (Strip.ValueCasts[0].RuleLine = STRIP_RULE) and (Strip.ValueCasts[0].FileName = 'dmToolStats.dfm');
+    Check('apply1270.value.cast.fields', What and Where, Strip.ValueCasts[0].OldValue + ' -> ' + Strip.ValueCasts[0].Value);
+    Check('apply1270.value.cast.pas', (Strip.ValueCasts[PAS_CAST].FileName = 'dmToolStats.pas') and (Strip.ValueCasts[PAS_CAST].OldValue = '''ToolFldr.db'''));
+  end;
+  Check('apply1270.value.check.parsed', Length(Strip.ValueChecks) = 1, IntToStr(Length(Strip.ValueChecks)));
+  if Length(Strip.ValueChecks) = 1 then
+  begin
+    Where:= (Strip.ValueChecks[0].Line = CHECK_LINE) and (Strip.ValueChecks[0].Instance = 'tblToolStats');
+    Check('apply1270.value.check.fields', Where and (Strip.ValueChecks[0].OldValue = '') and (Pos('non-literal assignment', Strip.ValueChecks[0].Text) > 0));
+  end;
+  Check('apply1270.value.note', ValueCastNote(Strip) = '; StripDB: 3 value(s) changed, 1 to check by hand', ValueCastNote(Strip));
+  Check('apply1270.value.no.cast.site', (Length(Strip.CastSites) = 0) and (CastSiteNote(Strip) = ''));
+end;
+
+procedure TestApply1270Uses;
+var
+  Cast : TApplyRow;
+  Uses1: TApplyRow;
+  Where: Boolean;
+begin
+  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Check('apply1270.cast.uses.kept', (Length(Cast.UsesRows) = 1) and (Cast.UsesRows[0].Action = 'kept') and (Cast.UsesRows[0].UnitName = 'Vcl.Buttons'));
+  if Length(Cast.UsesRows) = 1 then
+    Check('apply1270.cast.uses.needed.by', (string.Join(',', Cast.UsesRows[0].NeededBy) = 'SpeedButton1: TSpeedButton') and (Length(Cast.UsesRows[0].Dangling) = 0),
+      string.Join(',', Cast.UsesRows[0].NeededBy));
+  Check('apply1270.cast.uses.note.kept.only', UsesNote(Cast) = '', UsesNote(Cast));
+  Check('apply1270.cast.reindex', Cast.UsesReindex = 'done', Cast.UsesReindex);
+
+  Uses1:= ParseApplyJson(Apply1270Fixture('apply-uses-1270.json'));
+  Check('apply1270.uses.rows.parsed', (Length(Uses1.UsesRows) = 2) and (Uses1.UsesRows[0].Action = 'remove') and (Uses1.UsesRows[1].Action = 'add'),
+    IntToStr(Length(Uses1.UsesRows)));
+  if Length(Uses1.UsesRows) = 2 then
+  begin
+    Where:= (Uses1.UsesRows[1].UnitName = 'Vcl.ExtCtrls') and (Uses1.UsesRows[1].Section = 'implementation') and (Uses1.UsesRows[0].Source = 'rule');
+    Check('apply1270.uses.rows.fields', Where);
+    Check('apply1270.uses.dangling', (string.Join(',', Uses1.UsesRows[0].Dangling) = 'TBitBtnKind,bkOK') and (Length(Uses1.UsesRows[0].NeededBy) = 0),
+      string.Join(',', Uses1.UsesRows[0].Dangling));
+  end;
+  Check('apply1270.uses.note', UsesNote(Uses1) = '; uses: +1 -1 moved 0', UsesNote(Uses1));
+end;
+
+procedure TestApply1270Notes;
+const
+  CAST_RULE  = 4;
+  DFM_LINE   = 10;
+  SAMPLE_ROWS = 3;
+  NOTE_ORDER = '2 edit(s), 0 remaining for manual work; 1 inherited instance(s) left: ancestor Anc converted -- retype pending (engine N2)'
+    + '; StripDB: 3 value(s) changed, 1 to check by hand; 1 cast site(s) to convert by hand; uses: +1 -1 moved 0'
+    + '; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)';
+var
+  Strip : TApplyRow;
+  Bad   : TApplyRow;
+  Gated : TApplyRow;
+  Comb  : TApplyRow;
+  Old   : TApplyRow;
+  Raised: string;
+  Empty : Boolean;
+  Kept  : Boolean;
+begin
+  Strip:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  // Every part, in the runner's order: C8, then StripDB, cast sites, uses, then C10's glyph suffix.
+  Comb:= Default(TApplyRow);
+  Comb.Ok        := True;
+  Comb.EditsCount:= 2;
+  Comb.InheritedLeft:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json')).InheritedLeft;
+  Comb.ValueCasts := Strip.ValueCasts;
+  Comb.ValueChecks:= Strip.ValueChecks;
+  Comb.CastSites  := ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json')).CastSites;
+  Comb.UsesRows   := ParseApplyJson(Apply1270Fixture('apply-uses-1270.json')).UsesRows;
+  Comb.Glyphs     := ParseApplyJson(TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph\apply-glyphs-sample.json')))).Glyphs;
+  Check('apply1270.note.order', ConvertedRowNote(Comb, True, True) + GlyphNoteSuffix(Comb.Glyphs) = NOTE_ORDER, ConvertedRowNote(Comb, True, True) + GlyphNoteSuffix(Comb.Glyphs));
+
+  // Hand-written malformed entries: kept with what is known; nothing raises.
+  Raised:= '';
+  try
+    Bad:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'));
+  except
+    on E: Exception do
+      Raised:= E.ClassName + ': ' + E.Message;
+  end;
+  Check('apply1270.missing.fields.no.raise', Raised = '', Raised);
+  Check('apply1270.missing.fields.cast.kept', Length(Bad.CastSites) = 1);
+  if Length(Bad.CastSites) = 1 then
+    Check('apply1270.missing.fields.cast.known', (Bad.CastSites[0].Line = 0) and (Bad.CastSites[0].FileName = '') and (Bad.CastSites[0].Instance = 'Btn1')
+      and (Bad.CastSites[0].RuleLine = CAST_RULE));
+  Check('apply1270.missing.fields.value.kept', (Length(Bad.ValueCasts) = 1) and (Length(Bad.ValueChecks) = 1));
+  if (Length(Bad.ValueCasts) = 1) and (Length(Bad.ValueChecks) = 1) then
+    Check('apply1270.missing.fields.value.known', (Bad.ValueCasts[0].OldValue = '') and (Bad.ValueCasts[0].RuleLine = 0) and (Bad.ValueCasts[0].Line = DFM_LINE)
+      and (Bad.ValueChecks[0].Line = 0));
+  Check('apply1270.missing.fields.uses', Length(Bad.UsesRows) = SAMPLE_ROWS, IntToStr(Length(Bad.UsesRows)));
+  if Length(Bad.UsesRows) = SAMPLE_ROWS then
+    Check('apply1270.missing.fields.uses.known', (string.Join(',', Bad.UsesRows[0].Dangling) = 'bkOK') and (Bad.UsesRows[1].Action = 'moved')
+      and (Bad.UsesRows[SAMPLE_ROWS - 1].Action = '') and (Bad.UsesRows[SAMPLE_ROWS - 1].UnitName = ''));
+  Check('apply1270.missing.fields.unresolved', (Length(Bad.UsesUnresolved) = 2)
+    and (Bad.UsesUnresolved[0] = 'TFDQuery line 12: ambiguous (FireDAC.Comp.Client, Other.Client)') and (Bad.UsesUnresolved[1] = 'not-found'),
+    string.Join(' | ', Bad.UsesUnresolved));
+  Check('apply1270.missing.fields.reindex', Bad.UsesReindex = 'failed: index --project exited 3', Bad.UsesReindex);
+  Check('apply1270.reindex.failed.note', UsesNote(Bad) = '; uses: +0 -1 moved 1 (reindex failed: index --project exited 3)', UsesNote(Bad));
+
+  // An older engine: no feature, no new field, the old note byte-identical.
+  Old:= ParseApplyJson(InheritedFixture('apply-desc-1262-retyped.json'), ApplyFeaturesOf([]));
+  Empty:= (Length(Old.CastSites) + Length(Old.ValueCasts) + Length(Old.ValueChecks) + Length(Old.UsesRows) + Length(Old.UsesUnresolved) = 0) and (Old.UsesReindex = '');
+  Check('apply1270.old.engine.unchanged', Empty and (ConvertedRowNote(Old, True, True) = '3 edit(s), 0 remaining for manual work; 1 inherited instance(s) retyped'),
+    ConvertedRowNote(Old, True, True));
+  Old:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json'));
+  Check('apply1270.old.capture.all.features.empty', Length(Old.CastSites) + Length(Old.ValueCasts) + Length(Old.UsesRows) + Length(Old.UsesUnresolved) = 0);
+  // A 1.27.0 document read without the features (the probe said no) keeps today's note.
+  Gated:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), []);
+  Empty:= (Length(Gated.ValueCasts) + Length(Gated.ValueChecks) + Length(Gated.UsesRows) = 0) and (Gated.UsesReindex = '');
+  Kept := ConvertedRowNote(Gated, True, True) = Format('%d edit(s), %d remaining for manual work', [Gated.EditsCount, Length(Gated.Remainder)]);
+  Check('apply1270.gated.no.feature', Empty and Kept, ConvertedRowNote(Gated, True, True));
+  Gated:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), [afValueStripDb]);
+  Check('apply1270.gated.per.feature', (Length(Gated.ValueCasts) = Length(Strip.ValueCasts)) and (Length(Gated.UsesRows) = 0));
+end;
+
+procedure TestApply1270Report;
+const
+  SAMPLE_REPORT = 8; // 1 cast + 1 value + 1 check + 3 uses rows + 2 unresolved
+  STRIP_REPORT  = 5; // 3 value casts + 1 check + 1 uses row
+  LINE_CHECK    = 3; // after the three value casts
+  HEAD = 'B.rules'#9'dmToolStats.pas'#9;
+var
+  Row  : TConvertRow;
+  Lines: TArray<string>;
+  Cast : TApplyRow;
+begin
+  Row:= Default(TConvertRow);
+  Row.Book   := 'B.rules';
+  Row.UnitPas:= 'dmToolStats.pas';
+  Row.Status := csConverted;
+  Row.Apply  := ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  Lines:= ApplyItemReportLines(Row);
+  Check('apply1270.report.count', Length(Lines) = STRIP_REPORT, string.Join(' | ', Lines));
+  if Length(Lines) = STRIP_REPORT then
+  begin
+    Check('apply1270.report.value', Lines[0] = HEAD + 'value cast'#9#9#9#9#9'dmToolStats.dfm:10 tblToolAdj.TableName: ''ToolAdj.DB'' -> ''ToolAdj''', Lines[0]);
+    Check('apply1270.report.check', Lines[LINE_CHECK] = HEAD + 'value check'#9#9#9#9#9 + Row.Apply.ValueChecks[0].Text, Lines[LINE_CHECK]);
+    Check('apply1270.report.uses', Lines[High(Lines)] = HEAD + 'uses remove'#9#9#9#9#9'Bde.DBTables (interface, source rule)', Lines[High(Lines)]);
+  end;
+  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Row.Apply:= Cast;
+  Lines:= ApplyItemReportLines(Row);
+  Check('apply1270.report.cast.count', (Length(Lines) = 2) and (Length(Cast.CastSites) = 1), string.Join(' | ', Lines));
+  if (Length(Lines) = 2) and (Length(Cast.CastSites) = 1) then
+    Check('apply1270.report.cast', (Lines[0] = HEAD + 'cast site'#9#9#9#9#9 + Cast.CastSites[0].Text)
+      and (Lines[1] = HEAD + 'uses kept'#9#9#9#9#9'Vcl.Buttons (interface, source rule); needed by: SpeedButton1: TSpeedButton'), string.Join(' | ', Lines));
+  Row.Apply:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'));
+  Lines:= ApplyItemReportLines(Row);
+  Check('apply1270.report.unresolved', (Length(Lines) = SAMPLE_REPORT) and (Lines[High(Lines)] = HEAD + 'uses unresolved'#9#9#9#9#9'not-found'),
+    string.Join(' | ', Lines));
+  Row.Status:= csRolledBack;
+  Check('apply1270.report.rolled.back.none', Length(ApplyItemReportLines(Row)) = 0);
+end;
+{ Engine 1.28.0: convert-apply exits 6 for an unusable cast library -- a RUN-level
+  configuration error, never a unit or book error. }
+procedure TestRunnerExit6;
+const
+  ORIG    = 'unit U; interface implementation end.'#13#10;
+  CHANGED = 'unit U; { converted } interface implementation end.'#13#10;
+  OK_JSON = '{"schema":"apply/1","ok":true,"edits_count":1}';
+  STOP_TEXT = 'Convert stopped: the cast library casts.castlib is unusable -- castlib bad.castlib: line 88: cast StripDB: unknown value transform "strip-dbx" (known: strip-db)';
+var
+  Dir  : string;
+  U1   : string;
+  U2   : string;
+  Json6: string;
+  Rows : TArray<TConvertRow>;
+  Calls: TStringList;
+  Index: TIndexFn;
+begin
+  Json6:= Apply1270Fixture('apply-exit6-castlib-1280.json');
+  Dir:= TPath.Combine(TPath.GetTempPath, 'exit6-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  Calls:= TStringList.Create;
+  try
+    U1:= TPath.Combine(Dir, 'U1.pas');
+    U2:= TPath.Combine(Dir, 'U2.pas');
+    TFile.WriteAllText(U1, ORIG, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.ChangeExtension(U1, '.dfm'), 'object F: TF'#13#10'end'#13#10, TEncoding.ASCII);
+    TFile.WriteAllText(U2, ORIG, TEncoding.ASCII);
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result := 0;
+      end;
+
+    // Exit 6 on the very first apply: the run stops, nothing restored, no backup kept.
+    Rows:= RunConversionUnits([U1, U2], ['A.rules', 'B.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Calls.Add(ExtractFileName(AUnitPas) + ' ' + ARulesFile);
+        AJson := Json6;
+        Result:= ENGINE_EXIT_CONFIG;
+      end, Index, nil, nil);
+    Check('runner.exit6.castlib.config.error', (Length(Rows) = 1) and (Rows[0].Status = csConfigError) and (Calls.CommaText = '"U1.pas A.rules"'),
+      Calls.CommaText + ' / ' + IntToStr(Length(Rows)));
+    if Length(Rows) = 1 then
+      Check('runner.exit6.note.engine.text', Pos('unknown value transform "strip-dbx"', Rows[0].Note) > 0, Rows[0].Note);
+    Check('runner.exit6.no.backup', (Length(TDirectory.GetFiles(Dir, '*.BCK*')) = 0) and (TFile.ReadAllText(U1) = ORIG),
+      string.Join(',', TDirectory.GetFiles(Dir, '*.BCK*')));
+    Check('runner.exit6.stop.text', CastLibStopText(Rows, 'casts.castlib') = STOP_TEXT, CastLibStopText(Rows, 'casts.castlib'));
+    Check('runner.exit6.stop.text.none', CastLibStopText(Rows, '') = StringReplace(STOP_TEXT, 'library casts.castlib', 'library (none)', []));
+    Check('runner.exit6.not.reached', string.Join(',', NotReachedAfterStop(Rows, [U1, U2])) = U2, string.Join(',', NotReachedAfterStop(Rows, [U1, U2])));
+    Check('runner.exit6.tally', (TallyRows(Rows).ConfigErrors = 1) and (TallyRows(Rows).Restored = 0) and (TallyRows(Rows).Refused = 0));
+    Check('runner.exit6.status.text', ConvertStatusText(csConfigError) = 'stopped -- cast library unusable');
+
+    // Exit 6 on the SECOND book, after the first converted the unit: restored, the first rolled back.
+    Calls.Clear;
+    Rows:= RunConversionUnits([U1, U2], ['A.rules', 'B.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Calls.Add(ExtractFileName(AUnitPas) + ' ' + ARulesFile);
+        if ARulesFile = 'A.rules' then
+        begin
+          TFile.WriteAllText(AUnitPas, CHANGED, TEncoding.ASCII);
+          AJson := OK_JSON;
+          Result:= 0;
+        end
+        else
+        begin
+          AJson := Json6;
+          Result:= ENGINE_EXIT_CONFIG;
+        end;
+      end, Index, nil, nil);
+    Check('runner.exit6.after.change.restored', (Length(Rows) = 2) and (Rows[0].Status = csRolledBack) and (Rows[1].Status = csConfigError)
+      and (TFile.ReadAllText(U1) = ORIG) and (Calls.Count = 2), Calls.CommaText);
+    // No stop: a run with no csConfigError row says nothing.
+    Check('runner.exit6.no.stop.empty', (CastLibStopText(nil, 'x') = '') and (Length(NotReachedAfterStop(nil, [U1])) = 0));
+  finally
+    Calls.Free;
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
 { C10 E13: ParseApplyJson reads glyphs[] whenever it is present (additive, not gated);
   a missing array, a missing dropped_slots key, an unknown kind and wrongly-typed
   values never raise. }
@@ -12543,6 +12823,11 @@ begin
     TestRunnerScope;
     TestScopeForUnit;
     TestRunnerLiveOnly;
+    TestApply1270Items;
+    TestApply1270Uses;
+    TestApply1270Notes;
+    TestApply1270Report;
+    TestRunnerExit6;
 
     FreeAndNil(GParseBook);
 

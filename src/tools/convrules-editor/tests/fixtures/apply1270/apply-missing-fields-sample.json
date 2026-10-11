@@ -1,0 +1,18 @@
+{"_note":"HAND-WRITTEN 2026-10-11 (Task 2, NOT an engine capture): malformed and partial apply/1 1.27.0 items for apply1270.missing.fields.no.raise. Shapes follow docs\\CONVERSION-RULES.md (cast-not-applied: instance, file, line, path, value) and the engine's own contract text in DRagLint.CLI.pas (uses[] needed_by[] {name,line,section}; uses_unresolved[] {name,line,section,reason,candidates[] {unit,db}}). Deliberate faults: a cast-not-applied with line as a STRING and no file; a value-cast-applied with no old_value; a uses row whose needed_by mixes an object, a bare string and a number; a non-object item; a uses_unresolved entry that is a bare string; uses_reindex failed with a reason.","schema":"apply/1","mode":"apply","ok":true,"error":"","refused":false,"reason":"","rule_errors":[],"edits_count":2,"converted":[],"todos":[],"reemit_notes":[],"warnings":[],
+"items":[
+ {"kind":"cast-not-applied","field":"warnings","instance":"Btn1","path":"Glyph","text":"line 4: #link OptionsImage.Glyph <- Glyph : AssignGraphic -- access site not rewritten","line":"25","rule_line":4,"value":"AssignGraphic"},
+ {"kind":"value-cast-applied","field":"access_sites","instance":"tblA","file":"C:\\fix\\A.dfm","path":"TableName","text":"tblA: value cast StripDB","line":10,"rule_line":true,"value":"'A'"},
+ {"kind":"value-cast-check","field":"warnings","text":"line 2: warning: A.pas:28 t2.TableName -- value cast StripDB: non-literal assignment, check by hand"},
+ "not an object",
+ {"kind":"some-future-kind","line":1}
+],
+"uses":[
+ {"action":"remove","unit":"Vcl.Buttons","section":"interface","line":7,"source":"rule","needed_by":[{"name":"bkOK","line":26,"section":"implementation"},"TBitBtnKind",42]},
+ {"action":"moved","unit":"Data.DB","section":"interface","source":"reconcile"},
+ {"action":7,"unit":["x"]},
+ "bad row"
+],
+"uses_unresolved":[{"name":"TFDQuery","line":12,"section":"implementation","reason":"ambiguous","candidates":[{"unit":"FireDAC.Comp.Client","db":"lib"},{"unit":"Other.Client","db":"lib"}]},"bare string",{"reason":"not-found"}],
+"uses_reconcile":"on",
+"uses_reindex":{"status":"failed","reason":"index --project exited 3","ms":"x"}
+}

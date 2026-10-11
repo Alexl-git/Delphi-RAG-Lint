@@ -54,6 +54,62 @@ type
     Action       : string;
   end;
 
+  /// <summary>One apply/1 items[] entry of a 1.27.0 kind the Convert tab reports:
+  /// cast-not-applied, value-cast-applied or value-cast-check.</summary>
+  /// <remarks>Every field is read type-checked: absent, or of another JSON type, it
+  /// is '' / 0 -- the entry is still kept with what is known.</remarks>
+  TApplyItem = record
+    /// <summary>`kind`.</summary>
+    Kind    : string;
+    /// <summary>`instance` -- the component; '' when the engine names none.</summary>
+    Instance: string;
+    /// <summary>`file` -- the .pas or .dfm the entry is about, as the engine gives it.</summary>
+    FileName: string;
+    /// <summary>`path` -- the From member (cast site) or the linked property (value cast).</summary>
+    Path    : string;
+    /// <summary>`value` -- the cast's name (cast site, value check) or the new value
+    /// (value cast, quoted as in the source).</summary>
+    Value   : string;
+    /// <summary>`old_value` -- the value before a value cast; '' for the other kinds.</summary>
+    OldValue: string;
+    /// <summary>`text` -- the engine's own sentence.</summary>
+    Text    : string;
+    /// <summary>`line` -- the line in FileName.</summary>
+    Line    : Integer;
+    /// <summary>`rule_line` -- the #link's line in the book.</summary>
+    RuleLine: Integer;
+  end;
+
+  /// <summary>One apply/1 uses[] row (engine 1.27.0, C9 uses reconciliation).</summary>
+  /// <remarks>The engine's keys: action remove|add|skipped|kept|moved, unit, section,
+  /// source rule|reconcile|convert, needed_by[] of {name, line, section}. A missing or
+  /// wrongly-typed field reads as ''.</remarks>
+  TUsesRow = record
+    /// <summary>`action` -- remove, add, skipped, kept or moved.</summary>
+    Action  : string;
+    /// <summary>`section` -- interface or implementation.</summary>
+    Section : string;
+    /// <summary>`unit`.</summary>
+    UnitName: string;
+    /// <summary>`source` -- rule, reconcile or convert.</summary>
+    Source  : string;
+    /// <summary>needed_by[] names on every row but a remove: what still needs the
+    /// unit (a kept row's .dfm components).</summary>
+    NeededBy: TArray<string>;
+    /// <summary>needed_by[] names on a remove row: the .pas references the removal
+    /// left dangling (the unit will not compile until that code is converted).</summary>
+    Dangling: TArray<string>;
+  end;
+
+  /// <summary>An engine 1.27.0 apply/1 feature, one per info --json capability.</summary>
+  /// <remarks>afCastSiteRefusal: cast_site_refusal (items[] cast-not-applied, one per
+  /// .pas site); afValueStripDb: value_cast_strip_db (value-cast-applied /
+  /// value-cast-check); afUsesReconcile: uses_reconcile (uses[] rows, uses_unresolved[],
+  /// uses_reindex); afPasUses: pas_uses (pas_uses[]).</remarks>
+  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses);
+  /// <summary>The apply/1 features the run's engine reported.</summary>
+  TApplyFeatures = set of TApplyFeature;
+
   /// <summary>One convert-apply run, read from its apply/1 JSON.</summary>
   TApplyRow = record
     /// <summary>The engine's own ok flag; False also for unparseable output.</summary>
@@ -97,6 +153,24 @@ type
     /// document; from 1.25.1 it is also apply/1 error. warnings[] is read too. Empty
     /// for a clean run.</summary>
     EditRefusals: TArray<string>;
+    /// <summary>items[] kind cast-not-applied (afCastSiteRefusal): a class-cast #link
+    /// site in the .pas left for the user; [] without the feature.</summary>
+    CastSites: TArray<TApplyItem>;
+    /// <summary>items[] kind value-cast-applied (afValueStripDb): a value the cast
+    /// rewrote; [] without the feature.</summary>
+    ValueCasts: TArray<TApplyItem>;
+    /// <summary>items[] kind value-cast-check (afValueStripDb): a site the value cast
+    /// could not rewrite -- check by hand; [] without the feature.</summary>
+    ValueChecks: TArray<TApplyItem>;
+    /// <summary>uses[] (afUsesReconcile); [] without the feature (a 1.26 engine sends
+    /// uses[] too, under another contract).</summary>
+    UsesRows: TArray<TUsesRow>;
+    /// <summary>uses_unresolved[] (afUsesReconcile), one text per entry: '&lt;name&gt;
+    /// line N: &lt;reason&gt; (&lt;candidate units&gt;)', the parts the engine sent.</summary>
+    UsesUnresolved: TArray<string>;
+    /// <summary>uses_reindex (afUsesReconcile): its status (done, skipped, failed,
+    /// dry-run), plus ': &lt;reason&gt;' when the engine gave one; '' when absent.</summary>
+    UsesReindex: string;
   end;
 
   /// <summary>The verdict before any file is touched.</summary>
@@ -213,8 +287,54 @@ function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles
 /// <summary>Reads convert-apply's --format json output (schema apply/1).</summary>
 /// <param name="AJson">The engine's merged stdout+stderr; text before the first
 /// '{' and after the last '}' (the "(loaded defaults ...)" line) is ignored.</param>
-/// <returns>See TApplyRow; never raises.</returns>
-function ParseApplyJson(const AJson: string): TApplyRow;
+/// <param name="AFeatures">The engine's 1.27.0 apply/1 features (ApplyFeaturesOf its
+/// capabilities). A field of a feature not in the set is left empty, so an older
+/// engine's output reads exactly as before. The default (every feature) is for the
+/// test seams; a real run passes what the engine reported.</param>
+/// <returns>See TApplyRow; never raises. Unknown items[] kinds and unknown keys are
+/// ignored; a missing array reads as empty.</returns>
+function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures = [Low(TApplyFeature)..High(TApplyFeature)]): TApplyRow;
+
+/// <summary>PURE: the apply/1 features an engine reported.</summary>
+/// <param name="ACapNames">The capability names info --json reported true
+/// (TEngineAdapter.CapabilityNames).</param>
+/// <returns>One feature per matching name, case-insensitive: cast_site_refusal,
+/// value_cast_strip_db, uses_reconcile, pas_uses (ConvRules.Engine CAPABILITY_*).</returns>
+function ApplyFeaturesOf(const ACapNames: TArray<string>): TApplyFeatures;
+
+/// <summary>PURE: the converted row's StripDB part.</summary>
+/// <param name="ARow">The book's apply/1 answer.</param>
+/// <returns>'; StripDB: N value(s) changed, M to check by hand' (N = ValueCasts, M =
+/// ValueChecks); '' when both are 0.</returns>
+function ValueCastNote(const ARow: TApplyRow): string;
+
+/// <summary>PURE: the converted row's class-cast part.</summary>
+/// <param name="ARow">The book's apply/1 answer.</param>
+/// <returns>'; N cast site(s) to convert by hand' (N = CastSites); '' when 0.</returns>
+function CastSiteNote(const ARow: TApplyRow): string;
+
+/// <summary>PURE: the converted row's uses part.</summary>
+/// <param name="ARow">The book's apply/1 answer.</param>
+/// <returns>'; uses: +A -R moved M' (A add rows, R remove rows, M moved rows), then
+/// ' (reindex failed: &lt;reason&gt;)' when UsesReindex is a failure; '' when A, R and M
+/// are 0 and the reindex did not fail.</returns>
+/// <remarks>Kept, skipped and unresolved entries are not counted here: they are in the
+/// run report's uses lines (UsesReportNote).</remarks>
+function UsesNote(const ARow: TApplyRow): string;
+
+/// <summary>PURE: the run-report note of one items[] entry.</summary>
+/// <param name="AItem">A CastSites / ValueCasts / ValueChecks entry.</param>
+/// <returns>For value-cast-applied '&lt;file&gt;:&lt;line&gt; &lt;instance&gt;.&lt;path&gt;: &lt;old&gt;
+/// -&gt; &lt;new&gt;' (the file name without its folder); for every other kind the engine's
+/// text.</returns>
+function ApplyItemReportNote(const AItem: TApplyItem): string;
+
+/// <summary>PURE: the run-report note of one uses[] row.</summary>
+/// <param name="ARow">The row.</param>
+/// <returns>'&lt;unit&gt; (&lt;section&gt;, source &lt;source&gt;)', the parenthesis holding only the
+/// parts that are set, then '; needed by: a, b' and '; dangling: a, b' when those
+/// lists are not empty.</returns>
+function UsesReportNote(const ARow: TUsesRow): string;
 
 /// <summary>PURE: True when convert-apply claims success but refused to write one of
 /// the unit's edit sets -- the unit is left HALF-converted.</summary>
@@ -313,7 +433,9 @@ function InheritedRetypedNote(const AItems: TArray<TInheritedLeft>): string;
 /// convert' when ComponentPart is 'skipped-no-instances' (the engine converted around a
 /// .dfm holding only inherited instances, exit 0 -- not a failure), then '; ' +
 /// InheritedRetypedNote when supported and something was retyped, then '; ' +
-/// InheritedLeftNote when supported and something was left.</returns>
+/// InheritedLeftNote when supported and something was left, then ValueCastNote,
+/// CastSiteNote and UsesNote (each '' when it has nothing to say). The runner appends
+/// the glyph suffix after all of these.</returns>
 function ConvertedRowNote(const AApply: TApplyRow; AInheritedSupported, ARetypeSupported: Boolean): string;
 
 /// <summary>PURE: why the Convert tab must not add sources right now, or '' when it may.</summary>
@@ -400,6 +522,7 @@ uses
   , ConvRules.Model
   , ConvRules.UsesHarvest
   , ConvRules.EngineProgress  // dl:unit ConvRules.EngineProgress accepted -- ENGINE_OUTCOME_CANCELLED / _TIMEOUT are the long-call runner's outcome contract ReindexOutcomeText reads, so they travel with the runner
+  , ConvRules.Engine  // dl:unit ConvRules.Engine accepted -- the four 1.27.0 CAPABILITY_* names live with the other info --json keys; ApplyFeaturesOf maps them to the apply/1 features it gates
   ;
 
 const
@@ -426,6 +549,18 @@ const
   // 'line N: warning: inherited instance <Name>: <Type> skipped -- <reason>'.
   INHERITED_WARNING_PATTERN = '^line \d+: warning: inherited instance ';
   BCK_PROBE_WINDOW = 50;
+  // Engine 1.27.0 apply/1: items[] kinds, uses[] actions, uses_reindex status.
+  APPLY_KIND_CAST_SITE   = 'cast-not-applied';
+  APPLY_KIND_VALUE_CAST  = 'value-cast-applied';
+  APPLY_KIND_VALUE_CHECK = 'value-cast-check';
+  USES_ACTION_ADD        = 'add';
+  USES_ACTION_REMOVE     = 'remove';
+  USES_ACTION_MOVED      = 'moved';
+  USES_REINDEX_FAILED    = 'failed';
+  VALUE_CAST_NOTE_FMT    = '; StripDB: %d value(s) changed, %d to check by hand';
+  CAST_SITE_NOTE_FMT     = '; %d cast site(s) to convert by hand';
+  USES_NOTE_FMT          = '; uses: +%d -%d moved %d';
+  VALUE_CAST_REPORT_FMT  = '%s:%d %s.%s: %s -> %s';
 
 // The highest N with AFile + '.BCK' + N present; 0 when there is none.
 function HighestBackupN(const AFile: string; const AExists: TFileProbe): Integer;
@@ -752,7 +887,225 @@ begin
   end;
 end;
 
-function ParseApplyJson(const AJson: string): TApplyRow;
+function ApplyFeaturesOf(const ACapNames: TArray<string>): TApplyFeatures;
+begin
+  Result:= [];
+  if MatchText(CAPABILITY_CAST_SITE_REFUSAL, ACapNames) then
+    Include(Result, afCastSiteRefusal);
+  if MatchText(CAPABILITY_VALUE_CAST_STRIP_DB, ACapNames) then
+    Include(Result, afValueStripDb);
+  if MatchText(CAPABILITY_USES_RECONCILE, ACapNames) then
+    Include(Result, afUsesReconcile);
+  if MatchText(CAPABILITY_PAS_USES, ACapNames) then
+    Include(Result, afPasUses);
+end;
+
+function ValueCastNote(const ARow: TApplyRow): string;
+begin
+  if Length(ARow.ValueCasts) + Length(ARow.ValueChecks) = 0 then
+    Exit('');
+  Result:= Format(VALUE_CAST_NOTE_FMT, [Length(ARow.ValueCasts), Length(ARow.ValueChecks)]);
+end;
+
+function CastSiteNote(const ARow: TApplyRow): string;
+begin
+  Result:= if Length(ARow.CastSites) > 0 then Format(CAST_SITE_NOTE_FMT, [Length(ARow.CastSites)]) else '';
+end;
+
+function UsesNote(const ARow: TApplyRow): string;
+var
+  LAdded  : Integer;
+  LRemoved: Integer;
+  LMoved  : Integer;
+  LFailed : Boolean;
+begin
+  LAdded  := 0;
+  LRemoved:= 0;
+  LMoved  := 0;
+  for var LRow: TUsesRow in ARow.UsesRows do
+    if SameText(LRow.Action, USES_ACTION_ADD) then
+      Inc(LAdded)
+    else if SameText(LRow.Action, USES_ACTION_REMOVE) then
+      Inc(LRemoved)
+    else if SameText(LRow.Action, USES_ACTION_MOVED) then
+      Inc(LMoved);
+  // UsesReindex is 'failed' or 'failed: <reason>' (ParseApplyJson).
+  LFailed:= SameText(ARow.UsesReindex, USES_REINDEX_FAILED) or StartsText(USES_REINDEX_FAILED + ': ', ARow.UsesReindex);
+  if (LAdded + LRemoved + LMoved = 0) and not LFailed then
+    Exit('');
+  Result:= Format(USES_NOTE_FMT, [LAdded, LRemoved, LMoved]);
+  if LFailed then
+    Result:= Result + ' (reindex ' + ARow.UsesReindex + ')';
+end;
+
+function ApplyItemReportNote(const AItem: TApplyItem): string;
+begin
+  if SameText(AItem.Kind, APPLY_KIND_VALUE_CAST) then
+    Result:= Format(VALUE_CAST_REPORT_FMT, [ExtractFileName(AItem.FileName), AItem.Line, AItem.Instance, AItem.Path, AItem.OldValue, AItem.Value])
+  else
+    Result:= AItem.Text;
+end;
+
+function UsesReportNote(const ARow: TUsesRow): string;
+var
+  LParts: TArray<string>;
+begin
+  LParts:= nil;
+  if ARow.Section <> '' then
+    LParts:= LParts + [ARow.Section];
+  if ARow.Source <> '' then
+    LParts:= LParts + ['source ' + ARow.Source];
+  Result:= ARow.UnitName;
+  if Length(LParts) > 0 then
+    Result:= Result + ' (' + string.Join(', ', LParts) + ')';
+  if Length(ARow.NeededBy) > 0 then
+    Result:= Result + '; needed by: ' + string.Join(', ', ARow.NeededBy);
+  if Length(ARow.Dangling) > 0 then
+    Result:= Result + '; dangling: ' + string.Join(', ', ARow.Dangling);
+end;
+
+{ The 1.27.0 apply/1 reads. Every key is read type-checked, as GlyphOutcomes does:
+  a missing key, a wrong JSON type or a non-object entry degrades to ''/0 or is
+  skipped -- nothing raises. }
+
+// A JSON string member's text; '' when absent or of another JSON type
+// (TJSONNumber descends from TJSONString, so it is excluded by name).
+function JsonStr(AObj: TJSONObject; const AKey: string): string;
+var
+  LVal: TJSONValue;
+begin
+  LVal:= AObj.Values[AKey];
+  Result:= if (LVal is TJSONString) and not (LVal is TJSONNumber) then LVal.Value else '';
+end;
+
+// A JSON number member holding an integer; 0 for anything else ("25", 3.5, true).
+function JsonInt(AObj: TJSONObject; const AKey: string): Integer;
+var
+  LVal: TJSONValue;
+begin
+  LVal:= AObj.Values[AKey];
+  if not ((LVal is TJSONNumber) and TryStrToInt(LVal.Value, Result)) then
+    Result:= 0;
+end;
+
+// The items[] entries of one kind.
+function ApplyItems(AObj: TJSONObject; const AKind: string): TArray<TApplyItem>;
+var
+  LItem: TJSONObject;
+  O    : TApplyItem;
+begin
+  Result:= nil;
+  if not (AObj.Values['items'] is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(AObj.Values['items']) do
+  begin
+    if not (LVal is TJSONObject) then
+      Continue;
+    LItem:= TJSONObject(LVal);
+    if not SameText(JsonStr(LItem, 'kind'), AKind) then
+      Continue;
+    O:= Default(TApplyItem);
+    O.Kind    := JsonStr(LItem, 'kind');
+    O.Instance:= JsonStr(LItem, 'instance');
+    O.FileName:= JsonStr(LItem, 'file');
+    O.Path    := JsonStr(LItem, 'path');
+    O.Value   := JsonStr(LItem, 'value');
+    O.OldValue:= JsonStr(LItem, 'old_value');
+    O.Text    := JsonStr(LItem, 'text');
+    O.Line    := JsonInt(LItem, 'line');
+    O.RuleLine:= JsonInt(LItem, 'rule_line');
+    Result:= Result + [O];
+  end;
+end;
+
+// The `name` of each object entry of AArr (needed_by[], candidates[] use AKey 'unit').
+function EntryNames(AArr: TJSONValue; const AKey: string): TArray<string>;
+var
+  LName: string;
+begin
+  Result:= nil;
+  if not (AArr is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(AArr) do
+    if LVal is TJSONObject then
+    begin
+      LName:= JsonStr(TJSONObject(LVal), AKey);
+      if LName <> '' then
+        Result:= Result + [LName];
+    end;
+end;
+
+// uses[]: needed_by on a remove row names the references the removal left dangling.
+function UsesRows(AObj: TJSONObject): TArray<TUsesRow>;
+var
+  LItem : TJSONObject;
+  LNames: TArray<string>;
+  O     : TUsesRow;
+begin
+  Result:= nil;
+  if not (AObj.Values['uses'] is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(AObj.Values['uses']) do
+  begin
+    if not (LVal is TJSONObject) then
+      Continue;
+    LItem:= TJSONObject(LVal);
+    O:= Default(TUsesRow);
+    O.Action  := JsonStr(LItem, 'action');
+    O.Section := JsonStr(LItem, 'section');
+    O.UnitName:= JsonStr(LItem, 'unit');
+    O.Source  := JsonStr(LItem, 'source');
+    LNames:= EntryNames(LItem.Values['needed_by'], 'name');
+    if SameText(O.Action, USES_ACTION_REMOVE) then
+      O.Dangling:= LNames
+    else
+      O.NeededBy:= LNames;
+    Result:= Result + [O];
+  end;
+end;
+
+// uses_unresolved[] {name, line, section, reason, candidates[] {unit, db}}, one text each.
+function UsesUnresolved(AObj: TJSONObject): TArray<string>;
+var
+  LItem : TJSONObject;
+  LText : string;
+  LCands: TArray<string>;
+begin
+  Result:= nil;
+  if not (AObj.Values['uses_unresolved'] is TJSONArray) then
+    Exit;
+  for var LVal: TJSONValue in TJSONArray(AObj.Values['uses_unresolved']) do
+  begin
+    if not (LVal is TJSONObject) then
+      Continue;
+    LItem:= TJSONObject(LVal);
+    LText:= JsonStr(LItem, 'name');
+    if JsonInt(LItem, 'line') > 0 then
+      LText:= LText + ' line ' + IntToStr(JsonInt(LItem, 'line'));
+    if JsonStr(LItem, 'reason') <> '' then
+      LText:= LText + (if LText <> '' then ': ' else '') + JsonStr(LItem, 'reason');
+    LCands:= EntryNames(LItem.Values['candidates'], 'unit');
+    if Length(LCands) > 0 then
+      LText:= LText + ' (' + string.Join(', ', LCands) + ')';
+    if LText <> '' then
+      Result:= Result + [LText];
+  end;
+end;
+
+// uses_reindex {status, reason}: 'status' or 'status: reason'; '' when absent.
+function UsesReindex(AObj: TJSONObject): string;
+var
+  LReason: string;
+begin
+  if not (AObj.Values['uses_reindex'] is TJSONObject) then
+    Exit('');
+  Result := JsonStr(TJSONObject(AObj.Values['uses_reindex']), 'status');
+  LReason:= JsonStr(TJSONObject(AObj.Values['uses_reindex']), 'reason');
+  if LReason <> '' then
+    Result:= Result + ': ' + LReason;
+end;
+
+function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures): TApplyRow;
 
   function Strings(AObj: TJSONObject; const AKey: string): TArray<string>;
   var
@@ -869,6 +1222,21 @@ begin
     Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0);
     Result.ComponentPart:= Str(Obj, 'component_part');
     Result.Glyphs    := GlyphOutcomes(Obj);
+    // Engine 1.27.0, each behind its capability: an older engine's items[] / uses[]
+    // (a 1.26 per-rule cast-not-applied, its uses rows) is not this contract.
+    if afCastSiteRefusal in AFeatures then
+      Result.CastSites:= ApplyItems(Obj, APPLY_KIND_CAST_SITE);
+    if afValueStripDb in AFeatures then
+    begin
+      Result.ValueCasts := ApplyItems(Obj, APPLY_KIND_VALUE_CAST);
+      Result.ValueChecks:= ApplyItems(Obj, APPLY_KIND_VALUE_CHECK);
+    end;
+    if afUsesReconcile in AFeatures then
+    begin
+      Result.UsesRows      := UsesRows(Obj);
+      Result.UsesUnresolved:= UsesUnresolved(Obj);
+      Result.UsesReindex   := UsesReindex(Obj);
+    end;
     // The applier's refusal reaches us on stderr, outside the document (no apply/1
     // key carries it, up to engine 1.25.0); warnings[] / error are read as well.
     AddRefusals(AJson.Split([#10]), Result.EditRefusals);
@@ -1121,6 +1489,8 @@ begin
   LLeft:= if AInheritedSupported then InheritedLeftNote(AApply.InheritedLeft, ARetypeSupported) else '';
   if LLeft <> '' then
     Result:= Result + '; ' + LLeft;
+  // Engine 1.27.0: each part is '' when its arrays are empty (feature off, or nothing to say).
+  Result:= Result + ValueCastNote(AApply) + CastSiteNote(AApply) + UsesNote(AApply);
 end;
 function SourcesAddRefusal(ARunning, AChecking: Boolean): string;
 begin

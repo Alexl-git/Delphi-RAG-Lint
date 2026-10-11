@@ -117,6 +117,7 @@ type
       FRunInheritedOk : Boolean;            // FInheritedOk when Convert was pressed: the report follows the run
       FRetypeOk       : Boolean;            // engine reports inherited_retype (C8 N2): the notes stop warning that a descendant breaks
       FRunRetypeOk    : Boolean;            // FRetypeOk when Convert was pressed
+      FApplyFeatures  : TApplyFeatures;     // engine 1.27.0 apply/1 features (ApplyFeaturesOf the same probe); [] = an older engine
       FScope          : TConvertScope;      // C12: the IDE request's scope; Default = whole unit
       FRunScope       : TConvertScope;      // FScope when Convert was pressed: the report's Scope line (Clear scope may run mid-run)
       FInherit        : TDictionary<string, TUnitInheritance>; // C8 analyses, by upper-cased path
@@ -343,6 +344,7 @@ const
   CAP_CANCEL      = 'Cancel';
   CAP_CANCELLING  = 'Cancelling after this unit...';
   STATUS_NOT_REACHED = 'not reached (cancelled)'; // a unit a cancel kept from running
+  STATUS_NOT_REACHED_STOPPED = 'not reached (stopped)'; // a unit a castlib configuration error (exit 6) kept from running
   CAPABILITY_UNIT_RULES = 'apply_unit_rules';
   STEP_TICK_MS    = 1000; // the progress line's clock refresh while one phase runs (C16)
   PAIRS_KEY_NONE        = '|none|'; // FPairsKey after a pass that did not complete: never equals a real key
@@ -592,6 +594,7 @@ begin
     FInheritedOk:= MatchText(CAPABILITY_INHERITED_INSTANCES, LCaps);
     FRetypeOk   := MatchText(CAPABILITY_INHERITED_RETYPE, LCaps);
     FGlyphOk    := MatchText(CAPABILITY_GLYPH_STITCH, LCaps);
+    FApplyFeatures:= ApplyFeaturesOf(LCaps);
     FProbed     := True;
   end;
   Folder:= FHost.GetRulesFolder();
@@ -1360,6 +1363,7 @@ begin
   Job.Dbs        := FHost.GetDbs();
   Job.InheritedSupported:= FInheritedOk;
   Job.RetypeSupported   := FRetypeOk;
+  Job.ApplyFeatures     := FApplyFeatures;
   Job.Scope             := FScope; // copied: Clear scope mid-run does not reach the worker
   LExe:= FHost.ExePath;
   // Captured now: the user may open or start another book mid-run, which moves
@@ -1482,11 +1486,17 @@ begin
       // C10 E13: one 8-column line per glyph outcome, converted rows only.
       for var LLine: string in GlyphReportLines(LRow) do
         LLines.Add(LLine);
+      // Engine 1.27.0: cast sites, value casts and checks, uses rows -- converted rows only.
+      for var LLine: string in ApplyItemReportLines(LRow) do
+        LLines.Add(LLine);
     end;
+    var LStopped: Boolean:= CastLibStopText(FRunRows, FRunCastLib) <> '';
     for var LUnit: string in ANotReached do
-      LLines.Add(string.Join(#9, ['', LUnit, STATUS_NOT_REACHED, '', '', '', '', '']));
+      LLines.Add(string.Join(#9, ['', LUnit, if LStopped then STATUS_NOT_REACHED_STOPPED else STATUS_NOT_REACHED, '', '', '', '', '']));
     LLines.Add('');
-    if FCancelRequested then
+    if LStopped then
+      LLines.Add(Format('Run'#9'stopped -- the cast library is unusable, %d unit(s) not reached', [Length(ANotReached)]))
+    else if FCancelRequested then
       LLines.Add(Format('Run'#9'cancelled -- %d unit(s) not reached', [Length(ANotReached)]))
     else
       LLines.Add('Run'#9'completed');
@@ -1522,8 +1532,13 @@ begin
   NotReached := nil;
   if (AStopAt >= 0) and (AStopAt < Length(AJob.Units)) then
     NotReached:= Copy(AJob.Units, AStopAt, Length(AJob.Units) - AStopAt);
+  // Engine 1.28.0 exit 6: the run stopped on an unusable cast library -- a RUN-level
+  // error that leads the status line; the units after the stop never ran.
+  var LStop: string:= CastLibStopText(FRunRows, FRunCastLib);
+  if LStop <> '' then
+    NotReached:= NotReachedAfterStop(FRunRows, AJob.Units);
   for var LUnit: string in NotReached do
-    AddResultRow(['', ExtractFileName(LUnit), STATUS_NOT_REACHED, '', '', '', '', '']);
+    AddResultRow(['', ExtractFileName(LUnit), if LStop <> '' then STATUS_NOT_REACHED_STOPPED else STATUS_NOT_REACHED, '', '', '', '', '']);
   // C12: out-of-scope pairs are counted apart and leave the "of M" denominator.
   Tally:= TallyRows(FRunRows);
   Msg:= ConvertedSummaryText(Tally, Length(AJob.Books) * Length(AJob.Units));
@@ -1544,6 +1559,8 @@ begin
   // implementation section starts with a to-do line the user must act on.
   var LGlyphSummary: string:= GlyphRunSummary(GlyphTodoUnitCount(FRunRows));
   Msg:= RunStatusLead(Tally.NotRestored, LGlyphSummary, Msg);
+  if LStop <> '' then
+    Msg:= LStop + '.  ' + Msg;
   if AProblem <> '' then
     Msg:= Msg + ' Also: ' + AProblem + '.';
   if WriteReport(NotReached, AFinalIndex, Report, RepErr) then
@@ -1562,7 +1579,7 @@ begin
   // Re-harvest the converted code so the Unit Rules MISSING list is current.
   FHost.FeedHarvest(AJob.Units);
   // Red when the run went wrong, a re-read after it failed (C8), or units hold glyph to-dos (C10).
-  var LRunProblem : Boolean:= (Tally.Restored + Tally.BookSkips + Tally.UnitSkips + Length(Tally.NotRestored) > 0) or (AProblem <> '') or (RepErr <> '');
+  var LRunProblem : Boolean:= (Tally.Restored + Tally.BookSkips + Tally.UnitSkips + Tally.ConfigErrors + Length(Tally.NotRestored) > 0) or (AProblem <> '') or (RepErr <> '');
   var LReadProblem: Boolean:= (LIndexErr <> '') or (FInheritError <> '');
   FHost.SetStatus(Msg, LRunProblem or LReadProblem or (LGlyphSummary <> ''));
 end;
