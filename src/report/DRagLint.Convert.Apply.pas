@@ -3271,9 +3271,11 @@ begin
   for var I: Integer:= 0 to High(ANeeds.Keeps) do
   begin
     var K: TUsesKeep:= ANeeds.Keeps[I];
-    if (K.Reason <> KEEP_REASON_DFM) or (Length(K.NeededBy) = 0) then Continue;
+    if (K.Reason <> KEEP_REASON_DFM) or (Length(K.Keepers) = 0) then Continue;
+    { A7-6: decided on EVERY keeper -- NeededBy is the capped display list, so a
+      sixth keeper no --only explains would otherwise be missed }
     var AllOnly: Boolean:= True;
-    for var N: TUsesNeed in K.NeededBy do
+    for var N: TUsesNeed in K.Keepers do
       if not MatchText(NeedInstance(N), Own) then AllOnly:= False;
     if not AllOnly then Continue;
     for var E: TUsesEntryInfo in AEntries do
@@ -3293,6 +3295,7 @@ begin
               K.Action  := 'skipped';
               K.Reason  := Skips[0].Reason;
               K.NeededBy:= nil;
+              K.Keepers := nil;
               ANeeds.Keeps[I]:= K;
             end;
             Break;
@@ -3356,6 +3359,7 @@ begin
   UnitIn.Rules       := Rules;
   UnitIn.ExtraAdds   := Adds;
   UnitIn.HandledNames:= AArgs.Handled;
+  UnitIn.InterfaceAdds:= AArgs.IntfAdds;
   OrigDfm:= '';
   if (DfmPath <> '') and TFile.Exists(DfmPath) then
   begin
@@ -3383,7 +3387,8 @@ begin
     if Ch.Action = 'skipped' then
       Result.Items:= Result.Items + [SkippedRuleItem(Rules, UnitPas, Ch)]
     else if (Ch.Action = 'kept') and (Ch.Reason = KEEP_REASON_UNVERIFIED) then
-      Warn(aikUnitRuleUnverified, Ch.Line, RL, Format('line %d: warning: %s kept %s -- no --db indexes that unit, so whether anything still needs it is unknown',
+      Warn(aikUnitRuleUnverified, Ch.Line, RL, Format('line %d: warning: %s kept %s -- no --db indexes that unit, so whether anything still needs it is unknown;' +
+        ' pass the platform library --db (resolve-dbs --platform Win32|Win64)',
         [RL, Ch.Rule, Ch.UnitName]))
     else if (Ch.Action = 'kept') and (Ch.Reason = KEEP_REASON_DEGRADED) then
       Warn(aikUnitRuleKept, Ch.Line, RL, Format('line %d: warning: %s kept %s -- the re-index of the converted output failed (%s)',

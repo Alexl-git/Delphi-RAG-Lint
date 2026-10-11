@@ -507,6 +507,17 @@ begin
 end;
 '@ @((Obj 'Old1' 'TOld'))
 Form 'SecForm' 'Classes, LibOldS' @('Old1: TOldS;', 'X: TShared;') 'LibDupI' @() '' @((Obj 'Old1' 'TOldS'))
+# A7-9 control: the same TShared referenced only in the IMPLEMENTATION, where
+# LibDupI is visible -- not dangling.
+Form 'SecIForm' 'Classes, LibOldS' @('Old1: TOldS;') 'LibDupI' @('procedure Run;') @'
+procedure TSecIForm.Run;
+var
+  X: TShared;
+begin
+  X:= 0;
+  if X = 0 then Exit;
+end;
+'@ @((Obj 'Old1' 'TOldS'))
 foreach ($cf in @('CastForm', 'CastEForm', 'AmbForm', 'AmbUForm', 'NfForm')) {
   Form $cf 'Classes, LibPicOld' @('pic1: TPicOld;') '' @('procedure Setup;') @"
 procedure T$cf.Setup;
@@ -521,7 +532,7 @@ W 'P.dpr' (@('program P;', '', 'uses',
   '  W1Form, W2Form, W3Form, W4Form, W5Form, W6Form, W6bForm, W7Form, W8Form, U1Form, D1Form, D2Form, O1Form,',
   '  LibSolo, LibNest, LibHelp2, LibOldS, LibDupI,',
   '  TieForm, BaseForm, DescForm, CastForm, CastEForm, AmbForm, AmbUForm, EncForm, Enc2Form, NfForm, Base2Form, Desc2Form,',
-  '  TieUForm, TieMForm, W2iForm, O2Form, SoloForm, W5bForm, SecForm;', '', 'begin', 'end.') -join "`n")
+  '  TieUForm, TieMForm, W2iForm, O2Form, SoloForm, W5bForm, SecForm, SecIForm;', '', 'begin', 'end.') -join "`n")
 
 # ---- books ------------------------------------------------------------------
 W 'old.rules'   "#convert TOld -> TNew`n#link Caption <- Caption`n#unuse LibOld`n"
@@ -644,6 +655,8 @@ $r = J 'U1Form.pas' 'gone.rules'
 $kp = Rows $r 'kept'
 Check 'U1 (Q3) a watched unit no --db knows: KEPT with unit-rule-unverified' `
   (($kp.Count -eq 1) -and ($kp[0].unit -eq 'GoneU') -and ((Kinds $r) -contains 'unit-rule-unverified')) $r.Out
+Check 'A7-10 ... and the warning says how to fix it: pass the platform library --db (resolve-dbs --platform Win32|Win64)' `
+  (@($r.J.warnings | Where-Object { $_ -match 'GoneU' -and $_ -match [regex]::Escape('pass the platform library --db (resolve-dbs --platform Win32|Win64)') }).Count -eq 1) ($r.J.warnings -join ' | ')
 
 $r = J 'D1Form.pas' 'db.rules'
 Check 'D1 `#use DB` on a unit using Fx.DB: no add (alias-aware presence)' (($r.Code -eq 0) -and (@($r.J.uses | Where-Object { $_.unit -eq 'DB' }).Count -eq 0)) $r.Out
@@ -691,6 +704,32 @@ $r = J 'W2iForm.pas' 'old.rules'
 $rm = Rows $r 'remove'
 Check 'A8-3 implementation{ glued }: the dangling ELibOld is in the IMPLEMENTATION section (line 31)' `
   (($rm.Count -eq 1) -and ((Need $rm[0]) -eq 'ELibOld') -and ($rm[0].needed_by[0].line -eq 31) -and ($rm[0].needed_by[0].section -eq 'implementation')) ($rm | ConvertTo-Json -Depth 5)
+
+# ---- A7-6: a keeper past the needed_by cap still counts --------------------
+$r = J 'O2Form.pas' 'old.rules' @('--only', 'Old0')
+Check 'A7-6 --only Old0 with 5 own left-out TOld instances + X2: TOld2 (6th keeper): KEPT, not skipped' `
+  (($r.Code -eq 0) -and ((Rows $r 'kept').Count -eq 1) -and ((Rows $r 'skipped').Count -eq 0)) $r.Out
+
+# ---- A7-7: a class-level (nested) declaration is no unit-level declarer -----
+$r = J 'SoloForm.pas' 'solo.rules'
+Check 'A7-7 TSolo (unit level in LibSolo, nested in LibNest): not ambiguous, nothing unresolved' `
+  (($r.Code -eq 0) -and -not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@($r.J.uses_unresolved).Count -eq 0)) $r.Out
+
+# ---- A7-8: a helper member another kept unit provides is not dangling -------
+$r = J 'W5bForm.pas' 'old.rules'
+$rm = Rows $r 'remove'
+Check 'A7-8 S.OldUpper also provided by LibHelp2 (kept): LibOld removed with NO needed_by, no unit-rule-dangling' `
+  (($rm.Count -eq 1) -and (@($rm[0].needed_by).Count -eq 0) -and -not ((Kinds $r) -contains 'unit-rule-dangling')) $r.Out
+
+# ---- A7-9: an interface name is not satisfied by an implementation-only unit -
+$r = J 'SecForm.pas' 'olds.rules'
+$rm = Rows $r 'remove'
+Check 'A7-9 TShared (interface field) declared by LibOldS (removed) and LibDupI (implementation uses only): dangling, section interface' `
+  (($rm.Count -eq 1) -and ($rm[0].unit -eq 'LibOldS') -and ((Need $rm[0]) -eq 'TShared') -and ($rm[0].needed_by[0].section -eq 'interface')) $r.Out
+$r = J 'SecIForm.pas' 'olds.rules'
+$rm = Rows $r 'remove'
+Check 'A7-9 control: TShared referenced only in the implementation, LibDupI in the implementation uses: NOT dangling' `
+  (($rm.Count -eq 1) -and ($rm[0].unit -eq 'LibOldS') -and (@($rm[0].needed_by).Count -eq 0) -and -not ((Kinds $r) -contains 'unit-rule-dangling')) $r.Out
 
 # 1.27.0 (cast-link refusal, owner decision): a cast link writes NO .pas access
 # site, so a cast template's routine (CastPic, CastPicMode + cmFancy, AmbPic,
@@ -797,7 +836,7 @@ $written = @('W1Form.dfm', 'W4Form.dfm')
 foreach ($x in @(@('W2Form','old.rules'), @('W3Form','old.rules'), @('W5Form','old.rules'), @('W6Form','al.rules'), @('W6bForm','al.rules'),
                  @('W7Form','old.rules'), @('D1Form','db.rules'), @('D2Form','old.rules'), @('DescForm','old.rules'),
                  @('CastForm','cast.rules'), @('CastEForm','caste.rules'),
-                 @('TieUForm','tieu.rules'), @('TieMForm','tieu.rules'))) {
+                 @('TieUForm','tieu.rules'), @('TieMForm','tieu.rules'), @('SoloForm','solo.rules'), @('W5bForm','old.rules'), @('SecIForm','olds.rules'))) {
   $r = Run "$($x[0]).pas" $x[1] @('--apply', '--no-backup')
   Check "X $($x[0]) --apply exits 0" ($r.Code -eq 0) $r.Out
   $written += "$($x[0]).dfm"
@@ -823,10 +862,11 @@ function Dcc([string]$Dpr, [string[]]$Units) {
 Check 'X TieUForm LibTieA written into the INTERFACE uses' ((Text 'TieUForm.pas') -match "interface\s+uses\s+Classes, LibOld, LibTieA;") (Text 'TieUForm.pas')
 Check 'X TieMForm LibTieA moved: in the interface uses, no longer in the implementation' `
   (((Text 'TieMForm.pas') -match "interface\s+uses\s+Classes, LibOld, LibTieA;") -and -not ((Text 'TieMForm.pas') -match "implementation\s+uses")) (Text 'TieMForm.pas')
-# A8-1 / A8-4: these must COMPILE -- an interface field typed by a
+Check 'X SoloForm LibSolo added, LibNest not' (((Text 'SoloForm.pas') -match '\bLibSolo\b') -and -not ((Text 'SoloForm.pas') -match 'LibNest')) (Text 'SoloForm.pas')
+# A8-1 / A8-4 / A7-7 / A7-8 / A7-9 control: these must COMPILE -- an interface field typed by a
 # unit in the implementation uses (the A8-1 defect) is E2003.
 $cl = Dcc 'CGood' @('W1Form', 'W4Form', 'W6Form', 'W6bForm', 'W7Form', 'D1Form', 'D2Form', 'BaseForm', 'DescForm', 'O1Form',
-                    'TieUForm', 'TieMForm')
+                    'TieUForm', 'TieMForm', 'SoloForm', 'W5bForm', 'SecIForm')
 Check 'C1 the reconciled units compile (dcc64)' (($cl -match 'BUILD_EXITCODE=0') -and -not ($cl -match '(?m)Error')) (@(($cl -split "`r?`n") | Where-Object { $_ -match 'Error|Fatal' }) -join ' | ')
 # CastForm / CastEForm: until 1.26.x they were EXCLUDED here because the cast
 # realisation spliced a statement over the member token (`pic1.pic1.Glyph.

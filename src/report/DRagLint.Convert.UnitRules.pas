@@ -112,12 +112,17 @@ type
 
   /// <summary>A watched entry the reconciler decided to KEEP (C9).</summary>
   /// <remarks>UnitName is the entry as written in the unit. Action is 'kept'
-  /// or 'skipped' (the C13 N4 --only shape, kept byte-compatible).</remarks>
+  /// or 'skipped' (the C13 N4 --only shape, kept byte-compatible). NeededBy is
+  /// the DISPLAY list (capped at NEEDED_BY_MAX); Keepers is every keeping .dfm
+  /// component, uncapped -- a decision about the row reads Keepers (C9 A7-6).</remarks>
   TUsesKeep = record
     UnitName: string;
     Action  : string;
     Reason  : string;
     NeededBy: TArray<TUsesNeed>;
+    /// <summary>C9 A7-6: every .dfm component that keeps the unit, uncapped
+    /// (same shape as NeededBy); empty unless Reason is the .dfm reason.</summary>
+    Keepers : TArray<TUsesNeed>;
   end;
 
   /// <summary>A unit the reconciler adds because a name the conversion

@@ -28,6 +28,21 @@ breaking changes** until v1.0.
   refusal: no `.pas` surface writes a new bare name (retypes write the handled To type, access
   rewrites write a member after a `.`, a value cast writes a literal, a cast link writes no site).
   Documented in the code; no feature invented for it.
+- **convert-apply (C9 A7, review minors).**
+  A7-6: the `--only` demotion of a `kept` row to `skipped` decides on EVERY keeping component
+  (new `TUsesKeep.Keepers`), not the five-entry `needed_by` display list -- a sixth keeper no
+  `--only` explains keeps the row `kept`.
+  A7-7: a class-level const / var / nested type is no longer counted as a unit-level declarer
+  (`DeclaringUnits` requires the unit, or a unit-level enum, as the parent) -- no false To-type
+  ambiguity from a nested class of the same name.
+  A7-8: a type-helper member another still-used unit's helper provides is not reported dangling.
+  A7-9: section-aware reachability -- a name referenced above `implementation` is satisfied only by
+  a unit in the post-plan INTERFACE uses; one only the implementation uses no longer hides a
+  dangling interface reference.
+  A7-10: `unit-rule-unverified` says how to fix it: "pass the platform library --db (resolve-dbs
+  --platform Win32|Win64)".
+  A7-12: `docs\wiki\convert-apply.md` covers the uses rules, C9 reconciliation and the exit codes.
+  Guards: run_convert_apply_uses_reconcile.ps1 A7-6..A7-10, X SoloForm, C1.
 
 No extractor or resolver change: indexes do not re-parse or re-resolve.
 

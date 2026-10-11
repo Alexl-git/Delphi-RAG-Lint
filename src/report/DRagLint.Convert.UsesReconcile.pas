@@ -89,8 +89,10 @@ type
     FByTail   : TObjectDictionary<string, TList<string>>; { lower last segment -> stems }
     FDeclMemo : TDictionary<string, TArray<TUsesCandidate>>;
     FPathMemo : TDictionary<string, string>;
+    FLevelMemo: TDictionary<string, Boolean>;
     procedure Build;
     function StemOf(AStore: Integer; AFileId: Int64): string;
+    function AtUnitLevel(AStore: Integer; const ASym: TSymbol): Boolean;
   public
     /// <summary>Wraps the run's stores.</summary>
     /// <param name="AStores">The --db stores, in --db order. Not owned.</param>
@@ -113,8 +115,10 @@ type
     /// <param name="B">The other.</param>
     /// <returns>True when they are the same unit.</returns>
     function SameUnit(const A, B: string): Boolean;
-    /// <summary>The distinct units that declare AName at unit level and
-    /// visibly (not in an implementation section), across every store.</summary>
+    /// <summary>The distinct units that declare AName at unit level (its
+    /// parent is the unit, or a unit-level enum for an enum value -- never a
+    /// class / record member) and visibly (not in an implementation section),
+    /// across every store.</summary>
     /// <param name="AName">A bare identifier.</param>
     /// <param name="AClassesOnly">True: class/interface/record declarations only.</param>
     /// <returns>Candidates in store order; memoised.</returns>
@@ -145,6 +149,10 @@ type
     Rules       : TConversionRuleSet;  { the book }
     ExtraAdds   : TArray<string>;      { units the #convert surface adds (To types) }
     HandledNames: TArray<string>;      { names the #convert surface resolves itself (To types) }
+    /// <summary>C9 A7-9: the units of ExtraAdds the planner puts in (or moves
+    /// to) the INTERFACE uses -- a To type whose retyped field is declared
+    /// there. Decides which post-plan units an interface reference can see.</summary>
+    InterfaceAdds: TArray<string>;
   end;
 
   /// <summary>One name a REMOVED unit exports that the converted .pas still
@@ -223,10 +231,12 @@ begin
   FByTail  := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
   FDeclMemo:= TDictionary<string, TArray<TUsesCandidate>>.Create;
   FPathMemo:= TDictionary<string, string>.Create;
+  FLevelMemo:= TDictionary<string, Boolean>.Create;
 end;
 
 destructor TUsesUnitIndex.Destroy;
 begin
+  FLevelMemo.Free;
   FPathMemo.Free;
   FDeclMemo.Free;
   FByTail.Free;
@@ -323,6 +333,26 @@ begin
   FPathMemo.Add(Key, Result);
 end;
 
+{ A7-7: ASym is declared AT UNIT LEVEL -- its parent is the unit, or (an
+  unscoped enum value) a unit-level enum. A class-level const / var / nested
+  type is a MEMBER, not a declarer a uses entry can bring into scope. A symbol
+  with no readable parent counts as unit level (the 1.27.0 answer). }
+function TUsesUnitIndex.AtUnitLevel(AStore: Integer; const ASym: TSymbol): Boolean;
+var
+  Key   : string;
+  Parent: TSymbol;
+begin
+  if ASym.ParentId <= 0 then Exit(True);
+  Key:= Format('%d:%d:%d', [AStore, ASym.ParentId, Ord(ASym.Kind = skEnumValue)]);
+  if FLevelMemo.TryGetValue(Key, Result) then Exit;
+  Parent:= FStores[AStore].GetSymbolById(ASym.ParentId);
+  if Parent.Id <> ASym.ParentId then Result:= True   { Default(TSymbol).Kind is skUnit: check the id }
+  else if Parent.Kind = skUnit then Result:= True
+  else if (ASym.Kind = skEnumValue) and (Parent.Kind = skEnum) then Result:= AtUnitLevel(AStore, Parent)
+  else Result:= False;
+  FLevelMemo.AddOrSetValue(Key, Result);
+end;
+
 function TUsesUnitIndex.DeclaringUnits(const AName: string; AClassesOnly: Boolean): TArray<TUsesCandidate>;
 const
   CLASS_KINDS: set of TSymbolKind = [skClass, skInterface, skRecord];
@@ -342,7 +372,7 @@ begin
       begin
         if (S.FileId <= 0) or SameText(S.Section, SECTION_IMPL) then Continue;
         if AClassesOnly and not (S.Kind in CLASS_KINDS) then Continue;
-        if not (S.Kind in UNIT_LEVEL) then Continue;
+        if not (S.Kind in UNIT_LEVEL) or not AtUnitLevel(I, S) then Continue;
         var Stem: string:= StemOf(I, S.FileId);
         if not SameText(ExtractFileExt(FStores[I].GetFilePath(S.FileId)), '.pas') then Continue;
         if (Stem = '') or Seen.Contains(LowerCase(Stem)) then Continue;
@@ -447,6 +477,8 @@ type
     FWatch   : TArray<TWatchUnit>;
     FRemoved : TList<string>;           { entries the reconciler removes }
     FPostPlan: TList<string>;           { the unit names reachable after the plan }
+    FPostIntf: TList<string>;           { A7-9: those an INTERFACE reference reaches }
+    FHelpers : TDictionary<string, TArray<string>>;  { A7-8: stem -> its helper member names }
     FConvUses: TDictionary<string, TNameUse>;
     FOrigUses: TDictionary<string, TNameUse>;
     FOwn     : TDictionary<string, Boolean>;
@@ -457,7 +489,8 @@ type
     procedure CollectNames(const AText: string; const AParse: TParseResult; ADict: TDictionary<string, TNameUse>);
     procedure DecideWatch(const ADfm: TParseResult; ADfmOk: Boolean);
     procedure BuildPostPlan;
-    function Reachable(const ACands: TArray<TUsesCandidate>): Boolean;
+    function Reachable(const ACands: TArray<TUsesCandidate>; AIntf: Boolean): Boolean;
+    function HelperProvided(const AName, ARemovedStem: string; AIntf: Boolean): Boolean;
     procedure PlanNewNames;
     procedure PlanDangling;
   public
@@ -490,6 +523,8 @@ begin
   FIn      := AIn;
   FRemoved := TList<string>.Create;
   FPostPlan:= TList<string>.Create;
+  FPostIntf:= TList<string>.Create;
+  FHelpers := TDictionary<string, TArray<string>>.Create;
   FConvUses:= TDictionary<string, TNameUse>.Create;
   FOrigUses:= TDictionary<string, TNameUse>.Create;
   FOwn     := TDictionary<string, Boolean>.Create;
@@ -500,6 +535,8 @@ begin
   FOwn.Free;
   FOrigUses.Free;
   FConvUses.Free;
+  FHelpers.Free;
+  FPostIntf.Free;
   FPostPlan.Free;
   FRemoved.Free;
   inherited Destroy;
@@ -593,8 +630,9 @@ begin
             if FIx.SameUnit(C.UnitName, E.Name) then
             begin
               K.Reason:= KEEP_REASON_DFM;
-              if Length(K.NeededBy) < NEEDED_BY_MAX then
-                K.NeededBy:= K.NeededBy + [Need(S.Name + ': ' + S.Signature, S.StartLine, NEED_SECTION_DFM)];
+              var N: TUsesNeed:= Need(S.Name + ': ' + S.Signature, S.StartLine, NEED_SECTION_DFM);
+              K.Keepers:= K.Keepers + [N];
+              if Length(K.NeededBy) < NEEDED_BY_MAX then K.NeededBy:= K.NeededBy + [N];
               Break;
             end;
         end;
@@ -607,28 +645,73 @@ begin
   end;
 end;
 
+{ The units in scope after the plan, and (A7-9) the subset an INTERFACE
+  reference reaches -- the section each lands in, as PlanUnitRules places it:
+  an entry stays where it is, a #convert To unit goes to the interface when an
+  interface field needs it (moved there when only in the implementation), else
+  to the implementation unless only the interface has a clause, a #use to the
+  implementation, a #useswap New to Old's section; System, SysInit and the
+  unit itself are visible everywhere. }
 procedure TReconciler.BuildPostPlan;
+var
+  IntfHas, ImplHas: Boolean;
+
+  procedure Add(const AUnit: string; AIntf: Boolean);
+  begin
+    FPostPlan.Add(AUnit);
+    if AIntf then FPostIntf.Add(AUnit);
+  end;
+
 begin
+  IntfHas:= False;
+  ImplHas:= False;
   for var E: TUsesEntryInfo in FEntries do
-    if not FRemoved.Contains(E.Name) then FPostPlan.Add(E.Name);
-  for var U: string in FIn.ExtraAdds do FPostPlan.Add(U);
-  for var U: string in IMPLICIT_UNITS do FPostPlan.Add(U);
-  FPostPlan.Add(TPath.GetFileNameWithoutExtension(FIn.UnitPas));
+    if SameText(E.Section, SECTION_INTF) then IntfHas:= True else ImplHas:= True;
+  for var E: TUsesEntryInfo in FEntries do
+    if not FRemoved.Contains(E.Name) then Add(E.Name, SameText(E.Section, SECTION_INTF));
+  for var U: string in FIn.ExtraAdds do
+    Add(U, MatchText(U, FIn.InterfaceAdds) or (IntfHas and not ImplHas));
+  for var U: string in IMPLICIT_UNITS do Add(U, True);
+  Add(TPath.GetFileNameWithoutExtension(FIn.UnitPas), True);
   for var R: TConversionRule in FIn.Rules.Rules do
     case R.Kind of
-      rkUse: FPostPlan.Add(R.UnitName);
+      rkUse: Add(R.UnitName, False);
       rkUseSwap:
         for var E: TUsesEntryInfo in FEntries do
           if FIx.SameUnit(E.Name, R.UnitName) then
-            for var N: string in R.UnitsAdd do FPostPlan.Add(N);
+            for var N: string in R.UnitsAdd do Add(N, SameText(E.Section, SECTION_INTF));
     end;
 end;
 
-function TReconciler.Reachable(const ACands: TArray<TUsesCandidate>): Boolean;
+{ A candidate unit is in scope after the plan -- for an interface reference
+  (AIntf), in the INTERFACE uses (A7-9: a unit only the implementation uses
+  does not satisfy a name declared above 'implementation'). }
+function TReconciler.Reachable(const ACands: TArray<TUsesCandidate>; AIntf: Boolean): Boolean;
 begin
   for var C: TUsesCandidate in ACands do
-    for var U: string in FPostPlan do
+    for var U: string in (if AIntf then FPostIntf else FPostPlan) do
       if FIx.SameUnit(C.UnitName, U) then Exit(True);
+  Result:= False;
+end;
+
+{ A7-8: a unit still in scope after the plan, other than ARemovedStem, has a
+  type helper providing the member AName (lowercase) -- so the reference does
+  not dangle when ARemovedStem goes. }
+function TReconciler.HelperProvided(const AName, ARemovedStem: string; AIntf: Boolean): Boolean;
+var
+  Names: TArray<string>;
+begin
+  for var U: string in (if AIntf then FPostIntf else FPostPlan) do
+  begin
+    var Stem: string:= FIx.Resolve(U);
+    if (Stem = '') or SameText(Stem, ARemovedStem) then Continue;
+    if not FHelpers.TryGetValue(LowerCase(Stem), Names) then
+    begin
+      Names:= FIx.ExportNames(Stem, True);
+      FHelpers.Add(LowerCase(Stem), Names);
+    end;
+    if MatchText(AName, Names) then Exit(True);
+  end;
   Result:= False;
 end;
 
@@ -639,7 +722,7 @@ end;
   each .pas surface writes: the field and creator retypes write the To type
   (HandledNames, skipped below); the access-site rewrite writes a member token
   after a '.', never bare; a value cast writes a string literal (no reference);
-  the creator TODO marker is a comment; a cast link writes no .pas site at all
+  the creator's marker is a comment; a cast link writes no .pas site at all
   (cast-not-applied). Enum casts act on the .dfm only. So no name reaches the
   add / ambiguous / not-found verdicts here, and the ToInterface placement and
   the PlanMoves reconcile branch they feed are unreachable too -- the live
@@ -662,7 +745,7 @@ begin
       var Cands: TArray<TUsesCandidate>:= nil;
       for var C: TUsesCandidate in FIx.DeclaringUnits(U.Name, False) do
         if not SameText(C.UnitName, TPath.GetFileNameWithoutExtension(FIn.UnitPas)) then Cands:= Cands + [C];
-      if Reachable(Cands) then Continue;
+      if Reachable(Cands, U.InIntf) then Continue;
       { a unit the book removes is never added back (ADD would win over it) }
       var Kept: TArray<TUsesCandidate>:= nil;
       for var C: TUsesCandidate in Cands do
@@ -740,8 +823,11 @@ begin
         if not FConvUses.TryGetValue(N, U) then Continue;
         if (Pass = 0) and not U.Bare then Continue;
         if FOwn.ContainsKey(N) then Continue;
-        { still declared by a unit that stays: not dangling }
-        if (Pass = 0) and Reachable(FIx.DeclaringUnits(U.Name, False)) then Continue;
+        { still declared by a unit that stays -- visible from where it is
+          referenced (A7-9) -- or still provided by another kept unit's type
+          helper (A7-8): not dangling }
+        if (Pass = 0) and Reachable(FIx.DeclaringUnits(U.Name, False), U.InIntf) then Continue;
+        if (Pass = 1) and HelperProvided(N, Stem, U.InIntf) then Continue;
         var Line: Integer:= if Pass = 0 then U.BareLine else U.Line;
         var Dup: Boolean:= False;
         for var X: TUsesDangling in FRes.Dangling do
