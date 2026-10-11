@@ -773,7 +773,7 @@ begin
     begin
       // C14: comments inside a (split) parameter list are not parameter text --
       // the same helper the writer (TDocumenter.BuildForSymbol) parses with.
-      Sig       := SignatureWithoutComments(EffectiveSignature(AStore, ASym),
+      Sig       := SignatureWithoutComments(EffectiveSignature(AStore, ASym), ASym.Name,
                                             AStore.GetFilePath(ASym.FileId), ASym.StartLine);
       ParamList := ExtractParamList(Sig);
       SigNames  := ParseParamNames(ParamList);

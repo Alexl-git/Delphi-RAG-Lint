@@ -24,6 +24,11 @@
     W1  writer: S1's shape, ACodeUses undocumented     `document` proposes <param name="ACodeUses">
     P1  S1's shape, ACodeUses undocumented             ddParamMissing "ACodeUses" (positive control)
     P2  S1's shape, a documented AGhost not in the sig ddParamRenamedOrRemoved "AGhost" (positive control)
+    S5  // comment, then an {$IFDEF NEVERDEF} param    no param finding (the index already
+                                                     dropped Z; the source must not bring it back)
+    S6  // comment between '(' and the first ':'      no param finding
+    P3  S6's shape, B undocumented                    ddParamMissing "B" (positive control)
+    W2  writer: P3                                    `document` proposes <param name="B">, no comment text
 #>
 [CmdletBinding()]
 param(
@@ -97,6 +102,26 @@ function P1(const AUnitPas: string; const AReader: TReader;  // note; a; b
 function P2(const AUnitPas: string; const AReader: TReader;  // note; a; b
   const ACodeUses: TObject = nil): Integer;
 
+/// <summary>S5: a line comment, then a parameter the preprocessor drops.</summary>
+/// <param name="A">First.</param>
+/// <param name="B">Second.</param>
+procedure S5(const A: Integer; // one; two
+  {$IFDEF NEVERDEF} Z: Integer; {$ENDIF}
+  B: Integer);
+
+/// <summary>S6: a line comment before the first parameter.</summary>
+/// <param name="A">First.</param>
+/// <param name="B">Second.</param>
+procedure S6( // leading note; x
+  const A: Integer;
+  B: Integer);
+
+/// <summary>P3: S6's shape, B undocumented.</summary>
+/// <param name="A">First.</param>
+procedure P3( // leading note; x
+  const A: Integer;
+  B: Integer);
+
 implementation
 
 function S1(const AUnitPas: string; const AReader: TReader;
@@ -131,6 +156,18 @@ begin
   Result := 0;
 end;
 
+procedure S5(const A: Integer; B: Integer);
+begin
+end;
+
+procedure S6(const A: Integer; B: Integer);
+begin
+end;
+
+procedure P3(const A: Integer; B: Integer);
+begin
+end;
+
 end.
 '@
   $norm = $body -replace "`r`n", "`n" -replace "`n", "`r`n"
@@ -160,10 +197,14 @@ end.
   Check 'P2 ghost param -> ddParamRenamedOrRemoved "AGhost"' (
     @($p2.Findings | Where-Object { $_.kind -eq 'ddParamRenamedOrRemoved' -and $_.detail -match '"AGhost"' }).Count -eq 1) $p2.Raw
   Check 'P2 nothing else' (@($p2.Findings | Where-Object { $paramKinds -contains $_.kind }).Count -eq 1) $p2.Raw
+  $p3 = Get-Findings 'SplitSig.P3'
+  Check 'P3 comment before the first param, B undocumented -> ddParamMissing "B"' (
+    @($p3.Findings | Where-Object { $_.kind -eq 'ddParamMissing' -and $_.detail -match '"B"' }).Count -eq 1) $p3.Raw
+  Check 'P3 nothing else' (@($p3.Findings | Where-Object { $paramKinds -contains $_.kind }).Count -eq 1) $p3.Raw
 
   Write-Host ''
   Write-Host 'A comment inside the parameter list is not parameter text' -ForegroundColor Cyan
-  foreach ($q in @('S1', 'S2', 'S3', 'S4')) {
+  foreach ($q in @('S1', 'S2', 'S3', 'S4', 'S5', 'S6')) {
     $r = Get-Findings ('SplitSig.' + $q)
     Check ("$q no param finding") (@($r.Findings | Where-Object { $paramKinds -contains $_.kind }).Count -eq 0) $r.Raw
   }
@@ -173,6 +214,9 @@ end.
   $w = (& $Exe document --qname SplitSig.P1 --db $db 2>$null) -join "`n"
   Check 'W1 document proposes <param name="ACodeUses">' ($w -match '<param name="ACodeUses">')
   Check 'W1 document proposes no comment-text param' (-not ($w -match '<param name="(b|a|note)\b'))
+  $w2 = (& $Exe document --qname SplitSig.P3 --db $db 2>$null) -join "`n"
+  Check 'W2 document proposes <param name="B"> for S6''s shape' ($w2 -match '<param name="B">')
+  Check 'W2 document proposes no comment-text param' (-not ($w2 -match '<param name="(x|note|leading)\b'))
 }
 finally {
   if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir -ErrorAction SilentlyContinue }

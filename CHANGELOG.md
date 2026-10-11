@@ -34,10 +34,14 @@ No extractor or resolver change: indexes do not re-parse or re-resolve.
   <param> tag" (plus "documented param ... not in signature" for the real one). The
   checker and the `document` writer now parse the signature through one helper,
   `SignatureWithoutComments` (DRagLint.Refactor.DocStub): `{ }` / `(* *)` comments are
-  stripped in place; a `//` comment makes it re-read the heading from the source, where
-  the line break is, and it keeps the indexed text if the source no longer matches.
-  Read-time only: the stored signature is unchanged. Pinned by
-  run_doc_drift_split_signature_comments.ps1.
+  stripped in place; for a `//` comment it reads the heading's source lines, where the
+  line break is, and cuts each comment's text out of the INDEXED signature -- the
+  parameter text always comes from the index, which has already applied the
+  preprocessor, so a parameter inside a false `{$IFDEF}` does not come back. The source
+  line must name the routine followed by its `(` (so a comment between `(` and the first
+  `:` is handled too), and every comment must be found verbatim in the indexed text;
+  otherwise the indexed text is kept. Read-time only: the stored signature is unchanged.
+  Pinned by run_doc_drift_split_signature_comments.ps1.
 - **"Called from:" no longer claims a call on a receiver of an unrelated, known type**
   (converter-filed wrong edge). `FUnitList.ClearSelection` (FUnitList: TListView) is
   correctly left unresolved by the resolver, but the doc-facts builder's unverified
