@@ -11197,6 +11197,128 @@ begin
   end; // try
 end;
 
+{ Fix round 1: the run stop survives a failed restore, and a stop on a LATER unit's
+  first book leaves that unit untouched. Fake TApplyFn throughout. }
+procedure TestRunnerExit6Stops;
+const
+  ORIG      = 'unit U; interface implementation end.'#13#10;
+  CHANGED   = 'unit U; { converted } interface implementation end.'#13#10;
+  OK_JSON   = '{"schema":"apply/1","ok":true,"edits_count":1}';
+  STOP_TEXT = 'Convert stopped: the cast library casts.castlib is unusable -- castlib bad.castlib: line 88: cast StripDB: unknown value transform "strip-dbx" (known: strip-db)';
+  TWO_ROWS  = 2;
+var
+  Dir  : string;
+  U1   : string;
+  U2   : string;
+  U3   : string;
+  Json6: string;
+  Rows : TArray<TConvertRow>;
+  Calls: TStringList;
+  Index: TIndexFn;
+  Shape: Boolean;
+begin
+  Json6:= Apply1270Fixture('apply-exit6-castlib-1280.json');
+  Index:= function(out AOutput: string): Integer
+    begin
+      AOutput:= '';
+      Result := 0;
+    end;
+  Calls:= TStringList.Create;
+  Dir:= TPath.Combine(TPath.GetTempPath, 'exit6b-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    U1:= TPath.Combine(Dir, 'U1.pas');
+    U2:= TPath.Combine(Dir, 'U2.pas');
+    U3:= TPath.Combine(Dir, 'U3.pas');
+    for var LU: string in [U1, U2, U3] do
+      TFile.WriteAllText(LU, ORIG, TEncoding.ASCII);
+
+    // (a) book A changes U1 and makes it read-only, book B exits 6: the restore FAILS.
+    try
+      Rows:= RunConversionUnits([U1, U2, U3], ['A.rules', 'B.rules'],
+        function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+        begin
+          Calls.Add(ExtractFileName(AUnitPas) + ' ' + ARulesFile);
+          if ARulesFile = 'A.rules' then
+          begin
+            TFile.WriteAllText(AUnitPas, CHANGED, TEncoding.ASCII);
+            FileSetAttr(AUnitPas, faReadOnly);
+            AJson := OK_JSON;
+            Result:= 0;
+          end
+          else
+          begin
+            AJson := Json6;
+            Result:= ENGINE_EXIT_CONFIG;
+          end;
+        end, Index, nil, nil);
+    finally
+      FileSetAttr(U1, faNormal);
+    end; // try
+    Shape:= (Length(Rows) = TWO_ROWS) and (Rows[1].Status = csRestoreFailed) and Rows[1].StoppedRun;
+    Check('runner.exit6.restore.failed.keeps.stop', Shape and (Calls.CommaText = '"U1.pas A.rules","U1.pas B.rules"'), Calls.CommaText);
+    // The report's 'Run<TAB>stopped' line and the status lead are both CastLibStopText <> ''.
+    Check('runner.exit6.restore.failed.stop.text', CastLibStopText(Rows, 'casts.castlib') = STOP_TEXT, CastLibStopText(Rows, 'casts.castlib'));
+    Check('runner.exit6.restore.failed.not.reached', string.Join(',', NotReachedAfterStop(Rows, [U1, U2, U3])) = U2 + ',' + U3,
+      string.Join(',', NotReachedAfterStop(Rows, [U1, U2, U3])));
+
+    // (b) U1 converted by its only book, then U2's FIRST apply exits 6.
+    for var LU: string in [U1, U2, U3] do
+      TFile.WriteAllText(LU, ORIG, TEncoding.ASCII);
+    for var LBak: string in TDirectory.GetFiles(Dir, '*.BCK*') do
+      TFile.Delete(LBak);
+    Calls.Clear;
+    Rows:= RunConversionUnits([U1, U2, U3], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJson: string): Integer
+      begin
+        Calls.Add(ExtractFileName(AUnitPas));
+        if SameText(AUnitPas, U1) then
+        begin
+          TFile.WriteAllText(AUnitPas, CHANGED, TEncoding.ASCII);
+          AJson := OK_JSON;
+          Result:= 0;
+        end
+        else
+        begin
+          AJson := Json6;
+          Result:= ENGINE_EXIT_CONFIG;
+        end;
+      end, Index, nil, nil);
+    Shape:= (Length(Rows) = TWO_ROWS) and (Rows[0].Status = csConverted) and (Rows[1].Status = csConfigError) and Rows[1].StoppedRun;
+    Check('runner.exit6.later.unit.rows', Shape and (Calls.CommaText = 'U1.pas,U2.pas'), Calls.CommaText);
+    Check('runner.exit6.later.unit.untouched', (TFile.ReadAllText(U2) = ORIG) and (Length(TDirectory.GetFiles(Dir, 'U2.pas.BCK*')) = 0)
+      and (TFile.ReadAllText(U1) = CHANGED) and TFile.Exists(U1 + '.BCK1'), string.Join(',', TDirectory.GetFiles(Dir, '*.BCK*')));
+    Check('runner.exit6.later.unit.stop.text', CastLibStopText(Rows, 'casts.castlib') = STOP_TEXT, CastLibStopText(Rows, 'casts.castlib'));
+    Check('runner.exit6.later.unit.not.reached', string.Join(',', NotReachedAfterStop(Rows, [U1, U2, U3])) = U3,
+      string.Join(',', NotReachedAfterStop(Rows, [U1, U2, U3])));
+  finally
+    Calls.Free;
+    TDirectory.Delete(Dir, True);
+  end; // try
+end;
+
+{ Fix round 1: a cast site / value check is counted ONCE -- its warnings[] line leaves
+  the manual remainder (real 1.27.0 captures). }
+procedure TestApply1270Remainder;
+const
+  CAST_REMAINDER  = 11; // 5 reemit_notes + 7 warnings - the 1 cast-site warning
+  STRIP_REMAINDER = 27; // 11 reemit_notes + 17 warnings - the 1 value-check warning
+  CAST_ALL        = 12;
+  STRIP_ALL       = 28;
+var
+  A: TApplyRow;
+begin
+  A:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Check('apply1270.remainder.cast.once', Length(A.Remainder) = CAST_REMAINDER, IntToStr(Length(A.Remainder)));
+  Check('apply1270.remainder.cast.note', ConvertedRowNote(A, True, True) = '5 edit(s), 11 remaining for manual work; 1 cast site(s) to convert by hand',
+    ConvertedRowNote(A, True, True));
+  Check('apply1270.remainder.cast.gated', Length(ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), []).Remainder) = CAST_ALL);
+  A:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  Check('apply1270.remainder.check.once', Length(A.Remainder) = STRIP_REMAINDER, IntToStr(Length(A.Remainder)));
+  Check('apply1270.remainder.check.note', ConvertedRowNote(A, True, True) = '19 edit(s), 27 remaining for manual work; StripDB: 3 value(s) changed, 1 to check by hand; uses: +0 -1 moved 0',
+    ConvertedRowNote(A, True, True));
+  Check('apply1270.remainder.check.gated', Length(ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), []).Remainder) = STRIP_ALL);
+end;
 { C10 E13: ParseApplyJson reads glyphs[] whenever it is present (additive, not gated);
   a missing array, a missing dropped_slots key, an unknown kind and wrongly-typed
   values never raise. }
@@ -12828,6 +12950,8 @@ begin
     TestApply1270Notes;
     TestApply1270Report;
     TestRunnerExit6;
+    TestRunnerExit6Stops;
+    TestApply1270Remainder;
 
     FreeAndNil(GParseBook);
 

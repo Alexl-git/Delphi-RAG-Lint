@@ -77,7 +77,8 @@ type
   ///   unusable). The RUN stops: no later book or unit is tried. The unit is restored
   ///   only when an earlier book had changed it (its rows become csRolledBack); else
   ///   nothing is restored and the backup is dropped, as for a first-book refusal.
-  ///   Note = the engine's error text.
+  ///   Note = the engine's error text. TConvertRow.StoppedRun marks the stop, also when a
+///   failed restore turns the row into csRestoreFailed.
   /// </remarks>
   TConvertStatus = (csConverted, csFailedRestored, csBookSkipped, csUnitSkipped, csRolledBack, csRestoreFailed, csRefused, csOutOfScope, csConfigError);
 
@@ -102,6 +103,10 @@ type
     Status : TConvertStatus;
     /// <summary>The engine's report when convert-apply ran.</summary>
     Apply  : TApplyRow;
+    /// <summary>True on the row whose apply exited ENGINE_EXIT_CONFIG: the RUN stopped
+    /// here. Set whatever the restore did -- the row is csConfigError, or
+    /// csRestoreFailed when the restore of an earlier book's change failed.</summary>
+    StoppedRun: Boolean;
   end;
 
   /// <summary>Everything a run needs; built by the Convert tab.</summary>
@@ -407,16 +412,17 @@ function ApplyItemReportLines(const ARow: TConvertRow): TArray<string>;
 /// ENGINE_EXIT_CONFIG).</summary>
 /// <param name="ARows">The run's rows.</param>
 /// <param name="ACastLib">The cast library the run passed ('' = none).</param>
-/// <returns>'' when no row is csConfigError; else 'Convert stopped: the cast library
-/// &lt;path&gt; is unusable -- &lt;engine text&gt;', the text being the first such row's Note
-/// and the path '(none)' when ACastLib is ''.</returns>
+/// <returns>'' when no row has StoppedRun; else 'Convert stopped: the cast library
+/// &lt;path&gt; is unusable -- &lt;engine text&gt;', the text being that row's Apply.Error (also
+/// when its restore failed and it is csRestoreFailed) and the path '(none)' when ACastLib
+/// is ''.</returns>
 function CastLibStopText(const ARows: TArray<TConvertRow>; const ACastLib: string): string;
 
 /// <summary>PURE: the units a configuration stop kept from running.</summary>
 /// <param name="ARows">The run's rows.</param>
 /// <param name="AUnits">The job's units, run order.</param>
-/// <returns>The units after the first csConfigError row's unit, in AUnits order; [] when
-/// no row is csConfigError (or its unit is not in AUnits).</returns>
+/// <returns>The units after the StoppedRun row's unit, in AUnits order; [] when no row has
+/// StoppedRun (or its unit is not in AUnits).</returns>
 function NotReachedAfterStop(const ARows: TArray<TConvertRow>; const AUnits: TArray<string>): TArray<string>;
 
 /// <summary>How many UNITS a run left with glyph to-do outcomes (spec E14).</summary>
@@ -555,11 +561,11 @@ begin
     Result:= Result + [Line(REPORT_STATUS_USES + 'unresolved', LText)];
 end;
 
-// The first csConfigError row's index; -1 when there is none.
+// The index of the row that stopped the run (StoppedRun); -1 when there is none.
 function ConfigErrorAt(const ARows: TArray<TConvertRow>): Integer;
 begin
   for var I: Integer:= 0 to High(ARows) do
-    if ARows[I].Status = csConfigError then
+    if ARows[I].StoppedRun then
       Exit(I);
   Result:= -1;
 end;
@@ -571,7 +577,7 @@ begin
   LAt:= ConfigErrorAt(ARows);
   if LAt < 0 then
     Exit('');
-  Result:= Format('Convert stopped: the cast library %s is unusable -- %s', [if ACastLib = '' then '(none)' else ACastLib, ARows[LAt].Note]);
+  Result:= Format('Convert stopped: the cast library %s is unusable -- %s', [if ACastLib = '' then '(none)' else ACastLib, ARows[LAt].Apply.Error]);
 end;
 
 function NotReachedAfterStop(const ARows: TArray<TConvertRow>; const AUnits: TArray<string>): TArray<string>;
@@ -863,6 +869,9 @@ var
     LError: string;
     LVerb : string;
   begin
+    // The run stop is recorded on the row whatever the restore below does: a failed
+    // restore makes the row csRestoreFailed, and the stop must not be lost with it.
+    Row.StoppedRun:= AStatus = csConfigError;
     // A refusal leaves the file untouched (engine contract), and so does a castlib
     // configuration error (the engine stops before it plans an edit). When no earlier
     // book changed the unit either, there is nothing to restore and the backup is not

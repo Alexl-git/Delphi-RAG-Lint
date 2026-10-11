@@ -134,7 +134,9 @@ type
     Converted : TArray<string>;
     /// <summary>todos[] + reemit_notes[] + warnings[] -- the manual remainder. When inherited[]
     /// is not empty, the engine's per-instance 'line N: warning: inherited instance ...'
-    /// warnings are left out: InheritedLeftNote already counts those instances.</summary>
+    /// warnings are left out: InheritedLeftNote already counts those instances. Likewise a
+    /// warnings[] line that is the text of a CastSites or ValueChecks entry is left out
+    /// (CastSiteNote / ValueCastNote count it), so each to-do is counted once.</summary>
     Remainder : TArray<string>;
     /// <summary>inherited[] -- the instances left unconverted; empty for an engine
     /// without inherited_instances (it refuses such a unit instead). A non-object
@@ -1165,6 +1167,25 @@ function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures): TApplyR
         Result:= Result + [LWarn];
   end;
 
+  // AWarnings minus every line that IS one of AItems' text. Matched on the exact text:
+  // the engine writes the item's `text` verbatim as its warnings[] line (measured on the
+  // 1.27.0 captures: field "warnings", text == the warning), and no other key ties the
+  // two -- a looser match (rule line, instance) could swallow an unrelated warning.
+  function WithoutItemTexts(const AWarnings: TArray<string>; const AItems: TArray<TApplyItem>): TArray<string>;
+  var
+    LTaken: Boolean;
+  begin
+    Result:= nil;
+    for var LWarn: string in AWarnings do
+    begin
+      LTaken:= False;
+      for var LItem: TApplyItem in AItems do
+        LTaken:= LTaken or ((LItem.Text <> '') and (LItem.Text = LWarn));
+      if not LTaken then
+        Result:= Result + [LWarn];
+    end;
+  end;
+
   // A refusal line without its 'drag-lint: ' / 'ERROR: ' prefix: one refusal read
   // from apply/1 error AND from stderr is the same refusal.
   function RefusalKey(const ALine: string): string;
@@ -1219,7 +1240,6 @@ begin
     Result.EditsCount:= Obj.GetValue<Integer>('edits_count', 0);
     Result.Converted := Strings(Obj, 'converted');
     Result.InheritedLeft:= InheritedItems(Obj);
-    Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes') + OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0);
     Result.ComponentPart:= Str(Obj, 'component_part');
     Result.Glyphs    := GlyphOutcomes(Obj);
     // Engine 1.27.0, each behind its capability: an older engine's items[] / uses[]
@@ -1237,7 +1257,11 @@ begin
       Result.UsesUnresolved:= UsesUnresolved(Obj);
       Result.UsesReindex   := UsesReindex(Obj);
     end;
-    // The applier's refusal reaches us on stderr, outside the document (no apply/1
+    // Each to-do is counted ONCE, in its own note part (controller ruling: items[] is
+    // the union the six arrays partition). A cast site / value check is also a
+    // warnings[] line, so it leaves the manual remainder when its array holds it.
+    Result.Remainder := Strings(Obj, 'todos') + Strings(Obj, 'reemit_notes')
+      + WithoutItemTexts(OwnWarnings(Strings(Obj, 'warnings'), Length(Result.InheritedLeft) > 0), Result.CastSites + Result.ValueChecks);    // The applier's refusal reaches us on stderr, outside the document (no apply/1
     // key carries it, up to engine 1.25.0); warnings[] / error are read as well.
     AddRefusals(AJson.Split([#10]), Result.EditRefusals);
     AddRefusals(Strings(Obj, 'warnings'), Result.EditRefusals);
