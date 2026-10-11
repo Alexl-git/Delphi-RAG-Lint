@@ -99,6 +99,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 
 ## Component conversion
 
+* **Convert progress** -- ConvRulesEditor Convert tab: per-step progress (unit, book, phase, elapsed) on the status bar and the tab. See where a long Convert run is and how long each unit takes. [More](convrules-editor-convert-progress)
 * **convert-apply** -- Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add. [More](convert-apply)
 * **convert-reemit** (internal) -- The DFM re-emit stage of the conversion pipeline, driven by convert-apply and by test runners. [More](Maintenance)
 * **convert-scaffold** -- Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type. [More](convert-scaffold)
@@ -106,6 +107,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **ConvRulesEditor** -- Visual rulebook editor for the component-conversion rules. [More](Features)
 * **glyph-vacuum** -- Measure every streamed glyph or picture under a tree before writing a glyph rule. [More](Features)
 * **proptree** -- Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties. [More](proptree)
+* **Reindex project** -- ConvRulesEditor command: incremental index --project of the editor's project index, cancellable. Refresh the project index after IDE edits or between conversion stages. [More](convrules-editor-reindex-project)
 
 ## Graphs and reports
 
@@ -207,6 +209,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Charts and the IDE: procedure docs\wiki\Charts-and-the-IDE.md
 * Circular Dependency Report (worked example): procedure docs\wiki\Circular-Dependency-Report.md
 * ConvRulesEditor: menu 'Convert tab (--convert-request <file>; the IDE plugin probes --write-capabilities <file>)' inside ConvRulesEditor.exe
+* Convert progress: menu 'Convert tab progress line' inside ConvRulesEditor.exe
 * Copy All Diagnostics: host 'Structure form' (the caption is verified, the host is declared)
 * Create helper class: host 'Structure form' (the caption is verified, the host is declared)
 * Document it: host 'Structure form' (the caption is verified, the host is declared)
@@ -223,6 +226,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * IDE Menu Reference: procedure docs\wiki\IDE-Menu-Reference.md
 * Installation: procedure docs\wiki\Installation.md
 * Maintenance: procedure docs\wiki\Maintenance.md
+* Reindex project: menu 'Conversion > Reindex project' inside ConvRulesEditor.exe
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
 * Where the charts find the engine and Graphviz: procedure charts\README.md
 * dl:wiki concept blocks: procedure docs\wiki\Wiki-Blocks-Authoring.md
