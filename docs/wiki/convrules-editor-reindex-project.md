@@ -12,8 +12,9 @@ the progress window and can be cancelled. It is disabled while a Convert run is
 in progress (the run reindexes on its own).
 
 ## What it says
-`Reindexed Fix.dproj: files=3 walked=4 (0:01)` on success -- `files` is the
-index's file count and `walked` the project's compile-closure count. A failure
+`Reindexed Fix.dproj (Fix.sqlite): 3 file(s) in the index, compile closure 4 (0:01)`
+on success -- the index's file count and the length of the project's compile-closure
+list. The index is named here and in the menu hint. A failure
 shows the engine's error in red. A cancel says the index may be partly
 refreshed; run it again.
 

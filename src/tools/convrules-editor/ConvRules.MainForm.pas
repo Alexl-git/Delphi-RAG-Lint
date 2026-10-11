@@ -2866,7 +2866,7 @@ begin
   AddMenuCmd(FMnuConversion, '-', '', nil);
   AddMenuCmd(FMnuConversion, 'Con&vert...', 'Open the Convert tab: apply checked rule books to a list of source units', DoShowConvertTab);
   // C17: no shortcut (a main-menu shortcut fires inside every edit control).
-  FMiReindex:= AddMenuCmd(FMnuConversion, '&Reindex project', 'Refresh the project index (incremental index --project) -- after IDE edits, or between conversion stages', DoReindexProject);
+  FMiReindex:= AddMenuCmd(FMnuConversion, '&Reindex project', ReindexMenuHint(GEditorProjectDb), DoReindexProject);
 
   LMapping:= Top('&Mapping');
   FMiAutoMatch:= AddMenuCmd(LMapping, 'Auto-&Match', 'Assign every unambiguous, castable property pair', DoAutoMatch);
@@ -8111,10 +8111,9 @@ begin
       LOut := 'the reindex stopped on an error: ' + E.Message;
     end;
   end; // try
-  LText:= ReindexOutcomeText(LCode, LOut, LProject, LWatch.ElapsedMilliseconds, LIsError);
-  // As a Convert run's end: classes resolved from the old index may have moved, and the
-  // Convert tab's unindexed-unit flags read the index.
-  FEngine.ClearResolveCache;
+  LText:= ReindexOutcomeText(LCode, LOut, LProject, LDb, LWatch.ElapsedMilliseconds, LIsError);
+  // IndexProject has already cleared FEngine's resolve cache (as a Convert run's end does);
+  // the Convert tab's unindexed-unit flags read the index.
   if FConvertTab <> nil then
     FConvertTab.RefreshIndex;
   if LIsError then

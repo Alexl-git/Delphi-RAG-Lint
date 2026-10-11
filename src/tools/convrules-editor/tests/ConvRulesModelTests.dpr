@@ -2276,6 +2276,23 @@ begin
     // --- nil step callback: the run is unchanged ---
     var LRows: TArray<TConvertRow>:= RunConversionUnitsStepped([Fresh('S8.pas')], ['A.rules'], ApplyOk, OkIndex, nil, nil, nil);
     Check('steps.nil.callback', (Length(LRows) = 1) and (LRows[0].Status = csConverted), IntToStr(Length(LRows)));
+
+    // --- a raising step callback is ignored: the run converts both units, every row arrives ---
+    var LStepCalls: Integer:= 0;
+    Log:= '';
+    LRows:= RunConversionUnitsStepped([Fresh('S9.pas'), Fresh('S10.pas')], ['A.rules'], ApplyOk, OkIndex, OnRow, nil,
+      procedure(const AStep: TRunStep)
+      begin
+        Inc(LStepCalls);
+        raise EInvalidOpException.Create('display failed');
+      end);
+    Check('steps.raising.callback.ignored', (Length(LRows) = 2) and (LRows[0].Status = csConverted) and (LRows[1].Status = csConverted)
+      and (Log = 'row:S9/A;row:S10/A;') and (LStepCalls = 1), Format('%d rows, %d step call(s), log=%s', [Length(LRows), LStepCalls, Log]));
+
+    // --- a unit missing on disk: its csUnitSkipped row, and no step at all ---
+    Log:= '';
+    LRows:= RunConversionUnitsStepped([TPath.Combine(Dir, 'Gone.pas')], ['A.rules'], ApplyOk, OkIndex, OnRow, nil, OnStep);
+    Check('steps.missing.unit.no.step', (Length(LRows) = 1) and (LRows[0].Status = csUnitSkipped) and (Log = 'row:Gone/;'), Log);
   finally
     TDirectory.Delete(Dir, True);
   end; // try
@@ -2331,6 +2348,7 @@ end; // procedure
   the outcome text. }
 procedure TestReindexProject;
 const
+  // `index --all`'s section line: NOT what the editor's direct run prints, and not read.
   SECTION_LINE = '=== Fix -> C:\x\_D-RAG\Fix.sqlite : files=40 symbols=5937 refs=37493 walked=38 attempted=2 up-to-date=36 [1.2s, n/a] ===';
   DIRECT_OUT   = 'Database: C:\x\_D-RAG\Fix.sqlite' + sLineBreak + 'Compile closure: 3 file(s):' + sLineBreak + '  C:\x\A.pas' + sLineBreak
     + 'Done. Files: 4, Symbols: 10, Refs: 20, skipped 3 up-to-date, 0.14s' + sLineBreak;
@@ -2338,20 +2356,18 @@ const
   DB           = 'C:\p\_D-RAG\P.sqlite';  // dl:ok hardcoded-absolute-path@f05e -- REVIEWED 2026-10-10 text only: no file is touched
   PROJ         = 'C:\p\P.dproj';           // dl:ok hardcoded-absolute-path@b439 -- REVIEWED 2026-10-10 text only: no file is touched
   MS_3S        = 3000;
-  FILES_40     = 40;
-  WALKED_38    = 38;
   FILES_4      = 4;
-  WALKED_3     = 3;
+  CLOSURE_3    = 3;
 var
-  Files, Walked: Integer;
+  Files, Closure: Integer;
   IsErr        : Boolean;
   Text         : string;
 begin
-  Check('reindex.parse.section', ParseIndexSummary('noise' + sLineBreak + SECTION_LINE + sLineBreak, Files, Walked)
-    and (Files = FILES_40) and (Walked = WALKED_38), Format('%d/%d', [Files, Walked]));
-  Check('reindex.parse.direct', ParseIndexSummary(DIRECT_OUT, Files, Walked) and (Files = FILES_4) and (Walked = WALKED_3), Format('%d/%d', [Files, Walked]));
-  Check('reindex.parse.done.only', ParseIndexSummary(DONE_ONLY, Files, Walked) and (Files = FILES_4) and (Walked = -1), Format('%d/%d', [Files, Walked]));
-  Check('reindex.parse.none', not ParseIndexSummary('FATAL: cannot open', Files, Walked) and (Files = -1) and (Walked = -1), Format('%d/%d', [Files, Walked]));
+  Check('reindex.parse.section.not.read', not ParseIndexSummary('noise' + sLineBreak + SECTION_LINE + sLineBreak, Files, Closure)
+    and (Files = -1) and (Closure = -1), Format('%d/%d', [Files, Closure]));
+  Check('reindex.parse.direct', ParseIndexSummary(DIRECT_OUT, Files, Closure) and (Files = FILES_4) and (Closure = CLOSURE_3), Format('%d/%d', [Files, Closure]));
+  Check('reindex.parse.done.only', ParseIndexSummary(DONE_ONLY, Files, Closure) and (Files = FILES_4) and (Closure = -1), Format('%d/%d', [Files, Closure]));
+  Check('reindex.parse.none', not ParseIndexSummary('FATAL: cannot open', Files, Closure) and (Files = -1) and (Closure = -1), Format('%d/%d', [Files, Closure]));
 
   Check('reindex.refuse.running', ReindexRefusal(True, DB, PROJ, True) = 'Reindex refused: a conversion is running -- reindex after it finishes.', ReindexRefusal(True, DB, PROJ, True));
   Check('reindex.refuse.missing', ReindexRefusal(False, DB, PROJ, False)
@@ -2361,19 +2377,20 @@ begin
   Check('reindex.refuse.no.file.guess', Pos('<Project>.dproj beside its _D-RAG folder', NoProjectFileText(DB, '')) > 0, NoProjectFileText(DB, ''));
   Check('reindex.refuse.none', ReindexRefusal(False, DB, PROJ, True) = '', ReindexRefusal(False, DB, PROJ, True));
 
-  Text:= ReindexOutcomeText(0, DIRECT_OUT, PROJ, MS_3S, IsErr);
-  Check('reindex.outcome.ok', (Text = 'Reindexed P.dproj: files=4 walked=3 (0:03)') and not IsErr, Text);
-  Text:= ReindexOutcomeText(0, DONE_ONLY, PROJ, MS_3S, IsErr);
-  Check('reindex.outcome.ok.no.walked', (Text = 'Reindexed P.dproj: files=4 walked=? (0:03)') and not IsErr, Text);
-  Text:= ReindexOutcomeText(0, 'nothing useful', PROJ, MS_3S, IsErr);
-  Check('reindex.outcome.ok.no.summary', (Text = 'Reindexed P.dproj (0:03); the engine printed no summary line.') and not IsErr, Text);
-  Text:= ReindexOutcomeText(1, 'ERROR: cannot open db' + sLineBreak + 'more', PROJ, MS_3S, IsErr);
-  Check('reindex.outcome.failed', (Text = 'Reindex of P.dproj failed (exit 1): ERROR: cannot open db more') and IsErr, Text);
-  Text:= ReindexOutcomeText(ENGINE_OUTCOME_CANCELLED, '', PROJ, MS_3S, IsErr);
-  Check('reindex.outcome.cancelled', (Text = 'Reindex of P.dproj cancelled after 0:03 -- the index may be partly refreshed; run it again.') and not IsErr, Text);
-  Text:= ReindexOutcomeText(ENGINE_OUTCOME_TIMEOUT, '', PROJ, MS_3S, IsErr);
-  Check('reindex.outcome.timeout', (Text = 'Reindex of P.dproj failed: the engine did not finish in time (0:03).') and IsErr, Text);
-end; // procedure
+  Text:= ReindexOutcomeText(0, DIRECT_OUT, PROJ, DB, MS_3S, IsErr);
+  Check('reindex.outcome.ok', (Text = 'Reindexed P.dproj (P.sqlite): 4 file(s) in the index, compile closure 3 (0:03)') and not IsErr, Text);
+  Check('reindex.outcome.no.engine.names', (Pos('files=', Text) = 0) and (Pos('walked', Text) = 0), Text);
+  Text:= ReindexOutcomeText(0, DONE_ONLY, PROJ, DB, MS_3S, IsErr);
+  Check('reindex.outcome.ok.no.closure', (Text = 'Reindexed P.dproj (P.sqlite): 4 file(s) in the index (0:03)') and not IsErr, Text);
+  Text:= ReindexOutcomeText(0, 'nothing useful', PROJ, DB, MS_3S, IsErr);
+  Check('reindex.outcome.ok.no.summary', (Text = 'Reindexed P.dproj (P.sqlite) (0:03); the engine printed no summary line.') and not IsErr, Text);
+  Text:= ReindexOutcomeText(1, 'ERROR: cannot open db' + sLineBreak + 'more', PROJ, DB, MS_3S, IsErr);
+  Check('reindex.outcome.failed', (Text = 'Reindex of P.dproj (P.sqlite) failed (exit 1): ERROR: cannot open db more') and IsErr, Text);
+  Text:= ReindexOutcomeText(ENGINE_OUTCOME_CANCELLED, '', PROJ, DB, MS_3S, IsErr);
+  Check('reindex.outcome.cancelled', (Text = 'Reindex of P.dproj (P.sqlite) cancelled after 0:03 -- the index may be partly refreshed; run it again.') and not IsErr, Text);
+  Text:= ReindexOutcomeText(ENGINE_OUTCOME_TIMEOUT, '', PROJ, DB, MS_3S, IsErr);
+  Check('reindex.outcome.timeout', (Text = 'Reindex of P.dproj (P.sqlite) failed: the engine did not finish in time (0:03).') and IsErr, Text);
+  Check('reindex.menu.hint.names.db', ReindexMenuHint(DB) = 'Refresh the project index C:\p\_D-RAG\P.sqlite (incremental index --project) -- after IDE edits, or between conversion stages', ReindexMenuHint(DB));end; // procedure
 
 { The real engine on a 3-file fixture (one TLabel, a one-#convert book) -- the
   shape measured converting on 2026-09-29 (dry run 106 s; the bad book 93 s).

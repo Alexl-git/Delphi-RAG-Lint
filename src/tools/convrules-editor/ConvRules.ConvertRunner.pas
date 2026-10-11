@@ -515,6 +515,7 @@ begin
   Inc(Result.UnitElapsedMs, AMs);
   Inc(Result.TotalElapsedMs, AMs);
 end;
+
 function FileProbe: TFileProbe;
 begin
   Result:= function(const APath: string): Boolean

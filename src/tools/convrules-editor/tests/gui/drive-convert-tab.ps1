@@ -514,29 +514,34 @@ try {
     ("bom=$bom bytes=$($repBytes.Length) dfmBackup=$($repText -match 'FixUnit\.dfm\.BCK1') final=$($repText -match "Final reindex`t\S+")")
 
   # --- 9. C17: Conversion > Reindex project on the fixture ---
-  # Waits for a status that is neither the line before nor the 'Reindexing ...' one.
-  function WaitReindex($main, $Seconds) {
+  # Waits for a reindex outcome: a status that DIFFERS from $Before (an earlier '[!]' line
+  # must not pass) and is a reindex outcome or an error, not the 'Reindexing ...' line.
+  function WaitReindex($main, $Before, $Seconds) {
     $t0 = Get-Date
     while (((Get-Date) - $t0).TotalSeconds -lt $Seconds) {
       Start-Sleep -Milliseconds 300
       $s = Status $main
+      if ($s -eq $Before) { continue }
       # Re-read after a pause: WM_GETTEXTLENGTH and WM_GETTEXT are two messages, and a status
       # written between them came back cut to the OLD length ('Reindexed Fix.dproj: fi').
       if ($s -like 'Reindexed *' -or $s -like 'Reindex of *' -or $s -like '`[!`] *') { Start-Sleep -Milliseconds 500; return (Status $main) }
     }
     Status $main
   }
+  $before = Status $main
   $invoked = [W]::InvokeMenu($main, 'Conversion|Reindex project')
-  $st = WaitReindex $main 120
-  Check 'reindex.status' ($invoked -and ($st -match '^Reindexed Fix\.dproj: files=\d+ walked=\d+ \(\d+:\d\d\)$')) "invoked=$invoked status: $st"
+  $st = WaitReindex $main $before 120
+  Check 'reindex.status' ($invoked -and ($st -match '^Reindexed Fix\.dproj \(Fix\.sqlite\): \d+ file\(s\) in the index, compile closure \d+ \(\d+:\d\d\)$')) "invoked=$invoked status: $st"
   # The refusal: the project file gone (renamed away and back).
   $off = $dproj + '.off'
   [IO.File]::Move($dproj, $off)
   try {
+    $before = Status $main
     [void][W]::InvokeMenu($main, 'Conversion|Reindex project')
-    $st = WaitReindex $main 20
+    $st = WaitReindex $main $before 20
     Check 'reindex.refused.no.project.file' ($st -like ('`[!`] Reindex refused: the project index ' + $db + ' has no project file on disk -- expected ' + $dproj + '.')) $st
-  } finally { [IO.File]::Move($off, $dproj) }}
+  } finally { [IO.File]::Move($off, $dproj) }
+}
 finally {
   if ($null -ne $p -and -not $p.HasExited) { $p.Kill($true); [void]$p.WaitForExit(15000) }
   # The engine child may still hold the index for a moment after the kill.

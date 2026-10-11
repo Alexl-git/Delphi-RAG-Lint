@@ -188,8 +188,10 @@ type
       /// <param name="AStep">The step, copied into the queued call.</param>
       procedure QueueStep(const AStep: TRunStep);
       /// <summary>UI thread: writes the progress line for FLastStep, advanced by the time
-      /// since it arrived, to the tab's line and the status line.</summary>
-      procedure RenderStep;
+      /// since it arrived, to the tab's line -- and to the status line when AToStatus.</summary>
+      /// <param name="AToStatus">True only for a NEW step: the once-a-second tick must not
+      /// overwrite a refusal or a menu hint the status line shows mid-run.</param>
+      procedure RenderStep(AToStatus: Boolean);
       /// <summary>FStepTimer.OnTimer: RenderStep while a step is known.</summary>
       /// <param name="Sender">FStepTimer.</param>
       procedure StepTimerTick(Sender: TObject);
@@ -1189,21 +1191,22 @@ begin
       FLastStep := LStep;
       FStepWatch:= TStopwatch.StartNew;
       FHasStep  := True;
-      RenderStep;
+      RenderStep(True);
     end);
 end;
 
-procedure TConvertTab.RenderStep;
+procedure TConvertTab.RenderStep(AToStatus: Boolean);
 begin
   var LText: string:= RunStepText(AdvanceStep(FLastStep, FStepWatch.ElapsedMilliseconds));
   FLblRunStep.Caption:= LText;
-  FHost.SetStatus(LText, False);
+  if AToStatus then
+    FHost.SetStatus(LText, False);
 end;
 
 procedure TConvertTab.StepTimerTick(Sender: TObject);
 begin
   if FRunning and FHasStep then
-    RenderStep;
+    RenderStep(False);
 end;
 
 procedure TConvertTab.SetRunning(ARunning: Boolean);
