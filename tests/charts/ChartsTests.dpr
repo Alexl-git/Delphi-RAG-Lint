@@ -30,6 +30,10 @@ uses
   , DRagLint.Charts.Adapter.Graph in '..\..\src\charts\DRagLint.Charts.Adapter.Graph.pas'
   , DRagLint.Charts.Adapters in '..\..\src\charts\DRagLint.Charts.Adapters.pas'
   , ChartsTests.Adapters in 'ChartsTests.Adapters.pas'
+  , DRagLint.Charts.Process in '..\..\src\charts\DRagLint.Charts.Process.pas'
+  , DRagLint.Charts.Producer in '..\..\src\charts\DRagLint.Charts.Producer.pas'
+  , DRagLint.Charts.Producer.PowerShell in '..\..\src\charts\DRagLint.Charts.Producer.PowerShell.pas'
+  , ChartsTests.Producer in 'ChartsTests.Producer.pas'
   ;
 
 const
