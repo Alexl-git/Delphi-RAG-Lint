@@ -3,6 +3,97 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.28.2-alpha -- unreleased
+
+### Fixed
+
+- **convert-apply `pas_uses[]`: the From class is resolved through the UNIT'S SCOPE, never by bare
+  name.** Converter report 2026-10-11: a VCL `Label1: TLabel` listed `WordWrap` as declared in
+  `FMX.StdCtrls.TLabel` and `Layout` with an EMPTY kind -- `CollectPasUses` looked the bare
+  `TLabel` up across the `--db` stores and the first one won. Now (`ResolveClassInScope`): the
+  unit itself, then the LAST uses entry declaring the name (an interface field sees the interface
+  uses only), then the book's qualified `#convert` From, then a lone declarer; an ancestor the
+  class's own store cannot resolve goes through the declaring unit's scope the same way, and the
+  To-type `same-name` check too. New per-row `resolution` (`resolved` / `ambiguous` /
+  `class-not-found` / `member-not-found` / `kind-unknown`) and `candidates[]`: several declarers
+  left over are reported, never picked, and an empty kind is never presented as a fact. `kind`
+  adds `enum-value` (a global-dangling `bkOK` had kind `''`). Capability `pas_uses_resolution`.
+  Guard: run_convert_apply_pas_uses.ps1 C0-C10, K2.
+- **lint `unused-unit-in-uses`: an ENUM VALUE is a use of the unit declaring its enum.** A unit
+  using `Vcl.Controls` only through `alTop` / `bvNone` was called a dead import (removing it
+  fails E2003). The extractor already records those refs; the rule's export set held the unit's
+  interface-level names only, and an enum value sits one level below, under its enum. Read-time
+  fix in `ExportNamesFor`; no extractor or resolver change. Guard: run_unused_unit_enum_values.ps1.
+## v1.28.1-alpha -- unreleased
+
+### Fixed
+
+- **convert-apply (C9 A8-1): a To-type tie the book settles with `#use` goes to the INTERFACE uses.**
+  `#convert TOld -> TTie` with TTie declared in two units and `#use LibTieA` in the book still
+  warned "add #use" and added LibTieA to the IMPLEMENTATION uses, while the retyped field is
+  declared in the interface -- the converted unit failed with E2003. The `#use` (or a
+  `#useswap` New, a `#convert` block unit, or a uses entry the unit already has) now picks that
+  candidate as the To type's unit: no ambiguity warning, the unit is added to the interface
+  uses (with the `#use` row), or MOVED there when the unit used it only in its implementation.
+  Guard: run_convert_apply_uses_reconcile.ps1 A8-1, X TieUForm, C1 (dcc64).
+- **convert-apply (C9 A8-2): `uses_unresolved[].line` of a To-type tie is the retyped field's line**,
+  not 0 (the item's `line` too). A8-2.
+- **convert-apply (C9 A8-3): `implementation{comment}` is recognised as the implementation keyword.**
+  The reconciler matched the keyword by line text, missed a comment glued to it and then counted
+  every reference as an interface reference (needed_by sections). It now uses the uses planner's
+  own lexer (`ImplementationKeywordLine`). A8-3.
+- **convert-apply (C9 A8-4 / A8-5): reachability recorded.** The MOVE of a To type's unit from the
+  implementation to the interface uses is reachable since A8-1 and pinned (A8-4, TieMForm: `moved`
+  row, dcc64). The reconciler's own reconcile-add path (`PlanNewNames`, its ToInterface placement
+  and the PlanMoves reconcile branch) has NO convert-apply route since the 1.27.0 cast-link
+  refusal: no `.pas` surface writes a new bare name (retypes write the handled To type, access
+  rewrites write a member after a `.`, a value cast writes a literal, a cast link writes no site).
+  Documented in the code; no feature invented for it.
+- **convert-apply (C9 A7, review minors).**
+  A7-6: the `--only` demotion of a `kept` row to `skipped` decides on EVERY keeping component
+  (new `TUsesKeep.Keepers`), not the five-entry `needed_by` display list -- a sixth keeper no
+  `--only` explains keeps the row `kept`.
+  A7-7: a class-level const / var / nested type is no longer counted as a unit-level declarer
+  (`DeclaringUnits` requires the unit, or a unit-level enum, as the parent) -- no false To-type
+  ambiguity from a nested class of the same name.
+  A7-8: a type-helper member another still-used unit's helper provides is not reported dangling.
+  A7-9: section-aware reachability -- a name referenced above `implementation` is satisfied only by
+  a unit in the post-plan INTERFACE uses; one only the implementation uses no longer hides a
+  dangling interface reference.
+  A7-10: `unit-rule-unverified` says how to fix it: "pass the platform library --db (resolve-dbs
+  --platform Win32|Win64)".
+  A7-12: `docs\wiki\convert-apply.md` covers the uses rules, C9 reconciliation and the exit codes.
+  Guards: run_convert_apply_uses_reconcile.ps1 A7-6..A7-10, X SoloForm, C1.
+- **convert-apply (C9 review fix wave).**
+  F1: a To-type tie settled ONLY by a `#convert` block's trailing unit (`#convert TOld -> TTie,
+  LibTieA`, no unit rules) was picked but never written -- the field was retyped, no unit added,
+  no warning (E2003). The uses planner now writes every picked tie unit.
+  F2: a uses entry the same book removes (`#unuse` / `#useswap` Old, after ADD wins) no longer
+  settles a tie -- picking it fed ADD wins and cancelled the book's own `#unuse`. A To type a
+  `#use` settled also keeps only that unit: the other declarer no longer keeps a watched unit.
+  F3: with ONE unit-level declarer of the To type (a nested type of the same name elsewhere),
+  that unit is used, not `TFindUnitRefactoring.Build`'s pick, which scored class members and
+  broke the tie by hash order.
+  A `#useswap Old -> New` settles a tie only when the unit uses Old (the swap's own condition).
+  An escaped identifier `&implementation` is not taken for the implementation keyword (the uses
+  lexer marks `&ident` tokens; `IsWord` rejects them).
+  Guards: run_convert_apply_uses_reconcile.ps1 F1, F2 x2, F3, F-minor x2, X F1/F2/F3, C1.
+
+### Changed (JSON consumers)
+
+- **apply/1 `uses[]` reports EVERY unit the `#convert` surface writes into the uses clause** (a To
+  type's unit, a `#convert ... -> T, Unit` header's trailing unit): one `add` row per unit actually
+  added -- `rule` `#convert`, `source` rule, the section it is written to -- and `uses_added`
+  counts it; a unit already present gives no row (converter report, real 1.27.0 capture
+  `apply-cast-site-1270.json`: cxButtons written, `uses_added` 0). With reconciliation on, the uses
+  planner now writes these adds. When a book rule (an editor-derived `#use <To unit>`) asks for
+  the same unit, that rule owns the row instead. `--no-reconcile-uses` keeps 1.26.6 exactly (no
+  row). Text mode prints the row (`add X (interface, line N) -- #convert`). Guards:
+  run_convert_apply_uses_reconcile.ps1 F4 (+ control), run_convert_apply_unit_rules.ps1 R2
+  (expected text updated: `Uses: 0 removed, 1 added, ...`).
+
+No extractor or resolver change: indexes do not re-parse or re-resolve.
+
 ## v1.28.0-alpha -- unreleased
 
 ### Changed

@@ -3653,6 +3653,15 @@ var
             ATo.AddOrSetValue(LowerCase(Ch.Name), True);
             var LtPos: Integer:= Pos('<', Ch.Name);
             if LtPos > 1 then ATo.AddOrSetValue(LowerCase(Copy(Ch.Name, 1, LtPos - 1)), True);
+            { BLIND SPOT 3 (1.28.2, converter report): AN ENUM'S VALUES ARE
+              EXPORTS TOO. They are children of the ENUM, one level below the
+              unit, so the loop above never saw them -- and `Panel.Align:=
+              alTop;` names no Vcl.Controls symbol but alTop. The extractor
+              already records those refs (kind read); only this set lacked
+              the names. Removing such an import fails with E2003. }
+            if Ch.Kind = skEnum then
+              for var V: TSymbol in AFrom.FindAllChildSymbols(Ch.Id) do
+                if V.Kind = skEnumValue then ATo.AddOrSetValue(LowerCase(V.Name), True);
           end;
         { BLIND SPOT 1 (T4/U1): TYPE HELPER MEMBERS ARE PART OF THE SURFACE.
 

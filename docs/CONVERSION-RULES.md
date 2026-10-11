@@ -1131,12 +1131,25 @@ uncapped; only when the reconciliation ran). `declared_in` names the class that
 declares the member, an ancestor of the From type included, followed across the
 `--db` stores; `kind`/`visibility`/`declared_in`/`declaring_unit` are `''`
 when no `--db` holds the member (pass the library index for inherited RTL/VCL
-members). Lines are the unit's own, sorted. Text mode prints `pas uses: N
+members). **The From class is resolved through the unit's scope (1.28.2)**,
+never by bare name: the unit itself, then the LAST uses entry that declares
+the name (Delphi's order; an interface field sees the interface uses only),
+then the book's qualified `#convert` From, then a lone declarer -- so a VCL
+`Label1: TLabel` is no longer read as `FMX.StdCtrls.TLabel` because the
+library indexes both. Each row carries `resolution`: `resolved`, `ambiguous`
+(several declarers and nothing settles it -- `candidates[]` lists their units,
+and kind/declarer stay `''`, nothing is picked; a `StdCtrls` entry matching
+both `FMX.StdCtrls` and `Vcl.StdCtrls` is ambiguous too), `class-not-found`,
+`member-not-found`, or `kind-unknown` (a global whose kind the index lacks).
+An unresolved To class makes `same-name` impossible: the row is `unmapped`.
+`kind` adds `enum-value`. Lines are the unit's own, sorted. Text mode prints `pas uses: N
 unmapped, M global-dangling, K same-name, J mapped, C cast-refused, R
 not-rewritten` and one `<status> <inst>.<member> (<kind>, <visibility>, <class>
-in <unit>) -- line(s) ...` per unmapped and per not-rewritten member. Not listed: a member reached with no receiver (`with
+in <unit>) -- line(s) ...` per unmapped and per not-rewritten member (an
+unresolved row prints `(declaring class ambiguous: <units>)` or its
+resolution instead). Not listed: a member reached with no receiver (`with
 X do`) and a site the index cannot vouch for. `info --json`:
-`capabilities.pas_uses: true`.
+`capabilities.pas_uses: true`, `capabilities.pas_uses_resolution: true`.
 5. **Runtime-creator retype + TODO marker** -- every explicit `FromType.Xxx(...)`
    construction (e.g. `Edit1 := TOldEdit.Create(Self);`) gets its type token
    rewritten to ToType, PLUS an unconditional `{ TODO: drag-lint convert --

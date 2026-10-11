@@ -102,6 +102,25 @@ const
   /// <summary>apply/1 pas_uses[].status: a global the .pas uses from a unit
   /// the reconciliation removes.</summary>
   PAS_USE_GLOBAL_DANGLING = 'global-dangling';
+  /// <summary>apply/1 pas_uses[].resolution: Kind, DeclaringUnit and
+  /// DeclaredIn are facts the index holds (1.28.2).</summary>
+  PAS_RES_RESOLVED = 'resolved';
+  /// <summary>apply/1 pas_uses[].resolution: the From class name has several
+  /// unit-level declarers and neither the unit's uses clauses nor the book's
+  /// qualification settles which one -- none is picked; Candidates names
+  /// them, and Kind / DeclaringUnit / DeclaredIn are '' (1.28.2).</summary>
+  PAS_RES_AMBIGUOUS = 'ambiguous';
+  /// <summary>apply/1 pas_uses[].resolution: no --db holds the From class
+  /// (1.28.2).</summary>
+  PAS_RES_CLASS_NOT_FOUND = 'class-not-found';
+  /// <summary>apply/1 pas_uses[].resolution: the From class resolved, but
+  /// neither it nor any ancestor the index reaches declares the member
+  /// (1.28.2).</summary>
+  PAS_RES_MEMBER_NOT_FOUND = 'member-not-found';
+  /// <summary>apply/1 pas_uses[].resolution, global rows only: the declaring
+  /// unit is known but the index does not hold the symbol's kind
+  /// (1.28.2).</summary>
+  PAS_RES_KIND_UNKNOWN = 'kind-unknown';
 
 type
   /// <summary>One component instance selected for conversion: its DFM instance
@@ -424,7 +443,14 @@ type
   /// site the index cannot vouch for is NOT listed. Kind, Visibility,
   /// DeclaredIn and DeclaringUnit describe the member as the From type -- or
   /// the nearest ancestor of it that declares it, across the --db stores --
-  /// has it; all four are '' when no store holds it.</para>
+  /// has it; all four are '' when no store holds it, and Resolution then
+  /// says why. The From class (and an ancestor the class's own store cannot
+  /// resolve) is resolved through the SCOPE of the unit that names it, never
+  /// by bare name alone (1.28.2): the unit itself, then its uses entries
+  /// (the last one that declares the name wins, as in Delphi; an interface
+  /// declaration sees the interface uses only), then the book's own
+  /// qualification of the #convert From type, then a lone declarer; several
+  /// declarers left over is PAS_RES_AMBIGUOUS, with Candidates.</para>
   /// <para>A GLOBAL row (Status PAS_USE_GLOBAL_DANGLING) has Instance,
   /// FromType, ToType and Visibility ''; it is the reconciliation's own
   /// dangling verdict (TUsesReconcileResult.Dangling), uncapped, so it exists
@@ -432,8 +458,9 @@ type
   /// it degraded).</para>
   /// <para>Lines are 1-based lines of the unit as read, distinct and sorted.
   /// Kind is one of method, property, field, event, const, var, type,
-  /// routine, or '' when unknown; an event is a property named On + a capital
-  /// letter.</para>
+  /// routine, enum-value, or '' when unknown; an event is a property named
+  /// On + a capital letter. Kind is '' exactly when Resolution is not
+  /// PAS_RES_RESOLVED.</para>
   /// </remarks>
   TApplyPasUse = record
     Instance     : string;  { the converted instance; '' for a global }
@@ -446,6 +473,8 @@ type
     DeclaredIn   : string;  { the class declaring the member (maybe an ancestor of FromType); a helper type for a global }
     Status       : string;  { a PAS_USE_* constant }
     Lines        : TArray<Integer>;
+    Resolution   : string;  { a PAS_RES_* constant (1.28.2) }
+    Candidates   : TArray<string>;  { the declaring units, PAS_RES_AMBIGUOUS only (1.28.2) }
   end;
 
   /// <summary>Human-readable summary of one convert-apply run, grouped by
@@ -3271,9 +3300,11 @@ begin
   for var I: Integer:= 0 to High(ANeeds.Keeps) do
   begin
     var K: TUsesKeep:= ANeeds.Keeps[I];
-    if (K.Reason <> KEEP_REASON_DFM) or (Length(K.NeededBy) = 0) then Continue;
+    if (K.Reason <> KEEP_REASON_DFM) or (Length(K.Keepers) = 0) then Continue;
+    { A7-6: decided on EVERY keeper -- NeededBy is the capped display list, so a
+      sixth keeper no --only explains would otherwise be missed }
     var AllOnly: Boolean:= True;
-    for var N: TUsesNeed in K.NeededBy do
+    for var N: TUsesNeed in K.Keepers do
       if not MatchText(NeedInstance(N), Own) then AllOnly:= False;
     if not AllOnly then Continue;
     for var E: TUsesEntryInfo in AEntries do
@@ -3293,6 +3324,7 @@ begin
               K.Action  := 'skipped';
               K.Reason  := Skips[0].Reason;
               K.NeededBy:= nil;
+              K.Keepers := nil;
               ANeeds.Keeps[I]:= K;
             end;
             Break;
@@ -3356,6 +3388,7 @@ begin
   UnitIn.Rules       := Rules;
   UnitIn.ExtraAdds   := Adds;
   UnitIn.HandledNames:= AArgs.Handled;
+  UnitIn.InterfaceAdds:= AArgs.IntfAdds;
   OrigDfm:= '';
   if (DfmPath <> '') and TFile.Exists(DfmPath) then
   begin
@@ -3383,7 +3416,8 @@ begin
     if Ch.Action = 'skipped' then
       Result.Items:= Result.Items + [SkippedRuleItem(Rules, UnitPas, Ch)]
     else if (Ch.Action = 'kept') and (Ch.Reason = KEEP_REASON_UNVERIFIED) then
-      Warn(aikUnitRuleUnverified, Ch.Line, RL, Format('line %d: warning: %s kept %s -- no --db indexes that unit, so whether anything still needs it is unknown',
+      Warn(aikUnitRuleUnverified, Ch.Line, RL, Format('line %d: warning: %s kept %s -- no --db indexes that unit, so whether anything still needs it is unknown;' +
+        ' pass the platform library --db (resolve-dbs --platform Win32|Win64)',
         [RL, Ch.Rule, Ch.UnitName]))
     else if (Ch.Action = 'kept') and (Ch.Reason = KEEP_REASON_DEGRADED) then
       Warn(aikUnitRuleKept, Ch.Line, RL, Format('line %d: warning: %s kept %s -- the re-index of the converted output failed (%s)',
@@ -3795,18 +3829,141 @@ begin
     skConstDecl: Result:= 'const';
     skVarDecl: Result:= 'var';
     skClass, skInterface, skRecord, skEnum, skTypeAlias: Result:= 'type';
+    skEnumValue: Result:= 'enum-value';  { 1.28.2: was '' -- a global-dangling bkOK }
   else
     Result:= '';
   end;
 end;
 
-// 1.27.0 (pas_uses[]): the member AName of class ATypeName, declared by the
+type
+  // 1.28.2 (pas_uses[]): a class name as one unit's scope resolves it.
+  TScopedClass = record
+    QName     : string;          { the qualified class; '' unless Resolution is PAS_RES_RESOLVED }
+    Resolution: string;          { PAS_RES_RESOLVED / PAS_RES_AMBIGUOUS / PAS_RES_CLASS_NOT_FOUND; '' = not asked }
+    Candidates: TArray<string>;  { the declaring units, PAS_RES_AMBIGUOUS only }
+  end;
+
+// 1.28.2: the unit-level classes named AName in any of ATrees' stores, one
+// per qualified name, appended to AQNames with their unit stems in AStems
+// (index-aligned). An implementation-section class counts only when it is
+// declared in AScopePath itself.
+procedure CollectClassDeclarers(ATrees: TConvertTreeCache; const AName, AScopePath: string;
+  AQNames, AStems: TList<string>);
+begin
+  for var St: ISymbolStore in ATrees.Stores do
+    for var S: TSymbol in St.FindSymbolsByExactName(AName) do
+    begin
+      if (S.Kind <> skClass) or (S.FileId <= 0) then Continue;
+      var Path: string:= St.GetFilePath(S.FileId);
+      var Stem: string:= TPath.GetFileNameWithoutExtension(Path);
+      if not SameText(S.QualifiedName, Stem + '.' + AName) then Continue;   { unit level only }
+      if SameText(S.Section, 'implementation') and not SameText(Path, AScopePath) then Continue;
+      var Known: Boolean:= False;
+      for var Q: string in AQNames do
+        if SameText(Q, S.QualifiedName) then Known:= True;
+      if Known then Continue;
+      AQNames.Add(S.QualifiedName);
+      AStems.Add(Stem);
+    end;
+end;
+
+// 1.28.2: the indexes into AStems that the LAST uses entry of file
+// AScopeFileId naming any of them names (AIntfOnly: interface entries only);
+// [] when no entry names one. Two or more = that entry is itself ambiguous.
+function UsesTiedDeclarers(ATrees: TConvertTreeCache; const AScope: ISymbolStore; AScopeFileId: Int64;
+  AIntfOnly: Boolean; AStems: TList<string>): TArray<Integer>;
+begin
+  Result:= nil;
+  var UsesList: TArray<TUnitUse>:= AScope.GetUnitUsesForFile(AScopeFileId);
+  TArray.Sort<TUnitUse>(UsesList, TComparer<TUnitUse>.Construct(
+    function(const A, B: TUnitUse): Integer
+    begin
+      Result:= A.StartLine - B.StartLine;
+    end));
+  for var U: Integer:= High(UsesList) downto 0 do
+  begin
+    if AIntfOnly and (UsesList[U].Section <> uusInterface) then Continue;
+    for var I: Integer:= 0 to AStems.Count - 1 do
+      if ATrees.UnitIndex.SameUnit(UsesList[U].UnitName, AStems[I]) then Result:= Result + [I];
+    if Length(Result) > 0 then Exit;
+  end;
+end;
+
+// 1.28.2 (pas_uses[]): the class AName names as file AScopeFileId of AScope
+// sees it -- the converter's report: a VCL Label1: TLabel resolved by BARE
+// NAME across the --db stores landed on FMX.StdCtrls.TLabel. A qualified
+// AName is taken as written. Otherwise, of the unit-level classes of that
+// name in any store (an implementation-section one only from the scope file
+// itself): the scope unit's own; else the declarer named by the LAST uses
+// entry of the file that names exactly one declarer (Delphi's scope order;
+// AIntfOnly: interface entries only, for a name used above implementation;
+// an entry naming two -- 'StdCtrls' for FMX.StdCtrls and Vcl.StdCtrls -- is
+// ambiguous, not a pick); else the one AHint (the book's qualification)
+// names; else a lone declarer. Anything else is PAS_RES_AMBIGUOUS.
+function ResolveClassInScope(ATrees: TConvertTreeCache; const AScope: ISymbolStore; AScopeFileId: Int64;
+  const AName: string; AIntfOnly: Boolean; const AHint: string): TScopedClass;
+var
+  QNames, Stems: TList<string>;
+  Tied         : TArray<Integer>;
+  Pick         : Integer;
+begin
+  Result:= Default(TScopedClass);
+  Result.Resolution:= PAS_RES_CLASS_NOT_FOUND;
+  if Trim(AName) = '' then Exit;
+  if Pos('.', AName) > 0 then
+  begin
+    Result.QName:= ATrees.ResolveType(AName);
+    if Result.QName <> '' then Result.Resolution:= PAS_RES_RESOLVED;
+    Exit;
+  end;
+  var ScopePath: string:= if (AScope <> nil) and (AScopeFileId > 0) then AScope.GetFilePath(AScopeFileId) else '';
+  var ScopeStem: string:= TPath.GetFileNameWithoutExtension(ScopePath);
+  QNames:= TList<string>.Create;
+  Stems := TList<string>.Create;
+  try
+    CollectClassDeclarers(ATrees, AName, ScopePath, QNames, Stems);
+    if QNames.Count = 0 then Exit;
+    Pick:= -1;
+    Tied:= nil;
+    for var I: Integer:= 0 to Stems.Count - 1 do
+      if (ScopeStem <> '') and SameText(Stems[I], ScopeStem) then Pick:= I;
+    if (Pick < 0) and (ScopeStem <> '') then
+    begin
+      Tied:= UsesTiedDeclarers(ATrees, AScope, AScopeFileId, AIntfOnly, Stems);
+      if Length(Tied) = 1 then Pick:= Tied[0];
+    end;
+    if (Pick < 0) and (Length(Tied) < 2) and SameText(BareTypeTail(AHint), AName) then
+      for var I: Integer:= 0 to QNames.Count - 1 do
+        if SameText(QNames[I], AHint) then Pick:= I;
+    if (Pick < 0) and (QNames.Count = 1) then Pick:= 0;
+    if Pick >= 0 then
+    begin
+      Result.QName     := QNames[Pick];
+      Result.Resolution:= PAS_RES_RESOLVED;
+      Exit;
+    end;
+    Result.Resolution:= PAS_RES_AMBIGUOUS;
+    if Length(Tied) > 1 then
+      for var I: Integer in Tied do Result.Candidates:= Result.Candidates + [Stems[I]]
+    else
+      Result.Candidates:= Stems.ToArray;
+    TArray.Sort<string>(Result.Candidates);
+  finally
+    Stems.Free;
+    QNames.Free;
+  end;
+end;
+
+// 1.27.0 (pas_uses[]): the member AName of class AClassQName, declared by the
 // class itself or by its nearest ancestor that declares it. An ancestor the
-// class's store cannot resolve (TComponent of a project class) is followed in
-// the store ATrees resolves it in. AOwner is the declaring class, AUnit its
-// unit. False when no store holds such a member.
-function FindClassMember(ATrees: TConvertTreeCache; const ATypeName, AName: string;
-  out AMember: TSymbol; out AOwner, AUnit: string): Boolean;
+// class's store cannot resolve (TComponent of a project class) is resolved
+// through the scope of the unit that declares the class (1.28.2,
+// ResolveClassInScope -- it was a bare-name lookup) and followed in the store
+// that holds it. AOwner is the declaring class, AUnit its unit. False when no
+// store holds such a member; AAmbiguous is then the first ancestor whose
+// declarer the scope could not settle (Resolution '' when none was).
+function FindClassMember(ATrees: TConvertTreeCache; const AClassQName, AName: string;
+  out AMember: TSymbol; out AOwner, AUnit: string; out AAmbiguous: TScopedClass): Boolean;
 const
   MAX_HOPS = 32;
   MEMBER_KINDS: set of TSymbolKind = [skMethod, skConstructor, skDestructor, skProcedure, skFunction,
@@ -3838,8 +3995,16 @@ var
         if TryIn(AStore, AStore.GetSymbolById(A.SymbolId)) then Exit(True);
         Continue;
       end;
+      var Anc: TScopedClass:= ResolveClassInScope(ATrees, AStore, AClass.FileId, A.Name,
+        SameText(AClass.Section, 'interface'), '');
+      if Anc.Resolution = PAS_RES_AMBIGUOUS then
+      begin
+        if AAmbiguous.Resolution = '' then AAmbiguous:= Anc;
+        Continue;
+      end;
+      if Anc.QName = '' then Continue;
       var Other: ISymbolStore;
-      var C: TSymbol:= ATrees.ClassSymbol(A.Name, Other);
+      var C: TSymbol:= ATrees.ClassSymbol(Anc.QName, Other);
       if Search(Other, C, ADepth + 1) then Exit(True);
     end;
   end;
@@ -3848,10 +4013,11 @@ begin
   AMember:= Default(TSymbol);
   AOwner := '';
   AUnit  := '';
+  AAmbiguous:= Default(TScopedClass);
   Seen:= TList<string>.Create;
   try
     var St: ISymbolStore;
-    var Cls: TSymbol:= ATrees.ClassSymbol(ATypeName, St);
+    var Cls: TSymbol:= ATrees.ClassSymbol(AClassQName, St);
     Result:= Search(St, Cls, 0);
   finally
     Seen.Free;
@@ -3931,7 +4097,24 @@ type
     Member  : TSymbol;
     Owner   : string;
     DeclUnit: string;
+    Ambig   : TScopedClass;  { 1.28.2: an ancestor the scope could not settle }
   end;
+
+// 1.28.2: the From and To types the book's #convert rule for AFromBare spells,
+// qualified or not -- the rule FindConvertRuleFor picks (the first match).
+procedure ConvertRuleSpelling(const ARules: TConversionRuleSet; const AFromBare: string;
+  out AFrom, ATo: string);
+begin
+  AFrom:= '';
+  ATo  := '';
+  for var R: TConversionRule in ARules.Rules do
+    if (R.Kind = rkConvert) and SameText(BareTypeTail(R.FromType), AFromBare) then
+    begin
+      AFrom:= R.FromType;
+      ATo  := R.ToType;
+      Exit;
+    end;
+end;
 
 // 1.27.0: apply/1 pas_uses[] member rows -- every member the unit's code
 // reaches through a converted instance, on the access-site rewrite's own
@@ -3942,20 +4125,52 @@ var
   Index   : TDictionary<string, Integer>;     { UPPER instance|member -> row }
   Rows    : TList<TApplyPasUse>;
   RowLines: TObjectList<TList<Integer>>;      { per row, its lines as found }
-  Hits    : TDictionary<string, TMemberHit>;  { UPPER type|member -> FindClassMember's answer }
+  Hits    : TDictionary<string, TMemberHit>;  { UPPER class|member -> FindClassMember's answer }
+  ClassMemo: TDictionary<string, TScopedClass>; { UPPER instance|type|side -> ClassOf's answer }
   Blocks  : TDictionary<string, Integer>;     { instance -> its #convert block, once for every link }
   Unv     : TArray<TAccessSite>;
   Status  : string;
 
   { review fix wave: FindClassMember walks ancestors across every --db; many
-    instances share a type, so each (type, member) is asked ONCE }
-  function Lookup(const AType, AMember: string): TMemberHit;
+    instances share a type, so each (class, member) is asked ONCE. AClassQName
+    is qualified (ResolveClassInScope). }
+  function Lookup(const AClassQName, AMember: string): TMemberHit;
   begin
-    var Key: string:= UpperCase(AType + '|' + AMember);
+    var Key: string:= UpperCase(AClassQName + '|' + AMember);
     if Hits.TryGetValue(Key, Result) then Exit;
     Result:= Default(TMemberHit);
-    Result.Found:= FindClassMember(AIn.Trees, AType, AMember, Result.Member, Result.Owner, Result.DeclUnit);
+    Result.Found:= FindClassMember(AIn.Trees, AClassQName, AMember, Result.Member, Result.Owner, Result.DeclUnit,
+      Result.Ambig);
     Hits.Add(Key, Result);
+  end;
+
+  { 1.28.2: instance AInst's From (AToSide False) or To class, through the
+    unit's own scope -- never by bare name alone. The From side reads the
+    instance's field declaration: its section (an interface field sees the
+    interface uses only) and a qualified type written there. The book's
+    #convert spelling is the hint either side. }
+  function ClassOf(const AInst, AType: string; AToSide: Boolean): TScopedClass;
+  begin
+    var Key: string:= UpperCase(AInst + '|' + AType + '|' + BoolToStr(AToSide, True));
+    if ClassMemo.TryGetValue(Key, Result) then Exit;
+    var Name    : string := AType;
+    var IntfOnly: Boolean:= False;
+    if not AToSide then
+      for var F: TSymbol in AIn.Store.FindSymbolsByExactName(AInst) do
+        if (F.FileId = AIn.FileId) and (F.Kind = skField) then
+        begin
+          IntfOnly:= SameText(F.Section, 'interface');
+          var Written: string:= Trim(F.Signature);
+          if Written.StartsWith(':') then Written:= Trim(Written.Substring(1));
+          if (Pos('.', Written) > 0) and SameText(BareTypeTail(Written), AType) then Name:= Written;
+          Break;
+        end;
+    var HintFrom, HintTo, FromBare: string;
+    if not AIn.FromTypes.TryGetValue(AInst, FromBare) then FromBare:= '';
+    ConvertRuleSpelling(AIn.Book.Rules, if AToSide then BareTypeTail(FromBare) else AType, HintFrom, HintTo);
+    Result:= ResolveClassInScope(AIn.Trees, AIn.Store, AIn.FileId, Name, IntfOnly,
+      if AToSide then HintTo else HintFrom);
+    ClassMemo.Add(Key, Result);
   end;
 
 begin
@@ -3966,6 +4181,7 @@ begin
   Rows    := TList<TApplyPasUse>.Create;
   RowLines:= TObjectList<TList<Integer>>.Create(True);
   Hits    := TDictionary<string, TMemberHit>.Create;
+  ClassMemo:= TDictionary<string, TScopedClass>.Create;
   Blocks  := InstanceConvertBlocks(AIn.Book.Rules, AIn.Converted, AIn.FromTypes);
   try
     for var L: TConversionRule in WithoutUnreachableRules(AIn.Book.Rules, AIn.Book.Unreachable, 0).Rules do
@@ -4001,16 +4217,35 @@ begin
       R.Member  := S.Member;
       if not AIn.FromTypes.TryGetValue(Inst, R.FromType) then R.FromType:= '';
       if not AIn.ToTypes.TryGetValue(Inst, R.ToType) then R.ToType:= '';
-      var Hit: TMemberHit:= Lookup(R.FromType, S.Member);
-      if Hit.Found then
+      var FromCls: TScopedClass:= ClassOf(Inst, R.FromType, False);
+      R.Resolution:= FromCls.Resolution;
+      R.Candidates:= FromCls.Candidates;
+      if FromCls.Resolution = PAS_RES_RESOLVED then
       begin
-        R.Kind         := PasUseKind(Hit.Member.Kind, Hit.Member.Name, True);
-        R.Visibility   := Trim(Hit.Member.Modifiers);
-        R.DeclaredIn   := Hit.Owner;
-        R.DeclaringUnit:= Hit.DeclUnit;
+        var Hit: TMemberHit:= Lookup(FromCls.QName, S.Member);
+        if Hit.Found then
+        begin
+          R.Kind         := PasUseKind(Hit.Member.Kind, Hit.Member.Name, True);
+          R.Visibility   := Trim(Hit.Member.Modifiers);
+          R.DeclaredIn   := Hit.Owner;
+          R.DeclaringUnit:= Hit.DeclUnit;
+        end
+        else if Hit.Ambig.Resolution = PAS_RES_AMBIGUOUS then
+        begin
+          R.Resolution:= PAS_RES_AMBIGUOUS;
+          R.Candidates:= Hit.Ambig.Candidates;
+        end
+        else
+          R.Resolution:= PAS_RES_MEMBER_NOT_FOUND;
       end;
       if not Cover.TryGetValue(K, Status) then
-        Status:= if (R.ToType <> '') and Lookup(R.ToType, S.Member).Found then PAS_USE_SAME_NAME else PAS_USE_UNMAPPED;
+      begin
+        { an unresolved To class carries nothing implicitly: unmapped, the
+          conservative answer (1.28.2: it was a bare-name lookup) }
+        var ToCls: TScopedClass:= if R.ToType = '' then Default(TScopedClass) else ClassOf(Inst, R.ToType, True);
+        Status:= if (ToCls.Resolution = PAS_RES_RESOLVED) and Lookup(ToCls.QName, S.Member).Found then PAS_USE_SAME_NAME
+                 else PAS_USE_UNMAPPED;
+      end;
       R.Status:= Status;
       Index.Add(K, Rows.Count);
       Rows.Add(R);
@@ -4027,6 +4262,7 @@ begin
       end));
   finally
     Blocks.Free;
+    ClassMemo.Free;
     Hits.Free;
     RowLines.Free;
     Rows.Free;
@@ -4045,6 +4281,7 @@ begin
     var R: TApplyPasUse:= Default(TApplyPasUse);
     R.Member       := D.Name;
     R.Kind         := if D.KindKnown then PasUseKind(D.Kind, D.Name, D.DeclaredIn <> '') else '';
+    R.Resolution   := if R.Kind <> '' then PAS_RES_RESOLVED else PAS_RES_KIND_UNKNOWN;
     R.DeclaringUnit:= D.DeclUnit;
     R.DeclaredIn   := D.DeclaredIn;
     R.Status       := PAS_USE_GLOBAL_DANGLING;
@@ -5264,6 +5501,120 @@ var
         end;
     Result:= InImpl and not InIntf;
   end;
+  // C9 A8-1: the ONE candidate of a To-type tie the book or the unit already
+  // chooses -- a unit a #use / #useswap New / #convert block adds, or a uses
+  // entry of the unit (as the index recorded it) -- spelled as the unit writes
+  // it when present, else as the book does. '' when none or more than one
+  // candidate is chosen: the tie is then reported, never decided.
+  function PickTieCandidate(const ACands: TArray<TUsesCandidate>): string;
+  var
+    Picked  : TArray<string>;   { candidate unit names chosen, distinct }
+    Spelling: string;
+
+    procedure Choose(const ASpelling: string; APreferred: Boolean);
+    begin
+      for var C: TUsesCandidate in ACands do
+        if ATrees.UnitIndex.SameUnit(ASpelling, C.UnitName) then
+        begin
+          if not MatchText(C.UnitName, Picked) then Picked:= Picked + [C.UnitName];
+          if APreferred or (Spelling = '') then Spelling:= ASpelling;
+        end;
+    end;
+
+  var
+    UnitUses  : TArray<TUnitUse>;
+    Watched: TArray<TWatchUnit>;
+
+    function UsesUnit(const AUnit: string): Boolean;
+    begin
+      for var U: TUnitUse in UnitUses do
+        if ATrees.UnitIndex.SameUnit(U.UnitName, AUnit) then Exit(True);
+      Result:= False;
+    end;
+
+    function BookRemoves(const AUnit: string): Boolean;
+    begin
+      for var W: TWatchUnit in Watched do
+        if ATrees.UnitIndex.SameUnit(W.UnitName, AUnit) then Exit(True);
+      Result:= False;
+    end;
+
+  begin
+    Picked  := nil;
+    Spelling:= '';
+    UnitUses   := if PasFileId > 0 then PasStore.GetUnitUsesForFile(PasFileId) else nil;
+    { the units the book REMOVES after ADD wins -- an entry among them is going
+      away, so it settles nothing (review F2: picking it fed ADD wins and
+      cancelled the book's own #unuse) }
+    Watched := UnitRuleWatchList(ABook.Rules, nil, ATrees.UnitIndex.SameUnit);
+    for var R: TConversionRule in ABook.Rules.Rules do
+      case R.Kind of
+        rkUse: Choose(R.UnitName, False);
+        rkConvert:
+          for var U: string in R.UnitsAdd do Choose(U, False);
+        rkUseSwap:
+          { the swap's New is added only when the unit uses Old }
+          if UsesUnit(R.UnitName) then
+            for var U: string in R.UnitsAdd do Choose(U, False);
+      end;
+    for var U: TUnitUse in UnitUses do
+      if not BookRemoves(U.UnitName) then Choose(U.UnitName, True);
+    Result:= if Length(Picked) = 1 then Spelling else '';
+  end;
+  // C9 A8-2: the line the conversion writes ToType onto in the unit (its first
+  // field retype), 0 when it writes it nowhere (an inherited instance only).
+  function ToTypeLine(const AToType: string): Integer;
+  begin
+    Result:= 0;
+    for var E: TTextEdit in Edits do
+      if (E.Kind = tekReplaceInLine) and SameText(E.FilePath, AUnitPas) and SameText(E.Text, AToType) and
+         ((Result = 0) or (E.Line < Result)) then Result:= E.Line;
+  end;
+  // C9 R8a: a To-type tie nothing settles is REPORTED -- a uses_unresolved row
+  // (with the retyped field's line, A8-2) and a uses-unit-ambiguous warning.
+  procedure ReportTie(const AToType: string; AWantIntf: Boolean; const ACands: TArray<TUsesCandidate>);
+  var
+    Un   : TUsesUnresolved;
+    Units: string;
+    TieIt: TApplyItem;
+  begin
+    Un:= Default(TUsesUnresolved);
+    Un.Name      := AToType;
+    Un.Line      := ToTypeLine(AToType);
+    Un.Section   := if AWantIntf then 'interface' else 'implementation';
+    Un.Reason    := UNRESOLVED_AMBIGUOUS;
+    Un.Candidates:= ACands;
+    Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + [Un];
+    Units:= '';
+    for var C: TUsesCandidate in ACands do Units:= Units + (if Units = '' then '' else ', ') + C.UnitName;
+    TieIt:= PlainItem(aikUsesUnitAmbiguous, afWarnings,
+      Format('"%s" is declared in %d units (%s) -- none added to uses; add #use <unit> to the book to choose',
+        [AToType, Length(ACands), Units]));
+    TieIt.ToType  := AToType;
+    TieIt.FilePath:= AUnitPas;
+    TieIt.Line    := Un.Line;
+    Emit(TieIt);
+  end;
+  // Surface #2's find-unit for one To type: the first store that resolves it
+  // (Build's edits / already-used answer). Returns the unit to use INSTEAD of
+  // Build's pick, '' to keep it: review F3 -- when ONE unit declares the To
+  // type at unit level (AUnitLevel), Build also scores class members (a
+  // nested type of the same name) and lets hash order break that tie.
+  function BuildToTypeAdd(const AToType: string; AWantIntf: Boolean; const AUnitLevel: TArray<TUsesCandidate>;
+    out AResolved: string; out AAlreadyUsed: Boolean; out AEdits: TArray<TTextEdit>): string;
+  begin
+    AResolved   := '';
+    AAlreadyUsed:= False;
+    AEdits      := nil;
+    for var St in Stores do
+    begin
+      AEdits:= TFindUnitRefactoring.Build(St, PasStore, AToType, AUnitPas, AResolved, AAlreadyUsed, AWantIntf);
+      if AAlreadyUsed or (Length(AEdits) > 0) then Break;
+    end;
+    Result:= '';
+    if (Length(AUnitLevel) = 1) and not ATrees.UnitIndex.SameUnit(AResolved, AUnitLevel[0].UnitName) then
+      Result:= AUnitLevel[0].UnitName;
+  end;
   procedure PlanUsesAdditions(out AUses: TUsesPlan; out AAdds, AIntfAdds: TArray<string>);
   var
     E : TTextEdit;
@@ -5271,6 +5622,7 @@ var
   begin
     var UnitRules  : Boolean      := BookHasUnitRules(ABook.Rules);
     var MoveNeeded : Boolean      := False;
+    var TiePlanned : Boolean      := False;  { review F1: a picked tie unit is written by the planner }
     var Pending    : TList<TTextEdit>:= TList<TTextEdit>.Create;
     var ConvertAdds: TList<string>:= TList<string>.Create;
     var IntfAdds   : TList<string>:= TList<string>.Create;
@@ -5283,32 +5635,36 @@ var
         var WantIntf: Boolean:= IntfToTypes.ContainsKey(ToType_);
         { C9 R8a: a To type two units declare is REPORTED, never decided by
           dictionary order }
+        var TieUnit: string:= '';
+        var Amb    : TArray<TUsesCandidate>:= nil;
         if ABook.Reconcile then
         begin
-          var Amb: TArray<TUsesCandidate>:= ATrees.UnitIndex.DeclaringUnits(BareTypeTail(ToType_), True);
+          Amb:= ATrees.UnitIndex.DeclaringUnits(BareTypeTail(ToType_), True);
           if Length(Amb) > 1 then
           begin
-            var Un: TUsesUnresolved:= Default(TUsesUnresolved);
-            Un.Name      := ToType_;
-            Un.Section   := if WantIntf then 'interface' else 'implementation';
-            Un.Reason    := UNRESOLVED_AMBIGUOUS;
-            Un.Candidates:= Amb;
-            Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + [Un];
-            var Units: string:= '';
-            for var C: TUsesCandidate in Amb do Units:= Units + (if Units = '' then '' else ', ') + C.UnitName;
-            It:= PlainItem(aikUsesUnitAmbiguous, afWarnings,
-              Format('"%s" is declared in %d units (%s) -- none added to uses; add #use <unit> to the book to choose',
-                [ToType_, Length(Amb), Units]));
-            It.ToType  := ToType_;
-            It.FilePath:= AUnitPas;
-            Emit(It);
-            Continue;
+            { A8-1: a tie the book's #use (or the unit's own uses) settles is
+              resolved to that unit -- through the same ConvertAdds / IntfAdds
+              as an unambiguous To type, so an INTERFACE field's unit goes to
+              the interface uses (or is moved there), never to where a bare
+              #use would put it (the implementation: E2003) }
+            TieUnit:= PickTieCandidate(Amb);
+            if TieUnit = '' then
+            begin
+              ReportTie(ToType_, WantIntf, Amb);
+              Continue;
+            end;
           end;
         end;
-        for var St in Stores do
+        if TieUnit = '' then
+          TieUnit:= BuildToTypeAdd(ToType_, WantIntf, Amb, ResolvedUnit, AlreadyUsed, UseEdits);
+        if TieUnit <> '' then
         begin
-          UseEdits:= TFindUnitRefactoring.Build(St, PasStore, ToType_, AUnitPas, ResolvedUnit, AlreadyUsed, WantIntf);
-          if AlreadyUsed or (Length(UseEdits) > 0) then Break;
+          { review F1: the uses PLANNER writes it -- a book with no unit rule
+            has no Pending edit for this unit, so nothing else would }
+          if not MatchText(TieUnit, ConvertAdds.ToArray) then ConvertAdds.Add(TieUnit);
+          if WantIntf and not MatchText(TieUnit, IntfAdds.ToArray) then IntfAdds.Add(TieUnit);
+          TiePlanned:= True;
+          Continue;
         end;
         { 1.25.1: two To types declared in ONE unit (TFDTable and
           TFDAutoIncField) planned that unit's add twice -- 'uses LibB, LibB'
@@ -5355,7 +5711,7 @@ var
         RA.Adds         := AAdds;
         RA.IntfAdds     := AIntfAdds;
         RA.Handled      := Handled;
-        RA.PlannerNeeded:= UnitRules or MoveNeeded;
+        RA.PlannerNeeded:= UnitRules or MoveNeeded or TiePlanned or (Pending.Count > 0);  { review: the planner also reports the #convert adds as rows }
         var Rec: TReconcileOutcome:= ReconcileUnitUses(ATrees, RA);
         for var RIt: TApplyItem in Rec.Items do Emit(RIt);
         Result.Report.UsesUnresolved:= Result.Report.UsesUnresolved + Rec.Unresolved;
