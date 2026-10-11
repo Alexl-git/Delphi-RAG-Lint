@@ -55,6 +55,31 @@ by its OWNER RULINGS 2026-10-06.)
   character columns, so non-ASCII text before a reference on its line (CP1252 in a
   string) no longer raised `ERangeError`.
 
+### Added
+
+- **`convert-apply` reports what the `.pas` still uses that the map does not cover**
+  (owner request: "list methods and properties and public and globals not mentioned and
+  not converted ... so we could see what else is there to work on"). New apply/1 array
+  `pas_uses[]`, dry run and `--apply`, always present (`[]` when none), one row per
+  (instance, member) the unit's code reaches through a CONVERTED instance -- the
+  access-site rewrite's own bound sites (`FindMemberAccessSites` + `BoundAccessSites`)
+  -- then one per global the unit uses from a unit the reconciliation REMOVES:
+  `{instance, from_type, to_type, member, kind, visibility, declaring_unit,
+  declared_in, status, lines[], count}`. `kind` method | property | field | event |
+  const | var | type | routine ('' when no `--db` holds the member); `declared_in` is
+  the class that declares it -- an ancestor of the From type included, followed into
+  another `--db` (TComponent in the library index); `status` `mapped` (a `#link`
+  covers it), `cast-refused` (a cast `#link` covers it, its sites refused),
+  `same-name` (no link; the To type or an ancestor has the name), `unmapped` (the
+  work list) or `global-dangling` (the reconciliation's own dangling verdict --
+  the remove row's `needed_by`, uncapped and with every line; absent with
+  `--no-reconcile-uses` or when degraded). Text: `pas uses: N unmapped, M
+  global-dangling, K same-name, J mapped, C cast-refused` and one line per unmapped
+  member. `info --json` capability `pas_uses`. Known gaps: a member reached with no
+  receiver (`with pic1 do Caption := ...`) and a site the index cannot vouch for
+  (`access-site-unverified`) are not listed; an inherited RTL/VCL member is
+  classified only when its library `--db` is passed (else kind '' and `unmapped`).
+
 ### Fixed
 
 - **A `#link` carrying a cast no longer writes a `.pas` access site** (shipped defect,

@@ -26,6 +26,15 @@ as a `cast-not-applied` warning naming the file, line, instance and cast --
 "convert this access site by hand". The unit will not compile until you do;
 that compile error is the signal.
 
+## What is left to convert (1.27.0)
+Every run also lists what the unit's code still uses: each member reached
+through a converted instance, and each global from a unit the run removes.
+JSON `pas_uses[]` gives one row per member with its kind, where it is declared,
+its lines and a status -- `mapped`, `cast-refused`, `same-name` (the new type
+has the same name, so it carries over), `unmapped` (no rule and no such member:
+your work list) or `global-dangling`. Text mode prints a one-line count and
+the unmapped members with their lines.
+
 ## Reaching it in the IDE
 No IDE surface -- this is a CLI-only feature.
 

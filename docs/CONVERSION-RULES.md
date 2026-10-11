@@ -1057,6 +1057,36 @@ because of it, and descendants are not edited. LIMIT: a descendant outside the
    a template no longer reaches the `.pas`, the converted unit fails to compile
    at exactly those sites, and the uses reconciliation has no template routine
    to add. `info --json`: `capabilities.cast_site_refusal: true`.
+
+**What the `.pas` still uses (`pas_uses[]`, 1.27.0).** Every run -- dry run
+and `--apply` -- lists what the unit's code uses that the book does not
+convert, so the next rule to write is visible. One row per (instance, member)
+the code reaches through a converted instance (the same bound sites surface #4
+rewrites), then one per global the unit uses from a unit the uses
+reconciliation removes:
+
+```
+{"instance":"pic1","from_type":"TPicOld","to_type":"TPicNew","member":"DoOld",
+ "kind":"method","visibility":"public","declaring_unit":"LibOld",
+ "declared_in":"TPicOld","status":"unmapped","lines":[26,28],"count":2}
+```
+
+`status`: `mapped` (a `#link` whose From path starts with the member covers it,
+for that instance's `#convert` block), `cast-refused` (a cast `#link` covers it:
+its sites are refused, above), `same-name` (no link, but the To type or one of
+its ancestors has a member of that name -- carried implicitly), `unmapped` (no
+link and no such member: the work list) and `global-dangling` (a routine,
+const, var or type from a removed unit -- the remove row's `needed_by`,
+uncapped; only when the reconciliation ran). `declared_in` names the class that
+declares the member, an ancestor of the From type included, followed across the
+`--db` stores; `kind`/`visibility`/`declared_in`/`declaring_unit` are `''`
+when no `--db` holds the member (pass the library index for inherited RTL/VCL
+members). Lines are the unit's own, sorted. Text mode prints `pas uses: N
+unmapped, M global-dangling, K same-name, J mapped, C cast-refused` and one
+`unmapped <inst>.<member> (<kind>, <visibility>, <class> in <unit>) -- line(s)
+...` per unmapped member. Not listed: a member reached with no receiver (`with
+X do`) and a site the index cannot vouch for. `info --json`:
+`capabilities.pas_uses: true`.
 5. **Runtime-creator retype + TODO marker** -- every explicit `FromType.Xxx(...)`
    construction (e.g. `Edit1 := TOldEdit.Create(Self);`) gets its type token
    rewritten to ToType, PLUS an unconditional `{ TODO: drag-lint convert --

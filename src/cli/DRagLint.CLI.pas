@@ -999,6 +999,7 @@ begin
     '#check-ref <ToPath> <Class>.<Prop>[, ...] warns when the converted ToPath value contains \ or : (ref-path-like) or no listed Class.Prop of any .dfm in the project index carries it (ref-dangling), and once per run ref-not-checked when the index holds no .dfm property facts; info capabilities book_warn, check_ref (1.26.5); ' +
     'every code rewrite is scoped to the instance''s field (receiver bound to it, or unbound / bare / Self. in a routine of the .dfm root class with no same-named local); a site the index cannot vouch for is NOT rewritten and is reported (''access site <file>:<line> ... not verified against the index -- not rewritten'', items[] kind access-site-unverified, json access_sites_unverified); a --db resolved before resolver 1.12.0 is REFUSED, dry run too, naming the index ... --resolve-only fix; ' +
     'a #link carrying a cast never rewrites a .pas access site (1.27.0, interim): the cast''s pas template is a statement with no correct splice inside an expression, so each bound site is reported -- ''line N: #link To <- From : Cast -- access site <file>:<line> <inst>.<From> not rewritten: ... convert this access site by hand'', items[] kind cast-not-applied with instance, file, line and value (the cast); no .pas edit, the .dfm half of the cast unchanged; kind cast-applied is retired; info capability cast_site_refusal; ' +
+    'json pas_uses[] (1.27.0, dry run and --apply; info capability pas_uses) lists what the .pas still uses that the map does not cover: one row per (instance, member) the code reaches through a converted instance -- the access-site rewrite''s own bound sites -- and one per global (routine/const/var/type) from a unit the reconciliation removes: {instance,from_type,to_type,member,kind method|property|field|event|const|var|type|routine,visibility,declaring_unit,declared_in,status mapped|cast-refused|same-name|unmapped|global-dangling,lines[],count}; text prints ''pas uses: N unmapped, M global-dangling, K same-name, J mapped, C cast-refused'' and one line per unmapped member; ' +
     'a DESCENDANT unit (a class descending from the unit''s root class at any level, or a form hosting it inline) that still streams a converted instance in its .dfm or uses it in code is a WARNING, never a refusal (1.25.0): ''line N: warning: descendant <Unit> still streams <Name> as <TOld> -- convert it next (needs C8 N2)'', N = the instance''s object line in this .dfm (json: items[] kind descendant-not-converted, descendants[] {unit,name,type,line,reason}; line = the descendant .dfm block, else its first code reference; reason dfm|code|both; --only filters it; only descendants the --db index are seen); ' +
     'a plan the edit applier would refuse in part (overlapping delete ranges -- an engine defect) fails the WHOLE unit before anything is written, dry run too, and a write that fails part-way is ROLLED BACK byte-identical (exit 2, ''-- rolled back, unit not changed''; a failed rollback names the files it could not restore) (1.25.1): exit 1, ''ERROR: refused N edit(s) to <file> -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written'', json ok=false with that error; ' +
     'a .dfm component nested in another converted one is spliced into its parent''s re-emit, and --only naming the parent converts it too (json only_included[] {name,parent}, text ''--only: <child> converts too -- nested in <parent>''); a collection property (FieldDefs = < item ... end>) whose item members the book links (#link X.Items.* <- X.Items.*, identity) is carried whole when the To type publishes X with the same collection type, else reported NOT carried with its item count and counted as dropped, #ignore X notwithstanding; ' +
@@ -16139,6 +16140,10 @@ begin
         access site -- one items[] cast-not-applied per site (instance, file,
         line, value = the cast); the 1.26.x kind cast-applied is retired. }
       JCap.AddPair('cast_site_refusal', TJSONBool.Create(True));
+      { 1.27.0, same contract: apply/1 pas_uses[] -- what the unit's .pas still
+        uses that the map does not cover (status mapped | cast-refused |
+        same-name | unmapped | global-dangling), dry run and --apply. }
+      JCap.AddPair('pas_uses', TJSONBool.Create(True));
       { 1.25.0, same contract: convert-apply lists the descendant units that
         still stream or use an instance it converts (apply/1 descendants[],
         items[] kind descendant-not-converted) -- a warning, never a refusal. }
@@ -24682,7 +24687,34 @@ begin
     Block('ResolvedDefaults',
       [Format('%d property value(s) carried from their declared defaults (--format json lists each)',
               [Length(AReport.ResolvedDefaults)])]);
-end; // procedure
+  { 1.27.0 -- pas_uses[]: one summary line, then the work list (unmapped
+    members) with their lines; nothing when the code uses nothing }
+  if Length(AReport.PasUses) > 0 then
+  begin
+    var NUnm : Integer:= 0;
+    var NGlob: Integer:= 0;
+    var NSame: Integer:= 0;
+    var NMap : Integer:= 0;
+    var NCast: Integer:= 0;
+    for var PU: TApplyPasUse in AReport.PasUses do
+      if PU.Status = PAS_USE_UNMAPPED then Inc(NUnm)
+      else if PU.Status = PAS_USE_GLOBAL_DANGLING then Inc(NGlob)
+      else if PU.Status = PAS_USE_SAME_NAME then Inc(NSame)
+      else if PU.Status = PAS_USE_MAPPED then Inc(NMap)
+      else Inc(NCast);
+    Writeln('');
+    Writeln(Format('pas uses: %d unmapped, %d global-dangling, %d same-name, %d mapped, %d cast-refused',
+      [NUnm, NGlob, NSame, NMap, NCast]));
+    for var PU: TApplyPasUse in AReport.PasUses do
+    begin
+      if PU.Status <> PAS_USE_UNMAPPED then Continue;
+      var Ls: string:= '';
+      for var L: Integer in PU.Lines do Ls:= Ls + (if Ls = '' then '' else ', ') + IntToStr(L);
+      Writeln(Format('  unmapped %s.%s (%s, %s, %s in %s) -- %s %s',
+        [PU.Instance, PU.Member, PU.Kind, PU.Visibility, PU.DeclaredIn, PU.DeclaringUnit,
+         if Length(PU.Lines) = 1 then 'line' else 'lines', Ls]));
+    end;
+  end;end; // procedure
 
 type
   /// <summary>The post-apply refresh of the unit's project index (C9,
@@ -25004,7 +25036,31 @@ begin
     JRx.AddPair('ms'     , TJSONNumber.Create(ACtx.Reindex.Ms));
     JRx.AddPair('reason' , ACtx.Reindex.Reason);
     JRoot.AddPair('uses_reindex', JRx);
-
+    { 1.27.0 -- what the .pas still uses that the conversion map does not
+      cover: one row per (instance, member) reached through a converted
+      instance, then one per global from a unit the reconciliation removes.
+      ALWAYS present, [] when none. status mapped | cast-refused | same-name |
+      unmapped | global-dangling; the editor filters on it. }
+    var JPas: TJSONArray:= TJSONArray.Create;
+    for var PU: TApplyPasUse in ACtx.Report.PasUses do
+    begin
+      var JP: TJSONObject:= TJSONObject.Create;
+      JP.AddPair('instance'      , PU.Instance);
+      JP.AddPair('from_type'     , PU.FromType);
+      JP.AddPair('to_type'       , PU.ToType);
+      JP.AddPair('member'        , PU.Member);
+      JP.AddPair('kind'          , PU.Kind);
+      JP.AddPair('visibility'    , PU.Visibility);
+      JP.AddPair('declaring_unit', PU.DeclaringUnit);
+      JP.AddPair('declared_in'   , PU.DeclaredIn);
+      JP.AddPair('status'        , PU.Status);
+      var JL: TJSONArray:= TJSONArray.Create;
+      for var L: Integer in PU.Lines do JL.Add(L);
+      JP.AddPair('lines'         , JL);
+      JP.AddPair('count'         , TJSONNumber.Create(Length(PU.Lines)));
+      JPas.AddElement(JP);
+    end;
+    JRoot.AddPair('pas_uses', JPas);
     { 1.20.6 (T2b) -- the classes whose members the run resolved, summed over
       the --db stores. No property tree is built; this is the whole cost. }
     JRoot.AddPair('classes_built', TJSONNumber.Create(ACtx.ClassesBuilt));

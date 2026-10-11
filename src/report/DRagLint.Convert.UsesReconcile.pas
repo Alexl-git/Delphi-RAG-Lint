@@ -126,6 +126,14 @@ type
     /// <param name="AHelpers">True for the helper-member half only.</param>
     /// <returns>The names (a new array per call).</returns>
     function ExportNames(const AUnit: string; AHelpers: Boolean): TArray<string>;
+    /// <summary>The symbol named AName that unit AUnit declares, and the type
+    /// it is a member of when it is one (a type-helper member).</summary>
+    /// <param name="AUnit">An indexed stem.</param>
+    /// <param name="AName">The name, as ExportNames returned it.</param>
+    /// <param name="ASym">The first such symbol in store order.</param>
+    /// <param name="AParent">Its class / record parent's name, else ''.</param>
+    /// <returns>False when no store holds such a symbol.</returns>
+    function ExportSymbol(const AUnit, AName: string; out ASym: TSymbol; out AParent: string): Boolean;
   end;
 
   /// <summary>What ReconcileUses needs to know about one unit.</summary>
@@ -139,14 +147,34 @@ type
     HandledNames: TArray<string>;      { names the #convert surface resolves itself (To types) }
   end;
 
+  /// <summary>One name a REMOVED unit exports that the converted .pas still
+  /// references -- the same verdict as a remove row's needed_by, uncapped and
+  /// with every line (apply/1 pas_uses[] status global-dangling, 1.27.0).</summary>
+  /// <remarks>Lines are 1-based lines of the converted text, which differs
+  /// from the unit as read by in-line edits only, so they are the unit's own
+  /// lines; sorted, distinct. Kind is the declaring symbol's kind when the
+  /// index holds it (KindKnown). DeclaredIn is the helper type of a
+  /// type-helper member, '' for a unit-level name.</remarks>
+  TUsesDangling = record
+    UnitName  : string;           { the removed uses entry, as spelled }
+    DeclUnit  : string;           { the indexed unit that declares Name }
+    Name      : string;
+    Kind      : TSymbolKind;
+    KindKnown : Boolean;
+    DeclaredIn: string;
+    Lines     : TArray<Integer>;
+  end;
+
   /// <summary>ReconcileUses' answer.</summary>
   /// <remarks>Status is 'on' or 'degraded' (Detail says why). Needs goes to
-  /// PlanUnitRules; Unresolved to apply/1 uses_unresolved[].</remarks>
+  /// PlanUnitRules; Unresolved to apply/1 uses_unresolved[]. Dangling is the
+  /// uncapped form of Needs.Dangling (empty when degraded).</remarks>
   TUsesReconcileResult = record
     Status    : string;
     Detail    : string;
     Needs     : TUsesNeeds;
     Unresolved: TArray<TUsesUnresolved>;
+    Dangling  : TArray<TUsesDangling>;
   end;
 
 /// <summary>Reconciles one unit's uses clauses against the re-indexed
@@ -355,6 +383,27 @@ begin
   end;
 end;
 
+function TUsesUnitIndex.ExportSymbol(const AUnit, AName: string; out ASym: TSymbol; out AParent: string): Boolean;
+const
+  PARENT_KINDS: set of TSymbolKind = [skClass, skRecord, skInterface];
+begin
+  ASym   := Default(TSymbol);
+  AParent:= '';
+  for var I: Integer:= 0 to High(FStores) do
+    for var S: TSymbol in FStores[I].FindSymbolsByExactName(AName) do
+    begin
+      if (S.FileId <= 0) or not SameText(StemOf(I, S.FileId), AUnit) then Continue;
+      ASym:= S;
+      if S.ParentId > 0 then
+      begin
+        var P: TSymbol:= FStores[I].GetSymbolById(S.ParentId);
+        if P.Kind in PARENT_KINDS then AParent:= P.Name;
+      end;
+      Exit(True);
+    end;
+  Result:= False;
+end;
+
 { ---- the re-index ------------------------------------------------------------ }
 
 function ReindexText(const APath, AText: string): TParseResult;
@@ -385,6 +434,8 @@ type
     Bare     : Boolean;
     BareLine : Integer;
     InIntf   : Boolean;
+    Lines    : TArray<Integer>;  { every line it is referenced on }
+    BareLines: TArray<Integer>;  { every line it is referenced on BARE }
   end;
 
   TReconciler = class  // dl:ok high-response@0a35 -- REVIEWED 2026-10-10: 57 since the fail-safe Degrade path (Reconcile/Degrade/SpelledSame) joined; one unit's verdicts over shared parse state -- splitting it would pass that state between classes
@@ -515,6 +566,8 @@ begin
       U.BareLine:= R.StartLine;
     end;
     if IsBare and (R.StartLine < ImplAt) then U.InIntf:= True;
+    U.Lines:= U.Lines + [R.StartLine];
+    if IsBare then U.BareLines:= U.BareLines + [R.StartLine];
     ADict.AddOrSetValue(Key, U);
   end;
 end;
@@ -648,11 +701,23 @@ begin
   end;
 end;
 
+{ The distinct values of ALines, ascending. }
+function SortedLines(const ALines: TArray<Integer>): TArray<Integer>;
+begin
+  Result:= nil;
+  for var L: Integer in ALines do
+    if TArray.IndexOf<Integer>(Result, L) < 0 then Result:= Result + [L];
+  TArray.Sort<Integer>(Result);
+end;
+
 { Ruling 1: a removed unit's exports the converted .pas still references --
-  reported on the remove row, never a reason to keep it. }
+  reported on the remove row, never a reason to keep it. 1.27.0: the same
+  verdicts, uncapped and with every line, go to FRes.Dangling (pas_uses[]). }
 procedure TReconciler.PlanDangling;
 var
-  U: TNameUse;
+  U     : TNameUse;
+  Parent: string;
+  Sym   : TSymbol;
 begin
   for var E: string in FRemoved do
   begin
@@ -670,9 +735,19 @@ begin
         if (Pass = 0) and Reachable(FIx.DeclaringUnits(U.Name, False)) then Continue;
         var Line: Integer:= if Pass = 0 then U.BareLine else U.Line;
         var Dup: Boolean:= False;
-        for var X: TUsesNeed in D.NeededBy do
-          if SameText(X.Name, U.Name) then Dup:= True;
-        if Dup or (Length(D.NeededBy) >= NEEDED_BY_MAX) then Continue;
+        for var X: TUsesDangling in FRes.Dangling do
+          if SameText(X.UnitName, E) and SameText(X.Name, U.Name) then Dup:= True;
+        if Dup then Continue;
+        var G: TUsesDangling:= Default(TUsesDangling);
+        G.UnitName := E;
+        G.DeclUnit := Stem;
+        G.Name     := U.Name;
+        G.Lines    := SortedLines(if Pass = 0 then U.BareLines else U.Lines);
+        G.KindKnown:= FIx.ExportSymbol(Stem, U.Name, Sym, Parent);
+        G.Kind     := Sym.Kind;
+        G.DeclaredIn:= Parent;
+        FRes.Dangling:= FRes.Dangling + [G];
+        if Length(D.NeededBy) >= NEEDED_BY_MAX then Continue;
         D.NeededBy:= D.NeededBy + [Need(U.Name, Line,
           if Line < ImplementationLine(FIn.ConvPas) then SECTION_INTF else SECTION_IMPL)];
       end;
@@ -695,6 +770,7 @@ begin
   FRes.Needs.Keeps  := nil;
   FRes.Needs.Adds   := nil;
   FRes.Needs.Dangling:= nil;
+  FRes.Dangling     := nil;
   FRes.Unresolved   := nil;
   FRemoved.Clear;
   try
