@@ -23,14 +23,16 @@ uses
 
 /// <summary>The terminal text of a compare (spec O1).</summary>
 /// <param name="pR">The result of RunCompare.</param>
-/// <returns>'WARNING: ' lines first; then (exit 0/1) the OLD and NEW header lines, the
+/// <returns>'WARNING: ' lines first (the result's warnings, then for a chart one 'chart image
+/// withheld: the SVG contains content that is not allowed (reason)' line for each SVG the page
+/// would refuse); then (exit 0/1) the OLD and NEW header lines, the
 /// '--- before / +++ after / = K unchanged, - D removed, + I added' counts and the delta in
 /// unified form ('@@ -a,b +c,d @@', then '= ' unchanged, '- ' removed, '+ ' added rows;
 /// for a chart the four lists 'nodes removed (n): ...'), then 'result: ... (exit N)'.
 /// Exit 2 and 3 return the warnings and 'ERROR: ' plus the message, no diff. CRLF line
 /// ends, a final CRLF.</returns>
 /// <remarks>Nothing is printed to a stream; the CLI sends this to stdout and the ERROR
-/// line to stderr. Pure; thread-safe.</remarks>
+/// line to stderr. Reads a chart's two SVG files (never writes); thread-safe.</remarks>
 function RenderCompareText(const pR: TCompareResult): string;
 
 /// <summary>The JSON of a compare (spec O2, schema 'compare/1').</summary>
@@ -41,9 +43,9 @@ function RenderCompareText(const pR: TCompareResult): string;
 /// hunks[{old_start, old_count, new_start, new_count, lines[{op, old, new}]}],
 /// graph{nodes_added, nodes_removed, edges_added, edges_removed}, snapshot, updated_file,
 /// message}. Every key is always present; a line carries 'old' for '=' and '-', 'new' for
-/// '=' and '+'.</returns>
+/// '=' and '+'. warnings holds the same withheld lines as the text output.</returns>
 /// <remarks>Built with TJSONObject, written with ToJSON. The CLI prints it after stderr is
-/// flushed. Pure; thread-safe.</remarks>
+/// flushed. Reads a chart's two SVG files (never writes); thread-safe.</remarks>
 function RenderCompareJson(const pR: TCompareResult): string;
 
 /// <summary>The side-by-side HTML page of a compare (spec O3, D7).</summary>
@@ -55,7 +57,10 @@ function RenderCompareJson(const pR: TCompareResult): string;
 /// text HTML-escaped. For a chart the NEW graph.svg is inlined with class="dl-added" on
 /// every added node anchor and edge group, the OLD one sits in a collapsed
 /// '&lt;details&gt;' with class="dl-removed" (faded) on every removed one, and the four
-/// lists of changes follow.</returns>
+/// lists of changes follow. An SVG is inlined only when nothing in it can run script,
+/// navigate, restyle the page or leave SVG parsing (R26); otherwise it is withheld, not
+/// patched: its section holds only 'chart image withheld: the SVG contains content that is
+/// not allowed (reason)', and the lists of changes still follow.</returns>
 /// <remarks>Only READS pR.OldSvgPath / pR.NewSvgPath: for a rerun compare OldSvgPath may be
 /// a temp copy that the caller (the CLI) deletes afterwards, so it is never deleted here.
 /// An SVG that cannot be read is left out of the page, not an error. Pure apart from
@@ -68,7 +73,8 @@ function RenderCompareHtml(const pR: TCompareResult): string;
 /// (cfGraph).</param>
 /// <param name="pFormat">Which of the three; cfUnknown is shown as a report.</param>
 /// <param name="pSvgPath">cfGraph: the chart's SVG to inline; '' or unreadable shows the
-/// node and edge list only. Ignored for the other formats.</param>
+/// node and edge list only, and an unsafe one (R26) the withheld line instead of the image.
+/// Ignored for the other formats.</param>
 /// <returns>cfReportText: a single-column '&lt;pre class="report"&gt;' of the logical lines;
 /// cfFormsCsv: a '&lt;table class="csv"&gt;' (first row is the header); cfGraph: the SVG in
 /// '&lt;section class="chart"&gt;' (not marked) plus the node and edge rows. Same
@@ -87,7 +93,7 @@ implementation
 uses
   Winapi.Windows, Winapi.ShellAPI, System.SysUtils, System.Classes, System.IOUtils,
   System.JSON, System.RegularExpressions, System.Generics.Collections,
-  System.Generics.Defaults, System.Character,
+  System.Generics.Defaults, System.Character, System.StrUtils,
   DRagLint.Charts.Diff, DRagLint.Charts.ReportHeader, DRagLint.Charts.Adapter.Graph, // dl:unit DRagLint.Charts.Diff accepted -- DIFF_NO_INDEX is the diff core's own no-counterpart sentinel
   DRagLint.Charts.Adapter.Text;
 
@@ -120,15 +126,47 @@ const
   RE_ENTITY = '&(#[xX][0-9A-Fa-f]+|#[0-9]+|amp|lt|gt|quot|apos);';
   RE_MARKER = '\{\{(\w+)\}\}';
   RE_XMLNS = '\s+xmlns(:\w+)?="[^"]*"';
-  // SVG defusing (O3): the page runs no script, so none may arrive inside a graph.svg either
-  RE_SVG_CLOSE = '</svg\s*>';
-  RE_ACTIVE_ELEMENT = '<(script|foreignObject)\b[^>]*>.*?</\1\s*>';
-  RE_ACTIVE_TAG = '</?(script|foreignObject)\b[^>]*>';
-  RE_QUOTED_TAG = '<(?:[^>"'']|"[^"]*"|''[^'']*'')*>';
-  RE_ATTR = '\s+([\w:.-]+)\s*=\s*("[^"]*"|''[^'']*''|[^\s"''>]+)';
-  RE_BLANKS = '[\s\x00-\x1F]+';
+  // SVG refusal (O3, R26): a graph.svg is inlined only when nothing in it can run, navigate,
+  // restyle the page or leave SVG parsing; otherwise it is withheld, never patched up
+  RE_SCAN_ENTITY = '&(#[xX][0-9A-Fa-f]+|#[0-9]+);?|&(colon|tab|newline|lpar|rpar|sol|bsol|period|quot|apos|lt|gt|amp);';
+  SCAN_ENTITY_NAMES: TArray<string> = ['colon', 'tab', 'newline', 'lpar', 'rpar', 'sol', 'bsol', 'period',
+    'quot', 'apos', 'lt', 'gt', 'amp'];
+  SCAN_ENTITY_CHARS = ':' + #9 + #10 + '()/\."''<>&';
+  G_SCAN_NAMED = 2;
+  REF_KIND_AT = 2;
+  NUMERIC_REF = '#';
+  REPLACEMENT_CHAR = #$FFFD;
+  RE_NOT_SCHEME_CHAR = '[^A-Za-z:]';
+  RE_TAG_NAME = '^[a-z][a-z0-9:._-]*$';
+  SVG_ROOT = 'svg';
   HANDLER_PREFIX = 'on';
-  SCRIPT_SCHEME = 'javascript:';
+  HREF_SUFFIX = ':href';
+  ANIMATE_PREFIX = 'animate';
+  SET_ELEMENT = 'set';
+  ANIMATED_ATTR = 'attributename';
+  ALLOWED_SCHEME = 'draglint:';
+  FRAGMENT_MARK = '#';
+  COMMENT_OPEN = '!--';
+  COMMENT_CLOSE = '-->';
+  COMMENT_BANG_CLOSE = '--!>';
+  EMPTY_COMMENT_TAIL = '->';
+  NEW_CHART_HEADING = 'After (added marked)';
+  OLD_CHART_HEADING = 'Before';
+  SHOW_CHART_HEADING = 'Chart';
+  WITHHELD_TEXT = 'chart image withheld: the SVG contains content that is not allowed (%s)';
+  // script, frames and plug-ins, navigation and page-wide CSS, forms -- and every HTML element
+  // the parser's foreign-content rules let out of the SVG (after one, later tags parse as HTML)
+  DENIED_ELEMENTS: TArray<string> = ['script', 'foreignobject', 'iframe', 'frame', 'frameset', 'object',
+    'embed', 'applet', 'meta', 'link', 'style', 'base', 'form', 'portal',
+    'b', 'big', 'blockquote', 'body', 'br', 'center', 'code', 'dd', 'div', 'dl', 'dt', 'em', 'font',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'hr', 'i', 'img', 'li', 'listing', 'menu', 'nobr',
+    'ol', 'p', 'pre', 'ruby', 's', 'small', 'span', 'strong', 'strike', 'sub', 'sup', 'table', 'tt',
+    'u', 'ul', 'var'];
+  BREAKOUT_END_TAGS: TArray<string> = ['br', 'p'];
+  // HTML integration points inside SVG: a start tag in them is parsed as HTML
+  TEXT_ONLY_ELEMENTS: TArray<string> = ['title', 'desc'];
+  URL_ATTRS: TArray<string> = ['href', 'src', 'action', 'formaction', 'data', 'srcset', 'poster',
+    'background', 'ping', 'codebase', 'cite', 'xml:base'];
   RE_TAG = '<[^>]*>';
   RE_XLINK_TITLE = 'xlink:title="([^"]*)"';
   RE_FIRST_TEXT = '<text[^>]*>(.*?)</text>';
@@ -201,6 +239,16 @@ begin
   Result:= pText.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;').Replace('"', '&quot;');
 end;
 
+{ The code point of a numeric reference body ('#x3A' or '#58'); -1 when it is not a character:
+  zero, out of range, or a lone surrogate (ConvertFromUtf32 raises on one). }
+function RefCodePoint(const pRef: string): Integer;
+begin
+  if CharInSet(pRef[ENT_KIND_AT], ['x', 'X']) then Result:= StrToIntDef(HEX_BASE + Copy(pRef, ENT_HEX_FROM, MaxInt), -1)
+  else Result:= StrToIntDef(Copy(pRef, ENT_KIND_AT, MaxInt), -1);
+  if (Result <= 0) or (Result > MAX_CODE_POINT) or ((Result >= SURROGATE_FIRST) and (Result <= SURROGATE_LAST)) then
+    Result:= -1;
+end;
+
 function EntityText(const pMatch: TMatch): string;
 begin
   var Name:= pMatch.Groups[1].Value;
@@ -209,13 +257,9 @@ begin
   if Name = 'gt' then Exit('>');
   if Name = 'quot' then Exit('"');
   if Name = 'apos' then Exit('''');
-  var Code: Integer;
-  if CharInSet(Name[ENT_KIND_AT], ['x', 'X']) then Code:= StrToIntDef(HEX_BASE + Copy(Name, ENT_HEX_FROM, MaxInt), -1)
-  else Code:= StrToIntDef(Copy(Name, ENT_KIND_AT, MaxInt), -1);
-  // a lone surrogate is not a character, and ConvertFromUtf32 raises on one: keep it as written
-  if (Code > 0) and (Code <= MAX_CODE_POINT) and ((Code < SURROGATE_FIRST) or (Code > SURROGATE_LAST)) then
-    Result:= Char.ConvertFromUtf32(Code)
-  else Result:= pMatch.Value;
+  var Code:= RefCodePoint(Name);
+  // not a character (a lone surrogate, say): keep it as written
+  Result:= if Code > 0 then Char.ConvertFromUtf32(Code) else pMatch.Value;
 end;
 
 { TRegEx.Replace takes a method pointer, not an anonymous method: this is the same loop with a closure. }
@@ -433,11 +477,31 @@ begin
   pLines.Add('result: ' + ResultText(pR));
 end;
 
+function SvgMarkup(const pPath: string; out pWhy: string): string; forward;
+function WithheldText(const pWhy: string): string; forward;
+
+{ The result's warnings, plus one withheld line (R26) for each chart SVG that SvgRefusal
+  refuses: the text and JSON outputs never inline an SVG, but they say when the page will not. }
+function OutputWarnings(const pR: TCompareResult): TArray<string>;
+begin
+  Result:= pR.Warnings;
+  if (pR.Format <> cfGraph) or not HasBody(pR) then
+    Exit;
+  var Paths: TArray<string>:= [pR.NewSvgPath, pR.OldSvgPath];
+  for var Path in Paths do
+  begin
+    var Why: string;
+    SvgMarkup(Path, Why);
+    if (Why <> '') and (IndexStr(WithheldText(Why), Result) < 0) then
+      Result:= Result + [WithheldText(Why)];
+  end;
+end;
+
 function RenderCompareText(const pR: TCompareResult): string;
 begin
   var Lines:= TList<string>.Create;
   try
-    for var W in pR.Warnings do
+    for var W in OutputWarnings(pR) do
       Lines.Add('WARNING: ' + W);
     if pR.ExitCode >= COMPARE_EXIT_SETUP then
       Lines.Add('ERROR: ' + pR.Message);
@@ -573,7 +637,7 @@ begin
     Root.AddPair('schema', SCHEMA_ID);
     Root.AddPair('exit_code', TJSONNumber.Create(pR.ExitCode));
     Root.AddPair('format', FormatName(pR.Format));
-    Root.AddPair('warnings', StringArray(pR.Warnings));
+    Root.AddPair('warnings', StringArray(OutputWarnings(pR)));
     Root.AddPair('old', OldObject(pR));
     Root.AddPair('new', NewObject(pR));
     Root.AddPair('counts', CountsObject(pR));
@@ -588,61 +652,247 @@ begin
   end;
 end;
 
-{ ---------- SVG (D7) ---------- }
+{ ---------- SVG (D7, R26) ---------- }
 
-{ Whether one attribute of an SVG tag could run script: an on* event handler, or a value that
-  is a javascript: URL once entities, blanks and control characters are taken out. }
-function IsActiveAttr(const pName, pValue: string): Boolean;
+type
+  { One attribute of a tag as the HTML tokenizer reads it: the name lowercased, the value raw. }
+  TSvgAttr = record
+    Name : string;
+    Value: string;
+  end;
+
+function IsTagSpace(pC: Char): Boolean;
 begin
-  if LowerCase(pName).StartsWith(HANDLER_PREFIX) then Exit(True);
-  var Plain:= LowerCase(TRegEx.Replace(DecodeXml(pValue), RE_BLANKS, ''));
-  Result:= Pos(SCRIPT_SCHEME, Plain) > 0;
+  Result:= CharInSet(pC, [#9, #10, #12, #13, ' ']);
 end;
 
-{ The SVG with nothing that could run: cut after the LAST '</svg>' (whatever follows is not the
-  chart), script and foreignObject elements removed, and every on* handler and javascript: URL
-  attribute removed from every tag. A graphviz SVG carries none of these, so it is unchanged. }
-function DefuseSvg(const pSvg: string): string;
+function IsAsciiLetter(pC: Char): Boolean;
 begin
-  Result:= pSvg;
-  var CloseAt:= 0;
-  var CloseLen:= 0;
-  for var M in TRegEx.Matches(Result, RE_SVG_CLOSE, [roIgnoreCase]) do
-  begin
-    CloseAt:= M.Index;
-    CloseLen:= M.Length;
-  end;
-  if CloseAt > 0 then
-    Result:= Copy(Result, 1, CloseAt + CloseLen - 1);
-  Result:= TRegEx.Replace(Result, RE_ACTIVE_ELEMENT, '', [roIgnoreCase, roSingleLine]);
-  Result:= TRegEx.Replace(Result, RE_ACTIVE_TAG, '', [roIgnoreCase]);
-  Result:= ReplaceMatches(Result, RE_QUOTED_TAG, [],
-    function(pTag: TMatch): string
+  Result:= CharInSet(pC, ['a'..'z', 'A'..'Z']);
+end;
+
+{ The character references of an attribute value decoded as a browser decodes them before it
+  reads a URL: numeric ones with or without ';' (an invalid code point becomes U+FFFD), and the
+  named ones a scheme can hide behind. }
+function DecodeScanEntities(const pText: string): string;
+begin
+  Result:= ReplaceMatches(pText, RE_SCAN_ENTITY, [roIgnoreCase],
+    function(pM: TMatch): string
     begin
-      Result:= ReplaceMatches(pTag.Value, RE_ATTR, [],
-        function(pAttr: TMatch): string
-        begin
-          var Value:= pAttr.Groups[2].Value;
-          if CharInSet(Value[1], ['"', '''']) then Value:= Copy(Value, 2, Length(Value) - 2);
-          Result:= if IsActiveAttr(pAttr.Groups[1].Value, Value) then '' else pAttr.Value;
-        end);
+      if pM.Value[REF_KIND_AT] <> NUMERIC_REF then
+        Exit(SCAN_ENTITY_CHARS[IndexStr(LowerCase(pM.Groups[G_SCAN_NAMED].Value), SCAN_ENTITY_NAMES) + 1]);
+      var Code:= RefCodePoint(pM.Groups[1].Value);
+      Result:= if Code > 0 then Char.ConvertFromUtf32(Code) else REPLACEMENT_CHAR;
     end);
 end;
 
-{ The SVG as page markup: read as UTF-8, everything before '<svg' (prolog, DOCTYPE,
-  generator comments) dropped, defused (DefuseSvg), and the xmlns attributes of the root
-  removed -- inline SVG in HTML needs none, and the page then holds no URL at all. '' when
-  there is no file. }
-function SvgMarkup(const pPath: string): string;
+{ Whether a URL attribute value is one a graphviz chart carries: a '#' fragment, or a draglint:
+  link once every character that is not an ASCII letter or ':' is taken out -- so blanks,
+  control characters and entities cannot spell another scheme past the check. }
+function IsAllowedUrl(const pValue: string): Boolean;
+begin
+  var Decoded:= DecodeScanEntities(pValue);
+  if TrimLeft(Decoded).StartsWith(FRAGMENT_MARK) then
+    Exit(True);
+  Result:= LowerCase(TRegEx.Replace(Decoded, RE_NOT_SCHEME_CHAR, '')).StartsWith(ALLOWED_SCHEME);
+end;
+
+{ Where a comment that opened just before pFrom ends (the index after its '>'), as the HTML
+  tokenizer ends it: '<!-->' and '<!--->' are empty, otherwise the first '-->' or '--!>' closes
+  it. 0 when it never ends. }
+function CommentEnd(const pText: string; pFrom: Integer): Integer;
+begin
+  if Copy(pText, pFrom, 1) = '>' then
+    Exit(pFrom + 1);
+  if Copy(pText, pFrom, Length(EMPTY_COMMENT_TAIL)) = EMPTY_COMMENT_TAIL then
+    Exit(pFrom + Length(EMPTY_COMMENT_TAIL));
+  var Dash:= Pos(COMMENT_CLOSE, pText, pFrom);
+  var Bang:= Pos(COMMENT_BANG_CLOSE, pText, pFrom);
+  if (Bang > 0) and ((Dash = 0) or (Bang < Dash)) then
+    Exit(Bang + Length(COMMENT_BANG_CLOSE));
+  Result:= if Dash > 0 then Dash + Length(COMMENT_CLOSE) else 0;
+end;
+
+{ The attributes of one tag, read from pAt (just after the tag name) by the HTML tokenizer's
+  attribute states: a quote only opens a value after '=', a value's closing quote may be
+  followed straight by the next name ('"1"onclick'), and '/' separates like a blank. pAt ends
+  just after the closing '>' (or past the end of the text). }
+function ReadTagAttrs(const pText: string; var pAt: Integer; out pSelfClosing: Boolean): TArray<TSvgAttr>;
+begin
+  Result:= [];
+  pSelfClosing:= False;
+  var Len:= Length(pText);
+  while pAt <= Len do
+  begin
+    var C:= pText[pAt];
+    if IsTagSpace(C) then
+    begin
+      Inc(pAt);
+      Continue;
+    end;
+    if C = '>' then
+    begin
+      Inc(pAt);
+      Exit;
+    end;
+    if C = '/' then
+    begin
+      Inc(pAt);
+      pSelfClosing:= (pAt <= Len) and (pText[pAt] = '>');
+      Continue;
+    end;
+    // a name runs to a blank, '/', '>' or '='; its first character is taken whatever it is
+    var NameFrom:= pAt;
+    Inc(pAt);
+    while (pAt <= Len) and not IsTagSpace(pText[pAt]) and not CharInSet(pText[pAt], ['/', '>', '=']) do
+      Inc(pAt);
+    var Attr: TSvgAttr;
+    Attr.Name:= LowerCase(Copy(pText, NameFrom, pAt - NameFrom));
+    Attr.Value:= '';
+    while (pAt <= Len) and IsTagSpace(pText[pAt]) do
+      Inc(pAt);
+    if (pAt <= Len) and (pText[pAt] = '=') then
+    begin
+      Inc(pAt);
+      while (pAt <= Len) and IsTagSpace(pText[pAt]) do
+        Inc(pAt);
+      if (pAt <= Len) and CharInSet(pText[pAt], ['"', '''']) then
+      begin
+        var CloseAt:= Pos(pText[pAt], pText, pAt + 1);
+        if CloseAt = 0 then
+          CloseAt:= Len + 1;
+        Attr.Value:= Copy(pText, pAt + 1, CloseAt - pAt - 1);
+        pAt:= CloseAt + 1;
+      end
+      else
+      begin
+        var ValueFrom:= pAt;
+        while (pAt <= Len) and not IsTagSpace(pText[pAt]) and (pText[pAt] <> '>') do
+          Inc(pAt);
+        Attr.Value:= Copy(pText, ValueFrom, pAt - ValueFrom);
+      end;
+    end;
+    Result:= Result + [Attr];
+  end;
+end;
+
+{ Why one start tag may not be inlined; '' when it may. }
+function TagRefusal(const pName: string; const pAttrs: TArray<TSvgAttr>): string;
+begin
+  if MatchStr(pName, DENIED_ELEMENTS) then
+    Exit(Format('a <%s> element', [pName]));
+  var Animates:= pName.StartsWith(ANIMATE_PREFIX) or (pName = SET_ELEMENT);
+  for var A in pAttrs do
+  begin
+    if A.Name.StartsWith(HANDLER_PREFIX) then
+      Exit(Format('an event handler attribute %s', [A.Name]));
+    if (MatchStr(A.Name, URL_ATTRS) or A.Name.EndsWith(HREF_SUFFIX)) and not IsAllowedUrl(A.Value) then
+      Exit(Format('a %s that is not a draglint: link or #anchor', [A.Name]));
+    if Animates and (A.Name = ANIMATED_ATTR) then
+    begin
+      var Target:= LowerCase(Trim(DecodeScanEntities(A.Value)));
+      if (Target = 'href') or Target.EndsWith(HREF_SUFFIX) or Target.StartsWith(HANDLER_PREFIX) then
+        Exit(Format('an animation of %s', [Target]));
+    end;
+  end;
+  Result:= '';
+end;
+
+{ Why an SVG may not be inlined into the page (R26); '' when it may. pSvg starts at its root
+  tag. It is read tag by tag as the HTML tokenizer reads it, so every tag the browser would see
+  is a tag checked here. Refused: a tag name that is not a plain name, a root that is not <svg>, a second <svg>, a denied element, a
+  start tag inside <title> or <desc>, an on* attribute, a URL attribute that is not draglint:
+  or #, an animation of href or of a handler, a '<!' or '<?' other than a comment, a malformed
+  end tag, a </br> or </p>, anything but blanks after the FIRST </svg>, and no </svg> at all. }
+function SvgRefusal(const pSvg: string): string; // dl:ok too-many-exit-points@ac92 -- REVIEWED 2026-10-11: each Exit is one R26 refusal rule returning its own reason, in the order the tokenizer meets it; folding them into a flag would hide which rule fired
+begin
+  var Len:= Length(pSvg);
+  var At:= 1;
+  var Roots:= 0;
+  var TextOnly:= ''; // the open <title> / <desc>, whose content must stay text
+  while True do
+  begin
+    var LtAt:= Pos('<', pSvg, At);
+    if (LtAt = 0) or (LtAt = Len) then
+      Exit('no closing </svg>');
+    At:= LtAt + 1;
+    if Copy(pSvg, At, Length(COMMENT_OPEN)) = COMMENT_OPEN then
+    begin
+      At:= CommentEnd(pSvg, At + Length(COMMENT_OPEN));
+      if At = 0 then
+        Exit('an unclosed comment');
+      Continue;
+    end;
+    if CharInSet(pSvg[At], ['!', '?']) then
+      Exit('a markup declaration');
+    var IsEnd:= pSvg[At] = '/';
+    if IsEnd then
+      Inc(At);
+    if (At > Len) or not IsAsciiLetter(pSvg[At]) then
+    begin
+      if IsEnd then
+        Exit('a malformed end tag');
+      Continue; // a '<' that opens no tag is text
+    end;
+    var NameFrom:= At;
+    while (At <= Len) and not IsTagSpace(pSvg[At]) and not CharInSet(pSvg[At], ['/', '>']) do
+      Inc(At);
+    var Name:= LowerCase(Copy(pSvg, NameFrom, At - NameFrom));
+    // the browser takes 'scr<script' as one inert name; a chart never writes one, so refuse it
+    if not TRegEx.IsMatch(Name, RE_TAG_NAME) then
+      Exit(Format('a malformed tag name <%s>', [Name]));
+    var SelfClosing: Boolean;
+    var Attrs:= ReadTagAttrs(pSvg, At, SelfClosing);
+    if (Roots = 0) and (IsEnd or (Name <> SVG_ROOT)) then
+      Exit('a root element that is not <svg>');
+    if IsEnd then
+    begin
+      if Name = SVG_ROOT then
+        Exit(if Trim(Copy(pSvg, At, MaxInt)) = '' then '' else 'content after </svg>');
+      if MatchStr(Name, BREAKOUT_END_TAGS) then
+        Exit(Format('a </%s> end tag', [Name]));
+      if Name = TextOnly then
+        TextOnly:= '';
+      Continue;
+    end;
+    if TextOnly <> '' then
+      Exit(Format('markup inside <%s>', [TextOnly]));
+    if Name = SVG_ROOT then
+    begin
+      Inc(Roots);
+      if Roots > 1 then
+        Exit('more than one <svg> root');
+    end;
+    var Why:= TagRefusal(Name, Attrs);
+    if Why <> '' then
+      Exit(Why);
+    if MatchStr(Name, TEXT_ONLY_ELEMENTS) and not SelfClosing then
+      TextOnly:= Name;
+  end;
+end;
+
+function WithheldText(const pWhy: string): string;
+begin
+  Result:= Format(WITHHELD_TEXT, [pWhy]);
+end;
+
+{ The SVG as page markup: read as UTF-8, everything before '<svg' (prolog, DOCTYPE, generator
+  comments) dropped, and the xmlns attributes of the root removed -- inline SVG in HTML needs
+  none, and the page then holds no URL at all. '' when there is no file or it cannot be read;
+  '' with pWhy set when SvgRefusal refuses it (R26): an unsafe SVG is withheld, never patched. }
+function SvgMarkup(const pPath: string; out pWhy: string): string;
 begin
   Result:= '';
+  pWhy:= '';
   if (pPath = '') or not TFile.Exists(pPath) then
     Exit;
   try
     var Text:= TFile.ReadAllText(pPath, TEncoding.UTF8);
     var Start:= Pos(SVG_OPEN, Text);
     if Start = 0 then Exit;
-    Text:= DefuseSvg(Copy(Text, Start, MaxInt));
+    Text:= Copy(Text, Start, MaxInt);
+    pWhy:= SvgRefusal(Text);
+    if pWhy <> '' then Exit;
     var TagEnd:= Pos('>', Text);
     if TagEnd = 0 then Exit;
     Result:= TRegEx.Replace(Copy(Text, 1, TagEnd), RE_XMLNS, '') + Copy(Text, TagEnd + 1, MaxInt);
@@ -831,6 +1081,13 @@ begin
     '<div class="chartbox">' + pSvg + '</div>' + CRLF + '</section>';
 end;
 
+{ The chart section of a refused SVG (R26): its heading and the withheld line, no image. }
+function WithheldChartHtml(const pHeading, pWhy: string): string;
+begin
+  Result:= '<section class="chart">' + CRLF + '<h2>' + HtmlEscape(pHeading) + '</h2>' + CRLF +
+    '<p class="warnings">' + HtmlEscape(WithheldText(pWhy)) + '</p>' + CRLF + '</section>';
+end;
+
 function OldChartHtml(const pSvg: string): string;
 begin
   Result:= '<details><summary>Before (removed shown faded)</summary>' + CRLF +
@@ -840,13 +1097,18 @@ end;
 function CompareChartsHtml(const pR: TCompareResult; const pDelta: TGraphDelta): string;
 begin
   Result:= '';
-  var NewSvg:= SvgMarkup(pR.NewSvgPath);
+  var Why: string;
+  var NewSvg:= SvgMarkup(pR.NewSvgPath, Why);
   if NewSvg <> '' then
-    Result:= Result + ChartHtml('After (added marked)',
-      MarkSvg(NewSvg, pR.NewGraph, pDelta.NodesAdded, pDelta.EdgesAdded, CLASS_ADDED)) + CRLF;
-  var OldSvg:= SvgMarkup(pR.OldSvgPath);
+    Result:= Result + ChartHtml(NEW_CHART_HEADING,
+      MarkSvg(NewSvg, pR.NewGraph, pDelta.NodesAdded, pDelta.EdgesAdded, CLASS_ADDED)) + CRLF
+  else if Why <> '' then
+    Result:= Result + WithheldChartHtml(NEW_CHART_HEADING, Why) + CRLF;
+  var OldSvg:= SvgMarkup(pR.OldSvgPath, Why);
   if OldSvg <> '' then
-    Result:= Result + OldChartHtml(MarkSvg(OldSvg, pR.OldGraph, pDelta.NodesRemoved, pDelta.EdgesRemoved, CLASS_REMOVED)) + CRLF;
+    Result:= Result + OldChartHtml(MarkSvg(OldSvg, pR.OldGraph, pDelta.NodesRemoved, pDelta.EdgesRemoved, CLASS_REMOVED)) + CRLF
+  else if Why <> '' then
+    Result:= Result + WithheldChartHtml(OLD_CHART_HEADING, Why) + CRLF;
 end;
 
 function CompareBodyHtml(const pR: TCompareResult): string;
@@ -989,8 +1251,12 @@ begin
     cfGraph:
       begin
         Head:= HTML_CHART_CSS;
-        var Svg:= SvgMarkup(pSvgPath);
-        Body:= (if Svg = '' then '' else ChartHtml('Chart', Svg) + CRLF) + GraphRowsHtml(pText);
+        var Why: string;
+        var Svg:= SvgMarkup(pSvgPath, Why);
+        if Svg <> '' then Body:= ChartHtml(SHOW_CHART_HEADING, Svg) + CRLF
+        else if Why <> '' then Body:= WithheldChartHtml(SHOW_CHART_HEADING, Why) + CRLF
+        else Body:= '';
+        Body:= Body + GraphRowsHtml(pText);
       end;
   else
     Body:= ReportPreHtml(pText);

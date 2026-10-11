@@ -50,6 +50,7 @@ type
     [Test] procedure UnchangedRemarksBlockIsExitZero;
     [Test] procedure AutoGraphSnapshotIsFoundNextTime;
     [Test] procedure EmptyChartIsRefusedNotSame;
+    [Test] procedure OldSvgCopyIsTheCallersPathEvenWhenTheRunRaises;
   end;
 
 implementation
@@ -464,6 +465,46 @@ begin
   Assert.AreEqual(ONE, Integer(Length(R.Warnings)), JoinWarnings(R.Warnings));
   Assert.IsTrue(R.Warnings[0].Contains('Depth: 3 vs (absent)'), R.Warnings[0]);
   Assert.IsFalse(R.NewHeader.Command.Has('Depth'), 'the GIVEN command was run');
+end;
+
+type
+  { A producer that raises: RunCompare has already copied the old SVG when it is called. }
+  TRaisingProducer = class(TInterfacedObject, IReportProducer)
+  public
+    function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
+    function Describe: string;
+  end;
+
+function TRaisingProducer.Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult; // dl:ok unused-parameter@f0f0 -- IReportProducer's signature; this stub only raises
+begin
+  raise EInvalidOpException.Create('producer raised on purpose');
+end;
+
+function TRaisingProducer.Describe: string;
+begin
+  Result:= 'raising test producer';
+end;
+
+procedure TCompareTests.OldSvgCopyIsTheCallersPathEvenWhenTheRunRaises;
+begin
+  // R26: the caller names the temp copy up front, so it can delete it on every path --
+  // including an exception raised after the copy was taken
+  var Bundle:= TPath.Combine(FTemp, 'bundle');
+  ForceDirectories(Bundle);
+  TFile.Copy(Fixture('graph', 'who-writes-a.dot'), TPath.Combine(Bundle, 'graph.dot'));
+  TFile.Copy(Fixture('graph', 'who-writes-a.svg'), TPath.Combine(Bundle, 'graph.svg'));
+  var Req:= Default(TCompareRequest);
+  Req.Source:= csFile;
+  Req.OldPath:= Bundle;
+  Req.Command:= Cmd(COMMAND_STUB);
+  Req.Producer:= TRaisingProducer.Create;
+  Req.OldSvgCopy:= TPath.Combine(FTemp, 'old-copy.svg');
+  Assert.WillRaise(
+    procedure
+    begin
+      RunCompare(Req);
+    end, EInvalidOpException);
+  Assert.IsTrue(TFile.Exists(Req.OldSvgCopy), 'the copy is at the path the caller gave');
 end;
 
 procedure TCompareTests.GraphRerunKeepsOldSvgAndSavesDot;

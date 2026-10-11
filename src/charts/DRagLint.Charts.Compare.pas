@@ -65,6 +65,11 @@ type
     Options     : TProduceOptions;
     /// <summary>The time stamped on snapshots and update-doc; 0 means the clock.</summary>
     Now         : TDateTime;
+    /// <summary>The temp file the old chart's SVG is copied to before a rerun; '' lets RunCompare
+    /// name one in the temp folder.</summary>
+    /// <remarks>Named by the caller so that it can delete the copy on every path, an exception
+    /// raised by RunCompare after the copy was taken included. Must not exist yet.</remarks>
+    OldSvgCopy  : string;
   end;
 
   /// <summary>Freshness facts of one index the new run read (C5).</summary>
@@ -142,7 +147,7 @@ type
 /// argument; the caller's wins); an auto snapshot's own COMMAND counts as the old one, the
 /// caller's command only locating the snapshot. The new run never passes AllowStale, whatever
 /// pRequest.Options says (only the S4 old side does). A graph's old DOT is read into memory
-/// and its SVG copied to a temp file before the rerun, because a rerun may overwrite the
+/// and its SVG copied to pRequest.OldSvgCopy (or a temp file) before the rerun, because a rerun may overwrite the
 /// bundle folder. --save with csTwoFiles is refused. A snapshot is saved with the extension
 /// its format is detected by (.txt, .csv, .dot). Snapshot and update-doc happen only on
 /// exit 0 or 1; a failed snapshot is a warning, a failed update-doc is exit 2 with the rest
@@ -359,10 +364,11 @@ begin
 end;
 
 { A rerun may rewrite the bundle folder the old chart came from, graph.svg included: the
-  old SVG is copied to a temp file first and OldSvgPath points at the copy. }
-function ProtectOldSvg(var pResult: TCompareResult): Boolean;
+  old SVG is copied to pCopy (or a temp file of its own when pCopy is '') first and OldSvgPath
+  points at the copy. }
+function ProtectOldSvg(const pCopy: string; var pResult: TCompareResult): Boolean;
 begin
-  var Copy_:= TPath.Combine(TPath.GetTempPath, 'drag-lint-compare-old-' + TGUID.NewGuid.ToString + SVG_EXT);
+  var Copy_:= if pCopy <> '' then pCopy else TPath.Combine(TPath.GetTempPath, 'drag-lint-compare-old-' + TGUID.NewGuid.ToString + SVG_EXT);
   try
     TFile.Copy(pResult.OldSvgPath, Copy_);
   except
@@ -512,7 +518,7 @@ begin
     Result:= ChartReadable(pResult.OldGraph, pResult.OldText, pResult.OldPath, pResult);
   end;
   if Result and (pResult.Format = cfGraph) and (pRequest.Source <> csTwoFiles) and (pResult.OldSvgPath <> '') then
-    Result:= ProtectOldSvg(pResult);
+    Result:= ProtectOldSvg(pRequest.OldSvgCopy, pResult);
 end;
 
 { Steps 3 and 4: choose the command (C2, C3), rerun it, refuse a stale index (C4), and

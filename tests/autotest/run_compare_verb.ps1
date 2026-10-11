@@ -19,8 +19,12 @@
     C-SHOW      --show report        -> HTML page
     C-CSV       two forms CSVs       -> exit 1
     C-GRAPH     two bundle folders   -> exit 1, graph counts in the JSON
-    C-HOSTILE   graph.svg with script / on* / javascript: / markup after </svg>
-                                     -> compare and --show pages carry none of it, plus a CSP meta
+    C-HOSTILE   graph.svg with script / on* / javascript: / markup after </svg>, and the R26
+                bypasses (<scr<script>ipt>, "onclick=, javascript&colon;, <meta refresh>)
+                                     -> the SVG is WITHHELD (not inlined) on the compare and
+                                        --show pages, a withheld line instead, CSP meta kept;
+                                        the text output carries the same WARNING
+    C-SAFE      the real graphviz graph.svg -> still inlined, nothing withheld
     C-ENTITY    &#xD800; in a DOT TITLE and in the SVG -> exit 0/1 (never the stale code 3)
     C-QUOTED    quoted DOT ids ("A" -> "B") -> read, so two different charts are exit 1
     C-EMPTY     a non-blank DOT that parses to nothing -> exit 2 'parsed as empty', not 'same'
@@ -169,6 +173,7 @@ try {
   Copy-Item (Join-Path $Fix 'graph\hostile.svg') (Join-Path $ha 'graph.svg')
   Copy-Item (Join-Path $Fix 'graph\who-writes-b.dot') (Join-Path $hb 'graph.dot')
   Copy-Item (Join-Path $Fix 'graph\hostile.svg') (Join-Path $hb 'graph.svg')
+  $withheld = 'chart image withheld: the SVG contains content that is not allowed ('
   $csp = '<meta http-equiv="Content-Security-Policy" content="default-src ''none''; style-src ''unsafe-inline''; img-src data:">'
   $hpage = Join-Path $Work 'hostile.html'
   $r = Invoke-Compare @('compare','--old',$ha,'--new',$hb,'--format','html','--output',$hpage)
@@ -179,7 +184,43 @@ try {
     Check "C-HOSTILE $($pg[0]) page written" ($pg[1].Code -le 1 -and $h -ne '') "exit=$($pg[1].Code) err=$($pg[1].Err)"
     Check "C-HOSTILE $($pg[0]) no script / handler / javascript: / payload" ($h -ne '' -and $h -notmatch '(?i)<script|<foreignobject|javascript:|alert\(|\son\w+\s*=') ([regex]::Match($h, '(?i).{0,60}(<script|javascript:|alert\(|\son\w+\s*=).{0,60}').Value)
     Check "C-HOSTILE $($pg[0]) CSP meta" ($h.Contains($csp))
+    Check "C-HOSTILE $($pg[0]) svg withheld" ($h -notmatch '(?i)<svg' -and $h.Contains($withheld)) ([regex]::Match($h, '(?i).{0,60}<svg.{0,60}').Value)
   }
+  # R26: the reviewer's bypasses of the old strip-based defusing, each against the built exe
+  $svgHead = '<svg width="10pt" height="10pt" xmlns="http://www.w3.org/2000/svg"><g id="graph0" class="graph"><text>KEEP-NODE</text>'
+  $bypasses = [ordered]@{
+    'split-script' = '<scr<script>ipt>alert(11)</scr<script>ipt>'
+    'quote-onclick' = '<text x="1"onclick="alert(12)">X</text>'
+    'colon-entity' = '<a href="javascript&colon;alert(14)"><text>L</text></a>'
+    'meta-refresh' = '<meta http-equiv="refresh" content="0;url=https://example.invalid/">'
+  }
+  # the old side has no svg, so any <svg on the compare page would be the refused one
+  $plain = Join-Path $Work 'plain'
+  New-Item -ItemType Directory -Force -Path $plain | Out-Null
+  Copy-Item (Join-Path $Fix 'graph\who-writes-a.dot') (Join-Path $plain 'graph.dot')
+  foreach ($name in $bypasses.Keys) {
+    $bd = Join-Path $Work "byp-$name"
+    New-Item -ItemType Directory -Force -Path $bd | Out-Null
+    Copy-Item (Join-Path $Fix 'graph\who-writes-b.dot') (Join-Path $bd 'graph.dot')
+    [IO.File]::WriteAllText((Join-Path $bd 'graph.svg'), ($svgHead + $bypasses[$name] + '</g></svg>'), [Text.Encoding]::ASCII)
+    $bp = Join-Path $Work "byp-$name.html"
+    $bs = Join-Path $Work "byp-$name-show.html"
+    $rb = Invoke-Compare @('compare','--old',$plain,'--new',$bd,'--format','html','--output',$bp)
+    $rs = Invoke-Compare @('compare','--show',$bd,'--output',$bs)
+    foreach ($pg in @(@('compare', $rb, $bp), @('show', $rs, $bs))) {
+      $h = $(if (Test-Path $pg[2]) { [IO.File]::ReadAllText($pg[2]) } else { '' })
+      $snip = [regex]::Match($h, '(?i).{0,40}(<svg|alert\(|example\.invalid).{0,40}').Value
+      Check "C-HOSTILE $name $($pg[0]) withheld, no payload, CSP" ($pg[1].Code -le 1 -and $h -ne '' -and $h -notmatch '(?i)<svg|alert\(|example\.invalid' -and $h.Contains($withheld) -and $h.Contains($csp)) ("exit={0} err={1} hit={2}" -f $pg[1].Code, $pg[1].Err, $snip)
+    }
+    $rt = Invoke-Compare @('compare','--old',$plain,'--new',$bd)
+    Check "C-HOSTILE $name text WARNING" ($rt.Code -le 1 -and $rt.Out -match ('(?m)^WARNING: ' + [regex]::Escape($withheld))) "exit=$($rt.Code) out=$($rt.Out)"
+  }
+
+  # C-SAFE: the real graphviz SVG is still inlined, nothing withheld
+  $safe = Join-Path $Work 'safe.html'
+  $r = Invoke-Compare @('compare','--old',$gb,'--new',$ga,'--format','html','--output',$safe)
+  $h = $(if (Test-Path $safe) { [IO.File]::ReadAllText($safe) } else { '' })
+  Check 'C-SAFE graphviz svg inlined and marked' ($r.Code -eq 1 -and $h -match '<svg' -and $h -match 'dl-added' -and -not $h.Contains('withheld')) "exit=$($r.Code) err=$($r.Err)"
 
   # C-ENTITY: a lone surrogate entity is not a character; it must not kill the verb with exit 3
   $ea = Join-Path $Work 'ea'

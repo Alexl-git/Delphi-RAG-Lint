@@ -30353,6 +30353,7 @@ const
     '--show <report|csv|bundle> | --question <id> --target <T> --project <P.dproj> --save [--auto]  (drag-lint --help lists every flag)';
   COMPARE_HTML_DIR = 'drag-lint-reports';
   COMPARE_TEMP_SVG_PREFIX = 'drag-lint-compare-old-';
+  COMPARE_SVG_EXT = '.svg';
   COMPARE_STAMP = 'yyyymmdd-hhnn';
 
 function CompareReadText(const APath: string): string;
@@ -30435,10 +30436,11 @@ begin
   if AArgs.Open then OpenInBrowser(APath);
 end;
 
-{ Only the temp copy Compare itself made for the old chart (name + folder both checked) is deleted. }
-procedure CompareDropTempSvg(const AResult: TCompareResult);
+{ Only the temp copy named for the old chart (name + folder both checked) is deleted; a path
+  that was never written is not there to delete. }
+procedure CompareDropTempSvg(const ASvg: string);
 begin
-  var Svg:= AResult.OldSvgPath;
+  var Svg:= ASvg;
   if (Svg <> '') and StartsText(COMPARE_TEMP_SVG_PREFIX, ExtractFileName(Svg)) and
      SameText(ExcludeTrailingPathDelimiter(ExtractFilePath(Svg)), ExcludeTrailingPathDelimiter(TPath.GetTempPath)) then
     DeleteFile(Svg); // a temp file that cannot be deleted is the OS's to reap
@@ -30625,59 +30627,74 @@ end;
 /// <returns>0 same, 1 differences, 2 usage or setup error, 3 stale index (also 2 for a bad usage,
 /// and 2 for any exception raised inside the verb: ERROR: &lt;class&gt;: &lt;message&gt;).</returns>
 /// <remarks>Output: text or JSON to stdout (or --output), HTML always to a file whose path is printed.
-/// The new run never accepts a stale index. Not thread-safe (it may rewrite a unit for --update-doc).</remarks>
+/// The new run never accepts a stale index. The old chart's temp SVG copy is deleted on every path,
+/// and an exception while reporting an exception still ends in one ERROR line and exit 2.
+/// Not thread-safe (it may rewrite a unit for --update-doc).</remarks>
 function DoCompare(const AArgs: TArgs): Integer;
 begin
   var Fmt:= if AArgs.Format = '' then 'text' else LowerCase(AArgs.Format);
   if AArgs.Open and (AArgs.Format = '') then Fmt:= 'html';
   if not MatchStr(Fmt, ['text', 'json', 'html']) then
     Exit(CompareRefuse(AArgs, 'text', COMPARE_EXIT_SETUP, '--format must be text, json or html', True));
+  // R26: the old chart's temp copy is named here, so it is deleted on every path below --
+  // an exception raised inside RunCompare after the copy was taken included.
+  var Req:= Default(TCompareRequest);
+  Req.OldSvgCopy:= TPath.Combine(TPath.GetTempPath, COMPARE_TEMP_SVG_PREFIX + TGUID.NewGuid.ToString + COMPARE_SVG_EXT);
   // C6 keeps exit 3 for a stale index: an exception escaping to Run would print FATAL and exit 3,
   // so anything unexpected inside the verb is a setup refusal (exit 2) with the same envelope.
   try
-    if AArgs.CompareShow <> '' then Exit(CompareShowPage(AArgs, Fmt));
-
-    var Err: string;
-    var Req:= Default(TCompareRequest);
-    Err:= CompareUsageProblem(AArgs, Req.Command);
-    if Err <> '' then Exit(CompareRefuse(AArgs, Fmt, COMPARE_EXIT_SETUP, Err, True));
-    Req.ProjectFile:= AArgs.ProjectPath;
-    Req.SnapshotDir:= AArgs.SnapshotDir;
-    Req.SaveSnapshot:= AArgs.CompareSave;
-    Req.UpdateDoc:= AArgs.UpdateDoc;
-    Req.Options:= CompareProduceOptions(AArgs);
-    if CompareIsSnapshotOnly(AArgs, Req.Command) then Exit(CompareTakeSnapshot(AArgs, Req.Command, Req.Options, Fmt));
-    if not CompareChooseSource(AArgs, Req.Source, Err) then Exit(CompareRefuse(AArgs, Fmt, COMPARE_EXIT_SETUP, Err, True));
-    case Req.Source of
-      csRemarks:
-        begin
-          Req.OldPath:= AArgs.InFile;
-          Req.OldLine:= AArgs.RefLine;
-        end;
-      csOldIndex: Req.OldDb:= AArgs.CompareOldDb;
-      csTwoFiles:
-        begin
-          Req.OldPath:= AArgs.CompareOld;
-          Req.NewPath:= AArgs.CompareNew;
-        end;
-      csFile: Req.OldPath:= AArgs.CompareOld;
-    end;
-    if Req.Source <> csTwoFiles then Req.Producer:= TPowerShellProducer.Create;
-
-    var Res:= RunCompare(Req);
     try
-      Result:= CompareEmit(AArgs, Req, Res, Fmt);
-    finally
-      CompareDropTempSvg(Res);
+      if AArgs.CompareShow <> '' then Exit(CompareShowPage(AArgs, Fmt));
+
+      var Err: string;
+      Err:= CompareUsageProblem(AArgs, Req.Command);
+      if Err <> '' then Exit(CompareRefuse(AArgs, Fmt, COMPARE_EXIT_SETUP, Err, True));
+      Req.ProjectFile:= AArgs.ProjectPath;
+      Req.SnapshotDir:= AArgs.SnapshotDir;
+      Req.SaveSnapshot:= AArgs.CompareSave;
+      Req.UpdateDoc:= AArgs.UpdateDoc;
+      Req.Options:= CompareProduceOptions(AArgs);
+      if CompareIsSnapshotOnly(AArgs, Req.Command) then Exit(CompareTakeSnapshot(AArgs, Req.Command, Req.Options, Fmt));
+      if not CompareChooseSource(AArgs, Req.Source, Err) then Exit(CompareRefuse(AArgs, Fmt, COMPARE_EXIT_SETUP, Err, True));
+      case Req.Source of
+        csRemarks:
+          begin
+            Req.OldPath:= AArgs.InFile;
+            Req.OldLine:= AArgs.RefLine;
+          end;
+        csOldIndex: Req.OldDb:= AArgs.CompareOldDb;
+        csTwoFiles:
+          begin
+            Req.OldPath:= AArgs.CompareOld;
+            Req.NewPath:= AArgs.CompareNew;
+          end;
+        csFile: Req.OldPath:= AArgs.CompareOld;
+      end;
+      if Req.Source <> csTwoFiles then Req.Producer:= TPowerShellProducer.Create;
+
+      Result:= CompareEmit(AArgs, Req, RunCompare(Req), Fmt);
+    except
+      on E: Exception do
+      begin
+        // the envelope goes to stdout: the exception may have come from writing --output itself
+        var ToStdout:= AArgs;
+        ToStdout.Output:= '';
+        Result:= COMPARE_EXIT_SETUP;
+        try
+          Result:= CompareRefuse(ToStdout, Fmt, COMPARE_EXIT_SETUP, E.ClassName + ': ' + E.Message, False);
+        except
+          on Exception do
+          try
+            // the envelope itself failed: one plain stderr line, still exit 2, never FATAL
+            Writeln(ErrOutput, 'ERROR: ' + E.ClassName + ': ' + E.Message);
+          except
+            on Exception do Result:= COMPARE_EXIT_SETUP; // stderr is gone too: the exit code is all that is left
+          end;
+        end;
+      end;
     end;
-  except
-    on E: Exception do
-    begin
-      // the envelope goes to stdout: the exception may have come from writing --output itself
-      var ToStdout:= AArgs;
-      ToStdout.Output:= '';
-      Result:= CompareRefuse(ToStdout, Fmt, COMPARE_EXIT_SETUP, E.ClassName + ': ' + E.Message, False);
-    end;
+  finally
+    CompareDropTempSvg(Req.OldSvgCopy);
   end;
 end;
 

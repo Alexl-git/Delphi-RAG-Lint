@@ -28,7 +28,18 @@ type
     [Test] procedure HtmlFadesRemovedNodeInOldSvg;
     [Test] procedure HtmlEscapesReportText;
     [Test] procedure ShowAsPageRendersPlainReport;
-    [Test] procedure HostileSvgIsDefusedOnBothPages;
+    [Test] procedure HostileSvgIsWithheldOnBothPages;
+    [TestCase('ScriptRebuiltFromSplitTag', '0')]
+    [TestCase('ForeignObjectRebuiltFromSplitTag', '1')]
+    [TestCase('HandlerRightAfterQuote', '2')]
+    [TestCase('HandlerAfterSlash', '3')]
+    [TestCase('JavascriptColonEntity', '4')]
+    [TestCase('JavascriptNumericEntityNoSemicolon', '5')]
+    [TestCase('JavascriptTabEntity', '6')]
+    [TestCase('MetaRefresh', '7')]
+    [TestCase('TrailerAfterFirstSvgClose', '8')]
+    procedure UnsafeSvgIsWithheld(pCase: Integer);
+    [Test] procedure RealGraphvizSvgIsInlinedAndMarked;
   end;
 
 implementation
@@ -67,6 +78,22 @@ const
   KEEP_TEXT = 'KEEP-NODE';
   RE_HANDLER_ATTR = '\son\w+\s*=';
   PAYLOAD_REACH = 80;
+  WITHHELD = 'chart image withheld: the SVG contains content that is not allowed (';
+  UNSAFE_SVG_HEAD = '<svg width="10pt" height="10pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">' + CRLF +
+    '<g id="graph0" class="graph"><text>' + 'KEEP-NODE' + '</text>' + CRLF;
+  UNSAFE_SVG_TAIL = CRLF + '</g>' + CRLF + '</svg>' + CRLF;
+  // the reviewer's bypasses of the old strip-based DefuseSvg, one per TestCase index
+  UNSAFE_PAYLOADS: array[0..8] of string = (
+    '<scr<script>ipt>alert(11)</scr<script>ipt>',
+    '<foreign<foreignObject>Object><div>alert(16)</div></foreign<foreignObject>Object>',
+    '<text x="1"onclick="alert(12)">X</text>',
+    '<rect/onmouseover="alert(13)"/>',
+    '<a xlink:href="javascript&colon;alert(14)"><text>L</text></a>',
+    '<a href="javascript&#58alert(15)"><text>L</text></a>',
+    '<a href="jav&Tab;ascript:alert(17)"><text>L</text></a>',
+    '<meta http-equiv="refresh" content="0;url=https://example.invalid/">',
+    '</g></svg>PHISH-TRAILER<g>');
+  TRAILER_TEXT = 'phish-trailer';
   CSP_META = '<meta http-equiv="Content-Security-Policy" content="default-src ''none''; style-src ''unsafe-inline''; img-src data:">';
 
 { The fixture folder: $DRAGLINT_REPO_ROOT, else the first ancestor of the current
@@ -392,10 +419,10 @@ begin
   Assert.IsTrue(Pos('<td>1,5</td>', C) > 0, 'quoted comma stays one cell');
 end;
 
-procedure TRenderTests.HostileSvgIsDefusedOnBothPages;
+procedure TRenderTests.HostileSvgIsWithheldOnBothPages;
 begin
   // hostile.svg: script elements, on* handlers, javascript: links, a foreignObject, markup
-  // after </svg>, and surrogate entities (&#xD800;) in the titles MarkSvg decodes.
+  // after </svg>, and surrogate entities (&#xD800;) in the titles: refused, never inlined.
   var R:= GraphResult('who-writes-a.dot', 'who-writes-b.dot', HOSTILE_SVG, True);
   var Pages: TArray<string>:= [RenderCompareHtml(R),
     RenderReportHtml('A chart', TFile.ReadAllText(GraphFixture('who-writes-a.dot')), cfGraph, GraphFixture(HOSTILE_SVG))];
@@ -403,7 +430,9 @@ begin
   begin
     var L:= LowerCase(H);
     Assert.IsTrue(Pos(CSP_META, H) > 0, 'CSP meta in the head');
-    Assert.IsTrue(Pos(KEEP_TEXT, H) > 0, 'the chart itself is kept');
+    Assert.AreEqual(0, Pos('<svg', L), 'the hostile SVG is not inlined');
+    Assert.IsTrue(Pos(WITHHELD, H) > 0, 'the withheld warning is shown');
+    Assert.AreEqual(0, Pos(KEEP_TEXT, H), 'nothing of the refused SVG reaches the page');
     Assert.AreEqual(0, Pos('<script', L), 'no script element');
     Assert.AreEqual(0, Pos('<foreignobject', L), 'no foreignObject');
     Assert.AreEqual(0, Pos('javascript:', L), 'no javascript: URL');
@@ -412,6 +441,47 @@ begin
     Assert.IsFalse(Handler.Success, 'no on* handler attribute: ' + Handler.Value);
     Assert.AreEqual(0, Pos('<img', L), 'nothing after </svg>');
   end;
+end;
+
+procedure TRenderTests.UnsafeSvgIsWithheld(pCase: Integer);
+begin
+  var SvgPath:= TPath.Combine(TPath.GetTempPath, 'drag-lint-render-test-' + TGUID.NewGuid.ToString + '.svg');
+  TFile.WriteAllText(SvgPath, UNSAFE_SVG_HEAD + UNSAFE_PAYLOADS[pCase] + UNSAFE_SVG_TAIL, TEncoding.UTF8);
+  try
+    var R:= GraphResult('who-writes-b.dot', 'who-writes-a.dot', 'who-writes-a.svg', True);
+    R.NewSvgPath:= SvgPath;
+    var Pages: TArray<string>:= [RenderCompareHtml(R),
+      RenderReportHtml('A chart', TFile.ReadAllText(GraphFixture('who-writes-a.dot')), cfGraph, SvgPath)];
+    for var H in Pages do
+    begin
+      var L:= LowerCase(H);
+      Assert.AreEqual(0, Pos('<svg', L), 'the unsafe SVG is inlined: ' + UNSAFE_PAYLOADS[pCase]);
+      Assert.IsTrue(Pos(WITHHELD, H) > 0, 'the withheld warning is shown');
+      Assert.IsTrue(Pos(CSP_META, H) > 0, 'CSP meta in the head');
+      Assert.AreEqual(0, Pos('alert(', L), 'no payload survives');
+      Assert.AreEqual(0, Pos(TRAILER_TEXT, L), 'no trailer survives');
+    end;
+    Assert.IsTrue(Pos('Nodes added (1)', Pages[0]) > 0, 'the text lists of changes stay on the compare page');
+    Assert.IsTrue(Pos('WARNING: ' + WITHHELD, RenderCompareText(R)) > 0, 'text output carries the warning');
+    Assert.IsTrue(Pos(WITHHELD, RenderCompareJson(R)) > 0, 'JSON warnings carry the warning');
+  finally
+    DeleteFile(SvgPath);
+  end;
+end;
+
+procedure TRenderTests.RealGraphvizSvgIsInlinedAndMarked;
+begin
+  // no regression: the real graphviz output is safe, so it is inlined and marked (D7) as before
+  var R:= GraphResult('who-writes-b.dot', 'who-writes-a.dot', 'who-writes-a.svg', True);
+  var H:= RenderCompareHtml(R);
+  Assert.IsTrue(Pos('<svg', H) > 0, 'the chart is inlined');
+  Assert.AreEqual(0, Pos('withheld', H), 'a graphviz SVG is not withheld');
+  Assert.IsTrue(Pos(CLASS_ADDED, H) > 0, 'the added node is marked');
+  Assert.IsTrue(Pos(EDGE_ADDED, H) > 0, 'the added edge is marked');
+  Assert.AreEqual(0, Pos('withheld', RenderCompareText(R)), 'no warning in the text output');
+  var G:= RenderReportHtml('A chart', TFile.ReadAllText(GraphFixture('who-writes-a.dot')), cfGraph, GraphFixture('who-writes-a.svg'));
+  Assert.IsTrue(Pos('<svg', G) > 0, 'the show page inlines the chart');
+  Assert.AreEqual(0, Pos('withheld', G), 'the show page does not withhold it');
 end;
 
 initialization

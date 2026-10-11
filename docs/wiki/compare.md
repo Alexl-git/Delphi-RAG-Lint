@@ -113,9 +113,8 @@ unexpected error inside the verb is reported as `ERROR: <class>: <message>` with
 * **json** -- one line, schema `compare/1`. Every key is always present.
 * **html** -- a self-contained page (no script, no external resource) that follows the
   light or dark setting of the browser. Its `Content-Security-Policy` meta allows inline
-  styles and `data:` images only. A chart's `graph.svg` is cut after its last `</svg>`,
-  and `<script>`, `<foreignObject>`, every `on*` attribute and every `javascript:` URL
-  are removed before it is inlined (the same for `--show`). A chart is shown with the added nodes and
+  styles and `data:` images only. A chart's `graph.svg` is inlined only when it passes a
+  safety check (the same for `--show`); otherwise it is withheld -- see Known limits. A chart is shown with the added nodes and
   edges marked, and the old chart in a collapsed section with the removed ones faded.
   Written to `--output`, else
   `%TEMP%\drag-lint-reports\compare-<question>-<target>-<yyyymmdd-hhmm>.html`; the path
@@ -149,6 +148,14 @@ question and target, newest 20, and are a local convenience, not a record.
 * A chart DOT is read in the emitters' dialect (one node statement per box with an HTML
   label; bare or double-quoted ids). A non-blank DOT that yields no node and no edge is
   refused (exit 2, "parsed as empty") rather than compared as "no differences".
+* Security: a `graph.svg` is untrusted (it may come from a committed snapshot), so it is
+  inlined only when nothing in it can run script, navigate, restyle the page or leave SVG
+  parsing -- graphviz output always passes. Anything else (`<script>`, `<foreignObject>`,
+  `<meta>`, `<style>`, an `on*` attribute, a link that is not `draglint:` or `#`,
+  content after the first `</svg>`, ...) WITHHOLDS the image: the page shows
+  `chart image withheld: the SVG contains content that is not allowed (<reason>)` and the
+  lists of changes, and text / JSON output carry the same line as a warning. Nothing is
+  stripped and then inlined.
 
 ## Determinism (N5) status
 
