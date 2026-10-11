@@ -423,14 +423,19 @@ Check 'C5 POSITIVE CONTROL: uses FMX.StdCtrls -- WordWrap IS the FMX TLabel''s' 
 $x = Row $c 'Label1' 'Layout'
 Check 'C6 ... and Layout, which the FMX TLabel lacks, is member-not-found there' `
   (($null -ne $x) -and ($x.resolution -eq 'member-not-found') -and ($x.declaring_unit -eq '')) (Show $x)
+# OWNER RULING 2026-10-11: a bare #convert From the unit's scope cannot settle
+# (and no framework / .dfm evidence infers) is REFUSED -- the block was never
+# to be validated or converted against a guessed class, so no pas_uses[] row is
+# produced for it; the refusal names both candidates and carries
+# qualify_fixes[] (run_convert_link_class_scope.ps1 pins its exact shape).
 $c = CRun 'CNone' 'c.rules'
-$x = Row $c 'Label1' 'WordWrap'
-Check 'C7 GENUINELY AMBIGUOUS (no uses entry declares TLabel, the book is bare): resolution ambiguous, both candidates, nothing picked' `
-  (($null -ne $x) -and ($x.resolution -eq 'ambiguous') -and ((@($x.candidates) | Sort-Object) -join ',') -eq 'FMX.StdCtrls,Vcl.StdCtrls' -and
-   ($x.kind -eq '') -and ($x.declaring_unit -eq '') -and ($x.declared_in -eq '')) (Show $x)
+Check 'C7 (owner ruling 2026-10-11) GENUINELY AMBIGUOUS (no uses entry declares TLabel, the book is bare): the unit is REFUSED with both candidates, pas_uses [] -- nothing picked' `
+  (($null -ne $c.J) -and ($c.J.refused -eq $true) -and (@($c.J.pas_uses).Count -eq 0) -and
+   ((@($c.J.qualify_fixes[0].suggestions | ForEach-Object { $_.candidate }) -join ',') -eq 'FMX.StdCtrls.TLabel,Vcl.StdCtrls.TLabel')) $c.Out
 $t = (& $Exe convert-apply --unit (P 'capp\CNone.pas') --rules (P 'c.rules') --db (P 'capp.sqlite') --db (P 'clib.sqlite') 2>$null) -join "`n"
-Check 'C8 text: the work-list line names the ambiguity instead of an empty declarer' `
-  ($t -match '(?m)^  unmapped Label1\.WordWrap \(declaring class ambiguous: FMX\.StdCtrls, Vcl\.StdCtrls\) -- line 21\s*$') $t
+Check 'C8 (owner ruling 2026-10-11) text: the REFUSED line names the ambiguity and the qualified lines are printed ready to paste' `
+  (($t -match '(?m)^REFUSED: #convert TLabel -> TStaticText \(line 1\): the bare name TLabel is ambiguous') -and
+   ($t -match '(?m)^    #convert Vcl\.StdCtrls\.TLabel -> TStaticText    \{')) $t
 $c = CRun 'CNone' 'cq.rules'
 Check 'C9 the BOOK''s own qualification (#convert Vcl.StdCtrls.TLabel) settles what the unit''s scope cannot' `
   (IsVcl (Row $c 'Label1' 'Layout') 'property') (Show (Row $c 'Label1' 'Layout'))

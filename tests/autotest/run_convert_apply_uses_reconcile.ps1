@@ -705,13 +705,24 @@ Check 'O1 --only Old1: the C13 N4 skipped row, byte-identical to 1.26.6' `
 Check 'O1 ... and its unit-rule-skipped warning text unchanged' `
   (@($r.J.warnings | Where-Object { $_ -eq 'line 3: warning: #unuse LibOld skipped -- it would leave 1 unconverted instance(s) of TOld left out by --only; LibOld kept in uses' }).Count -eq 1) ($r.J.warnings -join ' | ')
 
+# OWNER RULING 2026-10-11 (supersedes R8a for a #convert To type): a bare To
+# type two units declare that NOTHING settles -- no #use, no #convert trailing
+# unit, no applicable #useswap, no uses entry, no framework / .dfm inference --
+# is REFUSED, never converted against a guessed class; the refusal carries
+# apply/1 qualify_fixes[] with one ready-to-paste line per candidate and the
+# '#use <Unit>' alternative. (Until then the unit converted, validated against
+# the first TTie, and the tie was only reported in uses_unresolved[].)
 $r = J 'TieForm.pas' 'tie.rules'
-$un = @($r.J.uses_unresolved)
-Check 'A3 (R8a) the To type TTie is declared in two units: none added, reported ambiguous with both' `
-  (($un.Count -eq 1) -and ($un[0].name -eq 'TTie') -and ($un[0].reason -eq 'ambiguous') -and ((@($un[0].candidates | ForEach-Object { $_.unit }) | Sort-Object) -join ',') -eq 'LibTieA,LibTieB' -and
-   ((Kinds $r) -contains 'uses-unit-ambiguous') -and -not ((Text 'TieForm.pas') -match 'LibTie')) $r.Out
-Check 'A8-2 ... the uses_unresolved row carries the line of the retyped field (10), not 0' `
-  (($un.Count -eq 1) -and ($un[0].line -eq 10) -and ($un[0].section -eq 'interface')) ($un | ConvertTo-Json -Depth 5)
+$qf = @($r.J.qualify_fixes)
+Check 'A3 (owner ruling 2026-10-11) the To type TTie is declared in two units and nothing settles it: the unit is REFUSED with both candidates, nothing written' `
+  (($r.J.refused -eq $true) -and ($r.J.reason -match 'the bare name TTie is ambiguous.*LibTieA\.TTie \(not in the unit''s uses\), LibTieB\.TTie \(not in the unit''s uses\)') -and
+   ($qf.Count -eq 1) -and ($qf[0].side -eq 'to') -and ($qf[0].outcome -eq 'refused') -and
+   ((@($qf[0].suggestions | ForEach-Object { $_.candidate }) -join ',') -eq 'LibTieA.TTie,LibTieB.TTie') -and
+   ((@($qf[0].suggestions | ForEach-Object { $_.alternative }) -join ',') -eq '#use LibTieA,#use LibTieB') -and
+   -not ((Text 'TieForm.pas') -match 'LibTie')) $r.Out
+Check 'A8-2 (owner ruling 2026-10-11) ... the fix names the #convert line (1) and its text, and each suggestion is that line qualified' `
+  (($qf.Count -eq 1) -and ($qf[0].rule_line -eq 1) -and ($qf[0].current -eq '#convert TOld -> TTie') -and
+   ($qf[0].suggestions[0].replacement -eq '#convert TOld -> LibTieA.TTie') -and ($qf[0].suggestions[1].replacement -eq '#convert TOld -> LibTieB.TTie')) ($qf | ConvertTo-Json -Depth 5)
 
 # ---- A8-1 / A8-4: a #use resolves the To-type tie, in the INTERFACE ----------
 $r = J 'TieUForm.pas' 'tieu.rules'
@@ -760,8 +771,10 @@ Check 'F2 ... + #use LibTieA: the tie goes to LibTieA (interface), LibTieB REMOV
   (-not ((Kinds $r) -contains 'uses-unit-ambiguous') -and (@(Rows $r 'remove' | Where-Object { $_.unit -eq 'LibTieB' }).Count -eq 1) -and
    (@(Rows $r 'add' | Where-Object { $_.unit -eq 'LibTieA' -and $_.section -eq 'interface' }).Count -eq 1)) $r.Out
 $r = J 'TieSForm.pas' 'ties.rules'
-Check 'F-minor #useswap LibAmbA -> LibTieA on a unit without LibAmbA settles nothing: the tie is reported, LibTieA not added' `
-  (((Kinds $r) -contains 'uses-unit-ambiguous') -and (@(Rows $r 'add' | Where-Object { $_.unit -eq 'LibTieA' }).Count -eq 0)) $r.Out
+# owner ruling 2026-10-11: the unsettled tie is now REFUSED (see A3), not reported
+Check 'F-minor #useswap LibAmbA -> LibTieA on a unit without LibAmbA settles nothing: the unit is REFUSED on the tie, LibTieA not added' `
+  (($r.J.refused -eq $true) -and (@($r.J.qualify_fixes | Where-Object { $_.name -eq 'TTie' -and $_.outcome -eq 'refused' }).Count -eq 1) -and
+   (@(Rows $r 'add' | Where-Object { $_.unit -eq 'LibTieA' }).Count -eq 0) -and -not ((Text 'TieSForm.pas') -match 'LibTie')) $r.Out
 $r = J 'Solo2Form.pas' 'solo2.rules'
 Check 'F3 swapped names / order (LibANest2 nested, LibZSolo2 unit level): no ambiguity, the unit added is LibZSolo2' `
   (-not ((Kinds $r) -contains 'uses-unit-ambiguous') -and ($r.J.items | Where-Object { $_.kind -eq 'field-retyped' }) -and

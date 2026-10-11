@@ -16,10 +16,17 @@
     * a bare name resolves in the converted unit's scope (the unit, its last
       uses entry declaring it, the book's own qualification, a lone unit-level
       declarer); a NESTED class is never a declarer;
+    * a bare name the scope leaves ambiguous is INFERRED when exactly one
+      candidate survives (owner ruling 2026-10-11): the project's framework
+      (.dproj FrameworkType / DCC_Namespace), then the properties the unit's
+      .dfm streams on objects of that class -- the unit converts with a
+      warning (items[] kind convert-class-inferred) and apply/1
+      qualify_fixes[] outcome 'inferred';
     * a bare name still ambiguous REFUSES -- convert-apply refuses the unit,
-      convert-validate / convert-reemit refuse the run -- naming the
-      candidates and asking for the #convert line (or --from/--to) to be
-      qualified. Nothing is validated against a guess.
+      convert-validate / convert-reemit refuse the run -- naming the line,
+      every candidate and why it was not chosen, with ready-to-paste
+      qualified lines (qualify_fixes[] outcome 'refused', capability
+      convert_qualify_fix). Nothing is validated against a guess.
 
   Fixture written fresh under a $PID scratch folder; scratch --db files there.
 #>
@@ -136,7 +143,18 @@ function Form([string]$Name, [string]$Uses) {
 Form 'UVcl'  "uses`n  Vcl.StdCtrls;"
 Form 'UFmx'  "uses`n  FMX.StdCtrls;"
 Form 'UNone' "uses`n  LibSolo;"
-W 'app\P.dpr' "program P;`n`nuses`n  UVcl, UFmx, UNone;`n`nbegin`nend.`n"
+# owner ruling 2026-10-11 (b): a unit whose .dfm STREAMS a property only one
+# candidate TLabel declares -- WordWrap is the VCL one's
+Form 'UDfm'  "uses`n  LibSolo;"
+W 'app\UDfm.dfm' "object UDfm: TUDfm`n  object Label1: TLabel`n    WordWrap = True`n  end`nend`n"
+W 'app\P.dpr' "program P;`n`nuses`n  UVcl, UFmx, UNone, UDfm;`n`nbegin`nend.`n"
+# owner ruling 2026-10-11 (a): a second project whose .dproj says VCL; its unit
+# names no TLabel declarer and its .dfm streams nothing to tell them apart
+New-Item -ItemType Directory (P 'app2') -Force | Out-Null
+W 'app2\W.pas' "unit W;`n`ninterface`n`nuses`n  LibSolo;`n`ntype`n  TW = class`n    Label1: TLabel;`n  end;`n`nimplementation`n`n{`$R *.dfm}`n`nend.`n"
+W 'app2\W.dfm' "object W: TW`n  object Label1: TLabel`n  end`nend`n"
+W 'app2\Q.dpr' "program Q;`n`nuses`n  W;`n`nbegin`nend.`n"
+W 'app2\Q.dproj' "<Project xmlns=`"http://schemas.microsoft.com/developer/msbuild/2003`">`n  <PropertyGroup>`n    <FrameworkType>VCL</FrameworkType>`n    <MainSource>Q.dpr</MainSource>`n  </PropertyGroup>`n</Project>`n"
 
 W 'bare_vcl.rules'  "#convert TLabel -> TSolo`n#link Wrap <- WordWrap`n"
 W 'bare_fmx.rules'  "#convert TLabel -> TSolo`n#link Wrap <- FmxOnly`n"
@@ -148,6 +166,7 @@ W 'q_vcl_bad.rules' "#convert Vcl.StdCtrls.TLabel -> LibSolo.TSolo`n#link Wrap <
 
 & $Exe index (P 'lib') --db (P 'lib.sqlite') 2>&1 | Out-Null
 & $Exe index --project (P 'app\P.dpr') --db (P 'app.sqlite') 2>&1 | Out-Null
+& $Exe index --project (P 'app2\Q.dpr') --db (P 'app2.sqlite') 2>&1 | Out-Null
 $c0 = (& $Exe sql --db (P 'lib.sqlite') --query "select qualified_name from symbols where kind = 'class' and name in ('TLabel','TSolo') order by id" 2>$null) -join "`n"
 Check 'P0 premise: FMX.StdCtrls.TLabel and the NESTED TLabel / TSolo are indexed before the classes a guess must not replace' `
   ($c0 -match '(?s)FMX\.StdCtrls\.TLabel.*LibNest\.TNestHost\.TLabel.*LibNest\.TNestHost\.TSolo.*LibSolo\.TSolo.*Vcl\.StdCtrls\.TLabel') $c0
@@ -190,13 +209,57 @@ Check 'Q3 convert-validate --from FMX.StdCtrls.TLabel: FmxOnly validates (OK)' (
 $r = Validate 'q_fmx_bad.rules' 'FMX.StdCtrls.TLabel' 'LibSolo.TSolo'
 Check 'Q4 convert-validate --from FMX.StdCtrls.TLabel: WordWrap rejected' (($r.Code -eq 1) -and ($r.Out -match '(?m)^line 2: .*WordWrap')) $r.Out
 
-# ---- G: genuinely ambiguous bare name -> REFUSED, candidates named ---------
+# ---- G: genuinely ambiguous bare name -> REFUSED, in detail, with the fix ---
+# owner ruling 2026-10-11: the refusal names the line and its text, the bare
+# name, every candidate with WHY it was not chosen, and what to do; the JSON
+# carries qualify_fixes[] with ready-to-paste lines.
 $r = Apply 'UNone' 'bare_vcl.rules'
-Check 'G1 convert-apply, a unit whose scope declares no TLabel, bare book: REFUSED naming both candidates, asking to qualify the #convert line' `
-  (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: .*TLabel \(line 1\) is ambiguous.*' + $amb + '.*qualify the #convert line'))) $r.Out
+Check 'G1 convert-apply, a unit whose scope declares no TLabel, bare book, no framework or .dfm evidence: REFUSED -- line, text, both candidates with why, what to do' `
+  (($r.Code -eq 1) -and ($r.Out -match ('(?m)^REFUSED: #convert TLabel -> TSolo \(line 1\): the bare name TLabel is ambiguous in this unit''s scope -- candidates ' +
+     'FMX\.StdCtrls\.TLabel \(not in the unit''s uses\), Vcl\.StdCtrls\.TLabel \(not in the unit''s uses\) -- qualify the #convert line'))) $r.Out
+Check 'G1b ... text: the qualified lines are printed ready to paste, then the alternative' `
+  (($r.Out -match '(?m)^    #convert FMX\.StdCtrls\.TLabel -> TSolo    \{ not in the unit''s uses \}\s*$') -and
+   ($r.Out -match '(?m)^    #convert Vcl\.StdCtrls\.TLabel -> TSolo    \{ not in the unit''s uses \}\s*$') -and
+   ($r.Out -match '(?m)^  or: add FMX\.StdCtrls to the unit''s uses\s*$')) $r.Out
 $j = ApplyJ 'UNone' 'bare_vcl.rules'
 Check 'G2 ... JSON: ok=false, refused=true, the reason names the candidates' `
-  (($j.Code -eq 1) -and ($null -ne $j.J) -and ($j.J.ok -eq $false) -and ($j.J.refused -eq $true) -and ($j.J.reason -match $amb)) $j.Out
+  (($j.Code -eq 1) -and ($null -ne $j.J) -and ($j.J.ok -eq $false) -and ($j.J.refused -eq $true) -and ($j.J.reason -match 'FMX\.StdCtrls\.TLabel.*Vcl\.StdCtrls\.TLabel')) $j.Out
+$wantFix = [ordered]@{ rule_line = 1; current = '#convert TLabel -> TSolo'; name = 'TLabel'; side = 'from'; outcome = 'refused'; chosen = ''; inference = '';
+  suggestions = @(
+    [ordered]@{ replacement = '#convert FMX.StdCtrls.TLabel -> TSolo'; candidate = 'FMX.StdCtrls.TLabel'; why = 'not in the unit''s uses'; alternative = 'add FMX.StdCtrls to the unit''s uses' },
+    [ordered]@{ replacement = '#convert Vcl.StdCtrls.TLabel -> TSolo'; candidate = 'Vcl.StdCtrls.TLabel'; why = 'not in the unit''s uses'; alternative = 'add Vcl.StdCtrls to the unit''s uses' });
+  alternative = 'add FMX.StdCtrls to the unit''s uses' }
+$got  = if ($null -ne $j.J) { ConvertTo-Json -InputObject @($j.J.qualify_fixes) -Depth 6 -Compress } else { '' }
+$want = ConvertTo-Json -InputObject @($wantFix) -Depth 6 -Compress
+Check 'G2b ... JSON qualify_fixes[] is EXACTLY one refused fix with both suggestions (replacement, candidate, why, alternative)' ($got -eq $want) ("got:  $got`nwant: $want")
+
+# ---- I: INFERENCE before refusing (owner ruling 2026-10-11) ------------------
+$r = (& $Exe convert-apply --unit (P 'app2\W.pas') --rules (P 'bare_vcl.rules') --db (P 'app2.sqlite') --db (P 'lib.sqlite') --format json 2>$null) -join "`n"
+$ij = $null; try { $ij = $r.Substring($r.IndexOf('{')) | ConvertFrom-Json } catch {}
+$fx = if ($null -ne $ij) { @($ij.qualify_fixes) } else { @() }
+Check 'I1 (a) project framework: Q.dproj says VCL -- the bare TLabel converts as Vcl.StdCtrls.TLabel (WordWrap validates), exit 0' `
+  (($null -ne $ij) -and $ij.ok -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.StdCtrls.TLabel') -and
+   ($fx[0].inference -eq 'the project framework VCL (Q.dproj)') -and ($fx[0].suggestions[0].replacement -eq '#convert Vcl.StdCtrls.TLabel -> TSolo') -and
+   ($fx[0].suggestions[1].why -eq 'framework mismatch: the project is VCL (Q.dproj)')) $r
+$want = '#convert TLabel resolved to Vcl.StdCtrls.TLabel (line 1): inferred from the project framework VCL (Q.dproj); qualify the line to silence this: #convert Vcl.StdCtrls.TLabel -> TSolo'
+Check 'I2 ... a WARNING names the inference and the line to paste; items[] kind convert-class-inferred' `
+  (($null -ne $ij) -and (@($ij.warnings) -contains $want) -and (@($ij.items | Where-Object { $_.kind -eq 'convert-class-inferred' -and $_.text -eq $want -and $_.rule_line -eq 1 }).Count -eq 1)) $r
+$j = ApplyJ 'UDfm' 'bare_vcl.rules'
+$fx = if ($null -ne $j.J) { @($j.J.qualify_fixes) } else { @() }
+Check 'I3 (b) .dfm evidence: Label1 streams WordWrap, which only Vcl.StdCtrls.TLabel declares -- inferred, converts, exit 0' `
+  (($j.Code -eq 0) -and ($fx.Count -eq 1) -and ($fx[0].outcome -eq 'inferred') -and ($fx[0].chosen -eq 'Vcl.StdCtrls.TLabel') -and
+   ($fx[0].inference -eq '.dfm properties WordWrap') -and ($fx[0].suggestions[1].candidate -eq 'FMX.StdCtrls.TLabel') -and
+   ($fx[0].suggestions[1].why -eq '.dfm property WordWrap not declared')) $j.Out
+$j = ApplyJ 'UVcl' 'q_fmx_ok.rules'
+Check 'I4 POSITIVE CONTROL: a qualified #convert -- no inference warning, no refusal, qualify_fixes [] (present)' `
+  (($j.Code -eq 0) -and ($null -ne $j.J) -and ($null -ne $j.J.qualify_fixes) -and (@($j.J.qualify_fixes).Count -eq 0) -and
+   (@($j.J.items | Where-Object { $_.kind -eq 'convert-class-inferred' }).Count -eq 0) -and -not ($j.Out -match 'resolved to')) $j.Out
+$j = ApplyJ 'UVcl' 'bare_vcl.rules'
+Check 'I5 POSITIVE CONTROL: a bare #convert the unit''s uses settle -- no inference, qualify_fixes []' `
+  (($j.Code -eq 0) -and ($null -ne $j.J) -and (@($j.J.qualify_fixes).Count -eq 0)) $j.Out
+$info = (& $Exe info --json 2>$null) -join "`n"
+$inj = $null; try { $inj = $info.Substring($info.IndexOf('{')) | ConvertFrom-Json } catch {}
+Check 'K info --json: capabilities.convert_qualify_fix is true' (($null -ne $inj) -and ($inj.capabilities.convert_qualify_fix -eq $true)) ''
 $r = Validate 'bare_vcl.rules' 'TLabel' 'TSolo'
 Check 'G3 convert-validate --from TLabel (no unit, bare book): refuses, exit 1, both candidates named, asks to qualify; never OK' `
   (($r.Code -eq 1) -and ($r.Out -match ('(?m)^ERROR: --from TLabel is ambiguous.*' + $amb + '.*qualify')) -and -not ($r.Out -match '(?m)^OK')) $r.Out

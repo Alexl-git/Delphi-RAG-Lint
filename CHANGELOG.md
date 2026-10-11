@@ -26,6 +26,24 @@ breaking changes** until v1.0.
   `convert-validate` printed `OK` without checking a single path. `ResolveClassQName` is
   deleted. Guard: run_convert_link_class_scope.ps1.
 
+### Added
+
+- **convert-apply: an ambiguous bare `#convert` class is INFERRED, or refused with a ready-made
+  fix** (owner ruling 2026-10-11). After the unit's scope and the book's own units, a bare class
+  several units declare is inferred when exactly one candidate survives: (a) the project's
+  framework (`.dproj` `FrameworkType`, else `DCC_Namespace`) drops `Vcl.*` / `FMX.*` candidates
+  of the other framework; (b) a candidate that does not declare a property the unit's `.dfm`
+  streams on objects of that class -- and another candidate does -- is dropped. An inference
+  converts with a warning (`items[]` kind `convert-class-inferred`) naming the evidence and the
+  line to paste. Otherwise the refusal now names the line and its text, the bare name, every
+  candidate and why it was not chosen, and what to do, and prints the qualified lines ready to
+  paste. apply/1 `qualify_fixes[]` (always present) carries both outcomes for a one-click editor
+  fix: `{rule_line, current, name, side, outcome, chosen, inference, suggestions[{replacement,
+  candidate, why, alternative}], alternative}`. Capability `convert_qualify_fix`. Supersedes
+  ruling R8a for a `#convert` To type: an unsettled tie is refused, no longer converted against
+  the first declarer with the tie only reported (run_convert_apply_uses_reconcile.ps1 A3 / A8-2 /
+  F-minor and run_convert_apply_pas_uses.ps1 C7 / C8 updated to the ruling).
+
 ## v1.28.2-alpha -- unreleased
 
 ### Fixed

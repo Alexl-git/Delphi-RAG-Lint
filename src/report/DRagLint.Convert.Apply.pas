@@ -317,9 +317,14 @@ type
                                StripDB) rewrote a string literal in the .dfm or
                                the .pas -- field access_sites either way.
                                OldValue -> Value, FilePath, Line set. }
-    aikValueCastCheck);      { 1.27.0 (C15): a value-cast site with no edit --
+    aikValueCastCheck,       { 1.27.0 (C15): a value-cast site with no edit --
                                a .dfm value or .pas right-hand side that is not
                                ONE string literal, or a read. A warning. }
+    aikConvertClassInferred); { owner ruling 2026-10-11: a bare #convert class
+                               several units declare, settled by INFERENCE (the
+                               project framework, the .dfm's properties) -- a
+                               warning; RuleLine set, the structured row is
+                               apply/1 qualify_fixes[] outcome 'inferred'. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -668,6 +673,57 @@ type
     Resolution: string;
     /// <summary>The declaring units, PAS_RES_AMBIGUOUS only.</summary>
     Candidates: TArray<string>;
+    /// <summary>Index-aligned with Candidates: why each was not chosen
+    /// ('not in the unit''s uses', 'framework mismatch: ...', '.dfm property X
+    /// not declared', 'tie: ...'). ScopedClass only.</summary>
+    Why: TArray<string>;
+    /// <summary>Set when ScopedClass settled an otherwise ambiguous bare name
+    /// by INFERENCE (owner ruling 2026-10-11): what it was inferred from --
+    /// 'the project framework VCL (P.dproj)' or '.dfm properties WordWrap,
+    /// Layout'. QName is then the class chosen and Candidates / Why keep the
+    /// ones it was chosen over. '' otherwise.</summary>
+    Inferred: string;
+  end;
+
+  /// <summary>One ready-to-paste replacement for an ambiguous or inferred
+  /// #convert line (apply/1 qualify_fixes[].suggestions[]).</summary>
+  TQualifySuggestion = record
+    /// <summary>The whole #convert line with the bare name qualified.</summary>
+    Replacement: string;
+    /// <summary>The qualified class this replacement names.</summary>
+    Candidate  : string;
+    /// <summary>Why this candidate is (or is not) the one: the inference, or
+    /// the reason it was not chosen.</summary>
+    Why        : string;
+    /// <summary>The other way to settle it: '#use Unit' for a To type, 'add
+    /// Unit to the unit''s uses' for a From type.</summary>
+    Alternative: string;
+  end;
+
+  /// <summary>A #convert line whose bare class name had several declarers
+  /// (apply/1 qualify_fixes[], capability convert_qualify_fix): REFUSED, or
+  /// settled by inference and warned about.</summary>
+  /// <remarks>Built by MakeQualifyFix; the editor offers Suggestions as a
+  /// one-click correction of the line RuleLine.</remarks>
+  TQualifyFix = record
+    /// <summary>The #convert line's number in the rules file.</summary>
+    RuleLine   : Integer;
+    /// <summary>That line as written.</summary>
+    Current    : string;
+    /// <summary>The bare class name.</summary>
+    Name       : string;
+    /// <summary>'from' or 'to': the side of the line it is on.</summary>
+    Side       : string;
+    /// <summary>'refused' or 'inferred'.</summary>
+    Outcome    : string;
+    /// <summary>The class inferred; '' when refused.</summary>
+    Chosen     : string;
+    /// <summary>What the class was inferred from; '' when refused.</summary>
+    Inference  : string;
+    /// <summary>One per candidate; the chosen one first, else sorted.</summary>
+    Suggestions: TArray<TQualifySuggestion>;
+    /// <summary>The first suggestion's Alternative.</summary>
+    Alternative: string;
   end;
 
   /// <summary>The classes one convert-apply run works from: each type name
@@ -716,6 +772,10 @@ type
     FScoped     : TDictionary<string, TScopedClass>;   { UPPER name|hint -> ScopedClass's answer }
     FToOnly     : TArray<string>;                      { bare #convert To names that are no block's From }
     FBookUnits  : TArray<string>;                      { the units the unit uses AFTER the book (BookChosenUnits) }
+    FFrameworkDone: Boolean;                           { FFramework read for this scope }
+    FFramework    : string;                            { 'VCL' / 'FMX' / '' -- the scope unit's project }
+    FFrameworkSrc : string;                            { the .dproj it was read from }
+    function InferAmbiguous(const AName: string; var AScoped: TScopedClass): Boolean;
     function Lookup(const ATypeName: string): TResolved;
     function GetClassesBuilt: Integer;
   public
@@ -801,9 +861,43 @@ type
     /// class, PAS_RES_AMBIGUOUS with the declaring units in Candidates (none
     /// picked), or PAS_RES_CLASS_NOT_FOUND. A nested class is never a
     /// declarer.</returns>
-    /// <remarks>Cached per name and hint until the scope changes.</remarks>
+    /// <remarks>Cached per name and hint until the scope changes. A bare
+    /// name the scope leaves ambiguous is then INFERRED when exactly one
+    /// candidate survives (owner ruling 2026-10-11): first the project's
+    /// framework (the .dproj beside the scope unit's project file --
+    /// FrameworkType, else DCC_Namespace -- drops a Vcl.* or FMX.* candidate of
+    /// the other framework), then the .dfm evidence (a candidate that does not
+    /// declare a property the scope unit's .dfm streams on an object of that
+    /// class, and another candidate does, is dropped). Inferred then names
+    /// the evidence; Why says why each other candidate was dropped.</remarks>
     function ScopedClass(const ATypeName: string; const AHint: string = ''): TScopedClass;
   end;
+
+/// <summary>The machine-readable fix for a #convert line whose bare class
+/// name was ambiguous (apply/1 qualify_fixes[]).</summary>
+/// <param name="ALineText">The #convert line as written in the rules
+/// file.</param>
+/// <param name="ALine">Its line number.</param>
+/// <param name="AName">The bare class name.</param>
+/// <param name="ASide">'from' or 'to'.</param>
+/// <param name="AScoped">ScopedClass's answer: PAS_RES_AMBIGUOUS (a refusal)
+/// or PAS_RES_RESOLVED with Inferred set (an inference).</param>
+/// <returns>Outcome 'refused' or 'inferred'; one suggestion per class --
+/// the line with AName qualified on ASide -- the inferred one first, the rest
+/// sorted.</returns>
+function MakeQualifyFix(const ALineText: string; ALine: Integer; const AName, ASide: string;
+  const AScoped: TScopedClass): TQualifyFix;
+/// <summary>The detailed refusal text of one 'refused' fix: the line, the
+/// bare name, every candidate with why it was not chosen, and what to
+/// do.</summary>
+/// <param name="AFix">A MakeQualifyFix result.</param>
+/// <returns>One line, no line break.</returns>
+function QualifyRefusalText(const AFix: TQualifyFix): string;
+/// <summary>The warning text of one 'inferred' fix.</summary>
+/// <param name="AFix">A MakeQualifyFix result with Outcome 'inferred'.</param>
+/// <returns>'#convert X resolved to Unit.X (line N): inferred from ...;
+/// qualify the line to silence this: <replacement>'.</returns>
+function QualifyInferredText(const AFix: TQualifyFix): string;
 
 
 /// <summary>Verifies the F and T component types named by EVERY #convert
@@ -1234,7 +1328,8 @@ uses
   System.IOUtils,
   System.Classes,
   System.Hash,
-  System.DateUtils;
+  System.DateUtils,
+  System.RegularExpressions;
 
 var
   { 1.26.5: '#check-ref not checked' is said ONCE PER RUN (a batch of units is
@@ -1259,7 +1354,7 @@ const
     'inherited-instance-retyped', 'access-site-unverified',
     'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked',
     'unit-rule-kept', 'uses-unit-ambiguous', 'unit-rule-unverified', 'unit-rule-dangling',
-    'value-cast-applied', 'value-cast-check');
+    'value-cast-applied', 'value-cast-check', 'convert-class-inferred');
 begin
   Result:= NAMES[AKind];
 end;
@@ -1665,6 +1760,9 @@ begin
   FScopeFileId:= 0;
   FToOnly     := nil;
   FBookUnits  := nil;
+  FFrameworkDone:= False;
+  FFramework    := '';
+  FFrameworkSrc := '';
   if AUnitPas <> '' then
     for var St: ISymbolStore in FStores do
     begin
@@ -1728,7 +1826,296 @@ begin
   end;
   if Result.Resolution = '' then
     Result:= ResolveClassInScope(Self, FScopeStore, FScopeFileId, Name, False, Trim(AHint));
+  if Result.Resolution = PAS_RES_AMBIGUOUS then
+  begin
+    { why the scope did not settle each candidate }
+    var UsesList: TArray<TUnitUse>:= if FScopeFileId > 0 then FScopeStore.GetUnitUsesForFile(FScopeFileId) else nil;
+    SetLength(Result.Why, Length(Result.Candidates));
+    for var I: Integer:= 0 to High(Result.Candidates) do
+    begin
+      Result.Why[I]:= if FScopeFileId > 0 then 'not in the unit''s uses' else 'no unit to scope it';
+      for var U: TUnitUse in UsesList do
+        if UnitIndex.SameUnit(U.UnitName, Result.Candidates[I]) then
+          Result.Why[I]:= Format('tie: the uses entry %s names another candidate too', [U.UnitName]);
+    end;
+    InferAmbiguous(Name, Result);
+  end;
   FScoped.AddOrSetValue(Key, Result);
+end;
+
+// owner ruling 2026-10-11 (a): the framework of the project the unit at
+// AUnitPath belongs to -- 'VCL' / 'FMX' / '' -- from the .dproj beside a
+// project file (.dpr / .dpk) AStore indexes, else the one .dproj in the unit's
+// folder: <FrameworkType>, else a DCC_Namespace naming Vcl but not FMX (or the
+// reverse). ASource is the .dproj read. Only files that exist are read.
+function ProjectFramework(const AStore: ISymbolStore; const AUnitPath: string; out ASource: string): string;
+
+  function FromDproj(const ADproj: string): string;
+  begin
+    Result:= '';
+    var Text: string:= TFile.ReadAllText(ADproj);
+    var M: TMatch:= TRegEx.Match(Text, '<FrameworkType>\s*(VCL|FMX)\s*</FrameworkType>', [roIgnoreCase]);
+    if M.Success then Exit(UpperCase(M.Groups[1].Value));
+    var HasVcl: Boolean:= False;
+    var HasFmx: Boolean:= False;
+    for var NM: TMatch in TRegEx.Matches(Text, '<DCC_Namespace>([^<]*)</DCC_Namespace>', [roIgnoreCase]) do
+      for var Ns: string in NM.Groups[1].Value.Split([';']) do
+      begin
+        if SameText(Trim(Ns), 'Vcl') then HasVcl:= True;
+        if SameText(Trim(Ns), 'FMX') then HasFmx:= True;
+      end;
+    if HasVcl and not HasFmx then Result:= 'VCL'
+    else if HasFmx and not HasVcl then Result:= 'FMX';
+  end;
+
+begin
+  Result := '';
+  ASource:= '';
+  var Dprojs: TArray<string>:= nil;
+  if AStore <> nil then
+    for var Fid: Int64 in AStore.GetAllFileIds do
+    begin
+      var P: string:= AStore.GetFilePath(Fid);
+      var Ext: string:= ExtractFileExt(P);
+      if (SameText(Ext, '.dpr') or SameText(Ext, '.dpk')) and TFile.Exists(ChangeFileExt(P, '.dproj')) then
+        Dprojs:= Dprojs + [ChangeFileExt(P, '.dproj')];
+    end;
+  if (Length(Dprojs) = 0) and (AUnitPath <> '') and TDirectory.Exists(ExtractFilePath(AUnitPath)) then
+  begin
+    var Local: TArray<string>:= TDirectory.GetFiles(ExtractFilePath(AUnitPath), '*.dproj');
+    if Length(Local) = 1 then Dprojs:= Local;
+  end;
+  for var D: string in Dprojs do
+  begin
+    var F: string:= FromDproj(D);
+    if F = '' then Continue;
+    if (Result <> '') and (F <> Result) then
+    begin
+      ASource:= '';
+      Exit('');  { two projects disagree: no evidence }
+    end;
+    Result := F;
+    ASource:= D;
+  end;
+end;
+
+// owner ruling 2026-10-11 (b): the property paths the .dfm at ADfmPath streams
+// directly on every object whose class is AClassName (bare, case-insensitive):
+// the 'Name = value' lines one level inside each 'object|inherited|inline
+// X: AClassName' header, distinct. [] when the file is absent or has none.
+function DfmStreamedProps(const ADfmPath, AClassName: string): TArray<string>;
+const
+  DFM_INDENT_STEP = 2;  { a .dfm nests each level two spaces deeper }
+begin
+  Result:= nil;
+  if not TFile.Exists(ADfmPath) then Exit;
+  var Lines: TArray<string>:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(ADfmPath))
+    .Replace(#13#10, #10).Replace(#13, #10).Split([#10]);
+  var Header: TRegEx:= TRegEx.Create('^(?<ind>\s*)(object|inherited|inline)\s+\w+\s*:\s*(?<cls>[\w.]+)', [roIgnoreCase]);
+  var Prop  : TRegEx:= TRegEx.Create('^(?<ind>\s*)(?<name>[A-Za-z_][\w.]*)\s*=', []);
+  for var I: Integer:= 0 to High(Lines) do
+  begin
+    var M: TMatch:= Header.Match(Lines[I]);
+    if not (M.Success and SameText(BareTypeTail(M.Groups['cls'].Value), AClassName)) then Continue;
+    var Indent: Integer:= Length(M.Groups['ind'].Value);
+    for var J: Integer:= I + 1 to High(Lines) do
+    begin
+      var L: string:= Lines[J];
+      if (Length(L) - Length(L.TrimLeft) <= Indent) and (L.Trim <> '') then Break;  { this object's 'end' }
+      var PM: TMatch:= Prop.Match(L);
+      if PM.Success and (Length(PM.Groups['ind'].Value) = Indent + DFM_INDENT_STEP) and
+         not MatchText(PM.Groups['name'].Value, Result) then
+        Result:= Result + [PM.Groups['name'].Value];
+    end;
+  end;
+end;
+
+function TConvertTreeCache.InferAmbiguous(const AName: string; var AScoped: TScopedClass): Boolean;
+var
+  Alive   : TArray<Boolean>;
+  Evidence: TArray<string>;
+
+  function AliveCount: Integer;
+  begin
+    Result:= 0;
+    for var B: Boolean in Alive do if B then Inc(Result);
+  end;
+
+  function QNameOf(AIndex: Integer): string;
+  begin
+    Result:= AScoped.Candidates[AIndex] + '.' + AName;
+  end;
+
+  function FrameworkOf(const AUnit: string): string;
+  begin
+    Result:= if StartsText('Vcl.', AUnit) then 'VCL' else if StartsText('FMX.', AUnit) then 'FMX' else '';
+  end;
+
+  { (a) the project's framework drops a candidate of the other one }
+  procedure DropByFramework;
+  begin
+    if not FFrameworkDone then
+    begin
+      FFrameworkDone:= True;
+      FFramework    := ProjectFramework(FScopeStore, FScopePath, FFrameworkSrc);
+    end;
+    if FFramework = '' then Exit;
+    var Source : string := Format('%s (%s)', [FFramework, ExtractFileName(FFrameworkSrc)]);
+    var Dropped: Boolean:= False;
+    for var I: Integer:= 0 to High(Alive) do
+    begin
+      var CandFw: string:= FrameworkOf(AScoped.Candidates[I]);
+      if (CandFw = '') or (CandFw = FFramework) then Continue;
+      Alive[I]      := False;
+      Dropped       := True;
+      AScoped.Why[I]:= 'framework mismatch: the project is ' + Source;
+    end;
+    if Dropped then Evidence:= Evidence + ['the project framework ' + Source];
+  end;
+
+  { whether live candidate AIndex declares each of AProps on the .dfm surface }
+  function DeclaresRow(AIndex: Integer; const AProps: TArray<string>): TArray<Boolean>;
+  begin
+    SetLength(Result, Length(AProps));
+    if not Alive[AIndex] then Exit;
+    var Ref: TClassRef:= ClassFor(QNameOf(AIndex));
+    for var P: Integer:= 0 to High(AProps) do
+    begin
+      var Node: TPropNode;
+      Result[P]:= (Ref.QName <> '') and Ref.ResolvePath(AProps[P], psDfm, Node);
+    end;
+  end;
+
+  { a property SOME live candidate declares and another does not: evidence.
+    One no live candidate declares (DefineProperties: Explicit*, DesignSize)
+    tells them apart from nothing -- ignored. }
+  function Discriminates(const ADeclares: TArray<TArray<Boolean>>; AProp: Integer): Boolean;
+  begin
+    var AnyHas : Boolean:= False;
+    var AllHave: Boolean:= True;
+    for var I: Integer:= 0 to High(Alive) do
+      if Alive[I] then
+      begin
+        AnyHas := AnyHas or ADeclares[I][AProp];
+        AllHave:= AllHave and ADeclares[I][AProp];
+      end;
+    Result:= AnyHas and not AllHave;
+  end;
+
+  { (b) the .dfm evidence: what the unit's .dfm streams on objects of AName }
+  procedure DropByDfm;
+  begin
+    if (AliveCount < 2) or (FScopePath = '') then Exit;
+    var Props: TArray<string>:= DfmStreamedProps(ChangeFileExt(FScopePath, '.dfm'), AName);
+    if Length(Props) = 0 then Exit;
+    var Declares: TArray<TArray<Boolean>>;
+    SetLength(Declares, Length(Alive));
+    for var I: Integer:= 0 to High(Alive) do Declares[I]:= DeclaresRow(I, Props);
+    var Used: TArray<string>:= nil;
+    for var P: Integer:= 0 to High(Props) do
+      if Discriminates(Declares, P) then Used:= Used + [Props[P]];
+    if Length(Used) = 0 then Exit;
+    for var I: Integer:= 0 to High(Alive) do
+      for var P: Integer:= 0 to High(Props) do
+        if Alive[I] and MatchText(Props[P], Used) and not Declares[I][P] then
+        begin
+          Alive[I]      := False;
+          AScoped.Why[I]:= Format('.dfm property %s not declared', [Props[P]]);
+        end;
+    Evidence:= Evidence + ['.dfm properties ' + String.Join(', ', Used)];
+  end;
+
+begin
+  Result:= False;
+  if Length(AScoped.Candidates) < 2 then Exit;
+  SetLength(Alive, Length(AScoped.Candidates));
+  for var I: Integer:= 0 to High(Alive) do Alive[I]:= True;
+  Evidence:= nil;
+  DropByFramework;
+  DropByDfm;
+  if AliveCount <> 1 then
+  begin
+    { still a tie: say so on every survivor }
+    if Length(Evidence) > 0 then
+      for var I: Integer:= 0 to High(Alive) do
+        if Alive[I] then AScoped.Why[I]:= 'tie: fits ' + String.Join(' and ', Evidence) + ' as well as another candidate';
+    Exit;
+  end;
+  for var I: Integer:= 0 to High(Alive) do
+    if Alive[I] then
+    begin
+      AScoped.QName     := QNameOf(I);
+      AScoped.Resolution:= PAS_RES_RESOLVED;
+      AScoped.Inferred  := String.Join(' and ', Evidence);
+      AScoped.Why[I]    := 'inferred from ' + AScoped.Inferred;
+    end;
+  Result:= True;
+end;
+
+// ALineText with the bare AName on side ASide ('from': before '->', 'to':
+// after it) replaced by AQName -- the first whole-word, unqualified match.
+function QualifyLine(const ALineText, AName, ASide, AQName: string): string;
+begin
+  var Arrow: Integer:= Pos('->', ALineText);
+  var Left : string:= if Arrow > 0 then Copy(ALineText, 1, Arrow - 1) else ALineText;
+  var Right: string:= if Arrow > 0 then Copy(ALineText, Arrow, MaxInt) else '';
+  var Word : TRegEx:= TRegEx.Create('(?<![\w.])' + TRegEx.Escape(AName) + '(?![\w.])', [roIgnoreCase]);
+  if ASide = 'from' then Left:= Word.Replace(Left, AQName, 1)
+  else Right:= Word.Replace(Right, AQName, 1);
+  Result:= Left + Right;
+end;
+
+function MakeQualifyFix(const ALineText: string; ALine: Integer; const AName, ASide: string;
+  const AScoped: TScopedClass): TQualifyFix;
+
+  function Suggestion(AIndex: Integer): TQualifySuggestion;
+  begin
+    var Stem: string:= AScoped.Candidates[AIndex];
+    Result.Candidate  := Stem + '.' + AName;
+    Result.Replacement:= QualifyLine(Trim(ALineText), AName, ASide, Result.Candidate);
+    Result.Why        := if AIndex <= High(AScoped.Why) then AScoped.Why[AIndex] else '';
+    Result.Alternative:= if ASide = 'to' then '#use ' + Stem else Format('add %s to the unit''s uses', [Stem]);
+  end;
+
+begin
+  Result:= Default(TQualifyFix);
+  Result.RuleLine:= ALine;
+  Result.Current := Trim(ALineText);
+  Result.Name    := AName;
+  Result.Side    := ASide;
+  var Inferred: Boolean:= (AScoped.Resolution = PAS_RES_RESOLVED) and (AScoped.Inferred <> '');
+  Result.Outcome := if Inferred then 'inferred' else 'refused';
+  if Inferred then
+  begin
+    Result.Chosen   := AScoped.QName;
+    Result.Inference:= AScoped.Inferred;
+    for var I: Integer:= 0 to High(AScoped.Candidates) do
+      if SameText(AScoped.Candidates[I] + '.' + AName, AScoped.QName) then
+        Result.Suggestions:= [Suggestion(I)] + Result.Suggestions
+      else
+        Result.Suggestions:= Result.Suggestions + [Suggestion(I)];
+  end
+  else
+    for var I: Integer:= 0 to High(AScoped.Candidates) do Result.Suggestions:= Result.Suggestions + [Suggestion(I)];
+  if Length(Result.Suggestions) > 0 then Result.Alternative:= Result.Suggestions[0].Alternative;
+end;
+
+function QualifyRefusalText(const AFix: TQualifyFix): string;
+begin
+  var Parts: TArray<string>:= nil;
+  for var S: TQualifySuggestion in AFix.Suggestions do Parts:= Parts + [Format('%s (%s)', [S.Candidate, S.Why])];
+  Result:= Format('%s (line %d): the bare name %s is ambiguous in this unit''s scope -- candidates %s -- ' +
+    'qualify the #convert line (paste one of the suggested lines, apply/1 qualify_fixes[]) or %s; ' +
+    'nothing was validated against a guess',
+    [AFix.Current, AFix.RuleLine, AFix.Name, String.Join(', ', Parts),
+     if AFix.Side = 'to' then 'add #use <Unit> to the book' else 'add the declaring unit to the unit''s uses']);
+end;
+
+function QualifyInferredText(const AFix: TQualifyFix): string;
+begin
+  Result:= Format('#convert %s resolved to %s (line %d): inferred from %s; qualify the line to silence this: %s',
+    [AFix.Name, AFix.Chosen, AFix.RuleLine, AFix.Inference,
+     if Length(AFix.Suggestions) > 0 then AFix.Suggestions[0].Replacement else AFix.Current]);
 end;
 
 function TConvertTreeCache.ResolveType(const ATypeName: string): string;
@@ -4344,8 +4731,11 @@ var
     var HintFrom, HintTo, FromBare: string;
     if not AIn.FromTypes.TryGetValue(AInst, FromBare) then FromBare:= '';
     ConvertRuleSpelling(AIn.Book.Rules, if AToSide then BareTypeTail(FromBare) else AType, HintFrom, HintTo);
-    Result:= ResolveClassInScope(AIn.Trees, AIn.Store, AIn.FileId, Name, IntfOnly,
-      if AToSide then HintTo else HintFrom);
+    { a bare book spelling hints with the class the BLOCK resolved to (scope,
+      book units, inference), so a row agrees with the class converted }
+    var Hint: string:= if AToSide then HintTo else HintFrom;
+    if (Hint <> '') and (Pos('.', Hint) = 0) then Hint:= AIn.Trees.ResolveType(Hint);
+    Result:= ResolveClassInScope(AIn.Trees, AIn.Store, AIn.FileId, Name, IntfOnly, Hint);
     ClassMemo.Add(Key, Result);
   end;
 
