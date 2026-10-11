@@ -69,13 +69,21 @@ by its OWNER RULINGS 2026-10-06.)
   const | var | type | routine ('' when no `--db` holds the member); `declared_in` is
   the class that declares it -- an ancestor of the From type included, followed into
   another `--db` (TComponent in the library index); `status` `mapped` (a `#link`
-  covers it), `cast-refused` (a cast `#link` covers it, its sites refused),
+  covers it and convert-apply handles its sites), `cast-refused` (a cast `#link`
+  covers it, its sites refused), `not-rewritten` (a `#link` covers it but
+  convert-apply makes NO `.pas` edit for that link shape -- a dotted To or From path
+  such as `#link Properties.X <- X`, so the site still names the From member and
+  may not compile; precedence cast-refused > not-rewritten > mapped),
   `same-name` (no link; the To type or an ancestor has the name), `unmapped` (the
   work list) or `global-dangling` (the reconciliation's own dangling verdict --
   the remove row's `needed_by`, uncapped and with every line; absent with
   `--no-reconcile-uses` or when degraded). Text: `pas uses: N unmapped, M
-  global-dangling, K same-name, J mapped, C cast-refused` and one line per unmapped
-  member. `info --json` capability `pas_uses`. Known gaps: a member reached with no
+  global-dangling, K same-name, J mapped, C cast-refused, R not-rewritten` and one
+  line per unmapped and per not-rewritten member. `info --json` capability
+  `pas_uses`. Cost: the access-site binding buckets the unit's references by line
+  once, and each (type, member) and each instance's `#convert` block is resolved
+  once -- on INSPFLDR (DMTEST, 235 sites, 106 rows) pas_uses costs ~0.8 s, down
+  from ~3.3 s. Known gaps: a member reached with no
   receiver (`with pic1 do Caption := ...`) and a site the index cannot vouch for
   (`access-site-unverified`) are not listed; an inherited RTL/VCL member is
   classified only when its library `--db` is passed (else kind '' and `unmapped`).
@@ -89,13 +97,20 @@ by its OWNER RULINGS 2026-10-06.)
   fails the unit, exit 2), so the editor lists it like any cast. `.dfm`: the value is
   rewritten on each converted instance when that changes it. `.pas`: only
   `<inst>.<Prop> := '<one literal>';` has its literal rewritten (quote escaping
-  kept); any other right-hand side and every read get no edit and a warning
-  (`value cast StripDB: non-literal assignment, check by hand` / `read of <Prop>`);
-  a `with` block is out of scope. Items `value-cast-applied` (field access_sites,
+  kept) -- STRICTLY: the literal must be followed on the SAME line by nothing but
+  blanks / closed comments and `;` (blanks, tabs and comments before `:=` are
+  fine). A literal ending its line (a continuation may follow, even behind a comment
+  line), one followed by `#nn` or `+`, and a statement ended by `else` / `end`
+  without `;` are checks. Any other right-hand side and every read get no edit and
+  a warning (`value cast StripDB: non-literal assignment, check by hand` / `read of
+  <Prop>`). Every OTHER reference to the member -- a `with t1 do TableName := ...`,
+  a site the index cannot vouch for, another object's same-named member -- is a
+  `value-cast-check` naming its line (`the receiver is not resolved to a converted
+  instance ...`), never an edit and never silence. Items `value-cast-applied` (field access_sites,
   `old_value` -> `value`, file, line -- the `.dfm` line is the property's own) and
   `value-cast-check` (warnings); text `value casts: N value(s) changed (.dfm D, .pas P),
   W site(s) to check by hand`; `pas_uses[]` counts a member a StripDB link covers as
-  `mapped`. A renaming value-cast link renames the member as a plain link would and
+  `mapped` (`not-rewritten` when its path is dotted). A renaming value-cast link renames the member as a plain link would and
   reports its literals for checking. `info --json` capability `value_cast_strip_db`.
   The class-cast refusal below applies to CLASS casts only.
 

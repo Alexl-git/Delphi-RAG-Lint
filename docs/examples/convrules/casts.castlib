@@ -5,9 +5,15 @@
 # StripDB below): a built-in string transform, not a class cast.
 #
 # The realization hints (dfm/compat/pas/todo) ARE CONSUMED by the engine as of
-# 2026-09-16 (row 6): convert-apply renders `pas` at a .pas access site, and
-# `dfm keep-bytes-if-compatible` carries a streamed payload to the target path
-# when its format is in `compat`, emitting `todo` when it is not.
+# 2026-09-16 (row 6): `dfm keep-bytes-if-compatible` carries a streamed payload
+# to the target path when its format is in `compat`, emitting `todo` when it is
+# not. From 2026-09-16 until 1.27.0 convert-apply also RENDERED `pas` at a .pas
+# access site; 1.27.0 RETIRED that, and today `pas` only tells convert-apply the
+# cast was found (an empty one says the library has no .pas recipe). Why it was
+# retired: a `pas` template is a STATEMENT (dst.Assign(src);) and an access site
+# is a member token INSIDE an expression, so no splice is correct -- the 1.26.x
+# rendering wrote code that did not parse. Every such site is now refused one
+# by one (cast-not-applied), convert it by hand; see the paragraph at the end.
 #
 # THE HISTORY HERE IS DELIBERATE, and please keep it. Between 2026-09-04 and
 # 2026-09-16 this paragraph read "EDITOR-SIDE ONLY ... nothing under srceport\ or

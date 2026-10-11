@@ -1434,7 +1434,8 @@ var
       end;
       ValueCasts:= ValueCasts + [VC];
       Exit;
-    end;    if EnumCastValue(Def, AValue, Mapped) then Exit(Mapped);
+    end;
+    if EnumCastValue(Def, AValue, Mapped) then Exit(Mapped);
     Rec:= Default(TReemitEnumUnmapped);
     Rec.CastName:= CastName;
     Rec.FromPath:= AFromPath;

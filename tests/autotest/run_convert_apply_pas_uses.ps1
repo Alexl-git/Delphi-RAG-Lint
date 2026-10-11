@@ -13,13 +13,15 @@
       ancestor of the From type included), every line and a count.
     * status mapped (a #link covers it), cast-refused (a cast #link covers it:
       its sites are refused), same-name (no link, the To type or an ancestor
-      has the name), unmapped (the work list).
+      has the name), unmapped (the work list), not-rewritten (a link covers it,
+      but convert-apply makes no .pas edit for that link shape -- a dotted path).
     * One row per global (routine / const / var / type) the unit uses from a
       unit the reconciliation REMOVES -- status global-dangling, instance ''.
       The reconciler's own dangling analysis, uncapped.
     * Always present: [] when the unit's code uses nothing of the kind.
     * Text: 'pas uses: N unmapped, M global-dangling, K same-name, J mapped,
-      C cast-refused' and one line per unmapped member.
+      C cast-refused, R not-rewritten' and one line per unmapped and per
+      not-rewritten member.
 
   Fixture written fresh under a $PID scratch folder, indexed into a scratch
   PROJECT --db there. Nothing shared is touched.
@@ -221,6 +223,8 @@ W 'E0Form.dfm' "object E0Form: TE0Form`n  object pic1: TPicOld`n    Caption = 'p
 W 'P.dpr' "program P;`n`nuses`n  LibBase, LibOld, LibNew, F1Form, E0Form;`n`nbegin`nend.`n"
 W 'p.rules'  "#convert TPicOld -> TPicNew`n#link Caption <- Caption`n#link Glyph <- Picture : CastA`n#unuse LibOld`n"
 W 'p2.rules' "#convert TPicOld -> TPicNew`n#link Glyph <- Picture : CastA`n#unuse LibOld`n"
+# p3: link shapes whose .pas sites convert-apply does NOT rewrite (a dotted To / From path)
+W 'p3.rules' "#convert TPicOld -> TPicNew`n#link Glyph.Data <- Caption`n#link Caption <- Picture.Data`n"
 W 'fx.castlib' "cast CastA`n  accepts TSrcPic`n  yields  TDstGlyph`n  pas     '{dst}.Assign({src});'`nend`n"
 
 $db = P 'fx.sqlite'
@@ -338,12 +342,27 @@ Check 'R1 --no-reconcile-uses: 8 member rows, no global-dangling row (that verdi
 # ---- text mode --------------------------------------------------------------
 $t = Run 'F1Form.pas' 'p.rules'
 Check 'T1 text: the summary line counts every status' `
-  ($t.Out -match '(?m)^pas uses: 4 unmapped, 2 global-dangling, 2 same-name, 1 mapped, 1 cast-refused\s*$') $t.Out
+  ($t.Out -match '(?m)^pas uses: 4 unmapped, 2 global-dangling, 2 same-name, 1 mapped, 1 cast-refused, 0 not-rewritten\s*$') $t.Out
 Check 'T2 text: each unmapped member is listed with its lines' `
   (($t.Out -match '(?m)^  unmapped pic1\.DoOld \(method, public, TPicOld in LibOld\) -- lines 26, 28\s*$') -and
    ($t.Out -match '(?m)^  unmapped pic1\.MidOnly \(method, public, TOldMid in LibOld\) -- line 31\s*$')) $t.Out
 $t0 = Run 'E0Form.pas' 'p.rules'
 Check 'T3 text: no pas uses line when there are none' (($t0.Code -eq 0) -and -not ($t0.Out -match 'pas uses:')) $t0.Out
+
+# ---- not-rewritten: a link covers the member, but its shape gets no .pas edit --
+$r3 = J 'F1Form.pas' 'p3.rules'
+$x = Row $r3 'pic1' 'Caption'
+Check 'W1 not-rewritten: #link Glyph.Data <- Caption (a DOTTED To path) -- pic1.Caption, line 22, not mapped' `
+  (($null -ne $x) -and ($x.status -eq 'not-rewritten') -and ($x.kind -eq 'property') -and ((Lines $x) -eq '22')) (Show $x)
+$x = Row $r3 'pic1' 'Picture'
+Check 'W2 not-rewritten: #link Caption <- Picture.Data (a DOTTED From path) -- pic1.Picture, line 23' `
+  (($null -ne $x) -and ($x.status -eq 'not-rewritten') -and ((Lines $x) -eq '23')) (Show $x)
+Check 'W3 ... and convert-apply truly makes no .pas edit for either: no access-site-rewritten item' `
+  (@($r3.J.items | Where-Object { $_.kind -eq 'access-site-rewritten' }).Count -eq 0) (($r3.J.items | ForEach-Object { "$($_.kind)@$($_.line)" }) -join ',')
+$t3 = Run 'F1Form.pas' 'p3.rules'
+Check 'W4 text: the summary counts not-rewritten and lists each such member with its lines' `
+  (($t3.Out -match '(?m)^pas uses: .*, 2 not-rewritten\s*$') -and
+   ($t3.Out -match '(?m)^  not-rewritten pic1\.Caption \(property, published, TPicOld in LibOld\) -- line 22\s*$')) $t3.Out
 
 # ---- --apply reports the same rows ------------------------------------------
 $a = J 'F1Form.pas' 'p.rules' @('--apply', '--no-backup', '--no-reindex')

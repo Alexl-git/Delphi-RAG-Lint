@@ -24707,7 +24707,8 @@ begin
     Writeln(Format('value casts: %d value(s) changed (.dfm %d, .pas %d), %d site(s) to check by hand',
       [VDfm + VPas, VDfm, VPas, VChk]));
   end;
-  { 1.27.0 -- pas_uses[]: one summary line, then the work list (unmapped    members) with their lines; nothing when the code uses nothing }
+  { 1.27.0 -- pas_uses[]: one summary line, then the work list (unmapped and
+    not-rewritten members) with their lines; nothing when the code uses nothing }
   if Length(AReport.PasUses) > 0 then
   begin
     var NUnm : Integer:= 0;
@@ -24715,25 +24716,28 @@ begin
     var NSame: Integer:= 0;
     var NMap : Integer:= 0;
     var NCast: Integer:= 0;
+    var NNotW: Integer:= 0;
     for var PU: TApplyPasUse in AReport.PasUses do
       if PU.Status = PAS_USE_UNMAPPED then Inc(NUnm)
       else if PU.Status = PAS_USE_GLOBAL_DANGLING then Inc(NGlob)
       else if PU.Status = PAS_USE_SAME_NAME then Inc(NSame)
       else if PU.Status = PAS_USE_MAPPED then Inc(NMap)
+      else if PU.Status = PAS_USE_NOT_REWRITTEN then Inc(NNotW)
       else Inc(NCast);
     Writeln('');
-    Writeln(Format('pas uses: %d unmapped, %d global-dangling, %d same-name, %d mapped, %d cast-refused',
-      [NUnm, NGlob, NSame, NMap, NCast]));
+    Writeln(Format('pas uses: %d unmapped, %d global-dangling, %d same-name, %d mapped, %d cast-refused, %d not-rewritten',
+      [NUnm, NGlob, NSame, NMap, NCast, NNotW]));
     for var PU: TApplyPasUse in AReport.PasUses do
     begin
-      if PU.Status <> PAS_USE_UNMAPPED then Continue;
+      if (PU.Status <> PAS_USE_UNMAPPED) and (PU.Status <> PAS_USE_NOT_REWRITTEN) then Continue;
       var Ls: string:= '';
       for var L: Integer in PU.Lines do Ls:= Ls + (if Ls = '' then '' else ', ') + IntToStr(L);
-      Writeln(Format('  unmapped %s.%s (%s, %s, %s in %s) -- %s %s',
-        [PU.Instance, PU.Member, PU.Kind, PU.Visibility, PU.DeclaredIn, PU.DeclaringUnit,
+      Writeln(Format('  %s %s.%s (%s, %s, %s in %s) -- %s %s',
+        [PU.Status, PU.Instance, PU.Member, PU.Kind, PU.Visibility, PU.DeclaredIn, PU.DeclaringUnit,
          if Length(PU.Lines) = 1 then 'line' else 'lines', Ls]));
     end;
-  end;end; // procedure
+  end;
+end; // procedure
 
 type
   /// <summary>The post-apply refresh of the unit's project index (C9,

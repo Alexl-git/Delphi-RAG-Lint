@@ -1080,10 +1080,21 @@ ERROR: convert-apply fails the unit (exit 2) naming the file, the line and the
 keyword, because a cast silently not performed is the worse outcome.
 On the `.dfm` side the value of each converted instance is rewritten when that
 changes it. On the `.pas` side only `<instance>.<Prop> := '<one literal>';`
-(the literal followed by `;` or the end of a line no `+` continues) has the
-literal rewritten, quotes re-escaped; any other right-hand side (a
+has the literal rewritten, quotes re-escaped -- STRICTLY: the literal must be
+followed on the SAME line by nothing but blanks / closed comments and `;`
+(blanks, tabs and `{comments}` between the property and `:=` are fine). A
+literal that ends its line (a continuation may follow, even behind a comment
+line), one followed by `#nn` or `+`, and a statement ended by `else` / `end`
+without `;` are CHECKS, never rewrites. Any other right-hand side (a
 concatenation, a variable, a call, `Format(...)`) and every read of the
-property get NO edit and a warning, and a `with` block is out of scope. Report:
+property get NO edit and a warning. Every OTHER reference to the property in
+the unit -- `with t1 do TableName := 'W.db';`, a site the index cannot vouch
+for, another object's same-named member -- is a `value-cast-check` naming its
+line (`... the receiver is not resolved to a converted instance (a with block,
+or a site the index cannot vouch for), not rewritten; the .dfm value is, check
+by hand`): the `.dfm` value changes regardless, so silence is not an option.
+A `.dfm` value that is not ONE string literal (a multi-line `'A' + 'B.db'`, a
+`'X.db'#0` char code) is a `value-cast-check` too, left as it is. Report:
 `items[]` kind `value-cast-applied` (field `access_sites`; `old_value`, `value`,
 `file`, `line` -- for the `.dfm` the property's own line) and
 `value-cast-check` (field `warnings`, e.g. `line 2: warning: SForm.pas:28
@@ -1107,8 +1118,12 @@ reconciliation removes:
 ```
 
 `status`: `mapped` (a `#link` whose From path starts with the member covers it -- a value cast such as StripDB included --
-for that instance's `#convert` block), `cast-refused` (a CLASS-cast `#link` covers it:
-its sites are refused, above), `same-name` (no link, but the To type or one of
+for that instance's `#convert` block, and convert-apply handles its sites),
+`cast-refused` (a CLASS-cast `#link` covers it: its sites are refused, above),
+`not-rewritten` (a `#link` covers it, but convert-apply makes NO `.pas` edit
+for that link shape -- a dotted To or From path, e.g. the Orpheus->cx `#link
+Properties.X <- X`: the site still names the From member and may not compile;
+precedence cast-refused > not-rewritten > mapped), `same-name` (no link, but the To type or one of
 its ancestors has a member of that name -- carried implicitly), `unmapped` (no
 link and no such member: the work list) and `global-dangling` (a routine,
 const, var or type from a removed unit -- the remove row's `needed_by`,
@@ -1117,9 +1132,9 @@ declares the member, an ancestor of the From type included, followed across the
 `--db` stores; `kind`/`visibility`/`declared_in`/`declaring_unit` are `''`
 when no `--db` holds the member (pass the library index for inherited RTL/VCL
 members). Lines are the unit's own, sorted. Text mode prints `pas uses: N
-unmapped, M global-dangling, K same-name, J mapped, C cast-refused` and one
-`unmapped <inst>.<member> (<kind>, <visibility>, <class> in <unit>) -- line(s)
-...` per unmapped member. Not listed: a member reached with no receiver (`with
+unmapped, M global-dangling, K same-name, J mapped, C cast-refused, R
+not-rewritten` and one `<status> <inst>.<member> (<kind>, <visibility>, <class>
+in <unit>) -- line(s) ...` per unmapped and per not-rewritten member. Not listed: a member reached with no receiver (`with
 X do`) and a site the index cannot vouch for. `info --json`:
 `capabilities.pas_uses: true`.
 5. **Runtime-creator retype + TODO marker** -- every explicit `FromType.Xxx(...)`

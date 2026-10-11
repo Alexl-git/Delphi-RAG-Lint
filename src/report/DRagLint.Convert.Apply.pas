@@ -79,11 +79,19 @@ const
   /// the index, so not rewritten; reported as access-site-unverified (C8 N2
   /// review, 1.26.0).</summary>
   INH_ACTION_UNVERIFIED = 'unverified';
-  /// <summary>apply/1 pas_uses[].status: a #link covers the member (1.27.0).</summary>
+  /// <summary>apply/1 pas_uses[].status: a #link covers the member and
+  /// convert-apply handles its .pas sites -- renamed, or nothing to rename
+  /// (1.27.0).</summary>
   PAS_USE_MAPPED = 'mapped';
+  /// <summary>apply/1 pas_uses[].status: a #link covers the member, but
+  /// convert-apply makes NO .pas edit for that link shape -- a dotted To or
+  /// From path (`#link Properties.X <- X`), so the site still names the From
+  /// member and may not compile (1.27.0 review fix wave). Outranks
+  /// PAS_USE_MAPPED; PAS_USE_CAST_REFUSED outranks it.</summary>
+  PAS_USE_NOT_REWRITTEN = 'not-rewritten';
   /// <summary>apply/1 pas_uses[].status: a CLASS-cast #link covers the member,
   /// so its .pas sites are refused (cast-not-applied). A value cast (StripDB)
-  /// counts as PAS_USE_MAPPED.</summary>
+  /// counts as PAS_USE_MAPPED (PAS_USE_NOT_REWRITTEN on a dotted path).</summary>
   PAS_USE_CAST_REFUSED = 'cast-refused';
   /// <summary>apply/1 pas_uses[].status: no #link, but the To type (or an
   /// ancestor of it) has a member of that name -- carried implicitly.</summary>
@@ -3563,6 +3571,9 @@ var
   Classes  : TArray<TSymbol>;
   FieldIds : TDictionary<string, TArray<Int64>>; { UPPER name -> field ids }
   OwnerIds : TDictionary<string, TArray<Int64>>; { UPPER name -> classes declaring / inheriting it }
+  ByLine   : TDictionary<Integer, TArray<Integer>>; { line -> indexes into Refs }
+  Bound    : TList<TAccessSite>;
+  Unbound  : TList<TAccessSite>;
 
   function Has(const AIds: TArray<Int64>; AId: Int64): Boolean;
   begin
@@ -3630,12 +3641,17 @@ var
   begin
     Found:= False;
     Recv := Default(TReference);
-    for var R: TReference in Refs do
-      if (R.StartLine = ASite.Line) and (R.StartCol < ASite.Col) and SameText(R.NameText, ASite.InstanceName) and
-         ((not Found) or (R.StartCol > Recv.StartCol)) then
+    var OnLine: TArray<Integer>;
+    if ByLine.TryGetValue(ASite.Line, OnLine) then
+      for var I: Integer in OnLine do
       begin
-        Recv := R;
-        Found:= True;
+        var R: TReference:= Refs[I];
+        if (R.StartCol < ASite.Col) and SameText(R.NameText, ASite.InstanceName) and
+           ((not Found) or (R.StartCol > Recv.StartCol)) then
+        begin
+          Recv := R;
+          Found:= True;
+        end;
       end;
     AUnchecked:= not Found;
     if not Found then Exit(False);
@@ -3657,14 +3673,30 @@ begin
     if (S.Kind = skClass) and SameText(S.Name, Root) then Classes:= Classes + [S];
   FieldIds:= TDictionary<string, TArray<Int64>>.Create;
   OwnerIds:= TDictionary<string, TArray<Int64>>.Create;
+  ByLine  := TDictionary<Integer, TArray<Integer>>.Create;
+  Bound   := TList<TAccessSite>.Create;
+  Unbound := TList<TAccessSite>.Create;
   try
+    { review fix wave: the refs bucketed by line ONCE -- a site looks only at
+      its own line, not at every ref of the file (was O(sites x refs)) }
+    for var I: Integer:= 0 to High(Refs) do
+    begin
+      var OnLine: TArray<Integer>;
+      if not ByLine.TryGetValue(Refs[I].StartLine, OnLine) then OnLine:= nil;
+      ByLine.AddOrSetValue(Refs[I].StartLine, OnLine + [I]);
+    end;
     for var Site: TAccessSite in ASites do
     begin
       var Unchecked: Boolean;
-      if SiteIsBound(Site, Unchecked) then Result:= Result + [Site]
-      else if Unchecked then AUnverified:= AUnverified + [Site];
+      if SiteIsBound(Site, Unchecked) then Bound.Add(Site)
+      else if Unchecked then Unbound.Add(Site);
     end;
+    Result     := Bound.ToArray;
+    AUnverified:= Unbound.ToArray;
   finally
+    Unbound.Free;
+    Bound.Free;
+    ByLine.Free;
     OwnerIds.Free;
     FieldIds.Free;
   end;
@@ -3678,36 +3710,72 @@ end;
 // edits per DMTEST site, and two blocks linking one path to different targets
 // wrote both into the same line. 1.27.0: lifted out of PlanAccessSites so
 // pas_uses[] scopes a link exactly as the rewrite does.
-function LinkScopeNames(const ARules: TConversionRuleSet; AConverted: TList<string>;
-  AFromTypes: TDictionary<string, string>; const ALink: TConversionRule): TArray<string>;
-var
-  RuleBlock: Integer;
-  Block    : Integer;
-  First    : Integer;
-  Found    : Integer;
-  Q        : TConversionRule;
-  FromT    : string;
+// The #convert block (1-based) a #link belongs to: the number of #convert
+// rules at or before its line; 0 for a file-scope link before the first.
+function LinkRuleBlock(const ARules: TConversionRuleSet; const ALink: TConversionRule): Integer;
 begin
-  RuleBlock:= 0;
-  for Q in ARules.Rules do
-    if (Q.Kind = rkConvert) and (Q.LineNo <= ALink.LineNo) then Inc(RuleBlock);
-  if RuleBlock = 0 then Exit(AConverted.ToArray);
-  Result:= nil;
+  Result:= 0;
+  for var Q: TConversionRule in ARules.Rules do
+    if (Q.Kind = rkConvert) and (Q.LineNo <= ALink.LineNo) then Inc(Result);
+end;
+
+// The #convert block (1-based) the .dfm re-emit picks for each converted
+// instance: the first #convert whose From type matches, else the first. An
+// instance with no known From type has no entry. The caller frees the result.
+// Review fix wave: lifted out of LinkScopeNames so a caller asking for MANY
+// links (CollectPasUses) computes it once, not once per link.
+function InstanceConvertBlocks(const ARules: TConversionRuleSet; AConverted: TList<string>;
+  AFromTypes: TDictionary<string, string>): TDictionary<string, Integer>;
+var
+  Block, First, Found: Integer;
+  FromT: string;
+begin
+  Result:= TDictionary<string, Integer>.Create;
   for var N: string in AConverted do
   begin
     if not AFromTypes.TryGetValue(N, FromT) then Continue;
     Block:= 0;
     First:= 0;
     Found:= 0;
-    for Q in ARules.Rules do
+    for var Q: TConversionRule in ARules.Rules do
       if Q.Kind = rkConvert then
       begin
         Inc(Block);
         if First = 0 then First:= Block;
         if (Found = 0) and SameText(BareTypeTail(Q.FromType), BareTypeTail(FromT)) then Found:= Block;
       end;
-    if Found = 0 then Found:= First;
-    if Found = RuleBlock then Result:= Result + [N];
+    Result.AddOrSetValue(N, if Found = 0 then First else Found);
+  end;
+end;
+
+// The converted instances whose block (ABlocks) is ARuleBlock, in AConverted
+// order; every one of them when ARuleBlock is 0 (a file-scope link).
+function ScopeFromBlocks(AConverted: TList<string>; ABlocks: TDictionary<string, Integer>;
+  ARuleBlock: Integer): TArray<string>;
+var
+  B: Integer;
+begin
+  if ARuleBlock = 0 then Exit(AConverted.ToArray);
+  var Names: TList<string>:= TList<string>.Create;
+  try
+    for var N: string in AConverted do
+      if ABlocks.TryGetValue(N, B) and (B = ARuleBlock) then Names.Add(N);
+    Result:= Names.ToArray;
+  finally
+    Names.Free;
+  end;
+end;
+
+function LinkScopeNames(const ARules: TConversionRuleSet; AConverted: TList<string>;
+  AFromTypes: TDictionary<string, string>; const ALink: TConversionRule): TArray<string>;
+begin
+  var RuleBlock: Integer:= LinkRuleBlock(ARules, ALink);
+  if RuleBlock = 0 then Exit(AConverted.ToArray);
+  var Blocks: TDictionary<string, Integer>:= InstanceConvertBlocks(ARules, AConverted, AFromTypes);
+  try
+    Result:= ScopeFromBlocks(AConverted, Blocks, RuleBlock);
+  finally
+    Blocks.Free;
   end;
 end;
 
@@ -3808,43 +3876,111 @@ type
 // The distinct values of ALines, ascending.
 function DistinctSortedLines(const ALines: TArray<Integer>): TArray<Integer>;
 begin
-  Result:= nil;
-  for var L: Integer in ALines do
-    if TArray.IndexOf<Integer>(Result, L) < 0 then Result:= Result + [L];
-  TArray.Sort<Integer>(Result);
+  var Sorted: TArray<Integer>:= Copy(ALines);
+  TArray.Sort<Integer>(Sorted);
+  var Kept: Integer:= 0;
+  for var I: Integer:= 0 to High(Sorted) do
+    if (Kept = 0) or (Sorted[I] <> Sorted[Kept - 1]) then
+    begin
+      Sorted[Kept]:= Sorted[I];
+      Inc(Kept);
+    end;
+  SetLength(Sorted, Kept);
+  Result:= Sorted;
 end;
+
+// 1.27.0 review fix wave: the pas_uses status one #link gives the member its
+// FromPath head names -- the access-site planner's own decision, mirrored
+// branch for branch (PlanAccessSites):
+//   * a CLASS cast, or a cast the library does not hold -> cast-refused
+//     (Outcomes 1-3: refused per site, or skipped with one warning);
+//   * a dotted To or From path -> not-rewritten (the planner's
+//     "nested .dfm path" Continue; a value cast on a dotted path finds no
+//     member token either), except an identity link of a plain path;
+//   * otherwise -> mapped (renamed, or an identity link: nothing to rename;
+//     a value cast's literals are rewritten or checked).
+function LinkPasStatus(const ALink: TConversionRule; const ACastLib: TCastLib): string;
+begin
+  var Dotted  : Boolean:= (Pos('.', ALink.ToPath) > 0) or (Pos('.', ALink.FromPath) > 0);
+  var Identity: Boolean:= SameText(ALink.ToPath, ALink.FromPath);
+  if ALink.Cast <> '' then
+  begin
+    var VD: TCastDef;
+    if not (FindClassCast(ACastLib, ALink.Cast, VD) and (VD.Value <> '')) then Exit(PAS_USE_CAST_REFUSED);
+    Exit(if Dotted then PAS_USE_NOT_REWRITTEN else PAS_USE_MAPPED);
+  end;
+  Result:= if Dotted and not Identity then PAS_USE_NOT_REWRITTEN else PAS_USE_MAPPED;
+end;
+
+// The precedence of the link-given pas_uses statuses (higher wins).
+function PasStatusRank(const AStatus: string): Integer;
+const
+  RANK_MAPPED        = 0;
+  RANK_NOT_REWRITTEN = 1;
+  RANK_CAST_REFUSED  = 2;
+begin
+  if AStatus = PAS_USE_CAST_REFUSED then Result:= RANK_CAST_REFUSED
+  else if AStatus = PAS_USE_NOT_REWRITTEN then Result:= RANK_NOT_REWRITTEN
+  else Result:= RANK_MAPPED;
+end;
+
+type
+  // review fix wave: one cached FindClassMember answer (CollectPasUses).
+  TMemberHit = record
+    Found   : Boolean;
+    Member  : TSymbol;
+    Owner   : string;
+    DeclUnit: string;
+  end;
 
 // 1.27.0: apply/1 pas_uses[] member rows -- every member the unit's code
 // reaches through a converted instance, on the access-site rewrite's own
 // bound sites, with what the map does about it (see TApplyPasUse).
 function CollectPasUses(const AIn: TPasUsesInput): TArray<TApplyPasUse>;
 var
-  Cover : TDictionary<string, string>;   { UPPER instance|member -> mapped / cast-refused }
-  Index : TDictionary<string, Integer>;  { UPPER instance|member -> row }
-  Rows  : TList<TApplyPasUse>;
-  Unv   : TArray<TAccessSite>;
-  Member: TSymbol;
-  Owner, DeclUnit, Status: string;
+  Cover   : TDictionary<string, string>;      { UPPER instance|member -> a link-given status }
+  Index   : TDictionary<string, Integer>;     { UPPER instance|member -> row }
+  Rows    : TList<TApplyPasUse>;
+  RowLines: TObjectList<TList<Integer>>;      { per row, its lines as found }
+  Hits    : TDictionary<string, TMemberHit>;  { UPPER type|member -> FindClassMember's answer }
+  Blocks  : TDictionary<string, Integer>;     { instance -> its #convert block, once for every link }
+  Unv     : TArray<TAccessSite>;
+  Status  : string;
+
+  { review fix wave: FindClassMember walks ancestors across every --db; many
+    instances share a type, so each (type, member) is asked ONCE }
+  function Lookup(const AType, AMember: string): TMemberHit;
+  begin
+    var Key: string:= UpperCase(AType + '|' + AMember);
+    if Hits.TryGetValue(Key, Result) then Exit;
+    Result:= Default(TMemberHit);
+    Result.Found:= FindClassMember(AIn.Trees, AType, AMember, Result.Member, Result.Owner, Result.DeclUnit);
+    Hits.Add(Key, Result);
+  end;
+
 begin
   Result:= nil;
   if (AIn.FileId <= 0) or (AIn.Converted = nil) or (AIn.Converted.Count = 0) then Exit;
-  Cover:= TDictionary<string, string>.Create;
-  Index:= TDictionary<string, Integer>.Create;
-  Rows := TList<TApplyPasUse>.Create;
+  Cover   := TDictionary<string, string>.Create;
+  Index   := TDictionary<string, Integer>.Create;
+  Rows    := TList<TApplyPasUse>.Create;
+  RowLines:= TObjectList<TList<Integer>>.Create(True);
+  Hits    := TDictionary<string, TMemberHit>.Create;
+  Blocks  := InstanceConvertBlocks(AIn.Book.Rules, AIn.Converted, AIn.FromTypes);
   try
     for var L: TConversionRule in WithoutUnreachableRules(AIn.Book.Rules, AIn.Book.Unreachable, 0).Rules do
     begin
       if (L.Kind <> rkLink) or (L.FromPath = '') or (L.ToPath = '') then Continue;
       var Head: string:= L.FromPath;
       if Head.Contains('.') then Head:= Head.Substring(0, Head.IndexOf('.'));
-      for var N: string in LinkScopeNames(AIn.Book.Rules, AIn.Converted, AIn.FromTypes, L) do
+      var LinkStatus: string:= LinkPasStatus(L, AIn.CastLib);
+      for var N: string in ScopeFromBlocks(AIn.Converted, Blocks, LinkRuleBlock(AIn.Book.Rules, L)) do
       begin
         var K: string:= UpperCase(N + '|' + Head);
-        { a cast link wins: whatever else covers the member, its sites are refused }
-        var VD: TCastDef;
-        var ClassCast: Boolean:= (L.Cast <> '') and not (FindClassCast(AIn.CastLib, L.Cast, VD) and (VD.Value <> ''));
-        if ClassCast then Cover.AddOrSetValue(K, PAS_USE_CAST_REFUSED)
-        else if not Cover.ContainsKey(K) then Cover.Add(K, PAS_USE_MAPPED);
+        { the strongest claim wins: cast-refused > not-rewritten > mapped }
+        var Prior: string;
+        if not Cover.TryGetValue(K, Prior) or (PasStatusRank(LinkStatus) > PasStatusRank(Prior)) then
+          Cover.AddOrSetValue(K, LinkStatus);
       end;
     end;
     for var S: TAccessSite in BoundAccessSites(AIn.Store, AIn.FileId, AIn.DfmPath,
@@ -3857,33 +3993,32 @@ begin
       var At: Integer;
       if Index.TryGetValue(K, At) then
       begin
-        var Old: TApplyPasUse:= Rows[At];
-        Old.Lines:= Old.Lines + [S.Line];
-        Rows[At]:= Old;
+        RowLines[At].Add(S.Line);
         Continue;
       end;
       var R: TApplyPasUse:= Default(TApplyPasUse);
       R.Instance:= Inst;
       R.Member  := S.Member;
-      R.Lines   := [S.Line];
       if not AIn.FromTypes.TryGetValue(Inst, R.FromType) then R.FromType:= '';
       if not AIn.ToTypes.TryGetValue(Inst, R.ToType) then R.ToType:= '';
-      if FindClassMember(AIn.Trees, R.FromType, S.Member, Member, Owner, DeclUnit) then
+      var Hit: TMemberHit:= Lookup(R.FromType, S.Member);
+      if Hit.Found then
       begin
-        R.Kind         := PasUseKind(Member.Kind, Member.Name, True);
-        R.Visibility   := Trim(Member.Modifiers);
-        R.DeclaredIn   := Owner;
-        R.DeclaringUnit:= DeclUnit;
+        R.Kind         := PasUseKind(Hit.Member.Kind, Hit.Member.Name, True);
+        R.Visibility   := Trim(Hit.Member.Modifiers);
+        R.DeclaredIn   := Hit.Owner;
+        R.DeclaringUnit:= Hit.DeclUnit;
       end;
       if not Cover.TryGetValue(K, Status) then
-        Status:= if (R.ToType <> '') and FindClassMember(AIn.Trees, R.ToType, S.Member, Member, Owner, DeclUnit)
-                 then PAS_USE_SAME_NAME else PAS_USE_UNMAPPED;
+        Status:= if (R.ToType <> '') and Lookup(R.ToType, S.Member).Found then PAS_USE_SAME_NAME else PAS_USE_UNMAPPED;
       R.Status:= Status;
       Index.Add(K, Rows.Count);
       Rows.Add(R);
+      RowLines.Add(TList<Integer>.Create);
+      RowLines.Last.Add(S.Line);
     end;
     Result:= Rows.ToArray;
-    for var I: Integer:= 0 to High(Result) do Result[I].Lines:= DistinctSortedLines(Result[I].Lines);
+    for var I: Integer:= 0 to High(Result) do Result[I].Lines:= DistinctSortedLines(RowLines[I].ToArray);
     TArray.Sort<TApplyPasUse>(Result, TComparer<TApplyPasUse>.Construct(
       function(const A, B: TApplyPasUse): Integer
       begin
@@ -3891,6 +4026,9 @@ begin
         if Result = 0 then Result:= CompareText(A.Member, B.Member);
       end));
   finally
+    Blocks.Free;
+    Hits.Free;
+    RowLines.Free;
     Rows.Free;
     Index.Free;
     Cover.Free;
@@ -3997,25 +4135,51 @@ begin
     end;
 end;
 
-// 1.27.0 (C15): True when the first non-blank line after ALine (1-based)
-// continues an expression ('+' or a '#nn' character code).
-function NextLineContinues(const APasLines: TStringList; ALine: Integer): Boolean;
+// 1.27.0 review fix wave: the column of the first character at or after AP in
+// AText that is neither a blank (space, tab) nor inside a comment closed on
+// the same line ({..}, (*..*)). A '//' comment, or one left open, runs to the
+// end of the line: Length(AText) + 1 is returned.
+function SkipBlanksAndComments(const AText: string; AP: Integer): Integer;
+const
+  PAREN_STAR_OPEN  = '(*';
+  PAREN_STAR_CLOSE = '*)';
+  LINE_COMMENT     = '//';
 begin
-  for var N: Integer:= ALine to APasLines.Count - 1 do
+  Result:= AP;
+  while Result <= Length(AText) do
   begin
-    var T: string:= Trim(APasLines[N]);
-    if T <> '' then Exit(CharInSet(T[1], ['+', '#']));
+    if CharInSet(AText[Result], [' ', #9]) then Inc(Result)
+    else if AText[Result] = '{' then
+    begin
+      var Close: Integer:= Pos('}', AText, Result + 1);
+      if Close = 0 then Exit(Length(AText) + 1);
+      Result:= Close + 1;
+    end
+    else if Copy(AText, Result, Length(PAREN_STAR_OPEN)) = PAREN_STAR_OPEN then
+    begin
+      var Close: Integer:= Pos(PAREN_STAR_CLOSE, AText, Result + Length(PAREN_STAR_OPEN));
+      if Close = 0 then Exit(Length(AText) + 1);
+      Result:= Close + Length(PAREN_STAR_CLOSE);
+    end
+    else if Copy(AText, Result, Length(LINE_COMMENT)) = LINE_COMMENT then Exit(Length(AText) + 1)
+    else Exit;
   end;
-  Result:= False;
 end;
 
-// 1.27.0 (C15): a `:=` whose right-hand side is ONE string literal, ending at
-// a ';' or at the end of the line with no continuation on the next one (its
-// [ALitCol, ALitEnd) span returned), any other assignment, or a read.
+// 1.27.0 (C15): a `:=` whose right-hand side is ONE string literal (its
+// [ALitCol, ALitEnd) span returned), any other assignment, or a read. Review
+// fix wave: STRICT -- the literal must be followed, on the SAME line, by
+// nothing but blanks / closed comments and then ';'. A literal that ends the
+// line (a continuation may follow, even behind a comment line), one followed
+// by '#nn', '+', a comment running to the line end, or a statement ended by
+// `else` / `end` without ';' is vskNonLiteral, never rewritten. Blanks, tabs
+// and closed comments between the member and ':=' are allowed.
 function ClassifyValueCastSite(const APasLines: TStringList; ALine, ACol: Integer;
   out ALitCol, ALitEnd: Integer): TValueCastSiteKind;
 const
   ASSIGN_OP = ':=';
+  QUOTE     = '''';
+  STMT_END  = ';';
 var
   S: string;
   P: Integer;
@@ -4026,23 +4190,21 @@ begin
   S:= APasLines[ALine - 1];
   P:= ACol;
   while (P <= Length(S)) and IsIdentChar(S[P]) do Inc(P);
-  while (P <= Length(S)) and (S[P] = ' ') do Inc(P);
+  P:= SkipBlanksAndComments(S, P);
   if Copy(S, P, Length(ASSIGN_OP)) <> ASSIGN_OP then Exit(vskRead);
   Result:= vskNonLiteral;
-  Inc(P, Length(ASSIGN_OP));
-  while (P <= Length(S)) and (S[P] = ' ') do Inc(P);
-  if (P <= Length(S)) and (S[P] = '''') and (LiteralEnd(S, P) > 0) then
-  begin
-    ALitCol:= P;
-    ALitEnd:= LiteralEnd(S, P);
-    P:= ALitEnd;
-    while (P <= Length(S)) and (S[P] = ' ') do Inc(P);
-    if ((P <= Length(S)) and (S[P] = ';')) or ((P > Length(S)) and not NextLineContinues(APasLines, ALine)) then
-      Result:= vskLiteral;
-  end;
+  P:= SkipBlanksAndComments(S, P + Length(ASSIGN_OP));
+  if (P > Length(S)) or (S[P] <> QUOTE) or (LiteralEnd(S, P) = 0) then Exit;
+  var LitEnd: Integer:= LiteralEnd(S, P);
+  var After: Integer:= SkipBlanksAndComments(S, LitEnd);
+  if (After > Length(S)) or (S[After] <> STMT_END) then Exit;
+  ALitCol:= P;
+  ALitEnd:= LitEnd;
+  Result := vskLiteral;
 end;
 // 1.27.0 (C15): the .pas half of a VALUE cast for one #link: each bound site
-// whose assignment has ONE string-literal right-hand side gets that literal
+// whose assignment has ONE string-literal right-hand side ending the statement
+// on its line (ClassifyValueCastSite) gets that literal
 // rewritten when the transform changes it (an identity link only); every
 // other assignment and every read gets no edit and a value-cast-check
 // warning naming its line. A literal the transform leaves alone: nothing.
@@ -4103,6 +4265,60 @@ begin
         [ALink.LineNo, ExtractFileName(AUnitPas), S.Line, S.InstanceName, ALink.FromPath, ALink.Cast, Why]);
     end;
     AItems:= AItems + [It];
+  end;
+end;
+
+// 1.27.0 review fix wave: the .pas references to a value-cast link's member
+// that the access-site binding did NOT resolve to a converted instance -- a
+// `with X do TableName := ...` (no receiver at the site), a receiver the index
+// cannot vouch for, any other object's same-named member. The .dfm value is
+// rewritten regardless, so each is a value-cast-check warning naming its line,
+// never an edit and never silence. One item per (line, column); ABound are the
+// sites PlanValueCastSites already reports. A dotted FromPath has no single
+// member token and yields nothing here (pas_uses says not-rewritten).
+function UnresolvedValueCastSites(const AStore: ISymbolStore; AFileId: Int64; const AUnitPas: string;
+  const ALink: TConversionRule; const ABound: TArray<TAccessSite>): TArray<TApplyItem>;
+var
+  Seen: TDictionary<Int64, Boolean>;
+  Items: TList<TApplyItem>;
+
+  function PosKey(ALine, ACol: Integer): Int64;
+  const
+    LINE_SHIFT = 32; { the line in the high 32 bits, the column in the low }
+  begin
+    Result:= (Int64(ALine) shl LINE_SHIFT) or Cardinal(ACol);
+  end;
+
+begin
+  Result:= nil;
+  if (AFileId <= 0) or (ALink.FromPath = '') or (Pos('.', ALink.FromPath) > 0) then Exit;
+  Seen := TDictionary<Int64, Boolean>.Create;
+  Items:= TList<TApplyItem>.Create;
+  try
+    for var B: TAccessSite in ABound do Seen.AddOrSetValue(PosKey(B.Line, B.Col), True);
+    for var R: TReference in AStore.GetReferencesFromFile(AFileId) do
+    begin
+      if not SameText(R.NameText, ALink.FromPath) or Seen.ContainsKey(PosKey(R.StartLine, R.StartCol)) then Continue;
+      Seen.Add(PosKey(R.StartLine, R.StartCol), True);
+      var It: TApplyItem:= Default(TApplyItem);
+      It.Kind    := aikValueCastCheck;
+      It.Field   := afWarnings;
+      It.Instance:= R.ReceiverText;
+      It.FilePath:= AUnitPas;
+      It.Path    := ALink.FromPath;
+      It.RuleLine:= ALink.LineNo;
+      It.Line    := R.StartLine;
+      It.Value   := ALink.Cast;
+      It.Text    := Format('line %d: warning: %s:%d %s -- value cast %s: the receiver is not resolved to a converted ' +
+        'instance (a with block, or a site the index cannot vouch for), not rewritten; the .dfm value is, check by hand',
+        [ALink.LineNo, ExtractFileName(AUnitPas), R.StartLine,
+         (if R.ReceiverText <> '' then R.ReceiverText + '.' + ALink.FromPath else ALink.FromPath), ALink.Cast]);
+      Items.Add(It);
+    end;
+    Result:= Items.ToArray;
+  finally
+    Items.Free;
+    Seen.Free;
   end;
 end;
 // C8 N2: the 'retyped' entries of AInherited as instances for BuildApplyPlan's
@@ -4872,11 +5088,17 @@ var
       begin
         var VEdits: TArray<TTextEdit>;
         var VItems: TArray<TApplyItem>;
-        PlanValueCastSites(BoundAccessSites(PasStore, PasFileId, ADfmPath, FindMemberAccessSites(PasStore, PasFileId, PasLines,
-          LinkRule.FromPath, LinkScopeNames(ABook.Rules, ConvertedInstNames, InstFromType, LinkRule)), Unv), LinkRule, VDef, AUnitPas, PasLines, VEdits, VItems);
+        var VScope: TArray<string>:= LinkScopeNames(ABook.Rules, ConvertedInstNames, InstFromType, LinkRule);
+        var VSites: TArray<TAccessSite>:= BoundAccessSites(PasStore, PasFileId, ADfmPath,
+          FindMemberAccessSites(PasStore, PasFileId, PasLines, LinkRule.FromPath, VScope), Unv);
+        PlanValueCastSites(VSites, LinkRule, VDef, AUnitPas, PasLines, VEdits, VItems);
         ReportUnverified(LinkRule.FromPath);
         for var VE: TTextEdit in VEdits do Edits.Add(VE);
         for var VI: TApplyItem in VItems do Emit(VI);
+        { review fix wave: every other reference to the member -- a with block,
+          an unverified site -- is a check, never silence }
+        if Length(VScope) > 0 then
+          for var VU: TApplyItem in UnresolvedValueCastSites(PasStore, PasFileId, AUnitPas, LinkRule, VSites) do Emit(VU);
         if SameText(LinkRule.ToPath, LinkRule.FromPath) then Continue;
       end
       else if LinkRule.Cast <> '' then
