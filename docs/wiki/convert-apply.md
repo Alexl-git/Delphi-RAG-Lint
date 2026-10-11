@@ -17,6 +17,43 @@ that writes nothing. `--apply` writes for real, with backups and a
 `recovery.txt`, unless `--no-backup` is also given. `--db PATH` is required
 and may be repeated.
 
+## Uses rules: #unuse, #use, #useswap
+A book's unit rules act on the unit being converted, in the same single
+write: `#unuse Old` takes Old out of whichever uses clause holds it, `#use New`
+adds New to the implementation uses when neither clause has it, and
+`#useswap Old -> New1, New2` swaps them in Old's section (a unit without Old
+is not touched). A unit the book both adds and removes is kept. An entry to
+remove inside a `{$IF...}` region refuses the unit (exit 1, nothing written).
+The JSON `uses[]` lists every change with its action, section, line and rule.
+
+## Uses reconciliation (C9, 1.27.0; on by default)
+convert-apply re-indexes the converted `.pas` and `.dfm` IN MEMORY (nothing
+is written to a database, so the dry run shows exactly what `--apply` will
+write) and decides each `#unuse` / `#useswap Old` from what the converted
+unit still needs:
+* **kept** while a component the converted `.dfm` still streams has a class
+  from that unit (an unconverted instance, a second component type, an
+  inherited instance) -- a `kept` row and a warning naming the components;
+* **removed** when only `.pas` code still needs it -- the remove row names the
+  references left dangling (`needed_by`, and `pas_uses[]` rows with status
+  `global-dangling`); the compile errors are the intended signal;
+* **kept** when no `--db` indexes the unit (`unit-rule-unverified`): pass the
+  platform library `--db` (`drag-lint resolve-dbs --platform Win32|Win64`) so
+  the engine can see it.
+
+Presence is scope-alias aware (`#unuse DBTables` matches `Bde.DBTables`,
+`#use DB` is satisfied by `Data.DB`). When a To type is declared in two
+units, none is picked: it is reported in `uses_unresolved` (with the line of
+the retyped field) and as a `uses-unit-ambiguous` warning -- add `#use <unit>`
+to the book to choose. That `#use` then puts the unit where the retyped field
+needs it: the INTERFACE uses when the field is declared there, moved there when
+the unit used it only in its implementation (a `moved` row). Every unit the
+conversion itself writes into the uses clause (a To type's unit, or a unit
+named after the To type on a `#convert` line) is an `add` row with rule
+`#convert`, counted in `uses_added`. After `--apply`
+the unit's own project index is refreshed (`--no-reindex` skips it).
+`--no-reconcile-uses` restores the 1.26 behaviour exactly.
+
 ## Cast links in code (1.27.0)
 A `#link To <- From : Cast` converts the `.dfm` as before, but never rewrites
 a `.pas` access site: a cast's `pas` template is a statement, and there is no
@@ -46,6 +83,15 @@ old member), `same-name` (the new type has the same name, so it carries over),
 `unmapped` (no rule and no such member: your work list) or `global-dangling`.
 Text mode prints a one-line count and the unmapped and not-rewritten members
 with their lines.
+
+## Exit codes
+`0` converted (or nothing to do); `1` the unit was REFUSED (a deliberate
+refusal: nothing written, the reason printed); `2` a write failed or was
+rolled back, or the run could not start (a missing unit or rules file);
+`3` an unknown argument;
+`6` the `--castlib` cannot be used (it fails to load, or names an unknown
+`value` keyword) -- a configuration error, so it no longer reads as a write
+failure. A batch (`--unit` repeated) exits with the worst unit's code.
 
 ## Reaching it in the IDE
 No IDE surface -- this is a CLI-only feature.

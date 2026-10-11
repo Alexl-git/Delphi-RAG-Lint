@@ -82,8 +82,8 @@ type
   /// the line the name is written onto (the entry it is appended after, or the
   /// first entry it replaces), or the section keyword's line when a new uses
   /// clause is created. Rule is the book line behind the row, normalised to
-  /// '#unuse Old', '#use New' or '#useswap Old -&gt; New1, New2', '' for a
-  /// row no rule asked for. UnitName is spelled as written in the unit for a
+  /// '#unuse Old', '#use New' or '#useswap Old -&gt; New1, New2', '#convert'
+  /// (C9) for a unit the #convert surface adds, '' for a row no rule asked for. UnitName is spelled as written in the unit for a
   /// removal, kept or moved row and as written in the book for an add.
   /// Reason is '' unless kept or skipped. Source (C9) says what produced the
   /// row: 'rule' (a book line), 'reconcile' (a name the conversion introduced)
@@ -112,12 +112,17 @@ type
 
   /// <summary>A watched entry the reconciler decided to KEEP (C9).</summary>
   /// <remarks>UnitName is the entry as written in the unit. Action is 'kept'
-  /// or 'skipped' (the C13 N4 --only shape, kept byte-compatible).</remarks>
+  /// or 'skipped' (the C13 N4 --only shape, kept byte-compatible). NeededBy is
+  /// the DISPLAY list (capped at NEEDED_BY_MAX); Keepers is every keeping .dfm
+  /// component, uncapped -- a decision about the row reads Keepers (C9 A7-6).</remarks>
   TUsesKeep = record
     UnitName: string;
     Action  : string;
     Reason  : string;
     NeededBy: TArray<TUsesNeed>;
+    /// <summary>C9 A7-6: every .dfm component that keeps the unit, uncapped
+    /// (same shape as NeededBy); empty unless Reason is the .dfm reason.</summary>
+    Keepers : TArray<TUsesNeed>;
   end;
 
   /// <summary>A unit the reconciler adds because a name the conversion
@@ -203,7 +208,8 @@ function BookHasUnitRules(const ARules: TConversionRuleSet): Boolean;
 /// implementation uses when the unit has one, else the interface uses, else a
 /// new implementation clause -- the section TFindUnitRefactoring.Build picks.
 /// They produce edits but no TUsesChange row: they are the #convert surface,
-/// not a unit rule.</param>
+/// not a unit rule. (The C9 overload with ANeeds.Enabled reports each one
+/// actually added as an 'add' row, rule '#convert', source 'rule'.)</param>
 /// <param name="AInterfaceAdds">The units of AExtraAdds that must go to the
 /// INTERFACE uses because a retyped field of their To type is declared in the
 /// interface section (C13 a). Requested first, so a #use of the same unit does
@@ -254,6 +260,15 @@ function ReadUsesEntries(const AUnitPas, AText: string; out AEntries: TArray<TUs
 function UnitRuleWatchList(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>;
   const ASameUnit: TSameUnitFunc): TArray<TWatchUnit>;
 
+/// <summary>The 1-based line of a unit's 'implementation' keyword, found
+/// TOKEN by token with the planner's own lexer (C9 A8-3), so a comment glued
+/// to it ('implementation{...}', 'implementation(*...*)') or the word inside
+/// a comment or string elsewhere does not mislead it.</summary>
+/// <param name="AText">The unit's text (any mix of CRLF / LF / CR).</param>
+/// <returns>The keyword's line, or 0 when the text has none.</returns>
+/// <remarks>Pure.</remarks>
+function ImplementationKeywordLine(const AText: string): Integer;
+
 implementation
 
 uses
@@ -270,6 +285,9 @@ const
   QUOTE        = '''';
   TRIPLE_QUOTE = '''''''';
   DIR_OPEN_LEN = 2;  // brace + dollar
+  { C9 review: uses[].rule of a unit the #convert surface adds (a To type's unit or a block's
+    trailing unit) -- reported as an add row like any rule add, source 'rule' }
+  CONVERT_ADD_RULE = '#convert';
   PAR_OPEN_LEN = 3;  // paren + star + dollar
 
 type
@@ -283,6 +301,7 @@ type
     Stop : Integer;
     Text : string;
     Depth: Integer;
+    Escaped: Boolean;  { an '&ident': an identifier, never a keyword }
   end;
 
   TUsesEntry = record
@@ -476,7 +495,10 @@ begin
   end;
   C:= FText[FPos];
   if (C = '&') and (FPos < Length(FText)) and IsIdentStart(FText[FPos + 1]) then
+  begin
     Inc(FPos);
+    Result.Escaped:= True;
+  end;
   if IsIdentStart(FText[FPos]) then
   begin
     Result.Kind:= tkIdent;
@@ -513,7 +535,7 @@ end;
 
 function IsWord(const T: TTok; const AWord: string): Boolean;
 begin
-  Result:= (T.Kind = tkIdent) and SameText(T.Text, AWord);
+  Result:= (T.Kind = tkIdent) and not T.Escaped and SameText(T.Text, AWord);
 end;
 
 function IsSym(const T: TTok; const ASym: string): Boolean;
@@ -903,7 +925,24 @@ procedure TUnitRulePlanner.RequestAdd(const AName: string; ASection: Integer; co
 var
   C: TUsesChange;
 begin
-  if (Trim(AName) = '') or SameText(AName, FUnitName) or IsPresent(AName) then Exit;
+  if (Trim(AName) = '') or SameText(AName, FUnitName) then Exit;
+  if IsPresent(AName) then
+  begin
+    { C9 A8-1: a book rule asking for a unit the #convert surface already
+      requested is that add's reason -- its row keeps the section the unit is
+      written to and takes the rule's text }
+    if FNeeds.Enabled and (ARule <> '') then
+      for var S: Integer:= 0 to 1 do
+        for var I: Integer:= 0 to FAdds[S].Count - 1 do
+          if Same(FAdds[S][I].UnitName, AName) and (FAdds[S][I].Rule = CONVERT_ADD_RULE) then
+          begin
+            C:= FAdds[S][I];
+            C.Rule  := ARule;
+            C.Source:= 'rule';
+            FAdds[S][I]:= C;
+          end;
+    Exit;
+  end;
   C:= Default(TUsesChange);
   C.Action  := 'add';
   C.UnitName:= Trim(AName);
@@ -935,7 +974,9 @@ var
 
 begin
   for U in AInterfaceAdds do Move(U);
-  { C9: a reconcile add an interface declaration needs moves the same way }
+  { C9: a reconcile add an interface declaration needs moves the same way.
+    Unreachable through convert-apply since 1.27.0: no .pas surface writes a
+    name the reconciler adds (see UsesReconcile.TReconciler.PlanNewNames) }
   if FNeeds.Enabled then
     for var A: TUsesReconAdd in FNeeds.Adds do
       if A.ToInterface then Move(A.UnitName);
@@ -947,10 +988,15 @@ var
   U: string;
   S: Integer;
 begin
+  { C9 review: under C9 the #convert surface's adds are uses[] rows too (rule
+    '#convert', source 'rule'), so an editor counts every unit written;
+    the 1.26 planner (Enabled=False) keeps them silent }
+  var ConvertRule  : string:= if FNeeds.Enabled then CONVERT_ADD_RULE else '';
+  var ConvertSource: string:= if FNeeds.Enabled then 'rule' else '';
   { C13 a: a To type whose retyped field is declared in the interface needs
     its unit THERE -- requested before any rule, so IsPresent then keeps a
     #use or the section rule below from adding it a second time }
-  for U in AInterfaceAdds do RequestAdd(U, 0, '');
+  for U in AInterfaceAdds do RequestAdd(U, 0, ConvertRule, ConvertSource);
   for R in ARules.Rules do
     case R.Kind of
       rkUse: RequestAdd(R.UnitName, 1, '#use ' + R.UnitName);
@@ -965,7 +1011,7 @@ begin
   { the #convert surface's own uses-add: TFindUnitRefactoring's section rule }
   S:= 1;
   if (Length(FClauses[1].Entries) = 0) and (Length(FClauses[0].Entries) > 0) then S:= 0;
-  for U in AExtraAdds do RequestAdd(U, S, '');
+  for U in AExtraAdds do RequestAdd(U, S, ConvertRule, ConvertSource);
   { C9 R7: units a name the conversion introduced resolves to }
   if FNeeds.Enabled then
     for var A: TUsesReconAdd in FNeeds.Adds do
@@ -1387,6 +1433,30 @@ begin
     Result:= Planner.Entries(AEntries);
   finally
     Planner.Free;
+  end;
+end;
+
+function ImplementationKeywordLine(const AText: string): Integer;
+var
+  Txt: TUnitText;
+  Lex: TUsesLexer;
+  T  : TTok;
+begin
+  Result:= 0;
+  Txt:= TUnitText.Create('', AText);
+  try
+    Lex:= TUsesLexer.Create(Txt.Text);
+    try
+      { IsWord: an escaped identifier '&implementation' is not the keyword }
+      repeat
+        T:= Lex.Next;
+      until (T.Kind = tkEof) or IsWord(T, SECTION_IMPL);
+      if T.Kind <> tkEof then Result:= Txt.LineOf(T.Start);
+    finally
+      Lex.Free;
+    end;
+  finally
+    Txt.Free;
   end;
 end;
 
