@@ -254,6 +254,15 @@ function ReadUsesEntries(const AUnitPas, AText: string; out AEntries: TArray<TUs
 function UnitRuleWatchList(const ARules: TConversionRuleSet; const AExtraAdds: TArray<string>;
   const ASameUnit: TSameUnitFunc): TArray<TWatchUnit>;
 
+/// <summary>The 1-based line of a unit's 'implementation' keyword, found
+/// TOKEN by token with the planner's own lexer (C9 A8-3), so a comment glued
+/// to it ('implementation{...}', 'implementation(*...*)') or the word inside
+/// a comment or string elsewhere does not mislead it.</summary>
+/// <param name="AText">The unit's text (any mix of CRLF / LF / CR).</param>
+/// <returns>The keyword's line, or 0 when the text has none.</returns>
+/// <remarks>Pure.</remarks>
+function ImplementationKeywordLine(const AText: string): Integer;
+
 implementation
 
 uses
@@ -903,7 +912,24 @@ procedure TUnitRulePlanner.RequestAdd(const AName: string; ASection: Integer; co
 var
   C: TUsesChange;
 begin
-  if (Trim(AName) = '') or SameText(AName, FUnitName) or IsPresent(AName) then Exit;
+  if (Trim(AName) = '') or SameText(AName, FUnitName) then Exit;
+  if IsPresent(AName) then
+  begin
+    { C9 A8-1: a rule asking for a unit the #convert surface's rule-less
+      interface add already requested is that add's reason -- its row, in the
+      section the unit is written to (the 1.26 planner kept it silent) }
+    if FNeeds.Enabled and (ARule <> '') then
+      for var S: Integer:= 0 to 1 do
+        for var I: Integer:= 0 to FAdds[S].Count - 1 do
+          if Same(FAdds[S][I].UnitName, AName) and (FAdds[S][I].Rule = '') and (FAdds[S][I].Source = '') then
+          begin
+            C:= FAdds[S][I];
+            C.Rule  := ARule;
+            C.Source:= 'rule';
+            FAdds[S][I]:= C;
+          end;
+    Exit;
+  end;
   C:= Default(TUsesChange);
   C.Action  := 'add';
   C.UnitName:= Trim(AName);
@@ -1387,6 +1413,29 @@ begin
     Result:= Planner.Entries(AEntries);
   finally
     Planner.Free;
+  end;
+end;
+
+function ImplementationKeywordLine(const AText: string): Integer;
+var
+  Txt: TUnitText;
+  Lex: TUsesLexer;
+  T  : TTok;
+begin
+  Result:= 0;
+  Txt:= TUnitText.Create('', AText);
+  try
+    Lex:= TUsesLexer.Create(Txt.Text);
+    try
+      repeat
+        T:= Lex.Next;
+      until (T.Kind = tkEof) or IsWord(T, SECTION_IMPL);
+      if T.Kind <> tkEof then Result:= Txt.LineOf(T.Start);
+    finally
+      Lex.Free;
+    end;
+  finally
+    Txt.Free;
   end;
 end;
 

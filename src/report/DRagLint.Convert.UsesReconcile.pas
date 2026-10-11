@@ -473,18 +473,14 @@ begin
   Result.Section:= ASection;
 end;
 
-{ The line of the 'implementation' keyword (MaxInt when none): a reference above it is in the interface. }
+{ The line of the 'implementation' keyword (MaxInt when none): a reference
+  above it is in the interface. Token level (A8-3): a line match missed the
+  keyword with a brace comment glued to it and then counted every name as
+  interface. }
 function ImplementationLine(const AText: string): Integer;
-var
-  Lines: TArray<string>;
 begin
-  Lines:= AText.Replace(#13#10, #10).Split([#10]);
-  for var I: Integer:= 0 to High(Lines) do
-  begin
-    var T: string:= LowerCase(Trim(Lines[I]));
-    if (T = SECTION_IMPL) or T.StartsWith(SECTION_IMPL + ' ') then Exit(I + 1);
-  end;
-  Result:= MaxInt;
+  Result:= ImplementationKeywordLine(AText);
+  if Result = 0 then Result:= MaxInt;
 end;
 
 constructor TReconciler.Create(AIndex: TUsesUnitIndex; const AIn: TUsesReconcileInput);

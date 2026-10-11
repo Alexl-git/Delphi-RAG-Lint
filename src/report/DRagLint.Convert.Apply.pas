@@ -5264,6 +5264,48 @@ var
         end;
     Result:= InImpl and not InIntf;
   end;
+  // C9 A8-1: the ONE candidate of a To-type tie the book or the unit already
+  // chooses -- a unit a #use / #useswap New / #convert block adds, or a uses
+  // entry of the unit (as the index recorded it) -- spelled as the unit writes
+  // it when present, else as the book does. '' when none or more than one
+  // candidate is chosen: the tie is then reported, never decided.
+  function PickTieCandidate(const ACands: TArray<TUsesCandidate>): string;
+  var
+    Picked  : TArray<string>;   { candidate unit names chosen, distinct }
+    Spelling: string;
+
+    procedure Choose(const ASpelling: string; APreferred: Boolean);
+    begin
+      for var C: TUsesCandidate in ACands do
+        if ATrees.UnitIndex.SameUnit(ASpelling, C.UnitName) then
+        begin
+          if not MatchText(C.UnitName, Picked) then Picked:= Picked + [C.UnitName];
+          if APreferred or (Spelling = '') then Spelling:= ASpelling;
+        end;
+    end;
+
+  begin
+    Picked  := nil;
+    Spelling:= '';
+    for var R: TConversionRule in ABook.Rules.Rules do
+      case R.Kind of
+        rkUse: Choose(R.UnitName, False);
+        rkUseSwap, rkConvert:
+          for var U: string in R.UnitsAdd do Choose(U, False);
+      end;
+    if PasFileId > 0 then
+      for var U: TUnitUse in PasStore.GetUnitUsesForFile(PasFileId) do Choose(U.UnitName, True);
+    Result:= if Length(Picked) = 1 then Spelling else '';
+  end;
+  // C9 A8-2: the line the conversion writes ToType onto in the unit (its first
+  // field retype), 0 when it writes it nowhere (an inherited instance only).
+  function ToTypeLine(const AToType: string): Integer;
+  begin
+    Result:= 0;
+    for var E: TTextEdit in Edits do
+      if (E.Kind = tekReplaceInLine) and SameText(E.FilePath, AUnitPas) and SameText(E.Text, AToType) and
+         ((Result = 0) or (E.Line < Result)) then Result:= E.Line;
+  end;
   procedure PlanUsesAdditions(out AUses: TUsesPlan; out AAdds, AIntfAdds: TArray<string>);
   var
     E : TTextEdit;
@@ -5288,8 +5330,22 @@ var
           var Amb: TArray<TUsesCandidate>:= ATrees.UnitIndex.DeclaringUnits(BareTypeTail(ToType_), True);
           if Length(Amb) > 1 then
           begin
+            { A8-1: a tie the book's #use (or the unit's own uses) settles is
+              resolved to that unit -- through the same ConvertAdds / IntfAdds
+              as an unambiguous To type, so an INTERFACE field's unit goes to
+              the interface uses (or is moved there), never to where a bare
+              #use would put it (the implementation: E2003) }
+            var Picked: string:= PickTieCandidate(Amb);
+            if Picked <> '' then
+            begin
+              if not MatchText(Picked, ConvertAdds.ToArray) then ConvertAdds.Add(Picked);
+              if WantIntf and not MatchText(Picked, IntfAdds.ToArray) then IntfAdds.Add(Picked);
+              if WantIntf and UsedOnlyInImplementation(Picked) then MoveNeeded:= True;
+              Continue;
+            end;
             var Un: TUsesUnresolved:= Default(TUsesUnresolved);
             Un.Name      := ToType_;
+            Un.Line      := ToTypeLine(ToType_);
             Un.Section   := if WantIntf then 'interface' else 'implementation';
             Un.Reason    := UNRESOLVED_AMBIGUOUS;
             Un.Candidates:= Amb;
@@ -5301,6 +5357,7 @@ var
                 [ToType_, Length(Amb), Units]));
             It.ToType  := ToType_;
             It.FilePath:= AUnitPas;
+            It.Line    := Un.Line;
             Emit(It);
             Continue;
           end;

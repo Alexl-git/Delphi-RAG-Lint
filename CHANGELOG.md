@@ -3,6 +3,27 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Fixed
+
+- **convert-apply (C9 A8-1): a To-type tie the book settles with `#use` goes to the INTERFACE uses.**
+  `#convert TOld -> TTie` with TTie declared in two units and `#use LibTieA` in the book still
+  warned "add #use" and added LibTieA to the IMPLEMENTATION uses, while the retyped field is
+  declared in the interface -- the converted unit failed with E2003. The `#use` (or a
+  `#useswap` New, a `#convert` block unit, or a uses entry the unit already has) now picks that
+  candidate as the To type's unit: no ambiguity warning, the unit is added to the interface
+  uses (with the `#use` row), or MOVED there when the unit used it only in its implementation.
+  Guard: run_convert_apply_uses_reconcile.ps1 A8-1, X TieUForm, C1 (dcc64).
+- **convert-apply (C9 A8-2): `uses_unresolved[].line` of a To-type tie is the retyped field's line**,
+  not 0 (the item's `line` too). A8-2.
+- **convert-apply (C9 A8-3): `implementation{comment}` is recognised as the implementation keyword.**
+  The reconciler matched the keyword by line text, missed a comment glued to it and then counted
+  every reference as an interface reference (needed_by sections). It now uses the uses planner's
+  own lexer (`ImplementationKeywordLine`). A8-3.
+
+No extractor or resolver change: indexes do not re-parse or re-resolve.
+
 ## v1.28.0-alpha -- unreleased
 
 ### Changed

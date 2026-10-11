@@ -563,7 +563,9 @@ when only `.pas` code needs it (the dangling references are named; the compile e
 are the intended signal), and kept when no `--db` knows it; presence is scope-alias aware
 (`#unuse DBTables` matches `Bde.DBTables`, `#use DB` is satisfied by `Data.DB`); a name
 the conversion introduces into the `.pas` gets its unit added (none since 1.27.0: a cast link no longer writes a `.pas` site, one `cast-not-applied` per site instead); a `#link X <- X : StripDB` value cast (shipped castlib, `value strip-db`) drops a trailing `.db` from the string in the `.dfm` and in single-literal `.pas` assignments ending the statement on their line, reporting every other site (a `with` block included) (capability `value_cast_strip_db`); every run lists what the `.pas` still uses that the map does not cover in `pas_uses[]` (status `mapped` / `cast-refused` / `not-rewritten` / `same-name` / `unmapped` / `global-dangling`, capability `pas_uses`),
-and a name two units declare is reported (`uses_unresolved`), never picked. After
+and a name two units declare is reported (`uses_unresolved`), never picked -- unless the
+book's `#use` (or a uses entry of the unit) names one of them: a To type's unit is then
+added to the INTERFACE uses when its retyped field is declared there, or moved there. After
 `--apply` the unit's own project DB is refreshed (`index --project`, child process,
 terminated as `failed` after 10 minutes; `--no-reindex` skips it). `capabilities.uses_reconcile: true`. A book can also REPORT without writing
 anything (1.26.5): `#warn <FromPath> "<text>"` warns once per converted instance
