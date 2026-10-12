@@ -18,7 +18,7 @@ REM -DDRAGLINT_TEST_REGROOT: Settings then writes HKCU\...\DelphiPlugin.Test, ne
 REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
 REM src\*.dcu is reused by any later build that searches that directory.
 if not exist "%HERE%_dcu\T61_hovertracker" mkdir "%HERE%_dcu\T61_hovertracker"
-dcc64 -NU"%HERE%_dcu\T61_hovertracker" -DDRAGLINT_TEST_REGROOT -Q -B -E%HERE% -U"%SRC%" -U"%ROOT%\src\core" -U"%ROOT%\src\index" -U"%ROOT%\src\workspace" -U"%ROOT%\src\lint" -U"%ROOT%\src\project" -LUdesignide "%HERE%T61_hovertracker.dpr" > "%HERE%t61_build.txt" 2>&1
+dcc64 -NU"%HERE%_dcu\T61_hovertracker" -DDRAGLINT_TEST_REGROOT -Q -B -E%HERE% -U"%SRC%" -U"%ROOT%\src\core" -U"%ROOT%\src\index" -U"%ROOT%\src\workspace" -U"%ROOT%\src\lint" -U"%ROOT%\src\project" -U"%ROOT%\src\charts" -LUdesignide "%HERE%T61_hovertracker.dpr" > "%HERE%t61_build.txt" 2>&1
 
 if errorlevel 1 (
   echo FAIL: T61 compile failed

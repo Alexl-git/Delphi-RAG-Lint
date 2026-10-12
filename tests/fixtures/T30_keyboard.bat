@@ -13,7 +13,7 @@ REM -DDRAGLINT_TEST_REGROOT: Settings then writes HKCU\...\DelphiPlugin.Test, ne
 REM -NU: DCUs go to a private folder, never beside the sources in src\ -- a stray
 REM src\*.dcu is reused by any later build that searches that directory.
 if not exist "%HERE%_dcu\T30_keyboard" mkdir "%HERE%_dcu\T30_keyboard"
-dcc64 -NU"%HERE%_dcu\T30_keyboard" -B -DDRAGLINT_TEST_REGROOT -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core;%HERE%..\..\src\index;%HERE%..\..\src\workspace;%HERE%..\..\src\lint;%HERE%..\..\src\project "-U%IDELIB%" -LUdesignide %HERE%T30_keyboard.dpr > "%HERE%t30_build.txt" 2>&1
+dcc64 -NU"%HERE%_dcu\T30_keyboard" -B -DDRAGLINT_TEST_REGROOT -E%HERE% -U%HERE%..\..\src\delphi-plugin;%HERE%..\..\src\core;%HERE%..\..\src\index;%HERE%..\..\src\workspace;%HERE%..\..\src\lint;%HERE%..\..\src\project;%HERE%..\..\src\charts "-U%IDELIB%" -LUdesignide %HERE%T30_keyboard.dpr > "%HERE%t30_build.txt" 2>&1
 if not exist "%HERE%T30_keyboard.exe" (echo FAIL: build failed && type "%HERE%t30_build.txt" && exit /b 1)
 "%HERE%T30_keyboard.exe" > "%HERE%t30_out.txt"
 type "%HERE%t30_out.txt"
