@@ -307,6 +307,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [lsp](lsp) | `lsp` |  |
 | [Register the MCP server (Claude Code, VS Code)](Register-MCP-Server) | `charts\src\Set-DragLintMcpConfig.ps1 -All -DryRun` |  |
 | [serve](serve) | `serve` |  |
+| [Setup installer](Setup-Installer) | procedure: `docs\wiki\Setup-Installer.md` | experimental |
 | [workspace add](workspace-add) | `workspace add` |  |
 | [workspace index](workspace-index) | `workspace index` |  |
 | [workspace status](workspace-status) | `workspace status` |  |
