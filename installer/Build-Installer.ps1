@@ -46,7 +46,7 @@ $need = @(
   "$Plugin32Dir\dclDragLintWizard.bpl",
   "$GraphvizBin\dot.exe", "$GraphvizBin\config8",
   "$YadfDir\Win64\Release\EXE\YADF.exe", "$YadfDir\Win64\Release\EXE\YADFSetup.exe",
-  "$YadfDir\Win32\Release\EXE\YADFOT.bpl", "$YadfDir\Win64\Release\EXE\YADFOT.bpl", "$YadfDir\LICENSE",
+  "$YadfDir\Win32\Release\EXE\YADFOT.bpl", "$YadfDir\Win64\Release\EXE\YADFOT.bpl", "$YadfDir\LICENSE", "$YadfDir\Demo\Sample.pas",
   "$repo\installer\drag-lint.starter.json", "$repo\charts\report-pairs.example.json",
   "$repo\charts\src\Ask-Report.ps1", "$repo\charts\src\Register-DragLintProtocol.ps1", "$repo\charts\src\Set-DragLintMcpConfig.ps1",
   "$repo\installer\licenses\drag-lint-LICENSE.txt", "$repo\installer\licenses\graphviz-EPL-2.0.txt"
@@ -60,6 +60,10 @@ if ($missing.Count) { throw ("missing source file(s):`n  " + ($missing -join "`n
 # A BPL older than the engine it ships with is worth a warning, not a stop.
 $bplAge = (Get-Item "$EngineDir\drag-lint.exe").LastWriteTime - (Get-Item "$Plugin32Dir\dclDragLintWizard.bpl").LastWriteTime
 if ($bplAge.TotalDays -gt 7) { Write-Warning ("the Win32 plugin BPL is {0:N0} days older than the engine" -f $bplAge.TotalDays) }
+# The Win64 BPL (64-bit IDE) has no build script of its own and was once packed six weeks
+# stale (2026-10-13), so it gets the same check.
+$bpl64Age = (Get-Item "$EngineDir\drag-lint.exe").LastWriteTime - (Get-Item "$EngineDir\dclDragLintWizard.bpl").LastWriteTime
+if ($bpl64Age.TotalDays -gt 7) { Write-Warning ("the Win64 plugin BPL is {0:N0} days older than the engine" -f $bpl64Age.TotalDays) }
 
 $defines = [ordered]@{
   AppVersion = $version; EngineDir = $EngineDir; Plugin32Dir = $Plugin32Dir; YadfDir = $YadfDir
