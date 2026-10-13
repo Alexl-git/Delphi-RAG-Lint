@@ -240,9 +240,10 @@ function ParseReindexCommands(const pOutput: string): TArray<TReindexCommand>;
 
 /// <summary>Where Ask-Report.ps1 may live relative to the engine, in search order.</summary>
 /// <param name="pEngineExe">Full path to the drag-lint.exe the plugin uses.</param>
-/// <returns>Two expanded paths: first the installed layout (the chart scripts
-/// beside drag-lint.exe, {app}\bin), then the repository layout
-/// (charts\src, two folders above third_party\dll-win64).</returns>
+/// <returns>Three expanded paths: first the flat installed layout (the chart
+/// scripts beside drag-lint.exe), then the v2 installed layout ({app}\charts,
+/// a sibling of {app}\bin), then the repository layout (charts\src, two
+/// folders above third_party\dll-win64).</returns>
 /// <remarks>Pure: touches no file. The caller takes the first that exists.
 /// Nothing is looked up beside the plugin BPL -- that was removed on purpose
 /// (see DragLint.Plugin.ExeResolver).</remarks>
@@ -447,12 +448,14 @@ end;
 function AskReportCandidates(const pEngineExe: string): TArray<string>;
 const
   ASK_REPORT_NAME = 'Ask-Report.ps1';
+  INSTALLED_CHARTS_REL = '..\charts\';
   REPO_CHARTS_REL = '..\..\charts\src\';
 var
   Dir: string;
 begin
   Dir:= ExtractFilePath(pEngineExe);
-  Result:= [ExpandFileName(Dir + ASK_REPORT_NAME), ExpandFileName(Dir + REPO_CHARTS_REL + ASK_REPORT_NAME)];
+  Result:= [ExpandFileName(Dir + ASK_REPORT_NAME), ExpandFileName(Dir + INSTALLED_CHARTS_REL + ASK_REPORT_NAME),
+    ExpandFileName(Dir + REPO_CHARTS_REL + ASK_REPORT_NAME)];
 end;
 
 function AskReportNotFoundText(const pCandidates: TArray<string>): string;

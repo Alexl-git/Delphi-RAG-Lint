@@ -57,17 +57,21 @@ function New-RowHref([string] $File, [int] $Line) {
 #
 #   engine: -Engine -> $env:DRAGLINT_ENGINE -> settings.json "engine"
 #           -> <scripts>\drag-lint.exe (the FLAT installed layout, owner D1)
+#           -> <scripts>\..\bin\drag-lint.exe (installed layout v2, 2026-10-13: {app}\charts + {app}\bin)
 #           -> <app>\bin\drag-lint.exe (the earlier proposed bin\ layout)
 #           -> C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe (the shared engine)
 #           -> <repo>\third_party\dll-win64\drag-lint.exe (a clone's own build)
 #   dot:    -Dot -> $env:DRAGLINT_DOT -> settings.json "dot"
-#           -> <scripts>\graphviz\bin\dot.exe (flat) -> <app>\graphviz\bin\dot.exe -> dot.exe on PATH
+#           -> <scripts>\graphviz\bin\dot.exe (flat) -> <scripts>\..\graphviz\bin\dot.exe (v2)
+#           -> <app>\graphviz\bin\dot.exe -> dot.exe on PATH
 #           -> C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe
 #
 # <scripts> is the folder the chart scripts (and this file) live in (-ScriptDir,
 # default this file's folder): in the flat install drag-lint.exe, its DLLs and
 # the plugin BPL sit right there; in the repo (charts\src) nothing does, so the
-# step is skipped. <app> and <repo> are both the folder above charts\
+# step is skipped. In the v2 install the scripts sit in {app}\charts, so
+# <scripts>\.. is {app} and its bin\ and graphviz\bin\ are the next steps; in the
+# repo <scripts>\.. is charts\, which holds neither. <app> and <repo> are both the folder above charts\
 # (-ChartsRoot, default the folder above this file). settings.json is %APPDATA%\drag-lint\settings.json,
 # written by the installer; a MISSING or UNREADABLE file, or one without the key,
 # is skipped, never an error.
@@ -135,6 +139,7 @@ function Resolve-DragLintEngine([string] $Explicit,
     , @('$env:DRAGLINT_ENGINE', $env:DRAGLINT_ENGINE, 'not set', '$env:DRAGLINT_ENGINE')
     , @("$(if ($SettingsPath) { "settings $SettingsPath" } else { 'settings.json' }) `"engine`"", $set[0], $set[1], "settings.json $SettingsPath key `"engine`"")
     , @('beside the scripts', (Join-Path $ScriptDir 'drag-lint.exe'), '')
+    , @('installed v2', [IO.Path]::GetFullPath((Join-Path $ScriptDir '..\bin\drag-lint.exe')), '')
     , @('installed', (Join-Path $app 'bin\drag-lint.exe'), '')
     , @('shared', $SharedDefault, '')
     , @('repo', (Join-Path $app 'third_party\dll-win64\drag-lint.exe'), '')
@@ -154,10 +159,23 @@ function Resolve-GraphvizDot([string] $Explicit,
     , @('$env:DRAGLINT_DOT', $env:DRAGLINT_DOT, 'not set', '$env:DRAGLINT_DOT')
     , @("$(if ($SettingsPath) { "settings $SettingsPath" } else { 'settings.json' }) `"dot`"", $set[0], $set[1], "settings.json $SettingsPath key `"dot`"")
     , @('beside the scripts', (Join-Path $ScriptDir 'graphviz\bin\dot.exe'), '')
+    , @('installed v2', [IO.Path]::GetFullPath((Join-Path $ScriptDir '..\graphviz\bin\dot.exe')), '')
     , @('installed', (Join-Path $app 'graphviz\bin\dot.exe'), '')
     , @('dot.exe on PATH', $(if ($onPath.Count) { $onPath[0].Source } else { '' }), 'not on PATH')
     , @('shared', $SharedDefault, '')
   ) "Pass -Dot, set DRAGLINT_DOT, or add `"dot`" to $(if ($SettingsPath) { $SettingsPath } else { 'settings.json' })."
+}
+
+# Resolve-ReportPairsFile -- the default report-pairs.json for Ask-Report -PairsFile (installer layout v2,
+# 2026-10-13). Pairs are user data, so %APPDATA%\drag-lint\report-pairs.json comes first; the repo's
+# <scripts>\..\report-pairs.json (charts\report-pairs.json) keeps the dev box working. When NEITHER exists
+# the %APPDATA% path is returned, so the "not found" message names the place to create it.
+function Resolve-ReportPairsFile([string] $AppData = $env:APPDATA, [string] $ScriptDir = $PSScriptRoot) {
+  $user = $(if ($AppData) { Join-Path $AppData 'drag-lint\report-pairs.json' } else { '' })
+  $repo = [IO.Path]::GetFullPath((Join-Path $ScriptDir '..\report-pairs.json'))
+  if ($user -and (Test-Path -LiteralPath $user -PathType Leaf)) { return $user }
+  if ((Test-Path -LiteralPath $repo -PathType Leaf) -or -not $user) { return $repo }
+  $user
 }
 
 # ---- database safety ---------------------------------------------------------

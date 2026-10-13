@@ -12,6 +12,7 @@
   settings.json is never read or written -- every case passes -SettingsPath to a temp file.
 
   Engine order (pinned E-ORDER): -Engine -> DRAGLINT_ENGINE -> settings.json "engine" ->
+  <scripts>\drag-lint.exe (flat) -> <scripts>\..\bin\drag-lint.exe (v2, E-V2) ->
   <app>\bin\drag-lint.exe -> the shared C:\Projects engine -> <repo>\third_party\dll-win64.
   The shared engine sits BEFORE the repo-relative copy on purpose: a worktree can hold an
   old build there (this one held 1.16.0-alpha against a deployed 1.22.0-alpha), and taking
@@ -72,6 +73,11 @@ $flatEng = New-Exe (Join-Path $flat 'drag-lint.exe')
 $flatDot = New-Exe (Join-Path $flat 'graphviz\bin\dot.exe')
 $flatEmpty = Join-Path $root 'flatempty'
 New-Item -ItemType Directory -Force $flatEmpty | Out-Null
+# the v2 installed layout (2026-10-13): {app}\charts holds the scripts, {app}\bin the engine, {app}\graphviz\bin dot
+$v2Charts = Join-Path $root 'v2\charts'
+New-Item -ItemType Directory -Force $v2Charts | Out-Null
+$v2Eng = New-Exe (Join-Path $root 'v2\bin\drag-lint.exe')
+$v2Dot = New-Exe (Join-Path $root 'v2\graphviz\bin\dot.exe')
 $emptyPath = Join-Path $root 'emptypath'
 New-Item -ItemType Directory -Force $emptyPath | Out-Null
 
@@ -125,8 +131,15 @@ try {
   Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Emit-Common.ps1') -Destination $flat -Force
   Chk 'E-FLAT-DEFAULT' (& { . (Join-Path $flat 'Emit-Common.ps1'); Resolve-DragLintEngine '' -SettingsPath $setGone }) $flatEng
   Chk 'D-FLAT-DEFAULT' (& { . (Join-Path $flat 'Emit-Common.ps1'); Resolve-GraphvizDot '' -SettingsPath $setGone }) $flatDot
+  # the v2 step: <scripts>\..\bin, right after beside-the-scripts and before <app>\bin and the shared engine
+  Chk 'E-V2'         (Resolve-DragLintEngine '' -SettingsPath $setGone -ChartsRoot $bareCharts -ScriptDir $v2Charts -SharedDefault $shared) $v2Eng
+  Chk 'E-V2-FLAT'    (Resolve-DragLintEngine '' -SettingsPath $setGone -ChartsRoot $bareCharts -ScriptDir $flat -SharedDefault $shared) $flatEng
+  Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Emit-Common.ps1') -Destination $v2Charts -Force
+  Chk 'E-V2-DEFAULT' (& { . (Join-Path $v2Charts 'Emit-Common.ps1'); Resolve-DragLintEngine '' -SettingsPath $setGone -SharedDefault $noShared }) $v2Eng
+  Chk 'D-V2-DEFAULT' (& { . (Join-Path $v2Charts 'Emit-Common.ps1'); Resolve-GraphvizDot '' -SettingsPath $setGone -SharedDefault $noSharedDot }) $v2Dot
   $m = Throws 'E-NONE' { Resolve-DragLintEngine '' -SettingsPath $setGone -ChartsRoot $bareCharts -ScriptDir $flatEmpty -SharedDefault $noShared }
   $want = @('-Engine', 'DRAGLINT_ENGINE', $setGone, '"engine"', (Join-Path $flatEmpty 'drag-lint.exe'),
+            [IO.Path]::GetFullPath((Join-Path $flatEmpty '..\bin\drag-lint.exe')),
             [IO.Path]::GetFullPath((Join-Path $bareCharts '..\bin\drag-lint.exe')), $noShared,
             [IO.Path]::GetFullPath((Join-Path $bareCharts '..\third_party\dll-win64\drag-lint.exe')))
   $at = -1
@@ -184,8 +197,13 @@ try {
   $m = Throws 'D-SETTINGS-STALE' { Resolve-GraphvizDot '' -SettingsPath $setStale -ChartsRoot $appCharts -SharedDefault $sharedDot }
   if ($m -notlike "*$setStale*`"dot`"*moved\dot.exe*") { Fail 'D-SETTINGS-STALE' "the message does not name the file, the key and the path: $m" }
   Chk 'D-FLAT' (Resolve-GraphvizDot '' -SettingsPath $setGone -ChartsRoot $appCharts -ScriptDir $flat -SharedDefault $sharedDot) $flatDot
+  # the v2 step: <scripts>\..\graphviz\bin, before <app>\graphviz\bin and before dot.exe on PATH
+  $env:PATH = $pathDir
+  Chk 'D-V2' (Resolve-GraphvizDot '' -SettingsPath $setGone -ChartsRoot $bareCharts -ScriptDir $v2Charts -SharedDefault $sharedDot) $v2Dot
+  $env:PATH = $emptyPath
   $m = Throws 'D-NONE' { Resolve-GraphvizDot '' -SettingsPath $setGone -ChartsRoot $bareCharts -ScriptDir $flatEmpty -SharedDefault $noSharedDot }
   $want = @('-Dot', 'DRAGLINT_DOT', $setGone, '"dot"', (Join-Path $flatEmpty 'graphviz\bin\dot.exe'),
+            [IO.Path]::GetFullPath((Join-Path $flatEmpty '..\graphviz\bin\dot.exe')),
             [IO.Path]::GetFullPath((Join-Path $bareCharts '..\graphviz\bin\dot.exe')), 'PATH', $noSharedDot)
   $at = -1
   foreach ($w in $want) {
@@ -194,6 +212,21 @@ try {
     if ($i -lt $at) { Fail 'D-NONE' "the message names '$w' out of order: $m"; break }
     $at = $i
   }
+
+  # ---- report-pairs.json (Ask-Report -PairsFile default, installer layout v2) ----------------
+  # %APPDATA%\drag-lint\report-pairs.json if it exists, else <scripts>\..\report-pairs.json if it exists,
+  # else the %APPDATA% path -- the place a user is told to create it
+  $pfApp = Join-Path $root 'pf\appdata'
+  $pfScripts = Join-Path $root 'pf\charts\src'
+  New-Item -ItemType Directory -Force $pfScripts | Out-Null
+  $pfAppFile  = Join-Path $pfApp 'drag-lint\report-pairs.json'
+  $pfRepoFile = [IO.Path]::GetFullPath((Join-Path $pfScripts '..\report-pairs.json'))
+  Chk 'PF-NONE'     (Resolve-ReportPairsFile -AppData $pfApp -ScriptDir $pfScripts) $pfAppFile
+  $null = New-Exe $pfRepoFile
+  Chk 'PF-REPO'     (Resolve-ReportPairsFile -AppData $pfApp -ScriptDir $pfScripts) $pfRepoFile
+  $null = New-Exe $pfAppFile
+  Chk 'PF-APPDATA'  (Resolve-ReportPairsFile -AppData $pfApp -ScriptDir $pfScripts) $pfAppFile
+  Chk 'PF-NOAPPDATA' (Resolve-ReportPairsFile -AppData '' -ScriptDir $pfScripts) $pfRepoFile
 } finally {
   foreach ($n in $saved.Keys) {
     if ($null -eq $saved[$n]) { Remove-Item "Env:\$n" -ErrorAction SilentlyContinue } else { Set-Item "Env:\$n" $saved[$n] }

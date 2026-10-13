@@ -108,6 +108,7 @@
         <DCCReference Include="DragLint.Plugin.HoverTracker.pas"/>
         <DCCReference Include="DragLint.Plugin.AutoComplete.pas"/>
         <DCCReference Include="DragLint.Plugin.Telemetry.pas"/>
+        <DCCReference Include="DragLint.Plugin.LogPaths.pas"/>
         <DCCReference Include="DragLint.Plugin.DbResolver.pas"/>
         <DCCReference Include="DragLint.Plugin.Theme.pas"/>
         <DCCReference Include="DragLint.Plugin.Updates.pas"/>
