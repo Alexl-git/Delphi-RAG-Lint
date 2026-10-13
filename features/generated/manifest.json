@@ -3719,6 +3719,26 @@
         "wikiAnchor": "concat-in-loop"
       },
       {
+        "id": "rule.confusable-identifier",
+        "title": "confusable-identifier",
+        "group": "linting",
+        "owner": "ENGINE",
+        "status": "shipped",
+        "since": "0.2.0-alpha",
+        "summary": "Two declarations differ only by underscores (naming, warning)",
+        "wikiPage": "rules",
+        "surfaces": [
+          {
+            "type": "cli",
+            "verb": "lint",
+            "example": "drag-lint lint <file.pas> --rule confusable-identifier"
+          }
+        ],
+        "audience": "both",
+        "parent": "lint-rules",
+        "wikiAnchor": "confusable-identifier"
+      },
+      {
         "id": "rule.const-casing",
         "title": "const-casing",
         "group": "linting",

@@ -12531,10 +12531,10 @@ const
     'too-many-parameters', 'too-many-locals', 'method-too-long', 'deep-nesting');
   LINT_GATE_MISSING_INHERITED: array[0..1] of string = ('missing-inherited-ctor', 'missing-inherited-dtor');
   LINT_GATE_FORMAT_CALL: array[0..1] of string = ('format-argument-count', 'format-specifier-type-mismatch');
-  LINT_GATE_NAMING: array[0..9] of string = (
+  LINT_GATE_NAMING: array[0..10] of string = (
     'type-name-prefix', 'field-name-prefix', 'param-name-prefix', 'method-pascalcase', 'const-casing',
     'local-var-casing', 'unit-name-matches-file', 'reserved-word-casing', 'hungarian-or-short-identifier',
-    'local-field-prefix');
+    'local-field-prefix', 'confusable-identifier');
   LINT_GATE_DEAD_CODE: array[0..24] of string = (
     'unused-parameter', 'identical-then-else', 'referenced-never-set', 'redundant-parentheses',
     'commented-out-code', 'function-result-ignored', 'destructor-without-override',

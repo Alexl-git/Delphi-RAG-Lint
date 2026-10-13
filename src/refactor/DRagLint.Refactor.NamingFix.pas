@@ -136,6 +136,24 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// <seealso cref="DRagLint.Refactor.NamingFix.ResolveSymbolAt"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
+/// <summary>The names const-casing may rename AOldName to, in preference order:
+/// one per style in AConstCase (the configured order), duplicates and the
+/// unchanged name removed.</summary>
+/// <param name="AOldName">The offending constant name verbatim.</param>
+/// <param name="AConstCase">The configured const_case styles; empty means UPPER_CASE.</param>
+/// <returns>Candidates, best first; empty when no style changes the name.</returns>
+/// <remarks>WORD-AWARE, unlike SynthesizeCasedName (owner report 2026-10-13: most
+/// of ORM3's const-casing findings looked like StationType_Operator, which a
+/// first-letter re-casing leaves unchanged, so nothing was ever fixable). Words
+/// split at '_' and at a lower-to-upper step:
+///   PascalCase  StationType_Operator -> StationTypeOperator, wr_str -> WrStr,
+///               MAX_COUNT -> MaxCount, wrStr -> WrStr
+///   UPPER_CASE  StationType_Operator -> STATION_TYPE_OPERATOR, wrStr -> WR_STR
+///   camelCase   StationType_Operator -> stationTypeOperator
+/// A candidate CHANGES the identifier, so the caller must ask the index whether
+/// it is free (BuildNamingFixEdits takes the first that ConflictReason clears).
+/// Pure. Pinned by tests\autotest\run_const_casing_word_fix.ps1.</remarks>
+function ConstCaseCandidates(const AOldName: string; const AConstCase: TArray<string>): TArray<string>;
 function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
   out AFixCount: Integer; out ASkippedCount: Integer): TArray<TTextEdit>;
@@ -144,6 +162,7 @@ implementation
 
 uses
   System.SysUtils,
+  System.StrUtils,
   System.IOUtils,
   System.Classes,
   System.Generics.Collections,
@@ -157,6 +176,75 @@ begin
   if SameText(AConfigCase, 'camelCase') then Result := nsCamelCase
   else if SameText(AConfigCase, 'UPPER_CASE') then Result := nsUpperCase
   else Result := nsPascalCase;
+end;
+
+{ Words of an identifier: split at '_' (dropped) and at a lower-to-upper step
+  ('StationType' -> Station, Type). Digits stay with the word they follow. }
+function IdentWords(const AName: string): TArray<string>;
+var
+  I    : Integer;
+  Start: Integer; { 1-based start of the word being collected; 0 = none }
+begin
+  Result:= nil;
+  Start:= 0;
+  for I:= 1 to Length(AName) do
+  begin
+    if AName[I] = '_' then
+    begin
+      if Start > 0 then Result:= Result + [Copy(AName, Start, I - Start)];
+      Start:= 0;
+      Continue;
+    end;
+    if (Start > 0) and CharInSet(AName[I], ['A'..'Z']) and CharInSet(AName[I - 1], ['a'..'z', '0'..'9']) then
+    begin
+      Result:= Result + [Copy(AName, Start, I - Start)];
+      Start:= 0;
+    end;
+    if Start = 0 then Start:= I;
+  end;
+  if Start > 0 then Result:= Result + [Copy(AName, Start, MaxInt)];
+end;
+{ One word as PascalCase: first letter upper; an ALL-CAPS word ('MAX') is
+  lowered after its first letter, a mixed one keeps its inner capitals. }
+function PascalWord(const AWord: string): string;
+begin
+  if AWord = '' then Exit('');
+  if (Length(AWord) > 1) and (AWord = UpperCase(AWord)) then
+    Result:= UpperCase(AWord[1]) + LowerCase(Copy(AWord, 2, MaxInt))
+  else
+    Result:= UpperCase(AWord[1]) + Copy(AWord, 2, MaxInt);
+end;
+
+function ConstCaseCandidates(const AOldName: string; const AConstCase: TArray<string>): TArray<string>;
+var
+  Styles: TArray<string>;
+  Words : TArray<string>;
+  S, W  : string;
+  Cand  : string;
+  Parts : TArray<string>;
+begin
+  Result:= nil;
+  if AOldName = '' then Exit;
+  Styles:= AConstCase;
+  if Length(Styles) = 0 then Styles:= ['UPPER_CASE'];
+  Words:= IdentWords(AOldName);
+  if Length(Words) = 0 then Exit;
+  for S in Styles do
+  begin
+    Parts:= nil;
+    for W in Words do
+      Parts:= Parts + [if StyleFromConfigText(S) = nsUpperCase then UpperCase(W) else PascalWord(W)];
+    case StyleFromConfigText(S) of
+      nsUpperCase: Cand:= string.Join('_', Parts);
+      nsCamelCase:
+        begin
+          Cand:= string.Join('', Parts);
+          Cand:= LowerCase(Cand[1]) + Copy(Cand, 2, MaxInt);
+        end;
+    else
+      Cand:= string.Join('', Parts);
+    end;    if (Cand <> '') and (Cand <> AOldName) and (IndexStr(Cand, Result) < 0) then Result:= Result + [Cand];
+  end;
 end;
 
 function SynthesizeCasedName(const AOldName: string; AStyle: TNameStyle): string;
@@ -524,6 +612,7 @@ var
   DedupKey  : string;
   IsPrefixRule: Boolean;
   Prefix    : string;
+  ConstCands: TArray<string>; { const-casing only: rename candidates, best first }
 begin
   AFixCount:= 0;
   ASkippedCount:= 0;
@@ -593,11 +682,15 @@ begin
         begin
           if SameText(F.RuleId, 'method-pascalcase') then Style:= StyleFromConfigText(ANaming.MethodCase)
           else if SameText(F.RuleId, 'local-var-casing') then Style:= StyleFromConfigText(ANaming.LocalCase)
-          else { const-casing } begin
-            if Length(ANaming.ConstCase) > 0 then Style:= StyleFromConfigText(ANaming.ConstCase[0])
-            else Style:= StyleFromConfigText('UPPER_CASE');
-          end;
-          NewName:= SynthesizeCasedName(OldName, Style);
+          else { const-casing }
+            Style:= nsPascalCase; { unused: const-casing picks from ConstCands below }
+          ConstCands:= nil;
+          if SameText(F.RuleId, 'const-casing') then
+          begin
+            ConstCands:= ConstCaseCandidates(OldName, ANaming.ConstCase);
+            NewName:= if Length(ConstCands) > 0 then ConstCands[0] else OldName;
+          end
+          else NewName:= SynthesizeCasedName(OldName, Style);
         end;
         if NewName = OldName then Continue; // already correct -- nothing to do
 
@@ -622,7 +715,21 @@ begin
             workaround is needed here. }
           Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol, OldName);
           if Sym.Id = 0 then Continue; // unresolved symbol -- report NEEDS_CONTEXT by skipping
-          if TRenameRefactoring.ConflictReason(AStore, Sym.QualifiedName, NewName) <> '' then Continue; // conflict -- skip
+          if SameText(F.RuleId, 'const-casing') and (Length(ConstCands) > 0) then
+          begin
+            { ASK THE INDEX (owner, 2026-10-13): the first configured style whose
+              name is free wins; when every candidate already exists, the
+              constant is left alone rather than renamed into a clash. }
+            NewName:= '';
+            for var Cand: string in ConstCands do
+              if TRenameRefactoring.ConflictReason(AStore, Sym.QualifiedName, Cand) = '' then
+              begin
+                NewName:= Cand;
+                Break;
+              end;
+            if NewName = '' then Continue; // every candidate collides -- skip
+          end
+          else if TRenameRefactoring.ConflictReason(AStore, Sym.QualifiedName, NewName) <> '' then Continue; // conflict -- skip
           EmitRenameEdits(TRenameRefactoring.Build(AStore, Sym.QualifiedName, NewName), Sym.StartLine, F.StartCol, F.EndCol, OldName);
         end;
       except

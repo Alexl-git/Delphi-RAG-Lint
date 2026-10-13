@@ -281,6 +281,7 @@ One line per rule, linking the rule reference. Counts: see [Features](Features#l
 * [comparison-same-operands](rules#comparison-same-operands) -- bug-patterns, warning
 * [compiler-magic-comments](rules#compiler-magic-comments) -- other, info
 * [concat-in-loop](rules#concat-in-loop) -- other, info
+* [confusable-identifier](rules#confusable-identifier) -- naming, warning
 * [const-casing](rules#const-casing) -- naming, info, fixable
 * [constant-condition](rules#constant-condition) -- bug-patterns, warning
 * [control-flow-in-finally](rules#control-flow-in-finally) -- bug-patterns, warning

@@ -125,7 +125,7 @@ Find symbols, callers, callees, text and types in the index.
 
 Rules, autofix, suppression markers and project-wide checks.
 
-**189 rules. 23 have an auto-fix. 159 are on by default.** 136 are built-in checks; 53 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
+**190 rules. 23 have an auto-fix. 160 are on by default.** 137 are built-in checks; 53 are external tree-sitter `.scm` rules you can read and extend in `rules\`. Run `drag-lint rules` for the always-current catalogue.
 
 | Category | Rules | With auto-fix |
 |---|---:|---:|
@@ -136,7 +136,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | documentation | 5 | 2 |
 | firedac | 3 | - |
 | metrics | 8 | - |
-| naming | 10 | 8 |
+| naming | 11 | 8 |
 | other | 6 | - |
 | platform | 10 | - |
 | project-wide | 20 | - |
@@ -145,7 +145,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | review-markers | 5 | - |
 | security | 10 | - |
 | structure | 7 | - |
-| **Total** | **189** | **23** |
+| **Total** | **190** | **23** |
 
 | Feature | Surfaces | Status |
 |---|---|---|
@@ -160,7 +160,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Format Whole Project with YADF](Format-Whole-Project-with-YADF) | drag-lint > Format Whole Project with YADF...; `format`; `index` |  |
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |
-| [Lint rules](rules) | 189 rules, 23 fixable; `rules` |  |
+| [Lint rules](rules) | 190 rules, 23 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project` |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
 | [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |

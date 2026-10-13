@@ -452,6 +452,9 @@ begin
       [MkParam('method_case','string','PascalCase')]);
     B('const-casing',        'naming', 'info', 'Constant name casing', True,
       [MkParam('const_case','stringlist','PascalCase,UPPER_CASE')]);
+    { 2026-10-13: two unit/class-level consts or vars that differ only by
+      underscores (StationType_Operator / StationTypeOperator). }
+    B('confusable-identifier', 'naming', 'warning', 'Two declarations differ only by underscores', True);
     B('local-var-casing',    'naming', 'info', 'Local variable name casing', True,
       [MkParam('local_case','string','PascalCase')]);
     { Split out of local-var-casing (2026-08-10). Casing is high-noise and this

@@ -60,7 +60,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **Format Whole Project with YADF** -- Runs YADF formatting across a project's files, with indexing involved as part of the same action. [More](Format-Whole-Project-with-YADF)
 * **Format with YADF** -- Reformats one Pascal unit by driving the external YADF formatter. [More](Format-with-YADF)
 * **Lint Buffer (Unsaved)** -- Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first. [More](Lint-Buffer-Unsaved)
-* **Lint rules** -- 189 rules, 23 fixable. Every lint rule the engine ships, imported from rules --json. [More](rules)
+* **Lint rules** -- 190 rules, 23 fixable. Every lint rule the engine ships, imported from rules --json. [More](rules)
 * **lint-project** -- Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol. [More](lint-project)
 * **lint-tree** -- Answers one question lint-all cannot: does an interface edit to this unit reach any dependent?. [More](lint-tree)
 * **Rescan this unit** -- Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed. Use it when the Diagnostics panel still shows a finding you have already fixed. Rules such as unused-unit-in-uses read the project index, and a save is not an edit, so this reindexes the project incrementally and re-lints the unit when that lands. Runs in the background; the status strip shows it. [More](Rescan-this-unit)

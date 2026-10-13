@@ -61,7 +61,7 @@ every use, and without it the engine does not say which ones are opted out.
 Without `--apply` the command is a DRY RUN: it reports what it would fix
 and writes nothing. Always dry-run first.
 
-Only rules marked fixable are applied; 23 of the 189 rules are fixable
+Only rules marked fixable are applied; 23 of the 190 rules are fixable
 (`drag-lint rules --json` reports a `fixable` field per rule).
 
 ## What it needs

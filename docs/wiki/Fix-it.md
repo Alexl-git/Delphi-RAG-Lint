@@ -29,7 +29,7 @@ right-clicked. Without `--apply` the command is a DRY RUN: it reports what
 it would fix and writes nothing.
 
 Only rules marked fixable can be auto-fixed. `drag-lint rules --json`
-reports a `fixable` field per rule; 23 of the 189 rules are fixable.
+reports a `fixable` field per rule; 23 of the 190 rules are fixable.
 
 ## Unused units (`unused-unit-in-uses`)
 
@@ -62,6 +62,14 @@ drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform
   that ONE finding is the opt-in; "Fix all in unit" never renames unless the
   rule is listed in `"autofix": [...]` in `drag-lint-lint.json`. It needs the
   project index, and is not offered without one.
+* A constant is renamed WORD BY WORD, to the first style in `const_case`
+  (drag-lint > Lint Options; default PascalCase, then UPPER_CASE):
+  `StationType_Operator` -> `StationTypeOperator` (PascalCase) or
+  `STATION_TYPE_OPERATOR` (UPPER_CASE). Before renaming, the project index is
+  asked whether the new name already exists; if it does, the next style is
+  tried (`Station_Name` beside an existing `StationName` becomes
+  `STATION_NAME`), and with no free name the constant is left alone. Two names
+  that close are also reported by the `confusable-identifier` warning.
 * A unit with UNSAVED changes is refused ("save the unit first"): a fix
   rewrites the file on disk and then reloads the editor from disk, which would
   otherwise discard the unsaved edits.

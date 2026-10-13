@@ -307,6 +307,49 @@ begin
   end;
 end;
 
+{ confusable-identifier (owner ask 2026-10-13): two declarations whose names
+  are the same once underscores are dropped -- StationType_Operator beside
+  StationTypeOperator. Delphi already ignores case, so the underscore is the
+  only thing telling them apart, and code that means one silently compiles
+  against the other. Also what makes a const-casing rename unsafe, which is why
+  that fix asks the index before renaming. One warning per LATER declaration,
+  naming the first. Unit/class-level consts and vars only: a routine's locals
+  are their own scope. }
+function ConfusableFindings(const AFile: string; const ADecls: TArray<TLintFinding>): TArray<TLintFinding>;
+var
+  FirstByKey: TDictionary<string, Integer>;
+  I, J      : Integer;
+  Key       : string;
+  F         : TLintFinding;
+begin
+  Result:= nil;
+  FirstByKey:= TDictionary<string, Integer>.Create;
+  try
+    for I:= 0 to High(ADecls) do
+    begin
+      Key:= LowerCase(StringReplace(ADecls[I].Message, '_', '', [rfReplaceAll]));
+      if Key = '' then Continue;
+      if not FirstByKey.TryGetValue(Key, J) then
+      begin
+        FirstByKey.Add(Key, I);
+        Continue;
+      end;
+      { the SAME identifier twice (a redeclaration, or a class const and a unit
+        const of one name) is not this rule's business }
+      if SameText(ADecls[I].Message, ADecls[J].Message) then Continue;
+      F:= ADecls[I];
+      F.RuleId  := 'confusable-identifier';
+      F.Severity:= 'warning';
+      F.FilePath:= AFile;
+      F.Message := Format('"%s" differs from "%s" (line %d) only by underscores -- two names ' +
+        'this close are easy to confuse, and code meant for one compiles against the other; rename one',
+        [ADecls[I].Message, ADecls[J].Message, ADecls[J].StartLine]);
+      Result:= Result + [F];
+    end;
+  finally
+    FirstByKey.Free;
+  end;
+end;
 class function TNamingChecker.Check(const AFile: string; const ANaming: TNamingConfig;
   const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
 var
@@ -345,6 +388,10 @@ var
     external header -- renaming them breaks the mapping. Saved/restored around
     declType recursion. }
   InRecordDecl: Boolean;
+  { confusable-identifier: every unit/class-level const and var declared in
+    the file, as (Message = name, StartLine, StartCol, EndCol). Compared once
+    the walk is done; see ConfusableFindings. }
+  Decls: TList<TLintFinding>;
 
   function NodeStr(const N: TTSNode): string;
   var
@@ -465,6 +512,21 @@ var
   end;
 
   { Emit one finding pointing at the name identifier node. }
+  { Remember a const/var declaration for confusable-identifier. }
+  procedure NoteDecl(const ANameNode: TTSNode; const AName: string);
+  var
+    D: TLintFinding;
+  begin
+    if AName = '' then Exit;
+    D:= Default(TLintFinding);
+    D.Message  := AName;
+    D.StartLine:= Integer(ANameNode.StartPoint.Row) + 1;
+    D.StartCol := Integer(ANameNode.StartPoint.Column) + 1;
+    D.EndLine  := D.StartLine;
+    D.EndCol   := D.StartCol + Length(AName);
+    Decls.Add(D);
+  end;
+
   procedure EmitAt(const ANameNode: TTSNode; const ARuleId, AMessage: string);
   var
     P: TTSPoint     ;
@@ -1001,6 +1063,9 @@ var
       ANaming.ConstCase. Skipped when ConstCase is empty. }
     if N.NodeType = 'declConst' then
     begin
+      { confusable-identifier collects every const, whatever const_case says }
+      NameNode:= N.ChildByField('name');
+      if not NameNode.IsNull then NoteDecl(NameNode, Trim(NodeStr(NameNode)));
       if Length(ANaming.ConstCase) > 0 then
       begin
         NameNode:= N.ChildByField('name');
@@ -1024,6 +1089,9 @@ var
       is a naming-convention smell). Skipped when LocalCase=''. }
     if N.NodeType = 'declVar' then
     begin
+      if not InProcBody then
+        for I:= 0 to N.NamedChildCount - 1 do
+          if N.NamedChild(I).NodeType = 'identifier' then NoteDecl(N.NamedChild(I), Trim(NodeStr(N.NamedChild(I))));
       if InProcBody and ((ANaming.LocalCase <> '') or ANaming.ShortIdentifierCheck) then
       begin
         TypeNode:= N.ChildByField('type');
@@ -1111,15 +1179,17 @@ begin
   if PF.Tree = nil then Exit;
   Src:= PF.Src;
   Findings:= TList<TLintFinding>.Create;
+  Decls   := TList<TLintFinding>.Create;
   InExplicitSection         := False; { root and class-body level = implicit-first section }
   InPrivateSection          := False; { ... which is never private, so F is not required there }
   InProcBody                := False; { not inside a routine body at the root level }
   CurSectionSkipsMethodCase := False; { root-level routines are always checked }
   try
     Visit(PF.Tree.RootNode);
-    Raw:= Findings.ToArray;
+    Raw:= Findings.ToArray + ConfusableFindings(AFile, Decls.ToArray);
   finally
     Findings.Free;
+    Decls.Free;
   end;
   { De-duplicate by (RuleId, StartLine, StartCol) -- a declProc that is also
     a named child of its defProc can otherwise cause double-emission. }
