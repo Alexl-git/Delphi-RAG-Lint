@@ -17,7 +17,9 @@ function PluginLogPathIn(const pLocalAppData, pFileName: string): string;
 
 /// <summary>The full path of a plugin log file, its folder created on demand.</summary>
 /// <param name="pFileName">Bare log file name, e.g. drag-lint-plugin.log.</param>
-/// <returns>%LOCALAPPDATA%\drag-lint\logs\pFileName.</returns>
+/// <returns>%LOCALAPPDATA%\drag-lint\logs\pFileName, or '' when no local-app-data
+/// folder can be found at all -- callers skip the write then, rather than log to
+/// '\drag-lint\logs' on the current drive root.</returns>
 /// <remarks>Creates the logs folder when missing; a failure to create it is
 /// not raised -- the caller's own write then fails, and every log writer in
 /// the plugin is already best-effort.</remarks>
@@ -63,6 +65,7 @@ end;
 
 function PluginLogPath(const pFileName: string): string;
 begin
+  if GLocalAppData = '' then Exit('');
   Result:= PluginLogPathIn(GLocalAppData, pFileName);
   if not GLogDirReady then GLogDirReady:= ForceDirectories(ExtractFilePath(Result));
 end;

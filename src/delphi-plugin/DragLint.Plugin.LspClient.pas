@@ -127,6 +127,7 @@ begin
   try
     try
       LogPath:= GetPluginLogPath;
+      if LogPath = '' then Exit; { no local-app-data folder: nowhere sane to log }
       Line:= AnsiString(Format('[%s] %s'#13#10, [FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now), AMsg]));
       if FileExists(LogPath) then Stream:= TFileStream.Create(LogPath, fmOpenWrite or fmShareDenyNone)
       else Stream:= TFileStream.Create(LogPath, fmCreate or fmShareDenyNone);

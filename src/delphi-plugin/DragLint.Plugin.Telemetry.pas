@@ -46,7 +46,9 @@ begin
     EnsureLock;
     GLock.Enter;
     try
-      TFile.AppendAllText(TelemetryLogPath, FormatDateTime('hh:nn:ss.zzz', Now) + ' [' + ATag + '] ' + AMsg + sLineBreak);
+      var LogPath: string:= TelemetryLogPath;
+      if LogPath <> '' then { '' = no local-app-data folder: skip }
+        TFile.AppendAllText(LogPath, FormatDateTime('hh:nn:ss.zzz', Now) + ' [' + ATag + '] ' + AMsg + sLineBreak);
     finally
       GLock.Leave;
     end;
