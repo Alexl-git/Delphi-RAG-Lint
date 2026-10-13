@@ -46,7 +46,7 @@ $need = @(
   "$Plugin32Dir\dclDragLintWizard.bpl",
   "$GraphvizBin\dot.exe", "$GraphvizBin\config8",
   "$YadfDir\Win64\Release\EXE\YADF.exe", "$YadfDir\Win64\Release\EXE\YADFSetup.exe",
-  "$YadfDir\Win32\Release\EXE\YADFOT.bpl", "$YadfDir\Win64\Release\EXE\YADFOT.bpl", "$YadfDir\LICENSE", "$YadfDir\Demo\Sample.pas",
+  "$YadfDir\Win32\Release\EXE\YADFOT.bpl", "$YadfDir\Win64\Release\EXE\YADFOT.bpl", "$YadfDir\LICENSE",
   "$repo\installer\drag-lint.starter.json", "$repo\charts\report-pairs.example.json",
   "$repo\charts\src\Ask-Report.ps1", "$repo\charts\src\Register-DragLintProtocol.ps1", "$repo\charts\src\Set-DragLintMcpConfig.ps1",
   "$repo\installer\licenses\drag-lint-LICENSE.txt", "$repo\installer\licenses\graphviz-EPL-2.0.txt"

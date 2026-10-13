@@ -125,11 +125,16 @@ Source: "{#YadfDir}\Win64\Release\EXE\YADF.exe";      DestDir: "{app}\yadf";    
 Source: "{#YadfDir}\Win64\Release\EXE\YADFSetup.exe"; DestDir: "{app}\yadf";     Components: yadf; Flags: ignoreversion
 Source: "{#YadfDir}\Win32\Release\EXE\YADFOT.bpl";    DestDir: "{app}\yadf";     Components: yadfot32; Check: InstallYadfot32; Flags: ignoreversion
 Source: "{#YadfDir}\Win64\Release\EXE\YADFOT.bpl";    DestDir: "{app}\yadf\x64"; Components: yadfot64; Check: InstallYadfot64; Flags: ignoreversion
-; the Options-page preview (YADF.OptionsFrame.pas:1561) looks for Demo\Sample.pas beside the
-; HOST module: yadf\ serves YADFSetup.exe and the 32-bit YADFOT; the 64-bit YADFOT needs its own
-; copy. Missing is harmless (a built-in snippet is shown).
+; YADF's Options-page preview sample. YADF 1.0.18.0 and older look for Demo\Sample.pas beside
+; the HOST module (yadf\ serves YADFSetup.exe and the 32-bit YADFOT; the 64-bit YADFOT needs its
+; own copy). Newer YADF (4b01ac1) embeds the sample and writes it once per user to
+; %APPDATA%\YADF itself, so it is shipped ONLY with the old binaries -- decided at compile time
+; from the packaged YADF.exe. Missing is harmless either way (a built-in snippet is shown).
+#define YadfVer GetVersionNumbersString(YadfDir + "\Win64\Release\EXE\YADF.exe")
+#if YadfVer == "1.0.18.0" || YadfVer == "1.0.17.0"
 Source: "{#YadfDir}\Demo\Sample.pas"; DestDir: "{app}\yadf\Demo";     Components: yadf or yadfot32; Flags: ignoreversion
 Source: "{#YadfDir}\Demo\Sample.pas"; DestDir: "{app}\yadf\x64\Demo"; Components: yadfot64; Check: InstallYadfot64; Flags: ignoreversion
+#endif
 ; ---- licences ---------------------------------------------------------------
 Source: "{#RepoRoot}\installer\licenses\*.txt"; DestDir: "{app}\licenses"; Components: core; Flags: ignoreversion
 Source: "{#YadfDir}\LICENSE"; DestDir: "{app}\licenses"; DestName: "YADF-LICENSE.txt"; Components: yadf; Flags: ignoreversion

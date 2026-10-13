@@ -37,11 +37,37 @@ begin
   Result:= IncludeTrailingPathDelimiter(pLocalAppData) + LOGS_REL + pFileName;
 end;
 
+var
+  { %LOCALAPPDATA%, resolved ONCE at unit initialization (single-threaded, BPL
+    load) -- PluginLogPath sits on the hot path of every log write, from the IDE
+    thread and the live-diagnostics worker alike, so it must not re-query the
+    shell folder or the disk each time. GLogDirReady is a benign race: two
+    threads may both call ForceDirectories once. }
+  GLocalAppData: string  = '';
+  GLogDirReady : Boolean = False;
+
+function ResolveLocalAppData: string;
+begin
+  { TPath.GetCachePath is CSIDL_LOCAL_APPDATA on Windows; the environment
+    variable is the fallback if the shell call fails or returns nothing. }
+  { Runs in the unit's initialization, i.e. while the IDE loads the BPL: ANY
+    failure here would stop the plugin loading, so every exception class is
+    deliberately caught and turned into the fallback below. }
+  try
+    Result:= TPath.GetCachePath;
+  except
+    on E: Exception do Result:= '';
+  end;
+  if Result = '' then Result:= GetEnvironmentVariable('LOCALAPPDATA');
+end;
+
 function PluginLogPath(const pFileName: string): string;
 begin
-  { TPath.GetCachePath is CSIDL_LOCAL_APPDATA on Windows. }
-  Result:= PluginLogPathIn(TPath.GetCachePath, pFileName);
-  ForceDirectories(ExtractFilePath(Result));
+  Result:= PluginLogPathIn(GLocalAppData, pFileName);
+  if not GLogDirReady then GLogDirReady:= ForceDirectories(ExtractFilePath(Result));
 end;
+
+initialization
+  GLocalAppData:= ResolveLocalAppData;
 
 end.

@@ -9,8 +9,8 @@ auto-jump-to-Diagnostics. Run in the IDE against a real project (e.g. ORM3
 - [ ] Close RAD Studio, confirm the deployed BPL is current: `third_party\dll-win32\dclDragLintWizard.bpl` timestamp is today (>= the latest commit). The engine `third_party\dll-win32\drag-lint.exe` is the multi-overlay build.
 - [ ] Reopen RAD Studio and the project. (BPLs don't hot-reload -- a restart is required after any deploy.)
 - [ ] Two logs help if something misbehaves:
-      - plugin: `%TEMP%\drag-lint-plugin.log` (look for `Compile(state): ... START` / `exit`)
-      - runner: `third_party\dll-win32\drag-lint-telemetry.log` (look for `[livediag] runner: ... idle -> auto ghost-check`, `switch settled`, `SKIP --` reasons)
+      - plugin: `%LOCALAPPDATA%\drag-lint\logs\drag-lint-plugin.log` (look for `Compile(state): ... START` / `exit`)
+      - runner: `%LOCALAPPDATA%\drag-lint\logs\drag-lint-telemetry.log` (look for `[livediag] runner: ... idle -> auto ghost-check`, `switch settled`, `SKIP --` reasons)
 
 ## 1. Startup compile (AutoCompileOnStartup)
 - [ ] With a project that has a known compiler error saved (e.g. an undeclared identifier), start the IDE.
