@@ -156,7 +156,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [exceptions-sync](Features) | `exceptions-sync` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
 | [Fix all in unit](Fix-all-in-unit) | Structure form: Fix all in unit; `lint` |  |
-| [Fix it](Fix-it) | Structure form: Fix it; `lint` |  |
+| [Fix it](Fix-it) | Structure form: Fix it; `lint`; `uses-fix` |  |
 | [Format Whole Project with YADF](Format-Whole-Project-with-YADF) | drag-lint > Format Whole Project with YADF...; `format`; `index` |  |
 | [Format with YADF](Format-with-YADF) | drag-lint > Format with YADF; `format` |  |
 | [Lint Buffer (Unsaved)](Lint-Buffer-Unsaved) | About window: Lint Buffer (Unsaved); `lint` |  |

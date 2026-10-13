@@ -37,6 +37,7 @@ var
   Lines: TArray<Integer>;
   I    : Integer;
   Txt  : string;
+  Json : string;
 begin
   { rule-grouped, the way the engine emits: line 0-based }
   Diags:= [D(226, 6, dlsInfo, 'public-field', 'pf A'),
@@ -82,5 +83,20 @@ begin
   Writeln('af.isapplied=', AutofixApplied('applied 2 edit(s) across 1 file(s)'));
   Writeln('af.zero=', AutofixApplied('applied 0 edit(s) across 0 file(s)'));
   Writeln('af.noneapplied=', AutofixApplied('no fixable findings (of 14 finding(s))'));
+  Writeln('uu.name=', UnusedUnitFromMessage('Unit ''System.Win.Registry'' is listed in the uses clause but no symbols from it are referenced'));
+  Writeln('uu.other=[', UnusedUnitFromMessage('Public field on a class breaks encapsulation'), ']');
+  Json:= '(loaded defaults)'#13#10 +
+    '{"schema":"uses-fix/1","applied":true,"items":[' +
+    '{"unit":"iSetupDefaults","kind":"remove","line":48,"status":"deselected","reason":"not in --only"},' +
+    '{"unit":"System.Win.Registry","kind":"remove","line":16,"status":"verified","reason":""},' +
+    '{"unit":"System.IniFiles","kind":"move","line":14,"status":"verified","reason":"has an initialization section: moved, not removed"},' +
+    '{"unit":"System.SysUtils","kind":"move","line":7,"status":"skipped","reason":"moving it did not verify"}]}';
+  Writeln('uf.remove=', UsesFixSummary(Json, 'system.win.registry'));
+  Writeln('uf.move=', UsesFixSummary(Json, 'System.IniFiles'));
+  Writeln('uf.skip=', UsesFixSummary(Json, 'System.SysUtils'));
+  Writeln('uf.absent=', UsesFixSummary(Json, 'Vcl.Nothing'));
+  Writeln('uf.nojson=[', UsesFixSummary('ERROR: database not found', 'X'), ']');
+  Writeln('uf.applied=', AutofixApplied(UsesFixSummary(Json, 'System.IniFiles')));
+  Writeln('uf.notapplied=', AutofixApplied(UsesFixSummary(Json, 'System.SysUtils')));
   Writeln('DONE');
 end.

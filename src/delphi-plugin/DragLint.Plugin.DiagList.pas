@@ -72,6 +72,21 @@ function DiagSetSignature(const ADiags: TArray<TDragLintDiagnostic>): Cardinal;
 /// 'no fixable findings (of 14 finding(s))' -- or '' when there is none.</returns>
 function AutofixSummary(const AOutput: string): string;
 
+/// <summary>The unit an unused-unit-in-uses finding names.</summary>
+/// <param name="AMessage">The finding's message: "Unit 'X' is listed in the uses clause ...".</param>
+/// <returns>'X', or '' when the message does not have that shape.</returns>
+function UnusedUnitFromMessage(const AMessage: string): string;
+
+/// <summary>Summarises a `uses-fix --format json` document for one unit, in the
+/// same 'applied N edit(s)' shape AutofixSummary returns, so one completion
+/// path handles both kinds of fix.</summary>
+/// <param name="AOutput">The engine's stdout; text before the first '{' is ignored.</param>
+/// <param name="AUnitName">The unit the fix was asked about (the --only value).</param>
+/// <returns>'applied 1 edit(s): X removed (.bak written)', 'applied 1 edit(s): X
+/// moved to the implementation section (.bak written)', 'no change: X -- reason',
+/// or '' when there is no parseable document.</returns>
+function UsesFixSummary(const AOutput, AUnitName: string): string;
+
 /// <summary>Tells whether an autofix summary reports at least one applied edit.</summary>
 /// <param name="ASummary">A value returned by AutofixSummary.</param>
 /// <returns>True for 'applied N edit(s)' with N above zero.</returns>
@@ -84,6 +99,7 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults
   , System.RegularExpressions
+  , System.JSON
   ;
 
 function DiagDisplayOrder(const ADiags: TArray<TDragLintDiagnostic>): TArray<Integer>;
@@ -206,6 +222,49 @@ begin
   Result:= '';
   for Line in AOutput.Split([#13#10, #10]) do
     if Line.Trim.StartsWith(CTag) then Result:= Line.Trim.Substring(Length(CTag));
+end;
+
+function UnusedUnitFromMessage(const AMessage: string): string;
+var
+  M: TMatch;
+begin
+  M:= TRegEx.Match(AMessage, '^Unit ''([^'']+)''');
+  Result:= if M.Success then M.Groups[1].Value else '';
+end;
+
+function UsesFixSummary(const AOutput, AUnitName: string): string;
+var
+  P    : Integer;
+  Root : TJSONValue;
+  Items: TJSONArray;
+  It   : TJSONValue;
+  Done : string;
+begin
+  Result:= '';
+  P:= Pos('{', AOutput);
+  if P = 0 then Exit;
+  Root:= TJSONObject.ParseJSONValue(Copy(AOutput, P, MaxInt));
+  if not (Root is TJSONObject) then
+  begin
+    Root.Free;
+    Exit;
+  end;
+  try
+    if not TJSONObject(Root).TryGetValue<TJSONArray>('items', Items) then Exit;
+    for It in Items do
+    begin
+      if not SameText(It.GetValue<string>('unit', ''), AUnitName) then Continue;
+      if SameText(It.GetValue<string>('status', ''), 'verified') then
+      begin
+        Done:= if SameText(It.GetValue<string>('kind', ''), 'move') then 'moved to the implementation section' else 'removed';
+        Exit(Format('applied 1 edit(s): %s %s (.bak written)', [AUnitName, Done]));
+      end;
+      Exit(Format('no change: %s -- %s', [AUnitName, It.GetValue<string>('reason', It.GetValue<string>('status', ''))]));
+    end;
+    Result:= Format('no change: %s -- not in this unit''s uses clause', [AUnitName]);
+  finally
+    Root.Free;
+  end;
 end;
 
 function AutofixApplied(const ASummary: string): Boolean;

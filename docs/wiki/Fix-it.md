@@ -31,6 +31,37 @@ it would fix and writes nothing.
 Only rules marked fixable can be auto-fixed. `drag-lint rules --json`
 reports a `fixable` field per rule; 23 of the 189 rules are fixable.
 
+## Unused units (`unused-unit-in-uses`)
+
+"Fix it" on an `unused-unit-in-uses` finding does not use `lint --fix`. It
+asks the compiler-verified [uses-fix](Uses-Cleanup-Preview-compiler-verified-this-unit)
+verb about that ONE unit, which decides by compiling:
+
+* **removed** -- nothing needs the unit and it has no initialization section;
+* **moved to the implementation section** -- only the implementation needs it,
+  or it has an initialization section (moving keeps that running; removing
+  could build cleanly and break at runtime);
+* **no change** -- neither edit compiles; the reason is shown.
+
+It needs an active project with an index (the same one a save reindexes), and
+it compiles the unit up to three times, so it can take a minute on a large
+unit. The result is reported in the status strip and the Messages pane, e.g.
+`applied 1 edit(s): System.Win.Registry removed (.bak written)`. The CLI form:
+
+```
+drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform win32 --remove-unused --only <UnitName> --apply --format json
+```
+
+## While it runs, and afterwards
+
+* It runs in the background on the drag-lint job queue; the status strip
+  shows it.
+* A unit with UNSAVED changes is refused ("save the unit first"): a fix
+  rewrites the file on disk and then reloads the editor from disk, which would
+  otherwise discard the unsaved edits.
+* When it changed the file, the buffer is reloaded, the project reindexed and
+  the unit re-linted, so the fixed finding drops off on its own.
+
 ## What it needs
 
 No index required -- `lint --file` works on a single file. (An index is

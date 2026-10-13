@@ -5,7 +5,7 @@
   "owner": "ENGINE",
   "status": "shipped",
   "since": "0.1.0-alpha",
-  "summary": "Applies the autofix for the single lint finding represented by a Structure-tree node",
+  "summary": "Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling",
   "wikiPage": "Fix-it",
   "surfaces": [
     {
@@ -16,6 +16,10 @@
     {
       "type": "cli",
       "verb": "lint"
+    },
+    {
+      "type": "cli",
+      "verb": "uses-fix"
     }
   ],
   "audience": "both"

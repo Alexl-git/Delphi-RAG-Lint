@@ -990,7 +990,7 @@ begin
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
   Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text]   (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
-  Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible)');
+  Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
   Writeln('  drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff]   (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))');
   Writeln('  drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]');
@@ -21919,6 +21919,8 @@ var
   nSkip       : Integer                            ;
   Items       : TList<TUsesFixItem>                ;
   WantJson    : Boolean                            ;
+  LibStore    : ISymbolStore                       ; { forced candidates only; opened on first need }
+  LibTried    : Boolean                            ;
 
   function UnitStemOf(const APath: string): string;
   begin
@@ -22156,6 +22158,54 @@ var
     Items.Add(It);
   end;
 
+  { Has the index-driven pass already reported this unit? }
+  function ItemListed(const AUnitName: string): Boolean;
+  begin
+    for var It in Items do
+      if SameText(It.UnitName, AUnitName) then Exit(True);
+    Result:= False;
+  end;
+
+  { Does a FORCED candidate have an initialization/finalization section?
+    Returns False when no store can say -- the caller then leaves the unit
+    alone. A project unit is asked of the project store (HasInitSection, which
+    already answers True when unsure); anything else of the library store:
+    --library-db, else the platform library the manifest resolves -- the same
+    store unused-unit-in-uses asks, so the fix and the finding agree. }
+  function ForcedInitKnown(const AUnitName: string; out AHasInit: Boolean): Boolean;
+  var
+    Why: string;
+    Us : TSymbol;
+    Ch : TSymbol;
+  begin
+    AHasInit:= True;
+    if IndexedUnits.ContainsKey(LowerCase(AUnitName)) then
+    begin
+      AHasInit:= HasInitSection(LowerCase(AUnitName));
+      Exit(True);
+    end;
+    if not LibTried then
+    begin
+      LibTried:= True;
+      LibStore:= OpenLibraryStoreIfCurrent(LintLibraryDb(AArgs), Why);
+      if (LibStore = nil) and (Why <> '') then Writeln(ErrOutput, 'uses-fix: ', Why);
+    end;
+    Result:= False;
+    if LibStore = nil then Exit;
+    for Us in LibStore.FindSymbolsByExactName(AUnitName) do
+    begin
+      if Us.Kind <> skUnit then Continue;
+      AHasInit:= False;
+      for Ch in LibStore.FindAllChildSymbols(Us.Id) do
+        if (Ch.Kind = skInitialization) or (Ch.Kind = skFinalization) then
+        begin
+          AHasInit:= True;
+          Break;
+        end;
+      Exit(True);
+    end;
+  end;
+
   { The whole report as one object. Emitted from the SAME item list the text
     path prints and --apply writes from, so the three cannot disagree about what
     was considered. }
@@ -22281,6 +22331,7 @@ begin
   Proj:= AArgs.ProjectPath;
   Plat:= AArgs.CheckPlatform;
   WantJson:= SameText(AArgs.Format, 'json');
+  LibTried:= False;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'uses-fix', AArgs.DbPath) then Exit(2);
@@ -22389,6 +22440,63 @@ begin
         end;
       end; // if
     end; // for
+
+    { FORCED CANDIDATES (2026-10-13). The pass above decides candidacy from the
+      PROJECT index, and a library unit -- RTL, VCL, DevExpress -- is never a
+      file in it, so `lint` reported 21 unused-unit-in-uses findings on ORM3's
+      BASICS.PAS while this verb offered one, and the IDE's per-finding
+      "Fix it" (which passes --only <Unit>) came back `unmatched` for nearly
+      every row. A unit the caller NAMED that is in this file's uses clause but
+      got no candidate above is decided by compiling instead:
+        no init/final section -> REMOVE (needs --remove-unused), else MOVE
+                                 when it is an interface entry;
+        HAS one               -> MOVE only: moving keeps the section running,
+                                 removing could build clean and fail at runtime;
+        cannot tell           -> skipped, never touched.
+      Every edit still goes through TryEdit, so nothing is written that adds a
+      compile error. Pinned by run_uses_fix_forced_library_unit.ps1. }
+    if Length(AArgs.OnlySections) > 0 then
+      for Uo in UU do
+      begin
+        if SameText(LowerCase(Uo.UnitName), ThisStem) then Continue;
+        if not Selected(Uo.UnitName) or ItemListed(Uo.UnitName) then Continue;
+        var IsIntf: Boolean:= Uo.Section = uusInterface;
+        var FKind : string := if IsIntf then 'move' else 'remove';
+        var HasInit: Boolean;
+        if not ForcedInitKnown(Uo.UnitName, HasInit) then
+        begin
+          Inc(nSkip);
+          AddItem(Uo.UnitName, FKind, Uo.StartLine, 'skipped',
+                  'not in the project index, and no library index says whether it has an initialization section -- not touched');
+          if not WantJson then Writeln(Format('  skip   %s  (initialization section unknown -- not touched)', [Uo.UnitName]));
+          Continue;
+        end;
+        if (not HasInit) and AArgs.RemoveUnused and TryEdit(Uo.UnitName, Uo.StartLine - 1, 'remove') then
+        begin
+          Inc(nRemove);
+          AddItem(Uo.UnitName, 'remove', Uo.StartLine, 'verified', '');
+          if not WantJson then Writeln(Format('  REMOVE %s  commented out (line %d)', [Uo.UnitName, Uo.StartLine]));
+        end
+        else if IsIntf and TryEdit(Uo.UnitName, Uo.StartLine - 1, 'move') then
+        begin
+          Inc(nMove);
+          AddItem(Uo.UnitName, 'move', Uo.StartLine, 'verified',
+                  if HasInit then 'has an initialization section: moved, not removed' else '');
+          if not WantJson then Writeln(Format('  MOVED  %s  interface -> implementation (line %d)', [Uo.UnitName, Uo.StartLine]));
+        end
+        else
+        begin
+          Inc(nSkip);
+          var Why: string;
+          var NeedsFlag: string:= if (not HasInit) and (not AArgs.RemoveUnused) then ' (removal needs --remove-unused)' else '';
+          if HasInit and not IsIntf then Why:= 'has an initialization section and is already in the implementation -- not removed'
+          else if HasInit then Why:= 'has an initialization section, and moving it to the implementation did not verify'
+          else if IsIntf then Why:= 'neither removing it nor moving it to the implementation verified / not a clean entry' + NeedsFlag
+          else Why:= 'removing it did not verify / not a clean entry' + NeedsFlag;
+          AddItem(Uo.UnitName, FKind, Uo.StartLine, 'skipped', Why);
+          if not WantJson then Writeln(Format('  skip   %s  (%s)', [Uo.UnitName, Why]));
+        end;
+      end; // for
 
     { A JSON caller gets a document in EVERY outcome, including this one. An
       empty stdout would force the IDE to distinguish "nothing to do" from "the

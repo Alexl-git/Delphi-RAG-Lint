@@ -31,7 +31,12 @@ then right-click a tree node and choose "Fix all in unit".
   project is reindexed and the unit is re-linted, so the fixed findings
   drop off the panel on their own.
 
-"Fix it" on a single finding works the same way.
+* A unit with UNSAVED changes is refused ("save the unit first"): the fix
+  rewrites the file on disk and reloads the editor from it.
+
+"Fix it" on a single finding works the same way. `unused-unit-in-uses`
+findings are not counted here -- they are fixed one at a time by
+[Fix it](Fix-it), which compiles to decide between removing and moving.
 
 ## Running it from the CLI
 

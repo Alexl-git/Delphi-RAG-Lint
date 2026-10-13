@@ -13,6 +13,19 @@ re-lints automatically when the reindex that follows a save finishes; this
 item is the on-demand version of the same step, for when you do not want to
 wait or auto-reindex is switched off.
 
+## How the panel stays current on its own
+
+* **After an edit** the unsaved buffer is re-linted about 0.7 s after you stop
+  typing, in the background.
+* **An edit while a lint is still running CANCELS it**: the running engine is
+  stopped and its result is thrown away (it describes text that is gone), and
+  the next lint starts after the same short pause. The panel never shows
+  findings for an older version of the buffer.
+* **After a save** the project is reindexed, and the unit is re-linted when
+  that reindex lands.
+* **The panel refreshes when the findings change**, not only when their number
+  does.
+
 ## Reaching it in the IDE
 
 This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure

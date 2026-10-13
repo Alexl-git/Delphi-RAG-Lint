@@ -147,8 +147,10 @@ type
       { Re-index the project and re-lint this unit on demand. }
       procedure RescanUnitClick        (Sender: TObject);
       function  SelectedDiagIndices: TArray<Integer>;
-      { One queued autofix run: progress in the status bar, summary on done. }
-      procedure RunFixJob(const ATitle, ACmd: string; ATimeoutMs: Integer);
+      { One queued autofix run: progress in the status bar, summary on done.
+        AUsesUnit <> '' marks a uses-fix run about that unit (JSON summary). }
+      procedure RunFixJob(const ATitle, ACmd: string; ATimeoutMs: Integer; const AUsesUnit: string = '');
+      function  UnusedUnitOfNode(ANode: TTreeNode): string;
       { v0.88 AutoFix handlers + helpers. }
       procedure EnsureFixableRules;
       function  NodeIsDiagnosticsRoot(ANode: TTreeNode): Boolean;
@@ -201,6 +203,10 @@ type
       /// with the single nearest row.</remarks>
       function SelectDiagnosticForLine(ALine: Integer): Boolean;
   end;
+
+const
+  { the one rule 'Fix it' routes to uses-fix instead of `lint --fix` }
+  CUnusedUnitRule = 'unused-unit-in-uses';
 
 var
   GStructureForm: TDragLintStructureForm = nil;
@@ -1156,8 +1162,25 @@ begin
   if ANode.Parent <> FRootDiag then Exit; { only diagnostics children are findings }
   ND:= TStructureNodeData(ANode.Data);
   if ND.Code = '' then Exit;
+  { unused-unit-in-uses is fixed by the compiler-verified uses-fix verb, not
+    by `lint --fix`, so it is not in the engine's fixable set. Offered when
+    the finding names a unit and there is a project + index to verify in. }
+  if SameText(ND.Code, CUnusedUnitRule) then
+    Exit((UnusedUnitOfNode(ANode) <> '') and (GetActiveProjectFilePath <> '') and (GLastProjectDb <> ''));
   EnsureFixableRules;
   Result:= (FFixableRules <> nil) and (FFixableRules.IndexOf(LowerCase(ND.Code)) >= 0);
+end;
+
+{ The unit an unused-unit-in-uses row names, read from its finding's message. }
+function TDragLintStructureForm.UnusedUnitOfNode(ANode: TTreeNode): string;
+var
+  ND: TStructureNodeData;
+begin
+  Result:= '';
+  if (ANode = nil) or (ANode.Data = nil) then Exit;
+  ND:= TStructureNodeData(ANode.Data);
+  if (ND.DiagIndex < 0) or (ND.DiagIndex > High(FDiags)) then Exit;
+  Result:= UnusedUnitFromMessage(FDiags[ND.DiagIndex].Message);
 end;
 
 { Reload the on-disk file into the IDE editor buffer AFTER the current callback
@@ -1248,14 +1271,32 @@ end;
   On exit 0, reload the buffer + refresh the tree; otherwise log and do nothing. }
 procedure TDragLintStructureForm.FixItClick(Sender: TObject);
 const
-  CFixItTimeoutMs = 60000;
+  CFixItTimeoutMs   = 60000;
+  { uses-fix shadow-compiles the unit once for a baseline and once per try;
+    ORM3's BASICS.PAS measured ~50 s for one unit }
+  CUsesFixTimeoutMs = 300000;
 var
-  ND: TStructureNodeData;
+  ND      : TStructureNodeData;
+  UnitName: string;
 begin
   try
     if not NodeIsFixableFinding(FTree.Selected) then Exit;
     ND:= TStructureNodeData(FTree.Selected.Data);
     if FCurrentFile = '' then Exit;
+    if SameText(ND.Code, CUnusedUnitRule) then
+    begin
+      { Owner ask 2026-10-13: decide whether the unit can go entirely or must
+        move to the implementation section. uses-fix answers by COMPILING:
+        remove when nothing needs it and it has no initialization section,
+        else move when only the implementation needs it, else leave it. }
+      UnitName:= UnusedUnitOfNode(FTree.Selected);
+      RunFixJob('Fix unused unit ' + UnitName,
+        Format('"%s" uses-fix "%s" --project "%s" --db "%s" --platform %s --remove-unused --only "%s" --apply --format json',
+          [ResolveExePath, FCurrentFile, GetActiveProjectFilePath, GLastProjectDb,
+           LowerCase(GetActivePlatformForLibrary), UnitName]),
+        CUsesFixTimeoutMs, UnitName);
+      Exit;
+    end;
     RunFixJob(Format('Fix %s line %d', [ND.Code, ND.Line]),
       Format('"%s" lint --file "%s" --fix --fix-line %d --fix-rule "%s" --apply',
         [ResolveExePath, FCurrentFile, ND.Line, ND.Code]),
@@ -1309,16 +1350,54 @@ end;
 
   OnDone deliberately captures no Self: the panel can be closed while the job
   runs, and a closure over a freed form is an AV in the IDE message loop. }
-procedure TDragLintStructureForm.RunFixJob(const ATitle, ACmd: string; ATimeoutMs: Integer);
+{ Does any editor of AFilePath hold unsaved changes? A fix rewrites the file
+  ON DISK and then reloads the buffer from disk, so running one over unsaved
+  edits would silently throw those edits away. }
+function BufferIsModified(const AFilePath: string): Boolean;
+var
+  QMS : IOTAModuleServices;
+  QMod: IOTAModule        ;
+  I   : Integer           ;
+begin
+  Result:= False;
+  try
+    if not Supports(BorlandIDEServices, IOTAModuleServices, QMS) then Exit;
+    QMod:= QMS.FindModule(AFilePath);
+    if QMod = nil then Exit;
+    for I:= 0 to QMod.ModuleFileCount - 1 do
+      if QMod.ModuleFileEditors[I].Modified then Exit(True);
+  except
+    on E: Exception do DLT('autofix', 'BufferIsModified failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end;
+
+{ The first non-blank line of a failed run's output -- usually the engine's
+  own ERROR line, which says more than an exit code does. }
+function FirstOutputLine(const AOutput: string): string;
+begin
+  Result:= '';
+  for var Line: string in AOutput.Split([#13#10, #10]) do
+    if (Line.Trim <> '') and not Line.Trim.StartsWith('(loaded defaults') then Exit(Line.Trim);
+end;
+
+procedure TDragLintStructureForm.RunFixJob(const ATitle, ACmd: string; ATimeoutMs: Integer; const AUsesUnit: string);
 const
   CLogExcerptChars = 400; { enough of a failed run's output to diagnose it in the log }
 var
   Job     : TDragLintJob;
   FilePath: string;
   Title   : string;
+  UsesUnit: string; { a local, so the OnDone closure captures a copy }
 begin
   FilePath:= FCurrentFile;
+  UsesUnit:= AUsesUnit;
   Title   := ATitle + ' -- ' + ExtractFileName(FilePath);
+  if BufferIsModified(FilePath) then
+  begin
+    SetDragLintNote(Title + ': not run -- save the unit first (a fix rewrites the file on disk and reloads it)');
+    PostIdeMessage('drag-lint: ' + Title + ': not run -- the unit has unsaved changes; save it first.');
+    Exit;
+  end;
   Job:= TDragLintJob.Create;
   Job.Kind       := jkGeneric;
   Job.Title      := Title;
@@ -1332,12 +1411,12 @@ begin
       Summary: string;
     begin
       try
-        Summary:= AutofixSummary(AOutput);
+        Summary:= if UsesUnit <> '' then UsesFixSummary(AOutput, UsesUnit) else AutofixSummary(AOutput);
         DLT('autofix', Format('%s -> exit=%d summary=[%s]', [Title, AExit, Summary]));
         if AExit <> 0 then
         begin
           DLT('autofix', Title + ' non-zero exit; output: ' + Copy(AOutput, 1, CLogExcerptChars));
-          Summary:= Format('FAILED (exit %d) -- see the drag-lint log', [AExit]);
+          Summary:= Format('FAILED (exit %d): %s', [AExit, FirstOutputLine(AOutput)]);
         end
         else if Summary = '' then Summary:= 'finished, but the engine printed no autofix summary';
         SetDragLintNote(Title + ': ' + Summary);

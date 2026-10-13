@@ -103,10 +103,14 @@ uses
       gate. Pure -- no OTA, no VCL -- so tests\SurfaceSplitTests.dpr exercises
       the whole decision headless. }
     DragLint.Plugin.SurfaceSplit
+  , System.SyncObjs { TInterlocked: the live-lint generation }
+  , { RunCaptureStdoutCancellable / KillProcess: superseding a running lint }
+    DragLint.Plugin.ProcRun
   ;
 
 const
   DEBOUNCE_MS          = 700; { keystroke->lint (instant feedback) }
+  CLiveLintTimeoutMs   = 8000; { one live lint run; a superseded run is killed long before }
   SEMANTIC_DEBOUNCE_MS = 5000; { keystroke->semantic check (compiler; slower) }
   GHOST_IDLE_MS        = 3500; { keystroke->auto ghost-check (full-project compile of the unsaved buffer; heavy, so a longer pause) }
   SWITCH_COMPILE_MS    = 1200; { tab-switch->compile-current-state (debounce so flipping through tabs doesn't spam) }
@@ -185,6 +189,50 @@ end;
 
 var
   GLastSemanticCheck: Cardinal = 0; { v0.43: throttle semantic to 5s apart }
+
+  { ---------- live-lint supersession (owner ask 2026-10-13) ----------
+    "If a relint runs long and there was another edit, cancel the running lint
+    and start the next one after the debounce." Two halves, and only the first
+    is load-bearing:
+
+    * GENERATION. Every edit and every RequestRelint bumps GLintGen. The runner
+      stamps the generation it fired with, and a result arriving for an older
+      one is DISCARDED, never published -- a killed child still returns
+      normally (its pipe closes), so its output must not be read as findings.
+    * KILL. The running lint child's handle is published in GLintProc under
+      GLintProcLock; an edit terminates it so the box is not busy linting text
+      nobody will see. Best-effort: a run that finishes before the kill lands
+      is still discarded by the generation check.
+
+    Only the LINT provider's child is tracked (the semantic check has its own
+    5 s throttle and is not superseded here). }
+  GLintGen     : Integer = 0;
+  GLintProc    : THandle = 0;
+  GLintProcLock: TObject = nil; { created in initialization; TMonitor-locked }
+
+/// <summary>Marks the running live lint as superseded: bumps the generation
+/// and terminates the lint child if one is running.</summary>
+/// <remarks>MAIN THREAD. Does not wait for the child to exit -- the worker
+/// thread that owns the run sees its pipe close, returns, and is discarded.</remarks>
+procedure SupersedeRunningLint(const AWhy: string);
+var
+  H: THandle;
+begin
+  TInterlocked.Increment(GLintGen);
+  H:= 0;
+  TMonitor.Enter(GLintProcLock);
+  try
+    if GLintProc <> 0 then
+    begin
+      H:= GLintProc;
+      { zero wait: never block the editor on a dying child }
+      KillProcess(H, 0);
+    end;
+  finally
+    TMonitor.Exit(GLintProcLock);
+  end;
+  if H <> 0 then LiveLog('lint: superseded by ' + AWhy + ' -- running lint killed');
+end;
 
   { ---------- small process-capture helper ---------- }
 
@@ -318,9 +366,28 @@ begin
   if LiveDb <> '' then Cmd:= Cmd + Format(' --db "%s"', [LiveDb]);
   LiveLog(Format('lint: exe=%s target=%s standin=%s db=%s',
     [ACtx.ExePath, LintTarget, ACtx.FilePath, LiveDb]));
-  if not RunCapture(Cmd, Output, 8000) then
+  { Cancellable: the handle lands in GLintProc BEFORE the run blocks, so
+    SupersedeRunningLint can kill it mid-run. Taken back under the lock before
+    it is closed, so a kill can never touch a closed handle. }
+  var LintHandle: THandle;
+  var LintPid: DWORD:= 0;
+  var LintExit: Integer:= RunCaptureStdoutCancellable(Cmd, Output, CLiveLintTimeoutMs, 0, GLintProc, LintPid);
+  TMonitor.Enter(GLintProcLock);
+  try
+    LintHandle:= GLintProc;
+    GLintProc := 0;
+  finally
+    TMonitor.Exit(GLintProcLock);
+  end;
+  CloseProcessHandle(LintHandle);
+  if LintExit < 0 then
   begin
-    LiveLog('lint: RunCapture FAILED (engine not found / timeout?)');
+    LiveLog('lint: spawn FAILED (engine not found?)');
+    Exit;
+  end;
+  if LintExit = PROCRUN_KILLED_EXIT_CODE then
+  begin
+    LiveLog(Format('lint: pid %d killed (superseded) -- output discarded', [LintPid]));
     Exit;
   end;
   LiveLog(Format('lint: output=%d bytes', [Length(Output)]));
@@ -737,6 +804,7 @@ begin
           FGhostPending   := True; { arm the auto ghost-check too }
           FLastEdit       := GetTickCount; { debounce 700ms after the detected change }
           LiveLog('runner: content changed (poll) -> dirty');
+          SupersedeRunningLint('an edit (poll)');
         end;
 
         { PLAN-lint-tree P2: the interface-change fan-out, fed from the SAME
@@ -855,6 +923,8 @@ begin
     FDirty:= False;
     GLiveStatus:= 'Analyzing ' + ExtractFileName(FilePath) + '...';
     LiveLog(Format('runner: FIRE file=%s exe=%s bufLen=%d', [FilePath, Exe, Length(BufText)]));
+    { The generation this run answers for; an edit after this point supersedes it. }
+    var FireGen: Integer:= TInterlocked.CompareExchange(GLintGen, 0, 0);
 
     TThread.CreateAnonymousThread(
       procedure
@@ -879,9 +949,34 @@ begin
 
         TThread.Queue(
           nil,
-          procedure var nErr, nWarn, j: Integer; begin try PublishToCache(FilePath,
-                Diags); RepaintEditViews; nErr:= 0; nWarn:= 0; for j:= 0 to High(Diags) do if Diags[j].Severity = 1 then Inc(nErr) else if Diags[j].Severity = 2 then Inc(nWarn); GLiveStatus:= Format('%d error(s), %d warning(s)', [nErr,
-                  nWarn]); except end; FBusy:= False; end
+          procedure
+          var
+            ErrCount, WarnCount, j: Integer;
+          begin
+            try
+              { SUPERSEDED: an edit (or RequestRelint) arrived while this ran.
+                Its findings describe text that is gone -- and a KILLED run
+                comes back with none at all, so publishing it would blank the
+                panel. Drop it; FDirty is already set, so the runner lints
+                the current buffer after the normal debounce. }
+              if FireGen <> GLintGen then
+                LiveLog(Format('runner: result for gen %d discarded (now gen %d)', [FireGen, GLintGen]))
+              else
+              begin
+                PublishToCache(FilePath, Diags);
+                RepaintEditViews;
+                ErrCount := 0;
+                WarnCount:= 0;
+                for j:= 0 to High(Diags) do
+                  if Diags[j].Severity = 1 then Inc(ErrCount)
+                  else if Diags[j].Severity = 2 then Inc(WarnCount);
+                GLiveStatus:= Format('%d error(s), %d warning(s)', [ErrCount, WarnCount]);
+              end;
+            except
+              on E: Exception do LiveLog('runner: publish EXC: ' + E.ClassName + ': ' + E.Message);
+            end;
+            FBusy:= False;
+          end
         );
       end).Start; // procedure
   except
@@ -909,7 +1004,8 @@ begin
     if not GRunner.FDirty then LiveLog('NotifyEditDirty: edit detected -> FDirty set');
     GRunner.FDirty       := True;
     GRunner.FGhostPending:= True; { arm the auto ghost-check }
-    GRunner.FLastEdit    := GetTickCount;
+    GRunner.FLastEdit    := GetTickCount;  // dl:ok gettickcount-wraparound@d200 -- the runner's Cardinal edit tick, read only as an unsigned DIFFERENCE, which is wrap-safe
+    SupersedeRunningLint('an edit');
   end
   else LiveLog('NotifyEditDirty: GRunner=nil -- live runner NOT started!');
 end;
@@ -922,8 +1018,10 @@ begin
     Exit;
   end;
   LiveLog('RequestRelint: re-lint armed for the next tick');
-  { A lint already in flight keeps FBusy; FDirty survives it and the runner
-    fires again once that one publishes, so the request is never lost. }
+  { a lint in flight was computed against the index this request replaces }
+  SupersedeRunningLint('a re-lint request');
+  { A lint already in flight is superseded above: its result is discarded and,
+    with FDirty set, the runner fires again once that one unwinds. }
   GRunner.FDirty   := True;
   GRunner.FLastEdit:= GetTickCount - DEBOUNCE_MS;  // dl:ok gettickcount-wraparound@cf82 -- FLastEdit is the runner's Cardinal tick, read only as an unsigned DIFFERENCE (GetTickCount - FLastEdit), which is wrap-safe; same shape as the four existing writes
 end;
@@ -988,6 +1086,7 @@ begin
 end;
 
 initialization
+  GLintProcLock:= TObject.Create;
 
 finalization
 { TEARDOWN BRACKETING. An access violation while the IDE closes leaves NOTHING
@@ -1001,8 +1100,10 @@ finalization
   that goes quiet does NOT prove UnregisterDragLintMenu reached its
   StopLiveDiagnostics step -- that ambiguity cost a diagnosis today. Record
   which path actually did it. }
-try LiveLog('finalization: entering StopLiveDiagnostics (UNIT finalization, not the menu teardown)'); except end;
-try StopLiveDiagnostics; except end;
+try LiveLog('finalization: entering StopLiveDiagnostics (UNIT finalization, not the menu teardown)'); except on E: Exception do DLT('teardown', 'LiveDiagnostics: LiveLog raised ' + E.ClassName); end;
+try StopLiveDiagnostics; except on E: Exception do DLT('teardown', 'LiveDiagnostics: StopLiveDiagnostics raised ' + E.ClassName + ': ' + E.Message); end;
+{ after the runner is stopped: nothing can be holding the lint-handle lock now }
+FreeAndNil(GLintProcLock);
 
   DLT('teardown', 'LiveDiagnostics: finalization END');
 

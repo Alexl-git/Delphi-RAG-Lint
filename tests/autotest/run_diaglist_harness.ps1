@@ -101,6 +101,18 @@ Check 'A4 applied N>0 -> True'           ($kv['af.isapplied']   -eq 'TRUE')  ''
 Check 'A5 applied 0 -> False'            ($kv['af.zero']        -eq 'FALSE') ''
 Check 'A6 nothing fixable -> False'      ($kv['af.noneapplied'] -eq 'FALSE') ''
 
+Write-Host '-- Fix it on unused-unit-in-uses (uses-fix)' -ForegroundColor Cyan
+Check 'U1 the unit name is read from the finding'     ($kv['uu.name'] -eq 'System.Win.Registry') "got: $($kv['uu.name'])"
+Check 'U2 another rule''s message yields no unit'      ($kv['uu.other'] -eq '[]') "got: $($kv['uu.other'])"
+Check 'U3 a verified remove is reported as applied (unit compared case-insensitively)' `
+  ($kv['uf.remove'] -eq 'applied 1 edit(s): system.win.registry removed (.bak written)') "got: $($kv['uf.remove'])"
+Check 'U4 a verified move says where it went'          ($kv['uf.move'] -eq 'applied 1 edit(s): System.IniFiles moved to the implementation section (.bak written)') "got: $($kv['uf.move'])"
+Check 'U5 a skipped unit says why, and is not applied' ($kv['uf.skip'] -eq 'no change: System.SysUtils -- moving it did not verify') "got: $($kv['uf.skip'])"
+Check 'U6 a unit not in the document is a no-change'   ($kv['uf.absent'] -eq 'no change: Vcl.Nothing -- not in this unit''s uses clause') "got: $($kv['uf.absent'])"
+Check 'U7 no JSON at all -> empty (caller reports the failure)' ($kv['uf.nojson'] -eq '[]') "got: $($kv['uf.nojson'])"
+Check 'U8 the shared completion path sees a move as applied'  ($kv['uf.applied'] -eq 'TRUE') ''
+Check 'U9 ... and a skip as not applied'                      ($kv['uf.notapplied'] -eq 'FALSE') ''
+
 [System.IO.Directory]::Delete($WorkDir, $true)
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

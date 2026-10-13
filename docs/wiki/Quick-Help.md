@@ -56,7 +56,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **exceptions-sync** -- Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites. [More](Features)
 * **Fix all in project** -- Applies autofixes for every fixable finding across the whole project, starting from the Structure form. [More](Fix-all-in-project)
 * **Fix all in unit** -- Applies autofixes for every fixable finding in the current unit, starting from the Structure form. [More](Fix-all-in-unit)
-* **Fix it** -- Applies the autofix for the single lint finding represented by a Structure-tree node. [More](Fix-it)
+* **Fix it** -- Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling. [More](Fix-it)
 * **Format Whole Project with YADF** -- Runs YADF formatting across a project's files, with indexing involved as part of the same action. [More](Format-Whole-Project-with-YADF)
 * **Format with YADF** -- Reformats one Pascal unit by driving the external YADF formatter. [More](Format-with-YADF)
 * **Lint Buffer (Unsaved)** -- Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first. [More](Lint-Buffer-Unsaved)
