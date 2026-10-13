@@ -118,13 +118,13 @@ Source: "{#GraphvizBin}\dot.exe";  DestDir: "{app}\bin\graphviz\bin"; Components
 Source: "{#GraphvizBin}\*.dll";    DestDir: "{app}\bin\graphviz\bin"; Components: graphviz; Flags: ignoreversion
 Source: "{#GraphvizBin}\config8";  DestDir: "{app}\bin\graphviz\bin"; Components: graphviz; Flags: ignoreversion
 ; ---- IDE plugins (a BPL loads only in the IDE it was built for: 37.0) --------
-Source: "{#Plugin32Dir}\dclDragLintWizard.bpl"; DestDir: "{app}\bin";     Components: plugin32; Check: Have32BitIde; Flags: ignoreversion
-Source: "{#EngineDir}\dclDragLintWizard.bpl";   DestDir: "{app}\bin\x64"; Components: plugin64; Check: Have64BitIde; Flags: ignoreversion
+Source: "{#Plugin32Dir}\dclDragLintWizard.bpl"; DestDir: "{app}\bin";     Components: plugin32; Check: InstallPlugin32; Flags: ignoreversion
+Source: "{#EngineDir}\dclDragLintWizard.bpl";   DestDir: "{app}\bin\x64"; Components: plugin64; Check: InstallPlugin64; Flags: ignoreversion
 ; ---- YADF (owner 2026-10-13: a component; YADFSetup is its settings editor) ---
 Source: "{#YadfDir}\Win64\Release\EXE\YADF.exe";      DestDir: "{app}\yadf";     Components: yadf; Flags: ignoreversion
 Source: "{#YadfDir}\Win64\Release\EXE\YADFSetup.exe"; DestDir: "{app}\yadf";     Components: yadf; Flags: ignoreversion
-Source: "{#YadfDir}\Win32\Release\EXE\YADFOT.bpl";    DestDir: "{app}\yadf";     Components: yadfot32; Check: Have32BitIde; Flags: ignoreversion
-Source: "{#YadfDir}\Win64\Release\EXE\YADFOT.bpl";    DestDir: "{app}\yadf\x64"; Components: yadfot64; Check: Have64BitIde; Flags: ignoreversion
+Source: "{#YadfDir}\Win32\Release\EXE\YADFOT.bpl";    DestDir: "{app}\yadf";     Components: yadfot32; Check: InstallYadfot32; Flags: ignoreversion
+Source: "{#YadfDir}\Win64\Release\EXE\YADFOT.bpl";    DestDir: "{app}\yadf\x64"; Components: yadfot64; Check: InstallYadfot64; Flags: ignoreversion
 ; ---- licences ---------------------------------------------------------------
 Source: "{#RepoRoot}\installer\licenses\*.txt"; DestDir: "{app}\licenses"; Components: core; Flags: ignoreversion
 Source: "{#YadfDir}\LICENSE"; DestDir: "{app}\licenses"; DestName: "YADF-LICENSE.txt"; Components: yadf; Flags: ignoreversion
@@ -132,10 +132,10 @@ Source: "{#YadfDir}\LICENSE"; DestDir: "{app}\licenses"; DestName: "YADF-LICENSE
 [Registry]
 ; plugin registration: ONE value each, named by our own path; uninstall deletes
 ; exactly that value and never touches other Known Packages entries.
-Root: HKCU; Subkey: "{#IdeKey}\Known Packages";     ValueType: string; ValueName: "{app}\bin\dclDragLintWizard.bpl";     ValueData: "drag-lint IDE plugin"; Components: plugin32; Check: Have32BitIde; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "{#IdeKey}\Known Packages x64"; ValueType: string; ValueName: "{app}\bin\x64\dclDragLintWizard.bpl"; ValueData: "drag-lint IDE plugin"; Components: plugin64; Check: Have64BitIde; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "{#IdeKey}\Known Packages";     ValueType: string; ValueName: "{app}\yadf\YADFOT.bpl";     ValueData: "YADF formatter"; Components: yadfot32; Check: Have32BitIde; Flags: uninsdeletevalue
-Root: HKCU; Subkey: "{#IdeKey}\Known Packages x64"; ValueType: string; ValueName: "{app}\yadf\x64\YADFOT.bpl"; ValueData: "YADF formatter"; Components: yadfot64; Check: Have64BitIde; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "{#IdeKey}\Known Packages";     ValueType: string; ValueName: "{app}\bin\dclDragLintWizard.bpl";     ValueData: "drag-lint IDE plugin"; Components: plugin32; Check: InstallPlugin32; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "{#IdeKey}\Known Packages x64"; ValueType: string; ValueName: "{app}\bin\x64\dclDragLintWizard.bpl"; ValueData: "drag-lint IDE plugin"; Components: plugin64; Check: InstallPlugin64; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "{#IdeKey}\Known Packages";     ValueType: string; ValueName: "{app}\yadf\YADFOT.bpl";     ValueData: "YADF formatter"; Components: yadfot32; Check: InstallYadfot32; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "{#IdeKey}\Known Packages x64"; ValueType: string; ValueName: "{app}\yadf\x64\YADFOT.bpl"; ValueData: "YADF formatter"; Components: yadfot64; Check: InstallYadfot64; Flags: uninsdeletevalue
 ; marker: this installer registered draglint:// (read by the uninstaller)
 Root: HKCU; Subkey: "{#InstKey}"; ValueType: string; ValueName: "ProtocolRegisteredBy"; ValueData: "{app}"; Tasks: protocol; Check: RegisterProtocol; Flags: uninsdeletevalue uninsdeletekeyifempty
 
@@ -257,6 +257,41 @@ begin
       end;
 end;
 
+{ One plugin slot: Subkey (Known Packages or Known Packages x64), the BPL file
+  name, and the path this install registers. }
+function SlotOther(Slot: Integer): string;
+begin
+  case Slot of
+    0: Result:= OtherRegistration('{#IdeKey}\Known Packages',     'dclDragLintWizard.bpl', ExpandConstant('{app}\bin\dclDragLintWizard.bpl'));
+    1: Result:= OtherRegistration('{#IdeKey}\Known Packages x64', 'dclDragLintWizard.bpl', ExpandConstant('{app}\bin\x64\dclDragLintWizard.bpl'));
+    2: Result:= OtherRegistration('{#IdeKey}\Known Packages',     'YADFOT.bpl', ExpandConstant('{app}\yadf\YADFOT.bpl'));
+  else Result:= OtherRegistration('{#IdeKey}\Known Packages x64', 'YADFOT.bpl', ExpandConstant('{app}\yadf\x64\YADFOT.bpl'));
+  end;
+end;
+
+{ Whether to install the plugin in Slot. Needs its IDE. A SILENT install never
+  adds a second registration of a package already registered from elsewhere --
+  the IDE would refuse one of them, and nobody is there to be warned -- so it
+  skips that plugin and logs why. An interactive install has already asked on
+  the components page (NextButtonClick), so the user's choice stands. }
+function InstallSlot(Slot: Integer): Boolean;
+var
+  Other: string;
+begin
+  if (Slot = 0) or (Slot = 2) then Result:= Have32BitIde else Result:= Have64BitIde;
+  if not Result or not WizardSilent then Exit;
+  Other:= SlotOther(Slot);
+  if Other <> '' then
+  begin
+    Result:= False;
+    Log('plugin slot ' + IntToStr(Slot) + ' skipped: the same package is already registered from ' + Other);
+  end;
+end;
+
+function InstallPlugin32: Boolean; begin Result:= InstallSlot(0); end;
+function InstallPlugin64: Boolean; begin Result:= InstallSlot(1); end;
+function InstallYadfot32: Boolean; begin Result:= InstallSlot(2); end;
+function InstallYadfot64: Boolean; begin Result:= InstallSlot(3); end;
 { ---- draglint:// (owner D5: ask before replacing an existing registration) - }
 
 var
@@ -341,30 +376,33 @@ begin
   end;
 end;
 
-{ Interactive only (silent installs skip the wizard pages). The no-IDE rule does
-  not depend on this: every plugin [Files]/[Registry] entry carries a
-  Have32BitIde / Have64BitIde Check, which holds in silent mode too. }
+{ Interactive only: silent installs skip the wizard pages. InstallSlot enforces
+  the same two rules (IDE present, no second registration) in silent mode. }
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
+  Slot : Integer;
+  Comp : array[0..3] of string;
+  What : array[0..3] of string;
   Other: string;
 begin
   Result:= True;
   if CurPageID <> wpSelectComponents then Exit;
-  Other:= OtherRegistration('{#IdeKey}\Known Packages', 'dclDragLintWizard.bpl', ExpandConstant('{app}\bin\dclDragLintWizard.bpl'));
-  if WizardIsComponentSelected('plugin32') and (Other <> '') then
-    Result:= MsgBox('The drag-lint IDE plugin is already registered from' + #13#10 + Other + #13#10#13#10 +
+  Comp[0]:= 'plugin32'; What[0]:= 'The drag-lint IDE plugin (32-bit IDE)';
+  Comp[1]:= 'plugin64'; What[1]:= 'The drag-lint IDE plugin (64-bit IDE)';
+  Comp[2]:= 'yadfot32'; What[2]:= 'The YADF IDE plugin (32-bit IDE)';
+  Comp[3]:= 'yadfot64'; What[3]:= 'The YADF IDE plugin (64-bit IDE)';
+  for Slot:= 0 to 3 do
+  begin
+    if not WizardIsComponentSelected(Comp[Slot]) then Continue;
+    Other:= SlotOther(Slot);
+    if Other = '' then Continue;
+    Result:= MsgBox(What[Slot] + ' is already registered from' + #13#10 + Other + #13#10#13#10 +
       'Two copies of the same package make the IDE refuse to load one of them. Remove that entry ' +
-      '(Component > Install Packages) or untick the plugin.' + #13#10#13#10 + 'Continue anyway?',
+      '(Component > Install Packages) or untick it here.' + #13#10#13#10 + 'Continue anyway?',
       mbConfirmation, MB_YESNO) = IDYES;
-  if not Result then Exit;
-  Other:= OtherRegistration('{#IdeKey}\Known Packages', 'YADFOT.bpl', ExpandConstant('{app}\yadf\YADFOT.bpl'));
-  if WizardIsComponentSelected('yadfot32') and (Other <> '') then
-    Result:= MsgBox('The YADF IDE plugin is already registered from' + #13#10 + Other + #13#10#13#10 +
-      'Two copies of the same package make the IDE refuse to load one of them. Remove that entry ' +
-      '(Component > Install Packages) or untick the YADF plugin.' + #13#10#13#10 + 'Continue anyway?',
-      mbConfirmation, MB_YESNO) = IDYES;
+    if not Result then Exit;
+  end;
 end;
-
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result:= '';
@@ -400,7 +438,7 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep <> ssPostInstall then Exit;
-  if (WizardIsComponentSelected('plugin32') and Have32BitIde) or (WizardIsComponentSelected('plugin64') and Have64BitIde) then
+  if (WizardIsComponentSelected('plugin32') and InstallPlugin32) or (WizardIsComponentSelected('plugin64') and InstallPlugin64) then
     ClaimPathSetting('{#PlugKey}', 'ExePath', ExpandConstant('{app}\bin\drag-lint.exe'),
       'The drag-lint IDE plugin''s engine setting', 'PluginExePath');
   if WizardIsComponentSelected('yadf') then

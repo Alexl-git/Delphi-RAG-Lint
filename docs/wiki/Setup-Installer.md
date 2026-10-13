@@ -14,6 +14,9 @@ For the manual, zip-based route see [Installation](Installation.md).
 rights, installs under `%LOCALAPPDATA%\Programs\drag-lint`) or *All users*
 (Windows asks for admin rights, installs under `Program Files`). The IDE plugin
 registration and the `draglint://` links are per user in both modes.
+Per user means the account that RUNS setup: if Windows asks for a different
+administrator account, the plugin and links are registered for that account,
+not yours -- install *Just for me* from your own account instead.
 
 **Components.** Everything is ticked in a full install.
 
@@ -67,7 +70,8 @@ YADF elsewhere without asking, and a silent install never overwrites one.
 
 If the same plugin is already registered from another folder (a developer's
 repository build, say), setup warns: two copies of one package make the IDE
-refuse to load one of them.
+refuse to load one of them. A silent install does not ask: it skips that plugin and
+says so in the setup log.
 
 ## Updating
 

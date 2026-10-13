@@ -101,7 +101,8 @@ gets one value per ticked plugin, the IDE loads both drag-lint and YADF
 plugins, *drag-lint > Reports* finds `Ask-Report.ps1` beside the engine,
 setup refuses while `bds.exe` runs, and uninstall removes only those values.
 If the developer's own `dll-win32` plugin is registered, setup warns about the
-duplicate before installing.
+duplicate before installing; a `/VERYSILENT` install skips that plugin and logs
+"plugin slot 0 skipped" instead of registering a second copy.
 
 ## What to send back
 
