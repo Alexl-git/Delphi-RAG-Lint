@@ -97,6 +97,12 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// holds the identifier being renamed. Non-zero means the store is stale for
 /// the target file(s) and the caller should surface a "reindex and re-run"
 /// hint; those sites were NOT written.</param>
+/// <param name="AStaleCount">Out: number of FINDINGS (not edits) skipped because
+/// the store-backed symbol could not be resolved at the finding's position
+/// although the store DOES hold a symbol of that name in that file -- the
+/// index predates an edit that moved the declaration (spec criterion 12).
+/// Counted separately from ASkippedCount, which counts edits. A finding whose
+/// name the store does not know in that file at all is not counted.</param>
 /// <returns>The applied edit set (empty if nothing was fixable).</returns>
 /// <remarks>
 /// Re-casing (phase 1) is collision-free in a case-insensitive language
@@ -156,7 +162,7 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 function ConstCaseCandidates(const AOldName: string; const AConstCase: TArray<string>): TArray<string>;
 function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
-  out AFixCount: Integer; out ASkippedCount: Integer): TArray<TTextEdit>;
+  out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer): TArray<TTextEdit>;
 
 implementation
 
@@ -487,7 +493,7 @@ end;
 
 function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
-  out AFixCount: Integer; out ASkippedCount: Integer): TArray<TTextEdit>;
+  out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer): TArray<TTextEdit>;
 var
   Edits: TList<TTextEdit>;
   Seen : TDictionary<string, Boolean>;
@@ -603,6 +609,16 @@ var
     if Emitted > 0 then Inc(AFixCount);
   end;
 
+  { True when the store holds a symbol named AName (case-insensitively) declared
+    in AFilePath -- at ANY position. Separates "the index is stale for this
+    file" from "the index does not know this name here at all". }
+  function DeclaredInFile(const AFilePath, AName: string): Boolean;
+  begin
+    for var S: TSymbol in AStore.FindSymbolsByFile(AFilePath) do
+      if SameText(S.Name, AName) then Exit(True);
+    Result:= False;
+  end;
+
 var
   F         : TLintFinding;
   OldName   : string;
@@ -616,6 +632,7 @@ var
 begin
   AFixCount:= 0;
   ASkippedCount:= 0;
+  AStaleCount:= 0;
   Result:= nil;
   if AStore = nil then Exit;
 
@@ -714,7 +731,15 @@ begin
             implementation-section header (Type.OldName) itself, so no local
             workaround is needed here. }
           Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol, OldName);
-          if Sym.Id = 0 then Continue; // unresolved symbol -- report NEEDS_CONTEXT by skipping
+          if Sym.Id = 0 then
+          begin
+            { Unresolved at this position. If the store still knows the name in
+              this file, the index predates an edit that moved the declaration:
+              count it so the summary says "stale index", not "no fixable
+              findings" (spec criterion 12). Otherwise it is a plain skip. }
+            if DeclaredInFile(F.FilePath, OldName) then Inc(AStaleCount);
+            Continue;
+          end;
           if SameText(F.RuleId, 'const-casing') and (Length(ConstCands) > 0) then
           begin
             { ASK THE INDEX (owner, 2026-10-13): the first configured style whose

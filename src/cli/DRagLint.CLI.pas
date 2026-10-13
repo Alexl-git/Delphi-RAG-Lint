@@ -1200,7 +1200,10 @@ function BuildProjectFileScope(const AArgs: TArgs): TDictionary<string, Boolean>
 { Forward: DoLint and DoLintAll both ask which .dproj owns the run for
   ifdef-undefined-symbol; it sits beside ManifestProjectFileForDb, far below. }
 function IfdefProjectFile(const AArgs: TArgs; const ADbPath: string): string; forward;
-function ResolveLibraryDb  (const AArgs: TArgs): string        ; forward;
+{ Forward: the naming autofix's stale-index hint (FinalizeAndOutput) lives
+  beside IfdefProjectFile, far below. }
+function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; forward;
+function ResolveLibraryDb(const AArgs: TArgs): string        ; forward;
 function LintLibraryDb     (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
 function MakeSiblingStoreResolver(const AArgs: TArgs;
@@ -12066,6 +12069,12 @@ begin
       here so the autofix summary below can report it -- an invisible skip is
       what made the stale-index corruption a silent, exit-0 failure. }
     var NFSkippedTotal: Integer:= 0;
+    { Naming FINDINGS (not edits) whose symbol the index holds in that file but
+      not at that position -- the index predates the edit that moved it (spec
+      criterion 12). Kept apart from NFSkippedTotal, which counts edits. }
+    var NFStaleTotal: Integer:= 0;
+    { The DB the reindex hints name: the primary store, else --db. }
+    var NFHintDb: string:= if APrimaryDb <> '' then APrimaryDb else AArgs.DbPath;
 
     { ADF Task 8: doc-drift is store-backed, so its fix cannot be produced by the
       pure-text BuildAutofixEdits above -- it needs the store (facts + MergeComment).
@@ -12223,17 +12232,25 @@ begin
 
         var NFCount: Integer;
         var NFSkipped: Integer;
-        var NFEdits: TArray<TTextEdit>:= DRagLint.Refactor.NamingFix.BuildNamingFixEdits(AStore, NamingTargets, Cfg.Naming, NFCount, NFSkipped);
+        var NFStale: Integer;
+        var NFEdits: TArray<TTextEdit>:= DRagLint.Refactor.NamingFix.BuildNamingFixEdits(AStore, NamingTargets, Cfg.Naming, NFCount, NFSkipped, NFStale);
         if Length(NFEdits) > 0 then
         begin
           Edits:= Edits + NFEdits;
           Inc(FixCount, NFCount);
         end;
         Inc(NFSkippedTotal, NFSkipped);
+        Inc(NFStaleTotal, NFStale);
+        { The hint is the PROJECT form, never `index <dir> --db`: a folder
+          reindex of a project DB widens it permanently. }
         if NFSkipped > 0 then
           Writeln(ErrOutput, Format('drag-lint: warning: naming autofix skipped %d edit(s) whose recorded position no longer holds '
             + 'the identifier being renamed -- the index is stale for the target file(s). Nothing was written at those sites; '
-            + 'reindex (drag-lint index <dir> --db <db>) and re-run.', [NFSkipped]));
+            + 'reindex (%s) and re-run.', [NFSkipped, NamingReindexHint(AArgs, NFHintDb)]));
+        if NFStale > 0 then
+          Writeln(ErrOutput, Format('drag-lint: warning: naming autofix skipped %d finding(s) whose symbol the index holds in that file '
+            + 'but not at that position -- the index is stale for the target file(s). Nothing was written for them; '
+            + 'reindex (%s) and re-run.', [NFStale, NamingReindexHint(AArgs, NFHintDb)]));
       end;
     end;
 
@@ -12334,8 +12351,23 @@ begin
       summary line stays byte-identical on the ordinary path. }
     var SkipSuffix: string:= '';
     if NFSkippedTotal > 0 then SkipSuffix:= Format(', %d skipped (stale index)', [NFSkippedTotal]);
+    { Stale-position FINDINGS lead; edits keep the historical wording when they
+      are the only kind, and say "edit(s)" when both appear so the two units
+      are not read as one number. }
+    var StaleSuffix: string:= '';
+    if NFStaleTotal > 0 then
+    begin
+      StaleSuffix:= Format(', %d skipped (stale index)', [NFStaleTotal]);
+      if NFSkippedTotal > 0 then SkipSuffix:= Format(', %d edit(s) skipped (stale index)', [NFSkippedTotal]);
+    end;
 
-    if FixCount = 0 then Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))' + SkipSuffix)
+    { Every naming finding that could have been fixed was lost to a stale index:
+      "no fixable findings" would read as "cannot be fixed" (spec criterion 13),
+      so say how many were skipped and how to reindex instead. }
+    if (FixCount = 0) and (NFStaleTotal + NFSkippedTotal > 0) then
+      Writeln(Format('autofix: 0 fixable finding(s)%s%s -- reindex: %s',
+        [StaleSuffix, SkipSuffix, NamingReindexHint(AArgs, NFHintDb)]))
+    else if FixCount = 0 then Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))')
     else if AArgs.Apply then
     begin
       { The applier runs the SAME stale-position check a second time, at write
@@ -12352,8 +12384,8 @@ begin
         self-contradictory on its face: eleven fixes applied to no files. }
       var Written: Integer:= Length(Edits) - ApplySkipped;
       if ApplySkipped > 0 then
-        SkipSuffix:= Format(', %d skipped (stale index)', [NFSkippedTotal + ApplySkipped]);
-      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s', [Written, Touched, SkipSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+        SkipSuffix:= Format(', %d %sskipped (stale index)', [NFSkippedTotal + ApplySkipped, IfThen(NFStaleTotal > 0, 'edit(s) ', '')]);
+      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
     end
     else
     begin
@@ -12362,7 +12394,7 @@ begin
       for F in Targeted do
         if IsRiskyFixRule(F.RuleId) then begin HasRisky:= True; Break; end;
       if HasRisky then Writeln('[risky] one or more fixes are behaviour-changing -- review before --apply.');
-      Writeln(Format('autofix: %d fixable finding(s)%s -- pass --apply to write', [FixCount, SkipSuffix]));
+      Writeln(Format('autofix: %d fixable finding(s)%s%s -- pass --apply to write', [FixCount, StaleSuffix, SkipSuffix]));
     end;
     Exit(0);
   end; // if
@@ -18076,6 +18108,36 @@ begin
   if Result = '' then Exit;
   if not SameText(ExtractFileExt(Result), '.dproj') then Result:= ChangeFileExt(Result, '.dproj');
   if TFile.Exists(Result) then Result:= ExpandFileName(Result) else Result:= '';
+end;
+
+{ The reindex command the naming autofix prints when the index is stale for
+  the target file. ALWAYS a project-form command, never `index <dir> --db`: a
+  folder target against a project DB adds every loose .pas under the folder and
+  adopts that widened set as the DB's scope, permanently (repo CLAUDE.md).
+
+  The project file: --project; else the manifest section that owns ADbPath;
+  else the _D-RAG convention, <dir>\_D-RAG\<base>.sqlite -> <dir>\<base>.dproj
+  or .dpr (unlike IfdefProjectFile, a bare .dpr is a valid --project target
+  here). The first candidate that exists on disk wins. With none, the manifest
+  form `index --all --only <Section>` is named instead. }
+function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string;
+var
+  AnchorDir: string;
+  Cands    : TArray<string>;
+begin
+  Cands:= [AArgs.ProjectPath];
+  if ADbPath <> '' then
+  begin
+    Cands:= Cands + [ManifestProjectFileForDb(ADbPath)];
+    AnchorDir:= AnchorDirForDb(ADbPath);
+    if AnchorDir <> '' then
+      for var Ext: string in ['.dproj', '.dpr'] do
+        Cands:= Cands + [TPath.Combine(AnchorDir, ChangeFileExt(ExtractFileName(ADbPath), Ext))];
+  end;
+  for var C: string in Cands do
+    if (C <> '') and TFile.Exists(C) then
+      Exit(Format('drag-lint index --project "%s" --db "%s"', [ExpandFileName(C), ExpandFileName(ADbPath)]));
+  Result:= Format('drag-lint index --all --only <Section> (the manifest section that owns "%s")', [ADbPath]);
 end;
 
 { The project folder a lint run is anchored to: --project when given, else the
