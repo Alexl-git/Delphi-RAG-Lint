@@ -1,0 +1,28 @@
+{
+  "id": "rescan-this-unit",
+  "title": "Rescan this unit",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.28.3-alpha",
+  "summary": "Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed",
+  "intro": "Use it when the Diagnostics panel still shows a finding you have already fixed. Rules such as unused-unit-in-uses read the project index, and a save is not an edit, so this reindexes the project incrementally and re-lints the unit when that lands. Runs in the background; the status strip shows it.",
+  "wikiPage": "Rescan-this-unit",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Rescan this unit"
+    },
+    {
+      "type": "cli",
+      "verb": "index"
+    }
+  ],
+  "audience": "both",
+  "lastVerified": {
+    "date": "2026-10-13",
+    "by": "alexanderl",
+    "build": "1.28.3-alpha"
+  }
+}

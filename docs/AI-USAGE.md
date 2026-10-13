@@ -807,6 +807,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `index` | [Auto-Document Whole Project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Auto-Document-Whole-Project) | Writes DocInsight documentation into every public declaration a project owns |  |
 | `index` | [Format Whole Project with YADF](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Format-Whole-Project-with-YADF) | Runs YADF formatting across a project's files, with indexing involved as part of the same action |  |
 | `index` | [Rebuild Index for This Project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Rebuild-Index-for-This-Project) | Walks a project's .dproj compile closure and (re)builds its index |  |
+| `index` | [Rescan this unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Rescan-this-unit) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed |  |
 | `info` | [About and Status](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/About-and-Status) | The plugin's status window -- versions, connection health, and which indexes are actually in use |  |
 | `info` | [info](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities |  |
 | `library-drift` | [Library Drift Check](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Library-Drift-Check) | Flags registered library roots that have source on disk but nothing in the index |  |

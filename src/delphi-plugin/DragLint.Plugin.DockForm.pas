@@ -86,6 +86,8 @@ uses
     ToolsAPI
   , DragLint.Plugin.StructureForm
   , DragLint.Plugin.DiagnosticCache
+  , { DiagSetSignature for the watch refresh }
+    DragLint.Plugin.DiagList
   , DragLint.Plugin.Telemetry
   , { TEMP debug telemetry }
     DragLint.Plugin.UsagesForm
@@ -148,6 +150,7 @@ type
       FWatchTimer    : TTimer      ; { v0.46: auto-refresh Structure on code-tab switch }
       FLastStructFile: string      ;
       FLastDiagCount : Integer     ; { v0.46: refresh Diagnostics node when cache changes }
+      FLastDiagSig   : Cardinal    ; { 2026-10-13: content signature -- a same-count change refreshes too }
       procedure HandlePageChange(Sender: TObject);
       procedure HandleInitTimer (Sender: TObject);
       procedure HandleWatchTimer(Sender: TObject);
@@ -451,6 +454,7 @@ begin
     FLastStructFile:= CurFile;
     if CurFile <> '' then FLastDiagCount:= Length(Cache.GetForFile(CurFile))
     else                  FLastDiagCount:= 0;
+    FLastDiagSig:= if CurFile <> '' then DiagSetSignature(Cache.GetForFile(CurFile)) else 0;
     if CurFile <> '' then
       DLT('dock', Format('watch: file change -> %s (full structure refresh)', [ExtractFileName(CurFile)]))
     else
@@ -464,12 +468,22 @@ begin
     Fixes "Diagnostics (0)" while the gutter already shows the markers. }
   if CurFile <> '' then
   begin
-    var DiagN: Integer:= Length(Cache.GetForFile(CurFile));
-    if DiagN <> FLastDiagCount then
+    { Compared by CONTENT, not count (owner report 2026-10-13): a re-lint
+      that swaps two findings for two others keeps the count, and the count
+      test alone left the panel showing findings that were already gone. }
+    var CurDiags: TArray<TDragLintDiagnostic>:= Cache.GetForFile(CurFile);
+    var DiagN: Integer:= Length(CurDiags);
+    var DiagSig: Cardinal:= DiagSetSignature(CurDiags);
+    if (DiagN <> FLastDiagCount) or (DiagSig <> FLastDiagSig) then
     begin
-      DLT('dock', Format('watch: diag count %d -> %d for %s (diag-only refresh)', [FLastDiagCount, DiagN, ExtractFileName(CurFile)]));
+      DLT('dock', Format('watch: diag count %d -> %d (content %s) for %s (diag-only refresh)', [FLastDiagCount, DiagN, if DiagSig <> FLastDiagSig then 'changed' else 'same', ExtractFileName(CurFile)]));
       FLastDiagCount:= DiagN;
-      try RefreshEmbeddedStructureDiagnostics(FStructure); except end;
+      FLastDiagSig  := DiagSig;
+      try
+        RefreshEmbeddedStructureDiagnostics(FStructure);
+      except
+        on E: Exception do DLT('dock', 'watch: diag-only refresh failed: ' + E.ClassName + ': ' + E.Message);
+      end;
       { v0.47: the diagnostic cache changed -> also force the editor gutter to
         redraw from this reliable 400ms timer context, as a fallback in case a
         path's immediate ForceGutterRepaint was missed. }

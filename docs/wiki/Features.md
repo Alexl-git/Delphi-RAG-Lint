@@ -151,6 +151,7 @@ Rules, autofix, suppression markers and project-wide checks.
 |---|---|---|
 | [Copy All Diagnostics](Copy-All-Diagnostics) | Structure form: Copy All Diagnostics; `lint` |  |
 | [Copy Diagnostics (Current File)](Copy-Diagnostics-Current-File) | About window: Copy Diagnostics (Current File); `lint` |  |
+| [Copy Selected Diagnostics](Copy-Selected-Diagnostics) | Structure form: Copy |  |
 | [drag-lint: Project Rules](drag-lint-Project-Rules) | Project Manager: drag-lint: Project Rules; `rules` |  |
 | [exceptions-sync](Features) | `exceptions-sync` |  |
 | [Fix all in project](Fix-all-in-project) | Structure form: Fix all in project; `lint-all` |  |
@@ -162,6 +163,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Lint rules](rules) | 189 rules, 23 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project` |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
+| [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |
 | [Run AST Checks](Run-AST-Checks) | About window: Run AST Checks; `check-ast` |  |
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |

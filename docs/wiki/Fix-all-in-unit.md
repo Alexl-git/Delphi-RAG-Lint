@@ -16,6 +16,23 @@ IDE** -- there is no main drag-lint menu item for it.
 To reach it: open the Structure form first (drag-lint > Show Structure),
 then right-click a tree node and choose "Fix all in unit".
 
+## What you see while it runs
+
+* The item is ENABLED only when at least one finding in the unit has a
+  registered fix, and its caption says how many: "Fix all in unit (3)". It is
+  offered from the Diagnostics root and from any Diagnostics row.
+* It runs in the BACKGROUND on the drag-lint job queue -- the IDE stays
+  usable, and the dock's status strip shows the job while it works.
+* When it finishes, the engine's own summary is shown in the status strip
+  and in the IDE Messages pane, e.g.
+  `drag-lint: Fix all in unit -- Unit1.pas: applied 2 edit(s) across 1 file(s) (.bak written)`
+  or `... no fixable findings (of 13 finding(s))`.
+* When edits were applied, the editor buffer is reloaded from disk, the
+  project is reindexed and the unit is re-linted, so the fixed findings
+  drop off the panel on their own.
+
+"Fix it" on a single finding works the same way.
+
 ## Running it from the CLI
 
 The menu item runs `lint` with the autofix flags, unscoped -- no

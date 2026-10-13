@@ -880,6 +880,25 @@
       "audience": "both"
     },
     {
+      "id": "copy-selected-diagnostics",
+      "title": "Copy Selected Diagnostics",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.28.3-alpha",
+      "summary": "Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard",
+      "intro": "Select one or several Diagnostics rows in the Structure form and choose Copy or press Ctrl+C. The rows are copied in panel order, one finding per line. Selecting the Diagnostics root copies everything, like Copy All Diagnostics.",
+      "wikiPage": "Copy-Selected-Diagnostics",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Copy"
+        }
+      ],
+      "audience": "both"
+    },
+    {
       "id": "drag-lint-project-rules",
       "title": "drag-lint: Project Rules",
       "group": "linting",
@@ -1102,6 +1121,29 @@
         {
           "type": "cli",
           "verb": "lint-tree"
+        }
+      ],
+      "audience": "both"
+    },
+    {
+      "id": "rescan-this-unit",
+      "title": "Rescan this unit",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.28.3-alpha",
+      "summary": "Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed",
+      "intro": "Use it when the Diagnostics panel still shows a finding you have already fixed. Rules such as unused-unit-in-uses read the project index, and a save is not an edit, so this reindexes the project incrementally and re-lints the unit when that lands. Runs in the background; the status strip shows it.",
+      "wikiPage": "Rescan-this-unit",
+      "surfaces": [
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Rescan this unit"
+        },
+        {
+          "type": "cli",
+          "verb": "index"
         }
       ],
       "audience": "both"

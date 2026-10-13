@@ -13,6 +13,21 @@ form (right-click a tree node)".
 To reach it: open the Structure form first (drag-lint > Show Structure),
 then right-click a tree node and choose "Copy All Diagnostics".
 
+## What lands on the clipboard
+
+The unit's path on the first line, then one line per finding in the SAME
+order as the Diagnostics rows -- by line, then column:
+
+```
+C:\Projects\MyApp\Unit1.pas
+[W] (10:5) Unit 'Winapi.ShellAPI' is listed in the uses clause but ...  [unused-unit-in-uses]
+[I] (227:7) Public field on a class breaks encapsulation -- ...  [public-field]
+```
+
+(Before 2026-10-13 the copy followed the engine's rule-grouped order, so the
+paste did not match what the panel showed.) To copy only some rows, see
+[Copy Selected Diagnostics](Copy-Selected-Diagnostics).
+
 ## Running it from the CLI
 
 The feature map lists the underlying verb as `lint`. From the usage banner:

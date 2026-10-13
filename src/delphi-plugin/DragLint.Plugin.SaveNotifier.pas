@@ -65,6 +65,20 @@ procedure UnregisterAllSaveNotifiers;
   (called from ProjectNotifier on ofnFileClosing). Idempotent. }
 procedure UnregisterSaveNotifierForModule(const AModule: IOTAModule);
 
+/// <summary>Queues an incremental reindex of the ACTIVE project and, when it
+/// finishes, re-lints the active buffer so the Diagnostics panel shows findings
+/// computed against the fresh index.</summary>
+/// <param name="ATitle">Status-bar title for the job; '' keeps the default
+/// 'Reindex &lt;project&gt;'.</param>
+/// <returns>True when the reindex was queued. False when no active project or
+/// project DB is known -- a re-lint is still requested, so the panel at least
+/// reflects the buffer.</returns>
+/// <remarks>MAIN THREAD ONLY. Uses exactly the project file and DB the save
+/// path uses (GetActiveProjectFilePath + GLastProjectDb): pairing a project
+/// with another project's DB would widen that DB with a foreign closure.
+/// Coalesces with a pending save-triggered reindex of the same DB.</remarks>
+function EnqueueReindexThenRelint(const ATitle: string): Boolean;
+
 { Written by TDragLintProjectNotifier when a .dproj is opened;
   read by TDragLintSaveNotifier.AfterSave to resolve the project DB path. }
 var
@@ -104,6 +118,8 @@ uses
     DragLint.Plugin.JobQueue
   , DragLint.Plugin.IndexJob
   , DragLint.Plugin.DbResolver
+  , { RequestRelint once a reindex lands }
+    DragLint.Plugin.LiveDiagnostics
   ;
 
 { ---- helpers ---- }
@@ -192,17 +208,37 @@ end;
   would do to the resident LSP. B0(c) measured the incremental form at 0.37 s
   for a no-op pass and 1.21 s for a one-file write, with two resident LSP
   children alive and no lock. }
-class function TDragLintSaveNotifier.EnqueueProjectReindex(const AExePath, ADbPath: string): Boolean;
+{ The one place a reindex job is queued from this unit. OnDone re-lints: a
+  save does not change the buffer hash, so without it the live runner never
+  looks again and the panel keeps findings computed against the old index. }
+function QueueReindexJob(const AExePath, ADbPath, ATitle: string): Boolean;
 var
   ProjFile: string;
-  Platform: string;
+  Job     : TDragLintJob;
 begin
   Result:= False;
   ProjFile:= GetActiveProjectFilePath;
-  if ProjFile = '' then Exit;
-  Platform:= GetActivePlatformForLibrary;
-  JobQueue.Enqueue(BuildProjectIndexJob(AExePath, ProjFile, ADbPath, Platform));
+  if (ProjFile = '') or (ADbPath = '') then Exit;
+  Job:= BuildProjectIndexJob(AExePath, ProjFile, ADbPath, GetActivePlatformForLibrary);
+  if ATitle <> '' then Job.Title:= ATitle;
+  Job.OnDone:=
+    procedure(AExit: Integer; AOutput: string)
+    begin
+      RequestRelint;
+    end;
+  JobQueue.Enqueue(Job);
   Result:= True;
+end;
+
+class function TDragLintSaveNotifier.EnqueueProjectReindex(const AExePath, ADbPath: string): Boolean;
+begin
+  Result:= QueueReindexJob(AExePath, ADbPath, '');
+end;
+
+function EnqueueReindexThenRelint(const ATitle: string): Boolean;
+begin
+  Result:= QueueReindexJob(DragLintExe, GLastProjectDb, ATitle);
+  if not Result then RequestRelint;
 end;
 
 { ---- TDragLintSaveNotifier ---- }

@@ -180,7 +180,7 @@ type
     /// library version symbol, for example). Compared case-insensitively.</summary>
     /// <remarks>Empty when the key is absent. A profile that names the key
     /// replaces the list; the top level appends.</remarks>
-    IfdefAllow: TArray<string>;  // dl:ok public-field@3596 -- TLintConfig is a value-type settings record; its sibling public fields (Naming, ExceptionsUnit, ExceptionsRoot) follow the same shape
+    IfdefAllow: TArray<string>;
     /// <summary>Loads config from APath (JSON). Empty/missing APath yields a
     /// no-op default config. If AProfile is non-empty and present under
     /// "profiles", the profile is merged over the top-level values: list fields

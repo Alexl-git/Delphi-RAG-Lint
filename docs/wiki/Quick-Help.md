@@ -51,6 +51,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 
 * **Copy All Diagnostics** -- Puts every lint finding for the current unit onto the clipboard, starting from the Structure form. [More](Copy-All-Diagnostics)
 * **Copy Diagnostics (Current File)** -- Puts the current file's lint findings onto the clipboard. [More](Copy-Diagnostics-Current-File)
+* **Copy Selected Diagnostics** -- Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard. Select one or several Diagnostics rows in the Structure form and choose Copy or press Ctrl+C. The rows are copied in panel order, one finding per line. Selecting the Diagnostics root copies everything, like Copy All Diagnostics. [More](Copy-Selected-Diagnostics)
 * **drag-lint: Project Rules** -- Shows the catalog of lint rules in the context of a specific project. [More](drag-lint-Project-Rules)
 * **exceptions-sync** -- Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites. [More](Features)
 * **Fix all in project** -- Applies autofixes for every fixable finding across the whole project, starting from the Structure form. [More](Fix-all-in-project)
@@ -62,6 +63,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **Lint rules** -- 189 rules, 23 fixable. Every lint rule the engine ships, imported from rules --json. [More](rules)
 * **lint-project** -- Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol. [More](lint-project)
 * **lint-tree** -- Answers one question lint-all cannot: does an interface edit to this unit reach any dependent?. [More](lint-tree)
+* **Rescan this unit** -- Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed. Use it when the Diagnostics panel still shows a finding you have already fixed. Rules such as unused-unit-in-uses read the project index, and a save is not an edit, so this reindexes the project incrementally and re-lints the unit when that lands. Runs in the background; the status strip shows it. [More](Rescan-this-unit)
 * **Run AST Checks** -- Runs drag-lint's AST-level checks against a file. [More](Run-AST-Checks)
 * **Run Diagnostics (didSave)** -- Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification. [More](Run-Diagnostics-didSave)
 * **Run Lint All (Full Report)** -- Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check. [More](Run-Lint-All-Full-Report)
@@ -213,6 +215,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * ConvRulesEditor: menu 'Convert tab (--convert-request <file>; the IDE plugin probes --write-capabilities <file>)' inside ConvRulesEditor.exe
 * Convert progress: menu 'Convert tab progress line' inside ConvRulesEditor.exe
 * Copy All Diagnostics: host 'Structure form' (the caption is verified, the host is declared)
+* Copy Selected Diagnostics: host 'Structure form' (the caption is verified, the host is declared)
 * Create helper class: host 'Structure form' (the caption is verified, the host is declared)
 * Document it: host 'Structure form' (the caption is verified, the host is declared)
 * Document project: host 'Structure form' (the caption is verified, the host is declared)
@@ -229,6 +232,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Installation: procedure docs\wiki\Installation.md
 * Maintenance: procedure docs\wiki\Maintenance.md
 * Reindex project: menu 'Conversion > Reindex project' inside ConvRulesEditor.exe
+* Rescan this unit: host 'Structure form' (the caption is verified, the host is declared)
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
 * Where the charts find the engine and Graphviz: procedure charts\README.md
 * Work list: menu 'View > Work list' inside ConvRulesEditor.exe

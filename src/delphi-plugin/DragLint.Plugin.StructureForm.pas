@@ -71,6 +71,14 @@ uses
   , { per-severity row icons; one asset shared with the editor gutter }
     DragLint.Plugin.SeverityGlyph
   , DragLint.Plugin.Editor { v0.88 AutoFix: RunAndCaptureStdout for the fix verbs }
+  , { 2026-10-13: row order, nearest row, clipboard text, autofix summary }
+    DragLint.Plugin.DiagList
+  , { Fix all runs as a queued job -> status-bar progress }
+    DragLint.Plugin.JobQueue
+  , { SetDragLintNote: what the fix did }
+    DragLint.Plugin.StatusBar
+  , { EnqueueReindexThenRelint: Rescan this unit }
+    DragLint.Plugin.SaveNotifier
   ;
 
 { ---- TStructureNodeData: stores line info in tree node.Data ---- }
@@ -82,6 +90,8 @@ type
     QName: string     ; { qualified name -- for Go to Implementation }
     Kind : TSymbolKind; { so we only offer impl/usages on proc-likes }
     Code : string     ; { v0.88 AutoFix: rule-id on a diagnostic node ('' on symbol nodes) }
+    DiagIndex: Integer; { index into FDiags on a diagnostic node; -1 on every other node }
+    constructor Create;
   end;
 
   { ---- TDragLintStructureForm ---- }
@@ -110,6 +120,8 @@ type
       FItemAllow      : TMenuItem   ; { 'Allow this message' -- dl:ok review of a single finding }
       FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
+      FItemCopySel    : TMenuItem   ; { 'Copy' -- the selected Diagnostics rows }
+      FItemRescan     : TMenuItem   ; { 'Rescan this unit' -- reindex + re-lint now }
       procedure BtnRefreshClick(Sender: TObject);
       procedure BtnDiagClick   (Sender: TObject);
       procedure FormActivate   (Sender: TObject);
@@ -129,6 +141,14 @@ type
       procedure FindUsagesClick        (Sender: TObject);
       procedure ShowInButterflyClick   (Sender: TObject); { Task 5: 'Show in Call Graph' -> butterfly tab }
       procedure CopyDiagnosticsClick   (Sender: TObject);
+      { Copy only the selected Diagnostics rows (multi-select; Ctrl+C). }
+      procedure CopySelectedDiagnosticsClick(Sender: TObject);
+      procedure TreeKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+      { Re-index the project and re-lint this unit on demand. }
+      procedure RescanUnitClick        (Sender: TObject);
+      function  SelectedDiagIndices: TArray<Integer>;
+      { One queued autofix run: progress in the status bar, summary on done. }
+      procedure RunFixJob(const ATitle, ACmd: string; ATimeoutMs: Integer);
       { v0.88 AutoFix handlers + helpers. }
       procedure EnsureFixableRules;
       function  NodeIsDiagnosticsRoot(ANode: TTreeNode): Boolean;
@@ -166,17 +186,19 @@ type
       procedure ScrollToDiagnostics;
       function HasDiagnostics: Boolean;
 
-      /// <summary>Selects the Diagnostics row for ALine and scrolls it into
-      /// view, or clears the selection when that line carries no finding.</summary>
+      /// <summary>Selects the Diagnostics row NEAREST to ALine and scrolls it
+      /// into view, so the panel follows the caret through the file.</summary>
       /// <param name="ALine">1-based editor line the caret is on.</param>
-      /// <returns>True when a row was selected.</returns>
+      /// <returns>True when a row was selected; False when there are no rows.</returns>
       /// <remarks>Does NOT take focus and does NOT move the editor caret --
       /// this is the editor -> panel direction only, and the panel already
       /// navigates the editor on double-click, so moving the caret here would
       /// close a feedback loop (select row -> jump editor -> caret moves ->
-      /// select row). A line with no finding CLEARS the selection rather than
-      /// leaving the previous row lit, because a stale highlight claims the
-      /// caret is somewhere it is not.</remarks>
+      /// select row). Nearest, not exact (owner ask 2026-10-13): an exact-only
+      /// match left nothing lit between findings. An exact line still wins
+      /// (its first row); a tie between rows above and below picks the one
+      /// ABOVE -- see DiagList.NearestDiagRow. Replaces a multi-row selection
+      /// with the single nearest row.</remarks>
       function SelectDiagnosticForLine(ALine: Integer): Boolean;
   end;
 
@@ -402,6 +424,12 @@ begin
   Result:= ResolveDbForOpenFile(GStructureCurrentFile);
 end;
 
+constructor TStructureNodeData.Create;
+begin
+  inherited Create;
+  DiagIndex:= -1;
+end;
+
 { ---- TDragLintStructureForm ---- }
 
 constructor TDragLintStructureForm.Create(AOwner: TComponent);
@@ -489,6 +517,10 @@ begin
   FTree.HideSelection:= False;
   FTree.OnDblClick   := TreeDblClick;
   FTree.OnMouseDown  := TreeMouseDown;
+  { 2026-10-13: Ctrl/Shift-click several Diagnostics rows, then Copy / Ctrl+C. }
+  FTree.MultiSelect     := True;
+  FTree.MultiSelectStyle:= [msControlSelect, msShiftSelect];
+  FTree.OnKeyDown       := TreeKeyDown;
 
   { v0.43: right-click navigation menu. Single/double-click stays as the
     primary "go to declaration"; the secondary actions live here. }
@@ -515,7 +547,13 @@ begin
   AddPopupItem(FPopup, 'Create &helper class'        , CreateEnumHelperClick  );
   FItemEnumHelper:= FPopup.Items[FPopup.Items.Count - 1];
   AddPopupItem(FPopup, '-'                           , nil                    ); { separator }
-  AddPopupItem(FPopup, '&Copy All Diagnostics'       , CopyDiagnosticsClick  );
+  { The 'Ctrl+C' is caption text, not a ShortCut: TreeKeyDown owns the key,
+    and a ShortCut too would copy twice when both see it. }
+  AddPopupItem(FPopup, '&Copy'#9'Ctrl+C'             , CopySelectedDiagnosticsClick);
+  FItemCopySel:= FPopup.Items[FPopup.Items.Count - 1];
+  AddPopupItem(FPopup, 'Copy &All Diagnostics'       , CopyDiagnosticsClick  );
+  AddPopupItem(FPopup, '&Rescan this unit'           , RescanUnitClick       );
+  FItemRescan:= FPopup.Items[FPopup.Items.Count - 1];
   { v0.88 AutoFix: run the CLI fix verbs on the clicked node. Enablement is set
     per-popup by PopupPopup, so we keep references to the three items. }
   AddPopupItem(FPopup, '-'                           , nil                    ); { separator }
@@ -647,20 +685,11 @@ begin
       v0.86: with ~hundreds of findings per file, CLI/cache order (typically
       rule-then-file order) is unusable -- display in ascending-line order so
       the list reads top-to-bottom like the file. FDiags itself is left
-      untouched (CopyDiagnosticsClick and RefreshDiagnosticsOnly both still
-      want the original cache order). TArray.Sort is not guaranteed stable, so
-      we sort an INDEX array instead, comparing by Line and breaking ties by
-      the original index -- that tie-break makes the ordering stable (diags on
-      the same line keep their original relative order) without depending on
-      the sort algorithm's own stability. }
-    SetLength(DiagOrder, Length(FDiags));
-    for i:= 0 to High(DiagOrder) do DiagOrder[i]:= i;
-    TArray.Sort<Integer>(DiagOrder, TComparer<Integer>.Construct(
-      function(const A, B: Integer): Integer
-      begin
-        Result:= FDiags[A].Line - FDiags[B].Line;
-        if Result = 0 then Result:= A - B;
-      end));
+      untouched; the rows are an INDEX permutation of it. The order comes from
+      DiagList.DiagDisplayOrder -- (line, column, original index) -- which the
+      clipboard copies use too, so the paste always matches the screen (it
+      did not until 2026-10-13: Copy All walked the raw cache order). }
+    DiagOrder:= DiagDisplayOrder(FDiags);
 
     { --- Severity icons on the message rows (2026-08-25) ---
       The owner's reference surface is VS Code's PROBLEMS tab, where every row
@@ -692,6 +721,7 @@ begin
       ND:= TStructureNodeData.Create;
       ND.Line:= D.Line + 1;
       ND.Code:= D.Code; { v0.88 AutoFix: rule-id so the popup can offer a per-finding fix }
+      ND.DiagIndex:= DiagOrder[i]; { so Copy can emit exactly the selected rows }
       { The '[E] ' text tag and the icon are alternatives, not companions:
         showing both is noise. But the tag is only dropped when an icon will
         actually appear -- SeverityGlyphImages returns nil if the list cannot
@@ -772,16 +802,17 @@ end;
   Wiring, not new machinery: the diagnostic rows are already the children of
   FRootDiag, each carrying a TStructureNodeData with the 1-based Line.
 
-  FOUR OF THE NOTE'S FIVE DESIGN POINTS ARE SETTLED HERE:
+  DESIGN POINTS:
 
   * No focus change and no caret move (see the declaration's remarks). Only the
-    tree's Selected + MakeVisible are touched, which is what ScrollToDiagnostics
+    tree's selection + MakeVisible are touched, which is what ScrollToDiagnostics
     already does.
-  * A line with no finding CLEARS the selection.
-  * MORE THAN ONE FINDING ON A LINE is normal. The FIRST matching row wins, and
-    that is the most severe one, because the tree is already built in severity
-    order -- the same ordering the gutter uses to pick its glyph colour, so the
-    two surfaces agree by construction rather than by a second sort here.
+  * NEAREST row, not exact (owner ask 2026-10-13; this used to CLEAR the
+    selection on a line with no finding, which left the panel blank for most
+    caret positions). The choice is DiagList.NearestDiagRow, pinned by
+    tests\autotest\run_diaglist_harness.ps1.
+  * MORE THAN ONE FINDING ON A LINE is normal. The FIRST row on that line wins
+    -- the rows are in (line, column) order, so that is the leftmost finding.
   * Cost: this runs off a caret poll, so it walks FRootDiag's children -- tens
     of nodes for a file, not the whole tree, and only when the caret's LINE
     changed (the caller debounces on line, not on position).
@@ -790,8 +821,10 @@ end;
   runs through the caller: this function cannot move the editor. }
 function TDragLintStructureForm.SelectDiagnosticForLine(ALine: Integer): Boolean;
 var
-  N: TTreeNode;
-  D: TStructureNodeData;
+  N    : TTreeNode;
+  Nodes: TArray<TTreeNode>;
+  Lines: TArray<Integer>;
+  Row  : Integer;
 begin
   Result:= False;
   if (FTree = nil) or (FRootDiag = nil) or (ALine <= 0) then Exit;
@@ -801,23 +834,21 @@ begin
   begin
     if N.Data <> nil then
     begin
-      D:= TStructureNodeData(N.Data);
-      if D.Line = ALine then
-      begin
-        // MakeVisible before Selected: selecting a node that is scrolled out of
-        // view leaves the tree showing the wrong region until the next paint.
-        N.MakeVisible;
-        FTree.Selected:= N;
-        Exit(True);
-      end;
+      Nodes:= Nodes + [N];
+      Lines:= Lines + [TStructureNodeData(N.Data).Line];
     end;
     N:= N.getNextSibling;
   end;
 
-  // Nothing on this line. Clearing beats leaving the previous row lit: a stale
-  // highlight is a claim about where the caret is, and it would be false.
-  if (FTree.Selected <> nil) and (FTree.Selected.Parent = FRootDiag) then
-    FTree.Selected:= nil;
+  Row:= NearestDiagRow(Lines, ALine);
+  if Row < 0 then Exit;
+  N:= Nodes[Row];
+  if (FTree.Selected = N) and (FTree.SelectionCount = 1) then Exit(True);
+  // MakeVisible before selecting: selecting a node that is scrolled out of
+  // view leaves the tree showing the wrong region until the next paint.
+  N.MakeVisible;
+  FTree.Select(N); { a plain Select replaces any multi-row selection }
+  Result:= True;
 end;
 
 procedure TDragLintStructureForm.ScrollToDiagnostics;
@@ -830,8 +861,8 @@ begin
   FTree.Items.BeginUpdate;
   try
     Root.Expand(False);
-    if Root.getFirstChild <> nil then FTree.Selected:= Root.getFirstChild { focus the top message line }
-    else FTree.Selected:= Root; { no messages -> just the header }
+    if Root.getFirstChild <> nil then FTree.Select(Root.getFirstChild) { focus the top message line }
+    else FTree.Select(Root); { no messages -> just the header }
     FTree.TopItem:= Root; { pin the Diagnostics header to the top of the view }
   finally
     FTree.Items.EndUpdate;
@@ -894,7 +925,9 @@ begin
   if Button = mbRight then
   begin
     N:= FTree.GetNodeAt(X, Y);
-    if N <> nil then FTree.Selected:= N;
+    { A right-click INSIDE a multi-row selection keeps it, so 'Copy' acts on
+      every row the user picked; a click elsewhere selects just that node. }
+    if (N <> nil) and not N.Selected then FTree.Select(N);
   end;
 end;
 
@@ -970,28 +1003,72 @@ begin
   ShowButterflyForQName(ND.Name, Db);
 end;
 
+{ Copy All: every finding, in the SAME order as the rows on screen (the raw
+  cache order is rule-grouped -- that mismatch was the 2026-10-13 report). }
 procedure TDragLintStructureForm.CopyDiagnosticsClick(Sender: TObject);
 var
-  SB: TStringBuilder;
-  D : TDragLintDiagnostic;
-  Line: string;
+  Txt: string;
 begin
-  if Length(FDiags) = 0 then Exit;
-  SB:= TStringBuilder.Create;
+  Txt:= DiagClipboardText(FCurrentFile, FDiags, DiagDisplayOrder(FDiags));
+  if Txt <> '' then Clipboard.AsText:= Txt;
+end;
+
+{ Indices into FDiags of the selected Diagnostics rows, in row order. Walks
+  the rows rather than FTree.Selections, whose order is CLICK order. }
+function TDragLintStructureForm.SelectedDiagIndices: TArray<Integer>;
+var
+  N: TTreeNode;
+begin
+  Result:= [];
+  if FRootDiag = nil then Exit;
+  N:= FRootDiag.getFirstChild;
+  while N <> nil do
+  begin
+    if N.Selected and (N.Data <> nil) and (TStructureNodeData(N.Data).DiagIndex >= 0) then
+      Result:= Result + [TStructureNodeData(N.Data).DiagIndex];
+    N:= N.getNextSibling;
+  end;
+end;
+
+{ Copy: just the selected rows, no file header -- what was picked is what is
+  pasted. With only the Diagnostics root selected it copies everything, which
+  is what selecting the root means. }
+procedure TDragLintStructureForm.CopySelectedDiagnosticsClick(Sender: TObject);
+var
+  Txt: string;
+begin
+  if NodeIsDiagnosticsRoot(FTree.Selected) and (FTree.SelectionCount <= 1) then
+  begin
+    CopyDiagnosticsClick(Sender);
+    Exit;
+  end;
+  Txt:= DiagClipboardText('', FDiags, SelectedDiagIndices);
+  if Txt <> '' then Clipboard.AsText:= Txt;
+end;
+
+procedure TDragLintStructureForm.TreeKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if (Key = Ord('C')) and (Shift = [ssCtrl]) then
+  begin
+    CopySelectedDiagnosticsClick(Sender);
+    Key:= 0;
+  end;
+end;
+
+{ Rescan this unit: the on-demand answer to "the panel still shows findings I
+  already fixed". Reindexes the active project incrementally (the project rules
+  -- unused-unit-in-uses and friends -- read the INDEX, not the buffer) and
+  re-lints the buffer when that lands. Runs on the job queue, so the status bar
+  shows it working and the IDE never blocks. }
+procedure TDragLintStructureForm.RescanUnitClick(Sender: TObject);
+begin
   try
-    if FCurrentFile <> '' then
-      SB.AppendLine(FCurrentFile);
-    for D in FDiags do
-    begin
-      Line:= SeverityPrefix(D.Severity)
-           + Format('(%d:%d) ', [D.Line + 1, D.StartCol + 1])
-           + D.Message;
-      if D.Code <> '' then Line:= Line + '  [' + D.Code + ']';
-      SB.AppendLine(Line);
-    end;
-    Clipboard.AsText:= SB.ToString;
-  finally
-    SB.Free;
+    if FCurrentFile = '' then Exit;
+    SetDragLintNote('Rescanning ' + ExtractFileName(FCurrentFile) + '...');
+    if not EnqueueReindexThenRelint('Rescan ' + ExtractFileName(FCurrentFile)) then
+      DLT('structure', 'Rescan: no active project/DB -- re-lint only');
+  except
+    on E: Exception do DLT('structure', 'RescanUnitClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
 end;
 
@@ -1124,21 +1201,39 @@ begin
 end; // procedure
 
 { Enable exactly the item(s) that apply to the clicked/selected node:
-  - Diagnostics root  -> 'Fix all in unit' + 'Fix all in project'; 'Fix it' off.
-  - fixable finding    -> 'Fix it'; both 'Fix all' off.
-  - anything else      -> all three disabled (nav items are untouched). }
+  - Diagnostics root or row -> 'Copy'; 'Fix all in unit (N)' when N > 0
+                               findings have a registered fix.
+  - Diagnostics root        -> 'Fix all in project'.
+  - fixable finding         -> 'Fix it'.
+  - an active file          -> 'Rescan this unit'.
+  Everything else is disabled (nav items are untouched). }
 procedure TDragLintStructureForm.PopupPopup(Sender: TObject);
 var
-  Node    : TTreeNode;
-  IsRoot  : Boolean  ;
-  IsFinding: Boolean ;
+  Node     : TTreeNode;
+  IsRoot   : Boolean  ;
+  IsFinding: Boolean  ;
+  InDiags  : Boolean  ;
+  FixCount : Integer  ;
 begin
   Node     := FTree.Selected;
   IsRoot   := NodeIsDiagnosticsRoot(Node);
   IsFinding:= NodeIsFixableFinding (Node);
+  InDiags  := IsRoot or ((Node <> nil) and (Node.Parent = FRootDiag) and (FRootDiag <> nil));
+  { 'Fix all in unit' is offered only when there is something to fix, and says
+    how much (owner ask 2026-10-13: it was always enabled and ran ~10 s to fix
+    nothing). Available from any Diagnostics row, not only the root. }
+  FixCount:= 0;
+  if InDiags then
+  begin
+    EnsureFixableRules;
+    if FFixableRules <> nil then FixCount:= CountFixableDiags(FDiags, FFixableRules.ToStringArray);
+  end;
   FItemFixIt     .Enabled:= IsFinding;
-  FItemFixUnit   .Enabled:= IsRoot   ;
+  FItemFixUnit   .Enabled:= InDiags and (FixCount > 0);
+  FItemFixUnit   .Caption:= if FixCount > 0 then Format('Fix all in &unit (%d)', [FixCount]) else 'Fix all in &unit';
   FItemFixProject.Enabled:= IsRoot   ;
+  FItemCopySel   .Enabled:= InDiags and (Length(FDiags) > 0);
+  FItemRescan    .Enabled:= FCurrentFile <> '';
   FItemDocIt     .Enabled:= NodeIsDocumentable(Node); { v0.90 AutoDocument: symbol node with a qname }
   { ADF T10: file-/project-scoped batch actions are node-independent -- only
     gated on there being an active file / active project to run against. }
@@ -1152,26 +1247,113 @@ end;
   drag-lint lint --file <FCurrentFile> --fix --fix-line <L> --fix-rule <id> --apply
   On exit 0, reload the buffer + refresh the tree; otherwise log and do nothing. }
 procedure TDragLintStructureForm.FixItClick(Sender: TObject);
+const
+  CFixItTimeoutMs = 60000;
 var
-  ND     : TStructureNodeData;
-  Cmd    : string           ;
-  Output : string           ;
-  ExitVal: Integer          ;
+  ND: TStructureNodeData;
 begin
   try
     if not NodeIsFixableFinding(FTree.Selected) then Exit;
     ND:= TStructureNodeData(FTree.Selected.Data);
     if FCurrentFile = '' then Exit;
-    Cmd:= Format('"%s" lint --file "%s" --fix --fix-line %d --fix-rule "%s" --apply',
-      [ResolveExePath, FCurrentFile, ND.Line, ND.Code]);
-    ExitVal:= RunAndCaptureStdout(Cmd, Output, 60000);
-    DLT('autofix', Format('Fix it %s line %d rule %s -> exit=%d', [ExtractFileName(FCurrentFile), ND.Line, ND.Code, ExitVal]));
-    if ExitVal = 0 then ReloadCurrentFileBuffer
-    else DLT('autofix', 'Fix it non-zero exit; output: ' + Copy(Output, 1, 400));
+    RunFixJob(Format('Fix %s line %d', [ND.Code, ND.Line]),
+      Format('"%s" lint --file "%s" --fix --fix-line %d --fix-rule "%s" --apply',
+        [ResolveExePath, FCurrentFile, ND.Line, ND.Code]),
+      CFixItTimeoutMs);
   except
     on E: Exception do DLT('autofix', 'FixItClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
 end; // procedure
+
+{ Post one line to the IDE Messages pane -- the surface every Delphi user
+  already watches, so an autofix result is seen even with the dock hidden. }
+procedure PostIdeMessage(const AText: string);
+var
+  Svc: IOTAMessageServices;
+begin
+  try
+    if Supports(BorlandIDEServices, IOTAMessageServices, Svc) then Svc.AddTitleMessage(AText);
+  except
+    on E: Exception do DLT('autofix', 'PostIdeMessage failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end;
+
+{ Reload AFilePath from disk into its editor buffer, deferred until the
+  current callback unwinds. Only the path string is captured -- no OTAPI
+  interface may outlive the callback (see ReloadCurrentFileBuffer). }
+procedure ReloadModuleFromDisk(const AFilePath: string);
+begin
+  if AFilePath = '' then Exit;
+  TThread.ForceQueue(nil,
+    procedure
+    var
+      QMS : IOTAModuleServices;
+      QMod: IOTAModule        ;
+    begin
+      try
+        if not Supports(BorlandIDEServices, IOTAModuleServices, QMS) then Exit;
+        QMod:= QMS.FindModule(AFilePath);
+        if QMod <> nil then QMod.Refresh(True);
+      except
+        on E: Exception do DLT('autofix', 'deferred Refresh failed: ' + E.ClassName + ': ' + E.Message);
+      end;
+    end);
+end;
+
+{ One autofix run, on the JOB QUEUE rather than the UI thread (owner report
+  2026-10-13: Fix all took 10+ s with no sign of life, and afterwards gave no
+  sign of what it had done). The status bar shows the job while it runs; on
+  completion the engine's 'autofix:' summary goes to the status bar AND the
+  Messages pane. When edits were applied the buffer is reloaded and the
+  project reindexed, and the re-lint that follows refreshes the panel.
+
+  OnDone deliberately captures no Self: the panel can be closed while the job
+  runs, and a closure over a freed form is an AV in the IDE message loop. }
+procedure TDragLintStructureForm.RunFixJob(const ATitle, ACmd: string; ATimeoutMs: Integer);
+const
+  CLogExcerptChars = 400; { enough of a failed run's output to diagnose it in the log }
+var
+  Job     : TDragLintJob;
+  FilePath: string;
+  Title   : string;
+begin
+  FilePath:= FCurrentFile;
+  Title   := ATitle + ' -- ' + ExtractFileName(FilePath);
+  Job:= TDragLintJob.Create;
+  Job.Kind       := jkGeneric;
+  Job.Title      := Title;
+  Job.CoalesceKey:= 'autofix:' + LowerCase(FilePath) + ':' + ATitle;
+  Job.CmdLine    := ACmd;
+  Job.TimeoutMs  := ATimeoutMs;
+  Job.Streaming  := False;
+  Job.OnDone:=
+    procedure(AExit: Integer; AOutput: string)
+    var
+      Summary: string;
+    begin
+      try
+        Summary:= AutofixSummary(AOutput);
+        DLT('autofix', Format('%s -> exit=%d summary=[%s]', [Title, AExit, Summary]));
+        if AExit <> 0 then
+        begin
+          DLT('autofix', Title + ' non-zero exit; output: ' + Copy(AOutput, 1, CLogExcerptChars));
+          Summary:= Format('FAILED (exit %d) -- see the drag-lint log', [AExit]);
+        end
+        else if Summary = '' then Summary:= 'finished, but the engine printed no autofix summary';
+        SetDragLintNote(Title + ': ' + Summary);
+        PostIdeMessage('drag-lint: ' + Title + ': ' + Summary);
+        if (AExit = 0) and AutofixApplied(Summary) then
+        begin
+          ReloadModuleFromDisk(FilePath);
+          EnqueueReindexThenRelint('');
+        end;
+      except
+        on E: Exception do DLT('autofix', 'fix job OnDone failed: ' + E.ClassName + ': ' + E.Message);
+      end;
+    end;
+  SetDragLintNote(Title + '...');
+  JobQueue.Enqueue(Job);
+end;
 
 { An allowable finding node hangs off the Diagnostics root and carries a rule-id.
   Unlike 'Fix it' there is no fixable-rule set to consult: ANY finding can be
@@ -1496,18 +1678,14 @@ end; // procedure
 { 'Fix all in unit' -- apply every fixable finding in the current file:
   drag-lint lint --file <FCurrentFile> --fix --apply. }
 procedure TDragLintStructureForm.FixAllInUnitClick(Sender: TObject);
-var
-  Cmd    : string ;
-  Output : string ;
-  ExitVal: Integer;
+const
+  CFixUnitTimeoutMs = 120000;
 begin
   try
     if FCurrentFile = '' then Exit;
-    Cmd:= Format('"%s" lint --file "%s" --fix --apply', [ResolveExePath, FCurrentFile]);
-    ExitVal:= RunAndCaptureStdout(Cmd, Output, 120000);
-    DLT('autofix', Format('Fix all in unit %s -> exit=%d', [ExtractFileName(FCurrentFile), ExitVal]));
-    if ExitVal = 0 then ReloadCurrentFileBuffer
-    else DLT('autofix', 'Fix all in unit non-zero exit; output: ' + Copy(Output, 1, 400));
+    RunFixJob('Fix all in unit',
+      Format('"%s" lint --file "%s" --fix --apply', [ResolveExePath, FCurrentFile]),
+      CFixUnitTimeoutMs);
   except
     on E: Exception do DLT('autofix', 'FixAllInUnitClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
@@ -1520,24 +1698,22 @@ end; // procedure
   in their editor buffers until re-opened (documented in the smoke notes) --
   sweeping every open module is intentionally out of scope for this chunk. }
 procedure TDragLintStructureForm.FixAllInProjectClick(Sender: TObject);
+const
+  CFixProjectTimeoutMs = 600000;
 var
-  Db     : string ;
-  Cmd    : string ;
-  Output : string ;
-  ExitVal: Integer;
+  Db: string;
 begin
   try
     Db:= ResolveDbForFile;
     if Db = '' then
     begin
       DLT('autofix', 'Fix all in project: no index DB resolved -- aborted');
+      SetDragLintNote('Fix all in project: no index DB for this file -- nothing run');
       Exit;
     end;
-    Cmd:= Format('"%s" lint-all --db "%s" --fix --apply', [ResolveExePath, Db]);
-    ExitVal:= RunAndCaptureStdout(Cmd, Output, 600000);
-    DLT('autofix', Format('Fix all in project db=%s -> exit=%d', [ExtractFileName(Db), ExitVal]));
-    if ExitVal = 0 then ReloadCurrentFileBuffer
-    else DLT('autofix', 'Fix all in project non-zero exit; output: ' + Copy(Output, 1, 400));
+    RunFixJob('Fix all in project',
+      Format('"%s" lint-all --db "%s" --fix --apply', [ResolveExePath, Db]),
+      CFixProjectTimeoutMs);
   except
     on E: Exception do DLT('autofix', 'FixAllInProjectClick failed: ' + E.ClassName + ': ' + E.Message);
   end;

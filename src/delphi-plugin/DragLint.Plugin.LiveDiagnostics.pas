@@ -27,6 +27,17 @@ procedure StopLiveDiagnostics;
 { Called from the edit-view notifier's Modified hook. }
 procedure NotifyEditDirty;
 
+/// <summary>Re-lints the active buffer on the next runner tick, even though
+/// its text has not changed.</summary>
+/// <remarks>MAIN THREAD ONLY. The runner only re-lints on an EDIT, and a save
+/// is not an edit: the buffer hash is unchanged, so after a save the panel kept
+/// the findings of a lint that ran against the PRE-save index (owner report
+/// 2026-10-13: two unused-unit-in-uses findings outlived the save that fixed
+/// them). Called when a reindex finishes, by 'Rescan this unit', and after an
+/// autofix. Does not arm the idle compile -- nothing was edited. A no-op when
+/// the runner is not started or live diagnostics are switched off.</remarks>
+procedure RequestRelint;
+
 /// <summary>Reports the surface fingerprint the engine returned for a fan-out
 /// run, so a repeated answer can stop the same shape being asked twice.</summary>
 /// <param name="AFingerprint">The engine's fingerprint for the last launch.</param>
@@ -901,6 +912,20 @@ begin
     GRunner.FLastEdit    := GetTickCount;
   end
   else LiveLog('NotifyEditDirty: GRunner=nil -- live runner NOT started!');
+end;
+
+procedure RequestRelint;
+begin
+  if GRunner = nil then
+  begin
+    LiveLog('RequestRelint: GRunner=nil -- live runner NOT started');
+    Exit;
+  end;
+  LiveLog('RequestRelint: re-lint armed for the next tick');
+  { A lint already in flight keeps FBusy; FDirty survives it and the runner
+    fires again once that one publishes, so the request is never lost. }
+  GRunner.FDirty   := True;
+  GRunner.FLastEdit:= GetTickCount - DEBOUNCE_MS;  // dl:ok gettickcount-wraparound@cf82 -- FLastEdit is the runner's Cardinal tick, read only as an unsigned DIFFERENCE (GetTickCount - FLastEdit), which is wrap-safe; same shape as the four existing writes
 end;
 
 function ActiveBufferSnapshot(out AFilePath: string): string;
