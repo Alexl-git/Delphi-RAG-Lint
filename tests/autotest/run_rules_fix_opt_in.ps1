@@ -34,5 +34,51 @@ $plain = @($rules | Where-Object { $_.fixable -and -not $_.fix_opt_in } | ForEac
 Check 'C1 CONTROL: ordinary fixes stay plain (unused-local, redundant-parentheses)' `
   (($plain -contains 'unused-local') -and ($plain -contains 'redundant-parentheses')) "plain=$($plain.Count)"
 
+# ONE FINDING ASKED FOR BY LINE AND RULE IS THE OPT-IN ("Fix it" in the IDE);
+# a batch run still is not. Owner, 2026-10-13: "We can change them to PascalCase".
+$work = Join-Path ([IO.Path]::GetTempPath()) ("draglint-optin-" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Force -Path $work | Out-Null
+try {
+  $u = Join-Path $work 'uOptIn.pas'
+  [IO.File]::WriteAllText($u, ((@'
+unit uOptIn;
+
+interface
+
+const
+  wrStr = 'x';
+
+function Get: string;
+
+implementation
+
+function Get: string;
+begin
+  Result:= wrStr;
+end;
+
+end.
+'@ -replace "`r`n", "`n") -replace "`n", "`r`n"), [Text.Encoding]::ASCII)
+  $dpr = Join-Path $work 'OptIn.dpr'
+  [IO.File]::WriteAllText($dpr, "program OptIn;`r`nuses`r`n  uOptIn in 'uOptIn.pas';`r`nbegin`r`nend.`r`n", [Text.Encoding]::ASCII)
+  $db = Join-Path $work 'optin.sqlite'
+  $ExeP = (Resolve-Path $Exe).Path
+  & $ExeP index --project $dpr --db $db 2>&1 | Out-Null
+  $line = @(& $ExeP lint $u --db $db --rule const-casing --json 2>$null | ConvertFrom-Json)[0].start_line
+  Check 'P1 premise: wrStr is a const-casing finding' ($line -eq 6) "line=$line"
+  $one   = (& $ExeP lint --file $u --db $db --fix --fix-line $line --fix-rule const-casing 2>&1 | Out-String)
+  $batch = (& $ExeP lint --file $u --db $db --fix 2>&1 | Out-String)
+  Check 'E1 --fix-line + --fix-rule on ONE naming finding is offered without the config opt-in' `
+    ($one -match 'autofix: 1 fixable finding') (($one -split "`r?`n" | Where-Object { $_ -match 'autofix' }) -join ' | ')
+  Check 'E2 CONTROL: a batch --fix still holds the naming fix back and says why' `
+    (($batch -match 'no fixable findings') -and ($batch -match 'NOT opted in: const-casing')) (($batch -split "`r?`n" | Where-Object { $_ -match 'autofix|opted' }) -join ' | ')
+  & $ExeP lint --file $u --db $db --fix --fix-line $line --fix-rule const-casing --apply 2>&1 | Out-Null
+  $after = [IO.File]::ReadAllText($u)
+  Check 'E3 --apply renames the declaration AND its use' `
+    (($after -cmatch '(?m)^\s*WrStr = ') -and ($after -cmatch 'Result:= WrStr;') -and ($after -cnotmatch '\bwrStr\b')) ''
+} finally {
+  Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

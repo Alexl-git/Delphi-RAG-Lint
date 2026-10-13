@@ -947,7 +947,7 @@ hundred tokens versus tens of thousands to read the relevant 2,000-line units.
 ## 4b. AutoFix (`--fix`)
 
 A subset of rules have a registered, mechanical quick-fix. `rules --json` marks
-each with `"fixable": true`; the seven NAMING fixes (const-casing, type-name-prefix, ...) also carry `"fix_opt_in": true` -- they rewrite every use project-wide, so `--fix` applies them only when `"autofix": [...]` in drag-lint-lint.json lists them and a `--db` is open, and otherwise reports them on stderr as `fixable but NOT opted in`. Apply them with `--fix`:
+each with `"fixable": true`; the seven NAMING fixes (const-casing, type-name-prefix, ...) also carry `"fix_opt_in": true` -- they rewrite every use project-wide, so `--fix` applies them only when `"autofix": [...]` in drag-lint-lint.json lists them and a `--db` is open, and otherwise reports them on stderr as `fixable but NOT opted in`. A request for ONE finding -- `--fix-line L --fix-rule <naming-rule>` together, which is what the IDE's Fix it sends -- IS the opt-in and renames that symbol (declaration + every indexed use; needs `--db`). Apply them with `--fix`:
 
 - **One finding:** `lint --file F --fix --fix-line L --fix-rule R --json [--apply]`
   (omit `--apply` to preview; `--json` reports `fixable`/`applied`/`preview`/`risky`).

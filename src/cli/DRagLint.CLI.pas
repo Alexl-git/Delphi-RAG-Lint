@@ -12172,7 +12172,14 @@ begin
       for F in Targeted do
         if IsOptInFixRule(F.RuleId) then
         begin
-          if Cfg.IsAutoFix(F.RuleId) then NamingTargets:= NamingTargets + [F]
+          { A request for ONE finding -- --fix-line AND --fix-rule naming this
+            rule, which is what the IDE's "Fix it" sends -- IS the opt-in. The
+            config gate exists so a BATCH fix never renames across the project
+            unasked; a human pointing at one constant and asking for it to be
+            renamed has asked (owner, 2026-10-13: "We can change them to
+            PascalCase"). }
+          var Explicit: Boolean:= (AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId);
+          if Cfg.IsAutoFix(F.RuleId) or Explicit then NamingTargets:= NamingTargets + [F]
           else NamingOptOut.AddOrSetValue(LowerCase(F.RuleId), True);
         end;
       if NamingOptOut.Count > 0 then
@@ -12627,6 +12634,68 @@ begin
   except
     { The sweep is housekeeping: it must never fail the lint it runs inside. }
     on E: Exception do TraceLintChecker('stand-in sweep skipped: ' + E.Message);
+  end;
+end;
+
+/// <summary>Holds each unused-unit-in-uses finding to the uses clause of the
+/// BUFFER being linted: a unit no longer listed there is dropped, and one still
+/// listed is re-anchored to the buffer's line.</summary>
+/// <param name="AFindings">The single-file lint's findings; only
+/// unused-unit-in-uses rows are touched.</param>
+/// <param name="ABufferPath">The text actually linted -- the stand-in copy of
+/// an editor buffer when there is one.</param>
+/// <returns>AFindings with stale unused-unit rows removed or moved.</returns>
+/// <remarks>WHY (owner report 2026-10-13, ORM3 BASICS.PAS): the rule reads the
+/// uses list and the refs from the INDEX, so the IDE's live lint described the
+/// file as of the last reindex -- three units the user had commented out and
+/// saved were still reported, at the lines they used to occupy. This repairs
+/// the one half the buffer can answer exactly (is the unit still listed, and
+/// where); "is it now referenced" still follows the index. A buffer the uses
+/// lexer cannot read leaves the findings untouched.</remarks>
+function ReconcileUnusedUnitsWithBuffer(const AFindings: TArray<TLintFinding>;
+  const ABufferPath: string): TArray<TLintFinding>;
+var
+  Entries: TArray<TUsesEntryInfo>;
+  LineOf : TDictionary<string, Integer>;
+  F      : TLintFinding;
+  M      : TMatch;
+  BufLine: Integer;
+begin
+  Result:= AFindings;
+  if (ABufferPath = '') or not TFile.Exists(ABufferPath) then Exit;
+  if not ReadUsesEntries(ABufferPath, TFile.ReadAllText(ABufferPath), Entries) then Exit;
+  LineOf:= TDictionary<string, Integer>.Create;
+  try
+    { the first listing wins: a unit named in both sections is a compile error
+      anyway, and the interface entry is the one the rule reports }
+    for var En: TUsesEntryInfo in Entries do
+      if not LineOf.ContainsKey(LowerCase(En.Name)) then LineOf.Add(LowerCase(En.Name), En.Line);
+    Result:= nil;
+    for F in AFindings do
+    begin
+      if not SameText(F.RuleId, 'unused-unit-in-uses') then
+      begin
+        Result:= Result + [F];
+        Continue;
+      end;
+      M:= TRegEx.Match(F.Message, '^Unit ''([^'']+)''');
+      if not M.Success then
+      begin
+        Result:= Result + [F];
+        Continue;
+      end;
+      if not LineOf.TryGetValue(LowerCase(M.Groups[1].Value), BufLine) then
+      begin
+        TraceLintChecker('unused-unit-in-uses: ' + M.Groups[1].Value + ' is no longer in the buffer''s uses clause -- dropped');
+        Continue;
+      end;
+      var G: TLintFinding:= F;
+      G.EndLine  := BufLine + (G.EndLine - G.StartLine);
+      G.StartLine:= BufLine;
+      Result:= Result + [G];
+    end;
+  finally
+    LineOf.Free;
   end;
 end;
 
@@ -13348,6 +13417,9 @@ begin
                        FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
+            { the pass above read this file's uses from the INDEX; the buffer is
+              what the user is looking at }
+            Findings:= ReconcileUnusedUnitsWithBuffer(Findings, EffPath);
           end;
           if LintRuleWants(NarrowRule, ['used-unit-not-resolvable']) then
           begin

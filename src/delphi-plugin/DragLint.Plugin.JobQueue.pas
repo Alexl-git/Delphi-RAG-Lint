@@ -97,6 +97,16 @@ type
 var
   GJobQueueDeferredHook: TProc<string> = nil;
 
+{ Called on the MAIN thread after EVERY jkReindex job has finished (and after
+  its own OnDone), whoever queued it -- the save path, 'Rescan this unit', or a
+  project rebuild from the menu. The live runner assigns RequestRelint here:
+  project rules such as unused-unit-in-uses read the index, so findings
+  computed while a reindex was writing stay stale until the next lint, and
+  only some reindex paths used to ask for one (owner report 2026-10-13). A
+  HOOK, so this unit keeps compiling into console tests with no ToolsAPI. }
+var
+  GReindexDoneHook: TProc = nil;
+
 { Lazy singleton (create/access on the main thread) + finalization teardown. }
 function JobQueue: TDragLintJobQueue;
 procedure ShutdownJobQueue;
@@ -346,6 +356,20 @@ begin
         try DoneCb(DoneExit, DoneOut) except end;
       end);
   end;
+  if AJob.Kind = jkReindex then
+    TThread.Queue(nil,
+      procedure
+      begin
+        { read at run time: the runner may have stopped since the job began }
+        if Assigned(GReindexDoneHook) then
+          try
+            GReindexDoneHook();
+          except
+            on E: Exception do
+              if Assigned(GJobQueueDeferredHook) then
+                GJobQueueDeferredHook('JobQueue: reindex-done hook raised ' + E.ClassName + ': ' + E.Message);
+          end;
+      end);
 end;
 
 { THE ENGINE-HOLD GATE.

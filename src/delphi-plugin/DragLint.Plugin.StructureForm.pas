@@ -120,6 +120,9 @@ type
       FItemAllow      : TMenuItem   ; { 'Allow this message' -- dl:ok review of a single finding }
       FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
+      { fix_opt_in naming rules: never counted by 'Fix all', but 'Fix it' on ONE
+        finding is the opt-in (the engine treats --fix-line + --fix-rule so) }
+      FOptInFixRules  : TStringList ;
       FItemCopySel    : TMenuItem   ; { 'Copy' -- the selected Diagnostics rows }
       FItemRescan     : TMenuItem   ; { 'Rescan this unit' -- reindex + re-lint now }
       { The last fix result for FActionNoteFile, shown on the Diagnostics root row. }
@@ -480,6 +483,8 @@ begin
   FBtnRefresh.Caption:= 'Refresh';
   FBtnRefresh.Align  := alRight;
   FBtnRefresh.Width  := 72;
+  FBtnRefresh.Hint   := 'Re-read this unit, then reindex the project and re-lint it';
+  FBtnRefresh.ShowHint:= True;
   FBtnRefresh.OnClick:= BtnRefreshClick;
 
   { v0.47: jump to Diagnostics. A refresh leaves the tree scrolled to Code
@@ -600,6 +605,7 @@ begin
   if GLiveStructureForms <> nil then GLiveStructureForms.Remove(Self);
   ClearNodeData;
   FreeAndNil(FFixableRules); { v0.88 AutoFix: release the cached fixable-rule set }
+  FreeAndNil(FOptInFixRules);
 end;
 
 procedure TDragLintStructureForm.ClearNodeData;
@@ -803,9 +809,13 @@ begin
   BuildTree(FSearch.Text);
 end;
 
+{ Refresh = a real rescan (owner ask 2026-10-13): re-read the panel NOW, and
+  queue an incremental reindex of the project followed by a re-lint, so the
+  index-backed rules catch up too. Same path as 'Rescan this unit'. }
 procedure TDragLintStructureForm.BtnRefreshClick(Sender: TObject);
 begin
   RefreshForFile(GetActiveFilePath);
+  RescanUnitClick(Sender);
 end;
 
 { v0.47: scroll the tree so the Diagnostics section is at the top of the view
@@ -1123,6 +1133,10 @@ begin
   FFixableRules.CaseSensitive:= False;
   FFixableRules.Duplicates   := dupIgnore;
   FFixableRules.Sorted       := True;
+  FOptInFixRules:= TStringList.Create;
+  FOptInFixRules.CaseSensitive:= False;
+  FOptInFixRules.Duplicates   := dupIgnore;
+  FOptInFixRules.Sorted       := True;
   try
     Cmd    := Format('"%s" rules --json', [ResolveExePath]);
     ExitVal:= RunAndCaptureStdout(Cmd, Output, 15000);
@@ -1150,7 +1164,11 @@ begin
           in. Counting those offered 'Fix all in unit (78)' on ORM3 BASICS.PAS and
           then fixed nothing (2026-10-13). An engine without the field reads False. }
         OptV:= Obj.GetValue('fix_opt_in');
-        if (OptV is TJSONBool) and TJSONBool(OptV).AsBoolean then Continue;
+        if (OptV is TJSONBool) and TJSONBool(OptV).AsBoolean then
+        begin
+          if IdV <> nil then FOptInFixRules.Add(LowerCase(IdV.Value));
+          Continue;
+        end;
         if (FixV is TJSONBool) and TJSONBool(FixV).AsBoolean and (IdV <> nil) then
           FFixableRules.Add(LowerCase(IdV.Value));
       end;
@@ -1193,6 +1211,9 @@ begin
     Exit((UnusedUnitOfNode(ANode) <> '') and (GetActiveProjectFilePath <> '') and (GLastProjectDb <> ''));
   EnsureFixableRules;
   Result:= (FFixableRules <> nil) and (FFixableRules.IndexOf(LowerCase(ND.Code)) >= 0);
+  { a naming rename finds every use through the index, so it needs one }
+  if (not Result) and (FOptInFixRules <> nil) and (FOptInFixRules.IndexOf(LowerCase(ND.Code)) >= 0) then
+    Result:= ResolveDbForFile <> '';
 end;
 
 { The unit an unused-unit-in-uses row names, read from its finding's message. }
@@ -1321,9 +1342,13 @@ begin
         CUsesFixTimeoutMs, UnitName);
       Exit;
     end;
+    { --db: a naming fix renames every use the index knows about, and the
+      store-backed fixes (doc-drift, missing-doc) need it too }
+    var Db: string:= ResolveDbForFile;
     RunFixJob(Format('Fix %s line %d', [ND.Code, ND.Line]),
       Format('"%s" lint --file "%s" --fix --fix-line %d --fix-rule "%s" --apply',
-        [ResolveExePath, FCurrentFile, ND.Line, ND.Code]),
+        [ResolveExePath, FCurrentFile, ND.Line, ND.Code])
+        + (if Db <> '' then Format(' --db "%s"', [Db]) else ''),
       CFixItTimeoutMs);
   except
     on E: Exception do DLT('autofix', 'FixItClick failed: ' + E.ClassName + ': ' + E.Message);

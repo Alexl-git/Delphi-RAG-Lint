@@ -106,6 +106,8 @@ uses
   , System.SyncObjs { TInterlocked: the live-lint generation }
   , { RunCaptureStdoutCancellable / KillProcess: superseding a running lint }
     DragLint.Plugin.ProcRun
+  , { GReindexDoneHook: re-lint when any reindex lands }
+    DragLint.Plugin.JobQueue
   ;
 
 const
@@ -1048,6 +1050,8 @@ end;
 procedure StartLiveDiagnostics;
 begin
   LiveLog('StartLiveDiagnostics: ENTER');
+  { ANY finished reindex re-lints the active buffer -- see GReindexDoneHook }
+  GReindexDoneHook:= procedure begin RequestRelint; end;
   { Register lint provider (syntax/style rules) }
   if GLintProvider = nil then
   begin
@@ -1070,6 +1074,7 @@ begin
   { 2026-08-26: freeing the runner destroys a timer and can block. Log each
     stage so a hang here is distinguishable from a hang in the caller. }
   LiveLog('StopLiveDiagnostics: ENTER');
+  GReindexDoneHook:= nil;
   if GLintProvider <> nil then
   begin
     UnregisterDiagnosticProvider(GLintProvider);

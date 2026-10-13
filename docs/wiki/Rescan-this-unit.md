@@ -21,8 +21,11 @@ wait or auto-reindex is switched off.
   stopped and its result is thrown away (it describes text that is gone), and
   the next lint starts after the same short pause. The panel never shows
   findings for an older version of the buffer.
-* **After a save** the project is reindexed, and the unit is re-linted when
-  that reindex lands.
+* **After any reindex** -- a save, "Rescan this unit", or a project rebuild
+  from the menu -- the unit is re-linted when the reindex lands.
+* **Unused-unit findings follow the editor**, not the index: a unit you have
+  commented out or deleted from the uses clause is not reported even before
+  the reindex, and a finding sits on the line the unit occupies in the buffer.
 * **The panel refreshes when the findings change**, not only when their number
   does.
 
@@ -32,7 +35,8 @@ This is a RIGHT-CLICK action, not a main-menu item. Menu path: "Structure
 form (right-click a tree node)".
 
 Open the Structure form (drag-lint > Show Structure), right-click any node and
-choose "Rescan this unit". It runs in the background on the drag-lint job
+choose "Rescan this unit" -- or press the **Refresh** button beside **Diag**,
+which re-reads the panel and then does the same rescan. It runs in the background on the drag-lint job
 queue; the dock's status strip shows it while it works, and the panel updates
 when the re-lint lands.
 

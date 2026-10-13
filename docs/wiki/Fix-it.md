@@ -56,10 +56,12 @@ drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform
 
 * It runs in the background on the drag-lint job queue; the status strip
   shows it, and the result appears on the Diagnostics root row.
-* "Fix it" is not offered on a naming finding (`const-casing`,
-  `type-name-prefix`, ...) unless that rule is opted in: those fixes rename
-  the symbol everywhere and run only from `"autofix": [...]` in
-  `drag-lint-lint.json`.
+* On a NAMING finding (`const-casing`, `type-name-prefix`,
+  `local-var-casing`, ...) "Fix it" RENAMES the symbol -- its declaration and
+  every use the project index knows about (e.g. `wrStr` -> `WrStr`). Asking for
+  that ONE finding is the opt-in; "Fix all in unit" never renames unless the
+  rule is listed in `"autofix": [...]` in `drag-lint-lint.json`. It needs the
+  project index, and is not offered without one.
 * A unit with UNSAVED changes is refused ("save the unit first"): a fix
   rewrites the file on disk and then reloads the editor from disk, which would
   otherwise discard the unsaved edits.
