@@ -100,6 +100,10 @@ Check 'A3 no summary -> empty'           ($kv['af.missing'] -eq '[]') "got: $($k
 Check 'A4 applied N>0 -> True'           ($kv['af.isapplied']   -eq 'TRUE')  ''
 Check 'A5 applied 0 -> False'            ($kv['af.zero']        -eq 'FALSE') ''
 Check 'A6 nothing fixable -> False'      ($kv['af.noneapplied'] -eq 'FALSE') ''
+Check 'A7 a summary split INTO a stderr note is still found (the IDE reported nothing, 2026-10-13)' `
+  ($kv['af.interleaved'] -eq 'no fixable findings (of 147 finding(s))') "got: $($kv['af.interleaved'])"
+Check 'A8 the not-opted-in naming rules are read from the engine note' ($kv['af.optout'] -eq 'const-casing, type-name-prefix') "got: $($kv['af.optout'])"
+Check 'A9 ... and no note means none'    ($kv['af.nooptout'] -eq '[]') "got: $($kv['af.nooptout'])"
 
 Write-Host '-- Fix it on unused-unit-in-uses (uses-fix)' -ForegroundColor Cyan
 Check 'U1 the unit name is read from the finding'     ($kv['uu.name'] -eq 'System.Win.Registry') "got: $($kv['uu.name'])"

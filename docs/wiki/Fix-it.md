@@ -55,7 +55,11 @@ drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform
 ## While it runs, and afterwards
 
 * It runs in the background on the drag-lint job queue; the status strip
-  shows it.
+  shows it, and the result appears on the Diagnostics root row.
+* "Fix it" is not offered on a naming finding (`const-casing`,
+  `type-name-prefix`, ...) unless that rule is opted in: those fixes rename
+  the symbol everywhere and run only from `"autofix": [...]` in
+  `drag-lint-lint.json`.
 * A unit with UNSAVED changes is refused ("save the unit first"): a fix
   rewrites the file on disk and then reloads the editor from disk, which would
   otherwise discard the unsaved edits.

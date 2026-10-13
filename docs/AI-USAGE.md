@@ -633,7 +633,7 @@ pure-diagnostic verbs are broken out in 2b.
 **Lint**
 | Verb | What it does |
 |------|--------------|
-| `rules` | list every lint rule (`--category`, `--json`; marks `fixable`; `--rules-dir <dir>` loads the external `.scm` pack from another folder -- `lint` takes it too) |
+| `rules` | list every lint rule (`--category`, `--json`; marks `fixable`, and `fix_opt_in` on the 7 naming fixes that `--fix` applies only when `"autofix": [...]` in drag-lint-lint.json opts them in and a `--db` is open; `--rules-dir <dir>` loads the external `.scm` pack from another folder -- `lint` takes it too) |
 | `lint <path>` | lint a file/dir (`--rule`, `--disable`, `--fix`; see 4b). Conditionals are resolved the way the indexer resolves them, so code inside a branch the compiler never sees is NOT reported; `--no-preprocess` lints the raw bytes instead. Add `--db <index>` to enable the store-backed checks -- without it type resolution and exception ancestry degrade conservatively. `--library-db <lib.sqlite>` overrides the manifest-resolved library index (the cross-store hop that lets a project class reach `TCustomForm`); absent, it resolves as before |
 | `lint <f> --db <db> --project-rules` | adds per-file `doc-drift`/`missing-doc`; off by default (per-decl cost can exceed the IDE's 8s budget) |
 | `lint <snap> --stand-in-for <real>` | lint a temp snapshot of an unsaved buffer as though it were `<real>`: store membership, file id, unit-name check and reported path all use the real path |
@@ -947,7 +947,7 @@ hundred tokens versus tens of thousands to read the relevant 2,000-line units.
 ## 4b. AutoFix (`--fix`)
 
 A subset of rules have a registered, mechanical quick-fix. `rules --json` marks
-each with `"fixable": true`. Apply them with `--fix`:
+each with `"fixable": true`; the seven NAMING fixes (const-casing, type-name-prefix, ...) also carry `"fix_opt_in": true` -- they rewrite every use project-wide, so `--fix` applies them only when `"autofix": [...]` in drag-lint-lint.json lists them and a `--db` is open, and otherwise reports them on stderr as `fixable but NOT opted in`. Apply them with `--fix`:
 
 - **One finding:** `lint --file F --fix --fix-line L --fix-rule R --json [--apply]`
   (omit `--apply` to preview; `--json` reports `fixable`/`applied`/`preview`/`risky`).

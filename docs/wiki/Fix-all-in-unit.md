@@ -21,10 +21,18 @@ then right-click a tree node and choose "Fix all in unit".
 * The item is ENABLED only when at least one finding in the unit has a
   registered fix, and its caption says how many: "Fix all in unit (3)". It is
   offered from the Diagnostics root and from any Diagnostics row.
+* The seven NAMING fixes (`const-casing`, `type-name-prefix`,
+  `method-pascalcase`, `local-var-casing`, `field-name-prefix`,
+  `param-name-prefix`, `local-field-prefix`) are NOT counted: they rename a
+  symbol everywhere it is used, so they run only when you opt them in with
+  `"autofix": [...]` in `drag-lint-lint.json`. When the unit has such findings
+  the result says so: `... no fixable findings (of 147 finding(s)) -- naming
+  fixes not opted in: const-casing, type-name-prefix`.
 * It runs in the BACKGROUND on the drag-lint job queue -- the IDE stays
   usable, and the dock's status strip shows the job while it works.
-* When it finishes, the engine's own summary is shown in the status strip
-  and in the IDE Messages pane, e.g.
+* When it finishes, the engine's own summary is shown ON THE DIAGNOSTICS ROOT
+  ROW of the panel (with the time), in the status strip and in the IDE
+  Messages pane, e.g.
   `drag-lint: Fix all in unit -- Unit1.pas: applied 2 edit(s) across 1 file(s) (.bak written)`
   or `... no fixable findings (of 13 finding(s))`.
 * When edits were applied, the editor buffer is reloaded from disk, the
@@ -44,8 +52,11 @@ The menu item runs `lint` with the autofix flags, unscoped -- no
 `--fix-line`/`--fix-rule`, so every fixable finding in the file is applied:
 
 ```
-drag-lint lint --file <path.pas> --fix --apply
+drag-lint lint --file <path.pas> --fix --apply [--db <project.sqlite>]
 ```
+
+The IDE passes the project's `--db`: the naming fixes need the index to find
+every use, and without it the engine does not say which ones are opted out.
 
 Without `--apply` the command is a DRY RUN: it reports what it would fix
 and writes nothing. Always dry-run first.

@@ -10818,6 +10818,29 @@ begin
   Result:= False;
 end;
 
+{ The NAMING fixes. Each rewrites a declaration and every use the index knows
+  about -- project-wide -- so `lint --fix` applies one only when the config
+  opts it in ("autofix": [...] in drag-lint-lint.json) AND a store is open.
+  One list, read by the fixer AND by `rules --json` (`fix_opt_in`): the IDE
+  counted these as fixable, offered "Fix all in unit (78)" on ORM3's
+  BASICS.PAS, and the run then reported "no fixable findings" (2026-10-13). }
+const
+  OPT_IN_FIX_RULE_IDS: array[0..6] of string = (
+    'method-pascalcase', 'local-var-casing', 'const-casing', 'field-name-prefix',
+    'param-name-prefix', 'type-name-prefix', 'local-field-prefix');
+
+/// <summary>Is ARuleId a fixable rule whose fix applies only when opted in?</summary>
+/// <param name="ARuleId">A lint rule id; compared case-insensitively.</param>
+/// <returns>True for the naming fixes in OPT_IN_FIX_RULE_IDS.</returns>
+function IsOptInFixRule(const ARuleId: string): Boolean;
+var
+  S: string;
+begin
+  for S in OPT_IN_FIX_RULE_IDS do
+    if SameText(S, ARuleId) then Exit(True);
+  Result:= False;
+end;
+
 function FixableRuleIds: TArray<string>;
 var
   i: Integer;
@@ -12147,10 +12170,7 @@ begin
       var NamingOptOut: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
       try
       for F in Targeted do
-        if (SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'local-var-casing')
-            or SameText(F.RuleId, 'const-casing') or SameText(F.RuleId, 'field-name-prefix')
-            or SameText(F.RuleId, 'param-name-prefix') or SameText(F.RuleId, 'type-name-prefix')
-            or SameText(F.RuleId, 'local-field-prefix')) then
+        if IsOptInFixRule(F.RuleId) then
         begin
           if Cfg.IsAutoFix(F.RuleId) then NamingTargets:= NamingTargets + [F]
           else NamingOptOut.AddOrSetValue(LowerCase(F.RuleId), True);
@@ -12412,6 +12432,8 @@ begin
         O.AddPair('default_enabled', TJSONBool.Create(R.DefaultEnabled));
         O.AddPair('source', R.Source);
         O.AddPair('fixable', TJSONBool.Create(IsFixableRule(R.Id)));
+        { true: the fix runs only when "autofix": [...] opts the rule in }
+        O.AddPair('fix_opt_in', TJSONBool.Create(IsOptInFixRule(R.Id)));
         AddParamsJson(O, R.Params);
         Arr.AddElement(O);
       end;

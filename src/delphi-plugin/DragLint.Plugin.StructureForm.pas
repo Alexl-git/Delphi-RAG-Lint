@@ -122,6 +122,9 @@ type
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
       FItemCopySel    : TMenuItem   ; { 'Copy' -- the selected Diagnostics rows }
       FItemRescan     : TMenuItem   ; { 'Rescan this unit' -- reindex + re-lint now }
+      { The last fix result for FActionNoteFile, shown on the Diagnostics root row. }
+      FActionNote     : string      ;
+      FActionNoteFile : string      ;
       procedure BtnRefreshClick(Sender: TObject);
       procedure BtnDiagClick   (Sender: TObject);
       procedure FormActivate   (Sender: TObject);
@@ -202,6 +205,13 @@ type
       /// ABOVE -- see DiagList.NearestDiagRow. Replaces a multi-row selection
       /// with the single nearest row.</remarks>
       function SelectDiagnosticForLine(ALine: Integer): Boolean;
+
+      /// <summary>Shows ANote on the Diagnostics root row while AFile is the panel's file.</summary>
+      /// <param name="AFile">The unit the note is about; ignored by a panel showing another file.</param>
+      /// <param name="ANote">One line, e.g. the outcome of a fix.</param>
+      /// <remarks>Main thread. The note stays until the panel switches to another
+      /// file or the next note replaces it.</remarks>
+      procedure ShowActionNote(const AFile, ANote: string);
   end;
 
 const
@@ -210,6 +220,10 @@ const
 
 var
   GStructureForm: TDragLintStructureForm = nil;
+  { Every live Structure panel (standalone and docked). A queued job's OnDone
+    reaches a panel ONLY through this list, never through a captured Self, so a
+    panel closed while the job ran is simply not in it. }
+  GLiveStructureForms: TList<TDragLintStructureForm> = nil;
 
   { ---- helpers ---- }
 
@@ -577,10 +591,13 @@ begin
   FItemAllow:= FPopup.Items[FPopup.Items.Count - 1];
   FPopup.OnPopup := PopupPopup;
   FTree.PopupMenu:= FPopup;
+  if GLiveStructureForms = nil then GLiveStructureForms:= TList<TDragLintStructureForm>.Create;
+  GLiveStructureForms.Add(Self);
 end; // constructor
 
 procedure TDragLintStructureForm.FormDestroy(Sender: TObject);
 begin
+  if GLiveStructureForms <> nil then GLiveStructureForms.Remove(Self);
   ClearNodeData;
   FreeAndNil(FFixableRules); { v0.88 AutoFix: release the cached fixable-rule set }
 end;
@@ -717,7 +734,8 @@ begin
     Imgs   := StructureGlyphImages(GlyphPx);
     FTree.Images:= Imgs;
 
-    RootDiag:= FTree.Items.Add(nil, Format('Diagnostics (%d)', [Length(FDiags)]));
+    RootDiag:= FTree.Items.Add(nil, Format('Diagnostics (%d)', [Length(FDiags)])
+      + (if (FActionNote <> '') and SameText(FActionNoteFile, FCurrentFile) then '  --  ' + FActionNote else ''));
     RootDiag.Data:= nil;
     SetNodeGlyph(RootDiag, KindGlyphIndex(kgFolder));
     FRootDiag:= RootDiag; { v0.88 AutoFix: remember the root for node discrimination }
@@ -1098,6 +1116,7 @@ var
   Obj    : TJSONObject ;
   IdV    : TJSONValue  ;
   FixV   : TJSONValue  ;
+  OptV   : TJSONValue  ;
 begin
   if FFixableRules <> nil then Exit;
   FFixableRules:= TStringList.Create;
@@ -1127,6 +1146,11 @@ begin
         if Obj = nil then Continue;
         FixV:= Obj.GetValue('fixable');
         IdV := Obj.GetValue('id'     );
+        { fix_opt_in: a naming fix the engine applies only when the config opts it
+          in. Counting those offered 'Fix all in unit (78)' on ORM3 BASICS.PAS and
+          then fixed nothing (2026-10-13). An engine without the field reads False. }
+        OptV:= Obj.GetValue('fix_opt_in');
+        if (OptV is TJSONBool) and TJSONBool(OptV).AsBoolean then Continue;
         if (FixV is TJSONBool) and TJSONBool(FixV).AsBoolean and (IdV <> nil) then
           FFixableRules.Add(LowerCase(IdV.Value));
       end;
@@ -1350,6 +1374,27 @@ end;
 
   OnDone deliberately captures no Self: the panel can be closed while the job
   runs, and a closure over a freed form is an AV in the IDE message loop. }
+procedure TDragLintStructureForm.ShowActionNote(const AFile, ANote: string);
+begin
+  FActionNote    := FormatDateTime('hh:nn', Now) + ' ' + ANote;
+  FActionNoteFile:= AFile;
+  if (FRootDiag <> nil) and SameText(AFile, FCurrentFile) then
+    FRootDiag.Text:= Format('Diagnostics (%d)', [Length(FDiags)]) + '  --  ' + FActionNote;
+end;
+
+{ Put a fix result on every live panel showing AFile -- the panel the user is
+  looking at, which the status strip and the Messages pane are not (owner
+  report 2026-10-13: "nothing was reported back"). }
+procedure ShowFixResultInPanels(const AFile, ANote: string);
+begin
+  if GLiveStructureForms = nil then Exit;
+  for var F: TDragLintStructureForm in GLiveStructureForms do
+    try
+      F.ShowActionNote(AFile, ANote);
+    except
+      on E: Exception do DLT('autofix', 'ShowActionNote failed: ' + E.ClassName + ': ' + E.Message);
+    end;
+end;
 { Does any editor of AFilePath hold unsaved changes? A fix rewrites the file
   ON DISK and then reloads the buffer from disk, so running one over unsaved
   edits would silently throw those edits away. }
@@ -1419,6 +1464,10 @@ begin
           Summary:= Format('FAILED (exit %d): %s', [AExit, FirstOutputLine(AOutput)]);
         end
         else if Summary = '' then Summary:= 'finished, but the engine printed no autofix summary';
+        var OptOut: string:= AutofixOptOutRules(AOutput);
+        if (AExit = 0) and (OptOut <> '') then
+          Summary:= Summary + ' -- naming fixes not opted in: ' + OptOut + ' (add them to "autofix" in drag-lint-lint.json)';
+        ShowFixResultInPanels(FilePath, Title + ': ' + Summary);
         SetDragLintNote(Title + ': ' + Summary);
         PostIdeMessage('drag-lint: ' + Title + ': ' + Summary);
         if (AExit = 0) and AutofixApplied(Summary) then
@@ -1762,8 +1811,12 @@ const
 begin
   try
     if FCurrentFile = '' then Exit;
+    { --db: the naming fixes need the index to find every use, and without it
+      the engine neither applies an opted-in one nor says which are opted out. }
+    var Db: string:= ResolveDbForFile;
     RunFixJob('Fix all in unit',
-      Format('"%s" lint --file "%s" --fix --apply', [ResolveExePath, FCurrentFile]),
+      Format('"%s" lint --file "%s" --fix --apply', [ResolveExePath, FCurrentFile])
+        + (if Db <> '' then Format(' --db "%s"', [Db]) else ''),
       CFixUnitTimeoutMs);
   except
     on E: Exception do DLT('autofix', 'FixAllInUnitClick failed: ' + E.ClassName + ': ' + E.Message);
@@ -1895,5 +1948,6 @@ initialization
 
 finalization
 if GStructureForm <> nil then FreeAndNil(GStructureForm);
+FreeAndNil(GLiveStructureForms);
 
 end.

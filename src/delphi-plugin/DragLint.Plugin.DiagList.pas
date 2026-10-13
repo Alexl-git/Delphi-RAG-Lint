@@ -67,10 +67,17 @@ function DiagSetSignature(const ADiags: TArray<TDragLintDiagnostic>): Cardinal;
 
 /// <summary>Extracts the engine's autofix summary from `lint --fix` output.</summary>
 /// <param name="AOutput">Full stdout+stderr of the run.</param>
-/// <returns>The text after 'autofix: ' on the LAST such line -- e.g.
-/// 'applied 2 edit(s) across 1 file(s) (.bak written)' or
+/// <returns>The text after the LAST 'autofix: ', up to the end of its line --
+/// e.g. 'applied 2 edit(s) across 1 file(s) (.bak written)' or
 /// 'no fixable findings (of 14 finding(s))' -- or '' when there is none.</returns>
+/// <remarks>The tag is found anywhere in a line, not only at its start: stdout
+/// and stderr share one pipe, so an unbuffered stderr note can be split by it.</remarks>
 function AutofixSummary(const AOutput: string): string;
+
+/// <summary>The naming rules the engine reports as fixable but not opted in.</summary>
+/// <param name="AOutput">Full stdout+stderr of a `lint --fix` run.</param>
+/// <returns>The engine's list, e.g. 'const-casing, type-name-prefix', or ''.</returns>
+function AutofixOptOutRules(const AOutput: string): string;
 
 /// <summary>The unit an unused-unit-in-uses finding names.</summary>
 /// <param name="AMessage">The finding's message: "Unit 'X' is listed in the uses clause ...".</param>
@@ -217,11 +224,41 @@ function AutofixSummary(const AOutput: string): string;
 const
   CTag = 'autofix: ';
 var
-  Line: string;
+  P: Integer;
+  E: Integer;
+begin
+  { FOUND ANYWHERE, NOT AT A LINE START. The plugin reads stdout and stderr
+    through ONE pipe, and the engine's stderr note is unbuffered: on ORM3's
+    BASICS.PAS (2026-10-13) the captured line was
+      '...cross-file duplicate-code, in' + 'autofix: no fixable findings ...'
+    -- the summary landed mid-way through a note, a start-of-line match missed
+    it, and the IDE reported nothing at all. The summary is one Writeln, so it
+    runs intact to the end of its line. }
+  Result:= '';
+  P:= AOutput.LastIndexOf(CTag);
+  if P < 0 then Exit;
+  Result:= AOutput.Substring(P + Length(CTag));
+  E:= Result.IndexOfAny([#13, #10]);
+  if E >= 0 then Result:= Result.Substring(0, E);
+  Result:= Result.Trim;
+end;
+
+function AutofixOptOutRules(const AOutput: string): string;
+const
+  CTag = 'fixable but NOT opted in: ';
+var
+  P: Integer;
+  E: Integer;
 begin
   Result:= '';
-  for Line in AOutput.Split([#13#10, #10]) do
-    if Line.Trim.StartsWith(CTag) then Result:= Line.Trim.Substring(Length(CTag));
+  P:= AOutput.IndexOf(CTag);
+  if P < 0 then Exit;
+  Result:= AOutput.Substring(P + Length(CTag));
+  E:= Result.IndexOf('. ');
+  if E >= 0 then Result:= Result.Substring(0, E);
+  E:= Result.IndexOfAny([#13, #10]);
+  if E >= 0 then Result:= Result.Substring(0, E);
+  Result:= Result.Trim;
 end;
 
 function UnusedUnitFromMessage(const AMessage: string): string;

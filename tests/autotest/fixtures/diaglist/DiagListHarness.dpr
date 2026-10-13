@@ -83,6 +83,14 @@ begin
   Writeln('af.isapplied=', AutofixApplied('applied 2 edit(s) across 1 file(s)'));
   Writeln('af.zero=', AutofixApplied('applied 0 edit(s) across 0 file(s)'));
   Writeln('af.noneapplied=', AutofixApplied('no fixable findings (of 14 finding(s))'));
+  { the exact interleaving captured in the IDE on ORM3 BASICS.PAS, 2026-10-13:
+    the stdout summary split an unbuffered stderr note mid-word }
+  Writeln('af.interleaved=', AutofixSummary('(loaded defaults from C:\Projects\.drag-lint.json)'#13#10 +
+    'drag-lint: note: project rules ran for this file. STILL NOT reported here: doc-drift/missing-doc (pass --project-rules), cross-file duplicate-code, in' +
+    'autofix: no fixable findings (of 147 finding(s))'#13#10 +
+    'terface-reference-cycle, exception-class enrichment, and unit-not-in-dpr without --project.'#13#10));
+  Writeln('af.optout=', AutofixOptOutRules('drag-lint: note: 2 naming rule(s) here are fixable but NOT opted in: const-casing, type-name-prefix. Naming fixes rewrite call sites project-wide, so they are opt-in'#13#10));
+  Writeln('af.nooptout=[', AutofixOptOutRules('autofix: no fixable findings (of 3 finding(s))'), ']');
   Writeln('uu.name=', UnusedUnitFromMessage('Unit ''System.Win.Registry'' is listed in the uses clause but no symbols from it are referenced'));
   Writeln('uu.other=[', UnusedUnitFromMessage('Public field on a class breaks encapsulation'), ']');
   Json:= '(loaded defaults)'#13#10 +
