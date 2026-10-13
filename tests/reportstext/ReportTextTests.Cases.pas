@@ -647,13 +647,16 @@ begin
 end;
 
 procedure TReportGlueTests.AskReportInstalledLayoutComesFirst;
+const
+  CANDIDATE_COUNT = 3;  // flat install, v2 install (app\charts), repo
 var
   Paths: TArray<string>;
 begin
   Paths:= AskReportCandidates('C:\App\bin\drag-lint.exe');  // dl:ok hardcoded-absolute-path@e69f -- synthetic test input: names no real location and reaches no filesystem call
-  Assert.AreEqual(2, Integer(Length(Paths)));
+  Assert.AreEqual(CANDIDATE_COUNT, Integer(Length(Paths)));
   Assert.AreEqual('C:\App\bin\Ask-Report.ps1', Paths[0], 'installed: beside the engine');  // dl:ok hardcoded-absolute-path@5caf -- synthetic test input: names no real location and reaches no filesystem call
-  Assert.AreEqual('C:\charts\src\Ask-Report.ps1', Paths[1], 'repo: two folders above the engine');  // dl:ok hardcoded-absolute-path@c5da -- synthetic test input: names no real location and reaches no filesystem call
+  Assert.AreEqual('C:\App\charts\Ask-Report.ps1', Paths[1], 'installed v2: {app}\charts beside {app}\bin');  // dl:ok hardcoded-absolute-path@8dff -- synthetic test input: names no real location and reaches no filesystem call
+  Assert.AreEqual('C:\charts\src\Ask-Report.ps1', Paths[2], 'repo: two folders above the engine');  // dl:ok hardcoded-absolute-path@3b4e -- synthetic test input: names no real location and reaches no filesystem call
 end;
 
 procedure TReportGlueTests.AskReportNotFoundNamesEveryPath;
