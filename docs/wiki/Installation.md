@@ -1,5 +1,7 @@
 # Installation
 
+**One-step alternative:** [Setup installer](Setup-Installer.md) installs all of it -- engine, charts, Graphviz, plugin, YADF -- with one exe (experimental).
+
 drag-lint has three faces, and they install independently. Most people want the
 first two.
 

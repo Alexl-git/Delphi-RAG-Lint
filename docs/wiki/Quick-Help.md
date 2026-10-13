@@ -177,6 +177,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **Register the MCP server (Claude Code, VS Code)** -- Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable. Run Set-DragLintMcpConfig.ps1 -All (try -DryRun first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass -DbPath to pin one index per entry (-Name); -Remove takes only its own entry out again. Needs PowerShell 7 and the engine found by the charts' lookup. [More](Register-MCP-Server)
   aliases: claude mcp add, mcp setup, mcp.json
 * **serve** -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index. [More](serve)
+* **Setup installer** (experimental) -- One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF. drag-lint-setup-<version>.exe installs the whole tool set per user or for all users, registers the IDE plugins only where RAD Studio 13 is installed, and uninstalls only what it wrote. [More](Setup-Installer)
 * **workspace add** -- Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it. [More](workspace-add)
 * **workspace index** -- Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass. [More](workspace-index)
 * **workspace status** -- Reports the status of every project registered in a .drag-lint-workspace.json workspace config. [More](workspace-status)
@@ -233,6 +234,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Maintenance: procedure docs\wiki\Maintenance.md
 * Reindex project: menu 'Conversion > Reindex project' inside ConvRulesEditor.exe
 * Rescan this unit: host 'Structure form' (the caption is verified, the host is declared)
+* Setup installer: procedure docs\wiki\Setup-Installer.md
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)
 * Where the charts find the engine and Graphviz: procedure charts\README.md
 * Work list: menu 'View > Work list' inside ConvRulesEditor.exe

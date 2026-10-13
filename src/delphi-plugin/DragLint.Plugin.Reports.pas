@@ -105,7 +105,6 @@ const
   REPORT_TIMEOUT_MS = 600000;
   TYPEAT_TIMEOUT_MS = 20000;
   PWSH_REL = 'PowerShell\7\pwsh.exe';
-  ASK_REPORT_REL = '..\..\charts\src\Ask-Report.ps1';
   PROJECT_TARGET = 'project';
   { the report window }
   WIN_WIDTH = 820;
@@ -479,15 +478,20 @@ var
   Problem: string;
 begin
   pExe:= DragLintExe;
-  pScript:= ExpandFileName(ExtractFilePath(pExe) + ASK_REPORT_REL);
+  var Candidates: TArray<string>:= AskReportCandidates(pExe);
+  pScript:= '';
+  for var Candidate: string in Candidates do
+    if FileExists(Candidate) then
+    begin
+      pScript:= Candidate;
+      Break;
+    end;
   pPwsh:= FindPwsh;
   pInFile:= '';
   var View: IOTAEditView:= ActiveEditView;
   if View <> nil then pInFile:= View.Buffer.FileName;
-  if not FileExists(pScript) then
-    Problem:= 'Ask-Report.ps1 is not there, so no report can run:' + sLineBreak + pScript +
-              sLineBreak + sLineBreak + 'The reports run the chart scripts of a drag-lint repository clone ' +
-              '(charts\src, two folders above the engine at ' + pExe + ').'
+  if pScript = '' then
+    Problem:= AskReportNotFoundText(Candidates)
   else if pPwsh = '' then
     Problem:= 'PowerShell 7 (pwsh.exe) was not found at ' + DefaultPwshPath + ' or on PATH.'
   else if pInFile = '' then

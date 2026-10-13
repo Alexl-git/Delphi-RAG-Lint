@@ -217,7 +217,9 @@ $roots = [ordered]@{
   # PowerShell (the chart emitters, Ask-Report, the draglint:// handler), all
   # ASCII + CRLF at merge time, so it is scanned. Its generated output
   # (scratch\, artifacts\, docs\examples\) is gitignored and holds no .ps1.
-  '.ps1' = @('src', 'tests', 'build', 'stats', 'tools', 'charts')
+  # 2026-10-13: installer\ (job R2) holds Build-Installer.ps1 -- our own script,
+  # ASCII + CRLF, so it is scanned. drag-lint.iss is not a scannable extension.
+  '.ps1' = @('src', 'tests', 'build', 'stats', 'tools', 'charts', 'installer')
   '.pas' = @('src', 'tests', 'build', 'tools', 'circular-demo')
   '.dpr' = @('src', 'tests', 'build', 'tools', 'circular-demo')
   '.dpk' = @('src', 'tests', 'build', 'tools')
