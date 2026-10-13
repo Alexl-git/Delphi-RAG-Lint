@@ -76,6 +76,8 @@ type
     [Test] procedure ReasonStripsPrefix;
     [Test] procedure ReindexCommandsAreParsed;
     [Test] procedure FolderTargetIndexIsNeverAccepted;
+    [Test] procedure AskReportInstalledLayoutComesFirst;
+    [Test] procedure AskReportNotFoundNamesEveryPath;
   end;
 
 implementation
@@ -644,8 +646,30 @@ begin
   Assert.AreEqual(0, Integer(Length(ParseReindexCommands(''))));
 end;
 
-initialization
-  TDUnitX.RegisterTestFixture(TReportCatalogTests);
+procedure TReportGlueTests.AskReportInstalledLayoutComesFirst;
+var
+  Paths: TArray<string>;
+begin
+  Paths:= AskReportCandidates('C:\App\bin\drag-lint.exe');  // dl:ok hardcoded-absolute-path@e69f -- synthetic test input: names no real location and reaches no filesystem call
+  Assert.AreEqual(2, Integer(Length(Paths)));
+  Assert.AreEqual('C:\App\bin\Ask-Report.ps1', Paths[0], 'installed: beside the engine');  // dl:ok hardcoded-absolute-path@5caf -- synthetic test input: names no real location and reaches no filesystem call
+  Assert.AreEqual('C:\charts\src\Ask-Report.ps1', Paths[1], 'repo: two folders above the engine');  // dl:ok hardcoded-absolute-path@c5da -- synthetic test input: names no real location and reaches no filesystem call
+end;
+
+procedure TReportGlueTests.AskReportNotFoundNamesEveryPath;
+const
+  FIRST_PATH = 'C:\A\Ask-Report.ps1';  // dl:ok hardcoded-absolute-path@3718 -- synthetic test input: names no real location and reaches no filesystem call
+  SECOND_PATH = 'C:\B\Ask-Report.ps1';  // dl:ok hardcoded-absolute-path@bebc -- synthetic test input: names no real location and reaches no filesystem call
+var
+  Msg: string;
+begin
+  Msg:= AskReportNotFoundText([FIRST_PATH, SECOND_PATH]);
+  Assert.IsTrue(Pos(FIRST_PATH, Msg) > 0, Msg);
+  Assert.IsTrue(Pos(SECOND_PATH, Msg) > 0, Msg);
+  Assert.IsTrue(Pos(FIRST_PATH, Msg) < Pos(SECOND_PATH, Msg), 'in search order');
+end;
+
+initialization  TDUnitX.RegisterTestFixture(TReportCatalogTests);
   TDUnitX.RegisterTestFixture(TReportFormatterTests);
   TDUnitX.RegisterTestFixture(TReportGlueTests);
 
