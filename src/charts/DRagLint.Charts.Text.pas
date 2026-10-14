@@ -49,7 +49,7 @@ type
 /// <returns>pS with &amp; &lt; &gt; and the double quote escaped, ampersand first.</returns>
 /// <remarks>Port of ConvertTo-XmlText (Emit-Common.ps1:31). PS trap closed: `$null` reads as
 /// '' (Delphi strings are never nil). The single quote is NOT escaped, as in the PS.</remarks>
-function XmlText(const pS: string): string;  // dl:ok unused-public-symbol@dfea -- REVIEWED 2026-10-11: step-1 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests.CoreText and the ChartsCoreProbe parity harness, which sit outside this project index
+function XmlText(const pS: string): string;
 
 /// <summary>The unit name of a source path: its file name without the extension.</summary>
 /// <param name="pFile">A source path; '/' and '\' both separate.</param>
@@ -57,7 +57,7 @@ function XmlText(const pS: string): string;  // dl:ok unused-public-symbol@dfea 
 /// <remarks>Port of Get-UnitName (Emit-Common.ps1:36). PS trap closed: .NET
 /// GetFileNameWithoutExtension splits on '/' as well as '\', Delphi's ExtractFileName does
 /// not, so '/' is normalised first; IsNullOrWhiteSpace is matched with Trim.</remarks>
-function UnitNameOf(const pFile: string): string;  // dl:ok unused-public-symbol@eb92 -- REVIEWED 2026-10-11: step-1 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests.CoreText and the ChartsCoreProbe parity harness, which sit outside this project index
+function UnitNameOf(const pFile: string): string;
 
 /// <summary>A qualified name with its unit prefix removed.</summary>
 /// <param name="pQName">The qualified name.</param>

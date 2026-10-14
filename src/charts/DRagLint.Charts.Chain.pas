@@ -359,7 +359,7 @@ type
     FCatalog: TSqlCatalog;
     FSet    : TSqlTableSet;
   public
-    /// <summary>Creates a walker.</summary>
+    /// <summary>Constructor: a walker over one Delphi index and one SQL catalogue.</summary>
     /// <param name="pIndex">The Delphi index (the PS $DbPath).</param>
     /// <param name="pReader">A source reader over pIndex.</param>
     /// <param name="pCatalog">The SQL catalogue (column states).</param>

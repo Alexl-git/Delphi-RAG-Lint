@@ -106,7 +106,7 @@ function SqlColumnState(pCatalog: TSqlCatalog; pSet: TSqlTableSet; const pTable,
 /// <returns>The names not held, in input order; a stale (unknown) column is not held.</returns>
 /// <remarks>Port of Get-ColumnsNotHeld (Emit-Common.ps1:1129): the cheap test first, the source
 /// scan only for a name it rejects.</remarks>
-function ColumnsNotHeld(pCatalog: TSqlCatalog; pSet: TSqlTableSet; const pTable: string;  // dl:ok unused-public-symbol@2e2c -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function ColumnsNotHeld(pCatalog: TSqlCatalog; pSet: TSqlTableSet; const pTable: string;
   const pCols: TArray<string>): TArray<string>;
 
 /// <summary>feeds-from's column-hop label: a quoted column keeps its quotes.</summary>

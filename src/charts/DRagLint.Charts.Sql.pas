@@ -108,7 +108,7 @@ type
     FOlderKeys   : TList<string>;
     FOlder       : TDictionary<string, TOlderColumn>;
   public
-    /// <summary>Creates an empty table; the set fills it.</summary>
+    /// <summary>Constructor: an empty table; the set fills it.</summary>
     constructor Create;
     /// <summary>Frees the column sets.</summary>
     destructor Destroy; override;
@@ -165,7 +165,7 @@ type
     FProcedures        : TDictionary<string, Boolean>;
     FProcedureDeclCount: Integer;
   public
-    /// <summary>Creates an empty set for the database pDb.</summary>
+    /// <summary>Constructor: an empty set for the database pDb.</summary>
     /// <param name="pDb">The SQL index path (the PS .Db).</param>
     constructor Create(const pDb: string);
     /// <summary>Frees the tables.</summary>
@@ -256,7 +256,7 @@ type
     function FreshLines(const pPath: string; pLine: Integer; out pBody: TSqlBody; out pLines: TArray<string>): Boolean;
     function BlankSqlMatch(const pMatch: TMatch): string;
   public
-    /// <summary>Creates a catalogue over one SQL index.</summary>
+    /// <summary>Constructor: a catalogue over one SQL index.</summary>
     /// <param name="pIndex">The SQL index; not owned.</param>
     /// <param name="pReader">A source reader over the same index; not owned.</param>
     constructor Create(pIndex: TChartsIndex; pReader: TSourceReader);
