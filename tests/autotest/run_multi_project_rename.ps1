@@ -79,7 +79,7 @@ function UnitUser([string]$Name, [string]$Expr, [string[]]$Extra = @()) {
 # Rebuilds the whole fixture from scratch and indexes every project.
 function Reset {
   param([string[]]$SharedConsts = @('  My_Const = 1;'), [string]$Expr = 'My_Const',
-        [string[]]$BExtra = @(), [string[]]$ConstCase = @(), [switch]$Library)
+        [string[]]$BExtra = @(), [string[]]$ConstCase = @(), [switch]$Library, [switch]$NoOptIn)
   foreach ($d in 'shared', 'twin', 'A', 'B', 'C', 'D') {
     if (Test-Path "$work\$d") { [IO.Directory]::Delete("$work\$d", $true) }
     New-Item -ItemType Directory "$work\$d" | Out-Null
@@ -112,7 +112,7 @@ function Reset {
     "  { `"name`": `"D`", `"include`": [`"$j\\D\\D.dpr`"],   `"db`": `"$j\\D.sqlite`" }")
   if ($Library) { $secs += "  { `"name`": `"LIB`", `"source`": `"registry-libraries`", `"platforms`": [`"Win32`", `"Win64`"], `"db`": `"$j\\LIB.sqlite`" }" }
   WriteAscii "$eng\drag-lint.json" (@('{ "indexes": { "sections": [', ($secs -join ",`r`n"), ']}}'))
-  $cfg = '{ "autofix": ["const-casing"]'
+  $cfg = if ($NoOptIn) { '{ "autofix": []' } else { '{ "autofix": ["const-casing"]' }
   if ($ConstCase.Count -gt 0) { $cfg += ', "naming": { "const_case": [' + (($ConstCase | ForEach-Object { "`"$_`"" }) -join ', ') + '] }' }
   WriteAscii "$work\drag-lint-lint.json" @($cfg + ' }')
   $ok = $true
@@ -273,8 +273,30 @@ try {
   Check 'K2 ... rename-unknown names BAD.sqlite and the refusal says ownership unknown' `
     (($o -match ('(?m)^rename-unknown: ' + [regex]::Escape("$work\BAD.sqlite"))) -and ((LastAutofix $o) -match '^autofix: rename refused -- ownership unknown')) (LastAutofix $o)
 
-  # ---------------------------------------------------------------- single-project
-  Check 'U0 reset' (Reset) ''
+  # ---------------------------------------------------------------- fix-naming (Ruling 11)
+  # a BATCH run (no --fix-line) with no config opt-in: --fix-naming is the consent
+  Check 'N0 reset: no "autofix" opt-in in drag-lint-lint.json' (Reset -NoOptIn) ''
+  $h0 = Hashes
+  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--apply')
+  Check 'N1 batch without --fix-naming: the opt-out note, no rename plan' `
+    (($o -match 'fixable but NOT opted in: const-casing') -and ($o -notmatch '(?m)^rename-')) (Lines $o '(^rename-|NOT opted in)')
+  Check 'N2 ... and nothing is renamed' ((Hashes) -eq $h0) (Lines $o '^autofix')
+  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--fix-naming')
+  Check 'N3 batch preview with --fix-naming prints the plan for A, B and C' `
+    (($o -match '(?m)^rename-owners: 3 of 4 indexes\r?$') -and ($o -match '(?m)^rename-target: L6 My_Const -> MyConst apply A=1 B=1 C=1\r?$')) (Lines $o '^rename-')
+  Check 'N4 ... no opt-out note, and the preview writes nothing' (($o -notmatch 'NOT opted in') -and ((Hashes) -eq $h0)) (Lines $o 'NOT opted in')
+  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--fix-naming', '--apply')
+  Check 'N5 batch --fix-naming --apply renames in shared, uA, uB and uMid' `
+    (((Txt 'shared\uShared.pas') -cmatch '  MyConst = 1;') -and ((Txt 'A\uA.pas') -match 'Result:= MyConst;') -and `
+     ((Txt 'B\uB.pas') -match 'Result:= MyConst;') -and ((Txt 'C\uMid.pas') -match 'Result:= MyConst;')) (Lines $o '^(rename-|autofix)')
+  Check 'N6 reset (no opt-in)' (Reset -NoOptIn) ''
+  $o = Run @('lint', '--file', "$work\A\uA.pas", '--db', "$work\A.sqlite", '--fix', '--fix-naming')
+  Check 'N7 single-project batch with --fix-naming: rename-local: 1 (the IDE''s single-project confirm count)' `
+    ($o -match '(?m)^rename-local: 1\r?$') (Lines $o '^(rename-|autofix)')
+  $o = Run @('lint', '--file', "$work\A\uA.pas", '--db', "$work\A.sqlite", '--fix')
+  Check 'N8 ... and no rename-local line without --fix-naming (criterion 15)' ($o -notmatch '(?m)^rename-') (Lines $o '^rename-')
+
+  # ---------------------------------------------------------------- single-project  Check 'U0 reset' (Reset) ''
   $o = Run @('lint', '--file', "$work\A\uA.pas", '--db', "$work\A.sqlite", '--fix', '--fix-line', '9', '--fix-rule', 'const-casing')
   Check 'U1 single-project unit: NO rename- lines (criterion 15)' ($o -notmatch '(?m)^rename-') (Lines $o '^rename-')
   Check 'U2 ... and today''s autofix line shape' ($o -match '(?m)^autofix: 1 fixable finding\(s\) -- pass --apply to write\r?$') (Lines $o '^autofix')

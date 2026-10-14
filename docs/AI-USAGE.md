@@ -952,6 +952,7 @@ each with `"fixable": true`; the seven NAMING fixes (const-casing, type-name-pre
 - **One finding:** `lint --file F --fix --fix-line L --fix-rule R --json [--apply]`
   (omit `--apply` to preview; `--json` reports `fixable`/`applied`/`preview`/`risky`).
 - **Whole unit / project:** `lint --file F --fix --apply` / `lint-all --fix --apply`.
+- **Naming fixes in a batch run:** add `--fix-naming` (`lint --file F --fix --fix-naming [--apply]`) -- explicit consent to the opt-in naming fixes without listing them in `"autofix"`; in a unit several project indexes own the rename covers every owner (the `rename-owners:` / `rename-project:` / `rename-target:` plan), and it prints `rename-local: <N>` on stderr for the single-project renames. The IDE's Fix all in unit sends it after the user confirms.
 - **Raise sites:** `lint <f> --db <db> --fix --fix-rule raise-bare-exception [--apply]` rewrites `raise Exception.Create('msg')` to the generated class for that message and adds the exceptions unit to `uses`. Requires `exceptions-sync --apply` to have run AND the index to be refreshed -- the class NAME is read out of the generated unit, never re-derived, so a rename survives. It SKIPS any file testing the class exactly (`ClassType = Exception`, `ClassNameIs('Exception')`), because narrowing a raise would break that test, and it says which.
 
 **Batch fix respects the active rule set.** `--fix` applies quick-fixes only for

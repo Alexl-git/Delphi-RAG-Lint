@@ -161,6 +161,16 @@ Check 'R36 ... which by itself reads as not applied' ($kv['ra.summaryapplied'] -
 Check 'R37 ... but the earlier applied line is seen, so the buffer is reloaded' ($kv['ra.anyapplied'] -eq 'TRUE') ''
 Check 'R38 rename-dropped-at-write is parsed'      ($kv['ra.dropped0'] -eq 'My_Const -> MyConst C:\w\B\uB.pas:7 (stale)') "got: $($kv['ra.dropped0'])"
 Check 'R39 applied 0 -> nothing to reload'         ($kv['ra.noneapplied'] -eq 'FALSE') ''
+Check 'R40 80 applied renames parsed'               ($kv['cap.renames'] -eq '80') "got: $($kv['cap.renames'])"
+Check 'R41 the confirmation lists the first 10 renames' (($kv['cap.tenth'] -eq 'TRUE') -and ($kv['cap.eleventh'] -eq 'FALSE')) "got: $($kv['cap.tenth'])/$($kv['cap.eleventh'])"
+Check 'R42 ... then "... and 70 more"'              ($kv['cap.more'] -eq 'TRUE') ''
+Check 'R43 dropped list capped the same way (10 + "... and 5 more")' ($kv['cap.dropmore'] -eq 'TRUE') ''
+Check 'R44 project lines stay complete'             ($kv['cap.projects'] -eq 'TRUE') ''
+Check 'R45 rename-local: N read'                     ($kv['rl.count'] -eq '3') "got: $($kv['rl.count'])"
+Check 'R46 single-project renames -> confirm (local) before applying' ($kv['rl.action'] -eq '3') "got: $($kv['rl.action'])"
+Check 'R47 local confirmation text'                  ($kv['rl.text'] -eq 'Rename 3 identifier(s) in Micronite2027?') "got: $($kv['rl.text'])"
+Check 'R48 rename-local: 0 -> apply as before'       ($kv['rl.zero'] -eq '0') "got: $($kv['rl.zero'])"
+Check 'R49 2 owners with rename-local: 0 -> the multi-project confirm' ($kv['rl.multi'] -eq '1') "got: $($kv['rl.multi'])"
 
 [System.IO.Directory]::Delete($WorkDir, $true)
 Write-Host ''

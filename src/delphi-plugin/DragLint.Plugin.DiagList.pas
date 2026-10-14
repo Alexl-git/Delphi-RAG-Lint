@@ -39,11 +39,14 @@ type
     Dropped: TArray<string>;
     /// <summary>Old and new name of the first applied rename-target; '' when none.</summary>
     OldName, NewName: string;
+    /// <summary>Single-project naming renames, from 'rename-local: N' (printed only under
+    /// --fix-naming); 0 when absent.</summary>
+    LocalRenames: Integer;
   end;
 
   /// <summary>What the plugin does after a rename preview: apply at once (one
   /// owner, as before), ask first, or stop and show the refusal.</summary>
-  TRenamePreviewAction = (rpaApply, rpaConfirm, rpaRefuse);
+  TRenamePreviewAction = (rpaApply, rpaConfirm, rpaRefuse, rpaConfirmLocal);
 
 /// <summary>Parses the multi-project rename lines of a `lint --fix` preview.</summary>
 /// <param name="AOutput">Full stdout+stderr of the run.</param>
@@ -70,6 +73,12 @@ function RenamePreviewAction(const APreview: TRenamePreview): TRenamePreviewActi
 /// reference count, and stating that only projects with a drag-lint index were
 /// checked (criterion 19).</returns>
 function RenameConfirmText(const AUnit, AOld, ANew: string; const APreview: TRenamePreview): string;
+
+/// <summary>The confirmation shown before a Fix all writes single-project naming renames.</summary>
+/// <param name="AProject">The project the unit belongs to (its index's base name).</param>
+/// <param name="APreview">The parsed preview; LocalRenames is the count.</param>
+/// <returns>'Rename N identifier(s) in AProject?' as the first line, then what Yes and No do.</returns>
+function RenameLocalConfirmText(const AProject: string; const APreview: TRenamePreview): string;
 
 /// <summary>Tells whether ANY 'autofix: applied N edit(s)' line with N above zero
 /// is in a run's output -- not only the last autofix: line.</summary>
@@ -397,6 +406,7 @@ const
   CTagTarget  = 'rename-target: ';
   CTagAtWrite = 'rename-dropped-at-write: ';
   CTagRefused = 'autofix: rename refused -- ';
+  CTagLocal   = 'rename-local: ';
 var
   Names : TArray<string> ; { owning projects, first-seen order }
   States: TArray<string> ; { 'index fresh', ... ; '' until a rename-project line names it }
@@ -404,8 +414,6 @@ var
   Line  : string         ;
   Rest  : string         ;
   M     : TMatch         ;
-  Token : string         ;
-  P     : Integer        ;
   I     : Integer        ;
 
   function ProjectIndex(const AName: string): Integer;
@@ -418,6 +426,36 @@ var
     States:= States + [''];
     Refs  := Refs   + [0];
     Result:= High(Names);
+  end;
+
+  { One 'L<n> Old -> New apply A=n ...' / '... dropped <reason>' line into APreview. }
+  procedure AddTarget(const ARest: string; var APreview: TRenamePreview);
+  var
+    TM  : TMatch ;
+    Tok : string ;
+    Eq  : Integer;
+    Proj: Integer;
+  begin
+    TM:= TRegEx.Match(ARest, '^L(?<line>\d+) (?<old>\S+) -> (?<new>\S+) (?<kind>apply|dropped) ?(?<rest>.*)$');
+    if not TM.Success then Exit;
+    if TM.Groups['kind'].Value = 'dropped' then
+    begin
+      APreview.Dropped:= APreview.Dropped + [Format('L%s %s -> %s: %s', [TM.Groups['line'].Value, TM.Groups['old'].Value, TM.Groups['new'].Value, TM.Groups['rest'].Value])];
+      Exit;
+    end;
+    APreview.Renames:= APreview.Renames + [TM.Groups['old'].Value + ' -> ' + TM.Groups['new'].Value];
+    if APreview.OldName = '' then
+    begin
+      APreview.OldName:= TM.Groups['old'].Value;
+      APreview.NewName:= TM.Groups['new'].Value;
+    end;
+    for Tok in TM.Groups['rest'].Value.Split([' '], TStringSplitOptions.ExcludeEmpty) do
+    begin
+      Eq:= Tok.LastIndexOf('=');
+      if Eq <= 0 then Continue;
+      Proj:= ProjectIndex(Tok.Substring(0, Eq));
+      Refs[Proj]:= Refs[Proj] + StrToIntDef(Tok.Substring(Eq + 1), 0);
+    end;
   end;
 
 begin
@@ -439,31 +477,10 @@ begin
       if M.Success then States[ProjectIndex(M.Groups[1].Value)]:= 'index ' + M.Groups[2].Value
       else if Rest <> '' then ProjectIndex(Rest.Split([' '])[0]);
     end
+    else if TagRest(Line, CTagLocal, Rest) then Result.LocalRenames:= StrToIntDef(Rest, 0)
     else if TagRest(Line, CTagUnknown, Rest) then Result.Unknown:= Result.Unknown + [Rest]
     else if TagRest(Line, CTagAtWrite, Rest) then Result.Dropped:= Result.Dropped + [Rest]
-    else if TagRest(Line, CTagTarget, Rest) then
-    begin
-      M:= TRegEx.Match(Rest, '^L(?<line>\d+) (?<old>\S+) -> (?<new>\S+) (?<kind>apply|dropped) ?(?<rest>.*)$');
-      if not M.Success then Continue;
-      if M.Groups['kind'].Value = 'dropped' then
-      begin
-        Result.Dropped:= Result.Dropped + [Format('L%s %s -> %s: %s', [M.Groups['line'].Value, M.Groups['old'].Value, M.Groups['new'].Value, M.Groups['rest'].Value])];
-        Continue;
-      end;
-      Result.Renames:= Result.Renames + [M.Groups['old'].Value + ' -> ' + M.Groups['new'].Value];
-      if Result.OldName = '' then
-      begin
-        Result.OldName:= M.Groups['old'].Value;
-        Result.NewName:= M.Groups['new'].Value;
-      end;
-      for Token in M.Groups['rest'].Value.Split([' '], TStringSplitOptions.ExcludeEmpty) do
-      begin
-        P:= Token.LastIndexOf('=');
-        if P <= 0 then Continue;
-        I:= ProjectIndex(Token.Substring(0, P));
-        Refs[I]:= Refs[I] + StrToIntDef(Token.Substring(P + 1), 0);
-      end;
-    end
+    else if TagRest(Line, CTagTarget, Rest) then AddTarget(Rest, Result)
     else if TagRest(Line, CTagRefused, Rest) then Result.Refused:= Rest;
   for I:= 0 to High(Names) do
     Result.ProjectLines:= Result.ProjectLines + [Format('%s -- %s, %d reference(s)',
@@ -475,13 +492,34 @@ begin
   if APreview.Refused <> '' then Exit(rpaRefuse);
   { unknown ownership with no refusal is a batch run whose global targets were
     dropped: 0 owners then does NOT mean "one project", so ask }
-  Result:= if (APreview.OwnerCount >= 2) or (Length(APreview.Unknown) > 0) then rpaConfirm else rpaApply;
+  if (APreview.OwnerCount >= 2) or (Length(APreview.Unknown) > 0) then Exit(rpaConfirm);
+  { 'rename-local:' is printed only under --fix-naming (Fix all): a batch of
+    naming renames is always confirmed, even in one project }
+  Result:= if APreview.LocalRenames > 0 then rpaConfirmLocal else rpaApply;
 end;
 
 function RenameConfirmText(const AUnit, AOld, ANew: string; const APreview: TRenamePreview): string;
+const
+  CListCap = 10; { BASICS.PAS has ~80 naming findings: a dialog taller than the screen hides Yes/No }
 var
   SB: TStringBuilder;
   S : string        ;
+
+  procedure AppendCapped(const AItems: TArray<string>);
+  var
+    J: Integer;
+  begin
+    for J:= 0 to High(AItems) do
+    begin
+      if J = CListCap then
+      begin
+        SB.AppendFormat('  ... and %d more', [Length(AItems) - CListCap]).Append(sLineBreak);
+        Break;
+      end;
+      SB.Append('  ').Append(AItems[J]).Append(sLineBreak);
+    end;
+  end;
+
 begin
   SB:= TStringBuilder.Create;
   try
@@ -490,7 +528,7 @@ begin
     else
     begin
       SB.AppendFormat('Apply %d rename(s) in %s?', [Length(APreview.Renames), AUnit]).Append(sLineBreak);
-      for S in APreview.Renames do SB.Append('  ').Append(S).Append(sLineBreak);
+      AppendCapped(APreview.Renames);
     end;
     SB.Append(sLineBreak)
       .AppendFormat('This unit is compiled by %d indexed project(s) (%d index(es) checked). Yes renames it in every one of them:',
@@ -499,7 +537,7 @@ begin
     if Length(APreview.Dropped) > 0 then
     begin
       SB.Append(sLineBreak).Append('NOT renamed (nothing is written for these):').Append(sLineBreak);
-      for S in APreview.Dropped do SB.Append('  ').Append(S).Append(sLineBreak);
+      AppendCapped(APreview.Dropped);
     end;
     if Length(APreview.Unknown) > 0 then
     begin
@@ -515,6 +553,12 @@ begin
   finally
     SB.Free;
   end;
+end;
+
+function RenameLocalConfirmText(const AProject: string; const APreview: TRenamePreview): string;
+begin
+  Result:= Format('Rename %d identifier(s) in %s?', [APreview.LocalRenames, AProject]) + sLineBreak + sLineBreak
+    + 'Each rename changes the declaration and every use the index knows about. No writes nothing.';
 end;
 
 function AutofixAppliedInOutput(const AOutput: string): Boolean;

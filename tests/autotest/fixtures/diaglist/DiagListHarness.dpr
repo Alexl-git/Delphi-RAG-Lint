@@ -213,5 +213,27 @@ begin
   Writeln('ra.anyapplied=', AutofixAppliedInOutput(Txt));
   Writeln('ra.dropped0=', JoinS(ParseRenamePreview(Txt).Dropped, 0));
   Writeln('ra.noneapplied=', AutofixAppliedInOutput('autofix: applied 0 edit(s) across 0 file(s)'#13#10'autofix: rename refused -- x'));
+
+  { cap (fix round 1, Important 2): Fix all on BASICS.PAS has ~80 renames --
+    the dialog lists 10 of each list plus '... and K more'; projects stay whole }
+  Txt:= 'rename-owners: 2 of 3 indexes'#13#10 + 'rename-project: A index=fresh'#13#10 + 'rename-project: B index=fresh'#13#10;
+  for I:= 0 to 79 do Txt:= Txt + Format('rename-target: L%d C_%d -> C%d apply A=1 B=1'#13#10, [I + 1, I, I]);
+  for I:= 0 to 14 do Txt:= Txt + Format('rename-target: L%d D_%d -> D%d dropped project B: taken'#13#10, [I + 100, I, I]);
+  Prev:= ParseRenamePreview(Txt);
+  Txt:= RenameConfirmText('BASICS.PAS', Prev.OldName, Prev.NewName, Prev);
+  Writeln('cap.renames=', Length(Prev.Renames));
+  Writeln('cap.tenth=', Txt.Contains('C_9 -> C9'));
+  Writeln('cap.eleventh=', Txt.Contains('C_10 -> C10'));
+  Writeln('cap.more=', Txt.Contains('... and 70 more'));
+  Writeln('cap.dropmore=', Txt.Contains('... and 5 more') and Txt.Contains('D_9 -> D9') and not Txt.Contains('D_10 -> D10'));
+  Writeln('cap.projects=', Txt.Contains('A -- index fresh, 80 reference(s)') and Txt.Contains('B -- index fresh, 80 reference(s)'));
+
+  { rl: single-project Fix all under --fix-naming prints 'rename-local: N' }
+  Prev:= ParseRenamePreview('autofix: 4 fixable finding(s) -- pass --apply to write'#13#10'rename-local: 3'#13#10);
+  Writeln('rl.count=', Prev.LocalRenames);
+  Writeln('rl.action=', Ord(RenamePreviewAction(Prev)));
+  Writeln('rl.text=', RenameLocalConfirmText('Micronite2027', Prev).Split([sLineBreak])[0]);
+  Writeln('rl.zero=', Ord(RenamePreviewAction(ParseRenamePreview('rename-local: 0'#13#10'autofix: 1 fixable finding(s)'))));
+  Writeln('rl.multi=', Ord(RenamePreviewAction(ParseRenamePreview('rename-owners: 2 of 3 indexes'#13#10'rename-local: 0'#13#10))));
   Writeln('DONE');
 end.

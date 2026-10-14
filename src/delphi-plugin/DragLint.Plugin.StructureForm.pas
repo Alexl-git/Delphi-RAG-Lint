@@ -1297,6 +1297,10 @@ begin
   begin
     EnsureFixableRules;
     if FFixableRules <> nil then FixCount:= CountFixableDiags(FDiags, FFixableRules.ToStringArray);
+    { the opt-in naming rules too, gated on an index exactly as Fix it is
+      (NodeIsFixableFinding): Fix all sends --fix-naming after a confirm }
+    if (FOptInFixRules <> nil) and (FOptInFixRules.Count > 0) and (ResolveDbForFile <> '') then
+      Inc(FixCount, CountFixableDiags(FDiags, FOptInFixRules.ToStringArray));
   end;
   FItemFixIt     .Enabled:= IsFinding;
   FItemFixUnit   .Enabled:= InDiags and (FixCount > 0);
@@ -1314,7 +1318,7 @@ begin
 end;
 
 { Defined beside RunFixJob, below. }
-procedure EnqueueRenamePreviewJob(const AFilePath, ATitle, APreviewCmd, AApplyCmd: string; ATimeoutMs: Integer); forward;
+procedure EnqueueRenamePreviewJob(const AFilePath, ATitle, APreviewCmd, AApplyCmd, AProject: string; ATimeoutMs: Integer); forward;
 
 { 'Fix it' -- apply the single fixable finding under the cursor:
   drag-lint lint --file <FCurrentFile> --fix --fix-line <L> --fix-rule <id> --apply
@@ -1357,7 +1361,7 @@ begin
         + (if Db <> '' then Format(' --db "%s"', [Db]) else '');
     { a naming rename may span several projects: preview, then confirm }
     if IsNamingFixRule(ND.Code) then
-      EnqueueRenamePreviewJob(FCurrentFile, Format('Fix %s line %d', [ND.Code, ND.Line]), Cmd, Cmd + ' --apply', CFixItTimeoutMs)
+      EnqueueRenamePreviewJob(FCurrentFile, Format('Fix %s line %d', [ND.Code, ND.Line]), Cmd, Cmd + ' --apply', '', CFixItTimeoutMs)
     else RunFixJob(Format('Fix %s line %d', [ND.Code, ND.Line]), Cmd + ' --apply', CFixItTimeoutMs);
   except
     on E: Exception do DLT('autofix', 'FixItClick failed: ' + E.ClassName + ': ' + E.Message);
@@ -1528,10 +1532,12 @@ end;
     - shows a refusal on the Diagnostics root row and stops (criterion 18);
     - for 2+ owners (or unknown ownership) asks first, and queues AApplyCmd only
       on Yes -- No writes nothing (criteria 16, 17, 19);
-    - for one owner queues AApplyCmd at once, as before.
-  OnDone runs on the main thread (TDragLintJobQueue posts it with TThread.Queue),
+    - for one owner queues AApplyCmd at once, as before -- unless the preview
+      printed 'rename-local: N' (Fix all, --fix-naming), which is confirmed as
+      'Rename N identifier(s) in AProject?' first.
+  Every rename confirm defaults to No. OnDone runs on the main thread (TDragLintJobQueue posts it with TThread.Queue),
   so the dialog is modal over the IDE; like EnqueueFixJob it captures no form. }
-procedure EnqueueRenamePreviewJob(const AFilePath, ATitle, APreviewCmd, AApplyCmd: string; ATimeoutMs: Integer);
+procedure EnqueueRenamePreviewJob(const AFilePath, ATitle, APreviewCmd, AApplyCmd, AProject: string; ATimeoutMs: Integer);
 var
   Job     : TDragLintJob;
   FilePath: string;
@@ -1573,9 +1579,12 @@ begin
         else
           case RenamePreviewAction(Preview) of
             rpaRefuse : Note:= 'rename refused -- ' + Preview.Refused;
-            rpaConfirm:
-              if MessageDlg(RenameConfirmText(ExtractFileName(FilePath), Preview.OldName, Preview.NewName, Preview),
-                   mtConfirmation, [mbYes, mbNo], 0) = mrYes then EnqueueFixJob(FilePath, ATitle, ApplyCmd, ATimeoutMs, '')
+            rpaConfirm, rpaConfirmLocal:
+              if MessageDlg(
+                   if RenamePreviewAction(Preview) = rpaConfirm
+                     then RenameConfirmText(ExtractFileName(FilePath), Preview.OldName, Preview.NewName, Preview)
+                     else RenameLocalConfirmText(AProject, Preview),
+                   mtConfirmation, [mbYes, mbNo], 0, mbNo) = mrYes then EnqueueFixJob(FilePath, ATitle, ApplyCmd, ATimeoutMs, '')
               else Note:= 'cancelled -- nothing written';
             rpaApply  : EnqueueFixJob(FilePath, ATitle, ApplyCmd, ATimeoutMs, '');
           end; // case
@@ -1926,7 +1935,8 @@ end; // procedure
 
 { 'Fix all in unit' -- apply every fixable finding in the current file:
   drag-lint lint --file <FCurrentFile> --fix --apply.
-  With any naming finding in the unit, previewed first (EnqueueRenamePreviewJob). }
+  With any naming finding in the unit, previewed first with --fix-naming and always
+  confirmed before the --apply run (EnqueueRenamePreviewJob). }
 procedure TDragLintStructureForm.FixAllInUnitClick(Sender: TObject);
 const
   CFixUnitTimeoutMs = 120000;
@@ -1946,7 +1956,12 @@ begin
         HasNaming:= True;
         Break;
       end;
-    if HasNaming then EnqueueRenamePreviewJob(FCurrentFile, 'Fix all in unit', Cmd, Cmd + ' --apply', CFixUnitTimeoutMs)
+    { --fix-naming: the naming fixes are consented to here, by the confirm that
+      always follows the preview, not by an "autofix" entry in the config }
+    var Project: string:= if Db <> '' then ChangeFileExt(ExtractFileName(Db), '')
+                          else ChangeFileExt(ExtractFileName(GetActiveProjectFilePath), '');
+    if HasNaming then
+      EnqueueRenamePreviewJob(FCurrentFile, 'Fix all in unit', Cmd + ' --fix-naming', Cmd + ' --fix-naming --apply', Project, CFixUnitTimeoutMs)
     else RunFixJob('Fix all in unit', Cmd + ' --apply', CFixUnitTimeoutMs);
   except
     on E: Exception do DLT('autofix', 'FixAllInUnitClick failed: ' + E.ClassName + ': ' + E.Message);

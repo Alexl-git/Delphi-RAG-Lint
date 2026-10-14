@@ -427,6 +427,7 @@ type
     // narrows the fixable set; unset = no filter. Default FixLine:=0, FixRule:=''.
     FixLine      : Integer; // --fix-line <L> (1-based; 0 = all lines)
     FixRule      : string ; // --fix-rule <id> ('' = all rules)
+    FixNaming    : Boolean; // --fix-naming (batch --fix: explicit consent to the opt-in naming fixes)
     { --stand-in-for <realpath>: analyse THIS file's text, but answer as though
       it were <realpath>. The IDE lints an unsaved buffer by writing a snapshot
       to %TEMP%\drag-lint-live-<tick>.pas; every question that is really about
@@ -847,16 +848,20 @@ begin
   Writeln('                               for editor buffers snapshotted to a temp file -- fixes store membership, file id,');
   Writeln('                               unit-name and the reported path)');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
-  Writeln('  drag-lint lint  --file <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--apply]   (AUTOFIX one file)');
+  Writeln('  drag-lint lint  --file <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)');
   Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes nothing.');
   Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
   Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');
   Writeln('                               "fixable": true are ever applied -- see `drag-lint rules --json`.');
+  Writeln('                               --fix-naming: consent, in a batch run, to the opt-in naming fixes (renames across');
+  Writeln('                               every owning project) without listing them in "autofix" in drag-lint-lint.json;');
+  Writeln('                               it also prints "rename-local: <N>" (stderr) for the single-project renames.');
   Writeln('                               This is what the IDE Structure form''s right-click Fix it / Fix all in unit run.');
   Writeln('  drag-lint allow <file>       --fix-line <L> --fix-rule <id> [--apply]   (record a dl:ok review of ONE finding; dry-run without --apply)');
   Writeln('  drag-lint shared-unit        --in <file.pas> [--add-project <name>] [--apply] [--json]   (read/extend the dl:shared marker; dry-run without --apply)');
   Writeln('  drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]');
   Writeln('  drag-lint lint-all           [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]');
+  Writeln('                               --fix [--fix-naming] [--apply]: autofix every unit, as lint --fix (dry run without --apply)');
   Writeln('                               --rule <id>: report ONLY that rule; naming an OFF-by-default rule opts it in');
   Writeln('                               for the run (no --enable needed) -- the same contract as lint and lint-project.');
   Writeln('                               --quiet: suppress per-file progress lines written to stderr');
@@ -1813,6 +1818,7 @@ begin
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting (lint --fix)
     else if (A = '--fix-line') and (i < ParamCount) then begin Inc(i); Result.FixLine:= StrToIntDef(ParamStr(i), 0); end
     else if (A = '--fix-rule') and (i < ParamCount) then begin Inc(i); Result.FixRule:= ParamStr(i); end
+    else if A = '--fix-naming' then Result.FixNaming:= True
     else if (A = '--stand-in-for') and (i < ParamCount) then begin Inc(i); Result.StandInFor:= ParamStr(i); end
     else if A = '--project-rules' then Result.ProjectRules:= True
     else if A = '--include-private' then Result.IncludePrivate:= True
@@ -12422,7 +12428,9 @@ begin
             unasked; a human pointing at one constant and asking for it to be
             renamed has asked (owner, 2026-10-13: "We can change them to
             PascalCase"). }
-          var Explicit: Boolean:= (AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId);
+          { --fix-naming is the same consent for a BATCH run: the IDE's Fix all
+            sends it after the user has seen and confirmed the renames. }
+          var Explicit: Boolean:= ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) or AArgs.FixNaming;
           if Cfg.IsAutoFix(F.RuleId) or Explicit then NamingTargets:= NamingTargets + [F]
           else NamingOptOut.AddOrSetValue(LowerCase(F.RuleId), True);
         end;
@@ -12479,6 +12487,10 @@ begin
         end;
         Inc(NFSkippedTotal, NFSkipped);
         Inc(NFStaleTotal, NFStale);
+        { The single-project naming renames this run makes, for the IDE's Fix all
+          confirmation. Only under --fix-naming, so an ordinary run's output is
+          unchanged (spec criterion 15); stderr keeps a --json stdout clean. }
+        if AArgs.FixNaming then Writeln(ErrOutput, Format('rename-local: %d', [NFCount]));
         { The hint is the PROJECT form, never `index <dir> --db`: a folder
           reindex of a project DB widens it permanently. }
         if NFSkipped > 0 then
