@@ -1021,6 +1021,17 @@ in none:
   UNVERIFIED. A configured DB whose FILE does not exist is "no index": not
   checked, never blocking, named on `rename-unindexed: <section> (<db>)`. A library
   owner refuses it ("a library unit is not project code").
+- **Per-row freshness cannot see a row that is ABSENT**, so a project owner is
+  also checked against its project file. An index stamped with ANOTHER
+  project's `project_tag` is that project's closure: UNVERIFIED in a preview
+  and an apply alike, never reindexed (`index was built from project <tag>,
+  not <X>.dproj -- rebuild it: drag-lint index --project <pf> --db <db>
+  --rebuild`); an empty tag (an index built before the stamp) is no mismatch.
+  A member the `.dproj` (DCCReference) or `.dpr` (uses) declares that exists on
+  disk but has no files row makes the owner stale (`<n> project member(s) not
+  in the index: <paths>`): the preview plans on it as is, the apply reindexes
+  it, and a member still missing afterwards is UNVERIFIED with the rebuild
+  hint. Units the closure reaches only transitively are not checked.
 - **One new name, free in every owner** -- the first candidate style no owner
   already declares; the edits of all owners are merged and exact duplicates
   dropped (the shared declaration is rewritten once).
@@ -1041,6 +1052,8 @@ rename-owners: 4 of 37 indexes
 rename-project: Micronite2027 index=fresh
 rename-project: DMTEST index=reindexed      (apply; a preview says index=stale (<n> changed file(s)))
 rename-project: TEST_X index=unverified (still stale after reindex: <file> -- ... rebuild it: ... --rebuild)
+rename-project: DMTEST index=unverified (index was built from project Micronite2027, not DMTEST.dproj -- rebuild it: ...)
+rename-project: TEST_Y index=stale (1 project member(s) not in the index: <file>)   (preview; the apply reindexes)
 rename-unknown: <db>: <reason>             (a DB that exists but could not be read, or the manifest)
 rename-unindexed: <section> (<db>)         (a configured DB whose file does not exist: not checked)
 rename-target: L48 Lot_Notes -> LotNotes apply Micronite2027=3 DMTEST=1
