@@ -22,6 +22,7 @@ uses
   , Winapi.Windows
   , DRagLint.Storage.FileMembership
   , DRagLint.Index.Manifest
+  , DRagLint.Project.Coherence
   , DRagLint.Refactor.MultiProjectRename
   , DRagLint.Refactor.TextEdit
   ;
@@ -199,6 +200,24 @@ begin
   Store.SetMetaValue(INDEXED_AT_KEY, '');
   Store:= nil;
   Refresh('r.nostamp', W + 'A_nostamp.sqlite', W + 'A\A.dpr', FakeReindex(True));
+
+  { T1: an index stamped with ANOTHER project's tag is not this project's
+    index, however fresh its rows are -- unverified, and never reindexed. }
+  Refresh('r.wrongtag', W + 'A_tag.sqlite', W + 'T\T.dpr', FakeReindex(True));
+  { ... but an EMPTY tag (an index built before the stamp) is no mismatch. }
+  Store:= TSQLiteSymbolStore.Create(W + 'A_notag.sqlite');
+  Store.SetMetaValue(PROJECT_TAG_KEY, '');
+  Store:= nil;
+  Refresh('r.notag', W + 'A_notag.sqlite', W + 'T\T.dpr', FakeReindex(True));
+
+  { T2: a .dproj member the index does not hold (added after indexing). A
+    preview reports it stale and writes nothing; an apply reindexes once; a
+    reindex that still leaves it out is unverified with the rebuild hint. }
+  Stamp:= FileStamp(W + 'M_preview.sqlite');
+  Refresh('r.member', W + 'M_preview.sqlite', W + 'M\M.dproj', nil);
+  Writeln('r.member.db_unchanged=', FileStamp(W + 'M_preview.sqlite') = Stamp);
+  Refresh('r.memberapply', W + 'M_apply.sqlite', W + 'M\M.dproj', ShellReindex());
+  Refresh('r.membernoop', W + 'M_noop.sqlite', W + 'M\M.dproj', FakeReindex(True));
 
   Touch(Shared);
   C:= Changed(W + 'A.sqlite');

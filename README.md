@@ -884,11 +884,14 @@ CI flags (apply to `lint` / `lint-all` / `check-ast`): `--format sarif` (SARIF
 by two or more project indexes renames it in EVERY owner, or in none. Owners are
 found by the unit's full path in every DB the manifest lists; a stale owner is
 reindexed first (`index --project`); the new name must be free in all of them.
+An owner whose index is stamped with ANOTHER project's tag (the DB is some
+other project's closure) is unverified and refuses the rename; one that lacks a
+member its `.dproj`/`.dpr` declares is stale (the apply reindexes it).
 A single-finding fix (`--fix-line` + `--fix-rule`) is all-or-nothing and ends
 `autofix: rename refused -- <reason>`; a batch drops only the unsafe renames. A
 manifest that did not load completely refuses every naming fix (fail-closed).
 Only for 2+ owners (or unknown ownership) the run prints its plan --
-`rename-owners: N of M indexes`, `rename-project: <name> index=fresh|reindexed|unverified`,
+`rename-owners: N of M indexes`, `rename-project: <name> index=fresh|reindexed|stale|unverified [(<reason>)]`,
 `rename-target: L<line> <old> -> <new> apply|dropped ...`, `rename-unknown:`,
 `rename-dropped-at-write:` -- and `--json` gains `projects` and
 `dropped_reason`. The IDE's Fix it / Fix all in unit preview first and confirm
