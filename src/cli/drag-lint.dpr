@@ -231,6 +231,7 @@ uses
   DRagLint.Charts.Q.ChangeImpact in '..\charts\DRagLint.Charts.Q.ChangeImpact.pas',
   DRagLint.Charts.Q.CrossesBoundary in '..\charts\DRagLint.Charts.Q.CrossesBoundary.pas',
   DRagLint.Charts.Q.ProtocolTrace in '..\charts\DRagLint.Charts.Q.ProtocolTrace.pas',
+  DRagLint.Charts.Q.Lifecycle in '..\charts\DRagLint.Charts.Q.Lifecycle.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

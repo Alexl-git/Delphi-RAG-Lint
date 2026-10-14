@@ -75,6 +75,7 @@ uses
   , DRagLint.Charts.Q.ChangeImpact in '..\..\src\charts\DRagLint.Charts.Q.ChangeImpact.pas'
   , DRagLint.Charts.Q.CrossesBoundary in '..\..\src\charts\DRagLint.Charts.Q.CrossesBoundary.pas'
   , DRagLint.Charts.Q.ProtocolTrace in '..\..\src\charts\DRagLint.Charts.Q.ProtocolTrace.pas'
+  , DRagLint.Charts.Q.Lifecycle in '..\..\src\charts\DRagLint.Charts.Q.Lifecycle.pas'
   , ChartsTests.Questions in 'ChartsTests.Questions.pas'
   , DRagLint.Charts.Producer.Delphi in '..\..\src\charts\DRagLint.Charts.Producer.Delphi.pas'
   , ChartsTests.ProducerDelphi in 'ChartsTests.ProducerDelphi.pas'
