@@ -552,8 +552,8 @@ read from that code and MEASURED on the gate's trace
   prefix). Whether Form A gains a DocInsight rendering (escape `<` / `&`, prefix
   `///`) is the owner's call; the footer now says only `trace.dlgraph (Form A text)`.
   **ANSWERED and built (R5, 2026-10-06):** `Ask-Report.ps1`'s default answer is the
-  DocInsight `/// <remarks>` block the IDE's Reports menu makes (`Report.DocInsight.ps1`,
-  a byte-for-byte port of the plugin's formatter); `-Plain` gives the Form A text.
+  DocInsight `/// <remarks>` block the IDE's Reports menu makes (since 2026-10-14 delegated to
+  `drag-lint ask`, whose DRagLint.Charts.DocInsight is the one formatter); `-Plain` gives the Form A text.
 * Certainty gains `[by name]` (a name match) beside `[certain]` / `[inferred]`; it is two tokens and the checker drops it as a phrase.
 * Gutters may be two OR three digits.
 * The canonical emitter (`Trace.FormA.ps1`) numbers every item, anchors every step INCLUDING `CROSSES` (at the send line), and never writes an epilogue. `Read-FormA` reads only the canonical layout; the golden stays hand-aligned and is checked, not parsed.

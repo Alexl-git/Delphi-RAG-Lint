@@ -74,10 +74,13 @@ type
     [Test] procedure CmdLineCarriesToOnlyWhenGiven;
     [Test] procedure OnlyPathTakesSecondRoutine;
     [Test] procedure ReasonStripsPrefix;
+    [Test] procedure CmdLineEscapesEmbeddedQuote;
+    [Test] procedure CmdLineEscapesTrailingBackslash;
+    [Test] procedure CmdLineSplitsBackToTheValues;
+    [Test] procedure OldEngineWithoutAskIsNamed;
+    [Test] procedure OtherSetupFailuresAreNotAnOldEngine;
     [Test] procedure ReindexCommandsAreParsed;
     [Test] procedure FolderTargetIndexIsNeverAccepted;
-    [Test] procedure AskReportInstalledLayoutComesFirst;
-    [Test] procedure AskReportNotFoundNamesEveryPath;
   end;
 
 implementation
@@ -89,6 +92,8 @@ uses
   , System.IOUtils
   , System.Character
   , System.RegularExpressions
+  , Winapi.Windows
+  , Winapi.ShellAPI
   , DragLint.Plugin.ReportText
   ;
 
@@ -489,7 +494,7 @@ end;
 
 procedure TReportFormatterTests.HeaderFixtureMatchesPowerShellPort;
 begin
-  { the same bytes charts\src\Report.DocInsight.ps1 produces (Test-AskReport AR-DOC-PORT) }
+  { the header fixture the deleted PowerShell port (Report.DocInsight.ps1) was also held to }
   CheckFixtureRows(HEADER_FIXTURE);
 end;
 
@@ -576,31 +581,28 @@ procedure TReportGlueTests.CmdLineCarriesEveryArgument;
 var
   Cmd: string;
 begin
-  Cmd:= BuildAskReportCmdLine('C:\PS\pwsh.exe', 'C:\R\charts\src\Ask-Report.ps1', 'who-writes',  // dl:ok hardcoded-absolute-path@a8ba -- synthetic test input: names no real location and reaches no filesystem call
-                              'Unit.TFoo.FBar', 'C:\P\Unit.pas', 'C:\E\drag-lint.exe');  // dl:ok hardcoded-absolute-path@1799 -- synthetic test input: names no real location and reaches no filesystem call
-  Assert.IsTrue(StartsStr('"C:\PS\pwsh.exe" -NoProfile', Cmd), Cmd);
-  Assert.Contains(Cmd, '-File "C:\R\charts\src\Ask-Report.ps1"');
-  Assert.Contains(Cmd, '-Question who-writes');
-  Assert.Contains(Cmd, '-Target "Unit.TFoo.FBar"');
-  Assert.Contains(Cmd, '-In "C:\P\Unit.pas"');
-  Assert.Contains(Cmd, '-Engine "C:\E\drag-lint.exe"');
-  Assert.Contains(Cmd, '-Open');
-  { the menu wraps the answer in its own DocInsight block, so the script must
+  Cmd:= BuildAskCmdLine('C:\E\drag-lint.exe', 'who-writes', 'Unit.TFoo.FBar', 'C:\P\Unit.pas');
+  { the engine's own verb: no pwsh, no Ask-Report.ps1 to find }
+  Assert.IsTrue(StartsStr('"C:\E\drag-lint.exe" ask who-writes', Cmd), Cmd);
+  Assert.Contains(Cmd, '--target "Unit.TFoo.FBar"');
+  Assert.Contains(Cmd, '--in "C:\P\Unit.pas"');
+  Assert.Contains(Cmd, ' --open');
+  Assert.AreEqual(0, Pos('pwsh', Cmd), Cmd);
+  { the menu wraps the answer in its own DocInsight block, so the verb must
     answer plain or the block is wrapped twice }
-  Assert.Contains(Cmd, ' -Plain');
+  Assert.Contains(Cmd, ' --plain');
 end;
 
 procedure TReportGlueTests.CmdLineCarriesToOnlyWhenGiven;
 var
   Cmd: string;
 begin
-  Cmd:= BuildAskReportCmdLine('p.exe', 'a.ps1', 'path', 'U.TA.Run', 'U.pas', 'e.exe', 'U.TB.Stop');
-  Assert.Contains(Cmd, '-Target "U.TA.Run"');
-  Assert.Contains(Cmd, '-To "U.TB.Stop"');
-  Cmd:= BuildAskReportCmdLine('p.exe', 'a.ps1', 'who-calls', 'U.TA.Run', 'U.pas', 'e.exe');
-  Assert.AreEqual(0, Pos('-To ', Cmd), Cmd);
+  Cmd:= BuildAskCmdLine('e.exe', 'path', 'U.TA.Run', 'U.pas', 'U.TB.Stop');
+  Assert.Contains(Cmd, '--target "U.TA.Run"');
+  Assert.Contains(Cmd, '--to "U.TB.Stop"');
+  Cmd:= BuildAskCmdLine('e.exe', 'who-calls', 'U.TA.Run', 'U.pas');
+  Assert.AreEqual(0, Pos('--to ', Cmd), Cmd);
 end;
-
 procedure TReportGlueTests.OnlyPathTakesSecondRoutine;
 begin
   Assert.IsTrue(QuestionTakesSecondRoutine('path'));
@@ -615,6 +617,57 @@ begin
   Assert.AreEqual('plain text', AskReportReason('  plain text  '));
 end;
 
+procedure TReportGlueTests.CmdLineEscapesEmbeddedQuote;
+begin
+  { an embedded quote is escaped as \" (CommandLineToArgvW), never left to close the argument;
+    a path with spaces stays one quoted argument }
+  Assert.AreEqual('"C:\Program Files\dl\drag-lint.exe" ask who-calls --target "U.T\"A.Run" --in "C:\My Dir\U.pas" --plain --open',
+    BuildAskCmdLine('C:\Program Files\dl\drag-lint.exe', 'who-calls', 'U.T"A.Run', 'C:\My Dir\U.pas'));  // dl:ok hardcoded-absolute-path@263c -- REVIEWED 2026-10-14: synthetic command-line text for the quoting test; never reaches the filesystem
+end;
+
+procedure TReportGlueTests.CmdLineEscapesTrailingBackslash;
+begin
+  { a trailing backslash is doubled, or it would escape the closing quote }
+  Assert.AreEqual('"e.exe" ask path --target "U.TA.Run" --to "U.TB\\" --in "C:\My Dir\\" --plain --open',
+    BuildAskCmdLine('e.exe', 'path', 'U.TA.Run', 'C:\My Dir\', 'U.TB\'));  // dl:ok hardcoded-absolute-path@639f -- REVIEWED 2026-10-14: synthetic command-line text for the quoting test; never reaches the filesystem
+end;
+
+{ the arguments CreateProcess hands the engine, split the way the RTL's ParamStr does }
+function SplitCmdLine(const pCmdLine: string): TArray<string>;
+var
+  Count: Integer;
+begin
+  var Argv:= CommandLineToArgvW(PChar(pCmdLine), Count);
+  try
+    SetLength(Result, Count);
+    for var I:= 0 to Count - 1 do
+      Result[I]:= PPCharArray(Argv)^[I];
+  finally
+    LocalFree(HLOCAL(Argv));
+  end;
+end;
+
+procedure TReportGlueTests.CmdLineSplitsBackToTheValues;
+begin
+  var Args:= SplitCmdLine(BuildAskCmdLine('C:\Program Files\dl\drag-lint.exe', 'path', 'U.T"A.Run', 'C:\My Dir\', 'B\"x\'));  // dl:ok hardcoded-absolute-path@c362 -- REVIEWED 2026-10-14: synthetic command-line text for the quoting test; never reaches the filesystem
+  Assert.AreEqual('C:\Program Files\dl\drag-lint.exe|ask|path|--target|U.T"A.Run|--to|B\"x\|--in|C:\My Dir\|--plain|--open',  // dl:ok hardcoded-absolute-path@868d -- REVIEWED 2026-10-14: synthetic command-line text for the quoting test; never reaches the filesystem
+    string.Join('|', Args));
+end;
+
+procedure TReportGlueTests.OldEngineWithoutAskIsNamed;
+begin
+  { an engine older than `ask` prints this line and then its whole help banner, exit 2 }
+  Assert.AreEqual('The drag-lint engine is too old for the Reports menu (no "ask" command) -- update the engine.',
+    AskEngineTooOldMessage(2, 'ERROR: unknown command: ask' + CRLF + 'drag-lint 1.20.0-alpha' + CRLF +
+      'Usage: drag-lint <command> [options]' + CRLF + '  index   ...' + CRLF));
+end;
+
+procedure TReportGlueTests.OtherSetupFailuresAreNotAnOldEngine;
+begin
+  Assert.AreEqual('', AskEngineTooOldMessage(2, 'ask-report: index not found: C:\X\_D-RAG\X.sqlite' + CRLF));
+  Assert.AreEqual('', AskEngineTooOldMessage(1, 'ERROR: unknown command: ask' + CRLF), 'exit 1 is a refusal, not setup');
+  Assert.AreEqual('', AskEngineTooOldMessage(2, 'ERROR: unknown command: frobnicate' + CRLF), 'another verb is not ask');
+end;
 const
   STALE_ERR =
     'ask-report: stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' + CRLF +
@@ -644,32 +697,6 @@ begin
     '    & ''C:\E\drag-lint.exe'' index --project ''C:\P\A.dproj'' --db ''C:\x.sqlite'' --rebuild'))),
     'a rebuild is not the incremental job');
   Assert.AreEqual(0, Integer(Length(ParseReindexCommands(''))));
-end;
-
-procedure TReportGlueTests.AskReportInstalledLayoutComesFirst;
-const
-  CANDIDATE_COUNT = 3;  // flat install, v2 install (app\charts), repo
-var
-  Paths: TArray<string>;
-begin
-  Paths:= AskReportCandidates('C:\App\bin\drag-lint.exe');  // dl:ok hardcoded-absolute-path@e69f -- synthetic test input: names no real location and reaches no filesystem call
-  Assert.AreEqual(CANDIDATE_COUNT, Integer(Length(Paths)));
-  Assert.AreEqual('C:\App\bin\Ask-Report.ps1', Paths[0], 'installed: beside the engine');  // dl:ok hardcoded-absolute-path@5caf -- synthetic test input: names no real location and reaches no filesystem call
-  Assert.AreEqual('C:\App\charts\Ask-Report.ps1', Paths[1], 'installed v2: {app}\charts beside {app}\bin');  // dl:ok hardcoded-absolute-path@8dff -- synthetic test input: names no real location and reaches no filesystem call
-  Assert.AreEqual('C:\charts\src\Ask-Report.ps1', Paths[2], 'repo: two folders above the engine');  // dl:ok hardcoded-absolute-path@3b4e -- synthetic test input: names no real location and reaches no filesystem call
-end;
-
-procedure TReportGlueTests.AskReportNotFoundNamesEveryPath;
-const
-  FIRST_PATH = 'C:\A\Ask-Report.ps1';  // dl:ok hardcoded-absolute-path@3718 -- synthetic test input: names no real location and reaches no filesystem call
-  SECOND_PATH = 'C:\B\Ask-Report.ps1';  // dl:ok hardcoded-absolute-path@bebc -- synthetic test input: names no real location and reaches no filesystem call
-var
-  Msg: string;
-begin
-  Msg:= AskReportNotFoundText([FIRST_PATH, SECOND_PATH]);
-  Assert.IsTrue(Pos(FIRST_PATH, Msg) > 0, Msg);
-  Assert.IsTrue(Pos(SECOND_PATH, Msg) > 0, Msg);
-  Assert.IsTrue(Pos(FIRST_PATH, Msg) < Pos(SECOND_PATH, Msg), 'in search order');
 end;
 
 initialization  TDUnitX.RegisterTestFixture(TReportCatalogTests);

@@ -11,7 +11,7 @@ unit DRagLint.Charts.Question;
   not registered is not ported, and the producer hands it to PowerShell.
 
   The two tables below are copied from the scripts and must change with them:
-  QUESTION_CAPTIONS is Report.DocInsight.ps1's $script:ReportCaptions (the phrase of the
+  QUESTION_CAPTIONS is the IDE plugin's REPORT_QUESTIONS captions (the phrase of the
   header sentence) and QUESTION_VOCAB is New-DiagramArtifact.ps1's $vocab (the two
   labelled counts of the CHART line and meta.json). *)
 
@@ -46,10 +46,16 @@ type
     Target       : string;
     /// <summary>The project index, full path.</summary>
     DbPath       : string;
+    /// <summary>crosses-boundary's other half (-CounterpartDb), full path; '' = not given.</summary>
+    CounterpartDb: string;
     /// <summary>Where the bundle folder is made (Ask-Report -OutRoot).</summary>
     OutRoot      : string;
     /// <summary>The repo's charts folder: the clone root is &lt;ChartsRoot&gt;\scratch\db.</summary>
     ChartsRoot   : string;
+    /// <summary>The folder the chart scripts (Ask-Report.ps1) were found in; '' = &lt;ChartsRoot&gt;\src,
+    /// the repository layout. An installed copy keeps them beside the engine ({app}\bin), so
+    /// the producer sets this and the dot lookup starts there.</summary>
+    ScriptDir    : string;
     /// <summary>The resolved dot.exe.</summary>
     DotExe       : string;
     /// <summary>The effective -Cap.</summary>
@@ -72,7 +78,7 @@ type
     /// <summary>The clone folder &lt;ChartsRoot&gt;\scratch\db.</summary>
     /// <returns>The folder path.</returns>
     function CloneRoot: string;
-    /// <summary>dot.exe: DotExe when set, else the Resolve-GraphvizDot walk from ChartsRoot.</summary>
+    /// <summary>dot.exe: DotExe when set, else the Resolve-GraphvizDot walk from ScriptDir (or ChartsRoot\src).</summary>
     /// <returns>The full path of dot.exe.</returns>
     /// <remarks>Called where the PS emitter's Invoke-DotRun resolves it: after the .dot text is built.
     /// ResolveGraphvizDot raises EChartsTool, naming every place looked, when no dot.exe is found.</remarks>
@@ -104,6 +110,21 @@ type
     /// <param name="pValue">Value; escaped as ConvertTo-Json escapes it.</param>
     /// <returns>The field.</returns>
     class function Str(const pName, pValue: string): TMetaField; static;
+    /// <summary>A double field, as ConvertTo-Json writes a [double] (Measure-Object -Sum).</summary>
+    /// <param name="pName">Property name.</param>
+    /// <param name="pValue">Value.</param>
+    /// <returns>The field: a whole number keeps a '.0' suffix (24.0), any other prints round-trip.</returns>
+    class function Real(const pName: string; pValue: Double): TMetaField; static;
+    /// <summary>A nested object field (an [ordered] dictionary of the emitter result).</summary>
+    /// <param name="pName">Property name.</param>
+    /// <param name="pFields">The members, in order, already JSON-encoded.</param>
+    /// <returns>The field, indented for the emitter object of meta.json (members at six
+    /// spaces, the closing brace at four); '{}' when pFields is empty.</returns>
+    class function Obj(const pName: string; const pFields: TArray<TMetaField>): TMetaField; static;
+    /// <summary>A double encoded as ConvertTo-Json writes it.</summary>
+    /// <param name="pValue">Value.</param>
+    /// <returns>'24.0' for a whole number, else the shortest round-trip text with '.' as decimal point.</returns>
+    class function RealJson(pValue: Double): string; static;
   end;
 
   /// <summary>What a ported chart emitter hands back (the PS emitter's result object).</summary>
@@ -114,6 +135,11 @@ type
     LeftCount   : Int64;
     /// <summary>The count the question's vocabulary names second (e.g. Writes).</summary>
     RightCount  : Int64;
+    /// <summary>meta.json's leftCount literal when the PS value is not an integer (e.g. a
+    /// Measure-Object sum, '24.0'); '' writes LeftCount.</summary>
+    LeftJson    : string;
+    /// <summary>meta.json's rightCount literal when the PS value is not an integer; '' writes RightCount.</summary>
+    RightJson   : string;
     /// <summary>The emitter's ClickTargets.</summary>
     ClickTargets: Integer;
     /// <summary>The emitter's AllClickable.</summary>
@@ -149,6 +175,11 @@ function PortedQuestionIds: TArray<string>;
 /// <returns>Its menu caption without the trailing dots, or 'Report' for an unknown id.</returns>
 function QuestionPhrase(const pId: string): string;
 
+/// <summary>Every question id the chart pipeline accepts (New-DiagramArtifact.ps1's
+/// ValidateSet), in the menu-caption order of the header-phrase table.</summary>
+/// <returns>The 26 ids, lower case.</returns>
+function QuestionIds: TArray<string>;
+
 /// <summary>The two count labels of a question (New-DiagramArtifact's $vocab).</summary>
 /// <param name="pId">The question id.</param>
 /// <param name="pLeft">The first label, e.g. 'tables read'.</param>
@@ -174,6 +205,8 @@ const
   SCRIPTS_SUBDIR = 'src';
   UNKNOWN_PHRASE = 'Report';
   HEX_WIDTH = 4;
+  { below this a whole double prints exactly as an integer }
+  EXACT_DOUBLE_LIMIT = 1E15;
   QUESTION_CAPTIONS: array[0..25] of array[0..1] of string = (
     ('butterfly', 'Callers and callees (butterfly chart)...'),
     ('who-calls', 'Who calls this routine...'),
@@ -241,7 +274,8 @@ function TQuestionArgs.Dot: string;
 begin
   if DotExe <> '' then
     Exit(DotExe);
-  Result:= ResolveGraphvizDot('', DragLintSettingsPath, ChartsRoot, TPath.Combine(ChartsRoot, SCRIPTS_SUBDIR), SHARED_DOT_DEFAULT);
+  var Scripts:= if ScriptDir <> '' then ScriptDir else TPath.Combine(ChartsRoot, SCRIPTS_SUBDIR);
+  Result:= ResolveGraphvizDot('', DragLintSettingsPath, ChartsRoot, Scripts, SHARED_DOT_DEFAULT);
 end;
 
 function TQuestionArgs.GuardedDb: string;
@@ -294,6 +328,47 @@ begin
   Result.Json:= PsJsonString(pValue);
 end;
 
+class function TMetaField.RealJson(pValue: Double): string;
+begin
+  if (Frac(pValue) = 0) and (Abs(pValue) < EXACT_DOUBLE_LIMIT) then
+    Exit(IntToStr(Trunc(pValue)) + '.0');
+  Result:= FloatToStr(pValue, TFormatSettings.Invariant);
+end;
+
+class function TMetaField.Real(const pName: string; pValue: Double): TMetaField;
+begin
+  Result.Name:= pName;
+  Result.Json:= RealJson(pValue);
+end;
+
+class function TMetaField.Obj(const pName: string; const pFields: TArray<TMetaField>): TMetaField;
+const
+  MEMBER_INDENT = '      ';
+  CLOSE_INDENT = '    ';
+begin
+  Result.Name:= pName;
+  if Length(pFields) = 0 then
+  begin
+    Result.Json:= '{}';
+    Exit;
+  end;
+  var SB:= TStringBuilder.Create;
+  try
+    SB.Append('{').Append(sLineBreak);
+    for var K:= 0 to High(pFields) do
+    begin
+      SB.Append(MEMBER_INDENT).Append(PsJsonString(pFields[K].Name)).Append(': ').Append(pFields[K].Json);
+      if K < High(pFields) then
+        SB.Append(',');
+      SB.Append(sLineBreak);
+    end;
+    SB.Append(CLOSE_INDENT).Append('}');
+    Result.Json:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
 procedure RegisterChartQuestion(const pId: string; const pEmitter: TChartEmitter);
 begin
   if GRegistry = nil then
@@ -326,6 +401,13 @@ begin
       Exit;
     end;
   Result:= UNKNOWN_PHRASE;
+end;
+
+function QuestionIds: TArray<string>;
+begin
+  SetLength(Result, Length(QUESTION_CAPTIONS));
+  for var K:= Low(QUESTION_CAPTIONS) to High(QUESTION_CAPTIONS) do
+    Result[K]:= QUESTION_CAPTIONS[K, 0];
 end;
 
 function QuestionVocab(const pId: string; out pLeft, pRight: string): Boolean;

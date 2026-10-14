@@ -11,9 +11,11 @@ unit DRagLint.Charts.Producer.Delphi;
   it exactly as Ask-Report does. Freshness IS checked in-process, through the engine's own
   DRagLint.Index.Freshness: a stale index refuses with exit 3 unless AllowStale.
 
-  THE SWITCH. `drag-lint compare` keeps the PowerShell producer until the owner decides the
-  clone-guard / DRAGLINT_CHARTS_ALLOW_LIVE_DB policy for in-process answers on LIVE indexes.
-  ProducerForCompare is the one place that choice is made. *)
+  LIVE INDEXES (owner ruling 2026-10-14). In real use -- `drag-lint compare` and `drag-lint ask` --
+  this producer answers from the live index, protected by the staleness refusal (exit 3, AllowStale
+  to override); it is constructed with pAllowLiveDb True. The frozen-clone guard (CloneDb in
+  DRagLint.Charts.Tools) stays ON only where pAllowLiveDb is False: the parity harness and the
+  tests. ProducerForCompare is the one place compare's choice is made. *)
 
 interface
 
@@ -33,23 +35,31 @@ type
     FAllowLiveDb: Boolean;
     FOutRoot    : string;
     FLast       : string;
+    function FallBack(const pCommand: TReportCommand; const pOptions: TProduceOptions; const pWhy: string): TProduceResult;
   public
+    /// <summary>Whether a non-clone (live) index is let through the clone guard.</summary>
+    property AllowLiveDb: Boolean read FAllowLiveDb;
     /// <summary>Creates the producer.</summary>
     /// <param name="pFallback">Answers every question this producer does not; must not be nil.</param>
     /// <param name="pAllowLiveDb">Let a non-clone index through the clone guard for the emitter call
     /// (what Ask-Report does). False keeps the guard: only charts\scratch\db clones are answered.</param>
-    /// <param name="pOutRoot">The bundle root; '' means %TEMP%\drag-lint-reports (Ask-Report's -OutRoot default).</param>
+    /// <param name="pOutRoot">The bundle root; '' means %TEMP%\drag-lint-reports (Ask-Report's -OutRoot default).
+    /// TProduceOptions.OutRoot, when set, wins over it for one call.</param>
     constructor Create(const pFallback: IReportProducer; pAllowLiveDb: Boolean; const pOutRoot: string = '');
     /// <summary>Whether a command would be answered in-process.</summary>
     /// <param name="pCommand">The question.</param>
     /// <param name="pOptions">The options; DbOverride must be set.</param>
-    /// <returns>True for a ported question with an index given.</returns>
+    /// <returns>True for a ported question with an index given; crosses-boundary also needs
+    /// TProduceOptions.CounterpartDbOverride (without it Ask-Report pairs the far side from
+    /// report-pairs.json, which only the fallback reads).</returns>
     function AnswersInProcess(const pCommand: TReportCommand; const pOptions: TProduceOptions): Boolean;
     /// <summary>Answers one question, in-process when ported, else through the fallback.</summary>
     /// <param name="pCommand">The question and its explicit arguments.</param>
     /// <param name="pOptions">Index override, staleness policy, engine, script, timeout.</param>
     /// <returns>As IReportProducer.Produce: exit 0 answered (plain text, CRLF lines, header first),
-    /// 1 refused (the emitter's message), 2 setup (index missing, charts folder not found), 3 stale.</returns>
+    /// 1 refused (the emitter's message), 2 setup (index missing, charts folder not found, or a
+    /// PORTED question that has to fall back while its Emit-*.ps1 is not beside Ask-Report.ps1 --
+    /// an installed copy, which does not ship the ported scripts), 3 stale.</returns>
     function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
     /// <summary>Says what answered the last call.</summary>
     /// <returns>'Delphi in-process (&lt;ids&gt;)' or 'Delphi in-process, fell back to: &lt;fallback&gt;'.</returns>
@@ -57,12 +67,18 @@ type
   end;
 
 /// <summary>The producer `drag-lint compare` uses: the ONE place that choice is made.</summary>
-/// <returns>A TPowerShellProducer, today and until the owner rules on the clone guard /
-/// DRAGLINT_CHARTS_ALLOW_LIVE_DB policy for in-process answers on live indexes.</returns>
-/// <remarks>Switching compare to the Delphi producer is a change HERE (and a test change);
-/// nothing else. The CLI's compare verb is to obtain its producer from this function.</remarks>
-function ProducerForCompare: IReportProducer;  // dl:ok unused-public-symbol@39d8 -- REVIEWED 2026-10-13: the compare switch; DRagLint.CLI (compare verb, :31005 and :31117) is to call it -- a one-line engine-side change this branch may not make (no CLI edits); pinned by ChartsTests.ProducerDelphi
+/// <returns>A TDelphiProducer with live indexes allowed (owner ruling 2026-10-14) and a
+/// TPowerShellProducer as its fallback for every question not ported to Delphi.</returns>
+/// <remarks>Live indexes are protected by the staleness refusal, not by the clone guard; the
+/// clone guard stays on only in the parity harness and the tests. The CLI's compare verb obtains
+/// its producer from this function.</remarks>
+function ProducerForCompare: IReportProducer;
 
+/// <summary>The file name of a question's PowerShell emitter, beside Ask-Report.ps1.</summary>
+/// <param name="pId">A question id, e.g. crosses-boundary.</param>
+/// <returns>'Emit-' + the id in PascalCase + '.ps1', e.g. Emit-CrossesBoundary.ps1. Every ported
+/// id follows this convention (guarded by a test against charts\src).</returns>
+function EmitterScriptName(const pId: string): string;
 implementation
 
 uses
@@ -73,17 +89,35 @@ uses
   , DRagLint.Charts.Q.TouchesTables  // dl:ok unused-unit-in-uses@5c7b -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.ShownWhere  // dl:ok unused-unit-in-uses@62b1 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Deps  // dl:ok unused-unit-in-uses@6504 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.ClassSurface  // dl:ok unused-unit-in-uses@239f -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.EventWiring  // dl:ok unused-unit-in-uses@60ca -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.TestedBy  // dl:ok unused-unit-in-uses@e105 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.ChangeImpact  // dl:ok unused-unit-in-uses@c0e0 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.CrossesBoundary  // dl:ok unused-unit-in-uses@0508 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.ProtocolTrace  // dl:ok unused-unit-in-uses@a865 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Lifecycle  // dl:ok unused-unit-in-uses@6e60 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Effects  // dl:ok unused-unit-in-uses@db90 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   ;
 
 const
   EXIT_OK = 0;
   EXIT_SETUP = 2;
   REPORTS_SUBDIR = 'drag-lint-reports';
+  CROSSES_BOUNDARY = 'crosses-boundary';
   CRLF = #13#10;
 
 function ProducerForCompare: IReportProducer;
 begin
-  Result:= TPowerShellProducer.Create;
+  Result:= TDelphiProducer.Create(TPowerShellProducer.Create, True);
+end;
+
+function EmitterScriptName(const pId: string): string;
+begin
+  Result:= 'Emit-';
+  for var Part in pId.ToLower.Split(['-']) do
+    if Part <> '' then
+      Result:= Result + UpperCase(Part.Chars[0]) + Part.Substring(1);
+  Result:= Result + '.ps1';
 end;
 
 constructor TDelphiProducer.Create(const pFallback: IReportProducer; pAllowLiveDb: Boolean; const pOutRoot: string);
@@ -98,7 +132,10 @@ function TDelphiProducer.AnswersInProcess(const pCommand: TReportCommand; const 
 var
   E: TChartEmitter;
 begin
-  Result:= (pOptions.DbOverride <> '') and FindChartQuestion(pCommand.Question, E);
+  { crosses-boundary without -CounterpartDb: Ask-Report would pair it from report-pairs.json,
+    which only the fallback reads, so the fallback answers it }
+  Result:= (pOptions.DbOverride <> '') and FindChartQuestion(pCommand.Question, E)
+    and not (SameText(pCommand.Question, CROSSES_BOUNDARY) and (pOptions.CounterpartDbOverride = ''));
 end;
 
 function Fail(pCode: Integer; const pReason: string): TProduceResult;
@@ -121,17 +158,44 @@ begin
   Result:= if pCommand.Has(pName) then StrToIntDef(pCommand.Get(pName), pDefault) else pDefault;
 end;
 
+{ Hands a question to the fallback. A PORTED question falls back only when its PowerShell emitter
+  is beside the resolved Ask-Report.ps1: the installer does not ship the ported Emit-*.ps1 (owner
+  ruling), so in an installed copy the fallback would fail obscurely -- refuse with pWhy instead.
+  An unresolvable Ask-Report.ps1 is left to the fallback, which reports it itself. }
+function TDelphiProducer.FallBack(const pCommand: TReportCommand; const pOptions: TProduceOptions; const pWhy: string): TProduceResult;
+var
+  E: TChartEmitter;
+begin
+  if FindChartQuestion(pCommand.Question, E) then
+  begin
+    var NotFound: string;
+    var Script:= ResolveAskReportScript(pOptions.ScriptPath, NotFound);
+    if (Script <> '') and not TFile.Exists(TPath.Combine(ExtractFileDir(Script), EmitterScriptName(pCommand.Question))) then
+    begin
+      FLast:= 'Delphi in-process, no fallback installed: ' + pWhy;
+      Exit(Fail(EXIT_SETUP, Format('%s is answered by the engine in this install, and its PowerShell fallback is not installed: %s',
+        [pCommand.Question.ToLower, pWhy])));
+    end;
+  end;
+  Result:= FFallback.Produce(pCommand, pOptions);
+end;
+
 function TDelphiProducer.Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
 begin
   if not AnswersInProcess(pCommand, pOptions) then
   begin
     FLast:= 'Delphi in-process, fell back to: ' + FFallback.Describe;
-    Exit(FFallback.Produce(pCommand, pOptions));
+    var WhyNot:= if pOptions.DbOverride = '' then 'no index given (--db / -Db); naming only a project needs the PowerShell fallback'
+      else 'no counterpart index given (--counterpart-db / -CounterpartDb, or report-pairs.json)';
+    Exit(FallBack(pCommand, pOptions, WhyNot));
   end;
   FLast:= 'Delphi in-process (' + pCommand.Question.ToLower + ')';
   var Db:= ExpandFileName(pOptions.DbOverride);
   if not TFile.Exists(Db) then
     Exit(Fail(EXIT_SETUP, 'index not found: ' + Db));
+  var Other:= if pOptions.CounterpartDbOverride <> '' then ExpandFileName(pOptions.CounterpartDbOverride) else '';
+  if (Other <> '') and not TFile.Exists(Other) then
+    Exit(Fail(EXIT_SETUP, 'index not found: ' + Other));
   var Why: string;
   var Script:= ResolveAskReportScript(pOptions.ScriptPath, Why);
   if Script = '' then
@@ -142,8 +206,10 @@ begin
   Q.Question:= pCommand.Question.ToLower;
   Q.Target:= pCommand.Get('Target');
   Q.DbPath:= Db;
-  Q.OutRoot:= FOutRoot;
+  Q.CounterpartDb:= Other;
+  Q.OutRoot:= if pOptions.OutRoot <> '' then pOptions.OutRoot else FOutRoot;
   Q.ChartsRoot:= ExtractFileDir(ExtractFileDir(Script));
+  Q.ScriptDir:= ExtractFileDir(Script);  { installed copy: <app>\bin, where graphviz\bin sits beside the scripts }
   Q.Cap:= NumArg(pCommand, 'Cap', DEFAULT_CAP);
   Q.Depth:= NumArg(pCommand, 'Depth', DEFAULT_DEPTH);
   Q.SurfaceCap:= NumArg(pCommand, 'SurfaceCap', DEFAULT_SURFACE_CAP);
@@ -161,16 +227,25 @@ begin
     of the in-process path, so the question is handed to the fallback producer and Describe
     says why. Nothing escapes Produce. }
   try
-    var Rep:= Freshness(Db);
-    if (Rep.Verdict = fvStale) and not pOptions.AllowStale then
-      Exit(Fail(PRODUCER_EXIT_STALE, Format('stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' +
-        sLineBreak + '  %s: %d file(s) changed since it was indexed', [Db, Rep.Changed])));
+    { every index the question reads, as Ask-Report checks them (the counterpart too) }
+    var StaleLines:= '';
+    var Read: TArray<string>:= [Db];
+    if (Other <> '') and not SameText(Other, Db) then
+      Read:= Read + [Other];
+    for var D in Read do
+    begin
+      var Rep:= Freshness(D);
+      if Rep.Verdict = fvStale then
+        StaleLines:= StaleLines + sLineBreak + Format('  %s: %d file(s) changed since it was indexed', [D, Rep.Changed]);
+    end;
+    if (StaleLines <> '') and not pOptions.AllowStale then
+      Exit(Fail(PRODUCER_EXIT_STALE, 'stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' + StaleLines));
     var Answer:= AskChartQuestion(Q);
     Result:= Default(TProduceResult);
     Result.Ok:= True;
     Result.ExitCode:= EXIT_OK;
     Result.Text:= string.Join(CRLF, Answer.Lines) + CRLF;
-    Result.IndexPaths:= [Db];
+    Result.IndexPaths:= Read;
     Result.BundlePath:= Answer.BundleDir;
   except
     on E: EChartsQuestion do
@@ -182,7 +257,7 @@ begin
     on E: Exception do
     begin
       FLast:= Format('Delphi in-process failed (%s: %s), fell back to: %s', [E.ClassName, E.Message, FFallback.Describe]);
-      Result:= FFallback.Produce(pCommand, pOptions);
+      Result:= FallBack(pCommand, pOptions, Format('the in-process answer failed (%s: %s)', [E.ClassName, E.Message]));
     end;
   end;
 end;

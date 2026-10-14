@@ -69,9 +69,19 @@ uses
   , DRagLint.Charts.Q.TouchesTables in '..\..\src\charts\DRagLint.Charts.Q.TouchesTables.pas'
   , DRagLint.Charts.Q.ShownWhere in '..\..\src\charts\DRagLint.Charts.Q.ShownWhere.pas'
   , DRagLint.Charts.Q.Deps in '..\..\src\charts\DRagLint.Charts.Q.Deps.pas'
+  , DRagLint.Charts.Q.ClassSurface in '..\..\src\charts\DRagLint.Charts.Q.ClassSurface.pas'
+  , DRagLint.Charts.Q.EventWiring in '..\..\src\charts\DRagLint.Charts.Q.EventWiring.pas'
+  , DRagLint.Charts.Q.TestedBy in '..\..\src\charts\DRagLint.Charts.Q.TestedBy.pas'
+  , DRagLint.Charts.Q.ChangeImpact in '..\..\src\charts\DRagLint.Charts.Q.ChangeImpact.pas'
+  , DRagLint.Charts.Q.CrossesBoundary in '..\..\src\charts\DRagLint.Charts.Q.CrossesBoundary.pas'
+  , DRagLint.Charts.Q.ProtocolTrace in '..\..\src\charts\DRagLint.Charts.Q.ProtocolTrace.pas'
+  , DRagLint.Charts.Q.Lifecycle in '..\..\src\charts\DRagLint.Charts.Q.Lifecycle.pas'
+  , DRagLint.Charts.Q.Effects in '..\..\src\charts\DRagLint.Charts.Q.Effects.pas'
   , ChartsTests.Questions in 'ChartsTests.Questions.pas'
   , DRagLint.Charts.Producer.Delphi in '..\..\src\charts\DRagLint.Charts.Producer.Delphi.pas'
   , ChartsTests.ProducerDelphi in 'ChartsTests.ProducerDelphi.pas'
+  , DRagLint.Charts.AskVerb in '..\..\src\charts\DRagLint.Charts.AskVerb.pas'
+  , ChartsTests.AskVerb in 'ChartsTests.AskVerb.pas'
   ;
 
 const

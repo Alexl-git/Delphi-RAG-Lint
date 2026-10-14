@@ -26,7 +26,7 @@ type
 /// <remarks>Port of Test-D12OwnNameWrite (Emit-Common.ps1:1259). PS traps closed:
 /// String.Equals(..., OrdinalIgnoreCase) compares upper-invariant chars (not Delphi SameText,
 /// which folds ASCII only); `$_.Kind -eq 'g'` is case-insensitive.</remarks>
-function TestD12OwnNameWrite(const pName, pWitness: string; const pEffectKinds: TArray<string>): Boolean;  // dl:ok unused-public-symbol@98e8 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function TestD12OwnNameWrite(const pName, pWitness: string; const pEffectKinds: TArray<string>): Boolean;
 
 /// <summary>True when the INTERFACE-section edges alone close a loop among the members.</summary>
 /// <param name="pEdges">The member edges; the FIRST edge of a src|dst pair counts (Emit-Cycles

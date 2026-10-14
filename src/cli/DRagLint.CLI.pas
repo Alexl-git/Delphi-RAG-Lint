@@ -232,7 +232,8 @@ uses
   , DRagLint.Charts    .ReportHeader { charts step 1: `compare` -- ParseCommandLine for --command / --question }
   , DRagLint.Charts    .Adapters     { DetectFormat / TChartsFormat -- `compare --show` and the snapshot-only path }
   , DRagLint.Charts    .Producer     // dl:unit DRagLint.Charts.Producer accepted -- IReportProducer / TProduceOptions; the producer exit-code constant travels with the seam it belongs to
-  , DRagLint.Charts    .Producer.PowerShell { TPowerShellProducer: runs charts\src\Ask-Report.ps1 -Plain }
+  , DRagLint.Charts    .Producer.Delphi { ProducerForCompare: the producer `compare` reruns a question with }
+  , DRagLint.Charts    .AskVerb      { RunAskVerbFromCommandLine: the `ask` verb }
   , DRagLint.Charts    .Snapshot     // dl:unit DRagLint.Charts.Snapshot accepted -- ResolveSnapshotDir / SaveSnapshot for `compare --save`; the three extension constants name the formats it writes
   , DRagLint.Charts    .Compare      // dl:unit DRagLint.Charts.Compare accepted -- RunCompare + the request/result records; the exit-code constants travel with it and `compare` uses only the two refusal codes it prints itself
   , DRagLint.Charts    .Render       { RenderCompareText / Json / Html, RenderReportHtml, OpenInBrowser }
@@ -667,7 +668,7 @@ type
     SnapshotDir   : string ; // --snapshot-dir <dir>
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@11fa -- REVIEWED 2026-10-11 (461 lines: 1.27.x banner lines merged from main + compare lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@2de7 -- REVIEWED 2026-10-14 (475 lines: 1.27.x banner lines merged from main + compare lines + the 1.30.0 ask lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -822,9 +823,15 @@ begin
   Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
   Writeln('  drag-lint compare            --show <report|csv|bundle> [--output <f.html>] [--open]   any report as the HTML page');
   Writeln('  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot');
-  Writeln('                               Reruns the old report''s COMMAND (charts\src\Ask-Report.ps1 -Plain) and diffs the normalised');
+  Writeln('                               Reruns the old report''s COMMAND (in-process for a ported question, else Ask-Report.ps1 -Plain) and diffs the normalised');
   Writeln('                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,');
   Writeln('                               :line anchors, the header date/engine, BUNDLE/INDEX/AS OF/REGENERATE lines and wrapping.');
+  Writeln('  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]');
+  Writeln('                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]');
+  Writeln('                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]');
+  Writeln('                               [--plain] [--open] [--resolve-only]   one report question (26 ids; `ask --help` lists them) as text:');
+  Writeln('                               the DocInsight remarks block, or with --plain the plain answer. Ported questions answer in-process,');
+  Writeln('                               the rest through charts\src\Ask-Report.ps1. Exit 0 answered, 1 refused, 2 setup, 3 stale index.');
   Writeln('  drag-lint query type-usage   --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]');
   Writeln('                               of these type names, which does THIS file actually REFERENCE? Answers a');
   Writeln('                               LIST in one pass (an RTL surface, say). Counts declarations, X.Create');
@@ -1484,6 +1491,8 @@ begin
   Result.MinVisibility      := '';        // proptree: --min-visibility unset = emit ALL leaves (back-compat)
   Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
   if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
+  { `ask` parses its own flags (DRagLint.Charts.AskVerb) and prints nothing else: no defaults note on stderr }
+  if Result.Command = 'ask' then Exit;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -1922,7 +1931,7 @@ begin
     // AutoDocument (ADF T5): --since opts in the git <since> doc-source; --base-dir
     // sets the repo root for the git lookup (defaults to the file's own dir).
     else if A = '--since' then Result.DocSince:= True
-    else if A = '--migrate-pure' then Result.DocMigratePure:= True  // dl:ok duplicate-code@1caf -- REVIEWED 2026-09-23: the ParseArgs flag-chain shape, as on --no-seealso above; the doc-forget flags extend the chain
+    else if A = '--migrate-pure' then Result.DocMigratePure:= True
     else if (A = '--scope') and (i < ParamCount) then
     begin
       Inc(i);
@@ -31444,7 +31453,7 @@ begin
     Exit(CompareRefuse(AArgs, AFormat, COMPARE_EXIT_SETUP,
       '--save without an old side only takes a snapshot; it cannot be combined with --update-doc, --new or --format json|html', True));
   var Cmd:= ACmd;
-  var Asker:= TPowerShellProducer.Create as IReportProducer;
+  var Asker:= ProducerForCompare;
   var Prod:= Asker.Produce(Cmd, AOpts);
   if Prod.ExitCode = PRODUCER_EXIT_STALE then
   begin
@@ -31556,7 +31565,7 @@ begin
           end;
         csFile: Req.OldPath:= AArgs.CompareOld;
       end;
-      if Req.Source <> csTwoFiles then Req.Producer:= TPowerShellProducer.Create;
+      if Req.Source <> csTwoFiles then Req.Producer:= ProducerForCompare;
 
       Result:= CompareEmit(AArgs, Req, RunCompare(Req), Fmt);
     except
@@ -31687,6 +31696,7 @@ begin
     else if Args.Command = 'surface'           then Result:= DoSurface         (Args)
     else if Args.Command = 'outline'           then Result:= DoOutline         (Args)
     else if Args.Command = 'compare'           then Result:= DoCompare         (Args)
+    else if Args.Command = 'ask'               then Result:= RunAskVerbFromCommandLine
     else if Args.Command = 'usages'            then Result:= DoUsages          (Args)
     else if Args.Command = 'slice'             then Result:= DoSlice           (Args)
     else if Args.Command = 'context'           then Result:= DoContext         (Args)

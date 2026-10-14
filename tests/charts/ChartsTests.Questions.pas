@@ -20,6 +20,9 @@ type
     FOutRoot: string;
     function Args(const pQuestion, pTarget, pCloneName: string; out pArgs: TQuestionArgs): Boolean;
     function Fields(const pChart: TChartResult): string;
+    function EmitChart(const pQuestion, pTarget, pCloneName: string; out pChart: TChartResult): Boolean;
+    function Refusal(const pQuestion, pTarget, pCloneName: string): string;
+    function Answer(const pQuestion, pTarget, pCloneName: string; out pLines: TArray<string>): Boolean;
   public
     [Setup] procedure Setup;
     [TearDown] procedure TearDown;
@@ -56,11 +59,92 @@ type
     [Test] procedure AnswerMatchesPowerShell;
   end;
 
+  [TestFixture]
+  TClassSurfaceTests = class(TQuestionFixture)
+  public
+    [Test] procedure EmitterMatchesPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure UnitIsRefused;
+  end;
+
+  [TestFixture]
+  TEventWiringTests = class(TQuestionFixture)
+  public
+    [Test] procedure EmitterMatchesPowerShell;
+    [Test] procedure ControlFilterMatchesPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure NonFormIsRefused;
+  end;
+
+  [TestFixture]
+  TTestedByTests = class(TQuestionFixture)
+  public
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure TypeSeedsItsMembers;
+    [Test] procedure NoCoveringTestSaysSo;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure ProductIndexIsRefused;
+  end;
+
+  [TestFixture]
+  TChangeImpactTests = class(TQuestionFixture)
+  public
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure TypeSeedsMembersAndTypeUses;
+    [Test] procedure CappedWalkMatchesPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure LeafIsRefused;
+  end;
+
+  [TestFixture]
+  TCrossesBoundaryTests = class(TQuestionFixture)
+  private
+    function Emit(const pTarget, pCounterpart: string; out pChart: TChartResult): Boolean;
+  public
+    [Test] procedure WithCounterpartMatchesPowerShell;
+    [Test] procedure WithoutCounterpartMatchesPowerShell;
+    [Test] procedure TransportMethodIsTheBoundary;
+    [Test] procedure NoEvidenceIsNotDoesNotCross;
+    [Test] procedure AnswerNamesTheCounterpart;
+  end;
+
+  [TestFixture]
+  TProtocolTraceTests = class(TQuestionFixture)
+  public
+    [Test] procedure CommandMatchesPowerShell;
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure MethodWithManyConstantsCountsThem;
+    [Test] procedure WireFieldMatchesPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
+  [TestFixture]
+  TLifecycleTests = class(TQuestionFixture)
+  public
+    [Test] procedure MainFormMatchesPowerShell;
+    [Test] procedure TwoUnwiredStagesMatchPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure PlainClassIsRefusedByHeritage;
+  end;
+
+  [TestFixture]
+  TEffectsTests = class(TQuestionFixture)
+  private
+    procedure Check(const pTarget, pFields, pDotSha: string);
+  public
+    [Test] procedure EffectsAndAnAdmissionMatchPowerShell;
+    [Test] procedure ParameterNamedByOrdinal;
+    [Test] procedure GroupedParametersCountAsOrdinals;
+    [Test] procedure PureIsEffectFreeNotNullSummary;
+    [Test] procedure NullVerdictIsNotAnalysed;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
-  DRagLint.Charts.Q.TouchesTables;
+  DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
@@ -112,6 +196,92 @@ const
   DEPS_MODEL_FIELDS = 'UsedBy=40,Uses=0,UsedByTotal=68,UsesTotal=0,UsedByHidden=28,UsesHidden=0,ImplementationUses=0,ClickTargets=40,Expected=40,AllClickable=true';
   DEPS_MODEL_DOT_SHA = '479e9a4e53c10963e604153ba5cbf67bcf3e0ca826cd782137d2bebbc6efd26b';
   DEPS_CLI_LINES = 47;
+  CS_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel';
+  { ByKind / ByVisibility sit between these two: nested objects, checked in ChartsTests.Question }
+  CS_FIELDS_HEAD = 'Resolved="Blueprint4.ViewModel.TBlueprint_ViewModel",Kind="class",Members=392,ByKind={';
+  CS_FIELDS_TAIL = 'Shown=24.0,Hidden=368.0,Clusters=2,ClickTargets=25,Expected=25.0,AllClickable=true';
+  CS_DOT_SHA = '58ed8c4fc1489b24c8d85c5b455b5a7213c36db7d85585db3a3ca0e5f1135ed3';
+  CS_LINES = 32;
+  CS_CHART_LINE = 4;
+  EVENT_WIRING_ID = 'event-wiring';
+  EW_TARGET = 'uMain.TfrmMAIN';
+  EW_FIELDS = 'Events=43,Handlers=43,Components=41,EventKinds=5,DfmResolved=43,DfmFallback=0,Edges=43,Clusters=6,ClickTargets=86,Expected=86,AllClickable=true';
+  EW_DOT_SHA = 'fc3fe4545efeeb4b0fb872f21a0fe45480107ebb8bd025a86be300749f8a7074';
+  EW_CONTROL = 'CauseList';
+  EW_CONTROL_FIELDS = 'Events=1,Handlers=1,Components=1,EventKinds=1,DfmResolved=1,DfmFallback=0,Edges=1,Clusters=2,ClickTargets=2,Expected=2,AllClickable=true';
+  EW_CONTROL_DOT_SHA = '42866c97d39012f0ad8a7bf28ac924f82e17304ce3ed7b556f4309cab8e878bb';
+  EW_LINES = 86;
+  EW_FIRST_ROW = 5;
+  TESTED_BY_ID = 'tested-by';
+  TESTS_CLONE = 'TESTS-MicroniteTests.sqlite';
+  TB_TARGET = 'uCompGroupTree.TCompGroupTree.Build';
+  TB_FIELDS = 'Qname="uCompGroupTree.TCompGroupTree.Build",Tests=11,Fixtures=1,TestMethods=71,Walked=11,MaxHop=1.0,Clusters=2,ClickTargets=12,Expected=12,AllClickable=true';
+  TB_DOT_SHA = '01d8c52f4b6555a594ba34aaebb065dba3e84225feb5b084ea7d563a1828600a';
+  TB_TYPE = 'uCompGroupTree.TCompGroupTree';
+  TB_TYPE_FIELDS = 'Qname="uCompGroupTree.TCompGroupTree",Tests=13,Fixtures=1,TestMethods=71,Walked=13,MaxHop=1.0,Clusters=2,ClickTargets=14,Expected=14,AllClickable=true';
+  TB_TYPE_DOT_SHA = '2b2174a8afb085a3be55df2e9ed1dbb6ee2cdc76efbec19d56d8500dac0e98eb';
+  TB_NONE = 'Test.CompGroupTree.TCompGroupTreeTests.Flush_after_clean_build_is_noop';
+  TB_NONE_FIELDS = 'Qname="Test.CompGroupTree.TCompGroupTreeTests.Flush_after_clean_build_is_noop",Tests=0,Fixtures=0,TestMethods=71,Walked=0,MaxHop=0,Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
+  TB_NONE_DOT_SHA = '85218cabc300d99d88af6c8010d28a07edd1481dfcec1e2c7ceea7c536f30288';
+  TB_LINES = 17;
+  CHANGE_IMPACT_ID = 'change-impact';
+  CI_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  CI_FIELDS = 'Qname="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation",IsType=false,Members=0,Affected=9,Units=1,Zones=1,MaxHop=1.0,Capped=false,Clusters=2,ClickTargets=9,Expected=9,AllClickable=true';
+  CI_DOT_SHA = '3e57099569edc0120de83859f59c67700657c009449c52b6446bb45929a7a36a';
+  CI_TYPE_FIELDS = 'Qname="Blueprint4.ViewModel.TBlueprint_ViewModel",IsType=true,Members=392,Affected=3,Units=3,Zones=1,MaxHop=2.0,Capped=false,Clusters=2,ClickTargets=4,Expected=4,AllClickable=true';
+  CI_TYPE_DOT_SHA = '01aa6faa064198a807b62073f5f18aab2ae422244c1ab29e64b1c1b100a2823f';
+  { 595 routines over the 400-node frontier cap, 175 units in two zones }
+  CI_CAPPED = 'uPipeClientConnection.TPipeClientConnection.NextSeq';
+  CI_CAPPED_FIELDS = 'Qname="uPipeClientConnection.TPipeClientConnection.NextSeq",IsType=false,Members=0,Affected=595,Units=175,Zones=2,MaxHop=2.0,Capped=true,Clusters=3,ClickTargets=11,Expected=11,AllClickable=true';
+  CI_CAPPED_DOT_SHA = '0ca5bb5addfb872e94165e014e184facf1a2d5ebae74ec6c8a06f5fd59c5f019';
+  CI_LINES = 15;
+  CROSSES_BOUNDARY_ID = 'crosses-boundary';
+  CB_FIELDS = 'Qname="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation",Zone="CLIENT",Verdict="crosses",Commands=2,PipeCalls=1,FarSide=18,SelfIsPipe=false,Clusters=4,ClickTargets=22,Expected=22,AllClickable=true';
+  CB_DOT_SHA = '0d482728de30edf6f8541da9996c9310189995f4aff584f4d6065afd181353fb';
+  CB_ALONE_FIELDS = 'Qname="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation",Zone="CLIENT",Verdict="crosses",Commands=2,PipeCalls=1,FarSide=0,SelfIsPipe=false,Clusters=3,ClickTargets=4,Expected=4,AllClickable=true';
+  CB_ALONE_DOT_SHA = 'bc4fe076532b5b36296f891d88ed114a404c8c8ef532fc3b9bae5eb57174e0b9';
+  CB_SELF_FIELDS = 'Qname="uPipeClientConnection.TPipeClientConnection.NextSeq",Zone="CLIENT",Verdict="is the boundary",Commands=0,PipeCalls=0,FarSide=0,SelfIsPipe=true,Clusters=1,ClickTargets=1,Expected=1,AllClickable=true';
+  CB_SELF_DOT_SHA = '0141a2f37ecfaa0a568a3b3cc8e8e0f2a1d26de4142b71ac334b4186aa744678';
+  CB_NONE = 'uMain.TfrmMAIN.CauseListClick';
+  CB_NONE_FIELDS = 'Qname="uMain.TfrmMAIN.CauseListClick",Zone="CLIENT",Verdict="no evidence in this index",Commands=0,PipeCalls=0,FarSide=0,SelfIsPipe=false,Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
+  CB_NONE_DOT_SHA = '002ece2c52f5f564c02e7522b05b5dc06857b316d4139e17588f346d7b4ed375';
+  CB_LINES = 28;
+  PROTOCOL_TRACE_ID = 'protocol-trace';
+  PT_CMD = 'cmdDelta';
+  PT_CMD_FIELDS = 'Qname="Pipes.Protocol.TCommandID.cmdDelta",Mode="command",Refs=38,Zones=2,Routines=38,Commands=1,Unattributed=0,Kinds="read",Clusters=3,ClickTargets=22,Expected=22,AllClickable=true';
+  PT_CMD_DOT_SHA = 'f92d7c0911d43b40efa1913793688fa99293a00d0e5a366fa46df7211f8b0a76';
+  PT_METHOD_FIELDS = 'Qname="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation",Mode="method",Refs=2,Zones=1,Routines=1,Commands=2,Unattributed=0,Kinds="read",Clusters=2,ClickTargets=2,Expected=2,AllClickable=true';
+  PT_METHOD_DOT_SHA = 'e7cc7dd4aa39c0263b1c954c4949e378f5c5ad25df6fa9e7698cddb814830738';
+  PT_MANY = 'Pipes.Protocol.CommandIDToStr';
+  PT_MANY_FIELDS = 'Qname="Pipes.Protocol.CommandIDToStr",Mode="method",Refs=42,Zones=1,Routines=1,Commands=42,Unattributed=0,Kinds="read",Clusters=2,ClickTargets=2,Expected=2,AllClickable=true';
+  PT_MANY_DOT_SHA = '98c792edb324ad1211a75794dcd817ac0b7103d730819196fdf4026094befd8d';
+  PT_FIELD = 'Pipes.Protocol.TPipeMessageHeader.CommandID';
+  PT_FIELD_FIELDS = 'Qname="Pipes.Protocol.TPipeMessageHeader.CommandID",Mode="field",Refs=1047,Zones=2,Routines=728,Commands=0,Unattributed=0,Kinds="member-access",Clusters=3,ClickTargets=24,Expected=24,AllClickable=true';
+  PT_FIELD_DOT_SHA = '59c852de5a908751fbaed70674ca0f212439daa88a61303359043495a020dcf9';
+  PT_LINES = 28;
+  LIFECYCLE_ID = 'lifecycle';
+  LC_MAIN_FIELDS = 'Form="uMain.TfrmMAIN",Heritage="TdxRibbonForm",Wired=2,NotWired=1,Absent=4,Stages=7,Oddities=0,Clusters=8,ClickTargets=3,Expected=3,AllClickable=true';
+  LC_MAIN_DOT_SHA = '174f18d2acbd0a974f07d0cc9e561f94571063e8535dd576c13fb38e7f42baee';
+  LC_SERIAL = 'DefineSerialNumbers.TfrmDefineSerialNumbers';
+  LC_SERIAL_FIELDS = 'Form="DefineSerialNumbers.TfrmDefineSerialNumbers",Heritage="TForm",Wired=1,NotWired=2,Absent=4,Stages=7,Oddities=0,Clusters=8,ClickTargets=3,Expected=3,AllClickable=true';
+  LC_SERIAL_DOT_SHA = 'e8d2936283a74340639c7c9ba806f7e8fa06101bd9c1e9a29aa75e6ac9b3021e';
+  LC_LINES = 8;
+  EFFECTS_ID = 'effects';
+  EF_FIELDS = 'TestChart=false,Qname="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation",Outcome="effects",EffectFree="0",Summary="g,s,?",Effects=2,Unknown=1,Unnamed=0,D12Suspect=false,ParamCount=1,Witness="writes field FLastPersistError",Clusters=3,ClickTargets=1,Expected=1,AllClickable=true';
+  EF_DOT_SHA = '799de0250335f8d0854ab21560a6403d1e45b59bb6188ca3c4301ef85aa7bcb0';
+  EF_AP = 'Ap.APVDotProduct';
+  EF_AP_FIELDS = 'TestChart=false,Qname="Ap.APVDotProduct",Outcome="effects",EffectFree="0",Summary="p0,p3,?",Effects=2,Unknown=1,Unnamed=0,D12Suspect=false,ParamCount=6,Witness="calls Assert (unbound)",Clusters=3,ClickTargets=1,Expected=1,AllClickable=true';
+  EF_AP_DOT_SHA = 'e8e82e413a7bf9c037c50bfa08c51e9b98345b7b3e8f2a35c31e45f194251ca4';
+  EF_Z14 = 'Stats.Z14_LookupAcRe';
+  EF_Z14_FIELDS = 'TestChart=false,Qname="Stats.Z14_LookupAcRe",Outcome="effects",EffectFree="0",Summary="p3,p4,p5,?",Effects=3,Unknown=1,Unnamed=0,D12Suspect=false,ParamCount=6,Witness="writes through parameter #3 (p_AcNmbr)",Clusters=3,ClickTargets=1,Expected=1,AllClickable=true';
+  EF_Z14_DOT_SHA = '2c8c128da06e9829817c40e3d4efc365a6ede60455a62800e70d32082f8f1e12';
+  EF_PURE = 'BASICSF.BoolToStr';
+  EF_PURE_FIELDS = 'TestChart=false,Qname="BASICSF.BoolToStr",Outcome="pure",EffectFree="1",Summary="",Effects=0,Unknown=0,Unnamed=0,D12Suspect=false,ParamCount=1,Witness="",Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
+  EF_PURE_DOT_SHA = '1d7ab810b4ec07f7e00870e77e172dbb32d4654f321e4d3f67981d87a67554db';
+  EF_NA = 'uSetupDefaults.TGlobalSetupDefaults.GetDebug1';
+  EF_NA_FIELDS = 'TestChart=false,Qname="uSetupDefaults.TGlobalSetupDefaults.GetDebug1",Outcome="not-analysed",EffectFree="NULL",Summary="",Effects=0,Unknown=0,Unnamed=0,D12Suspect=false,ParamCount=0,Witness="",Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
+  EF_NA_DOT_SHA = 'de3e372524e883ca452e15acb8aa5191fe0b2ed56575926b411520b66c33b73f';
+  EF_LINES = 7;
   DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
@@ -195,6 +365,47 @@ begin
   for var F in pChart.Fields do
     Parts:= Parts + [F.Name + '=' + F.Json];
   Result:= string.Join(',', Parts);
+end;
+
+function TQuestionFixture.EmitChart(const pQuestion, pTarget, pCloneName: string; out pChart: TChartResult): Boolean;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  pChart:= Default(TChartResult);
+  Result:= Args(pQuestion, pTarget, pCloneName, A);
+  if not Result then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(pQuestion, E), pQuestion + ' is not registered');
+  pChart:= E(A, FOutRoot);
+end;
+
+function TQuestionFixture.Refusal(const pQuestion, pTarget, pCloneName: string): string;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  Result:= '';
+  if not Args(pQuestion, pTarget, pCloneName, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(pQuestion, E), pQuestion + ' is not registered');
+  try
+    E(A, FOutRoot);
+    Assert.Fail(pQuestion + ' was not refused');
+  except
+    on X: EChartsQuestion do Result:= X.Message;
+    on X: EChartsIndex do Result:= X.Message;
+  end;
+end;
+
+function TQuestionFixture.Answer(const pQuestion, pTarget, pCloneName: string; out pLines: TArray<string>): Boolean;
+var
+  A: TQuestionArgs;
+begin
+  pLines:= nil;
+  Result:= Args(pQuestion, pTarget, pCloneName, A);
+  if Result then
+    pLines:= AskChartQuestion(A).Lines;
 end;
 
 { ---- touches-tables ---- }
@@ -389,6 +600,398 @@ begin
   Assert.AreEqual('  drag-lint @drag-lint.dpr:195', Answer.Lines[DEPS_FIRST_ROW]);
   Assert.AreEqual('  ... +70 more units this uses not shown -- 40 of 110 drawn (display cap 40) (raise -Cap to see them)',
     Answer.Lines[High(Answer.Lines)]);
+end;
+
+{ ---- class-surface ---- }
+
+procedure TClassSurfaceTests.EmitterMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CLASS_SURFACE_ID, CS_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.StartsWith(CS_FIELDS_HEAD, Fields(C));
+  Assert.EndsWith(CS_FIELDS_TAIL, Fields(C));
+  Assert.AreEqual('24.0', C.RightJson);
+  Assert.AreEqual(CS_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TClassSurfaceTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(CLASS_SURFACE_ID, CS_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(CS_LINES, Length(L));
+  Assert.AreEqual('CHART class-surface ' + CS_TARGET + ' -- 392 members / 24 shown', L[CS_CHART_LINE]);
+  Assert.AreEqual('  TARGET ' + CS_TARGET + ' @Blueprint4.ViewModel.pas:57', L[CS_CHART_LINE + 1]);
+  Assert.AreEqual('  ... +189 more members not shown (-SurfaceCap 12; raise -SurfaceCap to see them)', L[High(L)]);
+end;
+
+procedure TClassSurfaceTests.UnitIsRefused;
+begin
+  Assert.Contains(Refusal(CLASS_SURFACE_ID, 'Blueprint4.ViewModel', CLIENT_CLONE),
+    'class-surface needs a type; a unit has no members to expose');
+end;
+
+{ ---- event-wiring ---- }
+
+procedure TEventWiringTests.EmitterMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(EVENT_WIRING_ID, EW_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(EW_FIELDS, Fields(C));
+  Assert.AreEqual(EW_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TEventWiringTests.ControlFilterMatchesPowerShell;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(EVENT_WIRING_ID, EW_TARGET, CLIENT_CLONE, A) then
+    Exit;
+  var Ctl: TCommandArg;
+  Ctl.Name:= 'Control';
+  Ctl.Value:= EW_CONTROL;
+  A.Command.Args:= A.Command.Args + [Ctl];
+  Assert.IsTrue(FindChartQuestion(EVENT_WIRING_ID, E), 'event-wiring is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(EW_CONTROL_FIELDS, Fields(C));
+  Assert.AreEqual(EW_CONTROL_DOT_SHA, FileSha(C.Layout.Dot));
+  { New-DiagramArtifact's slug takes the -Control too }
+  var Answer:= AskChartQuestion(A);
+  Assert.EndsWith('\event-wiring-uMain_TfrmMAIN_CauseList', Answer.BundleDir);
+  Assert.AreEqual('COMMAND event-wiring -Target "uMain.TfrmMAIN" -Control "CauseList"', Answer.Lines[1]);
+end;
+
+procedure TEventWiringTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(EVENT_WIRING_ID, EW_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(EW_LINES, Length(L));
+  Assert.AreEqual('  CauseList.OnClick = CauseListClick @uMain.dfm:3065', L[EW_FIRST_ROW]);
+  Assert.StartsWith('  ... 6 more row(s) not printed here (-MaxRows 80): ', L[High(L)]);
+end;
+
+procedure TEventWiringTests.NonFormIsRefused;
+begin
+  Assert.StartsWith('no dfm_event facts under ' + CS_TARGET + ' (index has ',
+    Refusal(EVENT_WIRING_ID, CS_TARGET, CLIENT_CLONE));
+end;
+
+{ ---- tested-by ---- }
+
+procedure TTestedByTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(TESTED_BY_ID, TB_TARGET, TESTS_CLONE, C) then
+    Exit;
+  Assert.AreEqual(TB_FIELDS, Fields(C));
+  Assert.AreEqual(TB_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TTestedByTests.TypeSeedsItsMembers;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(TESTED_BY_ID, TB_TYPE, TESTS_CLONE, C) then
+    Exit;
+  Assert.AreEqual(TB_TYPE_FIELDS, Fields(C));
+  Assert.AreEqual(TB_TYPE_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TTestedByTests.NoCoveringTestSaysSo;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(TESTED_BY_ID, TB_NONE, TESTS_CLONE, C) then
+    Exit;
+  Assert.AreEqual(TB_NONE_FIELDS, Fields(C));
+  Assert.AreEqual(TB_NONE_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TTestedByTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(TESTED_BY_ID, TB_TARGET, TESTS_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(TB_LINES, Length(L));
+  Assert.AreEqual('CHART tested-by ' + TB_TARGET + ' -- 11 covering tests / 1 fixtures', L[CS_CHART_LINE]);
+  Assert.AreEqual('  Test.CompGroupTree.TCompGroupTreeTests.Flush_unchanged_group_stays_unmodified @Test.CompGroupTree.pas:348', L[High(L)]);
+end;
+
+procedure TTestedByTests.ProductIndexIsRefused;
+begin
+  Assert.StartsWith('tested-by: this index carries no DUnitX [Test] attributes, so it is not a test project index.',
+    Refusal(TESTED_BY_ID, EW_TARGET, CLIENT_CLONE));
+end;
+
+{ ---- change-impact ---- }
+
+procedure TChangeImpactTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CHANGE_IMPACT_ID, CI_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CI_FIELDS, Fields(C));
+  Assert.AreEqual(CI_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TChangeImpactTests.TypeSeedsMembersAndTypeUses;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CHANGE_IMPACT_ID, CS_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CI_TYPE_FIELDS, Fields(C));
+  Assert.AreEqual(CI_TYPE_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TChangeImpactTests.CappedWalkMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CHANGE_IMPACT_ID, CI_CAPPED, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CI_CAPPED_FIELDS, Fields(C));
+  Assert.AreEqual(CI_CAPPED_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TChangeImpactTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(CHANGE_IMPACT_ID, CI_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(CI_LINES, Length(L));
+  Assert.AreEqual('CHART change-impact ' + CI_TARGET + ' -- 9 routines affected / 1 units', L[CS_CHART_LINE]);
+  Assert.AreEqual('  ... +1 more routines not shown (raise -Cap to see them)', L[High(L)]);
+end;
+
+procedure TChangeImpactTests.LeafIsRefused;
+begin
+  Assert.StartsWith('nothing in this index depends on uMain.TfrmMAIN.CauseListClick -- 0 callers at any depth.',
+    Refusal(CHANGE_IMPACT_ID, 'uMain.TfrmMAIN.CauseListClick', CLIENT_CLONE));
+end;
+
+{ ---- crosses-boundary ---- }
+
+function TCrossesBoundaryTests.Emit(const pTarget, pCounterpart: string; out pChart: TChartResult): Boolean;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  pChart:= Default(TChartResult);
+  Result:= Args(CROSSES_BOUNDARY_ID, pTarget, CLIENT_CLONE, A);
+  if not Result then
+    Exit;
+  if pCounterpart <> '' then
+    A.CounterpartDb:= TPath.Combine(ExtractFileDir(A.DbPath), pCounterpart);
+  Assert.IsTrue(FindChartQuestion(CROSSES_BOUNDARY_ID, E), 'crosses-boundary is not registered');
+  pChart:= E(A, FOutRoot);
+end;
+
+procedure TCrossesBoundaryTests.WithCounterpartMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not Emit(CI_TARGET, SERVER_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CB_FIELDS, Fields(C));
+  Assert.AreEqual(CB_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TCrossesBoundaryTests.WithoutCounterpartMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not Emit(CI_TARGET, '', C) then
+    Exit;
+  Assert.AreEqual(CB_ALONE_FIELDS, Fields(C));
+  Assert.AreEqual(CB_ALONE_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TCrossesBoundaryTests.TransportMethodIsTheBoundary;
+var
+  C: TChartResult;
+begin
+  if not Emit(CI_CAPPED, '', C) then
+    Exit;
+  Assert.AreEqual(CB_SELF_FIELDS, Fields(C));
+  Assert.AreEqual(CB_SELF_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TCrossesBoundaryTests.NoEvidenceIsNotDoesNotCross;
+var
+  C: TChartResult;
+begin
+  if not Emit(CB_NONE, '', C) then
+    Exit;
+  Assert.AreEqual(CB_NONE_FIELDS, Fields(C));
+  Assert.AreEqual(CB_NONE_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TCrossesBoundaryTests.AnswerNamesTheCounterpart;
+var
+  A: TQuestionArgs;
+begin
+  if not Args(CROSSES_BOUNDARY_ID, CI_TARGET, CLIENT_CLONE, A) then
+    Exit;
+  A.CounterpartDb:= TPath.Combine(ExtractFileDir(A.DbPath), SERVER_CLONE);
+  var L:= AskChartQuestion(A).Lines;
+  Assert.AreEqual<Integer>(CB_LINES, Length(L));
+  Assert.AreEqual('INDEX ' + A.CounterpartDb + ' (counterpart)', L[CS_CHART_LINE]);
+  Assert.AreEqual('  uPipeSessionBuilder.TPipeSessionBuilder.RouteSTATIONS handles rspOK @uPipeSessionBuilder.pas:902', L[High(L)]);
+end;
+
+{ ---- protocol-trace ---- }
+
+procedure TProtocolTraceTests.CommandMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(PROTOCOL_TRACE_ID, PT_CMD, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(PT_CMD_FIELDS, Fields(C));
+  Assert.AreEqual(PT_CMD_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TProtocolTraceTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(PROTOCOL_TRACE_ID, CI_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(PT_METHOD_FIELDS, Fields(C));
+  Assert.AreEqual(PT_METHOD_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TProtocolTraceTests.MethodWithManyConstantsCountsThem;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(PROTOCOL_TRACE_ID, PT_MANY, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(PT_MANY_FIELDS, Fields(C));
+  Assert.AreEqual(PT_MANY_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TProtocolTraceTests.WireFieldMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(PROTOCOL_TRACE_ID, PT_FIELD, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(PT_FIELD_FIELDS, Fields(C));
+  Assert.AreEqual(PT_FIELD_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TProtocolTraceTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(PROTOCOL_TRACE_ID, PT_CMD, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(PT_LINES, Length(L));
+  Assert.AreEqual('CHART protocol-trace cmdDelta -- 38 references / 2 zones', L[CS_CHART_LINE]);
+  Assert.AreEqual('  ... +17 more routines (+17 more sites) not shown (-Cap 20; raise -Cap to see them)', L[High(L)]);
+end;
+
+{ ---- lifecycle ---- }
+
+procedure TLifecycleTests.MainFormMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(LIFECYCLE_ID, EW_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(LC_MAIN_FIELDS, Fields(C));
+  Assert.AreEqual(LC_MAIN_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TLifecycleTests.TwoUnwiredStagesMatchPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(LIFECYCLE_ID, LC_SERIAL, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(LC_SERIAL_FIELDS, Fields(C));
+  Assert.AreEqual(LC_SERIAL_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TLifecycleTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(LIFECYCLE_ID, EW_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(LC_LINES, Length(L));
+  Assert.AreEqual('CHART lifecycle uMain.TfrmMAIN -- 2 stages wired / 1 implemented, not wired', L[CS_CHART_LINE]);
+  Assert.AreEqual('  uMain.TfrmMAIN.FormDestroy @uMain.pas:422', L[High(L)]);
+end;
+
+procedure TLifecycleTests.PlainClassIsRefusedByHeritage;
+begin
+  Assert.AreEqual(CS_TARGET + ' is not a form: its heritage is TInterfacedObject, and none of ' +
+    'TForm/TCustomForm/TdxRibbonForm/TDataModule/TFrame/TCustomFrame appears in it. Note this is a HERITAGE check -- ' +
+    'a real form that wires nothing is a different answer and still renders.', Refusal(LIFECYCLE_ID, CS_TARGET, CLIENT_CLONE));
+end;
+
+{ ---- effects ---- }
+
+procedure TEffectsTests.Check(const pTarget, pFields, pDotSha: string);
+var
+  C: TChartResult;
+begin
+  if not EmitChart(EFFECTS_ID, pTarget, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(pFields, Fields(C));
+  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
+end;
+
+procedure TEffectsTests.EffectsAndAnAdmissionMatchPowerShell;
+begin
+  Check(CI_TARGET, EF_FIELDS, EF_DOT_SHA);
+end;
+
+procedure TEffectsTests.ParameterNamedByOrdinal;
+begin
+  Check(EF_Z14, EF_Z14_FIELDS, EF_Z14_DOT_SHA);
+end;
+
+procedure TEffectsTests.GroupedParametersCountAsOrdinals;
+begin
+  { APVDotProduct(V1; I11, I12; V2; ...): grouped names are separate ordinals, p3 is V2 }
+  Check(EF_AP, EF_AP_FIELDS, EF_AP_DOT_SHA);
+end;
+
+procedure TEffectsTests.PureIsEffectFreeNotNullSummary;
+begin
+  Check(EF_PURE, EF_PURE_FIELDS, EF_PURE_DOT_SHA);
+end;
+
+procedure TEffectsTests.NullVerdictIsNotAnalysed;
+begin
+  Check(EF_NA, EF_NA_FIELDS, EF_NA_DOT_SHA);
+end;
+
+procedure TEffectsTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(EFFECTS_ID, CI_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(EF_LINES, Length(L));
+  Assert.AreEqual('CHART effects ' + CI_TARGET + ' -- 2 effects / 1 unclassified tokens', L[CS_CHART_LINE]);
+  Assert.StartsWith('  (no anchored result rows -- open ', L[High(L)]);
 end;
 
 end.

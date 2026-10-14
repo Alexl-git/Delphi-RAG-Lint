@@ -21,9 +21,10 @@
     5. the bundle goes under $env:TEMP\drag-lint-reports unless -OutRoot says otherwise.
     6. stdout is the answer, by DEFAULT as a DocInsight block -- `/// <remarks>` ... `/// </remarks>`,
        the same bytes the IDE's drag-lint > Reports menu puts on the clipboard (owner answer 2,
-       R5; the formatter is Report.DocInsight.ps1, a port of the plugin's FormatReportAsDocInsight,
-       checked against the plugin's own output by Test-AskReport AR-DOC-*). -Plain gives the plain
-       answer instead: two header lines (a sentence "<Phrase> (drag-lint report <id>) for <target>, asked on
+       R5). That mode is DELEGATED to the engine: without -Plain (and without -ResolveOnly) this script
+       runs `drag-lint ask` with the same arguments and passes its stdout, stderr and exit code through
+       -- the one formatter is DRagLint.Charts.DocInsight (Report.DocInsight.ps1, its PowerShell port,
+       was deleted 2026-10-14). -Plain gives the plain answer, made here: two header lines (a sentence "<Phrase> (drag-lint report <id>) for <target>, asked on
        <date> <time>, engine <version>." and a `COMMAND <id> -Target ...` line naming the arguments as given, never a
        display switch or an index override), then `BUNDLE <folder>`, one `INDEX <db>[ (server|sql|counterpart)]` line per
        index read, then the TEXT to read -- the whole trace.dlgraph for round-trip (plus a `NOTE the
@@ -33,7 +34,8 @@
        raise -Cap to see them)` for every row the chart itself left out -- a count in the header
        is never silently larger than the rows printed. The DocInsight block is made FROM that plain
        answer (BUNDLE / INDEX / REGENERATE dropped, anchors as (File.pas:line)). Nothing else is
-       printed on stdout. The IDE plugin formats the answer itself, so it must ask with -Plain.
+       printed on stdout. `drag-lint ask` runs this script with -Plain for every question not ported to
+       Delphi, and the IDE plugin now asks the engine (`drag-lint ask ... --plain`), not this script.
 
   Exit codes: 0 answered; 1 the question refused or failed (the reason on stderr);
   2 setup -- the indexes could not be resolved (stderr says what to pass or edit);
@@ -83,8 +85,37 @@ param(
 $ErrorActionPreference = 'Stop'
 $bundler = Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')   # functions only; Resolve-DragLintEngine
-. (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
 if (-not $PairsFile) { $PairsFile = Resolve-ReportPairsFile }
+# The IDE plugin's REPORT_QUESTIONS: -Question id -> menu caption; the header phrase is the caption without its '...'.
+# Also DRagLint.Charts.Question's QUESTION_CAPTIONS. Test-AskReport AR-CAPTIONS compares this table with the plugin's.
+$script:ReportCaptions = [ordered]@{
+  'butterfly'        = 'Callers and callees (butterfly chart)...'
+  'who-calls'        = 'Who calls this routine...'
+  'what-it-calls'    = 'What this routine calls...'
+  'path'             = 'Call path from this routine to another...'
+  'effects'          = 'What this routine changes (side effects)...'
+  'touches-tables'   = 'Which tables this routine touches...'
+  'exception-paths'  = 'Which exceptions escape this routine...'
+  'crosses-boundary' = 'Does this routine leave the process...'
+  'protocol-trace'   = 'Where this protocol command travels...'
+  'change-impact'    = 'What a change here would break...'
+  'tested-by'        = 'Which tests reach this code...'
+  'who-writes'       = 'Who writes this field...'
+  'who-reads'        = 'Who reads this field...'
+  'feeds-from'       = 'What feeds this control (back to the column)...'
+  'lands-where'      = 'Where this field lands in the database...'
+  'round-trip'       = 'Field round-trip (grid -> server -> SQL)...'
+  'class-surface'    = 'What this type exposes (class surface)...'
+  'hierarchy'        = 'Ancestors and descendants (hierarchy)...'
+  'wiring'           = 'Who registers and resolves this interface...'
+  'event-wiring'     = 'Which handler runs on which event (form)...'
+  'lifecycle'        = 'Form lifecycle (create -> show -> destroy)...'
+  'deps'             = 'Dependencies of this unit...'
+  'architecture'     = 'Project architecture (layered zones)...'
+  'cycles'           = 'Circular unit dependencies...'
+  'consumers'        = 'Who uses this table or column...'
+  'shown-where'      = 'Where this database column is shown...'
+}
 $answer = New-Object System.Collections.Generic.List[string]
 
 function Stop-Ask([int] $Code, [string] $Message) {
@@ -154,6 +185,19 @@ $exitCode = 0
 try {
   # ---- the engine (R2): a missing one is a setup stop that says where it looked
   try { $Engine = Resolve-DragLintEngine $Engine } catch { Stop-Ask 2 $_.Exception.Message }
+
+  # ---- the default (DocInsight) answer is the engine's: `drag-lint ask` with the same arguments -----------
+  if (-not $Plain -and -not $ResolveOnly) {
+    $ea = @('ask', $Question, '--target', $Target)
+    $flag = [ordered]@{ To = '--to'; Project = '--project'; In = '--in'; DbPath = '--db'; ServerDbPath = '--server-db'; SqlDbPath = '--sql-db'
+                         CounterpartDb = '--counterpart-db'; Depth = '--depth'; Cap = '--cap'; SurfaceCap = '--surface-cap'; Control = '--control'
+                         Mode = '--mode'; MaxRows = '--max-rows'; OutRoot = '--out-root'; PairsFile = '--pairs-file' }
+    foreach ($k in $flag.Keys) { if ($PSBoundParameters.ContainsKey($k) -and "$($PSBoundParameters[$k])" -ne '') { $ea += @($flag[$k], "$($PSBoundParameters[$k])") } }
+    if ($AllowStale) { $ea += '--allow-stale' }
+    if ($Open)       { $ea += '--open' }
+    & $Engine @ea
+    exit $LASTEXITCODE
+  }
 
   # ---- the question -------------------------------------------------------------------
   $valid = @((Get-Command $bundler).Parameters['Question'].Attributes |
@@ -354,12 +398,8 @@ try {
       foreach ($txt in $notShown) { $answer.Add("  ... $txt") }
       if ($rows.Count -gt $MaxRows) { $answer.Add("  ... $($rows.Count - $MaxRows) more row(s) not printed here (-MaxRows $MaxRows): $dotPath") }
     }
-    # ---- 6. the answer: plain, or (the default) the DocInsight block the IDE's Reports menu makes of it --------
-    if ($Plain) { foreach ($a in $answer) { Write-Output $a } }
-    else {
-      $doc = Format-ReportAsDocInsight $Question $(if ($To) { "$Target -> $To" } else { $Target }) (Get-Date) ($answer -join "`r`n")
-      foreach ($a in ($doc.TrimEnd("`r", "`n") -split "`r`n")) { Write-Output $a }
-    }
+    # ---- 6. the answer (plain: the default mode was delegated to `drag-lint ask` above) -------------------
+    foreach ($a in $answer) { Write-Output $a }
   }
 } catch {
   $exitCode = $(if ($_.Exception.Data.Contains('AskExit')) { [int]$_.Exception.Data['AskExit'] } else { 1 })

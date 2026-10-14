@@ -1,0 +1,97 @@
+# ask
+
+Asks one report question -- who writes this field, which tables this routine
+touches, what this unit depends on, and the other 23 -- and prints the answer as
+text. Reach for it when you want the answer on stdout (an agent, a script, a
+terminal) rather than in the IDE: it is the same answer the **drag-lint > Reports**
+menu puts on the clipboard, because that menu now runs this verb.
+
+## What it answers
+
+Every question of the chart pipeline, by id:
+
+`butterfly`, `who-calls`, `what-it-calls`, `path`, `effects`, `touches-tables`,
+`exception-paths`, `crosses-boundary`, `protocol-trace`, `change-impact`,
+`tested-by`, `who-writes`, `who-reads`, `feeds-from`, `lands-where`,
+`round-trip`, `class-surface`, `hierarchy`, `wiring`, `event-wiring`,
+`lifecycle`, `deps`, `architecture`, `cycles`, `consumers`, `shown-where`.
+
+Each id has its own page (`ask-<id>`) saying what to select and how to read
+the chart.
+
+## Running it from the CLI
+
+```
+drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <index>]
+              [--to <routine B>] [--server-db <idx>] [--sql-db <idx>] [--counterpart-db <idx>]
+              [--depth N] [--cap N] [--surface-cap N] [--control <C>] [--mode write|read|both] [--max-rows N]
+              [--out-root <dir>] [--pairs-file <report-pairs.json>] [--allow-stale] [--plain] [--open] [--resolve-only]
+```
+
+| Flag | Meaning |
+|---|---|
+| `<question>` | The question id (any case; it is matched and lower-cased). `--question <id>` works too. |
+| `--target <T>` | What the question is about: a routine, field, form control, type, unit, table or column. Required. |
+| `--project <P.dproj>` | The project whose index answers, resolved with `resolve-dbs --project`. |
+| `--in <U.pas>` | Any unit or form of the project; resolved with `resolve-dbs --in`. When several indexes hold the unit, the one `report-pairs.json` pairs is taken; otherwise pass `--project`. |
+| `--db <index>` | The project index itself, skipping resolution (never its freshness check). |
+| `--to <B>` | Routine B of the `path` question (`--target` is routine A). |
+| `--server-db`, `--sql-db` | The SERVER and SQL-script indexes that `round-trip`, `lands-where`, `consumers` and `feeds-from` also read. Default: the pair in `report-pairs.json`. |
+| `--counterpart-db` | The other side of `crosses-boundary`. Default: the pair's other index. |
+| `--depth`, `--cap`, `--surface-cap`, `--control`, `--mode` | Passed to the chart, as the question's page describes. |
+| `--max-rows N` | Rows printed from the chart (default 80). |
+| `--out-root <dir>` | Where the bundle folder (chart, page, trace) is written. Default `%TEMP%\drag-lint-reports`. |
+| `--pairs-file <f>` | The pairing file. Default `%APPDATA%\drag-lint\report-pairs.json`, else the repository's `charts\report-pairs.json`. |
+| `--allow-stale` | Answer from a stale index anyway, with a note on stderr. |
+| `--plain` | Print the plain answer instead of the DocInsight block. |
+| `--open` | Open the bundle's `index.html` in the browser. |
+| `--resolve-only` | Print the indexes it would read (`PROJECT`, `SERVER`, `SQL`, `COUNTERPART` lines) and stop. |
+
+## What comes back
+
+By default, a DocInsight `/// <remarks>` block ready to paste above a
+declaration: the report sentence (question, target, date and time, engine
+version), the `COMMAND` line that reruns it, then the findings -- anchors read
+`(File.pas:line)`, a capped chart says how many rows it left out.
+
+With `--plain`, the plain answer: the sentence, `COMMAND`, `BUNDLE <folder>`,
+one `INDEX <db>` line per index read (`(server)` / `(sql)` / `(counterpart)`
+after the first), then the text -- the whole trace for `round-trip`, otherwise a
+`CHART` line with the counts, `TARGET <name> @File.pas:line` for the chart's own
+selection and one `<name> @File.pas:line` row per result.
+
+Exit codes: 0 answered; 1 the question was refused (the reason is on stderr);
+2 setup -- usage, or the indexes could not be resolved (stderr says what to pass
+or edit); 3 an index is stale -- stderr names it and prints the incremental
+reindex command (`index --project '<p>' --db '<db>'` or `index --all --only
+<Section>`). It never indexes anything itself. Every refusal line on stderr
+starts with `ask-report:`.
+
+## How it answers
+
+The questions ported to Delphi (`touches-tables`, `shown-where`, `deps`,
+`class-surface`, `event-wiring`, `tested-by`, `change-impact`, `crosses-boundary`,
+`protocol-trace`, `lifecycle`, `effects`) are answered inside the engine, from the
+live index. `crosses-boundary` is answered there only when its counterpart index is
+known (`--counterpart-db`, or the pair in `report-pairs.json`); without one it goes
+to the script, which draws the one side and says so. Every other question is handed
+to `charts\src\Ask-Report.ps1 -Plain`, which the engine runs itself -- so those
+need PowerShell 7 and the repository's chart scripts. Either way the text is the
+same: the ported questions are held to the PowerShell output byte for byte by
+the parity harness (`charts\src\Test-Parity.ps1 -Mode Question`).
+
+`charts\src\Ask-Report.ps1` still works; without `-Plain` it now runs this verb
+with the same arguments.
+
+## Examples
+
+```
+drag-lint ask who-writes --target Blueprint4.TfrmBlueprint4.FNoRecursion --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
+drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1FtrsVNum --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --plain
+drag-lint ask deps --target uPipeSessionBuilder --in C:\Projects\DB\ORM3\SERVER\uPipeSessionBuilder.pas --open
+```
+
+## Related
+
+- [compare](compare) -- rerun a saved answer and see what changed.
+- [Charts and the IDE](Charts-and-the-IDE) -- the Reports menu, bundles, clickable rows.

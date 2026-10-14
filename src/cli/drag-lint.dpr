@@ -225,6 +225,15 @@ uses
   DRagLint.Charts.Q.ShownWhere in '..\charts\DRagLint.Charts.Q.ShownWhere.pas',
   DRagLint.Charts.Q.Deps in '..\charts\DRagLint.Charts.Q.Deps.pas',
   DRagLint.Charts.Producer.Delphi in '..\charts\DRagLint.Charts.Producer.Delphi.pas',
+  DRagLint.Charts.AskVerb in '..\charts\DRagLint.Charts.AskVerb.pas',
+  DRagLint.Charts.Q.ClassSurface in '..\charts\DRagLint.Charts.Q.ClassSurface.pas',
+  DRagLint.Charts.Q.EventWiring in '..\charts\DRagLint.Charts.Q.EventWiring.pas',
+  DRagLint.Charts.Q.TestedBy in '..\charts\DRagLint.Charts.Q.TestedBy.pas',
+  DRagLint.Charts.Q.ChangeImpact in '..\charts\DRagLint.Charts.Q.ChangeImpact.pas',
+  DRagLint.Charts.Q.CrossesBoundary in '..\charts\DRagLint.Charts.Q.CrossesBoundary.pas',
+  DRagLint.Charts.Q.ProtocolTrace in '..\charts\DRagLint.Charts.Q.ProtocolTrace.pas',
+  DRagLint.Charts.Q.Lifecycle in '..\charts\DRagLint.Charts.Q.Lifecycle.pas',
+  DRagLint.Charts.Q.Effects in '..\charts\DRagLint.Charts.Q.Effects.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

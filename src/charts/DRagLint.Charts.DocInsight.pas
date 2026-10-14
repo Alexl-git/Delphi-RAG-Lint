@@ -10,10 +10,11 @@ unit DRagLint.Charts.DocInsight;
   keeps FormatReportAsDocInsight as a thin forwarder that looks the caption up
   in its catalog and calls FormatAnswerAsDocInsight.
 
-  charts\src\Report.DocInsight.ps1 is a line-for-line PowerShell port of this
-  unit; charts\fixtures\docinsight holds the pairs both must reproduce byte for
-  byte (tests\reportstext ReportTextTests and charts\src\Test-AskReport.ps1
-  AR-DOC-PORT). }
+  It is the ONE formatter: `drag-lint ask` (and so Ask-Report.ps1's default
+  mode, which delegates to it) and the IDE's Reports menu both call it. Its
+  PowerShell port, charts\src\Report.DocInsight.ps1, was deleted 2026-10-14;
+  charts\fixtures\docinsight holds the pairs it must reproduce byte for byte
+  (tests\reportstext ReportTextTests). }
 
 interface
 

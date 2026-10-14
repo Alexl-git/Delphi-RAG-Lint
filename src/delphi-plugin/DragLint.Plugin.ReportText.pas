@@ -3,7 +3,7 @@ unit DragLint.Plugin.ReportText;
 { The IDE-free half of the drag-lint > Reports submenu.
 
   WHY IT IS ITS OWN UNIT. DragLint.Plugin.Reports builds the menu, reads the
-  caret and runs charts\src\Ask-Report.ps1; all of that is ToolsAPI-bound and
+  caret and runs `drag-lint ask`; all of that is ToolsAPI-bound and
   cannot be compiled into a console test. Everything that decides WHAT is sent
   and WHAT the user is handed back lives here instead, with no ToolsAPI and no
   VCL, so tests\reportstext\ReportTextTests.dpr (DUnitX) can pin it:
@@ -17,7 +17,7 @@ unit DragLint.Plugin.ReportText;
       The formatter itself lives in src\charts\DRagLint.Charts.DocInsight
       (the engine must not link a plugin unit); this unit only adds the
       catalog caption and forwards;
-    the small parsers -- typeat JSON, a DFM root object line, Ask-Report's
+    the small parsers -- typeat JSON, a DFM root object line, the ask verb's
       refusal reason and its stale-index reindex commands. }
 
 interface
@@ -39,7 +39,7 @@ type
     rtkProject,   { the whole project: no target to choose }
     rtkName);     { a typed table or column name }
 
-  /// <summary>One question of charts\src\Ask-Report.ps1 as the menu offers it.</summary>
+  /// <summary>One question of `drag-lint ask` as the menu offers it.</summary>
   TReportQuestion = record
     /// <summary>The -Question value, e.g. 'who-writes'.</summary>
     Id     : string;
@@ -49,13 +49,13 @@ type
     Kind   : TReportTargetKind;
   end;
 
-  /// <summary>The two incremental reindex shapes Ask-Report.ps1 prints for a
+  /// <summary>The two incremental reindex shapes `drag-lint ask` prints for a
   /// stale index.</summary>
   TReindexKind = (
     rikProject,   { index --project '<x.dproj>' --db '<db>' }
     rikSection);  { index --all --only <Section> }
 
-  /// <summary>One reindex command parsed from Ask-Report's stale-index
+  /// <summary>One reindex command parsed from the ask verb's stale-index
   /// message (exit 3).</summary>
   TReindexCommand = record
     /// <summary>Which of the two shapes it is.</summary>
@@ -122,7 +122,7 @@ function ReportGroupCaption(pKind: TReportTargetKind): string;
 /// <returns>True when the id is in REPORT_QUESTIONS.</returns>
 function FindReportQuestion(const pId: string; out pQuestion: TReportQuestion): Boolean;
 
-/// <summary>Turns an Ask-Report.ps1 stdout answer into a DocInsight remarks
+/// <summary>Turns a `drag-lint ask --plain` stdout answer into a DocInsight remarks
 /// block ready to paste above a declaration.</summary>
 /// <param name="pQuestionId">The question that was asked.</param>
 /// <param name="pTarget">The target that was sent.</param>
@@ -204,55 +204,48 @@ function QuestionTakesSecondRoutine(const pQuestionId: string): Boolean;
 /// quote, which would break the quoted command-line argument.</returns>
 function IsValidReportTarget(const pTarget: string): Boolean;
 
-/// <summary>The command line that runs one question through Ask-Report.ps1.</summary>
-/// <param name="pPwsh">Full path to pwsh.exe.</param>
-/// <param name="pScript">Full path to Ask-Report.ps1.</param>
-/// <param name="pQuestionId">The -Question value.</param>
-/// <param name="pTarget">The -Target value; must pass IsValidReportTarget.</param>
-/// <param name="pInFile">The active file, passed as -In so the script resolves
-/// the project index itself.</param>
-/// <param name="pEngine">The drag-lint.exe the plugin uses, passed as -Engine.</param>
+/// <summary>The command line that runs one question through the engine's `ask` verb.</summary>
+/// <param name="pEngine">The drag-lint.exe the plugin uses.</param>
+/// <param name="pQuestionId">The question id, e.g. 'who-writes'.</param>
+/// <param name="pTarget">The --target value; must pass IsValidReportTarget.</param>
+/// <param name="pInFile">The active file, passed as --in so the engine resolves the
+/// project index itself.</param>
 /// <param name="pTo">Routine B for a question that takes one (see
-/// QuestionTakesSecondRoutine), passed as -To; '' omits -To. Must pass
+/// QuestionTakesSecondRoutine), passed as --to; '' omits --to. Must pass
 /// IsValidReportTarget when given.</param>
-/// <returns>A quoted command line carrying -Plain and ending in -Open, so a
-/// chart opens in the browser.</returns>
-/// <remarks>-Plain is load-bearing: HandleReportDone wraps the answer in its
-/// own DocInsight block (FormatReportAsDocInsight), and without -Plain
-/// Ask-Report.ps1 would print a block of its own, wrapped twice.</remarks>
-function BuildAskReportCmdLine(const pPwsh, pScript, pQuestionId, pTarget, pInFile, pEngine: string;
-  const pTo: string = ''): string;
-
-/// <summary>The reason Ask-Report.ps1 gave for a non-zero exit.</summary>
+/// <returns>"engine" ask &lt;id&gt; --target "t" [--to "b"] --in "f" --plain --open, so a
+/// chart opens in the browser. Every value is quoted the way CommandLineToArgvW splits it (an
+/// embedded quote becomes \", backslashes before a quote or the closing quote are doubled), so
+/// the engine receives each value exactly.</returns>
+/// <remarks>--plain is load-bearing: HandleReportDone wraps the answer in its
+/// own DocInsight block (FormatReportAsDocInsight), and without --plain the
+/// verb would print a block of its own, wrapped twice. No pwsh and no
+/// Ask-Report.ps1 are needed here: the engine answers the ported questions
+/// in-process and runs Ask-Report.ps1 itself for the rest.</remarks>
+function BuildAskCmdLine(const pEngine, pQuestionId, pTarget, pInFile: string; const pTo: string = ''): string;
+/// <summary>The reason `drag-lint ask` gave for a non-zero exit.</summary>
 /// <param name="pOutput">The captured stdout+stderr.</param>
 /// <returns>Everything from the first 'ask-report:' line on, with that prefix
 /// removed; the trimmed output when there is no such line.</returns>
 function AskReportReason(const pOutput: string): string;
+/// <summary>The message for an engine that predates the `ask` verb.</summary>
+/// <param name="pExit">The exit code of the ask run.</param>
+/// <param name="pOutput">The captured stdout+stderr.</param>
+/// <returns>'The drag-lint engine is too old for the Reports menu (no "ask" command) --
+/// update the engine.' when pExit is 2 and a line of pOutput reads 'unknown command: ask'
+/// (any case, any prefix such as 'ERROR: '); '' otherwise.</returns>
+/// <remarks>An old engine answers `ask` with that line followed by its whole help banner,
+/// which AskReportReason would otherwise put into the dialog.</remarks>
+function AskEngineTooOldMessage(pExit: Integer; const pOutput: string): string;
 
 /// <summary>The incremental reindex commands in a stale-index message.</summary>
 /// <param name="pOutput">The captured output of a run that exited 3.</param>
 /// <returns>One entry per recognised command, in order.</returns>
-/// <remarks>Accepts exactly the two shapes Ask-Report.ps1 prints -- `index
+/// <remarks>Accepts exactly the two shapes `drag-lint ask` prints -- `index
 /// --project '&lt;p&gt;' --db '&lt;db&gt;'` and `index --all --only
 /// &lt;Section&gt;` -- and nothing else: a folder target (which would widen a
 /// project DB into a directory DB) and a --rebuild are never returned.</remarks>
 function ParseReindexCommands(const pOutput: string): TArray<TReindexCommand>;
-
-/// <summary>Where Ask-Report.ps1 may live relative to the engine, in search order.</summary>
-/// <param name="pEngineExe">Full path to the drag-lint.exe the plugin uses.</param>
-/// <returns>Three expanded paths: first the flat installed layout (the chart
-/// scripts beside drag-lint.exe), then the v2 installed layout ({app}\charts,
-/// a sibling of {app}\bin), then the repository layout (charts\src, two
-/// folders above third_party\dll-win64).</returns>
-/// <remarks>Pure: touches no file. The caller takes the first that exists.
-/// Nothing is looked up beside the plugin BPL -- that was removed on purpose
-/// (see DragLint.Plugin.ExeResolver).</remarks>
-function AskReportCandidates(const pEngineExe: string): TArray<string>;
-
-/// <summary>The message shown when no Ask-Report.ps1 candidate exists.</summary>
-/// <param name="pCandidates">The paths searched, as AskReportCandidates returned them.</param>
-/// <returns>A multi-line message naming every searched path, in search order.</returns>
-function AskReportNotFoundText(const pCandidates: TArray<string>): string;
 
 implementation
 
@@ -384,14 +377,47 @@ begin
   Result:= (Trim(pTarget) <> '') and (Pos('"', pTarget) = 0);
 end;
 
-function BuildAskReportCmdLine(const pPwsh, pScript, pQuestionId, pTarget, pInFile, pEngine: string;
-  const pTo: string = ''): string;
+{ Quotes one argument for CreateProcess the way CommandLineToArgvW splits it: n backslashes
+  before an embedded quote become 2n+1, n before the closing quote become 2n, others stay.
+  REFERENCE: the engine's QuoteArg in src\charts\DRagLint.Charts.Producer.PowerShell.pas --
+  same rules, reproduced here because the plugin BPL does not link the charts units. }
+function QuoteCmdArg(const pValue: string): string;
+const
+  QUOTE: Char = '"';
+  BACKSLASH: Char = '\';
+var
+  Slashes: Integer;
 begin
-  var ToArg: string:= if Trim(pTo) = '' then '' else Format(' -To "%s"', [Trim(pTo)]);
-  Result:= Format('"%s" -NoProfile -NonInteractive -File "%s" -Question %s -Target "%s"%s -In "%s" -Engine "%s" -Plain -Open',
-                  [pPwsh, pScript, pQuestionId, Trim(pTarget), ToArg, pInFile, pEngine]);
+  var SB:= TStringBuilder.Create;
+  try
+    SB.Append(QUOTE);
+    Slashes:= 0;
+    for var C in pValue do
+    begin
+      if C = BACKSLASH then
+        Inc(Slashes)
+      else
+      begin
+        if C = QUOTE then SB.Append(BACKSLASH, Slashes * 2 + 1)
+        else SB.Append(BACKSLASH, Slashes);
+        Slashes:= 0;
+        SB.Append(C);
+      end;
+    end;
+    SB.Append(BACKSLASH, Slashes * 2);
+    SB.Append(QUOTE);
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
 end;
 
+function BuildAskCmdLine(const pEngine, pQuestionId, pTarget, pInFile: string; const pTo: string = ''): string;
+begin
+  var ToArg: string:= if Trim(pTo) = '' then '' else ' --to ' + QuoteCmdArg(Trim(pTo));
+  Result:= Format('%s ask %s --target %s%s --in %s --plain --open',
+    [QuoteCmdArg(pEngine), pQuestionId, QuoteCmdArg(Trim(pTarget)), ToArg, QuoteCmdArg(pInFile)]);
+end;
 function AskReportReason(const pOutput: string): string;
 var
   SB     : TStringBuilder;
@@ -416,6 +442,19 @@ begin
   finally
     SB.Free;
   end;
+end;
+
+function AskEngineTooOldMessage(pExit: Integer; const pOutput: string): string;
+const
+  UNKNOWN_ASK = 'unknown command: ask';
+  EXIT_SETUP = 2;  { the engine's exit code for an unknown command }
+begin
+  Result:= '';
+  if pExit <> EXIT_SETUP then
+    Exit;
+  for var Line: string in SplitLines(pOutput) do
+    if EndsText(UNKNOWN_ASK, Trim(Line)) then
+      Exit('The drag-lint engine is too old for the Reports menu (no "ask" command) -- update the engine.');
 end;
 
 function ParseReindexCommands(const pOutput: string): TArray<TReindexCommand>;
@@ -443,25 +482,6 @@ begin
     end;
     Result:= Result + [Cmd];
   end;
-end;
-
-function AskReportCandidates(const pEngineExe: string): TArray<string>;
-const
-  ASK_REPORT_NAME = 'Ask-Report.ps1';
-  INSTALLED_CHARTS_REL = '..\charts\';
-  REPO_CHARTS_REL = '..\..\charts\src\';
-var
-  Dir: string;
-begin
-  Dir:= ExtractFilePath(pEngineExe);
-  Result:= [ExpandFileName(Dir + ASK_REPORT_NAME), ExpandFileName(Dir + INSTALLED_CHARTS_REL + ASK_REPORT_NAME),
-    ExpandFileName(Dir + REPO_CHARTS_REL + ASK_REPORT_NAME)];
-end;
-
-function AskReportNotFoundText(const pCandidates: TArray<string>): string;
-begin
-  Result:= 'Ask-Report.ps1 was not found, so no report can run. Looked in:';
-  for var Path: string in pCandidates do Result:= Result + CRLF + '  ' + Path;
 end;
 
 end.

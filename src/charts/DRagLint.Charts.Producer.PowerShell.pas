@@ -43,8 +43,8 @@ type
 /// <param name="pExplicit">A path the caller insists on; '' skips this step.</param>
 /// <param name="pWhy">Empty on success; otherwise one line per place looked, each with the path tried.</param>
 /// <returns>The full path of the first existing candidate, in this order: pExplicit; the environment
-/// variable DRAGLINT_ASK_REPORT; Ask-Report.ps1 beside the running exe; ..\..\charts\src\Ask-Report.ps1
-/// from the exe folder; ..\..\..\..\charts\src\Ask-Report.ps1 from the exe folder. '' when none exists.</returns>
+/// variable DRAGLINT_ASK_REPORT; Ask-Report.ps1 beside the running exe; ..\charts\Ask-Report.ps1 from the exe
+/// folder (the v2 installed layout, {app}\charts beside {app}\bin); ..\..\charts\src\Ask-Report.ps1 from the exe folder; ..\..\..\..\charts\src\Ask-Report.ps1 from the exe folder. '' when none exists.</returns>
 function ResolveAskReportScript(const pExplicit: string; out pWhy: string): string;
 
 /// <summary>Finds PowerShell 7.</summary>
@@ -56,15 +56,23 @@ function ResolvePwsh: string;
 /// <param name="pScript">Path of Ask-Report.ps1.</param>
 /// <param name="pEngine">Path of the engine exe, passed as -Engine.</param>
 /// <param name="pCommand">The question and its explicit arguments.</param>
-/// <param name="pOptions">DbOverride and AllowStale are appended when set.</param>
+/// <param name="pOptions">DbOverride, AllowStale, the three other index overrides, OutRoot and PairsFile are appended when set.</param>
 /// <returns>"pwsh" -NoProfile -NonInteractive -File "script" -Question q [-Target "t"] [-To "b"]
 /// [-Project "p" | -In "f"] [-Depth n] [-Cap n] [-SurfaceCap n] [-Control "c"] [-Mode m] [-MaxRows n]
-/// -Engine "exe" -Plain [-DbPath "db"] [-AllowStale]. Only arguments the command carries are passed;
-/// never -Open.</returns>
+/// -Engine "exe" -Plain [-DbPath "db"] [-AllowStale] [-ServerDbPath "s"] [-SqlDbPath "q"] [-CounterpartDb "c"]
+/// [-OutRoot "dir"] [-PairsFile "f"]. Only arguments the command carries and options that are set are
+/// passed; never -Open.</returns>
 /// <remarks>Quoted values escape embedded quotes and trailing backslashes the way
 /// CommandLineToArgvW expects, so a path ending in a backslash cannot swallow the next argument.</remarks>
 function BuildProducerCommandLine(const pPwsh, pScript, pEngine: string; const pCommand: TReportCommand;
   const pOptions: TProduceOptions): string;
+
+/// <summary>Quotes one command-line argument for CreateProcess.</summary>
+/// <param name="pValue">The argument, any text.</param>
+/// <returns>pValue in double quotes, escaped the way CommandLineToArgvW splits it: n backslashes
+/// before an embedded quote become 2n+1, n before the closing quote become 2n, others stay.</returns>
+/// <remarks>Pure; thread-safe.</remarks>
+function QuoteArg(const pValue: string): string;
 
 implementation
 
@@ -85,8 +93,8 @@ const
   QUOTE: Char = '"';
   BACKSLASH: Char = '\';
   MSG_SEP = '; ';
-  PLACE_LABELS: array[0..4] of string = ('explicit path', 'environment variable DRAGLINT_ASK_REPORT',
-    'beside the exe', 'two folders up, charts\src', 'four folders up, charts\src');
+  PLACE_LABELS: array[0..5] of string = ('explicit path', 'environment variable DRAGLINT_ASK_REPORT',
+    'beside the exe', 'installed v2, {app}\charts', 'two folders up, charts\src', 'four folders up, charts\src');
 
 { Quotes one argument for CreateProcess the way CommandLineToArgvW splits it: n backslashes
   before an embedded quote become 2n+1 (each doubled, plus one escaping the quote), n before the
@@ -155,6 +163,11 @@ begin
     SB.Append(' -Engine ').Append(QuoteArg(pEngine)).Append(' -Plain');
     if pOptions.DbOverride <> '' then SB.Append(' -DbPath ').Append(QuoteArg(pOptions.DbOverride));
     if pOptions.AllowStale then SB.Append(' -AllowStale');
+    if pOptions.ServerDbOverride <> '' then SB.Append(' -ServerDbPath ').Append(QuoteArg(pOptions.ServerDbOverride));
+    if pOptions.SqlDbOverride <> '' then SB.Append(' -SqlDbPath ').Append(QuoteArg(pOptions.SqlDbOverride));
+    if pOptions.CounterpartDbOverride <> '' then SB.Append(' -CounterpartDb ').Append(QuoteArg(pOptions.CounterpartDbOverride));
+    if pOptions.OutRoot <> '' then SB.Append(' -OutRoot ').Append(QuoteArg(pOptions.OutRoot));
+    if pOptions.PairsFile <> '' then SB.Append(' -PairsFile ').Append(QuoteArg(pOptions.PairsFile));
     Result:= SB.ToString;
   finally
     SB.Free;
@@ -178,6 +191,7 @@ begin
   var ExeDir:= ExtractFilePath(ParamStr(0));
   var Paths:= TArray<string>.Create(pExplicit, GetEnvironmentVariable(ENV_ASK_REPORT),
     ExeDir + SCRIPT_NAME,
+    ExeDir + '..\charts\' + SCRIPT_NAME,
     ExeDir + '..\..\charts\src\' + SCRIPT_NAME,
     ExeDir + '..\..\..\..\charts\src\' + SCRIPT_NAME);
   var Why:= TStringList.Create;

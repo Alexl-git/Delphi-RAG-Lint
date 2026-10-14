@@ -257,7 +257,7 @@ Ask a question about a symbol and get a clickable chart.
 
 | Feature | Surfaces | Status |
 |---|---|---|
-| [ask (engine verb)](Diagrams-and-Charts) |  | planned |
+| [ask](ask) | `ask`; drag-lint > Reports |  |
 | [Chart questions](Diagrams-and-Charts) | 26 questions; `charts\src\Ask-Report.ps1`; `charts\src\New-DiagramArtifact.ps1` |  |
 | [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md` |  |
 | [Compare a report with current code](compare) | `compare`; `charts\src\Ask-Report.ps1 -Plain prints the report header` |  |

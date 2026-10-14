@@ -1,6 +1,7 @@
 unit ChartsTests.ProducerDelphi;
 
-{ Cases for DRagLint.Charts.Producer.Delphi: which producer compare gets, what is answered
+{ Cases for DRagLint.Charts.Producer.Delphi: which producer compare gets (the Delphi one, on live
+  indexes), that the clone guard still holds where live is not allowed, what is answered
   in-process and what is delegated, and the exit codes of Ask-Report's contract. The
   in-process cases run against the FROZEN clones (a missing clone passes with a note). }
 
@@ -32,10 +33,12 @@ type
     FProducer: IReportProducer;
     FOutRoot : string;
     function Clone(const pName: string; out pPath: string): Boolean;
+    function BareScriptFolder: string;
   public
     [Setup] procedure Setup;
     [TearDown] procedure TearDown;
-    [Test] procedure CompareStillGetsThePowerShellProducer;
+    [Test] procedure CompareGetsTheDelphiProducerOnLiveIndexes;
+    [Test] procedure CloneGuardStaysOnWhenLiveIsNotAllowed;
     [Test] procedure UnportedQuestionFallsBack;
     [Test] procedure ProjectWithoutIndexFallsBack;
     [Test] procedure PortedQuestionIsAnsweredInProcess;
@@ -45,13 +48,19 @@ type
     [Test] procedure UnknownTargetIsExitOne;
     [Test] procedure CloneGuardRefusalIsSetup;
     [Test] procedure UnexpectedFailureFallsBack;
+    [Test] procedure CrossesBoundaryWithoutCounterpartFallsBack;
+    [Test] procedure CrossesBoundaryWithCounterpartIsInProcess;
+    [Test] procedure PortedFallbackWithoutEmitterScriptIsSetup;
+    [Test] procedure PortedFallbackWithEmitterScriptFallsBack;
+    [Test] procedure UnexpectedFailureWithoutEmitterScriptIsSetup;
+    [Test] procedure EveryPortedIdHasAnEmitterScriptInTheRepo;
   end;
 
 implementation
 
 uses
   System.SysUtils, System.IOUtils, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness,
-  DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Producer.Delphi;
+  DRagLint.Charts.Question, DRagLint.Charts.Producer.Delphi;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
@@ -62,8 +71,10 @@ const
   CLIENT_HISTORY = 'CLIENT-Micronite2027.sqlite.pre-1.10';
   NO_SUCH_TARGET = 'NoSuchUnit.TNoSuchClass.NoSuchMethod';
   TT_TARGET = 'uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation';
+  CB_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
   EXIT_SETUP = 2;
   STUB_EXIT = 42;
+  NOT_INSTALLED = 'crosses-boundary is answered by the engine in this install, and its PowerShell fallback is not installed: ';
 
 function RepoRoot: string;
 begin
@@ -145,11 +156,32 @@ begin
     Assert.Pass('clone missing: ' + pName);
 end;
 
-procedure TProducerDelphiTests.CompareStillGetsThePowerShellProducer;
+procedure TProducerDelphiTests.CompareGetsTheDelphiProducerOnLiveIndexes;
 begin
+  { owner ruling 2026-10-14: compare answers ported questions in-process on the LIVE index }
   var P:= ProducerForCompare;
   { P is an INTERFACE: 'as TObject' is the interface-to-object cast, not a redundant one }
-  Assert.IsTrue((P as TObject) is TPowerShellProducer, 'compare must keep the PowerShell producer until the owner rules');  // dl:ok redundant-as-tobject@63e2 -- FALSE POSITIVE: P is an IReportProducer, and 'as TObject' is the only interface-to-object cast (logged to draglint-gaps.log)
+  var O:= P as TObject;  // dl:ok redundant-as-tobject@60a8 -- FALSE POSITIVE: P is an IReportProducer, and 'as TObject' is the only interface-to-object cast (logged to draglint-gaps.log)
+  Assert.IsTrue(O is TDelphiProducer, 'compare gets the Delphi producer');
+  Assert.IsTrue(TDelphiProducer(O).AllowLiveDb, 'live indexes allowed; the staleness refusal protects them');
+  Assert.Contains(P.Describe, 'Delphi in-process (');
+end;
+
+procedure TProducerDelphiTests.CloneGuardStaysOnWhenLiveIsNotAllowed;
+begin
+  { the parity / test path: a valid, fresh index outside the clone root is refused by the guard }
+  TDirectory.CreateDirectory(FOutRoot);
+  var Live:= TPath.Combine(FOutRoot, 'live.sqlite');
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(Live, False);  // dl:ok write-only-local@e429 -- REVIEWED 2026-10-14: held only so the store CREATES the index file; released (nil) before Produce opens it
+  Store:= nil;
+  FProducer:= TDelphiProducer.Create(FKeep, False, FOutRoot);
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Live;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  var R:= FProducer.Produce(Cmd('deps', 'X'), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.StartsWith('refusing a non-clone database: ', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.UnportedQuestionFallsBack;
@@ -286,6 +318,90 @@ begin
   Assert.AreEqual(STUB_EXIT, R.ExitCode);
   Assert.Contains(FProducer.Describe, 'Delphi in-process failed (');
   Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryWithoutCounterpartFallsBack;
+begin
+  { Ask-Report would pair the far side from report-pairs.json, which only the fallback reads }
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= 'any.sqlite';
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(1, FFallback.Calls);
+  Assert.AreEqual(STUB_EXIT, R.ExitCode);
+  Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryWithCounterpartIsInProcess;
+var
+  Db, Other: string;
+begin
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SERVER_CLONE, Other) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.CounterpartDbOverride:= Other;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.Contains(R.Text, #13#10'INDEX ' + Other + ' (counterpart)'#13#10'CHART crosses-boundary ' + CB_TARGET +
+    ' -- 2 commands / 1 transport calls'#13#10);
+  Assert.AreEqual<Integer>(2, Length(R.IndexPaths));
+  Assert.AreEqual('Delphi in-process (crosses-boundary)', FProducer.Describe);
+end;
+
+{ a folder holding only an empty Ask-Report.ps1: an installed copy, where the ported Emit-*.ps1 are not shipped }
+function TProducerDelphiTests.BareScriptFolder: string;
+begin
+  var Dir:= TPath.Combine(FOutRoot, 'bin');
+  TDirectory.CreateDirectory(Dir);
+  Result:= TPath.Combine(Dir, 'Ask-Report.ps1');
+  TFile.WriteAllText(Result, '');
+end;
+
+procedure TProducerDelphiTests.PortedFallbackWithoutEmitterScriptIsSetup;
+begin
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= 'any.sqlite';
+  O.ScriptPath:= BareScriptFolder;
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual(NOT_INSTALLED + 'no counterpart index given (--counterpart-db / -CounterpartDb, or report-pairs.json)', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls, 'a fallback that cannot run is not called');
+end;
+
+procedure TProducerDelphiTests.PortedFallbackWithEmitterScriptFallsBack;
+begin
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= 'any.sqlite';
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(1, FFallback.Calls, 'the repo has Emit-CrossesBoundary.ps1, so the fallback answers');
+  Assert.AreEqual(STUB_EXIT, R.ExitCode);
+end;
+
+procedure TProducerDelphiTests.UnexpectedFailureWithoutEmitterScriptIsSetup;
+begin
+  var Script:= BareScriptFolder;
+  var Bad:= TPath.Combine(FOutRoot, 'corrupt.sqlite');
+  TFile.WriteAllText(Bad, 'this is not an SQLite database');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Bad;
+  O.ScriptPath:= Script;
+  var R:= FProducer.Produce(Cmd('deps', 'X'), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.StartsWith('deps is answered by the engine in this install, and its PowerShell fallback is not installed: ' +
+    'the in-process answer failed (', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls, 'a fallback that cannot run is not called');
+end;
+
+procedure TProducerDelphiTests.EveryPortedIdHasAnEmitterScriptInTheRepo;
+begin
+  var Src:= ExtractFileDir(TPath.Combine(RepoRoot, CHARTS_MARK));
+  Assert.IsTrue(Length(PortedQuestionIds) > 0, 'questions are registered');
+  for var Id in PortedQuestionIds do
+    Assert.IsTrue(TFile.Exists(TPath.Combine(Src, EmitterScriptName(Id))), Id + ' -> ' + EmitterScriptName(Id) + ' is not in charts\src');
 end;
 
 end.

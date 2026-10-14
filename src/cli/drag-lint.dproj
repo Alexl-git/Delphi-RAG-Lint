@@ -283,6 +283,15 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.ShownWhere.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Deps.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Producer.Delphi.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.AskVerb.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.ClassSurface.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.EventWiring.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.TestedBy.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.ChangeImpact.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.CrossesBoundary.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.ProtocolTrace.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Lifecycle.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Effects.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

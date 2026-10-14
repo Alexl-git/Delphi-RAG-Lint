@@ -31,6 +31,16 @@ type
     ScriptPath : string;
     /// <summary>Wall-clock limit for one question in milliseconds; 0 waits without limit.</summary>
     TimeoutMs  : Cardinal;
+    /// <summary>The SERVER index (-ServerDbPath); '' lets the producer pair it as usual.</summary>
+    ServerDbOverride     : string;
+    /// <summary>The SQL-script index (-SqlDbPath); '' lets the producer pair it as usual.</summary>
+    SqlDbOverride        : string;
+    /// <summary>The other side of crosses-boundary (-CounterpartDb); '' pairs it as usual.</summary>
+    CounterpartDbOverride: string;
+    /// <summary>Where the bundle folder is made (-OutRoot); '' keeps the producer's default.</summary>
+    OutRoot              : string;
+    /// <summary>The report-pairs.json to pair indexes from (-PairsFile); '' keeps the default.</summary>
+    PairsFile            : string;
   end;
 
   /// <summary>What a producer made of one question.</summary>

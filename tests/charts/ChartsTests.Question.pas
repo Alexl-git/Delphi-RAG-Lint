@@ -18,6 +18,7 @@ type
     [Test] procedure JsonStringEscapesAsConvertToJson;
     [Test] procedure MetaFieldsEncodeTheirType;
     [Test] procedure UnportedQuestionIsRefused;
+    [Test] procedure DotIsFoundBesideTheInstalledScripts;
   end;
 
   [TestFixture]
@@ -34,11 +35,15 @@ type
 implementation
 
 uses
-  System.SysUtils, DRagLint.Charts.ReportHeader, DRagLint.Charts.Question, DRagLint.Charts.Ask;
+  System.SysUtils, System.IOUtils, DRagLint.Charts.ReportHeader, DRagLint.Charts.Question, DRagLint.Charts.Ask;
 
 const
   MAX_ROWS_TWO = 2;
   BIG_INT = 41;
+  SHOWN_SUM = 24;
+  HALF_SUM = 2.5;
+  FIELD_COUNT = 174;
+  METHOD_COUNT = 101;
 
 function Cmd(const pQuestion: string; const pPairs: array of string): TReportCommand;
 begin
@@ -79,6 +84,13 @@ begin
   Assert.AreEqual('41', TMetaField.Int('Uses', BIG_INT).Json);
   Assert.AreEqual('true', TMetaField.Bool('AllClickable', True).Json);
   Assert.AreEqual('"FTRNAMESTR"', TMetaField.Str('Column', 'FTRNAMESTR').Json);
+  { a Measure-Object sum is a [double]: ConvertTo-Json keeps the '.0' (Emit-ClassSurface Shown) }
+  Assert.AreEqual('24.0', TMetaField.Real('Shown', SHOWN_SUM).Json);
+  Assert.AreEqual('2.5', TMetaField.RealJson(HALF_SUM));
+  { an [ordered] dictionary nested in the emitter object, as ConvertTo-Json -Depth 4 indents it }
+  Assert.AreEqual('{' + sLineBreak + '      "field": 174,' + sLineBreak + '      "method": 101' + sLineBreak + '    }',
+    TMetaField.Obj('ByKind', [TMetaField.Int('field', FIELD_COUNT), TMetaField.Int('method', METHOD_COUNT)]).Json);
+  Assert.AreEqual('{}', TMetaField.Obj('ByKind', []).Json);
 end;
 
 procedure TQuestionTests.UnportedQuestionIsRefused;
@@ -151,4 +163,27 @@ begin
     string.Join('|', Rows));
 end;
 
+procedure TQuestionTests.DotIsFoundBesideTheInstalledScripts;
+begin
+  { the installed layout: scripts in <app>\bin, Graphviz in <app>\bin\graphviz\bin. An explicit
+    DRAGLINT_DOT or a settings.json "dot" would win over this step, so the case only runs where
+    neither is set (it is the machine's choice, not this code's). }
+  if GetEnvironmentVariable('DRAGLINT_DOT') <> '' then
+    Assert.Pass('DRAGLINT_DOT is set on this machine');
+  if TFile.Exists(TPath.Combine(TPath.Combine(TPath.GetHomePath, 'drag-lint'), 'settings.json')) then
+    Assert.Pass('a settings.json exists on this machine');
+  var App:= TPath.Combine(TPath.GetTempPath, 'dl-dot-' + TGUID.NewGuid.ToString);
+  var Bin:= TPath.Combine(App, 'bin');
+  var DotDir:= TPath.Combine(TPath.Combine(Bin, 'graphviz'), 'bin');
+  TDirectory.CreateDirectory(DotDir);
+  try
+    TFile.WriteAllText(TPath.Combine(DotDir, 'dot.exe'), '');
+    var Args:= Default(TQuestionArgs);
+    Args.ChartsRoot:= App;
+    Args.ScriptDir:= Bin;
+    Assert.AreEqual(TPath.Combine(DotDir, 'dot.exe'), Args.Dot);
+  finally
+    TDirectory.Delete(App, True);
+  end;
+end;
 end.
