@@ -9,7 +9,9 @@ unit DRagLint.Charts.Producer.Delphi;
   resolve-dbs (manifest, pairing file), which lives in DRagLint.CLI and is not linked from
   src\charts, so a command that names only a project goes to the fallback, which resolves
   it exactly as Ask-Report does. Freshness IS checked in-process, through the engine's own
-  DRagLint.Index.Freshness: a stale index refuses with exit 3 unless AllowStale.
+  DRagLint.Index.Freshness: a stale index refuses with exit 3 unless AllowStale. The SERVER and SQL
+  indexes a question reads, when not given, are paired from report-pairs.json in-process, through the
+  same DRagLint.Charts.Pairs the ask verb uses (Ask-Report's step 2, its refusals included).
 
   LIVE INDEXES (owner ruling 2026-10-14). In real use -- `drag-lint compare` and `drag-lint ask` --
   this producer answers from the live index, protected by the staleness refusal (exit 3, AllowStale
@@ -57,7 +59,8 @@ type
     /// <param name="pCommand">The question and its explicit arguments.</param>
     /// <param name="pOptions">Index override, staleness policy, engine, script, timeout.</param>
     /// <returns>As IReportProducer.Produce: exit 0 answered (plain text, CRLF lines, header first),
-    /// 1 refused (the emitter's message), 2 setup (index missing, charts folder not found, or a
+    /// 1 refused (the emitter's message), 2 setup (index missing, a SERVER / SQL index the question
+    /// reads neither given nor paired by report-pairs.json -- Ask-Report's own message --, charts folder not found, or a
     /// PORTED question that has to fall back while its Emit-*.ps1 is not beside Ask-Report.ps1 --
     /// an installed copy, which does not ship the ported scripts), 3 stale.</returns>
     function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
@@ -85,7 +88,7 @@ uses
   System.SysUtils, System.IOUtils, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness
   , DRagLint.Core.Model // dl:unit DRagLint.Core.Model accepted -- the engine version the header names is the product constant itself
   , DRagLint.Charts.Question // dl:unit DRagLint.Charts.Question accepted -- the bundler defaults and Ask-Report's refusal code travel with the question types
-  , DRagLint.Charts.Ask, DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Index, DRagLint.Charts.Tools
+  , DRagLint.Charts.Ask, DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Index, DRagLint.Charts.Tools, DRagLint.Charts.Pairs
   , DRagLint.Charts.Q.TouchesTables  // dl:ok unused-unit-in-uses@5c7b -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.ShownWhere  // dl:ok unused-unit-in-uses@62b1 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Deps  // dl:ok unused-unit-in-uses@6504 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
@@ -108,6 +111,9 @@ const
   EXIT_SETUP = 2;
   REPORTS_SUBDIR = 'drag-lint-reports';
   CROSSES_BOUNDARY = 'crosses-boundary';
+  { Ask-Report's own override flags, named in its pairing refusals }
+  ASK_REPORT_SERVER_FLAG = '-ServerDbPath';
+  ASK_REPORT_SQL_FLAG = '-SqlDbPath';
   CRLF = #13#10;
 
 function ProducerForCompare: IReportProducer;
@@ -171,6 +177,25 @@ begin
   Result:= if pCommand.Has(pName) then StrToIntDef(pCommand.Get(pName), pDefault) else pDefault;
 end;
 
+{ The SERVER and SQL indexes, only for a question that reads them (Ask-Report's $needServer /
+  $needSql): as given, else paired from report-pairs.json exactly as Ask-Report's step 2 pairs
+  them -- compare passes only --db (R5). Raises EReportPairStop with Ask-Report's code and message. }
+function PairedIndexes(const pCommand: TReportCommand; const pOptions: TProduceOptions): TPairedIndexes;
+begin
+  Result:= Default(TPairedIndexes);
+  var Req:= Default(TPairRequest);
+  Req.Question:= pCommand.Question.ToLower;
+  Req.Db:= pOptions.DbOverride;
+  Req.Engine:= pOptions.EnginePath;
+  Req.NeedServer:= QuestionReadsServerIndex(Req.Question);
+  Req.NeedSql:= QuestionReadsSqlIndex(Req.Question);
+  Req.ServerFlag:= ASK_REPORT_SERVER_FLAG;
+  Req.SqlFlag:= ASK_REPORT_SQL_FLAG;
+  if Req.NeedServer then Result.Server:= pOptions.ServerDbOverride;
+  if Req.NeedSql then Result.Sql:= pOptions.SqlDbOverride;
+  if (Req.NeedServer and (Result.Server = '')) or (Req.NeedSql and (Result.Sql = '')) then
+    PairOtherIndexes(LoadReportPairs(pOptions.PairsFile, pOptions.ScriptPath), Req, Result);
+end;
 { Hands a question to the fallback. A PORTED question falls back only when its PowerShell emitter
   is beside the resolved Ask-Report.ps1: the installer does not ship the ported Emit-*.ps1 (owner
   ruling), so in an installed copy the fallback would fail obscurely -- refuse with pWhy instead.
@@ -203,17 +228,18 @@ begin
     Exit(FallBack(pCommand, pOptions, WhyNot));
   end;
   FLast:= 'Delphi in-process (' + pCommand.Question.ToLower + ')';
+  var Ix: TPairedIndexes;
+  try
+    Ix:= PairedIndexes(pCommand, pOptions);
+  except
+    on E: EReportPairStop do
+      Exit(Fail(E.Code, E.Message));
+  end;
   var Db:= ExpandFileName(pOptions.DbOverride);
-  if not TFile.Exists(Db) then
-    Exit(Fail(EXIT_SETUP, 'index not found: ' + Db));
-  { the SERVER and SQL indexes, only for a question that reads them (Ask-Report's $needServer /
-    $needSql); absent stays '' and the emitter answers as its Emit-*.ps1 does without it }
-  var Server:= if QuestionReadsServerIndex(pCommand.Question) and (pOptions.ServerDbOverride <> '') then
-    ExpandFileName(pOptions.ServerDbOverride) else '';
-  var Sql:= if QuestionReadsSqlIndex(pCommand.Question) and (pOptions.SqlDbOverride <> '') then
-    ExpandFileName(pOptions.SqlDbOverride) else '';
+  var Server:= if Ix.Server <> '' then ExpandFileName(Ix.Server) else '';
+  var Sql:= if Ix.Sql <> '' then ExpandFileName(Ix.Sql) else '';
   var Other:= if pOptions.CounterpartDbOverride <> '' then ExpandFileName(pOptions.CounterpartDbOverride) else '';
-  for var D in TArray<string>.Create(Server, Sql, Other) do
+  for var D in TArray<string>.Create(Db, Server, Sql, Other) do
     if (D <> '') and not TFile.Exists(D) then
       Exit(Fail(EXIT_SETUP, 'index not found: ' + D));
   var Why: string;

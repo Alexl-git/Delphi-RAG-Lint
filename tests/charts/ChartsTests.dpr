@@ -82,6 +82,7 @@ uses
   , DRagLint.Charts.Q.Consumers in '..\..\src\charts\DRagLint.Charts.Q.Consumers.pas'
   , DRagLint.Charts.Q.ExceptionPaths in '..\..\src\charts\DRagLint.Charts.Q.ExceptionPaths.pas'
   , ChartsTests.Questions in 'ChartsTests.Questions.pas'
+  , DRagLint.Charts.Pairs in '..\..\src\charts\DRagLint.Charts.Pairs.pas'
   , DRagLint.Charts.Producer.Delphi in '..\..\src\charts\DRagLint.Charts.Producer.Delphi.pas'
   , ChartsTests.ProducerDelphi in 'ChartsTests.ProducerDelphi.pas'
   , DRagLint.Charts.AskVerb in '..\..\src\charts\DRagLint.Charts.AskVerb.pas'

@@ -225,6 +225,7 @@ uses
   DRagLint.Charts.Q.TouchesTables in '..\charts\DRagLint.Charts.Q.TouchesTables.pas',
   DRagLint.Charts.Q.ShownWhere in '..\charts\DRagLint.Charts.Q.ShownWhere.pas',
   DRagLint.Charts.Q.Deps in '..\charts\DRagLint.Charts.Q.Deps.pas',
+  DRagLint.Charts.Pairs in '..\charts\DRagLint.Charts.Pairs.pas',
   DRagLint.Charts.Producer.Delphi in '..\charts\DRagLint.Charts.Producer.Delphi.pas',
   DRagLint.Charts.AskVerb in '..\charts\DRagLint.Charts.AskVerb.pas',
   DRagLint.Charts.Q.ClassSurface in '..\charts\DRagLint.Charts.Q.ClassSurface.pas',
