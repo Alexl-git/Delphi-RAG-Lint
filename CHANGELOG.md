@@ -3,6 +3,28 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.30.1-alpha -- 2026-10-14
+
+### Changed
+
+- **`lint <file> --db` serves three whole-graph project rules from an on-disk cache.**
+  circular-uses, enum-helper-separate-units and duplicate-global-decl read only the indexes, so
+  their answer is the same for every file until an index changes; the IDE spawns `lint` on every
+  tab switch, edit and save and paid for them each time. They are now cached per project index in
+  `%LOCALAPPDATA%\drag-lint\cache`, keyed on the engine build and the size + last-write time of the
+  project and library index files (any writer invalidates -- another engine, a one-file reindex, a
+  resolver pass). `index --project` and project sections of `index --all` warm it (+4.5 s on ORM3
+  Micronite2027); `lint` fills it lazily otherwise, and writes only when no index changed during the
+  run. `lint-all` does not use it. `DRAGLINT_RULE_CACHE=0` turns it off. Measured on ORM3
+  BASICS.PAS: 1.30.0 11.5 s -> 4.5 s on a hit (9.3 s on a miss), 0 finding differences;
+  `lint-all` byte-identical (9,427,865 bytes); cache file 30 KB.
+- **repeated-type-switch is no longer computed on a default `lint <file>`** (it ships OFF and was
+  computed and then dropped). It still runs when enabled or when a `dl:ok` / `drag-lint:ignore`
+  marker names it, and it is never cached: it parses the source files, so no index stat can tell
+  when its answer moved.
+- New guard `run_lint_rule_cache.ps1` (parity live / filling / cached, hit, invalidation by
+  reindex, one-file index and library change, corrupt file, opt-out, marker, `--rule`).
+
 ## v1.30.0-alpha -- 2026-10-14
 
 ### Added

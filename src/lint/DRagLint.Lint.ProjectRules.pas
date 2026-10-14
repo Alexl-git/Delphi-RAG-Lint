@@ -90,6 +90,10 @@ type
     /// only the other files' per-file findings are not computed. The whole-store
     /// collectors (circular-uses, repeated-type-switch, ...) are NOT narrowed by this;
     /// callers still filter the result by path.</param>
+    /// <param name="AWholeGraph">nil (the default): circular-uses, duplicate-global-decl,
+    /// enum-helper-separate-units and repeated-type-switch are computed here. Assigned: each
+    /// of those four sites asks AWholeGraph(ruleId) instead -- the `lint &lt;file&gt;` rule
+    /// cache (DRagLint.Lint.RuleCache). Emit order is unchanged either way.</param>
     /// <returns>Findings (file paths + lines); empty if none. With AOnlyFileId &gt; 0 the
     /// per-file rules contribute findings for that file only.</returns>
     /// <remarks>
@@ -110,7 +114,18 @@ type
                        const ASiblingStore: TSiblingStoreResolver = nil;
                        const ALibraryStore: ISymbolStore = nil;
                        const AOptInRules: TArray<string> = nil;
-                       const AOnlyFileId: Int64 = 0): TArray<TLintFinding>;
+                       const AOnlyFileId: Int64 = 0;
+                       const AWholeGraph: TFunc<string, TArray<TLintFinding>> = nil): TArray<TLintFinding>;
+    /// <summary>Computes ONE of the four whole-graph rules over AStore, exactly as Run does.</summary>
+    /// <param name="ARuleId">circular-uses, duplicate-global-decl, enum-helper-separate-units
+    /// or repeated-type-switch; any other id yields no findings.</param>
+    /// <param name="AStore">The project index; nil yields no findings.</param>
+    /// <param name="ALibraryStore">The library index or nil (read by duplicate-global-decl only).</param>
+    /// <returns>That rule's findings over the whole index.</returns>
+    /// <remarks>Exists so the `lint &lt;file&gt;` rule cache can compute live on a miss and
+    /// the indexer can warm it. Never raises.</remarks>
+    class function CollectWholeGraphRule(const ARuleId: string; const AStore: ISymbolStore;
+                       const ALibraryStore: ISymbolStore = nil): TArray<TLintFinding>;
     /// <summary>Flags forbidden cross-layer 'uses' edges per a layer-config JSON file.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
     /// <param name="AConfigPath">Path to a layers JSON file (see remarks); missing/invalid -> no findings.</param>
@@ -3455,7 +3470,8 @@ end; // function
 
 class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
-  const AOptInRules: TArray<string>; const AOnlyFileId: Int64): TArray<TLintFinding>;
+  const AOptInRules: TArray<string>; const AOnlyFileId: Int64;
+  const AWholeGraph: TFunc<string, TArray<TLintFinding>>): TArray<TLintFinding>;
 var
   Findings      : TList<TLintFinding>         ;
   FileIds       : TArray<Int64>               ;
@@ -3762,6 +3778,14 @@ var
     if Lt > 1 then ASet.AddOrSetValue(LowerCase(Copy(AName, 1, Lt - 1)), True);
   end;
 
+  { The four whole-graph sites ask AWholeGraph when the caller supplied one (the
+    `lint <file>` rule cache); otherwise they compute here, exactly as before. }
+  function WholeGraph(const AId: string): TArray<TLintFinding>;
+  begin
+    if Assigned(AWholeGraph) then Result:= AWholeGraph(AId)
+    else Result:= CollectWholeGraphRule(AId, AStore, ALibraryStore);
+  end;
+
   procedure Add(const AId, ASeverity, AMsg: string; const ASym: TSymbol);
   var
     F: TLintFinding;
@@ -3806,7 +3830,7 @@ begin
     { circular-uses: whole-graph SCC pass (not per-file). }
     var T0: Int64:= Tick;
     if WantRule('circular-uses') then
-      for var Cf in CollectCircularUses(AStore) do Findings.Add(Cf);
+      for var Cf in WholeGraph('circular-uses') do Findings.Add(Cf);
     { NR-C1: the per-unit view of the same cycles. OFF by default (OptedIn)
       until its corpus count is audited -- see CollectCycleParticipants. }
     if WantRule('cycle-participant-unit') and OptedIn('cycle-participant-unit') then
@@ -3839,7 +3863,8 @@ begin
       no refs join, so running it and discarding it is not the defect the
       sibling's gate exists to prevent. }
     if WantRule('duplicate-global-decl') then
-      for var Df in CollectDuplicateGlobalDecls(AStore, ALibraryStore) do Findings.Add(Df);
+      for var Df in WholeGraph('duplicate-global-decl') do
+        Findings.Add(Df);
     Inc(TDupD, Tick - T0); T0:= Tick;
 
     { uses-global-census: whole-refs-graph pass, OFF by default and gated on
@@ -3870,12 +3895,13 @@ begin
       DefDisabled build-up (CLI.pas); this is the sole gate that keeps it
       genuinely ON at runtime in both lint paths. }
     if WantRule('enum-helper-separate-units') then
-      for var Ef in CollectEnumHelperSeparateUnits(AStore) do Findings.Add(Ef);
+      for var Ef in WholeGraph('enum-helper-separate-units') do
+        Findings.Add(Ef);
     Inc(TEnum, Tick - T0); T0:= Tick;
 
     { repeated-type-switch (v0.80 #14): cross-file case-selector grouping pass. }
     if WantRule('repeated-type-switch') then
-      for var Rf in CollectRepeatedTypeSwitch(AStore) do Findings.Add(Rf);
+      for var Rf in WholeGraph('repeated-type-switch') do Findings.Add(Rf);
     Inc(TRts, Tick - T0);
 
     { ONE FILE when the caller names one (`lint <file>`): every finding this loop
@@ -4264,6 +4290,17 @@ begin
     Findings   .Free;
   end;
 end; // function
+
+class function TProjectLintRules.CollectWholeGraphRule(const ARuleId: string; const AStore: ISymbolStore;
+  const ALibraryStore: ISymbolStore): TArray<TLintFinding>;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  if      SameText(ARuleId, 'circular-uses'             ) then Result:= CollectCircularUses(AStore)
+  else if SameText(ARuleId, 'duplicate-global-decl'     ) then Result:= CollectDuplicateGlobalDecls(AStore, ALibraryStore)
+  else if SameText(ARuleId, 'enum-helper-separate-units') then Result:= CollectEnumHelperSeparateUnits(AStore)
+  else if SameText(ARuleId, 'repeated-type-switch'      ) then Result:= CollectRepeatedTypeSwitch(AStore);
+end;
 
 class function TProjectLintRules.CheckLayering(const AStore: ISymbolStore; const AConfigPath: string): TArray<TLintFinding>;
 var

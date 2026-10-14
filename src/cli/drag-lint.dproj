@@ -1,4 +1,4 @@
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{9ECF674F-154F-4413-B44B-C1D3A7EAA640}</ProjectGuid>
         <ProjectVersion>20.4</ProjectVersion>
@@ -143,6 +143,7 @@
         <DCCReference Include="..\lint\DRagLint.Lint.IfdefUndefined.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectChecks.Parse.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ProjectRules.pas"/>
+        <DCCReference Include="..\lint\DRagLint.Lint.RuleCache.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.ClassMetrics.pas"/>
         <DCCReference Include="..\lint\DRagLint.Lint.DocRules.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
