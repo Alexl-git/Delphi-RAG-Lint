@@ -79,7 +79,7 @@ function UnitUser([string]$Name, [string]$Expr, [string[]]$Extra = @()) {
 # Rebuilds the whole fixture from scratch and indexes every project.
 function Reset {
   param([string[]]$SharedConsts = @('  My_Const = 1;'), [string]$Expr = 'My_Const',
-        [string[]]$BExtra = @(), [string[]]$ConstCase = @(), [switch]$Library, [switch]$NoOptIn)
+        [string[]]$BExtra = @(), [string[]]$ConstCase = @(), [switch]$Library, [switch]$NoOptIn, [switch]$Unindexed)
   foreach ($d in 'shared', 'twin', 'A', 'B', 'C', 'D') {
     if (Test-Path "$work\$d") { [IO.Directory]::Delete("$work\$d", $true) }
     New-Item -ItemType Directory "$work\$d" | Out-Null
@@ -110,6 +110,8 @@ function Reset {
     "  { `"name`": `"B`", `"include`": [`"$j\\B\\B.dpr`"],   `"db`": `"$j\\B.sqlite`" }"
     "  { `"name`": `"C`", `"include`": [`"$j\\C\\C.dproj`"], `"db`": `"$j\\C.sqlite`" }"
     "  { `"name`": `"D`", `"include`": [`"$j\\D\\D.dpr`"],   `"db`": `"$j\\D.sqlite`" }")
+  # a configured section whose DB was never built (Ruling 14): no index, not unknown
+  if ($Unindexed) { $secs += "  { `"name`": `"E`", `"include`": [`"$j\\D\\D.dpr`"], `"db`": `"$j\\E-never-built.sqlite`" }" }
   if ($Library) { $secs += "  { `"name`": `"LIB`", `"source`": `"registry-libraries`", `"platforms`": [`"Win32`", `"Win64`"], `"db`": `"$j\\LIB.sqlite`" }" }
   WriteAscii "$eng\drag-lint.json" (@('{ "indexes": { "sections": [', ($secs -join ",`r`n"), ']}}'))
   $cfg = if ($NoOptIn) { '{ "autofix": []' } else { '{ "autofix": ["const-casing"]' }
@@ -125,6 +127,10 @@ function Reset {
 }
 
 $Tracked = @('shared\uShared.pas', 'twin\uShared.pas', 'A\uA.pas', 'B\uB.pas', 'C\uMid.pas', 'D\uD.pas')
+# size+mtime of a DB and its -wal/-shm companions: "was the index written?"
+function DbStamp([string]$Db) {
+  ((@($Db, "$Db-wal", "$Db-shm") | ForEach-Object { if (Test-Path $_) { $i = Get-Item $_; "$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" } else { '-' } }) -join ',')
+}
 function Hashes { ($Tracked | ForEach-Object { (Get-FileHash "$work\$_" -Algorithm SHA256).Hash }) -join ',' }
 function Txt([string]$Rel) { [IO.File]::ReadAllText("$work\$Rel") }
 $Shared = "$work\shared\uShared.pas"
@@ -204,10 +210,35 @@ try {
   Check 'R0 reset' (Reset) ''
   $b = [IO.File]::ReadAllText("$work\B\uB.pas")
   [IO.File]::WriteAllText("$work\B\uB.pas", "// an edit after indexing`r`n" + $b, [Text.Encoding]::ASCII)
+  # Ruling 12: the PREVIEW never reindexes -- it reports the stale owner and plans on the index as it is
+  $bStamp = DbStamp "$work\B.sqlite"
+  $h0 = Hashes
+  $o = FixShared 6
+  Check 'RP1 preview: a stale owner is reported index=stale with its changed-file count (Ruling 12)' `
+    ($o -match '(?m)^rename-project: B index=stale \(1 changed file\(s\)\)\r?$') (Lines $o '^rename-project')
+  Check 'RP2 ... the preview did not write B.sqlite (size+mtime, -wal/-shm)' ((DbStamp "$work\B.sqlite") -eq $bStamp) "$bStamp -> $(DbStamp "$work\B.sqlite")"
+  Check 'RP3 ... does not block: the target is still planned apply' ($o -match '(?m)^rename-target: L6 My_Const -> MyConst apply ') (Lines $o '^(rename-target|autofix)')
+  Check 'RP4 ... and writes no source file' ((Hashes) -eq $h0) ''
   $o = FixShared 6 -Apply
   Check 'R1 a stale owner is reindexed (rename-project: B index=reindexed)' ($o -match '(?m)^rename-project: B index=reindexed\r?$') (Lines $o '^rename-project')
   Check 'R2 ... and the apply is correct in uB at its NEW position' `
     (((Txt 'B\uB.pas') -cmatch 'Result:= MyConst;') -and -not ((Txt 'B\uB.pas') -match 'My_Const') -and ((Txt 'B\uB.pas') -match '^// an edit after indexing')) (Lines $o '^(rename-target|autofix)')
+
+  # ---------------------------------------------------------------- unindexed (Ruling 14)
+  # a configured section whose DB FILE does not exist is "no index": not an owner, not unknown, not blocking
+  Check 'W0 reset with a section E whose DB was never built' (Reset -Unindexed) ''
+  $eDb = "$work\E-never-built.sqlite"
+  $o = Run @('lint', '--file', "$work\A\uA.pas", '--db', "$work\A.sqlite", '--fix', '--fix-line', '9', '--fix-rule', 'const-casing', '--apply')
+  Check 'W1 a single-project unit still fixes (no refusal)' `
+    (((Txt 'A\uA.pas') -notmatch 'Local_Const') -and ((LastAutofix $o) -notmatch 'refused')) (Lines $o '^(rename-|autofix)')
+  Check 'W2 ... and names the project with no index: rename-unindexed: E (<db>)' `
+    ($o -match ('(?m)^rename-unindexed: E \(' + [regex]::Escape($eDb) + '\)\r?$')) (Lines $o '^rename-')
+  Check 'W3 ... and is not rename-unknown' ($o -notmatch '(?m)^rename-unknown:') (Lines $o '^rename-unknown')
+  $o = FixShared 6 -Apply
+  Check 'W4 a shared unit: the rename still applies in A, B and C' `
+    (((Txt 'A\uA.pas') -match 'Result:= MyConst;') -and ((Txt 'B\uB.pas') -match 'Result:= MyConst;') -and ((Txt 'C\uMid.pas') -match 'Result:= MyConst;')) (Lines $o '^(rename-|autofix)')
+  Check 'W5 ... rename-owners counts only real indexes (3 of 4)' ($o -match '(?m)^rename-owners: 3 of 4 indexes\r?$') (Lines $o '^rename-owners')
+  Check 'W6 ... and the missing DB was not created' (-not (Test-Path $eDb)) ''
 
   # ---------------------------------------------------------------- corrupt-db
   Check 'X0 reset' (Reset) ''

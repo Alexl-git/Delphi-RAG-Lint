@@ -26,7 +26,10 @@ drag-lint lint --file <path.pas> --fix --fix-line <L> --fix-rule <rule-id> --app
 
 `--fix-line` and `--fix-rule` narrow the fix to the ONE finding you
 right-clicked. Without `--apply` the command is a DRY RUN: it reports what
-it would fix and writes nothing.
+it would fix and writes no source file -- and, for a naming fix, no index
+either (a stale owning index is reported `index=stale`, not reindexed). With
+`--apply`, a naming fix may first reindex stale owning project indexes (see
+[Multi-Project-Rename](Multi-Project-Rename)).
 
 Only rules marked fixable can be auto-fixed. `drag-lint rules --json`
 reports a `fixable` field per rule; 23 of the 190 rules are fixable.

@@ -247,5 +247,27 @@ begin
   Writeln('rl.text=', RenameLocalConfirmText('Micronite2027', Prev).Split([sLineBreak])[0]);
   Writeln('rl.zero=', Ord(RenamePreviewAction(ParseRenamePreview('rename-local: 0'#13#10'autofix: 1 fixable finding(s)'))));
   Writeln('rl.multi=', Ord(RenamePreviewAction(ParseRenamePreview('rename-owners: 2 of 3 indexes'#13#10'rename-local: 0'#13#10))));
+
+  { st: a preview never reindexes (Ruling 12) -- a stale owner reads
+    index=stale; a configured project whose DB file does not exist is
+    rename-unindexed (Ruling 14). B and DMTEST appear twice (two files). }
+  Txt:= 'rename-owners: 2 of 3 indexes'#13#10 +
+    'rename-project: A index=fresh'#13#10 +
+    'rename-project: B index=stale (2 changed file(s))'#13#10 +
+    'rename-unindexed: DMTEST (C:\x\DMTEST.sqlite)'#13#10 +
+    'rename-project: B index=stale (2 changed file(s))'#13#10 +
+    'rename-unindexed: DMTEST (C:\x\DMTEST.sqlite)'#13#10 +
+    'rename-target: L6 My_Const -> MyConst apply A=1 B=1'#13#10;
+  Prev:= ParseRenamePreview(Txt);
+  Writeln('st.stale=', Prev.StaleCount);
+  Writeln('st.unindexed=', string.Join('|', Prev.Unindexed));
+  Writeln('st.project1=', JoinS(Prev.ProjectLines, 1));
+  Txt:= RenameConfirmText('uShared.pas', Prev.OldName, Prev.NewName, Prev);
+  Writeln('st.staletext=', Txt.Contains('1 project index(es) are stale and will be reindexed before writing -- this can take several minutes.'));
+  Writeln('st.unindexedtext=', Txt.Contains('DMTEST (C:\x\DMTEST.sqlite)'));
+  Writeln('st.nostale=', RenameConfirmText('u.pas', 'a', 'b', ParseRenamePreview('rename-owners: 2 of 2 indexes'#13#10 +
+    'rename-project: A index=fresh'#13#10'rename-project: B index=reindexed'#13#10)).Contains('are stale'));
+  Writeln('st.singleaction=', Ord(RenamePreviewAction(ParseRenamePreview('rename-unindexed: DMTEST (C:\x\DMTEST.sqlite)'#13#10 +
+    'autofix: 1 fixable finding(s) -- pass --apply to write'#13#10))));
   Writeln('DONE');
 end.

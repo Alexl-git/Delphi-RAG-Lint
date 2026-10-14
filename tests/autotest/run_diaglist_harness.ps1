@@ -171,6 +171,13 @@ Check 'R46 single-project renames -> confirm (local) before applying' ($kv['rl.a
 Check 'R47 local confirmation text'                  ($kv['rl.text'] -eq 'Rename 3 identifier(s) in Micronite2027?') "got: $($kv['rl.text'])"
 Check 'R48 rename-local: 0 -> apply as before'       ($kv['rl.zero'] -eq '0') "got: $($kv['rl.zero'])"
 Check 'R49 2 owners with rename-local: 0 -> the multi-project confirm' ($kv['rl.multi'] -eq '1') "got: $($kv['rl.multi'])"
+Check 'R50 index=stale owners counted once per project (Ruling 12)' ($kv['st.stale'] -eq '1') "got: $($kv['st.stale'])"
+Check 'R51 rename-unindexed read, one entry per section (Ruling 14)' ($kv['st.unindexed'] -eq 'DMTEST (C:\x\DMTEST.sqlite)') "got: $($kv['st.unindexed'])"
+Check 'R52 a stale project line keeps its changed-file count' ($kv['st.project1'] -eq 'B -- index stale (2 changed file(s)), 1 reference(s)') "got: $($kv['st.project1'])"
+Check 'R53 confirmation warns that stale indexes are reindexed before writing' ($kv['st.staletext'] -eq 'TRUE') ''
+Check 'R54 confirmation names the configured project that has no index' ($kv['st.unindexedtext'] -eq 'TRUE') ''
+Check 'R55 no stale owner -> no reindex warning' ($kv['st.nostale'] -eq 'FALSE') ''
+Check 'R56 rename-unindexed alone does not turn a single-project fix into a confirm' ($kv['st.singleaction'] -eq '0') "got: $($kv['st.singleaction'])"
 
 [System.IO.Directory]::Delete($WorkDir, $true)
 Write-Host ''

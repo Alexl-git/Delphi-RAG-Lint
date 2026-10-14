@@ -22,25 +22,47 @@ checked. Two consequences:
   and is not renamed. The confirmation says so. The remedy is to add the
   project to the manifest (`drag-lint register-project <file.dproj> --apply`)
   and index it.
+* A project the manifest lists but whose index FILE does not exist yet (a
+  section never built) is "no index", not an error: it is not checked, never
+  blocks a fix, and is named on a `rename-unindexed: <section> (<db>)` line and
+  in the confirmation.
 
-A unit only one project owns behaves exactly as before: no preview dialog for
-Fix it, no extra output lines.
+A unit only one project owns is fixed as before -- no preview dialog for Fix
+it, no `rename-owners` / `rename-project` / `rename-target` lines. What a
+single-project user CAN now see:
+
+* every naming fix probes the manifest and opens each configured index
+  read-only to find the unit's owners (one SQL lookup per index);
+* the fix is REFUSED (fail-closed) when that probe cannot answer: the manifest
+  did not load completely, or an index that exists cannot be opened (locked,
+  corrupt) -- `rename-unknown:` plus `autofix: rename refused -- ownership
+  unknown: ...`;
+* a `rename-unindexed:` line for each configured index whose file does not
+  exist.
 
 ## In the IDE: Fix it
 
 Right-click a naming finding in the Structure form and choose "Fix it".
 
-1. A PREVIEW runs first, in the background. It writes nothing.
+1. A PREVIEW runs first, in the background. It writes no source file and no
+   index: an owner whose index is stale is NOT reindexed by the preview -- it
+   is reported `index=stale (<n> changed file(s))` and planned on its index as
+   it is, so its reference count is provisional.
 2. If the unit has two or more owners, a confirmation opens:
    * the rename (`Rename Lot_Notes -> LotNotes in BASICS.PAS?`);
    * every owning project with its index state and how many references it
-     holds (`DMTEST -- index reindexed, 1 reference(s)`);
+     holds (`DMTEST -- index fresh, 1 reference(s)`);
    * what will NOT be renamed, if anything;
-   * the note that only projects with a drag-lint index were checked.
+   * when any owner is stale: `<N> project index(es) are stale and will be
+     reindexed before writing -- this can take several minutes.`;
+   * the note that only projects with a drag-lint index were checked, naming
+     the configured projects whose index was never built.
 
    The default button is **No**. No writes nothing, in any file.
-3. Yes applies the rename in every owner, reloads the editor buffer, reindexes
-   and re-lints.
+3. Yes runs the APPLY: it reindexes every stale owner first (`index --project`,
+   the owner's own index DB is written), plans again on the fresh indexes,
+   applies the rename in every owner, reloads the editor buffer, reindexes and
+   re-lints. The apply can still drop a rename the preview showed (it says so).
 
 A Fix it is ALL OR NOTHING: if any owner cannot take the rename, nothing is
 written and the Diagnostics root row says why, e.g.
@@ -63,10 +85,10 @@ be done safely, lists them, and applies the rest.
 | Reason in the message | What it means | What to do |
 |---|---|---|
 | `name X already declared in <unit>` | the new name would clash with, or capture, a symbol in that project | the other candidate styles were tried and were taken too; rename by hand to a free name |
-| `unverified -- still stale after reindex: <file>` | the owner's index could not be brought up to date | `drag-lint index --project <file.dproj> --db <db>`, then retry |
+| `unverified -- still stale after reindex: <file> -- if this DB was once widened by a folder index, rebuild it: ...` | the owner's index could not be brought up to date | `drag-lint index --project <file.dproj> --db <db>`; if it stays stale, `... --rebuild` (rows a folder index once swept in are only cleared by a rebuild), then retry |
 | `unverified -- no project file -- folder DBs are not reindexed by a rename` | the owner is a folder index, not a project index | index that code as a project, or rename by hand |
 | `library <Sec>: a library unit is not project code` | the unit is in a library index | do not rename library code from a project |
-| `ownership unknown: <db>: <reason>` | an index could not be opened (locked, corrupt, missing) | close what holds it, or rebuild it, then retry |
+| `ownership unknown: <db>: <reason>` | an index that exists could not be opened (locked, corrupt) | close what holds it, or rebuild it, then retry |
 | `ownership unknown: manifest did not load completely: <file>` | a `drag-lint.json` / `.drag-lint.json` has a syntax error, so the owners cannot be known -- EVERY naming fix is refused until it is fixed | fix the named file |
 | `two projects edit <file> line N col M differently` | the owners disagree about a reference | reindex both owners; if it persists, report it |
 | `rename-dropped-at-write: ... (stale)` | the file changed on disk between planning and writing; the WHOLE rename was dropped | save, let the index catch up, retry |
@@ -101,15 +123,20 @@ carries the plan:
 ```
 rename-owners: 4 of 37 indexes
 rename-project: Micronite2027 index=fresh
-rename-project: DMTEST index=reindexed
+rename-project: DMTEST index=stale (2 changed file(s))
 rename-target: L48 Lot_Notes -> LotNotes apply Micronite2027=3 DMTEST=1
 rename-target: L52 Other_X -> ? dropped project DMTEST: name OtherX already declared in uFoo
+rename-unindexed: TEST_Foo (C:\Projects\...\_D-RAG\TEST_Foo.sqlite)
 ```
 
-* `rename-owners:` -- owners found, of how many indexes checked.
-* `rename-project:` -- per owner: `index=fresh`, `reindexed`, `unverified`
-  (with the reason in parentheses) or `library`.
-* `rename-unknown:` -- an index (or the manifest) that could not be read.
+* `rename-owners:` -- owners found, of how many existing indexes checked.
+* `rename-project:` -- per owner: `index=fresh`, `stale` (preview only, with
+  the changed-file count), `reindexed` (apply only), `unverified` (with the
+  reason in parentheses) or `library`.
+* `rename-unknown:` -- an index that exists but could not be read, or the
+  manifest.
+* `rename-unindexed:` -- a configured index whose file does not exist (printed
+  on any run that plans naming fixes, single-project units included).
 * `rename-target:` -- per rename: `apply` with the references per project, or
   `dropped` with the reason.
 * `rename-dropped-at-write:` -- a rename dropped whole by the write-time check.
@@ -128,7 +155,9 @@ stderr) and each finding gains `projects` (`name`, `index`, `refs`) and
   fixes without one).
 * A manifest that loads cleanly, listing an index for every project that
   compiles the unit.
-* A stale owner is reindexed automatically with `index --project` (only the
-  changed files are re-parsed); on a large project that can take a while.
+* A stale owner is reindexed automatically with `index --project` -- by the
+  APPLY only, never the preview (only the changed files are re-parsed, but the
+  resolve stages run over the whole project: measured 2026-10-14 on copies,
+  MicroniteMW1Service ~69 s with 2 of 471 files changed, TEST_uSetupDefaultsFrm ~11 s with 1 of 38).
 
 See also: [Fix it](Fix-it), [Fix all in unit](Fix-all-in-unit).

@@ -29,7 +29,7 @@ uses
 const
   KIND_TEXT: array[TOwnerKind] of string = ('project', 'library');
   MEMBERSHIP_TEXT: array[TDbMembership] of string = ('member', 'notmember', 'unknown');
-  FRESHNESS_TEXT: array[TOwnerFreshness] of string = ('fresh', 'reindexed', 'unverified');
+  FRESHNESS_TEXT: array[TOwnerFreshness] of string = ('fresh', 'reindexed', 'unverified', 'stale');
   REINDEX_TIMEOUT_MS = 120000;
   { the wg fixture's edit positions: My_Const in wg1 (line 3 col 3), its use in wg2 (line 2 col 7) }
   WG_DECL_LINE = 3;
@@ -79,6 +79,9 @@ begin
   Writeln(APrefix, 'unknown_count=', Length(D.Unknown));
   for I:= 0 to High(D.Unknown) do
     Writeln(APrefix, 'unknown.', I, '=', D.Unknown[I]);
+  Writeln(APrefix, 'unindexed_count=', Length(D.Unindexed));
+  for I:= 0 to High(D.Unindexed) do
+    Writeln(APrefix, 'unindexed.', I, '=', D.Unindexed[I]);
 end; // procedure
 
 function OwnerNames(const AManifestFile, APreferredDb: string): string;
@@ -174,12 +177,19 @@ begin
   Writeln(AKey, '.reindex_calls=', ReindexCalls - Before);
 end; // procedure
 
+{ Size and last-write time of a file, for a "was it written?" check. }
+function FileStamp(const APath: string): string;
+begin
+  Result:= IntToStr(TFile.GetSize(APath)) + '|' + FormatDateTime('yyyymmddhhnnsszzz', TFile.GetLastWriteTimeUtc(APath));
+end; // function
+
 procedure RefreshChecks;
 var
   C    : TArray<string>;
   Store: ISymbolStore  ;
   Rep  : TFreshnessReport;
   F    : string        ;
+  Stamp: string        ;
 begin
   Writeln('r.changed_fresh=', Length(Changed(W + 'A.sqlite')));
   Refresh('r.fresh', W + 'A.sqlite', W + 'A\A.dpr', ShellReindex());
@@ -203,6 +213,14 @@ begin
   Store:= nil;
   Writeln('m.probe_changed=', Rep.Changed);
   Writeln('m.probe_examples=', Length(Rep.Examples));
+
+  { A PREVIEW (no reindex callback, Ruling 12): a stale project owner is
+    reported stale with its changed-file count and the DB is not written; a
+    stale folder DB is unverified exactly as on an apply. }
+  Stamp:= FileStamp(W + 'A_preview.sqlite');
+  Refresh('r.preview', W + 'A_preview.sqlite', W + 'A\A.dpr', nil);
+  Writeln('r.preview.db_unchanged=', FileStamp(W + 'A_preview.sqlite') = Stamp);
+  Refresh('r.previewfolder', W + 'LIB.sqlite', '', nil);
 
   Refresh('r.stale', W + 'A.sqlite', W + 'A\A.dpr', ShellReindex());
   Writeln('r.stale.args=', ReindexArgs);
@@ -249,6 +267,83 @@ begin
   Writeln('wg.gone=', if FindStaleEdit(Edits, Bad) then 'stale' else 'ok');
 end; // procedure
 
+{ Ruling 13: two owners spelling ONE file in two cases (BASICS.PAS vs
+  Basics.pas) is one file -- merged to one spelling, applied as one group,
+  backed up once from the original bytes, and checked for overlapping deletes
+  as one group. }
+procedure CaseChecks;
+const
+  WC_ORIGINAL = 'unit wc;'#13#10'const'#13#10'  My_Const = 1;'#13#10'  Y = My_Const;'#13#10;
+  WC_RENAMED  = 'unit wc;'#13#10'const'#13#10'  MyConst = 1;'#13#10'  Y = MyConst;'#13#10;
+  WC_USE_LINE = 4;
+  WC_USE_COL  = 7;
+var
+  F, UpPath: string        ;
+  Merged: TArray<TTextEdit>;
+  Why   : string           ;
+  D1, D2: TTextEdit        ;
+begin
+  F  := W + 'wc.pas';
+  UpPath:= UpperCase(F);
+  TFile.WriteAllText(F, WC_ORIGINAL, TEncoding.ANSI);
+  { owner B (upper case) holds the declaration edit A has AND a use only B has }
+  Why:= MergeEdits([[GuardEdit(F, WG_DECL_LINE, WG_DECL_COL, 'My_Const', 'MyConst')],
+    [GuardEdit(UpPath, WG_DECL_LINE, WG_DECL_COL, 'My_Const', 'MyConst'), GuardEdit(UpPath, WC_USE_LINE, WC_USE_COL, 'My_Const', 'MyConst')]],
+    F, Merged);
+  Writeln('wc.why=[', Why, ']');
+  Writeln('wc.merged=', Length(Merged));
+  Writeln('wc.one_spelling=', (Length(Merged) = 2) and (Merged[0].FilePath = F) and (Merged[1].FilePath = F));
+  { the applier alone, given the two spellings unmerged }
+  Writeln('wc.touched=', TTextEditApplier.Apply([GuardEdit(F, WG_DECL_LINE, WG_DECL_COL, 'My_Const', 'MyConst'),
+    GuardEdit(UpPath, WC_USE_LINE, WC_USE_COL, 'My_Const', 'MyConst')], True));
+  Writeln('wc.text_ok=', TFile.ReadAllText(F, TEncoding.ANSI) = WC_RENAMED);
+  Writeln('wc.bak_is_original=', TFile.ReadAllText(F + '.bak', TEncoding.ANSI) = WC_ORIGINAL);
+  D1        := Default(TTextEdit);
+  D1.FilePath:= F;
+  D1.Kind    := tekDeleteLines;
+  D1.Line    := WG_DECL_LINE - 1;
+  D1.EndLine := WG_DECL_LINE;
+  D2         := D1;
+  D2.FilePath:= UpPath;
+  D2.Line    := WG_DECL_LINE;
+  D2.EndLine := WC_USE_LINE;
+  Writeln('wc.overlap_refused=', TTextEditApplier.RefusalOf([D1, D2]) <> '');
+end; // procedure
+
+{ T5: the write-time guard over a RUN's plans. Two applied plans, the second's
+  file changed on disk: a batch drops only the stale one; a single fix
+  (--fix-line, criterion 9) drops BOTH -- all or nothing per run. }
+function AwPlan(const AFile, AOld, ANew: string): TTargetPlan;
+begin
+  Result                := Default(TTargetPlan);
+  Result.Target.OldName := AOld;
+  Result.NewName        := ANew;
+  Result.Decision       := rdApply;
+  Result.Edits          := [GuardEdit(AFile, WG_DECL_LINE, WG_DECL_COL, AOld, ANew)];
+end; // function
+
+procedure AtWriteChecks;
+var
+  F1, F2: string              ;
+  Plans : TArray<TTargetPlan> ;
+  Edits : TArray<TTextEdit>   ;
+  Notes : TArray<string>      ;
+  N     : Integer             ;
+begin
+  F1:= W + 'aw1.pas';
+  F2:= W + 'aw2.pas';
+  TFile.WriteAllText(F1, 'unit aw1;'#13#10'const'#13#10'  My_Const = 1;'#13#10, TEncoding.ANSI);
+  TFile.WriteAllText(F2, 'unit aw2;'#13#10'// moved'#13#10'const'#13#10'  Other_Const = 2;'#13#10, TEncoding.ANSI);
+  Plans:= [AwPlan(F1, 'My_Const', 'MyConst'), AwPlan(F2, 'Other_Const', 'OtherConst')];
+  N:= GuardPlansAtWrite(Plans, False, Edits, Notes);
+  Writeln('aw.batch=', N, '|', Length(Edits), '|', Length(Notes), '|', Ord(Plans[0].Decision), Ord(Plans[1].Decision));
+  Plans:= [AwPlan(F1, 'My_Const', 'MyConst'), AwPlan(F2, 'Other_Const', 'OtherConst')];
+  N:= GuardPlansAtWrite(Plans, True, Edits, Notes);
+  Writeln('aw.single=', N, '|', Length(Edits), '|', Length(Notes), '|', Ord(Plans[0].Decision), Ord(Plans[1].Decision));
+  Writeln('aw.single.reason0=', Plans[0].Reason);
+  Writeln('aw.single.edits0=', Length(Plans[0].Edits));
+end; // procedure
+
 begin  try
     W     := IncludeTrailingPathDelimiter(ParamStr(1));
     Shared:= W + 'shared\uShared.pas';
@@ -263,6 +358,8 @@ begin  try
     Discover('u.', 'unknown.json', '');
     RefreshChecks;
     WriteGuardChecks;
+    CaseChecks;
+    AtWriteChecks;
     Writeln('DONE');
   except
     on E: Exception do Writeln('EXCEPTION=', E.ClassName, ': ', E.Message);

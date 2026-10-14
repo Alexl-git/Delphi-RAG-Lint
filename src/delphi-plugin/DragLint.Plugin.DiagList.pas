@@ -42,6 +42,13 @@ type
     /// <summary>Single-project naming renames, from 'rename-local: N' (printed only under
     /// --fix-naming); 0 when absent.</summary>
     LocalRenames: Integer;
+    /// <summary>Distinct owning projects a rename-project line reported index=stale:
+    /// a preview never reindexes (Ruling 12), so the apply will.</summary>
+    StaleCount: Integer;
+    /// <summary>Each distinct rename-unindexed line's text, 'section (dbpath)': a
+    /// configured project whose index file does not exist, so it was not checked
+    /// (Ruling 14).</summary>
+    Unindexed: TArray<string>;
   end;
 
   /// <summary>What the plugin does after a rename preview: apply at once (one
@@ -54,7 +61,10 @@ type
 /// <remarks>Tags are found anywhere in a line, not only at its start: stdout and
 /// stderr share one pipe. A rename-project line may carry a ' (reason)' suffix,
 /// and a rename-unknown line is free text (e.g. 'manifest did not load completely: ...').
-/// Reference counts are summed per project over every applied rename-target.</remarks>
+/// Reference counts are summed per project over every applied rename-target.
+/// A project reported 'index=stale' counts once in StaleCount however many files
+/// name it; rename-unindexed lines are kept once each. Pinned by
+/// run_diaglist_harness.ps1 R50-R56.</remarks>
 function ParseRenamePreview(const AOutput: string): TRenamePreview;
 
 /// <summary>Decides what follows a rename preview.</summary>
@@ -70,8 +80,10 @@ function RenamePreviewAction(const APreview: TRenamePreview): TRenamePreviewActi
 /// <param name="ANew">The new name.</param>
 /// <param name="APreview">The parsed preview: its projects, drops and unknowns are listed.</param>
 /// <returns>Multi-line text naming every owning project with its index state and
-/// reference count, and stating that only projects with a drag-lint index were
-/// checked (criterion 19).</returns>
+/// reference count, warning that stale indexes are reindexed before writing
+/// when any is (Ruling 12), and stating that only projects with a drag-lint
+/// index were checked -- naming the configured ones that have none (criterion
+/// 19, Ruling 14).</returns>
 function RenameConfirmText(const AUnit, AOld, ANew: string; const APreview: TRenamePreview): string;
 
 /// <summary>The confirmation shown before a Fix all writes single-project naming renames.</summary>
@@ -181,6 +193,7 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults
   , System.RegularExpressions
+  , System.StrUtils
   , System.JSON
   ;
 
@@ -407,6 +420,8 @@ const
   CTagAtWrite = 'rename-dropped-at-write: ';
   CTagRefused = 'autofix: rename refused -- ';
   CTagLocal   = 'rename-local: ';
+  CTagUnindexed = 'rename-unindexed: ';
+  CStaleState   = 'index stale';
 var
   Names : TArray<string> ; { owning projects, first-seen order }
   States: TArray<string> ; { 'index fresh', ... ; '' until a rename-project line names it }
@@ -479,12 +494,19 @@ begin
     end
     else if TagRest(Line, CTagLocal, Rest) then Result.LocalRenames:= StrToIntDef(Rest, 0)
     else if TagRest(Line, CTagUnknown, Rest) then Result.Unknown:= Result.Unknown + [Rest]
+    else if TagRest(Line, CTagUnindexed, Rest) then
+    begin
+      if IndexText(Rest, Result.Unindexed) < 0 then Result.Unindexed:= Result.Unindexed + [Rest];
+    end
     else if TagRest(Line, CTagAtWrite, Rest) then Result.Dropped:= Result.Dropped + [Rest]
     else if TagRest(Line, CTagTarget, Rest) then AddTarget(Rest, Result)
     else if TagRest(Line, CTagRefused, Rest) then Result.Refused:= Rest;
   for I:= 0 to High(Names) do
+  begin
     Result.ProjectLines:= Result.ProjectLines + [Format('%s -- %s, %d reference(s)',
       [Names[I], (if States[I] <> '' then States[I] else 'index not reported'), Refs[I]])];
+    if StartsText(CStaleState, States[I]) then Inc(Result.StaleCount);
+  end;
 end;
 
 function RenamePreviewAction(const APreview: TRenamePreview): TRenamePreviewAction;
@@ -544,10 +566,19 @@ begin
       SB.Append(sLineBreak).Append('Ownership could not be read from:').Append(sLineBreak);
       for S in APreview.Unknown do SB.Append('  ').Append(S).Append(sLineBreak);
     end;
+    if APreview.StaleCount > 0 then
+      SB.Append(sLineBreak)
+        .AppendFormat('%d project index(es) are stale and will be reindexed before writing -- this can take several minutes.',
+          [APreview.StaleCount]).Append(sLineBreak);
     SB.Append(sLineBreak)
       .Append('Note: only projects with a drag-lint index were checked. A project that compiles this unit ')
-      .Append('but has no configured index is not renamed, and may stop compiling.').Append(sLineBreak)
-      .Append(sLineBreak)
+      .Append('but has no configured index is not renamed, and may stop compiling.').Append(sLineBreak);
+    if Length(APreview.Unindexed) > 0 then
+    begin
+      SB.Append('Configured, but with no index built (not checked):').Append(sLineBreak);
+      for S in APreview.Unindexed do SB.Append('  ').Append(S).Append(sLineBreak);
+    end;
+    SB.Append(sLineBreak)
       .Append('No writes nothing.');
     Result:= SB.ToString;
   finally

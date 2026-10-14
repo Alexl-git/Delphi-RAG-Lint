@@ -1009,10 +1009,15 @@ in none:
 - **Owners are found by FULL PATH** in every DB the manifest lists for the
   platform (project and library), case-insensitive -- never by unit name, so
   another project's own copy of `BASICS.PAS` is not an owner.
-- **A stale owner is reindexed first** with `index --project <proj> --db <db>`
-  (incremental: only changed files are re-parsed). One that cannot be made
-  fresh, a folder DB (no project file), a DB that cannot be opened, or a
-  manifest that did not load completely makes the rename UNVERIFIED. A library
+- **A stale owner is reindexed first -- by `--apply` only** with
+  `index --project <proj> --db <db>` (incremental: only changed files are
+  re-parsed). The PREVIEW (no `--apply`) never reindexes: it reports the owner
+  `index=stale (<n> changed file(s))` and plans on the index as it is, so its
+  counts are provisional; the apply re-plans after reindexing. One that cannot
+  be made fresh, a folder DB (no project file), a DB that exists but cannot be
+  opened, or a manifest that did not load completely makes the rename
+  UNVERIFIED. A configured DB whose FILE does not exist is "no index": not
+  checked, never blocking, named on `rename-unindexed: <section> (<db>)`. A library
   owner refuses it ("a library unit is not project code").
 - **One new name, free in every owner** -- the first candidate style no owner
   already declares; the edits of all owners are merged and exact duplicates
@@ -1026,14 +1031,16 @@ in none:
   WHOLE rename (`rename-dropped-at-write:`), never part of it.
 
 Output (only for a unit with 2+ owners, or when ownership is unknown -- a
-single-project unit prints exactly what it always did):
+single-project unit prints what it always did plus any `rename-unindexed:`
+lines, and is refused when the manifest or an existing index cannot be read):
 
 ```
 rename-owners: 4 of 37 indexes
 rename-project: Micronite2027 index=fresh
-rename-project: DMTEST index=reindexed
-rename-project: TEST_X index=unverified (still stale after reindex: <file>)
-rename-unknown: <db>: <reason>             (a DB that could not be read, or the manifest)
+rename-project: DMTEST index=reindexed      (apply; a preview says index=stale (<n> changed file(s)))
+rename-project: TEST_X index=unverified (still stale after reindex: <file> -- ... rebuild it: ... --rebuild)
+rename-unknown: <db>: <reason>             (a DB that exists but could not be read, or the manifest)
+rename-unindexed: <section> (<db>)         (a configured DB whose file does not exist: not checked)
 rename-target: L48 Lot_Notes -> LotNotes apply Micronite2027=3 DMTEST=1
 rename-target: L52 Other_X -> ? dropped project DMTEST: name OtherX already declared in uFoo
 rename-dropped-at-write: Lot_Notes -> LotNotes <file>:<line> (stale)
@@ -1050,8 +1057,9 @@ naming renames. A naming fix the stale index cannot place says
 IDE: Fix it and Fix all in unit run the preview first. For 2+ owners (or
 unknown ownership) a confirmation lists every owning project with its index
 state and reference count, the renames (capped at 10), what will NOT be renamed,
-and that only projects with a drag-lint index were checked; it defaults to No,
-and No writes nothing. Fix all also confirms a single-project batch of renames
+that stale indexes will be reindexed before writing (when any is), and that
+only projects with a drag-lint index were checked (naming configured ones with
+no index built); it defaults to No, and No writes nothing. Fix all also confirms a single-project batch of renames
 (`Rename N identifier(s) in <project>?`). A refusal shows on the Diagnostics
 root row. Wiki: `Multi-Project-Rename`.
 

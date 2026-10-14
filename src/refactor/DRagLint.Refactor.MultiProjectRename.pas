@@ -74,8 +74,13 @@ type
     /// order. Library owners included, Kind = okLibrary.</summary>
     Owners: TArray<TRenameOwner>;
     /// <summary>'dbpath: reason' for each index that could not be read
-    /// (criterion 8c) -- ownership unknown, never "not an owner".</summary>
+    /// (criterion 8c) -- ownership unknown, never "not an owner". A DB that
+    /// exists but cannot be opened (locked, corrupt) lands here.</summary>
     Unknown: TArray<string>;
+    /// <summary>'section (dbpath)' for each configured index whose DB FILE does
+    /// not exist (Ruling 14): no index, so the project is not checked -- not an
+    /// owner, not unknown, not counted in Probed, and never blocking.</summary>
+    Unindexed: TArray<string>;
   end; // record
 
   /// <summary>Whether an owning DB may be used for a rename, after RefreshOwner.</summary>
@@ -87,7 +92,11 @@ type
     ofReindexed,
     /// <summary>Could not be opened, could not be reindexed, or is still stale
     /// afterwards: the project counts as UNVERIFIED for the rename (criterion 5).</summary>
-    ofUnverified);
+    ofUnverified,
+    /// <summary>A PREVIEW only (no reindex callback, Ruling 12): stale, not
+    /// reindexed, and planned on its data as it is. Never blocking; the apply
+    /// reindexes it and re-plans.</summary>
+    ofStale);
 
   /// <summary>One owning index's part in a rename plan.</summary>
   /// <remarks>Value type. In TMultiRenamePlan.Owners it describes the owner
@@ -157,21 +166,24 @@ type
 /// <param name="APreferredDb">The DB the caller started from; when it is an
 /// owner it is listed first. '' for no preference. Compared case-insensitively
 /// after expansion.</param>
-/// <returns>Probed = number of distinct DB paths asked (duplicates folded
-/// case-insensitively); Owners = every dmMember DB, preferred first, then plan
-/// order; Unknown = 'dbpath: reason' for every dmUnknown DB.</returns>
+/// <returns>Probed = number of distinct existing DB paths asked (duplicates
+/// folded case-insensitively); Owners = every dmMember DB, preferred first,
+/// then plan order; Unknown = 'dbpath: reason' for every dmUnknown DB;
+/// Unindexed = 'section (dbpath)' for every configured DB whose file does not
+/// exist (Ruling 14).</returns>
 /// <remarks>
 /// Raises nothing of its own: an unreadable DB lands in Unknown, not
-/// in an exception. A library owner is returned rather than refused here so
+/// in an exception. A DB file that does not exist is never opened (so never
+/// created) and is not "unknown": a never-built section has no index to ask. A library owner is returned rather than refused here so
 /// the caller can name the library in its refusal (criterion 8d).
 /// Reads the registry (library path expansion, via ResolvePlan) and opens each
 /// DB read-only, closing it before the next. Not thread-safe only in so far as
 /// ResolvePlan is not; touches no shared state of its own.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas)</para>
-/// <para>Calls: Default, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Refactor.MultiProjectRename.DbKey, DRagLint.Refactor.MultiProjectRename.OwnerOf, DRagLint.Storage.FileMembership.DbMembership, SameText</para>
+/// <para>Calls: Default, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Refactor.MultiProjectRename.DbKey, DRagLint.Refactor.MultiProjectRename.OwnerOf, DRagLint.Storage.FileMembership.DbMembership, FileExists, SameText</para>
 /// <para>Returns: Default(TOwnerDiscovery)</para>
-/// <para>Complexity: 13 (cyclomatic, outer body), 59 lines (full implementation)</para>
+/// <para>Complexity: 14 (cyclomatic, outer body), 69 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Index.Plan.ResolvePlan"/>
 /// <seealso cref="DRagLint.Project.Resolver.TProjectResolver.Create"/>
 /// <seealso cref="DRagLint.Refactor.MultiProjectRename.DbKey"/>
@@ -188,14 +200,18 @@ function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFil
 /// <param name="AReindex">Runs an incremental `index --project` as
 /// AReindex(ProjectFile, DbPath) and returns True on success. Supplied by the
 /// caller (the CLI) so this unit never links DRagLint.CLI. Called at most once,
-/// and only for an owner with a project file whose DB opened and was stale.</param>
-/// <param name="AReason">'' for ofFresh and ofReindexed; otherwise why the owner
-/// is unverified -- REASON_FOLDER_DB, 'reindex failed: index --project
-/// &lt;file&gt;', 'still stale after reindex: &lt;first path&gt;', or the
-/// message of whatever was raised.</param>
+/// and only for an owner with a project file whose DB opened and was stale.
+/// nil for a PREVIEW (Ruling 12): nothing is reindexed and nothing is written.</param>
+/// <param name="AReason">'' for ofFresh and ofReindexed; for ofStale
+/// '&lt;n&gt; changed file(s)' (or the missing-stamp text); otherwise why the
+/// owner is unverified -- REASON_FOLDER_DB, 'reindex failed: index --project
+/// &lt;file&gt;', 'still stale after reindex: &lt;first path&gt; -- if this DB
+/// was once widened by a folder index, rebuild it: ...', or the message of
+/// whatever was raised.</param>
 /// <returns>ofFresh when ChangedFilePaths is empty and the DB carries its
-/// INDEXED_AT_KEY stamp; ofReindexed when it was stale and AReindex made it
-/// fresh; ofUnverified otherwise.</returns>
+/// INDEXED_AT_KEY stamp; ofStale when it is stale, has a project file and
+/// AReindex is nil; ofReindexed when it was stale and AReindex made it fresh;
+/// ofUnverified otherwise (a stale folder DB is unverified in a preview too).</returns>
 /// <remarks>
 /// <para>A DB without the INDEXED_AT_KEY stamp is STALE, not fresh: nothing
 /// says a completed run ever wrote it. A completed `index --project` writes it.</para>
@@ -220,7 +236,11 @@ function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, 
 /// built a target for is rdDropped with the block reason (fix round 1).</param>
 /// <param name="ANaming">Naming config supplying candidates and prefixes.</param>
 /// <param name="AReindex">Passed to RefreshOwner for each project owner:
-/// AReindex(ProjectFile, DbPath) runs an incremental `index --project`.</param>
+/// AReindex(ProjectFile, DbPath) runs an incremental `index --project`. nil
+/// for a PREVIEW (Ruling 12): no owner is reindexed, a stale one is ofStale and
+/// planned on its current data, and its stale-position or unresolved results
+/// do not drop a target -- the plan is provisional for that owner, and the
+/// apply (which passes a callback) reindexes it and plans again.</param>
 /// <returns>Owners: one report per owner. Targets: one plan per target Key, and one
 /// rdDropped plan per finding no opened store resolved (no owner opened, or all
 /// unverified) -- so a refusal is never silent.
@@ -250,9 +270,45 @@ function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
 
 /// <summary>The text a `rename-project:` line prints for AFreshness.</summary>
 /// <param name="AFreshness">The owner's freshness.</param>
-/// <returns>'fresh', 'reindexed' or 'unverified'.</returns>
+/// <returns>'fresh', 'reindexed', 'stale' or 'unverified'.</returns>
 /// <remarks>Pure. The IDE plugin parses these words.</remarks>
 function OwnerFreshnessText(AFreshness: TOwnerFreshness): string;
+
+/// <summary>Unions every owner's edits for one target into one set, written
+/// against ONE spelling of each file.</summary>
+/// <param name="AParts">One edit list per owner, in owner order.</param>
+/// <param name="APreferredPath">The spelling to use for that file (the target's
+/// own file, as --file named it); '' for none. Every other file keeps the
+/// first spelling any owner used.</param>
+/// <param name="AMerged">Out: the merged edits; nil when the result is a conflict.</param>
+/// <returns>'' on success; otherwise why the edits conflict.</returns>
+/// <remarks>An exact duplicate (same file case-insensitively, line, col, end
+/// col and text) is kept once; two DIFFERENT edits at one file/line/col are a
+/// conflict (criterion 8). Every surviving edit's FilePath is rewritten to the
+/// file's one canonical spelling (Ruling 13): two owners store BASICS.PAS and
+/// Basics.pas, and the applier must see one file, back it up once and check
+/// its edits together. Pure; pinned by run_rename_owners_harness.ps1 P1-P2.</remarks>
+function MergeEdits(const AParts: TArray<TArray<TTextEdit>>; const APreferredPath: string;
+  out AMerged: TArray<TTextEdit>): string;
+
+/// <summary>The write-time all-or-nothing guard over a run's rename plans:
+/// turns every rdApply plan whose edit set FindStaleEdit calls stale into
+/// rdDropped.</summary>
+/// <param name="APlans">Every plan of the run; updated in place (Decision,
+/// Reason, Edits).</param>
+/// <param name="AAllOrNothing">True for a single fix (--fix-line, criterion
+/// 9): when ANY plan is dropped here, EVERY other rdApply plan is dropped too,
+/// so the run writes no rename edit at all. False for a batch (criterion 10):
+/// only the stale plans are dropped.</param>
+/// <param name="AEdits">Out: the edits of the plans that are still rdApply.</param>
+/// <param name="ANotes">Out: one 'Old -> New file:line (stale)' text per plan
+/// dropped because its own edit went stale (what `rename-dropped-at-write:`
+/// prints).</param>
+/// <returns>How many plans were turned from rdApply to rdDropped.</returns>
+/// <remarks>Reads the files the edits name (via FindStaleEdit); writes
+/// nothing. Pinned by run_rename_owners_harness.ps1 checks AW1-AW4.</remarks>
+function GuardPlansAtWrite(var APlans: TArray<TTargetPlan>; AAllOrNothing: Boolean;
+  out AEdits: TArray<TTextEdit>; out ANotes: TArray<string>): Integer;
 
 /// <summary>The write-time all-or-nothing check for one multi-project rename:
 /// is any of its edits no longer applicable to the file as it is on disk
@@ -311,6 +367,7 @@ var
   Seen     : TList<string>    ;
   Owners   : TList<TRenameOwner>;
   Unknown  : TList<string>    ;
+  Unindexed: TList<string>   ;
   Item     : TPlanSection     ;
   Key      : string           ;
   Reason   : string           ;
@@ -331,6 +388,7 @@ begin
   Seen   := TList<string>.Create;
   Owners := TList<TRenameOwner>.Create;
   Unknown:= TList<string>.Create;
+  Unindexed:= TList<string>.Create;
   try
     for Item in Plan.Items do
     begin
@@ -338,6 +396,12 @@ begin
       Key:= DbKey(Item.DbPath);
       if (Key = '') or Seen.Contains(Key) then Continue;
       Seen.Add(Key);
+      { Ruling 14: no file = no index -- not unknown, not probed, not opened. }
+      if not FileExists(Item.DbPath) then
+      begin
+        Unindexed.Add(Item.Name + ' (' + Item.DbPath + ')');
+        Continue;
+      end;
       Member:= DbMembership(Item.DbPath, AFilePath, Reason);
       if Member = dmMember then Owners.Add(OwnerOf(AManifest, Item))
       else if Member = dmUnknown then Unknown.Add(Item.DbPath + ': ' + Reason);
@@ -353,10 +417,12 @@ begin
           Break;
         end;
 
-    Result.Probed := Seen.Count;
-    Result.Owners := Owners.ToArray;
-    Result.Unknown:= Unknown.ToArray;
+    Result.Probed   := Seen.Count - Unindexed.Count;
+    Result.Owners   := Owners.ToArray;
+    Result.Unknown  := Unknown.ToArray;
+    Result.Unindexed:= Unindexed.ToArray;
   finally
+    Unindexed.Free;
     Unknown.Free;
     Owners .Free;
     Seen   .Free;
@@ -364,43 +430,57 @@ begin
 end; // function
 
 { '' when the DB at ADbPath is fresh; otherwise what makes it stale -- the
-  first changed path, or the missing completed-run stamp. Read-only; raises
-  when the DB cannot be opened or read. }
-function StaleEvidence(const ADbPath: string): string;
+  first changed path, or the missing completed-run stamp. AChanged: how many
+  files changed (0 for a missing stamp). Read-only; raises when the DB cannot
+  be opened or read. }
+function StaleEvidence(const ADbPath: string; out AChanged: Integer): string;
 var
   Store  : ISymbolStore  ;
   Changed: TArray<string>;
 begin
+  AChanged:= 0;
   { Read-only never CREATES: a missing path raises instead of leaving an empty
     database behind. }
   Store:= TSQLiteSymbolStore.Create(ADbPath, True);
   if Store.GetMetaValue(INDEXED_AT_KEY) = '' then Exit('index carries no ' + INDEXED_AT_KEY + ' stamp');
-  Changed:= ChangedFilePaths(Store);
-  Result := if Length(Changed) > 0 then Changed[0] else '';
+  Changed := ChangedFilePaths(Store);
+  AChanged:= Length(Changed);
+  Result  := if AChanged > 0 then Changed[0] else '';
 end; // function
 
 function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, string, Boolean>;
   out AReason: string): TOwnerFreshness;
 var
-  Evidence: string;
+  Evidence: string ;
+  Changed : Integer;
 begin
   AReason:= '';
   try
-    if StaleEvidence(AOwner.DbPath) = '' then Exit(ofFresh);
+    Evidence:= StaleEvidence(AOwner.DbPath, Changed);
+    if Evidence = '' then Exit(ofFresh);
     if AOwner.ProjectFile = '' then
     begin
       AReason:= REASON_FOLDER_DB;
       Exit(ofUnverified);
+    end;
+    { A preview never reindexes (Ruling 12): say how stale, plan on it as is. }
+    if not Assigned(AReindex) then
+    begin
+      AReason:= if Changed > 0 then Format('%d changed file(s)', [Changed]) else Evidence;
+      Exit(ofStale);
     end;
     if not AReindex(AOwner.ProjectFile, AOwner.DbPath) then
     begin
       AReason:= 'reindex failed: index --project ' + AOwner.ProjectFile;
       Exit(ofUnverified);
     end;
-    Evidence:= StaleEvidence(AOwner.DbPath);
+    Evidence:= StaleEvidence(AOwner.DbPath, Changed);
     if Evidence <> '' then
     begin
-      AReason:= 'still stale after reindex: ' + Evidence;
+      { M5: rows a folder-target index once swept in are outside the closure,
+        so no incremental run ever visits them -- only a rebuild clears them. }
+      AReason:= Format('still stale after reindex: %s -- if this DB was once widened by a folder index, '
+        + 'rebuild it: drag-lint index --project %s --db %s --rebuild', [Evidence, AOwner.ProjectFile, AOwner.DbPath]);
       Exit(ofUnverified);
     end;
     Result:= ofReindexed;
@@ -430,6 +510,7 @@ begin
   case AFreshness of
     ofFresh    : Result:= 'fresh';
     ofReindexed: Result:= 'reindexed';
+    ofStale    : Result:= 'stale';
   else
     Result:= 'unverified';
   end; // case
@@ -449,6 +530,14 @@ end; // function
 function ProjectReason(const AOwner: TRenameOwner; const AWhy: string): string;
 begin
   Result:= 'project ' + AOwner.SectionName + ': ' + AWhy;
+end; // function
+
+{ True when AStatus, from an owner a PREVIEW left stale (ofStale, Ruling 12),
+  is the staleness itself talking: the apply reindexes that owner and plans
+  again, so the preview does not drop the target for it. }
+function StaleTolerated(const AState: TOwnerState; AStatus: TTargetStatus): Boolean;
+begin
+  Result:= (AState.Report.Freshness = ofStale) and (AStatus in [tsStalePosition, tsUnresolved]);
 end; // function
 
 function FindTarget(const ATargets: TArray<TNamingTarget>; const AKey: string;
@@ -576,29 +665,37 @@ begin
     Exit(ProjectReason(AState.Report.Owner, if Why <> '' then Why else 'name ' + ACand + ' is not free'));
   end;
   AEdits:= BuildTargetEdits(AState.Store, ATarget, ACand, Skipped);
-  if Skipped > 0 then
-    Exit(ProjectReason(AState.Report.Owner, Format('%d edit(s) at a position the index no longer matches (stale index)', [Skipped])));
-  if Length(AEdits) = 0 then Exit(ProjectReason(AState.Report.Owner, 'no edit could be placed'));
+  { A preview's stale owner (ofStale) keeps the edits that could be placed:
+    its plan is provisional, and the apply re-plans after reindexing it. }
+  if AState.Report.Freshness <> ofStale then
+  begin
+    if Skipped > 0 then
+      Exit(ProjectReason(AState.Report.Owner, Format('%d edit(s) at a position the index no longer matches (stale index)', [Skipped])));
+    if Length(AEdits) = 0 then Exit(ProjectReason(AState.Report.Owner, 'no edit could be placed'));
+  end;
   Result:= ShadowReason(AState.Store, ATarget, ACand, AEdits);
   if Result <> '' then Result:= ProjectReason(AState.Report.Owner, Result);
 end; // function
 
-{ Unions every owner's edits. An exact duplicate (same file, line, col, end col
-  and text) is kept once; two DIFFERENT edits at one file/line/col are a
-  conflict (criterion 8): returns why, and AMerged is nil. }
-function MergeEdits(const AParts: TArray<TArray<TTextEdit>>; out AMerged: TArray<TTextEdit>): string;
+function MergeEdits(const AParts: TArray<TArray<TTextEdit>>; const APreferredPath: string;
+  out AMerged: TArray<TTextEdit>): string;
 var
-  Seen: TDictionary<string, string>;
-  Part: TArray<TTextEdit>          ;
-  E   : TTextEdit                  ;
-  K3  : string                     ;
-  K5  : string                     ;
-  Prev: string                     ;
+  Seen    : TDictionary<string, string>;
+  Spelling: TDictionary<string, string>; { lower(path) -> the one spelling written }
+  Part    : TArray<TTextEdit>          ;
+  E       : TTextEdit                  ;
+  Canon   : TTextEdit                  ;
+  Path    : string                     ;
+  K3      : string                     ;
+  K5      : string                     ;
+  Prev    : string                     ;
 begin
-  Result := '';
-  AMerged:= nil;
-  Seen   := TDictionary<string, string>.Create;
+  Result  := '';
+  AMerged := nil;
+  Seen    := TDictionary<string, string>.Create;
+  Spelling:= TDictionary<string, string>.Create;
   try
+    if APreferredPath <> '' then Spelling.Add(LowerCase(APreferredPath), APreferredPath);
     for Part in AParts do
       for E in Part do
       begin
@@ -607,7 +704,14 @@ begin
         if not Seen.TryGetValue(K3, Prev) then
         begin
           Seen.Add(K3, K5);
-          AMerged:= AMerged + [E];
+          if not Spelling.TryGetValue(LowerCase(E.FilePath), Path) then
+          begin
+            Path:= E.FilePath;
+            Spelling.Add(LowerCase(Path), Path);
+          end;
+          Canon         := E;
+          Canon.FilePath:= Path;
+          AMerged       := AMerged + [Canon];
         end
         else if Prev <> K5 then
         begin
@@ -616,12 +720,15 @@ begin
         end;
       end; // for
   finally
+    Spelling.Free;
     Seen.Free;
   end; // try
 end; // function
 
 { Tries ACand in every opened owner. '' when it is free in all of them, with
-  AParts[I] the edits of owner I; otherwise the first owner's reason. }
+  AParts[I] the edits of owner I; otherwise the first owner's reason. An owner
+  whose target is not tsReady (only a preview's tolerated stale owner reaches
+  here so) contributes no edits and no veto. }
 function TryCandidate(const AStates: TArray<TOwnerState>; const ATargets: TArray<TNamingTarget>;
   const ACand: string; out AParts: TArray<TArray<TTextEdit>>): string;
 var
@@ -631,6 +738,7 @@ begin
   SetLength(AParts, Length(AStates));
   for I:= 0 to High(AStates) do
   begin
+    if ATargets[I].Status <> tsReady then Continue;
     Result:= CandidateWhy(AStates[I], ATargets[I], ACand, AParts[I]);
     if Result <> '' then Break;
   end;
@@ -676,7 +784,7 @@ begin
   for I:= 0 to High(AStates) do
   begin
     if not FindTarget(AStates[I].Targets, ABase.Key, Ts[I]) then Ts[I].Status:= tsUnresolved;
-    if Ts[I].Status <> tsReady then
+    if (Ts[I].Status <> tsReady) and not StaleTolerated(AStates[I], Ts[I].Status) then
     begin
       Result.Reason:= ProjectReason(AStates[I].Report.Owner, StatusText(Ts[I].Status));
       Exit;
@@ -687,7 +795,7 @@ begin
   for Cand in ABase.Candidates do
   begin
     Why:= TryCandidate(AStates, Ts, Cand, Parts);
-    if Why = '' then Why:= MergeEdits(Parts, Result.Edits);
+    if Why = '' then Why:= MergeEdits(Parts, ABase.Finding.FilePath, Result.Edits);
     if Why = '' then
     begin
       Result.NewName := Cand;
@@ -705,10 +813,11 @@ end; // function
   built ONCE, from the first opened owner that resolved it. }
 function PlanLocal(const AStates: TArray<TOwnerState>; const ABase: TNamingTarget): TTargetPlan;
 var
-  I      : Integer       ;
-  T      : TNamingTarget ;
-  FreeNames: TArray<string>;
-  Skipped: Integer       ;
+  I          : Integer       ;
+  T          : TNamingTarget ;
+  FreeNames  : TArray<string>;
+  Skipped    : Integer       ;
+  Provisional: Boolean       ;
 begin
   Result         := Default(TTargetPlan);
   Result.Target  := ABase;
@@ -719,14 +828,23 @@ begin
   for I:= 0 to High(AStates) do
     if (AStates[I].Store <> nil) and FindTarget(AStates[I].Targets, ABase.Key, T) then
     begin
-      FreeNames:= FreeCandidates(AStates[I].Store, T);
-      if T.Status <> tsReady then Result.Reason:= ProjectReason(AStates[I].Report.Owner, StatusText(T.Status))
+      { A preview's stale owner (ofStale): its stale results do not drop the
+        target -- the plan is provisional and the apply re-plans (Ruling 12). }
+      Provisional:= AStates[I].Report.Freshness = ofStale;
+      FreeNames  := FreeCandidates(AStates[I].Store, T);
+      if StaleTolerated(AStates[I], T.Status) then
+      begin
+        Result.Decision:= rdApply;
+        Result.Reason  := '';
+        Result.Owners  := [AStates[I].Report];
+      end
+      else if T.Status <> tsReady then Result.Reason:= ProjectReason(AStates[I].Report.Owner, StatusText(T.Status))
       else if Length(FreeNames) = 0 then Result.Reason:= ProjectReason(AStates[I].Report.Owner, StatusText(tsAllCandidatesTaken))
       else
       begin
         Result.NewName:= FreeNames[0];
         Result.Edits  := BuildTargetEdits(AStates[I].Store, T, FreeNames[0], Skipped);
-        if (Skipped > 0) or (Length(Result.Edits) = 0) then
+        if ((Skipped > 0) or (Length(Result.Edits) = 0)) and not Provisional then
         begin
           Result.Edits := nil;
           Result.Reason:= ProjectReason(AStates[I].Report.Owner, 'no edit could be placed (stale index)');
@@ -821,6 +939,53 @@ begin
     end; // for
   finally
     Cache.Free;
+  end; // try
+end; // function
+
+function GuardPlansAtWrite(var APlans: TArray<TTargetPlan>; AAllOrNothing: Boolean;
+  out AEdits: TArray<TTextEdit>; out ANotes: TArray<string>): Integer;
+var
+  I    : Integer         ;
+  Bad  : TTextEdit       ;
+  Kept : TList<TTextEdit>;
+  Notes: TList<string>   ;
+begin
+  Result:= 0;
+  Kept  := TList<TTextEdit>.Create;
+  Notes := TList<string>.Create;
+  try
+    for I:= 0 to High(APlans) do
+    begin
+      if APlans[I].Decision <> rdApply then Continue;
+      if not FindStaleEdit(APlans[I].Edits, Bad) then
+      begin
+        Kept.AddRange(APlans[I].Edits);
+        Continue;
+      end;
+      Notes.Add(Format('%s -> %s %s:%d (stale)', [APlans[I].Target.OldName, APlans[I].NewName, Bad.FilePath, Bad.Line]));
+      APlans[I].Decision:= rdDropped;
+      APlans[I].Reason  := Format('%s:%d changed on disk after the rename was planned (stale)', [Bad.FilePath, Bad.Line]);
+      APlans[I].Edits   := nil;
+      Inc(Result);
+    end; // for
+    { T5 / criterion 9: a single fix is all-or-nothing per RUN, not per target. }
+    if AAllOrNothing and (Result > 0) then
+    begin
+      for I:= 0 to High(APlans) do
+        if APlans[I].Decision = rdApply then
+        begin
+          APlans[I].Decision:= rdDropped;
+          APlans[I].Reason  := 'not written: another rename of this fix changed on disk after it was planned (all-or-nothing)';
+          APlans[I].Edits   := nil;
+          Inc(Result);
+        end;
+      Kept.Clear;
+    end;
+    AEdits:= Kept.ToArray;
+    ANotes:= Notes.ToArray;
+  finally
+    Notes.Free;
+    Kept.Free;
   end; // try
 end; // function
 

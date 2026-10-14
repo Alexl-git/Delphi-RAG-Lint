@@ -849,7 +849,7 @@ begin
   Writeln('                               unit-name and the reported path)');
   Writeln('  drag-lint lint  --project <file.dproj> [--rule unit-not-in-dpr] [--json]');
   Writeln('  drag-lint lint  --file <f.pas> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]   (AUTOFIX one file)');
-  Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes nothing.');
+  Writeln('                               DRY RUN WITHOUT --apply: it reports what it would change and writes no source file.');
   Writeln('                               --fix-line + --fix-rule together narrow the fix to ONE finding; omit both to');
   Writeln('                               apply every fixable finding in the file. Only rules whose catalog entry has');
   Writeln('                               "fixable": true are ever applied -- see `drag-lint rules --json`.');
@@ -11971,8 +11971,9 @@ end;
   ATargets by file: a file with 2+ owning indexes, or any index that could not
   be read, is planned across EVERY owner (PlanMultiProjectRename) and printed;
   every other finding is handed back in ATargets for the unchanged
-  single-store path -- so a single-project unit's output is byte-identical to
-  before. Single-finding mode (--fix-line): one dropped target means NO rename
+  single-store path -- a single-project unit's output is unchanged except for
+  `rename-unindexed:` lines naming configured DBs that do not exist (Ruling
+  14). Only an --apply run reindexes a stale owner (Ruling 12). Single-finding mode (--fix-line): one dropped target means NO rename
   edits at all and Refusal says why (criterion 9). Batch: the applied
   targets' edits are returned and counted in Applied; dropped ones are only
   reported (criterion 10). Platform for discovery: --platform, else the
@@ -11991,6 +11992,9 @@ var
   TP      : TTargetPlan         ;
   Path    : string              ;
   Reasons : TArray<string>      ;
+  Unindexed: TStringList        ;
+  U       : string              ;
+  Reindex : TFunc<string, string, Boolean>;
 begin
   Result:= Default(TRenameOutcome);
   { A manifest that did not load COMPLETELY -- Load raised, or kept the
@@ -12008,9 +12012,11 @@ begin
   end; // try
   Plat  := if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else Manifest.Settings.DefaultPlatform;
   Single:= nil;
+  Unindexed:= TStringList.Create;
   Files := TStringList.Create;
   try
     Files.CaseSensitive:= False;
+    Unindexed.CaseSensitive:= False;
     for F in ATargets do
       if Files.IndexOf(F.FilePath) < 0 then Files.Add(F.FilePath);
     for Path in Files do
@@ -12021,20 +12027,33 @@ begin
         Disc.Unknown:= ['manifest did not load completely: ' + ManifestErr];
       end
       else Disc:= FindRenameOwners(Manifest, Plat, ExpandFileName(Path), APreferredDb);
+      for U in Disc.Unindexed do
+        if Unindexed.IndexOf(U) < 0 then Unindexed.Add(U);
       if (Length(Disc.Owners) < 2) and (Length(Disc.Unknown) = 0) then
       begin
         Single:= Single + FindingsInFile(ATargets, Path);
         Continue;
       end;
-      Plan:= PlanMultiProjectRename(Disc, FindingsInFile(ATargets, Path), ANaming,
-        function(AProjectFile, ADbPath: string): Boolean
-        begin
-          Result:= ReindexOwnerProject(AProjectFile, ADbPath);
-        end);
+      { Ruling 12: only an --apply run reindexes a stale owner. A preview
+        passes no callback: it writes no index, reports the owner
+        index=stale and plans on its data as it is. }
+      Reindex:= nil;
+      if AArgs.Apply then
+        Reindex:= function(AProjectFile, ADbPath: string): Boolean
+          begin
+            Result:= ReindexOwnerProject(AProjectFile, ADbPath);
+          end;
+      Plan:= PlanMultiProjectRename(Disc, FindingsInFile(ATargets, Path), ANaming, Reindex);
       EmitRenamePlan(Plan, AArgs.AsJson or SameText(AArgs.Format, 'json'));
       Result.Plans:= Result.Plans + Plan.Targets;
     end; // for
+    { Ruling 14: a configured project whose DB file does not exist was not
+      checked -- say so once per run, on whichever path the files took. }
+    for U in Unindexed do
+      if AArgs.AsJson or SameText(AArgs.Format, 'json') then Writeln(ErrOutput, 'rename-unindexed: ' + U)
+      else Writeln('rename-unindexed: ' + U);
   finally
+    Unindexed.Free;
     Files.Free;
   end; // try
   ATargets:= Single;
@@ -12087,46 +12106,36 @@ end;
 { The write-time all-or-nothing guard for multi-project renames (fix round 1,
   ruling 8). The applier re-checks each edit's ExpectText and drops a stale
   one while writing the rest -- for a rename that crosses projects that is a
-  half-rename. So, just before --apply writes: every applied plan whose edit
-  set FindStaleEdit calls stale is turned dropped, its edits are taken out of
-  ARename.Edits, `rename-dropped-at-write:` is printed (stderr under --json)
-  and AFixCount loses it; in single mode the refusal is set. }
+  half-rename. So, just before --apply writes, GuardPlansAtWrite turns every
+  applied plan whose edit set went stale into dropped -- and in single mode
+  (--fix-line, criterion 9) EVERY applied plan of the run once any one is
+  (T5). The survivors' edits replace ARename.Edits, `rename-dropped-at-write:`
+  is printed per stale plan (stderr under --json), AFixCount loses every
+  dropped plan, and in single mode the refusal is set. }
 procedure GuardRenameWrites(const AArgs: TArgs; var ARename: TRenameOutcome; var AFixCount: Integer);
 var
-  I      : Integer          ;
-  Bad    : TTextEdit        ;
-  Line   : string           ;
-  Edits  : TList<TTextEdit> ;
-  Reasons: TArray<string>   ;
+  I      : Integer        ;
+  Was    : TArray<Boolean>;
+  Notes  : TArray<string> ;
+  Note   : string         ;
+  Dropped: Integer        ;
+  Reasons: TArray<string> ;
 begin
   { A refused single fix already writes no rename edit; its rdApply plans
     must not be put back. }
   if ARename.Refusal <> '' then Exit;
+  SetLength(Was, Length(ARename.Plans));
+  for I:= 0 to High(ARename.Plans) do Was[I]:= ARename.Plans[I].Decision = rdApply;
+  Dropped:= GuardPlansAtWrite(ARename.Plans, AArgs.FixLine > 0, ARename.Edits, Notes);
+  for Note in Notes do
+    if AArgs.AsJson or SameText(AArgs.Format, 'json') then Writeln(ErrOutput, 'rename-dropped-at-write: ' + Note)
+    else Writeln('rename-dropped-at-write: ' + Note);
+  Dec(AFixCount, Dropped);
+  Dec(ARename.Applied, Dropped);
   Reasons:= nil;
-  Edits  := TList<TTextEdit>.Create;
-  try
-  for I:= 0 to High(ARename.Plans) do
-  begin
-    if ARename.Plans[I].Decision <> rdApply then Continue;
-    if not FindStaleEdit(ARename.Plans[I].Edits, Bad) then
-    begin
-      Edits.AddRange(ARename.Plans[I].Edits);
-      Continue;
-    end;
-    Line:= Format('rename-dropped-at-write: %s -> %s %s:%d (stale)',
-      [ARename.Plans[I].Target.OldName, ARename.Plans[I].NewName, Bad.FilePath, Bad.Line]);
-    if AArgs.AsJson or SameText(AArgs.Format, 'json') then Writeln(ErrOutput, Line) else Writeln(Line);
-    ARename.Plans[I].Decision:= rdDropped;
-    ARename.Plans[I].Reason  := Format('%s:%d changed on disk after the rename was planned (stale)', [Bad.FilePath, Bad.Line]);
-    ARename.Plans[I].Edits   := nil;
-    Dec(AFixCount);
-    Dec(ARename.Applied);
-    if AArgs.FixLine > 0 then Reasons:= Reasons + [ARename.Plans[I].Reason];
-  end; // for
-  ARename.Edits:= Edits.ToArray;
-  finally
-    Edits.Free;
-  end; // try
+  if AArgs.FixLine > 0 then
+    for I:= 0 to High(ARename.Plans) do
+      if Was[I] and (ARename.Plans[I].Decision = rdDropped) then Reasons:= Reasons + [ARename.Plans[I].Reason];
   ARename.Refusal:= string.Join('; ', Reasons);
 end;
 
@@ -12428,8 +12437,10 @@ begin
             unasked; a human pointing at one constant and asking for it to be
             renamed has asked (owner, 2026-10-13: "We can change them to
             PascalCase"). }
-          { --fix-naming is the same consent for a BATCH run: the IDE's Fix all
-            sends it after the user has seen and confirmed the renames. }
+          { --fix-naming is the same consent for a BATCH run. The IDE's Fix all
+            sends it on BOTH runs -- the preview (to get the plan to show) and
+            the apply; only the apply follows the user's confirmation, and a
+            preview writes no source file whatever this flag says. }
           var Explicit: Boolean:= ((AArgs.FixLine > 0) and SameText(AArgs.FixRule, F.RuleId)) or AArgs.FixNaming;
           if Cfg.IsAutoFix(F.RuleId) or Explicit then NamingTargets:= NamingTargets + [F]
           else NamingOptOut.AddOrSetValue(LowerCase(F.RuleId), True);
