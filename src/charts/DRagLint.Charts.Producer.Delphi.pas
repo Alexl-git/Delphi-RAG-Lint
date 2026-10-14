@@ -51,9 +51,9 @@ type
     /// <summary>Whether a command would be answered in-process.</summary>
     /// <param name="pCommand">The question.</param>
     /// <param name="pOptions">The options; DbOverride must be set.</param>
-    /// <returns>True for a ported question with an index given; crosses-boundary also needs
-    /// TProduceOptions.CounterpartDbOverride (without it Ask-Report pairs the far side from
-    /// report-pairs.json, which only the fallback reads).</returns>
+    /// <returns>True for a ported question with an index given. crosses-boundary's counterpart is
+    /// TProduceOptions.CounterpartDbOverride, else paired from report-pairs.json as Ask-Report pairs it;
+    /// with no pair it draws one side, as Ask-Report does.</returns>
     function AnswersInProcess(const pCommand: TReportCommand; const pOptions: TProduceOptions): Boolean;
     /// <summary>Answers one question, in-process when ported, else through the fallback.</summary>
     /// <param name="pCommand">The question and its explicit arguments.</param>
@@ -142,10 +142,7 @@ function TDelphiProducer.AnswersInProcess(const pCommand: TReportCommand; const 
 var
   E: TChartEmitter;
 begin
-  { crosses-boundary without -CounterpartDb: Ask-Report would pair it from report-pairs.json,
-    which only the fallback reads, so the fallback answers it }
-  Result:= (pOptions.DbOverride <> '') and FindChartQuestion(pCommand.Question, E)
-    and not (SameText(pCommand.Question, CROSSES_BOUNDARY) and (pOptions.CounterpartDbOverride = ''));
+  Result:= (pOptions.DbOverride <> '') and FindChartQuestion(pCommand.Question, E);
 end;
 
 function Fail(pCode: Integer; const pReason: string): TProduceResult;
@@ -178,8 +175,9 @@ begin
 end;
 
 { The SERVER and SQL indexes, only for a question that reads them (Ask-Report's $needServer /
-  $needSql): as given, else paired from report-pairs.json exactly as Ask-Report's step 2 pairs
-  them -- compare passes only --db (R5). Raises EReportPairStop with Ask-Report's code and message. }
+  $needSql), and crosses-boundary's counterpart ($wantOther): as given, else paired from report-pairs.json exactly as Ask-Report's step 2 pairs
+  them -- compare passes only --db (R5). Raises EReportPairStop with Ask-Report's code and message.
+  crosses-boundary with no pair keeps Other '' and goes on, as Ask-Report does (Ask-Report.ps1:262): one side drawn. }
 function PairedIndexes(const pCommand: TReportCommand; const pOptions: TProduceOptions): TPairedIndexes;
 begin
   Result:= Default(TPairedIndexes);
@@ -189,11 +187,14 @@ begin
   Req.Engine:= pOptions.EnginePath;
   Req.NeedServer:= QuestionReadsServerIndex(Req.Question);
   Req.NeedSql:= QuestionReadsSqlIndex(Req.Question);
+  Req.WantOther:= SameText(Req.Question, CROSSES_BOUNDARY);
   Req.ServerFlag:= ASK_REPORT_SERVER_FLAG;
   Req.SqlFlag:= ASK_REPORT_SQL_FLAG;
   if Req.NeedServer then Result.Server:= pOptions.ServerDbOverride;
   if Req.NeedSql then Result.Sql:= pOptions.SqlDbOverride;
-  if (Req.NeedServer and (Result.Server = '')) or (Req.NeedSql and (Result.Sql = '')) then
+  if Req.WantOther then Result.Other:= pOptions.CounterpartDbOverride;
+  var Missing:= (Req.NeedServer and (Result.Server = '')) or (Req.NeedSql and (Result.Sql = ''));
+  if Missing or (Req.WantOther and (Result.Other = '')) then
     PairOtherIndexes(LoadReportPairs(pOptions.PairsFile, pOptions.ScriptPath), Req, Result);
 end;
 { Hands a question to the fallback. A PORTED question falls back only when its PowerShell emitter
@@ -223,8 +224,7 @@ begin
   if not AnswersInProcess(pCommand, pOptions) then
   begin
     FLast:= 'Delphi in-process, fell back to: ' + FFallback.Describe;
-    var WhyNot:= if pOptions.DbOverride = '' then 'no index given (--db / -Db); naming only a project needs the PowerShell fallback'
-      else 'no counterpart index given (--counterpart-db / -CounterpartDb, or report-pairs.json)';
+    var WhyNot:= 'no index given (--db / -Db); naming only a project needs the PowerShell fallback';
     Exit(FallBack(pCommand, pOptions, WhyNot));
   end;
   FLast:= 'Delphi in-process (' + pCommand.Question.ToLower + ')';
@@ -238,7 +238,7 @@ begin
   var Db:= ExpandFileName(pOptions.DbOverride);
   var Server:= if Ix.Server <> '' then ExpandFileName(Ix.Server) else '';
   var Sql:= if Ix.Sql <> '' then ExpandFileName(Ix.Sql) else '';
-  var Other:= if pOptions.CounterpartDbOverride <> '' then ExpandFileName(pOptions.CounterpartDbOverride) else '';
+  var Other:= if Ix.Other <> '' then ExpandFileName(Ix.Other) else '';
   for var D in TArray<string>.Create(Db, Server, Sql, Other) do
     if (D <> '') and not TFile.Exists(D) then
       Exit(Fail(EXIT_SETUP, 'index not found: ' + D));

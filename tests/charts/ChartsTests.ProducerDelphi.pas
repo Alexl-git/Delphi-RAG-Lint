@@ -51,7 +51,9 @@ type
     [Test] procedure UnknownTargetIsExitOne;
     [Test] procedure CloneGuardRefusalIsSetup;
     [Test] procedure UnexpectedFailureFallsBack;
-    [Test] procedure CrossesBoundaryWithoutCounterpartFallsBack;
+    [Test] procedure CrossesBoundaryPairsItsCounterpartFromThePairsFile;
+    [Test] procedure CrossesBoundaryWithoutAPairDrawsOneSideAsAskReportDoes;
+    [Test] procedure CrossesBoundaryWithoutAnIndexFallsBack;
     [Test] procedure CrossesBoundaryWithCounterpartIsInProcess;
     [Test] procedure OtherIndexesAQuestionDoesNotReadAreIgnored;
     [Test] procedure MissingSqlIndexOfAReadingQuestionIsSetup;
@@ -335,17 +337,57 @@ begin
   Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
 end;
 
-procedure TProducerDelphiTests.CrossesBoundaryWithoutCounterpartFallsBack;
+procedure TProducerDelphiTests.CrossesBoundaryWithoutAnIndexFallsBack;
 begin
-  { Ask-Report would pair the far side from report-pairs.json, which only the fallback reads }
+  { naming only a project needs Ask-Report's own resolution, which only the fallback has }
   var O:= DefaultProduceOptions;
-  O.DbOverride:= 'any.sqlite';
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(1, FFallback.Calls);
   Assert.AreEqual(STUB_EXIT, R.ExitCode);
   Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
 end;
 
+procedure TProducerDelphiTests.CrossesBoundaryPairsItsCounterpartFromThePairsFile;
+var
+  Db, Other: string;
+begin
+  { compare passes only --db (R5): the far side is paired from report-pairs.json as Ask-Report's
+    step 2 pairs it (the pair's other side), checked with resolve-dbs, and carried like any index }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SERVER_CLONE, Other) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.PairsFile:= PairsFile(Db, Other, '');
+  O.EnginePath:= FakeEngine(Other);
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.Contains(R.Text, #13#10'INDEX ' + Other + ' (counterpart)'#13#10'CHART crosses-boundary ' + CB_TARGET +
+    ' -- 2 commands / 1 transport calls'#13#10);
+  Assert.AreEqual<Integer>(2, Length(R.IndexPaths));
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryWithoutAPairDrawsOneSideAsAskReportDoes;
+var
+  Db: string;
+begin
+  { Ask-Report.ps1:262 -- no pair names the project: no refusal, no counterpart, one side drawn }
+  if not Clone(CLIENT_CLONE, Db) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.PairsFile:= PairsFile(TPath.Combine(FOutRoot, 'someone-else.sqlite'), TPath.Combine(FOutRoot, 'server.sqlite'), '');
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.IsFalse(R.Text.Contains('(counterpart)'), 'no counterpart line');
+  Assert.AreEqual<Integer>(1, Length(R.IndexPaths));
+  Assert.AreEqual('Delphi in-process (crosses-boundary)', FProducer.Describe);
+end;
 procedure TProducerDelphiTests.CrossesBoundaryWithCounterpartIsInProcess;
 var
   Db, Other: string;
@@ -567,18 +609,16 @@ end;
 procedure TProducerDelphiTests.PortedFallbackWithoutEmitterScriptIsSetup;
 begin
   var O:= DefaultProduceOptions;
-  O.DbOverride:= 'any.sqlite';
   O.ScriptPath:= BareScriptFolder;
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
-  Assert.AreEqual(NOT_INSTALLED + 'no counterpart index given (--counterpart-db / -CounterpartDb, or report-pairs.json)', R.Reason);
+  Assert.AreEqual(NOT_INSTALLED + 'no index given (--db / -Db); naming only a project needs the PowerShell fallback', R.Reason);
   Assert.AreEqual(0, FFallback.Calls, 'a fallback that cannot run is not called');
 end;
 
 procedure TProducerDelphiTests.PortedFallbackWithEmitterScriptFallsBack;
 begin
   var O:= DefaultProduceOptions;
-  O.DbOverride:= 'any.sqlite';
   O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(1, FFallback.Calls, 'the repo has Emit-CrossesBoundary.ps1, so the fallback answers');

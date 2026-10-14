@@ -73,9 +73,9 @@ The questions ported to Delphi (`touches-tables`, `shown-where`, `deps`,
 `class-surface`, `event-wiring`, `tested-by`, `change-impact`, `crosses-boundary`,
 `protocol-trace`, `lifecycle`, `effects`, `feeds-from`, `lands-where`,
 `consumers`, `exception-paths`) are answered inside the engine, from the live
-index. `crosses-boundary` is answered there only when its counterpart index is
-known (`--counterpart-db`, or the pair in `report-pairs.json`); without one it
-goes to the script, which draws the one side and says so. Every other question is
+index. `crosses-boundary` takes its counterpart from `--counterpart-db`, else from
+the pair in `report-pairs.json`; with neither it draws the one side and says so, as
+the script does. Every other question is
 handed to `charts\src\Ask-Report.ps1 -Plain`, which the engine runs itself -- so
 those need PowerShell 7 and the repository's chart scripts. Either way the text is
 the same: the ported questions are held to the PowerShell output byte for byte by
