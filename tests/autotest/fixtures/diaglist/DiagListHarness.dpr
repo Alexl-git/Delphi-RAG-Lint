@@ -30,7 +30,15 @@ begin
   Result:= string.Join(',', S);
 end;
 
+{ AItems[AIndex], or '<none>' when out of range -- keeps a short array from
+  raising inside the harness and turns it into a readable FAIL }
+function JoinS(const AItems: TArray<string>; AIndex: Integer): string;
+begin
+  Result:= if (AIndex >= 0) and (AIndex <= High(AItems)) then AItems[AIndex] else '<none>';
+end;
+
 var
+  Prev : TRenamePreview;
   Diags: TArray<TDragLintDiagnostic>;
   Diags2: TArray<TDragLintDiagnostic>;
   Order: TArray<Integer>;
@@ -106,5 +114,104 @@ begin
   Writeln('uf.nojson=[', UsesFixSummary('ERROR: database not found', 'X'), ']');
   Writeln('uf.applied=', AutofixApplied(UsesFixSummary(Json, 'System.IniFiles')));
   Writeln('uf.notapplied=', AutofixApplied(UsesFixSummary(Json, 'System.SysUtils')));
+
+  { multi-project rename preview (spec criteria 16-19). rp: the Task 5 brief's
+    sample verbatim -- 2 rename-project lines, 4 sections in the apply counts }
+  Prev:= ParseRenamePreview(
+    'rename-owners: 4 of 37 indexes'#13#10 +
+    'rename-project: Micronite2027 index=fresh'#13#10 +
+    'rename-project: MicroniteMW1Service index=reindexed'#13#10 +
+    'rename-target: L36 LotNotes_Headline -> LotNotesHeadline apply Micronite2027=0 MicroniteMW1Service=0 DMTEST=0 TEST_uSetupDefaultsFrm=0'#13#10 +
+    'rename-target: L40 Foo_Bar -> FooBar dropped project MicroniteMW1Service: name FooBar already declared in uX'#13#10 +
+    'rename-unknown: C:\x\X.sqlite: database disk image is malformed'#13#10 +
+    'autofix: 1 fixable finding(s) -- pass --apply to write'#13#10);
+  Writeln('rp.owners=', Prev.OwnerCount);
+  Writeln('rp.probed=', Prev.Probed);
+  Writeln('rp.projects=', Length(Prev.ProjectLines));
+  Writeln('rp.project0=', JoinS(Prev.ProjectLines, 0));
+  Writeln('rp.project1=', JoinS(Prev.ProjectLines, 1));
+  Writeln('rp.project2=', JoinS(Prev.ProjectLines, 2));
+  Writeln('rp.refused=[', Prev.Refused, ']');
+  Writeln('rp.old=', Prev.OldName);
+  Writeln('rp.new=', Prev.NewName);
+  Writeln('rp.renames=', Length(Prev.Renames));
+  Writeln('rp.dropped0=', JoinS(Prev.Dropped, 0));
+  Writeln('rp.unknown0=', JoinS(Prev.Unknown, 0));
+  Writeln('rp.action=', Ord(RenamePreviewAction(Prev)));
+  Txt:= RenameConfirmText('BASICS.PAS', Prev.OldName, Prev.NewName, Prev);
+  Writeln('rc.notindexed=', Txt.Contains('only projects with a drag-lint index were checked'));
+  Writeln('rc.allnames=', Txt.Contains('Micronite2027') and Txt.Contains('MicroniteMW1Service')
+    and Txt.Contains('DMTEST') and Txt.Contains('TEST_uSetupDefaultsFrm'));
+  Writeln('rc.header=', Txt.Contains('LotNotes_Headline -> LotNotesHeadline') and Txt.Contains('BASICS.PAS'));
+  Writeln('rc.dropped=', Txt.Contains('Foo_Bar -> FooBar'));
+  Writeln('rc.unknown=', Txt.Contains('X.sqlite: database disk image is malformed'));
+  Writeln('rc.counts=', Txt.Contains('4 indexed project(s)') and Txt.Contains('37 index(es) checked'));
+
+  { rr: the engine's real refusal shape (run_multi_project_rename S4) }
+  Prev:= ParseRenamePreview(
+    'rename-owners: 3 of 4 indexes'#13#10 +
+    'rename-project: A index=fresh'#13#10 +
+    'rename-project: MicroniteMW1Service index=fresh'#13#10 +
+    'rename-project: C index=fresh'#13#10 +
+    'rename-target: L6 My_Const -> MyConst dropped project MicroniteMW1Service: name MyConst already declared in uB'#13#10 +
+    'autofix: rename refused -- project MicroniteMW1Service: name MyConst already declared in uB'#13#10);
+  Writeln('rr.refused=', Prev.Refused);
+  Writeln('rr.action=', Ord(RenamePreviewAction(Prev)));
+
+  { rs: a single-project unit prints no rename- lines (criterion 15) }
+  Prev:= ParseRenamePreview('(loaded defaults from C:\Projects\.drag-lint.json)'#13#10 +
+    'autofix: 1 fixable finding(s) -- pass --apply to write'#13#10);
+  Writeln('rs.owners=', Prev.OwnerCount);
+  Writeln('rs.projects=', Length(Prev.ProjectLines));
+  Writeln('rs.action=', Ord(RenamePreviewAction(Prev)));
+
+  { rx: the shapes the brief's sample does not show -- reason suffix, real
+    counts summed over two targets, a library owner, a tag mid-line }
+  Prev:= ParseRenamePreview(
+    'drag-lint: note: project rules ran for this file, inrename-owners: 3 of 5 indexes'#13#10 +
+    'rename-project: A index=fresh'#13#10 +
+    'rename-project: B index=unverified (reindex failed: exit 2)'#13#10 +
+    'rename-project: LIB index=library'#13#10 +
+    'rename-target: L6 My_Const -> MyConst apply A=1 B=2'#13#10 +
+    'rename-target: L7 Other_Const -> OtherConst apply A=2 B=0'#13#10);
+  Writeln('rx.owners=', Prev.OwnerCount);
+  Writeln('rx.probed=', Prev.Probed);
+  Writeln('rx.project0=', JoinS(Prev.ProjectLines, 0));
+  Writeln('rx.project1=', JoinS(Prev.ProjectLines, 1));
+  Writeln('rx.project2=', JoinS(Prev.ProjectLines, 2));
+  Writeln('rx.renames=', string.Join('|', Prev.Renames));
+  Writeln('rx.action=', Ord(RenamePreviewAction(Prev)));
+  Txt:= RenameConfirmText('uShared.pas', Prev.OldName, Prev.NewName, Prev);
+  Writeln('rx.multi=', Txt.Contains('2 rename(s)') and Txt.Contains('Other_Const -> OtherConst'));
+
+  { rm: a manifest that did not load -- 0 of 0, free-text unknown, refusal }
+  Prev:= ParseRenamePreview(
+    'rename-owners: 0 of 0 indexes'#13#10 +
+    'rename-unknown: manifest did not load completely: C:\x\drag-lint.json: Unexpected character'#13#10 +
+    'rename-target: L6 My_Const -> ? dropped ownership unknown: manifest did not load completely: C:\x\drag-lint.json: Unexpected character'#13#10 +
+    'autofix: rename refused -- ownership unknown: manifest did not load completely: C:\x\drag-lint.json: Unexpected character'#13#10);
+  Writeln('rm.owners=', Prev.OwnerCount);
+  Writeln('rm.unknown0=', JoinS(Prev.Unknown, 0));
+  Writeln('rm.action=', Ord(RenamePreviewAction(Prev)));
+  { rb: the same in a batch run (Fix all): no refusal line, the target is only
+    dropped -- 0 owners must still not mean "single project, apply directly" }
+  Prev:= ParseRenamePreview(
+    'rename-owners: 0 of 0 indexes'#13#10 +
+    'rename-unknown: manifest did not load completely: C:\x\drag-lint.json: Unexpected character'#13#10 +
+    'rename-target: L6 My_Const -> ? dropped ownership unknown: manifest'#13#10 +
+    'autofix: no fixable findings (of 3 finding(s))'#13#10);
+  Writeln('rb.action=', Ord(RenamePreviewAction(Prev)));
+
+  { ra: an --apply run whose rename was dropped at write time: the refusal is
+    the LAST autofix: line (the Diagnostics row), but other edits were written }
+  Txt:= 'rename-owners: 2 of 3 indexes'#13#10 +
+    'rename-dropped-at-write: My_Const -> MyConst C:\w\B\uB.pas:7 (stale)'#13#10 +
+    'autofix: applied 1 edit(s) across 1 file(s) (.bak written)'#13#10 +
+    'autofix: rename refused -- project B: uB.pas:7 changed since it was indexed'#13#10;
+  Writeln('ra.summary=', AutofixSummary(Txt));
+  Writeln('ra.summaryapplied=', AutofixApplied(AutofixSummary(Txt)));
+  Writeln('ra.anyapplied=', AutofixAppliedInOutput(Txt));
+  Writeln('ra.dropped0=', JoinS(ParseRenamePreview(Txt).Dropped, 0));
+  Writeln('ra.noneapplied=', AutofixAppliedInOutput('autofix: applied 0 edit(s) across 0 file(s)'#13#10'autofix: rename refused -- x'));
   Writeln('DONE');
 end.
