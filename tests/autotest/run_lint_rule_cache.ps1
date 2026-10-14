@@ -310,10 +310,33 @@ Check 'C7  ...and the file is rewritten (next run hits)' ((CacheState $c7b.Prof)
 $c6 = LintOne 'uG1.pas'
 Check 'C6  the library index changing makes the next run a MISS' ((CacheState $c6.Prof) -eq 'miss') "state: $(CacheState $c6.Prof)"
 
+# --- C11: a partial entry is TOPPED UP, its other rules carried --------------------
+CacheFiles | Remove-Item -Force
+# Carrying only matters when a run needs rules the entry LACKS while NOT needing
+# one it HAS: entry {circular-uses}, then a run with circular-uses disabled needs
+# {enum, dup}. Without carrying, that run writes {enum, dup} and loses
+# circular-uses, so the next default run misses again.
+$p11 = LintOne 'uCycA.pas' @('--disable','enum-helper-separate-units,duplicate-global-decl')
+$txtA = [string](CacheFiles | ForEach-Object { [IO.File]::ReadAllText($_.FullName) })
+Check 'C11 step 1: the entry holds circular-uses only' (($txtA -match '"circular-uses"') -and ($txtA -notmatch '"enum-helper-separate-units"') -and ($txtA -notmatch '"duplicate-global-decl"')) "state: $(CacheState $p11.Prof)"
+$q11 = LintOne 'uCycA.pas' @('--disable','circular-uses')
+Check 'C11 step 2: a run needing {enum, dup} is a MISS (lacks)' ($q11.Prof -match 'rule-cache: miss \(lacks ') (($q11.Prof -split "`n" | Where-Object { $_ -match 'rule-cache' }) -join ' / ')
+$txtB = [string](CacheFiles | ForEach-Object { [IO.File]::ReadAllText($_.FullName) })
+Check 'C11 ...and writes an entry that STILL holds circular-uses (carried) plus the two it computed' (($txtB -match '"circular-uses"') -and ($txtB -match '"enum-helper-separate-units"') -and ($txtB -match '"duplicate-global-decl"')) ""
+$h11 = LintOne 'uCycA.pas'
+Check 'C11 step 3: a default run is now a HIT' ((CacheState $h11.Prof) -eq 'hit') "state: $(CacheState $h11.Prof)"
+Check 'C11 ...with correct findings' (@(Compare-Object $off['uCycA.pas'] (Tuples $h11.Rows)).Count -eq 0) ""
+
+# --- C12: a run that needs none of the cached rules writes nothing ------------------
+CacheFiles | Remove-Item -Force
+$p12 = LintOne 'uCycA.pas' @('--disable','circular-uses,enum-helper-separate-units,duplicate-global-decl')
+Check 'C12 a run needing none of the cached rules writes no (empty) entry' ((CacheFiles).Count -eq 0) "files: $((CacheFiles).Count); $(($p12.Prof -split "`n" | Where-Object { $_ -match 'rule-cache' }) -join ' / ')"
+
 # --- C3/C5: edit + index --project -> warmed HIT, and the NEW answer ----------------
 Write-Ascii (Join-Path $proj 'uCycB.pas') $cycB_nocycle
 $idx3 = & $exePath index --project $dpr --db $db --library-db $lib 2>&1 | Out-String
 Check 'SANITY: reindex after breaking the cycle' ($LASTEXITCODE -eq 0) $idx3
+Check 'C5  index --project reports that it WARMED the cache' ($idx3 -match 'rule-cache: warmed \d+ finding') (($idx3 -split "`n" | Where-Object { $_ -match 'rule-cache|WARNING' }) -join ' / ')
 $c3 = LintOne 'uCycA.pas'
 Check 'C3  the lint after index --project is a HIT (the indexer warmed the cache)' ((CacheState $c3.Prof) -eq 'hit') "state: $(CacheState $c3.Prof); index said: $(($idx3 -split "`n" | Where-Object { $_ -match 'rule-cache' }) -join ' / ')"
 Check 'C3  ...and the broken cycle is GONE (no stale answer)' (@($c3.Rows | Where-Object rule -eq 'circular-uses').Count -eq 0) (($c3.Rows | Where-Object rule -eq 'circular-uses' | ForEach-Object message) -join ' ; ')

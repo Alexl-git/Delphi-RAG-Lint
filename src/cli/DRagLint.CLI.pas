@@ -4081,6 +4081,7 @@ begin
       section has no project rules to cache. }
     if AItem.Mode = smClosure then
     begin
+      Indexer:= nil; { it holds its own reference to the store -- see DoIndex }
       Store:= nil;
       WarmRuleCache(AItem.DbPath, RuleCacheLibraryDb(Default(TArgs)));
     end;
@@ -6170,6 +6171,9 @@ begin
     it lazily (its key no longer matches). }
   if IsProjectScopedTarget and not AArgs.ResolveOnly then
   begin
+    { TIndexer holds its OWN reference to the store (FStore): releasing only Store
+      would leave the write connection open through the warm (whole-branch review). }
+    Indexer:= nil;
     Store:= nil;
     WarmRuleCache(ResolvedDb, RuleCacheLibraryDb(AArgs));
   end;
@@ -13019,9 +13023,13 @@ begin
     if ((ANarrowRule = '') or SameText(ANarrowRule, R)) and AKept(R) then Need:= Need + [R];
   var KeyBefore: TRuleCacheKey:= TRuleCacheKey.Take(AProjectDb, ALibraryDbUsed);
   var Why: string:= 'disabled';
+  { An entry with the SAME key that merely lacks a rule this run needs: its other
+    rules are still current, so they are carried into what this run writes rather
+    than thrown away (whole-branch review). }
+  var Carry : Boolean        := False;
+  var Cached: TRuleCacheEntry:= Default(TRuleCacheEntry);
   if TRuleCache.Enabled then
   begin
-    var Cached: TRuleCacheEntry;
     if TRuleCache.TryLoad(AProjectDb, Cached, Why) then
     begin
       Why:= 'key';
@@ -13035,14 +13043,29 @@ begin
           RuleCacheTrace('hit');
           Exit(Cached);
         end;
-        Why:= 'lacks ' + Missing;
+        Why  := 'lacks ' + Missing;
+        Carry:= True;
       end;
     end;
   end;
   RuleCacheTrace('miss (' + Why + ')');
   Result:= ComputeRuleCacheEntry(AStore, ALibStore, Need);
   Result.Key:= KeyBefore;
+  if Carry then
+    for var R: string in Cached.RuleIds do
+      if not Result.Holds(R) then
+      begin
+        Result.RuleIds := Result.RuleIds + [R];
+        Result.Findings:= Result.Findings + Cached.FindingsFor(R);
+      end;
   if not TRuleCache.Enabled then Exit;
+  { An entry holding no rule (every cached rule disabled for this run) would only
+    overwrite a useful one; there is nothing to cache. }
+  if Length(Result.RuleIds) = 0 then
+  begin
+    RuleCacheTrace('skipped (this run needs none of the cached rules)');
+    Exit;
+  end;
   if ANarrowRule <> '' then
   begin
     RuleCacheTrace('skipped (--rule run; a partial entry is never written)');

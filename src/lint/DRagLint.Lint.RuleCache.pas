@@ -116,15 +116,31 @@ const
   DWORD_BITS   = 32; { a FILETIME / file size arrives as two DWORD halves }
   HASH_HEX_CHARS = 16; { enough to keep index paths apart; the key still names the full path }
 
-{ size:lastwrite-FILETIME of one file, or '-' when it does not exist or cannot be read. }
+{ size:lastwrite-FILETIME of one file, or '-' when it does not exist or cannot be read.
+
+  READ THROUGH A HANDLE, not GetFileAttributesEx: for a file another process holds
+  open and is writing -- exactly an index mid-reindex -- the attribute query can
+  report a lagging size / last-write time, and a key that does not move is a
+  cache that serves an old answer (whole-branch review). A handle opened for
+  attributes only, sharing everything, reads the live values and blocks no one. }
 function StatSig(const APath: string): string;
 var
-  Data: TWin32FileAttributeData;
+  H   : THandle;
+  Info: TByHandleFileInformation;
 begin
   Result:= '-';
-  if (APath = '') or not GetFileAttributesEx(PChar(APath), GetFileExInfoStandard, @Data) then Exit;
-  Result:= Format('%d:%d', [(Int64(Data.nFileSizeHigh) shl DWORD_BITS) or Data.nFileSizeLow,
-                            (Int64(Data.ftLastWriteTime.dwHighDateTime) shl DWORD_BITS) or Data.ftLastWriteTime.dwLowDateTime]);
+  if APath = '' then Exit;
+  H:= CreateFile(PChar(APath), FILE_READ_ATTRIBUTES,
+                 FILE_SHARE_READ or FILE_SHARE_WRITE or FILE_SHARE_DELETE,
+                 nil, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+  if H = INVALID_HANDLE_VALUE then Exit;
+  try
+    if not GetFileInformationByHandle(H, Info) then Exit;
+    Result:= Format('%d:%d', [(Int64(Info.nFileSizeHigh) shl DWORD_BITS) or Info.nFileSizeLow,
+                              (Int64(Info.ftLastWriteTime.dwHighDateTime) shl DWORD_BITS) or Info.ftLastWriteTime.dwLowDateTime]);
+  finally
+    CloseHandle(H);
+  end;
 end;
 
 { The -wal as part of the key -- but only when it HOLDS something. SQLite creates
@@ -133,13 +149,9 @@ end;
   ever matched (measured: run 2 always `miss (key)`). An empty -wal carries no
   data; a non-empty one holds real uncheckpointed writes and stays in the key. }
 function WalSig(const ADb: string): string;
-var
-  Data: TWin32FileAttributeData;
 begin
-  Result:= '-';
-  if not GetFileAttributesEx(PChar(ADb + '-wal'), GetFileExInfoStandard, @Data) then Exit;
-  if (Data.nFileSizeHigh = 0) and (Data.nFileSizeLow = 0) then Exit;
   Result:= StatSig(ADb + '-wal');
+  if StartsStr('0:', Result) then Result:= '-';
 end;
 
 function IndexSig(const ADb: string): string;
