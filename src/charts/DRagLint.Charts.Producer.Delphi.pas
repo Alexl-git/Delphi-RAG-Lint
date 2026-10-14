@@ -69,7 +69,7 @@ uses
   System.SysUtils, System.IOUtils, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness
   , DRagLint.Core.Model // dl:unit DRagLint.Core.Model accepted -- the engine version the header names is the product constant itself
   , DRagLint.Charts.Question // dl:unit DRagLint.Charts.Question accepted -- the bundler defaults and Ask-Report's refusal code travel with the question types
-  , DRagLint.Charts.Ask, DRagLint.Charts.Producer.PowerShell
+  , DRagLint.Charts.Ask, DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Index, DRagLint.Charts.Tools
   , DRagLint.Charts.Q.TouchesTables  // dl:ok unused-unit-in-uses@5c7b -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.ShownWhere  // dl:ok unused-unit-in-uses@62b1 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Deps  // dl:ok unused-unit-in-uses@6504 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
@@ -138,11 +138,6 @@ begin
     Exit(Fail(EXIT_SETUP, 'the charts folder was not found (it holds the clone root and the dot settings); looked for Ask-Report.ps1 at' +
       sLineBreak + Why));
 
-  var Rep:= Freshness(Db);
-  if (Rep.Verdict = fvStale) and not pOptions.AllowStale then
-    Exit(Fail(PRODUCER_EXIT_STALE, Format('stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' +
-      sLineBreak + '  %s: %d file(s) changed since it was indexed', [Db, Rep.Changed])));
-
   var Q:= Default(TQuestionArgs);
   Q.Question:= pCommand.Question.ToLower;
   Q.Target:= pCommand.Get('Target');
@@ -158,7 +153,18 @@ begin
   Q.AllowLiveDb:= FAllowLiveDb;
   Q.AskedOn:= Now;
   Q.EngineVersion:= DRAGLINT_VERSION;
+  { FAILURE POLICY (engine review 2026-10-13). A refusal Ask-Report.ps1 would ALSO give stays
+    a refusal with Ask-Report's exit code, so the two producers agree: index missing / no
+    charts folder -> 2 (above), stale -> 3, question or index-lookup refusal -> 1, tool or
+    clone-guard refusal -> 2. ANY OTHER exception -- including one from the freshness probe,
+    which is therefore inside this try -- is not a verdict about the question but a failure
+    of the in-process path, so the question is handed to the fallback producer and Describe
+    says why. Nothing escapes Produce. }
   try
+    var Rep:= Freshness(Db);
+    if (Rep.Verdict = fvStale) and not pOptions.AllowStale then
+      Exit(Fail(PRODUCER_EXIT_STALE, Format('stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' +
+        sLineBreak + '  %s: %d file(s) changed since it was indexed', [Db, Rep.Changed])));
     var Answer:= AskChartQuestion(Q);
     Result:= Default(TProduceResult);
     Result.Ok:= True;
@@ -167,11 +173,19 @@ begin
     Result.IndexPaths:= [Db];
     Result.BundlePath:= Answer.BundleDir;
   except
-    on E: Exception do
+    on E: EChartsQuestion do
       Result:= Fail(ASK_EXIT_REFUSED, E.Message);
+    on E: EChartsIndex do
+      Result:= Fail(ASK_EXIT_REFUSED, E.Message);
+    on E: EChartsTool do
+      Result:= Fail(EXIT_SETUP, E.Message);
+    on E: Exception do
+    begin
+      FLast:= Format('Delphi in-process failed (%s: %s), fell back to: %s', [E.ClassName, E.Message, FFallback.Describe]);
+      Result:= FFallback.Produce(pCommand, pOptions);
+    end;
   end;
 end;
-
 function TDelphiProducer.Describe: string;
 begin
   Result:= if FLast <> '' then FLast else 'Delphi in-process (' + string.Join(', ', PortedQuestionIds) + ')';

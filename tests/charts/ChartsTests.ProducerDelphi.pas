@@ -42,6 +42,9 @@ type
     [Test] procedure StaleIndexRefusesWithoutAllowStale;
     [Test] procedure MissingIndexIsSetup;
     [Test] procedure RefusalIsExitOne;
+    [Test] procedure UnknownTargetIsExitOne;
+    [Test] procedure CloneGuardRefusalIsSetup;
+    [Test] procedure UnexpectedFailureFallsBack;
   end;
 
 implementation
@@ -56,6 +59,8 @@ const
   CLONE_DIR = 'charts\scratch\db';
   SERVER_CLONE = 'SERVER-MicroniteMW1Service.sqlite';
   CLIENT_CLONE = 'CLIENT-Micronite2027.sqlite';
+  CLIENT_HISTORY = 'CLIENT-Micronite2027.sqlite.pre-1.10';
+  NO_SUCH_TARGET = 'NoSuchUnit.TNoSuchClass.NoSuchMethod';
   TT_TARGET = 'uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation';
   EXIT_SETUP = 2;
   STUB_EXIT = 42;
@@ -229,6 +234,58 @@ begin
   Assert.AreEqual(1, R.ExitCode);
   Assert.IsFalse(R.Ok);
   Assert.StartsWith('touches-tables: this index has NO SQL facts at all', R.Reason);
+end;
+
+
+procedure TProducerDelphiTests.UnknownTargetIsExitOne;
+var
+  Db: string;
+begin
+  if not Clone(SERVER_CLONE, Db) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('touches-tables', NO_SUCH_TARGET), O);
+  Assert.AreEqual(1, R.ExitCode, R.Reason);
+  Assert.Contains(R.Reason, 'is not in this index');
+  Assert.AreEqual(0, FFallback.Calls, 'a refusal PowerShell would also give is not handed to the fallback');
+end;
+
+procedure TProducerDelphiTests.CloneGuardRefusalIsSetup;
+var
+  Db: string;
+begin
+  { a history copy in the clone root: a valid index, but the clone guard refuses its name }
+  if not Clone(CLIENT_HISTORY, Db) then
+    Exit;
+  FProducer:= TDelphiProducer.Create(FKeep, False, FOutRoot);  { clone guard ON for this case }
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.StartsWith('refusing a database whose name does not end in .sqlite', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.UnexpectedFailureFallsBack;
+begin
+  { not an index at all: the freshness probe fails inside the try, which is a failure of the
+    in-process path, not a verdict -- so the fallback answers and nothing escapes }
+  TDirectory.CreateDirectory(FOutRoot);
+  var Bad:= TPath.Combine(FOutRoot, 'corrupt.sqlite');
+  TFile.WriteAllText(Bad, 'this is not an SQLite database');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Bad;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  var R:= FProducer.Produce(Cmd('deps', 'X'), O);
+  Assert.AreEqual(1, FFallback.Calls, 'the fallback answers an unexpected failure');
+  Assert.AreEqual(STUB_EXIT, R.ExitCode);
+  Assert.Contains(FProducer.Describe, 'Delphi in-process failed (');
+  Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
 end;
 
 end.
