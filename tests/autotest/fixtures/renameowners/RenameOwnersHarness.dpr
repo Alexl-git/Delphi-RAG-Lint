@@ -2,10 +2,12 @@ program RenameOwnersHarness;
 
 { Pins DRagLint.Storage.FileMembership.DbMembership (spec 8a/8c) and
   DRagLint.Refactor.MultiProjectRename.FindRenameOwners (8a-8d) against
-  fixture databases the deployed engine built. Driven by
+  fixture databases the deployed engine built, and RefreshOwner /
+  ChangedFilePaths (criteria 3-5) against copies of them. Driven by
   tests\autotest\run_rename_owners_harness.ps1, which asserts the key=value
   lines printed here.
-  Arg 1: the fixture work folder (shared\, twin\, A.sqlite, T.sqlite, ...). }
+  Arg 1: the fixture work folder (shared\, twin\, A.sqlite, T.sqlite, ...).
+  Arg 2: the engine exe RefreshOwner's reindex callback shells. }
 
 {$APPTYPE CONSOLE}
 
@@ -13,6 +15,11 @@ uses
   System.SysUtils
   , FireDAC.Stan.Async { the CLI links it elsewhere; FileMembership's open needs it }
   , System.IOUtils
+  , System.DateUtils
+  , DRagLint.Core.Interfaces
+  , DRagLint.Storage.SQLite
+  , DRagLint.Index.Freshness
+  , Winapi.Windows
   , DRagLint.Storage.FileMembership
   , DRagLint.Index.Manifest
   , DRagLint.Refactor.MultiProjectRename
@@ -21,10 +28,16 @@ uses
 const
   KIND_TEXT: array[TOwnerKind] of string = ('project', 'library');
   MEMBERSHIP_TEXT: array[TDbMembership] of string = ('member', 'notmember', 'unknown');
+  FRESHNESS_TEXT: array[TOwnerFreshness] of string = ('fresh', 'reindexed', 'unverified');
+  REINDEX_TIMEOUT_MS = 120000;
+  TOUCH_AHEAD_SEC = 10; { mtime_unix is in SECONDS: an edit in the second the DB was built would read as unchanged }
 
 var
-  W     : string;
-  Shared: string;
+  W           : string ;
+  Shared      : string ;
+  Exe         : string ;
+  ReindexCalls: Integer;
+  ReindexArgs : string ;
 
 procedure Probe(const AKey, ADb, AFile: string);
 var
@@ -73,10 +86,133 @@ begin
     Result:= Result + (if I > 0 then ',' else '') + D.Owners[I].SectionName;
 end; // function
 
+{ --- RefreshOwner / ChangedFilePaths (criteria 3-5) --- }
+
+function Changed(const ADb: string): TArray<string>;
+var
+  Store: ISymbolStore;
 begin
+  Store := TSQLiteSymbolStore.Create(ADb, True);
+  Result:= ChangedFilePaths(Store);
+end; // function
+
+procedure Touch(const APath: string);
+begin
+  TFile.AppendAllText(APath, '{ edited }'#13#10, TEncoding.ASCII);
+  TFile.SetLastWriteTime(APath, IncSecond(Now, TOUCH_AHEAD_SEC));
+end; // procedure
+
+{ The callback the CLI will supply in Task 5, as a test double: the deployed
+  engine's incremental `index --project` -- never `index <dir>`. }
+function RunQuiet(const ACmd: string): Boolean;
+var
+  SI  : TStartupInfo       ;
+  PI  : TProcessInformation;
+  Cmd : string             ;
+  Code: DWORD              ;
+begin
+  { cmd /c with output to NUL: the engine's progress lines must not mix with
+    the key=value lines the .ps1 parses. }
+  Cmd:= 'cmd.exe /c "' + ACmd + ' >NUL 2>&1"';
+  UniqueString(Cmd);
+  SI:= Default(TStartupInfo);
+  SI.cb:= SizeOf(SI);
+  Result:= CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, PChar(W), SI, PI);
+  if not Result then Exit;
   try
+    Result:= (WaitForSingleObject(PI.hProcess, REINDEX_TIMEOUT_MS) = WAIT_OBJECT_0)
+      and GetExitCodeProcess(PI.hProcess, Code) and (Code = 0);
+  finally
+    CloseHandle(PI.hThread);
+    CloseHandle(PI.hProcess);
+  end; // try
+end; // function
+
+function ShellReindex: TFunc<string, string, Boolean>;
+begin
+  Result:= function(AProj, ADb: string): Boolean
+    begin
+      Inc(ReindexCalls);
+      ReindexArgs:= AProj + '|' + ADb;
+      Result:= RunQuiet('"' + Exe + '" index --project "' + AProj + '" --db "' + ADb + '"');
+    end;
+end; // function
+
+{ Counts the call and touches nothing: proves what RefreshOwner does with the
+  callback's answer, independent of the engine. }
+function FakeReindex(AAnswer: Boolean): TFunc<string, string, Boolean>;
+begin
+  Result:= function(AProj, ADb: string): Boolean
+    begin
+      Inc(ReindexCalls);
+      ReindexArgs:= AProj + '|' + ADb;
+      Result:= AAnswer;
+    end;
+end; // function
+
+procedure Refresh(const AKey, ADb, AProj: string; const AReindex: TFunc<string, string, Boolean>);
+var
+  O     : TRenameOwner   ;
+  Reason: string         ;
+  F     : TOwnerFreshness;
+  Before: Integer        ;
+begin
+  O:= Default(TRenameOwner);
+  O.DbPath     := ADb;
+  O.SectionName:= AKey;
+  O.ProjectFile:= AProj;
+  Before:= ReindexCalls;
+  F:= RefreshOwner(O, AReindex, Reason);
+  Writeln(AKey, '=', FRESHNESS_TEXT[F]);
+  Writeln(AKey, '.reason=', Reason);
+  Writeln(AKey, '.reindex_calls=', ReindexCalls - Before);
+end; // procedure
+
+procedure RefreshChecks;
+var
+  C    : TArray<string>;
+  Store: ISymbolStore  ;
+  Rep  : TFreshnessReport;
+  F    : string        ;
+begin
+  Writeln('r.changed_fresh=', Length(Changed(W + 'A.sqlite')));
+  Refresh('r.fresh', W + 'A.sqlite', W + 'A\A.dpr', ShellReindex());
+
+  { An index whose completed-run stamp is gone is STALE, not fresh. }
+  Store:= TSQLiteSymbolStore.Create(W + 'A_nostamp.sqlite');
+  Store.SetMetaValue(INDEXED_AT_KEY, '');
+  Store:= nil;
+  Refresh('r.nostamp', W + 'A_nostamp.sqlite', W + 'A\A.dpr', FakeReindex(True));
+
+  Touch(Shared);
+  C:= Changed(W + 'A.sqlite');
+  Writeln('r.changed_before=', Length(C));
+  if Length(C) > 0 then Writeln('r.changed_before.0=', C[0]);
+
+  { The FULL list: five changed files where the probe keeps three examples. }
+  for F in TDirectory.GetFiles(W + 'many', '*.pas') do Touch(F);
+  Writeln('m.changed=', Length(Changed(W + 'many.sqlite')));
+  Store:= TSQLiteSymbolStore.Create(W + 'many.sqlite', True);
+  Rep  := ProbeIndexFreshness(Store);
+  Store:= nil;
+  Writeln('m.probe_changed=', Rep.Changed);
+  Writeln('m.probe_examples=', Length(Rep.Examples));
+
+  Refresh('r.stale', W + 'A.sqlite', W + 'A\A.dpr', ShellReindex());
+  Writeln('r.stale.args=', ReindexArgs);
+  Writeln('r.changed_after=', Length(Changed(W + 'A.sqlite')));
+
+  Refresh('r.fail'   , W + 'A_fail.sqlite', W + 'A\A.dpr', FakeReindex(False));
+  Refresh('r.noop'   , W + 'A_noop.sqlite', W + 'A\A.dpr', FakeReindex(True));
+  Refresh('r.bad'    , W + 'bad.sqlite'   , W + 'A\A.dpr', ShellReindex());
+  Refresh('r.missing', W + 'missing.sqlite', W + 'A\A.dpr', ShellReindex());
+  Refresh('r.folder' , W + 'LIB.sqlite'   , ''           , ShellReindex());
+end; // procedure
+
+begin  try
     W     := IncludeTrailingPathDelimiter(ParamStr(1));
     Shared:= W + 'shared\uShared.pas';
+    Exe   := ParamStr(2);
     Probe('A'      , W + 'A.sqlite'      , Shared);
     Probe('A_upper', W + 'A.sqlite'      , UpperCase(Shared));
     Probe('T'      , W + 'T.sqlite'      , Shared);
@@ -85,6 +221,7 @@ begin
     Discover('', 'owners.json', '');
     Writeln('owners_pref=', OwnerNames('owners.json', W + 'LIB.sqlite'));
     Discover('u.', 'unknown.json', '');
+    RefreshChecks;
     Writeln('DONE');
   except
     on E: Exception do Writeln('EXCEPTION=', E.ClassName, ': ', E.Message);

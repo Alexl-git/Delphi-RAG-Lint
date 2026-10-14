@@ -12,6 +12,13 @@
       owners in plan order with the preferred DB first, keeps a library owner
       with Kind=library so the caller can refuse it (8d), and lists the DBs it
       could not read instead of dropping them (8c).
+    * RefreshOwner (criteria 3-5): a fresh owner is used as is; a stale one is
+      reindexed through the caller's callback (here: the engine's incremental
+      `index --project`) and re-checked; an unopenable DB, a failed or
+      ineffective reindex, a DB without its completed-run stamp, and a folder DB
+      (no project file -- never reindexed) are all UNVERIFIED, with a reason.
+    * ChangedFilePaths returns the FULL changed list (5 of 5) where
+      ProbeIndexFreshness keeps 3 examples, using the same comparison.
 
   ISOLATION: every DB is built under $env:TEMP\draglint-owners-<guid> with an
   explicit --db; the manifest is parsed from text by the harness (no manifest
@@ -43,13 +50,14 @@ $realBefore = if (Test-Path $RealDb) { $i = Get-Item $RealDb; "$($i.Length)|$($i
 Write-Host '== Rename owners: tri-state membership + discovery by full path ==' -ForegroundColor Cyan
 $Exe = (Resolve-Path $Exe).Path
 New-Item -ItemType Directory $WorkDir | Out-Null
-foreach ($d in 'shared', 'twin', 'A', 'T') { New-Item -ItemType Directory "$WorkDir\$d" | Out-Null }
+foreach ($d in 'shared', 'twin', 'A', 'T', 'many') { New-Item -ItemType Directory "$WorkDir\$d" | Out-Null }
 
 # --- fixture sources: one unit name, two different files ---
 $unit = @('unit uShared;', '', 'interface', '', 'const', '  My_Const = 1;', '', 'implementation', '', 'end.')
 WriteAscii "$WorkDir\shared\uShared.pas" $unit
 WriteAscii "$WorkDir\twin\uShared.pas"   $unit
 WriteAscii "$WorkDir\A\A.dpr" @('program A;', '', 'uses', "  uShared in '..\shared\uShared.pas';", '', 'begin', 'end.')
+foreach ($n in 1..5) { WriteAscii "$WorkDir\many\uMany$n.pas" @("unit uMany$n;", '', 'interface', '', 'implementation', '', 'end.') }
 WriteAscii "$WorkDir\T\T.dpr" @('program T;', '', 'uses', "  uShared in '..\twin\uShared.pas';", '', 'begin', 'end.')
 
 # --- fixture DBs, each with an explicit --db, cwd inside the work folder ---
@@ -62,7 +70,11 @@ try {
   # a LIBRARY-type DB: a folder target is valid for a library DB (never for a project DB)
   $null = & $Exe index "$WorkDir\shared" --db "$WorkDir\LIB.sqlite" 2>&1
   Check 'F3 indexed shared\ as a library DB' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\LIB.sqlite")) "exit=$LASTEXITCODE"
+  $null = & $Exe index "$WorkDir\many" --db "$WorkDir\many.sqlite" 2>&1
+  Check 'F4 indexed many\ (5 units) as a library DB' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\many.sqlite")) "exit=$LASTEXITCODE"
 } finally { Pop-Location }
+# fresh copies of A for the callback-double cases (RefreshOwner never sees the original)
+foreach ($c in 'A_nostamp', 'A_fail', 'A_noop') { Copy-Item "$WorkDir\A.sqlite" "$WorkDir\$c.sqlite" }
 [System.IO.File]::WriteAllBytes("$WorkDir\bad.sqlite", [byte[]](,0xFF * 64))
 
 # --- manifests, parsed from text by the harness ---
@@ -100,10 +112,11 @@ $log = Get-Content $logPath -Raw -ErrorAction SilentlyContinue
 $buildOk = ($log -match 'BUILD_EXITCODE=0') -and ($log -notmatch 'Error:')
 $errLines = ($log -split "`r?`n" | Where-Object { $_ -match 'Error|Fatal' } | Select-Object -First 4) -join ' | '
 Check 'B1 RenameOwnersHarness.dpr builds (Win64 Debug)' $buildOk $errLines
+Copy-TreeSitterDlls -Dest $outDir | Out-Null
 $hx = "$outDir\RenameOwnersHarness.exe"
 if (-not $buildOk -or -not (Test-Path $hx)) { [System.IO.Directory]::Delete($WorkDir, $true); Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 
-$out = & $hx $WorkDir 2>&1 | Out-String
+$out = & $hx $WorkDir $Exe 2>&1 | Out-String
 $kv = @{}
 foreach ($line in ($out -split "`r?`n")) { if ($line -match '^([A-Za-z0-9_.]+)=(.*)$') { $kv[$matches[1]] = $matches[2] } }
 Check 'H1 harness ran to completion' ($out -match '(?m)^DONE') ($kv['EXCEPTION'])
@@ -130,6 +143,28 @@ Check 'O8 the same DB under two spellings is probed once'           ($kv['u.prob
 Check 'O9 ... and owns once'                                        ($kv['u.owners'] -eq 'A')                "got: $($kv['u.owners'])"
 Check 'O10 an unreadable DB is reported unknown, not dropped'       ($kv['u.unknown_count'] -eq '1')         "got: $($kv['u.unknown_count'])"
 Check 'O11 ... as "dbpath: reason"' ($kv['u.unknown.0'] -like "$WorkDir\bad.sqlite: ?*") "got: $($kv['u.unknown.0'])"
+
+Write-Host '-- ChangedFilePaths + RefreshOwner (criteria 3-5)' -ForegroundColor Cyan
+$sharedPath = "$WorkDir\shared\uShared.pas"
+$aDpr = "$WorkDir\A\A.dpr"
+Check 'C1 a just-built DB has no changed files'                     ($kv['r.changed_fresh'] -eq '0')         "got: $($kv['r.changed_fresh'])"
+Check 'C2 after an edit, the edited file is listed'                 ($kv['r.changed_before'] -eq '1')        "got: $($kv['r.changed_before'])"
+Check 'C3 ... by its full path'                                     ($kv['r.changed_before.0'] -eq $sharedPath) "got: $($kv['r.changed_before.0'])"
+Check 'C4 the FULL list: 5 of 5 changed files'                      ($kv['m.changed'] -eq '5')               "got: $($kv['m.changed'])"
+Check 'C5 ... same count as the probe, which keeps only 3 examples' (($kv['m.probe_changed'] -eq '5') -and ($kv['m.probe_examples'] -eq '3')) "got: $($kv['m.probe_changed'])/$($kv['m.probe_examples'])"
+Check 'R1 a fresh owner is fresh'                                   ($kv['r.fresh'] -eq 'fresh')             "got: $($kv['r.fresh']) $($kv['r.fresh.reason'])"
+Check 'R2 ... with no reason and no reindex'                        (($kv['r.fresh.reason'] -eq '') -and ($kv['r.fresh.reindex_calls'] -eq '0')) "got: '$($kv['r.fresh.reason'])' calls=$($kv['r.fresh.reindex_calls'])"
+Check 'R3 a stale owner is reindexed (fresh_after=reindexed)'       ($kv['r.stale'] -eq 'reindexed')         "got: $($kv['r.stale']) $($kv['r.stale.reason'])"
+Check 'R4 ... once, as index --project <projectFile> --db <db>'     (($kv['r.stale.reindex_calls'] -eq '1') -and ($kv['r.stale.args'] -eq "$aDpr|$WorkDir\A.sqlite")) "got: calls=$($kv['r.stale.reindex_calls']) args=$($kv['r.stale.args'])"
+Check 'R5 ... and ChangedFilePaths is empty afterwards'             ($kv['r.changed_after'] -eq '0')         "got: $($kv['r.changed_after'])"
+Check 'R6 an unopenable DB is unverified'                           ($kv['r.bad'] -eq 'unverified')          "got: $($kv['r.bad'])"
+Check 'R7 ... with the error as reason, and is never reindexed'     (($kv['r.bad.reason'] -ne '') -and ($kv['r.bad.reindex_calls'] -eq '0')) "got: '$($kv['r.bad.reason'])' calls=$($kv['r.bad.reindex_calls'])"
+Check 'R8 a DB file that does not exist is unverified, not created' (($kv['r.missing'] -eq 'unverified') -and ($kv['r.missing.reindex_calls'] -eq '0') -and -not (Test-Path "$WorkDir\missing.sqlite")) "got: $($kv['r.missing']) calls=$($kv['r.missing.reindex_calls'])"
+Check 'R9 a folder DB (no project file) is unverified'              ($kv['r.folder'] -eq 'unverified')       "got: $($kv['r.folder'])"
+Check 'R10 ... with the exact reason, and is never reindexed'       (($kv['r.folder.reason'] -eq 'no project file -- folder DBs are not reindexed by a rename') -and ($kv['r.folder.reindex_calls'] -eq '0')) "got: '$($kv['r.folder.reason'])' calls=$($kv['r.folder.reindex_calls'])"
+Check 'R11 a reindex that reports failure leaves it unverified'     (($kv['r.fail'] -eq 'unverified') -and ($kv['r.fail.reason'] -eq "reindex failed: index --project $aDpr")) "got: $($kv['r.fail']) '$($kv['r.fail.reason'])'"
+Check 'R12 a reindex that changes nothing: still stale, named'      (($kv['r.noop'] -eq 'unverified') -and ($kv['r.noop.reason'] -eq "still stale after reindex: $sharedPath")) "got: $($kv['r.noop']) '$($kv['r.noop.reason'])'"
+Check 'R13 a DB without its completed-run stamp is stale, not fresh' (($kv['r.nostamp'] -eq 'unverified') -and ($kv['r.nostamp.reindex_calls'] -eq '1') -and ($kv['r.nostamp.reason'] -eq 'still stale after reindex: index carries no indexed_at_unix stamp')) "got: $($kv['r.nostamp']) calls=$($kv['r.nostamp.reindex_calls']) '$($kv['r.nostamp.reason'])'"
 
 $realAfter = if (Test-Path $RealDb) { $i = Get-Item $RealDb; "$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" } else { 'absent' }
 Check 'Z1 a real project DB was not touched (size+mtime)' ($realBefore -eq $realAfter) "$realBefore -> $realAfter"

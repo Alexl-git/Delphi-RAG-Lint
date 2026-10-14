@@ -14,8 +14,13 @@ unit DRagLint.Refactor.MultiProjectRename;
 interface
 
 uses
-  DRagLint.Index.Manifest
+  System.SysUtils
+  , DRagLint.Index.Manifest
   ;
+
+const
+  /// <summary>RefreshOwner's AReason for an owner with no project file.</summary>
+  REASON_FOLDER_DB = 'no project file -- folder DBs are not reindexed by a rename';
 
 type
   /// <summary>What kind of index owns the file.</summary>
@@ -69,6 +74,17 @@ type
     Unknown: TArray<string>;
   end; // record
 
+  /// <summary>Whether an owning DB may be used for a rename, after RefreshOwner.</summary>
+  /// <remarks>Spec criteria 3-5.</remarks>
+  TOwnerFreshness = (
+    /// <summary>Nothing changed on disk since the DB was indexed; used as is.</summary>
+    ofFresh,
+    /// <summary>Was stale, was reindexed, and is fresh now.</summary>
+    ofReindexed,
+    /// <summary>Could not be opened, could not be reindexed, or is still stale
+    /// afterwards: the project counts as UNVERIFIED for the rename (criterion 5).</summary>
+    ofUnverified);
+
 /// <summary>Probes every index the manifest configures for APlatform and
 /// reports which of them hold AFilePath, which do not, and which could not be
 /// asked.</summary>
@@ -106,11 +122,41 @@ type
 function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFilePath,
   APreferredDb: string): TOwnerDiscovery;
 
+/// <summary>Makes one owning DB fresh before a rename uses it, or says why it
+/// cannot (spec criteria 3-5).</summary>
+/// <param name="AOwner">The owner to check. Only DbPath and ProjectFile are read.</param>
+/// <param name="AReindex">Runs an incremental `index --project` as
+/// AReindex(ProjectFile, DbPath) and returns True on success. Supplied by the
+/// caller (the CLI) so this unit never links DRagLint.CLI. Called at most once,
+/// and only for an owner with a project file whose DB opened and was stale.</param>
+/// <param name="AReason">'' for ofFresh and ofReindexed; otherwise why the owner
+/// is unverified -- REASON_FOLDER_DB, 'reindex failed: index --project
+/// &lt;file&gt;', 'still stale after reindex: &lt;first path&gt;', or the
+/// message of whatever was raised.</param>
+/// <returns>ofFresh when ChangedFilePaths is empty and the DB carries its
+/// INDEXED_AT_KEY stamp; ofReindexed when it was stale and AReindex made it
+/// fresh; ofUnverified otherwise.</returns>
+/// <remarks>
+/// <para>A DB without the INDEXED_AT_KEY stamp is STALE, not fresh: nothing
+/// says a completed run ever wrote it. A completed `index --project` writes it.</para>
+/// <para>Criterion 3 (changed files only) is met by the incremental
+/// `index --project` itself, which skips every up-to-date file; an in-process
+/// per-file path would duplicate DoIndex's resolve stages (Task 4 spike,
+/// ledger). A folder DB (ProjectFile = '') is never reindexed: `index &lt;dir&gt;
+/// --db` is the call that widens a project DB, so it is not made here.</para>
+/// <para>Raises nothing: every exception becomes ofUnverified with its message.
+/// The store is opened read-only and released before AReindex runs.</para>
+/// </remarks>
+function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, string, Boolean>;
+  out AReason: string): TOwnerFreshness;
+
 implementation
 
 uses
-  System.SysUtils
-  , System.Generics.Collections
+  System.Generics.Collections
+  , DRagLint.Core.Interfaces
+  , DRagLint.Storage.SQLite
+  , DRagLint.Index.Freshness
   , DRagLint.Index.Plan
   , DRagLint.Project.Resolver
   , DRagLint.Storage.FileMembership
@@ -192,6 +238,56 @@ begin
     Unknown.Free;
     Owners .Free;
     Seen   .Free;
+  end; // try
+end; // function
+
+{ '' when the DB at ADbPath is fresh; otherwise what makes it stale -- the
+  first changed path, or the missing completed-run stamp. Read-only; raises
+  when the DB cannot be opened or read. }
+function StaleEvidence(const ADbPath: string): string;
+var
+  Store  : ISymbolStore  ;
+  Changed: TArray<string>;
+begin
+  { Read-only never CREATES: a missing path raises instead of leaving an empty
+    database behind. }
+  Store:= TSQLiteSymbolStore.Create(ADbPath, True);
+  if Store.GetMetaValue(INDEXED_AT_KEY) = '' then Exit('index carries no ' + INDEXED_AT_KEY + ' stamp');
+  Changed:= ChangedFilePaths(Store);
+  Result := if Length(Changed) > 0 then Changed[0] else '';
+end; // function
+
+function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, string, Boolean>;
+  out AReason: string): TOwnerFreshness;
+var
+  Evidence: string;
+begin
+  AReason:= '';
+  try
+    if StaleEvidence(AOwner.DbPath) = '' then Exit(ofFresh);
+    if AOwner.ProjectFile = '' then
+    begin
+      AReason:= REASON_FOLDER_DB;
+      Exit(ofUnverified);
+    end;
+    if not AReindex(AOwner.ProjectFile, AOwner.DbPath) then
+    begin
+      AReason:= 'reindex failed: index --project ' + AOwner.ProjectFile;
+      Exit(ofUnverified);
+    end;
+    Evidence:= StaleEvidence(AOwner.DbPath);
+    if Evidence <> '' then
+    begin
+      AReason:= 'still stale after reindex: ' + Evidence;
+      Exit(ofUnverified);
+    end;
+    Result:= ofReindexed;
+  except
+    on E: Exception do
+    begin
+      AReason:= E.Message;
+      Result := ofUnverified;
+    end;
   end; // try
 end; // function
 
