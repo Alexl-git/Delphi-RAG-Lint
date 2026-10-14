@@ -23,8 +23,19 @@
                       from the symbol's file and one dot layout of it (shas of .dot/.svg/
                       .plain and the anchor count; dot.exe runs on both sides); then the
                       checks, sql, columns, orm and chains sections (index-wide, once per clone).
+  -Mode Question      (P3 end to end) for each case whose question the probe reports as ported
+                      (ChartsCoreProbe --ported): Ask-Report.ps1 -Plain as Determinism runs it, and the
+                      probe's question mode (the in-process Delphi question, same index, its own
+                      -OutRoot). The text is compared with `drag-lint compare` (the step-1 diff and its
+                      spec-s5 normalisation, nothing looser); every bundle file both sides wrote is
+                      compared too: graph.dot/.svg/.plain/.png byte for byte, meta.json/index.html/
+                      xref.txt with only the generated time and the bundle root masked (the facts N1
+                      already drops from the text), graph.pdf reported and not compared (see
+                      $BundleSkipped). Questions not ported are listed as SKIP. The probe is rebuilt
+                      when any src\charts unit or the probe source is newer than it.
 
   Usage:  pwsh -File charts\src\Test-Parity.ps1 -Mode Core -Only who-writes -Clone DL
+          pwsh -File charts\src\Test-Parity.ps1 -Mode Question -Only touches-tables
           -Only   restricts the CASES (by question id); the fixed names of each clone in play
                   always run.
           -Clone  restricts the clones to those whose file name starts with the text (DL, CLIENT...).
@@ -59,7 +70,7 @@ $DbRoot  = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\scratch\db'))
 $CasesPath = Join-Path $PSScriptRoot '..\parity\cases.json'
 $AskReport = Join-Path $PSScriptRoot 'Ask-Report.ps1'
 $RepoRoot  = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
-if ($Mode -notin 'Determinism', 'Core') { Write-Host "FATAL: -Mode must be Determinism or Core (got '$Mode')" -ForegroundColor Red; exit 2 }
+if ($Mode -notin 'Determinism', 'Core', 'Question') { Write-Host "FATAL: -Mode must be Determinism, Core or Question (got '$Mode')" -ForegroundColor Red; exit 2 }
 
 $cases = @((Get-Content -LiteralPath $CasesPath -Raw | ConvertFrom-Json).cases)
 if ($Only) { $cases = @($cases | Where-Object { $_.question -ieq $Only }) }
@@ -727,6 +738,126 @@ function Invoke-CoreMode {
   $mismatches.Count
 }
 
+# ============================ Question (P3, end to end) ===========================
+
+# The probe's sources: rebuilt when any is newer than the exe, so a question is never compared
+# against a Delphi build of yesterday's code.
+function Get-ProbeExe {
+  $probeExe = Join-Path $RepoRoot 'charts\scratch\probe\ChartsCoreProbe.exe'
+  $srcs = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot 'src\charts') -Filter '*.pas') + @(Get-Item -LiteralPath (Join-Path $RepoRoot 'tests\charts\ChartsCoreProbe.dpr'))
+  $stale = -not (Test-Path -LiteralPath $probeExe)
+  if (-not $stale) { $t = (Get-Item -LiteralPath $probeExe).LastWriteTimeUtc; $stale = [bool]@($srcs | Where-Object { $_.LastWriteTimeUtc -gt $t }).Count }
+  if ($stale) {
+    Write-Host 'building ChartsCoreProbe ...'
+    & pwsh -NoProfile -File (Join-Path $RepoRoot 'tests\charts\run_charts_core_probe_build.ps1') | Out-Host
+    if (-not (Test-Path -LiteralPath $probeExe)) { Write-Host 'FATAL: probe build failed' -ForegroundColor Red; exit 2 }
+  }
+  $probeExe
+}
+
+# The text a bundle file holds once the two facts that legitimately differ between two runs are
+# masked: the time it was generated (the same N1 rule that drops the header's date/time) and the
+# bundle's own root folder (the same N1 rule that drops the BUNDLE line; the two sides write to
+# two roots so neither overwrites the other). Nothing else is touched.
+function Get-MaskedBundleText([string] $Path, [string] $Root) {
+  $t = [IO.File]::ReadAllText($Path)
+  $t = $t.Replace($Root, '<BUNDLE-ROOT>')
+  $t = [regex]::Replace($t, '(?<="generated": ")[^"]*', '<GENERATED>')
+  $t = [regex]::Replace($t, '(?<=generated <b>)[^<]*', '<GENERATED>')
+  [regex]::Replace($t, '(?<=/// Generated: )\S+', '<GENERATED>')
+}
+
+# Per bundle file: 'same' or why not. graph.pdf is reported, never compared: dot's cairo PDF is not
+# byte-stable (two PS runs of one question differ, measured 2026-10-13), and its content is the
+# .dot source, which IS compared byte for byte.
+$BundleBytewise = @('graph.dot', 'graph.svg', 'graph.plain', 'graph.png')
+$BundleMasked   = @('meta.json', 'index.html', 'xref.txt')
+$BundleSkipped  = @{ 'graph.pdf' = 'not compared: cairo PDF output differs between two PS runs of the same question' }
+function Compare-Bundle([string] $PsDir, [string] $DlDir, [string] $PsRoot, [string] $DlRoot) {
+  $out = New-Object System.Collections.Generic.List[object]
+  $names = @(@(Get-ChildItem -LiteralPath $PsDir -File | ForEach-Object Name) + @(Get-ChildItem -LiteralPath $DlDir -File | ForEach-Object Name) | Sort-Object -Unique)
+  foreach ($n in $names) {
+    $p = Join-Path $PsDir $n; $d = Join-Path $DlDir $n
+    if ($BundleSkipped.ContainsKey($n)) { $out.Add([pscustomobject]@{ File = $n; Same = $null; Why = $BundleSkipped[$n] }); continue }
+    if (-not (Test-Path -LiteralPath $p)) { $out.Add([pscustomobject]@{ File = $n; Same = $false; Why = 'only the Delphi bundle has it' }); continue }
+    if (-not (Test-Path -LiteralPath $d)) { $out.Add([pscustomobject]@{ File = $n; Same = $false; Why = 'only the PS bundle has it' }); continue }
+    if ($n -in $BundleMasked) {
+      $same = (Get-MaskedBundleText $p $PsRoot) -ceq (Get-MaskedBundleText $d $DlRoot)
+      $out.Add([pscustomobject]@{ File = $n; Same = $same; Why = $(if ($same) { 'equal (generated time and bundle root masked)' } else { 'differs after masking -- diff the two files' }) })
+    } elseif ($n -in $BundleBytewise) {
+      $same = (Get-ParityFileSha $p) -ceq (Get-ParityFileSha $d)
+      $out.Add([pscustomobject]@{ File = $n; Same = $same; Why = $(if ($same) { 'byte-equal' } else { 'bytes differ' }) })
+    } else {
+      $out.Add([pscustomobject]@{ File = $n; Same = $false; Why = 'a bundle file this harness does not know -- add it to a list above' })
+    }
+  }
+  $out
+}
+
+function Invoke-QuestionMode {
+  $probeExe = Get-ProbeExe
+  $ported = @(& $probeExe --ported 2>$null | Where-Object { $_ })
+  $chartsRoot = Join-Path $RepoRoot 'charts'
+  $psRoot = Join-Path $OutDir 'question\ps'
+  $dlRoot = Join-Path $OutDir 'question\dl'
+  New-Item -ItemType Directory -Force $psRoot, $dlRoot | Out-Null
+  $rows = New-Object System.Collections.Generic.List[object]
+  $bad = 0
+  foreach ($c in $cases) {
+    if ($ported -notcontains $c.question) { $rows.Add([pscustomobject]@{ Question = $c.question; Text = 'not ported'; Files = ''; PsS = ''; DlS = ''; Verdict = 'SKIP' }); continue }
+    if ($c.serverDb -or $c.sqlDb -or $c.counterpartDb -or @($c.extra).Count) {
+      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes one index and no extra arguments' }); $bad++; continue
+    }
+    Write-Host "question: $($c.question) ..."
+    $psFile = Join-Path $OutDir "$($c.question).ps.txt"
+    $dlFile = Join-Path $OutDir "$($c.question).dl.txt"
+    $r1 = Invoke-AskPlain $c $psFile $psRoot
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $dlOut = & $probeExe --question $c.question --target $c.target --db (Join-Path $DbRoot $c.db) --out-root $dlRoot --charts-root $chartsRoot 2>"$dlFile.err"
+    $dlExit = $LASTEXITCODE
+    $sw.Stop()
+    [IO.File]::WriteAllText($dlFile, ((@($dlOut) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+    $row = [ordered]@{ Question = $c.question; Text = ''; Files = ''; PsS = $r1.Seconds; DlS = [Math]::Round($sw.Elapsed.TotalSeconds, 1); Verdict = '' }
+    if ($r1.Exit -ne 0 -or $dlExit -ne 0) {
+      $row.Verdict = "SETUP/REFUSAL: Ask-Report exit $($r1.Exit), Delphi exit $dlExit (see $($c.question).*.txt.err)"
+      $bad++; $rows.Add([pscustomobject]$row); continue
+    }
+    # the text: the step-1 diff with its own normalisation (spec s5), never a looser rule
+    $cmp = & $Exe compare --old $psFile --new $dlFile --format json 2>"$OutDir\$($c.question).question-compare.err"
+    $code = $LASTEXITCODE
+    $cmpText = (@($cmp) -join "`n")
+    [IO.File]::WriteAllText((Join-Path $OutDir "$($c.question).question-compare.json"), $cmpText)
+    $textDiffs = -1
+    try { $j = $cmpText | ConvertFrom-Json -ErrorAction Stop; $textDiffs = [int]$j.counts.removed + [int]$j.counts.added } catch { }
+    $row.Text = $(if ($code -eq 0) { '0 differences' } elseif ($code -eq 1) { "$textDiffs line(s) differ" } else { "compare exited $code" })
+    # the bundle: every file either side wrote
+    $psBundle = ((Get-Content -LiteralPath $psFile | Where-Object { $_ -like 'BUNDLE *' } | Select-Object -First 1) -replace '^BUNDLE ', '')
+    $dlBundle = ((Get-Content -LiteralPath $dlFile | Where-Object { $_ -like 'BUNDLE *' } | Select-Object -First 1) -replace '^BUNDLE ', '')
+    $files = @(Compare-Bundle $psBundle $dlBundle $psRoot $dlRoot)
+    $fileBad = @($files | Where-Object { $_.Same -eq $false })
+    $row.Files = (@($files | ForEach-Object { "$($_.File): $($_.Why)" }) -join '; ')
+    foreach ($f in $fileBad) { Write-Host "  DIFF $($c.question) $($f.File): $($f.Why)" -ForegroundColor Red }
+    if ($code -ne 0) {
+      Write-Host "  DIFF $($c.question) text: $($row.Text)" -ForegroundColor Red
+      Write-Host ('  first differing line pair: ' + (Get-FirstDiffPair $psFile $dlFile))
+    }
+    $row.Verdict = $(if ($code -eq 0 -and $fileBad.Count -eq 0) { 'PASS' } else { 'FINDING' })
+    if ($row.Verdict -ne 'PASS') { $bad++ }
+    $rows.Add([pscustomobject]$row)
+    Write-Host ("  {0}: text {1}; {2} of {3} bundle file(s) compared equal  ps {4}s  delphi {5}s" -f $c.question, $row.Text,
+                @($files | Where-Object { $_.Same -eq $true }).Count, $files.Count, $row.PsS, $row.DlS)
+  }
+  Add-Summary '## Question (Ask-Report -Plain vs the in-process Delphi question)'
+  Add-Summary ''
+  Add-Summary "Ported in this build: $(if ($ported.Count) { $ported -join ', ' } else { '(none)' })."
+  Add-Summary ''
+  Add-Summary '| question | text | bundle | PS s | Delphi s | verdict |'
+  Add-Summary '|---|---|---|---|---|---|'
+  foreach ($r in $rows) { Add-Summary "| $($r.Question) | $($r.Text) | $($r.Files.Replace('|', '\|')) | $($r.PsS) | $($r.DlS) | $($r.Verdict) |" }
+  Add-Summary ''
+  $bad
+}
+
 # ===================================== run =========================================
 
 Add-Summary "# Parity summary -- mode $Mode, $Stamp"
@@ -734,7 +865,7 @@ Add-Summary ''
 Add-Summary "Engine: ``$Exe``; clones: ``$DbRoot``; cases: $($cases.Count)$(if ($Only) { ", -Only $Only" })$(if ($Clone) { ", -Clone $Clone" })."
 Add-Summary ''
 $bad = 0
-if ($Mode -eq 'Determinism') { $bad = Invoke-DeterminismMode } else { $bad = Invoke-CoreMode }
+if ($Mode -eq 'Determinism') { $bad = Invoke-DeterminismMode } elseif ($Mode -eq 'Question') { $bad = Invoke-QuestionMode } else { $bad = Invoke-CoreMode }
 $summaryPath = Join-Path $OutDir 'parity-summary.md'
 [IO.File]::WriteAllText($summaryPath, (($summary -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
 Write-Host "summary: $summaryPath"

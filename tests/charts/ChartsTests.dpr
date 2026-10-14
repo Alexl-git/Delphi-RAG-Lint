@@ -61,6 +61,11 @@ uses
   , ChartsTests.CoreChain in 'ChartsTests.CoreChain.pas'
   , DRagLint.Charts.Exceptions in '..\..\src\charts\DRagLint.Charts.Exceptions.pas'
   , ChartsTests.CoreExceptions in 'ChartsTests.CoreExceptions.pas'
+  , DRagLint.Charts.PsSort in '..\..\src\charts\DRagLint.Charts.PsSort.pas'
+  , ChartsTests.PsSort in 'ChartsTests.PsSort.pas'
+  , DRagLint.Charts.Question in '..\..\src\charts\DRagLint.Charts.Question.pas'
+  , DRagLint.Charts.Ask in '..\..\src\charts\DRagLint.Charts.Ask.pas'
+  , ChartsTests.Question in 'ChartsTests.Question.pas'
   ;
 
 const
