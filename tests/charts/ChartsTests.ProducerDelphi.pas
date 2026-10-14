@@ -54,6 +54,9 @@ type
     [Test] procedure CrossesBoundaryPairsItsCounterpartFromThePairsFile;
     [Test] procedure CrossesBoundaryWithoutAPairDrawsOneSideAsAskReportDoes;
     [Test] procedure CrossesBoundaryWithoutAnIndexFallsBack;
+    [Test] procedure CrossesBoundaryFromTheServerSideDbPairsTheClient;
+    [Test] procedure CrossesBoundaryWithAMissingCounterpartFileIsSetup;
+    [Test] procedure CrossesBoundaryWithAnUnconfiguredPairEntryIsRefused;
     [Test] procedure CrossesBoundaryWithCounterpartIsInProcess;
     [Test] procedure OtherIndexesAQuestionDoesNotReadAreIgnored;
     [Test] procedure MissingSqlIndexOfAReadingQuestionIsSetup;
@@ -388,6 +391,69 @@ begin
   Assert.AreEqual<Integer>(1, Length(R.IndexPaths));
   Assert.AreEqual('Delphi in-process (crosses-boundary)', FProducer.Describe);
 end;
+
+procedure TProducerDelphiTests.CrossesBoundaryFromTheServerSideDbPairsTheClient;
+var
+  Db, Other: string;
+begin
+  { --db is the pair's SERVER: the counterpart is the pair's CLIENT (Ask-Report.ps1:270, the else side) }
+  if not Clone(SERVER_CLONE, Db) or not Clone(CLIENT_CLONE, Other) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.PairsFile:= PairsFile(Other, Db, '');
+  O.EnginePath:= FakeEngine(Other);
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('crosses-boundary', TT_TARGET), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.Contains(R.Text, #13#10'INDEX ' + Other + ' (counterpart)'#13#10);
+  Assert.AreEqual<Integer>(2, Length(R.IndexPaths));
+  Assert.AreEqual(Other, R.IndexPaths[1]);
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryWithAMissingCounterpartFileIsSetup;
+var
+  Db: string;
+begin
+  { the paired counterpart is configured but its file is gone: Ask-Report.ps1:298, exit 2, no fallback }
+  if not Clone(CLIENT_CLONE, Db) then
+    Exit;
+  var Missing:= TPath.Combine(FOutRoot, 'missing-server.sqlite');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.PairsFile:= PairsFile(Db, Missing, '');
+  O.EnginePath:= FakeEngine(Missing);
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('index not found: ' + Missing, R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryWithAnUnconfiguredPairEntryIsRefused;
+var
+  Db, Other: string;
+begin
+  { the pairs file names a counterpart the engine's manifest no longer configures (resolve-dbs):
+    Ask-Report.ps1:279, exit 2, before any index is opened }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SERVER_CLONE, Other) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.PairsFile:= PairsFile(Db, Other, '');
+  O.EnginePath:= FakeEngine(Db);
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual(O.PairsFile + ' names ' + Other + ', which the engine''s manifest no longer configures (resolve-dbs) -- fix the pair',
+    R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
 procedure TProducerDelphiTests.CrossesBoundaryWithCounterpartIsInProcess;
 var
   Db, Other: string;

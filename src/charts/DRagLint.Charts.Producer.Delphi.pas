@@ -175,9 +175,11 @@ begin
 end;
 
 { The SERVER and SQL indexes, only for a question that reads them (Ask-Report's $needServer /
-  $needSql), and crosses-boundary's counterpart ($wantOther): as given, else paired from report-pairs.json exactly as Ask-Report's step 2 pairs
-  them -- compare passes only --db (R5). Raises EReportPairStop with Ask-Report's code and message.
-  crosses-boundary with no pair keeps Other '' and goes on, as Ask-Report does (Ask-Report.ps1:262): one side drawn. }
+  $needSql), and crosses-boundary's counterpart ($wantOther): as given, else paired from
+  report-pairs.json exactly as Ask-Report's step 2 pairs them -- compare passes only --db (R5).
+  Raises EReportPairStop with Ask-Report's code and message.
+  crosses-boundary with no pair keeps Other '' and goes on, as Ask-Report does (Ask-Report.ps1:262):
+  one side drawn. }
 function PairedIndexes(const pCommand: TReportCommand; const pOptions: TProduceOptions): TPairedIndexes;
 begin
   Result:= Default(TPairedIndexes);
@@ -197,6 +199,7 @@ begin
   if Missing or (Req.WantOther and (Result.Other = '')) then
     PairOtherIndexes(LoadReportPairs(pOptions.PairsFile, pOptions.ScriptPath), Req, Result);
 end;
+
 { Hands a question to the fallback. A PORTED question falls back only when its PowerShell emitter
   is beside the resolved Ask-Report.ps1: the installer does not ship the ported Emit-*.ps1 (owner
   ruling), so in an installed copy the fallback would fail obscurely -- refuse with pWhy instead.
