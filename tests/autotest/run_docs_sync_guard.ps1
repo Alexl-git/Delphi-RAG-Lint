@@ -1157,6 +1157,17 @@ if ($paSpan.Success) {
 }
 foreach ($m in [regex]::Matches($cliSrc, "ParamStr\(1\)\s*=\s*'($FlagRx)'"))    { [void]$accepted.Add($m.Groups[1].Value) }
 foreach ($k in $StructuralFlags.Keys) { [void]$accepted.Add($k) }
+# `ask` parses its OWN flags (ParseArgs returns before its chain for that verb), from the
+# FLAG_NAMES table of DRagLint.Charts.AskVerb -- the same spelling list the verb matches. Read
+# here, with its own non-emptiness control, so an ask flag in --help is accepted only while
+# that table really spells it, and a rename of the table makes this check fail, not go quiet.
+$askSrcPath = Join-Path $Repo 'src\charts\DRagLint.Charts.AskVerb.pas'
+$askSpan = $(if (Test-Path -LiteralPath $askSrcPath) {
+  [regex]::Match([IO.File]::ReadAllText($askSrcPath), "(?s)FLAG_NAMES\s*:\s*array\[TAskFlag\]\s*of\s*string\s*=\s*\((.*?)\);") })
+$askFlags = @($(if ($askSpan -and $askSpan.Success) { [regex]::Matches($askSpan.Groups[1].Value, "'($FlagRx)'") | ForEach-Object { $_.Groups[1].Value } }))
+Check 'check 9: the ask verb''s own flag table was read' ($askFlags.Count -ge 20) `
+  "only $($askFlags.Count) flag(s) read from FLAG_NAMES in $askSrcPath -- was the table renamed or moved?"
+foreach ($af in $askFlags) { [void]$accepted.Add($af) }
 
 $helpSet = Get-FlagSet $helpText $FlagRx
 

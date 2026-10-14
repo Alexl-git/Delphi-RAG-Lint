@@ -3,6 +3,38 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.30.0-alpha (unreleased)
+
+### Added
+
+- **`drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>]` -- one
+  report question, answered by the engine.** The engine's twin of `charts\src\Ask-Report.ps1`, with
+  its whole argument set (`--to`, `--server-db`, `--sql-db`, `--counterpart-db`, `--depth`, `--cap`,
+  `--surface-cap`, `--control`, `--mode`, `--max-rows`, `--out-root`, `--pairs-file`, `--allow-stale`,
+  `--plain`, `--open`, `--resolve-only`), its index resolution (`resolve-dbs --project` / `--in`,
+  `report-pairs.json`), its freshness refusal and its exit codes (0 answered, 1 refused, 2 setup,
+  3 stale index with the incremental reindex command on stderr). The default output is the
+  DocInsight remarks block (DRagLint.Charts.DocInsight), `--plain` the plain answer; both proved
+  identical to Ask-Report's for touches-tables, deps, shown-where and the unported who-reads. Ported
+  questions answer in-process on the live index (TDelphiProducer); the rest run Ask-Report.ps1
+  -Plain. New unit `DRagLint.Charts.AskVerb`; tests ChartsTests.AskVerb.
+
+### Changed
+
+- **`compare` reruns a ported question in-process.** `ProducerForCompare` now returns the Delphi
+  producer with live indexes allowed and the PowerShell producer as its fallback (owner ruling
+  2026-10-14: live indexes are protected by the staleness refusal; the frozen-clone guard stays on
+  only in the parity harness and the tests).
+- **The IDE's drag-lint > Reports menu runs `drag-lint ask ... --plain --open`** instead of
+  `pwsh -File Ask-Report.ps1`. The plugin no longer looks for pwsh or Ask-Report.ps1 (removed:
+  `BuildAskReportCmdLine`, `AskReportCandidates`, `AskReportNotFoundText`; added `BuildAskCmdLine`).
+  The remarks paste, the stale-index reindex offer and `--open` are unchanged.
+- **`Ask-Report.ps1` without `-Plain` delegates to `drag-lint ask`.** `charts\src\Report.DocInsight.ps1`,
+  the PowerShell port of the DocInsight formatter, is deleted: DRagLint.Charts.DocInsight is the one
+  formatter. The installer no longer ships the emitters ported to Delphi (Emit-TouchesTables,
+  Emit-ShownWhere, Emit-Deps); they stay in the repository as the parity reference.
+- The PowerShell producer passes `-ServerDbPath`, `-SqlDbPath`, `-CounterpartDb`, `-OutRoot` and
+  `-PairsFile` when set, and looks for Ask-Report.ps1 in the v2 installed layout (`{app}\charts`) too.
 ## v1.28.3-alpha -- 2026-10-11
 
 ### Fixed

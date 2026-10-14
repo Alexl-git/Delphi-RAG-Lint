@@ -6,7 +6,7 @@
   "status": "shipped",
   "since": "1.20.2-alpha",
   "summary": "Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS",
-  "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run charts\\src\\Ask-Report.ps1 -Question <id> -Target <name> -Project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index, PowerShell 7, and Graphviz for the pictures.",
+  "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run drag-lint ask <id> --target <name> --project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index, Graphviz for the pictures, and PowerShell 7 for the questions not yet ported to Delphi.",
   "wikiPage": "Diagrams-and-Charts",
   "surfaces": [
     {

@@ -2299,16 +2299,27 @@
     },
     {
       "id": "ask",
-      "title": "ask (engine verb)",
+      "title": "ask",
       "group": "diagrams-charts",
       "owner": "CHARTS",
-      "status": "planned",
-      "summary": "Ask the index a question, get a chart back",
-      "intro": "Planned: one engine verb, drag-lint ask --question <id> --at <file:line:col>, answering every chart question. Not shipped yet -- ask today from drag-lint > Reports, or with charts\\src\\Ask-Report.ps1 or New-DiagramArtifact.ps1.",
-      "wikiPage": "Diagrams-and-Charts",
-      "surfaces": [],
+      "status": "shipped",
+      "since": "1.30.0-alpha",
+      "summary": "Ask one report question and print the answer as text",
+      "intro": "Read this when you want a report answer on stdout -- drag-lint ask <question> --target <T> --project <P.dproj> prints the DocInsight block the Reports menu copies (or the plain answer with --plain), with Ask-Report's exit codes. Ported questions answer in-process; the rest run charts\\src\\Ask-Report.ps1, so they need PowerShell 7.",
+      "wikiPage": "ask",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "ask",
+          "example": "drag-lint ask who-writes --target U.TForm.FField --project P.dproj"
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Reports"
+        }
+      ],
       "audience": "both",
-      "notes": "one engine verb for every chart question; planned, not shipped (Features.md 2026-10-05)"
+      "requires": ["index", "powershell7", "graphviz"]
     },
     {
       "id": "chart-questions",
@@ -2318,7 +2329,7 @@
       "status": "shipped",
       "since": "1.20.2-alpha",
       "summary": "Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS",
-      "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run charts\\src\\Ask-Report.ps1 -Question <id> -Target <name> -Project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index, PowerShell 7, and Graphviz for the pictures.",
+      "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run drag-lint ask <id> --target <name> --project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index, Graphviz for the pictures, and PowerShell 7 for the questions not yet ported to Delphi.",
       "wikiPage": "Diagrams-and-Charts",
       "surfaces": [
         {
