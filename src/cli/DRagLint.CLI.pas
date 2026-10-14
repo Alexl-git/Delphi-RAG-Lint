@@ -12862,6 +12862,33 @@ begin
   Result:= False;
 end;
 
+/// <summary>The skip predicate handed to TClassMetrics.Run: True when the final
+/// filter of `lint` / `lint-all` would KEEP a finding of rule AId.</summary>
+/// <param name="AArgs">The run's arguments; only Rule is read (--rule opts a rule back in).</param>
+/// <param name="ACfg">The run's LoadLintConfig result -- the same one FinalizeAndOutput applies.</param>
+/// <returns>A predicate over rule ids.</returns>
+/// <remarks>
+/// SOUND ONLY WHILE IT IS A SUBSET OF THE FILTER. Its default-disabled set is
+/// PROJECT_RULES_OFF_BY_DEFAULT + BUILTIN_RULES_OFF_BY_DEFAULT less --rule, and
+/// both verbs hand FinalizeAndOutput a SUPERSET of that (plus the .scm defaults),
+/// so this never answers False for a finding the filter would keep -- at worst it
+/// computes something that is dropped later, which is what both verbs did before.
+/// Pinned by tests\autotest\run_lint_file_class_metrics_parity.ps1.
+/// </remarks>
+function ClassMetricKept(const AArgs: TArgs; const ACfg: TLintConfig): TFunc<string, Boolean>;
+begin
+  var Rule: string     := AArgs.Rule;
+  var Cfg : TLintConfig:= ACfg;
+  Result:=
+    function(AId: string): Boolean
+    begin
+      var DefOff: Boolean:= (MatchText(AId, PROJECT_RULES_OFF_BY_DEFAULT) or
+                             MatchText(AId, BUILTIN_RULES_OFF_BY_DEFAULT)) and
+                            not SameText(AId, Rule);
+      Result:= Cfg.ShouldKeep(AId, DefOff);
+    end;
+end;
+
 { The rule a lint run may NARROW its checkers to: ARule, except '' for a
   review-marker-* rule. Those are computed FROM every other rule's findings --
   review-marker-unused means "no finding on this line matches the marker" --
@@ -13740,7 +13767,8 @@ begin
           if LintRuleWants(NarrowRule, LINT_GATE_CLASS_METRICS) then
           begin
             TraceLintChecker('class-metrics');
-            for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, NarrowRule) do
+            for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, NarrowRule,
+                       {AOnlyFileId=}FlowFid, ClassMetricKept(AArgs, Cfg)) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
           end;
@@ -19623,10 +19651,13 @@ begin
     SibKeep .Free;
     SibOwned.Free;
   end;
-  { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; runs only here. }
+  { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; `lint <file>`
+    runs the same pass scoped to its file. ClassMetricKept skips a metric this
+    verb's final filter would drop -- on defaults that is ComputeAllFanIn. }
   LintPhase('class-metrics');
   if LintRuleWants(Nr, LINT_GATE_CLASS_METRICS) then
-    Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, Nr);
+    Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, Nr,
+      {AOnlyFileId=}0, ClassMetricKept(AArgs, Cfg));
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
   LintPhase('missing-doc');
