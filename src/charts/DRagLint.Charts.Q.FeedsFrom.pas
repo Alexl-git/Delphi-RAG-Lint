@@ -1024,6 +1024,9 @@ end;
 
 function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;
 begin
+  { New-DiagramArtifact refuses before the PS emitter is reached }
+  if pArgs.SqlDbPath = '' then
+    raise EChartsQuestion.Create('feeds-from needs -SqlDbPath: the SQL-script index clone (charts\scratch\db\SQL-drag-lint-sql.sqlite)');
   var Chart:= TFeedsFromChart.Create(pArgs);
   try
     Result:= Chart.Emit(pArgs, pOutDir);

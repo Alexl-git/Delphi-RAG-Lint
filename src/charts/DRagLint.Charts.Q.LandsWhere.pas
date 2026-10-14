@@ -200,7 +200,6 @@ type
     FSrvRead     : TArray<TDotRow>;
     FSrvOther    : TArray<TDotRow>;
     FSrvClass    : string;
-    FSrvImp      : string;
     FSrvElsewhere: Integer;
     FSrvFile     : string;
     FSrvSqlHit   : Boolean;
@@ -850,8 +849,8 @@ begin
   try
     if Imp.Count > 0 then
     begin
+      { the PS also keeps its qualified name, read only by a Write-Host line }
       ImpId:= Imp[0].I('id');
-      FSrvImp:= Imp[0].S('q');
     end;
   finally
     Imp.Free;
@@ -1204,6 +1203,7 @@ begin
     FHasColRow:= True;
   end;
   var From:= if FKind = KIND_ORM then Format('from %s by the naming convention', [FOrmSym.PName]) else 'where the chain resolved';
+  { FTbl is not nil: ReadColumn's SqlColumnState raised for a table outside the set }
   var CRows: TArray<TDotRow>:= [NewRow('table ' + FTName, FTbl.Path, FTbl.Line, FTName + ' -- ' + At(FTbl.Path, FTbl.Line),
     Format('%s; newest of %d declaration(s)', [From, Length(FTbl.Declarations)]))];
   if FHasColRow then
@@ -1332,13 +1332,13 @@ procedure TLandsWhereChart.DrawFocus;
 begin
   Inc(FNi);
   var FNid:= 'n' + IntToStr(FNi);
-  var FTbl:= TStringBuilder.Create;
+  var FocusHtml:= TStringBuilder.Create;
   try
-    FTbl.Append('<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="3" CELLPADDING="5">');
-    FTbl.Append(Format('<TR><TD ALIGN="LEFT" BGCOLOR="%s"><FONT COLOR="#FFFFFF" FACE="%s" POINT-SIZE="14"><B> lands-where &#183; %s </B></FONT></TD></TR>',
+    FocusHtml.Append('<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="3" CELLPADDING="5">');
+    FocusHtml.Append(Format('<TR><TD ALIGN="LEFT" BGCOLOR="%s"><FONT COLOR="#FFFFFF" FACE="%s" POINT-SIZE="14"><B> lands-where &#183; %s </B></FONT></TD></TR>',
       [FOCUS_HDR, FONT_SANS, XmlText(FSel)]));
     { R24 item 7: a QUOTED column the index does not extract is still a column }
-    AddDisclosureRow(FTbl, Format('table by naming convention (Tmc<T>): %s of %s Tmc properties in this index are a column of their class''s table',
+    AddDisclosureRow(FocusHtml, Format('table by naming convention (Tmc<T>): %s of %s Tmc properties in this index are a column of their class''s table',
       [FormatN(FConv.Column + FConv.NQuoted), FormatN(FConv.Props)]), LINE_INK);
     var ConvText:= Format('(%s sit on a table-named class; %d are not extracted as a column by the SQL index',
       [FormatN(FConv.OnTable), FConv.OnTable - FConv.Column]);
@@ -1346,46 +1346,46 @@ begin
       ConvText:= ConvText + Format('; of those, %s is a QUOTED column the index does not extract', [FConv.Quoted]);
     if FConv.Stale <> '' then
       ConvText:= ConvText + '; not scanned for a quoted identifier [stale source]: ' + FConv.Stale;
-    AddDisclosureRow(FTbl, ConvText + ')', LINE_INK);
+    AddDisclosureRow(FocusHtml, ConvText + ')', LINE_INK);
     if FKind = KIND_DFM then
     begin
       var NColumn:= 0;
       for var B in FIx.Bindings do
         if SameText(B.Outcome, O_COLUMN) then
           Inc(NColumn);
-      AddDisclosureRow(FTbl, Format('DFM-field selection: the feeds-from chain (%d of %d field-bound controls reach a column of one table; ' +
+      AddDisclosureRow(FocusHtml, Format('DFM-field selection: the feeds-from chain (%d of %d field-bound controls reach a column of one table; ' +
         'outcome here: %s)', [NColumn, Length(FIx.Bindings), FChainOutcome]), LINE_INK);
     end;
     { R24 item 9: an unknown table is said, not spelled TDataService__SERVER / Imc. }
     if FTName = '' then
-      AddDisclosureRow(FTbl, 'server: the table could not be determined, so no DataService was looked up', LINE_INK)
+      AddDisclosureRow(FocusHtml, 'server: the table could not be determined, so no DataService was looked up', LINE_INK)
     else
     begin
       var Found:= if FSrvClass <> '' then Format('%s (found by name; %d DataService classes)', [FSrvClass, FNDsClasses])
         else Format('no TDataService_%s_SERVER in the SERVER index', [FTName]);
       var Elsewhere:= if FSrvElsewhere <> 0 then Format('; %d access(es) to it outside the DataService not drawn', [FSrvElsewhere]) else '';
-      AddDisclosureRow(FTbl, Format('server: %s; member accesses resolved to Imc%s.%s are [certain], SQL / ParamByName literals [inferred]',
+      AddDisclosureRow(FocusHtml, Format('server: %s; member accesses resolved to Imc%s.%s are [certain], SQL / ParamByName literals [inferred]',
         [Found, FTName, FProp]) + Elsewhere, LINE_INK);
     end;
-    AddDisclosureRow(FTbl, 'positional Fields[i] / Params[i] reads are not shown -- they never name the column', LINE_INK);
-    AddDisclosureRow(FTbl, Format('script-derived schema: %d tables; %s', [Length(FCatalog.TableSet.Names), SCHEMA_NOTE]), LINE_INK);
+    AddDisclosureRow(FocusHtml, 'positional Fields[i] / Params[i] reads are not shown -- they never name the column', LINE_INK);
+    AddDisclosureRow(FocusHtml, Format('script-derived schema: %d tables; %s', [Length(FCatalog.TableSet.Names), SCHEMA_NOTE]), LINE_INK);
     if FTrigStale <> 0 then
-      AddDisclosureRow(FTbl, Format('%d trigger(s) FOR %s in a script that differs from the index [stale source] -- not scanned', [FTrigStale, FTName]), LINE_INK);
+      AddDisclosureRow(FocusHtml, Format('%d trigger(s) FOR %s in a script that differs from the index [stale source] -- not scanned', [FTrigStale, FTName]), LINE_INK);
     if FProcUnscanned <> 0 then
-      AddDisclosureRow(FTbl, Format('%d procedure bodies not scanned', [FProcUnscanned]), LINE_INK);
+      AddDisclosureRow(FocusHtml, Format('%d procedure bodies not scanned', [FProcUnscanned]), LINE_INK);
     var Route:= Format('route: derived (path A) -- orm_links rows: %d on %s, %d on %s',
       [FOlCli.Rows, FileNameOf(FDbPath), FOlSrv.Rows, FileNameOf(FSrvDb)]);
     if (FOlCli.Rows <> 0) or (FOlSrv.Rows <> 0) then
       Route:= Route + ' -- the engine HAS links now; this chart does not read them yet (path B awaits the owner)';
-    AddDisclosureRow(FTbl, Route, LINE_INK);
-    FTbl.Append('</TABLE>');
+    AddDisclosureRow(FocusHtml, Route, LINE_INK);
+    FocusHtml.Append('</TABLE>');
     FSb.AppendLine(Format('  subgraph cluster_focus_%d {', [FNi]));
     FSb.AppendLine(Format('    style="rounded,filled"; color="%s"; fillcolor="%s"; penwidth=2;', [FOCUS_BORDER, FOCUS_FILL]));
     FSb.AppendLine('    label=""; margin=10;');
-    FSb.AppendLine(Format('    %s [label=<%s>];', [FNid, FTbl.ToString]));
+    FSb.AppendLine(Format('    %s [label=<%s>];', [FNid, FocusHtml.ToString]));
     FSb.AppendLine('  }');
   finally
-    FTbl.Free;
+    FocusHtml.Free;
   end;
   var First:= if FNTop <> '' then FNTop else if FNProp <> '' then FNProp else FNCol;
   if First <> '' then

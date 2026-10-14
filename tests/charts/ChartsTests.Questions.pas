@@ -155,6 +155,7 @@ type
     [Test] procedure DanglingRePointStopsAtAWalkLimit;
     [Test] procedure DataSourceAndPersistentFieldAreRefused;
     [Test] procedure SelectionAndSqlIndexRoleAreChecked;
+    [Test] procedure MissingSqlIndexRefusesAsTheBundlerDoes;
     [Test] procedure AnswerNamesTheSqlIndex;
   end;
 
@@ -173,6 +174,11 @@ type
     [Test] procedure ComputedFieldOfAControlIsNoColumn;
     [Test] procedure DanglingChainStopsBeforeATable;
     [Test] procedure RePointedChainReachesTheTable;
+    [Test] procedure InterfacePropertyWithTwoTriggers;
+    [Test] procedure ProceduresNamingTheColumnAreDrawn;
+    [Test] procedure ThreeTriggersAndOnlyNoTableBindings;
+    [Test] procedure OtherDataServiceRoutineIsItsOwnCluster;
+    [Test] procedure AmbiguousChainStopsBeforeATable;
     [Test] procedure SelectionRefusalsMatchPowerShell;
     [Test] procedure IndexRolesAreChecked;
     [Test] procedure MissingIndexesRefuseAsTheBundlerDoes;
@@ -436,7 +442,48 @@ const
     'ClientRows="Blueprint4.dfm:4534:dxDBGrid1OperationVName",ClientOther=25,' + LW_CONV + ',' + LW_NEWEST_OF_TWO + LW_SRV +
     ',ClickTargets=17,Expected=17,AllClickable=true';
   LW_RP_DOT_SHA = '63d846867e5cf864b07352dd1c8ef08af7a6f2d2e8affcbb9457eb192b871be9';
-  LW_NOT_ORM = 'not an ORM object property (class is not Tmc<T>) and not a DFM-bound field';
+  LW_TAIL = LW_CONV + ',' + LW_NEWEST_OF_TWO + LW_SRV;
+  LW_IFACE = 'iCAUSFAIL.ImcCAUSFAIL.SYSTID';
+  LW_IFACE_FIELDS = 'TestChart=false,ClientOutcomes="column",IndexBindColumn=443,Selection="iCAUSFAIL.ImcCAUSFAIL.SYSTID",Kind="orm",' +
+    'Property="iCAUSFAIL.ImcCAUSFAIL.SYSTID",Table="CAUSFAIL",TableColumn="CAUSFAIL.SYSTID",ColumnState="yes",ChainOutcome="",StopReason="",' +
+    'ServerClass="TDataService_CAUSFAIL_SERVER",ServerRows=4,ServerWrite="PrepareSaveQuery:124,Save:231",ServerRead="PrepareLoadQuery:109,Load:161",' +
+    'ServerOther="",ServerElsewhere=1,Triggers=2,TriggerNames="CAUSFAIL_BIU5@MS5.SQL:15,CAUSFAIL_BUD0@MS6.SQL:44",TriggersStale=0,Procedures=0,' +
+    'ProcedureNames="",ClientBindings=1,ClientRows="uCausFailForm.dfm:53:colSYSTID",ClientOther=4,' + LW_TAIL +
+    ',ClickTargets=10,Expected=10,AllClickable=true';
+  LW_IFACE_DOT_SHA = '2c076cc4ba47e28a36fb1779372ff6b05e6303911d46ff51d38346e6d649701e';
+  LW_PROC = 'uCAUSFAIL.TmcCAUSFAIL.ID';
+  LW_PROC_FIELDS = 'TestChart=false,ClientOutcomes="column",IndexBindColumn=443,Selection="uCAUSFAIL.TmcCAUSFAIL.ID",Kind="orm",' +
+    'Property="uCAUSFAIL.TmcCAUSFAIL.ID",Table="CAUSFAIL",TableColumn="CAUSFAIL.ID",ColumnState="yes",ChainOutcome="",StopReason="",' +
+    'ServerClass="TDataService_CAUSFAIL_SERVER",ServerRows=4,ServerWrite="PrepareSaveQuery:124,Save:227",ServerRead="PrepareLoadQuery:109,Load:152",' +
+    'ServerOther="",ServerElsewhere=1,Triggers=1,TriggerNames="CAUSFAIL_BIU0@MS6.SQL:34",TriggersStale=0,Procedures=2,' +
+    'ProcedureNames="SP_GET_CAUSFAIL_ID,SP_MAXID_FORALL_TABLES",ClientBindings=1,ClientRows="uCausFailForm.dfm:44:colID",ClientOther=34,' + LW_TAIL +
+    ',ClickTargets=11,Expected=11,AllClickable=true';
+  LW_PROC_DOT_SHA = '0d73975afba4ac1b222377c4f43c3777fcc75cde04a25e9ee485b3261a1f1951';
+  LW_TRIGS = 'uMACHINES.TmcMACHINES.MACHINEID';
+  LW_TRIGS_FIELDS = 'TestChart=false,ClientOutcomes="column",IndexBindColumn=443,Selection="uMACHINES.TmcMACHINES.MACHINEID",Kind="orm",' +
+    'Property="uMACHINES.TmcMACHINES.MACHINEID",Table="MACHINES",TableColumn="MACHINES.MACHINEID",ColumnState="yes",ChainOutcome="",StopReason="",' +
+    'ServerClass="TDataService_MACHINES_SERVER",ServerRows=4,ServerWrite="PrepareSaveQuery:132,Save:281",ServerRead="PrepareLoadQuery:113,Load:164",' +
+    'ServerOther="",ServerElsewhere=1,Triggers=3,TriggerNames="MACHINES_AI10@MS5.SQL:620,MACHINES_AU10@MS5.SQL:629,MACHINES_BDU0@MS6.SQL:405",' +
+    'TriggersStale=0,Procedures=2,ProcedureNames="MACHINESLASTSTOP,MACHINESLASTSTOP2",ClientBindings=1,ClientRows="uMachineListForm.dfm:43:colMACHINEID",' +
+    'ClientOther=1,' + LW_TAIL + ',ClickTargets=13,Expected=13,AllClickable=true';
+  LW_TRIGS_DOT_SHA = '11c1acf06f0c3d16ccffbb88d3ad6e411330e6b9807023015b9c782da898a124';
+  LW_OTHER = 'uOPTRLIST.TmcOPTRLIST.XOPERATOR';
+  LW_OTHER_FIELDS = 'TestChart=false,ClientOutcomes="column",IndexBindColumn=443,Selection="uOPTRLIST.TmcOPTRLIST.XOPERATOR",Kind="orm",' +
+    'Property="uOPTRLIST.TmcOPTRLIST.XOPERATOR",Table="OPTRLIST",TableColumn="OPTRLIST.XOPERATOR",ColumnState="yes",ChainOutcome="",StopReason="",' +
+    'ServerClass="TDataService_OPTRLIST_SERVER",ServerRows=5,ServerWrite="PrepareSaveQuery:132,Save:243",ServerRead="PrepareLoadQuery:115,Load:160",' +
+    'ServerOther="FindOperatorName:364",ServerElsewhere=3,Triggers=1,TriggerNames="OPTRLIST_BDU0@MS6.SQL:548",TriggersStale=0,Procedures=0,' +
+    'ProcedureNames="",ClientBindings=1,ClientRows="OperatorList.dfm:80:colXOPERATOR",ClientOther=1,' + LW_TAIL +
+    ',ClickTargets=10,Expected=10,AllClickable=true';
+  LW_OTHER_DOT_SHA = '22376e6af57281a3b8ff248a1a80aa3d6e3c6e43f21a1ffe5371096a4da93863';
+  LW_AMBIG = 'frmDefineSerialNumbers.cxGrid1DBTableView1SID1';
+  LW_AMBIG_FIELDS = 'TestChart=false,ClientOutcomes="",IndexBindColumn=443,Selection="frmDefineSerialNumbers.cxGrid1DBTableView1SID1",' +
+    'Kind="dfm",Property="",Table=null,TableColumn="",ColumnState="n/a",ChainOutcome="ambiguous",StopReason="the chain stops before a ' +
+    'table (many): uDefineSerialNumbers.ViewModel.pas names 3 tables in upper case; 3 of them hold all 2 bound column(s)",ServerClass=null,' +
+    'ServerRows=0,ServerWrite="",ServerRead="",ServerOther="",ServerElsewhere=0,Triggers=0,TriggerNames="",TriggersStale=0,Procedures=0,' +
+    'ProcedureNames="",ClientBindings=0,ClientRows="",ClientOther=0,' + LW_CONV + ',ColumnLabel="",' + LW_SRV +
+    ',ClickTargets=5,Expected=5,AllClickable=true';
+  LW_AMBIG_DOT_SHA = '647097e3b5d98896e178d81e61f37f2eb3ca7e73c44e695414b1127099412ad0';
+  LW_NOT_ORM ='not an ORM object property (class is not Tmc<T>) and not a DFM-bound field';
   LW_LINES = 17;
   LW_SERVER_INDEX_LINE = 4;
   LW_CHART = 'CHART lands-where uCAUSFAIL.TmcCAUSFAIL.REASON -- 4 server DataService rows / 1 triggers touching the column';
@@ -1254,6 +1301,23 @@ begin
     'project clone', FeedsRefusal(FF_ONE, CLIENT_CLONE));
 end;
 
+procedure TFeedsFromTests.MissingSqlIndexRefusesAsTheBundlerDoes;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  { New-DiagramArtifact refuses a blank -SqlDbPath before the emitter (or the clone guard) runs }
+  if not SqlArgs(FF_ONE, '', A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(FEEDS_FROM_ID, E));
+  A.SqlDbPath:= '';
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      E(A, FOutRoot);
+    end, EChartsQuestion, 'feeds-from needs -SqlDbPath: the SQL-script index clone (charts\scratch\db\SQL-drag-lint-sql.sqlite)');
+end;
+
 procedure TFeedsFromTests.AnswerNamesTheSqlIndex;
 var
   A: TQuestionArgs;
@@ -1363,6 +1427,36 @@ procedure TLandsWhereTests.RePointedChainReachesTheTable;
 begin
   { past the dangling Blueprint4_Model.dsrOperation: the re-point hops on the control box, OPERAT.NAME }
   Check(LW_RP, LW_RP_FIELDS, LW_RP_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.InterfacePropertyWithTwoTriggers;
+begin
+  { an Imc<T> property: "the interface the server reads"; two triggers name NEW./OLD.SYSTID }
+  Check(LW_IFACE, LW_IFACE_FIELDS, LW_IFACE_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.ProceduresNamingTheColumnAreDrawn;
+begin
+  { two procedure bodies name CAUSFAIL and ID; 34 other ID bindings, by table AND by outcome }
+  Check(LW_PROC, LW_PROC_FIELDS, LW_PROC_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.ThreeTriggersAndOnlyNoTableBindings;
+begin
+  { three triggers in two scripts, two procedures, and the one other binding reaches no table }
+  Check(LW_TRIGS, LW_TRIGS_FIELDS, LW_TRIGS_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.OtherDataServiceRoutineIsItsOwnCluster;
+begin
+  { FindOperatorName's ParamByName('XOPERATOR') is neither save nor load }
+  Check(LW_OTHER, LW_OTHER_FIELDS, LW_OTHER_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.AmbiguousChainStopsBeforeATable;
+begin
+  { an ambiguous chain: the default stop "the chain stops before a table (many): ..." }
+  Check(LW_AMBIG, LW_AMBIG_FIELDS, LW_AMBIG_DOT_SHA);
 end;
 
 procedure TLandsWhereTests.SelectionRefusalsMatchPowerShell;
