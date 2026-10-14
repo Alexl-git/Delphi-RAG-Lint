@@ -119,6 +119,7 @@ uses
   , TreeSitter
   , DRagLint.Core.DeclText { v(A2): TDeclTextReader -- `query find --decl-contains` }
   , DRagLint.Core.ForwardStub { C2.5: PairForwardStubs/HasChildInSet -- `outline` tags a forward stub row (S6) }
+  , DRagLint.Lint.RuleCache // dl:unit DRagLint.Lint.RuleCache accepted -- CACHED_RULES travels with the cache that defines which rules it may hold, so lint and the indexer warm cannot drift apart
   { DRagLint.Core.Model moved to the INTERFACE uses (for DRAGLINT_VERSION); it
     must not be listed twice. }
   , DRagLint.Core   .Interfaces
@@ -1203,6 +1204,8 @@ end;
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
+procedure WarmRuleCache(const AProjectDb, ALibraryDb: string); forward;
+function RuleCacheLibraryDb(const AArgs: TArgs): string; forward;
 { Declared here because ResolveReadDbsForFileWith (used by `outline`, well above
   the implementation) needs it, and the implementation sits beside the manifest
   helpers near DoResolveDbsList. }
@@ -4073,6 +4076,15 @@ begin
       [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols,
        Store.CountReferences, Length(Indexer.VisitedFiles), Indexer.ParsedFiles,
        Indexer.SkippedUpToDate, Elapsed, RateStr]));
+    { Warm the `lint <file>` rule cache for a PROJECT section, after releasing this
+      section's write connection (see the same block in DoIndex). A library
+      section has no project rules to cache. }
+    if AItem.Mode = smClosure then
+    begin
+      Indexer:= nil; { it holds its own reference to the store -- see DoIndex }
+      Store:= nil;
+      WarmRuleCache(AItem.DbPath, RuleCacheLibraryDb(Default(TArgs)));
+    end;
     Result:= True;
   except
     on E: Exception do
@@ -6152,6 +6164,19 @@ begin
     Sleep(Interval * 1000);
   end; // while
 
+  { WARM THE `lint <file>` RULE CACHE for a project index, AFTER releasing the
+    write connection: a checkpoint on close would otherwise move the index's
+    stat after the key was taken, and every first lint would miss. Project
+    targets only -- a one-file or --resolve-only run leaves the next lint to fill
+    it lazily (its key no longer matches). }
+  if IsProjectScopedTarget and not AArgs.ResolveOnly then
+  begin
+    { TIndexer holds its OWN reference to the store (FStore): releasing only Store
+      would leave the write connection open through the warm (whole-branch review). }
+    Indexer:= nil;
+    Store:= nil;
+    WarmRuleCache(ResolvedDb, RuleCacheLibraryDb(AArgs));
+  end;
   Result:= 0;
 end; // function
 
@@ -12877,7 +12902,7 @@ end;
 /// <param name="AFiles">Source files to scan; a missing file is skipped.</param>
 /// <returns>Distinct ids; empty when no file carries a marker.</returns>
 /// <remarks>
-/// Exists for ClassMetricKept. ApplyLineMarkers runs BEFORE the config filter on
+/// Exists for RuleKeptByRun. ApplyLineMarkers runs BEFORE the config filter on
 /// purpose, so a finding of a DISABLED rule still accounts for its marker; a metric
 /// that is never computed would leave that marker reading as review-marker-unused.
 /// Each file is read the way ApplyLineMarkers reads it, and a line is parsed only
@@ -12917,7 +12942,8 @@ begin
   end;
 end;
 
-/// <summary>The skip predicate handed to TClassMetrics.Run: True when the final
+/// <summary>The skip predicate for rules a run may avoid computing (TClassMetrics.Run, and the
+/// project-rule cache provider): True when the final
 /// filter of `lint` / `lint-all` would KEEP a finding of rule AId, or when a
 /// marker in the linted scope names AId.</summary>
 /// <param name="AArgs">The run's arguments; only Rule is read (--rule opts a rule back in).</param>
@@ -12934,7 +12960,7 @@ end;
 /// marked rule is always kept. Pinned by
 /// tests\autotest\run_lint_file_class_metrics_parity.ps1 (checks P* and M*).
 /// </remarks>
-function ClassMetricKept(const AArgs: TArgs; const ACfg: TLintConfig;
+function RuleKeptByRun(const AArgs: TArgs; const ACfg: TLintConfig;
   const AMarked: TArray<string>): TFunc<string, Boolean>;
 begin
   var Rule  : string        := AArgs.Rule;
@@ -12949,6 +12975,218 @@ begin
                             not SameText(AId, Rule);
       Result:= Cfg.ShouldKeep(AId, DefOff);
     end;
+end;
+
+{ Prints one `rule-cache:` line under DRAGLINT_PROFILE -- how the guard proves
+  that hits really happen and why a miss was a miss. }
+procedure RuleCacheTrace(const AMsg: string);
+begin
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then Writeln(ErrOutput, '  rule-cache: ' + AMsg);
+end;
+
+/// <summary>Computes the given cacheable rules live into a fresh entry (key unset).</summary>
+/// <param name="AStore">The project index.</param>
+/// <param name="ALibStore">The library index or nil.</param>
+/// <param name="ARules">Rule ids, each one of CACHED_RULES.</param>
+/// <returns>The entry: RuleIds = ARules, Findings = their findings in ARules order.</returns>
+function ComputeRuleCacheEntry(const AStore, ALibStore: ISymbolStore;
+  const ARules: TArray<string>): TRuleCacheEntry;
+begin
+  Result:= Default(TRuleCacheEntry);
+  Result.RuleIds:= ARules;
+  for var R: string in ARules do
+    Result.Findings:= Result.Findings + TProjectLintRules.CollectWholeGraphRule(R, AStore, ALibStore);
+end;
+
+/// <summary>The cached rules' entry for one `lint &lt;file&gt;` run: served from the
+/// cache when its key matches and it holds every rule the run needs, else computed
+/// live and -- when the run may -- written back.</summary>
+/// <param name="AStore">The project index.</param>
+/// <param name="ALibStore">The library index actually opened, or nil.</param>
+/// <param name="AProjectDb">The project index path (the cache is per index path).</param>
+/// <param name="ALibraryDbUsed">The library path behind ALibStore, or ''.</param>
+/// <param name="ANarrowRule">The --rule narrowing, or ''.</param>
+/// <param name="AKept">RuleKeptByRun for this run.</param>
+/// <returns>An entry holding at least every rule the run needs.</returns>
+/// <remarks>
+/// WRITE ONLY WHAT IS PROVABLY CURRENT. The key is taken before computing and
+/// again after; if an index changed in between (a reindex-on-save landed) the
+/// entry is used for this run but not cached, so it can never be served under
+/// a key it does not match (spec AC9). A --rule run never writes (AC10).
+/// </remarks>
+function ResolveRuleCacheEntry(const AStore, ALibStore: ISymbolStore;
+  const AProjectDb, ALibraryDbUsed, ANarrowRule: string;
+  const AKept: TFunc<string, Boolean>): TRuleCacheEntry;
+begin
+  var Need: TArray<string>:= nil;
+  for var R: string in CACHED_RULES do
+    if ((ANarrowRule = '') or SameText(ANarrowRule, R)) and AKept(R) then Need:= Need + [R];
+  var KeyBefore: TRuleCacheKey:= TRuleCacheKey.Take(AProjectDb, ALibraryDbUsed);
+  var Why: string:= 'disabled';
+  { An entry with the SAME key that merely lacks a rule this run needs: its other
+    rules are still current, so they are carried into what this run writes rather
+    than thrown away (whole-branch review). }
+  var Carry : Boolean        := False;
+  var Cached: TRuleCacheEntry:= Default(TRuleCacheEntry);
+  if TRuleCache.Enabled then
+  begin
+    if TRuleCache.TryLoad(AProjectDb, Cached, Why) then
+    begin
+      Why:= 'key';
+      if Cached.Key.SameAs(KeyBefore) then
+      begin
+        var Missing: string:= '';
+        for var R: string in Need do
+          if (Missing = '') and not Cached.Holds(R) then Missing:= R;
+        if Missing = '' then
+        begin
+          RuleCacheTrace('hit');
+          Exit(Cached);
+        end;
+        Why  := 'lacks ' + Missing;
+        Carry:= True;
+      end;
+    end;
+  end;
+  RuleCacheTrace('miss (' + Why + ')');
+  Result:= ComputeRuleCacheEntry(AStore, ALibStore, Need);
+  Result.Key:= KeyBefore;
+  if Carry then
+    for var R: string in Cached.RuleIds do
+      if not Result.Holds(R) then
+      begin
+        Result.RuleIds := Result.RuleIds + [R];
+        Result.Findings:= Result.Findings + Cached.FindingsFor(R);
+      end;
+  if not TRuleCache.Enabled then Exit;
+  { An entry holding no rule (every cached rule disabled for this run) would only
+    overwrite a useful one; there is nothing to cache. }
+  if Length(Result.RuleIds) = 0 then
+  begin
+    RuleCacheTrace('skipped (this run needs none of the cached rules)');
+    Exit;
+  end;
+  if ANarrowRule <> '' then
+  begin
+    RuleCacheTrace('skipped (--rule run; a partial entry is never written)');
+    Exit;
+  end;
+  if not TRuleCacheKey.Take(AProjectDb, ALibraryDbUsed).SameAs(KeyBefore) then
+  begin
+    RuleCacheTrace('skipped (an index changed during the run)');
+    Exit;
+  end;
+  var SaveWhy: string;
+  if TRuleCache.Save(AProjectDb, Result, SaveWhy) then RuleCacheTrace('written')
+  else RuleCacheTrace('skipped (' + SaveWhy + ')');
+end;
+
+/// <summary>The AWholeGraph provider `lint &lt;file&gt;` hands TProjectLintRules.Run.</summary>
+/// <param name="AStore">The project index.</param>
+/// <param name="ALibStore">The library index actually opened, or nil.</param>
+/// <param name="AProjectDb">The project index path.</param>
+/// <param name="ALibraryDbUsed">The library path behind ALibStore, or ''.</param>
+/// <param name="ANarrowRule">The --rule narrowing, or ''.</param>
+/// <param name="AKept">RuleKeptByRun for this run.</param>
+/// <returns>A function from a whole-graph rule id to its findings over the whole index.</returns>
+/// <remarks>
+/// The three CACHED_RULES are resolved once, on first use, through
+/// ResolveRuleCacheEntry. repeated-type-switch is never cached -- it parses the
+/// SOURCE files, so no index stat can tell when its answer moved -- and is
+/// computed live only when AKept says the run keeps it (a marker or an opt-in),
+/// which is also what spares the ~3.5 s it cost on every default lint.
+/// </remarks>
+function WholeGraphProvider(const AStore, ALibStore: ISymbolStore;
+  const AProjectDb, ALibraryDbUsed, ANarrowRule: string;
+  const AKept: TFunc<string, Boolean>): TFunc<string, TArray<TLintFinding>>;
+begin
+  var Store  : ISymbolStore            := AStore;
+  var Lib    : ISymbolStore            := ALibStore;
+  var Db     : string                  := AProjectDb;
+  var LibUsed: string                  := ALibraryDbUsed;
+  var Narrow : string                  := ANarrowRule;
+  var Kept   : TFunc<string, Boolean>  := AKept;
+  var Ready  : Boolean                 := False;
+  var Entry  : TRuleCacheEntry         := Default(TRuleCacheEntry);
+  Result:=
+    function(AId: string): TArray<TLintFinding>
+    begin
+      if not MatchText(AId, CACHED_RULES) then
+      begin
+        Result:= nil;
+        if ((Narrow = '') or SameText(Narrow, AId)) and Kept(AId) then
+          Result:= TProjectLintRules.CollectWholeGraphRule(AId, Store, Lib);
+        Exit;
+      end;
+      if not Ready then
+      begin
+        Entry:= ResolveRuleCacheEntry(Store, Lib, Db, LibUsed, Narrow, Kept);
+        Ready:= True;
+      end;
+      Result:= Entry.FindingsFor(AId);
+    end;
+end;
+
+/// <summary>The library index an indexer should warm the rule cache WITH: the one a
+/// plain `lint &lt;file&gt;` will open.</summary>
+/// <param name="AArgs">The index run's arguments; only LibraryDbs is read.</param>
+/// <returns>An explicit --library-db when given, else the manifest's library for a
+/// run with no --project and no --platform; '' when there is none.</returns>
+/// <remarks>The IDE spawns `lint "&lt;file&gt;"` with neither flag, so its library comes
+/// from the manifest default -- resolving from the INDEX run's own --project could pick
+/// another platform's library, and every warm entry would then miss on the library part
+/// of its key. A wrong guess costs a lazy fill, never a wrong answer.</remarks>
+function RuleCacheLibraryDb(const AArgs: TArgs): string;
+begin
+  if Length(AArgs.LibraryDbs) > 0 then Exit(AArgs.LibraryDbs[0]);
+  Result:= ResolveLibraryDb(Default(TArgs));
+end;
+
+/// <summary>Fills the rule cache for a project index the caller has just finished
+/// writing, so the next `lint &lt;file&gt;` is a hit.</summary>
+/// <param name="AProjectDb">The project index; the caller's write connection must be released.</param>
+/// <param name="ALibraryDb">RuleCacheLibraryDb for the run, or ''.</param>
+/// <remarks>Opens both indexes read-only and computes the three CACHED_RULES. Writes
+/// only if no index changed while it ran (same check as a lint run). NEVER fails the
+/// index run: every problem is one warning line, and the next lint fills lazily.</remarks>
+procedure WarmRuleCache(const AProjectDb, ALibraryDb: string);
+begin
+  if not TRuleCache.Enabled then Exit;
+  var Sw: TStopwatch:= TStopwatch.StartNew;
+  try
+    var Ok: Boolean;
+    var Store: ISymbolStore:= OpenReadOnlyStore(AProjectDb, Ok, {AQuiet=}True);
+    if (not Ok) or (Store = nil) then
+    begin
+      Writeln('WARNING: rule-cache not warmed: the project index could not be opened read-only');
+      Exit;
+    end;
+    var LibUsed: string:= '';
+    var Lib    : ISymbolStore:= nil;
+    if ALibraryDb <> '' then
+    begin
+      var LibWhy: string;
+      Lib:= OpenLibraryStoreIfCurrent(ALibraryDb, LibWhy);
+      if Lib <> nil then LibUsed:= ALibraryDb;
+    end;
+    var Rules: TArray<string>:= nil;
+    for var R: string in CACHED_RULES do Rules:= Rules + [R];
+    var KeyBefore: TRuleCacheKey:= TRuleCacheKey.Take(AProjectDb, LibUsed);
+    var Entry: TRuleCacheEntry:= ComputeRuleCacheEntry(Store, Lib, Rules);
+    Entry.Key:= KeyBefore;
+    if not TRuleCacheKey.Take(AProjectDb, LibUsed).SameAs(KeyBefore) then
+    begin
+      Writeln('rule-cache: not warmed -- an index changed while warming; the next lint fills it');
+      Exit;
+    end;
+    var Why: string;
+    if TRuleCache.Save(AProjectDb, Entry, Why) then
+      Writeln(Format('rule-cache: warmed %d finding(s) in %.1fs', [Length(Entry.Findings), Sw.Elapsed.TotalSeconds]))
+    else
+      Writeln('WARNING: rule-cache not warmed: ' + Why);
+  except
+    on E: Exception do Writeln('WARNING: rule-cache not warmed: ' + E.ClassName + ': ' + E.Message);
+  end;
 end;
 
 { The rule a lint run may NARROW its checkers to: ARule, except '' for a
@@ -13570,6 +13808,9 @@ begin
         side effect of linting would take a write lock on someone else's 2.2 GB.
         A failure degrades to project-only rather than failing the run. }
       var FlowLibStore: ISymbolStore := nil;
+      { The library path ACTUALLY opened ('' when none or stale): the rule-cache key
+        must say which library the cached duplicate-global-decl answer was built with. }
+      var FlowLibUsed: string := '';
       { ...and only for a run that asks a checker which READS it (D3): the
         with-hiding walk, the flow checker and the project pass. }
       if (FlowStore <> nil) and
@@ -13583,6 +13824,7 @@ begin
         var FlowLibWhy: string;
         TraceLintChecker('library-store');
         FlowLibStore:= OpenLibraryStoreIfCurrent(FlowLibDb, FlowLibWhy);
+        if FlowLibStore <> nil then FlowLibUsed:= FlowLibDb;
         if FlowLibWhy <> '' then EmitStatusLine(AArgs, 'WARNING: ' + FlowLibWhy);
       end;
       { Mirror of lint-all's drop (see the note above ScanAdd(0) there): when a
@@ -13807,12 +14049,17 @@ begin
             second half is also what makes an OFF-by-default project rule
             reachable here: TProjectLintRules.OptedIn treats the requested rule
             as opted in, the same contract lint-project and lint-all honour. }
+          { Which rules a marker in this file names -- read once, for the two passes
+            below that may skip a rule the final filter would drop. }
+          var Marked: TArray<string>:= MarkedRuleIds([EffPath, MyPath]);
           if LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES) then
           begin
             TraceLintChecker('project-rules');
             for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
                        FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore,
-                       {AOptInRules=}nil, {AOnlyFileId=}FlowFid) do
+                       {AOptInRules=}nil, {AOnlyFileId=}FlowFid,
+                       WholeGraphProvider(FlowStore, FlowLibStore, FlowDb, FlowLibUsed, NarrowRule,
+                                          RuleKeptByRun(AArgs, Cfg, Marked))) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
             { the pass above read this file's uses from the INDEX; the buffer is
@@ -13830,7 +14077,7 @@ begin
           begin
             TraceLintChecker('class-metrics');
             for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, NarrowRule,
-                       {AOnlyFileId=}FlowFid, ClassMetricKept(AArgs, Cfg, MarkedRuleIds([EffPath, MyPath]))) do
+                       {AOnlyFileId=}FlowFid, RuleKeptByRun(AArgs, Cfg, Marked)) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
           end;
@@ -19714,13 +19961,13 @@ begin
     SibOwned.Free;
   end;
   { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; `lint <file>`
-    runs the same pass scoped to its file. ClassMetricKept skips a metric this
+    runs the same pass scoped to its file. RuleKeptByRun skips a metric this
     verb's final filter would drop and no marker names -- on defaults that is
     ComputeAllFanIn. }
   LintPhase('class-metrics');
   if LintRuleWants(Nr, LINT_GATE_CLASS_METRICS) then
     Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, Nr,
-      {AOnlyFileId=}0, ClassMetricKept(AArgs, Cfg, MarkedRuleIds(FilePaths)));
+      {AOnlyFileId=}0, RuleKeptByRun(AArgs, Cfg, MarkedRuleIds(FilePaths)));
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
   LintPhase('missing-doc');

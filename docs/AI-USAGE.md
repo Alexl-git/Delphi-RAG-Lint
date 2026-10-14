@@ -1227,6 +1227,8 @@ except where noted. All are read once per process.
 | `DRAGLINT_NO_SCOPED_RESOLVE` | `1` | Disables the scoped call-resolution pass (falls back to the whole-index pass). Diagnostic only -- it is slower and can change resolution. |
 | `DRAGLINT_SCOPED_RESOLVE_ADDITIONS` | path | Writes the call edges the scoped pass ADDED, for A/B work. |
 | `DRAGLINT_SCOPED_RESOLVE_REMOVALS` | path | Writes the call edges the scoped pass REMOVED, for A/B work. |
+| `DRAGLINT_RULE_CACHE` | `0` | Turns off the `lint <file>` whole-graph rule cache (circular-uses, enum-helper-separate-units, duplicate-global-decl served from disk; `index --project` warms it). Off = computed live every run, as before 1.30.1. Under `DRAGLINT_PROFILE` every lint prints `rule-cache: hit / miss (<why>) / written / skipped (<why>)`. |
+| `DRAGLINT_RULE_CACHE_DIR` | path | Where cache entries live (default `%LOCALAPPDATA%\drag-lint\cache`, one `rules-<hash>.json` per project index). Tests point it at a scratch folder. Deleting the folder is always safe. |
 
 The two `VERIFY_*` pairs follow one rule that is worth stating: a verifier that
 has never been observed to fail is indistinguishable from one that was never
