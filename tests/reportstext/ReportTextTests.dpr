@@ -18,7 +18,9 @@ uses
   , DUnitX.Loggers.Console
   , DRagLint.Charts.DocInsight in '..\..\src\charts\DRagLint.Charts.DocInsight.pas'
   , DragLint.Plugin.ReportText in '..\..\src\delphi-plugin\DragLint.Plugin.ReportText.pas'
+  , DragLint.Plugin.LogPaths in '..\..\src\delphi-plugin\DragLint.Plugin.LogPaths.pas'
   , ReportTextTests.Cases in 'ReportTextTests.Cases.pas'
+  , LogPathTests.Cases in 'LogPathTests.Cases.pas'
   ;
 
 const

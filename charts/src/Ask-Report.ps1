@@ -8,9 +8,11 @@
 
     1. the PROJECT index comes from the engine's own `resolve-dbs` (`--project` on -Project,
        else `--in` on -In) -- never a guessed path. When --in names several indexes, the one
-       charts\report-pairs.json pairs is taken; otherwise it stops and asks for -Project.
+       report-pairs.json pairs is taken; otherwise it stops and asks for -Project.
     2. the SERVER and SQL indexes, for the questions that read them, come from
-       charts\report-pairs.json (client index -> server index, SQL index); a missing pair is a
+       report-pairs.json (client index -> server index, SQL index) -- by default
+       %APPDATA%\drag-lint\report-pairs.json, else the repo's charts\report-pairs.json
+       (Resolve-ReportPairsFile, Emit-Common.ps1); a missing pair is a
        clear stop that names the file to edit, never a one-sided chart.
     3. freshness: every index it will read is checked with the engine's `sql` envelope
        (`stale` / `stale_files`); a stale one stops the run and prints the exact incremental
@@ -72,7 +74,8 @@ param(
   # the old side of a compare may be an old index copy, stale on purpose: report it, do not stop
   [switch] $AllowStale,
   [int]    $MaxRows = 80,
-  [string] $PairsFile = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\report-pairs.json')),
+  # '' = Resolve-ReportPairsFile (Emit-Common.ps1): %APPDATA%\drag-lint\report-pairs.json, else charts\report-pairs.json
+  [string] $PairsFile = '',
   # '' = found by Resolve-DragLintEngine (Emit-Common.ps1): DRAGLINT_ENGINE, settings.json, the installed or shared engine
   [string] $Engine    = ''
 )
@@ -81,6 +84,7 @@ $ErrorActionPreference = 'Stop'
 $bundler = Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1'
 . (Join-Path $PSScriptRoot 'Emit-Common.ps1')   # functions only; Resolve-DragLintEngine
 . (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
+if (-not $PairsFile) { $PairsFile = Resolve-ReportPairsFile }
 $answer = New-Object System.Collections.Generic.List[string]
 
 function Stop-Ask([int] $Code, [string] $Message) {

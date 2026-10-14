@@ -125,6 +125,20 @@ Source: "{#YadfDir}\Win64\Release\EXE\YADF.exe";      DestDir: "{app}\yadf";    
 Source: "{#YadfDir}\Win64\Release\EXE\YADFSetup.exe"; DestDir: "{app}\yadf";     Components: yadf; Flags: ignoreversion
 Source: "{#YadfDir}\Win32\Release\EXE\YADFOT.bpl";    DestDir: "{app}\yadf";     Components: yadfot32; Check: InstallYadfot32; Flags: ignoreversion
 Source: "{#YadfDir}\Win64\Release\EXE\YADFOT.bpl";    DestDir: "{app}\yadf\x64"; Components: yadfot64; Check: InstallYadfot64; Flags: ignoreversion
+; YADF's Options-page preview sample. YADF before 1.0.19.0 looks for Demo\Sample.pas beside
+; the HOST module (yadf\ serves YADFSetup.exe and the 32-bit YADFOT; the 64-bit YADFOT needs its
+; own copy). Newer YADF (4b01ac1) embeds the sample and writes it once per user to
+; %APPDATA%\YADF itself, so it is shipped ONLY with the old binaries -- decided at compile time
+; from the packaged YADF.exe. Missing is harmless either way (a built-in snippet is shown).
+; Gate: version < 1.0.19.0 (the first release that embeds it). An unreadable version SHIPS the
+; copies: extra files are ignored by a new build, while a missing sample costs an old one its preview.
+#define YadfPacked 0
+#define YadfVerStr GetPackedVersion(YadfDir + "\Win64\Release\EXE\YADF.exe", YadfPacked)
+#pragma message "YADF.exe version: " + (YadfVerStr == "" ? "unreadable" : YadfVerStr)
+#if YadfVerStr == "" || YadfPacked < PackVersionComponents(1, 0, 19, 0)
+Source: "{#YadfDir}\Demo\Sample.pas"; DestDir: "{app}\yadf\Demo";     Components: yadf or yadfot32; Flags: ignoreversion
+Source: "{#YadfDir}\Demo\Sample.pas"; DestDir: "{app}\yadf\x64\Demo"; Components: yadfot64; Check: InstallYadfot64; Flags: ignoreversion
+#endif
 ; ---- licences ---------------------------------------------------------------
 Source: "{#RepoRoot}\installer\licenses\*.txt"; DestDir: "{app}\licenses"; Components: core; Flags: ignoreversion
 Source: "{#YadfDir}\LICENSE"; DestDir: "{app}\licenses"; DestName: "YADF-LICENSE.txt"; Components: yadf; Flags: ignoreversion

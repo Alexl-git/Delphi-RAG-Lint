@@ -66,7 +66,7 @@ Copy these once; every command below uses them verbatim.
 | ~~VS Code private engine~~ | ~~`C:\Users\alexanderl\AppData\Local\drag-lint-vscode-engine\`~~ -- **RETIRED, still on disk, an orphan** |
 | plugin BPL | `C:\Projects\Delphi-RAG-lint\third_party\dll-win32\dclDragLintWizard.bpl` |
 | engine config | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.json` |
-| plugin log | `C:\Users\alexanderl\AppData\Local\Temp\drag-lint-plugin.log` |
+| plugin log | `%LOCALAPPDATA%\drag-lint\logs\drag-lint-plugin.log` (since 2026-10-13; was `%TEMP%`) |
 | library index (Win64) | `C:\Projects\.drag-lint\library-Win64.sqlite` |
 | DataCopy index | `C:\Projects\DataCopy\_D-RAG\DataCopy.sqlite` |
 | ORM3 CLIENT index | `C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite` |

@@ -49,7 +49,7 @@ type
 /// <returns>pS with &amp; &lt; &gt; and the double quote escaped, ampersand first.</returns>
 /// <remarks>Port of ConvertTo-XmlText (Emit-Common.ps1:31). PS trap closed: `$null` reads as
 /// '' (Delphi strings are never nil). The single quote is NOT escaped, as in the PS.</remarks>
-function XmlText(const pS: string): string;  // dl:ok unused-public-symbol@dfea -- REVIEWED 2026-10-11: step-1 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests.CoreText and the ChartsCoreProbe parity harness, which sit outside this project index
+function XmlText(const pS: string): string;
 
 /// <summary>The unit name of a source path: its file name without the extension.</summary>
 /// <param name="pFile">A source path; '/' and '\' both separate.</param>
@@ -57,7 +57,7 @@ function XmlText(const pS: string): string;  // dl:ok unused-public-symbol@dfea 
 /// <remarks>Port of Get-UnitName (Emit-Common.ps1:36). PS trap closed: .NET
 /// GetFileNameWithoutExtension splits on '/' as well as '\', Delphi's ExtractFileName does
 /// not, so '/' is normalised first; IsNullOrWhiteSpace is matched with Trim.</remarks>
-function UnitNameOf(const pFile: string): string;  // dl:ok unused-public-symbol@eb92 -- REVIEWED 2026-10-11: step-1 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests.CoreText and the ChartsCoreProbe parity harness, which sit outside this project index
+function UnitNameOf(const pFile: string): string;
 
 /// <summary>A qualified name with its unit prefix removed.</summary>
 /// <param name="pQName">The qualified name.</param>
@@ -75,7 +75,7 @@ function ShortName(const pQName, pUnit: string): string;
 /// is NOT TNetEncoding.URL -- it keeps only the RFC 3986 unreserved set (A-Z a-z 0-9 - _ . ~)
 /// and writes every other UTF-8 byte as %XX in UPPERCASE hex (a space is %20, never '+').
 /// The '&amp;amp;' between the two parameters is literal, as the PS emits it.</remarks>
-function RowHref(const pFile: string; pLine: Integer): string;  // dl:ok unused-public-symbol@4270 -- REVIEWED 2026-10-11: step-1 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests.CoreText and the ChartsCoreProbe parity harness, which sit outside this project index
+function RowHref(const pFile: string; pLine: Integer): string;
 
 /// <summary>The one "not shown" sentence every chart uses.</summary>
 /// <param name="pHiddenRows">Rows left out; 0 or less gives ''.</param>
@@ -83,7 +83,7 @@ function RowHref(const pFile: string; pLine: Integer): string;  // dl:ok unused-
 /// <param name="pNoun">What a row is, plural.</param>
 /// <returns>'+N more &lt;noun&gt; (+M more sites) not shown', or '' when nothing was hidden.</returns>
 /// <remarks>Port of Get-DisclosureText (Emit-Common.ps1:736). No trap: integers only.</remarks>
-function DisclosureText(pHiddenRows, pHiddenSites: Integer; const pNoun: string = 'routines'): string;  // dl:ok unused-public-symbol@d21f -- REVIEWED 2026-10-11: step-1 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests.CoreText and the ChartsCoreProbe parity harness, which sit outside this project index
+function DisclosureText(pHiddenRows, pHiddenSites: Integer; const pNoun: string = 'routines'): string;
 
 /// <summary>How many leading '\'-separated segments every directory shares.</summary>
 /// <param name="pDirs">Directories; blanks are ignored.</param>

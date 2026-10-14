@@ -211,6 +211,20 @@ uses
   DRagLint.Charts.Text in '..\charts\DRagLint.Charts.Text.pas',
   DRagLint.Charts.Index in '..\charts\DRagLint.Charts.Index.pas',
   DRagLint.Charts.Source in '..\charts\DRagLint.Charts.Source.pas',
+  DRagLint.Charts.Tools in '..\charts\DRagLint.Charts.Tools.pas',
+  DRagLint.Charts.Dot in '..\charts\DRagLint.Charts.Dot.pas',
+  DRagLint.Charts.Checks in '..\charts\DRagLint.Charts.Checks.pas',
+  DRagLint.Charts.Sql in '..\charts\DRagLint.Charts.Sql.pas',
+  DRagLint.Charts.Columns in '..\charts\DRagLint.Charts.Columns.pas',
+  DRagLint.Charts.Chain in '..\charts\DRagLint.Charts.Chain.pas',
+  DRagLint.Charts.Exceptions in '..\charts\DRagLint.Charts.Exceptions.pas',
+  DRagLint.Charts.PsSort in '..\charts\DRagLint.Charts.PsSort.pas',
+  DRagLint.Charts.Question in '..\charts\DRagLint.Charts.Question.pas',
+  DRagLint.Charts.Ask in '..\charts\DRagLint.Charts.Ask.pas',
+  DRagLint.Charts.Q.TouchesTables in '..\charts\DRagLint.Charts.Q.TouchesTables.pas',
+  DRagLint.Charts.Q.ShownWhere in '..\charts\DRagLint.Charts.Q.ShownWhere.pas',
+  DRagLint.Charts.Q.Deps in '..\charts\DRagLint.Charts.Q.Deps.pas',
+  DRagLint.Charts.Producer.Delphi in '..\charts\DRagLint.Charts.Producer.Delphi.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

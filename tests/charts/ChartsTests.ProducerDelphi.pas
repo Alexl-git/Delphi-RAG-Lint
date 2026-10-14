@@ -1,0 +1,291 @@
+unit ChartsTests.ProducerDelphi;
+
+{ Cases for DRagLint.Charts.Producer.Delphi: which producer compare gets, what is answered
+  in-process and what is delegated, and the exit codes of Ask-Report's contract. The
+  in-process cases run against the FROZEN clones (a missing clone passes with a note). }
+
+interface
+
+uses
+  DUnitX.TestFramework, DRagLint.Charts.ReportHeader, DRagLint.Charts.Producer;
+
+type
+  /// <summary>A fallback that records whether it was asked.</summary>
+  TRecordingProducer = class(TInterfacedObject, IReportProducer)
+  private
+    FCalls: Integer;
+    FLastQuestion: string;
+    FLastDb: string;
+  public
+    property Calls: Integer read FCalls;
+    property LastQuestion: string read FLastQuestion;
+    property LastDb: string read FLastDb;
+    function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
+    function Describe: string;
+  end;
+
+  [TestFixture]
+  TProducerDelphiTests = class
+  private
+    FFallback: TRecordingProducer;
+    FKeep    : IReportProducer;
+    FProducer: IReportProducer;
+    FOutRoot : string;
+    function Clone(const pName: string; out pPath: string): Boolean;
+  public
+    [Setup] procedure Setup;
+    [TearDown] procedure TearDown;
+    [Test] procedure CompareStillGetsThePowerShellProducer;
+    [Test] procedure UnportedQuestionFallsBack;
+    [Test] procedure ProjectWithoutIndexFallsBack;
+    [Test] procedure PortedQuestionIsAnsweredInProcess;
+    [Test] procedure StaleIndexRefusesWithoutAllowStale;
+    [Test] procedure MissingIndexIsSetup;
+    [Test] procedure RefusalIsExitOne;
+    [Test] procedure UnknownTargetIsExitOne;
+    [Test] procedure CloneGuardRefusalIsSetup;
+    [Test] procedure UnexpectedFailureFallsBack;
+  end;
+
+implementation
+
+uses
+  System.SysUtils, System.IOUtils, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness,
+  DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Producer.Delphi;
+
+const
+  REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
+  CHARTS_MARK = 'charts\src\Ask-Report.ps1';
+  CLONE_DIR = 'charts\scratch\db';
+  SERVER_CLONE = 'SERVER-MicroniteMW1Service.sqlite';
+  CLIENT_CLONE = 'CLIENT-Micronite2027.sqlite';
+  CLIENT_HISTORY = 'CLIENT-Micronite2027.sqlite.pre-1.10';
+  NO_SUCH_TARGET = 'NoSuchUnit.TNoSuchClass.NoSuchMethod';
+  TT_TARGET = 'uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation';
+  EXIT_SETUP = 2;
+  STUB_EXIT = 42;
+
+function RepoRoot: string;
+begin
+  var Root:= GetEnvironmentVariable(REPO_ROOT_ENV);
+  if (Root <> '') and TFile.Exists(TPath.Combine(Root, CHARTS_MARK)) then
+    Exit(Root);
+  var Dir:= GetCurrentDir;
+  while Dir <> '' do
+  begin
+    if TFile.Exists(TPath.Combine(Dir, CHARTS_MARK)) then
+      Exit(Dir);
+    var Up:= ExtractFileDir(ExcludeTrailingPathDelimiter(Dir));
+    if SameText(Up, Dir) then
+      Break;
+    Dir:= Up;
+  end;
+  Result:= '';
+end;
+
+{ the engine's own freshness verdict for a clone; the store is closed on return }
+function IsStale(const pDb: string): Boolean;
+begin
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(pDb, True);
+  Result:= ProbeIndexFreshness(Store).Verdict = fvStale;
+end;
+
+function Cmd(const pQuestion, pTarget: string; const pProject: string = ''): TReportCommand;
+begin
+  Result:= Default(TReportCommand);
+  Result.Question:= pQuestion;
+  var A: TCommandArg;
+  A.Name:= 'Target';
+  A.Value:= pTarget;
+  Result.Args:= [A];
+  if pProject <> '' then
+  begin
+    A.Name:= 'Project';
+    A.Value:= pProject;
+    Result.Args:= Result.Args + [A];
+  end;
+end;
+
+function TRecordingProducer.Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
+begin
+  Inc(FCalls);
+  FLastQuestion:= pCommand.Question;
+  FLastDb:= pOptions.DbOverride;
+  Result:= Default(TProduceResult);
+  Result.ExitCode:= STUB_EXIT;
+end;
+
+function TRecordingProducer.Describe: string;
+begin
+  Result:= 'recording stub';
+end;
+
+procedure TProducerDelphiTests.Setup;
+begin
+  FFallback:= TRecordingProducer.Create;
+  FKeep:= FFallback;
+  FOutRoot:= TPath.Combine(TPath.GetTempPath, 'drag-lint-charts-p-' + TGUID.NewGuid.ToString);
+  FProducer:= TDelphiProducer.Create(FKeep, True, FOutRoot);
+end;
+
+procedure TProducerDelphiTests.TearDown;
+begin
+  FProducer:= nil;
+  FKeep:= nil;
+  if TDirectory.Exists(FOutRoot) then
+    TDirectory.Delete(FOutRoot, True);
+end;
+
+function TProducerDelphiTests.Clone(const pName: string; out pPath: string): Boolean;
+begin
+  var Root:= RepoRoot;
+  pPath:= if Root = '' then '' else TPath.Combine(TPath.Combine(Root, CLONE_DIR), pName);
+  Result:= (pPath <> '') and TFile.Exists(pPath);
+  if not Result then
+    Assert.Pass('clone missing: ' + pName);
+end;
+
+procedure TProducerDelphiTests.CompareStillGetsThePowerShellProducer;
+begin
+  var P:= ProducerForCompare;
+  { P is an INTERFACE: 'as TObject' is the interface-to-object cast, not a redundant one }
+  Assert.IsTrue((P as TObject) is TPowerShellProducer, 'compare must keep the PowerShell producer until the owner rules');  // dl:ok redundant-as-tobject@63e2 -- FALSE POSITIVE: P is an IReportProducer, and 'as TObject' is the only interface-to-object cast (logged to draglint-gaps.log)
+end;
+
+procedure TProducerDelphiTests.UnportedQuestionFallsBack;
+begin
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= 'any.sqlite';
+  var R:= FProducer.Produce(Cmd('butterfly', 'A.B'), O);
+  Assert.AreEqual(1, FFallback.Calls);
+  Assert.AreEqual('butterfly', FFallback.LastQuestion);
+  Assert.AreEqual('any.sqlite', FFallback.LastDb);
+  Assert.AreEqual(STUB_EXIT, R.ExitCode);
+  Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
+end;
+
+procedure TProducerDelphiTests.ProjectWithoutIndexFallsBack;
+begin
+  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET, 'X.dproj'), DefaultProduceOptions);
+  Assert.AreEqual(1, FFallback.Calls);
+  Assert.AreEqual(STUB_EXIT, R.ExitCode);
+end;
+
+procedure TProducerDelphiTests.PortedQuestionIsAnsweredInProcess;
+var
+  Db: string;
+begin
+  if not Clone(SERVER_CLONE, Db) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.Contains(R.Text, #13#10'CHART touches-tables ' + TT_TARGET + ' -- 5 tables read / 5 tables written'#13#10);
+  Assert.AreEqual(Db, R.IndexPaths[0]);
+  Assert.IsTrue(TFile.Exists(TPath.Combine(R.BundlePath, 'graph.dot')));
+  Assert.AreEqual('Delphi in-process (touches-tables)', FProducer.Describe);
+end;
+
+procedure TProducerDelphiTests.StaleIndexRefusesWithoutAllowStale;
+var
+  Db: string;
+begin
+  if not Clone(SERVER_CLONE, Db) then
+    Exit;
+  var Stale:= IsStale(Db);
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET), O);
+  if Stale then
+  begin
+    Assert.AreEqual(PRODUCER_EXIT_STALE, R.ExitCode);
+    Assert.StartsWith('stale index -- the answer would be short or wrong.', R.Reason);
+  end
+  else
+    Assert.IsTrue(R.Ok, 'a fresh clone answers');
+end;
+
+procedure TProducerDelphiTests.MissingIndexIsSetup;
+begin
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= TPath.Combine(FOutRoot, 'missing.sqlite');
+  var R:= FProducer.Produce(Cmd('deps', 'X'), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode);
+  Assert.StartsWith('index not found: ', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.RefusalIsExitOne;
+var
+  Db: string;
+begin
+  if not Clone(CLIENT_CLONE, Db) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET), O);
+  Assert.AreEqual(1, R.ExitCode);
+  Assert.IsFalse(R.Ok);
+  Assert.StartsWith('touches-tables: this index has NO SQL facts at all', R.Reason);
+end;
+
+
+procedure TProducerDelphiTests.UnknownTargetIsExitOne;
+var
+  Db: string;
+begin
+  if not Clone(SERVER_CLONE, Db) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('touches-tables', NO_SUCH_TARGET), O);
+  Assert.AreEqual(1, R.ExitCode, R.Reason);
+  Assert.Contains(R.Reason, 'is not in this index');
+  Assert.AreEqual(0, FFallback.Calls, 'a refusal PowerShell would also give is not handed to the fallback');
+end;
+
+procedure TProducerDelphiTests.CloneGuardRefusalIsSetup;
+var
+  Db: string;
+begin
+  { a history copy in the clone root: a valid index, but the clone guard refuses its name }
+  if not Clone(CLIENT_HISTORY, Db) then
+    Exit;
+  FProducer:= TDelphiProducer.Create(FKeep, False, FOutRoot);  { clone guard ON for this case }
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.StartsWith('refusing a database whose name does not end in .sqlite', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.UnexpectedFailureFallsBack;
+begin
+  { not an index at all: the freshness probe fails inside the try, which is a failure of the
+    in-process path, not a verdict -- so the fallback answers and nothing escapes }
+  TDirectory.CreateDirectory(FOutRoot);
+  var Bad:= TPath.Combine(FOutRoot, 'corrupt.sqlite');
+  TFile.WriteAllText(Bad, 'this is not an SQLite database');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Bad;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  var R:= FProducer.Produce(Cmd('deps', 'X'), O);
+  Assert.AreEqual(1, FFallback.Calls, 'the fallback answers an unexpected failure');
+  Assert.AreEqual(STUB_EXIT, R.ExitCode);
+  Assert.Contains(FProducer.Describe, 'Delphi in-process failed (');
+  Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
+end;
+
+end.

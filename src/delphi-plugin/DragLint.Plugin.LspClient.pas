@@ -92,6 +92,10 @@ type
 
 implementation
 
+uses
+  DragLint.Plugin.LogPaths
+  ;
+
 { ---- Debug log ---- }
 
 var
@@ -102,22 +106,14 @@ function GetPluginLogPath: string;
   EnsureLspClient / InvokeTestConnection printed GetEnvironmentVariable('TEMP')
   while DebugLog wrote to TPath.GetTempPath -- the two can disagree under
   Windows TMP/TEMP precedence, so users hunted for a log at the displayed
-  path and couldn't find it. }
-var
-  Candidate: string;
+  path and couldn't find it.
+  2026-10-13 (installer layout v2, owner ruling): ALWAYS
+  %LOCALAPPDATA%\drag-lint\logs, dev box included -- no %TEMP% probe and no
+  beside-the-BPL fallback. }
+const
+  PLUGIN_LOG_NAME = 'drag-lint-plugin.log';
 begin
-  Candidate:= TPath.Combine(TPath.GetTempPath, 'drag-lint-plugin.log');
-  Result:= Candidate;
-  { Best-effort: if we can't write to TEMP, fall back to alongside the BPL. }
-  try
-    with TFileStream.Create(Candidate, fmOpenReadWrite or fmShareDenyNone) do Free;
-  except
-    try
-      with TFileStream.Create(Candidate, fmCreate or fmShareDenyNone) do Free;
-    except
-      Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint-plugin.log';
-    end;
-  end;
+  Result:= PluginLogPath(PLUGIN_LOG_NAME);
 end; // function
 
 procedure DebugLog(const AMsg: string);
@@ -131,6 +127,7 @@ begin
   try
     try
       LogPath:= GetPluginLogPath;
+      if LogPath = '' then Exit; { no local-app-data folder: nowhere sane to log }
       Line:= AnsiString(Format('[%s] %s'#13#10, [FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now), AMsg]));
       if FileExists(LogPath) then Stream:= TFileStream.Create(LogPath, fmOpenWrite or fmShareDenyNone)
       else Stream:= TFileStream.Create(LogPath, fmCreate or fmShareDenyNone);
