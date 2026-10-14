@@ -122,7 +122,7 @@ procedure ArmBusyTimeout(AConn: TFDConnection; ABusyTimeoutMs: Integer = DEFAULT
 /// asks for it (TSQLiteSymbolStore.IsSchemaCurrent) and refuses a stale one.
 /// Thread-safe: touches only AConn.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DbLooksHealthy (DRagLint.CLI.pas), DRagLint.CLI.DoDiff (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas), DRagLint.CLI.DoGraph (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas) (+8 more)</para>
+/// <para>Called from: DRagLint.CLI.DbLooksHealthy (DRagLint.CLI.pas), DRagLint.CLI.DoDiff (DRagLint.CLI.pas), DRagLint.CLI.DoExportObsidian (DRagLint.CLI.pas), DRagLint.CLI.DoGraph (DRagLint.CLI.pas), DRagLint.CLI.DoMigrateDbs (DRagLint.CLI.pas) (+9 more)</para>
 /// <para>Calls: DRagLint.Storage.FileMembership.ArmBusyTimeout, DRagLint.Storage.FileMembership.HeaderSaysWal</para>
 /// <seealso cref="DRagLint.Storage.FileMembership.ArmBusyTimeout"/>
 /// <seealso cref="DRagLint.Storage.FileMembership.HeaderSaysWal"/>
@@ -173,6 +173,55 @@ procedure ConnectReadOnly(AConn: TFDConnection; const ADbPath: string;
 procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string;
   ABusyTimeoutMs: Integer = DEFAULT_BUSY_TIMEOUT_MS);
 
+type
+  /// <summary>What an index can say about one source file: it holds it, it
+  /// does not, or it could not be asked.</summary>
+  /// <remarks>
+  /// dmUnknown exists so a caller that must not mistake "could not
+  /// read" for "not an owner" -- the multi-project rename, spec criterion 8c --
+  /// can tell the two apart. DbContainsFile folds dmUnknown into False.
+  /// <!-- drag-lint:auto BEGIN -->
+  /// <para>Used by: declaration (DRagLint.Storage.FileMembership.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <!-- drag-lint:auto END -->
+  /// </remarks>
+  TDbMembership = (
+    /// <summary>The DB's files table holds the path.</summary>
+    dmMember,
+    /// <summary>The DB was read and its files table does not hold the path.</summary>
+    dmNotMember,
+    /// <summary>The DB is missing, unopenable, locked, corrupt or has no files
+    /// table; AReason says which.</summary>
+    dmUnknown);
+
+/// <summary>Asks the index at ADbPath whether its files table holds
+/// AFilePath, by FULL PATH, and says so in three states.</summary>
+/// <param name="ADbPath">Full path to a .sqlite index.</param>
+/// <param name="AFilePath">Absolute path of the source file to look for; a
+/// different file with the same unit name never matches.</param>
+/// <param name="AReason">'' on dmMember / dmNotMember. On dmUnknown: 'db file
+/// not found' for a missing (or empty) ADbPath, 'no file path' for an empty
+/// AFilePath, otherwise the message of the exception the open or query raised.</param>
+/// <returns>dmMember on a byte-exact or case-insensitive match, dmNotMember
+/// when the files table was read and holds no such path, dmUnknown on every
+/// failure to determine either. Never raises.</returns>
+/// <remarks>
+/// Same normalisation, exact-then-NOCASE order, read-only open and
+/// header-preserving connect as DbContainsFile, whose body this is (see its
+/// remarks). Thread-safe: no shared state; each call owns its connection.
+/// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Storage.FileMembership.DbContainsFile (DRagLint.Storage.FileMembership.pas)</para>
+/// <para>Calls: DRagLint.Storage.FileMembership.ConnectReadOnly, DRagLint.Storage.FileMembership.NormalizeForLookup</para>
+/// <para>Returns: dmUnknown; if Found then dmMember</para>
+/// <para>Catches: Exception (swallowed)</para>
+/// <para>SQL: reads FILES</para>
+/// <para>Mutates: AReason (out)</para>
+/// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
+/// <seealso cref="DRagLint.Storage.FileMembership.NormalizeForLookup"/>
+/// <!-- drag-lint:auto END -->
+/// </remarks>
+function DbMembership(const ADbPath, AFilePath: string; out AReason: string): TDbMembership;
+
 /// <summary>True when ADbPath is a readable index whose files table holds
 /// AFilePath.</summary>
 /// <param name="ADbPath">Full path to a .sqlite index. A missing, empty,
@@ -206,13 +255,9 @@ procedure ConnectWriter(AConn: TFDConnection; const ADbPath: string;
 /// Thread-safe: no shared state; each call owns its connection.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoQueryTypeUsage (DRagLint.CLI.pas), DRagLint.CLI.DoQueryUnitUsage (DRagLint.CLI.pas), DRagLint.CLI.ResolveFrameworkContextDb.TheOnlyProjectDb (DRagLint.CLI.pas), DRagLint.CLI.ResolveReadDbsForFileWith (DRagLint.CLI.pas)</para>
-/// <para>Calls: DRagLint.Storage.FileMembership.ConnectReadOnly, DRagLint.Storage.FileMembership.NormalizeForLookup</para>
-/// <para>Returns: False; not Q.Eof</para>
-/// <para>Catches: Exception (swallowed)</para>
-/// <para>SQL: reads FILES</para>
-/// <para>Touches: file system</para>
-/// <seealso cref="DRagLint.Storage.FileMembership.ConnectReadOnly"/>
-/// <seealso cref="DRagLint.Storage.FileMembership.NormalizeForLookup"/>
+/// <para>Calls: DRagLint.Storage.FileMembership.DbMembership</para>
+/// <para>Returns: DbMembership(ADbPath, AFilePath, Reason) = dmMember</para>
+/// <seealso cref="DRagLint.Storage.FileMembership.DbMembership"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
@@ -333,18 +378,27 @@ end; // procedure
 const
   MEMBERSHIP_BUSY_TIMEOUT_MS = 2000; { a probe answers "no" sooner than a verb gives up }
 
-function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
+function DbMembership(const ADbPath, AFilePath: string; out AReason: string): TDbMembership;
 var
-  Conn: TFDConnection;
-  Q   : TFDQuery     ;
-  NP  : string       ;
+  Conn : TFDConnection;
+  Q    : TFDQuery     ;
+  NP   : string       ;
+  Found: Boolean      ;
 begin
-  Result:= False;
-  if (ADbPath = '') or (AFilePath = '') then Exit;
-  if not TFile.Exists(ADbPath) then Exit;
+  Result := dmUnknown;
+  AReason:= '';
+  if (ADbPath = '') or not TFile.Exists(ADbPath) then
+  begin
+    AReason:= 'db file not found';
+    Exit;
+  end;
 
   NP:= NormalizeForLookup(AFilePath);
-  if NP = '' then Exit;
+  if NP = '' then
+  begin
+    AReason:= 'no file path';
+    Exit;
+  end;
 
   try
     Conn:= TFDConnection.Create(nil);
@@ -373,19 +427,20 @@ begin
           Q.SQL.Text:= 'SELECT 1 FROM files WHERE path = :p LIMIT 1';
           Q.ParamByName('p').AsString:= NP;
           Q.Open;
-          Result:= not Q.Eof;
+          Found:= not Q.Eof;
           Q.Close;
 
           { Only on a miss, the case-insensitive retry -- for a differently-cased
             directory or file name. Bounded by the files table, which is
             per-project. }
-          if not Result then
+          if not Found then
           begin
             Q.SQL.Text:= 'SELECT 1 FROM files WHERE path = :p COLLATE NOCASE LIMIT 1';
             Q.ParamByName('p').AsString:= NP;
             Q.Open;
-            Result:= not Q.Eof;
+            Found:= not Q.Eof;
           end;
+          Result:= if Found then dmMember else dmNotMember;
         finally
           Q.Close;
         end; // try
@@ -397,11 +452,23 @@ begin
       Conn.Free;
     end; // try
   except
-    { A DB that cannot be opened or has no files table cannot vouch for the file.
-      False is the honest answer AND the safe one: the caller leaves its existing
-      order alone rather than promoting an index it could not read. }
-    on E: Exception do Result:= False;
+    { A DB that cannot be opened or has no files table cannot vouch for the file
+      either way: unknown, with the reason, never a truthful-looking "no". }
+    on E: Exception do
+    begin
+      Result := dmUnknown;
+      AReason:= E.Message;
+    end;
   end; // try
+end; // function
+
+function DbContainsFile(const ADbPath, AFilePath: string): Boolean;
+var
+  Reason: string;
+begin
+  { dmUnknown reads as False: the caller leaves its existing order alone rather
+    than promoting an index it could not read. }
+  Result:= DbMembership(ADbPath, AFilePath, Reason) = dmMember;
 end; // function
 
 end.

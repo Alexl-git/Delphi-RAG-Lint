@@ -12,7 +12,7 @@ type
   /// <summary>Target casing styles, matching TNamingConfig's textual vocabulary.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.NamingFix.pas), DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.NamingFix.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TNameStyle = (nsPascalCase, nsCamelCase, nsUpperCase);
@@ -24,7 +24,7 @@ type
 /// nsPascalCase.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Called from: DRagLint.Refactor.NamingFix.ConstCaseCandidates (DRagLint.Refactor.NamingFix.pas), DRagLint.Refactor.NamingFix.NamingCandidates (DRagLint.Refactor.NamingFix.pas)</para>
 /// <para>Calls: SameText</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
@@ -44,7 +44,7 @@ function StyleFromConfigText(const AConfigCase: string): TNameStyle;
 /// (word-boundary detection is a phase-2 concern; this keeps phase-1
 /// collision-free and mechanical).
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Called from: DRagLint.Refactor.NamingFix.NamingCandidates (DRagLint.Refactor.NamingFix.pas)</para>
 /// <para>Calls: Copy, LowerCase, UpperCase</para>
 /// <para>Returns: UpperCase(AOldName); LowerCase(AOldName[1]) + Copy(AOldName, 2, MaxInt); UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt)</para>
 /// <para>Pure</para>
@@ -63,13 +63,126 @@ function SynthesizeCasedName(const AOldName: string; AStyle: TNameStyle): string
 /// <returns>The prefixed identifier, or AOldName unchanged if already prefixed/empty input.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Refactor.NamingFix.BuildNamingFixEdits (DRagLint.Refactor.NamingFix.pas)</para>
+/// <para>Called from: DRagLint.Refactor.NamingFix.NamingCandidates (DRagLint.Refactor.NamingFix.pas)</para>
 /// <para>Calls: CharInSet, Copy, SameText, UpperCase</para>
 /// <para>Returns: APrefix + UpperCase(AOldName[1]) + Copy(AOldName, 2, MaxInt)</para>
 /// <para>Pure</para>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function SynthesizePrefixedName(const AOldName, APrefix: string): string;
+
+/// <summary>The names const-casing may rename AOldName to, in preference order:
+/// one per style in AConstCase (the configured order), duplicates and the
+/// unchanged name removed.</summary>
+/// <param name="AOldName">The offending constant name verbatim.</param>
+/// <param name="AConstCase">The configured const_case styles; empty means UPPER_CASE.</param>
+/// <returns>Candidates, best first; empty when no style changes the name.</returns>
+/// <remarks>WORD-AWARE, unlike SynthesizeCasedName (owner report 2026-10-13: most
+/// of ORM3's const-casing findings looked like StationType_Operator, which a
+/// first-letter re-casing leaves unchanged, so nothing was ever fixable). Words
+/// split at '_' and at a lower-to-upper step:
+///   PascalCase  StationType_Operator -> StationTypeOperator, wr_str -> WrStr,
+///               MAX_COUNT -> MaxCount, wrStr -> WrStr
+///   UPPER_CASE  StationType_Operator -> STATION_TYPE_OPERATOR, wrStr -> WR_STR
+///   camelCase   StationType_Operator -> stationTypeOperator
+/// A candidate CHANGES the identifier, so the caller must ask the index whether
+/// it is free (FreeCandidates keeps those ConflictReason clears; BuildNamingFixEdits takes the first).
+/// Pure. Pinned by tests\autotest\run_const_casing_word_fix.ps1.</remarks>
+function ConstCaseCandidates(const AOldName: string; const AConstCase: TArray<string>): TArray<string>;
+
+type
+  /// <summary>Which rename engine a naming target goes through.</summary>
+  /// <remarks>nsGlobal: the store-backed TRenameRefactoring.Build on the resolved
+  /// symbol's qualified name (method-pascalcase, const-casing, field-name-prefix,
+  /// type-name-prefix). nsLocal: the routine-local TRenameRefactoring.BuildLocal at
+  /// the finding's own position (local-var-casing, param-name-prefix,
+  /// local-field-prefix); no store symbol is resolved for it.</remarks>
+  TNamingScope = (nsGlobal, nsLocal);
+
+  /// <summary>Outcome of the TARGET phase (BuildNamingTargets) for one naming finding.</summary>
+  /// <remarks>
+  /// tsReady: identifier read, at least one candidate, and (nsGlobal) the symbol resolved.
+  /// tsNoChange: no candidate differs from OldName (it already conforms), or
+  /// local-field-prefix would strip it to an empty or digit-led name.
+  /// tsUnresolved: the identifier could not be read from the file, or (nsGlobal) no
+  /// store symbol sits at the position and the store does not know the name in that file.
+  /// tsStalePosition: (nsGlobal) unresolved at the position although the store DOES hold
+  /// a symbol of that name in that file -- the index predates an edit that moved the
+  /// declaration; BuildNamingFixEdits counts these in AStaleCount
+  /// (pinned by tests\autotest\run_naming_fix_stale_position.ps1).
+  /// tsAllCandidatesTaken: never produced by BuildNamingTargets; for a caller that finds
+  /// FreeCandidates empty (for instance across several stores) to record that.
+  /// </remarks>
+  TTargetStatus = (tsReady, tsNoChange, tsUnresolved, tsStalePosition, tsAllCandidatesTaken);
+
+  /// <summary>One naming finding resolved against ONE symbol store, before a new name
+  /// is chosen: the identifier, its candidate names and how it is renamed.</summary>
+  /// <remarks>Value type; owns nothing. Store-dependent fields are QName, SymLine,
+  /// Status and, for type-name-prefix only (its prefix follows the resolved symbol's
+  /// kind), Candidates.</remarks>
+  TNamingTarget = record
+    Key       : string;          // lower(file)|line|col|rule -- one target per key
+    Finding   : TLintFinding;
+    OldName   : string;          // identifier verbatim from the finding's file span
+    Candidates: TArray<string>;  // best first; exactly one for non-const rules
+    Scope     : TNamingScope;
+    QName     : string;          // Sym.QualifiedName for nsGlobal, '' for nsLocal
+    SymLine   : Integer;         // Sym.StartLine (EmitRenameEdits anchor); 0 for nsLocal
+    Status    : TTargetStatus;
+  end;
+
+/// <summary>TARGET phase: turns the naming findings the fixer handles into one
+/// TNamingTarget each, against ONE store -- reads the identifier, synthesizes its
+/// candidate names and, for nsGlobal, resolves the declaring symbol. Builds no edits
+/// and runs no conflict check.</summary>
+/// <param name="AStore">Store used to resolve nsGlobal symbols (and the type kind
+/// for type-name-prefix). nil returns nil.</param>
+/// <param name="AFindings">Candidate findings; rule-ids the fixer does not handle are
+/// omitted from the result.</param>
+/// <param name="ANaming">Naming config supplying the casing styles and prefixes.</param>
+/// <returns>Targets in finding order, one per Key (the first finding wins). Every
+/// status is included; a finding whose processing raises is omitted.</returns>
+/// <remarks>Rules handled: method-pascalcase, local-var-casing, const-casing,
+/// field-name-prefix, param-name-prefix, type-name-prefix, local-field-prefix.
+/// const-casing candidates come from ConstCaseCandidates; every other rule has
+/// exactly one candidate. Exercised through BuildNamingFixEdits by
+/// run_naming_autofix.ps1, run_naming_prefix_autofix.ps1, run_const_casing_word_fix.ps1
+/// and run_naming_fix_stale_position.ps1.</remarks>
+function BuildNamingTargets(const AStore: ISymbolStore; const AFindings: TArray<TLintFinding>;
+  const ANaming: TNamingConfig): TArray<TNamingTarget>;
+
+/// <summary>The candidates of ATarget that are free to rename to, in their original
+/// (preference) order.</summary>
+/// <param name="AStore">Store asked about nsGlobal conflicts; nil yields nil for an
+/// nsGlobal target.</param>
+/// <param name="ATarget">A target from BuildNamingTargets built against AStore.</param>
+/// <returns>The free candidates, best first; nil when ATarget.Status is not tsReady
+/// or none is free.</returns>
+/// <remarks>nsGlobal: a candidate is free when TRenameRefactoring.ConflictReason
+/// reports no conflict for ATarget.QName. nsLocal: param-name-prefix and
+/// local-field-prefix drop a candidate LocalNameCollides finds in the enclosing
+/// routine; local-var-casing keeps its candidate (a pure re-casing cannot collide).
+/// Pinned by run_const_casing_word_fix.ps1 (Station_Name -> STATION_NAME because
+/// StationName already exists).</remarks>
+function FreeCandidates(const AStore: ISymbolStore; const ATarget: TNamingTarget): TArray<string>;
+
+/// <summary>EDIT phase: the text edits that rename ATarget to ANewName, each one
+/// POSITION-VERIFIED against the file as it is on disk now.</summary>
+/// <param name="AStore">Store backing the nsGlobal rename; nil yields no edits for an
+/// nsGlobal target. Unused for nsLocal.</param>
+/// <param name="ATarget">A tsReady target from BuildNamingTargets built against AStore.</param>
+/// <param name="ANewName">The new identifier. Not checked for conflicts here -- pass a
+/// FreeCandidates result.</param>
+/// <param name="ASkipped">Out: edits dropped because the recorded span no longer
+/// holds the identifier (the stale-position guard); those sites are not written.</param>
+/// <returns>The surviving edits; empty when ATarget is not tsReady, ANewName is empty
+/// or nothing survived.</returns>
+/// <remarks>An edit on the finding's own line takes the finding's verified
+/// [StartCol, EndCol) span; every other edit uses the rename engine's coordinates.
+/// Each edit carries ExpectText for the applier to re-verify at write time. Pinned
+/// by run_autofix_apply_accounting.ps1 and the naming autofix suites.</remarks>
+function BuildTargetEdits(const AStore: ISymbolStore; const ATarget: TNamingTarget;
+  const ANewName: string; out ASkipped: Integer): TArray<TTextEdit>;
 
 /// <summary>Turns naming findings -- the 3 phase-1 re-casing rules
 /// (method-pascalcase, local-var-casing, const-casing) AND the 3 phase-2
@@ -97,6 +210,12 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// holds the identifier being renamed. Non-zero means the store is stale for
 /// the target file(s) and the caller should surface a "reindex and re-run"
 /// hint; those sites were NOT written.</param>
+/// <param name="AStaleCount">Out: number of FINDINGS (not edits) skipped because
+/// the store-backed symbol could not be resolved at the finding's position
+/// although the store DOES hold a symbol of that name in that file -- the
+/// index predates an edit that moved the declaration (spec criterion 12).
+/// Counted separately from ASkippedCount, which counts edits. A finding whose
+/// name the store does not know in that file at all is not counted.</param>
 /// <returns>The applied edit set (empty if nothing was fixable).</returns>
 /// <remarks>
 /// Re-casing (phase 1) is collision-free in a case-insensitive language
@@ -122,41 +241,22 @@ function SynthesizePrefixedName(const AOldName, APrefix: string): string;
 /// identifier glued onto the `then`/`else` keywords, exit code 0). Any edit
 /// whose span is out of range or does not hold the expected identifier is
 /// DROPPED and counted in ASkippedCount -- never written.
+/// COMPOSITION (2026-10-13, pure refactor): BuildNamingTargets, then for each
+/// tsReady target FreeCandidates, then BuildTargetEdits with the FIRST free
+/// candidate; a tsStalePosition target increments AStaleCount.
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas)</para>
-/// <para>Calls: CharInSet, Copy, Default, DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf, DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits, DRagLint.Refactor.NamingFix.LocalNameCollides, DRagLint.Refactor.NamingFix.ReadIdentifierAt, DRagLint.Refactor.NamingFix.ResolveSymbolAt, DRagLint.Refactor.NamingFix.StyleFromConfigText, DRagLint.Refactor.NamingFix.SynthesizeCasedName (+9 more)</para>
-/// <para>Returns: nil; Edits.ToArray</para>
-/// <para>Complexity: 35 (cyclomatic, outer body), 239 lines (full implementation)</para>
+/// <para>Calls: DRagLint.Refactor.NamingFix.BuildNamingTargets, DRagLint.Refactor.NamingFix.BuildTargetEdits, DRagLint.Refactor.NamingFix.FreeCandidates</para>
 /// <para>Catches: Exception (empty)</para>
-/// <para>Mutates: AFixCount (out), ASkippedCount (out)</para>
-/// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.IsDescendantOf"/>
-/// <seealso cref="DRagLint.Refactor.NamingFix.BuildNamingFixEdits.EmitRenameEdits"/>
-/// <seealso cref="DRagLint.Refactor.NamingFix.LocalNameCollides"/>
-/// <seealso cref="DRagLint.Refactor.NamingFix.ReadIdentifierAt"/>
-/// <seealso cref="DRagLint.Refactor.NamingFix.ResolveSymbolAt"/>
+/// <para>Mutates: AFixCount (out), ASkippedCount (out), AStaleCount (out)</para>
+/// <seealso cref="DRagLint.Refactor.NamingFix.BuildNamingTargets"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.BuildTargetEdits"/>
+/// <seealso cref="DRagLint.Refactor.NamingFix.FreeCandidates"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-/// <summary>The names const-casing may rename AOldName to, in preference order:
-/// one per style in AConstCase (the configured order), duplicates and the
-/// unchanged name removed.</summary>
-/// <param name="AOldName">The offending constant name verbatim.</param>
-/// <param name="AConstCase">The configured const_case styles; empty means UPPER_CASE.</param>
-/// <returns>Candidates, best first; empty when no style changes the name.</returns>
-/// <remarks>WORD-AWARE, unlike SynthesizeCasedName (owner report 2026-10-13: most
-/// of ORM3's const-casing findings looked like StationType_Operator, which a
-/// first-letter re-casing leaves unchanged, so nothing was ever fixable). Words
-/// split at '_' and at a lower-to-upper step:
-///   PascalCase  StationType_Operator -> StationTypeOperator, wr_str -> WrStr,
-///               MAX_COUNT -> MaxCount, wrStr -> WrStr
-///   UPPER_CASE  StationType_Operator -> STATION_TYPE_OPERATOR, wrStr -> WR_STR
-///   camelCase   StationType_Operator -> stationTypeOperator
-/// A candidate CHANGES the identifier, so the caller must ask the index whether
-/// it is free (BuildNamingFixEdits takes the first that ConflictReason clears).
-/// Pure. Pinned by tests\autotest\run_const_casing_word_fix.ps1.</remarks>
-function ConstCaseCandidates(const AOldName: string; const AConstCase: TArray<string>): TArray<string>;
 function BuildNamingFixEdits(const AStore: ISymbolStore;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
-  out AFixCount: Integer; out ASkippedCount: Integer): TArray<TTextEdit>;
+  out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer): TArray<TTextEdit>;
 
 implementation
 
@@ -167,7 +267,6 @@ uses
   System.Classes,
   System.Generics.Collections,
   TreeSitter,
-  TreeSitterLib,
   DRagLint.Diagnostics.ParseCache,
   DRagLint.Refactor.Rename;
 
@@ -374,7 +473,9 @@ var
   begin
     Result:= '';
     if N.IsNull then Exit;
-    S:= Integer(N.StartByte); E:= Integer(N.EndByte); L:= E - S;
+    S:= Integer(N.StartByte);
+    E:= Integer(N.EndByte);
+    L:= E - S;
     if (L <= 0) or (S < 0) or (E > Length(Src)) then Exit;
     Result:= TEncoding.UTF8.GetString(Src, S, L);
   end;
@@ -485,12 +586,172 @@ begin
   Result:= ScanScope(OwnerProc);
 end;
 
-function BuildNamingFixEdits(const AStore: ISymbolStore;
-  const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
-  out AFixCount: Integer; out ASkippedCount: Integer): TArray<TTextEdit>;
+{ True when the store holds a symbol named AName (case-insensitively) declared
+  in AFilePath -- at ANY position. Separates "the index is stale for this
+  file" from "the index does not know this name here at all". }
+function DeclaredInFile(const AStore: ISymbolStore; const AFilePath, AName: string): Boolean;
+begin
+  for var S: TSymbol in AStore.FindSymbolsByFile(AFilePath) do
+    if SameText(S.Name, AName) then Exit(True);
+  Result:= False;
+end;
+
+{ The rename candidates for finding AF whose identifier is AOldName, best first;
+  nil when no candidate differs from AOldName or no legal one exists. }
+function NamingCandidates(const AStore: ISymbolStore; const AF: TLintFinding;
+  const AOldName: string; const ANaming: TNamingConfig): TArray<string>;
+var
+  NewName: string;
+  Prefix : string;
+  Sym    : TSymbol;
+begin
+  Result:= nil;
+  { local-field-prefix is the MIRROR of the phase-2 prefix rules: the
+    others ADD a missing prefix, this one STRIPS a prefix a local should
+    never have worn. It is the safest rename in the family -- scope is a
+    single routine body, so no call site anywhere can be affected -- which
+    is why it routes through BuildLocal with the same collision guard
+    param-name-prefix uses rather than the store-backed global rename. }
+  if SameText(AF.RuleId, 'local-field-prefix') then
+  begin
+    NewName:= AOldName;
+    if (ANaming.FieldPrefix <> '') and NewName.StartsWith(ANaming.FieldPrefix, True) then
+      NewName:= Copy(NewName, Length(ANaming.FieldPrefix) + 1, MaxInt);
+    { A local called exactly the prefix ("F") would strip to '', and one
+      whose remainder starts with a digit ("F1") would produce an illegal
+      identifier. Leave both for a human -- silently emitting a broken
+      rename is worse than reporting the finding unfixed. }
+    if (NewName = '') or CharInSet(NewName[1], ['0'..'9']) then Exit;
+  end
+  else if SameText(AF.RuleId, 'const-casing') then
+    { Word-aware; ConstCaseCandidates already drops the unchanged name. }
+    Exit(ConstCaseCandidates(AOldName, ANaming.ConstCase))
+  else if SameText(AF.RuleId, 'method-pascalcase') then
+    NewName:= SynthesizeCasedName(AOldName, StyleFromConfigText(ANaming.MethodCase))
+  else if SameText(AF.RuleId, 'local-var-casing') then
+    NewName:= SynthesizeCasedName(AOldName, StyleFromConfigText(ANaming.LocalCase))
+  else
+  begin
+    { Phase 2: prefix-adding. Pick the configured prefix per rule; for
+      type-name-prefix, resolve the symbol's kind to choose between
+      ClassPrefix/ExceptionPrefix/InterfacePrefix/PointerPrefix (default
+      ClassPrefix when ambiguous/unresolved, mirroring the checker's own
+      conservative default). }
+    if SameText(AF.RuleId, 'field-name-prefix') then Prefix:= ANaming.FieldPrefix
+    else if SameText(AF.RuleId, 'param-name-prefix') then Prefix:= ANaming.ParamPrefix
+    else { type-name-prefix }
+    begin
+      Sym:= ResolveSymbolAt(AStore, AF.FilePath, AF.StartLine, AF.StartCol, AOldName);
+      if (Sym.Id <> 0) and (Sym.Kind = skInterface) then Prefix:= ANaming.InterfacePrefix
+      else if (Sym.Id <> 0) and (Sym.Kind = skClass) and (ANaming.ExceptionPrefix <> '')
+              and AStore.IsDescendantOf(Sym.Name, 'Exception', Sym.FileId) then Prefix:= ANaming.ExceptionPrefix
+      else Prefix:= ANaming.ClassPrefix; // default: class, or unresolved/ambiguous
+    end;
+    NewName:= SynthesizePrefixedName(AOldName, Prefix);
+  end;
+  if NewName <> AOldName then Result:= [NewName]; // equal: already correct -- nothing to do
+end;
+
+function BuildNamingTargets(const AStore: ISymbolStore; const AFindings: TArray<TLintFinding>;
+  const ANaming: TNamingConfig): TArray<TNamingTarget>;
+var
+  Seen   : TDictionary<string, Boolean>;
+  F      : TLintFinding;
+  T      : TNamingTarget;
+  Sym    : TSymbol;
+  IsLocal: Boolean;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  Seen:= TDictionary<string, Boolean>.Create;
+  try
+    for F in AFindings do
+    begin
+      IsLocal:= SameText(F.RuleId, 'local-var-casing') or SameText(F.RuleId, 'param-name-prefix')
+                or SameText(F.RuleId, 'local-field-prefix');
+      if not (IsLocal or SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'const-casing')
+          or SameText(F.RuleId, 'field-name-prefix') or SameText(F.RuleId, 'type-name-prefix')) then Continue;
+
+      try
+        T:= Default(TNamingTarget);
+        { One fix per (file,line,col) decl -- multiple findings could target the
+          same identifier (defensive; mirrors FixEditsForMissingDoc's Seen guard). }
+        T.Key:= LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + IntToStr(F.StartCol) + '|' + LowerCase(F.RuleId);
+        if Seen.ContainsKey(T.Key) then Continue;
+        Seen.Add(T.Key, True);
+        T.Finding:= F;
+        T.Scope:= if IsLocal then nsLocal else nsGlobal;
+
+        { Naming findings carry no identifier text -- recover it from the
+          source span the checker anchored to. }
+        T.OldName:= ReadIdentifierAt(F.FilePath, F.StartLine, F.StartCol, F.EndCol);
+        if T.OldName = '' then
+          T.Status:= tsUnresolved
+        else
+        begin
+          T.Candidates:= NamingCandidates(AStore, F, T.OldName, ANaming);
+          if Length(T.Candidates) = 0 then
+            T.Status:= tsNoChange
+          else if T.Scope = nsLocal then
+            T.Status:= tsReady
+          else
+          begin
+            { Global rename: needs a symbol resolved from the store for its
+              qualified name. Unresolved at this position but still known by
+              name in this file means the index predates an edit that moved the
+              declaration: "stale index", not "no fixable findings" (spec
+              criterion 12). }
+            Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol, T.OldName);
+            if Sym.Id = 0 then
+              T.Status:= if DeclaredInFile(AStore, F.FilePath, T.OldName) then tsStalePosition else tsUnresolved
+            else
+            begin
+              T.QName:= Sym.QualifiedName;
+              T.SymLine:= Sym.StartLine;
+              T.Status:= tsReady;
+            end;
+          end;
+        end;
+        Result:= Result + [T];
+      except
+        { A single malformed finding must not abort the whole fix sweep. }
+      end;
+    end;
+  finally
+    Seen.Free;
+  end;
+end;
+
+function FreeCandidates(const AStore: ISymbolStore; const ATarget: TNamingTarget): TArray<string>;
+var
+  F         : TLintFinding;
+  Cand      : string;
+  LocalGuard: Boolean;
+begin
+  Result:= nil;
+  if ATarget.Status <> tsReady then Exit;
+  if (ATarget.Scope = nsGlobal) and (AStore = nil) then Exit;
+  F:= ATarget.Finding;
+  { Routine-local prefix rules: UNLIKE local-var-casing (collision-free
+    re-casing), prefix-adding/stripping genuinely changes the identifier, so
+    BuildLocal -- which has no collision check of its own -- needs
+    LocalNameCollides. }
+  LocalGuard:= SameText(F.RuleId, 'param-name-prefix') or SameText(F.RuleId, 'local-field-prefix');
+  for Cand in ATarget.Candidates do
+    if ATarget.Scope = nsLocal then
+    begin
+      if not (LocalGuard and LocalNameCollides(F.FilePath, F.StartLine, F.StartCol, Cand)) then
+        Result:= Result + [Cand];
+    end
+    { ASK THE INDEX (owner, 2026-10-13): a name that already exists is not free. }
+    else if TRenameRefactoring.ConflictReason(AStore, ATarget.QName, Cand) = '' then
+      Result:= Result + [Cand];
+end;
+
+function BuildTargetEdits(const AStore: ISymbolStore; const ATarget: TNamingTarget;
+  const ANewName: string; out ASkipped: Integer): TArray<TTextEdit>;
 var
   Edits: TList<TTextEdit>;
-  Seen : TDictionary<string, Boolean>;
   Cache: TDictionary<string, TStringList>;
 
   { ANSI-decoded lines of APath, read AT MOST ONCE per file (mirrors
@@ -553,8 +814,8 @@ var
     span -- the text SpanHoldsIdent must find at a finding-coordinate edit. For
     every other (engine-coordinate) edit the expected text is RE.OldName, which
     TRenameRefactoring.Build/BuildLocal always set to the bare short name. An
-    edit that fails the check is dropped and counted in ASkippedCount; AFixCount
-    is incremented only when at least one edit of this rename SURVIVED, so a
+    edit that fails the check is dropped and counted in ASkipped; the caller
+    counts a fix only when at least one edit of this rename SURVIVED, so a
     fully-skipped finding never inflates the CLI's "applied N fix(es)". }
   procedure EmitRenameEdits(const ARenameEdits: TArray<TRenameEdit>;
     AFindingLine, AFindingCol, AFindingEndCol: Integer; const AOldName: string);
@@ -562,10 +823,7 @@ var
     RE     : TRenameEdit;
     TE     : TTextEdit  ;
     Want   : string     ;
-    Emitted: Integer    ;
   begin
-    if Length(ARenameEdits) = 0 then Exit;
-    Emitted:= 0;
     for RE in ARenameEdits do
     begin
       TE:= Default(TTextEdit);
@@ -594,154 +852,76 @@ var
       { Never write a position the file no longer backs -- see SpanHoldsIdent. }
       if not SpanHoldsIdent(TE.FilePath, TE.Line, TE.Col, TE.EndCol, Want) then
       begin
-        Inc(ASkippedCount);
+        Inc(ASkipped);
         Continue;
       end;
       Edits.Add(TE);
-      Inc(Emitted);
     end;
-    if Emitted > 0 then Inc(AFixCount);
   end;
 
 var
-  F         : TLintFinding;
-  OldName   : string;
-  Style     : TNameStyle;
-  NewName   : string;
-  Sym       : TSymbol;
-  DedupKey  : string;
-  IsPrefixRule: Boolean;
-  Prefix    : string;
-  ConstCands: TArray<string>; { const-casing only: rename candidates, best first }
+  F: TLintFinding;
 begin
-  AFixCount:= 0;
-  ASkippedCount:= 0;
+  ASkipped:= 0;
   Result:= nil;
-  if AStore = nil then Exit;
+  if (ATarget.Status <> tsReady) or (ANewName = '') then Exit;
+  if (ATarget.Scope = nsGlobal) and (AStore = nil) then Exit;
+  F:= ATarget.Finding;
 
   Edits:= TList<TTextEdit>.Create;
-  Seen := TDictionary<string, Boolean>.Create;
   Cache:= TDictionary<string, TStringList>.Create;
   try
-    for F in AFindings do
-    begin
-      IsPrefixRule:= SameText(F.RuleId, 'field-name-prefix') or SameText(F.RuleId, 'param-name-prefix')
-                     or SameText(F.RuleId, 'type-name-prefix');
-      if not (IsPrefixRule or SameText(F.RuleId, 'method-pascalcase') or SameText(F.RuleId, 'local-var-casing')
-          or SameText(F.RuleId, 'const-casing') or SameText(F.RuleId, 'local-field-prefix')) then Continue;
-
-      try
-        { One fix per (file,line,col) decl -- multiple findings could target the
-          same identifier (defensive; mirrors FixEditsForMissingDoc's Seen guard). }
-        DedupKey:= LowerCase(F.FilePath) + '|' + IntToStr(F.StartLine) + '|' + IntToStr(F.StartCol) + '|' + LowerCase(F.RuleId);
-        if Seen.ContainsKey(DedupKey) then Continue;
-        Seen.Add(DedupKey, True);
-
-        { Naming findings carry no identifier text -- recover it from the
-          source span the checker anchored to. }
-        OldName:= ReadIdentifierAt(F.FilePath, F.StartLine, F.StartCol, F.EndCol);
-        if OldName = '' then Continue;
-
-        { local-field-prefix is the MIRROR of the phase-2 prefix rules: the
-          others ADD a missing prefix, this one STRIPS a prefix a local should
-          never have worn. It is the safest rename in the family -- scope is a
-          single routine body, so no call site anywhere can be affected -- which
-          is why it routes through BuildLocal with the same collision guard
-          param-name-prefix uses rather than the store-backed global rename. }
-        if SameText(F.RuleId, 'local-field-prefix') then
-        begin
-          NewName:= OldName;
-          if (ANaming.FieldPrefix <> '') and NewName.StartsWith(ANaming.FieldPrefix, True) then
-            NewName:= Copy(NewName, Length(ANaming.FieldPrefix) + 1, MaxInt);
-          { A local called exactly the prefix ("F") would strip to '', and one
-            whose remainder starts with a digit ("F1") would produce an illegal
-            identifier. Leave both for a human -- silently emitting a broken
-            rename is worse than reporting the finding unfixed. }
-          if (NewName = '') or CharInSet(NewName[1], ['0'..'9']) then Continue;
-        end
-        else if IsPrefixRule then
-        begin
-          { Phase 2: prefix-adding. Pick the configured prefix per rule; for
-            type-name-prefix, resolve the symbol's kind to choose between
-            ClassPrefix/ExceptionPrefix/InterfacePrefix/PointerPrefix (default
-            ClassPrefix when ambiguous/unresolved, mirroring the checker's own
-            conservative default). }
-          if SameText(F.RuleId, 'field-name-prefix') then Prefix:= ANaming.FieldPrefix
-          else if SameText(F.RuleId, 'param-name-prefix') then Prefix:= ANaming.ParamPrefix
-          else { type-name-prefix }
-          begin
-            Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol, OldName);
-            if (Sym.Id <> 0) and (Sym.Kind = skInterface) then Prefix:= ANaming.InterfacePrefix
-            else if (Sym.Id <> 0) and (Sym.Kind = skClass) and (ANaming.ExceptionPrefix <> '')
-                    and AStore.IsDescendantOf(Sym.Name, 'Exception', Sym.FileId) then Prefix:= ANaming.ExceptionPrefix
-            else Prefix:= ANaming.ClassPrefix; // default: class, or unresolved/ambiguous
-          end;
-          NewName:= SynthesizePrefixedName(OldName, Prefix);
-        end
-        else
-        begin
-          if SameText(F.RuleId, 'method-pascalcase') then Style:= StyleFromConfigText(ANaming.MethodCase)
-          else if SameText(F.RuleId, 'local-var-casing') then Style:= StyleFromConfigText(ANaming.LocalCase)
-          else { const-casing }
-            Style:= nsPascalCase; { unused: const-casing picks from ConstCands below }
-          ConstCands:= nil;
-          if SameText(F.RuleId, 'const-casing') then
-          begin
-            ConstCands:= ConstCaseCandidates(OldName, ANaming.ConstCase);
-            NewName:= if Length(ConstCands) > 0 then ConstCands[0] else OldName;
-          end
-          else NewName:= SynthesizeCasedName(OldName, Style);
-        end;
-        if NewName = OldName then Continue; // already correct -- nothing to do
-
-        if SameText(F.RuleId, 'local-var-casing') then
-          EmitRenameEdits(TRenameRefactoring.BuildLocal(F.FilePath, F.StartLine, F.StartCol, NewName), F.StartLine, F.StartCol, F.EndCol, OldName)
-        else if SameText(F.RuleId, 'param-name-prefix') or SameText(F.RuleId, 'local-field-prefix') then
-        begin
-          { Routine-local rename. UNLIKE local-var-casing (collision-free
-            re-casing), prefix-adding genuinely changes the identifier, so
-            BuildLocal -- which has no collision check of its own -- needs the
-            NEW guard: skip the whole fix if NewName already exists as another
-            local/param in the same routine scope. }
-          if LocalNameCollides(F.FilePath, F.StartLine, F.StartCol, NewName) then Continue; // collision -- skip
-          EmitRenameEdits(TRenameRefactoring.BuildLocal(F.FilePath, F.StartLine, F.StartCol, NewName), F.StartLine, F.StartCol, F.EndCol, OldName);
-        end
-        else
-        begin
-          { method-pascalcase / const-casing / field-name-prefix / type-name-prefix:
-            global rename, needs a symbol resolved from the store for its
-            qualified name. Build now also covers the symbol's separate
-            implementation-section header (Type.OldName) itself, so no local
-            workaround is needed here. }
-          Sym:= ResolveSymbolAt(AStore, F.FilePath, F.StartLine, F.StartCol, OldName);
-          if Sym.Id = 0 then Continue; // unresolved symbol -- report NEEDS_CONTEXT by skipping
-          if SameText(F.RuleId, 'const-casing') and (Length(ConstCands) > 0) then
-          begin
-            { ASK THE INDEX (owner, 2026-10-13): the first configured style whose
-              name is free wins; when every candidate already exists, the
-              constant is left alone rather than renamed into a clash. }
-            NewName:= '';
-            for var Cand: string in ConstCands do
-              if TRenameRefactoring.ConflictReason(AStore, Sym.QualifiedName, Cand) = '' then
-              begin
-                NewName:= Cand;
-                Break;
-              end;
-            if NewName = '' then Continue; // every candidate collides -- skip
-          end
-          else if TRenameRefactoring.ConflictReason(AStore, Sym.QualifiedName, NewName) <> '' then Continue; // conflict -- skip
-          EmitRenameEdits(TRenameRefactoring.Build(AStore, Sym.QualifiedName, NewName), Sym.StartLine, F.StartCol, F.EndCol, OldName);
-        end;
-      except
-        { A single malformed finding must not abort the whole fix sweep. }
-      end;
-    end;
+    if ATarget.Scope = nsLocal then
+      EmitRenameEdits(TRenameRefactoring.BuildLocal(F.FilePath, F.StartLine, F.StartCol, ANewName),
+        F.StartLine, F.StartCol, F.EndCol, ATarget.OldName)
+    else
+      { method-pascalcase / const-casing / field-name-prefix / type-name-prefix:
+        Build also covers the symbol's separate implementation-section header
+        (Type.OldName) itself, so no local workaround is needed here. }
+      EmitRenameEdits(TRenameRefactoring.Build(AStore, ATarget.QName, ANewName),
+        ATarget.SymLine, F.StartCol, F.EndCol, ATarget.OldName);
     Result:= Edits.ToArray;
   finally
     for var SL: TStringList in Cache.Values do SL.Free;
     Cache.Free;
-    Seen.Free;
     Edits.Free;
+  end;
+end;
+
+function BuildNamingFixEdits(const AStore: ISymbolStore;
+  const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
+  out AFixCount: Integer; out ASkippedCount: Integer; out AStaleCount: Integer): TArray<TTextEdit>;
+var
+  T        : TNamingTarget;
+  FreeNames: TArray<string>;
+  TargetTE : TArray<TTextEdit>;
+  Skipped  : Integer;
+begin
+  AFixCount:= 0;
+  ASkippedCount:= 0;
+  AStaleCount:= 0;
+  Result:= nil;
+  if AStore = nil then Exit;
+
+  for T in BuildNamingTargets(AStore, AFindings, ANaming) do
+  begin
+    if T.Status = tsStalePosition then Inc(AStaleCount);
+    if T.Status <> tsReady then Continue;
+    try
+      { The first FREE candidate wins; with none free the finding is left
+        alone rather than renamed into a clash. }
+      FreeNames:= FreeCandidates(AStore, T);
+      if Length(FreeNames) = 0 then Continue;
+      TargetTE:= BuildTargetEdits(AStore, T, FreeNames[0], Skipped);
+      Inc(ASkippedCount, Skipped);
+      if Length(TargetTE) > 0 then
+      begin
+        Result:= Result + TargetTE;
+        Inc(AFixCount);
+      end;
+    except
+      { A single malformed finding must not abort the whole fix sweep. }
+    end;
   end;
 end;
 

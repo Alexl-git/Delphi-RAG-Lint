@@ -174,6 +174,7 @@ uses
   DRagLint.Refactor.EnumHelper in '..\refactor\DRagLint.Refactor.EnumHelper.pas',
   DRagLint.Refactor.ExtractMethod in '..\refactor\DRagLint.Refactor.ExtractMethod.pas',
   DRagLint.Refactor.NamingFix in '..\refactor\DRagLint.Refactor.NamingFix.pas',
+  DRagLint.Refactor.MultiProjectRename in '..\refactor\DRagLint.Refactor.MultiProjectRename.pas',
   DRagLint.Convert.Apply in '..\report\DRagLint.Convert.Apply.pas',
   DRagLint.Convert.Backup in '..\report\DRagLint.Convert.Backup.pas',
   DRagLint.Convert.UnitRules in '..\report\DRagLint.Convert.UnitRules.pas',

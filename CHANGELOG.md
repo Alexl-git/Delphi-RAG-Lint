@@ -3,6 +3,60 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.29.0-alpha -- 2026-10-13
+
+### Added
+
+- **A naming fix on a unit several projects compile renames it in every one of them, or in
+  none.** `const-casing`, `method-pascalcase`, `local-var-casing`, `field-name-prefix`,
+  `param-name-prefix`, `type-name-prefix` and `local-field-prefix` used to rename against the
+  ONE `--db` they were given, so a shared unit (ORM3 `COMMON\BASICS.PAS` is in four project
+  indexes) could be renamed in one project and left on the old name in another -- a broken
+  build with exit 0. Now the owners are found by the unit's FULL PATH in every DB the manifest
+  lists; a stale owner is reindexed with `index --project` -- by `--apply` only: the preview
+  writes no index, reports the owner `index=stale (<n> changed file(s))` and plans on it as it
+  is; a configured DB whose FILE does not exist is "no index" (`rename-unindexed: <section>
+  (<db>)`), never blocking, while one that exists but cannot be opened refuses (fail-closed);
+  one file stored in two cases by two owners is ONE file (merged edits carry one spelling, the
+  applier groups paths case-insensitively, the `.bak` is the original); the new name must be free in all
+  owners; their edits are merged. A single-finding fix is all-or-nothing
+  (`autofix: rename refused -- <reason>`); a batch drops only the unsafe renames. Just before
+  writing, a rename whose text moved on disk is dropped whole (`rename-dropped-at-write:`) --
+  and in a single-finding fix every other rename of the run with it. A
+  manifest that did not load completely refuses every naming fix and names the file. Plan
+  lines for 2+ owners: `rename-owners:`, `rename-project:`, `rename-target:`,
+  `rename-unknown:`; `--json` gains `projects` and `dropped_reason`.
+- **`lint --fix --fix-naming`**: explicit consent to the opt-in naming fixes in a batch run
+  (prints `rename-local: <N>` on stderr). The IDE's Fix all in unit counts naming findings,
+  sends it on the preview and the apply, and always confirms renames first.
+- **IDE: Fix it / Fix all in unit preview a naming fix and confirm it** -- every owning
+  project with its index state and reference count, capped lists, default No, a warning when
+  stale indexes will be reindexed before writing ("this can take several minutes"), and the
+  note that only projects with a drag-lint index were checked, naming configured projects with
+  no index built. Wiki: Multi-Project-Rename.
+
+### Merged from main (since v1.28.3)
+
+- **Installer R2 + installed layout v2.** The IDE plugin's logs always go to
+  `%LOCALAPPDATA%\drag-lint\logs` (folder resolved once at load; no log root means no log write,
+  never the drive root); Ask-Report also looks in `{app}\charts`; chart resolvers and
+  `report-pairs.json` follow the v2 layout. The installer ships the YADF Demo `Sample.pas` only
+  for YADF older than 1.0.19.0 and age-checks the Win64 plugin BPL.
+- **Charts, Delphi port.** The Emit-Common shared functions (dot walk, clone guard, SQL catalogue,
+  column state, datasource chain, exception paths, consumer keys) and the touches-tables,
+  shown-where and deps question emitters run in Delphi (`TDelphiProducer`, question-level parity
+  0 differences); other questions still go through PowerShell. Producer failure policy:
+  Ask-Report refusals keep their exit codes, any other exception falls back to PowerShell.
+  `compare` still uses the PowerShell producer.
+
+### Fixed
+
+- **A naming fix the stale index cannot place no longer says `no fixable findings`.** It
+  reports `autofix: 0 fixable finding(s), N skipped (stale index) -- reindex: drag-lint index
+  --project "<proj>" --db "<db>"` (never a folder reindex hint).
+- **`still stale after reindex` names the remedy** for a DB a folder index once widened:
+  `drag-lint index --project <proj> --db <db> --rebuild`.
+
 ## v1.28.3-alpha -- 2026-10-11
 
 ### Fixed

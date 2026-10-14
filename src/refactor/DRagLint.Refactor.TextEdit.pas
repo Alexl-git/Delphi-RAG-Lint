@@ -123,6 +123,10 @@ type
     /// <returns>Number of files ACTUALLY modified -- a file whose every edit was
     /// rejected is not rewritten, backed up, or counted.</returns>
     /// <remarks>
+    /// Edits are grouped by FilePath CASE-INSENSITIVELY (Ruling 13): one file
+    /// spelled two ways is one group -- read once, its .bak written once from
+    /// the original bytes, written once under the first spelling seen.
+    /// Pinned by run_rename_owners_harness.ps1 P3-P5.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.ApplyDocEditsGuarded (DRagLint.CLI.pas), DRagLint.CLI.FinalizeAndOutput (DRagLint.CLI.pas), DRagLint.Refactor.TextEdit.TTextEditApplier.Apply/2 (DRagLint.Refactor.TextEdit.pas)</para>
     /// <para>Calls: Copy, DRagLint.Refactor.TextEdit.AnchorIsValid, DRagLint.Refactor.TextEdit.DeletesOverlap, DRagLint.Refactor.TextEdit.EditTopLine, DRagLint.Refactor.TextEdit.ReplaceEditIsValid, Format, Writeln</para>
@@ -163,7 +167,8 @@ type
     /// or writing anything, so a caller can refuse a multi-file plan BEFORE
     /// any file is written -- Apply works file by file and cannot undo a file
     /// it already wrote. Stale-anchor edits are not considered: they are
-    /// skipped one by one by design. Pure.</remarks>
+    /// skipped one by one by design. Files are grouped case-insensitively,
+    /// as Apply groups them (Ruling 13; run_rename_owners_harness.ps1 P6). Pure.</remarks>
     class function RefusalOf(const AEdits: TArray<TTextEdit>): string;
   end;
 
@@ -415,7 +420,9 @@ var
   Paths  : TArray<string>;
 begin
   Result := '';
-  FileMap:= TObjectDictionary<string, TList<TTextEdit>>.Create([doOwnsValues]);
+  { Ruling 13: one file under two spellings (BASICS.PAS / Basics.pas) is ONE
+    group, or an overlap across the spellings goes unseen. }
+  FileMap:= TObjectDictionary<string, TList<TTextEdit>>.Create([doOwnsValues], TIStringComparer.Ordinal);
   try
     Paths:= nil;
     for var E: TTextEdit in AEdits do
@@ -657,7 +664,11 @@ var
 begin
   Touched:= 0;
   ASkippedEdits:= 0;
-  FileMap:= TDictionary<string, TList<TTextEdit>>.Create;
+  { Ruling 13: group by path CASE-INSENSITIVELY. Two owners of a shared unit
+    store it as BASICS.PAS and Basics.pas; as two groups the second re-read the
+    first's output and overwrote the .bak with it. One group = one read, one
+    .bak from the ORIGINAL bytes, one write (under the first spelling seen). }
+  FileMap:= TDictionary<string, TList<TTextEdit>>.Create(TIStringComparer.Ordinal);
   try
     for E in AEdits do
     begin
