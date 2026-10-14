@@ -36,6 +36,8 @@ type
     function BareScriptFolder: string;
     function PairsFile(const pClient, pServer, pSql: string): string;
     function FakeEngine(const pKnown: string): string;
+    procedure CheckCounterpartDrawn(const pR: TProduceResult; const pOther, pTarget: string);
+    function PairedOptions(const pDb, pClient, pServer, pKnown: string): TProduceOptions;
     procedure CheckFeedsFromReadsSql(const pR: TProduceResult; const pSql: string);
   public
     [Setup] procedure Setup;
@@ -358,18 +360,10 @@ begin
     step 2 pairs it (the pair's other side), checked with resolve-dbs, and carried like any index }
   if not Clone(CLIENT_CLONE, Db) or not Clone(SERVER_CLONE, Other) then
     Exit;
-  var O:= DefaultProduceOptions;
-  O.DbOverride:= Db;
-  O.PairsFile:= PairsFile(Db, Other, '');
-  O.EnginePath:= FakeEngine(Other);
-  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
-  O.AllowStale:= True;
+  var O:= PairedOptions(Db, Db, Other, Other);
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
-  Assert.AreEqual(0, FFallback.Calls);
-  Assert.IsTrue(R.Ok, R.Reason);
-  Assert.Contains(R.Text, #13#10'INDEX ' + Other + ' (counterpart)'#13#10'CHART crosses-boundary ' + CB_TARGET +
-    ' -- 2 commands / 1 transport calls'#13#10);
-  Assert.AreEqual<Integer>(2, Length(R.IndexPaths));
+  CheckCounterpartDrawn(R, Other, CB_TARGET);
+  Assert.Contains(R.Text, 'CHART crosses-boundary ' + CB_TARGET + ' -- 2 commands / 1 transport calls'#13#10);
 end;
 
 procedure TProducerDelphiTests.CrossesBoundaryWithoutAPairDrawsOneSideAsAskReportDoes;
@@ -399,17 +393,9 @@ begin
   { --db is the pair's SERVER: the counterpart is the pair's CLIENT (Ask-Report.ps1:270, the else side) }
   if not Clone(SERVER_CLONE, Db) or not Clone(CLIENT_CLONE, Other) then
     Exit;
-  var O:= DefaultProduceOptions;
-  O.DbOverride:= Db;
-  O.PairsFile:= PairsFile(Other, Db, '');
-  O.EnginePath:= FakeEngine(Other);
-  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
-  O.AllowStale:= True;
+  var O:= PairedOptions(Db, Other, Db, Other);
   var R:= FProducer.Produce(Cmd('crosses-boundary', TT_TARGET), O);
-  Assert.AreEqual(0, FFallback.Calls);
-  Assert.IsTrue(R.Ok, R.Reason);
-  Assert.Contains(R.Text, #13#10'INDEX ' + Other + ' (counterpart)'#13#10);
-  Assert.AreEqual<Integer>(2, Length(R.IndexPaths));
+  CheckCounterpartDrawn(R, Other, TT_TARGET);
   Assert.AreEqual(Other, R.IndexPaths[1]);
 end;
 
@@ -421,12 +407,7 @@ begin
   if not Clone(CLIENT_CLONE, Db) then
     Exit;
   var Missing:= TPath.Combine(FOutRoot, 'missing-server.sqlite');
-  var O:= DefaultProduceOptions;
-  O.DbOverride:= Db;
-  O.PairsFile:= PairsFile(Db, Missing, '');
-  O.EnginePath:= FakeEngine(Missing);
-  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
-  O.AllowStale:= True;
+  var O:= PairedOptions(Db, Db, Missing, Missing);
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual('index not found: ' + Missing, R.Reason);
@@ -441,12 +422,7 @@ begin
     Ask-Report.ps1:279, exit 2, before any index is opened }
   if not Clone(CLIENT_CLONE, Db) or not Clone(SERVER_CLONE, Other) then
     Exit;
-  var O:= DefaultProduceOptions;
-  O.DbOverride:= Db;
-  O.PairsFile:= PairsFile(Db, Other, '');
-  O.EnginePath:= FakeEngine(Db);
-  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
-  O.AllowStale:= True;
+  var O:= PairedOptions(Db, Db, Other, Db);
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual(O.PairsFile + ' names ' + Other + ', which the engine''s manifest no longer configures (resolve-dbs) -- fix the pair',
@@ -601,6 +577,26 @@ begin
   TDirectory.CreateDirectory(FOutRoot);
   Result:= TPath.Combine(FOutRoot, 'fake-engine.cmd');
   TFile.WriteAllText(Result, '@echo ["' + pKnown.Replace('\', '\\') + '"]' + #13#10, TEncoding.ASCII);
+end;
+
+{ a crosses-boundary answer in-process, with pOther carried as the counterpart: no fallback, two indexes }
+procedure TProducerDelphiTests.CheckCounterpartDrawn(const pR: TProduceResult; const pOther, pTarget: string);
+begin
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(pR.Ok, pR.Reason);
+  Assert.Contains(pR.Text, #13#10'INDEX ' + pOther + ' (counterpart)'#13#10'CHART crosses-boundary ' + pTarget + ' -- ');
+  Assert.AreEqual<Integer>(2, Length(pR.IndexPaths));
+end;
+
+{ options for a --db-only compare run: pairs file with one client/server pair, fake engine listing pKnown as configured }
+function TProducerDelphiTests.PairedOptions(const pDb, pClient, pServer, pKnown: string): TProduceOptions;
+begin
+  Result:= DefaultProduceOptions;
+  Result.DbOverride:= pDb;
+  Result.PairsFile:= PairsFile(pClient, pServer, '');
+  Result.EnginePath:= FakeEngine(pKnown);
+  Result.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  Result.AllowStale:= True;
 end;
 
 procedure TProducerDelphiTests.ReadingQuestionPairsItsSqlIndexFromThePairsFile;
