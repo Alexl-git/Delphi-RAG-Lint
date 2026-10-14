@@ -105,7 +105,7 @@ $Fixtures = @(
   'T51_structure', 'T54_settings_scan_libraries', 'T55_codelens_cache',
   'T57_usages_form', 'T58_symbolsearch_form', 'T59_workspace_config',
   'T63_lint_config_roundtrip', 'T64_lint_options_compile', 'T65_profile_apply',
-  'T66_open_source_path',
+  'T66_open_source_path', 'T68_draglint_uri',
   # --- POSITIVE CONTROL for the compile guard below: must NOT compile ----------
   'T67_compile_fail'
 )

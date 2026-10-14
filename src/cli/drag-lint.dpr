@@ -70,6 +70,8 @@ uses
   DRagLint.Core.Indexer in '..\core\DRagLint.Core.Indexer.pas',
   DRagLint.Core.JsonFile in '..\core\DRagLint.Core.JsonFile.pas',
   DRagLint.Core.StudioEnv in '..\core\DRagLint.Core.StudioEnv.pas',
+  DRagLint.Core.DragLintUri in '..\core\DRagLint.Core.DragLintUri.pas',
+  DragLint.Plugin.OpenSourcePath in '..\delphi-plugin\DragLint.Plugin.OpenSourcePath.pas',
   DRagLint.Storage.Schema in '..\storage\DRagLint.Storage.Schema.pas',
   DRagLint.Storage.SQLite in '..\storage\DRagLint.Storage.SQLite.pas',
   DRagLint.Storage.FileMembership in '..\storage\DRagLint.Storage.FileMembership.pas',
