@@ -227,6 +227,7 @@ uses
   DRagLint.Charts.AskVerb in '..\charts\DRagLint.Charts.AskVerb.pas',
   DRagLint.Charts.Q.ClassSurface in '..\charts\DRagLint.Charts.Q.ClassSurface.pas',
   DRagLint.Charts.Q.EventWiring in '..\charts\DRagLint.Charts.Q.EventWiring.pas',
+  DRagLint.Charts.Q.TestedBy in '..\charts\DRagLint.Charts.Q.TestedBy.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

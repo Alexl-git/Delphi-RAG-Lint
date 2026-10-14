@@ -110,7 +110,7 @@ Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; De
 Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; DestName: "drag-lint.json"; Components: core; Flags: onlyifdoesntexist uninsneveruninstall; Permissions: users-modify; Check: IsAdminInstallMode
 ; chart scripts, flat beside the engine (owner D1); tests are not shipped, nor the emitters ported to Delphi
 ; (owner 2026-10-14: they stay in the repo as the parity reference; the engine answers those questions)
-Source: "{#RepoRoot}\charts\src\*.ps1"; Excludes: "Test-*.ps1,Emit-TouchesTables.ps1,Emit-ShownWhere.ps1,Emit-Deps.ps1,Emit-ClassSurface.ps1,Emit-EventWiring.ps1"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
+Source: "{#RepoRoot}\charts\src\*.ps1"; Excludes: "Test-*.ps1,Emit-TouchesTables.ps1,Emit-ShownWhere.ps1,Emit-Deps.ps1,Emit-ClassSurface.ps1,Emit-EventWiring.ps1,Emit-TestedBy.ps1"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#RepoRoot}\charts\report-pairs.example.json"; DestDir: "{app}"; Components: core; Flags: ignoreversion
 ; ---- optional tools ---------------------------------------------------------
 Source: "{#EngineDir}\ConvRulesEditor.exe";  DestDir: "{app}\bin"; Components: convrules; Flags: ignoreversion

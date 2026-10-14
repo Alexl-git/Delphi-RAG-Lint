@@ -76,6 +76,16 @@ type
     [Test] procedure NonFormIsRefused;
   end;
 
+  [TestFixture]
+  TTestedByTests = class(TQuestionFixture)
+  public
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure TypeSeedsItsMembers;
+    [Test] procedure NoCoveringTestSaysSo;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure ProductIndexIsRefused;
+  end;
+
 implementation
 
 uses
@@ -148,6 +158,18 @@ const
   EW_CONTROL_DOT_SHA = '42866c97d39012f0ad8a7bf28ac924f82e17304ce3ed7b556f4309cab8e878bb';
   EW_LINES = 86;
   EW_FIRST_ROW = 5;
+  TESTED_BY_ID = 'tested-by';
+  TESTS_CLONE = 'TESTS-MicroniteTests.sqlite';
+  TB_TARGET = 'uCompGroupTree.TCompGroupTree.Build';
+  TB_FIELDS = 'Qname="uCompGroupTree.TCompGroupTree.Build",Tests=11,Fixtures=1,TestMethods=71,Walked=11,MaxHop=1.0,Clusters=2,ClickTargets=12,Expected=12,AllClickable=true';
+  TB_DOT_SHA = '01d8c52f4b6555a594ba34aaebb065dba3e84225feb5b084ea7d563a1828600a';
+  TB_TYPE = 'uCompGroupTree.TCompGroupTree';
+  TB_TYPE_FIELDS = 'Qname="uCompGroupTree.TCompGroupTree",Tests=13,Fixtures=1,TestMethods=71,Walked=13,MaxHop=1.0,Clusters=2,ClickTargets=14,Expected=14,AllClickable=true';
+  TB_TYPE_DOT_SHA = '2b2174a8afb085a3be55df2e9ed1dbb6ee2cdc76efbec19d56d8500dac0e98eb';
+  TB_NONE = 'Test.CompGroupTree.TCompGroupTreeTests.Flush_after_clean_build_is_noop';
+  TB_NONE_FIELDS = 'Qname="Test.CompGroupTree.TCompGroupTreeTests.Flush_after_clean_build_is_noop",Tests=0,Fixtures=0,TestMethods=71,Walked=0,MaxHop=0,Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
+  TB_NONE_DOT_SHA = '85218cabc300d99d88af6c8010d28a07edd1481dfcec1e2c7ceea7c536f30288';
+  TB_LINES = 17;
   DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
@@ -548,6 +570,55 @@ procedure TEventWiringTests.NonFormIsRefused;
 begin
   Assert.StartsWith('no dfm_event facts under ' + CS_TARGET + ' (index has ',
     Refusal(EVENT_WIRING_ID, CS_TARGET, CLIENT_CLONE));
+end;
+
+{ ---- tested-by ---- }
+
+procedure TTestedByTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(TESTED_BY_ID, TB_TARGET, TESTS_CLONE, C) then
+    Exit;
+  Assert.AreEqual(TB_FIELDS, Fields(C));
+  Assert.AreEqual(TB_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TTestedByTests.TypeSeedsItsMembers;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(TESTED_BY_ID, TB_TYPE, TESTS_CLONE, C) then
+    Exit;
+  Assert.AreEqual(TB_TYPE_FIELDS, Fields(C));
+  Assert.AreEqual(TB_TYPE_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TTestedByTests.NoCoveringTestSaysSo;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(TESTED_BY_ID, TB_NONE, TESTS_CLONE, C) then
+    Exit;
+  Assert.AreEqual(TB_NONE_FIELDS, Fields(C));
+  Assert.AreEqual(TB_NONE_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TTestedByTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(TESTED_BY_ID, TB_TARGET, TESTS_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(TB_LINES, Length(L));
+  Assert.AreEqual('CHART tested-by ' + TB_TARGET + ' -- 11 covering tests / 1 fixtures', L[CS_CHART_LINE]);
+  Assert.AreEqual('  Test.CompGroupTree.TCompGroupTreeTests.Flush_unchanged_group_stays_unmodified @Test.CompGroupTree.pas:348', L[High(L)]);
+end;
+
+procedure TTestedByTests.ProductIndexIsRefused;
+begin
+  Assert.StartsWith('tested-by: this index carries no DUnitX [Test] attributes, so it is not a test project index.',
+    Refusal(TESTED_BY_ID, EW_TARGET, CLIENT_CLONE));
 end;
 
 end.

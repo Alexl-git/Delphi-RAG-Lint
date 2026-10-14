@@ -69,6 +69,7 @@ uses
   , DRagLint.Charts.Q.Deps in '..\..\src\charts\DRagLint.Charts.Q.Deps.pas'
   , DRagLint.Charts.Q.ClassSurface in '..\..\src\charts\DRagLint.Charts.Q.ClassSurface.pas'
   , DRagLint.Charts.Q.EventWiring in '..\..\src\charts\DRagLint.Charts.Q.EventWiring.pas'
+  , DRagLint.Charts.Q.TestedBy in '..\..\src\charts\DRagLint.Charts.Q.TestedBy.pas'
   , DRagLint.Core.Model
   ;
 
