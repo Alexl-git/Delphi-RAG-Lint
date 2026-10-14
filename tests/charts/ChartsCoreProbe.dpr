@@ -19,6 +19,8 @@ program ChartsCoreProbe;
            "sql":{"tableCount",..,"tables":[digest],"procs":[digest],"trigs":[digest]}|{"error":..},
            "columns":{"states":[digest],"notHeld":[..],"quoted":[digest]}|{"error":..},
            "orm":{"db","rows","computedAt"}|{"error":..},
+           "excGlobal":{"stats","names":[..]}|{"error":..},
+           "exc":{"stale","rows":[..],"tries":[..],"classes":[..]}|{"error":..}  (per name),
            "chains":{"chains":[..],"dataSources":[..],"bindings":[..],"rePoints":[..]}|{"error":..}  (--sql-db),
            "cluster":{"text","ports","disclosure"}|{"error":..},
            "layout":{"dotSha","svgSha","plainSha","anchors"}|{"error":..}}
@@ -47,6 +49,7 @@ uses
   , DRagLint.Charts.Sql in '..\..\src\charts\DRagLint.Charts.Sql.pas'
   , DRagLint.Charts.Columns in '..\..\src\charts\DRagLint.Charts.Columns.pas'
   , DRagLint.Charts.Chain in '..\..\src\charts\DRagLint.Charts.Chain.pas'
+  , DRagLint.Charts.Exceptions in '..\..\src\charts\DRagLint.Charts.Exceptions.pas'
   ;
 
 const
@@ -762,6 +765,103 @@ begin
   end;
 end;
 
+const
+  EXC_NAMES = 60;
+  EXC_REFS = 40;
+  WHOLE_FILE = 999999;
+
+{ Get-ExceptionIndexStats and Test-ExceptionTypeName over the first EXC_NAMES distinct
+  pre-filtered ref names of the clone. }
+function ExcGlobalJson(pIndex: TChartsIndex; pReader: TSourceReader): TJSONObject;
+begin
+  try
+    var Ex:= TExceptionIndex.Create(pIndex, pReader);
+    try
+      var S:= Ex.IndexStats;
+      Result:= TJSONObject.Create;
+      Result.AddPair('stats', Format('%d|%d|%d|%d|%d|%d|%d|%d|%d', [S.Candidates, S.RaiseSites, S.HandleSites, S.Dropped, S.Stale,
+        S.RaiseRoutines, S.HandleRoutines, S.Files, S.FreshFiles]));
+      var Names: TArray<string>:= [];
+      var Rows:= pIndex.Query(Format('SELECT DISTINCT r.name_text AS n FROM refs r WHERE %s ORDER BY r.name_text LIMIT %d',
+        [ExceptionNameSql('r.name_text'), EXC_NAMES]));
+      try
+        for var R in Rows do
+          Names:= Names + [R.S('n') + '=' + BoolText(Ex.IsExceptionTypeName(R.S('n')))];
+      finally
+        Rows.Free;
+      end;
+      Result.AddPair('names', StrArray(Names));
+    finally
+      Ex.Free;
+    end;
+  except
+    on E: Exception do
+      Result:= ErrorObject(E.Message);
+  end;
+end;
+
+{ The try-blocks of a span and every handler's re-raise verdict. }
+function TryDigest(const pLines: TArray<string>; pFrom, pTo: Integer): TArray<string>;
+var
+  Blk: TTryBlock;
+begin
+  var Tb:= TryBlocks(pLines, pFrom, pTo);
+  Result:= [Format('%s|%s', [BoolText(Tb.Decided), Tb.Reason])];
+  for var B in Tb.Blocks do
+  begin
+    var Verdicts: TArray<string>:= [];
+    if B.ExceptPos <> 0 then
+      Verdicts:= Verdicts + ['bare=' + BoolText(HandlerReraises(pLines, B, B.ExceptPos, True))];
+    for var P in B.OnPos do
+      if FindHandlerBlock(Tb, P, Blk) then
+        Verdicts:= Verdicts + [Format('%d=%s', [P, BoolText(HandlerReraises(pLines, Blk, P, False))])];
+    Result:= Result + [Format('%d/%d/%d/%d/%s/%s', [B.TryPos, B.ExceptPos, B.FinallyPos, B.EndPos, IntsText(B.OnPos),
+      string.Join(';', Verdicts)])];
+  end;
+end;
+
+{ Per name: the source-only rows and the try-blocks of the symbol's body (its whole file when
+  it has none), and the classes of the first EXC_REFS read/type_use refs inside that span. }
+function ExcJson(pIndex: TChartsIndex; pReader: TSourceReader; const pPath: string; pFrom, pTo: Integer): TJSONObject;
+begin
+  if pPath = '' then
+    Exit(ErrorObject(NO_SYMBOL));
+  try
+    var Ex:= TExceptionIndex.Create(pIndex, pReader);
+    try
+      var Scan:= Ex.SourceRows(pPath, pFrom, pTo, []);
+      Result:= TJSONObject.Create;
+      Result.AddPair('stale', TJSONBool.Create(Scan.Stale));
+      var A: TArray<string>:= [];
+      for var R in Scan.Rows do
+        A:= A + [Format('%s|%d|%d|%s', [R.Kind, R.Line, R.Col, R.Text])];
+      Result.AddPair('rows', StrArray(A));
+      if not Scan.Stale then
+        Result.AddPair('tries', StrArray(TryDigest(pReader.StrippedSourceLines(pReader.ReadPath(pPath)), pFrom, pTo)));
+      A:= [];
+      var Rows:= pIndex.Query(Format('SELECT r.kind AS kind, r.start_line AS line, r.start_col AS col, r.end_col AS ecol ' +
+        'FROM refs r JOIN files f ON f.id = r.file_id WHERE f.path = ''%s'' AND r.kind IN (''read'',''type_use'') ' +
+        'AND r.start_line BETWEEN %d AND %d ORDER BY r.start_line, r.start_col, r.id LIMIT %d',
+        [TChartsIndex.SqlText(pPath), pFrom, pTo, EXC_REFS]));
+      try
+        for var R in Rows do
+        begin
+          var C:= pReader.SourceContext(pPath, R.I('line'), R.I('col'), R.I('ecol') - R.I('col'));
+          A:= A + [Format('%d:%d:%s:%s', [R.I('line'), R.I('col'), R.S('kind'), ExceptionRefClass(C, R.S('kind'))])];
+        end;
+      finally
+        Rows.Free;
+      end;
+      Result.AddPair('classes', StrArray(A));
+    finally
+      Ex.Free;
+    end;
+  except
+    on E: Exception do
+      Result:= ErrorObject(E.Message);
+  end;
+end;
+
 procedure Run(const pArgs: TProbeArgs);
 begin
   var Index:= TChartsIndex.Create(pArgs.Db);
@@ -787,11 +887,18 @@ begin
           Root.AddPair('sql', SqlJson(Index, Reader));
           Root.AddPair('columns', ColumnsJson(Index, Reader));
           Root.AddPair('orm', OrmJson(Index));
+          Root.AddPair('excGlobal', ExcGlobalJson(Index, Reader));
           if pArgs.SqlDb <> '' then
             Root.AddPair('chains', ChainsJson(Index, Reader, pArgs.SqlDb));
         end;
         var LocPath:= Loc.GetValue<string>('path', '');
         Root.AddPair('cluster', ClusterJson(Index, pArgs.QName, LocPath));
+        var ImplStart:= Loc.GetValue<Integer>('implStart', 0);
+        var ImplEnd:= Loc.GetValue<Integer>('implEnd', 0);
+        if ImplStart > 0 then
+          Root.AddPair('exc', ExcJson(Index, Reader, LocPath, ImplStart, ImplEnd))
+        else
+          Root.AddPair('exc', ExcJson(Index, Reader, LocPath, 1, WHOLE_FILE));
         if pArgs.LayoutDir <> '' then
           Root.AddPair('layout', LayoutJson(Index, pArgs, LocPath));
         Writeln(Root.ToJSON([TJSONAncestor.TJSONOutputOption.EncodeBelow32,

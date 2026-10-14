@@ -455,6 +455,53 @@ function Get-PsChainsFacts([string] $SqlDb) {
   } catch { [ordered]@{ error = $_.Exception.Message } }
 }
 
+# The exception helpers (the probe's ExcGlobalJson / ExcJson ask the same): index-wide stats and
+# the name filter over the first 60 pre-filtered ref names once per clone; per name the
+# source-only rows and try-blocks of the symbol's body (its whole file when it has none), every
+# handler's re-raise verdict, and the classes of the first 40 read/type_use refs in that span.
+function Get-PsExcGlobalFacts {
+  try {
+    $s = Get-ExceptionIndexStats
+    $names = Invoke-IndexQuery "SELECT DISTINCT r.name_text AS n FROM refs r WHERE $(Get-ExceptionNameSql 'r.name_text') ORDER BY r.name_text LIMIT 60"
+    [ordered]@{
+      stats = "$($s.Candidates)|$($s.Raise)|$($s.Handle)|$($s.Dropped)|$($s.Stale)|$($s.RaiseRoutines)|$($s.HandleRoutines)|$($s.Files)|$($s.FreshFiles)"
+      names = @($names | ForEach-Object { "$([string]$_.n)=$(Test-ExceptionTypeName ([string]$_.n))" })
+    }
+  } catch { [ordered]@{ error = $_.Exception.Message } }
+}
+
+function Get-PsTryDigest([string[]] $Lines, [int] $From, [int] $To) {
+  $tb = Get-TryBlocks $Lines $From $To
+  $out = @("$($tb.Decided)|$($tb.Reason)")
+  foreach ($b in $tb.Blocks) {
+    $v = @()
+    if ($b.Except) { $v += "bare=$(Test-HandlerReraises $Lines $b $b.Except $true)" }
+    foreach ($p in $b.On) { $hb = Find-HandlerBlock $tb $p; if ($hb) { $v += "$p=$(Test-HandlerReraises $Lines $hb $p $false)" } }
+    $out += "$($b.Try)/$($b.Except)/$($b.Finally)/$($b.End)/$(@($b.On) -join ',')/$($v -join ';')"
+  }
+  $out
+}
+
+function Get-PsExcFacts([string] $Path, [int] $From, [int] $To) {
+  if (-not $Path) { return [ordered]@{ error = '(no symbol)' } }
+  try {
+    $scan = Get-ExceptionSourceRows $Path $From $To
+    $f = [ordered]@{ stale = [bool]$scan.Stale; rows = @($scan.Rows | ForEach-Object { "$($_.Kind)|$($_.Line)|$($_.Col)|$($_.Text)" }) }
+    if (-not $scan.Stale) { $f.tries = @(Get-PsTryDigest (Get-StrippedSourceLines (Resolve-SourceReadPath $Path $null)) $From $To) }
+    $q = ConvertTo-SqlText $Path
+    $refs = Invoke-IndexQuery @"
+SELECT r.kind AS kind, r.start_line AS line, r.start_col AS col, r.end_col AS ecol
+  FROM refs r JOIN files f ON f.id = r.file_id
+ WHERE f.path = '$q' AND r.kind IN ('read','type_use') AND r.start_line BETWEEN $From AND $To
+ ORDER BY r.start_line, r.start_col, r.id LIMIT 40
+"@
+    $f.classes = @($refs | ForEach-Object {
+      $c = Get-SourceContext $Path ([int]$_.line) ([int]$_.col) ([int]$_.ecol - [int]$_.col)
+      "$($_.line):$($_.col):$($_.kind):$(Get-ExceptionRefClass $c ([string]$_.kind))" })
+    $f
+  } catch { [ordered]@{ error = $_.Exception.Message } }
+}
+
 function Get-PsOrmFacts {
   try { $o = Get-OrmLinksState $DbPath; [ordered]@{ db = [string]$o.Db; rows = [int]$o.Rows; computedAt = [string]$o.ComputedAt } }
   catch { [ordered]@{ error = $_.Exception.Message } }
@@ -561,7 +608,9 @@ SELECT r.line AS line, r.start_col AS start_col, r.end_col AS end_col
                                after = $c.After; prevLine = $c.PrevLine; prevLineNo = [int]$c.PrevLineNo; following = @($c.Following) }
     } catch { $f.context = [ordered]@{ error = $_.Exception.Message } }
   }
-  [pscustomobject]@{ Facts = $f; Ctx = $ctxArgs; LocPath = $locPath }
+  $implS = $(if ($f.symbolLocation.Contains('implStart')) { $f.symbolLocation.implStart } else { 0 })
+  $implE = $(if ($f.symbolLocation.Contains('implEnd')) { $f.symbolLocation.implEnd } else { 0 })
+  [pscustomobject]@{ Facts = $f; Ctx = $ctxArgs; LocPath = $locPath; ImplStart = $implS; ImplEnd = $implE }
 }
 
 function Invoke-Probe([string] $ProbeExe, [string] $Db, [string] $QName, $Ctx, [string] $LayoutDir, [string[]] $ClonePaths, [bool] $Globals) {
@@ -620,6 +669,8 @@ function Invoke-CoreMode {
       $ps = Get-PsFacts $q
       $facts = $ps.Facts
       foreach ($kv in (Get-PsClusterFacts $q $ps.LocPath $layoutPs).GetEnumerator()) { $facts[$kv.Key] = $kv.Value }
+      $impl = [int]$ps.ImplStart
+      $facts.exc = $(if ($impl -gt 0) { Get-PsExcFacts $ps.LocPath $impl ([int]$ps.ImplEnd) } else { Get-PsExcFacts $ps.LocPath 1 999999 })
       if (-not $globalDone) {
         foreach ($kv in (Get-PsGlobalFacts).GetEnumerator()) { $facts[$kv.Key] = $kv.Value }
         $facts.tools = Get-PsToolFacts $clonePaths
@@ -627,6 +678,7 @@ function Invoke-CoreMode {
         $facts.sql = Get-PsSqlFacts
         $facts.columns = Get-PsColumnFacts
         $facts.orm = Get-PsOrmFacts
+        $facts.excGlobal = Get-PsExcGlobalFacts
         $facts.chains = Get-PsChainsFacts $sqlClone
       }
       $swPs.Stop()

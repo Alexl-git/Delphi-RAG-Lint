@@ -59,6 +59,8 @@ uses
   , ChartsTests.CoreColumns in 'ChartsTests.CoreColumns.pas'
   , DRagLint.Charts.Chain in '..\..\src\charts\DRagLint.Charts.Chain.pas'
   , ChartsTests.CoreChain in 'ChartsTests.CoreChain.pas'
+  , DRagLint.Charts.Exceptions in '..\..\src\charts\DRagLint.Charts.Exceptions.pas'
+  , ChartsTests.CoreExceptions in 'ChartsTests.CoreExceptions.pas'
   ;
 
 const

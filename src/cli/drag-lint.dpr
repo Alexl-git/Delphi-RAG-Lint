@@ -216,6 +216,7 @@ uses
   DRagLint.Charts.Sql in '..\charts\DRagLint.Charts.Sql.pas',
   DRagLint.Charts.Columns in '..\charts\DRagLint.Charts.Columns.pas',
   DRagLint.Charts.Chain in '..\charts\DRagLint.Charts.Chain.pas',
+  DRagLint.Charts.Exceptions in '..\charts\DRagLint.Charts.Exceptions.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin
