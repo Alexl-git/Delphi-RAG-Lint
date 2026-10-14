@@ -296,7 +296,8 @@ try {
   $o = Run @('lint', '--file', "$work\A\uA.pas", '--db', "$work\A.sqlite", '--fix')
   Check 'N8 ... and no rename-local line without --fix-naming (criterion 15)' ($o -notmatch '(?m)^rename-') (Lines $o '^rename-')
 
-  # ---------------------------------------------------------------- single-project  Check 'U0 reset' (Reset) ''
+  # ---------------------------------------------------------------- single-project
+  Check 'U0 reset' (Reset) ''
   $o = Run @('lint', '--file', "$work\A\uA.pas", '--db', "$work\A.sqlite", '--fix', '--fix-line', '9', '--fix-rule', 'const-casing')
   Check 'U1 single-project unit: NO rename- lines (criterion 15)' ($o -notmatch '(?m)^rename-') (Lines $o '^rename-')
   Check 'U2 ... and today''s autofix line shape' ($o -match '(?m)^autofix: 1 fixable finding\(s\) -- pass --apply to write\r?$') (Lines $o '^autofix')
