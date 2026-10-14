@@ -16,14 +16,18 @@ type
     [Test] procedure D12NeedsOwnNameWitnessAndG;
     [Test] procedure InterfaceLoopOnSyntheticGraphs;
     [Test] procedure InterfaceLoopKeysAreCaseBlind;
+    [Test] procedure ConsumerKeysCountRoutinesAndUnits;
   end;
 
 implementation
 
 uses
-  DRagLint.Charts.Checks;
+  System.SysUtils, DRagLint.Charts.Checks;
 
 const
+  ROUTINE_FIVE = 5;
+  ROUTINE_SEVEN = 7;
+  UNIT_THREE = -3;
   INTF = 'interface';
   IMPL = 'implementation';
 
@@ -65,6 +69,18 @@ begin
   Assert.IsTrue(TestInterfaceLoop([E('A', 'b', 'INTERFACE'), E('B', 'a', INTF)], ['a', 'b']));
   { the FIRST edge of a key wins, as Emit-Cycles builds the map (ContainsKey before set) }
   Assert.IsFalse(TestInterfaceLoop([E('a', 'b', IMPL), E('a', 'b', INTF), E('b', 'a', INTF)], ['a', 'b']));
+end;
+
+procedure TCoreChecksTests.ConsumerKeysCountRoutinesAndUnits;
+begin
+  { the gate's case: routine 5 by fact AND literal is ONE routine; -3 is one unit, however many literals }
+  var K:= MeasureConsumerKeys([ROUTINE_FIVE], [ROUTINE_FIVE, ROUTINE_SEVEN, UNIT_THREE, UNIT_THREE]);
+  Assert.AreEqual('2/1', Format('%d/%d', [K.Routines, K.Units]));
+  K:= MeasureConsumerKeys([], []);
+  Assert.AreEqual('0/0', Format('%d/%d', [K.Routines, K.Units]));
+  { a 0 key is neither a routine nor a unit }
+  K:= MeasureConsumerKeys([0], []);
+  Assert.AreEqual('0/0', Format('%d/%d', [K.Routines, K.Units]));
 end;
 
 end.

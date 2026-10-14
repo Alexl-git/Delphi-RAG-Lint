@@ -39,6 +39,23 @@ function TestD12OwnNameWrite(const pName, pWitness: string; const pEffectKinds: 
 /// `-ne 'interface'` is case-insensitive.</remarks>
 function TestInterfaceLoop(const pEdges: TArray<TUnitEdge>; const pMembers: TArray<string>): Boolean;  // dl:ok unused-public-symbol@c0dd -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
 
+type
+  /// <summary>consumers' reader / writer counts. Port of the Measure-ConsumerKeys result.</summary>
+  TConsumerKeys = record
+    /// <summary>Distinct keys &gt; 0 (routine ids).</summary>
+    Routines: Integer;
+    /// <summary>Distinct keys &lt; 0 (minus a file id: one "(unit level)" row per unit).</summary>
+    Units   : Integer;
+  end;
+
+/// <summary>Counts consumers' rows apart: routines and units.</summary>
+/// <param name="pCertKeys">Keys of the certain rows.</param>
+/// <param name="pLitKeys">Keys of the literal rows.</param>
+/// <returns>Distinct positive keys and distinct negative keys over both lists.</returns>
+/// <remarks>Port of Measure-ConsumerKeys (Emit-Common.ps1:1246). A key counts once however
+/// many rows carry it; 0 is neither.</remarks>
+function MeasureConsumerKeys(const pCertKeys, pLitKeys: TArray<Integer>): TConsumerKeys;  // dl:ok unused-public-symbol@bfe4 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+
 implementation
 
 uses
@@ -138,6 +155,22 @@ begin
     Result:= Walk.Run;
   finally
     Walk.Free;
+  end;
+end;
+
+function MeasureConsumerKeys(const pCertKeys, pLitKeys: TArray<Integer>): TConsumerKeys;
+begin
+  Result:= Default(TConsumerKeys);
+  var Seen:= TDictionary<Integer, Boolean>.Create;
+  try
+    for var K in pCertKeys + pLitKeys do
+      if Seen.TryAdd(K, True) then
+        if K > 0 then
+          Inc(Result.Routines)
+        else if K < 0 then
+          Inc(Result.Units);
+  finally
+    Seen.Free;
   end;
 end;
 
