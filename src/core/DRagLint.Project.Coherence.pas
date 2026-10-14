@@ -17,6 +17,18 @@ uses
   , DRagLint.Project.Members
   ;
 
+const
+  /// <summary>The schema_meta key of the PROJECT TAG an index writes into
+  /// inbound doc facts (D27, 2026-09-24): the sanitized base name of the
+  /// project file a closure scan indexed.</summary>
+  /// <remarks>Stamped beside SCAN_TYPE_KEY by both index paths and read by
+  /// ProjectTagFor and the multi-project rename, so the tag is a stored fact of
+  /// the index and not a property of whatever the .sqlite file happens to be
+  /// called. Absent on an index built before 1.18.0 -- ProjectTagFor then falls
+  /// back to the DB base name. Lives here (not in DRagLint.CLI) so a unit that
+  /// must not link the CLI can read it.</remarks>
+  PROJECT_TAG_KEY = 'project_tag';
+
 type
   /// <summary>Coherence verdict for one project member's UnitPath against the
   /// index. Indexed: the path has a files row. IndexFresh: that row's
@@ -26,8 +38,8 @@ type
   /// All three are False when Indexed is False.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Project.Coherence.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
-  /// <para>Used in units: DRagLint.CLI, DRagLint.Project.Coherence</para>
+  /// <para>Used by: declaration (DRagLint.Project.Coherence.pas), DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.MissingMembers (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Project.Coherence, DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TMemberCoherence = record
@@ -53,7 +65,7 @@ type
 /// <returns>One TMemberCoherence per AMembers entry, same order.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas)</para>
+/// <para>Called from: DRagLint.CLI.DoReconcileProject (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.MissingMembers (DRagLint.Refactor.MultiProjectRename.pas)</para>
 /// <para>Calls: DateTimeToUnix, DRagLint.Core.Interfaces.ISymbolStore.FindFileIdByPath, DRagLint.Core.Interfaces.ISymbolStore.GetFileCompiledAt, DRagLint.Core.Interfaces.ISymbolStore.GetFileMTime</para>
 /// <para>Catches: Exception (swallowed)</para>
 /// <para>Touches: file system</para>
@@ -77,7 +89,25 @@ function ComputeCoherence(const AStore: ISymbolStore; const AMembers: TArray<TPr
 /// </remarks>
 function IsIncoherent(const AC: TMemberCoherence): Boolean;
 
+/// <summary>AName with every character the tag grammar reserves -- `[`, `]`,
+/// `,`, blank, tab -- replaced by '_'.</summary>
+/// <param name="AName">A project name as typed or derived.</param>
+/// <returns>A name safe inside `[A,B]entry`, trimmed.</returns>
+/// <remarks>Pure.</remarks>
+function SanitizeProjectTag(const AName: string): string;
+
 implementation
+
+function SanitizeProjectTag(const AName: string): string;
+const
+  RESERVED = '[], ' + #9;
+var
+  I: Integer;
+begin
+  Result:= Trim(AName);
+  for I:= 1 to Length(Result) do
+    if Pos(Result[I], RESERVED) > 0 then Result[I]:= '_';
+end; // function
 
 function ComputeCoherence(const AStore: ISymbolStore; const AMembers: TArray<TProjectMember>): TArray<TMemberCoherence>;
 var

@@ -18,6 +18,7 @@
   beside it, so the real manifest and the real DBs are never read.
 
   Cases: preview, apply-all, cand-split (+ refusal), batch-drop, stale-owner,
+  wrongdb (a DB stamped with another project's tag), member-missing,
   corrupt-db, library-owner, single-project (criterion 15: no rename- lines).
 
   Exit code: 0 on full pass, 1 on any failure.
@@ -39,7 +40,9 @@ function LastAutofix([string]$Out) { [string]((($Out -split "`r?`n") | Where-Obj
 function Lines([string]$Out, [string]$Pattern) { (($Out -split "`r?`n") | Where-Object { $_ -match $Pattern }) -join ' | ' }
 
 $RealDb = 'C:\Projects\DB\ORM3\CLIENT\_D-RAG\Micronite2027.sqlite'
-$realBefore = if (Test-Path $RealDb) { $i = Get-Item $RealDb; "$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" } else { 'absent' }
+$RealDb2 = 'C:\Projects\DB\ORM3\CLIENT\DM\_D-RAG\DMTEST.sqlite'
+function RealStamp { (@($RealDb, $RealDb2) | ForEach-Object { if (Test-Path $_) { $i = Get-Item $_; "$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" } else { 'absent' } }) -join ',' }
+$realBefore = RealStamp
 
 Write-Host '== Multi-project rename: every owning project, or refuse ==' -ForegroundColor Cyan
 $EngineDir = (Resolve-Path $EngineDir).Path
@@ -224,6 +227,51 @@ try {
   Check 'R2 ... and the apply is correct in uB at its NEW position' `
     (((Txt 'B\uB.pas') -cmatch 'Result:= MyConst;') -and -not ((Txt 'B\uB.pas') -match 'My_Const') -and ((Txt 'B\uB.pas') -match '^// an edit after indexing')) (Lines $o '^(rename-target|autofix)')
 
+  # ---------------------------------------------------------------- wrongdb (T1)
+  # INBOX rename-owner-without-target-reports-fresh: C's DB is really project A's closure. Every row in it is
+  # fresh, so per-row freshness said "fresh" and the plan counted C=0 -- a rename that breaks C. The stamped
+  # project_tag names A, not C: C is unverified (never reindexed: an incremental run keeps A's rows), and the
+  # rename is refused.
+  Check 'WD0 reset, then C.sqlite indexed from project A' (Reset) ''
+  $null = Run @('index', '--project', "$work\A\A.dpr", '--db', "$work\C.sqlite")
+  $cDproj = "$work\C\C.dproj"
+  $o = FixShared 6
+  Check 'WD1 preview: C is unverified, the reason names the tag and the rebuild' `
+    ($o -match ('(?m)^rename-project: C index=unverified \(' + [regex]::Escape("index was built from project A, not C.dproj -- rebuild it: drag-lint index --project $cDproj --db $work\C.sqlite --rebuild") + '\)\r?$')) (Lines $o '^rename-project')
+  Check 'WD2 ... and the target is dropped for project C: unverified' ($o -match '(?m)^rename-target: L6 My_Const -> \S+ dropped project C: unverified') (Lines $o '^rename-target')
+  $h0 = Hashes
+  $cStamp = DbStamp "$work\C.sqlite"
+  $o = FixShared 6 -Apply
+  Check 'WD3 --apply writes nothing' ((Hashes) -eq $h0) (Lines $o '^(rename-|autofix)')
+  Check 'WD4 ... the last autofix line is the refusal naming project C' ((LastAutofix $o) -match '^autofix: rename refused -- .*project C') (LastAutofix $o)
+  Check 'WD5 ... and C.sqlite was not reindexed (size+mtime, -wal/-shm)' ((DbStamp "$work\C.sqlite") -eq $cStamp) "$cStamp -> $(DbStamp "$work\C.sqlite")"
+
+  # ---------------------------------------------------------------- member-missing (T2)
+  # a member added to C.dproj (only there, not in C.dpr) after C was indexed: no files row, so no per-row check can see it
+  Check 'MM0 reset' (Reset) ''
+  $late = "$work\C\uLate.pas"
+  WriteAscii $late (UnitUser 'uLate' 'My_Const')
+  WriteAscii $cDproj @(
+    '<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">'
+    '<PropertyGroup>'
+    '<MainSource>C.dpr</MainSource>'
+    '<DCC_UnitSearchPath>..\shared;$(DCC_UnitSearchPath)</DCC_UnitSearchPath>'
+    '</PropertyGroup>'
+    '<ItemGroup>'
+    '<DCCReference Include="uLate.pas"/>'
+    '</ItemGroup>'
+    '</Project>')
+  $h0 = (Hashes) + (Get-FileHash $late).Hash
+  $cStamp = DbStamp "$work\C.sqlite"
+  $o = FixShared 6
+  Check 'MM1 preview: C is stale and names the member the index lacks (Ruling 12)' `
+    ($o -match ('(?m)^rename-project: C index=stale \(1 project member\(s\) not in the index: ' + [regex]::Escape($late) + '\)\r?$')) (Lines $o '^rename-project')
+  Check 'MM2 ... does not block: the target is still planned apply' ($o -match '(?m)^rename-target: L6 My_Const -> MyConst apply ') (Lines $o '^rename-target')
+  Check 'MM3 ... and writes nothing: no source, not C.sqlite' ((((Hashes) + (Get-FileHash $late).Hash) -eq $h0) -and ((DbStamp "$work\C.sqlite") -eq $cStamp)) ''
+  $o = FixShared 6 -Apply
+  Check 'MM4 apply: C is reindexed' ($o -match '(?m)^rename-project: C index=reindexed\r?$') (Lines $o '^rename-project')
+  Check 'MM5 ... uLate is rewritten' (((Txt 'C\uLate.pas') -cmatch 'Result:= MyConst;') -and ((Txt 'C\uLate.pas') -notmatch 'My_Const')) (Lines $o '^(rename-|autofix)')
+  Check 'MM6 ... and C counts both of its references' ($o -match '(?m)^rename-target: L6 My_Const -> MyConst apply A=1 B=1 C=2\r?$') (Lines $o '^rename-target')
   # ---------------------------------------------------------------- unindexed (Ruling 14)
   # a configured section whose DB FILE does not exist is "no index": not an owner, not unknown, not blocking
   Check 'W0 reset with a section E whose DB was never built' (Reset -Unindexed) ''
@@ -338,7 +386,7 @@ try {
   Get-Process drag-lint -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$work*" } | Stop-Process -Force -ErrorAction SilentlyContinue
   try { [IO.Directory]::Delete($work, $true) } catch { Write-Host "  (could not delete $work)" }
 }
-$realAfter = if (Test-Path $RealDb) { $i = Get-Item $RealDb; "$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" } else { 'absent' }
-Check 'Z2 the real Micronite2027.sqlite was not touched (size+mtime)' ($realBefore -eq $realAfter) "$realBefore -> $realAfter"
+$realAfter = RealStamp
+Check 'Z2 the real Micronite2027.sqlite and DMTEST.sqlite were not touched (size+mtime)' ($realBefore -eq $realAfter) "$realBefore -> $realAfter"
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

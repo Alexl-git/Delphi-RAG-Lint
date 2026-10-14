@@ -2199,17 +2199,11 @@ const
     note's own remedy cannot work and only --rebuild can. Absent/'' means
     "unknown" (a DB written before this existed), which reads as zero. }
   OUT_OF_CLOSURE_KEY = 'out_of_closure_count';
-  { The PROJECT TAG this index writes into inbound doc facts (D27, 2026-09-24):
-    the sanitized base name of the project file a closure scan indexed. Stamped
-    beside SCAN_TYPE_KEY by both index paths and read by ProjectTagFor, so the
-    tag is a stored fact of the index and not a property of whatever the .sqlite
-    file happens to be called. Absent on an index built before 1.18.0 --
-    ProjectTagFor then falls back to the DB base name, today's behaviour. }
-  PROJECT_TAG_KEY = 'project_tag';
+  { PROJECT_TAG_KEY and SanitizeProjectTag live in DRagLint.Project.Coherence,
+    so the multi-project rename can read the tag without linking this unit. }
 
-{ Forward: the index paths stamp PROJECT_TAG_KEY and the doc/lint verbs read it
-  long before the tag helpers' home next to doc-forget. }
-function SanitizeProjectTag(const AName: string): string; forward;
+{ Forward: the doc/lint verbs read the tag long before the tag helpers' home
+  next to doc-forget. }
 function ProjectTagFor(const AStore: ISymbolStore; const ADbPath: string; const AArgs: TArgs): string; forward;
 
 function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
@@ -17852,20 +17846,6 @@ end;
 // below plus the --qname strip path at the bottom) via
 // CheckDocStripStubsConflict; document-all has its own call (separate dispatch
 // entry, never routed through this function).
-/// <summary>AName with every character the tag grammar reserves -- `[`, `]`,
-/// `,`, blank, tab -- replaced by '_'.</summary>
-/// <param name="AName">A project name as typed or derived.</param>
-/// <returns>A name safe inside `[A,B]entry`.</returns>
-function SanitizeProjectTag(const AName: string): string;
-const
-  RESERVED = '[], ' + #9;
-var
-  I: Integer;
-begin
-  Result:= Trim(AName);
-  for I:= 1 to Length(Result) do
-    if Pos(Result[I], RESERVED) > 0 then Result[I]:= '_';
-end; // function
 /// <summary>The project tag for a database path: its file base name, with every
 /// character the tag grammar reserves replaced by '_'.</summary>
 /// <param name="ADbPath">The primary index, e.g.
