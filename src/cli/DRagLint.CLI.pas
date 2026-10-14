@@ -10190,10 +10190,15 @@ end; // function
   in a block comment where no marker is ever read) and
   `review-marker-reason-unreviewed` (a reason with no current `REVIEWED
   <yyyy-mm-dd>` stamp; OFF by default). AReviewMaxAgeDays is the latter's age
-  limit, the rule's threshold in drag-lint-lint.json. }
+  limit, the rule's threshold in drag-lint-lint.json.
+
+  AUnjudgedRules names rules the CALLER did not evaluate as lint-all would
+  (LintUnjudgedMarkerRules); an unaccounted marker for one of them is not
+  reported unused. nil -- lint-all, lint-project -- judges every marker. }
 function ApplyLineMarkers(const AFindings: TArray<TLintFinding>;
   const AScannedFiles: TArray<string> = nil;
-  AReviewMaxAgeDays: Integer = REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS): TArray<TLintFinding>;
+  AReviewMaxAgeDays: Integer = REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS;
+  const AUnjudgedRules: TArray<string> = nil): TArray<TLintFinding>;
 const
   MARK = 'drag-lint:ignore';
   { Rules that count a comment as content, so the marker itself stops them
@@ -10663,6 +10668,11 @@ begin
                        'with `drag-lint allow`, or remove it.', [M.RuleId, M.Hash, M.RuleId]));
               Continue;
             end;
+            { A rule THIS run never evaluated (AUnjudgedRules -- cross-file
+              duplicate-code in `lint <file>`, a project rule with no index) cannot
+              have accounted its marker, so "no longer matches" would be a claim the
+              run has no evidence for. See LintUnjudgedMarkerRules. }
+            if MatchStr(LowerCase(M.RuleId), AUnjudgedRules) then Continue;
             if not Accounted.ContainsKey(MarkerKey(SF, LN, M.RuleId)) then
               EmitHint(SF, LN, 'review-marker-unused',
                 Format('dl:ok marker for "%s" no longer matches any finding on this line -- remove it.', [M.RuleId]));
@@ -12175,7 +12185,8 @@ end;
 
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
-  const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil): Integer;
+  const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil;
+  const AUnjudgedRules: TArray<string> = nil): Integer;
 var
   Cfg      : TLintConfig         ;
   Survivors: TArray<TLintFinding>;
@@ -12281,7 +12292,7 @@ begin
     unreviewed's age limit; the filter that USES the config stays at step 1. }
   Cfg:= LoadLintConfig(AArgs);
   AFindings:= ApplyLineMarkers(AFindings, ScopedScan,
-    Cfg.ThresholdFor('review-marker-reason-unreviewed', REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS));
+    Cfg.ThresholdFor('review-marker-reason-unreviewed', REVIEW_STAMP_DEFAULT_MAX_AGE_DAYS), AUnjudgedRules);
 
   { 1: config -- severity remap + enable/disable filter.
 
@@ -13199,6 +13210,47 @@ end;
 function LintNarrowRule(const ARule: string): string;
 begin
   Result:= if StartsText('review-marker-', ARule) then '' else ARule;
+end;
+
+/// <summary>The rule ids a `lint` run does not evaluate the way lint-all does, so
+/// a dl:ok naming one of them cannot be judged unused by that run.</summary>
+/// <param name="AArgs">The run's arguments (--project-rules, --project).</param>
+/// <param name="AStoreSeen">True when an index covering the linted file was opened
+/// and the store-backed project passes ran.</param>
+/// <returns>Rule ids, lowercase; never empty -- cross-file duplicate-code and
+/// interface-reference-cycle are lint-all answers in every file-scoped run.</returns>
+/// <remarks>WHY (docs\INBOX-lint-file-duplicate-code-marker.md): `lint <file>`
+/// pairs duplicate-code only WITHIN the file, so a marker on a cross-file pair was
+/// never accounted and was reported review-marker-unused -- "remove it" -- while
+/// lint-all honoured it, and obeying the hint re-opened the finding. Computing the
+/// pair here instead would mean tokenising every project file on each IDE lint,
+/// and the whole-graph rule cache does not carry duplicate-code, so the sound
+/// answer is to not JUDGE what was not evaluated. Built from the same gate lists
+/// DoLint runs its passes on, so the two cannot name different rules. A marker
+/// that IS accounted by a finding this run produced (a within-file pair) is
+/// unaffected; lint-all still reports an unused marker for every rule here.</remarks>
+function LintUnjudgedMarkerRules(const AArgs: TArgs; AStoreSeen: Boolean): TArray<string>;
+
+  procedure AddAll(const AIds: array of string);
+  begin
+    for var Id: string in AIds do Result:= Result + [LowerCase(Id)];
+  end;
+
+begin
+  Result:= nil;
+  AddAll(['duplicate-code', 'interface-reference-cycle']);
+  if not (AStoreSeen and AArgs.ProjectRules) then
+  begin
+    AddAll(LINT_GATE_DOC_DRIFT);
+    AddAll(['missing-doc']);
+  end;
+  if AArgs.ProjectPath = '' then AddAll(['unit-not-in-dpr']);
+  if not AStoreSeen then
+  begin
+    AddAll(LINT_GATE_PROJECT_RULES);
+    AddAll(LINT_GATE_CLASS_METRICS);
+    AddAll(['used-unit-not-resolvable']);
+  end;
 end;
 
 { DRAGLINT_DEBUG trace of which heavy checker a `lint <file>` run entered. The
@@ -14222,7 +14274,7 @@ begin
       about, and it is worse than the gap this closes, so the stand-in path
       keeps the documented degraded behaviour until the rewrite and the marker
       scan are ordered properly. }
-    Store, MarkerScanSet, '', WalkSkipped
+    Store, MarkerScanSet, '', WalkSkipped, LintUnjudgedMarkerRules(AArgs, FlowStoreSeen)
   );
 end; // function
 
