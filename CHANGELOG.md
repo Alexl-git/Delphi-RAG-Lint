@@ -3,6 +3,35 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.29.0-alpha -- 2026-10-13
+
+### Added
+
+- **A naming fix on a unit several projects compile renames it in every one of them, or in
+  none.** `const-casing`, `method-pascalcase`, `local-var-casing`, `field-name-prefix`,
+  `param-name-prefix`, `type-name-prefix` and `local-field-prefix` used to rename against the
+  ONE `--db` they were given, so a shared unit (ORM3 `COMMON\BASICS.PAS` is in four project
+  indexes) could be renamed in one project and left on the old name in another -- a broken
+  build with exit 0. Now the owners are found by the unit's FULL PATH in every DB the manifest
+  lists; a stale owner is reindexed with `index --project`; the new name must be free in all
+  owners; their edits are merged. A single-finding fix is all-or-nothing
+  (`autofix: rename refused -- <reason>`); a batch drops only the unsafe renames. Just before
+  writing, a rename whose text moved on disk is dropped whole (`rename-dropped-at-write:`). A
+  manifest that did not load completely refuses every naming fix and names the file. Plan
+  lines for 2+ owners: `rename-owners:`, `rename-project:`, `rename-target:`,
+  `rename-unknown:`; `--json` gains `projects` and `dropped_reason`.
+- **`lint --fix --fix-naming`**: explicit consent to the opt-in naming fixes in a batch run
+  (prints `rename-local: <N>` on stderr). The IDE's Fix all in unit counts naming findings,
+  sends it on the preview and the apply, and always confirms renames first.
+- **IDE: Fix it / Fix all in unit preview a naming fix and confirm it** -- every owning
+  project with its index state and reference count, capped lists, default No, and the note
+  that only projects with a drag-lint index were checked. Wiki: Multi-Project-Rename.
+
+### Fixed
+
+- **A naming fix the stale index cannot place no longer says `no fixable findings`.** It
+  reports `autofix: 0 fixable finding(s), N skipped (stale index) -- reindex: drag-lint index
+  --project "<proj>" --db "<db>"` (never a folder reindex hint).
 ## v1.28.3-alpha -- 2026-10-11
 
 ### Fixed
