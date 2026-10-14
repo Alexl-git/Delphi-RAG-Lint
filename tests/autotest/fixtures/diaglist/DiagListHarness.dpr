@@ -264,10 +264,28 @@ begin
   Writeln('st.project1=', JoinS(Prev.ProjectLines, 1));
   Txt:= RenameConfirmText('uShared.pas', Prev.OldName, Prev.NewName, Prev);
   Writeln('st.staletext=', Txt.Contains('1 project index(es) are stale and will be reindexed before writing -- this can take several minutes.'));
-  Writeln('st.unindexedtext=', Txt.Contains('DMTEST (C:\x\DMTEST.sqlite)'));
+  Writeln('st.unindexedtext=', Txt.Contains('Not checked (no index): DMTEST -- projects without a drag-lint index may still compile this unit.'));
   Writeln('st.nostale=', RenameConfirmText('u.pas', 'a', 'b', ParseRenamePreview('rename-owners: 2 of 2 indexes'#13#10 +
     'rename-project: A index=fresh'#13#10'rename-project: B index=reindexed'#13#10)).Contains('are stale'));
   Writeln('st.singleaction=', Ord(RenamePreviewAction(ParseRenamePreview('rename-unindexed: DMTEST (C:\x\DMTEST.sqlite)'#13#10 +
     'autofix: 1 fixable finding(s) -- pass --apply to write'#13#10))));
+
+  { un: owner decision 2026-10-14 -- any rename-unindexed line means a
+    confirmation, even with one indexed owner; a refusal still wins }
+  Prev:= ParseRenamePreview('rename-unindexed: DMTEST (C:\x\DMTEST.sqlite)'#13#10 +
+    'rename-unindexed: TOOLS (C:\x\TOOLS.sqlite)'#13#10 +
+    'autofix: 1 fixable finding(s) -- pass --apply to write'#13#10);
+  Txt:= RenameConfirmText('uShared.pas', Prev.OldName, Prev.NewName, Prev);
+  Writeln('un.text=', Txt.Contains('Not checked (no index): DMTEST, TOOLS -- projects without a drag-lint index may still compile this unit.'));
+  Writeln('un.noowners=', Txt.Contains('0 indexed project(s)') or Txt.Contains('Apply 0 rename(s)'));
+  Writeln('un.plain=', Ord(RenamePreviewAction(ParseRenamePreview('autofix: 1 fixable finding(s) -- pass --apply to write'#13#10))));
+  Writeln('un.refuse=', Ord(RenamePreviewAction(ParseRenamePreview('rename-unindexed: DMTEST (C:\x\DMTEST.sqlite)'#13#10 +
+    'autofix: rename refused -- index for B could not be read'#13#10))));
+  Writeln('un.local=', Ord(RenamePreviewAction(ParseRenamePreview('rename-unindexed: DMTEST (C:\x\DMTEST.sqlite)'#13#10 +
+    'rename-local: 3'#13#10))));
+  Txt:= '';
+  for I:= 1 to 12 do Txt:= Txt + Format('rename-unindexed: U%d (C:\x\U%d.sqlite)'#13#10, [I, I]);
+  Txt:= RenameConfirmText('u.pas', '', '', ParseRenamePreview(Txt));
+  Writeln('un.cap=', Txt.Contains('U9, U10 and 2 more -- ') and not Txt.Contains('U11'));
   Writeln('DONE');
 end.

@@ -1531,8 +1531,9 @@ end;
   (spec 2026-10-13-multi-project-rename, criteria 16-19). So it runs twice: this
   PREVIEW (APreviewCmd, the fix without --apply) writes nothing; its OnDone then
     - shows a refusal on the Diagnostics root row and stops (criterion 18);
-    - for 2+ owners (or unknown ownership) asks first, and queues AApplyCmd only
-      on Yes -- No writes nothing (criteria 16, 17, 19);
+    - for 2+ owners, unknown ownership, or any 'rename-unindexed:' project
+      (even with one indexed owner, owner decision 2026-10-14) asks first, and
+      queues AApplyCmd only on Yes -- No writes nothing (criteria 16, 17, 19);
     - for one owner queues AApplyCmd at once, as before -- unless the preview
       printed 'rename-local: N' (Fix all, --fix-naming), which is confirmed as
       'Rename N identifier(s) in AProject?' first.

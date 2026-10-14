@@ -1054,12 +1054,16 @@ naming renames. A naming fix the stale index cannot place says
 `autofix: 0 fixable finding(s), N skipped (stale index) -- reindex: drag-lint index --project "<proj>" --db "<db>"`
 -- never `no fixable findings`, and never a folder reindex hint.
 
-IDE: Fix it and Fix all in unit run the preview first. For 2+ owners (or
-unknown ownership) a confirmation lists every owning project with its index
+IDE: Fix it and Fix all in unit run the preview first. For 2+ owners,
+unknown ownership, or any `rename-unindexed:` line, a confirmation lists every owning project with its index
 state and reference count, the renames (capped at 10), what will NOT be renamed,
 that stale indexes will be reindexed before writing (when any is), and that
 only projects with a drag-lint index were checked (naming configured ones with
-no index built); it defaults to No, and No writes nothing. Fix all also confirms a single-project batch of renames
+no index built: `Not checked (no index): <section>[, <section>] -- projects
+without a drag-lint index may still compile this unit.`); it defaults to No,
+and No writes nothing. Any `rename-unindexed:` line brings up that confirmation
+for a single-owner unit too (Fix it and Fix all), since a project with no index
+may still compile the unit. Fix all otherwise confirms a single-project batch of renames
 (`Rename N identifier(s) in <project>?`). A refusal shows on the Diagnostics
 root row. Wiki: `Multi-Project-Rename`.
 

@@ -177,7 +177,13 @@ Check 'R52 a stale project line keeps its changed-file count' ($kv['st.project1'
 Check 'R53 confirmation warns that stale indexes are reindexed before writing' ($kv['st.staletext'] -eq 'TRUE') ''
 Check 'R54 confirmation names the configured project that has no index' ($kv['st.unindexedtext'] -eq 'TRUE') ''
 Check 'R55 no stale owner -> no reindex warning' ($kv['st.nostale'] -eq 'FALSE') ''
-Check 'R56 rename-unindexed alone does not turn a single-project fix into a confirm' ($kv['st.singleaction'] -eq '0') "got: $($kv['st.singleaction'])"
+Check 'R56 rename-unindexed turns a single-project fix into a confirm (owner 2026-10-14)' ($kv['st.singleaction'] -eq '1') "got: $($kv['st.singleaction'])"
+Check 'R57 single-owner confirm names every unindexed section' ($kv['un.text'] -eq 'TRUE') ''
+Check 'R58 single-owner confirm does not claim 0 owners / 0 renames' ($kv['un.noowners'] -eq 'FALSE') ''
+Check 'R59 no rename-unindexed -> single-owner fix applies as before' ($kv['un.plain'] -eq '0') "got: $($kv['un.plain'])"
+Check 'R60 refusal + rename-unindexed -> refuse' ($kv['un.refuse'] -eq '2') "got: $($kv['un.refuse'])"
+Check 'R61 Fix all (rename-local) + rename-unindexed -> the unindexed confirm' ($kv['un.local'] -eq '1') "got: $($kv['un.local'])"
+Check 'R62 unindexed section list capped at 10' ($kv['un.cap'] -eq 'TRUE') ''
 
 [System.IO.Directory]::Delete($WorkDir, $true)
 Write-Host ''

@@ -25,10 +25,12 @@ checked. Two consequences:
 * A project the manifest lists but whose index FILE does not exist yet (a
   section never built) is "no index", not an error: it is not checked, never
   blocks a fix, and is named on a `rename-unindexed: <section> (<db>)` line and
-  in the confirmation.
+  in the confirmation -- for a single-owner unit too: any `rename-unindexed:`
+  line makes the IDE ask first (see Fix it, step 2).
 
-A unit only one project owns is fixed as before -- no preview dialog for Fix
-it, no `rename-owners` / `rename-project` / `rename-target` lines. What a
+A unit only one project owns, with every configured project indexed, is fixed
+as before -- no preview dialog for Fix it, no `rename-owners` /
+`rename-project` / `rename-target` lines. What a
 single-project user CAN now see:
 
 * every naming fix probes the manifest and opens each configured index
@@ -56,7 +58,16 @@ Right-click a naming finding in the Structure form and choose "Fix it".
    * when any owner is stale: `<N> project index(es) are stale and will be
      reindexed before writing -- this can take several minutes.`;
    * the note that only projects with a drag-lint index were checked, naming
-     the configured projects whose index was never built.
+     the configured projects whose index was never built:
+     `Not checked (no index): <section>[, <section>] -- projects without a
+     drag-lint index may still compile this unit.` (up to 10 sections, then
+     `and K more`).
+
+   A unit with ONE owner also gets this confirmation whenever the preview
+   printed a `rename-unindexed:` line: one project index owns it, but a
+   configured project with no index may compile it too and would stop
+   compiling if only the indexed one were renamed. The dialog says one project
+   index owns the unit and names the unindexed sections as above.
 
    The default button is **No**. No writes nothing, in any file.
 3. Yes runs the APPLY: it reindexes every stale owner first (`index --project`,
@@ -73,7 +84,9 @@ written and the Diagnostics root row says why, e.g.
 When the unit has any naming finding (and the project has an index), "Fix all
 in unit" counts the naming findings too, and ALWAYS asks before renaming:
 
-* a unit one project owns: `Rename N identifier(s) in <project>?`;
+* a unit one project owns: `Rename N identifier(s) in <project>?` -- or, when
+  the preview printed a `rename-unindexed:` line, the confirmation above with
+  its `Not checked (no index): ...` line;
 * a shared unit: the multi-project confirmation above, listing up to 10
   renames and up to 10 that will not be done (`... and K more`).
 

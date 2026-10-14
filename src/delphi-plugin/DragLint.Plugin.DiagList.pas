@@ -71,10 +71,15 @@ function ParseRenamePreview(const AOutput: string): TRenamePreview;
 /// <param name="APreview">A value returned by ParseRenamePreview.</param>
 /// <returns>rpaRefuse whenever a refusal was printed, whatever the owner count
 /// ('rename-owners: 0 of 0' with a refusal is a broken manifest, not one owner);
-/// rpaConfirm for 2+ owners or any unknown ownership; rpaApply otherwise.</returns>
+/// rpaConfirm for 2+ owners, any unknown ownership, or any rename-unindexed
+/// section -- the last even with one indexed owner and under Fix all, since a
+/// project with no index may still compile the unit (owner decision
+/// 2026-10-14); otherwise rpaConfirmLocal when 'rename-local: N' (N above 0)
+/// was printed, else rpaApply. Pinned by run_diaglist_harness.ps1 R56-R61.</returns>
 function RenamePreviewAction(const APreview: TRenamePreview): TRenamePreviewAction;
 
-/// <summary>The confirmation shown before a multi-project rename is written.</summary>
+/// <summary>The confirmation shown before a multi-project rename, or a naming
+/// rename with unindexed projects configured, is written.</summary>
 /// <param name="AUnit">File name of the unit being fixed.</param>
 /// <param name="AOld">The old name, '' when not known.</param>
 /// <param name="ANew">The new name.</param>
@@ -82,8 +87,11 @@ function RenamePreviewAction(const APreview: TRenamePreview): TRenamePreviewActi
 /// <returns>Multi-line text naming every owning project with its index state and
 /// reference count, warning that stale indexes are reindexed before writing
 /// when any is (Ruling 12), and stating that only projects with a drag-lint
-/// index were checked -- naming the configured ones that have none (criterion
-/// 19, Ruling 14).</returns>
+/// index were checked -- naming the configured ones that have none on one
+/// 'Not checked (no index): A, B -- ...' line, capped at 10 sections
+/// (criterion 19, Ruling 14). With fewer than 2 owners and no unknown index
+/// (the single-owner case) it states that one project index owns the unit
+/// instead of an owner count.</returns>
 function RenameConfirmText(const AUnit, AOld, ANew: string; const APreview: TRenamePreview): string;
 
 /// <summary>The confirmation shown before a Fix all writes single-project naming renames.</summary>
@@ -513,8 +521,12 @@ function RenamePreviewAction(const APreview: TRenamePreview): TRenamePreviewActi
 begin
   if APreview.Refused <> '' then Exit(rpaRefuse);
   { unknown ownership with no refusal is a batch run whose global targets were
-    dropped: 0 owners then does NOT mean "one project", so ask }
-  if (APreview.OwnerCount >= 2) or (Length(APreview.Unknown) > 0) then Exit(rpaConfirm);
+    dropped: 0 owners then does NOT mean "one project", so ask. A
+    rename-unindexed line (printed only when the run has naming targets) means
+    a project that may compile this unit was not checked: ask too, even with
+    one indexed owner (owner decision 2026-10-14) }
+  if (APreview.OwnerCount >= 2) or (Length(APreview.Unknown) > 0) or (Length(APreview.Unindexed) > 0) then
+    Exit(rpaConfirm);
   { 'rename-local:' is printed only under --fix-naming (Fix all): a batch of
     naming renames is always confirmed, even in one project }
   Result:= if APreview.LocalRenames > 0 then rpaConfirmLocal else rpaApply;
@@ -523,9 +535,13 @@ end;
 function RenameConfirmText(const AUnit, AOld, ANew: string; const APreview: TRenamePreview): string;
 const
   CListCap = 10; { BASICS.PAS has ~80 naming findings: a dialog taller than the screen hides Yes/No }
+  CDbSuffix = ' ('; { a rename-unindexed entry is 'section (dbpath)' }
 var
-  SB: TStringBuilder;
-  S : string        ;
+  SB   : TStringBuilder;
+  S    : string        ;
+  Multi: Boolean       ;
+  Names: TArray<string>;
+  K    : Integer       ;
 
   procedure AppendCapped(const AItems: TArray<string>);
   var
@@ -543,19 +559,32 @@ var
   end;
 
 begin
+  { single-owner path (only rename-unindexed brought us here): the engine
+    printed no rename-owners / rename-target lines, so there are no counts }
+  Multi:= (APreview.OwnerCount >= 2) or (Length(APreview.Unknown) > 0);
   SB:= TStringBuilder.Create;
   try
     if (Length(APreview.Renames) <= 1) and (AOld <> '') then
       SB.AppendFormat('Rename %s -> %s in %s?', [AOld, ANew, AUnit]).Append(sLineBreak)
-    else
+    else if Multi or (Length(APreview.Renames) > 0) then
     begin
       SB.AppendFormat('Apply %d rename(s) in %s?', [Length(APreview.Renames), AUnit]).Append(sLineBreak);
       AppendCapped(APreview.Renames);
-    end;
-    SB.Append(sLineBreak)
-      .AppendFormat('This unit is compiled by %d indexed project(s) (%d index(es) checked). Yes renames it in every one of them:',
+    end
+    else if APreview.LocalRenames > 0 then
+      SB.AppendFormat('Rename %d identifier(s) in %s?', [APreview.LocalRenames, AUnit]).Append(sLineBreak)
+    else
+      SB.AppendFormat('Apply the naming rename in %s?', [AUnit]).Append(sLineBreak);
+    SB.Append(sLineBreak);
+    if Multi then
+    begin
+      SB.AppendFormat('This unit is compiled by %d indexed project(s) (%d index(es) checked). Yes renames it in every one of them:',
         [APreview.OwnerCount, APreview.Probed]).Append(sLineBreak);
-    for S in APreview.ProjectLines do SB.Append('  ').Append(S).Append(sLineBreak);
+      for S in APreview.ProjectLines do SB.Append('  ').Append(S).Append(sLineBreak);
+    end
+    else
+      SB.Append('No other indexed project compiles this unit. Yes renames it in the one project index that owns it.')
+        .Append(sLineBreak);
     if Length(APreview.Dropped) > 0 then
     begin
       SB.Append(sLineBreak).Append('NOT renamed (nothing is written for these):').Append(sLineBreak);
@@ -575,8 +604,18 @@ begin
       .Append('but has no configured index is not renamed, and may stop compiling.').Append(sLineBreak);
     if Length(APreview.Unindexed) > 0 then
     begin
-      SB.Append('Configured, but with no index built (not checked):').Append(sLineBreak);
-      for S in APreview.Unindexed do SB.Append('  ').Append(S).Append(sLineBreak);
+      Names:= nil;
+      for K:= 0 to High(APreview.Unindexed) do
+      begin
+        if K = CListCap then Break;
+        S:= APreview.Unindexed[K];
+        if Pos(CDbSuffix, S) > 0 then S:= Copy(S, 1, Pos(CDbSuffix, S) - 1);
+        Names:= Names + [S];
+      end;
+      SB.Append('Not checked (no index): ').Append(string.Join(', ', Names));
+      if Length(APreview.Unindexed) > CListCap then
+        SB.AppendFormat(' and %d more', [Length(APreview.Unindexed) - CListCap]);
+      SB.Append(' -- projects without a drag-lint index may still compile this unit.').Append(sLineBreak);
     end;
     SB.Append(sLineBreak)
       .Append('No writes nothing.');
