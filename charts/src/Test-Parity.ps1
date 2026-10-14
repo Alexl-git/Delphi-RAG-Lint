@@ -33,6 +33,9 @@
                       already drops from the text), graph.pdf reported and not compared (see
                       $BundleSkipped). Questions not ported are listed as SKIP. The probe is rebuilt
                       when any src\charts unit or the probe source is newer than it.
+                      POSITIVE CONTROL: on the first compared case a one-line change is planted in a copy
+                      of the Delphi text and one byte flipped in a copy of its graph.dot; each must be
+                      reported as a difference ('[PASS] POSITIVE CONTROL ...') or the run FAILS.
 
   Usage:  pwsh -File charts\src\Test-Parity.ps1 -Mode Core -Only who-writes -Clone DL
           pwsh -File charts\src\Test-Parity.ps1 -Mode Question -Only touches-tables
@@ -794,6 +797,43 @@ function Compare-Bundle([string] $PsDir, [string] $DlDir, [string] $PsRoot, [str
   $out
 }
 
+# POSITIVE CONTROL (engine review 2026-10-14: "what goes RED if the in-process answer is wrong?").
+# A harness that only ever reports "0 differences" proves nothing unless it is shown to SEE one.
+# On the first case that reaches the comparison, a one-line change is planted in a COPY of the
+# Delphi text and one byte is flipped in a COPY of the Delphi graph.dot; each must be reported as
+# at least one difference by the very same comparison the real case used, or the run FAILS.
+function Test-TextControl([string] $PsFile, [string] $DlFile) {
+  $lines = [IO.File]::ReadAllLines($DlFile)
+  $i = [Array]::FindIndex($lines, [Predicate[string]] { param($l) $l -like 'CHART *' })
+  if ($i -lt 0) { $i = [Array]::FindLastIndex($lines, [Predicate[string]] { param($l) $l.Trim() -ne '' }) }
+  if ($i -lt 0) { return 'FAIL: the Delphi text has no line to plant a change in' }
+  $lines[$i] = $lines[$i] + ' [PLANTED BY THE POSITIVE CONTROL]'
+  $planted = "$DlFile.control.txt"
+  [IO.File]::WriteAllText($planted, (($lines -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+  $cmp = & $Exe compare --old $PsFile --new $planted --format json 2>"$planted.err"
+  $code = $LASTEXITCODE
+  $n = -1
+  try { $j = (@($cmp) -join "`n") | ConvertFrom-Json -ErrorAction Stop; $n = [int]$j.counts.removed + [int]$j.counts.added } catch { }
+  if ($code -eq 1 -and $n -ge 1) { return "PASS: a one-line change planted in the Delphi text was reported ($n line(s) differ)" }
+  "FAIL: a one-line change planted in the Delphi text went UNSEEN (compare exit $code, $n difference(s))"
+}
+
+function Test-DotControl([string] $PsBundle, [string] $DlBundle, [string] $Root) {
+  $copy = "$DlBundle.control"
+  if (Test-Path -LiteralPath $copy) { Remove-Item -LiteralPath $copy -Recurse -Force }
+  Copy-Item -LiteralPath $DlBundle -Destination $copy -Recurse
+  $dot = Join-Path $copy 'graph.dot'
+  $bytes = [IO.File]::ReadAllBytes($dot)
+  if ($bytes.Length -eq 0) { return 'FAIL: the Delphi graph.dot is empty -- no byte to flip' }
+  $mid = [int][Math]::Floor($bytes.Length / 2)
+  $bytes[$mid] = $bytes[$mid] -bxor 1
+  [IO.File]::WriteAllBytes($dot, $bytes)
+  $row = @(Compare-Bundle $PsBundle $copy $Root $Root | Where-Object { $_.File -eq 'graph.dot' })
+  Remove-Item -LiteralPath $copy -Recurse -Force
+  if ($row.Count -eq 1 -and $row[0].Same -eq $false) { return "PASS: one byte flipped in a copied graph.dot was reported ($($row[0].Why))" }
+  'FAIL: one byte flipped in a copied graph.dot went UNSEEN'
+}
+
 function Invoke-QuestionMode {
   $probeExe = Get-ProbeExe
   $ported = @(& $probeExe --ported 2>$null | Where-Object { $_ })
@@ -811,6 +851,9 @@ function Invoke-QuestionMode {
   $dlRoot = $bRoot
   $rows = New-Object System.Collections.Generic.List[object]
   $bad = 0
+  $textControl = ''
+  $dotControl = ''
+  $compared = 0
   foreach ($c in $cases) {
     if ($ported -notcontains $c.question) { $rows.Add([pscustomobject]@{ Question = $c.question; Text = 'not ported'; Files = ''; PsS = ''; DlS = ''; Verdict = 'SKIP' }); continue }
     if ($c.serverDb -or $c.sqlDb -or @($c.extra).Count) {
@@ -851,6 +894,9 @@ function Invoke-QuestionMode {
     # the bundle: every file either side wrote
     $dlBundle = ((Get-Content -LiteralPath $dlFile | Where-Object { $_ -like 'BUNDLE *' } | Select-Object -First 1) -replace '^BUNDLE ', '')
     $files = @(Compare-Bundle $psBundle $dlBundle $psRoot $dlRoot)
+    $compared++
+    if (-not $textControl) { $textControl = Test-TextControl $psFile $dlFile }
+    if (-not $dotControl -and $dlBundle -and $psBundle -and (Test-Path -LiteralPath (Join-Path $dlBundle 'graph.dot'))) { $dotControl = Test-DotControl $psBundle $dlBundle $dlRoot }
     $fileBad = @($files | Where-Object { $_.Same -eq $false })
     $row.Files = (@($files | ForEach-Object { "$($_.File): $($_.Why)" }) -join '; ')
     foreach ($f in $fileBad) { Write-Host "  DIFF $($c.question) $($f.File): $($f.Why)" -ForegroundColor Red }
@@ -863,6 +909,18 @@ function Invoke-QuestionMode {
     $rows.Add([pscustomobject]$row)
     Write-Host ("  {0}: text {1}; {2} of {3} bundle file(s) compared equal  ps {4}s  delphi {5}s" -f $c.question, $row.Text,
                 @($files | Where-Object { $_.Same -eq $true }).Count, $files.Count, $row.PsS, $row.DlS)
+  }
+  # the positive control: with at least one case compared, both planted changes must have been seen
+  if ($compared -gt 0) {
+    foreach ($ctl in @(@('text', $textControl), @('graph.dot', $dotControl))) {
+      $msg = $(if ($ctl[1]) { $ctl[1] } else { "FAIL: no compared case had a $($ctl[0]) to plant a change in" })
+      $ok = $msg -like 'PASS*'
+      if ($ok) { Write-Host "[PASS] POSITIVE CONTROL ($($ctl[0])): $($msg.Substring(6))" -ForegroundColor Green }
+      else { Write-Host "[FAIL] POSITIVE CONTROL ($($ctl[0])): $msg" -ForegroundColor Red; $bad++ }
+      $rows.Add([pscustomobject]@{ Question = "positive control ($($ctl[0]))"; Text = $msg; Files = ''; PsS = ''; DlS = ''; Verdict = $(if ($ok) { 'PASS' } else { 'FAIL' }) })
+    }
+  } else {
+    Write-Host '[SKIP] POSITIVE CONTROL: no case reached the comparison' -ForegroundColor Yellow
   }
   Add-Summary '## Question (Ask-Report -Plain vs the in-process Delphi question)'
   Add-Summary ''
