@@ -909,7 +909,7 @@ begin
       if Ty = '' then Exit;
       try
         Exit(TRegEx.IsMatch(Ty, ATypeRx, [roIgnoreCase]));
-      except
+      except  // dl:ok try-except-swallowed@c2a3 -- REVIEWED 2026-10-14: a malformed rule regex answers "no match", never aborts the scan
         on ERegularExpressionError do Exit; { a bad regex in a rule file must not take the scan down }
       end;
     end;
