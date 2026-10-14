@@ -86,6 +86,7 @@ uses
   , DRagLint.Charts.Q.TestedBy  // dl:ok unused-unit-in-uses@e105 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.ChangeImpact  // dl:ok unused-unit-in-uses@c0e0 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.CrossesBoundary  // dl:ok unused-unit-in-uses@0508 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.ProtocolTrace  // dl:ok unused-unit-in-uses@a865 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   ;
 
 const

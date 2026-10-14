@@ -108,6 +108,16 @@ type
     [Test] procedure AnswerNamesTheCounterpart;
   end;
 
+  [TestFixture]
+  TProtocolTraceTests = class(TQuestionFixture)
+  public
+    [Test] procedure CommandMatchesPowerShell;
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure MethodWithManyConstantsCountsThem;
+    [Test] procedure WireFieldMatchesPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
 implementation
 
 uses
@@ -214,6 +224,19 @@ const
   CB_NONE_FIELDS = 'Qname="uMain.TfrmMAIN.CauseListClick",Zone="CLIENT",Verdict="no evidence in this index",Commands=0,PipeCalls=0,FarSide=0,SelfIsPipe=false,Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
   CB_NONE_DOT_SHA = '002ece2c52f5f564c02e7522b05b5dc06857b316d4139e17588f346d7b4ed375';
   CB_LINES = 28;
+  PROTOCOL_TRACE_ID = 'protocol-trace';
+  PT_CMD = 'cmdDelta';
+  PT_CMD_FIELDS = 'Qname="Pipes.Protocol.TCommandID.cmdDelta",Mode="command",Refs=38,Zones=2,Routines=38,Commands=1,Unattributed=0,Kinds="read",Clusters=3,ClickTargets=22,Expected=22,AllClickable=true';
+  PT_CMD_DOT_SHA = 'f92d7c0911d43b40efa1913793688fa99293a00d0e5a366fa46df7211f8b0a76';
+  PT_METHOD_FIELDS = 'Qname="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation",Mode="method",Refs=2,Zones=1,Routines=1,Commands=2,Unattributed=0,Kinds="read",Clusters=2,ClickTargets=2,Expected=2,AllClickable=true';
+  PT_METHOD_DOT_SHA = 'e7cc7dd4aa39c0263b1c954c4949e378f5c5ad25df6fa9e7698cddb814830738';
+  PT_MANY = 'Pipes.Protocol.CommandIDToStr';
+  PT_MANY_FIELDS = 'Qname="Pipes.Protocol.CommandIDToStr",Mode="method",Refs=42,Zones=1,Routines=1,Commands=42,Unattributed=0,Kinds="read",Clusters=2,ClickTargets=2,Expected=2,AllClickable=true';
+  PT_MANY_DOT_SHA = '98c792edb324ad1211a75794dcd817ac0b7103d730819196fdf4026094befd8d';
+  PT_FIELD = 'Pipes.Protocol.TPipeMessageHeader.CommandID';
+  PT_FIELD_FIELDS = 'Qname="Pipes.Protocol.TPipeMessageHeader.CommandID",Mode="field",Refs=1047,Zones=2,Routines=728,Commands=0,Unattributed=0,Kinds="member-access",Clusters=3,ClickTargets=24,Expected=24,AllClickable=true';
+  PT_FIELD_DOT_SHA = '59c852de5a908751fbaed70674ca0f212439daa88a61303359043495a020dcf9';
+  PT_LINES = 28;
   DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
@@ -782,6 +805,59 @@ begin
   Assert.AreEqual<Integer>(CB_LINES, Length(L));
   Assert.AreEqual('INDEX ' + A.CounterpartDb + ' (counterpart)', L[CS_CHART_LINE]);
   Assert.AreEqual('  uPipeSessionBuilder.TPipeSessionBuilder.RouteSTATIONS handles rspOK @uPipeSessionBuilder.pas:902', L[High(L)]);
+end;
+
+{ ---- protocol-trace ---- }
+
+procedure TProtocolTraceTests.CommandMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(PROTOCOL_TRACE_ID, PT_CMD, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(PT_CMD_FIELDS, Fields(C));
+  Assert.AreEqual(PT_CMD_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TProtocolTraceTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(PROTOCOL_TRACE_ID, CI_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(PT_METHOD_FIELDS, Fields(C));
+  Assert.AreEqual(PT_METHOD_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TProtocolTraceTests.MethodWithManyConstantsCountsThem;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(PROTOCOL_TRACE_ID, PT_MANY, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(PT_MANY_FIELDS, Fields(C));
+  Assert.AreEqual(PT_MANY_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TProtocolTraceTests.WireFieldMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(PROTOCOL_TRACE_ID, PT_FIELD, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(PT_FIELD_FIELDS, Fields(C));
+  Assert.AreEqual(PT_FIELD_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TProtocolTraceTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(PROTOCOL_TRACE_ID, PT_CMD, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(PT_LINES, Length(L));
+  Assert.AreEqual('CHART protocol-trace cmdDelta -- 38 references / 2 zones', L[CS_CHART_LINE]);
+  Assert.AreEqual('  ... +17 more routines (+17 more sites) not shown (-Cap 20; raise -Cap to see them)', L[High(L)]);
 end;
 
 end.

@@ -73,6 +73,7 @@ uses
   , DRagLint.Charts.Q.TestedBy in '..\..\src\charts\DRagLint.Charts.Q.TestedBy.pas'
   , DRagLint.Charts.Q.ChangeImpact in '..\..\src\charts\DRagLint.Charts.Q.ChangeImpact.pas'
   , DRagLint.Charts.Q.CrossesBoundary in '..\..\src\charts\DRagLint.Charts.Q.CrossesBoundary.pas'
+  , DRagLint.Charts.Q.ProtocolTrace in '..\..\src\charts\DRagLint.Charts.Q.ProtocolTrace.pas'
   , DRagLint.Core.Model
   ;
 
