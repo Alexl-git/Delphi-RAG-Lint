@@ -47,6 +47,20 @@ uses
   , ChartsTests.CoreIndex in 'ChartsTests.CoreIndex.pas'
   , DRagLint.Charts.Source in '..\..\src\charts\DRagLint.Charts.Source.pas'
   , ChartsTests.CoreSource in 'ChartsTests.CoreSource.pas'
+  , DRagLint.Charts.Tools in '..\..\src\charts\DRagLint.Charts.Tools.pas'
+  , ChartsTests.CoreTools in 'ChartsTests.CoreTools.pas'
+  , DRagLint.Charts.Dot in '..\..\src\charts\DRagLint.Charts.Dot.pas'
+  , ChartsTests.CoreDot in 'ChartsTests.CoreDot.pas'
+  , DRagLint.Charts.Checks in '..\..\src\charts\DRagLint.Charts.Checks.pas'
+  , ChartsTests.CoreChecks in 'ChartsTests.CoreChecks.pas'
+  , DRagLint.Charts.Sql in '..\..\src\charts\DRagLint.Charts.Sql.pas'
+  , ChartsTests.CoreSql in 'ChartsTests.CoreSql.pas'
+  , DRagLint.Charts.Columns in '..\..\src\charts\DRagLint.Charts.Columns.pas'
+  , ChartsTests.CoreColumns in 'ChartsTests.CoreColumns.pas'
+  , DRagLint.Charts.Chain in '..\..\src\charts\DRagLint.Charts.Chain.pas'
+  , ChartsTests.CoreChain in 'ChartsTests.CoreChain.pas'
+  , DRagLint.Charts.Exceptions in '..\..\src\charts\DRagLint.Charts.Exceptions.pas'
+  , ChartsTests.CoreExceptions in 'ChartsTests.CoreExceptions.pas'
   ;
 
 const

@@ -210,6 +210,13 @@ uses
   DRagLint.Charts.Text in '..\charts\DRagLint.Charts.Text.pas',
   DRagLint.Charts.Index in '..\charts\DRagLint.Charts.Index.pas',
   DRagLint.Charts.Source in '..\charts\DRagLint.Charts.Source.pas',
+  DRagLint.Charts.Tools in '..\charts\DRagLint.Charts.Tools.pas',
+  DRagLint.Charts.Dot in '..\charts\DRagLint.Charts.Dot.pas',
+  DRagLint.Charts.Checks in '..\charts\DRagLint.Charts.Checks.pas',
+  DRagLint.Charts.Sql in '..\charts\DRagLint.Charts.Sql.pas',
+  DRagLint.Charts.Columns in '..\charts\DRagLint.Charts.Columns.pas',
+  DRagLint.Charts.Chain in '..\charts\DRagLint.Charts.Chain.pas',
+  DRagLint.Charts.Exceptions in '..\charts\DRagLint.Charts.Exceptions.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

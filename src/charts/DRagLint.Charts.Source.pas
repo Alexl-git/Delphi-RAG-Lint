@@ -53,10 +53,11 @@ type
   private
     FIndex    : TChartsIndex;
     FShas     : TDictionary<string, string>;
+    FIds      : TDictionary<string, Integer>;
+    FPaths    : TDictionary<string, string>;
     FOverrides: TDictionary<string, string>;
     FFresh    : TDictionary<string, Boolean>;
     FStripped : TDictionary<string, TArray<string>>;
-    function ReadPath(const pPath: string): string;
     function DbPathText: string;
     function BlankMatch(const pMatch: TMatch): string;
   public
@@ -75,6 +76,18 @@ type
     /// TIStringComparer.Ordinal. The PS paging (CLIENT has 625 files) is gone: AllRows has no cap.
     /// The parallel path -> id map the PS also built is not ported (nothing here reads it).</remarks>
     function IndexedFileShas: TDictionary<string, string>;
+    /// <summary>files.id of an indexed path (any case); 0 when it is not a file of the index.</summary>
+    /// <param name="pPath">A path.</param>
+    /// <returns>The id, or 0.</returns>
+    /// <remarks>The $script:DlFileIds[] map Get-IndexedFileShas builds (Emit-Common.ps1:812),
+    /// ported in step 2 for the datasource chain; loaded with the shas, case-insensitive.</remarks>
+    function FileId(const pPath: string): Integer;
+    /// <summary>The path exactly as the index stores it, for a path matched case-insensitively.</summary>
+    /// <param name="pPath">A path (any case).</param>
+    /// <param name="pStored">The stored spelling.</param>
+    /// <returns>False when pPath is not a file of the index.</returns>
+    /// <remarks>Stands in for the PS @(.Keys | Where-Object { Equals(OrdinalIgnoreCase) }).</remarks>
+    function IndexedPath(const pPath: string; out pStored: string): Boolean;
     /// <summary>Reads pReadPath whenever pIndexedPath is asked about.</summary>
     /// <param name="pIndexedPath">A path of the index; matched case-insensitively.</param>
     /// <param name="pReadPath">The file to read (and hash) instead.</param>
@@ -82,6 +95,12 @@ type
     /// so a test can manufacture a stale file deterministically. PS trap closed: the keys are
     /// compared OrdinalIgnoreCase, so the dictionary is case-insensitive.</remarks>
     procedure AddOverride(const pIndexedPath, pReadPath: string);
+    /// <summary>The file to read for an indexed path: its override, else the path itself.</summary>
+    /// <param name="pPath">A path of the index.</param>
+    /// <returns>The override target, or pPath.</returns>
+    /// <remarks>Port of Resolve-SourceReadPath (Emit-Common.ps1:799); public since step 2 so the SQL
+    /// readers (DRagLint.Charts.Sql) read the same file this reader hashes.</remarks>
+    function ReadPath(const pPath: string): string;
     /// <summary>Whether the file that would be READ for pPath hashes to the sha256 the index recorded.</summary>
     /// <param name="pPath">A path of the index (any case).</param>
     /// <returns>True when the hashes match; False when they differ or the read file is missing.</returns>
@@ -136,6 +155,22 @@ type
       pFollowing: Integer = 0): TSourceContext;
   end;
 
+/// <summary>[IO.File]::ReadAllText(path, Latin-1): a UTF-8 or UTF-16 BOM still wins, else one byte is one char.</summary>
+/// <param name="pPath">The file.</param>
+/// <returns>The decoded text.</returns>
+/// <remarks>Shared by the Pascal and SQL strippers (public since step 2). A UTF-32 BOM is not detected.</remarks>
+function ReadLatin1(const pPath: string): string;
+
+/// <summary>$s -split "\r?\n": split on LF, dropping one CR right before it.</summary>
+/// <param name="pS">The text.</param>
+/// <returns>The lines; a final line break yields a final '' element; a lone CR stays in the text.</returns>
+function SplitLines(const pS: string): TArray<string>;
+
+/// <summary>PS String.Trim: strips Char.IsWhiteSpace characters (not Delphi Trim's &lt;= #32) from both ends.</summary>
+/// <param name="pS">The text.</param>
+/// <returns>The trimmed text.</returns>
+function PsTrim(const pS: string): string;
+
 implementation
 
 uses
@@ -143,7 +178,7 @@ uses
   , System.IOUtils
   , System.Hash
   , System.Math
-  , System.Character
+  , System.Character  // dl:ok unused-unit-in-uses@b683 -- REVIEWED 2026-10-13: linter FP -- PsTrim calls TCharHelper.IsWhiteSpace on pS[First]; removing the unit fails E2671 (C:\Projects\Delphi-RAG-lint\docs\INBOX-lint-fp-unused-unit-helper-on-indexed-char.md)
   , System.Generics.Defaults
   ;
 
@@ -155,7 +190,6 @@ const
   BYTE_FF = $FF;
   BYTE_FE = $FE;
 
-{ PS String.Trim: strips Char.IsWhiteSpace characters from both ends. }
 function PsTrim(const pS: string): string;
 begin
   var First:= 1;
@@ -167,7 +201,6 @@ begin
   Result:= Copy(pS, First, Last - First + 1);
 end;
 
-{ [IO.File]::ReadAllText(path, Latin-1): a UTF-8 or UTF-16 BOM still wins, else one byte is one char. }
 function ReadLatin1(const pPath: string): string;
 begin
   var Bytes:= TFile.ReadAllBytes(pPath);
@@ -183,7 +216,6 @@ begin
     Result[K + 1]:= Char(Bytes[K]);
 end;
 
-{ $s -split "\r?\n": split on LF, dropping one CR right before it. }
 function SplitLines(const pS: string): TArray<string>;
 begin
   var Parts:= TList<string>.Create;
@@ -221,6 +253,8 @@ begin
   FFresh.Free;
   FOverrides.Free;
   FShas.Free;
+  FIds.Free;
+  FPaths.Free;
   inherited Destroy;
 end;
 
@@ -233,13 +267,32 @@ begin
     var Rows:= FIndex.AllRows('SELECT id, path, sha256 FROM files', 'id');
     try
       FShas:= TDictionary<string, string>.Create(TIStringComparer.Ordinal);
+      FIds:= TDictionary<string, Integer>.Create(TIStringComparer.Ordinal);
+      FPaths:= TDictionary<string, string>.Create(TIStringComparer.Ordinal);
       for var R in Rows do
+      begin
         FShas.AddOrSetValue(R.S('path'), R.S('sha256'));
+        FIds.AddOrSetValue(R.S('path'), R.I('id'));
+        FPaths.AddOrSetValue(R.S('path'), R.S('path'));
+      end;
     finally
       Rows.Free;
     end;
   end;
   Result:= FShas;
+end;
+
+function TSourceReader.FileId(const pPath: string): Integer;
+begin
+  IndexedFileShas;
+  if not FIds.TryGetValue(pPath, Result) then
+    Result:= 0;
+end;
+
+function TSourceReader.IndexedPath(const pPath: string; out pStored: string): Boolean;
+begin
+  IndexedFileShas;
+  Result:= FPaths.TryGetValue(pPath, pStored);
 end;
 
 procedure TSourceReader.AddOverride(const pIndexedPath, pReadPath: string);
