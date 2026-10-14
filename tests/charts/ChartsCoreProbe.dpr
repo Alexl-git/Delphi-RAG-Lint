@@ -27,7 +27,17 @@ program ChartsCoreProbe;
   tools, checks and sql (the index-wide sections) need --globals 1 and --charts-root; layout needs --layout-dir and runs dot.exe (never drag-lint.exe,
   spec P5).
   A failing section becomes {"error":"<message>"}; the probe never crashes on a question.
-  Exit 0 = JSON printed, 2 = usage. Everything is read-only. *)
+  Exit 0 = JSON printed, 2 = usage. Everything is read-only.
+
+  QUESTION MODE (2026-10-13, Test-Parity -Mode Question): one ported chart question, answered
+  in-process exactly as Ask-Report.ps1 -Plain answers it -- the plain lines on stdout, the bundle
+  under --out-root (graph.*, meta.json, index.html, xref.txt):
+
+    ChartsCoreProbe --question <id> --target <t> --db <index.sqlite> --out-root <dir>
+                    --charts-root <repo\charts> [--cap n] [--depth n] [--max-rows n]
+
+  A refusal prints 'ask-report: <message>' on stderr and exits 1 (Ask-Report's contract).
+  ChartsCoreProbe --ported prints the ported question ids, one per line. *)
 
 {$APPTYPE CONSOLE}
 
@@ -50,10 +60,19 @@ uses
   , DRagLint.Charts.Columns in '..\..\src\charts\DRagLint.Charts.Columns.pas'
   , DRagLint.Charts.Chain in '..\..\src\charts\DRagLint.Charts.Chain.pas'
   , DRagLint.Charts.Exceptions in '..\..\src\charts\DRagLint.Charts.Exceptions.pas'
+  , DRagLint.Charts.ReportHeader in '..\..\src\charts\DRagLint.Charts.ReportHeader.pas'
+  , DRagLint.Charts.PsSort in '..\..\src\charts\DRagLint.Charts.PsSort.pas'
+  , DRagLint.Charts.Question in '..\..\src\charts\DRagLint.Charts.Question.pas'
+  , DRagLint.Charts.Ask in '..\..\src\charts\DRagLint.Charts.Ask.pas'
+  , DRagLint.Charts.Q.TouchesTables in '..\..\src\charts\DRagLint.Charts.Q.TouchesTables.pas'
+  , DRagLint.Charts.Q.ShownWhere in '..\..\src\charts\DRagLint.Charts.Q.ShownWhere.pas'
+  , DRagLint.Charts.Q.Deps in '..\..\src\charts\DRagLint.Charts.Q.Deps.pas'
+  , DRagLint.Core.Model
   ;
 
 const
   EXIT_USAGE = 2;
+  EXIT_REFUSED = 1;
   LATIN1_CODEPAGE = 28591;
   ZONE_SAMPLE_COUNT = 10;
   EDGELESS_LISTED = 5;
@@ -77,6 +96,12 @@ type
     ClonePaths: TArray<string>;
     Globals   : Boolean;
     SqlDb     : string;
+    Question  : string;
+    Target    : string;
+    OutRoot   : string;
+    Cap       : string;
+    Depth     : string;
+    MaxRows   : string;
   end;
 
 function Num(pValue: Int64): TJSONNumber;
@@ -90,7 +115,27 @@ begin
   Result.AddPair('error', pMessage);
 end;
 
-{ The step-2 switches (tools, cluster, layout); False for a switch it does not know. }
+{ The question-mode switches; False for a switch it does not know. }
+function ParseQuestionArg(const pName, pValue: string; var pArgs: TProbeArgs): Boolean;
+begin
+  Result:= True;
+  if SameText(pName, '--question') then
+    pArgs.Question:= pValue
+  else if SameText(pName, '--target') then
+    pArgs.Target:= pValue
+  else if SameText(pName, '--out-root') then
+    pArgs.OutRoot:= pValue
+  else if SameText(pName, '--cap') then
+    pArgs.Cap:= pValue
+  else if SameText(pName, '--depth') then
+    pArgs.Depth:= pValue
+  else if SameText(pName, '--max-rows') then
+    pArgs.MaxRows:= pValue
+  else
+    Result:= False;
+end;
+
+{ The step-2 switches (tools, cluster, layout), then the question-mode ones; False for a switch neither knows. }
 function ParseStep2Arg(const pName, pValue: string; var pArgs: TProbeArgs): Boolean;
 begin
   Result:= True;
@@ -107,7 +152,7 @@ begin
   else if SameText(pName, '--clone-path') then
     pArgs.ClonePaths:= pArgs.ClonePaths + [pValue]
   else
-    Result:= False;
+    Result:= ParseQuestionArg(pName, pValue, pArgs);
 end;
 
 function ParseArgs(out pArgs: TProbeArgs): Boolean;
@@ -141,6 +186,8 @@ begin
     else if not ParseStep2Arg(Name, Value, pArgs) then
       Exit(False);
   end;
+  if pArgs.Question <> '' then
+    Exit((pArgs.Db <> '') and (pArgs.Target <> '') and (pArgs.OutRoot <> '') and (pArgs.ChartsRoot <> ''));
   Result:= (pArgs.Db <> '') and (pArgs.QName <> '');
 end;
 
@@ -914,12 +961,70 @@ begin
   end;
 end;
 
+{ An explicit numeric argument: on the COMMAND line and as the effective value; absent keeps the default. }
+procedure AddNumberArg(var pQ: TQuestionArgs; const pName, pValue: string; var pEffective: Integer);
 begin
+  if pValue = '' then
+    Exit;
+  pQ.Command.Args:= pQ.Command.Args + [Default(TCommandArg)];
+  pQ.Command.Args[High(pQ.Command.Args)].Name:= pName;
+  pQ.Command.Args[High(pQ.Command.Args)].Value:= pValue;
+  pEffective:= StrToInt(pValue);
+end;
+
+{ Question mode: Ask-Report -Plain -DbPath <db> for one ported question, in-process. }
+procedure RunQuestion(const pArgs: TProbeArgs);
+begin
+  var Q:= Default(TQuestionArgs);
+  Q.Question:= pArgs.Question.ToLower;
+  Q.Target:= pArgs.Target;
+  Q.DbPath:= ExpandFileName(pArgs.Db);
+  Q.OutRoot:= pArgs.OutRoot;
+  Q.ChartsRoot:= pArgs.ChartsRoot;
+  Q.Cap:= DEFAULT_CAP;
+  Q.Depth:= DEFAULT_DEPTH;
+  Q.SurfaceCap:= DEFAULT_SURFACE_CAP;
+  Q.MaxRows:= DEFAULT_MAX_ROWS;
+  Q.Command.Question:= Q.Question;
+  Q.Command.Args:= [Default(TCommandArg)];
+  Q.Command.Args[0].Name:= 'Target';
+  Q.Command.Args[0].Value:= pArgs.Target;
+  AddNumberArg(Q, 'Depth', pArgs.Depth, Q.Depth);
+  AddNumberArg(Q, 'Cap', pArgs.Cap, Q.Cap);
+  AddNumberArg(Q, 'MaxRows', pArgs.MaxRows, Q.MaxRows);
+  Q.AllowLiveDb:= True;   { Ask-Report sets DRAGLINT_CHARTS_ALLOW_LIVE_DB=1 around the bundler }
+  Q.AskedOn:= Now;
+  Q.EngineVersion:= DRAGLINT_VERSION;
+  try
+    var A:= AskChartQuestion(Q);
+    for var L in A.Lines do
+      Writeln(L);
+  except
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, 'ask-report: ' + E.Message);
+      ExitCode:= EXIT_REFUSED;
+    end;
+  end;
+end;
+
+begin
+  if (ParamCount = 1) and SameText(ParamStr(1), '--ported') then
+  begin
+    for var Id in PortedQuestionIds do
+      Writeln(Id);
+    Exit;
+  end;
   var Args: TProbeArgs;
   if not ParseArgs(Args) then
   begin
     Writeln(ErrOutput, 'usage: ChartsCoreProbe --db <index.sqlite> --qname <name> [--kinds a,b] [--file <path> --line n --col n --len n]');
     ExitCode:= EXIT_USAGE;
+    Exit;
+  end;
+  if Args.Question <> '' then
+  begin
+    RunQuestion(Args);
     Exit;
   end;
   try

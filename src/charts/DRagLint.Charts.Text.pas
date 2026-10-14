@@ -75,7 +75,7 @@ function ShortName(const pQName, pUnit: string): string;
 /// is NOT TNetEncoding.URL -- it keeps only the RFC 3986 unreserved set (A-Z a-z 0-9 - _ . ~)
 /// and writes every other UTF-8 byte as %XX in UPPERCASE hex (a space is %20, never '+').
 /// The '&amp;amp;' between the two parameters is literal, as the PS emits it.</remarks>
-function RowHref(const pFile: string; pLine: Integer): string;  // dl:ok unused-public-symbol@4270 -- REVIEWED 2026-10-11: step-1 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests.CoreText and the ChartsCoreProbe parity harness, which sit outside this project index
+function RowHref(const pFile: string; pLine: Integer): string;
 
 /// <summary>The one "not shown" sentence every chart uses.</summary>
 /// <param name="pHiddenRows">Rows left out; 0 or less gives ''.</param>
@@ -83,7 +83,7 @@ function RowHref(const pFile: string; pLine: Integer): string;  // dl:ok unused-
 /// <param name="pNoun">What a row is, plural.</param>
 /// <returns>'+N more &lt;noun&gt; (+M more sites) not shown', or '' when nothing was hidden.</returns>
 /// <remarks>Port of Get-DisclosureText (Emit-Common.ps1:736). No trap: integers only.</remarks>
-function DisclosureText(pHiddenRows, pHiddenSites: Integer; const pNoun: string = 'routines'): string;  // dl:ok unused-public-symbol@d21f -- REVIEWED 2026-10-11: step-1 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests.CoreText and the ChartsCoreProbe parity harness, which sit outside this project index
+function DisclosureText(pHiddenRows, pHiddenSites: Integer; const pNoun: string = 'routines'): string;
 
 /// <summary>How many leading '\'-separated segments every directory shares.</summary>
 /// <param name="pDirs">Directories; blanks are ignored.</param>

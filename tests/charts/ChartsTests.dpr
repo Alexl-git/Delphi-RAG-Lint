@@ -61,6 +61,17 @@ uses
   , ChartsTests.CoreChain in 'ChartsTests.CoreChain.pas'
   , DRagLint.Charts.Exceptions in '..\..\src\charts\DRagLint.Charts.Exceptions.pas'
   , ChartsTests.CoreExceptions in 'ChartsTests.CoreExceptions.pas'
+  , DRagLint.Charts.PsSort in '..\..\src\charts\DRagLint.Charts.PsSort.pas'
+  , ChartsTests.PsSort in 'ChartsTests.PsSort.pas'
+  , DRagLint.Charts.Question in '..\..\src\charts\DRagLint.Charts.Question.pas'
+  , DRagLint.Charts.Ask in '..\..\src\charts\DRagLint.Charts.Ask.pas'
+  , ChartsTests.Question in 'ChartsTests.Question.pas'
+  , DRagLint.Charts.Q.TouchesTables in '..\..\src\charts\DRagLint.Charts.Q.TouchesTables.pas'
+  , DRagLint.Charts.Q.ShownWhere in '..\..\src\charts\DRagLint.Charts.Q.ShownWhere.pas'
+  , DRagLint.Charts.Q.Deps in '..\..\src\charts\DRagLint.Charts.Q.Deps.pas'
+  , ChartsTests.Questions in 'ChartsTests.Questions.pas'
+  , DRagLint.Charts.Producer.Delphi in '..\..\src\charts\DRagLint.Charts.Producer.Delphi.pas'
+  , ChartsTests.ProducerDelphi in 'ChartsTests.ProducerDelphi.pas'
   ;
 
 const

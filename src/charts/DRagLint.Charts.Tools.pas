@@ -48,7 +48,7 @@ type
 /// <summary>The settings.json the installer writes: %APPDATA%\drag-lint\settings.json.</summary>
 /// <returns>The path, or '' when APPDATA is not set.</returns>
 /// <remarks>Port of Get-DragLintSettingsPath (Emit-Common.ps1:98).</remarks>
-function DragLintSettingsPath: string;  // dl:ok unused-public-symbol@c7ae -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function DragLintSettingsPath: string;
 
 /// <summary>One key of settings.json, or why it was skipped.</summary>
 /// <param name="pSettingsPath">The settings file; '' means APPDATA was not set.</param>
@@ -92,7 +92,7 @@ function ResolveChartTool(const pWhat, pParamName, pExplicit: string; const pSte
 /// settings "dot", beside the scripts, installed v2, installed, dot.exe on PATH, shared. PS
 /// trap closed: Get-Command searches PATH only (never the current folder), so PATH is walked
 /// entry by entry rather than through FileSearch, which looks in the current folder first.</remarks>
-function ResolveGraphvizDot(const pExplicit, pSettingsPath, pChartsRoot, pScriptDir, pSharedDefault: string): string;  // dl:ok unused-public-symbol@a1c8 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function ResolveGraphvizDot(const pExplicit, pSettingsPath, pChartsRoot, pScriptDir, pSharedDefault: string): string;
 
 /// <summary>A database path made full, refusing anything but a live clone.</summary>
 /// <param name="pPath">The database path.</param>
@@ -105,7 +105,7 @@ function ResolveGraphvizDot(const pExplicit, pSettingsPath, pChartsRoot, pScript
 /// <remarks>Port of Get-CloneDb (Emit-Common.ps1:231). The suffix rule is checked BEFORE the
 /// override, as in the PS. PS traps closed: Test-Path without -PathType accepts a folder too;
 /// EndsWith/StartsWith are OrdinalIgnoreCase; `-eq '1'` on the variable.</remarks>
-function CloneDb(const pPath, pCloneRoot: string; out pNote: string): string;  // dl:ok unused-public-symbol@370a -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function CloneDb(const pPath, pCloneRoot: string; out pNote: string): string;
 
 implementation
 

@@ -95,7 +95,7 @@ type
 /// <param name="pText">The note text (plain).</param>
 /// <returns>The row.</returns>
 /// <remarks>Port of New-NoteRow (Emit-Common.ps1:780).</remarks>
-function NoteRow(const pText: string): TDotRow;  // dl:ok unused-public-symbol@de43 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function NoteRow(const pText: string): TDotRow;
 
 /// <summary>Appends a non-anchored disclosure row to an HTML-label table being built.</summary>
 /// <param name="pTable">The table builder; must not be nil.</param>
@@ -105,7 +105,7 @@ function NoteRow(const pText: string): TDotRow;  // dl:ok unused-public-symbol@d
 /// <param name="pPointSize">Font size.</param>
 /// <remarks>Port of Add-DisclosureRow (Emit-Common.ps1:771). PS trap closed: blank is
 /// IsNullOrWhiteSpace (Char.IsWhiteSpace), not Delphi Trim.</remarks>
-procedure AddDisclosureRow(pTable: TStringBuilder; const pText: string; const pInk: string = NOTE_INK;  // dl:ok unused-public-symbol@e738 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+procedure AddDisclosureRow(pTable: TStringBuilder; const pText: string; const pInk: string = NOTE_INK;
   pPointSize: Integer = NOTE_POINT_SIZE);
 
 /// <summary>Appends a rounded, label-less cluster holding one HTML-table node of rows.</summary>
@@ -121,7 +121,7 @@ procedure AddDisclosureRow(pTable: TStringBuilder; const pText: string; const pI
 /// is a dot syntax error, and skipping it would shift every later port.</exception>
 /// <remarks>Port of Add-RowCluster (Emit-Common.ps1:2849). Colours are inserted raw, as in
 /// the PS; text is escaped with XmlText.</remarks>
-function AddRowCluster(pSb: TStringBuilder; const pCid, pNid, pTitle, pSubtitle: string;  // dl:ok unused-public-symbol@5d88 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function AddRowCluster(pSb: TStringBuilder; const pCid, pNid, pTitle, pSubtitle: string;
   const pRows: TArray<TDotRow>; const pStyle: TClusterStyle): TArray<string>;
 
 /// <summary>Runs dot.exe once for four outputs (svg, plain, png at 110 dpi, pdf).</summary>
@@ -149,7 +149,7 @@ function DotRun(const pDotExe, pDotFile, pSvg, pPlain, pPng, pPdf: string): TArr
 /// <returns>The five paths and the SVG anchor count.</returns>
 /// <exception cref="EChartsDot">As DotRun.</exception>
 /// <remarks>Port of Invoke-DotLayout (Emit-Common.ps1:2814).</remarks>
-function DotLayout(const pDotExe, pDotText, pOutDir, pBase: string; out pMessages: TArray<string>): TDotLayout;  // dl:ok unused-public-symbol@8a44 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function DotLayout(const pDotExe, pDotText, pOutDir, pBase: string; out pMessages: TArray<string>): TDotLayout;
 
 implementation
 
