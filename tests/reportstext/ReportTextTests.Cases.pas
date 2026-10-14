@@ -76,8 +76,6 @@ type
     [Test] procedure ReasonStripsPrefix;
     [Test] procedure ReindexCommandsAreParsed;
     [Test] procedure FolderTargetIndexIsNeverAccepted;
-    [Test] procedure AskReportInstalledLayoutComesFirst;
-    [Test] procedure AskReportNotFoundNamesEveryPath;
   end;
 
 implementation
@@ -489,7 +487,7 @@ end;
 
 procedure TReportFormatterTests.HeaderFixtureMatchesPowerShellPort;
 begin
-  { the same bytes charts\src\Report.DocInsight.ps1 produces (Test-AskReport AR-DOC-PORT) }
+  { the header fixture the deleted PowerShell port (Report.DocInsight.ps1) was also held to }
   CheckFixtureRows(HEADER_FIXTURE);
 end;
 
@@ -576,31 +574,28 @@ procedure TReportGlueTests.CmdLineCarriesEveryArgument;
 var
   Cmd: string;
 begin
-  Cmd:= BuildAskReportCmdLine('C:\PS\pwsh.exe', 'C:\R\charts\src\Ask-Report.ps1', 'who-writes',  // dl:ok hardcoded-absolute-path@a8ba -- synthetic test input: names no real location and reaches no filesystem call
-                              'Unit.TFoo.FBar', 'C:\P\Unit.pas', 'C:\E\drag-lint.exe');  // dl:ok hardcoded-absolute-path@1799 -- synthetic test input: names no real location and reaches no filesystem call
-  Assert.IsTrue(StartsStr('"C:\PS\pwsh.exe" -NoProfile', Cmd), Cmd);
-  Assert.Contains(Cmd, '-File "C:\R\charts\src\Ask-Report.ps1"');
-  Assert.Contains(Cmd, '-Question who-writes');
-  Assert.Contains(Cmd, '-Target "Unit.TFoo.FBar"');
-  Assert.Contains(Cmd, '-In "C:\P\Unit.pas"');
-  Assert.Contains(Cmd, '-Engine "C:\E\drag-lint.exe"');
-  Assert.Contains(Cmd, '-Open');
-  { the menu wraps the answer in its own DocInsight block, so the script must
+  Cmd:= BuildAskCmdLine('C:\E\drag-lint.exe', 'who-writes', 'Unit.TFoo.FBar', 'C:\P\Unit.pas');
+  { the engine's own verb: no pwsh, no Ask-Report.ps1 to find }
+  Assert.IsTrue(StartsStr('"C:\E\drag-lint.exe" ask who-writes', Cmd), Cmd);
+  Assert.Contains(Cmd, '--target "Unit.TFoo.FBar"');
+  Assert.Contains(Cmd, '--in "C:\P\Unit.pas"');
+  Assert.Contains(Cmd, ' --open');
+  Assert.AreEqual(0, Pos('pwsh', Cmd), Cmd);
+  { the menu wraps the answer in its own DocInsight block, so the verb must
     answer plain or the block is wrapped twice }
-  Assert.Contains(Cmd, ' -Plain');
+  Assert.Contains(Cmd, ' --plain');
 end;
 
 procedure TReportGlueTests.CmdLineCarriesToOnlyWhenGiven;
 var
   Cmd: string;
 begin
-  Cmd:= BuildAskReportCmdLine('p.exe', 'a.ps1', 'path', 'U.TA.Run', 'U.pas', 'e.exe', 'U.TB.Stop');
-  Assert.Contains(Cmd, '-Target "U.TA.Run"');
-  Assert.Contains(Cmd, '-To "U.TB.Stop"');
-  Cmd:= BuildAskReportCmdLine('p.exe', 'a.ps1', 'who-calls', 'U.TA.Run', 'U.pas', 'e.exe');
-  Assert.AreEqual(0, Pos('-To ', Cmd), Cmd);
+  Cmd:= BuildAskCmdLine('e.exe', 'path', 'U.TA.Run', 'U.pas', 'U.TB.Stop');
+  Assert.Contains(Cmd, '--target "U.TA.Run"');
+  Assert.Contains(Cmd, '--to "U.TB.Stop"');
+  Cmd:= BuildAskCmdLine('e.exe', 'who-calls', 'U.TA.Run', 'U.pas');
+  Assert.AreEqual(0, Pos('--to ', Cmd), Cmd);
 end;
-
 procedure TReportGlueTests.OnlyPathTakesSecondRoutine;
 begin
   Assert.IsTrue(QuestionTakesSecondRoutine('path'));
@@ -644,32 +639,6 @@ begin
     '    & ''C:\E\drag-lint.exe'' index --project ''C:\P\A.dproj'' --db ''C:\x.sqlite'' --rebuild'))),
     'a rebuild is not the incremental job');
   Assert.AreEqual(0, Integer(Length(ParseReindexCommands(''))));
-end;
-
-procedure TReportGlueTests.AskReportInstalledLayoutComesFirst;
-const
-  CANDIDATE_COUNT = 3;  // flat install, v2 install (app\charts), repo
-var
-  Paths: TArray<string>;
-begin
-  Paths:= AskReportCandidates('C:\App\bin\drag-lint.exe');  // dl:ok hardcoded-absolute-path@e69f -- synthetic test input: names no real location and reaches no filesystem call
-  Assert.AreEqual(CANDIDATE_COUNT, Integer(Length(Paths)));
-  Assert.AreEqual('C:\App\bin\Ask-Report.ps1', Paths[0], 'installed: beside the engine');  // dl:ok hardcoded-absolute-path@5caf -- synthetic test input: names no real location and reaches no filesystem call
-  Assert.AreEqual('C:\App\charts\Ask-Report.ps1', Paths[1], 'installed v2: {app}\charts beside {app}\bin');  // dl:ok hardcoded-absolute-path@8dff -- synthetic test input: names no real location and reaches no filesystem call
-  Assert.AreEqual('C:\charts\src\Ask-Report.ps1', Paths[2], 'repo: two folders above the engine');  // dl:ok hardcoded-absolute-path@3b4e -- synthetic test input: names no real location and reaches no filesystem call
-end;
-
-procedure TReportGlueTests.AskReportNotFoundNamesEveryPath;
-const
-  FIRST_PATH = 'C:\A\Ask-Report.ps1';  // dl:ok hardcoded-absolute-path@3718 -- synthetic test input: names no real location and reaches no filesystem call
-  SECOND_PATH = 'C:\B\Ask-Report.ps1';  // dl:ok hardcoded-absolute-path@bebc -- synthetic test input: names no real location and reaches no filesystem call
-var
-  Msg: string;
-begin
-  Msg:= AskReportNotFoundText([FIRST_PATH, SECOND_PATH]);
-  Assert.IsTrue(Pos(FIRST_PATH, Msg) > 0, Msg);
-  Assert.IsTrue(Pos(SECOND_PATH, Msg) > 0, Msg);
-  Assert.IsTrue(Pos(FIRST_PATH, Msg) < Pos(SECOND_PATH, Msg), 'in search order');
 end;
 
 initialization  TDUnitX.RegisterTestFixture(TReportCatalogTests);

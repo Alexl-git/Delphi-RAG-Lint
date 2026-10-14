@@ -1,7 +1,7 @@
 unit DragLint.Plugin.Reports;
 
-{ The drag-lint > Reports submenu: every question of charts\src\Ask-Report.ps1,
-  asked from inside RAD Studio.
+{ The drag-lint > Reports submenu: every question of `drag-lint ask` (the engine's
+  twin of charts\src\Ask-Report.ps1), asked from inside RAD Studio.
 
   WHAT A CLICK DOES.
     1. Picks the target. Caret questions (routine / field / type) save first
@@ -13,13 +13,15 @@ unit DragLint.Plugin.Reports;
        because feeds-from and lands-where refuse the typeat form. Project
        questions send 'project'; table questions prompt for a name. Every
        target except 'project' is shown in an editable prompt first.
-    2. Runs `pwsh -File Ask-Report.ps1 ... -Open` through the plugin's ONE
+    2. Runs `drag-lint ask ... --plain --open` through the plugin's ONE
        background runner, the job queue (no second runner), so a report never
        collides with a reindex or lint-all on the same database. Charts open in
-       the browser (-Open).
+       the browser (--open). No pwsh and no Ask-Report.ps1 are looked for here:
+       the engine answers the ported questions in-process and runs
+       Ask-Report.ps1 itself for the rest.
     3. On exit 0 the text answer becomes a DocInsight block
        (DragLint.Plugin.ReportText), put on the clipboard and shown in a small
-       modeless window with a Copy button. Exit 1 and 2 show Ask-Report's
+       modeless window with a Copy button. Exit 1 and 2 show the verb's
        reason; exit 3 (stale index) shows the reindex command and offers to run
        it as the incremental index job -- never a folder target, never a
        --rebuild.
@@ -95,7 +97,7 @@ uses
 
 const
   MSG_PREFIX = 'drag-lint Reports: ';
-  { Ask-Report.ps1's documented exit codes }
+  { drag-lint ask's documented exit codes (Ask-Report.ps1's) }
   ASK_EXIT_ANSWERED = 0;
   ASK_EXIT_REFUSED = 1;
   ASK_EXIT_SETUP = 2;
@@ -104,7 +106,6 @@ const
     a non-streaming job, so this is a ceiling, not a kill. }
   REPORT_TIMEOUT_MS = 600000;
   TYPEAT_TIMEOUT_MS = 20000;
-  PWSH_REL = 'PowerShell\7\pwsh.exe';
   PROJECT_TARGET = 'project';
   { the report window }
   WIN_WIDTH = 820;
@@ -199,23 +200,6 @@ begin
 end;
 
 { ---- target selection ---- }
-
-{ PowerShell 7's default install, else pwsh.exe on PATH. ProgramW6432 first:
-  bds.exe is a 32-bit process, and in it %ProgramFiles% names the (x86)
-  folder, where PowerShell 7 x64 is never installed. }
-function DefaultPwshPath: string;
-begin
-  Result:= GetEnvironmentVariable('ProgramW6432');
-  if Result = '' then Result:= GetEnvironmentVariable('ProgramFiles');
-  Result:= IncludeTrailingPathDelimiter(Result) + PWSH_REL;
-end;
-
-function FindPwsh: string;
-begin
-  if FileExists(DefaultPwshPath) then Exit(DefaultPwshPath);
-  Result:= FileSearch('pwsh.exe', GetEnvironmentVariable('PATH'));
-  if Result <> '' then Result:= ExpandFileName(Result);
-end;
 
 function ActiveEditView: IOTAEditView;
 var
@@ -427,7 +411,7 @@ begin
     ASK_EXIT_STALE:
       OfferReindex(pOutput);
   else
-    ShowMessage(Format(MSG_PREFIX + 'Ask-Report.ps1 ended with exit %d.', [pExit]) + sLineBreak + sLineBreak +
+    ShowMessage(Format(MSG_PREFIX + 'drag-lint ask ended with exit %d.', [pExit]) + sLineBreak + sLineBreak +
                 AskReportReason(pOutput));
   end;
 end;
@@ -473,27 +457,16 @@ begin
 end;
 
 { Everything a run needs besides the target; says plainly what is missing. }
-function ResolveRunTools(out pExe, pScript, pPwsh, pInFile: string): Boolean;
+function ResolveRunTools(out pExe, pInFile: string): Boolean;
 var
   Problem: string;
 begin
   pExe:= DragLintExe;
-  var Candidates: TArray<string>:= AskReportCandidates(pExe);
-  pScript:= '';
-  for var Candidate: string in Candidates do
-    if FileExists(Candidate) then
-    begin
-      pScript:= Candidate;
-      Break;
-    end;
-  pPwsh:= FindPwsh;
   pInFile:= '';
   var View: IOTAEditView:= ActiveEditView;
   if View <> nil then pInFile:= View.Buffer.FileName;
-  if pScript = '' then
-    Problem:= AskReportNotFoundText(Candidates)
-  else if pPwsh = '' then
-    Problem:= 'PowerShell 7 (pwsh.exe) was not found at ' + DefaultPwshPath + ' or on PATH.'
+  if (pExe = '') or not FileExists(pExe) then
+    Problem:= 'drag-lint.exe was not found' + (if pExe = '' then '.' else ' at ' + pExe + '.')
   else if pInFile = '' then
     Problem:= 'open a unit of the project first -- the report finds the index from the active file.'
   else
@@ -505,8 +478,6 @@ end;
 procedure InvokeReportQuestion(Sender: TObject);
 var
   Exe   : string;
-  Script: string;
-  Pwsh  : string;
   InFile: string;
   Target: string;
   ToName: string;
@@ -515,11 +486,11 @@ begin
   var Idx: Integer:= TMenuItem(Sender).Tag;
   if (Idx < Low(REPORT_QUESTIONS)) or (Idx > High(REPORT_QUESTIONS)) then Exit;
   var Q: TReportQuestion:= REPORT_QUESTIONS[Idx];
-  if not (ResolveRunTools(Exe, Script, Pwsh, InFile) and ChooseTarget(Q, InFile, Target)) then Exit;
+  if not (ResolveRunTools(Exe, InFile) and ChooseTarget(Q, InFile, Target)) then Exit;
   ToName:= '';
   if QuestionTakesSecondRoutine(Q.Id) and not PromptSecondRoutine(Q, Target, ToName) then Exit;
   var Shown: string:= if ToName = '' then Target else Target + ' -> ' + ToName;
-  EnqueueReport(Q.Id, Shown, BuildAskReportCmdLine(Pwsh, Script, Q.Id, Target, InFile, Exe, ToName));
+  EnqueueReport(Q.Id, Shown, BuildAskCmdLine(Exe, Q.Id, Target, InFile, ToName));
 end;
 
 end.
