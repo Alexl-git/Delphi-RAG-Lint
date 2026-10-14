@@ -3,6 +3,26 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Fixed
+
+- **pchar-arithmetic decides on the declared type, not a `P` prefix.** It matched
+  `^P[A-Z][a-z]` names, so `PRows := PRows + [Row]` on a `TArray` fired and a typed `PChar`
+  named `Walk` did not. A new query predicate `(#declared-type? @ident "regex")` finds the
+  operand's declaration in the file (inline vars above the use, routine locals and parameters,
+  unit vars; innermost wins) and matches its type. An operand whose declaration is not visible
+  there -- a field, another unit's global, an untyped inline var -- is now SILENT (no guess).
+- **`lint <file>` no longer calls a live `dl:ok` marker unused when it did not evaluate the
+  marker's rule.** Cross-file duplicate-code (always), project rules and class metrics with no
+  index covering the file, doc-drift / missing-doc without `--project-rules`, unit-not-in-dpr
+  without `--project`. lint-all still judges every marker. Guard
+  `run_marker_unused_unjudgeable_rules.ps1`.
+- **used-before-assignment:** an out/var argument of a call in an inline-if CONDITION now counts
+  as assigned in its branches (`var K := if Find(X, Rt) then Rt.Id else 0`), and an inline
+  `var X: T;` declaration is no longer read as a use of an earlier same-named inline var.
+  Analysis only -- extractor version unchanged.
+
 ## v1.31.0-alpha -- 2026-10-14
 
 ### Added

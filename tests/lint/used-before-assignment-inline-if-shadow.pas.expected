@@ -1,0 +1,11 @@
+# (a) 29: Rt read in the branch of an inline-if whose condition assigns it (out)
+!used-before-assignment 29
+# control: 37 reads Rt in a branch whose condition does not assign it
+used-before-assignment 37
+# (c) 54: `var Why: Integer;` after an inner-block `var Why := ...` is not a read
+!used-before-assignment 54
+!used-before-assignment 55
+!used-before-assignment 56
+# control: 68 reads the outer Why, which nothing assigned; its declaration (67) is not a read
+!used-before-assignment 67
+used-before-assignment 68
