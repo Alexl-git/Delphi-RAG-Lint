@@ -3,6 +3,21 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.29.2-alpha -- 2026-10-14
+
+### Changed
+
+- **Class metrics in `lint <file> --db` measure only that file's classes, and neither verb
+  computes a metric its own filter would drop.** `TClassMetrics` used to compute RFC, CBO,
+  LCOM4 and middle-man for every class in the index, and the fan-in pass for `fan-in` and
+  `instability`, which both ship OFF and were filtered out afterwards. Class inventory,
+  parents, NOC, DIT and fan-in are still whole-store, so a class's answer is unchanged.
+  `lint-all` on ORM3 (Micronite2027) is byte-identical to 1.29.1 (9,427,865 bytes), and
+  per-file class-metric findings match `lint-all` (26/26 and 17/17 on the two heaviest
+  units). Measured on BASICS.PAS: 35.4 s -> 20.3 s (class metrics ~14 s -> 0.7 s). Turning
+  `fan-in` / `instability` on (`--enable`, config, or `--rule`) still computes them.
+  New guard `run_lint_file_class_metrics_parity.ps1`.
+
 ## v1.29.1-alpha -- 2026-10-14
 
 ### Changed
