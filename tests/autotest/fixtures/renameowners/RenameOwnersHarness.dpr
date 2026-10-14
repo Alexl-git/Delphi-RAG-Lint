@@ -31,6 +31,11 @@ const
   MEMBERSHIP_TEXT: array[TDbMembership] of string = ('member', 'notmember', 'unknown');
   FRESHNESS_TEXT: array[TOwnerFreshness] of string = ('fresh', 'reindexed', 'unverified');
   REINDEX_TIMEOUT_MS = 120000;
+  { the wg fixture's edit positions: My_Const in wg1 (line 3 col 3), its use in wg2 (line 2 col 7) }
+  WG_DECL_LINE = 3;
+  WG_DECL_COL  = 3;
+  WG_USE_LINE  = 2;
+  WG_USE_COL   = 7;
   TOUCH_AHEAD_SEC = 10; { mtime_unix is in SECONDS: an edit in the second the DB was built would read as unchanged }
 
 var
@@ -118,7 +123,7 @@ begin
   UniqueString(Cmd);
   SI:= Default(TStartupInfo);
   SI.cb:= SizeOf(SI);
-  Result:= CreateProcess(nil, PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, PChar(W), SI, PI);
+  Result:= CreateProcess(PChar(GetEnvironmentVariable('ComSpec')), PChar(Cmd), nil, nil, False, CREATE_NO_WINDOW, nil, PChar(W), SI, PI);
   if not Result then Exit;
   try
     Result:= (WaitForSingleObject(PI.hProcess, REINDEX_TIMEOUT_MS) = WAIT_OBJECT_0)
@@ -235,7 +240,7 @@ begin
   F2:= W + 'wg2.pas';
   TFile.WriteAllText(F1, 'unit wg1;'#13#10'const'#13#10'  My_Const = 1;'#13#10, TEncoding.ANSI);
   TFile.WriteAllText(F2, 'unit wg2;'#13#10'  X:= My_Const;'#13#10, TEncoding.ANSI);
-  Edits:= [GuardEdit(F1, 3, 3, 'My_Const', 'MyConst'), GuardEdit(F2, 2, 7, 'my_const', 'MyConst')];
+  Edits:= [GuardEdit(F1, WG_DECL_LINE, WG_DECL_COL, 'My_Const', 'MyConst'), GuardEdit(F2, WG_USE_LINE, WG_USE_COL, 'my_const', 'MyConst')];
   Writeln('wg.fresh=', if FindStaleEdit(Edits, Bad) then 'stale' else 'ok');
   TFile.WriteAllText(F2, 'unit wg2;'#13#10'  // moved'#13#10'  X:= My_Const;'#13#10, TEncoding.ANSI);
   Writeln('wg.moved=', if FindStaleEdit(Edits, Bad) then 'stale' else 'ok');

@@ -37,7 +37,13 @@ begin
   Result:= if (AIndex >= 0) and (AIndex <= High(AItems)) then AItems[AIndex] else '<none>';
 end;
 
+const
+  CAP_RENAME_ROWS   = 80;  { far more than the dialog's cap of 10, as on BASICS.PAS }
+  CAP_DROPPED_ROWS  = 15;  { more than the cap of 10 too }
+  CAP_DROPPED_LINE0 = 100; { the dropped rows' line numbers start below the renames' }
+
 var
+  SB   : TStringBuilder;
   Prev : TRenamePreview;
   Diags: TArray<TDragLintDiagnostic>;
   Diags2: TArray<TDragLintDiagnostic>;
@@ -217,8 +223,14 @@ begin
   { cap (fix round 1, Important 2): Fix all on BASICS.PAS has ~80 renames --
     the dialog lists 10 of each list plus '... and K more'; projects stay whole }
   Txt:= 'rename-owners: 2 of 3 indexes'#13#10 + 'rename-project: A index=fresh'#13#10 + 'rename-project: B index=fresh'#13#10;
-  for I:= 0 to 79 do Txt:= Txt + Format('rename-target: L%d C_%d -> C%d apply A=1 B=1'#13#10, [I + 1, I, I]);
-  for I:= 0 to 14 do Txt:= Txt + Format('rename-target: L%d D_%d -> D%d dropped project B: taken'#13#10, [I + 100, I, I]);
+  SB:= TStringBuilder.Create(Txt);
+  try
+    for I:= 0 to CAP_RENAME_ROWS - 1 do SB.AppendFormat('rename-target: L%d C_%d -> C%d apply A=1 B=1'#13#10, [I + 1, I, I]);
+    for I:= 0 to CAP_DROPPED_ROWS - 1 do SB.AppendFormat('rename-target: L%d D_%d -> D%d dropped project B: taken'#13#10, [I + CAP_DROPPED_LINE0, I, I]);
+    Txt:= SB.ToString;
+  finally
+    SB.Free;
+  end; // try
   Prev:= ParseRenamePreview(Txt);
   Txt:= RenameConfirmText('BASICS.PAS', Prev.OldName, Prev.NewName, Prev);
   Writeln('cap.renames=', Length(Prev.Renames));

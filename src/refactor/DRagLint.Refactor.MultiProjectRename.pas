@@ -278,7 +278,7 @@ uses
   , DRagLint.Core.Interfaces
   , DRagLint.Refactor.Rename
   , DRagLint.Storage.SQLite
-  , DRagLint.Index.Freshness
+  , DRagLint.Index.Freshness // dl:unit DRagLint.Index.Freshness accepted -- StaleEvidence calls ChangedFilePaths and reads the INDEXED_AT_KEY stamp the freshness module defines; the const travels with that call
   , DRagLint.Index.Plan
   , DRagLint.Project.Resolver
   , DRagLint.Storage.FileMembership
