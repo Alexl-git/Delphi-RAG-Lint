@@ -339,6 +339,21 @@ function SqlVerbTables(const pText: string; pSet: TSqlTableSet): TArray<TSqlVerb
 /// <returns>The sorted, unique names (the first of equal names in sorted order is kept).</returns>
 function SortUniqueNames(const pNames: TArray<string>): TArray<string>;
 
+/// <summary>A regex for pName as a whole word, `$` counting as a word character.</summary>
+/// <param name="pName">The name; escaped.</param>
+/// <returns>The pattern, to be used case-SENSITIVELY (the SQL in this corpus is upper case).</returns>
+/// <remarks>Port of Get-WordRx, defined identically in Emit-Consumers.ps1 and
+/// Emit-LandsWhere.ps1; both ports share this one.</remarks>
+function WordRx(const pName: string): string;
+
+/// <summary>How many sql_table symbols an index holds: the role check that tells a SQL-script
+/// index from a Delphi project index.</summary>
+/// <param name="pIndex">The (guarded) index; not owned.</param>
+/// <returns>The count; 0 for a Delphi index.</returns>
+/// <remarks>Port of Get-SqlTableSymbolCount, defined identically in Emit-Consumers.ps1 and
+/// Emit-LandsWhere.ps1; both ports share this one.</remarks>
+function SqlTableSymbolCount(pIndex: TChartsIndex): Integer;
+
 implementation
 
 uses
@@ -908,6 +923,21 @@ begin
   end;
   FTrigsDone:= True;
   Result:= FTrigs;
+end;
+
+function WordRx(const pName: string): string;
+begin
+  Result:= '(?<![A-Za-z0-9_$])' + TRegEx.Escape(pName) + '(?![A-Za-z0-9_$])';
+end;
+
+function SqlTableSymbolCount(pIndex: TChartsIndex): Integer;
+begin
+  var Rows:= pIndex.Query('SELECT COUNT(*) AS n FROM symbols WHERE kind = ''sql_table''');
+  try
+    Result:= Rows[0].I('n');
+  finally
+    Rows.Free;
+  end;
 end;
 
 initialization

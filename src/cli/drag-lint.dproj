@@ -283,6 +283,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.TouchesTables.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.ShownWhere.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Deps.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Pairs.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Producer.Delphi.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.AskVerb.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.ClassSurface.pas"/>
@@ -293,6 +294,10 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.ProtocolTrace.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Lifecycle.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Effects.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.FeedsFrom.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.LandsWhere.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Consumers.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.ExceptionPaths.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

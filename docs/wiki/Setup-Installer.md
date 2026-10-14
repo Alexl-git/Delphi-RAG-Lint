@@ -47,7 +47,7 @@ RAD Studio 13 (37.0) only.
 
 * **Windows x64.**
 * **PowerShell 7** for `draglint://`, the MCP task, and the chart questions not yet
-  ported to Delphi (the engine answers the ported ones itself -- 11 of 26 as of v1.30.0 --
+  ported to Delphi (the engine answers the ported ones itself -- 15 of 26 as of v1.31.0-alpha --
   and runs the rest through PowerShell). Setup does not bundle it: if `pwsh.exe` is missing it says so,
   skips those two tasks and carries on. Install it from https://aka.ms/powershell
   and run setup again.

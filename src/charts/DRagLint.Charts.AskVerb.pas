@@ -167,16 +167,13 @@ implementation
 uses
   System.SysUtils, System.IOUtils, System.JSON, System.StrUtils
   , DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness
-  , DRagLint.Charts.DocInsight, DRagLint.Charts.Process, DRagLint.Charts.Render
+  , DRagLint.Charts.DocInsight, DRagLint.Charts.Render
   , DRagLint.Charts.Question  // dl:unit DRagLint.Charts.Question accepted -- the question catalog and its caption phrase travel with the question types
-  , DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Producer.Delphi
+  , DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Pairs
   ;
 
 const
   CRLF = #13#10;
-  ENGINE_TIMEOUT_MS = 120000;
-  PAIRS_FILE_NAME = 'report-pairs.json';
-  USER_PAIRS_REL = 'drag-lint\' + PAIRS_FILE_NAME;
   DRAG_DIR = '_D-RAG';
   SHELL_HTML = 'index.html';
   Q_ROUND_TRIP = 'round-trip';
@@ -187,25 +184,9 @@ const
   Q_PATH = 'path';
 
 type
-  { One entry of report-pairs.json. }
-  TReportPair = record
-    Name, Client, Server, Sql, SqlSection: string;
-  end;
-
-  { Every refusal: the exit code travels with the message, as Ask-Report's Stop-Ask. }
-  EAskStop = class(Exception)
-  private
-    FCode: Integer;
-  public
-    constructor CreateCode(pCode: Integer; const pMessage: string);
-    property Code: Integer read FCode;
-  end;
-
-constructor EAskStop.CreateCode(pCode: Integer; const pMessage: string);
-begin
-  inherited Create(pMessage);
-  FCode:= pCode;
-end;
+  { Every refusal: the exit code travels with the message, as Ask-Report's Stop-Ask. The pairing
+    unit's own refusal, so a pairing stop is an ask stop. }
+  EAskStop = EReportPairStop;
 
 function AskUsage: TArray<string>;
 begin
@@ -362,104 +343,6 @@ begin
   Result:= AnswerLines(FormatAnswerAsDocInsight(QuestionPhrase(pQuestion), pQuestion, pShownTarget, pAskedOn, pPlainText));
 end;
 
-{ ---- the engine as a child process (resolve-dbs), as Ask-Report asks it ---- }
-
-{ The JSON document of an engine answer: the first LINE from which the rest parses (a note line
-  such as '[note] ...' also starts with '['). nil when there is none; the caller frees it. }
-function EngineJson(const pText: string): TJSONValue;
-begin
-  var Lines:= SplitAnswerLines(pText);
-  for var I:= 0 to High(Lines) do
-  begin
-    var T:= Lines[I].TrimLeft;
-    if not (T.StartsWith('{') or T.StartsWith('[')) then Continue;
-    var Rest:= string.Join(#10, Lines, I, Length(Lines) - I);
-    Result:= TJSONObject.ParseJSONValue(Rest);
-    if Result <> nil then Exit;
-  end;
-  Result:= nil;
-end;
-
-{ Runs `<engine> <args>` and returns its JSON document (nil on a non-zero exit or no JSON). }
-function AskEngine(const pEngine: string; const pArgs: array of string; out pExit: Integer): TJSONValue;
-var
-  Run: TProcessResult;
-begin
-  Result:= nil;
-  pExit:= -1;
-  var Line:= QuoteArg(pEngine);
-  for var A in pArgs do Line:= Line + ' ' + QuoteArg(A);
-  if not RunCapture(Line, '', ENGINE_TIMEOUT_MS, Run) then Exit;
-  pExit:= Run.ExitCode;
-  if Run.TimedOut or (Run.ExitCode <> 0) then Exit;
-  Result:= EngineJson(Run.StdOut);
-end;
-
-function JsonStrings(const pValue: TJSONValue): TArray<string>;
-begin
-  Result:= nil;
-  if not (pValue is TJSONArray) then Exit;
-  for var V in TJSONArray(pValue) do
-    if (V is TJSONString) and (V.Value <> '') then Result:= Result + [V.Value];
-end;
-
-function SamePath(const pA, pB: string): Boolean;
-begin
-  Result:= (pA <> '') and (pB <> '') and SameText(ExpandFileName(pA), ExpandFileName(pB));
-end;
-
-{ ---- the pairing file ---- }
-
-function ResolveReportPairsFile: string;
-begin
-  var AppData:= GetEnvironmentVariable('APPDATA');
-  var User:= if AppData <> '' then TPath.Combine(AppData, USER_PAIRS_REL) else '';
-  var Why: string;
-  var Script:= ResolveAskReportScript('', Why);
-  var Repo:= if Script <> '' then TPath.Combine(ExtractFileDir(ExtractFileDir(Script)), PAIRS_FILE_NAME) else '';
-  if (User <> '') and TFile.Exists(User) then Exit(User);
-  if (Repo <> '') and (TFile.Exists(Repo) or (User = '')) then Exit(Repo);
-  Result:= User;
-end;
-
-function LoadPairs(const pFile: string): TArray<TReportPair>;
-begin
-  Result:= nil;
-  var Doc:= TJSONObject.ParseJSONValue(TFile.ReadAllText(pFile));
-  if Doc = nil then
-    raise EAskStop.CreateCode(ASK_VERB_EXIT_REFUSED, pFile + ' is not valid JSON');
-  try
-    var Arr: TJSONArray;
-    if not ((Doc is TJSONObject) and TJSONObject(Doc).TryGetValue<TJSONArray>('pairs', Arr)) then Exit;
-    for var V in Arr do
-    begin
-      if not (V is TJSONObject) then Continue;
-      var O:= TJSONObject(V);
-      var P:= Default(TReportPair);
-      P.Name:= O.GetValue<string>('name', '');
-      P.Client:= O.GetValue<string>('client', '');
-      P.Server:= O.GetValue<string>('server', '');
-      P.Sql:= O.GetValue<string>('sql', '');
-      P.SqlSection:= O.GetValue<string>('sqlSection', '');
-      Result:= Result + [P];
-    end;
-  finally
-    Doc.Free;
-  end;
-end;
-
-function FindPair(const pPairs: TArray<TReportPair>; const pDb: string; out pPair: TReportPair): Boolean;
-begin
-  for var P in pPairs do
-    if SamePath(P.Client, pDb) or SamePath(P.Server, pDb) then
-    begin
-      pPair:= P;
-      Exit(True);
-    end;
-  pPair:= Default(TReportPair);
-  Result:= False;
-end;
-
 { ---- the run ---- }
 
 type
@@ -467,9 +350,7 @@ type
   TAskRun = record
     Args      : TAskVerbArgs;
     Engine    : string;
-    PairsFile : string;
-    Pairs     : TArray<TReportPair>;
-    PairsFound: Boolean;
+    PairSet   : TReportPairs;
     NeedServer: Boolean;
     NeedSql   : Boolean;
     WantOther : Boolean;
@@ -525,7 +406,7 @@ begin
       { several projects hold this unit: the one report-pairs.json names is the declared choice }
       var Paired: TArray<string>:= nil;
       for var C in Cands do
-        if FindPair(Pairs, C, P) then Paired:= Paired + [C];
+        if FindReportPair(PairSet.Pairs, C, P) then Paired:= Paired + [C];
       if Length(Paired) <> 1 then
         Stop(ASK_VERB_EXIT_SETUP, Format('%d indexes cover %s: %s -- pass --project <x.dproj> to pick one',
           [Length(Cands), InFull, string.Join(', ', Cands)]));
@@ -538,79 +419,34 @@ begin
       'choosing that index is the step being asked for.');
 end;
 
+{ Ask-Report's step 2, through the one shared implementation (DRagLint.Charts.Pairs). }
 procedure TAskRun.ResolveOthers;
-var
-  Pair: TReportPair;
-  Code: Integer;
 begin
-  var FromPairs: TArray<string>:= nil;
-  var MissServer:= NeedServer and (Args.ServerDb = '');
-  var MissSql:= NeedSql and (Args.SqlDb = '');
-  var MissOther:= WantOther and (Args.CounterpartDb = '');
-  if MissServer or MissSql or MissOther then
-  begin
-    if not FindPair(Pairs, Args.DbPath, Pair) then
-    begin
-      if NeedServer or NeedSql then
-      begin
-        var Reads:= if NeedServer then 'the SERVER index and ' else '';
-        var OrPass:= 'or pass ' + (if NeedServer then '--server-db and ' else '') + '--sql-db';
-        if not PairsFound then
-          Stop(ASK_VERB_EXIT_SETUP, Format('%s also reads %sthe SQL-script index, and %s not found at %s, so no pairs are configured -- copy ' +
-            'charts\report-pairs.example.json to that path and fill in client, server and sql (each checked with resolve-dbs), %s',
-            [Args.Question, Reads, ExtractFileName(PairsFile), PairsFile, OrPass]));
-        Stop(ASK_VERB_EXIT_SETUP, Format('%s also reads %sthe SQL-script index, and %s has no entry for %s -- add one (client, server, sql; ' +
-          'check each with resolve-dbs), %s', [Args.Question, Reads, PairsFile, Args.DbPath, OrPass]));
-      end;
-      { crosses-boundary without a counterpart draws one side and says so (the bundler's own behaviour) }
-    end
-    else
-    begin
-      if NeedServer and (Args.ServerDb = '') then
-      begin
-        if not SamePath(Pair.Client, Args.DbPath) then
-          Stop(ASK_VERB_EXIT_SETUP, Format('%s starts from the CLIENT index; %s is the SERVER of pair ''%s'' in %s -- pass the client project',
-            [Args.Question, Args.DbPath, Pair.Name, PairsFile]));
-        Args.ServerDb:= Pair.Server;
-        FromPairs:= FromPairs + [Args.ServerDb];
-      end;
-      if NeedSql and (Args.SqlDb = '') then
-      begin
-        Args.SqlDb:= Pair.Sql;
-        FromPairs:= FromPairs + [Args.SqlDb];
-      end;
-      if WantOther and (Args.CounterpartDb = '') then
-      begin
-        Args.CounterpartDb:= if SamePath(Pair.Client, Args.DbPath) then Pair.Server else Pair.Client;
-        FromPairs:= FromPairs + [Args.CounterpartDb];
-      end;
-    end;
-  end;
-  { a pairing-file path must still be one the manifest configures }
-  if Length(FromPairs) = 0 then Exit;
-  var J:= AskEngine(Engine, ['resolve-dbs', '--json'], Code);
-  var Known: TArray<string>;
-  try
-    Known:= JsonStrings(J);
-  finally
-    J.Free;
-  end;
-  for var F in FromPairs do
-  begin
-    var Found:= False;
-    for var K in Known do
-      if SamePath(K, F) then Found:= True;
-    if not Found then
-      Stop(ASK_VERB_EXIT_SETUP, Format('%s names %s, which the engine''s manifest no longer configures (resolve-dbs) -- fix the pair', [PairsFile, F]));
-  end;
+  var Req:= Default(TPairRequest);
+  Req.Question:= Args.Question;
+  Req.Db:= Args.DbPath;
+  Req.Engine:= Engine;
+  Req.NeedServer:= NeedServer;
+  Req.NeedSql:= NeedSql;
+  Req.WantOther:= WantOther;
+  Req.ServerFlag:= '--server-db';
+  Req.SqlFlag:= '--sql-db';
+  var Ix:= Default(TPairedIndexes);
+  Ix.Server:= Args.ServerDb;
+  Ix.Sql:= Args.SqlDb;
+  Ix.Other:= Args.CounterpartDb;
+  PairOtherIndexes(PairSet, Req, Ix);
+  Args.ServerDb:= Ix.Server;
+  Args.SqlDb:= Ix.Sql;
+  Args.CounterpartDb:= Ix.Other;
 end;
 
 function TAskRun.ReindexCommand(const pDb: string): string;
 var
   Code: Integer;
 begin
-  for var P in Pairs do
-    if SamePath(P.Sql, pDb) and (P.SqlSection <> '') then
+  for var P in PairSet.Pairs do
+    if SameIndexPath(P.Sql, pDb) and (P.SqlSection <> '') then
       Exit(Format('& ''%s'' index --all --only %s', [Engine, P.SqlSection]));
   Result:= '';
   var Dir:= ExtractFileDir(pDb);
@@ -623,7 +459,7 @@ begin
     if not TFile.Exists(Pf) then Continue;
     var J:= AskEngine(Engine, ['resolve-dbs', '--project', Pf, '--json'], Code);
     try
-      if (J is TJSONObject) and SamePath(TJSONObject(J).GetValue<string>('db', ''), pDb) then
+      if (J is TJSONObject) and SameIndexPath(TJSONObject(J).GetValue<string>('db', ''), pDb) then
         Exit(Format('& ''%s'' index --project ''%s'' --db ''%s''', [Engine, Pf, pDb]));
     finally
       J.Free;
@@ -721,9 +557,8 @@ begin
   R.NeedServer:= MatchStr(Id, [Q_ROUND_TRIP, Q_LANDS_WHERE]);
   R.NeedSql:= MatchStr(Id, [Q_ROUND_TRIP, Q_LANDS_WHERE, Q_CONSUMERS, Q_FEEDS_FROM]);
   R.WantOther:= Id = Q_CROSSES;
-  R.PairsFile:= if pArgs.PairsFile <> '' then pArgs.PairsFile else ResolveReportPairsFile;
-  R.PairsFound:= (R.PairsFile <> '') and TFile.Exists(R.PairsFile);
-  if R.PairsFound then R.Pairs:= LoadPairs(R.PairsFile);
+  R.PairSet:= LoadReportPairs(pArgs.PairsFile);
+
 
   R.ResolveProject;
   R.ResolveOthers;

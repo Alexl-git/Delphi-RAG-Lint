@@ -19,6 +19,7 @@ type
     [Test] procedure MetaFieldsEncodeTheirType;
     [Test] procedure UnportedQuestionIsRefused;
     [Test] procedure DotIsFoundBesideTheInstalledScripts;
+    [Test] procedure OtherIndexesFollowAskReport;
   end;
 
   [TestFixture]
@@ -26,6 +27,8 @@ type
   public
     [Test] procedure SlugKeepsOnlyLettersAndDigits;
     [Test] procedure CommandLineNamesOnlyGivenArguments;
+    [Test] procedure RegenerateNamesTheIndexesAQuestionReads;
+    [Test] procedure IndexLinesNameTheIndexesAQuestionReads;
     [Test] procedure HtmlDecodeAsWebUtility;
     [Test] procedure UnescapeDataStringAsUri;
     [Test] procedure DotRowsAsAskReport;
@@ -101,6 +104,60 @@ begin
   var Args:= Default(TQuestionArgs);
   Args.Question:= 'no-such-question';
   Assert.WillRaise(procedure begin AskChartQuestion(Args); end, EChartsQuestion);
+end;
+
+procedure TQuestionTests.OtherIndexesFollowAskReport;
+begin
+  { Ask-Report.ps1's $needServer and $needSql }
+  for var Id in ['round-trip', 'Lands-Where'] do
+    Assert.IsTrue(QuestionReadsServerIndex(Id), Id);
+  for var Id in ['round-trip', 'lands-where', 'consumers', 'FEEDS-FROM'] do
+    Assert.IsTrue(QuestionReadsSqlIndex(Id), Id);
+  for var Id in ['consumers', 'feeds-from', 'crosses-boundary', 'touches-tables'] do
+    Assert.IsFalse(QuestionReadsServerIndex(Id), Id);
+  for var Id in ['crosses-boundary', 'touches-tables', 'exception-paths'] do
+    Assert.IsFalse(QuestionReadsSqlIndex(Id), Id);
+end;
+
+function QArgs(const pQuestion: string): TQuestionArgs;
+begin
+  Result:= Default(TQuestionArgs);
+  Result.Question:= pQuestion;
+  Result.Target:= 'T.X';
+  Result.DbPath:= 'C:\d.sqlite';  // dl:ok hardcoded-absolute-path@4ee4 -- REVIEWED 2026-10-14: a fixture value, never opened: QArgs only proves which index paths a question carries
+  Result.ServerDbPath:= 'C:\s.sqlite';  // dl:ok hardcoded-absolute-path@16b8 -- REVIEWED 2026-10-14: a fixture value, never opened: QArgs only proves which index paths a question carries
+  Result.SqlDbPath:= 'C:\q.sqlite';  // dl:ok hardcoded-absolute-path@ba73 -- REVIEWED 2026-10-14: a fixture value, never opened: QArgs only proves which index paths a question carries
+  Result.CounterpartDb:= 'C:\c.sqlite';  // dl:ok hardcoded-absolute-path@d268 -- REVIEWED 2026-10-14: a fixture value, never opened: QArgs only proves which index paths a question carries
+  Result.Cap:= DEFAULT_CAP;
+  Result.Depth:= DEFAULT_DEPTH;
+  Result.SurfaceCap:= DEFAULT_SURFACE_CAP;
+end;
+
+procedure TAskTests.RegenerateNamesTheIndexesAQuestionReads;
+begin
+  { New-DiagramArtifact.ps1 $meta.regenerate: -SqlDbPath before -ServerDbPath, both after -Cap }
+  Assert.AreEqual('New-DiagramArtifact.ps1 -Question feeds-from -Target T.X -DbPath "C:\d.sqlite" -Cap 20 -SqlDbPath "C:\q.sqlite"',
+    RegenerateText(QArgs('feeds-from')));
+  Assert.AreEqual('New-DiagramArtifact.ps1 -Question lands-where -Target T.X -DbPath "C:\d.sqlite" -Cap 20 -SqlDbPath "C:\q.sqlite"' +
+    ' -ServerDbPath "C:\s.sqlite"', RegenerateText(QArgs('lands-where')));
+  Assert.AreEqual('New-DiagramArtifact.ps1 -Question round-trip -Target T.X -DbPath "C:\d.sqlite" -Depth 2 -SqlDbPath "C:\q.sqlite"' +
+    ' -ServerDbPath "C:\s.sqlite"', RegenerateText(QArgs('round-trip')));
+  { a question that does not read them never names them, even when they are carried }
+  Assert.AreEqual('New-DiagramArtifact.ps1 -Question deps -Target T.X -DbPath "C:\d.sqlite"', RegenerateText(QArgs('deps')));
+  { the script names them unconditionally for a question that reads them }
+  var A:= QArgs('consumers');
+  A.SqlDbPath:= '';
+  Assert.AreEqual('New-DiagramArtifact.ps1 -Question consumers -Target T.X -DbPath "C:\d.sqlite" -Cap 20 -SqlDbPath ""', RegenerateText(A));
+end;
+
+procedure TAskTests.IndexLinesNameTheIndexesAQuestionReads;
+begin
+  { Ask-Report.ps1: INDEX db, then (server), (sql), (counterpart) }
+  Assert.AreEqual('INDEX C:\d.sqlite|INDEX C:\s.sqlite (server)|INDEX C:\q.sqlite (sql)',
+    string.Join('|', AnswerIndexLines(QArgs('round-trip'))));
+  Assert.AreEqual('INDEX C:\d.sqlite|INDEX C:\q.sqlite (sql)', string.Join('|', AnswerIndexLines(QArgs('feeds-from'))));
+  Assert.AreEqual('INDEX C:\d.sqlite|INDEX C:\c.sqlite (counterpart)', string.Join('|', AnswerIndexLines(QArgs('crosses-boundary'))));
+  Assert.AreEqual('INDEX C:\d.sqlite', string.Join('|', AnswerIndexLines(QArgs('touches-tables'))));
 end;
 
 procedure TAskTests.SlugKeepsOnlyLettersAndDigits;
