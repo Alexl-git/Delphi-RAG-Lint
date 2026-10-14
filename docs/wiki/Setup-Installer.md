@@ -46,8 +46,9 @@ RAD Studio 13 (37.0) only.
 ## What it needs
 
 * **Windows x64.**
-* **PowerShell 7** for the charts, the plugin's Reports menu, `draglint://` and
-  the MCP task. Setup does not bundle it: if `pwsh.exe` is missing it says so,
+* **PowerShell 7** for `draglint://`, the MCP task, and the chart questions not yet
+  ported to Delphi (the engine answers the ported ones itself -- 11 of 26 as of v1.30.0 --
+  and runs the rest through PowerShell). Setup does not bundle it: if `pwsh.exe` is missing it says so,
   skips those two tasks and carries on. Install it from https://aka.ms/powershell
   and run setup again.
 * **RAD Studio must be closed** when installing or uninstalling a plugin -- a

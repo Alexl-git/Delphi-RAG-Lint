@@ -52,6 +52,10 @@ type
     OutRoot      : string;
     /// <summary>The repo's charts folder: the clone root is &lt;ChartsRoot&gt;\scratch\db.</summary>
     ChartsRoot   : string;
+    /// <summary>The folder the chart scripts (Ask-Report.ps1) were found in; '' = &lt;ChartsRoot&gt;\src,
+    /// the repository layout. An installed copy keeps them beside the engine ({app}\bin), so
+    /// the producer sets this and the dot lookup starts there.</summary>
+    ScriptDir    : string;
     /// <summary>The resolved dot.exe.</summary>
     DotExe       : string;
     /// <summary>The effective -Cap.</summary>
@@ -74,7 +78,7 @@ type
     /// <summary>The clone folder &lt;ChartsRoot&gt;\scratch\db.</summary>
     /// <returns>The folder path.</returns>
     function CloneRoot: string;
-    /// <summary>dot.exe: DotExe when set, else the Resolve-GraphvizDot walk from ChartsRoot.</summary>
+    /// <summary>dot.exe: DotExe when set, else the Resolve-GraphvizDot walk from ScriptDir (or ChartsRoot\src).</summary>
     /// <returns>The full path of dot.exe.</returns>
     /// <remarks>Called where the PS emitter's Invoke-DotRun resolves it: after the .dot text is built.
     /// ResolveGraphvizDot raises EChartsTool, naming every place looked, when no dot.exe is found.</remarks>
@@ -270,7 +274,8 @@ function TQuestionArgs.Dot: string;
 begin
   if DotExe <> '' then
     Exit(DotExe);
-  Result:= ResolveGraphvizDot('', DragLintSettingsPath, ChartsRoot, TPath.Combine(ChartsRoot, SCRIPTS_SUBDIR), SHARED_DOT_DEFAULT);
+  var Scripts:= if ScriptDir <> '' then ScriptDir else TPath.Combine(ChartsRoot, SCRIPTS_SUBDIR);
+  Result:= ResolveGraphvizDot('', DragLintSettingsPath, ChartsRoot, Scripts, SHARED_DOT_DEFAULT);
 end;
 
 function TQuestionArgs.GuardedDb: string;

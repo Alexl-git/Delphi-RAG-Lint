@@ -67,6 +67,8 @@ uses
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
   ASK_REPORT_ENV = 'DRAGLINT_ASK_REPORT';
+  QUESTION_COUNT = 26;  { New-DiagramArtifact.ps1's ValidateSet }
+  INDEX_LINE_NO = 3;    { the plain answer's INDEX line: header, COMMAND, ENGINE, INDEX }
   CHARTS_MARK = 'charts\src\Ask-Report.ps1';
   CLONE_DIR = 'charts\scratch\db';
   SERVER_CLONE = 'SERVER-MicroniteMW1Service.sqlite';
@@ -184,7 +186,7 @@ end;
 function TAskVerbTests.FreshIndex: string;
 begin
   Result:= TPath.Combine(FTempDir, 'fresh.sqlite');
-  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(Result, False);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(Result, False);  // dl:ok write-only-local@0fd0 -- REVIEWED 2026-10-14: held only so the store CREATES the empty index file; released (nil) before the verb opens it
   Store:= nil;
 end;
 
@@ -225,11 +227,11 @@ var
   Error: string;
 begin
   { the same arguments as Test-AskReport AR-HDR-CMD-ALL, which pins Get-ReportCommandLine }
-  Assert.IsTrue(ParseAskArgs(['path', '--target', 'A', '--to', 'B', '--in', 'C:\P\u.pas', '--cap', '5', '--surface-cap', '6',
+  Assert.IsTrue(ParseAskArgs(['path', '--target', 'A', '--to', 'B', '--in', 'C:\P\u.pas', '--cap', '5', '--surface-cap', '6',  // dl:ok hardcoded-absolute-path@44bd -- REVIEWED 2026-10-14: inert test string -- ParseAskArgs/BuildCommandLine only echo it; nothing touches the filesystem
     '--control', 'c1', '--mode', 'x', '--max-rows', '7', '--db', 'zz', '--plain', '--open'], A, Error), Error);
   Assert.AreEqual('path -Target "A" -To "B" -In "C:\P\u.pas" -Cap 5 -SurfaceCap 6 -Control "c1" -Mode x -MaxRows 7',
     BuildCommandLine(AskCommandOf(A)));
-  Assert.IsTrue(ParseAskArgs(['who-writes', '--target', 'T', '--project', 'C:\P\A.dproj', '--in', 'C:\P\u.pas', '--depth', '3'], A, Error), Error);
+  Assert.IsTrue(ParseAskArgs(['who-writes', '--target', 'T', '--project', 'C:\P\A.dproj', '--in', 'C:\P\u.pas', '--depth', '3'], A, Error), Error);  // dl:ok hardcoded-absolute-path@88de -- REVIEWED 2026-10-14: inert test string -- ParseAskArgs/BuildCommandLine only echo it; nothing touches the filesystem
   Assert.AreEqual('who-writes -Target "T" -Project "C:\P\A.dproj" -Depth 3', BuildCommandLine(AskCommandOf(A)), '--project wins over --in');
 end;
 
@@ -240,7 +242,7 @@ begin
   Assert.IsTrue(NormaliseAskQuestion('Who-Reads', Id));
   Assert.AreEqual('who-reads', Id);
   Assert.IsFalse(NormaliseAskQuestion('who-reads-x', Id));
-  Assert.AreEqual(26, Integer(Length(QuestionIds)), 'the 26 ids of New-DiagramArtifact.ps1''s ValidateSet');
+  Assert.AreEqual(QUESTION_COUNT, Integer(Length(QuestionIds)), 'the 26 ids of New-DiagramArtifact.ps1''s ValidateSet');
 end;
 
 procedure TAskVerbTests.UnknownQuestionIsSetup;
@@ -362,7 +364,7 @@ begin
     Assert.AreEqual(0, Code, Joined(FErr));
     Assert.Contains(Joined(FOut), CRLF + 'CHART touches-tables ' + TT_TARGET + ' -- 5 tables read / 5 tables written' + CRLF);
     Assert.AreEqual('COMMAND touches-tables -Target "' + TT_TARGET + '"', FOut[1]);
-    Assert.AreEqual('INDEX ' + Db, FOut[3]);
+    Assert.AreEqual('INDEX ' + Db, FOut[INDEX_LINE_NO]);
   finally
     SetEnvironmentVariable(ASK_REPORT_ENV, if Prev = '' then nil else PChar(Prev));
   end;

@@ -168,6 +168,7 @@ begin
   Q.CounterpartDb:= Other;
   Q.OutRoot:= if pOptions.OutRoot <> '' then pOptions.OutRoot else FOutRoot;
   Q.ChartsRoot:= ExtractFileDir(ExtractFileDir(Script));
+  Q.ScriptDir:= ExtractFileDir(Script);  { installed copy: <app>\bin, where graphviz\bin sits beside the scripts }
   Q.Cap:= NumArg(pCommand, 'Cap', DEFAULT_CAP);
   Q.Depth:= NumArg(pCommand, 'Depth', DEFAULT_DEPTH);
   Q.SurfaceCap:= NumArg(pCommand, 'SurfaceCap', DEFAULT_SURFACE_CAP);

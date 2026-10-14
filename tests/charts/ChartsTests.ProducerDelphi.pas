@@ -155,7 +155,7 @@ begin
   { owner ruling 2026-10-14: compare answers ported questions in-process on the LIVE index }
   var P:= ProducerForCompare;
   { P is an INTERFACE: 'as TObject' is the interface-to-object cast, not a redundant one }
-  var O:= P as TObject;  // dl:ok redundant-as-tobject@63e2 -- FALSE POSITIVE: P is an IReportProducer, and 'as TObject' is the only interface-to-object cast (logged to draglint-gaps.log)
+  var O:= P as TObject;  // dl:ok redundant-as-tobject@60a8 -- FALSE POSITIVE: P is an IReportProducer, and 'as TObject' is the only interface-to-object cast (logged to draglint-gaps.log)
   Assert.IsTrue(O is TDelphiProducer, 'compare gets the Delphi producer');
   Assert.IsTrue(TDelphiProducer(O).AllowLiveDb, 'live indexes allowed; the staleness refusal protects them');
   Assert.Contains(P.Describe, 'Delphi in-process (');
@@ -166,7 +166,7 @@ begin
   { the parity / test path: a valid, fresh index outside the clone root is refused by the guard }
   TDirectory.CreateDirectory(FOutRoot);
   var Live:= TPath.Combine(FOutRoot, 'live.sqlite');
-  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(Live, False);
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(Live, False);  // dl:ok write-only-local@e429 -- REVIEWED 2026-10-14: held only so the store CREATES the index file; released (nil) before Produce opens it
   Store:= nil;
   FProducer:= TDelphiProducer.Create(FKeep, False, FOutRoot);
   var O:= DefaultProduceOptions;

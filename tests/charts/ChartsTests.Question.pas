@@ -18,6 +18,7 @@ type
     [Test] procedure JsonStringEscapesAsConvertToJson;
     [Test] procedure MetaFieldsEncodeTheirType;
     [Test] procedure UnportedQuestionIsRefused;
+    [Test] procedure DotIsFoundBesideTheInstalledScripts;
   end;
 
   [TestFixture]
@@ -34,7 +35,7 @@ type
 implementation
 
 uses
-  System.SysUtils, DRagLint.Charts.ReportHeader, DRagLint.Charts.Question, DRagLint.Charts.Ask;
+  System.SysUtils, System.IOUtils, DRagLint.Charts.ReportHeader, DRagLint.Charts.Question, DRagLint.Charts.Ask;
 
 const
   MAX_ROWS_TWO = 2;
@@ -162,4 +163,27 @@ begin
     string.Join('|', Rows));
 end;
 
+procedure TQuestionTests.DotIsFoundBesideTheInstalledScripts;
+begin
+  { the installed layout: scripts in <app>\bin, Graphviz in <app>\bin\graphviz\bin. An explicit
+    DRAGLINT_DOT or a settings.json "dot" would win over this step, so the case only runs where
+    neither is set (it is the machine's choice, not this code's). }
+  if GetEnvironmentVariable('DRAGLINT_DOT') <> '' then
+    Assert.Pass('DRAGLINT_DOT is set on this machine');
+  if TFile.Exists(TPath.Combine(TPath.Combine(TPath.GetHomePath, 'drag-lint'), 'settings.json')) then
+    Assert.Pass('a settings.json exists on this machine');
+  var App:= TPath.Combine(TPath.GetTempPath, 'dl-dot-' + TGUID.NewGuid.ToString);
+  var Bin:= TPath.Combine(App, 'bin');
+  var DotDir:= TPath.Combine(TPath.Combine(Bin, 'graphviz'), 'bin');
+  TDirectory.CreateDirectory(DotDir);
+  try
+    TFile.WriteAllText(TPath.Combine(DotDir, 'dot.exe'), '');
+    var Args:= Default(TQuestionArgs);
+    Args.ChartsRoot:= App;
+    Args.ScriptDir:= Bin;
+    Assert.AreEqual(TPath.Combine(DotDir, 'dot.exe'), Args.Dot);
+  finally
+    TDirectory.Delete(App, True);
+  end;
+end;
 end.
