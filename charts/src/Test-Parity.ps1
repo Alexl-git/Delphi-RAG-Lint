@@ -809,13 +809,26 @@ function Test-TextControl([string] $PsFile, [string] $DlFile) {
   if ($i -lt 0) { return 'FAIL: the Delphi text has no line to plant a change in' }
   $lines[$i] = $lines[$i] + ' [PLANTED BY THE POSITIVE CONTROL]'
   $planted = "$DlFile.control.txt"
-  [IO.File]::WriteAllText($planted, (($lines -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
-  $cmp = & $Exe compare --old $PsFile --new $planted --format json 2>"$planted.err"
-  $code = $LASTEXITCODE
-  $n = -1
-  try { $j = (@($cmp) -join "`n") | ConvertFrom-Json -ErrorAction Stop; $n = [int]$j.counts.removed + [int]$j.counts.added } catch { }
-  if ($code -eq 1 -and $n -ge 1) { return "PASS: a one-line change planted in the Delphi text was reported ($n line(s) differ)" }
-  "FAIL: a one-line change planted in the Delphi text went UNSEEN (compare exit $code, $n difference(s))"
+  # try/finally: the planted copy and compare's stderr are removed even when something throws.
+  try {
+    [IO.File]::WriteAllText($planted, (($lines -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))
+    $cmp = & $Exe compare --old $PsFile --new $planted --format json 2>"$planted.err"
+    $code = $LASTEXITCODE
+    $n = -1
+    try { $j = (@($cmp) -join "`n") | ConvertFrom-Json -ErrorAction Stop; $n = [int]$j.counts.removed + [int]$j.counts.added } catch { }
+    $result = "FAIL: a one-line change planted in the Delphi text went UNSEEN (compare exit $code, $n difference(s))"
+    if ($code -eq 1 -and $n -ge 1) { $result = "PASS: a one-line change planted in the Delphi text was reported ($n line(s) differ)" }
+    if ($result -like 'FAIL:*') {
+      # The planted copy and compare's stderr are deleted in the finally, so their evidence is printed first.
+      Write-Host "  positive control diagnostics -- compare stdout:"
+      @($cmp) | ForEach-Object { Write-Host "    $_" }
+      Write-Host "  compare stderr ($planted.err):"
+      if (Test-Path -LiteralPath "$planted.err") { Get-Content -LiteralPath "$planted.err" | ForEach-Object { Write-Host "    $_" } }
+    }
+    $result
+  } finally {
+    Remove-Item -LiteralPath $planted, "$planted.err" -Force -ErrorAction SilentlyContinue
+  }
 }
 
 function Test-DotControl([string] $PsBundle, [string] $DlBundle, [string] $Root) {
@@ -856,8 +869,8 @@ function Invoke-QuestionMode {
   $compared = 0
   foreach ($c in $cases) {
     if ($ported -notcontains $c.question) { $rows.Add([pscustomobject]@{ Question = $c.question; Text = 'not ported'; Files = ''; PsS = ''; DlS = ''; Verdict = 'SKIP' }); continue }
-    if ($c.serverDb -or $c.sqlDb -or @($c.extra).Count) {
-      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes one index (plus -CounterpartDb) and no extra arguments' }); $bad++; continue
+    if (@($c.extra).Count) {
+      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes the indexes (-CounterpartDb, -ServerDbPath, -SqlDbPath) and no extra arguments' }); $bad++; continue
     }
     Write-Host "question: $($c.question) ..."
     $psFile = Join-Path $OutDir "$($c.question).ps.txt"
@@ -874,6 +887,8 @@ function Invoke-QuestionMode {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $pa = @('--question', $c.question, '--target', $c.target, '--db', (Join-Path $DbRoot $c.db), '--out-root', $dlRoot, '--charts-root', $chartsRoot)
     if ($c.counterpartDb) { $pa += @('--counterpart-db', (Join-Path $DbRoot $c.counterpartDb)) }
+    if ($c.serverDb)      { $pa += @('--server-db', (Join-Path $DbRoot $c.serverDb)) }
+    if ($c.sqlDb)         { $pa += @('--sql-db', (Join-Path $DbRoot $c.sqlDb)) }
     $dlOut = & $probeExe @pa 2>"$dlFile.err"
     $dlExit = $LASTEXITCODE
     $sw.Stop()

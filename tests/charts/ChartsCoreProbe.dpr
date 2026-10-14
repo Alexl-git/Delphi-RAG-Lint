@@ -36,6 +36,7 @@ program ChartsCoreProbe;
     ChartsCoreProbe --question <id> --target <t> --db <index.sqlite> --out-root <dir>
                     --charts-root <repo\charts> [--cap n] [--depth n] [--max-rows n]
                     [--counterpart-db <index.sqlite>]   (crosses-boundary's -CounterpartDb)
+                    [--server-db <index.sqlite>] [--sql-db <index.sqlite>]   (-ServerDbPath / -SqlDbPath)
 
   A refusal prints 'ask-report: <message>' on stderr and exits 1 (Ask-Report's contract).
   ChartsCoreProbe --ported prints the ported question ids, one per line. *)
@@ -76,6 +77,10 @@ uses
   , DRagLint.Charts.Q.ProtocolTrace in '..\..\src\charts\DRagLint.Charts.Q.ProtocolTrace.pas'
   , DRagLint.Charts.Q.Lifecycle in '..\..\src\charts\DRagLint.Charts.Q.Lifecycle.pas'
   , DRagLint.Charts.Q.Effects in '..\..\src\charts\DRagLint.Charts.Q.Effects.pas'
+  , DRagLint.Charts.Q.FeedsFrom in '..\..\src\charts\DRagLint.Charts.Q.FeedsFrom.pas'
+  , DRagLint.Charts.Q.LandsWhere in '..\..\src\charts\DRagLint.Charts.Q.LandsWhere.pas'
+  , DRagLint.Charts.Q.Consumers in '..\..\src\charts\DRagLint.Charts.Q.Consumers.pas'
+  , DRagLint.Charts.Q.ExceptionPaths in '..\..\src\charts\DRagLint.Charts.Q.ExceptionPaths.pas'
   , DRagLint.Core.Model
   ;
 
@@ -112,6 +117,7 @@ type
     Depth     : string;
     MaxRows   : string;
     Counterpart: string;
+    ServerDb  : string;
   end;
 
 function Num(pValue: Int64): TJSONNumber;
@@ -143,6 +149,8 @@ begin
     pArgs.MaxRows:= pValue
   else if SameText(pName, '--counterpart-db') then
     pArgs.Counterpart:= pValue
+  else if SameText(pName, '--server-db') then
+    pArgs.ServerDb:= pValue
   else
     Result:= False;
 end;
@@ -874,7 +882,10 @@ begin
     for var P in B.OnPos do
       if FindHandlerBlock(Tb, P, Blk) then
         Verdicts:= Verdicts + [Format('%d=%s', [P, BoolText(HandlerReraises(pLines, Blk, P, False))])];
-    Result:= Result + [Format('%d/%d/%d/%d/%s/%s', [B.TryPos, B.ExceptPos, B.FinallyPos, B.EndPos, IntsText(B.OnPos),
+    var OnTexts: TArray<string>:= [];
+    for var P in B.OnPos do
+      OnTexts:= OnTexts + [IntToStr(P)];
+    Result:= Result + [Format('%d/%d/%d/%d/%s/%s', [B.TryPos, B.ExceptPos, B.FinallyPos, B.EndPos, string.Join(',', OnTexts),
       string.Join(';', Verdicts)])];
   end;
 end;
@@ -992,10 +1003,13 @@ begin
   Q.Target:= pArgs.Target;
   Q.DbPath:= ExpandFileName(pArgs.Db);
   Q.CounterpartDb:= if pArgs.Counterpart <> '' then ExpandFileName(pArgs.Counterpart) else '';
+  { as the producer carries them: only for a question that reads them; absent stays '' }
+  Q.ServerDbPath:= if QuestionReadsServerIndex(Q.Question) and (pArgs.ServerDb <> '') then ExpandFileName(pArgs.ServerDb) else '';
+  Q.SqlDbPath:= if QuestionReadsSqlIndex(Q.Question) and (pArgs.SqlDb <> '') then ExpandFileName(pArgs.SqlDb) else '';
   Q.OutRoot:= pArgs.OutRoot;
   Q.ChartsRoot:= pArgs.ChartsRoot;
   Q.Cap:= DEFAULT_CAP;
-  Q.Depth:= DEFAULT_DEPTH;
+  Q.Depth:= QuestionDefaultDepth(Q.Question);
   Q.SurfaceCap:= DEFAULT_SURFACE_CAP;
   Q.MaxRows:= DEFAULT_MAX_ROWS;
   Q.Command.Question:= Q.Question;

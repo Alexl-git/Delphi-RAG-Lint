@@ -113,14 +113,14 @@ function ColumnsNotHeld(pCatalog: TSqlCatalog; pSet: TSqlTableSet; const pTable:
 /// <param name="pState">A column state.</param>
 /// <returns>'column "COL"' for the quoted state, else 'column COL'.</returns>
 /// <remarks>Port of Get-ColumnHopLabel (Emit-Common.ps1:1091).</remarks>
-function ColumnHopLabel(const pState: TSqlColumnState): string;  // dl:ok unused-public-symbol@5ca7 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function ColumnHopLabel(const pState: TSqlColumnState): string;
 
 /// <summary>The name a chart PRINTS for a column state.</summary>
 /// <param name="pState">yes | older | no | stale | anything else.</param>
 /// <returns>column | older-only | not-a-column | [stale source] | pState unchanged.</returns>
 /// <remarks>Port of Get-ColumnStateName (Emit-Common.ps1:1155). PS trap closed: `switch` on a
 /// string is case-insensitive.</remarks>
-function ColumnStateName(const pState: string): string;  // dl:ok unused-public-symbol@5129 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function ColumnStateName(const pState: string): string;
 
 /// <summary>lands-where's row for a property the SQL index does not extract (state no).</summary>
 /// <param name="pProp">The property.</param>
@@ -129,7 +129,7 @@ function ColumnStateName(const pState: string): string;  // dl:ok unused-public-
 /// <param name="pServerSearched">The DataService class searched; '' when none was.</param>
 /// <returns>The sentence; "computed or UI-only" only when the server's SQL was searched.</returns>
 /// <remarks>Port of Format-NotAColumnNote (Emit-Common.ps1:1233).</remarks>
-function FormatNotAColumnNote(const pProp, pTable, pCaption, pServerSearched: string): string;  // dl:ok unused-public-symbol@d221 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function FormatNotAColumnNote(const pProp, pTable, pCaption, pServerSearched: string): string;
 
 implementation
 

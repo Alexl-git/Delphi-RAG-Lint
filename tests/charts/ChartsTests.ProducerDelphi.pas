@@ -34,6 +34,9 @@ type
     FOutRoot : string;
     function Clone(const pName: string; out pPath: string): Boolean;
     function BareScriptFolder: string;
+    function PairsFile(const pClient, pServer, pSql: string): string;
+    function FakeEngine(const pKnown: string): string;
+    procedure CheckFeedsFromReadsSql(const pR: TProduceResult; const pSql: string);
   public
     [Setup] procedure Setup;
     [TearDown] procedure TearDown;
@@ -50,6 +53,15 @@ type
     [Test] procedure UnexpectedFailureFallsBack;
     [Test] procedure CrossesBoundaryWithoutCounterpartFallsBack;
     [Test] procedure CrossesBoundaryWithCounterpartIsInProcess;
+    [Test] procedure OtherIndexesAQuestionDoesNotReadAreIgnored;
+    [Test] procedure MissingSqlIndexOfAReadingQuestionIsSetup;
+    [Test] procedure SqlIndexOfAReadingQuestionIsCarriedAndChecked;
+    [Test] procedure MissingServerIndexOfAReadingQuestionIsSetup;
+    [Test] procedure ServerAndSqlIndexesAreCarriedInAskReportOrder;
+    [Test] procedure ReadingQuestionPairsItsSqlIndexFromThePairsFile;
+    [Test] procedure ReadingQuestionWithoutAPairsFileIsAskReportsSetup;
+    [Test] procedure ReadingQuestionWithNoEntryIsAskReportsSetup;
+    [Test] procedure ServerIndexIsPairedOnlyFromTheClient;
     [Test] procedure PortedFallbackWithoutEmitterScriptIsSetup;
     [Test] procedure PortedFallbackWithEmitterScriptFallsBack;
     [Test] procedure UnexpectedFailureWithoutEmitterScriptIsSetup;
@@ -72,6 +84,9 @@ const
   NO_SUCH_TARGET = 'NoSuchUnit.TNoSuchClass.NoSuchMethod';
   TT_TARGET = 'uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation';
   CB_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
+  FF_TARGET = 'frmCausFail.colREASON';
+  LW_TARGET = 'uCAUSFAIL.TmcCAUSFAIL.REASON';
   EXIT_SETUP = 2;
   STUB_EXIT = 42;
   NOT_INSTALLED = 'crosses-boundary is answered by the engine in this install, and its PowerShell fallback is not installed: ';
@@ -351,6 +366,195 @@ begin
   Assert.AreEqual('Delphi in-process (crosses-boundary)', FProducer.Describe);
 end;
 
+procedure TProducerDelphiTests.OtherIndexesAQuestionDoesNotReadAreIgnored;
+var
+  Db: string;
+begin
+  { Ask-Report checks and names only the indexes the question reads ($needServer / $needSql):
+    touches-tables reads neither, so a server and SQL index given anyway -- even missing
+    ones -- are not opened, not freshness-checked and not named }
+  if not Clone(SERVER_CLONE, Db) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ServerDbOverride:= TPath.Combine(FOutRoot, 'missing-server.sqlite');
+  O.SqlDbOverride:= TPath.Combine(FOutRoot, 'missing-sql.sqlite');
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET), O);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.AreEqual<Integer>(1, Length(R.IndexPaths));
+  Assert.DoesNotContain(R.Text, '(server)');
+  Assert.DoesNotContain(R.Text, '(sql)');
+end;
+
+procedure TProducerDelphiTests.MissingSqlIndexOfAReadingQuestionIsSetup;
+var
+  Db: string;
+begin
+  { feeds-from reads the SQL index: a missing one is Ask-Report's "index not found", exit 2 }
+  if not Clone(CLIENT_CLONE, Db) then
+    Exit;
+  var Missing:= TPath.Combine(FOutRoot, 'missing-sql.sqlite');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.SqlDbOverride:= Missing;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('feeds-from', FF_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('index not found: ' + Missing, R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+{ answered in-process, with the SQL index in the freshness list after the project index and named in the answer }
+procedure TProducerDelphiTests.CheckFeedsFromReadsSql(const pR: TProduceResult; const pSql: string);
+begin
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(pR.Ok, pR.Reason);
+  Assert.AreEqual<Integer>(2, Length(pR.IndexPaths));
+  Assert.AreEqual(pSql, pR.IndexPaths[1]);
+  Assert.Contains(pR.Text, #13#10'INDEX ' + pSql + ' (sql)'#13#10'CHART feeds-from ' + FF_TARGET + ' -- ');
+end;
+procedure TProducerDelphiTests.SqlIndexOfAReadingQuestionIsCarriedAndChecked;
+var
+  Db, Sql: string;
+begin
+  { the SQL index reaches the emitter (without it the clone guard refuses a blank path) and
+    joins the freshness list after the project index; the answer names it }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SQL_CLONE, Sql) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.SqlDbOverride:= Sql;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  CheckFeedsFromReadsSql(FProducer.Produce(Cmd('feeds-from', FF_TARGET), O), Sql);
+  Assert.AreEqual('Delphi in-process (feeds-from)', FProducer.Describe);
+end;
+
+procedure TProducerDelphiTests.MissingServerIndexOfAReadingQuestionIsSetup;
+var
+  Db, Sql: string;
+begin
+  { lands-where reads the SERVER index: a missing one is Ask-Report's "index not found", exit 2, before the SQL index is looked at }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SQL_CLONE, Sql) then
+    Exit;
+  var Missing:= TPath.Combine(FOutRoot, 'missing-server.sqlite');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ServerDbOverride:= Missing;
+  O.SqlDbOverride:= Sql;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('lands-where', LW_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('index not found: ' + Missing, R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.ServerAndSqlIndexesAreCarriedInAskReportOrder;
+const
+  PROJECT_SERVER_SQL = 3;
+var
+  Db, Server, Sql: string;
+begin
+  { both extra indexes reach the emitter and the freshness list: project, server, sql }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SERVER_CLONE, Server) or not Clone(SQL_CLONE, Sql) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ServerDbOverride:= Server;
+  O.SqlDbOverride:= Sql;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('lands-where', LW_TARGET), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.AreEqual<Integer>(PROJECT_SERVER_SQL, Length(R.IndexPaths));
+  Assert.AreEqual(Server, R.IndexPaths[1]);
+  Assert.AreEqual(Sql, R.IndexPaths[2]);
+  Assert.Contains(R.Text, #13#10'INDEX ' + Server + ' (server)'#13#10'INDEX ' + Sql + ' (sql)'#13#10'CHART lands-where ' + LW_TARGET + ' -- ');
+  Assert.AreEqual('Delphi in-process (lands-where)', FProducer.Describe);
+end;
+
+{ report-pairs.json in the test folder with one pair }
+function TProducerDelphiTests.PairsFile(const pClient, pServer, pSql: string): string;
+begin
+  TDirectory.CreateDirectory(FOutRoot);
+  Result:= TPath.Combine(FOutRoot, 'report-pairs.json');
+  TFile.WriteAllText(Result, Format('{"pairs":[{"name":"t","client":"%s","server":"%s","sql":"%s"}]}',
+    [pClient.Replace('\', '\\'), pServer.Replace('\', '\\'), pSql.Replace('\', '\\')]));
+end;
+
+{ an engine stand-in whose `resolve-dbs --json` lists one configured index }
+function TProducerDelphiTests.FakeEngine(const pKnown: string): string;
+begin
+  TDirectory.CreateDirectory(FOutRoot);
+  Result:= TPath.Combine(FOutRoot, 'fake-engine.cmd');
+  TFile.WriteAllText(Result, '@echo ["' + pKnown.Replace('\', '\\') + '"]' + #13#10, TEncoding.ASCII);
+end;
+
+procedure TProducerDelphiTests.ReadingQuestionPairsItsSqlIndexFromThePairsFile;
+var
+  Db, Sql: string;
+begin
+  { compare passes only --db (R5): the SQL index feeds-from reads is paired from report-pairs.json,
+    as Ask-Report's step 2 pairs it, and the path taken from the file is checked with resolve-dbs }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SQL_CLONE, Sql) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.PairsFile:= PairsFile(Db, '', Sql);
+  O.EnginePath:= FakeEngine(Sql);
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  CheckFeedsFromReadsSql(FProducer.Produce(Cmd('feeds-from', FF_TARGET), O), Sql);
+end;
+
+procedure TProducerDelphiTests.ReadingQuestionWithoutAPairsFileIsAskReportsSetup;
+begin
+  { no report-pairs.json: Ask-Report's exit 2 and message, before the index itself is looked at }
+  var Missing:= TPath.Combine(FOutRoot, 'report-pairs.json');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= 'any.sqlite';
+  O.PairsFile:= Missing;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  var R:= FProducer.Produce(Cmd('feeds-from', FF_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('feeds-from also reads the SQL-script index, and report-pairs.json not found at ' + Missing +
+    ', so no pairs are configured -- copy charts\report-pairs.example.json to that path and fill in client, server and sql ' +
+    '(each checked with resolve-dbs), or pass -SqlDbPath', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.ReadingQuestionWithNoEntryIsAskReportsSetup;
+begin
+  { a pairing file without an entry for the index: Ask-Report's exit 2 and message }
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= 'any.sqlite';
+  O.PairsFile:= PairsFile(TPath.Combine(FOutRoot, 'client.sqlite'), TPath.Combine(FOutRoot, 'server.sqlite'), TPath.Combine(FOutRoot, 'sql.sqlite'));
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  var R:= FProducer.Produce(Cmd('lands-where', LW_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('lands-where also reads the SERVER index and the SQL-script index, and ' + O.PairsFile +
+    ' has no entry for any.sqlite -- add one (client, server, sql; check each with resolve-dbs), or pass -ServerDbPath and -SqlDbPath', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.ServerIndexIsPairedOnlyFromTheClient;
+begin
+  { lands-where starts from the CLIENT: given the pair's SERVER, Ask-Report refuses with exit 2 }
+  var Server:= TPath.Combine(FOutRoot, 'server.sqlite');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Server;
+  O.PairsFile:= PairsFile(TPath.Combine(FOutRoot, 'client.sqlite'), Server, TPath.Combine(FOutRoot, 'sql.sqlite'));
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  var R:= FProducer.Produce(Cmd('lands-where', LW_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('lands-where starts from the CLIENT index; ' + Server + ' is the SERVER of pair ''t'' in ' + O.PairsFile +
+    ' -- pass the client project', R.Reason);
+end;
 { a folder holding only an empty Ask-Report.ps1: an installed copy, where the ported Emit-*.ps1 are not shipped }
 function TProducerDelphiTests.BareScriptFolder: string;
 begin

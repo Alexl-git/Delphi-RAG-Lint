@@ -58,6 +58,31 @@ try {
       Check 'compare prints a result line' ($out -match '(?m)^result: ') $out
     }
   }
+
+  # feeds-from reads the SQL index too; compare passes only --db (R5), so the in-process producer
+  # pairs it from report-pairs.json exactly as Ask-Report's step 2 does. A clone is in no pair, so
+  # BOTH must refuse with exit 2 and the SAME message (before the fix compare said "feeds-from
+  # needs -SqlDbPath", exit 1).
+  $SqlClone = Join-Path $Repo 'charts\scratch\db\SQL-drag-lint-sql.sqlite'
+  $FfTarget = 'frmCausFail.colREASON'
+  if (-not (Test-Path $SqlClone)) { Skip 'compare pairs a reading question like Ask-Report' "frozen clone missing: $SqlClone" }
+  else {
+    $oldFf = Join-Path $Work 'old-ff.txt'
+    $txt = & $Pwsh -NoProfile -File $Ask -Question feeds-from -Target $FfTarget -DbPath $Clone -SqlDbPath $SqlClone -AllowStale -Plain -Engine $Exe | Out-String
+    $made = $LASTEXITCODE -eq 0 -and $txt -match 'drag-lint report feeds-from'
+    Check 'feeds-from old side produced by Ask-Report on the clones' $made "exit=$LASTEXITCODE first=[$(($txt -split "`r?`n")[0])]"
+    if ($made) {
+      [IO.File]::WriteAllText($oldFf, $txt, [Text.UTF8Encoding]::new($false))
+      $ps = & $Pwsh -NoProfile -File $Ask -Question feeds-from -Target $FfTarget -DbPath $Clone -AllowStale -Plain -Engine $Exe 2>&1 | Out-String
+      $psCode = $LASTEXITCODE
+      $psMsg = (($ps -split "`r?`n") | Where-Object { $_ -like 'ask-report: *' } | Select-Object -First 1) -replace '^ask-report: ', ''
+      Check 'Ask-Report refuses the unpaired clone with exit 2' ($psCode -eq 2 -and $psMsg -match 'also reads the SQL-script index') "exit=$psCode`n$ps"
+      $out = & $Exe compare --old $oldFf --command "feeds-from -Target $FfTarget" --db $Clone 2>&1 | Out-String
+      $code = $LASTEXITCODE
+      Check 'compare refuses it with exit 2' ($code -eq 2) "exit=$code`n$out"
+      Check 'compare names Ask-Report''s pairing refusal verbatim' ($psMsg -and $out.Contains("the new run failed (exit 2): $psMsg")) "ask-report: $psMsg`ncompare: $out"
+    }
+  }
 }
 finally {
   Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue

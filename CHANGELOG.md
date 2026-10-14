@@ -23,6 +23,35 @@ breaking changes** until v1.0.
   `var X: T;` declaration is no longer read as a use of an earlier same-named inline var.
   Analysis only -- extractor version unchanged.
 
+## v1.31.0-alpha -- 2026-10-14
+
+### Added
+
+- **Four more chart questions are answered by the engine itself, in Delphi: `feeds-from`,
+  `lands-where`, `consumers` and `exception-paths`.** That makes 15 of the 26 questions
+  in-process; the rest still run through PowerShell. Output matches the PowerShell emitters
+  (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal on each).
+  `Emit-FeedsFrom.ps1`, `Emit-LandsWhere.ps1`, `Emit-Consumers.ps1` and
+  `Emit-ExceptionPaths.ps1` are no longer shipped.
+- **Ported questions carry the SQL and server indexes** (`-SqlDbPath` / `-ServerDbPath`)
+  in-process; a question that reads one refuses a missing index with exit 2.
+
+### Changed
+
+- **`compare` pairs a reading question's SERVER / SQL index from `report-pairs.json` in-process.**
+  `compare` passes only `--db`, so `feeds-from`, `lands-where` and `consumers` failed with
+  "needs -SqlDbPath". The pairing step now lives in one unit, `DRagLint.Charts.Pairs`, shared by
+  `ask` and the Delphi producer.
+- `exception-paths` walks 3 levels by default when no `-Depth` is given, as the PowerShell path does.
+- IDE plugin: the `ask` exit-2 dialog header no longer claims the indexes could not be resolved
+  (exit 2 also covers an unknown question, a missing target or a pairs-file problem; the engine's own
+  reason is shown below). Needs a plugin BPL rebuild.
+
+### Fixed
+
+- **`exception-paths` call-site and try-block positions past line 21474 no longer overflow**
+  (`line * 100000 + col` is now Int64; `DRagLint.CLI.pas:29442` printed as `:-13507`).
+- `Test-Parity`'s text positive control removes its planted copy and `.err` even when something throws.
 ## v1.30.1-alpha -- 2026-10-14
 
 ### Changed

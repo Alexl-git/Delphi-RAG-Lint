@@ -54,7 +54,7 @@ type
 /// <returns>Distinct positive keys and distinct negative keys over both lists.</returns>
 /// <remarks>Port of Measure-ConsumerKeys (Emit-Common.ps1:1246). A key counts once however
 /// many rows carry it; 0 is neither.</remarks>
-function MeasureConsumerKeys(const pCertKeys, pLitKeys: TArray<Integer>): TConsumerKeys;  // dl:ok unused-public-symbol@bfe4 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function MeasureConsumerKeys(const pCertKeys, pLitKeys: TArray<Integer>): TConsumerKeys;
 
 implementation
 
