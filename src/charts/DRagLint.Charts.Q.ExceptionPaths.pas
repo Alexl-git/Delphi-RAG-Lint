@@ -493,10 +493,7 @@ function SortedIntsText(const pValues: TArray<Integer>): string;
 begin
   var A:= Copy(pValues);
   TArray.Sort<Integer>(A);
-  var Parts: TArray<string>:= [];
-  for var V in A do
-    Parts:= Parts + [IntToStr(V)];
-  Result:= string.Join(',', Parts);
+  Result:= IntsText(A);
 end;
 
 { the distinct strings of pValues, added to pSet }

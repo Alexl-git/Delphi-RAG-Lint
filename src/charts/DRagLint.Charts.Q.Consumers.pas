@@ -21,7 +21,8 @@ unit DRagLint.Charts.Q.Consumers;
   Get-FileRoutines, Find-Routine, Get-RoutineRows, Get-SpanLiterals, Set-ColumnFromState,
   Get-SqlIndexRows, Get-SqlLineText) or free routines (Get-NearestName, Split-Tables,
   Get-ShortList); Get-WordRx and Get-SqlTableSymbolCount are shared with lands-where
-  (DRagLint.Charts.Sql).
+  (DRagLint.Charts.Sql). Invoke-IndexQuery's row cap, -FailOnTruncate guard and truncation NOTE
+  have no counterpart: DRagLint.Charts.Index fetches every row, so nothing is cut.
 
   PS traps closed: `-eq`, `-in`, `-contains` and `-match` are case-insensitive while
   [regex]::IsMatch is not (Get-WordRx and the verb pattern are case-SENSITIVE on purpose);

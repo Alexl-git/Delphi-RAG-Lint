@@ -20,8 +20,9 @@ unit DRagLint.Charts.Q.LandsWhere;
   -ServerDbPath / -SqlDbPath refuses with New-DiagramArtifact's own message, the layer that
   checks them before the PS emitter is reached. The PS local functions Format-N,
   Get-DataServiceClassCount, Get-ParamByNameStats and Get-RowAnchors are free routines below
-  (Get-SqlTableSymbolCount and Get-WordRx, shared with consumers, live in DRagLint.Charts.Sql); New-Row, Find-OrmProperty, Add-Box and Add-Edge are
-  private methods of TLandsWhereChart, and the script's numbered sections are its methods.
+  (Get-SqlTableSymbolCount and Get-WordRx, shared with consumers, live in DRagLint.Charts.Sql);
+  New-Row, Find-OrmProperty, Add-Box and Add-Edge are private methods of TLandsWhereChart, and
+  the script's numbered sections are its methods.
 
   PS traps closed: `-match`, `-eq`, `-in`, `-contains` and `switch` are case-insensitive, while
   [regex]::Match / IsMatch are not (Get-WordRx is case-SENSITIVE on purpose); hashtables are

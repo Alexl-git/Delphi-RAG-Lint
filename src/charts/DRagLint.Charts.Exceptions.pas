@@ -304,7 +304,7 @@ function InvokeExceptionWalk(pFocusId: Integer; pGraph: TExceptionGraph; pDepth:
 /// <summary>Integers joined with ',' (the PS "$($a -join ',')").</summary>
 /// <param name="pValues">The integers.</param>
 /// <returns>The text.</returns>
-function IntsText(const pValues: TArray<Integer>): string;  // dl:ok unused-public-symbol@4e9e -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function IntsText(const pValues: TArray<Integer>): string;
 
 implementation
 
