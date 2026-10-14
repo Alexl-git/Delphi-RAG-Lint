@@ -12,9 +12,19 @@ unit DRagLint.Core.DragLintUri;
 /// <para>The PATH verdict is DragLint.Plugin.OpenSourcePath.IsOpenableSourcePath,
 /// the same gate the IDE pipe server applies, so the browser side and the IDE
 /// side cannot drift; its reason text is reported as-is. One rule of the script
-/// is checked here on top of it: a reserved device name is the part of a
-/// segment before its FIRST dot, trimmed (CON.x.pas and NUL .pas are devices),
-/// where the gate only strips the last extension.</para>
+/// is checked here on top of it, with the script's own device list: a
+/// reserved device name is the part of a segment before its FIRST dot,
+/// trimmed (CON.x.pas and NUL .pas are devices; the gate only strips the last
+/// extension), and COM0 / LPT0 count (the script's digits are [0-9], the
+/// gate's 1-9).</para>
+/// <para>STRICTER THAN THE SCRIPT, ON PURPOSE, where .NET culture folding would
+/// otherwise make the port looser: a query key holding any non-ASCII character
+/// is refused (the script's culture-aware ToLower could fold one onto file=,
+/// line= or col=); and before the device test a base name is folded with the
+/// four non-ASCII letters whose simple case mapping is ASCII (U+0130 and U+0131
+/// to I, U+017F to S, U+212A to K), so CON&lt;U+0130&gt;N$ is CONIN$ here as it
+/// is to the script's -match. The port refuses at least everything the script
+/// refuses.</para>
 /// <para>All .pas source: strict 7-bit ASCII, CRLF line endings, no BOM.</para>
 /// </remarks>
 
@@ -38,8 +48,8 @@ type
 /// <param name="pUri">The URI exactly as the browser handed it (one argument).</param>
 /// <param name="pTarget">On True, the file (as decoded), the line (1-based; 0 and absent become 1) and col text.</param>
 /// <param name="pReason">On False, why: the reasons of Open-DragLintUri.ps1 (no uri given, not a draglint uri,
-/// no file= in uri, duplicate key, control character in file/line/col, line is not a number, col is not a number,
-/// reserved device name) or IsOpenableSourcePath's. '' on True.</param>
+/// non-ascii key in uri, no file= in uri, duplicate key, control character in file/line/col, line is not a number,
+/// col is not a number, reserved device name) or IsOpenableSourcePath's. '' on True.</param>
 /// <returns>True only when every rule passes.</returns>
 /// <remarks>Pure and thread-safe; never touches the file system (the gate runs BEFORE any FileExists, which on a
 /// UNC path is itself the network access being prevented). The scheme match is CASE-INSENSITIVE, as the script's
@@ -85,9 +95,19 @@ const
   UTF8_LEN2 = 2;
   UTF8_LEN3 = 3;
   UTF8_LEN4 = 4;
-  { Probe extension and reason prefix shared with the plugin's path gate. }
-  PROBE_EXT       = '.pas';
+  { The reason prefix, shared with the plugin's path gate. }
   RESERVED_DEVICE = 'reserved device name';
+  NON_ASCII_KEY   = 'non-ascii key in uri';
+  { The script's device list: COM/LPT take 0-9 and the superscripts 1, 2, 3. }
+  DEVICE_NAMES: array[0..5] of string = ('CON', 'PRN', 'AUX', 'NUL', 'CONIN$', 'CONOUT$');
+  NUMBERED_DEVICES: array[0..1] of string = ('COM', 'LPT');
+  NUMBERED_DEVICE_LEN = 4;
+  DEVICE_DIGITS = '0123456789' + #$00B9 + #$00B2 + #$00B3;
+  { The non-ASCII letters whose simple case mapping lands in ASCII. }
+  DOTTED_CAPITAL_I = #$0130;
+  DOTLESS_SMALL_I  = #$0131;
+  LONG_SMALL_S     = #$017F;
+  KELVIN_SIGN      = #$212A;
 
 function TDragLintTarget.Payload: string;
 begin
@@ -96,8 +116,9 @@ begin
   Result:= Result + LF_CHAR;
 end;
 
-{ Char.IsWhiteSpace at both ends -- the .NET String.Trim the script uses, so a
-  stray control character at an end is NOT silently trimmed away. }
+{ Char.IsWhiteSpace at both ends -- matches the .NET String.Trim the script
+  uses: space, TAB, LF, CR, VT, FF and the Unicode spaces are trimmed; any other
+  control character at an end stays and is refused later. }
 function TrimWhiteSpace(const S: string): string;
 var
   First, Last: Integer;
@@ -228,29 +249,60 @@ begin
   end;
 end;
 
+function HasNonAscii(const S: string): Boolean;
+var
+  C: Char;
+begin
+  Result:= False;
+  for C in S do
+    if C > DEL_CHAR then Exit(True);
+end;
+
+{ Upper-cases ASCII letters and folds the four non-ASCII letters whose simple
+  case mapping is ASCII onto it; every other character is kept. }
+function FoldToAsciiUpper(const S: string): string;
+var
+  I: Integer;
+begin
+  Result:= S;
+  for I:= 1 to Length(Result) do
+    if (Result[I] = DOTTED_CAPITAL_I) or (Result[I] = DOTLESS_SMALL_I) then Result[I]:= 'I'
+    else if Result[I] = LONG_SMALL_S then Result[I]:= 'S'
+    else if Result[I] = KELVIN_SIGN then Result[I]:= 'K'
+    else Result[I]:= UpCase(Result[I]);
+end;
+
+{ The script's device pattern over an already folded, upper-case base name. }
+function IsScriptDeviceName(const AFolded: string): Boolean;
+begin
+  Result:= MatchStr(AFolded, DEVICE_NAMES)
+        or ((Length(AFolded) = NUMBERED_DEVICE_LEN)
+            and MatchStr(Copy(AFolded, 1, NUMBERED_DEVICE_LEN - 1), NUMBERED_DEVICES)
+            and (Pos(AFolded[NUMBERED_DEVICE_LEN], DEVICE_DIGITS) > 0));
+end;
+
 { The script's device-name rule: the part of each segment before its FIRST dot,
-  trailing spaces trimmed. The gate already covers the last-extension form;
-  this adds CON.x.pas and NUL .pas. Returns '' or the refusal reason. }
+  trailing spaces trimmed, folded (see the unit remarks). The gate already
+  covers the last-extension form with digits 1-9; this adds CON.x.pas,
+  NUL .pas, COM0 / LPT0 and the folded spellings. Returns '' or the reason. }
 function CheckDeviceBaseNames(const APath: string): string;
 var
-  Seg, Base, Drive, Why: string;
-  Dot                  : Integer;
+  Seg, Base: string;
+  Dot      : Integer;
 begin
   Result:= '';
-  Drive:= Copy(APath, 1, DRIVE_PREFIX_LEN);
   for Seg in Copy(APath, DRIVE_PREFIX_LEN + 1, MaxInt).Split(['\']) do
   begin
     Dot:= Pos('.', Seg);
     Base:= TrimRight(if Dot > 0 then Copy(Seg, 1, Dot - 1) else Seg);
-    { The gate judges the base name through a probe on the path's own drive:
-      the device list lives in one place. }
-    if not IsOpenableSourcePath(Drive + Base + PROBE_EXT, Why) and StartsText(RESERVED_DEVICE, Why) then
+    if IsScriptDeviceName(FoldToAsciiUpper(Base)) then
       Exit(Format(RESERVED_DEVICE + ' "%s"', [Base]));
   end;
 end;
 
-{ Splits the query into lower-cased keys and once-decoded values. Returns ''
-  or the refusal reason (a duplicate key). }
+{ Splits the query into lower-cased keys and once-decoded values. Keys are
+  never decoded (nor by the script). Returns '' or the refusal reason: a key
+  with a non-ASCII character, or a duplicate key. }
 function SplitQuery(const AQuery: string; AParts: TDictionary<string, string>): string;
 var
   Pair, Key: string;
@@ -261,7 +313,9 @@ begin
   begin
     EqPos:= Pos('=', Pair);
     if EqPos <= 1 then Continue;
-    Key:= LowerCase(Copy(Pair, 1, EqPos - 1));
+    Key:= Copy(Pair, 1, EqPos - 1);
+    if HasNonAscii(Key) then Exit(NON_ASCII_KEY);
+    Key:= LowerCase(Key);
     if AParts.ContainsKey(Key) then Exit(Format('duplicate %s= in uri', [Key]));
     AParts.Add(Key, PercentDecode(Copy(Pair, EqPos + 1, MaxInt)));
   end;

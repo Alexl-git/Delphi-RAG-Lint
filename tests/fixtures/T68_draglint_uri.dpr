@@ -143,6 +143,17 @@ begin
   { the script takes the base name up to the FIRST dot, trimmed: CON.x.pas and CON .pas are CON }
   Refuse(U('C:\P\CON.x.pas'),                     'reserved device name "CON"', 'UH-DEVMULTIDOT');
   Refuse(U('C:\P\NUL .pas'),                      'reserved device name "NUL"', 'UH-DEVSPACE');
+  { fix round 1: the script's device digits are [0-9] -- COM0 / LPT0 too (the gate takes only 1-9) }
+  Refuse(U('C:\P\COM0.pas'),                      'reserved device name "COM0"', 'UH-COM0');
+  Refuse(U('C:\P\lpt0.pas'),                      'reserved device name "lpt0"', 'UH-LPT0');
+  Refuse(U('C:\P\LPT0\x.pas'),                    'reserved device name "LPT0"', 'UH-LPT0-DIR');
+  { fix round 1: a letter that case-folds onto ASCII (-match folds it) is folded before the device test }
+  Refuse(U('C:\P\CON' + #$0130 + 'N$.pas'),       'reserved device name "CON' + #$0130 + 'N$"', 'UH-DEVFOLD');
+  Refuse(U('C:\P\con' + #$0131 + 'n$\x.pas'),     'reserved device name "con' + #$0131 + 'n$"', 'UH-DEVFOLD-DIR');
+  { fix round 1: a raw non-ASCII key could fold onto file/line/col under .NET ToLower -- refused outright }
+  Refuse('draglint://open?file=C%3A%5CP%5Ca.pas&line=1&F' + #$0130 + 'LE=%5C%5Chost%5Cx.pas',
+         'non-ascii key in uri', 'UH-KEY-NONASCII');
+  Refuse('draglint://open?' + #$212A + '=1&file=C%3A%5CP%5Ca.pas', 'non-ascii key in uri', 'UH-KEY-KELVIN');
 
   { --- accepted: exact pipe payloads --- }
   Accept(U('C:\Projects\DB\ORM3\CLIENT\Blueprint4.pas', '681'),
@@ -165,6 +176,9 @@ begin
   Accept(U('C:\DB\SQL\MS1.SQL', '7'),             'C:\DB\SQL\MS1.SQL' + #9 + '7' + #10, 'UH-GOOD-EXT SQL');
   Accept(U('C:\P\a.fmx', '7'),                    'C:\P\a.fmx' + #9 + '7' + #10, 'UH-GOOD-EXT fmx');
   Accept(U('C:\P\A.PAS', '7'),                    'C:\P\A.PAS' + #9 + '7' + #10, 'UH-GOOD-EXT PAS');
+  { keys are never percent-decoded (nor by the script): F%C4%B0LE is its own, ignored, ASCII key }
+  Accept('draglint://open?file=C%3A%5CP%5Ca.pas&line=1&F%C4%B0LE=%5C%5Chost%5Cx.pas',
+         'C:\P\a.pas' + #9 + '1' + #10, 'UH-KEY-PCT');
   Accept(U('C:\P\Console.pas', '7'),              'C:\P\Console.pas' + #9 + '7' + #10, 'UH-NOTCON');
 
   if Fails = 0 then Writeln('OK') else Writeln(Fails, ' FAILED');
