@@ -80,6 +80,7 @@ uses
   , DRagLint.Charts.Q.FeedsFrom in '..\..\src\charts\DRagLint.Charts.Q.FeedsFrom.pas'
   , DRagLint.Charts.Q.LandsWhere in '..\..\src\charts\DRagLint.Charts.Q.LandsWhere.pas'
   , DRagLint.Charts.Q.Consumers in '..\..\src\charts\DRagLint.Charts.Q.Consumers.pas'
+  , DRagLint.Charts.Q.ExceptionPaths in '..\..\src\charts\DRagLint.Charts.Q.ExceptionPaths.pas'
   , DRagLint.Core.Model
   ;
 
@@ -881,7 +882,10 @@ begin
     for var P in B.OnPos do
       if FindHandlerBlock(Tb, P, Blk) then
         Verdicts:= Verdicts + [Format('%d=%s', [P, BoolText(HandlerReraises(pLines, Blk, P, False))])];
-    Result:= Result + [Format('%d/%d/%d/%d/%s/%s', [B.TryPos, B.ExceptPos, B.FinallyPos, B.EndPos, IntsText(B.OnPos),
+    var OnTexts: TArray<string>:= [];
+    for var P in B.OnPos do
+      OnTexts:= OnTexts + [IntToStr(P)];
+    Result:= Result + [Format('%d/%d/%d/%d/%s/%s', [B.TryPos, B.ExceptPos, B.FinallyPos, B.EndPos, string.Join(',', OnTexts),
       string.Join(';', Verdicts)])];
   end;
 end;
@@ -1005,7 +1009,7 @@ begin
   Q.OutRoot:= pArgs.OutRoot;
   Q.ChartsRoot:= pArgs.ChartsRoot;
   Q.Cap:= DEFAULT_CAP;
-  Q.Depth:= DEFAULT_DEPTH;
+  Q.Depth:= QuestionDefaultDepth(Q.Question);
   Q.SurfaceCap:= DEFAULT_SURFACE_CAP;
   Q.MaxRows:= DEFAULT_MAX_ROWS;
   Q.Command.Question:= Q.Question;

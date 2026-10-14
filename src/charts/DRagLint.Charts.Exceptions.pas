@@ -57,18 +57,19 @@ type
     Rows : TArray<TExceptionSourceRow>;
   end;
 
-  /// <summary>One try-block. Positions are line * 100000 + column.</summary>
+  /// <summary>One try-block. Positions are line * 100000 + column, as Int64: the PS arithmetic widens,
+  /// and a line past 21474 would overflow an Integer.</summary>
   TTryBlock = record
     /// <summary>The `try`.</summary>
-    TryPos    : Integer;
+    TryPos    : Int64;
     /// <summary>The `except`; 0 when none.</summary>
-    ExceptPos : Integer;
+    ExceptPos : Int64;
     /// <summary>The `finally`; 0 when none.</summary>
-    FinallyPos: Integer;
+    FinallyPos: Int64;
     /// <summary>The closing `end`.</summary>
-    EndPos    : Integer;
+    EndPos    : Int64;
     /// <summary>The `on` clauses of the except part.</summary>
-    OnPos     : TArray<Integer>;
+    OnPos     : TArray<Int64>;
   end;
 
   /// <summary>The try-blocks of one span. Port of the Get-TryBlocks result.</summary>
@@ -91,7 +92,7 @@ type
   end;
 
   /// <summary>Evaluates ONE edge: does caller pCaller stop pType on its calls to pCallee at pSites?</summary>
-  TEvaluateEdge = reference to function(pCaller, pCallee: Integer; const pSites: TArray<Integer>; const pType: string): TEdgeVerdict;
+  TEvaluateEdge = reference to function(pCaller, pCallee: Integer; const pSites: TArray<Int64>; const pType: string): TEdgeVerdict;
   /// <summary>Which of pIds have a caller at all (asked only at the depth bound).</summary>
   THasCallers = reference to function(const pIds: TArray<Integer>): TArray<Integer>;
 
@@ -102,7 +103,7 @@ type
     /// <summary>The callee.</summary>
     Callee : Integer;
     /// <summary>The call sites (positions).</summary>
-    Sites  : TArray<Integer>;
+    Sites  : TArray<Int64>;
     /// <summary>The evaluation.</summary>
     Verdict: TEdgeVerdict;
   end;
@@ -134,7 +135,7 @@ type
     /// <summary>The caller.</summary>
     Caller: Integer;
     /// <summary>Its call sites (positions).</summary>
-    Sites : TArray<Integer>;
+    Sites : TArray<Int64>;
   end;
 
   /// <summary>The caller graph the walk runs over (the PS $CallersOf / $Fetched / $CappedOf).</summary>
@@ -152,7 +153,7 @@ type
     /// <param name="pCallee">The callee.</param>
     /// <param name="pCaller">The caller.</param>
     /// <param name="pSites">Its call sites.</param>
-    procedure AddCaller(pCallee, pCaller: Integer; const pSites: TArray<Integer>);
+    procedure AddCaller(pCallee, pCaller: Integer; const pSites: TArray<Int64>);
     /// <summary>Records a caller of pCallee kept out by the caller cap (once).</summary>
     /// <param name="pCallee">The callee.</param>
     /// <param name="pCaller">The capped caller.</param>
@@ -267,7 +268,7 @@ function ExceptionNameSql(const pColumn: string): string;
 /// <returns>Decided with the blocks, or not decided with the reason.</returns>
 /// <remarks>Port of Get-TryBlocks (Emit-Common.ps1:2555). Tokens after '.', '&amp;' or a word
 /// character are identifiers; inside `asm` only `end` counts; a `case` inside a `record` opens nothing.</remarks>
-function TryBlocks(const pLines: TArray<string>; pFrom, pTo: Integer): TTryBlocks;  // dl:ok unused-public-symbol@b085 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function TryBlocks(const pLines: TArray<string>; pFrom, pTo: Integer): TTryBlocks;
 
 /// <summary>The innermost try-block whose EXCEPT part holds a position.</summary>
 /// <param name="pBlocks">TryBlocks' result.</param>
@@ -275,7 +276,7 @@ function TryBlocks(const pLines: TArray<string>; pFrom, pTo: Integer): TTryBlock
 /// <param name="pBlock">The block.</param>
 /// <returns>False when none holds it.</returns>
 /// <remarks>Port of Find-HandlerBlock (Emit-Common.ps1:2603).</remarks>
-function FindHandlerBlock(const pBlocks: TTryBlocks; pPos: Integer; out pBlock: TTryBlock): Boolean;  // dl:ok unused-public-symbol@d733 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function FindHandlerBlock(const pBlocks: TTryBlocks; pPos: Int64; out pBlock: TTryBlock): Boolean;
 
 /// <summary>Whether the handler at a position re-raises what it caught.</summary>
 /// <param name="pLines">Stripped lines.</param>
@@ -284,7 +285,7 @@ function FindHandlerBlock(const pBlocks: TTryBlocks; pPos: Integer; out pBlock: 
 /// <param name="pBare">pPos is the block's bare `except`.</param>
 /// <returns>True for `raise;` (or `raise` before else/end) or `raise V` of the handler's own variable.</returns>
 /// <remarks>Port of Test-HandlerReraises (Emit-Common.ps1:2621). Line-granular.</remarks>
-function HandlerReraises(const pLines: TArray<string>; const pBlock: TTryBlock; pPos: Integer; pBare: Boolean): Boolean;  // dl:ok unused-public-symbol@edd9 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function HandlerReraises(const pLines: TArray<string>; const pBlock: TTryBlock; pPos: Int64; pBare: Boolean): Boolean;
 
 /// <summary>The upward walk of ONE raised type over the call EDGES of a caller graph.</summary>
 /// <param name="pFocusId">The routine that raises.</param>
@@ -297,7 +298,7 @@ function HandlerReraises(const pLines: TArray<string>; const pBlock: TTryBlock; 
 /// <remarks>Port of Invoke-ExceptionWalk (Emit-Common.ps1:2671): every incoming edge is
 /// evaluated on its own; a node passes when ANY incoming edge is not stopped, and a passing node
 /// is expanded once (which also ends a cycle).</remarks>
-function InvokeExceptionWalk(pFocusId: Integer; pGraph: TExceptionGraph; pDepth: Integer; const pType: string;  // dl:ok unused-public-symbol@8b92 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function InvokeExceptionWalk(pFocusId: Integer; pGraph: TExceptionGraph; pDepth: Integer; const pType: string;
   const pEvaluate: TEvaluateEdge; const pHasCallers: THasCallers): TExceptionWalk;
 
 /// <summary>Integers joined with ',' (the PS "$($a -join ',')").</summary>
@@ -480,10 +481,10 @@ type
   { One open block of the nesting scan (the PS stack object). }
   TOpenBlock = record
     Kind      : string;
-    Pos       : Integer;
-    ExceptPos : Integer;
-    FinallyPos: Integer;
-    OnPos     : TArray<Integer>;
+    Pos       : Int64;
+    ExceptPos : Int64;
+    FinallyPos: Int64;
+    OnPos     : TArray<Int64>;
   end;
 
   { The scan state: the open-block stack, the closed try-blocks, and the first failure. }
@@ -491,11 +492,11 @@ type
     Stack : TArray<TOpenBlock>;
     Blocks: TArray<TTryBlock>;
     Fail  : string;
-    procedure Token(const pWord: string; pPos, pLine: Integer);
-    procedure CloseEnd(pPos, pLine: Integer);
+    procedure Token(const pWord: string; pPos: Int64; pLine: Integer);
+    procedure CloseEnd(pPos: Int64; pLine: Integer);
   end;
 
-procedure TTryScan.CloseEnd(pPos, pLine: Integer);
+procedure TTryScan.CloseEnd(pPos: Int64; pLine: Integer);
 begin
   if Length(Stack) = 0 then
   begin
@@ -515,7 +516,7 @@ begin
   Blocks:= Blocks + [B];
 end;
 
-procedure TTryScan.Token(const pWord: string; pPos, pLine: Integer);
+procedure TTryScan.Token(const pWord: string; pPos: Int64; pLine: Integer);
 begin
   var HasTop:= Length(Stack) > 0;
   var TopKind:= if HasTop then Stack[High(Stack)].Kind else '';
@@ -557,7 +558,7 @@ begin
   begin
     for var M in TRegEx.Matches(pLines[Ln - 1], TRY_TOKEN_PATTERN) do
     begin
-      S.Token(M.Groups[1].Value.ToLowerInvariant, Ln * POS_SCALE + M.Index, Ln);
+      S.Token(M.Groups[1].Value.ToLowerInvariant, Int64(Ln) * POS_SCALE + M.Index, Ln);
       if S.Fail <> '' then
         Break;
     end;
@@ -572,7 +573,7 @@ begin
     Result.Blocks:= S.Blocks;
 end;
 
-function FindHandlerBlock(const pBlocks: TTryBlocks; pPos: Integer; out pBlock: TTryBlock): Boolean;
+function FindHandlerBlock(const pBlocks: TTryBlocks; pPos: Int64; out pBlock: TTryBlock): Boolean;
 begin
   pBlock:= Default(TTryBlock);
   Result:= False;
@@ -584,20 +585,20 @@ begin
     end;
 end;
 
-function HandlerReraises(const pLines: TArray<string>; const pBlock: TTryBlock; pPos: Integer; pBare: Boolean): Boolean;
+function HandlerReraises(const pLines: TArray<string>; const pBlock: TTryBlock; pPos: Int64; pBare: Boolean): Boolean;
 var
   A, B: Integer;
 begin
   var HandlerVar:= '';
   if pBare then
   begin
-    A:= pBlock.ExceptPos div POS_SCALE;
-    B:= pBlock.EndPos div POS_SCALE;
+    A:= Integer(pBlock.ExceptPos div POS_SCALE);
+    B:= Integer(pBlock.EndPos div POS_SCALE);
   end
   else
   begin
-    var OnAt:= 0;
-    var Next:= 0;
+    var OnAt: Int64:= 0;
+    var Next: Int64:= 0;
     for var P in pBlock.OnPos do
       if P <= pPos then
         OnAt:= Max(OnAt, P)
@@ -605,9 +606,9 @@ begin
         Next:= P;
     if OnAt = 0 then
       Exit(False);
-    A:= OnAt div POS_SCALE;
-    B:= if Next <> 0 then Max(A, Next div POS_SCALE - 1) else pBlock.EndPos div POS_SCALE;
-    var M:= TRegEx.Match(Copy(pLines[A - 1], OnAt mod POS_SCALE, MaxInt), HANDLER_VAR_PATTERN);
+    A:= Integer(OnAt div POS_SCALE);
+    B:= if Next <> 0 then Max(A, Integer(Next div POS_SCALE) - 1) else Integer(pBlock.EndPos div POS_SCALE);
+    var M:= TRegEx.Match(Copy(pLines[A - 1], Integer(OnAt mod POS_SCALE), MaxInt), HANDLER_VAR_PATTERN);
     if M.Success then
       HandlerVar:= M.Groups[1].Value;
   end;
@@ -635,7 +636,7 @@ begin
   inherited Destroy;
 end;
 
-procedure TExceptionGraph.AddCaller(pCallee, pCaller: Integer; const pSites: TArray<Integer>);
+procedure TExceptionGraph.AddCaller(pCallee, pCaller: Integer; const pSites: TArray<Int64>);
 var
   L: TList<TCallerEdge>;
   E: TCallerEdge;

@@ -212,11 +212,35 @@ type
     [Test] procedure AnswerNamesTheSqlIndex;
   end;
 
-implementation
+  [TestFixture]
+  TExceptionPathsTests = class(TQuestionFixture)
+  private
+    procedure Check(const pDb, pTarget, pFields, pDotSha: string);
+  public
+    [Test] procedure CaughtOnOneEdgeAndEscapingOnAnother;
+    [Test] procedure CaughtTwoLevelsUp;
+    [Test] procedure RecursiveRoutineEvaluatesOnlyItself;
+    [Test] procedure StaleFocusIsNotClassified;
+    [Test] procedure StaleCallersAndABareExcept;
+    [Test] procedure ReRaiseIsWalkedAsItsOwnType;
+    [Test] procedure HandlersInBodyAndCaughtByTheCaller;
+    [Test] procedure HandlersThatGuardOtherStatements;
+    [Test] procedure CaughtAtOnlySomeCallSites;
+    [Test] procedure LinesPastTheIntegerRangeKeepTheirNumbers;
+    [Test] procedure CallerWalkCappedAt150;
+    [Test] procedure ReRaiseOfAVariableWithNoCaller;
+    [Test] procedure HandlerClausesPastTheCapAreDisclosed;
+    [Test] procedure MayCatchAndCannotCatch;
+    [Test] procedure RefusalsMatchPowerShell;
+    [Test] procedure WalksThreeLevelsByDefault;
+    [Test] procedure HashtableKeyOrderMatchesPowerShell;
+  end;
 
+implementation
 uses
   System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
-  DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface;
+  DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
+  DRagLint.Charts.Exceptions;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
@@ -765,6 +789,234 @@ const
   CO_SQL_INDEX_LINE = 4;
   CO_CHART = 'CHART consumers MSCLIST -- 0 reading routines / 0 writing routines';
   CO_LAST_ROW = '  ControlPlan2.ViewModel @ControlPlan2.ViewModel.pas:387 -- ControlPlan2.ViewModel.pas: ''MSCLIST'' at literal :387, literal :708, literal :851';
+  EP_ID = 'exception-paths';
+  EP_HT_FIRST = 4242;
+  EP_HT_COUNT = 150;
+  EP_HT_STEP = 37;
+  EP_HT_OFFSET = 11;
+  EP_HT_ORDER = '4303,3008,1713,418,5154,3859,2564,1269,4710,3415,2120,825,5561,4266,2971,1676,381,5117,3822,2527,123' +
+    '2,4242,3378,2083,788,5524,4229,2934,1639,344,5080,3785,2490,1195,4636,3341,2046,751,5487,4192,2897,1' +
+    '602,307,5043,3748,2453,1158,4599,3304,2009,714,5450,4155,2860,1565,270,5006,3711,2416,1121,4562,3267' +
+    ',1972,677,5413,4118,2823,1528,233,196,4969,3674,2379,1084,4525,3230,1935,640,5376,4081,2786,1491,467' +
+    '3,4932,3637,2342,1047,4488,3193,1898,603,5339,4044,2749,1454,159,4895,3600,2305,1010,4451,3156,1861,' +
+    '566,5302,4007,2712,1417,122,4858,3563,2268,973,4414,3119,1824,529,5265,3970,2675,1380,85,4821,3526,2' +
+    '231,936,4377,3082,1787,492,5228,3933,2638,1343,48,4784,3489,2194,899,4340,3045,1750,455,5191,3896,26' +
+    '01,1306,4747,3452,2157,862';
+  EP_DEPTH = 3;
+  TEST_CLONE = 'TESTS-TestMicroniteObjects.sqlite';
+  EP_RB = 'MStreams.TABZMemoryStream.ReadBuffer';
+  EP_SCHEMA = 'uJobList.ViewModel.TJobListViewModel.BuildSchema';
+  EP_NOCALL = 'BASICSF.Delete_DirTree';
+  EP_STALE = 'Stats.Z19_LowerQI_KnownSigma';
+  EP_BARE = 'uPipeClientConnection.TPipeClientConnection.Disconnect';
+  EP_DDL = 'uOptrlistRoleSync.CreateDdlConnection';
+  EP_RERAISE = 'uThreadStorageServer.TThreadStorageServer.OpenConnection';
+  EP_WRITE = 'MStreams.TABZMemoryStream.WriteBuffer';
+  EP_PARTIAL = 'DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture';
+  EP_WIDE = 'DRagLint.Sql.Guarded.TSqlGuard.Create';
+  EP_CAP = 'MStreams.TABZMemoryStream.EnsureMoreCapacity';
+  EP_RVAR = 'BASICSF.CopyRecords';
+  EP_MANY = 'uAutoTest.RunAutoTest';
+  EP_MAY = 'DUnitX.TestRunner.TDUnitXTestRunner.ExecuteTest';
+  EP_UNITTESTS_CLONE = 'TESTS-MicroniteTests.sqlite';
+  EP_PARTIAL_FIELDS = 'Qname="DRagLint.Format.Yadf.TYadfFormatter.SpawnAndCapture",Raises=2,RaiseTypes=1,RaiseTypeNames="EY' +
+    'adfFormatError",RaiseLines="512,529",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,' +
+    'BareExcepts=0,InferredLines="",StaleRows=0,FocusFresh=true,Callers=3,CallerLevels=3,CallerNames="d1:' +
+    'Format,d2:DoFormat,d3:Run",CallersCapped=false,Caught=0,Escapes=0,NoCallerEnds=1.0,CappedCallers=0,C' +
+    'atchAndPass=0,TypePaths="EYadfFormatError:0/0/1/3/0",SolidEdges=2,ReRaised=0,Partial=2,Unverified=0,' +
+    'MayCatch=0,NotGuarding=2,NotGuardingUndrawn=2,NotEvaluated="",NoVerdicts=0,StaleCallers=2,Events="pa' +
+    'rtial:Format:652,partial:Format:690",WalkSentence="no handler found within 3 caller levels (3 caller' +
+    's evaluated); reaches 1 caller with no resolved caller of its own; 2 caught at only some call sites;' +
+    ' 2 callers not read: source changed since indexing",FilesTouched=2,StaleFiles=1,IndexCandidates=152,' +
+    'IndexRaise=30,IndexHandle=45,IndexDropped=8,IndexRaiseRoutines=20,IndexHandleRoutines=31,Clusters=5,' +
+    'ClickTargets=8,Expected=8,AllClickable=true';
+  EP_PARTIAL_DOT_SHA = 'fc5d4a14e99ac015a1a89549acb7eb66cade487f3000deeb88606ad8f43f3ea6';
+  EP_WIDE_FIELDS = 'Qname="DRagLint.Sql.Guarded.TSqlGuard.Create",Raises=5,RaiseTypes=1,RaiseTypeNames="ESqlGuardError",' +
+    'RaiseLines="412,414,416,425,427",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,Bare' +
+    'Excepts=0,InferredLines="",StaleRows=0,FocusFresh=true,Callers=2,CallerLevels=2,CallerNames="d1:DoSq' +
+    'l,d2:Run",CallersCapped=false,Caught=0,Escapes=0,NoCallerEnds=1.0,CappedCallers=0,CatchAndPass=0,Typ' +
+    'ePaths="ESqlGuardError:0/0/1/2/0",SolidEdges=0,ReRaised=0,Partial=0,Unverified=0,MayCatch=0,NotGuard' +
+    'ing=0,NotGuardingUndrawn=0,NotEvaluated="",NoVerdicts=0,StaleCallers=2,Events="",WalkSentence="no ha' +
+    'ndler found within 3 caller levels (2 callers evaluated); reaches 1 caller with no resolved caller o' +
+    'f its own; 2 callers not read: source changed since indexing",FilesTouched=2,StaleFiles=1,IndexCandi' +
+    'dates=152,IndexRaise=30,IndexHandle=45,IndexDropped=8,IndexRaiseRoutines=20,IndexHandleRoutines=31,C' +
+    'lusters=4,ClickTargets=8,Expected=8,AllClickable=true';
+  EP_WIDE_DOT_SHA = '83acbff111f4960350735aae2ca349339cc1316d87d5ebb15c203379f05cdb4b';
+  EP_CAP_FIELDS = 'Qname="MStreams.TABZMemoryStream.EnsureMoreCapacity",Raises=1,RaiseTypes=1,RaiseTypeNames="EStreamEr' +
+    'ror",RaiseLines="2163",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,BareExcepts=0,' +
+    'InferredLines="",StaleRows=0,FocusFresh=true,Callers=150,CallerLevels=2,CallerNames="d1:Read,d1:Writ' +
+    'e,d1:WriteB,d1:WriteB,d1:WriteB,d1:WriteB,d1:WriteB,d1:WriteB,d2:WriteB,d2:WriteB,d2:WriteB,d2:Write' +
+    'B,d2:WriteB,d2:WriteB,d2:WriteB,d2:WriteBuffer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:' +
+    'Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer,d2:Writer",CallersCappe' +
+    'd=true,Caught=0,Escapes=0,NoCallerEnds=144.0,CappedCallers=140.0,CatchAndPass=0,TypePaths="EStreamEr' +
+    'ror:0/0/144/150/140",SolidEdges=0,ReRaised=0,Partial=0,Unverified=0,MayCatch=0,NotGuarding=0,NotGuar' +
+    'dingUndrawn=0,NotEvaluated="",NoVerdicts=0,StaleCallers=0,Events="",WalkSentence="no handler found w' +
+    'ithin 3 caller levels (150 callers evaluated); reaches 144 callers with no resolved caller of their ' +
+    'own; 140 callers not walked (cap)",FilesTouched=135,StaleFiles=0,IndexCandidates=428,IndexRaise=168,' +
+    'IndexHandle=177,IndexDropped=74,IndexRaiseRoutines=120,IndexHandleRoutines=101,Clusters=4,ClickTarge' +
+    'ts=30,Expected=30,AllClickable=true';
+  EP_CAP_DOT_SHA = '4485996b95b6ef142e3407c8f29089a450731a8a13dd2dfcc18014030e8e2459';
+  EP_RVAR_FIELDS = 'Qname="BASICSF.CopyRecords",Raises=0,RaiseTypes=0,RaiseTypeNames="",RaiseLines="",Handles=1,HandleLi' +
+    'nes="5037",Dropped=0,Inferred=5,InferredRaises=3,BareExcepts=2,InferredLines="raise-var@5046,bare-ex' +
+    'cept@5053,reraise@5054,bare-except@5063,reraise@5064",StaleRows=0,FocusFresh=true,Callers=0,CallerLe' +
+    'vels=0,CallerNames="",CallersCapped=false,Caught=0,Escapes=0,NoCallerEnds=0,CappedCallers=0,CatchAnd' +
+    'Pass=0,TypePaths="(re-raise):0/0/0/0/0",SolidEdges=0,ReRaised=0,Partial=0,Unverified=0,MayCatch=0,No' +
+    'tGuarding=0,NotGuardingUndrawn=0,NotEvaluated="",NoVerdicts=0,StaleCallers=0,Events="",WalkSentence=' +
+    '"no resolved caller in this index",FilesTouched=1,StaleFiles=0,IndexCandidates=428,IndexRaise=168,In' +
+    'dexHandle=177,IndexDropped=74,IndexRaiseRoutines=120,IndexHandleRoutines=101,Clusters=4,ClickTargets' +
+    '=7,Expected=7,AllClickable=true';
+  EP_RVAR_DOT_SHA = 'd1184e775a1cd2f3f7c83e8a90368041a7a966c6ee4a8eebd02b819d0e4f2ade';
+  EP_MANY_FIELDS = 'Qname="uAutoTest.RunAutoTest",Raises=0,RaiseTypes=0,RaiseTypeNames="",RaiseLines="",Handles=41,Handl' +
+    'eLines="698,709,733,775,834,890,972,984,1001,1022,1096,1117,1132,1170,1204,1233,1251,1275,1292,1326,' +
+    '1350,1383,1497,1530,1591,1618,1646,1653,1660,1735,1765,1788,1845,1886,1912,1938,1967,1989,2006,2065,' +
+    '2072",Dropped=0,Inferred=5,InferredRaises=0,BareExcepts=5,InferredLines="bare-except@770,bare-except' +
+    '@829,bare-except@886,bare-except@967,bare-except@2081",StaleRows=0,FocusFresh=true,Callers=0,CallerL' +
+    'evels=0,CallerNames="",CallersCapped=false,Caught=0,Escapes=0,NoCallerEnds=0,CappedCallers=0,CatchAn' +
+    'dPass=0,TypePaths="",SolidEdges=0,ReRaised=0,Partial=0,Unverified=0,MayCatch=0,NotGuarding=0,NotGuar' +
+    'dingUndrawn=0,NotEvaluated="",NoVerdicts=0,StaleCallers=0,Events="",WalkSentence=null,FilesTouched=1' +
+    ',StaleFiles=0,IndexCandidates=428,IndexRaise=168,IndexHandle=177,IndexDropped=74,IndexRaiseRoutines=' +
+    '120,IndexHandleRoutines=101,Clusters=3,ClickTargets=26,Expected=26,AllClickable=true';
+  EP_MANY_DOT_SHA = 'a296fca968fb8872193d22e560b6f05ed89e292c926a463829e2a1d70e2e6b46';
+  EP_MAY_FIELDS = 'Qname="DUnitX.TestRunner.TDUnitXTestRunner.ExecuteTest",Raises=2,RaiseTypes=2,RaiseTypeNames="ENoAss' +
+    'ertionsMade,Exception",RaiseLines="788,801",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRa' +
+    'ises=0,BareExcepts=0,InferredLines="",StaleRows=0,FocusFresh=true,Callers=3,CallerLevels=3,CallerNam' +
+    'es="d1:ExecuteTests,d2:ExecuteFixtures,d3:Execute",CallersCapped=false,Caught=2.0,Escapes=0,NoCaller' +
+    'Ends=0,CappedCallers=0,CatchAndPass=0,TypePaths="ENoAssertionsMade:1/0/0/1/0,Exception:1/0/0/1/0",So' +
+    'lidEdges=3,ReRaised=0,Partial=0,Unverified=0,MayCatch=3,NotGuarding=0,NotGuardingUndrawn=0,NotEvalua' +
+    'ted="d2:ExecuteFixtures,d3:Execute",NoVerdicts=2,StaleCallers=0,Events="caught:ExecuteTests:853,caug' +
+    'ht:ExecuteTests:857,may:ExecuteTests:851,may:ExecuteTests:853,may:ExecuteTests:855,caught:ExecuteTes' +
+    'ts:857",WalkSentence="ENoAssertionsMade: caught on 1 call edge (ExecuteTests:853 on the call to Exec' +
+    'uteTest) within 3 caller levels (1 caller evaluated); Exception: caught on 1 call edge (ExecuteTests' +
+    ':857 on the call to ExecuteTest) within 3 caller levels (1 caller evaluated); 3 may catch",FilesTouc' +
+    'hed=1,StaleFiles=0,IndexCandidates=85,IndexRaise=24,IndexHandle=23,IndexDropped=32,IndexRaiseRoutine' +
+    's=16,IndexHandleRoutines=17,Clusters=5,ClickTargets=10,Expected=10,AllClickable=true';
+  EP_MAY_DOT_SHA = '05744c36d614b339c1d1a407a70d450243f25acbc3fb84ac8050d1d4a28532dc';
+  EP_RB_FIELDS = 'Qname="MStreams.TABZMemoryStream.ReadBuffer",Raises=1,RaiseTypes=1,RaiseTypeNames="EReadError",Raise' +
+    'Lines="2173",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,BareExcepts=0,InferredLi' +
+    'nes="",StaleRows=0,FocusFresh=true,Callers=140,CallerLevels=3,CallerNames="d1:Save,d1:AutoTestSetupD' +
+    'efaults,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:S' +
+    'ave,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,' +
+    'd1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:S' +
+    'ave,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,' +
+    'd1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:S' +
+    'ave,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,' +
+    'd1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:S' +
+    'ave,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,' +
+    'd1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:S' +
+    'ave,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,' +
+    'd1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d1:Save,d2:RunAutoTest,d2:Save,d2:PostStatio' +
+    'nToServer,d3:SaveDefaults,d3:AutoTestSetupBools,d3:FormCloseQuery",CallersCapped=false,Caught=2.0,Es' +
+    'capes=3.0,NoCallerEnds=133.0,CappedCallers=0,CatchAndPass=1.0,TypePaths="EReadError:2/3/133/139/0",S' +
+    'olidEdges=2,ReRaised=0,Partial=0,Unverified=0,MayCatch=0,NotGuarding=2,NotGuardingUndrawn=1,NotEvalu' +
+    'ated="d2:RunAutoTest",NoVerdicts=0,StaleCallers=0,Events="caught:AutoTestSetupDefaults:466,caught:Au' +
+    'toTestSetupDefaults:466",WalkSentence="caught on 2 call edges (AutoTestSetupDefaults:466 on the call' +
+    ' to ReadBuffer, AutoTestSetupDefaults:466 on the call to Save) within 3 caller levels (139 callers e' +
+    'valuated); 1 catching caller also lets it escape on another call; escapes the walk on 3 path ends af' +
+    'ter 3 levels; reaches 133 callers with no resolved caller of their own",FilesTouched=139,StaleFiles=' +
+    '0,IndexCandidates=428,IndexRaise=168,IndexHandle=177,IndexDropped=74,IndexRaiseRoutines=120,IndexHan' +
+    'dleRoutines=101,Clusters=5,ClickTargets=31,Expected=31,AllClickable=true';
+  EP_RB_DOT_SHA = '3ff01d4fd6b623f336c7f97303d318c28fe53d90d4267ad25f8724985226d64c';
+  EP_SCHEMA_FIELDS = 'Qname="uJobList.ViewModel.TJobListViewModel.BuildSchema",Raises=1,RaiseTypes=1,RaiseTypeNames="EData' +
+    'baseError",RaiseLines="289",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,BareExcep' +
+    'ts=0,InferredLines="",StaleRows=0,FocusFresh=true,Callers=7,CallerLevels=3,CallerNames="d1:ApplyRawP' +
+    'ayload,d1:LoadAll,d2:btnRefreshClick,d2:btnRefreshGridClick,d2:RefreshFolders,d2:LoadAllAsync,d3:DoI' +
+    'nitLoad",CallersCapped=false,Caught=1.0,Escapes=0,NoCallerEnds=3.0,CappedCallers=0,CatchAndPass=0,Ty' +
+    'pePaths="EDatabaseError:1/0/3/6/0",SolidEdges=1,ReRaised=0,Partial=0,Unverified=0,MayCatch=0,NotGuar' +
+    'ding=3,NotGuardingUndrawn=3,NotEvaluated="d3:DoInitLoad",NoVerdicts=0,StaleCallers=0,Events="caught:' +
+    'LoadAllAsync:632",WalkSentence="caught on 1 call edge (LoadAllAsync:632 on the call to ApplyRawPaylo' +
+    'ad) within 3 caller levels (6 callers evaluated); reaches 3 callers with no resolved caller of their' +
+    ' own",FilesTouched=2,StaleFiles=0,IndexCandidates=428,IndexRaise=168,IndexHandle=177,IndexDropped=74' +
+    ',IndexRaiseRoutines=120,IndexHandleRoutines=101,Clusters=5,ClickTargets=10,Expected=10,AllClickable=' +
+    'true';
+  EP_SCHEMA_DOT_SHA = 'dbe8776b521a5c08c71dd62d12a2a92fe4bbe4506a121bec6070fce536b1ae1b';
+  EP_NOCALL_FIELDS = 'Qname="BASICSF.Delete_DirTree",Raises=3,RaiseTypes=1,RaiseTypeNames="EFileError",RaiseLines="684,693' +
+    ',698",Handles=1,HandleLines="715",Dropped=0,Inferred=0,InferredRaises=0,BareExcepts=0,InferredLines=' +
+    '"",StaleRows=0,FocusFresh=true,Callers=0,CallerLevels=0,CallerNames="",CallersCapped=false,Caught=0,' +
+    'Escapes=0,NoCallerEnds=0,CappedCallers=0,CatchAndPass=0,TypePaths="EFileError:0/0/0/1/0",SolidEdges=' +
+    '0,ReRaised=0,Partial=0,Unverified=0,MayCatch=0,NotGuarding=0,NotGuardingUndrawn=0,NotEvaluated="",No' +
+    'Verdicts=0,StaleCallers=0,Events="",WalkSentence="no handler found within 3 caller levels (1 caller ' +
+    'evaluated)",FilesTouched=1,StaleFiles=0,IndexCandidates=428,IndexRaise=168,IndexHandle=177,IndexDrop' +
+    'ped=74,IndexRaiseRoutines=120,IndexHandleRoutines=101,Clusters=3,ClickTargets=5,Expected=5,AllClicka' +
+    'ble=true';
+  EP_NOCALL_DOT_SHA = '25da5af3dffb2be1915c9ae7a6272b014a827bfb1340eaf0ab72553859279f8a';
+  EP_STALE_FIELDS = 'Qname="Stats.Z19_LowerQI_KnownSigma",Raises=0,RaiseTypes=0,RaiseTypeNames="",RaiseLines="",Handles=0' +
+    ',HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,BareExcepts=0,InferredLines="",StaleRows=2,Foc' +
+    'usFresh=false,Callers=8,CallerLevels=3,CallerNames="d1:Accept_Double_Known_CombinedAQL,d1:Accept_Dou' +
+    'ble_Known_DiffAQLs,d1:Accept_SingleForm2_Known,d1:Accept_Double_Known_CombinedAQL,d1:Accept_Double_K' +
+    'nown_DiffAQLs,d1:Accept_SingleForm2_Known,d2:IssueVerdict,d3:Update",CallersCapped=false,Caught=0,Es' +
+    'capes=0,NoCallerEnds=0,CappedCallers=0,CatchAndPass=0,TypePaths="",SolidEdges=0,ReRaised=0,Partial=0' +
+    ',Unverified=0,MayCatch=0,NotGuarding=0,NotGuardingUndrawn=0,NotEvaluated="d1:Accept_Double_Known_Com' +
+    'binedAQL,d1:Accept_Double_Known_DiffAQLs,d1:Accept_SingleForm2_Known,d1:Accept_Double_Known_Combined' +
+    'AQL,d1:Accept_Double_Known_DiffAQLs,d1:Accept_SingleForm2_Known,d2:IssueVerdict,d3:Update",NoVerdict' +
+    's=0,StaleCallers=0,Events="",WalkSentence=null,FilesTouched=2,StaleFiles=1,IndexCandidates=428,Index' +
+    'Raise=168,IndexHandle=177,IndexDropped=74,IndexRaiseRoutines=120,IndexHandleRoutines=101,Clusters=5,' +
+    'ClickTargets=11,Expected=11,AllClickable=true';
+  EP_STALE_DOT_SHA = '319120590752d4960a466959ed8793ece129e321c4d4ca707b84295b57728707';
+  EP_BARE_FIELDS = 'Qname="uPipeClientConnection.TPipeClientConnection.Disconnect",Raises=0,RaiseTypes=0,RaiseTypeNames=' +
+    '"",RaiseLines="",Handles=1,HandleLines="535",Dropped=0,Inferred=1,InferredRaises=0,BareExcepts=1,Inf' +
+    'erredLines="bare-except@524",StaleRows=0,FocusFresh=true,Callers=6,CallerLevels=2,CallerNames="d1:Ru' +
+    'nAdminBootstrap,d1:Connect,d1:Destroy,d1:Disconnect,d1:Destroy,d2:FormCreate",CallersCapped=false,Ca' +
+    'ught=0,Escapes=0,NoCallerEnds=0,CappedCallers=0,CatchAndPass=0,TypePaths="",SolidEdges=0,ReRaised=0,' +
+    'Partial=0,Unverified=0,MayCatch=0,NotGuarding=0,NotGuardingUndrawn=0,NotEvaluated="d1:RunAdminBootst' +
+    'rap,d1:Connect,d1:Destroy,d1:Disconnect,d1:Destroy,d2:FormCreate",NoVerdicts=0,StaleCallers=3,Events' +
+    '="",WalkSentence=null,FilesTouched=4,StaleFiles=1,IndexCandidates=428,IndexRaise=168,IndexHandle=177' +
+    ',IndexDropped=74,IndexRaiseRoutines=120,IndexHandleRoutines=101,Clusters=5,ClickTargets=9,Expected=9' +
+    ',AllClickable=true';
+  EP_BARE_DOT_SHA = '852261dbada87c2c100b3ab8ae153e9195ac0e5604131626cb881b01f8286d50';
+  EP_DDL_FIELDS = 'Qname="uOptrlistRoleSync.CreateDdlConnection",Raises=1,RaiseTypes=1,RaiseTypeNames="Exception",Raise' +
+    'Lines="195",Handles=0,HandleLines="",Dropped=0,Inferred=2,InferredRaises=1,BareExcepts=1,InferredLin' +
+    'es="bare-except@207,reraise@209",StaleRows=0,FocusFresh=true,Callers=7,CallerLevels=3,CallerNames="d' +
+    '1:ApplyOptrlistSyncItems,d1:ResyncAllOptrlistFirebirdRoles,d1:SyncOptrlistFirebirdRoles,d2:HandleDel' +
+    'ta,d2:RevokeAllOptrlistFirebirdRoles,d2:HandleRoleResync,d3:HandleDelta",CallersCapped=false,Caught=' +
+    '4.0,Escapes=0,NoCallerEnds=2.0,CappedCallers=0,CatchAndPass=0,TypePaths="Exception:2/0/1/5/0,(re-rai' +
+    'se):2/0/1/5/0",SolidEdges=4,ReRaised=0,Partial=0,Unverified=0,MayCatch=0,NotGuarding=2,NotGuardingUn' +
+    'drawn=2,NotEvaluated="d2:HandleDelta,d3:HandleDelta",NoVerdicts=0,StaleCallers=0,Events="caught:Appl' +
+    'yOptrlistSyncItems:394,caught:HandleRoleResync:4791,caught:ApplyOptrlistSyncItems:394,caught:HandleR' +
+    'oleResync:4791",WalkSentence="Exception: caught on 2 call edges (ApplyOptrlistSyncItems:394 on the c' +
+    'all to CreateDdlConnection, HandleRoleResync:4791 on the call to ResyncAllOptrlistFirebirdRoles) wit' +
+    'hin 3 caller levels (5 callers evaluated); reaches 1 caller with no resolved caller of its own; (re-' +
+    'raise): caught on 2 call edges (ApplyOptrlistSyncItems:394 on the call to CreateDdlConnection, Handl' +
+    'eRoleResync:4791 on the call to ResyncAllOptrlistFirebirdRoles) within 3 caller levels (5 callers ev' +
+    'aluated); reaches 1 caller with no resolved caller of its own",FilesTouched=3,StaleFiles=0,IndexCand' +
+    'idates=2831,IndexRaise=282,IndexHandle=1693,IndexDropped=847,IndexRaiseRoutines=261,IndexHandleRouti' +
+    'nes=469,Clusters=7,ClickTargets=13,Expected=13,AllClickable=true';
+  EP_DDL_DOT_SHA = '8bcd584dbed6869c7fdd7a805d89f76ce563f037befd10dfcbd6bf1c62aa46e0';
+  EP_RERAISE_FIELDS = 'Qname="uThreadStorageServer.TThreadStorageServer.OpenConnection",Raises=1,RaiseTypes=1,RaiseTypeName' +
+    's="Exception",RaiseLines="335",Handles=2,HandleLines="325,340",Dropped=1,Inferred=1,InferredRaises=1' +
+    ',BareExcepts=0,InferredLines="reraise@340",StaleRows=0,FocusFresh=true,Callers=1,CallerLevels=1,Call' +
+    'erNames="d1:OpenConnectionForUser",CallersCapped=false,Caught=2.0,Escapes=0,NoCallerEnds=0,CappedCal' +
+    'lers=0,CatchAndPass=0,TypePaths="Exception:1/0/0/1/0,(re-raise):1/0/0/1/0",SolidEdges=2,ReRaised=0,P' +
+    'artial=0,Unverified=0,MayCatch=0,NotGuarding=0,NotGuardingUndrawn=0,NotEvaluated="",NoVerdicts=0,Sta' +
+    'leCallers=0,Events="caught:OpenConnectionForUser:221,caught:OpenConnectionForUser:221",WalkSentence=' +
+    '"Exception: caught on 1 call edge (OpenConnectionForUser:221 on the call to OpenConnection) within 3' +
+    ' caller levels (1 caller evaluated); (re-raise): caught on 1 call edge (OpenConnectionForUser:221 on' +
+    ' the call to OpenConnection) within 3 caller levels (1 caller evaluated)",FilesTouched=2,StaleFiles=' +
+    '0,IndexCandidates=2831,IndexRaise=282,IndexHandle=1693,IndexDropped=847,IndexRaiseRoutines=261,Index' +
+    'HandleRoutines=469,Clusters=5,ClickTargets=7,Expected=7,AllClickable=true';
+  EP_RERAISE_DOT_SHA = 'cc0a5f7611d60f233c725204098e7defb436cc24a00d5544a70d163d5a8bc924';
+  EP_WRITE_FIELDS = 'Qname="MStreams.TABZMemoryStream.WriteBuffer",Raises=1,RaiseTypes=1,RaiseTypeNames="EWriteError",Rai' +
+    'seLines="2180",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,BareExcepts=0,Inferred' +
+    'Lines="",StaleRows=0,FocusFresh=true,Callers=3,CallerLevels=2,CallerNames="d1:RouteOPTRLIST,d1:Route' +
+    'STATIONS,d2:RouteTableCommand",CallersCapped=false,Caught=0,Escapes=0,NoCallerEnds=1.0,CappedCallers' +
+    '=0,CatchAndPass=0,TypePaths="EWriteError:0/0/1/3/0",SolidEdges=0,ReRaised=0,Partial=0,Unverified=0,M' +
+    'ayCatch=0,NotGuarding=3,NotGuardingUndrawn=3,NotEvaluated="",NoVerdicts=0,StaleCallers=0,Events="",W' +
+    'alkSentence="no handler found within 3 caller levels (3 callers evaluated); reaches 1 caller with no' +
+    ' resolved caller of its own",FilesTouched=2,StaleFiles=0,IndexCandidates=2831,IndexRaise=282,IndexHa' +
+    'ndle=1693,IndexDropped=847,IndexRaiseRoutines=261,IndexHandleRoutines=469,Clusters=4,ClickTargets=5,' +
+    'Expected=5,AllClickable=true';
+  EP_WRITE_DOT_SHA = 'f930452844a5d66fae1af3017f2efda9a15d325e8ee8cf6db8499dc26f92faaf';
 
 function RepoRoot: string;
 begin
@@ -1975,6 +2227,135 @@ begin
   Assert.AreEqual('INDEX ' + A.SqlDbPath + ' (sql)', L[CO_SQL_INDEX_LINE]);
   Assert.AreEqual(CO_CHART, L[CO_SQL_INDEX_LINE + 1]);
   Assert.AreEqual(CO_LAST_ROW, L[High(L)]);
+end;
+
+{ ---- exception-paths ---- }
+
+{ the bundler's -Depth for exception-paths (3) and -Cap (20), as New-DiagramArtifact passes them }
+procedure TExceptionPathsTests.Check(const pDb, pTarget, pFields, pDotSha: string);
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(EP_ID, pTarget, pDb, A) then
+    Exit;
+  A.Depth:= QuestionDefaultDepth(EP_ID);
+  Assert.IsTrue(FindChartQuestion(EP_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(pFields, Fields(C));
+  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
+end;
+
+procedure TExceptionPathsTests.CaughtOnOneEdgeAndEscapingOnAnother;
+begin
+  { 140 callers: AutoTestSetupDefaults catches EReadError on the call to ReadBuffer AND on the call to Save, and lets
+    it escape through Save elsewhere; 133 ends, 3 escapes past the bound, a capped depth-1 cluster ("N more callers"),
+    a not-guarding handler that is drawn on another edge }
+  Check(CLIENT_CLONE, EP_RB, EP_RB_FIELDS, EP_RB_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.CaughtTwoLevelsUp;
+begin
+  { LoadAllAsync catches EDatabaseError at depth 2; three handlers guard other statements and are not drawn }
+  Check(CLIENT_CLONE, EP_SCHEMA, EP_SCHEMA_FIELDS, EP_SCHEMA_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.RecursiveRoutineEvaluatesOnlyItself;
+begin
+  { no resolved caller but itself: no caller cluster, "no handler found ... (1 caller evaluated)" }
+  Check(CLIENT_CLONE, EP_NOCALL, EP_NOCALL_FIELDS, EP_NOCALL_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.StaleFocusIsNotClassified;
+begin
+  { the frozen clone is stale for Stats.pas: [stale source] rows, nothing classified, WalkSentence null }
+  Check(CLIENT_CLONE, EP_STALE, EP_STALE_FIELDS, EP_STALE_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.StaleCallersAndABareExcept;
+begin
+  { a bare except [inferred] in the body; three callers not read because their file is stale }
+  Check(CLIENT_CLONE, EP_BARE, EP_BARE_FIELDS, EP_BARE_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.ReRaiseIsWalkedAsItsOwnType;
+begin
+  { raise Exception + bare except + raise; : two types walked, each sentence prefixed with its type }
+  Check(SERVER_CLONE, EP_DDL, EP_DDL_FIELDS, EP_DDL_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.HandlersInBodyAndCaughtByTheCaller;
+begin
+  { two handler clauses in the body, a dropped declaration, the caller catches both types }
+  Check(SERVER_CLONE, EP_RERAISE, EP_RERAISE_FIELDS, EP_RERAISE_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.HandlersThatGuardOtherStatements;
+begin
+  { matching handlers whose try holds none of the call sites: counted, not drawn }
+  Check(SERVER_CLONE, EP_WRITE, EP_WRITE_FIELDS, EP_WRITE_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.CaughtAtOnlySomeCallSites;
+begin
+  { Format calls SpawnAndCapture twice, once inside its try: "caught ... for k of n call sites" (partial) }
+  Check(DL_CLONE, EP_PARTIAL, EP_PARTIAL_FIELDS, EP_PARTIAL_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.LinesPastTheIntegerRangeKeepTheirNumbers;
+begin
+  { a caller in DRagLint.CLI.pas calls at line 29442: line * 100000 overflows an Integer, the PS widens it }
+  Check(DL_CLONE, EP_WIDE, EP_WIDE_FIELDS, EP_WIDE_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.CallerWalkCappedAt150;
+begin
+  { the walk stops at 150 callers: "caller walk CAPPED", capped callers counted, never "no resolved caller" }
+  Check(CLIENT_CLONE, EP_CAP, EP_CAP_FIELDS, EP_CAP_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.ReRaiseOfAVariableWithNoCaller;
+begin
+  { raise <var>, raise; and bare excepts only: the (re-raise) type alone, no resolved caller }
+  Check(CLIENT_CLONE, EP_RVAR, EP_RVAR_FIELDS, EP_RVAR_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.HandlerClausesPastTheCapAreDisclosed;
+begin
+  { 41 handler clauses: 20 drawn, "21 more handler clauses not shown" }
+  Check(CLIENT_CLONE, EP_MANY, EP_MANY_FIELDS, EP_MANY_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.MayCatchAndCannotCatch;
+begin
+  { typed handlers whose relation to the raised type is unknown (dashed "may catch"), and two that provably cannot }
+  Check(EP_UNITTESTS_CLONE, EP_MAY, EP_MAY_FIELDS, EP_MAY_DOT_SHA);
+end;
+
+procedure TExceptionPathsTests.RefusalsMatchPowerShell;
+begin
+  Assert.AreEqual('Blueprint4.ViewModel is a unit, not a method or procedure or function or constructor or destructor -- ' +
+    'exception-paths selects a routine', Refusal(EP_ID, 'Blueprint4.ViewModel', CLIENT_CLONE));
+  Assert.AreEqual('NoSuchRoutineXyz is not in this index', Refusal(EP_ID, 'NoSuchRoutineXyz', CLIENT_CLONE));
+end;
+
+procedure TExceptionPathsTests.WalksThreeLevelsByDefault;
+begin
+  { New-DiagramArtifact's $EffDepth }
+  Assert.AreEqual<Integer>(EP_DEPTH, QuestionDefaultDepth(EP_ID));
+  Assert.AreEqual<Integer>(DEFAULT_DEPTH, QuestionDefaultDepth('change-impact'));
+end;
+
+procedure TExceptionPathsTests.HashtableKeyOrderMatchesPowerShell;
+begin
+  (* $h = @{}; foreach ($k in ...) { $h[$k] = 1 }; $h.Keys -join ',' -- printed by pwsh 7 *)
+  Assert.AreEqual('1000,99,64,12,7,40,5,3,2,17', IntsText(PsHashtableOrder([5, 12, 3, 40, 7, 99, 1000, 17, 2, 64])));
+  Assert.AreEqual('100,200,300,400,500,600,700', IntsText(PsHashtableOrder([100, 200, 300, 400, 500, 600, 700])));
+  { 151 keys: the table grows 3 -> 7 -> 17 -> 37 -> 89 -> 197 -> 431 buckets, rehashing each time }
+  var Keys: TArray<Integer>:= [EP_HT_FIRST];
+  for var K:= 1 to EP_HT_COUNT do
+    Keys:= Keys + [K * EP_HT_STEP + EP_HT_OFFSET];
+  Assert.AreEqual(EP_HT_ORDER, IntsText(PsHashtableOrder(Keys)));
 end;
 
 end.

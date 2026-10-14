@@ -237,6 +237,7 @@ uses
   DRagLint.Charts.Q.FeedsFrom in '..\charts\DRagLint.Charts.Q.FeedsFrom.pas',
   DRagLint.Charts.Q.LandsWhere in '..\charts\DRagLint.Charts.Q.LandsWhere.pas',
   DRagLint.Charts.Q.Consumers in '..\charts\DRagLint.Charts.Q.Consumers.pas',
+  DRagLint.Charts.Q.ExceptionPaths in '..\charts\DRagLint.Charts.Q.ExceptionPaths.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

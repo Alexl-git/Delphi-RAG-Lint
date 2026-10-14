@@ -209,6 +209,12 @@ function QuestionReadsServerIndex(const pId: string): Boolean;
 /// Ask-Report's 'INDEX ... (sql)' line.</remarks>
 function QuestionReadsSqlIndex(const pId: string): Boolean;
 
+/// <summary>The -Depth a question walks when none is given (New-DiagramArtifact's $EffDepth).</summary>
+/// <param name="pId">The question id; compared case-insensitively.</param>
+/// <returns>3 for exception-paths, 4 for round-trip, else DEFAULT_DEPTH.</returns>
+/// <remarks>The value the emitter walks, meta.json's depth and the regenerate line's -Depth.</remarks>
+function QuestionDefaultDepth(const pId: string): Integer;
+
 /// <summary>Encodes a string as ConvertTo-Json writes it.</summary>
 /// <param name="pValue">The text.</param>
 /// <returns>The quoted JSON string: '"' and '\' escaped, control characters as \b \f \n \r \t
@@ -222,6 +228,13 @@ uses
   , DRagLint.Charts.Tools // dl:unit DRagLint.Charts.Tools accepted -- the shared dot.exe default travels with the dot walk (ResolveGraphvizDot) it feeds
   ;
 
+type
+  { one row of DEFAULT_DEPTHS }
+  TDepthDefault = record
+    Id   : string;
+    Depth: Integer;
+  end;
+
 const
   CLONE_SUBDIR = 'scratch\db';
   SCRIPTS_SUBDIR = 'src';
@@ -232,6 +245,10 @@ const
   { Ask-Report.ps1's $needServer and $needSql }
   READS_SERVER: array[0..1] of string = ('round-trip', 'lands-where');
   READS_SQL: array[0..3] of string = ('round-trip', 'lands-where', 'consumers', 'feeds-from');
+  { New-DiagramArtifact's $EffDepth: the questions whose -Depth default is not DEFAULT_DEPTH }
+  DEFAULT_DEPTHS: array[0..1] of TDepthDefault = (
+    (Id: 'exception-paths'; Depth: 3),
+    (Id: 'round-trip'; Depth: 4));
   QUESTION_CAPTIONS: array[0..25] of array[0..1] of string = (
     ('butterfly', 'Callers and callees (butterfly chart)...'),
     ('who-calls', 'Who calls this routine...'),
@@ -463,6 +480,14 @@ begin
   for var Id in READS_SQL do
     if SameText(Id, pId) then
       Exit(True);
+end;
+
+function QuestionDefaultDepth(const pId: string): Integer;
+begin
+  Result:= DEFAULT_DEPTH;
+  for var D in DEFAULT_DEPTHS do
+    if SameText(D.Id, pId) then
+      Exit(D.Depth);
 end;
 
 initialization

@@ -100,6 +100,7 @@ uses
   , DRagLint.Charts.Q.FeedsFrom  // dl:ok unused-unit-in-uses@e7ae -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.LandsWhere  // dl:ok unused-unit-in-uses@43f8 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Consumers  // dl:ok unused-unit-in-uses@e7fa -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.ExceptionPaths  // dl:ok unused-unit-in-uses@4e99 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   ;
 
 const
@@ -232,7 +233,7 @@ begin
   Q.ChartsRoot:= ExtractFileDir(ExtractFileDir(Script));
   Q.ScriptDir:= ExtractFileDir(Script);  { installed copy: <app>\bin, where graphviz\bin sits beside the scripts }
   Q.Cap:= NumArg(pCommand, 'Cap', DEFAULT_CAP);
-  Q.Depth:= NumArg(pCommand, 'Depth', DEFAULT_DEPTH);
+  Q.Depth:= NumArg(pCommand, 'Depth', QuestionDefaultDepth(Q.Question));
   Q.SurfaceCap:= NumArg(pCommand, 'SurfaceCap', DEFAULT_SURFACE_CAP);
   Q.MaxRows:= NumArg(pCommand, 'MaxRows', DEFAULT_MAX_ROWS);
   Q.Command:= pCommand;
