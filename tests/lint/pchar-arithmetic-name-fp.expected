@@ -1,0 +1,2 @@
+# P-named operands of non-pointer type must not fire
+!pchar-arithmetic
