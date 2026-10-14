@@ -26,7 +26,10 @@ drag-lint lint --file <path.pas> --fix --fix-line <L> --fix-rule <rule-id> --app
 
 `--fix-line` and `--fix-rule` narrow the fix to the ONE finding you
 right-clicked. Without `--apply` the command is a DRY RUN: it reports what
-it would fix and writes nothing.
+it would fix and writes no source file -- and, for a naming fix, no index
+either (a stale owning index is reported `index=stale`, not reindexed). With
+`--apply`, a naming fix may first reindex stale owning project indexes (see
+[Multi-Project-Rename](Multi-Project-Rename)).
 
 Only rules marked fixable can be auto-fixed. `drag-lint rules --json`
 reports a `fixable` field per rule; 23 of the 190 rules are fixable.
@@ -59,11 +62,15 @@ drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform
 * On a NAMING finding (`const-casing`, `type-name-prefix`,
   `local-var-casing`, ...) "Fix it" RENAMES the symbol -- its declaration and
   every use the project index knows about (e.g. `wrStr` -> `WrStr`). Asking for
-  that ONE finding is the opt-in; "Fix all in unit" never renames unless the
-  rule is listed in `"autofix": [...]` in `drag-lint-lint.json`. It needs the
-  project index, and is not offered without one.
+  that ONE finding is the opt-in. It needs the project index, and is not
+  offered without one. A naming fix runs a PREVIEW first (nothing written):
+  when the unit is compiled by two or more indexed projects, a confirmation
+  lists every one of them and the rename happens in all of them or in none --
+  see [Multi-Project-Rename](Multi-Project-Rename). A refusal (a conflicting
+  name, an index that could not be refreshed, ...) is shown on the Diagnostics
+  root row as `rename refused -- <project>: <reason>`.
 * A constant is renamed WORD BY WORD, to the first style in `const_case`
-  (drag-lint > Lint Options; default PascalCase, then UPPER_CASE):
+  (the Lint Options tab of the drag-lint Panel; default PascalCase, then UPPER_CASE):
   `StationType_Operator` -> `StationTypeOperator` (PascalCase) or
   `STATION_TYPE_OPERATOR` (UPPER_CASE). Before renaming, the project index is
   asked whether the new name already exists; if it does, the next style is

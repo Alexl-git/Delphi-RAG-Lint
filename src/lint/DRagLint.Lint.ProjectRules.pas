@@ -82,7 +82,16 @@ type
     /// without this the rule's own "is the unit indexed?" gate answered False
     /// for every RTL/VCL import and the rule reported ZERO, everywhere.</param>
     /// <param name="AOptInRules"><!-- drag-lint:auto type -->const TArray&lt;string&gt; = nil</param>
-    /// <returns>Findings across the whole index (file paths + lines); empty if none.</returns>
+    /// <param name="AOnlyFileId">0 (the default): the per-file rules (unused-unit-in-uses,
+    /// god-class, unused-public-symbol, unused-private-member) visit every file in AStore.
+    /// &gt; 0: they visit only that file id. The cross-file "is it referenced anywhere"
+    /// sets are still built from the WHOLE store, and every per-file finding is stamped
+    /// with its own file, so this file's findings are identical to an unscoped run's --
+    /// only the other files' per-file findings are not computed. The whole-store
+    /// collectors (circular-uses, repeated-type-switch, ...) are NOT narrowed by this;
+    /// callers still filter the result by path.</param>
+    /// <returns>Findings (file paths + lines); empty if none. With AOnlyFileId &gt; 0 the
+    /// per-file rules contribute findings for that file only.</returns>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas), DRagLint.CLI.DoLintProject (DRagLint.CLI.pas)</para>
@@ -100,7 +109,8 @@ type
     class function Run(const AStore: ISymbolStore; const ARuleId: string = '';
                        const ASiblingStore: TSiblingStoreResolver = nil;
                        const ALibraryStore: ISymbolStore = nil;
-                       const AOptInRules: TArray<string> = nil): TArray<TLintFinding>;
+                       const AOptInRules: TArray<string> = nil;
+                       const AOnlyFileId: Int64 = 0): TArray<TLintFinding>;
     /// <summary>Flags forbidden cross-layer 'uses' edges per a layer-config JSON file.</summary>
     /// <param name="AStore">An open, migrated symbol store; nil yields no findings.</param>
     /// <param name="AConfigPath">Path to a layers JSON file (see remarks); missing/invalid -> no findings.</param>
@@ -3445,7 +3455,7 @@ end; // function
 
 class function TProjectLintRules.Run(const AStore: ISymbolStore; const ARuleId: string;
   const ASiblingStore: TSiblingStoreResolver; const ALibraryStore: ISymbolStore;
-  const AOptInRules: TArray<string>): TArray<TLintFinding>;
+  const AOptInRules: TArray<string>; const AOnlyFileId: Int64): TArray<TLintFinding>;
 var
   Findings      : TList<TLintFinding>         ;
   FileIds       : TArray<Int64>               ;
@@ -3868,7 +3878,16 @@ begin
       for var Rf in CollectRepeatedTypeSwitch(AStore) do Findings.Add(Rf);
     Inc(TRts, Tick - T0);
 
-    FileIds:= AStore.GetAllFileIds;
+    { ONE FILE when the caller names one (`lint <file>`): every finding this loop
+      emits is stamped with the loop's own Path, and the memos it fills are caches
+      keyed by unit, so visiting only AOnlyFileId cannot change that file's answer
+      -- it only skips computing everyone else's. The relational half (RefdIds /
+      RefdNames above) is still built from the whole store.
+      tests\autotest\run_lint_file_scoped_loop_parity.ps1 pins it. }
+    if AOnlyFileId > 0 then
+      FileIds:= [AOnlyFileId]
+    else
+      FileIds:= AStore.GetAllFileIds;
     for Fid in FileIds do
     begin
       var TF: Int64:= Tick;
@@ -4230,6 +4249,7 @@ begin
       ProfLine('unused-private-member'     , TUpriv );
       ProfLine('  (accessor-set parse)'    , TAccess);
       ProfLine('  (per-file store reads)'  , TOuter );
+      Writeln(ErrOutput, Format('    %-28s %10d file(s)', ['per-file loop', Length(FileIds)]));
       Flush(ErrOutput);
     end;
     Result:= Findings.ToArray;

@@ -163,6 +163,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Lint rules](rules) | 190 rules, 23 fixable; `rules` |  |
 | [lint-project](lint-project) | `lint-project` |  |
 | [lint-tree](lint-tree) | `lint-tree` |  |
+| [Rename across every project that compiles a shared unit](Multi-Project-Rename) | `lint`; Structure form: Fix it; Structure form: Fix all in unit |  |
 | [Rescan this unit](Rescan-this-unit) | Structure form: Rescan this unit; `index` |  |
 | [Run AST Checks](Run-AST-Checks) | About window: Run AST Checks; `check-ast` |  |
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |

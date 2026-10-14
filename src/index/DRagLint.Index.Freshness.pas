@@ -83,7 +83,7 @@ type
   /// <summary>What one freshness sweep found.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Index.Freshness.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas), DRagLint.Index.Freshness.ProbeIndexFreshness (DRagLint.Index.Freshness.pas)</para>
+  /// <para>Used by: declaration (DRagLint.CLI.pas), declaration (DRagLint.Index.Freshness.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas), DRagLint.Index.Freshness.ProbeIndexFreshness (DRagLint.Index.Freshness.pas)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Index.Freshness</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -115,13 +115,12 @@ type
 /// counts as Missing, on the principle that a freshness check must not be able
 /// to break the command it is advising.
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas)</para>
-/// <para>Calls: Default, DRagLint.Core.FileTime.TryGetFileMTimeUnix, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue</para>
+/// <para>Called from: DRagLint.Charts.Compare.IndexFactFor (DRagLint.Charts.Compare.pas), DRagLint.CLI.AddStalenessPairs (DRagLint.CLI.pas), DRagLint.CLI.NoteIndexFreshnessOnce (DRagLint.CLI.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps, DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue, DRagLint.Index.Freshness.StampState</para>
 /// <para>Returns: Default(TFreshnessReport)</para>
-/// <para>Pure</para>
-/// <seealso cref="DRagLint.Core.FileTime.TryGetFileMTimeUnix"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetAllFileStamps"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetMetaValue"/>
+/// <seealso cref="DRagLint.Index.Freshness.StampState"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function ProbeIndexFreshness(const AStore: ISymbolStore;
@@ -148,14 +147,55 @@ function ProbeIndexFreshness(const AStore: ISymbolStore;
 /// </remarks>
 function FreshnessNote(const AReport: TFreshnessReport; const ADbPath: string): string;
 
+/// <summary>EVERY file row whose on-disk mtime differs from the recorded one --
+/// the full list, where ProbeIndexFreshness keeps only a few examples.</summary>
+/// <param name="AStore">An open store (read-only is enough). Not modified.</param>
+/// <returns>Changed paths in the stored form, in GetAllFileStamps order; empty
+/// when nothing changed or AStore is nil.</returns>
+/// <remarks>
+/// <para>Same comparison as ProbeIndexFreshness, through the same helper, so the
+/// two can never disagree on what "changed" means: a row whose recorded mtime is
+/// absent (0) counts as CHANGED, and a row whose file is gone from disk is NOT
+/// listed (it is a ghost row, not staleness -- see TFreshnessReport.Missing).</para>
+/// <para>Does NOT consult the DB-level INDEXED_AT_KEY stamp: a list of paths
+/// cannot say "unknown". A caller that must not treat an unstamped index as
+/// fresh checks GetMetaValue(INDEXED_AT_KEY) itself, as RefreshOwner does.</para>
+/// <para>One query plus one stat per row. Store errors propagate.</para>
+/// </remarks>
+function ChangedFilePaths(const AStore: ISymbolStore): TArray<string>;
+
 implementation
+
+type
+  { The per-row verdict both sweeps share. }
+  TStampState = (ssSame, ssChanged, ssGone);
+
+{ The ONE comparison rule. TryGetFileMTimeUnix, never FileAge -- see the note
+  in ProbeIndexFreshness for the one-hour DST defect FileAge caused. }
+function StampState(const AStamp: TFileStamp): TStampState;
+var
+  DiskUnix: Int64;
+begin
+  if not TryGetFileMTimeUnix(AStamp.Path, DiskUnix) then Exit(ssGone);
+  Result:= if DiskUnix <> AStamp.MTimeUnix then ssChanged else ssSame;
+end; // function
+
+function ChangedFilePaths(const AStore: ISymbolStore): TArray<string>;
+var
+  S: TFileStamp;
+begin
+  Result:= nil;
+  if AStore = nil then Exit;
+  for S in AStore.GetAllFileStamps do
+    if StampState(S) = ssChanged then Result:= Result + [S.Path];
+end; // function
 
 function ProbeIndexFreshness(const AStore: ISymbolStore;
   AMaxExamples: Integer = 3): TFreshnessReport;
 var
   Stamps  : TArray<TFileStamp>;
   S       : TFileStamp        ;
-  DiskUnix: Int64             ;
+  State   : TStampState       ;
 begin
   Result := Default(TFreshnessReport);
   Result.Verdict := fvUnknown;
@@ -199,14 +239,16 @@ begin
       cannot break the command it is advising -- and reads the FILETIME directly,
       which is already UTC and so has no DST period to get wrong.
       run_index_freshness_dst.ps1 is the guard that CAN fail: its fixture is
-      back-dated into the other period. }
-    if not TryGetFileMTimeUnix(S.Path, DiskUnix) then
+      back-dated into the other period. The read now lives in StampState,
+      shared with ChangedFilePaths so the two sweeps cannot drift apart. }
+    State:= StampState(S);
+    if State = ssGone then
     begin
       Inc(Result.Missing);
       Continue;
     end;
     Inc(Result.Checked);
-    if DiskUnix <> S.MTimeUnix then
+    if State = ssChanged then
     begin
       Inc(Result.Changed);
       if Length(Result.Examples) < AMaxExamples then

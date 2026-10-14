@@ -57,6 +57,7 @@ uses
   , Vcl.Menus
   , Vcl.Clipbrd
   , Vcl.Dialogs { Task 5: ShowMessage for the no-index guard in ShowInButterflyClick }
+  , System.UITypes { mtConfirmation / mbYes / mrYes for the multi-project rename confirmation }
   , Winapi.Windows
   , ToolsAPI
   , DragLint.Plugin.DiagnosticCache
@@ -120,8 +121,9 @@ type
       FItemAllow      : TMenuItem   ; { 'Allow this message' -- dl:ok review of a single finding }
       FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
-      { fix_opt_in naming rules: never counted by 'Fix all', but 'Fix it' on ONE
-        finding is the opt-in (the engine treats --fix-line + --fix-rule so) }
+      { fix_opt_in naming rules: 'Fix it' on ONE finding is the opt-in (the engine
+        treats --fix-line + --fix-rule so); 'Fix all in unit' counts them when an
+        index resolves and opts in with --fix-naming, always after a confirm }
       FOptInFixRules  : TStringList ;
       FItemCopySel    : TMenuItem   ; { 'Copy' -- the selected Diagnostics rows }
       FItemRescan     : TMenuItem   ; { 'Rescan this unit' -- reindex + re-lint now }
@@ -156,6 +158,7 @@ type
       { One queued autofix run: progress in the status bar, summary on done.
         AUsesUnit <> '' marks a uses-fix run about that unit (JSON summary). }
       procedure RunFixJob(const ATitle, ACmd: string; ATimeoutMs: Integer; const AUsesUnit: string = '');
+      function  IsNamingFixRule(const ACode: string): Boolean;
       function  UnusedUnitOfNode(ANode: TTreeNode): string;
       { v0.88 AutoFix handlers + helpers. }
       procedure EnsureFixableRules;
@@ -1295,6 +1298,10 @@ begin
   begin
     EnsureFixableRules;
     if FFixableRules <> nil then FixCount:= CountFixableDiags(FDiags, FFixableRules.ToStringArray);
+    { the opt-in naming rules too, gated on an index exactly as Fix it is
+      (NodeIsFixableFinding): Fix all sends --fix-naming after a confirm }
+    if (FOptInFixRules <> nil) and (FOptInFixRules.Count > 0) and (ResolveDbForFile <> '') then
+      Inc(FixCount, CountFixableDiags(FDiags, FOptInFixRules.ToStringArray));
   end;
   FItemFixIt     .Enabled:= IsFinding;
   FItemFixUnit   .Enabled:= InDiags and (FixCount > 0);
@@ -1311,9 +1318,14 @@ begin
   FItemAllow     .Enabled:= NodeIsAllowableFinding(Node);
 end;
 
+{ Defined beside RunFixJob, below. }
+procedure EnqueueRenamePreviewJob(const AFilePath, ATitle, APreviewCmd, AApplyCmd, AProject: string; ATimeoutMs: Integer); forward;
+
 { 'Fix it' -- apply the single fixable finding under the cursor:
   drag-lint lint --file <FCurrentFile> --fix --fix-line <L> --fix-rule <id> --apply
-  On exit 0, reload the buffer + refresh the tree; otherwise log and do nothing. }
+  On exit 0, reload the buffer + refresh the tree; otherwise log and do nothing.
+  A naming rule runs the same command without --apply first
+  (EnqueueRenamePreviewJob): a unit several projects own is confirmed first. }
 procedure TDragLintStructureForm.FixItClick(Sender: TObject);
 const
   CFixItTimeoutMs   = 60000;
@@ -1345,11 +1357,13 @@ begin
     { --db: a naming fix renames every use the index knows about, and the
       store-backed fixes (doc-drift, missing-doc) need it too }
     var Db: string:= ResolveDbForFile;
-    RunFixJob(Format('Fix %s line %d', [ND.Code, ND.Line]),
-      Format('"%s" lint --file "%s" --fix --fix-line %d --fix-rule "%s" --apply',
+    var Cmd: string:= Format('"%s" lint --file "%s" --fix --fix-line %d --fix-rule "%s"',
         [ResolveExePath, FCurrentFile, ND.Line, ND.Code])
-        + (if Db <> '' then Format(' --db "%s"', [Db]) else ''),
-      CFixItTimeoutMs);
+        + (if Db <> '' then Format(' --db "%s"', [Db]) else '');
+    { a naming rename may span several projects: preview, then confirm }
+    if IsNamingFixRule(ND.Code) then
+      EnqueueRenamePreviewJob(FCurrentFile, Format('Fix %s line %d', [ND.Code, ND.Line]), Cmd, Cmd + ' --apply', '', CFixItTimeoutMs)
+    else RunFixJob(Format('Fix %s line %d', [ND.Code, ND.Line]), Cmd + ' --apply', CFixItTimeoutMs);
   except
     on E: Exception do DLT('autofix', 'FixItClick failed: ' + E.ClassName + ': ' + E.Message);
   end;
@@ -1450,16 +1464,19 @@ begin
     if (Line.Trim <> '') and not Line.Trim.StartsWith('(loaded defaults') then Exit(Line.Trim);
 end;
 
-procedure TDragLintStructureForm.RunFixJob(const ATitle, ACmd: string; ATimeoutMs: Integer; const AUsesUnit: string);
 const
   CLogExcerptChars = 400; { enough of a failed run's output to diagnose it in the log }
+
+{ The body of RunFixJob, standalone so a rename preview's OnDone -- which must
+  not capture a form -- can queue the --apply run for AFilePath. }
+procedure EnqueueFixJob(const AFilePath, ATitle, ACmd: string; ATimeoutMs: Integer; const AUsesUnit: string);
 var
   Job     : TDragLintJob;
   FilePath: string;
   Title   : string;
   UsesUnit: string; { a local, so the OnDone closure captures a copy }
 begin
-  FilePath:= FCurrentFile;
+  FilePath:= AFilePath;
   UsesUnit:= AUsesUnit;
   Title   := ATitle + ' -- ' + ExtractFileName(FilePath);
   if BufferIsModified(FilePath) then
@@ -1495,7 +1512,9 @@ begin
         ShowFixResultInPanels(FilePath, Title + ': ' + Summary);
         SetDragLintNote(Title + ': ' + Summary);
         PostIdeMessage('drag-lint: ' + Title + ': ' + Summary);
-        if (AExit = 0) and AutofixApplied(Summary) then
+        { a rename refused AFTER other fixes on the line were written leaves the
+          refusal as the summary, but the file on disk has still changed }
+        if (AExit = 0) and (AutofixApplied(Summary) or ((UsesUnit = '') and AutofixAppliedInOutput(AOutput))) then
         begin
           ReloadModuleFromDisk(FilePath);
           EnqueueReindexThenRelint('');
@@ -1506,6 +1525,94 @@ begin
     end;
   SetDragLintNote(Title + '...');
   JobQueue.Enqueue(Job);
+end;
+
+{ A naming fix in a unit several project indexes own renames it in all of them
+  (spec 2026-10-13-multi-project-rename, criteria 16-19). So it runs twice: this
+  PREVIEW (APreviewCmd, the fix without --apply) writes nothing; its OnDone then
+    - shows a refusal on the Diagnostics root row and stops (criterion 18);
+    - for 2+ owners, unknown ownership, or any 'rename-unindexed:' project
+      (even with one indexed owner, owner decision 2026-10-14) asks first, and
+      queues AApplyCmd only on Yes -- No writes nothing (criteria 16, 17, 19);
+    - for one owner queues AApplyCmd at once, as before -- unless the preview
+      printed 'rename-local: N' (Fix all, --fix-naming), which is confirmed as
+      'Rename N identifier(s) in AProject?' first.
+  Every rename confirm defaults to No. OnDone runs on the main thread (TDragLintJobQueue posts it with TThread.Queue),
+  so the dialog is modal over the IDE; like EnqueueFixJob it captures no form. }
+procedure EnqueueRenamePreviewJob(const AFilePath, ATitle, APreviewCmd, AApplyCmd, AProject: string; ATimeoutMs: Integer);
+var
+  Job     : TDragLintJob;
+  FilePath: string;
+  Title   : string;
+  ApplyCmd: string;
+begin
+  FilePath:= AFilePath;
+  ApplyCmd:= AApplyCmd;
+  Title   := ATitle + ' -- ' + ExtractFileName(FilePath);
+  if BufferIsModified(FilePath) then
+  begin
+    SetDragLintNote(Title + ': not run -- save the unit first (a fix rewrites the file on disk and reloads it)');
+    PostIdeMessage('drag-lint: ' + Title + ': not run -- the unit has unsaved changes; save it first.');
+    Exit;
+  end;
+  Job:= TDragLintJob.Create;
+  Job.Kind       := jkGeneric;
+  Job.Title      := Title + ' (preview)';
+  Job.CoalesceKey:= 'autofix-preview:' + LowerCase(FilePath) + ':' + ATitle;
+  Job.CmdLine    := APreviewCmd;
+  Job.TimeoutMs  := ATimeoutMs;
+  Job.Streaming  := False;
+  Job.OnDone:=
+    procedure(AExit: Integer; AOutput: string)
+    var
+      Preview: TRenamePreview;
+      Note   : string;
+    begin
+      try
+        Preview:= ParseRenamePreview(AOutput);
+        DLT('autofix', Format('%s preview -> exit=%d owners=%d of %d refused=[%s]',
+          [Title, AExit, Preview.OwnerCount, Preview.Probed, Preview.Refused]));
+        Note:= '';
+        if AExit <> 0 then
+        begin
+          DLT('autofix', Title + ' preview non-zero exit; output: ' + Copy(AOutput, 1, CLogExcerptChars));
+          Note:= Format('FAILED (exit %d): %s -- nothing written', [AExit, FirstOutputLine(AOutput)]);
+        end
+        else
+          case RenamePreviewAction(Preview) of
+            rpaRefuse : Note:= 'rename refused -- ' + Preview.Refused;
+            rpaConfirm, rpaConfirmLocal:
+              if MessageDlg(
+                   if RenamePreviewAction(Preview) = rpaConfirm
+                     then RenameConfirmText(ExtractFileName(FilePath), Preview.OldName, Preview.NewName, Preview)
+                     else RenameLocalConfirmText(AProject, Preview),
+                   mtConfirmation, [mbYes, mbNo], 0, mbNo) = mrYes then EnqueueFixJob(FilePath, ATitle, ApplyCmd, ATimeoutMs, '')
+              else Note:= 'cancelled -- nothing written';
+            rpaApply  : EnqueueFixJob(FilePath, ATitle, ApplyCmd, ATimeoutMs, '');
+          end; // case
+        if Note = '' then Exit;
+        ShowFixResultInPanels(FilePath, Title + ': ' + Note);
+        SetDragLintNote(Title + ': ' + Note);
+        PostIdeMessage('drag-lint: ' + Title + ': ' + Note);
+      except
+        on E: Exception do DLT('autofix', 'rename preview OnDone failed: ' + E.ClassName + ': ' + E.Message);
+      end;
+    end;
+  SetDragLintNote(Title + ' (preview)...');
+  JobQueue.Enqueue(Job);
+end;
+
+procedure TDragLintStructureForm.RunFixJob(const ATitle, ACmd: string; ATimeoutMs: Integer; const AUsesUnit: string);
+begin
+  EnqueueFixJob(FCurrentFile, ATitle, ACmd, ATimeoutMs, AUsesUnit);
+end;
+
+{ Is ACode a naming rule whose fix renames call sites (the engine's fix_opt_in
+  set)? Those may span several projects, so they are previewed first. }
+function TDragLintStructureForm.IsNamingFixRule(const ACode: string): Boolean;
+begin
+  EnsureFixableRules;
+  Result:= (ACode <> '') and (FOptInFixRules <> nil) and (FOptInFixRules.IndexOf(LowerCase(ACode)) >= 0);
 end;
 
 { An allowable finding node hangs off the Diagnostics root and carries a rule-id.
@@ -1829,7 +1936,9 @@ begin
 end; // procedure
 
 { 'Fix all in unit' -- apply every fixable finding in the current file:
-  drag-lint lint --file <FCurrentFile> --fix --apply. }
+  drag-lint lint --file <FCurrentFile> --fix --apply.
+  With any naming finding in the unit, previewed first with --fix-naming and always
+  confirmed before the --apply run (EnqueueRenamePreviewJob). }
 procedure TDragLintStructureForm.FixAllInUnitClick(Sender: TObject);
 const
   CFixUnitTimeoutMs = 120000;
@@ -1839,10 +1948,23 @@ begin
     { --db: the naming fixes need the index to find every use, and without it
       the engine neither applies an opted-in one nor says which are opted out. }
     var Db: string:= ResolveDbForFile;
-    RunFixJob('Fix all in unit',
-      Format('"%s" lint --file "%s" --fix --apply', [ResolveExePath, FCurrentFile])
-        + (if Db <> '' then Format(' --db "%s"', [Db]) else ''),
-      CFixUnitTimeoutMs);
+    var Cmd: string:= Format('"%s" lint --file "%s" --fix', [ResolveExePath, FCurrentFile])
+        + (if Db <> '' then Format(' --db "%s"', [Db]) else '');
+    { any naming finding in the unit may rename across projects: preview first }
+    var HasNaming: Boolean:= False;
+    for var D: TDragLintDiagnostic in FDiags do
+      if IsNamingFixRule(D.Code) then
+      begin
+        HasNaming:= True;
+        Break;
+      end;
+    { --fix-naming: the naming fixes are consented to here, by the confirm that
+      always follows the preview, not by an "autofix" entry in the config }
+    var Project: string:= if Db <> '' then ChangeFileExt(ExtractFileName(Db), '')
+                          else ChangeFileExt(ExtractFileName(GetActiveProjectFilePath), '');
+    if HasNaming then
+      EnqueueRenamePreviewJob(FCurrentFile, 'Fix all in unit', Cmd + ' --fix-naming', Cmd + ' --fix-naming --apply', Project, CFixUnitTimeoutMs)
+    else RunFixJob('Fix all in unit', Cmd + ' --apply', CFixUnitTimeoutMs);
   except
     on E: Exception do DLT('autofix', 'FixAllInUnitClick failed: ' + E.ClassName + ': ' + E.Message);
   end;

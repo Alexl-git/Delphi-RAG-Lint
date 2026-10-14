@@ -1,5 +1,5 @@
 {
-  "product": "1.28.3-alpha",
+  "product": "1.29.1-alpha",
   "extractor": "1.21.1-alpha",
   "resolver": "1.12.0-alpha",
   "schema": 23,
@@ -1128,6 +1128,36 @@
         }
       ],
       "audience": "both"
+    },
+    {
+      "id": "multi-project-rename",
+      "title": "Rename across every project that compiles a shared unit",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.29.0-alpha",
+      "summary": "A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects",
+      "intro": "Use it when a naming finding (const-casing, type-name-prefix, ...) sits in a unit that more than one project compiles: the rename is checked and applied in every indexed project, or refused with the reason.",
+      "wikiPage": "Multi-Project-Rename",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "lint",
+          "example": "lint --file <f> --fix --fix-line <L> --fix-rule const-casing --db <db>"
+        },
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Fix it"
+        },
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Fix all in unit"
+        }
+      ],
+      "audience": "both",
+      "related": ["fix-all-in-unit", "fix-it", "rename-symbol"]
     },
     {
       "id": "rescan-this-unit",

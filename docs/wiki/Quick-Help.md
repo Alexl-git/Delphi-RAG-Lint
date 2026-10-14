@@ -63,6 +63,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **Lint rules** -- 190 rules, 23 fixable. Every lint rule the engine ships, imported from rules --json. [More](rules)
 * **lint-project** -- Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol. [More](lint-project)
 * **lint-tree** -- Answers one question lint-all cannot: does an interface edit to this unit reach any dependent?. [More](lint-tree)
+* **Rename across every project that compiles a shared unit** -- A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects. Use it when a naming finding (const-casing, type-name-prefix, ...) sits in a unit that more than one project compiles: the rename is checked and applied in every indexed project, or refused with the reason. [More](Multi-Project-Rename)
 * **Rescan this unit** -- Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed. Use it when the Diagnostics panel still shows a finding you have already fixed. Rules such as unused-unit-in-uses read the project index, and a save is not an edit, so this reindexes the project incrementally and re-lints the unit when that lands. Runs in the background; the status strip shows it. [More](Rescan-this-unit)
 * **Run AST Checks** -- Runs drag-lint's AST-level checks against a file. [More](Run-AST-Checks)
 * **Run Diagnostics (didSave)** -- Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification. [More](Run-Diagnostics-didSave)
@@ -233,6 +234,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * Installation: procedure docs\wiki\Installation.md
 * Maintenance: procedure docs\wiki\Maintenance.md
 * Reindex project: menu 'Conversion > Reindex project' inside ConvRulesEditor.exe
+* Rename across every project that compiles a shared unit: host 'Structure form' (the caption is verified, the host is declared)
 * Rescan this unit: host 'Structure form' (the caption is verified, the host is declared)
 * Setup installer: procedure docs\wiki\Setup-Installer.md
 * Show in Call Graph: host 'Structure form' (the caption is verified, the host is declared)

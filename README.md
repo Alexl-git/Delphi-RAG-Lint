@@ -717,7 +717,7 @@ and more (see [MCP tools](#mcp-tools-15) below).
 |---|---:|---|
 | [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 8 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 31 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 18 (+ 190 rules, 23 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 19 (+ 190 rules, 23 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
@@ -863,7 +863,7 @@ enabled by default, 23 with an auto-fix.**
 | `lint <path>` | Run built-in + external `.scm` rules on a file/folder (no index needed). Pass `--db <index>` and the store-backed checks join in -- exact type resolution, cross-unit virtual-in-constructor, and the exception-ancestry half of `type-name-prefix`. Without a store those degrade conservatively, which is why an editor buffer linted with no `--db` can show findings `lint-all` does not | `--rule <id>`, `--disable id1,id2`, `--json`, `--db <index.sqlite>`, `--library-db <lib.sqlite>` (override the manifest-resolved library index; the cross-store ancestry hop that lets a project class reach `TCustomForm` is otherwise untestable) |
 | `lint <file> --db <db> --project-rules` | Also runs the per-declaration doc rules (`doc-drift`, `missing-doc`) for that one file. **Off by default on purpose:** they rebuild the expected facts block per declaration at ~16 ms each, so a 53-decl unit costs 0.83 s and a real DataCopy unit reached 8.75 s -- past the IDE plugin's hard 8 s timeout, whose failure branch shows *no* diagnostics at all | |
 | `lint <snapshot> --stand-in-for <realpath>` | Analyse `<snapshot>`'s **text** under `<realpath>`'s **identity**. For editors that lint an unsaved buffer by writing it to a temp file: store membership, file id, `unit-name-matches-file` and the reported path all answer for the real file, so a temp path no longer defeats the index | Used by the IDE plugin's live diagnostics |
-| `lint --file <f> --fix [--fix-line <L> --fix-rule <id>] [--apply]` | **Autofix one file.** Without `--apply` it is a dry run: reports what it would change, writes nothing. `--fix-line`+`--fix-rule` narrow to one finding; omit both to apply every fixable finding. Only rules with `"fixable": true` are ever applied | This is what the Structure form's right-click **Fix it** / **Fix all in unit** run |
+| `lint --file <f> --fix [--fix-line <L> --fix-rule <id>] [--fix-naming] [--apply]` | **Autofix one file.** Without `--apply` it is a dry run: reports what it would change, writes no source file (and no index: a stale owning index is reported `index=stale`, not reindexed; `--apply` may reindex it first). `--fix-line`+`--fix-rule` narrow to one finding; omit both to apply every fixable finding. Only rules with `"fixable": true` are ever applied. `--fix-naming` consents, in a batch run, to the opt-in naming fixes (renamed in every owning project) without an `"autofix"` entry, and prints `rename-local: <N>` (stderr) | This is what the Structure form's right-click **Fix it** / **Fix all in unit** run |
 | `lint --project <dproj>` | One project-scoped rule (e.g. `unit-not-in-dpr`). A plain `lint-all --db <db>` now evaluates that rule too, inferring the project file from the manifest section that owns the DB -- passing `--project` additionally *scopes* the report, which inference deliberately does not | `--rule` |
 | [`lint-project`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-project) `--db <db>` | Project-wide structural rules -- god-class, circular-uses, layering-violation, unused-public-symbol, and more | `--rule <id>`, `--layers <f.json>` |
 | `lint-all --db <db>` | Full project report. Since the per-file verb gained the store-backed project rules, what `lint-all` *uniquely* adds is narrower than it used to be: cross-file duplicate code, `interface-reference-cycle`, exception-class enrichment, and doc-drift/missing-doc across the whole project (`review-marker-unused` and `review-marker-malformed` moved to the per-file verb too, 2026-09-03) | `--project <.dproj>` (report only that project's compile closure), `--rule <id>` (report only that rule, and run only the checkers that can emit it; an OFF-by-default rule named here is opted in for the run, as with `lint`), `--output <file>`, `--json`, `--quiet` (no per-file progress lines on stderr), `--lint-third-party`, `--no-preprocess` (lint the raw bytes, including branches the compiler never sees -- the default now resolves conditionals the same way the indexer does) |
@@ -877,6 +877,22 @@ enabled by default, 23 with an auto-fix.**
 CI flags (apply to `lint` / `lint-all` / `check-ast`): `--format sarif` (SARIF
 2.1.0), `--fail-on <level>` (nonzero exit at error\|warning\|info), `--baseline
 <file>` / `--write-baseline <file>`, `--enable id1,id2`, `--profile <name>`.
+
+**Naming fixes in a unit several projects compile (1.29.0).** A naming fix
+(`const-casing`, `method-pascalcase`, `local-var-casing`, `field-name-prefix`,
+`param-name-prefix`, `type-name-prefix`, `local-field-prefix`) on a unit owned
+by two or more project indexes renames it in EVERY owner, or in none. Owners are
+found by the unit's full path in every DB the manifest lists; a stale owner is
+reindexed first (`index --project`); the new name must be free in all of them.
+A single-finding fix (`--fix-line` + `--fix-rule`) is all-or-nothing and ends
+`autofix: rename refused -- <reason>`; a batch drops only the unsafe renames. A
+manifest that did not load completely refuses every naming fix (fail-closed).
+Only for 2+ owners (or unknown ownership) the run prints its plan --
+`rename-owners: N of M indexes`, `rename-project: <name> index=fresh|reindexed|unverified`,
+`rename-target: L<line> <old> -> <new> apply|dropped ...`, `rename-unknown:`,
+`rename-dropped-at-write:` -- and `--json` gains `projects` and
+`dropped_reason`. The IDE's Fix it / Fix all in unit preview first and confirm
+before writing. Details: [Multi-Project-Rename](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Multi-Project-Rename).
 
 #### Docs
 

@@ -218,7 +218,8 @@ Check 'CASE2: unrelated OtherRoutine local (Untouched) unchanged' $otherUntouche
 # CASE 3: const-casing -- unit-level const 'maxItems' with const_case:
 # ["UPPER_CASE"] (single-entry, so SynthesizeCasedName picks UPPER_CASE, not
 # PascalCase which is ConstCase[0] under the default two-entry list) becomes
-# MAXITEMS at decl + use.
+# MAX_ITEMS at decl + use (word-aware since 40fd41b2: 'maxItems' splits at the
+# lower-to-upper step into max|Items).
 # =============================================================================
 Write-Host ''
 Write-Host 'CASE 3: const-casing' -ForegroundColor Cyan
@@ -277,11 +278,11 @@ $out3 = & $Exe lint-all --db $c3Db --config $c3Cfg --rule const-casing --fix --a
 Write-Host ($out3 -join "`n")
 
 $after3 = Get-Content -Raw $c3File
-$c3DeclRenamed = $after3 -cmatch 'MAXITEMS\s*=\s*10;'
-$c3UseRenamed  = $after3 -cmatch 'SetLimit\(MAXITEMS\);'
+$c3DeclRenamed = $after3 -cmatch 'MAX_ITEMS\s*=\s*10;'
+$c3UseRenamed  = $after3 -cmatch 'SetLimit\(MAX_ITEMS\);'
 $c3NoStale     = -not ($after3 -cmatch 'maxItems')
-Check 'CASE3: const decl renamed to MAXITEMS' $c3DeclRenamed $after3
-Check 'CASE3: call-argument use renamed to SetLimit(MAXITEMS)' $c3UseRenamed $after3
+Check 'CASE3: const decl renamed to MAX_ITEMS' $c3DeclRenamed $after3
+Check 'CASE3: call-argument use renamed to SetLimit(MAX_ITEMS)' $c3UseRenamed $after3
 Check 'CASE3: no stale lower-camel maxItems remains' $c3NoStale $after3
 
 # =============================================================================
