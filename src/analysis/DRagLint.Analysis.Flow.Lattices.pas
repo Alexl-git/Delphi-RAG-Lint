@@ -1554,6 +1554,15 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
       Pinned by tests\autotest\run_flow_typeref_not_a_read.ps1, whose K1/K2
       cases are genuine reads of the SAME name and must keep firing. }
     if (K = 'type') or (K = 'typeref') then Exit;
+    { AN INLINE DECLARATION IS NOT A READ OF THE NAME IT DECLARES. `var Why:
+      string;` parses as varDef(kVar, identifier, type) -- dumped, not guessed --
+      and the identifier is the declared name. With an initialiser the node is
+      an assignment's varAssignDef lhs instead, which never reaches this walk.
+      The cost of walking it (gap log 2026-10-14T07:04:18): an earlier
+      `var Why := ...` in an inner block owns the slot for the name, so the
+      outer declaration read as a use of the inner one, "may be used before it
+      is assigned", on a line that assigns and reads nothing. }
+    if K = 'varDef' then Exit;
     if K = 'identifier' then
     begin
       if not AAfterDot then
@@ -1693,6 +1702,36 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
           end;
         end;
       Walk(N.ChildByField('entity'), False);
+    end
+    else if K = 'exprIf' then
+    begin
+      { THE CONDITION RUNS BEFORE EITHER BRANCH. An inline-if is ONE item, and
+        FlowChecks tests the item's reads against the state BEFORE its call defs
+        apply -- so `var Key := if FindRoutine(F, L, Rt) then Rt.Id else -F;`
+        reported Rt as used before assignment, on the line whose condition
+        assigns it (gap log 2026-10-14T11:31:44). Written as two statements --
+        `Found := FindRoutine(F, L, Rt); if Found then Key := Rt.Id` -- the
+        call def lands first and nothing fires; this restores that order inside
+        the expression. Withdrawn: only a branch read the BRANCH walk introduced,
+        of a var the CONDITION walk newly call-defined. A read of the same var
+        already present before the condition (`X.A + (if G(X) ...)`) survives. }
+      var DefsFrom: Integer := ACallDefs.Count;
+      Walk(N.ChildByField('condition'), False);
+      var CondDefs: TArray<Integer> := nil;
+      for I := DefsFrom to ACallDefs.Count - 1 do CondDefs := CondDefs + [ACallDefs[I]];
+      for I := 0 to N.NamedChildCount - 1 do
+      begin
+        Arg := N.NamedChild(I);
+        if Arg = N.ChildByField('condition') then Continue;
+        var ReadsBefore: Integer := AReads.Count;
+        Walk(Arg, False);
+        { AReads only ever APPENDS, so what this branch introduced is the tail }
+        for Idx in CondDefs do
+        begin
+          var RP: Integer := AReads.IndexOf(Idx);
+          if RP >= ReadsBefore then AReads.Delete(RP);
+        end;
+      end;
     end
     else
       { The generic arm, now an ELSE rather than a fall-through. Behaviour is
