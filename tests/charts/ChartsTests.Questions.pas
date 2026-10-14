@@ -185,7 +185,35 @@ type
     [Test] procedure AnswerNamesTheServerAndSqlIndexes;
   end;
 
+  [TestFixture]
+  TConsumersTests = class(TQuestionFixture)
+  private
+    function CoArgs(const pTarget, pDb, pSql: string; out pArgs: TQuestionArgs): Boolean;
+    procedure Check(const pDb, pTarget, pFields, pDotSha: string; pCap: Integer = 0);
+    function CoRefusal(const pTarget, pDb: string; const pSql: string = ''): string;
+  public
+    [Test] procedure CertainReadersAndWritersOnServer;
+    [Test] procedure InferredReadersWideTriggerAndIndexes;
+    [Test] procedure CappedClustersDiscloseTheRest;
+    [Test] procedure OtherTriggersNameTheTable;
+    [Test] procedure ProcedureDeclaredTwiceSaysSo;
+    [Test] procedure ClientWithoutFactsNamesCaseOnlyLiterals;
+    [Test] procedure IndexWithoutAnySqlSaysSo;
+    [Test] procedure InferredWriterWithoutAFact;
+    [Test] procedure ColumnNamedByServerRoutines;
+    [Test] procedure ColumnBindingsResolvingElsewhereAreCounted;
+    [Test] procedure ColumnBindingsThatStopAreCounted;
+    [Test] procedure ColumnOnlyTheServerSqlNames;
+    [Test] procedure ColumnOnlyAnOlderDeclarationExtracts;
+    [Test] procedure ColumnInAnIndexDefinition;
+    [Test] procedure SelectionRefusalsMatchPowerShell;
+    [Test] procedure IndexRolesAreChecked;
+    [Test] procedure MissingSqlIndexRefusesAsTheBundlerDoes;
+    [Test] procedure AnswerNamesTheSqlIndex;
+  end;
+
 implementation
+
 uses
   System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface;
@@ -501,6 +529,242 @@ const
     '  grdFtrsColFtrName.DataBinding.FieldName = ''FTRNAMESTR'' @AssignTools2.dfm:67|' +
     '  grdAssignedColFtrName.DataBinding.FieldName = ''FTRNAMESTR'' @AssignTools2.dfm:213|' +
     '  ... DFM data bindings only -- code-driven display is not indexed and is not shown';
+  CO_ID = 'consumers';
+  CO_SMALL_CAP = 4;
+  CO_NOSQL_CLONE = 'TESTS-PdfOcrImportTests.sqlite';
+  CO_DL_CLONE = 'DL-drag-lint.sqlite';
+  CO_SRV = 'CAUSFAIL';
+  CO_SRV_FIELDS = 'TestChart=false,Table="CAUSFAIL",Column=null,ColumnOlderOnly=false,ColumnState="",ColumnLabel="",ColumnLine="",' +
+    'Declarations=2,Columns=4,Readers=1,Writers=1,ReaderUnits=0,WriterUnits=0,CertainReaders=1,CertainWriters=1,' +
+    'InferredReaders=0,InferredWriters=0,InferredReaderNames="",' +
+    'CertainWriterNames="uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareSaveQuery",UnitLevelUnits=0,ByNameUnits=1,' +
+    'ByNameLiterals=6.0,ByNameCaseOnly="",ByNameLines="uCAUSFAIL_SERVER:71+134+188+211+252+283",Triggers=3,' +
+    'TriggerNames="CAUSFAIL_BIU0@MS6.SQL:34,CAUSFAIL_BIU5@MS5.SQL:15,CAUSFAIL_BUD0@MS6.SQL:44",OtherTriggers=0,' +
+    'Procedures=2,ProcedureNames="SP_GET_CAUSFAIL_ID,SP_MAXID_FORALL_TABLES",ProcsUnscanned=0,ProcBodies="168/168",' +
+    'Indexes=0,ServerRoutines=0,ServerRoutineNames="",SilentRoutines=0,ColumnTriggers=0,ColumnTriggerNames="",' +
+    'ColumnTriggersStale=0,ColumnTriggersNoBody=0,ColumnProcedures=0,ColumnIndexes=0,IndexBindings=0,DrawnBindings=0,' +
+    'DrawnBindingRows="",BindingsElsewhere=0.0,BindingsUnresolved=0.0,BindingsStale=0,IndexReadFacts=112,' +
+    'IndexWriteFacts=148,IndexFactSymbols=250,IndexFactReadTables=104,IndexVerbLiterals=791,IndexFromJoinTables=133,' +
+    'NoSqlFacts=false,NoSql=false,Clusters=6,ClickTargets=9,Expected=9,AllClickable=true';
+  CO_SRV_DOT_SHA = 'dbd3ed2ec3cb9793ac20ed7d95f72013cf106f32b9f39361e75e4a6cb288a6f2';
+  CO_FOLDERS = 'FOLDERS';
+  CO_FOLDERS_FIELDS = 'TestChart=false,Table="FOLDERS",Column=null,ColumnOlderOnly=false,ColumnState="",ColumnLabel="",ColumnLine="",' +
+    'Declarations=2,Columns=79,Readers=4,Writers=2,ReaderUnits=0,WriterUnits=0,CertainReaders=1,CertainWriters=2,' +
+    'InferredReaders=3,InferredWriters=0,InferredReaderNames="uFOLDERS_SERVER.TDataService_FOLDERS_SERVER.PrepareLoadQuery,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleCreateFolder,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandlePrePlanPreset",' +
+    'CertainWriterNames="uFOLDERS_SERVER.TDataService_FOLDERS_SERVER.PrepareSaveQuery,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleCreateFolder",UnitLevelUnits=0,ByNameUnits=2,ByNameLiterals=7.0,' +
+    'ByNameCaseOnly="",ByNameLines="uFOLDERS_SERVER:72+156+285+308+424+455,uPipeSessionBuilder:747",Triggers=3,' +
+    'TriggerNames="FOLDERS_BD0@MS6.SQL:276,FOLDERS_BIU0@MS6.SQL:285,FOLDERS_BIU5@MS5.SQL:269",OtherTriggers=0,Procedures=1,' +
+    'ProcedureNames="SP_MAXID_FORALL_TABLES",ProcsUnscanned=0,ProcBodies="168/168",Indexes=2,ServerRoutines=0,' +
+    'ServerRoutineNames="",SilentRoutines=0,ColumnTriggers=0,ColumnTriggerNames="",ColumnTriggersStale=0,' +
+    'ColumnTriggersNoBody=0,ColumnProcedures=0,ColumnIndexes=0,IndexBindings=0,DrawnBindings=0,DrawnBindingRows="",' +
+    'BindingsElsewhere=0.0,BindingsUnresolved=0.0,BindingsStale=0,IndexReadFacts=112,IndexWriteFacts=148,' +
+    'IndexFactSymbols=250,IndexFactReadTables=104,IndexVerbLiterals=791,IndexFromJoinTables=133,NoSqlFacts=false,' +
+    'NoSql=false,Clusters=8,ClickTargets=15,Expected=15,AllClickable=true';
+  CO_FOLDERS_DOT_SHA = 'c1fb9dd5356efea894620104e40e8540ad84dfd6e4375c2e2c8725f03892f040';
+  CO_CAPPED = 'MSCLIST';
+  CO_CAPPED_FIELDS = 'TestChart=false,Table="MSCLIST",Column=null,ColumnOlderOnly=false,ColumnState="",ColumnLabel="",ColumnLine="",' +
+    'Declarations=2,Columns=123,Readers=15,Writers=9,ReaderUnits=0,WriterUnits=0,CertainReaders=6,CertainWriters=5,' +
+    'InferredReaders=9,InferredWriters=4,InferredReaderNames="uMSCLIST_SERVER.TDataService_MSCLIST_SERVER.PrepareLoadQuery,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleComputeSchedule.BuildFinalFamily,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleComputeSchedule.BuildSimpleKind,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleComputeSchedule.BuildSPC,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleComputeSchedule.RollUpGroupVisualFlags.RollOne,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation.ClonePlans,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleDeleteCharacteristic,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandlePrePlanPreset,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleVerifyFolder",' +
+    'CertainWriterNames="uMSCLIST_SERVER.TDataService_MSCLIST_SERVER.PrepareSaveQuery,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleComputeSchedule,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleComputeSchedule.BuildInProcess,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleDeleteCharacteristic,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleVerifyFolder",UnitLevelUnits=0,ByNameUnits=1,ByNameLiterals=6.0,' +
+    'ByNameCaseOnly="",ByNameLines="uMSCLIST_SERVER:72+163+336+359+519+550",Triggers=2,' +
+    'TriggerNames="MSCLIST_BIU0@MS6.SQL:467,MSCLIST_BIU5@MS5.SQL:696",OtherTriggers=0,Procedures=0,ProcedureNames="",' +
+    'ProcsUnscanned=0,ProcBodies="168/168",Indexes=0,ServerRoutines=0,ServerRoutineNames="",SilentRoutines=0,' +
+    'ColumnTriggers=0,ColumnTriggerNames="",ColumnTriggersStale=0,ColumnTriggersNoBody=0,ColumnProcedures=0,' +
+    'ColumnIndexes=0,IndexBindings=0,DrawnBindings=0,DrawnBindingRows="",BindingsElsewhere=0.0,BindingsUnresolved=0.0,' +
+    'BindingsStale=0,IndexReadFacts=112,IndexWriteFacts=148,IndexFactSymbols=250,IndexFactReadTables=104,' +
+    'IndexVerbLiterals=791,IndexFromJoinTables=133,NoSqlFacts=false,NoSql=false,Clusters=7,ClickTargets=20,Expected=20,' +
+    'AllClickable=true';
+  CO_CAPPED_DOT_SHA = 'abf5d6e0f4d45306fba3ec61b456bbfe2536d5244b44cb690596d927e6c9ea91';
+  CO_OTHER = 'MACHINESTAT';
+  CO_OTHER_FIELDS = 'TestChart=false,Table="MACHINESTAT",Column=null,ColumnOlderOnly=false,ColumnState="",ColumnLabel="",ColumnLine="",' +
+    'Declarations=2,Columns=97,Readers=1,Writers=1,ReaderUnits=0,WriterUnits=0,CertainReaders=0,CertainWriters=1,' +
+    'InferredReaders=1,InferredWriters=0,' +
+    'InferredReaderNames="uMACHINESTAT_SERVER.TDataService_MACHINESTAT_SERVER.PrepareLoadQuery",' +
+    'CertainWriterNames="uMACHINESTAT_SERVER.TDataService_MACHINESTAT_SERVER.PrepareSaveQuery",UnitLevelUnits=0,' +
+    'ByNameUnits=1,ByNameLiterals=6.0,ByNameCaseOnly="",ByNameLines="uMACHINESTAT_SERVER:72+157+304+327+464+495",' +
+    'Triggers=0,TriggerNames="",OtherTriggers=2,Procedures=0,ProcedureNames="",ProcsUnscanned=0,ProcBodies="168/168",' +
+    'Indexes=0,ServerRoutines=0,ServerRoutineNames="",SilentRoutines=0,ColumnTriggers=0,ColumnTriggerNames="",' +
+    'ColumnTriggersStale=0,ColumnTriggersNoBody=0,ColumnProcedures=0,ColumnIndexes=0,IndexBindings=0,DrawnBindings=0,' +
+    'DrawnBindingRows="",BindingsElsewhere=0.0,BindingsUnresolved=0.0,BindingsStale=0,IndexReadFacts=112,' +
+    'IndexWriteFacts=148,IndexFactSymbols=250,IndexFactReadTables=104,IndexVerbLiterals=791,IndexFromJoinTables=133,' +
+    'NoSqlFacts=false,NoSql=false,Clusters=5,ClickTargets=6,Expected=6,AllClickable=true';
+  CO_OTHER_DOT_SHA = 'edcc7af7017e29513873437f506104ececa6f73a47406ed31ac5b5e460a415af';
+  CO_TWICE = 'GONOFF';
+  CO_TWICE_FIELDS = 'TestChart=false,Table="GONOFF",Column=null,ColumnOlderOnly=false,ColumnState="",ColumnLabel="",ColumnLine="",' +
+    'Declarations=2,Columns=26,Readers=1,Writers=1,ReaderUnits=0,WriterUnits=0,CertainReaders=0,CertainWriters=1,' +
+    'InferredReaders=1,InferredWriters=0,InferredReaderNames="uGONOFF_SERVER.TDataService_GONOFF_SERVER.PrepareLoadQuery",' +
+    'CertainWriterNames="uGONOFF_SERVER.TDataService_GONOFF_SERVER.PrepareSaveQuery",UnitLevelUnits=0,ByNameUnits=1,' +
+    'ByNameLiterals=6.0,ByNameCaseOnly="",ByNameLines="uGONOFF_SERVER:72+142+218+241+304+335",Triggers=2,' +
+    'TriggerNames="GONOFF_BIU0@MS6.SQL:340,GONOFF_BIU5@MS5.SQL:413",OtherTriggers=0,Procedures=3,ProcedureNames="LASTSTOP,' +
+    'SP_GET_GONOFF_ID,SP_MAXID_FORALL_TABLES",ProcsUnscanned=0,ProcBodies="168/168",Indexes=2,ServerRoutines=0,' +
+    'ServerRoutineNames="",SilentRoutines=0,ColumnTriggers=0,ColumnTriggerNames="",ColumnTriggersStale=0,' +
+    'ColumnTriggersNoBody=0,ColumnProcedures=0,ColumnIndexes=0,IndexBindings=0,DrawnBindings=0,DrawnBindingRows="",' +
+    'BindingsElsewhere=0.0,BindingsUnresolved=0.0,BindingsStale=0,IndexReadFacts=112,IndexWriteFacts=148,' +
+    'IndexFactSymbols=250,IndexFactReadTables=104,IndexVerbLiterals=791,IndexFromJoinTables=133,NoSqlFacts=false,' +
+    'NoSql=false,Clusters=7,ClickTargets=11,Expected=11,AllClickable=true';
+  CO_TWICE_DOT_SHA = '6c8e59c83e20060d7eb732fd9faffe6b89a11998408b953a2bd0076070cae900';
+  CO_CLIENT = 'FOLDERS';
+  CO_CLIENT_FIELDS = 'TestChart=false,Table="FOLDERS",Column=null,ColumnOlderOnly=false,ColumnState="",ColumnLabel="",ColumnLine="",' +
+    'Declarations=2,Columns=79,Readers=0,Writers=0,ReaderUnits=0,WriterUnits=0,CertainReaders=0,CertainWriters=0,' +
+    'InferredReaders=0,InferredWriters=0,InferredReaderNames="",CertainWriterNames="",UnitLevelUnits=0,ByNameUnits=6,' +
+    'ByNameLiterals=7.0,ByNameCaseOnly="''Folders'' uJobList.pas:552",ByNameLines="Blueprint4:815,' +
+    'Blueprint4.ViewModel:1221,uJobList:439,uJobList.ViewModel:288,uSetupDefaultsFrm:2413+2427,uFieldsInfoCache:158",' +
+    'Triggers=3,TriggerNames="FOLDERS_BD0@MS6.SQL:276,FOLDERS_BIU0@MS6.SQL:285,FOLDERS_BIU5@MS5.SQL:269",OtherTriggers=0,' +
+    'Procedures=1,ProcedureNames="SP_MAXID_FORALL_TABLES",ProcsUnscanned=0,ProcBodies="168/168",Indexes=2,ServerRoutines=0,' +
+    'ServerRoutineNames="",SilentRoutines=0,ColumnTriggers=0,ColumnTriggerNames="",ColumnTriggersStale=0,' +
+    'ColumnTriggersNoBody=0,ColumnProcedures=0,ColumnIndexes=0,IndexBindings=0,DrawnBindings=0,DrawnBindingRows="",' +
+    'BindingsElsewhere=0.0,BindingsUnresolved=0.0,BindingsStale=0,IndexReadFacts=0,IndexWriteFacts=0,IndexFactSymbols=0,' +
+    'IndexFactReadTables=0,IndexVerbLiterals=7,IndexFromJoinTables=0,NoSqlFacts=true,NoSql=false,Clusters=5,' +
+    'ClickTargets=13,Expected=13,AllClickable=true';
+  CO_CLIENT_DOT_SHA = '706aa0754a94b88a3defb68e0c98589e32f8b6af79fc97bc026127edd4bb431b';
+  CO_NOSQL = 'CAUSFAIL';
+  CO_NOSQL_FIELDS = 'TestChart=false,Table="CAUSFAIL",Column=null,ColumnOlderOnly=false,ColumnState="",ColumnLabel="",ColumnLine="",' +
+    'Declarations=2,Columns=4,Readers=0,Writers=0,ReaderUnits=0,WriterUnits=0,CertainReaders=0,CertainWriters=0,' +
+    'InferredReaders=0,InferredWriters=0,InferredReaderNames="",CertainWriterNames="",UnitLevelUnits=0,ByNameUnits=0,' +
+    'ByNameLiterals=0,ByNameCaseOnly="",ByNameLines="",Triggers=3,TriggerNames="CAUSFAIL_BIU0@MS6.SQL:34,' +
+    'CAUSFAIL_BIU5@MS5.SQL:15,CAUSFAIL_BUD0@MS6.SQL:44",OtherTriggers=0,Procedures=2,ProcedureNames="SP_GET_CAUSFAIL_ID,' +
+    'SP_MAXID_FORALL_TABLES",ProcsUnscanned=0,ProcBodies="168/168",Indexes=0,ServerRoutines=0,ServerRoutineNames="",' +
+    'SilentRoutines=0,ColumnTriggers=0,ColumnTriggerNames="",ColumnTriggersStale=0,ColumnTriggersNoBody=0,' +
+    'ColumnProcedures=0,ColumnIndexes=0,IndexBindings=0,DrawnBindings=0,DrawnBindingRows="",BindingsElsewhere=0.0,' +
+    'BindingsUnresolved=0.0,BindingsStale=0,IndexReadFacts=0,IndexWriteFacts=0,IndexFactSymbols=0,IndexFactReadTables=0,' +
+    'IndexVerbLiterals=0,IndexFromJoinTables=0,NoSqlFacts=true,NoSql=true,Clusters=3,ClickTargets=6,Expected=6,' +
+    'AllClickable=true';
+  CO_NOSQL_DOT_SHA = '5558a4233e731661fa56ff69259fef891eb77601764f2186bda760a2de8d1b55';
+  CO_DL = 'FIB$ENUMVALUES';
+  CO_DL_FIELDS = 'TestChart=false,Table="FIB$ENUMVALUES",Column=null,ColumnOlderOnly=false,ColumnState="",ColumnLabel="",ColumnLine="",' +
+    'Declarations=1,Columns=6,Readers=1,Writers=1,ReaderUnits=0,WriterUnits=0,CertainReaders=0,CertainWriters=0,' +
+    'InferredReaders=1,InferredWriters=1,InferredReaderNames="DRagLint.Sql.FbSnapshot.TFbSnapshot.Run",' +
+    'CertainWriterNames="",UnitLevelUnits=0,ByNameUnits=0,ByNameLiterals=0,ByNameCaseOnly="",ByNameLines="",Triggers=0,' +
+    'TriggerNames="",OtherTriggers=0,Procedures=0,ProcedureNames="",ProcsUnscanned=0,ProcBodies="168/168",Indexes=0,' +
+    'ServerRoutines=0,ServerRoutineNames="",SilentRoutines=0,ColumnTriggers=0,ColumnTriggerNames="",ColumnTriggersStale=0,' +
+    'ColumnTriggersNoBody=0,ColumnProcedures=0,ColumnIndexes=0,IndexBindings=0,DrawnBindings=0,DrawnBindingRows="",' +
+    'BindingsElsewhere=0.0,BindingsUnresolved=0.0,BindingsStale=0,IndexReadFacts=99,IndexWriteFacts=27,' +
+    'IndexFactSymbols=113,IndexFactReadTables=20,IndexVerbLiterals=462,IndexFromJoinTables=3,NoSqlFacts=false,NoSql=false,' +
+    'Clusters=3,ClickTargets=3,Expected=3,AllClickable=true';
+  CO_DL_DOT_SHA = 'b685fa89511d7670f45aac41a49b72cec0ba972783bb92c47677458cfc31e996';
+  CO_SRVCOL = 'CAUSFAIL.REASON';
+  CO_SRVCOL_FIELDS = 'TestChart=false,Table="CAUSFAIL",Column="REASON",ColumnOlderOnly=false,ColumnState="yes",' +
+    'ColumnLabel="[certain] a column of the newest of 2 declaration(s), MS1.SQL",ColumnLine="MS1.SQL:1411",Declarations=2,' +
+    'Columns=4,Readers=1,Writers=1,ReaderUnits=0,WriterUnits=0,CertainReaders=1,CertainWriters=1,InferredReaders=0,' +
+    'InferredWriters=0,InferredReaderNames="",' +
+    'CertainWriterNames="uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareSaveQuery",UnitLevelUnits=0,ByNameUnits=1,' +
+    'ByNameLiterals=6.0,ByNameCaseOnly="",ByNameLines="uCAUSFAIL_SERVER:71+134+188+211+252+283",Triggers=3,' +
+    'TriggerNames="CAUSFAIL_BIU0@MS6.SQL:34,CAUSFAIL_BIU5@MS5.SQL:15,CAUSFAIL_BUD0@MS6.SQL:44",OtherTriggers=0,' +
+    'Procedures=2,ProcedureNames="SP_GET_CAUSFAIL_ID,SP_MAXID_FORALL_TABLES",ProcsUnscanned=0,ProcBodies="168/168",' +
+    'Indexes=0,ServerRoutines=2,ServerRoutineNames="uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareLoadQuery,' +
+    'uCAUSFAIL_SERVER.TDataService_CAUSFAIL_SERVER.PrepareSaveQuery",SilentRoutines=0,ColumnTriggers=1,' +
+    'ColumnTriggerNames="CAUSFAIL_BIU5",ColumnTriggersStale=0,ColumnTriggersNoBody=0,ColumnProcedures=0,ColumnIndexes=0,' +
+    'IndexBindings=0,DrawnBindings=0,DrawnBindingRows="",BindingsElsewhere=0.0,BindingsUnresolved=0.0,BindingsStale=0,' +
+    'IndexReadFacts=112,IndexWriteFacts=148,IndexFactSymbols=250,IndexFactReadTables=104,IndexVerbLiterals=791,' +
+    'IndexFromJoinTables=133,NoSqlFacts=false,NoSql=false,Clusters=4,ClickTargets=4,Expected=4,AllClickable=true';
+  CO_SRVCOL_DOT_SHA = '882f41545ee720889c23ed2707fe2166eb0b8ea0e401b93b59c756680cc4992f';
+  CO_BIND = 'CAUSFAIL.REASON';
+  CO_BIND_FIELDS = 'TestChart=false,Table="CAUSFAIL",Column="REASON",ColumnOlderOnly=false,ColumnState="yes",' +
+    'ColumnLabel="[certain] a column of the newest of 2 declaration(s), MS1.SQL",ColumnLine="MS1.SQL:1411",Declarations=2,' +
+    'Columns=4,Readers=0,Writers=0,ReaderUnits=0,WriterUnits=0,CertainReaders=0,CertainWriters=0,InferredReaders=0,' +
+    'InferredWriters=0,InferredReaderNames="",CertainWriterNames="",UnitLevelUnits=0,ByNameUnits=1,ByNameLiterals=3.0,' +
+    'ByNameCaseOnly="",ByNameLines="uCausFail.ViewModel:37+258+259",Triggers=3,TriggerNames="CAUSFAIL_BIU0@MS6.SQL:34,' +
+    'CAUSFAIL_BIU5@MS5.SQL:15,CAUSFAIL_BUD0@MS6.SQL:44",OtherTriggers=0,Procedures=2,ProcedureNames="SP_GET_CAUSFAIL_ID,' +
+    'SP_MAXID_FORALL_TABLES",ProcsUnscanned=0,ProcBodies="168/168",Indexes=0,ServerRoutines=0,ServerRoutineNames="",' +
+    'SilentRoutines=0,ColumnTriggers=1,ColumnTriggerNames="CAUSFAIL_BIU5",ColumnTriggersStale=0,ColumnTriggersNoBody=0,' +
+    'ColumnProcedures=0,ColumnIndexes=0,IndexBindings=7,DrawnBindings=1,DrawnBindingRows="uCausFailForm.dfm:60:colREASON",' +
+    'BindingsElsewhere=6.0,BindingsUnresolved=0.0,BindingsStale=0,IndexReadFacts=0,IndexWriteFacts=0,IndexFactSymbols=0,' +
+    'IndexFactReadTables=0,IndexVerbLiterals=7,IndexFromJoinTables=0,NoSqlFacts=true,NoSql=false,Clusters=3,ClickTargets=3,' +
+    'Expected=3,AllClickable=true';
+  CO_BIND_DOT_SHA = '75b81c2f033881604f4f933d3291a0e73503e5841068900a8840289a5396cdbb';
+  CO_UNRES = 'CAUSFAIL.ID';
+  CO_UNRES_FIELDS = 'TestChart=false,Table="CAUSFAIL",Column="ID",ColumnOlderOnly=false,ColumnState="yes",' +
+    'ColumnLabel="[certain] a column of the newest of 2 declaration(s), MS1.SQL",ColumnLine="MS1.SQL:1409",Declarations=2,' +
+    'Columns=4,Readers=0,Writers=0,ReaderUnits=0,WriterUnits=0,CertainReaders=0,CertainWriters=0,InferredReaders=0,' +
+    'InferredWriters=0,InferredReaderNames="",CertainWriterNames="",UnitLevelUnits=0,ByNameUnits=1,ByNameLiterals=3.0,' +
+    'ByNameCaseOnly="",ByNameLines="uCausFail.ViewModel:37+258+259",Triggers=3,TriggerNames="CAUSFAIL_BIU0@MS6.SQL:34,' +
+    'CAUSFAIL_BIU5@MS5.SQL:15,CAUSFAIL_BUD0@MS6.SQL:44",OtherTriggers=0,Procedures=2,ProcedureNames="SP_GET_CAUSFAIL_ID,' +
+    'SP_MAXID_FORALL_TABLES",ProcsUnscanned=0,ProcBodies="168/168",Indexes=0,ServerRoutines=0,ServerRoutineNames="",' +
+    'SilentRoutines=0,ColumnTriggers=1,ColumnTriggerNames="CAUSFAIL_BIU0",ColumnTriggersStale=0,ColumnTriggersNoBody=0,' +
+    'ColumnProcedures=2,ColumnIndexes=0,IndexBindings=72,DrawnBindings=2,' +
+    'DrawnBindingRows="uCausFailForm.dfm:34:cxGrid1DBTableView1,uCausFailForm.dfm:44:colID",BindingsElsewhere=31.0,' +
+    'BindingsUnresolved=39.0,BindingsStale=0,IndexReadFacts=0,IndexWriteFacts=0,IndexFactSymbols=0,IndexFactReadTables=0,' +
+    'IndexVerbLiterals=7,IndexFromJoinTables=0,NoSqlFacts=true,NoSql=false,Clusters=4,ClickTargets=6,Expected=6,' +
+    'AllClickable=true';
+  CO_UNRES_DOT_SHA = 'f9133bac0b970c7b5c049b748c45a0016743051b0ffda94d54c55db670bddb35';
+  CO_SRVSQL = 'STATIONS.GRIDS';
+  CO_SRVSQL_FIELDS = 'TestChart=false,Table="STATIONS",Column="GRIDS",ColumnOlderOnly=false,ColumnState="server-sql",' +
+    'ColumnLabel="[inferred] not extracted as a column by the SQL index (23 columns extracted from the newest of 2 declaration(s),' +
+    ' MS1.SQL:3495); nor a quoted identifier in that declaration -- but the SQL for STATIONS in TDataService_STATIONS_SERVER.PrepareLoadQuery names it: the scripts lag the schema",' +
+    'ColumnLine="uSTATIONS_SERVER.PAS:110",Declarations=2,Columns=23,Readers=4,Writers=4,ReaderUnits=0,WriterUnits=0,' +
+    'CertainReaders=2,CertainWriters=4,InferredReaders=2,InferredWriters=0,' +
+    'InferredReaderNames="uPipeSessionBuilder.TPipeSessionBuilder.HandlePrePlanPreset,' +
+    'uSTATIONS_SERVER.TDataService_STATIONS_SERVER.PrepareLoadQuery",' +
+    'CertainWriterNames="uPipeSessionBuilder.TPipeSessionBuilder.MarkStationActive,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.MarkStationDropped,uPipeSessionBuilder.TPipeSessionBuilder.MarkStationIdle,' +
+    'uSTATIONS_SERVER.TDataService_STATIONS_SERVER.PrepareSaveQuery",UnitLevelUnits=0,ByNameUnits=2,ByNameLiterals=7.0,' +
+    'ByNameCaseOnly="",ByNameLines="uPipeSessionBuilder:746,uSTATIONS_SERVER:71+144+219+242+309+340",Triggers=2,' +
+    'TriggerNames="STATIONS_BIU5@MS5.SQL:1118,STATIONS_BUD0@MS6.SQL:834",OtherTriggers=0,Procedures=0,ProcedureNames="",' +
+    'ProcsUnscanned=0,ProcBodies="168/168",Indexes=0,ServerRoutines=2,' +
+    'ServerRoutineNames="uSTATIONS_SERVER.TDataService_STATIONS_SERVER.PrepareLoadQuery,' +
+    'uSTATIONS_SERVER.TDataService_STATIONS_SERVER.PrepareSaveQuery",SilentRoutines=6,ColumnTriggers=0,' +
+    'ColumnTriggerNames="",ColumnTriggersStale=0,ColumnTriggersNoBody=0,ColumnProcedures=0,ColumnIndexes=0,IndexBindings=0,' +
+    'DrawnBindings=0,DrawnBindingRows="",BindingsElsewhere=0.0,BindingsUnresolved=0.0,BindingsStale=0,IndexReadFacts=112,' +
+    'IndexWriteFacts=148,IndexFactSymbols=250,IndexFactReadTables=104,IndexVerbLiterals=791,IndexFromJoinTables=133,' +
+    'NoSqlFacts=false,NoSql=false,Clusters=3,ClickTargets=3,Expected=3,AllClickable=true';
+  CO_SRVSQL_DOT_SHA = 'a8d913d7f0103551bf7fce6acf4435cf3e781075f1cde7e24bb6e9a7240dea12';
+  CO_OLDER = 'MACHINES.OPTORID';
+  CO_OLDER_FIELDS = 'TestChart=false,Table="MACHINES",Column="OPTORID",ColumnOlderOnly=true,ColumnState="older",' +
+    'ColumnLabel="column extracted ONLY from an older declaration (MScript2.SQL:39); not extracted from the newest (45 columns extracted from the newest of 2 declaration(s),' +
+    ' MS1.SQL:2409); nor a quoted identifier in that declaration",ColumnLine="MScript2.SQL:39",Declarations=2,Columns=45,' +
+    'Readers=1,Writers=1,ReaderUnits=0,WriterUnits=0,CertainReaders=0,CertainWriters=1,InferredReaders=1,InferredWriters=0,' +
+    'InferredReaderNames="uMACHINES_SERVER.TDataService_MACHINES_SERVER.PrepareLoadQuery",' +
+    'CertainWriterNames="uMACHINES_SERVER.TDataService_MACHINES_SERVER.PrepareSaveQuery",UnitLevelUnits=0,ByNameUnits=1,' +
+    'ByNameLiterals=6.0,ByNameCaseOnly="",ByNameLines="uMACHINES_SERVER:72+146+241+264+349+380",Triggers=4,' +
+    'TriggerNames="MACHINES_AI10@MS5.SQL:620,MACHINES_AU10@MS5.SQL:629,MACHINES_BDU0@MS6.SQL:405,' +
+    'MACHINES_BIU5@MS5.SQL:643",OtherTriggers=0,Procedures=2,ProcedureNames="MACHINESLASTSTOP,MACHINESLASTSTOP2",' +
+    'ProcsUnscanned=0,ProcBodies="168/168",Indexes=0,ServerRoutines=0,ServerRoutineNames="",SilentRoutines=2,' +
+    'ColumnTriggers=0,ColumnTriggerNames="",ColumnTriggersStale=0,ColumnTriggersNoBody=0,ColumnProcedures=0,' +
+    'ColumnIndexes=0,IndexBindings=0,DrawnBindings=0,DrawnBindingRows="",BindingsElsewhere=0.0,BindingsUnresolved=0.0,' +
+    'BindingsStale=0,IndexReadFacts=112,IndexWriteFacts=148,IndexFactSymbols=250,IndexFactReadTables=104,' +
+    'IndexVerbLiterals=791,IndexFromJoinTables=133,NoSqlFacts=false,NoSql=false,Clusters=1,ClickTargets=1,Expected=1,' +
+    'AllClickable=true';
+  CO_OLDER_DOT_SHA = 'f43283832ad57e19226d90fb02d97795c526c77d937ff82b315d85196cb0d937';
+  CO_IDX = 'FOLDERS.FLDRSTATUS_CODE';
+  CO_IDX_FIELDS = 'TestChart=false,Table="FOLDERS",Column="FLDRSTATUS_CODE",ColumnOlderOnly=false,ColumnState="yes",' +
+    'ColumnLabel="[certain] a column of the newest of 2 declaration(s), MS1.SQL",ColumnLine="MS1.SQL:1837",Declarations=2,' +
+    'Columns=79,Readers=4,Writers=2,ReaderUnits=0,WriterUnits=0,CertainReaders=1,CertainWriters=2,InferredReaders=3,' +
+    'InferredWriters=0,InferredReaderNames="uFOLDERS_SERVER.TDataService_FOLDERS_SERVER.PrepareLoadQuery,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleCreateFolder,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandlePrePlanPreset",' +
+    'CertainWriterNames="uFOLDERS_SERVER.TDataService_FOLDERS_SERVER.PrepareSaveQuery,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleCreateFolder",UnitLevelUnits=0,ByNameUnits=2,ByNameLiterals=7.0,' +
+    'ByNameCaseOnly="",ByNameLines="uFOLDERS_SERVER:72+156+285+308+424+455,uPipeSessionBuilder:747",Triggers=3,' +
+    'TriggerNames="FOLDERS_BD0@MS6.SQL:276,FOLDERS_BIU0@MS6.SQL:285,FOLDERS_BIU5@MS5.SQL:269",OtherTriggers=0,Procedures=1,' +
+    'ProcedureNames="SP_MAXID_FORALL_TABLES",ProcsUnscanned=0,ProcBodies="168/168",Indexes=2,ServerRoutines=3,' +
+    'ServerRoutineNames="uFOLDERS_SERVER.TDataService_FOLDERS_SERVER.PrepareLoadQuery,' +
+    'uFOLDERS_SERVER.TDataService_FOLDERS_SERVER.PrepareSaveQuery,' +
+    'uPipeSessionBuilder.TPipeSessionBuilder.HandleCreateFolder",SilentRoutines=2,ColumnTriggers=1,' +
+    'ColumnTriggerNames="FOLDERS_BIU5",ColumnTriggersStale=0,ColumnTriggersNoBody=0,ColumnProcedures=0,ColumnIndexes=1,' +
+    'IndexBindings=0,DrawnBindings=0,DrawnBindingRows="",BindingsElsewhere=0.0,BindingsUnresolved=0.0,BindingsStale=0,' +
+    'IndexReadFacts=112,IndexWriteFacts=148,IndexFactSymbols=250,IndexFactReadTables=104,IndexVerbLiterals=791,' +
+    'IndexFromJoinTables=133,NoSqlFacts=false,NoSql=false,Clusters=5,ClickTargets=7,Expected=7,AllClickable=true';
+  CO_IDX_DOT_SHA = '87b813d412e8c2964debe14cb0dbfa1d4130085d519ba8f8db2d777f64707d8a';
+  CO_ANSWER = 'MSCLIST';
+  CO_LINES = 17;
+  CO_SQL_INDEX_LINE = 4;
+  CO_CHART = 'CHART consumers MSCLIST -- 0 reading routines / 0 writing routines';
+  CO_LAST_ROW = '  ControlPlan2.ViewModel @ControlPlan2.ViewModel.pas:387 -- ControlPlan2.ViewModel.pas: ''MSCLIST'' at literal :387, literal :708, literal :851';
 
 function RepoRoot: string;
 begin
@@ -1528,6 +1792,189 @@ begin
   Assert.AreEqual('INDEX ' + A.SqlDbPath + ' (sql)', L[LW_SERVER_INDEX_LINE + 1]);
   Assert.AreEqual(LW_CHART, L[LW_SERVER_INDEX_LINE + 2]);
   Assert.AreEqual(LW_LAST_ROW, L[High(L)]);
+end;
+
+{ ---- consumers ---- }
+
+{ the Delphi clone pDb and the SQL clone ('' = SQL_CLONE), as the parity case passes them }
+function TConsumersTests.CoArgs(const pTarget, pDb, pSql: string; out pArgs: TQuestionArgs): Boolean;
+begin
+  Result:= Args(CO_ID, pTarget, pDb, pArgs);
+  if not Result then
+    Exit;
+  var Sql:= TPath.Combine(ExtractFileDir(pArgs.DbPath), if pSql = '' then SQL_CLONE else pSql);
+  Result:= TFile.Exists(Sql);
+  if not Result then
+  begin
+    Assert.Pass('clone missing: ' + Sql);
+    Exit;
+  end;
+  pArgs.SqlDbPath:= Sql;
+end;
+
+{ pCap 0 = the default cap the bundler passes (20) }
+procedure TConsumersTests.Check(const pDb, pTarget, pFields, pDotSha: string; pCap: Integer);
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not CoArgs(pTarget, pDb, '', A) then
+    Exit;
+  if pCap > 0 then
+    A.Cap:= pCap;
+  Assert.IsTrue(FindChartQuestion(CO_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(pFields, Fields(C));
+  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
+end;
+
+function TConsumersTests.CoRefusal(const pTarget, pDb, pSql: string): string;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  Result:= '';
+  if not CoArgs(pTarget, pDb, pSql, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(CO_ID, E));
+  try
+    E(A, FOutRoot);
+    Assert.Fail(pTarget + ' was not refused');
+  except
+    on X: EChartsQuestion do Result:= X.Message;
+  end;
+end;
+
+procedure TConsumersTests.CertainReadersAndWritersOnServer;
+begin
+  { sql_reads / sql_writes facts anchored on a literal, [by name] mentions, triggers, procedures }
+  Check(SERVER_CLONE, CO_SRV, CO_SRV_FIELDS, CO_SRV_DOT_SHA);
+end;
+
+procedure TConsumersTests.InferredReadersWideTriggerAndIndexes;
+begin
+  { verb-literal readers, a 70-column trigger cut to "+64 more", two indexes, a mention inside a drawn routine }
+  Check(SERVER_CLONE, CO_FOLDERS, CO_FOLDERS_FIELDS, CO_FOLDERS_DOT_SHA);
+end;
+
+procedure TConsumersTests.CappedClustersDiscloseTheRest;
+begin
+  { cap 4: every reader / writer cluster past the cap says how many rows it did not draw }
+  Check(SERVER_CLONE, CO_CAPPED, CO_CAPPED_FIELDS, CO_CAPPED_DOT_SHA, CO_SMALL_CAP);
+end;
+
+procedure TConsumersTests.OtherTriggersNameTheTable;
+begin
+  { two triggers FOR other tables name MACHINESTAT in their body; an older-only column on the focus }
+  Check(SERVER_CLONE, CO_OTHER, CO_OTHER_FIELDS, CO_OTHER_DOT_SHA);
+end;
+
+procedure TConsumersTests.ProcedureDeclaredTwiceSaysSo;
+begin
+  { LASTSTOP is declared twice: one row, "(2 declarations)" }
+  Check(SERVER_CLONE, CO_TWICE, CO_TWICE_FIELDS, CO_TWICE_DOT_SHA);
+end;
+
+procedure TConsumersTests.ClientWithoutFactsNamesCaseOnlyLiterals;
+begin
+  { CLIENT: no SQL facts; 'Folders' equals the table only case-insensitively and is named, not drawn }
+  Check(CLIENT_CLONE, CO_CLIENT, CO_CLIENT_FIELDS, CO_CLIENT_DOT_SHA);
+end;
+
+procedure TConsumersTests.IndexWithoutAnySqlSaysSo;
+begin
+  { no facts and no upper-case SQL literal: "ask the SERVER index" }
+  Check(CO_NOSQL_CLONE, CO_NOSQL, CO_NOSQL_FIELDS, CO_NOSQL_DOT_SHA);
+end;
+
+procedure TConsumersTests.InferredWriterWithoutAFact;
+begin
+  { drag-lint's own index: a reader and a writer by SQL literal only }
+  Check(CO_DL_CLONE, CO_DL, CO_DL_FIELDS, CO_DL_DOT_SHA);
+end;
+
+procedure TConsumersTests.ColumnNamedByServerRoutines;
+begin
+  Check(SERVER_CLONE, CO_SRVCOL, CO_SRVCOL_FIELDS, CO_SRVCOL_DOT_SHA);
+end;
+
+procedure TConsumersTests.ColumnBindingsResolvingElsewhereAreCounted;
+begin
+  { one REASON binding resolves to CAUSFAIL; six resolve to other tables and are only counted }
+  Check(CLIENT_CLONE, CO_BIND, CO_BIND_FIELDS, CO_BIND_DOT_SHA);
+end;
+
+procedure TConsumersTests.ColumnBindingsThatStopAreCounted;
+begin
+  { 72 ID bindings: 2 drawn, 31 elsewhere, 39 whose chain stops; two procedures name CAUSFAIL and ID }
+  Check(CLIENT_CLONE, CO_UNRES, CO_UNRES_FIELDS, CO_UNRES_DOT_SHA);
+end;
+
+procedure TConsumersTests.ColumnOnlyTheServerSqlNames;
+begin
+  { STATIONS.GRIDS is in no script, but this index's SQL for STATIONS names it: server-sql }
+  Check(SERVER_CLONE, CO_SRVSQL, CO_SRVSQL_FIELDS, CO_SRVSQL_DOT_SHA);
+end;
+
+procedure TConsumersTests.ColumnOnlyAnOlderDeclarationExtracts;
+begin
+  Check(SERVER_CLONE, CO_OLDER, CO_OLDER_FIELDS, CO_OLDER_DOT_SHA);
+end;
+
+procedure TConsumersTests.ColumnInAnIndexDefinition;
+begin
+  Check(SERVER_CLONE, CO_IDX, CO_IDX_FIELDS, CO_IDX_DOT_SHA);
+end;
+
+procedure TConsumersTests.SelectionRefusalsMatchPowerShell;
+begin
+  Assert.AreEqual('consumers: -Column takes TABLE.COLUMN, got ''a.b.c''', CoRefusal('a.b.c', SERVER_CLONE));
+  Assert.AreEqual('consumers: no table PDF_SCAN in the SQL index (script-derived; the scripts may lag the live schema) -- nearest: ' +
+    'PDF1. The index holds 135 table names from 252 declarations; 5 live tables are not in the scripts (2026-09-23).',
+    CoRefusal('PDF_SCAN', SERVER_CLONE));
+  Assert.AreEqual('consumers: no column NOPE in CAUSFAIL: not extracted as a column by the SQL index (4 columns extracted from the ' +
+    'newest of 2 declaration(s), MS1.SQL:1408); nor a quoted identifier in that declaration; no SQL for CAUSFAIL in ' +
+    'SERVER-MicroniteMW1Service.sqlite names it -- nearest: ID. Script-derived; the scripts may lag the live schema.',
+    CoRefusal('CAUSFAIL.NOPE', SERVER_CLONE));
+end;
+
+procedure TConsumersTests.IndexRolesAreChecked;
+begin
+  { a swapped pair must refuse, never render an empty chart }
+  Assert.EndsWith(SQL_CLONE + ' is a SQL-script index, not a Delphi project index. -DbPath takes the Delphi project clone ' +
+    '(SERVER for the SQL half, CLIENT for bindings); the scripts go in -SqlDbPath.', CoRefusal(CO_SRV, SQL_CLONE));
+  Assert.EndsWith(CLIENT_CLONE + ' is not a SQL index (0 sql_table symbols). -SqlDbPath takes the index of the .SQL scripts ' +
+    '(SQL-drag-lint-sql.sqlite); the Delphi project index goes in -DbPath.', CoRefusal(CO_SRV, SERVER_CLONE, CLIENT_CLONE));
+end;
+
+procedure TConsumersTests.MissingSqlIndexRefusesAsTheBundlerDoes;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  { New-DiagramArtifact checks it before the emitter runs }
+  if not CoArgs(CO_SRV, SERVER_CLONE, '', A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(CO_ID, E));
+  A.SqlDbPath:= '';
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      E(A, FOutRoot);
+    end, EChartsQuestion, 'consumers needs -SqlDbPath: the SQL-script index clone (charts\scratch\db\SQL-drag-lint-sql.sqlite)');
+end;
+
+procedure TConsumersTests.AnswerNamesTheSqlIndex;
+var
+  A: TQuestionArgs;
+begin
+  if not CoArgs(CO_ANSWER, CLIENT_CLONE, '', A) then
+    Exit;
+  var L:= AskChartQuestion(A).Lines;
+  Assert.AreEqual<Integer>(CO_LINES, Length(L));
+  Assert.AreEqual('INDEX ' + A.SqlDbPath + ' (sql)', L[CO_SQL_INDEX_LINE]);
+  Assert.AreEqual(CO_CHART, L[CO_SQL_INDEX_LINE + 1]);
+  Assert.AreEqual(CO_LAST_ROW, L[High(L)]);
 end;
 
 end.

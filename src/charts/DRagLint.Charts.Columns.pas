@@ -120,7 +120,7 @@ function ColumnHopLabel(const pState: TSqlColumnState): string;
 /// <returns>column | older-only | not-a-column | [stale source] | pState unchanged.</returns>
 /// <remarks>Port of Get-ColumnStateName (Emit-Common.ps1:1155). PS trap closed: `switch` on a
 /// string is case-insensitive.</remarks>
-function ColumnStateName(const pState: string): string;  // dl:ok unused-public-symbol@5129 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function ColumnStateName(const pState: string): string;
 
 /// <summary>lands-where's row for a property the SQL index does not extract (state no).</summary>
 /// <param name="pProp">The property.</param>

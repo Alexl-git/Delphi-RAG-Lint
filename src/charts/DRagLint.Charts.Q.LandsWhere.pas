@@ -19,8 +19,8 @@ unit DRagLint.Charts.Q.LandsWhere;
   passes them, so TestChart is always false), and the Write-Host progress lines. A missing
   -ServerDbPath / -SqlDbPath refuses with New-DiagramArtifact's own message, the layer that
   checks them before the PS emitter is reached. The PS local functions Format-N,
-  Get-DataServiceClassCount, Get-SqlTableSymbolCount, Get-ParamByNameStats, Get-WordRx and
-  Get-RowAnchors are free routines below; New-Row, Find-OrmProperty, Add-Box and Add-Edge are
+  Get-DataServiceClassCount, Get-ParamByNameStats and Get-RowAnchors are free routines below
+  (Get-SqlTableSymbolCount and Get-WordRx, shared with consumers, live in DRagLint.Charts.Sql); New-Row, Find-OrmProperty, Add-Box and Add-Edge are
   private methods of TLandsWhereChart, and the script's numbered sections are its methods.
 
   PS traps closed: `-match`, `-eq`, `-in`, `-contains` and `switch` are case-insensitive, while
@@ -252,12 +252,6 @@ begin
   Result:= FormatFloat('#,##0', pN, TFormatSettings.Invariant);
 end;
 
-{ Get-WordRx: the name as a whole word, `$` counting as a word character (case-SENSITIVE) }
-function WordRx(const pName: string): string;
-begin
-  Result:= '(?<![A-Za-z0-9_$])' + TRegEx.Escape(pName) + '(?![A-Za-z0-9_$])';
-end;
-
 function CountOf(pIndex: TChartsIndex; const pSql: string): Integer;
 begin
   var Rows:= pIndex.Query(pSql);
@@ -272,12 +266,6 @@ end;
 function DataServiceClassCount(pIndex: TChartsIndex): Integer;
 begin
   Result:= CountOf(pIndex, 'SELECT COUNT(*) AS n FROM symbols WHERE kind = ''class'' AND name GLOB ''TDataService_*_SERVER''');
-end;
-
-{ Get-SqlTableSymbolCount }
-function SqlTableSymbolCount(pIndex: TChartsIndex): Integer;
-begin
-  Result:= CountOf(pIndex, 'SELECT COUNT(*) AS n FROM symbols WHERE kind = ''sql_table''');
 end;
 
 { Get-RowAnchors: "Label:Line" of every anchored row }

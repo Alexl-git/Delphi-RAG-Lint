@@ -294,6 +294,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Effects.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.FeedsFrom.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.LandsWhere.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Consumers.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>
