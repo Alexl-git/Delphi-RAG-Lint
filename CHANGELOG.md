@@ -3,6 +3,21 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.29.1-alpha -- 2026-10-14
+
+### Changed
+
+- **`lint <file> --db` no longer runs the per-file project rules over every file in the
+  index.** unused-unit-in-uses, god-class, unused-public-symbol and unused-private-member
+  used to visit all files and keep one file's findings; they now visit that file only.
+  Findings are unchanged: `run_lint_file_scoped_loop_parity.ps1` compares full tuples
+  against `lint-all` for every fixture file, and on ORM3 (Micronite2027, 625 files)
+  BASICS.PAS, ControlPlan2.pas and SPCTplEdit.pas match `lint-all` exactly (1, 58 and 53
+  loop findings, 0 diff). Measured on BASICS.PAS: 40.0 s -> 28.7 s. The whole-store rules
+  (circular-uses, repeated-type-switch, enum-helper-separate-units, duplicate-global-decl)
+  and the class metrics still run in full; narrowing those is the next step.
+  `DRAGLINT_PROFILE` now prints how many files the per-file loop visited.
+
 ## v1.29.0-alpha -- 2026-10-13
 
 ### Added
