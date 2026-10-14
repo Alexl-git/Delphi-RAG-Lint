@@ -400,7 +400,7 @@ begin
   Assert.AreEqual(0, FFallback.Calls);
 end;
 
-procedure TProducerDelphiTests.SqlIndexOfAReadingQuestionIsCarriedAndChecked;
+procedure TProducerDelphiTests.SqlIndexOfAReadingQuestionIsCarriedAndChecked;  // dl:ok duplicate-code@9be3 -- REVIEWED 2026-10-14: each test spells out its own clone / options / Produce / assert steps so a failure reads on its own; a shared helper would hide which index each case passes
 var
   Db, Sql: string;
 begin
@@ -443,6 +443,8 @@ begin
 end;
 
 procedure TProducerDelphiTests.ServerAndSqlIndexesAreCarriedInAskReportOrder;
+const
+  PROJECT_SERVER_SQL = 3;
 var
   Db, Server, Sql: string;
 begin
@@ -458,12 +460,13 @@ begin
   var R:= FProducer.Produce(Cmd('lands-where', LW_TARGET), O);
   Assert.AreEqual(0, FFallback.Calls);
   Assert.IsTrue(R.Ok, R.Reason);
-  Assert.AreEqual<Integer>(3, Length(R.IndexPaths));
+  Assert.AreEqual<Integer>(PROJECT_SERVER_SQL, Length(R.IndexPaths));
   Assert.AreEqual(Server, R.IndexPaths[1]);
   Assert.AreEqual(Sql, R.IndexPaths[2]);
   Assert.Contains(R.Text, #13#10'INDEX ' + Server + ' (server)'#13#10'INDEX ' + Sql + ' (sql)'#13#10'CHART lands-where ' + LW_TARGET + ' -- ');
   Assert.AreEqual('Delphi in-process (lands-where)', FProducer.Describe);
 end;
+
 { a folder holding only an empty Ask-Report.ps1: an installed copy, where the ported Emit-*.ps1 are not shipped }
 function TProducerDelphiTests.BareScriptFolder: string;
 begin

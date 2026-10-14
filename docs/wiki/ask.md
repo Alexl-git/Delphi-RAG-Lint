@@ -71,8 +71,8 @@ starts with `ask-report:`.
 
 The questions ported to Delphi (`touches-tables`, `shown-where`, `deps`,
 `class-surface`, `event-wiring`, `tested-by`, `change-impact`, `crosses-boundary`,
-`protocol-trace`, `lifecycle`, `effects`) are answered inside the engine, from the
-live index. `crosses-boundary` is answered there only when its counterpart index is
+`protocol-trace`, `lifecycle`, `effects`, `feeds-from`, `lands-where`, `consumers`,
+`exception-paths`) are answered inside the engine, from the live index. `crosses-boundary` is answered there only when its counterpart index is
 known (`--counterpart-db`, or the pair in `report-pairs.json`); without one it goes
 to the script, which draws the one side and says so. Every other question is handed
 to `charts\src\Ask-Report.ps1 -Plain`, which the engine runs itself -- so those

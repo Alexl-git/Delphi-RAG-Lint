@@ -124,10 +124,10 @@ begin
   Result:= Default(TQuestionArgs);
   Result.Question:= pQuestion;
   Result.Target:= 'T.X';
-  Result.DbPath:= 'C:\d.sqlite';
-  Result.ServerDbPath:= 'C:\s.sqlite';
-  Result.SqlDbPath:= 'C:\q.sqlite';
-  Result.CounterpartDb:= 'C:\c.sqlite';
+  Result.DbPath:= 'C:\d.sqlite';  // dl:ok hardcoded-absolute-path@4ee4 -- REVIEWED 2026-10-14: a fixture value, never opened: QArgs only proves which index paths a question carries
+  Result.ServerDbPath:= 'C:\s.sqlite';  // dl:ok hardcoded-absolute-path@16b8 -- REVIEWED 2026-10-14: a fixture value, never opened: QArgs only proves which index paths a question carries
+  Result.SqlDbPath:= 'C:\q.sqlite';  // dl:ok hardcoded-absolute-path@ba73 -- REVIEWED 2026-10-14: a fixture value, never opened: QArgs only proves which index paths a question carries
+  Result.CounterpartDb:= 'C:\c.sqlite';  // dl:ok hardcoded-absolute-path@d268 -- REVIEWED 2026-10-14: a fixture value, never opened: QArgs only proves which index paths a question carries
   Result.Cap:= DEFAULT_CAP;
   Result.Depth:= DEFAULT_DEPTH;
   Result.SurfaceCap:= DEFAULT_SURFACE_CAP;

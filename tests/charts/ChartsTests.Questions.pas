@@ -1,4 +1,4 @@
-unit ChartsTests.Questions;
+unit ChartsTests.Questions;  // dl:ok unit-too-large@75ce -- REVIEWED 2026-10-14: one fixture per ported question sharing TQuestionFixture and the clone constants; splitting it is a separate test-layout change, not part of the group C port
 
 { Cases for the ported chart questions (DRagLint.Charts.Q.*), each run in-process against
   its FROZEN clone under charts\scratch\db (never a live index; a missing clone passes with
@@ -19,6 +19,7 @@ type
   protected
     FOutRoot: string;
     function Args(const pQuestion, pTarget, pCloneName: string; out pArgs: TQuestionArgs): Boolean;
+    function ArgsWithSql(const pQuestion, pTarget, pCloneName, pSqlClone: string; out pArgs: TQuestionArgs): Boolean;
     function Fields(const pChart: TChartResult): string;
     function EmitChart(const pQuestion, pTarget, pCloneName: string; out pChart: TChartResult): Boolean;
     function Refusal(const pQuestion, pTarget, pCloneName: string): string;
@@ -237,6 +238,7 @@ type
   end;
 
 implementation
+
 uses
   System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
@@ -535,14 +537,15 @@ const
     'ProcedureNames="",ClientBindings=0,ClientRows="",ClientOther=0,' + LW_CONV + ',ColumnLabel="",' + LW_SRV +
     ',ClickTargets=5,Expected=5,AllClickable=true';
   LW_AMBIG_DOT_SHA = '647097e3b5d98896e178d81e61f37f2eb3ca7e73c44e695414b1127099412ad0';
-  LW_NOT_ORM ='not an ORM object property (class is not Tmc<T>) and not a DFM-bound field';
+  LW_NOT_ORM = 'not an ORM object property (class is not Tmc<T>) and not a DFM-bound field';
   LW_LINES = 17;
   LW_SERVER_INDEX_LINE = 4;
   LW_CHART = 'CHART lands-where uCAUSFAIL.TmcCAUSFAIL.REASON -- 4 server DataService rows / 1 triggers touching the column';
   LW_LAST_ROW = '  ... positional Fields[i] / Params[i] reads are not shown -- they never name the column';
   FF_LINES = 13;
   FF_SQL_INDEX_LINE = 4;
-  FF_CHART_LINE = 5;  DEPS_CHART_LINE = 4;
+  FF_CHART_LINE = 5;
+  DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
     'COMMAND shown-where -Target "FTRNAMESTR"|' +
@@ -802,6 +805,11 @@ const
     '566,5302,4007,2712,1417,122,4858,3563,2268,973,4414,3119,1824,529,5265,3970,2675,1380,85,4821,3526,2' +
     '231,936,4377,3082,1787,492,5228,3933,2638,1343,48,4784,3489,2194,899,4340,3045,1750,455,5191,3896,26' +
     '01,1306,4747,3452,2157,862';
+  { two small key sets and the order pwsh 7 prints their hashtable keys in }
+  EP_HT_MIXED_KEYS: TArray<Integer> = [5, 12, 3, 40, 7, 99, 1000, 17, 2, 64];
+  EP_HT_MIXED_ORDER = '1000,99,64,12,7,40,5,3,2,17';
+  EP_HT_HUNDREDS_KEYS: TArray<Integer> = [100, 200, 300, 400, 500, 600, 700];
+  EP_HT_HUNDREDS_ORDER = '100,200,300,400,500,600,700';
   EP_DEPTH = 3;
   TEST_CLONE = 'TESTS-TestMicroniteObjects.sqlite';
   EP_RB = 'MStreams.TABZMemoryStream.ReadBuffer';
@@ -1052,6 +1060,23 @@ procedure TQuestionFixture.TearDown;
 begin
   if TDirectory.Exists(FOutRoot) then
     TDirectory.Delete(FOutRoot, True);
+end;
+
+{ Args plus the SQL-script clone (-SqlDbPath) beside it; pSqlClone '' = SQL_CLONE }
+function TQuestionFixture.ArgsWithSql(const pQuestion, pTarget, pCloneName, pSqlClone: string;
+  out pArgs: TQuestionArgs): Boolean;
+begin
+  Result:= Args(pQuestion, pTarget, pCloneName, pArgs);
+  if not Result then
+    Exit;
+  var Sql:= TPath.Combine(ExtractFileDir(pArgs.DbPath), if pSqlClone = '' then SQL_CLONE else pSqlClone);
+  Result:= TFile.Exists(Sql);
+  if not Result then
+  begin
+    Assert.Pass('clone missing: ' + Sql);
+    Exit;
+  end;
+  pArgs.SqlDbPath:= Sql;
 end;
 
 function TQuestionFixture.Args(const pQuestion, pTarget, pCloneName: string; out pArgs: TQuestionArgs): Boolean;
@@ -1723,18 +1748,9 @@ end;
 { the fixture's arguments plus the SQL-script clone (-SqlDbPath); pSqlClone '' = the SQL clone }
 function TFeedsFromTests.SqlArgs(const pTarget, pSqlClone: string; out pArgs: TQuestionArgs): Boolean;
 begin
-  Result:= Args(FEEDS_FROM_ID, pTarget, CLIENT_CLONE, pArgs);
-  if not Result then
-    Exit;
-  var Sql:= TPath.Combine(ExtractFileDir(pArgs.DbPath), if pSqlClone = '' then SQL_CLONE else pSqlClone);
-  Result:= TFile.Exists(Sql);
-  if not Result then
-  begin
-    Assert.Pass('clone missing: ' + Sql);
-    Exit;
-  end;
-  pArgs.SqlDbPath:= Sql;
+  Result:= ArgsWithSql(FEEDS_FROM_ID, pTarget, CLIENT_CLONE, pSqlClone, pArgs);
 end;
+
 
 procedure TFeedsFromTests.Check(const pTarget, pFields, pDotSha: string);
 var
@@ -2051,18 +2067,9 @@ end;
 { the Delphi clone pDb and the SQL clone ('' = SQL_CLONE), as the parity case passes them }
 function TConsumersTests.CoArgs(const pTarget, pDb, pSql: string; out pArgs: TQuestionArgs): Boolean;
 begin
-  Result:= Args(CO_ID, pTarget, pDb, pArgs);
-  if not Result then
-    Exit;
-  var Sql:= TPath.Combine(ExtractFileDir(pArgs.DbPath), if pSql = '' then SQL_CLONE else pSql);
-  Result:= TFile.Exists(Sql);
-  if not Result then
-  begin
-    Assert.Pass('clone missing: ' + Sql);
-    Exit;
-  end;
-  pArgs.SqlDbPath:= Sql;
+  Result:= ArgsWithSql(CO_ID, pTarget, pDb, pSql, pArgs);
 end;
+
 
 { pCap 0 = the default cap the bundler passes (20) }
 procedure TConsumersTests.Check(const pDb, pTarget, pFields, pDotSha: string; pCap: Integer);
@@ -2349,8 +2356,8 @@ end;
 procedure TExceptionPathsTests.HashtableKeyOrderMatchesPowerShell;
 begin
   (* $h = @{}; foreach ($k in ...) { $h[$k] = 1 }; $h.Keys -join ',' -- printed by pwsh 7 *)
-  Assert.AreEqual('1000,99,64,12,7,40,5,3,2,17', IntsText(PsHashtableOrder([5, 12, 3, 40, 7, 99, 1000, 17, 2, 64])));
-  Assert.AreEqual('100,200,300,400,500,600,700', IntsText(PsHashtableOrder([100, 200, 300, 400, 500, 600, 700])));
+  Assert.AreEqual(EP_HT_MIXED_ORDER, IntsText(PsHashtableOrder(EP_HT_MIXED_KEYS)));
+  Assert.AreEqual(EP_HT_HUNDREDS_ORDER, IntsText(PsHashtableOrder(EP_HT_HUNDREDS_KEYS)));
   { 151 keys: the table grows 3 -> 7 -> 17 -> 37 -> 89 -> 197 -> 431 buckets, rehashing each time }
   var Keys: TArray<Integer>:= [EP_HT_FIRST];
   for var K:= 1 to EP_HT_COUNT do
