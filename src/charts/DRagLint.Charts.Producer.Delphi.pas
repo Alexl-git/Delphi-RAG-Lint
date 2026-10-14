@@ -18,7 +18,9 @@ unit DRagLint.Charts.Producer.Delphi;
 interface
 
 uses
-  DRagLint.Charts.ReportHeader, DRagLint.Charts.Producer;
+  DRagLint.Charts.ReportHeader
+  , DRagLint.Charts.Producer // dl:unit DRagLint.Charts.Producer accepted -- the producer exit-code constant travels with the seam it belongs to
+  ;
 
 type
   /// <summary>Answers ported questions in-process; delegates the rest.</summary>
@@ -59,14 +61,19 @@ type
 /// DRAGLINT_CHARTS_ALLOW_LIVE_DB policy for in-process answers on live indexes.</returns>
 /// <remarks>Switching compare to the Delphi producer is a change HERE (and a test change);
 /// nothing else. The CLI's compare verb is to obtain its producer from this function.</remarks>
-function ProducerForCompare: IReportProducer;  // dl:ok unused-public-symbol -- REVIEWED 2026-10-13: the compare switch; DRagLint.CLI (compare verb) is to call it, an engine-side one-line change this branch may not make (owner rule: no CLI edits); pinned by ChartsTests.ProducerDelphi
+function ProducerForCompare: IReportProducer;  // dl:ok unused-public-symbol@39d8 -- REVIEWED 2026-10-13: the compare switch; DRagLint.CLI (compare verb, :31005 and :31117) is to call it -- a one-line engine-side change this branch may not make (no CLI edits); pinned by ChartsTests.ProducerDelphi
 
 implementation
 
 uses
-  System.SysUtils, System.IOUtils, DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite,
-  DRagLint.Index.Freshness, DRagLint.Charts.Question, DRagLint.Charts.Ask, DRagLint.Charts.Producer.PowerShell,
-  DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ShownWhere, DRagLint.Charts.Q.Deps;
+  System.SysUtils, System.IOUtils, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness
+  , DRagLint.Core.Model // dl:unit DRagLint.Core.Model accepted -- the engine version the header names is the product constant itself
+  , DRagLint.Charts.Question // dl:unit DRagLint.Charts.Question accepted -- the bundler defaults and Ask-Report's refusal code travel with the question types
+  , DRagLint.Charts.Ask, DRagLint.Charts.Producer.PowerShell
+  , DRagLint.Charts.Q.TouchesTables  // dl:ok unused-unit-in-uses@5c7b -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.ShownWhere  // dl:ok unused-unit-in-uses@62b1 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Deps  // dl:ok unused-unit-in-uses@6504 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  ;
 
 const
   EXIT_OK = 0;

@@ -74,8 +74,8 @@ type
     function CloneRoot: string;
     /// <summary>dot.exe: DotExe when set, else the Resolve-GraphvizDot walk from ChartsRoot.</summary>
     /// <returns>The full path of dot.exe.</returns>
-    /// <exception cref="EChartsTool">No dot.exe was found (the message names every place looked).</exception>
-    /// <remarks>Called where the PS emitter's Invoke-DotRun resolves it: after the .dot text is built.</remarks>
+    /// <remarks>Called where the PS emitter's Invoke-DotRun resolves it: after the .dot text is built.
+    /// ResolveGraphvizDot raises EChartsTool, naming every place looked, when no dot.exe is found.</remarks>
     function Dot: string;
     /// <summary>The index path through the clone guard (Get-CloneDb), as the PS emitters open it.</summary>
     /// <returns>The full path.</returns>
@@ -165,7 +165,9 @@ function PsJsonString(const pValue: string): string;
 implementation
 
 uses
-  System.Generics.Collections, System.Generics.Defaults, System.IOUtils, DRagLint.Charts.Tools;
+  System.Generics.Collections, System.Generics.Defaults, System.IOUtils
+  , DRagLint.Charts.Tools // dl:unit DRagLint.Charts.Tools accepted -- the shared dot.exe default travels with the dot walk (ResolveGraphvizDot) it feeds
+  ;
 
 const
   CLONE_SUBDIR = 'scratch\db';

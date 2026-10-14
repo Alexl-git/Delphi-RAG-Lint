@@ -85,7 +85,9 @@ implementation
 
 uses
   Winapi.Windows, System.Classes, System.IOUtils, System.StrUtils, System.Character, System.DateUtils,
-  System.Generics.Collections, System.RegularExpressions, DRagLint.Charts.Text, DRagLint.Charts.Dot, DRagLint.Charts.Tools;
+  System.Generics.Collections, System.RegularExpressions, DRagLint.Charts.Text
+  , DRagLint.Charts.Tools // dl:unit DRagLint.Charts.Tools accepted -- the clone-guard override's variable name travels with the guard (CloneDb) that reads it
+  ;
 
 const
   LF = #10;
@@ -619,7 +621,7 @@ begin
   ForceDirectories(Dir);
   try
     Chart:= RunEmitter(Emitter, pArgs, Dir);
-  except // dl:ok bare-except@1c1f -- removes the bundle folder this call made, then re-raises; the refusal is the answer
+  except  // dl:ok bare-except@1755 -- REVIEWED 2026-10-13: removes the bundle folder this call made when it is still empty, then re-raises; the refusal is the answer
     if DirWasNew and TDirectory.Exists(Dir) and IsEmptyDir(Dir) then
       TDirectory.Delete(Dir);
     raise;

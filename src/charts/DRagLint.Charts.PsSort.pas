@@ -30,7 +30,7 @@ type
     TRIPLE = 3;
   private
     FItems  : TArray<T>;
-    FCompare: TComparison<T>;
+    FCompare: TComparison<T>;  // dl:ok referenced-never-set@0fb1 -- REVIEWED 2026-10-13: linter FP -- Sort writes it through the local record (S.FCompare:= pCompare) before IntroSort reads it (logged to draglint-gaps.log)
     procedure Swap(pI, pJ: Integer);
     procedure SwapIfGreater(pI, pJ: Integer);
     procedure InsertionSort(pLo, pCount: Integer);

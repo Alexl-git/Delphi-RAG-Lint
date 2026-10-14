@@ -115,7 +115,27 @@ begin
   Result.AddPair('error', pMessage);
 end;
 
-{ The step-2 switches (tools, cluster, layout); False for a switch it does not know. }
+{ The question-mode switches; False for a switch it does not know. }
+function ParseQuestionArg(const pName, pValue: string; var pArgs: TProbeArgs): Boolean;
+begin
+  Result:= True;
+  if SameText(pName, '--question') then
+    pArgs.Question:= pValue
+  else if SameText(pName, '--target') then
+    pArgs.Target:= pValue
+  else if SameText(pName, '--out-root') then
+    pArgs.OutRoot:= pValue
+  else if SameText(pName, '--cap') then
+    pArgs.Cap:= pValue
+  else if SameText(pName, '--depth') then
+    pArgs.Depth:= pValue
+  else if SameText(pName, '--max-rows') then
+    pArgs.MaxRows:= pValue
+  else
+    Result:= False;
+end;
+
+{ The step-2 switches (tools, cluster, layout), then the question-mode ones; False for a switch neither knows. }
 function ParseStep2Arg(const pName, pValue: string; var pArgs: TProbeArgs): Boolean;
 begin
   Result:= True;
@@ -131,20 +151,8 @@ begin
     pArgs.Globals:= pValue = '1'
   else if SameText(pName, '--clone-path') then
     pArgs.ClonePaths:= pArgs.ClonePaths + [pValue]
-  else if SameText(pName, '--question') then
-    pArgs.Question:= pValue
-  else if SameText(pName, '--target') then
-    pArgs.Target:= pValue
-  else if SameText(pName, '--out-root') then
-    pArgs.OutRoot:= pValue
-  else if SameText(pName, '--cap') then
-    pArgs.Cap:= pValue
-  else if SameText(pName, '--depth') then
-    pArgs.Depth:= pValue
-  else if SameText(pName, '--max-rows') then
-    pArgs.MaxRows:= pValue
   else
-    Result:= False;
+    Result:= ParseQuestionArg(pName, pValue, pArgs);
 end;
 
 function ParseArgs(out pArgs: TProbeArgs): Boolean;
