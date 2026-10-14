@@ -3,7 +3,8 @@ unit DRagLint.Lint.ClassMetrics;
 { v0.78 CK class metrics (#6): DIT, NOC, CBO, RFC, LCOM4. v0.80 refactoring
   signal: middle-man. v0.81 coupling metrics: fan-out (Ce, aliases CBO) and
   fan-in (Ca, whole-project reverse aggregation). Store-backed, project-wide --
-  runs only in lint-all (not lint-project, not the per-file LSP). Complements the
+  runs in lint-all, and in `lint <file> --db` scoped to that file's classes (not
+  lint-project, not the per-file LSP). Complements the
   coarse god-class rule with individually-tunable metrics. Stateless; reads an
   open store; never raises. }
 
@@ -46,9 +47,20 @@ type
     /// <param name="AStore">An open, migrated symbol store; nil -> empty result.</param>
     /// <param name="ACfg">Active lint config (supplies per-rule thresholds).</param>
     /// <param name="ARuleId">Single-rule filter for --rule; '' evaluates every metric.</param>
+    /// <param name="AOnlyFileId">0 (the default): findings for every class in AStore. &gt; 0:
+    /// metrics are computed and emitted only for the classes declared in that file. The
+    /// inventory, parent links, NOC, DIT and fan-in stay whole-store (they are relational:
+    /// a class's children or referrers may live in any unit), so a class's answer is the
+    /// same as in an unscoped run.</param>
+    /// <param name="ARuleKept">nil (the default): every metric ARuleId allows is computed.
+    /// Otherwise a metric is computed only when ARuleKept(id) is True. Callers pass the
+    /// predicate their own final filter applies, so a metric that would be dropped anyway
+    /// -- fan-in and instability ship OFF, and ComputeAllFanIn is the costliest pass --
+    /// is never computed. Must not answer False for a rule the caller's filter keeps.</param>
     /// <returns>'info' findings anchored at each offending class declaration.</returns>
     /// <remarks>
-    /// Project-wide; call from lint-all only. Never raises.
+    /// Project-wide relations; `lint-all` passes AOnlyFileId = 0, `lint &lt;file&gt;` passes
+    /// the file. Never raises.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.DoLint (DRagLint.CLI.pas), DRagLint.CLI.DoLintAll (DRagLint.CLI.pas)</para>
     /// <para>Calls: CollectDefProcNodes, CollectIdentifiers, CompareText, Connected, Copy, Default, DelegateBaseField, DelegationField, DRagLint.Diagnostics.ParseCache.TAstParseCache.Clear, DRagLint.Lint.ClassMetrics.TClassMetrics.Run.BuildInventory (+34 more)</para>
@@ -63,7 +75,8 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Run(const AStore: ISymbolStore; const ACfg: TLintConfig;
-      const ARuleId: string = ''): TArray<TLintFinding>;
+      const ARuleId: string = ''; const AOnlyFileId: Int64 = 0;
+      const ARuleKept: TFunc<string, Boolean> = nil): TArray<TLintFinding>;
   end;
 
 implementation
@@ -160,7 +173,8 @@ begin
 end;
 
 class function TClassMetrics.Run(const AStore: ISymbolStore; const ACfg: TLintConfig;
-  const ARuleId: string): TArray<TLintFinding>;
+  const ARuleId: string; const AOnlyFileId: Int64;
+  const ARuleKept: TFunc<string, Boolean>): TArray<TLintFinding>;
 var
   Inv         : TDictionary<Int64, TClassInfo>   ;
   ByName      : TDictionary<string, TList<Int64>>;
@@ -188,9 +202,11 @@ var
   TInstFloor  : Integer                          ; { v0.82 instability: noise floor on Ca+Ce (also guards div-by-zero) }
   CI          : TClassInfo                       ;
 
+  { --rule narrows; ARuleKept drops what the caller's final filter would drop. }
   function WantRule(const AId: string): Boolean;
   begin
-    Result:= (ARuleId = '') or (ARuleId = AId);
+    Result:= ((ARuleId = '') or (ARuleId = AId)) and
+             ((not Assigned(ARuleKept)) or ARuleKept(AId));
   end;
 
   procedure Emit(const AId, AMsg: string; const AInfo: TClassInfo);
@@ -1014,6 +1030,47 @@ var
     end;
   end;
 
+  { The classes the emit loop visits, in report order. }
+  function ClassesToEmit: TArray<TClassInfo>;
+  begin
+    { DETERMINISTIC EMIT ORDER, and it is a correctness property of the REPORT
+      rather than a cosmetic one.
+
+      This loop used to walk Inv.Values directly. Inv is a
+      TDictionary<Int64, TClassInfo> keyed by SYMBOL ID, and dictionary
+      enumeration follows the hash layout -- so the order depends on the ids,
+      and a reindex reassigns ids. Measured 2026-08-17 on ORM3: reindexing the
+      SAME sources moved 61 findings (58 high-response, 2 low-cohesion, 1
+      too-many-children) to different positions. Same 14,764 findings, same
+      2,161,951 bytes, identical line multiset when sorted -- a different file.
+
+      Why that matters more than it looks: byte-identity of `lint-all` stdout is
+      this project's primary verification gate for every performance change. An
+      output order that moves when the index is rebuilt makes that gate valid
+      only WITHIN one index state, silently, and makes any report-to-report diff
+      across a reindex show churn that is not there.
+
+      Sorted by (path, decl line, decl col, name): the file and position a
+      reader is sent to, which is stable across reindexes because it comes from
+      the SOURCE, not from the index's internal numbering. }
+    Result:= nil;
+    { `lint <file>`: only this file's classes. Every finding below is emitted at
+      its class (or, feature-envy, its class's method), so no finding of this
+      file is lost; the relations they read (Inv, ParentOf, NocCount, FanIn)
+      were all built from the whole store above. }
+    for var CIv in Inv.Values do
+      if (AOnlyFileId <= 0) or (CIv.FileId = AOnlyFileId) then
+        Result:= Result + [CIv];
+    TArray.Sort<TClassInfo>(Result, TComparer<TClassInfo>.Construct(
+      function(const L, R: TClassInfo): Integer
+      begin
+        Result:= CompareText(L.Path, R.Path);
+        if Result = 0 then Result:= L.DeclLine - R.DeclLine;
+        if Result = 0 then Result:= L.DeclCol  - R.DeclCol ;
+        if Result = 0 then Result:= CompareText(L.Name, R.Name);
+      end));
+  end;
+
 begin
   Result:= nil;
   if AStore = nil then Exit;
@@ -1044,41 +1101,16 @@ begin
     BuildInventory;
     ResolveParents;
     ComputeNOC;
+    { FanIn feeds exactly two rules, both OFF by default; it is the costliest pass
+      here (6.3 s of a single-file lint on ORM3), and with ARuleKept supplied the
+      final filter would have dropped everything it led to. }
+    var FanInWanted: Boolean:= WantRule('fan-in') or WantRule('instability');
     var TFI: Int64:= TStopwatch.GetTimeStamp;
-    ComputeAllFanIn;
+    if FanInWanted then ComputeAllFanIn;
     Inc(GBFanInAll, TStopwatch.GetTimeStamp - TFI);
     if WantRule('feature-envy') then BuildMemberMap;
 
-    { DETERMINISTIC EMIT ORDER, and it is a correctness property of the REPORT
-      rather than a cosmetic one.
-
-      This loop used to walk Inv.Values directly. Inv is a
-      TDictionary<Int64, TClassInfo> keyed by SYMBOL ID, and dictionary
-      enumeration follows the hash layout -- so the order depends on the ids,
-      and a reindex reassigns ids. Measured 2026-08-17 on ORM3: reindexing the
-      SAME sources moved 61 findings (58 high-response, 2 low-cohesion, 1
-      too-many-children) to different positions. Same 14,764 findings, same
-      2,161,951 bytes, identical line multiset when sorted -- a different file.
-
-      Why that matters more than it looks: byte-identity of `lint-all` stdout is
-      this project's primary verification gate for every performance change. An
-      output order that moves when the index is rebuilt makes that gate valid
-      only WITHIN one index state, silently, and makes any report-to-report diff
-      across a reindex show churn that is not there.
-
-      Sorted by (path, decl line, decl col, name): the file and position a
-      reader is sent to, which is stable across reindexes because it comes from
-      the SOURCE, not from the index's internal numbering. }
-    var Ordered: TArray<TClassInfo>:= nil;
-    for var CIv in Inv.Values do Ordered:= Ordered + [CIv];
-    TArray.Sort<TClassInfo>(Ordered, TComparer<TClassInfo>.Construct(
-      function(const L, R: TClassInfo): Integer
-      begin
-        Result:= CompareText(L.Path, R.Path);
-        if Result = 0 then Result:= L.DeclLine - R.DeclLine;
-        if Result = 0 then Result:= L.DeclCol  - R.DeclCol ;
-        if Result = 0 then Result:= CompareText(L.Name, R.Name);
-      end));
+    var Ordered: TArray<TClassInfo>:= ClassesToEmit;
 
     for CI in Ordered do
     begin
@@ -1201,7 +1233,10 @@ begin
       Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeRFC'            , GBRfc  / TStopwatch.Frequency, GCRfc ]));
       Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeLCOM4'          , GBLcom / TStopwatch.Frequency, GCLcom]));
       Writeln(ErrOutput, Format('    %-26s %8.2f s (%d call(s))', ['ComputeMiddleMan'      , GBMm   / TStopwatch.Frequency, GCMm  ]));
-      Writeln(ErrOutput, Format('    %-26s %8.2f s', ['ComputeAllFanIn', GBFanInAll / TStopwatch.Frequency]));
+      Writeln(ErrOutput, Format('    %-26s %s', ['ComputeAllFanIn',
+        if FanInWanted then Format('%8.2f s', [GBFanInAll / TStopwatch.Frequency])
+        else 'skipped (fan-in, instability not kept)']));
+      Writeln(ErrOutput, Format('    %-26s %8d class(es)', ['per-class loop', Length(Ordered)]));
       Writeln(ErrOutput, '    (ResolveTypeCategory is called from INSIDE ComputeCBO/ComputeAllFanIn,');
       Writeln(ErrOutput, '     so its time is also counted in theirs -- the rows are not disjoint.)');
       Flush(ErrOutput);

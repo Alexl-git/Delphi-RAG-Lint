@@ -12862,6 +12862,86 @@ begin
   Result:= False;
 end;
 
+/// <summary>The rule ids named by a suppression marker anywhere in AFiles, lowercased:
+/// every `dl:ok &lt;rule&gt;` and every `drag-lint:ignore &lt;rule&gt;`; '*' when a
+/// `drag-lint:ignore` names no rule (it suppresses everything on its line).</summary>
+/// <param name="AFiles">Source files to scan; a missing file is skipped.</param>
+/// <returns>Distinct ids; empty when no file carries a marker.</returns>
+/// <remarks>
+/// Exists for ClassMetricKept. ApplyLineMarkers runs BEFORE the config filter on
+/// purpose, so a finding of a DISABLED rule still accounts for its marker; a metric
+/// that is never computed would leave that marker reading as review-marker-unused.
+/// Each file is read the way ApplyLineMarkers reads it, and a line is parsed only
+/// when it contains a marker keyword. Deliberately over-inclusive (a marker inside
+/// a string literal counts): an extra id only means a metric is computed, as before.
+/// </remarks>
+function MarkedRuleIds(const AFiles: TArray<string>): TArray<string>;
+const
+  IGNORE_MARK = 'drag-lint:ignore';
+begin
+  Result:= nil;
+  var Seen: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  try
+    for var Path: string in AFiles do
+    begin
+      if (Path = '') or not TFile.Exists(Path) then Continue;
+      { Read EXACTLY as ApplyLineMarkers' LinesOf does -- same call, same
+        encoding detection -- so this scan and the marker pass cannot disagree
+        about what a file says; a file that pass cannot read fails the run there. }
+      for var Line: string in TFile.ReadAllLines(Path) do
+      begin
+        var Low: string:= LowerCase(Line);
+        if Pos('dl:ok', Low) > 0 then
+          for var M: TReviewMarker in TReviewMarkers.Parse(Line) do
+            Seen.AddOrSetValue(LowerCase(M.RuleId), True);
+        var IPos: Integer:= Pos(IGNORE_MARK, Low);
+        if IPos = 0 then Continue;
+        var Rest: string:= Trim(Copy(Line, IPos + Length(IGNORE_MARK), MaxInt));
+        if Rest = '' then Seen.AddOrSetValue('*', True);
+        for var Tok: string in Rest.Split([' ', ',', #9]) do
+          if Trim(Tok) <> '' then Seen.AddOrSetValue(LowerCase(Trim(Tok)), True);
+      end;
+    end;
+    Result:= Seen.Keys.ToArray;
+  finally
+    Seen.Free;
+  end;
+end;
+
+/// <summary>The skip predicate handed to TClassMetrics.Run: True when the final
+/// filter of `lint` / `lint-all` would KEEP a finding of rule AId, or when a
+/// marker in the linted scope names AId.</summary>
+/// <param name="AArgs">The run's arguments; only Rule is read (--rule opts a rule back in).</param>
+/// <param name="ACfg">The run's LoadLintConfig result -- the same one FinalizeAndOutput applies.</param>
+/// <param name="AMarked">MarkedRuleIds over the files this run reports on.</param>
+/// <returns>A predicate over rule ids.</returns>
+/// <remarks>
+/// SOUND ONLY WHILE IT IS A SUBSET OF THE FILTER. Its default-disabled set is
+/// PROJECT_RULES_OFF_BY_DEFAULT + BUILTIN_RULES_OFF_BY_DEFAULT less --rule, and
+/// both verbs hand FinalizeAndOutput a SUPERSET of that (plus the .scm defaults),
+/// so this never answers False for a finding the filter would keep -- at worst it
+/// computes something that is dropped later, which is what both verbs did before.
+/// The ONE consumer ahead of that filter is ApplyLineMarkers, which is why a
+/// marked rule is always kept. Pinned by
+/// tests\autotest\run_lint_file_class_metrics_parity.ps1 (checks P* and M*).
+/// </remarks>
+function ClassMetricKept(const AArgs: TArgs; const ACfg: TLintConfig;
+  const AMarked: TArray<string>): TFunc<string, Boolean>;
+begin
+  var Rule  : string        := AArgs.Rule;
+  var Cfg   : TLintConfig   := ACfg;
+  var Marked: TArray<string>:= AMarked;
+  Result:=
+    function(AId: string): Boolean
+    begin
+      if MatchText('*', Marked) or MatchText(AId, Marked) then Exit(True);
+      var DefOff: Boolean:= (MatchText(AId, PROJECT_RULES_OFF_BY_DEFAULT) or
+                             MatchText(AId, BUILTIN_RULES_OFF_BY_DEFAULT)) and
+                            not SameText(AId, Rule);
+      Result:= Cfg.ShouldKeep(AId, DefOff);
+    end;
+end;
+
 { The rule a lint run may NARROW its checkers to: ARule, except '' for a
   review-marker-* rule. Those are computed FROM every other rule's findings --
   review-marker-unused means "no finding on this line matches the marker" --
@@ -13740,7 +13820,8 @@ begin
           if LintRuleWants(NarrowRule, LINT_GATE_CLASS_METRICS) then
           begin
             TraceLintChecker('class-metrics');
-            for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, NarrowRule) do
+            for F in DRagLint.Lint.ClassMetrics.TClassMetrics.Run(FlowStore, Cfg, NarrowRule,
+                       {AOnlyFileId=}FlowFid, ClassMetricKept(AArgs, Cfg, MarkedRuleIds([EffPath, MyPath]))) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
           end;
@@ -19623,10 +19704,14 @@ begin
     SibKeep .Free;
     SibOwned.Free;
   end;
-  { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; runs only here. }
+  { v0.78: CK class metrics (DIT/NOC/CBO/RFC/LCOM4). Project-wide; `lint <file>`
+    runs the same pass scoped to its file. ClassMetricKept skips a metric this
+    verb's final filter would drop and no marker names -- on defaults that is
+    ComputeAllFanIn. }
   LintPhase('class-metrics');
   if LintRuleWants(Nr, LINT_GATE_CLASS_METRICS) then
-    Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, Nr);
+    Findings:= Findings + DRagLint.Lint.ClassMetrics.TClassMetrics.Run(Store, Cfg, Nr,
+      {AOnlyFileId=}0, ClassMetricKept(AArgs, Cfg, MarkedRuleIds(FilePaths)));
   { ADF Task 7: missing-doc -- store-backed (symbol_docs join), so it can only
     run where a store is open; ON by default (see RuleCatalog). }
   LintPhase('missing-doc');
