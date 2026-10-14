@@ -411,7 +411,7 @@ begin
         if TooOld <> '' then
           ShowMessage(MSG_PREFIX + TooOld)
         else
-          ShowMessage(MSG_PREFIX + 'setup problem -- the indexes could not be resolved.' + sLineBreak + sLineBreak +
+          ShowMessage(MSG_PREFIX + 'setup problem -- the question could not be run, for this reason:' + sLineBreak + sLineBreak +
                       AskReportReason(pOutput));
       end;
     ASK_EXIT_STALE:
