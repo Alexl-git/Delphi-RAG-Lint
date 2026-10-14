@@ -8,7 +8,7 @@ program ChartsCoreProbe;
     ChartsCoreProbe --db <index.sqlite> --qname <name> [--kinds field,property]
                     [--file <path> --line <n> --col <n> --len <n>]
                     [--charts-root <repo\charts> --scratch <dir> --layout-dir <dir>
-                     --clone-path <path> ... --globals 1]
+                     --clone-path <path> ... --globals 1 --sql-db <sql.sqlite>]
 
   Output: {"symbolLocation":{...}|{"error":..}, "memberSelection":{..}|{"found":false}|{"error":..},
            "edgeless":{"count","disclosure","files":[..]}, "zones":{"rootLen","sample":[..]},
@@ -18,6 +18,8 @@ program ChartsCoreProbe;
            "checks":{"members","edges","intfLoop","anyLoop"}|{"error":..},
            "sql":{"tableCount",..,"tables":[digest],"procs":[digest],"trigs":[digest]}|{"error":..},
            "columns":{"states":[digest],"notHeld":[..],"quoted":[digest]}|{"error":..},
+           "orm":{"db","rows","computedAt"}|{"error":..},
+           "chains":{"chains":[..],"dataSources":[..],"bindings":[..],"rePoints":[..]}|{"error":..}  (--sql-db),
            "cluster":{"text","ports","disclosure"}|{"error":..},
            "layout":{"dotSha","svgSha","plainSha","anchors"}|{"error":..}}
   tools, checks and sql (the index-wide sections) need --globals 1 and --charts-root; layout needs --layout-dir and runs dot.exe (never drag-lint.exe,
@@ -34,6 +36,7 @@ uses
   , System.Hash
   , System.IOUtils
   , System.Generics.Collections
+  , System.Generics.Defaults
   , DRagLint.Charts.Text in '..\..\src\charts\DRagLint.Charts.Text.pas'
   , DRagLint.Charts.Index in '..\..\src\charts\DRagLint.Charts.Index.pas'
   , DRagLint.Charts.Source in '..\..\src\charts\DRagLint.Charts.Source.pas'
@@ -43,6 +46,7 @@ uses
   , DRagLint.Charts.Checks in '..\..\src\charts\DRagLint.Charts.Checks.pas'
   , DRagLint.Charts.Sql in '..\..\src\charts\DRagLint.Charts.Sql.pas'
   , DRagLint.Charts.Columns in '..\..\src\charts\DRagLint.Charts.Columns.pas'
+  , DRagLint.Charts.Chain in '..\..\src\charts\DRagLint.Charts.Chain.pas'
   ;
 
 const
@@ -69,6 +73,7 @@ type
     LayoutDir : string;
     ClonePaths: TArray<string>;
     Globals   : Boolean;
+    SqlDb     : string;
   end;
 
 function Num(pValue: Int64): TJSONNumber;
@@ -92,6 +97,8 @@ begin
     pArgs.Scratch:= pValue
   else if SameText(pName, '--layout-dir') then
     pArgs.LayoutDir:= pValue
+  else if SameText(pName, '--sql-db') then
+    pArgs.SqlDb:= pValue
   else if SameText(pName, '--globals') then
     pArgs.Globals:= pValue = '1'
   else if SameText(pName, '--clone-path') then
@@ -623,6 +630,138 @@ begin
   end;
 end;
 
+function DsHopDigest(const pH: TChainHop): string;
+begin
+  Result:= Format('%s|%s|%s|%s|%d|%s', [pH.Hop, pH.Grade, pH.Caption, pH.Path, pH.Line, pH.Reason]);
+end;
+
+function RpHopDigest(const pH: TChainHop): string;
+begin
+  Result:= Format('%s|%s|%s|%s|%d|%s|%s|%s', [pH.Hop, pH.Grade, pH.Caption, pH.Path, pH.Line, pH.Routine, pH.Reason, pH.Ask]);
+end;
+
+function SiteDigest(const pS: TRePointSite): string;
+begin
+  Result:= Format('%s|%s|%s|%s|%s|%d|%s|%s|%s', [pS.Control, pS.ControlFrom, pS.Receiver, pS.Prop, pS.Path, pS.Line, pS.Routine,
+    pS.Rhs, BoolText(pS.Stale)]);
+end;
+
+function ChainJson(const pKey: string; const pC: TDataSourceChain): TJSONObject;
+begin
+  Result:= TJSONObject.Create;
+  Result.AddPair('key', pKey);
+  Result.AddPair('head', Format('%s|%s|%s|%s|%s|%s', [pC.Form, pC.FormFile, pC.PasFile, pC.DsName, pC.Module, BoolText(pC.Dangling)]));
+  Result.AddPair('ds', if pC.DataSource.Present then Format('%d|%s|%s|%s|%s|%d|%s', [pC.DataSource.Id, pC.DataSource.Name,
+    pC.DataSource.QName, pC.DataSource.TypeName, pC.DataSource.Path, pC.DataSource.Line, BoolText(pC.DataSource.SameFile)]) else '<null>');
+  var A: TArray<string>:= [];
+  for var C in pC.Controls do
+    A:= A + [Format('%s|%s|%d|%s|%s|%d|%s', [C.Control, C.ControlType, C.ControlId, C.Prop, C.Path, C.Line, BoolText(C.IsLookup)])];
+  Result.AddPair('controls', StrArray(A));
+  A:= [];
+  for var S in pC.RePointedAt do
+    A:= A + [SiteDigest(S)];
+  Result.AddPair('rePointedAt', StrArray(A));
+  A:= [];
+  for var S in pC.DataSetSites do
+    A:= A + [Format('%s|%s|%d|%s|%s|%d', [S.Kind, S.Path, S.Line, S.Routine, S.Rhs, S.Eid])];
+  Result.AddPair('dataSetSites', StrArray(A));
+  Result.AddPair('rhsType', if pC.RhsType.Present then Format('%s|%s|%s|%s|%s|%s|%d', [pC.RhsType.Rhs, pC.RhsType.Root,
+    pC.RhsType.RootKind, pC.RhsType.TypeName, pC.RhsType.TypeKind, pC.RhsType.TypePath, pC.RhsType.TypeLine]) else '<null>');
+  A:= [];
+  for var K:= 0 to Length(pC.CandidateTables) - 1 do
+    A:= A + [Format('%s:%d', [pC.CandidateTables[K], pC.CandidateLines[K]])];
+  Result.AddPair('candidates', StrArray(A));
+  Result.AddPair('bound', StrArray(pC.BoundColumns));
+  Result.AddPair('columnMatch', StrArray(pC.ColumnMatch));
+  Result.AddPair('caseOnly', StrArray(pC.CaseOnlyLiterals));
+  Result.AddPair('tail', Format('%s|%s|%s', [pC.ResolvedTable, pC.Grade, pC.StopReason]));
+  A:= [];
+  for var H in pC.Hops do
+    A:= A + [DsHopDigest(H)];
+  Result.AddPair('hops', StrArray(A));
+end;
+
+function RePointJson(const pKey: string; const pR: TRePointTable): TJSONObject;
+begin
+  Result:= TJSONObject.Create;
+  Result.AddPair('key', pKey);
+  Result.AddPair('head', Format('%s|%s|%d|%s|%d|%d|%s|%s', [pR.Status, pR.Owner, pR.NilSites, pR.Table, pR.TableLine, pR.TableLines,
+    pR.Stop, pR.StaleFile]));
+  var A: TArray<string>:= [];
+  for var S in pR.Sites do
+    A:= A + [SiteDigest(S)];
+  Result.AddPair('sites', StrArray(A));
+  A:= [];
+  for var H in pR.Hops do
+    A:= A + [RpHopDigest(H)];
+  Result.AddPair('hops', StrArray(A));
+  Result.AddPair('dataSet', if pR.DataSet.Present then Format('%s|%d|%d|%s|%d|%d|%s', [pR.DataSet.Name, pR.DataSet.Id,
+    pR.DataSet.ClassId, pR.DataSet.Path, pR.DataSet.Fid, pR.DataSet.Line, pR.DataSet.TypeName]) else '<null>');
+end;
+
+{ Get-FieldBindingChains over the clone against the SQL clone: every chain (by key, ordinal),
+  every datasource, every binding and every re-point table (by key). }
+function ChainsJson(pIndex: TChartsIndex; pReader: TSourceReader; const pSqlDb: string): TJSONObject;
+begin
+  try
+    var SqlIndex:= TChartsIndex.Create(pSqlDb);
+    var SqlReader:= TSourceReader.Create(SqlIndex);
+    var Cat:= TSqlCatalog.Create(SqlIndex, SqlReader);
+    var Walker:= TChainWalker.Create(pIndex, pReader, Cat, Cat.TableSet);
+    try
+      var Fb:= Walker.FieldBindingChains;
+      Result:= TJSONObject.Create;
+      var Order:= Copy(Fb.ChainKeys);
+      TArray.Sort<string>(Order, TStringComparer.Ordinal);
+      var Chains:= TJSONArray.Create;  // dl:ok object-leak@2505 -- AddPair below transfers ownership to the parent JSON object
+      for var K in Order do
+        for var I:= 0 to Length(Fb.ChainKeys) - 1 do
+          if Fb.ChainKeys[I] = K then
+            Chains.AddElement(ChainJson(K, Fb.Chains[I]));
+      Result.AddPair('chains', Chains);
+      var A: TArray<string>:= [];
+      for var C in Fb.DataSources do
+        A:= A + [Format('%s|%s|%s', [C.FormFile, C.DsName, C.Grade])];
+      Result.AddPair('dataSources', StrArray(A));
+      A:= [];
+      for var B in Fb.Bindings do
+        A:= A + [Format('%d|%s|%d|%s|%s|%d|%s|%s|%s|%s|%s|%s|%s', [B.Id, B.Dfm, B.Line, B.Prop, B.Column, B.ControlId, B.Control, B.Ds,
+          B.Outcome, B.Table, BoolText(B.Dangling), B.RePointKey, B.RePoint])];
+      Result.AddPair('bindings', StrArray(A));
+      Order:= Copy(Fb.RePointKeys);
+      TArray.Sort<string>(Order, TStringComparer.Ordinal);
+      var Rps:= TJSONArray.Create;  // dl:ok object-leak@6b25 -- AddPair below transfers ownership to the parent JSON object
+      for var K in Order do
+        for var I:= 0 to Length(Fb.RePointKeys) - 1 do
+          if Fb.RePointKeys[I] = K then
+            Rps.AddElement(RePointJson(K, Fb.RePoints[I]));
+      Result.AddPair('rePoints', Rps);
+    finally
+      Walker.Free;
+      Cat.Free;
+      SqlReader.Free;
+      SqlIndex.Free;
+    end;
+  except
+    on E: Exception do
+      Result:= ErrorObject(E.Message);
+  end;
+end;
+
+function OrmJson(pIndex: TChartsIndex): TJSONObject;
+begin
+  try
+    var O:= OrmLinksState(pIndex);
+    Result:= TJSONObject.Create;
+    Result.AddPair('db', O.Db);
+    Result.AddPair('rows', Num(O.Rows));
+    Result.AddPair('computedAt', O.ComputedAt);
+  except
+    on E: Exception do
+      Result:= ErrorObject(E.Message);
+  end;
+end;
+
 procedure Run(const pArgs: TProbeArgs);
 begin
   var Index:= TChartsIndex.Create(pArgs.Db);
@@ -647,6 +786,9 @@ begin
           Root.AddPair('checks', ChecksJson(Index));
           Root.AddPair('sql', SqlJson(Index, Reader));
           Root.AddPair('columns', ColumnsJson(Index, Reader));
+          Root.AddPair('orm', OrmJson(Index));
+          if pArgs.SqlDb <> '' then
+            Root.AddPair('chains', ChainsJson(Index, Reader, pArgs.SqlDb));
         end;
         var LocPath:= Loc.GetValue<string>('path', '');
         Root.AddPair('cluster', ClusterJson(Index, pArgs.QName, LocPath));

@@ -21,7 +21,8 @@
                       Step 2 (2026-10-13) adds: the Graphviz dot walk and the clone guard
                       (once per clone), and per name a row cluster + disclosure row built
                       from the symbol's file and one dot layout of it (shas of .dot/.svg/
-                      .plain and the anchor count; dot.exe runs on both sides).
+                      .plain and the anchor count; dot.exe runs on both sides); then the
+                      checks, sql, columns, orm and chains sections (index-wide, once per clone).
 
   Usage:  pwsh -File charts\src\Test-Parity.ps1 -Mode Core -Only who-writes -Clone DL
           -Only   restricts the CASES (by question id); the fixed names of each clone in play
@@ -399,6 +400,66 @@ function Get-PsColumnFacts {
   } catch { [ordered]@{ error = $_.Exception.Message } }
 }
 
+# Get-FieldBindingChains over the clone against the SQL clone (the probe's ChainsJson asks the
+# same): every chain (by key, ordinal -- a hashtable has no order), every datasource, every
+# binding, every re-point table (by key). Get-OrmLinksState once per clone.
+function Get-PsSiteDigest($S) {
+  "$($S.Control)|$($S.ControlFrom)|$($S.Receiver)|$($S.Prop)|$($S.File)|$($S.Line)|$($S.Routine)|$($S.Rhs)|$($S.Stale)"
+}
+
+function Get-PsChainsFacts([string] $SqlDb) {
+  try {
+    $s = Get-SqlTableSet $SqlDb
+    $fb = Get-FieldBindingChains $s
+    $keys = [string[]]@($fb.Chains.Keys)
+    [Array]::Sort($keys, [StringComparer]::Ordinal)
+    $chains = @(foreach ($k in $keys) {
+      $c = $fb.Chains[$k]
+      $ds = $c.DataSource
+      [ordered]@{
+        key = $k
+        head = "$($c.Form)|$($c.FormFile)|$($c.PasFile)|$($c.DsName)|$($c.Module)|$($c.Dangling)"
+        ds = $(if ($ds) { "$($ds.Id)|$($ds.Name)|$($ds.Qname)|$($ds.Type)|$($ds.File)|$($ds.Line)|$($ds.SameFile)" } else { '<null>' })
+        controls = @($c.Controls | ForEach-Object { "$($_.Control)|$($_.ControlType)|$($_.ControlId)|$($_.Prop)|$($_.File)|$($_.Line)|$($_.IsLookup)" })
+        rePointedAt = @($c.RePointedAt | ForEach-Object { Get-PsSiteDigest $_ })
+        dataSetSites = @($c.DataSetSites | ForEach-Object { "$($_.Kind)|$($_.File)|$($_.Line)|$($_.Routine)|$($_.Rhs)|$($_.Eid)" })
+        rhsType = $(if ($c.RhsType) { $r = $c.RhsType; "$($r.Rhs)|$($r.Root)|$($r.RootKind)|$($r.TypeName)|$($r.TypeKind)|$($r.TypeFile)|$($r.TypeLine)" } else { '<null>' })
+        candidates = @($c.CandidateTables | ForEach-Object { "${_}:$($c.CandidateLines[$_])" })
+        bound = @($c.BoundColumns)
+        columnMatch = @($c.ColumnMatch)
+        caseOnly = @($c.CaseOnlyLiterals)
+        tail = "$($c.ResolvedTable)|$($c.Grade)|$($c.StopReason)"
+        hops = @($c.Hops | ForEach-Object { "$($_.Hop)|$($_.Grade)|$($_.Label)|$($_.File)|$($_.Line)|$($_.Reason)" })
+      }
+    })
+    $rkeys = [string[]]@($fb.RePoints.Keys)
+    [Array]::Sort($rkeys, [StringComparer]::Ordinal)
+    $rps = @(foreach ($k in $rkeys) {
+      $r = $fb.RePoints[$k]
+      $d = $r.DataSet
+      [ordered]@{
+        key = $k
+        head = "$($r.Status)|$($r.Owner)|$($r.NilSites)|$($r.Table)|$($r.TableLine)|$($r.TableLines)|$($r.Stop)|$($r.StaleFile)"
+        sites = @($r.Sites | ForEach-Object { Get-PsSiteDigest $_ })
+        hops = @($r.Hops | ForEach-Object { "$($_.Hop)|$($_.Grade)|$($_.Label)|$($_.File)|$($_.Line)|$($_.Routine)|$($_.Reason)|$($_.Ask)" })
+        dataSet = $(if ($d) { "$($d.Name)|$($d.Id)|$($d.ClassId)|$($d.File)|$($d.Fid)|$($d.Line)|$($d.Type)" } else { '<null>' })
+      }
+    })
+    [ordered]@{
+      chains = $chains
+      dataSources = @($fb.DataSources | ForEach-Object { "$($_.FormFile)|$($_.DsName)|$($_.Grade)" })
+      bindings = @($fb.Bindings | ForEach-Object { "$($_.Id)|$($_.Dfm)|$($_.Line)|$($_.Prop)|$($_.Column)|$($_.ControlId)|$($_.Control)|$($_.Ds)|" +
+                                                   "$($_.Outcome)|$($_.Table)|$($_.Dangling)|$($_.RePointKey)|$($_.RePoint)" })
+      rePoints = $rps
+    }
+  } catch { [ordered]@{ error = $_.Exception.Message } }
+}
+
+function Get-PsOrmFacts {
+  try { $o = Get-OrmLinksState $DbPath; [ordered]@{ db = [string]$o.Db; rows = [int]$o.Rows; computedAt = [string]$o.ComputedAt } }
+  catch { [ordered]@{ error = $_.Exception.Message } }
+}
+
 function Get-ParityFileSha([string] $Path) {
   $sha = [Security.Cryptography.SHA256]::Create()
   try { (($sha.ComputeHash([IO.File]::ReadAllBytes($Path)) | ForEach-Object { $_.ToString('x2') }) -join '') } finally { $sha.Dispose() }
@@ -508,7 +569,7 @@ function Invoke-Probe([string] $ProbeExe, [string] $Db, [string] $QName, $Ctx, [
   if ($Ctx) { $a += @('--file', $Ctx.File, '--line', [string]$Ctx.Line, '--col', [string]$Ctx.Col, '--len', [string]$Ctx.Len) }
   $a += @('--charts-root', (Join-Path $RepoRoot 'charts'), '--scratch', $OutDir, '--layout-dir', $LayoutDir)
   foreach ($p in $ClonePaths) { $a += @('--clone-path', $p) }
-  if ($Globals) { $a += @('--globals', '1') }
+  if ($Globals) { $a += @('--globals', '1', '--sql-db', (Join-Path $DbRoot 'SQL-drag-lint-sql.sqlite')) }
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $o = & $ProbeExe @a 2>&1
   $sw.Stop()
@@ -537,6 +598,7 @@ function Invoke-CoreMode {
   $badDot = Join-Path $OutDir 'nope\dot.exe'
   [IO.File]::WriteAllText((Join-Path $OutDir 'settings-bad-dot.json'), ('{"dot": "' + $badDot.Replace('\', '\\') + '"}'))
   $nonClone = Join-Path $RepoRoot 'src\cli\_D-RAG\drag-lint.sqlite'
+  $sqlClone = Join-Path $DbRoot 'SQL-drag-lint-sql.sqlite'
   $mismatches = New-Object System.Collections.Generic.List[object]
   $rowsOut = New-Object System.Collections.Generic.List[object]
   $nameNo = 0
@@ -564,6 +626,8 @@ function Invoke-CoreMode {
         $facts.checks = Get-PsCheckFacts
         $facts.sql = Get-PsSqlFacts
         $facts.columns = Get-PsColumnFacts
+        $facts.orm = Get-PsOrmFacts
+        $facts.chains = Get-PsChainsFacts $sqlClone
       }
       $swPs.Stop()
       $probe = Invoke-Probe $probeExe $DbPath $q $ps.Ctx $layoutDl $clonePaths (-not $globalDone)

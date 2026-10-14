@@ -57,6 +57,8 @@ uses
   , ChartsTests.CoreSql in 'ChartsTests.CoreSql.pas'
   , DRagLint.Charts.Columns in '..\..\src\charts\DRagLint.Charts.Columns.pas'
   , ChartsTests.CoreColumns in 'ChartsTests.CoreColumns.pas'
+  , DRagLint.Charts.Chain in '..\..\src\charts\DRagLint.Charts.Chain.pas'
+  , ChartsTests.CoreChain in 'ChartsTests.CoreChain.pas'
   ;
 
 const
