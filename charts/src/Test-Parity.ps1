@@ -856,8 +856,8 @@ function Invoke-QuestionMode {
   $compared = 0
   foreach ($c in $cases) {
     if ($ported -notcontains $c.question) { $rows.Add([pscustomobject]@{ Question = $c.question; Text = 'not ported'; Files = ''; PsS = ''; DlS = ''; Verdict = 'SKIP' }); continue }
-    if ($c.serverDb -or $c.sqlDb -or @($c.extra).Count) {
-      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes one index (plus -CounterpartDb) and no extra arguments' }); $bad++; continue
+    if (@($c.extra).Count) {
+      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes the indexes (-CounterpartDb, -ServerDbPath, -SqlDbPath) and no extra arguments' }); $bad++; continue
     }
     Write-Host "question: $($c.question) ..."
     $psFile = Join-Path $OutDir "$($c.question).ps.txt"
@@ -874,6 +874,8 @@ function Invoke-QuestionMode {
     $sw = [Diagnostics.Stopwatch]::StartNew()
     $pa = @('--question', $c.question, '--target', $c.target, '--db', (Join-Path $DbRoot $c.db), '--out-root', $dlRoot, '--charts-root', $chartsRoot)
     if ($c.counterpartDb) { $pa += @('--counterpart-db', (Join-Path $DbRoot $c.counterpartDb)) }
+    if ($c.serverDb)      { $pa += @('--server-db', (Join-Path $DbRoot $c.serverDb)) }
+    if ($c.sqlDb)         { $pa += @('--sql-db', (Join-Path $DbRoot $c.sqlDb)) }
     $dlOut = & $probeExe @pa 2>"$dlFile.err"
     $dlExit = $LASTEXITCODE
     $sw.Stop()

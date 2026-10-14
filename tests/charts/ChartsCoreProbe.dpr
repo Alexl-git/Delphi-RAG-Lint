@@ -36,6 +36,7 @@ program ChartsCoreProbe;
     ChartsCoreProbe --question <id> --target <t> --db <index.sqlite> --out-root <dir>
                     --charts-root <repo\charts> [--cap n] [--depth n] [--max-rows n]
                     [--counterpart-db <index.sqlite>]   (crosses-boundary's -CounterpartDb)
+                    [--server-db <index.sqlite>] [--sql-db <index.sqlite>]   (-ServerDbPath / -SqlDbPath)
 
   A refusal prints 'ask-report: <message>' on stderr and exits 1 (Ask-Report's contract).
   ChartsCoreProbe --ported prints the ported question ids, one per line. *)
@@ -112,6 +113,7 @@ type
     Depth     : string;
     MaxRows   : string;
     Counterpart: string;
+    ServerDb  : string;
   end;
 
 function Num(pValue: Int64): TJSONNumber;
@@ -143,6 +145,8 @@ begin
     pArgs.MaxRows:= pValue
   else if SameText(pName, '--counterpart-db') then
     pArgs.Counterpart:= pValue
+  else if SameText(pName, '--server-db') then
+    pArgs.ServerDb:= pValue
   else
     Result:= False;
 end;
@@ -992,6 +996,9 @@ begin
   Q.Target:= pArgs.Target;
   Q.DbPath:= ExpandFileName(pArgs.Db);
   Q.CounterpartDb:= if pArgs.Counterpart <> '' then ExpandFileName(pArgs.Counterpart) else '';
+  { as the producer carries them: only for a question that reads them; absent stays '' }
+  Q.ServerDbPath:= if QuestionReadsServerIndex(Q.Question) and (pArgs.ServerDb <> '') then ExpandFileName(pArgs.ServerDb) else '';
+  Q.SqlDbPath:= if QuestionReadsSqlIndex(Q.Question) and (pArgs.SqlDb <> '') then ExpandFileName(pArgs.SqlDb) else '';
   Q.OutRoot:= pArgs.OutRoot;
   Q.ChartsRoot:= pArgs.ChartsRoot;
   Q.Cap:= DEFAULT_CAP;

@@ -50,6 +50,7 @@ type
     [Test] procedure UnexpectedFailureFallsBack;
     [Test] procedure CrossesBoundaryWithoutCounterpartFallsBack;
     [Test] procedure CrossesBoundaryWithCounterpartIsInProcess;
+    [Test] procedure OtherIndexesAQuestionDoesNotReadAreIgnored;
     [Test] procedure PortedFallbackWithoutEmitterScriptIsSetup;
     [Test] procedure PortedFallbackWithEmitterScriptFallsBack;
     [Test] procedure UnexpectedFailureWithoutEmitterScriptIsSetup;
@@ -349,6 +350,28 @@ begin
     ' -- 2 commands / 1 transport calls'#13#10);
   Assert.AreEqual<Integer>(2, Length(R.IndexPaths));
   Assert.AreEqual('Delphi in-process (crosses-boundary)', FProducer.Describe);
+end;
+
+procedure TProducerDelphiTests.OtherIndexesAQuestionDoesNotReadAreIgnored;
+var
+  Db: string;
+begin
+  { Ask-Report checks and names only the indexes the question reads ($needServer / $needSql):
+    touches-tables reads neither, so a server and SQL index given anyway -- even missing
+    ones -- are not opened, not freshness-checked and not named }
+  if not Clone(SERVER_CLONE, Db) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ServerDbOverride:= TPath.Combine(FOutRoot, 'missing-server.sqlite');
+  O.SqlDbOverride:= TPath.Combine(FOutRoot, 'missing-sql.sqlite');
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET), O);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.AreEqual<Integer>(1, Length(R.IndexPaths));
+  Assert.DoesNotContain(R.Text, '(server)');
+  Assert.DoesNotContain(R.Text, '(sql)');
 end;
 
 { a folder holding only an empty Ask-Report.ps1: an installed copy, where the ported Emit-*.ps1 are not shipped }

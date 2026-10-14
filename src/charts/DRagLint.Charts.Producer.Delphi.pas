@@ -145,6 +145,15 @@ begin
   Result.Reason:= pReason;
 end;
 
+{ True when pDb is already in pList (paths compared as Windows compares them) }
+function InIndexList(const pDb: string; const pList: TArray<string>): Boolean;
+begin
+  Result:= False;
+  for var D in pList do
+    if SameText(D, pDb) then
+      Exit(True);
+end;
+
 { Ask-Report's step 3, through the engine's own sweep; the store is closed before the emitter opens the index }
 function Freshness(const pDb: string): TFreshnessReport;
 begin
@@ -193,9 +202,16 @@ begin
   var Db:= ExpandFileName(pOptions.DbOverride);
   if not TFile.Exists(Db) then
     Exit(Fail(EXIT_SETUP, 'index not found: ' + Db));
+  { the SERVER and SQL indexes, only for a question that reads them (Ask-Report's $needServer /
+    $needSql); absent stays '' and the emitter answers as its Emit-*.ps1 does without it }
+  var Server:= if QuestionReadsServerIndex(pCommand.Question) and (pOptions.ServerDbOverride <> '') then
+    ExpandFileName(pOptions.ServerDbOverride) else '';
+  var Sql:= if QuestionReadsSqlIndex(pCommand.Question) and (pOptions.SqlDbOverride <> '') then
+    ExpandFileName(pOptions.SqlDbOverride) else '';
   var Other:= if pOptions.CounterpartDbOverride <> '' then ExpandFileName(pOptions.CounterpartDbOverride) else '';
-  if (Other <> '') and not TFile.Exists(Other) then
-    Exit(Fail(EXIT_SETUP, 'index not found: ' + Other));
+  for var D in TArray<string>.Create(Server, Sql, Other) do
+    if (D <> '') and not TFile.Exists(D) then
+      Exit(Fail(EXIT_SETUP, 'index not found: ' + D));
   var Why: string;
   var Script:= ResolveAskReportScript(pOptions.ScriptPath, Why);
   if Script = '' then
@@ -207,6 +223,8 @@ begin
   Q.Target:= pCommand.Get('Target');
   Q.DbPath:= Db;
   Q.CounterpartDb:= Other;
+  Q.ServerDbPath:= Server;
+  Q.SqlDbPath:= Sql;
   Q.OutRoot:= if pOptions.OutRoot <> '' then pOptions.OutRoot else FOutRoot;
   Q.ChartsRoot:= ExtractFileDir(ExtractFileDir(Script));
   Q.ScriptDir:= ExtractFileDir(Script);  { installed copy: <app>\bin, where graphviz\bin sits beside the scripts }
@@ -227,11 +245,12 @@ begin
     of the in-process path, so the question is handed to the fallback producer and Describe
     says why. Nothing escapes Produce. }
   try
-    { every index the question reads, as Ask-Report checks them (the counterpart too) }
+    { every index the question reads, once each, in Ask-Report's order: project, server, sql, counterpart }
     var StaleLines:= '';
     var Read: TArray<string>:= [Db];
-    if (Other <> '') and not SameText(Other, Db) then
-      Read:= Read + [Other];
+    for var D in TArray<string>.Create(Server, Sql, Other) do
+      if (D <> '') and not InIndexList(D, Read) then
+        Read:= Read + [D];
     for var D in Read do
     begin
       var Rep:= Freshness(D);

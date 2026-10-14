@@ -10,8 +10,8 @@ unit DRagLint.Charts.Ask;
   BUNDLE, INDEX, the CHART line and one line per row read back from graph.dot.
 
   NOT PORTED, because no ported question needs it: the round-trip text branch
-  (trace.dlgraph), and the -SqlDbPath / -ServerDbPath parts of the regenerate command and
-  of the INDEX lines (crosses-boundary's -CounterpartDb IS ported). Index resolution
+  (trace.dlgraph). The -ServerDbPath / -SqlDbPath / -CounterpartDb parts of the regenerate
+  command and of the INDEX lines ARE ported (RegenerateText, AnswerIndexLines). Index resolution
   (-Project / -In), the pairing file and the freshness check are the producer's job,
   before this unit is called.
 
@@ -57,6 +57,19 @@ function BundleSlug(const pTarget: string): string;
 /// -Depth, -Cap, -SurfaceCap, -Control, -Mode, -MaxRows -- each only when given (-To,
 /// -Project, -In, -Control and -Mode only when not empty).</returns>
 function ReportCommandText(const pCmd: TReportCommand): string;
+
+/// <summary>meta.json's regenerate command (New-DiagramArtifact.ps1's $meta.regenerate).</summary>
+/// <param name="pArgs">The question, resolved.</param>
+/// <returns>'New-DiagramArtifact.ps1 -Question q -Target t -DbPath "db"', then -Depth, -Cap,
+/// -SqlDbPath "s" and -ServerDbPath "s" for a question that reads them (even when ''), the
+/// counterpart (only when given), -SurfaceCap, -Control and -To, each per the script's lists.</returns>
+function RegenerateText(const pArgs: TQuestionArgs): string;
+
+/// <summary>The INDEX lines of the answer (Ask-Report's "which index(es) answered").</summary>
+/// <param name="pArgs">The question, resolved.</param>
+/// <returns>'INDEX &lt;db&gt;', then 'INDEX &lt;server&gt; (server)' and 'INDEX &lt;sql&gt; (sql)' for a
+/// question that reads them, then 'INDEX &lt;counterpart&gt; (counterpart)' when given.</returns>
+function AnswerIndexLines(const pArgs: TQuestionArgs): TArray<string>;
 
 /// <summary>The result lines Ask-Report reads back from a chart's graph.dot.</summary>
 /// <param name="pDotLines">graph.dot, one element per line.</param>
@@ -472,7 +485,6 @@ begin
   end;
 end;
 
-{ New-DiagramArtifact's regenerate command for the ported (one-index) questions }
 function RegenerateText(const pArgs: TQuestionArgs): string;
 begin
   Result:= Format('New-DiagramArtifact.ps1 -Question %s -Target %s -DbPath "%s"', [pArgs.Question, pArgs.Target, pArgs.DbPath]);
@@ -480,6 +492,10 @@ begin
     Result:= Result + ' -Depth ' + IntToStr(pArgs.Depth);
   if InList(pArgs.Question, REGEN_CAP) then
     Result:= Result + ' -Cap ' + IntToStr(pArgs.Cap);
+  if QuestionReadsSqlIndex(pArgs.Question) then
+    Result:= Result + ' -SqlDbPath "' + pArgs.SqlDbPath + '"';
+  if QuestionReadsServerIndex(pArgs.Question) then
+    Result:= Result + ' -ServerDbPath "' + pArgs.ServerDbPath + '"';
   if SameText(pArgs.Question, CROSSES_BOUNDARY) and (pArgs.CounterpartDb <> '') then
     Result:= Result + ' -CounterpartDb "' + pArgs.CounterpartDb + '"';
   if SameText(pArgs.Question, 'class-surface') then
@@ -488,6 +504,18 @@ begin
     Result:= Result + ' -Control ' + pArgs.Command.Get('Control');
   if SameText(pArgs.Question, PATH_QUESTION) then
     Result:= Result + ' -To ' + pArgs.Command.Get('To');
+end;
+
+{ which index(es) answered (Ask-Report fix round 1, M-1): the project index, then any other the question read }
+function AnswerIndexLines(const pArgs: TQuestionArgs): TArray<string>;
+begin
+  Result:= ['INDEX ' + pArgs.DbPath];
+  if QuestionReadsServerIndex(pArgs.Question) then
+    Result:= Result + ['INDEX ' + pArgs.ServerDbPath + ' (server)'];
+  if QuestionReadsSqlIndex(pArgs.Question) then
+    Result:= Result + ['INDEX ' + pArgs.SqlDbPath + ' (sql)'];
+  if SameText(pArgs.Question, CROSSES_BOUNDARY) and (pArgs.CounterpartDb <> '') then
+    Result:= Result + ['INDEX ' + pArgs.CounterpartDb + ' (counterpart)'];
 end;
 
 function JsonPair(const pIndent, pName, pJson: string; pLast: Boolean): string;
@@ -655,11 +683,7 @@ begin
     Format('%s (drag-lint report %s) for %s, asked on %s, engine %s.', [QuestionPhrase(pArgs.Question), pArgs.Question,
       SentTarget, FormatDateTime(ASKED_ON, pArgs.AskedOn), pArgs.EngineVersion]),
     ReportCommandText(pArgs.Command),
-    'BUNDLE ' + Dir,
-    'INDEX ' + pArgs.DbPath];
-  { which other index answered (Ask-Report fix round 1, M-1): crosses-boundary's counterpart }
-  if SameText(pArgs.Question, CROSSES_BOUNDARY) and (pArgs.CounterpartDb <> '') then
-    Lines:= Lines + ['INDEX ' + pArgs.CounterpartDb + ' (counterpart)'];
+    'BUNDLE ' + Dir] + AnswerIndexLines(pArgs);
   Lines:= Lines + [Format('CHART %s %s -- %d %s / %d %s', [pArgs.Question, SentTarget, Chart.LeftCount, LeftLabel, Chart.RightCount, RightLabel])];
   var DotPath:= TPath.Combine(Dir, GRAPH_DOT);
   var DotLines: TArray<string>:= [];
