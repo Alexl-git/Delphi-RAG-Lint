@@ -19,6 +19,10 @@
       (no project file -- never reindexed) are all UNVERIFIED, with a reason.
     * ChangedFilePaths returns the FULL changed list (5 of 5) where
       ProbeIndexFreshness keeps 3 examples, using the same comparison.
+    * FindStaleEdit (fix round 1, ruling 8): a multi-project rename's edit set
+      is stale as a WHOLE when any one edit's span no longer holds its
+      ExpectText on disk (or its file is gone), so `lint --fix --apply` writes
+      none of that rename rather than half of it.
 
   ISOLATION: every DB is built under $env:TEMP\draglint-owners-<guid> with an
   explicit --db; the manifest is parsed from text by the harness (no manifest
@@ -166,7 +170,13 @@ Check 'R11 a reindex that reports failure leaves it unverified'     (($kv['r.fai
 Check 'R12 a reindex that changes nothing: still stale, named'      (($kv['r.noop'] -eq 'unverified') -and ($kv['r.noop.reason'] -eq "still stale after reindex: $sharedPath")) "got: $($kv['r.noop']) '$($kv['r.noop.reason'])'"
 Check 'R13 a DB without its completed-run stamp is stale, not fresh' (($kv['r.nostamp'] -eq 'unverified') -and ($kv['r.nostamp.reindex_calls'] -eq '1') -and ($kv['r.nostamp.reason'] -eq 'still stale after reindex: index carries no indexed_at_unix stamp')) "got: $($kv['r.nostamp']) calls=$($kv['r.nostamp.reindex_calls']) '$($kv['r.nostamp.reason'])'"
 
-$realAfter = if (Test-Path $RealDb) { $i = Get-Item $RealDb; "$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" } else { 'absent' }
+Write-Host '-- FindStaleEdit: the write-time all-or-nothing guard (fix round 1, ruling 8)' -ForegroundColor Cyan
+Check 'G1 every edit still holds its expected text: not stale'      ($kv['wg.fresh'] -eq 'ok')        "got: $($kv['wg.fresh'])"
+Check 'G2 ONE edit''s line moved on disk: the set is stale'         ($kv['wg.moved'] -eq 'stale')     "got: $($kv['wg.moved'])"
+Check 'G3 ... and the stale edit is named (file:line)'              ($kv['wg.moved.at'] -eq 'wg2.pas:2') "got: $($kv['wg.moved.at'])"
+Check 'G4 a file that no longer exists is stale'                    ($kv['wg.gone'] -eq 'stale')      "got: $($kv['wg.gone'])"
+
+$realAfter =if (Test-Path $RealDb) { $i = Get-Item $RealDb; "$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" } else { 'absent' }
 Check 'Z1 a real project DB was not touched (size+mtime)' ($realBefore -eq $realAfter) "$realBefore -> $realAfter"
 
 [System.IO.Directory]::Delete($WorkDir, $true)

@@ -11975,6 +11975,7 @@ function PlanMultiOwnerNaming(const AArgs: TArgs; const APreferredDb: string; co
   var ATargets: TArray<TLintFinding>): TRenameOutcome;
 var
   Manifest: TIndexManifest      ;
+  ManifestErr: string           ;
   Plat    : string              ;
   Files   : TStringList         ;
   Single  : TArray<TLintFinding>;
@@ -11986,14 +11987,18 @@ var
   Reasons : TArray<string>      ;
 begin
   Result:= Default(TRenameOutcome);
+  { A manifest that did not load COMPLETELY -- Load raised, or kept the
+    sections that parsed and recorded LoadError -- hides owners: discovery
+    would find fewer than there are and the single-store path would rename
+    one project only (fix round 1, I1). Ownership is then UNKNOWN for every
+    file: refused in single mode, dropped in batch, never the single path. }
+  ManifestErr:= '';
+  Manifest   := Default(TIndexManifest);
   try
-    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    Manifest   := TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+    ManifestErr:= Manifest.LoadError;
   except
-    on E: Exception do
-    begin
-      Writeln(ErrOutput, 'drag-lint: rename: the manifest could not be read, so other owning projects were not checked -- ' + E.Message);
-      Exit;
-    end;
+    on E: Exception do ManifestErr:= E.Message;
   end; // try
   Plat  := if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else Manifest.Settings.DefaultPlatform;
   Single:= nil;
@@ -12004,7 +12009,12 @@ begin
       if Files.IndexOf(F.FilePath) < 0 then Files.Add(F.FilePath);
     for Path in Files do
     begin
-      Disc:= FindRenameOwners(Manifest, Plat, ExpandFileName(Path), APreferredDb);
+      if ManifestErr <> '' then
+      begin
+        Disc        := Default(TOwnerDiscovery);
+        Disc.Unknown:= ['manifest did not load completely: ' + ManifestErr];
+      end
+      else Disc:= FindRenameOwners(Manifest, Plat, ExpandFileName(Path), APreferredDb);
       if (Length(Disc.Owners) < 2) and (Length(Disc.Unknown) = 0) then
       begin
         Single:= Single + FindingsInFile(ATargets, Path);
@@ -12066,6 +12076,52 @@ begin
     if RP.Decision = rdDropped then AObj.AddPair('dropped_reason', RP.Reason);
     Break;
   end; // for
+end;
+
+{ The write-time all-or-nothing guard for multi-project renames (fix round 1,
+  ruling 8). The applier re-checks each edit's ExpectText and drops a stale
+  one while writing the rest -- for a rename that crosses projects that is a
+  half-rename. So, just before --apply writes: every applied plan whose edit
+  set FindStaleEdit calls stale is turned dropped, its edits are taken out of
+  ARename.Edits, `rename-dropped-at-write:` is printed (stderr under --json)
+  and AFixCount loses it; in single mode the refusal is set. }
+procedure GuardRenameWrites(const AArgs: TArgs; var ARename: TRenameOutcome; var AFixCount: Integer);
+var
+  I      : Integer          ;
+  Bad    : TTextEdit        ;
+  Line   : string           ;
+  Edits  : TList<TTextEdit> ;
+  Reasons: TArray<string>   ;
+begin
+  { A refused single fix already writes no rename edit; its rdApply plans
+    must not be put back. }
+  if ARename.Refusal <> '' then Exit;
+  Reasons:= nil;
+  Edits  := TList<TTextEdit>.Create;
+  try
+  for I:= 0 to High(ARename.Plans) do
+  begin
+    if ARename.Plans[I].Decision <> rdApply then Continue;
+    if not FindStaleEdit(ARename.Plans[I].Edits, Bad) then
+    begin
+      Edits.AddRange(ARename.Plans[I].Edits);
+      Continue;
+    end;
+    Line:= Format('rename-dropped-at-write: %s -> %s %s:%d (stale)',
+      [ARename.Plans[I].Target.OldName, ARename.Plans[I].NewName, Bad.FilePath, Bad.Line]);
+    if AArgs.AsJson or SameText(AArgs.Format, 'json') then Writeln(ErrOutput, Line) else Writeln(Line);
+    ARename.Plans[I].Decision:= rdDropped;
+    ARename.Plans[I].Reason  := Format('%s:%d changed on disk after the rename was planned (stale)', [Bad.FilePath, Bad.Line]);
+    ARename.Plans[I].Edits   := nil;
+    Dec(AFixCount);
+    Dec(ARename.Applied);
+    if AArgs.FixLine > 0 then Reasons:= Reasons + [ARename.Plans[I].Reason];
+  end; // for
+  ARename.Edits:= Edits.ToArray;
+  finally
+    Edits.Free;
+  end; // try
+  ARename.Refusal:= string.Join('; ', Reasons);
 end;
 
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
@@ -12475,6 +12531,7 @@ begin
         + 'but no project in this index compiles them. Name one explicitly to fix it anyway.', [Length(WalkDropped)]));
       for var WD: string in WalkDropped do Writeln(ErrOutput, '  skipped: ' + WD);
     end;
+    if AArgs.Apply then GuardRenameWrites(AArgs, Rename, FixCount);
     Edits:= Edits + Rename.Edits;
     if AArgs.AsJson or SameText(AArgs.Format, 'json') then
     begin

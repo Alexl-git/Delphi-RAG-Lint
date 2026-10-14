@@ -51,7 +51,7 @@ foreach ($f in 'drag-lint.exe', 'tree-sitter.dll', 'tree-sitter-delphi13.dll', '
   if (Test-Path "$EngineDir\$f") { Copy-Item "$EngineDir\$f" "$eng\$f" }
 }
 Copy-Item "$EngineDir\rules" "$eng\rules" -Recurse
-$Exe = "$eng\drag-lint.exe"
+$Exe = Join-Path $eng 'drag-lint.exe'  # the COPY; built from $EngineDir above
 $script:AllOut = ''
 
 function Run([string[]]$EngArgs) {
@@ -85,6 +85,7 @@ function Reset {
     New-Item -ItemType Directory "$work\$d" | Out-Null
   }
   Get-ChildItem $work -Filter '*.sqlite*' | ForEach-Object { [IO.File]::Delete($_.FullName) }
+  if (Test-Path "$work\.drag-lint.json") { [IO.File]::Delete("$work\.drag-lint.json") }
   $shared = @('unit uShared;', '', 'interface', '', 'const') + $SharedConsts + @('', 'implementation', '', 'end.')
   WriteAscii "$work\shared\uShared.pas" $shared
   WriteAscii "$work\twin\uShared.pas"   $shared
@@ -227,6 +228,50 @@ try {
   Check 'L1 a library owner refuses the rename, nothing written (8d)' ((Hashes) -eq $h0) (Lines $o '^(rename-|autofix)')
   Check 'L2 ... and the reason names the library' `
     ((LastAutofix $o) -match '^autofix: rename refused -- .*library LIB') (Lines $o '^autofix')
+
+  # ---------------------------------------------------------------- fix round 1: manifest that did not fully load (I1)
+  # The engine manifest lists only A; a LOCAL manifest beside the cwd would add B and C but is truncated
+  # mid-section, so TManifestIO.Load keeps A and records LoadError. Discovery then sees ONE owner --
+  # and before the fix the single-store path renamed A only: a confident half-rename.
+  Check 'M0 reset' (Reset) ''
+  $j = ($work -replace '\\', '\\')
+  WriteAscii "$eng\drag-lint.json" @('{ "indexes": { "sections": [', "  { `"name`": `"A`", `"include`": [`"$j\\A\\A.dpr`"], `"db`": `"$j\\A.sqlite`" }", ']}}')
+  WriteAscii "$work\.drag-lint.json" @('{ "indexes": { "sections": [', "  { `"name`": `"B`", `"include`": [`"$j\\B\\B.dpr`"], `"db`": `"$j\\B.sqlite`" },", "  { `"name`": `"C`", `"include`": [`"$j\\C")
+  $h0 = Hashes
+  $o = FixShared 6 -Apply
+  Check 'M1 a manifest that did not fully load: single fix writes nothing (8b, 9)' ((Hashes) -eq $h0) (Lines $o '^(rename-|autofix)')
+  Check 'M2 ... and the refusal names the manifest problem' ((LastAutofix $o) -match '^autofix: rename refused -- .*manifest') (LastAutofix $o)
+  [IO.File]::Delete("$work\.drag-lint.json")
+
+  # ---------------------------------------------------------------- fix round 1: no usable owner store (I2)
+  # (i) two owners, BOTH unverified: folder DBs over shared\ (no project file to reindex), made stale.
+  Check 'V0 reset' (Reset) ''
+  WriteAscii "$eng\drag-lint.json" @('{ "indexes": { "sections": [',
+    "  { `"name`": `"FA`", `"include`": [`"$j\\shared`"], `"db`": `"$j\\FA.sqlite`" },",
+    "  { `"name`": `"FB`", `"include`": [`"$j\\shared`"], `"db`": `"$j\\FB.sqlite`" }", ']}}')
+  $null = Run @('index', "$work\shared", '--db', "$work\FA.sqlite")
+  $null = Run @('index', "$work\shared", '--db', "$work\FB.sqlite")
+  [IO.File]::AppendAllText($Shared, "// edited after indexing`r`n", [Text.Encoding]::ASCII)
+  $h0 = Hashes
+  $o = FixShared 6 -Apply
+  Check 'V1 two owners, both unverified: single fix writes nothing (criterion 9)' ((Hashes) -eq $h0) (Lines $o '^(rename-|autofix)')
+  Check 'V2 ... the target is reported dropped, not silently gone' ($o -match '(?m)^rename-target: L6 My_Const -> \S+ dropped .*unverified') (Lines $o '^rename-target')
+  Check 'V3 ... and the last autofix line is the refusal' ((LastAutofix $o) -match '^autofix: rename refused -- .*unverified') (LastAutofix $o)
+  $o = Run @('lint', '--file', $Shared, '--db', "$work\A.sqlite", '--fix', '--apply')
+  Check 'V4 batch: the same target is listed dropped (criterion 10), nothing written' `
+    (($o -match '(?m)^rename-target: L6 My_Const -> \S+ dropped ') -and ((Hashes) -eq $h0)) (Lines $o '^(rename-target|autofix)')
+
+  # (ii) NO owner at all, one DB that cannot be read.
+  Check 'K0 reset' (Reset) ''
+  [IO.File]::WriteAllBytes("$work\BAD.sqlite", [byte[]](,0x5A * 4096))
+  WriteAscii "$eng\drag-lint.json" @('{ "indexes": { "sections": [',
+    "  { `"name`": `"D`", `"include`": [`"$j\\D\\D.dpr`"], `"db`": `"$j\\D.sqlite`" },",
+    "  { `"name`": `"BAD`", `"include`": [`"$j\\B\\B.dpr`"], `"db`": `"$j\\BAD.sqlite`" }", ']}}')
+  $h0 = Hashes
+  $o = FixShared 6 -Apply
+  Check 'K1 0 owners + an unreadable DB: single fix writes nothing (8c, 9)' ((Hashes) -eq $h0) (Lines $o '^(rename-|autofix)')
+  Check 'K2 ... rename-unknown names BAD.sqlite and the refusal says ownership unknown' `
+    (($o -match ('(?m)^rename-unknown: ' + [regex]::Escape("$work\BAD.sqlite"))) -and ((LastAutofix $o) -match '^autofix: rename refused -- ownership unknown')) (LastAutofix $o)
 
   # ---------------------------------------------------------------- single-project
   Check 'U0 reset' (Reset) ''

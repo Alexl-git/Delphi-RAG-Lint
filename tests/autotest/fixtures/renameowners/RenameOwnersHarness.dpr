@@ -23,6 +23,7 @@ uses
   , DRagLint.Storage.FileMembership
   , DRagLint.Index.Manifest
   , DRagLint.Refactor.MultiProjectRename
+  , DRagLint.Refactor.TextEdit
   ;
 
 const
@@ -209,6 +210,40 @@ begin
   Refresh('r.folder' , W + 'LIB.sqlite'   , ''           , ShellReindex());
 end; // procedure
 
+{ The write-time all-or-nothing guard (fix round 1, ruling 8): FindStaleEdit
+  on a rename's edit set, against a file as written, then after ONE of the
+  edits' lines is changed on disk. }
+function GuardEdit(const AFile: string; ALine, ACol: Integer; const AOld, ANew: string): TTextEdit;
+begin
+  Result:= Default(TTextEdit);
+  Result.FilePath  := AFile;
+  Result.Kind      := tekReplaceInLine;
+  Result.Line      := ALine;
+  Result.Col       := ACol;
+  Result.EndCol    := ACol + Length(AOld);
+  Result.Text      := ANew;
+  Result.ExpectText:= AOld;
+end; // function
+
+procedure WriteGuardChecks;
+var
+  F1, F2: string           ;
+  Edits : TArray<TTextEdit>;
+  Bad   : TTextEdit        ;
+begin
+  F1:= W + 'wg1.pas';
+  F2:= W + 'wg2.pas';
+  TFile.WriteAllText(F1, 'unit wg1;'#13#10'const'#13#10'  My_Const = 1;'#13#10, TEncoding.ANSI);
+  TFile.WriteAllText(F2, 'unit wg2;'#13#10'  X:= My_Const;'#13#10, TEncoding.ANSI);
+  Edits:= [GuardEdit(F1, 3, 3, 'My_Const', 'MyConst'), GuardEdit(F2, 2, 7, 'my_const', 'MyConst')];
+  Writeln('wg.fresh=', if FindStaleEdit(Edits, Bad) then 'stale' else 'ok');
+  TFile.WriteAllText(F2, 'unit wg2;'#13#10'  // moved'#13#10'  X:= My_Const;'#13#10, TEncoding.ANSI);
+  Writeln('wg.moved=', if FindStaleEdit(Edits, Bad) then 'stale' else 'ok');
+  Writeln('wg.moved.at=', ExtractFileName(Bad.FilePath), ':', Bad.Line);
+  TFile.Delete(F2);
+  Writeln('wg.gone=', if FindStaleEdit(Edits, Bad) then 'stale' else 'ok');
+end; // procedure
+
 begin  try
     W     := IncludeTrailingPathDelimiter(ParamStr(1));
     Shared:= W + 'shared\uShared.pas';
@@ -222,6 +257,7 @@ begin  try
     Writeln('owners_pref=', OwnerNames('owners.json', W + 'LIB.sqlite'));
     Discover('u.', 'unknown.json', '');
     RefreshChecks;
+    WriteGuardChecks;
     Writeln('DONE');
   except
     on E: Exception do Writeln('EXCEPTION=', E.ClassName, ': ', E.Message);

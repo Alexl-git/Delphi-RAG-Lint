@@ -215,12 +215,15 @@ function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, 
 /// edits of all of them -- or the reason the rename is unsafe.</summary>
 /// <param name="ADiscovery">FindRenameOwners' result for the file. Owners are
 /// refreshed and opened in this order (criterion 2).</param>
-/// <param name="AFindings">The file's naming findings; rule-ids the naming fixer
-/// does not handle are ignored (BuildNamingTargets).</param>
+/// <param name="AFindings">The file's naming findings (the CLI passes only the
+/// opt-in naming rules). EVERY finding gets a plan: one no usable owner store
+/// built a target for is rdDropped with the block reason (fix round 1).</param>
 /// <param name="ANaming">Naming config supplying candidates and prefixes.</param>
 /// <param name="AReindex">Passed to RefreshOwner for each project owner:
 /// AReindex(ProjectFile, DbPath) runs an incremental `index --project`.</param>
-/// <returns>Owners: one report per owner. Targets: one plan per target Key.
+/// <returns>Owners: one report per owner. Targets: one plan per target Key, and one
+/// rdDropped plan per finding no opened store resolved (no owner opened, or all
+/// unverified) -- so a refusal is never silent.
 /// An nsGlobal target is rdDropped when the discovery has an Unknown DB, any
 /// owner is a library (8d) or unverified, any opened store does not resolve it
 /// tsReady, no candidate is free in EVERY opened store, a store's edits hit a
@@ -251,11 +254,27 @@ function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
 /// <remarks>Pure. The IDE plugin parses these words.</remarks>
 function OwnerFreshnessText(AFreshness: TOwnerFreshness): string;
 
+/// <summary>The write-time all-or-nothing check for one multi-project rename:
+/// is any of its edits no longer applicable to the file as it is on disk
+/// NOW?</summary>
+/// <param name="AEdits">One target's merged edits (TTargetPlan.Edits).</param>
+/// <param name="AStale">Out: the first edit that failed; Default when none did.</param>
+/// <returns>True when a tekReplaceInLine edit with an ExpectText no longer holds
+/// it at [Col, EndCol) of Line (case-insensitive -- the same rule
+/// TTextEditApplier applies per edit), or its file is gone. Edits of other
+/// kinds, and unguarded ones, are not checked.</returns>
+/// <remarks>The applier drops a stale edit and writes the rest; for a rename
+/// that crosses projects that is a half-rename, so the caller checks the
+/// WHOLE set first and writes none of it when this returns True (fix round 1,
+/// ruling 8). Reads each file once (ANSI); writes nothing. Pinned by
+/// run_rename_owners_harness.ps1 checks G1-G4.</remarks>
+function FindStaleEdit(const AEdits: TArray<TTextEdit>; out AStale: TTextEdit): Boolean;
 implementation
 
 uses
   System.Generics.Collections
   , System.StrUtils
+  , System.IOUtils
   , DRagLint.Core.Interfaces
   , DRagLint.Refactor.Rename
   , DRagLint.Storage.SQLite
@@ -723,6 +742,88 @@ begin
     end; // if
 end; // function
 
+{ TNamingTarget.Key's spelling for a finding (BuildNamingTargets builds the same). }
+function FindingKey(const AFinding: TLintFinding): string;
+begin
+  Result:= LowerCase(AFinding.FilePath) + '|' + IntToStr(AFinding.StartLine) + '|'
+    + IntToStr(AFinding.StartCol) + '|' + LowerCase(AFinding.RuleId);
+end; // function
+
+{ The identifier at a finding's span as it is on disk; '' when unreadable. }
+function IdentifierAt(const AFinding: TLintFinding): string;
+var
+  Lines: TArray<string>;
+begin
+  Result:= '';
+  try
+    Lines:= TFile.ReadAllLines(AFinding.FilePath, TEncoding.ANSI);
+    if (AFinding.StartLine >= 1) and (AFinding.StartLine <= Length(Lines)) and (AFinding.EndCol > AFinding.StartCol) then
+      Result:= Copy(Lines[AFinding.StartLine - 1], AFinding.StartCol, AFinding.EndCol - AFinding.StartCol);
+  except
+    on E: Exception do Result:= '';  { unreadable: the plan still says why it was dropped }
+  end; // try
+end; // function
+
+{ A dropped plan for a finding no usable owner store built a target for. }
+function UnplannedTarget(const AStates: TArray<TOwnerState>; const AFinding: TLintFinding;
+  const AReason: string): TTargetPlan;
+begin
+  Result                := Default(TTargetPlan);
+  Result.Target.Key     := FindingKey(AFinding);
+  Result.Target.Finding := AFinding;
+  Result.Target.OldName := IdentifierAt(AFinding);
+  Result.Target.Status  := tsUnresolved;
+  Result.Decision       := rdDropped;
+  Result.Reason         := AReason;
+  Result.Owners         := OwnerReports(AStates, nil, '');
+end; // function
+
+{ True when ALine holds AEdit.ExpectText at [Col, EndCol), case-insensitively. }
+function SpanHolds(const ALine: string; const AEdit: TTextEdit): Boolean;
+var
+  WidthOk: Boolean;
+begin
+  WidthOk:= (AEdit.Col >= 1) and (AEdit.EndCol - AEdit.Col = Length(AEdit.ExpectText));
+  Result := WidthOk and (AEdit.EndCol - 1 <= Length(ALine))
+    and SameText(Copy(ALine, AEdit.Col, AEdit.EndCol - AEdit.Col), AEdit.ExpectText);
+end; // function
+
+function FindStaleEdit(const AEdits: TArray<TTextEdit>; out AStale: TTextEdit): Boolean;
+var
+  Cache: TDictionary<string, TArray<string>>;
+  E    : TTextEdit                          ;
+  Lines: TArray<string>                     ;
+  Key  : string                             ;
+  Ok   : Boolean                            ;
+begin
+  Result:= False;
+  AStale:= Default(TTextEdit);
+  Cache := TDictionary<string, TArray<string>>.Create;
+  try
+    for E in AEdits do
+    begin
+      if (E.Kind <> tekReplaceInLine) or (E.ExpectText = '') then Continue;
+      Key:= LowerCase(E.FilePath);
+      if not Cache.TryGetValue(Key, Lines) then
+      begin
+        Lines:= nil;
+        if TFile.Exists(E.FilePath) then Lines:= TFile.ReadAllLines(E.FilePath, TEncoding.ANSI);
+        Cache.Add(Key, Lines);
+      end;
+      { TTextEditApplier's ReplaceEditIsValid rule: the span [Col, EndCol) on
+        Line holds ExpectText, compared case-insensitively. }
+      Ok:= (E.Line >= 1) and (E.Line <= Length(Lines)) and SpanHolds(Lines[E.Line - 1], E);
+      if not Ok then
+      begin
+        AStale:= E;
+        Exit(True);
+      end;
+    end; // for
+  finally
+    Cache.Free;
+  end; // try
+end; // function
+
 function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
   const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
   const AReindex: TFunc<string, string, Boolean>): TMultiRenamePlan;
@@ -732,6 +833,7 @@ var
   Block : string             ;
   S     : TOwnerState        ;
   T     : TNamingTarget      ;
+  F     : TLintFinding       ;
   I     : Integer            ;
 begin
   Result          := Default(TMultiRenamePlan);
@@ -750,6 +852,16 @@ begin
         if T.Scope = nsLocal then Result.Targets:= Result.Targets + [PlanLocal(States, T)]
         else Result.Targets:= Result.Targets + [PlanGlobal(States, Block, T)];
       end; // for
+    { A finding no usable store built a target for -- no owner opened at all,
+      or every one unverified -- is still PLANNED, as dropped: it must reach
+      the refusal / `dropped` line, never vanish (fix round 1, I2). }
+    for F in AFindings do
+      if not Seen.Contains(FindingKey(F)) then
+      begin
+        Seen.Add(FindingKey(F));
+        Result.Targets:= Result.Targets + [UnplannedTarget(States, F,
+          if Block <> '' then Block else 'no owning index could resolve the finding')];
+      end;
   finally
     Seen.Free;
     for I:= 0 to High(States) do States[I].Store:= nil;
