@@ -39,6 +39,10 @@ uses
 const
   MAX_ROWS_TWO = 2;
   BIG_INT = 41;
+  SHOWN_SUM = 24;
+  HALF_SUM = 2.5;
+  FIELD_COUNT = 174;
+  METHOD_COUNT = 101;
 
 function Cmd(const pQuestion: string; const pPairs: array of string): TReportCommand;
 begin
@@ -79,6 +83,13 @@ begin
   Assert.AreEqual('41', TMetaField.Int('Uses', BIG_INT).Json);
   Assert.AreEqual('true', TMetaField.Bool('AllClickable', True).Json);
   Assert.AreEqual('"FTRNAMESTR"', TMetaField.Str('Column', 'FTRNAMESTR').Json);
+  { a Measure-Object sum is a [double]: ConvertTo-Json keeps the '.0' (Emit-ClassSurface Shown) }
+  Assert.AreEqual('24.0', TMetaField.Real('Shown', SHOWN_SUM).Json);
+  Assert.AreEqual('2.5', TMetaField.RealJson(HALF_SUM));
+  { an [ordered] dictionary nested in the emitter object, as ConvertTo-Json -Depth 4 indents it }
+  Assert.AreEqual('{' + sLineBreak + '      "field": 174,' + sLineBreak + '      "method": 101' + sLineBreak + '    }',
+    TMetaField.Obj('ByKind', [TMetaField.Int('field', FIELD_COUNT), TMetaField.Int('method', METHOD_COUNT)]).Json);
+  Assert.AreEqual('{}', TMetaField.Obj('ByKind', []).Json);
 end;
 
 procedure TQuestionTests.UnportedQuestionIsRefused;

@@ -20,6 +20,9 @@ type
     FOutRoot: string;
     function Args(const pQuestion, pTarget, pCloneName: string; out pArgs: TQuestionArgs): Boolean;
     function Fields(const pChart: TChartResult): string;
+    function EmitChart(const pQuestion, pTarget, pCloneName: string; out pChart: TChartResult): Boolean;
+    function Refusal(const pQuestion, pTarget, pCloneName: string): string;
+    function Answer(const pQuestion, pTarget, pCloneName: string; out pLines: TArray<string>): Boolean;
   public
     [Setup] procedure Setup;
     [TearDown] procedure TearDown;
@@ -56,11 +59,19 @@ type
     [Test] procedure AnswerMatchesPowerShell;
   end;
 
+  [TestFixture]
+  TClassSurfaceTests = class(TQuestionFixture)
+  public
+    [Test] procedure EmitterMatchesPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure UnitIsRefused;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
-  DRagLint.Charts.Q.TouchesTables;
+  DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
@@ -112,6 +123,13 @@ const
   DEPS_MODEL_FIELDS = 'UsedBy=40,Uses=0,UsedByTotal=68,UsesTotal=0,UsedByHidden=28,UsesHidden=0,ImplementationUses=0,ClickTargets=40,Expected=40,AllClickable=true';
   DEPS_MODEL_DOT_SHA = '479e9a4e53c10963e604153ba5cbf67bcf3e0ca826cd782137d2bebbc6efd26b';
   DEPS_CLI_LINES = 47;
+  CS_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel';
+  { ByKind / ByVisibility sit between these two: nested objects, checked in ChartsTests.Question }
+  CS_FIELDS_HEAD = 'Resolved="Blueprint4.ViewModel.TBlueprint_ViewModel",Kind="class",Members=392,ByKind={';
+  CS_FIELDS_TAIL = 'Shown=24.0,Hidden=368.0,Clusters=2,ClickTargets=25,Expected=25.0,AllClickable=true';
+  CS_DOT_SHA = '58ed8c4fc1489b24c8d85c5b455b5a7213c36db7d85585db3a3ca0e5f1135ed3';
+  CS_LINES = 32;
+  CS_CHART_LINE = 4;
   DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
@@ -195,6 +213,47 @@ begin
   for var F in pChart.Fields do
     Parts:= Parts + [F.Name + '=' + F.Json];
   Result:= string.Join(',', Parts);
+end;
+
+function TQuestionFixture.EmitChart(const pQuestion, pTarget, pCloneName: string; out pChart: TChartResult): Boolean;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  pChart:= Default(TChartResult);
+  Result:= Args(pQuestion, pTarget, pCloneName, A);
+  if not Result then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(pQuestion, E), pQuestion + ' is not registered');
+  pChart:= E(A, FOutRoot);
+end;
+
+function TQuestionFixture.Refusal(const pQuestion, pTarget, pCloneName: string): string;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  Result:= '';
+  if not Args(pQuestion, pTarget, pCloneName, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(pQuestion, E), pQuestion + ' is not registered');
+  try
+    E(A, FOutRoot);
+    Assert.Fail(pQuestion + ' was not refused');
+  except
+    on X: EChartsQuestion do Result:= X.Message;
+    on X: EChartsIndex do Result:= X.Message;
+  end;
+end;
+
+function TQuestionFixture.Answer(const pQuestion, pTarget, pCloneName: string; out pLines: TArray<string>): Boolean;
+var
+  A: TQuestionArgs;
+begin
+  pLines:= nil;
+  Result:= Args(pQuestion, pTarget, pCloneName, A);
+  if Result then
+    pLines:= AskChartQuestion(A).Lines;
 end;
 
 { ---- touches-tables ---- }
@@ -389,6 +448,38 @@ begin
   Assert.AreEqual('  drag-lint @drag-lint.dpr:195', Answer.Lines[DEPS_FIRST_ROW]);
   Assert.AreEqual('  ... +70 more units this uses not shown -- 40 of 110 drawn (display cap 40) (raise -Cap to see them)',
     Answer.Lines[High(Answer.Lines)]);
+end;
+
+{ ---- class-surface ---- }
+
+procedure TClassSurfaceTests.EmitterMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CLASS_SURFACE_ID, CS_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.StartsWith(CS_FIELDS_HEAD, Fields(C));
+  Assert.EndsWith(CS_FIELDS_TAIL, Fields(C));
+  Assert.AreEqual('24.0', C.RightJson);
+  Assert.AreEqual(CS_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TClassSurfaceTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(CLASS_SURFACE_ID, CS_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(CS_LINES, Length(L));
+  Assert.AreEqual('CHART class-surface ' + CS_TARGET + ' -- 392 members / 24 shown', L[CS_CHART_LINE]);
+  Assert.AreEqual('  TARGET ' + CS_TARGET + ' @Blueprint4.ViewModel.pas:57', L[CS_CHART_LINE + 1]);
+  Assert.AreEqual('  ... +189 more members not shown (-SurfaceCap 12; raise -SurfaceCap to see them)', L[High(L)]);
+end;
+
+procedure TClassSurfaceTests.UnitIsRefused;
+begin
+  Assert.Contains(Refusal(CLASS_SURFACE_ID, 'Blueprint4.ViewModel', CLIENT_CLONE),
+    'class-surface needs a type; a unit has no members to expose');
 end;
 
 end.

@@ -283,6 +283,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Deps.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Producer.Delphi.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.AskVerb.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.ClassSurface.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

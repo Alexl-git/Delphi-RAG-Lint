@@ -510,9 +510,9 @@ begin
     SB.Append(JsonPair(IND, 'indexMtime', PsJsonString(Mtime), False));
     SB.Append(JsonPair(IND, 'generated', PsJsonString(pGenerated), False));
     SB.Append(JsonPair(IND, 'leftLabel', PsJsonString(pLeftLabel), False));
-    SB.Append(JsonPair(IND, 'leftCount', IntToStr(pChart.LeftCount), False));
+    SB.Append(JsonPair(IND, 'leftCount', if pChart.LeftJson <> '' then pChart.LeftJson else IntToStr(pChart.LeftCount), False));
     SB.Append(JsonPair(IND, 'rightLabel', PsJsonString(pRightLabel), False));
-    SB.Append(JsonPair(IND, 'rightCount', IntToStr(pChart.RightCount), False));
+    SB.Append(JsonPair(IND, 'rightCount', if pChart.RightJson <> '' then pChart.RightJson else IntToStr(pChart.RightCount), False));
     SB.Append(JsonPair(IND, 'testChart', 'false', False));
     SB.Append(JsonPair(IND, 'clickTargets', IntToStr(pChart.ClickTargets), False));
     SB.Append(JsonPair(IND, 'allClickable', if pChart.AllClickable then 'true' else 'false', False));
