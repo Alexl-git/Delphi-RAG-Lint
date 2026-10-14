@@ -22,10 +22,11 @@
     AR-INDEX     every answer names the index(es) that answered, after BUNDLE
     AR-TARGET    a chart's own focus row is marked TARGET, not listed like a result
     AR-CAP       a capped chart prints its "+N more ... not shown" disclosure and the -Cap to raise
-    AR-DOC-PORT  Report.DocInsight.ps1 gives, byte for byte, what the IDE plugin's own formatter wrote
-                 (charts\fixtures\docinsight\*.expected.txt) for the same answers
-    AR-DOC-CAPTIONS  its caption table equals the plugin's REPORT_QUESTIONS (read from the plugin source)
-    AR-DOC-RT    the DEFAULT answer (no -Plain) is the DocInsight block of the -Plain answer (owner answer 2, R5)
+    AR-CAPTIONS  Ask-Report's caption table (the -Plain header phrase) equals the plugin's REPORT_QUESTIONS
+    AR-DOC-RT    the DEFAULT answer (no -Plain) is `drag-lint ask`'s answer -- the default mode is delegated to the
+                 engine, whose DocInsight block of the -Plain answer ChartsTests.AskVerb pins (owner answer 2, R5;
+                 Report.DocInsight.ps1 and its AR-DOC-PORT check were deleted 2026-10-14 -- the formatter is the
+                 engine's DRagLint.Charts.DocInsight, checked against the same fixtures by ReportTextTests)
 
     AR-HDR       -Plain starts with the report sentence (date, time, engine) and a COMMAND line (no -DbPath, R5)
     AR-HDR-CASE  -Question Who-Reads (any case) emits the ValidateSet id lower-cased in the sentence and the COMMAND (R13)
@@ -33,7 +34,8 @@
     AR-HDR-DOC   the default block holds the COMMAND once, unwrapped
     AR-ALLOWSTALE  -AllowStale on the stale DL clone answers (exit 0) and says so on stderr
 
-  Every check of the answer's plain shape passes -Plain; the default is the DocInsight block.
+  Every check of the answer's plain shape passes -Plain; the default is the DocInsight block, made by the engine.
+  ENGINE: the default mode runs `drag-lint ask` -- set DRAGLINT_ENGINE to an engine that has the verb (1.28.4+).
 
   FRESH CLONES NEEDED: AR-OUTROOT, AR-CHART, AR-CAP and AR-RT read the CLIENT / SERVER / SQL clones under
   charts\scratch\db, and Ask-Report checks freshness first -- once a source file those clones index changes
@@ -91,7 +93,8 @@ Step 'AR-NOPAIR' {
   if ($r.Out.Count) { Fail 'AR-NOPAIR' "printed on stdout while refusing: $($r.Out -join ' | ')" }
 }
 Step 'AR-NOPROJ' {
-  $r = Invoke-Ask @('-Question', 'who-writes', '-Target', $Q_FNR)
+  # -Plain: Ask-Report's OWN resolution (the default mode is the engine's, whose message names --project / --in)
+  $r = Invoke-Ask @('-Question', 'who-writes', '-Target', $Q_FNR, '-Plain')
   Chk 'AR-NOPROJ' $r.Exit 2
   if ($r.Err -notlike '*name the project: -Project <x.dproj> or -In*') { Fail 'AR-NOPROJ' "stderr: $($r.Err)" }
 }
@@ -201,10 +204,10 @@ Step 'AR-RT' {
   $tr = Join-Path $b.Substring(7) 'trace.dlgraph'
   if (-not (Test-Path $tr)) { Fail 'AR-RT' "no trace.dlgraph in $b" }
   elseif ((($r.Out | Select-Object -Skip 6) -join "`r`n") -cne [IO.File]::ReadAllText($tr).TrimEnd("`r", "`n")) { Fail 'AR-RT' 'stdout after BUNDLE is not the whole trace.dlgraph' }
-  # AR-DOC-RT: the same question WITHOUT -Plain answers the DocInsight block the IDE's Reports menu makes of that text
+  # AR-DOC-RT: the same question WITHOUT -Plain answers exactly what `drag-lint ask` answers (the delegated default mode)
   $d = Invoke-Ask @('-Question', 'round-trip', '-Target', 'frmBlueprint4.dxDBGrid1FtrsVNum', '-DbPath', $DbCli, '-ServerDbPath', $DbSrv, '-SqlDbPath', $DbSql, '-OutRoot', (Join-Path $OutDir 'rt-doc'))
-  . (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
-  $want = (Format-ReportAsDocInsight 'round-trip' 'frmBlueprint4.dxDBGrid1FtrsVNum' (Get-Date) ($r.Out -join "`r`n")).TrimEnd("`r", "`n")
+  . (Join-Path $PSScriptRoot 'Emit-Common.ps1')   # Resolve-DragLintEngine
+  $want = (& (Resolve-DragLintEngine '') ask round-trip --target 'frmBlueprint4.dxDBGrid1FtrsVNum' --db $DbCli --server-db $DbSrv --sql-db $DbSql --out-root (Join-Path $OutDir 'rt-doc-engine') 2>$null) -join "`r`n"
   # the two runs are minutes apart: the header's time of day is the one thing that legitimately differs
   $tm = { param($s) $s -replace 'asked on (\d{4}-\d{2}-\d{2}) \d{2}:\d{2}', 'asked on $1 HH:MM' }
   Chk 'AR-DOC-RT' "$($d.Exit)|$(@($d.Out)[0])|$(@($d.Out)[-1])|$((& $tm (($d.Out) -join "`r`n")) -ceq (& $tm $want))" '0|/// <remarks>|/// </remarks>|True'
@@ -247,37 +250,21 @@ Step 'AR-ALLOWSTALE' {
   Chk 'AR-ALLOWSTALE' "$($r.Exit)|$($r.Err -like '*ask-report: note -- stale index allowed by -AllowStale*')" '0|True'
 }
 
-Write-Host 'the DocInsight formatter against the plugin ...'
-Step 'AR-DOC-PORT' {
-  . (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
-  $fx = Join-Path $PSScriptRoot '..\fixtures\docinsight'
-  $n = 0; $same = 0; $diff = @()
-  foreach ($l in (Get-Content (Join-Path $fx 'cases.txt'))) {
-    if ($l -match '^#' -or -not $l.Trim()) { continue }
-    $c = $l -split '\|'; $n++
-    $a = [regex]::Replace([IO.File]::ReadAllText((Join-Path $fx $c[0])), '\{U\+([0-9A-F]{4,5})\}', { param($m) [char]::ConvertFromUtf32([Convert]::ToInt32($m.Groups[1].Value, 16)) })
-    if ((Format-ReportAsDocInsight $c[1] $c[2] ([datetime]'2026-10-06') $a) -ceq [IO.File]::ReadAllText((Join-Path $fx $c[3]))) { $same++ } else { $diff += $c[3] }
-  }
-  Chk 'AR-DOC-PORT' "$same/$n$(if ($diff) { ' differ: ' + ($diff -join ',') })" '5/5'
-  # the port must go red when it drifts: one byte of the wrap width changed
-  $script:ReportDocMaxLine = 99
-  $c = (Get-Content (Join-Path $fx 'cases.txt') | Where-Object { $_ -like 'chart-who-writes*' }) -split '\|'
-  $a = [regex]::Replace([IO.File]::ReadAllText((Join-Path $fx $c[0])), '\{U\+([0-9A-F]{4,5})\}', { param($m) [char]::ConvertFromUtf32([Convert]::ToInt32($m.Groups[1].Value, 16)) })
-  Chk 'AR-DOC-PORT-MUT' ((Format-ReportAsDocInsight $c[1] $c[2] ([datetime]'2026-10-06') $a) -ceq [IO.File]::ReadAllText((Join-Path $fx $c[3]))) 'False'
-  $script:ReportDocMaxLine = 100
-}
-Step 'AR-DOC-CAPTIONS' {
-  . (Join-Path $PSScriptRoot 'Report.DocInsight.ps1')
+Write-Host 'the caption table against the plugin ...'
+Step 'AR-CAPTIONS' {
   # this checkout's plugin source, not a fixed main-tree path: a worktree must compare against its OWN catalog
   $pas = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\src\delphi-plugin\DragLint.Plugin.ReportText.pas'))
-  if (-not (Test-Path -LiteralPath $pas)) { Write-Host "  AR-DOC-CAPTIONS skipped: $pas is not on this machine" }
+  $src = [IO.File]::ReadAllText($AR)
+  $m = [regex]::Match($src, '(?ms)^\$script:ReportCaptions = \[ordered\]@\{.*?^\}\r?$')
+  if (-not $m.Success) { Fail 'AR-CAPTIONS' 'the caption table is not defined in Ask-Report.ps1' }
+  elseif (-not (Test-Path -LiteralPath $pas)) { Write-Host "  AR-CAPTIONS skipped: $pas is not on this machine" }
   else {
+    . ([scriptblock]::Create($m.Value))
     $pq = @([regex]::Matches([IO.File]::ReadAllText($pas), "\(Id: '([^']+)'\s*; Caption: '((?:[^']|'')*)'") | ForEach-Object { "$($_.Groups[1].Value)=$($_.Groups[2].Value -replace "''", "'")" })
     $mine = @($script:ReportCaptions.Keys | ForEach-Object { "$_=$($script:ReportCaptions[$_])" })
-    Chk 'AR-DOC-CAPTIONS' "$($pq.Count)|$(($pq -join ';') -ceq ($mine -join ';'))" '26|True'
+    Chk 'AR-CAPTIONS' "$($pq.Count)|$(($pq -join ';') -ceq ($mine -join ';'))" '26|True'
   }
 }
-
 Write-Host 'freshness ...'
 Step 'AR-STALE' {
   $r = Invoke-Ask @('-Question', 'who-calls', '-Target', 'DRagLint.CLI.Main', '-DbPath', $DbDl, '-OutRoot', (Join-Path $OutDir 'stale'))

@@ -29,6 +29,14 @@ charts\
 
 ## For AI agents -- one command
 
+Since 2026-10-14 the engine asks it itself, with the same arguments, output and exit codes:
+
+```
+drag-lint ask <id> --target <t> --project <x.dproj>   (or --in <any .pas/.dfm of it>; --plain for the plain answer)
+```
+
+The script form below still works (without -Plain it runs `drag-lint ask`):
+
 ```
 $ar = @('C:\Projects\Delphi-RAG-lint\charts\src\Ask-Report.ps1', 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\Ask-Report.ps1') | Where-Object { Test-Path $_ } | Select-Object -First 1
 pwsh -NoProfile -File $ar -Question <id> -Target <t> -Project <x.dproj>   (or -In <any .pas/.dfm of it>)
@@ -38,7 +46,7 @@ pwsh -NoProfile -File $ar -Question <id> -Target <t> -Project <x.dproj>   (or -I
 
 * Use it for a PATH or SET question (the ids in `question-catalogue.md`: `round-trip`, `who-writes`, `who-calls`, `lands-where`, `consumers` ...), not for one symbol's definition.
 * It resolves the project index with the engine's `resolve-dbs`, takes the SERVER and SQL indexes from `charts\report-pairs.json`, and writes the bundle under `%TEMP%\drag-lint-reports`. A stale index stops it (exit 3) with the incremental `index` command printed; it never indexes.
-* Read stdout. By DEFAULT it is a DocInsight `/// <remarks>` block, byte for byte what the IDE's drag-lint > Reports menu puts on the clipboard (R5, owner 2026-10-05; `src\Report.DocInsight.ps1`, checked against the plugin's own formatter by `Test-AskReport` AR-DOC-*) -- ready to paste above a declaration. With `-Plain`: `BUNDLE <folder>`, one `INDEX <db>` line per index read (`(server)` / `(sql)` / `(counterpart)` after the first), then the answer -- the whole Form A trace for `round-trip` (plus `NOTE the chart could not be drawn: <why>` if dot failed), else a `CHART` header with the counts, `TARGET <name> @File.pas:line` for the chart's own selection, one `<name> @File.pas:line` line per result row, and `... +N more ... not shown (-Cap N; raise -Cap to see them)` whenever the chart drew fewer rows than its header counts. Exit 1 = the question refused (reason on stderr), 2 = setup (what to pass or edit), 3 = stale.
+* Read stdout. By DEFAULT it is a DocInsight `/// <remarks>` block, byte for byte what the IDE's drag-lint > Reports menu puts on the clipboard (R5, owner 2026-10-05; since 2026-10-14 that mode runs `drag-lint ask`, whose DRagLint.Charts.DocInsight is the one formatter) -- ready to paste above a declaration. With `-Plain`: `BUNDLE <folder>`, one `INDEX <db>` line per index read (`(server)` / `(sql)` / `(counterpart)` after the first), then the answer -- the whole Form A trace for `round-trip` (plus `NOTE the chart could not be drawn: <why>` if dot failed), else a `CHART` header with the counts, `TARGET <name> @File.pas:line` for the chart's own selection, one `<name> @File.pas:line` line per result row, and `... +N more ... not shown (-Cap N; raise -Cap to see them)` whenever the chart drew fewer rows than its header counts. Exit 1 = the question refused (reason on stderr), 2 = setup (what to pass or edit), 3 = stale.
 * Give the target the way the verb takes it: `who-writes` wants `Blueprint4.ViewModel.TBlueprint_ViewModel.FSuppressEvents`, not `TBlueprint_ViewModel.FSuppressEvents`.
 * `-ResolveOnly` prints the indexes it would read; `-DbPath` / `-ServerDbPath` / `-SqlDbPath` override resolution. Tests: `src\Test-AskReport.ps1` (~70 s measured 2026-09-28, not in the gate). Several of its cases read the clones under `scratch\db` and need them FRESH (Ask-Report checks freshness first and answers exit 3 once a source file they index changes -- re-take the clones); `AR-STALE` needs the DL clone to stay stale.
 

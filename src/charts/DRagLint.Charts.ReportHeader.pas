@@ -5,7 +5,7 @@ unit DRagLint.Charts.ReportHeader;
   and the COMMAND line that names the exact question that produced it
     COMMAND <id> [-Target "v"] [-To "v"] (-Project "v" | -In "v") [-Depth n] ...
   in both the plain form (Ask-Report.ps1 -Plain) and the DocInsight form
-  (Format-ReportAsDocInsight), plus the legacy header that has no time, engine
+  (DRagLint.Charts.DocInsight, `drag-lint ask`), plus the legacy header that has no time, engine
   or COMMAND. Pure string work: no IO, no VCL, no engine dependency. }
 
 interface

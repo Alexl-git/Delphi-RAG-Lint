@@ -5,7 +5,7 @@ unit ChartsTests.ReportHeader;
   the same-question rule (H1-H4).
 
   Fixtures are CRLF-joined strings exactly as Ask-Report.ps1 -Plain and
-  Format-ReportAsDocInsight write them; Lines() splits them back into lines. }
+  DRagLint.Charts.DocInsight write them; Lines() splits them back into lines. }
 
 interface
 
