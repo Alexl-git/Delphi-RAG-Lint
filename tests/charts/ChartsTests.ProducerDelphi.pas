@@ -1,6 +1,7 @@
 unit ChartsTests.ProducerDelphi;
 
-{ Cases for DRagLint.Charts.Producer.Delphi: which producer compare gets, what is answered
+{ Cases for DRagLint.Charts.Producer.Delphi: which producer compare gets (the Delphi one, on live
+  indexes), that the clone guard still holds where live is not allowed, what is answered
   in-process and what is delegated, and the exit codes of Ask-Report's contract. The
   in-process cases run against the FROZEN clones (a missing clone passes with a note). }
 
@@ -35,7 +36,8 @@ type
   public
     [Setup] procedure Setup;
     [TearDown] procedure TearDown;
-    [Test] procedure CompareStillGetsThePowerShellProducer;
+    [Test] procedure CompareGetsTheDelphiProducerOnLiveIndexes;
+    [Test] procedure CloneGuardStaysOnWhenLiveIsNotAllowed;
     [Test] procedure UnportedQuestionFallsBack;
     [Test] procedure ProjectWithoutIndexFallsBack;
     [Test] procedure PortedQuestionIsAnsweredInProcess;
@@ -51,7 +53,7 @@ implementation
 
 uses
   System.SysUtils, System.IOUtils, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness,
-  DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Producer.Delphi;
+  DRagLint.Charts.Producer.Delphi;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
@@ -145,11 +147,32 @@ begin
     Assert.Pass('clone missing: ' + pName);
 end;
 
-procedure TProducerDelphiTests.CompareStillGetsThePowerShellProducer;
+procedure TProducerDelphiTests.CompareGetsTheDelphiProducerOnLiveIndexes;
 begin
+  { owner ruling 2026-10-14: compare answers ported questions in-process on the LIVE index }
   var P:= ProducerForCompare;
   { P is an INTERFACE: 'as TObject' is the interface-to-object cast, not a redundant one }
-  Assert.IsTrue((P as TObject) is TPowerShellProducer, 'compare must keep the PowerShell producer until the owner rules');  // dl:ok redundant-as-tobject@63e2 -- FALSE POSITIVE: P is an IReportProducer, and 'as TObject' is the only interface-to-object cast (logged to draglint-gaps.log)
+  var O:= P as TObject;  // dl:ok redundant-as-tobject@63e2 -- FALSE POSITIVE: P is an IReportProducer, and 'as TObject' is the only interface-to-object cast (logged to draglint-gaps.log)
+  Assert.IsTrue(O is TDelphiProducer, 'compare gets the Delphi producer');
+  Assert.IsTrue(TDelphiProducer(O).AllowLiveDb, 'live indexes allowed; the staleness refusal protects them');
+  Assert.Contains(P.Describe, 'Delphi in-process (');
+end;
+
+procedure TProducerDelphiTests.CloneGuardStaysOnWhenLiveIsNotAllowed;
+begin
+  { the parity / test path: a valid, fresh index outside the clone root is refused by the guard }
+  TDirectory.CreateDirectory(FOutRoot);
+  var Live:= TPath.Combine(FOutRoot, 'live.sqlite');
+  var Store: ISymbolStore:= TSQLiteSymbolStore.Create(Live, False);
+  Store:= nil;
+  FProducer:= TDelphiProducer.Create(FKeep, False, FOutRoot);
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Live;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  var R:= FProducer.Produce(Cmd('deps', 'X'), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.StartsWith('refusing a non-clone database: ', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.UnportedQuestionFallsBack;

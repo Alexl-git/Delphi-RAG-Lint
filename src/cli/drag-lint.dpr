@@ -224,6 +224,7 @@ uses
   DRagLint.Charts.Q.ShownWhere in '..\charts\DRagLint.Charts.Q.ShownWhere.pas',
   DRagLint.Charts.Q.Deps in '..\charts\DRagLint.Charts.Q.Deps.pas',
   DRagLint.Charts.Producer.Delphi in '..\charts\DRagLint.Charts.Producer.Delphi.pas',
+  DRagLint.Charts.AskVerb in '..\charts\DRagLint.Charts.AskVerb.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

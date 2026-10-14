@@ -11,7 +11,7 @@ unit DRagLint.Charts.Question;
   not registered is not ported, and the producer hands it to PowerShell.
 
   The two tables below are copied from the scripts and must change with them:
-  QUESTION_CAPTIONS is Report.DocInsight.ps1's $script:ReportCaptions (the phrase of the
+  QUESTION_CAPTIONS is the IDE plugin's REPORT_QUESTIONS captions (the phrase of the
   header sentence) and QUESTION_VOCAB is New-DiagramArtifact.ps1's $vocab (the two
   labelled counts of the CHART line and meta.json). *)
 
@@ -148,6 +148,11 @@ function PortedQuestionIds: TArray<string>;
 /// <param name="pId">The question id.</param>
 /// <returns>Its menu caption without the trailing dots, or 'Report' for an unknown id.</returns>
 function QuestionPhrase(const pId: string): string;
+
+/// <summary>Every question id the chart pipeline accepts (New-DiagramArtifact.ps1's
+/// ValidateSet), in the menu-caption order of the header-phrase table.</summary>
+/// <returns>The 26 ids, lower case.</returns>
+function QuestionIds: TArray<string>;
 
 /// <summary>The two count labels of a question (New-DiagramArtifact's $vocab).</summary>
 /// <param name="pId">The question id.</param>
@@ -326,6 +331,13 @@ begin
       Exit;
     end;
   Result:= UNKNOWN_PHRASE;
+end;
+
+function QuestionIds: TArray<string>;
+begin
+  SetLength(Result, Length(QUESTION_CAPTIONS));
+  for var K:= Low(QUESTION_CAPTIONS) to High(QUESTION_CAPTIONS) do
+    Result[K]:= QUESTION_CAPTIONS[K, 0];
 end;
 
 function QuestionVocab(const pId: string; out pLeft, pRight: string): Boolean;

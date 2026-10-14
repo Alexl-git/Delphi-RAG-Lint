@@ -72,6 +72,8 @@ uses
   , ChartsTests.Questions in 'ChartsTests.Questions.pas'
   , DRagLint.Charts.Producer.Delphi in '..\..\src\charts\DRagLint.Charts.Producer.Delphi.pas'
   , ChartsTests.ProducerDelphi in 'ChartsTests.ProducerDelphi.pas'
+  , DRagLint.Charts.AskVerb in '..\..\src\charts\DRagLint.Charts.AskVerb.pas'
+  , ChartsTests.AskVerb in 'ChartsTests.AskVerb.pas'
   ;
 
 const

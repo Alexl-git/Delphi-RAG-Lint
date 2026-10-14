@@ -11,9 +11,11 @@ unit DRagLint.Charts.Producer.Delphi;
   it exactly as Ask-Report does. Freshness IS checked in-process, through the engine's own
   DRagLint.Index.Freshness: a stale index refuses with exit 3 unless AllowStale.
 
-  THE SWITCH. `drag-lint compare` keeps the PowerShell producer until the owner decides the
-  clone-guard / DRAGLINT_CHARTS_ALLOW_LIVE_DB policy for in-process answers on LIVE indexes.
-  ProducerForCompare is the one place that choice is made. *)
+  LIVE INDEXES (owner ruling 2026-10-14). In real use -- `drag-lint compare` and `drag-lint ask` --
+  this producer answers from the live index, protected by the staleness refusal (exit 3, AllowStale
+  to override); it is constructed with pAllowLiveDb True. The frozen-clone guard (CloneDb in
+  DRagLint.Charts.Tools) stays ON only where pAllowLiveDb is False: the parity harness and the
+  tests. ProducerForCompare is the one place compare's choice is made. *)
 
 interface
 
@@ -34,11 +36,14 @@ type
     FOutRoot    : string;
     FLast       : string;
   public
+    /// <summary>Whether a non-clone (live) index is let through the clone guard.</summary>
+    property AllowLiveDb: Boolean read FAllowLiveDb;
     /// <summary>Creates the producer.</summary>
     /// <param name="pFallback">Answers every question this producer does not; must not be nil.</param>
     /// <param name="pAllowLiveDb">Let a non-clone index through the clone guard for the emitter call
     /// (what Ask-Report does). False keeps the guard: only charts\scratch\db clones are answered.</param>
-    /// <param name="pOutRoot">The bundle root; '' means %TEMP%\drag-lint-reports (Ask-Report's -OutRoot default).</param>
+    /// <param name="pOutRoot">The bundle root; '' means %TEMP%\drag-lint-reports (Ask-Report's -OutRoot default).
+    /// TProduceOptions.OutRoot, when set, wins over it for one call.</param>
     constructor Create(const pFallback: IReportProducer; pAllowLiveDb: Boolean; const pOutRoot: string = '');
     /// <summary>Whether a command would be answered in-process.</summary>
     /// <param name="pCommand">The question.</param>
@@ -57,11 +62,12 @@ type
   end;
 
 /// <summary>The producer `drag-lint compare` uses: the ONE place that choice is made.</summary>
-/// <returns>A TPowerShellProducer, today and until the owner rules on the clone guard /
-/// DRAGLINT_CHARTS_ALLOW_LIVE_DB policy for in-process answers on live indexes.</returns>
-/// <remarks>Switching compare to the Delphi producer is a change HERE (and a test change);
-/// nothing else. The CLI's compare verb is to obtain its producer from this function.</remarks>
-function ProducerForCompare: IReportProducer;  // dl:ok unused-public-symbol@39d8 -- REVIEWED 2026-10-13: the compare switch; DRagLint.CLI (compare verb, :31005 and :31117) is to call it -- a one-line engine-side change this branch may not make (no CLI edits); pinned by ChartsTests.ProducerDelphi
+/// <returns>A TDelphiProducer with live indexes allowed (owner ruling 2026-10-14) and a
+/// TPowerShellProducer as its fallback for every question not ported to Delphi.</returns>
+/// <remarks>Live indexes are protected by the staleness refusal, not by the clone guard; the
+/// clone guard stays on only in the parity harness and the tests. The CLI's compare verb obtains
+/// its producer from this function.</remarks>
+function ProducerForCompare: IReportProducer;
 
 implementation
 
@@ -83,7 +89,7 @@ const
 
 function ProducerForCompare: IReportProducer;
 begin
-  Result:= TPowerShellProducer.Create;
+  Result:= TDelphiProducer.Create(TPowerShellProducer.Create, True);
 end;
 
 constructor TDelphiProducer.Create(const pFallback: IReportProducer; pAllowLiveDb: Boolean; const pOutRoot: string);
@@ -142,7 +148,7 @@ begin
   Q.Question:= pCommand.Question.ToLower;
   Q.Target:= pCommand.Get('Target');
   Q.DbPath:= Db;
-  Q.OutRoot:= FOutRoot;
+  Q.OutRoot:= if pOptions.OutRoot <> '' then pOptions.OutRoot else FOutRoot;
   Q.ChartsRoot:= ExtractFileDir(ExtractFileDir(Script));
   Q.Cap:= NumArg(pCommand, 'Cap', DEFAULT_CAP);
   Q.Depth:= NumArg(pCommand, 'Depth', DEFAULT_DEPTH);
