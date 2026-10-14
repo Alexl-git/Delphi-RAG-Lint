@@ -194,6 +194,46 @@ Check 'P4  --rule fan-in (OFF by default) still computes it: THub reported, Ca 2
       (($ruleGot.Count -eq 1) -and ($ruleGot[0] -match 'THub is referenced by 21 other classes')) `
       ("got: " + ($ruleGot -join ' ; '))
 
+# M: A MARKER ON A METRIC THE FILTER DROPS MUST STILL BE ACCOUNTED FOR.
+# ApplyLineMarkers runs BEFORE the config filter on purpose, so a fan-in finding
+# (fan-in ships OFF) used to satisfy `dl:ok fan-in` and was then dropped. A skip
+# that ignored markers turned that marker into a review-marker-unused hint
+# telling the reader to delete a review that is doing its job (whole-branch
+# review, 2026-10-14). Same fixture, one marker added on THub's declaration line.
+Write-Ascii (Join-Path $proj 'uHub.pas') @'
+unit uHub;
+
+interface
+
+type
+  THub = class // dl:ok fan-in@a95e -- hub by design, referenced everywhere
+  end;
+
+implementation
+
+end.
+'@
+$idx2 = & $exePath index $proj --db $db 2>&1 | Out-String
+Check 'SANITY: marker fixture re-indexed' ($LASTEXITCODE -eq 0) $idx2
+
+function UnusedOnHub($rows) { @($rows | Where-Object { $_.rule -like 'review-marker-*' -and $_.file_path -like '*uHub.pas' } |
+                                ForEach-Object { '{0}:{1} {2}' -f $_.rule, $_.start_line, $_.message }) }
+$env:DRAGLINT_PROFILE = '1'
+$mAllErr  = Join-Path $WorkDir 'mall.err'
+$mAllRows = Rows (& $exePath lint-all --db $db --rules-dir $rules --json 2>$mAllErr | Out-String)
+$mOneErr  = Join-Path $WorkDir 'mone.err'
+$mOneRows = Rows (& $exePath lint $hubAbs --db $db --rules-dir $rules --json 2>$mOneErr | Out-String)
+$env:DRAGLINT_PROFILE = $null
+$ua = @(UnusedOnHub $mAllRows | Where-Object { $_ -like 'review-marker-unused*' -or $_ -like 'review-marker-stale*' })
+$uo = @(UnusedOnHub $mOneRows | Where-Object { $_ -like 'review-marker-unused*' -or $_ -like 'review-marker-stale*' })
+Check 'M1  lint-all: `dl:ok fan-in` on THub is NOT reported unused/stale on defaults' ($ua.Count -eq 0) ($ua -join ' ; ')
+Check 'M2  lint uHub.pas: the same marker is NOT reported unused/stale' ($uo.Count -eq 0) ($uo -join ' ; ')
+Check 'M3  the marker pins the metric: neither verb skips ComputeAllFanIn' `
+      (((Get-Content $mAllErr -Raw) -notmatch 'ComputeAllFanIn\s+skipped') -and ((Get-Content $mOneErr -Raw) -notmatch 'ComputeAllFanIn\s+skipped')) `
+      "a marked rule must be computed even though the final filter drops it"
+Check 'M3b CONTROL: fan-in itself is still NOT reported (the filter still drops it)' `
+      (@($mAllRows | Where-Object { $_.rule -eq 'fan-in' }).Count -eq 0) "pinning a rule for its marker must not turn it on"
+
 Write-Host ''
 if ($fail) { Write-Host 'run_lint_file_class_metrics_parity: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'run_lint_file_class_metrics_parity: PASS' -ForegroundColor Green

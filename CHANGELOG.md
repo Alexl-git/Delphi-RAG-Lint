@@ -14,9 +14,12 @@ breaking changes** until v1.0.
   parents, NOC, DIT and fan-in are still whole-store, so a class's answer is unchanged.
   `lint-all` on ORM3 (Micronite2027) is byte-identical to 1.29.1 (9,427,865 bytes), and
   per-file class-metric findings match `lint-all` (26/26 and 17/17 on the two heaviest
-  units). Measured on BASICS.PAS: 35.4 s -> 20.3 s (class metrics ~14 s -> 0.7 s). Turning
-  `fan-in` / `instability` on (`--enable`, config, or `--rule`) still computes them.
-  New guard `run_lint_file_class_metrics_parity.ps1`.
+  units). Measured on BASICS.PAS, back to back: 1.29.1 24.6 / 23.5 s -> 13.4 / 15.0 s
+  (class metrics ~14 s -> 0.7 s). Turning `fan-in` / `instability` on (`--enable`, config,
+  or `--rule`) still computes them, and so does a `dl:ok <metric>` or `drag-lint:ignore`
+  marker in the linted files: markers are applied BEFORE the config filter, so a marker
+  on an OFF metric must still find its finding, or it would be reported unused.
+  New guard `run_lint_file_class_metrics_parity.ps1` (parity, scope, skip and marker checks).
 
 ## v1.29.1-alpha -- 2026-10-14
 
