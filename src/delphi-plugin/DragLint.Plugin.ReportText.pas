@@ -214,7 +214,9 @@ function IsValidReportTarget(const pTarget: string): Boolean;
 /// QuestionTakesSecondRoutine), passed as --to; '' omits --to. Must pass
 /// IsValidReportTarget when given.</param>
 /// <returns>"engine" ask &lt;id&gt; --target "t" [--to "b"] --in "f" --plain --open, so a
-/// chart opens in the browser.</returns>
+/// chart opens in the browser. Every value is quoted the way CommandLineToArgvW splits it (an
+/// embedded quote becomes \", backslashes before a quote or the closing quote are doubled), so
+/// the engine receives each value exactly.</returns>
 /// <remarks>--plain is load-bearing: HandleReportDone wraps the answer in its
 /// own DocInsight block (FormatReportAsDocInsight), and without --plain the
 /// verb would print a block of its own, wrapped twice. No pwsh and no
@@ -375,10 +377,46 @@ begin
   Result:= (Trim(pTarget) <> '') and (Pos('"', pTarget) = 0);
 end;
 
+{ Quotes one argument for CreateProcess the way CommandLineToArgvW splits it: n backslashes
+  before an embedded quote become 2n+1, n before the closing quote become 2n, others stay.
+  REFERENCE: the engine's QuoteArg in src\charts\DRagLint.Charts.Producer.PowerShell.pas --
+  same rules, reproduced here because the plugin BPL does not link the charts units. }
+function QuoteCmdArg(const pValue: string): string;
+const
+  QUOTE: Char = '"';
+  BACKSLASH: Char = '\';
+var
+  Slashes: Integer;
+begin
+  var SB:= TStringBuilder.Create;
+  try
+    SB.Append(QUOTE);
+    Slashes:= 0;
+    for var C in pValue do
+    begin
+      if C = BACKSLASH then
+        Inc(Slashes)
+      else
+      begin
+        if C = QUOTE then SB.Append(BACKSLASH, Slashes * 2 + 1)
+        else SB.Append(BACKSLASH, Slashes);
+        Slashes:= 0;
+        SB.Append(C);
+      end;
+    end;
+    SB.Append(BACKSLASH, Slashes * 2);
+    SB.Append(QUOTE);
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
 function BuildAskCmdLine(const pEngine, pQuestionId, pTarget, pInFile: string; const pTo: string = ''): string;
 begin
-  var ToArg: string:= if Trim(pTo) = '' then '' else Format(' --to "%s"', [Trim(pTo)]);
-  Result:= Format('"%s" ask %s --target "%s"%s --in "%s" --plain --open', [pEngine, pQuestionId, Trim(pTarget), ToArg, pInFile]);
+  var ToArg: string:= if Trim(pTo) = '' then '' else ' --to ' + QuoteCmdArg(Trim(pTo));
+  Result:= Format('%s ask %s --target %s%s --in %s --plain --open',
+    [QuoteCmdArg(pEngine), pQuestionId, QuoteCmdArg(Trim(pTarget)), ToArg, QuoteCmdArg(pInFile)]);
 end;
 function AskReportReason(const pOutput: string): string;
 var

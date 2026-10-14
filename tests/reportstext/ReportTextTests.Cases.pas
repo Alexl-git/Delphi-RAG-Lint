@@ -74,6 +74,9 @@ type
     [Test] procedure CmdLineCarriesToOnlyWhenGiven;
     [Test] procedure OnlyPathTakesSecondRoutine;
     [Test] procedure ReasonStripsPrefix;
+    [Test] procedure CmdLineEscapesEmbeddedQuote;
+    [Test] procedure CmdLineEscapesTrailingBackslash;
+    [Test] procedure CmdLineSplitsBackToTheValues;
     [Test] procedure OldEngineWithoutAskIsNamed;
     [Test] procedure OtherSetupFailuresAreNotAnOldEngine;
     [Test] procedure ReindexCommandsAreParsed;
@@ -89,6 +92,8 @@ uses
   , System.IOUtils
   , System.Character
   , System.RegularExpressions
+  , Winapi.Windows
+  , Winapi.ShellAPI
   , DragLint.Plugin.ReportText
   ;
 
@@ -610,6 +615,43 @@ begin
   Assert.AreEqual('lands-where: X is on TfrmBlueprint4 -- not an ORM object property.',
     AskReportReason('ask-report: lands-where: X is on TfrmBlueprint4 -- not an ORM object property.' + CRLF));
   Assert.AreEqual('plain text', AskReportReason('  plain text  '));
+end;
+
+procedure TReportGlueTests.CmdLineEscapesEmbeddedQuote;
+begin
+  { an embedded quote is escaped as \" (CommandLineToArgvW), never left to close the argument;
+    a path with spaces stays one quoted argument }
+  Assert.AreEqual('"C:\Program Files\dl\drag-lint.exe" ask who-calls --target "U.T\"A.Run" --in "C:\My Dir\U.pas" --plain --open',
+    BuildAskCmdLine('C:\Program Files\dl\drag-lint.exe', 'who-calls', 'U.T"A.Run', 'C:\My Dir\U.pas'));  // dl:ok hardcoded-absolute-path@263c -- REVIEWED 2026-10-14: synthetic command-line text for the quoting test; never reaches the filesystem
+end;
+
+procedure TReportGlueTests.CmdLineEscapesTrailingBackslash;
+begin
+  { a trailing backslash is doubled, or it would escape the closing quote }
+  Assert.AreEqual('"e.exe" ask path --target "U.TA.Run" --to "U.TB\\" --in "C:\My Dir\\" --plain --open',
+    BuildAskCmdLine('e.exe', 'path', 'U.TA.Run', 'C:\My Dir\', 'U.TB\'));  // dl:ok hardcoded-absolute-path@639f -- REVIEWED 2026-10-14: synthetic command-line text for the quoting test; never reaches the filesystem
+end;
+
+{ the arguments CreateProcess hands the engine, split the way the RTL's ParamStr does }
+function SplitCmdLine(const pCmdLine: string): TArray<string>;
+var
+  Count: Integer;
+begin
+  var Argv:= CommandLineToArgvW(PChar(pCmdLine), Count);
+  try
+    SetLength(Result, Count);
+    for var I:= 0 to Count - 1 do
+      Result[I]:= PPCharArray(Argv)^[I];
+  finally
+    LocalFree(HLOCAL(Argv));
+  end;
+end;
+
+procedure TReportGlueTests.CmdLineSplitsBackToTheValues;
+begin
+  var Args:= SplitCmdLine(BuildAskCmdLine('C:\Program Files\dl\drag-lint.exe', 'path', 'U.T"A.Run', 'C:\My Dir\', 'B\"x\'));  // dl:ok hardcoded-absolute-path@c362 -- REVIEWED 2026-10-14: synthetic command-line text for the quoting test; never reaches the filesystem
+  Assert.AreEqual('C:\Program Files\dl\drag-lint.exe|ask|path|--target|U.T"A.Run|--to|B\"x\|--in|C:\My Dir\|--plain|--open',  // dl:ok hardcoded-absolute-path@868d -- REVIEWED 2026-10-14: synthetic command-line text for the quoting test; never reaches the filesystem
+    string.Join('|', Args));
 end;
 
 procedure TReportGlueTests.OldEngineWithoutAskIsNamed;
