@@ -33,6 +33,7 @@ type
     FProducer: IReportProducer;
     FOutRoot : string;
     function Clone(const pName: string; out pPath: string): Boolean;
+    function BareScriptFolder: string;
   public
     [Setup] procedure Setup;
     [TearDown] procedure TearDown;
@@ -49,13 +50,17 @@ type
     [Test] procedure UnexpectedFailureFallsBack;
     [Test] procedure CrossesBoundaryWithoutCounterpartFallsBack;
     [Test] procedure CrossesBoundaryWithCounterpartIsInProcess;
+    [Test] procedure PortedFallbackWithoutEmitterScriptIsSetup;
+    [Test] procedure PortedFallbackWithEmitterScriptFallsBack;
+    [Test] procedure UnexpectedFailureWithoutEmitterScriptIsSetup;
+    [Test] procedure EveryPortedIdHasAnEmitterScriptInTheRepo;
   end;
 
 implementation
 
 uses
   System.SysUtils, System.IOUtils, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness,
-  DRagLint.Charts.Producer.Delphi;
+  DRagLint.Charts.Question, DRagLint.Charts.Producer.Delphi;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
@@ -69,6 +74,7 @@ const
   CB_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
   EXIT_SETUP = 2;
   STUB_EXIT = 42;
+  NOT_INSTALLED = 'crosses-boundary is answered by the engine in this install, and its PowerShell fallback is not installed: ';
 
 function RepoRoot: string;
 begin
@@ -343,6 +349,59 @@ begin
     ' -- 2 commands / 1 transport calls'#13#10);
   Assert.AreEqual<Integer>(2, Length(R.IndexPaths));
   Assert.AreEqual('Delphi in-process (crosses-boundary)', FProducer.Describe);
+end;
+
+{ a folder holding only an empty Ask-Report.ps1: an installed copy, where the ported Emit-*.ps1 are not shipped }
+function TProducerDelphiTests.BareScriptFolder: string;
+begin
+  var Dir:= TPath.Combine(FOutRoot, 'bin');
+  TDirectory.CreateDirectory(Dir);
+  Result:= TPath.Combine(Dir, 'Ask-Report.ps1');
+  TFile.WriteAllText(Result, '');
+end;
+
+procedure TProducerDelphiTests.PortedFallbackWithoutEmitterScriptIsSetup;
+begin
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= 'any.sqlite';
+  O.ScriptPath:= BareScriptFolder;
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual(NOT_INSTALLED + 'no counterpart index given (--counterpart-db / -CounterpartDb, or report-pairs.json)', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls, 'a fallback that cannot run is not called');
+end;
+
+procedure TProducerDelphiTests.PortedFallbackWithEmitterScriptFallsBack;
+begin
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= 'any.sqlite';
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(1, FFallback.Calls, 'the repo has Emit-CrossesBoundary.ps1, so the fallback answers');
+  Assert.AreEqual(STUB_EXIT, R.ExitCode);
+end;
+
+procedure TProducerDelphiTests.UnexpectedFailureWithoutEmitterScriptIsSetup;
+begin
+  var Script:= BareScriptFolder;
+  var Bad:= TPath.Combine(FOutRoot, 'corrupt.sqlite');
+  TFile.WriteAllText(Bad, 'this is not an SQLite database');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Bad;
+  O.ScriptPath:= Script;
+  var R:= FProducer.Produce(Cmd('deps', 'X'), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.StartsWith('deps is answered by the engine in this install, and its PowerShell fallback is not installed: ' +
+    'the in-process answer failed (', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls, 'a fallback that cannot run is not called');
+end;
+
+procedure TProducerDelphiTests.EveryPortedIdHasAnEmitterScriptInTheRepo;
+begin
+  var Src:= ExtractFileDir(TPath.Combine(RepoRoot, CHARTS_MARK));
+  Assert.IsTrue(Length(PortedQuestionIds) > 0, 'questions are registered');
+  for var Id in PortedQuestionIds do
+    Assert.IsTrue(TFile.Exists(TPath.Combine(Src, EmitterScriptName(Id))), Id + ' -> ' + EmitterScriptName(Id) + ' is not in charts\src');
 end;
 
 end.

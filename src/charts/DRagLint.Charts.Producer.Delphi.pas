@@ -35,6 +35,7 @@ type
     FAllowLiveDb: Boolean;
     FOutRoot    : string;
     FLast       : string;
+    function FallBack(const pCommand: TReportCommand; const pOptions: TProduceOptions; const pWhy: string): TProduceResult;
   public
     /// <summary>Whether a non-clone (live) index is let through the clone guard.</summary>
     property AllowLiveDb: Boolean read FAllowLiveDb;
@@ -56,7 +57,9 @@ type
     /// <param name="pCommand">The question and its explicit arguments.</param>
     /// <param name="pOptions">Index override, staleness policy, engine, script, timeout.</param>
     /// <returns>As IReportProducer.Produce: exit 0 answered (plain text, CRLF lines, header first),
-    /// 1 refused (the emitter's message), 2 setup (index missing, charts folder not found), 3 stale.</returns>
+    /// 1 refused (the emitter's message), 2 setup (index missing, charts folder not found, or a
+    /// PORTED question that has to fall back while its Emit-*.ps1 is not beside Ask-Report.ps1 --
+    /// an installed copy, which does not ship the ported scripts), 3 stale.</returns>
     function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
     /// <summary>Says what answered the last call.</summary>
     /// <returns>'Delphi in-process (&lt;ids&gt;)' or 'Delphi in-process, fell back to: &lt;fallback&gt;'.</returns>
@@ -71,6 +74,11 @@ type
 /// its producer from this function.</remarks>
 function ProducerForCompare: IReportProducer;
 
+/// <summary>The file name of a question's PowerShell emitter, beside Ask-Report.ps1.</summary>
+/// <param name="pId">A question id, e.g. crosses-boundary.</param>
+/// <returns>'Emit-' + the id in PascalCase + '.ps1', e.g. Emit-CrossesBoundary.ps1. Every ported
+/// id follows this convention (guarded by a test against charts\src).</returns>
+function EmitterScriptName(const pId: string): string;
 implementation
 
 uses
@@ -101,6 +109,15 @@ const
 function ProducerForCompare: IReportProducer;
 begin
   Result:= TDelphiProducer.Create(TPowerShellProducer.Create, True);
+end;
+
+function EmitterScriptName(const pId: string): string;
+begin
+  Result:= 'Emit-';
+  for var Part in pId.ToLower.Split(['-']) do
+    if Part <> '' then
+      Result:= Result + UpperCase(Part.Chars[0]) + Part.Substring(1);
+  Result:= Result + '.ps1';
 end;
 
 constructor TDelphiProducer.Create(const pFallback: IReportProducer; pAllowLiveDb: Boolean; const pOutRoot: string);
@@ -141,12 +158,36 @@ begin
   Result:= if pCommand.Has(pName) then StrToIntDef(pCommand.Get(pName), pDefault) else pDefault;
 end;
 
+{ Hands a question to the fallback. A PORTED question falls back only when its PowerShell emitter
+  is beside the resolved Ask-Report.ps1: the installer does not ship the ported Emit-*.ps1 (owner
+  ruling), so in an installed copy the fallback would fail obscurely -- refuse with pWhy instead.
+  An unresolvable Ask-Report.ps1 is left to the fallback, which reports it itself. }
+function TDelphiProducer.FallBack(const pCommand: TReportCommand; const pOptions: TProduceOptions; const pWhy: string): TProduceResult;
+var
+  E: TChartEmitter;
+begin
+  if FindChartQuestion(pCommand.Question, E) then
+  begin
+    var NotFound: string;
+    var Script:= ResolveAskReportScript(pOptions.ScriptPath, NotFound);
+    if (Script <> '') and not TFile.Exists(TPath.Combine(ExtractFileDir(Script), EmitterScriptName(pCommand.Question))) then
+    begin
+      FLast:= 'Delphi in-process, no fallback installed: ' + pWhy;
+      Exit(Fail(EXIT_SETUP, Format('%s is answered by the engine in this install, and its PowerShell fallback is not installed: %s',
+        [pCommand.Question.ToLower, pWhy])));
+    end;
+  end;
+  Result:= FFallback.Produce(pCommand, pOptions);
+end;
+
 function TDelphiProducer.Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
 begin
   if not AnswersInProcess(pCommand, pOptions) then
   begin
     FLast:= 'Delphi in-process, fell back to: ' + FFallback.Describe;
-    Exit(FFallback.Produce(pCommand, pOptions));
+    var WhyNot:= if pOptions.DbOverride = '' then 'no index given (--db / -Db); naming only a project needs the PowerShell fallback'
+      else 'no counterpart index given (--counterpart-db / -CounterpartDb, or report-pairs.json)';
+    Exit(FallBack(pCommand, pOptions, WhyNot));
   end;
   FLast:= 'Delphi in-process (' + pCommand.Question.ToLower + ')';
   var Db:= ExpandFileName(pOptions.DbOverride);
@@ -216,7 +257,7 @@ begin
     on E: Exception do
     begin
       FLast:= Format('Delphi in-process failed (%s: %s), fell back to: %s', [E.ClassName, E.Message, FFallback.Describe]);
-      Result:= FFallback.Produce(pCommand, pOptions);
+      Result:= FallBack(pCommand, pOptions, Format('the in-process answer failed (%s: %s)', [E.ClassName, E.Message]));
     end;
   end;
 end;
