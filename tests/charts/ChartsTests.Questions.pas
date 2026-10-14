@@ -811,6 +811,7 @@ const
   EP_HT_HUNDREDS_KEYS: TArray<Integer> = [100, 200, 300, 400, 500, 600, 700];
   EP_HT_HUNDREDS_ORDER = '100,200,300,400,500,600,700';
   EP_DEPTH = 3;
+  RT_DEPTH = 4;
   TEST_CLONE = 'TESTS-TestMicroniteObjects.sqlite';
   EP_RB = 'MStreams.TABZMemoryStream.ReadBuffer';
   EP_SCHEMA = 'uJobList.ViewModel.TJobListViewModel.BuildSchema';
@@ -1751,7 +1752,6 @@ begin
   Result:= ArgsWithSql(FEEDS_FROM_ID, pTarget, CLIENT_CLONE, pSqlClone, pArgs);
 end;
 
-
 procedure TFeedsFromTests.Check(const pTarget, pFields, pDotSha: string);
 var
   A: TQuestionArgs;
@@ -2070,7 +2070,6 @@ begin
   Result:= ArgsWithSql(CO_ID, pTarget, pDb, pSql, pArgs);
 end;
 
-
 { pCap 0 = the default cap the bundler passes (20) }
 procedure TConsumersTests.Check(const pDb, pTarget, pFields, pDotSha: string; pCap: Integer);
 var
@@ -2350,6 +2349,7 @@ procedure TExceptionPathsTests.WalksThreeLevelsByDefault;
 begin
   { New-DiagramArtifact's $EffDepth }
   Assert.AreEqual<Integer>(EP_DEPTH, QuestionDefaultDepth(EP_ID));
+  Assert.AreEqual<Integer>(RT_DEPTH, QuestionDefaultDepth('round-trip'));
   Assert.AreEqual<Integer>(DEFAULT_DEPTH, QuestionDefaultDepth('change-impact'));
 end;
 

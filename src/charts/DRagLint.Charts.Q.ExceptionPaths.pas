@@ -363,7 +363,10 @@ begin
   for var P in HT_PRIMES do
     if P >= pMin then
       Exit(P);
-  { HashHelpers.GetPrime past its table: the next odd prime whose predecessor is not a multiple of HashPrime }
+  { past the 48 primes copied here (.NET's own table continues to 7199369): HashHelpers.GetPrime's computed
+    branch -- the next odd prime whose predecessor is not a multiple of HashPrime. Unreachable in practice:
+    growing past 90523 buckets needs more than ~65k keys (load factor 0.72), and the walk stops at MAX_CALLERS (150).
+    It differs from .NET above 90523, where .NET would still pick from its table. }
   Result:= pMin or 1;
   while True do
   begin

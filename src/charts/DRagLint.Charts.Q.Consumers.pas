@@ -699,18 +699,27 @@ var
   E: TLitEntry;
   C: TSpanLit;
   Hit: TSpanLit;
+  Rt: TRoutineInfo;
+
+  { a key the maps were built without: name it rather than raise EListError }
+  procedure StaleId(const pMap: string);
+  begin
+    raise EChartsQuestion.CreateFmt('consumers: %s has no entry for id %d -- the index changed while the question ran; ask again',
+      [pMap, pKey]);
+  end;
+
 begin
   if pKey < 0 then
   begin
-    E:= pLitBag[pKey];
+    if not pLitBag.TryGetValue(pKey, E) then StaleId('the literal map');
     Exit(NewRow('(unit level) ' + UnitNameOf(E.Path), E.Path, E.Line,
       Format('%s %s outside any routine -- %s', [string.Join(', ', E.Verbs), FTName, At(E.Path, E.Line)]), 'unit-level literal'));
   end;
-  var Rt:= FRtInfo[pKey];
+  if not FRtInfo.TryGetValue(pKey, Rt) then StaleId('the routine map');
   var UnitName:= UnitNameOf(Rt.Path);
   if FColName <> '' then
   begin
-    C:= FSrvCol[pKey];
+    if not FSrvCol.TryGetValue(pKey, C) then StaleId('the column-literal map');
     var How:= if FCertR.ContainsKey(pKey) or FCertW.ContainsKey(pKey) then 'table by fact' else 'table by literal';
     Exit(NewRow(RoutineLabel(Rt), Rt.Path, C.Line, Format('%s -- %s names %s (%s)', [Rt.Q, At(Rt.Path, C.Line), FColName, How]),
       UnitName + '; ' + How));
@@ -723,7 +732,7 @@ begin
     Exit(NewRow(RoutineLabel(Rt), Rt.Path, Rt.Line, Format('%s (%s, sql_%ss fact) -- no literal inside the routine names %s',
       [Rt.Q, pSide, pSide, FTName]), UnitName + '; fact only'));
   end;
-  E:= pLitBag[pKey];
+  if not pLitBag.TryGetValue(pKey, E) then StaleId('the literal map');
   Result:= NewRow(RoutineLabel(Rt), Rt.Path, E.Line, Format('%s -- %s %s at %s', [Rt.Q, string.Join(', ', E.Verbs), FTName,
     At(Rt.Path, E.Line)]), UnitName + '; ' + string.Join('/', E.Verbs));
 end;
