@@ -74,7 +74,7 @@ begin
       if not Slot.TryGetValue(R.Event, K) then
       begin
         var G:= Default(TEventGroup);
-        G.Name:= R.Event;
+        G.Name:= R.Event;  // dl:ok duplicate-code@31fd -- REVIEWED 2026-10-14: each Q unit ports ONE Emit-*.ps1 line for line (spec P3), and the PS emitters repeat this block verbatim; sharing it would make one parity finding span two questions
         Result:= Result + [G];
         K:= High(Result);
         Slot.Add(R.Event, K);

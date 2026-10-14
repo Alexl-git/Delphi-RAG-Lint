@@ -118,7 +118,7 @@ begin
     LoadTestMethods(Index, TestIds);
 
     { ---- 3. the selection ---- }
-    var Sel:= Index.ResolveMemberSelection(pArgs.Target,
+    var Sel:= Index.ResolveMemberSelection(pArgs.Target,  // dl:ok duplicate-code@d54b -- REVIEWED 2026-10-14: each Q unit ports ONE Emit-*.ps1 line for line (spec P3), and the PS emitters repeat this block verbatim; sharing it would make one parity finding span two questions
       ['method', 'function', 'procedure', 'constructor', 'destructor', 'class', 'interface', 'record', 'type'], False, HINT, Found);
     var IsType:= SameText(Sel.Kind, 'class') or SameText(Sel.Kind, 'interface') or SameText(Sel.Kind, 'record') or SameText(Sel.Kind, 'type');
     var Seeds: TArray<Integer>:= [Sel.Id];
@@ -180,7 +180,7 @@ begin
       Rows:= Index.Query(
         'SELECT s.id AS id, s.name AS nm, s.qualified_name AS q,' + sLineBreak +
         '       s.impl_start_line AS impl, s.start_line AS decl,' + sLineBreak +
-        '       f.path AS path, p.name AS fixture' + sLineBreak +
+        '       f.path AS path, p.name AS fixture' + sLineBreak +  // dl:ok duplicate-code@d717 -- REVIEWED 2026-10-14: each Q unit ports ONE Emit-*.ps1 line for line (spec P3), and the PS emitters repeat this block verbatim; sharing it would make one parity finding span two questions
         '  FROM symbols s JOIN files f ON f.id = s.file_id' + sLineBreak +
         '  LEFT JOIN symbols p ON p.id = s.parent_id' + sLineBreak +
         ' WHERE s.id IN (' + IdList(Ids) + ')');
@@ -204,7 +204,7 @@ begin
     end;
     var FixtureNames: TArray<string>:= [];
     for var T in Tests do
-      FixtureNames:= FixtureNames + [T.Fixture];
+      FixtureNames:= FixtureNames + [T.Fixture];  // dl:ok duplicate-code@0c7d -- REVIEWED 2026-10-14: each Q unit ports ONE Emit-*.ps1 line for line (spec P3), and the PS emitters repeat this block verbatim; sharing it would make one parity finding span two questions
     var Fixtures:= SortUniqueNames(FixtureNames);
     var TestsOf:= function(const pFixture: string): TArray<TCoveringTest>
       begin
@@ -306,7 +306,7 @@ begin
           AddRowCluster(Sb, 'cluster_fx_' + IntToStr(NodeId), Nid, Fx,
             Format('%d test%s', [Length(Ft), if Length(Ft) <> 1 then 's' else '']), Cells, Style);
           Sb.AppendLine(Format('  %s -> %s:p1 [color="%s"];', [Nid, FNid, TEST_BORDER]));
-        end;
+        end;  // dl:ok duplicate-code@56fd -- REVIEWED 2026-10-14: each Q unit ports ONE Emit-*.ps1 line for line (spec P3), and the PS emitters repeat this block verbatim; sharing it would make one parity finding span two questions
       end;
       Sb.AppendLine('}');
 

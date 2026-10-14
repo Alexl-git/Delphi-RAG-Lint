@@ -197,7 +197,7 @@ begin
           AddDisclosureRow(FTbl, Format('index-wide: %d binding(s) over %d column(s) in %d form file(s)', [IdxRows, IdxCols, IdxForms]), LINE_INK);
           AddDisclosureRow(FTbl, 'DFM data bindings only -- code-driven display is not indexed and is not shown', LINE_INK);
           if Unresolved > 0 then
-            AddDisclosureRow(FTbl, Format('%d binding(s) did not resolve to a control symbol', [Unresolved]), LINE_INK);
+            AddDisclosureRow(FTbl, Format('%d binding(s) did not resolve to a control symbol', [Unresolved]), LINE_INK);  // dl:ok duplicate-code@bdba -- REVIEWED 2026-10-14: each Q unit ports ONE Emit-*.ps1 line for line (spec P3), and the PS emitters repeat this block verbatim; sharing it would make one parity finding span two questions
           FTbl.Append('</TABLE>');
           Sb.AppendLine(Format('  subgraph cluster_focus_%d {', [NodeId]));
           Sb.AppendLine(Format('    style="rounded,filled"; color="%s"; fillcolor="%s"; penwidth=2;', [FOCUS_BORDER, FOCUS_FILL]));
