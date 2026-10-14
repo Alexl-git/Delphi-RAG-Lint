@@ -198,12 +198,20 @@ type
     property Notes: TStrings read FNotes;
   end;
 
+/// <summary>PowerShell's Group-Object / Sort-Object key order for text: case-insensitive,
+/// culture-aware (ICU root), weight by weight, then the shorter key first.</summary>
+/// <param name="pA">First key.</param>
+/// <param name="pB">Second key.</param>
+/// <returns>Negative, zero or positive, as pA sorts before, with or after pB.</returns>
+/// <remarks>Zero only for keys equal ignoring ASCII case. Exact for 7-bit ASCII (measured on
+/// 160k index keys); an approximation beyond it (see GROUP_KEY_ORDER). Public since step 2:
+/// every `Sort-Object` / `Sort-Object -Unique` over names the SQL helpers port sorts with it.</remarks>
+function CompareGroupKeys(const pA, pB: string): Integer;
+
 implementation
 
 uses
-  System.StrUtils
-  , System.Generics.Defaults
-  , Data.DB
+  System.Generics.Defaults
   , FireDAC.Stan.Option
   , FireDAC.Comp.Client
   , DRagLint.Charts.Text
@@ -378,8 +386,6 @@ begin
   Result:= if At > 0 then Ord(' ') + At else GROUP_KEY_OTHER_BASE + Ord(pC);
 end;
 
-{ Group-Object's key comparison: weight by weight, then the shorter key first. Zero only
-  for keys equal ignoring ASCII case -- which Select-DeclarationRows has merged already. }
 function CompareGroupKeys(const pA, pB: string): Integer;
 begin
   var N:= if Length(pA) < Length(pB) then Length(pA) else Length(pB);

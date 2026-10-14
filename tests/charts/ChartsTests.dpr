@@ -53,6 +53,10 @@ uses
   , ChartsTests.CoreDot in 'ChartsTests.CoreDot.pas'
   , DRagLint.Charts.Checks in '..\..\src\charts\DRagLint.Charts.Checks.pas'
   , ChartsTests.CoreChecks in 'ChartsTests.CoreChecks.pas'
+  , DRagLint.Charts.Sql in '..\..\src\charts\DRagLint.Charts.Sql.pas'
+  , ChartsTests.CoreSql in 'ChartsTests.CoreSql.pas'
+  , DRagLint.Charts.Columns in '..\..\src\charts\DRagLint.Charts.Columns.pas'
+  , ChartsTests.CoreColumns in 'ChartsTests.CoreColumns.pas'
   ;
 
 const

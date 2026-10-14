@@ -213,6 +213,8 @@ uses
   DRagLint.Charts.Tools in '..\charts\DRagLint.Charts.Tools.pas',
   DRagLint.Charts.Dot in '..\charts\DRagLint.Charts.Dot.pas',
   DRagLint.Charts.Checks in '..\charts\DRagLint.Charts.Checks.pas',
+  DRagLint.Charts.Sql in '..\charts\DRagLint.Charts.Sql.pas',
+  DRagLint.Charts.Columns in '..\charts\DRagLint.Charts.Columns.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

@@ -334,6 +334,71 @@ SELECT LOWER(su.qualified_name) AS src, LOWER(uu.unit_name) AS dst, uu.section A
   } catch { [ordered]@{ error = $_.Exception.Message } }
 }
 
+# The SQL helpers over the whole clone (the probe's SqlJson asks the same): the collapsed table
+# set, the procedure set and the trigger set, one digest line per item.
+function Get-ParityTextSha([string] $Text) {
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try { (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Text)) | ForEach-Object { $_.ToString('x2') }) -join '') } finally { $sha.Dispose() }
+}
+
+function Get-PsSqlFacts {
+  try {
+    $s = Get-SqlTableSet $DbPath
+    $f = [ordered]@{ tableCount = [int]$s.TableCount; declarations = [int]$s.DeclarationCount; collapsed = [int]$s.CollapsedNames
+                     procedureDecls = [int]$s.ProcedureDeclCount; names = @($s.Names) }
+    $f.tables = @(foreach ($n in $s.Names) {
+      $t = $s.Tables[$n]
+      $decls = @($t.Declarations | ForEach-Object { "$($_.Id):$($_.File):$($_.Line):$($_.Columns)" }) -join ';'
+      $older = @($t.OlderOnlyColumns.Keys | ForEach-Object { $o = $t.OlderOnlyColumns[$_]; "$_=$($o.Column)@$($o.File):$($o.Line)" }) -join ';'
+      "$($t.Name)|$($t.Id)|$($t.File)|$($t.Line)|$($t.DeclCount)|$decls|$(@($t.ColumnNames) -join ',')|$older"
+    })
+    $f.procs = @(foreach ($p in (Get-SqlProcedureSet $DbPath).Declarations) {
+      "$($p.Id)|$($p.Name)|$($p.File)|$($p.Line)|$($p.EndLine)|$($p.Stale)|$($p.Found)|$($p.Reason)|$(@($p.Tables) -join ',')|" +
+        "$(@($p.Procs) -join ',')|$(if ($p.Found) { Get-ParityTextSha $p.Text } else { '<null>' })"
+    })
+    $f.trigs = @(foreach ($t in (Get-SqlTriggerSet $DbPath).Triggers) {
+      "$($t.Id)|$($t.Name)|$($t.File)|$($t.Line)|$($t.EndLine)|$($t.Table)|$($t.TableKnown)|$($t.Stale)|$($t.Found)|" +
+        "$(@($t.Columns) -join ',')|$(@($t.OtherTables) -join ',')"
+    })
+    $f
+  } catch { [ordered]@{ error = $_.Exception.Message } }
+}
+
+# THE column state over the whole SQL clone (the probe's ColumnsJson asks the same): per table
+# its first extracted column, its first older-only column and NOT_A_COLUMN (SqlSearched 'SRV'
+# on even tables, a server hit on every fifth), the not-held list, and the quoted state
+# through Hide-ExtractedColumns.
+function Get-PsStateDigest($S) {
+  "$($S.Table)|$($S.Column)|$($S.State)|$($S.IsColumn)|$($S.File)|$($S.Line)|$($S.Text)|$($S.Label)|$($S.OlderFile)|" +
+    "$($S.OlderLine)|$($S.QuotedScan)|$(Get-ColumnHopLabel $S)|$(Get-ColumnStateName $S.State)"
+}
+
+function Get-PsColumnFacts {
+  try {
+    $s = Get-SqlTableSet $DbPath
+    $states = New-Object System.Collections.Generic.List[string]
+    $notHeld = New-Object System.Collections.Generic.List[string]
+    for ($k = 0; $k -lt $s.Names.Count; $k++) {
+      $t = $s.Tables[$s.Names[$k]]
+      $probe = @()
+      if (@($t.ColumnNames).Count) { $probe += @($t.ColumnNames)[0] }
+      if ($t.OlderOnlyColumns.Count) { $probe += @($t.OlderOnlyColumns.Keys)[0] }
+      foreach ($c in $probe) { $states.Add((Get-PsStateDigest (Get-SqlColumnState $s $t.Name $c))) }
+      $hit = $(if ($k % 5 -eq 0) { [pscustomobject]@{ File = 'S.pas'; Line = 7; Routine = "TFoo.$($t.Name)" } } else { $null })
+      $searched = $(if ($k % 2 -eq 0) { 'SRV' } else { '' })
+      $states.Add((Get-PsStateDigest (Get-SqlColumnState $s $t.Name 'NOT_A_COLUMN' $null $hit $searched)))
+      $notHeld.Add("$($t.Name):" + (@(Get-ColumnsNotHeld $s $t.Name @($probe + 'NOT_A_COLUMN')) -join ','))
+    }
+    $f = [ordered]@{ states = $states.ToArray(); notHeld = $notHeld.ToArray() }
+    $ip = $s.Tables['IPCHART']; $fc = $s.Tables['FOLDERCOUNT']
+    if ($ip -and $ip.Columns.Contains('ACTION') -and $fc -and $fc.Columns.Contains('TABLE')) {
+      $h = Hide-ExtractedColumns $s @('IPCHART.ACTION', 'FOLDERCOUNT.TABLE')
+      $f.quoted = @((Get-PsStateDigest (Get-SqlColumnState $h 'IPCHART' 'ACTION')), (Get-PsStateDigest (Get-SqlColumnState $h 'FOLDERCOUNT' 'TABLE')))
+    }
+    $f
+  } catch { [ordered]@{ error = $_.Exception.Message } }
+}
+
 function Get-ParityFileSha([string] $Path) {
   $sha = [Security.Cryptography.SHA256]::Create()
   try { (($sha.ComputeHash([IO.File]::ReadAllBytes($Path)) | ForEach-Object { $_.ToString('x2') }) -join '') } finally { $sha.Dispose() }
@@ -438,11 +503,12 @@ SELECT r.line AS line, r.start_col AS start_col, r.end_col AS end_col
   [pscustomobject]@{ Facts = $f; Ctx = $ctxArgs; LocPath = $locPath }
 }
 
-function Invoke-Probe([string] $ProbeExe, [string] $Db, [string] $QName, $Ctx, [string] $LayoutDir, [string[]] $ClonePaths) {
+function Invoke-Probe([string] $ProbeExe, [string] $Db, [string] $QName, $Ctx, [string] $LayoutDir, [string[]] $ClonePaths, [bool] $Globals) {
   $a = @('--db', $Db, '--qname', $QName, '--kinds', ($CoreKinds -join ','))
   if ($Ctx) { $a += @('--file', $Ctx.File, '--line', [string]$Ctx.Line, '--col', [string]$Ctx.Col, '--len', [string]$Ctx.Len) }
   $a += @('--charts-root', (Join-Path $RepoRoot 'charts'), '--scratch', $OutDir, '--layout-dir', $LayoutDir)
   foreach ($p in $ClonePaths) { $a += @('--clone-path', $p) }
+  if ($Globals) { $a += @('--globals', '1') }
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $o = & $ProbeExe @a 2>&1
   $sw.Stop()
@@ -496,9 +562,11 @@ function Invoke-CoreMode {
         foreach ($kv in (Get-PsGlobalFacts).GetEnumerator()) { $facts[$kv.Key] = $kv.Value }
         $facts.tools = Get-PsToolFacts $clonePaths
         $facts.checks = Get-PsCheckFacts
+        $facts.sql = Get-PsSqlFacts
+        $facts.columns = Get-PsColumnFacts
       }
       $swPs.Stop()
-      $probe = Invoke-Probe $probeExe $DbPath $q $ps.Ctx $layoutDl $clonePaths
+      $probe = Invoke-Probe $probeExe $DbPath $q $ps.Ctx $layoutDl $clonePaths (-not $globalDone)
       $found = New-Object System.Collections.Generic.List[object]
       if ($null -eq $probe.Json) {
         $found.Add([pscustomobject]@{ Field = '(probe)'; Ps = '(a JSON object)'; Delphi = $probe.Text.Substring(0, [Math]::Min(300, $probe.Text.Length)); Hint = 'probe printed no JSON: diagnose the probe first' })

@@ -8,7 +8,7 @@ program ChartsCoreProbe;
     ChartsCoreProbe --db <index.sqlite> --qname <name> [--kinds field,property]
                     [--file <path> --line <n> --col <n> --len <n>]
                     [--charts-root <repo\charts> --scratch <dir> --layout-dir <dir>
-                     --clone-path <path> ...]
+                     --clone-path <path> ... --globals 1]
 
   Output: {"symbolLocation":{...}|{"error":..}, "memberSelection":{..}|{"found":false}|{"error":..},
            "edgeless":{"count","disclosure","files":[..]}, "zones":{"rootLen","sample":[..]},
@@ -16,9 +16,11 @@ program ChartsCoreProbe;
            "context":{..}|{"error":..},
            "tools":{"dotDefault","dotExplicitMissing","dotBadSetting","dotNothing","clone":[..]},
            "checks":{"members","edges","intfLoop","anyLoop"}|{"error":..},
+           "sql":{"tableCount",..,"tables":[digest],"procs":[digest],"trigs":[digest]}|{"error":..},
+           "columns":{"states":[digest],"notHeld":[..],"quoted":[digest]}|{"error":..},
            "cluster":{"text","ports","disclosure"}|{"error":..},
            "layout":{"dotSha","svgSha","plainSha","anchors"}|{"error":..}}
-  tools needs --charts-root; layout needs --layout-dir and runs dot.exe (never drag-lint.exe,
+  tools, checks and sql (the index-wide sections) need --globals 1 and --charts-root; layout needs --layout-dir and runs dot.exe (never drag-lint.exe,
   spec P5).
   A failing section becomes {"error":"<message>"}; the probe never crashes on a question.
   Exit 0 = JSON printed, 2 = usage. Everything is read-only. *)
@@ -39,6 +41,8 @@ uses
   , DRagLint.Charts.Tools in '..\..\src\charts\DRagLint.Charts.Tools.pas'
   , DRagLint.Charts.Dot in '..\..\src\charts\DRagLint.Charts.Dot.pas'
   , DRagLint.Charts.Checks in '..\..\src\charts\DRagLint.Charts.Checks.pas'
+  , DRagLint.Charts.Sql in '..\..\src\charts\DRagLint.Charts.Sql.pas'
+  , DRagLint.Charts.Columns in '..\..\src\charts\DRagLint.Charts.Columns.pas'
   ;
 
 const
@@ -64,6 +68,7 @@ type
     Scratch   : string;
     LayoutDir : string;
     ClonePaths: TArray<string>;
+    Globals   : Boolean;
   end;
 
 function Num(pValue: Int64): TJSONNumber;
@@ -87,6 +92,8 @@ begin
     pArgs.Scratch:= pValue
   else if SameText(pName, '--layout-dir') then
     pArgs.LayoutDir:= pValue
+  else if SameText(pName, '--globals') then
+    pArgs.Globals:= pValue = '1'
   else if SameText(pName, '--clone-path') then
     pArgs.ClonePaths:= pArgs.ClonePaths + [pValue]
   else
@@ -484,6 +491,138 @@ begin
   end;
 end;
 
+function Sha256Text(const pS: string): string;
+begin
+  var H:= THashSHA2.Create(THashSHA2.TSHA2Version.SHA256); // dl:ok object-leak@2527 -- THashSHA2 is a record, not a class: nothing to free
+  H.Update(TEncoding.UTF8.GetBytes(pS));
+  Result:= H.HashAsString;
+end;
+
+function BoolText(pValue: Boolean): string;
+begin
+  Result:= if pValue then 'True' else 'False';
+end;
+
+function TableDigest(pTable: TSqlTable): string;
+begin
+  var Decls: TArray<string>:= [];
+  for var D in pTable.Declarations do
+    Decls:= Decls + [Format('%d:%s:%d:%d', [D.Id, D.Path, D.Line, D.Columns])];
+  var Older: TArray<string>:= [];
+  for var K in pTable.OlderKeys do
+  begin
+    var O: TOlderColumn;
+    pTable.TryOlder(K, O);
+    Older:= Older + [Format('%s=%s@%s:%d', [K, O.Column, O.Path, O.Line])];
+  end;
+  Result:= Format('%s|%d|%s|%d|%d|%s|%s|%s', [pTable.Name, pTable.Id, pTable.Path, pTable.Line, Length(pTable.Declarations),
+    string.Join(';', Decls), string.Join(',', pTable.ColumnNames), string.Join(';', Older)]);
+end;
+
+function StrArray(const pValues: TArray<string>): TJSONArray;
+begin
+  Result:= TJSONArray.Create;
+  for var S in pValues do
+    Result.Add(S);
+end;
+
+{ The SQL clone's table set, procedure set and trigger set, one digest line per item. }
+function SqlJson(pIndex: TChartsIndex; pReader: TSourceReader): TJSONObject;
+begin
+  try
+    var Cat:= TSqlCatalog.Create(pIndex, pReader);
+    try
+      var S:= Cat.TableSet;
+      Result:= TJSONObject.Create;
+      Result.AddPair('tableCount', Num(Length(S.Names)));
+      Result.AddPair('declarations', Num(S.DeclarationCount));
+      Result.AddPair('collapsed', Num(S.CollapsedNames));
+      Result.AddPair('procedureDecls', Num(S.ProcedureDeclCount));
+      Result.AddPair('names', StrArray(S.Names));
+      var Tables: TArray<string>:= [];
+      for var N in S.Names do
+        Tables:= Tables + [TableDigest(S.Table(N))];
+      Result.AddPair('tables', StrArray(Tables));
+      var Procs: TArray<string>:= [];
+      for var P in Cat.ProcedureSet do
+        Procs:= Procs + [Format('%d|%s|%s|%d|%d|%s|%s|%s|%s|%s|%s', [P.Id, P.Name, P.Path, P.Body.StartLine, P.Body.EndLine,
+          BoolText(P.Body.Stale), BoolText(P.Body.Found), P.Body.Reason, string.Join(',', P.Tables), string.Join(',', P.Procs),
+          if P.Body.Found then Sha256Text(P.Body.Text) else '<null>'])];
+      Result.AddPair('procs', StrArray(Procs));
+      var Trigs: TArray<string>:= [];
+      for var T in Cat.TriggerSet do
+        Trigs:= Trigs + [Format('%d|%s|%s|%d|%d|%s|%s|%s|%s|%s|%s', [T.Id, T.Name, T.Path, T.Body.StartLine, T.Body.EndLine,
+          T.Table, BoolText(T.TableKnown), BoolText(T.Body.Stale), BoolText(T.Body.Found),
+          string.Join(',', T.Columns), string.Join(',', T.OtherTables)])];
+      Result.AddPair('trigs', StrArray(Trigs));
+    finally
+      Cat.Free;
+    end;
+  except
+    on E: Exception do
+      Result:= ErrorObject(E.Message);
+  end;
+end;
+
+function StateDigest(const pS: TSqlColumnState): string;
+begin
+  Result:= Format('%s|%s|%s|%s|%s|%d|%s|%s|%s|%d|%s|%s|%s', [pS.Table, pS.Column, pS.State, BoolText(pS.IsColumn), pS.Path,
+    pS.Line, pS.Text, pS.Caption, pS.OlderPath, pS.OlderLine, pS.QuotedScan, ColumnHopLabel(pS), ColumnStateName(pS.State)]);
+end;
+
+{ THE column state over the whole SQL clone: per table its first extracted column, its first
+  older-only column and a name it does not hold (searched SQL named on even tables, a server
+  hit on every fifth), the not-held list, and the quoted state through a doctored set. }
+function ColumnsJson(pIndex: TChartsIndex; pReader: TSourceReader): TJSONObject;
+const
+  NOT_A_COLUMN = 'NOT_A_COLUMN';
+  SERVER_EVERY = 5;
+  SERVER_LINE = 7;
+begin
+  try
+    var Cat:= TSqlCatalog.Create(pIndex, pReader);
+    try
+      var S:= Cat.TableSet;
+      var States: TArray<string>:= [];
+      var NotHeld: TArray<string>:= [];
+      for var K:= 0 to Length(S.Names) - 1 do
+      begin
+        var T:= S.Table(S.Names[K]);
+        var Probe: TArray<string>:= [];
+        if Length(T.ColumnNames) > 0 then
+          Probe:= Probe + [T.ColumnNames[0]];
+        if Length(T.OlderKeys) > 0 then
+          Probe:= Probe + [T.OlderKeys[0]];
+        for var C in Probe do
+          States:= States + [StateDigest(SqlColumnState(Cat, S, T.Name, C, TServerSqlHit.None, ''))];
+        var Hit:= if K mod SERVER_EVERY = 0 then TServerSqlHit.Make('S.pas', SERVER_LINE, 'TFoo.' + T.Name) else TServerSqlHit.None;
+        States:= States + [StateDigest(SqlColumnState(Cat, S, T.Name, NOT_A_COLUMN, Hit, if not Odd(K) then 'SRV' else ''))];
+        NotHeld:= NotHeld + [T.Name + ':' + string.Join(',', ColumnsNotHeld(Cat, S, T.Name, Probe + [NOT_A_COLUMN]))];
+      end;
+      Result:= TJSONObject.Create;
+      Result.AddPair('states', StrArray(States));
+      Result.AddPair('notHeld', StrArray(NotHeld));
+      var Ipchart:= S.Table('IPCHART');
+      var Folder:= S.Table('FOLDERCOUNT');
+      if (Ipchart <> nil) and Ipchart.HasColumn('ACTION') and (Folder <> nil) and Folder.HasColumn('TABLE') then
+      begin
+        var Hidden:= S.HideExtractedColumns(['IPCHART.ACTION', 'FOLDERCOUNT.TABLE']);
+        try
+          Result.AddPair('quoted', StrArray([StateDigest(SqlColumnState(Cat, Hidden, 'IPCHART', 'ACTION', TServerSqlHit.None, '')),
+            StateDigest(SqlColumnState(Cat, Hidden, 'FOLDERCOUNT', 'TABLE', TServerSqlHit.None, ''))]));
+        finally
+          Hidden.Free;
+        end;
+      end;
+    finally
+      Cat.Free;
+    end;
+  except
+    on E: Exception do
+      Result:= ErrorObject(E.Message);
+  end;
+end;
+
 procedure Run(const pArgs: TProbeArgs);
 begin
   var Index:= TChartsIndex.Create(pArgs.Db);
@@ -502,10 +641,12 @@ begin
         ShaPaths:= [Loc.GetValue<string>('path', ''), Mem.GetValue<string>('path', ''), pArgs.FilePath];
         Root.AddPair('strippedSha', StrippedShaJson(Reader, ShaPaths));
         Root.AddPair('context', ContextJson(Reader, pArgs));
-        if pArgs.ChartsRoot <> '' then
+        if pArgs.Globals then
         begin
           Root.AddPair('tools', ToolsJson(pArgs));
           Root.AddPair('checks', ChecksJson(Index));
+          Root.AddPair('sql', SqlJson(Index, Reader));
+          Root.AddPair('columns', ColumnsJson(Index, Reader));
         end;
         var LocPath:= Loc.GetValue<string>('path', '');
         Root.AddPair('cluster', ClusterJson(Index, pArgs.QName, LocPath));

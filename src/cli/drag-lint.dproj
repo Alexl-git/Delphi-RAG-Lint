@@ -271,6 +271,8 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Tools.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Dot.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Checks.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Sql.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Columns.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>
