@@ -93,7 +93,7 @@ function DisclosureText(pHiddenRows, pHiddenSites: Integer; const pNoun: string 
 /// so segments compare with SameText -- 'orm3' and 'ORM3' are one directory; `-split '\\'`
 /// keeps empty segments, as does string.Split. The PS sort only fixes which directory seeds
 /// the prefix, which a case-insensitive comparison makes irrelevant, so no sort is done.</remarks>
-function CommonRootLen(const pDirs: TArray<string>): Integer;  // dl:ok unused-public-symbol@cb31 -- REVIEWED 2026-10-11: step-1 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests.CoreText and the ChartsCoreProbe parity harness, which sit outside this project index
+function CommonRootLen(const pDirs: TArray<string>): Integer;
 
 /// <summary>The zone of a source file: its directory below the common root, '/'-joined.</summary>
 /// <param name="pPath">The source file path.</param>
@@ -102,7 +102,7 @@ function CommonRootLen(const pDirs: TArray<string>): Integer;  // dl:ok unused-p
 /// UNKNOWN_TEXT for a blank path.</returns>
 /// <remarks>Port of Get-PathZone (Emit-Common.ps1:587). PS trap closed: .NET GetDirectoryName
 /// treats '/' as a separator and Delphi ExtractFileDir does not, so '/' is normalised first.</remarks>
-function PathZone(const pPath: string; pRootLen: Integer): string;  // dl:ok unused-public-symbol@49ba -- REVIEWED 2026-10-11: step-1 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests.CoreText and the ChartsCoreProbe parity harness, which sit outside this project index
+function PathZone(const pPath: string; pRootLen: Integer): string;
 
 /// <summary>The file-name part of a path, '/' and '\' both separating.</summary>
 /// <param name="pPath">A path.</param>

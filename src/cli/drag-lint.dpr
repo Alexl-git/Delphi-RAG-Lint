@@ -228,6 +228,7 @@ uses
   DRagLint.Charts.Q.ClassSurface in '..\charts\DRagLint.Charts.Q.ClassSurface.pas',
   DRagLint.Charts.Q.EventWiring in '..\charts\DRagLint.Charts.Q.EventWiring.pas',
   DRagLint.Charts.Q.TestedBy in '..\charts\DRagLint.Charts.Q.TestedBy.pas',
+  DRagLint.Charts.Q.ChangeImpact in '..\charts\DRagLint.Charts.Q.ChangeImpact.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

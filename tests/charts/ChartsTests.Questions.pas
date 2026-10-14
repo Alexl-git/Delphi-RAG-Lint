@@ -86,6 +86,16 @@ type
     [Test] procedure ProductIndexIsRefused;
   end;
 
+  [TestFixture]
+  TChangeImpactTests = class(TQuestionFixture)
+  public
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure TypeSeedsMembersAndTypeUses;
+    [Test] procedure CappedWalkMatchesPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure LeafIsRefused;
+  end;
+
 implementation
 
 uses
@@ -170,6 +180,17 @@ const
   TB_NONE_FIELDS = 'Qname="Test.CompGroupTree.TCompGroupTreeTests.Flush_after_clean_build_is_noop",Tests=0,Fixtures=0,TestMethods=71,Walked=0,MaxHop=0,Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
   TB_NONE_DOT_SHA = '85218cabc300d99d88af6c8010d28a07edd1481dfcec1e2c7ceea7c536f30288';
   TB_LINES = 17;
+  CHANGE_IMPACT_ID = 'change-impact';
+  CI_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  CI_FIELDS = 'Qname="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation",IsType=false,Members=0,Affected=9,Units=1,Zones=1,MaxHop=1.0,Capped=false,Clusters=2,ClickTargets=9,Expected=9,AllClickable=true';
+  CI_DOT_SHA = '3e57099569edc0120de83859f59c67700657c009449c52b6446bb45929a7a36a';
+  CI_TYPE_FIELDS = 'Qname="Blueprint4.ViewModel.TBlueprint_ViewModel",IsType=true,Members=392,Affected=3,Units=3,Zones=1,MaxHop=2.0,Capped=false,Clusters=2,ClickTargets=4,Expected=4,AllClickable=true';
+  CI_TYPE_DOT_SHA = '01aa6faa064198a807b62073f5f18aab2ae422244c1ab29e64b1c1b100a2823f';
+  { 595 routines over the 400-node frontier cap, 175 units in two zones }
+  CI_CAPPED = 'uPipeClientConnection.TPipeClientConnection.NextSeq';
+  CI_CAPPED_FIELDS = 'Qname="uPipeClientConnection.TPipeClientConnection.NextSeq",IsType=false,Members=0,Affected=595,Units=175,Zones=2,MaxHop=2.0,Capped=true,Clusters=3,ClickTargets=11,Expected=11,AllClickable=true';
+  CI_CAPPED_DOT_SHA = '0ca5bb5addfb872e94165e014e184facf1a2d5ebae74ec6c8a06f5fd59c5f019';
+  CI_LINES = 15;
   DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
@@ -619,6 +640,55 @@ procedure TTestedByTests.ProductIndexIsRefused;
 begin
   Assert.StartsWith('tested-by: this index carries no DUnitX [Test] attributes, so it is not a test project index.',
     Refusal(TESTED_BY_ID, EW_TARGET, CLIENT_CLONE));
+end;
+
+{ ---- change-impact ---- }
+
+procedure TChangeImpactTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CHANGE_IMPACT_ID, CI_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CI_FIELDS, Fields(C));
+  Assert.AreEqual(CI_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TChangeImpactTests.TypeSeedsMembersAndTypeUses;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CHANGE_IMPACT_ID, CS_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CI_TYPE_FIELDS, Fields(C));
+  Assert.AreEqual(CI_TYPE_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TChangeImpactTests.CappedWalkMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CHANGE_IMPACT_ID, CI_CAPPED, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CI_CAPPED_FIELDS, Fields(C));
+  Assert.AreEqual(CI_CAPPED_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TChangeImpactTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(CHANGE_IMPACT_ID, CI_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(CI_LINES, Length(L));
+  Assert.AreEqual('CHART change-impact ' + CI_TARGET + ' -- 9 routines affected / 1 units', L[CS_CHART_LINE]);
+  Assert.AreEqual('  ... +1 more routines not shown (raise -Cap to see them)', L[High(L)]);
+end;
+
+procedure TChangeImpactTests.LeafIsRefused;
+begin
+  Assert.StartsWith('nothing in this index depends on uMain.TfrmMAIN.CauseListClick -- 0 callers at any depth.',
+    Refusal(CHANGE_IMPACT_ID, 'uMain.TfrmMAIN.CauseListClick', CLIENT_CLONE));
 end;
 
 end.

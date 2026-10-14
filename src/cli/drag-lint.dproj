@@ -286,6 +286,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.ClassSurface.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.EventWiring.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.TestedBy.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.ChangeImpact.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>
