@@ -3,10 +3,20 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.31.1-alpha -- 2026-10-14
 
 ### Fixed
 
+- **A multi-project rename no longer trusts an owner whose index cannot vouch for it (high
+  severity).** An owner whose index was built from ANOTHER project (stored `project_tag` differs
+  from the owner's project file) is now `unverified` -- refused, with a `--rebuild` hint, never
+  auto-reindexed. An owner whose index lacks one of its declared project members is `stale` in
+  the preview and reindexed once on apply; still missing -> `unverified`. Before, both read
+  `index=fresh` with a confident edit count of 0, and "Fix all in unit" on ORM3 `BASICS.PAS`
+  would have renamed the shared declaration and broken DMTEST (whose index was Micronite2027's
+  closure). No plugin change: the IDE already refuses on `unverified`. Units reached only
+  transitively (not project members) are not checked yet -- INBOX
+  `INBOX-rename-owner-transitive-members-unchecked.md`.
 - **pchar-arithmetic decides on the declared type, not a `P` prefix.** It matched
   `^P[A-Z][a-z]` names, so `PRows := PRows + [Row]` on a `TArray` fired and a typed `PChar`
   named `Walk` did not. A new query predicate `(#declared-type? @ident "regex")` finds the
