@@ -18,6 +18,10 @@
                       name, compares what Emit-Common.ps1 computes with what the probe prints
                       (symbol location, member selection, edgeless files + disclosure, zones,
                       stripped-source sha, source context), field by field with -ceq.
+                      Step 2 (2026-10-13) adds: the Graphviz dot walk and the clone guard
+                      (once per clone), and per name a row cluster + disclosure row built
+                      from the symbol's file and one dot layout of it (shas of .dot/.svg/
+                      .plain and the anchor count; dot.exe runs on both sides).
 
   Usage:  pwsh -File charts\src\Test-Parity.ps1 -Mode Core -Only who-writes -Clone DL
           -Only   restricts the CASES (by question id); the fixed names of each clone in play
@@ -278,6 +282,83 @@ function Get-PsGlobalFacts {
   $facts
 }
 
+# ---- step 2 (2026-10-13): the dot walk, the clone guard, the row cluster and one dot layout ----
+# Each tool question is one message the PS can print; the probe answers the same question with
+# DRagLint.Charts.Tools. A value is the resolved path; a failure is {error = <message>}.
+function Get-PsToolValue([scriptblock] $Ask) {
+  try { [string](& $Ask) } catch { [ordered]@{ error = $_.Exception.Message } }
+}
+
+function Get-PsToolFacts([string[]] $ClonePaths) {
+  $t = [ordered]@{}
+  $t.dotDefault         = Get-PsToolValue { Resolve-GraphvizDot '' }
+  $t.dotExplicitMissing = Get-PsToolValue { Resolve-GraphvizDot (Join-Path $OutDir 'nope\dot.exe') }
+  $t.dotBadSetting      = Get-PsToolValue { Resolve-GraphvizDot '' -SettingsPath (Join-Path $OutDir 'settings-bad-dot.json') }
+  $t.dotNothing         = Get-PsToolValue { Resolve-GraphvizDot '' -SettingsPath (Join-Path $OutDir 'absent.json') `
+                            -ChartsRoot (Join-Path $OutDir 'fake\charts') -ScriptDir (Join-Path $OutDir 'fake\charts\src') `
+                            -SharedDefault (Join-Path $OutDir 'nope\shared-dot.exe') }
+  $clones = New-Object System.Collections.Generic.List[object]
+  foreach ($p in $ClonePaths) {
+    $o = [ordered]@{ path = $p }
+    try {
+      # the override's NOTE is Write-Host (stream 6): capture it beside the value
+      $items = @(Get-CloneDb $p 6>&1)
+      $o.value = [string]@($items | Where-Object { $_ -is [string] })[-1]
+      $o.note  = (@($items | Where-Object { $_ -isnot [string] } | ForEach-Object { [string]$_ }) -join "`n")
+    } catch { $o.error = $_.Exception.Message }
+    $clones.Add($o)
+  }
+  $t.clone = $clones.ToArray()
+  $t
+}
+
+function Get-ParityFileSha([string] $Path) {
+  $sha = [Security.Cryptography.SHA256]::Create()
+  try { (($sha.ComputeHash([IO.File]::ReadAllBytes($Path)) | ForEach-Object { $_.ToString('x2') }) -join '') } finally { $sha.Dispose() }
+}
+
+# Up to 6 symbols of the symbol's file, in line order, as anchored rows (every other row
+# with a note) plus a disclosure note row; the probe's ClusterText builds the same rows.
+function Get-PsClusterText([string] $QName, [string] $Path) {
+  $q = ConvertTo-SqlText $Path
+  $rows = Invoke-IndexQuery @"
+SELECT s.name AS name, s.qualified_name AS qname, s.kind AS kind, s.start_line AS line
+  FROM symbols s JOIN files f ON f.id = s.file_id
+ WHERE f.path = '$q' ORDER BY s.start_line, s.id LIMIT 6
+"@
+  $list = New-Object System.Collections.Generic.List[object]
+  for ($i = 0; $i -lt $rows.Count; $i++) {
+    $r = $rows[$i]
+    $list.Add([pscustomobject]@{ Label = [string]$r.name; Line = $r.line; Href = (New-RowHref $Path ([int]$r.line))
+                                 Tip = [string]$r.qname; Note = $(if ($i % 2 -eq 0) { [string]$r.kind } else { '' }) })
+  }
+  $total = Invoke-IndexQuery "SELECT COUNT(*) AS n FROM symbols s JOIN files f ON f.id = s.file_id WHERE f.path = '$q'"
+  $noteText = Get-DisclosureText ([int]$total[0].n - $rows.Count) 0 'symbols'
+  if ($noteText) { $list.Add((New-NoteRow $noteText)) }
+  $sb = New-Object System.Text.StringBuilder
+  $ports = Add-RowCluster -Sb $sb -Cid 'cluster_focus' -Nid 'focus' -Title $QName -Subtitle (Get-UnitName $Path) `
+                          -Rows $list.ToArray() -Border '#3B6EA8' -Fill '#EEF3FA' -Hdr '#3B6EA8'
+  $t = New-Object System.Text.StringBuilder
+  Add-DisclosureRow $t "$QName &#183; $Path"
+  [pscustomobject]@{ Text = $sb.ToString(); Ports = @($ports); Disclosure = $t.ToString() }
+}
+
+function Get-PsClusterFacts([string] $QName, [string] $Path, [string] $LayoutDir) {
+  $f = [ordered]@{}
+  if (-not $Path) { $f.cluster = [ordered]@{ error = '(no symbol)' }; $f.layout = [ordered]@{ error = '(no symbol)' }; return $f }
+  try {
+    $c = Get-PsClusterText $QName $Path
+    $f.cluster = [ordered]@{ text = $c.Text; ports = $c.Ports; disclosure = $c.Disclosure }
+  } catch { $f.cluster = [ordered]@{ error = $_.Exception.Message } }
+  try {
+    $c = Get-PsClusterText $QName $Path
+    $l = Invoke-DotLayout ("digraph G {`n  rankdir=LR; node [shape=plaintext];`n" + $c.Text + "}`n") $LayoutDir 'c'
+    $f.layout = [ordered]@{ dotSha = (Get-ParityFileSha $l.Dot); svgSha = (Get-ParityFileSha $l.Svg)
+                            plainSha = (Get-ParityFileSha $l.Plain); anchors = [int]$l.Anchors }
+  } catch { $f.layout = [ordered]@{ error = $_.Exception.Message } }
+  $f
+}
+
 function Get-PsFacts([string] $QName) {
   $f = [ordered]@{}
   $locPath = ''
@@ -332,12 +413,14 @@ SELECT r.line AS line, r.start_col AS start_col, r.end_col AS end_col
                                after = $c.After; prevLine = $c.PrevLine; prevLineNo = [int]$c.PrevLineNo; following = @($c.Following) }
     } catch { $f.context = [ordered]@{ error = $_.Exception.Message } }
   }
-  [pscustomobject]@{ Facts = $f; Ctx = $ctxArgs }
+  [pscustomobject]@{ Facts = $f; Ctx = $ctxArgs; LocPath = $locPath }
 }
 
-function Invoke-Probe([string] $ProbeExe, [string] $Db, [string] $QName, $Ctx) {
+function Invoke-Probe([string] $ProbeExe, [string] $Db, [string] $QName, $Ctx, [string] $LayoutDir, [string[]] $ClonePaths) {
   $a = @('--db', $Db, '--qname', $QName, '--kinds', ($CoreKinds -join ','))
   if ($Ctx) { $a += @('--file', $Ctx.File, '--line', [string]$Ctx.Line, '--col', [string]$Ctx.Col, '--len', [string]$Ctx.Len) }
+  $a += @('--charts-root', (Join-Path $RepoRoot 'charts'), '--scratch', $OutDir, '--layout-dir', $LayoutDir)
+  foreach ($p in $ClonePaths) { $a += @('--clone-path', $p) }
   $sw = [Diagnostics.Stopwatch]::StartNew()
   $o = & $ProbeExe @a 2>&1
   $sw.Stop()
@@ -362,20 +445,37 @@ function Invoke-CoreMode {
     foreach ($n in $FixedNames[$db]) { if (-not $names.Contains($n)) { $names.Add($n) } }
     $plan[$db] = $names
   }
+  # the settings file the dotBadSetting question reads: a "dot" key that names a missing file
+  $badDot = Join-Path $OutDir 'nope\dot.exe'
+  [IO.File]::WriteAllText((Join-Path $OutDir 'settings-bad-dot.json'), ('{"dot": "' + $badDot.Replace('\', '\\') + '"}'))
+  $nonClone = Join-Path $RepoRoot 'src\cli\_D-RAG\drag-lint.sqlite'
   $mismatches = New-Object System.Collections.Generic.List[object]
   $rowsOut = New-Object System.Collections.Generic.List[object]
+  $nameNo = 0
   foreach ($db in $plan.Keys) {
     $script:DbPath = Join-Path $DbRoot $db
     $DbPath = $script:DbPath
     Write-Host "== $db ($($plan[$db].Count) names)"
+    # the clone, a history copy beside it, a non-clone index and a missing clone name
+    $clonePaths = @($DbPath)
+    if (Test-Path -LiteralPath "$DbPath.pre-1.9") { $clonePaths += "$DbPath.pre-1.9" }
+    if (Test-Path -LiteralPath $nonClone) { $clonePaths += $nonClone }
+    $clonePaths += (Join-Path $DbRoot 'missing.sqlite')
     $globalDone = $false
     foreach ($q in $plan[$db]) {
+      $nameNo++
+      $layoutPs = Join-Path $OutDir "dot\$nameNo\ps"
+      $layoutDl = Join-Path $OutDir "dot\$nameNo\dl"
       $swPs = [Diagnostics.Stopwatch]::StartNew()
       $ps = Get-PsFacts $q
       $facts = $ps.Facts
-      if (-not $globalDone) { foreach ($kv in (Get-PsGlobalFacts).GetEnumerator()) { $facts[$kv.Key] = $kv.Value } }
+      foreach ($kv in (Get-PsClusterFacts $q $ps.LocPath $layoutPs).GetEnumerator()) { $facts[$kv.Key] = $kv.Value }
+      if (-not $globalDone) {
+        foreach ($kv in (Get-PsGlobalFacts).GetEnumerator()) { $facts[$kv.Key] = $kv.Value }
+        $facts.tools = Get-PsToolFacts $clonePaths
+      }
       $swPs.Stop()
-      $probe = Invoke-Probe $probeExe $DbPath $q $ps.Ctx
+      $probe = Invoke-Probe $probeExe $DbPath $q $ps.Ctx $layoutDl $clonePaths
       $found = New-Object System.Collections.Generic.List[object]
       if ($null -eq $probe.Json) {
         $found.Add([pscustomobject]@{ Field = '(probe)'; Ps = '(a JSON object)'; Delphi = $probe.Text.Substring(0, [Math]::Min(300, $probe.Text.Length)); Hint = 'probe printed no JSON: diagnose the probe first' })

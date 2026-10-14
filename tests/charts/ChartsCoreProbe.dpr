@@ -7,11 +7,18 @@ program ChartsCoreProbe;
 
     ChartsCoreProbe --db <index.sqlite> --qname <name> [--kinds field,property]
                     [--file <path> --line <n> --col <n> --len <n>]
+                    [--charts-root <repo\charts> --scratch <dir> --layout-dir <dir>
+                     --clone-path <path> ...]
 
   Output: {"symbolLocation":{...}|{"error":..}, "memberSelection":{..}|{"found":false}|{"error":..},
            "edgeless":{"count","disclosure","files":[..]}, "zones":{"rootLen","sample":[..]},
            "strippedSha":{"<path>":"<sha256 of the stripped lines joined with LF>"},
-           "context":{..}|{"error":..}}
+           "context":{..}|{"error":..},
+           "tools":{"dotDefault","dotExplicitMissing","dotBadSetting","dotNothing","clone":[..]},
+           "cluster":{"text","ports","disclosure"}|{"error":..},
+           "layout":{"dotSha","svgSha","plainSha","anchors"}|{"error":..}}
+  tools needs --charts-root; layout needs --layout-dir and runs dot.exe (never drag-lint.exe,
+  spec P5).
   A failing section becomes {"error":"<message>"}; the probe never crashes on a question.
   Exit 0 = JSON printed, 2 = usage. Everything is read-only. *)
 
@@ -27,6 +34,9 @@ uses
   , DRagLint.Charts.Text in '..\..\src\charts\DRagLint.Charts.Text.pas'
   , DRagLint.Charts.Index in '..\..\src\charts\DRagLint.Charts.Index.pas'
   , DRagLint.Charts.Source in '..\..\src\charts\DRagLint.Charts.Source.pas'
+  , DRagLint.Charts.Process in '..\..\src\charts\DRagLint.Charts.Process.pas'
+  , DRagLint.Charts.Tools in '..\..\src\charts\DRagLint.Charts.Tools.pas'
+  , DRagLint.Charts.Dot in '..\..\src\charts\DRagLint.Charts.Dot.pas'
   ;
 
 const
@@ -35,6 +45,8 @@ const
   ZONE_SAMPLE_COUNT = 10;
   EDGELESS_LISTED = 5;
   FOLLOWING_LINES = 2;
+  CLUSTER_ROWS = 6;
+  NO_SYMBOL = '(no symbol)';
 
 type
   TProbeArgs = record
@@ -46,6 +58,10 @@ type
     Line   : Integer;
     Col    : Integer;
     Len    : Integer;
+    ChartsRoot: string;
+    Scratch   : string;
+    LayoutDir : string;
+    ClonePaths: TArray<string>;
   end;
 
 function Num(pValue: Int64): TJSONNumber;
@@ -57,6 +73,22 @@ function ErrorObject(const pMessage: string): TJSONObject;
 begin
   Result:= TJSONObject.Create;
   Result.AddPair('error', pMessage);
+end;
+
+{ The step-2 switches (tools, cluster, layout); False for a switch it does not know. }
+function ParseStep2Arg(const pName, pValue: string; var pArgs: TProbeArgs): Boolean;
+begin
+  Result:= True;
+  if SameText(pName, '--charts-root') then
+    pArgs.ChartsRoot:= pValue
+  else if SameText(pName, '--scratch') then
+    pArgs.Scratch:= pValue
+  else if SameText(pName, '--layout-dir') then
+    pArgs.LayoutDir:= pValue
+  else if SameText(pName, '--clone-path') then
+    pArgs.ClonePaths:= pArgs.ClonePaths + [pValue]
+  else
+    Result:= False;
 end;
 
 function ParseArgs(out pArgs: TProbeArgs): Boolean;
@@ -87,7 +119,7 @@ begin
       pArgs.Col:= StrToIntDef(Value, 0)
     else if SameText(Name, '--len') then
       pArgs.Len:= StrToIntDef(Value, 0)
-    else
+    else if not ParseStep2Arg(Name, Value, pArgs) then
       Exit(False);
   end;
   Result:= (pArgs.Db <> '') and (pArgs.QName <> '');
@@ -248,6 +280,164 @@ begin
   end;
 end;
 
+function ToolText(const pResolve: TFunc<string>): TJSONValue;
+begin
+  try
+    Result:= TJSONString.Create(pResolve());
+  except
+    on E: Exception do
+      Result:= ErrorObject(E.Message);
+  end;
+end;
+
+function CloneJson(const pPath, pRoot: string): TJSONObject;
+begin
+  Result:= TJSONObject.Create;
+  Result.AddPair('path', pPath);
+  try
+    var Note: string;
+    var Full:= CloneDb(pPath, pRoot, Note);
+    Result.AddPair('value', Full);
+    Result.AddPair('note', Note);
+  except
+    on E: Exception do
+      Result.AddPair('error', E.Message);
+  end;
+end;
+
+{ The tool walk and the clone guard: one question per message the PS can print. }
+function ToolsJson(const pArgs: TProbeArgs): TJSONObject;
+begin
+  Result:= TJSONObject.Create;
+  var Charts:= pArgs.ChartsRoot;
+  var Scripts:= TPath.Combine(Charts, 'src');
+  var Scratch:= pArgs.Scratch;
+  Result.AddPair('dotDefault', ToolText(function: string begin
+    Result:= ResolveGraphvizDot('', DragLintSettingsPath, Charts, Scripts, SHARED_DOT_DEFAULT); end));
+  Result.AddPair('dotExplicitMissing', ToolText(function: string begin
+    Result:= ResolveGraphvizDot(TPath.Combine(Scratch, 'nope\dot.exe'), DragLintSettingsPath, Charts, Scripts,
+      SHARED_DOT_DEFAULT); end));
+  Result.AddPair('dotBadSetting', ToolText(function: string begin
+    Result:= ResolveGraphvizDot('', TPath.Combine(Scratch, 'settings-bad-dot.json'), Charts, Scripts,
+      SHARED_DOT_DEFAULT); end));
+  Result.AddPair('dotNothing', ToolText(function: string begin
+    Result:= ResolveGraphvizDot('', TPath.Combine(Scratch, 'absent.json'), TPath.Combine(Scratch, 'fake\charts'),
+      TPath.Combine(Scratch, 'fake\charts\src'), TPath.Combine(Scratch, 'nope\shared-dot.exe')); end));
+  var Clones:= TJSONArray.Create;
+  var Root:= TPath.Combine(Charts, 'scratch\db');
+  for var P in pArgs.ClonePaths do
+    Clones.Add(CloneJson(P, Root));
+  Result.AddPair('clone', Clones);
+end;
+
+{ Up to CLUSTER_ROWS symbols of the file, in line order, as anchored rows; every other
+  row carries a note; pNote is the disclosure for the rest. }
+function ClusterRows(pIndex: TChartsIndex; const pPath: string; out pNote: string): TArray<TDotRow>;
+begin
+  var Q:= TChartsIndex.SqlText(pPath);
+  var Rows:= pIndex.Query(Format('SELECT s.name AS name, s.qualified_name AS qname, s.kind AS kind, s.start_line AS line ' +
+    'FROM symbols s JOIN files f ON f.id = s.file_id WHERE f.path = ''%s'' ORDER BY s.start_line, s.id LIMIT %d', [Q, CLUSTER_ROWS]));
+  try
+    Result:= [];
+    for var K:= 0 to Rows.Count - 1 do
+    begin
+      var R:= Default(TDotRow);
+      R.Caption:= Rows[K].S('name');
+      R.Line:= Rows[K].S('line');
+      R.Href:= RowHref(pPath, Rows[K].I('line'));
+      R.Tip:= Rows[K].S('qname');
+      if not Odd(K) then
+        R.Note:= Rows[K].S('kind');
+      Result:= Result + [R];
+    end;
+  finally
+    Rows.Free;
+  end;
+  var Total:= pIndex.Query(Format('SELECT COUNT(*) AS n FROM symbols s JOIN files f ON f.id = s.file_id WHERE f.path = ''%s''', [Q]));
+  try
+    pNote:= DisclosureText(Total[0].I('n') - Length(Result), 0, 'symbols');
+  finally
+    Total.Free;
+  end;
+end;
+
+function ClusterText(pIndex: TChartsIndex; const pQName, pPath: string; out pPorts: TArray<string>;
+  out pDisclosure: string): string;
+begin
+  var Note: string;
+  var Rows:= ClusterRows(pIndex, pPath, Note);
+  if Note <> '' then
+    Rows:= Rows + [NoteRow(Note)];
+  var Sb:= TStringBuilder.Create;
+  try
+    pPorts:= AddRowCluster(Sb, 'cluster_focus', 'focus', pQName, UnitNameOf(pPath), Rows,
+      TClusterStyle.Make('#3B6EA8', '#EEF3FA', '#3B6EA8'));
+    Result:= Sb.ToString;
+  finally
+    Sb.Free;
+  end;
+  var T:= TStringBuilder.Create;
+  try
+    AddDisclosureRow(T, pQName + ' &#183; ' + pPath);
+    pDisclosure:= T.ToString;
+  finally
+    T.Free;
+  end;
+end;
+
+function FileSha(const pPath: string): string;
+begin
+  var H:= THashSHA2.Create(THashSHA2.TSHA2Version.SHA256); // dl:ok object-leak@2527 -- THashSHA2 is a record, not a class: nothing to free
+  H.Update(TFile.ReadAllBytes(pPath));
+  Result:= H.HashAsString;
+end;
+
+function ClusterJson(pIndex: TChartsIndex; const pQName, pPath: string): TJSONObject;
+begin
+  if pPath = '' then
+    Exit(ErrorObject(NO_SYMBOL));
+  try
+    var Ports: TArray<string>;
+    var Disc: string;
+    var Text:= ClusterText(pIndex, pQName, pPath, Ports, Disc);
+    Result:= TJSONObject.Create;
+    Result.AddPair('text', Text);
+    var A:= TJSONArray.Create; // dl:ok object-leak@8f0d -- AddPair below transfers ownership to the parent JSON object
+    for var P in Ports do
+      A.Add(P);
+    Result.AddPair('ports', A);
+    Result.AddPair('disclosure', Disc);
+  except
+    on E: Exception do
+      Result:= ErrorObject(E.Message);
+  end;
+end;
+
+{ The cluster in a one-node graph, laid out by dot: the shas of what was written and drawn. }
+function LayoutJson(pIndex: TChartsIndex; const pArgs: TProbeArgs; const pPath: string): TJSONObject;
+begin
+  if pPath = '' then
+    Exit(ErrorObject(NO_SYMBOL));
+  try
+    var Ports: TArray<string>;
+    var Disc: string;
+    var Text:= ClusterText(pIndex, pArgs.QName, pPath, Ports, Disc);
+    var Exe:= ResolveGraphvizDot('', DragLintSettingsPath, pArgs.ChartsRoot, TPath.Combine(pArgs.ChartsRoot, 'src'),
+      SHARED_DOT_DEFAULT);
+    var Msgs: TArray<string>;
+    var L:= DotLayout(Exe, 'digraph G {'#10'  rankdir=LR; node [shape=plaintext];'#10 + Text + '}'#10,
+      pArgs.LayoutDir, 'c', Msgs);
+    Result:= TJSONObject.Create;
+    Result.AddPair('dotSha', FileSha(L.Dot));
+    Result.AddPair('svgSha', FileSha(L.Svg));
+    Result.AddPair('plainSha', FileSha(L.Plain));
+    Result.AddPair('anchors', Num(L.Anchors));
+  except
+    on E: Exception do
+      Result:= ErrorObject(E.Message);
+  end;
+end;
+
 procedure Run(const pArgs: TProbeArgs);
 begin
   var Index:= TChartsIndex.Create(pArgs.Db);
@@ -266,6 +456,12 @@ begin
         ShaPaths:= [Loc.GetValue<string>('path', ''), Mem.GetValue<string>('path', ''), pArgs.FilePath];
         Root.AddPair('strippedSha', StrippedShaJson(Reader, ShaPaths));
         Root.AddPair('context', ContextJson(Reader, pArgs));
+        if pArgs.ChartsRoot <> '' then
+          Root.AddPair('tools', ToolsJson(pArgs));
+        var LocPath:= Loc.GetValue<string>('path', '');
+        Root.AddPair('cluster', ClusterJson(Index, pArgs.QName, LocPath));
+        if pArgs.LayoutDir <> '' then
+          Root.AddPair('layout', LayoutJson(Index, pArgs, LocPath));
         Writeln(Root.ToJSON([TJSONAncestor.TJSONOutputOption.EncodeBelow32,
           TJSONAncestor.TJSONOutputOption.EncodeAbove127]));
       finally

@@ -47,6 +47,10 @@ uses
   , ChartsTests.CoreIndex in 'ChartsTests.CoreIndex.pas'
   , DRagLint.Charts.Source in '..\..\src\charts\DRagLint.Charts.Source.pas'
   , ChartsTests.CoreSource in 'ChartsTests.CoreSource.pas'
+  , DRagLint.Charts.Tools in '..\..\src\charts\DRagLint.Charts.Tools.pas'
+  , ChartsTests.CoreTools in 'ChartsTests.CoreTools.pas'
+  , DRagLint.Charts.Dot in '..\..\src\charts\DRagLint.Charts.Dot.pas'
+  , ChartsTests.CoreDot in 'ChartsTests.CoreDot.pas'
   ;
 
 const
