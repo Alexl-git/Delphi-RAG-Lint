@@ -158,6 +158,27 @@ type
     [Test] procedure AnswerNamesTheSqlIndex;
   end;
 
+  [TestFixture]
+  TLandsWhereTests = class(TQuestionFixture)
+  private
+    function LwArgs(const pTarget, pDb, pServer, pSql: string; out pArgs: TQuestionArgs): Boolean;
+    procedure Check(const pTarget, pFields, pDotSha: string);
+    function LwRefusal(const pTarget: string; const pDb: string = ''; const pServer: string = ''; const pSql: string = ''): string;
+  public
+    [Test] procedure OrmPropertyMatchesPowerShell;
+    [Test] procedure BackingFieldResolvesToItsProperty;
+    [Test] procedure DfmControlFollowsTheFeedsFromChain;
+    [Test] procedure ServerSqlNamesAColumnTheScriptsLack;
+    [Test] procedure PropertyThatIsNoColumnSaysSo;
+    [Test] procedure ComputedFieldOfAControlIsNoColumn;
+    [Test] procedure DanglingChainStopsBeforeATable;
+    [Test] procedure RePointedChainReachesTheTable;
+    [Test] procedure SelectionRefusalsMatchPowerShell;
+    [Test] procedure IndexRolesAreChecked;
+    [Test] procedure MissingIndexesRefuseAsTheBundlerDoes;
+    [Test] procedure AnswerNamesTheServerAndSqlIndexes;
+  end;
+
 implementation
 uses
   System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
@@ -348,6 +369,78 @@ const
     'RepointJobHeaderToFolder (TDataSource, :984) -- the value assigned to it there is not followed",Dangling=true,RePointed=1,' +
     'RePointedAt="Blueprint4.pas:1015",Rebound=1,' + FF_STATS + ',ClickTargets=6,Expected=6,AllClickable=true';
   FF_WALK_DOT_SHA = '0215ef526350760930dbc8f5b667b251b15c9b6421dbe078689c67cdef0186bb';
+  LANDS_WHERE_ID = 'lands-where';
+  LW_CONV = 'ConvProps=2063,ConvOnTable=1997,ConvColumn=1992,' +
+    'ConvNonColumn="INSPRSLT.DistHist,INSPRSLT.DistHistLim,INSPRSLT.f_tb,STATIONS.GRIDS,STATIONS.MENUS",ConvQuoted="",ConvStale=""';
+  LW_SRV = 'DsClasses=133,ParamByNameAll=383,ParamByNameDs=189,ParamByNameCol=183,OrmLinksCli=0,OrmLinksSrv=0';
+  LW_CAUSFAIL_SRV = 'ServerClass="TDataService_CAUSFAIL_SERVER",ServerRows=4,ServerWrite="PrepareSaveQuery:124,Save:229",' +
+    'ServerRead="PrepareLoadQuery:109,Load:159",ServerOther="",ServerElsewhere=1,Triggers=1,TriggerNames="CAUSFAIL_BIU5@MS5.SQL:15",' +
+    'TriggersStale=0,Procedures=0,ProcedureNames="",ClientBindings=1,ClientRows="uCausFailForm.dfm:60:colREASON",ClientOther=6,';
+  LW_NEWEST_OF_TWO = 'ColumnLabel="[certain] a column of the newest of 2 declaration(s), MS1.SQL",';
+  LW_ORM = 'uCAUSFAIL.TmcCAUSFAIL.REASON';
+  LW_ORM_FIELDS = 'TestChart=false,ClientOutcomes="column",IndexBindColumn=443,Selection="uCAUSFAIL.TmcCAUSFAIL.REASON",Kind="orm",' +
+    'Property="uCAUSFAIL.TmcCAUSFAIL.REASON",Table="CAUSFAIL",TableColumn="CAUSFAIL.REASON",ColumnState="yes",ChainOutcome="",StopReason="",' +
+    LW_CAUSFAIL_SRV + LW_CONV + ',' + LW_NEWEST_OF_TWO + LW_SRV + ',ClickTargets=9,Expected=9,AllClickable=true';
+  LW_ORM_DOT_SHA = 'dc7570812275c8b70d5b4aa2c406fe1ec9c1cf9ccced3dfb14ffe421231fbecb';
+  LW_FIELD = 'uCAUSFAIL.TmcCAUSFAIL.fREASON';
+  LW_FIELD_FIELDS = 'TestChart=false,ClientOutcomes="column",IndexBindColumn=443,Selection="uCAUSFAIL.TmcCAUSFAIL.fREASON",Kind="orm",' +
+    'Property="uCAUSFAIL.TmcCAUSFAIL.REASON",Table="CAUSFAIL",TableColumn="CAUSFAIL.REASON",ColumnState="yes",ChainOutcome="",StopReason="",' +
+    LW_CAUSFAIL_SRV + LW_CONV + ',' + LW_NEWEST_OF_TWO + LW_SRV + ',ClickTargets=10,Expected=10,AllClickable=true';
+  LW_FIELD_DOT_SHA = '518f6d2bdb4bbbd997f8aca013c95020f0383600702c211ff107faf2e543e171';
+  LW_DFM = 'frmCausFail.colREASON';
+  LW_DFM_FIELDS = 'TestChart=false,ClientOutcomes="column",IndexBindColumn=443,Selection="frmCausFail.colREASON",Kind="dfm",' +
+    'Property="uCAUSFAIL.TmcCAUSFAIL.REASON",Table="CAUSFAIL",TableColumn="CAUSFAIL.REASON",ColumnState="yes",ChainOutcome="column",StopReason="",' +
+    LW_CAUSFAIL_SRV + LW_CONV + ',' + LW_NEWEST_OF_TWO + LW_SRV + ',ClickTargets=14,Expected=14,AllClickable=true';
+  LW_DFM_DOT_SHA = '2d6a5510d95efaa25728eb354c9f3565c408eb0a742514db60326d9947375ad3';
+  LW_GRIDS = 'uSTATIONS.TmcSTATIONS.GRIDS';
+  LW_GRIDS_FIELDS = 'TestChart=false,ClientOutcomes="",IndexBindColumn=443,Selection="uSTATIONS.TmcSTATIONS.GRIDS",Kind="orm",' +
+    'Property="uSTATIONS.TmcSTATIONS.GRIDS",Table="STATIONS",TableColumn="STATIONS.GRIDS",ColumnState="server-sql",ChainOutcome="",StopReason="",' +
+    'ServerClass="TDataService_STATIONS_SERVER",ServerRows=4,ServerWrite="PrepareSaveQuery:129,Save:271",ServerRead="PrepareLoadQuery:110,Load:176",' +
+    'ServerOther="",ServerElsewhere=1,Triggers=0,TriggerNames="",TriggersStale=0,Procedures=0,ProcedureNames="",ClientBindings=0,ClientRows="",' +
+    'ClientOther=0,' + LW_CONV + ',ColumnLabel="[inferred] not extracted as a column by the SQL index (23 columns extracted from the newest of 2 ' +
+    'declaration(s), MS1.SQL:3495); nor a quoted identifier in that declaration -- but the SQL for STATIONS in ' +
+    'TDataService_STATIONS_SERVER.PrepareLoadQuery names it: the scripts lag the schema",' + LW_SRV + ',ClickTargets=7,Expected=7,AllClickable=true';
+  LW_GRIDS_DOT_SHA = '0a138efab154408cc58578e96e2c27b946174cd19043d8968de16ffb63def3c4';
+  LW_NOCOL = 'uINSPRSLT.TmcINSPRSLT.DistHist';
+  LW_NOCOL_FIELDS = 'TestChart=false,ClientOutcomes="",IndexBindColumn=443,Selection="uINSPRSLT.TmcINSPRSLT.DistHist",Kind="orm",' +
+    'Property="uINSPRSLT.TmcINSPRSLT.DistHist",Table="INSPRSLT",TableColumn="",ColumnState="no",ChainOutcome="",StopReason="",' +
+    'ServerClass="TDataService_INSPRSLT_SERVER",ServerRows=0,ServerWrite="",ServerRead="",ServerOther="",ServerElsewhere=0,Triggers=0,' +
+    'TriggerNames="",TriggersStale=0,Procedures=0,ProcedureNames="",ClientBindings=0,ClientRows="",ClientOther=0,' + LW_CONV +
+    ',ColumnLabel="not extracted as a column by the SQL index (144 columns extracted from the newest of 2 declaration(s), MS1.SQL:2073); ' +
+    'nor a quoted identifier in that declaration; no SQL for INSPRSLT in the server''s TDataService_INSPRSLT_SERVER names it",' + LW_SRV +
+    ',ClickTargets=2,Expected=2,AllClickable=true';
+  LW_NOCOL_DOT_SHA = 'e116eba552c85f35e56439df77789a707c3ab61f302fd15d4885867223b3ac8b';
+  LW_COMPUTED = 'frmJobList.cxGrid1DBTableView1DueInStr1';
+  LW_COMPUTED_FIELDS = 'TestChart=false,ClientOutcomes="not-column",IndexBindColumn=443,Selection="frmJobList.cxGrid1DBTableView1DueInStr1",' +
+    'Kind="dfm",Property="",Table="FOLDERS",TableColumn="",ColumnState="no",ChainOutcome="not-column",StopReason="",' +
+    'ServerClass="TDataService_FOLDERS_SERVER",ServerRows=0,ServerWrite="",ServerRead="",ServerOther="",ServerElsewhere=0,Triggers=0,' +
+    'TriggerNames="",TriggersStale=0,Procedures=0,ProcedureNames="",ClientBindings=1,ClientRows="uJobList.dfm:480:cxGrid1DBTableView1DueInStr1",' +
+    'ClientOther=0,' + LW_CONV + ',ColumnLabel="not extracted as a column by the SQL index (79 columns extracted from the newest of 2 ' +
+    'declaration(s), MS1.SQL:1834); nor a quoted identifier in that declaration; no SQL for FOLDERS in the server''s TDataService_FOLDERS_SERVER ' +
+    'names it",' + LW_SRV + ',ClickTargets=7,Expected=7,AllClickable=true';
+  LW_COMPUTED_DOT_SHA = '9c9fa02b7e0a28b798d6b8c3cd6e8948cbcd2eaaed0bd20f867f6d7841ea6ced';
+  LW_DANGLING = 'frmBlueprint4.edtF1';
+  LW_DANGLING_FIELDS = 'TestChart=false,ClientOutcomes="",IndexBindColumn=443,Selection="frmBlueprint4.edtF1",Kind="dfm",Property="",Table=null,' +
+    'TableColumn="",ColumnState="n/a",ChainOutcome="dangling",StopReason="the designer datasource dmlSystem2.dsrFolder is dangling (module ' +
+    'dmlSystem2 is declared nowhere in this index (no form, var or symbol) -- a dangling designer reference) -- no table; the code re-point: DS ' +
+    'is a local variable of RepointJobHeaderToFolder (TDataSource, :984) -- the value assigned to it there is not followed",ServerClass=null,' +
+    'ServerRows=0,ServerWrite="",ServerRead="",ServerOther="",ServerElsewhere=0,Triggers=0,TriggerNames="",TriggersStale=0,Procedures=0,' +
+    'ProcedureNames="",ClientBindings=0,ClientRows="",ClientOther=0,' + LW_CONV + ',ColumnLabel="",' + LW_SRV +
+    ',ClickTargets=3,Expected=3,AllClickable=true';
+  LW_DANGLING_DOT_SHA = '7927c0c3e18486a72c4f19cdb6b85ce68a84b3799c4b409abcc1bfc6c27e4657';
+  LW_RP = 'frmBlueprint4.dxDBGrid1OperationVName';
+  LW_RP_FIELDS = 'TestChart=false,ClientOutcomes="column",IndexBindColumn=443,Selection="frmBlueprint4.dxDBGrid1OperationVName",Kind="dfm",' +
+    'Property="uOPERAT.TmcOPERAT.NAME",Table="OPERAT",TableColumn="OPERAT.NAME",ColumnState="yes",ChainOutcome="column",StopReason="",' +
+    'ServerClass="TDataService_OPERAT_SERVER",ServerRows=4,ServerWrite="PrepareSaveQuery:134,Save:338",ServerRead="PrepareLoadQuery:114,Load:209",' +
+    'ServerOther="",ServerElsewhere=1,Triggers=0,TriggerNames="",TriggersStale=0,Procedures=0,ProcedureNames="",ClientBindings=1,' +
+    'ClientRows="Blueprint4.dfm:4534:dxDBGrid1OperationVName",ClientOther=25,' + LW_CONV + ',' + LW_NEWEST_OF_TWO + LW_SRV +
+    ',ClickTargets=17,Expected=17,AllClickable=true';
+  LW_RP_DOT_SHA = '63d846867e5cf864b07352dd1c8ef08af7a6f2d2e8affcbb9457eb192b871be9';
+  LW_NOT_ORM = 'not an ORM object property (class is not Tmc<T>) and not a DFM-bound field';
+  LW_LINES = 17;
+  LW_SERVER_INDEX_LINE = 4;
+  LW_CHART = 'CHART lands-where uCAUSFAIL.TmcCAUSFAIL.REASON -- 4 server DataService rows / 1 triggers touching the column';
+  LW_LAST_ROW = '  ... positional Fields[i] / Params[i] reads are not shown -- they never name the column';
   FF_LINES = 13;
   FF_SQL_INDEX_LINE = 4;
   FF_CHART_LINE = 5;  DEPS_CHART_LINE = 4;
@@ -1172,6 +1265,175 @@ begin
   Assert.AreEqual('INDEX ' + A.SqlDbPath + ' (sql)', L[FF_SQL_INDEX_LINE]);
   Assert.AreEqual('CHART feeds-from ' + FF_ONE + ' -- 5 chain rows / 471 controls in the index that resolve to one table', L[FF_CHART_LINE]);
   Assert.AreEqual('  CAUSFAIL.REASON @MS1.SQL:1411', L[High(L)]);
+end;
+
+{ ---- lands-where ---- }
+
+{ the three clones lands-where reads; '' = CLIENT / SERVER / SQL, as the parity case passes them }
+function TLandsWhereTests.LwArgs(const pTarget, pDb, pServer, pSql: string; out pArgs: TQuestionArgs): Boolean;
+begin
+  Result:= Args(LANDS_WHERE_ID, pTarget, if pDb = '' then CLIENT_CLONE else pDb, pArgs);
+  if not Result then
+    Exit;
+  var Dir:= ExtractFileDir(pArgs.DbPath);
+  var Server:= TPath.Combine(Dir, if pServer = '' then SERVER_CLONE else pServer);
+  var Sql:= TPath.Combine(Dir, if pSql = '' then SQL_CLONE else pSql);
+  Result:= TFile.Exists(Server) and TFile.Exists(Sql);
+  if not Result then
+  begin
+    Assert.Pass('clone missing: ' + Server + ' or ' + Sql);
+    Exit;
+  end;
+  pArgs.ServerDbPath:= Server;
+  pArgs.SqlDbPath:= Sql;
+end;
+
+procedure TLandsWhereTests.Check(const pTarget, pFields, pDotSha: string);
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not LwArgs(pTarget, '', '', '', A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(LANDS_WHERE_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(pFields, Fields(C));
+  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
+end;
+
+function TLandsWhereTests.LwRefusal(const pTarget, pDb, pServer, pSql: string): string;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  Result:= '';
+  if not LwArgs(pTarget, pDb, pServer, pSql, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(LANDS_WHERE_ID, E));
+  try
+    E(A, FOutRoot);
+    Assert.Fail(pTarget + ' was not refused');
+  except
+    on X: EChartsQuestion do Result:= X.Message;
+  end;
+end;
+
+procedure TLandsWhereTests.OrmPropertyMatchesPowerShell;
+begin
+  { write path, read path, a trigger naming NEW.REASON, one bound control: every cluster }
+  Check(LW_ORM, LW_ORM_FIELDS, LW_ORM_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.BackingFieldResolvesToItsProperty;
+begin
+  { fREASON -> REASON [by name]: one more anchored row on the property box }
+  Check(LW_FIELD, LW_FIELD_FIELDS, LW_FIELD_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.DfmControlFollowsTheFeedsFromChain;
+begin
+  Check(LW_DFM, LW_DFM_FIELDS, LW_DFM_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.ServerSqlNamesAColumnTheScriptsLack;
+begin
+  { STATIONS.GRIDS is in no script, yet the server's own SQL names it: server-sql, never "not a column" }
+  Check(LW_GRIDS, LW_GRIDS_FIELDS, LW_GRIDS_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.PropertyThatIsNoColumnSaysSo;
+begin
+  { searched in TDataService_INSPRSLT_SERVER and named by nothing: "computed or UI-only" }
+  Check(LW_NOCOL, LW_NOCOL_FIELDS, LW_NOCOL_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.ComputedFieldOfAControlIsNoColumn;
+begin
+  { R17: a uJobList control bound to a computed FOLDERS field; no Tmc property of that name }
+  Check(LW_COMPUTED, LW_COMPUTED_FIELDS, LW_COMPUTED_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.DanglingChainStopsBeforeATable;
+begin
+  { a null Table and ServerClass, and the code re-point's stop in the stop reason }
+  Check(LW_DANGLING, LW_DANGLING_FIELDS, LW_DANGLING_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.RePointedChainReachesTheTable;
+begin
+  { past the dangling Blueprint4_Model.dsrOperation: the re-point hops on the control box, OPERAT.NAME }
+  Check(LW_RP, LW_RP_FIELDS, LW_RP_DOT_SHA);
+end;
+
+procedure TLandsWhereTests.SelectionRefusalsMatchPowerShell;
+begin
+  Assert.AreEqual('lands-where: -Field takes <Unit>.<Tmc class>.<property> or <Form>.<Control>, got ''bad name''', LwRefusal('bad name'));
+  Assert.AreEqual('lands-where: uFOLDERS.TmcFOLDERS.TABLE resolves to no property or field in this index and uFOLDERS is no form -- ' +
+    LW_NOT_ORM + '.', LwRefusal('uFOLDERS.TmcFOLDERS.TABLE'));
+  Assert.AreEqual('lands-where: uPipeClientConnection.TPipeClientConnection.Connected is on TPipeClientConnection -- ' + LW_NOT_ORM + '.',
+    LwRefusal('uPipeClientConnection.TPipeClientConnection.Connected'));
+  Assert.AreEqual('lands-where: no table named FIB_FIELDS_INFO in the SQL index (the scripts declare FIB$FIELDS_INFO) -- the name was ' +
+    'derived from TmcFIB_FIELDS_INFO by the Tmc<T> / Imc<T> naming convention. 5 live tables are not in the scripts (2026-09-23).',
+    LwRefusal('uFIB_FIELDS_INFO.TmcFIB_FIELDS_INFO.FIELD_NAME'));
+  Assert.AreEqual('lands-where: no table named MEMCONTROLPLANNINGPRESETS in the SQL index (script-derived; the scripts may lag the live ' +
+    'schema) -- the name was derived from TmcMEMCONTROLPLANNINGPRESETS by the Tmc<T> / Imc<T> naming convention. 5 live tables are not ' +
+    'in the scripts (2026-09-23).', LwRefusal('uMEMCONTROLPLANNINGPRESETS.TmcMEMCONTROLPLANNINGPRESETS.OLDID'));
+  Assert.AreEqual('lands-where: frmCompGroupSetup2.tblCompTree.tblCompTreeName is a persistent FIELD (TStringField) of the dataset ' +
+    'tblCompTree, not a data-aware control -- its dataset is not a datasource chain. Ask lands-where of the ORM property, or of a control ' +
+    'bound to that column.', LwRefusal('frmCompGroupSetup2.tblCompTreeName'));
+end;
+
+procedure TLandsWhereTests.IndexRolesAreChecked;
+begin
+  { a swapped pair must refuse, never render an empty chart }
+  Assert.EndsWith(CLIENT_CLONE + ' holds no TDataService_<T>_SERVER class -- -ServerDbPath takes the SERVER clone ' +
+    '(SERVER-MicroniteMW1Service.sqlite), where the write and read path live', LwRefusal(LW_ORM, '', CLIENT_CLONE));
+  Assert.EndsWith(SERVER_CLONE + ' holds TDataService_<T>_SERVER classes, so it is a SERVER index -- -DbPath takes the CLIENT clone ' +
+    '(the ORM classes and the DFM bindings); the SERVER clone goes in -ServerDbPath', LwRefusal(LW_ORM, SERVER_CLONE));
+  Assert.EndsWith(CLIENT_CLONE + ' is not a SQL index (0 sql_table symbols) -- -SqlDbPath takes the SQL-script clone',
+    LwRefusal(LW_ORM, '', '', CLIENT_CLONE));
+  Assert.AreEqual('lands-where: a SQL-script index was passed as a Delphi clone -- -DbPath takes CLIENT, -ServerDbPath SERVER, ' +
+    '-SqlDbPath the scripts', LwRefusal(LW_ORM, '', SQL_CLONE));
+end;
+
+procedure TLandsWhereTests.MissingIndexesRefuseAsTheBundlerDoes;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  { New-DiagramArtifact checks both before the emitter runs, the SQL index first }
+  if not LwArgs(LW_ORM, '', '', '', A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(LANDS_WHERE_ID, E));
+  var NoServer:= A;
+  NoServer.ServerDbPath:= '';
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      E(NoServer, FOutRoot);
+    end, EChartsQuestion, 'lands-where needs -ServerDbPath: the SERVER clone (charts\scratch\db\SERVER-MicroniteMW1Service.sqlite); ' +
+    '-DbPath is the CLIENT clone');
+  var Neither:= NoServer;
+  Neither.SqlDbPath:= '';
+  Assert.WillRaiseWithMessage(
+    procedure
+    begin
+      E(Neither, FOutRoot);
+    end, EChartsQuestion, 'lands-where needs -SqlDbPath: the SQL-script index clone (charts\scratch\db\SQL-drag-lint-sql.sqlite)');
+end;
+
+procedure TLandsWhereTests.AnswerNamesTheServerAndSqlIndexes;
+var
+  A: TQuestionArgs;
+begin
+  if not LwArgs(LW_ORM, '', '', '', A) then
+    Exit;
+  var L:= AskChartQuestion(A).Lines;
+  Assert.AreEqual<Integer>(LW_LINES, Length(L));
+  Assert.AreEqual('INDEX ' + A.ServerDbPath + ' (server)', L[LW_SERVER_INDEX_LINE]);
+  Assert.AreEqual('INDEX ' + A.SqlDbPath + ' (sql)', L[LW_SERVER_INDEX_LINE + 1]);
+  Assert.AreEqual(LW_CHART, L[LW_SERVER_INDEX_LINE + 2]);
+  Assert.AreEqual(LW_LAST_ROW, L[High(L)]);
 end;
 
 end.

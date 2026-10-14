@@ -129,7 +129,7 @@ function ColumnStateName(const pState: string): string;  // dl:ok unused-public-
 /// <param name="pServerSearched">The DataService class searched; '' when none was.</param>
 /// <returns>The sentence; "computed or UI-only" only when the server's SQL was searched.</returns>
 /// <remarks>Port of Format-NotAColumnNote (Emit-Common.ps1:1233).</remarks>
-function FormatNotAColumnNote(const pProp, pTable, pCaption, pServerSearched: string): string;  // dl:ok unused-public-symbol@d221 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function FormatNotAColumnNote(const pProp, pTable, pCaption, pServerSearched: string): string;
 
 implementation
 

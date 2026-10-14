@@ -53,6 +53,8 @@ type
     [Test] procedure OtherIndexesAQuestionDoesNotReadAreIgnored;
     [Test] procedure MissingSqlIndexOfAReadingQuestionIsSetup;
     [Test] procedure SqlIndexOfAReadingQuestionIsCarriedAndChecked;
+    [Test] procedure MissingServerIndexOfAReadingQuestionIsSetup;
+    [Test] procedure ServerAndSqlIndexesAreCarriedInAskReportOrder;
     [Test] procedure PortedFallbackWithoutEmitterScriptIsSetup;
     [Test] procedure PortedFallbackWithEmitterScriptFallsBack;
     [Test] procedure UnexpectedFailureWithoutEmitterScriptIsSetup;
@@ -77,6 +79,7 @@ const
   CB_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
   SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
   FF_TARGET = 'frmCausFail.colREASON';
+  LW_TARGET = 'uCAUSFAIL.TmcCAUSFAIL.REASON';
   EXIT_SETUP = 2;
   STUB_EXIT = 42;
   NOT_INSTALLED = 'crosses-boundary is answered by the engine in this install, and its PowerShell fallback is not installed: ';
@@ -419,6 +422,48 @@ begin
   Assert.AreEqual('Delphi in-process (feeds-from)', FProducer.Describe);
 end;
 
+procedure TProducerDelphiTests.MissingServerIndexOfAReadingQuestionIsSetup;
+var
+  Db, Sql: string;
+begin
+  { lands-where reads the SERVER index: a missing one is Ask-Report's "index not found", exit 2, before the SQL index is looked at }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SQL_CLONE, Sql) then
+    Exit;
+  var Missing:= TPath.Combine(FOutRoot, 'missing-server.sqlite');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ServerDbOverride:= Missing;
+  O.SqlDbOverride:= Sql;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('lands-where', LW_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('index not found: ' + Missing, R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.ServerAndSqlIndexesAreCarriedInAskReportOrder;
+var
+  Db, Server, Sql: string;
+begin
+  { both extra indexes reach the emitter and the freshness list: project, server, sql }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SERVER_CLONE, Server) or not Clone(SQL_CLONE, Sql) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.ServerDbOverride:= Server;
+  O.SqlDbOverride:= Sql;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('lands-where', LW_TARGET), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.AreEqual<Integer>(3, Length(R.IndexPaths));
+  Assert.AreEqual(Server, R.IndexPaths[1]);
+  Assert.AreEqual(Sql, R.IndexPaths[2]);
+  Assert.Contains(R.Text, #13#10'INDEX ' + Server + ' (server)'#13#10'INDEX ' + Sql + ' (sql)'#13#10'CHART lands-where ' + LW_TARGET + ' -- ');
+  Assert.AreEqual('Delphi in-process (lands-where)', FProducer.Describe);
+end;
 { a folder holding only an empty Ask-Report.ps1: an installed copy, where the ported Emit-*.ps1 are not shipped }
 function TProducerDelphiTests.BareScriptFolder: string;
 begin
