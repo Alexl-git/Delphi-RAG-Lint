@@ -1204,6 +1204,8 @@ end;
 // these helpers that are defined later in the file.
 procedure SizeGuardCheck(const ADbPath: string; ASizeGuardMB: Integer; AForce32: Boolean); forward;
 function ResolveConsumerDbs(const AArgs: TArgs): TArray<string>; forward;
+procedure WarmRuleCache(const AProjectDb, ALibraryDb: string); forward;
+function RuleCacheLibraryDb(const AArgs: TArgs): string; forward;
 { Declared here because ResolveReadDbsForFileWith (used by `outline`, well above
   the implementation) needs it, and the implementation sits beside the manifest
   helpers near DoResolveDbsList. }
@@ -4074,6 +4076,14 @@ begin
       [AItem.Name, PlatSuffix, AItem.DbPath, Store.CountFiles, Store.CountSymbols,
        Store.CountReferences, Length(Indexer.VisitedFiles), Indexer.ParsedFiles,
        Indexer.SkippedUpToDate, Elapsed, RateStr]));
+    { Warm the `lint <file>` rule cache for a PROJECT section, after releasing this
+      section's write connection (see the same block in DoIndex). A library
+      section has no project rules to cache. }
+    if AItem.Mode = smClosure then
+    begin
+      Store:= nil;
+      WarmRuleCache(AItem.DbPath, RuleCacheLibraryDb(Default(TArgs)));
+    end;
     Result:= True;
   except
     on E: Exception do
@@ -6153,6 +6163,16 @@ begin
     Sleep(Interval * 1000);
   end; // while
 
+  { WARM THE `lint <file>` RULE CACHE for a project index, AFTER releasing the
+    write connection: a checkpoint on close would otherwise move the index's
+    stat after the key was taken, and every first lint would miss. Project
+    targets only -- a one-file or --resolve-only run leaves the next lint to fill
+    it lazily (its key no longer matches). }
+  if IsProjectScopedTarget and not AArgs.ResolveOnly then
+  begin
+    Store:= nil;
+    WarmRuleCache(ResolvedDb, RuleCacheLibraryDb(AArgs));
+  end;
   Result:= 0;
 end; // function
 
@@ -13082,6 +13102,68 @@ begin
       end;
       Result:= Entry.FindingsFor(AId);
     end;
+end;
+
+/// <summary>The library index an indexer should warm the rule cache WITH: the one a
+/// plain `lint &lt;file&gt;` will open.</summary>
+/// <param name="AArgs">The index run's arguments; only LibraryDbs is read.</param>
+/// <returns>An explicit --library-db when given, else the manifest's library for a
+/// run with no --project and no --platform; '' when there is none.</returns>
+/// <remarks>The IDE spawns `lint "&lt;file&gt;"` with neither flag, so its library comes
+/// from the manifest default -- resolving from the INDEX run's own --project could pick
+/// another platform's library, and every warm entry would then miss on the library part
+/// of its key. A wrong guess costs a lazy fill, never a wrong answer.</remarks>
+function RuleCacheLibraryDb(const AArgs: TArgs): string;
+begin
+  if Length(AArgs.LibraryDbs) > 0 then Exit(AArgs.LibraryDbs[0]);
+  Result:= ResolveLibraryDb(Default(TArgs));
+end;
+
+/// <summary>Fills the rule cache for a project index the caller has just finished
+/// writing, so the next `lint &lt;file&gt;` is a hit.</summary>
+/// <param name="AProjectDb">The project index; the caller's write connection must be released.</param>
+/// <param name="ALibraryDb">RuleCacheLibraryDb for the run, or ''.</param>
+/// <remarks>Opens both indexes read-only and computes the three CACHED_RULES. Writes
+/// only if no index changed while it ran (same check as a lint run). NEVER fails the
+/// index run: every problem is one warning line, and the next lint fills lazily.</remarks>
+procedure WarmRuleCache(const AProjectDb, ALibraryDb: string);
+begin
+  if not TRuleCache.Enabled then Exit;
+  var Sw: TStopwatch:= TStopwatch.StartNew;
+  try
+    var Ok: Boolean;
+    var Store: ISymbolStore:= OpenReadOnlyStore(AProjectDb, Ok, {AQuiet=}True);
+    if (not Ok) or (Store = nil) then
+    begin
+      Writeln('WARNING: rule-cache not warmed: the project index could not be opened read-only');
+      Exit;
+    end;
+    var LibUsed: string:= '';
+    var Lib    : ISymbolStore:= nil;
+    if ALibraryDb <> '' then
+    begin
+      var LibWhy: string;
+      Lib:= OpenLibraryStoreIfCurrent(ALibraryDb, LibWhy);
+      if Lib <> nil then LibUsed:= ALibraryDb;
+    end;
+    var Rules: TArray<string>:= nil;
+    for var R: string in CACHED_RULES do Rules:= Rules + [R];
+    var KeyBefore: TRuleCacheKey:= TRuleCacheKey.Take(AProjectDb, LibUsed);
+    var Entry: TRuleCacheEntry:= ComputeRuleCacheEntry(Store, Lib, Rules);
+    Entry.Key:= KeyBefore;
+    if not TRuleCacheKey.Take(AProjectDb, LibUsed).SameAs(KeyBefore) then
+    begin
+      Writeln('rule-cache: not warmed -- an index changed while warming; the next lint fills it');
+      Exit;
+    end;
+    var Why: string;
+    if TRuleCache.Save(AProjectDb, Entry, Why) then
+      Writeln(Format('rule-cache: warmed %d finding(s) in %.1fs', [Length(Entry.Findings), Sw.Elapsed.TotalSeconds]))
+    else
+      Writeln('WARNING: rule-cache not warmed: ' + Why);
+  except
+    on E: Exception do Writeln('WARNING: rule-cache not warmed: ' + E.ClassName + ': ' + E.Message);
+  end;
 end;
 
 { The rule a lint run may NARROW its checkers to: ARule, except '' for a
