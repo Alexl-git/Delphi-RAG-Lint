@@ -66,6 +66,8 @@ uses
   , DRagLint.Charts.Question in '..\..\src\charts\DRagLint.Charts.Question.pas'
   , DRagLint.Charts.Ask in '..\..\src\charts\DRagLint.Charts.Ask.pas'
   , ChartsTests.Question in 'ChartsTests.Question.pas'
+  , DRagLint.Charts.Q.TouchesTables in '..\..\src\charts\DRagLint.Charts.Q.TouchesTables.pas'
+  , ChartsTests.Questions in 'ChartsTests.Questions.pas'
   ;
 
 const
