@@ -127,6 +127,19 @@ type
     [Test] procedure PlainClassIsRefusedByHeritage;
   end;
 
+  [TestFixture]
+  TEffectsTests = class(TQuestionFixture)
+  private
+    procedure Check(const pTarget, pFields, pDotSha: string);
+  public
+    [Test] procedure EffectsAndAnAdmissionMatchPowerShell;
+    [Test] procedure ParameterNamedByOrdinal;
+    [Test] procedure GroupedParametersCountAsOrdinals;
+    [Test] procedure PureIsEffectFreeNotNullSummary;
+    [Test] procedure NullVerdictIsNotAnalysed;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
 implementation
 
 uses
@@ -253,6 +266,22 @@ const
   LC_SERIAL_FIELDS = 'Form="DefineSerialNumbers.TfrmDefineSerialNumbers",Heritage="TForm",Wired=1,NotWired=2,Absent=4,Stages=7,Oddities=0,Clusters=8,ClickTargets=3,Expected=3,AllClickable=true';
   LC_SERIAL_DOT_SHA = 'e8d2936283a74340639c7c9ba806f7e8fa06101bd9c1e9a29aa75e6ac9b3021e';
   LC_LINES = 8;
+  EFFECTS_ID = 'effects';
+  EF_FIELDS = 'TestChart=false,Qname="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation",Outcome="effects",EffectFree="0",Summary="g,s,?",Effects=2,Unknown=1,Unnamed=0,D12Suspect=false,ParamCount=1,Witness="writes field FLastPersistError",Clusters=3,ClickTargets=1,Expected=1,AllClickable=true';
+  EF_DOT_SHA = '799de0250335f8d0854ab21560a6403d1e45b59bb6188ca3c4301ef85aa7bcb0';
+  EF_AP = 'Ap.APVDotProduct';
+  EF_AP_FIELDS = 'TestChart=false,Qname="Ap.APVDotProduct",Outcome="effects",EffectFree="0",Summary="p0,p3,?",Effects=2,Unknown=1,Unnamed=0,D12Suspect=false,ParamCount=6,Witness="calls Assert (unbound)",Clusters=3,ClickTargets=1,Expected=1,AllClickable=true';
+  EF_AP_DOT_SHA = 'e8e82e413a7bf9c037c50bfa08c51e9b98345b7b3e8f2a35c31e45f194251ca4';
+  EF_Z14 = 'Stats.Z14_LookupAcRe';
+  EF_Z14_FIELDS = 'TestChart=false,Qname="Stats.Z14_LookupAcRe",Outcome="effects",EffectFree="0",Summary="p3,p4,p5,?",Effects=3,Unknown=1,Unnamed=0,D12Suspect=false,ParamCount=6,Witness="writes through parameter #3 (p_AcNmbr)",Clusters=3,ClickTargets=1,Expected=1,AllClickable=true';
+  EF_Z14_DOT_SHA = '2c8c128da06e9829817c40e3d4efc365a6ede60455a62800e70d32082f8f1e12';
+  EF_PURE = 'BASICSF.BoolToStr';
+  EF_PURE_FIELDS = 'TestChart=false,Qname="BASICSF.BoolToStr",Outcome="pure",EffectFree="1",Summary="",Effects=0,Unknown=0,Unnamed=0,D12Suspect=false,ParamCount=1,Witness="",Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
+  EF_PURE_DOT_SHA = '1d7ab810b4ec07f7e00870e77e172dbb32d4654f321e4d3f67981d87a67554db';
+  EF_NA = 'uSetupDefaults.TGlobalSetupDefaults.GetDebug1';
+  EF_NA_FIELDS = 'TestChart=false,Qname="uSetupDefaults.TGlobalSetupDefaults.GetDebug1",Outcome="not-analysed",EffectFree="NULL",Summary="",Effects=0,Unknown=0,Unnamed=0,D12Suspect=false,ParamCount=0,Witness="",Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
+  EF_NA_DOT_SHA = 'de3e372524e883ca452e15acb8aa5191fe0b2ed56575926b411520b66c33b73f';
+  EF_LINES = 7;
   DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
@@ -914,6 +943,55 @@ begin
   Assert.AreEqual(CS_TARGET + ' is not a form: its heritage is TInterfacedObject, and none of ' +
     'TForm/TCustomForm/TdxRibbonForm/TDataModule/TFrame/TCustomFrame appears in it. Note this is a HERITAGE check -- ' +
     'a real form that wires nothing is a different answer and still renders.', Refusal(LIFECYCLE_ID, CS_TARGET, CLIENT_CLONE));
+end;
+
+{ ---- effects ---- }
+
+procedure TEffectsTests.Check(const pTarget, pFields, pDotSha: string);
+var
+  C: TChartResult;
+begin
+  if not EmitChart(EFFECTS_ID, pTarget, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(pFields, Fields(C));
+  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
+end;
+
+procedure TEffectsTests.EffectsAndAnAdmissionMatchPowerShell;
+begin
+  Check(CI_TARGET, EF_FIELDS, EF_DOT_SHA);
+end;
+
+procedure TEffectsTests.ParameterNamedByOrdinal;
+begin
+  Check(EF_Z14, EF_Z14_FIELDS, EF_Z14_DOT_SHA);
+end;
+
+procedure TEffectsTests.GroupedParametersCountAsOrdinals;
+begin
+  { APVDotProduct(V1; I11, I12; V2; ...): grouped names are separate ordinals, p3 is V2 }
+  Check(EF_AP, EF_AP_FIELDS, EF_AP_DOT_SHA);
+end;
+
+procedure TEffectsTests.PureIsEffectFreeNotNullSummary;
+begin
+  Check(EF_PURE, EF_PURE_FIELDS, EF_PURE_DOT_SHA);
+end;
+
+procedure TEffectsTests.NullVerdictIsNotAnalysed;
+begin
+  Check(EF_NA, EF_NA_FIELDS, EF_NA_DOT_SHA);
+end;
+
+procedure TEffectsTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(EFFECTS_ID, CI_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(EF_LINES, Length(L));
+  Assert.AreEqual('CHART effects ' + CI_TARGET + ' -- 2 effects / 1 unclassified tokens', L[CS_CHART_LINE]);
+  Assert.StartsWith('  (no anchored result rows -- open ', L[High(L)]);
 end;
 
 end.

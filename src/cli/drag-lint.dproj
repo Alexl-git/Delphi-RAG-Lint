@@ -290,6 +290,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.CrossesBoundary.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.ProtocolTrace.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Lifecycle.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Effects.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

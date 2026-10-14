@@ -232,6 +232,7 @@ uses
   DRagLint.Charts.Q.CrossesBoundary in '..\charts\DRagLint.Charts.Q.CrossesBoundary.pas',
   DRagLint.Charts.Q.ProtocolTrace in '..\charts\DRagLint.Charts.Q.ProtocolTrace.pas',
   DRagLint.Charts.Q.Lifecycle in '..\charts\DRagLint.Charts.Q.Lifecycle.pas',
+  DRagLint.Charts.Q.Effects in '..\charts\DRagLint.Charts.Q.Effects.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin
