@@ -216,7 +216,9 @@ type
   [TestFixture]
   TExceptionPathsTests = class(TQuestionFixture)
   private
-    procedure Check(const pDb, pTarget, pFields, pDotSha: string);
+    function FrozenDl(var pArgs: TQuestionArgs): Boolean;
+    function FrozenDotSha(const pDot: string): string;
+    procedure Check(const pDb, pTarget, pFields, pDotSha: string; pFrozenDl: Boolean = False);
   public
     [Test] procedure CaughtOnOneEdgeAndEscapingOnAnother;
     [Test] procedure CaughtTwoLevelsUp;
@@ -242,7 +244,7 @@ implementation
 uses
   System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
-  DRagLint.Charts.Exceptions;
+  DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
@@ -837,9 +839,9 @@ const
     'rtial:Format:652,partial:Format:690",WalkSentence="no handler found within 3 caller levels (3 caller' +
     's evaluated); reaches 1 caller with no resolved caller of its own; 2 caught at only some call sites;' +
     ' 2 callers not read: source changed since indexing",FilesTouched=2,StaleFiles=1,IndexCandidates=152,' +
-    'IndexRaise=30,IndexHandle=45,IndexDropped=8,IndexRaiseRoutines=20,IndexHandleRoutines=31,Clusters=5,' +
+    'IndexRaise=40,IndexHandle=59,IndexDropped=10,IndexRaiseRoutines=30,IndexHandleRoutines=45,Clusters=5,' +
     'ClickTargets=8,Expected=8,AllClickable=true';
-  EP_PARTIAL_DOT_SHA = 'fc5d4a14e99ac015a1a89549acb7eb66cade487f3000deeb88606ad8f43f3ea6';
+  EP_PARTIAL_DOT_SHA = 'c820e0c3c716c9416068e7e8576a05074d30f54207f60d9457cda8a3b524799f';
   EP_WIDE_FIELDS = 'Qname="DRagLint.Sql.Guarded.TSqlGuard.Create",Raises=5,RaiseTypes=1,RaiseTypeNames="ESqlGuardError",' +
     'RaiseLines="412,414,416,425,427",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,Bare' +
     'Excepts=0,InferredLines="",StaleRows=0,FocusFresh=true,Callers=2,CallerLevels=2,CallerNames="d1:DoSq' +
@@ -848,9 +850,27 @@ const
     'ing=0,NotGuardingUndrawn=0,NotEvaluated="",NoVerdicts=0,StaleCallers=2,Events="",WalkSentence="no ha' +
     'ndler found within 3 caller levels (2 callers evaluated); reaches 1 caller with no resolved caller o' +
     'f its own; 2 callers not read: source changed since indexing",FilesTouched=2,StaleFiles=1,IndexCandi' +
-    'dates=152,IndexRaise=30,IndexHandle=45,IndexDropped=8,IndexRaiseRoutines=20,IndexHandleRoutines=31,C' +
+    'dates=152,IndexRaise=40,IndexHandle=59,IndexDropped=10,IndexRaiseRoutines=30,IndexHandleRoutines=45,C' +
     'lusters=4,ClickTargets=8,Expected=8,AllClickable=true';
-  EP_WIDE_DOT_SHA = '83acbff111f4960350735aae2ca349339cc1316d87d5ebb15c203379f05cdb4b';
+  EP_WIDE_DOT_SHA = 'ad12b701629679fff6e951a09e4d6b9f88cf8a6d1f42ef15d1c50e63a4112635';
+  { DL_CLONE's FROZEN source: every file of the clone at the sha256 it was indexed with (recovered
+    from git by that sha; third_party\delphi-tree-sitter\TreeSitterLib.pas has no such blob and is
+    absent, so stale). The live tree the clone indexed, EP_DL_INDEXED_ROOT, is edited and re-indexed
+    all day, so its freshness is no fixture. EP_PARTIAL / EP_WIDE values: the PS bundler over the
+    same rewritten copy (DRAGLINT_CHARTS_ALLOW_LIVE_DB=1), its graph.dot hashed as FrozenDotSha does. }
+  EP_DL_SOURCE = 'charts\scratch\src\DL-drag-lint';
+  EP_DL_INDEXED_ROOT = 'C:\Projects\Delphi-RAG-lint\';  // dl:ok hardcoded-absolute-path@d2c6 -- REVIEWED 2026-10-14: the root the FROZEN DL clone indexed, matched against its files table and never opened; the fixture re-roots it to EP_DL_SOURCE
+  { stale BY CONSTRUCTION (its recorded sha256 replaced): the state the 2026-10-13 PS reference was
+    printed in, and the one the PS can still answer -- with this file fresh the PS SpawnAndCapture
+    walk dies on an Int32 -Pos (29385 * 100000 + 15) }
+  EP_DL_STALE_UNIT = '%\src\cli\DRagLint.CLI.pas';
+  EP_DL_STALE_SHA = 'stale-by-construction';
+  EP_ALLOW_LIVE_ON = '1';
+  EP_SQLITE_DRIVER = 'SQLite';
+  EP_SQLITE_DATABASE = 'Database';
+  EP_DL_REROOT_SQL = 'UPDATE files SET path = :root || substr(path, :cut) WHERE substr(path, 1, :len) = :old COLLATE NOCASE';
+  EP_DL_FILES_SQL = 'SELECT count(*) FROM files';
+  EP_DL_STALE_SQL ='UPDATE files SET sha256 = :sha WHERE path LIKE :unit';
   EP_CAP_FIELDS = 'Qname="MStreams.TABZMemoryStream.EnsureMoreCapacity",Raises=1,RaiseTypes=1,RaiseTypeNames="EStreamEr' +
     'ror",RaiseLines="2163",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,BareExcepts=0,' +
     'InferredLines="",StaleRows=0,FocusFresh=true,Callers=150,CallerLevels=2,CallerNames="d1:Read,d1:Writ' +
@@ -1050,6 +1070,14 @@ begin
   var H:= THashSHA2.Create(THashSHA2.TSHA2Version.SHA256); // dl:ok object-leak@2527 -- THashSHA2 is a record, not a class: nothing to free
   H.Update(TFile.ReadAllBytes(pPath));
   Result:= H.HashAsString;
+end;
+
+{ pPath exactly as RowHref escapes it into a draglint:// link (between "file=" and the "&") }
+function HrefPath(const pPath: string): string;
+begin
+  var H:= RowHref(pPath, 0);
+  var From:= Pos('=', H) + 1;
+  Result:= Copy(H, From, Pos('&', H) - From);
 end;
 
 procedure TQuestionFixture.Setup;
@@ -2237,19 +2265,72 @@ end;
 
 { ---- exception-paths ---- }
 
-{ the bundler's -Depth for exception-paths (3) and -Cap (20), as New-DiagramArtifact passes them }
-procedure TExceptionPathsTests.Check(const pDb, pTarget, pFields, pDotSha: string);
+{ pArgs.DbPath (DL_CLONE) copied into this test's scratch with its files table re-rooted from
+  EP_DL_INDEXED_ROOT to EP_DL_SOURCE and EP_DL_STALE_UNIT made stale, so nothing reads the live
+  tree; False (with a passing note) when the frozen source is missing, as for a missing clone }
+function TExceptionPathsTests.FrozenDl(var pArgs: TQuestionArgs): Boolean;
+begin
+  var Src:= TPath.Combine(RepoRoot, EP_DL_SOURCE);
+  Result:= TDirectory.Exists(Src);
+  if not Result then
+  begin
+    Assert.Pass('frozen source missing: ' + Src);
+    Exit;
+  end;
+  TDirectory.CreateDirectory(FOutRoot);
+  var Db:= TPath.Combine(FOutRoot, DL_CLONE);
+  TFile.Copy(pArgs.DbPath, Db);
+  var Conn:= TFDConnection.Create(nil);
+  try
+    Conn.DriverName:= EP_SQLITE_DRIVER;
+    Conn.Params.Values[EP_SQLITE_DATABASE]:= Db;
+    { every row re-rooted: not one file is left to be read from the live tree }
+    var Files:= Integer(Conn.ExecSQLScalar(EP_DL_FILES_SQL));
+    Assert.AreEqual(Files, Conn.ExecSQL(EP_DL_REROOT_SQL, [IncludeTrailingPathDelimiter(Src), Length(EP_DL_INDEXED_ROOT) + 1,
+      Length(EP_DL_INDEXED_ROOT), EP_DL_INDEXED_ROOT]), EP_DL_INDEXED_ROOT);
+    Assert.AreEqual(1, Conn.ExecSQL(EP_DL_STALE_SQL, [EP_DL_STALE_SHA, EP_DL_STALE_UNIT]), EP_DL_STALE_UNIT);
+  finally
+    Conn.Free;
+  end;
+  pArgs.DbPath:= Db;
+end;
+
+{ the sha256 of graph.dot as the clone would draw it in place: the frozen root in every escaped
+  href read back as EP_DL_INDEXED_ROOT, so the hash does not depend on where the worktree is }
+function TExceptionPathsTests.FrozenDotSha(const pDot: string): string;
+begin
+  var Dot:= TFile.ReadAllText(pDot, TEncoding.UTF8);
+  Dot:= Dot.Replace(HrefPath(IncludeTrailingPathDelimiter(TPath.Combine(RepoRoot, EP_DL_SOURCE))),
+    HrefPath(EP_DL_INDEXED_ROOT));
+  Result:= THashSHA2.GetHashString(Dot);
+end;
+
+{ the bundler's -Depth for exception-paths (3) and -Cap (20), as New-DiagramArtifact passes them;
+  pFrozenDl runs DL_CLONE against its frozen source (FrozenDl) }
+procedure TExceptionPathsTests.Check(const pDb, pTarget, pFields, pDotSha: string; pFrozenDl: Boolean);
 var
   A: TQuestionArgs;
   E: TChartEmitter;
 begin
   if not Args(EP_ID, pTarget, pDb, A) then
     Exit;
+  if pFrozenDl and not FrozenDl(A) then
+    Exit;
   A.Depth:= QuestionDefaultDepth(EP_ID);
   Assert.IsTrue(FindChartQuestion(EP_ID, E));
-  var C:= E(A, FOutRoot);
+  { the re-rooted copy sits outside the clone root: CloneDb admits it only under the override }
+  var Prev:= GetEnvironmentVariable(ALLOW_LIVE_DB_ENV_VAR);
+  if pFrozenDl then
+    SetEnvironmentVariable(ALLOW_LIVE_DB_ENV_VAR, EP_ALLOW_LIVE_ON);
+  var C: TChartResult;
+  try
+    C:= E(A, FOutRoot);
+  finally
+    if pFrozenDl then
+      SetEnvironmentVariable(ALLOW_LIVE_DB_ENV_VAR, if Prev = '' then nil else PChar(Prev));
+  end;
   Assert.AreEqual(pFields, Fields(C));
-  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
+  Assert.AreEqual(pDotSha, if pFrozenDl then FrozenDotSha(C.Layout.Dot) else FileSha(C.Layout.Dot));
 end;
 
 procedure TExceptionPathsTests.CaughtOnOneEdgeAndEscapingOnAnother;
@@ -2304,14 +2385,16 @@ end;
 
 procedure TExceptionPathsTests.CaughtAtOnlySomeCallSites;
 begin
-  { Format calls SpawnAndCapture twice, once inside its try: "caught ... for k of n call sites" (partial) }
-  Check(DL_CLONE, EP_PARTIAL, EP_PARTIAL_FIELDS, EP_PARTIAL_DOT_SHA);
+  { Format calls SpawnAndCapture twice, once inside its try: "caught ... for k of n call sites" (partial).
+    Against the frozen source: the live tree drifts under every reindex and edit (FrozenDl) }
+  Check(DL_CLONE, EP_PARTIAL, EP_PARTIAL_FIELDS, EP_PARTIAL_DOT_SHA, True);
 end;
 
 procedure TExceptionPathsTests.LinesPastTheIntegerRangeKeepTheirNumbers;
 begin
-  { a caller in DRagLint.CLI.pas calls at line 29442: line * 100000 overflows an Integer, the PS widens it }
-  Check(DL_CLONE, EP_WIDE, EP_WIDE_FIELDS, EP_WIDE_DOT_SHA);
+  { a caller in DRagLint.CLI.pas calls at line 29442: line * 100000 overflows an Integer, the PS widens it.
+    Against the frozen source: the live tree drifts under every reindex and edit (FrozenDl) }
+  Check(DL_CLONE, EP_WIDE, EP_WIDE_FIELDS, EP_WIDE_DOT_SHA, True);
 end;
 
 procedure TExceptionPathsTests.CallerWalkCappedAt150;
