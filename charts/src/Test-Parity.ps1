@@ -814,8 +814,17 @@ function Test-TextControl([string] $PsFile, [string] $DlFile) {
   $code = $LASTEXITCODE
   $n = -1
   try { $j = (@($cmp) -join "`n") | ConvertFrom-Json -ErrorAction Stop; $n = [int]$j.counts.removed + [int]$j.counts.added } catch { }
-  if ($code -eq 1 -and $n -ge 1) { return "PASS: a one-line change planted in the Delphi text was reported ($n line(s) differ)" }
-  "FAIL: a one-line change planted in the Delphi text went UNSEEN (compare exit $code, $n difference(s))"
+  $result = "FAIL: a one-line change planted in the Delphi text went UNSEEN (compare exit $code, $n difference(s))"
+  if ($code -eq 1 -and $n -ge 1) { $result = "PASS: a one-line change planted in the Delphi text was reported ($n line(s) differ)" }
+  if ($result -like 'FAIL:*') {
+    # The planted copy and compare's stderr are deleted below, so their evidence is printed first.
+    Write-Host "  positive control diagnostics -- compare stdout:"
+    @($cmp) | ForEach-Object { Write-Host "    $_" }
+    Write-Host "  compare stderr ($planted.err):"
+    if (Test-Path -LiteralPath "$planted.err") { Get-Content -LiteralPath "$planted.err" | ForEach-Object { Write-Host "    $_" } }
+  }
+  Remove-Item -LiteralPath $planted, "$planted.err" -Force -ErrorAction SilentlyContinue
+  $result
 }
 
 function Test-DotControl([string] $PsBundle, [string] $DlBundle, [string] $Root) {
