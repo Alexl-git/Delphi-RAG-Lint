@@ -25,7 +25,7 @@ type
 implementation
 
 uses
-  System.SysUtils, System.IOUtils, System.Generics.Collections, System.Generics.Defaults,
+  System.SysUtils, System.Math, System.IOUtils, System.Generics.Collections, System.Generics.Defaults,
   DRagLint.Charts.Index, DRagLint.Charts.Source, DRagLint.Charts.Exceptions;
 
 const
@@ -123,7 +123,7 @@ function BlocksText(const pTb: TTryBlocks): string;
 begin
   var Sorted:= Copy(pTb.Blocks);
   TArray.Sort<TTryBlock>(Sorted, TComparer<TTryBlock>.Construct(
-    function(const pA, pB: TTryBlock): Integer begin Result:= pA.TryPos - pB.TryPos; end));
+    function(const pA, pB: TTryBlock): Integer begin Result:= CompareValue(pA.TryPos, pB.TryPos); end));
   var Parts: TArray<string>:= [];
   for var B in Sorted do
     Parts:= Parts + [Format('%d/%s/%s/%d:%d', [B.TryPos div POS_SCALE,
@@ -205,7 +205,7 @@ begin
     var Stops:= pStopSet;
     var Has:= pHas;
     var W:= InvokeExceptionWalk(1, G, pDepth, 'EX',
-      function(pCaller, pCallee: Integer; const pSites: TArray<Integer>; const pType: string): TEdgeVerdict
+      function(pCaller, pCallee: Integer; const pSites: TArray<Int64>; const pType: string): TEdgeVerdict
       begin
         Result:= Default(TEdgeVerdict);
         Result.Stopped:= False;

@@ -9,7 +9,9 @@ unit DRagLint.Charts.Producer.Delphi;
   resolve-dbs (manifest, pairing file), which lives in DRagLint.CLI and is not linked from
   src\charts, so a command that names only a project goes to the fallback, which resolves
   it exactly as Ask-Report does. Freshness IS checked in-process, through the engine's own
-  DRagLint.Index.Freshness: a stale index refuses with exit 3 unless AllowStale.
+  DRagLint.Index.Freshness: a stale index refuses with exit 3 unless AllowStale. The SERVER and SQL
+  indexes a question reads, when not given, are paired from report-pairs.json in-process, through the
+  same DRagLint.Charts.Pairs the ask verb uses (Ask-Report's step 2, its refusals included).
 
   LIVE INDEXES (owner ruling 2026-10-14). In real use -- `drag-lint compare` and `drag-lint ask` --
   this producer answers from the live index, protected by the staleness refusal (exit 3, AllowStale
@@ -57,7 +59,8 @@ type
     /// <param name="pCommand">The question and its explicit arguments.</param>
     /// <param name="pOptions">Index override, staleness policy, engine, script, timeout.</param>
     /// <returns>As IReportProducer.Produce: exit 0 answered (plain text, CRLF lines, header first),
-    /// 1 refused (the emitter's message), 2 setup (index missing, charts folder not found, or a
+    /// 1 refused (the emitter's message), 2 setup (index missing, a SERVER / SQL index the question
+    /// reads neither given nor paired by report-pairs.json -- Ask-Report's own message --, charts folder not found, or a
     /// PORTED question that has to fall back while its Emit-*.ps1 is not beside Ask-Report.ps1 --
     /// an installed copy, which does not ship the ported scripts), 3 stale.</returns>
     function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
@@ -85,7 +88,7 @@ uses
   System.SysUtils, System.IOUtils, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness
   , DRagLint.Core.Model // dl:unit DRagLint.Core.Model accepted -- the engine version the header names is the product constant itself
   , DRagLint.Charts.Question // dl:unit DRagLint.Charts.Question accepted -- the bundler defaults and Ask-Report's refusal code travel with the question types
-  , DRagLint.Charts.Ask, DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Index, DRagLint.Charts.Tools
+  , DRagLint.Charts.Ask, DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Index, DRagLint.Charts.Tools, DRagLint.Charts.Pairs
   , DRagLint.Charts.Q.TouchesTables  // dl:ok unused-unit-in-uses@5c7b -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.ShownWhere  // dl:ok unused-unit-in-uses@62b1 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Deps  // dl:ok unused-unit-in-uses@6504 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
@@ -97,6 +100,10 @@ uses
   , DRagLint.Charts.Q.ProtocolTrace  // dl:ok unused-unit-in-uses@a865 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Lifecycle  // dl:ok unused-unit-in-uses@6e60 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Effects  // dl:ok unused-unit-in-uses@db90 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.FeedsFrom  // dl:ok unused-unit-in-uses@e7ae -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.LandsWhere  // dl:ok unused-unit-in-uses@43f8 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Consumers  // dl:ok unused-unit-in-uses@e7fa -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.ExceptionPaths  // dl:ok unused-unit-in-uses@4e99 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   ;
 
 const
@@ -104,6 +111,9 @@ const
   EXIT_SETUP = 2;
   REPORTS_SUBDIR = 'drag-lint-reports';
   CROSSES_BOUNDARY = 'crosses-boundary';
+  { Ask-Report's own override flags, named in its pairing refusals }
+  ASK_REPORT_SERVER_FLAG = '-ServerDbPath';
+  ASK_REPORT_SQL_FLAG = '-SqlDbPath';
   CRLF = #13#10;
 
 function ProducerForCompare: IReportProducer;
@@ -145,6 +155,15 @@ begin
   Result.Reason:= pReason;
 end;
 
+{ True when pDb is already in pList (paths compared as Windows compares them) }
+function InIndexList(const pDb: string; const pList: TArray<string>): Boolean;
+begin
+  Result:= False;
+  for var D in pList do
+    if SameText(D, pDb) then
+      Exit(True);
+end;
+
 { Ask-Report's step 3, through the engine's own sweep; the store is closed before the emitter opens the index }
 function Freshness(const pDb: string): TFreshnessReport;
 begin
@@ -158,6 +177,25 @@ begin
   Result:= if pCommand.Has(pName) then StrToIntDef(pCommand.Get(pName), pDefault) else pDefault;
 end;
 
+{ The SERVER and SQL indexes, only for a question that reads them (Ask-Report's $needServer /
+  $needSql): as given, else paired from report-pairs.json exactly as Ask-Report's step 2 pairs
+  them -- compare passes only --db (R5). Raises EReportPairStop with Ask-Report's code and message. }
+function PairedIndexes(const pCommand: TReportCommand; const pOptions: TProduceOptions): TPairedIndexes;
+begin
+  Result:= Default(TPairedIndexes);
+  var Req:= Default(TPairRequest);
+  Req.Question:= pCommand.Question.ToLower;
+  Req.Db:= pOptions.DbOverride;
+  Req.Engine:= pOptions.EnginePath;
+  Req.NeedServer:= QuestionReadsServerIndex(Req.Question);
+  Req.NeedSql:= QuestionReadsSqlIndex(Req.Question);
+  Req.ServerFlag:= ASK_REPORT_SERVER_FLAG;
+  Req.SqlFlag:= ASK_REPORT_SQL_FLAG;
+  if Req.NeedServer then Result.Server:= pOptions.ServerDbOverride;
+  if Req.NeedSql then Result.Sql:= pOptions.SqlDbOverride;
+  if (Req.NeedServer and (Result.Server = '')) or (Req.NeedSql and (Result.Sql = '')) then
+    PairOtherIndexes(LoadReportPairs(pOptions.PairsFile, pOptions.ScriptPath), Req, Result);
+end;
 { Hands a question to the fallback. A PORTED question falls back only when its PowerShell emitter
   is beside the resolved Ask-Report.ps1: the installer does not ship the ported Emit-*.ps1 (owner
   ruling), so in an installed copy the fallback would fail obscurely -- refuse with pWhy instead.
@@ -190,12 +228,20 @@ begin
     Exit(FallBack(pCommand, pOptions, WhyNot));
   end;
   FLast:= 'Delphi in-process (' + pCommand.Question.ToLower + ')';
+  var Ix: TPairedIndexes;
+  try
+    Ix:= PairedIndexes(pCommand, pOptions);
+  except
+    on E: EReportPairStop do
+      Exit(Fail(E.Code, E.Message));
+  end;
   var Db:= ExpandFileName(pOptions.DbOverride);
-  if not TFile.Exists(Db) then
-    Exit(Fail(EXIT_SETUP, 'index not found: ' + Db));
+  var Server:= if Ix.Server <> '' then ExpandFileName(Ix.Server) else '';
+  var Sql:= if Ix.Sql <> '' then ExpandFileName(Ix.Sql) else '';
   var Other:= if pOptions.CounterpartDbOverride <> '' then ExpandFileName(pOptions.CounterpartDbOverride) else '';
-  if (Other <> '') and not TFile.Exists(Other) then
-    Exit(Fail(EXIT_SETUP, 'index not found: ' + Other));
+  for var D in TArray<string>.Create(Db, Server, Sql, Other) do
+    if (D <> '') and not TFile.Exists(D) then
+      Exit(Fail(EXIT_SETUP, 'index not found: ' + D));
   var Why: string;
   var Script:= ResolveAskReportScript(pOptions.ScriptPath, Why);
   if Script = '' then
@@ -207,11 +253,13 @@ begin
   Q.Target:= pCommand.Get('Target');
   Q.DbPath:= Db;
   Q.CounterpartDb:= Other;
+  Q.ServerDbPath:= Server;
+  Q.SqlDbPath:= Sql;
   Q.OutRoot:= if pOptions.OutRoot <> '' then pOptions.OutRoot else FOutRoot;
   Q.ChartsRoot:= ExtractFileDir(ExtractFileDir(Script));
   Q.ScriptDir:= ExtractFileDir(Script);  { installed copy: <app>\bin, where graphviz\bin sits beside the scripts }
   Q.Cap:= NumArg(pCommand, 'Cap', DEFAULT_CAP);
-  Q.Depth:= NumArg(pCommand, 'Depth', DEFAULT_DEPTH);
+  Q.Depth:= NumArg(pCommand, 'Depth', QuestionDefaultDepth(Q.Question));
   Q.SurfaceCap:= NumArg(pCommand, 'SurfaceCap', DEFAULT_SURFACE_CAP);
   Q.MaxRows:= NumArg(pCommand, 'MaxRows', DEFAULT_MAX_ROWS);
   Q.Command:= pCommand;
@@ -227,11 +275,12 @@ begin
     of the in-process path, so the question is handed to the fallback producer and Describe
     says why. Nothing escapes Produce. }
   try
-    { every index the question reads, as Ask-Report checks them (the counterpart too) }
+    { every index the question reads, once each, in Ask-Report's order: project, server, sql, counterpart }
     var StaleLines:= '';
     var Read: TArray<string>:= [Db];
-    if (Other <> '') and not SameText(Other, Db) then
-      Read:= Read + [Other];
+    for var D in TArray<string>.Create(Server, Sql, Other) do
+      if (D <> '') and not InIndexList(D, Read) then
+        Read:= Read + [D];
     for var D in Read do
     begin
       var Rep:= Freshness(D);

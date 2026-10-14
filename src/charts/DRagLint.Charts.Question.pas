@@ -48,6 +48,14 @@ type
     DbPath       : string;
     /// <summary>crosses-boundary's other half (-CounterpartDb), full path; '' = not given.</summary>
     CounterpartDb: string;
+    /// <summary>The SERVER index (-ServerDbPath), full path; '' = not given. Carried only for a
+    /// question that reads it (QuestionReadsServerIndex); the emitter handles '' as its
+    /// Emit-*.ps1 handles the omitted parameter.</summary>
+    ServerDbPath : string;
+    /// <summary>The SQL-script index (-SqlDbPath), full path; '' = not given. Carried only for a
+    /// question that reads it (QuestionReadsSqlIndex); the emitter handles '' as its
+    /// Emit-*.ps1 handles the omitted parameter.</summary>
+    SqlDbPath    : string;
     /// <summary>Where the bundle folder is made (Ask-Report -OutRoot).</summary>
     OutRoot      : string;
     /// <summary>The repo's charts folder: the clone root is &lt;ChartsRoot&gt;\scratch\db.</summary>
@@ -187,6 +195,26 @@ function QuestionIds: TArray<string>;
 /// <returns>False for an unknown id (both labels '').</returns>
 function QuestionVocab(const pId: string; out pLeft, pRight: string): Boolean;
 
+/// <summary>Whether a question reads the SERVER index (Ask-Report's $needServer).</summary>
+/// <param name="pId">The question id; compared case-insensitively.</param>
+/// <returns>True for round-trip and lands-where.</returns>
+/// <remarks>The same list decides New-DiagramArtifact's regenerate -ServerDbPath and
+/// Ask-Report's 'INDEX ... (server)' line.</remarks>
+function QuestionReadsServerIndex(const pId: string): Boolean;
+
+/// <summary>Whether a question reads the SQL-script index (Ask-Report's $needSql).</summary>
+/// <param name="pId">The question id; compared case-insensitively.</param>
+/// <returns>True for round-trip, lands-where, consumers and feeds-from.</returns>
+/// <remarks>The same list decides New-DiagramArtifact's regenerate -SqlDbPath and
+/// Ask-Report's 'INDEX ... (sql)' line.</remarks>
+function QuestionReadsSqlIndex(const pId: string): Boolean;
+
+/// <summary>The -Depth a question walks when none is given (New-DiagramArtifact's $EffDepth).</summary>
+/// <param name="pId">The question id; compared case-insensitively.</param>
+/// <returns>3 for exception-paths, 4 for round-trip, else DEFAULT_DEPTH.</returns>
+/// <remarks>The value the emitter walks, meta.json's depth and the regenerate line's -Depth.</remarks>
+function QuestionDefaultDepth(const pId: string): Integer;
+
 /// <summary>Encodes a string as ConvertTo-Json writes it.</summary>
 /// <param name="pValue">The text.</param>
 /// <returns>The quoted JSON string: '"' and '\' escaped, control characters as \b \f \n \r \t
@@ -200,6 +228,13 @@ uses
   , DRagLint.Charts.Tools // dl:unit DRagLint.Charts.Tools accepted -- the shared dot.exe default travels with the dot walk (ResolveGraphvizDot) it feeds
   ;
 
+type
+  { one row of DEFAULT_DEPTHS }
+  TDepthDefault = record
+    Id   : string;
+    Depth: Integer;
+  end;
+
 const
   CLONE_SUBDIR = 'scratch\db';
   SCRIPTS_SUBDIR = 'src';
@@ -207,6 +242,13 @@ const
   HEX_WIDTH = 4;
   { below this a whole double prints exactly as an integer }
   EXACT_DOUBLE_LIMIT = 1E15;
+  { Ask-Report.ps1's $needServer and $needSql }
+  READS_SERVER: array[0..1] of string = ('round-trip', 'lands-where');
+  READS_SQL: array[0..3] of string = ('round-trip', 'lands-where', 'consumers', 'feeds-from');
+  { New-DiagramArtifact's $EffDepth: the questions whose -Depth default is not DEFAULT_DEPTH }
+  DEFAULT_DEPTHS: array[0..1] of TDepthDefault = (
+    (Id: 'exception-paths'; Depth: 3),
+    (Id: 'round-trip'; Depth: 4));
   QUESTION_CAPTIONS: array[0..25] of array[0..1] of string = (
     ('butterfly', 'Callers and callees (butterfly chart)...'),
     ('who-calls', 'Who calls this routine...'),
@@ -422,6 +464,30 @@ begin
   pLeft:= '';
   pRight:= '';
   Result:= False;
+end;
+
+function QuestionReadsServerIndex(const pId: string): Boolean;
+begin
+  Result:= False;
+  for var Id in READS_SERVER do
+    if SameText(Id, pId) then
+      Exit(True);
+end;
+
+function QuestionReadsSqlIndex(const pId: string): Boolean;
+begin
+  Result:= False;
+  for var Id in READS_SQL do
+    if SameText(Id, pId) then
+      Exit(True);
+end;
+
+function QuestionDefaultDepth(const pId: string): Integer;
+begin
+  Result:= DEFAULT_DEPTH;
+  for var D in DEFAULT_DEPTHS do
+    if SameText(D.Id, pId) then
+      Exit(D.Depth);
 end;
 
 initialization

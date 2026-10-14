@@ -225,6 +225,7 @@ uses
   DRagLint.Charts.Q.TouchesTables in '..\charts\DRagLint.Charts.Q.TouchesTables.pas',
   DRagLint.Charts.Q.ShownWhere in '..\charts\DRagLint.Charts.Q.ShownWhere.pas',
   DRagLint.Charts.Q.Deps in '..\charts\DRagLint.Charts.Q.Deps.pas',
+  DRagLint.Charts.Pairs in '..\charts\DRagLint.Charts.Pairs.pas',
   DRagLint.Charts.Producer.Delphi in '..\charts\DRagLint.Charts.Producer.Delphi.pas',
   DRagLint.Charts.AskVerb in '..\charts\DRagLint.Charts.AskVerb.pas',
   DRagLint.Charts.Q.ClassSurface in '..\charts\DRagLint.Charts.Q.ClassSurface.pas',
@@ -235,6 +236,10 @@ uses
   DRagLint.Charts.Q.ProtocolTrace in '..\charts\DRagLint.Charts.Q.ProtocolTrace.pas',
   DRagLint.Charts.Q.Lifecycle in '..\charts\DRagLint.Charts.Q.Lifecycle.pas',
   DRagLint.Charts.Q.Effects in '..\charts\DRagLint.Charts.Q.Effects.pas',
+  DRagLint.Charts.Q.FeedsFrom in '..\charts\DRagLint.Charts.Q.FeedsFrom.pas',
+  DRagLint.Charts.Q.LandsWhere in '..\charts\DRagLint.Charts.Q.LandsWhere.pas',
+  DRagLint.Charts.Q.Consumers in '..\charts\DRagLint.Charts.Q.Consumers.pas',
+  DRagLint.Charts.Q.ExceptionPaths in '..\charts\DRagLint.Charts.Q.ExceptionPaths.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

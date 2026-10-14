@@ -456,7 +456,7 @@ function ChainKey(const pDfm, pDs: string): string;
 /// <returns>The state; Db is the file SQLite reports for the main database.</returns>
 /// <remarks>Port of Get-OrmLinksState (Emit-Common.ps1:2387). PS difference: the PS ran
 /// Get-CloneDb on its path; the caller guards the path before it opens the index.</remarks>
-function OrmLinksState(pIndex: TChartsIndex): TOrmLinksState;  // dl:ok unused-public-symbol@80f4 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function OrmLinksState(pIndex: TChartsIndex): TOrmLinksState;
 
 implementation
 
