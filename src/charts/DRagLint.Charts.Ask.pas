@@ -616,7 +616,9 @@ begin
   if not FindChartQuestion(pArgs.Question, Emitter) then
     raise EChartsQuestion.CreateFmt('%s is not ported to Delphi', [pArgs.Question]);
   QuestionVocab(pArgs.Question, LeftLabel, RightLabel);
-  var Dir:= TPath.Combine(pArgs.OutRoot, pArgs.Question + '-' + BundleSlug(pArgs.Target));
+  { New-DiagramArtifact's slug: the target, then '.<Control>' when one is given }
+  var Slugged:= if pArgs.Command.Get('Control') <> '' then pArgs.Target + '.' + pArgs.Command.Get('Control') else pArgs.Target;
+  var Dir:= TPath.Combine(pArgs.OutRoot, pArgs.Question + '-' + BundleSlug(Slugged));
   var DirWasNew:= not TDirectory.Exists(Dir);
   ForceDirectories(Dir);
   try

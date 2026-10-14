@@ -80,6 +80,7 @@ uses
   , DRagLint.Charts.Q.ShownWhere  // dl:ok unused-unit-in-uses@62b1 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Deps  // dl:ok unused-unit-in-uses@6504 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.ClassSurface  // dl:ok unused-unit-in-uses@239f -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.EventWiring  // dl:ok unused-unit-in-uses@60ca -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   ;
 
 const

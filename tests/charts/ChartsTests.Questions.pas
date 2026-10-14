@@ -67,6 +67,15 @@ type
     [Test] procedure UnitIsRefused;
   end;
 
+  [TestFixture]
+  TEventWiringTests = class(TQuestionFixture)
+  public
+    [Test] procedure EmitterMatchesPowerShell;
+    [Test] procedure ControlFilterMatchesPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure NonFormIsRefused;
+  end;
+
 implementation
 
 uses
@@ -130,6 +139,15 @@ const
   CS_DOT_SHA = '58ed8c4fc1489b24c8d85c5b455b5a7213c36db7d85585db3a3ca0e5f1135ed3';
   CS_LINES = 32;
   CS_CHART_LINE = 4;
+  EVENT_WIRING_ID = 'event-wiring';
+  EW_TARGET = 'uMain.TfrmMAIN';
+  EW_FIELDS = 'Events=43,Handlers=43,Components=41,EventKinds=5,DfmResolved=43,DfmFallback=0,Edges=43,Clusters=6,ClickTargets=86,Expected=86,AllClickable=true';
+  EW_DOT_SHA = 'fc3fe4545efeeb4b0fb872f21a0fe45480107ebb8bd025a86be300749f8a7074';
+  EW_CONTROL = 'CauseList';
+  EW_CONTROL_FIELDS = 'Events=1,Handlers=1,Components=1,EventKinds=1,DfmResolved=1,DfmFallback=0,Edges=1,Clusters=2,ClickTargets=2,Expected=2,AllClickable=true';
+  EW_CONTROL_DOT_SHA = '42866c97d39012f0ad8a7bf28ac924f82e17304ce3ed7b556f4309cab8e878bb';
+  EW_LINES = 86;
+  EW_FIRST_ROW = 5;
   DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
@@ -480,6 +498,56 @@ procedure TClassSurfaceTests.UnitIsRefused;
 begin
   Assert.Contains(Refusal(CLASS_SURFACE_ID, 'Blueprint4.ViewModel', CLIENT_CLONE),
     'class-surface needs a type; a unit has no members to expose');
+end;
+
+{ ---- event-wiring ---- }
+
+procedure TEventWiringTests.EmitterMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(EVENT_WIRING_ID, EW_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(EW_FIELDS, Fields(C));
+  Assert.AreEqual(EW_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TEventWiringTests.ControlFilterMatchesPowerShell;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(EVENT_WIRING_ID, EW_TARGET, CLIENT_CLONE, A) then
+    Exit;
+  var Ctl: TCommandArg;
+  Ctl.Name:= 'Control';
+  Ctl.Value:= EW_CONTROL;
+  A.Command.Args:= A.Command.Args + [Ctl];
+  Assert.IsTrue(FindChartQuestion(EVENT_WIRING_ID, E), 'event-wiring is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(EW_CONTROL_FIELDS, Fields(C));
+  Assert.AreEqual(EW_CONTROL_DOT_SHA, FileSha(C.Layout.Dot));
+  { New-DiagramArtifact's slug takes the -Control too }
+  var Answer:= AskChartQuestion(A);
+  Assert.EndsWith('\event-wiring-uMain_TfrmMAIN_CauseList', Answer.BundleDir);
+  Assert.AreEqual('COMMAND event-wiring -Target "uMain.TfrmMAIN" -Control "CauseList"', Answer.Lines[1]);
+end;
+
+procedure TEventWiringTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(EVENT_WIRING_ID, EW_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(EW_LINES, Length(L));
+  Assert.AreEqual('  CauseList.OnClick = CauseListClick @uMain.dfm:3065', L[EW_FIRST_ROW]);
+  Assert.StartsWith('  ... 6 more row(s) not printed here (-MaxRows 80): ', L[High(L)]);
+end;
+
+procedure TEventWiringTests.NonFormIsRefused;
+begin
+  Assert.StartsWith('no dfm_event facts under ' + CS_TARGET + ' (index has ',
+    Refusal(EVENT_WIRING_ID, CS_TARGET, CLIENT_CLONE));
 end;
 
 end.

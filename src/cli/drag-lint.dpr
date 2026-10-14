@@ -226,6 +226,7 @@ uses
   DRagLint.Charts.Producer.Delphi in '..\charts\DRagLint.Charts.Producer.Delphi.pas',
   DRagLint.Charts.AskVerb in '..\charts\DRagLint.Charts.AskVerb.pas',
   DRagLint.Charts.Q.ClassSurface in '..\charts\DRagLint.Charts.Q.ClassSurface.pas',
+  DRagLint.Charts.Q.EventWiring in '..\charts\DRagLint.Charts.Q.EventWiring.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

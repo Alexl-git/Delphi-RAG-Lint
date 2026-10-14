@@ -68,6 +68,7 @@ uses
   , DRagLint.Charts.Q.ShownWhere in '..\..\src\charts\DRagLint.Charts.Q.ShownWhere.pas'
   , DRagLint.Charts.Q.Deps in '..\..\src\charts\DRagLint.Charts.Q.Deps.pas'
   , DRagLint.Charts.Q.ClassSurface in '..\..\src\charts\DRagLint.Charts.Q.ClassSurface.pas'
+  , DRagLint.Charts.Q.EventWiring in '..\..\src\charts\DRagLint.Charts.Q.EventWiring.pas'
   , DRagLint.Core.Model
   ;
 
