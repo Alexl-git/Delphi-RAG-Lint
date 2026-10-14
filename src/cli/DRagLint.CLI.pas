@@ -165,6 +165,7 @@ uses
   , DRagLint.Refactor   .Rename
   , DRagLint.Refactor   .TextEdit
   , DRagLint.Refactor   .NamingFix
+  , DRagLint.Refactor   .MultiProjectRename { a naming fix on a unit several project DBs own (lint --fix) }
   , DRagLint.Refactor   .DocStub
   , DRagLint.Doc        .Facts
   , DRagLint.Doc        .Regions
@@ -1203,6 +1204,9 @@ function IfdefProjectFile(const AArgs: TArgs; const ADbPath: string): string; fo
 { Forward: the naming autofix's stale-index hint (FinalizeAndOutput) lives
   beside IfdefProjectFile, far below. }
 function NamingReindexHint(const AArgs: TArgs; const ADbPath: string): string; forward;
+{ Forward: the multi-project rename's reindex callback (FinalizeAndOutput)
+  wraps RefreshProjectIndex, which sits beside convert-apply far below. }
+function ReindexOwnerProject(const AProjectFile, ADbPath: string): Boolean; forward;
 function ResolveLibraryDb(const AArgs: TArgs): string        ; forward;
 function LintLibraryDb     (const AArgs: TArgs): string        ; forward;
 function ResolveFrameworkContextDb(const AArgs: TArgs; const APathsToScan: TArray<string>): string; forward;
@@ -11896,6 +11900,174 @@ begin
   end;
 end;
 
+type
+  { What PlanMultiOwnerNaming hands back to FinalizeAndOutput. }
+  TRenameOutcome = record
+    Plans  : TArray<TTargetPlan>; // every plan, for the --json output
+    Edits  : TArray<TTextEdit>;   // the applied targets' merged edits
+    Applied: Integer;             // targets applied (added to FixCount)
+    Refusal: string;              // single fix only: why nothing was renamed
+  end;
+
+{ The text of one rename-project line's index= value. }
+function RenameIndexText(const AReport: TOwnerReport): string;
+begin
+  Result:= if AReport.Owner.Kind = okLibrary then 'library' else OwnerFreshnessText(AReport.Freshness);
+end;
+
+{ Prints one file's multi-project rename plan in the form the IDE plugin parses
+  (spec criteria 8e, 11, 14): rename-owners, one rename-project per owner,
+  rename-unknown per unreadable DB, rename-target per target. To stdout, or to
+  stderr under --json so the JSON document stays the only thing on stdout. }
+procedure EmitRenamePlan(const APlan: TMultiRenamePlan; AToStdErr: Boolean);
+
+  procedure Emit(const ALine: string);
+  var
+    S: string;
+  begin
+    S:= StringReplace(StringReplace(ALine, #13, ' ', [rfReplaceAll]), #10, ' ', [rfReplaceAll]);
+    if AToStdErr then Writeln(ErrOutput, S) else Writeln(S);
+  end;
+
+var
+  R     : TOwnerReport  ;
+  TP    : TTargetPlan   ;
+  U     : string        ;
+  Counts: TArray<string>;
+begin
+  Emit(Format('rename-owners: %d of %d indexes', [Length(APlan.Discovery.Owners), APlan.Discovery.Probed]));
+  for R in APlan.Owners do
+    if (R.Reason = '') or (R.Owner.Kind = okLibrary) then Emit('rename-project: ' + R.Owner.SectionName + ' index=' + RenameIndexText(R))
+    else Emit('rename-project: ' + R.Owner.SectionName + ' index=' + RenameIndexText(R) + ' (' + R.Reason + ')');
+  for U in APlan.Discovery.Unknown do Emit('rename-unknown: ' + U);
+  for TP in APlan.Targets do
+    if TP.Decision = rdApply then
+    begin
+      Counts:= nil;
+      for R in TP.Owners do Counts:= Counts + [Format('%s=%d', [R.Owner.SectionName, R.RefCount])];
+      Emit(Format('rename-target: L%d %s -> %s apply %s', [TP.Target.Finding.StartLine, TP.Target.OldName, TP.NewName, string.Join(' ', Counts)]));
+    end
+    else Emit(Format('rename-target: L%d %s -> %s dropped %s',
+      [TP.Target.Finding.StartLine, TP.Target.OldName, (if TP.NewName <> '' then TP.NewName else '?'), TP.Reason]));
+end;
+
+{ The findings of ATargets in the file APath. }
+function FindingsInFile(const ATargets: TArray<TLintFinding>; const APath: string): TArray<TLintFinding>;
+var
+  F: TLintFinding;
+begin
+  Result:= nil;
+  for F in ATargets do
+    if SameText(F.FilePath, APath) then Result:= Result + [F];
+end;
+
+{ Spec 2026-10-13 (multi-project rename), criteria 1, 2, 9, 10, 15. Splits
+  ATargets by file: a file with 2+ owning indexes, or any index that could not
+  be read, is planned across EVERY owner (PlanMultiProjectRename) and printed;
+  every other finding is handed back in ATargets for the unchanged
+  single-store path -- so a single-project unit's output is byte-identical to
+  before. Single-finding mode (--fix-line): one dropped target means NO rename
+  edits at all and Refusal says why (criterion 9). Batch: the applied
+  targets' edits are returned and counted in Applied; dropped ones are only
+  reported (criterion 10). Platform for discovery: --platform, else the
+  manifest's defaultPlatform. }
+function PlanMultiOwnerNaming(const AArgs: TArgs; const APreferredDb: string; const ANaming: TNamingConfig;
+  var ATargets: TArray<TLintFinding>): TRenameOutcome;
+var
+  Manifest: TIndexManifest      ;
+  Plat    : string              ;
+  Files   : TStringList         ;
+  Single  : TArray<TLintFinding>;
+  F       : TLintFinding        ;
+  Disc    : TOwnerDiscovery     ;
+  Plan    : TMultiRenamePlan    ;
+  TP      : TTargetPlan         ;
+  Path    : string              ;
+  Reasons : TArray<string>      ;
+begin
+  Result:= Default(TRenameOutcome);
+  try
+    Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+  except
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, 'drag-lint: rename: the manifest could not be read, so other owning projects were not checked -- ' + E.Message);
+      Exit;
+    end;
+  end; // try
+  Plat  := if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else Manifest.Settings.DefaultPlatform;
+  Single:= nil;
+  Files := TStringList.Create;
+  try
+    Files.CaseSensitive:= False;
+    for F in ATargets do
+      if Files.IndexOf(F.FilePath) < 0 then Files.Add(F.FilePath);
+    for Path in Files do
+    begin
+      Disc:= FindRenameOwners(Manifest, Plat, ExpandFileName(Path), APreferredDb);
+      if (Length(Disc.Owners) < 2) and (Length(Disc.Unknown) = 0) then
+      begin
+        Single:= Single + FindingsInFile(ATargets, Path);
+        Continue;
+      end;
+      Plan:= PlanMultiProjectRename(Disc, FindingsInFile(ATargets, Path), ANaming,
+        function(AProjectFile, ADbPath: string): Boolean
+        begin
+          Result:= ReindexOwnerProject(AProjectFile, ADbPath);
+        end);
+      EmitRenamePlan(Plan, AArgs.AsJson or SameText(AArgs.Format, 'json'));
+      Result.Plans:= Result.Plans + Plan.Targets;
+    end; // for
+  finally
+    Files.Free;
+  end; // try
+  ATargets:= Single;
+
+  Reasons:= nil;
+  if AArgs.FixLine > 0 then
+    for TP in Result.Plans do
+      if TP.Decision = rdDropped then Reasons:= Reasons + [TP.Reason];
+  Result.Refusal:= string.Join('; ', Reasons);
+  if Result.Refusal <> '' then Exit;
+  for TP in Result.Plans do
+    if TP.Decision = rdApply then
+    begin
+      Result.Edits:= Result.Edits + TP.Edits;
+      Inc(Result.Applied);
+    end;
+end;
+
+{ Adds the multi-project rename fields to one --fix --json element (spec
+  criterion 14): "projects" (objects with name, index, refs) and, for a dropped rename,
+  "dropped_reason". Adds nothing when APlans holds no plan for AFinding --
+  a single-project unit's JSON is unchanged. }
+procedure AddRenameJson(AObj: TJSONObject; const APlans: TArray<TTargetPlan>; const AFinding: TLintFinding);
+var
+  Key  : string      ;
+  RP   : TTargetPlan ;
+  RO   : TOwnerReport;
+  JProj: TJSONArray  ;
+  JP   : TJSONObject ;
+begin
+  Key:= LowerCase(AFinding.FilePath) + '|' + IntToStr(AFinding.StartLine) + '|' + IntToStr(AFinding.StartCol) + '|' + LowerCase(AFinding.RuleId);
+  for RP in APlans do
+  begin
+    if RP.Target.Key <> Key then Continue;
+    JProj:= TJSONArray.Create;
+    AObj.AddPair('projects', JProj);
+    for RO in RP.Owners do
+    begin
+      JP:= TJSONObject.Create;
+      JProj.AddElement(JP);
+      JP.AddPair('name' , RO.Owner.SectionName);
+      JP.AddPair('index', RenameIndexText(RO));
+      JP.AddPair('refs' , TJSONNumber.Create(RO.RefCount));
+    end;
+    if RP.Decision = rdDropped then AObj.AddPair('dropped_reason', RP.Reason);
+    Break;
+  end; // for
+end;
+
 function FinalizeAndOutput(const AArgs: TArgs; AFindings: TArray<TLintFinding>; const ADefaultDisabled: TArray<string>; const AEmitText: TProc<TArray<TLintFinding>>;
   const AStore: ISymbolStore = nil; const AScannedFiles: TArray<string> = nil;
   const APrimaryDb: string = ''; const AWalkSkipped: TArray<string> = nil): Integer;
@@ -12075,6 +12247,13 @@ begin
     var NFStaleTotal: Integer:= 0;
     { The DB the reindex hints name: the primary store, else --db. }
     var NFHintDb: string:= if APrimaryDb <> '' then APrimaryDb else AArgs.DbPath;
+    { Multi-project rename (spec 2026-10-13): the plans of naming targets in a
+      unit several indexes own, their applied edits (kept OUT of the
+      walk-closure filter below: each was built from an owner's own closure,
+      and filtering them to this DB's closure would leave the other projects
+      half renamed), and a single fix's refusal. Empty for a single-project
+      unit, which keeps every line below byte-identical for it. }
+    var Rename: TRenameOutcome:= Default(TRenameOutcome);
 
     { ADF Task 8: doc-drift is store-backed, so its fix cannot be produced by the
       pure-text BuildAutofixEdits above -- it needs the store (facts + MergeComment).
@@ -12230,6 +12409,9 @@ begin
             Break;
           end;
 
+        Rename:= PlanMultiOwnerNaming(AArgs, NFHintDb, Cfg.Naming, NamingTargets);
+        Inc(FixCount, Rename.Applied);
+
         var NFCount: Integer;
         var NFSkipped: Integer;
         var NFStale: Integer;
@@ -12293,6 +12475,7 @@ begin
         + 'but no project in this index compiles them. Name one explicitly to fix it anyway.', [Length(WalkDropped)]));
       for var WD: string in WalkDropped do Writeln(ErrOutput, '  skipped: ' + WD);
     end;
+    Edits:= Edits + Rename.Edits;
     if AArgs.AsJson or SameText(AArgs.Format, 'json') then
     begin
       { Structured per-finding output so an AI orchestrator can drive fixes
@@ -12335,6 +12518,10 @@ begin
             JObj.AddPair('applied', TJSONBool.Create(AArgs.Apply and HasEdit));
             JObj.AddPair('preview', TJSONBool.Create((not AArgs.Apply) and HasEdit));
             JObj.AddPair('risky' , TJSONBool.Create(IsRiskyFixRule(F.RuleId)));
+            { Multi-project rename: the owners and, when it applies, why the
+              rename was dropped (spec criterion 14). Absent for a
+              single-project unit. }
+            AddRenameJson(JObj, Rename.Plans, F);
             JArr.AddElement(JObj);
           end;
           Writeln(JArr.Format(2));
@@ -12364,7 +12551,11 @@ begin
     { Every naming finding that could have been fixed was lost to a stale index:
       "no fixable findings" would read as "cannot be fixed" (spec criterion 13),
       so say how many were skipped and how to reindex instead. }
-    if (FixCount = 0) and (NFStaleTotal + NFSkippedTotal > 0) then
+    { A refused single-finding rename (spec criterion 9) IS the summary: the
+      plugin reads the LAST autofix: line, so the refusal must be it. }
+    if (FixCount = 0) and (Rename.Refusal <> '') then
+      Writeln('autofix: rename refused -- ' + Rename.Refusal)
+    else if (FixCount = 0) and (NFStaleTotal + NFSkippedTotal > 0) then
       Writeln(Format('autofix: 0 fixable finding(s)%s%s -- reindex: %s',
         [StaleSuffix, SkipSuffix, NamingReindexHint(AArgs, NFHintDb)]))
     else if FixCount = 0 then Writeln('autofix: no fixable findings (of ' + IntToStr(Length(Targeted)) + ' finding(s))')
@@ -12396,6 +12587,9 @@ begin
       if HasRisky then Writeln('[risky] one or more fixes are behaviour-changing -- review before --apply.');
       Writeln(Format('autofix: %d fixable finding(s)%s%s -- pass --apply to write', [FixCount, StaleSuffix, SkipSuffix]));
     end;
+    { Other fixes on the line went ahead; the refused rename still has to be
+      the last autofix: line the plugin reads. }
+    if (FixCount > 0) and (Rename.Refusal <> '') then Writeln('autofix: rename refused -- ' + Rename.Refusal);
     Exit(0);
   end; // if
 
@@ -26016,6 +26210,24 @@ begin
     ARx.Status:= 'failed';
     ARx.Reason:= Format('index exited %d -- run: drag-lint index --project "%s" --db "%s"', [ExitCode, ARx.Project, ARx.Db]);
   end;
+end;
+
+{ The multi-project rename's reindex callback (RefreshOwner's AReindex): an
+  incremental `index --project <AProjectFile> --db <ADbPath>` in a CHILD
+  engine, never the folder form. A child, not DoIndex in-process, because
+  DoIndex writes its progress to STDOUT, which is the lint run's output (and,
+  under --json, a JSON document). True when the child exited 0; on failure its
+  reason goes to stderr and RefreshOwner reports the owner unverified. }
+function ReindexOwnerProject(const AProjectFile, ADbPath: string): Boolean;
+var
+  Rx: TUsesReindex;
+begin
+  Rx        := Default(TUsesReindex);
+  Rx.Project:= AProjectFile;
+  Rx.Db     := ADbPath;
+  RefreshProjectIndex(Rx);
+  Result:= Rx.Status = 'done';
+  if not Result then Writeln(ErrOutput, 'drag-lint: rename: reindex failed -- ' + Rx.Reason);
 end;
 
 type

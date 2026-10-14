@@ -15,7 +15,11 @@ interface
 
 uses
   System.SysUtils
+  , DRagLint.Core.Model
   , DRagLint.Index.Manifest
+  , DRagLint.Lint.Config
+  , DRagLint.Refactor.NamingFix
+  , DRagLint.Refactor.TextEdit
   ;
 
 const
@@ -39,7 +43,7 @@ type
   /// <summary>One index whose files table holds the file being renamed.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.ProjectReason (DRagLint.Refactor.MultiProjectRename.pas)</para>
   /// <para>Used in units: DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -59,8 +63,8 @@ type
   /// <summary>The result of probing every configured index for one file.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
-  /// <para>Used in units: DRagLint.Refactor.MultiProjectRename</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas), DRagLint.Refactor.MultiProjectRename.BlockReason (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.OpenOwners (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used in units: DRagLint.CLI, DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TOwnerDiscovery = record
@@ -84,6 +88,61 @@ type
     /// <summary>Could not be opened, could not be reindexed, or is still stale
     /// afterwards: the project counts as UNVERIFIED for the rename (criterion 5).</summary>
     ofUnverified);
+
+  /// <summary>One owning index's part in a rename plan.</summary>
+  /// <remarks>Value type. In TMultiRenamePlan.Owners it describes the owner
+  /// (RefCount 0); in TTargetPlan.Owners it also counts that owner's edits.</remarks>
+  TOwnerReport = record
+    /// <summary>The owner, as FindRenameOwners returned it.</summary>
+    Owner: TRenameOwner;
+    /// <summary>RefreshOwner's verdict; ofUnverified for a library owner and
+    /// for a project DB that could not be opened after its refresh.</summary>
+    Freshness: TOwnerFreshness;
+    /// <summary>'' when usable; otherwise why the owner is unverified.</summary>
+    Reason: string;
+    /// <summary>Edits this owner contributed for the target OUTSIDE the
+    /// target's own file (the shared unit), before de-duplication.</summary>
+    RefCount: Integer;
+  end; // record
+
+  /// <summary>Whether a planned rename is written.</summary>
+  TRenameDecision = (
+    /// <summary>Free in every owner, edits built and merged: apply it.</summary>
+    rdApply,
+    /// <summary>Unsafe in some owner (unknown, unverified, library, taken,
+    /// unresolved, conflicting edits): write nothing for it.</summary>
+    rdDropped);
+
+  /// <summary>The plan for ONE naming target across every owning index.</summary>
+  /// <remarks>Value type; owns nothing.</remarks>
+  TTargetPlan = record
+    /// <summary>The target as the first owner that resolved it built it.</summary>
+    Target: TNamingTarget;
+    /// <summary>The chosen name for rdApply; for rdDropped the name the rename
+    /// wanted (the first candidate), '' when there is none.</summary>
+    NewName: string;
+    /// <summary>Apply or dropped.</summary>
+    Decision: TRenameDecision;
+    /// <summary>'' for rdApply; for rdDropped why, naming the project or
+    /// library first, e.g. 'project B: name MyConst already declared in uB'.</summary>
+    Reason: string;
+    /// <summary>rdApply: every owner with its RefCount (an nsLocal target: the
+    /// one owner it was built from). rdDropped: every owner, RefCount 0.</summary>
+    Owners: TArray<TOwnerReport>;
+    /// <summary>Merged, de-duplicated edits; nil for rdDropped.</summary>
+    Edits: TArray<TTextEdit>;
+  end; // record
+
+  /// <summary>A rename plan for the naming findings of ONE file.</summary>
+  TMultiRenamePlan = record
+    /// <summary>The discovery the plan was built from, unchanged.</summary>
+    Discovery: TOwnerDiscovery;
+    /// <summary>One report per Discovery.Owners entry, same order, RefCount 0:
+    /// what the `rename-project:` lines print.</summary>
+    Owners: TArray<TOwnerReport>;
+    /// <summary>One plan per distinct target Key, in finding order.</summary>
+    Targets: TArray<TTargetPlan>;
+  end; // record
 
 /// <summary>Probes every index the manifest configures for APlatform and
 /// reports which of them hold AFilePath, which do not, and which could not be
@@ -109,6 +168,7 @@ type
 /// DB read-only, closing it before the next. Not thread-safe only in so far as
 /// ResolvePlan is not; touches no shared state of its own.
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.PlanMultiOwnerNaming (DRagLint.CLI.pas)</para>
 /// <para>Calls: Default, DRagLint.Index.Plan.ResolvePlan, DRagLint.Project.Resolver.TProjectResolver.Create, DRagLint.Refactor.MultiProjectRename.DbKey, DRagLint.Refactor.MultiProjectRename.OwnerOf, DRagLint.Storage.FileMembership.DbMembership, SameText</para>
 /// <para>Returns: Default(TOwnerDiscovery)</para>
 /// <para>Complexity: 13 (cyclomatic, outer body), 59 lines (full implementation)</para>
@@ -150,11 +210,54 @@ function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFil
 function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, string, Boolean>;
   out AReason: string): TOwnerFreshness;
 
+/// <summary>Builds the rename of the naming findings of ONE file across every
+/// index that owns that file: one new name free in all of them, and the merged
+/// edits of all of them -- or the reason the rename is unsafe.</summary>
+/// <param name="ADiscovery">FindRenameOwners' result for the file. Owners are
+/// refreshed and opened in this order (criterion 2).</param>
+/// <param name="AFindings">The file's naming findings; rule-ids the naming fixer
+/// does not handle are ignored (BuildNamingTargets).</param>
+/// <param name="ANaming">Naming config supplying candidates and prefixes.</param>
+/// <param name="AReindex">Passed to RefreshOwner for each project owner:
+/// AReindex(ProjectFile, DbPath) runs an incremental `index --project`.</param>
+/// <returns>Owners: one report per owner. Targets: one plan per target Key.
+/// An nsGlobal target is rdDropped when the discovery has an Unknown DB, any
+/// owner is a library (8d) or unverified, any opened store does not resolve it
+/// tsReady, no candidate is free in EVERY opened store, a store's edits hit a
+/// stale position, or two stores produce different edits for one span
+/// (criterion 8). Otherwise NewName is the first candidate free everywhere and
+/// Edits the union of every store's edits, exact duplicates dropped (key
+/// lower(file)|line|col|endcol|text, criterion 7).</returns>
+/// <remarks>
+/// <para>"Free" in a store = in FreeCandidates (same-scope ConflictReason) AND
+/// no other symbol of that name is declared at unit scope anywhere in that
+/// project, nor at any scope in a file the rename edits -- a same-named
+/// declaration there would capture the renamed references.</para>
+/// <para>An nsLocal target is routine-local, so no other project can reference
+/// it: it is built ONCE, from the first opened store, and the owner
+/// refusals above do not apply to it.</para>
+/// <para>Opens each usable owner DB read-only, and releases every store before
+/// returning. Raises nothing of its own; an owner whose store cannot be opened
+/// is unverified.</para>
+/// Pinned by tests\autotest\run_multi_project_rename.ps1.
+/// </remarks>
+function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
+  const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
+  const AReindex: TFunc<string, string, Boolean>): TMultiRenamePlan;
+
+/// <summary>The text a `rename-project:` line prints for AFreshness.</summary>
+/// <param name="AFreshness">The owner's freshness.</param>
+/// <returns>'fresh', 'reindexed' or 'unverified'.</returns>
+/// <remarks>Pure. The IDE plugin parses these words.</remarks>
+function OwnerFreshnessText(AFreshness: TOwnerFreshness): string;
+
 implementation
 
 uses
   System.Generics.Collections
+  , System.StrUtils
   , DRagLint.Core.Interfaces
+  , DRagLint.Refactor.Rename
   , DRagLint.Storage.SQLite
   , DRagLint.Index.Freshness
   , DRagLint.Index.Plan
@@ -288,6 +391,368 @@ begin
       AReason:= E.Message;
       Result := ofUnverified;
     end;
+  end; // try
+end; // function
+
+const
+  REASON_LIBRARY = 'a library unit is not project code';
+
+type
+  { One owner while a plan is built: its report, its read-only store (nil when
+    it is not usable) and the targets BuildNamingTargets built against it. }
+  TOwnerState = record
+    Report : TOwnerReport;
+    Store  : ISymbolStore;
+    Targets: TArray<TNamingTarget>;
+  end; // record
+
+function OwnerFreshnessText(AFreshness: TOwnerFreshness): string;
+begin
+  case AFreshness of
+    ofFresh    : Result:= 'fresh';
+    ofReindexed: Result:= 'reindexed';
+  else
+    Result:= 'unverified';
+  end; // case
+end; // function
+
+function StatusText(AStatus: TTargetStatus): string;
+begin
+  case AStatus of
+    tsNoChange     : Result:= 'the name already conforms';
+    tsUnresolved   : Result:= 'the symbol is not resolved in this index';
+    tsStalePosition: Result:= 'the index holds the symbol at another position (stale index)';
+  else
+    Result:= 'every candidate name is taken';
+  end; // case
+end; // function
+
+function ProjectReason(const AOwner: TRenameOwner; const AWhy: string): string;
+begin
+  Result:= 'project ' + AOwner.SectionName + ': ' + AWhy;
+end; // function
+
+function FindTarget(const ATargets: TArray<TNamingTarget>; const AKey: string;
+  out ATarget: TNamingTarget): Boolean;
+var
+  T: TNamingTarget;
+begin
+  for T in ATargets do
+    if T.Key = AKey then
+    begin
+      ATarget:= T;
+      Exit(True);
+    end;
+  ATarget:= Default(TNamingTarget);
+  Result := False;
+end; // function
+
+{ Refreshes and opens every owner, in discovery order. A library owner is never
+  opened; an owner RefreshOwner leaves unverified, or whose store cannot be
+  opened, keeps Store = nil. }
+function OpenOwners(const ADiscovery: TOwnerDiscovery; const AFindings: TArray<TLintFinding>;
+  const ANaming: TNamingConfig; const AReindex: TFunc<string, string, Boolean>): TArray<TOwnerState>;
+var
+  I     : Integer;
+  Reason: string ;
+begin
+  SetLength(Result, Length(ADiscovery.Owners));
+  for I:= 0 to High(Result) do
+  begin
+    Result[I].Report.Owner:= ADiscovery.Owners[I];
+    if ADiscovery.Owners[I].Kind = okLibrary then
+    begin
+      Result[I].Report.Freshness:= ofUnverified;
+      Result[I].Report.Reason   := REASON_LIBRARY;
+      Continue;
+    end;
+    Result[I].Report.Freshness:= RefreshOwner(ADiscovery.Owners[I], AReindex, Reason);
+    Result[I].Report.Reason   := Reason;
+    if Result[I].Report.Freshness = ofUnverified then Continue;
+    try
+      Result[I].Store  := TSQLiteSymbolStore.Create(ADiscovery.Owners[I].DbPath, True);
+      Result[I].Targets:= BuildNamingTargets(Result[I].Store, AFindings, ANaming);
+    except
+      on E: Exception do
+      begin
+        Result[I].Store           := nil;
+        Result[I].Targets         := nil;
+        Result[I].Report.Freshness:= ofUnverified;
+        Result[I].Report.Reason   := E.Message;
+      end;
+    end; // try
+  end; // for
+end; // function
+
+{ Why no nsGlobal target may be renamed at all: every unknown DB (8c), library
+  owner (8d) and unverified project (criterion 5), '; '-joined. '' when none. }
+function BlockReason(const ADiscovery: TOwnerDiscovery; const AStates: TArray<TOwnerState>): string;
+var
+  Parts: TArray<string>;
+  U    : string       ;
+  S    : TOwnerState  ;
+begin
+  Parts:= nil;
+  for S in AStates do
+    if S.Report.Owner.Kind = okLibrary then
+      Parts:= Parts + ['library ' + S.Report.Owner.SectionName + ': ' + REASON_LIBRARY]
+    else if S.Store = nil then
+      Parts:= Parts + [ProjectReason(S.Report.Owner, 'unverified -- ' + S.Report.Reason)];
+  for U in ADiscovery.Unknown do Parts:= Parts + ['ownership unknown: ' + U];
+  Result:= string.Join('; ', Parts);
+end; // function
+
+{ Why another declaration in AStore would capture ANewName after the rename:
+  a symbol of that name at unit scope anywhere in the project, or at any scope
+  in a file the rename edits. '' when there is none. ATarget itself (same
+  qualified name: a pure re-casing) does not count. }
+function ShadowReason(const AStore: ISymbolStore; const ATarget: TNamingTarget;
+  const ANewName: string; const AEdits: TArray<TTextEdit>): string;
+var
+  FileIds: TList<Int64>;
+  E      : TTextEdit   ;
+  Sym    : TSymbol     ;
+  Parent : TSymbol     ;
+  Fid    : Int64       ;
+  Scope  : string      ;
+begin
+  Result := '';
+  FileIds:= TList<Int64>.Create;
+  try
+    for E in AEdits do
+    begin
+      Fid:= AStore.FindFileIdByPath(E.FilePath);
+      if (Fid > 0) and not FileIds.Contains(Fid) then FileIds.Add(Fid);
+    end;
+    for Sym in AStore.FindSymbolsByExactName(ANewName) do
+    begin
+      if (not SameText(Sym.Name, ANewName)) or SameText(Sym.QualifiedName, ATarget.QName) then Continue;
+      Parent:= if Sym.ParentId > 0 then AStore.GetSymbolById(Sym.ParentId) else Default(TSymbol);
+      if FileIds.Contains(Sym.FileId) or (Parent.Id = 0) or (Parent.Kind in [skUnit, skProgram, skPackage]) then
+      begin
+        Scope := if EndsText('.' + Sym.Name, Sym.QualifiedName)
+                 then Copy(Sym.QualifiedName, 1, Length(Sym.QualifiedName) - Length(Sym.Name) - 1)
+                 else Sym.QualifiedName;
+        Result:= Format('name %s already declared in %s', [ANewName, Scope]);
+        Break;
+      end;
+    end; // for
+  finally
+    FileIds.Free;
+  end; // try
+end; // function
+
+{ Why ACand cannot be used in one owner's store; '' when it can, with AEdits
+  the store's edits for it. }
+function CandidateWhy(const AState: TOwnerState; const ATarget: TNamingTarget;
+  const ACand: string; out AEdits: TArray<TTextEdit>): string;
+var
+  Skipped: Integer;
+  Why    : string ;
+begin
+  AEdits:= nil;
+  if IndexStr(ACand, FreeCandidates(AState.Store, ATarget)) < 0 then
+  begin
+    Why:= TRenameRefactoring.ConflictReason(AState.Store, ATarget.QName, ACand);
+    Exit(ProjectReason(AState.Report.Owner, if Why <> '' then Why else 'name ' + ACand + ' is not free'));
+  end;
+  AEdits:= BuildTargetEdits(AState.Store, ATarget, ACand, Skipped);
+  if Skipped > 0 then
+    Exit(ProjectReason(AState.Report.Owner, Format('%d edit(s) at a position the index no longer matches (stale index)', [Skipped])));
+  if Length(AEdits) = 0 then Exit(ProjectReason(AState.Report.Owner, 'no edit could be placed'));
+  Result:= ShadowReason(AState.Store, ATarget, ACand, AEdits);
+  if Result <> '' then Result:= ProjectReason(AState.Report.Owner, Result);
+end; // function
+
+{ Unions every owner's edits. An exact duplicate (same file, line, col, end col
+  and text) is kept once; two DIFFERENT edits at one file/line/col are a
+  conflict (criterion 8): returns why, and AMerged is nil. }
+function MergeEdits(const AParts: TArray<TArray<TTextEdit>>; out AMerged: TArray<TTextEdit>): string;
+var
+  Seen: TDictionary<string, string>;
+  Part: TArray<TTextEdit>          ;
+  E   : TTextEdit                  ;
+  K3  : string                     ;
+  K5  : string                     ;
+  Prev: string                     ;
+begin
+  Result := '';
+  AMerged:= nil;
+  Seen   := TDictionary<string, string>.Create;
+  try
+    for Part in AParts do
+      for E in Part do
+      begin
+        K3:= LowerCase(E.FilePath) + '|' + IntToStr(E.Line) + '|' + IntToStr(E.Col);
+        K5:= K3 + '|' + IntToStr(E.EndCol) + '|' + E.Text;
+        if not Seen.TryGetValue(K3, Prev) then
+        begin
+          Seen.Add(K3, K5);
+          AMerged:= AMerged + [E];
+        end
+        else if Prev <> K5 then
+        begin
+          AMerged:= nil;
+          Exit(Format('two projects edit %s line %d col %d differently', [E.FilePath, E.Line, E.Col]));
+        end;
+      end; // for
+  finally
+    Seen.Free;
+  end; // try
+end; // function
+
+{ Tries ACand in every opened owner. '' when it is free in all of them, with
+  AParts[I] the edits of owner I; otherwise the first owner's reason. }
+function TryCandidate(const AStates: TArray<TOwnerState>; const ATargets: TArray<TNamingTarget>;
+  const ACand: string; out AParts: TArray<TArray<TTextEdit>>): string;
+var
+  I: Integer;
+begin
+  Result:= '';
+  SetLength(AParts, Length(AStates));
+  for I:= 0 to High(AStates) do
+  begin
+    Result:= CandidateWhy(AStates[I], ATargets[I], ACand, AParts[I]);
+    if Result <> '' then Break;
+  end;
+end; // function
+
+{ Sets ARefs[I] to owner I's edits outside AFile (the shared unit itself). }
+function OwnerReports(const AStates: TArray<TOwnerState>; const AParts: TArray<TArray<TTextEdit>>;
+  const AFile: string): TArray<TOwnerReport>;
+var
+  I: Integer  ;
+  E: TTextEdit;
+begin
+  SetLength(Result, Length(AStates));
+  for I:= 0 to High(AStates) do
+  begin
+    Result[I]:= AStates[I].Report;
+    if I <= High(AParts) then
+      for E in AParts[I] do
+        if not SameText(E.FilePath, AFile) then Inc(Result[I].RefCount);
+  end;
+end; // function
+
+{ An nsGlobal target: one name free in EVERY owner, every owner's edits merged. }
+function PlanGlobal(const AStates: TArray<TOwnerState>; const ABlock: string;
+  const ABase: TNamingTarget): TTargetPlan;
+var
+  Ts      : TArray<TNamingTarget>          ;
+  Parts   : TArray<TArray<TTextEdit>>      ;
+  I       : Integer                        ;
+  Cand    : string                         ;
+  Why     : string                         ;
+  FirstWhy: string                         ;
+begin
+  Result         := Default(TTargetPlan);
+  Result.Target  := ABase;
+  Result.Decision:= rdDropped;
+  if Length(ABase.Candidates) > 0 then Result.NewName:= ABase.Candidates[0];
+  Result.Owners:= OwnerReports(AStates, nil, '');
+  Result.Reason:= ABlock;
+  if ABlock <> '' then Exit;
+
+  SetLength(Ts, Length(AStates));
+  for I:= 0 to High(AStates) do
+  begin
+    if not FindTarget(AStates[I].Targets, ABase.Key, Ts[I]) then Ts[I].Status:= tsUnresolved;
+    if Ts[I].Status <> tsReady then
+    begin
+      Result.Reason:= ProjectReason(AStates[I].Report.Owner, StatusText(Ts[I].Status));
+      Exit;
+    end;
+  end; // for
+
+  FirstWhy:= '';
+  for Cand in ABase.Candidates do
+  begin
+    Why:= TryCandidate(AStates, Ts, Cand, Parts);
+    if Why = '' then Why:= MergeEdits(Parts, Result.Edits);
+    if Why = '' then
+    begin
+      Result.NewName := Cand;
+      Result.Decision:= rdApply;
+      Result.Reason  := '';
+      Result.Owners  := OwnerReports(AStates, Parts, ABase.Finding.FilePath);
+      Exit;
+    end;
+    if FirstWhy = '' then FirstWhy:= Why;
+  end; // for
+  Result.Reason:= if FirstWhy <> '' then FirstWhy else StatusText(tsAllCandidatesTaken);
+end; // function
+
+{ An nsLocal target: routine-local, so no other project can reference it --
+  built ONCE, from the first opened owner that resolved it. }
+function PlanLocal(const AStates: TArray<TOwnerState>; const ABase: TNamingTarget): TTargetPlan;
+var
+  I      : Integer       ;
+  T      : TNamingTarget ;
+  FreeNames: TArray<string>;
+  Skipped: Integer       ;
+begin
+  Result         := Default(TTargetPlan);
+  Result.Target  := ABase;
+  Result.Decision:= rdDropped;
+  if Length(ABase.Candidates) > 0 then Result.NewName:= ABase.Candidates[0];
+  Result.Owners:= OwnerReports(AStates, nil, '');
+  Result.Reason:= 'no owning index could be opened';
+  for I:= 0 to High(AStates) do
+    if (AStates[I].Store <> nil) and FindTarget(AStates[I].Targets, ABase.Key, T) then
+    begin
+      FreeNames:= FreeCandidates(AStates[I].Store, T);
+      if T.Status <> tsReady then Result.Reason:= ProjectReason(AStates[I].Report.Owner, StatusText(T.Status))
+      else if Length(FreeNames) = 0 then Result.Reason:= ProjectReason(AStates[I].Report.Owner, StatusText(tsAllCandidatesTaken))
+      else
+      begin
+        Result.NewName:= FreeNames[0];
+        Result.Edits  := BuildTargetEdits(AStates[I].Store, T, FreeNames[0], Skipped);
+        if (Skipped > 0) or (Length(Result.Edits) = 0) then
+        begin
+          Result.Edits := nil;
+          Result.Reason:= ProjectReason(AStates[I].Report.Owner, 'no edit could be placed (stale index)');
+        end
+        else
+        begin
+          Result.Decision:= rdApply;
+          Result.Reason  := '';
+          Result.Owners  := [AStates[I].Report];
+        end;
+      end;
+      Break;
+    end; // if
+end; // function
+
+function PlanMultiProjectRename(const ADiscovery: TOwnerDiscovery;
+  const AFindings: TArray<TLintFinding>; const ANaming: TNamingConfig;
+  const AReindex: TFunc<string, string, Boolean>): TMultiRenamePlan;
+var
+  States: TArray<TOwnerState>;
+  Seen  : TList<string>      ;
+  Block : string             ;
+  S     : TOwnerState        ;
+  T     : TNamingTarget      ;
+  I     : Integer            ;
+begin
+  Result          := Default(TMultiRenamePlan);
+  Result.Discovery:= ADiscovery;
+  States:= OpenOwners(ADiscovery, AFindings, ANaming, AReindex);
+  Seen  := TList<string>.Create;
+  try
+    SetLength(Result.Owners, Length(States));
+    for I:= 0 to High(States) do Result.Owners[I]:= States[I].Report;
+    Block:= BlockReason(ADiscovery, States);
+    for S in States do
+      for T in S.Targets do
+      begin
+        if Seen.Contains(T.Key) then Continue;
+        Seen.Add(T.Key);
+        if T.Scope = nsLocal then Result.Targets:= Result.Targets + [PlanLocal(States, T)]
+        else Result.Targets:= Result.Targets + [PlanGlobal(States, Block, T)];
+      end; // for
+  finally
+    Seen.Free;
+    for I:= 0 to High(States) do States[I].Store:= nil;
   end; // try
 end; // function
 
