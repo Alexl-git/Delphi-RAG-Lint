@@ -1657,15 +1657,24 @@ end;
 
 // True when C can continue a SQL identifier token on the ALREADY-UPPERCASED
 // text this whole extractor works on (see ExtractSqlTables): letters/
-// digits/underscore. '.' (a schema-qualified name's separator) is handled
-// separately by ScanSqlIdent, not here, since it is valid mid-token but
-// never as the first character.
+// digits/underscore/dollar -- Firebird's unquoted-identifier alphabet. '$' was
+// missing until 2026-10-14, which cut every FIBPlus/system table at it:
+// 'INTO FIB$ENUMVALUES' stored the write 'FIB', and a SELECT FROM one was
+// rejected outright by SelectFromIsSqlShaped's prose gate ('$ENUMVALUES'
+// after the table is not a clause boundary), so its read was lost. Pinned by
+// tests\autotest\run_sql_dollar_identifier.ps1. '$' is a CONTINUATION
+// character only: ScanSqlIdent still requires a letter/underscore first.
+// '.' (a schema-qualified name's separator) is handled separately by
+// ScanSqlIdent, not here, since it is valid mid-token but never as the first
+// character. A double-quoted identifier is NOT scanned (it yields '', i.e.
+// absence): this pipeline works on an upper-cased copy, and a quoted name is
+// case-sensitive, so reading one here would store a wrong-cased table.
 function IsSqlIdentChar(C: Char): Boolean;
 begin
-  Result:= (C = '_') or ((C >= 'A') and (C <= 'Z')) or ((C >= '0') and (C <= '9'));
+  Result:= CharInSet(C, ['A'..'Z', '0'..'9', '_', '$']);
 end;
 
-// Reads one identifier token -- letters/digits/underscore, '.' allowed
+// Reads one identifier token -- IsSqlIdentChar characters, '.' allowed
 // MID-token for a 'schema.table' reference (kept whole; see ExtractSqlTables'
 // header comment for why the whole dotted name is the chosen convention) --
 // starting at S[APos] after skipping leading spaces; advances APos past it.

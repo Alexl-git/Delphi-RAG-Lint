@@ -958,4 +958,11 @@
 #   writes nothing. No parser, preprocessor or indexer path reaches it, so no stored parse
 #   can differ. Lives under src\index, hence inside the hashed surface.
 #   Superseded: 1.21.1-alpha|dc59cf349ac20a0a676b3c002bd9ecfab9294f15bc50140debd99642393140a3
-1.21.1-alpha|ba5b43cfb9f5257c609ea491739d4f6dffe56f43b701518b247a90afbaff13e5
+# 2026-10-14: bumped 1.21.1-alpha -> 1.22.0-alpha for two extractor fixes in one re-parse:
+#   (1) Parser.Delphi13: a statement-level exprIf (`if C then Foo else Bar;`) emitted no ref for
+#   its bare-call branches; now call refs (plus 'read' for an ifElse bare condition and the
+#   slots of an expression-position exprIf). Guard: run_bare_call_in_exprif_refs.ps1.
+#   (2) Doc.SymbolFacts: SQL table names cut at '$' (FIB$ENUMVALUES -> FIB). Guard:
+#   run_sql_dollar_identifier.ps1.
+#   Superseded: 1.21.1-alpha|ba5b43cfb9f5257c609ea491739d4f6dffe56f43b701518b247a90afbaff13e5
+1.22.0-alpha|222fab4b909ee849195766b4b469f8e6298ccdf17eb1b6dec79d1d5cbe13cd6a
