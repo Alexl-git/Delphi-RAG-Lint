@@ -15,6 +15,7 @@ program ChartsCoreProbe;
            "strippedSha":{"<path>":"<sha256 of the stripped lines joined with LF>"},
            "context":{..}|{"error":..},
            "tools":{"dotDefault","dotExplicitMissing","dotBadSetting","dotNothing","clone":[..]},
+           "checks":{"members","edges","intfLoop","anyLoop"}|{"error":..},
            "cluster":{"text","ports","disclosure"}|{"error":..},
            "layout":{"dotSha","svgSha","plainSha","anchors"}|{"error":..}}
   tools needs --charts-root; layout needs --layout-dir and runs dot.exe (never drag-lint.exe,
@@ -37,6 +38,7 @@ uses
   , DRagLint.Charts.Process in '..\..\src\charts\DRagLint.Charts.Process.pas'
   , DRagLint.Charts.Tools in '..\..\src\charts\DRagLint.Charts.Tools.pas'
   , DRagLint.Charts.Dot in '..\..\src\charts\DRagLint.Charts.Dot.pas'
+  , DRagLint.Charts.Checks in '..\..\src\charts\DRagLint.Charts.Checks.pas'
   ;
 
 const
@@ -438,6 +440,50 @@ begin
   end;
 end;
 
+{ Test-InterfaceLoop over the whole clone: every unit is a member, every uses row between
+  two of them an edge (first row of a pair wins, in uu.id order); anyLoop forces every
+  edge to 'interface', so a real loop shows as True. }
+function ChecksJson(pIndex: TChartsIndex): TJSONObject;
+begin
+  try
+    var Members: TArray<string>:= [];
+    var Rows:= pIndex.Query('SELECT DISTINCT LOWER(qualified_name) AS u FROM symbols WHERE kind = ''unit'' ORDER BY u');
+    try
+      for var K:= 0 to Rows.Count - 1 do
+        Members:= Members + [Rows[K].S('u')];
+    finally
+      Rows.Free;
+    end;
+    var Edges: TArray<TUnitEdge>:= [];
+    var Forced: TArray<TUnitEdge>:= [];
+    Rows:= pIndex.Query('SELECT LOWER(su.qualified_name) AS src, LOWER(uu.unit_name) AS dst, uu.section AS section ' +
+      'FROM unit_uses uu JOIN files sf ON sf.id = uu.file_id JOIN symbols su ON su.file_id = sf.id AND su.kind = ''unit'' ' +
+      'WHERE LOWER(uu.unit_name) IN (SELECT LOWER(qualified_name) FROM symbols WHERE kind = ''unit'') ORDER BY uu.id, su.id');
+    try
+      for var K:= 0 to Rows.Count - 1 do
+      begin
+        var E: TUnitEdge;
+        E.Src:= Rows[K].S('src');
+        E.Dst:= Rows[K].S('dst');
+        E.Section:= Rows[K].S('section');
+        Edges:= Edges + [E];
+        E.Section:= 'interface';
+        Forced:= Forced + [E];
+      end;
+    finally
+      Rows.Free;
+    end;
+    Result:= TJSONObject.Create;
+    Result.AddPair('members', Num(Length(Members)));
+    Result.AddPair('edges', Num(Length(Edges)));
+    Result.AddPair('intfLoop', TJSONBool.Create(TestInterfaceLoop(Edges, Members)));
+    Result.AddPair('anyLoop', TJSONBool.Create(TestInterfaceLoop(Forced, Members)));
+  except
+    on E: Exception do
+      Result:= ErrorObject(E.Message);
+  end;
+end;
+
 procedure Run(const pArgs: TProbeArgs);
 begin
   var Index:= TChartsIndex.Create(pArgs.Db);
@@ -457,7 +503,10 @@ begin
         Root.AddPair('strippedSha', StrippedShaJson(Reader, ShaPaths));
         Root.AddPair('context', ContextJson(Reader, pArgs));
         if pArgs.ChartsRoot <> '' then
+        begin
           Root.AddPair('tools', ToolsJson(pArgs));
+          Root.AddPair('checks', ChecksJson(Index));
+        end;
         var LocPath:= Loc.GetValue<string>('path', '');
         Root.AddPair('cluster', ClusterJson(Index, pArgs.QName, LocPath));
         if pArgs.LayoutDir <> '' then

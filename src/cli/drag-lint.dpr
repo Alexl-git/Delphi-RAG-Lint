@@ -212,6 +212,7 @@ uses
   DRagLint.Charts.Source in '..\charts\DRagLint.Charts.Source.pas',
   DRagLint.Charts.Tools in '..\charts\DRagLint.Charts.Tools.pas',
   DRagLint.Charts.Dot in '..\charts\DRagLint.Charts.Dot.pas',
+  DRagLint.Charts.Checks in '..\charts\DRagLint.Charts.Checks.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

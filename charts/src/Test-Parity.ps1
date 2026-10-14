@@ -312,6 +312,28 @@ function Get-PsToolFacts([string[]] $ClonePaths) {
   $t
 }
 
+# Test-InterfaceLoop over the whole clone (the probe's ChecksJson asks the same): every unit a
+# member, every uses row between two of them an edge, the FIRST row of a pair kept (as
+# Emit-Cycles builds its map); anyLoop forces every section to 'interface'.
+function Get-PsCheckFacts {
+  try {
+    $members = @((Get-AllIndexRows "SELECT DISTINCT LOWER(qualified_name) AS u FROM symbols WHERE kind = 'unit'" 'u') | ForEach-Object { [string]$_.u })
+    $rows = Get-AllIndexRows @"
+SELECT LOWER(su.qualified_name) AS src, LOWER(uu.unit_name) AS dst, uu.section AS section, uu.id AS uid, su.id AS sid
+  FROM unit_uses uu JOIN files sf ON sf.id = uu.file_id JOIN symbols su ON su.file_id = sf.id AND su.kind = 'unit'
+ WHERE LOWER(uu.unit_name) IN (SELECT LOWER(qualified_name) FROM symbols WHERE kind = 'unit')
+"@ 'uid, sid'
+    $map = @{}; $forced = @{}
+    $intf = [pscustomobject]@{ section = 'interface' }
+    foreach ($e in $rows) {
+      $k = [string]$e.src + '|' + [string]$e.dst
+      if (-not $map.ContainsKey($k)) { $map[$k] = $e; $forced[$k] = $intf }
+    }
+    [ordered]@{ members = $members.Count; edges = @($rows).Count
+                intfLoop = [bool](Test-InterfaceLoop $map $members); anyLoop = [bool](Test-InterfaceLoop $forced $members) }
+  } catch { [ordered]@{ error = $_.Exception.Message } }
+}
+
 function Get-ParityFileSha([string] $Path) {
   $sha = [Security.Cryptography.SHA256]::Create()
   try { (($sha.ComputeHash([IO.File]::ReadAllBytes($Path)) | ForEach-Object { $_.ToString('x2') }) -join '') } finally { $sha.Dispose() }
@@ -473,6 +495,7 @@ function Invoke-CoreMode {
       if (-not $globalDone) {
         foreach ($kv in (Get-PsGlobalFacts).GetEnumerator()) { $facts[$kv.Key] = $kv.Value }
         $facts.tools = Get-PsToolFacts $clonePaths
+        $facts.checks = Get-PsCheckFacts
       }
       $swPs.Stop()
       $probe = Invoke-Probe $probeExe $DbPath $q $ps.Ctx $layoutDl $clonePaths

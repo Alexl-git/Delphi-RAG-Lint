@@ -51,6 +51,8 @@ uses
   , ChartsTests.CoreTools in 'ChartsTests.CoreTools.pas'
   , DRagLint.Charts.Dot in '..\..\src\charts\DRagLint.Charts.Dot.pas'
   , ChartsTests.CoreDot in 'ChartsTests.CoreDot.pas'
+  , DRagLint.Charts.Checks in '..\..\src\charts\DRagLint.Charts.Checks.pas'
+  , ChartsTests.CoreChecks in 'ChartsTests.CoreChecks.pas'
   ;
 
 const
