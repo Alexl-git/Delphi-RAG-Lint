@@ -813,8 +813,8 @@ function Invoke-QuestionMode {
   $bad = 0
   foreach ($c in $cases) {
     if ($ported -notcontains $c.question) { $rows.Add([pscustomobject]@{ Question = $c.question; Text = 'not ported'; Files = ''; PsS = ''; DlS = ''; Verdict = 'SKIP' }); continue }
-    if ($c.serverDb -or $c.sqlDb -or $c.counterpartDb -or @($c.extra).Count) {
-      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes one index and no extra arguments' }); $bad++; continue
+    if ($c.serverDb -or $c.sqlDb -or @($c.extra).Count) {
+      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes one index (plus -CounterpartDb) and no extra arguments' }); $bad++; continue
     }
     Write-Host "question: $($c.question) ..."
     $psFile = Join-Path $OutDir "$($c.question).ps.txt"
@@ -829,7 +829,9 @@ function Invoke-QuestionMode {
       Move-Item -LiteralPath $psWrote -Destination $psBundle
     }
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $dlOut = & $probeExe --question $c.question --target $c.target --db (Join-Path $DbRoot $c.db) --out-root $dlRoot --charts-root $chartsRoot 2>"$dlFile.err"
+    $pa = @('--question', $c.question, '--target', $c.target, '--db', (Join-Path $DbRoot $c.db), '--out-root', $dlRoot, '--charts-root', $chartsRoot)
+    if ($c.counterpartDb) { $pa += @('--counterpart-db', (Join-Path $DbRoot $c.counterpartDb)) }
+    $dlOut = & $probeExe @pa 2>"$dlFile.err"
     $dlExit = $LASTEXITCODE
     $sw.Stop()
     [IO.File]::WriteAllText($dlFile, ((@($dlOut) -join "`r`n") + "`r`n"), (New-Object Text.UTF8Encoding($false)))

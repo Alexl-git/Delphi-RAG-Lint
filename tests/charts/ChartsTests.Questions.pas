@@ -96,6 +96,18 @@ type
     [Test] procedure LeafIsRefused;
   end;
 
+  [TestFixture]
+  TCrossesBoundaryTests = class(TQuestionFixture)
+  private
+    function Emit(const pTarget, pCounterpart: string; out pChart: TChartResult): Boolean;
+  public
+    [Test] procedure WithCounterpartMatchesPowerShell;
+    [Test] procedure WithoutCounterpartMatchesPowerShell;
+    [Test] procedure TransportMethodIsTheBoundary;
+    [Test] procedure NoEvidenceIsNotDoesNotCross;
+    [Test] procedure AnswerNamesTheCounterpart;
+  end;
+
 implementation
 
 uses
@@ -191,6 +203,17 @@ const
   CI_CAPPED_FIELDS = 'Qname="uPipeClientConnection.TPipeClientConnection.NextSeq",IsType=false,Members=0,Affected=595,Units=175,Zones=2,MaxHop=2.0,Capped=true,Clusters=3,ClickTargets=11,Expected=11,AllClickable=true';
   CI_CAPPED_DOT_SHA = '0ca5bb5addfb872e94165e014e184facf1a2d5ebae74ec6c8a06f5fd59c5f019';
   CI_LINES = 15;
+  CROSSES_BOUNDARY_ID = 'crosses-boundary';
+  CB_FIELDS = 'Qname="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation",Zone="CLIENT",Verdict="crosses",Commands=2,PipeCalls=1,FarSide=18,SelfIsPipe=false,Clusters=4,ClickTargets=22,Expected=22,AllClickable=true';
+  CB_DOT_SHA = '0d482728de30edf6f8541da9996c9310189995f4aff584f4d6065afd181353fb';
+  CB_ALONE_FIELDS = 'Qname="Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation",Zone="CLIENT",Verdict="crosses",Commands=2,PipeCalls=1,FarSide=0,SelfIsPipe=false,Clusters=3,ClickTargets=4,Expected=4,AllClickable=true';
+  CB_ALONE_DOT_SHA = 'bc4fe076532b5b36296f891d88ed114a404c8c8ef532fc3b9bae5eb57174e0b9';
+  CB_SELF_FIELDS = 'Qname="uPipeClientConnection.TPipeClientConnection.NextSeq",Zone="CLIENT",Verdict="is the boundary",Commands=0,PipeCalls=0,FarSide=0,SelfIsPipe=true,Clusters=1,ClickTargets=1,Expected=1,AllClickable=true';
+  CB_SELF_DOT_SHA = '0141a2f37ecfaa0a568a3b3cc8e8e0f2a1d26de4142b71ac334b4186aa744678';
+  CB_NONE = 'uMain.TfrmMAIN.CauseListClick';
+  CB_NONE_FIELDS = 'Qname="uMain.TfrmMAIN.CauseListClick",Zone="CLIENT",Verdict="no evidence in this index",Commands=0,PipeCalls=0,FarSide=0,SelfIsPipe=false,Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
+  CB_NONE_DOT_SHA = '002ece2c52f5f564c02e7522b05b5dc06857b316d4139e17588f346d7b4ed375';
+  CB_LINES = 28;
   DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
@@ -689,6 +712,76 @@ procedure TChangeImpactTests.LeafIsRefused;
 begin
   Assert.StartsWith('nothing in this index depends on uMain.TfrmMAIN.CauseListClick -- 0 callers at any depth.',
     Refusal(CHANGE_IMPACT_ID, 'uMain.TfrmMAIN.CauseListClick', CLIENT_CLONE));
+end;
+
+{ ---- crosses-boundary ---- }
+
+function TCrossesBoundaryTests.Emit(const pTarget, pCounterpart: string; out pChart: TChartResult): Boolean;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  pChart:= Default(TChartResult);
+  Result:= Args(CROSSES_BOUNDARY_ID, pTarget, CLIENT_CLONE, A);
+  if not Result then
+    Exit;
+  if pCounterpart <> '' then
+    A.CounterpartDb:= TPath.Combine(ExtractFileDir(A.DbPath), pCounterpart);
+  Assert.IsTrue(FindChartQuestion(CROSSES_BOUNDARY_ID, E), 'crosses-boundary is not registered');
+  pChart:= E(A, FOutRoot);
+end;
+
+procedure TCrossesBoundaryTests.WithCounterpartMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not Emit(CI_TARGET, SERVER_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CB_FIELDS, Fields(C));
+  Assert.AreEqual(CB_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TCrossesBoundaryTests.WithoutCounterpartMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not Emit(CI_TARGET, '', C) then
+    Exit;
+  Assert.AreEqual(CB_ALONE_FIELDS, Fields(C));
+  Assert.AreEqual(CB_ALONE_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TCrossesBoundaryTests.TransportMethodIsTheBoundary;
+var
+  C: TChartResult;
+begin
+  if not Emit(CI_CAPPED, '', C) then
+    Exit;
+  Assert.AreEqual(CB_SELF_FIELDS, Fields(C));
+  Assert.AreEqual(CB_SELF_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TCrossesBoundaryTests.NoEvidenceIsNotDoesNotCross;
+var
+  C: TChartResult;
+begin
+  if not Emit(CB_NONE, '', C) then
+    Exit;
+  Assert.AreEqual(CB_NONE_FIELDS, Fields(C));
+  Assert.AreEqual(CB_NONE_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TCrossesBoundaryTests.AnswerNamesTheCounterpart;
+var
+  A: TQuestionArgs;
+begin
+  if not Args(CROSSES_BOUNDARY_ID, CI_TARGET, CLIENT_CLONE, A) then
+    Exit;
+  A.CounterpartDb:= TPath.Combine(ExtractFileDir(A.DbPath), SERVER_CLONE);
+  var L:= AskChartQuestion(A).Lines;
+  Assert.AreEqual<Integer>(CB_LINES, Length(L));
+  Assert.AreEqual('INDEX ' + A.CounterpartDb + ' (counterpart)', L[CS_CHART_LINE]);
+  Assert.AreEqual('  uPipeSessionBuilder.TPipeSessionBuilder.RouteSTATIONS handles rspOK @uPipeSessionBuilder.pas:902', L[High(L)]);
 end;
 
 end.

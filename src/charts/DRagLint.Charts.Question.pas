@@ -46,6 +46,8 @@ type
     Target       : string;
     /// <summary>The project index, full path.</summary>
     DbPath       : string;
+    /// <summary>crosses-boundary's other half (-CounterpartDb), full path; '' = not given.</summary>
+    CounterpartDb: string;
     /// <summary>Where the bundle folder is made (Ask-Report -OutRoot).</summary>
     OutRoot      : string;
     /// <summary>The repo's charts folder: the clone root is &lt;ChartsRoot&gt;\scratch\db.</summary>

@@ -229,6 +229,7 @@ uses
   DRagLint.Charts.Q.EventWiring in '..\charts\DRagLint.Charts.Q.EventWiring.pas',
   DRagLint.Charts.Q.TestedBy in '..\charts\DRagLint.Charts.Q.TestedBy.pas',
   DRagLint.Charts.Q.ChangeImpact in '..\charts\DRagLint.Charts.Q.ChangeImpact.pas',
+  DRagLint.Charts.Q.CrossesBoundary in '..\charts\DRagLint.Charts.Q.CrossesBoundary.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

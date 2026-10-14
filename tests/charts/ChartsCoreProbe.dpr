@@ -35,6 +35,7 @@ program ChartsCoreProbe;
 
     ChartsCoreProbe --question <id> --target <t> --db <index.sqlite> --out-root <dir>
                     --charts-root <repo\charts> [--cap n] [--depth n] [--max-rows n]
+                    [--counterpart-db <index.sqlite>]   (crosses-boundary's -CounterpartDb)
 
   A refusal prints 'ask-report: <message>' on stderr and exits 1 (Ask-Report's contract).
   ChartsCoreProbe --ported prints the ported question ids, one per line. *)
@@ -71,6 +72,7 @@ uses
   , DRagLint.Charts.Q.EventWiring in '..\..\src\charts\DRagLint.Charts.Q.EventWiring.pas'
   , DRagLint.Charts.Q.TestedBy in '..\..\src\charts\DRagLint.Charts.Q.TestedBy.pas'
   , DRagLint.Charts.Q.ChangeImpact in '..\..\src\charts\DRagLint.Charts.Q.ChangeImpact.pas'
+  , DRagLint.Charts.Q.CrossesBoundary in '..\..\src\charts\DRagLint.Charts.Q.CrossesBoundary.pas'
   , DRagLint.Core.Model
   ;
 
@@ -106,6 +108,7 @@ type
     Cap       : string;
     Depth     : string;
     MaxRows   : string;
+    Counterpart: string;
   end;
 
 function Num(pValue: Int64): TJSONNumber;
@@ -135,6 +138,8 @@ begin
     pArgs.Depth:= pValue
   else if SameText(pName, '--max-rows') then
     pArgs.MaxRows:= pValue
+  else if SameText(pName, '--counterpart-db') then
+    pArgs.Counterpart:= pValue
   else
     Result:= False;
 end;
@@ -983,6 +988,7 @@ begin
   Q.Question:= pArgs.Question.ToLower;
   Q.Target:= pArgs.Target;
   Q.DbPath:= ExpandFileName(pArgs.Db);
+  Q.CounterpartDb:= if pArgs.Counterpart <> '' then ExpandFileName(pArgs.Counterpart) else '';
   Q.OutRoot:= pArgs.OutRoot;
   Q.ChartsRoot:= pArgs.ChartsRoot;
   Q.Cap:= DEFAULT_CAP;

@@ -48,7 +48,9 @@ type
     /// <summary>Whether a command would be answered in-process.</summary>
     /// <param name="pCommand">The question.</param>
     /// <param name="pOptions">The options; DbOverride must be set.</param>
-    /// <returns>True for a ported question with an index given.</returns>
+    /// <returns>True for a ported question with an index given; crosses-boundary also needs
+    /// TProduceOptions.CounterpartDbOverride (without it Ask-Report pairs the far side from
+    /// report-pairs.json, which only the fallback reads).</returns>
     function AnswersInProcess(const pCommand: TReportCommand; const pOptions: TProduceOptions): Boolean;
     /// <summary>Answers one question, in-process when ported, else through the fallback.</summary>
     /// <param name="pCommand">The question and its explicit arguments.</param>
@@ -83,12 +85,14 @@ uses
   , DRagLint.Charts.Q.EventWiring  // dl:ok unused-unit-in-uses@60ca -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.TestedBy  // dl:ok unused-unit-in-uses@e105 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.ChangeImpact  // dl:ok unused-unit-in-uses@c0e0 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.CrossesBoundary  // dl:ok unused-unit-in-uses@0508 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   ;
 
 const
   EXIT_OK = 0;
   EXIT_SETUP = 2;
   REPORTS_SUBDIR = 'drag-lint-reports';
+  CROSSES_BOUNDARY = 'crosses-boundary';
   CRLF = #13#10;
 
 function ProducerForCompare: IReportProducer;
@@ -108,7 +112,10 @@ function TDelphiProducer.AnswersInProcess(const pCommand: TReportCommand; const 
 var
   E: TChartEmitter;
 begin
-  Result:= (pOptions.DbOverride <> '') and FindChartQuestion(pCommand.Question, E);
+  { crosses-boundary without -CounterpartDb: Ask-Report would pair it from report-pairs.json,
+    which only the fallback reads, so the fallback answers it }
+  Result:= (pOptions.DbOverride <> '') and FindChartQuestion(pCommand.Question, E)
+    and not (SameText(pCommand.Question, CROSSES_BOUNDARY) and (pOptions.CounterpartDbOverride = ''));
 end;
 
 function Fail(pCode: Integer; const pReason: string): TProduceResult;
@@ -142,6 +149,9 @@ begin
   var Db:= ExpandFileName(pOptions.DbOverride);
   if not TFile.Exists(Db) then
     Exit(Fail(EXIT_SETUP, 'index not found: ' + Db));
+  var Other:= if pOptions.CounterpartDbOverride <> '' then ExpandFileName(pOptions.CounterpartDbOverride) else '';
+  if (Other <> '') and not TFile.Exists(Other) then
+    Exit(Fail(EXIT_SETUP, 'index not found: ' + Other));
   var Why: string;
   var Script:= ResolveAskReportScript(pOptions.ScriptPath, Why);
   if Script = '' then
@@ -152,6 +162,7 @@ begin
   Q.Question:= pCommand.Question.ToLower;
   Q.Target:= pCommand.Get('Target');
   Q.DbPath:= Db;
+  Q.CounterpartDb:= Other;
   Q.OutRoot:= if pOptions.OutRoot <> '' then pOptions.OutRoot else FOutRoot;
   Q.ChartsRoot:= ExtractFileDir(ExtractFileDir(Script));
   Q.Cap:= NumArg(pCommand, 'Cap', DEFAULT_CAP);
@@ -171,16 +182,25 @@ begin
     of the in-process path, so the question is handed to the fallback producer and Describe
     says why. Nothing escapes Produce. }
   try
-    var Rep:= Freshness(Db);
-    if (Rep.Verdict = fvStale) and not pOptions.AllowStale then
-      Exit(Fail(PRODUCER_EXIT_STALE, Format('stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' +
-        sLineBreak + '  %s: %d file(s) changed since it was indexed', [Db, Rep.Changed])));
+    { every index the question reads, as Ask-Report checks them (the counterpart too) }
+    var StaleLines:= '';
+    var Read: TArray<string>:= [Db];
+    if (Other <> '') and not SameText(Other, Db) then
+      Read:= Read + [Other];
+    for var D in Read do
+    begin
+      var Rep:= Freshness(D);
+      if Rep.Verdict = fvStale then
+        StaleLines:= StaleLines + sLineBreak + Format('  %s: %d file(s) changed since it was indexed', [D, Rep.Changed]);
+    end;
+    if (StaleLines <> '') and not pOptions.AllowStale then
+      Exit(Fail(PRODUCER_EXIT_STALE, 'stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' + StaleLines));
     var Answer:= AskChartQuestion(Q);
     Result:= Default(TProduceResult);
     Result.Ok:= True;
     Result.ExitCode:= EXIT_OK;
     Result.Text:= string.Join(CRLF, Answer.Lines) + CRLF;
-    Result.IndexPaths:= [Db];
+    Result.IndexPaths:= Read;
     Result.BundlePath:= Answer.BundleDir;
   except
     on E: EChartsQuestion do

@@ -47,6 +47,8 @@ type
     [Test] procedure UnknownTargetIsExitOne;
     [Test] procedure CloneGuardRefusalIsSetup;
     [Test] procedure UnexpectedFailureFallsBack;
+    [Test] procedure CrossesBoundaryWithoutCounterpartFallsBack;
+    [Test] procedure CrossesBoundaryWithCounterpartIsInProcess;
   end;
 
 implementation
@@ -64,6 +66,7 @@ const
   CLIENT_HISTORY = 'CLIENT-Micronite2027.sqlite.pre-1.10';
   NO_SUCH_TARGET = 'NoSuchUnit.TNoSuchClass.NoSuchMethod';
   TT_TARGET = 'uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation';
+  CB_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
   EXIT_SETUP = 2;
   STUB_EXIT = 42;
 
@@ -309,6 +312,37 @@ begin
   Assert.AreEqual(STUB_EXIT, R.ExitCode);
   Assert.Contains(FProducer.Describe, 'Delphi in-process failed (');
   Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryWithoutCounterpartFallsBack;
+begin
+  { Ask-Report would pair the far side from report-pairs.json, which only the fallback reads }
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= 'any.sqlite';
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(1, FFallback.Calls);
+  Assert.AreEqual(STUB_EXIT, R.ExitCode);
+  Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryWithCounterpartIsInProcess;
+var
+  Db, Other: string;
+begin
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SERVER_CLONE, Other) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.CounterpartDbOverride:= Other;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.Contains(R.Text, #13#10'INDEX ' + Other + ' (counterpart)'#13#10'CHART crosses-boundary ' + CB_TARGET +
+    ' -- 2 commands / 1 transport calls'#13#10);
+  Assert.AreEqual<Integer>(2, Length(R.IndexPaths));
+  Assert.AreEqual('Delphi in-process (crosses-boundary)', FProducer.Describe);
 end;
 
 end.

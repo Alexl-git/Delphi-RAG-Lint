@@ -10,9 +10,10 @@ unit DRagLint.Charts.Ask;
   BUNDLE, INDEX, the CHART line and one line per row read back from graph.dot.
 
   NOT PORTED, because no ported question needs it: the round-trip text branch
-  (trace.dlgraph), and the -SqlDbPath / -ServerDbPath / -CounterpartDb parts of the
-  regenerate command. Index resolution (-Project / -In), the pairing file and the
-  freshness check are the producer's job, before this unit is called.
+  (trace.dlgraph), and the -SqlDbPath / -ServerDbPath parts of the regenerate command and
+  of the INDEX lines (crosses-boundary's -CounterpartDb IS ported). Index resolution
+  (-Project / -In), the pairing file and the freshness check are the producer's job,
+  before this unit is called.
 
   PS traps closed here: [regex]::Matches is case-SENSITIVE while -match / -notmatch are
   case-insensitive; WebUtility.HtmlDecode decodes numeric references (&#183; becomes a
@@ -102,6 +103,7 @@ const
   SHELL_HTML = 'index.html';
   XREF_TXT = 'xref.txt';
   PATH_QUESTION = 'path';
+  CROSSES_BOUNDARY = 'crosses-boundary';
   ISO_UTC = 'yyyy"-"mm"-"dd"T"hh":"nn":"ss"Z"';
   ASKED_ON = 'yyyy"-"mm"-"dd hh":"nn';
   HEX_BASE = 16;
@@ -478,6 +480,8 @@ begin
     Result:= Result + ' -Depth ' + IntToStr(pArgs.Depth);
   if InList(pArgs.Question, REGEN_CAP) then
     Result:= Result + ' -Cap ' + IntToStr(pArgs.Cap);
+  if SameText(pArgs.Question, CROSSES_BOUNDARY) and (pArgs.CounterpartDb <> '') then
+    Result:= Result + ' -CounterpartDb "' + pArgs.CounterpartDb + '"';
   if SameText(pArgs.Question, 'class-surface') then
     Result:= Result + ' -SurfaceCap ' + IntToStr(pArgs.SurfaceCap);
   if SameText(pArgs.Question, 'event-wiring') and (pArgs.Command.Get('Control') <> '') then
@@ -652,8 +656,11 @@ begin
       SentTarget, FormatDateTime(ASKED_ON, pArgs.AskedOn), pArgs.EngineVersion]),
     ReportCommandText(pArgs.Command),
     'BUNDLE ' + Dir,
-    'INDEX ' + pArgs.DbPath,
-    Format('CHART %s %s -- %d %s / %d %s', [pArgs.Question, SentTarget, Chart.LeftCount, LeftLabel, Chart.RightCount, RightLabel])];
+    'INDEX ' + pArgs.DbPath];
+  { which other index answered (Ask-Report fix round 1, M-1): crosses-boundary's counterpart }
+  if SameText(pArgs.Question, CROSSES_BOUNDARY) and (pArgs.CounterpartDb <> '') then
+    Lines:= Lines + ['INDEX ' + pArgs.CounterpartDb + ' (counterpart)'];
+  Lines:= Lines + [Format('CHART %s %s -- %d %s / %d %s', [pArgs.Question, SentTarget, Chart.LeftCount, LeftLabel, Chart.RightCount, RightLabel])];
   var DotPath:= TPath.Combine(Dir, GRAPH_DOT);
   var DotLines: TArray<string>:= [];
   if TFile.Exists(DotPath) then
