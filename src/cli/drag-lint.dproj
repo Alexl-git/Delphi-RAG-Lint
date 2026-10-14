@@ -275,6 +275,13 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Columns.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Chain.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Exceptions.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.PsSort.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Question.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Ask.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.TouchesTables.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.ShownWhere.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Deps.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Producer.Delphi.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>
