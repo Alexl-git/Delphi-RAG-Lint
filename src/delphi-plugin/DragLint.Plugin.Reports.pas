@@ -406,8 +406,14 @@ begin
     ASK_EXIT_REFUSED:
       ShowMessage(MSG_PREFIX + 'the question was refused.' + sLineBreak + sLineBreak + AskReportReason(pOutput));
     ASK_EXIT_SETUP:
-      ShowMessage(MSG_PREFIX + 'setup problem -- the indexes could not be resolved.' + sLineBreak + sLineBreak +
-                  AskReportReason(pOutput));
+      begin
+        var TooOld:= AskEngineTooOldMessage(pExit, pOutput);
+        if TooOld <> '' then
+          ShowMessage(MSG_PREFIX + TooOld)
+        else
+          ShowMessage(MSG_PREFIX + 'setup problem -- the indexes could not be resolved.' + sLineBreak + sLineBreak +
+                      AskReportReason(pOutput));
+      end;
     ASK_EXIT_STALE:
       OfferReindex(pOutput);
   else

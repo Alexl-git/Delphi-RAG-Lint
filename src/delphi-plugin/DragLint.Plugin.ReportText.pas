@@ -226,6 +226,15 @@ function BuildAskCmdLine(const pEngine, pQuestionId, pTarget, pInFile: string; c
 /// <returns>Everything from the first 'ask-report:' line on, with that prefix
 /// removed; the trimmed output when there is no such line.</returns>
 function AskReportReason(const pOutput: string): string;
+/// <summary>The message for an engine that predates the `ask` verb.</summary>
+/// <param name="pExit">The exit code of the ask run.</param>
+/// <param name="pOutput">The captured stdout+stderr.</param>
+/// <returns>'The drag-lint engine is too old for the Reports menu (no "ask" command) --
+/// update the engine.' when pExit is 2 and a line of pOutput reads 'unknown command: ask'
+/// (any case, any prefix such as 'ERROR: '); '' otherwise.</returns>
+/// <remarks>An old engine answers `ask` with that line followed by its whole help banner,
+/// which AskReportReason would otherwise put into the dialog.</remarks>
+function AskEngineTooOldMessage(pExit: Integer; const pOutput: string): string;
 
 /// <summary>The incremental reindex commands in a stale-index message.</summary>
 /// <param name="pOutput">The captured output of a run that exited 3.</param>
@@ -395,6 +404,19 @@ begin
   finally
     SB.Free;
   end;
+end;
+
+function AskEngineTooOldMessage(pExit: Integer; const pOutput: string): string;
+const
+  UNKNOWN_ASK = 'unknown command: ask';
+  EXIT_SETUP = 2;  { the engine's exit code for an unknown command }
+begin
+  Result:= '';
+  if pExit <> EXIT_SETUP then
+    Exit;
+  for var Line: string in SplitLines(pOutput) do
+    if EndsText(UNKNOWN_ASK, Trim(Line)) then
+      Exit('The drag-lint engine is too old for the Reports menu (no "ask" command) -- update the engine.');
 end;
 
 function ParseReindexCommands(const pOutput: string): TArray<TReindexCommand>;

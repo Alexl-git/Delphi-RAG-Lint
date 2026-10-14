@@ -74,6 +74,8 @@ type
     [Test] procedure CmdLineCarriesToOnlyWhenGiven;
     [Test] procedure OnlyPathTakesSecondRoutine;
     [Test] procedure ReasonStripsPrefix;
+    [Test] procedure OldEngineWithoutAskIsNamed;
+    [Test] procedure OtherSetupFailuresAreNotAnOldEngine;
     [Test] procedure ReindexCommandsAreParsed;
     [Test] procedure FolderTargetIndexIsNeverAccepted;
   end;
@@ -610,6 +612,20 @@ begin
   Assert.AreEqual('plain text', AskReportReason('  plain text  '));
 end;
 
+procedure TReportGlueTests.OldEngineWithoutAskIsNamed;
+begin
+  { an engine older than `ask` prints this line and then its whole help banner, exit 2 }
+  Assert.AreEqual('The drag-lint engine is too old for the Reports menu (no "ask" command) -- update the engine.',
+    AskEngineTooOldMessage(2, 'ERROR: unknown command: ask' + CRLF + 'drag-lint 1.20.0-alpha' + CRLF +
+      'Usage: drag-lint <command> [options]' + CRLF + '  index   ...' + CRLF));
+end;
+
+procedure TReportGlueTests.OtherSetupFailuresAreNotAnOldEngine;
+begin
+  Assert.AreEqual('', AskEngineTooOldMessage(2, 'ask-report: index not found: C:\X\_D-RAG\X.sqlite' + CRLF));
+  Assert.AreEqual('', AskEngineTooOldMessage(1, 'ERROR: unknown command: ask' + CRLF), 'exit 1 is a refusal, not setup');
+  Assert.AreEqual('', AskEngineTooOldMessage(2, 'ERROR: unknown command: frobnicate' + CRLF), 'another verb is not ask');
+end;
 const
   STALE_ERR =
     'ask-report: stale index -- the answer would be short or wrong. Reindex incrementally, then ask again:' + CRLF +
