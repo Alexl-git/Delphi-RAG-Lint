@@ -13689,19 +13689,21 @@ begin
       begin
         { THE INDEX-WIDE RULES, NARROWED TO THIS FILE'S FINDINGS.
 
-          Computed over the whole store and then filtered, deliberately, rather
-          than plumbing a file filter down through TProjectLintRules: these
-          rules are RELATIONAL -- unused-unit-in-uses asks whether anything in
-          the project still references an import, unused-public-symbol asks
-          whether anything calls a routine. A filter applied INSIDE would have
-          to be threaded through every one of those questions without changing
-          any of their answers, and getting that subtly wrong yields findings
-          that are confidently wrong rather than absent. Filtering the RESULT
-          cannot: the computation is bit-for-bit the one lint-all does.
+          The RELATIONAL questions are still answered over the whole store --
+          unused-unit-in-uses asks whether anything references an import,
+          unused-public-symbol whether anything calls a routine -- and the
+          result is still filtered to this file. What is narrowed (FlowFid) is
+          only the per-file LOOP: it used to visit every file in the index and
+          throw all but one answer away, 7.6 s of a 36.5 s run on ORM3
+          BASICS.PAS for unused-unit-in-uses alone. Every finding that loop
+          emits is stamped with its own file and its memos are caches, so this
+          file's answer is unchanged -- run_lint_file_scoped_loop_parity.ps1
+          compares full tuples against lint-all for every fixture file.
 
-          It is affordable because the whole-store pass is one indexed sweep,
-          not per-declaration work -- measured below and recorded in the commit.
-          That is exactly why doc-drift is NOT here: its cost is per-decl.
+          The whole-store collectors (circular-uses, repeated-type-switch,
+          duplicate-global-decl, ...) still run in full: narrowing those is
+          steps 2-3 of docs\superpowers\plans\2026-10-14-single-file-lint-scoping-notes.md.
+          doc-drift is still NOT here: its cost is per-decl.
 
           LibStore is load-bearing for unused-unit-in-uses, not optional. A
           PROJECT store cannot see System.IniFiles, so without the library index
@@ -13720,7 +13722,8 @@ begin
           begin
             TraceLintChecker('project-rules');
             for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
-                       FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore) do
+                       FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore,
+                       {AOptInRules=}nil, {AOnlyFileId=}FlowFid) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
             { the pass above read this file's uses from the INDEX; the buffer is
