@@ -46,6 +46,16 @@ type
     [Test] procedure ServerIndexIsRefused;
   end;
 
+  [TestFixture]
+  TDepsTests = class(TQuestionFixture)
+  private
+    function Emit(const pUnit: string; out pChart: TChartResult): Boolean;
+  public
+    [Test] procedure UsesCappedMatchPowerShell;
+    [Test] procedure UsersOverNineFoldersMatchPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
 implementation
 
 uses
@@ -92,6 +102,18 @@ const
   SW_CAPPED = 'ID';
   SW_CAPPED_FIELDS = 'Column="ID",Bindings=72,Forms=25,Unresolved=0,IndexRows=903,IndexColumns=459,Clusters=22,ClickTargets=67,Expected=67,AllClickable=true';
   SW_CAPPED_DOT_SHA = '7747fbc6a62ee382da46687f980377b9ce0877d4447d0e7d3714a1bc58b18f58';
+  DEPS_ID = 'deps';
+  DL_CLONE = 'DL-drag-lint.sqlite';
+  DEPS_CLI = 'DRagLint.CLI';
+  DEPS_CLI_FIELDS = 'UsedBy=1,Uses=40,UsedByTotal=1,UsesTotal=110,UsedByHidden=0,UsesHidden=70,ImplementationUses=40,ClickTargets=41,Expected=41,AllClickable=true';
+  DEPS_CLI_DOT_SHA = '5ef4c130d1c2eef9274c240970b42a9aa9b7f0ce88a045c40352aaff8b463846';
+  { 68 users in nine folders: Group-Object Dir | Sort-Object Name orders the clusters }
+  DEPS_MODEL = 'DRagLint.Core.Model';
+  DEPS_MODEL_FIELDS = 'UsedBy=40,Uses=0,UsedByTotal=68,UsesTotal=0,UsedByHidden=28,UsesHidden=0,ImplementationUses=0,ClickTargets=40,Expected=40,AllClickable=true';
+  DEPS_MODEL_DOT_SHA = '479e9a4e53c10963e604153ba5cbf67bcf3e0ca826cd782137d2bebbc6efd26b';
+  DEPS_CLI_LINES = 47;
+  DEPS_CHART_LINE = 4;
+  DEPS_FIRST_ROW = 5;
   SW_ANSWER =
     'COMMAND shown-where -Target "FTRNAMESTR"|' +
     'INDEX <db>|' +
@@ -318,6 +340,55 @@ begin
     on X: EChartsQuestion do Msg:= X.Message;
   end;
   Assert.StartsWith('shown-where: this index contains NO DFM data bindings at all', Msg);
+end;
+
+{ ---- deps ---- }
+
+function TDepsTests.Emit(const pUnit: string; out pChart: TChartResult): Boolean;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  pChart:= Default(TChartResult);
+  Result:= Args(DEPS_ID, pUnit, DL_CLONE, A);
+  if not Result then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(DEPS_ID, E), 'deps is not registered');
+  pChart:= E(A, FOutRoot);
+end;
+
+procedure TDepsTests.UsesCappedMatchPowerShell;
+var
+  C: TChartResult;
+begin
+  if not Emit(DEPS_CLI, C) then
+    Exit;
+  Assert.AreEqual(DEPS_CLI_FIELDS, Fields(C));
+  Assert.AreEqual(DEPS_CLI_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TDepsTests.UsersOverNineFoldersMatchPowerShell;
+var
+  C: TChartResult;
+begin
+  if not Emit(DEPS_MODEL, C) then
+    Exit;
+  Assert.AreEqual(DEPS_MODEL_FIELDS, Fields(C));
+  Assert.AreEqual(DEPS_MODEL_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TDepsTests.AnswerMatchesPowerShell;
+var
+  A: TQuestionArgs;
+begin
+  if not Args(DEPS_ID, DEPS_CLI, DL_CLONE, A) then
+    Exit;
+  var Answer:= AskChartQuestion(A);
+  Assert.AreEqual<Integer>(DEPS_CLI_LINES, Length(Answer.Lines));
+  Assert.AreEqual('CHART deps DRagLint.CLI -- 1 used by / 40 uses', Answer.Lines[DEPS_CHART_LINE]);
+  Assert.AreEqual('  drag-lint @drag-lint.dpr:195', Answer.Lines[DEPS_FIRST_ROW]);
+  Assert.AreEqual('  ... +70 more units this uses not shown -- 40 of 110 drawn (display cap 40) (raise -Cap to see them)',
+    Answer.Lines[High(Answer.Lines)]);
 end;
 
 end.

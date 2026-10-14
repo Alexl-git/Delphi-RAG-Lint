@@ -68,6 +68,7 @@ uses
   , ChartsTests.Question in 'ChartsTests.Question.pas'
   , DRagLint.Charts.Q.TouchesTables in '..\..\src\charts\DRagLint.Charts.Q.TouchesTables.pas'
   , DRagLint.Charts.Q.ShownWhere in '..\..\src\charts\DRagLint.Charts.Q.ShownWhere.pas'
+  , DRagLint.Charts.Q.Deps in '..\..\src\charts\DRagLint.Charts.Q.Deps.pas'
   , ChartsTests.Questions in 'ChartsTests.Questions.pas'
   ;
 
