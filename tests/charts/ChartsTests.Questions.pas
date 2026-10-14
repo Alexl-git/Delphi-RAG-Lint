@@ -33,6 +33,19 @@ type
     [Test] procedure ClientIndexIsRefused;
   end;
 
+  [TestFixture]
+  TShownWhereTests = class(TQuestionFixture)
+  private
+    function Emit(const pColumn: string; out pChart: TChartResult): Boolean;
+  public
+    [Test] procedure FewFormsMatchPowerShell;
+    [Test] procedure TiedFormsKeepSortObjectOrder;
+    [Test] procedure CappedFormsMatchPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure UnboundColumnIsRefused;
+    [Test] procedure ServerIndexIsRefused;
+  end;
+
 implementation
 
 uses
@@ -67,6 +80,27 @@ const
     '  TOOLASSG (written) @uPipeSessionBuilder.pas:1675|' +
     '  TOOLFLDR (written) @uPipeSessionBuilder.pas:1681';
   BUNDLE_LINE = 2;
+  SHOWN_WHERE_ID = 'shown-where';
+  SW_FEW = 'FTRNAMESTR';
+  SW_FEW_FIELDS = 'Column="FTRNAMESTR",Bindings=4,Forms=2,Unresolved=0,IndexRows=903,IndexColumns=459,Clusters=3,ClickTargets=4,Expected=4,AllClickable=true';
+  SW_FEW_DOT_SHA = 'de495b04d4817cb19b2ce5c315f53c30a930b6033829bf4287a899f881ac5442';
+  { 18 forms: more than 16, so Sort-Object's introsort orders the tied counts }
+  SW_TIED = 'NAME';
+  SW_TIED_FIELDS = 'Column="NAME",Bindings=41,Forms=18,Unresolved=0,IndexRows=903,IndexColumns=459,Clusters=19,ClickTargets=41,Expected=41,AllClickable=true';
+  SW_TIED_DOT_SHA = 'eab91899d8d38c53f500156850021b335a361633397c30cdebbff402b7f82269';
+  { 25 forms over the cap of 20: five are disclosed in a 'not shown' cluster }
+  SW_CAPPED = 'ID';
+  SW_CAPPED_FIELDS = 'Column="ID",Bindings=72,Forms=25,Unresolved=0,IndexRows=903,IndexColumns=459,Clusters=22,ClickTargets=67,Expected=67,AllClickable=true';
+  SW_CAPPED_DOT_SHA = '7747fbc6a62ee382da46687f980377b9ce0877d4447d0e7d3714a1bc58b18f58';
+  SW_ANSWER =
+    'COMMAND shown-where -Target "FTRNAMESTR"|' +
+    'INDEX <db>|' +
+    'CHART shown-where FTRNAMESTR -- 4 data bindings / 2 forms|' +
+    '  grdFtrsColFtrName.DataBinding.FieldName = ''FTRNAMESTR'' @AssignGroups.dfm:59|' +
+    '  grdAssignedColFtrName.DataBinding.FieldName = ''FTRNAMESTR'' @AssignGroups.dfm:156|' +
+    '  grdFtrsColFtrName.DataBinding.FieldName = ''FTRNAMESTR'' @AssignTools2.dfm:67|' +
+    '  grdAssignedColFtrName.DataBinding.FieldName = ''FTRNAMESTR'' @AssignTools2.dfm:213|' +
+    '  ... DFM data bindings only -- code-driven display is not indexed and is not shown';
 
 function RepoRoot: string;
 begin
@@ -190,6 +224,100 @@ begin
     on X: EChartsQuestion do Msg:= X.Message;
   end;
   Assert.StartsWith('touches-tables: this index has NO SQL facts at all (0 sql_reads, 0 sql_writes across ', Msg);
+end;
+
+{ ---- shown-where ---- }
+
+function TShownWhereTests.Emit(const pColumn: string; out pChart: TChartResult): Boolean;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  pChart:= Default(TChartResult);
+  Result:= Args(SHOWN_WHERE_ID, pColumn, CLIENT_CLONE, A);
+  if not Result then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(SHOWN_WHERE_ID, E), 'shown-where is not registered');
+  pChart:= E(A, FOutRoot);
+end;
+
+procedure TShownWhereTests.FewFormsMatchPowerShell;
+var
+  C: TChartResult;
+begin
+  if not Emit(SW_FEW, C) then
+    Exit;
+  Assert.AreEqual(SW_FEW_FIELDS, Fields(C));
+  Assert.AreEqual(SW_FEW_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TShownWhereTests.TiedFormsKeepSortObjectOrder;
+var
+  C: TChartResult;
+begin
+  if not Emit(SW_TIED, C) then
+    Exit;
+  Assert.AreEqual(SW_TIED_FIELDS, Fields(C));
+  Assert.AreEqual(SW_TIED_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TShownWhereTests.CappedFormsMatchPowerShell;
+var
+  C: TChartResult;
+begin
+  if not Emit(SW_CAPPED, C) then
+    Exit;
+  Assert.AreEqual(SW_CAPPED_FIELDS, Fields(C));
+  Assert.AreEqual(SW_CAPPED_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TShownWhereTests.AnswerMatchesPowerShell;
+var
+  A: TQuestionArgs;
+begin
+  if not Args(SHOWN_WHERE_ID, SW_FEW, CLIENT_CLONE, A) then
+    Exit;
+  var Answer:= AskChartQuestion(A);
+  var Rest:= Copy(Answer.Lines, 1, MaxInt);
+  Delete(Rest, BUNDLE_LINE - 1, 1);
+  Assert.AreEqual(SW_ANSWER.Replace('<db>', A.DbPath), string.Join('|', Rest));
+end;
+
+procedure TShownWhereTests.UnboundColumnIsRefused;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(SHOWN_WHERE_ID, 'NO_SUCH_COLUMN_X', CLIENT_CLONE, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(SHOWN_WHERE_ID, E), 'shown-where is not registered');
+  var Msg:= '';
+  try
+    E(A, FOutRoot);
+  except
+    on X: EChartsQuestion do Msg:= X.Message;
+  end;
+  Assert.AreEqual('no DFM in this index binds a column called ''NO_SUCH_COLUMN_X''. This chart reads DFM data bindings ' +
+    '(903 in this index over 459 columns); it cannot see code-driven display such as Label.Caption := Field.AsString, and ' +
+    'symbol_facts.ui_affinity does NOT answer this question -- it is a thread-affinity hint carried by routines, with zero ' +
+    'coverage on fields and properties.', Msg);
+end;
+
+procedure TShownWhereTests.ServerIndexIsRefused;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(SHOWN_WHERE_ID, SW_FEW, SERVER_CLONE, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(SHOWN_WHERE_ID, E), 'shown-where is not registered');
+  var Msg:= '';
+  try
+    E(A, FOutRoot);
+  except
+    on X: EChartsQuestion do Msg:= X.Message;
+  end;
+  Assert.StartsWith('shown-where: this index contains NO DFM data bindings at all', Msg);
 end;
 
 end.
