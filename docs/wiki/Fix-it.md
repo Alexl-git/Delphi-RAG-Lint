@@ -59,11 +59,15 @@ drag-lint uses-fix <Unit.pas> --project <App.dproj> --db <App.sqlite> --platform
 * On a NAMING finding (`const-casing`, `type-name-prefix`,
   `local-var-casing`, ...) "Fix it" RENAMES the symbol -- its declaration and
   every use the project index knows about (e.g. `wrStr` -> `WrStr`). Asking for
-  that ONE finding is the opt-in; "Fix all in unit" never renames unless the
-  rule is listed in `"autofix": [...]` in `drag-lint-lint.json`. It needs the
-  project index, and is not offered without one.
+  that ONE finding is the opt-in. It needs the project index, and is not
+  offered without one. A naming fix runs a PREVIEW first (nothing written):
+  when the unit is compiled by two or more indexed projects, a confirmation
+  lists every one of them and the rename happens in all of them or in none --
+  see [Multi-Project-Rename](Multi-Project-Rename). A refusal (a conflicting
+  name, an index that could not be refreshed, ...) is shown on the Diagnostics
+  root row as `rename refused -- <project>: <reason>`.
 * A constant is renamed WORD BY WORD, to the first style in `const_case`
-  (drag-lint > Lint Options; default PascalCase, then UPPER_CASE):
+  (the Lint Options tab of the drag-lint Panel; default PascalCase, then UPPER_CASE):
   `StationType_Operator` -> `StationTypeOperator` (PascalCase) or
   `STATION_TYPE_OPERATOR` (UPPER_CASE). Before renaming, the project index is
   asked whether the new name already exists; if it does, the next style is

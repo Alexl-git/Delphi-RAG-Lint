@@ -23,11 +23,15 @@ then right-click a tree node and choose "Fix all in unit".
   offered from the Diagnostics root and from any Diagnostics row.
 * The seven NAMING fixes (`const-casing`, `type-name-prefix`,
   `method-pascalcase`, `local-var-casing`, `field-name-prefix`,
-  `param-name-prefix`, `local-field-prefix`) are NOT counted: they rename a
-  symbol everywhere it is used, so they run only when you opt them in with
-  `"autofix": [...]` in `drag-lint-lint.json`. When the unit has such findings
-  the result says so: `... no fixable findings (of 147 finding(s)) -- naming
-  fixes not opted in: const-casing, type-name-prefix`.
+  `param-name-prefix`, `local-field-prefix`) ARE counted when the project has
+  an index (they rename a symbol everywhere it is used, so they need it). With
+  any naming finding in the unit, Fix all in unit runs a PREVIEW first and
+  ALWAYS asks before renaming: `Rename N identifier(s) in <project>?` for a
+  unit one project compiles, or the multi-project confirmation listing every
+  owning project for a shared unit (see
+  [Multi-Project-Rename](Multi-Project-Rename)). Both default to No, and No
+  writes nothing. Renames that cannot be done safely are dropped and listed;
+  the rest are applied.
 * It runs in the BACKGROUND on the drag-lint job queue -- the IDE stays
   usable, and the dock's status strip shows the job while it works.
 * When it finishes, the engine's own summary is shown ON THE DIAGNOSTICS ROOT
@@ -57,6 +61,17 @@ drag-lint lint --file <path.pas> --fix --apply [--db <project.sqlite>]
 
 The IDE passes the project's `--db`: the naming fixes need the index to find
 every use, and without it the engine does not say which ones are opted out.
+With a naming finding in the unit it also passes `--fix-naming` -- on the
+preview AND on the apply; only the apply waits for your confirm:
+
+```
+drag-lint lint --file <path.pas> --fix --fix-naming --db <project.sqlite>           (preview)
+drag-lint lint --file <path.pas> --fix --fix-naming --apply --db <project.sqlite>   (after Yes)
+```
+
+Without `--fix-naming` (and without an `"autofix": [...]` entry in
+`drag-lint-lint.json`) a batch run never renames, and says which naming fixes
+were not opted in.
 
 Without `--apply` the command is a DRY RUN: it reports what it would fix
 and writes nothing. Always dry-run first.

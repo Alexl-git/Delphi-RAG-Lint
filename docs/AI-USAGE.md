@@ -821,6 +821,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `lint` | [Fix all in unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Fix-all-in-unit) | Applies autofixes for every fixable finding in the current unit, starting from the Structure form |  |
 | `lint` | [Fix it](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Fix-it) | Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling |  |
 | `lint` | [Lint Buffer (Unsaved)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Lint-Buffer-Unsaved) | Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first |  |
+| `lint` | [Rename across every project that compiles a shared unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Multi-Project-Rename) | A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects |  |
 | `lsp` | [lsp](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Starts the LSP (Language Server Protocol) stdio server | index |
 | `migrate-dbs` | [migrate-dbs](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/migrate-dbs) | Moves project index databases into each project's own D-RAG folder, matching the current index layout |  |
 | `outline` | [outline](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) | Prints the file-scoped symbol outline for one Pascal unit |  |
@@ -952,7 +953,7 @@ each with `"fixable": true`; the seven NAMING fixes (const-casing, type-name-pre
 - **One finding:** `lint --file F --fix --fix-line L --fix-rule R --json [--apply]`
   (omit `--apply` to preview; `--json` reports `fixable`/`applied`/`preview`/`risky`).
 - **Whole unit / project:** `lint --file F --fix --apply` / `lint-all --fix --apply`.
-- **Naming fixes in a batch run:** add `--fix-naming` (`lint --file F --fix --fix-naming [--apply]`) -- explicit consent to the opt-in naming fixes without listing them in `"autofix"`; in a unit several project indexes own the rename covers every owner (the `rename-owners:` / `rename-project:` / `rename-target:` plan), and it prints `rename-local: <N>` on stderr for the single-project renames. The IDE's Fix all in unit sends it after the user confirms.
+- **Naming fixes in a batch run:** add `--fix-naming` (`lint --file F --fix --fix-naming [--apply]`) -- explicit consent to the opt-in naming fixes without listing them in `"autofix"`; in a unit several project indexes own the rename covers every owner (the `rename-owners:` / `rename-project:` / `rename-target:` plan), and it prints `rename-local: <N>` on stderr for the single-project renames. The IDE's Fix all in unit sends it on BOTH runs -- the preview (no `--apply`) and the apply; only the apply waits for the user's confirm.
 - **Raise sites:** `lint <f> --db <db> --fix --fix-rule raise-bare-exception [--apply]` rewrites `raise Exception.Create('msg')` to the generated class for that message and adds the exceptions unit to `uses`. Requires `exceptions-sync --apply` to have run AND the index to be refreshed -- the class NAME is read out of the generated unit, never re-derived, so a rename survives. It SKIPS any file testing the class exactly (`ClassType = Exception`, `ClassNameIs('Exception')`), because narrowing a raise would break that test, and it says which.
 
 **Batch fix respects the active rule set.** `--fix` applies quick-fixes only for
@@ -998,6 +999,61 @@ Enable an autofix by adding its rule id, e.g. in `drag-lint-lint.json`:
 { "autofix": ["method-pascalcase", "param-name-prefix"] }
 ```
 See the **v0.96 / v0.97** CHANGELOG entries for the full behaviour notes.
+
+### A naming fix in a unit several projects compile (1.29.0)
+
+A unit can be a member of several project indexes (ORM3's `COMMON\BASICS.PAS`
+is in four). A naming fix there renames the symbol in EVERY owning project, or
+in none:
+
+- **Owners are found by FULL PATH** in every DB the manifest lists for the
+  platform (project and library), case-insensitive -- never by unit name, so
+  another project's own copy of `BASICS.PAS` is not an owner.
+- **A stale owner is reindexed first** with `index --project <proj> --db <db>`
+  (incremental: only changed files are re-parsed). One that cannot be made
+  fresh, a folder DB (no project file), a DB that cannot be opened, or a
+  manifest that did not load completely makes the rename UNVERIFIED. A library
+  owner refuses it ("a library unit is not project code").
+- **One new name, free in every owner** -- the first candidate style no owner
+  already declares; the edits of all owners are merged and exact duplicates
+  dropped (the shared declaration is rewritten once).
+- **Single finding (`--fix-line` + `--fix-rule`) is all-or-nothing:** any
+  conflicted or unverified owner writes nothing and ends with
+  `autofix: rename refused -- <project>: <reason>[; ...]`. **Batch** (`--fix`
+  without `--fix-line`) drops only the unsafe renames and applies the rest.
+- **Write-time check:** just before writing, every edit of a rename is
+  re-checked against the file on disk; one that no longer matches drops the
+  WHOLE rename (`rename-dropped-at-write:`), never part of it.
+
+Output (only for a unit with 2+ owners, or when ownership is unknown -- a
+single-project unit prints exactly what it always did):
+
+```
+rename-owners: 4 of 37 indexes
+rename-project: Micronite2027 index=fresh
+rename-project: DMTEST index=reindexed
+rename-project: TEST_X index=unverified (still stale after reindex: <file>)
+rename-unknown: <db>: <reason>             (a DB that could not be read, or the manifest)
+rename-target: L48 Lot_Notes -> LotNotes apply Micronite2027=3 DMTEST=1
+rename-target: L52 Other_X -> ? dropped project DMTEST: name OtherX already declared in uFoo
+rename-dropped-at-write: Lot_Notes -> LotNotes <file>:<line> (stale)
+autofix: rename refused -- <reason>        (single finding only; always the LAST autofix: line)
+```
+
+`--json` keeps stdout one document (the `rename-*` lines go to stderr) and adds
+`"projects": [{"name","index","refs"}]` and `"dropped_reason"` per finding.
+With `--fix-naming`, `rename-local: <N>` (stderr) counts the single-project
+naming renames. A naming fix the stale index cannot place says
+`autofix: 0 fixable finding(s), N skipped (stale index) -- reindex: drag-lint index --project "<proj>" --db "<db>"`
+-- never `no fixable findings`, and never a folder reindex hint.
+
+IDE: Fix it and Fix all in unit run the preview first. For 2+ owners (or
+unknown ownership) a confirmation lists every owning project with its index
+state and reference count, the renames (capped at 10), what will NOT be renamed,
+and that only projects with a drag-lint index were checked; it defaults to No,
+and No writes nothing. Fix all also confirms a single-project batch of renames
+(`Rename N identifier(s) in <project>?`). A refusal shows on the Diagnostics
+root row. Wiki: `Multi-Project-Rename`.
 
 ### Naming your exceptions unit (`raise-bare-exception` gets specific)
 

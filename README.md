@@ -717,7 +717,7 @@ and more (see [MCP tools](#mcp-tools-15) below).
 |---|---:|---|
 | [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 8 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 31 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
-| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 18 (+ 190 rules, 23 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
+| [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 19 (+ 190 rules, 23 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
@@ -876,6 +876,22 @@ enabled by default, 23 with an auto-fix.**
 CI flags (apply to `lint` / `lint-all` / `check-ast`): `--format sarif` (SARIF
 2.1.0), `--fail-on <level>` (nonzero exit at error\|warning\|info), `--baseline
 <file>` / `--write-baseline <file>`, `--enable id1,id2`, `--profile <name>`.
+
+**Naming fixes in a unit several projects compile (1.29.0).** A naming fix
+(`const-casing`, `method-pascalcase`, `local-var-casing`, `field-name-prefix`,
+`param-name-prefix`, `type-name-prefix`, `local-field-prefix`) on a unit owned
+by two or more project indexes renames it in EVERY owner, or in none. Owners are
+found by the unit's full path in every DB the manifest lists; a stale owner is
+reindexed first (`index --project`); the new name must be free in all of them.
+A single-finding fix (`--fix-line` + `--fix-rule`) is all-or-nothing and ends
+`autofix: rename refused -- <reason>`; a batch drops only the unsafe renames. A
+manifest that did not load completely refuses every naming fix (fail-closed).
+Only for 2+ owners (or unknown ownership) the run prints its plan --
+`rename-owners: N of M indexes`, `rename-project: <name> index=fresh|reindexed|unverified`,
+`rename-target: L<line> <old> -> <new> apply|dropped ...`, `rename-unknown:`,
+`rename-dropped-at-write:` -- and `--json` gains `projects` and
+`dropped_reason`. The IDE's Fix it / Fix all in unit preview first and confirm
+before writing. Details: [Multi-Project-Rename](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Multi-Project-Rename).
 
 #### Docs
 

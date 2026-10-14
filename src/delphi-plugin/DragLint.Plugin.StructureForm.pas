@@ -121,8 +121,9 @@ type
       FItemAllow      : TMenuItem   ; { 'Allow this message' -- dl:ok review of a single finding }
       FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
-      { fix_opt_in naming rules: never counted by 'Fix all', but 'Fix it' on ONE
-        finding is the opt-in (the engine treats --fix-line + --fix-rule so) }
+      { fix_opt_in naming rules: 'Fix it' on ONE finding is the opt-in (the engine
+        treats --fix-line + --fix-rule so); 'Fix all in unit' counts them when an
+        index resolves and opts in with --fix-naming, always after a confirm }
       FOptInFixRules  : TStringList ;
       FItemCopySel    : TMenuItem   ; { 'Copy' -- the selected Diagnostics rows }
       FItemRescan     : TMenuItem   ; { 'Rescan this unit' -- reindex + re-lint now }
