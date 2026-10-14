@@ -140,8 +140,25 @@ type
     [Test] procedure AnswerMatchesPowerShell;
   end;
 
-implementation
+  [TestFixture]
+  TFeedsFromTests = class(TQuestionFixture)
+  private
+    function SqlArgs(const pTarget, pSqlClone: string; out pArgs: TQuestionArgs): Boolean;
+    procedure Check(const pTarget, pFields, pDotSha: string);
+    function FeedsRefusal(const pTarget: string; const pSqlClone: string = ''): string;
+  public
+    [Test] procedure OneTableMatchesPowerShell;
+    [Test] procedure TieBrokenByBoundColumns;
+    [Test] procedure InterfaceTypedViewModelStops;
+    [Test] procedure AmbiguousPrintsCandidatesAndNoColumn;
+    [Test] procedure DanglingRePointFollowedToTable;
+    [Test] procedure DanglingRePointStopsAtAWalkLimit;
+    [Test] procedure DataSourceAndPersistentFieldAreRefused;
+    [Test] procedure SelectionAndSqlIndexRoleAreChecked;
+    [Test] procedure AnswerNamesTheSqlIndex;
+  end;
 
+implementation
 uses
   System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface;
@@ -282,7 +299,58 @@ const
   EF_NA_FIELDS = 'TestChart=false,Qname="uSetupDefaults.TGlobalSetupDefaults.GetDebug1",Outcome="not-analysed",EffectFree="NULL",Summary="",Effects=0,Unknown=0,Unnamed=0,D12Suspect=false,ParamCount=0,Witness="",Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
   EF_NA_DOT_SHA = 'de3e372524e883ca452e15acb8aa5191fe0b2ed56575926b411520b66c33b73f';
   EF_LINES = 7;
-  DEPS_CHART_LINE = 4;
+  FEEDS_FROM_ID = 'feeds-from';
+  SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
+  FF_STATS = 'IndexDs=54,IndexDsDfm=5,IndexDsCode=49,IndexDsOne=22,IndexDsMany=17,IndexDsByCol=6,IndexDsNone=9,IndexDsOther=6,' +
+    'Controls=808,CtlTable=471,CtlColumn=443,CtlNotColumn=28,CtlAmbiguous=37,CtlStops=77,CtlDangling=222,CtlNoDs=1,CtlStale=0,CoveragePct=58.3';
+  FF_ONE = 'frmCausFail.colREASON';
+  FF_ONE_FIELDS = 'Control="frmCausFail.cxGrid1.cxGrid1DBTableView1.colREASON",ControlType="TcxGridDBColumn",Field="REASON",DataSource="dsrCausFail",' +
+    'DsOwner="cxGrid1DBTableView1",Grade="one-table",HopGrades="certain>certain>certain>by name>inferred",ChainRows=5,ResolvedTable="CAUSFAIL",' +
+    'RePoint="",CtlDanglingAll=426,CtlRePoint="204/0/18/197/3/4/0/0",TableColumn="CAUSFAIL.REASON",ColumnExists="yes",Candidates="CAUSFAIL",' +
+    'AfterTieBreak=0,BoundColumns=4,StopReason="",Dangling=false,RePointed=0,RePointedAt="",Rebound=0,' + FF_STATS +
+    ',ClickTargets=7,Expected=7,AllClickable=true';
+  FF_ONE_DOT_SHA = 'c891bf3b0b838dffba8fcd5b504caeea37b59c5aced7ab4b620adbb21f1c6398';
+  FF_TIE = 'frmMachineList.colMACHINEID';
+  FF_TIE_FIELDS = 'Control="frmMachineList.cxGrid1.cxGrid1DBTableView1.colMACHINEID",ControlType="TcxGridDBColumn",Field="MACHINEID",' +
+    'DataSource="dsrMachines",DsOwner="cxGrid1DBTableView1",Grade="by-columns",HopGrades="certain>certain>certain>by name>inferred",ChainRows=5,' +
+    'ResolvedTable="MACHINES",RePoint="",CtlDanglingAll=426,CtlRePoint="204/0/18/197/3/4/0/0",TableColumn="MACHINES.MACHINEID",ColumnExists="yes",' +
+    'Candidates="MACHINES,STATIONS,PLANT,DEPARTTBL",AfterTieBreak=1,BoundColumns=6,StopReason="",Dangling=false,RePointed=0,RePointedAt="",Rebound=0,' +
+    FF_STATS + ',ClickTargets=7,Expected=7,AllClickable=true';
+  FF_TIE_DOT_SHA = '417820b87be165051d0900892631cc3d12cac871b3ec4d2bbacefb59d51a00ee';
+  FF_INTF = 'frmBlueprintCADImport.grdBalsViewNUM';
+  FF_INTF_FIELDS = 'Control="frmBlueprintCADImport.pnlGrids.grdBalloons.grdBalsView.grdBalsViewNUM",ControlType="TcxGridDBBandedColumn",Field="NUM",' +
+    'DataSource="dsrBals",DsOwner="grdBalsView",Grade="none",HopGrades="certain>certain>certain>by name>stop",ChainRows=5,ResolvedTable=null,' +
+    'RePoint="",CtlDanglingAll=426,CtlRePoint="204/0/18/197/3/4/0/0",TableColumn="",ColumnExists="n/a",Candidates="",AfterTieBreak=0,BoundColumns=1,' +
+    'StopReason="[unresolved -- interface-typed view-model] Blueprint4.CADImport.Interfaces.pas holds no upper-case string literal naming a table ' +
+    '(IBlueprintCADImport_ViewModel is an interface; its implementation is not followed)",Dangling=false,RePointed=0,RePointedAt="",Rebound=0,' +
+    FF_STATS + ',ClickTargets=5,Expected=5,AllClickable=true';
+  FF_INTF_DOT_SHA = '1f196a6a9481321e92585286ff8f395bece269dce56e99e5f5e3678744364256';
+  FF_AMBIG = 'frmDefineSerialNumbers.cxGrid1DBTableView1SID1';
+  FF_AMBIG_FIELDS = 'Control="frmDefineSerialNumbers.cxGrid1.cxGrid1DBTableView1.cxGrid1DBTableView1SID1",ControlType="TcxGridDBColumn",Field="SID",' +
+    'DataSource="dsrPList",DsOwner="cxGrid1DBTableView1",Grade="many",HopGrades="certain>certain>certain>by name>stop",ChainRows=5,ResolvedTable=null,' +
+    'RePoint="",CtlDanglingAll=426,CtlRePoint="204/0/18/197/3/4/0/0",TableColumn="",ColumnExists="n/a",Candidates="SERID,SERREAD,SERPART",' +
+    'AfterTieBreak=3,BoundColumns=2,StopReason="ambiguous: SERID, SERREAD, SERPART share every bound column (ID, SID)",Dangling=false,RePointed=0,' +
+    'RePointedAt="",Rebound=0,' + FF_STATS + ',ClickTargets=8,Expected=8,AllClickable=true';
+  FF_AMBIG_DOT_SHA = '9678b2bddf65b9731173da7817ed4f76f1cf449a96292e65de85f66ea7f33e7e';
+  FF_RP = 'frmBlueprint4.dxDBGrid1OperationVName';
+  FF_RP_FIELDS = 'Control="frmBlueprint4.cxGroupBox16.cxPageControl1.tabRouter.cxGroupBox6.pnlOperationList.cxGrid1.dxDBGrid1OperationV.' +
+    'dxDBGrid1OperationVName",ControlType="TcxGridDBColumn",Field="Name",DataSource="Blueprint4_Model.dsrOperation",DsOwner="dxDBGrid1OperationV",' +
+    'Grade="dangling",HopGrades="certain>dangling>certain>certain>by name>by name>certain>certain>inferred",ChainRows=9,ResolvedTable="OPERAT",' +
+    'RePoint="table",CtlDanglingAll=426,CtlRePoint="204/0/18/197/3/4/0/0",TableColumn="OPERAT.NAME",ColumnExists="yes",Candidates="",' +
+    'AfterTieBreak=0,BoundColumns=0,StopReason="",Dangling=true,RePointed=2,RePointedAt="Blueprint4.pas:2282,Blueprint4.pas:3213",Rebound=0,' +
+    FF_STATS + ',ClickTargets=13,Expected=13,AllClickable=true';
+  FF_RP_DOT_SHA = 'b536d3c544a4b15c79dc3a02a7c4a6cd78b987efa3a1832e4f4c51c2977b80fd';
+  FF_WALK = 'frmBlueprint4.edtF1';
+  FF_WALK_FIELDS = 'Control="frmBlueprint4.cxGroupBox16.cxPageControl1.tabHeader.dxLayoutControl1.edtF1",ControlType="TcxDBTextEdit",' +
+    'Field="WrkOrdrNmbr",DataSource="dmlSystem2.dsrFolder",DsOwner="edtF1",Grade="dangling",HopGrades="certain>dangling>certain>stop",ChainRows=4,' +
+    'ResolvedTable=null,RePoint="walk-limit",CtlDanglingAll=426,CtlRePoint="204/0/18/197/3/4/0/0",TableColumn="",ColumnExists="n/a",Candidates="",' +
+    'AfterTieBreak=0,BoundColumns=0,StopReason="the code re-point was followed to a shape this walk does not follow: DS is a local variable of ' +
+    'RepointJobHeaderToFolder (TDataSource, :984) -- the value assigned to it there is not followed",Dangling=true,RePointed=1,' +
+    'RePointedAt="Blueprint4.pas:1015",Rebound=1,' + FF_STATS + ',ClickTargets=6,Expected=6,AllClickable=true';
+  FF_WALK_DOT_SHA = '0215ef526350760930dbc8f5b667b251b15c9b6421dbe078689c67cdef0186bb';
+  FF_LINES = 13;
+  FF_SQL_INDEX_LINE = 4;
+  FF_CHART_LINE = 5;  DEPS_CHART_LINE = 4;
   DEPS_FIRST_ROW = 5;
   SW_ANSWER =
     'COMMAND shown-where -Target "FTRNAMESTR"|' +
@@ -992,6 +1060,118 @@ begin
   Assert.AreEqual<Integer>(EF_LINES, Length(L));
   Assert.AreEqual('CHART effects ' + CI_TARGET + ' -- 2 effects / 1 unclassified tokens', L[CS_CHART_LINE]);
   Assert.StartsWith('  (no anchored result rows -- open ', L[High(L)]);
+end;
+
+{ ---- feeds-from ---- }
+
+{ the fixture's arguments plus the SQL-script clone (-SqlDbPath); pSqlClone '' = the SQL clone }
+function TFeedsFromTests.SqlArgs(const pTarget, pSqlClone: string; out pArgs: TQuestionArgs): Boolean;
+begin
+  Result:= Args(FEEDS_FROM_ID, pTarget, CLIENT_CLONE, pArgs);
+  if not Result then
+    Exit;
+  var Sql:= TPath.Combine(ExtractFileDir(pArgs.DbPath), if pSqlClone = '' then SQL_CLONE else pSqlClone);
+  Result:= TFile.Exists(Sql);
+  if not Result then
+  begin
+    Assert.Pass('clone missing: ' + Sql);
+    Exit;
+  end;
+  pArgs.SqlDbPath:= Sql;
+end;
+
+procedure TFeedsFromTests.Check(const pTarget, pFields, pDotSha: string);
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not SqlArgs(pTarget, '', A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(FEEDS_FROM_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(pFields, Fields(C));
+  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
+end;
+
+function TFeedsFromTests.FeedsRefusal(const pTarget, pSqlClone: string): string;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  Result:= '';
+  if not SqlArgs(pTarget, pSqlClone, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(FEEDS_FROM_ID, E));
+  try
+    E(A, FOutRoot);
+    Assert.Fail(pTarget + ' was not refused');
+  except
+    on X: EChartsQuestion do Result:= X.Message;
+  end;
+end;
+
+procedure TFeedsFromTests.OneTableMatchesPowerShell;
+begin
+  Check(FF_ONE, FF_ONE_FIELDS, FF_ONE_DOT_SHA);
+end;
+
+procedure TFeedsFromTests.TieBrokenByBoundColumns;
+begin
+  { P33: four candidate tables in literal order, six bound columns, one survivor }
+  Check(FF_TIE, FF_TIE_FIELDS, FF_TIE_DOT_SHA);
+end;
+
+procedure TFeedsFromTests.InterfaceTypedViewModelStops;
+begin
+  Check(FF_INTF, FF_INTF_FIELDS, FF_INTF_DOT_SHA);
+end;
+
+procedure TFeedsFromTests.AmbiguousPrintsCandidatesAndNoColumn;
+begin
+  { three tables share every bound column: the candidates are drawn, never a TABLE.COLUMN }
+  Check(FF_AMBIG, FF_AMBIG_FIELDS, FF_AMBIG_DOT_SHA);
+end;
+
+procedure TFeedsFromTests.DanglingRePointFollowedToTable;
+begin
+  { past the dangling Blueprint4_Model.dsrOperation the code re-point is walked to OPERAT }
+  Check(FF_RP, FF_RP_FIELDS, FF_RP_DOT_SHA);
+end;
+
+procedure TFeedsFromTests.DanglingRePointStopsAtAWalkLimit;
+begin
+  { re-pointed AND re-bound in code (the side cluster), the walk stops at a local variable }
+  Check(FF_WALK, FF_WALK_FIELDS, FF_WALK_DOT_SHA);
+end;
+
+procedure TFeedsFromTests.DataSourceAndPersistentFieldAreRefused;
+begin
+  Assert.AreEqual('feeds-from selects a data-aware CONTROL, not a datasource -- ask consumers/shown-where. frmCausFail.dsrCausFail is a ' +
+    'TDataSource; pick a control bound to it (a grid column, an edit) to see its chain.', FeedsRefusal('frmCausFail.dsrCausFail'));
+  Assert.AreEqual('feeds-from: frmCompGroupSetup2.tblCompTree.tblCompTreeName is a persistent FIELD (TStringField) of the dataset tblCompTree, ' +
+    'not a control -- its FieldName names the dataset column it maps. Ask shown-where for the controls that display that column.',
+    FeedsRefusal('frmCompGroupSetup2.tblCompTreeName'));
+end;
+
+procedure TFeedsFromTests.SelectionAndSqlIndexRoleAreChecked;
+begin
+  Assert.AreEqual('feeds-from: -Control takes <Form>.<Control> (e.g. frmCausFail.colREASON), got ''colREASON''', FeedsRefusal('colREASON'));
+  { a swapped pair must not render: the Delphi clone has no sql_table symbol }
+  Assert.EndsWith(CLIENT_CLONE + ' is not a SQL index (0 sql_table symbols) -- -SqlDbPath takes the SQL-script clone, -DbPath the Delphi ' +
+    'project clone', FeedsRefusal(FF_ONE, CLIENT_CLONE));
+end;
+
+procedure TFeedsFromTests.AnswerNamesTheSqlIndex;
+var
+  A: TQuestionArgs;
+begin
+  if not SqlArgs(FF_ONE, '', A) then
+    Exit;
+  var L:= AskChartQuestion(A).Lines;
+  Assert.AreEqual<Integer>(FF_LINES, Length(L));
+  Assert.AreEqual('INDEX ' + A.SqlDbPath + ' (sql)', L[FF_SQL_INDEX_LINE]);
+  Assert.AreEqual('CHART feeds-from ' + FF_ONE + ' -- 5 chain rows / 471 controls in the index that resolve to one table', L[FF_CHART_LINE]);
+  Assert.AreEqual('  CAUSFAIL.REASON @MS1.SQL:1411', L[High(L)]);
 end;
 
 end.

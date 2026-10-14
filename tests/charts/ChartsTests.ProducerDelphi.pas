@@ -51,6 +51,8 @@ type
     [Test] procedure CrossesBoundaryWithoutCounterpartFallsBack;
     [Test] procedure CrossesBoundaryWithCounterpartIsInProcess;
     [Test] procedure OtherIndexesAQuestionDoesNotReadAreIgnored;
+    [Test] procedure MissingSqlIndexOfAReadingQuestionIsSetup;
+    [Test] procedure SqlIndexOfAReadingQuestionIsCarriedAndChecked;
     [Test] procedure PortedFallbackWithoutEmitterScriptIsSetup;
     [Test] procedure PortedFallbackWithEmitterScriptFallsBack;
     [Test] procedure UnexpectedFailureWithoutEmitterScriptIsSetup;
@@ -73,6 +75,8 @@ const
   NO_SUCH_TARGET = 'NoSuchUnit.TNoSuchClass.NoSuchMethod';
   TT_TARGET = 'uPipeSessionBuilder.TPipeSessionBuilder.HandleCopyOperation';
   CB_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
+  FF_TARGET = 'frmCausFail.colREASON';
   EXIT_SETUP = 2;
   STUB_EXIT = 42;
   NOT_INSTALLED = 'crosses-boundary is answered by the engine in this install, and its PowerShell fallback is not installed: ';
@@ -372,6 +376,47 @@ begin
   Assert.AreEqual<Integer>(1, Length(R.IndexPaths));
   Assert.DoesNotContain(R.Text, '(server)');
   Assert.DoesNotContain(R.Text, '(sql)');
+end;
+
+procedure TProducerDelphiTests.MissingSqlIndexOfAReadingQuestionIsSetup;
+var
+  Db: string;
+begin
+  { feeds-from reads the SQL index: a missing one is Ask-Report's "index not found", exit 2 }
+  if not Clone(CLIENT_CLONE, Db) then
+    Exit;
+  var Missing:= TPath.Combine(FOutRoot, 'missing-sql.sqlite');
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.SqlDbOverride:= Missing;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('feeds-from', FF_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('index not found: ' + Missing, R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.SqlIndexOfAReadingQuestionIsCarriedAndChecked;
+var
+  Db, Sql: string;
+begin
+  { the SQL index reaches the emitter (without it the clone guard refuses a blank path) and
+    joins the freshness list after the project index; the answer names it }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SQL_CLONE, Sql) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.SqlDbOverride:= Sql;
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('feeds-from', FF_TARGET), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.AreEqual<Integer>(2, Length(R.IndexPaths));
+  Assert.AreEqual(Sql, R.IndexPaths[1]);
+  Assert.Contains(R.Text, #13#10'INDEX ' + Sql + ' (sql)'#13#10'CHART feeds-from ' + FF_TARGET + ' -- ');
+  Assert.AreEqual('Delphi in-process (feeds-from)', FProducer.Describe);
 end;
 
 { a folder holding only an empty Ask-Report.ps1: an installed copy, where the ported Emit-*.ps1 are not shipped }

@@ -113,7 +113,7 @@ function ColumnsNotHeld(pCatalog: TSqlCatalog; pSet: TSqlTableSet; const pTable:
 /// <param name="pState">A column state.</param>
 /// <returns>'column "COL"' for the quoted state, else 'column COL'.</returns>
 /// <remarks>Port of Get-ColumnHopLabel (Emit-Common.ps1:1091).</remarks>
-function ColumnHopLabel(const pState: TSqlColumnState): string;  // dl:ok unused-public-symbol@5ca7 -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function ColumnHopLabel(const pState: TSqlColumnState): string;
 
 /// <summary>The name a chart PRINTS for a column state.</summary>
 /// <param name="pState">yes | older | no | stale | anything else.</param>
