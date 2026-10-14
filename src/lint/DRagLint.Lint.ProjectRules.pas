@@ -3863,7 +3863,8 @@ begin
       no refs join, so running it and discarding it is not the defect the
       sibling's gate exists to prevent. }
     if WantRule('duplicate-global-decl') then
-      for var Df in WholeGraph('duplicate-global-decl') do Findings.Add(Df);
+      for var Df in WholeGraph('duplicate-global-decl') do
+        Findings.Add(Df);
     Inc(TDupD, Tick - T0); T0:= Tick;
 
     { uses-global-census: whole-refs-graph pass, OFF by default and gated on
@@ -3894,7 +3895,8 @@ begin
       DefDisabled build-up (CLI.pas); this is the sole gate that keeps it
       genuinely ON at runtime in both lint paths. }
     if WantRule('enum-helper-separate-units') then
-      for var Ef in WholeGraph('enum-helper-separate-units') do Findings.Add(Ef);
+      for var Ef in WholeGraph('enum-helper-separate-units') do
+        Findings.Add(Ef);
     Inc(TEnum, Tick - T0); T0:= Tick;
 
     { repeated-type-switch (v0.80 #14): cross-file case-selector grouping pass. }

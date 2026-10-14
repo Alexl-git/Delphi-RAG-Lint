@@ -105,7 +105,6 @@ implementation
 
 uses
   Winapi.Windows
-  , System.Classes
   , System.IOUtils
   , System.JSON
   , System.Hash
@@ -114,6 +113,7 @@ uses
 
 const
   CACHE_FORMAT = 1;
+  DWORD_BITS   = 32; { a FILETIME / file size arrives as two DWORD halves }
   HASH_HEX_CHARS = 16; { enough to keep index paths apart; the key still names the full path }
 
 { size:lastwrite-FILETIME of one file, or '-' when it does not exist or cannot be read. }
@@ -123,8 +123,8 @@ var
 begin
   Result:= '-';
   if (APath = '') or not GetFileAttributesEx(PChar(APath), GetFileExInfoStandard, @Data) then Exit;
-  Result:= Format('%d:%d', [(Int64(Data.nFileSizeHigh) shl 32) or Data.nFileSizeLow,
-                            (Int64(Data.ftLastWriteTime.dwHighDateTime) shl 32) or Data.ftLastWriteTime.dwLowDateTime]);
+  Result:= Format('%d:%d', [(Int64(Data.nFileSizeHigh) shl DWORD_BITS) or Data.nFileSizeLow,
+                            (Int64(Data.ftLastWriteTime.dwHighDateTime) shl DWORD_BITS) or Data.ftLastWriteTime.dwLowDateTime]);
 end;
 
 { The -wal as part of the key -- but only when it HOLDS something. SQLite creates
@@ -235,13 +235,21 @@ begin
   AEntry:= Default(TRuleCacheEntry);
   AWhy  := '';
   var Path: string:= PathFor(AProjectDb);
-  if (Path = '') or not TFile.Exists(Path) then begin AWhy:= 'none'; Exit; end;
+  if (Path = '') or not TFile.Exists(Path) then
+  begin
+    AWhy:= 'none';
+    Exit;
+  end;
   var Root: TJSONValue:= nil;
   try
     try
       Root:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Path, TEncoding.UTF8), False, True);
       var O: TJSONObject:= Root as TJSONObject;
-      if O.GetValue<Integer>('format') <> CACHE_FORMAT then begin AWhy:= 'format'; Exit; end;
+      if O.GetValue<Integer>('format') <> CACHE_FORMAT then
+      begin
+        AWhy:= 'format';
+        Exit;
+      end;
       var K: TJSONObject:= O.GetValue<TJSONObject>('key');
       AEntry.Key.Engine := K.GetValue<string>('engine');
       AEntry.Key.Project:= K.GetValue<string>('project');
@@ -272,7 +280,11 @@ begin
   Result:= False;
   AWhy  := '';
   var Path: string:= PathFor(AProjectDb);
-  if Path = '' then begin AWhy:= 'no cache directory (LOCALAPPDATA unset)'; Exit; end;
+  if Path = '' then
+  begin
+    AWhy:= 'no cache directory (LOCALAPPDATA unset)';
+    Exit;
+  end;
   var O: TJSONObject:= TJSONObject.Create;
   try
     O.AddPair('format', TJSONNumber.Create(CACHE_FORMAT));
