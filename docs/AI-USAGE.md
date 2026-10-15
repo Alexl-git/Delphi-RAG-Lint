@@ -89,7 +89,7 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
 * `query --name U --exact` against a **project** DB answers MEMBERSHIP in both
   directions: a project DB is exactly the compile closure, so a miss is a real
   answer, not a lookup failure.
-* `query unit-usage` without `--in` answers the project-wide question (which files
+* `query unit-usage` without `--in` (`--limit N`: the first N importers, full counts kept) answers the project-wide question (which files
   reference the unit, and which merely IMPORT it); with `--in` it answers about one
   file. Its candidate set is the uses graph, since in Delphi you cannot name an
   export without a uses entry. For an RTL/VCL/third-party unit whose exports live
@@ -367,8 +367,8 @@ pure-diagnostic verbs are broken out in 2b.
 | `query hints` | stored lint hints (`--name <code>`, `--rule <severity>`) |
 | `resolve-uses --name X` | which unit to add to `uses` (won't suggest implementation-only symbols) |
 | `find-unit --name X --in F` | add the declaring unit to F's `uses` clause |
-| `usages --name X` | every read/write/use of X (`--width narrow\|wide\|very-wide`) |
-| `outline --file F.pas` | all symbols declared in one file. Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`). A forward stub row is tagged `[forward -> line N]` (`forward_target_line` in JSON); both rows are listed. |
+| `usages --name X` | every read/write/use of X (`--width narrow\|wide\|very-wide`; `--limit N` keeps the first N rows of each JSON group and adds `limit` and `totals`, the full counts) |
+| `outline --file F.pas` | all symbols declared in one file (`--kind <k[,k...]>` keeps only those kinds, `--no-locals` drops `local_var` and `param` -- most of a large unit's rows -- and `--limit N` prints the first N and says how many matched; without them every row, as the IDE reads it). Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`). A forward stub row is tagged `[forward -> line N]` (`forward_target_line` in JSON); both rows are listed. |
 | `compare --old R --command "<id> -Target T -Project P"` / `--in U.pas --line L [--update-doc]` | is this report still true? Reruns the report's COMMAND (in-process for a ported question, else `charts\src\Ask-Report.ps1 -Plain`) against the current index and diffs the normalised text (forms CSV by row, chart by nodes and edges). Exit 0 same, 1 differs, 2 usage/setup, 3 stale index (the new run never accepts a stale index). `--new F` (two saved outputs, no rerun) / `--question ID --target T` / `--old-db` / `--auto` / `--save` / `--snapshot-dir D` / `--show` / `--format text\|json\|html` / `--open`; `--format json` is schema `compare/1`. Page: [compare](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) |
 | `ask <id> --target T --project P` / `--in U.pas` / `--db D` | one report question (26 ids) as text: the DocInsight remarks block the IDE Reports menu copies, or `--plain` for the plain answer (header, COMMAND, BUNDLE, INDEX, text). Ported questions answer in-process on the live index; the rest run `charts\src\Ask-Report.ps1 -Plain`. Exit 0 answered, 1 refused, 2 usage/setup, 3 stale index (stderr prints the incremental reindex command; `--allow-stale` answers anyway). `--to B` / `--server-db` / `--sql-db` / `--counterpart-db` / `--depth` / `--cap` / `--surface-cap` / `--control` / `--mode` / `--max-rows` / `--out-root` / `--pairs-file` / `--open` / `--resolve-only`. Page: [ask](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) |
 | `surface --qname U.T` | class surface / member signatures (`--include-impl`, `--all-visibility`) |
@@ -1240,6 +1240,7 @@ except where noted. All are read once per process.
 | `DRAGLINT_NO_SCOPED_RESOLVE` | `1` | Disables the scoped call-resolution pass (falls back to the whole-index pass). Diagnostic only -- it is slower and can change resolution. |
 | `DRAGLINT_SCOPED_RESOLVE_ADDITIONS` | path | Writes the call edges the scoped pass ADDED, for A/B work. |
 | `DRAGLINT_SCOPED_RESOLVE_REMOVALS` | path | Writes the call edges the scoped pass REMOVED, for A/B work. |
+| `DRAGLINT_UTF8` | `1` | Same as `--utf8` on every run: stdout and stderr go out as UTF-8 instead of the ANSI code page, so source text from a cp1252 unit (`slice`, `context`, `find-callers --context`, `hover`, `--json`) is valid UTF-8 for an agent. Off by default because the IDE plugin decodes the output as ANSI. `serve` (MCP) writes UTF-8 either way. |
 | `DRAGLINT_RULE_CACHE` | `0` | Turns off the `lint <file>` whole-graph rule cache (circular-uses, enum-helper-separate-units, duplicate-global-decl served from disk; `index --project` warms it). Off = computed live every run, as before 1.30.1. Under `DRAGLINT_PROFILE` every lint prints `rule-cache: hit / miss (<why>) / written / skipped (<why>)`. |
 | `DRAGLINT_RULE_CACHE_DIR` | path | Where cache entries live (default `%LOCALAPPDATA%\drag-lint\cache`, one `rules-<hash>.json` per project index). Tests point it at a scratch folder. Deleting the folder is always safe. |
 
