@@ -3,6 +3,34 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.39.0-alpha -- planned
+
+### Fixed
+
+- **A file is found in the index whatever mix of long and 8.3 short path components names it**
+  (no version constant moves). Jonathas Paiva (PR #7). Windows names a file both by its long path
+  and by 8.3 short components (`C:\Users\JONATH~1.SIL\...`), and a path can MIX them: an index stores
+  paths as its run was given them -- `%TEMP%` hands out a short first component on some machines --
+  and a later lookup arrives in another mix (a process CWD is reported long). Both lookups compared
+  text, so `convert-apply` said "MyForm.pas is not covered by any supplied --db" about a file the
+  `--db` held, converted nothing, wrote no backup and exited 0, and `lint --db` ran store-free. On a
+  miss, `TSQLiteSymbolStore.FindFileIdByPath` and `DbContainsFile` now compare the rows with the same
+  file name by canonical LONG path. Stored paths are not rewritten. `run_convert_apply` and
+  `run_convert_apply_multidb` go green. Guard: `tests\autotest\run_file_lookup_8dot3.ps1`
+  (SKIPs where the volume makes no 8.3 names).
+- **One `index` run per database, refused at the start**. Two runs on the
+  ProjectA database met on 2026-10-09: the second parsed every file and only then died with `database
+  is locked` (exit 3), and while they overlapped the index answered with a third of its rows. A run now
+  holds `<db>.indexing.lock` (no sharing, delete-on-close, released by the OS however the process
+  ends); a second `index` on the same database exits 2 at once. Readers never take it. Guard:
+  `tests\autotest\run_index_concurrent_lock.ps1`. Jonathas Paiva (PR #7).
+- **`index <folder> --db <projectDb> --rebuild` no longer empties the project index before refusing**
+ . The folder-into-project refusal ran after `Migrate`, the fingerprint stamp and
+  `--rebuild`'s `ClearAllFiles`, so it exited 2 with `--rebuild: cleared N indexed file(s)` already
+  printed -- measured 2 -> 0 files on a fixture. The refusal is now decided first, from a read-only
+  look at `scan_type`, before anything writes. Guard:
+  `tests\autotest\run_index_folder_refusal_before_write.ps1`. Jonathas Paiva (PR #7).
+
 ## v1.38.1-alpha -- planned
 
 ### Planned

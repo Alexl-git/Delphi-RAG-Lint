@@ -4053,6 +4053,63 @@ end;
 { Defined beside IndexerFingerprint, below; BuildPlanItem is its first caller. }
 function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: string): Boolean; forward;
 
+var GIndexLocks: TDictionary<string, THandle> = nil;
+
+{ ONE INDEX RUN PER DATABASE, REFUSED AT THE START (Gitea drag-lint#17).
+
+  Two `index` runs on one database used to find each other only at the END:
+  the second parsed all ~2,000 files and then died on its first big write with
+  `FATAL: ... database is locked` (exit 3), after the first had already
+  cleared and was refilling the tables -- so for minutes the index answered
+  queries with a third of its rows. Measured on ProjectA, 2026-10-09.
+
+  The lock is `<db>.indexing.lock`, opened with NO sharing and DELETE_ON_CLOSE
+  and held until the process exits. The operating system releases it when the
+  process dies, however it dies, so a killed run never leaves a stale lock
+  behind -- the failure mode a PID file would have. Readers (query, lint ...)
+  never take it; only the writers that index do. The same process asking again
+  for a database it already holds is told yes. }
+function AcquireIndexLock(const ADbPath: string): Boolean;
+begin
+  if GIndexLocks = nil then GIndexLocks:= TDictionary<string, THandle>.Create;
+  var Key: string:= LowerCase(TPath.GetFullPath(ADbPath));
+  if GIndexLocks.ContainsKey(Key) then Exit(True);
+  var LockPath: string:= ADbPath + '.indexing.lock';
+  var H: THandle:= CreateFile(PChar(LockPath), GENERIC_WRITE, 0, nil, OPEN_ALWAYS,
+    FILE_ATTRIBUTE_NORMAL or FILE_FLAG_DELETE_ON_CLOSE, 0);
+  if H = INVALID_HANDLE_VALUE then
+  begin
+    var Err: DWORD:= GetLastError;
+    if Err = ERROR_SHARING_VIOLATION then
+      Writeln(ErrOutput, Format('ERROR: index: another index run is writing %s (its lock %s is held). ' +
+        'Wait for it to finish -- two runs on one database end with "database is locked" after parsing everything.',
+        [ADbPath, LockPath]))
+    else
+      Writeln(ErrOutput, Format('ERROR: index: cannot create the lock file %s: %s', [LockPath, SysErrorMessage(Err)]));
+    Exit(False);
+  end;
+  GIndexLocks.Add(Key, H); { held until exit; the OS closes and deletes it }
+  Result:= True;
+end;
+
+{ The refusal text for `index <folder>` aimed at a PROJECT database, shared by
+  the early read-only check and the original one in DoIndex. }
+procedure WriteFolderIntoProjectRefusal(const ADbPath, AFolder: string);
+begin
+  Writeln(ErrOutput, 'ERROR: refusing to index a FOLDER into a PROJECT database.');
+  Writeln(ErrOutput, '  database: ' + ADbPath);
+  Writeln(ErrOutput, '  folder  : ' + AFolder);
+  Writeln(ErrOutput, '');
+  Writeln(ErrOutput, 'A project index holds the project''s MEMBERS, which may span several folders');
+  Writeln(ErrOutput, 'and deliberately exclude loose .pas files sitting beside them. Indexing a');
+  Writeln(ErrOutput, 'folder into it would add those loose files and then adopt the widened set as');
+  Writeln(ErrOutput, 'the database''s own scope -- silently, and until the next section rebuild.');
+  Writeln(ErrOutput, '');
+  Writeln(ErrOutput, 'Use instead:');
+  Writeln(ErrOutput, '  drag-lint index --project <file.dproj> --db ' + ADbPath);
+  Writeln(ErrOutput, '  drag-lint index --all --only <Section>');
+end;
+
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
   AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False;
   AResolveOnly: Boolean = False; const ABuildConfig: string = ''; AWaitLibraryMin: Integer = 0;
@@ -4095,6 +4152,7 @@ begin
 
   T0:= Now;
   try
+    if not AcquireIndexLock(AItem.DbPath) then Exit(False); { #17: another run owns this database }
     Store:= TSQLiteSymbolStore.Create(AItem.DbPath);
     { Ruling 1: never downgrade. Before Migrate, so a refusal leaves the file
       byte-identical; False here is reported by the section roll-up like any
@@ -6186,6 +6244,33 @@ begin
     preview refusals that read the stored DB (project-tag conflict, engine older than DB). }
   if (not AArgs.DryRun) and (DbHome <> '') and (not TDirectory.Exists(DbHome)) then TDirectory.CreateDirectory(DbHome);
 
+  { REFUSE A FOLDER INTO A PROJECT DATABASE BEFORE ANYTHING WRITES. The same
+    refusal further down ran after Migrate, the fingerprint stamp and --rebuild's
+    ClearAllFiles, so `index <dir> --db <projectDb> --rebuild` EMPTIED the
+    project index and then refused (Gitea drag-lint#22). It also has to come
+    before the one-writer lock: a folder aimed at a project index is refused
+    for what it is, whether or not another run is writing. A read-only peek at
+    the stamp; the later check stays for the unstamped-database NOTE. }
+  var EarlyProjectScoped: Boolean:= (AArgs.ProjectPath <> '') or
+    SameText(ExtractFileExt(AArgs.Path), '.dpr') or SameText(ExtractFileExt(AArgs.Path), '.dproj');
+  if (not EarlyProjectScoped) and (not AArgs.ResolveOnly) and TDirectory.Exists(AArgs.Path)
+     and TFile.Exists(ResolvedDb) then
+  begin
+    var PeekScanType: string:= '';
+    try
+      var Peek: ISymbolStore:= TSQLiteSymbolStore.Create(ResolvedDb, {AReadOnly=}True);
+      PeekScanType:= Peek.GetMetaValue(SCAN_TYPE_KEY);
+    except
+      PeekScanType:= ''; { unreadable here: the checks below report it as before }
+    end;
+    if SameText(PeekScanType, SCAN_TYPE_PROJECT) then
+    begin
+      WriteFolderIntoProjectRefusal(ResolvedDb, AArgs.Path);
+      Exit(2);
+    end;
+  end;
+
+  if not AcquireIndexLock(ResolvedDb) then Exit(2); { #17: another run owns this database }
   Store:= TSQLiteSymbolStore.Create(if AArgs.DryRun then ':memory:' else ResolvedDb);
   { Ruling 1: never downgrade. Before Migrate, so a refusal leaves the file
     byte-identical. Exit 2, the code every other refusal in this verb uses. }
@@ -6601,18 +6686,7 @@ begin
 
     if SameText(DbScanType, SCAN_TYPE_PROJECT) then
     begin
-      Writeln(ErrOutput, 'ERROR: refusing to index a FOLDER into a PROJECT database.');
-      Writeln(ErrOutput, '  database: ' + ResolvedDb);
-      Writeln(ErrOutput, '  folder  : ' + AArgs.Path);
-      Writeln(ErrOutput, '');
-      Writeln(ErrOutput, 'A project index holds the project''s MEMBERS, which may span several folders');
-      Writeln(ErrOutput, 'and deliberately exclude loose .pas files sitting beside them. Indexing a');
-      Writeln(ErrOutput, 'folder into it would add those loose files and then adopt the widened set as');
-      Writeln(ErrOutput, 'the database''s own scope -- silently, and until the next section rebuild.');
-      Writeln(ErrOutput, '');
-      Writeln(ErrOutput, 'Use instead:');
-      Writeln(ErrOutput, '  drag-lint index --project <file.dproj> --db ' + ResolvedDb);
-      Writeln(ErrOutput, '  drag-lint index --all --only <Section>');
+      WriteFolderIntoProjectRefusal(ResolvedDb, AArgs.Path);
       Exit(2);
     end;
 
