@@ -17,6 +17,13 @@
       `index --project`) and re-checked; an unopenable DB, a failed or
       ineffective reindex, a DB without its completed-run stamp, and a folder DB
       (no project file -- never reindexed) are all UNVERIFIED, with a reason.
+    * RefreshOwner also checks a PROJECT owner as a whole (INBOX
+      rename-owner-without-target-reports-fresh), because per-row freshness
+      cannot see a row that is absent: a DB stamped with ANOTHER project's
+      project_tag is unverified and never reindexed (R18); an empty tag is no
+      mismatch (R21); a .dproj member with no files row is stale in a preview
+      (R19), reindexed by an apply (R20), and unverified with the rebuild hint
+      when the reindex still leaves it out (R22).
     * ChangedFilePaths returns the FULL changed list (5 of 5) where
       ProbeIndexFreshness keeps 3 examples, using the same comparison.
     * FindStaleEdit (fix round 1, ruling 8): a multi-project rename's edit set
@@ -54,7 +61,7 @@ $realBefore = if (Test-Path $RealDb) { $i = Get-Item $RealDb; "$($i.Length)|$($i
 Write-Host '== Rename owners: tri-state membership + discovery by full path ==' -ForegroundColor Cyan
 $Exe = (Resolve-Path $Exe).Path
 New-Item -ItemType Directory $WorkDir | Out-Null
-foreach ($d in 'shared', 'twin', 'A', 'T', 'many') { New-Item -ItemType Directory "$WorkDir\$d" | Out-Null }
+foreach ($d in 'shared', 'twin', 'A', 'T', 'many', 'M') { New-Item -ItemType Directory "$WorkDir\$d" | Out-Null }
 
 # --- fixture sources: one unit name, two different files ---
 $unit = @('unit uShared;', '', 'interface', '', 'const', '  My_Const = 1;', '', 'implementation', '', 'end.')
@@ -63,6 +70,14 @@ WriteAscii "$WorkDir\twin\uShared.pas"   $unit
 WriteAscii "$WorkDir\A\A.dpr" @('program A;', '', 'uses', "  uShared in '..\shared\uShared.pas';", '', 'begin', 'end.')
 foreach ($n in 1..5) { WriteAscii "$WorkDir\many\uMany$n.pas" @("unit uMany$n;", '', 'interface', '', 'implementation', '', 'end.') }
 WriteAscii "$WorkDir\T\T.dpr" @('program T;', '', 'uses', "  uShared in '..\twin\uShared.pas';", '', 'begin', 'end.')
+# M: a .dproj project; uLate.pas is added to its DCCReferences AFTER indexing (T2)
+function MDproj([string[]]$Refs) {
+  @('<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">', '<PropertyGroup>', '<MainSource>M.dpr</MainSource>', '</PropertyGroup>', '<ItemGroup>') +
+  @($Refs | ForEach-Object { "<DCCReference Include=`"$_`"/>" }) + @('</ItemGroup>', '</Project>')
+}
+WriteAscii "$WorkDir\M\M.dpr"  @('program M;', '', 'uses', "  uM in 'uM.pas';", '', 'begin', 'end.')
+WriteAscii "$WorkDir\M\uM.pas" @('unit uM;', '', 'interface', '', 'implementation', '', 'end.')
+WriteAscii "$WorkDir\M\M.dproj" (MDproj @('uM.pas'))
 
 # --- fixture DBs, each with an explicit --db, cwd inside the work folder ---
 Push-Location $WorkDir
@@ -76,9 +91,15 @@ try {
   Check 'F3 indexed shared\ as a library DB' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\LIB.sqlite")) "exit=$LASTEXITCODE"
   $null = & $Exe index "$WorkDir\many" --db "$WorkDir\many.sqlite" 2>&1
   Check 'F4 indexed many\ (5 units) as a library DB' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\many.sqlite")) "exit=$LASTEXITCODE"
+  $null = & $Exe index --project "$WorkDir\M\M.dproj" --db "$WorkDir\M.sqlite" 2>&1
+  Check 'F5 indexed M.dproj' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\M.sqlite")) "exit=$LASTEXITCODE"
 } finally { Pop-Location }
 # fresh copies of A for the callback-double cases (RefreshOwner never sees the original)
-foreach ($c in 'A_nostamp', 'A_fail', 'A_noop', 'A_preview') { Copy-Item "$WorkDir\A.sqlite" "$WorkDir\$c.sqlite" }
+foreach ($c in 'A_nostamp', 'A_fail', 'A_noop', 'A_preview', 'A_tag', 'A_notag') { Copy-Item "$WorkDir\A.sqlite" "$WorkDir\$c.sqlite" }
+# T2: a member added to M.dproj after M was indexed -- the copies lack it
+WriteAscii "$WorkDir\M\uLate.pas" @('unit uLate;', '', 'interface', '', 'implementation', '', 'end.')
+WriteAscii "$WorkDir\M\M.dproj" (MDproj @('uM.pas', 'uLate.pas'))
+foreach ($c in 'M_preview', 'M_apply', 'M_noop') { Copy-Item "$WorkDir\M.sqlite" "$WorkDir\$c.sqlite" }
 [System.IO.File]::WriteAllBytes("$WorkDir\bad.sqlite", [byte[]](,0xFF * 64))
 
 # --- manifests, parsed from text by the harness ---
@@ -180,6 +201,28 @@ Check 'R15 ... with its changed-file count, and never reindexes' (($kv['r.previe
 Check 'R16 ... and the owner DB size+mtime are unchanged' ($kv['r.preview.db_unchanged'] -eq 'TRUE') "got: $($kv['r.preview.db_unchanged'])"
 Check 'R17 a stale folder DB in a preview is unverified, as on an apply' (($kv['r.previewfolder'] -eq 'unverified') -and ($kv['r.previewfolder.reason'] -eq 'no project file -- folder DBs are not reindexed by a rename')) "got: $($kv['r.previewfolder']) '$($kv['r.previewfolder.reason'])'"
 
+Write-Host '-- RefreshOwner: an index that is not this project''s closure (T1 tag, T2 members)' -ForegroundColor Cyan
+$tDpr = "$WorkDir\T\T.dpr"
+$mDproj = "$WorkDir\M\M.dproj"
+$late = "$WorkDir\M\uLate.pas"
+Check 'R18 an index stamped with ANOTHER project''s tag is unverified, never reindexed, with the exact reason' `
+  (($kv['r.wrongtag'] -eq 'unverified') -and ($kv['r.wrongtag.reindex_calls'] -eq '0') -and `
+   ($kv['r.wrongtag.reason'] -eq "index was built from project A, not T.dpr -- rebuild it: drag-lint index --project $tDpr --db $WorkDir\A_tag.sqlite --rebuild")) `
+  "got: $($kv['r.wrongtag']) calls=$($kv['r.wrongtag.reindex_calls']) '$($kv['r.wrongtag.reason'])'"
+Check 'R19 a .dproj member missing from the index: a PREVIEW reports it stale, names it, never reindexes, writes nothing' `
+  (($kv['r.member'] -eq 'stale') -and ($kv['r.member.reindex_calls'] -eq '0') -and ($kv['r.member.db_unchanged'] -eq 'TRUE') -and `
+   ($kv['r.member.reason'] -eq "1 project member(s) not in the index: $late")) `
+  "got: $($kv['r.member']) calls=$($kv['r.member.reindex_calls']) unchanged=$($kv['r.member.db_unchanged']) '$($kv['r.member.reason'])'"
+Check 'R20 ... an APPLY reindexes it once and the owner is reindexed' `
+  (($kv['r.memberapply'] -eq 'reindexed') -and ($kv['r.memberapply.reindex_calls'] -eq '1')) `
+  "got: $($kv['r.memberapply']) calls=$($kv['r.memberapply.reindex_calls']) '$($kv['r.memberapply.reason'])'"
+Check 'R21 an EMPTY project_tag (pre-stamp index) is not a mismatch: fresh, no reindex' `
+  (($kv['r.notag'] -eq 'fresh') -and ($kv['r.notag.reindex_calls'] -eq '0') -and ($kv['r.notag.reason'] -eq '')) `
+  "got: $($kv['r.notag']) calls=$($kv['r.notag.reindex_calls']) '$($kv['r.notag.reason'])'"
+Check 'R22 a reindex that still leaves the member out: unverified, with the rebuild hint' `
+  (($kv['r.membernoop'] -eq 'unverified') -and ($kv['r.membernoop.reindex_calls'] -eq '1') -and `
+   ($kv['r.membernoop.reason'] -eq "still missing after reindex: 1 project member(s) not in the index: $late -- rebuild it: drag-lint index --project $mDproj --db $WorkDir\M_noop.sqlite --rebuild")) `
+  "got: $($kv['r.membernoop']) calls=$($kv['r.membernoop.reindex_calls']) '$($kv['r.membernoop.reason'])'"
 Write-Host '-- FindStaleEdit: the write-time all-or-nothing guard (fix round 1, ruling 8)' -ForegroundColor Cyan
 Check 'G1 every edit still holds its expected text: not stale'      ($kv['wg.fresh'] -eq 'ok')        "got: $($kv['wg.fresh'])"
 Check 'G2 ONE edit''s line moved on disk: the set is stale'         ($kv['wg.moved'] -eq 'stale')     "got: $($kv['wg.moved'])"

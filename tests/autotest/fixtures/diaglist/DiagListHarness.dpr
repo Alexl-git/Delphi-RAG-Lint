@@ -287,5 +287,19 @@ begin
   for I:= 1 to 12 do Txt:= Txt + Format('rename-unindexed: U%d (C:\x\U%d.sqlite)'#13#10, [I, I]);
   Txt:= RenameConfirmText('u.pas', '', '', ParseRenamePreview(Txt));
   Writeln('un.cap=', Txt.Contains('U9, U10 and 2 more -- ') and not Txt.Contains('U11'));
+
+  { tm: INBOX rename-owner-without-target-reports-fresh -- an owner whose DB
+    carries another project's tag is unverified, one missing a member is
+    stale; both reasons reach the dialog verbatim, and the refusal wins }
+  Prev:= ParseRenamePreview('rename-owners: 3 of 4 indexes'#13#10 +
+    'rename-project: A index=fresh'#13#10 +
+    'rename-project: C index=unverified (index was built from project A, not C.dproj -- rebuild it: drag-lint index --project C:\w\C\C.dproj --db C:\w\C.sqlite --rebuild)'#13#10 +
+    'rename-project: E index=stale (1 project member(s) not in the index: C:\w\E\uLate.pas)'#13#10 +
+    'rename-target: L6 My_Const -> MyConst dropped project C: unverified -- index was built from project A, not C.dproj'#13#10 +
+    'autofix: rename refused -- project C: unverified -- index was built from project A, not C.dproj'#13#10);
+  Writeln('tm.project1=', JoinS(Prev.ProjectLines, 1));
+  Writeln('tm.project2=', JoinS(Prev.ProjectLines, 2));
+  Writeln('tm.stale=', Prev.StaleCount);
+  Writeln('tm.action=', Ord(RenamePreviewAction(Prev)));
   Writeln('DONE');
 end.

@@ -96,11 +96,18 @@ and no empty result -- only a smaller answer than the truth.
 The engine already carries both checks; the standing requirement is to RUN them:
 
 ```
-drag-lint reconcile-project <App.dproj> --db <db> --json        (dry run FIRST)
+drag-lint reconcile-project <App.dproj> --json                  (read-only report FIRST -- no --db)
 drag-lint lint --project <App.dproj> --rule unit-not-in-dpr
 ```
 
-Dry-run before `--apply`, always -- `--apply` edits the project file. Fix the
+**`--db` is NOT a dry run.** With an explicit `--db`, reconcile-project runs its
+coherence phase: it opens that index read-write, re-scans incoherent members and
+re-runs the resolve pass -- with or without `--apply` (`--help`: "--db heals the
+index"). Measured 2026-10-14: a read-only planner ran it on ORM3 `DMTEST.sqlite`
+believing this line, and the DB was written. For a read-only look, omit `--db`
+or point it at a COPY; pass the real `--db` only when you mean to heal that index.
+
+Report before `--apply`, always -- `--apply` edits the project file. Fix the
 `.dproj`/`.dpr`, then re-index that project INCREMENTALLY (`index --project
 <x.dproj> --db <db>`; **never** `index <dir> --db <projectDb>`, which widens a
 project DB into a directory DB). Verify the closure actually grew by comparing
