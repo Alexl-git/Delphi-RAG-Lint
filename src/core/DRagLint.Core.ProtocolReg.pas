@@ -41,8 +41,9 @@ function ProtocolRegistryRoot: string;
 
 /// <summary>Reads the current draglint:// registration.</summary>
 /// <returns>Kind pcNone when the key or its command is absent; pcOurs when the handler file name is
-/// drag-lint-open.exe; pcLegacyPowerShell when the command names Open-DragLintUri.ps1; else pcForeign.</returns>
-/// <remarks>Read-only; never raises on a missing key. Both name matches are case-insensitive.</remarks>
+/// drag-lint-open.exe; pcLegacyPowerShell when the command names Open-DragLintUri.ps1; else pcForeign -- including
+/// a command value that is not a string (Command is then '(a non-string value)').</returns>
+/// <remarks>Read-only; never raises on a missing key or a non-string value. Both name matches are case-insensitive.</remarks>
 function ReadProtocolStatus: TProtocolStatus;
 
 /// <summary>Registers pHandler as the draglint:// handler for the current user.</summary>
@@ -50,27 +51,33 @@ function ReadProtocolStatus: TProtocolStatus;
 /// <param name="pForce">Accept a path containing '-wt\' and replace a pcForeign registration.</param>
 /// <param name="pDryRun">Report what would be written and write nothing.</param>
 /// <param name="pReport">The lines the verb prints.</param>
-/// <returns>0 written (or would be); 1 refused (foreign without pForce, worktree without pForce); 2 handler missing.</returns>
+/// <returns>0 written (or would be); 1 refused (foreign without pForce, worktree without pForce); 2 handler missing,
+/// or DRAGLINT_PROTOCOL_TEST_ROOT resolving to or under the real Software\Classes.</returns>
 /// <remarks>HKCU only, never HKLM (owner D4). Writes (default)=URL:drag-lint protocol, an empty REG_SZ
 /// "URL Protocol" and shell\open\command\(default)="&lt;handler&gt;" "%1" (REG_SZ). Replacing a
 /// pcLegacyPowerShell registration also deletes the copy %LOCALAPPDATA%\drag-lint\Open-DragLintUri.ps1 that
 /// Register-DragLintProtocol.ps1 installed -- except under DRAGLINT_PROTOCOL_TEST_ROOT, where it is reported as
-/// left in place.</remarks>
+/// left in place. A legacy copy that cannot be deleted (locked, read-only) is reported, not raised: the key is
+/// already written and the exit stays 0.</remarks>
 function RegisterProtocol(const pHandler: string; pForce, pDryRun: Boolean; out pReport: string): Integer;
 
 /// <summary>Removes the draglint:// registration when it is ours or the legacy PowerShell one.</summary>
 /// <param name="pForce">Also remove a pcForeign registration.</param>
 /// <param name="pDryRun">Report what would be removed and remove nothing.</param>
 /// <param name="pReport">The lines the verb prints.</param>
-/// <returns>0 removed, absent, or would be removed; 1 refused (pcForeign without pForce).</returns>
-/// <remarks>The key is deleted recursively. A legacy registration's copy is deleted with it, under the same
+/// <returns>0 removed, absent, kept (a key with no shell\open\command, without pForce), or would be removed;
+/// 1 refused (pcForeign without pForce); 2 for an unsafe DRAGLINT_PROTOCOL_TEST_ROOT.</returns>
+/// <remarks>The key is deleted recursively. A key that exists but names no command may be another program's and is
+/// kept ('nothing to remove') unless pForce. A legacy registration's copy is deleted with it, under the same
 /// test-root exception as RegisterProtocol.</remarks>
 function UnregisterProtocol(pForce, pDryRun: Boolean; out pReport: string): Integer;
 
 /// <summary>Entry point of `drag-lint protocol`: parses ParamStr(2..) itself (register|unregister|status and flags).</summary>
 /// <returns>The verb's exit code; 2 with usage on stderr for no sub-verb, an unknown sub-verb or an unknown flag.</returns>
-/// <remarks>Also 2 when DRAGLINT_PROTOCOL_TEST_ROOT names the real root (Software): the override must never
-/// resolve to the key it exists to protect.</remarks>
+/// <remarks>Also 2, before anything is opened, when DRAGLINT_PROTOCOL_TEST_ROOT -- normalised as TRegistry reads it:
+/// surrounding blanks and backslashes stripped -- is Software, Software\Classes or lies under Software\Classes: the
+/// override must never resolve to the tree it exists to protect. A trailing --handler with no value is a usage
+/// error ('--handler needs a value').</remarks>
 function RunProtocolVerbFromCommandLine: Integer;
 
 implementation
@@ -103,11 +110,26 @@ const
   EXIT_REFUSED = 1;
   EXIT_SETUP   = 2;
 
+  NON_STRING_COMMAND = '(a non-string value)';
+  TEST_ROOT_REFUSAL  = TEST_ROOT_ENV + ' resolves to or under the real HKCU\Software\Classes; refusing';
   FIRST_FLAG_PARAM = 3;  // ParamStr(1) is `protocol`, ParamStr(2) the sub-verb
 
+{ Normalised the way TRegistry reads a path: surrounding blanks and backslashes stripped (a leading '\' is
+  absolute to TRegistry, so '\Software' would otherwise be the real Software) and doubled backslashes folded. }
 function TestRoot: string;
 begin
-  Result:= GetEnvironmentVariable(TEST_ROOT_ENV).Trim.TrimRight(['\']);
+  Result:= GetEnvironmentVariable(TEST_ROOT_ENV).Trim;
+  while Result.Contains('\\') do Result:= Result.Replace('\\', '\');
+  Result:= Result.Trim(['\']).Trim;
+end;
+
+{ True when DRAGLINT_PROTOCOL_TEST_ROOT is set but the key it yields is the real one or lies under the real
+  Software\Classes -- the override exists to keep tests OFF that tree, so such a value is refused outright. }
+function UnsafeTestRoot: Boolean;
+begin
+  var Root:= TestRoot.ToLower;
+  if Root = '' then Exit(False);
+  Result:= (Root = 'software') or (Root = 'software\classes') or Root.StartsWith('software\classes\');
 end;
 
 function ProtocolRegistryRoot: string;
@@ -149,13 +171,24 @@ function ReadProtocolStatus: TProtocolStatus;
 begin
   Result.Command:= '';
   Result.Handler:= '';
+  var NonString:= False;
   var Reg:= TRegistry.Create(KEY_READ);
   try
     Reg.RootKey:= HKEY_CURRENT_USER;
     if Reg.OpenKeyReadOnly(ProtocolRegistryRoot + COMMAND_SUBKEY) and Reg.ValueExists('') then
-      Result.Command:= Reg.ReadString('');
+    begin
+      { A non-string command is nobody's we know: report it as foreign rather than let ReadString raise. }
+      NonString:= not (Reg.GetDataType('') in [rdString, rdExpandString]);
+      if not NonString then Result.Command:= Reg.ReadString('');
+    end;
   finally
     Reg.Free;
+  end;
+  if NonString then
+  begin
+    Result.Command:= NON_STRING_COMMAND;
+    Result.Kind:= pcForeign;
+    Exit;
   end;
   Result.Kind:= Classify(Result.Command);
   if Result.Kind <> pcNone then Result.Handler:= FirstToken(Result.Command);
@@ -180,14 +213,24 @@ begin
     pReport:= pReport + 'would remove: ' + LegacyCopy + sLineBreak
   else
   begin
-    TFile.Delete(LegacyCopy);
-    pReport:= pReport + '  removed : ' + LegacyCopy + sLineBreak;
+    try
+      TFile.Delete(LegacyCopy);
+      pReport:= pReport + '  removed : ' + LegacyCopy + sLineBreak;
+    except
+      on E: Exception do  { the key is already written: report, do not fail the verb over a locked copy }
+        pReport:= pReport + 'could not remove legacy copy ' + LegacyCopy + ': ' + E.Message + sLineBreak;
+    end;
   end;
 end;
 
 function RegisterProtocol(const pHandler: string; pForce, pDryRun: Boolean; out pReport: string): Integer;
 begin
   pReport:= '';
+  if UnsafeTestRoot then
+  begin
+    pReport:= TEST_ROOT_REFUSAL + sLineBreak;
+    Exit(EXIT_SETUP);
+  end;
   var Handler:= ExpandFileName(pHandler);
   if not TFile.Exists(Handler) then
   begin
@@ -237,6 +280,11 @@ end;
 function UnregisterProtocol(pForce, pDryRun: Boolean; out pReport: string): Integer;
 begin
   pReport:= '';
+  if UnsafeTestRoot then
+  begin
+    pReport:= TEST_ROOT_REFUSAL + sLineBreak;
+    Exit(EXIT_SETUP);
+  end;
   var Root:= ProtocolRegistryRoot;
   var Current:= ReadProtocolStatus;
   var Reg:= TRegistry.Create(KEY_ALL_ACCESS);
@@ -251,6 +299,13 @@ begin
     begin
       pReport:= 'refusing: draglint:// is registered to ' + Current.Command + '; pass --force to remove it' + sLineBreak;
       Exit(EXIT_REFUSED);
+    end;
+    if (Current.Kind = pcNone) and not pForce then
+    begin
+      { The key exists but names no handler: it may be another program's half-written registration. }
+      pReport:= 'nothing to remove: HKCU\' + Root + ' has no shell\open\command; key kept (pass --force to remove it)'
+        + sLineBreak;
+      Exit(EXIT_OK);
     end;
     if pDryRun then
       pReport:= 'would remove: HKCU\' + Root + sLineBreak
@@ -307,8 +362,7 @@ begin
   var Verb:= ParamStr(2).ToLower;
   if (Verb <> 'register') and (Verb <> 'unregister') and (Verb <> 'status') then
     Exit(UsageError('unknown sub-verb "' + ParamStr(2) + '"'));
-  if SameText(ProtocolRegistryRoot, REAL_ROOT) and (TestRoot <> '') then
-    Exit(UsageError(TEST_ROOT_ENV + ' resolves to the real key; refusing'));
+  if UnsafeTestRoot then Exit(UsageError(TEST_ROOT_REFUSAL));
   var Handler:= TPath.Combine(ExtractFileDir(ParamStr(0)), HANDLER_EXE);
   var Force:= False;
   var DryRun:= False;
@@ -317,8 +371,9 @@ begin
   while I <= ParamCount do
   begin
     var Flag:= ParamStr(I);
-    if (Flag = PROTOCOL_FLAG_NAMES[pfHandler]) and (Verb = 'register') and (I < ParamCount) then
+    if (Flag = PROTOCOL_FLAG_NAMES[pfHandler]) and (Verb = 'register') then
     begin
+      if I = ParamCount then Exit(UsageError(Flag + ' needs a value'));
       Inc(I);
       Handler:= ParamStr(I);
     end

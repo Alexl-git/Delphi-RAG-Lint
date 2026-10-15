@@ -14,7 +14,11 @@
   asserts that line plus the copy's existence/hash unchanged. The real deletion (no test root) is
   MANUAL-VERIFIED, not guarded -- exercising it would need the real key.
 
-    PV-USAGE      no sub-verb / unknown sub-verb / unknown flag: usage on stderr, exit 2
+    PV-USAGE      no sub-verb / unknown sub-verb / unknown flag / --handler with no value: usage on
+                  stderr, exit 2, nothing written
+    PV-ROOTSAFE   a test root that is, or (as TRegistry reads it: '\Software', 'Software\') resolves to,
+                  Software or anything under Software\Classes: exit 2 before anything is opened. Only
+                  read-only invocations are used for these
     PV-NONE       status on an empty root: `draglint://: none`, exit 1
     PV-NOHANDLER  register with a bogus --handler: `handler not found`, exit 2
     PV-DEFAULT    register --dry-run with no --handler names <exe dir>\drag-lint-open.exe
@@ -22,9 +26,12 @@
     PV-WT         a handler under ...-wt\...: refused exit 1; with --force accepted
     PV-REG        register a scratch copy of drag-lint-open.exe: status ours exit 0; the three
                   registry values exact; status --json fields
-    PV-LEGACY     a pre-seeded legacy PowerShell command is silently replaced (status ours)
+    PV-LEGACY     a pre-seeded legacy PowerShell command: register --dry-run names it as current and
+                  writes nothing; unregister removes it; register replaces it silently (status ours)
     PV-FOREIGN    a pre-seeded foreign command: register refused exit 1, --force replaces;
-                  unregister refused exit 1 without --force
+                  unregister refused exit 1 without --force, removes it with --force
+    PV-BARE       a key with no shell\open\command is kept by unregister, removed with --force
+    PV-NONSTRING  a DWORD command classifies as foreign (no raise); register --force replaces it
     PV-UNREG      unregister --dry-run writes nothing; unregister removes; again: nothing to remove
     PV-PARITY     TRANSITIONAL, while the script exists: Register-DragLintProtocol.ps1 -DryRun and
                   `protocol register --dry-run` name the same key path (shell\open\command)
@@ -75,9 +82,11 @@ function Get-CopyFingerprint {
 }
 
 # Every engine run goes through here: the test root is set FIRST, and a run without it is refused.
-function Invoke-Protocol([string[]]$ArgList) {
-  $env:DRAGLINT_PROTOCOL_TEST_ROOT = $TestRoot
-  if ($env:DRAGLINT_PROTOCOL_TEST_ROOT -ne $TestRoot) { throw 'test root not set -- refusing to run the verb' }
+# -Root overrides it ONLY for PV-ROOTSAFE, whose runs are read-only verbs the engine must refuse up front.
+function Invoke-Protocol([string[]]$ArgList, [string]$Root = $TestRoot) {
+  if (-not $Root) { throw 'empty test root -- refusing to run the verb' }
+  $env:DRAGLINT_PROTOCOL_TEST_ROOT = $Root
+  if ($env:DRAGLINT_PROTOCOL_TEST_ROOT -ne $Root) { throw 'test root not set -- refusing to run the verb' }
   $o = Join-Path $Work 'out.txt'; $e = Join-Path $Work 'err.txt'
   $p = Start-Process -FilePath $Exe -ArgumentList (@('protocol') + $ArgList | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) `
          -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
@@ -109,7 +118,18 @@ try {
   $r = Invoke-Protocol @('frobnicate')
   Check 'PV-USAGE (unknown)' ($r.Code -eq 2 -and $r.Err -match 'drag-lint protocol' -and -not (Test-Written)) "exit $($r.Code)"
   $r = Invoke-Protocol @('status', '--bogus')
-  Check 'PV-USAGE (flag)'    ($r.Code -eq 2 -and $r.Err -match '--bogus') "exit $($r.Code)"
+  Check 'PV-USAGE (flag)'    ($r.Code -eq 2 -and $r.Err -match '--bogus' -and -not (Test-Written)) "exit $($r.Code)"
+  $r = Invoke-Protocol @('register', '--handler')
+  Check 'PV-USAGE (--handler no value)' ($r.Code -eq 2 -and $r.Err -match '--handler needs a value' -and -not (Test-Written)) "exit $($r.Code)"
+
+  # ---- a test root that resolves to the REAL tree is refused before anything is opened ----------
+  # Only read-only invocations (status, register --dry-run), so even a broken refusal writes nothing;
+  # PV-REALKEY at the end still byte-compares the real key.
+  foreach ($bad in @('\Software', 'Software\', ' \\Software\\ ', 'Software\Classes', 'software\classes\draglint-x')) {
+    $r1 = Invoke-Protocol @('status') $bad
+    $r2 = Invoke-Protocol @('register', '--handler', $Handler, '--dry-run', '--force') $bad
+    Check "PV-ROOTSAFE '$bad'" ($r1.Code -eq 2 -and $r2.Code -eq 2 -and $r1.Err -match 'refusing' -and $r1.Out -eq '' -and $r2.Out -eq '') "exit $($r1.Code)/$($r2.Code)"
+  }
 
   # ---- status none ------------------------------------------------------------------------------
   $r = Invoke-Protocol @('status')
@@ -154,6 +174,12 @@ try {
   Set-Seed $legacy
   $r = Invoke-Protocol @('status')
   Check 'PV-LEGACY (status)'   ($r.Code -eq 1 -and $r.Out -match 'draglint://: legacy-powershell') "exit $($r.Code)"
+  $r = Invoke-Protocol @('register', '--handler', $good, '--dry-run')
+  Check 'PV-LEGACY (dry over legacy)' ($r.Code -eq 0 -and $r.Out -match 'would register' -and $r.Out.Contains("current : $legacy") -and
+                                      (Get-Cmd) -ceq $legacy) "exit $($r.Code)"
+  $r = Invoke-Protocol @('unregister')
+  Check 'PV-LEGACY (unregister)' ($r.Code -eq 0 -and $r.Out -match 'unregistered: ' -and $r.Out -match 'left in place' -and -not (Test-Written)) "exit $($r.Code)"
+  Set-Seed $legacy
   $r = Invoke-Protocol @('register', '--handler', $good)
   Check 'PV-LEGACY (replaced)' ($r.Code -eq 0 -and (Get-Cmd) -ceq $expectCmd -and
                                 $r.Out -match 'left in place \(DRAGLINT_PROTOCOL_TEST_ROOT is set\)') "exit $($r.Code) out=$($r.Out.Trim())"
@@ -168,8 +194,26 @@ try {
                                 (Get-Cmd) -ceq $foreign) "exit $($r.Code)"
   $r = Invoke-Protocol @('unregister')
   Check 'PV-FOREIGN (unreg refused)' ($r.Code -eq 1 -and (Get-Cmd) -ceq $foreign) "exit $($r.Code)"
+  $r = Invoke-Protocol @('unregister', '--force')
+  Check 'PV-FOREIGN (unreg --force)' ($r.Code -eq 0 -and -not (Test-Written)) "exit $($r.Code)"
+  Set-Seed $foreign
   $r = Invoke-Protocol @('register', '--handler', $good, '--force')
   Check 'PV-FOREIGN (--force)' ($r.Code -eq 0 -and (Get-Cmd) -ceq $expectCmd) "exit $($r.Code)"
+
+  # ---- a key with no command, and a non-string command ------------------------------------------
+  Remove-Item -LiteralPath $TestKey -Recurse -Force
+  New-Item -Path $TestKey -Force | Out-Null
+  Set-ItemProperty -LiteralPath $TestKey -Name '(default)' -Value 'someone else'
+  $r = Invoke-Protocol @('unregister')
+  Check 'PV-BARE (kept)'    ($r.Code -eq 0 -and $r.Out -match 'nothing to remove' -and (Test-Written)) "exit $($r.Code)"
+  $r = Invoke-Protocol @('unregister', '--force')
+  Check 'PV-BARE (--force)' ($r.Code -eq 0 -and -not (Test-Written)) "exit $($r.Code)"
+  New-Item -Path $CmdKey -Force | Out-Null
+  New-ItemProperty -LiteralPath $CmdKey -Name '(default)' -PropertyType DWord -Value 7 -Force | Out-Null
+  $r = Invoke-Protocol @('status')
+  Check 'PV-NONSTRING'      ($r.Code -eq 1 -and $r.Out -match 'draglint://: foreign') "exit $($r.Code) out=$($r.Out.Trim()) err=$($r.Err.Trim())"
+  $r = Invoke-Protocol @('register', '--handler', $good, '--force')
+  Check 'PV-NONSTRING (--force)' ($r.Code -eq 0 -and (Get-Cmd) -ceq $expectCmd) "exit $($r.Code)"
 
   # ---- unregister -------------------------------------------------------------------------------
   $r = Invoke-Protocol @('unregister', '--dry-run')

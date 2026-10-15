@@ -131,8 +131,9 @@ folder (not in the release zip) and need PowerShell 7 and Graphviz.
 
 drag-lint is not a model: every chart comes from a formal call, and every row in
 it is a fact from the index with a file and a line. Each answer is a bundle --
-`graph.svg` whose rows link back to the source (`draglint://open`, handled by the
-IDE plugin once `drag-lint protocol register` has made the link clickable -- see
+`graph.svg` whose rows link back to the source (`draglint://open`: a click is received by
+`drag-lint-open.exe`, which hands it to the IDE plugin, once `drag-lint protocol register` has made
+the link clickable -- see
 [Click-to-source links](#click-to-source-links-draglint)), PNG and PDF exports of the same layout, a browser shell, a
 `meta.json` that fingerprints the index and records the command that regenerates
 the chart, and a ready-to-paste DocInsight `<remarks>` reference. Full reference,
@@ -693,7 +694,7 @@ and more (see [MCP tools](#mcp-tools-15) below).
 
 Chart rows link to `draglint://open?file=...&line=...`. One per-user registry key
 (`HKCU\Software\Classes\draglint`, never HKLM, no elevation) hands such a click to
-`drag-lint-open.exe`, which validates the link and opens the line in the running IDE:
+`drag-lint-open.exe`, which validates the link and hands it to the IDE plugin, which opens the line in the running IDE:
 
 ```
 drag-lint protocol register [--handler <drag-lint-open.exe>] [--dry-run] [--force]
