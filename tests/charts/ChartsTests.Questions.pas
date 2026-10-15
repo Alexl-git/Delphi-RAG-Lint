@@ -239,11 +239,25 @@ type
     [Test] procedure HashtableKeyOrderMatchesPowerShell;
   end;
 
+  [TestFixture]
+  TWhoCallsTests = class(TQuestionFixture)
+  private
+    procedure CheckDepth(pDepth: Integer; const pFields, pDotSha: string);
+  public
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure CycleRowAndNameOnlyMatchPowerShell;
+    [Test] procedure DepthLimitTouchedIsTruncated;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure EventHandlerIsRefused;
+    [Test] procedure UnknownTargetIsRefused;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
+  DRagLint.Charts.Q.WhoCalls,
   DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
@@ -382,6 +396,18 @@ const
   EF_NA_FIELDS = 'TestChart=false,Qname="uSetupDefaults.TGlobalSetupDefaults.GetDebug1",Outcome="not-analysed",EffectFree="NULL",Summary="",Effects=0,Unknown=0,Unnamed=0,D12Suspect=false,ParamCount=0,Witness="",Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
   EF_NA_DOT_SHA = 'de3e372524e883ca452e15acb8aa5191fe0b2ed56575926b411520b66c33b73f';
   EF_LINES = 7;
+  WC_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  WC_FIELDS = 'Direction="callers",Question="who-calls",Rows=9,Callers=9,Callees=0,NodeCount=10,Cycles=0,MaxDepth=1.0,Truncated=false,Clusters=1,NameMatches=9,NameOnly=0,NameRendered=false,ClickTargets=10,Expected=10,AllClickable=true';
+  WC_DOT_SHA = 'db146e8ebfb5296a27fb16979197e7f9a1c865d9cd277edc255d69a3cf49fa24';
+  WC_LINES = 15;
+  WC_CYCLE_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.ReserveNextID';
+  WC_CYCLE_DEPTH = 3;
+  WC_CYCLE_FIELDS = 'Direction="callers",Question="who-calls",Rows=10,Callers=10,Callees=0,NodeCount=11,Cycles=1,MaxDepth=2.0,Truncated=false,Clusters=2,NameMatches=18,NameOnly=9,NameRendered=false,ClickTargets=11,Expected=11,AllClickable=true';
+  WC_CYCLE_DOT_SHA = 'a8c534920dc06417affc8254c33ec9a34e0b688ffdcac2f9544c8ba4e627c890';
+  WC_D1_DEPTH = 1;
+  WC_D1_FIELDS = 'Direction="callers",Question="who-calls",Rows=9,Callers=9,Callees=0,NodeCount=10,Cycles=0,MaxDepth=1.0,Truncated=true,Clusters=1,NameMatches=18,NameOnly=9,NameRendered=false,ClickTargets=10,Expected=10,AllClickable=true';
+  WC_D1_DOT_SHA = 'a9fb422c9009732f94971e6d8fe88eefae41a82a8f3158c3df9650a734f0bbcc';
+  WC_EVENT_TARGET = 'uMain.TfrmMAIN.FormCreate';
   FEEDS_FROM_ID = 'feeds-from';
   SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
   FF_STATS = 'IndexDs=54,IndexDsDfm=5,IndexDsCode=49,IndexDsOne=22,IndexDsMany=17,IndexDsByCol=6,IndexDsNone=9,IndexDsOther=6,' +
@@ -2446,6 +2472,66 @@ begin
   for var K:= 1 to EP_HT_COUNT do
     Keys:= Keys + [K * EP_HT_STEP + EP_HT_OFFSET];
   Assert.AreEqual(EP_HT_ORDER, IntsText(PsHashtableOrder(Keys)));
+end;
+
+{ ---- who-calls ---- }
+
+{ the -Depth runs on ReserveNextID: through FindChartQuestion with the depth set, as Ask-Report passes it }
+procedure TWhoCallsTests.CheckDepth(pDepth: Integer; const pFields, pDotSha: string);
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(WHO_CALLS_ID, WC_CYCLE_TARGET, CLIENT_CLONE, A) then
+    Exit;
+  A.Depth:= pDepth;
+  Assert.IsTrue(FindChartQuestion(WHO_CALLS_ID, E), WHO_CALLS_ID + ' is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(pFields, Fields(C));
+  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
+end;
+
+procedure TWhoCallsTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_CALLS_ID, WC_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WC_FIELDS, Fields(C));
+  Assert.AreEqual(WC_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TWhoCallsTests.CycleRowAndNameOnlyMatchPowerShell;
+begin
+  { AddOperation is reached again at :4102 as a cycle row; 9 of the 18 name matches are sibling classes' own ReserveNextID }
+  CheckDepth(WC_CYCLE_DEPTH, WC_CYCLE_FIELDS, WC_CYCLE_DOT_SHA);
+end;
+
+procedure TWhoCallsTests.DepthLimitTouchedIsTruncated;
+begin
+  { Truncated means the depth limit was TOUCHED by a node that has callers, not that rows were dropped }
+  CheckDepth(WC_D1_DEPTH, WC_D1_FIELDS, WC_D1_DOT_SHA);
+end;
+
+procedure TWhoCallsTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(WHO_CALLS_ID, WC_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(WC_LINES, Length(L));
+  Assert.AreEqual('CHART who-calls ' + WC_TARGET + ' -- 9 call sites / 0 cycle rows', L[CS_CHART_LINE]);
+end;
+
+procedure TWhoCallsTests.EventHandlerIsRefused;
+begin
+  Assert.StartsWith(WC_EVENT_TARGET + ' has 0 callers in call_edges (node_count 1). If it is an event handler the ' +
+    'caller is the DFM -- ask event-wiring instead.', Refusal(WHO_CALLS_ID, WC_EVENT_TARGET, CLIENT_CLONE));
+end;
+
+procedure TWhoCallsTests.UnknownTargetIsRefused;
+begin
+  Assert.AreEqual('symbol not found: No.Such.Method', Refusal(WHO_CALLS_ID, 'No.Such.Method', CLIENT_CLONE));
 end;
 
 end.

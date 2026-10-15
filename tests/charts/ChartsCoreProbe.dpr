@@ -81,6 +81,7 @@ uses
   , DRagLint.Charts.Q.LandsWhere in '..\..\src\charts\DRagLint.Charts.Q.LandsWhere.pas'
   , DRagLint.Charts.Q.Consumers in '..\..\src\charts\DRagLint.Charts.Q.Consumers.pas'
   , DRagLint.Charts.Q.ExceptionPaths in '..\..\src\charts\DRagLint.Charts.Q.ExceptionPaths.pas'
+  , DRagLint.Charts.Q.WhoCalls in '..\..\src\charts\DRagLint.Charts.Q.WhoCalls.pas'
   , DRagLint.Core.Model
   ;
 

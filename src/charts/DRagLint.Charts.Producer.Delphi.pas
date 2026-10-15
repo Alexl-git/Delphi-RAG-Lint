@@ -104,6 +104,7 @@ uses
   , DRagLint.Charts.Q.LandsWhere  // dl:ok unused-unit-in-uses@43f8 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Consumers  // dl:ok unused-unit-in-uses@e7fa -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.ExceptionPaths  // dl:ok unused-unit-in-uses@4e99 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.WhoCalls  // dl:ok unused-unit-in-uses@eb43 -- REVIEWED 2026-10-15: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   ;
 
 const

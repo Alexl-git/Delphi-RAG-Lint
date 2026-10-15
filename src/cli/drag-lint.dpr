@@ -246,6 +246,7 @@ uses
   DRagLint.Charts.Q.LandsWhere in '..\charts\DRagLint.Charts.Q.LandsWhere.pas',
   DRagLint.Charts.Q.Consumers in '..\charts\DRagLint.Charts.Q.Consumers.pas',
   DRagLint.Charts.Q.ExceptionPaths in '..\charts\DRagLint.Charts.Q.ExceptionPaths.pas',
+  DRagLint.Charts.Q.WhoCalls in '..\charts\DRagLint.Charts.Q.WhoCalls.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin
