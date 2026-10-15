@@ -171,6 +171,8 @@ names (26 rows; `protocol-trace` is two), three or four each, measured on a
 2026-09-28 run into a scratch `-OutRoot` (the copy under `docs\examples` on
 this machine is from 2026-09-23/24, except `round-trip`, regenerated with its charts on
 2026-10-06 by `New-ExampleGallery.ps1 -Only round-trip`).
+
+(`src\New-ExampleGallery.ps1` is dev-only and not shipped: it needs the frozen clones under `scratch\db`, and since 2026-10-14 it renders every example through `drag-lint ask`.)
 `round-trip`'s three carry the trace in a `<pre>` (a bundle made since DOC-R1 links each
 `@file:line` anchor into the IDE) under the chart drawn from it (R5, 2026-10-06); the rest are charts.
 

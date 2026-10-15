@@ -329,7 +329,7 @@ reason and offers nothing.
 `charts\src\New-ExampleGallery.ps1` renders three or four real examples per
 shipped question to `charts\docs\examples\index.html`, including three
 `round-trip` traces. The folder is generated, not committed: run the script to
-build it. It reads the same clones under `charts\scratch\db\`. A gallery built
+build it. It reads the same clones under `charts\scratch\db\`. It is dev-only and not shipped (the installer excludes it); since 2026-10-14 every example is rendered by `drag-lint ask`. A gallery built
 before 28 September has `round-trip` pages without links; rebuild it to get
 them.
 
