@@ -44,7 +44,8 @@ function Check($n, $ok, $d = '') {
   if (-not $ok) { $script:Failed = $true }
 }
 if (-not (Test-Path $Exe)) { Write-Host "FATAL: engine not found: $Exe" -ForegroundColor Red; exit 2 }
-if (-not (Test-Path $Database))  { Write-Host "FATAL: self-index not found: $Database" -ForegroundColor Red; exit 2 }
+# exit 77 = SKIP in tests\run_battery.ps1: the self-index is a local artefact, not part of the tree (backlog #30).
+if (-not (Test-Path $Database))  { Write-Host "SKIP: self-index not found: $Database -- build it with: drag-lint index --project src\cli\drag-lint.dproj" -ForegroundColor Yellow; exit 77 }
 
 function Hover($qname) {
   # -Width, and slice from the first '{' to the last '}'. Out-String wraps at

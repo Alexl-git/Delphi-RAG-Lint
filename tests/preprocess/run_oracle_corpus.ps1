@@ -48,6 +48,7 @@ function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),
 $exePath  = (Resolve-Path $Exe).Path
 $fixDir   = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures')).Path
 $renderJs = (Resolve-Path (Join-Path $PSScriptRoot 'lib\render.js')).Path
+. (Join-Path $PSScriptRoot 'lib\OracleRequire.ps1')   # node + oracle optional: ORACLE-DIFF checks SKIP (exit 77) without them
 
 # Quote one token for a cmd.exe command line.
 function Q([string]$s) { return '"' + $s + '"' }
@@ -70,6 +71,7 @@ function Run-Pascal([string]$fixture) {
 
 # Run the JS oracle (real preprocess()) under the SAME fixed profile.
 function Run-Oracle([string]$fixture) {
+  if (-not $script:OracleOk) { return ,([byte[]]@()) }
   $nodeExe = (Get-Command node).Source
   return ,(Run-Redirected @((Q $nodeExe), (Q $renderJs), (Q $fixture), '--define', 'win64', '--define', 'unicode'))
 }
@@ -88,7 +90,7 @@ function CheckFixture([string]$name) {
   $oracle   = Run-Oracle $f
 
   Check "$name`: Length(Pascal output) == Length(input) [OFFSET-IDENTITY INVARIANT]" ($pascal.Length -eq $inBytes.Length)
-  Check "$name`: ORACLE-DIFF Pascal bytes === JS bytes (byte-for-byte)" (BytesEqual $pascal $oracle)
+  Check-Oracle "$name`: ORACLE-DIFF Pascal bytes === JS bytes (byte-for-byte)" { BytesEqual $pascal $oracle }
 }
 
 $fixtures = @('undef', 'elseif_chain', 'ifopt', 'passthrough_dir', 'strings_with_braces', 'comment_dollar')
@@ -98,4 +100,6 @@ try {
   foreach ($name in $fixtures) { CheckFixture $name }
 } finally { Pop-Location }
 
-if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
+elseif($script:OracleSkipped){ Write-Host "SKIP: ORACLE-DIFF checks not run -- $($script:OracleWhy)" -ForegroundColor Yellow; exit 77 }
+else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

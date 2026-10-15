@@ -684,7 +684,7 @@ $RunOneText = @'
   $code  = $null
   if ($proc.WaitForExit($TimeoutSec * 1000)) {
     $code  = $proc.ExitCode
-    $state = $(if ($code -eq 0) { 'PASS' } else { 'FAIL' })
+    $state = $(if ($code -eq 0) { 'PASS' } elseif ($code -eq 77) { 'SKIP' } else { 'FAIL' })
   } else {
     $state = 'TIMEOUT'
     # Kill the whole tree -- runners spawn drag-lint.exe children, and an
@@ -739,7 +739,7 @@ if ($Jobs -gt 1) {
              ($_.FullName.Substring(($using:repoRoot).Length + 1).Replace('\', '/')) `
              $using:LogDir $using:repoRoot ([Math]::Max($using:effectiveTimeout, [int](($using:RunnerBudgetSec)[$_.Name])))
     ($using:bag).Add($res)
-    $colour = @{ PASS = 'Green'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$res.State]
+    $colour = @{ PASS = 'Green'; SKIP = 'Yellow'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$res.State]
     Write-Host ("  {0,-7} {1} ({2:N1}s)" -f $res.State, $res.Runner, $res.Seconds) -ForegroundColor $colour
   }
   foreach ($res in $bag) { $results.Add($res) }
@@ -750,7 +750,7 @@ if ($Jobs -gt 1) {
     $rel = RelPath $s.File.FullName
     Write-Host ("[serial {0,2}/{1}] {2} ... " -f $j, $serialSet.Count, $rel) -NoNewline
     $res = & $RunOne $s.File.FullName $rel $LogDir $repoRoot ([Math]::Max($effectiveTimeout, [int]$RunnerBudgetSec[$s.File.Name]))
-    $colour = @{ PASS = 'Green'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$res.State]
+    $colour = @{ PASS = 'Green'; SKIP = 'Yellow'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$res.State]
     Write-Host ("{0} ({1:N1}s)" -f $res.State, $res.Seconds) -ForegroundColor $colour
     $results.Add($res)
   }
@@ -844,7 +844,7 @@ foreach ($r in $kept) {
   }
   if ($exited) {
     $code  = $proc.ExitCode
-    $state = $(if ($code -eq 0) { 'PASS' } else { 'FAIL' })
+    $state = $(if ($code -eq 0) { 'PASS' } elseif ($code -eq 77) { 'SKIP' } else { 'FAIL' })
   } else {
     $state = 'TIMEOUT'
     $code  = $null
@@ -854,7 +854,7 @@ foreach ($r in $kept) {
   }
   $rsw.Stop()
 
-  $colour = @{ PASS = 'Green'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$state]
+  $colour = @{ PASS = 'Green'; SKIP = 'Yellow'; FAIL = 'Red'; TIMEOUT = 'Magenta' }[$state]
   Write-Host ("{0} ({1:N1}s)" -f $state, $rsw.Elapsed.TotalSeconds) -ForegroundColor $colour
 
   $results.Add([pscustomobject]@{
@@ -871,11 +871,16 @@ $sw.Stop()
 $pass    = @($results | Where-Object State -eq 'PASS').Count
 $fail    = @($results | Where-Object State -eq 'FAIL')
 $timeout = @($results | Where-Object State -eq 'TIMEOUT')
+# SKIP (exit 77, 2026-10-07): the runner ran, nothing it checked failed, but a
+# check it OWNS could not run here -- today only the ORACLE-DIFF checks of
+# tests\preprocess, without node or the in-repo JS oracle. Counted apart from
+# PASS on purpose: a skipped comparison is not a passed one.
+$skip    = @($results | Where-Object State -eq 'SKIP')
 
 Write-Host ''
 Write-Host '=== battery summary ===' -ForegroundColor Cyan
-Write-Host ("  {0} pass / {1} fail / {2} timeout out of {3} executed  (of {4} found)" -f `
-            $pass, $fail.Count, $timeout.Count, $results.Count, $totalFound)
+Write-Host ("  {0} pass / {1} skip / {2} fail / {3} timeout out of {4} executed  (of {5} found)" -f `
+            $pass, $skip.Count, $fail.Count, $timeout.Count, $results.Count, $totalFound)
 # K41: the denominator above is a property of THIS tree. Repeated here because a
 # report quotes the tail, not the header -- the same reason the narrowing banner
 # is repeated below.
@@ -899,6 +904,14 @@ if ($fail.Count -gt 0) {
   Write-Host '  FAIL:' -ForegroundColor Red
   foreach ($f in $fail) { Write-Host ("    {0}  (exit {1})" -f $f.Runner, $f.ExitCode) -ForegroundColor Red }
 }
+if ($skip.Count -gt 0) {
+  Write-Host ''
+  Write-Host '  SKIP (exit 77 -- the reason is the runner''s last SKIP: line):' -ForegroundColor Yellow
+  foreach ($k in $skip) {
+    $why = @(Get-Content -LiteralPath $k.Log -ErrorAction SilentlyContinue | Where-Object { $_ -match '^SKIP:' }) | Select-Object -Last 1
+    Write-Host ("    {0}  {1}" -f $k.Runner, $(if ($why) { $why } else { '(no SKIP: line in the log)' })) -ForegroundColor Yellow
+  }
+}
 if ($timeout.Count -gt 0) {
   Write-Host ''
   # Per-runner EFFECTIVE budget (scaled by -Jobs, floored by RunnerBudgetSec), not the base -TimeoutSec.
@@ -917,11 +930,11 @@ Write-Host ("  results: {0}" -f $csv)
 # word rather than leaving it to be inferred from three counts.
 $green = ($fail.Count -eq 0 -and $timeout.Count -eq 0)
 Write-BatteryBanner `
-  $(if ($green) { 'BATTERY FINISHED -- ALL GREEN' } else { 'BATTERY FINISHED -- RED' }) `
+  $(if (-not $green) { 'BATTERY FINISHED -- RED' } elseif ($skip.Count -gt 0) { "BATTERY FINISHED -- GREEN, $($skip.Count) SKIPPED" } else { 'BATTERY FINISHED -- ALL GREEN' }) `
   $(if ($green) { 'Green' } else { 'Red' }) `
   @(
     ('finished  : {0:yyyy-MM-dd HH:mm:ss}' -f (Get-Date)),
-    ('result    : {0} pass / {1} fail / {2} timeout of {3} executed' -f $pass, $fail.Count, $timeout.Count, $results.Count),
+    ('result    : {0} pass / {1} skip / {2} fail / {3} timeout of {4} executed' -f $pass, $skip.Count, $fail.Count, $timeout.Count, $results.Count),
     ('wall clock: {0:N1} min' -f $sw.Elapsed.TotalMinutes),
     ('results   : {0}' -f $csv),
     $(if ($Exclude.Count -gt 0 -or $Include.Count -gt 0) { 'NARROWED RUN -- this is NOT the full battery.' } else { 'Full battery -- no -Include/-Exclude narrowing.' }),

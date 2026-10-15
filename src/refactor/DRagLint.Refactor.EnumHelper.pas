@@ -252,7 +252,8 @@ type
     /// AResolve.DescArrayName is non-empty.</summary>
     /// <param name="AResolve">A resolved enum (Found must be True; EnumName
     /// and Members are read, DescArrayName drives the auto-included
-    /// ToDescription method).</param>
+    /// ToDescription method, HasExplicitOrdinal widens FromByte's case
+    /// selector to Integer so an ordinal outside 0..255 still compiles).</param>
     /// <param name="AMethods">Subset of the 6 convert methods to emit; an
     /// empty set emits an (almost) empty helper (still gets ToDescription if
     /// DescArrayName is set).</param>
@@ -560,7 +561,17 @@ begin
     begin
       BodySb.AppendLine('class function ' + HelperName + '.FromByte(const AValue: Byte): ' + EnumName + ';');
       BodySb.AppendLine('begin');
-      EmitFromCase(BodySb, 'AValue');
+      { An explicit ordinal can lie outside 0..255 (`Elem1 = -2`), and an arm
+        label outside the selector's range is E1012 "Constant expression
+        violates subrange bounds" -- the generated FromByte did not compile.
+        Ordinals are not indexed, so whenever the declaration has ANY explicit
+        `= N` the selector is widened to Integer, which holds every label; a
+        Byte value outside the members still falls to the `else` arm. An enum
+        with only implicit ordinals keeps the plain `case AValue of`. }
+      if AResolve.HasExplicitOrdinal then
+        EmitFromCase(BodySb, 'Integer(AValue)')
+      else
+        EmitFromCase(BodySb, 'AValue');
       BodySb.AppendLine('end;');
       BodySb.AppendLine('');
     end;

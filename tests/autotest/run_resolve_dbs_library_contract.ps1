@@ -50,6 +50,16 @@ function RunResolve([string[]]$ExtraArgs) {
             Lines = @($o -split "`r?`n" | Where-Object { $_.Trim() -ne '' }) }
 }
 
+# The library paths in a resolve-dbs answer: listed (built) or named in the
+# "configured ... but has never been built" NOTE -- see the first use below.
+function LibPaths($lines) {
+  # the comma keeps a one-element answer an array (PowerShell unrolls it otherwise)
+  return ,@($lines | ForEach-Object {
+    if ($_ -match '^NOTE:\s+(\S*library-[^\s]*\.sqlite)\s+is configured in the manifest but has never been built') { $Matches[1] }
+    elseif ($_ -match 'library-.*\.sqlite$') { $_.Trim() }
+  })
+}
+
 Push-Location C:\TEMP
 try {
   Check 'the manifest beside the engine exists (precondition, named not assumed)' `
@@ -61,7 +71,15 @@ try {
 
   foreach ($plat in @('Win32','Win64')) {
     $r = RunResolve @('--platform', $plat)
-    $libs = @($r.Lines | Where-Object { $_ -match 'library-.*\.sqlite$' })
+    # THE ENGINE'S ANSWER, BUILT OR NOT (Gitea drag-lint#28). resolve-dbs lists
+    # an index that exists and reports one the manifest names but nobody has
+    # built yet as `NOTE: <path> is configured in the manifest but has never
+    # been built ...` -- on stderr-merged output, with the SAME derived path.
+    # This runner was written when only the listed form existed, so on any
+    # machine without the library index (no outDir at all here) it saw ZERO
+    # library paths and failed every check, though the engine's answer -- the
+    # path, which is the contract -- was right. Both forms are the answer.
+    $libs = LibPaths $r.Lines
 
     Check "$plat : resolve-dbs names exactly ONE library index" `
           ($libs.Count -eq 1) ("got " + ($libs -join ', '))
@@ -103,7 +121,7 @@ try {
   # --config would satisfy C1 and C2 completely.
   $good = RunResolve @('--platform','Win32','--config', $manifest)
   Check 'C3 positive control: the same call with the REAL --config succeeds' `
-        (($good.Code -eq 0) -and (@($good.Lines | Where-Object { $_ -match 'library-Win32\.sqlite$' }).Count -eq 1)) `
+        (($good.Code -eq 0) -and (@(LibPaths $good.Lines | Where-Object { $_ -match 'library-Win32\.sqlite$' }).Count -eq 1)) `
         "exit=$($good.Code) lines=$($good.Lines.Count)"
 
   # ---- the JSON surface must not carry an empty entry either ---------------

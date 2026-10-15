@@ -36,6 +36,7 @@ function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),
 $exePath  = (Resolve-Path $Exe).Path
 $fixDir   = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures')).Path
 $renderJs = (Resolve-Path (Join-Path $PSScriptRoot 'lib\render.js')).Path
+. (Join-Path $PSScriptRoot 'lib\OracleRequire.ps1')   # node + oracle optional: ORACLE-DIFF checks SKIP (exit 77) without them
 
 # Quote one token for a cmd.exe command line.
 function Q([string]$s) { return '"' + $s + '"' }
@@ -61,6 +62,7 @@ function Run-Pascal([string]$fixture, [string[]]$verbArgs) {
 
 # Run the JS oracle (real preprocess()), capturing RAW stdout bytes.
 function Run-Oracle([string]$fixture, [string[]]$oracleArgs) {
+  if (-not $script:OracleOk) { return ,([byte[]]@()) }
   $nodeExe = (Get-Command node).Source
   return ,(Run-Redirected (@((Q $nodeExe), (Q $renderJs), (Q $fixture)) + $oracleArgs))
 }
@@ -115,7 +117,7 @@ try {
 
   # ORACLE-DIFF.
   $orc1 = Run-Oracle $f1 @('--define', 'win64')
-  Check 'simple_ifdef: ORACLE-DIFF Pascal bytes === JS bytes' (BytesEqual $out1 $orc1)
+  Check-Oracle 'simple_ifdef: ORACLE-DIFF Pascal bytes === JS bytes' { BytesEqual $out1 $orc1 }
 
   # ============================================================
   # Fixture 2: nested_if.pas  (--define A) -- nested conditionals
@@ -131,7 +133,7 @@ try {
   Check 'nested_if: inner-B line blanked (InnerB absent)'   (-not $outText2.Contains('const InnerB = 2;'))
   Check 'nested_if: no-A line blanked (NoA absent)'         (-not $outText2.Contains('const NoA = 4;'))
   $orc2 = Run-Oracle $f2 @('--define', 'a')
-  Check 'nested_if: ORACLE-DIFF Pascal bytes === JS bytes' (BytesEqual $out2 $orc2)
+  Check-Oracle 'nested_if: ORACLE-DIFF Pascal bytes === JS bytes' { BytesEqual $out2 $orc2 }
 
   # ============================================================
   # Fixture 3: if_expr.pas  ({$IF CompilerVersion >= 37}) -- evaluator path
@@ -144,8 +146,10 @@ try {
   Check 'if_expr: {$IF} THEN branch active (Modern present)'  ($outText3.Contains('const Modern = True;'))
   Check 'if_expr: {$ELSE} branch blanked (Legacy absent)'     (-not $outText3.Contains('const Legacy = True;'))
   $orc3 = Run-Oracle $f3 @('--numeric', 'CompilerVersion=37')
-  Check 'if_expr: ORACLE-DIFF Pascal bytes === JS bytes' (BytesEqual $out3 $orc3)
+  Check-Oracle 'if_expr: ORACLE-DIFF Pascal bytes === JS bytes' { BytesEqual $out3 $orc3 }
 
 } finally { Pop-Location }
 
-if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
+elseif($script:OracleSkipped){ Write-Host "SKIP: ORACLE-DIFF checks not run -- $($script:OracleWhy)" -ForegroundColor Yellow; exit 77 }
+else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

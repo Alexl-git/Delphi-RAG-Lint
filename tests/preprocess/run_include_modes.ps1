@@ -38,6 +38,7 @@ function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),
 $exePath  = (Resolve-Path $Exe).Path
 $fixDir   = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures')).Path
 $renderJs = (Resolve-Path (Join-Path $PSScriptRoot 'lib\render.js')).Path
+. (Join-Path $PSScriptRoot 'lib\OracleRequire.ps1')   # node + oracle optional: ORACLE-DIFF checks SKIP (exit 77) without them
 
 # Quote one token for a cmd.exe command line.
 function Q([string]$s) { return '"' + $s + '"' }
@@ -60,6 +61,7 @@ function Run-Pascal([string]$fixture, [string[]]$verbArgs) {
 
 # Run the JS oracle (real preprocess()), capturing RAW stdout bytes.
 function Run-Oracle([string]$fixture, [string[]]$oracleArgs) {
+  if (-not $script:OracleOk) { return ,([byte[]]@()) }
   $nodeExe = (Get-Command node).Source
   return ,(Run-Redirected (@((Q $nodeExe), (Q $renderJs), (Q $fixture)) + $oracleArgs))
 }
@@ -98,7 +100,7 @@ try {
   Check 'defines-only: Length(output) == Length(input) [OFFSET-IDENTITY INVARIANT -- {$I} blanked, NO body splice]' ($do.Length -eq $inBytes.Length)
 
   $doOrc = Run-Oracle $main @('--include-mode', 'defines-only', '--define', 'win64')
-  Check 'defines-only: ORACLE-DIFF Pascal bytes === JS bytes (byte-for-byte)' (BytesEqual $do $doOrc)
+  Check-Oracle 'defines-only: ORACLE-DIFF Pascal bytes === JS bytes (byte-for-byte)' { BytesEqual $do $doOrc }
 
   # ============================================================
   # off: config.inc is ignored -> FEATURE_X undefined -> the ELSE branch wins.
@@ -112,7 +114,7 @@ try {
   Check 'off: Length(output) == Length(input) [offset-identity invariant]' ($off.Length -eq $inBytes.Length)
 
   $offOrc = Run-Oracle $main @('--include-mode', 'off', '--define', 'win64')
-  Check 'off: ORACLE-DIFF Pascal bytes === JS bytes (byte-for-byte)' (BytesEqual $off $offOrc)
+  Check-Oracle 'off: ORACLE-DIFF Pascal bytes === JS bytes (byte-for-byte)' { BytesEqual $off $offOrc }
 
   # off vs defines-only must differ (proves the mode actually changes behaviour).
   Check 'off vs defines-only: outputs DIFFER (mode selection is real)' (-not (BytesEqual $do $off))
@@ -136,8 +138,10 @@ try {
   Check 'nested defines-only: Length(output) == Length(input) [offset-identity, no splice]' ($nDo.Length -eq $nIn.Length)
 
   $nOrc = Run-Oracle $nmain @('--include-mode', 'defines-only')
-  Check 'nested defines-only: ORACLE-DIFF Pascal bytes === JS bytes (byte-for-byte)' (BytesEqual $nDo $nOrc)
+  Check-Oracle 'nested defines-only: ORACLE-DIFF Pascal bytes === JS bytes (byte-for-byte)' { BytesEqual $nDo $nOrc }
 
 } finally { Pop-Location }
 
-if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
+elseif($script:OracleSkipped){ Write-Host "SKIP: ORACLE-DIFF checks not run -- $($script:OracleWhy)" -ForegroundColor Yellow; exit 77 }
+else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

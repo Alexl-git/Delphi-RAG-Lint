@@ -44,9 +44,9 @@ function Check($n, $ok, $d = '') {
 }
 
 if (-not (Test-Path $Exe)) {
-  Write-Host "FATAL: drag-lint-switch.exe not found: $Exe" -ForegroundColor Red
-  Write-Host '       build it with build\build_lsp_switch.bat' -ForegroundColor Red
-  exit 2
+  Write-Host "SKIP: drag-lint-switch.exe not found at $Exe -- build it with build\build_lsp_switch.bat" -ForegroundColor Yellow
+  # exit 77 = SKIP in tests\run_battery.ps1: reported by name with this reason, never a PASS (backlog #30).
+  exit 77
 }
 $Exe = (Resolve-Path $Exe).Path
 

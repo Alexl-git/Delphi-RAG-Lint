@@ -223,8 +223,10 @@ Write-Host 'FLOOD CHECK: index a real sizable unit (ap.pas) and inspect per-kind
 
 $floodSrc = 'C:\Projects\DB\ORM3\CLIENT\ap.pas'
 if (-not (Test-Path $floodSrc)) {
+  # Not a FAIL: every other check above still ran. The runner ends in SKIP
+  # (exit 77) so the battery names what was not checked (backlog #30).
   Write-Host "FLOOD CHECK SKIPPED: real fixture not found at $floodSrc" -ForegroundColor Yellow
-  Check 'flood-check source unit is available' $false "expected at $floodSrc"
+  $script:FloodSkipped = $true
 } else {
   $floodWork = Join-Path $WorkDir 'flood'
   $floodFixture = Join-Path $floodWork 'fixture'
@@ -295,7 +297,9 @@ c.close()
 }
 
 Write-Host ''
-if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
+if ($script:FloodSkipped) { Write-Host "SKIP: flood check not run -- real fixture not found at $floodSrc" -ForegroundColor Yellow; exit 77 }
+Write-Host 'PASS' -ForegroundColor Green; exit 0
 } finally {
   # D23: this run's scratch is $PID-suffixed; remove it so per-run folders do not pile up in TEMP.
   foreach ($d23 in @("$env:TEMP\drag-lint-member-access-refs-$PID")) { if (Test-Path -LiteralPath $d23) { Remove-Item -LiteralPath $d23 -Recurse -Force -ErrorAction SilentlyContinue } }

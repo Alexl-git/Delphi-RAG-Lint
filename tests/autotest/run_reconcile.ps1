@@ -76,6 +76,9 @@ Check 'brace comment not split'       ($dprAfter -match '\{Form: TBar; note\}')
 # an edited project member with no files row -> findings can't attach).
 # Needs Python (stdlib sqlite3) to inspect the DB -- skip-not-fail if absent.
 $py = 'C:\Python314\python.exe'
+# The historical default, else the first python on PATH (backlog #30: a fixed
+# C:\Python314 made this runner fail or skip on any other machine).
+if (-not (Test-Path $py)) { $pyCmd = Get-Command python -ErrorAction SilentlyContinue | Select-Object -First 1; if ($pyCmd) { $py = $pyCmd.Source } }
 if (Test-Path $py) {
   $enc = [System.Text.Encoding]::ASCII
   $cx  = "$env:TEMP\drag-lint-reconcile-coherence-$PID"

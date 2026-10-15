@@ -50,9 +50,9 @@ function Check($n, $ok, $d = '') {
 if (-not (Test-Path $Exe)) {
   # Not built in this tree. Say so loudly rather than passing vacuously: a
   # guard that skips when its subject is missing is a guard that never fails.
-  Write-Host "SKIP-FATAL: drag-lint-switch.exe not found at $Exe" -ForegroundColor Yellow
-  Write-Host "  Build src\tools\lsp-switch\drag-lint-switch.dproj (Win64 Debug) and re-run." -ForegroundColor Yellow
-  exit 2
+  Write-Host "SKIP: drag-lint-switch.exe not found at $Exe -- build src\tools\lsp-switch\drag-lint-switch.dproj (Win64 Debug) and re-run" -ForegroundColor Yellow
+  # exit 77 = SKIP in tests\run_battery.ps1: reported by name with this reason, never a PASS (backlog #30).
+  exit 77
 }
 $Exe = (Resolve-Path $Exe).Path
 

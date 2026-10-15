@@ -79,9 +79,12 @@ $Exe = (Resolve-Path $Exe).Path
 # guard needs a WRITE (removing / ageing one schema_meta row), which the `sql`
 # verb deliberately refuses -- it is authorizer-guarded read-only.
 $py = 'C:\Python314\python.exe'
+# The historical default, else the first python on PATH (backlog #30: a fixed
+# C:\Python314 made this runner fail or skip on any other machine).
+if (-not (Test-Path $py)) { $pyCmd = Get-Command python -ErrorAction SilentlyContinue | Select-Object -First 1; if ($pyCmd) { $py = $pyCmd.Source } }
 if (-not (Test-Path $py)) {
-  Write-Host '[SKIP] run_resolver_stamp_absent_is_stale: Python not found at C:\Python314' -ForegroundColor Yellow
-  exit 0
+  Write-Host 'SKIP: run_resolver_stamp_absent_is_stale: no python found (C:\Python314, nor on PATH)' -ForegroundColor Yellow
+  exit 77
 }
 
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }

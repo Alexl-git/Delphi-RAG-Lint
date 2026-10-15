@@ -56,6 +56,10 @@ function Check([string]$n, [bool]$ok, [string]$d = '') {
 
 Write-Host '== no default database in the cwd ==' -ForegroundColor Cyan
 $Exe    = (Resolve-Path $Exe).Path
+# exit 77 = SKIP in tests\run_battery.ps1: the self-index is a local artefact,
+# not part of the tree; without it Resolve-Path threw and the runner FAILED
+# (backlog #30).
+if (-not (Test-Path $RealDb)) { Write-Host "SKIP: self-index not found: $RealDb -- build it with: drag-lint index --project src\cli\drag-lint.dproj" -ForegroundColor Yellow; exit 77 }
 $RealDb = (Resolve-Path $RealDb).Path
 
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir -ErrorAction SilentlyContinue }

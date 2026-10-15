@@ -98,6 +98,17 @@ Check 'no quarantine entry has a stub reason' ($vague.Count -eq 0) `
   ("vague: " + (($vague | ForEach-Object { Split-Path $_.Path -Leaf }) -join ', '))
 
 Write-Host ''
+Write-Host 'Runners measured flaky under -Jobs 8 stay quarantined' -ForegroundColor Cyan
+# 2026-10-15: each failed only in parallel batteries and passed
+# every serial re-run. Named here so dropping the marker is a red, not a surprise.
+$loadSensitive = @('run_readonly_then_writer_same_process.ps1', 'run_score_cycle_playbook_selftest.ps1',
+                   'run_forward_decl_shadow.ps1')
+$unmarkedLoad = @($loadSensitive | Where-Object {
+  $f = Join-Path $RepoRoot "tests\autotest\$_"
+  -not (Test-Path $f) -or ((SerialReason $f) -eq '')
+})
+Check 'every load-sensitive runner carries dl:serial' ($unmarkedLoad.Count -eq 0) "unmarked: $($unmarkedLoad -join ', ')"
+
 Write-Host 'The LSP proxy family is quarantined -- it interfered even SERIALLY' -ForegroundColor Cyan
 # Match the family by FILENAME. Matching on file CONTENT would sweep in
 # run_flow_typeref_not_a_read.ps1, whose fixture merely quotes the identifier
