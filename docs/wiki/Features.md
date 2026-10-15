@@ -260,6 +260,7 @@ Ask a question about a symbol and get a clickable chart.
 | [ask](ask) | `ask`; drag-lint > Reports |  |
 | [Chart questions](Diagrams-and-Charts) | 26 questions; `charts\src\Ask-Report.ps1`; `charts\src\New-DiagramArtifact.ps1` |  |
 | [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md` |  |
+| [Click-to-source: the draglint:// handler](Draglint-Protocol-Handler) | `protocol`; `drag-lint-open.exe` |  |
 | [Compare a report with current code](compare) | `compare`; `charts\src\Ask-Report.ps1 -Plain prints the report header` |  |
 | [Where the charts find the engine and Graphviz](Charts-and-the-IDE) | procedure: `charts\README.md` |  |
 
@@ -306,7 +307,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [ide-release](ide-release) | `ide-release` |  |
 | [Installation](Installation) | `drag-lint.exe`; procedure: `docs\wiki\Installation.md` |  |
 | [lsp](lsp) | `lsp` |  |
-| [Register the MCP server (Claude Code, VS Code)](Register-MCP-Server) | `charts\src\Set-DragLintMcpConfig.ps1 -All -DryRun` |  |
+| [Register the MCP server (Claude Code, VS Code)](Register-MCP-Server) | `mcp-config` |  |
 | [serve](serve) | `serve` |  |
 | [Setup installer](Setup-Installer) | procedure: `docs\wiki\Setup-Installer.md` | experimental |
 | [workspace add](workspace-add) | `workspace add` |  |

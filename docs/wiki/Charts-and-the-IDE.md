@@ -177,45 +177,24 @@ the `OPERAT.NAME` trace).
 
 ### One-time registration
 
-Per Windows user, no administrator rights. After the merge, run it from the
-main checkout:
+Per Windows user, no administrator rights. Run it from the install (or the main
+checkout):
 
 ```
-C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1 -DryRun      # show, write nothing
-C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1              # register
-C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1 -Unregister  # undo
+drag-lint protocol register --dry-run   # show, write nothing
+drag-lint protocol register             # register
+drag-lint protocol unregister           # undo
+drag-lint protocol status               # ours | legacy-powershell | foreign | none
 ```
 
-What it writes:
-
-* a **copy** of the handler, `%LOCALAPPDATA%\drag-lint\Open-DragLintUri.ps1` --
-  the registration points at the copy, so it survives the checkout it was made
-  from;
-* one registry key, `HKCU\Software\Classes\draglint`, whose command runs the
-  copy with a PowerShell that survives an update:
-  `%ProgramFiles%\PowerShell\7\pwsh.exe`, else the Store alias
-  `%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe`, else Windows PowerShell 5.1.
-  It refuses a versioned `WindowsApps\Microsoft.PowerShell_...` folder, which
-  the next update deletes.
-
-`-DryRun` prints the value it would write and touches nothing. On a machine
-with PowerShell 7 installed from the MSI it prints (user folder shortened):
-
-```
-Key              : HKCU:\Software\Classes\draglint\shell\open\command
-Kind             : String
-Interpreter      : C:\Program Files\PowerShell\7\pwsh.exe
-Command          : "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -NonInteractive -WindowStyle Hidden
-                   -ExecutionPolicy Bypass -File "C:\Users\<you>\AppData\Local\drag-lint\Open-DragLintUri.ps1" "%1"
-HandlerSource    : ...\charts\src\Open-DragLintUri.ps1
-HandlerInstalled : C:\Users\<you>\AppData\Local\drag-lint\Open-DragLintUri.ps1
-```
-
-`-Unregister` removes the key and the copy; `-Unregister -DryRun` lists what it
-would remove. A source inside a `*-wt\` worktree is refused unless you pass
-`-Force`. **Re-register after the merge:** a registration made before
-28 September 2026 points at the worktree's handler and at a versioned
-PowerShell folder.
+What it writes: one registry key, `HKCU\Software\Classes\draglint`, whose command
+runs `drag-lint-open.exe` (a GUI helper, no PowerShell) from where it sits beside
+`drag-lint.exe`. A handler inside a `*-wt\` worktree, or a key that belongs to
+another program, is refused unless you pass `--force`. `--dry-run` prints what
+would be written and touches nothing; `unregister --dry-run` lists what it would
+remove. **Re-register after the merge:** a registration made with the old
+PowerShell script reads `legacy-powershell` in `status`, and `register` replaces
+it. Full details: [the draglint:// handler](Draglint-Protocol-Handler).
 
 ### What a click does
 

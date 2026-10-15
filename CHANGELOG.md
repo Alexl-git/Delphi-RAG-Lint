@@ -30,6 +30,12 @@ breaking changes** until v1.0.
   registration silently and deletes that script's `%LOCALAPPDATA%\drag-lint\Open-DragLintUri.ps1`
   copy. `--dry-run` writes nothing. Replaces `charts\src\Register-DragLintProtocol.ps1`. Guard:
   `tests\autotest\run_protocol_verb.ps1` (scratch registry root only; asserts the real key unchanged).
+- **`drag-lint-open.exe` -- the `draglint://` handler is a GUI helper, not a PowerShell script.** It validates the
+  link before anything else (local drive path, source extension, digits-only line/col, case-insensitive
+  scheme), writes to the plugin's pipe and falls back to Notepad; rejections go to
+  `%LOCALAPPDATA%\drag-lint\logs\uri-handler.log`. The installer's `draglint://` and MCP tasks now run the two
+  verbs above. Docs: `docs\wiki\Draglint-Protocol-Handler.md`, `docs\wiki\Register-MCP-Server.md`, feature
+  registry entry `protocol-handler`.
 
 ## v1.31.0-alpha -- 2026-10-14
 

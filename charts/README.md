@@ -86,30 +86,28 @@ configured: the questions that read a SERVER or SQL index stop with exit 2 and s
 
 ## Registering the MCP server with Claude Code and VS Code (R4, 2026-10-06)
 
-`src\Set-DragLintMcpConfig.ps1` adds drag-lint's MCP server (`drag-lint serve`) to the MCP clients'
-own config. The installer runs it with `-All` as an optional task.
+`drag-lint mcp-config` adds drag-lint's MCP server (`drag-lint serve`) to the MCP clients'
+own config. The installer runs it with `--all` as an optional task.
 
 ```
-pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -All -DryRun        (print the change, write nothing)
-pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -ClaudeCode -DbPath C:\Projects\MyApp\_D-RAG\MyApp.sqlite
-pwsh -NoProfile -File charts\src\Set-DragLintMcpConfig.ps1 -All -Remove
+drag-lint mcp-config --all --dry-run        (print the change, write nothing)
+drag-lint mcp-config --claude-code --db C:\Projects\MyApp\_D-RAG\MyApp.sqlite
+drag-lint mcp-config --all --remove
 ```
 
-* Targets: `-ClaudeCode` (user scope, top-level `mcpServers` in `~\.claude.json`; through the `claude mcp`
-  CLI when it is on PATH, else a file edit), `-VSCode` (`servers` in `%APPDATA%\Code\User\mcp.json`), or `-All`
-  (a client that is not installed is skipped: Claude Code counts as installed only with a `~\.claude`
-  folder, an existing `CLAUDE_CONFIG_DIR`, an existing `.claude.json` or a `claude` CLI; VS Code with `%APPDATA%\Code\User`).
-* The entry is `{ "type": "stdio", "command": "<engine>", "args": ["serve", "--db", "<-DbPath>"] }` (Claude
-  Code adds `"env": {}`). Without `-DbPath` the args are `["serve"]` and the engine picks the index from its
+* Targets: `--claude-code` (user scope, top-level `mcpServers` in `~\.claude.json`), `--vscode` (`servers` in
+  `%APPDATA%\Code\User\mcp.json`), or `--all` (a client that is not installed is skipped: Claude Code counts as
+  installed only with a `~\.claude` folder, an existing `CLAUDE_CONFIG_DIR`, an existing `.claude.json`; VS Code
+  with `%APPDATA%\Code\User`). Both are file edits; the verb never runs the `claude` CLI.
+* The entry is `{ "type": "stdio", "command": "<engine>", "args": ["serve", "--db", "<index>"] }` (Claude
+  Code adds `"env": {}`). Without `--db` the args are `["serve"]` and the engine picks the index from its
   manifest when the client starts it. `serve` answers from ONE index, so register one entry per index with
-  `-Name`. The engine comes from `Resolve-DragLintEngine` (table above).
-* Safe on a real config: `-DryRun` writes nothing; a real write backs the file up to `<file>.bak-<timestamp>`,
-  merges (other servers and keys untouched), is idempotent (a second run says "no change" and writes
-  nothing), and `-Remove` deletes only its own entry -- an entry by that name whose command is not drag-lint.exe is refused, never touched. An entry carrying any key beyond type/command/args -- a user-added `env` included -- is updated by file edit, never the CLI, so an env value never lands on the `claude` command line; in every printed Before / After / Commands / dry-run line an env VALUE reads `***` (the keys stay). Malformed JSON, or JSON with comments a rewrite would
-  drop, is refused with nothing written. A file a running client rewrote while the script ran is not
-  overwritten. JSON is written UTF-8 without BOM.
-* Tests: `src\Test-McpConfig.ps1` (seconds; temp copies via `-ConfigPath`, a fake `claude` for the CLI path;
-  it never writes the real files).
+  `--name`. `--engine <exe>` overrides the default (the running drag-lint.exe).
+* Safe on a real config: `--dry-run` writes nothing; a real write backs the file up to `<file>.bak-<stamp>`,
+  merges (other servers and keys untouched), is idempotent (a second run says "unchanged" and writes
+  nothing), and `--remove` deletes only its own entry -- an entry by that name whose command is not drag-lint.exe is refused, never touched. Keys you added to the entry, an `env` included, survive an update; every `env` and `headers` VALUE prints as `***` (the keys stay). Malformed JSON, or JSON with comments a rewrite would
+  drop, is refused with nothing written (the entry to paste by hand is printed). JSON is written UTF-8 without BOM.
+* Tests: `tests\autotest\run_mcp_config_verb.ps1` (scratch copies; it asserts the real config files are unchanged).
 
 ## Graphviz -- present and verified 2026-09-22
 
@@ -366,38 +364,25 @@ true now.** Measured:
 So the viewer -> IDE path has been ready since 2026-09-11. What was missing is
 only the BROWSER hop, because a browser cannot write to a named pipe:
 
-* `src\Open-DragLintUri.ps1` -- parses `draglint://open?file=..&line=..[&col=..]`
-  and writes the contract payload. ANY web page can carry such a link, so it
-  VALIDATES first (fix round 1, 2026-09-28): no control character (a TAB/LF would
-  forge a pipe frame), a local drive path only (no UNC / WebDAV / `\\?\` / device
-  path -- a UNC `Test-Path` alone leaks NTLM), no `:` stream or wildcard, no segment
-  ending in a dot or space, no reserved device name, and a source extension from
-  `.pas .dfm .dpr .inc .sql .fmx` (never a project or package file -- `.dpk` dropped by
-  ruling SEC-R3); line and col ASCII digits only (line 0, a chart's focus box, opens at
-  1); each key at most once. A drive letter does not prove locality -- a mapped or
-  subst'ed drive can be SMB/WebDAV -- so the handler reaches only servers the user has
-  already mapped. It takes EXACTLY ONE argument, the URI (ruling SEC-R2: a launcher that
-  does not percent-encode `"` could otherwise append `-LogPath ...` through the
-  registered `"%1"`); test overrides come only from `DRAGLINT_URI_TEST_*` environment
-  variables. A drive letter must be ASCII A-Z (compared case-sensitively: U+212A and U+0130 fold to K / I),
-  and COM/LPT with a superscript 1-3 count as device names. A rejection exits 2 with one line (attacker text
-  capped at 512 chars) in the FIXED log
-  `%LOCALAPPDATA%\drag-lint\uri-handler.log`. When no IDE answers it opens the file in
-  NOTEPAD, never by its default verb.
-  Tests: `src\Test-DragLintProtocol.ps1` (synthetic, launches nothing; SEC-1 runs the
-  handler as the registry does, in a sandbox, under pwsh 7 and 5.1).
-* `src\Register-DragLintProtocol.ps1` -- one HKCU key, no elevation,
-  `-Unregister` to undo. It copies the handler to `%LOCALAPPDATA%\drag-lint\` and
-  registers the COPY, with an interpreter path that survives an update
-  (`%ProgramFiles%\PowerShell\7\pwsh.exe`, else the `%LOCALAPPDATA%` Store alias as
-  REG_EXPAND_SZ, else Windows PowerShell 5.1 -- never the versioned WindowsApps
-  folder). A source inside a `*-wt\` worktree needs `-Force`. `-DryRun` returns the
-  value it would write and touches nothing; `-Unregister -DryRun` lists what it would
-  remove and removes nothing. A registration made before 2026-09-28
-  points at the worktree's handler and the versioned pwsh path (this machine's still
-  does, read 2026-09-29): after the merge, re-run it once from the main checkout,
-  `C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1` (no `-Force`),
-  then check one live click -- the owner decides when.
+* `drag-lint-open.exe` (the `draglint://` handler, a GUI helper with no console and no PowerShell) -- parses
+  `draglint://open?file=..&line=..[&col=..]` and writes the contract payload. ANY web page can carry such a
+  link, so it VALIDATES first: no control character (a TAB/LF would forge a pipe frame), a local drive path
+  only (no UNC / WebDAV / `\\?\` / device path -- a UNC existence check alone leaks NTLM), no `:` stream or
+  wildcard, no segment ending in a dot or space, no reserved device name, and a source extension from
+  `.pas .dfm .dpr .inc .sql .fmx` (never a project or package file); line and col ASCII digits only (line 0,
+  a chart's focus box, opens at 1); each key at most once. A drive letter must be ASCII A-Z, and COM/LPT with
+  a superscript 1-3 count as device names. A drive letter does not prove locality -- a mapped or subst'ed
+  drive can be SMB/WebDAV -- so the handler reaches only servers the user has already mapped. It takes
+  EXACTLY ONE argument, the URI; the scheme match is case-insensitive. A rejection exits 2 with one line
+  (attacker text capped at 512 chars) in the log `%LOCALAPPDATA%\drag-lint\logs\uri-handler.log`. When no IDE
+  answers it opens the file in NOTEPAD, never by its default verb. Wiki: `docs\wiki\Draglint-Protocol-Handler.md`.
+* `drag-lint protocol register | status | unregister` -- one HKCU key, no elevation. `register` defaults to the
+  `drag-lint-open.exe` beside `drag-lint.exe` and registers it in place; a handler in a `*-wt\` worktree or a
+  registration that belongs to another program needs `--force`. `--dry-run` prints what it would write and
+  touches nothing. `status` prints `ours | legacy-powershell | foreign | none` (exit 0 only for `ours`). A
+  registration made by the old PowerShell script reads `legacy-powershell` (this machine's still does):
+  re-register once with `drag-lint protocol register` from the main checkout's `drag-lint.exe`, then check
+  one live click -- the owner decides when. Tests: `tests\autotest\run_protocol_verb.ps1`.
 
 The bundle page itself must not stand in the way (DOC-R1, 2026-09-28). Its click
 handler used to call `preventDefault` and only toast "sent to the IDE", so no

@@ -130,8 +130,8 @@ that the next PowerShell update deletes. Re-register once from the main
 checkout:
 
 ```
-C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1 -DryRun
-C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1
+drag-lint protocol register --dry-run
+drag-lint protocol register
 ```
 
 Then add the two Tools entries above.
@@ -163,7 +163,7 @@ IDE plugin. To produce this report you need:
    project**: edit `charts\report-pairs.json` (one object per project; check
    each path with `resolve-dbs` first).
 7. **For the jump into the IDE**: the drag-lint IDE plugin installed in RAD
-   Studio, and `charts\src\Register-DragLintProtocol.ps1` run once.
+   Studio, and `drag-lint protocol register` run once.
 
 Then add the two Tools entries, with your clone's path in place of
 `C:\Projects\Delphi-RAG-lint`, and follow the steps above with your own form

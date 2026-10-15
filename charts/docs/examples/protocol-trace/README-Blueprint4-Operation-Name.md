@@ -80,7 +80,7 @@ the butterfly Call Graph tab). The working path:
    protocol-trace -Target <qualified method> -DbPath <clone> -Open`
    (not set up on this machine).
 2. **Navigate back:** every row in the SVG is a `draglint://open?file=..&line=..`
-   link. Run `charts\src\Register-DragLintProtocol.ps1` once (HKCU, no
+   link. Run `drag-lint protocol register` once (HKCU, no
    elevation); a click then reaches the plugin's pipe server
    (`DragLint.Plugin.OpenSourceServer.pas`, `\\.\pipe\drag-lint-open-source`)
    and the IDE opens the file at the line.

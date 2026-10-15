@@ -83,7 +83,7 @@ or, for `round-trip`, `trace.dlgraph` shown in a `<pre>` under the chart drawn f
 paths are the CLONES under `charts\scratch\db\`; `Get-CloneDb` refuses anything
 else.
 One command instead, on the live indexes: `src\Ask-Report.ps1 -Question <id> -Target <t> -Project <x.dproj>` (README "For AI agents").
-Every chart row and every linked `round-trip` anchor is a `draglint://` link that opens the line in RAD Studio once `src\Register-DragLintProtocol.ps1` has been run for the user (README "Click-to-source").
+Every chart row and every linked `round-trip` anchor is a `draglint://` link that opens the line in RAD Studio once `drag-lint protocol register` has been run for the user (README "Click-to-source").
 
 ```
 New-DiagramArtifact.ps1 -Question exception-paths -Target <Unit.Class.Method> -DbPath <clone> [-Depth 3] [-Cap 20]

@@ -304,7 +304,7 @@ Shipped on this branch since the trace-core plan started (2026-09-27):
 
 Latest full gate: `Test-Emitters.ps1` PASS, 2026-09-28 23:56 - 2026-09-29 00:22, on the tree committed as 2a4915a1 (65e1419c touched no gated file; `Test-DragLintProtocol.ps1` PASS on it). Protected counts unmoved: 76/31/4/2, 17/17, 12/12, ALSO 9, 103/35/4/2, DimAbbr 98/35/4/2.
 
-Owner actions after the merge: re-register the protocol from `C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1` (this machine still runs the versioned 7.6.6.0 pwsh on the worktree's handler) and check one live click into RAD Studio -- never checked end to end.
+Owner actions after the merge: re-register with `drag-lint protocol register` (status: legacy-powershell on this machine) and check one live click into RAD Studio -- never checked end to end.
 
 **Follow-ons, recorded, not designed (one line each):**
 
