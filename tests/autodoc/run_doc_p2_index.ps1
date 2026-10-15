@@ -39,9 +39,12 @@ function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),
 $script:Failed = $false
 
 $py = 'C:\Python314\python.exe'
+# The historical default, else the first python on PATH (backlog #30: a fixed
+# C:\Python314 made this runner fail or skip on any other machine).
+if (-not (Test-Path $py)) { $pyCmd = Get-Command python -ErrorAction SilentlyContinue | Select-Object -First 1; if ($pyCmd) { $py = $pyCmd.Source } }
 if (-not (Test-Path $py)) {
-  Write-Host '[SKIP] run_doc_p2_index: Python not found at C:\Python314' -ForegroundColor Yellow
-  exit 0
+  Write-Host 'SKIP: run_doc_p2_index: no python found (C:\Python314, nor on PATH)' -ForegroundColor Yellow
+  exit 77
 }
 
 $exePath    = (Resolve-Path $Exe).Path

@@ -39,9 +39,12 @@ $ErrorActionPreference = 'Continue'
 function Check($n,$ok,$d=''){ Write-Host ("[{0}] {1} {2}" -f (@('FAIL','PASS')[[int]$ok]),$n,$d) -ForegroundColor (@('Red','Green')[[int]$ok]); if(-not $ok){$script:Failed=$true} }
 $script:Failed = $false
 
+# The historical default, else the first python on PATH (backlog #30: a fixed
+# C:\Python314 made this runner fail or skip on any other machine).
+if (-not (Test-Path $Py)) { $pyCmd = Get-Command python -ErrorAction SilentlyContinue | Select-Object -First 1; if ($pyCmd) { $Py = $pyCmd.Source } }
 if (-not (Test-Path $Py)) {
-  Write-Host "[FAIL] python not found at $Py (needed to read symbol_docs directly)" -ForegroundColor Red
-  exit 1
+  Write-Host "SKIP: no python found ($Py, nor on PATH) -- needed to read symbol_docs directly" -ForegroundColor Yellow
+  exit 77
 }
 
 $exePath = (Resolve-Path $Exe).Path

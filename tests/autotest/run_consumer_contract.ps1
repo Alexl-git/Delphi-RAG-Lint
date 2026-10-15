@@ -161,6 +161,14 @@ function RunSplit([string[]]$A) {
   }
 }
 # Run from a directory under a .drag-lint.json so the banner has a reason to fire.
+# That directory is C:\Projects on the author's machine; without it the two
+# banner checks below cannot be run, and the runner ends in SKIP, not FAIL
+# (backlog #30).
+if (-not (Test-Path 'C:\Projects')) {
+  Write-Host "SKIP: C:\Projects (a folder under a .drag-lint.json) not found -- the --quiet banner checks (2.8) were not run" -ForegroundColor Yellow
+  if ($script:Failed) { Write-Host 'CONSUMER CONTRACT: FAIL' -ForegroundColor Red; exit 1 }
+  exit 77
+}
 Push-Location 'C:\Projects'
 try {
   $loud  = RunSplit @('query', '--name', 'TWidget', '--db', $db, '--json')

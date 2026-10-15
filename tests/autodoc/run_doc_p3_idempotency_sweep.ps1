@@ -62,9 +62,12 @@ $exePath  = (Resolve-Path $Exe).Path
 $fxPreserve = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\docp3\preserve_tags.pas')).Path
 $fxShapes   = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures\docp3\idempotency_shapes.pas')).Path
 
+# The historical default, else the first python on PATH (backlog #30: a fixed
+# C:\Python314 made this runner fail or skip on any other machine).
+if (-not (Test-Path $Py)) { $pyCmd = Get-Command python -ErrorAction SilentlyContinue | Select-Object -First 1; if ($pyCmd) { $Py = $pyCmd.Source } }
 if (-not (Test-Path $Py)) {
-  Write-Host "[FAIL] python not found at $Py (needed to enumerate symbols from the index)" -ForegroundColor Red
-  exit 1
+  Write-Host "SKIP: no python found ($Py, nor on PATH) -- needed to enumerate symbols from the index" -ForegroundColor Yellow
+  exit 77
 }
 
 # ---------------------------------------------------------------------------

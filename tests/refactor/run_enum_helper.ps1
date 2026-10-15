@@ -214,6 +214,9 @@ Assert "case2 explicit_ordinals: FromByte maps Ord(sp_Double) -> sp_Double" `
     ($ordinalsDry -match 'Ord\(sp_Double\):\s*Result\s*:=\s*sp_Double;')
 Assert "case2 explicit_ordinals: else = first member (sp_Undefined)" `
     ($ordinalsDry -match "(?s)case AValue of.*else\s*\r?\n\s*Result := sp_Undefined;")
+# L#30 control: an enum with only implicit ordinals keeps `case AValue of` in FromByte.
+Assert "simple enum: FromByte keeps the plain Byte selector (no Integer widening)" `
+    (($dry1 -match 'FromByte\(const AValue: Byte\)') -and -not ($dry1 -match 'case Integer\(AValue\)'))
 Assert "case2 explicit_ordinals: ToInteger returns Ord(Self)" `
     ($ordinalsDry -match '(?s)function TSpecHelper\.ToInteger: Integer;.*Result := Ord\(Self\);')
 
@@ -246,6 +249,14 @@ Assert "case3 negative_ordinal: case over real members (Elem3)" ($negDry -match 
 Assert "case3 negative_ordinal: else = first member (Elem1)" `
     ($negDry -match "(?s)case AValue of.*else\s*\r?\n\s*Result := Elem1;")
 Assert "case3 negative_ordinal: no ShortInt variant text" (-not ($negDry -match 'ShortInt'))
+# L#30: an arm label outside the Byte selector's range (Ord(Elem1) = -2) is
+# dcc E1012 "Constant expression violates subrange bounds", so FromByte widens
+# its selector to Integer when the enum has an explicit ordinal. RED-CHECK: the
+# pre-fix build emits `case AValue of` in FromByte and the compile gate fails.
+Assert "case3 negative_ordinal: FromByte selector widened to Integer (E1012 fix)" `
+    ($negDry -match '(?s)FromByte\(const AValue: Byte\): TTEST;\s*begin\s*case Integer\(AValue\) of')
+Assert "case3 negative_ordinal: FromInteger keeps the plain selector" `
+    ($negDry -match '(?s)FromInteger\(const AValue: Integer\): TTEST;\s*begin\s*case AValue of')
 & $exe create-enum-helper --qname TTEST --db $dbNeg --apply --no-backup --tostring case 2>$null | Out-Null
 Assert "case3 negative_ordinal: applied result (--tostring case) compiles (dcc64)" (Test-Compiles $negPas)
 $negApplied = Get-Content $negPas -Raw

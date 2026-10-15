@@ -39,6 +39,7 @@ function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),
 $exePath  = (Resolve-Path $Exe).Path
 $fixDir   = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures')).Path
 $renderJs = (Resolve-Path (Join-Path $PSScriptRoot 'lib\render.js')).Path
+. (Join-Path $PSScriptRoot 'lib\OracleRequire.ps1')   # node + oracle optional: ORACLE-DIFF checks SKIP (exit 77) without them
 
 function Q([string]$s) { return '"' + $s + '"' }
 function Run-Redirected([string[]]$tokens) {
@@ -53,6 +54,7 @@ function Run-Pascal([string]$fixture, [string[]]$verbArgs) {
   return ,(Run-Redirected (@((Q $exePath), 'preprocess-file', '--file', (Q $fixture)) + $verbArgs))
 }
 function Run-Oracle([string]$fixture, [string[]]$oracleArgs) {
+  if (-not $script:OracleOk) { return ,([byte[]]@()) }
   $nodeExe = (Get-Command node).Source
   return ,(Run-Redirected (@((Q $nodeExe), (Q $renderJs), (Q $fixture)) + $oracleArgs))
 }
@@ -79,13 +81,13 @@ try {
   $c = RunCase 'incres\Source\uses_eldefs.pas'
   Check 'resolve: parent subdir Common/ found (var ok survives)' ((AsciiOf $c.Pas).Contains('var ok'))
   Check 'resolve: uses_eldefs Length invariant' ($c.Pas.Length -eq $c.In.Length)
-  Check 'resolve: uses_eldefs ORACLE-DIFF Pascal === JS' (BytesEqual $c.Pas $c.Orc)
+  Check-Oracle 'resolve: uses_eldefs ORACLE-DIFF Pascal === JS' { BytesEqual $c.Pas $c.Orc }
 
   # 2. Two levels up (Source/Sub -> ../../defs.inc).
   $c = RunCase 'incres\Source\Sub\uses_defs.pas'
   Check 'resolve: two levels up found (var ok2 survives)' ((AsciiOf $c.Pas).Contains('var ok2'))
   Check 'resolve: uses_defs Length invariant' ($c.Pas.Length -eq $c.In.Length)
-  Check 'resolve: uses_defs ORACLE-DIFF Pascal === JS' (BytesEqual $c.Pas $c.Orc)
+  Check-Oracle 'resolve: uses_defs ORACLE-DIFF Pascal === JS' { BytesEqual $c.Pas $c.Orc }
 
   # 3. Nearest-first: Source/shadow.inc (defines SHADOW_NEAR) must win over
   #    root/shadow.inc (defines SHADOW_FAR). The two copies DEFINE DIFFERENT
@@ -97,12 +99,12 @@ try {
   Check 'resolve: nearest-first picks NEAR copy (usednear survives)' ((AsciiOf $c.Pas).Contains('var usednear'))
   Check 'resolve: nearest-first does NOT pick FAR copy (usedfar absent)' (-not (AsciiOf $c.Pas).Contains('var usedfar'))
   Check 'resolve: shadow Length invariant' ($c.Pas.Length -eq $c.In.Length)
-  Check 'resolve: shadow nearest-first ORACLE-DIFF Pascal === JS' (BytesEqual $c.Pas $c.Orc)
+  Check-Oracle 'resolve: shadow nearest-first ORACLE-DIFF Pascal === JS' { BytesEqual $c.Pas $c.Orc }
 
   # 4. Unresolvable include stays blanked 1:1 (no throw, no offset shift).
   $c = RunCase 'incres\Source\Sub\uses_missing.pas'
   Check 'resolve: unresolvable blanked 1:1 (Length invariant, no throw)' ($c.Pas.Length -eq $c.In.Length)
-  Check 'resolve: unresolvable ORACLE-DIFF Pascal === JS' (BytesEqual $c.Pas $c.Orc)
+  Check-Oracle 'resolve: unresolvable ORACLE-DIFF Pascal === JS' { BytesEqual $c.Pas $c.Orc }
 
   # 5. --no-near-search restores strict BaseDir-only resolution: ELDefs.inc lives
   #    in ../Common, NOT in the file's own dir, so with the widened search OFF it
@@ -115,4 +117,6 @@ try {
 
 } finally { Pop-Location }
 
-if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
+elseif($script:OracleSkipped){ Write-Host "SKIP: ORACLE-DIFF checks not run -- $($script:OracleWhy)" -ForegroundColor Yellow; exit 77 }
+else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

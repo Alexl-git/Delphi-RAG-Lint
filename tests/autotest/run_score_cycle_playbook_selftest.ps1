@@ -1,3 +1,6 @@
+# dl:serial: compiles the circular demo with dcc64 several times and scores the result -- under
+#   -Jobs 8 the BUILD arm failed beside seven other runners (2026-10-15) and passed serially;
+#   Gitea drag-lint#41.
 <#
   run_score_cycle_playbook_selftest.ps1 -- tools\score-cycle-playbook.ps1 still
   scores: an UNEDITED copy of circular-demo, scored against the plan the engine

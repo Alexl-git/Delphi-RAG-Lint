@@ -28,6 +28,7 @@ function Check($n,$ok){ Write-Host ("[{0}] {1}" -f (@('FAIL','PASS')[[int]$ok]),
 $exePath  = (Resolve-Path $Exe).Path
 $fixDir   = (Resolve-Path (Join-Path $PSScriptRoot 'fixtures')).Path
 $renderJs = (Resolve-Path (Join-Path $PSScriptRoot 'lib\render.js')).Path
+. (Join-Path $PSScriptRoot 'lib\OracleRequire.ps1')   # node + oracle optional: ORACLE-DIFF checks SKIP (exit 77) without them
 
 function Q([string]$s) { return '"' + $s + '"' }
 
@@ -44,6 +45,7 @@ function Run-Pascal([string]$fixture, [string[]]$verbArgs) {
   return ,(Run-Redirected (@((Q $exePath), 'preprocess-file', '--file', (Q $fixture)) + $verbArgs))
 }
 function Run-Oracle([string]$fixture, [string[]]$oracleArgs) {
+  if (-not $script:OracleOk) { return ,([byte[]]@()) }
   $nodeExe = (Get-Command node).Source
   return ,(Run-Redirected (@((Q $nodeExe), (Q $renderJs), (Q $fixture)) + $oracleArgs))
 }
@@ -65,7 +67,7 @@ try {
   $out1 = Run-Pascal $f1 @()
   $orc1 = Run-Oracle $f1 @()
   Check 'asm_quotes: Length(output) == Length(input)' ($out1.Length -eq $in1.Length)
-  Check 'asm_quotes: ORACLE-DIFF Pascal bytes === JS bytes' (BytesEqual $out1 $orc1)
+  Check-Oracle 'asm_quotes: ORACLE-DIFF Pascal bytes === JS bytes' { BytesEqual $out1 $orc1 }
   Check 'asm_quotes: dquoted apostrophe does NOT swallow {$ENDIF} (var ok1 survives)' ((AsciiOf $out1).Contains('var ok1'))
 
   # ============================================================
@@ -77,7 +79,7 @@ try {
   $out2 = Run-Pascal $f2 @()
   $orc2 = Run-Oracle $f2 @()
   Check 'stray_quote: Length(output) == Length(input)' ($out2.Length -eq $in2.Length)
-  Check 'stray_quote: ORACLE-DIFF Pascal bytes === JS bytes' (BytesEqual $out2 $orc2)
+  Check-Oracle 'stray_quote: ORACLE-DIFF Pascal bytes === JS bytes' { BytesEqual $out2 $orc2 }
   Check 'stray_quote: stray quote is line-bounded (var ok3 survives)' ((AsciiOf $out2).Contains('var ok3'))
 
   # ============================================================
@@ -90,10 +92,12 @@ try {
   $out3 = Run-Pascal $f3 @()
   $orc3 = Run-Oracle $f3 @()
   Check 'dir_in_string: Length(output) == Length(input)' ($out3.Length -eq $in3.Length)
-  Check 'dir_in_string: ORACLE-DIFF Pascal bytes === JS bytes' (BytesEqual $out3 $orc3)
+  Check-Oracle 'dir_in_string: ORACLE-DIFF Pascal bytes === JS bytes' { BytesEqual $out3 $orc3 }
   Check 'dir_in_string: directive inside ''...'' still ignored (bad absent)' (-not (AsciiOf $out3).Contains('var bad'))
   Check 'dir_in_string: post-string code active (ok2 present)' ((AsciiOf $out3).Contains('var ok2'))
 
 } finally { Pop-Location }
 
-if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
+if($fail){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
+elseif($script:OracleSkipped){ Write-Host "SKIP: ORACLE-DIFF checks not run -- $($script:OracleWhy)" -ForegroundColor Yellow; exit 77 }
+else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

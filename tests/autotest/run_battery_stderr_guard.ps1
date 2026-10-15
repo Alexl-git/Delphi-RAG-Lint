@@ -98,7 +98,14 @@ New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
 # uses. Kept as one pattern so checks 3 and 5 assert the SAME detector -- a
 # positive control that exercised a different pattern would prove nothing about
 # the real check.
-$NOT_RECOGNIZED = 'is not recognized as a name of a cmdlet'
+# LANGUAGE-INDEPENDENT (Gitea drag-lint#27). The English sentence "is not
+# recognized as a name of a cmdlet" is a LOCALIZED resource string: on a pt-BR
+# pwsh it reads 'O termo "ules" nao e reconhecido...', so check 5 failed on that
+# machine and -- worse -- check 3 was vacuous there and could never fail. The
+# exception TYPE is not localized, and the error record prints it in the
+# NormalView CategoryInfo line, so both probes below run with
+# $ErrorView = 'NormalView' and this matches the type.
+$NOT_RECOGNIZED = 'CommandNotFoundException'
 
 $battery = Join-Path $RepoRoot 'tests\run_battery.ps1'
 Write-Host ''
@@ -110,7 +117,7 @@ if (-not (Test-Path $battery)) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 
 
 $pOut = Join-Path $WorkDir 'list.out'
 $pErr = Join-Path $WorkDir 'list.err'
-$proc = Start-Process pwsh -ArgumentList '-File', $battery, '-List' `
+$proc = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$ErrorView = 'NormalView'; & '$battery' -List; exit `$LASTEXITCODE" `
           -WorkingDirectory $RepoRoot -RedirectStandardOutput $pOut `
           -RedirectStandardError $pErr -NoNewWindow -Wait -PassThru
 
@@ -150,7 +157,7 @@ $corruptLines = @(
 
 $cOut = Join-Path $WorkDir 'corrupt.out'
 $cErr = Join-Path $WorkDir 'corrupt.err'
-$cProc = Start-Process pwsh -ArgumentList '-File', $corrupt `
+$cProc = Start-Process pwsh -ArgumentList '-NoProfile', '-Command', "`$ErrorView = 'NormalView'; & '$corrupt'; exit `$LASTEXITCODE" `
            -WorkingDirectory $WorkDir -RedirectStandardOutput $cOut `
            -RedirectStandardError $cErr -NoNewWindow -Wait -PassThru
 $cErrText = [IO.File]::ReadAllText($cErr)

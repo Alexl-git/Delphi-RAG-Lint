@@ -3,6 +3,51 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Changed
+
+- **The preprocess oracle is optional and lives in the repo; a check that cannot run is a SKIP,
+  not a FAIL.** Five `tests\preprocess` runners required the grammar's JS `preprocess()` from a
+  hard-coded `C:\Projects\tree-sitter-delphi13`, so on any other machine their ORACLE-DIFF checks
+  failed and the runners were red for a missing tool. The oracle is now expected in
+  `tests\preprocess\oracle\preprocessor\` (`oracle\README.md`); without it, or without `node`, each
+  ORACLE-DIFF check prints `[SKIP] ... -- <reason>` (`lib\OracleRequire.ps1`), the runner's other
+  checks still run and can still fail, and a runner with skips exits 77. `tests\run_battery.ps1`
+  reports exit 77 as SKIP -- counted apart from PASS, listed with its reason, and the closing
+  banner reads `GREEN, N SKIPPED` instead of `ALL GREEN`. On this machine: 48 non-oracle checks
+  pass, 19 comparisons skip, and the five runners leave the pre-existing failure list.
+
+### Fixed
+
+- **Battery: an environment gap ends in SKIP, never FAIL or a silent pass.** Runners that need
+  something a checkout may not have -- the local self-index (`run_no_default_db`), a fixture
+  database, a UI-language-specific `cmd` message (the stderr guard now detects a missing command
+  in any language), an LSP trace path (compared by its resolved path) or a built library index
+  (`resolve-dbs` library contract reads the engine's answer either way) -- now say `[SKIP] <why>`
+  instead of failing or passing without checking. Three runners that failed only under `-Jobs 8`
+  and passed every serial re-run (`run_readonly_then_writer_same_process`,
+  `run_score_cycle_playbook_selftest`, `run_forward_decl_shadow`) carry `dl:serial`, and
+  `run_battery_jobs_guard.ps1` names them so dropping the marker is a red.
+- **`run_doctests_v021` runs all 27 legacy sections in any checkout, and sees every failure**
+  (backlog Ltests only). Four separate faults hid behind one red line: T2..T7 ran prebuilt
+  `.exe` files that `*.exe` keeps out of git, so in a fresh checkout cmd said "not recognized" and
+  the section failed with no `FAIL:` line (`tests\fixtures\build_fixture_exe.bat` now compiles each
+  one, stages the engine DLLs beside it and prints `FAIL: build failed: <name>` when it cannot);
+  T27 could not compile because `DRagLint.Core.JobObject` moved to `src\core` (added to its `-U`);
+  T12 and T24 asked the LSP about `file:///C:/Projects/Delphi-RAG-lint/...`, a URI the index does
+  not hold, so hover and completion answered null (`lsp_send.py` now builds every URI from its own
+  folder; the static `T12_lsp.json` is gone and the generated `t*_in.bin` frames are no longer
+  tracked); and the wrapper matched `^FAIL`, but a fixture that `type`s a reply with no trailing
+  newline prints its `FAIL:` mid-line, so it reported "0 FAIL line(s)" beside a failing exit code.
+- **`create-enum-helper` emits a `FromByte` that compiles for an enum with an ordinal outside 0..255**
+  (backlog Lno version constant moves). For `TTEST = (Elem1 = -2, Elem2 = 0, Elem3)` the
+  generated `FromByte` read `case AValue of` with `Ord(Elem1):` as an arm, and a label outside the
+  Byte selector's range is dcc E1012 "Constant expression violates subrange bounds". Ordinals are
+  not indexed, so when the declaration has any explicit `= N` the `FromByte` selector is now
+  `Integer(AValue)`; an enum with only implicit ordinals keeps `case AValue of`. `run_enum_helper`
+  goes green.
+
 ## v1.31.1-alpha -- 2026-10-14
 
 ### Fixed

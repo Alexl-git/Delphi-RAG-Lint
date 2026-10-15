@@ -1,7 +1,7 @@
 # Run the JS preprocessor oracle on a file, return its resolved stdout as bytes.
 # Node is a TEST-ONLY dependency; the shipped drag-lint exe never calls it.
 param([string]$File, [string[]]$Defines, [string]$IncludeMode = 'defines-only')
-$ppDir = 'C:\Projects\tree-sitter-delphi13\preprocessor'
+$ppDir = Join-Path $PSScriptRoot '..\oracle\preprocessor'   # inside the repo: tests\preprocess\oracle\README.md
 $defObj = @{ defines = $Defines } | ConvertTo-Json -Compress
 $defFile = [System.IO.Path]::GetTempFileName()
 Set-Content -Path $defFile -Value $defObj -Encoding ascii

@@ -11,23 +11,27 @@ pushd "%HERE%.."
 echo === T1: schema v4 ===
 call "%HERE%fixtures\T1_schema.bat" || set FAILED=1
 
+REM T2..T7 are Delphi programs, and *.exe is gitignored: in a fresh checkout
+REM they did not exist, cmd said "not recognized" on stderr and the section
+REM failed with no FAIL: line (backlog L#30). build_fixture_exe.bat compiles
+REM each one first and prints "FAIL: build failed: <name>" when it cannot.
 echo === T2: typecheck ===
-"%HERE%fixtures\T2_typecheck.exe" || set FAILED=1
+call "%HERE%fixtures\build_fixture_exe.bat" T2_typecheck && "%HERE%fixtures\T2_typecheck.exe" || set FAILED=1
 
 echo === T3: region scanner ===
-"%HERE%fixtures\T3_regions.exe" || set FAILED=1
+call "%HERE%fixtures\build_fixture_exe.bat" T3_regions && "%HERE%fixtures\T3_regions.exe" || set FAILED=1
 
 echo === T4: XMLDoc parser ===
-"%HERE%fixtures\T4_xmldoc.exe" || set FAILED=1
+call "%HERE%fixtures\build_fixture_exe.bat" T4_xmldoc && "%HERE%fixtures\T4_xmldoc.exe" || set FAILED=1
 
 echo === T5: PasDoc parser ===
-"%HERE%fixtures\T5_pasdoc.exe" || set FAILED=1
+call "%HERE%fixtures\build_fixture_exe.bat" T5_pasdoc && "%HERE%fixtures\T5_pasdoc.exe" || set FAILED=1
 
 echo === T6: dispatch ===
-"%HERE%fixtures\T6_dispatch.exe" || set FAILED=1
+call "%HERE%fixtures\build_fixture_exe.bat" T6_dispatch && "%HERE%fixtures\T6_dispatch.exe" || set FAILED=1
 
 echo === T7: storage roundtrip ===
-"%HERE%fixtures\T7_storage.exe" || set FAILED=1
+call "%HERE%fixtures\build_fixture_exe.bat" T7_storage && "%HERE%fixtures\T7_storage.exe" || set FAILED=1
 
 echo === T8: end-to-end indexing ===
 call "%HERE%fixtures\T8_e2e.bat" || set FAILED=1

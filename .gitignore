@@ -49,7 +49,7 @@ tests/fixtures/t*.txt
 tests/fixtures/t*.json
 !tests/fixtures/T*_mcp.json
 !tests/fixtures/T*_mcp_*.json
-!tests/fixtures/T*_lsp.json
+tests/fixtures/t*_in.bin
 
 # OS
 Thumbs.db

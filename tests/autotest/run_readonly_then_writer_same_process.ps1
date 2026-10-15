@@ -1,3 +1,6 @@
+# dl:serial: times a read-only open against a writer in the same process -- under -Jobs 8 the
+#   CPU and disk contention breaks its timing (failed in 2 of 5 parallel batteries on 2026-10-15,
+#   passed every serial run; Gitea drag-lint#41).
 <#
   run_readonly_then_writer_same_process.ps1 -- a verb that holds a READ-ONLY
   store and then opens a WRITER on the same index in the SAME process must be

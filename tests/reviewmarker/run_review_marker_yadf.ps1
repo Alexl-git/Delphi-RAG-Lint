@@ -21,7 +21,8 @@ $exe  = Join-Path $PSScriptRoot '..\..\third_party\dll-win64\drag-lint.exe'
 $yadf = 'C:\Projects\YADF\Win64\Debug\EXE\YADF.exe'
 
 if (-not (Test-Path $exe))  { Write-Output "review-marker-yadf: FATAL -- no drag-lint at $exe"; exit 1 }
-if (-not (Test-Path $yadf)) { Write-Output "review-marker-yadf: SKIP -- YADF not built at $yadf"; exit 2 }
+# exit 77 = SKIP in tests\run_battery.ps1 (it printed SKIP but exited 2, a FAIL -- backlog #30).
+if (-not (Test-Path $yadf)) { Write-Output "SKIP: review-marker-yadf: YADF not built at $yadf"; exit 77 }
 
 $tmp = Join-Path $env:TEMP ("dl-marker-yadf-" + $PID)
 New-Item -ItemType Directory -Path $tmp -Force | Out-Null

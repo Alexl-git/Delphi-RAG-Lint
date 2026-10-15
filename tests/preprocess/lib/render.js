@@ -19,7 +19,8 @@
 'use strict';
 
 const fs = require('fs');
-const { preprocess } = require('C:/Projects/tree-sitter-delphi13/preprocessor/preprocess');
+// The oracle lives inside the repo (tests\preprocess\oracle\README.md); never a machine path.
+const { preprocess } = require(require('path').join(__dirname, '..', 'oracle', 'preprocessor', 'preprocess'));
 
 function main() {
   const args = process.argv.slice(2);
