@@ -25,6 +25,23 @@ uses
 const
   /// <summary>RefreshOwner's AReason for an owner with no project file.</summary>
   REASON_FOLDER_DB = 'no project file -- folder DBs are not reindexed by a rename';
+  /// <summary>RefreshOwner's AReason for a project owner whose index carries
+  /// ANOTHER project's project_tag (the DB is some other project's closure).
+  /// Format arguments: the stored tag, the owner's project file NAME, the
+  /// project file, the DB path.</summary>
+  /// <remarks>Never reindexed: an incremental `index --project` keeps the
+  /// other closure's rows, so only the --rebuild named here can fix it.</remarks>
+  REASON_TAG_MISMATCH = 'index was built from project %s, not %s -- rebuild it: '
+    + 'drag-lint index --project %s --db %s --rebuild';
+  /// <summary>The evidence text for project members the index does not hold.
+  /// Format arguments: how many, and the first few member paths ', '-joined
+  /// (', ...' appended when there are more).</summary>
+  REASON_MEMBERS_MISSING = '%d project member(s) not in the index: %s';
+  /// <summary>RefreshOwner's AReason when an apply's reindex still left
+  /// members out. Format arguments: the REASON_MEMBERS_MISSING text, the
+  /// project file, the DB path.</summary>
+  REASON_MEMBERS_STILL_MISSING = 'still missing after reindex: %s -- rebuild it: '
+    + 'drag-lint index --project %s --db %s --rebuild';
 
 type
   /// <summary>What kind of index owns the file.</summary>
@@ -43,7 +60,7 @@ type
   /// <summary>One index whose files table holds the file being renamed.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.ProjectReason (DRagLint.Refactor.MultiProjectRename.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.FindRenameOwners (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.OwnerOf (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.StaleEvidence (DRagLint.Refactor.MultiProjectRename.pas), DRagLint.Refactor.MultiProjectRename.TagMismatch (DRagLint.Refactor.MultiProjectRename.pas) (+1 more)</para>
   /// <para>Used in units: DRagLint.Refactor.MultiProjectRename</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -202,19 +219,31 @@ function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFil
 /// caller (the CLI) so this unit never links DRagLint.CLI. Called at most once,
 /// and only for an owner with a project file whose DB opened and was stale.
 /// nil for a PREVIEW (Ruling 12): nothing is reindexed and nothing is written.</param>
-/// <param name="AReason">'' for ofFresh and ofReindexed; for ofStale
-/// '&lt;n&gt; changed file(s)' (or the missing-stamp text); otherwise why the
-/// owner is unverified -- REASON_FOLDER_DB, 'reindex failed: index --project
-/// &lt;file&gt;', 'still stale after reindex: &lt;first path&gt; -- if this DB
-/// was once widened by a folder index, rebuild it: ...', or the message of
-/// whatever was raised.</param>
-/// <returns>ofFresh when ChangedFilePaths is empty and the DB carries its
-/// INDEXED_AT_KEY stamp; ofStale when it is stale, has a project file and
-/// AReindex is nil; ofReindexed when it was stale and AReindex made it fresh;
-/// ofUnverified otherwise (a stale folder DB is unverified in a preview too).</returns>
+/// <param name="AReason">'' for ofFresh and ofReindexed; for ofStale the
+/// REASON_MEMBERS_MISSING text and/or '&lt;n&gt; changed file(s)', '; '-joined
+/// in that order (or the missing-stamp text); otherwise why the owner is
+/// unverified -- REASON_TAG_MISMATCH, REASON_FOLDER_DB, 'reindex failed: index
+/// --project &lt;file&gt;', REASON_MEMBERS_STILL_MISSING, 'still stale after
+/// reindex: &lt;first path&gt; -- if this DB was once widened by a folder
+/// index, rebuild it: ...', or the message of whatever was raised.</param>
+/// <returns>ofFresh when ChangedFilePaths is empty, the DB carries its
+/// INDEXED_AT_KEY stamp and (for a project owner) holds every declared member;
+/// ofStale when it is stale, has a project file and AReindex is nil;
+/// ofReindexed when it was stale and AReindex made it fresh; ofUnverified
+/// otherwise (a stale folder DB is unverified in a preview too, and a project
+/// tag mismatch is unverified in a preview and an apply alike).</returns>
 /// <remarks>
 /// <para>A DB without the INDEXED_AT_KEY stamp is STALE, not fresh: nothing
 /// says a completed run ever wrote it. A completed `index --project` writes it.</para>
+/// <para>Per-row freshness cannot see a row that is ABSENT, so a project owner
+/// is also checked as a whole (INBOX rename-owner-without-target-reports-fresh):
+/// (1) a non-empty PROJECT_TAG_KEY that is not SanitizeProjectTag of the project
+/// file's base name means the DB is another project's closure -- unverified at
+/// once, never reindexed; an empty tag (an index older than the stamp) is no
+/// mismatch. (2) A declared member -- a .dproj DCCReference .pas, or a .dpr/.dpk
+/// uses name with a same-named .pas in the project folder -- that exists on
+/// disk but has no files row is stale evidence, handled like a changed file.
+/// Units the closure reaches only transitively are not checked.</para>
 /// <para>Criterion 3 (changed files only) is met by the incremental
 /// `index --project` itself, which skips every up-to-date file; an in-process
 /// per-file path would duplicate DoIndex's resolve stages (Task 4 spike,
@@ -328,7 +357,8 @@ function FindStaleEdit(const AEdits: TArray<TTextEdit>; out AStale: TTextEdit): 
 implementation
 
 uses
-  System.Generics.Collections
+  System.Classes
+  , System.Generics.Collections
   , System.StrUtils
   , System.IOUtils
   , DRagLint.Core.Interfaces
@@ -337,6 +367,9 @@ uses
   , DRagLint.Index.Freshness // dl:unit DRagLint.Index.Freshness accepted -- StaleEvidence calls ChangedFilePaths and reads the INDEXED_AT_KEY stamp the freshness module defines; the const travels with that call
   , DRagLint.Index.Plan
   , DRagLint.Project.Resolver
+  , DRagLint.Project.Members
+  , DRagLint.Project.Coherence // dl:unit DRagLint.Project.Coherence accepted -- TagMismatch reads the PROJECT_TAG_KEY stamp this module defines beside SanitizeProjectTag, which compares it; the const travels with that call
+  , DRagLint.Lint.ProjectChecks.Parse
   , DRagLint.Storage.FileMembership
   ;
 
@@ -429,34 +462,136 @@ begin
   end; // try
 end; // function
 
-{ '' when the DB at ADbPath is fresh; otherwise what makes it stale -- the
-  first changed path, or the missing completed-run stamp. AChanged: how many
-  files changed (0 for a missing stamp). Read-only; raises when the DB cannot
-  be opened or read. }
-function StaleEvidence(const ADbPath: string; out AChanged: Integer): string;
+const
+  { How many missing members REASON_MEMBERS_MISSING names before ', ...'. }
+  MAX_MEMBER_EXAMPLES = 3;
+
+{ Adds APath to AList when the file exists and is not listed yet (AList is
+  case-insensitive). }
+procedure AddMember(AList: TStringList; const APath: string);
+begin
+  if TFile.Exists(APath) and (AList.IndexOf(APath) < 0) then AList.Add(APath);
+end; // procedure
+
+{ The .pas members AProjectFile DECLARES, absolute, existing on disk, in
+  declaration order: the .dproj's DCCReferences, then each .dpr/.dpk uses name
+  that has a same-named .pas in the project folder. A .dpr finds its sibling
+  .dproj and a .dproj its sibling .dpr/.dpk. Units the closure reaches only
+  transitively are not members (out of scope). Reads files; writes nothing. }
+function DeclaredMembers(const AProjectFile: string): TArray<string>;
+var
+  Dproj    : string     ;
+  Prog     : string     ;
+  Ref      : string     ;
+  Name     : string     ;
+  StartLine: Integer    ;
+  List     : TStringList;
+begin
+  if SameText(ExtractFileExt(AProjectFile), '.dproj') then
+  begin
+    Dproj:= AProjectFile;
+    Prog := FindSiblingProgramFile(AProjectFile);
+  end
+  else
+  begin
+    Dproj:= ChangeFileExt(AProjectFile, '.dproj');
+    Prog := AProjectFile;
+  end;
+  List:= TStringList.Create;
+  try
+    for Ref in ReadDCCReferences(Dproj) do
+      if SameText(ExtractFileExt(Ref), '.pas') then
+        AddMember(List, if TPath.IsPathRooted(Ref) then Ref else TPath.GetFullPath(TPath.Combine(ExtractFilePath(Dproj), Ref)));
+    if Prog <> '' then
+      for Name in ExtractUsesNames(Prog, StartLine) do
+        AddMember(List, TPath.Combine(ExtractFilePath(AProjectFile), Name + '.pas'));
+    Result:= List.ToStringArray;
+  finally
+    List.Free;
+  end; // try
+end; // function
+
+{ REASON_MEMBERS_MISSING for the members of AProjectFile that AStore holds no
+  files row for; '' when it holds every one. Read-only. }
+function MissingMembers(const AStore: ISymbolStore; const AProjectFile: string): string;
+var
+  C    : TMemberCoherence;
+  Names: TArray<string>  ;
+  Count: Integer         ;
+begin
+  Count:= 0;
+  Names:= nil;
+  for C in ComputeCoherence(AStore, PairDfmSiblings(DeclaredMembers(AProjectFile))) do
+    if not C.Indexed then
+    begin
+      Inc(Count);
+      if Count <= MAX_MEMBER_EXAMPLES then Names:= Names + [C.Member.UnitPath];
+    end;
+  if Count = 0 then Exit('');
+  Result:= Format(REASON_MEMBERS_MISSING, [Count, string.Join(', ', Names) + (if Count > MAX_MEMBER_EXAMPLES then ', ...' else '')]);
+end; // function
+
+{ REASON_TAG_MISMATCH when the DB of a PROJECT owner is stamped with another
+  project's tag; '' when the tags agree or the DB carries none. Read-only;
+  raises when the DB cannot be opened. }
+function TagMismatch(const AOwner: TRenameOwner): string;
+var
+  Store: ISymbolStore;
+  Tag  : string      ;
+begin
+  Store:= TSQLiteSymbolStore.Create(AOwner.DbPath, True);
+  Tag  := Trim(Store.GetMetaValue(PROJECT_TAG_KEY));
+  if (Tag = '') or SameText(Tag, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(AOwner.ProjectFile))) then Exit('');
+  Result:= Format(REASON_TAG_MISMATCH, [Tag, ExtractFileName(AOwner.ProjectFile), AOwner.ProjectFile, AOwner.DbPath]);
+end; // function
+
+{ '' when the DB of AOwner is fresh; otherwise what makes it stale -- the
+  first changed path, the missing completed-run stamp, or (a project owner)
+  the REASON_MEMBERS_MISSING text. AChanged: how many files changed (0 for a
+  missing stamp). AMissing: the members text, '' when none are missing or the
+  stamp is. Read-only; raises when the DB cannot be opened or read. }
+function StaleEvidence(const AOwner: TRenameOwner; out AChanged: Integer; out AMissing: string): string;
 var
   Store  : ISymbolStore  ;
   Changed: TArray<string>;
 begin
   AChanged:= 0;
+  AMissing:= '';
   { Read-only never CREATES: a missing path raises instead of leaving an empty
     database behind. }
-  Store:= TSQLiteSymbolStore.Create(ADbPath, True);
+  Store:= TSQLiteSymbolStore.Create(AOwner.DbPath, True);
   if Store.GetMetaValue(INDEXED_AT_KEY) = '' then Exit('index carries no ' + INDEXED_AT_KEY + ' stamp');
   Changed := ChangedFilePaths(Store);
   AChanged:= Length(Changed);
-  Result  := if AChanged > 0 then Changed[0] else '';
+  if AOwner.ProjectFile <> '' then AMissing:= MissingMembers(Store, AOwner.ProjectFile);
+  Result  := if AChanged > 0 then Changed[0] else AMissing;
+end; // function
+
+{ A preview's ofStale reason: the members text, then the changed-file count,
+  '; '-joined; AEvidence itself (the missing stamp) when neither applies. }
+function PreviewStaleText(const AEvidence, AMissing: string; AChanged: Integer): string;
+var
+  Parts: TArray<string>;
+begin
+  Parts:= nil;
+  if AMissing <> '' then Parts:= Parts + [AMissing];
+  if AChanged > 0 then Parts:= Parts + [Format('%d changed file(s)', [AChanged])];
+  Result:= if Parts = nil then AEvidence else string.Join('; ', Parts);
 end; // function
 
 function RefreshOwner(const AOwner: TRenameOwner; const AReindex: TFunc<string, string, Boolean>;
   out AReason: string): TOwnerFreshness;
 var
   Evidence: string ;
+  Missing : string ;
   Changed : Integer;
 begin
   AReason:= '';
   try
-    Evidence:= StaleEvidence(AOwner.DbPath, Changed);
+    { Another project's closure: no reindex of THIS project can repair it. }
+    if AOwner.ProjectFile <> '' then AReason:= TagMismatch(AOwner);
+    if AReason <> '' then Exit(ofUnverified);
+    Evidence:= StaleEvidence(AOwner, Changed, Missing);
     if Evidence = '' then Exit(ofFresh);
     if AOwner.ProjectFile = '' then
     begin
@@ -466,7 +601,7 @@ begin
     { A preview never reindexes (Ruling 12): say how stale, plan on it as is. }
     if not Assigned(AReindex) then
     begin
-      AReason:= if Changed > 0 then Format('%d changed file(s)', [Changed]) else Evidence;
+      AReason:= PreviewStaleText(Evidence, Missing, Changed);
       Exit(ofStale);
     end;
     if not AReindex(AOwner.ProjectFile, AOwner.DbPath) then
@@ -474,16 +609,15 @@ begin
       AReason:= 'reindex failed: index --project ' + AOwner.ProjectFile;
       Exit(ofUnverified);
     end;
-    Evidence:= StaleEvidence(AOwner.DbPath, Changed);
-    if Evidence <> '' then
-    begin
-      { M5: rows a folder-target index once swept in are outside the closure,
-        so no incremental run ever visits them -- only a rebuild clears them. }
+    Evidence:= StaleEvidence(AOwner, Changed, Missing);
+    Result  := if Evidence = '' then ofReindexed else ofUnverified;
+    { Still missing members, or (M5) rows a folder-target index once swept in:
+      outside the closure, no incremental run visits them -- only a rebuild. }
+    if (Evidence <> '') and (Changed = 0) and (Missing <> '') then
+      AReason:= Format(REASON_MEMBERS_STILL_MISSING, [Missing, AOwner.ProjectFile, AOwner.DbPath])
+    else if Evidence <> '' then
       AReason:= Format('still stale after reindex: %s -- if this DB was once widened by a folder index, '
         + 'rebuild it: drag-lint index --project %s --db %s --rebuild', [Evidence, AOwner.ProjectFile, AOwner.DbPath]);
-      Exit(ofUnverified);
-    end;
-    Result:= ofReindexed;
   except
     on E: Exception do
     begin

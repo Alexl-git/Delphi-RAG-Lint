@@ -323,6 +323,7 @@ implementation
 uses
   System.Diagnostics       { TStopwatch -- the per-rule .scm timing below }
   , System.Generics.Defaults { TComparer -- sorting that table by cost }
+  , System.RegularExpressionsCore { ERegularExpressionError -- a bad rule regex }
   ;
 
 { Armed once, from DRAGLINT_PROFILE, so the unarmed path costs one Boolean test
@@ -789,6 +790,145 @@ begin
   if ANegated then Result:= not Result;
 end;
 
+{ True when ADecl (declVar / declArg / varDef) names AName. Every direct
+  `identifier` child is a declared name -- `A, B: T` carries two -- and the
+  type sits inside its own `type` node, so it is never mistaken for one. }
+function DeclNamesIdent(const ADecl: TTSNode; const ASource: TBytes; const AName: string): Boolean;
+var
+  I: Integer;
+begin
+  for I:= 0 to Integer(ADecl.NamedChildCount) - 1 do
+    if (ADecl.NamedChild(I).NodeType = 'identifier') and SameText(NodeText(ADecl.NamedChild(I), ASource), AName) then
+      Exit(True);
+  Result:= False;
+end;
+
+{ The `type` field text of ADecl with all whitespace removed (`^ Char` ->
+  `^Char`), or '' when the declaration carries no explicit type -- an
+  inferred inline `var X := Expr`. }
+function DeclTypeText(const ADecl: TTSNode; const ASource: TBytes): string;
+var
+  Ty: TTSNode;
+begin
+  Ty:= ADecl.ChildByField('type');
+  if Ty.IsNull then Exit('');
+  Result:= TRegEx.Replace(NodeText(Ty, ASource), '\s', '');
+end;
+
+{ Looks for the declaration of AName among the direct children of AScope.
+  Var sections (`declVars` > `declVar`) count wherever they sit; a routine's
+  header contributes its `declArgs`; inline vars (`varDef`, and the
+  `varAssignDef` lhs of an `assignment`) count only inside a `block` and only
+  when they END before ABeforeByte -- an inline var is not in scope above its
+  declaration. A nested routine is a child of its parent's `defProc`, but its
+  own locals are never visited here: they are not in scope for the parent.
+  True with AType set when found; AType is '' for an untyped inline var. }
+function FindDeclInScope(const AScope: TTSNode; const ASource: TBytes; const AName: string;
+  ABeforeByte: UInt32; out AType: string): Boolean;
+var
+  I, J  : Integer;
+  Child : TTSNode;
+  Sub   : TTSNode;
+  Args  : TTSNode;
+begin
+  AType:= '';
+  for I:= 0 to Integer(AScope.NamedChildCount) - 1 do
+  begin
+    Child:= AScope.NamedChild(I);
+    if Child.NodeType = 'declVars' then
+    begin
+      for J:= 0 to Integer(Child.NamedChildCount) - 1 do
+      begin
+        Sub:= Child.NamedChild(J);
+        if (Sub.NodeType = 'declVar') and DeclNamesIdent(Sub, ASource, AName) then
+        begin
+          AType:= DeclTypeText(Sub, ASource);
+          Exit(True);
+        end;
+      end;
+    end
+    else if Child.NodeType = 'declProc' then
+    begin
+      Args:= Child.ChildByField('args');
+      if not Args.IsNull then
+        for J:= 0 to Integer(Args.NamedChildCount) - 1 do
+        begin
+          Sub:= Args.NamedChild(J);
+          if (Sub.NodeType = 'declArg') and DeclNamesIdent(Sub, ASource, AName) then
+          begin
+            AType:= DeclTypeText(Sub, ASource);
+            Exit(True);
+          end;
+        end;
+    end
+    else if (AScope.NodeType = 'block') and (Child.EndByte <= ABeforeByte) then
+    begin
+      Sub:= Child;
+      if Child.NodeType = 'assignment' then Sub:= Child.ChildByField('lhs');
+      if (not Sub.IsNull) and ((Sub.NodeType = 'varDef') or (Sub.NodeType = 'varAssignDef'))
+        and DeclNamesIdent(Sub, ASource, AName) then
+      begin
+        AType:= DeclTypeText(Sub, ASource);
+        Exit(True);
+      end;
+    end;
+  end;
+  Result:= False;
+end;
+
+{ (#declared-type? @ident "regex") -- 2026-10-14, pchar-arithmetic.
+
+  True when the identifier captured by @ident is declared, in a scope the
+  source itself shows, with a type whose text (whitespace removed) matches the
+  case-insensitive regex. The walk goes from the capture outwards: each
+  enclosing `block` (inline vars declared above the use), each enclosing
+  routine (its var sections and parameters), then the unit's own var
+  sections. The INNERMOST declaration wins, so a nested routine's local
+  shadows its parent's.
+
+  Anything it cannot SEE answers False: a field, a global from another unit,
+  a `with` member, an untyped inline var (`var P := Expr`). That is a
+  deliberate choice of silence over a guess -- the rule this was written for
+  (pchar-arithmetic) used to guess from a `P` prefix and reported
+  `PRows := PRows + [Row]` on a TArray. Malformed arguments pass, like every
+  predicate here. }
+function DeclaredTypeMatches(const ANode: TTSNode; const ASource: TBytes; const ATypeRx: string): Boolean;
+var
+  Name : string ;
+  Cur  : TTSNode;
+  Ty   : string ;
+begin
+  Result:= False;
+  if ANode.IsNull or (ANode.NodeType <> 'identifier') then Exit;
+  Name:= NodeText(ANode, ASource);
+  Cur:= ANode.Parent;
+  while not Cur.IsNull do
+  begin
+    if FindDeclInScope(Cur, ASource, Name, ANode.StartByte, Ty) then
+    begin
+      if Ty = '' then Exit;
+      try
+        Exit(TRegEx.IsMatch(Ty, ATypeRx, [roIgnoreCase]));
+      except  // dl:ok try-except-swallowed@c2a3 -- REVIEWED 2026-10-14: a malformed rule regex answers "no match", never aborts the scan
+        on ERegularExpressionError do Exit; { a bad regex in a rule file must not take the scan down }
+      end;
+    end;
+    Cur:= Cur.Parent;
+  end;
+end;
+
+function EvalDeclaredType(const AMatch: TTSQueryMatch; const ASource: TBytes;
+  const AArgs: TArray<TPredicateArg>): Boolean;
+const
+  OP_CAPTURE_RX = 3; // the operator + one capture + the regex
+  CAP_ARG       = 1;
+  RX_ARG        = 2;
+begin
+  if (Length(AArgs) <> OP_CAPTURE_RX) or not AArgs[CAP_ARG].IsCapture or AArgs[RX_ARG].IsCapture then Exit(True);
+  Result:= DeclaredTypeMatches(ResolveCaptureNode(AMatch, AArgs[CAP_ARG].CaptureIndex), ASource,
+    AArgs[RX_ARG].StringValue);
+end;
+
 // Evaluate one predicate. Returns True if it passes.
 function EvalPredicate(const AQuery: TTSQuery; const AMatch: TTSQueryMatch; const ASource: TBytes; const AArgs: TArray<TPredicateArg>): Boolean;
 const
@@ -880,6 +1020,9 @@ begin
 
   if (Op = 'reset-in-loop?') or (Op = 'not-reset-in-loop?') then
     Exit(EvalResetInLoop(AMatch, ASource, AArgs, Op = 'not-reset-in-loop?'));
+
+  if Op = 'declared-type?' then
+    Exit(EvalDeclaredType(AMatch, ASource, AArgs));
 
   // Unknown predicate - treat as pass (don't suppress matches just because
   // we don't recognise a directive).

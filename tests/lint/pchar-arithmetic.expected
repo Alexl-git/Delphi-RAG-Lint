@@ -1,5 +1,11 @@
 # PStr + N (12), PStr + 1 (13); N + 1 (21) and S + 'x' (22) must not fire
+# Typed pointers without a P prefix: GBuf (36), Cur (39), Hat (40), Walk (42), Src (44)
 pchar-arithmetic 12
 pchar-arithmetic 13
+pchar-arithmetic 36
+pchar-arithmetic 39
+pchar-arithmetic 40
+pchar-arithmetic 42
+pchar-arithmetic 44
 !pchar-arithmetic 21
 !pchar-arithmetic 22

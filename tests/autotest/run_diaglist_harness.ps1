@@ -184,6 +184,11 @@ Check 'R59 no rename-unindexed -> single-owner fix applies as before' ($kv['un.p
 Check 'R60 refusal + rename-unindexed -> refuse' ($kv['un.refuse'] -eq '2') "got: $($kv['un.refuse'])"
 Check 'R61 Fix all (rename-local) + rename-unindexed -> the unindexed confirm' ($kv['un.local'] -eq '1') "got: $($kv['un.local'])"
 Check 'R62 unindexed section list capped at 10' ($kv['un.cap'] -eq 'TRUE') ''
+# tm: INBOX rename-owner-without-target-reports-fresh -- the engine's two new reasons, no plugin change
+Check 'R63 a tag-mismatch owner keeps its unverified reason verbatim' ($kv['tm.project1'] -eq 'C -- index unverified (index was built from project A, not C.dproj -- rebuild it: drag-lint index --project C:\w\C\C.dproj --db C:\w\C.sqlite --rebuild), 0 reference(s)') "got: $($kv['tm.project1'])"
+Check 'R64 a missing-member owner keeps its stale reason verbatim' ($kv['tm.project2'] -eq 'E -- index stale (1 project member(s) not in the index: C:\w\E\uLate.pas), 0 reference(s)') "got: $($kv['tm.project2'])"
+Check 'R65 ... and counts as stale (unverified does not)' ($kv['tm.stale'] -eq '1') "got: $($kv['tm.stale'])"
+Check 'R66 ... and the refusal wins -> refuse' ($kv['tm.action'] -eq '2') "got: $($kv['tm.action'])"
 
 [System.IO.Directory]::Delete($WorkDir, $true)
 Write-Host ''
