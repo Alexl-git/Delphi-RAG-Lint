@@ -103,6 +103,8 @@ const
   EXIT_REFUSED = 1;
   EXIT_SETUP   = 2;
 
+  FIRST_FLAG_PARAM = 3;  // ParamStr(1) is `protocol`, ParamStr(2) the sub-verb
+
 function TestRoot: string;
 begin
   Result:= GetEnvironmentVariable(TEST_ROOT_ENV).Trim.TrimRight(['\']);
@@ -311,7 +313,7 @@ begin
   var Force:= False;
   var DryRun:= False;
   var Json:= False;
-  var I:= 3;
+  var I:= FIRST_FLAG_PARAM;
   while I <= ParamCount do
   begin
     var Flag:= ParamStr(I);
