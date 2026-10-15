@@ -16,7 +16,7 @@
 
     PV-USAGE      no sub-verb / unknown sub-verb / unknown flag / --handler with no value: usage on
                   stderr, exit 2, nothing written
-    PV-ROOTSAFE   a test root that is, or (as TRegistry reads it: '\Software', 'Software\') resolves to,
+    PV-ROOTSAFE   a blank (whitespace/backslash-only) test root, and a test root that is, or (as TRegistry reads it: '\Software', 'Software\') resolves to,
                   Software or anything under Software\Classes: exit 2 before anything is opened. Only
                   read-only invocations are used for these
     PV-NONE       status on an empty root: `draglint://: none`, exit 1
@@ -125,7 +125,7 @@ try {
   # ---- a test root that resolves to the REAL tree is refused before anything is opened ----------
   # Only read-only invocations (status, register --dry-run), so even a broken refusal writes nothing;
   # PV-REALKEY at the end still byte-compares the real key.
-  foreach ($bad in @('\Software', 'Software\', ' \\Software\\ ', 'Software\Classes', 'software\classes\draglint-x')) {
+  foreach ($bad in @('\Software', 'Software\', ' \\Software\\ ', 'Software\Classes', 'software\classes\draglint-x', ' ', '\', '  \\  ')) {
     $r1 = Invoke-Protocol @('status') $bad
     $r2 = Invoke-Protocol @('register', '--handler', $Handler, '--dry-run', '--force') $bad
     Check "PV-ROOTSAFE '$bad'" ($r1.Code -eq 2 -and $r2.Code -eq 2 -and $r1.Err -match 'refusing' -and $r1.Out -eq '' -and $r2.Out -eq '') "exit $($r1.Code)/$($r2.Code)"

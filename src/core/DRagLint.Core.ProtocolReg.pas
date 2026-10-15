@@ -76,7 +76,7 @@ function UnregisterProtocol(pForce, pDryRun: Boolean; out pReport: string): Inte
 /// <returns>The verb's exit code; 2 with usage on stderr for no sub-verb, an unknown sub-verb or an unknown flag.</returns>
 /// <remarks>Also 2, before anything is opened, when DRAGLINT_PROTOCOL_TEST_ROOT -- normalised as TRegistry reads it:
 /// surrounding blanks and backslashes stripped -- is Software, Software\Classes or lies under Software\Classes: the
-/// override must never resolve to the tree it exists to protect. A trailing --handler with no value is a usage
+/// override must never resolve to the tree it exists to protect. A value that is set but blank after that normalisation is refused too, never read as unset. A trailing --handler with no value is a usage
 /// error ('--handler needs a value').</remarks>
 function RunProtocolVerbFromCommandLine: Integer;
 
@@ -123,12 +123,12 @@ begin
   Result:= Result.Trim(['\']).Trim;
 end;
 
-{ True when DRAGLINT_PROTOCOL_TEST_ROOT is set but the key it yields is the real one or lies under the real
+{ True when DRAGLINT_PROTOCOL_TEST_ROOT is set but blank after normalisation, or the key it yields is the real one or lies under the real
   Software\Classes -- the override exists to keep tests OFF that tree, so such a value is refused outright. }
 function UnsafeTestRoot: Boolean;
 begin
   var Root:= TestRoot.ToLower;
-  if Root = '' then Exit(False);
+  if Root = '' then Exit(GetEnvironmentVariable(TEST_ROOT_ENV) <> '');
   Result:= (Root = 'software') or (Root = 'software\classes') or Root.StartsWith('software\classes\');
 end;
 
