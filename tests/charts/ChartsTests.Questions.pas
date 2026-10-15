@@ -250,6 +250,7 @@ type
     [Test] procedure AnswerMatchesPowerShell;
     [Test] procedure EventHandlerIsRefused;
     [Test] procedure UnknownTargetIsRefused;
+    [Test] procedure AmbiguousTargetIsRefused;
   end;
 
 implementation
@@ -2532,6 +2533,13 @@ end;
 procedure TWhoCallsTests.UnknownTargetIsRefused;
 begin
   Assert.AreEqual('symbol not found: No.Such.Method', Refusal(WHO_CALLS_ID, 'No.Such.Method', CLIENT_CLONE));
+end;
+
+procedure TWhoCallsTests.AmbiguousTargetIsRefused;
+begin
+  { an overloaded routine: two declarations share this qualified name, so the root is not one symbol (D3) }
+  Assert.AreEqual('MStreams.TABZMemoryStream.Seek resolves to 2 symbols in this index -- name one qualified routine',
+    Refusal(WHO_CALLS_ID, 'MStreams.TABZMemoryStream.Seek', CLIENT_CLONE));
 end;
 
 end.
