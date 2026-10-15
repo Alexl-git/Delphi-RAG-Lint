@@ -2472,16 +2472,125 @@ end;
   impl-only free routine) -- so the fix is never worse than before. There cannot
   be two unstamped decls sharing both name and signature (that would be a
   duplicate-overload compile error), so a signature match is always unique. }
+{ #37 (2026-10-08): the overload a body belongs to, by parameter SHAPE. An
+  implementation header may leave out the default values the declaration gives
+  (Delphi only allows them once) and may wrap its parameters differently, so
+  its signature text differs from the declaration's and the exact comparison in
+  SetRoutineImplRange never matched -- every such overload pair fell back to
+  name order, which swaps them (UConfig.SaveResult on ProjectA: the TConfig overload
+  carried the TStringList body). The key keeps what tells overloads apart --
+  one 'modifier type' entry per parameter, in order, plus the return type --
+  and drops what may differ between the two headers: names, grouping, default
+  values, spacing, case. A quote, a parenthesis or a bracket is skipped as a
+  unit, so a default like 'a;b' or [1, 2] cannot split a parameter. }
+function ParamShapeKey(const ASignature: string): string;
+
+  // Index of the first AChar at nesting depth 0 and outside a quoted string
+  // in AText, or 0 when there is none.
+  function TopLevelPos(const AText: string; AChar: Char): Integer;
+  var
+    i, Depth: Integer;
+    InQuote : Boolean;
+  begin
+    Result := 0;
+    Depth  := 0;
+    InQuote:= False;
+    for i:= 1 to Length(AText) do
+    begin
+      if AText[i] = '''' then InQuote:= not InQuote
+      else if InQuote then Continue
+      else if CharInSet(AText[i], ['(', '[']) then Inc(Depth)
+      else if CharInSet(AText[i], [')', ']']) then Dec(Depth)
+      else if (Depth = 0) and (AText[i] = AChar) then Exit(i);
+    end;
+  end;
+
+var
+  Args, Rest, Segment, NamesPart, TypePart, Modifier, FirstWord: string;
+  CloseAt, Cut, Depth, i, NameCount: Integer;
+  InQuote: Boolean;
+begin
+  Result:= '';
+  Args  := '';
+  Rest  := Trim(ASignature);
+  if (Rest <> '') and (Rest[1] = '(') then
+  begin
+    // The matching ')' of the opening '(' ends the parameter list.
+    CloseAt:= 0;
+    Depth  := 0;
+    InQuote:= False;
+    for i:= 1 to Length(Rest) do
+    begin
+      if Rest[i] = '''' then InQuote:= not InQuote
+      else if InQuote then Continue
+      else if CharInSet(Rest[i], ['(', '[']) then Inc(Depth)
+      else if CharInSet(Rest[i], [')', ']']) then
+      begin
+        Dec(Depth);
+        if Depth = 0 then
+        begin
+          CloseAt:= i;
+          Break;
+        end;
+      end;
+    end;
+    if CloseAt = 0 then Exit; // unbalanced: no key, the caller falls back
+    Args:= Copy(Rest, 2, CloseAt - 2);
+    Rest:= Trim(Copy(Rest, CloseAt + 1, MaxInt));
+  end;
+  while Args <> '' do
+  begin
+    Cut:= TopLevelPos(Args, ';');
+    if Cut = 0 then Cut:= Length(Args) + 1;
+    Segment:= Trim(Copy(Args, 1, Cut - 1));
+    Args   := Copy(Args, Cut + 1, MaxInt);
+    if Segment = '' then Continue;
+    Cut:= TopLevelPos(Segment, ':');
+    if Cut = 0 then
+    begin
+      NamesPart:= Segment; // an untyped parameter (var X)
+      TypePart := '';
+    end
+    else
+    begin
+      NamesPart:= Trim(Copy(Segment, 1, Cut - 1));
+      TypePart := Copy(Segment, Cut + 1, MaxInt);
+      Cut:= TopLevelPos(TypePart, '=');
+      if Cut > 0 then TypePart:= Copy(TypePart, 1, Cut - 1);
+      TypePart:= LowerCase(Trim(TypePart));
+    end;
+    Modifier:= '';
+    Cut     := Pos(' ', NamesPart);
+    if Cut > 0 then
+    begin
+      FirstWord:= LowerCase(Copy(NamesPart, 1, Cut - 1));
+      if (FirstWord = 'const') or (FirstWord = 'var') or (FirstWord = 'out') or (FirstWord = 'constref') then
+        Modifier:= FirstWord;
+    end;
+    NameCount:= 1;
+    for i:= 1 to Length(NamesPart) do
+      if NamesPart[i] = ',' then Inc(NameCount);
+    for i:= 1 to NameCount do
+      Result:= Result + Modifier + ' ' + TypePart + ';';
+  end;
+  Result:= Result + '|' + LowerCase(Rest);
+end; // function
+
 procedure SetRoutineImplRange(const AState: TWalkState; const AName: string; AStartLine, AEndLine: Integer; const ASignature: string);
 var
   i          : Integer;
   Sym        : TSymbol;
   LastSeg    : string ;
+  ShapeKey   : string ;
+  ShapeIdx   : Integer;
   FallbackIdx: Integer;
 begin
   if AName = '' then Exit;
   LastSeg:= AName;
   if Pos('.', LastSeg) > 0 then LastSeg:= Copy(LastSeg, LastDelimiter('.', LastSeg) + 1, MaxInt);
+  ShapeKey   := '';
+  if ASignature <> '' then ShapeKey:= ParamShapeKey(ASignature);
+  ShapeIdx   := -1;
   FallbackIdx:= -1;
   for i:= AState.Symbols.Count - 1 downto 0 do
   begin
@@ -2496,9 +2605,13 @@ begin
         AState.Symbols[i]:= Sym;
         Exit;
       end;
+      // #37: same parameter shape -- the header only left out defaults or
+      // wrapped differently. Preferred over name order, after the exact text.
+      if (ShapeIdx < 0) and (ShapeKey <> '') and (ParamShapeKey(Sym.Signature) = ShapeKey) then ShapeIdx:= i;
       if FallbackIdx < 0 then FallbackIdx:= i;
     end;
   end;
+  if ShapeIdx >= 0 then FallbackIdx:= ShapeIdx;
   if FallbackIdx >= 0 then
   begin
     Sym:= AState.Symbols[FallbackIdx];
@@ -3135,24 +3248,24 @@ begin
             var QualNode:= HdrNameNode.ChildByField('lhs');
             if (not QualNode.IsNull) and (QualNode.NodeType = 'identifier') then
               AState.EmitRef('type_use', NodeText(QualNode, AState.Source), QualNode);
-            var ArgsNode:= HdrNode.ChildByField('args');
-            if not ArgsNode.IsNull then Walk(ArgsNode, AState, AParentSymbolIdx, AParentQualifiedName);
-            var RetTypeNode:= HdrNode.ChildByField('type');
-            if not RetTypeNode.IsNull then Walk(RetTypeNode, AState, AParentSymbolIdx, AParentQualifiedName);
           end;
+          { MERGE 2026-10-15: upstream's Ref-gap F (extractor 1.21.0 / 1.21.1) added the
+            same emission for implementation-only free routines and for nested
+            routines, after WalkDeclProc. This walk subsumes both, so theirs was
+            dropped: two emitters would write each type_use row twice. Pinned by
+            run_impl_only_signature_type_uses.ps1 and run_impl_header_type_refs.ps1. }
+          { #39 (2026-10-08): the param and return types of EVERY implementation
+            header, not only a method's. A free routine's header -- declared in
+            the interface or implementation-only -- emitted no type_use for
+            them, so `usages` / rename missed `procedure Foo(A: TBar)` in the
+            implementation (ULabelReport.PrintLabel's TConfig on ProjectA). }
+          var ArgsNode:= HdrNode.ChildByField('args');
+          if not ArgsNode.IsNull then Walk(ArgsNode, AState, AParentSymbolIdx, AParentQualifiedName);
+          var RetTypeNode:= HdrNode.ChildByField('type');
+          if not RetTypeNode.IsNull then Walk(RetTypeNode, AState, AParentSymbolIdx, AParentQualifiedName);
           if (HdrName <> '') and (Pos('.', HdrName) = 0) and not FreeRoutineSymbolExists(AState, HdrName) then
           begin
             WalkDeclProc(HdrNode, AState, AParentSymbolIdx, AParentQualifiedName, False);
-            { Ref-gap F: emit type_use refs for parameter and return types on
-              implementation-only free routines. These routines have no interface
-              declaration, so their signature types are never indexed unless we
-              emit them here. Walk() already handles all typeref shapes (including
-              generics and grouped params), so we route args/return through it
-              just like method-impl headers above (lines 2441-2444). }
-            var ArgsNode:= HdrNode.ChildByField('args');
-            if not ArgsNode.IsNull then Walk(ArgsNode, AState, AParentSymbolIdx, AParentQualifiedName);
-            var RetTypeNode:= HdrNode.ChildByField('type');
-            if not RetTypeNode.IsNull then Walk(RetTypeNode, AState, AParentSymbolIdx, AParentQualifiedName);
           end;
           { v9: record this routine's body span on its symbol (decl or the
             impl-only one just emitted above). v(ADP1 Bug B): pass the impl
@@ -3227,18 +3340,6 @@ begin
           if (NName <> '') and (Pos('.', NName) = 0) then
           begin
             SelfIdx:= WalkDeclProc(NHdr, AState, AParentSymbolIdx, AParentQualifiedName, False);
-            { Ref-gap F (1.21.1): a NESTED routine's header is, like an
-              impl-only free routine's, the ONLY place its signature exists,
-              and WalkDeclProc emits symbols, never refs -- so without this
-              walk `procedure Inner(P: TImported);` left TImported with no
-              type_use row and unused-unit-in-uses reported its unit dead.
-              Same routing as the depth-0 arms above: args + return type
-              through Walk, which emits a type_use per typeref and adds no
-              param symbols (EmitRoutineParams in WalkDeclProc owns those). }
-            var NArgs:= NHdr.ChildByField('args');
-            if not NArgs.IsNull then Walk(NArgs, AState, AParentSymbolIdx, AParentQualifiedName);
-            var NRet:= NHdr.ChildByField('type');
-            if not NRet.IsNull then Walk(NRet, AState, AParentSymbolIdx, AParentQualifiedName);
             if SelfIdx >= 0 then
             begin
               SelfQName:= AState.Symbols[SelfIdx].QualifiedName;
@@ -3248,6 +3349,11 @@ begin
               AState.Symbols[SelfIdx]:= NSym;
               EmitRoutineLocals(ANode, AState, SelfIdx, SelfQName);   // v23 (spec N1/N2)
             end;
+            // #39: a nested routine's param and return types, as on a top-level header.
+            var NArgs:= NHdr.ChildByField('args');
+            if not NArgs.IsNull then Walk(NArgs, AState, AParentSymbolIdx, AParentQualifiedName);
+            var NRet:= NHdr.ChildByField('type');
+            if not NRet.IsNull then Walk(NRet, AState, AParentSymbolIdx, AParentQualifiedName);
           end;
         end;
       end;

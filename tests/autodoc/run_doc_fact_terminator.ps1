@@ -183,23 +183,26 @@ Check 'all five fixture blocks were written' `
   (($bRep -and $bMode -and $bWide -and $bIn -and $bGam) -ne $false)
 
 # --- C1/C2: canonical inbound order on the FIRST write -----------------------
+# #39 (2026-10-08): a free function's IMPLEMENTATION header now references its
+# return type, as a method's always did (TInner / Pong below), so Probe, Mode and
+# Wide each join the list of the type they return.
 Check 'C1 TRep Used by: is canonical on apply 1 (declaration before Echo.Client.Note)' `
-  ($bRep -match '<para>Used by: declaration \(Zed\.Types\.pas\), Echo\.Client\.Note \(Echo\.Client\.pas\)</para>') `
+  ($bRep -match '<para>Used by: declaration \(Zed\.Types\.pas\), Echo\.Client\.Note \(Echo\.Client\.pas\), Zed\.Types\.Probe \(Zed\.Types\.pas\)</para>') `
   'RED today: Echo.Client.Note first (store order)'
 Check 'C2 TMode Used by: is canonical on apply 1' `
-  ($bMode -match '<para>Used by: declaration \(Zed\.Types\.pas\), Echo\.Client\.Note \(Echo\.Client\.pas\)</para>') `
+  ($bMode -match '<para>Used by: declaration \(Zed\.Types\.pas\), Echo\.Client\.Note \(Echo\.Client\.pas\), Zed\.Types\.Mode \(Zed\.Types\.pas\)</para>') `
   'RED today: reversed, and never canonicalised by any later run'
 
 # --- C4 CONTROL: membership is unchanged by any ordering fix -----------------
 Check 'C4 CONTROL: TRep Used in units: still names both units' `
   ($bRep -match '<para>Used in units: Echo\.Client, Zed\.Types</para>')
-Check 'C4 CONTROL: TRep Used by: still has exactly 2 entries' `
-  ((([regex]::Matches((($bRep -split "`n") | Where-Object { $_ -match 'Used by:' }) -join '', '\(\w')).Count) -eq 2)
+Check 'C4 CONTROL: TRep Used by: still has exactly 3 entries (declaration, Note, Probe)' `
+  ((([regex]::Matches((($bRep -split "`n") | Where-Object { $_ -match 'Used by:' }) -join '', '\(\w')).Count) -eq 3)
 
 # --- C8 CONTROL: the sort runs AFTER the cap, so the five shown do not move ---
 # Under sort-BEFORE-cap this line would show Echo.Client.Note and drop W5.
-Check 'C8 CONTROL: TWide truncated list is still W1..W5 (+3 more)' `
-  ($bWide -match '<para>Used by: Echo\.Client\.W1 \(Echo\.Client\.pas\), Echo\.Client\.W2 \(Echo\.Client\.pas\), Echo\.Client\.W3 \(Echo\.Client\.pas\), Echo\.Client\.W4 \(Echo\.Client\.pas\), Echo\.Client\.W5 \(Echo\.Client\.pas\) \(\+3 more\)</para>') `
+Check 'C8 CONTROL: TWide truncated list is still W1..W5 (+4 more: W6, Note, Wide, declaration)' `
+  ($bWide -match '<para>Used by: Echo\.Client\.W1 \(Echo\.Client\.pas\), Echo\.Client\.W2 \(Echo\.Client\.pas\), Echo\.Client\.W3 \(Echo\.Client\.pas\), Echo\.Client\.W4 \(Echo\.Client\.pas\), Echo\.Client\.W5 \(Echo\.Client\.pas\) \(\+4 more\)</para>') `
   'green today; sorting before the cap would change WHICH callers are shown'
 
 # --- A3 CONTROL: the fix must not "stop swallowing" by dropping the crefs -----

@@ -5902,6 +5902,12 @@ begin
   { A7-I: ACfgLimb is ';cfg=<config>;defs=<digest>' for a PROJECT section and ''
     for library / folder / ad-hoc sections, whose string is therefore byte-
     identical to what it was before the limb existed. }
+  { PR #8 (extractor 1.27.0): the compiler version picks IFDEF branches as surely as
+    the platform does, so an index built for 10.3 (VER330) must not be read as
+    current by a Delphi 13 run. Appended only when it is not the default, so a
+    Delphi 13 index keeps the stamp it has always had. }
+  if APreprocess and (TargetCompilerVersion <> DEFAULT_COMPILER_VERSION) then
+    Result:= Result + Format(';cv=%d', [TargetCompilerVersion]);
 end;
 
 { The `v=` limb of a stored indexer fingerprint, or '' when the stamp is absent
@@ -35557,6 +35563,12 @@ begin
   InstallOutputEncoding(OutEnc);
   if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(SELFTEST_SCHEMA_DB_ARG)));
+  { PR #8 (extractor 1.27.0): preprocess for the Delphi the environment names. $BDS (or
+    the registry) resolving to ...\Studio\20.0 means Delphi 10.3, whose code is
+    compiled with VER330 / CompilerVersion 33; the built-ins used to say 37
+    whatever the project was built with. Silent when no Studio resolves -- the
+    default stays 37. }
+  SetTargetCompilerVersion(CompilerVersionOfStudioRoot(TStudioEnv.RootOrEmpty));
   try
     Args:= ParseArgs;
     if Args.ShowHelp then

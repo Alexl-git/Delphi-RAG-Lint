@@ -1141,4 +1141,12 @@
 
 # 2026-10-28 int138-sync: merge gaps/stage3 into gaps/int138; the ONE combined pin (rb5-gen + rb5-ovl + stage3), no bump.
 #   Superseded: 1.26.0-alpha|619af3482ab963dd10999252a53259fa748b894ed9ad7d818ba6cd1d34140d8c and ...|2e3128646f62cadf2a6ddf46f5f2fb6f2d056ee5d9e96325e966b2b295a4f8cb
-1.26.0-alpha|3302e490166911801893376a90ca2bfa592e1e09b70260a65f5bc35469a53acc
+
+# 2026-10-30 x139 (1.39): a REAL BUMP, 1.26.0-alpha -> 1.27.0-alpha -- outside PR #8
+#   (Jonathas Paiva), rebased onto main: overloads pair with their bodies by parameter
+#   SHAPE; under index, symbol_facts come from the preprocessed parse; VER<N>0 /
+#   CompilerVersion / RTLVersion follow the RAD Studio root (cv=<N> fingerprint limb
+#   when not 37); one walk emits header type_use refs for every impl header. Every
+#   index re-parses once.
+#   Superseded: 1.26.0-alpha|3302e490166911801893376a90ca2bfa592e1e09b70260a65f5bc35469a53acc
+1.27.0-alpha|f3e091987358acb0559609745d1ec775b6b8c040db540ad6721a945e529a4a0a

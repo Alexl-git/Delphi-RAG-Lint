@@ -165,7 +165,21 @@ const
     Resolver-side companions are DRAGLINT_RESOLVER_VERSION
     1.16.0-alpha (refs.receiver_type_text, library oracle). One full re-parse
     covers all of it. }
-  DRAGLINT_EXTRACTOR_VERSION = '1.26.0-alpha';
+  { 1.26.0 -> 1.27.0 (2026-10-30, 1.39 lane x139; outside PR #8 by Jonathas Paiva,
+    rebased -- his 1.22.0 numbering predates ours):
+    * overloads keep their own bodies: the body span was paired with its
+      declaration by comparing the two signature TEXTS, and Delphi lets the
+      implementation omit default values and wrap the list -- for those
+      overloads the name-order fallback swapped them. The pairing now compares
+      the parameter SHAPE;
+    * symbol_facts comes from the same PREPROCESSED parse as the symbols
+      (under index it came from a raw re-parse, which keeps an IFDEF's first
+      branch);
+    * the define profile names the Delphi the environment names (VERxxx), and
+      CompilerVersion / RTLVersion follow it.
+    Guards: run_overload_impl_shape.ps1, run_index_facts_use_preprocessed_parse.ps1,
+    run_preprocess_compiler_version.ps1. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.27.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.
