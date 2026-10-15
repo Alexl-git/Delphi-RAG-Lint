@@ -3,6 +3,43 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### `query unit-usage`: 13 s -> under 1 s on a much-used unit
+
+- Project-wide `query unit-usage --unit U` read EVERY ref of every importing file and
+  compared each with every export of U (SameText plus the receiver's base type): 13 s for
+  UConfig on ProjectA (208 importers). The refs are now read in ONE query per store, already
+  filtered in SQLite to those whose name or receiver base type is an export
+  (`ISymbolStore.FindRefsNamingInFiles`), and each is matched through a dictionary of the
+  exports. Measured on the daily index: UConfig 7.6 -> 0.9 s, ULib 11.5 -> 2.6 s (Debug,
+  warm cache); the JSON and text answers are byte-identical to the old loop's. Names are
+  lowered A-Z only on both sides, as SameText compares. `DRAGLINT_PROFILE` prints the
+  refs read. Guard: `tests\autotest\run_unit_usage_reads_only_matches.ps1`.
+
+### `--utf8` / `DRAGLINT_UTF8=1`: source text reaches a UTF-8 reader intact
+
+- **Output is written in the ANSI code page, so source text from a cp1252 unit left as raw
+  cp1252 bytes** -- `slice`, `context`, `find-callers --context`, `hover` and any `--json`
+  that carries it. An agent reading UTF-8 saw `vari?veis`, and the JSON was not valid UTF-8.
+  `--utf8` on any verb (or `DRAGLINT_UTF8=1` for every run) sets stdout and stderr to UTF-8.
+  The default stays ANSI: the IDE plugin (`ProcRun`) and the convrules editor decode the
+  output that way. `serve` (MCP) now writes its UTF-8 bytes straight to the handle, so the
+  flag cannot encode them twice. No version constant moves. Guard:
+  `tests\autotest\run_utf8_output.ps1`.
+
+### `outline`, `usages`, `query unit-usage`: options to narrow the answer
+
+- **Asked about one large unit, an agent got 94,000 characters from `outline`** (UConfig.pas:
+  1,587 rows, 701 `local_var` and 330 `param`), 144,000 from `usages --format json` and
+  27,000 from `query unit-usage`, with nothing to narrow them. New, all opt-in -- the IDE
+  reads `outline` and `usages` whole, so without them nothing changes:
+  `outline --kind <k[,k...]>`, `outline --no-locals`, `outline --limit N`,
+  `usages --limit N` (first N rows per JSON group, plus `limit` and `totals`) and
+  `query unit-usage --limit N` (first N importers; the summary keeps the full counts). A
+  capped text answer says so on its last line; a capped JSON array says so on stderr. No
+  version constant moves. Guard: `tests\autotest\run_output_caps.ps1`.
+
 ## v1.31.1-alpha -- 2026-10-14
 
 ### Fixed

@@ -234,8 +234,8 @@ the three must agree (see the DOCS-IN-SYNC rule in `CLAUDE.md`).
   directions: a project DB is exactly the compile closure, so a miss is a real
   answer, not a lookup failure.
 * `query unit-usage` without `--in` answers the project-wide question (which files
-  reference the unit, and which merely IMPORT it); with `--in` it answers about one
-  file. Its candidate set is the uses graph, since in Delphi you cannot name an
+  reference the unit, and which merely IMPORT it; `--limit N` lists the first N and
+  keeps the full counts); with `--in` it answers about one file. Its candidate set is the uses graph, since in Delphi you cannot name an
   export without a uses entry. For an RTL/VCL/third-party unit whose exports live
   in the platform library index, the project DB alone still answers the
   project-wide form: you get the importer list with the `uses` line, and an
@@ -834,8 +834,8 @@ Win64 build.
 | `query descendants` `--of <a>` | The reverse of `ancestors`: every **class** descending from `<a>`, across all scanned DBs. Derived interfaces are excluded by design (this backs the conversion editor's class pickers) | `--json` (exit 1 = no such ancestor) |
 | [`query typecat`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/query-typecat) `--name <t>` | Resolve a type's category (class/interface/float/string/...) | |
 | `query hints` | List stored compiler hints/warnings | `--name <code>`, `--rule <severity>` |
-| [`usages`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/usages) `--name <n>` | Grouped usage report (backs the IDE Symbol Search dialog) | `--width narrow\|wide\|very-wide`, `--depth N` |
-| [`outline`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) `--file <f.pas>` | Unit outline (backs the IDE Structure form) | `--format text\|json` |
+| [`usages`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/usages) `--name <n>` | Grouped usage report (backs the IDE Symbol Search dialog) | `--width narrow\|wide\|very-wide`, `--depth N`, `--limit N` (JSON: first N rows per group, plus `limit` and `totals`) |
+| [`outline`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) `--file <f.pas>` | Unit outline (backs the IDE Structure form) | `--format text\|json`, `--kind <k[,k...]>` (only those kinds), `--no-locals` (drop `local_var` / `param`), `--limit N` (first N rows, and how many matched) |
 | [`compare`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) `--old <report\|csv\|bundle> [--command "<id> ..."]` / `--in <U.pas> --line <L>` | Rerun a saved report's question and show before / delta / after (exit 0 same, 1 differs, 2 setup, 3 stale index) | `--new <f>` (two saved outputs), `--question <id> --target <T>`, `--update-doc`, `--old-db`, `--auto`, `--save`, `--snapshot-dir <dir>`, `--show`, `--format text\|json\|html`, `--open` |
 | [`ask`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) `<question> --target <T> [--project <P.dproj>\|--in <U.pas>\|--db <idx>]` | Ask one report question (the 26 chart questions) and print the answer: the DocInsight remarks block the Reports menu copies, or the plain answer. Ported questions answer in-process, the rest through `charts\src\Ask-Report.ps1` (exit 0 answered, 1 refused, 2 setup, 3 stale index) | `--to <B>`, `--server-db`, `--sql-db`, `--counterpart-db`, `--depth N`, `--cap N`, `--surface-cap N`, `--control <C>`, `--mode write\|read\|both`, `--max-rows N`, `--out-root <dir>`, `--pairs-file <f>`, `--allow-stale`, `--plain`, `--open`, `--resolve-only` |
 | `hover --qname <q>` | Hover card for a symbol | `--format plain\|md\|json` |
@@ -1051,6 +1051,7 @@ messages from `MS*.sql` files by default (`--no-sql-ms` to index every `.sql`).
 | [`purge-locals`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/purge-locals) `--db <db>` | Size escape hatch: drop local-var/param symbols + VACUUM (call graph unchanged; re-inflated on next index) | `--json` |
 | [`workspace index`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-index) / [`status`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-status) / [`add <dproj>`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/workspace-add) | Multi-project workspace management | `--config <file>` |
 | `--version` / `--help` | Print version / usage. `--help` (aliases `-h`, `-?`) is accepted **after any verb** too -- `drag-lint lint --help` prints this same full banner and exits 0. There is no per-verb help text. | |
+| any verb `--utf8` | Write stdout and stderr as UTF-8 instead of the ANSI code page, so source text from a cp1252 unit (`slice`, `context`, `find-callers --context`, `hover`, `--json`) reaches a UTF-8 reader (an agent) intact. `DRAGLINT_UTF8=1` does the same for every run. Off by default: the IDE plugin reads the output as ANSI | `--utf8` |
 
 ### MCP tools (15)
 

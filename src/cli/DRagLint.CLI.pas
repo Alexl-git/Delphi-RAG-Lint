@@ -343,6 +343,7 @@ type
     NoDocs     : Boolean;
     Kind       : string ;
     PublicOnly : Boolean;
+    NoLocals   : Boolean; // outline --no-locals: drop local_var and param rows (Gitea #38)
     // v0.40.4: uses-report flags
     IncludeExternal: Boolean; // --include-external
     AllSources     : Boolean; // --all-sources (default: only first DB's files)
@@ -814,10 +815,14 @@ begin
   Writeln('       ^ --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind <k> --all');
   Writeln('       ^ --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`)');
   Writeln('         -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.');
-  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]');
+  Writeln('  drag-lint usages             --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json] [--limit N]');
   Writeln('                               grouped usage report; backs the IDE Symbol Search dialog''s Usages view.');
-  Writeln('  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]');
-  Writeln('                               unit outline; backs the IDE Structure form.');
+  Writeln('                               --limit N keeps the first N rows of each JSON group and adds "limit" and "totals"');
+  Writeln('                               (the full counts); without it nothing is capped.');
+  Writeln('  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json] [--kind <k[,k...]>] [--no-locals] [--limit N]');
+  Writeln('                               unit outline; backs the IDE Structure form. --kind keeps only those kinds (as printed:');
+  Writeln('                               class, method, field, ...); --no-locals drops local_var and param rows (most of a large');
+  Writeln('                               unit''s outline); --limit N prints the first N rows and says how many matched.');
   Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
   Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
   Writeln('                               [--format text|json|html] [--output <file>] [--open]');
@@ -840,10 +845,11 @@ begin
   Writeln('                               a STRING LITERAL is correctly not a reference -- which is the difference');
   Writeln('                               from grep. Name-keyed: a project type sharing an RTL name is');
   Writeln('                               indistinguishable, and the output says so.');
-  Writeln('  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json]');
+  Writeln('  drag-lint query unit-usage   --unit <UnitName> [--in <file.pas>] [--db ...] [--json] [--limit N]');
   Writeln('                               WITH --in: of that unit''s exports, which does THIS file reference? Empty = dead import.');
   Writeln('                               WITHOUT --in: which files reference the unit at all, and which merely IMPORT it.');
   Writeln('                               The candidate set is the uses graph -- in Delphi you cannot name an export without a uses entry.');
+  Writeln('                               --limit N (without --in) lists the first N importing files and says how many there are.');
   Writeln('  drag-lint query ancestors    --name <type> [--of <ancestor>] [--db ...] [--json]   (transitive class/interface hierarchy)');
   Writeln('  drag-lint query descendants  --of <ancestor> [--db ...] [--json]   (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor''s class pickers. exit 1 = no such ancestor)');
   Writeln('  drag-lint query typecat      --name <type> [--db ...] [--json]   (resolve type category: float/string/class/interface/...)');
@@ -1099,6 +1105,11 @@ begin
   Writeln('                               `drag-lint query find-callers -h` and `drag-lint index -?` all print THIS');
   Writeln('                               banner and exit 0. Until 2026-08-28 every one of those FATALed with exit 3.');
   Writeln('                               There is no per-verb help TEXT -- one banner answers them all.');
+  Writeln('  drag-lint <verb> ... --utf8   (any verb) write stdout and stderr as UTF-8 instead of the ANSI code page,');
+  Writeln('                               so source text (slice, context, find-callers --context, hover, --json) reaches a');
+  Writeln('                               UTF-8 reader intact. DRAGLINT_UTF8=1 does the same for every run. Off by default:');
+  Writeln('                               the IDE plugin reads the output as ANSI. For a pipe or a file; a console shows it');
+  Writeln('                               right only under chcp 65001.');
   Writeln('');
   Writeln('Databases (--db is repeatable, on every verb that takes it):');
   Writeln('  THE FIRST --db IS THE PRIMARY. Every later --db is an EXTRA store.');
@@ -1659,6 +1670,8 @@ begin
     else if A = '--dry-run' then Result.DryRun:= True
     else if A = '--diff' then Result.ShowDiff:= True
     else if A = '--quiet'   then Result.Quiet := True
+    else if A = '--no-locals' then Result.NoLocals:= True
+    else if A = '--utf8'    then // applied in Run, before ParseArgs can print (Gitea #35)
     else if A = '--lint-third-party' then Result.LintThirdParty:= True
     else if A = '--document-third-party' then Result.DocumentThirdParty:= True
     else if (A = '--scan-libraries') or (A = '--scan-libraries-win') then Result.ScanLibraries:= True // Win32 + Win64 (--scan-libraries is the back-compat alias)
@@ -7040,6 +7053,27 @@ begin
     below splits on ExportsKnown for exactly that reason. }
   var ExportsKnown: Boolean := Length(ExportSyms) > 0;
 
+  { ONE LOOKUP PER REF, NOT ONE COMPARISON PER EXPORT (Gitea drag-lint#39). Every
+    ref of every importing file was compared with every export -- SameText plus
+    ReceiverNamesType -- which on UConfig (hundreds of importers, hundreds of
+    exports) took 13 s. Each export's lowercased name maps to its FIRST index;
+    a ref matches the smaller of the indexes its name and its receiver's base
+    type hit, which is the export the old loop's `Break` stopped at, so the
+    counts are the same. The refs themselves are read in ONE query per store, of
+    the importing files, already filtered to these names (FindRefsNamingInFiles)
+    -- reading every ref of 208 files to keep a few was the rest of the time. }
+  var ExportIdx: TDictionary<string, Integer>:= TDictionary<string, Integer>.Create;
+  { Lowered A-Z ONLY: SameText folds nothing else, and neither does SQLite's
+    lower() in FindRefsNamingInFiles -- LowerCase would also fold accented
+    letters and match an identifier the old comparison did not. }
+  var AsciiLower: TFunc<string, string>:= function(A: string): string
+    begin
+      Result:= A;
+      for var CI: Integer:= 1 to Length(Result) do
+        if CharInSet(Result[CI], ['A'..'Z']) then Result[CI]:= Char(Ord(Result[CI]) + 32);
+    end;
+  for var XI: Integer:= High(ExportSyms) downto 0 do
+    ExportIdx.AddOrSetValue(AsciiLower(ExportSyms[XI].Name), XI);
   Hits:= nil;
   SeenPaths:= TDictionary<string, Boolean>.Create;
   try
@@ -7065,7 +7099,31 @@ begin
       if DotPos > 0 then WantNorm:= Copy(WantNorm, DotPos + 1, MaxInt);
       var WantIsBare: Boolean := LastDelimiter('.', AArgs.UnitName) = 0;
 
-      for var Use: TUnitUse in Store.FindUsersOfUnit(WantNorm) do
+      var UnitUses: TArray<TUnitUse>:= Store.FindUsersOfUnit(WantNorm);
+      var RefsByFile: TObjectDictionary<Int64, TList<TReference>>:=
+        TObjectDictionary<Int64, TList<TReference>>.Create([doOwnsValues]);
+      try
+      if ExportsKnown then
+      begin
+        var ImportIds: TArray<Int64>:= nil;
+        for var U: TUnitUse in UnitUses do
+          if WantIsBare or SameText(U.UnitName, AArgs.UnitName) then ImportIds:= ImportIds + [U.FileId];
+        var Fetched: TArray<TReference>:= Store.FindRefsNamingInFiles(ImportIds, ExportIdx.Keys.ToArray);
+        if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
+          Writeln(ErrOutput, Format('unit-usage: %d ref(s) read from %d importing file(s) of %s',
+            [Length(Fetched), Length(ImportIds), DbPath]));
+        for var FR: TReference in Fetched do
+        begin
+          var FL: TList<TReference>;
+          if not RefsByFile.TryGetValue(FR.FileId, FL) then
+          begin
+            FL:= TList<TReference>.Create;
+            RefsByFile.Add(FR.FileId, FL);
+          end;
+          FL.Add(FR);
+        end;
+      end;
+      for var Use: TUnitUse in UnitUses do
       begin
         if not (WantIsBare or SameText(Use.UnitName, AArgs.UnitName)) then Continue;
         var Path: string := Store.GetFilePath(Use.FileId);
@@ -7089,29 +7147,41 @@ begin
           { Skipped entirely without an export surface -- not merely empty:
             GetReferencesFromFile walks every reference in the file, and there is
             nothing to match them against. }
-          if ExportsKnown then
-          for var R: TReference in Store.GetReferencesFromFile(Use.FileId) do
-            for var Sym: TSymbol in ExportSyms do
-              if SameText(R.NameText, Sym.Name) or ReceiverNamesType(R.ReceiverText, Sym.Name) then
-              begin
-                Inc(Hit.Refs);
-                if not Used.ContainsKey(LowerCase(Sym.Name)) then
-                begin
-                  Used.Add(LowerCase(Sym.Name), True);
-                  Inc(Hit.ExportsUsed);
-                end;
-                if (Hit.FirstLine = 0) or (R.StartLine < Hit.FirstLine) then Hit.FirstLine:= R.StartLine;
-                Break;
-              end;
+          var FileRefs: TList<TReference>:= nil;
+          if ExportsKnown and RefsByFile.TryGetValue(Use.FileId, FileRefs) then
+          for var R: TReference in FileRefs do
+          begin
+            var ByName, ByRecv: Integer;
+            if not ExportIdx.TryGetValue(AsciiLower(R.NameText), ByName) then ByName:= MaxInt;
+            { ReceiverNamesType's own reading of the receiver: the text before any
+              generic argument list, trimmed; an empty base matches nothing. }
+            var RecvBase: string:= Trim(R.ReceiverText);
+            if Pos('<', RecvBase) > 0 then RecvBase:= Trim(Copy(RecvBase, 1, Pos('<', RecvBase) - 1));
+            if (RecvBase = '') or not ExportIdx.TryGetValue(AsciiLower(RecvBase), ByRecv) then ByRecv:= MaxInt;
+            var Hit1: Integer:= Min(ByName, ByRecv);
+            if Hit1 = MaxInt then Continue;
+            var Sym: TSymbol:= ExportSyms[Hit1];
+            Inc(Hit.Refs);
+            if not Used.ContainsKey(LowerCase(Sym.Name)) then
+            begin
+              Used.Add(LowerCase(Sym.Name), True);
+              Inc(Hit.ExportsUsed);
+            end;
+            if (Hit.FirstLine = 0) or (R.StartLine < Hit.FirstLine) then Hit.FirstLine:= R.StartLine;
+          end;
         finally
           Used.Free;
         end;
 
         Hits:= Hits + [Hit];
       end;
+      finally
+        RefsByFile.Free;
+      end;
     end;
   finally
     SeenPaths.Free;
+    ExportIdx.Free;
   end;
 
   { Only NOW is an empty answer really empty: no export surface AND no importer
@@ -7128,8 +7198,17 @@ begin
   var UsedFiles: Integer:= 0;
   for var H: TFileHit in Hits do if H.Refs > 0 then Inc(UsedFiles);
 
+  { --limit N (Gitea #38): the first N importing files; the summary keeps the
+    full counts. A much-used unit answered 27,000 characters. }
+  var AllHits: Integer:= Length(Hits);
+  if (AArgs.Limit > 0) and (AllHits > AArgs.Limit) then SetLength(Hits, AArgs.Limit);
+  var CapNote: string:= '';
+  if Length(Hits) < AllHits then
+    CapNote:= Format('unit-usage: first %d of %d importing file(s) (--limit %d)', [Length(Hits), AllHits, AArgs.Limit]);
+
   if AArgs.AsJson then
   begin
+    if CapNote <> '' then Writeln(ErrOutput, CapNote); // stderr: the array stays the document
     var Arr: TJSONArray:= TJSONArray.Create;
     try
       for var H: TFileHit in Hits do
@@ -7166,7 +7245,8 @@ begin
       else
         Writeln(Format('  %-70s uses(%s)  %d ref(s) to %d export(s), first line %d',
           [H.Path, H.Section, H.Refs, H.ExportsUsed, H.FirstLine]));
-    Writeln(Format('%d of %d importing file(s) reference it', [UsedFiles, Length(Hits)]));
+    if CapNote <> '' then Writeln(CapNote);
+    Writeln(Format('%d of %d importing file(s) reference it', [UsedFiles, AllHits]));
   end
   else
   begin
@@ -7177,7 +7257,8 @@ begin
     Writeln('unit: ', AArgs.UnitName, '  (' + EXPORTS_NOT_HERE + ')');
     for var H: TFileHit in Hits do
       Writeln(Format('  %-70s uses(%s)  line %d', [H.Path, H.Section, H.FirstLine]));
-    Writeln(Format('%d importing file(s); reference counts NOT computed', [Length(Hits)]));
+    if CapNote <> '' then Writeln(CapNote);
+    Writeln(Format('%d importing file(s); reference counts NOT computed', [AllHits]));
   end;
   Result:= 0;
 end;
@@ -9898,11 +9979,33 @@ begin
     are in hand, so children are answered from Syms, not the store. }
   var StubOf: TArray<Integer>:= PairForwardStubs(Syms, HasChildInSet(Syms));
 
+  { WHICH ROWS (Gitea #38). The whole file is the IDE's Structure view; an agent
+    asking "what is in this unit" drowns in it -- UConfig.pas: 1,587 rows, 701 of
+    them local_var and 330 param, 94,000 characters. --kind / --no-locals filter,
+    --limit caps; with none of them every row is printed, as before. The stubs
+    above were paired over the WHOLE file, so a filter never breaks a pairing. }
+  var KindSet: TArray<string>:= [];
+  for var K: string in AArgs.Kind.Split([',']) do
+    if Trim(K) <> '' then KindSet:= KindSet + [Trim(K)];
+  var Shown: TArray<Integer>:= [];
+  for var Idx:= 0 to High(Syms) do
+  begin
+    if AArgs.NoLocals and (Syms[Idx].Kind in [skLocalVar, skParam]) then Continue;
+    if (Length(KindSet) > 0) and (IndexText(Syms[Idx].Kind.ToText, KindSet) < 0) then Continue;
+    Shown:= Shown + [Idx];
+  end;
+  var Matched: Integer:= Length(Shown);
+  if (AArgs.Limit > 0) and (Matched > AArgs.Limit) then SetLength(Shown, AArgs.Limit);
+  var CapNote: string:= '';
+  if Length(Shown) < Matched then
+    CapNote:= System.SysUtils.Format('outline: first %d of %d row(s) (--limit %d)', [Length(Shown), Matched, AArgs.Limit]);
+
   if SameText(AArgs.Format, 'json') then
   begin
+    if CapNote <> '' then Writeln(ErrOutput, CapNote); // stderr: the array stays the document
     JArr:= TJSONArray.Create;
     try
-      for var Idx:= 0 to High(Syms) do
+      for var Idx in Shown do
       begin
         S:= Syms[Idx];
         JObj:= TJSONObject.Create;
@@ -9924,13 +10027,14 @@ begin
   end // if
   else
   begin
-    for var Idx:= 0 to High(Syms) do
+    for var Idx in Shown do
     begin
       S:= Syms[Idx];
       var Row: string:= System.SysUtils.Format('%-10s %-40s %d', [S.Kind.ToText, S.QualifiedName, S.StartLine]);
       if StubOf[Idx] >= 0 then Row:= Row + System.SysUtils.Format('  [forward -> line %d]', [Syms[StubOf[Idx]].StartLine]);  // dl:ok concat-in-loop@edfd -- Row is a fresh per-iteration inline local, not an accumulator: at most ONE suffix is appended per row, so there is no O(n^2) growth
       Writeln(Row);
     end;
+    if CapNote <> '' then Writeln(CapNote);
   end;
   Result:= 0;
 end; // function
@@ -9980,6 +10084,13 @@ var
     else if AKind = 'attribute'     then Result:= JAttrs
     else if AKind = 'event-binding' then Result:= JEvents
     else Result:= JCalls; { call + anything else }
+  end;
+
+  { --limit N on one JSON group: its full count into ATotals, then its first N rows. }
+  procedure CapGroup(const AKey: string; AArr: TJSONArray; ATotals: TJSONObject);
+  begin
+    ATotals.AddPair(AKey, TJSONNumber.Create(AArr.Count));
+    while AArr.Count > AArgs.Limit do AArr.Remove(AArr.Count - 1).Free;
   end;
 
 var
@@ -10076,7 +10187,26 @@ begin
       has no JSON detail, only counts" -- which is false, and cost them a round
       trip. A CLI must not answer a question it was not asked. The idiom used by
       the majority of verbs is `AsJson or Format='json'`; this is that. }
-    if AArgs.AsJson or SameText(AArgs.Format, 'json') then Writeln(JRoot.Format(2))
+    if AArgs.AsJson or SameText(AArgs.Format, 'json') then
+    begin
+      { --limit N (Gitea #38): the first N rows of each group, and the full
+        counts beside them -- a much-used type answered 144,000 characters.
+        Without --limit the document is exactly what it was. }
+      if AArgs.Limit > 0 then
+      begin
+        var JTotals: TJSONObject:= TJSONObject.Create;
+        JRoot.AddPair('limit' , TJSONNumber.Create(AArgs.Limit));
+        JRoot.AddPair('totals', JTotals);
+        CapGroup('declarations' , JDecls , JTotals);
+        CapGroup('reads'        , JReads , JTotals);
+        CapGroup('writes'       , JWrites, JTotals);
+        CapGroup('calls'        , JCalls , JTotals);
+        CapGroup('types'        , JTypes , JTotals);
+        CapGroup('attributes'   , JAttrs , JTotals);
+        CapGroup('events'       , JEvents, JTotals);
+      end;
+      Writeln(JRoot.Format(2));
+    end
     else
     begin
       Writeln(Format('usages of "%s" (width=%s)', [AArgs.Name, Width]));
@@ -31878,6 +32008,16 @@ var
 begin
   if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
+  { UTF-8 OUTPUT ON REQUEST (Gitea #35). Text goes out in the ANSI code page by
+    default, and source text (slice, context, find-callers --context, hover)
+    leaves cp1252 bytes that an agent reading UTF-8 sees as U+FFFD, inside
+    --json too. Not the default: the IDE plugin (ProcRun) and the convrules
+    editor decode this output as ANSI. Before ParseArgs, which can print. }
+  if HasSwitch('--utf8') or (GetEnvironmentVariable('DRAGLINT_UTF8') = '1') then
+  begin
+    SetTextCodePage(Output, CP_UTF8);
+    SetTextCodePage(ErrOutput, CP_UTF8);
+  end;
   try
     Args:= ParseArgs;
     if Args.ShowHelp then begin PrintHelp; Exit(0); end;
