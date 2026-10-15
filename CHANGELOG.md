@@ -7,7 +7,8 @@ breaking changes** until v1.0.
 
 ### Added
 
-- **`who-calls` is answered by the engine itself, in Delphi.** That makes 16 of the 26 questions in-process; it calls the engine's own reverse-calltree walk and find-callers name match in-process. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal). `Emit-WhoCalls.ps1` is still shipped: `what-it-calls` runs through it.
+- **`what-it-calls` is answered by the engine itself, in Delphi.** That makes 17 of the 26 questions in-process; the callee direction of the same unit as `who-calls`, over the engine's own forward call-tree walk. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal). `Emit-WhoCalls.ps1` is no longer shipped (it stays in the repo as the parity reference).
+- **`who-calls` is answered by the engine itself, in Delphi.** That makes 16 of the 26 questions in-process; it calls the engine's own reverse-calltree walk and find-callers name match in-process. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal).
 - **`drag-lint mcp-config (--claude-code | --vscode | --all)` -- registers `drag-lint serve` with
   MCP clients.** Writes `{"type":"stdio","command":"<engine>","args":["serve"(,"--db","<index>")]}`
   (plus `"env":{}` for Claude Code) into `~\.claude.json` `"mcpServers"` (`CLAUDE_CONFIG_DIR` wins)
