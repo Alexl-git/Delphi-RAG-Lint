@@ -3,9 +3,9 @@ program T68_draglint_uri;
 { T68: ParseDragLintUri -- the draglint:// URI gate the GUI handler
   (drag-lint-open.exe) calls before it writes anything to the IDE pipe.
 
-  A Delphi port of the validation in charts\src\Open-DragLintUri.ps1. The case
-  table is the UH-* table of charts\src\Test-DragLintProtocol.ps1, case for
-  case: every hostile URI there is refused here, every good one is accepted
+  A Delphi port of the validation in the retired charts\src\Open-DragLintUri.ps1.
+  The case table is the UH-* table of tests\autotest\run_uri_handler.ps1 (first
+  written in the retired charts\src\Test-DragLintProtocol.ps1), case for case: every hostile URI there is refused here, every good one is accepted
   with the same pipe payload. The path verdict itself is
   DragLint.Plugin.OpenSourcePath.IsOpenableSourcePath (T66), so a path refusal
   carries THAT unit's reason text; the URI-level reasons (scheme, duplicate
@@ -32,14 +32,20 @@ var
 { EscapeDataString: every UTF-8 byte outside the unreserved set as %XX. }
 function Esc(const S: string): string;
 var
-  B: Byte;
+  B : Byte;
+  SB: TStringBuilder;
 begin
-  Result:= '';
-  for B in TEncoding.UTF8.GetBytes(S) do
-    if CharInSet(Char(B), ['A'..'Z', 'a'..'z', '0'..'9', '-', '.', '_', '~']) then
-      Result:= Result + Char(B)
-    else
-      Result:= Result + '%' + IntToHex(B, 2);
+  SB:= TStringBuilder.Create;
+  try
+    for B in TEncoding.UTF8.GetBytes(S) do
+      if CharInSet(Char(B), ['A'..'Z', 'a'..'z', '0'..'9', '-', '.', '_', '~']) then
+        SB.Append(Char(B))
+      else
+        SB.Append('%').Append(IntToHex(B, 2));
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
 end;
 
 function U(const AFile: string; const ALine: string = '1'; const AExtra: string = ''): string;
@@ -91,7 +97,7 @@ begin
 end;
 
 begin
-  { --- hostile: the UH-* table of Test-DragLintProtocol.ps1 --- }
+  { --- hostile: the UH-* table of run_uri_handler.ps1 --- }
   Refuse(U('\\host\share\x.pas'),                 NOT_LOCAL, 'UH-UNC');
   Refuse(U('\\host@SSL\DavWWWRoot\x.hta'),        NOT_LOCAL, 'UH-WEBDAV');
   Refuse(U('\\?\C:\Projects\x.pas'),              NOT_LOCAL, 'UH-LONG');

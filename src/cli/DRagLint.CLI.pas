@@ -671,7 +671,7 @@ type
     SnapshotDir   : string ; // --snapshot-dir <dir>
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@2de7 -- REVIEWED 2026-10-14 (475 lines: 1.27.x banner lines merged from main + compare lines + the 1.30.0 ask lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@7f59 -- REVIEWED 2026-10-14 (483 lines: 1.27.x banner lines merged from main + compare lines + the 1.30.0 ask lines + the protocol / mcp-config lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');

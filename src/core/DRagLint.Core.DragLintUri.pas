@@ -4,9 +4,9 @@ unit DRagLint.Core.DragLintUri;
 /// security gate the GUI protocol handler (drag-lint-open.exe) runs before it
 /// writes anything to the IDE's open-source pipe.</summary>
 /// <remarks>
-/// <para>A port of the validation in charts\src\Open-DragLintUri.ps1 (its
-/// URI parsing and Test-DragLintTarget); tests\fixtures\T68_draglint_uri.dpr
-/// carries the UH-* case table of charts\src\Test-DragLintProtocol.ps1. ANY web
+/// <para>A port of the validation in the retired charts\src\Open-DragLintUri.ps1
+/// (its URI parsing and Test-DragLintTarget); tests\fixtures\T68_draglint_uri.dpr
+/// carries the UH-* case table of tests\autotest\run_uri_handler.ps1. ANY web
 /// page can carry a draglint:// link, so the URI is hostile until proven
 /// otherwise.</para>
 /// <para>The PATH verdict is DragLint.Plugin.OpenSourcePath.IsOpenableSourcePath,
