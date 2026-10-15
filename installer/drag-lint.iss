@@ -24,7 +24,7 @@
 ;   * Software\drag-lint\DelphiPlugin\ExePath and Software\YADF\ExePath -- written
 ;     only when empty, dead, already ours, or the user agrees to replace it; removed
 ;     only when they still point at this install.
-;   * draglint:// -- by Register-DragLintProtocol.ps1, undone by -Unregister only
+;   * draglint:// -- by drag-lint protocol register, undone by protocol unregister only
 ;     when this installer registered it (Software\drag-lint\Installer marker).
 ;
 ; WHY THE ENGINE PATH IS A SETTING, NOT A FILE BESIDE THE BPL. The plugin used to
@@ -110,9 +110,10 @@ Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; De
 Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; DestName: "drag-lint.json"; Components: core; Flags: onlyifdoesntexist uninsneveruninstall; Permissions: users-modify; Check: IsAdminInstallMode
 ; chart scripts, flat beside the engine (owner D1); tests are not shipped, nor the emitters ported to Delphi
 ; (owner 2026-10-14: they stay in the repo as the parity reference; the engine answers those questions)
-Source: "{#RepoRoot}\charts\src\*.ps1"; Excludes: "Test-*.ps1,Emit-TouchesTables.ps1,Emit-ShownWhere.ps1,Emit-Deps.ps1,Emit-ClassSurface.ps1,Emit-EventWiring.ps1,Emit-TestedBy.ps1,Emit-ChangeImpact.ps1,Emit-CrossesBoundary.ps1,Emit-ProtocolTrace.ps1,Emit-Lifecycle.ps1,Emit-Effects.ps1,Emit-FeedsFrom.ps1,Emit-LandsWhere.ps1,Emit-Consumers.ps1,Emit-ExceptionPaths.ps1"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
+Source: "{#RepoRoot}\charts\src\*.ps1"; Excludes: "Test-*.ps1,New-ExampleGallery.ps1,Open-DragLintUri.ps1,Register-DragLintProtocol.ps1,Set-DragLintMcpConfig.ps1,Emit-TouchesTables.ps1,Emit-ShownWhere.ps1,Emit-Deps.ps1,Emit-ClassSurface.ps1,Emit-EventWiring.ps1,Emit-TestedBy.ps1,Emit-ChangeImpact.ps1,Emit-CrossesBoundary.ps1,Emit-ProtocolTrace.ps1,Emit-Lifecycle.ps1,Emit-Effects.ps1,Emit-FeedsFrom.ps1,Emit-LandsWhere.ps1,Emit-Consumers.ps1,Emit-ExceptionPaths.ps1"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#RepoRoot}\charts\report-pairs.example.json"; DestDir: "{app}"; Components: core; Flags: ignoreversion
 ; ---- optional tools ---------------------------------------------------------
+Source: "{#EngineDir}\drag-lint-open.exe"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\ConvRulesEditor.exe";  DestDir: "{app}\bin"; Components: convrules; Flags: ignoreversion
 Source: "{#EngineDir}\drag_lint_graph.exe";  DestDir: "{app}\bin"; Components: graph; Flags: ignoreversion
 Source: "{#GraphvizBin}\dot.exe";  DestDir: "{app}\bin\graphviz\bin"; Components: graphviz; Flags: ignoreversion
@@ -155,13 +156,13 @@ Root: HKCU; Subkey: "{#IdeKey}\Known Packages x64"; ValueType: string; ValueName
 Root: HKCU; Subkey: "{#InstKey}"; ValueType: string; ValueName: "ProtocolRegisteredBy"; ValueData: "{app}"; Tasks: protocol; Check: RegisterProtocol; Flags: uninsdeletevalue uninsdeletekeyifempty
 
 [Run]
-Filename: "{code:PwshPath}"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bin\Register-DragLintProtocol.ps1"""; StatusMsg: "Registering draglint:// ..."; Tasks: protocol; Check: RegisterProtocol; Flags: runhidden runasoriginaluser waituntilterminated
-Filename: "{code:PwshPath}"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bin\Set-DragLintMcpConfig.ps1"" -All -Engine ""{app}\bin\drag-lint.exe"""; StatusMsg: "Registering the MCP server ..."; Tasks: mcp; Check: HavePwsh; Flags: runhidden runasoriginaluser waituntilterminated
+Filename: "{app}\bin\drag-lint.exe"; Parameters: "protocol register --handler ""{app}\bin\drag-lint-open.exe"" --force"; StatusMsg: "Registering draglint:// ..."; Tasks: protocol; Check: RegisterProtocol; Flags: runhidden runasoriginaluser waituntilterminated
+Filename: "{app}\bin\drag-lint.exe"; Parameters: "mcp-config --all --engine ""{app}\bin\drag-lint.exe"""; StatusMsg: "Registering the MCP server ..."; Tasks: mcp; Flags: runhidden runasoriginaluser waituntilterminated
 Filename: "{app}\yadf\YADFSetup.exe"; Description: "Open YADFSetup to choose formatting settings"; Components: yadf; Flags: postinstall nowait skipifsilent unchecked runasoriginaluser
 
 [UninstallRun]
-Filename: "{code:PwshPath}"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bin\Register-DragLintProtocol.ps1"" -Unregister"; RunOnceId: "UnregisterProtocol"; Check: WeRegisteredProtocol; Flags: runhidden waituntilterminated
-Filename: "{code:PwshPath}"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\bin\Set-DragLintMcpConfig.ps1"" -All -Remove"; RunOnceId: "RemoveMcp"; Tasks: mcp; Check: HavePwsh; Flags: runhidden waituntilterminated
+Filename: "{app}\bin\drag-lint.exe"; Parameters: "protocol unregister"; RunOnceId: "UnregisterProtocol"; Check: WeRegisteredProtocol; Flags: runhidden waituntilterminated
+Filename: "{app}\bin\drag-lint.exe"; Parameters: "mcp-config --all --remove"; RunOnceId: "RemoveMcp"; Tasks: mcp; Flags: runhidden waituntilterminated
 
 [Code]
 var
@@ -312,7 +313,7 @@ function InstallYadfot64: Boolean; begin Result:= InstallSlot(3); end;
 var
   ProtocolDecided, ProtocolOk: Boolean;
 
-{ True when the protocol task should run: pwsh exists and either nothing is
+{ True when the protocol task should run: either nothing is
   registered yet or the user agreed to replace it. A silent install never
   replaces an existing registration. Asked once. }
 function RegisterProtocol: Boolean;
@@ -322,8 +323,8 @@ begin
   if not ProtocolDecided then
   begin
     ProtocolDecided:= True;
-    ProtocolOk:= HavePwsh;
-    if ProtocolOk and RegQueryStringValue(HKCU, 'Software\Classes\draglint\shell\open\command', '', Cmd) then
+    ProtocolOk:= True;
+    if RegQueryStringValue(HKCU, 'Software\Classes\draglint\shell\open\command', '', Cmd) then
       if WizardSilent then
         ProtocolOk:= False
       else
@@ -362,11 +363,11 @@ end;
 procedure InitializeWizard;
 begin
   PwshPage:= CreateOutputMsgPage(wpSelectTasks, 'PowerShell 7 was not found',
-    'The charts, the Reports menu, draglint:// links and MCP registration need it.',
-    'drag-lint installs and the engine works without PowerShell 7, but the chart scripts, ' +
-    'the IDE plugin''s Reports menu, draglint:// links and the MCP registration run on pwsh.exe.' + #13#10#13#10 +
-    'Install PowerShell 7 from https://aka.ms/powershell and run this setup again to register ' +
-    'draglint:// and MCP.' + #13#10#13#10 + 'Setup will continue without them.');
+    'The charts'' PowerShell fallback and the IDE plugin''s Reports menu need it.',
+    'drag-lint installs and the engine works without PowerShell 7. The charts'' PowerShell fallback ' +
+    'for the questions not yet answered in-process, and the IDE plugin''s Reports menu for those ' +
+    'questions, need it. draglint:// links and MCP registration do not.' + #13#10#13#10 +
+    'Install PowerShell 7 from https://aka.ms/powershell if you want them.' + #13#10#13#10 + 'Setup will continue.');
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
@@ -477,7 +478,7 @@ function WeRegisteredProtocol: Boolean;
 var
   By: string;
 begin
-  Result:= HavePwsh and RegQueryStringValue(HKCU, '{#InstKey}', 'ProtocolRegisteredBy', By) and
+  Result:= RegQueryStringValue(HKCU, '{#InstKey}', 'ProtocolRegisteredBy', By) and
            (CompareText(By, ExpandConstant('{app}')) = 0);
 end;
 
