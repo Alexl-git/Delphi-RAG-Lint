@@ -3,6 +3,35 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.39.0-alpha -- planned
+
+### MCP server: right answers, read-only, and it stays up (Jonathas Paiva, PR #2)
+
+- **`find_callers` answers from the call graph.** It matched refs by NAME with no
+  kind filter, so writes, same-named locals and any other identifier counted as callers.
+  It now returns the callers `query find-callers --resolved` returns (the shared
+  `DRagLint.Query.Callers`), callbacks marked; only when nothing resolves does it fall
+  back to the name match, filtered as the CLI filters it and SAID to be a name match.
+  `DropRefsThatCannotBeCallers` and `CollapseRefsAtSameSite` moved from the CLI into
+  that unit so both paths filter alike.
+- **A read of a same-named local is no longer a callback reach** -- in `find_callers`,
+  `query find-callers --resolved` and the hover alike (the shared
+  `ResolvedCallersForName`): `if Run > 0` in a routine with a local `Run` was listed as a
+  `[callback]` of every routine named Run. The CLI still lists a local's writes when the
+  name has one (D31); the MCP tool, which answers "who calls this method", leaves local
+  and parameter targets out.
+- **`get_context_bundle` returns the content.** It, and `context --format json`,
+  returned only counts. The JSON now adds `doc`, `surface`, `slice`, `callers` and
+  `impact` after the unchanged summary keys.
+- **A tool that raises no longer ends the server.** There was no `except` in the
+  unit: an exception reached the CLI's top-level handler and the process exited. The call
+  now answers `isError: true` with the reason, and the next call is served.
+- **Read-only, no Migrate, old schema refused, freshness said.** `serve --db` and a
+  per-call `"db"` opened the shared index for WRITING and migrated it on every open. Both
+  now open it read-only like the CLI's read verbs, refuse an old schema naming it, and add
+  the freshness note as a second text item when files changed since indexing.
+- Guard: `tests\autotest\run_mcp_answers.ps1` (M1-M6; red before).
+
 ## v1.38.1-alpha -- planned
 
 ### Planned

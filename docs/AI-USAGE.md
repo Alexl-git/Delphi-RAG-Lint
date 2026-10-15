@@ -991,10 +991,18 @@ Servers table in section 2), or `drag-lint init --project <X.dproj>` to register
 It speaks **JSON-RPC 2.0 over stdio**. The MCP surface is a **curated subset**
 of the CLI -- exactly **15 tools**:
 
+> **Like the CLI's read verbs**, the server opens every index READ-ONLY (the
+> `--db` of `serve` and a per-call `"db"` argument alike) and never migrates it:
+> an index at an older schema is refused, and the error names the schema and the
+> rebuild command. When files changed since the index was built, the answer
+> carries the freshness note as a SECOND text item, so the first stays the plain
+> answer (JSON stays JSON). A tool that fails answers that one call with
+> `isError: true` and the reason; the server keeps serving.
+
 | Tool | Purpose |
 |------|---------|
 | `find_symbol` | locate a symbol by name/qname |
-| `find_callers` | callers of a symbol |
+| `find_callers` | callers of a symbol, resolved through the call graph (a name match only when nothing resolves, said so) |
 | `find_by_doc_tag` | symbols carrying a given doc tag |
 | `find_undocumented` | public symbols with no doc comment |
 | `get_symbol_doc` | doc comment for a symbol |

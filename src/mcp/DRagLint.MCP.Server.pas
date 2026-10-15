@@ -37,6 +37,30 @@ type
       FStore  : ISymbolStore  ;
       FLinter : TLinter       ;
       FDbPaths: TArray<string>;
+      { Gitea #34 (2026-10-15): why the --db store is not open ('' when it is),
+        and the same for the last per-call "db" argument -- named in the error
+        instead of a bare "no database loaded". }
+      FStoreError    : string;
+      FLastStoreError: string;
+      { The freshness note of the store this tools/call reads ('' when fresh),
+        returned as a SECOND text item so the first stays parseable JSON. }
+      FCallNote      : string;
+      /// <summary>Opens ADbPath READ-ONLY, as the CLI's read verbs do: no Migrate,
+      /// and an index at an old schema is refused with the reason in AError.</summary>
+      function OpenStore(const ADbPath: string; out AError: string): ISymbolStore;
+      /// <summary>FreshnessNote for AStore when its files changed since it was
+      /// built; '' when fresh or when the probe cannot tell.</summary>
+      function NoteFor(const ADbPath: string; const AStore: ISymbolStore): string;
+      /// <summary>The error a tool returns when it has no store: the reason the
+      /// store could not be opened, else the usage hint.</summary>
+      function NoStoreMessage: string;
+      /// <summary>The find_callers answer for AName: its callers resolved through
+      /// the call graph, else the name match filtered as `query find-callers`
+      /// filters it, said to be a name match.</summary>
+      function FindCallersText(const AName: string; AContext: Integer): string;
+      /// <summary>The tool dispatch itself; HandleToolsCall wraps it so an
+      /// exception becomes an isError reply instead of ending the server.</summary>
+      procedure DispatchToolsCall(const AId: TJSONValue; const AParams: TJSONObject);
       /// <param name="AText"><!-- drag-lint:auto type -->const string</param>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -390,6 +414,8 @@ implementation
 
 uses
   DRagLint.Doc.Regions
+  , DRagLint.Query.Callers   { Gitea #31: the CLI's resolved callers and name filters }
+  , DRagLint.Index.Freshness { Gitea #34: the freshness note of the store a tool reads }
   ;
 
 constructor TMCPServer.Create(const ADbPaths: TArray<string>);
@@ -402,8 +428,15 @@ begin
   // is v0.5; for now the AI passes a single --db on the serve invocation.
   if Length(FDbPaths) > 0 then
   begin
-    FStore:= TSQLiteSymbolStore.Create(FDbPaths[0]);
-    FStore.Migrate;
+    { READ-ONLY, NO MIGRATE (Gitea #34). The server answers questions; it used
+      to open the shared index for WRITING and migrate it on every start, while
+      every read verb of the CLI opens it query_only and refuses an old schema. }
+    FStore:= OpenStore(FDbPaths[0], FStoreError);
+    if FStore = nil then
+    begin
+      Writeln(ErrOutput, 'drag-lint serve: ' + FStoreError);
+      Flush(ErrOutput);
+    end;
   end;
   { SAY SO. Every --db after the first is accepted, held in FDbPaths, and never
     opened -- so `serve --db A --db B` answers every question from A while
@@ -534,8 +567,11 @@ begin
         + '},"additionalProperties":false}'));
 
   Tools.AddElement(ToolDescriptor(
-      'find_callers', 'Find every reference site to a method/event-handler by name. Returns ' + 'file:line:col rows. Includes DFM event-handler bindings when the .dfm '
-        + 'files are indexed. When context > 0 each result includes surrounding ' + 'source lines.',
+      'find_callers', 'Find the callers of a method/event-handler (bare or qualified name), resolved through the '
+        + 'call graph like `query find-callers --resolved`: one row per caller with file:line and confidence; a '
+        + 'routine passed as a value is marked [callback]. Only when nothing resolves does it fall back to '
+        + 'references by name (said so; may include homonyms). When context > 0 each result includes surrounding '
+        + 'source lines.',
       '{"type":"object","properties":{' + '"name":{"type":"string","description":"Callee/handler name"},'
         + '"context":{"type":"integer","description":"Number of surrounding source lines to include (optional, default 0)"}' + '},"required":["name"],"additionalProperties":false}'
     ));
@@ -591,8 +627,9 @@ begin
 
   Tools.AddElement(ToolDescriptor(
       'get_context_bundle',
-      'Return a curated context bundle for a symbol: doc, class surface, impl slice, ' + 'callers, and token estimate. Useful for preparing minimal AI-ready context for '
-        + 'refactoring, inspection, or deletion tasks.',
+      'Return a curated context bundle for a symbol as JSON: the summary counts plus the content -- doc, '
+        + 'class surface, impl slice, callers with their context and the impact summary. Useful for preparing '
+        + 'minimal AI-ready context for refactoring, inspection, or deletion tasks.',
       '{"type":"object","properties":{' + '"task":{"type":"string","description":"Task description (verb qname, e.g. \"modify Foo.Bar\")"},'
         + '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},'
         + '"verb":{"type":"string","description":"Action verb: modify|inspect|refactor|delete|extend (default modify)"},'
@@ -713,11 +750,147 @@ begin
   if DbVal <> nil then
   begin
     DbPath:= DbVal.Value;
-    Result:= TSQLiteSymbolStore.Create(DbPath);
-    Result.Migrate;
+    Result:= OpenStore(DbPath, FLastStoreError);
   end
-  else Result:= FStore;
+  else
+  begin
+    Result:= FStore;
+    if Length(FDbPaths) > 0 then DbPath:= FDbPaths[0];
+  end;
+  FCallNote:= NoteFor(DbPath, Result);
 end; // function
+
+function TMCPServer.OpenStore(const ADbPath: string; out AError: string): ISymbolStore;
+var
+  Found   : Integer;
+  Expected: Integer;
+begin
+  AError:= '';
+  Result:= nil;
+  if not TFile.Exists(ADbPath) then
+  begin
+    AError:= 'database not found: ' + ADbPath;
+    Exit;
+  end;
+  Result:= TSQLiteSymbolStore.Create(ADbPath, {AReadOnly=}True);
+  if not Result.IsSchemaCurrent(Found, Expected) then
+  begin
+    AError:= Format('index schema v%d < v%d in %s -- nothing was answered. Rebuild it: ' +
+      '"drag-lint index --project <file.dproj> --db <db>" for a project index, or ' +
+      '"drag-lint index <dir> --db <db>" for a library index', [Found, Expected, ADbPath]);
+    Result:= nil;
+  end;
+end;
+
+function TMCPServer.NoteFor(const ADbPath: string; const AStore: ISymbolStore): string;
+begin
+  Result:= '';
+  if (AStore = nil) or (ADbPath = '') then Exit;
+  { Probed on every call, not cached: a session outlives reindexes, and a note
+    that stays after the index caught up is the warning nobody reads again. }
+  var Rep: TFreshnessReport:= ProbeIndexFreshness(AStore);
+  if Rep.Verdict = fvStale then Result:= FreshnessNote(Rep, ADbPath);
+end;
+
+function TMCPServer.FindCallersText(const AName: string; AContext: Integer): string;
+var
+  Sb     : TStringBuilder;
+  LastSeg: string;
+begin
+  LastSeg:= AName;
+  if LastDelimiter('.', LastSeg) > 0 then LastSeg:= Copy(LastSeg, LastDelimiter('.', LastSeg) + 1, MaxInt);
+  { RESOLVED FIRST (Gitea #31). The tool matched refs by NAME with no kind
+    filter, so writes, same-named locals and every other X answered "who calls
+    X". It now answers from the call graph, exactly as `query find-callers
+    --resolved` does (DRagLint.Query.Callers, shared with the LSP). }
+  var Rows: TQueryCallerRows:= ResolvedCallersForName(FStore, AName);
+  { A LOCAL OR PARAMETER IS NOT A CALLEE HERE. The shared function lists every
+    symbol of the name as a target -- `query find-callers --resolved` shows a
+    local's writes on purpose (D31) -- but this tool answers "who calls this
+    method", and a routine's own local `Run` is not an answer to that. }
+  var Routines: TQueryCallerRows:= nil;
+  var LocalTarget: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+  try
+    for var Row in Rows do
+    begin
+      var IsLocal: Boolean:= False;
+      if (Row.TargetQName <> '') and not LocalTarget.TryGetValue(Row.TargetQName, IsLocal) then
+      begin
+        var Syms: TArray<TSymbol>:= FStore.FindSymbolsByQualifiedName(Row.TargetQName);
+        IsLocal:= Length(Syms) > 0;
+        for var Sym in Syms do
+          if not (Sym.Kind in [skLocalVar, skParam]) then IsLocal:= False;
+        LocalTarget.Add(Row.TargetQName, IsLocal);
+      end;
+      if not IsLocal then Routines:= Routines + [Row];
+    end;
+  finally
+    LocalTarget.Free;
+  end;
+  Rows:= Routines;
+  if Length(Rows) > 0 then
+  begin
+    if AContext > 0 then
+    begin
+      { The same sites with their source around them: the name-matched refs that
+        sit at a resolved site, one per site. }
+      var Sites: TDictionary<string, Boolean>:= TDictionary<string, Boolean>.Create;
+      try
+        for var Row in Rows do
+          if (Row.FullPath <> '') and (Row.CallSiteLine > 0) then
+            Sites.AddOrSetValue(LowerCase(Row.FullPath) + '|' + IntToStr(Row.CallSiteLine), True);
+        var Kept: TArray<TReference>:= nil;
+        for var Ref in CollapseRefsAtSameSite(FStore.FindCallersByNameWithContext(LastSeg, AContext)) do
+          if Sites.ContainsKey(LowerCase(FStore.GetFilePath(Ref.FileId)) + '|' + IntToStr(Ref.StartLine)) then
+            Kept:= Kept + [Ref];
+        if Length(Kept) > 0 then
+          Exit(FormatReferencesWithContext(Kept) + sLineBreak +
+            Format('%d caller(s), resolved through the call graph.', [Length(Rows)]));
+      finally
+        Sites.Free;
+      end;
+    end;
+    Sb:= TStringBuilder.Create;
+    try
+      for var Row in Rows do
+      begin
+        var Where: string:= if Row.FullPath <> '' then Row.FullPath else Row.FilePath;
+        if Row.CallSiteLine > 0 then Where:= Format('%s:%d', [Where, Row.CallSiteLine]);
+        if Row.Confidence = 'callback' then
+          Sb.AppendLine(Format('  %s  (%s)  [callback]', [Row.CallerQName, Where]))
+        else
+        begin
+          if Row.FirstOfTarget then Sb.AppendLine(Row.TargetQName + ':');
+          var Tag: string:= Row.Confidence;
+          if Row.Mode <> '' then Tag:= Tag + ', ' + Row.Mode;
+          Sb.AppendLine(Format('  %s  (%s)  [%s]', [Row.CallerQName, Where, Tag]));
+        end;
+      end;
+      Sb.Append(Format('%d caller(s), resolved through the call graph.', [Length(Rows)]));
+      Result:= Sb.ToString;
+    finally
+      Sb.Free;
+    end;
+    Exit;
+  end;
+  { No resolved caller -- an index without a call pass, or a name nothing binds
+    to. The name match, with the filters `query find-callers` applies, SAID to
+    be a name match: it can still hold homonyms. }
+  var Refs: TArray<TReference>;
+  if AContext > 0 then Refs:= FStore.FindCallersByNameWithContext(LastSeg, AContext)
+  else Refs:= FStore.FindCallersByName(LastSeg);
+  Refs:= CollapseRefsAtSameSite(DropRefsThatCannotBeCallers(FStore, Refs));
+  Result:= 'No caller resolved through the call graph; references by NAME (may include homonyms):' + sLineBreak;
+  if AContext > 0 then Result:= Result + FormatReferencesWithContext(Refs)
+  else Result:= Result + FormatReferences(Refs);
+end;
+
+function TMCPServer.NoStoreMessage: string;
+begin
+  if FLastStoreError <> '' then Exit(FLastStoreError);
+  if FStoreError <> '' then Exit(FStoreError);
+  Result:= 'no database loaded; pass --db on serve or "db" in the arguments';
+end;
 
 function TMCPServer.FormatDocAsJson(const AQName: string; const ADoc: TParsedDoc): string;
 var
@@ -865,6 +1038,29 @@ begin
 end; // function
 
 procedure TMCPServer.HandleToolsCall(const AId: TJSONValue; const AParams: TJSONObject);
+begin
+  FCallNote      := '';
+  FLastStoreError:= '';
+  { AN EXCEPTION IN ONE TOOL IS THAT CALL'S ANSWER, NOT THE SERVER'S END (Gitea
+    #33). There was no except anywhere in this unit: an exception left Run,
+    reached the CLI's top-level handler and ended the process, so the client
+    lost every later call too. }
+  try
+    DispatchToolsCall(AId, AParams);
+  except
+    on E: Exception do
+    begin
+      var ToolName: string:= '';
+      if (AParams <> nil) and (AParams.GetValue('name') <> nil) then ToolName:= AParams.GetValue('name').Value;
+      var Reply: TJSONObject:= TJSONObject.Create;
+      Reply.AddPair('content', TextContent(Format('drag-lint: tool %s failed: %s: %s', [ToolName, E.ClassName, E.Message])));
+      Reply.AddPair('isError', TJSONBool.Create(True));
+      SendResult(AId, Reply);
+    end;
+  end;
+end;
+
+procedure TMCPServer.DispatchToolsCall(const AId: TJSONValue; const AParams: TJSONObject);
 var
   ToolName  : string              ;
   Args      : TJSONObject         ;
@@ -889,9 +1085,10 @@ begin
   try
     if ToolName = 'find_symbol' then
     begin
+      if Length(FDbPaths) > 0 then FCallNote:= NoteFor(FDbPaths[0], FStore);
       if FStore = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       Name := '';
@@ -915,7 +1112,7 @@ begin
     begin
       if FStore = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       if Args.GetValue('name') = nil then
@@ -924,18 +1121,10 @@ begin
         Exit;
       end;
       Name:= Args.GetValue('name').Value;
+      if Length(FDbPaths) > 0 then FCallNote:= NoteFor(FDbPaths[0], FStore);
       var CtxLines:= 0;
       if Args.GetValue('context') <> nil then CtxLines:= StrToIntDef(Args.GetValue('context').Value, 0);
-      if CtxLines > 0 then
-      begin
-        Refs:= FStore.FindCallersByNameWithContext(Name, CtxLines);
-        ResultText:= FormatReferencesWithContext(Refs);
-      end
-      else
-      begin
-        Refs:= FStore.FindCallersByName(Name);
-        ResultText:= FormatReferences(Refs);
-      end;
+      ResultText:= FindCallersText(Name, CtxLines);
     end // if
     else if ToolName = 'lint' then
     begin
@@ -959,7 +1148,7 @@ begin
       var CallStore:= ResolveStore(Args);
       if CallStore = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       var QNameVal:= '';
@@ -983,7 +1172,7 @@ begin
       var CallStore2:= ResolveStore(Args);
       if CallStore2 = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       var TagVal:= '';
@@ -1001,7 +1190,7 @@ begin
       var CallStore3:= ResolveStore(Args);
       if CallStore3 = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       var KindVal:= '';
@@ -1016,7 +1205,7 @@ begin
       var ImpStore:= ResolveStore(Args);
       if ImpStore = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       var ImpQName:= '';
@@ -1039,7 +1228,7 @@ begin
       var WStore:= ResolveStore(Args);
       if WStore = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       var WQName:= '';
@@ -1061,7 +1250,7 @@ begin
       var SurfStore:= ResolveStore(Args);
       if SurfStore = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       var SurfQName:= '';
@@ -1083,7 +1272,7 @@ begin
       var SliceStore:= ResolveStore(Args);
       if SliceStore = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       var SliceQName:= '';
@@ -1101,7 +1290,7 @@ begin
       var BundleStore:= ResolveStore(Args);
       if BundleStore = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
 
@@ -1155,7 +1344,7 @@ begin
       var TAPosStore:= ResolveStore(Args);
       if TAPosStore = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       var TAPosFile:= '';
@@ -1182,7 +1371,7 @@ begin
       var RenStore:= ResolveStore(Args);
       if RenStore = nil then
       begin
-        SendError(AId, -32000, 'no database loaded; pass --db on serve or in arguments');
+        SendError(AId, -32000, NoStoreMessage);
         Exit;
       end;
       var RenQName := '';
@@ -1328,7 +1517,10 @@ begin
   end; // try
 
   Reply:= TJSONObject.Create;
-  Reply.AddPair('content', TextContent(ResultText));
+  var Content: TJSONArray:= TextContent(ResultText);
+  if FCallNote <> '' then
+    Content.AddElement(TJSONObject.Create.AddPair('type', 'text').AddPair('text', FCallNote));
+  Reply.AddPair('content', Content);
   Reply.AddPair('isError', TJSONBool.Create(False));
   SendResult(AId, Reply);
 end; // procedure

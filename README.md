@@ -1208,7 +1208,7 @@ CLI-only verbs).
 | Tool | Description |
 |------|-------------|
 | `find_symbol` | Find symbols by exact name (fuzzy fallback) or by qualified name; returns file:line:col |
-| `find_callers` | Every reference site to a method/event-handler by name; `context` adds surrounding source lines |
+| `find_callers` | Callers of a method/event-handler resolved through the call graph (as `query find-callers --resolved`), callbacks marked; a name match only when nothing resolves, said so; `context` adds surrounding source lines |
 | `lint` | Run the linter (built-in + external `.scm` rules) on a file or folder |
 | `get_symbol_doc` | Structured DocInsight comment for a qualified symbol -- summary, params, returns, exceptions, since, deprecated, raw block |
 | `find_by_doc_tag` | Symbols tagged `deprecated`, or carrying a `since` annotation |
@@ -1217,7 +1217,7 @@ CLI-only verbs).
 | `get_wiring` | Spring4D DI edges (interface -> impl class + lifetime + resolve-sites) plus DFM event handlers for a form |
 | `get_surface` | Public interface (declaration lines) of a class/record; `include_impl` / `all_visibility` widen it |
 | `get_slice` | Minimal self-contained source slice (header + class decl + method bodies) for a class |
-| `get_context_bundle` | Curated context bundle for a task on a symbol -- doc + surface + slice + callers + token estimate |
+| `get_context_bundle` | Curated context bundle for a task on a symbol -- the counts plus the doc, surface, slice, callers and impact themselves (JSON) |
 | `get_type_at_position` | Resolve the identifier at file/line/col to a symbol |
 | `rename_symbol` | Preview (`dry_run`) or apply a cross-unit rename of a symbol |
 | `run_ast_checks` | Compiler-less AST diagnostics on a file (unbalanced begin/end, undeclared identifiers) |
