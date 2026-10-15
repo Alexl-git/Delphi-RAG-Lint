@@ -15,6 +15,9 @@ drag-lint query find-callers --name <callee-name> [--context N] [--resolved] [--
 TFoo.Bar` silently returns 0 rows; `--name Bar` returns the call sites.
 `--context N` adds N lines of surrounding source.
 
+Several `--db` give ONE answer: `--json` is a single array holding every
+database's rows, and the text form ends with one `N caller(s)` total.
+
 ## Plain vs `--resolved`
 
 Without `--resolved` the answer is every site whose NAME matches -- complete,
@@ -44,7 +47,8 @@ text form prints `(<file>:<site line>)` and the JSON `line` key is the same
 number. The caller routine's own declaration line is a separate JSON key,
 `caller_line`, omitted when the enclosing routine is unknown (a unit-level
 reference). Key order: `caller_qname, file, confidence, target_qname, line,
-caller_line, mode`. Before 2026-09-23 the JSON `line` on every row except a
+caller_line, mode, path`. `file` is the file NAME; `path` is the full path, and
+the text form prints the full path too. Before 2026-09-23 the JSON `line` on every row except a
 callback was the caller's DECLARATION line, and the text form printed no line
 for those rows.
 
@@ -54,6 +58,19 @@ is modelled, and wherever the target types a with member wins), and inside a
 `{$SCOPEDENUMS ON}` unit, a bare name can bind to an enum value the compiler
 would not have chosen. Verify such a binding against the declaration.
 Qualified reads (`TEnum.Value`) are unaffected.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | at least one caller listed |
+| `1` | **zero callers** -- a valid answer, not an error. Text prints `0 caller(s)`; `--json` prints `[]` (with or without `--resolved`) |
+| `2` | usage error (no `--name`), or a `--db` that is missing or at an old schema; also a manifest-resolved list whose every database is stale |
+| `3` | fatal: an unrecognised flag or an exception (message on stderr) |
+
+Zero callers is exit `1` on purpose (grep's convention): it is the only signal a
+script has for "nothing calls this" without parsing the text. A handler wired
+only from a `.dfm` has no call site, so it answers `1` too.
 
 ## Reaching it in the IDE
 

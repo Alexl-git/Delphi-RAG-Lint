@@ -3,6 +3,102 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Changed
+
+- **`index --project` and `index --scan-libraries-*` print their scope CAPPED.** The whole
+  compile closure used to be printed, one path per line, before every run -- 2,249 lines (over
+  100k tokens) ahead of the summary on an incremental run that re-parsed one file. A real run now
+  prints the count, 20 paths, `... and N more` and `(--dry-run lists all N)`; `--dry-run` still
+  lists every entry, because there the list is the answer. Guard:
+  `tests\autotest\run_index_scope_listing_cap.ps1`.
+
+### Fixed
+
+- **`allow` records a routine-metric review on any routine of a big unit**. To bind a
+  `dl:ok deep-nesting` (or any of the seven routine-metric rules) to the measured value, `allow`
+  re-measures with every threshold at 1 -- but the checkers stop their walk after 200 findings, a
+  cap meant for lint output, and at threshold 1 a routine gives up to four. In a big unit the walk
+  ended around the 50th routine, so `allow` refused every routine below it ("no routine at ...
+  produces one") on the line `lint` anchored the finding on: `TCallResolver.ResolveOneAt`, line
+  ~5900, while a method early in the same file worked -- which read as a methods-vs-functions bug.
+  The four metric checkers take an optional `AMaxFindings` (default 200, lint unchanged); `allow`
+  lifts it and measures only its rule's metric. Guard:
+  `tests\autotest\run_allow_metric_late_routine.ps1`.
+- **A query on a project index says when the index holds files outside the project** (no version constant moves). `index --project` reported and stamped
+  `out_of_closure_count`, but only the STALE branch of the freshness note read it, so a current
+  index stayed silent while those rows took part in every answer: on ProjectA a `.dpr` copied from
+  another folder was one more `unit-usage --unit UConfig` user, and a deleted `UErrors.pas` was the
+  target of all 19 `uses UErrors`. Every verb that opens the index read-only now prints, once, on
+  stderr: `N indexed file(s) lie OUTSIDE this project's compile closure and may appear in answers ...
+  --rebuild`. Guard: `tests\autotest\run_query_notes_out_of_closure.ps1`.
+- **stderr notes reach a merged stdout+stderr stream whole**. The
+  freshness notes and `lint`'s closing note are longer than the RTL's 128-byte text buffer, which
+  flushes per line only on a console; with both streams on one pipe (bash, cmd `2>&1`) a note was
+  cut at byte 128 and its tail printed after the results, gluing the first finding to it.
+  `NoteIndexFreshnessOnce` and `DoLint` now flush stderr after their notes. Guards:
+  `run_query_notes_out_of_closure.ps1` (case 6c), `tests\autotest\run_lint_note_not_interleaved.ps1`.
+- **A reader that closes stdout early no longer turns the answer into a FATAL**.
+  `callgraph ... | Select-Object -First 12` printed `FATAL: EInOutError: I/O error 232` and exited 3.
+  A broken pipe (`ERROR_NO_DATA` / `ERROR_BROKEN_PIPE`) now ends the run quietly with exit 0, as a
+  Unix tool does on SIGPIPE. Guard: `tests\autotest\run_closed_pipe_quiet_exit.ps1`.
+- **`reverse-calltree --direction callees --format dot|mermaid` draws caller -> callee**. The chart renderer always emitted child -> node, which in a callees tree claimed
+  every callee called the root. `butterfly` already turned its callees wing round. Guard:
+  `tests\autotest\run_callee_graph_outputs.ps1`.
+- **`callgraph --format` is read**. It was parsed and ignored: `--format dot`
+  printed the text tree with exit 0. `--format json` now equals `--json`, `text` is the default, and
+  any other value exits 2 pointing at `reverse-calltree`, which draws dot and mermaid. Guard:
+  `run_callee_graph_outputs.ps1`.
+- **The resolver freshness note names the engine by its product version**: on an index resolved by another resolver it said `this build is
+  r=1.19.0-alpha;schema=23` while `--version` said 1.18.0-alpha, so the resolver fingerprint read as
+  the version of the exe. The three notes (older stamp, newer stamp, no stamp) now say `this engine
+  (drag-lint 1.18.0-alpha) resolves with r=...`. Guard:
+  `tests\autotest\run_resolver_note_names_versions.ps1`.
+- **`find-callees` documents that it prints one line per call SITE**: a helper
+  called 24 times was listed 24 times and nothing said so. `--help`, README and AI-USAGE now say it
+  and name `callgraph --qname X --direction callees --depth 1` for the distinct list. Guard:
+  `run_callee_graph_outputs.ps1` (cases 8-10).
+- **The battery no longer leaves a Windows dialog on screen.** `build\stage-engine.ps1`, recovering
+  from a locked target, launched the fresh exe to write the engine hold -- and
+  `tests\autotest\run_engine_hold.ps1` hands it a TEXT file named `fresh.exe`. Launching a non-image
+  `.exe` does not just fail: Windows raises a modal "Unsupported 16-Bit Application" box that waits
+  for a click, whatever `try/catch` the caller has, so every battery run left one behind. The
+  recovery now checks the `MZ` header first and skips the hold step, saying so, for anything that
+  is not an executable image; a real build is unchanged. Guarded by a new check in the same test.
+- **Numbers print the same on every machine.** Stage timings (`done in 0.3s`), the `Done.`
+  line, section summaries and contrast ratios went through `Format`/`FloatToStr` with the OS
+  locale, so a pt-BR machine printed `0,3s` / `58,13s` / `21,00` and every parser of that output
+  read nothing -- six battery runners failed on this machine for that reason alone
+  (`run_index_stage_markers`, `run_index_section_summary_reconciles`, `run_hover_contrast`,
+  `run_flowchecker_profile_breakdown`, `run_defasgn_gen_memo`, `run_flow_oracle_memo`). The engine
+  now sets `.` as decimal and `,` as thousands separator at startup; dates keep the OS format.
+- **Exit `1` now always means an EMPTY answer; a stale database is `2`.** Nine single-db verbs
+  answered a `--db` at an old schema with exit 1 -- the code each uses for "no results / not
+  found": `find-callees`, `context`, `query find`, `query typecat`, `surface`, `ambiguous-calls`,
+  `dump-refs`, `doc-drift`, `dump-call-edges`. They now exit 2, like `find-callers`, `usages` and
+  `outline` already did. `query` (every subcommand) also refuses with 2 when the MANIFEST resolved
+  a list whose every database is stale; it used to skip each one, print `0 caller(s)` and exit 1.
+  The grep-style convention (0 results / 1 empty / 2 usage or bad db / 3 fatal) is now documented
+  in `--help`, `docs\AI-USAGE.md` and `docs\wiki\query-find-callers.md` -- a field agent read a
+  valid zero-caller answer as a failed command because nothing said otherwise. Guard:
+  `run_explicit_db_strict.ps1` (the nine verbs join the T5 stale matrix; new T8/P8).
+- **Symbol and caller answers say WHERE, as a path that opens.** `query --name` (text) named the
+  symbol and never its file: each row now carries `(path:line)`, placed before the `[impl-only]`
+  and `forward at line` suffixes. `query find-callers --resolved` gave the file NAME only: the JSON
+  gains a `path` key (LAST, so the pinned key order and the file-name `file` key are unchanged)
+  and the text form prints the full path. The MCP `find_symbol` tool, whose description promised
+  `file:line:col`, returned `line L:C`: it now returns `path:line:col`. Guard:
+  `tests\autotest\run_output_locations.ps1`.
+- **Name-based `query find-callers` answers ONCE across every `--db`.** It printed per store: `--json`
+  over two databases wrote two arrays back to back (not a JSON document), `--json` with no hit wrote
+  NOTHING (where `--resolved --json` writes `[]`), and the text form wrote one `N caller(s)` line per
+  store. It now writes one array (`[]` when empty) or every store's rows plus ONE total. Guard:
+  `tests\autotest\run_find_callers_json_one_document.ps1`.
+- **Docs: `lint` without `--fail-on` exits 1 on ANY surviving finding.** `docs\AI-USAGE.md` said
+  a wall of warnings still exits 0; a single hint exits 1 (the default equals `--fail-on hint`).
+  The `--help` line now names `hint` and the no-flag default.
+
 ## v1.31.1-alpha -- 2026-10-14
 
 ### Fixed

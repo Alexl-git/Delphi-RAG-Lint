@@ -500,6 +500,19 @@ if ($havePython) {
     @{ N='uses-fix';         A=@('uses-fix',$fileA,'--project',$dummyDproj) }
     @{ N='generate-test';    A=@('generate-test','--qname','uAlpha.TAlphaBase.Touch') }
     @{ N='check-ast';        A=@('check-ast',$fileA) }
+    # 2026-09-29: these nine answered a stale --db with exit 1 -- the SAME code
+    # each uses for "no results / not found", so a caller could not tell a stale
+    # index from an empty answer. Single-db verbs: they open the FIRST --db,
+    # which is the stale one here.
+    @{ N='find-callees';     A=@('find-callees','--qname','uAlpha.TAlphaBase.Touch') }
+    @{ N='context';          A=@('context','--task','modify uAlpha.TAlphaBase.Touch') }
+    @{ N='query find';       A=@('query','find','--no-docs','--kind','class') }
+    @{ N='query typecat';    A=@('query','typecat','--name','TAlphaBase') }
+    @{ N='surface';          A=@('surface','--qname','uAlpha.TAlphaBase') }
+    @{ N='ambiguous-calls';  A=@('ambiguous-calls') }
+    @{ N='dump-refs';        A=@('dump-refs',$fileA) }
+    @{ N='doc-drift';        A=@('doc-drift','--qname','uAlpha.TAlphaBase.Touch') }
+    @{ N='dump-call-edges';  A=@('dump-call-edges') }
   )
   Check 'V the stale matrix covers all four convert-* verbs' `
         (@($staleMatrix | Where-Object { $_.N -like 'convert-*' }).Count -eq 4) `
@@ -561,6 +574,44 @@ if ($havePython) {
   }
   Check 'P5 POSITIVE CONTROL the stale matrix verbs still answer on CURRENT --db' ($p5.Count -eq 0) `
         ("these broke on good databases, so their T5 rows prove nothing: " + ($p5 -join ', '))
+
+  # ---- T8: a MANIFEST-resolved list whose EVERY store is stale --------------
+  # No --db is named, so StaleDbRefusesRun never fires: each DoQuery loop skipped
+  # the stale store, then printed "0 caller(s)" / zero hits and exited 1 -- the
+  # code for a real EMPTY answer. It must refuse with 2. The list comes from a
+  # local .drag-lint.json found by walking up from the working directory.
+  function Run-InDir([string]$Dir, [string[]]$VerbArgs) {
+    $p = Start-Process -FilePath $exePath -ArgumentList $VerbArgs -NoNewWindow -PassThru `
+          -RedirectStandardOutput $out -RedirectStandardError $err -WorkingDirectory $Dir
+    if (-not $p.WaitForExit(90000)) { try { $p.Kill($true) } catch {}; return @{ Code=-1; Out=''; Err='(timed out)' } }
+    return @{ Code = $p.ExitCode
+              Out  = ((Get-Content -LiteralPath $out -Raw -ErrorAction SilentlyContinue) + '')
+              Err  = ((Get-Content -LiteralPath $err -Raw -ErrorAction SilentlyContinue) + '') }
+  }
+  function New-ManifestDir([string]$Name, [string]$Db) {
+    $d = Join-Path $WorkDir $Name
+    New-Item -ItemType Directory $d -Force | Out-Null
+    $j = '{ "indexes": { "outDir": "' + (Split-Path $Db).Replace('\','\\') + '", "sections": [ ' +
+         '{ "name": "Only", "db": "' + (Split-Path $Db -Leaf) + '", "include": ["' + $srcA.Replace('\','\\') + '"] } ] } }'
+    Write-Ascii (Join-Path $d '.drag-lint.json') $j
+    return $d
+  }
+  $staleDir = New-ManifestDir 'mf-stale' $dbV12
+  $okDir    = New-ManifestDir 'mf-ok'    $dbA
+  $t8 = @(); $p8 = @()
+  foreach ($a in @(@('query','find-callers','--name','Touch'), @('query','--name','TAlphaBase'))) {
+    $label = $a -join ' '
+    Reset-StaleDb
+    $r = Run-InDir $staleDir $a
+    if ($r.Code -ne 2) { $t8 += ("{0}=exit{1}" -f $label, $r.Code) }
+    elseif ($r.Err -notmatch 'OLD SCHEMA') { $t8 += ("{0}=no-reason-on-stderr" -f $label) }
+    $g = Run-InDir $okDir $a
+    if ($g.Code -ge 2) { $p8 += ("{0}=exit{1}" -f $label, $g.Code) }
+  }
+  Check 'T8 a manifest list whose every store is stale exits 2, not an empty-answer 1' ($t8.Count -eq 0) `
+        ("answered 'nothing' as if the index were empty: " + ($t8 -join ', '))
+  Check 'P8 POSITIVE CONTROL the same manifest shape over a CURRENT db still answers' ($p8.Count -eq 0) `
+        ("the manifest fixture itself is broken, so T8 proves nothing: " + ($p8 -join ', '))
 }
 
 Write-Host ''

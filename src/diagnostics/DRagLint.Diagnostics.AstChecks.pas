@@ -292,7 +292,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckRoutineMetrics(const AFile: string; AMaxParams, AMaxLocals, AMaxLines, AMaxNesting: Integer): TArray<TLintFinding>;
+      class function CheckRoutineMetrics(const AFile: string; AMaxParams, AMaxLocals, AMaxLines, AMaxNesting: Integer; AMaxFindings: Integer = 200): TArray<TLintFinding>;
       /// <summary>Type-aware checks using a lightweight per-file name-to-type map:
       /// floating-point equality comparison, and FreeAndNil on an interface-typed variable.</summary>
       /// <param name="AFile">Path to the .pas/.inc source file to scan; must exist.</param>
@@ -844,7 +844,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckTooManyExitPoints(const AFile: string; AMaxExits: Integer): TArray<TLintFinding>; overload;
+      class function CheckTooManyExitPoints(const AFile: string; AMaxExits: Integer; AMaxFindings: Integer = 200): TArray<TLintFinding>; overload;
       /// <summary>Flags a routine whose cyclomatic complexity exceeds 15. Decision points:
       /// if/ifElse/while/for/repeat, each case branch, and each and/or operator; base 1.</summary>
       /// <param name="AFile">Path to the .pas source file to analyse.</param>
@@ -886,7 +886,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckCyclomaticComplexity(const AFile: string; AMaxComplexity: Integer): TArray<TLintFinding>; overload;
+      class function CheckCyclomaticComplexity(const AFile: string; AMaxComplexity: Integer; AMaxFindings: Integer = 200): TArray<TLintFinding>; overload;
       /// <summary>v(ADP2 T3): the McCabe cyclomatic complexity of one routine body --
       /// 1 + the count of decision-point nodes (if/ifElse/while/for/repeat/kAnd/kOr/
       /// caseCase) anywhere under ABody, not recursing into a nested defProc (a
@@ -952,7 +952,7 @@ type
       /// <seealso cref="DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCodeAfterExit"/>
       /// <!-- drag-lint:auto END -->
       /// </remarks>
-      class function CheckCognitiveComplexity(const AFile: string; AMaxScore: Integer): TArray<TLintFinding>; overload;
+      class function CheckCognitiveComplexity(const AFile: string; AMaxScore: Integer; AMaxFindings: Integer = 200): TArray<TLintFinding>; overload;
       /// <summary>Flags a constructor that calls a virtual/dynamic/override method declared in
       /// its OWN class -- the VMT is live before the body runs, so the call dispatches to a
       /// descendant override whose fields are not yet initialised (AV or corrupt state).</summary>
@@ -2408,7 +2408,7 @@ begin
   end;
 end; // function
 
-class function TAstChecker.CheckRoutineMetrics(const AFile: string; AMaxParams, AMaxLocals, AMaxLines, AMaxNesting: Integer): TArray<TLintFinding>;
+class function TAstChecker.CheckRoutineMetrics(const AFile: string; AMaxParams, AMaxLocals, AMaxLines, AMaxNesting: Integer; AMaxFindings: Integer): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
@@ -2599,7 +2599,7 @@ var
   var
     I: Integer;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= AMaxFindings) then Exit;
     if N.NodeType = 'defProc' then CheckProc(N);
     for I:= 0 to N.NamedChildCount - 1 do Visit(N.NamedChild(I));
   end; // procedure
@@ -8356,7 +8356,7 @@ begin
   Result:= CheckTooManyExitPoints(AFile, 5);   // historic default
 end;
 
-class function TAstChecker.CheckTooManyExitPoints(const AFile: string; AMaxExits: Integer): TArray<TLintFinding>;
+class function TAstChecker.CheckTooManyExitPoints(const AFile: string; AMaxExits: Integer; AMaxFindings: Integer): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
@@ -8426,7 +8426,7 @@ var
     P         : TTSPoint;
     F         : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= AMaxFindings) then Exit;
     if N.NodeType = 'defProc' then
     begin
       Body:= N.ChildByField('body');
@@ -8725,7 +8725,7 @@ begin
   Result:= CheckCyclomaticComplexity(AFile, 15);   // historic default
 end;
 
-class function TAstChecker.CheckCyclomaticComplexity(const AFile: string; AMaxComplexity: Integer): TArray<TLintFinding>;
+class function TAstChecker.CheckCyclomaticComplexity(const AFile: string; AMaxComplexity: Integer; AMaxFindings: Integer): TArray<TLintFinding>;
 var
   Src     : TBytes             ;
   PF      : TParsedFile        ;
@@ -8749,7 +8749,7 @@ var
     P         : TTSPoint;
     F         : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= AMaxFindings) then Exit;
     if N.NodeType = 'defProc' then
     begin
       Body:= N.ChildByField('body');
@@ -8795,7 +8795,7 @@ begin
   Result:= CheckCognitiveComplexity(AFile, 25);   // default limit (cognitive scores higher than cyclomatic)
 end;
 
-class function TAstChecker.CheckCognitiveComplexity(const AFile: string; AMaxScore: Integer): TArray<TLintFinding>;
+class function TAstChecker.CheckCognitiveComplexity(const AFile: string; AMaxScore: Integer; AMaxFindings: Integer): TArray<TLintFinding>;
 var
   PF      : TParsedFile        ;
   Findings: TList<TLintFinding>;
@@ -8828,7 +8828,7 @@ var
     P         : TTSPoint;
     F         : TLintFinding;
   begin
-    if N.IsNull or (Findings.Count >= 200) then Exit;
+    if N.IsNull or (Findings.Count >= AMaxFindings) then Exit;
     if N.NodeType = 'defProc' then
     begin
       Body:= N.ChildByField('body');
