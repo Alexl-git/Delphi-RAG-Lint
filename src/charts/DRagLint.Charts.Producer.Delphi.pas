@@ -77,10 +77,15 @@ type
 /// its producer from this function.</remarks>
 function ProducerForCompare: IReportProducer;
 
-/// <summary>The file name of a question's PowerShell emitter, beside Ask-Report.ps1.</summary>
+/// <summary>The file name of a question's PowerShell emitter, beside Ask-Report.ps1, or the
+/// shared script a question runs through.</summary>
 /// <param name="pId">A question id, e.g. crosses-boundary.</param>
-/// <returns>'Emit-' + the id in PascalCase + '.ps1', e.g. Emit-CrossesBoundary.ps1. Every ported
-/// id follows this convention (guarded by a test against charts\src).</returns>
+/// <returns>The shared script when the id is in the shared-script table (what-it-calls ->
+/// Emit-WhoCalls.ps1, as features\families\chart-questions.json names it); otherwise 'Emit-' +
+/// the id in PascalCase + '.ps1', e.g. Emit-CrossesBoundary.ps1. Every ported id resolves to a
+/// script in charts\src (guarded by a test).</returns>
+/// <remarks>A shared script is NAMED, never derived from the id: one emitter answering two
+/// questions has one name. Add a row when a question that shares an emitter is ported.</remarks>
 function EmitterScriptName(const pId: string): string;
 implementation
 
@@ -117,6 +122,18 @@ const
   ASK_REPORT_SQL_FLAG = '-SqlDbPath';
   CRLF = #13#10;
 
+type
+  /// <summary>One question answered through a script whose name is not derived from its id.</summary>
+  TSharedEmitter = record
+    Id: string;
+    Script: string;
+  end;
+
+const
+  { the shared scripts, as features\families\chart-questions.json names them; only ported ids }
+  SHARED_EMITTERS: array[0..0] of TSharedEmitter = (
+    (Id: 'what-it-calls'; Script: 'Emit-WhoCalls.ps1'));
+
 function ProducerForCompare: IReportProducer;
 begin
   Result:= TDelphiProducer.Create(TPowerShellProducer.Create, True);
@@ -124,6 +141,9 @@ end;
 
 function EmitterScriptName(const pId: string): string;
 begin
+  for var Row in SHARED_EMITTERS do
+    if SameText(Row.Id, pId) then
+      Exit(Row.Script);
   Result:= 'Emit-';
   for var Part in pId.ToLower.Split(['-']) do
     if Part <> '' then

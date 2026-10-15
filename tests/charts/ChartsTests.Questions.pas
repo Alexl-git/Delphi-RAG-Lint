@@ -24,6 +24,7 @@ type
     function EmitChart(const pQuestion, pTarget, pCloneName: string; out pChart: TChartResult): Boolean;
     function Refusal(const pQuestion, pTarget, pCloneName: string): string;
     function Answer(const pQuestion, pTarget, pCloneName: string; out pLines: TArray<string>): Boolean;
+    procedure CheckAtDepth(const pQuestion, pTarget: string; pDepth: Integer; const pFields, pDotSha: string);
   public
     [Setup] procedure Setup;
     [TearDown] procedure TearDown;
@@ -253,10 +254,24 @@ type
     [Test] procedure AmbiguousTargetIsRefused;
   end;
 
+  [TestFixture]
+  TWhatItCallsTests = class(TQuestionFixture)
+  private
+    procedure CheckDepth(pDepth: Integer; const pFields, pDotSha: string);
+  public
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure DepthOneIsTruncated;
+    [Test] procedure CyclesAtDepthThreeMatchPowerShell;
+    [Test] procedure EdgesLeaveTheFocus;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure LeafIsRefused;
+    [Test] procedure UnknownTargetIsRefused;
+  end;
+
 implementation
 
 uses
-  System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
+  System.SysUtils, System.IOUtils, System.Hash, System.RegularExpressions, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
   DRagLint.Charts.Q.WhoCalls,
   DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
@@ -409,6 +424,17 @@ const
   WC_D1_FIELDS = 'Direction="callers",Question="who-calls",Rows=9,Callers=9,Callees=0,NodeCount=10,Cycles=0,MaxDepth=1.0,Truncated=true,Clusters=1,NameMatches=18,NameOnly=9,NameRendered=false,ClickTargets=10,Expected=10,AllClickable=true';
   WC_D1_DOT_SHA = 'a9fb422c9009732f94971e6d8fe88eefae41a82a8f3158c3df9650a734f0bbcc';
   WC_EVENT_TARGET = 'uMain.TfrmMAIN.FormCreate';
+  WIC_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  WIC_FIELDS = 'Direction="callees",Question="what-it-calls",Rows=9,Callers=0,Callees=9,NodeCount=10,Cycles=0,MaxDepth=2.0,Truncated=true,Clusters=5,NameMatches=null,NameOnly=null,NameRendered=false,ClickTargets=10,Expected=10,AllClickable=true';
+  WIC_DOT_SHA = '44e51833342d4b21eaa858edae414c6f4786c886fc8f52856327f5000c6a99b9';
+  WIC_LINES = 15;
+  WIC_D1_DEPTH = 1;
+  WIC_D1_FIELDS = 'Direction="callees",Question="what-it-calls",Rows=2,Callers=0,Callees=2,NodeCount=3,Cycles=0,MaxDepth=1.0,Truncated=true,Clusters=2,NameMatches=null,NameOnly=null,NameRendered=false,ClickTargets=3,Expected=3,AllClickable=true';
+  WIC_D1_DOT_SHA = '6af60a47cd68157628ba8eb118af76eb33be2a742db4aaf54c859d682c9783b0';
+  WIC_D3_DEPTH = 3;
+  WIC_D3_FIELDS = 'Direction="callees",Question="what-it-calls",Rows=18,Callers=0,Callees=18,NodeCount=19,Cycles=5,MaxDepth=3.0,Truncated=true,Clusters=8,NameMatches=null,NameOnly=null,NameRendered=false,ClickTargets=19,Expected=19,AllClickable=true';
+  WIC_D3_DOT_SHA = '267f441b767c6c5513cf9c8a66230286ea57869198052904b0b7b1b1ea1625e4';
+  WIC_LEAF_TARGET = 'AssignGroups.ViewModel.TAssignGroupsViewModel.CanAddGroup';
   FEEDS_FROM_ID = 'feeds-from';
   SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
   FF_STATS = 'IndexDs=54,IndexDsDfm=5,IndexDsCode=49,IndexDsOne=22,IndexDsMany=17,IndexDsByCol=6,IndexDsNone=9,IndexDsOther=6,' +
@@ -1211,6 +1237,21 @@ begin
   Result:= Args(pQuestion, pTarget, pCloneName, A);
   if Result then
     pLines:= AskChartQuestion(A).Lines;
+end;
+
+{ a -Depth run on the CLIENT clone: through FindChartQuestion with the depth set, as Ask-Report passes it }
+procedure TQuestionFixture.CheckAtDepth(const pQuestion, pTarget: string; pDepth: Integer; const pFields, pDotSha: string);
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(pQuestion, pTarget, CLIENT_CLONE, A) then
+    Exit;
+  A.Depth:= pDepth;
+  Assert.IsTrue(FindChartQuestion(pQuestion, E), pQuestion + ' is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(pFields, Fields(C));
+  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
 end;
 
 { ---- touches-tables ---- }
@@ -2477,19 +2518,10 @@ end;
 
 { ---- who-calls ---- }
 
-{ the -Depth runs on ReserveNextID: through FindChartQuestion with the depth set, as Ask-Report passes it }
+{ the -Depth runs on ReserveNextID }
 procedure TWhoCallsTests.CheckDepth(pDepth: Integer; const pFields, pDotSha: string);
-var
-  A: TQuestionArgs;
-  E: TChartEmitter;
 begin
-  if not Args(WHO_CALLS_ID, WC_CYCLE_TARGET, CLIENT_CLONE, A) then
-    Exit;
-  A.Depth:= pDepth;
-  Assert.IsTrue(FindChartQuestion(WHO_CALLS_ID, E), WHO_CALLS_ID + ' is not registered');
-  var C:= E(A, FOutRoot);
-  Assert.AreEqual(pFields, Fields(C));
-  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
+  CheckAtDepth(WHO_CALLS_ID, WC_CYCLE_TARGET, pDepth, pFields, pDotSha);
 end;
 
 procedure TWhoCallsTests.MethodMatchesPowerShell;
@@ -2540,6 +2572,70 @@ begin
   { an overloaded routine: two declarations share this qualified name, so the root is not one symbol (D3) }
   Assert.AreEqual('MStreams.TABZMemoryStream.Seek resolves to 2 symbols in this index -- name one qualified routine',
     Refusal(WHO_CALLS_ID, 'MStreams.TABZMemoryStream.Seek', CLIENT_CLONE));
+end;
+
+{ ---- what-it-calls ---- }
+
+{ the -Depth runs on SendDeltaOperation }
+procedure TWhatItCallsTests.CheckDepth(pDepth: Integer; const pFields, pDotSha: string);
+begin
+  CheckAtDepth(WHAT_IT_CALLS_ID, WIC_TARGET, pDepth, pFields, pDotSha);
+end;
+
+procedure TWhatItCallsTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  { NameMatches / NameOnly are null walking callees: the name bucket answers the caller question only }
+  if not EmitChart(WHAT_IT_CALLS_ID, WIC_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WIC_FIELDS, Fields(C));
+  Assert.AreEqual(WIC_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TWhatItCallsTests.DepthOneIsTruncated;
+begin
+  CheckDepth(WIC_D1_DEPTH, WIC_D1_FIELDS, WIC_D1_DOT_SHA);
+end;
+
+procedure TWhatItCallsTests.CyclesAtDepthThreeMatchPowerShell;
+begin
+  CheckDepth(WIC_D3_DEPTH, WIC_D3_FIELDS, WIC_D3_DOT_SHA);
+end;
+
+procedure TWhatItCallsTests.EdgesLeaveTheFocus;
+var
+  C: TChartResult;
+begin
+  { the arrow means "calls": walking callees the focus calls the row (Test-Emitters A-WIC3-EDGEDIR/EDGEDIR2) }
+  if not EmitChart(WHAT_IT_CALLS_ID, WIC_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains(' focus -> '), 'an edge leaves the focus');
+  Assert.IsFalse(TRegEx.IsMatch(Text, '(?m)^\s+n\d+:p\d+ -> focus'), 'no edge enters the focus');
+end;
+
+procedure TWhatItCallsTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(WHAT_IT_CALLS_ID, WIC_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(WIC_LINES, Length(L));
+  Assert.AreEqual('CHART what-it-calls ' + WIC_TARGET + ' -- 9 call sites / 0 cycle rows', L[CS_CHART_LINE]);
+end;
+
+procedure TWhatItCallsTests.LeafIsRefused;
+begin
+  { a leaf calls nothing; a DFM is never a callee, so the event-wiring hint must not appear (Test-Emitters N8-HINT) }
+  var R:= Refusal(WHAT_IT_CALLS_ID, WIC_LEAF_TARGET, CLIENT_CLONE);
+  Assert.StartsWith(WIC_LEAF_TARGET + ' calls nothing in call_edges (node_count 1).', R);
+  Assert.IsFalse(R.Contains('event-wiring'), 'no event-wiring hint walking callees');
+end;
+
+procedure TWhatItCallsTests.UnknownTargetIsRefused;
+begin
+  Assert.AreEqual('symbol not found: No.Such.Method', Refusal(WHAT_IT_CALLS_ID, 'No.Such.Method', CLIENT_CLONE));
 end;
 
 end.

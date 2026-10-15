@@ -94,6 +94,8 @@ begin
   Assert.AreEqual('{' + sLineBreak + '      "field": 174,' + sLineBreak + '      "method": 101' + sLineBreak + '    }',
     TMetaField.Obj('ByKind', [TMetaField.Int('field', FIELD_COUNT), TMetaField.Int('method', METHOD_COUNT)]).Json);
   Assert.AreEqual('{}', TMetaField.Obj('ByKind', []).Json);
+  { the PS wrote $null: the value was not asked (Emit-WhoCalls NameMatches walking callees) }
+  Assert.AreEqual('null', TMetaField.Null('NameMatches').Json);
 end;
 
 procedure TQuestionTests.UnportedQuestionIsRefused;

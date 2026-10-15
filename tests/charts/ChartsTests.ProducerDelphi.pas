@@ -73,6 +73,7 @@ type
     [Test] procedure PortedFallbackWithEmitterScriptFallsBack;
     [Test] procedure UnexpectedFailureWithoutEmitterScriptIsSetup;
     [Test] procedure EveryPortedIdHasAnEmitterScriptInTheRepo;
+    [Test] procedure SharedEmitterScriptIsNamedNotDerived;
   end;
 
 implementation
@@ -708,6 +709,14 @@ begin
   Assert.IsTrue(Length(PortedQuestionIds) > 0, 'questions are registered');
   for var Id in PortedQuestionIds do
     Assert.IsTrue(TFile.Exists(TPath.Combine(Src, EmitterScriptName(Id))), Id + ' -> ' + EmitterScriptName(Id) + ' is not in charts\src');
+end;
+
+procedure TProducerDelphiTests.SharedEmitterScriptIsNamedNotDerived;
+begin
+  { one emitter, two questions: what-it-calls is Emit-WhoCalls.ps1 -Direction callees (chart-questions.json) }
+  Assert.AreEqual('Emit-WhoCalls.ps1', EmitterScriptName('what-it-calls'));
+  { an id outside the table keeps the derivation }
+  Assert.AreEqual('Emit-CrossesBoundary.ps1', EmitterScriptName('crosses-boundary'));
 end;
 
 end.

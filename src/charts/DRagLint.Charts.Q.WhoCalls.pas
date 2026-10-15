@@ -1,43 +1,50 @@
 unit DRagLint.Charts.Q.WhoCalls;
 
-(* The `who-calls` question in-process: a port of the CALLERS direction of
-  charts\src\Emit-WhoCalls.ps1 (spec s11; the PS output is the reference, P3). The N-deep
-  CALLER tree of one routine: every RESOLVED call site (call_edges) up to -Depth levels,
-  clustered by (depth, unit) so the picture flows depth N -> ... -> depth 1 -> focus. A row
-  is a CALL SITE, not a method: the port map is keyed by row ordinal, because one method
-  legitimately appears twice at different sites (ReserveNextID reaches AddOperation at :4084
-  and again at :4102 as a cycle row). Zero callers is a refusal that names the DFM as the
-  likely caller of an event handler.
+(* The `who-calls` AND `what-it-calls` questions in-process: a port of BOTH directions of
+  charts\src\Emit-WhoCalls.ps1 (spec s11; the PS output is the reference, P3), registered
+  from this one unit (decision E1: the PS header rules one file, "a second file would be a
+  copy that drifts"). The N-deep CALLER (who-calls) or CALLEE (what-it-calls) tree of one
+  routine: every RESOLVED call site (call_edges) up to -Depth levels, clustered by (depth,
+  unit) so the picture flows depth N -> ... -> depth 1 -> focus for callers and focus ->
+  depth 1 -> ... -> depth N for callees. A row is a CALL SITE, not a method: the port map is
+  keyed by row ordinal, because one method legitimately appears twice at different sites
+  (ReserveNextID reaches AddOperation at :4084 and again at :4102 as a cycle row).
 
-  The NAME bucket (find-callers --name <bare>) is counted always and reported separately as
-  NameMatches / NameOnly (name rows at a site no resolved row covers); it is never added to
-  Callers and is not drawn.
+  The NAME bucket (find-callers --name <bare>) is CALLERS-ONLY: counted always walking
+  callers and reported separately as NameMatches / NameOnly (name rows at a site no resolved
+  row covers); it is never added to Callers and is not drawn. Walking callees it is not run
+  and both fields are JSON null (TMetaField.Null): the question was not asked, not measured
+  empty.
 
-  DATA ROUTE (decision D1). The PS spawns two engine verbs; this unit calls the engine's own
-  units in-process instead (spec P5 forbids starting drag-lint.exe from a ported emitter):
-  the tree is DRagLint.Report.RCallTree.BuildReverseCallTree, the function reverse-calltree
-  itself calls, over a read-only TSQLiteSymbolStore; the root id is resolved by a private
-  mirror of the CLI's ResolveEndpointIds (exact name, else qualified name, ids de-duplicated).
-  The name bucket (D2) is ISymbolStore.FindCallersByName followed by private mirrors of the
-  CLI's two find-callers post-filters, DropRefsThatCannotBeCallers and
-  CollapseRefsAtSameSite (DRagLint.CLI.pas); moving those to a shared query unit is deferred
-  to an engine session.
+  DATA ROUTE (decisions D1, E2). The PS spawns two engine verbs; this unit calls the engine's
+  own units in-process instead (spec P5 forbids starting drag-lint.exe from a ported
+  emitter), the functions reverse-calltree itself calls per --direction, over a read-only
+  TSQLiteSymbolStore: callers -> DRagLint.Report.RCallTree.BuildReverseCallTree, callees ->
+  BuildForwardCallTree (same options, same TRCallTree record; the Callers field of a forward
+  node holds its CALLEES). The root id is resolved by a private mirror of the CLI's
+  ResolveEndpointIds (exact name, else qualified name, ids de-duplicated). The name bucket
+  (D2) is ISymbolStore.FindCallersByName followed by private mirrors of the CLI's two
+  find-callers post-filters, DropRefsThatCannotBeCallers and CollapseRefsAtSameSite
+  (DRagLint.CLI.pas); moving those to a shared query unit is deferred to an engine session.
 
-  REFUSALS (D3). Unknown target: 'symbol not found: <target>' (the verb's own line; the PS
-  message names a process this port never starts). A target resolving to more than one
+  REFUSALS (D3, E6). Unknown target: 'symbol not found: <target>' (the verb's own line; the
+  PS message names a process this port never starts). A target resolving to more than one
   symbol: '<target> resolves to N symbols in this index -- name one qualified routine' (the
-  PS dies on an [int] cast). Zero callers and the flatten mismatch are the PS text verbatim.
+  PS dies on an [int] cast). Zero rows and the flatten mismatch are the PS text verbatim, and
+  zero rows differ per direction: callers '<target> has 0 callers in call_edges (node_count
+  N). If it is an event handler the caller is the DFM -- ask event-wiring instead.', callees
+  '<target> calls nothing in call_edges (node_count N).' (a DFM is never a callee, so no
+  event-wiring hint).
 
   NOT PORTED (D4): -WithNameMatches (PS lines 239-260, the dashed name cluster). Ask-Report
   and New-DiagramArtifact never pass it, so NameRendered is always false and Expected is
   Rows + 1. The Write-Host progress lines are not output (no host stream here).
 
-  THE CALLEE DIRECTION (D5) is not registered: what-it-calls is still answered by the PS.
-  Porting it is a diff of this unit, at these PS lines: 93-98 (the amber callee palette),
-  134-137 (the 'calls nothing' empty message), 156-164 (bucket not probed: NameMatches and
-  NameOnly are JSON null, which needs a TMetaField.Null), 205 (groups sorted ascending),
-  270 (edge drawn parent -> row), 281 (base name suffix '_callees'), 296-297 (Callers 0,
-  Callees Rows) and 304-305 (the null bucket fields).
+  THE pCallees SITES (EmitTree), one for one with the PS $isCallees lines: 93-98 (question,
+  direction and the amber callee palette), 102 (BuildForwardCallTree), 134-137 (the 'calls
+  nothing' empty message), 156-185 (bucket not probed), 189 ('digraph whatitcalls {'), 205
+  (groups sorted ascending), 270 (edge drawn parent -> row), 281 (base name suffix
+  '_callees'), 296-297 (Callers 0, Callees Rows) and 304-305 (the null bucket fields).
 
   PS traps closed: Group-Object groups by "<level>|<unit>" case-insensitively AND sorts its
   groups by key (CompareGroupKeys), each group keeping its rows in input order and named
@@ -48,8 +55,11 @@ unit DRagLint.Charts.Q.WhoCalls;
 interface
 
 const
-  /// <summary>The registered question id.</summary>
+  /// <summary>The registered question id of the caller direction.</summary>
   WHO_CALLS_ID = 'who-calls';
+  /// <summary>The registered question id of the callee direction (Emit-WhoCalls.ps1 -Direction
+  /// callees), answered by the same unit.</summary>
+  WHAT_IT_CALLS_ID = 'what-it-calls';
 
 implementation
 
@@ -63,6 +73,9 @@ const
   CALLER_BORDER = '#3B5BDB';
   CALLER_FILL = '#EDF2FF';
   CALLER_HDR = '#3B5BDB';
+  CALLEE_BORDER = '#B45309';
+  CALLEE_FILL = '#FEF6EC';
+  CALLEE_HDR = '#B45309';
   FOCUS_BORDER = '#0F766E';
   FOCUS_FILL = '#E2F1EF';
   FOCUS_HDR = '#0F766E';
@@ -71,8 +84,6 @@ const
   FOCUS_INK = '#0B3F39';
   FONT_MONO = 'Consolas';
   FONT_SANS = 'Segoe UI';
-  DIRECTION = 'callers';
-  QUESTION = WHO_CALLS_ID;
   { CollapseRefsAtSameSite's kind ranks: the surviving row at one position is the highest }
   RANK_CALL = 3;
   RANK_MEMBER_ACCESS = 2;
@@ -226,12 +237,16 @@ begin
   end;
 end;
 
-/// <summary>Group-Object { "&lt;level&gt;|&lt;unit&gt;" } then Sort-Object { [int]level } -Descending.</summary>
+/// <summary>Group-Object { "&lt;level&gt;|&lt;unit&gt;" } then Sort-Object { [int]level } -Descending:pDescending.</summary>
 /// <param name="pRows">The rows.</param>
 /// <param name="pGroups">Owns the groups made; must not be nil.</param>
-/// <returns>The groups: case-insensitive keys, sorted by key, then by level descending in
-/// Sort-Object's (unstable) order.</returns>
-function GroupByLevelAndUnit(pRows: TList<TCallRow>; pGroups: TObjectList<TCallGroup>): TArray<TCallGroup>;
+/// <param name="pDescending">True sorts deepest first (callers: depth N -> ... -> focus); False
+/// shallowest first (callees: focus -> depth 1 -> ... -> depth N).</param>
+/// <returns>The groups: case-insensitive keys, sorted by key, then by level in Sort-Object's
+/// (unstable) order.</returns>
+/// <remarks>Both directions go through TPsSort, not TArray.Sort: Sort-Object ascending is as
+/// unstable as descending, and the ties among the units of one level must keep its order.</remarks>
+function GroupByLevelAndUnit(pRows: TList<TCallRow>; pGroups: TObjectList<TCallGroup>; pDescending: Boolean): TArray<TCallGroup>;
 begin
   var Slot:= TDictionary<string, TCallGroup>.Create(TIStringComparer.Ordinal);
   try
@@ -255,8 +270,12 @@ begin
   { keys are unique case-insensitively, so the order is total and no tie can move }
   TArray.Sort<TCallGroup>(Result, TComparer<TCallGroup>.Construct(
     function(const pL, pR: TCallGroup): Integer begin Result:= CompareGroupKeys(pL.Name, pR.Name); end));
-  TPsSort<TCallGroup>.Sort(Result, function(const pL, pR: TCallGroup): Integer
-    begin Result:= pR.Level - pL.Level; end);
+  if pDescending then
+    TPsSort<TCallGroup>.Sort(Result, function(const pL, pR: TCallGroup): Integer
+      begin Result:= pR.Level - pL.Level; end)
+  else
+    TPsSort<TCallGroup>.Sort(Result, function(const pL, pR: TCallGroup): Integer
+      begin Result:= pL.Level - pR.Level; end);
 end;
 
 /// <summary>Appends the focus cluster: the target's unit header and its 18-point short name.</summary>
@@ -280,14 +299,24 @@ begin
   pSb.AppendLine('  }');
 end;
 
-/// <summary>Answers who-calls for pArgs.Target (Emit-WhoCalls.ps1 -Direction callers).</summary>
-/// <param name="pArgs">The question; Target is a routine, Depth the caller levels walked.</param>
+/// <summary>Answers who-calls or what-it-calls for pArgs.Target (Emit-WhoCalls.ps1 -Direction
+/// callers / callees).</summary>
+/// <param name="pArgs">The question; Target is a routine, Depth the levels walked.</param>
 /// <param name="pOutDir">The bundle folder the layout files go to.</param>
+/// <param name="pCallees">True walks what the target calls, through BuildForwardCallTree
+/// (what-it-calls); False walks who calls it, through BuildReverseCallTree (who-calls).</param>
 /// <returns>The chart: LeftCount the resolved call sites, RightCount the cycle rows.</returns>
-/// <exception cref="EChartsQuestion">Unknown or ambiguous target, zero callers, flatten mismatch.</exception>
+/// <exception cref="EChartsQuestion">Unknown or ambiguous target, zero rows (the per-direction
+/// message), flatten mismatch.</exception>
 /// <exception cref="EChartsIndex">The focus is not in the index (SymbolLocation).</exception>
-function Emit(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult;
+function EmitTree(const pArgs: TQuestionArgs; const pOutDir: string; pCallees: Boolean): TChartResult;
 begin
+  { ---- 0. what the direction changes ---- }
+  var Question:= if pCallees then WHAT_IT_CALLS_ID else WHO_CALLS_ID;
+  var Direction:= if pCallees then 'callees' else 'callers';
+  var RoleBorder:= if pCallees then CALLEE_BORDER else CALLER_BORDER;
+  var RoleFill:= if pCallees then CALLEE_FILL else CALLER_FILL;
+  var RoleHdr:= if pCallees then CALLEE_HDR else CALLER_HDR;
   var Db:= pArgs.GuardedDb;
   var Store: ISymbolStore:= TSQLiteSymbolStore.Create(Db, True);
   var Index:= TChartsIndex.Create(Db);
@@ -303,12 +332,15 @@ begin
         [pArgs.Target, Length(RootIds)]);
     var Opts:= Default(TRCallOptions);
     Opts.Depth:= pArgs.Depth;
-    var Tree:= BuildReverseCallTree(Store, RootIds[0], Opts);
+    var Tree:= if pCallees then BuildForwardCallTree(Store, RootIds[0], Opts) else BuildReverseCallTree(Store, RootIds[0], Opts);
     ExpandCallers(Tree.Root, -1, 1, Rows);
     var NodeCount:= Tree.Summary.NodeCount;
     if Rows.Count + 1 <> NodeCount then
       raise EChartsQuestion.CreateFmt('flatten mismatch: %d rows vs node_count %d -- did you read the wrong child key?',
         [Rows.Count, NodeCount]);
+    { a leaf calls nothing; the event-wiring hint would point downward at a DFM, which is never a callee }
+    if (Rows.Count = 0) and pCallees then
+      raise EChartsQuestion.CreateFmt('%s calls nothing in call_edges (node_count %d).', [pArgs.Target, NodeCount]);
     if Rows.Count = 0 then
       raise EChartsQuestion.CreateFmt('%s has 0 callers in call_edges (node_count %d). If it is an event handler ' +
         'the caller is the DFM -- ask event-wiring instead.', [pArgs.Target, NodeCount]);
@@ -326,20 +358,24 @@ begin
     var Loc:= Index.SymbolLocation(pArgs.Target);
     var FocusFile:= Loc.Path;
 
-    { ---- 3. the NAME bucket, counted always ---- }
-    var Parts:= pArgs.Target.Split(['.']);
-    var Bare:= Parts[High(Parts)];
-    var NameRows:= CollapseRefsAtSameSite(DropRefsThatCannotBeCallers(Store, Store.FindCallersByName(Bare)));
+    { ---- 3. the NAME bucket, counted always walking callers; not run walking callees ---- }
+    var NameRows: TArray<TReference>:= [];
     var NameOnly:= 0;
-    var Seen:= TDictionary<string, Boolean>.Create;
-    try
-      for var R in Rows do
-        Seen.AddOrSetValue(R.FilePath.ToLowerInvariant + '|' + IntToStr(R.Line), True);
-      for var N in NameRows do
-        if not Seen.ContainsKey(Store.GetFilePath(N.FileId).ToLowerInvariant + '|' + IntToStr(N.StartLine)) then
-          Inc(NameOnly);
-    finally
-      Seen.Free;
+    if not pCallees then
+    begin
+      var Parts:= pArgs.Target.Split(['.']);
+      var Bare:= Parts[High(Parts)];
+      NameRows:= CollapseRefsAtSameSite(DropRefsThatCannotBeCallers(Store, Store.FindCallersByName(Bare)));
+      var Seen:= TDictionary<string, Boolean>.Create;
+      try
+        for var R in Rows do
+          Seen.AddOrSetValue(R.FilePath.ToLowerInvariant + '|' + IntToStr(R.Line), True);
+        for var N in NameRows do
+          if not Seen.ContainsKey(Store.GetFilePath(N.FileId).ToLowerInvariant + '|' + IntToStr(N.StartLine)) then
+            Inc(NameOnly);
+      finally
+        Seen.Free;
+      end;
     end;
 
     { ---- 4. dot ---- }
@@ -349,7 +385,7 @@ begin
     SetLength(PortOf, Rows.Count);
     var Sb:= TStringBuilder.Create;
     try
-      Sb.AppendLine('digraph whocalls {');
+      Sb.AppendLine('digraph ' + Question.Replace('-', '') + ' {');
       Sb.AppendLine('  rankdir=LR; bgcolor="transparent"; compound=true;');
       Sb.AppendLine('  nodesep=0.35; ranksep=1.1; splines=spline;');
       Sb.AppendLine(Format('  graph [fontname="%s"];', [FONT_SANS]));
@@ -357,12 +393,13 @@ begin
       Sb.AppendLine(Format('  edge  [fontname="%s", fontsize=11, color="%s", penwidth=1.5, arrowsize=0.8];', [FONT_MONO, LINE_INK]));
       Sb.AppendLine('');
 
-      { CALLERS: deepest first, so the flow reads depth N -> ... -> depth 1 -> focus }
-      var Style:= TClusterStyle.Make(CALLER_BORDER, CALLER_FILL, CALLER_HDR);
+      { CALLERS: deepest first, so the flow reads depth N -> ... -> depth 1 -> focus.
+        CALLEES: shallowest first, so it reads focus -> depth 1 -> ... -> depth N. }
+      var Style:= TClusterStyle.Make(RoleBorder, RoleFill, RoleHdr);
       Style.RowInk:= ROW_INK;
       Style.LineInk:= LINE_INK;
       Style.FontSans:= FONT_SANS;
-      for var G in GroupByLevelAndUnit(Rows, Groups) do
+      for var G in GroupByLevelAndUnit(Rows, Groups, not pCallees) do
       begin
         Inc(NodeId);
         Inc(Clusters);
@@ -385,13 +422,18 @@ begin
         var Parent:= if R.Parent < 0 then 'focus' else PortOf[R.Parent];
         if (Mine = '') or (Parent = '') then
           Continue;
-        Sb.AppendLine(Format('  %s -> %s [color="%s"%s];', [Mine, Parent, CALLER_BORDER, if R.Cycle then ', style=dashed' else '']));
+        { the arrow means "calls": a caller row calls its parent; walking callees the parent calls the row }
+        var EdgeFrom:= if pCallees then Parent else Mine;
+        var EdgeTo:= if pCallees then Mine else Parent;
+        Sb.AppendLine(Format('  %s -> %s [color="%s"%s];', [EdgeFrom, EdgeTo, RoleBorder, if R.Cycle then ', style=dashed' else '']));
       end;
       Sb.AppendLine('}');
 
       { ---- 5. lay out ---- }
       var Msgs: TArray<string>;
-      Result.Layout:= DotLayout(pArgs.Dot, Sb.ToString, pOutDir, TRegEx.Replace(pArgs.Target, '[^A-Za-z0-9]', '_'), Msgs);
+      { the two directions must not share a base name inside one pOutDir }
+      var Base:= TRegEx.Replace(pArgs.Target, '[^A-Za-z0-9]', '_') + (if pCallees then '_callees' else '');
+      Result.Layout:= DotLayout(pArgs.Dot, Sb.ToString, pOutDir, Base, Msgs);
     finally
       Sb.Free;
     end;
@@ -401,11 +443,15 @@ begin
     Result.RightCount:= Cycles;
     Result.ClickTargets:= Result.Layout.Anchors;
     Result.AllClickable:= Result.Layout.Anchors >= Expected;
-    Result.Fields:= [TMetaField.Str('Direction', DIRECTION), TMetaField.Str('Question', QUESTION),
-      TMetaField.Int('Rows', Rows.Count), TMetaField.Int('Callers', Rows.Count), TMetaField.Int('Callees', 0),
+    { NameMatches / NameOnly are null, NOT 0, walking callees: the bucket was not asked }
+    var NameMatchesField:= if pCallees then TMetaField.Null('NameMatches') else TMetaField.Int('NameMatches', Length(NameRows));
+    var NameOnlyField:= if pCallees then TMetaField.Null('NameOnly') else TMetaField.Int('NameOnly', NameOnly);
+    Result.Fields:= [TMetaField.Str('Direction', Direction), TMetaField.Str('Question', Question),
+      TMetaField.Int('Rows', Rows.Count), TMetaField.Int('Callers', if pCallees then 0 else Rows.Count),
+      TMetaField.Int('Callees', if pCallees then Rows.Count else 0),
       TMetaField.Int('NodeCount', NodeCount), TMetaField.Int('Cycles', Cycles), TMetaField.Real('MaxDepth', MaxDepth),
       TMetaField.Bool('Truncated', Tree.Summary.Truncated), TMetaField.Int('Clusters', Clusters),
-      TMetaField.Int('NameMatches', Length(NameRows)), TMetaField.Int('NameOnly', NameOnly),
+      NameMatchesField, NameOnlyField,
       TMetaField.Bool('NameRendered', False), TMetaField.Int('ClickTargets', Result.Layout.Anchors),
       TMetaField.Int('Expected', Expected), TMetaField.Bool('AllClickable', Result.AllClickable)];
   finally
@@ -416,6 +462,13 @@ begin
 end;
 
 initialization
-  RegisterChartQuestion(WHO_CALLS_ID, Emit);
+  RegisterChartQuestion(WHO_CALLS_ID, function(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult
+    begin
+      Result:= EmitTree(pArgs, pOutDir, False);
+    end);
+  RegisterChartQuestion(WHAT_IT_CALLS_ID, function(const pArgs: TQuestionArgs; const pOutDir: string): TChartResult
+    begin
+      Result:= EmitTree(pArgs, pOutDir, True);
+    end);
 
 end.

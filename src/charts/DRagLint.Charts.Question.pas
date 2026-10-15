@@ -123,6 +123,10 @@ type
     /// <param name="pValue">Value.</param>
     /// <returns>The field: a whole number keeps a '.0' suffix (24.0), any other prints round-trip.</returns>
     class function Real(const pName: string; pValue: Double): TMetaField; static;
+    /// <summary>A JSON null: the PS wrote $null -- the value was not asked, not measured empty.</summary>
+    /// <param name="pName">Property name.</param>
+    /// <returns>The field, Json 'null' (never 0, which would read as a measured absence).</returns>
+    class function Null(const pName: string): TMetaField; static;
     /// <summary>A nested object field (an [ordered] dictionary of the emitter result).</summary>
     /// <param name="pName">Property name.</param>
     /// <param name="pFields">The members, in order, already JSON-encoded.</param>
@@ -381,6 +385,12 @@ class function TMetaField.Real(const pName: string; pValue: Double): TMetaField;
 begin
   Result.Name:= pName;
   Result.Json:= RealJson(pValue);
+end;
+
+class function TMetaField.Null(const pName: string): TMetaField;
+begin
+  Result.Name:= pName;
+  Result.Json:= 'null';
 end;
 
 class function TMetaField.Obj(const pName: string; const pFields: TArray<TMetaField>): TMetaField;
