@@ -1,6 +1,6 @@
 <#
-  run_protocol_verb.ps1 -- `drag-lint protocol register|unregister|status`, the verb that replaces
-  charts\src\Register-DragLintProtocol.ps1, against a SCRATCH registry root.
+  run_protocol_verb.ps1 -- `drag-lint protocol register|unregister|status`, the verb that replaced
+  charts\src\Register-DragLintProtocol.ps1 (retired), against a SCRATCH registry root.
 
   THE REAL KEY IS NEVER TOUCHED. Every engine run below goes through Invoke-Protocol, which sets
   DRAGLINT_PROTOCOL_TEST_ROOT=Software\drag-lint-test\protocol-<stamp> first and refuses to run
@@ -33,8 +33,9 @@
     PV-BARE       a key with no shell\open\command is kept by unregister, removed with --force
     PV-NONSTRING  a DWORD command classifies as foreign (no raise); register --force replaces it
     PV-UNREG      unregister --dry-run writes nothing; unregister removes; again: nothing to remove
-    PV-PARITY     TRANSITIONAL, while the script exists: Register-DragLintProtocol.ps1 -DryRun and
-                  `protocol register --dry-run` name the same key path (shell\open\command)
+    PV-PARITY     GOLDEN: `protocol register --dry-run` names the key path the retired
+                  Register-DragLintProtocol.ps1 -DryRun named (HKCU\Software\Classes\draglint\shell\open\command,
+                  frozen from its last green parity run, 2026-10-14)
     PV-REALKEY    the real HKCU\Software\Classes\draglint export is unchanged
     PV-REALCOPY   the real legacy copy is unchanged
 
@@ -43,8 +44,7 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Handler = "$PSScriptRoot\..\..\src\tools\uri-handler\Win64\Debug\drag-lint-open.exe",
-  [string]$Script  = "$PSScriptRoot\..\..\charts\src\Register-DragLintProtocol.ps1"
+  [string]$Handler = "$PSScriptRoot\..\..\src\tools\uri-handler\Win64\Debug\drag-lint-open.exe"
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -223,16 +223,13 @@ try {
   $r = Invoke-Protocol @('unregister')
   Check 'PV-UNREG (again)'  ($r.Code -eq 0 -and $r.Out -match 'nothing to remove') "exit $($r.Code)"
 
-  # ---- transitional parity with Register-DragLintProtocol.ps1 -----------------------------------
-  if (Test-Path -LiteralPath $Script) {
-    # -DryRun: no registry write, no copy. -Force only because this checkout is a worktree.
-    $plan = & $Script -DryRun -Force
-    $scriptKey = ($plan.Key -replace '^HKCU:\\', 'HKCU\')
-    $r = Invoke-Protocol @('register', '--handler', $good, '--dry-run')
-    $m = [regex]::Match($r.Out, 'key     : (\S+)')
-    $verbKey = $m.Groups[1].Value.Replace("HKCU\$TestRoot\Classes\", 'HKCU\Software\Classes\')
-    Check 'PV-PARITY' ($m.Success -and $verbKey -eq $scriptKey -and $scriptKey -eq 'HKCU\Software\Classes\draglint\shell\open\command') "verb=$verbKey script=$scriptKey"
-  } else { Write-Host '  [SKIP] PV-PARITY (script retired)' }
+  # ---- parity with the retired Register-DragLintProtocol.ps1, golden ----------------------------
+  # The key its -DryRun plan named (frozen from its last green parity run, 2026-10-14).
+  $scriptKey = 'HKCU\Software\Classes\draglint\shell\open\command'
+  $r = Invoke-Protocol @('register', '--handler', $good, '--dry-run')
+  $m = [regex]::Match($r.Out, 'key     : (\S+)')
+  $verbKey = $m.Groups[1].Value.Replace("HKCU\$TestRoot\Classes\", 'HKCU\Software\Classes\')
+  Check 'PV-PARITY' ($m.Success -and $verbKey -eq $scriptKey) "verb=$verbKey script(golden)=$scriptKey"
 }
 finally {
   Remove-Item -LiteralPath "HKCU:\Software\drag-lint-test\protocol-$stamp" -Recurse -Force -ErrorAction SilentlyContinue

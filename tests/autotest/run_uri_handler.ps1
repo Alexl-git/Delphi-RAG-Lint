@@ -21,19 +21,19 @@
     UH-LOGCAP   a 30 KB URI (and a 30 KB URI plus an extra argument): no log line over 600 chars
     UH-GUI      the PE subsystem is WINDOWS_GUI (2): a browser click never flashes a console
     UH-REALLOG  the real uri-handler.log is unchanged
-    PARITY-*    TRANSITIONAL, kept while charts\src\Open-DragLintUri.ps1 exists: the same rows run
-                through the script (what-if through the same environment) must give the same
-                accept/refuse verdict and payload. The exe is STRICTER BY DESIGN on a few rows
-                (ruling R9: non-ASCII query keys refused); those rows are declared in
-                $KnownStricter and must differ in exactly that way -- exe refuses, script
-                accepts. The exe must never accept a row the script refuses.
+    PARITY-*    GOLDEN parity with the retired charts\src\Open-DragLintUri.ps1: the exe must give
+                the verdict and payload the script gave on every row (frozen from its last green
+                parity run, 2026-10-14: the row's own Ok / Payload). The exe is STRICTER BY DESIGN
+                on a few rows (ruling R9: non-ASCII query keys refused); those rows are declared
+                in $KnownStricter, where the script ACCEPTED -- exe refuses, script accepted. The
+                exe must never accept a row the script refused. PARITY-SEC-1: the script refused
+                the injected %1 with exit 2 (frozen), and so must the exe.
 
   Exit: 0 all PASS, 1 any FAIL, 2 setup.
 #>
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\src\tools\uri-handler\Win64\Debug\drag-lint-open.exe",
-  [string]$Script  = "$PSScriptRoot\..\..\charts\src\Open-DragLintUri.ps1",
   [string]$WorkDir = "$env:TEMP\drag-lint-uri-handler-guard-$PID"
 )
 $ErrorActionPreference = 'Stop'
@@ -55,7 +55,6 @@ if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
 
 $log       = Join-Path $WorkDir 'uri-handler.log'
-$scriptLog = Join-Path $WorkDir 'script-uri-handler.log'
 $realLog   = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'drag-lint\logs\uri-handler.log' } else { '' })
 function Get-RealLogSize { if ($realLog -and (Test-Path -LiteralPath $realLog)) { (Get-Item -LiteralPath $realLog).Length } else { -1 } }
 $realBefore = Get-RealLogSize
@@ -245,34 +244,26 @@ $pe = [BitConverter]::ToInt32($b, 0x3C)
 $subsystem = [BitConverter]::ToUInt16($b, $pe + 24 + 68)
 Check 'UH-GUI' ($subsystem -eq 2) "PE optional-header Subsystem=$subsystem (2 = WINDOWS_GUI, 3 = console)"
 
-Write-Host 'TRANSITIONAL PARITY with charts\src\Open-DragLintUri.ps1 ...'
-if (-not (Test-Path -LiteralPath $Script)) {
-  Write-Host '  (script gone: parity block retired)'
-} else {
-  $Script = (Resolve-Path -LiteralPath $Script).ProviderPath
-  $env:DRAGLINT_URI_TEST_LOG = $scriptLog
-  foreach ($row in $rows) {
-    $argv = @($row.Argv)
-    $o = & $Script @argv
-    $sOk = [bool]($o -and $o.Ok -and $LASTEXITCODE -eq 0)
-    $sPay = $(if ($sOk) { [string]$o.Payload } else { '' })
-    $e = $exeVerdict[$row.Id]
-    $eOk = [bool]($e -and $e.Ok); $ePay = $(if ($e) { $e.Payload } else { '' })
-    if ($KnownStricter -contains $row.Id) {
-      Check "PARITY-$($row.Id)" ((-not $eOk) -and $sOk) "known-stricter: exe ok=$eOk, script ok=$sOk (want exe refuses, script accepts)"
-    } else {
-      $same = ($eOk -eq $sOk) -and ($ePay -ceq $sPay)
-      Check "PARITY-$($row.Id)" $same $(if ($same) { '' } else { "exe ok=$eOk payload=[$ePay]; script ok=$sOk payload=[$sPay]" })
-    }
-    if ($eOk -and -not $sOk) { Check "PARITY-NEVER-LOOSER-$($row.Id)" $false 'the exe accepted a row the script refuses' }
+Write-Host 'PARITY with the retired charts\src\Open-DragLintUri.ps1 (golden) ...'
+# The script's verdict, frozen from its last green parity run (2026-10-14): the row's own Ok and
+# Payload, except the $KnownStricter rows, which the script accepted.
+foreach ($row in $rows) {
+  $sOk  = [bool]($row.Ok -or ($KnownStricter -contains $row.Id))
+  $sPay = $(if ($row.Ok) { $row.Payload } else { '' })
+  $e = $exeVerdict[$row.Id]
+  $eOk = [bool]($e -and $e.Ok); $ePay = $(if ($e) { $e.Payload } else { '' })
+  if ($KnownStricter -contains $row.Id) {
+    Check "PARITY-$($row.Id)" ((-not $eOk) -and $sOk) "known-stricter: exe ok=$eOk, script ok=$sOk (want exe refuses, script accepted)"
+  } else {
+    $same = ($eOk -eq $sOk) -and ($ePay -ceq $sPay)
+    Check "PARITY-$($row.Id)" $same $(if ($same) { '' } else { "exe ok=$eOk payload=[$ePay]; script(golden) ok=$sOk payload=[$sPay]" })
   }
-  # SEC-1 through the script, run as its registration runs it (raw command line, one child pwsh)
-  $pr = Start-Process -FilePath 'pwsh' -ArgumentList ('-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $Script + '" "' + $inj + '"') `
-          -Wait -PassThru -NoNewWindow -RedirectStandardOutput (Join-Path $WorkDir 'sec1-script.out') -RedirectStandardError (Join-Path $WorkDir 'sec1-script.err')
-  Check 'PARITY-SEC-1' ($pr.ExitCode -eq 2 -and $r.Exit -ne 0) "script exit=$($pr.ExitCode) (both refuse)"
-  Check 'PARITY-SEC-1-NOFILE' (-not (Test-Path (Split-Path $evil))) 'the script wrote nothing at the injected path either'
+  if ($eOk -and -not $sOk) { Check "PARITY-NEVER-LOOSER-$($row.Id)" $false 'the exe accepted a row the script refused' }
 }
-
+# SEC-1: the script, run as its registration ran it, refused the injected %1 with exit 2 (frozen)
+$ScriptSec1Exit = 2
+Check 'PARITY-SEC-1' ($ScriptSec1Exit -eq 2 -and $r.Exit -ne 0) "script(golden) exit=$ScriptSec1Exit, exe exit=$($r.Exit) (both refuse)"
+Check 'PARITY-SEC-1-NOFILE' (-not (Test-Path (Split-Path $evil))) 'nothing at the injected path'
 $realAfter = Get-RealLogSize
 Check 'UH-REALLOG' ($realAfter -eq $realBefore) "real uri-handler.log bytes before=$realBefore after=$realAfter (-1 = absent)"
 } finally {

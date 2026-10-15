@@ -1,6 +1,6 @@
 <#
-  run_mcp_config_verb.ps1 -- `drag-lint mcp-config`, the verb that replaces
-  charts\src\Set-DragLintMcpConfig.ps1, run ONLY against scratch copies.
+  run_mcp_config_verb.ps1 -- `drag-lint mcp-config`, the verb that replaced
+  charts\src\Set-DragLintMcpConfig.ps1 (retired), run ONLY against scratch copies.
 
   THE REAL FILES ARE NEVER TOUCHED. Every engine run goes through Invoke-McpConfig, which refuses
   to start unless the command line carries --config-path, or BOTH --home-dir and --appdata-dir
@@ -15,10 +15,10 @@
   Env VALUES are secrets: the seeded API_KEY value must never reach stdout or stderr (text, --json,
   --dry-run) while the key and *** do.
 
-  Cases (each also runs Set-DragLintMcpConfig.ps1 in its FILE-EDIT mode -- -ConfigPath / -HomeDir /
-  -AppDataDir plus -NoCli, so the script never looks for or runs `claude` -- on a second copy and
-  asserts the same Action word and the same parsed tree: PARITY, transitional while the script
-  exists; numbers compare as their text):
+  Cases (each also asserts a GOLDEN pair, <case>-PARITY-ACTION and <case>-PARITY-TREE: the Action
+  word(s) and the parsed tree that the retired Set-DragLintMcpConfig.ps1 produced in its FILE-EDIT
+  mode on the same input, measured green against the script on 2026-10-14 and frozen here when it
+  was deleted; numbers compare as their text):
     MC-USAGE      no target / unknown flag / flag without value / --all with --config-path / bad
                   --name: usage on stderr, exit 2
     MC-NODB       --db that does not exist: exit 2, nothing written
@@ -58,7 +58,6 @@
 [CmdletBinding()]
 param(
   [string]$Exe    = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$Script = "$PSScriptRoot\..\..\charts\src\Set-DragLintMcpConfig.ps1",
   [string]$Fixtures = "$PSScriptRoot\..\fixtures\mcp-config"
 )
 $ErrorActionPreference = 'Stop'
@@ -75,16 +74,13 @@ foreach ($p in @($Exe, $Fixtures)) {
 }
 $Exe      = (Resolve-Path -LiteralPath $Exe).ProviderPath
 $Fixtures = (Resolve-Path -LiteralPath $Fixtures).ProviderPath
-$HaveScript = Test-Path -LiteralPath $Script
-if ($HaveScript) { $Script = (Resolve-Path -LiteralPath $Script).ProviderPath }
 
 $Secret = 'S3cr3t-Value-MCV'
 $stamp  = '{0}-{1}' -f (Get-Date -Format 'yyyyMMddHHmmss'), $PID
 $Work   = Join-Path ([IO.Path]::GetTempPath()) "drag-lint-mcp-config-guard-$stamp"
 $Bin    = Join-Path $Work 'bin'
 $EDir   = Join-Path $Work 'e'      # the engine's copies
-$SDir   = Join-Path $Work 's'      # the script's copies (parity)
-New-Item -ItemType Directory -Force $Bin, $EDir, $SDir | Out-Null
+New-Item -ItemType Directory -Force $Bin, $EDir | Out-Null
 $Eng = Join-Path $Bin 'drag-lint.exe'; [IO.File]::WriteAllText($Eng, 'dummy')
 $Db1 = Join-Path $Bin 'One.sqlite';    [IO.File]::WriteAllText($Db1, 'dummy')
 $Db2 = Join-Path $Bin 'Two.sqlite';    [IO.File]::WriteAllText($Db2, 'dummy')
@@ -149,29 +145,14 @@ function Invoke-McpConfig([string[]]$A) {
 function Get-Actions([string]$Out) {
   @([regex]::Matches($Out, '(?m)^Action: (\S+)') | ForEach-Object { $_.Groups[1].Value })
 }
-# The script, FILE-EDIT mode only (-NoCli; -ConfigPath or scratch -HomeDir/-AppDataDir). Returns Actions or 'refused'.
-function Invoke-Script([hashtable]$P) {
-  if (-not $HaveScript) { return $null }
-  $P = $P.Clone(); $P.NoCli = $true
-  if (-not $P.ContainsKey('Engine')) { $P.Engine = $Eng }
-  if (-not $P.ContainsKey('ConfigPath')) {
-    if (-not ($P.ContainsKey('HomeDir') -and $P.ContainsKey('AppDataDir'))) { throw 'GUARD BUG: script run without -ConfigPath or scratch dirs' }
-  }
-  foreach ($k in 'ConfigPath', 'HomeDir', 'AppDataDir') {
-    if ($P.ContainsKey($k) -and -not ([IO.Path]::GetFullPath($P[$k]).StartsWith($Work, [StringComparison]::OrdinalIgnoreCase))) {
-      throw "GUARD BUG: script -$k outside the scratch folder: $($P[$k])"
-    }
-  }
-  if ($env:CLAUDE_CONFIG_DIR -and -not $env:CLAUDE_CONFIG_DIR.StartsWith($Work, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "GUARD BUG: CLAUDE_CONFIG_DIR points outside the scratch folder"
-  }
-  try { $o = & $Script @P 6>$null; [pscustomobject]@{ Actions = @($o | ForEach-Object Action); Err = '' } }
-  catch { [pscustomobject]@{ Actions = @('refused'); Err = $_.Exception.Message } }
-}
-
 function Get-Tree([string]$Path) {
   if (-not (Test-Path -LiteralPath $Path)) { return $null }
-  $t = [IO.File]::ReadAllText($Path)
+  # a nested command's output is passed through, not re-enumerated
+  Get-TextTree ([IO.File]::ReadAllText($Path))
+}
+# the tree of a text (the same rules as Get-Tree; $null text = no file)
+function Get-TextTree($t) {
+  if ($null -eq $t) { return $null }
   if ([string]::IsNullOrWhiteSpace($t.TrimStart([char]0xFEFF))) { return $null }
   # a file the refusal cases leave unparsable compares as its raw text
   try { $n = [System.Text.Json.Nodes.JsonNode]::Parse($t) } catch { return ('RAW:' + $t) }
@@ -209,26 +190,26 @@ function Get-Expected([string]$Name) {
   # the unary comma: a JsonObject is IEnumerable, and a bare return would be enumerated into its pairs
   , [System.Text.Json.Nodes.JsonNode]::Parse($t)
 }
-# seed the same input into e\<name> and s\<name>; $Text = $null means "no file"
+# seed the input into e\<name>; $Text = $null means "no file"
 function Set-Pair([string]$Name, $Text, [switch]$Bom) {
-  foreach ($d in $EDir, $SDir) {
-    $p = Join-Path $d $Name
-    Get-ChildItem -LiteralPath $d -Filter "$Name*" -ErrorAction SilentlyContinue | Remove-Item -Force
-    if ($null -ne $Text) { [IO.File]::WriteAllText($p, $Text, [Text.UTF8Encoding]::new([bool]$Bom)) }
-  }
-  [pscustomobject]@{ E = (Join-Path $EDir $Name); S = (Join-Path $SDir $Name) }
+  $p = Join-Path $EDir $Name
+  Get-ChildItem -LiteralPath $EDir -Filter "$Name*" -ErrorAction SilentlyContinue | Remove-Item -Force
+  if ($null -ne $Text) { [IO.File]::WriteAllText($p, $Text, [Text.UTF8Encoding]::new([bool]$Bom)) }
+  [pscustomobject]@{ E = $p }
 }
 function Get-Fixture([string]$Name) { [IO.File]::ReadAllText((Join-Path $Fixtures $Name)) -replace "`r`n", "`n" }
 function Get-Baks([string]$Path) { @(Get-ChildItem -LiteralPath (Split-Path -Parent $Path) -Filter "$(Split-Path -Leaf $Path).bak-*" -ErrorAction SilentlyContinue) }
 function Get-Tmps([string]$Path) { @(Get-ChildItem -LiteralPath (Split-Path -Parent $Path) -Filter "$(Split-Path -Leaf $Path).tmp-*" -ErrorAction SilentlyContinue) }
 function Get-Hash([string]$Path) { if (Test-Path -LiteralPath $Path) { (Get-FileHash -LiteralPath $Path).Hash } else { 'absent' } }
-# PARITY: same Action words, same parsed tree on the two copies
-function Check-Parity([string]$Case, $Eng, $Scr, $Pair) {
-  if ($null -eq $Scr) { Write-Host "  [SKIP] $Case-PARITY (script gone: $Script)" -ForegroundColor DarkGray; return }
-  $ea = $(if ($Eng.Code -ne 0 -and (Get-Actions $Eng.Out).Count -eq 0) { @('refused') } else { Get-Actions $Eng.Out })
-  # the script stops at its first refusal; the engine reports 'refused' per target -- compare the words
-  Check "$Case-PARITY-ACTION" (($ea -join ',') -ceq ($Scr.Actions -join ',')) "engine=$($ea -join ',') script=$($Scr.Actions -join ',') $($Scr.Err)"
-  if ($Pair) { Check "$Case-PARITY-TREE" (Test-SameTree (Get-Tree $Pair.E) (Get-Tree $Pair.S)) '' }
+# PARITY, GOLDEN: the Action words and the parsed tree the retired Set-DragLintMcpConfig.ps1 gave on
+# the same input (frozen from its last green parity run, 2026-10-14). $ScriptActions is the script's
+# comma-joined Action list ('refused' where it threw); $Path the engine's file, $null = no tree check;
+# $ScriptTree the script's resulting tree ($null = no file / blank).
+function Check-Parity([string]$Case, $Run, [string]$ScriptActions, $Path, $ScriptTree) {
+  $ea = $(if ($Run.Code -ne 0 -and (Get-Actions $Run.Out).Count -eq 0) { @('refused') } else { Get-Actions $Run.Out })
+  # the script stopped at its first refusal; the engine reports 'refused' per target -- compare the words
+  Check "$Case-PARITY-ACTION" (($ea -join ',') -ceq $ScriptActions) "engine=$($ea -join ',') script(golden)=$ScriptActions"
+  if ($Path) { Check "$Case-PARITY-TREE" (Test-SameTree (Get-Tree $Path) $ScriptTree) '' }
 }
 
 try {
@@ -253,8 +234,7 @@ try {
   $missing = Join-Path $Bin 'nope.sqlite'
   $r = Invoke-McpConfig @('--vscode', '--config-path', $p.E, '--engine', $Eng, '--db', $missing)
   Check 'MC-NODB' (($r.Code -eq 2) -and ($r.Err -match 'does not exist') -and -not (Test-Path -LiteralPath $p.E)) "exit=$($r.Code)"
-  $s = Invoke-Script @{ VSCode = $true; ConfigPath = $p.S; DbPath = $missing }
-  Check-Parity 'MC-NODB' $r $s $p
+  Check-Parity 'MC-NODB' $r 'refused' $p.E $null
 
   # ---- MC-ADD-MISS ---------------------------------------------------------------------------
   $p = Set-Pair 'add-missing.json' $null
@@ -265,8 +245,7 @@ try {
   Check 'MC-ADD-MISS-NOBOM' (($bytes.Length -gt 0) -and -not ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF)) ''
   Check 'MC-ADD-MISS-TREE' (Test-SameTree (Get-Tree $p.E) (Get-Expected 'add-missing.vscode.expected.json')) ''
   Check 'MC-ADD-MISS-CRLF' (($bytes.Length -gt 0) -and ([Text.Encoding]::UTF8.GetString($bytes) -notmatch "(?<!`r)`n")) 'a new file is written CRLF'
-  $s = Invoke-Script @{ VSCode = $true; ConfigPath = $p.S; DbPath = $Db1 }
-  Check-Parity 'MC-ADD-MISS' $r $s $p
+  Check-Parity 'MC-ADD-MISS' $r 'added' $p.E (Get-Expected 'add-missing.vscode.expected.json')
 
   # ---- MC-ADD-EMPTY --------------------------------------------------------------------------
   $in = Get-Fixture 'empty-object.json'
@@ -276,15 +255,13 @@ try {
   Check 'MC-ADD-EMPTY-TREE' (Test-SameTree (Get-Tree $p.E) (Get-Expected 'empty-object.claude.expected.json')) ''
   $bk = Get-Baks $p.E
   Check 'MC-ADD-EMPTY-BAK' (($bk.Count -eq 1) -and ([IO.File]::ReadAllText($bk[0].FullName) -ceq $in)) "backups=$($bk.Count)"
-  $s = Invoke-Script @{ ClaudeCode = $true; ConfigPath = $p.S }
-  Check-Parity 'MC-ADD-EMPTY' $r $s $p
+  Check-Parity 'MC-ADD-EMPTY' $r 'added' $p.E (Get-Expected 'empty-object.claude.expected.json')
 
   # ---- MC-ADD-BLANK --------------------------------------------------------------------------
   $p = Set-Pair 'blank.json' ''
   $r = Invoke-McpConfig @('--vscode', '--config-path', $p.E, '--engine', $Eng)
   Check 'MC-ADD-BLANK' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'added') "exit=$($r.Code) $($r.Err)"
-  $s = Invoke-Script @{ VSCode = $true; ConfigPath = $p.S }
-  Check-Parity 'MC-ADD-BLANK' $r $s $p
+  Check-Parity 'MC-ADD-BLANK' $r 'added' $p.E (Get-Expected 'add-blank.vscode.expected.json')
 
   # ---- MC-DRYRUN -----------------------------------------------------------------------------
   $in = Get-Fixture 'beside-other.json'
@@ -296,8 +273,7 @@ try {
   $p2 = Set-Pair 'dry-missing.json' $null
   $r = Invoke-McpConfig @('--vscode', '--config-path', $p2.E, '--engine', $Eng, '--dry-run')
   Check 'MC-DRYRUN-MISSING' (($r.Code -eq 0) -and -not (Test-Path -LiteralPath $p2.E)) ''
-  $s = Invoke-Script @{ ClaudeCode = $true; ConfigPath = $p.S; DbPath = $Db1; DryRun = $true }
-  Check-Parity 'MC-DRYRUN' (Invoke-McpConfig @('--claude-code', '--config-path', $p.E, '--engine', $Eng, '--db', $Db1, '--dry-run')) $s $p
+  Check-Parity 'MC-DRYRUN' (Invoke-McpConfig @('--claude-code', '--config-path', $p.E, '--engine', $Eng, '--db', $Db1, '--dry-run')) 'would-added' $p.E (Get-TextTree $in)
 
   # ---- MC-BESIDE (+ LF kept, backup bytes, no .tmp-) -----------------------------------------
   $in = Get-Fixture 'beside-other.json'
@@ -315,8 +291,7 @@ try {
   $bk = Get-Baks $p.E
   Check 'MC-BESIDE-BAK' (($bk.Count -eq 1) -and ([IO.File]::ReadAllText($bk[0].FullName) -ceq $in)) "backups=$($bk.Count)"
   Check 'MC-BESIDE-NOTMP' ((Get-Tmps $p.E).Count -eq 0) ''
-  $s = Invoke-Script @{ ClaudeCode = $true; ConfigPath = $p.S; DbPath = $Db1 }
-  Check-Parity 'MC-BESIDE' $r $s $p
+  Check-Parity 'MC-BESIDE' $r 'added' $p.E (Get-Expected 'beside-other.claude.expected.json')
 
   # ---- MC-UNCHANGED --------------------------------------------------------------------------
   $h = Get-Hash $p.E; $m = (Get-Item -LiteralPath $p.E).LastWriteTimeUtc
@@ -324,21 +299,18 @@ try {
   $r = Invoke-McpConfig @('--claude-code', '--config-path', $p.E, '--engine', $Eng, '--db', $Db1)
   Check 'MC-UNCHANGED' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'unchanged') "exit=$($r.Code)"
   Check 'MC-UNCHANGED-NOWRITE' (((Get-Hash $p.E) -eq $h) -and ((Get-Item -LiteralPath $p.E).LastWriteTimeUtc -eq $m) -and (Get-Baks $p.E).Count -eq 1) ''
-  $s = Invoke-Script @{ ClaudeCode = $true; ConfigPath = $p.S; DbPath = $Db1 }
-  Check-Parity 'MC-UNCHANGED' $r $s $p
+  Check-Parity 'MC-UNCHANGED' $r 'unchanged' $p.E (Get-Expected 'beside-other.claude.expected.json')
 
   # ---- MC-REMOVE / MC-ABSENT -----------------------------------------------------------------
   Start-Sleep -Milliseconds 1100     # a distinct backup name
   $r = Invoke-McpConfig @('--claude-code', '--config-path', $p.E, '--remove')
   Check 'MC-REMOVE' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'removed') "exit=$($r.Code) $($r.Err)"
   Check 'MC-REMOVE-TREE' (Test-SameTree (Get-Tree $p.E) $orig) 'only our entry went'
-  $s = Invoke-Script @{ ClaudeCode = $true; ConfigPath = $p.S; Remove = $true }
-  Check-Parity 'MC-REMOVE' $r $s $p
+  Check-Parity 'MC-REMOVE' $r 'removed' $p.E $orig
   $h = Get-Hash $p.E; $nb = (Get-Baks $p.E).Count
   $r = Invoke-McpConfig @('--claude-code', '--config-path', $p.E, '--remove')
   Check 'MC-ABSENT' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'absent' -and ((Get-Hash $p.E) -eq $h) -and ((Get-Baks $p.E).Count -eq $nb)) "exit=$($r.Code)"
-  $s = Invoke-Script @{ ClaudeCode = $true; ConfigPath = $p.S; Remove = $true }
-  Check-Parity 'MC-ABSENT' $r $s $p
+  Check-Parity 'MC-ABSENT' $r 'absent' $p.E $orig
 
   # ---- MC-UPDATE (user env kept, values masked everywhere) -----------------------------------
   $in = Get-Fixture 'user-env.json'
@@ -355,8 +327,7 @@ try {
   Check 'MC-UPDATE-TREE' (Test-SameTree (Get-Tree $p.E) (Get-Expected 'user-env.claude.expected.json')) 'env + timeout kept, args replaced'
   $leaks = @($outs | Where-Object { $_ -and $_.Contains($Secret) })
   Check 'MC-UPDATE-NOLEAK' ($leaks.Count -eq 0) 'the env value never reaches stdout/stderr (text, --json, --dry-run)'
-  $s = Invoke-Script @{ ClaudeCode = $true; ConfigPath = $p.S; DbPath = $Db2 }
-  Check-Parity 'MC-UPDATE' $r $s $p
+  Check-Parity 'MC-UPDATE' $r 'updated' $p.E (Get-Expected 'user-env.claude.expected.json')
 
   # ---- refusals: nothing written, no backup --------------------------------------------------
   foreach ($c in @(
@@ -373,10 +344,7 @@ try {
     $r = Invoke-McpConfig (@('--vscode', '--config-path', $p.E, '--engine', $Eng) + $extra)
     Check $case (($r.Code -eq 1) -and ([regex]::IsMatch($r.Err, $rx, 'Singleline'))) "exit=$($r.Code) err=$($r.Err.Trim())"
     Check "$case-NOWRITE" (((Get-Hash $p.E) -eq $h) -and ((Get-Baks $p.E).Count -eq 0) -and ((Get-Tmps $p.E).Count -eq 0)) ''
-    $sp = @{ VSCode = $true; ConfigPath = $p.S }
-    if ($extra -contains '--remove') { $sp.Remove = $true }
-    $s = Invoke-Script $sp
-    Check-Parity $case $r $s $p
+    Check-Parity $case $r 'refused' $p.E (Get-TextTree (Get-Fixture $fx))
   }
 
   # ---- MC-NOLEAK: a refused foreign entry's body is never printed; headers / non-object env masked --------
@@ -392,8 +360,7 @@ try {
   Check 'MC-NOTOURS-NOLEAK' (@($outs | Where-Object { $_ -and $_.Contains($tok) }).Count -eq 0) 'the foreign entry''s token / url never reach stdout or stderr (text, --json)'
   Check 'MC-NOTOURS-BEFORE' ($outs[0] -match '(?m)^Before: \(not ours\)') 'Before is (not ours), never the body'
   Check 'MC-NOTOURS-HTTP-NOWRITE' (((Get-Hash $p.E) -eq $h) -and ((Get-Baks $p.E).Count -eq 0)) ''
-  $s = Invoke-Script @{ VSCode = $true; ConfigPath = $p.S }
-  Check-Parity 'MC-NOTOURS-HTTP' (Invoke-McpConfig @('--vscode', '--config-path', $p.E, '--engine', $Eng)) $s $p
+  Check-Parity 'MC-NOTOURS-HTTP' (Invoke-McpConfig @('--vscode', '--config-path', $p.E, '--engine', $Eng)) 'refused' $p.E (Get-TextTree (Get-Fixture 'not-ours-http.json'))
   $p = Set-Pair 'ours-http.json' (Get-Fixture 'ours-http.json')
   $outs.Clear()
   foreach ($extra in @(@('--dry-run'), @('--dry-run', '--json'), @())) {
@@ -404,8 +371,7 @@ try {
   Check 'MC-HEADERS-MASK' (($r.Out -match '(?m)^Before: .*"Authorization":"\*\*\*".*"env":"\*\*\*"') -and ($r.Out -match '(?m)^After : .*"Authorization":"\*\*\*".*"env":"\*\*\*"')) 'headers values and a string env read ***'
   Check 'MC-HEADERS-NOLEAK' (@($outs | Where-Object { $_ -and ($_.Contains($tok) -or $_.Contains('ENVSECRET')) }).Count -eq 0) 'text, --json and --dry-run'
   Check 'MC-HEADERS-TREE' (Test-SameTree (Get-Tree $p.E) (Get-Expected 'ours-http.vscode.expected.json')) 'type/command replaced in place, args appended, headers + env kept'
-  $s = Invoke-Script @{ VSCode = $true; ConfigPath = $p.S }
-  Check-Parity 'MC-HEADERS' $r $s $p
+  Check-Parity 'MC-HEADERS' $r 'updated' $p.E (Get-Expected 'ours-http.vscode.expected.json')
   # --remove on a commented file: the advice is to delete the entry, not to paste "(none)"
   $p = Set-Pair 'comments-rm.json' (Get-Fixture 'comments.json')
   $r = Invoke-McpConfig @('--vscode', '--config-path', $p.E, '--remove')
@@ -417,44 +383,34 @@ try {
   $r = Invoke-McpConfig @('--claude-code', '--config-path', $p.E, '--engine', $Eng, '--db', $Db1)
   $txt = $(if (Test-Path -LiteralPath $p.E) { [IO.File]::ReadAllText($p.E) } else { '' })
   Check 'MC-EOL-CRLF' (($r.Code -eq 0) -and $txt.Contains("`r`n") -and ($txt -notmatch "(?<!`r)`n")) 'a CRLF file stays CRLF'
-  $s = Invoke-Script @{ ClaudeCode = $true; ConfigPath = $p.S; DbPath = $Db1 }
-  Check-Parity 'MC-EOL-CRLF' $r $s $p
+  Check-Parity 'MC-EOL-CRLF' $r 'added' $p.E (Get-Expected 'beside-other.claude.expected.json')
   $p = Set-Pair 'bom.json' (Get-Fixture 'empty-object.json') -Bom
   $r = Invoke-McpConfig @('--vscode', '--config-path', $p.E, '--engine', $Eng)
   $bytes = $(if (Test-Path -LiteralPath $p.E) { [IO.File]::ReadAllBytes($p.E) } else { [byte[]]@(0xEF, 0xBB) })
   Check 'MC-BOM' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'added' -and -not ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB)) "exit=$($r.Code)"
-  $s = Invoke-Script @{ VSCode = $true; ConfigPath = $p.S }
-  Check-Parity 'MC-BOM' $r $s $p
+  Check-Parity 'MC-BOM' $r 'added' $p.E (Get-Expected 'add-blank.vscode.expected.json')
 
   # ---- MC-ALL-SKIP / MC-DOTCLAUDE / MC-CCD (scratch home + appdata; CLAUDE_CONFIG_DIR unset) --
-  foreach ($side in 'e', 's') {
-    New-Item -ItemType Directory -Force (Join-Path $Work "$side-home"), (Join-Path $Work "$side-appdata") | Out-Null
-  }
   $eh = Join-Path $Work 'e-home'; $ea = Join-Path $Work 'e-appdata'
-  $sh = Join-Path $Work 's-home'; $sa = Join-Path $Work 's-appdata'
+  New-Item -ItemType Directory -Force $eh, $ea | Out-Null
   $r = Invoke-McpConfig @('--all', '--home-dir', $eh, '--appdata-dir', $ea, '--engine', $Eng)
   Check 'MC-ALL-SKIP' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'skipped,skipped') "exit=$($r.Code) $((Get-Actions $r.Out) -join ',')"
   Check 'MC-ALL-SKIP-NOFILE' (-not (Test-Path -LiteralPath (Join-Path $eh '.claude.json')) -and -not (Test-Path -LiteralPath (Join-Path $ea 'Code'))) ''
-  $s = Invoke-Script @{ All = $true; HomeDir = $sh; AppDataDir = $sa }
-  Check-Parity 'MC-ALL-SKIP' $r $s $null
+  Check-Parity 'MC-ALL-SKIP' $r 'skipped,skipped' $null $null
   $r = Invoke-McpConfig @('--claude-code', '--home-dir', $eh, '--appdata-dir', $ea, '--engine', $Eng)
   Check 'MC-NAMED-NOTINSTALLED' (($r.Code -eq 2) -and ($r.Err -match 'is the client installed')) "exit=$($r.Code)"
-  $s = Invoke-Script @{ ClaudeCode = $true; HomeDir = $sh; AppDataDir = $sa }
-  Check-Parity 'MC-NAMED-NOTINSTALLED' $r $s $null
-  New-Item -ItemType Directory -Force (Join-Path $eh '.claude'), (Join-Path $sh '.claude') | Out-Null
+  Check-Parity 'MC-NAMED-NOTINSTALLED' $r 'refused' $null $null
+  New-Item -ItemType Directory -Force (Join-Path $eh '.claude') | Out-Null
   $r = Invoke-McpConfig @('--all', '--home-dir', $eh, '--appdata-dir', $ea, '--engine', $Eng)
   Check 'MC-DOTCLAUDE' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'added,skipped' -and ($r.Out -match [regex]::Escape("Path  : $(Join-Path $eh '.claude.json')"))) "$((Get-Actions $r.Out) -join ',')"
-  $s = Invoke-Script @{ All = $true; HomeDir = $sh; AppDataDir = $sa }
-  Check-Parity 'MC-DOTCLAUDE' $r $s ([pscustomobject]@{ E = (Join-Path $eh '.claude.json'); S = (Join-Path $sh '.claude.json') })
-  $ccdE = Join-Path $Work 'e-ccd'; $ccdS = Join-Path $Work 's-ccd'
-  New-Item -ItemType Directory -Force $ccdE, $ccdS | Out-Null
+  Check-Parity 'MC-DOTCLAUDE' $r 'added,skipped' (Join-Path $eh '.claude.json') (Get-Expected 'empty-object.claude.expected.json')
+  $ccdE = Join-Path $Work 'e-ccd'
+  New-Item -ItemType Directory -Force $ccdE | Out-Null
   try {
     $env:CLAUDE_CONFIG_DIR = $ccdE
     $r = Invoke-McpConfig @('--claude-code', '--home-dir', (Join-Path $Work 'none-home'), '--appdata-dir', $ea, '--engine', $Eng)
     Check 'MC-CCD' (($r.Code -eq 0) -and ($r.Out -match [regex]::Escape("Path  : $(Join-Path $ccdE '.claude.json')")) -and (Test-Path -LiteralPath (Join-Path $ccdE '.claude.json'))) "exit=$($r.Code) $($r.Err)"
-    $env:CLAUDE_CONFIG_DIR = $ccdS
-    $s = Invoke-Script @{ ClaudeCode = $true; HomeDir = (Join-Path $Work 'none-home'); AppDataDir = $sa }
-    Check-Parity 'MC-CCD' $r $s ([pscustomobject]@{ E = (Join-Path $ccdE '.claude.json'); S = (Join-Path $ccdS '.claude.json') })
+    Check-Parity 'MC-CCD' $r 'added' (Join-Path $ccdE '.claude.json') (Get-Expected 'empty-object.claude.expected.json')
   } finally {
     Remove-Item Env:\CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue
   }
