@@ -173,7 +173,10 @@ try {
     }
 
     $txt = (& $exePath query find-callers --name $c.Name --resolved --db $db 2>$null) -join "`n"
-    $pat = [regex]::Escape($c.Caller) + '\s+\(uSiteLine\.pas:' + $site + '\)'
+    # The text form names the FULL path since 2026-09-29 (it printed the file
+    # name alone); the site line is what this check is about, so any directory
+    # prefix is accepted.
+    $pat = [regex]::Escape($c.Caller) + '\s+\((?:[^()]*[\\/])?uSiteLine\.pas:' + $site + '\)'
     Check ("text [{0}]: the row prints the SITE line, agreeing with json" -f $c.Arm) ($txt -match $pat) "got: $($txt.Trim())"
   }
 }

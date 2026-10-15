@@ -655,7 +655,10 @@ var
 begin
   Sb:= TStringBuilder.Create;
   try
-    for S in ASymbols do Sb.AppendLine(Format('%s %s (%s) - line %d:%d', [S.Kind.ToText, S.QualifiedName, S.Name, S.StartLine, S.StartCol]));
+    { file:line:col, as the tool description has always promised: the row used to
+      carry only `line L:C`, so a caller had to search for the file separately. }
+    for S in ASymbols do
+      Sb.AppendLine(Format('%s %s (%s) - %s:%d:%d', [S.Kind.ToText, S.QualifiedName, S.Name, FStore.GetFilePath(S.FileId), S.StartLine, S.StartCol]));
     if Length(ASymbols) = 0 then Sb.AppendLine('No matches.')
     else Sb.AppendLine(Format('%d match(es).', [Length(ASymbols)]));
     Result:= Sb.ToString;

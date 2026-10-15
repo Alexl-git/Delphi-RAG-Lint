@@ -118,8 +118,25 @@ if ($holders.Count -eq 0) {
   }
 }
 
+# True when APath starts with the 'MZ' signature every Windows executable has.
+# Launching anything else named .exe does not merely fail: Windows puts up a
+# MODAL "Unsupported 16-Bit Application" box that waits for a click, whatever
+# try/catch the caller has. tests\autotest\run_engine_hold.ps1 stages a text
+# file named fresh.exe, and each battery run left one such box on screen.
+function Test-PeImage([string] $APath) {
+  try {
+    $fs = [System.IO.File]::OpenRead($APath)
+    try {
+      $b = New-Object byte[] 2
+      return ($fs.Read($b, 0, 2) -eq 2) -and ($b[0] -eq 0x4D) -and ($b[1] -eq 0x5A)
+    } finally { $fs.Dispose() }
+  } catch { return $false }
+}
+
 # 1 -- stop the RESPAWN before stopping the process, or the kill loses the race.
-if ((Test-Path -LiteralPath $FreshExe) -and ($ImageName -ieq 'drag-lint.exe')) {
+if ((Test-Path -LiteralPath $FreshExe) -and -not (Test-PeImage $FreshExe)) {
+  Write-Host "  skipped the engine hold: $FreshExe is not an executable image (no MZ header)" -ForegroundColor Yellow
+} elseif ((Test-Path -LiteralPath $FreshExe) -and ($ImageName -ieq 'drag-lint.exe')) {
   try {
     & $FreshExe ide-release --seconds $HoldSeconds 2>$null | Out-Null
     Write-Host ("  asked the IDE plugin to hold off for {0}s (it respawns on its own afterwards)" -f $HoldSeconds)

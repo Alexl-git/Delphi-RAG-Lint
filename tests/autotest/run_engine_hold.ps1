@@ -316,6 +316,12 @@ if (Test-Path -LiteralPath $stager) {
   Check 'it staged the file once the lock was released' ($staged -eq 'NEW') "target content: '$staged'"
   Check 'and it said the target was locked rather than failing silently' `
     (($out -join "`n") -match 'staging blocked') (($out -join ' ') -replace '\s+',' ')
+  # fresh.exe here is TEXT. Executing it does not just fail: Windows puts up a
+  # modal "Unsupported 16-Bit Application" box that waits for a click, and every
+  # battery run left one on screen (found 2026-09-30). The recovery must
+  # recognise it is not an image and skip the hold step instead of launching it.
+  Check 'it did not try to launch a fresh file that is not an executable image' `
+    (($out -join "`n") -match 'skipped the engine hold') (($out -join ' ') -replace '\s+',' ')
 
   Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
