@@ -1168,6 +1168,15 @@ $askFlags = @($(if ($askSpan -and $askSpan.Success) { [regex]::Matches($askSpan.
 Check 'check 9: the ask verb''s own flag table was read' ($askFlags.Count -ge 20) `
   "only $($askFlags.Count) flag(s) read from FLAG_NAMES in $askSrcPath -- was the table renamed or moved?"
 foreach ($af in $askFlags) { [void]$accepted.Add($af) }
+# `protocol` likewise parses its own flags, from PROTOCOL_FLAG_NAMES of DRagLint.Core.ProtocolReg;
+# same shape, same non-emptiness control.
+$protoSrcPath = Join-Path $Repo 'src\core\DRagLint.Core.ProtocolReg.pas'
+$protoSpan = $(if (Test-Path -LiteralPath $protoSrcPath) {
+  [regex]::Match([IO.File]::ReadAllText($protoSrcPath), "(?s)PROTOCOL_FLAG_NAMES\s*:\s*array\[TProtocolFlag\]\s*of\s*string\s*=\s*\((.*?)\);") })
+$protoFlags = @($(if ($protoSpan -and $protoSpan.Success) { [regex]::Matches($protoSpan.Groups[1].Value, "'($FlagRx)'") | ForEach-Object { $_.Groups[1].Value } }))
+Check 'check 9: the protocol verb''s own flag table was read' ($protoFlags.Count -ge 4) `
+  "only $($protoFlags.Count) flag(s) read from PROTOCOL_FLAG_NAMES in $protoSrcPath -- was the table renamed or moved?"
+foreach ($pf in $protoFlags) { [void]$accepted.Add($pf) }
 
 $helpSet = Get-FlagSet $helpText $FlagRx
 

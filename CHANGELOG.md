@@ -3,6 +3,20 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Added
+
+- **`drag-lint protocol register|unregister|status` -- the `draglint://` click-to-source registration is
+  an engine verb.** It writes one per-user key, `HKCU\Software\Classes\draglint` (never HKLM), pointing
+  at `drag-lint-open.exe` in place (default: beside `drag-lint.exe`). `status` classifies the current
+  registration as `ours`, `legacy-powershell`, `foreign` or `none` (exit 0 only for `ours`;
+  `--json` schema `protocol/1`). `register` refuses a missing handler (exit 2), a `*-wt\` worktree
+  path and a foreign registration (exit 1) unless `--force`; it replaces the legacy PowerShell
+  registration silently and deletes that script's `%LOCALAPPDATA%\drag-lint\Open-DragLintUri.ps1`
+  copy. `--dry-run` writes nothing. Replaces `charts\src\Register-DragLintProtocol.ps1`. Guard:
+  `tests\autotest\run_protocol_verb.ps1` (scratch registry root only; asserts the real key unchanged).
+
 ## v1.31.0-alpha -- 2026-10-14
 
 ### Added

@@ -238,6 +238,7 @@ uses
   , DRagLint.Charts    .Snapshot     // dl:unit DRagLint.Charts.Snapshot accepted -- ResolveSnapshotDir / SaveSnapshot for `compare --save`; the three extension constants name the formats it writes
   , DRagLint.Charts    .Compare      // dl:unit DRagLint.Charts.Compare accepted -- RunCompare + the request/result records; the exit-code constants travel with it and `compare` uses only the two refusal codes it prints itself
   , DRagLint.Charts    .Render       { RenderCompareText / Json / Html, RenderReportHtml, OpenInBrowser }
+  , DRagLint.Core      .ProtocolReg  { RunProtocolVerbFromCommandLine: the `protocol` verb }
   ;
 
 type
@@ -896,6 +897,9 @@ begin
   Writeln('                               It is a VERB and not a --fix because its input is project-wide and its output is one file; the CALL-SITE');
   Writeln('                               rewrite is the fix-it half and lives on `lint <file> --fix --fix-rule raise-bare-exception [--apply]`.');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
+  Writeln('  drag-lint protocol register [--handler <drag-lint-open.exe>] [--dry-run] [--force]   (HKCU\Software\Classes\draglint -> the handler; --force accepts a *-wt\ path or replaces a foreign registration)');
+  Writeln('  drag-lint protocol unregister [--dry-run] [--force]   (removes the key when it is ours or the legacy PowerShell one; foreign needs --force)');
+  Writeln('  drag-lint protocol status [--json]   (prints the registered command and ours|legacy-powershell|foreign|none; exit 0 only when ours)');
   Writeln('  drag-lint lsp                --db <file.sqlite>    (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]');
   Writeln('                               --stdio and --clientProcessId are accepted and IGNORED -- editor clients pass them;');
   Writeln('                               stdio is the only transport, and --parent-pid is the shutdown watch that DOES act.');
@@ -1494,8 +1498,9 @@ begin
   Result.MinVisibility      := '';        // proptree: --min-visibility unset = emit ALL leaves (back-compat)
   Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
   if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
-  { `ask` parses its own flags (DRagLint.Charts.AskVerb) and prints nothing else: no defaults note on stderr }
-  if Result.Command = 'ask' then Exit;
+  { `ask` and `protocol` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg) and print
+    nothing else: no defaults note on stderr }
+  if (Result.Command = 'ask') or (Result.Command = 'protocol') then Exit;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -31944,6 +31949,7 @@ begin
     else if Args.Command = 'outline'           then Result:= DoOutline         (Args)
     else if Args.Command = 'compare'           then Result:= DoCompare         (Args)
     else if Args.Command = 'ask'               then Result:= RunAskVerbFromCommandLine
+    else if Args.Command = 'protocol'          then Result:= RunProtocolVerbFromCommandLine
     else if Args.Command = 'usages'            then Result:= DoUsages          (Args)
     else if Args.Command = 'slice'             then Result:= DoSlice           (Args)
     else if Args.Command = 'context'           then Result:= DoContext         (Args)

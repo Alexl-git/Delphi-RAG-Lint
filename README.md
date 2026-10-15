@@ -132,7 +132,8 @@ folder (not in the release zip) and need PowerShell 7 and Graphviz.
 drag-lint is not a model: every chart comes from a formal call, and every row in
 it is a fact from the index with a file and a line. Each answer is a bundle --
 `graph.svg` whose rows link back to the source (`draglint://open`, handled by the
-IDE plugin), PNG and PDF exports of the same layout, a browser shell, a
+IDE plugin once `drag-lint protocol register` has made the link clickable -- see
+[Click-to-source links](#click-to-source-links-draglint)), PNG and PDF exports of the same layout, a browser shell, a
 `meta.json` that fingerprints the index and records the command that regenerates
 the chart, and a ready-to-paste DocInsight `<remarks>` reference. Full reference,
 one page per question: **[Diagrams and Charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Diagrams-and-Charts)**.
@@ -687,6 +688,25 @@ Add to your MCP config (e.g. `~/.claude/claude_desktop_config.json`):
 15 tools are then available to Claude: `find_symbol`, `find_callers`,
 `get_symbol_doc`, `get_context_bundle`, `rename_symbol`, `run_compile_check`,
 and more (see [MCP tools](#mcp-tools-15) below).
+
+### Click-to-source links (draglint://)
+
+Chart rows link to `draglint://open?file=...&line=...`. One per-user registry key
+(`HKCU\Software\Classes\draglint`, never HKLM, no elevation) hands such a click to
+`drag-lint-open.exe`, which validates the link and opens the line in the running IDE:
+
+```
+drag-lint protocol register [--handler <drag-lint-open.exe>] [--dry-run] [--force]
+drag-lint protocol status [--json]          # ours | legacy-powershell | foreign | none; exit 0 only when ours
+drag-lint protocol unregister [--dry-run] [--force]
+```
+
+`register` defaults to the `drag-lint-open.exe` beside `drag-lint.exe` and registers it in
+place. It refuses a handler inside a `*-wt\` worktree and a registration that belongs to
+another program unless `--force` is given; the older PowerShell registration made by
+`charts\src\Register-DragLintProtocol.ps1` is replaced silently, and its copy
+`%LOCALAPPDATA%\drag-lint\Open-DragLintUri.ps1` is deleted. `--dry-run` prints what would
+be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1`.
 
 ### RAD Studio 13 plugin
 

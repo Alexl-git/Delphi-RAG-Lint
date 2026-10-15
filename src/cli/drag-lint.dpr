@@ -71,6 +71,7 @@ uses
   DRagLint.Core.JsonFile in '..\core\DRagLint.Core.JsonFile.pas',
   DRagLint.Core.StudioEnv in '..\core\DRagLint.Core.StudioEnv.pas',
   DRagLint.Core.DragLintUri in '..\core\DRagLint.Core.DragLintUri.pas',
+  DRagLint.Core.ProtocolReg in '..\core\DRagLint.Core.ProtocolReg.pas',
   DragLint.Plugin.OpenSourcePath in '..\delphi-plugin\DragLint.Plugin.OpenSourcePath.pas',
   DRagLint.Storage.Schema in '..\storage\DRagLint.Storage.Schema.pas',
   DRagLint.Storage.SQLite in '..\storage\DRagLint.Storage.SQLite.pas',
