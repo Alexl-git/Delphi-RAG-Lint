@@ -226,7 +226,7 @@ const
     '    clearTimeout(timer); timer = setTimeout(function () { t.classList.remove(''on''); }, 5200);' + LF +
     '  }' + LF +
     '  // DOC-R1: the click is NEVER cancelled. The browser hands the draglint:// URI to the registered' + LF +
-    '  // protocol handler (Register-DragLintProtocol.ps1 -> Open-DragLintUri.ps1 -> the IDE plugin''s pipe' + LF +
+    '  // protocol handler (drag-lint protocol register -> drag-lint-open.exe -> the IDE plugin''s pipe' + LF +
     '  // \\.\pipe\drag-lint-open-source); the toast only says what was asked, and what to do if nothing opens.' + LF +
     '  document.querySelector(''.stage'').addEventListener(''click'', function (ev) {' + LF +
     '    var a = ev.target.closest(''a''); if (!a) return;' + LF +
@@ -235,7 +235,7 @@ const
     '    var m = /file=([^&]*)&(?:amp;)?line=(\d+)/.exec(href);' + LF +
     '    var what = href;' + LF +
     '    if (m) { try { what = decodeURIComponent(m[1]) + '':'' + m[2]; } catch (e) { what = m[1] + '':'' + m[2]; } }' + LF +
-    '    toast(''opening '' + what + '' in the IDE -- if nothing opens, register the handler once: charts\\src\\Register-DragLintProtocol.ps1'');' + LF +
+    '    toast(''opening '' + what + '' in the IDE -- if nothing opens, register the handler once: drag-lint protocol register'');' + LF +
     '  });' + LF +
     '})();' + LF +
     '</script>';
@@ -250,7 +250,7 @@ const
     '    <code class="k">&lt;file&gt;&lt;TAB&gt;&lt;line&gt;&lt;LF&gt;</code>.</p>' + LF +
     '    <p style="margin-top:10px">A browser cannot write to a named pipe, so the' + LF +
     '    one-time bridge is a protocol handler:' + LF +
-    '    <code class="k">charts\src\Register-DragLintProtocol.ps1</code> (HKCU only,' + LF +
+    '    <code class="k">drag-lint protocol register</code> (HKCU only,' + LF +
     '    no elevation, <code class="k">-Unregister</code> to undo). A click also shows' + LF +
     '    a short note naming the file and line it asked for; if nothing opens, the' + LF +
     '    handler is not registered on this machine. The handler opens only a local' + LF +

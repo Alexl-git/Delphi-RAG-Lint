@@ -655,7 +655,7 @@ END TRACE  33 steps, 12 guards, 4 crossings, 0 unresolved.</pre>
     // Provenance chips, inert ON THIS PAGE by choice -- it is a design document.
   // The generated artifacts carry real draglint:// links, and those DO open the
   // IDE: the plugin's pipe server has existed since 2026-09-11 and a protocol
-  // handler bridges the browser. See charts\src\Register-DragLintProtocol.ps1.
+  // handler bridges the browser. See drag-lint protocol register.
     out = out.replace(/@[A-Za-z0-9_$\\\/.-]+:\d+/g, function (m) {
       return '<a class="prov" href="#" title="inert on this design page; generated artifacts open the IDE for real">' + m + '</a>';
     });
