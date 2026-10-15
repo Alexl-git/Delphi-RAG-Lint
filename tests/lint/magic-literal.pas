@@ -26,4 +26,15 @@ begin
   Arr[1] := 2;
 end;
 
+procedure Q;
+var
+  V: Integer;
+begin
+  const A = 3;
+  const B: Integer = 4;
+  const C = 60 * 7;
+  var W := 5;
+  V := 37 + A + B + C + W;
+end;
+
 end.

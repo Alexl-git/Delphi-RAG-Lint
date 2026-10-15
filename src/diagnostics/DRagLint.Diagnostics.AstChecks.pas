@@ -1075,9 +1075,18 @@ end;
 
   AIncludeInline adds the inline forms `var X: T;` (varDef) and
   `var X: T := v;` (varAssignDef), which share declVar's layout (name
-  identifiers, then a type: field). OPT-IN: CheckTypeAware still passes False, so
-  its rules see exactly the map they always did; widening theirs is a separate,
-  measured change. An untyped `var X := v;` has no type: field and is skipped. }
+  identifiers, then a type: field).
+
+  INLINE VARIABLES ARE DECLARATIONS TOO (Gitea drag-lint#5). Without them an
+  inline JP in one routine silently took the type of a JP declared in ANOTHER
+  routine of the file: DRagLint.CLI.pas got four "Redundant cast: JP is already
+  of type TJSONObject" on `for var JP in ...` / `var JP := ...`, and
+  `--fix --apply` would have deleted casts the compiler needs. An inline variable
+  with NO written type (`for var X in`, `var X := e`) records the ambiguity
+  sentinel: its type is not known here, so every rule reading the map fails safe
+  on that name -- the rule the conflicting-declaration case already follows.
+  BOTH callers pass True (the merge with upstream, 2026-10-15, widened
+  CheckTypeAware too: its rules are the ones that mis-typed JP). }
 procedure CollectDeclTypes(const N: TTSNode; const ASrc: TBytes; ATypeMap: TDictionary<string, string>; AIncludeInline: Boolean);
 var
   I, J     : Integer;
@@ -1096,7 +1105,21 @@ begin
   if IsSection or IsInline then
   begin
     TypeNode:= N.ChildByField('type');
-    if not TypeNode.IsNull then
+    if TypeNode.IsNull and IsInline then
+      for J:= 0 to N.NamedChildCount - 1 do
+        if N.NamedChild(J).NodeType = 'type' then begin TypeNode:= N.NamedChild(J); Break; end;
+    if TypeNode.IsNull and IsInline then
+    begin
+      { `for var X in` / `var X := e`: declared, type not written -- unknown. }
+      for J:= 0 to N.NamedChildCount - 1 do
+        if N.NamedChild(J).NodeType = 'identifier' then
+        begin
+          LowName:= LowerCase(SrcText(N.NamedChild(J), ASrc));
+          ATypeMap.AddOrSetValue(LowName, AMBIGUOUS_DECL_TYPE);
+          Break;
+        end;
+    end
+    else if not TypeNode.IsNull then
     begin
       TTxt:= Trim(SrcText(TypeNode, ASrc));
       TypeStart:= Integer(TypeNode.StartByte);
@@ -3636,7 +3659,7 @@ begin
 
     if PF.Tree <> nil then
     begin
-      CollectDeclTypes(PF.Tree.RootNode, Src, TypeMap, False);
+      CollectDeclTypes(PF.Tree.RootNode, Src, TypeMap, True); { inline `var X: T` too (Gitea #5) }
       CollectGuards(PF.Tree.RootNode);
       CollectEnums (PF.Tree.RootNode);
       CheckExpr    (PF.Tree.RootNode);
