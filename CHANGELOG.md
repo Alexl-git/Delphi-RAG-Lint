@@ -16,7 +16,7 @@ breaking changes** until v1.0.
   line-ending style, UTF-8 without BOM. `--remove` takes only our entry out; an entry by that name
   running something other than `drag-lint.exe` is refused, as is a file with comments or trailing
   commas (the entry to paste is printed) or invalid JSON (exit 1). `--all` skips a client that is not
-  installed; naming one that is not installed, or a `--db` that does not exist, is exit 2. env values
+  installed; naming one that is not installed, or a `--db` that does not exist, is exit 2. `env` / `headers` values
   print as `***`. `--dry-run`, `--json`, `--name`, `--engine`, `--config-path`, `--home-dir`,
   `--appdata-dir`. File edit only -- the script's `claude mcp` CLI mode is not ported. Replaces
   `charts\src\Set-DragLintMcpConfig.ps1`. Guard: `tests\autotest\run_mcp_config_verb.ps1` (scratch

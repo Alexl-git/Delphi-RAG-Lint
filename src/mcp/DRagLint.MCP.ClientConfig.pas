@@ -51,11 +51,13 @@ type
     Path    : string;
     /// <summary>added|updated|unchanged|removed|absent (would- prefixed on a dry run), skipped, or refused.</summary>
     Action  : string;
-    /// <summary>The backup written; '' when none (no file before, no write, or a dry run).</summary>
+    /// <summary>The backup written; '' when none (no file before, no write, or a dry run). Kept on a refusal that
+    /// comes after the backup was taken (the copy exists).</summary>
     Backup  : string;
-    /// <summary>The entry before, compact JSON with env values as ***; '(none)' when absent.</summary>
+    /// <summary>The entry before, compact JSON with env/headers values as ***; '(none)' when absent; '(not ours)'
+    /// when it runs something else (its body is never printed).</summary>
     Before  : string;
-    /// <summary>The entry after, compact JSON with env values as ***; '(none)' when removed or absent.</summary>
+    /// <summary>The entry after, compact JSON with env/headers values as ***; '(none)' when removed or absent.</summary>
     After   : string;
     /// <summary>Why the run was refused; '' when ExitCode is 0.</summary>
     Error   : string;
@@ -77,7 +79,8 @@ type
 /// when taken), writes &lt;file&gt;.tmp-&lt;pid&gt; as UTF-8 without BOM in the file's own line-ending style, and
 /// moves it into place after re-checking the file did not change; nothing is ever written on a refusal. A file that
 /// did not exist gets no backup, its folder is created, and CRLF. Before/After/paste-hint text masks env VALUES as
-/// ***. Never runs a child process (the claude CLI mode of Set-DragLintMcpConfig.ps1 is not ported; owner
+/// ***, and so do `headers` values (an HTTP entry's token); an entry refused as not ours prints only (not ours) as
+/// Before, never its body. Never runs a child process (the claude CLI mode of Set-DragLintMcpConfig.ps1 is not ported; owner
 /// decision 4).</remarks>
 function ApplyMcpConfig(const pRequest: TMcpConfigRequest): TMcpConfigResult;
 
@@ -90,8 +93,8 @@ function McpEntryText(pClient: TMcpClient; const pEngine, pDbPath: string): stri
 
 /// <summary>Entry point of `drag-lint mcp-config`; parses ParamStr(2..) itself.</summary>
 /// <returns>The worst exit code over the targets; 2 with usage on stderr when no target is named, for an unknown
-/// flag, a flag missing its value, --config-path with other than exactly one target, an invalid --name, or a
-/// --db that does not exist.</returns>
+/// flag, a flag missing its value, --config-path with other than exactly one target, or an invalid --name. A --db
+/// that does not exist is 2 from ApplyMcpConfig, per target.</returns>
 /// <remarks>Prints one block per target (Target, Path, Action, Backup, Before, After) or, with --json, one JSON
 /// array of those objects (plus Error and ExitCode). A refusal's reason also goes to stderr.</remarks>
 function RunMcpConfigVerbFromCommandLine: Integer;
@@ -165,6 +168,9 @@ const
   NAME_CHARS       = ['A'..'Z', 'a'..'z', '0'..'9', '_', '.', '-'];
   { the keys that decide "same server" and the only ones an update rewrites }
   SERVER_KEYS: array[0..2] of string = ('type', 'command', 'args');
+  { the members whose values may be secrets: masked as *** wherever an entry is printed }
+  SECRET_KEYS: array[0..1] of string = ('env', 'headers');
+  NOT_OURS_TEXT = '(not ours)';
 
 constructor EMcpConfigStop.CreateCode(pCode: Integer; const pMsg: string);
 begin
@@ -214,18 +220,31 @@ begin
   end;
 end;
 
-{ The entry as printed text (Before / After / the paste hint): an `env` object's VALUES read *** -- they may be
-  secrets, and this text is printed and logged by the installer. The keys stay, so the change is still readable. }
+{ Masks pObj.pKey in place: an object's VALUES become *** (its keys stay, so a change is still readable); any
+  other value (a string, an array, ...) becomes *** whole. An absent member is left absent. }
+procedure MaskMember(pObj: TJSONObject; const pKey: string);
+begin
+  var Pair:= pObj.Get(pKey);
+  if Pair = nil then Exit;
+  if Pair.JsonValue is TJSONObject then
+  begin
+    var Inner:= TJSONObject(Pair.JsonValue);
+    for var I:= 0 to Inner.Count - 1 do Inner.Pairs[I].JsonValue:= TJSONString.Create(MASK_TEXT);
+  end
+  else
+    Pair.JsonValue:= TJSONString.Create(MASK_TEXT);
+end;
+
+{ The entry as printed text (Before / After / the paste hint): whatever sits under `env` and `headers` (an HTTP
+  entry's Authorization lives there) reads *** -- they may be secrets, and this text is printed and logged by the
+  installer. Object keys stay, so the change is still readable. }
 function MaskedText(pNode: TJSONValue): string;
 begin
   if pNode = nil then Exit(NONE_TEXT);
-  var Env: TJSONValue:= nil;
-  if pNode is TJSONObject then Env:= TJSONObject(pNode).GetValue('env');
-  if (Env is not TJSONObject) or (TJSONObject(Env).Count = 0) then Exit(pNode.ToJSON);
+  if pNode is not TJSONObject then Exit(MASK_TEXT);
   var Copy:= TJSONObject(pNode.Clone);
   try
-    var Masked:= Copy.GetValue('env') as TJSONObject;
-    for var I:= 0 to Masked.Count - 1 do Masked.Pairs[I].JsonValue:= TJSONString.Create(MASK_TEXT);
+    for var Key in SECRET_KEYS do MaskMember(Copy, Key);
     Result:= Copy.ToJSON;
   finally
     Copy.Free;
@@ -329,7 +348,7 @@ end;
 
 { Reads the config. Missing -> an empty object (Exists False); empty or whitespace (BOM tolerated) -> an empty object. Anything that is not
   one JSON object is refused before a byte is written. The caller owns Result.Root. }
-function ReadConfig(const pPath, pPasteHint: string): TConfigFile;
+function ReadConfig(const pPath, pByHand: string): TConfigFile;
 begin
   Result.Exists:= TFile.Exists(pPath);
   Result.NewLine:= CRLF;
@@ -357,7 +376,7 @@ begin
     begin
       if ParsesLeniently(Text) then
         Stop(EXIT_REFUSED, 'refusing ' + pPath + ' -- it holds comments or trailing commas, and rewriting it would '
-          + 'silently drop them. Nothing was written. Add this entry by hand instead:' + sLineBreak + pPasteHint);
+          + 'silently drop them. Nothing was written. ' + pByHand);
       Stop(EXIT_REFUSED, 'refusing ' + pPath + ' -- it is not valid JSON, so nothing was written: ' + E.Message);
     end;
   end;
@@ -452,11 +471,21 @@ begin
       Stop(EXIT_REFUSED, pPath + ' changed while this ran (a running client rewrote it?) -- nothing was written; run again');
     Backup:= BackupPath(pPath);
     TFile.Copy(pPath, Backup, False);
+    pResult.Backup:= Backup;  { it exists from here on, whatever happens next }
   end
   else
     ForceDirectories(ExtractFileDir(pPath));
   var Tmp:= pPath + '.tmp-' + IntToStr(GetCurrentProcessId);
-  TFile.WriteAllBytes(Tmp, TEncoding.UTF8.GetBytes(pText));
+  try
+    TFile.WriteAllBytes(Tmp, TEncoding.UTF8.GetBytes(pText));
+  except
+    on E: Exception do
+    begin
+      { never leave a partial temp file behind; Tmp is ours (pid-named), so no stat gate -- a missing file just fails }
+      System.SysUtils.DeleteFile(Tmp);
+      raise;
+    end;
+  end;
   { a file that did not exist when read must still not exist now -- a client may have created it meanwhile,
     and the move would overwrite what it wrote }
   if not pCfg.Exists and TFile.Exists(pPath) then
@@ -471,7 +500,6 @@ begin
     Stop(EXIT_REFUSED, 'cannot replace ' + pPath + ': ' + Why + ' -- the file is unchanged'
       + (if Backup <> '' then ' (a copy is at ' + Backup + ')' else ''));
   end;
-  pResult.Backup:= Backup;
 end;
 
 { The text the file is rewritten with: Format(2) plus a newline, every line ending in the file's own style. }
@@ -522,27 +550,35 @@ begin
   var Cfg: TConfigFile;
   Cfg.Root:= nil;
   try
-    var Shown:= if pRequest.Remove then NONE_TEXT else McpEntryText(Client, Engine, DbPath);
-    var Hint:= '  "' + Container + '": { "' + Name + '": ' + Shown + ' }';
-    Cfg:= ReadConfig(Path, Hint);
+    var ByHand: string;
+    if pRequest.Remove then
+      ByHand:= 'Delete the "' + Name + '" entry under "' + Container + '" by hand instead.'
+    else
+      ByHand:= 'Add this entry by hand instead:' + sLineBreak + '  "' + Container + '": { "' + Name + '": '
+        + McpEntryText(Client, Engine, DbPath) + ' }';
+    Cfg:= ReadConfig(Path, ByHand);
     var BoxV:= Cfg.Root.GetValue(Container);
     if (BoxV <> nil) and (BoxV is not TJSONObject) then
       Stop(EXIT_REFUSED, 'refusing ' + Path + ' -- "' + Container + '" is not a JSON object, so nothing was written');
     var Box:= TJSONObject(BoxV);
     var Have: TJSONValue:= nil;
     if Box <> nil then Have:= Box.GetValue(Name);
-    pResult.Before:= MaskedText(Have);
 
-    { an entry by this name that runs something else is NOT ours -- never update or remove it }
+    { an entry by this name that runs something else is NOT ours -- never update or remove it, and never print its
+      body: a foreign entry may carry a token anywhere (url, headers, ...), so only the command it runs is named }
     if Have <> nil then
     begin
       var HaveCmd:= CommandOf(Have);
       var Ours:= (HaveCmd <> '') and (SameText(ExtractFileName(HaveCmd), ENGINE_EXE) or SameText(HaveCmd, Engine));
       if not Ours then
+      begin
+        pResult.Before:= NOT_OURS_TEXT;
         Stop(EXIT_REFUSED, 'refusing ' + Path + ' -- the entry "' + Name + '" runs ''' + HaveCmd
           + ''', not drag-lint.exe, so it is not this verb''s to ' + (if pRequest.Remove then 'remove' else 'update')
           + '. Nothing was written. Pass --name for a different entry, or edit it by hand.');
+      end;
     end;
+    pResult.Before:= MaskedText(Have);
 
     var Verb: string;
     if pRequest.Remove then
@@ -614,7 +650,6 @@ begin
     on E: EMcpConfigStop do
     begin
       Result.Action:= 'refused';
-      Result.Backup:= '';
       Result.Error:= E.Message;
       Result.ExitCode:= E.Code;
     end;
@@ -737,12 +772,6 @@ begin
   var Json: Boolean;
   var Why:= ParseFlags(Req, Clients, Json);
   if Why <> '' then Exit(UsageError(Why));
-  if (Req.DbPath <> '') and not Req.Remove and not TFile.Exists(ExpandFileName(Req.DbPath)) then
-  begin
-    Writeln(ErrOutput, 'drag-lint mcp-config: --db ' + Req.DbPath + ' does not exist -- serve refuses a missing index, '
-      + 'so the entry would never start');
-    Exit(EXIT_SETUP);
-  end;
 
   Result:= EXIT_OK;
   var Arr:= TJSONArray.Create;

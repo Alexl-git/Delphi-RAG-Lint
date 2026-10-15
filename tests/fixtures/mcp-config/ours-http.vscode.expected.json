@@ -1,0 +1,1 @@
+{ "servers": { "drag-lint": { "type": "stdio", "command": "{{ENGINE}}", "url": "https://x", "headers": { "Authorization": "Bearer TOPSECRET-MCV" }, "env": "ENVSECRET-MCV", "args": ["serve"] } } }

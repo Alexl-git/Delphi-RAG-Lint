@@ -690,7 +690,7 @@ The entry is `{"type":"stdio","command":"<engine>","args":["serve"(,"--db","<ind
 the entry name (default `drag-lint`). The edit is **merged** (only that one entry changes; every
 other key and server is kept, numbers keep their text), **backed up** (`<file>.bak-<stamp>`) and
 **idempotent** (a matching entry is `unchanged` and nothing is written); keys you added to the entry,
-such as `env`, survive an update, and env values print as `***`. An entry by that name that runs
+such as `env`, survive an update, and `env` / `headers` values print as `***` (an entry refused as not ours is never printed). An entry by that name that runs
 something other than `drag-lint.exe` is refused, as is a file holding comments or trailing commas
 (the entry to paste by hand is printed instead) or one that is not valid JSON. `--remove` takes only
 our entry out; `--dry-run` writes nothing; `--json` prints one object per target;

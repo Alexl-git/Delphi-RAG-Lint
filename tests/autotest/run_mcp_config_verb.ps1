@@ -35,7 +35,11 @@
     MC-REMOVE     remove: only our entry goes (tree == the input fixture); then MC-ABSENT: absent,
                   no write, no backup
     MC-NOTOURS    an entry running other.exe: update and remove both refused (exit 1), bytes same,
-                  no backup
+                  no backup; an HTTP entry with a bearer token in headers/url: refused, Before reads
+                  (not ours), the token absent from stdout/stderr (text, --json, update and remove)
+    MC-HEADERS    an ours entry with headers + a string env: updated, both masked *** in Before/After, the
+                  secrets absent from stdout/stderr (text, --json, --dry-run); expected tree
+    MC-COMMENTS-RM  --remove on a commented file: "Delete the ... entry by hand", no (none) paste hint
     MC-COMMENTS   // comment: refused with the paste hint; MC-TRAILING trailing commas: same message;
     MC-INVALID    not JSON: "is not valid JSON"; MC-CONTAINER "servers": []; MC-TOPARRAY []:
                   all exit 1, bytes same, no backup
@@ -107,12 +111,17 @@ function Get-ServersText([string]$Path) {
     if ($null -eq $s) { 'none' } else { $s.ToJsonString() }
   } catch { 'unparsable' }
 }
+$PrevCcd = $env:CLAUDE_CONFIG_DIR
+# the user's own CLAUDE_CONFIG_DIR, when set, is where Claude Code really keeps its file: fingerprinted too
+$RealCcd = $(if ($PrevCcd) { Join-Path $PrevCcd '.claude.json' } else { '' })
 $RealBefore = @{
   ClaudePrint = Get-Print $RealClaude; ClaudeServers = Get-ServersText $RealClaude
   VSCodePrint = Get-Print $RealVSCode
   ClaudeSibs  = (Get-Siblings $RealClaude) -join '|'; VSCodeSibs = (Get-Siblings $RealVSCode) -join '|'
+  CcdPrint    = $(if ($RealCcd) { Get-Print $RealCcd } else { '' })
+  CcdServers  = $(if ($RealCcd) { Get-ServersText $RealCcd } else { '' })
+  CcdSibs     = $(if ($RealCcd) { (Get-Siblings $RealCcd) -join '|' } else { '' })
 }
-$PrevCcd = $env:CLAUDE_CONFIG_DIR
 Remove-Item Env:\CLAUDE_CONFIG_DIR -ErrorAction SilentlyContinue
 
 # ---- runners ---------------------------------------------------------------------------------
@@ -147,6 +156,14 @@ function Invoke-Script([hashtable]$P) {
   if (-not $P.ContainsKey('Engine')) { $P.Engine = $Eng }
   if (-not $P.ContainsKey('ConfigPath')) {
     if (-not ($P.ContainsKey('HomeDir') -and $P.ContainsKey('AppDataDir'))) { throw 'GUARD BUG: script run without -ConfigPath or scratch dirs' }
+  }
+  foreach ($k in 'ConfigPath', 'HomeDir', 'AppDataDir') {
+    if ($P.ContainsKey($k) -and -not ([IO.Path]::GetFullPath($P[$k]).StartsWith($Work, [StringComparison]::OrdinalIgnoreCase))) {
+      throw "GUARD BUG: script -$k outside the scratch folder: $($P[$k])"
+    }
+  }
+  if ($env:CLAUDE_CONFIG_DIR -and -not $env:CLAUDE_CONFIG_DIR.StartsWith($Work, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "GUARD BUG: CLAUDE_CONFIG_DIR points outside the scratch folder"
   }
   try { $o = & $Script @P 6>$null; [pscustomobject]@{ Actions = @($o | ForEach-Object Action); Err = '' } }
   catch { [pscustomobject]@{ Actions = @('refused'); Err = $_.Exception.Message } }
@@ -362,6 +379,38 @@ try {
     Check-Parity $case $r $s $p
   }
 
+  # ---- MC-NOLEAK: a refused foreign entry's body is never printed; headers / non-object env masked --------
+  $tok = 'TOPSECRET'
+  $p = Set-Pair 'foreign-http.json' (Get-Fixture 'not-ours-http.json')
+  $h = Get-Hash $p.E
+  $outs = New-Object System.Collections.Generic.List[string]
+  foreach ($extra in @(@(), @('--json'), @('--remove'), @('--remove', '--json'))) {
+    $r = Invoke-McpConfig (@('--vscode', '--config-path', $p.E, '--engine', $Eng) + $extra)
+    Check "MC-NOTOURS-HTTP $($extra -join ' ')" ($r.Code -eq 1) "exit=$($r.Code)"
+    $outs.Add($r.Out); $outs.Add($r.Err)
+  }
+  Check 'MC-NOTOURS-NOLEAK' (@($outs | Where-Object { $_ -and $_.Contains($tok) }).Count -eq 0) 'the foreign entry''s token / url never reach stdout or stderr (text, --json)'
+  Check 'MC-NOTOURS-BEFORE' ($outs[0] -match '(?m)^Before: \(not ours\)') 'Before is (not ours), never the body'
+  Check 'MC-NOTOURS-HTTP-NOWRITE' (((Get-Hash $p.E) -eq $h) -and ((Get-Baks $p.E).Count -eq 0)) ''
+  $s = Invoke-Script @{ VSCode = $true; ConfigPath = $p.S }
+  Check-Parity 'MC-NOTOURS-HTTP' (Invoke-McpConfig @('--vscode', '--config-path', $p.E, '--engine', $Eng)) $s $p
+  $p = Set-Pair 'ours-http.json' (Get-Fixture 'ours-http.json')
+  $outs.Clear()
+  foreach ($extra in @(@('--dry-run'), @('--dry-run', '--json'), @())) {
+    $r = Invoke-McpConfig (@('--vscode', '--config-path', $p.E, '--engine', $Eng) + $extra)
+    $outs.Add($r.Out); $outs.Add($r.Err)
+  }
+  Check 'MC-HEADERS' (($r.Code -eq 0) -and ((Get-Actions $r.Out) -join ',') -ceq 'updated') "exit=$($r.Code) $($r.Err)"
+  Check 'MC-HEADERS-MASK' (($r.Out -match '(?m)^Before: .*"Authorization":"\*\*\*".*"env":"\*\*\*"') -and ($r.Out -match '(?m)^After : .*"Authorization":"\*\*\*".*"env":"\*\*\*"')) 'headers values and a string env read ***'
+  Check 'MC-HEADERS-NOLEAK' (@($outs | Where-Object { $_ -and ($_.Contains($tok) -or $_.Contains('ENVSECRET')) }).Count -eq 0) 'text, --json and --dry-run'
+  Check 'MC-HEADERS-TREE' (Test-SameTree (Get-Tree $p.E) (Get-Expected 'ours-http.vscode.expected.json')) 'type/command replaced in place, args appended, headers + env kept'
+  $s = Invoke-Script @{ VSCode = $true; ConfigPath = $p.S }
+  Check-Parity 'MC-HEADERS' $r $s $p
+  # --remove on a commented file: the advice is to delete the entry, not to paste "(none)"
+  $p = Set-Pair 'comments-rm.json' (Get-Fixture 'comments.json')
+  $r = Invoke-McpConfig @('--vscode', '--config-path', $p.E, '--remove')
+  Check 'MC-COMMENTS-RM' (($r.Code -eq 1) -and ($r.Err -match 'Delete the "drag-lint" entry under "servers" by hand instead') -and ($r.Err -notmatch '\(none\)')) "err=$($r.Err.Trim())"
+
   # ---- MC-EOL (CRLF) / MC-BOM ----------------------------------------------------------------
   $in = (Get-Fixture 'beside-other.json') -replace "`n", "`r`n"
   $p = Set-Pair 'crlf.json' $in
@@ -438,6 +487,11 @@ try {
   }
   Check 'MC-REAL-NOSIBLINGS' ((((Get-Siblings $RealClaude) -join '|') -eq $RealBefore.ClaudeSibs) -and (((Get-Siblings $RealVSCode) -join '|') -eq $RealBefore.VSCodeSibs)) `
     'no .bak-* / .tmp-* appeared beside the real files'
+  if ($RealCcd) {
+    $okCcd = ((Get-Print $RealCcd) -eq $RealBefore.CcdPrint) -or ((Get-ServersText $RealCcd) -ceq $RealBefore.CcdServers)
+    Check 'MC-REAL-CCD' ($okCcd -and (((Get-Siblings $RealCcd) -join '|') -eq $RealBefore.CcdSibs)) `
+      "$RealCcd (your CLAUDE_CONFIG_DIR) unchanged or its mcpServers identical; no .bak-*/.tmp-* beside it"
+  }
   Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue
 }
 
