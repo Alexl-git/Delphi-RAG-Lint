@@ -4389,6 +4389,24 @@
       }
     },
     {
+      "id": "warm-rule-cache",
+      "title": "warm-rule-cache",
+      "group": "linting",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.31.1-alpha",
+      "summary": "Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm)",
+      "intro": "Computes the whole-project lint rules (circular-uses, enum-helper-separate-units, duplicate-global-decl) for a project index and stores them, so the next lint of any unit in it is a cache hit. Every project index run warms it before it returns; --rule-cache-warm background starts it in a detached process instead (the run returns at once), off skips it, and DRAGLINT_RULE_CACHE_WARM sets the default. Run it by hand when you want the cache warm right now. It needs a project index and writes only if no index changed while it ran.",
+      "wikiPage": "warm-rule-cache",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "warm-rule-cache"
+        }
+      ],
+      "audience": "both"
+    },
+    {
       "id": "wiki-blocks-authoring",
       "title": "dl:wiki concept blocks",
       "group": "documentation",

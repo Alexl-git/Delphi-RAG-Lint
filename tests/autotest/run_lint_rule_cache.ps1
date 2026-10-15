@@ -232,7 +232,10 @@ Check 'SANITY: library fixture indexed' ($LASTEXITCODE -eq 0) $idxL
 
 $db   = Join-Path $WorkDir 'proj.sqlite'
 $dpr  = Join-Path $proj 'Proj.dpr'
-$idxP = & $exePath index --project $dpr --db $db --library-db $lib 2>&1 | Out-String
+# --rule-cache-warm wait: these checks need the warm FINISHED when index returns
+# (the default runs it in the background since 2026-10-15; that path has its own
+# suite, run_rule_cache_warm_background.ps1).
+$idxP = & $exePath index --project $dpr --db $db --library-db $lib --rule-cache-warm wait 2>&1 | Out-String
 Check 'SANITY: project fixture indexed (index --project)' ($LASTEXITCODE -eq 0 -and $idxP -notmatch '\b[1-9]\d* errors\b') $idxP
 
 $UNITS  = @('uCycA.pas','uCycB.pas','uG1.pas','uG2.pas','uEnum.pas','uHelp.pas','uRts.pas')
@@ -351,7 +354,7 @@ Check 'C12 a run needing none of the cached rules writes no (empty) entry' ((Cac
 
 # --- C3/C5: edit + index --project -> warmed HIT, and the NEW answer ----------------
 Write-Ascii (Join-Path $proj 'uCycB.pas') $cycB_nocycle
-$idx3 = & $exePath index --project $dpr --db $db --library-db $lib 2>&1 | Out-String
+$idx3 = & $exePath index --project $dpr --db $db --library-db $lib --rule-cache-warm wait 2>&1 | Out-String
 Check 'SANITY: reindex after breaking the cycle' ($LASTEXITCODE -eq 0) $idx3
 Check 'C5  index --project reports that it WARMED the cache' ($idx3 -match 'rule-cache: warmed \d+ finding') (($idx3 -split "`n" | Where-Object { $_ -match 'rule-cache|WARNING' }) -join ' / ')
 $c3 = LintOne 'uCycA.pas'
