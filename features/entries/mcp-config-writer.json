@@ -19,8 +19,8 @@
   "aliases": ["Set-DragLintMcpConfig", "claude mcp add", "mcp setup", "mcp.json"],
   "related": ["serve"],
   "lastVerified": {
-    "date": "2026-10-06",
-    "by": "session 71ca37e7-00ea-4eb4-aceb-c1274bd19bce",
-    "build": "1.26.1-alpha"
+    "date": "2026-10-14",
+    "by": "alexanderl",
+    "build": "1.31.1-alpha"
   }
 }

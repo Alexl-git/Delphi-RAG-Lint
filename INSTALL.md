@@ -540,7 +540,7 @@ stderr: `rules\` is not beside the exe. Move it back, or pass
 3. Delete the indexes you built: each project's `_D-RAG\` folder beside its
    `.dproj`, and the manifest's `outDir` (the library and folder-section
    databases).
-4. If you registered `draglint://`, remove it (add `-DryRun` first to see what
+4. If you registered `draglint://`, remove it (add `--dry-run` first to see what
    it would remove):
 
    ```

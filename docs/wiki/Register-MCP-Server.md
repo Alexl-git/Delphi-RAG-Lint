@@ -18,7 +18,7 @@ drag-lint mcp-config --all --remove
 
 ## What it writes
 
-`{ "type": "stdio", "command": "<engine>", "args": ["serve", "--db", "<--db>"] }` (Claude Code adds `"env": {}`). Without `--db` the args are `["serve"]` and the engine picks the index from its manifest when the client starts it. `serve` answers from ONE index, so register one entry per index with `--name`. The engine defaults to the running `drag-lint.exe`; `--engine <exe>` overrides it.
+`{ "type": "stdio", "command": "<engine>", "args": ["serve", "--db", "<index>"] }` (Claude Code adds `"env": {}`). Without `--db` the args are `["serve"]` and the engine picks the index from its manifest when the client starts it. `serve` answers from ONE index, so register one entry per index with `--name`. The engine defaults to the running `drag-lint.exe`; `--engine <exe>` overrides it.
 
 ## Safe on a real config
 
