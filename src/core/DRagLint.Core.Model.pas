@@ -97,7 +97,22 @@ const
     unit whose type appeared only in such a signature read as unused
     (unused-unit-in-uses false positive). Guard:
     tests\autotest\run_impl_only_signature_type_uses.ps1 }
-  DRAGLINT_EXTRACTOR_VERSION = '1.21.1-alpha';
+  { 1.21.1 -> 1.22.0 (2026-10-15, ONE bump for three extraction changes found
+    on a 2,249-file project, ProjectA):
+    * overloads keep their own bodies: the body span was paired with its
+      declaration by comparing the two signature TEXTS, and Delphi lets the
+      implementation omit default values and wrap the list -- for those
+      overloads the name-order fallback swapped them (182 routines in 73
+      overload groups). The pairing now compares the parameter SHAPE;
+    * symbol_facts comes from the same PREPROCESSED parse as the symbols
+      (under index it came from a raw re-parse, which keeps an IFDEF's first
+      branch);
+    * the define profile names the Delphi the environment names (VERxxx), and
+      CompilerVersion / RTLVersion carry values, so an IF CompilerVersion >= N
+      directive no longer always takes its ELSE branch.
+    Guards: run_overload_impl_shape.ps1, run_index_facts_use_preprocessed_parse.ps1,
+    run_preprocess_compiler_version.ps1. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.22.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.

@@ -25,7 +25,31 @@ interface
 
 uses
   System.SysUtils,
+  System.Generics.Collections,
   DRagLint.Preprocess.Types;
+
+/// <summary>extractor 1.20.0: the compiler version the built-ins describe --
+/// 37 (Delphi 13) unless the caller names another. The CLI sets it once, from
+/// the RAD Studio installation it resolved, so a project built with Delphi 10.3
+/// (BDS 20.0) is preprocessed with VER330 / CompilerVersion 33.</summary>
+/// <param name="AVersion">A CompilerVersion (33 for 10.3, 37 for 13).</param>
+procedure SetTargetCompilerVersion(AVersion: Integer);
+
+/// <summary>The compiler version PlatformBuiltins and CompilerNumerics describe.</summary>
+/// <returns>A CompilerVersion; 37 until SetTargetCompilerVersion is called.</returns>
+function TargetCompilerVersion: Integer;
+
+/// <summary>The CompilerVersion of the RAD Studio installed at ARoot, read from
+/// the root folder's BDS number (`...\Studio\20.0` -> BDS 20 -> 33): BDS 14..23
+/// add 13; from BDS 37 (Delphi 13) the two numbers are equal.</summary>
+/// <param name="ARoot">A Studio root, as TStudioEnv resolves it; '' allowed.</param>
+/// <returns>The CompilerVersion, or 0 when the folder name is not a BDS number.</returns>
+function CompilerVersionOfStudioRoot(const ARoot: string): Integer;
+
+/// <summary>The numeric built-ins {$IF} reads -- CompilerVersion and RTLVersion
+/// -- for TargetCompilerVersion, lowercased like every define.</summary>
+/// <returns>Two (name, value) pairs.</returns>
+function CompilerNumerics: TArray<TPair<string, Integer>>;
 
 /// <summary>Returns the built-in compiler defines for the given target
 /// platform, ALL LOWERCASED, for Delphi 13 / RAD Studio 37 (CompilerVersion 37,
@@ -84,26 +108,80 @@ uses
   System.Classes,
   System.StrUtils,
   System.IOUtils,
-  System.RegularExpressions,
-  System.Generics.Collections;
+  System.RegularExpressions;
 
 // The MSBuild recursion token that terminates every DCC_Define list -- dropped
 // when splitting a DCC_Define value into concrete symbols.
 const
   RECURSION_TOKEN = '$(DCC_Define)';
 
-function PlatformBuiltins(const APlatform: string): TArray<string>;
+const
+  // Delphi 13 Florence: the version the product was built against and the
+  // default whenever the installation's own number cannot be read.
+  DEFAULT_COMPILER_VERSION = 37;
+  // BDS numbering ran 13 behind CompilerVersion (BDS 20.0 = 10.3 = 33) up to
+  // BDS 23.0 (Delphi 12, 36); Delphi 13 jumped both to 37.
+  BDS_COMPILER_OFFSET  = 13;
+  BDS_LAST_OFFSET      = 23;
+  BDS_FIRST_OFFSET     = 14;
+
+var
+  GTargetCompilerVersion: Integer = DEFAULT_COMPILER_VERSION;
+
+procedure SetTargetCompilerVersion(AVersion: Integer);
 begin
-  // Shared across every Windows platform for Delphi 13 / RAD Studio 37.
+  if AVersion > 0 then GTargetCompilerVersion:= AVersion;
+end;
+
+function TargetCompilerVersion: Integer;
+begin
+  Result:= GTargetCompilerVersion;
+end;
+
+function CompilerVersionOfStudioRoot(const ARoot: string): Integer;
+var
+  Leaf: string ;
+  Dot : Integer;
+  Bds : Integer;
+begin
+  Result:= 0;
+  Leaf:= ExtractFileName(ExcludeTrailingPathDelimiter(Trim(ARoot)));
+  Dot := Pos('.', Leaf);
+  if Dot > 0 then Leaf:= Copy(Leaf, 1, Dot - 1);
+  if not TryStrToInt(Leaf, Bds) then Exit;
+  if (Bds >= BDS_FIRST_OFFSET) and (Bds <= BDS_LAST_OFFSET) then Result:= Bds + BDS_COMPILER_OFFSET
+  else if Bds >= DEFAULT_COMPILER_VERSION then Result:= Bds;
+end;
+
+function CompilerNumerics: TArray<TPair<string, Integer>>;
+begin
+  // A CompilerVersion or RTLVersion test in an IF directive reads these.
+  // Without them both names were unknown identifiers, which the evaluator
+  // reads as False, so every such test took its ELSE branch whatever the
+  // compiler.
+  Result:= [TPair<string, Integer>.Create('compilerversion', GTargetCompilerVersion),
+            TPair<string, Integer>.Create('rtlversion'     , GTargetCompilerVersion)];
+end;
+
+function PlatformBuiltins(const APlatform: string): TArray<string>;
+var
+  CvDefine : string;
+  VerDefine: string;
+begin
+  // Shared across every Windows platform; the version pair follows
+  // TargetCompilerVersion (compiler_version_37 / ver370 for Delphi 13,
+  // compiler_version_33 / ver330 for 10.3).
+  CvDefine := 'compiler_version_' + IntToStr(GTargetCompilerVersion);
+  VerDefine:= 'ver' + IntToStr(GTargetCompilerVersion) + '0';
   if SameText(APlatform, 'Win32') then
     Result := TArray<string>.Create(
       'mswindows', 'win32', 'cpux86',
-      'unicode', 'conditionalexpressions', 'compiler_version_37', 'ver370')
+      'unicode', 'conditionalexpressions', CvDefine, VerDefine)
   else
     // Win64 is the default (also for unknown/empty platforms).
     Result := TArray<string>.Create(
       'mswindows', 'win64', 'cpu64bits', 'cpux86_64',
-      'unicode', 'conditionalexpressions', 'compiler_version_37', 'ver370');
+      'unicode', 'conditionalexpressions', CvDefine, VerDefine);
 end;
 
 // Map a config name to its RAD Studio Cfg_N alias: Release -> Cfg_2,
@@ -197,7 +275,7 @@ var
   CfgDef : string;
 begin
   Result.Defines := nil;
-  Result.NumericDefines := nil;
+  Result.NumericDefines := CompilerNumerics;
 
   Seen  := TDictionary<string, Byte>.Create;
   Order := TList<string>.Create;

@@ -323,12 +323,16 @@ foreach ($nm in @('MakePoint','SumPoint')) {
 # CERTAIN -- always rendered plain, and must stay that way).
 Check 'A MARKER: the whole applied file carries ZERO " ?" markers' ((Count-Markers $textA) -eq 0) `
   ("markers=" + (Count-Markers $textA))
+# #39 (2026-10-08): the IMPLEMENTATION headers of MakePoint and SumPoint now
+# reference TPoint2 too (as a method's header always did), so the uniformly-
+# uncertain list holds three entries -- MakePoint, SumPoint, declaration -- and
+# still carries no marker, which is what this check is about.
 if ($usedByLines.Count -eq 1) {
   $tpEntries = Split-RefEntries $usedByLines[0]
-  Check 'A MARKER: TPoint2 uniformly-UNCERTAIN list has 1 entry and no marker' `
-    (($tpEntries.Count -eq 1) -and (-not $tpEntries[0].Marked)) ($usedByLines[0].Trim())
+  Check 'A MARKER: TPoint2 uniformly-UNCERTAIN list has 3 entries and no marker' `
+    (($tpEntries.Count -eq 3) -and (@($tpEntries | Where-Object { $_.Marked }).Count -eq 0)) ($usedByLines[0].Trim())
 } else {
-  Check 'A MARKER: TPoint2 uniformly-UNCERTAIN list has 1 entry and no marker' $false `
+  Check 'A MARKER: TPoint2 uniformly-UNCERTAIN list has 3 entries and no marker' $false `
     'no single "Used by:" line to inspect -- see the CONTROL above'
 }
 # Located THROUGH each symbol's own block and NAMED for it. Iterating the two

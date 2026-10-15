@@ -3,6 +3,37 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Extractor (`DRAGLINT_EXTRACTOR_VERSION` 1.21.1 -> 1.22.0-alpha; every index RE-PARSES on its next run)
+
+- **Overloads keep their own bodies when the implementation header leaves out the defaults**. A routine's body span (`impl_start_line` / `impl_end_line`) was paired with its
+  declaration by comparing the two signature TEXTS; Delphi lets the implementation omit the default
+  values and wrap the list, so for those overloads nothing matched and the name-order fallback
+  swapped them. The span, the locals' parent and every ref's enclosing routine then belonged to the
+  other overload, and a call inside the body could not type its own parameters. Found on ProjectA:
+  `UConfig.SaveResult` (the `TConfig` overload held the `TStringList` body), so `SaveResult(aList, ...)` at
+  `UConfig.pas:1353` was `[ambiguous]` to the wrong overload. The pairing now compares the parameter
+  SHAPE -- each parameter's modifier and type, in order, plus the return type -- after the exact text
+  and before name order. Measured on ProjectA (full re-parse of a copy, 717 s Debug): 182 routines in 73 overload groups (49 files) got their own body back; 6 call edges that were `[certain]` to the WRONG overload now bind the right one (`UOperation.pas:173`, inside `Sub(TEntry)`, called `Add(TReconEntry)`), 5 went from `[ambiguous]` to `[certain]`, 9 calls bound for the first time, none lost. Guard: `tests\autotest\run_overload_impl_shape.ps1`.
+- **`symbol_facts` comes from the same preprocessed parse as the symbols.** The facts analyzer
+  reads its tree from `TAstParseCache`, which only `lint` / `lint-all` handed the define profile.
+  Under `index` every symbol came from the preprocessed parse and every facts row beside it from a
+  RAW re-parse, in which the grammar keeps an IFDEF's FIRST branch -- so a routine whose inactive
+  first branch held the logic reported that branch's cyclomatic complexity, reads/writes and SQL.
+  `TIndexer.SetPreprocess` now configures the cache with the same switch and profile. Guard:
+  `tests\autotest\run_index_facts_use_preprocessed_parse.ps1`.
+- **The define profile describes the Delphi the environment names, and `{$IF CompilerVersion}` is
+  evaluated at all.** The built-ins were pinned to Delphi 13 (`VER370`, `compiler_version_37`)
+  whatever the project is built with, so a 10.3 project's `{$IFDEF VER330}` branches were never
+  indexed. Worse, `CompilerVersion` and `RTLVersion` were never given a value: the evaluator reads an
+  unknown identifier as False, so EVERY `{$IF CompilerVersion >= N}` took its ELSE branch, on every
+  compiler. The CLI now derives the target CompilerVersion from the RAD Studio root it resolves --
+  `$BDS` first, so `BDS=...\Studio\20.0` gives `VER330` / 33 (BDS 14..23 add 13; from 37 the numbers
+  are equal) -- and every profile carries both numeric values. A non-default version adds `cv=<N>`
+  to the indexer fingerprint, so switching compilers re-parses; a Delphi 13 index keeps the stamp it
+  had. Guard: `tests\autotest\run_preprocess_compiler_version.ps1`.
+
 ## v1.31.1-alpha -- 2026-10-14
 
 ### Fixed

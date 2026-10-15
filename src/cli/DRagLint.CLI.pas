@@ -2905,7 +2905,11 @@ begin
   Plat:= EffectiveIndexPlatform(APlatform); // library / no-project fallback (plan default)
   if ADproj <> '' then Result:= ProfileFromDproj(ADproj, Plat, AConfig)
   else Result:= Default(TDefineProfile);
-  if ADproj = '' then Result.Defines:= PlatformBuiltins(Plat);
+  if ADproj = '' then
+  begin
+    Result.Defines       := PlatformBuiltins(Plat);
+    Result.NumericDefines:= CompilerNumerics;
+  end;
 end;
 
 // v0.45 Task 7: build one plan item into its SQLite database.
@@ -5176,6 +5180,12 @@ begin
   Result:= Format('v=%s;schema=%d;pp=%d;plat=%s',
                   [DRAGLINT_EXTRACTOR_VERSION, Expected, Ord(APreprocess),
                    LowerCase(EffectiveIndexPlatform(APlatform))]);
+  { extractor 1.20.0: the compiler version picks IFDEF branches as surely as
+    the platform does, so an index built for 10.3 (VER330) must not be read as
+    current by a Delphi 13 run. Appended only when it is not the default, so a
+    Delphi 13 index keeps the stamp it has always had. }
+  if APreprocess and (TargetCompilerVersion <> 37) then
+    Result:= Result + Format(';cv=%d', [TargetCompilerVersion]);
 end;
 
 { The `v=` limb of a stored indexer fingerprint, or '' when the stamp is absent
@@ -23709,7 +23719,7 @@ begin
   else
   begin
     Profile.Defines:= PlatformBuiltins(Platform);
-    Profile.NumericDefines:= nil;
+    Profile.NumericDefines:= CompilerNumerics;
   end;
 
   Defines:= Copy(Profile.Defines, 0, Length(Profile.Defines));
@@ -31878,6 +31888,12 @@ var
 begin
   if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
+  { extractor 1.20.0: preprocess for the Delphi the environment names. $BDS (or
+    the registry) resolving to ...\Studio\20.0 means Delphi 10.3, whose code is
+    compiled with VER330 / CompilerVersion 33; the built-ins used to say 37
+    whatever the project was built with. Silent when no Studio resolves -- the
+    default stays 37. }
+  SetTargetCompilerVersion(CompilerVersionOfStudioRoot(TStudioEnv.RootOrEmpty));
   try
     Args:= ParseArgs;
     if Args.ShowHelp then begin PrintHelp; Exit(0); end;

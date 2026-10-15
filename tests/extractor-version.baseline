@@ -958,4 +958,11 @@
 #   writes nothing. No parser, preprocessor or indexer path reaches it, so no stored parse
 #   can differ. Lives under src\index, hence inside the hashed surface.
 #   Superseded: 1.21.1-alpha|dc59cf349ac20a0a676b3c002bd9ecfab9294f15bc50140debd99642393140a3
-1.21.1-alpha|ba5b43cfb9f5257c609ea491739d4f6dffe56f43b701518b247a90afbaff13e5
+#
+# 2026-10-15: a REAL BUMP, 1.21.1-alpha -> 1.22.0-alpha:
+#   overloads keep their own bodies (the impl/decl pairing compares parameter SHAPE),
+#   symbol_facts from the preprocessed parse, and a define profile with VERxxx /
+#   CompilerVersion / RTLVersion for the target Delphi. All three change stored parses:
+#   every index re-parses once.
+#   Superseded: 1.21.1-alpha|ba5b43cfb9f5257c609ea491739d4f6dffe56f43b701518b247a90afbaff13e5
+1.22.0-alpha|778dc37176b7dbbb057ff1867a9e9b317604032a3da524ce3f3d8ccf25c9ddf9

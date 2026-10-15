@@ -778,6 +778,14 @@ begin
   FPreprocessEnabled := AEnabled;
   FProfile           := AProfile;
   FPreprocessFellBack:= False;
+  { extractor 1.20.0: the facts analyzer (TSymbolFactsAnalyzer) reads its tree
+    from TAstParseCache, which only lint / lint-all ever configured. So under
+    `index` every symbol came from THIS preprocessed parse and every symbol_facts
+    row beside it from a RAW re-parse -- in which the grammar keeps the FIRST
+    branch of an IFDEF, so a routine whose inactive first branch held the logic
+    got that branch's complexity, reads/writes and SQL. Same switch, same
+    profile, so both parses see the same branches. }
+  TAstParseCache.SetPreprocess(AEnabled, AProfile);
 end;
 
 procedure TIndexer.LogPreprocessFallbackOnce(const AFilePath: string; const AError: Exception);
