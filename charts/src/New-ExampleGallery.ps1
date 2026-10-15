@@ -217,10 +217,11 @@ foreach ($e in $EX) {
     $bl = @($out | ForEach-Object { "$_" } | Where-Object { $_ -match '^BUNDLE ' } | Select-Object -First 1)
     if (-not $bl.Count) { throw 'ask printed no BUNDLE line' }
     $shell = Join-Path ($bl[0] -replace '^BUNDLE\s+', '').Trim() 'index.html'
-    $r = [pscustomobject]@{
-      Bundle = Split-Path $shell -Parent; Shell = $shell
-      ClickTargets = $(if (Test-Path $shell) { ([regex]::Matches([IO.File]::ReadAllText($shell), 'draglint://')).Count } else { 0 })
-    }
+    $bundle = Split-Path $shell -Parent
+    $meta = Join-Path $bundle 'meta.json'
+    $clicks = 0
+    if (Test-Path $meta) { $mj = Get-Content $meta -Raw | ConvertFrom-Json; if ($null -ne $mj.clickTargets) { $clicks = [int]$mj.clickTargets } }
+    $r = [pscustomobject]@{ Bundle = $bundle; Shell = $shell; ClickTargets = $clicks }
     if (-not (Test-Path $r.Shell)) { throw 'no index.html produced' }
     # a TEXT bundle (round-trip): its @file:line anchors are links into the IDE (DOC-R1), counted apart from chart click targets
     $isText = Test-Path (Join-Path $r.Bundle 'trace.dlgraph')
