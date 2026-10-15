@@ -251,7 +251,7 @@ const
     '    <p style="margin-top:10px">A browser cannot write to a named pipe, so the' + LF +
     '    one-time bridge is a protocol handler:' + LF +
     '    <code class="k">drag-lint protocol register</code> (HKCU only,' + LF +
-    '    no elevation, <code class="k">-Unregister</code> to undo). A click also shows' + LF +
+    '    no elevation, <code class="k">drag-lint protocol unregister</code> to undo). A click also shows' + LF +
     '    a short note naming the file and line it asked for; if nothing opens, the' + LF +
     '    handler is not registered on this machine. The handler opens only a local' + LF +
     '    source file (.pas .dfm .dpr .inc .sql .fmx) and, when the IDE is not' + LF +

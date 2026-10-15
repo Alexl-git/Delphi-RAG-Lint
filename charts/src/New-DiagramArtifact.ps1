@@ -354,7 +354,7 @@ if ($isText) {
     <p style="margin-top:10px">A browser cannot write to a named pipe, so the
     one-time bridge is a protocol handler:
     <code class="k">drag-lint protocol register</code> (HKCU only,
-    no elevation, <code class="k">-Unregister</code> to undo). A click also shows
+    no elevation, <code class="k">drag-lint protocol unregister</code> to undo). A click also shows
     a short note naming the file and line it asked for; if nothing opens, the
     handler is not registered on this machine. The handler opens only a local
     source file (.pas .dfm .dpr .inc .sql .fmx) and, when the IDE is not
