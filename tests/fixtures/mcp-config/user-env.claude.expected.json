@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "drag-lint": { "type": "stdio", "command": "{{ENGINE}}", "args": ["serve", "--db", "{{DB2}}"], "env": { "API_KEY": "S3cr3t-Value-MCV" }, "timeout": 30 }
+  }
+}

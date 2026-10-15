@@ -675,7 +675,30 @@ diagnostics (publishDiagnostics on didSave), workspaceSymbols.
 
 ### MCP server (Claude / Cursor)
 
-Add to your MCP config (e.g. `~/.claude/claude_desktop_config.json`):
+Register it with Claude Code and VS Code in one step:
+
+```
+drag-lint mcp-config --all [--db C:\Projects\MyApp\_D-RAG\MyApp.sqlite] [--dry-run]
+drag-lint mcp-config --claude-code --remove
+```
+
+`--claude-code` edits the top-level `"mcpServers"` object of `~\.claude.json`
+(`%CLAUDE_CONFIG_DIR%\.claude.json` when that is set); `--vscode` edits `"servers"` in
+`%APPDATA%\Code\User\mcp.json`; `--all` does both and skips a client that is not installed.
+The entry is `{"type":"stdio","command":"<engine>","args":["serve"(,"--db","<index>")]}`
+(plus `"env":{}` for Claude Code); `--engine <exe>` overrides the default (this exe), `--name <n>`
+the entry name (default `drag-lint`). The edit is **merged** (only that one entry changes; every
+other key and server is kept, numbers keep their text), **backed up** (`<file>.bak-<stamp>`) and
+**idempotent** (a matching entry is `unchanged` and nothing is written); keys you added to the entry,
+such as `env`, survive an update, and env values print as `***`. An entry by that name that runs
+something other than `drag-lint.exe` is refused, as is a file holding comments or trailing commas
+(the entry to paste by hand is printed instead) or one that is not valid JSON. `--remove` takes only
+our entry out; `--dry-run` writes nothing; `--json` prints one object per target;
+`--config-path <file>` edits another file (with exactly one target), and `--home-dir` /
+`--appdata-dir` move where the default files are looked for (tests). Exit 0 done or unchanged,
+1 refused, 2 usage/setup. This verb replaces `charts\src\Set-DragLintMcpConfig.ps1`.
+
+Or add it to your MCP config by hand (e.g. `~/.claude/claude_desktop_config.json`):
 
 ```json
 {

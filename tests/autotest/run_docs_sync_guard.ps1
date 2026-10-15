@@ -1177,6 +1177,15 @@ $protoFlags = @($(if ($protoSpan -and $protoSpan.Success) { [regex]::Matches($pr
 Check 'check 9: the protocol verb''s own flag table was read' ($protoFlags.Count -ge 4) `
   "only $($protoFlags.Count) flag(s) read from PROTOCOL_FLAG_NAMES in $protoSrcPath -- was the table renamed or moved?"
 foreach ($pf in $protoFlags) { [void]$accepted.Add($pf) }
+# `mcp-config` likewise parses its own flags, from MCP_CONFIG_FLAG_NAMES of DRagLint.MCP.ClientConfig;
+# same shape, same non-emptiness control.
+$mcpCfgSrcPath = Join-Path $Repo 'src\mcp\DRagLint.MCP.ClientConfig.pas'
+$mcpCfgSpan = $(if (Test-Path -LiteralPath $mcpCfgSrcPath) {
+  [regex]::Match([IO.File]::ReadAllText($mcpCfgSrcPath), "(?s)MCP_CONFIG_FLAG_NAMES\s*:\s*array\[TMcpConfigFlag\]\s*of\s*string\s*=\s*\((.*?)\);") })
+$mcpCfgFlags = @($(if ($mcpCfgSpan -and $mcpCfgSpan.Success) { [regex]::Matches($mcpCfgSpan.Groups[1].Value, "'($FlagRx)'") | ForEach-Object { $_.Groups[1].Value } }))
+Check 'check 9: the mcp-config verb''s own flag table was read' ($mcpCfgFlags.Count -ge 12) `
+  "only $($mcpCfgFlags.Count) flag(s) read from MCP_CONFIG_FLAG_NAMES in $mcpCfgSrcPath -- was the table renamed or moved?"
+foreach ($mf in $mcpCfgFlags) { [void]$accepted.Add($mf) }
 
 $helpSet = Get-FlagSet $helpText $FlagRx
 

@@ -7,6 +7,20 @@ breaking changes** until v1.0.
 
 ### Added
 
+- **`drag-lint mcp-config (--claude-code | --vscode | --all)` -- registers `drag-lint serve` with
+  MCP clients.** Writes `{"type":"stdio","command":"<engine>","args":["serve"(,"--db","<index>")]}`
+  (plus `"env":{}` for Claude Code) into `~\.claude.json` `"mcpServers"` (`CLAUDE_CONFIG_DIR` wins)
+  and/or `%APPDATA%\Code\User\mcp.json` `"servers"`: merged (only the named entry changes, numbers
+  keep their text), backed up (`<file>.bak-<stamp>`), written through `<file>.tmp-<pid>` after a
+  re-check that the file did not change, idempotent (`unchanged` writes nothing), in the file's own
+  line-ending style, UTF-8 without BOM. `--remove` takes only our entry out; an entry by that name
+  running something other than `drag-lint.exe` is refused, as is a file with comments or trailing
+  commas (the entry to paste is printed) or invalid JSON (exit 1). `--all` skips a client that is not
+  installed; naming one that is not installed, or a `--db` that does not exist, is exit 2. env values
+  print as `***`. `--dry-run`, `--json`, `--name`, `--engine`, `--config-path`, `--home-dir`,
+  `--appdata-dir`. File edit only -- the script's `claude mcp` CLI mode is not ported. Replaces
+  `charts\src\Set-DragLintMcpConfig.ps1`. Guard: `tests\autotest\run_mcp_config_verb.ps1` (scratch
+  copies only, parity with the script, asserts the real files unchanged).
 - **`drag-lint protocol register|unregister|status` -- the `draglint://` click-to-source registration is
   an engine verb.** It writes one per-user key, `HKCU\Software\Classes\draglint` (never HKLM), pointing
   at `drag-lint-open.exe` in place (default: beside `drag-lint.exe`). `status` classifies the current

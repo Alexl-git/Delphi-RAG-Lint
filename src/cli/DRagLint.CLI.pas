@@ -239,6 +239,7 @@ uses
   , DRagLint.Charts    .Compare      // dl:unit DRagLint.Charts.Compare accepted -- RunCompare + the request/result records; the exit-code constants travel with it and `compare` uses only the two refusal codes it prints itself
   , DRagLint.Charts    .Render       { RenderCompareText / Json / Html, RenderReportHtml, OpenInBrowser }
   , DRagLint.Core      .ProtocolReg  { RunProtocolVerbFromCommandLine: the `protocol` verb }
+  , DRagLint.MCP       .ClientConfig { RunMcpConfigVerbFromCommandLine: the `mcp-config` verb }
   ;
 
 type
@@ -897,6 +898,11 @@ begin
   Writeln('                               It is a VERB and not a --fix because its input is project-wide and its output is one file; the CALL-SITE');
   Writeln('                               rewrite is the fix-it half and lives on `lint <file> --fix --fix-rule raise-bare-exception [--apply]`.');
   Writeln('  drag-lint serve              --db <file.sqlite>    (MCP stdio server)');
+  Writeln('  drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]');
+  Writeln('                               writes {"type":"stdio","command":"<engine>","args":["serve"[,"--db","<index>"]]} (+ "env":{} for Claude Code) into');
+  Writeln('                               ~\.claude.json "mcpServers" / %APPDATA%\Code\User\mcp.json "servers": merged, backed up (<file>.bak-<stamp>), idempotent;');
+  Writeln('                               --remove takes only its own entry out; an entry by that name that runs something else is refused; --dry-run writes nothing;');
+  Writeln('                               --home-dir / --appdata-dir move where the default files are looked for (tests)');
   Writeln('  drag-lint protocol register [--handler <drag-lint-open.exe>] [--dry-run] [--force]   (HKCU\Software\Classes\draglint -> the handler; --force accepts a *-wt\ path or replaces a foreign registration)');
   Writeln('  drag-lint protocol unregister [--dry-run] [--force]   (removes the key when it is ours or the legacy PowerShell one; foreign needs --force)');
   Writeln('  drag-lint protocol status [--json]   (prints the registered command and ours|legacy-powershell|foreign|none; exit 0 only when ours)');
@@ -1498,9 +1504,9 @@ begin
   Result.MinVisibility      := '';        // proptree: --min-visibility unset = emit ALL leaves (back-compat)
   Result.FromBlockFile      := '';        // convert-reemit: --from-block <file>
   if ParamCount > 0 then Result.Command:= ParamStr(1); { LoadConfigDefaults keys on the verb }
-  { `ask` and `protocol` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg) and print
-    nothing else: no defaults note on stderr }
-  if (Result.Command = 'ask') or (Result.Command = 'protocol') then Exit;
+  { `ask`, `protocol` and `mcp-config` parse their own flags (DRagLint.Charts.AskVerb, DRagLint.Core.ProtocolReg,
+    DRagLint.MCP.ClientConfig) and print nothing else: no defaults note on stderr }
+  if (Result.Command = 'ask') or (Result.Command = 'protocol') or (Result.Command = 'mcp-config') then Exit;
   LoadConfigDefaults(Result);
   if ParamCount = 0 then begin Result.ShowHelp:= True; Exit; end;
   Result.Command:= ParamStr(1);
@@ -31950,6 +31956,7 @@ begin
     else if Args.Command = 'compare'           then Result:= DoCompare         (Args)
     else if Args.Command = 'ask'               then Result:= RunAskVerbFromCommandLine
     else if Args.Command = 'protocol'          then Result:= RunProtocolVerbFromCommandLine
+    else if Args.Command = 'mcp-config'        then Result:= RunMcpConfigVerbFromCommandLine
     else if Args.Command = 'usages'            then Result:= DoUsages          (Args)
     else if Args.Command = 'slice'             then Result:= DoSlice           (Args)
     else if Args.Command = 'context'           then Result:= DoContext         (Args)
