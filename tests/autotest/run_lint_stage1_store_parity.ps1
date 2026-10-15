@@ -38,9 +38,12 @@
   RED FIRST: against the unfixed build A1 FAILS (the per-file verb reports EFoo)
   while A2/A3/A4 pass. A2 is the live positive control -- a mis-prefixed class
   BOTH verbs must keep reporting -- so a "fix" that merely switched the rule off
-  would turn A2 red rather than sneak through. A4 pins the deliberate store-free
-  fallback (NamingChecks.pas:613 "conservative -- no guessing") so the change
-  cannot be mistaken for making the rule unconditionally quiet.
+  would turn A2 red rather than sneak through. A4 pinned the store-free
+  fallback that then answered "T" for EFoo; that answer was itself the false
+  positive of Gitea drag-lint#3, and since 2026-10-09 the store-free path reads
+  the ancestor as written (class(Exception) -> exception class). A4 now pins
+  THAT, and keeps the anti-off check on its own: store-free must still report
+  Foo, so the change cannot be mistaken for making the rule quiet.
 
   INDEX ABSOLUTE. A relative index target writes relative path rows, the
   membership probe in DoLint then misses, and the store is SILENTLY dropped --
@@ -133,12 +136,12 @@ Check 'A3  PARITY: lint-all agrees -- silent on EFoo, reports Foo' `
       ((TypeNamePrefixHits $allTxt 'EFoo') -eq 0 -and (TypeNamePrefixHits $allTxt 'Foo') -ge 1) `
       "lint-all EFoo=$(TypeNamePrefixHits $allTxt 'EFoo') Foo=$(TypeNamePrefixHits $allTxt 'Foo')"
 
-# --- store-FREE stays deliberately conservative -------------------------------
+# --- store-FREE: the ancestor as written decides (Gitea drag-lint#3) ----------
 $noStore = & $exePath lint $file --rules-dir $rules 2>&1 | Out-String
 
-Check 'A4  store-free `lint <file>` still reports EFoo (documented fallback, unchanged)' `
-      ((TypeNamePrefixHits $noStore 'EFoo') -ge 1) `
-      "NamingChecks.pas:613 says fall back to requiring the class prefix -- no guessing. If this is red the change went further than the store."
+Check 'A4  store-free `lint <file>` is silent on EFoo = class(Exception) and still reports Foo' `
+      (((TypeNamePrefixHits $noStore 'EFoo') -eq 0) -and ((TypeNamePrefixHits $noStore 'Foo') -ge 1)) `
+      "EFoo=$(TypeNamePrefixHits $noStore 'EFoo') Foo=$(TypeNamePrefixHits $noStore 'Foo') -- EFoo>0 is the #3 false positive back; Foo=0 means the rule went quiet"
 
 Write-Host ''
 if ($fail) { Write-Host 'run_lint_stage1_store_parity: FAIL' -ForegroundColor Red; exit 1 }

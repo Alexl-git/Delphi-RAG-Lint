@@ -26,10 +26,12 @@
       the right cannot be string concatenation -- `S := S + 1` does not compile
       in Delphi -- so this is type-safe reasoning without a type.
 
-  It remains type-blind for a VARIABLE operand: `i := i + Count` still fires.
-  Case 5 below asserts that honestly rather than pretending otherwise, so the
-  day a store-backed built-in supersedes this query (the
-  string-equality-comparison precedent), the test says exactly what changed.
+  It WAS type-blind for a VARIABLE operand: `i := i + Count` fired. Case 5
+  asserted that honestly so the day it changed the test would say so. It
+  changed on 2026-10-09 (Gitea drag-lint#7): the #not-declared-numeric?
+  predicate reads `i: Integer` from the routine's var section and drops the
+  match -- without an index, so no store-backed built-in was needed. Case 5
+  now pins the flip; S := S + C above (C: string) still fires.
 #>
 [CmdletBinding()]
 param(
@@ -202,12 +204,13 @@ Check "V := V + 'f' in the INNER loop (line $lnInnerLoop) -- the outer reset doe
   ($fired -contains $lnInnerLoop)
 
 Write-Host ''
-Write-Host 'KNOWN LIMITATION, asserted so a future fix is visible' -ForegroundColor Cyan
-# WITHOUT a store this stays true on purpose. With a store, lint / lint-all / the
-# LSP drop it (2026-09-27, R11) -- that half is pinned by
-# run_concat_in_loop_type_aware.ps1, which also asserts this no-store case.
-Check "i := i + Count (line $lnAddVar) still fires -- type-blind for a variable operand" `
-  ($fired -contains $lnAddVar) 'no store here; the store-backed filter is pinned by run_concat_in_loop_type_aware.ps1'
+Write-Host 'THE FORMER LIMITATION, flipped by Gitea drag-lint#7' -ForegroundColor Cyan
+Check "i := i + Count (line $lnAddVar) no longer fires -- i is declared Integer in the routine" `
+  (-not ($fired -contains $lnAddVar)) 'if this fires again, #not-declared-numeric? is gone from concat-in-loop.scm'
+# MERGE 2026-10-15: upstream's R11 pinned this very line the other way (type-blind without a
+# store); the declaration-based predicate of drag-lint#7 answers it without one, so the
+# store-backed filter (run_concat_in_loop_type_aware.ps1) now only matters for
+# what the declaration cannot show.
 
 Write-Host ''
 # D23: the scratch folder is per run ($PID); remove it so they do not pile up in TEMP.

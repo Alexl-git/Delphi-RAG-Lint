@@ -3,6 +3,43 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Fixed
+
+- **Type-aware rules no longer lend an inline variable another routine's type** (no version constant moves). `CheckTypeAware`'s file-wide `TypeMap` only saw section declarations,
+  so an inline `for var JP in` / `var JP := ...` took the type of a `JP: TJSONObject` declared in
+  another routine: four `redundant-cast` hints in `DRagLint.CLI.pas`, and `--fix --apply` would have
+  removed casts the compiler needs. Inline declarations now enter the map -- typed ones like a section
+  declaration, untyped ones as the ambiguity sentinel, so every rule reading it fails safe. Guard:
+  `tests\autotest\run_typemap_inline_vars.ps1`.
+- **`concat-in-loop` no longer reports numeric sums whose type is declared**. A
+  variable on the right of `X := X + Y` cannot be typed from the tree, so `Total := Total + Qty` was an
+  "O(n^2) string concatenation" -- ~40% of the rule's findings on sampled production code. The new query
+  predicate `#not-declared-numeric?` reads the declaration of X in the enclosing routine (var
+  sections, parameters, inline `var X: T`, the return type for `Result`, then an enclosing routine);
+  a declared numeric type drops the match, and anything unknown (a field, a global, `var X := e`)
+  keeps it. Works without an index. On the TestCopy test repo: UFReportB 6 -> 0,
+  UFReportA 5 -> 0; UFReportC keeps 3 sums of class FIELDS (unknown by design). The rule's
+  comment no longer cites a `docs\INBOX-...` file that never existed. Guard:
+  `tests\autotest\run_concat_in_loop_numeric.ps1`.
+- **`magic-literal` and `large-magic-number` exempt an inline constant's value**.
+  `const X = 3;` inside a routine (10.3+) is a `constInline` node with no `defaultValue` wrapper and no
+  `declConst`, so both rules reported the literal that IS the named constant. Fixtures:
+  `tests\lint\magic-literal.pas` (lines 33-37) and `tests\lint\large-magic-number-const.pas` (line 25).
+- **Guard: an inline `var X: T;` is not a read of X.** Upstream's `if K = 'varDef' then Exit;` in
+  `CollectReadsAndCallDefs` already fixes the false `used-before-assignment` (found here
+  independently on `DoIndexRepo`: `var P: TRepoProject;` + `for var P in Todo`, reported at
+  `[error]` while dcc32 emits nothing). `testsutotestun_flow_inline_vardef_not_a_read.ps1` pins it.
+- **`type-name-prefix` recognises an exception class when the index cannot see its ancestry**. Exception classes were recognised only through the store, so every `lint <file>`
+  without `--db` -- the IDE gutter -- told every exception to start with "T", told a badly named one
+  "T" instead of "E", and even with `--db` `EAbortLike = class(EAbort)` failed when the RTL is not
+  indexed. When the store does not answer "exception", the first ancestor AS WRITTEN decides:
+  `Exception`, or an exception-style name (prefix + upper case). `class(TObject)` and
+  `class(Engine)` are still ordinary classes. `run_lint_stage1_store_parity.ps1` A4, which pinned the
+  old store-free answer, now pins the new one and keeps its "rule not switched off" check. Guard:
+  `tests\autotest\run_type_prefix_exception_no_db.ps1`.
+
 ## v1.31.1-alpha -- 2026-10-14
 
 ### Fixed

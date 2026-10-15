@@ -19,4 +19,11 @@ begin
   X := 8640;
 end;
 
+procedure Q;
+begin
+  { An INLINE constant's value is a named constant too (Gitea drag-lint#2). }
+  const LIMIT_MS = 16000;
+  Writeln(LIMIT_MS);
+end;
+
 end.

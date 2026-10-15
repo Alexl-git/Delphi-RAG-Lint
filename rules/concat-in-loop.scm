@@ -45,13 +45,31 @@
 ;                         nonsense for an array of records. A wrong finding AND
 ;                         unfollowable advice.
 ;
-; STILL TYPE-BLIND for a VARIABLE operand IN THIS QUERY: `i := i + Count` is
-; indistinguishable from `S := S + Word` in the tree alone. WITH A STORE the
-; surfaces close that gap after the fact (2026-09-27, R11): lint, lint-all and the
-; LSP pass these findings through TAstChecker.DropNonStringConcat, which drops a
-; match whose target's declared type is proven non-string (numeric, boolean, enum,
-; pointer, dynamic array, set) and keeps an unknown or ambiguous one. Without a
-; store (bare `lint <file>`) this query's answer is final and stays type-blind.
+; A VARIABLE operand cannot be typed from the tree: `i := i + Count` and
+; `S := S + Word` are the same subtree -- `StartPos := StartPos + Length(...)`
+; was the 5th false positive in that sample. FIFTH CONSTRAINT, 2026-10-09
+; (Gitea drag-lint#7; ~40% of this rule's findings on sampled production code were
+; numeric sums):
+;
+;   #not-declared-numeric? @id -- reads the DECLARATION of the assigned name in
+;                         the routine the assignment sits in (its var sections,
+;                         parameters, inline `var X: T`, and the return type for
+;                         Result), then in an enclosing routine. A declared
+;                         numeric type (Integer, Int64, Currency, Double, ...)
+;                         drops the match. Anything not declared there with one
+;                         written type -- a field, a global, `var X := e` -- is
+;                         UNKNOWN and keeps the finding, so a real string
+;                         accumulation is never hidden. Works without an index.
+;                         (DRagLint.Lint.QueryRules, DeclaredTypeInRoutine.)
+;
+; WHAT THE QUERY STILL CANNOT TYPE: a variable the routine does not declare with ONE
+; written type (a field, a global, an inline `var X := e`) -- UNKNOWN, so the finding
+; stays. WITH A STORE the surfaces close that gap after the fact (2026-09-27, R11):
+; lint, lint-all and the LSP pass these findings through TAstChecker.DropNonStringConcat,
+; which drops a match whose target's declared type is proven non-string (numeric,
+; boolean, enum, pointer, dynamic array, set) and keeps an unknown or ambiguous one.
+; Without a store (bare `lint <file>`) the declaration-based predicate above is the
+; only type reasoning there is.
 ; Pinned by tests\autotest\run_concat_in_loop_type_aware.ps1.
 ;
 ; FOURTH CONSTRAINT ADDED 2026-09-23 (L6):
@@ -74,4 +92,5 @@
  (#eq? @id @lhs_id)
  (#not-match? @rhs_operand "^[0-9$]")
  (#not-match? @rhs_operand "^\\[")
- (#not-reset-in-loop? @warn))
+ (#not-reset-in-loop? @warn)
+ (#not-declared-numeric? @id))

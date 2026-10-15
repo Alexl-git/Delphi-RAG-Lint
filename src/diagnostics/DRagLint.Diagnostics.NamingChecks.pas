@@ -757,11 +757,29 @@ var
 
           if not ClassBodyNode.IsNull then
           begin
-            { Is this an exception class? Use store when available, else fall
-              back to requiring the class prefix (conservative -- no guessing). }
+            { Is this an exception class? The store answers when it can see the
+              whole ancestry. When it cannot -- no index (every `lint <file>`
+              without --db, the IDE gutter) or an ancestor outside it (EAbort
+              with no RTL index) -- the class used to be taken for an ordinary
+              one, so EVERY exception was told to start with "T" (Gitea
+              drag-lint#3). The fallback reads the first ancestor as WRITTEN:
+              `Exception` itself, or a name in the exception style (prefix +
+              upper case: EAbort, EFooError), as IsIntfName does for I-names. }
             IsExcClass:= False;
             if (AStore <> nil) and (ANaming.ExceptionPrefix <> '') then
               IsExcClass:= AStore.IsDescendantOf(TypeName, 'Exception', AFileId);
+            if (not IsExcClass) and (ANaming.ExceptionPrefix <> '') then
+              for I:= 0 to ClassBodyNode.NamedChildCount - 1 do
+                if ClassBodyNode.NamedChild(I).NodeType = 'typeref' then
+                begin
+                  var Anc: string:= Trim(NodeStr(ClassBodyNode.NamedChild(I)));
+                  if Pos('<', Anc) > 0 then Anc:= Copy(Anc, 1, Pos('<', Anc) - 1);
+                  if LastDelimiter('.', Anc) > 0 then Anc:= Copy(Anc, LastDelimiter('.', Anc) + 1, MaxInt);
+                  var PL: Integer:= Length(ANaming.ExceptionPrefix);
+                  IsExcClass:= SameText(Anc, 'Exception') or
+                    ((Length(Anc) > PL) and StartsText(ANaming.ExceptionPrefix, Anc) and CharInSet(Anc[PL + 1], ['A'..'Z']));
+                  Break; { only the first typeref is the ancestor; the rest are interfaces }
+                end;
 
             { StartsWithPrefix is used (not HasPrefix) so that form-style names
               such as TfrmAssignGroups pass the T-prefix check. The relaxed guard
