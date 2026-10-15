@@ -133,7 +133,7 @@ begin
     { logging never stops a click (the script's catch): a locked log, a missing
       DRAGLINT_URI_TEST_LOG folder or a denied LOCALAPPDATA goes to the debugger only }
     on E: Exception do
-      OutputDebugString(PChar('drag-lint-open: log not written: ' + E.Message));
+      OutputDebugString(PChar('drag-lint-open: log not written: ' + E.Message));  // dl:ok outputdebugstring@c532 -- REVIEWED 2026-10-14: deliberate; the log itself failed and a GUI handler has no other channel
   end;
 end;
 
