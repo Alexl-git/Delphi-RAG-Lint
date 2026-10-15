@@ -965,4 +965,9 @@
 #   (2) Doc.SymbolFacts: SQL table names cut at '$' (FIB$ENUMVALUES -> FIB). Guard:
 #   run_sql_dollar_identifier.ps1.
 #   Superseded: 1.21.1-alpha|ba5b43cfb9f5257c609ea491739d4f6dffe56f43b701518b247a90afbaff13e5
-1.22.0-alpha|222fab4b909ee849195766b4b469f8e6298ccdf17eb1b6dec79d1d5cbe13cd6a
+# 2026-10-14 (2nd): hash re-pinned WITHIN 1.22.0-alpha (still unreleased, so its one re-parse
+#   covers this too): Doc.SymbolFacts now records a double-quoted Firebird identifier verbatim
+#   (quotes stripped, case kept, '""' unescaped) in sql_reads/sql_writes instead of nothing.
+#   Guard: run_sql_quoted_identifier.ps1.
+#   Superseded: 1.22.0-alpha|222fab4b909ee849195766b4b469f8e6298ccdf17eb1b6dec79d1d5cbe13cd6a
+1.22.0-alpha|a15260d618a6bd5d2496ca9b1436db17df3669b177a2f2b88ddeaf9f277be9f4
