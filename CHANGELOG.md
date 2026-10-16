@@ -3,6 +3,27 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.31.3-alpha -- 2026-10-16
+
+### Fixed
+
+- **Fix all in unit did nothing when the project had a member under a registry LIBRARY root
+  (e.g. `ArrayHelper.pas`).** The multi-project rename's freshness check counted that `.dproj`
+  member as missing from the owner's index, so the owner was permanently stale and `--apply`
+  dropped every rename (75 in the report), ending with "no fixable findings". The check now
+  considers only members the project owns (`ProjectOwnedMembers`). The CLI summary now says
+  `autofix: nothing written -- N rename(s) dropped: <reason>` and appends `, N rename(s) not
+  written` when some were written and some were not.
+- **IDE plugin: Fix all shows the wait cursor while it runs and refuses a second fix.** The job
+  queue marks fix jobs Busy; the Structure form hooks the cursor and answers a second Fix all
+  with a refusal (`RefusedWhileFixRuns`) instead of queueing a conflicting write.
+- **`type-name-prefix`: an exception class whose direct ancestor is exception-named is no longer
+  told to use `T`.** `EKeyViolation = class(EDatabaseError)` is accepted, and Fix all no longer
+  renames it to `TEKeyViolation` (`AncestorNamedLikeException`). Name heuristic only; the
+  library-index hop is planned for 1.31.4-alpha.
+
+Extractor unchanged (1.21.1): no reindex needed.
+
 ## v1.31.2-alpha -- 2026-10-16
 
 ### Fixed

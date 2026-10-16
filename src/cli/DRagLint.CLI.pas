@@ -12714,6 +12714,20 @@ begin
       if NFSkippedTotal > 0 then SkipSuffix:= Format(', %d edit(s) skipped (stale index)', [NFSkippedTotal]);
     end;
 
+    { Multi-project renames this run dropped (an unverified owner, or stale at
+      write). Not "no fixable findings": ORM3 BASICS.PAS previewed 75, the apply
+      dropped all 75 on an owner it could not verify, and the IDE said "no
+      fixable findings (of 91)" -- the user saw nothing happen (2026-10-16). }
+    var RenameDropped: Integer:= 0;
+    var DropReason: string:= '';
+    for var DP: TTargetPlan in Rename.Plans do
+      if DP.Decision = rdDropped then
+      begin
+        Inc(RenameDropped);
+        if DropReason = '' then DropReason:= DP.Reason;
+      end;
+    var DropSuffix: string:= if RenameDropped > 0 then Format(', %d rename(s) not written', [RenameDropped]) else '';
+
     { Every naming finding that could have been fixed was lost to a stale index:
       "no fixable findings" would read as "cannot be fixed" (spec criterion 13),
       so say how many were skipped and how to reindex instead. }
@@ -12721,6 +12735,8 @@ begin
       plugin reads the LAST autofix: line, so the refusal must be it. }
     if (FixCount = 0) and (Rename.Refusal <> '') then
       Writeln('autofix: rename refused -- ' + Rename.Refusal)
+    else if (FixCount = 0) and (RenameDropped > 0) then
+      Writeln(Format('autofix: nothing written -- %d rename(s) dropped: %s', [RenameDropped, DropReason]))
     else if (FixCount = 0) and (NFStaleTotal + NFSkippedTotal > 0) then
       Writeln(Format('autofix: 0 fixable finding(s)%s%s -- reindex: %s',
         [StaleSuffix, SkipSuffix, NamingReindexHint(AArgs, NFHintDb)]))
@@ -12742,7 +12758,7 @@ begin
       var Written: Integer:= Length(Edits) - ApplySkipped;
       if ApplySkipped > 0 then
         SkipSuffix:= Format(', %d %sskipped (stale index)', [NFSkippedTotal + ApplySkipped, IfThen(NFStaleTotal > 0, 'edit(s) ', '')]);
-      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
+      Writeln(Format('autofix: applied %d edit(s) across %d file(s)%s%s%s%s', [Written, Touched, StaleSuffix, SkipSuffix, DropSuffix, IfThen(AArgs.NoBackup, '', ' (.bak written)')]));
     end
     else
     begin
@@ -12751,7 +12767,7 @@ begin
       for F in Targeted do
         if IsRiskyFixRule(F.RuleId) then begin HasRisky:= True; Break; end;
       if HasRisky then Writeln('[risky] one or more fixes are behaviour-changing -- review before --apply.');
-      Writeln(Format('autofix: %d fixable finding(s)%s%s -- pass --apply to write', [FixCount, StaleSuffix, SkipSuffix]));
+      Writeln(Format('autofix: %d fixable finding(s)%s%s%s -- pass --apply to write', [FixCount, StaleSuffix, SkipSuffix, DropSuffix]));
     end;
     { Other fixes on the line went ahead; the refused rename still has to be
       the last autofix: line the plugin reads. }

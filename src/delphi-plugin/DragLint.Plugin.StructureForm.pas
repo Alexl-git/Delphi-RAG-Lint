@@ -1480,6 +1480,17 @@ end;
 const
   CLogExcerptChars = 400; { enough of a failed run's output to diagnose it in the log }
 
+{ True, with a note, when a Fix it / Fix all job is still queued or running: a
+  second fix would plan against files the first is rewriting (owner
+  2026-10-16: "so users won't try to do other changes in parallel"). }
+function RefusedWhileFixRuns(const ATitle: string): Boolean;
+begin
+  Result:= JobQueueBusy;
+  if not Result then Exit;
+  SetDragLintNote(ATitle + ': not run -- another fix is still running; wait for it to finish');
+  PostIdeMessage('drag-lint: ' + ATitle + ': not run -- another fix is still running; wait for it to finish.');
+end;
+
 { The body of RunFixJob, standalone so a rename preview's OnDone -- which must
   not capture a form -- can queue the --apply run for AFilePath. }
 procedure EnqueueFixJob(const AFilePath, ATitle, ACmd: string; ATimeoutMs: Integer; const AUsesUnit: string);
@@ -1498,8 +1509,10 @@ begin
     PostIdeMessage('drag-lint: ' + Title + ': not run -- the unit has unsaved changes; save it first.');
     Exit;
   end;
+  if RefusedWhileFixRuns(Title) then Exit;
   Job:= TDragLintJob.Create;
   Job.Kind       := jkGeneric;
+  Job.Busy       := True; { wait cursor until OnDone; no second fix meanwhile }
   Job.Title      := Title;
   Job.CoalesceKey:= 'autofix:' + LowerCase(FilePath) + ':' + ATitle;
   Job.CmdLine    := ACmd;
@@ -1568,8 +1581,10 @@ begin
     PostIdeMessage('drag-lint: ' + Title + ': not run -- the unit has unsaved changes; save it first.');
     Exit;
   end;
+  if RefusedWhileFixRuns(Title) then Exit;
   Job:= TDragLintJob.Create;
   Job.Kind       := jkGeneric;
+  Job.Busy       := True; { released before OnDone, so the confirm dialog has a normal cursor }
   Job.Title      := Title + ' (preview)';
   Job.CoalesceKey:= 'autofix-preview:' + LowerCase(FilePath) + ':' + ATitle;
   Job.CmdLine    := APreviewCmd;
@@ -2105,8 +2120,17 @@ begin
 end;
 
 initialization
+{ The IDE's wait cursor while a Fix it / Fix all job (Busy) is queued or
+  running -- see EnqueueFixJob / EnqueueRenamePreviewJob (owner 2026-10-16). }
+GJobQueueBusyHook:=
+  procedure(ABusy: Boolean)
+  begin
+    Screen.Cursor:= if ABusy then crHourGlass else crDefault;
+  end;
 
 finalization
+GJobQueueBusyHook:= nil;
+if JobQueueBusy then Screen.Cursor:= crDefault;
 if GStructureForm <> nil then FreeAndNil(GStructureForm);
 FreeAndNil(GLiveStructureForms);
 

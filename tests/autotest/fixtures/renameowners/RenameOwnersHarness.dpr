@@ -363,6 +363,20 @@ begin
   Writeln('aw.single.edits0=', Length(Plans[0].Edits));
 end; // procedure
 
+{ LM: a .dproj member under a registry library root is the platform library's
+  -- `index --project` leaves it out, so it must not read as missing (ORM3
+  Micronite2027 + C:\Projects\ArrayHelper\ArrayHelper.pas, 2026-10-16). }
+procedure LibraryMemberChecks;
+var
+  Kept: TArray<string>;
+begin
+  Kept:= ProjectOwnedMembers(['C:\P\App\Main.pas', 'c:/projects/arrayhelper/ArrayHelper.pas', 'C:\Projects\ArrayHelperX\Y.pas'],
+    ['C:\Projects\ArrayHelper', 'C:\Lib\']);
+  Writeln('lm.count=', Length(Kept));
+  Writeln('lm.kept=', string.Join(',', Kept));
+  Writeln('lm.noroots=', Length(ProjectOwnedMembers(['C:\P\App\Main.pas', 'C:\Lib\X.pas'], nil)));
+end; // procedure
+
 begin  try
     W     := IncludeTrailingPathDelimiter(ParamStr(1));
     Shared:= W + 'shared\uShared.pas';
@@ -379,6 +393,7 @@ begin  try
     WriteGuardChecks;
     CaseChecks;
     AtWriteChecks;
+    LibraryMemberChecks;
     Writeln('DONE');
   except
     on E: Exception do Writeln('EXCEPTION=', E.ClassName, ': ', E.Message);

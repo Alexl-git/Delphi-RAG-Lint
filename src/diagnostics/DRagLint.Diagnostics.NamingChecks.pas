@@ -137,6 +137,33 @@ begin
   Result:= Copy(AName, 1, PLen) = APrefix;
 end;
 
+{ True when AClassText -- a declClass node's text, 'class(EDatabaseError)' --
+  names a direct ancestor called like an exception: 'Exception', or
+  AExcPrefix followed by a capital (EDatabaseError, not Engine). A unit
+  qualifier (Data.DB.EDatabaseError) is dropped. The type-name-prefix rule's
+  fallback when the ancestry leaves the index; '' prefix -> False. }
+function AncestorNamedLikeException(const AClassText, AExcPrefix: string): Boolean;
+var
+  S   : string ;
+  P   : Integer;
+  Anc : string ;
+  PLen: Integer;
+begin
+  Result:= False;
+  S:= Trim(AClassText);
+  if (AExcPrefix = '') or (not StartsText('class', S)) then Exit;
+  S:= Trim(Copy(S, Length('class') + 1, MaxInt));
+  if (S = '') or (S[1] <> '(') then Exit;
+  S:= Copy(S, 2, MaxInt);
+  P:= 1;
+  while (P <= Length(S)) and (CharInSet(S[P], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.'])) do Inc(P);
+  Anc:= Copy(S, 1, P - 1);
+  if Pos('.', Anc) > 0 then Anc:= Copy(Anc, LastDelimiter('.', Anc) + 1, MaxInt);
+  if SameText(Anc, 'Exception') then Exit(True);
+  PLen:= Length(AExcPrefix);
+  Result:= (Length(Anc) > PLen) and (Copy(Anc, 1, PLen) = AExcPrefix) and CharInSet(Anc[PLen + 1], ['A'..'Z']);
+end;
+
 { Returns True when S is a short all-uppercase abbreviation (e.g. GLE, BS, OK,
   FF, ID) that should be exempt from PascalCase / camelCase requirements.
   Criteria: length 1..4, every character is A..Z or 0..9, and at least one
@@ -762,6 +789,15 @@ var
             IsExcClass:= False;
             if (AStore <> nil) and (ANaming.ExceptionPrefix <> '') then
               IsExcClass:= AStore.IsDescendantOf(TypeName, 'Exception', AFileId);
+            { The chain can leave the project index -- EKeyViolation =
+              class(EDatabaseError), whose ancestor lives in Data.DB -- and then
+              read as "not an exception": the rule asked for "T" and its fix
+              planned EKeyViolation -> TEKeyViolation (ORM3 BASICS.PAS,
+              2026-10-16). A direct ancestor that is itself named like an
+              exception (Exception, or the exception prefix + a capital) makes
+              it one. Full ancestry: docs\INBOX-type-name-prefix-exception-ancestry.md }
+            if (not IsExcClass) and (ANaming.ExceptionPrefix <> '') then
+              IsExcClass:= AncestorNamedLikeException(NodeStr(ClassBodyNode), ANaming.ExceptionPrefix);
 
             { StartsWithPrefix is used (not HasPrefix) so that form-style names
               such as TfrmAssignGroups pass the T-prefix check. The relaxed guard

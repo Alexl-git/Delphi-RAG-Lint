@@ -1,7 +1,7 @@
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
-        <ProjectVersion>20.4</ProjectVersion>
+        <ProjectVersion>20.5</ProjectVersion>
         <FrameworkType>None</FrameworkType>
         <Base>True</Base>
         <Config Condition="'$(Config)'==''">Debug</Config>
@@ -76,7 +76,6 @@
         <DCCReference Include="DragLint.Plugin.LspClient.pas"/>
         <DCCReference Include="DragLint.Plugin.Editor.pas"/>
         <DCCReference Include="DragLint.Plugin.ProjectNotifier.pas"/>
-        <DCCReference Include="DragLint.Plugin.ProjectMenu.pas"/>
         <DCCReference Include="DragLint.Plugin.Settings.pas"/>
         <DCCReference Include="DragLint.Plugin.Keyboard.pas"/>
         <DCCReference Include="DragLint.Plugin.CallerFilter.pas"/>
@@ -95,13 +94,12 @@
         <DCCReference Include="DragLint.Plugin.EditViewNotifier.pas"/>
         <DCCReference Include="DragLint.Plugin.StructureCache.pas"/>
         <DCCReference Include="DragLint.Plugin.StructureForm.pas"/>
-        <DCCReference Include="DragLint.Plugin.OptionsFrames.pas">
-            <Form>DLPageFrame</Form>
-            <FormType>dfm</FormType>
-            <DesignClass>TFrame</DesignClass>
-        </DCCReference>
         <DCCReference Include="DragLint.Plugin.Options.pas"/>
         <DCCReference Include="DragLint.Plugin.ProcRun.pas"/>
+        <DCCReference Include="DragLint.Plugin.SurfaceSplit.pas"/>
+        <DCCReference Include="DragLint.Plugin.IndexJob.pas"/>
+        <DCCReference Include="DragLint.Plugin.FanOutState.pas"/>
+        <DCCReference Include="DragLint.Plugin.FanOut.pas"/>
         <DCCReference Include="DragLint.Plugin.UsagesForm.pas"/>
         <DCCReference Include="DragLint.Plugin.SymbolSearchForm.pas"/>
         <DCCReference Include="..\workspace\DRagLint.Workspace.Config.pas"/>
@@ -127,6 +125,7 @@
         <DCCReference Include="DragLint.Plugin.LintOutputParse.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.JobObject.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.GhostText.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.EngineHold.pas"/>
         <DCCReference Include="DragLint.Plugin.JobQueue.pas"/>
         <DCCReference Include="DragLint.Plugin.StatusBar.pas"/>
         <DCCReference Include="DragLint.Plugin.GraphWindow.pas"/>
@@ -141,9 +140,16 @@
         <DCCReference Include="DragLint.Plugin.SeverityGlyph.pas"/>
         <DCCReference Include="DragLint.Plugin.Fonts.pas"/>
         <DCCReference Include="..\core\DRagLint.Hover.Contrast.pas"/>
+        <DCCReference Include="DragLint.Plugin.ProjectMenu.pas"/>
         <DCCReference Include="..\project\DRagLint.Project.Resolver.pas"/>
-        <DCCReference Include="..\core\DRagLint.Core.StudioEnv.pas"/>
         <DCCReference Include="..\index\DRagLint.Index.Manifest.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.JsonFile.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.StudioEnv.pas"/>
+        <DCCReference Include="DragLint.Plugin.OptionsFrames.pas">
+            <Form>DLPageFrame</Form>
+            <FormType>dfm</FormType>
+            <DesignClass>TFrame</DesignClass>
+        </DCCReference>
         <DCCReference Include="DragLint.Plugin.About.pas"/>
         <DCCReference Include="..\charts\DRagLint.Charts.DocInsight.pas"/>
         <DCCReference Include="DragLint.Plugin.ReportText.pas"/>

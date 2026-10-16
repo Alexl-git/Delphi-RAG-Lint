@@ -244,6 +244,11 @@ Check 'AW2 single fix: one stale plan drops EVERY plan of the run, no edit kept'
 Check 'AW3 ... the collateral plan says why it was not written' ($kv['aw.single.reason0'] -like '*all-or-nothing*') "got: $($kv['aw.single.reason0'])"
 Check 'AW4 ... and carries no edits' ($kv['aw.single.edits0'] -eq '0') "got: $($kv['aw.single.edits0'])"
 
+Write-Host '-- ProjectOwnedMembers: a library-root member is not a missing member' -ForegroundColor Cyan
+Check 'LM1 the member under a library root (any case / slash) is dropped, the rest kept' ($kv['lm.count'] -eq '2') "got: $($kv['lm.count']) [$($kv['lm.kept'])]"
+Check 'LM2 ... a sibling folder sharing the root''s prefix is NOT library' ($kv['lm.kept'] -eq 'C:\P\App\Main.pas,C:\Projects\ArrayHelperX\Y.pas') "got: $($kv['lm.kept'])"
+Check 'LM3 no library roots: every member kept (positive control)' ($kv['lm.noroots'] -eq '2') "got: $($kv['lm.noroots'])"
+
 $realAfter =if (Test-Path $RealDb) { $i = Get-Item $RealDb; "$($i.Length)|$($i.LastWriteTimeUtc.Ticks)" } else { 'absent' }
 Check 'Z1 a real project DB was not touched (size+mtime)' ($realBefore -eq $realAfter) "$realBefore -> $realAfter"
 

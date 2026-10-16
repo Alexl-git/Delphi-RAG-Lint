@@ -51,6 +51,11 @@ type
     OnPreRun   : TJobPreRun;
     OnLine     : TJobLine  ;
     OnDone     : TJobDone  ;
+    { true -> a USER-started job that edits source (Fix it / Fix all): counted
+      by JobQueueBusy from Enqueue until it is superseded, cancelled, or has
+      finished -- released just BEFORE its OnDone runs, so an OnDone that shows
+      a dialog or queues the next step is not itself seen as busy }
+    Busy       : Boolean   ;  // dl:ok public-field@3419
     constructor Create;
   end;
 
@@ -111,6 +116,19 @@ var
 var
   GReindexDoneHook: TProc = nil;
 
+{ Called on the MAIN thread when the count of live Busy jobs goes 0 -> 1 (True)
+  and 1 -> 0 (False). The plugin sets the IDE's wait cursor here, so a user does
+  not start a second edit while a fix is rewriting files (owner 2026-10-16). A
+  HOOK, so this unit stays free of the VCL for its console tests. }
+var
+  GJobQueueBusyHook: TProc<Boolean> = nil;
+
+/// <summary>Is a Busy job (a user-started fix) queued or running?</summary>
+/// <returns>True from the Enqueue of a Busy job until the last one is
+/// superseded, cancelled by ClearPending, or released before its OnDone.</returns>
+/// <remarks>Main thread only.</remarks>
+function JobQueueBusy: Boolean;
+
 { Lazy singleton (create/access on the main thread) + finalization teardown. }
 function JobQueue: TDragLintJobQueue;
 procedure ShutdownJobQueue;
@@ -118,7 +136,8 @@ procedure ShutdownJobQueue;
 implementation
 
 uses
-  DragLint.Plugin.ProcRun
+  System.Math
+  , DragLint.Plugin.ProcRun
   { The gate's only new dependency. Core.EngineHold reads a sentinel file
     and touches no process and no ToolsAPI, so the unit still compiles
     headless -- which the harness for this gate depends on. }
@@ -152,6 +171,34 @@ end;
 procedure TQueueWorker.Execute;
 begin
   FOwner.WorkerLoop;
+end;
+
+{ ---- busy count (main thread only) ---- }
+
+var
+  GBusyJobs: Integer = 0;
+
+{ Moves the live Busy-job count by ADelta, never below 0 (a release queued by
+  the worker's exception path may follow the normal one), and tells
+  GJobQueueBusyHook when the count crosses zero. }
+procedure AdjustBusy(ADelta: Integer);
+var
+  Was: Boolean;
+begin
+  Was      := GBusyJobs > 0;
+  GBusyJobs:= Max(0, GBusyJobs + ADelta);
+  if (Was <> (GBusyJobs > 0)) and Assigned(GJobQueueBusyHook) then
+    try
+      GJobQueueBusyHook(GBusyJobs > 0);
+    except
+      on E: Exception do
+        if Assigned(GJobQueueDeferredHook) then GJobQueueDeferredHook('JobQueue: busy hook failed: ' + E.Message);
+    end;
+end;
+
+function JobQueueBusy: Boolean;
+begin
+  Result:= GBusyJobs > 0;
 end;
 
 { ---- TDragLintJob ---- }
@@ -198,32 +245,44 @@ end;
 
 procedure TDragLintJobQueue.Enqueue(AJob: TDragLintJob);
 var
-  I: Integer;
+  I    : Integer;
+  Delta: Integer; { Busy jobs added minus Busy jobs superseded }
 begin
   if AJob = nil then Exit;
+  Delta:= if AJob.Busy then 1 else 0;
   FLock.Enter;
   try
     if AJob.CoalesceKey <> '' then
       for I:= FPending.Count - 1 downto 0 do
         if SameText(FPending[I].CoalesceKey, AJob.CoalesceKey) then
+        begin
+          if FPending[I].Busy then Dec(Delta); { its OnDone will never run }
           FPending.Delete(I); { OwnsObjects -> frees the superseded job }
+        end;
     FPending.Add(AJob);
     FState.QueueDepth:= FPending.Count;
   finally
     FLock.Leave;
   end;
+  if Delta <> 0 then AdjustBusy(Delta);
   FWake.SetEvent;
 end;
 
 procedure TDragLintJobQueue.ClearPending;
+var
+  Dropped: Integer; { Busy jobs cancelled: their OnDone will never run }
 begin
+  Dropped:= 0;
   FLock.Enter;
   try
+    for var J: TDragLintJob in FPending do
+      if J.Busy then Inc(Dropped);
     FPending.Clear; { frees pending jobs; the running one is owned by the worker frame }
     FState.QueueDepth:= 0;
   finally
     FLock.Leave;
   end;
+  if Dropped > 0 then AdjustBusy(-Dropped);
 end;
 
 function TDragLintJobQueue.GetState: TQueueState;
@@ -363,17 +422,28 @@ begin
     Res:= Res + ': done';
   SetLastResult(Res);
 
-  if Assigned(AJob.OnDone) then
+  if Assigned(AJob.OnDone) or AJob.Busy then
   begin
     { value-capture so the closure is independent of AJob (freed next) and of
       the queue: holds the (ref-counted) callback + exit code + output only. }
     var DoneCb  : TJobDone:= AJob.OnDone;
     var DoneExit: Integer := ExitCode;
     var DoneOut : string  := Output;
+    var DoneBusy: Boolean := AJob.Busy;
+    AJob.Busy:= False; { released here; the worker's exception path must not release it again }
     TThread.Queue(nil,
       procedure
       begin
-        try DoneCb(DoneExit, DoneOut) except end;
+        { release FIRST: a preview's OnDone confirms and queues the apply,
+          which must not find the preview still counted }
+        if DoneBusy then AdjustBusy(-1);
+        if Assigned(DoneCb) then
+          try
+            DoneCb(DoneExit, DoneOut);
+          except
+            on E: Exception do
+              if Assigned(GJobQueueDeferredHook) then GJobQueueDeferredHook('JobQueue: OnDone failed: ' + E.ClassName + ': ' + E.Message);
+          end;
       end);
   end;
   if AJob.Kind = jkReindex then
@@ -516,6 +586,9 @@ begin
       except
         { a bad job must never kill the worker }
       end;
+      { RunOne clears Busy once it has queued the release; still set means it
+        raised first, and the count must not stay up (a stuck wait cursor) }
+      if Job.Busy then TThread.Queue(nil, procedure begin AdjustBusy(-1); end);
       Job.Free;
 
       FLock.Enter;

@@ -354,6 +354,21 @@ function GuardPlansAtWrite(var APlans: TArray<TTargetPlan>; AAllOrNothing: Boole
 /// ruling 8). Reads each file once (ANSI); writes nothing. Pinned by
 /// run_rename_owners_harness.ps1 checks G1-G4.</remarks>
 function FindStaleEdit(const AEdits: TArray<TTextEdit>; out AStale: TTextEdit): Boolean;
+
+/// <summary>The members of ADeclared a project index is expected to hold: every
+/// one not under a folder of ALibraryRoots.</summary>
+/// <param name="ADeclared">Absolute unit paths a project file declares.</param>
+/// <param name="ALibraryRoots">Library folders (TProjectResolver.ResolveLibraryPaths);
+/// nil keeps every member.</param>
+/// <returns>ADeclared, in order, without the library members.</returns>
+/// <remarks>`index --project` leaves a unit under a library root to the
+/// platform library index (TClosureResolver), so no reindex of the project DB
+/// can add it. Counting one as missing made an owner stale forever, and every
+/// Fix all apply then dropped all its renames as "still missing after reindex"
+/// (ORM3 Micronite2027 and C:\Projects\ArrayHelper\ArrayHelper.pas, 2026-10-16).
+/// Root matching is case-insensitive, accepts '/' and stops at a folder
+/// boundary. Pure.</remarks>
+function ProjectOwnedMembers(const ADeclared, ALibraryRoots: TArray<string>): TArray<string>;
 implementation
 
 uses
@@ -511,8 +526,62 @@ begin
   end; // try
 end; // function
 
+function ProjectOwnedMembers(const ADeclared, ALibraryRoots: TArray<string>): TArray<string>;
+
+  function Norm(const APath: string): string;
+  begin
+    Result:= LowerCase(StringReplace(APath, '/', '\', [rfReplaceAll]));
+  end; // function
+
+var
+  Roots  : TArray<string>;
+  R      : string        ;
+  M      : string        ;
+  IsLib  : Boolean       ;
+begin
+  Roots:= nil;
+  for R in ALibraryRoots do
+    if Trim(R) <> '' then Roots:= Roots + [IncludeTrailingPathDelimiter(Norm(Trim(R)))];
+  Result:= nil;
+  for M in ADeclared do
+  begin
+    IsLib:= False;
+    for R in Roots do
+      if Norm(M).StartsWith(R) then
+      begin
+        IsLib:= True;
+        Break;
+      end;
+    if not IsLib then Result:= Result + [M];
+  end; // for
+end; // function
+
+{ The registry library folders, read once per process: MissingMembers runs per
+  owner per file, and the answer cannot change during one run. }
+var
+  GLibraryRoots      : TArray<string>;
+  GLibraryRootsLoaded: Boolean       ;
+
+function LibraryRoots: TArray<string>;
+var
+  Resolver: TProjectResolver;
+begin
+  if not GLibraryRootsLoaded then
+  begin
+    Resolver:= TProjectResolver.Create;
+    try
+      GLibraryRoots:= Resolver.ResolveLibraryPaths;
+    finally
+      Resolver.Free;
+    end; // try
+    GLibraryRootsLoaded:= True;
+  end;
+  Result:= GLibraryRoots;
+end; // function
+
 { REASON_MEMBERS_MISSING for the members of AProjectFile that AStore holds no
-  files row for; '' when it holds every one. Read-only. }
+  files row for; '' when it holds every one. A member under a library root is
+  not counted (ProjectOwnedMembers). Read-only. }
 function MissingMembers(const AStore: ISymbolStore; const AProjectFile: string): string;
 var
   C    : TMemberCoherence;
@@ -521,7 +590,7 @@ var
 begin
   Count:= 0;
   Names:= nil;
-  for C in ComputeCoherence(AStore, PairDfmSiblings(DeclaredMembers(AProjectFile))) do
+  for C in ComputeCoherence(AStore, PairDfmSiblings(ProjectOwnedMembers(DeclaredMembers(AProjectFile), LibraryRoots))) do
     if not C.Indexed then
     begin
       Inc(Count);
