@@ -38,9 +38,15 @@
   RED FIRST: against the unfixed build A1 FAILS (the per-file verb reports EFoo)
   while A2/A3/A4 pass. A2 is the live positive control -- a mis-prefixed class
   BOTH verbs must keep reporting -- so a "fix" that merely switched the rule off
-  would turn A2 red rather than sneak through. A4 pins the deliberate store-free
-  fallback (NamingChecks.pas:613 "conservative -- no guessing") so the change
-  cannot be mistaken for making the rule unconditionally quiet.
+  would turn A2 red rather than sneak through.
+
+  2026-10-16 (v1.31.3, AncestorNamedLikeException): store-free, a class whose
+  DIRECT ancestor is NAMED like an exception ('Exception', or the exception
+  prefix + a capital) is an exception class. A4 now pins that EFoo is silent
+  store-free too (the intended change); A5 is its positive control -- EBar is
+  E-prefixed but derives from TObject, so the store-free run must still report
+  it. A rule switched off, or a heuristic that trusts the E prefix alone, turns
+  A5 red.
 
   INDEX ABSOLUTE. A relative index target writes relative path rows, the
   membership probe in DoLint then misses, and the store is SILENTLY dropped --
@@ -78,13 +84,20 @@ uses
 
 type
   /// <summary>Correctly E-prefixed exception class. Store-backed runs must be
-  /// SILENT about it; only a store-free run mistakes it for a plain class.</summary>
+  /// SILENT about it. Store-free, the fallback heuristic recognizes "Exception"
+  /// as an exception-like ancestor name, so it is also silent.</summary>
   EFoo = class(Exception)
   end;
 
   /// <summary>The positive control: no prefix at all, wrong under every
   /// branch. Every path must keep reporting this one.</summary>
   Foo = class
+  end;
+
+  /// <summary>Positive control for the fallback heuristic: E-prefixed but
+  /// derives from TObject (not an exception). Store-free must still report this,
+  /// since the fallback rule is "E is only OK if ancestor looks like Exception".</summary>
+  EBar = class(TObject)
   end;
 
 implementation
@@ -133,12 +146,16 @@ Check 'A3  PARITY: lint-all agrees -- silent on EFoo, reports Foo' `
       ((TypeNamePrefixHits $allTxt 'EFoo') -eq 0 -and (TypeNamePrefixHits $allTxt 'Foo') -ge 1) `
       "lint-all EFoo=$(TypeNamePrefixHits $allTxt 'EFoo') Foo=$(TypeNamePrefixHits $allTxt 'Foo')"
 
-# --- store-FREE stays deliberately conservative -------------------------------
+# --- store-FREE fallback with exception-name heuristic -------------------------
 $noStore = & $exePath lint $file --rules-dir $rules 2>&1 | Out-String
 
-Check 'A4  store-free `lint <file>` still reports EFoo (documented fallback, unchanged)' `
-      ((TypeNamePrefixHits $noStore 'EFoo') -ge 1) `
-      "NamingChecks.pas:613 says fall back to requiring the class prefix -- no guessing. If this is red the change went further than the store."
+Check 'A4  store-free `lint <file>` does NOT report EFoo (fallback recognizes Exception name)' `
+      ((TypeNamePrefixHits $noStore 'EFoo') -eq 0) `
+      "AncestorNamedLikeException fallback now recognizes 'Exception' as exception-like ancestor. EFoo must be silent."
+
+Check 'A5  CONTROL: store-free still reports EBar (E-prefix without exception ancestor)' `
+      ((TypeNamePrefixHits $noStore 'EBar') -ge 1) `
+      "The fallback heuristic allows E only if ancestor is Exception or starts with ExceptionPrefix. EBar(TObject) must be reported."
 
 Write-Host ''
 if ($fail) { Write-Host 'run_lint_stage1_store_parity: FAIL' -ForegroundColor Red; exit 1 }

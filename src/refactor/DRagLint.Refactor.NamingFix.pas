@@ -240,7 +240,10 @@ function BuildTargetEdits(const AStore: ISymbolStore; const ATarget: TNamingTarg
 /// was indexed those coordinates point at unrelated text (observed: an
 /// identifier glued onto the `then`/`else` keywords, exit code 0). Any edit
 /// whose span is out of range or does not hold the expected identifier is
-/// DROPPED and counted in ASkippedCount -- never written.
+/// DROPPED and counted in ASkippedCount -- never written. When the new name
+/// differs from the old in more than letter case, one dropped site drops the
+/// whole rename (every edit of it counted in ASkippedCount): a half-applied
+/// rename does not compile (pinned by run_fix_stale_index_guard.ps1).
 /// COMPOSITION (2026-10-13, pure refactor): BuildNamingTargets, then for each
 /// tsReady target FreeCandidates, then BuildTargetEdits with the FIRST free
 /// candidate; a tsStalePosition target increments AStaleCount.
@@ -913,6 +916,15 @@ begin
       FreeNames:= FreeCandidates(AStore, T);
       if Length(FreeNames) = 0 then Continue;
       TargetTE:= BuildTargetEdits(AStore, T, FreeNames[0], Skipped);
+      { All or nothing once the new name differs in more than letter case
+        (glyActive -> GLY_ACTIVE, Foo -> TFoo): renaming the sites the guard
+        kept and leaving the skipped ones writes a unit that no longer
+        compiles. The multi-project path refuses the same way. }
+      if (Skipped > 0) and (not SameText(T.OldName, FreeNames[0])) then
+      begin
+        Inc(Skipped, Length(TargetTE));
+        TargetTE:= nil;
+      end;
       Inc(ASkippedCount, Skipped);
       if Length(TargetTE) > 0 then
       begin

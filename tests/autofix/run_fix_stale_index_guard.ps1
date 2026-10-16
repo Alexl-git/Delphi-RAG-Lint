@@ -26,6 +26,13 @@
   caught only because it produced invalid syntax; a rename landing on a
   same-length identifier would have compiled and shipped.) The keyword
   assertions below are belt-and-braces on top of it.
+
+  2026-10-16: since 40fd41b2 const-casing renames word by word (glyActive ->
+  GLY_ACTIVE), no longer a pure re-casing. The fixer then renamed the
+  declaration and skipped the stale use site -- a unit that no longer
+  compiles. A rename that changes more than case is now all-or-nothing, so
+  with one stale site the file must stay as it was; the checks below are
+  unchanged and are what caught it.
 #>
 [CmdletBinding()]
 param([string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe")

@@ -72,12 +72,15 @@ begin
   { 2026-08-12: 9 -> 10. local-field-prefix ("Local variable wears the
     field/param prefix") joined the naming bucket in 3fdefd9 when the naming
     rules were split. Verified against the live catalog before the number was
-    changed -- the delta is exactly that one id. }
-  Check('summary naming count = 10', NamingCount = 10);
+    changed -- the delta is exactly that one id.
+    2026-10-16: 10 -> 11. confusable-identifier joined the naming bucket in
+    40fd41b2; ce007d31 re-pinned the docrules count but missed this one.
+    Verified against the live catalog (rules --json): the delta is that id. }
+  Check('summary naming count = 11', NamingCount = 11);
 
   { category filter returns only that category }
   Cat:= TRuleCatalog.BuildCatalog(RulesDir, 'naming');
-  Check('category filter naming -> 10 rules', Length(Cat) = 10);
+  Check('category filter naming -> 11 rules', Length(Cat) = 11);
   for Info in Cat do
     if Info.Category <> 'naming' then begin Check('filtered all naming', False); Break; end;
 

@@ -21,6 +21,11 @@ breaking changes** until v1.0.
   told to use `T`.** `EKeyViolation = class(EDatabaseError)` is accepted, and Fix all no longer
   renames it to `TEKeyViolation` (`AncestorNamedLikeException`). Name heuristic only; the
   library-index hop is planned for 1.31.4-alpha.
+- **Naming autofix no longer half-applies a rename against a stale index.** Since const-casing
+  renames word by word (`glyActive` -> `GLY_ACTIVE`), a stale use site that the position guard
+  skipped left the declaration renamed and the use not, so the unit no longer compiled. A rename
+  that changes more than letter case is now all or nothing: one skipped site drops the whole
+  rename, and it is counted as skipped (stale index), as the multi-project path already did.
 
 Extractor unchanged (1.21.1): no reindex needed.
 
