@@ -1,0 +1,1887 @@
+# convrules-editor -- hand-over archive
+
+Verbatim copy of every `##` section of `src\tools\convrules-editor\CLAUDE.md` as it stood
+before the 2026-10-16 trim (commit fb0f6803 tree), one section per original heading, in
+original order. Section 1 is also condensed into the trimmed CLAUDE.md; the rest is history.
+Line numbers and counts below are as of the date each section names -- re-verify before
+repeating any of them. Search with Grep (.md is not indexed).
+
+## Contents
+
+1. THE ENGINE UNDER THIS EDITOR IS PINNED. CHECK IT BEFORE YOU WORK.
+2. Standing state with the engine stream (as of 2026-09-14)
+3. Replying to the engine stream
+4. Left lists (class picker) -- hand-over notes (Task 13, 2026-09-20)
+5. Unit picker -- hand-over notes (feat/unit-picker, 2026-09-24)
+6. Unit Rules harvest -- hand-over notes (feat/unit-harvest, 2026-09-28)
+7. Menu bar + Convert tab -- hand-over notes (feat/convert-tab, 2026-09-29)
+8. Book depth, progress window, refusals -- hand-over notes (feat/engine-1206-adoption, 2026-09-30)
+9. Scoped validation on Save -- hand-over notes (fix/validate-edited-blocks, 2026-10-05)
+10. Editor minors -- hand-over notes (fix/editor-minors, job C6, 2026-10-05)
+11. Inherited instances (C8) -- hand-over notes (feat/c8-inherited-editor, 2026-10-06)
+12. Glyph expressions on #link -- hand-over notes (feat/c10-glyph-editor, 2026-10-06)
+13. Convert progress + Reindex project -- hand-over notes (feat/convert-progress-reindex, C16 + C17, 2026-10-11)
+14. IDE hand-off -- hand-over notes (feat/c12-convert-request, 2026-10-06)
+15. Engine half-apply guard (fix/apply-refusal-guard, 2026-10-06)
+16. Engine 1.27.0 adoption -- hand-over notes (feat/editor-1270-adoption, 2026-10-11)
+
+## THE ENGINE UNDER THIS EDITOR IS PINNED. CHECK IT BEFORE YOU WORK.
+
+The rule editor shells out to `drag-lint.exe` for six verbs (`proptree`,
+`query descendants`, `query find`, `query --name`, `convert-scaffold`,
+`convert-validate` -- all in `ConvRules.Engine.pas`). The **engine stream builds
+that exe from the same working tree we develop in.**
+
+On 2026-09-14 the deployed engine was rebuilt at **12:55 and again at 14:02
+during one converter session**. Verification done at 12:55 was, by 14:02, a
+statement about bytes that no longer existed at that path. Nothing announced it;
+the file simply changed.
+
+So: **the editor runs against a pinned snapshot, and the first thing any session
+here does is check whether that pin has fallen behind.**
+
+### Run this at session start, and again before any GUI or engine-touching work
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File .\check-engine-drift.ps1
+```
+
+| exit | meaning | what to do |
+|---|---|---|
+| 0 | pin matches the deployed engine, no new INBOX notes | carry on |
+| 1 | **action needed** -- engine drifted, or new/open notes addressed to us | read the listed notes, then decide whether to re-pin |
+| 2 | **cannot answer** -- pin or engine missing/unreadable | fix that first; never read a 2 as "fine" |
+
+**Match on the exit code, not on the text.** Exit 2 exists precisely so a
+misconfigured check cannot pass silently.
+
+The script is read-only and keeps no "last checked" state, so running it can
+never itself become the thing that drifts. Its baseline is always the pin's own
+manifest.
+
+### >>> THE TRAP: the version STRING is not a drift signal
+
+Both the 12:55 and the 14:02 builds reported `drag-lint 1.11.0-alpha`. Only the
+SHA256 and the build timestamp moved. **Never conclude "same engine" from a
+matching version.** The check compares bytes for this reason; so should you.
+
+### Where the pin lives, and how the editor finds it
+
+`third_party\engine-pinned\<version>-<yyyyMMdd-HHmmss>\`, holding
+`drag-lint.exe`, its tree-sitter DLLs, `drag-lint.json`, the full `rules\` tree
+(111 files) and `ENGINE-PIN.json` -- the manifest recording version, build stamp,
+SHA256 and what was verified at pin time.
+
+`ConvRulesEditor.exe` is copied in beside it, and
+`ResolveDragLintExe` (`ConvRulesEditor.dpr:48-50`) prefers a `drag-lint.exe`
+sitting next to `ParamStr(0)`. **Launch the editor FROM the pin directory and it
+uses the pinned engine with no code change.** Launch it from anywhere else and it
+falls through to `third_party\dll-win64\` -- the live, rebuilt-without-warning
+one.
+
+The snapshot is gitignored (`third_party/engine-pinned/`); the rule and the check
+that govern it are tracked. `*.exe` alone was not enough -- it would have hidden
+the binaries and still committed 111 rule files.
+
+### Re-pinning
+
+Copy the `dll-win64` tree to a new `<version>-<stamp>\` folder, write a fresh
+`ENGINE-PIN.json`, and **verify the new pin RUNS before trusting it**: `info`
+must report the *pinned* paths for its tree-sitter DLLs, `rules` must report a
+non-zero count, and one real query must answer. A pin that exists but cannot
+answer is worse than no pin -- it is an authoritative-looking baseline for an
+engine that was never checked.
+
+Re-pin when the engine change is *settled*, not mid-sweep. A pin taken halfway
+through a breaking change buys nothing.
+
+## Standing state with the engine stream (as of 2026-09-14)
+
+* **`resolved_defaults` HAS SHIPPED (corrected 2026-09-16).** This entry said it
+  "was never built (zero occurrences in `src\`)" and told the next session not to
+  start anything consuming `convert-apply` findings until it landed. It landed as
+  `7f5ce20`: a real run on VARINSP prints `ResolvedDefaults: 8 property value(s)
+  carried from their declared defaults (--format json lists each)`. The advice was
+  correct when written and became a brake on work that was already unblocked.
+
+* **`convert-apply` needs the unit to be INDEXED, and says something else when it
+  is not (2026-09-16).** It reports `could not locate .dfm object block for "<x>:
+  <Type>"` -- an assertion about the .dfm's content that is FALSE. Measured: a
+  261-byte fixture with the block at depth 1 fails; index that folder and the
+  identical run converts. VARINSP produced 20 of these and converted 0 of 20;
+  indexed into its own DB it converts **20 of 20, 60 edits**. Do not go looking in
+  the .dfm -- check the `--db` set first. Filed as
+  `docs\INBOX-2026-09-16-converter-to-engine-dfm-block-needs-indexed-unit.md`.
+
+* **The class cast IS realized on the `.pas` side (corrected 2026-10-05); the
+  `.dfm` image half is UNVERIFIED.** This bullet said `#link OptionsImage.Glyph <-
+  Picture : AssignGraphic` was skipped on the `.pas` side and that `--castlib`
+  ran enum blocks only. Engine commit `52d9a1b9` realized class casts on the
+  `.pas` side. Whether the `.dfm` re-emit still reports `dropped Picture.Data`
+  (twenty buttons losing their glyphs) has NOT been re-measured since -- check a
+  real convert-apply on VARINSP before repeating either claim.
+* **The 1.21.0 conversion hold is OVER (corrected 2026-10-06).** It held while the
+  DBs re-stamped by an unreviewed 1.21.0 build could not be written by the 1.20.6
+  pin. The engine re-parsed every DB at extractor 1.21.1; the C8 branch runs on the
+  **1.22.0 pin** (`1.22.0-alpha-20261006-040048`, extractor still 1.21.1, so no
+  re-parse), which writes them. The other live pin, `1.21.1-alpha-20261005-161726`,
+  stays for the C10 stream. Before a REAL conversion of a project, still check
+  `check-engine-drift.ps1` and that the project DB answers to the pin (a schema
+  refusal names the DB; `index --project` migrates it in seconds).
+* **The `--db` strictness sweep has LANDED, and the "costs us nothing" reading of
+  it was WRONG (corrected 2026-09-15).** The claim recorded here was that our DB
+  set is three hardcoded paths that all exist, so strictness could not touch us.
+  That measured EXISTENCE. The strictness is about **SCHEMA**: a read verb now
+  refuses an index at an older schema, and on 2026-09-15 the ORM3
+  `Micronite2027.sqlite` sat at v21 against an engine wanting v22.
+
+  It cost 12 test failures (`picker.*`, `platform.rescope.*`, `proptree.bareclass.*`)
+  and would have blocked a GUI session at the first class pick. **A stale DB is a
+  file that exists perfectly.**
+
+  Two properties worth knowing before you debug this shape again:
+
+  * **One stale `--db` fails the WHOLE query.** The error is `exit 2` with
+    "Nothing was answered", even though the other DBs in the list are healthy and
+    could answer. So a single stale index takes down every editor query, and the
+    message names the stale DB -- read it, do not assume the engine broke.
+  * **The migration is nearly free when the sources have not changed.** The fix
+    was `index --project Micronite2027.dproj --db <db>`: **2.0 s, 624 files, all
+    624 "up-to-date"** -- a schema migration, NOT a re-parse. Do not budget hours
+    for this or route around it; just run it.
+
+  `DbArgsFor` (`ConvRules.Engine.pas:544`) filtering empty entries is still true
+  and still irrelevant to this. Note also that `--project-db ''` does NOT disable
+  the project DB: `ConvRulesEditor.dpr:205-206` re-defaults an empty value to the
+  hardcoded `ProjectDb`.
+* **The stdout -> stderr move for engine errors is a non-event here.**
+  `RunCapture` sets `SI.hStdError := WritePipe` (`ConvRules.Engine.pas:580`) --
+  both streams already land in one pipe, and we gate on the exit code.
+* **`query descendants` exit-1-on-success is fixed** in the pinned engine
+  (verified: 6,324 names -> exit 0; unknown ancestor -> exit 1). The `Code = 2`
+  workaround at `ConvRules.Engine.pas:756` stays *correct* either way; removing
+  it is optional cleanup, not a fix.
+
+## Replying to the engine stream
+
+Notes arrive as `docs\INBOX-*engine-to-converter*.md`; ours go back as
+`docs\INBOX-REPLY-*.md`. The drift check lists both, newest first. **Re-verify an
+inherited claim against the tree before repeating it** -- the 2026-09-14 ledger
+found five items that read as open in the correspondence and were already done,
+and one that read as answered and was not.
+
+## Left lists (class picker) -- hand-over notes (Task 13, 2026-09-20)
+
+Line numbers below are deliberately omitted (this unit moved ~600 lines in
+ONE DAY during this branch, and a cited `:NNNN` is wrong by the next session)
+-- resolve a routine name with `drag-lint outline --file <U.pas> --db <db>` or
+get its full context with `drag-lint context --task "modify <Unit.Routine>"
+--db <db>`.
+
+* **Skip file location:** `<rules folder>\convrules-editor-skip.txt`, beside the
+  `.rules` book(s) -- shared via source control, not per-user. Format is plain
+  text, one `skip <ClassName>` line per marked class (`SkipFilePath`,
+  `ConvRules.SkipList.pas`).
+* **The class-picker's own index is PER-UNIT and PERSISTENT**, under
+  `%LOCALAPPDATA%\DragLint\ConvRulesEditor\scratch\<stem>-<hash>.sqlite` --
+  ONE database per unit, keyed on the upper-cased full path, so two units
+  sharing a stem cannot collide. This is only used by the `OutlineClasses`
+  path (the From-Unit "Browse..." button next to `FCbUnit`, wired to
+  `DoBrowseFromUnit` -> `HarvestUnitFile` -> `HarvestUnitClasses`, which calls
+  `FEngine.OutlineClasses` and merges the result into `FFormTypeRows` via
+  `MergeClassRows`). **It is NOT used by "Open form..." / `HarvestFormTypes`**,
+  which parses `.dfm` text only (`ScanDfmTypes`/`MergeFormTypes`) and never
+  touches the engine or any index -- that is why opening a form is always fast
+  regardless of cold/warm state, and why a `dfm`-only unit's checklist never
+  shows a `pas`-origin row unless the unit was ALSO picked via "Browse...".
+* **Cold-pick cost, measured 2026-09-20:** a small unindexed unit (7 lines, 1
+  class) costs **0.55 s**; VARINSP.PAS (4,000+ lines, 3,946 symbols) costs
+  **27.7 s** (the `calls` resolve pass is 16.5 s of that; nothing skips it).
+  Warm re-index of either, unchanged file, is **0.09-0.13 s**. The 27.7 s
+  figure is the worst case on this corpus, not the typical one -- quote both
+  numbers or the feature reads as slow when the common case is half a second.
+* **The three-column layout is an owner ruling, 2026-09-20 (spec R4.1a):** the
+  class panel (`TabClasses`, `FormTypesPanel` and everything parented to it)
+  is the DEFAULT `Classes` tab of `FTabs`, the leftmost page control's own
+  first tab -- not a fourth column beside it. The form went from four columns
+  to three the same day the old `FormTypesPanel`/`SplitForms` column was
+  retired; the accepted cost is that the checklist is hidden while `Raw DSL`
+  or `Unit Rules` is the active tab.
+* **Skip marks are re-applied on EVERY row rebuild, `HarvestFormTypes`
+  included** (`ApplySkipMarks` runs after every `MergeFormTypes`/
+  `MergeClassRows` call that replaces `FFormTypeRows`). Task 9 filed this as a
+  Critical when the "Open form..." button path was the one omitting it --
+  every rebuild site needs the same call or a re-Examine silently erases
+  marks the skip file still has, and the next `SaveSkipList` then persists the
+  erasure.
+* **`ApplySkipMarks` stamps memory only; `SaveSkipList` writes every row.**
+  The two are not symmetric -- `ApplySkipMarks` sets `FFormTypeRows[i].Skipped`
+  from `FSkipList` in memory and touches no file; only `SaveSkipList` (called
+  from every toggle site: `ToggleFormTypeSkip`, `FormTypeCheckClick`,
+  `ApplyNamedFilterClick`) writes the skip file, and it writes the FULL current
+  row set, which is what makes un-marking a class persist (a naive
+  additive-only writer would leak a stale `skip` line forever).
+* **`ConvRules.MainForm.pas` is OUTSIDE the tests project's compile closure.**
+  `ConvRulesModelTests.dpr` links the pure model/engine units directly; it does
+  not, and cannot, pull in the VCL form unit. Decision logic that needs a test
+  belongs in `ConvRules.FormTypes.pas` / `ConvRules.RuleCatalog.pas` /
+  `ConvRules.SkipList.pas`, not in `MainForm.pas` -- and the tests build can
+  NEVER detect a `MainForm.pas` compile break on its own. Always build
+  `_build_convrules_editor_local.bat` too, not just the tests.
+* **A double-click on an ALREADY-SELECTED rule row forces the grid load
+  directly.** VCL does not re-fire `OnSelectItem`/`LBN_SELCHANGE` when the
+  selection does not change, so `FormTypeDblClick` cannot rely on the
+  single-click handler having just run for that row -- it loads the grid
+  itself rather than assuming `FormTypeClick` already did.
+* **A per-task "touched hunks" lint gate has a real blind spot: a line whose
+  TEXT is unchanged can still be swept into a LATER task's diff** when
+  surrounding lines are inserted/deleted around it (git attributes the whole
+  replaced region to the new commit even where content did not change). Task
+  13 found 13 `--enable`'d findings on `MainForm.pas` branch-authored lines
+  that no single task's own per-task lint run had reported: 9 on the `BtnSkip`
+  creation line (last rewritten by the "several rules... warn" task, whose own
+  commit was ABOUT splitting statements onto one per line and still missed
+  this one) and 4 on the `LeftPanel`/`FTabs` creation lines (swept into the
+  "retire the placeholder Rules Library tab" task's replaced region). Only the
+  WHOLE-BRANCH diff (`cfe19ec9..HEAD`) caught them -- run that, not just the
+  latest commit's own diff, before calling a branch lint-clean.
+
+### Pre-existing oddities noticed in passing (not fixed -- for the owner)
+
+* `HeaderIndexFor`/`LoadFile` emits a stale-index message with a BLANK
+  filename on a cross-book reopen.
+* `BlockPercent` (`ConvRules.MainForm.pas`) is dead code since the `%` column
+  became `File` -- `H2219 Private symbol 'BlockPercent' declared but never
+  used` on every build.
+* The `{ "Fill From-classes": ... }` hand comment block directly above
+  `HarvestUnitFile` describes an unrelated feature -- stale prose, not stale
+  facts (autodoc does not touch hand-written comments).
+* `HarvestFormTypes`'s own hand comment still says "manual re-enable/override"
+  language that predates the current skip-mark carry-forward design.
+* `FormTypeDrawItem`'s 4px text inset is a literal written THREE separate
+  times -- the `TextOut` call, then the strikethrough's `MoveTo` and `LineTo`
+  -- each with its own `dl:ok magic-literal` review instead of one named
+  constant.
+
+## Unit picker -- hand-over notes (feat/unit-picker, 2026-09-24)
+
+Every place the editor asks for a unit name opens `TUnitPickerForm`
+(`ConvRules.UnitPicker.pas`): **Uses Units > Add unit... / Remove unit /
+Swap...** (toolbar buttons `+ Add unit` / `+ Remove unit` / `+ Swap` until 2026-09-29)
+and the From Unit **Pick...** button. Its decisions live in
+`ConvRules.UnitPick.pas`, which the model tests cover; the form only renders.
+
+* **Swap is row-driven, and the replacement picker is multi-pick (2026-09-29).**
+  The ROW is the Old unit: a right-click on a unit-list row (`FUnitPopup`:
+  Swap <Old> with... / Accept scope rename / Remove unit / Add unit / Delete)
+  or **Uses Units > Swap...** with exactly one row selected opens ONLY the
+  replacement picker (`TUnitPickerForm.ExecuteMulti`, caption
+  `Replacements for <Old>`). There a double-click, Enter or Space ADDS the unit
+  to a Replacements list with no confirmation; OK finishes; a chosen entry is
+  removed by double-click or Delete. The Old picker opens only when no row is
+  selected. `SwapUnit` MERGES into an existing `#useswap` for the same Old.
+  `AddPickedUnit` refuses blanks, repeats (any case) and the Old unit itself.
+* **Why (the defect it fixed):** every rule change rebuilds the list
+  (`Items.Clear`), dropping the selection, so the second **+ Swap** opened the
+  Old picker EMPTY -- indistinguishable from a replacement picker -- and the
+  replacement picked there became an Old unit. Guard:
+  `tests\gui\drive-unit-rules-toolbar.ps1` sections 4b/4c (the driver has 41
+  checks since the menu bar replaced the toolbar; the file name is historical).
+* **`IfThen` evaluates BOTH arguments.** `IfThen(Row <> nil, Format(..,
+  [Row.SubItems[1]]), '')` is an access violation on a nil row -- the popup
+  crashed on a right-click over empty space until it became if/else. The
+  `ifthen-both-branches` lint rule flags every such call; take it seriously.
+* **`#unuse` from selected rows no longer asks** (owner ruling 2026-09-29): a
+  rule row is undone by Delete. Delete of more than one row still asks.
+
+* **The lists come from `sql`, not `query find`.** `query find --no-docs` is a
+  FILTER (undocumented symbols only) -- the From Unit combo used it and listed
+  2,103 of library-Win64's 5,646 units. `TEngineAdapter.ListUnits` now runs one
+  `sql ... WHERE kind='unit'` per DB with `--limit` (the `sql` default cap is
+  200). Engine ask filed: `docs\INBOX-2026-09-24-converter-to-engine-list-units-and-object-leak.md`.
+* **Cost, measured 2026-09-24:** ~5.5 s per library DB, ~0.9 s for the project
+  DB, once per session (cached in `FPick*`); a reopen measured 0.4 s.
+* **Side -> platform:** a To unit (#use, a swap's New) lists the TO platform's
+  library, a From unit (#unuse, a swap's Old, From Unit) the FROM one. On
+  `Both` a unit present in only one library gets a note under the lists.
+* **The platform dropdowns now write `GEditorFromPlatform` /
+  `GEditorToPlatform`** -- those globals are the session's TO/FROM platform,
+  not just the command-line defaults.
+* **Setting a conversion adds its unit rules** (`AddDerivedUnitRules`):
+  `#unuse <From type's unit>` + `#use <To type's unit>`, skipping any the book
+  already says (`MissingUnitNodes`). They are atomic; deciding whether a unit
+  is still needed, already present or must move to the interface is the
+  ENGINE's job at apply time -- not built yet (next spec).
+* **Unit inserts shift every `#convert` index.** `InsertUnitNode` re-derives
+  `FActiveHdr`; any other index a caller holds must be re-found by NODE (see the
+  set-conversion path).
+* **Driving it (rewritten 2026-09-29 -- the toolbar is GONE):** every command
+  is a main-menu item, invoked by PATH: `[W]::InvokeMenu($main, 'Uses
+  Units|Swap...')` in the drivers' shared `W` block. `GetMenu(main)` returns 0
+  on this form -- the always-on VCL style detaches the native menu and paints
+  its own bar -- so the drivers ask the form for its HMENU with the registered
+  message `MAIN_MENU_QUERY_MSG` (`'ConvRulesEditor.MainMenuHandle'`) and post
+  `WM_COMMAND` with the item's id. Details in the menu-bar section below.
+  Raw DSL's memo has no window until its tab has been shown.
+
+## Unit Rules harvest -- hand-over notes (feat/unit-harvest, 2026-09-28)
+
+The Unit Rules tab lists the units a SOURCE uses (pasted or dropped text,
+`.pas` / `.dpr` / `.dproj` files) and classifies each against a DESTINATION
+`.dproj`, so a unit the destination cannot resolve shows as MISSING before
+anything is converted. Spec and plan (gitignored, main tree):
+`docs\superpowers\specs\2026-09-28-unit-rules-harvest-and-missing-design.md`,
+`docs\superpowers\plans\2026-09-28-unit-rules-harvest-and-missing.md`.
+
+* **Three pure units own the logic; the tests cover all three.**
+  `ConvRules.UsesHarvest` -- text / `.dpr` / `.dproj` parsing, `HarvestFiles`,
+  the merge. `ConvRules.UnitStatus` -- `TDestinationResolver`, which classifies
+  a unit against the destination. `ConvRules.UnitMask` -- the session masks and
+  the display order. `ConvRules.DropTarget` is Windows glue only.
+* **The resolver is `TDestinationResolver`, NOT `TUnitResolver`.**
+  `ConvRules.Units` already declares an unrelated `TUnitResolver` (a
+  reference-to-function type for `DeriveUnits`); the two compiled side by side
+  only by uses order. Do not "restore" the plan's name.
+* **A destination MEMBER is a `.dpr` entry WITH an `in` path.** A plain entry
+  (`Vcl.Forms`) is not a member; it resolves through the file / library / scope
+  steps like any other name. Counting it as a member reported library units as
+  `project` and defeated the hide-library mask.
+* **`MainForm` is wiring only.** Every decision a test can check lives in the
+  three pure units; `MainForm.pas` is outside the tests' compile closure (see
+  above), so build the editor too.
+* **Harvested rows are `Data = nil` with Kind `(used)`** (Examine candidates are
+  `(candidate)`, also `Data = nil`). They are session state, never written to
+  the book. A harvested name that is also an Examine candidate shows ONCE, as
+  the harvested row -- it carries the status and used-by that a candidate row
+  lacks -- but only while that harvested row is actually LISTED (rulings R7,
+  R16): `RefreshUnitList` computes the shown rows once, first, and a candidate
+  yields only to a name in that set (`IndexOfRow`). A harvested twin the check
+  boxes or masks hide does not hide the candidate.
+* **Which harvested rows are listed is pure: `ConvRules.UnitMask.FilterHarvestRows`**
+  (rows, Find missing, Include unqualified, a has-rule predicate, the mask) ->
+  `THarvestView` = the shown rows in display order + `Masked` + `Filtered`.
+  Every row lands in exactly one bucket (shown + masked + filtered = total; the
+  tests pin it). A row the check boxes drop or a rule covers is `Filtered` even
+  when a mask would also hide it. `MainForm` only renders the result and the
+  `N listed, M masked, F filtered` label.
+* **Delete acts on every selected row** (MultiSelect is on): a rule row deletes
+  its node, a `(used)` / `(candidate)` row is dismissed from its own session
+  set. More than one row asks first.
+* **Nothing about the destination is cached between classifies (ruling R13).**
+  `EnsureResolver` frees and rebuilds `TDestinationResolver` on EVERY classify:
+  it re-reads the `.dproj` and its `.dpr`, and the new resolver lists each
+  folder at most once, for that classify only. A session-long cache (the old
+  `<DPROJ>|<platform>` key) kept reporting MISSING after the owner copied the
+  unit into the destination. Only the library unit list is cached, by
+  `EnsurePickLists` -- the engine query is the expensive part; a failed load is
+  not cached and is retried. Classifies happen only on user actions: a harvest,
+  a destination commit, a platform change, dismissing harvested rows. A check
+  box or mask change NEVER reclassifies; it re-filters (`RefreshUnitList`).
+  `cpBoth` classifies as Win64 and says so in the status line.
+* **The Destination row shows `Platform: Win64` / `Win32` / `Both -> Win64`**
+  (`DestPlatformLabel`, ruling R17), set at build and by `PlatformChanged`. The
+  TO platform box is the only control; the label is read-only.
+* **Enter in the Destination edit commits it** (`DestKeyPress`, ruling R18),
+  exactly like leaving the edit; the key is swallowed so the edit does not beep.
+* **Pasted text without the word `uses` is a LIST** (`HarvestText`): comments
+  (`{..}`, `(*..*)`, `//..`) and quoted strings are removed first, the reserved
+  word `in` is dropped, then it splits on `,` `;` and whitespace. So a `.dpr`
+  uses-clause selection (`U1 in 'U1.pas' {Form1}, // old DM`) yields only the
+  unit names. It is deliberately NOT read as `'uses ' + text + ';'` through the
+  scanner (ruling R14's first proposal): the scanner stops at the first `;` and
+  keeps one name per comma entry, which measurably dropped `DB, Data.DB` from
+  `Forms, Vcl.Dialogs; DB` + newline + `Data.DB` and would collapse a
+  one-name-per-line list to its first name. Known limit: a selection that runs
+  PAST the clause's `;` into code (`begin`, `Application.Run`) lists those
+  identifiers too. Prose containing the word `uses` is still read as source.
+* **`.dproj` reading is deliberately narrow:** only the `'$(Base)'!=''` and
+  `'$(Base_<P>)'!=''` property groups are read; a search-path entry holding a
+  macro (`$(Platform)`, `$(Config)`, ...) is skipped and COUNTED in the status
+  line, never guessed at.
+* **Degraded classification goes red.** Destination unreadable, library list
+  unavailable (MISSING is then over-reported) or classification stopped part
+  way sets `FDestWarn`, and the harvest status line goes out through
+  `SetError`, not `SetStatus`. The informational notes (macros skipped, TO =
+  Both) stay on `SetStatus`. Exceptions from the `.dproj`/`.dpr` read and the
+  classify loop are caught and reported -- a bad project must not crash a drop.
+* **The strip's height is `HarvestRowResize`'s job, not `TPanel.AutoSize`.**
+  Each flow row AutoSizes to its wrapped content; the strip's height is set to
+  the sum of the rows on each row's `OnResize`. `AutoSize` on the strip itself
+  measurably did not re-run after the rows wrapped, and the list covered the
+  folder edit.
+* **The OLE drop target is on the FORM**, registered in `CreateWnd` (a VCL
+  style switch recreates the handle) and revoked in `DestroyWindowHandle`, NOT
+  `DestroyWnd` -- `TWinControl.Destroy` calls `DestroyWindowHandle` directly,
+  so a `DestroyWnd` revoke is skipped at form destruction.
+* **A drop hands its payload on with `TThread.ForceQueue`,** after `Drop`
+  returns, so Explorer's drag loop is never held while the editor reads files
+  or queries the engine.
+* **Paste catches `EClipboardException` only**, around the clipboard READ, and
+  reports "another program has the clipboard open" through `SetError`. A driven
+  run hung on the old modal "Cannot open clipboard: Access is denied".
+* **GUI check: `tests\gui\drive-unit-harvest.ps1 -Exe <ConvRulesEditor.exe>`**
+  (a frozen `drag-lint.exe` beside the exe whose Win64 library index answers).
+  It needs NO real project: it writes a FIXTURE in a fresh temp folder --
+  `dest\Dest.dproj` (the IDE's Base / Base_Win64 group shape, `Vcl` a Win64
+  scope name), `dest\Dest.dpr` with one member `Local in 'Local.pas'`, and a
+  source `source\Src.pas` using `Local, Forms, NoSuchUnitXyz, FileOnlyXyz` --
+  and deletes it on exit. It sets the Destination edit (WM_SETTEXT) and commits
+  it with Enter (WM_CHAR), then asserts EXACT statuses: NoSuchUnitXyz
+  `MISSING`, Forms `via scope -> Vcl.Forms`, Local not listed with Find missing
+  on. Also: a CF_HDROP file-list paste (FileOnlyXyz comes only from Src.pas), a
+  held clipboard (any editor dialog = FAIL), and the R13 case -- `uses
+  LateUnit;` is MISSING, LateUnit.pas is written into the fixture destination,
+  the same paste then reads `project`. `-ProofNoDestination` leaves the
+  Destination edit empty: the status assertions then FAIL, which is the proof
+  the check can fail. RED on the pre-feature build (no Paste button). It is NOT
+  wired into the `tests\autotest` battery -- run it by hand, like
+  `drive-unit-picker.ps1`. Explorer drag-drop itself, a real Ctrl+V keypress
+  and the visual checks (bold MISSING, the platform label, wrapped strip at
+  other widths) are owner checks.
+
+## Menu bar + Convert tab -- hand-over notes (feat/convert-tab, 2026-09-29)
+
+The toolbar became a main menu (File / Conversion / Mapping / Uses Units /
+View), File gained New / Save As / Exit behind one unsaved-changes guard, and a
+**Convert** tab applies checked rule books to a list of source units IN PLACE,
+with a numbered backup per unit. Plan and spec (gitignored, main tree):
+`docs\superpowers\plans\2026-09-29-menu-bar-and-convert-tab.md`; ledger and
+per-task reports: `.superpowers\sdd\2026-09-29-menu-bar-and-convert-tab\` in the
+`convert-tab` worktree.
+
+### Menu bar
+
+* **The toolbar is gone; every command is a menu item** built by `BuildMenu`
+  through `AddMenuCmd(AParent, ACaption, AHint, AHandler, AShortCut)`.
+  `UpdateToolbarEnabled` is now `UpdateMenuEnabled`; `Only this type` is a
+  `Checked` toggle, not a caption change. Menu hints go to the status line
+  (`WM_ENTERMENULOOP` / `AppHint` / `WM_EXITMENULOOP` restores it) -- not
+  covered by any driver; an owner check.
+* **Shortcuts are Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Shift+S -- nothing else, and
+  never a bare key** (Delete, Enter, a letter): a main-menu shortcut fires
+  inside the Raw DSL memo and every edit control.
+* **`GetMenu(main)` returns 0 on this form.** The always-on VCL style
+  (`TFormStyleHook`) detaches the native menu and paints its own bar. The form
+  answers the registered window message `MAIN_MENU_QUERY_MSG`
+  (`'ConvRulesEditor.MainMenuHandle'`) with `Menu.Handle`, from its `WndProc`
+  override; every other message goes to `inherited`. This exists for the GUI
+  drivers (owner-accepted automation hook, ledger Task 2). Drivers invoke by
+  PATH -- `[W]::InvokeMenu($main, 'File|Save As...')`, `[W]::MenuCaptions` to
+  list -- never by toolbar rectangle; the `W` block is copied between drivers.
+* **Status text is readable only from the `TStatusBar`.** `FLblStatus` is a
+  `TLabel` (no window); `SetStatus` / `SetError` mirror to the status bar, with
+  a `[!] ` prefix on errors. Assert on the status bar.
+
+### File > New / Save As / Exit and the unsaved-changes guard
+
+* **Unsaved = `FBook.Snapshot <> FSnapshot`** (`TRuleBook.Snapshot` is the
+  canonical re-emit, so a non-canonical file does not load dirty, and an
+  incomplete `#convert` block never makes a book dirty). `FSnapshot` is taken
+  at `LoadText` (every open / New / Curate reload) and in `SaveBook` once the
+  bytes reached disk.
+* **`ConfirmDiscard` is the one guard** -- New, Open, Exit, the window X
+  (`FormCloseQueryHandler`), the Convert tab's open-book check
+  (`ConfirmOpenBookSaved`) and a cross-book double-click in the Classes list
+  (`OpenOwningRuleEntry`, which is an Open under the spec). `DoCurate` keeps
+  its OWN save-first prompt (keyed on `FBook.Nodes.Count > 0`) -- a second,
+  coarser notion of unsaved, deliberately not unified yet.
+* **Exit's handler is `DoExitClick`, not `DoExit`** -- `TWinControl.DoExit` is
+  a dynamic method and a same-named handler hides it (W1010).
+* **`SaveBook(APromptPath)` restores the old path and title ONLY when no bytes
+  were written** (`LBytesWritten`). Once `TFile.WriteAllText` succeeded, the new
+  path is kept and `FSnapshot` refreshed even if validate / rescan then raise.
+  A cancelled Save As exits before anything changes (`saveas.cancel.keeps.path`).
+  The written-then-raised path has no automated test (needs fault injection;
+  MainForm is outside the model tests' closure).
+
+### Convert tab
+
+* **Three layers.** Pure decisions in `ConvRules.ConvertRun` (model-tested:
+  `SharedBackupPaths`, `BookKindOfText`, `MoveEntry`,
+  `ExpandSources`, `Preflight`, `ParseApplyJson`, `UnitInIndex`, `SourceRowText`);
+  execution in
+  `ConvRules.ConvertRunner` (`RunConversion` / `RunConversionUnits`); UI in
+  `ConvRules.ConvertTab` (`TConvertTab`, a code-built `TPanel`, editor-only --
+  not in the tests' closure). `Conversion > Convert...` shows the tab.
+* **Backups:** full file name + `.BCK<N>`, ONE N per unit shared by its `.pas`
+  and `.dfm` (`SharedBackupPaths`): one above the highest existing N over BOTH
+  `X.pas.BCK*` and `X.dfm.BCK*`, so `X.pas.BCK1` + `X.dfm.BCK3` give both
+  `.BCK4` (gaps are not reused; the probe window is 50). `TConvertRow` carries
+  `Backup` and `BackupDfm`; the grid has a `Backup .dfm` column, and the report
+  and every Note that names a backup (`rolled back`, `FAILED -- NOT restored`)
+  name both. A unit that no VALID book touched keeps no `.BCK`.
+* **Cancel is honoured between UNITS only**, never between two books of one
+  unit. A unit listed twice (file + `.dproj`, any case) is converted once
+  (`ExpandSources` dedupes). A listed unit gone from disk gets a
+  `unit skipped` row and no engine call.
+* **Failure is per unit, and the row set never lies.** Rows are buffered per
+  unit and emitted when the unit finishes. Statuses (`TConvertStatus`,
+  `ConvertStatusText`): `converted`; `FAILED -- restored` (the unit was copied
+  back from its `.BCK`); `rolled back` (an earlier book on this unit converted,
+  a later one failed, the restore undid it); `book skipped` (invalid book --
+  reported once, skipped for every unit); `unit skipped` (missing, the reindex
+  before its first book failed, or the backup copy failed); `FAILED -- NOT
+  restored` (the restore itself failed; backups kept
+  and named -- the summary LEADS with these). File I/O exceptions are handled
+  per unit; nothing escapes the runner.
+* **Book validity comes from convert-apply's own `rule_errors`.** A separate
+  `convert-validate` without `--from`/`--to` checks syntax only (measured), so
+  it is not used for this.
+* **`ParseApplyJson` cuts at the LAST `}` and skips leading noise.** The engine
+  prints `(loaded defaults from ...)` AFTER the JSON document; before the fix
+  every real apply parsed as "unparseable" and every unit was restored.
+  `HasCapability` slices `info --json` the same way.
+* **Testable runner:** the `RunConversionUnits(AUnits, ABooks, AApply, AIndex,
+  ...)` overload takes `TApplyFn` / `TIndexFn` function references; the
+  `TEngineAdapter` overload binds `ApplyConversion` / `IndexProject`. The fault
+  checks (`runner.rollback.*`, `runner.backup.failure`,
+  `runner.restore.failure`) use fakes; `runner.live.*` uses the real engine.
+* **The index is refreshed BEFORE each unit's first book** as well as after
+  every book: convert-apply patches the `.dfm` at the index's line ranges, so a
+  unit edited in the IDE since the last index would be patched in the wrong
+  place. A failed refresh gives `unit skipped` with `reindex before apply
+  failed: <output>` -- no backup, no engine apply -- and the run continues with
+  the next unit (`runner.reindex.before.*`).
+* **The project file is ALWAYS the DB's own** -- `ProjectFileForDb(
+  GEditorProjectDb)`, i.e. `<dir>\<Name>.dproj` for `<dir>\_D-RAG\<Name>.sqlite`
+  -- never the Unit Rules Destination: `index --project <other.dproj> --db
+  <editor's DB>` would re-scope the editor's project DB to another project.
+  Convert refuses (`Convert refused: the project index <db> has no project file
+  on disk -- expected <path>.`) when it does not exist. The Destination field
+  only classifies harvested units.
+* **Captured at Convert time:** units, books, project file / DB and the rules
+  folder (`FRunRulesFolder`) -- File > Open / New during a run cannot move the
+  report (`convert-run-yyyymmdd-hhnnss.txt`, tab-separated, UTF-8 WITHOUT a BOM
+  so non-ASCII engine text survives, in that folder). After the rows it lists
+  every unit a cancel kept from running (`not reached (cancelled)`, also added
+  to the grid), then `Run<TAB>completed` or `Run<TAB>cancelled -- N unit(s) not
+  reached`, then `Final reindex<TAB>ok` / `FAILED: ...` / `not run`. The
+  never-reached set comes from counting cancel polls: `RunConversionUnits`
+  polls `ACancelled` exactly once just before each unit (documented contract).
+* **Mid-run locks:** File > Save / Save As / Curate are disabled while a run is
+  in progress (`TConvertHost.RunStateChanged`, fired from `SetRunning`) -- a
+  book saved mid-run would change the rules the run's later units get. Open and
+  New stay enabled. A drop (or any `AddSources` call) during a run is refused
+  with `A conversion is running -- sources cannot be added until it finishes.`
+* **Unindexed source units are flagged on their row:** owner-drawn, bold red,
+  display text + ` -- not in the project index`; the ITEM text stays the raw
+  path (the job consumes it). "Indexed" means the unit's FULL PATH is in the
+  project DB's `files` table (`TEngineAdapter.ListIndexedFiles`, one `sql
+  SELECT path FROM files` with `--limit 1000000`; `UnitInIndex` compares
+  `ExpandFileName`'d paths case-insensitively) -- NOT the unit name: the engine
+  finds the `.dfm` by path, and `M2022\DM1.pas` must be refused when the
+  project indexes its own `DM1.pas` (`convertrun.pre.same.name.foreign.path`).
+  The index set is refreshed on add, on tab show (skipped when the list is
+  empty) and after a run. Convert refuses while any listed unit is unindexed
+  (`Preflight`, same `UnitInIndex`), and refuses without the project file on
+  disk (see above).
+* **The form refuses to close while a run is in progress** (File > Exit and the
+  window X). `Application.Terminate` or a Windows shutdown still bypasses it.
+* **Measured cost:** a 3-file fixture takes ~94-106 s per engine call
+  (convert-apply); a whole driven run of one unit x one book was 105 s.
+  `CONVERT_TIMEOUT_MS = 600000` for conversion calls; `ENGINE_TIMEOUT_MS =
+  180000` stays for every other call. A book list of M books on N units is up
+  to M x N such calls.
+
+### Engine gaps (open INBOX notes, main tree `docs\`)
+
+* **Unit rules are not applied by the engine.** Unit-rules-only books are
+  listed greyed `(unit rules: engine support pending)` and cannot be checked;
+  mixed books run their `#convert` blocks with `(unit rules not applied:
+  engine)`. `info --json` -> `capabilities.apply_unit_rules: true` lifts both
+  (read once per session, re-probed by the tab's Refresh):
+  `INBOX-2026-09-29-converter-to-engine-apply-unit-rules.md`.
+* **`BDE-to-FireDAC.rules` fails convert-apply validation** (every `#link`
+  "not found"): `INBOX-2026-09-29-converter-to-engine-convert-apply-bde-book-fails-validation.md`.
+* **`lint-all --rule doc-drift --fix --apply` de-indents** a two-space `///`
+  block above a column-0 routine (hand-written lines too). After ANY use of the
+  fixer here, check non-`///` lines and `git diff --stat` with and without
+  `-w`, and delete its `.bak` files:
+  `INBOX-2026-09-29-converter-to-engine-doc-drift-fix-dedents-indented-blocks.md`.
+* **Lint false positives held by `dl:ok` reviews** (try-except-swallowed on a
+  catch-and-check test; unused-unit-in-uses when an implementation-only
+  routine's return type is the only use; per-file `lint` of a `.dpr` reporting
+  EVERY marker as `review-marker-unused`):
+  `INBOX-2026-09-29-converter-to-engine-lint-false-positives-convert-tab.md`.
+  Judge the tests `.dpr`'s markers with `lint-all`, never per-file.
+
+### Verification kit
+
+* **Model tests:** `tests\ConvRulesModelTests.exe` with `CONVRULES_TEST_ENGINE` =
+  the 1.27.0 pin -> **`model-tests: 2194 pass / 5 fail / 0 skip / 2199 total`** -- 2026-10-11, feat/editor-1270-adoption after its final fix wave (identical on a 1.28.2 copy; 2180 / 5 / 0 before the fix wave, identical on 1.28.1); before it, on the 1.26.7 pin, `2055 pass / 5 fail / 0 skip / 2060 total` -- 2026-10-11, feat/convert-progress-reindex (C16 + C17); before that, on the 1.26.2 pin, `2021 pass / 5 fail / 0 skip / 2026 total` -- 2026-10-07, fix/editor-1262-adoption; earlier, on the 1.22.0 pin, `1951 pass / 5 fail / 0 skip / 1956 total`
+  (measured 2026-10-06 on C8 + C10 + C12 after the C12 final-review fix wave, 148 s;
+  1938 / 5 / 0 right after the C12 rebase onto C10; C12 on C8 alone 1792 / 5 / 0;
+  C8 + C10 1806 / 5 / 0 after the C10 fix wave, 1793 / 5 / 0 right after the C10 rebase onto C8; C8 alone 1660 / 5 / 0 after its Task 8 fix round 1, 1646 / 5 / 0 before it; 1616 / 5 / 1 skip on the 1.21.1 pin after the
+  fix wave; 1422 / 5 / 0 before C8; 1329 / 5 before C6); `inherited.live` RUNS now
+  (the engine reports `inherited_instances`) and SKIPs on an older pin; the 5 are the VARINSP fixture (`picker.unit.has.VARINSP`,
+  `fill.from-unit.nonempty` / `.has.TOvcController` / `.has.TPanel` /
+  `.has.TOvcTable`). A full run measured 98-178 s on 2026-10-06 (recorded
+  earlier as ~6 min, the live runner test ~3 min of it); a build or redeploy of `dll-win64` mid-run kills it -- discard that run.
+* **GUI drivers** (`tests\gui\`, run by hand as `pwsh -NoProfile -File <driver>
+  -Exe <ConvRulesEditor.exe>`, the exe beside a frozen `drag-lint.exe` whose
+  Win64 library index answers -- a staged copy, never `dll-win64`). Expected
+  on the final build (re-measured 2026-10-11 on feat/editor-1270-adoption, on a staged
+  copy of the 1.27.0 pin: all 13 green with these exact counts; `drive-unit-harvest.ps1`
+  on a rerun -- its first run lost the clipboard to another program, which the editor
+  reported correctly. After the branch's final fix wave `drive-work-list.ps1` (13 / 0)
+  and `drive-convert-tab.ps1` (23 / 0) were re-run on the 1.27.0 pin, and
+  `drive-work-list.ps1` also gave 13 / 0 on a staged 1.28.2 copy. Earlier, on C8 + C10
+  + C12 and the 1.22.0 pin, the then 12 were green and `drive-inherited-offer.ps1` also
+  15 / 0 on a staged 1.21.1 copy):
+
+  | driver | checks | covers |
+  |---|---|---|
+  | `drive-unit-rules-toolbar.ps1` | 41 | menu bar items (incl. `Conversion|Reindex project` since C17, `View|Work list` since the 1.27.0 adoption), toolbar gone, Uses Units commands, Swap flow |
+  | `drive-unit-picker.ps1` | 20 | unit picker |
+  | `drive-unit-harvest.ps1` | 21 | Unit Rules harvest (`-ProofNoDestination` control) |
+  | `drive-file-menu.ps1` | 19 | New / Save As / Exit, the guard, delete-in-place makes dirty |
+  | `drive-owning-open.ps1` | 6 | cross-book double-click goes through `ConfirmDiscard` |
+  | `drive-engine-wait.ps1` | 9 | progress window: appears after `SHOW_DELAY_MS`, Cancel closes it and stops the To tree, retry after cancel, a fast load shows no window, a re-load is cached (`wait.reload.*`) |
+  | `drive-book-depth.ps1` | 13 | depth combo shows the book's `#depth`, gated on `book_depth`, absent `#depth` not added on save, New file shows the default, `depth.change.*` (an engine without `book_depth` gives 10 + 1 SKIP line) |
+  | `drive-convert-tab.ps1` | 23 | Convert tab end to end on a temp fixture (`Fix.dproj` + `Loose.pas`): unindexed refusal, File > Save / Save As / Curate locked mid-run and unlocked after, in-place convert, `.BCK1` for `.pas` and `.dfm`, both named in the grid and the report, report UTF-8 without BOM with the final-reindex line; since C8 also: no E7 order dialog on a fixture with no inherited instance; since C16/C17 (2026-10-11): the mid-run status bar shows the progress line (`run.progress.status`), `Conversion|Reindex project` is locked mid-run, and after the run it answers `Reindexed Fix.dproj (Fix.sqlite): N file(s) in the index, compile closure M (m:ss)` (`reindex.status`) and refuses with `Fix.dproj` renamed away (`reindex.refused.no.project.file`). The pre-C16 editor (1.26.7 pin) gives 18 / 5 |
+  | `drive-validate-scope.ps1` | 18 | scoped validation on Save (warnings, unchanged re-save fast), progress window + Cancel, owed block revalidated, Exit without a prompt, `automatch.*` |
+  | `drive-inherited-offer.ps1` | 15 | C8: ancestor-first prompt (No / Yes inserts above), row note on the status bar (incl. an E2b code-only use), order warning (No runs nothing), the E10 run note branching on the staged engine's `inherited_instances` (`engine.refusal.note.absent` on 1.22.0, `engine.refusal.note` on a 1.21.1 pin copy -- run BOTH stages; `-ProofNoInheritance` control) |
+  | `drive-glyph-link.ps1` | 23 | C10: Glyph expression menu item (disabled without a rule, enabled with one), Convert tab greys the G-link book and it stays unchecked through Check all / Space / a click (`Convert refused: No rule book is checked.`), the dialog's checked `Keep ... G[count]` box, Auto-Match + Save As keeps both G-link lines byte-exact with no duplicate, the bad book's Save shows `G-expression column` (`-ProofNoGlyph` control: 17 / 6) |
+  | `drive-convert-request.ps1` | 25 | C12: `--convert-request` opens the Convert tab with the unit listed, only the matching book checked, the E5 status, `Clear scope` enabled; Convert converts the selected instance only (`--only`), report `Scope` line + `--only` note; Delete resets the scope and says `Scope cleared` on the status bar; Exit without a prompt; `form` scope; E3 no-rules-folder refusal (editor stays usable); missing project index refused; unindexed unit named in red; `--write-capabilities` within 5 s, no window (`-ProofNoRequest` control) |
+  | `drive-work-list.ps1` | 13 | 1.27.0 adoption: Work list tab after a real run (summary, status filter list incl. `(other)`, grid rows, double-click status + clipboard `<path>(<line>)`, missing file reported on the status bar; `-ProofNoPasUses` on a 1.26.7 copy: 9 / 5) |
+
+  `drive-convert-tab.ps1 -ProofNoIndex` skips the fixture index: 12 pass / 10 fail since C16/C17 (10 / 9 before; the two reindex checks PASS in proof mode -- Reindex project builds the missing DB, so they cannot discriminate there; their RED is the pre-C16 editor's 18 / 5)
+  is the proof the conversion checks (and the mid-run menu lock) can fail. It stops at "Cannot read
+  the project index" (no DB), not at the unindexed refusal; that refusal is
+  proven by `Loose.pas` in the normal run. `drive-inherited-offer.ps1
+  -ProofNoInheritance` gave 8 pass / 6 fail on the 1.22.0 pin and 7 / 7 on the
+  1.21.1 pin (both measured 2026-10-06 with the C8 fix-round-1 exe; on 1.21.1 the E10
+  refusal note is the seventh FAIL, on 1.22.0 its `.absent` twin passes vacuously);
+  on the C12 fix-wave build 7 / 7 on 1.22.0 and 6 / 8 on 1.21.1, the extra FAIL in
+  both being `sources.cleared` (the timing below):
+  the C8 checks can fail. On the C8 + C10 build (C10 fix wave, 1.22.0) it measured
+  7 / 7 TWICE: the six C8 checks plus `sources.cleared` -- in proof mode Convert starts
+  a REAL two-unit run and the driver clears the list ~32 s later; both logs show the
+  status still `Converting 2 unit(s) with 1 book(s)...` 30 s after the click, so the
+  run had most likely not finished when the delete came (the earlier 8 / 6 measured a
+  run that had). Read it as the proof run's timing, not a C8 check -- unconfirmed
+  against a C8-only build. Not bent in the driver. The driver also branches its E6 / E7 / cancel expectations on
+  the staged engine's `inherited_retype` (absent on both pins today). `drive-convert-request.ps1
+  -ProofNoRequest` gives 6 pass / 19 fail (C12 fix wave; 6 / 18 before
+  `req.delete.says.scope.cleared`) and prints a `PROOF` line per pass: four
+  positive controls (`req.fixture.index`, `req.main`, `req.nofolder.usable`,
+  `req.caps.probe`) and two checks that CANNOT discriminate (`req.label2.untouched`,
+  `req.exit` -- they hold with or without a request); any other pass is printed as
+  UNEXPECTED. The normal run against C8's editor build (774093c9, no C12 code) gave
+  5 / 19 -- RED (C12 Task 5).
+* **Driver traps recorded on this branch:** `LB_GETTEXT` is system-marshalled
+  -- read it into a LOCAL buffer, not remote memory; screen capture of a CHILD
+  window here returns another control's pixels -- use `PrintWindow(hwnd, dc,
+  0)`; an owner-drawn row's state is read from its pixels, with an "ink" count
+  so an unpainted row cannot pass as "not red"; the Open dialog is driven by
+  class `Edit` + `&Open` (English Windows only).
+
+## Book depth, progress window, refusals -- hand-over notes (feat/engine-1206-adoption, 2026-09-30)
+
+The editor side of engine 1.20.6's interface change: a per-book `#depth N`, a
+cancellable progress window for property-tree loads, and a `refused` row status
+on the Convert tab. Built and verified against the 1.20.3 pin (which has none of
+the three capabilities); the depth-change path is proven only once 1.20.6 is
+pinned. Plan / spec (gitignored, main tree):
+`docs\superpowers\plans\2026-09-30-engine-1206-adoption.md`,
+`docs\superpowers\specs\2026-09-30-engine-1206-adoption-design.md`; ledger with
+every ruling: `.superpowers\sdd\2026-09-30-engine-1206-adoption\progress.md` in
+the `convrules-depth` worktree.
+
+### `#depth` in the model
+
+* **`#depth` lives in `ConvRules.Model`**: node kind `rnkDepth`, consts
+  `BOOK_DEPTH_DEFAULT` (5) / `BOOK_DEPTH_MIN` (1) / `BOOK_DEPTH_MAX` (10),
+  `TRuleBook.Depth`, `DepthState` (`bdsAbsent` / `bdsValid` / `bdsInvalid` /
+  `bdsDuplicate`), `DepthNodes` (private), `SetDepth`. **The engine accepts
+  ONE `#depth` per book, decimal digits only, 1..10** (`DRagLint.Convert.Rules`,
+  `IsDecimalDigits`): a second `#depth` -- whatever either value is -- and a
+  sign, ``$` or `0x` value are validation ERRORS, so `convert-apply` reports
+  `rule_errors` and the Convert tab skips the book. `ParseLine` matches it
+  (`IsDecimalDigits` + range; `depth.parse.digits.only`). `Depth` is the FIRST
+  line's value when valid, else 5; `DepthState` precedence is `bdsDuplicate` >
+  `bdsInvalid` > `bdsValid` (`depth.duplicate.first.invalid`: an invalid first
+  line plus a valid second is still `bdsDuplicate`).
+* **`SetDepth` inserts before the first `#convert`** when the book has no
+  `#depth`, which shifts EVERY header index after it. Re-find by NODE, never
+  keep an index: `DepthChanged` captures the active header node, calls
+  `SetDepth`, then `FActiveHdr:= FBook.Nodes.IndexOf(Hdr)` and
+  `RefreshRulesList` (the list items' header indices are stale too).
+* **An explicit depth change REPAIRS a `bdsDuplicate` book** (ruling R11):
+  `SetDepth` updates the first `#depth` and DELETES (frees) every other one; the
+  state becomes `bdsValid` (`depth.set.duplicate.repairs`; the header is
+  re-found by node, `depth.set.duplicate.header.found.by.node`). An update
+  re-emits the line canonically (`#depth  3` becomes `#depth 3`).
+* **Opening and saving a book without `#depth` never adds one** -- only a user
+  change writes the directive (`depth.absent.roundtrip`; driver
+  `depth.absent.not.added`, which also proves a save really happened).
+* **A From-only `#convert X -> ` keeps its From type** (fixed 2026-10-05; it
+  had been lost on every load). `ParseLine` trims the line, which takes the
+  arrow's right-hand space with it, so `SplitArrow(' -> ')` never matched
+  `X ->`; it now splits `Body + ' '`. The `, Unit` form always parsed. Guards:
+  `model.convert.from.only.roundtrip` / `.with.unit.roundtrip` -- load,
+  Snapshot + reload, and a DIRTY re-emit + reload. Note that Save / Snapshot
+  still DROP a block that maps nothing (`BlockMapsSomething`), so a stub with
+  no `#link` / `#apply` / `#ignore` is still not written -- unchanged policy.
+  `#useswap` parses the same way (`SplitArrow(Body, ...)`) and was deliberately
+  NOT changed: an Old-only `#useswap X -> ` is not a form the editor can create
+  (the replacement picker's OK refuses an empty list), and a hand-written one
+  reads as nothing useful to the engine either (`DRagLint.Convert.Rules` takes
+  `X ->` as the Old unit name).
+* `ConvRules.BlockFile`'s `FILE_SCOPE_DIRECTIVES` includes `#depth`, so a
+  `#depth` after the last block opens a trailing file-scope block.
+* `TRuleBook.ParseLine` carries one comma-list review for method-too-long /
+  too-many-exit-points / cyclomatic / cognitive: every directive adds one arm
+  and one exit. `SetDepth` carries a `function-result-not-set` review that is an
+  ENGINE false positive (a leading `if .. then raise` guard is counted as a path
+  that skips Result; filed, see below).
+
+### Capabilities and engine arguments
+
+* **Capabilities are probed ONCE, in `TConvRulesForm.Create`**, by one
+  `TEngineAdapter.CapabilityNames` (`info --json`, `ParseCapabilityNames`):
+  `FBookDepthOk` from `CAPABILITY_BOOK_DEPTH`, `FEngine.ProgressLines` from
+  `CAPABILITY_PROGRESS_LINES`. A re-pin needs an EDITOR RESTART. The probe has
+  its OWN bound, `INFO_TIMEOUT_MS` = 15 s (`TEngineAdapter.InfoTimeoutMs`, set by
+  `Create`; writable for the tests only), via `RunCaptureTimed` -- not the 180 s
+  `ENGINE_TIMEOUT_MS`, because it runs on the UI thread during start-up. A
+  timeout reads as NO capabilities, i.e. the old-engine behaviour
+  (`caps.timeout.is.none`: a sleeping `.cmd` stand-in gives [] inside a 1.5 s
+  bound; `caps.standin.answers` is its positive control).
+  `HasCapability` is now case-insensitive, and it goes through `CapabilityNames`,
+  so the Convert tab's `apply_unit_rules` probe has the same 15 s bound (a
+  timeout = False = unit rules greyed, as on an old engine).
+* **`--depth N` only with `book_depth`; `--progress-interval S` only with
+  `progress_lines`** -- an older engine exits 3 on either flag. `DepthArgs(ADepth,
+  AProgress)` builds both; `ADepth = 0` omits `--depth`. `PrepareEngineForTrees`
+  sets `FEngine.TreeDepth:= if FBookDepthOk then FBook.Depth else 0` before
+  every tree load. `GetProptree` passes `DepthArgs(FTreeDepth, FProgressLines)`;
+  `convert-scaffold` passes `DepthArgs(FTreeDepth, False)` (no progress). Both
+  come from the IN-MEMORY book, never `--rules FILE`.
+* **The depth combo (`FCbDepth`, 1..10) is disabled** with the hint
+  `DEPTH_HINT_UNSUPPORTED` when the engine lacks `book_depth`. `FLblDepthNote`
+  says `(default)`, `(from book)`, `(book value invalid -- using 5)` or
+  `(several #depth lines -- the engine rejects this book; pick a depth to repair
+  it)` (the last two in red). `RefreshDepthControl` runs in `LoadText` (every
+  open / New / Curate reload), in `Create`, in `DepthChanged`, and in
+  `ChooseTargetForNewRule` right after the new-file `FBook.Clear` (Task 5 fix
+  I1). It also stops a pending depth commit (`FDepthTimer`, `FDepthPending`).
+* **A depth change reloads the grid EXACTLY ONCE** (`DepthChanged` ->
+  `LoadGridForBlock`); `RefreshRulesList` does not fire a second load.
+  `FCbDepth.OnChange` (`DepthComboChange`) does NOT commit: it marks
+  `FDepthPending` and, on the CLOSED combo (mouse wheel, arrow keys), restarts
+  `FDepthTimer` (`DEPTH_COMMIT_DELAY_MS` = 600 ms); with the list dropped down it
+  waits for `OnCloseUp` (`DepthComboCloseUp`). Either path calls `DepthChanged`,
+  which writes unless `TRuleBook.DepthPickWrites` says the book already holds
+  exactly that one valid value -- so a SELCHANGE/CLOSEUP pair for one pick
+  (Windows does not fix their order) still reloads once, and opening and closing
+  the list without a pick writes nothing. **An explicit pick is recorded**: the
+  default (5) on a book WITHOUT `#depth` WRITES `#depth 5` (owner decision
+  2026-10-04, `depth.pick.default.on.absent.writes`); only opening and saving
+  must never add the line. On `bdsDuplicate` / `bdsInvalid` the write is the repair.
+* **A depth commit never runs inside another operation** (fix round 2). The
+  timer runs in ANY message pump (`LoadGridForBlock`'s `ProcessMessages`, the
+  progress window, `MessageDlg`, the Open dialog), so `DepthTimerFire` and
+  `DepthComboCloseUp` DEFER -- step kept pending, timer re-armed -- while
+  `DepthCommitBlocked`: `FTreeLoads > 0` (set with try/finally by
+  `LoadGridForBlock` and by the `LongCallRunner` wrapper in `Create`, so New
+  Conversion's class checks count too), a menu loop (`FMenuOpen` for the main
+  menu, `InMenuLoop` = `GetGUIThreadInfo` for popup / system menus, whose loop a
+  VCL `TPopupMenu` runs on its own window), `Screen.ActiveForm <> Self` (a modal
+  form) or the main window disabled (a common dialog). A pending pick is
+  COMMITTED (not cancelled) by `CommitPendingDepth` at the top of
+  `ConfirmDiscard` (Open, New, Exit / window X, cross-book double-click, the
+  Convert tab's check), `SaveBook` (Save, Save As), `DoCurate` and
+  `DoNewConversion` -- so the unsaved-changes guard sees it; the commit costs one
+  reload even when the book is then replaced. **Esc in the dropped list cancels**:
+  `DepthComboWndProc` (a `WindowProc` hook) records `CBN_SELENDCANCEL` ONLY between
+  `CBN_DROPDOWN` and `CBN_CLOSEUP` (`FDepthDropped`) -- a drop-down-list combo
+  also sends it on EVERY focus loss with the list closed, with no close-up after
+  it, and a flag set then stuck and swallowed later steps (fix round 3);
+  `CBN_SETFOCUS` clears a stale cancel; a cancelled pick re-syncs the combo to
+  the book (`SyncDepthCombo`). `DepthComboCloseUp` then drops the pending pick (a queued reset also drops a
+  SELCHANGE that follows the close-up), so an explicit cancel never modifies the
+  book, not even as a repair.
+  Proven by instrumentation in Task 5; a double load is a second slow engine
+  call (the double-click path shipped one once, ~161 s).
+
+### Streaming runner and the progress window
+
+* **`TEngineAdapter.RunCaptureStreaming` = two pipes.** Stdout is `AOutput`;
+  stderr is split into lines (`TLineSplitter`), progress lines
+  (`TryParseProgressLine`) go to `AOnProgress` and NEVER reach `AOutput`; any
+  other stderr text (a `FATAL: ...`) is kept and returned
+  (`stream.stderr.kept`). It returns the CHILD's exit code unchanged -- the
+  engine's own 3 is FATAL (unknown flag, DB cannot be opened or is locked) and
+  reaches `GetProptree`'s generic failure branch with its output
+  (`stream.exit3.not.timeout`, `stream.exit3.fatal.kept`,
+  `engine.proptree.exit3.is.failure`). Its own outcomes are NEGATIVE so they can
+  never collide with an exit code: `ENGINE_OUTCOME_TIMEOUT` = -2,
+  `ENGINE_OUTCOME_CANCELLED` = -3 (-1 = not started; `exit.codes.distinct`).
+  `RunCaptureTimed` is unchanged and still reports ITS timeout as 3. The child is killed on every
+  exit path, including a raising progress callback (`ReapChild` in a finally;
+  `stream.raise.kills`), and each drain reads at most `MAX_READS_PER_DRAIN` (16)
+  chunks so Cancel and the deadline stay responsive. `StartHiddenProcess` is
+  shared with `RunCaptureTimed`.
+* **Only `GetProptree` streams.** Every other verb stays on the merged-pipe
+  `RunCaptureTimed`. The proptree bound is `CONVERT_TIMEOUT_MS` (600 s).
+* **`ConvRules.EngineWait` is editor-only** (`RunWithProgressDialog`,
+  `TEngineWaitForm`; not in the tests' compile closure). With `LongCallRunner`
+  nil the work runs inline, with no window and no cancel; the model tests
+  install FAKE runners (`TestProptreeCancelState`: one returns
+  `ENGINE_OUTCOME_CANCELLED`, one the engine's exit 3, one
+  `ENGINE_OUTCOME_TIMEOUT`, one raises). `TConvRulesForm.Create` sets
+  `FEngine.LongCallRunner` to a wrapper that counts `FTreeLoads` around
+  `RunWithProgressDialog`.
+* **The window appears only after `SHOW_DELAY_MS` (400 ms)** -- a fast load
+  shows nothing (`wait.fast.no.window`). Never raise the delay to hide a slow
+  call; measure the call.
+* **One Cancel stops From AND To.** `GetProptree` resets `LastCancelled` at its
+  TOP (before any early exit) and sets it on `ENGINE_OUTCOME_CANCELLED`; the block load checks it
+  after the From tree and does not start the To tree
+  (`wait.cancel.stops.to.tree`: no second window within 3 s). A cancelled load
+  clears BOTH trees, so the grid is left EMPTY (a To cancel no longer leaves the
+  From leaves), sets `FActiveHdr:= -1` and QUEUES a deselect of the rules list
+  (`TThread.ForceQueue`), so selecting the rule again really retries
+  (`wait.retry.after.cancel`); it must not count as loaded. Because of that a
+  depth change after a cancel does NOT reload; the status says to change the
+  depth first, THEN select the rule again (the depth part only when the engine
+  has `book_depth`). The proptree timeout text likewise names the Depth box only
+  when `TreeDepth > 0` (`engine.timeout.text.depth.box` / `.no.depth.box`).
+* **`FLastLoadCancelled` (form) is per call, `FEngine.LastCancelled` is per
+  engine call.** `LoadGridForBlock` sets the former; `OpenOwningRuleEntry` and
+  `DoNewConversion`'s select step RESET it before the load they own, so a cancel
+  left over from an earlier call (New Conversion's From check) can no longer
+  suppress `Opened the rule ...` / `Loaded ...` when no load ran.
+* **Cancel texts are accurate per caller** (`DoNewConversion`: "New conversion
+  cancelled while checking the From class X -- nothing was created." / the To
+  class). After a cancelled load of a From-only
+  stub, New Conversion no longer treats it as completing the stub
+  (`FActiveHdr = -1`) and shows the same-book prompt (deferred minor).
+* **The cancel message stays on screen** (`SetStatusAfterCancel`): Auto-Match,
+  Mappings, Assign, Find in From, Only this type and `SurfaceChanged` APPEND
+  their text to `FCancelStatus` (the text the cancel wrote) while
+  `FLastLoadCancelled` is set AND that text is still what the status line
+  starts with -- so a cancel from an earlier book never comes back once
+  anything else wrote the status, and repeated clicks do not stack. No
+  automated test (MainForm); a manual check.
+* **Known gap (deferred):** the class-name resolve (`ResolveClassQName`,
+  0.5-1 s) still runs on the UI thread and cannot be cancelled.
+
+### Refusals on the Convert tab
+
+* **`TApplyRow.Refused`** is `(not Ok) and refused = true` in the apply/1 JSON
+  (`ParseApplyJson`); `TApplyRow.Error` then holds the engine's `reason`
+  (`convert-apply refused the unit and gave no reason` when empty).
+* **`csRefused` (last member of `TConvertStatus`, text `refused -- not
+  changed`) takes the FAILURE path**: `FailUnit(AReason, csRefused)` restores
+  the unit and rolls back earlier books on it, exactly like
+  `csFailedRestored`; notes say "was refused" instead of "failed". **Except
+  when nothing had changed the unit yet** (the refused book was its first, or
+  every earlier one was skipped): the engine left the file untouched, so nothing
+  is restored, the row's `Backup` / `BackupDfm` are '' and the unneeded `.BCK<N>`
+  files are DROPPED, as for a skipped book (owner decision 2026-10-04;
+  `runner.refused.first.drops.backup`). After an earlier book converted the unit,
+  the restore needs the backup and keeps it (`runner.refused.later.keeps.backup`). The summary
+  adds `N unit(s) refused by the engine and left unchanged`, THEN (if any)
+  `N earlier conversion(s) on those units were rolled back by a later failure or
+  refusal` -- after the refused sentence, because a roll-back can follow a
+  refusal and the old "rolled back with them" read as caused by "0 failed".
+* **A refusal is a refusal even when it also lists `rule_errors`**: the
+  book-invalid branch in `RunBook` is guarded `and not Row.Apply.Refused`, so
+  `refused:true` with a non-empty `rule_errors[]` gives `csRefused` for that
+  unit and the book stays VALID for the next one
+  (`runner.refused.with.rule.errors.is.refused`: two units, two apply calls,
+  two refused rows). Engine 1.20.6 never sends that combination; the guard is
+  for a later engine that might.
+
+### Drivers (`tests\gui\`, by hand, on a staged pin copy)
+
+* **`drive-engine-wait.ps1` -- 8 checks** (`wait.main`, `.window.appears`,
+  `.cancel.button`, `.cancel.closes`, `.cancel.status`, `.cancel.stops.to.tree`,
+  `.retry.after.cancel`, `.fast.no.window`). It waits out the start-up engine
+  calls first. The slow fixture is a TcxButton block; the fast one is
+  `#convert TNoSuchClassXyz -> , NoSuchUnitXyz` (58-93 ms).
+* **`drive-book-depth.ps1` -- 10 checks + 1 SKIP line** on the 1.20.3 pin. The
+  SKIP line covers the three `depth.change.*` checks (`invoke.save`,
+  `one.line`, `saved`), which run only when the engine reports `book_depth`.
+  **They become REQUIRED after the 1.20.6 re-pin:** 13 pass, no SKIP. Its
+  `Choose` sends CBN_SELCHANGE to the CLOSED combo, so it now exercises the
+  wheel / arrow-key path (`FDepthTimer`), and waits 1.5 s before File > Save; the
+  drop-down + `OnCloseUp` path is an owner check.
+* **Both drivers open a class with `--form` plus a double-click on the rule
+  row** -- opening a book loads NO tree, so a driver that only opens a book
+  never sees the window.
+* **`drive-unit-rules-toolbar.ps1` ignores `TEngineWaitForm`** when it counts
+  top-level windows, and waits up to `ENGINE_IDLE_SEC = 900` for the window to
+  go (Task 5 fix; it had read the progress window as New Conversion's second
+  dialog and dropped to 30/11). The window is intended behaviour; the driver
+  changed, not the product.
+* **Machine load, measured 2026-09-30 ~18:05:** the pinned 1.20.3 CLI
+  `proptree --qname cxButtons.TcxButton --min-visibility published
+  --refs-as-leaves --format json --db library-Win64` took **37.5 s** (6.96 s in
+  July), with the engine session's proptree runs and three LSP engines on the
+  box. Driver timeouts were raised for that; PRODUCT timeouts were not.
+
+### Waiting on engine 1.20.6 (plan Task 8 PENDING)
+
+* **Owner checks after the re-pin:** a real TFDQuery load shows `depth x of y`
+  progress in the window; Cancel stops it; changing the depth changes the leaf
+  count; `drive-book-depth.ps1` runs 13/0 with no SKIP; confirm the refusal
+  key names (`refused`, `reason`) against the merge notice.
+* **Plan Task 8: show the engine's unreachable-member warnings** (owner
+  requirement 2026-09-30: a rule through an inaccessible member is KEPT in the
+  book; engine and editor WARN, "never applied unless a descendant class
+  changes the visibility of <Member>"). The editor shows the ENGINE's warnings
+  and does not judge accessibility itself. Engine contract (T2h, commits
+  a92b45a7 + 9d4b98bf, not merged yet):
+  * text line on STDOUT: `line N: warning: <path>: <Member> is <visibility> in
+    <DeclaringClass>; never applied unless a descendant class changes its
+    visibility`;
+  * `convert-validate`: TEXT ONLY (no `--json`); an unreachable warning does
+    not change the exit code;
+  * `convert-apply`: a text Warnings block, plus apply/1 `unreachable[]`
+    (always present) of `{line, path, member, visibility, class, reason:
+    "unreachable", message}`; `warnings[]` stays STRINGS and also carries each
+    message; `items[]` kind `rule-path-unreachable`. Schema stays apply/1.
+  * BDE-to-FireDAC.rules measured on the engine branch: exit 0, 16 warnings
+    (lines 274-277, 374-377, 478-485).
+* **Owner decisions still open:**
+  * a refused unit keeps an IDENTICAL `.BCK<N>` beside it (the `FailUnit` path
+    takes the backup before the engine refuses) -- keep, or delete on refusal?
+  * the combo on a `bdsInvalid` book already shows 5, so picking 5 does not
+    fire `OnChange`; the user must pick another value first (`SetDepth` then
+    repairs the line). On `bdsDuplicate` a change rewrites only the first
+    line and the red note stays. Accept, or repair / collapse the lines?
+* **Other deferred minors (ledger):** summary order reads oddly when a refusal
+  caused the roll-back.
+* **Fixed on fix/editor-open-issues (2026-10-05):** `TLineSplitter.Feed` is
+  linear (scans from a start index, cuts the consumed head once per call, also
+  when the sink raises; `split.many.lines.one.chunk`, 10,000 lines in one
+  chunk); a From-only `#convert X -> ` keeps its From type on reload (see the
+  model section); `FDepthDropped` is cleared after `CBN_CLOSEUP` in a finally,
+  so an exception from the close-up's commit cannot leave it set.
+
+## Scoped validation on Save -- hand-over notes (fix/validate-edited-blocks, 2026-10-05)
+
+Owner ruling: "The edited saved block should be validated. Stuff that is
+unchanged is presumed validated earlier."
+
+* **Why:** `convert-validate --from F --to T` checks EVERY `#convert` block
+  against that ONE pair. Save used the active block's pair, so a multi-block book
+  showed bogus errors (BDE-to-FireDAC.rules with TQuery -> TFDQuery: 145 error
+  lines, exit 1). And warnings (`line N: warning: ...`, e.g. an unreachable
+  protected member) never change the exit code, so the old Save -- which read
+  only a failing exit's first line -- lost every one of them.
+* **Save now runs:** one syntax-only pass (no pair, ~0.6 s) over the saved text,
+  keeping everything; plus, for each block that CHANGED against `FSnapshot`
+  (keyed by header line + occurrence; a new header counts; a block that `#apply`s
+  a changed `#mapping` counts), one pass with THAT block's own pair, keeping only
+  the diagnostics on its lines and on the `#mapping` lines it applies. From-only
+  blocks get no pair pass. An unchanged save is the syntax pass only (driven:
+  0.3-0.5 s vs 20-39 s for a save with one changed TTable block on this loaded box;
+  CLI: 10-15 s per block). **File > Validate** = syntax pass + the ACTIVE block.
+* **OK / failed comes from the kept diagnostics, never the exit code.** A
+  non-`line N:` line that is not noise (`OK`, `(loaded defaults ...)`,
+  `resolver: ...`, `NOTE: ...`) is an error on line 0 (FATAL etc.). **Engine
+  1.26.x prints `NOTE: --from and --to not both given -- the book was PARSED only;
+  ...` on stderr for EVERY syntax-only pass**; read as an error it made every Save
+  say failed (fix/editor-1262-adoption, 2026-10-07; real 1.26.2 captures, each stream
+  on its own, `tests\fixtures\validate\validate-1262-*`, tests `validate.1262.*`). A
+  pair pass prints nothing new (the `resolver:` advisory only). Status:
+  `Validate: OK, N warning(s) -- see marked rules`, or the first error +
+  `(+N more)` through `SetError` (it stays red across the post-save rescan).
+* **Pure logic: `ConvRules.ValidateScope`** (parse, blocks, changed blocks,
+  filter, `RunScopedValidation` with an injected `TValidateFn`, marks). Tests:
+  `validate.*` in the model tests, on REAL pinned-engine captures in
+  `tests\fixtures\validate\` (taken 2026-10-05 10:52, before the 1.21.1 re-parse;
+  TQuery capture = 145 errors, warnings only on the known 274-277 / 374-377 /
+  482-485 lines).
+* **Line -> rule:** `TRuleBook.SaveCompleteWithMap` returns the saved text AND the
+  node per line (`SaveCompleteToString` is it with the map dropped). Marks are
+  `TRuleNode.Marks` -- session state, never emitted, not in `Snapshot`/dirty, gone
+  with the node on Open / New / Curate. A revalidated block's marks are replaced;
+  other blocks keep theirs; syntax marks are replaced every pass.
+* **Display:** rules list column `Check` (`2 err` / `4 warn`) + info tip; grid
+  cast column painted with `[!] ` / `[w] ` (text unchanged) + hint. Owner checks:
+  the visuals were not driven.
+* **`ValidateText` now uses separate pipes** (`RunCaptureStreaming`): over the
+  merged pipe a driven Save showed `Validate: s, not a re-parse). (+3 more)` --
+  the tail of stderr's `resolver:` advisory cut off by a stdout chunk.
+* **GUI driver `tests\gui\drive-validate-scope.ps1`** -- 11 checks: New
+  Conversion TTable -> TFDTable (book `#depth 2`), Save shows `4 warning(s)`, an
+  unchanged re-save is fast and `OK`. RED on the main build
+  (`Validate: OK`, no warnings; its unchanged re-save took 19.9 s).
+* **Progress window + Cancel (follow-up, same branch):** every pass runs on
+  `FEngine.LongCallRunner` (`RunWithProgressDialog`, so `FTreeLoads` is counted
+  and no depth commit fires inside). The window shows after `SHOW_DELAY_MS`;
+  Cancel kills the running engine call and starts no further pass. The book is
+  already on disk, so nothing is undone and it stays clean. Blocks not validated
+  keep their marks and go into `FValidatePending` (pure: `NextPending`,
+  `ChangedBlockJobs(..., APending)`), so the NEXT Save validates them although they
+  no longer differ from the snapshot; the set is dropped when the book is
+  replaced. Status: `Validate: cancelled -- N changed block(s) not checked: <From
+  types>; checked so far: ...`. Driver now 16 checks (window, Cancel, owed block
+  revalidated, unchanged re-save fast, Exit without a prompt).
+* **Known cost:** passes still run one after another: a new book with many blocks
+  is N x 10-40 s, now cancellable.
+
+## Editor minors -- hand-over notes (fix/editor-minors, job C6, 2026-10-05)
+
+* **Model tests choose their engine EXPLICITLY** (`ChooseTestEngine` in the
+  tests `.dpr`): `drag-lint.exe` beside the runner, else the exe named by
+  `CONVRULES_TEST_ENGINE`, else none (live tests SKIP; the runner prints its
+  first line `engine: ...` with the reason). The silent fallbacks to
+  `third_party\dll-win64` are gone -- that is the live, rebuilt-without-warning
+  engine. Stage a COPY of a pin beside the runner.
+* **`build\_build_convrules_editor_local.bat` no longer stages to dll-win64**
+  unless given `stage`. The release pack ships
+  `src\tools\convrules-editor\ConvRulesEditor.exe` (not the dll-win64 copy) and
+  passes `stage` so dll-win64's editor keeps step with the drag-lint.exe it syncs
+  (`run_release_pack_payload_guard.ps1` still PASS).
+* **Every engine verb now reads stdout on its own pipe.** `RunCaptureTimed` (and
+  so `RunCapture`) wraps `RunCaptureStreaming`: stdout whole, stderr's lines
+  after it; its timeout code stays 3. Guard: `pipes.*` -- `.cmd` stand-ins write a
+  stderr line in the MIDDLE of a stdout JSON line (`info --json`, `sql --json`).
+* **`ResolveClassQName` runs inside `GetProptree`'s long-call work** -- under the
+  progress window, cancellable before either call starts, `FTreeLoads` counted
+  by the editor's runner (`resolve.*` tests). Measured: the resolve query is
+  0.5-1.2 s (`query --name TcxButton`, library-Win64 + Micronite2027), which the
+  UI thread no longer blocks on.
+* **Resolutions are CACHED for the session** (`TEngineAdapter.FResolveCache`,
+  key = upper-cased name + `#0` + `DbArgs`; NEGATIVE answers cached too). Without
+  it every rule click paid the query under the window and a trivial load flashed
+  it. Cleared by `SetDbs`, by `IndexProject`, by `ClearResolveCache`, and by the
+  form when a Convert run ends (that run reindexes through its OWN adapter). A
+  failed lookup (query exit other than 0/1) and a lookup cancelled before it ran
+  are never cached (`rcache.*`). `drive-engine-wait.ps1` now checks the RE-load
+  (`wait.reload.no.window`, `wait.reload.query.cached` = one engine child,
+  proptree only); both FAIL on the uncached build. The first uncached load is not
+  asserted; `wait.window.appears` is the positive control.
+* **Mapping > Auto-Match is disabled while no rule is loaded**
+  (`UpdateMenuEnabled`; driver `automatch.*` in `drive-validate-scope.ps1`, RED
+  on main).
+
+## Inherited instances (C8) -- hand-over notes (feat/c8-inherited-editor, 2026-10-06)
+
+Spec: `docs\superpowers\specs\2026-10-05-c8-inherited-instances-design.md` (E1-E11;
+the engine half C8 N1-N5 is the ENGINE stream's). Plan:
+`docs\superpowers\plans\2026-10-05-c8-inherited-instances-editor.md`. Ledger with
+every ruling: `.superpowers\sdd\2026-10-05-c8-inherited-instances-editor\progress.md`
+in the `c8-inherited` worktree.
+
+### Where things live
+
+* **Decisions: `ConvRules.Inheritance`** (model-tested). `ScanDfmInheritance` /
+  `FindDfmObject` share one header walk (`WalkDfmHeaders`) that skips `<` / `(` /
+  `{` values whole, so a collection's `item`/`end` never closes a component.
+  `AnalyzeUnit` / `AnalyzeUnits` walk the class chain through a `TClassLookup` and
+  read ancestor .dfm files through a `TDfmTextReader`; the row notes, the offer,
+  the list insert, the order warning, the Convert gate and the no-capability run
+  notes are all pure routines here. Two helpers are not pure: `DiskTextReader`
+  (the real reader, `TFile.ReadAllText`, which drops a BOM) and `CachingLookup`
+  (fills a caller-owned cache).
+* **Run-side decisions are NOT in `ConvRules.Inheritance`** (model-tested too):
+  `InheritedLeftNote` / `InheritedReportNote` (the engine's `inherited[]` as a row
+  note / a report note), `ConvertedRowNote` and `SourcesAddRefusal` live in
+  `ConvRules.ConvertRun`;
+  `InheritedReportLines`, `UnitsConvertedIn` and `CodeUseNoteDue` live in
+  `ConvRules.ConvertRunner`.
+* **The reader answers `TDfmRead`:** `drMissing` (no .dfm -- a class with no .dfm
+  declares no component), `drUnreadable` (exists, read raised), `drRead`.
+* **Engine binders: `ConvRules.InheritanceEngine`** -- `EngineClassLookup`
+  (`LookupClass` + `ListClassFields`), `EngineCodeUses` (`ListCodeRefs` through
+  `CodeUseName`), `IsStaleIndexError`, `AnalyzeRetryingStale`. The ONE place the
+  binding is made; the model tests drive it against a fixture index.
+* **Engine reads (`ConvRules.Engine`) share `SqlRowsOfDb`.** `LookupClass`:
+  `symbols` kind `class` JOIN `files` LEFT JOIN `type_ancestors` ordinal 0,
+  `COLLATE NOCASE`; only `IsPlainIdentifier` names are spliced in. One file = found;
+  two or more files = ambiguous = outside, never guessed. `ListClassFields` reads
+  only the From-typed fields the class itself declares, PINNED to the .pas the
+  lookup found. The C8 reads pass `ARequireFresh`: a STALE answer is a failure
+  (`INDEX_STALE_MARKER`), not data. `ParseClassLookupRows` / `ParseFieldRows` /
+  `ParseCodeRefRows` are test-only entry points over the same row mappers (held by
+  `dl:ok unused-public-symbol`).
+* **`MainForm.pas` / `ConvertTab.pas` are outside the tests' closure** -- as before,
+  build the editor too.
+
+### What the analysis decides
+
+* **The declaring ancestor is NOT always the parent.** Measured on DMTEST:
+  `dmCPData`'s `inherited tblFtrs: TTable` is declared in `DMREADINGS`, two levels
+  up; `PathToData.dfm` never mentions it. The walk continues past an ancestor that
+  does not open the instance.
+* **`TAncestorState`: `asUnconverted` / `asConverted` / `asMismatched` / `asOutside` /
+  `asUnknown`.** `asConverted` = the declaring object has the To type of a checked pair
+  whose From is the instance's type; **`asMismatched` (Task 8, 2026-10-06; REVERSES
+  preflight ruling C4, which read every non-From type as converted)** = it has neither
+  (the engine's `mismatched`; `TInstanceVerdict.FoundType` names the type). Its row note
+  is `inherits N <types> instance(s) from <Unit>, where they are <Found> -- not this
+  book's From or To type`; it is NOT offered (E6) and NOT warned about (E7) -- converting
+  that ancestor with this book would not help. `ResolveInstance` therefore takes the
+  pairs. `asUnknown` = the walk could not decide: the index could not be asked (failed or
+  stale read), the chain loops or passes `MAX_CHAIN_DEPTH` (32), or an IN-INDEX
+  ancestor's .dfm is binary (`TPF0`) or unreadable. The verdict's `Reason` names the
+  cause; `AnalyzeUnit` then makes the unit `Known = False` with an `Error` carrying
+  the engine's own text. **Unknown is never a row note** -- the reason goes to the
+  status line (`UnknownUnitsText`). `asOutside` = the chain left the project index
+  (a library ancestor, an ambiguous class) or ended at an indexed class with no
+  ancestor; with no ancestor class named at all the note is the no-ancestor wording
+  (`OUTSIDE_NO_ANCESTOR`, `OutsideNote`).
+* **`inline` blocks are the unit's OWN frames** and are not verdicts; their
+  `inherited` children are, resolved from the frame class. **Frame fallback:** when
+  the form chain does not declare an instance, every enclosing block's class
+  (`TInheritedInstance.Enclosing`, innermost outward, up to the innermost `inline`)
+  is walked next, and the chains are MERGED; `TChainUnit.Depth` is one shared
+  counter, so a frame unit always sits above every form that re-opens its child.
+* **The chain offered (E2a / E6) is only the units whose .dfm declares or re-opens
+  one of the descendant's instances** (plus, for a code use, the unit declaring the
+  field), topmost first -- ancestors that never mention it are not offered.
+* **E2b code uses: Fields first.** An identifier the unit's own class's methods use
+  (implicit Self, or a receiver's first segment) is matched against the From-typed
+  `Fields` each ancestor declares (`ListClassFields`); a name no ancestor declares is
+  dropped WITHOUT reading any .dfm, so it can never make the unit unknown. Only a
+  real hit walks the chain again reading .dfm files. The index leaves implicit-Self
+  refs unresolved, so `ListCodeRefs` matches by enclosing class + name. Accepted
+  gap: a closer ancestor redeclaring the name with a non-From type (shadowing) is
+  absent from the filtered Fields, so a further ancestor's From field of that name
+  counts.
+* **Cost:** one pass measured 1.5-2.1 s per unit on DMTEST `dmCPData`. Each pass
+  has its OWN class cache (`CachingLookup` over a per-pass dictionary; a failed
+  answer is never cached) and one .dfm cache, so a retry asks afresh.
+
+### The Convert tab
+
+* **Analysis runs behind the progress window** (`FHost.RunLongCall`,
+  cancellable). `FEngineProbe` is then used on the window's worker thread; that is
+  safe only because the runner is MODAL and a drop is refused while `FAnalyzing`
+  (class remarks of `TConvertTab`). A non-modal runner would break it.
+* **A drop is refused under ANY C8 prompt too** (fix wave M2): OLE delivers drops
+  inside a `MessageDlg`'s modal loop, and the E6 offer, the Convert gate and the E7
+  warning were each built from the list as it was when they opened -- a unit dropped
+  under the E6 prompt was wiped by Yes (`SetSources`), one dropped under the gate /
+  E7 was listed but not run. `AskBlockingDrops` sets `FPrompting` around each of the
+  three; `AddSources` asks `SourcesAddRefusal(FRunning, FAnalyzing or FPrompting)`
+  (pure, `tab.add.*`). `ConvertClick` also reads the list only AFTER the
+  open-book save prompt.
+* **A stale read triggers ONE incremental reindex of the editor's own project**
+  (`ProjectFileForDb` of the project DB, as the runner does) and one retry of the
+  stale units (`AnalyzeRetryingStale`); a second failure leaves them unknown with
+  `; reindex failed: ...` or the retry's own reason. After any such reindex the tab
+  calls `TConvertHost.ProjectReindexed`, which clears the MAIN adapter's resolve cache
+  (`FEngine.ClearResolveCache`), as `RunStateChanged(False)` does after a run (M6;
+  wiring only, no automated check).
+* **Re-analysis cadence:** added units on add; the whole list when the CHECKED PAIRS
+  change (`ReanalyzeAll(False)` is a no-op otherwise, so showing the tab costs
+  nothing), always on Convert -- AFTER `Preflight`, so a refused run never pays the
+  analysis -- and after a run (converted ancestors answer differently). The pairs key
+  is committed only for a completed pass.
+* **E6 offer:** a unit whose chain has units not yet listed asks
+  `Add <chain> ahead of <unit>?`. **Insertion (amended 2026-10-05):** each MISSING
+  chain unit, topmost first, goes directly before the earliest LISTED unit among the
+  later chain units and the descendant (appended when none is listed); listed units
+  never move, so a pre-existing misorder stays and E7 still warns about it.
+* **Ancestor-first is the LONG-TERM order -- and until engine C8 N2 it breaks the
+  descendant (controller ruling, Task 8 fix round 1, binding).** Engine 1.22.0 (C8 N1)
+  converts the ancestor and SKIPS the descendant's `inherited X: TOld`; that block under
+  an ancestor that now declares TNew fails at load (EClassNotFound, or EReadError on a
+  TOld-only property) and descendant code using TOld-only members stops compiling. So
+  while the engine lacks `inherited_retype` (`CAPABILITY_INHERITED_RETYPE`, a PROPOSED
+  key for C8 N2 -- the engine stream confirms or renames it; one constant), probed in the
+  SAME `CapabilityNames` call as `inherited_instances` (`FRetypeOk`, `Job.RetypeSupported`):
+  * E5 row note: `... -- convert it first (recommended)` stays verbatim (spec E5) plus
+    ` -- with this engine, converting it now breaks this unit until N2`;
+  * E6 prompt: `Add <chain> ahead of <unit>?` plus ` Converting <chain> leaves <unit>'s
+    inherited instance(s) as <From types> until engine N2 -- <unit> may not compile or
+    load.` (the ruling's `<types> as <From>` collapsed: the instance types ARE the From
+    types, so naming both read `TLabel as TLabel`);
+  * E7: lines `<Desc> is listed above its ancestor <Anc>.`, tail `With this engine the
+    order does not change this run's result: inherited instances are skipped either way.
+    Run anyway?` (no heading claiming reordering helps); still never blocking; No gives
+    `Convert cancelled: nothing was run.` (`OrderCancelledText`);
+  * the converted state's words: `ancestor <U> converted -- this unit still has <Type>
+    there and may not compile or load until the engine can retype inherited instances
+    (N2)`.
+  With the capability, every text is the pre-ruling one. All of it is pure
+  (`ConvRules.Inheritance` / `ConvRules.ConvertRun`), model-tested in both states.
+* **Convert order (fix wave M3):** the no-project-file refusal is checked right after
+  `Preflight` and BEFORE the C8 re-analysis, gate and E7 -- a run that will be refused
+  asks nothing.
+* **Convert gate (`InheritanceGate`):** a CANCELLED check stops the Convert
+  (`GATE_CANCELLED_TEXT`, nothing runs); a FAILED check asks once
+  `Could not check inherited instances for <units> -- convert anyway?` with the
+  reason on the status line; No stops with `InheritanceGateStopText`. Never a
+  refusal (E9). Covered by model tests only -- the fixture analysis finishes before
+  the 400 ms window delay.
+* **E7 order warning:** one dialog listing every descendant listed above an
+  unconverted ancestor; No runs nothing.
+* **Dialog text is mirrored on the status line** (the E6 prompt, the gate question,
+  the E7 warning) because a `TMessageForm`'s text is a windowless `TLabel`;
+  `drive-inherited-offer.ps1` asserts the status bar.
+* **Capability gate:** `inherited_instances`, read with `apply_unit_rules` in ONE
+  `CapabilityNames` call in `RefreshBooks`; `TConvertJob.InheritedSupported` comes
+  from that probe. Without it: `EngineRefusalNotes` says the engine will refuse each
+  Known unit with a .dfm verdict (code uses do not count -- the engine does not
+  refuse on code), and the refusal path is unchanged. With it (engine 1.22.0 on,
+  pin `1.22.0-alpha-20261006-040048`): the engine converts around inherited instances
+  and never refuses for them; a converted row's note (`ConvertedRowNote`) lists
+  `N inherited instance(s) left: <words>` (`InheritedLeftNote`) and the report adds
+  one 8-column `inherited left` line per instance (`InheritedReportLines`,
+  `<name>: <type> line N -- <words> (<reason>)`, the reason left out when the words
+  carry it). The words per `ancestor_state`:
+
+  | state | words |
+  |---|---|
+  | `unconverted` | `ancestor <U> not converted` |
+  | `converted` | without `inherited_retype` (1.22.0): `ancestor <U> converted -- this unit still has <Type> there and may not compile or load until the engine can retype inherited instances (N2)`; with it: `ancestor <U> converted -- retype pending (engine N2)`. N1 SKIPS it; the descendant's .dfm stays byte-unchanged |
+  | `mismatched` | `ancestor <U> has <Found> (neither <From> nor <To>)`, read from the engine's reason `declared in <U> as <Found>, neither <From> nor <To> -- ...`; any other reason shape gives `ancestor <U> has another type -- <reason>` |
+  | `outside` | `ancestor not determinable -- <reason>` (the engine sends `ancestor_unit` ""; a missing / binary ancestor .dfm lands here with the file named) |
+  | anything else | `ancestor <U>: <state>` |
+
+  Grouping is by the words, i.e. (state, unit) plus the type found / the reason (and the
+  instance type for converted without retype). The engine also puts each left instance in
+  `warnings[]` (`line N: warning: inherited instance ...`); when `inherited[]` is not
+  empty those are NOT counted in `M remaining for manual work` (`ParseApplyJson`,
+  `apply.remainder.*`) -- the left note already counts them.
+  A .dfm holding ONLY inherited instances answers `component_part:
+  "skipped-no-instances"`, ok, exit 0: a CONVERTED row with `; no component of its own
+  to convert` (`TApplyRow.ComponentPart`; `runner.inherited.skipped.no.instances`). Its
+  `.BCK<N>` is kept like any converted row's, although nothing changed. The editor's
+  own pre-run analysis keeps treating an unreadable / binary IN-INDEX ancestor .dfm as
+  unknown (status line); the engine's post-run `outside` reports it per instance.
+* **R4 -- an ancestor converted EARLIER IN THE SAME RUN is not "left" -- in the
+  editor-side code-use note ONLY** (`UnitsConvertedIn`). The code-use note
+  (`N inherited code use(s) left: ...`, `CodeUseLeftNote`) appears ONCE per unit
+  (`CodeUseNoteDue`), not once per book. **The engine's own `inherited[]` is shown
+  UNFILTERED** in the converted row's note and in the report's `inherited left` lines
+  (controller ruling, fix wave M4): the engine answers after the runner's reindex and
+  is authoritative. `InheritedLeftOmitting` was deleted with that ruling; guards
+  `tab.r4.runner.engine.unfiltered`, `tab.report.lines.engine.unfiltered`,
+  `tab.r4.left.engine.all`.
+* **Not built:** E4 (the index's inherited/inline `modifiers` flag) -- the .dfm text
+  read is the only source.
+* **N2 ADOPTED (fix/editor-1262-adoption, 2026-10-07).** Since engine 1.26.0 every
+  `inherited[]` entry carries `action`: `retyped` | `code` | `skipped` | `unverified`
+  (`TInheritedLeft.Action`; '' = a pre-1.26 engine = today's behaviour). A `retyped`
+  entry (ancestor_state `converted`) is NOT left: `IsRetypedInstance`, the row note
+  says `N inherited instance(s) retyped` (`InheritedRetypedNote`, before any left
+  note) and the report writes no `inherited left` line for it. `code` counts as
+  `N inherited code use(s) left: <words>`; `unverified`'s words are `ancestor field
+  use not verified against the index`; `skipped` is as before. The live test
+  `inherited.live` now PINS N2 (descendant `.dfm` retyped to `inherited Label1:
+  TStaticText`, nothing left, a `retyped` note, no `N2` text) and SKIPs on a pin
+  without `inherited_retype` (pre-1.26.0) -- run it on 1.26.2+; the N1 expectations live on in `TestInheritedActions` over a REAL
+  1.22.0 capture (`tests\fixtures\inherited\apply-desc-1220-n1.json`) beside the
+  1.26.2 one and a HAND-WRITTEN per-action sample. **With `inherited_retype` the
+  editor-side E2b code-use note is NOT added** (`CodeUseNoteDue(..., ARetypeSupported)`,
+  fix wave 1, C8 M4): the engine's `code` entries are authoritative, and both notes
+  said the same thing twice. Without the capability nothing changed; the pre-run E5
+  row note stays (advice, not a result). A `code` report line reads
+  `C1: TLabel[ line N] -- code use -- <words>` (no `line 0`); a `code` entry under a
+  converted ancestor reads `ancestor <U> (ancestor converted; retype needs engine N2)`.
+  `IsValidateNoise` matches `NOTE:` CASE-SENSITIVELY at the start of the trimmed line. Note 1.26.2's descendant row is
+  `component_part: applied`, 3 edits -- no longer `skipped-no-instances`.
+* **Deferred minors (ledger):** a multi-file drop of N descendants of one unlisted
+  base prompts once per descendant on No (no "No to all"); the Convert gate's Yes /
+  No has no GUI check; `drive-inherited-offer.ps1` still has a fixed 2 s sleep after
+  an answer.
+
+## Glyph expressions on #link -- hand-over notes (feat/c10-glyph-editor, 2026-10-06)
+
+The editor half of the G[I/N] glyph grammar (spec
+`docs\superpowers\specs\2026-10-06-c10-split-merge-design.md`, over
+`2026-09-17-glyph-strip-G-grammar-design.md`): a `#link` may carry a glyph
+expression (`#link OptionsImage.Glyph <- Glyph G[*/4], G[1/2]G[2/2] :
+AssignGraphic`, `#link OptionsImage.NumGlyphs <- Glyph G[count]`). Built against
+engine 1.21.1, which VALIDATES expressions (CV-4) but does not yet APPLY them.
+Plan, ledger and per-task reports: `docs\superpowers\plans\2026-10-06-c10-split-merge-editor.md`
+(main tree) and `.superpowers\sdd\2026-10-06-c10-split-merge-editor\` in the
+`c10-glyph` worktree. The engine asks (C10 ask N1 `glyph_stitch`, N2, N3 `glyphs[]`,
+N5, N7 capture ...) are in `docs\superpowers\specs\2026-10-06-c10-engine-asks.md`.
+**Two N-series exist: "C8 N1/N2/N5" (inherited instances, the section above) and "C10
+ask N1/N2/N5" (glyphs, here) are DIFFERENT engine asks** -- always qualify which.
+Rebased onto `feat/c8-inherited-editor` on 2026-10-06 (merge order C8 -> C10 -> C12).
+
+### Model and grammar
+
+* **`TRuleNode.GlyphExpr` holds the expression VERBATIM** ('' = none). `ParseLine`
+  splits the cast suffix FIRST (the existing `LastIndexOf(':')` rule), then the
+  expression at the first `GLYPH_EXPR_START` = `' G['` (space, capital G, `[`;
+  case-SENSITIVE, as the engine's `SplitGlyphExpr` -- `Picture g[1/2]` is a path).
+  `SplitGlyphExprOff` is that second step. A count link has no `:`, so `Cast = ''`
+  and the expression is `G[count]` (`glyph.parse.count.link`). `Emit` writes the
+  CANONICAL form `#link To <- From Expr : Cast` for a dirty node; the byte-exact
+  load/save round trip comes from `Raw` on UNTOUCHED lines, not from `Emit`.
+* **Merge (`ConvRules.BlockOps`)**: `TBlockLink` carries `GlyphExpr`; two links to
+  ONE To that differ only in the expression are a merge CONFLICT, an identical pair
+  is a duplicate, two G-links from one From to different Tos both merge in.
+
+### `ConvRules.Glyph` -- the decision unit (pure, model-tested)
+
+* **The expression is checked by the ENGINE's parser**, `DRagLint.Convert.GlyphExpr`,
+  imported from `src\report` by both `.dpr`s (as `DRagLint.Convert.CastLib` is):
+  `CheckGlyphExprText` gives `column C: <message>` with the engine's wording.
+* **Block rules** the parser cannot see: `CountLinkIssueFor` (`G[count] needs exactly
+  one image link from <From>; found K`, plus an exact same-From-same-To duplicate
+  refusal -- slightly stricter than the engine, which has no duplicate check; parked
+  ruling), `StraightCountCarryHint` (the engine's straight-carry warning as a hint),
+  `SuggestCountTarget`, `FindCountLink`, `OrphanedCountLink`, `CountLinkStepFor`,
+  `GlyphAssignBlock`. **Every block-level routine takes ONE block's nodes**
+  (`ActiveLinks` / `LinksForBlock`), never the whole book.
+* **Convert-tab and report text** also lives here: `GLYPH_BOOK_PENDING_SUFFIX`,
+  `BookHasGlyphLinks`, `GlyphNoteSuffix`, `GlyphReportNote`, `GlyphRunSummary`,
+  `TGlyphOutcome`; and the grid's `GridMarkNodes` (below). The report LINES are
+  `GlyphReportLines` in `ConvRules.ConvertRunner`, beside C8's `InheritedReportLines`.
+
+### Grid, dialog, Assign, Auto-Match
+
+* **Grid column `Glyph`** (`GRID_GLYPH_COL`, after `cast`) shows the expression
+  verbatim. A validation mark paints its `[!] ` / `[w] ` prefix on the Cast AND the
+  Glyph cell (text unchanged). The G[count] link is **not a grid row** (ruling R4:
+  `FindLinkForFrom` returns the first link per From); its marks show in the Glyph
+  cell of the row it shares a From with, and it is edited through the image link's
+  dialog or the Raw DSL. **Which nodes a cell shows is ONE answer:**
+  `TConvRulesForm.RowMarkNodes(ARow, ACol)` over the pure `GridMarkNodes`
+  (`glyph.marks.*`), used by BOTH `GridDrawCell` and the hint (`GridMouseMove`), so
+  the hint names the count link's marks too. An EMPTY Glyph cell gets no mark prefix
+  (the Cast cell already carries the link's mark) UNLESS the hidden count link
+  carries it -- that is the only place its marks show.
+* **An OK that leaves the expression unchanged keeps the link's marks**; only a
+  changed expression clears them (`DoGlyphExpr`, final-review Minor 3).
+* **Mapping > Glyph expression...** (`DoGlyphExpr`) is DISABLED while no rule is
+  loaded (ruling B2, the Auto-Match gate). On the selected grid row it opens
+  `TGlyphExprForm` (`ConvRules.GlyphForm`, editor-only): caption `Glyph expression:
+  <From> -> <To>`, the edit prefilled, a live check line (`OK`, `enter an
+  expression, or Clear to remove it`, or the engine's error in red -- OK is disabled
+  until it reads OK), a box `Keep #link <To> <- <From> G[count]` (an existing count
+  link; unchecking removes it) or `Also add ...` (no count link and exactly one
+  `SuggestCountTarget`; hidden when there is none), the straight-carry hint, and
+  OK / Clear / Cancel. Statuses: `Glyph expression on <From> -> <To>: <Expr>` (+
+  ` -- added ...` / ` -- removed ...`), `Glyph expression removed from <From> ->
+  <To>.` (+ ` -- <count link> went with it`). Inserting the count link re-finds the
+  active header by NODE (ruling R3).
+* **Assign refuses on a G-link** or a From with several links
+  (`GlyphAssignBlock`, red status naming the existing link): the grid shows only the
+  first link per From, so a retarget would be silent. Unassign and Clear also drop a
+  G[count] link left with no image link from its From.
+* **Auto-Match never writes an expression**: it fills only From leaves with no
+  link, so a G-link is never touched or duplicated (`drive-glyph-link.ps1`
+  `glyph.saveas.no.duplicate`).
+
+### Engine arguments, gating, outcomes
+
+* **`--castlib` now reaches the engine.** `TEngineAdapter.CastLibFile` adds
+  `--castlib "<file>"` to `convert-apply` AND `convert-validate` when the file
+  EXISTS (`CastLibArgs`; a missing file would make the engine exit 2). The form
+  sets it from `GEditorCastLib`; the Convert tab passes `ExistingCastLib`, captured on
+  the UI thread when Convert is pressed. **Behaviour change, said out loud: enum
+  casts in `.castlib` blocks now EXECUTE in editor-driven runs**; before this branch
+  the editor never passed the castlib. `convert-validate` accepts `--castlib` and
+  IGNORES it -- no check may assume validate looks at cast names.
+* **`glyph_stitch` gating (C10 ask N1, NOT shipped in 1.21.1 NOR in 1.22.0 --
+  re-checked 2026-10-06 on the 1.22.0 pin's `info --json`).** The Convert tab probes
+  `info --json` ONCE for every key -- `apply_unit_rules`, C8's `inherited_instances`
+  and `inherited_retype`, and `glyph_stitch` (`CapabilityNames`, one call), again
+  only on the tab's Refresh. **Convert re-classifies the checked books from disk
+  after the open-book save prompt** (`ClassifiedEntry`, then `ShowBooks`), so a book
+  that just gained a G-link is greyed before the run (final-review Minor 2). Without
+  `glyph_stitch` a book with a G-link (`BookHasGlyphLinks`, set on BOTH the
+  list-build and reload paths) is listed
+  `<book>  (glyph links: engine support pending)`, disabled, and unchecked again
+  after Check all. `Preflight`'s `<book>: glyph links: engine support pending --
+  skipped` note is DEFENCE IN DEPTH -- the GUI never lets the book be checked, so no
+  driver expects it. **Today every G-link book is greyed**; the with-capability
+  paths (row note, report lines, red summary) are model-tested only, on
+  `tests\fixtures\glyph\apply-glyphs-sample.json`, which is HAND-WRITTEN to the
+  C10 ask N3 contract until C10 ask N7's real capture replaces it.
+* **`glyphs[]` (apply/1, C10 ask N3):** `{instance, from_path, to_path, kind,
+  source_n, alternative, dropped_slots[], rule_line, message}` ->
+  `TApplyRow.Glyphs`. `kind` `glyph-stitched` is a success; ANY other kind is a
+  to-do. Every key is optional and type-checked; a missing array or key, or a wrong
+  type, degrades and never raises (ruling R8).
+* **Report and status.** A converted row's note gets `; glyphs: N stitched, M
+  slot(s) dropped by rule, K TODO(s)` (after C8's `ConvertedRowNote`; C8's code-use
+  note, added by the tab, stays last). Per row the run report writes the row line,
+  then C8's `inherited left` lines, then one `glyph` line per outcome for CONVERTED
+  rows only (`GlyphReportLines`) -- in the report's ONE 8-column shape: Book, Unit,
+  `glyph`, four empty cells, Note = `<instance>.<from> -> <to>: <kind>, N=<n>[,
+  <alternative>][, dropped a,b][ -- <message>]` (`GlyphReportNote`; spec E13 amended
+  by the final-review ruling), and a `Castlib<TAB><path>` /
+  `(none)` line before `Final reindex`. When a unit has glyph to-dos the status goes
+  red with `N unit(s) have glyph TODOs -- each one's implementation section starts
+  with the TODO line; see the report`, AFTER a `RESTORE FAILED` lead
+  (`RunStatusLead`) -- the most severe outcome still comes first; C8's
+  `Inherited instances could not be re-checked` follows the body. The line is red
+  on the run's own problems, a failed re-read (C8) OR glyph to-dos. The summary
+  counts UNITS (ruling R5).
+
+### Verification kit additions
+
+* **Model tests:** the combined C8 + C10 count is in the Verification kit above
+  (C10 alone measured 1555 / 5 on the 1.21.1 pin before the rebase). `glyph.validate.*`
+  feeds the REAL pinned-engine capture `tests\fixtures\glyph\validate-glyph-bad.txt` /
+  `-ok.txt` (`convert-validate --rules <book>`, parse-only, no `--db`, stdout; stderr
+  empty) of the fixture books `tests\fixtures\glyph\BitBtn-glyph-bad.rules` /
+  `BitBtn-glyph.rules` through `RunScopedValidation` and asserts the error marks the
+  G-link node. Captured on the 1.21.1 pin; RE-CAPTURED on the 1.22.0 pin 2026-10-06:
+  byte-identical (exit 1 / exit 0).
+* **GUI driver `drive-glyph-link.ps1`** -- its row is in the Verification kit table above.
+  It writes its own fixture (a Fix project indexed with the engine beside the exe,
+  so the Convert tab can pre-flight) and needs no real project. On an engine with
+  `glyph_stitch` the two greying checks SKIP and `glyph.convert.book.listed`
+  asserts the book is checkable instead. `-ProofNoGlyph` (books without
+  expressions) fails 6: greyed, never.checked, the count box, both exact-line checks
+  and the bad-save error. On the pre-C10 editor (main `0383bb87`) it fails 6: the
+  three menu checks, greyed, never.checked and the count box -- the old editor
+  already kept both G-link lines byte-exact (the expression rode along in LinkFrom)
+  and its Auto-Match did not duplicate the link (the To was taken).
+* **Driver trap found here:** a process's `ParentProcessId` can name a REUSED PID --
+  a day-old `tail.exe` of another session read as the editor's engine child and a
+  wait-for-idle loop never finished. `drive-glyph-link.ps1` counts only children
+  created after the editor started; `drive-engine-wait.ps1`'s `WaitIdle` still has
+  the old filter.
+
+## Convert progress + Reindex project -- hand-over notes (feat/convert-progress-reindex, C16 + C17, 2026-10-11)
+
+* **C16 -- the runner reports steps.** `TRunPhase` / `TRunStep` / `TRunStepFn` live in
+  `ConvRules.ConvertRunner`. Per unit: `rpReindexBefore`, `rpBackup`; per book `rpApply`,
+  `rpReindexAfter` after a successful apply, `rpRestore` when the unit is copied back; the tab
+  adds `rpFinalReindex` itself (the runner never emits it). A step is emitted as the phase
+  STARTS and carries unit k/N, book j/M (0 on unit-level phases), and ms elapsed for the unit and
+  the run. No step for an out-of-scope book, a unit a cancel kept from running, or a refusal on an
+  unchanged unit's restore (nothing is restored). A raising step callback is ignored and not
+  called again (advisory; the loop still never raises).
+* **The entry points are NEW NAMES, not defaulted parameters.** `RunConversionUnitsStepped` (the
+  TApplyFn test seam + step) and `RunConversion(..., AOnStep)` (required). Adding a defaulted
+  anonymous-method parameter to the existing `RunConversionUnits` overloads made dcc64 reject
+  ten EXISTING calls with E2250 -- do not "simplify" back to a default. The body is the
+  implementation-only `RunUnitLoop`; the public overloads pass `nil`.
+* **Text: `RunStepText` (pure)** -- `Unit 2 of 5: SystemData2 -- book 1 of 2 BDE-to-FireDAC:
+  applying (0:42, total 3:10)`; unit-level `Unit 2 of 5: SystemData2: backing up (...)`;
+  `Final reindex (total 3:10)`. `FormatElapsed` (`m:ss` / `h:mm:ss`) is in
+  `ConvRules.ConvertRun`; `AdvanceStep` adds the time since receipt.
+* **Display:** `TConvertTab.QueueStep` (`TThread.Queue`) stores the step; `RenderStep` writes
+  it to the new `LblRunStep` label under the Convert / Cancel row AND the status bar; a 1 s
+  `FStepTimer` re-renders the LABEL only while one phase runs, so the clocks tick during a long
+  apply without overwriting a mid-run refusal or menu hint on the status bar (review fix): the
+  status bar changes only when a NEW step arrives (`RenderStep(True)`). The
+  timer stops and the label clears in `SetRunning`; queued steps all land before `RunFinished`
+  (FIFO). The first status after Convert is still `Converting N unit(s) with M book(s)...`,
+  replaced by the first step at once. **Drivers:** `WaitStatus` in `drive-convert-tab`,
+  `drive-convert-request` and `drive-inherited-offer` now treat `RunInProgress` (Converting /
+  `Unit k of N:` / `Final reindex (total`) as still running -- without it they returned on the
+  first progress line. `drive-convert-request` (25 / 0) and `drive-inherited-offer` (15 / 0) were re-run on
+  this branch, on a staged 1.26.7 copy.
+* **Rows per unit were already live:** the runner's `Flush` hands each unit's rows to
+  `AProgress` when the unit finishes and the tab queues them -- `steps.order.2x2` pins that a
+  unit's rows arrive before the next unit's first step. Nothing changed there.
+* **Engine progress lines are NOT fed into the apply phase.** `ApplyConversion` still runs on
+  `RunCaptureTimed` (no streaming); convert-apply's `--progress-interval` was not checked.
+  Optional per the job; left for later.
+* **C17 -- Conversion > Reindex project** (`FMiReindex`, `DoReindexProject`, no shortcut):
+  `index --project <ProjectFileForDb(GEditorProjectDb)> --db <GEditorProjectDb>` through the
+  NEW cancellable `TEngineAdapter.IndexProject(..., ACancel, ...)` overload
+  (`RunCaptureStreaming`) on `FEngine.LongCallRunner` (progress window, Cancel, FTreeLoads
+  counted). Disabled mid-run (`RunStateChanged`); `ReindexRefusal` refuses while running and,
+  with `NoProjectFileText` -- now the ONE text Convert and the tab's stale retry use too -- when
+  the project file is missing. Afterwards `FEngine.ClearResolveCache` and
+  `FConvertTab.RefreshIndex` (skipped while the source list is empty).
+* **Status (`ReindexOutcomeText`):** `Reindexed <project> (<db file>): N file(s) in the index,
+  compile closure M (m:ss)`; failure red via `SetError` (`Reindex of <project> (<db file>) failed
+  (exit N): <first 200 chars>`, or `... did not finish in time`); cancel `... cancelled after
+  m:ss -- the index may be partly refreshed; run it again.` The DB is named on every outcome and
+  in the menu hint (`ReindexMenuHint`), so the built-in default index cannot surprise anyone.
+  **Never the engine's `files=` / `walked=` names (review fix, 2026-10-11).** The direct
+  `index --project --db` run prints no section line (that is `index --all` only); it prints
+  `Done. Files: N` (rows in the index) and `Compile closure: M file(s):` (the closure LIST
+  length), and `ParseIndexSummary` reads only those two. M is not the engine's `walked=`, and
+  under that name "files > walked means REBUILD" would read wrongly -- on the fixture the closure
+  (4, the `.dpr` included) is LARGER than the index's file count (3).
+* **Driver trap:** `WM_GETTEXTLENGTH` then `WM_GETTEXT` on the status bar are two messages; a
+  status written between them came back cut to the OLD length (`Reindexed Fix.dproj: fi`). The
+  reindex wait re-reads after 500 ms, and accepts only a status that differs from the one before
+  the command (a stale `[!]` line cannot pass).
+## IDE hand-off -- hand-over notes (feat/c12-convert-request, 2026-10-06)
+
+The editor half of C12: the IDE plugin writes a request file and launches the
+editor with it; the editor opens on the Convert tab with that unit listed, the
+matching books checked and a component SCOPE, and waits for Convert. Spec
+`docs\superpowers\specs\2026-10-06-c12-ide-convert-menu-design.md` ("Hand-off
+contract"), engine asks `...\2026-10-06-c12-engine-asks.md`, plan
+`docs\superpowers\plans\2026-10-06-c12-ide-convert-menu-editor.md`; ledger with
+every ruling `.superpowers\sdd\2026-10-06-c12-ide-convert-menu-editor\progress.md`
+in the `c12-request` worktree. Branched from C8 (774093c9); rebased onto C10
+(`feat/c10-glyph-editor` d879dedc) for the final-review fix wave, so the merge order is
+C8 -> C10 -> C12.
+
+**The ENGINE's plugin half is NOT built yet** -- N1 (the `drag-lint > Convert
+Components` submenu, the request writer, close / launch / reopen) and N2 (the
+capability probe that calls `--write-capabilities`). Until then the only way in is a
+hand-written request file, which is exactly what `drive-convert-request.ps1` does.
+
+### Contract and switches
+
+* **`convert-request/1`** (`ConvRules.ConvertRequest`, `ParseConvertRequest`):
+  `schema`, `scope` (`selected` | `form`; `project` is parsed and refused as
+  `Project-wide scope is not supported by this editor version`), `project_file` and
+  `project_db` (required), `units[]` (exactly one for both scopes) each with `pas`
+  (required), `dfm`, `form_class` and `components[]` of `{name, type}`. Optional:
+  `written`, `source`, `ide_pid`, `platform`, and **`rules_folder`** (controller
+  ruling B1, accepted by ENGINE: the plugin writes it from its "Conversion rules
+  folder" setting and OMITS the key -- never `""` -- when unset). Unknown keys are
+  ignored; a KNOWN key of the wrong JSON type is refused, never defaulted. Nothing
+  raises: every read is type-checked (`is TJSONArray` / `is TJSONObject`).
+* **Switches** (documented in the `.dpr` header): `--convert-request <file>`,
+  `--rules-folder <dir>`, `--write-capabilities <file>`. The editor NEVER starts the
+  run (owner Q1, plan default) and never deletes the request file.
+* **`--write-capabilities <file>`** is answered first in the `.dpr` main block,
+  before any global, window or engine child: it writes
+  `{"schema":"editor-capabilities/1","convert_request":1}` (UTF-8, no BOM, one line;
+  the folder is created) and exits 0, or 1 on any failure. An old editor opens its
+  window instead, so the plugin tells them apart by the file appearing within
+  seconds (`req.caps.probe`: written, exited, no window, within 5 s).
+* **Project index adoption** (`AdoptedProjectDb`): an explicit `--project-db` wins;
+  a request launch WITHOUT one adopts the request's `project_db` instead of the
+  built-in `ProjectDb` -- only when that file EXISTS (fix wave Minor 3: a missing one
+  would have put the whole session on a missing index). Not adopted, the editor keeps
+  its own index and the request is refused naming the request's file (`the project
+  index <request db> does not exist -- index the project first`), not as a mismatch.
+  An explicit `--project-db` that differs from the request is
+  kept, and `ValidateConvertRequest` then refuses the request naming both paths --
+  never re-scoped. `project_file` must equal `ProjectFileForDb(project_db)`.
+* **`PrepareConvertRequest(AJson, TRequestEditorState, probes, reader)`** is the
+  pure pass the form runs before touching a control; refusals in this order: parse;
+  the editor has no project index (`the editor has no project index -- launch it with
+  --project-db`); the REQUEST's project index does not exist; validate; the editor's
+  project index file does not exist (both as `the project index <db> does not exist --
+  index the project first`); rules folder; scope (`.dfm`
+  binary, missing, unreadable or header-less -- refused for BOTH scopes, ruling R9).
+  A refusal is shown red as `Convert request <file> refused: ...` and the editor
+  stays on the Classes tab, usable (`req.nofolder.usable`).
+* **Rules folder resolution** (`ResolveRequestRulesFolder`): the request's
+  `rules_folder` > `--rules-folder` > the editor's in-session folder
+  (`RulesFolderNow`: the rescanned folder, else the open book's) > refuse with E3
+  (`No book in <no rules folder: the request has no rules_folder, no --rules-folder
+  was given and no book is open> converts T1, T2 -- ...`). The FIRST non-empty
+  candidate decides: a named folder that does not exist is refused, never replaced
+  by a later candidate. The request is applied only after the folder is known.
+* **Applying it** (`TConvRulesForm.ApplyConvertRequest`, queued with
+  `TThread.ForceQueue` after the form shows, ruling R2): `RescanRulesFolder` on the
+  chosen folder, show the Convert tab, `RefreshBooks`, then
+  `TConvertTab.LoadRequest`: check EXACTLY the books with a `#convert` pair whose
+  From type is a requested bare type (`BookMatchesTypes`; exact match, owner Q6;
+  all matching books, Q7), list the unit (`AddSources` -- index flag, harvest, the C8
+  analysis with those books' pairs), THEN set the scope (`AddSources` resets it,
+  ruling R1). Status E5 `Request from the IDE: convert <scope> with N matching
+  book(s) -- review and press Convert.`, or E3 in red when no book matches.
+  `RequestStatusTail` appends what the tab already knows, each as ` Also: ...`, and
+  the line goes RED when anything was appended: an unindexed unit is named (`Also:
+  <pas> is not in the project index -- Convert will refuse.`) and then the C8
+  inherited-analysis error is DROPPED (the missing index entry is its cause --
+  reported once); an unreadable project index is said so. A scope that holds NO
+  instance (every selected name missing from the `.dfm`, or a form scope `(0 found)`)
+  leads the tail with ` Also: no requested instance is on the form.` (`EmptyScopeTail`,
+  fix wave Minor 1), red: such a run converts nothing. Its Scope text has no empty
+  list: `0 selected component(s) on U; not found on the form: x`.
+
+### The scope
+
+* **`TConvertScope`** (`skWholeUnit` = `Default`, `skSelected`, `skForm`) from
+  `BuildScope` over the `.dfm` text (the C8 depth-tracked header walk, any depth --
+  panels, inline frames' children; the root is never an instance). `selected`: each
+  requested name the `.dfm` opens, request order; names not on the form go to
+  `NotFound`, are listed in the Scope line (`; not found on the form: x`) and NEVER
+  reach the engine; a name selected twice is listed once. `form`: every object whose
+  bare type is a requested type, `.dfm` order; inherited / inline instances are
+  listed and counted in `(N found)` too.
+* **The scope binds the request's `UnitPas` ONLY** (ruling B5). Any other listed unit
+  -- e.g. an ancestor the C8 offer inserted above it -- converts WHOLE, with no
+  `--only` (`ScopedNamesForUnit` returns False for it).
+* **Per book** (`ScopedNamesForBookFile` -> `ScopedNamesForBook`): the scope's names
+  whose bare type is a From type of one of the book's pairs go to `convert-apply
+  --only a,b` (`TEngineAdapter.ApplyConversion` AOnly overload). A book with no name
+  in scope on the unit gets `skipped -- not in scope` (`csOutOfScope`) with NO engine
+  call and no backup named; a unit whose every book is out of scope keeps no `.BCK`.
+  A book file that cannot be read scopes to no name (out of scope, never whole-unit).
+* **Notes and summary.** A converted scoped row's note is `--only N instance(s): a,
+  b; ` + the unscoped note (`ConvertedRowNote`: `<edits> edit(s), <k> remaining for
+  manual work` and any C8 tail; then C10's `; glyphs: ...` suffix, `GlyphNoteSuffix`)
+  -- what was ASKED, not what converted (spec E11 amended; the engine had no
+  per-name answer). The engine's `--only` refusal (`unconverted instance(s) of
+  <Type>`, a `#unuse` / `#useswap` stranding excluded instances) gets the E10 hint
+  ` -- convert all <Type> instances on this form, or remove the #unuse / #useswap
+  from the book`. `csOutOfScope` is counted apart (`TallyRows`) and leaves the
+  `Converted N of M` denominator: `... 2 pair(s) skipped -- not in scope.`
+* **Unknown `--only` name, measured on 1.22.0** (`runner.live.only.unknown.name`):
+  exit 1, `ok=false`, `refused=false`, `edits_count` 0, a generic reason (`no
+  convertible instances found`) -- NOT a refusal. The runner keeps it on the
+  FAILED / restore path (all-or-nothing per unit) and appends ` -- --only asked for
+  <names>; the form may have changed since the IDE request -- re-send it`. A mix of
+  valid and unknown names was not measured. Interim until N3 is adopted (fix wave
+  Minor 2): the hint is SKIPPED when every `--only` name is an inherited or inline
+  instance (`UnmatchedOnlyHintFor`, bound to the job's scope through the runner's
+  `AOnlyHint` seam) -- the engine leaves those to the ancestor, so "re-send it" would
+  be wrong.
+* **`--castlib` travels on the AOnly overload** of `TEngineAdapter.ApplyConversion`
+  (rebase hot spot H1): the runner ALWAYS calls that overload (nil = unscoped) and the
+  4-argument one only delegates to it. Guard: `glyph.castlib.apply.only.scoped.arg` /
+  `.unscoped.arg` (RED with the argument left out).
+* **The Convert tab.** `Scope:` line (`FLblScope`, a `TLabel` named `LblScope`) under
+  the heading; `Clear scope` (enabled only with a scope, disabled during a run)
+  resets to a whole-unit run and says so. **Adding a NEW unit (Add / drop,
+  `AddSources`) or deleting any selected row resets the scope**, and when a scope was
+  in force the status says `Scope cleared -- the whole unit will be converted.`
+  (`SCOPE_CLEARED_TEXT`, fix wave Minor 4; `ResetScope` answers whether it cleared
+  one); the C8 ancestor
+  insert does not (ruling B5/R7). So the `ScopeMatchesUnits` refusal (`the scope
+  names <pas> but the source list (N unit(s)) does not hold it`) is NOT reachable
+  from the GUI today: deleting the unit clears the scope first. Review Focus 5's
+  "Convert tab check" therefore has no GUI driver; `req.delete.resets.scope` covers
+  what the GUI does, and `scope.matches.units.mismatch` (model) covers the refusal
+  (ruling R11). A scoped run adds a grid note row with the scope text.
+* **The run report's layout, all three branches together** (C8 + C10 + C12): the
+  header; `Scope<TAB><scope text>` (`Scope<TAB>whole unit` on a plain run; captured at
+  Convert time in `FRunScope`, so `Clear scope` mid-run cannot change it); per row the
+  row line, then C8's `inherited left` lines, then C10's `glyph` lines (converted rows
+  only); the `not reached (cancelled)` rows; `Run<TAB>completed` / `cancelled -- ...`;
+  `Castlib<TAB><path>` / `(none)` (C10); `Final reindex<TAB>...`.
+* **Driver decision:** the Scope line is a `TLabel` -- no window, unreadable by the
+  driver -- so `drive-convert-request.ps1` asserts the status bar, built from the
+  same `ScopeText`. The label itself is an owner visual check.
+
+### Waiting on ENGINE
+
+* **1.23.0 (merged on main, NOT deployed or pinned)** ships `only_matched[]` /
+  `only_unmatched[]` in apply/1 (N3) and `only_skips_unit_rules` (N4: a unit rule
+  that would strand only `--only`-excluded instances is SKIPPED). Queued editor
+  follow-ups, after a re-pin to 1.23.0: (1) the scoped note from `only_matched[]` /
+  `only_unmatched[]` ("converted N of M", unknown names named) instead of "--only
+  asked for"; (2) the E10 hint gated on `only_skips_unit_rules`; (3) a C13 `REFUSED
+  ... index gap ...` shown as "fix the index", not "edit the book"; (4) runner batch
+  mode (`batch_units`: one apply-batch/1 call per book over all units; measured
+  45.7 s vs 114.7 s for 3 units by ENGINE).
+* Still open: N1 / N2 (above), N6 (hold the plugin's own index jobs on the launched
+  project's DB while the editor lives), N7 (designer right-click entry). The plan's
+  INBOX note to ENGINE about `--only` was superseded (ENGINE shipped N3 / N4 and was
+  told the 1.22.0 measurement directly).
+* **Deferred minors (ledger):** a queued `ApplyConvertRequest` could run before the
+  form is visible if something pumps messages between `CreateForm` and
+  `Application.Run` (latent for IDE launches); a `--form` error is overwritten by the
+  request status; a whitespace-only required value reads "is missing"; the
+  unmatched-name hint also fires on unparseable output / a raised engine call.
+
+## Engine half-apply guard (fix/apply-refusal-guard, 2026-10-06)
+
+* **What it catches.** Every engine up to the deployed 1.25.0: a full
+  `convert-apply --apply` on a unit with NESTED converted components (a TTable
+  with TField children -- DMREADINGS on the DMTEST copies) plans overlapping
+  `.dfm` deletes; `TTextEditApplier.Apply` (`DRagLint.Refactor.TextEdit.pas`,
+  the `DeletesOverlap` branch) refuses that FILE's edits whole and writes one
+  stderr line, `drag-lint: refused N edit(s) to <file> -- overlapping delete
+  ranges (an engine defect; the file is left unchanged)`. The `.pas` IS written,
+  the `.dfm` is not, and `DoConvertApply` ignores the applier's skipped count:
+  apply/1 says `ok: true`, `edits_count` is the PLANNED count, exit 0. No
+  apply/1 key carries the refusal -- the stderr line is the only signal.
+* **What the editor does.** `ParseApplyJson` collects every whole line matching
+  `EDIT_REFUSAL_PATTERN` =
+  `^(?:drag-lint: |ERROR: )?refused (\d+) edit(?:\(s\)|s)? to (.+?) -- (.+)$`,
+  case-insensitive (`EDIT_REFUSAL_OPTIONS` = `[roIgnoreCase]`), from the captured
+  output (stderr follows stdout there), `warnings[]` and `error` into
+  `TApplyRow.EditRefusals`; `ApplyHalfWritten` = `Ok` and any refusal. The
+  runner then takes the FAILURE path (`FailUnit(.., csFailedRestored)`): the
+  unit is restored from its `.BCK<N>`, earlier books on it roll back, the summary
+  counts it failed (red), and the note reads `engine left the unit
+  half-converted (.dfm edits refused: N edit(s), overlapping delete ranges) --
+  restored from backup; engine fix pending` (`HalfWrittenNote`). Tests:
+  `half.*`, `runner.half.*`.
+* **Engine 1.25.1+ shape (not merged yet), covered too.** The plan is checked
+  BEFORE any write, on dry runs too: exit 1, `ok: false`, nothing written (no
+  `.BCK`, no recovery.txt), and the line is `ERROR: refused N edit(s) to <file>
+  -- overlapping delete ranges (an engine defect) -- unit not changed, nothing
+  written` (assumed the same text without `ERROR: ` in apply/1 `error`). The
+  pattern above accepts that prefix;
+  `ApplyEditSetRefused` = NOT `Ok` and any refusal. It is a UNIT failure, never a
+  book error (the book-skip branch excludes it; the next unit still runs), the
+  note is `EditSetRefusedNote` (`engine refused the unit as an engine defect
+  (...) -- unit not changed, nothing written`). It takes the `csRefused` path of
+  `FailUnit` (status `refused -- not changed`): when no earlier book changed the
+  unit nothing is restored and the unneeded `.BCK<N>` files are DROPPED (owner
+  decision 2026-10-04, as `runner.refused.first.drops.backup`); when one did, the
+  unit is restored from its `.BCK<N>` and that book rolls back. A scoped run's
+  `edits_count` 0 here never gets the `--only asked for ... re-send it` hint.
+  Tests: `editset.*`, `runner.editset.*`.
+* **A STOP-GAP.** It keys on engine TEXT. When the engine ships its
+  all-or-nothing apply (a non-zero exit / `ok:false` on any refused edit set),
+  tighten this to that exit contract and drop the text match. Blind spot: the
+  applier's other silent drops (stale anchor, invalid replace, out-of-range
+  line) print nothing, so they cannot be seen from here.
+
+## Engine 1.27.0 adoption -- hand-over notes (feat/editor-1270-adoption, 2026-10-11)
+
+The editor side of engine 1.27.0 (and the 1.28.0 exit 6): the StripDB value cast,
+the new apply/1 arrays on the Convert tab, a run-level stop on an unusable cast
+library, and a **Work list** tab over `pas_uses[]`. Plan
+`docs\superpowers\plans\2026-10-11-editor-1270-adoption.md`; ledger and per-task
+reports `.superpowers\sdd\2026-10-11-editor-1270-adoption\` in the `editor-1270`
+worktree. Test engine: a staged copy of the **1.27.0 pin**
+(`1.27.0-alpha-20261011-050359`, sha256 16B97F99...).
+
+### StripDB in the cast list (C15, editor side)
+
+* **`TConvKind` gained `ckValue`** (`ConvRules.ConvCatalog`, label `value`): a castlib
+  block with a `value` transform (`TCastDef.Value`, e.g. `strip-db`) is offered as
+  `ckValue` with Detail `value transform: <value>`; class casts stay `ckClass`.
+  `ConversionsFor` dedupes by (To type, cast name) -- not by To type alone, which let
+  the identity option swallow StripDB. Two DIFFERENT class casts to one type are now
+  both listed (none exists in the shipped castlib).
+* **`BDE-to-FireDAC.rules` line 300** is `#link TableName <- TableName : StripDB`
+  (the line count is unchanged, 729, so no `select.bde.*` / `convlib.bde2fd.*` pin
+  moved). Dry run on a dmToolStats copy: two `value-cast-applied` items
+  (`'ToolAdj.DB'` -> `'ToolAdj'`, `'toolstat.db'` -> `'toolstat'`).
+* Deferred: the picker does not offer StripDB for a `TFileName` From (string alias);
+  the option's Detail text is never shown; `TestConvCatalogValueCast` SKIPs its 4
+  checks when `casts.castlib` is absent beside the test engine.
+
+### The new apply/1 arrays (Convert tab)
+
+* **Capability gates -- probed in the SAME single `CapabilityNames` call the tab
+  already makes**: `cast_site_refusal`, `value_cast_strip_db`, `uses_reconcile`,
+  `pas_uses`, and (engine 1.28.2) `pas_uses_resolution` (`CAPABILITY_*` in
+  `ConvRules.Engine`). `ApplyFeaturesOf` turns them into `TApplyFeatures`
+  (`afCastSiteRefusal`, `afValueStripDb`, `afUsesReconcile`, `afPasUses`,
+  `afPasUsesResolution`), carried as `TConvertJob.ApplyFeatures`. `ParseApplyJson(AJson,
+  AFeatures)` reads an array ONLY when its feature is in the set; without the key the
+  row is exactly today's. The test seams (`TApplyFn` / `TApplyOnlyFn`) pass every
+  feature. Deferred minor: `ParseApplyJson`'s default `AFeatures` = all is a trap
+  for a future caller.
+* **`TApplyRow` gained** `CastSites`, `ValueCasts`, `ValueChecks` (`TApplyItem`:
+  Kind, Instance, FileName, Path, Value, OldValue, Text, Line, RuleLine), `UsesRows`
+  (`TUsesRow`: Action, Section, UnitName, Source, NeededBy, Dangling),
+  `UsesUnresolved` and `UsesReindex`. Keys came from the REAL captures and the
+  engine's contract literal (`DRagLint.CLI.pas`): apply/1 `unit` -> UnitName;
+  `needed_by[]` is `{name,line,section}` -- names go to `Dangling` on a remove row,
+  to `NeededBy` otherwise; `uses_unresolved[]` entries read as `'<name> line N:
+  <reason> (<units>)'`; `uses_reindex {status,reason}` as `status[: reason]`.
+  Every read is type-checked (ruling R8): a non-object entry is skipped, a
+  wrong-typed field reads '' / 0, nothing raises.
+* **Counted ONCE.** `items[]` is the union and the arrays partition it; a cast site /
+  value check is also a `warnings[]` line with the SAME text. `ParseApplyJson`
+  builds `Remainder` after the arrays and drops (`WithoutItemTexts`) every warning
+  that is exactly the `Text` of a CastSites / ValueChecks entry -- an exact match,
+  because no other key ties the two. So `remaining for manual work` excludes them;
+  their own note parts carry them (as C8 excludes inherited warnings).
+* **Row note order:** `<edits> edit(s), <k> remaining for manual work`, C8's
+  retyped / left parts, then `ValueCastNote` (`; StripDB: N value(s) changed, M to
+  check by hand`), `CastSiteNote` (`; N cast site(s) to convert by hand`),
+  `UsesNote` (`; uses: +A -R moved M`, plus ` (reindex failed: <reason>)`) --
+  all in `ConvertedRowNote`; the runner then adds C10's glyph suffix, and the tab
+  C8's code-use note last. **Report lines** (converted rows only,
+  `ApplyItemReportLines`): status `cast site`, `value cast`, `value check`,
+  `uses <action>`, `uses unresolved`, written AFTER the C8 and C10 lines -- a
+  different order from the note (deferred minor).
+* **Exit 6 = the cast library is unusable (engine 1.28.0) and STOPS THE RUN.**
+  `ENGINE_EXIT_CONFIG = 6`, status `csConfigError` (`stopped -- cast library
+  unusable`). The unit takes `FailUnit`'s path (restore only when an earlier book
+  changed it, else the `.BCK<N>` is dropped), `TConvertRow.StoppedRun` is set FIRST
+  -- before the restore -- so a failed restore (row `csRestoreFailed`) still stops
+  the run (fix round, I1). `CastLibStopText` takes the engine text from
+  `Apply.Error`, never the row note. The red status leads with `Convert stopped: the
+  cast library <path> is unusable -- <engine text>. ` -- right AFTER a `RESTORE
+  FAILED` lead when there is one (most severe first; `RunStatusLead`'s `AStop`, one
+  `. `, no doubled period; final fix wave, `convert.tab.lead.*stop*`) -- marks the rest
+  `not reached (stopped)` and writes `Run<TAB>stopped -- the cast library is
+  unusable, N unit(s) not reached`. Tests `runner.exit6.*` (fake TApplyFn).
+  Deferred: `Converted N of M` still counts the pairs never run after a stop.
+* **Fixtures** `tests\fixtures\apply1270\`: four REAL 1.27.0 captures (cast-site,
+  StripDB, uses, pas_uses) plus one 1.28.0 exit-6 capture; ONE hand-written sample
+  (`apply-missing-fields-sample.json`, marked in its `_note`). Each has a `_note`
+  with the command; temp paths are `C:\fix\`. **Engine 1.28.1 changed the uses
+  rows** (a `#convert` header's units now get `uses[]` add rows; a book `#use` into
+  the INTERFACE yields one), so a re-capture there may show one more add row. The
+  fixtures stay 1.27.0 captures -- re-capture on the re-pin, do not bend the tests.
+
+### Work list tab (pas_uses)
+
+* **Pure: `ConvRules.WorkList`** (both `.dpr`s): `TPasUseRow`, `ParsePasUses`
+  (never raises; `JInt` = `TJSONNumber` + `TryStrToInt`, so a non-Integer `lines`
+  entry is skipped and a bad `count` falls back to `Length(Lines)`), `FilterRows`,
+  `SortRows` (status rank, unit, instance with globals LAST, member;
+  case-insensitive, stable), `RowDisplay` / `WorkColumns` (`Unit, Instance, From ->
+  To, Member, Kind, Status, Lines, Declared in`; a global shows `(global)` and
+  `--`), `DeclaredInText`, `WorkListSummary`, `MergeRun`, `WorkGoTo`. A JSON
+  number is never read as a string (`JText`; note that Delphi 13's `TJSONNumber`
+  descends from `TJSONValue`, NOT `TJSONString` -- `System.JSON.pas:424` -- so the
+  `is TJSONNumber` exclusion is defensive, for an RTL where it descends from
+  `TJSONString`; `ConvRules.ConvertRun.JsonStr` says the same). **UI: `ConvRules.WorkListTab`**
+  (editor-only `TPanel`; its items are filled in `CreateWnd` because the host sets
+  `Parent` after `Create` -- the first build died at start-up without that).
+* **Statuses:** work = `unmapped`, `global-dangling`, `cast-refused`,
+  `not-rewritten` (bold; unmapped and global red); plain = `same-name`, `mapped`.
+  `(other)` (`WORK_STATUS_OTHER`, parenthesised so it cannot collide with an engine
+  word) stands for every status outside the six, '' included, and is checked by
+  default so a newer engine's status is never hidden; the summary adds `, K other`.
+  No box checked = nothing shown (`TWorkFilter.NoStatus`).
+* **States (`TWorkListState`):** `no work list yet -- run Convert first` (no run),
+  `no work list (engine has no pas_uses)`, `no work list (no unit converted)` --
+  every unit failed / was refused / rolled back, NEVER an empty grid that reads as
+  "nothing to do" -- else rows.
+* **One run at a time.** `TConvertJob.RunId` (the tab's `FRunId` counter, set in
+  `ConvertClick`); `WorkRunOf(rows, runId, afPasUses in features)` takes the
+  `PasUses` of every `csConverted` row, stamped with the run id and the row's full
+  unit path, exact repeats dropped. `RunFinished` hands it to
+  `TConvertHost.WorkListReady` -> `ShowRun` -> `MergeRun`, which keeps only the new
+  run's rows. Deferred: two books on one unit can list a global twice at shifted
+  lines; a preflight-refused Convert keeps the previous list.
+* **Double-click** copies `<full path>(<line>)` to the clipboard (the compiler-message
+  form) and says `Copied <file>(<line>) to the clipboard -- line <N>` (controller
+  ruling, final review: the IDE's Go to line takes only the number, so the status no
+  longer tells the user to paste it there); a missing file, a line past EOF, an I/O
+  error or a held clipboard is a status-bar error, never an exception.
+* **Menu:** `View > Work list` (no shortcut); showing the tab writes `Work list:
+  <summary>` to the status line. Feature registry `convrules-work-list`, wiki page
+  `docs\wiki\convrules-editor-work-list.md`.
+* **Driver `tests\gui\drive-work-list.ps1`** -- 13 checks on a temp fixture (TLabel
+  -> TStaticText): summary, filter statuses, grid rows, double-click status +
+  clipboard, missing file. `-ProofNoPasUses` against a staged 1.26.7 copy gives
+  9 / 5 (`proof.no.pas_uses` passes; the content checks fail).
+  `drive-unit-rules-toolbar.ps1` `menubar.items` now also requires `View|Work list`
+  (still 41).
+* **Engine defect seen through the driver -- FIXED in engine 1.28.2:** `pas_uses`
+  reported TLabel's `WordWrap` as declared in `FMX.StdCtrls` and `Layout` with an
+  empty declaring unit
+  (`docs\INBOX-2026-10-11-converter-to-engine-pas-uses-declared-in-fmx.md`). 1.28.2
+  resolves the From class in the unit's scope and says how
+  (`pas_uses_resolution`, below).
+* **Resolution (engine 1.28.2, capability `pas_uses_resolution`, final fix wave):**
+  each row carries `resolution` (`resolved` / `ambiguous` / `class-not-found` /
+  `member-not-found` / `kind-unknown`, `PAS_RES_*`) and `candidates[]` (strings
+  only; other entries skipped). `ParseApplyJson` CLEARS both unless
+  `afPasUsesResolution` is in the features (`ApplyFeaturesOf`, the same single
+  `CapabilityNames` probe in `RefreshBooks`). The Work list never presents a guessed
+  unit as fact: `DeclaredInText` gives the declaring unit only for '' / `resolved`;
+  `ambiguous: <candidates>` (`ambiguous: FMX.StdCtrls, Vcl.StdCtrls` for a bare
+  `TLabel` book on a unit naming no StdCtrls unit -- REAL capture
+  `tests\fixtures\apply1270\apply-pas-uses-resolution-1282.json`); `(class not
+  found)` / `(member not found)` / `(kind unknown)`; any other word `(<word>)`. The
+  Kind cell reads `(unknown)` when the engine sent no kind but did send a
+  resolution. `PasUseKey` includes both, so two books naming different candidates
+  stay two rows. Tests `worklist.resolution.*`, `worklist.run.of.key.resolution`.
+
+### Lint housekeeping in this batch (engine 1.28.1 = C14)
+
+Engine lint changes up to 1.28.1 (C14 among them) made several held findings stop
+firing, so their markers were removed or re-hashed (judged with `--enable multiple-statements-per-line,magic-literal,
+commented-out-code,review-marker-stale` on a staged 1.28.1 copy): `SetDepth`'s
+`function-result-not-set`; the `try-except-swallowed` reviews in `ConvertRunner`
+(2), `Engine` (1) and the tests `.dpr` (7) -- each keeps its "not swallowed" reason
+as a plain comment; `ConvertRunner`'s `unused-unit-in-uses` on `ConvRules.UnitStatus`
+(the unit stays); `ParseLine`'s `method-too-long` and `TestRunnerScope`'s
+`cyclomatic-complexity` re-hashed and re-stamped. `WorkingSet.ClearSelection`'s
+autodoc dropped a wrong `UnitPopupPopup` caller (that is `TListView.ClearSelection`)
+by hand -- never `doc-drift --fix --apply` here. Result: lint-all editor 971, tests
+413, nothing on the branch's lines. An engine before 1.27.1 (C14) reports
+`SetDepth`'s finding again -- judge markers with 1.28.1 or later. Engine 1.28.2
+counts an enum VALUE as a use of its unit, so `ConvRules.WorkListTab`'s
+`unused-unit-in-uses` review on `Vcl.Controls` (alTop / bvNone ...) read
+`review-marker-unused` and was deleted in the final fix wave; the unit stays. Re-judged
+on a staged 1.28.2 copy: lint-all editor 971, tests 413, 0 on the branch's lines.
