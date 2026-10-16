@@ -233,7 +233,9 @@ try {
   # project_tag names A, not C: C is unverified (never reindexed: an incremental run keeps A's rows), and the
   # rename is refused.
   Check 'WD0 reset, then C.sqlite indexed from project A' (Reset) ''
-  $null = Run @('index', '--project', "$work\A\A.dpr", '--db', "$work\C.sqlite")
+  # --rebuild: since 1.31.2 an incremental project scan into a DB tagged for another project is refused;
+  # a rebuild replaces it wholesale, which is exactly the 'C's DB is A's closure' shape this case needs.
+  $null = Run @('index', '--project', "$work\A\A.dpr", '--db', "$work\C.sqlite", '--rebuild')
   $cDproj = "$work\C\C.dproj"
   $o = FixShared 6
   Check 'WD1 preview: C is unverified, the reason names the tag and the rebuild' `

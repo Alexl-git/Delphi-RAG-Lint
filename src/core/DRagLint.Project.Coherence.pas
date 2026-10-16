@@ -96,7 +96,26 @@ function IsIncoherent(const AC: TMemberCoherence): Boolean;
 /// <remarks>Pure.</remarks>
 function SanitizeProjectTag(const AName: string): string;
 
+/// <summary>True when a stored PROJECT_TAG_KEY value names a DIFFERENT project
+/// than AProjectFile -- the index is some other project's closure.</summary>
+/// <param name="AStoredTag">The schema_meta project_tag value as read; blank
+/// (untagged, cleared by a folder scan, or predating the stamp) never
+/// conflicts.</param>
+/// <param name="AProjectFile">The .dpr/.dproj the caller would index or act
+/// for; compared by SanitizeProjectTag of its base name, case-insensitively.</param>
+/// <returns>False for a blank tag or a matching one; True otherwise.</returns>
+/// <remarks>Pure. The ONE comparison behind both the multi-project rename's
+/// owner check and the `index --project` refusal, so the two cannot disagree
+/// about what "another project's index" means.</remarks>
+function ProjectTagConflicts(const AStoredTag, AProjectFile: string): Boolean;
+
 implementation
+
+function ProjectTagConflicts(const AStoredTag, AProjectFile: string): Boolean;
+begin
+  Result:= (Trim(AStoredTag) <> '') and
+    not SameText(Trim(AStoredTag), SanitizeProjectTag(TPath.GetFileNameWithoutExtension(AProjectFile)));
+end; // function
 
 function SanitizeProjectTag(const AName: string): string;
 const

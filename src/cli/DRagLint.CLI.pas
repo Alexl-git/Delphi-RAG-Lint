@@ -5457,6 +5457,53 @@ begin
   { Ruling 1: never downgrade. Before Migrate, so a refusal leaves the file
     byte-identical. Exit 2, the code every other refusal in this verb uses. }
   if RefuseIfEngineOlderThanDb(Store, ResolvedDb) then Exit(2);
+  { A PROJECT INDEX REFUSES ANOTHER PROJECT'S DATABASE (1.31.2).
+
+    2026-10-16: the IDE plugin paired the active project with the last-OPENED
+    project's DB, and every save ran `index --project Micronite2027.dproj --db
+    Delphi13MigrationAssistant.sqlite`. This verb took it -- the second DB was
+    overwritten with the first project's closure and restamped, the right DB was
+    never refreshed, and nothing failed. The DB already said whose it was: the
+    project_tag every project-scoped run stamps (D27).
+
+    BEFORE Migrate, so a refusal leaves the file byte-identical. A blank tag (a
+    fresh DB, a folder scan, an index older than 1.18.0) carries no claim and
+    proceeds.
+
+    --rebuild PROCEEDS, with a NOTE. It is the documented remedy for exactly this
+    state -- the multi-project rename's REASON_TAG_MISMATCH tells the operator to
+    run it, and it is how the 2026-10-16 DB gets its own closure back -- and it
+    cannot mix closures: it clears every row first and restamps. The harm being
+    refused is the SILENT incremental overwrite; a rebuild is typed on purpose,
+    and no plugin path issues one without resolving the DB from the manifest. }
+  begin
+    var TagProject: string:= AArgs.ProjectPath;
+    if (TagProject = '') and MatchText(ExtractFileExt(AArgs.Path), ['.dpr', '.dproj']) then TagProject:= AArgs.Path;
+    if TagProject <> '' then
+    begin
+      { GetMetaValue answers '' for a DB with no schema_meta yet -- untagged. }
+      var StoredTag: string:= Trim(Store.GetMetaValue(PROJECT_TAG_KEY));
+      if ProjectTagConflicts(StoredTag, TagProject) and AArgs.Rebuild then
+        Writeln(ErrOutput, Format('NOTE: %s was the index of project %s; --rebuild replaces it with %s''s closure.',
+          [ResolvedDb, StoredTag, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(TagProject))]))
+      else if ProjectTagConflicts(StoredTag, TagProject) then
+      begin
+        Writeln(ErrOutput, 'ERROR: refusing to index a project into ANOTHER project''s database.');
+        Writeln(ErrOutput, '  database: ' + ResolvedDb + ' (project_tag ' + StoredTag + ')');
+        Writeln(ErrOutput, '  project : ' + TagProject + ' (would stamp '
+                           + SanitizeProjectTag(TPath.GetFileNameWithoutExtension(TagProject)) + ')');
+        Writeln(ErrOutput, '');
+        Writeln(ErrOutput, 'Indexing it would replace ' + StoredTag + '''s closure with this project''s and');
+        Writeln(ErrOutput, 'restamp the database, while this project''s own index stays stale. If this');
+        Writeln(ErrOutput, 'database really is this project''s (resolve-dbs below names it), re-run with');
+        Writeln(ErrOutput, '--rebuild to replace the other closure wholesale.');
+        Writeln(ErrOutput, '');
+        Writeln(ErrOutput, 'Find the database that owns this project:');
+        Writeln(ErrOutput, '  drag-lint resolve-dbs --project "' + TagProject + '"');
+        Exit(2);
+      end;
+    end;
+  end;
   Store.Migrate;
   { v0.42: deep scan emits identifier usage refs. Default deep, except a
     --scan-libraries scan defaults shallow (libraries are queried by call/type,

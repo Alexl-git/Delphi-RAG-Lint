@@ -368,7 +368,7 @@ uses
   , DRagLint.Index.Plan
   , DRagLint.Project.Resolver
   , DRagLint.Project.Members
-  , DRagLint.Project.Coherence // dl:unit DRagLint.Project.Coherence accepted -- TagMismatch reads the PROJECT_TAG_KEY stamp this module defines beside SanitizeProjectTag, which compares it; the const travels with that call
+  , DRagLint.Project.Coherence // dl:unit DRagLint.Project.Coherence accepted -- TagMismatch reads the PROJECT_TAG_KEY stamp this module defines beside ProjectTagConflicts, which compares it; the const travels with that call
   , DRagLint.Lint.ProjectChecks.Parse
   , DRagLint.Storage.FileMembership
   ;
@@ -541,7 +541,7 @@ var
 begin
   Store:= TSQLiteSymbolStore.Create(AOwner.DbPath, True);
   Tag  := Trim(Store.GetMetaValue(PROJECT_TAG_KEY));
-  if (Tag = '') or SameText(Tag, SanitizeProjectTag(TPath.GetFileNameWithoutExtension(AOwner.ProjectFile))) then Exit('');
+  if not ProjectTagConflicts(Tag, AOwner.ProjectFile) then Exit('');
   Result:= Format(REASON_TAG_MISMATCH, [Tag, ExtractFileName(AOwner.ProjectFile), AOwner.ProjectFile, AOwner.DbPath]);
 end; // function
 
