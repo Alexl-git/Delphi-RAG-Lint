@@ -65,9 +65,24 @@ page: `docs\wiki\Feature-Registry.md`.
 
 ## Index layout (do not guess a path)
 
-A project's index is `<project folder>\_D-RAG\<project file base name>.sqlite` --
-named after the PROJECT FILE, not the folder. Only the per-platform library
-indexes live in `C:\Projects\.drag-lint\`.
+**A configured repository (E3a, 2026-10-07)** has ONE `<root>\_D-RAG\config.json`
+(written by `drag-lint init`), found by walking UP from the verb's path argument
+or the CWD, like git. Its projects' indexes are `<root>\_D-RAG\<name>.sqlite`;
+`drag-lint index` with no target builds them all; no `--db` is needed inside the
+repo. It replaces the exe-side manifest and `.drag-lint.json` there (its
+`"rule"`, `"watch"` and `"docs"` keys are the run defaults); its `"lint"`,
+`"layers"` and `"ownRoots"` win over the loose `drag-lint-lint.json`,
+`drag-lint-layers.json` and `drag-lint-project.json`, which still answer when
+the key is absent (E3b, 2026-10-14). The per-platform library indexes then live
+beside the engine, in `<exe dir>\library\<bds>\`.
+
+**The old sources STAY (owner ruling 2026-10-14: "nothing the upstream author
+uses may break").** E3b added config.json parity instead of removing them; the
+removal candidates and their conditions are backlog #42-#44 in
+`plans\correcoes\README.md`. Without a config.json, a project's index is
+`<project folder>\_D-RAG\<project file base name>.sqlite` -- named after the
+PROJECT FILE, not the folder -- and the library indexes live in
+`C:\Projects\.drag-lint\`.
 
 Resolve, never guess: `drag-lint resolve-dbs --project <X.dproj>` /
 `--in <X.pas>` / `--platform <p>`.
@@ -78,9 +93,13 @@ Resolve, never guess: `drag-lint resolve-dbs --project <X.dproj>` /
 project's member list against the units it actually uses.**
 
 Since the 2026-08-11 move to one DB per project, an index is built from the
-COMPILE CLOSURE -- the `.dproj`/`.dpr` members plus transitively-used
-project-local units. That makes the manifest load-bearing in a way it never was
-when a folder walk swept up everything:
+COMPILE CLOSURE -- the `.dproj`/`.dpr` members plus transitively-used units
+that are not the Studio's own. Since 2026-10-07 the closure searches the
+project's Delphi Library search path after its own search path (as dcc does),
+and only Studio-owned folders (`ClosureLibraryRoots`: the Studio root, any
+`\Embarcadero\` folder) count as library; components outside them join the
+project DB. That makes the manifest load-bearing in a way it never was when a
+folder walk swept up everything:
 
 * a unit that exists on disk and is USED but is not listed is **not indexed**;
 * so `query`, `find-callers`, `lint-all` and the doc facts for that project are

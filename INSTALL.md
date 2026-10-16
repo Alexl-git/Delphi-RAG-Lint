@@ -43,6 +43,7 @@ Contents:
    tree-sitter-delphi13.dll      } parser DLLs -- must sit next to the exe
    tree-sitter-dfm.dll           }
    tree-sitter.dll               }
+   sqlite3.dll                   SQLite engine -- must sit next to the exe (PATH is never searched)
    rules\                        external lint rules (*.scm + *.json)  <-- REQUIRED for linting
      builtin-symbols.txt
      README.md                   the rule list with one-line descriptions

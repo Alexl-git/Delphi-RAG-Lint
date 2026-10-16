@@ -35,9 +35,20 @@ uses
 /// not creating a new config there'). Pass it unchanged to
 /// TrySaveConfigManifest.</returns>
 /// <remarks>Never raises for a bad or unreadable file: every exception from the
-/// read or the parse is turned into the returned text.</remarks>
+/// read or the parse is turned into the returned text.
+/// A REPOSITORY CONFIG IS READ-ONLY HERE (#31, 2026-10-15). When
+/// AConfigPath is a &lt;root&gt;\_D-RAG\config.json, or AConfigPath is '' and one
+/// sits above AStartDir (TManifestIO.Load then answers from it), the manifest is
+/// shown and the returned text says so, which refuses every save: this tool
+/// writes drag-lint.json, and saving would either rewrite config.json in the
+/// manifest format or put that repository's projects over the manifest beside
+/// the exe. IsRepoConfigReadOnly tells that text from a load error.</remarks>
 function LoadConfigManifest(const AConfigPath, AExeDir, AStartDir: string;
   out AManifest: TIndexManifest): string;
+
+/// <summary>True when ALoadError is LoadConfigManifest's read-only notice for a
+/// repository config, not a file that failed to load.</summary>
+function IsRepoConfigReadOnly(const ALoadError: string): Boolean;
 
 /// <summary>Save AManifest to APath unless doing so could destroy the file:
 /// refuses when the manifest did not load, when it does not validate, or when
@@ -64,7 +75,19 @@ implementation
 
 uses
   System.SysUtils,
-  System.IOUtils;
+  System.IOUtils,
+  System.StrUtils,
+  DRagLint.Index.RepoConfig;
+
+const
+  REPO_CONFIG_READ_ONLY = ': this repository is configured by its _D-RAG\config.json -- ' +
+    'the Config tool edits drag-lint.json manifests only. Edit config.json, or add a project ' +
+    'with `drag-lint init --project <x.dproj>`. Saving is disabled.';
+
+function IsRepoConfigReadOnly(const ALoadError: string): Boolean;
+begin
+  Result:= EndsText(REPO_CONFIG_READ_ONLY, ALoadError);
+end;
 
 // The manifest LoadConfigManifest hands back when AConfigPath gives it nothing
 // to parse: no sections, default settings, RootDir = the file's directory.
@@ -83,6 +106,27 @@ begin
   begin
     AManifest := TManifestIO.Load(AExeDir, AStartDir);
     Result := AManifest.LoadError;
+    if Result = '' then
+    begin
+      var RepoCfgFile: string:= TRepoConfigIO.FindConfigFile(AStartDir);
+      if RepoCfgFile <> '' then Result:= RepoCfgFile + REPO_CONFIG_READ_ONLY;
+    end;
+    Exit;
+  end;
+  if TRepoConfigIO.IsRepoConfigFile(AConfigPath) then
+  begin
+    { Shown as the engine reads it; never parsed as a manifest, never saved. }
+    var RepoCfg: TRepoConfig;
+    var RepoErr: string;
+    try
+      if TRepoConfigIO.TryLoad(AConfigPath, RepoCfg, RepoErr) then
+        AManifest:= ManifestFromRepoConfig(RepoCfg)
+      else
+        SetDefaults(AManifest, AConfigPath);
+    except
+      on E: Exception do SetDefaults(AManifest, AConfigPath);
+    end;
+    Result:= AConfigPath + REPO_CONFIG_READ_ONLY;
     Exit;
   end;
   // A file that does not exist yet has nothing on disk to overwrite: start
@@ -116,6 +160,11 @@ var
   Err: string;
 begin
   Result := False;
+  if IsRepoConfigReadOnly(ALoadError) then
+  begin
+    AReason := 'Not saved: ' + ALoadError;
+    Exit;
+  end;
   if ALoadError <> '' then
   begin
     AReason := 'Not saved: ' + APath + ' did not load (' + ALoadError +

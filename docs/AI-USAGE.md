@@ -132,7 +132,7 @@ published while `modifiers` says `public` for both.
 
 ## 1. Setup (once)
 
-1. Download `drag-lint.exe` + the three `tree-sitter*.dll` files from
+1. Download `drag-lint.exe` + the three `tree-sitter*.dll` files + `sqlite3.dll` from
    [Releases](https://github.com/Alexl-git/Delphi-RAG-Lint/releases) and keep
    them in the same folder (put it on PATH for convenience).
 2. Build an index. **Prefer one DB per project** -- `index --project` the
@@ -143,15 +143,40 @@ published while `modifiers` says `public` for both.
    - The **target declares the scan type**: `--project <.dpr|.dproj>` gives a
      *project* scan (compile closure -- members + transitively-used
      project-local units + sibling `.dfm` + `{$I}` includes + the project file;
-     Library/Browsing-path units and loose unreferenced files are excluded), a
-     **folder** gives a *library* scan of the whole tree. A POSITIONAL
-     `index <X.dproj>` (no `--project`) is NOT a closure scan: it refreshes only
-     that one file, with no project defines.
+     units are searched in the project's search path, then the Library search
+     path of the project's Delphi -- Studio-owned units (RTL/VCL/FMX/GetIt,
+     anything under `\Embarcadero\`) stay out, your own and third-party
+     components join; loose unreferenced files are excluded), a **folder** gives
+     a *library* scan of the whole tree. A POSITIONAL `index <X.dproj>` (no
+     `--project`) is NOT a closure scan: it refreshes only that one file, with no
+     project defines.
    - The **mode is chosen per run**: `--recompile` (default, incremental) or
      `--rebuild` (from scratch).
    - `--scan-libraries` to index the installed RTL/VCL/DevExpress/Spring4D.
    - `--watch [--interval N]` to keep it fresh as you edit.
-   - **On-disk convention:** a project's own DB lives at
+   - **A configured repository (preferred, since 2026-10-07):** `drag-lint init`
+     at the repository root writes `<root>\_D-RAG\config.json` -- the repo's ONLY
+     configuration: `"projects"` (`name`, `dproj`, `platform`, `delphi`),
+     `"exclude"`, `"settings"`, `"docs"`, `"lint"` (a drag-lint-lint.json body),
+     `"layers"` (a drag-lint-layers.json body), `"ownRoots"` (the folders the
+     repo owns, relative to its root; a project entry may carry its own, which
+     wins; it wins over `_D-RAG\drag-lint-project.json`, which still answers without it), and the `.drag-lint.json` run
+     defaults `"rule"` (narrows `lint` only), `"watch"` (`{"interval": N}`) and the `"docs"` capture
+     keys (`captureLooseComments`, `allowBlankLineGap`, `implPrecedence`) -- plus a `.gitignore`, and a
+     `_D-RAG` line in `.cvsignore` for a CVS working copy (for an SVN one it prints the `svn propedit svn:ignore` command, not run). Then `drag-lint index`
+     (no target) indexes every project into `<root>\_D-RAG\<name>.sqlite`, each in
+     its own process with its own Delphi (`"delphi"`, else the .dproj
+     ProjectVersion); `--only <Name>` picks some. A run naming no project takes
+     the Delphi all configured projects agree on, else the newest Studio. Every verb finds config.json by
+     walking UP from its path argument (`--in`, `--project`, `--db`) or the CWD,
+     so **no `--db` is needed inside the repo**, and the answer does not depend on
+     the subfolder you stand in. The IDE plugin resolves the same indexes for a
+     project of the repository, and the Config tool shows the repository read-only. Inside such a repo it wins over `drag-lint.json`,
+     `.drag-lint.json`, `drag-lint-lint.json` and `drag-lint-layers.json`; a
+     config.json that cannot be read is exit 2. `init --project <x.dproj>` adds a
+     project, `init --force` rediscovers them (other keys are kept). Library
+     indexes live beside the engine: `<exe dir>\library\<bds>\library-<platform>.sqlite`.
+   - **On-disk convention without a config.json:** a project's own DB lives at
      `<project folder>\_D-RAG\<project file base name>.sqlite` -- a hidden
      folder beside the `.dproj`, named after the project file (not the repo).
      Only the per-platform library DBs stay in a shared folder. Never guess
@@ -640,7 +665,7 @@ pure-diagnostic verbs are broken out in 2b.
 | `lint <snap> --stand-in-for <real>` | lint a temp snapshot of an unsaved buffer as though it were `<real>`: store membership, file id, unit-name check and reported path all use the real path |
 | `lint --project P.dproj` | project-level rules (e.g. `unit-not-in-dpr`). Since 2026-09-08 a plain `lint-all --db <db>` ALSO evaluates `unit-not-in-dpr`: it infers the project file from the manifest section that owns the DB, so the canonical run no longer skips the membership check. Passing `--project` explicitly additionally SCOPES the report; inference does not |
 | `lint-project --db DB` | index-wide rules (god-class, circular-uses, layering-violation, ...); `--layers <f.json>` is the architecture-layer config `layering-violation` needs (else `drag-lint-layers.json` in the CWD) |
-| `lint-all` | lint everything indexed (`--output report.txt`, `--quiet`); `--rule <id>` reports only that rule and opts an OFF-by-default rule in for the run, exactly as `lint --rule` does (no `--enable` needed), and RUNS only the checkers and the `.scm` query that can emit it (a `review-marker-*` rule still runs everything it is computed from); a `"rule"` key in `.drag-lint.json` is IGNORED by `lint-all` (with a stderr note) and honoured, with a note, only by `lint`; with no `_D-RAG\drag-lint-project.json` the run says which ownRoots it DEFAULTED to (the project folder) and how many files that skipped; `--project <.dproj>` reports only that project's compile closure; `--lint-third-party` reports the vendored roots too instead of naming them as skipped |
+| `lint-all` | lint everything indexed (`--output report.txt`, `--quiet`); `--rule <id>` reports only that rule and opts an OFF-by-default rule in for the run, exactly as `lint --rule` does (no `--enable` needed), and RUNS only the checkers and the `.scm` query that can emit it (a `review-marker-*` rule still runs everything it is computed from); a `"rule"` key in `.drag-lint.json` is IGNORED by `lint-all` (with a stderr note) and honoured, with a note, only by `lint`; with no declared ownRoots (`"ownRoots"` in config.json in a configured repository, else `_D-RAG\drag-lint-project.json`) the run says which ownRoots it DEFAULTED to (the project folder) and how many files that skipped; `--project <.dproj>` reports only that project's compile closure; `--lint-third-party` reports the vendored roots too instead of naming them as skipped |
 | `lint-tree` | does an interface edit to a unit reach any dependent? `--unit B.pas --db <db>` fingerprints B's interface; `--write-baseline f.json` captures the OLD side once per edit episode, `--baseline f.json` diffs against it, `--buffer f` reads an unsaved buffer, `--with-rules` also harvests the dependents' lint findings, `--compile` also compiles the dependents in a shadow dir. Exit 0 whether or not anything was found; 2 = could not run. A baseline from a different extractor/schema is REFUSED, not diffed. |
 | `exceptions-sync` | materialise the project's derived exception classes into the exceptions unit (`--apply`; dry-run without it; `--json` emits one machine-readable document on stdout with the counts and the classes it would add, prose to stderr). Harvests every bare `raise Exception.Create('literal')` project-wide and declares ONE class per DISTINCT message inside a `drag-lint:auto` managed block. Opt in with an `"exceptions"` block in `drag-lint-lint.json` -- an empty one is enough; key `unit` names the unit (default `uExceptionDefinitions`, **created if absent**) and key `root` the ancestor (default `Exception`). **The same-line `//` comment after each declaration IS the key**, so renaming a generated class is safe and editing its comment makes the next run add a second class for the old message. It is a VERB and not a `--fix` because its input is project-wide and its output is one file |
 | `check-unit <unit.pas>` | in-memory semantic check of one unit (`--project`, `--platform`, `--resolve-uses`; `--shadow <dir>` compiles an unsaved buffer staged there instead of the file on disk) |
@@ -654,11 +679,12 @@ pure-diagnostic verbs are broken out in 2b.
 |------|--------------|
 | `index <path>` | build/refresh an index; `--project <.dpr/.dproj>` = project (compile-closure) scan, a folder = library scan. A POSITIONAL `.dpr`/`.dproj` refreshes ONLY that one file (no project defines, into the project's own DB) -- not a closure scan. `--recompile` (default) / `--rebuild`; also `--project`, `--watch`, `--deep`. `--scan-libraries-win` (alias `--scan-libraries`) indexes the IDE's registered Win32+Win64 Library+Browsing paths, `--scan-libraries-all` every platform. After the walk every run resolves in this order: `uses-targets`, `ancestry`, **`facts-inherited`** (v23 -- inherited fields into `symbol_facts.reads_fields`/`writes_fields`; runs only when the run parsed files, so a no-change run does nothing here), `helpers`, `calls` (skipped when no file changed and the edges already hold), **`purity`** (purity v2: the interprocedural `Effect-free (proven)` verdict into `symbol_facts.effect_free` / `effect_summary` / `effect_witness`; runs whenever `calls` ran or any routine lacks a verdict) |
 | any `index` run | mode and sweep: `--force-reparse` (alias `--no-skip`) re-parses every walked file even when path+mtime+sha are unchanged -- once per DB after an engine upgrade that extracts something new; `--no-prune` is the one "delete nothing" switch (a dry look: both sweeps are computed and reported, nothing deleted), `--prune` forces the sweep for a single-FILE walk. Walk scoping: `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` skips any file larger than N KB, `--no-use-ignore` opts out of the `.gitignore` / `.hgignore` pattern files honoured by default (a folder holding a `.scanignore` marker file is always pruned), `--no-sql-ms` indexes EVERY `.sql` file rather than only the `MS*.sql` migration scripts, `--shallow` (default) vs `--deep` (also records usage refs) |
+| any verb | `--delphi <bds>` (`20.0` = 10.3, `23.0` = 12, `37.0` = 13): the Delphi to analyse for. Without it a project is analysed for the Delphi its `.dproj` `<ProjectVersion>` names (that Studio's Library path, IDE variables and `VER<N>` defines; 20.3 fits 12.3 and 13 and takes the installed one), and a run with no project for the newest Studio installed. Unmappable or not installed: exit 2 naming the fix. The `BDS` environment variable is not read |
 | any verb that opens a DB | `--size-guard-mb N` / `--force32` (`index`, `query`, `lsp`, `serve`): the 32-bit build refuses a database larger than the guard because it would run out of address space mid-answer; the first moves the threshold, the second overrides the refusal. Neither is normally needed on Win64 |
 | `index <path> --resolve-only` | re-derive call edges / ancestry / helper targets and purity verdicts from the STORED parses, skipping the walk. Use when `schema_meta.resolver_fingerprint` shows the edges predate the current resolver -- minutes, against the hours a re-parse costs, because no parse became wrong. It writes edges INSIDE that one index only: **no cross-store edges are written** (0 `refs.external_target` in every project DB, measured 2026-09-22; a library re-resolve added 13 intra-library edges per platform). Do not expect it to bind project calls to the platform library |
 | `index --all` | build every DB in the manifest (`--only`, `--platform`, `--jobs`, `--dry-run`) |
-| `register-project` | add a NEW project to the manifest as its own section, so `index --all` and the IDE's reindex can see it. Dry-run by default; `--apply` writes. Refuses when a section already claims the project |
-| `resolve-dbs` | print the consumer DB list a query/lsp/serve would use (`--platform`), or resolve the single DB covering one target (`--project <x.dproj>`, `--in <x.pas>`) |
+| `register-project` | add a NEW project to the manifest as its own section, so `index --all` and the IDE's reindex can see it. Inside a repository configured by `_D-RAG` config.json a project it does not list is refused (exit 2, outcome `use-init`) with the `drag-lint init <root> --project <x.dproj>` that adds it. Dry-run by default; `--apply` writes. Refuses when a section already claims the project |
+| `resolve-dbs` | print the consumer DB list a query/lsp/serve would use (`--platform`), or resolve the single DB covering one target (`--project <x.dproj>`, `--in <x.pas>`); `--config <path>` (also on `reconcile-project` and `library-drift`) takes a repository `_D-RAG\config.json` or a `drag-lint.json` manifest |
 | `reconcile-project <App.dproj>` | sync project member list; flag stale used units (`--apply`). `--only <unit,...>` restricts MISSING -- and therefore what `--apply` writes -- to a reviewed selection, so a dry run with `--only` is an exact preview of the apply. EXTRA and STALE stay unfiltered: they are advisory, and `--apply` never touches them. Unmatched `--only` names appear in the `--json` document as `unmatched` AND on stderr; stdout stays pure JSON. `--json` carries `applied` -- the OUTCOME of `--apply`, always present and `false` on a dry run or when there was nothing to write, so exit 0 no longer covers both cases -- plus `backups` (the `.bak` paths taken) and `edited` (the project files that actually changed), present only with `--apply`. Those two are separate on purpose: a backup is taken before the edit is attempted and both editors are idempotent, so offer a revert on `backups` and report "N units added" from `edited`. `refused` (present only when `--apply` actually refused something) names closure entries that were REPORTED as MISSING but deliberately not written -- today the `{$I}` includes, which the closure carries alongside `.pas` and which would otherwise have been spliced in as `uses ..., QDefs;`. They stay in the report and are refused by the write, so a caller diffing `missing` against `edited` can explain the difference |
 | `library-drift` | registry roots missing from the library index (exit 2 = drift) |
 | `workspace index\|status\|add` | multi-project workspace operations |
@@ -812,6 +838,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `index` | [Rescan this unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Rescan-this-unit) | Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed |  |
 | `info` | [About and Status](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/About-and-Status) | The plugin's status window -- versions, connection health, and which indexes are actually in use |  |
 | `info` | [info](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/info) | Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities |  |
+| `init` | [init](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/init) | Configures a repository: writes _D-RAG\config.json with every project, so index needs no target or --db |  |
 | `library-drift` | [Library Drift Check](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Library-Drift-Check) | Flags registered library roots that have source on disk but nothing in the index |  |
 | `link-orm` | [link-orm](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/link-orm) | Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both | index |
 | `lint-all` | [Fix all in project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Fix-all-in-project) | Applies autofixes for every fixable finding across the whole project, starting from the Structure form |  |

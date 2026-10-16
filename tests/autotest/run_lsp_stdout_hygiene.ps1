@@ -66,6 +66,7 @@ $body = $lines[($runFrom - 1)..($lines.Count - 1)]
 # review when this test is edited.
 $allow = @(
   "Writeln('drag-lint ', VERSION)"   # `--version`: its output IS stdout, and Args.Command is not lsp/serve
+  "Writeln('sqlite ', SqlVer"        # `--version`, second line (2026-10-07): the bundled sqlite3.dll that loaded; same branch, same reasoning
 )
 $offenders = @()
 for ($i = 0; $i -lt $body.Count; $i++) {

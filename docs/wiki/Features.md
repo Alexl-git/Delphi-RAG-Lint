@@ -75,6 +75,7 @@ Build and maintain the per-project and library indexes.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [Auto-Document Whole Project](Auto-Document-Whole-Project) | drag-lint > Generate & Export > Auto-Document Whole Project...; `index`; `document` |  |
+| [init](init) | `init` |  |
 | [migrate-dbs](migrate-dbs) | `migrate-dbs` |  |
 | [pp-profile](pp-profile) | `pp-profile` |  |
 | [purge-locals](purge-locals) | `purge-locals` |  |

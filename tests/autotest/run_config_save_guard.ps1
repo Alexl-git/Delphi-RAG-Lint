@@ -22,6 +22,10 @@
 #      disabled, Save + Build clicks write nothing; fixed file + Reload -> Save
 #      enabled
 #   H  positive control: a good file -> no dialog, Save enabled
+#   I  --config naming a repository _D-RAG\config.json (#31): shown read-only,
+#      its projects listed, SAVED=0, the file's bytes unchanged
+#   J  no --config, started inside a configured repository (#31): read-only,
+#      SAVED=0, and no drag-lint.json appears beside the exe
 #
 # Usage: pwsh -NoProfile -File tests\autotest\run_config_save_guard.ps1
 [CmdletBinding()]
@@ -74,11 +78,11 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
     exit 1
 }
 
-function Invoke-Harness([string]$Path) {
-    $out = (& $exe $Path 2>&1 | Out-String)
+function Invoke-Harness([string]$Path, [string[]]$Extra = @()) {
+    $out = (& $exe $Path @Extra 2>&1 | Out-String)
     $h = @{ RAW = $out.Trim() -replace "`r?`n", ' | ' }
     foreach ($line in ($out -split "`r?`n")) {
-        if ($line -match '^(LOADERR|SECTIONS|SAVED|REASON)=(.*)$') { $h[$Matches[1]] = $Matches[2] }
+        if ($line -match '^(LOADERR|SECTIONS|READONLY|SAVED|REASON)=(.*)$') { $h[$Matches[1]] = $Matches[2] }
     }
     $h
 }
@@ -146,6 +150,25 @@ Check 'F: SAVED=0' ($f.SAVED -eq '0') "SAVED='$($f.SAVED)' REASON='$($f.REASON)'
 Check 'F: REASON starts "Not saved:"' ([string]$f.REASON -like 'Not saved:*') "REASON='$($f.REASON)'"
 Check 'F: the folder still does not exist' (-not (Test-Path -LiteralPath $noDir))
 Check 'F: the file still does not exist' (-not (Test-Path -LiteralPath $noDirFile))
+
+# --- I/J: a repository configured by _D-RAG\config.json is read-only here (#31) --
+$repoRoot = "$WorkDir\repo"
+New-Item -ItemType Directory -Force "$repoRoot\App", "$repoRoot\_D-RAG", "$WorkDir\engine" | Out-Null
+[IO.File]::WriteAllText("$repoRoot\App\App.dproj", '<Project><PropertyGroup><ProjectVersion>18.8</ProjectVersion></PropertyGroup></Project>', [Text.Encoding]::ASCII)
+$repoCfg = "$repoRoot\_D-RAG\config.json"
+[IO.File]::WriteAllText($repoCfg, '{ "version": 1, "projects": [ { "name": "App", "dproj": "App\\App.dproj", "platform": "Win32", "delphi": "20.0" } ], "exclude": [] }', [Text.Encoding]::ASCII)
+$cfgBefore = Get-Sha $repoCfg
+$i = Invoke-Harness $repoCfg
+Check 'I: --config config.json is READONLY, not a load error' ($i.READONLY -eq '1') "got='$($i.RAW)'"
+Check 'I: its project is listed (App + Library)' ($i.SECTIONS -eq '2') "SECTIONS='$($i.SECTIONS)'"
+Check 'I: SAVED=0' ($i.SAVED -eq '0') "REASON='$($i.REASON)'"
+Check 'I: config.json bytes unchanged' ((Get-Sha $repoCfg) -eq $cfgBefore)
+$j = Invoke-Harness '--start' @("$repoRoot\App", "$WorkDir\engine")
+Check 'J: started inside the repository -- READONLY' ($j.READONLY -eq '1') "got='$($j.RAW)'"
+Check 'J: SAVED=0' ($j.SAVED -eq '0') "REASON='$($j.REASON)'"
+Check 'J: no drag-lint.json appears beside the exe' (-not (Test-Path -LiteralPath "$WorkDir\engine\drag-lint.json"))
+$k = Invoke-Harness '--start' @("$WorkDir", "$WorkDir\engine")
+Check 'J: CONTROL -- outside any repository the start-dir load is not read-only' ($k.READONLY -eq '0') "got='$($k.RAW)'"
 
 # --- D: structural -- one door in and out of the manifest file ---------------
 function Test-ConfigWriters([string]$Dir) {

@@ -195,6 +195,8 @@ uses
   , DRagLint.Workspace  .Config
   , DRagLint.Index      .Manifest
   , DRagLint.Index      .ManifestWrite
+  , DRagLint.Index      .RepoConfig
+  , DRagLint.Core       .JsonFile   { WriteJsonFileAtomic: init writes config.json atomically }
   , DRagLint.Index      .Glob
   , DRagLint.Index      .IgnoreFiles
   , DRagLint.Index      .Closure
@@ -300,6 +302,7 @@ type
     WikiCheck       : Boolean       ; // --check: SeeCode drift + duplicate-name gate
     Rule            : string        ;
     ProjectPath     : string        ;
+    Delphi          : string        ; // --delphi <bds>: the Delphi to analyse for ('20.0' = 10.3, '37.0' = 13); wins over the .dproj's ProjectVersion
     RulesDir        : string        ; // --rules-dir <path>: external .scm rules location (default <exe-dir>\rules)
     RuleCategory    : string        ; // --category <name>: filter `rules` output
     Disable         : string        ; // --disable id1,id2,...: rule ids to drop from lint output
@@ -737,6 +740,28 @@ begin
   Writeln('  sql, schema and deps-report envelopes also carry "stale" and "stale_files".');
   Writeln('');
   Writeln('Usage:');
+  Writeln('  drag-lint init [<root>] [--project <x.dproj>] [--force]');
+  Writeln('                               Configures a repository, codegraph-style: writes <root>\_D-RAG\config.json (the');
+  Writeln('                               repository''s ONLY configuration: "projects" [name, dproj, platform, delphi],');
+  Writeln('                               "exclude", "settings", "docs", "lint", "layers"), a .gitignore beside it, and a');
+  Writeln('                               _D-RAG line in <root>\.cvsignore when <root> holds CVS\ (in an SVN working copy it prints');
+  Writeln('                               the svn propedit svn:ignore command instead of running it). Every .dproj under <root>');
+  Writeln('                               becomes a project; its "delphi" comes from the .dproj ProjectVersion (empty, with');
+  Writeln('                               a warning, when the version is not in the verified table). An existing config is');
+  Writeln('                               never overwritten: --project adds or updates one project, --force rediscovers');
+  Writeln('                               them all; both keep every other key. Every verb then finds config.json by');
+  Writeln('                               walking UP from its path argument (--in, --project, --db) or the CWD, and it wins');
+  Writeln('                               over drag-lint.json / .drag-lint.json / drag-lint-lint.json / drag-lint-layers.json.');
+  Writeln('                               Indexes: <root>\_D-RAG\<name>.sqlite; library indexes: <exe dir>\library\<bds>\.');
+  Writeln('  drag-lint index [--only <Name1,Name2>] [--platform win32|win64] [--delphi <bds>] [--rebuild|--recompile]');
+  Writeln('                               With no <path> and no --project, inside a configured repository: indexes every');
+  Writeln('                               project of config.json (or the --only ones), each in its own process, so each');
+  Writeln('                               gets its own Delphi ("delphi" in config.json, else the .dproj ProjectVersion).');
+  Writeln('                               --project <x.dproj> without --db writes that project''s _D-RAG\<name>.sqlite and');
+  Writeln('                               refuses a .dproj the config does not list. Outside one: exit 2, run init.');
+  Writeln('                               Every mode flag is handed on to each project''s run: --rebuild, --recompile,');
+  Writeln('                               --force-reparse, --resolve-only, --no-prune, --max-file-kb, --no-preprocess');
+  Writeln('                               (parse every {$IF} branch), and --quiet (no per-file progress on stderr).');
   Writeln('  drag-lint index <path>                              [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]');
   Writeln('                               --library-db (v21, repeatable): consult another index for calls THIS one cannot resolve.');
   Writeln('                               A hit is recorded by qualified NAME on refs.external_target -- never as a call_edges row,');
@@ -959,7 +984,7 @@ begin
   Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
   Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only)');
   Writeln('  drag-lint document --project <p.dpr|.dproj> [--stubs|--apply|--json|--no-backup|--include-accessors|--reindex|--document-third-party|--migrate-pure] [--db PATH]  - document every public decl the project OWNS (--reindex brackets with index: self-freshens so hover/LSP are correct immediately after)');
-  Writeln('                                 scope: the compile closure restricted to the project''s own roots (_D-RAG\drag-lint-project.json, same declaration lint-all reads).');
+  Writeln('                                 scope: the compile closure restricted to the project''s own roots ("ownRoots" in _D-RAG\config.json in a configured repository, else _D-RAG\drag-lint-project.json; the same declaration lint-all reads).');
   Writeln('                                 Vendored roots are named and skipped; --document-third-party writes to them too.');
   Writeln('  drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]               - document every public decl in every indexed unit (no project scope)');
   // v(ADP3 T15): this line used to read "summary/param left as TODO ... add
@@ -1079,13 +1104,16 @@ begin
   Writeln('  drag-lint workspace status [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint workspace add <projfile> [--config <.drag-lint-workspace.json>]');
   Writeln('  drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>]   (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)');
-  Writeln('  drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)');
+  Writeln('  drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json]   (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply;' +
+          ' inside a repository with _D-RAG\config.json: exit 2 pointing at init --project)');
   Writeln('  drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json]   (print the consumer DB list query/lsp/serve would use)');
   Writeln('  drag-lint resolve-dbs --project <file.dproj> [--config <path>] [--json]     (print the ONE db that owns this project -- the WRITE target)');
   Writeln('                               exits 2 and names the sections when none or SEVERAL claim the project,');
   Writeln('                               rather than guessing: `index --rebuild` against a wrongly-picked db');
   Writeln('                               clears an index that was never meant to be touched.');
   Writeln('  drag-lint resolve-dbs --in <file.pas> [--project <file.dproj>] [--config <path>] [--json]');
+  Writeln('                               --config on resolve-dbs, reconcile-project and library-drift names a manifest:');
+  Writeln('                               a repository _D-RAG\config.json is read as one, any other file as a drag-lint.json.');
   Writeln('                               the READ list (what hover / Find Usages / the LSP would open for that');
   Writeln('                               file): the ACTIVE PROJECT''s db first, then the folder-matched db.');
   Writeln('                               Omit --project to model "no project active". Same resolution the IDE');
@@ -1115,6 +1143,14 @@ begin
   Writeln('  the 32-bit build refuses a database larger than the guard because it would run out of');
   Writeln('  address space mid-answer; --size-guard-mb moves the threshold and --force32 overrides the');
   Writeln('  refusal outright. On the Win64 build neither is normally needed.');
+  Writeln('  [--delphi <bds>] applies to every verb: the Delphi to analyse for, as its BDS version');
+  Writeln('  (20.0 = 10.3, 23.0 = 12, 37.0 = 13). Without it a project is analysed for the "delphi" its');
+  Writeln('  repository _D-RAG\config.json gives it, else for the Delphi its');
+  Writeln('  .dproj <ProjectVersion> names -- that Studio''s Library path, IDE variables and VER<N>');
+  Writeln('  defines -- and a run with no project for the Delphi every project of its repository');
+  Writeln('  config.json agrees on, else for the newest Studio installed. A .dproj whose');
+  Writeln('  version cannot be mapped, or whose Delphi is not installed, exits 2 naming the fix.');
+  Writeln('  The BDS environment variable is NOT read.');
   Writeln('  AN EXPLICIT --db MUST EXIST. If any path you name is not there the verb prints');
   Writeln('  the path, its position (--db #2 of 3) and the repair on stderr and exits 2 --');
   Writeln('  it never answers from the databases that happened to open. A narrowed answer is');
@@ -1229,6 +1265,111 @@ function MakeSiblingStoreResolver(const AArgs: TArgs;
   const AKeepAlive: TList<ISymbolStore>;
   const AOwned: TObjectList<TObject>): DRagLint.Lint.ProjectRules.TSiblingStoreResolver; forward;
 
+{ WHERE THIS RUN'S DEFAULTS ARE LOOKED UP (E3b item 3, 2026-10-14): the same
+  place RepoAnchorOf points every other loader at -- the verb's path argument
+  (an existing file or folder), else --in / --file, else --project, else the
+  first --db; else the CWD. Read from argv because LoadConfigDefaults runs
+  inside ParseArgs, before TArgs exists. Until E3b it asked "is there a
+  config.json above the CWD?", so a run started OUTSIDE a configured repository
+  with its path inside it took a .drag-lint.json from the CWD while every other
+  loader answered from config.json.
+
+  A token right after a switch is that switch's value, never the path argument:
+  this scan cannot know which switches take a value, and reading a value as the
+  path could only move the lookup -- so it is not done, and such a run falls
+  back to the CWD exactly as it always did. }
+function PrescanRepoAnchor: string;
+var
+  i    : Integer;
+  A    : string ;
+  Prev : string ;
+  PathA: string ;
+  InA  : string ;
+  ProjA: string ;
+  DbA  : string ;
+begin
+  PathA:= '';
+  InA  := '';
+  ProjA:= '';
+  DbA  := '';
+  Prev := '';
+  for i:= 2 to ParamCount do
+  begin
+    A:= ParamStr(i);
+    if ((Prev = '--in') or (Prev = '--file')) and (InA = '') then InA:= A
+    else if (Prev = '--project') and (ProjA = '') then ProjA:= A
+    else if (Prev = '--db') and (DbA = '') then DbA:= A
+    else if (PathA = '') and (not A.StartsWith('-')) and (not Prev.StartsWith('--'))
+            and (TFile.Exists(A) or TDirectory.Exists(A)) then PathA:= A;
+    Prev:= A;
+  end;
+  if PathA <> '' then Exit(PathA);
+  if InA   <> '' then Exit(InA);
+  if ProjA <> '' then Exit(ProjA);
+  if DbA   <> '' then Exit(DbA);
+  Result:= GetCurrentDir;
+end; // function
+
+{ The run-default keys a defaults file may carry besides db/project/path --
+  "rule", "watch" and the "docs" capture keys -- read from AJson into AArgs.
+  ASource names the file in the notes. Shared by .drag-lint.json and, inside a
+  configured repository, _D-RAG\config.json, so the two cannot drift apart. }
+procedure ApplyDefaultKeys(const AJson: TJSONObject; const ASource: string; var AArgs: TArgs);
+var
+  JWatch: TJSONObject;
+  JDocs : TJSONObject;
+  V     : TJSONValue ;
+  N     : TJSONNumber;
+  B     : TJSONBool  ;
+begin
+  { "rule" NARROWS A RUN, SO IT MAY NOT DO IT SILENTLY OR PROJECT-WIDE (L1).
+    It used to set AArgs.Rule for EVERY verb, so a "rule" left in a
+    .drag-lint.json anywhere above the CWD turned every lint-all into a
+    one-rule run whose report read as a clean project -- and nothing said so
+    (this file's banner is printed on every run and names no key).
+
+    Decided 2026-09-23: the key is a default for `lint` only, where the run is
+    the file or folder the user named, and it is ANNOUNCED on stderr. Every
+    other verb -- lint-all and lint-project above all, which are whole-project
+    questions -- IGNORES it and says so. --rule on the command line is the one
+    way to narrow those. ParamStr(1) rather than TArgs because this runs
+    before ParseArgs (see the --quiet note below). }
+  V:= AJson.GetValue('rule');
+  if (V <> nil) and (V.Value <> '') and not HasSwitch('--rule') then
+  begin
+    if SameText(AArgs.Command, 'lint') then
+    begin
+      AArgs.Rule:= V.Value;
+      Writeln(ErrOutput, Format('drag-lint: note: this run is narrowed to rule "%s" by the "rule" key in %s' +
+        ' -- only that rule is reported. Pass --rule to choose another.', [V.Value, ASource]));
+    end
+    else
+      Writeln(ErrOutput, Format('drag-lint: note: ignoring "rule": "%s" in %s for `%s` -- a defaults file ' +
+        'does not narrow a whole-project run. Pass --rule %s to narrow it deliberately.',
+        [V.Value, ASource, AArgs.Command, V.Value]));
+  end;
+  V:= AJson.GetValue('watch');
+  if V is TJSONObject then
+  begin
+    JWatch:= TJSONObject(V);
+    AArgs.Watch:= True;
+    N:= GetManifestNumber(JWatch, 'interval', 'watch');
+    if N <> nil then AArgs.Interval:= N.AsInt;
+  end;
+  // v0.16 Task 13: "docs" section
+  V:= AJson.GetValue('docs');
+  if V is TJSONObject then
+  begin
+    JDocs:= TJSONObject(V);
+    B:= GetManifestBool(JDocs, 'captureLooseComments', 'docs');
+    if B <> nil then AArgs.Docs.CaptureLooseComments:= B.AsBoolean;
+    N:= GetManifestNumber(JDocs, 'allowBlankLineGap', 'docs');
+    if N <> nil then AArgs.Docs.AllowBlankLineGap:= N.AsInt;
+    V:= JDocs.GetValue('implPrecedence');
+    if (V <> nil) and (V.Value <> '') then AArgs.Docs.ImplPrecedence:= V.Value;
+  end;
+end; // procedure
+
 // v0.14: load defaults from `.drag-lint.json` in cwd (or any parent),
 // before CLI flags. Recognized keys:
 //   { "db": "...", "project": "...", "path": "...", "rule": "...",
@@ -1236,6 +1377,9 @@ function MakeSiblingStoreResolver(const AArgs: TArgs;
 //     "docs": { "captureLooseComments": bool, "allowBlankLineGap": N,
 //               "implPrecedence": "interface" } }
 // CLI flags override config values. Missing file is silently ignored.
+// Inside a repository configured by _D-RAG\config.json, that file is read
+// instead, for "rule", "watch" and "docs" only (E3b item 2): its "projects"
+// already answer db/project/path.
 procedure LoadConfigDefaults(var AArgs: TArgs);
 const
   { every key read below -- the set a convert verb names when it ignores the file }
@@ -1245,12 +1389,38 @@ var
   Candidate: string     ;
   Content  : string     ;
   J        : TJSONObject;
-  JWatch   : TJSONObject;
-  JDocs    : TJSONObject;
+  JVal     : TJSONValue ;
   V        : TJSONValue ;
-  N        : TJSONNumber;
-  B        : TJSONBool  ;
 begin
+  { A repository with _D-RAG\config.json is configured by that file alone; a
+    dotted .drag-lint.json above the CWD (whose "db" key would silently become
+    this run's database) is not consulted there (E3a, 2026-10-07). Its run
+    defaults come from config.json, silently -- it is the repository's normal
+    configuration, not an override to announce. A config.json that cannot be
+    parsed is left to Run, which stops with exit 2 naming it. }
+  Candidate:= TRepoConfigIO.FindConfigFile(PrescanRepoAnchor);
+  if Candidate <> '' then
+  begin
+    try
+      JVal:= TJSONObject.ParseJSONValue(TFile.ReadAllText(Candidate, TEncoding.UTF8));
+    except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-10-14: an unreadable config.json is Run's to report (exit 2, naming it); here it only means no defaults are taken from it
+      Exit;
+    end;
+    try
+      try
+        if JVal is TJSONObject then ApplyDefaultKeys(TJSONObject(JVal), Candidate, AArgs);
+      except
+        on E: EManifestError do
+        begin
+          AArgs.ConfigError:= Candidate + ': ' + E.Message;
+          Writeln(ErrOutput, 'WARNING: could not parse config at ', Candidate, ': ', E.Message);
+        end;
+      end; // try
+    finally
+      JVal.Free;
+    end;
+    Exit;
+  end;
   Dir      := GetCurrentDir;
   Candidate:= '';
   while Dir <> '' do
@@ -1314,52 +1484,8 @@ begin
       if (V <> nil) and (V.Value <> '') then AArgs.ProjectPath:= V.Value;
       V:= J.GetValue('path');
       if (V <> nil) and (V.Value <> '') then AArgs.Path:= V.Value;
-      { "rule" NARROWS A RUN, SO IT MAY NOT DO IT SILENTLY OR PROJECT-WIDE (L1).
-        It used to set AArgs.Rule for EVERY verb, so a "rule" left in a
-        .drag-lint.json anywhere above the CWD turned every lint-all into a
-        one-rule run whose report read as a clean project -- and nothing said so
-        (this file's banner is printed on every run and names no key).
-
-        Decided 2026-09-23: the key is a default for `lint` only, where the run is
-        the file or folder the user named, and it is ANNOUNCED on stderr. Every
-        other verb -- lint-all and lint-project above all, which are whole-project
-        questions -- IGNORES it and says so. --rule on the command line is the one
-        way to narrow those. ParamStr(1) rather than TArgs because this runs
-        before ParseArgs (see the --quiet note below). }
-      V:= J.GetValue('rule');
-      if (V <> nil) and (V.Value <> '') and not HasSwitch('--rule') then
-      begin
-        if SameText(AArgs.Command, 'lint') then
-        begin
-          AArgs.Rule:= V.Value;
-          Writeln(ErrOutput, Format('drag-lint: note: this run is narrowed to rule "%s" by the "rule" key in %s' +
-            ' -- only that rule is reported. Pass --rule to choose another.', [V.Value, Candidate]));
-        end
-        else
-          Writeln(ErrOutput, Format('drag-lint: note: ignoring "rule": "%s" in %s for `%s` -- a defaults file ' +
-            'does not narrow a whole-project run. Pass --rule %s to narrow it deliberately.',
-            [V.Value, Candidate, AArgs.Command, V.Value]));
-      end;
-      V:= J.GetValue('watch');
-      if V is TJSONObject then
-      begin
-        JWatch:= TJSONObject(V);
-        AArgs.Watch:= True;
-        N:= GetManifestNumber(JWatch, 'interval', 'watch');
-        if N <> nil then AArgs.Interval:= N.AsInt;
-      end;
-      // v0.16 Task 13: "docs" section
-      V:= J.GetValue('docs');
-      if V is TJSONObject then
-      begin
-        JDocs:= TJSONObject(V);
-        B:= GetManifestBool(JDocs, 'captureLooseComments', 'docs');
-        if B <> nil then AArgs.Docs.CaptureLooseComments:= B.AsBoolean;
-        N:= GetManifestNumber(JDocs, 'allowBlankLineGap', 'docs');
-        if N <> nil then AArgs.Docs.AllowBlankLineGap:= N.AsInt;
-        V:= JDocs.GetValue('implPrecedence');
-        if (V <> nil) and (V.Value <> '') then AArgs.Docs.ImplPrecedence:= V.Value;
-      end;
+      { rule / watch / docs: ApplyDefaultKeys, shared with _D-RAG\config.json. }
+      ApplyDefaultKeys(J, Candidate, AArgs);
     except
       { A WRONG-TYPED KEY (1.20.4 Task 4) used to escape as EInvalidCast and kill
         EVERY verb with a FATAL that named neither the key nor the file. Now it is
@@ -1633,6 +1759,11 @@ begin
     else if A = '--no-preprocess' then Result.NoPreprocess:= True { PP-Task-9: revert index to raw all-branch parsing }
     else if (A = '--width') and (i < ParamCount) then begin Inc(i); Result.Width:= ParamStr(i); end
     else if (A = '--project') and (i < ParamCount) then begin Inc(i); Result.ProjectPath:= ParamStr(i); end
+    else if (A = '--delphi') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.Delphi:= ParamStr(i);
+    end
     else if (A = '--rules-dir') and (i < ParamCount) then begin Inc(i); Result.RulesDir:= ParamStr(i); end
     else if (A = '--category') and (i < ParamCount) then begin Inc(i); Result.RuleCategory:= ParamStr(i); end
     else if (A = '--disable') and (i < ParamCount) then begin Inc(i); Result.Disable:= ParamStr(i); end
@@ -3584,6 +3715,40 @@ end;
 { Defined beside IndexerFingerprint, below; BuildPlanItem is its first caller. }
 function RefuseIfEngineOlderThanDb(const AStore: ISymbolStore; const ADbPath: string): Boolean; forward;
 
+{ THE FOLDER AN INDEX GOES IN MUST EXIST AND TAKE A WRITE, and when it cannot,
+  say which folder and why (backlog #32). Library indexes live beside the
+  engine (<exe dir>\library\<bds>\, owner ruling 2026-10-07), so an engine in a
+  folder the user cannot write -- Program Files -- cannot build them; a bare
+  CreateDirectory died there as "FATAL: EInOutError" with the OS message alone,
+  exit 3. A folder that exists but refuses writes is caught by the probe file
+  before SQLite reports it as "unable to open database file". }
+function EnsureIndexFolder(const ADbPath: string): Boolean;
+var
+  Dir    : string;
+  Probe  : string;
+  LibRoot: string;
+begin
+  Result:= True;
+  Dir:= ExcludeTrailingPathDelimiter(ExtractFilePath(ADbPath));
+  if Dir = '' then Exit;
+  try
+    if not TDirectory.Exists(Dir) then TDirectory.CreateDirectory(Dir);
+    Probe:= TPath.Combine(Dir, Format('.drag-lint-write-probe-%d', [GetCurrentProcessId]));
+    TFile.WriteAllText(Probe, '');
+    TFile.Delete(Probe);
+  except
+    on E: Exception do
+    begin
+      Writeln(ErrOutput, Format('ERROR: cannot use the index folder %s: %s', [Dir, E.Message]));
+      LibRoot:= TPath.Combine(ExtractFilePath(ParamStr(0)), 'library');
+      if StartsText(IncludeTrailingPathDelimiter(LibRoot), IncludeTrailingPathDelimiter(Dir)) then
+        Writeln(ErrOutput, Format('       library indexes live beside the engine, in %s\<bds>\ -- ' +
+          'run drag-lint from a folder you can write to.', [LibRoot]));
+      Result:= False;
+    end;
+  end;
+end;
+
 function BuildPlanItem(const AItem: TPlanSection; const ADocs: TDocConfig; APreprocess: Boolean = True;
   AForceReparse: Boolean = False; ARebuild: Boolean = False; ANoPrune: Boolean = False;
   AResolveOnly: Boolean = False): Boolean;
@@ -3619,9 +3784,8 @@ var
     already contains them. They keep their eviction standing -- see the use site. }
   DroppedRoots   : TArray<string>                            ;
 begin
-  // Ensure output directory exists before creating the SQLite file.
-  var DbDir:= ExtractFilePath(AItem.DbPath);
-  if (DbDir <> '') and (not TDirectory.Exists(DbDir)) then TDirectory.CreateDirectory(DbDir);
+  // Ensure output directory exists (and takes a write) before creating the SQLite file.
+  if not EnsureIndexFolder(AItem.DbPath) then Exit(False);
 
   T0:= Now;
   try
@@ -3823,7 +3987,8 @@ begin
         // Build library roots for exclusion from the closure walk.
         Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
         try
-          Cl:= TClosureResolver.Create(Resolver.ResolveLibraryPaths);
+          Cl:= TClosureResolver.Create(ClosureLibraryRoots(Resolver.ResolveLibraryPaths));
+          Cl.AddLibrarySearchPaths(Resolver.ResolveLibrarySearchPath);
           try
             // PP-Task-10: per-config uses-discovery -- honour the SAME profile
             // the indexer uses for this section (default ON; --no-preprocess -> False).
@@ -4146,6 +4311,29 @@ begin
   Result:= AItem.Name;
   if AItem.Platform <> '' then Result:= Result + ' [' + AItem.Platform + ']';
 end;
+
+{ Starts ACmdLine as a child that INHERITS this process's console and std
+  handles, so its output interleaves with ours; AProcess is its process handle
+  (the thread handle is closed). False when CreateProcessW fails -- GetLastError
+  still holds the reason. Shared by the two verbs that fan an index run out to
+  children: index --all --jobs N and index over a repository config. }
+function StartInheritingChild(const ACmdLine: string; out AProcess: THandle): Boolean;
+var
+  SI : TStartupInfoW      ;
+  PI : TProcessInformation;
+  Buf: array of WideChar  ;
+begin
+  AProcess:= 0;
+  SetLength(Buf, Length(ACmdLine) + 1);
+  Move(PChar(ACmdLine)^, Buf[0], (Length(ACmdLine) + 1) * SizeOf(WideChar));
+  ZeroMemory(@SI, SizeOf(SI));
+  SI.cb:= SizeOf(SI);
+  ZeroMemory(@PI, SizeOf(PI));
+  Result:= CreateProcessW(nil, @Buf[0], nil, nil, True { bInheritHandles }, 0 { dwCreationFlags }, nil, nil, SI, PI);
+  if not Result then Exit;
+  CloseHandle(PI.hThread);
+  AProcess:= PI.hProcess;
+end; // function
 
 /// <summary>The distinct section names of APlan, sorted, as the "selectable"
 /// hint of `index --all --only` prints them.</summary>
@@ -4492,10 +4680,7 @@ begin
   var WaitResult: DWORD;
   var SlotDW    : DWORD;
   var ExitCode  : DWORD;
-  var SpawnSI   : TStartupInfoW;
-  var SpawnPI   : TProcessInformation;
   var ChildCmdLine: string          ;
-  var ChildCmdBuf: array of WideChar;
   var OkCount: Integer              ;
   SelfExe:= ParamStr(0);
   TotalSections:= NSections;
@@ -4580,24 +4765,15 @@ begin
       if AArgs.ForceReparse then ChildCmdLine:= ChildCmdLine + ' --force-reparse';
       if AArgs.MaxFileKBSet then ChildCmdLine:= ChildCmdLine + ' --max-file-kb ' + IntToStr(AArgs.MaxFileKB);
 
-      SetLength(ChildCmdBuf, Length(ChildCmdLine) + 1);
-      Move(PChar(ChildCmdLine)^, ChildCmdBuf[0], (Length(ChildCmdLine) + 1) * SizeOf(WideChar));
-
-      ZeroMemory(@SpawnSI, SizeOf(SpawnSI));
-      SpawnSI.cb:= SizeOf(SpawnSI);
-      ZeroMemory(@SpawnPI, SizeOf(SpawnPI));
-
       // Inherit console handles so child output interleaves on same stdout/stderr.
-      if not CreateProcessW(nil, @ChildCmdBuf[0], nil, nil, True { bInheritHandles }, 0 { dwCreationFlags }, nil, nil, SpawnSI, SpawnPI) then
+      var ChildProc: THandle;
+      if not StartInheritingChild(ChildCmdLine, ChildProc) then
       begin
         Writeln(ErrOutput, 'ERROR: failed to spawn child for section "', Plan.Items[i].Name, '": GetLastError=', GetLastError);
         FailedNames:= FailedNames + [SectionLabel(Plan.Items[i])];
         Continue;
       end;
-
-      // Close thread handle; keep only the process handle.
-      CloseHandle(SpawnPI.hThread);
-      ProcHandles[PoolCount]:= SpawnPI.hProcess;
+      ProcHandles[PoolCount]:= ChildProc;
       ProcItemIdx[PoolCount]:= i;
       Inc(PoolCount);
     end; // for
@@ -5400,6 +5576,337 @@ begin
   end;
 end;
 
+{ `index` with no target, inside a configured repository (E3a, 2026-10-07):
+  every project in _D-RAG\config.json, each in its OWN child process
+  (`index --project <dproj> --db <db>`). A child per project, not a loop in
+  this process, because the Delphi target is process-wide state (TStudioEnv,
+  the preprocessor's CompilerVersion): two projects of two Delphis cannot share
+  one run. The child finds the same config.json from its --project and takes
+  the project's "delphi" from it.
+  THE CHILD RE-PARSES ITS OWN ARGUMENTS -- the rule DoIndexAll learned four
+  times -- so every flag the single-project path reads is forwarded below. }
+function RepoChildFlags(const AArgs: TArgs): string;
+begin
+  Result:= '';
+  if AArgs.Delphi <> '' then Result:= Result + ' --delphi "' + AArgs.Delphi + '"';
+  if AArgs.Rebuild      then Result:= Result + ' --rebuild';
+  if AArgs.Recompile    then Result:= Result + ' --recompile';
+  if AArgs.NoPreprocess then Result:= Result + ' --no-preprocess';
+  if AArgs.NoPrune      then Result:= Result + ' --no-prune';
+  if AArgs.ResolveOnly  then Result:= Result + ' --resolve-only';
+  if AArgs.ForceReparse then Result:= Result + ' --force-reparse';
+  if AArgs.Quiet        then Result:= Result + ' --quiet';
+  if AArgs.MaxFileKBSet then Result:= Result + ' --max-file-kb ' + IntToStr(AArgs.MaxFileKB);
+end; // function
+
+function DoIndexRepo(const AArgs: TArgs; const ACfg: TRepoConfig): Integer;
+var
+  Todo  : TArray<TRepoProject>;
+  Failed: TArray<string>      ;
+begin
+  Todo:= nil;
+  if Length(AArgs.OnlySections) > 0 then
+  begin
+    for var OnlyName in AArgs.OnlySections do
+    begin
+      var P: TRepoProject;
+      if not ACfg.FindByName(OnlyName, P) then
+      begin
+        var Names: TArray<string>:= nil;
+        for var Q in ACfg.Projects do Names:= Names + [Q.Name];
+        Writeln(ErrOutput, Format('ERROR: --only matched no project in %s: %s', [ACfg.ConfigFile, OnlyName]));
+        Writeln(ErrOutput, Format('projects (%d): %s', [Length(Names), string.Join(', ', Names)]));
+        Writeln(ErrOutput, 'nothing was indexed.');
+        Exit(2);
+      end;
+      Todo:= Todo + [P];
+    end;
+  end
+  else Todo:= ACfg.Projects;
+  if Length(Todo) = 0 then
+  begin
+    Writeln(ErrOutput, 'ERROR: ', ACfg.ConfigFile, ' lists no projects. Add one with: drag-lint init --project <x.dproj>');
+    Exit(2);
+  end;
+
+  Writeln(Format('Repository: %s (%d project(s))', [ACfg.Root, Length(Todo)]));
+  Failed:= nil;
+  var Flags: string:= RepoChildFlags(AArgs);
+  for var P in Todo do
+  begin
+    var Plat: string:= AArgs.CheckPlatform;
+    if Plat = '' then Plat:= P.Platform;
+    var PlatArg: string:= '';
+    if Plat <> '' then PlatArg:= ' --platform "' + Plat + '"';
+    var Cmd: string:= Format('"%s" index --project "%s" --db "%s"%s%s', [ParamStr(0), P.Dproj, P.Db, PlatArg, Flags]);
+    Writeln(Format('== %s: %s', [P.Name, P.Dproj]));
+    Flush(Output);
+
+    { Inherit the console handles, so the child's progress is this run's. }
+    var Child: THandle;
+    if not StartInheritingChild(Cmd, Child) then
+    begin
+      Writeln(ErrOutput, 'ERROR: failed to start the index of "', P.Name, '": GetLastError=', GetLastError);
+      Failed:= Failed + [P.Name];
+      Continue;
+    end;
+    WaitForSingleObject(Child, INFINITE);
+    var Code: DWORD:= 0;
+    GetExitCodeProcess(Child, Code);
+    CloseHandle(Child);
+    if Code <> 0 then Failed:= Failed + [Format('%s (exit %d)', [P.Name, Code])];
+  end;
+  if Length(Failed) = 0 then
+  begin
+    Writeln(Format('Repository index done: %d project(s).', [Length(Todo)]));
+    Exit(0);
+  end;
+  Writeln(ErrOutput, Format('Repository index FAILED for %d of %d project(s): %s',
+                            [Length(Failed), Length(Todo), string.Join(', ', Failed)]));
+  Result:= 1;
+end; // function DoIndexRepo
+
+{ True for a folder that `init` never searches for projects: the index home
+  itself, IDE scratch (__history, __recovery), VCS metadata, and build output. }
+function InitSkipsDir(const ADirName: string): Boolean;
+begin
+  Result:= SameText(ADirName, DRAG_HOME_DIR) or ADirName.StartsWith('__')
+           or MatchText(ADirName, ['CVS', '.git', '.svn', '.hg', 'Win32', 'Win64']);
+end;
+
+{ The .dproj files under ARoot, sorted, skipping InitSkipsDir folders. }
+function FindRepoProjects(const ARoot: string): TArray<string>;
+var
+  Found: TList<string>;
+
+  procedure Walk(const ADir: string);
+  begin
+    for var F in TDirectory.GetFiles(ADir, '*.dproj', TSearchOption.soTopDirectoryOnly) do Found.Add(F);
+    for var D in TDirectory.GetDirectories(ADir) do
+      if not InitSkipsDir(ExtractFileName(D)) then Walk(D);
+  end;
+
+begin
+  Found:= TList<string>.Create;
+  try
+    Walk(ARoot);
+    Found.Sort;
+    Result:= Found.ToArray;
+  finally
+    Found.Free;
+  end;
+end;
+
+{ `drag-lint init [<root>] [--project <x.dproj>] [--force]` (E3a, 2026-10-07).
+  Creates <root>\_D-RAG\config.json -- the repository's whole configuration --
+  plus a .gitignore beside it, and a `_D-RAG` line in <root>\.cvsignore when the
+  root is a CVS working copy. Without --project, every .dproj under the root
+  becomes a project; its Delphi comes from the .dproj's ProjectVersion (E2) and
+  is left empty, with a warning, when the version is not in the verified table.
+  An existing config is never overwritten silently: --force rediscovers the
+  projects and --project adds or updates one, and both KEEP every other key
+  ("settings", "docs", "lint", "layers", "exclude") the user wrote. }
+{ One discovered .dproj as a config.json "projects" entry, named uniquely
+  against ANames (its base name; then <folder>-<base>; then a counter), with
+  the Delphi its ProjectVersion maps to -- '' and a printed reason when it maps
+  to none, so the user can set it. }
+procedure AddInitProject(const ADproj, ARoot: string; ANames: TStringList; AProjects: TJSONArray);
+var
+  Rel : string;
+  Name: string;
+  Base: string;
+  N   : Integer;
+  PV  : string;
+  Why : string;
+  Bds : string;
+  Plat: string;
+  JP  : TJSONObject;
+begin
+  Rel:= ADproj;
+  if StartsText(IncludeTrailingPathDelimiter(ARoot), ADproj) then
+    Rel:= Copy(ADproj, Length(IncludeTrailingPathDelimiter(ARoot)) + 1, MaxInt);
+  Name:= TPath.GetFileNameWithoutExtension(ADproj);
+  if ANames.IndexOf(Name) >= 0 then
+    Name:= ExtractFileName(ExcludeTrailingPathDelimiter(ExtractFilePath(ADproj))) + '-' + Name;
+  N:= 2;
+  Base:= Name;
+  while ANames.IndexOf(Name) >= 0 do
+  begin
+    Name:= Base + '-' + IntToStr(N);
+    Inc(N);
+  end;
+  ANames.Add(Name);
+  PV := TStudioEnv.ProjectVersionOf(ADproj);
+  Why:= 'no <ProjectVersion>';
+  Bds:= '';
+  if PV <> '' then Bds:= TStudioEnv.BdsOfProjectVersion(PV, Why);
+  Plat:= TRepoConfigIO.PlatformOfDproj(ADproj);
+  JP:= TJSONObject.Create;
+  JP.AddPair('name', Name);
+  JP.AddPair('dproj', Rel);
+  JP.AddPair('platform', Plat);
+  JP.AddPair('delphi', Bds);
+  AProjects.AddElement(JP);
+  if Bds <> '' then Writeln(Format('  %-24s %s  %s  delphi %s', [Name, Rel, Plat, Bds]))
+  else Writeln(Format('  %-24s %s  %s  delphi ?  -- %s; set "delphi" in config.json or pass --delphi', [Name, Rel, Plat, Why]));
+end; // procedure AddInitProject
+
+{ The .gitignore beside config.json (everything but itself and the config),
+  and -- in a CVS working copy, where no per-folder ignore file can travel with
+  the index home -- a _D-RAG line in <root>\.cvsignore. Neither is rewritten
+  when it already says so. }
+procedure WriteInitIgnores(const ARoot, AHome: string);
+var
+  GitIgnore: string ;
+  CvsIgnore: string ;
+  Text     : string ;
+  Have     : Boolean;
+begin
+  GitIgnore:= TPath.Combine(AHome, '.gitignore');
+  if not TFile.Exists(GitIgnore) then
+  begin
+    TFile.WriteAllText(GitIgnore, '*'#13#10'!.gitignore'#13#10'!config.json'#13#10, TEncoding.ASCII);
+    Writeln('Wrote ', GitIgnore);
+  end;
+  { AN SVN WORKING COPY IGNORES THROUGH A VERSIONED PROPERTY (backlog #33): the
+    parent folder's svn:ignore, which no file in _D-RAG can stand in for. The
+    .svn folder sits at the working-copy root, often ABOVE ARoot. Say how, do
+    not do it -- changing a versioned property is the user's commit -- and
+    propedit, because propset would replace whatever svn:ignore already holds. }
+  var SvnDir: string:= ExcludeTrailingPathDelimiter(ARoot);
+  while SvnDir <> '' do
+  begin
+    if TDirectory.Exists(TPath.Combine(SvnDir, '.svn')) then
+    begin
+      Writeln(Format('Note: %s is in an SVN working copy (%s). To keep %s out of `svn status`, ' +
+        'run: svn propedit svn:ignore "%s"  and add a line  %s  (drag-lint does not change versioned properties).',
+        [ARoot, SvnDir, DRAG_HOME_DIR, ExcludeTrailingPathDelimiter(ARoot), DRAG_HOME_DIR]));
+      Break;
+    end;
+    var SvnParent: string:= ExcludeTrailingPathDelimiter(ExtractFilePath(SvnDir));
+    if (SvnParent = '') or SameText(SvnParent, SvnDir) then Break;
+    SvnDir:= SvnParent;
+  end;
+  if not TDirectory.Exists(TPath.Combine(ARoot, 'CVS')) then Exit;
+  CvsIgnore:= TPath.Combine(ARoot, '.cvsignore');
+  Have:= False;
+  Text:= '';
+  if TFile.Exists(CvsIgnore) then
+  begin
+    Text:= TFile.ReadAllText(CvsIgnore);
+    for var L in Text.Split([#13#10, #10, ' ', #9]) do
+      if SameText(Trim(L), DRAG_HOME_DIR) then Have:= True;
+  end;
+  if Have then Exit;
+  if (Text <> '') and not Text.EndsWith(#10) then Text:= Text + #13#10;
+  TFile.WriteAllText(CvsIgnore, Text + DRAG_HOME_DIR + #13#10, TEncoding.ASCII);
+  Writeln('Added ', DRAG_HOME_DIR, ' to ', CvsIgnore);
+end; // procedure WriteInitIgnores
+
+{ The "projects" array init writes: when ADDING (AOne <> ''), the entries
+  already listed except AOne's, then AOne; when (re)discovering, every .dproj
+  in ADprojs. }
+function BuildInitProjects(const AObj: TJSONObject; const ARoot: string; const ADprojs: TArray<string>;
+  AAdding: Boolean): TJSONArray;
+var
+  Names: TStringList;
+begin
+  Result:= TJSONArray.Create;
+  Names:= TStringList.Create;
+  try
+    Names.CaseSensitive:= False;
+    if AAdding and (AObj.GetValue('projects') is TJSONArray) then
+      for var JP in TJSONArray(AObj.GetValue('projects')) do
+      begin
+        if not (JP is TJSONObject) then Continue;
+        var Abs: string:= '';
+        if TJSONObject(JP).GetValue('dproj') <> nil then Abs:= TJSONObject(JP).GetValue('dproj').Value;
+        if TPath.IsRelativePath(Abs) then Abs:= TPath.Combine(ARoot, Abs);
+        if SameText(ExpandFileName(Abs), ExpandFileName(ADprojs[0])) then Continue; { re-added below }
+        Result.AddElement(TJSONObject(JP.Clone));
+        if TJSONObject(JP).GetValue('name') <> nil then Names.Add(TJSONObject(JP).GetValue('name').Value);
+      end;
+    for var D in ADprojs do AddInitProject(D, ARoot, Names, Result);
+  finally
+    Names.Free;
+  end;
+end; // function BuildInitProjects
+
+function DoInit(const AArgs: TArgs): Integer;
+var
+  Root    : string        ;
+  Home    : string        ;
+  CfgFile : string        ;
+  Obj     : TJSONObject   ;
+  Dprojs  : TArray<string>;
+  Projects: TJSONArray    ;
+begin
+  Root:= AArgs.Path;
+  if Root = '' then Root:= GetCurrentDir;
+  Root:= ExcludeTrailingPathDelimiter(TPath.GetFullPath(Root));
+  if not TDirectory.Exists(Root) then
+  begin
+    Writeln(ErrOutput, 'ERROR: init: not a folder: ', Root);
+    Exit(2);
+  end;
+  Home   := TPath.Combine(Root, DRAG_HOME_DIR);
+  CfgFile:= TPath.Combine(Home, REPO_CONFIG_FILE);
+  if TFile.Exists(CfgFile) and (AArgs.ProjectPath = '') and not AArgs.ForceKill then
+  begin
+    Writeln(ErrOutput, 'ERROR: init: ', CfgFile, ' already exists.');
+    Writeln(ErrOutput, '       --project <x.dproj> adds a project; --force rediscovers every project (other keys are kept).');
+    Exit(2);
+  end;
+  if AArgs.ProjectPath <> '' then
+  begin
+    Dprojs:= [TPath.GetFullPath(AArgs.ProjectPath)];
+    if not TFile.Exists(Dprojs[0]) then
+    begin
+      Writeln(ErrOutput, 'ERROR: init: project not found: ', Dprojs[0]);
+      Exit(2);
+    end;
+  end
+  else Dprojs:= FindRepoProjects(Root);
+
+  if TFile.Exists(CfgFile) then
+  begin
+    var Existing: TJSONValue:= TJSONObject.ParseJSONValue(TFile.ReadAllText(CfgFile, TEncoding.UTF8));
+    if not (Existing is TJSONObject) then
+    begin
+      Existing.Free;
+      Writeln(ErrOutput, 'ERROR: init: ', CfgFile, ' is not a JSON object; fix or delete it first.');
+      Exit(2);
+    end;
+    Obj:= TJSONObject(Existing);
+  end
+  else Obj:= TJSONObject.Create;
+  try
+    Projects:= BuildInitProjects(Obj, Root, Dprojs, AArgs.ProjectPath <> '');
+    var Ordered: TJSONObject:= TJSONObject.Create;
+    try
+      Ordered.AddPair('version', TJSONNumber.Create(REPO_CONFIG_VERSION));
+      Ordered.AddPair('projects', Projects);
+      { every other key the user wrote, unchanged and in its order }
+      for var Pair in Obj do
+        if not MatchText(Pair.JsonString.Value, ['version', 'projects']) then
+          Ordered.AddPair(Pair.JsonString.Value, TJSONValue(Pair.JsonValue.Clone));
+      if Ordered.GetValue('exclude') = nil then Ordered.AddPair('exclude', TJSONArray.Create);
+      ForceDirectories(Home);
+      WriteJsonFileAtomic(CfgFile, Ordered);
+    finally
+      Ordered.Free;
+    end;
+  finally
+    Obj.Free;
+  end;
+  Writeln('Wrote ', CfgFile);
+  WriteInitIgnores(Root, Home);
+  if Length(Dprojs) = 0 then
+    Writeln('No .dproj found under ', Root, '. Add one with: drag-lint init --project <x.dproj>');
+  Writeln('Next: drag-lint index   (from anywhere inside ', Root, ')');
+  Result:= 0;
+end; // function DoInit
+
 function DoIndex(const AArgs: TArgs): Integer;
 var
   Store    : ISymbolStore                              ;
@@ -5413,7 +5920,11 @@ var
 begin
   if (AArgs.Path = '') and (AArgs.ProjectPath = '') and (not AArgs.ScanLibraries) then
   begin
-    Writeln('ERROR: index requires a <path>, --project <file.dproj>, ' + 'or --scan-libraries');
+    var RepoCfg: TRepoConfig;
+    var RepoErr: string;
+    if TRepoConfigIO.TryLoad('', RepoCfg, RepoErr) then Exit(DoIndexRepo(AArgs, RepoCfg));
+    Writeln('ERROR: index requires a <path>, --project <file.dproj>, ' + 'or --scan-libraries,');
+    Writeln('       or a repository configured by "drag-lint init" (none above ', TRepoConfigIO.Anchor, ').');
     Exit(2);
   end;
   if AArgs.Path <> '' then
@@ -5439,7 +5950,28 @@ begin
   if ManifestWriteRefused('index', TargetManifest) then Exit(2);
   var CwdManifest: TIndexManifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
   if ManifestWriteRefused('index', CwdManifest) then Exit(2);
-  var ResolvedDb: string:= ResolveIndexDb(AArgs, IndexTarget, TargetManifest);
+  var ResolvedDb: string:= '';
+  { A project of a configured repository is indexed into ITS index,
+    <root>\_D-RAG\<name>.sqlite; a .dproj inside such a repository that the
+    config does not list is refused rather than given a database next to
+    itself, which is the scattered layout config.json replaces. }
+  if (Length(AArgs.DbPaths) = 0) and (AArgs.ProjectPath <> '') then
+  begin
+    var RepoCfg: TRepoConfig;
+    var RepoErr: string;
+    if TRepoConfigIO.TryLoad(AArgs.ProjectPath, RepoCfg, RepoErr) then
+    begin
+      var RepoProj: TRepoProject;
+      if not RepoCfg.FindProject(AArgs.ProjectPath, RepoProj) then
+      begin
+        Writeln(ErrOutput, 'ERROR: index: ', TPath.GetFullPath(AArgs.ProjectPath), ' is not listed in ', RepoCfg.ConfigFile, '.');
+        Writeln(ErrOutput, '       Add it with: drag-lint init --project "', TPath.GetFullPath(AArgs.ProjectPath), '" (or pass --db).');
+        Exit(2);
+      end;
+      ResolvedDb:= RepoProj.Db;
+    end;
+  end;
+  if ResolvedDb = '' then ResolvedDb:= ResolveIndexDb(AArgs, IndexTarget, TargetManifest);
   if ResolvedDb = '' then
   begin
     { A project target's refusal (two claimants, or no manifest) was already
@@ -5460,8 +5992,7 @@ begin
     does NOT exist yet, and SQLite answers 'unable to open database file' --
     measured 2026-08-26, and it reads like a permissions problem rather than a
     missing directory. }
-  var DbHome: string:= ExtractFilePath(ResolvedDb);
-  if (DbHome <> '') and (not TDirectory.Exists(DbHome)) then TDirectory.CreateDirectory(DbHome);
+  if not EnsureIndexFolder(ResolvedDb) then Exit(2);
 
   Store:= TSQLiteSymbolStore.Create(ResolvedDb);
   { Ruling 1: never downgrade. Before Migrate, so a refusal leaves the file
@@ -5616,7 +6147,8 @@ begin
       passing a second --db. }
     Resolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
     try
-      var Cl: TClosureResolver:= TClosureResolver.Create(Resolver.ResolveLibraryPaths);
+      var Cl: TClosureResolver:= TClosureResolver.Create(ClosureLibraryRoots(Resolver.ResolveLibraryPaths));
+      Cl.AddLibrarySearchPaths(Resolver.ResolveLibrarySearchPath);
       try
         { PP-Task-10: uses-discovery must honour the SAME define profile the
           indexer was handed above, or the closure and the symbol extraction
@@ -10697,6 +11229,20 @@ begin
   end; // try
 end; // function
 
+{ The repository config.json when this run is inside a configured repository
+  and the file has a top-level ASection object ("lint", "layers"); else ''. The
+  readers of those configs take the config.json path and read the block. }
+function RepoSectionFile(const ASection: string): string;
+var
+  Cfg: TRepoConfig;
+  Err: string;
+begin
+  Result:= '';
+  if not TRepoConfigIO.TryLoad('', Cfg, Err) then Exit;
+  if (SameText(ASection, 'lint') and Cfg.HasLint) or (SameText(ASection, 'layers') and Cfg.HasLayers) then
+    Result:= Cfg.ConfigFile;
+end; // function
+
 /// <summary>Builds the effective TLintConfig for a command: discovers the config
 /// file (--config, else drag-lint-lint.json in CWD), applies the named --profile,
 /// and composes --disable/--enable from the command line.</summary>
@@ -10705,6 +11251,10 @@ var
   Path: string;
 begin
   Path:= AArgs.ConfigPath;
+  { The repository's _D-RAG\config.json "lint" block, when it has one, is the
+    lint config (E3a); TLintConfig.Load reads that block out of the file.
+    --config still wins. }
+  if Path = '' then Path:= RepoSectionFile('lint');
 
   { DISCOVER THE CONFIG BESIDE THE PROJECT, not only in the CWD.
     Before this, `lint-all --project C:\Projects\YADF\YADF.dproj` ignored
@@ -18663,11 +19213,12 @@ begin
   Result:= nil;
   ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
   try
-    LibRoots:= ProjResolver.ResolveLibraryPaths;
+    LibRoots:= ClosureLibraryRoots(ProjResolver.ResolveLibraryPaths);
   finally
     ProjResolver.Free;
   end;
   Resolver:= TClosureResolver.Create(LibRoots);
+  Resolver.AddLibrarySearchPaths(TargetLibrarySearchPath);
   try
     var Dproj: string:= '';
     if SameText(ExtractFileExt(AArgs.ProjectPath), '.dproj') then Dproj:= AArgs.ProjectPath;
@@ -18819,6 +19370,15 @@ begin
     Result:= ExcludeTrailingPathDelimiter(ExtractFilePath(ProjFile));
 end;
 
+{ Which configured project a lint run is about, for TOwnRoots to pick that
+  project's "ownRoots" out of config.json: --project when given, else the
+  index. }
+function OwnRootsHint(const AArgs: TArgs; const ADbPath: string): string;
+begin
+  Result:= AArgs.ProjectPath;
+  if Result = '' then Result:= ADbPath;
+end;
+
 { Collapse skipped files into the fewest honest lines. Grouping by directory
   would print DelphiAST twice (Source, and Source\SimpleParser) instead of
   naming the dependency once, so each file's group is the HIGHEST ancestor
@@ -18873,16 +19433,19 @@ function OwnRootsDefaultNote(const AOwn: TOwnRoots; ASkippedCount: Integer): TAr
 begin
   Result:= nil;
   if (not AOwn.Active) or AOwn.Declared then Exit;
-  var Cfg: string:= TPath.Combine(TPath.Combine(AOwn.Anchor, DRAG_HOME_DIR), 'drag-lint-project.json');
-  var Why: string:= if TFile.Exists(Cfg) then 'could not be read or declares no "ownRoots"'
+  var Cfg: string:= AOwn.DeclareIn;
+  var Why: string:= if TRepoConfigIO.IsRepoConfigFile(Cfg) then 'declares no "ownRoots" (entries are relative to the repository root)'
+                    else if TFile.Exists(Cfg) then 'could not be read or declares no "ownRoots"'
                     else 'does not exist (it is usually untracked, so a fresh clone or a git worktree lacks it)';
+  var Example: string:= if TRepoConfigIO.IsRepoConfigFile(Cfg) then '"ownRoots": ["App", "Shared"], relative to the repository root'
+                        else '["..\\.."] for a .dproj in a subfolder';
   if ASkippedCount = 0 then
     Result:= [Format('lint-all: ownRoots = %s (DEFAULT -- %s %s)', [AOwn.Anchor, Cfg, Why])]
   else
     Result:= [Format('lint-all: NOTE: %s %s, so ownRoots DEFAULTED to the project folder %s -- ' +
       'the %d file(s) outside it were treated as third-party and NOT linted. If they are this project''s ' +
-      'own code, declare "ownRoots" in that file (e.g. ["..\\.."] for a .dproj in a subfolder).',
-      [Cfg, Why, AOwn.Anchor, ASkippedCount])];
+      'own code, declare "ownRoots" in that file (e.g. %s).',
+      [Cfg, Why, AOwn.Anchor, ASkippedCount, Example])];
 end;
 
 function BuildSkippedThirdPartyLines(const ASkipped: TArray<string>; const AOwn: TOwnRoots): TArray<string>;
@@ -18918,7 +19481,7 @@ begin
       Result:= Result + [Format('          + %d more root(s)', [Length(Keys) - 10])];
     if AOwn.Anchor <> '' then
       Result:= Result + [Format('          declare in %s to include; --lint-third-party to lint everything',
-        [TPath.Combine(TPath.Combine(AOwn.Anchor, DRAG_HOME_DIR), 'drag-lint-project.json')])];
+        [AOwn.DeclareIn])];
   finally
     Groups.Free;
   end;
@@ -19096,7 +19659,7 @@ begin
   LibStore:= OpenLibraryStoreIfCurrent(LibDb, LibWhy); { nil on a stale schema -- see the helper }
   if LibWhy <> '' then EmitStatusLine(AArgs, 'WARNING: ' + LibWhy);
 
-  var Own: TOwnRoots:= TOwnRoots.Load(LintAnchorDir(AArgs, ProjectDb));
+  var Own: TOwnRoots:= TOwnRoots.Load(LintAnchorDir(AArgs, ProjectDb), OwnRootsHint(AArgs, ProjectDb));
   if Own.Error <> '' then begin EmitStatusLine(AArgs, 'ERROR: ' + Own.Error); Exit(2); end;
 
   { Same scope decisions as lint-all, in the same order: exclude_paths first,
@@ -19569,7 +20132,7 @@ begin
   { Ownership is a SCOPE decision, exactly like exclude_paths, so it belongs
     here -- before the scan, so an out-of-scope file never reaches the scanner
     and the banner counts what was actually scanned. }
-  var Own: TOwnRoots:= TOwnRoots.Load(LintAnchorDir(AArgs, ProjectDb));
+  var Own: TOwnRoots:= TOwnRoots.Load(LintAnchorDir(AArgs, ProjectDb), OwnRootsHint(AArgs, ProjectDb));
   if Own.Error <> '' then begin EmitStatusLine(AArgs, 'ERROR: ' + Own.Error); Exit(2); end;
   FilePaths:= nil;
   var ExcludedCount: Integer:= 0;
@@ -20034,6 +20597,8 @@ begin
   { Architecture layering (only if config present) }
   LintPhase('layering');
   LayersCfg:= AArgs.LayersPath;
+  if LayersCfg = '' then LayersCfg:= RepoSectionFile('layers'); { E3a: the config.json "layers" block }
+  if LayersCfg = '' then LayersCfg:= RepoSectionFile('layers'); { E3a: the config.json "layers" block }
   if (LayersCfg = '') and FileExists('drag-lint-layers.json') then LayersCfg:= 'drag-lint-layers.json';
   if (LayersCfg <> '') and LintRuleWants(Nr, ['layering-violation']) then
     Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, LayersCfg);
@@ -20468,6 +21033,8 @@ begin
   if (AArgs.Rule = '') or (AArgs.Rule = 'layering-violation') then
   begin
     var Cfg: string:= AArgs.LayersPath;
+    if Cfg = '' then Cfg:= RepoSectionFile('layers'); { E3a: the config.json "layers" block }
+    if Cfg = '' then Cfg:= RepoSectionFile('layers'); { E3a: the config.json "layers" block }
     if (Cfg = '') and FileExists('drag-lint-layers.json') then Cfg:= 'drag-lint-layers.json';
     if Cfg <> '' then Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.CheckLayering(Store, Cfg);
   end;
@@ -20743,8 +21310,7 @@ begin
 
   try
     if AArgs.WorkspaceConfig <> '' then
-      Manifest:= TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig),
-                   ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
+      Manifest:= TManifestIO.ParseFile(AArgs.WorkspaceConfig)
     else
       Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
   except
@@ -21903,6 +22469,32 @@ begin
   if ErrCount > 0 then Result:= 1 else Result:= 0;
 end; // function
 
+{ The BDS version an index was built for, read back from its indexer
+  fingerprint (backlog #29): "cv=<CompilerVersion>" when the target was not the
+  default; no cv limb on a preprocessed index ("pp=1") means
+  DEFAULT_COMPILER_VERSION. BDS ran 13 behind CompilerVersion up to Delphi 12
+  (20.0 = 33, 23.0 = 36); Delphi 13 made both 37. '' when the fingerprint does
+  not say -- no stamp, or an index built without the preprocessor. }
+function BdsOfIndex(const AStore: ISymbolStore): string;
+const
+  BDS_EQUALS_CV_FROM = 37;   { Delphi 13: BDS 37.0 = CompilerVersion 37 }
+  BDS_BEHIND_CV      = 13;   { before it: BDS 20.0 = CompilerVersion 33 }
+var
+  Fp: string ;
+  M : TMatch ;
+  Cv: Integer;
+begin
+  Result:= '';
+  Fp:= AStore.GetMetaValue(INDEXER_FINGERPRINT_META_KEY);
+  if not ContainsText(';' + Fp + ';', ';pp=1;') then Exit;
+  M:= TRegEx.Match(Fp, 'cv=(\d+)');
+  if M.Success then Cv:= StrToIntDef(M.Groups[1].Value, 0)
+  else Cv:= DEFAULT_COMPILER_VERSION;
+  if Cv <= BDS_BEHIND_CV then Exit;
+  if Cv >= BDS_EQUALS_CV_FROM then Result:= Format('%d.0', [Cv])
+  else Result:= Format('%d.0', [Cv - BDS_BEHIND_CV]);
+end; // function
+
 // v0.43: drag-lint cycles --db <sqlite> [--edges] [--format json|text]
 // Reports circular unit dependencies (strongly-connected components of the
 // unit-uses graph). These all compile (a pure interface cycle is illegal F2047,
@@ -22055,7 +22647,7 @@ begin
       Graph.UnitFid  := UnitFid;
       var PlanLines:= TStringList.Create;
       try
-        RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines);
+        RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, BdsOfIndex(Store));
         for var PlanLine in PlanLines do Writeln(PlanLine);
       finally
         PlanLines.Free;
@@ -29086,8 +29678,7 @@ begin
             hermetic test could not point it anywhere. }
           var Manifest: TIndexManifest;
           if AArgs.WorkspaceConfig <> '' then
-            Manifest:= TManifestIO.ParseText(TFile.ReadAllText(AArgs.WorkspaceConfig),
-                                             ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig)))
+            Manifest:= TManifestIO.ParseFile(AArgs.WorkspaceConfig)
           else
             Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
           var Platform: string:= AArgs.CheckPlatform;
@@ -29250,6 +29841,37 @@ begin
     Exit(2);
   end;
 
+  { INSIDE A CONFIGURED REPOSITORY THE PROJECT LIST IS config.json (E3b item 6,
+    2026-10-14). Ownership below is already asked of it, but a project it does
+    not list used to be written into the manifest beside the exe -- which
+    config.json overrides there, so the "registered" message described a write
+    no later run in the repository reads. Point at the command that adds it. A
+    project config.json lists falls through to "already-registered". }
+  var Repo  : TRepoConfig;
+  var RepoErr: string;
+  var Listed: TRepoProject;
+  if TRepoConfigIO.TryLoad(Proj, Repo, RepoErr) and not Repo.FindProject(TPath.GetFullPath(Proj), Listed) then
+  begin
+    var Msg: string:= Format('%s configures this repository and does not list %s -- add it with: ' +
+      'drag-lint init %s --project %s', [Repo.ConfigFile, TPath.GetFullPath(Proj), Repo.Root, TPath.GetFullPath(Proj)]);
+    if AArgs.AsJson then
+    begin
+      var J: TJSONObject:= TJSONObject.Create;
+      try
+        J.AddPair('outcome', 'use-init');
+        J.AddPair('section', '');
+        J.AddPair('message', Msg);
+        J.AddPair('manifests', TJSONArray.Create);
+        J.AddPair('claimants', TJSONArray.Create);
+        Writeln(J.Format(2));
+      finally
+        J.Free;
+      end;
+    end
+    else Writeln(ErrOutput, 'register-project: ', Msg);
+    Exit(2);
+  end;
+
   Name:= AArgs.Name;   { --name <Section>; blank derives it from the project file }
   Res := RegisterProjectSection(ExtractFilePath(ParamStr(0)), Proj, Name, AArgs.Apply);
 
@@ -29375,11 +29997,7 @@ begin
     ConfigPath:= AArgs.WorkspaceConfig;
     try
       if ConfigPath <> '' then
-      begin
-        var RContent:= TFile.ReadAllText(ConfigPath);
-        var RRootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
-        Manifest:= TManifestIO.ParseText(RContent, RRootDir);
-      end
+        Manifest:= TManifestIO.ParseFile(ConfigPath)
       else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
     except
       on E: Exception do
@@ -29425,11 +30043,7 @@ begin
     ConfigPath:= AArgs.WorkspaceConfig;
     try
       if ConfigPath <> '' then
-      begin
-        var PContent:= TFile.ReadAllText(ConfigPath);
-        var PRootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
-        Manifest:= TManifestIO.ParseText(PContent, PRootDir);
-      end
+        Manifest:= TManifestIO.ParseFile(ConfigPath)
       else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
     except
       on E: Exception do
@@ -29492,11 +30106,7 @@ begin
 
     try
       if ConfigPath <> '' then
-      begin
-        var Content:= TFile.ReadAllText(ConfigPath);
-        var RootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
-        Manifest:= TManifestIO.ParseText(Content, RootDir);
-      end
+        Manifest:= TManifestIO.ParseFile(ConfigPath)
       else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
 
       // Pick platform: CLI --platform > .dproj detection > manifest defaultPlatform.
@@ -29737,11 +30347,12 @@ begin
   if AArgs.ProjectPath = '' then begin Writeln('ERROR: selftest closure requires --project <dpr/.dproj>'); Exit (2 ); end;
   ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
   try
-    LibRoots:= ProjResolver.ResolveLibraryPaths;
+    LibRoots:= ClosureLibraryRoots(ProjResolver.ResolveLibraryPaths);
   finally
     ProjResolver.Free;
   end;
   Resolver:= TClosureResolver.Create(LibRoots);
+  Resolver.AddLibrarySearchPaths(TargetLibrarySearchPath);
   try
     // PP-Task-10: honour per-config uses-discovery (default ON; --no-preprocess
     // reverts to the all-branch scan). Same profile rule the index verbs use:
@@ -30556,7 +31167,7 @@ begin
   // Resolve library roots (used to exclude library files from the closure).
   ProjResolver:= DRagLint.Project.Resolver.TProjectResolver.Create;
   try
-    LibRoots:= ProjResolver.ResolveLibraryPaths;
+    LibRoots:= ClosureLibraryRoots(ProjResolver.ResolveLibraryPaths);
   finally
     ProjResolver.Free;
   end;
@@ -30569,11 +31180,7 @@ begin
     if AArgs.WorkspaceConfig <> '' then
     begin
       if TFile.Exists(AArgs.WorkspaceConfig) then
-      begin
-        var Content:= TFile.ReadAllText(AArgs.WorkspaceConfig);
-        var RootDir:= ExtractFilePath(TPath.GetFullPath(AArgs.WorkspaceConfig));
-        Manifest:= TManifestIO.ParseText(Content, RootDir);
-      end
+        Manifest:= TManifestIO.ParseFile(AArgs.WorkspaceConfig)
       else Manifest:= Default(TIndexManifest);
     end
     else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
@@ -31022,9 +31629,7 @@ begin
   if ConfigPath <> '' then
   begin
     if not TFile.Exists(ConfigPath) then begin Writeln(ErrOutput, 'library-drift: config not found: ', ConfigPath); Exit(2); end;
-    var Content:= TFile.ReadAllText(ConfigPath);
-    var RootDir:= ExtractFilePath(TPath.GetFullPath(ConfigPath));
-    Manifest:= TManifestIO.ParseText(Content, RootDir);
+    Manifest:= TManifestIO.ParseFile(ConfigPath);
   end
   else Manifest:= TManifestIO.Load(EngineDir, GetCurrentDir);
 
@@ -31524,6 +32129,122 @@ begin
   Result:= 0;
 end; // function
 
+const
+  { --version when the bundled sqlite3.dll does not load: the documented fatal
+    code (exit-code table in --help), as for any other unusable engine. }
+  EXIT_SQLITE_ENGINE_MISSING = 3;
+  { The project's Delphi cannot be determined, or is not installed: a usage
+    error (exit-code table in --help) -- the remedy is --delphi. }
+  EXIT_DELPHI_TARGET = 2;
+
+{ THE DELPHI THIS RUN ANALYSES FOR (2026-10-07). It decides the Studio whose
+  registry Library path, IDE variables and platforms the project resolver
+  reads, the compile-check's library key, and the preprocessor's VER<N> /
+  CompilerVersion (and with it the cv= of the indexer fingerprint).
+
+  Before, all of that was Delphi 13's unless $BDS said otherwise -- so a 10.3
+  project needed an environment variable and a rewritten .dproj copy to be
+  analysed as what it is. Now, in this order:
+    1. --delphi <bds>;
+    2. the project's "delphi" in <repo>\_D-RAG\config.json (E3a);
+    3. the .dproj's <ProjectVersion> (TStudioEnv.BdsOfProjectVersion);
+    4. no project file, or a .dpr with no .dproj beside it: the newest Studio
+       installed (TStudioEnv.Bds' own default).
+  A .dproj whose version does not map, or a project whose Delphi is not
+  installed, is an error naming the fix -- never a guess. $BDS is not read. }
+{ Where this run looks for <repo>\_D-RAG\config.json: the verb's own path
+  argument (an existing file or folder), else --in, else --project, else the
+  first --db (an index inside _D-RAG finds its own repository), else '' -- the
+  CWD, as for git. }
+function RepoAnchorOf(const AArgs: TArgs): string;
+begin
+  if (AArgs.Path <> '') and (TFile.Exists(AArgs.Path) or TDirectory.Exists(AArgs.Path)) then Exit(AArgs.Path);
+  if AArgs.InFile <> '' then Exit(AArgs.InFile);
+  if AArgs.ProjectPath <> '' then Exit(AArgs.ProjectPath);
+  if AArgs.DbPath <> '' then Exit(AArgs.DbPath);
+  Result:= '';
+end; // function
+
+{ The one "delphi" every project of this run's repository config names, or ''
+  when there is no config, a project names none, or two disagree. }
+function RepoCommonDelphi: string;
+var
+  Cfg: TRepoConfig;
+  Err: string;
+begin
+  Result:= '';
+  if not TRepoConfigIO.TryLoad('', Cfg, Err) then Exit;
+  for var P in Cfg.Projects do
+  begin
+    if P.Delphi = '' then Exit('');
+    if Result = '' then Result:= P.Delphi
+    else if not SameText(Result, P.Delphi) then Exit('');
+  end;
+end; // function
+
+function ResolveDelphiTarget(const AArgs: TArgs; out AError: string): Boolean;
+var
+  Proj, PV, Bds, Why, Root, Diag, Shown, Installed: string;
+  Explicit: Boolean;
+begin
+  AError:= '';
+  Proj:= AArgs.ProjectPath;
+  if (Proj = '') and MatchText(ExtractFileExt(AArgs.Path), ['.dproj', '.dpr', '.dpk']) then Proj:= AArgs.Path;
+  PV:= '';
+  if Proj <> '' then PV:= TStudioEnv.ProjectVersionOf(Proj);
+  Bds:= Trim(AArgs.Delphi);
+  { 2. the project's "delphi" in its repository's _D-RAG\config.json (E3a) --
+    the user's own statement, so it wins over what the .dproj implies. }
+  if (Bds = '') and (Proj <> '') then
+  begin
+    var RepoCfg: TRepoConfig;
+    var RepoErr: string;
+    var RepoProj: TRepoProject;
+    if TRepoConfigIO.TryLoad(Proj, RepoCfg, RepoErr) and RepoCfg.FindProject(Proj, RepoProj) then Bds:= RepoProj.Delphi;
+  end;
+  { --delphi and config.json are the user's own statement: a Delphi they name
+    that cannot be used is an error. The .dproj's <ProjectVersion> is only an
+    implication, so when it does not map, or maps to a Studio that is not
+    installed, the run says so on stderr and falls back to the default Studio --
+    what every run did before 2026-10-07. Refusing there broke the battery's own
+    fixtures (ProjectVersion 19.5 / 20.4 on a Delphi 13-only machine): a setup
+    that worked before must keep working. }
+  Explicit:= Bds <> '';
+  Shown:= ChangeFileExt(Proj, '.dproj');
+  Installed:= string.Join(', ', TStudioEnv.InstalledBds);
+  if Installed = '' then Installed:= 'none';
+  if (Bds = '') and (PV <> '') then
+  begin
+    Bds:= TStudioEnv.BdsOfProjectVersion(PV, Why);
+    if Bds = '' then
+      Writeln(ErrOutput, Format('drag-lint: note: cannot tell which Delphi %s is for (%s) -- analysing it for ' +
+        'the default Studio. Pass --delphi <bds> to choose; installed here: %s.', [Shown, Why, Installed]))
+    else if not MatchText(Bds, TStudioEnv.InstalledBds) then
+    begin
+      Writeln(ErrOutput, Format('drag-lint: note: %s is for BDS %s, which is not installed here -- analysing it ' +
+        'for the default Studio. Pass --delphi <bds> to choose; installed here: %s.', [Shown, Bds, Installed]));
+      Bds:= '';
+    end;
+  end;
+  { No project named, inside a configured repository whose projects all name
+    the SAME Delphi: that one. Without this a plain `query` in a 10.3-only
+    repository ran for the newest Studio installed -- its VER<N> defines, and
+    the library index of the wrong Delphi (<exe>\library\37.0\ for a 20.0
+    repository). Projects that disagree leave the default: no single answer. }
+  if (Bds = '') and (Proj = '') then Bds:= RepoCommonDelphi;
+  TStudioEnv.SetBds(Bds);
+  { A project is analysed against its Studio's Library path, so that Studio has
+    to exist; without a project only the VER<N> defines follow the target. }
+  if (Proj <> '') and Explicit and not TStudioEnv.TryRoot(Root, Diag) then
+  begin
+    AError:= Diag;
+    Exit(False);
+  end;
+  SetTargetCompilerVersion(CompilerVersionOfStudioRoot(TStudioEnv.Bds));
+  Result:= True;
+end; // function
+
+
 { ---- compare (charts step 1) -------------------------------------------------
   `drag-lint compare` is thin on purpose: DRagLint.Charts.Compare decides and diffs,
   DRagLint.Charts.Render prints; this section only maps flags onto a TCompareRequest,
@@ -31888,16 +32609,46 @@ var
 begin
   if (ParamStr(1) = '--selftest-fts5') then Exit(DoSelfTestFts5);
   if (ParamStr(1) = '--selftest-schema') then Exit(DoSelfTestSchema(ParamStr(3)));
-  { extractor 1.20.0: preprocess for the Delphi the environment names. $BDS (or
-    the registry) resolving to ...\Studio\20.0 means Delphi 10.3, whose code is
-    compiled with VER330 / CompilerVersion 33; the built-ins used to say 37
-    whatever the project was built with. Silent when no Studio resolves -- the
-    default stays 37. }
-  SetTargetCompilerVersion(CompilerVersionOfStudioRoot(TStudioEnv.RootOrEmpty));
   try
     Args:= ParseArgs;
     if Args.ShowHelp then begin PrintHelp; Exit(0); end;
-    if Args.ShowVersion then begin Writeln('drag-lint ', VERSION); Exit(0); end;
+    if Args.ShowVersion then
+    begin
+      Writeln('drag-lint ', VERSION);
+      { The engine ships its own sqlite3.dll beside the exe (see
+        DRagLint.Storage.SQLite.SqliteEngineLibPath); say which one loaded. }
+      var SqlErr: string;
+      var SqlVer: string:= SqliteEngineVersion(SqlErr);
+      if SqlVer <> '' then Writeln('sqlite ', SqlVer, ' (', SqliteEngineLibPath, ')')
+      else
+      begin
+        Writeln(ErrOutput, 'drag-lint: sqlite3.dll did not load from ', SqliteEngineLibPath, ': ', SqlErr);
+        Exit(EXIT_SQLITE_ENGINE_MISSING);
+      end;
+      Exit(0);
+    end;
+    { WHERE THIS RUN'S CONFIGURATION IS (E3a, 2026-10-07): the repository
+      _D-RAG\config.json above the verb's own path argument, else above the CWD
+      -- set once here, so every loader below finds the same file without each
+      being told where to look. A config.json that exists and cannot be read
+      stops the run: falling back to another source would answer from a
+      configuration the user did not write. }
+    TRepoConfigIO.SetAnchor(RepoAnchorOf(Args));
+    var RepoCfg: TRepoConfig;
+    var RepoErr: string;
+    var HaveRepoCfg: Boolean:= TRepoConfigIO.TryLoad('', RepoCfg, RepoErr);
+    if RepoErr <> '' then
+    begin
+      Writeln(ErrOutput, 'drag-lint: ', RepoErr);
+      Exit(2);
+    end;
+    { The Delphi this run analyses for -- before any verb touches a project. }
+    var DelphiErr: string;
+    if not ResolveDelphiTarget(Args, DelphiErr) then
+    begin
+      Writeln(ErrOutput, 'drag-lint: ', DelphiErr);
+      Exit(EXIT_DELPHI_TARGET);
+    end;
 
     { A .drag-lint.json DEFAULTS FILE THAT COULD NOT BE READ (1.20.4 Task 4):
       LoadConfigDefaults has warned and kept only the keys before the bad one.
@@ -31950,6 +32701,16 @@ begin
         end;
       end; // try
       if (OwnDb <> '') and TFile.Exists(OwnDb) then Args.DbPath:= OwnDb;
+    end
+    { ...and, inside a configured repository, with no --project either: the
+      config's indexes ARE the defaults, ordered by ResolveConsumerDbs (the file
+      the run names first, by what each index actually contains). index and init
+      decide their own targets and are left alone. }
+    else if HaveRepoCfg and (Args.DbPath = '') and (Length(Args.DbPaths) = 0)
+            and not MatchText(Args.Command, ['index', 'init', 'doc-forget']) then
+    begin
+      var RepoDbs: TArray<string>:= ResolveConsumerDbs(Args);
+      if (Length(RepoDbs) > 0) and (RepoDbs[0] <> '') and TFile.Exists(RepoDbs[0]) then Args.DbPath:= RepoDbs[0];
     end;
     { THE PROJECT TAG (2026-09-23): the name this run writes into, and reaps
       from, inbound fact entries on a reconciled block -- the primary DB's base
@@ -31975,6 +32736,7 @@ begin
       if Args.IndexAll then Result:= DoIndexAll(Args)
       else Result:= DoIndex(Args)
     end
+    else if Args.Command = 'init'              then Result:= DoInit            (Args)
     else if Args.Command = 'query'             then Result:= DoQuery           (Args)
     else if Args.Command = 'rules'             then Result:= DoRules           (Args)
     else if Args.Command = 'lint'              then Result:= DoLint            (Args)

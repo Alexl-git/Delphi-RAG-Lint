@@ -79,7 +79,7 @@ foreach ($plat in 'win64','win32') {
                                      (Join-Path $stg "docs\converter"),
                                      (Join-Path $stg "convrules\vendor") -Force | Out-Null
   Copy-Item (Join-Path $repo $exe) $stg
-  foreach ($d in 'tree-sitter-delphi13.dll','tree-sitter-dfm.dll','tree-sitter.dll') { Copy-Item (Join-Path $repo "$dll\$d") $stg }
+  foreach ($d in 'tree-sitter-delphi13.dll','tree-sitter-dfm.dll','tree-sitter.dll','sqlite3.dll') { Copy-Item (Join-Path $repo "$dll\$d") $stg }
   Copy-Item (Join-Path $repo "rules\*.scm") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\*.json") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\builtin-symbols.txt") (Join-Path $stg "rules")

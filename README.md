@@ -268,18 +268,91 @@ Add `--json` to any query for machine-readable output.
 ### Standalone CLI
 
 1. Download the [latest release](https://github.com/Alexl-git/Delphi-RAG-Lint/releases)
-   (`drag-lint.exe` + `tree-sitter*.dll`).
-2. Put them in the same directory.
-3. Index a Delphi project:
+   (`drag-lint.exe` + `tree-sitter*.dll` + `sqlite3.dll`).
+2. Put them in the same directory. drag-lint loads ONLY the `sqlite3.dll` beside
+   it, never one on PATH (`drag-lint --version` prints which one loaded).
+3. Configure the repository once, then index it -- codegraph-style:
    ```
-   drag-lint index --project C:\Projects\MyApp\MyApp.dproj --db myapp.sqlite
+   cd --project C:\Projects\MyRepo
+   drag-lint init        # writes _D-RAG\config.json: every .dproj below, with its Delphi
+   drag-lint index       # indexes every configured project into _D-RAG\<name>.sqlite
    ```
-4. Query symbols:
+4. Query symbols from anywhere inside the repository -- no `--db` needed:
    ```
-   drag-lint query --name TFoo --db myapp.sqlite
-   drag-lint surface --qname Unit.TFoo --db myapp.sqlite
-   drag-lint impact --qname Unit.TFoo.DoBar --db myapp.sqlite
+   drag-lint query --name TFoo
+   drag-lint surface --qname Unit.TFoo
+   drag-lint impact --qname Unit.TFoo.DoBar
    ```
+   An explicit `--db <file.sqlite>` still works everywhere, inside a repository
+   or not (`drag-lint index C:\Projects\MyApp\MyApp.dproj --db myapp.sqlite`).
+
+### Repository configuration: `_D-RAG\config.json`
+
+`drag-lint init [<root>]` creates `<root>\_D-RAG\` holding the repository's
+**only** configuration, `config.json`, plus a `.gitignore` that ignores everything
+in the folder except itself and `config.json` (so the config can be committed and
+the indexes are not). In a CVS working copy it also adds `_D-RAG` to
+`<root>\.cvsignore`. In an SVN working copy (a `.svn` folder at or above the root) it
+prints the `svn propedit svn:ignore "<root>"` command that keeps `_D-RAG` out of
+`svn status`, and does not run it: a versioned property is yours to commit.
+
+The Delphi IDE plugin follows the same file: with a project of a configured
+repository open, it reads that project's index from `<root>\_D-RAG\<name>.sqlite`
+and the library index from `library\<bds>\` beside the engine, for the project's
+Delphi. The Config tool (`drag-lint-config`) shows such a repository read-only --
+it edits `drag-lint.json` manifests, so it never saves over `config.json` or puts
+the repository's projects into the manifest beside the exe.
+
+```json
+{
+  "version": 1,
+  "projects": [
+    { "name": "App", "dproj": "App\\App.dproj", "platform": "Win32", "delphi": "20.0" }
+  ],
+  "exclude": [],
+  "ownRoots": ["App", "Shared"],
+  "settings": { }, "docs": { }, "lint": { }, "layers": { }
+}
+```
+
+* **Discovery walks up**, like git: every verb looks for `_D-RAG\config.json` above
+  its path argument (`<path>`, `--in`, `--project`, `--db`), else above the CWD,
+  so the same command answers the same from the root, a subfolder or a sibling
+  project. Inside a configured repository it **wins** over `drag-lint.json`
+  beside the exe, `.drag-lint.json`, `drag-lint-lint.json` and
+  `drag-lint-layers.json`. A `config.json` that cannot be read stops the run
+  (exit 2) instead of falling back to another source.
+* **`"delphi"`** is the BDS version the project is analysed for (`20.0` = 10.3,
+  `37.0` = 13). `init` fills it from the `.dproj` `<ProjectVersion>`; it wins over
+  that ProjectVersion, and `--delphi` wins over it. A run that names no project
+  (a plain `query`) takes the Delphi every configured project agrees on -- its
+  `VER<N>` defines and its library index folder -- else the newest Studio.
+* **`index`** with no target indexes every project (or `--only <Name>`), each in
+  its own process so each gets its own Delphi. `index --project <x.dproj>` writes
+  that project's `_D-RAG\<name>.sqlite` and refuses a `.dproj` the config does
+  not list (`init --project <x.dproj>` adds it; `init --force` rediscovers all,
+  keeping every other key).
+* **`"lint"`** is the body of a `drag-lint-lint.json`, **`"layers"`** the body
+  of a `drag-lint-layers.json`; `--config` / `--layers` still win.
+* **`"ownRoots"`** is the code the repository OWNS: `lint-all`, `exceptions-sync`
+  and `document --project` skip (and name) every indexed file outside it. Entries
+  are relative to the repository root; a `"projects"` entry may carry its own
+  `"ownRoots"`, which wins for that project; `[]` is refused (exit 2). Without the
+  key the scope defaults to the run's anchor (the repository root for a `--db` in
+  `_D-RAG`, the `.dproj` folder for `--project`) and the run says so. The key wins
+  over a loose `_D-RAG\drag-lint-project.json`; without the key that file still
+  answers, as `"lint"` / `"layers"` do for their loose files.
+* The **IDE / LSP** reads the same `"lint"` block for its published diagnostics,
+  so the editor and `lint` agree.
+* **`"rule"`, `"watch"` and the `"docs"` capture keys** (`captureLooseComments`,
+  `allowBlankLineGap`, `implPrecedence`) are the run defaults a `.drag-lint.json`
+  carries, with the same meaning: `"rule"` narrows `lint` only, with a note
+  (other verbs ignore it and say so), and `"watch": {"interval": N}` turns
+  `index` into the watch loop. Flags still win. A configured repository takes them
+  from config.json -- the `.drag-lint.json` of the CWD is not read when the run's
+  path, `--in`, `--project` or `--db` is inside the repository.
+* **Library indexes** (the Studio's own units, one per Delphi and platform) live
+  beside the engine, in `<exe dir>\library\<bds>\library-<platform>.sqlite`.
 
 ### Scan type and mode: two independent axes
 
@@ -287,7 +360,7 @@ Add `--json` to any query for machine-readable output.
 
 | Target | Type | What lands in the DB |
 |---|---|---|
-| `.dpr` / `.dproj` | **Project** | exactly the **compile closure** - the project's members, the project-local units they use transitively, each unit's sibling `.dfm`, the `{$I}` include files, and the project file. Units resolved through a Delphi **Library/Browsing** path are excluded (they belong to the library index), and loose unreferenced files in the project folder are excluded. |
+| `.dpr` / `.dproj` | **Project** | exactly the **compile closure** - the project's members, the project-local units they use transitively, each unit's sibling `.dfm`, the `{$I}` include files, and the project file. Units are searched like dcc does: the project's own search path, then the **Library search path of the project's Delphi**. A unit found under a **Studio-owned** folder (the Studio root, any `\Embarcadero\` folder: RTL, VCL, FMX, GetIt) is excluded -- it belongs to the library index; a unit found in any OTHER Library folder (your own and third-party components) joins the closure. Loose unreferenced files in the project folder are excluded. |
 | a folder | **Library** | every scannable file under the tree (subject to excludes). |
 
 The project row means `index --project <file>` or a manifest `include` naming the
@@ -305,6 +378,8 @@ Prefer **one DB per project**: a project DB answers questions about that project
 exactly. A question that spans projects needs several `--db` flags -
 `drag-lint resolve-dbs --platform <p>` lists every configured DB, and
 `resolve-dbs --project <x.dproj>` / `--in <x.pas>` resolves a single target.
+`--config <path>` on `resolve-dbs`, `reconcile-project` and `library-drift`
+accepts a repository `_D-RAG\config.json` as well as a `drag-lint.json` manifest.
 
 **The first `--db` is the primary; every later one is an extra store.** The
 primary answers the query and is the only store contributing *resolved* call
@@ -362,6 +437,10 @@ Any `MISSING: <path>` line is a component folder the current index doesn't cover
 **2. Rebuild the library index.** Pick whichever matches how your indexes are
 managed:
 
+- **Inside a repository configured with `drag-lint init`**, the same command
+  builds the library indexes for the target Delphi into
+  `<exe dir>\library\<bds>\library-<platform>.sqlite` -- config.json carries an
+  implicit `Library` section, so there is nothing to add to it.
 - **This repo's managed indexes (recommended here).** The `Library` section of
   the named-DB manifest (`third_party/dll-win64/drag-lint.json`) has
   `"source": "registry-libraries"` and rebuilds both platform DBs
@@ -715,7 +794,7 @@ and more (see [MCP tools](#mcp-tools-15) below).
 <!-- dl:registry:begin feature-summary -->
 | Group | Features | Wiki |
 |---|---:|---|
-| [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 8 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
+| [Indexing](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#indexing) | 9 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#indexing) |
 | [Search and navigation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#search-and-navigation) | 31 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#search-and-navigation) |
 | [Linting](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#linting) | 19 (+ 190 rules, 23 fixable) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#linting) |
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
@@ -806,7 +885,7 @@ https://github.com/Alexl-git/Delphi-RAG-Lint/wiki and carry no `.md` suffix.)
 | any `index` run | Mode is chosen per run, independent of scan type | `--recompile` (default, incremental) / `--rebuild` (from scratch), `--force-reparse` (alias `--no-skip`: re-parse every walked file even when path+mtime+sha are unchanged -- needed once per DB after an engine upgrade that extracts something new), `--no-prune` (dry look), `--prune` |
 | any `index` run (walk scoping) | Decide which files the walk admits before anything is parsed | `--exclude <glob>` / `--exclude-under <dir>` / `--include-only <glob>` (all repeatable), `--max-file-kb N` (skip any file larger than N KB), `--no-use-ignore` (opt out of the `.gitignore` / `.hgignore` pattern files, honoured by default; a folder holding a `.scanignore` marker file is always pruned), `--deep` (also record usage refs; `--shallow` is the default) |
 | [`migrate-dbs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/migrate-dbs) | Move project indexes into each project's `_D-RAG` folder | `--apply` |
-| `register-project` | Add a NEW project to the manifest so `index --all` and the IDE can index it | `<file.dproj>`, `--name <Section>`, `--apply`, `--json` |
+| `register-project` | Add a NEW project to the manifest so `index --all` and the IDE can index it (inside a repository with `_D-RAG` config.json: exit 2, use `init --project`) | `<file.dproj>`, `--name <Section>`, `--apply`, `--json` |
 | [`resolve-dbs`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Show-Resolved-DBs-debug) | Show which DB(s) a project/file/platform resolves to | `--project <dproj>`, `--in <file>`, `--platform` |
 | [`library-drift`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Library-Drift-Check) | Registry library roots with source on disk but not yet in the index | `--platform` |
 | [`reconcile-project`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Reconcile-Project-Members-dpr-dproj) `<App.dpr\|.dproj>` | Sync a project's member list against disk; flag stale used units | `--apply`, `--only <unit,...>` (restrict MISSING, and therefore `--apply`, to a reviewed selection -- a dry run with `--only` previews exactly what `--apply` would write), `--db`, `--full`, `--json` (carries `applied` -- the outcome, not the flag -- plus `backups` and `edited` when applying, and `refused` naming closure entries kept in the report but never written, today the `{$I}` includes) |
@@ -816,6 +895,16 @@ build refuses one larger than its size guard, because it would run out of
 address space mid-answer: `--size-guard-mb N` moves the threshold and
 `--force32` overrides the refusal outright. Neither is normally needed on the
 Win64 build.
+
+**Which Delphi.** Every verb analyses a project for the Delphi its `.dproj`
+names in `<ProjectVersion>` (18.5-18.8 = 10.3, 20.1-20.2 = 12, 20.4 = 13; 20.3
+fits 12.3 and 13, and takes whichever one is installed): that Studio's registry
+Library path, IDE environment variables and `VER<N>` / `CompilerVersion`
+defines. `--delphi <bds>` (`20.0`, `23.0`, `37.0`) overrides it; a run with no
+project uses the newest Studio installed. A `--delphi` that cannot be used exits 2
+naming the fix; a `<ProjectVersion>` that cannot be mapped, or names a Delphi
+that is not installed, prints a note and falls back to the default Studio. The `BDS` environment
+variable is **not** read.
 
 #### Search and navigation
 
@@ -1255,7 +1344,7 @@ drag-lint.exe
   |     |     +-- tree-sitter-delphi13.dll  (Delphi 13 grammar)
   |     |     +-- tree-sitter-dfm.dll        (DFM grammar)
   |     |     +-- tree-sitter.dll            (libtree-sitter runtime)
-  |     |     +-- SQLite storage
+  |     |     +-- SQLite storage           (sqlite3.dll beside the exe, pinned -- third_party/SQLITE-VERSION.txt)
   |     |
   |     +-- Query / Surface / Impact / Slice
   |     +-- Lint (rule runner over .scm files)
@@ -1297,8 +1386,8 @@ Prerequisites:
 
 Build the CLI (Win64 Debug -- the configuration that is deployed): run
 `build\build_draglint_win64.bat`. It loads `rsvars.bat`, builds
-`src\cli\drag-lint.dproj`, stages the tree-sitter companions beside the linked
-exe, syncs `rules\` and deploys to `third_party\dll-win64\`. By hand:
+`src\cli\drag-lint.dproj`, stages the tree-sitter companions and `sqlite3.dll` beside
+the linked exe, syncs `rules\` and deploys to `third_party\dll-win64\`. By hand:
 ```
 call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"
 cd src\cli

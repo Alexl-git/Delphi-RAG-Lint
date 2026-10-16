@@ -965,4 +965,12 @@
 #   CompilerVersion / RTLVersion for the target Delphi. All three change stored parses:
 #   every index re-parses once.
 #   Superseded: 1.21.1-alpha|ba5b43cfb9f5257c609ea491739d4f6dffe56f43b701518b247a90afbaff13e5
-1.22.0-alpha|778dc37176b7dbbb057ff1867a9e9b317604032a3da524ce3f3d8ccf25c9ddf9
+#
+# 2026-10-15: hash re-pinned WITHIN 1.22.0-alpha:
+#   The engine analyses a project for its own Delphi (the .dproj ProjectVersion, or
+#   --delphi) instead of $BDS, and the compile closure also searches that Delphi's Library
+#   path, as dcc does. Closure membership can change; how a file is parsed does not --
+#   measured on TestCopy ProjectA, 2,224 = 2,224 files and 269,606 = 269,606 call
+#   edges against the old BDS=20.0 run, same cv=33 fingerprint. No bump.
+#   Superseded: 1.22.0-alpha|778dc37176b7dbbb057ff1867a9e9b317604032a3da524ce3f3d8ccf25c9ddf9
+1.22.0-alpha|f9f7777e59e835b8dea7c15027107fc4780723a86fe8d8d8ffd0796d89ba955b

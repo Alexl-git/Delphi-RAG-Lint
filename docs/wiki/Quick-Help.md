@@ -5,6 +5,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 ## Indexing
 
 * **Auto-Document Whole Project** -- Writes DocInsight documentation into every public declaration a project owns. [More](Auto-Document-Whole-Project)
+* **init** -- Configures a repository: writes _D-RAG\config.json with every project, so index needs no target or --db. Writes one _D-RAG\config.json at the repository root, listing every .dproj below it with its Delphi version, and a .gitignore beside it. Every verb run inside the repository finds it by walking up from the current folder, so drag-lint index with no target indexes all projects and no --db is needed. Reach for it once per repository, before the first index. It needs no index and leaves a repository without a config.json working as before. [More](init)
 * **migrate-dbs** -- Moves project index databases into each project's own D-RAG folder, matching the current index layout. [More](migrate-dbs)
 * **pp-profile** -- Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line. [More](pp-profile)
 * **purge-locals** -- A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space. [More](purge-locals)

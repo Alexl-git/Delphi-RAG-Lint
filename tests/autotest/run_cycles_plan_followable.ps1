@@ -56,10 +56,13 @@ Copy-Item (Join-Path $demoDir '*.dpr')   $scratch -Force
 Copy-Item (Join-Path $demoDir '*.dproj') $scratch -Force
 $db    = Join-Path $scratch 'demo.sqlite'
 $dproj = Join-Path $scratch 'CircularDemo.dproj'
+$delphi = @(Get-ChildItem HKCU:\Software\Embarcadero\BDS -ErrorAction SilentlyContinue | Where-Object { $_.GetValue('RootDir') } | ForEach-Object PSChildName | Sort-Object { [version]$_ })[-1]
 
 Push-Location C:\TEMP
 try {
-  $idx = & $exePath index --project $dproj --db $db 2>&1 | Out-String
+  # circular-demo is a Delphi 11 project (ProjectVersion 19.5, outside the verified
+  # table), so its Delphi is named; any installed Studio parses these four units.
+  $idx = & $exePath index --project $dproj --db $db --delphi $delphi 2>&1 | Out-String
   Check 'SANITY: the four demo units indexed with no errors' `
         (([regex]::Matches($idx, 'Demo\w+\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 4) $idx
 
@@ -132,6 +135,15 @@ try {
         ($plan -match '\[ \] Create `[^`]+` with the exact text given for `[^`]+`\. Save it as plain ASCII with Windows CRLF line endings') $plan
   Check 'checklist gives the re-index command for this project' `
         (Has $plan ('index --project "' + $dproj + '" --db "' + $db + '"')) $plan
+  # Backlog #29: circular-demo's ProjectVersion 19.5 maps to no Delphi, so a
+  # re-index command without --delphi exits 2 for whoever follows the plan.
+  # The plan repeats the Delphi the index was built for (the fingerprint's cv=).
+  Check 'the re-index command names the Delphi the index was built for (#29)' `
+        (Has $plan ('index --project "' + $dproj + '" --db "' + $db + '" --delphi ' + $delphi)) $plan
+  $cmdLine = ([regex]::Match($plan, 'drag-lint (index --project "[^"]+" --db "[^"]+"[^`\n]*)')).Groups[1].Value
+  $cmdArgs = @([regex]::Matches($cmdLine, '"[^"]*"|\S+') | ForEach-Object { $_.Value.Trim('"') })
+  $reidx = & $exePath @cmdArgs 2>&1 | Out-String
+  Check 'and running it exactly as the plan prints it succeeds (#29)' ($LASTEXITCODE -eq 0) ("drag-lint $cmdLine -> exit $LASTEXITCODE`n$reidx")
   Check 'checklist predicts the implementation-only result exactly' `
         ($plan -match '1 circular unit group\(s\) found:\n  \[4 units\] [a-z <\->]+   \(implementation-only -- legal, lower impact\)') $plan
 

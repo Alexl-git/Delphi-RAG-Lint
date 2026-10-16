@@ -8,6 +8,7 @@ uses
   System.SysUtils,
   System.Classes,
   DRagLint.Index.Manifest in '..\index\DRagLint.Index.Manifest.pas',
+  DRagLint.Index.RepoConfig in '..\index\DRagLint.Index.RepoConfig.pas',
   DRagLint.Index.Plan in '..\index\DRagLint.Index.Plan.pas',
   DRagLint.Index.Coverage in '..\index\DRagLint.Index.Coverage.pas',
   DRagLint.Core.StudioEnv in '..\core\DRagLint.Core.StudioEnv.pas',

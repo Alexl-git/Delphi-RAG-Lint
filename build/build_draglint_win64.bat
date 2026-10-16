@@ -34,6 +34,14 @@ if errorlevel 1 (
   echo ERROR: failed to stage tree-sitter companions into %ROOT%\src\cli\Win64\Debug
   exit /b 1
 )
+REM The SQLite engine too (2026-10-07): DRagLint.Storage.SQLite loads ONLY the
+REM sqlite3.dll beside the exe, never one on PATH -- see third_party\SQLITE-VERSION.txt.
+REM Without this copy every DB verb of the Debug exe fails "Cannot load vendor library".
+copy /Y "%ROOT%\third_party\dll-win64\sqlite3.dll" "%ROOT%\src\cli\Win64\Debug\" >NUL
+if errorlevel 1 (
+  echo ERROR: failed to stage sqlite3.dll into %ROOT%\src\cli\Win64\Debug
+  exit /b 1
+)
 
 REM Stage the RULE CATALOGUE beside both exes. rules\ is the only TRACKED copy;
 REM <exe-dir>\rules is gitignored, and until now nothing produced it -- so a
@@ -104,5 +112,5 @@ if errorlevel 1 (
     exit /b 1
   )
 )
-echo OK: staged Win64 drag-lint.exe + tree-sitter companions
+echo OK: staged Win64 drag-lint.exe + tree-sitter companions + sqlite3.dll
 endlocal

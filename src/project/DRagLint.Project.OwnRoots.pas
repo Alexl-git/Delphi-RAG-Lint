@@ -42,6 +42,7 @@ type
     FDeclared: Boolean       ;
     FError   : string        ;
     FActive  : Boolean       ;
+    FDeclareIn: string       ;
   public
     /// <summary>Reads &lt;AAnchorDir&gt;\_D-RAG\drag-lint-project.json and resolves
     /// its "ownRoots", or falls back to the anchor directory itself.</summary>
@@ -68,7 +69,14 @@ type
     /// <seealso cref="DRagLint.Project.OwnRoots.TOwnRoots.IsOurs"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    class function Load(const AAnchorDir: string): TOwnRoots; static;
+    /// <para>INSIDE A REPOSITORY CONFIGURED BY _D-RAG\config.json (found by
+    /// walking up from AProjectHint, else from AAnchorDir) the declaration is
+    /// that file's "ownRoots": the entry of the project AProjectHint names (its
+    /// .dproj/.dpr or its index) wins over the top-level list, and entries are
+    /// relative to the repository root. The loose drag-lint-project.json is NOT
+    /// read there -- config.json is the repository's one configuration (E3b,
+    /// 2026-10-14). A config.json that cannot be read sets Error.</para>
+    class function Load(const AAnchorDir: string; const AProjectHint: string = ''): TOwnRoots; static;
     /// <summary>True when AFilePath sits under one of the roots.</summary>
     /// <param name="AFilePath">Absolute or relative source path.</param>
     /// <returns>True for our code; always True when the record is inactive
@@ -98,6 +106,10 @@ type
     property Error: string read FError;
     /// <summary>False when there is no anchor and IsOurs always answers True.</summary>
     property Active: Boolean read FActive;
+    /// <summary>The file a declaration belongs in: the repository's
+    /// _D-RAG\config.json when there is one, else
+    /// &lt;anchor&gt;\_D-RAG\drag-lint-project.json. '' when inactive.</summary>
+    property DeclareIn: string read FDeclareIn;
   end;
 
 /// <summary>The project folder for an index that lives in a _D-RAG home.</summary>
@@ -125,6 +137,7 @@ uses
   , System.IOUtils
   , System.JSON
   , DRagLint.Core.Model
+  , DRagLint.Index.RepoConfig
   ;
 
 function NormalizeDir(const APath: string): string;
@@ -146,21 +159,91 @@ begin
   Result:= ExtractFileDir(Dir);
 end;
 
-class function TOwnRoots.Load(const AAnchorDir: string): TOwnRoots;
+{ The config.json project AHint names -- its .dproj/.dpr, or its index -- or
+  False when AHint names none of them. }
+function ProjectForHint(const AConfig: TRepoConfig; const AHint: string; out AProject: TRepoProject): Boolean;
+begin
+  AProject:= Default(TRepoProject);
+  if AHint = '' then Exit(False);
+  if AConfig.FindProject(AHint, AProject) then Exit(True);
+  for var P in AConfig.Projects do
+    if SameText(ExpandFileName(P.Db), ExpandFileName(AHint)) then
+    begin
+      AProject:= P;
+      Exit(True);
+    end;
+  Result:= False;
+end;
+
+class function TOwnRoots.Load(const AAnchorDir: string; const AProjectHint: string): TOwnRoots;
 var
-  CfgPath: string     ;
-  JVal   : TJSONValue ;
-  Root   : TJSONObject;
-  Arr    : TJSONArray ;
-  V      : TJSONValue ;
-  Entry  : string     ;
+  CfgPath: string        ;
+  JVal   : TJSONValue    ;
+  Root   : TJSONObject   ;
+  Arr    : TJSONArray    ;
+  V      : TJSONValue    ;
+  Entry  : string        ;
+  Repo   : TRepoConfig   ;
+  RepoErr: string        ;
+  Start  : string        ;
+  Proj   : TRepoProject  ;
+  Decl   : TArray<string>;
+  HasDecl: Boolean       ;
 begin
   Result         := Default(TOwnRoots);
   Result.FActive := AAnchorDir <> '';
   if not Result.FActive then Exit;
 
   Result.FAnchor:= ExcludeTrailingPathDelimiter(ExpandFileName(AAnchorDir));
-  CfgPath       := TPath.Combine(TPath.Combine(Result.FAnchor, DRAG_HOME_DIR), 'drag-lint-project.json');
+
+  { A configured repository's config.json "ownRoots" wins, whichever folder the
+    run anchored to: the repository root for a --db in its _D-RAG, the .dproj's
+    folder for --project. Before E3b the loose file was looked up under the
+    ANCHOR, so those two runs of one project got two scopes. Without the key
+    the loose file below still answers -- the precedence the "lint" and
+    "layers" blocks have -- and the notes point at config.json as the place to
+    declare when no loose file exists. }
+  Start:= AProjectHint;
+  if Start = '' then Start:= Result.FAnchor;
+  HasDecl:= False;
+  if TRepoConfigIO.TryLoad(Start, Repo, RepoErr) then
+  begin
+    if ProjectForHint(Repo, AProjectHint, Proj) and Proj.HasOwnRoots then
+    begin
+      Decl   := Proj.OwnRoots;
+      HasDecl:= True;
+    end
+    else if Repo.HasOwnRoots then
+    begin
+      Decl   := Repo.OwnRoots;
+      HasDecl:= True;
+    end;
+    if HasDecl then
+    begin
+      Result.FDeclareIn:= Repo.ConfigFile;
+      if Length(Decl) = 0 then
+      begin
+        Result.FError:= Format('%s declares an empty "ownRoots". Remove the key to ' +
+          'default to the project folder, or list the roots -- scoping to nothing ' +
+          'would report a clean project.', [Repo.ConfigFile]);
+        Exit;
+      end;
+      for Entry in Decl do Result.FRoots:= Result.FRoots + [NormalizeDir(Entry)];
+      Result.FDeclared:= True;
+      Exit;
+    end;
+  end
+  else if RepoErr <> '' then
+  begin
+    { A config.json that cannot be read stops the run, as it does for every
+      other verb -- never a silent fall-back to the loose file. }
+    Result.FError:= RepoErr;
+    Exit;
+  end;
+
+  CfgPath:= TPath.Combine(TPath.Combine(Result.FAnchor, DRAG_HOME_DIR), 'drag-lint-project.json');
+  Result.FDeclareIn:= CfgPath;
+  if (Repo.ConfigFile <> '') and not TFile.Exists(CfgPath) then Result.FDeclareIn:= Repo.ConfigFile;
 
   if TFile.Exists(CfgPath) then
   try

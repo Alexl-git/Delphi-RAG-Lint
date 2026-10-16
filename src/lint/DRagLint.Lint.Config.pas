@@ -677,6 +677,14 @@ begin
   if not (RootVal is TJSONObject) then begin RootVal.Free; Exit; end;
   try
     Root:= RootVal as TJSONObject;
+    { A repository config.json carries the lint config as its "lint" block
+      (E3a); everything below reads that block exactly as it read a whole
+      drag-lint-lint.json. }
+    if IsRepoConfigFile(APath) then
+    begin
+      if not (Root.GetValue('lint') is TJSONObject) then Exit;
+      Root:= Root.GetValue('lint') as TJSONObject;
+    end;
     Result.ApplyConfigObject(Root, False);
     if (AProfile <> '') and (Root.GetValue('profiles') is TJSONObject) then
     begin

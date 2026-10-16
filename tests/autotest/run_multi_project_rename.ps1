@@ -50,7 +50,8 @@ $work = Join-Path $env:TEMP ('draglint-mpr-' + [Guid]::NewGuid().ToString('N'))
 $eng  = Join-Path $work 'eng'
 New-Item -ItemType Directory -Force $eng | Out-Null
 # the engine copy: exe + tree-sitter companions + rules\ (what build_draglint_win64.bat stages)
-foreach ($f in 'drag-lint.exe', 'tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll', 'casts.castlib') {
+# sqlite3.dll too: the engine loads ONLY the SQLite beside it (2026-10-07, merged 2026-10-15)
+foreach ($f in 'drag-lint.exe', 'tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll', 'sqlite3.dll', 'casts.castlib') {
   if (Test-Path "$EngineDir\$f") { Copy-Item "$EngineDir\$f" "$eng\$f" }
 }
 Copy-Item "$EngineDir\rules" "$eng\rules" -Recurse

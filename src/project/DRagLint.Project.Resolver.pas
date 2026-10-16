@@ -354,6 +354,11 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ResolveLibraryPaths(AAllPlatforms: Boolean = False): TArray<string>;
+      /// <summary>The target Studio's Library SEARCH Path (not the Browsing Path),
+      /// Win32 first, then Win64, in registry order -- where the compiler looks
+      /// for a unit after the project's own search path. 2026-10-07: what a
+      /// project closure searches (TClosureResolver.AddLibrarySearchPaths).</summary>
+      function ResolveLibrarySearchPath: TArray<string>;
       /// <summary>Returns every platform name registered under BDS\37.0\Library,
       /// deduplicated case-insensitively. Wraps the private EnumLibraryPlatforms.
       /// Returns at least ['Win32','Win64'] as a fallback when the registry is empty.</summary>
@@ -394,8 +399,12 @@ type
 
 implementation
 
-const
-  BDS_REG_PATH = '\Software\Embarcadero\BDS\37.0';
+{ The target Studio's registry key (2026-10-07: was pinned to BDS\37.0). It
+  follows TStudioEnv.Bds, which the CLI sets from the project's Delphi. }
+function BdsRegPath: string;
+begin
+  Result:= '\' + TStudioEnv.RegBase;
+end; // function
 
 constructor TProjectResolver.Create;
 begin
@@ -438,7 +447,7 @@ begin
   Reg:= TRegistry.Create(KEY_READ);
   try
     Reg.RootKey:= HKEY_CURRENT_USER;
-    if Reg.OpenKeyReadOnly(BDS_REG_PATH + '\Environment Variables') then
+    if Reg.OpenKeyReadOnly(BdsRegPath + '\Environment Variables') then
     try
       Reg.GetValueNames(Names);
       for Name in Names do
@@ -605,7 +614,7 @@ begin
         Reg:= TRegistry.Create(KEY_READ or Sam);
         try
           Reg.RootKey:= HiveRoot;
-          if Reg.OpenKeyReadOnly(BDS_REG_PATH + '\Library') then
+          if Reg.OpenKeyReadOnly(BdsRegPath + '\Library') then
           try
             Names.Clear;
             Reg.GetKeyNames(Names);
@@ -668,7 +677,7 @@ begin
     for var VIdx: Integer:= 0 to Last do
     begin
       Val:= VALUE_NAMES[VIdx];
-      RegBase:= BDS_REG_PATH + '\Library\' + Plat;
+      RegBase:= BdsRegPath + '\Library\' + Plat;
       for HiveRoot in [HKEY(HKEY_CURRENT_USER), HKEY(HKEY_LOCAL_MACHINE)] do
         for Sam in [KEY_WOW64_32KEY, KEY_WOW64_64KEY] do ReadRegPathInto(HiveRoot, RegBase, Val, Sam, procedure (S: string) begin AddSemicolonList(AList, S, ''); end);
     end;
@@ -754,6 +763,19 @@ begin
   List:= TList<string>.Create;
   try
     ReadLibraryPaths(List, Platforms);
+    Result:= List.ToArray;
+  finally
+    List.Free;
+  end;
+end; // function
+
+function TProjectResolver.ResolveLibrarySearchPath: TArray<string>;
+var
+  List: TList<string>;
+begin
+  List:= TList<string>.Create;
+  try
+    ReadLibraryPaths(List, ['Win32', 'Win64'], True);
     Result:= List.ToArray;
   finally
     List.Free;

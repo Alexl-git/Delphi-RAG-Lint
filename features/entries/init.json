@@ -1,0 +1,23 @@
+{
+  "id": "init",
+  "title": "init",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.31.1-alpha",
+  "summary": "Configures a repository: writes _D-RAG\\config.json with every project, so index needs no target or --db",
+  "intro": "Writes one _D-RAG\\config.json at the repository root, listing every .dproj below it with its Delphi version, and a .gitignore beside it. Every verb run inside the repository finds it by walking up from the current folder, so drag-lint index with no target indexes all projects and no --db is needed. Reach for it once per repository, before the first index. It needs no index and leaves a repository without a config.json working as before.",
+  "wikiPage": "init",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "init"
+    }
+  ],
+  "audience": "both",
+  "lastVerified": {
+    "date": "2026-10-15",
+    "by": "jonathas.silva",
+    "build": "1.31.1-alpha"
+  }
+}

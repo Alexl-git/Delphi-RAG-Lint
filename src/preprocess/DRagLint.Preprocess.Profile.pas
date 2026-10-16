@@ -28,6 +28,11 @@ uses
   System.Generics.Collections,
   DRagLint.Preprocess.Types;
 
+const
+  /// <summary>Delphi 13 Florence: the version the product is built against, and
+  /// the target whenever the installation's own number cannot be read.</summary>
+  DEFAULT_COMPILER_VERSION = 37;
+
 /// <summary>extractor 1.20.0: the compiler version the built-ins describe --
 /// 37 (Delphi 13) unless the caller names another. The CLI sets it once, from
 /// the RAD Studio installation it resolved, so a project built with Delphi 10.3
@@ -116,9 +121,6 @@ const
   RECURSION_TOKEN = '$(DCC_Define)';
 
 const
-  // Delphi 13 Florence: the version the product was built against and the
-  // default whenever the installation's own number cannot be read.
-  DEFAULT_COMPILER_VERSION = 37;
   // BDS numbering ran 13 behind CompilerVersion (BDS 20.0 = 10.3 = 33) up to
   // BDS 23.0 (Delphi 12, 36); Delphi 13 jumped both to 37.
   BDS_COMPILER_OFFSET  = 13;

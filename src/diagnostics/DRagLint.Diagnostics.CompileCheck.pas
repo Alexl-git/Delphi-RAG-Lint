@@ -287,7 +287,7 @@ implementation
     Seen:= TDictionary<string, Boolean>.Create;
     try
       Reg.RootKey:= HKEY_CURRENT_USER;
-      PlatKey:= 'Software\Embarcadero\BDS\37.0\Library\' + APlatform;
+      PlatKey:= TStudioEnv.RegBase + '\Library\' + APlatform;  { the target Studio (2026-10-07: was 37.0) }
 
       if Reg.OpenKey(PlatKey, False) then
       try
@@ -317,7 +317,7 @@ implementation
 
             Low:= LowerCase(Path);
             { Drop RAD-provided dirs -- already on dcc's baseline search path. }
-            if Pos('\embarcadero\studio\37.0\', Low) > 0 then Continue;
+            if Pos('\embarcadero\studio\' + LowerCase(TStudioEnv.Bds) + '\', Low) > 0 then Continue;
             { Keep compiled-DCU library dirs; otherwise drop source trees. }
             IsCompiled:= (Pos('\library\rs', Low) > 0) or (Pos('\library\win', Low) > 0);
             if (not IsCompiled) and ((Pos('\source', Low) > 0) or (Pos('\src', Low) > 0)) then Continue;

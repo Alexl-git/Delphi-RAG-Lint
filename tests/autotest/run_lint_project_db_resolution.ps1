@@ -74,7 +74,7 @@ function Write-Ascii([string]$Path, [string]$Body) {
 }
 
 # --- the engine copy: its own directory is what TManifestIO.Load reads first ---
-foreach ($dll in @('tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll')) {
+foreach ($dll in @('tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll', 'sqlite3.dll')) {  # sqlite3.dll: the engine loads ONLY the copy beside it (2026-10-07)
   $src = Join-Path $exeDir $dll
   if (Test-Path $src) { Copy-Item $src (Join-Path $bin $dll) -Force }
 }

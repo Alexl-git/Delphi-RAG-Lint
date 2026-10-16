@@ -138,6 +138,7 @@ uses
   DRagLint.Output.ExitCode in '..\output\DRagLint.Output.ExitCode.pas',
   DRagLint.Workspace.Config in '..\workspace\DRagLint.Workspace.Config.pas',
   DRagLint.Index.Manifest in '..\index\DRagLint.Index.Manifest.pas',
+  DRagLint.Index.RepoConfig in '..\index\DRagLint.Index.RepoConfig.pas',
   DRagLint.Index.ManifestWrite in '..\index\DRagLint.Index.ManifestWrite.pas',
   DRagLint.Index.Glob in '..\index\DRagLint.Index.Glob.pas',
   DRagLint.Index.IgnoreFiles in '..\index\DRagLint.Index.IgnoreFiles.pas',

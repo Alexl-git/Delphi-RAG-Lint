@@ -22,6 +22,7 @@ uses
   , System.JSON
   , System.Generics.Collections
   , DRagLint.Core.Model      // dl:unit DRagLint.Core.Model accepted -- TDocHandlesOptions (the docs.dialog_routines / max_handles knob) and drag_home_dir travel with the manifest that names them
+  , DRagLint.Index.RepoConfig
   ;
 
 type
@@ -294,6 +295,18 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ParseText(const AJson, ARootDir: string): TIndexManifest; static;
+
+      /// <summary>The manifest a --config file names: a repository
+      /// _D-RAG\config.json is read as one (ManifestFromRepoConfig, the manifest
+      /// anchor discovery builds); any other file is an old manifest, parsed by
+      /// ParseText against its own folder.</summary>
+      /// <param name="APath">The --config path, absolute or relative to the CWD.</param>
+      /// <returns>Populated TIndexManifest.</returns>
+      /// <remarks>ParseText knows "indexes" sections, not config.json's
+      /// "projects", so before this a repository's own config.json passed as
+      /// --config yielded a manifest with no project in it (E3b item 4). A
+      /// config.json that cannot be parsed raises ERepoConfigError.</remarks>
+      class function ParseFile(const APath: string): TIndexManifest; static;
 
       /// <summary>Parse a manifest from JSON text, also returning which top-level settings
       /// keys were explicitly present in the JSON. Used by the merge logic.</summary>
@@ -656,6 +669,47 @@ function LoadDocComplexityMin: Integer;
 /// </remarks>
 function LoadDocHandlesOptions: TDocHandlesOptions;
 
+/// <summary>The manifest a repository config.json describes: one section per
+/// configured project (include = its .dproj, db = &lt;root&gt;\_D-RAG\&lt;name&gt;.sqlite,
+/// both absolute), plus the Library section, whose per-platform indexes live
+/// beside the engine in library\&lt;bds&gt;\ for the target Delphi.</summary>
+/// <param name="AConfig">A parsed config.json.</param>
+/// <returns>RootDir = the repository root, OutDir = its _D-RAG folder.</returns>
+function ManifestFromRepoConfig(const AConfig: TRepoConfig): TIndexManifest;
+
+/// <summary>ManifestFromRepoConfig for a caller that is NOT the engine: the
+/// Library section points at AEngineDir\library\ABds\ instead of the running
+/// process's own folder and target Delphi.</summary>
+/// <param name="AConfig">A parsed config.json.</param>
+/// <param name="AEngineDir">The folder of the drag-lint.exe that builds and reads
+/// the library indexes.</param>
+/// <param name="ABds">The Delphi whose library index applies (e.g. '20.0').</param>
+/// <remarks>#31 (2026-10-15): the IDE plugin runs inside bds.exe, where
+/// ParamStr(0) is the IDE and the target Delphi was never resolved, so the
+/// engine's own form named &lt;Studio bin&gt;\library\ and the newest Studio.</remarks>
+function ManifestFromRepoConfigAt(const AConfig: TRepoConfig; const AEngineDir, ABds: string): TIndexManifest;
+
+/// <summary>The Delphi (BDS version) a configured repository's project is
+/// analysed for, the way the engine decides it: the project's "delphi" in
+/// config.json, else its .dproj &lt;ProjectVersion&gt; when that Studio is
+/// installed, else the one "delphi" every project agrees on, else the default
+/// Studio (TStudioEnv.Bds).</summary>
+/// <param name="AConfig">A parsed config.json.</param>
+/// <param name="AAnchor">The project file, or a file of it; '' for none.</param>
+function RepoBdsFor(const AConfig: TRepoConfig; const AAnchor: string): string;
+
+/// <summary>AEngineDir\library\ABds -- where the library indexes of one Delphi
+/// live, beside the engine (owner ruling 2026-10-07).</summary>
+function LibraryIndexDirAt(const AEngineDir, ABds: string): string;
+
+/// <summary>Finds the repository config.json for this run: from the explicit
+/// discovery anchor when the CLI set one, else from AStartDir.</summary>
+/// <param name="AStartDir">The caller's own starting point (often the CWD).</param>
+/// <param name="AConfig">Receives the parsed config on True.</param>
+/// <returns>True when one was found and parsed. A config that exists and cannot
+/// be parsed RAISES -- it must never be skipped in favour of another source.</returns>
+function FindRepoConfig(const AStartDir: string; out AConfig: TRepoConfig): Boolean;
+
 /// <summary>A manifest key's value when it is a JSON OBJECT; nil when the key is absent.</summary>
 /// <param name="AParent">The object that holds the key; must not be nil.</param>
 /// <param name="AKey">The key name.</param>
@@ -697,8 +751,114 @@ function GetManifestNumber(const AParent: TJSONObject; const AKey, AParentPath: 
 implementation
 
 uses
-  DRagLint.Core.JsonFile   { WriteJsonFileAtomic -- pretty, no BOM, atomic }
+  DRagLint.Core.JsonFile     { WriteJsonFileAtomic -- pretty, no BOM, atomic }
+  , DRagLint.Core.StudioEnv  { the target Delphi names the library index folder }
+  , System.StrUtils          { MatchText -- RepoBdsFor's installed-Studio test }
   ;
+
+{ ---------------------------------------------------------------------- }
+{  ManifestFromRepoConfig                                                  }
+{ ---------------------------------------------------------------------- }
+
+function LibraryIndexDir: string;
+begin
+  { One library index per Delphi and platform, BESIDE THE ENGINE (owner ruling,
+    2026-10-07): it is derived from the Studio install, not from any project,
+    takes hours to build, and serves every repository -- so it lives with the
+    tool, never in a repo and never in a global folder outside both. }
+  Result:= LibraryIndexDirAt(ExtractFilePath(ParamStr(0)), TStudioEnv.Bds);
+end;
+
+function LibraryIndexDirAt(const AEngineDir, ABds: string): string;
+begin
+  Result:= TPath.Combine(TPath.Combine(AEngineDir, 'library'), ABds);
+end;
+
+function RepoBdsFor(const AConfig: TRepoConfig; const AAnchor: string): string;
+var
+  Proj: TRepoProject;
+  PV  : string;
+  Why : string;
+begin
+  Result:= '';
+  if (AAnchor <> '') and AConfig.FindProject(AAnchor, Proj) then
+  begin
+    if Proj.Delphi <> '' then Exit(Proj.Delphi);
+    PV:= TStudioEnv.ProjectVersionOf(Proj.Dproj);
+    if PV <> '' then
+    begin
+      Result:= TStudioEnv.BdsOfProjectVersion(PV, Why);
+      if (Result <> '') and not MatchText(Result, TStudioEnv.InstalledBds) then Result:= '';
+      if Result <> '' then Exit;
+    end;
+  end;
+  for var P in AConfig.Projects do
+  begin
+    if P.Delphi = '' then begin Result:= ''; Break; end;
+    if Result = '' then Result:= P.Delphi
+    else if not SameText(Result, P.Delphi) then begin Result:= ''; Break; end;
+  end;
+  if Result = '' then Result:= TStudioEnv.Bds;
+end;
+
+function ManifestFromRepoConfig(const AConfig: TRepoConfig): TIndexManifest;
+begin
+  Result:= ManifestFromRepoConfigAt(AConfig, ExtractFilePath(ParamStr(0)), TStudioEnv.Bds);
+end;
+
+function ManifestFromRepoConfigAt(const AConfig: TRepoConfig; const AEngineDir, ABds: string): TIndexManifest;
+var
+  Keys: TSettingsKeySet;
+begin
+  { "settings" and "docs" are the manifest's own blocks, read by the one parser
+    that has always read them; an "indexes" block in config.json is IGNORED on
+    purpose -- projects are declared by "projects", and a second spelling of the
+    same thing would be a second way to disagree. }
+  Result:= TManifestIO.ParseTextEx(AConfig.Text, AConfig.Root, Keys);
+  Result.RootDir:= AConfig.Root;
+  Result.OutDir := AConfig.Home;
+  Result.GlobalExclude:= AConfig.Exclude;
+  Result.Sections:= nil;
+  for var P in AConfig.Projects do
+  begin
+    var Sec: TIndexSection:= Default(TIndexSection);
+    Sec.Name          := P.Name;
+    Sec.Db            := P.Db;           { absolute: never re-anchored on a CWD }
+    Sec.Include       := [P.Dproj];      { absolute, same reason }
+    Sec.UseIgnoreFiles:= True;
+    Sec.SqlOnlyMS     := True;
+    if P.Platform <> '' then Sec.Platforms:= [P.Platform];
+    Result.Sections:= Result.Sections + [Sec];
+  end;
+  var Lib: TIndexSection:= Default(TIndexSection);
+  Lib.Name     := 'Library';
+  Lib.Source   := 'registry-libraries';
+  Lib.Db       := TPath.Combine(LibraryIndexDirAt(AEngineDir, ABds), 'library-{platform}.sqlite');
+  Lib.Platforms:= ['Win32', 'Win64'];
+  Lib.Exclude  := ['SourceD3', 'Delphi5', 'Delphi7', 'BuildD3', 'BuildD4', 'BuildD5', 'BuildD7',
+                   'BuildCB3', 'BuildCB4', 'BuildCB5'];
+  Lib.UseIgnoreFiles:= True;
+  Lib.SqlOnlyMS:= True;
+  Result.Sections:= Result.Sections + [Lib];
+end;
+
+function FindRepoConfig(const AStartDir: string; out AConfig: TRepoConfig): Boolean;
+var
+  Err: string;
+begin
+  Result:= False;
+  AConfig:= Default(TRepoConfig);
+  if TRepoConfigIO.ExplicitAnchor <> '' then
+  begin
+    Result:= TRepoConfigIO.TryLoad(TRepoConfigIO.ExplicitAnchor, AConfig, Err);
+    if Err <> '' then raise ERepoConfigError.Create(Err);
+  end;
+  if (not Result) and (AStartDir <> '') then
+  begin
+    Result:= TRepoConfigIO.TryLoad(AStartDir, AConfig, Err);
+    if Err <> '' then raise ERepoConfigError.Create(Err);
+  end;
+end;
 
 { ---------------------------------------------------------------------- }
 {  Helpers                                                                 }
@@ -1123,6 +1283,24 @@ begin
   Result:= ParseTextEx(AJson, ARootDir, Keys);
 end;
 
+class function TManifestIO.ParseFile(const APath: string): TIndexManifest;
+var
+  Full: string     ;
+  Cfg : TRepoConfig;
+  Err : string     ;
+begin
+  Full:= TPath.GetFullPath(APath);
+  if TRepoConfigIO.IsRepoConfigFile(Full) then
+  begin
+    { <root>\_D-RAG\config.json -> <root>, as TRepoConfigIO.TryLoad does. }
+    if not TRepoConfigIO.Parse(TFile.ReadAllText(Full, TEncoding.UTF8),
+             ExtractFilePath(ExcludeTrailingPathDelimiter(ExtractFilePath(Full))), Cfg, Err) then
+      raise ERepoConfigError.CreateFmt('%s: %s', [Full, Err]);
+    Exit(ManifestFromRepoConfig(Cfg));
+  end;
+  Result:= ParseText(TFile.ReadAllText(Full), ExtractFilePath(Full));
+end;
+
 { ---------------------------------------------------------------------- }
 {  TManifestIO.Load                                                        }
 { ---------------------------------------------------------------------- }
@@ -1176,6 +1354,15 @@ var
   end; // procedure
 
 begin
+  { THE REPOSITORY CONFIG WINS, and is not merged with anything (E3a,
+    2026-10-07). <root>\_D-RAG\config.json is the whole configuration of the
+    repository it sits in; blending it with a manifest beside the exe or a
+    dotted file above the CWD would bring back exactly the "it depends where you
+    stand" answers it exists to end. The two older sources below remain only for
+    a tree that has no config.json yet, until E3b removes them. }
+  var RepoCfg: TRepoConfig;
+  if FindRepoConfig(AStartDir, RepoCfg) then Exit(ManifestFromRepoConfig(RepoCfg));
+
   Result:= Default(TIndexManifest);
   HaveGlobal:= False;
   HaveLocal := False;

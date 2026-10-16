@@ -218,7 +218,7 @@ $globalD = Join-Path $dirD 'globaldir'
 $projD   = Join-Path $globalD 'proj'
 New-Item -ItemType Directory $dirD, $globalD, $projD | Out-Null
 $exeDir = Split-Path -Parent $Exe
-foreach ($dll in @('tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll')) {
+foreach ($dll in @('tree-sitter.dll', 'tree-sitter-delphi13.dll', 'tree-sitter-dfm.dll', 'sqlite3.dll')) {  # sqlite3.dll: the engine loads ONLY the copy beside it (2026-10-07)
   $src = Join-Path $exeDir $dll
   if (Test-Path $src) { Copy-Item $src (Join-Path $globalD $dll) -Force }
 }

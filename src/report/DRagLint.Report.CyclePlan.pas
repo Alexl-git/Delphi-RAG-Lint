@@ -79,8 +79,12 @@ type
 /// <para>The expected `cycles` output is predicted by replaying the planned
 /// uses changes on the graph; it assumes the other groups are left alone.</para>
 /// </remarks>
+/// <param name="pDelphi">The BDS version the index was built for ('20.0' = 10.3), repeated as
+/// --delphi in the re-index command so a project whose ProjectVersion maps to no Delphi can
+/// follow the plan (backlog #29); '' leaves the flag out.</param>
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
-  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
+  const pDelphi: string = '');
 
 implementation
 
@@ -226,6 +230,7 @@ type
     FOut        : TStrings;
     FProjectFid : Int64;
     FProjectFile: string;
+    FDelphi     : string;
     FFiles      : TDictionary<Int64, TPlanFile>;
     FPaths      : TDictionary<Int64, string>;
     FStemFid    : TDictionary<string, Int64>;
@@ -361,6 +366,7 @@ type
       const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
     destructor Destroy; override;
     procedure Run;
+    property Delphi: string read FDelphi write FDelphi;
   end;
 
 { ---------------------------------------------------------------------------
@@ -2055,6 +2061,10 @@ begin
   else
     Result:= Format('drag-lint index "%s" --db "%s"',
       [ExcludeTrailingPathDelimiter(ExtractFilePath(PathOf(FidOfStem(FComp[0])))), FDbPath]);
+  { The Delphi the index was built for, so the command re-indexes the same way
+    -- without it a project whose ProjectVersion maps to no Delphi exits 2
+    (backlog #29: circular-demo is 19.5). }
+  if FDelphi <> '' then Result:= Result + ' --delphi ' + FDelphi;
 end;
 
 function TCyclePlanner.CyclesCommand(pPlan: Boolean): string;
@@ -2763,12 +2773,14 @@ begin
 end;
 
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
-  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
+  const pDelphi: string);
 var
   Planner: TCyclePlanner;
 begin
   Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, pOut);
   try
+    Planner.Delphi:= pDelphi;
     Planner.Run;
   finally
     Planner.Free;

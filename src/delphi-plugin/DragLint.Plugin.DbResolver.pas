@@ -41,6 +41,7 @@ uses
     DragLint.Plugin.Settings
   , DRagLint.Plugin.DbProbe
   , DRagLint.Index.Manifest
+  , DRagLint.Index.RepoConfig
   ;
 
 { v(project-scoped): resolves the ACTIVE PROJECT's .dproj to the ONE index DB the
@@ -160,18 +161,53 @@ begin
   Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.json';
 end;
 
-{ Loads + parses the manifest beside the BPL. Returns False when it is absent or
-  unparseable -- never raises, and never silently: the telemetry line is the only
-  place the reason survives, because a design-time package has nowhere to print.
-  Every caller treats False as "no owner could be established", which is the safe
-  reading on both the read and the write path. }
-function TryLoadManifest(out AManifest: TIndexManifest): Boolean;
+{ Loads + parses the manifest that answers for AAnchor (a project file or a
+  source file; '' for none). Returns False when it is absent or unparseable --
+  never raises, and never silently: the telemetry line is the only place the
+  reason survives, because a design-time package has nowhere to print. Every
+  caller treats False as "no owner could be established", which is the safe
+  reading on both the read and the write path.
+
+  A CONFIGURED REPOSITORY FIRST (#31, 2026-10-15). When a <root>\_D-RAG\config.json
+  sits above AAnchor, it is that repository's whole configuration, exactly as for
+  the engine (TManifestIO.Load): its projects' indexes are <root>\_D-RAG\<name>.sqlite,
+  and the Library section points beside the ENGINE deployed with this BPL, for the
+  project's own Delphi -- not beside bds.exe, which is what ParamStr(0) names in
+  here. Without a config.json nothing changes: the manifest beside the BPL, as
+  before. A config.json that cannot be read is "no owner" -- the engine refuses
+  such a repository too, and guessing from another file is the thing it forbids. }
+function TryLoadManifest(const AAnchor: string; out AManifest: TIndexManifest): Boolean;
 var
   MPath  : string;
   Content: string;
 begin
   Result   := False;
   AManifest:= Default(TIndexManifest);
+  if AAnchor <> '' then
+  begin
+    var RepoCfg: TRepoConfig;
+    var RepoErr: string;
+    try
+      if TRepoConfigIO.TryLoad(AAnchor, RepoCfg, RepoErr) then
+      begin
+        AManifest:= ManifestFromRepoConfigAt(RepoCfg, ExtractFilePath(GetModuleName(HInstance)),
+          RepoBdsFor(RepoCfg, AAnchor));
+        DLT('dbresolve', 'repository config ' + RepoCfg.ConfigFile + ' answers for ' + AAnchor);
+        Exit(True);
+      end;
+      if RepoErr <> '' then
+      begin
+        DLT('dbresolve', 'repository config UNREADABLE: ' + RepoErr);
+        Exit;
+      end;
+    except
+      on E: Exception do
+      begin
+        DLT('dbresolve', Format('repository config UNREADABLE above %s: %s: %s', [AAnchor, E.ClassName, E.Message]));
+        Exit;
+      end;
+    end; // try
+  end;
   MPath:= ManifestPathBesideEngine;
   if not TFile.Exists(MPath) then
   begin
@@ -197,7 +233,7 @@ begin
   AClaimants:= nil;
   Result    := pdmNone;
   if AProjectFile = '' then Exit;
-  if not TryLoadManifest(Manifest) then Exit;
+  if not TryLoadManifest(AProjectFile, Manifest) then Exit;
 
   Result:= ResolveProjectDb(Manifest, AProjectFile, ADb, AClaimants);
   DLT('dbresolve', Format('project resolve: %s -> match=%d db=%s claimants=%d',
@@ -209,7 +245,8 @@ var
   Manifest: TIndexManifest;
 begin
   Result:= nil;
-  if not TryLoadManifest(Manifest) then Exit;
+  { The active project's repository answers; with no project, the file's own. }
+  if not TryLoadManifest(if AActiveProjectFile <> '' then AActiveProjectFile else AEditorFile, Manifest) then Exit;
   Result:= ResolveReadDbs(Manifest, AActiveProjectFile, AEditorFile);
   DLT('dbresolve', Format('read resolve: proj=%s file=%s -> %d db(s)',
                           [ExtractFileName(AActiveProjectFile), ExtractFileName(AEditorFile), Length(Result)]));
@@ -246,7 +283,7 @@ begin
     logic the engine already had, which is how the two drifted into disagreeing
     about which section covers a file. One implementation, and it is the one the
     headless tests exercise. }
-  if not TryLoadManifest(Manifest) then Exit;
+  if not TryLoadManifest(AFilePath, Manifest) then Exit;
   Result:= ResolveFolderDb(Manifest, AFilePath);
 end; // function
 
@@ -474,6 +511,36 @@ begin
   AReason := '';
   Declined:= '';
 
+  { A CONFIGURED REPOSITORY FIRST (#31): its Library index lives beside the engine,
+    in library\<bds>\, for the active project's Delphi -- the folder `index` builds
+    and every engine verb inside the repository reads. }
+  var Anchor: string:= GetActiveProjectFilePath;
+  if Anchor = '' then Anchor:= GetActiveEditorFilePath;
+  if Anchor <> '' then
+  try
+    var RepoCfg: TRepoConfig;
+    var RepoErr: string;
+    if TRepoConfigIO.TryLoad(Anchor, RepoCfg, RepoErr) then
+    begin
+      var EngineDir: string:= if ASettings.ExePath <> '' then ExtractFilePath(ASettings.ExePath)
+                              else ExtractFilePath(GetModuleName(HInstance));
+      var Bds: string:= RepoBdsFor(RepoCfg, Anchor);
+      LibPlat:= GetActivePlatformForLibrary;
+      if LibPlat = '' then LibPlat:= 'Win64';
+      Db:= TPath.Combine(LibraryIndexDirAt(EngineDir, Bds), 'library-' + LibPlat + '.sqlite');
+      if TFile.Exists(Db) then
+      begin
+        AReason:= Format('repository config %s -> Delphi %s, platform %s', [RepoCfg.ConfigFile, Bds, LibPlat]);
+        DLT('dbresolve', 'library: ' + AReason + ' => ' + Db);
+        Exit(Db);
+      end;
+      Decline(Format('repository config %s: no library index at %s', [RepoCfg.ConfigFile, Db]));
+    end
+    else if RepoErr <> '' then
+      Decline('repository config unreadable: ' + RepoErr);
+  except
+    on E: Exception do Decline(Format('%s reading the repository config above %s: %s', [E.ClassName, Anchor, E.Message]));
+  end; // try
   { The engine's manifest first (it is the one that actually builds the indexes),
     then the BPL's. Duplicates are harmless -- the loop stops at the first hit. }
   Manifests:= nil;

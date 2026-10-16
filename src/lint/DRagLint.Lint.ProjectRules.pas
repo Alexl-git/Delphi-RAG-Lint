@@ -4351,6 +4351,17 @@ begin
   end;
   if not (Root is TJSONObject) then begin Root.Free; Exit; end;
   Obj:= TJSONObject(Root);
+  { A repository config.json carries this config as its "layers" block (E3a):
+    the block is the body a drag-lint-layers.json held. Root stays the owner. }
+  if IsRepoConfigFile(AConfigPath) then
+  begin
+    if not (Obj.GetValue('layers') is TJSONObject) then
+    begin
+      Root.Free;
+      Exit;
+    end;
+    Obj:= TJSONObject(Obj.GetValue('layers'));
+  end;
 
   Findings  := TList<TLintFinding>.Create;
   LayerNames:= TStringList.Create;

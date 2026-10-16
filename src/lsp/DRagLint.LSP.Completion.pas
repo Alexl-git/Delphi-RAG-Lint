@@ -265,6 +265,7 @@ uses
   DRagLint.Doc.Regions
   , DRagLint.Core.LiveDocs  { v(live-buffer): unsaved editor text, consulted before disk }
   , DRagLint.Lint.RuleCatalog  { BUILTIN_RULES_OFF_BY_DEFAULT -- the CLI's default-off set }
+  , DRagLint.Index.RepoConfig  { the repository config.json whose "lint" block is the lint config }
   ;
 
 { TLspCompletion }
@@ -863,13 +864,23 @@ end; // function
   also honored. Returns '' when none is found (Load then yields a no-op default
   that keeps everything). This lets the IDE (LSP) honor rule enable/disable +
   severity overrides the same way the CLI does -- previously the LSP ignored all
-  config, so noisy rules could not be silenced in the editor. }
+  config, so noisy rules could not be silenced in the editor.
+
+  A REPOSITORY _D-RAG\config.json WITH A "lint" OBJECT WINS (E3b item 5,
+  2026-10-14), the precedence the CLI's LoadLintConfig has: TLintConfig.Load
+  reads that block out of the file. Without the block the walk-up below answers
+  as before. A config.json that cannot be read is NOT an error here -- the
+  editor keeps publishing with the walk-up's answer; the CLI is where it stops a
+  run. }
 function DiscoverLintConfig(const AFile: string): string;
 const
   CANDIDATES: array[0..1] of string = ('drag-lint-lint.json', 'drag-lint.json');
 var
   Dir, Parent, Cand: string;
+  Repo  : TRepoConfig;
+  RepoErr: string    ;
 begin
+  if TRepoConfigIO.TryLoad(AFile, Repo, RepoErr) and Repo.HasLint then Exit(Repo.ConfigFile);
   Result:= '';
   Dir:= ExtractFilePath(AFile);
   while Dir <> '' do

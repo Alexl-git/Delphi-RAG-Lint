@@ -53,7 +53,7 @@ Check 'report questions == REPORT_QUESTION_COUNT == ValidateSet' (($live.ReportQ
 Check 'group captions cover every question Kind' (@($live.ReportQuestions | Where-Object { -not $live.GroupCaptions.ContainsKey($_.Kind) }).Count -eq 0)
 Check 'emitter files harvested without Emit-Common' (($live.EmitterFiles.Count -ge 20) -and ($live.EmitterFiles -notcontains 'Emit-Common.ps1')) "($($live.EmitterFiles.Count))"
 Check 'pack payload exes harvested' (($live.PackExes -contains 'drag-lint.exe') -and ($live.PackExes -contains 'ConvRulesEditor.exe')) ($live.PackExes -join ' ')
-$verOut = (& $p.Exe --version 2>$null | Out-String).Trim()
+$verOut = (& $p.Exe --version 2>$null | Select-Object -First 1 | Out-String).Trim()  # line 2 names the bundled sqlite3.dll (2026-10-07)
 Check 'REVIEW FOCUS 5: product version read from source equals --version stdout' ($verOut -eq ('drag-lint ' + $live.Versions.Product)) "'$verOut' vs source '$($live.Versions.Product)'"
 Check 'extractor, resolver and schema versions read' (($live.Versions.Extractor -match '^\d') -and ($live.Versions.Resolver -match '^\d') -and ([int]$live.Versions.Schema -gt 0)) "$($live.Versions.Extractor) / $($live.Versions.Resolver) / $($live.Versions.Schema)"
 Check 'About buttons harvested' ($live.AboutButtons.Count -ge 3) "($($live.AboutButtons.Count))"

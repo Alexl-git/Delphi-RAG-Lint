@@ -1,0 +1,29 @@
+third_party\dll-win64\sqlite3.dll -- the SQLite engine drag-lint ships and loads
+
+Version : 3.45.3 (x64, PE machine 0x8664)
+SHA256  : c323cb98d4eb7f3b885ccc0a6f5b8420291ff065afbd95f6f89954bfd3c5af0c
+Size    : 3172896 bytes
+Origin  : C:\Program Files (x86)\Embarcadero\Studio\37.0\bin64\sqlite3.dll
+          (RAD Studio 13), copied 2026-10-07.
+License : SQLite is in the public domain.
+
+Why this exact file: until 2026-10-07 drag-lint set no VendorLib, so the
+loader took whatever sqlite3.dll PATH reached first, which on the reference
+machine was this very file. Every index built so far was written by it, so
+bundling the same bytes changes nothing (index_db_diff.py IDENTICAL) while
+removing the dependency on a Delphi 13 install. A machine with only Delphi
+10.3 has no x64 sqlite3.dll on PATH at all (Studio\20.0\bin is 32-bit).
+
+How it is loaded: DRagLint.Storage.SQLite pins TFDPhysSQLiteDriverLink.VendorLib
+to <exe dir>\sqlite3.dll at unit initialization. A missing file fails the first
+connection ("Cannot load vendor library [path]"); PATH is never consulted.
+`drag-lint --version` prints the version and the path that loaded.
+
+Win32: there is NO third_party\dll-win32\sqlite3.dll. The Win32 build is retired,
+and RAD Studio 13's x86 Studio\37.0\bin\sqlite3.dll is SQLite 3.8.10 (2015, no
+FTS5 trigram tokenizer), so it cannot serve. pack-lint-release.ps1 therefore
+fails the win32 archive loudly, as it already did for the missing Win32 exe.
+
+Upgrading: replace the file, update this record, and MEASURE first -- the
+version decides the query planner (see the sqlite_stat1 note in
+DRagLint.Storage.SQLite.pas). Needs FTS5 with the trigram tokenizer (3.34+).

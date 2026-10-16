@@ -544,7 +544,7 @@ begin
   Result:= AFiles;
   if AOptions.DocumentThirdParty then Exit;
 
-  Own:= TOwnRoots.Load(ExtractFilePath(AProjectFile));
+  Own:= TOwnRoots.Load(ExtractFilePath(AProjectFile), AProjectFile);
   if not Own.Active then Exit;
 
   { exclude_paths is deliberately NOT checked here. It is not an ownership
@@ -594,12 +594,13 @@ begin
   // to document).
   ProjResolver := TProjectResolver.Create;
   try
-    LibRoots := ProjResolver.ResolveLibraryPaths;
+    LibRoots := ClosureLibraryRoots(ProjResolver.ResolveLibraryPaths);
   finally
     ProjResolver.Free;
   end;
 
   Resolver := TClosureResolver.Create(LibRoots);
+  Resolver.AddLibrarySearchPaths(TargetLibrarySearchPath);
   try
     CR := Resolver.Resolve(AProjectFile, []);
   finally

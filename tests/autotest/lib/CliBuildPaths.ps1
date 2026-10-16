@@ -89,6 +89,12 @@ function Copy-TreeSitterDlls {
   $dlls = @(Get-ChildItem -LiteralPath $SourceDir -Filter 'tree-sitter*.dll' -File -ErrorAction SilentlyContinue)
   if ($dlls.Count -eq 0) { throw "CliBuildPaths: no tree-sitter*.dll in $SourceDir" }
   if (-not (Test-Path -LiteralPath $Dest)) { New-Item -ItemType Directory -Force $Dest | Out-Null }
+  # The SQLite engine rides along (2026-10-07): DRagLint.Storage.SQLite loads ONLY
+  # the sqlite3.dll beside the running exe, so a harness that links the storage
+  # unit cannot open a DB without it.
+  $sqlite = Get-Item -LiteralPath (Join-Path $SourceDir 'sqlite3.dll') -ErrorAction SilentlyContinue
+  if (-not $sqlite) { throw "CliBuildPaths: no sqlite3.dll in $SourceDir" }
+  $dlls += $sqlite
   foreach ($d in $dlls) { Copy-Item -LiteralPath $d.FullName -Destination $Dest -Force }
   return @($dlls | ForEach-Object Name)
 }

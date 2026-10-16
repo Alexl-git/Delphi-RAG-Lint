@@ -90,6 +90,14 @@ whichever of the two applies to the current context (project open vs. no
 project open) -- never the merged, effective view `TManifestIO.Load` computes
 for indexing.
 
+**A repository configured with `drag-lint init` (since 2026-10-07) ignores all
+of the above for the CLI**: its `<root>\_D-RAG\config.json` is the whole
+configuration (projects, Delphi per project, `settings`, `docs`, `lint`,
+`layers`), found by walking up from the verb's path or the CWD, and it is not
+merged with either manifest. See README "Repository configuration". The IDE
+plugin still reads the manifests above; until it learns config.json it does
+not find the indexes of a configured repository.
+
 ## 3. Create the index databases
 
 drag-lint queries one or more `.sqlite` files. Two scopes matter:

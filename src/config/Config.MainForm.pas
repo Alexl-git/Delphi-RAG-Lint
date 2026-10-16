@@ -119,7 +119,9 @@ begin
   { If still no config path, derive one beside the EXE for Save operations }
   if FConfigPath = '' then
     FConfigPath := TPath.Combine(ExeDir, 'drag-lint.json');
-  if FLoadError <> '' then
+  if IsRepoConfigReadOnly(FLoadError) then
+    ShowMessage('Read-only: ' + FLoadError)
+  else if FLoadError <> '' then
     ShowMessage('Error loading config: ' + FLoadError + sLineBreak +
       'Saving is disabled until the file loads cleanly (fix it, then Reload).');
   PopulateFrame;
@@ -135,7 +137,9 @@ begin
   if FSettingsFrame <> nil then
     FSettingsFrame.BindManifest(PIndexManifest(@FManifest));
   btnSave.Enabled := FLoadError = '';
-  if FLoadError <> '' then
+  if IsRepoConfigReadOnly(FLoadError) then
+    lblConfigPath.Caption := FConfigPath + '  [repository config.json -- read-only]'
+  else if FLoadError <> '' then
     lblConfigPath.Caption := FConfigPath + '  [NOT LOADED -- saving disabled]'
   else if FConfigPath <> '' then
     lblConfigPath.Caption := FConfigPath

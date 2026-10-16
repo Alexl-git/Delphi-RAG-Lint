@@ -5,34 +5,170 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
-### Extractor (`DRAGLINT_EXTRACTOR_VERSION` 1.21.1 -> 1.22.0-alpha; every index RE-PARSES on its next run)
+### IDE plugin and Config tool: a configured repository (`_D-RAG\config.json`)
 
-- **Overloads keep their own bodies when the implementation header leaves out the defaults**. A routine's body span (`impl_start_line` / `impl_end_line`) was paired with its
-  declaration by comparing the two signature TEXTS; Delphi lets the implementation omit the default
-  values and wrap the list, so for those overloads nothing matched and the name-order fallback
-  swapped them. The span, the locals' parent and every ref's enclosing routine then belonged to the
-  other overload, and a call inside the body could not type its own parameters. Found on ProjectA:
-  `UConfig.SaveResult` (the `TConfig` overload held the `TStringList` body), so `SaveResult(aList, ...)` at
-  `UConfig.pas:1353` was `[ambiguous]` to the wrong overload. The pairing now compares the parameter
-  SHAPE -- each parameter's modifier and type, in order, plus the return type -- after the exact text
-  and before name order. Measured on ProjectA (full re-parse of a copy, 717 s Debug): 182 routines in 73 overload groups (49 files) got their own body back; 6 call edges that were `[certain]` to the WRONG overload now bind the right one (`UOperation.pas:173`, inside `Sub(TEntry)`, called `Add(TReconEntry)`), 5 went from `[ambiguous]` to `[certain]`, 9 calls bound for the first time, none lost. Guard: `tests\autotest\run_overload_impl_shape.ps1`.
-- **`symbol_facts` comes from the same preprocessed parse as the symbols.** The facts analyzer
-  reads its tree from `TAstParseCache`, which only `lint` / `lint-all` handed the define profile.
-  Under `index` every symbol came from the preprocessed parse and every facts row beside it from a
-  RAW re-parse, in which the grammar keeps an IFDEF's FIRST branch -- so a routine whose inactive
-  first branch held the logic reported that branch's cyclomatic complexity, reads/writes and SQL.
-  `TIndexer.SetPreprocess` now configures the cache with the same switch and profile. Guard:
-  `tests\autotest\run_index_facts_use_preprocessed_parse.ps1`.
-- **The define profile describes the Delphi the environment names, and `{$IF CompilerVersion}` is
-  evaluated at all.** The built-ins were pinned to Delphi 13 (`VER370`, `compiler_version_37`)
-  whatever the project is built with, so a 10.3 project's `{$IFDEF VER330}` branches were never
-  indexed. Worse, `CompilerVersion` and `RTLVersion` were never given a value: the evaluator reads an
-  unknown identifier as False, so EVERY `{$IF CompilerVersion >= N}` took its ELSE branch, on every
-  compiler. The CLI now derives the target CompilerVersion from the RAD Studio root it resolves --
-  `$BDS` first, so `BDS=...\Studio\20.0` gives `VER330` / 33 (BDS 14..23 add 13; from 37 the numbers
-  are equal) -- and every profile carries both numeric values. A non-default version adds `cv=<N>`
-  to the indexer fingerprint, so switching compilers re-parses; a Delphi 13 index keeps the stamp it
-  had. Guard: `tests\autotest\run_preprocess_compiler_version.ps1`.
+- **The IDE plugin finds a configured repository's indexes.** It looked only at the
+  manifest beside its BPL and `<projdir>\_D-RAG\<project>.sqlite`, so in a repository
+  set up with `drag-lint init` -- indexes in `<root>\_D-RAG\<name>.sqlite` -- hover,
+  usages and lint found nothing. `DragLint.Plugin.DbResolver.TryLoadManifest` now takes
+  the active project (or the editor file) and, when a `config.json` sits above it, uses
+  that repository's manifest, exactly as the engine does; the library index comes from
+  `library\<bds>\` beside the engine for the project's Delphi. Through the engine's own
+  `ManifestFromRepoConfig` it would have pointed beside `bds.exe` (ParamStr(0) in the
+  IDE) for the newest Studio, so the manifest unit gained `ManifestFromRepoConfigAt`,
+  `RepoBdsFor` and `LibraryIndexDirAt`; the engine's behaviour is unchanged. Without a
+  `config.json` the plugin resolves exactly as before. Guard:
+  `tests\autotest\run_plugin_repo_manifest.ps1` (compiles a probe against the same
+  units; red before).
+- **The Config tool no longer writes a configured repository's projects into
+  `drag-lint.json`.** Started inside such a repository without `--config`, it loaded
+  the repository's manifest (`TManifestIO.Load` prefers `config.json`) and its Save
+  target was the `drag-lint.json` beside the exe; with `--config` naming a
+  `config.json`, a Save would have rewritten it in the manifest format. Both now show
+  the repository read-only and refuse to save, saying why. Guard:
+  `run_config_save_guard.ps1` arms I and J.
+
+### Added
+
+- **One configuration per repository: `drag-lint init` and `<root>\_D-RAG\config.json`, found by
+  walking up.** The configuration was spread over six files with six search rules -- a manifest
+  beside the exe (and in every sibling folder of it), a dotted `.drag-lint.json` walked up from the
+  CWD, `drag-lint-lint.json`, `drag-lint-layers.json`, `drag-lint-project.json`,
+  `.drag-lint-workspace.json` -- so the same command answered differently depending on where the
+  shell stood. Now, codegraph-style:
+  - `drag-lint init [<root>] [--project <x.dproj>] [--force]` writes `<root>\_D-RAG\config.json`
+    (`projects`: name, dproj, platform, and the `delphi` read from the `.dproj` `<ProjectVersion>`;
+    plus `exclude`, `settings`, `docs`, `lint`, `layers`), a `.gitignore` beside it, and a `_D-RAG`
+    line in `.cvsignore` for a CVS working copy. An existing config is never overwritten silently;
+    `--project` adds one project and `--force` rediscovers, both keeping the other keys.
+  - Every verb finds the file by walking up from its own path argument (`<path>`, `--in`,
+    `--project`, `--db`), else from the CWD, like git. A config.json found that way WINS over every
+    older source and is merged with none of them; a broken one stops the run (exit 2) instead of
+    falling back. Inside the repository no `--db` is needed.
+  - `index` with no target indexes every configured project into `<root>\_D-RAG\<name>.sqlite`, each
+    in its own process so each gets its own Delphi; `--only` picks some. `index --project` refuses a
+    `.dproj` the config does not list (exit 2, naming `init --project`).
+  - The project's `"delphi"` joins the Delphi target between `--delphi` and the `<ProjectVersion>`.
+    A run that names no project takes the `"delphi"` EVERY configured project agrees on, so a plain
+    `query` in a 10.3-only repository gets 10.3's defines and library folder; projects that disagree
+    keep the newest installed Studio.
+  - The `"lint"` / `"layers"` blocks replace `drag-lint-lint.json` / `drag-lint-layers.json`
+    (`--config` / `--layers` still win). Library indexes of a configured repository live beside the
+    engine, in `<exe dir>\library\<bds>\`.
+
+  The older sources still answer for a tree with no config.json; a later change removes them. No
+  version constant moves (the extractor baseline is re-pinned: these files decide which
+  configuration a run reads, never how a file is parsed). Design and the owner's rulings:
+  `docs\design\2026-10-07-self-contained-engine.md`. Guard:
+  `tests\autotest\run_init_and_discovery.ps1` (init, refusal, `--project`, `--force`, the same answer
+  from the root, a subfolder and a sibling, a planted `.drag-lint.json` ignored, the lint block, no
+  repository, a broken config).
+- **`"ownRoots"` in `_D-RAG\config.json`** (E3b item 1). Inside a configured repository the code a
+  project OWNS -- what `lint-all`, `exceptions-sync` and `document --project` lint, naming the rest
+  as skipped -- is declared in config.json: a top-level list for every project, and a `"projects"`
+  entry's own list, which wins for that project. Entries are relative to the repository root; `[]`
+  is refused (exit 2, naming config.json). Before, the run read a loose
+  `_D-RAG\drag-lint-project.json` under whichever folder it anchored to -- the repository root for
+  `--db <root>\_D-RAG\App.sqlite`, the `.dproj` folder for `--project` -- so one project got two
+  scopes depending on the flag, and the declaration lived outside the repository's one
+  configuration file. The key wins over the loose file; without the key the loose file still
+  answers -- the precedence the `"lint"` and `"layers"` blocks have -- and with neither, the default
+  note and the skip lines name config.json as the place to declare. Outside a configured repository
+  nothing changes. No version constant moves (the extractor baseline is re-pinned: `RepoConfig` is
+  configuration parsing). Guard: `tests\autotest\run_config_ownroots.ps1`.
+- **The `.drag-lint.json` run defaults in `_D-RAG\config.json`, looked up from the run's anchor** (E3b
+  items 2 and 3). A configured repository had no home for `"rule"`, `"watch"` and the `"docs"`
+  capture keys (`captureLooseComments`, `allowBlankLineGap`, `implPrecedence`), since E3a stops
+  reading `.drag-lint.json` there; they are now config.json keys with the same meaning (`"rule"`
+  narrows `lint` only, with a note; `"watch": {"interval": N}` turns `index` into the watch loop;
+  flags still win). And `LoadConfigDefaults`, which runs before the anchor exists, asked for a
+  config.json above the CWD only: a run started outside the repository with its path, `--in`,
+  `--project` or `--db` inside it took the CWD's `.drag-lint.json` while every other loader
+  answered from config.json. It now scans argv for the same anchor `RepoAnchorOf` uses. Outside a
+  configured repository nothing changes. Guard: `tests\autotest\run_config_defaults.ps1`.
+- **`--config <root>\_D-RAG\config.json` works on the verbs that read `--config` as a manifest**
+  (E3b item 4): `resolve-dbs`, `reconcile-project`, `library-drift`, the compile check and the
+  sibling-store resolver. They parsed it with the old manifest reader, which knows `"indexes"`
+  sections and not `"projects"`, so naming the repository's own config.json gave a manifest with no
+  project: `resolve-dbs --project App.dproj --config <cfg>` exited 2 with "no manifest section
+  includes" while the same command without `--config` found the project. `TManifestIO.ParseFile`
+  reads a repository config.json as one (the manifest the anchor discovery builds) and any other
+  file as before. No version constant moves (extractor baseline re-pinned). Guard:
+  `tests\autotest\run_config_as_manifest.ps1`.
+- **The LSP honours the `"lint"` block of `_D-RAG\config.json`** (E3b item 5). Its
+  `DiscoverLintConfig` walked up from the file for `drag-lint-lint.json` / `drag-lint.json` and
+  knew nothing of config.json, so a rule a configured repository opts in was reported by `lint`
+  and never shown in the editor. A config.json above the file with a `"lint"` object now wins, the
+  CLI's precedence; without it the walk-up answers as before. Guard:
+  `tests\autotest\run_lsp_config_lint.ps1`.
+- **`register-project` inside a configured repository points at `init --project`** (E3b item 6).
+  It asked config.json whether the project was already claimed, but wrote a project config.json
+  does not list into the manifest beside the exe -- which config.json overrides inside the
+  repository, so the "registered" message described a write no later run there reads. Now such a
+  project is refused (exit 2, JSON outcome `use-init`) with the `drag-lint init <root> --project
+  <x.dproj>` that adds it; a listed project is still `already-registered`, and outside a configured
+  repository nothing changes. Guard: `tests\autotest\run_register_project_in_repo.ps1`.
+
+### Changed
+
+- **A project is analysed for ITS Delphi, read from the project; `$BDS` is no longer read.**
+  Every Studio path and registry key was pinned to 37.0 (Delphi 13) unless `$BDS` said otherwise,
+  so a 10.3 project needed an environment variable plus a hand-made `.dproj` copy whose
+  `DCC_UnitSearchPath` carried the 10.3 Library folders -- configuration outside the project.
+  Now `TStudioEnv` holds a TARGET (`SetBds`), resolved per run: `--delphi <bds>`, else the
+  `.dproj` `<ProjectVersion>` through a table of VERIFIED ranges (18.5-18.8 = 20.0, 20.1-20.2 =
+  23.0, 20.4 = 37.0; 20.3 fits 12.3 and 13 and takes whichever one is installed), else, with no
+  project, the newest Studio installed. A `--delphi` (or config.json `"delphi"`) that cannot be
+  used exits 2 naming the fix; a `<ProjectVersion>` that does not map, or names a Delphi that is
+  not installed, prints a note and falls back to the default Studio, as every run did before. The project resolver (Library path, IDE variables, platforms), compile-check and
+  the preprocessor's `VER<N>` / `CompilerVersion` all follow the target.
+  **The closure now searches the Library search path, as dcc does**, after the project's own
+  search path, and only Studio-owned folders (`ClosureLibraryRoots`: the Studio root, any
+  `\Embarcadero\` folder) count as library. Measured on ProjectA: 67.7% of all call edges target
+  units under `D:\COMPONENTS` that only the Library path names -- without this rule the real
+  `.dproj` would have dropped them. Acceptance, TestCopy ProjectA, full index each way (old exe
+  + eval copy + `BDS=20.0` vs new exe + the real `.dproj`, no `BDS`): closure 2,224 = 2,224 files,
+  269,606 = 269,606 call edges (264,705 certain both), same `cv=33` fingerprint; the only
+  differences are the 7 units the eval copy had remapped to the test repos and 46 paths spelled
+  `Components` vs `COMPONENTS`. No version constant moves (closure membership changes,
+  parsing does not; the extractor baseline is re-pinned with that reason). Guard:
+  `tests\autotest\run_preprocess_compiler_version.ps1` (rewritten: `--delphi`, `.dproj`
+  ProjectVersion beats a planted `BDS`, unmappable exits 2); `selftest studio-root` pins the table.
+- **drag-lint ships its own `sqlite3.dll` and loads only that one.** Nothing set FireDAC's
+  `VendorLib`, so the loader took whatever `sqlite3.dll` PATH reached first -- measured: RAD
+  Studio 13's `Studio\37.0\bin64\sqlite3.dll` (3.45.3). The engine therefore needed a
+  Delphi 13 install (a 10.3-only machine has no x64 `sqlite3.dll` on PATH at all), and the SQLite
+  version, which decides the query planner, moved with whatever was installed. The SAME bytes now
+  live in `third_party\dll-win64\sqlite3.dll` (record: `third_party\SQLITE-VERSION.txt`), the
+  build and the release packer stage it beside the exe, and `DRagLint.Storage.SQLite` pins one
+  `TFDPhysSQLiteDriverLink.VendorLib` to `<exe dir>\sqlite3.dll` for every connection. A missing
+  file fails with exit 3 naming that path; PATH is never consulted. `drag-lint --version` adds a
+  `sqlite <version> (<path>)` line. Same engine, so `index_db_diff.py` is IDENTICAL (ProjectC,
+  old exe vs new). Guard: `tests\autotest\run_sqlite_bundled.ps1` -- the old exe fails it, and
+  cannot even index once the Studio folders leave PATH.
+
+### Fixed
+
+- **`init` in an SVN working copy says how to keep `_D-RAG` out of `svn status`**. It
+  handled CVS (`.cvsignore`) and said nothing for SVN, whose ignores are the parent folder's
+  versioned `svn:ignore`; the new `_D-RAG` showed as `?`. When a `.svn` folder sits at or above the
+  root (the working-copy root is often above it), init prints `svn propedit svn:ignore "<root>"`
+  and the line to add. It does not run it -- a versioned property is the user's commit -- and
+  says propedit because propset would replace what the property already holds. Guard:
+  `tests\autotest\run_init_svn_note.ps1`.
+- **`cycles --plan` re-index command names the Delphi the index was built for**. The
+  checklist printed `drag-lint index --project "<x.dproj>" --db "<db>"`; for a project whose
+  `<ProjectVersion>` maps to no Delphi (`circular-demo` is 19.5) following it to the letter exited 2.
+  The command now ends in `--delphi <bds>`, read back from the index's fingerprint (`cv=`, or the
+  default when a preprocessed index has none). Guard: two new checks in
+  `tests\autotest\run_cycles_plan_followable.ps1`, one of which runs the printed command.
+- **An index folder that cannot be created or written is reported by path and reason**. Library indexes live beside the engine (`<exe dir>\library\<bds>\`), so an engine in a
+  folder the user cannot write could not build them -- and the run died as `FATAL: EInOutError`
+  with the OS message alone, exit 3. The folder is now created and probed for a write before the
+  database opens; a failure prints `ERROR: cannot use the index folder <dir>: <reason>` and, for a
+  library index, that it lives beside the engine and the engine must run from a writable folder.
+  `index --all` reports the section as FAILED (exit 1); a single-target `index` exits 2. Guard:
+  `tests\autotest\run_index_folder_unwritable.ps1`.
 
 ## v1.31.1-alpha -- 2026-10-14
 

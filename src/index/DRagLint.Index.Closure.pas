@@ -60,6 +60,9 @@ type
   TClosureResolver = class
     strict private
       FLibraryRoots: TArray<string>;
+      { 2026-10-07: searched AFTER the project's own search path, as dcc does;
+        see AddLibrarySearchPaths. Empty unless a caller opts in. }
+      FLibrarySearch: TArray<string>;
 
       // PP-Task-10: per-config file discovery. When FPreprocessEnabled, source
       // content is run through the in-process directive preprocessor under
@@ -313,6 +316,20 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ALibraryRoots: TArray<string>);
+      /// <summary>Also search these folders for a unit, after the project's own
+      /// search path -- the compiler's order. A unit found under one of the
+      /// LIBRARY roots is still classified as library and left out; one found
+      /// anywhere else joins the closure.</summary>
+      /// <remarks>
+      /// 2026-10-07. Pass TargetLibrarySearchPath. Without it a unit the
+      /// project reaches only through the Delphi Library path -- the company's
+      /// own components under D:\COMPONENTS, 67.7% of ProjectA's call edges
+      /// -- was never even looked for, and only a hand-made .dproj copy that
+      /// moved those folders into DCC_UnitSearchPath put it in the index.
+      /// Opt-in, so a harness that builds a closure over fixture roots is not
+      /// handed this machine's registry.
+      /// </remarks>
+      procedure AddLibrarySearchPaths(const APaths: TArray<string>);
 
       /// <summary>PP-Task-10: enable/disable per-config directive preprocessing of source
       /// content before its `uses` clause is scanned. When enabled, a unit
@@ -363,11 +380,35 @@ type
       function Resolve(const AProjectFile: string; const AExclude: TArray<string>): TClosureResult;
   end;
 
+/// <summary>Of a Delphi Library path (TProjectResolver.ResolveLibraryPaths), the
+/// roots a project closure must treat as LIBRARY: those the Studio owns.</summary>
+/// <remarks>
+/// 2026-10-07. A root counts as the Studio's when it lies under the target
+/// Studio's root or under any \Embarcadero\ folder (RTL, VCL, FMX, the
+/// Public Documents tree, GetIt). Every OTHER Library entry -- the company's own
+/// components, third-party sources -- is searched like the project's own
+/// search path and its units JOIN the closure.
+/// WHY: measured on the ProjectA reference index, 67.7% of all call edges
+/// (181,974 of 268,755) target units under D:\COMPONENTS, which the
+/// Delphi 10.3 Library path names -- UPrimary.TAppQuery alone draws 40k. They
+/// were in the project index only because a hand-made .dproj copy moved those
+/// folders into DCC_UnitSearchPath. Reading the project's real Library path
+/// (DelphiTarget, same date) without this rule would have silently dropped
+/// them; with it the real .dproj gives the closure the copy gave.
+/// </remarks>
+function ClosureLibraryRoots(const ALibraryPath: TArray<string>): TArray<string>;
+/// <summary>The target Studio's Library search path (Win32, then Win64), for
+/// TClosureResolver.AddLibrarySearchPaths. Reads the registry of the target set
+/// by TStudioEnv.SetBds.</summary>
+function TargetLibrarySearchPath: TArray<string>;
+
 implementation
 
 uses
   DRagLint.Index.Glob
   , DRagLint.Preprocess       // PP-Task-10: Preprocess(bytes, profile)
+  , DRagLint.Core.StudioEnv   // ClosureLibraryRoots: the target Studio's root
+  , DRagLint.Project.Resolver // TargetLibrarySearchPath
   , DRagLint.Core.Encoding    // PP-Task-10: EnsureUtf8Bytes
   { StripPasCommentsKeepLayout -- ONE implementation, shared with
     ParseUsesFromContent, so the .dpr and .pas uses-clause readers cannot drift.
@@ -378,6 +419,41 @@ uses
     deliberately rather than overlooked.) }
   , DRagLint.Lint.ProjectChecks.Parse
   ;
+
+{ ---- library roots of a closure (2026-10-07) ---------------------------------- }
+
+procedure TClosureResolver.AddLibrarySearchPaths(const APaths: TArray<string>);
+begin
+  FLibrarySearch:= FLibrarySearch + APaths;
+end; // procedure
+
+function TargetLibrarySearchPath: TArray<string>;
+var
+  PR: TProjectResolver;
+begin
+  PR:= TProjectResolver.Create;
+  try
+    Result:= PR.ResolveLibrarySearchPath;
+  finally
+    PR.Free;
+  end;
+end; // function
+
+function ClosureLibraryRoots(const ALibraryPath: TArray<string>): TArray<string>;
+var
+  StudioRoot: string;
+  Root      : string;
+  Low       : string;
+begin
+  Result:= nil;
+  StudioRoot:= LowerCase(IncludeTrailingPathDelimiter(TStudioEnv.RootOrEmpty));
+  for Root in ALibraryPath do
+  begin
+    Low:= LowerCase(IncludeTrailingPathDelimiter(StringReplace(Root, '/', '\', [rfReplaceAll])));
+    if (Pos('\embarcadero\', Low) > 0) or ((StudioRoot <> '\') and Low.StartsWith(StudioRoot)) then
+      Result:= Result + [Root];
+  end;
+end; // function
 
 { ---- TClosureResolver ------------------------------------------------------- }
 
@@ -959,6 +1035,12 @@ begin
       // branch above is NOT preprocessed (Content there feeds XML parsers).
       ParseDprUses(MaybePreprocess(Content, ProjectAbs), BaseDir, UnitNames, UnitFilePaths);
     end;
+
+    { The Delphi Library search path comes AFTER the project's own folders:
+      the compiler's order, so a project copy of a unit still wins. }
+    for var LibDir: string in FLibrarySearch do
+      if (LibDir <> '') and (SearchPaths.IndexOf(LibDir) < 0) and TDirectory.Exists(LibDir) then
+        SearchPaths.Add(LibDir);
 
     SearchArr:= SearchPaths.ToStringArray;
 

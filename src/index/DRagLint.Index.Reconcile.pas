@@ -553,6 +553,7 @@ begin
   // ---- Step 1: resolve compile closure ------------------------------------
   Closure:= TClosureResolver.Create(FLibraryRoots);
   try
+    Closure.AddLibrarySearchPaths(TargetLibrarySearchPath);  { the same closure index --project builds }
     CR:= Closure.Resolve(DprPath, []);
   finally
     Closure.Free;

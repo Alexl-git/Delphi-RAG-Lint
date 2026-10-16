@@ -289,6 +289,10 @@ const
   /// the ghost-compile journal that first created the folder.</summary>
   DRAG_HOME_DIR = '_D-RAG';
 
+  /// <summary>The repository configuration inside the _D-RAG home of a repo
+  /// root (E3a, 2026-10-07; see DRagLint.Index.RepoConfig).</summary>
+  REPO_CONFIG_FILE = 'config.json';
+
 type
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -1722,6 +1726,14 @@ function SeeAlsoToJson(const ASeeAlso: TArray<string>): string             ;
 
 function DefaultDocConfig: TDocConfig;
 
+/// <summary>True when APath is a repository config.json -- the file of that
+/// name directly inside a _D-RAG folder. Its "lint" and "layers" objects are
+/// the configs those readers take; here, not in DRagLint.Index.RepoConfig, so a
+/// lint unit can ask without depending on the index layer.</summary>
+/// <param name="APath">Any path; '' answers False.</param>
+/// <returns>True for &lt;dir&gt;\_D-RAG\config.json.</returns>
+function IsRepoConfigFile(const APath: string): Boolean;
+
 { v(ADP3 T3j review round 1): THE doc-region/declaration attribution predicate.
   ONE declaration, read by all THREE places that decide whether a doc comment
   belongs to a given declaration:
@@ -2623,6 +2635,13 @@ begin
   Result.DialogRoutines:= ['ShowMessage', 'MessageDlg', 'Application.MessageBox',
                            'Application.HandleException'];
   Result.MaxHandles    := DOC_HANDLES_DEFAULT_CAP;
+end;
+
+
+function IsRepoConfigFile(const APath: string): Boolean;
+begin
+  Result:= (APath <> '') and SameText(ExtractFileName(APath), REPO_CONFIG_FILE)
+    and SameText(ExtractFileName(ExcludeTrailingPathDelimiter(ExtractFilePath(ExpandFileName(APath)))), DRAG_HOME_DIR);
 end;
 
 end.

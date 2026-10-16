@@ -263,7 +263,9 @@ Write-Host ("      [NOTE] cross-verb (pre-dispatch) flags, excluded: " + (($glob
 # and a flag that LEAVES it (1.20.4: Run stopped calling the resolver before
 # dispatch) inflates the gap for a reason no banner edit can fix. Either is a
 # change to the classification, so it must be made here, deliberately.
-$ExpectedGlobalFlags = @('--db', '--dir', '--file', '--in', '--platform', '--project')
+# --delphi joined 2026-10-07 (merged 2026-10-15): Run resolves the Delphi target
+# (ResolveDelphiTarget) before dispatch, for every verb, so it is cross-verb by design.
+$ExpectedGlobalFlags = @('--db', '--delphi', '--dir', '--file', '--in', '--platform', '--project')
 $globalDiff = @(Compare-Object -ReferenceObject $ExpectedGlobalFlags -DifferenceObject @($globalFlags | Sort-Object) |
                 ForEach-Object { '{0}{1}' -f $(if ($_.SideIndicator -eq '=>') { '+' } else { '-' }), $_.InputObject })
 Check 'cross-verb flag set is exactly the pinned set (--db --dir --file --in --platform --project)' ($globalDiff.Count -eq 0) `

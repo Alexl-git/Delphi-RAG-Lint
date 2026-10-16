@@ -3286,6 +3286,25 @@ type
       class function FindImplEnd(const ALines: TArray<string>; AStartLine: Integer): Integer; static;
   end;
 
+/// <summary>The sqlite3.dll every connection in this process loads: the copy
+/// shipped BESIDE THE EXE, never one found on PATH.</summary>
+/// <remarks>
+/// Pinned once, at unit initialization, through one TFDPhysSQLiteDriverLink
+/// (the driver is process-global, so it covers every TFDConnection). Before
+/// 2026-10-07 nothing set VendorLib, and the loader took whatever sqlite3.dll
+/// PATH reached first -- measured: Studio\37.0\bin64\sqlite3.dll 3.45.3 -- so
+/// the engine depended on a Delphi 13 install and its version, and with it the
+/// query planner, moved with whatever was installed. A missing file is not
+/// worked around: the first connection fails with FireDAC's "Cannot load
+/// vendor library [path]", naming this path.
+/// </remarks>
+function SqliteEngineLibPath: string;
+/// <summary>sqlite_version() of the pinned library, read through a throwaway
+/// in-memory connection.</summary>
+/// <param name="AError">Why the library could not be loaded; '' on success.</param>
+/// <returns>The version string, or '' when the library did not load.</returns>
+function SqliteEngineVersion(out AError: string): string;
+
 implementation
 
 uses
@@ -3294,6 +3313,8 @@ uses
   , System.IOUtils
   , System.Math
   , System.Diagnostics        { v0.86: resolve-pass progress timing -- see ResolveLog }
+  , System.Variants           { VarToStr: SqliteEngineVersion }
+  , FireDAC.Phys.SQLiteWrapper { slDynamic: the bundled-engine driver link }
   , DRagLint.Storage.Schema
   , DRagLint.Storage.FileMembership { HeaderSaysWal: the read-only Connect names the journal mode the file already has }
   , DRagLint.Query  .Fuzzy
@@ -13585,5 +13606,49 @@ begin
     List.Free;
   end;
 end;
+
+{ ---- bundled SQLite engine (2026-10-07) ----------------------------------- }
+
+const
+  SQLITE_ENGINE_FILE = 'sqlite3.dll';
+
+var
+  GSqliteLink: TFDPhysSQLiteDriverLink;
+
+function SqliteEngineLibPath: string;
+begin
+  Result:= TPath.Combine(ExtractFilePath(GetModuleName(HInstance)), SQLITE_ENGINE_FILE);
+end; // function
+
+function SqliteEngineVersion(out AError: string): string;
+var
+  Conn: TFDConnection;
+begin
+  Result:= '';
+  AError:= '';
+  Conn:= TFDConnection.Create(nil);
+  try
+    try
+      Conn.DriverName:= 'SQLite';
+      Conn.Params.Values['Database']:= ':memory:';
+      Conn.LoginPrompt:= False;
+      Conn.Connected:= True;
+      Result:= VarToStr(Conn.ExecSQLScalar('SELECT sqlite_version()'));
+    except
+      on E: Exception do AError:= E.Message;
+    end;
+  finally
+    Conn.Free;
+  end;
+end; // function
+
+initialization
+  { Before any connection exists, so the first load is already the pinned one. }
+  GSqliteLink:= TFDPhysSQLiteDriverLink.Create(nil);
+  GSqliteLink.EngineLinkage:= slDynamic;
+  GSqliteLink.VendorLib:= SqliteEngineLibPath;
+
+finalization
+  GSqliteLink.Free;
 
 end.
