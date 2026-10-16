@@ -4269,6 +4269,12 @@ begin
     if AResolveOnly then
       Writeln('  Resolve-only: skipping the walk; re-deriving edges from the stored parses.')
     else
+    begin
+    { PR #10: one outer transaction around the walk, committed a group of files
+      at a time -- see FILE BATCH in DRagLint.Storage.SQLite. Closed before the
+      eviction below, the first writer after the walk. }
+    Store.BeginFileBatch;
+    try
     case AItem.Mode of
       smFolderTree, smLibrary:
       begin
@@ -4389,6 +4395,10 @@ begin
         end; // try
       end; // begin
     end; // case
+    finally
+      Store.EndFileBatch;
+    end; // try
+    end;
 
     { OUT-OF-SCOPE EVICTION -- drop rows for files that still EXIST and are no
       longer part of this section. Without it a --recompile of a manifest section
@@ -6657,11 +6667,20 @@ begin
     if AArgs.ResolveOnly then
       Writeln('Resolve-only: skipping the walk; re-deriving edges from the stored parses.')
     else
-      for F in Folders do
-      begin
-        if TFile.Exists(F) then Indexer.IndexFile(F)
-        else Indexer.IndexFolder(F, True);
-      end;
+    begin
+      { PR #10: one outer transaction around the walk -- see FILE BATCH in
+        DRagLint.Storage.SQLite. Closed before prune, the first writer after it. }
+      Store.BeginFileBatch;
+      try
+        for F in Folders do
+        begin
+          if TFile.Exists(F) then Indexer.IndexFile(F)
+          else Indexer.IndexFolder(F, True);
+        end;
+      finally
+        Store.EndFileBatch;
+      end; // try
+    end;
     { --prune: drop rows for source that has been deleted, moved or renamed since
       the last run. The incremental walk adds and refreshes but has no notion of
       a file that went away, so without this the linter goes on reporting against
@@ -7058,12 +7077,21 @@ begin
   DParser.EmitUsageRefs:= ADeep; { v0.42: deep dictionaries get usage refs }
   Indexer:= TIndexer.Create(Store, [DParser, TDFMParser.Create, TFirebirdSqlParser.Create], ADocs);
   for Ex in AExcludeRoots do Indexer.AddExcludeRoot(Ex);
-  for F in AFolders do
-  begin
-    if TDirectory.Exists(F) then begin Writeln('  + ', F, '  (recursive, incl. subfolders)'); Indexer.IndexFolder(F, True); end
-    else if TFile.Exists(F) then Indexer.IndexFile(F)
-    else Writeln('  (skip, not found) ', F);
-  end;
+  Store.BeginFileBatch; { PR #10: see FILE BATCH in DRagLint.Storage.SQLite }
+  try
+    for F in AFolders do
+    begin
+      if TDirectory.Exists(F) then
+      begin
+        Writeln('  + ', F, '  (recursive, incl. subfolders)');
+        Indexer.IndexFolder(F, True);
+      end
+      else if TFile.Exists(F) then Indexer.IndexFile(F)
+      else Writeln('  (skip, not found) ', F);
+    end;
+  finally
+    Store.EndFileBatch;
+  end; // try
   RunLinkStages('  ', Store, Indexer); { B-24: the one stage list (facts-inherited was missing here) }
   { GUARDED, v0.86 -- see the long note at the DoIndex call site. This function's
     only writer is the Indexer walk above: it does not clear, prune or evict, so

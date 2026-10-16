@@ -5,6 +5,9 @@ breaking changes** until v1.0.
 
 ## v1.38.1-alpha -- planned
 
+### Changed
+- Index throughput, from outside PR #10 (Jonathas Paiva), re-split onto main without PR #9 (lane p10): string_literals FTS5 triggers deferred during a CLI walk -- one rebuild after a bulk load, a targeted patch after an incremental one (crash debt in schema_meta `fts_rebuild_pending`, settled by the next writer); file transactions batched as savepoints under one outer transaction (256 files or 5 s); six missing FK child indexes and `idx_files_path_lower`; a stamp fast path (`files.size` + mtime, no read; same .inc-context / include-origin guards as the full test); facts-pass memos; FindUnitFile memoised per closure walk. No extractor or resolver bump: a full `--rebuild` is row-for-row identical to main. Deferred from #10: symbol-id reuse + scoped call widening, scoped purity + canonical witness (resolver bump), closure_cache, calls-pending mark, resolver file-cache bound. Guards: run_index_stamp_fast_path, run_fts_targeted_patch.
+
 ### Planned
 - Downgrade fixes: `compat` rules (`compat_since`) that rewrite syntax the `--target-compiler` cannot take back to classic syntax -- `if` expression, `is not`, `not in`, `Contains`, `InRange`, digit separators, inline `var`. Registry entry `compat-downgrade-fixes`.
 

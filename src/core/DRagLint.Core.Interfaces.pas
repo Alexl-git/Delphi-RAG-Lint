@@ -250,6 +250,21 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+    /// <summary>True when the files row of APath records this write time and
+    /// this byte size -- the indexer's no-read up-to-date test (PR #10 stamp fast
+    /// path). False for a row that recorded no size.</summary>
+    /// <param name="APath">The file, any spelling; matched as FileIsUpToDate matches it.</param>
+    /// <param name="AMtimeUnix">The file's write time, Unix seconds.</param>
+    /// <param name="ASize">The file's byte size.</param>
+    /// <returns>True when both match the stored row.</returns>
+    /// <remarks>A rewrite that keeps both the second and the byte count is the one
+    /// change this does not see -- the same trade make and git's index make.</remarks>
+    function FileStampIsCurrent(const APath: string; AMtimeUnix, ASize: Int64): Boolean;
+    /// <summary>Records the byte size of the content the files row of APath
+    /// describes (a no-op when it already says so). Arms FileStampIsCurrent.</summary>
+    /// <param name="APath">The file, any spelling.</param>
+    /// <param name="ASize">The byte size of the bytes last hashed for the row.</param>
+    procedure RecordFileSize(const APath: string; ASize: Int64);
     /// <summary>Content-hash skip: True when APath is stored with this sha256, whatever its mtime.</summary>
     /// <param name="APath">The file, as for FileIsUpToDate.</param>
     /// <param name="ASha">sha256 of the file's current raw bytes.</param>
@@ -345,6 +360,17 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Checkpoint                                                                                                  ;
+    /// <summary>Opens one outer transaction around a walk (PR #10 FILE BATCH): each
+    /// file's own transaction then runs as a SAVEPOINT, and the outer one is
+    /// committed every 256 files or 5 s. A no-op when one is open or the store is
+    /// read-only.</summary>
+    /// <remarks>Close it with EndFileBatch before any writer that is not a file
+    /// transaction (prune, eviction, the resolve passes); Checkpoint closes it too.</remarks>
+    procedure BeginFileBatch                                                                                              ;
+    /// <summary>Commits and closes the batch BeginFileBatch opened; a no-op when none is.</summary>
+    /// <exception cref="Exception">Re-raised after a rollback when the commit fails;
+    /// the batch's files then re-parse on the next run.</exception>
+    procedure EndFileBatch                                                                                                ;
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
     /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
