@@ -508,7 +508,87 @@ type
     procedure SetThresholdPair(const AName: string; AValue: Integer);
   end;
 
+const
+  /// <summary>The ONE format of every type-name-prefix finding message:
+  /// kind word, type name, expected prefix.</summary>
+  /// <remarks>Build messages with TypePrefixFindingMessage and read the prefix
+  /// back with TryExpectedPrefixFromTypePrefixMessage; never hand-format or
+  /// hand-parse it (the checker emits it, the fixer consumes it).</remarks>
+  TYPE_PREFIX_MSG_FMT = '%s "%s" should start with the "%s" prefix';
+
+  /// <summary>Format of the ERROR finding the type-name-prefix rule raises when a
+  /// class ancestor is in neither the project nor the library index, so the
+  /// E/T prefix cannot be decided. Args: ancestor name, class name.</summary>
+  /// <remarks>Build with TypePrefixGapMessage; recognise with
+  /// IsTypePrefixGapMessage. The fixer never acts on it.</remarks>
+  TYPE_PREFIX_GAP_MSG_FMT = 'Ancestor "%s" of class "%s" is in neither the project nor the library index -- cannot decide the E/T prefix (index gap: reindex, or add the library root)';
+
+/// <summary>Builds the type-name-prefix finding message from TYPE_PREFIX_MSG_FMT.</summary>
+/// <param name="AKindWord">One of 'Exception class', 'Class', 'Record', 'Interface', 'Pointer type'.</param>
+/// <param name="AName">The offending type name.</param>
+/// <param name="APrefix">The expected prefix (e.g. 'T', 'E').</param>
+/// <returns>The finding message text.</returns>
+/// <remarks>Pure.</remarks>
+function TypePrefixFindingMessage(const AKindWord, AName, APrefix: string): string;
+
+/// <summary>Reads the expected prefix back out of a message built by
+/// TypePrefixFindingMessage.</summary>
+/// <param name="AMessage">A finding message.</param>
+/// <param name="APrefix">The prefix inside the message; '' when it is not a type-prefix message.</param>
+/// <returns>True when AMessage has the TYPE_PREFIX_MSG_FMT shape with a non-empty prefix.</returns>
+/// <remarks>Pure. The inverse of TypePrefixFindingMessage on its prefix argument.</remarks>
+function TryExpectedPrefixFromTypePrefixMessage(const AMessage: string; out APrefix: string): Boolean;
+
+/// <summary>Builds the index-gap error message from TYPE_PREFIX_GAP_MSG_FMT.</summary>
+/// <param name="AAncestor">The ancestor name known to neither index.</param>
+/// <param name="AClassName">The class whose prefix cannot be decided.</param>
+/// <returns>The finding message text.</returns>
+/// <remarks>Pure.</remarks>
+function TypePrefixGapMessage(const AAncestor, AClassName: string): string;
+
+/// <summary>True when AMessage is an index-gap message (TypePrefixGapMessage).</summary>
+/// <param name="AMessage">A finding message.</param>
+/// <returns>True for the gap shape; the fixer must skip such a finding.</returns>
+/// <remarks>Pure.</remarks>
+function IsTypePrefixGapMessage(const AMessage: string): Boolean;
+
 implementation
+
+const
+  TYPE_PREFIX_MSG_MARK = ' should start with the "';
+  TYPE_PREFIX_MSG_TAIL = '" prefix';
+  TYPE_PREFIX_GAP_MARK = 'is in neither the project nor the library index';
+
+function TypePrefixFindingMessage(const AKindWord, AName, APrefix: string): string;
+begin
+  Result:= Format(TYPE_PREFIX_MSG_FMT, [AKindWord, AName, APrefix]);
+end;
+
+function TryExpectedPrefixFromTypePrefixMessage(const AMessage: string; out APrefix: string): Boolean;
+var
+  P   : Integer;
+  Rest: string ;
+begin
+  APrefix:= '';
+  Result := False;
+  P:= Pos(TYPE_PREFIX_MSG_MARK, AMessage);
+  if P = 0 then Exit;
+  Rest:= Copy(AMessage, P + Length(TYPE_PREFIX_MSG_MARK), MaxInt);
+  if (Length(Rest) <= Length(TYPE_PREFIX_MSG_TAIL))
+    or (Copy(Rest, Length(Rest) - Length(TYPE_PREFIX_MSG_TAIL) + 1, MaxInt) <> TYPE_PREFIX_MSG_TAIL) then Exit;
+  APrefix:= Copy(Rest, 1, Length(Rest) - Length(TYPE_PREFIX_MSG_TAIL));
+  Result := True;
+end;
+
+function TypePrefixGapMessage(const AAncestor, AClassName: string): string;
+begin
+  Result:= Format(TYPE_PREFIX_GAP_MSG_FMT, [AAncestor, AClassName]);
+end;
+
+function IsTypePrefixGapMessage(const AMessage: string): Boolean;
+begin
+  Result:= Pos(TYPE_PREFIX_GAP_MARK, AMessage) > 0;
+end;
 
 class function TNamingConfig.Default: TNamingConfig;
 begin

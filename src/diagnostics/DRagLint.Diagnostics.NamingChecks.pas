@@ -57,8 +57,11 @@ type
     /// <param name="AStore">Optional symbol store; when non-nil, enables the
     /// exception-ancestry sub-check for type-name-prefix.</param>
     /// <param name="AFileId">File id within AStore (ignored when AStore=nil).</param>
-    /// <returns>Array of findings (all severity 'info'); empty when the file is
-    /// clean or could not be parsed.</returns>
+    /// <param name="ALibStore">Optional platform LIBRARY index (the second hop of a
+    /// split ancestry chain); nil disables the hop. AStore is the project index.</param>
+    /// <returns>Array of findings (severity 'info', except the type-name-prefix
+    /// index-gap finding, which is 'error'); empty when the file is clean or could
+    /// not be parsed.</returns>
     /// <remarks>
     /// Thread-safe if the parse cache is thread-safe for the caller's
     /// use pattern; the checker itself has no shared mutable state.
@@ -83,7 +86,8 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function Check(const AFile: string; const ANaming: TNamingConfig;
-      const AStore: ISymbolStore = nil; AFileId: Int64 = 0): TArray<TLintFinding>;
+      const AStore: ISymbolStore = nil; AFileId: Int64 = 0;
+      const ALibStore: ISymbolStore = nil): TArray<TLintFinding>;
   end;
 
 implementation
@@ -137,31 +141,118 @@ begin
   Result:= Copy(AName, 1, PLen) = APrefix;
 end;
 
-{ True when AClassText -- a declClass node's text, 'class(EDatabaseError)' --
-  names a direct ancestor called like an exception: 'Exception', or
-  AExcPrefix followed by a capital (EDatabaseError, not Engine). A unit
-  qualifier (Data.DB.EDatabaseError) is dropped. The type-name-prefix rule's
-  fallback when the ancestry leaves the index; '' prefix -> False. }
-function AncestorNamedLikeException(const AClassText, AExcPrefix: string): Boolean;
+{ The identifier written right after 'class(' in AClassText -- a declClass
+  node's text, 'class(EDatabaseError)' -> 'EDatabaseError'; a unit qualifier
+  (Data.DB.EDatabaseError) is dropped. '' when the class names no ancestor
+  (class; / class end / class abstract). Only the FIRST entry of the list is
+  returned (class(TFoo, IBar) -> TFoo). }
+function DirectAncestorNameOf(const AClassText: string): string;
 var
-  S   : string ;
-  P   : Integer;
-  Anc : string ;
-  PLen: Integer;
+  S: string ;
+  P: Integer;
 begin
-  Result:= False;
+  Result:= '';
   S:= Trim(AClassText);
-  if (AExcPrefix = '') or (not StartsText('class', S)) then Exit;
+  if not StartsText('class', S) then Exit;
   S:= Trim(Copy(S, Length('class') + 1, MaxInt));
   if (S = '') or (S[1] <> '(') then Exit;
   S:= Copy(S, 2, MaxInt);
   P:= 1;
   while (P <= Length(S)) and (CharInSet(S[P], ['A'..'Z', 'a'..'z', '0'..'9', '_', '.'])) do Inc(P);
-  Anc:= Copy(S, 1, P - 1);
-  if Pos('.', Anc) > 0 then Anc:= Copy(Anc, LastDelimiter('.', Anc) + 1, MaxInt);
-  if SameText(Anc, 'Exception') then Exit(True);
-  PLen:= Length(AExcPrefix);
-  Result:= (Length(Anc) > PLen) and (Copy(Anc, 1, PLen) = AExcPrefix) and CharInSet(Anc[PLen + 1], ['A'..'Z']);
+  Result:= Copy(S, 1, P - 1);
+  if Pos('.', Result) > 0 then Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
+end;
+
+type
+  { Where a class's ancestry ends: an Exception descendant, a plain class, or
+    not decidable from the indexes at hand. }
+  TTypeOrigin = (toException, toClass, toUnknown);
+
+{ True when the library index declares AName as a class, interface or record. }
+function LibraryKnowsType(const ALibStore: ISymbolStore; const AName: string): Boolean;
+var
+  Sym: TSymbol;
+begin
+  Result:= False;
+  for Sym in ALibStore.FindSymbolsByExactName(AName) do
+    if Sym.Kind in [skClass, skInterface, skRecord] then Exit(True);
+end;
+
+{ Classifies a class declaration for type-name-prefix (design: plan
+  2026-10-16-type-name-prefix-ancestry sec 4 + rulings R2). AUnknownLeaf is set
+  only when the answer is toUnknown BECAUSE a library index was consulted and
+  an ancestor is in neither index (the caller then raises the index-gap error);
+  otherwise it is ''. Steps:
+   1. AExcPrefix = ''                    -> toClass (rule half disabled).
+   2. AStore = nil (store-less lint)     -> only the direct ancestor as written
+      is certain: none or TObject -> toClass, Exception -> toException, anything
+      else -> toUnknown (silent).
+   3. AStore says descendant of Exception -> toException.
+   4. No unresolved ancestor leaves       -> toClass (fully in-project chain).
+   5. Any leaf is Exception, or descends it in ALibStore -> toException.
+   6. ALibStore = nil                     -> toUnknown (silent: no index for the hop).
+   7. Every leaf is TObject or known to the library as a class/interface/record
+      -> toClass.
+   8. Otherwise                           -> toUnknown, AUnknownLeaf = first
+      leaf the library does not know.
+  Why not a name heuristic: EKeyViolation = class(EDatabaseError) was planned
+  as TEKeyViolation (ORM3 BASICS.PAS, 2026-10-16); the name says nothing about
+  the real ancestry. Full account: docs\INBOX-type-name-prefix-exception-ancestry.md }
+function ClassifyByWrittenAncestor(const ADirectAncestorText: string): TTypeOrigin;
+var
+  Direct: string;
+begin
+  Direct:= DirectAncestorNameOf(ADirectAncestorText);
+  if (Direct = '') or SameText(Direct, 'TObject') then Result:= toClass
+  else if SameText(Direct, 'Exception') then Result:= toException
+  else Result:= toUnknown;
+end;
+
+{ Steps 5-8 of ClassifyClassOrigin over the unresolved leaves of a class. }
+function ClassifyLeaves(const ALibStore: ISymbolStore; const ALeaves: TArray<string>;
+  out AUnknownLeaf: string): TTypeOrigin;
+var
+  Leaf: string;
+begin
+  AUnknownLeaf:= '';
+  Result:= toClass;
+  for Leaf in ALeaves do
+    if SameText(Leaf, 'Exception')
+      or ((ALibStore <> nil) and ALibStore.IsDescendantOf(Leaf, 'Exception', 0)) then Exit(toException);
+  if ALibStore = nil then Exit(toUnknown);
+  for Leaf in ALeaves do
+    if (not SameText(Leaf, 'TObject')) and (not LibraryKnowsType(ALibStore, Leaf)) then
+    begin
+      AUnknownLeaf:= Leaf;
+      Exit(toUnknown);
+    end;
+end;
+
+function ClassifyClassOrigin(const AStore, ALibStore: ISymbolStore; const ATypeName: string;
+  AFileId: Int64; const ADirectAncestorText, AExcPrefix: string; out AUnknownLeaf: string): TTypeOrigin;
+var
+  Leaves: TArray<string>;
+begin
+  AUnknownLeaf:= '';
+  if AExcPrefix = '' then Result:= toClass
+  else if AStore = nil then Result:= ClassifyByWrittenAncestor(ADirectAncestorText)
+  else if AStore.IsDescendantOf(ATypeName, 'Exception', AFileId) then Result:= toException
+  else
+  begin
+    Leaves:= AStore.UnresolvedAncestorNames(ATypeName, AFileId);
+    if Length(Leaves) = 0 then Result:= toClass
+    else Result:= ClassifyLeaves(ALibStore, Leaves, AUnknownLeaf);
+  end;
+end;
+
+{ The prefix a class must carry for its origin; '' for toUnknown (no verdict). }
+function ExpectedClassPrefix(AOrigin: TTypeOrigin; const ANaming: TNamingConfig): string;
+begin
+  case AOrigin of
+    toException: Result:= ANaming.ExceptionPrefix;
+    toClass    : Result:= ANaming.ClassPrefix;
+  else           Result:= '';
+  end;
 end;
 
 { Returns True when S is a short all-uppercase abbreviation (e.g. GLE, BS, OK,
@@ -378,7 +469,7 @@ begin
   end;
 end;
 class function TNamingChecker.Check(const AFile: string; const ANaming: TNamingConfig;
-  const AStore: ISymbolStore; AFileId: Int64): TArray<TLintFinding>;
+  const AStore: ISymbolStore; AFileId: Int64; const ALibStore: ISymbolStore): TArray<TLintFinding>;
 var
   Src       : TBytes             ;
   PF        : TParsedFile        ;
@@ -554,7 +645,8 @@ var
     Decls.Add(D);
   end;
 
-  procedure EmitAt(const ANameNode: TTSNode; const ARuleId, AMessage: string);
+  procedure EmitAt(const ANameNode: TTSNode; const ARuleId, AMessage: string;
+    const ASeverity: string = 'info');
   var
     P: TTSPoint     ;
     F: TLintFinding ;
@@ -562,7 +654,7 @@ var
     P:= ANameNode.StartPoint;
     F:= Default(TLintFinding);
     F.RuleId   := ARuleId;
-    F.Severity := 'info';
+    F.Severity := ASeverity;
     F.Message  := AMessage;
     F.FilePath := AFile;
     F.StartLine:= Integer(P.Row   ) + 1;
@@ -685,7 +777,8 @@ var
     TypeName : string ;
     ArgName  : string ;
     J        : Integer;
-    IsExcClass: Boolean;
+    Origin     : TTypeOrigin;
+    UnknownLeaf: string     ;
     VarTypeStart: Integer;
     VarNameId: TTSNode;
   begin
@@ -784,33 +877,21 @@ var
 
           if not ClassBodyNode.IsNull then
           begin
-            { Is this an exception class? Use store when available, else fall
-              back to requiring the class prefix (conservative -- no guessing). }
-            IsExcClass:= False;
-            if (AStore <> nil) and (ANaming.ExceptionPrefix <> '') then
-              IsExcClass:= AStore.IsDescendantOf(TypeName, 'Exception', AFileId);
-            { The chain can leave the project index -- EKeyViolation =
-              class(EDatabaseError), whose ancestor lives in Data.DB -- and then
-              read as "not an exception": the rule asked for "T" and its fix
-              planned EKeyViolation -> TEKeyViolation (ORM3 BASICS.PAS,
-              2026-10-16). A direct ancestor that is itself named like an
-              exception (Exception, or the exception prefix + a capital) makes
-              it one. Full ancestry: docs\INBOX-type-name-prefix-exception-ancestry.md }
-            if (not IsExcClass) and (ANaming.ExceptionPrefix <> '') then
-              IsExcClass:= AncestorNamedLikeException(NodeStr(ClassBodyNode), ANaming.ExceptionPrefix);
-
-            { StartsWithPrefix is used (not HasPrefix) so that form-style names
-              such as TfrmAssignGroups pass the T-prefix check. The relaxed guard
-              still rejects bare-prefix names (e.g. just 'T') and names with no
-              prefix at all (e.g. 'Widget'). }
-            if IsExcClass then
+            { Three-valued origin (see ClassifyClassOrigin): exception, plain
+              class, or unknown. Unknown never guesses a letter -- with a
+              library index it raises the index-gap error, without one it is
+              silent. docs\INBOX-type-name-prefix-exception-ancestry.md }
+            Origin:= ClassifyClassOrigin(AStore, ALibStore, TypeName, AFileId,
+              NodeStr(ClassBodyNode), ANaming.ExceptionPrefix, UnknownLeaf);
+            if (Origin = toUnknown) and (UnknownLeaf <> '') then
+              EmitAt(NameNode, 'type-name-prefix', TypePrefixGapMessage(UnknownLeaf, TypeName), 'error')
+            else if Origin = toException then
             begin
               if (ANaming.ExceptionPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.ExceptionPrefix)) then
                 EmitAt(NameNode, 'type-name-prefix',
-                  Format('Exception class "%s" should start with the "%s" prefix',
-                    [TypeName, ANaming.ExceptionPrefix]));
+                  TypePrefixFindingMessage('Exception class', TypeName, ExpectedClassPrefix(Origin, ANaming)));
             end
-            else
+            else if Origin = toClass then
             begin
               { Two exemptions, both cases where the name is NOT ours to choose:
                 - an API-mapped record/struct (RM_PROCESS_INFO) mirrors an
@@ -819,28 +900,28 @@ var
                   contract (declared INICaptionAttribute, written [INICaption]),
                   where a T prefix would be wrong.
                 Also report a record AS a record: emitting 'Class "..."' for a
-                record type misnames the construct in the message. }
+                record type misnames the construct in the message.
+                StartsWithPrefix is used (not HasPrefix) so that form-style
+                names such as TfrmAssignGroups pass the T-prefix check. }
               if (ANaming.ClassPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.ClassPrefix))
                 and (not IsApiStyleTypeName(TypeName))
                 and (not EndsText('Attribute', TypeName)) then
                 EmitAt(NameNode, 'type-name-prefix',
-                  Format('%s "%s" should start with the "%s" prefix',
-                    [IfThen(TypeNodeIsRecord(TypeNode), 'Record', 'Class'), TypeName, ANaming.ClassPrefix]));
+                  TypePrefixFindingMessage(IfThen(TypeNodeIsRecord(TypeNode), 'Record', 'Class'),
+                    TypeName, ExpectedClassPrefix(Origin, ANaming)));
             end;
           end
           else if TypeNode.NodeType = 'declIntf' then
           begin
             if (ANaming.InterfacePrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.InterfacePrefix)) then
               EmitAt(NameNode, 'type-name-prefix',
-                Format('Interface "%s" should start with the "%s" prefix',
-                  [TypeName, ANaming.InterfacePrefix]));
+                TypePrefixFindingMessage('Interface', TypeName, ANaming.InterfacePrefix));
           end
           else if TypeNodeIsPointer(TypeNode) then
           begin
             if (ANaming.PointerPrefix <> '') and (not StartsWithPrefix(TypeName, ANaming.PointerPrefix)) then
               EmitAt(NameNode, 'type-name-prefix',
-                Format('Pointer type "%s" should start with the "%s" prefix',
-                  [TypeName, ANaming.PointerPrefix]));
+                TypePrefixFindingMessage('Pointer type', TypeName, ANaming.PointerPrefix));
           end;
         end;
       end;
