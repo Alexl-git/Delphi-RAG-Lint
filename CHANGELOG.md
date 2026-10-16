@@ -3,6 +3,24 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.31.2-alpha -- 2026-10-16
+
+### Fixed
+
+- **`index --project <X> --db <Y>` refuses a database stamped as ANOTHER project's index.** When
+  Y's `project_tag` is non-empty and is not X's, the run exits 2 before touching the file, names
+  both projects and suggests `resolve-dbs --project <X>`. The bare `index <X.dpr|.dproj>` form
+  is checked the same way. `--rebuild` proceeds, with a NOTE: it is the remedy the multi-project
+  rename's tag-mismatch advice prints, and it clears before it writes. An untagged DB is accepted.
+- **IDE plugin: save-reindex and "Rescan this unit" wrote the active project into the LAST-OPENED
+  project's DB.** The DB is now the manifest's unique owner of the ACTIVE project
+  (`ManifestDbForProject`); no unique owner -> nothing queued, logged. The no-project per-file
+  fallback targets the DB covering the saved file, or skips. On 2026-10-16 every save ran
+  `index --project Micronite2027.dproj --db Delphi13MigrationAssistant.sqlite`.
+- **IDE plugin: project-open auto-index used the folder form** (`index <dir> --db <projectDb>`,
+  which widens a project DB); it is now `index --project <the .dproj>`. The "scan libraries"
+  setting no longer affects this spawn (a library scan does not belong in a project DB).
+- **IDE plugin: the job queue logs each job's command line at start and its exit code at end.**
 ## v1.31.1-alpha -- 2026-10-14
 
 ### Fixed

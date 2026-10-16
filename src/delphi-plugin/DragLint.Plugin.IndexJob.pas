@@ -29,6 +29,7 @@ interface
 
 uses
   System.SysUtils,
+  DRagLint.Index.Manifest,
   DragLint.Plugin.JobQueue;
 
 const
@@ -66,8 +67,35 @@ function ProjectIndexCoalesceKey(const ADbPath: string): string;
 function BuildProjectIndexJob(const AExePath, AProjectFile, ADbPath,
                               APlatform: string): TDragLintJob;
 
+/// <summary>The database a save-time reindex of AProjectFile may write: the
+/// manifest's UNIQUE owner of that project, and nothing else.</summary>
+/// <param name="AProjectFile">The ACTIVE project's .dproj; '' when none.</param>
+/// <param name="AMatch">ManifestDbForProject's verdict for AProjectFile.</param>
+/// <param name="AOwnerDb">The DB ManifestDbForProject returned (meaningful only
+/// for pdmUnique).</param>
+/// <param name="AWhy">Receives why nothing may be written, for the log; ''
+/// when a DB is returned.</param>
+/// <returns>AOwnerDb when AProjectFile is set, AMatch is pdmUnique and AOwnerDb
+/// is not blank; '' otherwise -- the caller then queues NOTHING.</returns>
+/// <remarks>Pure. Exists because the save path used to take the last-OPENED
+/// project's DB (GLastProjectDb) and pair it with the ACTIVE project, writing
+/// one project's closure into another project's index (2026-10-16). A missing
+/// or ambiguous owner is a refusal, never permission to guess.</remarks>
+function ReindexTargetDb(const AProjectFile: string; AMatch: TProjectDbMatch;
+                         const AOwnerDb: string; out AWhy: string): string;
+
 implementation
 
+function ReindexTargetDb(const AProjectFile: string; AMatch: TProjectDbMatch;
+                         const AOwnerDb: string; out AWhy: string): string;
+begin
+  Result:= '';
+  AWhy  := '';
+  if AProjectFile = '' then AWhy:= 'no active project'
+  else if AMatch = pdmAmbiguous then AWhy:= 'two or more manifest sections claim ' + AProjectFile
+  else if (AMatch <> pdmUnique) or (AOwnerDb = '') then AWhy:= 'no manifest section names ' + AProjectFile
+  else Result:= AOwnerDb;
+end;
 function BuildProjectIndexCmdLine(const AExePath, AProjectFile, ADbPath,
                                   APlatform: string): string;
 begin

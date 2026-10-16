@@ -54,5 +54,13 @@ project's database with `drag-lint resolve-dbs --project <App.dproj>`.
 
 ## What it needs
 
-An active project whose index the plugin knows (the same project and database
-a save reindexes). With no active project it only re-lints the buffer.
+An active project that exactly ONE manifest section names; that section's
+database is the one reindexed (the same resolution a save and Refresh findings
+use). With no active project, or no unique owner (none, or two sections
+claiming it), nothing is reindexed -- the reason goes to the plugin's telemetry
+log -- and only the buffer is re-linted.
+
+Before 1.31.2 the database was the one of the project OPENED LAST, so with two
+projects in a group a rescan could write the active project's closure into the
+other project's index. The engine now refuses that pairing too: `index
+--project <X>` into a database stamped for another project exits 2.

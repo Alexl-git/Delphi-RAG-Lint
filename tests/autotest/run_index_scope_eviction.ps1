@@ -454,8 +454,12 @@ try {
   # 2b. the sharper case -- ONE DB holding two projects. B's files lie outside
   #     A's roots, so A's eviction must not see them.
   $dbBoth = Join-Path $scratch 'both.sqlite'
+  #     Seeded with B's unit as a single-file target (no project_tag; a bare .dpr
+  #     target would stamp one), then A as
+  #     a project: since 1.31.2 a project scan into a DB tagged for ANOTHER project
+  #     is refused, so this is the shape a legacy shared DB still carries.
+  & $exePath index (Join-Path $projB 'BUnit.pas') --db $dbBoth --platform Win64 --quiet 2>&1 | Out-Null
   & $exePath index --project $dprojA --db $dbBoth --platform Win64 --quiet 2>&1 | Out-Null
-  & $exePath index --project $dprojB --db $dbBoth --platform Win64 --quiet 2>&1 | Out-Null
   $bothBefore = Snap $dbBoth
   Check '2b. the shared DB holds both projects' `
     (($bothBefore -like '*bunit.pas*') -and ($bothBefore -like '*member1.pas*')) (Leaves $bothBefore)

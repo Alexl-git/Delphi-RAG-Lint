@@ -294,6 +294,12 @@ The project row means `index --project <file>` or a manifest `include` naming th
 project file. A POSITIONAL `index <file.dproj>` is not a closure scan: it refreshes
 only that one file, with no project defines, into the project's own database.
 
+**A project DB belongs to one project.** A project-scoped run (`--project`, or a
+positional `.dpr`/`.dproj`) into a DB whose `project_tag` names a DIFFERENT project
+is refused (exit 2, naming both and suggesting `resolve-dbs --project <x>`), leaving
+the DB byte-identical; `--rebuild` proceeds with a NOTE, replacing the other closure
+wholesale. An untagged DB (fresh, folder-built, or pre-1.18) is accepted. (1.31.2)
+
 **MODE is chosen per run, independently of type:**
 
 | Mode | Meaning |

@@ -147,6 +147,11 @@ published while `modifiers` says `public` for both.
      **folder** gives a *library* scan of the whole tree. A POSITIONAL
      `index <X.dproj>` (no `--project`) is NOT a closure scan: it refreshes only
      that one file, with no project defines.
+   - **A project DB belongs to one project.** A project-scoped run into a DB
+     whose `project_tag` names ANOTHER project exits 2 (`refusing to index a
+     project into ANOTHER project's database`, both named, plus
+     `resolve-dbs --project <x>`) and writes nothing; `--rebuild` proceeds with
+     a NOTE and replaces that closure wholesale. An untagged DB is accepted.
    - The **mode is chosen per run**: `--recompile` (default, incremental) or
      `--rebuild` (from scratch).
    - `--scan-libraries` to index the installed RTL/VCL/DevExpress/Spring4D.

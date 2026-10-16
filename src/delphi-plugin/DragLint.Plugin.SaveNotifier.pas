@@ -10,10 +10,10 @@ unit DragLint.Plugin.SaveNotifier;
 
   asynchronously via CreateProcessW (detached, no window).
 
-  The project DB path is read from the GLastProjectDb cache, which is
-  written by TDragLintProjectNotifier when a .dproj is opened.  If no
-  project has been opened yet GLastProjectDb is empty and the save event
-  is silently skipped.
+  The project DB is the manifest's unique owner of the ACTIVE project
+  (ManifestDbForProject); with none, the per-file fallback writes the DB the
+  manifest says covers the saved file, or nothing.  GLastProjectDb (the last
+  .dproj OPENED) is never a write target here -- see QueueReindexJob.
 
   Registration:
     Call RegisterSaveNotifierForModule(AModule) from FileNotification
@@ -40,7 +40,7 @@ type
       { PLAN-lint-tree P4, tier 1. Returns False when no .dproj could be
         resolved, which is the caller's cue to fall back to the per-file spawn
         rather than silently leave the index stale. }
-      class function  EnqueueProjectReindex(const AExePath, ADbPath: string): Boolean; static;
+      class function  EnqueueProjectReindex(const AExePath: string): Boolean; static;
     public
       constructor Create(const AModule: IOTAModule);
       { IOTANotifier }
@@ -70,19 +70,20 @@ procedure UnregisterSaveNotifierForModule(const AModule: IOTAModule);
 /// computed against the fresh index.</summary>
 /// <param name="ATitle">Status-bar title for the job; '' keeps the default
 /// 'Reindex &lt;project&gt;'.</param>
-/// <returns>True when the reindex was queued. False when no active project or
-/// project DB is known -- a re-lint is still requested, so the panel at least
+/// <returns>True when the reindex was queued. False when there is no active
+/// project or the manifest names no UNIQUE owner DB for it (logged to the
+/// telemetry channel) -- a re-lint is still requested, so the panel at least
 /// reflects the buffer.</returns>
 /// <remarks>MAIN THREAD ONLY. Uses exactly the project file and DB the save
-/// path uses (GetActiveProjectFilePath + GLastProjectDb): pairing a project
-/// with another project's DB would widen that DB with a foreign closure.
+/// path uses (GetActiveProjectFilePath + ManifestDbForProject): pairing a
+/// project with another project's DB would overwrite that DB with a foreign
+/// closure, which GLastProjectDb did on 2026-10-16.
 /// Coalesces with a pending save-triggered reindex of the same DB.</remarks>
 function EnqueueReindexThenRelint(const ATitle: string): Boolean;
 
-{ Written by TDragLintProjectNotifier when a .dproj is opened;
-  read by TDragLintSaveNotifier.AfterSave to resolve the project DB path. }
-var
-  GLastProjectDb: string;
+{ GLastProjectDb (the last .dproj OPENED) was REMOVED 2026-10-16: every write
+  target is now DbResolver.ActiveProjectWriteDb -- the active project's unique
+  manifest DB -- so no path can pair one project with another's index. }
 
   { v0.42: set by Editor.RegisterDragLintMenu to Editor.TriggerDiagnosticsOnSave.
   Called from AfterSave (when AutoDiagnosticsOnSave is on) so saving a file
@@ -118,6 +119,7 @@ uses
     DragLint.Plugin.JobQueue
   , DragLint.Plugin.IndexJob
   , DragLint.Plugin.DbResolver
+  , DragLint.Plugin.Telemetry
   , { RequestRelint once a reindex lands }
     DragLint.Plugin.LiveDiagnostics
   ;
@@ -211,15 +213,26 @@ end;
 { The one place a reindex job is queued from this unit. OnDone re-lints: a
   save does not change the buffer hash, so without it the live runner never
   looks again and the panel keeps findings computed against the old index. }
-function QueueReindexJob(const AExePath, ADbPath, ATitle: string): Boolean;
+{ THE DB COMES FROM THE ACTIVE PROJECT, never from GLastProjectDb (2026-10-16).
+  GLastProjectDb is "the last .dproj OPENED", so with two projects in a group
+  every save ran `index --project <active> --db <the other one's DB>`: the
+  other DB was overwritten with this closure and the right one never refreshed.
+  The manifest's exact project match is the same resolution refresh-findings
+  uses; anything short of a unique owner is a refusal, logged, not a guess. }
+function QueueReindexJob(const AExePath, ATitle: string): Boolean;
 var
   ProjFile: string;
+  DbPath  : string;
+  Why     : string;
   Job     : TDragLintJob;
 begin
-  Result:= False;
-  ProjFile:= GetActiveProjectFilePath;
-  if (ProjFile = '') or (ADbPath = '') then Exit;
-  Job:= BuildProjectIndexJob(AExePath, ProjFile, ADbPath, GetActivePlatformForLibrary);
+  DbPath:= ActiveProjectWriteDb(ProjFile, Why);
+  if DbPath = '' then
+  begin
+    DLT('reindex', 'NOT queued: ' + Why);
+    Exit(False);
+  end;
+  Job:= BuildProjectIndexJob(AExePath, ProjFile, DbPath, GetActivePlatformForLibrary);
   if ATitle <> '' then Job.Title:= ATitle;
   Job.OnDone:=
     procedure(AExit: Integer; AOutput: string)
@@ -230,14 +243,14 @@ begin
   Result:= True;
 end;
 
-class function TDragLintSaveNotifier.EnqueueProjectReindex(const AExePath, ADbPath: string): Boolean;
+class function TDragLintSaveNotifier.EnqueueProjectReindex(const AExePath: string): Boolean;
 begin
-  Result:= QueueReindexJob(AExePath, ADbPath, '');
+  Result:= QueueReindexJob(AExePath, '');
 end;
 
 function EnqueueReindexThenRelint(const ATitle: string): Boolean;
 begin
-  Result:= QueueReindexJob(DragLintExe, GLastProjectDb, ATitle);
+  Result:= QueueReindexJob(DragLintExe, ATitle);
   if not Result then RequestRelint;
 end;
 
@@ -268,9 +281,6 @@ begin
     FileExt:= ExtractFileExt(FileName);
     if not IsDelphiSourceExt(FileExt) then Exit;
 
-    DbPath:= GLastProjectDb;
-    if DbPath = '' then Exit;
-
     { v0.42: coalesce rapid re-fires for the same file. }
     if ShouldDebounceReindex(FileName) then Exit;
 
@@ -286,11 +296,18 @@ begin
               [ExtractFileName(SavedFile)])); except { swallow } end; end
     );
 
-    { Tier 1. The per-file spawn stays as the fallback for a unit saved with no
-      project open: it is exactly what this path did before, so the no-project
-      case is unchanged rather than quietly losing its reindex. }
-    if not EnqueueProjectReindex(ExePath, DbPath) then
-      SpawnIndexerFile(ExePath, SavedFile, DbPath);
+    { Tier 1. The per-file fallback (no active project, or no unique owner)
+      targets the DB the manifest says covers the SAVED FILE -- never
+      GLastProjectDb, which names whichever project was opened last and is
+      exactly how a foreign DB got written. A single-file target cannot widen a
+      scope; a file no section covers is skipped and logged rather than written
+      somewhere it does not belong. }
+    if not EnqueueProjectReindex(ExePath) then
+    begin
+      DbPath:= ManifestDbForFile(SavedFile);
+      if DbPath <> '' then SpawnIndexerFile(ExePath, SavedFile, DbPath)
+      else DLT('reindex', 'per-file fallback skipped: no manifest section covers ' + SavedFile);
+    end;
 
     { v0.42: republish diagnostics for the saved file (syntax errors + lint).
       The hook sends textDocument/didSave to the running LSP, which replies with

@@ -15,7 +15,7 @@ uses
 type
   TDragLintProjectNotifier = class(TInterfacedObject, IOTAIDENotifier)
     private
-      class procedure SpawnIndexer(const AExePath, AProjDir, ADbPath: string); static;
+      class procedure SpawnIndexer(const AExePath, AProjFile, ADbPath: string); static;
       class function ResolveExePath(const ACfgExePath: string): string; static;
     public
       { IOTANotifier }
@@ -40,6 +40,7 @@ uses
   , DragLint.Plugin.LiveDiagnostics
   , DragLint.Plugin.Editor
   , DragLint.Plugin.ExeResolver
+  , DragLint.Plugin.IndexJob
   ;
 
 { ---- IOTANotifier stubs ---- }
@@ -72,7 +73,7 @@ end;
 
 { ---- async indexer spawn ---- }
 
-class procedure TDragLintProjectNotifier.SpawnIndexer( const AExePath, AProjDir, ADbPath: string);
+class procedure TDragLintProjectNotifier.SpawnIndexer( const AExePath, AProjFile, ADbPath: string);
 var
   CmdLine   : string                    ;
   SI        : TStartupInfoW             ;
@@ -82,7 +83,6 @@ var
   WsRoot    : string                    ;
   WsCfgPath : string                    ;
   WsCfg     : TWorkspaceConfig          ;
-  WsDbPath  : string                    ;
 begin
   FillChar(SI, SizeOf(SI), 0);
   SI.cb:= SizeOf(SI);
@@ -93,16 +93,13 @@ begin
   // the project dir, use "workspace index --config" instead.
   if Cfg.EnableWorkspaceMode then
   begin
-    WsRoot:= TWorkspaceConfigIO.FindWorkspaceRoot(AProjDir);
+    WsRoot:= TWorkspaceConfigIO.FindWorkspaceRoot(ExtractFilePath(AProjFile));
     if WsRoot <> '' then
     begin
       WsCfgPath:= TPath.Combine(WsRoot, WORKSPACE_FILENAME);
       try
         WsCfg:= TWorkspaceConfigIO.LoadFromFile(WsCfgPath);
-        WsDbPath:= TPath.Combine(WsRoot, WsCfg.SharedDb);
         CmdLine:= Format('"%s" workspace index --config "%s"', [AExePath, WsCfgPath]);
-        // Also update the session DB reference for save-notifier
-        GLastProjectDb:= WsDbPath;
         StrPCopy(CmdLineBuf, CmdLine);
         if CreateProcessW(nil, CmdLineBuf, nil, nil, False, CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
         begin
@@ -116,8 +113,14 @@ begin
     end; // if
   end; // if
 
-  if Cfg.ScanLibraries then CmdLine:= Format('"%s" index "%s" --scan-libraries --db "%s"', [AExePath, AProjDir, ADbPath])
-  else CmdLine:= Format('"%s" index "%s" --db "%s"', [AExePath, AProjDir, ADbPath]);
+  { The PROJECT form, never `index <dir> --db <projectDb>`: a folder target adds
+    every loose .pas under the directory and then adopts that widened set as the
+    DB's scope (DataCopy 39 -> 72 files, 2026-09-02), and the engine refuses it
+    outright against a DB stamped as a project index. --scan-libraries is NOT
+    carried over: it is a separate LIBRARY scan of the Delphi Library/Browsing
+    paths, and a project index excludes exactly those units -- so the setting
+    no longer affects this spawn. }
+  CmdLine:= BuildProjectIndexCmdLine(AExePath, AProjFile, ADbPath, '');
   StrPCopy(CmdLineBuf, CmdLine);
   if CreateProcessW(nil, CmdLineBuf, nil, nil, False, CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
   begin
@@ -225,7 +228,6 @@ begin
     template only when no manifest section covers it. }
   DbPath:= ManifestDbForFile(FileName);
   if DbPath = '' then DbPath:= ResolveDbPath(Cfg.DbPathTemplate, ProjDir, ProjName);
-  GLastProjectDb:= DbPath;
 
   ExePath:= ResolveExePath(Cfg.ExePath);
 
@@ -236,7 +238,7 @@ begin
           [ProjName])); end
   );
 
-  SpawnIndexer(ExePath, ProjDir, DbPath);
+  SpawnIndexer(ExePath, FileName, DbPath);
 end; // procedure
 
 { ---- registration ---- }

@@ -187,11 +187,14 @@ $p1 = Join-Path $aDir 'P1.dpr'
 $p2 = Join-Path $bDir 'P2.dpr'
 
 Write-Host ''
-Write-Host '=== seeding: P2 then P1, both --project, into ONE db ===' -ForegroundColor Cyan
-# Two PROJECT scans into one DB are not refused -- only folder-into-project is.
-# That is exactly how a real DB acquires another project's rows.
-$seed2 = RunCap @('index','--project',$p2,'--db',$db)
-Check 'seed: P2 indexes into the shared db' ($seed2.Code -eq 0) "exit=$($seed2.Code)"
+Write-Host '=== seeding: P2''s folder (untagged), then P1 --project, into ONE db ===' -ForegroundColor Cyan
+# Since 1.31.2 a second PROJECT scan into a DB tagged for another project is
+# REFUSED (run_index_project_tag_refusal.ps1), so the shared shape is seeded the
+# way a legacy DB still carries it: rows no project stamp claims. A FOLDER scan of
+# P2's directory adds its .dpr and its unit and records an EMPTY project_tag, so
+# P1's --project run proceeds and finds both outside its closure.
+$seed2 = RunCap @('index',$bDir,'--db',$db)
+Check 'seed: P2''s folder indexes into the shared db' ($seed2.Code -eq 0) "exit=$($seed2.Code)"
 $seed1 = RunCap @('index','--project',$p1,'--db',$db)
 Check 'seed: P1 indexes into the same db' ($seed1.Code -eq 0) "exit=$($seed1.Code)"
 
