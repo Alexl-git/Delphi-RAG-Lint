@@ -48,8 +48,15 @@ foreach ($plat in 'Win64','Win32') {
   if ($err) { Write-Host "$plat BUILD FAILED:"; $err | Select-Object -First 10; exit 1 }
   Write-Host ("{0}: {1}" -f $plat, ($out | Select-Object -Last 1))
 }
-# keep the canonical Win64 exe (used by tests / IDE plugin) in sync
-Copy-Item (Join-Path $repo "src\cli\Win64\Release\drag-lint.exe") (Join-Path $repo "third_party\dll-win64\drag-lint.exe") -Force
+# keep the canonical Win64 exe (used by tests / IDE plugin) in sync. Staged through
+# stage-engine.ps1, never a bare Copy-Item: a running engine (IDE plugin LSP child,
+# another session's query) holds an execute lock on its image, and on 2026-10-16 a
+# bare copy failed this step twice after both Release builds had succeeded.
+# stage-engine writes the ide-release hold, stops only processes running THIS
+# image, and retries. Manual equivalent: `drag-lint ide-release --seconds 900`
+# then `drag-lint shutdown --all --wait 30`.
+& pwsh -NoProfile -File (Join-Path $repo "build\stage-engine.ps1") -FreshExe (Join-Path $repo "src\cli\Win64\Release\drag-lint.exe") -Target (Join-Path $repo "third_party\dll-win64\drag-lint.exe")
+if ($LASTEXITCODE -ne 0) { Write-Host "PACK STOPPED: could not stage the Win64 exe into third_party\dll-win64 (holders named above)"; exit 1 }
 
 # ConvRulesEditor.exe (Win64). The batch compiles the VCL-style .res with brcc32
 # FIRST and gates on it, because dcc64 cannot compile a .rc and a stale .res would

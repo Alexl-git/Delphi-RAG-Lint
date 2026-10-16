@@ -51,8 +51,26 @@ That is also why stopping the running child is the **build's** job:
 The hold is what makes the kill stick.
 
 So a caller that needs the lock actually gone must wait and retry. You normally
-do not call this by hand at all -- `build_draglint_win64.bat` invokes the
-recovery automatically when staging fails.
+do not call this by hand at all -- `build_draglint_win64.bat` and
+`build\pack-lint-release.ps1` (release packing, since 2026-10-16) stage through
+`stage-engine.ps1` and get the recovery automatically.
+
+## Stopping the engine remotely (by hand)
+
+When something else must replace or delete the deployed exe -- a manual deploy,
+a release step, a script that copies over `third_party\dll-win64\drag-lint.exe`
+-- stop the engine remotely instead of killing processes by name:
+
+```
+drag-lint ide-release --seconds 900      # the IDE plugin stops respawning for 15 min
+drag-lint shutdown --all --wait 30       # running lsp engines close every store and exit 0
+```
+
+`shutdown` asks running `lsp` engines (over their per-user maintenance pipe) to
+stand down: close every store, exit 0. Its flags (`--db`, `--wait`, `--dry-run`,
+`--all`, `--force`) are on its `drag-lint --help` line. `ide-release --resume`
+lifts the hold early. Measured 2026-10-16: without this, a release pack lost the
+copy race twice to short-lived engines started by other sessions.
 
 ## Flags
 

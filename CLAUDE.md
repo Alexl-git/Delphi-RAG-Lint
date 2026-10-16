@@ -99,3 +99,9 @@ normalise, or `run_encoding_guard.ps1` fails.
 `delphi-build` skill. CLI: `build\build_draglint_win64.bat` -- Win64 Debug, stages the
 tree-sitter companions, syncs `rules\` to both exe dirs, deploys to `third_party\dll-win64\`.
 Run the engine as `.\drag-lint.exe` or by full path, never by bare name.
+
+**dll-win64 exe locked** ("being used by another process"): never kill by name or bare-copy over it.
+Stop it remotely -- `drag-lint ide-release --seconds 900` (the IDE plugin stops respawning) then
+`drag-lint shutdown --all --wait 30` (running engines stand down) -- or let
+`build\stage-engine.ps1 -FreshExe <new> -Target <deployed>` do hold + kill-by-image + retry; the
+build bat and `pack-lint-release.ps1` stage through it. Wiki: `docs\wiki\ide-release.md`.
