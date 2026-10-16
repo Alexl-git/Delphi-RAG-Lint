@@ -13921,10 +13921,13 @@ begin
         must say which library the cached duplicate-global-decl answer was built with. }
       var FlowLibUsed: string := '';
       { ...and only for a run that asks a checker which READS it (D3): the
-        with-hiding walk, the flow checker and the project pass. }
+        with-hiding walk, the flow checker and the project pass, and the
+        type-name-prefix ancestry hop (the exception-ancestry chain continues
+        into the library index). }
       if (FlowStore <> nil) and
          (LintRuleWants(NarrowRule, ['with-hides-outer-symbol', 'enum-read-inside-with'])
-          or LintRuleWants(NarrowRule, LINT_GATE_FLOW) or LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES)) then
+          or LintRuleWants(NarrowRule, LINT_GATE_FLOW) or LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES)
+          or LintRuleWants(NarrowRule, ['type-name-prefix'])) then
       begin
         var FlowLibDb: string := LintLibraryDb(AArgs);
         { A STALE library index degrades to project-only exactly like an
@@ -14090,10 +14093,11 @@ begin
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       end;
       { v0.68: naming-convention prefix rules (config-driven). The store enables
-        the exception-ancestry sub-check of type-name-prefix -- without it
-        EFoo = class(Exception) is reported as needing a 'T' prefix. }
+        the exception-ancestry sub-check of type-name-prefix + the library store
+        continues the chain -- without them EFoo = class(Exception) is reported
+        as needing a 'T' prefix. }
       if LintRuleWants(NarrowRule, LINT_GATE_NAMING) then
-        for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(EffPath, Cfg.Naming, FlowStore, FlowFid) do
+        for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(EffPath, Cfg.Naming, FlowStore, FlowFid, FlowLibStore) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set)
         v0.70: + redundant-parentheses + commented-out-code
@@ -19791,9 +19795,9 @@ begin
           lives on TCustomForm, which no project index can resolve. }
         if LintRuleWants(Nr, LINT_GATE_WITH_HIDING) then
           ScanAdd(30, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckWithHiding(PasPath, Store, LibStore, Store.FindFileIdByPath(PasPath)));
-        { v0.68: naming-convention prefix rules (store-optional; enables exception-ancestry sub-check) }
+        { v0.68: naming-convention prefix rules (store-optional; store enables exception-ancestry sub-check, + library store continues the chain) }
         if LintRuleWants(Nr, LINT_GATE_NAMING) then
-          for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath)) do Findings:= Findings + [F];
+          for F in DRagLint.Diagnostics.NamingChecks.TNamingChecker.Check(PasPath, Cfg.Naming, Store, Store.FindFileIdByPath(PasPath), LibStore) do Findings:= Findings + [F];
         ScanMark(30);
         { v0.68: dead-code checks (unused-parameter, identical-then-else, referenced-never-set);
           v0.70-72: + redundant-parens/commented-out-code/function-result-ignored + #5/#6/#7 rules }
