@@ -7,8 +7,10 @@ Autonomous mode is armed (`~/.claude/autonomy/mode.json`, runId 20261016-1640). 
 - origin/main has 1a5e40eb. Tag v1.31.3-alpha points at 1a5e40eb. The GitHub pre-release has both zips:
   https://github.com/Alexl-git/Delphi-RAG-Lint/releases/tag/v1.31.3-alpha
 - Release battery: 693 pass / 0 fail. Wiki published. dll-win64 runs the Debug 1.31.3-alpha engine.
-- Local, not pushed (the autonomy guard denies push; the owner pushes Sunday):
-  64f9c585 (handoff docs) and 3d927c35 (Win32 plugin BPL/DCP rebuilt by the release run).
+- UPDATE 2026-10-16 evening (owner present): everything pushed -- origin/main = 6f5508b1 (adds the
+  remote-stop docs: CLAUDE.md "Building", docs\wiki\ide-release.md; pack-lint-release.ps1 now stages
+  via stage-engine.ps1). Wiki republished; 1.31.3 release notes corrected. Autonomous mode was
+  DISARMED (mode.json `mode: interactive`) -- re-arm it (autonomous skill) only if the owner leaves.
 - `docs\NOTICE-2026-10-16-v1.31.3-released.md` is written. Like the other NOTICEs, it is untracked.
 
 ## Resume point (in order)
