@@ -15,7 +15,8 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Open
 
-- 2026-10-16 | engine | 1.31.3 pushed + tagged (1a5e40eb), GH pre-release up WITHOUT zips; battery running; then 1.31.4 plan, commit+deploy+pack only, owner publishes Sunday | open | [HANDOFF-2026-10-16-engine-release-1313-done-1314-plan](HANDOFF-2026-10-16-engine-release-1313-done-1314-plan.md)
+- 2026-10-16 | engine | 1.31.3 DONE (release + zips); next 1.31.4 type-prefix ancestry plan -> battery, commit, deploy, pack; NO push (owner Sunday) | open | [HANDOFF-2026-10-16-engine-1314-type-prefix-ancestry](HANDOFF-2026-10-16-engine-1314-type-prefix-ancestry.md)
+- 2026-10-16 | engine | 1.31.3 pushed + tagged (1a5e40eb), GH pre-release up WITHOUT zips; battery running; then 1.31.4 plan, commit+deploy+pack only, owner publishes Sunday | closed (1.31.3 done) | [HANDOFF-2026-10-16-engine-release-1313-done-1314-plan](HANDOFF-2026-10-16-engine-release-1313-done-1314-plan.md)
 - 2026-10-16 | engine | v1.31.3-alpha committed (cd9fa7ee), NOT pushed; fix 9 battery fails, publish, push+tag+release (approved); then type-prefix ancestry plan -> 1.31.4, hourly /loop | resumed | [HANDOFF-2026-10-16-engine-release-1313-type-prefix-ancestry](HANDOFF-2026-10-16-engine-release-1313-type-prefix-ancestry.md)
 - 2026-10-16 | engine | 1.31.2 deployed (reindex targets active project DB); push now rides 1.31.3; Toxicity yes/no pending | resumed | [HANDOFF-2026-10-16-engine-reindex-active-db](HANDOFF-2026-10-16-engine-reindex-active-db.md)
 - 2026-10-16 | converter | no code since 3756831c; waiting for the all-teams 1.22 extractor release + full re-parse, then ONE re-pin (top block) | open | [RESUME-CONVERTER-2026-10-05.md](../RESUME-CONVERTER-2026-10-05.md)
