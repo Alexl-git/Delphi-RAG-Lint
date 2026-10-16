@@ -211,9 +211,9 @@ procedure TProducerDelphiTests.UnportedQuestionFallsBack;
 begin
   var O:= DefaultProduceOptions;
   O.DbOverride:= 'any.sqlite';
-  var R:= FProducer.Produce(Cmd('butterfly', 'A.B'), O);
+  var R:= FProducer.Produce(Cmd('cycles', 'A.B'), O);
   Assert.AreEqual(1, FFallback.Calls);
-  Assert.AreEqual('butterfly', FFallback.LastQuestion);
+  Assert.AreEqual('cycles', FFallback.LastQuestion);
   Assert.AreEqual('any.sqlite', FFallback.LastDb);
   Assert.AreEqual(STUB_EXIT, R.ExitCode);
   Assert.Contains(FProducer.Describe, 'fell back to: recording stub');

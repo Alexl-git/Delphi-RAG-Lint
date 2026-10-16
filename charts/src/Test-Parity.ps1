@@ -766,6 +766,9 @@ function Get-MaskedBundleText([string] $Path, [string] $Root) {
   $t = [IO.File]::ReadAllText($Path)
   $t = $t.Replace($Root, '<BUNDLE-ROOT>')
   $t = [regex]::Replace($t, '(?<="generated": ")[^"]*', '<GENERATED>')
+  # ExportPdf is the SIZE of the cairo PDF, which is not byte-stable (measured 2026-10-16: the same
+  # question gave 38862 and 38863 bytes in two runs of one build), so the number is masked like graph.pdf.
+  $t = [regex]::Replace($t, '(?<="ExportPdf": )\d+', '<SIZE>')
   $t = [regex]::Replace($t, '(?<=generated <b>)[^<]*', '<GENERATED>')
   [regex]::Replace($t, '(?<=/// Generated: )\S+', '<GENERATED>')
 }

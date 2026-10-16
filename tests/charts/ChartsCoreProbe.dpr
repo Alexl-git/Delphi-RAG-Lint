@@ -82,6 +82,7 @@ uses
   , DRagLint.Charts.Q.Consumers in '..\..\src\charts\DRagLint.Charts.Q.Consumers.pas'
   , DRagLint.Charts.Q.ExceptionPaths in '..\..\src\charts\DRagLint.Charts.Q.ExceptionPaths.pas'
   , DRagLint.Charts.Q.WhoCalls in '..\..\src\charts\DRagLint.Charts.Q.WhoCalls.pas'
+  , DRagLint.Charts.Q.Butterfly in '..\..\src\charts\DRagLint.Charts.Q.Butterfly.pas'
   , DRagLint.Core.Model
   ;
 

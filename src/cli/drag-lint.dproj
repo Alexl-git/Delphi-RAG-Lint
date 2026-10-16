@@ -303,6 +303,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Consumers.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.ExceptionPaths.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.WhoCalls.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Butterfly.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

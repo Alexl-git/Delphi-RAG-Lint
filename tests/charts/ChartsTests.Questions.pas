@@ -268,12 +268,26 @@ type
     [Test] procedure UnknownTargetIsRefused;
   end;
 
+  [TestFixture]
+  TButterflyTests = class(TQuestionFixture)
+  private
+    function FieldsWithoutPdf(const pChart: TChartResult): string;
+  public
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure DepthOneMatchesPowerShell;
+    [Test] procedure ArrowsFollowTheTree;
+    [Test] procedure NoDuplicateRowPerSide;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure UnknownTargetIsRefused;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, System.RegularExpressions, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
   DRagLint.Charts.Q.WhoCalls,
+  DRagLint.Charts.Q.Butterfly, System.Generics.Collections,
   DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
@@ -435,6 +449,16 @@ const
   WIC_D3_FIELDS = 'Direction="callees",Question="what-it-calls",Rows=18,Callers=0,Callees=18,NodeCount=19,Cycles=5,MaxDepth=3.0,Truncated=true,Clusters=8,NameMatches=null,NameOnly=null,NameRendered=false,ClickTargets=19,Expected=19,AllClickable=true';
   WIC_D3_DOT_SHA = '267f441b767c6c5513cf9c8a66230286ea57869198052904b0b7b1b1ea1625e4';
   WIC_LEAF_TARGET = 'AssignGroups.ViewModel.TAssignGroupsViewModel.CanAddGroup';
+  BF_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  BF_FIELDS = 'Callers=9,Callees=9,Edges=18,FocusIn=9,FocusOut=2,ClickTargets=19,Expected=19,AllClickable=true,ExportSvg=25143,ExportPng=152765';
+  BF_DOT_SHA = '9901072e0c3a63637d8f4834f555380b881e9406babe75e2eb2b5fcb62bc40a6';
+  BF_LINES = 24;
+  BF_D1_DEPTH = 1;
+  BF_D1_FIELDS = 'Callers=9,Callees=2,Edges=11,FocusIn=9,FocusOut=2,ClickTargets=12,Expected=12,AllClickable=true,ExportSvg=15504,ExportPng=96589';
+  BF_D1_DOT_SHA = 'fda13591d2006ad492c2565b3ec0b81473080a67505ac21762dbeedf5721a101';
+  BF_D6_TARGET = 'DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead';
+  BF_FOCUS_IN = 9;
+  BF_FOCUS_OUT = 2;
   FEEDS_FROM_ID = 'feeds-from';
   SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
   FF_STATS = 'IndexDs=54,IndexDsDfm=5,IndexDsCode=49,IndexDsOne=22,IndexDsMany=17,IndexDsByCol=6,IndexDsNone=9,IndexDsOther=6,' +
@@ -2636,6 +2660,104 @@ end;
 procedure TWhatItCallsTests.UnknownTargetIsRefused;
 begin
   Assert.AreEqual('symbol not found: No.Such.Method', Refusal(WHAT_IT_CALLS_ID, 'No.Such.Method', CLIENT_CLONE));
+end;
+
+{ ---- butterfly ---- }
+
+{ ExportPdf is the size of a cairo PDF, which is not byte-stable between two runs (38862 / 38863 measured
+  on one build), so it is checked as present and positive, not for equality; Test-Parity masks it likewise }
+function TButterflyTests.FieldsWithoutPdf(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if F.Name = 'ExportPdf' then
+      Assert.IsTrue(StrToIntDef(F.Json, 0) > 0, 'the PDF was written')
+    else
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+procedure TButterflyTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(BUTTERFLY_ID, BF_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(BF_FIELDS, FieldsWithoutPdf(C));
+  Assert.AreEqual(BF_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TButterflyTests.DepthOneMatchesPowerShell;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(BUTTERFLY_ID, BF_TARGET, CLIENT_CLONE, A) then
+    Exit;
+  A.Depth:= BF_D1_DEPTH;
+  Assert.IsTrue(FindChartQuestion(BUTTERFLY_ID, E), 'butterfly is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(BF_D1_FIELDS, FieldsWithoutPdf(C));
+  Assert.AreEqual(BF_D1_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TButterflyTests.ArrowsFollowTheTree;
+var
+  C: TChartResult;
+begin
+  { only the engine's depth-1 children touch the focus box (Test-Emitters A-BF-FOCUSIN / A-BF-FOCUSOUT) }
+  if not EmitChart(BUTTERFLY_ID, BF_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.AreEqual<Integer>(BF_FOCUS_IN, TRegEx.Matches(Text, '(?m)^\s+\S+ -> focus \[').Count);
+  Assert.AreEqual<Integer>(BF_FOCUS_OUT, TRegEx.Matches(Text, '(?m)^\s+focus -> \S+ \[').Count);
+end;
+
+procedure TButterflyTests.NoDuplicateRowPerSide;
+var
+  C: TChartResult;
+begin
+  { D6 (Test-Emitters E-BF-D6): a symbol is one row per side, an arrow one distinct pair }
+  if not EmitChart(BUTTERFLY_ID, BF_D6_TARGET, DL_CLONE, C) then
+    Exit;
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  var Titles:= TDictionary<string, Boolean>.Create;
+  try
+    for var M in TRegEx.Matches(Text, '(?s)subgraph (cluster_(in|out)_\d+) \{.*?\n  \}') do
+      for var T in TRegEx.Matches(M.Value, 'TITLE="([^"]*)"') do
+      begin
+        var Key:= M.Groups[2].Value + '|' + T.Groups[1].Value;
+        Assert.IsFalse(Titles.ContainsKey(Key), 'duplicate row ' + Key);
+        Titles.Add(Key, True);
+      end;
+  finally
+    Titles.Free;
+  end;
+  var Edges:= TDictionary<string, Boolean>.Create;
+  try
+    for var E in TRegEx.Matches(Text, '(?m)^\s+(\S+ -> \S+) \[') do
+    begin
+      Assert.IsFalse(Edges.ContainsKey(E.Groups[1].Value), 'duplicate edge ' + E.Groups[1].Value);
+      Edges.Add(E.Groups[1].Value, True);
+    end;
+  finally
+    Edges.Free;
+  end;
+end;
+
+procedure TButterflyTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(BUTTERFLY_ID, BF_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(BF_LINES, Length(L));
+  Assert.AreEqual('CHART butterfly ' + BF_TARGET + ' -- 9 callers / 9 callees', L[CS_CHART_LINE]);
+end;
+
+procedure TButterflyTests.UnknownTargetIsRefused;
+begin
+  Assert.AreEqual('symbol not found: No.Such.Method', Refusal(BUTTERFLY_ID, 'No.Such.Method', CLIENT_CLONE));
 end;
 
 end.
