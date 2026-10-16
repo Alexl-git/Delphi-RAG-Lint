@@ -3,6 +3,30 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Index: the rule-cache warm can run in the background (`--rule-cache-warm`)
+
+- **`index --project --rule-cache-warm background` no longer waits for the `lint <file>`
+  rule-cache warm.** The warm (upstream 1.31.0) recomputes the whole-project rules, and its
+  key is the index's file stat, which every index run moves -- so it runs in full on every
+  run, nothing changed included: 252 s on the 2,218-file Unilabw closure, against an index
+  of 1 to 7 s (`tools\perf\scenarios.ps1`). `background` starts it in a DETACHED process
+  that inherits no handle (a caller capturing stdout does not wait for it) and returns at
+  once. The warm keeps its rule of writing only if no index moved meanwhile; until it
+  finishes, the next `lint <file>` fills the cache itself. `wait` (warm in the run) stays
+  the DEFAULT: the detached process keeps the index open until it ends, and Windows
+  refuses to delete an open file -- `tools\score-cycle-playbook.ps1` indexes a scratch DB
+  and deletes it, which failed under load while the warm still ran.
+  `DRAGLINT_RULE_CACHE_WARM=background|wait|off` sets the default for every run (a bad
+  value exits 2 naming the variable); `off` skips the warm; the same applies to each
+  project section of `index --all`. One
+  background warm per index: a newer one stops the older (its answer is stale anyway),
+  named by `<db>.rule-cache-warm.pid` and only when that pid runs the same engine image --
+  three were alive at once after three runs before this.
+  New verb `warm-rule-cache --db <project.sqlite> [--library-db <lib.sqlite>]` (what the
+  background process runs). Guard: `tests\autotest\run_rule_cache_warm_background.ps1`.
+
 ## v1.31.1-alpha -- 2026-10-14
 
 ### Fixed

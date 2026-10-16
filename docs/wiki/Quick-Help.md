@@ -68,6 +68,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **Run AST Checks** -- Runs drag-lint's AST-level checks against a file. [More](Run-AST-Checks)
 * **Run Diagnostics (didSave)** -- Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification. [More](Run-Diagnostics-didSave)
 * **Run Lint All (Full Report)** -- Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check. [More](Run-Lint-All-Full-Report)
+* **warm-rule-cache** -- Fills the lint rule cache for a project index; index runs warm it, or start it in the background (--rule-cache-warm). Computes the whole-project lint rules (circular-uses, enum-helper-separate-units, duplicate-global-decl) for a project index and stores them, so the next lint of any unit in it is a cache hit. Every project index run warms it before it returns; --rule-cache-warm background starts it in a detached process instead (the run returns at once), off skips it, and DRAGLINT_RULE_CACHE_WARM sets the default. Run it by hand when you want the cache warm right now. It needs a project index and writes only if no index changed while it ran. [More](warm-rule-cache)
 
 ## Documentation
 

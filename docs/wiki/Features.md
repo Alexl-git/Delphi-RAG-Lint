@@ -168,6 +168,7 @@ Rules, autofix, suppression markers and project-wide checks.
 | [Run AST Checks](Run-AST-Checks) | About window: Run AST Checks; `check-ast` |  |
 | [Run Diagnostics (didSave)](Run-Diagnostics-didSave) | About window: Run Diagnostics (didSave) |  |
 | [Run Lint All (Full Report)](Run-Lint-All-Full-Report) | drag-lint > Code Quality > Run Lint All (Full Report)...; `lint-all` |  |
+| [warm-rule-cache](warm-rule-cache) | `warm-rule-cache` |  |
 
 ## Documentation
 
