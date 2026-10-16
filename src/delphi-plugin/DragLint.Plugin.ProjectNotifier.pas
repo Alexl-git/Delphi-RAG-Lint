@@ -83,7 +83,6 @@ var
   WsRoot    : string                    ;
   WsCfgPath : string                    ;
   WsCfg     : TWorkspaceConfig          ;
-  WsDbPath  : string                    ;
 begin
   FillChar(SI, SizeOf(SI), 0);
   SI.cb:= SizeOf(SI);
@@ -100,10 +99,7 @@ begin
       WsCfgPath:= TPath.Combine(WsRoot, WORKSPACE_FILENAME);
       try
         WsCfg:= TWorkspaceConfigIO.LoadFromFile(WsCfgPath);
-        WsDbPath:= TPath.Combine(WsRoot, WsCfg.SharedDb);
         CmdLine:= Format('"%s" workspace index --config "%s"', [AExePath, WsCfgPath]);
-        // Also update the session DB reference for save-notifier
-        GLastProjectDb:= WsDbPath;
         StrPCopy(CmdLineBuf, CmdLine);
         if CreateProcessW(nil, CmdLineBuf, nil, nil, False, CREATE_NO_WINDOW or DETACHED_PROCESS, nil, nil, SI, PI) then
         begin
@@ -232,7 +228,6 @@ begin
     template only when no manifest section covers it. }
   DbPath:= ManifestDbForFile(FileName);
   if DbPath = '' then DbPath:= ResolveDbPath(Cfg.DbPathTemplate, ProjDir, ProjName);
-  GLastProjectDb:= DbPath;
 
   ExePath:= ResolveExePath(Cfg.ExePath);
 

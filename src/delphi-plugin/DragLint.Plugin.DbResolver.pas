@@ -99,6 +99,16 @@ function GetActiveEditorFilePath: string;
   exactly the shared-folder case that matters. }
 function GetActiveProjectFilePath: string;
 
+/// <summary>The ONE database a WRITE for the active project may target: the
+/// manifest's unique owner of GetActiveProjectFilePath.</summary>
+/// <param name="AProjectFile">Receives the active project's file ('' when none).</param>
+/// <param name="AWhy">Receives why no DB may be written ('' on success).</param>
+/// <returns>The owner DB, or '' -- the caller then writes NOTHING and logs AWhy.</returns>
+/// <remarks>Replaces GLastProjectDb (the last project OPENED), which paired the
+/// active project with another project's DB on 2026-10-16. The decision itself
+/// is IndexJob.ReindexTargetDb, which tests\IndexJobTests.dpr covers. Main
+/// thread only (OTAPI).</remarks>
+function ActiveProjectWriteDb(out AProjectFile, AWhy: string): string;
 { Returns the primary DB path for an arbitrary .dproj (or '' for none).
   Uses the template from Settings. Result may point at a file that does
   not yet exist. }
@@ -155,6 +165,22 @@ function GetActivePlatformForLibrary: string;
 
 implementation
 
+uses
+  DragLint.Plugin.IndexJob
+  ;
+
+function ActiveProjectWriteDb(out AProjectFile, AWhy: string): string;
+var
+  OwnerDb  : string;
+  Claimants: TArray<string>;
+  Match    : TProjectDbMatch;
+begin
+  AProjectFile:= GetActiveProjectFilePath;
+  OwnerDb     := '';
+  Match       := pdmNone;
+  if AProjectFile <> '' then Match:= ManifestDbForProject(AProjectFile, OwnerDb, Claimants);
+  Result:= ReindexTargetDb(AProjectFile, Match, OwnerDb, AWhy);
+end; // function
 function ManifestPathBesideEngine: string;
 begin
   Result:= ExtractFilePath(GetModuleName(HInstance)) + 'drag-lint.json';

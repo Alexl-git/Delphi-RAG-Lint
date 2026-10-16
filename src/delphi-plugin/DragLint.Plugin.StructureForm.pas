@@ -1211,7 +1211,10 @@ begin
     by `lint --fix`, so it is not in the engine's fixable set. Offered when
     the finding names a unit and there is a project + index to verify in. }
   if SameText(ND.Code, CUnusedUnitRule) then
-    Exit((UnusedUnitOfNode(ANode) <> '') and (GetActiveProjectFilePath <> '') and (GLastProjectDb <> ''));
+  begin
+    var OfferProj, OfferWhy: string;
+    Exit((UnusedUnitOfNode(ANode) <> '') and (ActiveProjectWriteDb(OfferProj, OfferWhy) <> ''));
+  end;
   EnsureFixableRules;
   Result:= (FFixableRules <> nil) and (FFixableRules.IndexOf(LowerCase(ND.Code)) >= 0);
   { a naming rename finds every use through the index, so it needs one }
@@ -1347,9 +1350,19 @@ begin
         remove when nothing needs it and it has no initialization section,
         else move when only the implementation needs it, else leave it. }
       UnitName:= UnusedUnitOfNode(FTree.Selected);
+      { The ACTIVE project's own manifest DB, never GLastProjectDb (the last
+        project OPENED): uses-fix --apply reindexes the --db it is handed, so a
+        mispaired DB is overwritten with this closure (2026-10-16). }
+      var FixProj, FixWhy: string;
+      var FixDb: string:= ActiveProjectWriteDb(FixProj, FixWhy);
+      if FixDb = '' then
+      begin
+        DLT('uses-fix', 'NOT run: ' + FixWhy);
+        Exit;
+      end;
       RunFixJob('Fix unused unit ' + UnitName,
         Format('"%s" uses-fix "%s" --project "%s" --db "%s" --platform %s --remove-unused --only "%s" --apply --format json',
-          [ResolveExePath, FCurrentFile, GetActiveProjectFilePath, GLastProjectDb,
+          [ResolveExePath, FCurrentFile, FixProj, FixDb,
            LowerCase(GetActivePlatformForLibrary), UnitName]),
         CUsesFixTimeoutMs, UnitName);
       Exit;

@@ -81,11 +81,9 @@ procedure UnregisterSaveNotifierForModule(const AModule: IOTAModule);
 /// Coalesces with a pending save-triggered reindex of the same DB.</remarks>
 function EnqueueReindexThenRelint(const ATitle: string): Boolean;
 
-{ Written by TDragLintProjectNotifier when a .dproj is opened: the LAST project
-  OPENED, not the active one. No reindex path reads it any more (2026-10-16);
-  StructureForm's uses-fix still does. }
-var
-  GLastProjectDb: string;
+{ GLastProjectDb (the last .dproj OPENED) was REMOVED 2026-10-16: every write
+  target is now DbResolver.ActiveProjectWriteDb -- the active project's unique
+  manifest DB -- so no path can pair one project with another's index. }
 
   { v0.42: set by Editor.RegisterDragLintMenu to Editor.TriggerDiagnosticsOnSave.
   Called from AfterSave (when AutoDiagnosticsOnSave is on) so saving a file
@@ -122,7 +120,6 @@ uses
   , DragLint.Plugin.IndexJob
   , DragLint.Plugin.DbResolver
   , DragLint.Plugin.Telemetry
-  , DRagLint.Index.Manifest
   , { RequestRelint once a reindex lands }
     DragLint.Plugin.LiveDiagnostics
   ;
@@ -224,19 +221,12 @@ end;
   uses; anything short of a unique owner is a refusal, logged, not a guess. }
 function QueueReindexJob(const AExePath, ATitle: string): Boolean;
 var
-  ProjFile : string;
-  DbPath   : string;
-  OwnerDb  : string;
-  Claimants: TArray<string>;
-  Match    : TProjectDbMatch;
-  Why      : string;
-  Job      : TDragLintJob;
+  ProjFile: string;
+  DbPath  : string;
+  Why     : string;
+  Job     : TDragLintJob;
 begin
-  ProjFile:= GetActiveProjectFilePath;
-  OwnerDb := '';
-  Match   := pdmNone;
-  if ProjFile <> '' then Match:= ManifestDbForProject(ProjFile, OwnerDb, Claimants);
-  DbPath:= ReindexTargetDb(ProjFile, Match, OwnerDb, Why);
+  DbPath:= ActiveProjectWriteDb(ProjFile, Why);
   if DbPath = '' then
   begin
     DLT('reindex', 'NOT queued: ' + Why);
