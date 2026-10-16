@@ -196,16 +196,22 @@ if ($null -ne $jsonRaw) {
 # assertion of "expect 2 headers" was written first and failed against correct
 # code; the expectation was wrong, not the code.
 #
-# So this pins the CURRENT truth (one header, both rows under it) and will fail
-# loudly if overload resolution ever becomes type-precise -- at which point the
-# per-target grouping starts to matter and this case becomes a real control.
+# So this pinned the truth of the day (one header, both rows under it) and was
+# written to fail loudly if overload resolution ever became type-precise -- at
+# which point the per-target grouping starts to matter and this case becomes a
+# real control.
+#
+# 2026-09-30, resolver 1.12.0-alpha: it did. PickFromMatches now reads LITERAL
+# arguments, so `W.Pick('a')` binds the string overload and `W.Pick(1)` the
+# integer one -- two targets with callers, so TWO headers. This is now the
+# control the paragraph above anticipated: name-grouping would print one.
 $ovTxt = (& $Exe query find-callers --name Pick --resolved --db $Db 2>$null | Out-String)
 $ovHeaders = ([regex]::Matches($ovTxt, '(?m)^\s+\S*TWorker\.Pick:\s*$')).Count
 $ovRowLines = ([regex]::Matches($ovTxt, '(?m)^\s+\S*C_Driver\s+\(')).Count
 Check 'OVERLOADS: both call sites are reported' ($ovRowLines -eq 2) `
   "rows=$ovRowLines in: $($ovTxt.Trim())"
-Check 'OVERLOADS: headers match the number of TARGETS that have callers' ($ovHeaders -eq 1) `
-  "headers=$ovHeaders (1 = the resolver still collapses ambiguous overloads onto one target; if this becomes 2, overload resolution got precise and that is the news)"
+Check 'OVERLOADS: headers match the number of TARGETS that have callers' ($ovHeaders -eq 2) `
+  "headers=$ovHeaders (2 = one per overload target, as resolver 1.12.0 binds them; 1 = the rows were grouped by NAME, or overload resolution regressed)"
 
 $ovJson = ResolvedJson 'Pick'
 if ($null -ne $ovJson) {

@@ -267,7 +267,22 @@ const
   /// row (~31k reads on ORM3 SERVER, ~21k on CLIENT by the 2026-09-28 decline
   /// counters). The reservation for C2.3 + the IsStub unification MOVES from
   /// 1.12.0 to 1.13.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.12.0-alpha';
+  /// <para>1.12.0-alpha -&gt; 1.13.0-alpha (2026-10-15, ONE bump for the call-binding
+  /// work found on a 2,249-file Delphi 10.3 project, ProjectA): C2.3, a forward
+  /// declaration no longer hides its type from receiver typing; a type NAME binds
+  /// only to a unit the calling file can see, and a written unit qualifier is a
+  /// constraint; overloads with overlapping arity are told apart by LITERAL
+  /// arguments, and overloads of one arity by a VARIABLE argument's declared type;
+  /// value receivers type through unit vars, inherited fields and member chains;
+  /// source lines are read in the byte coordinates refs are stored in;
+  /// --library-db answers calls on values and inherited members; a bare uses name
+  /// resolves through the project's DCC_Namespace; a call inside a routine nested
+  /// in a method binds to the method's class; a free routine exported by two used
+  /// units binds by uses order; a project file's `in` names its unit's file; a
+  /// call with no enclosing routine is a caller; an ambiguous guess is picked by a
+  /// stable key. DERIVED rows only, no parse change: remedy is
+  /// `index --all --resolve-only`.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.13.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
@@ -711,6 +726,11 @@ type
       mode/accessor to record). Default False so Default(TCallEdge) keeps its
       meaning. }
     ValueOnly           : Boolean;
+    { READ SIDE ONLY: the 1-based line of the call site (refs.start_line),
+      filled by GetCallEdgesFromSymbol so a callees tree can say WHERE the
+      parent calls the child, as a callers tree always could (Gitea
+      drag-lint#11). Never persisted; 0 when the reader did not ask. }
+    CallLine            : Integer;
   end;
 
   /// <summary>v14 (D5): one resolved uses-scope edge -- file AFileId can see
@@ -727,6 +747,15 @@ type
   TFileScopeEdge = record
     FileId      : Int64;
     TargetFileId: Int64;
+  end;
+
+  /// <summary>resolver 1.11.0-alpha (uses visibility): a file id and a unit
+  /// NAME -- either a name the file's uses clause writes (GetUnitUseNames: every
+  /// unit_uses row, resolved to an indexed file or not) or the name of the unit
+  /// the file declares (GetFileUnitNames).</summary>
+  TFileUnitName = record
+    FileId: Int64 ;
+    Name  : string;
   end;
 
   /// <summary>One unit that would have to be recompiled because it reaches,
@@ -1445,6 +1474,14 @@ type
     CallerCount: Integer       ;
     UnitCount  : Integer       ;
     Categories : TArray<string>;
+    { Of CallerCount, how many the walk reaches ONLY through ambiguous edges --
+      routines that drop out of the answer if every guessed target is wrong
+      (Gitea drag-lint#13). 0 on a graph of certain edges. }
+    AmbiguousOnly: Integer     ;
+    { Call SITES at this depth that have no routine around them -- a program's
+      begin..end. block, a unit's initialization -- and so are not counted in
+      CallerCount, which counts routines (Gitea drag-lint#20). }
+    OutsideRoutine: Integer    ;
   end;
 
   /// <remarks>
@@ -1625,6 +1662,11 @@ type
       rendered an empty bundle and exited 0, which is precisely the silent
       empty answer the bare-name fallback was added to stop. }
     Resolved     : Boolean              ;
+    { How many routines the resolved name covers (1 for a unique symbol). The
+      impl slice holds every overload's body; the header says so when there is
+      more than one, so the reader does not take one of them for the whole
+      routine (Gitea drag-lint#18). }
+    Overloads    : Integer              ;
   end;
 
 /// <param name="AFormat"><!-- drag-lint:auto type -->TDocFormat</param>

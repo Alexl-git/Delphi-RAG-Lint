@@ -5,99 +5,256 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
-### Changed
+### `find-callees`: where each call is, where it goes, and a suggestion
 
-- **`index --project` and `index --scan-libraries-*` print their scope CAPPED.** The whole
-  compile closure used to be printed, one path per line, before every run -- 2,249 lines (over
-  100k tokens) ahead of the summary on an incremental run that re-parsed one file. A real run now
-  prints the count, 20 paths, `... and N more` and `(--dry-run lists all N)`; `--dry-run` still
-  lists every entry, because there the list is the answer. Guard:
-  `tests\autotest\run_index_scope_listing_cap.ps1`.
+- Every callee line now carries the call site (`at <file>:<line>`) and the callee's
+  location (`-> <file>:<line>`), still one line per edge; `--json` adds `line`,
+  `call_site` and `target_where`. A qname that does not exist -- `UConfig.TConfig.SaveResult`
+  for the FREE routine `UConfig.SaveResult` -- still exits 1 and now lists `did you mean:`
+  routines of the same name. Guard: `tests\autotest\run_find_callees_sites.ps1`.
+
+### Resolver (`DRAGLINT_RESOLVER_VERSION` 1.12.0 -> 1.13.0-alpha; derived rows only -- remedy `index --all --resolve-only`)
+
+- **A forward declaration no longer hides its type from the call
+  resolver.** `TFoo = class;` followed later in the same unit by `TFoo = class(...) ... end;` is
+  two `class` rows with one qualified name. The readers fold the stub, but the call resolver's
+  type-candidate map kept both, so every `X: TFoo` receiver saw two in-scope candidates and was
+  left untyped: on ProjectA `vQ.GraveParametro` bound 3 times out of 35,813 references (TAppQuery,
+  stub at line 67 of UPrimary.pas, body at line 1362). `GetTypeCandidates` now drops the stub
+  with `DRagLint.Core.ForwardStub.PairForwardStubs` itself -- the readers' own test, applied per
+  (file, qualified name) -- in memory, because the equivalent correlated SQL cost 3.9 s per calls
+  pass against 0.1 s. Edges only appear; none moves to another target. Measured on ProjectA
+  (`--resolve-only`, before -> after): call edges 161,189 -> 236,782 (+75,593, +47%), none removed,
+  none retargeted, no confidence changed; `GraveParametro` 3 -> 16,973 bound sites. Guard:
+  `tests\callresolve\run_forward_stub_type_candidate.ps1` (two real same-named classes in scope
+  still decline; a one-line class WITH heritage is still a class).
+- **A type NAME binds only to a unit the calling file can see.**
+  `ResolveTypeNameToSymbol`'s last rung -- no candidate in the caller's uses scope, exactly one
+  in the whole database -- bound that one unconditionally. A project database holds no library
+  unit, so in a unit that uses `Vcl.Imaging.jpeg`, `TJPEGImage.Create` found exactly one
+  `TJpegImage` -- SynGdiPlus's, swept into the closure by some OTHER unit -- and bound it
+  `[certain]` (field report: `find-callees UAuxHash.ComprimirJPEG`; the `.dcu` references
+  Vcl.Imaging.jpeg only). The rung now binds only when the caller's uses clause NAMES the
+  candidate's unit -- as written, or as a bare name a namespace prefix completes (`Dialogs` for
+  a project-local `Vcl.Dialogs.pas`) -- or when the caller has no uses rows at all (an `.inc`).
+  The textual names come from the new `GetUnitUseNames` / `GetFileUnitNames`, because the
+  resolved uses graph drops exactly the library units that matter here. Measured on ProjectA:
+  1,924 edges removed (1,518 of them certain) -- `Neslib.Collections` bound for
+  `System.Generics.Collections` users the bulk, then SynGdiPlus, the `UHttpInterposer.TIdHTTP`
+  interposer for units that use only IdHTTP, and `mscorlib_TLB`; none added, none retargeted.
+  Sampled removals all came from callers whose uses clause does not name the target's unit.
+  Guard: `tests\callresolve\run_type_binding_uses_visibility.ps1`.
+  Same release: a type QUALIFIER is now a constraint rather than noise. The qualifier was
+  stripped before the lookup and the receiver rung passed only the last segment, so
+  `Vcl.Imaging.jpeg.TJPEGImage.Create` could bind SynGdiPlus's TJpegImage in a unit that used
+  both. What was written must now be a segment-aligned suffix of the candidate's qualified name
+  -- `uLibA.TWidget` and a nesting qualifier `TOuter.TInner` alike. Guard:
+  `tests\callresolve\run_type_qualifier_honoured.ps1`.
+- **Overloads with overlapping arity are told apart by the call's LITERAL
+  arguments.** `PickFromMatches` judged arity alone, and optional parameters make two overloads'
+  ranges overlap, so every such call was `[ambiguous]` -- 16 of ProjectA's 22 `GetReportPDFBase64`
+  callers (field report). `ArgsRuleOut` now rules a candidate out when a string, Boolean or
+  numeric literal meets a BUILTIN parameter of another family, or any literal meets a `var`/`out`
+  parameter; unknown types and non-literal arguments never rule out. The argument texts come
+  from `CallArgTexts`, the scan `CountCallArgs` now returns the length of, and live for one
+  `ResolveOne` call only. One survivor is `certain`; several narrow the ambiguous guess to the
+  first survivor. Measured on ProjectA: 244 edges ambiguous -> certain on the same target, 14
+  ambiguous -> certain on the other overload (e.g. `HP_NomeVariavel(S1, True)` had bound to
+  ITSELF, the `(S1, S2: String)` overload), 51 ambiguous edges narrowed to another overload, no
+  certain edge changed; all 22 `GetReportPDFBase64` callers are now certain. Guards:
+  `tests\callresolve\run_overload_literal_args.ps1`; `run_overload_arity.ps1`'s same-arity
+  control now calls with a VARIABLE (still ambiguous) and asserts that the string LITERAL picks
+  the string overload.
+- **A receiver that is a VALUE in scope types: unit-level vars, inherited fields,
+  value-headed chains.** `TypeReceiver` typed a bare receiver from a local or parameter, then a
+  member declared ON the enclosing class, then a type name -- never a unit-level var
+  (`FMain.Refresh`, `DM.Commit`: how Delphi code reaches its forms and data modules, and the
+  evaluation's largest source of missing callers), a field the class inherits, or a chain whose
+  head is a value (`FMain.QM.GetQuery`, `Self.FList.Open`), which the dotted rung read as a
+  qualified TYPE. The receiver rungs now use `TypeOfValueName` -- the same rungs the `with` path
+  already typed bare names with: local/parameter, enclosing-class chain member, exactly one
+  visible unit var -- and a value-headed chain walks `TypeOfMember` segment by segment. A value
+  shadows a type of the same name, as in Delphi. Measured on ProjectA: +32,957 edges (30,312
+  certain), none removed, none retargeted; the top receivers are `FMain` (9,114) and `FMain.QM`
+  (8,171), then report and data-entry globals (`RD`, `QREL`, `DE`). Guard:
+  `tests\callresolve\run_value_receiver_typing.ps1` (a local shadows the global; two visible
+  vars of one name decline).
+- **Source lines are read in the coordinates refs are stored in.** A ref's
+  column is 1 + a BYTE offset into the UTF-8 buffer the indexer parsed (`EnsureUtf8Bytes`, then
+  `NormalizeLoneCR`), but `LinesOf` decoded the file as ANSI -- one character per accented letter
+  where the column counts two bytes. In CP1252 (Portuguese) source every accented letter earlier
+  on a line pushed the call one character further than the column said, so the receiver scan read
+  the wrong text. `LinesOf` now builds its lines from the indexer's own buffer, one byte to one
+  character; the staleness probe still hashes the ANSI text. Measured on ProjectA: +585 edges (all
+  certain) and 8 removed -- each a wrong bind the misread column had made (after
+  `'Iniciando retificacao ...'`, the enum value `ELogKind.log` had bound to the method
+  `TPartnerWS.Log`; after `'Numero de errors: '`, `FErrorList.Count` to the class's own
+  `getCount`). Guard: `tests\callresolve\run_ansi_line_columns.ps1`, whose fixture is written as
+  CP1252 bytes.
+- **`--library-db` answers calls on VALUES, inherited members included.** The
+  cross-DB rung offered the library the receiver TEXT as a type name, so `vQ.Open` with
+  `vQ: TFDQuery` asked for a type called `vQ`; only a receiver that was itself a type name could
+  ever be answered. It also searched only the type's own members, so a method the type inherits
+  (TFDQuery.Open is TDataSet's) was never found. A value receiver is now looked up by its declared
+  type (`FindValueSymbol`, shared with the local rungs), the member on that type and then its
+  ancestors in the library store, nearest level first; several library types of one name
+  (`TList`) are told apart by the caller's uses. `refs.external_target` values appear; local edges
+  never move. Not measured on ProjectA, which has no library index configured. Guard:
+  `tests\callresolve\run_library_db_value_receiver.ps1`.
+- **A project index resolves a bare `uses` name through the project's own unit
+  scope names.** `uses Dialogs` in a VCL project means `Vcl.Dialogs`, and ProjectA keeps a local copy
+  of `Vcl.Dialogs.pas`; but rule B of `ResolveUnitUseTargets` infers a scope prefix only when one
+  indexed stem carries the name AND it is not a GUI framework -- it cannot know which framework a
+  project uses -- so the row stayed NULL. A project-scoped `index` now records the `.dproj`'s
+  `DCC_Namespace` (the four MSBuild groups, in dcc's search order) in `schema_meta`, and a new rule
+  C tries each prefix in order before rule B. It is the project's setting, not an inference, so the
+  GUI refusal does not apply; a library index records no list and is unchanged. Remedy: a project
+  `index` run (the list is written by a scope-establishing run, not by `--resolve-only`). Guard:
+  `tests\autotest\run_unit_uses_project_namespaces.ps1`.
+- **A call inside a routine NESTED in a method binds to the method's class.**
+  `TypeReceiver` typed the implicit receiver of a bare (or `Self.`) call as the enclosing symbol's
+  parent -- the class for a method, but the outer ROUTINE for a nested one, which owns no class
+  method. `_Read` inside `TWSPartner.ExportResults` calling `GetValorTag` bound to nothing, while the
+  same call in a `TWSPartner` method came out `[certain]`. It now takes the owner of the OUTERMOST
+  routine (`EnclosingClassChainDeclares`, whose header had named this defect), after the lexical
+  chain, so a nearer nested routine of the name still wins and a routine nested in a free one still
+  reaches the unit-level rung. Measured on the test bases (same sample, same ground truth):
+  TestCopy recall 93.7% -> 95.9%, ProjectB 75.2% -> 76.4%, precision unchanged, no hit lost; the
+  whole TestCopy database gains 851 edges, loses none, and RETARGETS 17 -- every one a call
+  from a nested routine of `TX.M` to a name `TX` declares as a method that had bound to a same-named
+  free routine of a used unit (`TFEDITC.ShowError` over `UHELPERS.showerror`), which the compiler never
+  picks inside the class. Remedy: `index --all --resolve-only`. Guard:
+  `tests\callresolve\run_nested_routine_reaches_class.ps1`.
+- **Overloads of one arity are told apart by a VARIABLE argument's declared type.**
+  The literal-argument choice above read only LITERAL arguments, so `LoadImage(aSource, vBitMap)` -- three overloads of two
+  parameters that differ only in the second (`TBitmap` / `TJPEGImage` / `TPngImage`) -- stayed
+  `[ambiguous]`. When arity and literals leave several candidates, an argument that is a plain
+  identifier the value rungs place (`FindValueSymbol`: local, parameter, class-chain member, the one
+  visible unit var) and that no `with` target can claim is typed from its declaration; the overload
+  whose exact-type matches strictly contain every other candidate's wins, `[certain]` -- Delphi's
+  preference for an exact match over a conversion. A tie, a split or no typed argument stays
+  ambiguous. On TestCopy: 0 edges added or removed, ambiguous edges 5,974 -> 4,901 (772 become
+  certain on the same target, 301 move to the overload the argument types name -- sampled and
+  checked in source, e.g. `ajcod(vDiasIdade, 2)` with an Integer local now reaches
+  `ajcod(Value: Integer; ...)` instead of the `String` one); ProjectB 948 -> 802. `ArgsRuleOut` reads
+  its parameters through the new `SignatureSlots`, unchanged in behaviour. Two controls that pinned the
+  old limitation now assert the compiler's choice. Remedy: `index --all --resolve-only`. Guard:
+  `tests\callresolve\run_overload_arg_types.ps1`.
+- **A free routine exported by two used units binds to the
+  unit whose uses entry comes LAST, as in Delphi.** `LookupUnitLevelRoutine` gathered every used
+  unit's candidate and, when arity could not choose, answered `ambiguous` with the FIRST unit's; the
+  compiler binds the later one (the implementation uses clause after the interface one, the later
+  unit within a clause). On ProjectA `UFSummaryReport` calls `SiteOnline` with `UAuxGeneric` at
+  :664 and `UAuxSupport` at :668, and the edge went to `UAuxGeneric` -- so `impact` on the real target
+  missed the caller. The rung now keeps the last-listed unit's candidates (`GetUnitScopeEdges` returns
+  each file's targets in source order); an `overload` set across units stays `ambiguous`, since
+  Delphi resolves it by signature. Measured on the TestCopy test repo (`--resolve-only` of the same
+  parse): 331 edges `ambiguous` -> `certain`, 74 of them retargeted (e.g. `UConfig.pas:6912 StrIn`
+  `UAuxGeneric` -> `UPrimary`, uses lines 38 vs 72); no `certain` edge changed, none added or lost;
+  callers benchmark identical (91.5% / 100% on today's sample, 240/249 on the 70 targets shared with
+  the 2026-09-30 run, as then). Guard: `tests\autotest\run_resolve_uses_order_precedence.ps1`.
+- **The project file's `in` names the unit's file.**
+  `ResolveUnitUseTargets` mapped a used-unit name to a `.pas` by stem alone, and with two indexed
+  copies the LAST path read won: a `DCCReference` to another copy, or a copy indexed into the same
+  database (on ProjectA an orphan `UErrors.pas` under `D:\Components`, which sorts after
+  `D:\WorkRepo`), took every `uses` of that unit, and `find-callers --resolved` went
+  silently empty for the real copy's routines. Rule D: a `.dpr`/`.dpk` `UFoo in 'path'`, resolved
+  against the project file's folder, names the target of every `uses UFoo` in the database; two
+  project files that disagree settle nothing. The resolve log says how many names it settled. On the
+  TestCopy test repo (a clean closure) it confirms 1,308 names and changes no `unit_uses` row and no
+  edge. Guard: `tests\autotest\run_unit_uses_in_path_wins.ps1`.
+- **A call with no routine around it is a caller.**
+  Two halves. (a) `TypeReceiver` gave up on a ref with no enclosing routine, and the unit-level value
+  set never held a `.dpr`'s own var section (the program has no symbol, so its vars have no parent):
+  `W.Run` in a program's `begin..end.`, with `W: TWorker` declared in the program, formed no edge. It
+  now skips only the rungs that need a routine and types the receiver from the file (program or
+  unit var, cast, type, chain); `GetUnitLevelValueDecls` includes a `.dpr`/`.dpk`'s parentless
+  var/const. (b) Read side, no derived row: `callgraph --direction callers`, `reverse-calltree` and
+  `butterfly` follow callers by routine and dropped every site without one; they now list it as a
+  leaf `(outside any routine) <file>:<line>` that navigates to the call (JSON `outside_routine`), and
+  `impact` adds `plus N call site(s) outside any routine` (JSON `outside_routine` per level). On the
+  TestCopy test repo: 18 edges added, all `certain`, all from initialization sections; none lost or
+  changed. Guard: `tests\autotest\run_calls_outside_routines.ps1`.
+- **An `ambiguous` guess no longer depends on id order.**
+  When nothing could choose between candidates, `PickFromMatches` named the first of the list,
+  i.e. the lowest symbol id -- an accident of indexing order. Re-parsing `UPrimary.pas` without
+  changing a byte moved 267 ambiguous `strin` edges to another unit, so an incremental database and
+  a `--rebuild` one differed. `LookupUnitLevelRoutine` now orders its candidates by (qualified name,
+  start line, signature) before picking; the edge is still marked `ambiguous`, and
+  `GetUnitLevelRoutines` carries `qualified_name` and `start_line` for it. A METHOD's candidates
+  keep their hierarchy order (own member before an ancestor's), which is the right guess -- a
+  first version that sorted those too bound `B.TransferFile` to an ancestor interface and was
+  caught by `run_doc_covered_by_dispatch.ps1`. On the TestCopy test repo no edge changes against the
+  #20 state (after #21 the unit-level ties left there were already in this order). Guard:
+  `tests\autotest\run_ambiguous_pick_stable.ps1` (the same sources indexed in two orders).
 
 ### Fixed
 
-- **`allow` records a routine-metric review on any routine of a big unit**. To bind a
-  `dl:ok deep-nesting` (or any of the seven routine-metric rules) to the measured value, `allow`
-  re-measures with every threshold at 1 -- but the checkers stop their walk after 200 findings, a
-  cap meant for lint output, and at threshold 1 a routine gives up to four. In a big unit the walk
-  ended around the 50th routine, so `allow` refused every routine below it ("no routine at ...
-  produces one") on the line `lint` anchored the finding on: `TCallResolver.ResolveOneAt`, line
-  ~5900, while a method early in the same file worked -- which read as a methods-vs-functions bug.
-  The four metric checkers take an optional `AMaxFindings` (default 200, lint unchanged); `allow`
-  lifts it and measures only its rule's metric. Guard:
-  `tests\autotest\run_allow_metric_late_routine.ps1`.
-- **A query on a project index says when the index holds files outside the project** (no version constant moves). `index --project` reported and stamped
-  `out_of_closure_count`, but only the STALE branch of the freshness note read it, so a current
-  index stayed silent while those rows took part in every answer: on ProjectA a `.dpr` copied from
-  another folder was one more `unit-usage --unit UConfig` user, and a deleted `UErrors.pas` was the
-  target of all 19 `uses UErrors`. Every verb that opens the index read-only now prints, once, on
-  stderr: `N indexed file(s) lie OUTSIDE this project's compile closure and may appear in answers ...
-  --rebuild`. Guard: `tests\autotest\run_query_notes_out_of_closure.ps1`.
-- **stderr notes reach a merged stdout+stderr stream whole**. The
-  freshness notes and `lint`'s closing note are longer than the RTL's 128-byte text buffer, which
-  flushes per line only on a console; with both streams on one pipe (bash, cmd `2>&1`) a note was
-  cut at byte 128 and its tail printed after the results, gluing the first finding to it.
-  `NoteIndexFreshnessOnce` and `DoLint` now flush stderr after their notes. Guards:
-  `run_query_notes_out_of_closure.ps1` (case 6c), `tests\autotest\run_lint_note_not_interleaved.ps1`.
-- **A reader that closes stdout early no longer turns the answer into a FATAL**.
-  `callgraph ... | Select-Object -First 12` printed `FATAL: EInOutError: I/O error 232` and exited 3.
-  A broken pipe (`ERROR_NO_DATA` / `ERROR_BROKEN_PIPE`) now ends the run quietly with exit 0, as a
-  Unix tool does on SIGPIPE. Guard: `tests\autotest\run_closed_pipe_quiet_exit.ps1`.
-- **`reverse-calltree --direction callees --format dot|mermaid` draws caller -> callee**. The chart renderer always emitted child -> node, which in a callees tree claimed
-  every callee called the root. `butterfly` already turned its callees wing round. Guard:
-  `tests\autotest\run_callee_graph_outputs.ps1`.
-- **`callgraph --format` is read**. It was parsed and ignored: `--format dot`
-  printed the text tree with exit 0. `--format json` now equals `--json`, `text` is the default, and
-  any other value exits 2 pointing at `reverse-calltree`, which draws dot and mermaid. Guard:
-  `run_callee_graph_outputs.ps1`.
-- **The resolver freshness note names the engine by its product version**: on an index resolved by another resolver it said `this build is
-  r=1.19.0-alpha;schema=23` while `--version` said 1.18.0-alpha, so the resolver fingerprint read as
-  the version of the exe. The three notes (older stamp, newer stamp, no stamp) now say `this engine
-  (drag-lint 1.18.0-alpha) resolves with r=...`. Guard:
-  `tests\autotest\run_resolver_note_names_versions.ps1`.
-- **`find-callees` documents that it prints one line per call SITE**: a helper
-  called 24 times was listed 24 times and nothing said so. `--help`, README and AI-USAGE now say it
-  and name `callgraph --qname X --direction callees --depth 1` for the distinct list. Guard:
-  `run_callee_graph_outputs.ps1` (cases 8-10).
-- **The battery no longer leaves a Windows dialog on screen.** `build\stage-engine.ps1`, recovering
-  from a locked target, launched the fresh exe to write the engine hold -- and
-  `tests\autotest\run_engine_hold.ps1` hands it a TEXT file named `fresh.exe`. Launching a non-image
-  `.exe` does not just fail: Windows raises a modal "Unsupported 16-Bit Application" box that waits
-  for a click, whatever `try/catch` the caller has, so every battery run left one behind. The
-  recovery now checks the `MZ` header first and skips the hold step, saying so, for anything that
-  is not an executable image; a real build is unchanged. Guarded by a new check in the same test.
-- **Numbers print the same on every machine.** Stage timings (`done in 0.3s`), the `Done.`
-  line, section summaries and contrast ratios went through `Format`/`FloatToStr` with the OS
-  locale, so a pt-BR machine printed `0,3s` / `58,13s` / `21,00` and every parser of that output
-  read nothing -- six battery runners failed on this machine for that reason alone
-  (`run_index_stage_markers`, `run_index_section_summary_reconciles`, `run_hover_contrast`,
-  `run_flowchecker_profile_breakdown`, `run_defasgn_gen_memo`, `run_flow_oracle_memo`). The engine
-  now sets `.` as decimal and `,` as thousands separator at startup; dates keep the OS format.
-- **Exit `1` now always means an EMPTY answer; a stale database is `2`.** Nine single-db verbs
-  answered a `--db` at an old schema with exit 1 -- the code each uses for "no results / not
-  found": `find-callees`, `context`, `query find`, `query typecat`, `surface`, `ambiguous-calls`,
-  `dump-refs`, `doc-drift`, `dump-call-edges`. They now exit 2, like `find-callers`, `usages` and
-  `outline` already did. `query` (every subcommand) also refuses with 2 when the MANIFEST resolved
-  a list whose every database is stale; it used to skip each one, print `0 caller(s)` and exit 1.
-  The grep-style convention (0 results / 1 empty / 2 usage or bad db / 3 fatal) is now documented
-  in `--help`, `docs\AI-USAGE.md` and `docs\wiki\query-find-callers.md` -- a field agent read a
-  valid zero-caller answer as a failed command because nothing said otherwise. Guard:
-  `run_explicit_db_strict.ps1` (the nine verbs join the T5 stale matrix; new T8/P8).
-- **Symbol and caller answers say WHERE, as a path that opens.** `query --name` (text) named the
-  symbol and never its file: each row now carries `(path:line)`, placed before the `[impl-only]`
-  and `forward at line` suffixes. `query find-callers --resolved` gave the file NAME only: the JSON
-  gains a `path` key (LAST, so the pinned key order and the file-name `file` key are unchanged)
-  and the text form prints the full path. The MCP `find_symbol` tool, whose description promised
-  `file:line:col`, returned `line L:C`: it now returns `path:line:col`. Guard:
-  `tests\autotest\run_output_locations.ps1`.
-- **Name-based `query find-callers` answers ONCE across every `--db`.** It printed per store: `--json`
-  over two databases wrote two arrays back to back (not a JSON document), `--json` with no hit wrote
-  NOTHING (where `--resolved --json` writes `[]`), and the text form wrote one `N caller(s)` line per
-  store. It now writes one array (`[]` when empty) or every store's rows plus ONE total. Guard:
-  `tests\autotest\run_find_callers_json_one_document.ps1`.
-- **Docs: `lint` without `--fail-on` exits 1 on ANY surviving finding.** `docs\AI-USAGE.md` said
-  a wall of warnings still exits 0; a single hint exits 1 (the default equals `--fail-on hint`).
-  The `--help` line now names `hint` and the no-flag default.
+- **Call trees show the call site downward too, and stop presenting guesses as resolved edges**
+  (no version constant moves). `reverse-calltree --direction callees` (and
+  butterfly's callees wing) printed `"site": ""` for every node; the site is now the parent's file and
+  the line of its FIRST call to the child, read from `refs.start_line` (`TCallEdge.CallLine`, read
+  side only). `file`/`line` still name the child's declaration -- the IDE plugin navigates there --
+  and the JSON envelope gains `"direction"`, since the children sit under `callers` either way.
+  `callgraph`, `reverse-calltree`, `butterfly` and `impact` dropped the edge confidence, so an
+  `ambiguous` edge, which can point at the wrong unit, looked exactly like a certain one in trees
+  documented as "resolved". A node reached only by a guessed edge is now marked `[ambiguous]` in
+  text, `"confidence"` in JSON, dashed in dot (`style=dashed`) and mermaid (`-.->`); a target reached
+  by any certain edge stays certain. `impact` adds `of which N reached only through ambiguous edges`
+  (JSON `ambiguous_only` per level) -- on ProjectA, 20 of the 77 callers of `UConfig.SaveResult` within
+  depth 3. Trees of certain edges print as before. Guard:
+  `tests\autotest\run_tree_sites_and_confidence.ps1`.
+- **`context` on an overloaded routine carries every overload's body** (no
+  version constant moves). The impl slice took `Syms[0]` only: on ProjectA `modify
+  UFSummaryReport.TSummaryPrint.ImportItems` showed the 6-line wrapper and left out the overload it calls,
+  where the work is, with nothing saying another body existed. `GetSymbolSlice` now emits the
+  recorded span of each overload in the file, in source order (so `slice` gains it too); the
+  markdown header says `OVERLOADED: <qname> names N routines` and the JSON summary carries
+  `"overloads"`. Guard: `tests\autotest\run_context_overload_bodies.ps1`.
+- **`find-callees` names the overload on both ends of an edge**. The callees of
+  every overload were unioned with nothing saying which overload an edge left from or reached, so a
+  wrapper overload calling its sibling listed the routine as a `[certain]` callee of itself. With
+  more than one overload the text prints a header per overload (signature and `file:line`), a call
+  to an overloaded target is suffixed `-> overload <signature> (<file>:<line>)`, and the JSON adds
+  `from_signature`/`from_where` and `target_signature`/`target_where`. A unique routine calling
+  unique targets prints exactly what it did. Guard: `tests\autotest\run_find_callees_overloads.ps1`.
+- **`impact` counts the routines that reach the target over the RESOLVED call graph** (no
+  version constant moves). It matched refs by NAME TEXT and took as the caller every symbol whose
+  DECLARATION range held the ref's line -- for a ref inside an implementation body, only the unit's --
+  so level 1 counted the units that mention the name, and level 2 followed refs to those unit names,
+  i.e. their `uses` clauses. On ProjectA `impact --qname UConfig.SaveResult` printed 21 callers, then 7 at
+  depth 2; the resolved graph has 22 direct callers and 30 more at depth 2. The walk now follows
+  `call_edges` from every overload of the qname (a bare name: every routine of that name), counts
+  each caller once at its shortest depth, and the text output ends with the total. `usages`, the
+  `context` impact summary (`refactor` / `delete` tasks), the LSP and the MCP `impact` tool read the
+  same walk. Guard: `tests\autotest\run_impact_resolved.ps1`.
+- **`context` lists the call sites bound to the routine, not every ref spelled like its last name
+  segment** (no version constant moves). For `context --task "modify UConfig.TConfig.Report"` on
+  ProjectA the bundle filled its caller cap from 663 `Report` refs -- `aRD.Report.Headless`, a
+  property of another class, first -- against 103 sites bound to that method, and it listed some
+  sites twice. For a routine with resolved call sites (every overload of the qname) only those are
+  kept, once each; a routine the call graph binds nothing to keeps the name list. Guard:
+  `tests\autotest\run_context_resolved_callers.ps1`.
+- **A unit the project names is that file for every unit that uses it.** The closure walk
+  resolved each `uses X` by searching the path, first hit wins, so a same-named COPY in another
+  folder on the path entered the closure beside the file the `.dpr` names -- dcc never searches
+  for a unit the project lists, so the copy is not compiled, but it was indexed and every by-name
+  lookup of its symbols saw two candidates. `TClosureResolver.Resolve` now records the project's
+  own unit -> file bindings (DCCReference, then the `.dpr`'s `in` paths, which win) and consults
+  them first. ProjectA's closure goes 2,249 -> 2,226 files: `Fun_Helpers`, `UTextUtil` and friends
+  from `D:\TEST_REPO_2\_SharedUnits`, the base forms of `R04Lib\source\Forms` the project replaces
+  with its `_lib_forms` copies, and `UWSPartnerC` / `UWSPartnerB` it takes from `SharedUnits\apoiado`. No
+  parse changes, so no version constant moves -- but copies in a folder no remaining closure file
+  shares are outside every eviction root, so run `index --project <x.dproj> --rebuild` once.
+  Guard: `tests\autotest\run_closure_project_unit_wins.ps1`.
+- **`wiring --qname TForm` lists only the DFM bindings that reach THAT form.**
+  `FindEventHandlersForForm` returned, for each method of the form class, every `event-binding`
+  of the same NAME in any DFM -- two dialogs that both have a `btnOKClick` each owned the other's
+  binding, and on ProjectA TFSavePrompt reported 911 handler bindings, 12 of them its own. Now only
+  the form's paired `.dfm` is admitted, plus a DESCENDANT form's paired `.dfm` (an `inherited`
+  form binding the ancestor's handler) unless that descendant declares its own method of the
+  name. The MCP `get_wiring` tool reads the same function. Guard:
+  `tests\autotest\run_wiring_form_scoped.ps1`.
 
 ## v1.31.1-alpha -- 2026-10-14
 

@@ -925,7 +925,7 @@ begin
   Writeln('  drag-lint import-log <logfile> --db <file.sqlite>  (parse dcc/msbuild log)');
   Writeln('  drag-lint query hints        --db <file.sqlite>    [--name <code>] [--rule <severity>]');
   Writeln('  drag-lint hover              --qname <Foo.Bar>     [--db <file.sqlite>] [--format plain|md|json]');
-  Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]');
+  Writeln('  drag-lint impact             --qname <Foo.Bar>     [--db <file.sqlite>] [--depth N] [--format text|json]   (adds "of which N reached only through ambiguous edges" and "plus N call site(s) outside any routine" when any; json ambiguous_only / outside_routine per level)');
   Writeln('  drag-lint wiring             --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]   (Spring4D DI + DFM event edges)');
   Writeln('  drag-lint wiring             --coverage           [--db <file.sqlite>] [--format text|json]   (DI registrations not resolved to I->T)');
   Writeln('  drag-lint surface            --qname <Foo.TBar>   [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]');
@@ -1015,11 +1015,11 @@ begin
   Writeln('  drag-lint dump-refs <file> --db PATH   (diagnostic: refs + enclosing_symbol_id attribution)');
   Writeln('  drag-lint doc-drift --qname X --db PATH [--json]   (diagnostic: deterministic doc-vs-code drift findings for one symbol)');
   Writeln('  drag-lint dump-call-edges --db PATH     (diagnostic: resolved call edges: ref_id|target_qname|confidence)');
-  Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X: one line per call SITE, so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1)');
+  Writeln('  drag-lint find-callees --qname <Foo.Bar> --db PATH [--json]   (resolved outgoing calls of routine X: one line per call SITE, each with `at <file>:<line>` and `-> <callee file>:<line>` (json: line, call_site, target_where); a qname not found lists `did you mean:` routines of the same name; so a target called N times repeats N times; distinct callees: callgraph --qname X --direction callees --depth 1; an overloaded X prints one header per overload, and a call to an overloaded target names that overload)');
   Writeln('  drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json]   (resolver-coverage diagnostic: unresolved/ambiguous call sites)');
   Writeln('  drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json]   (shortest resolved call path A -> ... -> B; exit 1 = no path)');
-  Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json|--format text|json]   (N-deep resolved call tree; cycle-guarded; dot/mermaid: reverse-calltree)');
-  Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)');
+  Writeln('  drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json|--format text|json]   (N-deep resolved call tree; cycle-guarded; a node reached only by a guessed edge is marked [ambiguous], json "confidence"; a caller outside any routine (program block, initialization) is a leaf "(outside any routine) <file>:<line>"; dot/mermaid: reverse-calltree)');
+  Writeln('  drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...]   (N-deep call tree; callers=who calls X (default), callees=what X calls; every child shows its call site [file:line]; a guessed edge is marked [ambiguous] (json "confidence", dot/mermaid dashed); json "direction"; cycle-guarded)');
   Writeln('  drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--progress-interval S] [--no-to-persistent] [--refs-as-leaves] [--no-write-back] [--min-visibility published|public] [--format text|json] [--json] --db PATH [--db ...]   (recursive deep-property enumerator: flattened dotted paths of a class''s own+inherited properties, recursing into class-typed types; ' +
     'depth = --depth N (an integer >= 1), else the --rules book''s #depth N (1..10), else 5 -- a K-segment path needs depth >= K-1; a bad --depth or #depth exits 2; --refs-as-leaves leaves TComponent-typed properties unexpanded (references, not owned sub-objects); types recovered by the ancestry-bridge are memoized back into the index automatically -- --no-write-back forces a read-only, non-mutating query; --min-visibility filters emitted leaves by effective visibility, default = all, schema proptree/2; ' +
     '--progress-interval S: see PROGRESS below)');
@@ -1065,7 +1065,7 @@ begin
     '--unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; ' +
     'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
   Writeln('  drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db PATH ...]   (measure every streamed graphic under the roots before writing a glyph rule: walks .dfm/.fmx, decodes each Picture.Data/Glyph.Data blob (wrapper class, format, width/height/bpp/palette), pairs it with its count property (NumGlyphs and kin), writes instances.tsv + classes.tsv + skipped.tsv + images\ + gallery.html into --output; --append merges into an existing --output; --db only qualifies class_unit / declared count default / runtime_refs)');
-  Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)');
+  Writeln('  drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...]   (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot; a guessed edge is dashed / [ambiguous])');
   Writeln('  drag-lint purge-locals --db PATH [--json]   (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)');
   Writeln('  drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances]   (diagnostic: print {$IFDEF}-resolved source to stdout)');
   Writeln('  drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug]   (diagnostic: print the resolved define profile, one symbol per line)');
@@ -2185,6 +2185,10 @@ const
   OUT_OF_CLOSURE_KEY = 'out_of_closure_count';
   { PROJECT_TAG_KEY and SanitizeProjectTag live in DRagLint.Project.Coherence,
     so the multi-project rename can read the tag without linking this unit. }
+  { resolver 1.16.0: the project's unit scope names (DCC_Namespace, ';'-joined in
+    dcc's search order), which ResolveUnitUseTargets resolves bare `uses` names
+    through. Written by a project-scoped index run before its uses-targets stage. }
+  DCC_NAMESPACE_KEY = 'dcc_namespace';
 
 { Forward: the doc/lint verbs read the tag long before the tag helpers' home
   next to doc-forget. }
@@ -3959,6 +3963,11 @@ begin
       Only the call pass is guarded -- see the DoIndex note for why the other
       three stay unconditional (they are the repair path, and they cost ~21 s
       together on that same index). }
+    { resolver 1.16.0: a project section records the project's unit scope names
+      BEFORE uses-targets reads them. }
+    if SectionDproj <> '' then
+      Store.SetMetaValue(DCC_NAMESPACE_KEY,
+        string.Join(';', DccNamespacesFromDproj(SectionDproj, AItem.Platform, '')));
     Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
     Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
     { v23 (spec F2): inherited-field facts need RESOLVED ancestry, which the
@@ -6097,6 +6106,15 @@ begin
       principle leave a call edge that was derived from the broken uses graph.
       `--force-reparse` re-runs everything, and DRAGLINT_NO_SCOPED_RESOLVE=1
       forces the full-corpus call pass; both are one flag away. }
+    { resolver 1.16.0: a project run records the project's unit scope names
+      BEFORE uses-targets reads them -- a .dpr target reads its sibling .dproj.
+      A --resolve-only pass keeps what the last scope-establishing run wrote. }
+    if (not AArgs.ResolveOnly) and IsProjectScopedTarget then
+    begin
+      var NsProject: string:= if AArgs.ProjectPath <> '' then AArgs.ProjectPath else AArgs.Path;
+      Store.SetMetaValue(DCC_NAMESPACE_KEY,
+        string.Join(';', DccNamespacesFromDproj(ChangeFileExt(NsProject, '.dproj'), PpPlatform, '')));
+    end;
     Stage('', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
     Stage('', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
     { v23 (spec F2): inherited-field facts need RESOLVED ancestry, which the
@@ -9636,7 +9654,7 @@ var
   Store     : ISymbolStore        ;
   Levels    : TArray<TImpactLevel>;
   L         : TImpactLevel        ;
-  Prev      : Integer             ;
+  Total     : Integer             ;
   Depth     : Integer             ;
   TargetName: string              ;
   JRoot     : TJSONObject         ;
@@ -9648,9 +9666,10 @@ begin
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
   Depth:= AArgs.Depth;
   if Depth <= 0 then begin Writeln(AArgs.QName); Writeln('  (depth 0 returns nothing)'); Exit (1 ); end;
-  // Use the bare name (last segment) as the target for the CTE ref lookup,
-  // since refs store the bare identifier name, not the qualified name.
-  TargetName:= LastSegment(AArgs.QName, '.');
+  // #38: the walk follows resolved call edges, so a qualified name targets
+  // exactly that routine (all its overloads); a bare name targets every
+  // routine of that name.
+  TargetName:= AArgs.QName;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'impact', AArgs.DbPath) then Exit(2);
@@ -9667,6 +9686,8 @@ begin
         JLevel.AddPair('depth'  , TJSONNumber.Create(L.Depth      ));
         JLevel.AddPair('callers', TJSONNumber.Create(L.CallerCount));
         JLevel.AddPair('units'  , TJSONNumber.Create(L.UnitCount  ));
+        JLevel.AddPair('ambiguous_only', TJSONNumber.Create(L.AmbiguousOnly)); { #13 }
+        JLevel.AddPair('outside_routine', TJSONNumber.Create(L.OutsideRoutine)); { #20 }
         JArr.AddElement(JLevel);
       end;
       JRoot.AddPair('levels', JArr);
@@ -9678,14 +9699,28 @@ begin
   else
   begin
     Writeln(AArgs.QName);
-    Prev:= 0;
+    // Each level holds the callers FIRST reached at that depth, so the total
+    // is the sum, not the last line.
+    Total:= 0;
+    var AmbTotal: Integer:= 0;
+    var OutTotal: Integer:= 0;
     for L in Levels do
     begin
-      if Prev > 0 then Writeln(Format('  Depth %d: %3d callers in %d units (+%d)', [L.Depth, L.CallerCount, L.UnitCount, L.CallerCount - Prev]))
-      else Writeln(Format('  Depth %d: %3d callers in %d units', [L.Depth, L.CallerCount, L.UnitCount]));
-      Prev:= L.CallerCount;
+      Writeln(Format('  Depth %d: %3d callers in %d units', [L.Depth, L.CallerCount, L.UnitCount]));
+      Inc(Total, L.CallerCount);
+      Inc(AmbTotal, L.AmbiguousOnly);
+      Inc(OutTotal, L.OutsideRoutine);
     end;
     if Length(Levels) = 0 then begin Writeln('  (no callers)'); Exit (1 ); end;
+    Writeln(Format('  Total: %d callers (resolved call edges; list them with callgraph --direction callers)', [Total]));
+    { Said only when it is not zero: a count built on guessed edges is not the
+      same claim as one built on certain edges (Gitea drag-lint#13). }
+    if AmbTotal > 0 then
+      Writeln(Format('  of which %d reached only through ambiguous edges (callgraph marks them [ambiguous])', [AmbTotal]));
+    { #20: sites with no routine around them are not routines, so they are not in
+      the total; said beside it so they are not lost either. }
+    if OutTotal > 0 then
+      Writeln(Format('  plus %d call site(s) outside any routine (a program block or a unit''s initialization)', [OutTotal]));
   end; // else
   Result:= 0;
 end; // function
@@ -24055,7 +24090,50 @@ begin
   if not RoOk then Exit(2); // stale schema: 2 like every bad --db -- 1 is reserved for an EMPTY answer
 
   Targets:= Store.FindSymbolsByQualifiedName(AArgs.QName);
-  if Length(Targets) = 0 then begin Writeln(Format('symbol not found: %s', [AArgs.QName])); Exit(1); end;
+  if Length(Targets) = 0 then
+  begin
+    Writeln(Format('symbol not found: %s', [AArgs.QName]));
+    { SAY WHERE IT IS (Gitea drag-lint#37). `UConfig.TConfig.SaveResult` for a FREE
+      routine `UConfig.SaveResult` answered only "not found". The routines that carry
+      the last segment are the likely intent; listed, capped, still exit 1. }
+    var Leaf: string:= AArgs.QName;
+    if LastDelimiter('.', Leaf) > 0 then Leaf:= Copy(Leaf, LastDelimiter('.', Leaf) + 1, MaxInt);
+    var Suggest: TArray<string>:= nil;
+    for var Cand: TSymbol in Store.FindSymbolsByExactName(Leaf) do
+      if (Cand.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor])
+         and (IndexText(Cand.QualifiedName, Suggest) < 0) and (Length(Suggest) < 10) then
+        Suggest:= Suggest + [Cand.QualifiedName];
+    if Length(Suggest) > 0 then Writeln('  did you mean: ' + string.Join(', ', Suggest));
+    Exit(1);
+  end;
+
+  { OVERLOADS ARE NAMED, ON BOTH ENDS (Gitea drag-lint#12). The callees of
+    every overload of the qname are unioned, and the line said nothing about
+    which overload an edge left from or which one it reached -- so a wrapper
+    overload calling its sibling printed the routine as a callee of ITSELF,
+    `[certain]`, which reads as recursion. Only when there IS more than one
+    overload: a unique routine calling a unique target prints exactly what it
+    always did, which keeps the scripts that count these lines valid. }
+  var MultiSrc: Boolean:= Length(Targets) > 1;
+  var OverloadCount: TDictionary<string, Integer>:= TDictionary<string, Integer>.Create;
+  try
+  { Where a routine is: its body when the index recorded one, else its declaration. }
+  var Where: TFunc<TSymbol, string>:= function(S: TSymbol): string
+    begin
+      var Ln: Integer:= S.ImplStartLine;
+      if Ln <= 0 then Ln:= S.StartLine;
+      Result:= Format('%s:%d', [TPath.GetFileName(Store.GetFilePath(S.FileId)), Ln]);
+    end;
+  var IsOverloaded: TFunc<string, Boolean>:= function(AQName: string): Boolean
+    var N: Integer;
+    begin
+      if not OverloadCount.TryGetValue(AQName, N) then
+      begin
+        N:= Length(Store.FindSymbolsByQualifiedName(AQName));
+        OverloadCount.Add(AQName, N);
+      end;
+      Result:= N > 1;
+    end;
 
   Total:= 0;
   var JOut: TJSONArray:= nil;
@@ -24064,18 +24142,53 @@ begin
     for T in Targets do
     begin
       Edges:= Store.GetCallEdgesFromSymbol(T.Id);
+      { WHERE EACH CALL IS, AND WHERE IT GOES (Gitea drag-lint#37): the call site
+        (`at <file>:<line>`, the caller's own file) and the callee's location
+        (`-> <file>:<line>`) on every line, so a reader does not open the file to
+        find them. Still ONE line per edge -- the count scripts rely on. }
+      var SiteFile: string:= TPath.GetFileName(Store.GetFilePath(T.FileId));
+      if MultiSrc and not AArgs.AsJson then
+        Writeln(Format('%s  %s  (%s):', [T.QualifiedName, T.Signature, Where(T)]));
       for E in Edges do
       begin
-        if E.TargetSymbolId > 0 then QName:= Store.GetSymbolById(E.TargetSymbolId).QualifiedName
-        else QName:= '';
+        var Dest: TSymbol:= Default(TSymbol);
+        if E.TargetSymbolId > 0 then Dest:= Store.GetSymbolById(E.TargetSymbolId);
+        QName:= Dest.QualifiedName;
+        var DestOverloaded: Boolean:= (QName <> '') and IsOverloaded(QName);
+        var Site: string:= '';
+        if E.CallLine > 0 then Site:= Format('%s:%d', [SiteFile, E.CallLine]);
         if AArgs.AsJson then
         begin
           var JObj:= TJSONObject.Create;
           JObj.AddPair('target_qname', QName        );
           JObj.AddPair('confidence'  , E.Confidence  );
+          if E.CallLine > 0 then
+          begin
+            JObj.AddPair('line'     , TJSONNumber.Create(E.CallLine));
+            JObj.AddPair('call_site', Site);
+          end;
+          if (Dest.Id > 0) and not DestOverloaded then JObj.AddPair('target_where', Where(Dest));
+          if MultiSrc then
+          begin
+            JObj.AddPair('from_signature', T.Signature);
+            JObj.AddPair('from_where'    , Where(T)   );
+          end;
+          if DestOverloaded then
+          begin
+            JObj.AddPair('target_signature', Dest.Signature);
+            JObj.AddPair('target_where'    , Where(Dest)   );
+          end;
           JOut.AddElement(JObj);
         end
-        else Writeln(Format('  %s  [%s]', [QName, E.Confidence]));
+        else
+        begin
+          var At: string:= if Site <> '' then '  at ' + Site else '';
+          if DestOverloaded then
+            Writeln(Format('  %s  [%s]%s  -> overload %s  (%s)', [QName, E.Confidence, At, Dest.Signature, Where(Dest)]))
+          else if Dest.Id > 0 then
+            Writeln(Format('  %s  [%s]%s  -> %s', [QName, E.Confidence, At, Where(Dest)]))
+          else Writeln(Format('  %s  [%s]%s', [QName, E.Confidence, At]));
+        end;
         Inc(Total);
       end; // for E
     end; // for T
@@ -24084,6 +24197,9 @@ begin
   finally
     JOut.Free;
   end; // try
+  finally
+    OverloadCount.Free;
+  end;
   Result:= 0;
 end; // function
 
@@ -24335,7 +24451,8 @@ end; // function
 /// <param name="AIndent">Current indent prefix.</param>
 /// <param name="AVisited">Global visited set (shared across the whole tree).</param>
 procedure RenderCallGraphText(const AStore: ISymbolStore; AId: Int64; ADepth: Integer;
-  ACallees: Boolean; const AIndent: string; AVisited: TDictionary<Int64,Boolean>);
+  ACallees: Boolean; const AIndent: string; AVisited: TDictionary<Int64,Boolean>;
+  const AConfidence: string = '');
 var
   QName    : string             ;
   Edges    : TArray<TCallEdge>  ;
@@ -24346,6 +24463,10 @@ var
   Cid      : Int64              ;
 begin
   QName:= AStore.GetSymbolById(AId).QualifiedName;
+  { The edge into this node is marked only when it is a GUESS (Gitea
+    drag-lint#13): the tree is called "resolved", and an ambiguous edge -- which
+    can point at the wrong unit -- printed exactly like a certain one. }
+  if SameText(AConfidence, 'ambiguous') then QName:= QName + ' [ambiguous]';
   if AVisited.ContainsKey(AId) then
   begin
     Writeln(Format('%s%s (cycle)', [AIndent, QName]));
@@ -24356,24 +24477,41 @@ begin
   if ADepth <= 0 then Exit;
 
   ChildIds:= TList<Int64>.Create;
+  var Sure: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create; { child -> reached by a non-ambiguous edge }
   try
     if ACallees then
     begin
       Edges:= AStore.GetCallEdgesFromSymbol(AId);
       for E in Edges do
-        if (E.TargetSymbolId > 0) and not ChildIds.Contains(E.TargetSymbolId) then
-          ChildIds.Add(E.TargetSymbolId);
+        if E.TargetSymbolId > 0 then
+        begin
+          if not ChildIds.Contains(E.TargetSymbolId) then ChildIds.Add(E.TargetSymbolId);
+          if not SameText(E.Confidence, 'ambiguous') then Sure.AddOrSetValue(E.TargetSymbolId, True);
+        end;
     end
     else
     begin
       Callers:= AStore.FindResolvedCallers(AId);
       for C in Callers do
-        if (C.EnclosingSymbolId > 0) and not ChildIds.Contains(C.EnclosingSymbolId) then
-          ChildIds.Add(C.EnclosingSymbolId);
+        if C.EnclosingSymbolId > 0 then
+        begin
+          if not ChildIds.Contains(C.EnclosingSymbolId) then ChildIds.Add(C.EnclosingSymbolId);
+          if not SameText(C.Confidence, 'ambiguous') then Sure.AddOrSetValue(C.EnclosingSymbolId, True);
+        end;
     end;
     for Cid in ChildIds do
-      RenderCallGraphText(AStore, Cid, ADepth - 1, ACallees, AIndent + '  ', AVisited);
+      RenderCallGraphText(AStore, Cid, ADepth - 1, ACallees, AIndent + '  ', AVisited,
+        IfThen(Sure.ContainsKey(Cid), 'certain', 'ambiguous'));
+    { A caller with no routine around it -- a program's begin..end. block, a
+      unit's initialization -- has no symbol to expand, so it is listed as its
+      SITE, a leaf (Gitea drag-lint#20). It used to be dropped. }
+    if not ACallees then
+      for C in Callers do
+        if C.EnclosingSymbolId <= 0 then
+          Writeln(Format('%s  (outside any routine) %s:%d%s', [AIndent, C.Location, C.CallSiteLine,
+            IfThen(SameText(C.Confidence, 'ambiguous'), ' [ambiguous]', '')]));
   finally
+    Sure.Free;
     ChildIds.Free;
   end; // try
 end; // procedure
@@ -24389,7 +24527,7 @@ end; // procedure
 /// <param name="AVisited">Global visited set.</param>
 /// <returns>A newly allocated JSON node the caller must free.</returns>
 function BuildCallGraphJson(const AStore: ISymbolStore; AId: Int64; ADepth: Integer;
-  ACallees: Boolean; AVisited: TDictionary<Int64,Boolean>): TJSONObject;
+  ACallees: Boolean; AVisited: TDictionary<Int64,Boolean>; const AConfidence: string = ''): TJSONObject;
 var
   QName   : string             ;
   Edges   : TArray<TCallEdge>  ;
@@ -24403,6 +24541,7 @@ begin
   QName:= AStore.GetSymbolById(AId).QualifiedName;
   Result:= TJSONObject.Create;
   Result.AddPair('qname', QName);
+  if AConfidence <> '' then Result.AddPair('confidence', AConfidence); { #13; absent on the root }
   if AVisited.ContainsKey(AId) then
   begin
     Result.AddPair('cycle', TJSONBool.Create(True));
@@ -24414,24 +24553,45 @@ begin
   if ADepth <= 0 then Exit;
 
   ChildIds:= TList<Int64>.Create;
+  var Sure: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
   try
     if ACallees then
     begin
       Edges:= AStore.GetCallEdgesFromSymbol(AId);
       for E in Edges do
-        if (E.TargetSymbolId > 0) and not ChildIds.Contains(E.TargetSymbolId) then
-          ChildIds.Add(E.TargetSymbolId);
+        if E.TargetSymbolId > 0 then
+        begin
+          if not ChildIds.Contains(E.TargetSymbolId) then ChildIds.Add(E.TargetSymbolId);
+          if not SameText(E.Confidence, 'ambiguous') then Sure.AddOrSetValue(E.TargetSymbolId, True);
+        end;
     end
     else
     begin
       Callers:= AStore.FindResolvedCallers(AId);
       for C in Callers do
-        if (C.EnclosingSymbolId > 0) and not ChildIds.Contains(C.EnclosingSymbolId) then
-          ChildIds.Add(C.EnclosingSymbolId);
+        if C.EnclosingSymbolId > 0 then
+        begin
+          if not ChildIds.Contains(C.EnclosingSymbolId) then ChildIds.Add(C.EnclosingSymbolId);
+          if not SameText(C.Confidence, 'ambiguous') then Sure.AddOrSetValue(C.EnclosingSymbolId, True);
+        end;
     end;
     for Cid in ChildIds do
-      Kids.AddElement(BuildCallGraphJson(AStore, Cid, ADepth - 1, ACallees, AVisited));
+      Kids.AddElement(BuildCallGraphJson(AStore, Cid, ADepth - 1, ACallees, AVisited,
+        IfThen(Sure.ContainsKey(Cid), 'certain', 'ambiguous')));
+    if not ACallees then { #20: a caller outside any routine, as a leaf -- see the text renderer }
+      for C in Callers do
+        if C.EnclosingSymbolId <= 0 then
+        begin
+          var JLeaf: TJSONObject:= TJSONObject.Create;
+          JLeaf.AddPair('qname', Format('(outside any routine) %s:%d', [C.Location, C.CallSiteLine]));
+          JLeaf.AddPair('outside_routine', TJSONBool.Create(True));
+          JLeaf.AddPair('file', C.FullPath);
+          JLeaf.AddPair('line', TJSONNumber.Create(C.CallSiteLine));
+          if C.Confidence <> '' then JLeaf.AddPair('confidence', C.Confidence);
+          Kids.AddElement(JLeaf);
+        end;
   finally
+    Sure.Free;
     ChildIds.Free;
   end; // try
 end; // function
@@ -27640,6 +27800,9 @@ var
   begin
     Line:= AIndent + ANode.QName;
     if ANode.Site <> '' then Line:= Line + Format(' [%s]', [ANode.Site]);
+    { Only the exception is marked: a tree of certain edges prints as it always
+      did (Gitea drag-lint#13). }
+    if SameText(ANode.Confidence, 'ambiguous') then Line:= Line + ' [ambiguous]';
     if ANode.Cycle then Line:= Line + ' (cycle)';
     ALines.Add(Line);
     if ANode.Cycle then Exit; // already expanded elsewhere -- marker only, no recursion
@@ -27658,6 +27821,7 @@ var
     Result.AddPair('file' , ANode.SiteFile);
     Result.AddPair('line' , TJSONNumber.Create(ANode.SiteLine));
     Result.AddPair('cycle', TJSONBool.Create(ANode.Cycle));
+    if ANode.Confidence <> '' then Result.AddPair('confidence', ANode.Confidence); { #13; absent on the root }
     JKids:= TJSONArray.Create;
     for Kid in ANode.Callers do JKids.AddElement(BuildNodeJson(Kid));
     Result.AddPair('callers', JKids);
@@ -27676,6 +27840,9 @@ var
   begin
     Result:= TJSONObject.Create;
     Result.AddPair('schema' , 'reverse-calltree/1'    );
+    { The children sit under "callers" in BOTH directions (the plugin reads that
+      key); this says which kind they are (Gitea drag-lint#11). }
+    Result.AddPair('direction', Dir                   );
     Result.AddPair('root'   , BuildNodeJson(ATree.Root));
     Result.AddPair('summary', BuildSummaryJson(ATree.Summary));
   end; // function
@@ -27695,8 +27862,11 @@ var
     begin
       if ACalleeTree then begin From:= ANode.QName; Dest:= Kid.QName;   end
       else                begin From:= Kid.QName;   Dest:= ANode.QName; end;
-      if AIsDot then ABuf.AppendLine(Format('  "%s" -> "%s";', [From, Dest]))
-      else ABuf.AppendLine(Format('  %s --> %s', [SanitizeId(From), SanitizeId(Dest)]));
+      { An ambiguous edge is drawn dashed, so a picture does not state as fact
+        what the resolver only guessed (Gitea drag-lint#13). }
+      var Amb: Boolean:= SameText(Kid.Confidence, 'ambiguous');
+      if AIsDot then ABuf.AppendLine(Format('  "%s" -> "%s"%s;', [From, Dest, IfThen(Amb, ' [style=dashed]', '')]))
+      else ABuf.AppendLine(Format('  %s %s %s', [SanitizeId(From), IfThen(Amb, '-.->', '-->'), SanitizeId(Dest)]));
       if not Kid.Cycle then RenderNodeChart(Kid, ABuf, AIsDot, ACalleeTree);
     end;
   end; // procedure
@@ -27870,6 +28040,9 @@ var
   begin
     Line:= AIndent + ANode.QName;
     if ANode.Site <> '' then Line:= Line + Format(' [%s]', [ANode.Site]);
+    { Only the exception is marked: a tree of certain edges prints as it always
+      did (Gitea drag-lint#13). }
+    if SameText(ANode.Confidence, 'ambiguous') then Line:= Line + ' [ambiguous]';
     if ANode.Cycle then Line:= Line + ' (cycle)';
     ALines.Add(Line);
     if ANode.Cycle then Exit; // already expanded elsewhere -- marker only, no recursion
@@ -27888,6 +28061,7 @@ var
     Result.AddPair('file' , ANode.SiteFile);
     Result.AddPair('line' , TJSONNumber.Create(ANode.SiteLine));
     Result.AddPair('cycle', TJSONBool.Create(ANode.Cycle));
+    if ANode.Confidence <> '' then Result.AddPair('confidence', ANode.Confidence); { #13; absent on the root }
     JKids:= TJSONArray.Create;
     for Kid in ANode.Callers do JKids.AddElement(BuildNodeJson(Kid));
     Result.AddPair('callers', JKids);
@@ -27921,15 +28095,18 @@ var
   begin
     for Kid in ANode.Callers do
     begin
+      var Amb: Boolean:= SameText(Kid.Confidence, 'ambiguous'); { #13: dashed when guessed }
+      var DotStyle: string:= IfThen(Amb, ' [style=dashed]', '');
+      var Arrow   : string:= IfThen(Amb, '-.->', '-->');
       if AIsDot then
       begin
-        if AReverseEdges then ABuf.AppendLine(Format('  "%s" -> "%s";', [ANode.QName, Kid.QName]))
-        else ABuf.AppendLine(Format('  "%s" -> "%s";', [Kid.QName, ANode.QName]));
+        if AReverseEdges then ABuf.AppendLine(Format('  "%s" -> "%s"%s;', [ANode.QName, Kid.QName, DotStyle]))
+        else ABuf.AppendLine(Format('  "%s" -> "%s"%s;', [Kid.QName, ANode.QName, DotStyle]));
       end
       else
       begin
-        if AReverseEdges then ABuf.AppendLine(Format('  %s --> %s', [SanitizeId(ANode.QName), SanitizeId(Kid.QName)]))
-        else ABuf.AppendLine(Format('  %s --> %s', [SanitizeId(Kid.QName), SanitizeId(ANode.QName)]));
+        if AReverseEdges then ABuf.AppendLine(Format('  %s %s %s', [SanitizeId(ANode.QName), Arrow, SanitizeId(Kid.QName)]))
+        else ABuf.AppendLine(Format('  %s %s %s', [SanitizeId(Kid.QName), Arrow, SanitizeId(ANode.QName)]));
       end;
       if not Kid.Cycle then RenderNodeChart(Kid, ABuf, AIsDot, AReverseEdges);
     end;

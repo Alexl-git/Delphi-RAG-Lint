@@ -841,11 +841,11 @@ Win64 build.
 | `hover --qname <q>` | Hover card for a symbol | `--format plain\|md\|json` |
 | `typeat <file>:<line>:<col>` | Resolve the type of the expression at a cursor position | `--format text\|json` |
 | [`find-unit`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-unit) `--name <X> --in <file>` | Find which unit declares `X`, to add to `uses` | `--apply` |
-| [`find-callees`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-callees) `--qname <X>` | Resolved outgoing calls of a routine, one line per call site (a target called N times repeats); for the distinct list use `callgraph --qname <X> --direction callees --depth 1` | `--json` |
+| [`find-callees`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-callees) `--qname <X>` | Resolved outgoing calls of a routine, one line per call site (a target called N times repeats); for the distinct list use `callgraph --qname <X> --direction callees --depth 1`; an overloaded X gets one header per overload and a call to an overloaded target names it (`from_signature` / `target_signature` in JSON) | `--json` |
 | [`call-path`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/call-path) `--from <A> --to <B>` | Shortest resolved call path A -> B | `--max-depth N` |
 | [`ambiguous-calls`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ambiguous-calls) | Resolver-coverage diagnostic: unresolved/ambiguous call sites | `--qname`, `--file` |
 | [`helpers-of`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/helpers-of) `<T>` | Record/class helper edges targeting type `T` | `--json` |
-| `impact --qname <q>` | Blast radius: callers/units affected by a change, per depth level | `--depth N` |
+| `impact --qname <q>` | Blast radius: routines that reach `<q>` over resolved call edges, counted at their shortest depth, with a total | `--depth N`, `--format json` |
 | `surface --qname <q>` | Public interface (declaration lines) of a class/record | `--include-impl`, `--all-visibility` |
 | `slice --qname <q>` | Minimal self-contained call-slice reachable from a symbol | |
 | [`context`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/context) `--task "verb qname"` | Compact context bundle for AI prompts -- doc + surface + body + callers, ~10-60x leaner than the source | `--max-callers N`, `--context N`, `--no-docs` |
@@ -992,9 +992,9 @@ reason with no stamp, an invalid or future date, or a stamp older than
 | `cycles --db <db>` | Circular unit dependencies -- see the [worked example](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report) below | `--edges`, `--causes` (blame the exact symbols), `--plan` (refactoring playbook), `--format json\|text` |
 | `top --db <db>` | Top symbols by fan-in | `--by fanin`, `--limit N` |
 | `graph --db <db>` | Export the symbol graph | `--format dot\|mermaid`, `--name <substr>`, `--output <f>` |
-| [`callgraph`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/callgraph) `--qname <X> --db <db>` | N-deep resolved call tree | `--direction callers\|callees`, `--depth N`, `--json` / `--format text\|json` (dot/mermaid: `reverse-calltree`) |
-| `reverse-calltree --qname <X> --db <db>` | N-deep call tree, cycle-guarded | `--direction`, `--depth N`, `--format text\|json\|dot\|mermaid` |
-| [`butterfly`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/butterfly) `--qname <X> --db <db>` | Callers (upward wing) + callees (downward wing) composed into one chart | `--depth N`, `--format dot\|mermaid\|text\|json` |
+| [`callgraph`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/callgraph) `--qname <X> --db <db>` | N-deep resolved call tree; a node reached only by a guessed edge is marked `[ambiguous]` (JSON `confidence`); a caller outside any routine is a leaf `(outside any routine) <file>:<line>` | `--direction callers\|callees`, `--depth N`, `--json` / `--format text\|json` (dot/mermaid: `reverse-calltree`) |
+| `reverse-calltree --qname <X> --db <db>` | N-deep call tree, cycle-guarded; each child shows its call site in both directions, a guessed edge is `[ambiguous]` (JSON `confidence`, dashed in dot/mermaid), JSON `direction` | `--direction`, `--depth N`, `--format text\|json\|dot\|mermaid` |
+| [`butterfly`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/butterfly) `--qname <X> --db <db>` | Callers (upward wing) + callees (downward wing) composed into one chart; guessed edges dashed / `[ambiguous]` | `--depth N`, `--format dot\|mermaid\|text\|json` |
 | `todos [<path>]` | Scan TODO/FIXME/HACK/XXX/REVIEW/NOTE comments | `--json` |
 | [`deps-report`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/deps-report) `--db <db>` | Third-party dependency rollup | `--edges`, `--format text\|json\|csv` |
 | `uses-report --output <f.csv>` | Uses graph as CSV | `--depth N`, `--include-external`, `--all-sources` (every unit across every `--db`, not just the first DB's files; `deps-report` takes it too), `--name <pattern>` (substring on the unit stem; a pattern matching NO source unit exits 2 with `ERROR: uses-report: no index passed contains a source unit named ...` and writes nothing, the same refusal `outline` gives an unindexed file) |
@@ -1067,7 +1067,7 @@ CLI-only verbs).
 | `get_symbol_doc` | Structured DocInsight comment for a qualified symbol -- summary, params, returns, exceptions, since, deprecated, raw block |
 | `find_by_doc_tag` | Symbols tagged `deprecated`, or carrying a `since` annotation |
 | `find_undocumented` | Symbols with no doc comment; filter by `kind` / `public_only` |
-| `get_impact` | Transitive blast radius of a symbol: callers/units affected, per depth level |
+| `get_impact` | Transitive blast radius of a symbol over the resolved call graph: callers/units affected, per depth level |
 | `get_wiring` | Spring4D DI edges (interface -> impl class + lifetime + resolve-sites) plus DFM event handlers for a form |
 | `get_surface` | Public interface (declaration lines) of a class/record; `include_impl` / `all_visibility` widen it |
 | `get_slice` | Minimal self-contained source slice (header + class decl + method bodies) for a class |

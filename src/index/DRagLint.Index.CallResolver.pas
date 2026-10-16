@@ -315,6 +315,20 @@ type
     FWriteStats      : TWriteResolveStats;
     // Declaring file id -> the resolved target file ids it can see (uses graph).
     FFileScope  : TObjectDictionary<Int64, TList<Int64>>;
+    // resolver 1.11.0: file id -> the unit names its uses clause WRITES,
+    // lowercased, resolved target or not; and file id -> the lowercased name of
+    // the unit it declares. Together they answer "does this file NAME the unit
+    // that declares that type", which the resolved graph alone cannot when the
+    // unit it really uses is a library unit outside the index.
+    FFileUseNames: TObjectDictionary<Int64, TList<string>>;
+    FFileUnitName: TDictionary<Int64, string>;
+    // resolver 1.12.0: the argument texts of the call ResolveOne is resolving
+    // (CallArgTexts), read by PickFromMatches to separate overloads by their
+    // literal arguments. Empty outside ResolveOne.
+    FCurArgs: TArray<string>;
+    // resolver 1.18.0: the call being resolved, for PickByArgTypes; empty (Id 0)
+    // on every path but ResolveOne, exactly like FCurArgs.
+    FCurRef: TReference;
     // Cache of a routine/type symbol's direct children, keyed by symbol id, so a
     // per-ref field/method scan does not re-hit the DB for the same enclosing
     // symbol repeatedly across a whole-DB pass.
@@ -373,6 +387,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function CandInScope(ADeclFile, ACandFile: Int64): Boolean;
+    /// <summary>True when ADeclFile's uses clause NAMES the unit ACandFile
+    /// declares -- as written, or as a bare name its namespace prefix completes
+    /// (`Dialogs` for Vcl.Dialogs). Also True when ADeclFile has no uses rows at
+    /// all (an .inc) or ACandFile declares no unit: there is nothing to judge
+    /// by, and the rung keeps its old answer.</summary>
+    /// <param name="ADeclFile">The file the type name is WRITTEN in.</param>
+    /// <param name="ACandFile">The file that declares the candidate type.</param>
+    /// <returns>Whether binding to the candidate is compatible with the uses clause.</returns>
+    function CandNamedInUses(ADeclFile, ACandFile: Int64): Boolean;
     /// <summary>Resolve a raw type text (a param/field/local Signature) to a
     /// defining class/interface/record symbol id, in scope of ADeclFileId. 0 when
     /// unresolvable OR ambiguous (FP-conservative, mirrors ResolveAncestry).</summary>
@@ -395,6 +418,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveTypeNameToSymbol(const ATypeText: string; ADeclFileId: Int64): Int64;
+    /// <summary>The scope rule of ResolveTypeNameToSymbol over an already
+    /// name-matched candidate list: the single candidate in ADeclFileId's uses
+    /// scope, else the single candidate overall whose unit the uses clause
+    /// names, else 0.</summary>
+    /// <param name="ACands">Candidates sharing the looked-up name (and, for a
+    /// dotted name, matching its qualifier).</param>
+    /// <param name="ADeclFileId">The file the type name is written in.</param>
+    /// <returns>The chosen type symbol id, or 0 when the rule declines.</returns>
+    function PickTypeCandidate(ACands: TList<TSymbol>; ADeclFileId: Int64): Int64;
     /// <summary>v21: resolves a call the primary index could not, against the
     /// extra (library) stores, answering with a QUALIFIED NAME. '' when it
     /// cannot answer unambiguously. See the implementation for why it is
@@ -416,7 +448,26 @@ type
     /// <seealso cref="DRagLint.Index.CallResolver.TCallResolver.CandInScope"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    function ResolveExternally(const AReceiver, ACallName: string): string;
+    function ResolveExternally(const ACallRef: TReference; const AReceiver, ACallName: string): string;
+    /// <summary>resolver 1.15.0: the symbol a bare VALUE name denotes at ARef --
+    /// a local or parameter, a member of the enclosing class chain, or exactly
+    /// one visible unit-level var -- and the file its declared type is written
+    /// in. Default when the name is no value, or an ambiguous one.</summary>
+    /// <param name="ARef">Supplies the file and the enclosing routine.</param>
+    /// <param name="AName">The identifier.</param>
+    /// <param name="ATypeFile">OUT: the file to resolve the value's type text in.</param>
+    /// <param name="AIsValue">OUT: True when AName names a value in scope (an
+    /// ambiguous one included -- it still shadows a type).</param>
+    /// <returns>The value's symbol, Default when there is no single one.</returns>
+    function FindValueSymbol(const ARef: TReference; const AName: string; out ATypeFile: Int64;
+      out AIsValue: Boolean): TSymbol;
+    /// <summary>resolver 1.15.0: whether AFileId's uses clause names AUnit (as
+    /// written, or as a bare name a namespace prefix completes). True when the
+    /// file has no uses rows at all.</summary>
+    /// <param name="AFileId">The referencing file.</param>
+    /// <param name="AUnit">A unit name, any case.</param>
+    /// <returns>True when the unit is named, or there is nothing to judge by.</returns>
+    function UsesNamesUnit(AFileId: Int64; const AUnit: string): Boolean;
     /// <summary>Direct children of AParentId (cached). Empty when none / 0.</summary>
     /// <param name="AParentId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->TList&lt;TSymbol&gt; -- Observed:
@@ -960,6 +1011,16 @@ type
     /// <param name="AName">The identifier.</param>
     /// <returns>A type symbol id, or 0.</returns>
     function TypeOfOrdinaryName(const ARef: TReference; const AName: string): Int64;
+    /// <summary>TypeOfOrdinaryName without its last rung: the type of AName
+    /// when it is a VALUE in scope -- a local or parameter, a member of the
+    /// enclosing class or one of its ancestors, or exactly one visible
+    /// unit-level var.</summary>
+    /// <param name="ARef">Supplies the file and the enclosing routine.</param>
+    /// <param name="AName">The identifier.</param>
+    /// <param name="AIsValue">OUT: True when AName names a value in scope, even
+    /// one whose type does not resolve -- it still shadows a type of that name.</param>
+    /// <returns>The value's type symbol id, or 0.</returns>
+    function TypeOfValueName(const ARef: TReference; const AName: string; out AIsValue: Boolean): Int64;
     /// <summary>What ATypeId declares under AName, nearest declaring level first.</summary>
     /// <param name="ATypeId">A with target's type.</param>
     /// <param name="AName">The bare name.</param>
@@ -1193,6 +1254,12 @@ type
     /// <param name="AReason">'' for a binding, else the decline reason.</param>
     procedure TallyWrite(const AReason: string);
   public
+    /// <summary>resolver 1.18.0: among overloads the arity and the literals left,
+    /// the one whose parameters match the call's VARIABLE arguments by exact
+    /// declared type, when it dominates every other.</summary>
+    /// <param name="ACands">The surviving candidates (two or more).</param>
+    /// <returns>The winner's id, or 0 when no candidate dominates.</returns>
+    function PickByArgTypes(ACands: TList<TSymbol>): Int64;
     { Probes AFileId (reading + caching it if not already read) and reports
       whether its on-disk content still matches what the index recorded. Called
       by ResolveCallTargets BEFORE it deletes anything, so a stale file's
@@ -1278,6 +1345,11 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ResolveOne(const ACallRef: TReference): TCallEdge;
+    /// <summary>The body of ResolveOne; ResolveOne wraps it so the per-call
+    /// argument texts are cleared on every return path.</summary>
+    /// <param name="ACallRef">The call reference to resolve.</param>
+    /// <returns>The edge, as ResolveOne documents it.</returns>
+    function ResolveOneAt(const ACallRef: TReference): TCallEdge;
 
     /// <summary>Shape A (2026-09-23, enum-value-ref-binding): resolve a bare
     /// `read` ref that names an enum value, by NAME and SCOPE only -- rules
@@ -1528,6 +1600,27 @@ type
   /// </remarks>
   function CountCallArgs(ALines: TStrings; ALine, ACol: Integer; out AKnown: Boolean): Integer;
 
+  /// <summary>The call site's arguments as TEXT, one entry per top-level
+  /// argument (trimmed, comments removed, string literals verbatim). The walk
+  /// CountCallArgs is defined by -- that function is Length of this one.</summary>
+  /// <param name="ALines">The whole file's lines.</param>
+  /// <param name="ALine">1-based line of the callee identifier.</param>
+  /// <param name="ACol">1-based column of the callee identifier.</param>
+  /// <param name="AKnown">False when the list could not be read (never closed,
+  /// scan budget spent); the result is then empty and says nothing.</param>
+  /// <returns>The arguments; empty for `M`, `M()` and an unreadable list.</returns>
+  function CallArgTexts(ALines: TStrings; ALine, ACol: Integer; out AKnown: Boolean): TArray<string>;
+
+  /// <summary>resolver 1.12.0: True when the literal arguments of a call cannot
+  /// be passed to ASignature's parameters -- a string, Boolean or numeric
+  /// literal into a parameter of a DIFFERENT builtin family, or any literal
+  /// into a `var`/`out` parameter. Unknown types and non-literal arguments
+  /// never rule a candidate out.</summary>
+  /// <param name="ASignature">A candidate's stored Signature.</param>
+  /// <param name="AArgs">The call site's argument texts (CallArgTexts).</param>
+  /// <returns>True only when the candidate is provably not the callee.</returns>
+  function ArgsRuleOut(const ASignature: string; const AArgs: TArray<string>): Boolean;
+
   /// <summary>B1: the range of argument counts a signature accepts. A parameter
   /// with a DEFAULT is optional, so the range is [required..declared] and a
   /// signature is not a single number.</summary>
@@ -1551,6 +1644,7 @@ type
 implementation
 
 uses
+  System.Generics.Defaults, // TComparer -- the unit-level rung's stable candidate order (#36)
   System.Math,     // Min -- ResolveAccessor's declaring-line range
   System.StrUtils, // B1: StartsText / SplitString, used by SignatureArityRange
   TreeSitter,      // 1.8.0: the with scope parses a file's `with` statements
@@ -1770,11 +1864,10 @@ const
   // count as unknown, which falls back to pre-B1 behaviour.
   ARGSCAN_MAX_LINES = 60;
 
-function CountCallArgs(ALines: TStrings; ALine, ACol: Integer; out AKnown: Boolean): Integer;
+function CallArgTexts(ALines: TStrings; ALine, ACol: Integer; out AKnown: Boolean): TArray<string>;
 var
   Li, Ci  : Integer;
   Depth   : Integer;
-  Commas  : Integer;
   Scanned : Integer;
   InStr   : Boolean;
   InBrace : Boolean; // { ... }
@@ -1782,6 +1875,8 @@ var
   Cur     : string ;
   C       : Char   ;
   SawArg  : Boolean;
+  Buf     : string ;
+  Args    : TArray<string>;
 
   { Advance one character, crossing to the next line when the current one runs
     out. False when the budget is spent or the file ends. }
@@ -1803,7 +1898,9 @@ var
 
 begin
   AKnown := False;
-  Result := 0;
+  Result := nil;
+  Buf    := '';
+  Args   := nil;
   if (ALines = nil) or (ALine < 1) or (ALine > ALines.Count) or (ACol < 1) then Exit;
 
   Li := ALine - 1;
@@ -1852,14 +1949,13 @@ begin
   if Cur[Ci] <> '(' then
   begin
     AKnown:= True;
-    Exit(0);
+    Exit(nil);
   end;
 
   { 4. Walk the argument list, counting separators at depth 1 only. '[' shares
        the depth counter because a comma inside an index expression is not an
        argument separator either. }
   Depth := 0;
-  Commas:= 0;
   InStr := False;
   SawArg:= False;
   while True do
@@ -1869,6 +1965,7 @@ begin
       if not Next then Exit; { never closed -> AKnown stays False }
       { a line comment and a string literal both end at the newline }
       InStr:= False;
+      if Depth >= 1 then Buf:= Buf + ' ';
       Continue;
     end;
     C:= Cur[Ci];
@@ -1877,6 +1974,7 @@ begin
     begin
       { '' inside a literal is an escaped quote; toggling twice handles it. }
       if C = '''' then InStr:= False;
+      Buf:= Buf + C;
       Inc(Ci);
       Continue;
     end;
@@ -1907,11 +2005,15 @@ begin
           if Depth = 0 then
           begin
             AKnown:= True;
-            if SawArg then Result:= Commas + 1 else Result:= 0;
+            if SawArg then Result:= Args + [Trim(Buf)] else Result:= nil;
             Exit;
           end;
         end;
-      ',' : if Depth = 1 then Inc(Commas);
+      ',' : if Depth = 1 then
+            begin
+              Args:= Args + [Trim(Buf)];
+              Buf := '';
+            end;
       '/' : if (Ci < Length(Cur)) and (Cur[Ci + 1] = '/') then
             begin Ci:= Length(Cur); { skip to EOL; the += 1 below lands past it } end;
     end;
@@ -1919,37 +2021,41 @@ begin
     { Anything that is not whitespace, and not the opening paren itself, proves
       the list is non-empty -- so `M()` counts 0 while `M( X )` counts 1. }
     if (Depth >= 1) and (C <> '(') and (C <> ' ') and (C <> #9) then SawArg:= True;
+    { The argument's own text: everything at depth >= 1 except the list's opening
+      paren, a top-level comma, and comments (a brace or (* opener has already
+      switched the scanner into its comment state, and a // skipped the line). }
+    if (Depth >= 1) and not ((C = '(') and (Depth = 1)) and not ((C = ',') and (Depth = 1))
+       and not InBrace and not InParStar and (Ci <= Length(Cur)) then Buf:= Buf + C;
 
     Inc(Ci);
   end;
 end;
 
-function SignatureArityRange(const ASignature: string; out AMin, AMax: Integer): Boolean;
-var
-  I, Depth, Start: Integer;
-  Inner : string ;
-  Groups: TStringList;
-  G, Names: string;
-  InStr : Boolean;
-  HasDefault: Boolean;
-  N, K  : Integer;
-  Part  : string ;
+function CountCallArgs(ALines: TStrings; ALine, ACol: Integer; out AKnown: Boolean): Integer;
 begin
-  AMin  := 0;
-  AMax  := 0;
-  Result:= False;
+  Result:= Length(CallArgTexts(ALines, ALine, ACol, AKnown));
+end;
 
-  { A routine with NO parameter list has no parens at all ('': Integer' or ''),
-    and accepts exactly zero arguments -- a real answer, not a parse failure. }
+/// <summary>The parameter clauses of a signature, split at top-level ';' --
+///  the parsing SignatureArityRange does, exposed for ArgsRuleOut.</summary>
+/// <param name="ASignature">A stored symbol Signature.</param>
+/// <param name="AGroups">One entry per clause (`const A, B: string = ''`).</param>
+/// <returns>False when the list is unbalanced; True with no groups for a
+///  routine with no parameter list or `()`.</returns>
+function SignatureParamGroups(const ASignature: string; out AGroups: TArray<string>): Boolean;
+var
+  I, K, Depth, Start: Integer;
+  InStr: Boolean;
+  Inner: string ;
+begin
+  AGroups:= nil;
+  Result := False;
   I:= Pos('(', ASignature);
   if I = 0 then Exit(True);
-
-  { Balanced extract of the parameter list. A default value can itself contain
-    parens ('= TFoo.Create'), so counting is the only safe way to find the end. }
-  Depth := 0;
-  InStr := False;
-  Start := I + 1;
-  Inner := '';
+  Depth:= 0;
+  InStr:= False;
+  Start:= I + 1;
+  Inner:= '';
   for K:= I to Length(ASignature) do
   begin
     if InStr then
@@ -1971,62 +2077,263 @@ begin
         end;
     end;
   end;
-  if Depth <> 0 then Exit; { unbalanced -> refuse to answer }
-  if Trim(Inner) = '' then Exit(True); { '()' -> zero parameters }
+  if Depth <> 0 then Exit;
+  if Trim(Inner) = '' then Exit(True);
+  Depth:= 0;
+  InStr:= False;
+  Start:= 1;
+  for K:= 1 to Length(Inner) do
+  begin
+    if InStr then
+    begin
+      if Inner[K] = '''' then InStr:= False;
+      Continue;
+    end;
+    case Inner[K] of
+      '''': InStr:= True;
+      '(', '[': Inc(Depth);
+      ')', ']': Dec(Depth);
+      ';': if Depth = 0 then
+           begin
+             AGroups:= AGroups + [Copy(Inner, Start, K - Start)];
+             Start:= K + 1;
+           end;
+    end;
+  end;
+  AGroups:= AGroups + [Copy(Inner, Start, Length(Inner) - Start + 1)];
+  Result:= True;
+end;
 
-  { Split at TOP-LEVEL ';' -- one group per declared parameter clause. }
-  Groups:= TStringList.Create;
-  try
-    Depth := 0;
-    InStr := False;
-    Start := 1;
-    for K:= 1 to Length(Inner) do
+function SignatureArityRange(const ASignature: string; out AMin, AMax: Integer): Boolean;
+var
+  Groups    : TArray<string>;
+  Names     : string        ;
+  HasDefault: Boolean       ;
+  N, K      : Integer       ;
+  Part      : string        ;
+begin
+  AMin:= 0;
+  AMax:= 0;
+  { No parameter list and '()' both answer True with no groups: zero
+    parameters is a real answer. An unbalanced list refuses (False). }
+  Result:= SignatureParamGroups(ASignature, Groups);
+  if not Result then Exit;
+  for var G: string in Groups do
+  begin
+    if Trim(G) = '' then Continue;
+    HasDefault:= Pos('=', G) > 0;
+    { Names are everything left of the first ':'. An untyped 'var X' group has
+      no colon at all, in which case the whole group is names. }
+    K:= Pos(':', G);
+    if K > 0 then Names:= Copy(G, 1, K - 1) else Names:= G;
+    Names:= Trim(Names);
+    { Drop one leading parameter modifier. }
+    for Part in TArray<string>.Create('const ', 'var ', 'out ') do
+      if StartsText(Part, Names) then
+      begin
+        Names:= Trim(Copy(Names, Length(Part) + 1, MaxInt));
+        Break;
+      end;
+    N:= 0;
+    for Part in SplitString(Names, ',') do
+      if Trim(Part) <> '' then Inc(N);
+    if N = 0 then Continue;
+    Inc(AMax, N);
+    if not HasDefault then Inc(AMin, N);
+  end;
+end;
+
+type
+  { resolver 1.12.0: what ArgsRuleOut knows about an argument and a parameter. }
+  TArgLiteral  = (alNone, alString, alBool, alInt, alFloat);
+  TParamFamily = (pfUnknown, pfAny, pfString, pfBool, pfInt, pfFloat);
+
+/// <summary>Classifies an argument text as a LITERAL of one builtin family, or
+///  alNone for anything that is not a bare literal (an identifier, a call, an
+///  expression -- including `'a' + S`, whose type is not read here).</summary>
+function ArgLiteral(const AArg: string): TArgLiteral;
+var
+  A    : string ;
+  I    : Integer;
+  InStr: Boolean;
+begin
+  A:= Trim(AArg);
+  if A = '' then Exit(alNone);
+  if SameText(A, 'True') or SameText(A, 'False') then Exit(alBool);
+  if (A[1] = '''') or (A[1] = '#') then
+  begin
+    { Only a run of quoted pieces and #nn codes -- `'a'#13'b'` -- is a string
+      literal; `'1' = X` is a Boolean expression and stays alNone. }
+    InStr:= False;
+    I:= 1;
+    while I <= Length(A) do
     begin
       if InStr then
       begin
-        if Inner[K] = '''' then InStr:= False;
-        Continue;
-      end;
-      case Inner[K] of
-        '''': InStr:= True;
-        '(', '[': Inc(Depth);
-        ')', ']': Dec(Depth);
-        ';': if Depth = 0 then
-             begin
-               Groups.Add(Copy(Inner, Start, K - Start));
-               Start:= K + 1;
-             end;
-      end;
+        if A[I] = '''' then InStr:= False;
+      end
+      else if A[I] = '''' then InStr:= True
+      else if A[I] = '#' then
+      begin
+        Inc(I);
+        if (I > Length(A)) or not CharInSet(A[I], ['0'..'9', '$']) then Exit(alNone);
+        while (I < Length(A)) and CharInSet(A[I + 1], ['0'..'9', 'A'..'F', 'a'..'f', '$']) do Inc(I);
+      end
+      else Exit(alNone);
+      Inc(I);
     end;
-    Groups.Add(Copy(Inner, Start, Length(Inner) - Start + 1));
-
-    for G in Groups do
-    begin
-      if Trim(G) = '' then Continue;
-      HasDefault:= Pos('=', G) > 0;
-      { Names are everything left of the first ':'. An untyped 'var X' group has
-        no colon at all, in which case the whole group is names. }
-      K:= Pos(':', G);
-      if K > 0 then Names:= Copy(G, 1, K - 1) else Names:= G;
-      Names:= Trim(Names);
-      { Drop one leading parameter modifier. }
-      for Part in TArray<string>.Create('const ', 'var ', 'out ') do
-        if StartsText(Part, Names) then
-        begin
-          Names:= Trim(Copy(Names, Length(Part) + 1, MaxInt));
-          Break;
-        end;
-      N:= 0;
-      for Part in SplitString(Names, ',') do
-        if Trim(Part) <> '' then Inc(N);
-      if N = 0 then Continue;
-      Inc(AMax, N);
-      if not HasDefault then Inc(AMin, N);
-    end;
-  finally
-    Groups.Free;
+    if InStr then Exit(alNone);
+    Exit(alString);
   end;
-  Result:= True;
+  I:= 1;
+  if CharInSet(A[1], ['+', '-']) then Inc(I);
+  if I > Length(A) then Exit(alNone);
+  if A[I] = '$' then
+  begin
+    Inc(I);
+    if I > Length(A) then Exit(alNone);
+    for var K:= I to Length(A) do
+      if not CharInSet(A[K], ['0'..'9', 'A'..'F', 'a'..'f']) then Exit(alNone);
+    Exit(alInt);
+  end;
+  Result:= alInt;
+  for var K:= I to Length(A) do
+    if CharInSet(A[K], ['0'..'9']) then Continue
+    else if CharInSet(A[K], ['.', 'e', 'E', '+', '-']) and (K > I) then Result:= alFloat
+    else Exit(alNone);
+end;
+
+/// <summary>The builtin family of a parameter type text, pfUnknown for any
+///  type this cannot judge (an alias, an enum, a class) -- which never rules
+///  a candidate out.</summary>
+function ParamFamily(const ATypeText: string): TParamFamily;
+var
+  T: string;
+begin
+  T:= LowerCase(Trim(ATypeText));
+  if T.StartsWith('system.') then T:= Copy(T, Length('system.') + 1, MaxInt);
+  if (T = '') or (T = 'variant') or (T = 'olevariant') or (T = 'tvalue') or T.StartsWith('array of const') then Exit(pfAny);
+  if (T = 'string') or (T = 'ansistring') or (T = 'widestring') or (T = 'unicodestring') or (T = 'shortstring') or
+     (T = 'rawbytestring') or (T = 'utf8string') or (T = 'char') or (T = 'ansichar') or (T = 'widechar') or
+     (T = 'pchar') or (T = 'pansichar') or (T = 'pwidechar') then Exit(pfString);
+  if (T = 'boolean') or (T = 'bytebool') or (T = 'wordbool') or (T = 'longbool') then Exit(pfBool);
+  if (T = 'integer') or (T = 'cardinal') or (T = 'int64') or (T = 'uint64') or (T = 'byte') or (T = 'word') or
+     (T = 'smallint') or (T = 'shortint') or (T = 'longint') or (T = 'longword') or (T = 'nativeint') or
+     (T = 'nativeuint') or (T = 'fixedint') or (T = 'fixeduint') then Exit(pfInt);
+  if (T = 'double') or (T = 'single') or (T = 'extended') or (T = 'currency') or (T = 'real') or
+     (T = 'comp') or (T = 'tdatetime') or (T = 'tdate') or (T = 'ttime') then Exit(pfFloat);
+  Result:= pfUnknown;
+end;
+
+/// <summary>Whether a literal of family AArg may be passed to a parameter of
+///  family AParam. Integer literals widen to floats; every literal passes to
+///  pfAny and pfUnknown.</summary>
+function LiteralFits(AArg: TArgLiteral; AParam: TParamFamily): Boolean;
+begin
+  if (AArg = alNone) or (AParam in [pfUnknown, pfAny]) then Exit(True);
+  case AArg of
+    alString: Result:= AParam = pfString;
+    alBool  : Result:= AParam = pfBool;
+    alInt   : Result:= AParam in [pfInt, pfFloat];
+    alFloat : Result:= AParam = pfFloat;
+  else
+    Result:= True;
+  end;
+end;
+
+type
+  /// <summary>One declared parameter of a signature -- one per NAME, so
+  ///  `A, B: T` is two slots.</summary>
+  TParamSlot = record
+    TypeText: string;    // as declared, default value dropped; '' for an untyped `const X`
+    ByRef   : Boolean;   // var / out
+  end;
+
+/// <summary>The parameters of ASignature, one slot per name, in order.</summary>
+/// <param name="ASignature">A routine signature as the index stores it.</param>
+/// <param name="ASlots">The slots; empty for no parameter list or `()`.</param>
+/// <returns>False when the list does not parse (SignatureParamGroups refused).</returns>
+function SignatureSlots(const ASignature: string; out ASlots: TArray<TParamSlot>): Boolean;
+var
+  Groups: TArray<string>;
+begin
+  ASlots:= nil;
+  Result:= SignatureParamGroups(ASignature, Groups);
+  if not Result then Exit;
+  for var G: string in Groups do
+  begin
+    if Trim(G) = '' then Continue;
+    var Names: string:= G;
+    var Slot: TParamSlot:= Default(TParamSlot);
+    var Colon: Integer:= Pos(':', G);
+    if Colon > 0 then
+    begin
+      Names:= Copy(G, 1, Colon - 1);
+      Slot.TypeText:= Copy(G, Colon + 1, MaxInt);
+      var Eq: Integer:= Pos('=', Slot.TypeText);   { a default value follows the type }
+      if Eq > 0 then Slot.TypeText:= Copy(Slot.TypeText, 1, Eq - 1);
+    end;
+    Names:= Trim(Names);
+    Slot.ByRef:= StartsText('var ', Names) or StartsText('out ', Names);
+    for var Part: string in TArray<string>.Create('constref ', 'const ', 'var ', 'out ') do
+      if StartsText(Part, Names) then
+      begin
+        Names:= Trim(Copy(Names, Length(Part) + 1, MaxInt));
+        Break;
+      end;
+    for var N: string in SplitString(Names, ',') do
+      if Trim(N) <> '' then ASlots:= ASlots + [Slot];
+  end;
+end;
+
+function ArgsRuleOut(const ASignature: string; const AArgs: TArray<string>): Boolean;
+var
+  Slots: TArray<TParamSlot>;
+begin
+  Result:= False;
+  if not SignatureSlots(ASignature, Slots) then Exit;
+  for var K:= 0 to High(Slots) do
+  begin
+    if K > High(AArgs) then Exit;
+    var Lit: TArgLiteral:= ArgLiteral(AArgs[K]);
+    if Slots[K].ByRef and (Lit <> alNone) then Exit(True);   { a literal is not a variable }
+    if not LiteralFits(Lit, ParamFamily(Slots[K].TypeText)) then Exit(True);
+  end;
+end;
+
+/// <summary>True when two declared type texts name the same type: case and
+///  blanks ignored, and a unit qualifier dropped (`Vcl.Graphics.TBitmap` is
+///  `TBitmap`) unless the text is generic.</summary>
+/// <param name="A">A type text; '' never matches.</param>
+/// <param name="B">The other type text.</param>
+/// <returns>True for the same type name.</returns>
+function SameTypeText(const A, B: string): Boolean;
+  function Norm(const S: string): string;
+  begin
+    Result:= LowerCase(StringReplace(Trim(S), ' ', '', [rfReplaceAll]));
+    if (Pos('<', Result) = 0) and (Pos('.', Result) > 0) then
+      Result:= Copy(Result, LastDelimiter('.', Result) + 1, MaxInt);
+  end;
+begin
+  Result:= (Trim(A) <> '') and (Trim(B) <> '') and (Norm(A) = Norm(B));
+end;
+
+/// <summary>True when every argument position AInner matches is matched by
+///  AOuter too, and AOuter matches at least one more.</summary>
+/// <param name="AOuter">Exact-match flags of one candidate, by argument.</param>
+/// <param name="AInner">Those of another candidate, same length.</param>
+/// <returns>True when AOuter strictly contains AInner.</returns>
+function StrictlyContains(const AOuter, AInner: TArray<Boolean>): Boolean;
+var
+  More: Boolean;
+begin
+  More:= False;
+  for var K:= 0 to High(AOuter) do
+  begin
+    if AInner[K] and not AOuter[K] then Exit(False);
+    if AOuter[K] and not AInner[K] then More:= True;
+  end;
+  Result:= More;
 end;
 
 { TCallResolver }
@@ -2044,6 +2351,8 @@ begin
   FEnumStats  := Default(TEnumResolveStats);
   FParenlessStats:= Default(TParenlessResolveStats);
   FFileScope  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
+  FFileUseNames:= TObjectDictionary<Int64, TList<string>>.Create([doOwnsValues]);
+  FFileUnitName:= TDictionary<Int64, string>.Create;
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
   FStaleFiles := TDictionary<Int64, Boolean>.Create;
@@ -2071,6 +2380,8 @@ begin
   FStaleFiles.Free;
   FChildCache.Free;
   FFileScope .Free;
+  FFileUseNames.Free;
+  FFileUnitName.Free;
   FNameToUnitValues.Free;
   FNameToEnumValues.Free;
   FNameToRoutines.Free;
@@ -2131,6 +2442,14 @@ begin
     if not FFileScope.ContainsKey(E.FileId) then FFileScope.Add(E.FileId, TList<Int64>.Create);
     FFileScope[E.FileId].Add(E.TargetFileId);
   end;
+  // 3. resolver 1.11.0: the uses names as WRITTEN, and each file's own unit name.
+  for var U: TFileUnitName in FStore.GetUnitUseNames do
+  begin
+    if not FFileUseNames.ContainsKey(U.FileId) then FFileUseNames.Add(U.FileId, TList<string>.Create);
+    FFileUseNames[U.FileId].Add(LowerCase(U.Name));
+  end;
+  for var U: TFileUnitName in FStore.GetFileUnitNames do
+    FFileUnitName.AddOrSetValue(U.FileId, LowerCase(U.Name));
 end;
 
 function TCallResolver.CandInScope(ADeclFile, ACandFile: Int64): Boolean;
@@ -2142,11 +2461,30 @@ begin
   if FFileScope.TryGetValue(ADeclFile, L) then Result:= L.IndexOf(ACandFile) >= 0;
 end;
 
+function TCallResolver.CandNamedInUses(ADeclFile, ACandFile: Int64): Boolean;
+var
+  Cand: string;
+begin
+  if not FFileUnitName.TryGetValue(ACandFile, Cand) then Exit(True);
+  Result:= UsesNamesUnit(ADeclFile, Cand);
+end;
+
+function TCallResolver.UsesNamesUnit(AFileId: Int64; const AUnit: string): Boolean;
+var
+  Names: TList<string>;
+  Cand : string       ;
+begin
+  if not FFileUseNames.TryGetValue(AFileId, Names) then Exit(True);
+  Cand:= LowerCase(AUnit);
+  for var N: string in Names do
+    if (N = Cand) or ((Pos('.', N) = 0) and Cand.EndsWith('.' + N)) then Exit(True);
+  Result:= False;
+end;
+
 function TCallResolver.ResolveTypeNameToSymbol(const ATypeText: string; ADeclFileId: Int64): Int64;
 var
   N    : string        ;
   Cands: TList<TSymbol>;
-  InScopeIdx, InScopeCount: Integer;
   ci   : Integer       ;
 begin
   Result:= 0;
@@ -2160,9 +2498,47 @@ begin
   // LastDelimiter that ResolveAncestry uses), hence Copy from DotPos + 2 to land
   // one char PAST the dot. A future "switch to 1-based" edit must also drop the +1.
   var DotPos: Integer:= N.LastDelimiter('.');
-  if DotPos >= 0 then N:= Trim(Copy(N, DotPos + 2, MaxInt));
+  { resolver 1.11.0: the QUALIFIER is a constraint, not noise. It used to be
+    stripped and forgotten, so `Vcl.Imaging.jpeg.TJPEGImage` was judged as a bare
+    `TJPEGImage` and could bind to SynGdiPlus.TJpegImage. What was written must
+    now be a segment-aligned suffix of the candidate's qualified name -- a unit
+    qualifier (`uLibA.TWidget`, or the bare `Dialogs.TOpenDialog` that names
+    Vcl.Dialogs) and a nesting qualifier (`TOuter.TInner`) alike. }
+  var Written: string:= '';
+  if DotPos >= 0 then
+  begin
+    Written:= LowerCase(StringReplace(N, ' ', '', [rfReplaceAll]));
+    N:= Trim(Copy(N, DotPos + 2, MaxInt));
+  end;
   if N = '' then Exit;
   if not FNameToCands.TryGetValue(LowerCase(N), Cands) then Exit;
+  if Written <> '' then
+  begin
+    var Kept: TList<TSymbol>:= TList<TSymbol>.Create;
+    try
+      for ci:= 0 to Cands.Count - 1 do
+      begin
+        var Q: string:= LowerCase(Cands[ci].QualifiedName);
+        if (Q = Written) or Q.EndsWith('.' + Written) then Kept.Add(Cands[ci]);
+      end;
+      if Kept.Count = 0 then Exit;
+      Result:= PickTypeCandidate(Kept, ADeclFileId);
+    finally
+      Kept.Free;
+    end;
+    Exit;
+  end;
+  Result:= PickTypeCandidate(Cands, ADeclFileId);
+end;
+
+function TCallResolver.PickTypeCandidate(ACands: TList<TSymbol>; ADeclFileId: Int64): Int64;
+var
+  Cands: TList<TSymbol>;
+  InScopeIdx, InScopeCount: Integer;
+  ci   : Integer       ;
+begin
+  Result:= 0;
+  Cands:= ACands;
   InScopeIdx  := -1;
   InScopeCount:= 0;
   for ci:= 0 to Cands.Count - 1 do
@@ -2172,10 +2548,19 @@ begin
       if InScopeIdx < 0 then InScopeIdx:= ci;
     end;
   // Resolve only when unambiguous (mirrors ResolveAncestry's FP policy):
-  //   exactly one in-scope candidate, OR (none in scope) a single global def.
+  //   exactly one in-scope candidate, OR (none in scope) a single global def
+  //   whose UNIT the caller's uses clause names.
+  // resolver 1.11.0: the second rung used to bind the single global def
+  // unconditionally. A project DB holds no library unit, so `TJPEGImage` in a
+  // unit that uses Vcl.Imaging.jpeg found exactly one TJpegImage -- SynGdiPlus's,
+  // swept into the closure by some other unit -- and bound it [certain] (~956
+  // such edges on ProjectA). "None in scope" is only a gap in the resolved graph
+  // when the uses clause still NAMES the candidate's unit; otherwise the type
+  // the caller sees lives somewhere this index does not hold, and absence beats
+  // a guess.
   if InScopeCount = 1 then
     Result:= Cands[InScopeIdx].Id
-  else if (InScopeCount = 0) and (Cands.Count = 1) then
+  else if (InScopeCount = 0) and (Cands.Count = 1) and CandNamedInUses(ADeclFileId, Cands[0].FileId) then
     Result:= Cands[0].Id;
 end;
 
@@ -2199,11 +2584,86 @@ begin
   FRows.Symbols.Add(AId, Result);
 end;
 
+{ resolver 1.18.0. An argument is typed only when it is a plain identifier the
+  value rungs place -- a local, parameter, class-chain member or the one visible
+  unit var (FindValueSymbol, the receivers' own rule) -- and no `with` target at
+  the call can claim the name. A candidate's exact set is the arguments whose
+  declared type is its parameter's type (SameTypeText). The winner must STRICTLY
+  contain every other candidate's set: exact wherever any other is exact, and
+  somewhere more. That is Delphi's own preference -- an exact match beats a
+  conversion -- read conservatively: a tie, a split (one exact at argument 1,
+  another at 2), an unparsed signature or no typed argument leaves the call
+  ambiguous, as before. }
+function TCallResolver.PickByArgTypes(ACands: TList<TSymbol>): Int64;
+var
+  ArgTypes: TArray<string> ;
+  Exact   : TArray<TArray<Boolean>>;
+  Slots   : TArray<TParamSlot>;
+  TypeFile: Int64           ;
+  IsValue : Boolean         ;
+  WType   : Int64           ;
+  WKind   : TWithMemberKind ;
+  Any     : Boolean         ;
+begin
+  Result:= 0;
+  if (FCurRef.Id = 0) or (Length(FCurArgs) = 0) or (ACands = nil) or (ACands.Count < 2) then Exit;
+  SetLength(ArgTypes, Length(FCurArgs));
+  Any:= False;
+  for var K:= 0 to High(FCurArgs) do
+  begin
+    var A: string:= Trim(FCurArgs[K]);
+    if (A = '') or not IsIdentStart(A[1]) then Continue;
+    var Plain: Boolean:= True;
+    for var I:= 2 to Length(A) do
+      if not IsIdentPart(A[I]) then Plain:= False;
+    if not Plain then Continue;
+    if WithScopeAt(FCurRef, FCurRef.StartLine, FCurRef.StartCol, A, WType, WKind) <> wvNone then Continue;
+    var V: TSymbol:= FindValueSymbol(FCurRef, A, TypeFile, IsValue);
+    if V.Id > 0 then
+    begin
+      ArgTypes[K]:= V.Signature;
+      Any:= True;
+    end;
+  end;
+  if not Any then Exit;
+  SetLength(Exact, ACands.Count);
+  for var C:= 0 to ACands.Count - 1 do
+  begin
+    if not SignatureSlots(ACands[C].Signature, Slots) then Exit;
+    SetLength(Exact[C], Length(ArgTypes));
+    for var K:= 0 to High(ArgTypes) do
+      Exact[C][K]:= (K <= High(Slots)) and SameTypeText(ArgTypes[K], Slots[K].TypeText);
+  end;
+  for var C:= 0 to ACands.Count - 1 do
+  begin
+    var Wins: Boolean:= True;
+    for var D:= 0 to ACands.Count - 1 do
+      if (D <> C) and not StrictlyContains(Exact[C], Exact[D]) then
+      begin
+        Wins:= False;
+        Break;
+      end;
+    if Wins then Exit(ACands[C].Id);
+  end;
+end;
+
 function TCallResolver.AncestorsOf(ATypeId: Int64): TArray<TTypeAncestor>;
 begin
   if FRows.Ancestors.TryGetValue(ATypeId, Result) then Exit;
   Result:= FStore.GetTransitiveAncestors(ATypeId);
   FRows.Ancestors.Add(ATypeId, Result);
+end;
+
+/// <summary>Text whose character I is byte I of AUtf8: the coordinates the
+///  index's columns are in (tree-sitter byte offsets, plus one).</summary>
+/// <param name="AUtf8">The UTF-8 buffer the indexer parsed.</param>
+/// <returns>A string of Length(AUtf8) characters; non-ASCII bytes become the
+///  Latin-1 characters of the same value, which only string literals and
+///  comments contain.</returns>
+function ByteColumnText(const AUtf8: TBytes): string;
+begin
+  SetLength(Result, Length(AUtf8));
+  for var I:= 0 to High(AUtf8) do Result[I + 1]:= Char(AUtf8[I]);
 end;
 
 function TCallResolver.LinesOf(AFileId: Int64): TStringList;
@@ -2243,13 +2703,23 @@ begin
         name-based rung can still be right. Only the receiver WRITE is withheld,
         which is the part that destroys information. }
       Bytes:= TFile.ReadAllBytes(Path);
-      // ANSI: source files are strict 7-bit ASCII / CP125x, matching Doc.Facts.
+      // The staleness probe hashes exactly what the indexer hashed: ANSI text.
       Txt  := TEncoding.ANSI.GetString(Bytes);
       if not FStore.FileIsUpToDate(Path,
                DateTimeToUnix(TFile.GetLastWriteTime(Path), False),
                THashSHA2.GetHashString(Txt)) then
         FStaleFiles.AddOrSetValue(AFileId, True);
-      Result.Text:= Txt;
+      { resolver 1.14.0: the LINES are the text a ref's COLUMN indexes, which is
+        not the ANSI text above. A ref stores 1 + a BYTE offset into the UTF-8
+        buffer the indexer parsed (EnsureUtf8Bytes, then NormalizeLoneCR), so in a
+        CP1252 unit every accented character earlier on the line -- `ShowIt('Acao
+        ...')` in Portuguese source -- pushed the column one place past where the
+        ANSI-decoded line had the call, and the receiver scan read the wrong
+        text. One byte to one char over the indexer's own buffer puts Line[Col] on
+        the byte the column names; identifiers are ASCII, so every name the
+        resolver reads comes out as written. The with table already reads the
+        same buffer (WithStatementsOf). }
+      Result.Text:= ByteColumnText(NormalizeLoneCR(EnsureUtf8Bytes(Bytes)));
     except
       // A missing / locked / unreadable source file is not fatal to the whole-DB
       // pass: leave the line list empty so this ref's receiver stays unresolved
@@ -2293,6 +2763,28 @@ begin
     end;
 end;
 
+{ THE GUESS MUST NOT DEPEND ON ID ORDER (resolver 1.20.0, backlog #36). An
+  'ambiguous' answer still names one candidate: the first of the list. For a
+  METHOD that list is in hierarchy order -- the receiver type's own members,
+  then its ancestors -- and the first IS the right guess (the nearest). For a
+  UNIT-LEVEL routine it was in symbol-id order, an accident of indexing:
+  re-parsing UPrimary.pas without changing a byte gave its symbols new ids
+  and moved 267 ambiguous `strin` edges to UAuxGeneric.strin, so an incremental
+  database and a --rebuild one differed. LookupUnitLevelRoutine therefore
+  orders its candidates by (qualified name, start line, signature) -- a
+  property of the code -- before picking; method lookup keeps its order. }
+function CompareStableKey(const L, R: TSymbol): Integer;
+  function Key(const S: TSymbol): string;
+  var Q: string;
+  begin
+    Q:= S.QualifiedName;
+    if Q = '' then Q:= S.Name;
+    Result:= Format('%s|%.9d|%s', [LowerCase(Q), S.StartLine, S.Signature]);
+  end;
+begin
+  Result:= CompareStr(Key(L), Key(R));
+end;
+
 function TCallResolver.PickFromMatches(AMatches: TList<TSymbol>; AArgCount: Integer;
   AArgsKnown: Boolean; out AConfidence: string): Int64;
 var
@@ -2332,6 +2824,52 @@ begin
       Result     := Fit[0].Id;
       AConfidence:= 'certain';
       Exit;
+    end;
+
+    { resolver 1.12.0: arity did not settle it -- two overloads whose optional
+      parameters make their arity ranges overlap -- so read the LITERAL
+      arguments. `GetReportPDFBase64(FSiteCode, FOrderCode, FExprCode, False,
+      False)` fits both ProjectA overloads by count, but its 4th argument is a
+      Boolean literal and the second overload's 4th parameter is a string, and
+      its 2nd parameter is `out`: that one is not the callee. 16 of that
+      routine's 22 callers were [ambiguous] for want of this. Only literals are
+      judged and only against BUILTIN parameter types; anything else keeps the
+      candidate. Several survivors narrow the guess (the first survivor), none
+      leaves the old answer. FCurArgs is set by ResolveOne for the call being
+      resolved and is empty on every other path. }
+    if (Fit.Count > 1) and AArgsKnown and (AArgCount > 0) and (Length(FCurArgs) = AArgCount) then
+    begin
+      var Typed: TList<TSymbol>:= TList<TSymbol>.Create;
+      try
+        for S in Fit do
+          if not ArgsRuleOut(S.Signature, FCurArgs) then Typed.Add(S);
+        if Typed.Count = 1 then
+        begin
+          Result     := Typed[0].Id;
+          AConfidence:= 'certain';
+          Exit;
+        end;
+        if Typed.Count > 1 then
+        begin
+          { resolver 1.18.0: the literals did not settle it -- read the VARIABLE
+            arguments' declared types. `LoadImage(aSource, vBitMap)` fits three
+            overloads that differ only in the 2nd parameter (TBitmap / TJPEGImage /
+            TPngImage); vBitMap is a TBitmap, so only the first matches it
+            exactly, and Delphi prefers an exact match over any conversion. }
+          var ByType: Int64:= PickByArgTypes(Typed);
+          if ByType > 0 then
+          begin
+            Result     := ByType;
+            AConfidence:= 'certain';
+            Exit;
+          end;
+          Result     := Typed[0].Id;
+          AConfidence:= 'ambiguous';
+          Exit;
+        end;
+      finally
+        Typed.Free;
+      end;
     end;
 
     // Arity did not settle it. NARROWING ONLY: when several candidates fit, the
@@ -2531,6 +3069,7 @@ begin
     // unit exports, so this rung answers alone whenever it matches at all.
     for S in Cands do
       if S.FileId = ACallFileId then Matches.Add(S);
+    Matches.Sort(TComparer<TSymbol>.Construct(CompareStableKey)); { #36: not id order }
     if Matches.Count > 0 then
       Exit(PickFromMatches(Matches, AArgCount, AArgsKnown, AConfidence));
 
@@ -2542,7 +3081,54 @@ begin
     for S in Cands do
       if (S.FileId <> ACallFileId) and SameText(S.Section, 'interface')
          and CandInScope(ACallFileId, S.FileId) then Matches.Add(S);
+    Matches.Sort(TComparer<TSymbol>.Construct(CompareStableKey)); { #36: not id order }
     Result:= PickFromMatches(Matches, AArgCount, AArgsKnown, AConfidence);
+
+    { USES ORDER SETTLES A CLASH BETWEEN UNITS (resolver 1.20.0, Gitea
+      drag-lint#21). Two used units exporting the same free routine were left
+      'ambiguous', and the pick was whichever candidate came first -- the FIRST
+      unit. Delphi binds the one whose uses entry comes LAST (implementation
+      clause after interface clause, later unit within a clause): on ProjectA
+      UFSummaryReport calls SiteOnline with UAuxGeneric at :664 and
+      UAuxSupport at :668, and the edge went to UAuxGeneric. GetUnitScopeEdges
+      lists each file's targets in source order, so the later index wins.
+
+      Applied only when arity did not decide and the candidates come from more
+      than one unit -- and NOT when any of them is `overload`: then Delphi
+      resolves across the units by signature, which this rung does not model,
+      so the answer stays 'ambiguous' as before. }
+    if SameText(AConfidence, 'ambiguous') and (Matches.Count > 1) then
+    begin
+      var Scope: TList<Int64>;
+      var AnyOverload: Boolean:= False;
+      var Multi: Boolean:= False;
+      for S in Matches do
+      begin
+        if Pos('overload', LowerCase(S.Directives)) > 0 then AnyOverload:= True;
+        if S.FileId <> Matches[0].FileId then Multi:= True;
+      end;
+      if Multi and (not AnyOverload) and FFileScope.TryGetValue(ACallFileId, Scope) then
+      begin
+        var BestFile: Int64:= 0;
+        var BestRank: Integer:= -1;
+        for S in Matches do
+        begin
+          var Rank: Integer:= Scope.LastIndexOf(S.FileId);
+          if Rank > BestRank then begin BestRank:= Rank; BestFile:= S.FileId; end;
+        end;
+        if BestRank >= 0 then
+        begin
+          var Winners: TList<TSymbol>:= TList<TSymbol>.Create;
+          try
+            for S in Matches do
+              if S.FileId = BestFile then Winners.Add(S);
+            Result:= PickFromMatches(Winners, AArgCount, AArgsKnown, AConfidence);
+          finally
+            Winners.Free;
+          end;
+        end;
+      end;
+    end;
   finally
     Matches.Free;
   end;
@@ -2619,10 +3205,11 @@ begin
   AClassId:= 0;
   if AEnclosingSymbolId <= 0 then Exit; // R4: vacuous
 
-  { Climb to the OUTERMOST enclosing routine and take ITS owner. TypeReceiver's
-    kind-1 logic takes the enclosing symbol's ParentId in one hop, which is right
-    for a method but answers a ROUTINE -- not a class -- for any ref inside a
-    nested routine, and those refs are in scope of the owning class all the same. }
+  { Climb to the OUTERMOST enclosing routine and take ITS owner. One hop to the
+    enclosing symbol's ParentId is right for a method but answers a ROUTINE -- not
+    a class -- for any ref inside a nested routine, and those refs are in scope of
+    the owning class all the same. TypeReceiver's kind-1 rung took that one hop
+    until resolver 1.17.0-alpha; it now comes here for a nested routine. }
   ScopeId:= AEnclosingSymbolId;
   Depth  := 0;
   while Depth < MAX_LEXICAL_DEPTH do
@@ -3682,20 +4269,49 @@ end;
 
 function TCallResolver.TypeOfOrdinaryName(const ARef: TReference; const AName: string): Int64;
 var
+  IsValue: Boolean;
+begin
+  Result:= TypeOfValueName(ARef, AName, IsValue);
+  { Last: the name IS a type -- `with TFoo do` reaches its class members. Only
+    when no value of the name is in scope: a value shadows a type. }
+  if not IsValue then Result:= ResolveTypeNameToSymbol(AName, ARef.FileId);
+end;
+
+function TCallResolver.TypeOfValueName(const ARef: TReference; const AName: string;
+  out AIsValue: Boolean): Int64;
+var
+  V       : TSymbol;
+  TypeFile: Int64  ;
+begin
+  V:= FindValueSymbol(ARef, AName, TypeFile, AIsValue);
+  if V.Id > 0 then Result:= ResolveTypeNameToSymbol(V.Signature, TypeFile)
+  else Result:= 0;
+end;
+
+function TCallResolver.FindValueSymbol(const ARef: TReference; const AName: string;
+  out ATypeFile: Int64; out AIsValue: Boolean): TSymbol;
+var
   M      : TSymbol       ;
   ClassId: Int64         ;
   L      : TList<TSymbol>;
   S      : TSymbol       ;
   Hits   : Integer       ;
 begin
+  Result   := Default(TSymbol);
+  ATypeFile:= ARef.FileId;
+  AIsValue := True;
   { A local or parameter. Same-named locals of DIFFERENT types (sibling
     for-var loops) type to nothing, and still shadow everything below. }
   M:= FindChildOfKind(ARef.EnclosingSymbolId, AName, [skLocalVar, skParam], True);
-  if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, ARef.FileId));
-  if FindChildOfKind(ARef.EnclosingSymbolId, AName, [skLocalVar, skParam]).Id > 0 then Exit(0);
+  if M.Id > 0 then Exit(M);
+  if FindChildOfKind(ARef.EnclosingSymbolId, AName, [skLocalVar, skParam]).Id > 0 then Exit;
   EnclosingClassChainDeclares(ARef.EnclosingSymbolId, '', ClassId);
   M:= LookupMemberOnType(ClassId, AName);
-  if M.Id > 0 then Exit(ResolveTypeNameToSymbol(M.Signature, M.FileId));
+  if M.Id > 0 then
+  begin
+    ATypeFile:= M.FileId;
+    Exit(M);
+  end;
   { A unit-level var visible from here: exactly one, or nothing. }
   Hits:= 0;
   if FNameToUnitValues.TryGetValue(LowerCase(AName), L) then
@@ -3706,10 +4322,12 @@ begin
         Inc(Hits);
         M:= S;
       end;
-  { Last: the name IS a type -- `with TFoo do` reaches its class members. }
-  if Hits = 0 then Result:= ResolveTypeNameToSymbol(AName, ARef.FileId)
-  else if Hits = 1 then Result:= ResolveTypeNameToSymbol(M.Signature, M.FileId)
-  else Result:= 0;
+  AIsValue:= Hits > 0;
+  if Hits = 1 then
+  begin
+    ATypeFile:= M.FileId;
+    Result:= M;
+  end;
 end;
 function TCallResolver.WithEntityType(const ARef: TReference; const AStmts: TArray<TWithStatement>;
   AStmt, AEnt: Integer): Int64;
@@ -4299,12 +4917,23 @@ end;
 function TCallResolver.TypeReceiver(const ACallRef: TReference; const AReceiverExpr: string): Int64;
 var
   Encl    : TSymbol;
-  ClassId : Int64  ;
-  Member  : TSymbol;
   CastType: string ;
 begin
   Result:= 0;
-  if ACallRef.EnclosingSymbolId <= 0 then Exit; // no enclosing routine -> give up
+  { NO ENCLOSING ROUTINE IS NOT NO SCOPE (resolver 1.20.0, Gitea drag-lint#20).
+    A call in a program's begin..end. block or in a unit's initialization /
+    finalization has no routine around it, and this used to give up at once --
+    so `W.Run` in a .dpr, with `W: TWorker` declared in the program's var
+    section, formed no edge at all. What needs a routine is skipped (a bare or
+    Self. call names the routine's class; a `with` and locals are routine
+    scope); every rung that types from the FILE and its uses -- a unit-level or
+    program-level var, a cast, a type, a dotted chain from a var -- still runs. }
+  if ACallRef.EnclosingSymbolId <= 0 then
+  begin
+    if (AReceiverExpr = '') or SameText(AReceiverExpr, 'Self') then Exit;
+  end
+  else
+  begin
   Encl:= SymbolById(ACallRef.EnclosingSymbolId);
 
   // --- Kind 1: bare M / Self.M -> the enclosing routine's owning class.
@@ -4327,11 +4956,24 @@ begin
   Result:= TypeReceiverThroughWith(ACallRef, AReceiverExpr, WithHandled);
   if WithHandled or (AReceiverExpr = '') or SameText(AReceiverExpr, 'Self') then
   begin
-    if not WithHandled then Result:= Encl.ParentId;
+    if not WithHandled then
+    begin
+      Result:= Encl.ParentId;
+      { resolver 1.17.0-alpha: inside a routine NESTED in a method, that parent
+        is the outer ROUTINE, and no class method is its child -- so a bare or
+        Self. call there bound to nothing, although the compiler binds it to the
+        method's class exactly as in the method itself (`_Read` inside
+        TWSPartner.ExportResults calling GetValorTag). The OUTERMOST routine's
+        owner is the receiver; 0 when that routine is a free one, which leaves the
+        unit-level rung to answer as before. The lexical chain ran first
+        (BareCallInNearScopes), so a nearer nested routine of the name still wins. }
+      if (Result > 0) and (SymbolById(Result).Kind in METHOD_KINDS) then
+        EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, '', Result);
+    end;
     Exit;
   end;
+  end; { an enclosing routine: the with / bare / Self rungs }
 
-  ClassId:= Encl.ParentId; // the enclosing routine's owning class (for kinds 2/3)
 
   // --- Kind 6: cast '(X as TBar).M' / 'TBar(X).M' -> the cast target type.
   if TryParseCastTarget(AReceiverExpr, CastType) then
@@ -4348,15 +4990,39 @@ begin
   //     uncertain (' ?').
   //
   //     Handled by taking the LAST segment as the type name: the leading segments
-  //     are a unit qualifier, and ResolveTypeNameToSymbol is already file-scoped
-  //     and FP-conservative (one certain candidate or nothing), so a wrong unit
+  //     are a unit (or enclosing-type) qualifier, which ResolveTypeNameToSymbol
+  //     holds the candidate to, and it is file-scoped and FP-conservative (one
+  //     candidate the caller's uses clause reaches, or nothing), so a wrong unit
   //     cannot silently bind. Only fires when EVERY segment is a plain
   //     identifier -- a real expression ('Arr[i].Foo', a cast) still falls
   //     through to the guard below, which is where it belongs.
   if (Pos('.', AReceiverExpr) > 0) and IsIdentChain(AReceiverExpr.Split(['.'])) then
   begin
-    var Segs: TArray<string>:= AReceiverExpr.Split(['.']);
-    Exit(ResolveTypeNameToSymbol(Segs[High(Segs)], ACallRef.FileId));
+    { resolver 1.13.0: a chain whose HEAD is a value -- `FMain.qryX.Open`,
+      `DM.Conexao.Commit`, `Self.FList.Add` -- is typed member by member from
+      the value's type. It used to reach only the type rung below, which read
+      `FMain.qryX` as a unit- or type-qualified TYPE and found none: the
+      single largest loss of callers on ProjectA, where forms and data modules
+      are reached through their global variables. A value shadows a type, so a
+      value head never falls through to the type reading. }
+    var Chain: TArray<string>:= AReceiverExpr.Split(['.']);
+    var HeadIsValue: Boolean;
+    var ChainType: Int64;
+    if SameText(Chain[0], 'Self') then
+    begin
+      EnclosingClassChainDeclares(ACallRef.EnclosingSymbolId, '', ChainType);
+      HeadIsValue:= ChainType > 0;
+    end
+    else ChainType:= TypeOfValueName(ACallRef, Chain[0], HeadIsValue);
+    if HeadIsValue then
+    begin
+      for var K:= 1 to High(Chain) do
+        if ChainType > 0 then ChainType:= TypeOfMember(ChainType, Chain[K]);
+      Exit(ChainType);
+    end;
+    { The WHOLE dotted text, not its last segment: ResolveTypeNameToSymbol now
+      holds the candidate to the qualifier that was written. }
+    Exit(ResolveTypeNameToSymbol(AReceiverExpr, ACallRef.FileId));
   end;
 
   // The remaining handled kinds require a simple identifier receiver.
@@ -4373,20 +5039,20 @@ begin
   // from either (decline -> the honest untyped floor), not from the first. The
   // local still SHADOWS any same-named field or type, so a declined local ends
   // the search here rather than falling through to the rungs below.
-  Member:= FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam], True);
-  if Member.Id > 0 then
-    Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
-  if FindChildOfKind(ACallRef.EnclosingSymbolId, AReceiverExpr, [skLocalVar, skParam]).Id > 0 then
-    Exit; // a local/param of that name exists but its type is ambiguous -> 0
-
-  // --- Kind 2: FIELD 'FBar.M' / Kind 3: PROPERTY 'Prop.M' -> member's type.
-  //     Members are children of the enclosing class.
-  if ClassId > 0 then
-  begin
-    Member:= FindChildOfKind(ClassId, AReceiverExpr, [skField, skProperty]);
-    if Member.Id > 0 then
-      Exit(ResolveTypeNameToSymbol(Member.Signature, ACallRef.FileId));
-  end;
+  //
+  // --- Kind 2: FIELD 'FBar.M' / Kind 3: PROPERTY 'Prop.M' -> member's type,
+  //     on the enclosing class OR AN ANCESTOR (resolver 1.13.0; only the class's
+  //     own members were looked at, so a field a form inherits from its base
+  //     form typed nothing).
+  // --- Kind 8 (resolver 1.13.0): a UNIT-LEVEL VAR 'FMain.M' / 'DM.M' -> the
+  //     var's declared type, when exactly one visible var has the name. Never
+  //     tried before: a form's or data module's global variable is how most
+  //     Delphi code reaches it.
+  // The four rungs, in Delphi's own order, are TypeOfValueName's -- the
+  // routine the `with` path already typed bare names with.
+  var IsValue: Boolean;
+  Result:= TypeOfValueName(ACallRef, AReceiverExpr, IsValue);
+  if IsValue then Exit;
 
   // --- Kind 7: the receiver IS A TYPE -- 'TFoo.Create(...)', 'TFoo.ClassMethod'.
   //
@@ -5105,6 +5771,19 @@ begin
 end;
 
 function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;
+begin
+  { The argument texts live for ONE call: every other entry into PickFromMatches
+    (parenless, write and with passes) must see none, not the last site's. }
+  FCurRef:= ACallRef;
+  try
+    Result:= ResolveOneAt(ACallRef);
+  finally
+    FCurArgs:= nil;
+    FCurRef := Default(TReference);
+  end;
+end;
+
+function TCallResolver.ResolveOneAt(const ACallRef: TReference): TCallEdge;
 var
   Lines   : TStringList;
   Line    : string     ;
@@ -5149,7 +5828,8 @@ begin
   // the receiver scan -- which reads LEFT and cannot leave the line -- an
   // argument list reads RIGHT and legitimately spans lines, so this is given the
   // whole file rather than the single line.
-  ArgCount:= CountCallArgs(Lines, ACallRef.StartLine, ACallRef.StartCol, ArgsKnown);
+  FCurArgs:= CallArgTexts(Lines, ACallRef.StartLine, ACallRef.StartCol, ArgsKnown);
+  ArgCount:= Length(FCurArgs);
 
   // 1c. NESTED-CALL RESOLUTION: a BARE call is resolved by Delphi's lexical
   // scope chain BEFORE any receiver typing, because the innermost declaration
@@ -5315,7 +5995,7 @@ begin
   // note in Migrate for why the alternative (nullable FK + target_qname) was
   // rejected.
   if (Result.TargetSymbolId = 0) and (Length(FExtraStores) > 0) then
-    Result.ExternalTarget:= ResolveExternally(Rcv, ACallRef.NameText);
+    Result.ExternalTarget:= ResolveExternally(ACallRef, Rcv, ACallRef.NameText);
 end;
 
 { v21. Consults the extra (library) stores for a call the primary index could not
@@ -5332,29 +6012,72 @@ end;
       posture ResolveTypeNameToSymbol takes locally.
   Returns '' whenever any of that fails, which is the common case and is fine:
   the ref simply stays unresolved, exactly as it was before v21. }
-function TCallResolver.ResolveExternally(const AReceiver, ACallName: string): string;
+function TCallResolver.ResolveExternally(const ACallRef: TReference; const AReceiver, ACallName: string): string;
 var
-  Store  : ISymbolStore ;
-  Leaf   : string       ;
-  Cands  : TArray<TSymbol>;
-  S, M   : TSymbol      ;
-  TypeSym: TSymbol      ;
-  Found  : Integer      ;
-  Members: TArray<TSymbol>;
-  Hit    : TSymbol      ;
-  MemHits: Integer      ;
+  Store   : ISymbolStore   ;
+  Leaf    : string         ;
+  Cands   : TArray<TSymbol>;
+  S       : TSymbol        ;
+  TypeSym : TSymbol        ;
+  Found   : Integer        ;
+  InUses  : Integer        ;
+  UsesSym : TSymbol        ;
+  TypeFile: Int64          ;
+  IsValue : Boolean        ;
+  Hit     : string         ;
+
+  { The qualified name of the member called ACallName that the NEAREST level of
+    ATypeId's chain declares -- the type itself, then its ancestors in walk
+    order. '' when no level does, or the nearest level declares members of
+    that name with different qualified names. Overloads share one qualified
+    name, which is all refs.external_target records. }
+  function MemberOnChain(const AStore: ISymbolStore; ATypeId: Int64): string;
+    function OnLevel(ALevelId: Int64; out AAnswer: string): Boolean;
+    begin
+      AAnswer:= '';
+      Result := False;
+      for var M: TSymbol in AStore.FindAllChildSymbols(ALevelId) do
+        if SameText(M.Name, ACallName) and CanBeCallTarget(M.Kind) then
+        begin
+          if not Result then AAnswer:= M.QualifiedName
+          else if not SameText(AAnswer, M.QualifiedName) then AAnswer:= '';
+          Result:= True;
+        end;
+    end;
+  var
+    Answer: string;
+  begin
+    Result:= '';
+    if OnLevel(ATypeId, Answer) then Exit(Answer);
+    for var A: TTypeAncestor in AStore.GetTransitiveAncestors(ATypeId) do
+      if A.Resolved and (A.SymbolId > 0) and OnLevel(A.SymbolId, Answer) then Exit(Answer);
+  end;
+
 begin
   Result:= '';
   if (Trim(AReceiver) = '') or (Trim(ACallName) = '') then Exit;
   if SameText(AReceiver, 'Self') then Exit; { the enclosing class is a LOCAL question }
 
-  { A dotted receiver contributes its LAST segment -- 'System.JSON.TJSONArray'
-    names TJSONArray; the leading segments are a unit qualifier. }
+  { resolver 1.15.0: a VALUE receiver is looked up by its declared TYPE. `vQ.Open`
+    with `vQ: TFDQuery` offered the library the name `vQ` -- which it never
+    declares -- so a receiver that was not itself a type name could never be
+    answered, and that is nearly every receiver. The value's type text is what
+    the library has to find. }
   Leaf:= AReceiver;
+  if IsIdentStart(Leaf[1]) and IsIdentChain([Leaf]) then
+  begin
+    var V: TSymbol:= FindValueSymbol(ACallRef, Leaf, TypeFile, IsValue);
+    if V.Id > 0 then Leaf:= V.Signature
+    else if IsValue then Exit; { an ambiguous value: no type to offer }
+  end;
+  { Generic arguments and a unit qualifier are not part of the name looked up. }
+  var LtPos: Integer:= Pos('<', Leaf);
+  if LtPos > 0 then Leaf:= Copy(Leaf, 1, LtPos - 1);
+  Leaf:= Trim(Leaf);
   if Pos('.', Leaf) > 0 then
   begin
     var Segs: TArray<string>:= Leaf.Split(['.']);
-    Leaf:= Segs[High(Segs)];
+    Leaf:= Trim(Segs[High(Segs)]);
   end;
   if Leaf = '' then Exit;
 
@@ -5362,28 +6085,34 @@ begin
   begin
     if Store = nil then Continue;
     Cands:= Store.FindSymbolsByExactName(Leaf);
-    Found:= 0;
+    Found := 0;
+    InUses:= 0;
     TypeSym:= Default(TSymbol);
+    UsesSym:= Default(TSymbol);
     for S in Cands do
       if S.Kind in [skClass, skInterface, skRecord] then
       begin
         Inc(Found);
-        if Found > 1 then Break;
         TypeSym:= S;
+        { resolver 1.15.0: several library types of one name (TList in
+          System.Classes and in System.Generics.Collections) are told apart by
+          the unit the caller's uses clause names -- the rule a project type
+          already answers to. }
+        var UnitName: string:= S.QualifiedName;
+        var Dot: Integer:= UnitName.LastDelimiter('.');
+        if Dot >= 0 then UnitName:= Copy(UnitName, 1, Dot) else UnitName:= '';
+        if (UnitName <> '') and UsesNamesUnit(ACallRef.FileId, UnitName) then
+        begin
+          Inc(InUses);
+          UsesSym:= S;
+        end;
       end;
-    if Found <> 1 then Continue;          { absent or ambiguous -> no answer }
-
-    Members:= Store.FindAllChildSymbols(TypeSym.Id);
-    MemHits:= 0;
-    Hit:= Default(TSymbol);
-    for M in Members do
-      if SameText(M.Name, ACallName) and CanBeCallTarget(M.Kind) then
-      begin
-        Inc(MemHits);
-        if MemHits > 1 then Break;
-        Hit:= M;
-      end;
-    if MemHits = 1 then Exit(Hit.QualifiedName);
+    if (Found > 1) and (InUses = 1) then TypeSym:= UsesSym
+    else if Found <> 1 then Continue;        { absent or ambiguous -> no answer }
+    { resolver 1.15.0: the member may be INHERITED -- TFDQuery.Open is declared
+      on TDataSet -- so the chain is walked, nearest level first. }
+    Hit:= MemberOnChain(Store, TypeSym.Id);
+    if Hit <> '' then Exit(Hit);
   end;
 end;
 

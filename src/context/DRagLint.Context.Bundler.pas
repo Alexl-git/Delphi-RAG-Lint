@@ -429,6 +429,12 @@ begin
   end;
   Sym          := Syms[0];
   Result.Resolved:= True;
+  { Syms[0] still names the bundle (surface, doc, callers are per name), but
+    the impl slice carries every overload's body -- see GetSymbolSlice. }
+  Result.Overloads:= 0;
+  for var O: TSymbol in Syms do
+    if O.Kind in [skMethod, skProcedure, skFunction, skConstructor, skDestructor] then Inc(Result.Overloads);
+  if Result.Overloads = 0 then Result.Overloads:= 1;
 
   { THE NAME TO USE FROM HERE DOWN IS THE RESOLVED ONE, NEVER THE TYPED ONE.
 
@@ -512,6 +518,52 @@ begin
   CallerName:= EffQName;
   if LastDelimiter('.', CallerName) > 0 then CallerName:= Copy(CallerName, LastDelimiter('.', CallerName) + 1, MaxInt);
   RawCallers:= DistinctCallSites(AStore.FindCallersByNameWithContext(CallerName, ACallerContext));
+  { #40 (2026-10-08): the name lookup above returns EVERY ref spelled like the
+    routine's last segment -- for UConfig.TConfig.Report on ProjectA that is 663 sites
+    of any `Report` (aRD.Report.Headless among them) against 103 resolved to
+    this method, and the 200-row cap showed mostly the wrong ones. For a routine
+    whose overloads have resolved call sites, keep only the sites the call graph
+    binds to it (the find-callers --resolved answer); with no resolved site at
+    all -- an index without a call pass, or a routine nothing binds to -- the
+    name list stays, as before. }
+  if Sym.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then
+  begin
+    var Sites:= TStringList.Create;
+    try
+      Sites.Sorted    := True;
+      Sites.Duplicates:= dupIgnore;
+      for var Target in AStore.FindSymbolsByQualifiedName(EffQName) do
+        if Target.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor] then
+          for var RC in AStore.FindResolvedCallers(Target.Id) do
+            if (RC.Mode = '') and (RC.FullPath <> '') and (RC.CallSiteLine > 0) then
+              Sites.Add(LowerCase(RC.FullPath) + '|' + IntToStr(RC.CallSiteLine));
+      if Sites.Count > 0 then
+      begin
+        // The name lookup returns some sites twice; one row per file:line:col.
+        var Seen:= TStringList.Create;
+        try
+          Seen.Sorted:= True;
+          var Kept:= 0;
+          for I:= 0 to High(RawCallers) do
+          begin
+            var SiteKey:= LowerCase(AStore.GetFilePath(RawCallers[I].FileId)) + '|' + IntToStr(RawCallers[I].StartLine);
+            var RowKey := SiteKey + '|' + IntToStr(RawCallers[I].StartCol);
+            if (Sites.IndexOf(SiteKey) >= 0) and (Seen.IndexOf(RowKey) < 0) then
+            begin
+              Seen.Add(RowKey);
+              RawCallers[Kept]:= RawCallers[I];
+              Inc(Kept);
+            end;
+          end;
+          SetLength(RawCallers, Kept);
+        finally
+          Seen.Free;
+        end;
+      end;
+    finally
+      Sites.Free;
+    end;
+  end;
   if Length(RawCallers) > AMaxCallers then SetLength(RawCallers, AMaxCallers);
   SetLength(Result.Callers, Length(RawCallers));
   for I:= 0 to High(RawCallers) do
@@ -525,7 +577,8 @@ begin
   end;
 
   // Impact summary (for refactor/delete verbs)
-  if SameText(AVerb, 'refactor') or SameText(AVerb, 'delete') then Result.ImpactSummary:= AStore.FindTransitiveCallers(CallerName, 2);
+  // (#38: by the qualified name, so the resolved walk starts at THIS routine.)
+  if SameText(AVerb, 'refactor') or SameText(AVerb, 'delete') then Result.ImpactSummary:= AStore.FindTransitiveCallers(EffQName, 2);
 
   // Compute token estimate from all major text contributions
   SB:= TStringBuilder.Create;
@@ -585,6 +638,9 @@ begin
         [ABundle.QName,
          IfThen(Length(ABundle.WikiTopics) > 0,
                 ' The phrase does match a wiki topic -- see below.', '')]));
+    if ABundle.Overloads > 1 then
+      SB.AppendLine(Format('> OVERLOADED: `%s` names %d routines; the impl slice below holds the body of each.',
+        [ABundle.QName, ABundle.Overloads]));
     SB.AppendLine;
 
     if ABundle.HasDoc then
@@ -739,11 +795,11 @@ begin
 
   Result:= Format(
     '{"task":"%s","verb":"%s","qname":"%s","resolved":%s,"token_estimate":%d,' +
-    '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d,"wiki":[%s]}', [
+    '"has_doc":%s,"caller_count":%d,"surface_lines":%d,"slice_chunks":%d,"overloads":%d,"wiki":[%s]}', [
       JsonEscape(ABundle.Verb + ' ' + ABundle.QName), JsonEscape(ABundle.Verb), JsonEscape(ABundle.QName),
       IfThen(ABundle.Resolved, 'true', 'false'),
       ABundle.TokenEstimate, IfThen(ABundle.HasDoc, 'true', 'false'), Length(ABundle.Callers),
-      Length(ABundle.ClassSurface), Length(ABundle.ImplSlice), Wiki]);
+      Length(ABundle.ClassSurface), Length(ABundle.ImplSlice), ABundle.Overloads, Wiki]);
 end; // function
 
 end.

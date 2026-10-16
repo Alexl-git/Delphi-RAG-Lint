@@ -3,7 +3,7 @@ unit DRagLint.Report.RCallTree;
 interface
 
 uses
-  System.SysUtils, System.Generics.Collections,
+  System.SysUtils, System.IOUtils, System.Generics.Collections,
   DRagLint.Core.Model, DRagLint.Core.Interfaces;
 
 type
@@ -24,6 +24,7 @@ type
     SiteFile: string;            // absolute source path of this node's own file (the call-site file); '' for root
     SiteLine: Integer;           // 1-based call-site line; 0 for root
     Cycle   : Boolean;           // True: already expanded elsewhere; Callers left empty
+    Confidence: string;          // the edge into this node: 'certain' | 'ambiguous'; '' for root (Gitea drag-lint#13)
     Callers : TArray<TRCallNode>;
   end;
 
@@ -116,7 +117,7 @@ var
   Visited: TDictionary<Int64, Boolean>;
   Sum    : TRCallSummary;
 
-  function Expand(AId: Int64; ADepth, ALevel: Integer; const ASite: string): TRCallNode;
+  function Expand(AId: Int64; ADepth, ALevel: Integer; const ASite, AConfidence: string): TRCallNode;
   var
     Callers: TArray<TResolvedCaller>;
     C      : TResolvedCaller;
@@ -128,6 +129,7 @@ var
     Sym := AStore.GetSymbolById(AId);
     Result.QName := Sym.QualifiedName;
     Result.Site  := ASite;
+    Result.Confidence:= AConfidence;
     { The call site lives in THIS node's own file (it is the caller). SiteFile =
       the symbol's declaring file (full path); SiteLine parsed from ASite's :N. }
     Result.SiteFile := AStore.GetFilePath(Sym.FileId);
@@ -156,9 +158,25 @@ var
       if (ADepth = 1) and (Length(Callers) > 0) then Sum.Truncated := True;
       for C in Callers do
       begin
-        if C.EnclosingSymbolId <= 0 then Continue;
+        if C.EnclosingSymbolId <= 0 then
+        begin
+          { A CALL WITH NO ROUTINE AROUND IT is still a caller (Gitea
+            drag-lint#20): a program's begin..end. block, a unit's
+            initialization/finalization. There is no symbol to name, so the
+            node is the SITE -- a leaf that navigates to the call. It used to be
+            dropped, and the tree said nobody called the routine from there. }
+          var Leaf: TRCallNode:= Default(TRCallNode);
+          Leaf.QName     := Format('(outside any routine) %s:%d', [C.Location, C.CallSiteLine]);
+          Leaf.Site      := Format('%s:%d', [C.Location, C.CallSiteLine]);
+          Leaf.SiteFile  := C.FullPath;
+          Leaf.SiteLine  := C.CallSiteLine;
+          Leaf.Confidence:= C.Confidence;
+          Inc(Sum.NodeCount);
+          Kids.Add(Leaf);
+          Continue;
+        end;
         Kids.Add(Expand(C.EnclosingSymbolId, ADepth - 1, ALevel + 1,
-          Format('%s:%d', [C.Location, C.CallSiteLine])));
+          Format('%s:%d', [C.Location, C.CallSiteLine]), C.Confidence));
       end;
       Result.Callers := Kids.ToArray;
     finally
@@ -170,7 +188,7 @@ begin
   Sum := Default(TRCallSummary);
   Visited := TDictionary<Int64, Boolean>.Create;
   try
-    Result.Root := Expand(ARootId, AOpts.Depth, 0, '');
+    Result.Root := Expand(ARootId, AOpts.Depth, 0, '', '');
     Result.Summary := Sum;
   finally
     Visited.Free;
@@ -183,7 +201,7 @@ var
   Visited: TDictionary<Int64, Boolean>;
   Sum    : TRCallSummary;
 
-  function Expand(AId: Int64; ADepth, ALevel: Integer): TRCallNode;
+  function Expand(AId: Int64; ADepth, ALevel: Integer; const ASite, AConfidence: string): TRCallNode;
   var
     Edges : TArray<TCallEdge>;
     E     : TCallEdge;
@@ -194,9 +212,14 @@ var
     Result := Default(TRCallNode);
     Sym := AStore.GetSymbolById(AId);
     Result.QName    := Sym.QualifiedName;
-    Result.Site     := '';
-    { Callee node navigates to the callee's OWN declaration (no call-site line on
-      the edge). SiteFile = declaring file; SiteLine = decl line. }
+    { SITE IS THE CALL SITE, as in the callers tree (Gitea drag-lint#11): the
+      parent's file and the line of its FIRST call to this node. It was '' --
+      the edge carried no line -- so a "call tree with call sites" had none in
+      this direction. SiteFile/SiteLine still navigate to the callee's own
+      declaration: the IDE plugin's double-click reads them, and that target
+      is a contract this fix does not move. }
+    Result.Site      := ASite;
+    Result.Confidence:= AConfidence;
     Result.SiteFile := AStore.GetFilePath(Sym.FileId);
     Result.SiteLine := Sym.StartLine;
     Inc(Sum.NodeCount);
@@ -215,12 +238,38 @@ var
     SeenChild := TDictionary<Int64, Boolean>.Create;
     try
       if ADepth = 1 then Sum.Truncated := True;
-      for E in Edges do
-      begin
-        if E.TargetSymbolId <= 0 then Continue;
-        if SeenChild.ContainsKey(E.TargetSymbolId) then Continue; { dedup sibling edges }
-        SeenChild.Add(E.TargetSymbolId, True);
-        Kids.Add(Expand(E.TargetSymbolId, ADepth - 1, ALevel + 1));
+      { One child per target: its FIRST call site, and 'certain' when ANY of the
+        sibling edges to it is certain -- an ambiguous duplicate must not
+        downgrade a target the resolver also bound for sure. }
+      var FirstLine: TDictionary<Int64, Integer>:= TDictionary<Int64, Integer>.Create;
+      var AnyCertain: TDictionary<Int64, Boolean>:= TDictionary<Int64, Boolean>.Create;
+      try
+        for E in Edges do
+        begin
+          if E.TargetSymbolId <= 0 then Continue;
+          var L: Integer;
+          if (not FirstLine.TryGetValue(E.TargetSymbolId, L)) or ((E.CallLine > 0) and (E.CallLine < L)) then
+            FirstLine.AddOrSetValue(E.TargetSymbolId, E.CallLine);
+          var C: Boolean;
+          if not AnyCertain.TryGetValue(E.TargetSymbolId, C) then C:= False;
+          AnyCertain.AddOrSetValue(E.TargetSymbolId, C or SameText(E.Confidence, 'certain'));
+        end;
+        var ParentFile: string:= TPath.GetFileName(AStore.GetFilePath(Sym.FileId));
+        for E in Edges do
+        begin
+          if E.TargetSymbolId <= 0 then Continue;
+          if SeenChild.ContainsKey(E.TargetSymbolId) then Continue; { dedup sibling edges }
+          SeenChild.Add(E.TargetSymbolId, True);
+          var KidLine: Integer:= FirstLine[E.TargetSymbolId];
+          var KidSite: string:= '';
+          if KidLine > 0 then KidSite:= Format('%s:%d', [ParentFile, KidLine]);
+          var KidConf: string:= 'ambiguous';
+          if AnyCertain[E.TargetSymbolId] then KidConf:= 'certain';
+          Kids.Add(Expand(E.TargetSymbolId, ADepth - 1, ALevel + 1, KidSite, KidConf));
+        end;
+      finally
+        AnyCertain.Free;
+        FirstLine.Free;
       end;
       Result.Callers := Kids.ToArray;
     finally
@@ -233,7 +282,7 @@ begin
   Sum := Default(TRCallSummary);
   Visited := TDictionary<Int64, Boolean>.Create;
   try
-    Result.Root := Expand(ARootId, AOpts.Depth, 0);
+    Result.Root := Expand(ARootId, AOpts.Depth, 0, '', '');
     Result.Summary := Sum;
   finally
     Visited.Free;

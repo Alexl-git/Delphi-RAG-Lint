@@ -2177,6 +2177,17 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function GetUnitScopeEdges: TArray<TFileScopeEdge>;
+    /// <summary>resolver 1.11.0-alpha: every uses entry AS WRITTEN, per file --
+    /// including a library unit that resolves to no indexed file, which
+    /// GetUnitScopeEdges drops. Backs the call resolver's test of whether a
+    /// type the uses graph cannot place is visible at all.</summary>
+    /// <returns>One row per unit_uses row: the file and the unit name as written.</returns>
+    function GetUnitUseNames: TArray<TFileUnitName>;
+    /// <summary>resolver 1.11.0-alpha: the name of the unit each file declares
+    /// (its kind='unit' symbol). A file declaring none -- a .dpr, an .inc -- is
+    /// absent.</summary>
+    /// <returns>One row per unit symbol: its file and its name.</returns>
+    function GetFileUnitNames: TArray<TFileUnitName>;
     /// <summary>Every unit that reaches <paramref name="AFileId"/> through its
     /// uses clauses -- the fan-out an interface change has to be checked
     /// against.</summary>

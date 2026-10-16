@@ -850,6 +850,7 @@ var
   Warnings   : TList<string>               ;
   UsedByList : TList<string>               ; // parallel to Files; using-unit per entry
   Queue      : TQueue<TWorkItem>           ;
+  ProjectUnit: TDictionary<string, string> ; // lowercase unit name -> the file the PROJECT names for it
 
   UnitNames    : TStringList;
   UnitFilePaths: TStringList;
@@ -897,6 +898,7 @@ begin
   UsedByList:= TList<string>.Create;
   Visited:= TDictionary<string, Boolean>.Create;
   Queue:= TQueue<TWorkItem>.Create;
+  ProjectUnit:= TDictionary<string, string>.Create;
   SearchPaths:= TStringList.Create;
   SearchPaths.CaseSensitive:= False;
 
@@ -968,6 +970,7 @@ begin
     begin
       if TFile.Exists(F) and not IsLibraryFile(F) then
       begin
+        ProjectUnit.AddOrSetValue(LowerCase(TPath.GetFileNameWithoutExtension(F)), F);
         Wi.UnitName:= TPath.GetFileNameWithoutExtension(F);
         Wi.FilePath := F;
         Wi.UsingUnit:= '<project>';
@@ -985,7 +988,13 @@ begin
       if UF <> '' then
       begin
         // `in 'path'` specifier: use that path directly
-        if TFile.Exists(UF) then ResolvedFile:= UF;
+        if TFile.Exists(UF) then
+        begin
+          ResolvedFile:= UF;
+          { `X in 'path'` is the project's own binding for X: it wins over any
+            DCCReference of the same name (the .dpr is what dcc reads). }
+          ProjectUnit.AddOrSetValue(LowerCase(UN), UF);
+        end;
       end;
 
       if ResolvedFile = '' then ResolvedFile:= FindUnitFile(UN, SearchArr);
@@ -1025,7 +1034,14 @@ begin
       for SubName in SubUses do
       begin
         if SubName = '' then Continue;
-        ResolvedFile:= FindUnitFile(SubName, SearchArr);
+        { A unit the PROJECT names -- `X in 'path'` in the .dpr, or a DCCReference --
+          is that file for EVERY unit that uses it; dcc never searches the path
+          for it. Searching first pulled a same-named copy from another folder
+          into the closure beside the real one: ProjectA indexed 15 such pairs
+          (Fun_Helpers, UTextUtil, UWSPartnerC, ...), each unit twice, so every
+          by-name lookup of their symbols saw two candidates. }
+        if not ProjectUnit.TryGetValue(LowerCase(SubName), ResolvedFile) then
+          ResolvedFile:= FindUnitFile(SubName, SearchArr);
         // Also try relative to the unit's own directory (not always on path)
         if (ResolvedFile = '') and TFile.Exists(TPath.Combine(UnitDir, SubName + '.pas')) then ResolvedFile:= TPath.GetFullPath( TPath.Combine(UnitDir, SubName + '.pas'));
 
@@ -1062,6 +1078,7 @@ begin
     UnitNames.Free;
     SearchPaths.Free;
     Queue.Free;
+    ProjectUnit.Free;
     Visited.Free;
     Warnings.Free;
     UsedByList.Free;

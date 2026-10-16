@@ -562,8 +562,9 @@ begin
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '}}'));
 
   Tools.AddElement(ToolDescriptor(
-      'get_impact', 'Return the transitive blast-radius of a symbol: how many callers and ' + 'units are impacted at each depth level. Uses a recursive CTE over the '
-        + 'refs table. Input: qualified name (last segment used for lookup) and ' + 'optional depth (default 3).',
+      'get_impact', 'Return the transitive blast-radius of a symbol: how many callers and ' + 'units are impacted at each depth level, walking the RESOLVED call graph '
+        + 'from every overload of the qualified name (a bare name walks every routine of that name). Input: '
+        + 'qualified name and optional depth (default 3).',
       '{"type":"object","properties":{' + '"qname":{"type":"string","description":"Qualified symbol name (e.g. Unit.TClass.Method)"},'
         + '"depth":{"type":"integer","description":"Maximum recursion depth (optional, default 3)"},'
         + '"db":{"type":"string","description":"Path to .sqlite database (optional)"}' + '},"required":["qname"]}'));
@@ -1031,10 +1032,11 @@ begin
       end;
       var ImpDepth:= 3;
       if Args.GetValue('depth') <> nil then ImpDepth:= StrToIntDef(Args.GetValue('depth').Value, 3);
-      // Use last segment of qname for the symbol name lookup
-      var ImpSegments:= ImpQName.Split(['.']);
-      var ImpName:= ImpSegments[High(ImpSegments)];
-      var ImpLevels:= ImpStore.FindTransitiveCallers(ImpName, ImpDepth);
+      { THE QNAME, NOT ITS LAST SEGMENT. FindTransitiveCallers walks resolved
+        call edges from every overload of a qualified name; the last segment
+        alone made it walk every routine of that simple name. The CLI's
+        `impact --qname` passes the qname the same way. }
+      var ImpLevels:= ImpStore.FindTransitiveCallers(ImpQName, ImpDepth);
       ResultText:= FormatImpactAsJson(ImpQName, ImpLevels);
     end // if
     else if ToolName = 'get_wiring' then

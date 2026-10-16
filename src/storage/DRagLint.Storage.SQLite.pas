@@ -1328,6 +1328,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function GetUnitScopeEdges: TArray<TFileScopeEdge>;
+      /// <summary>Every unit_uses row as (file_id, unit_name as written).</summary>
+      /// <returns>The rows, unresolved library units included.</returns>
+      /// <remarks>Implements ISymbolStore.GetUnitUseNames.</remarks>
+      function GetUnitUseNames: TArray<TFileUnitName>;
+      /// <summary>Every kind='unit' symbol as (file_id, name).</summary>
+      /// <returns>One row per declared unit.</returns>
+      /// <remarks>Implements ISymbolStore.GetFileUnitNames.</remarks>
+      function GetFileUnitNames: TArray<TFileUnitName>;
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->TArray&lt;TDependentFile&gt; -- Observed:
     /// List.ToArray.</returns>
@@ -6148,7 +6156,7 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text:=
-      'SELECT ce.ref_id, ce.target_symbol_id, ce.confidence, ce.receiver_type_symbol_id ' +
+      'SELECT ce.ref_id, ce.target_symbol_id, ce.confidence, ce.receiver_type_symbol_id, r.start_line ' +
       'FROM call_edges ce ' +
       'JOIN refs r ON r.id = ce.ref_id ' +
       'WHERE r.enclosing_symbol_id = :x';
@@ -6160,6 +6168,7 @@ begin
       E.RefId         := Q.FieldByName('ref_id'          ).AsLargeInt;
       E.TargetSymbolId:= Q.FieldByName('target_symbol_id').AsLargeInt;
       E.Confidence    := Q.FieldByName('confidence'       ).AsString;
+      E.CallLine      := Q.FieldByName('start_line'       ).AsInteger; { Gitea drag-lint#11 }
       if Q.FieldByName('receiver_type_symbol_id').IsNull then E.ReceiverTypeSymbolId:= 0
       else E.ReceiverTypeSymbolId:= Q.FieldByName('receiver_type_symbol_id').AsLargeInt;
       List.Add(E);
@@ -6222,6 +6231,11 @@ begin
   FConn.ExecSQL('VACUUM');
 end;
 
+const
+  { How many ids one children probe of GetTypeCandidates inlines -- well under
+    SQLite's statement-length limits, and a ProjectA-sized index needs 4 probes. }
+  STUB_PROBE_CHUNK = 1000;
+
 function TSQLiteSymbolStore.GetTypeCandidates: TArray<TSymbol>;
 { v14 (D5): every class/interface/record symbol, minimally populated (id,
   file_id, kind, name). Backs TCallResolver's name-candidate map.
@@ -6252,12 +6266,24 @@ function TSQLiteSymbolStore.GetTypeCandidates: TArray<TSymbol>;
   tests\autotest\run_alias_receiver_edges.ps1 keeps an inheritance control
   green for the local case. }
 var
-  Q   : TFDQuery      ;
-  List: TList<TSymbol>;
-  S   : TSymbol       ;
+  Q      : TFDQuery                                 ;
+  List   : TList<TSymbol>                           ;
+  S      : TSymbol                                  ;
+  Groups : TObjectDictionary<string, TList<Integer>>;
+  Probe  : TList<Int64>                             ;
+  HasKids: TDictionary<Int64, Boolean>              ;
+  Drop   : TDictionary<Int64, Boolean>              ;
+  Rows   : TArray<TSymbol>                          ;
+  Pairs  : TArray<Integer>                          ;
+  Ids    : TStringBuilder                           ;
 begin
-  List:= TList<TSymbol>.Create;
-  Q   := TFDQuery.Create(nil);
+  List   := TList<TSymbol>.Create;
+  Q      := TFDQuery.Create(nil);
+  Groups := TObjectDictionary<string, TList<Integer>>.Create([doOwnsValues]);
+  Probe  := TList<Int64>.Create;
+  HasKids:= TDictionary<Int64, Boolean>.Create;
+  Drop   := TDictionary<Int64, Boolean>.Create;
+  Ids    := TStringBuilder.Create;
   try
     Q.Connection:= FConn;
     { 'enum' joined 2026-08-30, measured rather than guessed. An enum-typed
@@ -6270,21 +6296,96 @@ begin
       enum-typed receiver can ONLY be a helper method -- an enum declares none
       of its own. So this is precise, not a widening: it admits exactly the
       receivers whose calls were unresolvable by construction. }
-    Q.SQL.Text  := 'SELECT id, file_id, kind, name FROM symbols ' +
+    Q.SQL.Text  := 'SELECT id, file_id, kind, name, qualified_name, start_line, heritage FROM symbols ' +
                    'WHERE kind IN (''class'',''interface'',''record'',''type'',''enum'')';
     Q.Open;
     while not Q.Eof do
     begin
       S:= Default(TSymbol);
-      S.Id    := Q.FieldByName('id'     ).AsLargeInt;
-      S.FileId:= Q.FieldByName('file_id').AsLargeInt;
-      S.Kind  := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
-      S.Name  := Q.FieldByName('name'   ).AsString;
+      S.Id           := Q.FieldByName('id'            ).AsLargeInt;
+      S.FileId       := Q.FieldByName('file_id'       ).AsLargeInt;
+      S.Kind         := TSymbolKind.FromText(Q.FieldByName('kind').AsString);
+      S.Name         := Q.FieldByName('name'          ).AsString;
+      S.QualifiedName:= Q.FieldByName('qualified_name').AsString;
+      S.StartLine    := Q.FieldByName('start_line'    ).AsInteger;
+      S.Heritage     := Q.FieldByName('heritage'      ).AsString;
       List.Add(S);
       Q.Next;
     end;
+    Q.Close;
+    { C2.3 (resolver 1.10.0-alpha): a FORWARD STUB is not a candidate. `TFoo = class;`
+      followed later in the same unit by `TFoo = class(...) ... end;` is two `class`
+      rows with one qualified name, so every `X: TFoo` receiver saw two in-scope
+      candidates and ResolveTypeNameToSymbol DECLINED -- vQ.GraveParametro bound 3
+      times of 35,813 on ProjectA, whose TAppQuery is forward-declared at line 67 and
+      declared at line 1362. The readers already fold the stub, and this applies
+      the SAME test -- DRagLint.Core.ForwardStub.PairForwardStubs itself, not a
+      copy -- per (file, qualified name) group, so the two cannot drift. A lone
+      stub, or a one-line class WITH heritage (`EOops = class(Exception);`), stays
+      a candidate. Done in memory: the equivalent correlated SQL measured 3.9 s
+      on ProjectA against 0.1 s for the plain read plus one bulk children probe,
+      and this map is rebuilt on every calls pass, incremental ones included. }
+    for var i:= 0 to List.Count - 1 do
+      if List[i].Kind in [skClass, skInterface] then
+      begin
+        var Key: string:= IntToStr(List[i].FileId) + '|' + LowerCase(List[i].QualifiedName);
+        var G: TList<Integer>;
+        if not Groups.TryGetValue(Key, G) then
+        begin
+          G:= TList<Integer>.Create;
+          Groups.Add(Key, G);
+        end;
+        G.Add(i);
+      end;
+    for var G in Groups.Values do
+      if G.Count > 1 then
+        for var i in G do
+          if List[i].Heritage = '' then Probe.Add(List[i].Id);
+    { The children test PairForwardStubs asks last, answered in bulk: which of the
+      would-be stubs own a child symbol. Ids are integers, so they are inlined. }
+    var At: Integer:= 0;
+    while At < Probe.Count do
+    begin
+      Ids.Clear;
+      var Stop: Integer:= At + STUB_PROBE_CHUNK;
+      if Stop > Probe.Count then Stop:= Probe.Count;
+      for var k:= At to Stop - 1 do
+      begin
+        if k > At then Ids.Append(',');
+        Ids.Append(Probe[k]);
+      end;
+      Q.SQL.Text:= 'SELECT DISTINCT parent_id FROM symbols WHERE parent_id IN (' + Ids.ToString + ')';
+      Q.Open;
+      while not Q.Eof do
+      begin
+        HasKids.AddOrSetValue(Q.Fields[0].AsLargeInt, True);
+        Q.Next;
+      end;
+      Q.Close;
+      At:= Stop;
+    end;
+    for var G in Groups.Values do
+    begin
+      if G.Count < 2 then Continue;
+      SetLength(Rows, G.Count);
+      for var k:= 0 to G.Count - 1 do Rows[k]:= List[G[k]];
+      Pairs:= PairForwardStubs(Rows,
+        function(const ASym: TSymbol): Boolean
+        begin
+          Result:= HasKids.ContainsKey(ASym.Id);
+        end);
+      for var k:= 0 to High(Pairs) do
+        if Pairs[k] >= 0 then Drop.AddOrSetValue(Rows[k].Id, True);
+    end;
+    for var i:= List.Count - 1 downto 0 do
+      if Drop.ContainsKey(List[i].Id) then List.Delete(i);
     Result:= List.ToArray;
   finally
+    Ids.Free;
+    Drop.Free;
+    HasKids.Free;
+    Probe.Free;
+    Groups.Free;
     Q.Free;
     List.Free;
   end; // try
@@ -6412,6 +6513,51 @@ begin
   end;
 end;
 
+/// <summary>Reads (file id, name) pairs from ASql, whose first two columns are
+///  exactly those.</summary>
+/// <param name="AConn">The store's connection.</param>
+/// <param name="ASql">A SELECT of (integer file id, text name).</param>
+/// <returns>The rows, in the order the query returned them.</returns>
+function ReadFileUnitNames(AConn: TFDConnection; const ASql: string): TArray<TFileUnitName>;
+var
+  Q   : TFDQuery             ;
+  List: TList<TFileUnitName> ;
+  E   : TFileUnitName        ;
+begin
+  List:= TList<TFileUnitName>.Create;
+  Q   := TFDQuery.Create(nil);
+  try
+    Q.Connection:= AConn;
+    Q.SQL.Text  := ASql;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      E.FileId:= Q.Fields[0].AsLargeInt;
+      E.Name  := Q.Fields[1].AsString;
+      List.Add(E);
+      Q.Next;
+    end;
+    Result:= List.ToArray;
+  finally
+    Q.Free;
+    List.Free;
+  end; // try
+end; // function
+
+function TSQLiteSymbolStore.GetUnitUseNames: TArray<TFileUnitName>;
+{ resolver 1.11.0-alpha: the TEXTUAL uses names, target resolved or not. The
+  resolved-only GetUnitScopeEdges cannot say "this file uses Vcl.Imaging.jpeg"
+  when that unit is a library unit outside a project DB -- and that is exactly
+  the fact the visibility test needs to decline a same-named project type. }
+begin
+  Result:= ReadFileUnitNames(FConn, 'SELECT file_id, unit_name FROM unit_uses');
+end; // function
+
+function TSQLiteSymbolStore.GetFileUnitNames: TArray<TFileUnitName>;
+begin
+  Result:= ReadFileUnitNames(FConn, 'SELECT file_id, name FROM symbols WHERE kind = ''unit''');
+end; // function
+
 function TSQLiteSymbolStore.GetUnitScopeEdges: TArray<TFileScopeEdge>;
 { v14 (D5): resolved uses-scope edges (file_id -> target_file_id), the exact set
   ResolveHelpers loads inline for its FileScope map. Unresolved rows (NULL
@@ -6428,8 +6574,14 @@ begin
   Q   := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
+    { SOURCE ORDER per file (resolver 1.20.0, Gitea drag-lint#21): Delphi
+      settles a name two used units both export by the uses entry that comes
+      LAST -- the implementation clause after the interface one, the later unit
+      within a clause -- and the call resolver reads that precedence off the
+      position of each target in this list. }
     Q.SQL.Text  := 'SELECT file_id, target_file_id FROM unit_uses ' +
-                   'WHERE target_file_id IS NOT NULL';
+                   'WHERE target_file_id IS NOT NULL ' +
+                   'ORDER BY file_id, start_line, start_col, id';
     Q.Open;
     while not Q.Eof do
     begin
@@ -6464,7 +6616,7 @@ begin
   try
     Q.Connection:= FConn;
     Q.SQL.Text  := 'SELECT s.id, s.file_id, s.parent_id, s.kind, s.name, ' +
-                   '       s.signature, s.section ' +
+                   '       s.signature, s.section, s.directives, s.qualified_name, s.start_line ' +
                    'FROM symbols s ' +
                    'JOIN symbols p ON p.id = s.parent_id AND p.kind = ''unit'' ' +
                    'WHERE s.kind IN (''procedure'',''function'')';
@@ -6479,6 +6631,11 @@ begin
       S.Name     := Q.FieldByName('name'     ).AsString;
       S.Signature:= Q.FieldByName('signature').AsString;
       S.Section  := Q.FieldByName('section'  ).AsString;
+      { resolver 1.20.0 (#21): `overload` decides whether uses order may pick a unit }
+      S.Directives:= Q.FieldByName('directives').AsString;
+      { resolver 1.20.0 (backlog #36): the stable tie-break of an ambiguous pick }
+      S.QualifiedName:= Q.FieldByName('qualified_name').AsString;
+      S.StartLine    := Q.FieldByName('start_line'    ).AsInteger;
       List.Add(S);
       Q.Next;
     end;
@@ -6588,11 +6745,20 @@ begin
   Q   := TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
+    { A PROGRAM'S OWN var/const (resolver 1.20.0, Gitea drag-lint#20) join the
+      unit-level set: the .dpr has no unit/program symbol, so a declaration in
+      its var section has NO parent and the join below never saw it -- `W.Run`
+      in the program block then had no var to type W from. Exactly the
+      parentless const/var rows of a .dpr/.dpk; a unit's are still the ones
+      parented by its unit symbol. }
     Q.SQL.Text  := 'SELECT s.id, s.file_id, s.parent_id, s.kind, s.name, ' +
                    '       s.signature, s.section ' +
                    'FROM symbols s ' +
-                   'JOIN symbols p ON p.id = s.parent_id AND p.kind = ''unit'' ' +
-                   'WHERE s.kind IN (''const'',''var'')';
+                   'LEFT JOIN symbols p ON p.id = s.parent_id ' +
+                   'JOIN files f ON f.id = s.file_id ' +
+                   'WHERE s.kind IN (''const'',''var'') ' +
+                   '  AND (p.kind = ''unit'' OR (s.parent_id IS NULL AND ' +
+                   '       (LOWER(f.path) LIKE ''%.dpr'' OR LOWER(f.path) LIKE ''%.dpk'')))';
     Q.Open;
     { Bound ONCE after Open -- see GetEnumValueSymbols for why. }
     ColId     := Q.FieldByName('id'       );
@@ -7442,30 +7608,75 @@ end; // function
 
 function TSQLiteSymbolStore.FindEventHandlersForForm( const AFormName: string): TArray<TReference>;
 var
-  FormSym : TSymbol          ;
-  Child   : TSymbol          ;
-  Children: TArray<TSymbol>  ;
-  R       : TReference       ;
-  H       : TReference       ;
-  List    : TList<TReference>;
+  FormSym : TSymbol                     ;
+  Child   : TSymbol                     ;
+  Children: TArray<TSymbol>             ;
+  R       : TReference                  ;
+  H       : TReference                  ;
+  List    : TList<TReference>           ;
+  OwnDfms : TDictionary<Int64, Boolean> ; // the form's own paired .dfm
+  Inherit : TDictionary<Int64, Int64>   ; // a descendant form's .dfm -> that descendant's symbol id
+
+  { The .dfm that pairs with the unit declaring ASym -- same path, .dfm
+    extension -- or -1 when the index holds none. }
+  function PairedDfm(const ASym: TSymbol): Int64;
+  begin
+    Result:= -1;
+    if ASym.FileId <= 0 then Exit;
+    var PasPath: string:= GetFilePath(ASym.FileId);
+    if PasPath <> '' then Result:= FindFileIdByPath(ChangeFileExt(PasPath, '.dfm'));
+  end;
+
 begin
-  List:= TList<TReference>.Create;
+  List   := TList<TReference>.Create;
+  OwnDfms:= TDictionary<Int64, Boolean>.Create;
+  Inherit:= TDictionary<Int64, Int64>.Create;
   try
     FormSym:= FindSymbolByExactNameAnywhere(AFormName);
     if FormSym.Id > 0 then
     begin
+      { A DFM binds `OnClick = btnOKClick` to a method of ITS OWN form class --
+        the one its paired unit declares -- or, in an `inherited` form, of an
+        ancestor that the descendant does not redeclare. Matching the handler
+        NAME against every event-binding in the index instead bound each form
+        method to every same-named handler of every form: TFSavePrompt reported
+        911 bindings on ProjectA, 12 of them its own. So only two kinds of DFM
+        are admitted: the form's paired one, and a DESCENDANT form's paired one
+        for a handler that descendant does not declare itself. }
+      var Own: Int64:= PairedDfm(FormSym);
+      if Own > 0 then OwnDfms.AddOrSetValue(Own, True);
+      for var DName: string in FindDescendantNames(FormSym.Name) do
+      begin
+        var DSym: TSymbol:= FindSymbolByExactNameAnywhere(DName);
+        if DSym.Id <= 0 then Continue;
+        var D: Int64:= PairedDfm(DSym);
+        if (D > 0) and not OwnDfms.ContainsKey(D) then Inherit.AddOrSetValue(D, DSym.Id);
+      end;
       Children:= FindAllChildSymbols(FormSym.Id);
       for Child in Children do
         for R in FindCallersByName(Child.Name) do
-          if R.Kind = 'event-binding' then
+        begin
+          if R.Kind <> 'event-binding' then Continue;
+          var Via  : Int64;
+          var Admit: Boolean:= OwnDfms.ContainsKey(R.FileId);
+          if (not Admit) and Inherit.TryGetValue(R.FileId, Via) then
           begin
-            H:= R;
-            H.NameText:= Child.Name; // the handler method name
-            List.Add(H);
+            { A descendant that declares its own method of this name owns the
+              binding in its DFM; the ancestor's method is not what runs. }
+            Admit:= True;
+            for var DC: TSymbol in FindAllChildSymbols(Via) do
+              if SameText(DC.Name, Child.Name) then begin Admit:= False; Break; end;
           end;
+          if not Admit then Continue;
+          H:= R;
+          H.NameText:= Child.Name; // the handler method name
+          List.Add(H);
+        end;
     end;
     Result:= List.ToArray;
   finally
+    Inherit.Free;
+    OwnDfms.Free;
     List.Free;
   end; // try
 end; // function
@@ -9796,14 +10007,68 @@ end;
 // v0.17: blast-radius pack
 
 function TSQLiteSymbolStore.FindTransitiveCallers(const ASymbolName: string; ADepth: Integer): TArray<TImpactLevel>;
+{ #38 (2026-10-08): walks the RESOLVED call graph, the one find-callers
+  --resolved and callgraph read. The walk this replaces matched refs by NAME
+  TEXT and took as the "caller" every symbol whose DECLARATION range held the
+  ref's line -- for a ref in an implementation body that is the unit symbol, so
+  level 1 counted units, and level 2 then followed refs to the unit names, i.e.
+  the uses clauses. On ProjectA, UConfig.SaveResult reported "7 callers" at depth 2
+  against 30+ real ones, and nothing marked the answer as wrong.
+
+  ASymbolName with a dot is a qualified name (every overload of it); a bare
+  name is every routine of that name. Each level counts the callers first
+  reached at that depth -- a routine is counted once, at its shortest distance
+  -- and the targets themselves are not counted when they recurse. }
 const
-  CTE_SQL = 'WITH RECURSIVE caller_walk(level, caller_id, caller_name, file_id) AS (' + '  SELECT 1, s2.id, s2.name, s2.file_id ' +
-  { COLLATE NOCASE on both hops -- Delphi identifiers are case-insensitive, so a
-    caller that spells the callee differently must still walk the chain. }
-  '    FROM refs r INNER JOIN symbols s2 ON s2.file_id = r.file_id ' + '      AND r.start_line BETWEEN s2.start_line AND s2.end_line ' + '    WHERE r.name_text = :targetName COLLATE NOCASE ' +
-  '  UNION ' + '  SELECT cw.level + 1, s3.id, s3.name, s3.file_id ' + '    FROM caller_walk cw ' + '    INNER JOIN refs r2 ON r2.name_text = cw.caller_name COLLATE NOCASE ' +
-  '    INNER JOIN symbols s3 ON s3.file_id = r2.file_id ' + '      AND r2.start_line BETWEEN s3.start_line AND s3.end_line ' + '    WHERE cw.level < :maxDepth' + ') ' +
-  'SELECT level, COUNT(DISTINCT caller_id) AS callers, ' + '       COUNT(DISTINCT file_id) AS units ' + '  FROM caller_walk GROUP BY level ORDER BY level';
+  TARGETS_QNAME = 'SELECT id FROM symbols WHERE qualified_name = :targetName COLLATE NOCASE';
+  TARGETS_NAME  = 'SELECT id FROM symbols WHERE name = :targetName COLLATE NOCASE ' +
+                  'AND kind IN (''procedure'', ''function'', ''method'', ''constructor'', ''destructor'')';
+  WALK_SQL = 'WITH RECURSIVE targets(id) AS (%s), ' +
+             'walk(level, sym_id) AS (' +
+             '  SELECT 1, r.enclosing_symbol_id FROM call_edges e JOIN refs r ON r.id = e.ref_id ' +
+             '   WHERE e.target_symbol_id IN (SELECT id FROM targets) AND r.enclosing_symbol_id IS NOT NULL ' +
+             '  UNION ' +
+             '  SELECT w.level + 1, r.enclosing_symbol_id FROM walk w ' +
+             '    JOIN call_edges e ON e.target_symbol_id = w.sym_id JOIN refs r ON r.id = e.ref_id ' +
+             '   WHERE w.level < :maxDepth AND r.enclosing_symbol_id IS NOT NULL), ' +
+             'first_seen(sym_id, level) AS (' +
+             '  SELECT sym_id, MIN(level) FROM walk WHERE sym_id NOT IN (SELECT id FROM targets) GROUP BY sym_id), ' +
+             { The same walk over CERTAIN edges only: a caller absent from it is
+               reached only through a guess (Gitea drag-lint#13). }
+             'sure(level, sym_id) AS (' +
+             '  SELECT 1, r.enclosing_symbol_id FROM call_edges e JOIN refs r ON r.id = e.ref_id ' +
+             '   WHERE e.target_symbol_id IN (SELECT id FROM targets) AND e.confidence <> ''ambiguous'' ' +
+             '     AND r.enclosing_symbol_id IS NOT NULL ' +
+             '  UNION ' +
+             '  SELECT s.level + 1, r.enclosing_symbol_id FROM sure s ' +
+             '    JOIN call_edges e ON e.target_symbol_id = s.sym_id JOIN refs r ON r.id = e.ref_id ' +
+             '   WHERE s.level < :maxDepth AND e.confidence <> ''ambiguous'' AND r.enclosing_symbol_id IS NOT NULL) ' +
+             'SELECT f.level, COUNT(*) AS callers, COUNT(DISTINCT s.file_id) AS units, ' +
+             '       SUM(CASE WHEN f.sym_id IN (SELECT sym_id FROM sure) THEN 0 ELSE 1 END) AS ambiguous_only ' +
+             '  FROM first_seen f JOIN symbols s ON s.id = f.sym_id GROUP BY f.level ORDER BY f.level';
+  { Gitea drag-lint#20: call SITES with no enclosing routine (a program block,
+    a unit's initialization) that call the target or a routine the walk
+    reached, by depth. The walk above only follows routines, so these were
+    simply not counted. A site is counted once, at its shortest depth. }
+  OUTSIDE_SQL = 'WITH RECURSIVE targets(id) AS (%s), ' +
+             'walk(level, sym_id) AS (' +
+             '  SELECT 1, r.enclosing_symbol_id FROM call_edges e JOIN refs r ON r.id = e.ref_id ' +
+             '   WHERE e.target_symbol_id IN (SELECT id FROM targets) AND r.enclosing_symbol_id IS NOT NULL ' +
+             '  UNION ' +
+             '  SELECT w.level + 1, r.enclosing_symbol_id FROM walk w ' +
+             '    JOIN call_edges e ON e.target_symbol_id = w.sym_id JOIN refs r ON r.id = e.ref_id ' +
+             '   WHERE w.level < :maxDepth AND r.enclosing_symbol_id IS NOT NULL), ' +
+             'first_seen(sym_id, level) AS (' +
+             '  SELECT sym_id, MIN(level) FROM walk WHERE sym_id NOT IN (SELECT id FROM targets) GROUP BY sym_id), ' +
+             'outside(level, ref_id) AS (' +
+             '  SELECT 1, r.id FROM call_edges e JOIN refs r ON r.id = e.ref_id ' +
+             '   WHERE e.target_symbol_id IN (SELECT id FROM targets) AND r.enclosing_symbol_id IS NULL ' +
+             '  UNION ' +
+             '  SELECT f.level + 1, r.id FROM first_seen f ' +
+             '    JOIN call_edges e ON e.target_symbol_id = f.sym_id JOIN refs r ON r.id = e.ref_id ' +
+             '   WHERE f.level < :maxDepth AND r.enclosing_symbol_id IS NULL) ' +
+             'SELECT level, COUNT(*) FROM (SELECT ref_id, MIN(level) AS level FROM outside GROUP BY ref_id) ' +
+             ' GROUP BY level ORDER BY level';
 var
   Q     : TFDQuery           ;
   Levels: TList<TImpactLevel>;
@@ -9813,7 +10078,8 @@ begin
   Levels:= TList<TImpactLevel>.Create;
   try
     Q.Connection:= FConn;
-    Q.SQL.Text:= CTE_SQL;
+    if Pos('.', ASymbolName) > 0 then Q.SQL.Text:= Format(WALK_SQL, [TARGETS_QNAME])
+    else Q.SQL.Text:= Format(WALK_SQL, [TARGETS_NAME]);
     Q.ParamByName('targetName').AsString := ASymbolName;
     Q.ParamByName('maxDepth'  ).AsInteger:= ADepth;
     Q.Open;
@@ -9823,9 +10089,36 @@ begin
       Lvl.Depth      := Q.Fields[0].AsInteger;
       Lvl.CallerCount:= Q.Fields[1].AsInteger;
       Lvl.UnitCount  := Q.Fields[2].AsInteger;
+      Lvl.AmbiguousOnly:= Q.Fields[3].AsInteger;
       Levels.Add(Lvl);
       Q.Next;
     end;
+    Q.Close;
+    if Pos('.', ASymbolName) > 0 then Q.SQL.Text:= Format(OUTSIDE_SQL, [TARGETS_QNAME])
+    else Q.SQL.Text:= Format(OUTSIDE_SQL, [TARGETS_NAME]);
+    Q.ParamByName('targetName').AsString := ASymbolName;
+    Q.ParamByName('maxDepth'  ).AsInteger:= ADepth;
+    Q.Open;
+    while not Q.Eof do
+    begin
+      var D: Integer:= Q.Fields[0].AsInteger;
+      var Ix: Integer:= -1;
+      for var K: Integer:= 0 to Levels.Count - 1 do
+        if Levels[K].Depth = D then begin Ix:= K; Break; end;
+      if Ix < 0 then
+      begin
+        Lvl:= Default(TImpactLevel);
+        Lvl.Depth:= D;
+        Levels.Add(Lvl);
+        Ix:= Levels.Count - 1;
+      end;
+      Lvl:= Levels[Ix];
+      Lvl.OutsideRoutine:= Q.Fields[1].AsInteger;
+      Levels[Ix]:= Lvl;
+      Q.Next;
+    end;
+    Levels.Sort(TComparer<TImpactLevel>.Construct(
+      function(const L, R: TImpactLevel): Integer begin Result:= L.Depth - R.Depth; end));
     Result:= Levels.ToArray;
   finally
     Q.Free;
@@ -10280,21 +10573,48 @@ begin
     // from the index rather than re-derived by FindImplLine's name heuristic:
     // the span is authoritative and already paid for, and the heuristic cannot
     // tell two same-named overloads apart.
+    //
+    // EVERY OVERLOAD, NOT Syms[0] (Gitea drag-lint#18). A qname shared by
+    // overloads resolves to one symbol per overload, and only the first one's
+    // body was emitted: on ProjectA `modify UFSummaryReport.TSummaryPrint.ImportItems`
+    // showed the 6-line wrapper and silently left out the overload it calls,
+    // where the work is. Each overload in this file with a recorded span now
+    // contributes its own chunk, in source order.
     if (ClassSym.Kind in [skMethod, skProcedure, skFunction, skConstructor, skDestructor])
        and (ClassSym.ImplStartLine > 0) then
     begin
-      ImplLine   := ClassSym.ImplStartLine - 1; // 1-based (DB) -> 0-based
-      ImplEndLine:= ClassSym.ImplEndLine   - 1;
-      if ImplEndLine < ImplLine       then ImplEndLine:= ImplLine;
-      if ImplEndLine >= LineCount     then ImplEndLine:= LineCount - 1;
-      if (ImplLine >= 0) and (ImplLine < LineCount) then
-      begin
-        Chunk:= Default(TSliceChunk);
-        Chunk.Kind     := 'impl-method';
-        Chunk.StartLine:= ImplLine    + 1;
-        Chunk.EndLine  := ImplEndLine + 1;
-        Chunk.Text     := JoinLines(ImplLine, ImplEndLine);
-        Chunks.Add(Chunk);
+      var Overloads: TList<TSymbol>:= TList<TSymbol>.Create;
+      try
+        for var O: TSymbol in Syms do
+          if (O.FileId = ClassSym.FileId) and (O.ImplStartLine > 0)
+             and (O.Kind in [skMethod, skProcedure, skFunction, skConstructor, skDestructor]) then
+            Overloads.Add(O);
+        Overloads.Sort(TComparer<TSymbol>.Construct(
+          function(const L, R: TSymbol): Integer
+          begin
+            Result:= L.ImplStartLine - R.ImplStartLine;
+          end));
+        var LastStart: Integer:= -1;
+        for var O: TSymbol in Overloads do
+        begin
+          if O.ImplStartLine = LastStart then Continue; { same span twice: emit once }
+          LastStart  := O.ImplStartLine;
+          ImplLine   := O.ImplStartLine - 1; // 1-based (DB) -> 0-based
+          ImplEndLine:= O.ImplEndLine   - 1;
+          if ImplEndLine < ImplLine       then ImplEndLine:= ImplLine;
+          if ImplEndLine >= LineCount     then ImplEndLine:= LineCount - 1;
+          if (ImplLine >= 0) and (ImplLine < LineCount) then
+          begin
+            Chunk:= Default(TSliceChunk);
+            Chunk.Kind     := 'impl-method';
+            Chunk.StartLine:= ImplLine    + 1;
+            Chunk.EndLine  := ImplEndLine + 1;
+            Chunk.Text     := JoinLines(ImplLine, ImplEndLine);
+            Chunks.Add(Chunk);
+          end;
+        end;
+      finally
+        Overloads.Free;
       end;
     end
     else
@@ -11245,8 +11565,12 @@ procedure TSQLiteSymbolStore.ResolveUnitUseTargets;
 
   NOT GUARANTEED: that a resolved target is the unit the Delphi compiler would
   have picked. Two indexed .pas copies of the same unit (two source trees)
-  collide on one stem and the LAST one read wins arbitrarily -- unchanged from
-  before, and harmless because both copies declare the same unit. What the filter
+  collide on one stem and the LAST one read wins. That was called harmless
+  "because both copies declare the same unit"; it is not -- the copies declare
+  DIFFERENT symbols, and TCallResolver reads this column, so find-callers
+  --resolved went empty for the real copy's routines (Gitea drag-lint#10). Rule D
+  below now lets a project file's `in 'path'` name the file for its unit; a
+  collision no project file settles still falls to the last path. What the filter
   above adds is that the competitor is always another unit-declaring file: before
   it, the winner could be a .dfm or a .dpr, which is not an answer to "which file
   declares this unit" at all. Nothing downstream may treat target_file_id as
@@ -11277,9 +11601,17 @@ var
   Fid         : Int64                      ;
   T0          : Int64                      ; { see ResolveLog -- silence read as a hang }
   Hits        : Integer                    ; { distinct used-unit names that resolved }
+  ScopeNames  : TArray<string>             ; { resolver 1.16.0: the project's DCC_Namespace, lowercased }
+  PasByPath   : TDictionary<string, Int64> ; { resolver 1.20.0: lowercased full path -> id, .pas only }
+  InSettled   : Integer                    ; { names rule D bound to the project file's `in` }
 begin
   T0  := TStopwatch.GetTimeStamp;
+  InSettled:= 0;
+  PasByPath:= TDictionary<string, Int64>.Create;
   Hits:= 0;
+  ScopeNames:= nil;
+  for var NsPart: string in GetMetaValue('dcc_namespace').Split([';']) do
+    if Trim(NsPart) <> '' then ScopeNames:= ScopeNames + [LowerCase(Trim(NsPart))];
   StemToFileId:= TDictionary<string, Int64> .Create;
   SegToStem   := TDictionary<string, string>.Create;
   UsedNorms   := TList<string>.Create;
@@ -11316,6 +11648,7 @@ begin
       if Slash >= 0 then Stem:= Copy(Path, Slash + 2, MaxInt)
       else Stem:= Path;
       Stem:= LowerCase(ChangeFileExt(Stem, ''));
+      PasByPath.AddOrSetValue(LowerCase(Path), QFiles.FieldByName('id').AsLargeInt);
       if Stem <> '' then
       begin
         StemToFileId.AddOrSetValue(Stem, QFiles.FieldByName('id').AsLargeInt);
@@ -11377,7 +11710,25 @@ begin
         if Stem = '' then Continue;
         if not StemToFileId.ContainsKey(Stem) then           // rule A missed
         begin
-          if Pos('.', Stem) > 0 then Continue;               // rule B is bare-only
+          if Pos('.', Stem) > 0 then Continue;               // rules C and B are bare-only
+          { RULE C (resolver 1.16.0): THE PROJECT'S OWN UNIT SCOPE NAMES. A project
+            index knows the DCC_Namespace list dcc compiles with, so a bare name is
+            resolved exactly as dcc resolves it: each scope prefix in order, first
+            indexed hit wins. That is not an inference -- it is the project's own
+            setting -- so the GUI refusal of rule B does not apply: `uses Dialogs`
+            in a project whose list says Vcl IS Vcl.Dialogs (ProjectA keeps a local
+            copy of Vcl.Dialogs.pas that rule B could never reach). A library
+            index has no list and falls through to rule B unchanged. }
+          var ScopeHit: string:= '';
+          for var Prefix: string in ScopeNames do
+            if StemToFileId.ContainsKey(Prefix + '.' + Stem) then
+            begin
+              ScopeHit:= Prefix + '.' + Stem;
+              Break;
+            end;
+          if ScopeHit <> '' then Stem:= ScopeHit
+          else
+          begin
           if not SegToStem.TryGetValue(Stem, Seen) then Continue;
           if Seen = CStemAmbiguous then Continue;            // 2+ stems -- decline
           { CRITERION 5, STRUCTURALLY. Rule B is an INFERENCE -- the used name
@@ -11403,6 +11754,7 @@ begin
             same reason. }
           if IsGuiFrameworkPrefix(UnitFrameworkPrefix(Seen)) then Continue;
           Stem:= Seen;                                       // rule B hit
+          end; // rule C missed
         end;
         if not StemToFileId.TryGetValue(Stem, Fid) then Continue;
         QUpdate.ParamByName('tid' ).AsLargeInt:= Fid;
@@ -11411,13 +11763,69 @@ begin
         QUpdate.ExecSQL;
         Inc(Hits);
       end;
+
+      { RULE D (resolver 1.20.0, Gitea drag-lint#10): THE PROJECT FILE'S `in`.
+        `UFoo in 'sub\UFoo.pas'` in a .dpr/.dpk is how a project says WHICH file
+        its unit UFoo is, and dcc compiles every `uses UFoo` of the program
+        against that file. Rules A-C above answer by stem alone, and with two
+        indexed copies of UFoo.pas the last path read won -- `D:\Components\...`
+        beat `D:\WorkRepo\...` on byte order, a deleted orphan won
+        over the project's own unit, and find-callers --resolved went silently
+        empty for the routines of the real one. The `in` is resolved against the
+        directory of the project file and, when it names an indexed .pas,
+        overrides the stem answer for that unit name. Two project files in one
+        database that name DIFFERENT files for a unit settle nothing for it. }
+      var InTarget: TDictionary<string, Int64>:= TDictionary<string, Int64>.Create;
+      var QIn: TFDQuery:= TFDQuery.Create(nil);
+      try
+        QIn.Connection:= FConn;
+        QIn.SQL.Text:= 'SELECT LOWER(u.unit_name), u.in_path, f.path FROM unit_uses u ' +
+                       'JOIN files f ON f.id = u.file_id ' +
+                       'WHERE u.in_path IS NOT NULL AND u.in_path <> '''' ' +
+                       '  AND (LOWER(f.path) LIKE ''%.dpr'' OR LOWER(f.path) LIKE ''%.dpk'')';
+        QIn.Open;
+        while not QIn.Eof do
+        begin
+          var InName: string:= QIn.Fields[0].AsString;
+          var InFile: string:= '';
+          try
+            InFile:= LowerCase(TPath.GetFullPath(TPath.Combine(ExtractFilePath(QIn.Fields[2].AsString),
+                                                               QIn.Fields[1].AsString)));
+          except
+            InFile:= ''; { a malformed in-path names nothing }
+          end;
+          var InId: Int64;
+          if (InFile <> '') and PasByPath.TryGetValue(InFile, InId) then
+          begin
+            var Prev: Int64;
+            if not InTarget.TryGetValue(InName, Prev) then InTarget.Add(InName, InId)
+            else if Prev <> InId then InTarget[InName]:= -1; { two project files disagree }
+          end;
+          QIn.Next;
+        end;
+        QIn.Close;
+        for var Pair: TPair<string, Int64> in InTarget do
+        begin
+          if Pair.Value <= 0 then Continue;
+          var Ix: Integer:= UsedFulls.IndexOf(Pair.Key);
+          if Ix < 0 then Continue;
+          QUpdate.ParamByName('tid' ).AsLargeInt:= Pair.Value;
+          QUpdate.ParamByName('un'  ).AsString  := UsedNorms[Ix];
+          QUpdate.ParamByName('full').AsString  := UsedFulls[Ix];
+          QUpdate.ExecSQL;
+          Inc(InSettled);
+        end;
+      finally
+        QIn.Free;
+        InTarget.Free;
+      end;
       FConn.Commit;
     except
       FConn.Rollback;
       raise;
     end;
-    ResolveLog(Format('unit-uses  %d/%d distinct used-unit name(s) bound, %d .pas stem(s)  [%.1fs]',
-      [Hits, UsedFulls.Count, StemToFileId.Count, ResolveSecs(T0)]));
+    ResolveLog(Format('unit-uses  %d/%d distinct used-unit name(s) bound, %d .pas stem(s), %d named by the project file''s `in`  [%.1fs]',
+      [Hits, UsedFulls.Count, StemToFileId.Count, InSettled, ResolveSecs(T0)]));
   finally
     QUpdate    .Free;
     QNames     .Free;
@@ -11426,6 +11834,7 @@ begin
     UsedNorms  .Free;
     SegToStem  .Free;
     StemToFileId.Free;
+    PasByPath  .Free;
   end; // try
 end; // procedure
 

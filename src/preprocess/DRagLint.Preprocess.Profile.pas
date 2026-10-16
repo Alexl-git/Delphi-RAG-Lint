@@ -27,6 +27,17 @@ uses
   System.SysUtils,
   DRagLint.Preprocess.Types;
 
+/// <summary>resolver 1.16.0: the project's UNIT SCOPE NAMES (DCC_Namespace), in
+/// the order dcc searches them -- MSBuild's four groups for one platform and
+/// config (Base, Base_&lt;P&gt;, Cfg_N, Cfg_N_&lt;P&gt;), each group's value
+/// taking the one before it where it writes $(DCC_Namespace). Empty for a
+/// missing or unreadable .dproj.</summary>
+/// <param name="ADprojPath">Path to the .dproj.</param>
+/// <param name="APlatform">'Win32' or 'Win64' (anything else is Win64).</param>
+/// <param name="AConfig">'Release' or 'Debug' (anything else is Release).</param>
+/// <returns>The scope names, as written, in search order.</returns>
+function DccNamespacesFromDproj(const ADprojPath, APlatform, AConfig: string): TArray<string>;
+
 /// <summary>Returns the built-in compiler defines for the given target
 /// platform, ALL LOWERCASED, for Delphi 13 / RAD Studio 37 (CompilerVersion 37,
 /// VER370). 'Win64' -> mswindows, win64, cpu64bits, cpux86_64, unicode,
@@ -132,7 +143,7 @@ end;
 // AConditionNeedle (e.g. the Base group or a Cfg_N group). Returns '' when no
 // such group / DCC_Define is present. Scoped per-PropertyGroup so a config's
 // DCC_Define is never confused with another config's.
-function DccDefineInGroup(const AContent, AConditionNeedle: string): string;
+function DccPropertyInGroup(const AContent, AConditionNeedle, AProperty: string): string;
 var
   GroupRx: TRegEx;
   DefRx  : TRegEx;
@@ -144,7 +155,7 @@ begin
   // Match each <PropertyGroup Condition="...">...</PropertyGroup> block.
   GroupRx := TRegEx.Create('<PropertyGroup\b([^>]*)>(.*?)</PropertyGroup>',
     [roIgnoreCase, roSingleLine]);
-  DefRx := TRegEx.Create('<DCC_Define>(.*?)</DCC_Define>',
+  DefRx := TRegEx.Create('<' + AProperty + '>(.*?)</' + AProperty + '>',
     [roIgnoreCase, roSingleLine]);
   M := GroupRx.Match(AContent);
   while M.Success do
@@ -162,6 +173,40 @@ begin
     end;
     M := M.NextMatch;
   end;
+end;
+
+function DccDefineInGroup(const AContent, AConditionNeedle: string): string;
+begin
+  Result := DccPropertyInGroup(AContent, AConditionNeedle, 'DCC_Define');
+end;
+
+function DccNamespacesFromDproj(const ADprojPath, APlatform, AConfig: string): TArray<string>;
+var
+  Content: string;
+  Value  : string;
+begin
+  Result := nil;
+  if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
+  try
+    Content := TFile.ReadAllText(ADprojPath);
+  except
+    Exit;
+  end;
+  // MSBuild evaluates the four groups in this order; a group that writes
+  // $(DCC_Namespace) extends the value the groups before it produced, so the
+  // token is replaced by that value (the platform group's Winapi;System.Win
+  // lands IN FRONT of the Base group's System;Vcl, which is dcc's search order).
+  Value := '';
+  for var Needle: string in TArray<string>.Create('$(Base)',
+      '$(Base_' + PlatformGroupSuffix(APlatform) + ')',
+      '$(' + CfgAliasFor(AConfig) + ')',
+      '$(' + CfgAliasFor(AConfig) + '_' + PlatformGroupSuffix(APlatform) + ')') do
+  begin
+    var G: string := DccPropertyInGroup(Content, Needle, 'DCC_Namespace');
+    if G <> '' then Value := StringReplace(G, '$(DCC_Namespace)', Value, [rfIgnoreCase]);
+  end;
+  for var P: string in Value.Split([';']) do
+    if Trim(P) <> '' then Result := Result + [Trim(P)];
 end;
 
 // Split a DCC_Define value on ';', drop the $(DCC_Define) recursion token and

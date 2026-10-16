@@ -56,7 +56,11 @@ function Write-Ascii([string]$Path, [string]$Body) {
 
 # Pick/1, Pick/2, Pick/3 mirror YADF's delegating chain. Blend/2 is the control:
 # two overloads of the SAME arity differing only by parameter TYPE, which arity
-# cannot decide and which must therefore stay uncertain. Fill has a DEFAULT
+# cannot decide. Called with a string LITERAL (Drive) resolver 1.12.0 reads the
+# literal and binds the string overload, certain -- the choice the compiler makes.
+# Called with a VARIABLE (DriveVar, S: string) it stayed uncertain until resolver
+# 1.18.0, which reads the variable's declared type and binds the same overload;
+# run_overload_arg_types.ps1 holds that rule's own controls. Fill has a DEFAULT
 # parameter, so it accepts 1 or 2 arguments.
 Write-Ascii (Join-Path $WorkDir 'arity.pas') @'
 unit arity;
@@ -74,6 +78,7 @@ function Fill(const A: string; const B: Integer = 0): string;
 
 procedure Drive;
 procedure DriveMultiline;
+procedure DriveVar;
 
 implementation
 
@@ -119,6 +124,14 @@ begin
   Pick('a',
        'b',
        'c');
+end;
+
+procedure DriveVar;
+var
+  S: string;
+begin
+  S := 'v';
+  Blend(S);
 end;
 
 end.
@@ -167,7 +180,7 @@ for row in c.execute("""
     WHERE r.kind = 'call'"""):
     out.append({"from": row[0], "from_arity": arity(row[1]), "callee": row[2],
                 "target_id": row[3], "conf": row[4], "target_arity": arity(row[5]),
-                "line": row[6]})
+                "target_sig": row[5] or "", "line": row[6]})
 # Call refs with NO edge at all, so a "fix" that stops resolving is visible.
 out_noedge = [r[0] for r in c.execute("""
     SELECT r.name_text FROM refs r LEFT JOIN call_edges ce ON ce.ref_id = r.id
@@ -215,9 +228,14 @@ Check 'a call whose arguments span 3 lines is counted as 3 args' `
 
 Write-Host ''
 Write-Host 'Controls -- what arity must NOT decide' -ForegroundColor Cyan
-$e5 = EdgeFrom 'Drive' 'Blend'
-Check 'same-arity overloads differing only by TYPE stay uncertain' `
-  ($null -eq $e5 -or $e5.conf -ne 'certain') "conf=$($e5.conf)"
+$e5 = EdgeFrom 'DriveVar' 'Blend'
+Check 'a VARIABLE of the string overload''s type picks it, certain (resolver 1.18.0)' `
+  ($null -ne $e5 -and $e5.conf -eq 'certain' -and $e5.target_sig -match 'string') `
+  "conf=$($e5.conf) target=$($e5.target_sig)"
+$e7 = EdgeFrom 'Drive' 'Blend'
+Check 'a string LITERAL picks the string overload, certain (resolver 1.12.0)' `
+  ($null -ne $e7 -and $e7.conf -eq 'certain' -and $e7.target_sig -match 'string') `
+  "conf=$($e7.conf) target=$($e7.target_sig)"
 $e6 = EdgeFrom 'Drive' 'Fill'
 Check 'a DEFAULT parameter still accepts the shorter call' `
   ($null -ne $e6 -and $e6.target_arity -eq 2) `
