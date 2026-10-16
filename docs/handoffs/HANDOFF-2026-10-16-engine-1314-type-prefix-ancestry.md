@@ -14,6 +14,11 @@ Autonomous mode is armed (`~/.claude/autonomy/mode.json`, runId 20261016-1640). 
 - `docs\NOTICE-2026-10-16-v1.31.3-released.md` is written. Like the other NOTICEs, it is untracked.
 
 ## Resume point (in order)
+0. **Owner leaves right after saying "resume" and is away until Sunday 2026-10-18 (instruction,
+   2026-10-16 evening): work COMPLETELY AUTONOMOUSLY.** Invoke the `autonomous` skill at once, IMMEDIATE
+   entry -- ask NOTHING. Write mode.json `mode: autonomous`, `phase: running`, keep its `goal` and
+   `assumptions`, drop `handoffReason`/`resumeDoc`/`disarmed`. Owner rulings already taken: 1.31.4 is
+   committed + deployed to dll-win64 (if no session is mid-gate) + packed; NO push/tag/release.
 1. **FIRST, before any work (owner instruction, 2026-10-16 evening):** start the wake timer -- `/loop`
    (dynamic) with an hourly ScheduleWakeup (~3600 s) re-armed EVERY turn. The weekly token limit runs
    out and resets around 14:00 on 2026-10-17; the timer is what makes the work resume by itself after
