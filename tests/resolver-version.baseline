@@ -674,7 +674,16 @@
 #   project file's in clause, calls outside any routine, a stable ambiguous pick. Derived
 #   rows only: index --all --resolve-only.
 #   Superseded: 1.12.0-alpha|e2db1d4d6dd17d7b1687e0cb9f7b27822e71e3299e5d2afed86dd0f329658c7d
-1.13.0-alpha|08ec099c0a13ee83d525e1ed1750ef8ffefb570757469d861f5d72eea9a405cb
+#
+# 2026-10-15: a REAL BUMP, 1.13.0-alpha -> 1.14.0-alpha:
+#   1.13.0-alpha -> 1.14.0-alpha: the index-speed work. A canonical purity witness (re-
+#   derived per strongly connected component after the fixpoint), symbol ids that survive
+#   a re-parse, a scoped call pass that widens only through new, gone or changed
+#   declarations, a scoped purity pass that reads only its scope, and a heritage change
+#   under the same type name declining the scoped pass. Whole-database results are
+#   IDENTICAL (tools\measure\index_db_diff.py); every database re-derives its edges once.
+#   Superseded: 1.13.0-alpha|08ec099c0a13ee83d525e1ed1750ef8ffefb570757469d861f5d72eea9a405cb
+1.14.0-alpha|a0bceb07778fba2530af16fbc7dd17c3817d8e8f4d6756d5a9ba211804897eb6
 # superseded (same 1.12.0-alpha, never released; E5 review round 1 on the branch -- NearestClassMember: the nearest member of any kind hides a farther field, an unresolved parent ends the walk, interfaces are not walked; new decline reason 'hidden'): 1.12.0-alpha|3cebd6247a15eb7fa8708c80fd73242b4c60d53c9d44a390564efaa12a6b1806
 # superseded: 1.11.0-alpha|7d04a1be5c4bfd0968b01c171996afe597c3b1ad94ae9910e013e044974854bd
 #   2026-10-06 1.11.0 -> 1.12.0-alpha (E5 / DEC-19, owner ruled YES 2026-10-05): ResolveBareMemberRead binds a BARE read of a field of the enclosing class or an ancestor (refs.symbol_id + member_accesses, mode read, no accessor); the 'field' decline reason and its counter are gone. Resolve-only: remedy is index --all --resolve-only. PINNED ON THE BRANCH feat/e5-resolver.

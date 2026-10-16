@@ -282,7 +282,17 @@ const
   /// call with no enclosing routine is a caller; an ambiguous guess is picked by a
   /// stable key. DERIVED rows only, no parse change: remedy is
   /// `index --all --resolve-only`.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.13.0-alpha';
+  /// <para>1.13.0-alpha -&gt; 1.14.0-alpha (2026-10-15, the index-speed work): a
+  /// purity WITNESS is canonical -- re-derived after the fixpoint per strongly
+  /// connected component, so it is the same whether the stage ran whole or scoped;
+  /// symbol ids survive a re-parse and the scoped call pass widens only through
+  /// declarations that are new, gone or changed; a scoped purity pass reads only
+  /// its scope; a type whose heritage changes under the same name declines the
+  /// scoped pass. Whole-database results are unchanged (index_db_diff.py
+  /// IDENTICAL); the bump makes every database re-derive its edges once on its
+  /// next index, which also drops any edge a heritage-changing scoped pass left
+  /// on the old ancestor.</para>
+  DRAGLINT_RESOLVER_VERSION = '1.14.0-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and
@@ -731,6 +741,53 @@ type
       parent calls the child, as a callers tree always could (Gitea
       drag-lint#11). Never persisted; 0 when the reader did not ask. }
     CallLine            : Integer;
+  end;
+
+  /// <summary>What the last call-target pass of a store instance re-derived,
+  /// when that pass was SCOPED (S4, 2026-10-08): the purity stage limits itself
+  /// to the routines these can have changed.</summary>
+  /// <remarks>Only the refs in <c>FileIds</c> or whose name is in <c>Names</c>
+  /// had their edges rewritten; every other edge is the one the previous run
+  /// derived. <c>Names</c> are the lowercased symbol names this run added or
+  /// removed, which also names every ancestor link that can have moved.</remarks>
+  TCallsScope = record
+    /// <summary>Files this store instance rewrote (OpenFileTx).</summary>
+    FileIds     : TArray<Int64>;
+    /// <summary>Lowercased names this run added or removed.</summary>
+    Names       : TArray<string>;
+    /// <summary>Distinct enclosing routine ids of the refs whose binding the pass
+    /// CHANGED (call edge or member access added, removed or retargeted), outside
+    /// the rewritten files.</summary>
+    EnclosingIds: TArray<Int64>;
+  end;
+
+  /// <summary>One call_edges row seen from the routines' side: the routine
+  /// that encloses the call site, and the routine it calls (S4).</summary>
+  TCallerTarget = record
+    /// <summary>refs.enclosing_symbol_id of the call site.</summary>
+    CallerId: Int64;
+    /// <summary>call_edges.target_symbol_id (never 0).</summary>
+    TargetId: Int64;
+  end;
+
+  /// <summary>One closure_cache row: what the compile-closure walk read out of
+  /// one unit (TClosureScan), its name lists joined with '|'.</summary>
+  TClosureCacheRow = record
+    Path        : string;
+    MTime       : Int64 ;
+    Size        : Int64 ;
+    UsesText    : string;
+    IncludesText: string;
+  end;
+
+  /// <summary>One type_ancestors row as written by the index: the type that
+  /// declares the heritage edge, and the edge itself. No late resolution is
+  /// applied -- an unresolved edge stays unresolved (Resolved = False).</summary>
+  TAncestorEdge = record
+    /// <summary>type_ancestors.symbol_id: the type whose heritage list holds the edge.</summary>
+    OwnerId : Int64;
+    /// <summary>The edge, filled the way GetTransitiveAncestors reads a direct row.</summary>
+    Ancestor: TTypeAncestor;
   end;
 
   /// <summary>v14 (D5): one resolved uses-scope edge -- file AFileId can see

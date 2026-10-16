@@ -965,4 +965,12 @@
 #   Closure.pas takes the file a project names for a unit as that unit for every user (the
 #   closure is computed afresh on every index run). No parse of a file differs.
 #   Superseded: 1.21.1-alpha|ba5b43cfb9f5257c609ea491739d4f6dffe56f43b701518b247a90afbaff13e5
-1.21.1-alpha|5a5911e163d9dd1e1c1fa8ea0ef582ed12c5c772f07aa995b69866c4dc0fc716
+#
+# 2026-10-15: hash re-pinned WITHIN 1.21.1-alpha:
+#   Index-speed work under src\core and src\index (throughput c1-c9, incremental runs, re-
+#   stamp of a moved date over identical bytes, closure cache, same-time same-size files
+#   taken as current, bounded resolver caches, profiling). Every stored parse is IDENTICAL
+#   by tools\measure\index_db_diff.py on the TestCopy scenarios, so no bump: what is
+#   parsed and emitted per file does not change, only when and how fast.
+#   Superseded: 1.21.1-alpha|5a5911e163d9dd1e1c1fa8ea0ef582ed12c5c772f07aa995b69866c4dc0fc716
+1.21.1-alpha|000bfd7b434a93911b137bd781166013a36b471c7ef43a175f525661f34535de

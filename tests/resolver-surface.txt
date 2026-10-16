@@ -78,6 +78,12 @@ src/storage/DRagLint.Storage.SQLite.pas::ScopedResolveDeclineReason
 src/storage/DRagLint.Storage.SQLite.pas::MaterializeResolveScope
 src/storage/DRagLint.Storage.SQLite.pas::TypeCandidateIds
 
+# 2026-09-30 (backlog #5, index throughput): the call resolver reads each file's
+# symbols ONCE through this (TCallResolver.LoadFileRows) and answers SymbolById
+# and ChildrenOf from those rows. Their ORDER decides which child a "first match
+# wins" rung takes, so a change here changes what is written.
+src/storage/DRagLint.Storage.SQLite.pas::GetSymbolsOfFile
+
 # The by-name READER the call resolver depends on. DRagLint.Index.CallResolver.pas
 # (~line 2176) calls FindSymbolsByExactName on the EXTRA stores for a receiver's
 # type and declines unless exactly ONE row comes back (Found <> 1 -> no edge).
@@ -189,6 +195,12 @@ src/storage/DRagLint.Storage.SQLite.pas::PurityNeedsRun
 src/storage/DRagLint.Storage.SQLite.pas::GetAllSymbolFacts
 src/storage/DRagLint.Storage.SQLite.pas::FindSymbolsWithFacts
 src/storage/DRagLint.Storage.SQLite.pas::DumpAllMemberAccesses
+# S4 (2026-10-08): the scope a scoped purity pass limits itself to, and the
+# reverse call graph it closes over. A reader again -- but one whose answer
+# decides WHICH verdicts are re-derived, so an error in it leaves verdicts
+# stale, which is exactly what this list bills for.
+src/storage/DRagLint.Storage.SQLite.pas::LastCallsScope
+src/storage/DRagLint.Storage.SQLite.pas::DumpCallerTargets
 # MOVED OUT OF THE EXCLUSION LIST, 2026-09-21. DumpAllCallEdges was EXCLUDEd as
 # a query-side reader on the stated ground that "a reader cannot make stored
 # data stale". That ground is now false: DRagLint.Analysis.PurityStage.pas:578
@@ -197,11 +209,28 @@ src/storage/DRagLint.Storage.SQLite.pas::DumpAllMemberAccesses
 # effects along. Leaving the two halves of one load on opposite sides of the
 # manifest would have been an exclusion whose reason no longer held.
 src/storage/DRagLint.Storage.SQLite.pas::DumpAllCallEdges
+# 2026-09-30 (backlog #5): the scan's refs now come through this --
+# GetReferencesFromFile narrowed to the four kinds and seven columns the body
+# scan reads -- so it is listed, and GetReferencesFromFile has left the stage.
+src/storage/DRagLint.Storage.SQLite.pas::GetRoutineRefsFromFile
+# 2026-10-14 (plans\2026-10-14-desempenho-e-explore.md): a scoped purity pass
+# reads the call edges and member accesses of its scope's files instead of
+# the whole tables, asks the reverse call graph per routine, and replays
+# GetTransitiveAncestors over the bulk heritage rows with the store's own late
+# resolution. Same closure rule as the readers above: each answer decides what
+# the stage writes.
+src/storage/DRagLint.Storage.SQLite.pas::DumpCallEdgesInFiles
+src/storage/DRagLint.Storage.SQLite.pas::ReadCallEdges
+src/storage/DRagLint.Storage.SQLite.pas::DumpMemberAccessesInFiles
+src/storage/DRagLint.Storage.SQLite.pas::ReadMemberAccesses
+src/storage/DRagLint.Storage.SQLite.pas::CallerRoutinesOf
+src/storage/DRagLint.Storage.SQLite.pas::DumpDirectAncestors
+src/storage/DRagLint.Storage.SQLite.pas::LateResolveAncestor
 #
 # NOT ADDED HERE, AND NAMED SO THE GAP IS AUDITABLE RATHER THAN INVISIBLE. The
-# stage reads eight further store routines -- FindAllChildSymbols,
+# stage reads seven further store routines -- FindAllChildSymbols,
 # FindChildSymbolByName, FindSymbolsByKind, GetAllFileStamps, GetFilePath,
-# GetReferencesFromFile, GetSymbolById (and GetTransitiveAncestors, which is
+# GetSymbolById (and GetTransitiveAncestors, which is
 # already listed above for ancestry). By the closure rule each of them also
 # decides what purity writes, so a strict reading puts all of them in. They are
 # left out of THIS change because widening the manifest that far is a scoping

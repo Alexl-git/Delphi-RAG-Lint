@@ -223,6 +223,28 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function FileIsUpToDate(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean                          ;
+    /// <summary>True when the files row of APath records this write time and
+    /// this byte size -- the indexer's no-read up-to-date test. False for a row
+    /// that recorded no size.</summary>
+    function FileStampIsCurrent(const APath: string; AMtimeUnix, ASize: Int64): Boolean;
+    /// <summary>Records the byte size of the content the files row of APath
+    /// describes (a no-op when it already says so).</summary>
+    procedure RecordFileSize(const APath: string; ASize: Int64);
+    /// <summary>Records a new mtime for a file whose stored row already has
+    /// this sha256 -- the content is byte-identical to what was parsed, only the
+    /// file's date moved -- so the indexer can skip re-parsing it.</summary>
+    /// <returns>True when a row matched path and sha and was re-stamped; False
+    /// when there is no row or the content differs (the file must be parsed).</returns>
+    /// <remarks>
+    /// Issue drag-lint#1 (2026-10-06): a working-copy operation rewrote the
+    /// dates of 1,138 ProjectA units without changing a byte, and because
+    /// FileIsUpToDate needs mtime AND sha to match, the next two incremental
+    /// runs re-parsed all of them (31 min). The sha is the content test; the
+    /// mtime is only the cheap first check, so a sha match with a moved mtime is
+    /// the same file. Exactly as safe as FileIsUpToDate itself: neither sees an
+    /// include file change under an unchanged unit.
+    /// </remarks>
+    function RestampFileIfSameContent(const APath: string; AMtimeUnix: Int64; const ASha: string): Boolean               ;
     // INBOX 2.2/2.3 (converter-editor team, 2026-08-02): read/write an arbitrary
     // schema_meta key. Used to carry the INDEXER FINGERPRINT -- see
     // TIndexer.ForceReparse -- so an engine upgrade can invalidate an otherwise
@@ -289,6 +311,19 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     procedure Checkpoint                                                                                                  ;
+    /// <summary>Opens a file batch: the per-file transactions that follow
+    /// (OpenFileTx .. CommitFileTx) become savepoints inside one outer
+    /// transaction, committed a group of files at a time.</summary>
+    /// <remarks>Each file stays atomic -- RollbackFileTx still undoes only its
+    /// own file -- but durability moves from the file to the group: a process
+    /// killed mid-group loses that group's files, which resume then re-parses,
+    /// because their fingerprint stamps were lost with them. A no-op on a
+    /// read-only store or when a batch is already open.</remarks>
+    procedure BeginFileBatch                                                                                              ;
+    /// <summary>Commits the open file batch, if any. Call it after the walk and
+    /// before anything else writes; Checkpoint and the destructor also close
+    /// one left open.</summary>
+    procedure EndFileBatch                                                                                                ;
     /// <param name="APath"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AMtimeUnix"><!-- drag-lint:auto type -->Int64</param>
     /// <param name="ASha"><!-- drag-lint:auto type -->const string</param>
@@ -1198,6 +1233,13 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function CallEdgesNeedRebuild: Boolean;
+    /// <summary>True when an EARLIER run wrote files (or evicted, or cleared)
+    /// and stopped before its call-target pass committed (#35).</summary>
+    /// <remarks>Its refs were never resolved, and this run, finding them up to
+    /// date, would otherwise skip the pass. Callers that skip
+    /// ResolveCallTargets must consult it beside CallEdgesNeedRebuild;
+    /// ResolveCallTargets itself then takes the whole database.</remarks>
+    function CallsPendingFromEarlierRun: Boolean;
     /// <summary>Transitive ancestor closure of the symbol (resolved edges are
     /// walked recursively; unresolved ones are name-only leaves). Cycle-safe,
     /// hop-capped.</summary>
@@ -2188,6 +2230,26 @@ type
     /// absent.</summary>
     /// <returns>One row per unit symbol: its file and its name.</returns>
     function GetFileUnitNames: TArray<TFileUnitName>;
+    /// <summary>The refs a routine-body scan reads from one file: kinds call,
+    /// read, write and member-access, inside a routine (enclosing symbol set),
+    /// in source order (line, column, then id).</summary>
+    /// <param name="AFileId">The file's id.</param>
+    /// <returns>Id, FileId, Kind, NameText, StartLine, StartCol,
+    /// EnclosingSymbolId and ReceiverText of each ref. SymbolId, EndLine and
+    /// EndCol are NOT read and stay 0.</returns>
+    /// <remarks>GetReferencesFromFile narrowed for the purity stage, which
+    /// reads every file of the database through it: 7 columns instead of 12,
+    /// the other ref kinds filtered in SQL, one prepared statement.</remarks>
+    function GetRoutineRefsFromFile(AFileId: Int64): TArray<TReference>;
+    /// <summary>Every symbol one file declares, ordered (start_line, id) --
+    /// FindAllChildSymbols' order, so grouping the rows by parent_id gives each
+    /// of the file's parents its child list as that call returns it.</summary>
+    /// <param name="AFileId">The file's id.</param>
+    /// <returns>The file's symbols; empty for an unknown id.</returns>
+    /// <remarks>The call resolver reads a file's rows in one query instead of
+    /// one GetSymbolById / FindAllChildSymbols round trip per routine and
+    /// class.</remarks>
+    function GetSymbolsOfFile(AFileId: Int64): TArray<TSymbol>;
     /// <summary>Every unit that reaches <paramref name="AFileId"/> through its
     /// uses clauses -- the fan-out an interface change has to be checked
     /// against.</summary>
@@ -2325,6 +2387,10 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function DumpAllCallEdges: TArray<TCallEdge>;
+    /// <summary>The call_edges rows of the refs that live in AFileIds -- the
+    /// slice a scoped purity pass scans.</summary>
+    /// <returns>Rows ordered by ref id; empty for an empty AFileIds.</returns>
+    function DumpCallEdgesInFiles(const AFileIds: TArray<Int64>): TArray<TCallEdge>;
     /// <summary>v14 (D5 T9): the ambiguous-calls resolver-coverage diagnostic --
     /// every CALL-SITE ref (kind = REF_KIND_CALL, i.e. exactly what
     /// ResolveCallTargets walks -- v(ADP3 T3i), register E1) that NAMES a known
@@ -2423,6 +2489,43 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function PurityNeedsRun: Boolean;
+    /// <summary>The scope of THIS instance's last ResolveCallTargets, when that
+    /// pass ran SCOPED and finished (S4): the files it covered, the added or
+    /// removed names, and the enclosing routines of every ref whose binding it
+    /// changed.</summary>
+    /// <param name="AScope">Filled on True; empty otherwise.</param>
+    /// <returns>False when the last pass ran over the whole database, did not
+    /// finish, or never ran on this instance -- then nothing is known about
+    /// which edges moved, and the caller must not limit itself.</returns>
+    function LastCallsScope(out AScope: TCallsScope): Boolean;
+    /// <summary>Every bound call edge as (enclosing routine, target routine),
+    /// distinct -- the reverse graph a scoped purity pass closes over (S4).</summary>
+    /// <returns>One row per distinct pair; call sites outside any routine are
+    /// left out.</returns>
+    function DumpCallerTargets: TArray<TCallerTarget>;
+    /// <summary>The distinct routines enclosing a bound call to ATargetId -- one
+    /// row of DumpCallerTargets' reverse graph, for a caller that visits few.</summary>
+    /// <returns>Caller routine ids; call sites outside any routine are left out.</returns>
+    function CallerRoutinesOf(ATargetId: Int64): TArray<Int64>;
+    /// <summary>Every type_ancestors row, ordered by owner then ordinal, as the
+    /// index stored it -- the input a caller needs to walk many types' ancestry
+    /// in memory instead of one GetTransitiveAncestors query per type.</summary>
+    /// <returns>All rows; unresolved edges come back unresolved (no late resolution).</returns>
+    function DumpDirectAncestors: TArray<TAncestorEdge>;
+    /// <summary>The compile-closure scans a previous index run recorded, when
+    /// they were recorded under AFingerprint; none otherwise.</summary>
+    function LoadClosureCache(const AFingerprint: string): TArray<TClosureCacheRow>;
+    /// <summary>Records closure scans under AFingerprint, replacing rows of the
+    /// same path; a different fingerprint than the stored one empties the cache
+    /// first.</summary>
+    procedure SaveClosureCache(const AFingerprint: string; const ARows: TArray<TClosureCacheRow>);
+    /// <summary>The late, scope-aware resolution GetTransitiveAncestors applies to
+    /// a heritage edge the index left unresolved (task 4d), for a caller that
+    /// replays that walk over DumpDirectAncestors rows.</summary>
+    /// <param name="AOwnerId">The type whose heritage list holds the edge.</param>
+    /// <param name="AOwnerFileId">That type's file -- the unit scope of the name.</param>
+    /// <param name="AEdge">Resolved in place when a single class or interface answers.</param>
+    procedure LateResolveAncestor(AOwnerId, AOwnerFileId: Int64; var AEdge: TTypeAncestor);
     /// <summary>Every symbol_facts row, Present = True on each. Bulk read for
     /// the purity stage (one query instead of one per routine).</summary>
     /// <returns>All rows; EffectFree is -1 where the column is NULL or ABSENT (pre-purity DB).</returns>
@@ -2466,6 +2569,9 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function DumpAllMemberAccesses: TArray<TCallEdge>;
+    /// <summary>The member_accesses rows of the refs that live in AFileIds.</summary>
+    /// <returns>Rows; empty for an empty AFileIds or a DB without the table.</returns>
+    function DumpMemberAccessesInFiles(const AFileIds: TArray<Int64>): TArray<TCallEdge>;
     /// <summary>This store's flow-oracle memo, created with the store and
     /// living exactly as long as it. Never nil.</summary>
     /// <returns>The store's own TFlowOracleCache; the store owns it and the
@@ -2621,6 +2727,11 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ParsedFiles: Integer;
+    /// <summary>How many of the SkippedUpToDate files were skipped only after
+    /// re-stamping their mtime: the date had moved, the content had not (see
+    /// ISymbolStore.RestampFileIfSameContent). A subset of SkippedUpToDate,
+    /// never of ParsedFiles. CUMULATIVE, like the other counters.</summary>
+    function RestampedFiles: Integer;
     /// <summary>Every file this indexer ADMITTED since it was created -- the
     /// walk's in-scope set, in the spelling the walk produced.</summary>
     /// <returns>The admitted paths, in visit order, with duplicates collapsed.</returns>

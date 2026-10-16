@@ -4,8 +4,11 @@
 /// writes symbol_facts.effect_free / effect_summary / effect_witness.</summary>
 /// <remarks>Resolve surface (tests\resolver-surface.txt): changing anything
 /// here changes what is WRITTEN and bills DRAGLINT_RESOLVER_VERSION, never the
-/// extractor. Whole-DB every run (the fixpoint is sub-second on a project DB);
-/// source is read at most once per file. Prints `resolve: purity -- ...` on
+/// extractor. Whole-DB, except after a SCOPED call-target pass on the same store
+/// (S4, 2026-10-08): then only the routines that pass can have moved and their
+/// transitive callers are re-derived, and every other stored verdict is the
+/// fixpoint's constant (DetermineScope); DRAGLINT_NO_SCOPED_PURITY=1 forces the
+/// whole pass. Source is read at most once per file. Prints `resolve: purity -- ...` on
 /// stdout, the per-phase split on stderr under DRAGLINT_PROFILE.
 /// The lattice, the axiom and built-in tables, the argument lexer, the body
 /// scanner and the callee -> caller translation live in
@@ -44,7 +47,8 @@ type
   /// needs, writes, and frees.</summary>
   TPurityStage = class
   public
-    /// <summary>Runs the whole-DB purity pass and persists the verdicts.</summary>
+    /// <summary>Runs the purity pass -- scoped to what a scoped call-target pass
+    /// on AStore can have moved, else whole-DB -- and persists the verdicts.</summary>
     /// <param name="AStore">An open, migrated, writable store. PutEffectFacts
     /// opens its own transaction, so no file transaction may be open.</param>
     /// <returns>Counts for the summary line.</returns>
@@ -93,6 +97,9 @@ const
   NAME_ADDR           = 'Addr';
   WORD_INHERITED      = 'inherited';
   TOP_NONE            = 'none';
+  { S4: set to anything, the stage re-derives every routine even after a scoped
+    call-target pass -- the A/B switch the scoped-equals-whole test runs on. }
+  ENV_NO_SCOPED_PURITY = 'DRAGLINT_NO_SCOPED_PURITY';
 
   WITNESS_STALE           = 'source changed since indexing';
   WITNESS_WITH            = 'with statement';
@@ -106,10 +113,25 @@ const
   ROUTINE_KINDS = [skProcedure, skFunction, skMethod, skConstructor, skDestructor];
   CAST_KINDS    = [skClass, skInterface, skRecord, skEnum, skTypeAlias];
   CLASS_KINDS   = [skClass, skRecord, skInterface, skForm];
+  { What a routine's ParentId can name besides another routine (Load preloads them). }
+  CONTAINER_KIND_TEXTS: array[0..4] of string = ('class', 'record', 'interface', 'form', 'unit');
+  ANCESTOR_HOP_CAP = 64; { GetTransitiveAncestors' own cap }
+  { CollectContextSymbols: above this many enclosing-routine parents, read both
+    kinds whole instead of one child query per parent. }
+  CONTEXT_PARENTS_BULK = 2000;
+  { DetermineScope: past this many per-routine caller lookups, read the whole
+    reverse call graph once instead. }
+  CALLERS_BULK_AFTER = 1000;
+  { Set to compare every replayed ancestry with the store's walk (tests). }
+  ENV_CHECK_ANCESTORS = 'DRAGLINT_PURITY_CHECK_ANCESTORS';
   FIELD_KINDS   = [skField, skComponent];
 
 type
   TSymbolKinds = set of TSymbolKind;
+  { The tables TPurityRun.Load reads, for the DRAGLINT_PROFILE split. }
+  TLoadPart = (lpRoutines, lpFacts, lpEdges, lpMembers, lpStamps);
+  { DetermineScope's steps, for the same split. }
+  TScopePart = (spClassOf, spCallsScope, spSeeds, spCallers, spHeirs, spClosure);
 
   /// <summary>One call site of a caller that the fixpoint folds in: a bound
   /// routine (TargetId) or a built-in (IsBuiltin). Arguments are lexed LAZILY,
@@ -156,6 +178,14 @@ type
     FOwnFieldsOf : TDictionary<Int64, TNameSet>;
     FPropsOf     : TDictionary<Int64, TNameSet>;
     FAncestorsOf : TDictionary<Int64, TArray<TTypeAncestor>>;
+    FDirectAnc   : TDictionary<Int64, TArray<TTypeAncestor>>; // type_ancestors rows by owner, in ordinal order (Load)
+    FAncChecked  : Integer; // DRAGLINT_PURITY_CHECK_ANCESTORS: classes whose replay was compared with the store
+    FAncDiffer   : Integer; // ... and how many of them disagreed
+    { A class's children, read once. FieldsOfClass and PropsOfClass each walk the
+      class AND every resolved ancestor, so without it the store was asked for
+      one base form's children twice per descendant: 5,120 reads, 3.6 s of the
+      ProjectA load (measured 2026-09-30). }
+    FClassKids   : TDictionary<Int64, TArray<TSymbol>>;
     FStamps      : TDictionary<string, Int64>;
     { The line cache is BOUNDED (PURITY_LINE_CACHE_CHARS). Holding every file's
       lines for the whole run cost ~800 MB of the 2.9 GB peak measured on the
@@ -179,11 +209,28 @@ type
     FStats       : TPurityStats;
     FVisits      : Integer;
     FLexTicks    : Int64;
+    FRefTicks    : Int64;   // DRAGLINT_PROFILE: the scan's per-file refs reads
+    FReadTicks   : Int64;   // DRAGLINT_PROFILE: the scan's stamp checks and source reads
+    FLoadSecs    : array[TLoadPart] of Double; // DRAGLINT_PROFILE: Load's reads, one per table
+    FScopeSecs   : array[TScopePart] of Double; // DRAGLINT_PROFILE: DetermineScope's steps
+    { S4 (2026-10-08): the routines this run re-derives. Every routine when the
+      run is not scoped; otherwise the closure DetermineScope computes, and every
+      other routine keeps its stored verdict as a constant of the fixpoint. }
+    FScoped      : Boolean;
+    FInScope     : TArray<Boolean>;
+    FScopeCount  : Integer;
+    FScopeFiles  : Integer;
+    FClassOf     : TArray<Int64>;   // ClassIdOf, per routine index
+    FComp        : TArray<Integer>;            // CanonicalWitnesses: component per routine
+    FContrib     : TArray<TArray<Boolean>>;    // CanonicalWitnesses: use adds anything
+    FRank        : TArray<Integer>;            // CanonicalWitnesses: distance to a source
     function  NewSet: TNameSet;
     function  NewMap: TParamMap;
     function  SymbolById(AId: Int64): TSymbol;
     function  ClassIdOf(const ASym: TSymbol): Int64;
+    function  ReplayAncestors(AClassId: Int64): TArray<TTypeAncestor>;
     function  AncestorsOf(AClassId: Int64): TArray<TTypeAncestor>;
+    function  ClassChildren(AClassId: Int64): TArray<TSymbol>;
     function  OwnMembersOf(AClassId: Int64; const AKinds: TSymbolKinds): TNameSet;
     function  FieldsOfClass(AClassId: Int64): TNameSet;
     function  PropsOfClass(AClassId: Int64): TNameSet;
@@ -199,6 +246,18 @@ type
     function  EnclosingCall(const ALine: string; ACol: Integer; ACalls: TList<TReference>; ALineNo: Integer): Integer;
     procedure MarkEscaping(AIndex: Integer; const AName: string);
     procedure Load;
+    procedure DetermineScope;
+    procedure Lap(var AStamp: Int64; APart: TScopePart);
+    function  StoredSummary(AIndex: Integer): TEffectSummary;
+    procedure ApplyUse(AIndex, AUse: Integer; var ASum: TEffectSummary; var AChanged: Boolean);
+    function  InScopeTarget(AIndex, AUse: Integer; out ATarget: Integer): Boolean;
+    function  SameComp(AIndex, AUse: Integer): Boolean;
+    procedure ComputeComponents;
+    procedure ComputeSourceRanks;
+    function  CanonicalSummaryOf(AIndex: Integer): TEffectSummary;
+    procedure CanonicalWitnesses;
+    procedure LoadBindings;
+    procedure CollectContextSymbols(out AParams, ALocals: TArray<TSymbol>);
     procedure BuildContexts;
     procedure ScanFiles;
     procedure ScanRoutine(AIndex: Integer; const ALines: TArray<string>; ARefs: TList<TReference>);
@@ -218,7 +277,7 @@ type
     procedure LexUse(AIndex, AUse: Integer);
     procedure FixPoint;
     procedure WriteVerdicts;
-    procedure Report(ALoad, AScan, AFix, AWrite: Double);
+    procedure Report(ALoad, AScope, AContexts, AScan, AFix, AWrite: Double);
   public
     constructor Create(const AStore: ISymbolStore);
     destructor Destroy; override;
@@ -255,6 +314,8 @@ begin
   FOwnFieldsOf:= TDictionary<Int64, TNameSet>.Create;
   FPropsOf    := TDictionary<Int64, TNameSet>.Create;
   FAncestorsOf:= TDictionary<Int64, TArray<TTypeAncestor>>.Create;
+  FDirectAnc  := TDictionary<Int64, TArray<TTypeAncestor>>.Create;
+  FClassKids  := TDictionary<Int64, TArray<TSymbol>>.Create;
   FStamps     := TDictionary<string, Int64>.Create(TIStringComparer.Ordinal);
   FLines      := TDictionary<Int64, TArray<string>>.Create;
   FLineOrder  := TQueue<Int64>.Create;
@@ -275,7 +336,9 @@ begin
   FLineOrder.Free;
   FLines.Free;
   FStamps.Free;
+  FClassKids.Free;
   FAncestorsOf.Free;
+  FDirectAnc.Free;
   FPropsOf.Free;
   FOwnFieldsOf.Free;
   FFieldsOf.Free;
@@ -325,19 +388,102 @@ begin
   if (P.Id > 0) and (P.Kind in CLASS_KINDS) then Result:= P.Id;
 end;
 
+{ GetTransitiveAncestors' walk, replayed over the rows Load read in bulk: the
+  per-name Seen set, the expand set, the 64-hop cap and the order are the
+  store's, and an unresolved edge goes through the store's own
+  LateResolveAncestor -- the same code and memo, not a copy -- so the two walks
+  return the same rows. Measured motive: one store walk per class (a query per
+  hop) was most of DetermineScope's 4.3 s on the TestCopy ProjectA index. }
+function TPurityRun.ReplayAncestors(AClassId: Int64): TArray<TTypeAncestor>;
+var
+  Acc     : TList<TTypeAncestor>;
+  Seen    : TDictionary<string, Boolean>;
+  Expanded: TDictionary<Int64, Boolean>;
+  Queue   : TQueue<Int64>;
+  Direct  : TArray<TTypeAncestor>;
+  Hops    : Integer;
+begin
+  Acc     := TList<TTypeAncestor>.Create;
+  Seen    := TDictionary<string, Boolean>.Create;
+  Expanded:= TDictionary<Int64, Boolean>.Create;
+  Queue   := TQueue<Int64>.Create;
+  try
+    Queue.Enqueue(AClassId);
+    Expanded.AddOrSetValue(AClassId, True);
+    Hops:= 0;
+    while (Queue.Count > 0) and (Hops < ANCESTOR_HOP_CAP) do
+    begin
+      Inc(Hops);
+      var Cur:= Queue.Dequeue;
+      if not FDirectAnc.TryGetValue(Cur, Direct) then Continue;
+      for var Ix:= 0 to High(Direct) do
+      begin
+        var A  : TTypeAncestor:= Direct[Ix];
+        var Key: string       := LowerCase(A.Name);
+        if not Seen.ContainsKey(Key) then
+        begin
+          Seen.Add(Key, True);
+          if (not A.Resolved) and (Trim(A.Name) <> '') then
+            FStore.LateResolveAncestor(Cur, SymbolById(Cur).FileId, A);
+          Acc.Add(A);
+        end;
+        if A.Resolved and (A.SymbolId > 0) and not Expanded.ContainsKey(A.SymbolId) then
+        begin
+          Expanded.Add(A.SymbolId, True);
+          Queue.Enqueue(A.SymbolId);
+        end;
+      end;
+    end;
+    Result:= Acc.ToArray;
+  finally
+    Queue.Free;
+    Expanded.Free;
+    Seen.Free;
+    Acc.Free;
+  end;
+end;
+
+function SameAncestor(const A, B: TTypeAncestor): Boolean;
+begin
+  var SameTarget: Boolean:= (A.Resolved = B.Resolved) and (A.SymbolId = B.SymbolId) and (A.FileId = B.FileId);
+  var SameNames : Boolean:= (A.Name = B.Name) and (A.ResolvedName = B.ResolvedName) and (A.TypeArgs = B.TypeArgs);
+  Result:= SameTarget and SameNames and (A.Kind = B.Kind) and (A.Ordinal = B.Ordinal);
+end;
+
+function SameAncestors(const A, B: TArray<TTypeAncestor>): Boolean;
+begin
+  Result:= Length(A) = Length(B);
+  for var I:= 0 to High(A) do
+    if Result then Result:= SameAncestor(A[I], B[I]);
+end;
+
 function TPurityRun.AncestorsOf(AClassId: Int64): TArray<TTypeAncestor>;
 begin
   if not FAncestorsOf.TryGetValue(AClassId, Result) then
   begin
-    Result:= FStore.GetTransitiveAncestors(AClassId);
+    Result:= ReplayAncestors(AClassId);
+    if GetEnvironmentVariable(ENV_CHECK_ANCESTORS) <> '' then
+    begin
+      Inc(FAncChecked);
+      if not SameAncestors(Result, FStore.GetTransitiveAncestors(AClassId)) then Inc(FAncDiffer);
+    end;
     FAncestorsOf.Add(AClassId, Result);
+  end;
+end;
+
+function TPurityRun.ClassChildren(AClassId: Int64): TArray<TSymbol>;
+begin
+  if not FClassKids.TryGetValue(AClassId, Result) then
+  begin
+    Result:= FStore.FindAllChildSymbols(AClassId);
+    FClassKids.Add(AClassId, Result);
   end;
 end;
 
 function TPurityRun.OwnMembersOf(AClassId: Int64; const AKinds: TSymbolKinds): TNameSet;
 begin
   Result:= NewSet;
-  for var C in FStore.FindAllChildSymbols(AClassId) do
+  for var C in ClassChildren(AClassId) do
     if C.Kind in AKinds then Result.AddOrSetValue(LowerKey(C.Name), True);
 end;
 
@@ -354,7 +500,7 @@ begin
   for var K in Own.Keys do Result.AddOrSetValue(K, True);
   for var Anc in AncestorsOf(AClassId) do
     if Anc.Resolved then
-      for var C in FStore.FindAllChildSymbols(Anc.SymbolId) do
+      for var C in ClassChildren(Anc.SymbolId) do
         if C.Kind in FIELD_KINDS then Result.AddOrSetValue(LowerKey(C.Name), True);
   FFieldsOf.Add(AClassId, Result);
 end;
@@ -366,7 +512,7 @@ begin
   Result:= OwnMembersOf(AClassId, [skProperty]);
   for var Anc in AncestorsOf(AClassId) do
     if Anc.Resolved then
-      for var C in FStore.FindAllChildSymbols(Anc.SymbolId) do
+      for var C in ClassChildren(Anc.SymbolId) do
         if C.Kind = skProperty then Result.AddOrSetValue(LowerKey(C.Name), True);
   FPropsOf.Add(AClassId, Result);
 end;
@@ -557,7 +703,12 @@ procedure TPurityRun.Load;
 var
   List: TList<Integer>;
 begin
+  var T:= TStopwatch.GetTimeStamp;
   FRoutines:= FStore.FindSymbolsWithFacts;
+  { Every routine row is already here, and SymbolById is asked for most of them
+    again -- a bound call's target, a nested routine's parent. Seeding the cache
+    with the same SELECT * rows answers those without a store round trip. }
+  for var R in FRoutines do FSymCache.AddOrSetValue(R.Id, R);
   SetLength(FCtx, Length(FRoutines));
   SetLength(FLocal, Length(FRoutines));
   SetLength(FSummary, Length(FRoutines));
@@ -574,16 +725,326 @@ begin
       end;
       List.Add(I);
     end;
+  FLoadSecs[lpRoutines]:= (TStopwatch.GetTimeStamp - T) / TStopwatch.Frequency;
+  T:= TStopwatch.GetTimeStamp;
   for var F in FStore.GetAllSymbolFacts do FFacts.AddOrSetValue(F.SymbolId, F);
-  for var E in FStore.DumpAllCallEdges do FEdges.AddOrSetValue(E.RefId, E);
-  for var M in FStore.DumpAllMemberAccesses do FMembers.AddOrSetValue(M.RefId, M);
+  FLoadSecs[lpFacts]:= (TStopwatch.GetTimeStamp - T) / TStopwatch.Frequency;
+  T:= TStopwatch.GetTimeStamp;
   for var S in FStore.GetAllFileStamps do FStamps.AddOrSetValue(S.Path, S.MTimeUnix);
+  FLoadSecs[lpStamps]:= (TStopwatch.GetTimeStamp - T) / TStopwatch.Frequency;
+  { DetermineScope asks ClassIdOf for every routine and AncestorsOf for every
+    class; both used to go to the store once per container. Read the containers
+    a routine can hang off, and the heritage rows, once. }
+  for var Kind in CONTAINER_KIND_TEXTS do
+    for var S in FStore.FindSymbolsByKind(Kind, False, MaxInt) do FSymCache.AddOrSetValue(S.Id, S);
+  var Rows:= FStore.DumpDirectAncestors;
+  var Start:= 0;
+  for var I:= 0 to High(Rows) do
+    if (I = High(Rows)) or (Rows[I + 1].OwnerId <> Rows[I].OwnerId) then
+    begin
+      var Edges: TArray<TTypeAncestor>;
+      SetLength(Edges, I - Start + 1);
+      for var K:= Start to I do Edges[K - Start]:= Rows[K].Ancestor;
+      FDirectAnc.Add(Rows[I].OwnerId, Edges);
+      Start:= I + 1;
+    end;
+end;
+
+{ A heritage name reduced to what the scope names hold: the bare, lowercased
+  type name -- no unit prefix ('Vcl.Forms.TForm'), no type arguments. }
+function BareTypeKey(const AName: string): string;
+var
+  P: Integer;
+begin
+  Result:= AName;
+  P:= Pos('<', Result);
+  if P > 0 then Result:= Copy(Result, 1, P - 1);
+  P:= LastDelimiter('.', Result);
+  if P > 0 then Result:= Copy(Result, P + 1, MaxInt);
+  Result:= LowerKey(Result);
+end;
+
+{ S4 (2026-10-08): WHICH ROUTINES THIS RUN RE-DERIVES.
+
+  Measured motive: on the 2,227-file ProjectA index a one-file incremental spent
+  30.8 s here, 29 of them loading and scanning every routine, while the routines
+  whose verdict CAN move were 0.4%-2% of them for an ordinary form (28% for the
+  most-called library unit).
+
+  Only after a call-target pass that ran SCOPED on this store instance
+  (LastCallsScope) -- then exactly the refs in its scope files, or named by a
+  name this run added or removed, had their edges rewritten; every other edge,
+  and so every other verdict input, is the previous run's. Seeds:
+    - every routine of a file this run rewrote;
+    - every routine enclosing a ref whose binding the pass CHANGED -- not every
+      ref it re-read: a reparse re-adds every name its file declares, so the
+      pass re-reads each Create/Free/Close in the corpus (23,607 of 36,027
+      routines for one form, measured), and almost none of those move;
+    - every routine with no verdict yet;
+    - every method of a class whose own file, or ANY ancestor's file or NAME,
+      is in the scope: inherited fields and properties decide how an
+      identifier is classified, a bare `inherited;` binds to the nearest
+      ancestor that declares the name, and a REMOVED base class leaves no
+      resolved link to a scope file -- only its name in the scope names.
+  Closed over the reverse call graph (a caller's verdict folds its callees'),
+  and, because a bare `inherited;` reaches the ancestor's method WITHOUT a
+  call_edges row, over the same-named methods of every descendant class.
+  Everything outside keeps its stored verdict, which the fixpoint reads as a
+  constant. DRAGLINT_NO_SCOPED_PURITY=1 forces the whole pass. }
+procedure TPurityRun.Lap(var AStamp: Int64; APart: TScopePart);
+begin
+  var Now64:= TStopwatch.GetTimeStamp;
+  FScopeSecs[APart]:= FScopeSecs[APart] + (Now64 - AStamp) / TStopwatch.Frequency;
+  AStamp:= Now64;
+end;
+
+procedure TPurityRun.DetermineScope;
+var
+  Scope    : TCallsScope;
+  ScopeFile: TDictionary<Int64, Boolean>;
+  ScopeName: TDictionary<string, Boolean>;
+  Touched  : TDictionary<Int64, Boolean>;
+  Desc     : TObjectDictionary<Int64, TList<Int64>>;
+  OfClass  : TObjectDictionary<Int64, TList<Integer>>;
+  CallersOf: TObjectDictionary<Int64, TList<Int64>>;
+  Queue    : TQueue<Integer>;
+  I, K     : Integer;
+  F        : TSymbolFacts;
+  IdList   : TList<Int64>;
+  IxList   : TList<Integer>;
+
+  procedure Mark(AIndex: Integer);
+  begin
+    if FInScope[AIndex] then Exit;
+    FInScope[AIndex]:= True;
+    Inc(FScopeCount);
+    Queue.Enqueue(AIndex);
+  end;
+
+  function ClassTouched(AClassId: Int64): Boolean;
+  begin
+    if Touched.TryGetValue(AClassId, Result) then Exit;
+    Result:= ScopeFile.ContainsKey(SymbolById(AClassId).FileId);
+    if not Result then
+      for var Anc in AncestorsOf(AClassId) do
+        if (Anc.Resolved and ScopeFile.ContainsKey(Anc.FileId)) or ScopeName.ContainsKey(BareTypeKey(Anc.Name))
+           or ((Anc.ResolvedName <> '') and ScopeName.ContainsKey(BareTypeKey(Anc.ResolvedName))) then
+        begin
+          Result:= True;
+          Break;
+        end;
+    Touched.Add(AClassId, Result);
+  end;
+
+begin
+  FScoped:= False;
+  FScopeCount:= 0;
+  SetLength(FInScope, Length(FRoutines));
+  SetLength(FClassOf, Length(FRoutines));
+  var T:= TStopwatch.GetTimeStamp;
+  for I:= 0 to High(FRoutines) do FClassOf[I]:= ClassIdOf(FRoutines[I]);
+  Lap(T, spClassOf);
+  var HasScope:= (GetEnvironmentVariable(ENV_NO_SCOPED_PURITY) = '') and FStore.LastCallsScope(Scope);
+  Lap(T, spCallsScope);
+  if not HasScope then
+  begin
+    for I:= 0 to High(FRoutines) do FInScope[I]:= True;
+    FScopeCount:= Length(FRoutines);
+    Exit;
+  end;
+  FScoped:= True;
+  ScopeFile:= TDictionary<Int64, Boolean>.Create;
+  ScopeName:= TDictionary<string, Boolean>.Create;
+  Touched  := TDictionary<Int64, Boolean>.Create;
+  Desc     := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
+  OfClass  := TObjectDictionary<Int64, TList<Integer>>.Create([doOwnsValues]);
+  CallersOf:= TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
+  Queue    := TQueue<Integer>.Create;
+  try
+    for var Fid in Scope.FileIds do ScopeFile.AddOrSetValue(Fid, True);
+    for var N in Scope.Names do ScopeName.AddOrSetValue(LowerKey(N), True);
+    for I:= 0 to High(FRoutines) do
+      if ScopeFile.ContainsKey(FRoutines[I].FileId) then Mark(I)
+      else if (not FFacts.TryGetValue(FRoutines[I].Id, F)) or (F.EffectFree < 0) then Mark(I)
+      else if (FClassOf[I] <> 0) and ClassTouched(FClassOf[I]) then Mark(I);
+    for var Id in Scope.EnclosingIds do
+      if FIndexOf.TryGetValue(Id, K) then Mark(K);
+    Lap(T, spSeeds);
+
+    { THE REVERSE CALL GRAPH, ASKED FOR WHAT THE CLOSURE VISITS. Reading every
+      (caller, target) pair -- 116k distinct on the TestCopy ProjectA index,
+      0.8 s -- served a closure that visits a few dozen routines after an
+      ordinary edit. The closure below asks per routine it dequeues, and only
+      past CALLERS_BULK_AFTER asks does it read the whole graph. The set it
+      marks is the same either way: Mark is idempotent and order-free. }
+    var CallerAsks:= 0;
+    var CallersBulk:= False;
+    var CallersOfRoutine: TFunc<Int64, TList<Int64>>:= function(AId: Int64): TList<Int64>
+      begin
+        if CallersOf.TryGetValue(AId, Result) then Exit;
+        if CallersBulk then Exit(nil);
+        Inc(CallerAsks);
+        if CallerAsks > CALLERS_BULK_AFTER then
+        begin
+          CallersOf.Clear;
+          for var CT in FStore.DumpCallerTargets do
+          begin
+            if not CallersOf.TryGetValue(CT.TargetId, Result) then
+            begin
+              Result:= TList<Int64>.Create;
+              CallersOf.Add(CT.TargetId, Result);
+            end;
+            Result.Add(CT.CallerId);
+          end;
+          CallersBulk:= True;
+          if not CallersOf.TryGetValue(AId, Result) then Result:= nil;
+          Exit;
+        end;
+        Result:= TList<Int64>.Create;
+        Result.AddRange(FStore.CallerRoutinesOf(AId));
+        CallersOf.Add(AId, Result);
+      end;
+    Lap(T, spCallers);
+    for I:= 0 to High(FRoutines) do
+      if FClassOf[I] <> 0 then
+      begin
+        if not OfClass.TryGetValue(FClassOf[I], IxList) then
+        begin
+          IxList:= TList<Integer>.Create;
+          OfClass.Add(FClassOf[I], IxList);
+        end;
+        IxList.Add(I);
+      end;
+    for var C in OfClass.Keys do
+      for var Anc in AncestorsOf(C) do
+        if Anc.Resolved then
+        begin
+          if not Desc.TryGetValue(Anc.SymbolId, IdList) then
+          begin
+            IdList:= TList<Int64>.Create;
+            Desc.Add(Anc.SymbolId, IdList);
+          end;
+          IdList.Add(C);
+        end;
+    Lap(T, spHeirs);
+
+    while Queue.Count > 0 do
+    begin
+      I:= Queue.Dequeue;
+      IdList:= CallersOfRoutine(FRoutines[I].Id);
+      if IdList <> nil then
+        for var C in IdList do
+          if FIndexOf.TryGetValue(C, K) then Mark(K);
+      if (FClassOf[I] <> 0) and Desc.TryGetValue(FClassOf[I], IdList) then
+        for var D in IdList do
+          if OfClass.TryGetValue(D, IxList) then
+            for var R in IxList do
+              if SameText(FRoutines[R].Name, FRoutines[I].Name) then Mark(R);
+    end;
+    Lap(T, spClosure);
+  finally
+    Queue.Free;
+    CallersOf.Free;
+    OfClass.Free;
+    Desc.Free;
+    Touched.Free;
+    ScopeName.Free;
+    ScopeFile.Free;
+  end;
+end;
+
+{ The verdict a routine OUTSIDE the scope already carries, as the fixpoint's
+  constant for it. DetermineScope admits only routines with a computed verdict
+  to the outside, so effect_summary is set. }
+function TPurityRun.StoredSummary(AIndex: Integer): TEffectSummary;
+var
+  F: TSymbolFacts;
+begin
+  if not FFacts.TryGetValue(FRoutines[AIndex].Id, F) then Exit(Default(TEffectSummary));
+  Result:= TEffectSummary.Decode(F.EffectSummary);
+  Result.Witness:= F.EffectWitness;
+end;
+
+{ The call edges and member accesses of the refs the scan will read. Only the
+  routines in scope are scanned, and only the refs of their files, so a scoped
+  run reads those files' rows instead of both whole tables (2026-10-14: 1.8 s
+  of a one-form run on the TestCopy ProjectA index). A whole run reads all. }
+procedure TPurityRun.LoadBindings;
+var
+  Edges, Members: TArray<TCallEdge>;
+  FileIds       : TArray<Int64>;
+begin
+  if FScoped then
+  begin
+    var Files:= TDictionary<Int64, Boolean>.Create;
+    try
+      for var I:= 0 to High(FRoutines) do
+        if FInScope[I] then Files.AddOrSetValue(FRoutines[I].FileId, True);
+      FileIds:= Files.Keys.ToArray;
+    finally
+      Files.Free;
+    end;
+  end;
+  var T:= TStopwatch.GetTimeStamp;
+  if FScoped then Edges:= FStore.DumpCallEdgesInFiles(FileIds) else Edges:= FStore.DumpAllCallEdges;
+  for var E in Edges do FEdges.AddOrSetValue(E.RefId, E);
+  FLoadSecs[lpEdges]:= (TStopwatch.GetTimeStamp - T) / TStopwatch.Frequency;
+  T:= TStopwatch.GetTimeStamp;
+  if FScoped then Members:= FStore.DumpMemberAccessesInFiles(FileIds) else Members:= FStore.DumpAllMemberAccesses;
+  for var M in Members do FMembers.AddOrSetValue(M.RefId, M);
+  FLoadSecs[lpMembers]:= (TStopwatch.GetTimeStamp - T) / TStopwatch.Frequency;
+end;
+
+{ The param and local_var symbols BuildContexts needs. A context is built only
+  for a routine in scope, from its own params and locals and those of the
+  routines enclosing it; a scoped run with few of them asks for exactly those
+  parents' children instead of the 93k rows of both kinds (1.4 s on the same
+  index). Past CONTEXT_PARENTS_BULK parents the two bulk reads are cheaper. }
+procedure TPurityRun.CollectContextSymbols(out AParams, ALocals: TArray<TSymbol>);
+var
+  Parents: TDictionary<Int64, Boolean>;
+  P, L   : TList<TSymbol>;
+begin
+  Parents:= TDictionary<Int64, Boolean>.Create;
+  P:= TList<TSymbol>.Create;
+  L:= TList<TSymbol>.Create;
+  try
+    if FScoped then
+      for var I:= 0 to High(FRoutines) do
+        if FInScope[I] then
+        begin
+          var Up:= FRoutines[I];
+          while (Up.Id > 0) and (Up.Kind in ROUTINE_KINDS) and not Parents.ContainsKey(Up.Id) do
+          begin
+            Parents.Add(Up.Id, True);
+            Up:= SymbolById(Up.ParentId);
+          end;
+        end;
+    if (not FScoped) or (Parents.Count > CONTEXT_PARENTS_BULK) then
+    begin
+      AParams:= FStore.FindSymbolsByKind(KIND_TEXT_PARAM, False, MaxInt);
+      ALocals:= FStore.FindSymbolsByKind(KIND_TEXT_LOCAL_VAR, False, MaxInt);
+      Exit;
+    end;
+    for var Id in Parents.Keys do
+      for var C in FStore.FindAllChildSymbols(Id) do
+        if SameText(C.Kind.ToText, KIND_TEXT_PARAM) then P.Add(C)
+        else if SameText(C.Kind.ToText, KIND_TEXT_LOCAL_VAR) then L.Add(C);
+    AParams:= P.ToArray;
+    ALocals:= L.ToArray;
+  finally
+    L.Free;
+    P.Free;
+    Parents.Free;
+  end;
 end;
 
 { Params (ordered by declaration position -> ordinal) and locals per routine,
   then the per-routine classification context. }
 procedure TPurityRun.BuildContexts;
 var
+  ParamSyms: TArray<TSymbol>;
+  LocalSyms: TArray<TSymbol>;
   ByParent: TObjectDictionary<Int64, TList<TSymbol>>;
   List    : TList<TSymbol>;
   Map     : TParamMap;
@@ -593,9 +1054,10 @@ var
   Up      : TSymbol;
   UpSet   : TNameSet;
 begin
+  CollectContextSymbols(ParamSyms, LocalSyms);
   ByParent:= TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
   try
-    for var P in FStore.FindSymbolsByKind(KIND_TEXT_PARAM, False, MaxInt) do
+    for var P in ParamSyms do
     begin
       if not ByParent.TryGetValue(P.ParentId, List) then
       begin
@@ -625,7 +1087,7 @@ begin
   finally
     ByParent.Free;
   end;
-  for var L in FStore.FindSymbolsByKind(KIND_TEXT_LOCAL_VAR, False, MaxInt) do
+  for var L in LocalSyms do
   begin
     if not FLocalsOf.TryGetValue(L.ParentId, Own) then
     begin
@@ -636,6 +1098,7 @@ begin
   end;
   for var I:= 0 to High(FRoutines) do
   begin
+    if not FInScope[I] then Continue;   { S4: an outside routine is never scanned }
     if not FLocalsOf.TryGetValue(FRoutines[I].Id, Own) then Own:= FEmptySet;
     FCtx[I].OwnLocals:= Own;
     { A nested routine writes the enclosing routine's locals as a matter of
@@ -660,7 +1123,7 @@ begin
     FCtx[I].Locals:= Merged;
     if not FParamsOf.TryGetValue(FRoutines[I].Id, FCtx[I].Params) then FCtx[I].Params:= FEmptyMap;
     if not FParamNames.TryGetValue(FRoutines[I].Id, FCtx[I].ParamNames) then FCtx[I].ParamNames:= nil;
-    FCtx[I].ClassId:= ClassIdOf(FRoutines[I]);
+    FCtx[I].ClassId:= FClassOf[I];
     FCtx[I].Fields:= FieldsOfClass(FCtx[I].ClassId);
     FCtx[I].Props:= PropsOfClass(FCtx[I].ClassId);
     FCtx[I].Escaping:= nil;
@@ -680,7 +1143,9 @@ var
   Lines    : TArray<string>;
   ByRoutine: TObjectDictionary<Int64, TList<TReference>>;
   RefList  : TList<TReference>;
+  Refs     : TArray<TReference>;
   Changed  : Boolean;
+  T0       : Int64;
 begin
   I:= 0;
   while I <= High(FRoutines) do
@@ -689,16 +1154,34 @@ begin
     J:= I;
     while (J <= High(FRoutines)) and (FRoutines[J].FileId = FileId) do Inc(J);
     { [I, J) is this file's routines (FindSymbolsWithFacts orders by file). }
+    { S4: a file with no routine in the scope is neither stamped, read nor
+      scanned -- that read is what the scope exists to save. }
+    var AnyInScope: Boolean:= False;
+    for var K:= I to J - 1 do
+      if FInScope[K] then
+      begin
+        AnyInScope:= True;
+        Break;
+      end;
+    if not AnyInScope then
+    begin
+      I:= J;
+      Continue;
+    end;
+    Inc(FScopeFiles);
+    T0:= TStopwatch.GetTimeStamp;
     Path:= FStore.GetFilePath(FileId);
     Stale:= not (TryGetFileMTimeUnix(Path, DiskUnix) and FStamps.TryGetValue(Path, Stored) and (DiskUnix = Stored));
     { An unreadable file IS the stale case (ruling 7): every routine in it is
       marked unknown with the stale witness below, which is the report. }
     if not Stale then Stale:= not ReadFileLines(FileId, Lines);
+    Inc(FReadTicks, TStopwatch.GetTimeStamp - T0);
     if Stale then
     begin
       Inc(FStats.StaleFiles);
       for var K:= I to J - 1 do
       begin
+        if not FInScope[K] then Continue;
         Changed:= False;
         FLocal[K]:= Default(TEffectSummary);
         FLocal[K].AddFlag(efUnknown, WITNESS_STALE, Changed);
@@ -710,8 +1193,13 @@ begin
     CacheLines(FileId, Lines);
     ByRoutine:= TObjectDictionary<Int64, TList<TReference>>.Create([doOwnsValues]);
     try
-      for var R in FStore.GetReferencesFromFile(FileId) do
+      T0:= TStopwatch.GetTimeStamp;
+      Refs:= FStore.GetRoutineRefsFromFile(FileId);
+      Inc(FRefTicks, TStopwatch.GetTimeStamp - T0);
+      for var R in Refs do
       begin
+        { The store already returns only these rows; the test stays so the scan's
+          own definition of what it reads is stated here, where it is used. }
         if R.EnclosingSymbolId = 0 then Continue;
         if not ((R.Kind = REF_KIND_CALL) or (R.Kind = REF_KIND_READ) or (R.Kind = REF_KIND_WRITE) or (R.Kind = REF_KIND_MEMBER)) then Continue;
         if not ByRoutine.TryGetValue(R.EnclosingSymbolId, RefList) then
@@ -723,6 +1211,7 @@ begin
       end;
       for var K:= I to J - 1 do
       begin
+        if not FInScope[K] then Continue;
         if ByRoutine.TryGetValue(FRoutines[K].Id, RefList) then
           RefList.Sort(TComparer<TReference>.Construct(
             function(const L, R: TReference): Integer
@@ -1208,15 +1697,40 @@ begin
   Inc(FLexTicks, TStopwatch.GetTimeStamp - T0);
 end;
 
+{ Folds use AUse of routine AIndex into ASum: the callee's CURRENT summary,
+  translated through the call site. The one place both the fixpoint and the
+  witness pass apply a use, so the two cannot disagree on what a use adds. }
+procedure TPurityRun.ApplyUse(AIndex, AUse: Integer; var ASum: TEffectSummary; var AChanged: Boolean);
+var
+  T        : Integer;
+  CalleeSum: TEffectSummary;
+begin
+  if FUses[AIndex][AUse].IsBuiltin then CalleeSum:= FUses[AIndex][AUse].Builtin
+  else if FIndexOf.TryGetValue(FUses[AIndex][AUse].TargetId, T) then CalleeSum:= FSummary[T]
+  else
+  begin
+    { BoundCall and AddInheritedUse both admit only targets that own a
+      facts row, so this is unreachable today -- and it FAILS CLOSED
+      anyway. Skipping the use would drop the callee's effects and move
+      the caller TOWARDS proven, which is the one direction a purity
+      verdict must never drift on its own. }
+    ASum.AddFlag(efUnknown,
+      'calls ' + FUses[AIndex][AUse].Name + ' (callee lost its facts row between load and fixpoint)', AChanged);
+    Exit;
+  end;
+  if (Length(CalleeSum.Params) > 0) and not FUses[AIndex][AUse].ArgsLexed then LexUse(AIndex, AUse);
+  TranslateCallee(CalleeSum, FUses[AIndex][AUse].Name, FUses[AIndex][AUse].Args, FUses[AIndex][AUse].ArgsKnown,
+    FUses[AIndex][AUse].Receiver, ASum, AChanged);
+end;
+
 procedure TPurityRun.FixPoint;
 var
   CallersOf: TObjectDictionary<Int64, TList<Integer>>;
   Callers  : TList<Integer>;
   Queue    : TQueue<Integer>;
   InQueue  : TArray<Boolean>;
-  I, T     : Integer;
+  I        : Integer;
   Changed  : Boolean;
-  CalleeSum: TEffectSummary;
 begin
   CallersOf:= TObjectDictionary<Int64, TList<Integer>>.Create([doOwnsValues]);
   Queue:= TQueue<Integer>.Create;
@@ -1224,6 +1738,13 @@ begin
     SetLength(InQueue, Length(FRoutines));
     for I:= 0 to High(FRoutines) do
     begin
+      { S4: outside the scope the stored verdict is a CONSTANT -- never queued,
+        never a caller of anything queued, read by the uses that target it. }
+      if not FInScope[I] then
+      begin
+        FSummary[I]:= StoredSummary(I);
+        Continue;
+      end;
       FSummary[I]:= FLocal[I];
       for var U in FUses[I] do
         if U.TargetId <> 0 then
@@ -1249,25 +1770,7 @@ begin
       InQueue[I]:= False;
       Inc(FVisits);
       Changed:= False;
-      for var J:= 0 to High(FUses[I]) do
-      begin
-        if FUses[I][J].IsBuiltin then CalleeSum:= FUses[I][J].Builtin
-        else if FIndexOf.TryGetValue(FUses[I][J].TargetId, T) then CalleeSum:= FSummary[T]
-        else
-        begin
-          { BoundCall and AddInheritedUse both admit only targets that own a
-            facts row, so this is unreachable today -- and it FAILS CLOSED
-            anyway. Skipping the use would drop the callee's effects and move
-            the caller TOWARDS proven, which is the one direction a purity
-            verdict must never drift on its own. }
-          FSummary[I].AddFlag(efUnknown,
-            'calls ' + FUses[I][J].Name + ' (callee lost its facts row between load and fixpoint)', Changed);
-          Continue;
-        end;
-        if (Length(CalleeSum.Params) > 0) and not FUses[I][J].ArgsLexed then LexUse(I, J);
-        TranslateCallee(CalleeSum, FUses[I][J].Name, FUses[I][J].Args, FUses[I][J].ArgsKnown,
-          FUses[I][J].Receiver, FSummary[I], Changed);
-      end;
+      for var J:= 0 to High(FUses[I]) do ApplyUse(I, J, FSummary[I], Changed);
       if Changed and CallersOf.TryGetValue(FRoutines[I].Id, Callers) then
         for var C in Callers do
           if not InQueue[C] then
@@ -1276,10 +1779,258 @@ begin
             InQueue[C]:= True;
           end;
     end;
-    if Length(FRoutines) > 0 then FStats.Rounds:= (FVisits + High(FRoutines)) div Length(FRoutines);
+    if FScopeCount > 0 then FStats.Rounds:= (FVisits + FScopeCount - 1) div FScopeCount;
   finally
     Queue.Free;
     CallersOf.Free;
+  end;
+end;
+
+{ S4: THE WITNESS IS A FUNCTION OF THE FIXPOINT, NOT OF THE QUEUE ORDER.
+  AddFlag/AddParam keep the FIRST change as the witness, and inside the
+  fixpoint that is whichever callee happened to have grown when the caller was
+  visited -- so a scoped run, whose outside callees enter already final, would
+  name a different first blocker than a whole run on the same database, for
+  the same verdict. Re-deriving each witness here from the routine's own local
+  summary plus its callees' FINAL summaries, in call order, makes it depend on
+  the answer alone. The flags are the fixpoint equation itself, so they come
+  out unchanged; only the witness is replaced, and only when they agree. }
+{ WHICH USE NAMES THE BLOCKER. Call order alone is not enough: inside a cycle
+  it can make every member point at another member (A1 -> "calls B1", B1 ->
+  "calls A1") and the chain of witnesses never reaches the write that caused
+  them -- run_purity_stage check 9 is exactly that shape. So, per strongly
+  connected component of the call graph:
+    1. the routine's own LOCAL effect, when it has one;
+    2. else a contributing use whose callee is OUTSIDE the component (or a
+       built-in), in call order -- such a routine is a source of the component;
+    3. else the contributing in-component callee NEAREST a source (BFS over
+       the component's contributing edges), ties in call order.
+  The witness chain then strictly descends and always ends at a real write.
+  A component that holds a routine of the scope lies wholly inside it (its
+  members are each other's transitive callers), so the components, and with
+  them every witness, are the same in a scoped and a whole run. }
+{ True when use AUse of AIndex calls a routine of the scope; ATarget is it. }
+function TPurityRun.InScopeTarget(AIndex, AUse: Integer; out ATarget: Integer): Boolean;
+begin
+  Result:= (not FUses[AIndex][AUse].IsBuiltin) and FIndexOf.TryGetValue(FUses[AIndex][AUse].TargetId, ATarget)
+           and FInScope[ATarget];
+end;
+
+{ True when use AUse of AIndex stays inside AIndex's own component. }
+function TPurityRun.SameComp(AIndex, AUse: Integer): Boolean;
+var
+  T: Integer;
+begin
+  Result:= InScopeTarget(AIndex, AUse, T) and (FComp[T] = FComp[AIndex]);
+end;
+
+{ Strongly connected components of the scope's call graph (Tarjan, iterative:
+  a recursive walk would overflow on a deep call chain). FComp[I] is the
+  component id, -1 outside the scope. }
+procedure TPurityRun.ComputeComponents;
+var
+  Low, Num: TArray<Integer>;
+  OnStack : TArray<Boolean>;
+  Stack   : TStack<Integer>;
+  Work    : TStack<TPair<Integer, Integer>>;   // (routine, next use to try)
+  Counter : Integer;
+  NComp   : Integer;
+  V, J, T : Integer;
+
+  { Advances V's frame from use J: descends into the first unvisited target
+    (True), or lowers V's link over the visited ones and reports done. }
+  function Descend: Boolean;
+  begin
+    Result:= False;
+    while J <= High(FUses[V]) do
+    begin
+      if InScopeTarget(V, J, T) then
+      begin
+        if Num[T] < 0 then
+        begin
+          Work.Push(TPair<Integer, Integer>.Create(V, J + 1));
+          Work.Push(TPair<Integer, Integer>.Create(T, 0));
+          Exit(True);
+        end;
+        if OnStack[T] then Low[V]:= Min(Low[V], Num[T]);
+      end;
+      Inc(J);
+    end;
+  end;
+
+  procedure CloseComponent;
+  begin
+    repeat
+      T:= Stack.Pop;
+      OnStack[T]:= False;
+      FComp[T]:= NComp;
+    until T = V;
+    Inc(NComp);
+  end;
+
+begin
+  SetLength(FComp, Length(FRoutines));
+  SetLength(Low, Length(FRoutines));
+  SetLength(Num, Length(FRoutines));
+  SetLength(OnStack, Length(FRoutines));
+  for var I:= 0 to High(FRoutines) do
+  begin
+    FComp[I]:= -1;
+    Num[I]:= -1;
+  end;
+  Counter:= 0;
+  NComp:= 0;
+  Stack:= TStack<Integer>.Create;
+  Work := TStack<TPair<Integer, Integer>>.Create;
+  try
+    for var Root:= 0 to High(FRoutines) do
+    begin
+      if (not FInScope[Root]) or (Num[Root] >= 0) then Continue;
+      Work.Push(TPair<Integer, Integer>.Create(Root, 0));
+      while Work.Count > 0 do
+      begin
+        V:= Work.Peek.Key;
+        J:= Work.Pop.Value;
+        if J = 0 then
+        begin
+          Num[V]:= Counter;
+          Low[V]:= Counter;
+          Inc(Counter);
+          Stack.Push(V);
+          OnStack[V]:= True;
+        end;
+        if Descend then Continue;
+        if Low[V] = Num[V] then CloseComponent;
+        { Back in the parent (its resume frame is next): a child still on the
+          stack shares the parent's component and lowers its link. }
+        if (Work.Count > 0) and OnStack[V] then Low[Work.Peek.Key]:= Min(Low[Work.Peek.Key], Low[V]);
+      end;
+    end;
+  finally
+    Work.Free;
+    Stack.Free;
+  end;
+end;
+
+{ FContrib[I][J]: use J adds anything at all. FRank[I]: 0 for a SOURCE of its
+  component (a local effect, or a contributing use that leaves the component or
+  is a built-in), else the BFS distance to one over contributing in-component
+  uses; MaxInt when it has no effect. }
+procedure TPurityRun.ComputeSourceRanks;
+var
+  RevIn  : TObjectDictionary<Integer, TList<Integer>>;
+  Queue  : TQueue<Integer>;
+  Probe  : TEffectSummary;
+  Changed: Boolean;
+  Source : Boolean;
+  T      : Integer;
+  L      : TList<Integer>;
+begin
+  SetLength(FContrib, Length(FRoutines));
+  SetLength(FRank, Length(FRoutines));
+  RevIn:= TObjectDictionary<Integer, TList<Integer>>.Create([doOwnsValues]);
+  Queue:= TQueue<Integer>.Create;
+  try
+    for var I:= 0 to High(FRoutines) do
+    begin
+      FRank[I]:= MaxInt;
+      if not FInScope[I] then Continue;
+      SetLength(FContrib[I], Length(FUses[I]));
+      Source:= not FLocal[I].IsEffectFree;
+      for var J:= 0 to High(FUses[I]) do
+      begin
+        Probe:= Default(TEffectSummary);
+        Changed:= False;
+        ApplyUse(I, J, Probe, Changed);
+        FContrib[I][J]:= Changed;
+        if not Changed then Continue;
+        if not SameComp(I, J) then
+        begin
+          Source:= True;
+          Continue;
+        end;
+        InScopeTarget(I, J, T);
+        if not RevIn.TryGetValue(T, L) then
+        begin
+          L:= TList<Integer>.Create;
+          RevIn.Add(T, L);
+        end;
+        L.Add(I);
+      end;
+      if Source then
+      begin
+        FRank[I]:= 0;
+        Queue.Enqueue(I);
+      end;
+    end;
+    while Queue.Count > 0 do
+    begin
+      T:= Queue.Dequeue;
+      if not RevIn.TryGetValue(T, L) then Continue;
+      for var C in L do
+        if FRank[C] = MaxInt then
+        begin
+          FRank[C]:= FRank[T] + 1;
+          Queue.Enqueue(C);
+        end;
+    end;
+  finally
+    Queue.Free;
+    RevIn.Free;
+  end;
+end;
+
+{ AIndex's summary rebuilt in WITNESS order -- local, then the uses that leave
+  the component in call order, then the in-component uses nearest a source --
+  and finally every use, so the flags are complete. }
+function TPurityRun.CanonicalSummaryOf(AIndex: Integer): TEffectSummary;
+var
+  Changed: Boolean;
+  Best   : Integer;
+  T      : Integer;
+begin
+  Result:= FLocal[AIndex];
+  Result.Params:= Copy(FLocal[AIndex].Params);   { AddParam must not write through to FLocal }
+  Changed:= False;
+  for var J:= 0 to High(FUses[AIndex]) do
+    if FContrib[AIndex][J] and not SameComp(AIndex, J) then ApplyUse(AIndex, J, Result, Changed);
+  if Result.Witness = '' then
+  begin
+    Best:= MaxInt;
+    for var J:= 0 to High(FUses[AIndex]) do
+      if FContrib[AIndex][J] and SameComp(AIndex, J) and InScopeTarget(AIndex, J, T) then Best:= Min(Best, FRank[T]);
+    for var J:= 0 to High(FUses[AIndex]) do
+      if FContrib[AIndex][J] and SameComp(AIndex, J) and InScopeTarget(AIndex, J, T) and (FRank[T] = Best) then
+        ApplyUse(AIndex, J, Result, Changed);
+  end;
+  for var J:= 0 to High(FUses[AIndex]) do ApplyUse(AIndex, J, Result, Changed);
+end;
+
+{ WHICH USE NAMES THE BLOCKER. Call order alone is not enough: inside a cycle
+  it can make every member point at another member (A1 -> "calls B1", B1 ->
+  "calls A1") and the chain of witnesses never reaches the write that caused
+  them -- run_purity_stage check 9 is exactly that shape. So, per strongly
+  connected component of the call graph:
+    1. the routine's own LOCAL effect, when it has one;
+    2. else a contributing use whose callee is OUTSIDE the component (or a
+       built-in), in call order -- such a routine is a source of the component;
+    3. else the contributing in-component callee NEAREST a source (BFS over
+       the component's contributing edges), ties in call order.
+  The witness chain then strictly descends and always ends at a real write.
+  A component that holds a routine of the scope lies wholly inside it (its
+  members are each other's transitive callers), so the components, and with
+  them every witness, are the same in a scoped and a whole run. }
+procedure TPurityRun.CanonicalWitnesses;
+var
+  W: TEffectSummary;
+begin
+  ComputeComponents;
+  ComputeSourceRanks;
+  for var I:= 0 to High(FRoutines) do
+  begin
+    if not FInScope[I] then Continue;
+    W:= CanonicalSummaryOf(I);
+    if W.Encode = FSummary[I].Encode then FSummary[I].Witness:= W.Witness;
   end;
 end;
 
@@ -1287,23 +2038,33 @@ end;
 
 procedure TPurityRun.WriteVerdicts;
 var
-  Rows: TArray<TEffectFactRow>;
+  Rows: TList<TEffectFactRow>;
+  Row : TEffectFactRow;
 begin
-  SetLength(Rows, Length(FRoutines));
   FStats.Routines:= Length(FRoutines);
   FStats.EffectFree:= 0;
-  for var I:= 0 to High(FRoutines) do
-  begin
-    Rows[I].SymbolId:= FRoutines[I].Id;
-    Rows[I].EffectFree:= Ord(FSummary[I].IsEffectFree);
-    Rows[I].Summary:= FSummary[I].Encode;
-    Rows[I].Witness:= FSummary[I].Witness;
-    Inc(FStats.EffectFree, Rows[I].EffectFree);
+  Rows:= TList<TEffectFactRow>.Create;
+  try
+    for var I:= 0 to High(FRoutines) do
+    begin
+      { Counted over EVERY routine, so the summary line means the same thing
+        on a scoped run; written for the scope only -- an outside row already
+        holds exactly this value. }
+      if FSummary[I].IsEffectFree then Inc(FStats.EffectFree);
+      if not FInScope[I] then Continue;
+      Row.SymbolId:= FRoutines[I].Id;
+      Row.EffectFree:= Ord(FSummary[I].IsEffectFree);
+      Row.Summary:= FSummary[I].Encode;
+      Row.Witness:= FSummary[I].Witness;
+      Rows.Add(Row);
+    end;
+    FStore.PutEffectFacts(Rows.ToArray);
+  finally
+    Rows.Free;
   end;
-  FStore.PutEffectFacts(Rows);
 end;
 
-procedure TPurityRun.Report(ALoad, AScan, AFix, AWrite: Double);
+procedure TPurityRun.Report(ALoad, AScope, AContexts, AScan, AFix, AWrite: Double);
 var
   Tally  : TList<TPair<string, Integer>>;
   Top    : string;
@@ -1326,38 +2087,59 @@ begin
   end;
   Top:= if Length(FStats.TopUnbound) > 0 then string.Join(', ', FStats.TopUnbound) else TOP_NONE;
   Percent:= if FStats.Routines > 0 then Round(FStats.EffectFree * PERCENT_SCALE / FStats.Routines) else 0;
+  { On a scoped run the unbound / unlexable / stale / gated counts and the
+    passes are the SCOPE's -- the routines this run re-derived -- and the line
+    says so; routines and effect-free always count every routine. }
   Writeln(Format('resolve: purity -- %d routine(s), %d effect-free (%d%%), %d unbound call ref(s) [top: %s], ' +
-                 '%d unlexable call(s), %d stale file(s), %d gated (local table incomplete), %d pass(es)',
+                 '%d unlexable call(s), %d stale file(s), %d gated (local table incomplete), %d pass(es)%s',
     [FStats.Routines, FStats.EffectFree, Percent, FStats.UnboundCalls, Top,
-     FStats.UnlexableCalls, FStats.StaleFiles, FStats.GatedIncomplete, FStats.Rounds]));
+     FStats.UnlexableCalls, FStats.StaleFiles, FStats.GatedIncomplete, FStats.Rounds,
+     (if FScoped then Format(', scoped to %d routine(s) in %d file(s)', [FScopeCount, FScopeFiles]) else '')]));
   Flush(Output);
+  if FAncChecked > 0 then
+    Writeln(ErrOutput, Format('purity: ancestry replay checked against the store for %d class(es): %d differ',
+                              [FAncChecked, FAncDiffer]));
   if GetEnvironmentVariable('DRAGLINT_PROFILE') <> '' then
-    Writeln(ErrOutput, Format('purity: load %.1fs  scan %.1fs  lex %.1fs  fixpoint %.1fs  write %.1fs  ' +
+    Writeln(ErrOutput, Format('purity: load %.1fs (contexts %.1fs; routines %.1fs, facts %.1fs, edges %.1fs, members %.1fs, ' +
+                              'stamps %.1fs, scope %.1fs [classof %.1fs, calls-scope %.1fs, seeds %.1fs, callers %.1fs, ' +
+                              'heirs %.1fs, closure %.1fs])  scan %.1fs (refs %.1fs, source %.1fs)  lex %.1fs  fixpoint %.1fs  write %.1fs  ' +
                               '(%d visit(s); lex is part of fixpoint; %d file re-read(s) after a line-cache eviction, %d MB cached at the end)',
-      [ALoad, AScan, FLexTicks / TStopwatch.Frequency, AFix, AWrite, FVisits, FLineReReads,
+      [ALoad + AScope + AContexts, AContexts, FLoadSecs[lpRoutines], FLoadSecs[lpFacts], FLoadSecs[lpEdges], FLoadSecs[lpMembers], FLoadSecs[lpStamps],
+       AScope, FScopeSecs[spClassOf], FScopeSecs[spCallsScope], FScopeSecs[spSeeds], FScopeSecs[spCallers],
+       FScopeSecs[spHeirs], FScopeSecs[spClosure], AScan, FRefTicks / TStopwatch.Frequency, FReadTicks / TStopwatch.Frequency,
+       FLexTicks / TStopwatch.Frequency, AFix, AWrite, FVisits, FLineReReads,
        Round(FLineChars * SizeOf(Char) / BYTES_PER_MB)]));
 end;
 
 function TPurityRun.Execute: TPurityStats;
 var
-  Sw                       : TStopwatch;
-  TLoad, TScan, TFix, TWrite: Double;
+  Sw                                  : TStopwatch;
+  TLoad, TScope, TContexts, TScan, TFix, TWrite: Double;
 begin
   FStats:= Default(TPurityStats);
   Sw:= TStopwatch.StartNew;
   Load;
-  BuildContexts;
   TLoad:= SecondsOf(Sw);
+  Sw:= TStopwatch.StartNew;
+  DetermineScope;
+  TScope:= SecondsOf(Sw);
+  Sw:= TStopwatch.StartNew;
+  LoadBindings; { part of the load figure; split into edges / members }
+  TLoad:= TLoad + SecondsOf(Sw);
+  Sw:= TStopwatch.StartNew;
+  BuildContexts;
+  TContexts:= SecondsOf(Sw);
   Sw:= TStopwatch.StartNew;
   ScanFiles;
   TScan:= SecondsOf(Sw);
   Sw:= TStopwatch.StartNew;
   FixPoint;
+  CanonicalWitnesses;
   TFix:= SecondsOf(Sw);
   Sw:= TStopwatch.StartNew;
   WriteVerdicts;
   TWrite:= SecondsOf(Sw);
-  Report(TLoad, TScan, TFix, TWrite);
+  Report(TLoad, TScope, TContexts, TScan, TFix, TWrite);
   Result:= FStats;
 end;
 

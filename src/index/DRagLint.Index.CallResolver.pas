@@ -333,6 +333,37 @@ type
     // per-ref field/method scan does not re-hit the DB for the same enclosing
     // symbol repeatedly across a whole-DB pass.
     FChildCache : TObjectDictionary<Int64, TList<TSymbol>>;
+    // Files whose every symbol LoadFileRows has put in FRows.Symbols and
+    // FChildCache. A symbol of such a file with no FChildCache list has no
+    // children, so ChildrenOf answers it without the store.
+    FFileRows   : TDictionary<Int64, Boolean>;
+    // #23 (2026-10-15): the per-file caches are BOUNDED. What each LoadFileRows
+    // call ADDED -- symbol ids to FRows.Symbols, parent ids to FChildCache -- and
+    // the order files were read in (rows and lines), so TrimFileCaches can drop
+    // the oldest files. Unbounded, a whole-DB pass kept every symbol row and the
+    // source text of every file it touched until the end: +9% on ProjectA, about
+    // +1 GB extrapolated to a 2.24 M-symbol library index.
+    FRowsAddedSyms   : TObjectDictionary<Int64, TList<Int64>>;
+    FRowsAddedParents: TObjectDictionary<Int64, TList<Int64>>;
+    FRowsOrder       : TList<Int64>;
+    FLinesOrder      : TList<Int64>;
+    FFileCacheCap    : Integer; // DRAGLINT_RESOLVER_FILE_CACHE, else MAX_CACHED_FILES
+    // Files LinesOf has probed for staleness: a file read AGAIN after
+    // TrimFileCaches dropped its lines keeps the first verdict (FStaleFiles) and
+    // skips the hash and the store lookup -- the probe compares the file with the
+    // index, and neither the index nor that verdict moves during a pass.
+    FProbedFiles     : TDictionary<Int64, Boolean>;
+    FFileCacheStats  : record Loads, Evictions, Peak: Integer; end;
+    // 2026-09-28 PERF: FChildCache re-keyed by NAME -- parent id -> lowercased
+    // child name -> that parent's children of that name, in FChildCache order.
+    // See ChildrenNamed.
+    FChildNames : TObjectDictionary<Int64, TObjectDictionary<string, TList<TSymbol>>>;
+    // 2026-09-28 PERF: type id -> FindHelpersOfTypeSymbol's answer. type_helpers
+    // is written by the helpers stage, which finishes before this pass starts.
+    FHelperCache: TDictionary<Int64, TArray<THelperEdge>>;
+    // 2026-09-28 PERF: receiver text, EXACT case -> UnitNameToFileId's answer.
+    // See the note on that function.
+    FUnitNameMemo: TDictionary<string, Int64>;
     // Cache: source file id -> its lines (0-based array). A single whole-DB pass
     // touches many refs in the same file; read each file at most once.
     FLineCache  : TObjectDictionary<Int64, TStringList>;
@@ -486,6 +517,15 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function ChildrenOf(AParentId: Int64): TList<TSymbol>;
+    /// <summary>Caches every symbol of AFileId, by id and by parent, in one
+    /// store read; a no-op for a file already read.</summary>
+    /// <param name="AFileId">The file a ref being resolved comes from.</param>
+    procedure LoadFileRows(AFileId: Int64);
+    /// <summary>The children of AParentId named AName (case-insensitively, the
+    /// SameText sense), in ChildrenOf order; nil when there are none.</summary>
+    function ChildrenNamed(AParentId: Int64; const AName: string): TList<TSymbol>;
+    /// <summary>FStore.FindHelpersOfTypeSymbol, memoized per type id.</summary>
+    function HelpersOf(ATypeId: Int64): TArray<THelperEdge>;
     /// <summary>The source lines of the file AFileId (cached, ANSI). Nil-safe.</summary>
     /// <param name="AFileId"><!-- drag-lint:auto type -->Int64</param>
     /// <returns><!-- drag-lint:auto -->TStringList -- Observed: TStringList.Create.</returns>
@@ -1254,6 +1294,22 @@ type
     /// <param name="AReason">'' for a binding, else the decline reason.</param>
     procedure TallyWrite(const AReason: string);
   public
+    /// <summary>Drops the oldest files' rows and lines beyond the file-cache cap.</summary>
+    /// <remarks>#23. ONLY at a point where no resolve is running: the caller's
+    /// loop between two refs. ChildrenOf / ChildrenNamed / LinesOf hand out the
+    /// cached lists themselves, so dropping one mid-resolve would free a list in
+    /// use. A dropped file is simply read again on its next ref -- the same rows
+    /// and the same text, so the edges are the same (index_db_diff IDENTICAL).</remarks>
+    procedure TrimFileCaches;
+    /// <summary>The file caches' counters, for the calls stage's profile line.</summary>
+    function FileCacheSummary: string;
+    /// <summary>True when AId names a routine (CanBeCallTarget's kinds), read
+    /// through the resolver's row cache.</summary>
+    /// <param name="AId">A resolved call target.</param>
+    /// <returns>False for 0 or an id the index does not hold.</returns>
+    /// <remarks>ResolveCallTargets' member-access guard asked the store once
+    /// per ref; the target is almost always a row this resolve already read.</remarks>
+    function IsRoutineSymbol(AId: Int64): Boolean;
     /// <summary>resolver 1.18.0: among overloads the arity and the literals left,
     /// the one whose parameters match the call's VARIABLE arguments by exact
     /// declared type, when it dominates every other.</summary>
@@ -1650,7 +1706,8 @@ uses
   TreeSitter,      // 1.8.0: the with scope parses a file's `with` statements
   TreeSitterLib,
   DRagLint.Core.Encoding,    // EnsureUtf8Bytes -- the indexer's own transcoding
-  DRagLint.Preprocess.Types; // NormalizeLoneCR -- the indexer's own row counting
+  DRagLint.Preprocess.Types, // NormalizeLoneCR -- the indexer's own row counting
+  System.Diagnostics;        // TStopwatch -- DRAGLINT_PROFILE per-rung split of ResolveOne
 
 { Declared HERE, in the implementation, for the reason DRagLint.Diagnostics.
   ParseCache gives: DRagLint.Parser.Delphi13 exports the same import from its
@@ -1663,6 +1720,10 @@ const
   TYPE_KINDS: TSymbolKindSet = [skClass, skInterface, skRecord];
   // Method-shaped children we accept as a call target on a resolved type.
   METHOD_KINDS: TSymbolKindSet = [skMethod, skProcedure, skFunction, skConstructor, skDestructor];
+  // #23: files whose rows and lines a resolver keeps at once (TrimFileCaches).
+  // A pass reads refs grouped by file, so a small window loses almost nothing.
+  // DRAGLINT_RESOLVER_FILE_CACHE overrides it (tests, measurement).
+  MAX_CACHED_FILES = 64;
 
 // True when C can start / continue a Pascal identifier.
 function IsIdentStart(C: Char): Boolean; inline;
@@ -1864,7 +1925,7 @@ const
   // count as unknown, which falls back to pre-B1 behaviour.
   ARGSCAN_MAX_LINES = 60;
 
-function CallArgTexts(ALines: TStrings; ALine, ACol: Integer; out AKnown: Boolean): TArray<string>;
+function CallArgTexts(ALines: TStrings; ALine, ACol: Integer; out AKnown: Boolean): TArray<string>;  // dl:ok too-many-exit-points@f873, cyclomatic-complexity@bbad, cognitive-complexity@8784 -- REVIEWED 2026-09-30: the call-site scanner CountCallArgs always was, moved whole so it can also collect each argument text; its shape is the character-level state machine, and CountCallArgs is now Length of it
 var
   Li, Ci  : Integer;
   Depth   : Integer;
@@ -1875,8 +1936,8 @@ var
   Cur     : string ;
   C       : Char   ;
   SawArg  : Boolean;
-  Buf     : string ;
-  Args    : TArray<string>;
+  Buf     : TStringBuilder;
+  Args    : TList<string>;
 
   { Advance one character, crossing to the next line when the current one runs
     out. False when the budget is spent or the file ends. }
@@ -1899,8 +1960,9 @@ var
 begin
   AKnown := False;
   Result := nil;
-  Buf    := '';
-  Args   := nil;
+  Buf    := TStringBuilder.Create;
+  Args   := TList<string>.Create;
+  try
   if (ALines = nil) or (ALine < 1) or (ALine > ALines.Count) or (ACol < 1) then Exit;
 
   Li := ALine - 1;
@@ -1965,7 +2027,7 @@ begin
       if not Next then Exit; { never closed -> AKnown stays False }
       { a line comment and a string literal both end at the newline }
       InStr:= False;
-      if Depth >= 1 then Buf:= Buf + ' ';
+      if Depth >= 1 then Buf.Append(' ');
       Continue;
     end;
     C:= Cur[Ci];
@@ -1974,7 +2036,7 @@ begin
     begin
       { '' inside a literal is an escaped quote; toggling twice handles it. }
       if C = '''' then InStr:= False;
-      Buf:= Buf + C;
+      Buf.Append(C);
       Inc(Ci);
       Continue;
     end;
@@ -2005,14 +2067,18 @@ begin
           if Depth = 0 then
           begin
             AKnown:= True;
-            if SawArg then Result:= Args + [Trim(Buf)] else Result:= nil;
+            if SawArg then
+            begin
+              Args.Add(Trim(Buf.ToString));
+              Result:= Args.ToArray;
+            end;
             Exit;
           end;
         end;
       ',' : if Depth = 1 then
             begin
-              Args:= Args + [Trim(Buf)];
-              Buf := '';
+              Args.Add(Trim(Buf.ToString));
+              Buf.Clear;
             end;
       '/' : if (Ci < Length(Cur)) and (Cur[Ci + 1] = '/') then
             begin Ci:= Length(Cur); { skip to EOL; the += 1 below lands past it } end;
@@ -2024,11 +2090,17 @@ begin
     { The argument's own text: everything at depth >= 1 except the list's opening
       paren, a top-level comma, and comments (a brace or (* opener has already
       switched the scanner into its comment state, and a // skipped the line). }
-    if (Depth >= 1) and not ((C = '(') and (Depth = 1)) and not ((C = ',') and (Depth = 1))
-       and not InBrace and not InParStar and (Ci <= Length(Cur)) then Buf:= Buf + C;
+    var ListOpener: Boolean:= (C = '(') and (Depth = 1);
+    var TopComma  : Boolean:= (C = ',') and (Depth = 1);
+    var InComment : Boolean:= InBrace or InParStar;
+    if (Depth >= 1) and not (ListOpener or TopComma or InComment) and (Ci <= Length(Cur)) then Buf.Append(C);
 
     Inc(Ci);
   end;
+  finally
+    Args.Free;
+    Buf.Free;
+  end; // try
 end;
 
 function CountCallArgs(ALines: TStrings; ALine, ACol: Integer; out AKnown: Boolean): Integer;
@@ -2151,78 +2223,100 @@ type
 /// <summary>Classifies an argument text as a LITERAL of one builtin family, or
 ///  alNone for anything that is not a bare literal (an identifier, a call, an
 ///  expression -- including `'a' + S`, whose type is not read here).</summary>
-function ArgLiteral(const AArg: string): TArgLiteral;
+{ True when A is a run of quoted pieces and #nn codes only -- `'a'#13'b'` --
+  which is a string literal; `'1' = X` is a Boolean expression and is not. }
+function IsStringLiteralRun(const A: string): Boolean;
 var
-  A    : string ;
   I    : Integer;
   InStr: Boolean;
 begin
-  A:= Trim(AArg);
-  if A = '' then Exit(alNone);
-  if SameText(A, 'True') or SameText(A, 'False') then Exit(alBool);
-  if (A[1] = '''') or (A[1] = '#') then
+  Result:= True;
+  InStr := False;
+  I     := 1;
+  while Result and (I <= Length(A)) do
   begin
-    { Only a run of quoted pieces and #nn codes -- `'a'#13'b'` -- is a string
-      literal; `'1' = X` is a Boolean expression and stays alNone. }
-    InStr:= False;
-    I:= 1;
-    while I <= Length(A) do
+    if InStr then InStr:= A[I] <> ''''
+    else if A[I] = '''' then InStr:= True
+    else if A[I] = '#' then
     begin
-      if InStr then
-      begin
-        if A[I] = '''' then InStr:= False;
-      end
-      else if A[I] = '''' then InStr:= True
-      else if A[I] = '#' then
-      begin
-        Inc(I);
-        if (I > Length(A)) or not CharInSet(A[I], ['0'..'9', '$']) then Exit(alNone);
-        while (I < Length(A)) and CharInSet(A[I + 1], ['0'..'9', 'A'..'F', 'a'..'f', '$']) do Inc(I);
-      end
-      else Exit(alNone);
       Inc(I);
-    end;
-    if InStr then Exit(alNone);
-    Exit(alString);
+      Result:= (I <= Length(A)) and CharInSet(A[I], ['0'..'9', '$']);
+      while Result and (I < Length(A)) and CharInSet(A[I + 1], ['0'..'9', 'A'..'F', 'a'..'f', '$']) do Inc(I);
+    end
+    else Result:= False;
+    Inc(I);
   end;
+  Result:= Result and not InStr;
+end;
+
+{ The literal kind of a signed decimal or $hex number, alNone when A is not one. }
+function NumberLiteral(const A: string): TArgLiteral;
+var
+  I: Integer;
+begin
   I:= 1;
   if CharInSet(A[1], ['+', '-']) then Inc(I);
-  if I > Length(A) then Exit(alNone);
-  if A[I] = '$' then
+  if I > Length(A) then Result:= alNone
+  else if A[I] = '$' then
   begin
-    Inc(I);
-    if I > Length(A) then Exit(alNone);
+    Result:= alNone;
+    if I < Length(A) then Result:= alInt;
+    for var K:= I + 1 to Length(A) do
+      if not CharInSet(A[K], ['0'..'9', 'A'..'F', 'a'..'f']) then Result:= alNone;
+  end
+  else
+  begin
+    Result:= alInt;
     for var K:= I to Length(A) do
-      if not CharInSet(A[K], ['0'..'9', 'A'..'F', 'a'..'f']) then Exit(alNone);
-    Exit(alInt);
+      if Result = alNone then Break
+      else if CharInSet(A[K], ['0'..'9']) then Continue
+      else if CharInSet(A[K], ['.', 'e', 'E', '+', '-']) and (K > I) then Result:= alFloat
+      else Result:= alNone;
   end;
-  Result:= alInt;
-  for var K:= I to Length(A) do
-    if CharInSet(A[K], ['0'..'9']) then Continue
-    else if CharInSet(A[K], ['.', 'e', 'E', '+', '-']) and (K > I) then Result:= alFloat
-    else Exit(alNone);
+end;
+
+function ArgLiteral(const AArg: string): TArgLiteral;
+var
+  A: string;
+begin
+  A:= Trim(AArg);
+  if A = '' then Result:= alNone
+  else if SameText(A, 'True') or SameText(A, 'False') then Result:= alBool
+  else if CharInSet(A[1], ['''', '#']) then
+    Result:= if IsStringLiteralRun(A) then alString else alNone
+  else Result:= NumberLiteral(A);
 end;
 
 /// <summary>The builtin family of a parameter type text, pfUnknown for any
 ///  type this cannot judge (an alias, an enum, a class) -- which never rules
 ///  a candidate out.</summary>
+const
+  { The builtin type names of each family, lowercased; `system.` is stripped
+    before the lookup. Variant-like types accept any literal. }
+  PF_ANY_NAMES   : array[0..2]  of string = ('variant', 'olevariant', 'tvalue');
+  PF_STRING_NAMES: array[0..12] of string = ('string', 'ansistring', 'widestring', 'unicodestring',
+    'shortstring', 'rawbytestring', 'utf8string', 'char', 'ansichar', 'widechar', 'pchar', 'pansichar',
+    'pwidechar');
+  PF_BOOL_NAMES  : array[0..3]  of string = ('boolean', 'bytebool', 'wordbool', 'longbool');
+  PF_INT_NAMES   : array[0..13] of string = ('integer', 'cardinal', 'int64', 'uint64', 'byte', 'word',
+    'smallint', 'shortint', 'longint', 'longword', 'nativeint', 'nativeuint', 'fixedint', 'fixeduint');
+  PF_FLOAT_NAMES : array[0..8]  of string = ('double', 'single', 'extended', 'currency', 'real', 'comp',
+    'tdatetime', 'tdate', 'ttime');
+  PF_SYSTEM_PREFIX = 'system.';
+  PF_OPEN_CONST    = 'array of const';
+
 function ParamFamily(const ATypeText: string): TParamFamily;
 var
   T: string;
 begin
   T:= LowerCase(Trim(ATypeText));
-  if T.StartsWith('system.') then T:= Copy(T, Length('system.') + 1, MaxInt);
-  if (T = '') or (T = 'variant') or (T = 'olevariant') or (T = 'tvalue') or T.StartsWith('array of const') then Exit(pfAny);
-  if (T = 'string') or (T = 'ansistring') or (T = 'widestring') or (T = 'unicodestring') or (T = 'shortstring') or
-     (T = 'rawbytestring') or (T = 'utf8string') or (T = 'char') or (T = 'ansichar') or (T = 'widechar') or
-     (T = 'pchar') or (T = 'pansichar') or (T = 'pwidechar') then Exit(pfString);
-  if (T = 'boolean') or (T = 'bytebool') or (T = 'wordbool') or (T = 'longbool') then Exit(pfBool);
-  if (T = 'integer') or (T = 'cardinal') or (T = 'int64') or (T = 'uint64') or (T = 'byte') or (T = 'word') or
-     (T = 'smallint') or (T = 'shortint') or (T = 'longint') or (T = 'longword') or (T = 'nativeint') or
-     (T = 'nativeuint') or (T = 'fixedint') or (T = 'fixeduint') then Exit(pfInt);
-  if (T = 'double') or (T = 'single') or (T = 'extended') or (T = 'currency') or (T = 'real') or
-     (T = 'comp') or (T = 'tdatetime') or (T = 'tdate') or (T = 'ttime') then Exit(pfFloat);
-  Result:= pfUnknown;
+  if T.StartsWith(PF_SYSTEM_PREFIX) then T:= Copy(T, Length(PF_SYSTEM_PREFIX) + 1, MaxInt);
+  if (T = '') or MatchText(T, PF_ANY_NAMES) or T.StartsWith(PF_OPEN_CONST) then Result:= pfAny
+  else if MatchText(T, PF_STRING_NAMES) then Result:= pfString
+  else if MatchText(T, PF_BOOL_NAMES)   then Result:= pfBool
+  else if MatchText(T, PF_INT_NAMES)    then Result:= pfInt
+  else if MatchText(T, PF_FLOAT_NAMES)  then Result:= pfFloat
+  else Result:= pfUnknown;
 end;
 
 /// <summary>Whether a literal of family AArg may be passed to a parameter of
@@ -2354,6 +2448,17 @@ begin
   FFileUseNames:= TObjectDictionary<Int64, TList<string>>.Create([doOwnsValues]);
   FFileUnitName:= TDictionary<Int64, string>.Create;
   FChildCache := TObjectDictionary<Int64, TList<TSymbol>>.Create([doOwnsValues]);
+  FFileRows   := TDictionary<Int64, Boolean>.Create;
+  FRowsAddedSyms   := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
+  FRowsAddedParents:= TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
+  FRowsOrder       := TList<Int64>.Create;
+  FLinesOrder      := TList<Int64>.Create;
+  FFileCacheCap    := StrToIntDef(GetEnvironmentVariable('DRAGLINT_RESOLVER_FILE_CACHE'), MAX_CACHED_FILES);
+  FProbedFiles     := TDictionary<Int64, Boolean>.Create;
+  if FFileCacheCap < 1 then FFileCacheCap:= MAX_CACHED_FILES;
+  FChildNames := TObjectDictionary<Int64, TObjectDictionary<string, TList<TSymbol>>>.Create([doOwnsValues]);
+  FHelperCache:= TDictionary<Int64, TArray<THelperEdge>>.Create;
+  FUnitNameMemo:= TDictionary<string, Int64>.Create; { default comparer: case-SENSITIVE, on purpose }
   FLineCache  := TObjectDictionary<Int64, TStringList>.Create([doOwnsValues]);
   FStaleFiles := TDictionary<Int64, Boolean>.Create;
   FWith.Statements     := TDictionary<Int64, TArray<TWithStatement>>.Create;
@@ -2378,6 +2483,15 @@ begin
   FUnitFileOf.Free;
   FWriteScopes.Free;
   FStaleFiles.Free;
+  FUnitNameMemo.Free;
+  FHelperCache.Free;
+  FChildNames.Free;
+  FFileRows.Free;
+  FRowsAddedSyms.Free;
+  FRowsAddedParents.Free;
+  FRowsOrder.Free;
+  FLinesOrder.Free;
+  FProbedFiles.Free;
   FChildCache.Free;
   FFileScope .Free;
   FFileUseNames.Free;
@@ -2485,7 +2599,7 @@ function TCallResolver.ResolveTypeNameToSymbol(const ATypeText: string; ADeclFil
 var
   N    : string        ;
   Cands: TList<TSymbol>;
-  ci   : Integer       ;
+  Ci   : Integer       ;
 begin
   Result:= 0;
   // Normalize the same way ResolveAncestry does: strip generics + dotted qualifier.
@@ -2516,10 +2630,10 @@ begin
   begin
     var Kept: TList<TSymbol>:= TList<TSymbol>.Create;
     try
-      for ci:= 0 to Cands.Count - 1 do
+      for Ci:= 0 to Cands.Count - 1 do
       begin
-        var Q: string:= LowerCase(Cands[ci].QualifiedName);
-        if (Q = Written) or Q.EndsWith('.' + Written) then Kept.Add(Cands[ci]);
+        var Q: string:= LowerCase(Cands[Ci].QualifiedName);
+        if (Q = Written) or Q.EndsWith('.' + Written) then Kept.Add(Cands[Ci]);
       end;
       if Kept.Count = 0 then Exit;
       Result:= PickTypeCandidate(Kept, ADeclFileId);
@@ -2535,17 +2649,17 @@ function TCallResolver.PickTypeCandidate(ACands: TList<TSymbol>; ADeclFileId: In
 var
   Cands: TList<TSymbol>;
   InScopeIdx, InScopeCount: Integer;
-  ci   : Integer       ;
+  Ci   : Integer       ;
 begin
   Result:= 0;
   Cands:= ACands;
   InScopeIdx  := -1;
   InScopeCount:= 0;
-  for ci:= 0 to Cands.Count - 1 do
-    if CandInScope(ADeclFileId, Cands[ci].FileId) then
+  for Ci:= 0 to Cands.Count - 1 do
+    if CandInScope(ADeclFileId, Cands[Ci].FileId) then
     begin
       Inc(InScopeCount);
-      if InScopeIdx < 0 then InScopeIdx:= ci;
+      if InScopeIdx < 0 then InScopeIdx:= Ci;
     end;
   // Resolve only when unambiguous (mirrors ResolveAncestry's FP policy):
   //   exactly one in-scope candidate, OR (none in scope) a single global def
@@ -2568,13 +2682,161 @@ function TCallResolver.ChildrenOf(AParentId: Int64): TList<TSymbol>;
 var
   Arr: TArray<TSymbol>;
   S  : TSymbol        ;
+  P  : TSymbol        ;
 begin
   if AParentId <= 0 then Exit(nil);
   if FChildCache.TryGetValue(AParentId, Result) then Exit;
   Result:= TList<TSymbol>.Create;
-  Arr   := FStore.FindAllChildSymbols(AParentId);
-  for S in Arr do Result.Add(S);
+  { A symbol of a file LoadFileRows has read, and that got no list from it, has
+    no children: the read listed every parent of that file. }
+  if not (FRows.Symbols.TryGetValue(AParentId, P) and FFileRows.ContainsKey(P.FileId)) then
+  begin
+    Arr:= FStore.FindAllChildSymbols(AParentId);
+    for S in Arr do Result.Add(S);
+  end;
   FChildCache.Add(AParentId, Result);
+end;
+
+{ perf 2026-09-30. Every symbol of the file a ref comes from, read ONCE, into
+  the two caches the rungs read through: FRows.Symbols (by id) and FChildCache
+  (by parent). Measured on a one-file incremental of ProjectA, the scoped pass
+  asked the store 14,540 times for a parent's children and 14,314 times for a
+  symbol by id -- mostly the routines, locals and parameters of the files it
+  re-resolves, one round trip each: 9.1 s of its 39 s.
+
+  Same answer, by construction. A child is always in its parent's file (the
+  parser assigns parent_id inside one file's tree; no exception among ProjectA's
+  226,554 symbols), so the file's rows grouped by parent_id ARE the complete
+  child lists of the parents it declares. GetSymbolsOfFile orders them by
+  (start_line, id), which is FindAllChildSymbols' own order, so each group
+  lists the children as that query does. A parent already cached keeps its
+  list, and a symbol already cached keeps its row -- both are the same rows. }
+procedure TCallResolver.LoadFileRows(AFileId: Int64);
+var
+  Fresh: TDictionary<Int64, TList<TSymbol>>;
+  L    : TList<TSymbol>;
+begin
+  if (AFileId <= 0) or FFileRows.ContainsKey(AFileId) then Exit;
+  FFileRows.Add(AFileId, True);
+  FRowsOrder.Add(AFileId);
+  Inc(FFileCacheStats.Loads);
+  if FRowsOrder.Count > FFileCacheStats.Peak then FFileCacheStats.Peak:= FRowsOrder.Count;
+  var AddedSyms   : TList<Int64>:= TList<Int64>.Create;
+  var AddedParents: TList<Int64>:= TList<Int64>.Create;
+  FRowsAddedSyms.AddOrSetValue(AFileId, AddedSyms);
+  FRowsAddedParents.AddOrSetValue(AFileId, AddedParents);
+  Fresh:= TDictionary<Int64, TList<TSymbol>>.Create;   { not owning: the lists move to FChildCache }
+  try
+    for var S: TSymbol in FStore.GetSymbolsOfFile(AFileId) do
+    begin
+      if not FRows.Symbols.ContainsKey(S.Id) then
+      begin
+        FRows.Symbols.Add(S.Id, S);
+        AddedSyms.Add(S.Id);
+      end;
+      if (S.ParentId <= 0) or FChildCache.ContainsKey(S.ParentId) then Continue;
+      if not Fresh.TryGetValue(S.ParentId, L) then
+      begin
+        L:= TList<TSymbol>.Create;
+        Fresh.Add(S.ParentId, L);
+      end;
+      L.Add(S);
+    end;
+    for var Pair in Fresh do
+    begin
+      FChildCache.Add(Pair.Key, Pair.Value);
+      AddedParents.Add(Pair.Key);
+    end;
+  finally
+    Fresh.Free;
+  end;
+end;
+
+procedure TCallResolver.TrimFileCaches;
+var
+  F: Int64;
+  L: TList<Int64>;
+begin
+  while FRowsOrder.Count > FFileCacheCap do
+  begin
+    F:= FRowsOrder[0];
+    FRowsOrder.Delete(0);
+    FFileRows.Remove(F);
+    if FRowsAddedSyms.TryGetValue(F, L) then
+      for var Id: Int64 in L do FRows.Symbols.Remove(Id);
+    if FRowsAddedParents.TryGetValue(F, L) then
+      for var Id: Int64 in L do
+      begin
+        FChildCache.Remove(Id);
+        FChildNames.Remove(Id); { its name buckets were built from that list }
+      end;
+    FRowsAddedSyms.Remove(F);
+    FRowsAddedParents.Remove(F);
+    Inc(FFileCacheStats.Evictions);
+  end;
+  { The lines go the same way. FStaleFiles keeps its verdict: a file read again
+    is probed again, and a file that changed meanwhile can only turn stale. }
+  while FLinesOrder.Count > FFileCacheCap do
+  begin
+    FLineCache.Remove(FLinesOrder[0]);
+    FLinesOrder.Delete(0);
+  end;
+end;
+
+function TCallResolver.FileCacheSummary: string;
+begin
+  Result:= Format('file cache: cap %d file(s), %d read(s), %d dropped, peak %d', [FFileCacheCap,
+    FFileCacheStats.Loads, FFileCacheStats.Evictions, FFileCacheStats.Peak]);
+end;
+
+{ 2026-09-28 PERF -- the name lookups in LookupMethodOnType and FindChildOfKind
+  scanned EVERY child of the type, once per call site and once per ancestor, with
+  a SameText per child. A form class carries thousands of children (TFEditB:
+  4,061 symbols) and tens of thousands of call sites, so the scan was
+  O(sites x children); measured on a 122-file subset those two rungs were 8.2 s
+  of the 9.4 s ResolveOne spends.
+
+  Same answer, by construction: every one of those loops keeps only children
+  whose name SameText-matches, and SameText (CompareText) and LowerCase fold the
+  SAME characters -- 'A'..'Z' only -- so bucketing by LowerCase(Name) selects
+  exactly the children the SameText test selected. Each bucket is filled in
+  ChildrenOf order, so the loops see the matching children in the order they
+  saw them before, and "the first match wins" keeps its winner. }
+function TCallResolver.ChildrenNamed(AParentId: Int64; const AName: string): TList<TSymbol>;
+var
+  ByName: TObjectDictionary<string, TList<TSymbol>>;
+  Kids  : TList<TSymbol>;
+  S     : TSymbol       ;
+  Key   : string        ;
+  Bucket: TList<TSymbol>;
+begin
+  Result:= nil;
+  if AParentId <= 0 then Exit;
+  if not FChildNames.TryGetValue(AParentId, ByName) then
+  begin
+    ByName:= TObjectDictionary<string, TList<TSymbol>>.Create([doOwnsValues]);
+    FChildNames.Add(AParentId, ByName);
+    Kids:= ChildrenOf(AParentId);
+    if Kids <> nil then
+      for S in Kids do
+      begin
+        Key:= LowerCase(S.Name);
+        if not ByName.TryGetValue(Key, Bucket) then
+        begin
+          Bucket:= TList<TSymbol>.Create;
+          ByName.Add(Key, Bucket);
+        end;
+        Bucket.Add(S);
+      end;
+  end;
+  if not ByName.TryGetValue(LowerCase(AName), Result) then Result:= nil;
+end;
+
+function TCallResolver.HelpersOf(ATypeId: Int64): TArray<THelperEdge>;
+begin
+  if FHelperCache.TryGetValue(ATypeId, Result) then Exit;
+  Result:= FStore.FindHelpersOfTypeSymbol(ATypeId);
+  FHelperCache.Add(ATypeId, Result);
 end;
 
 function TCallResolver.SymbolById(AId: Int64): TSymbol;
@@ -2647,6 +2909,15 @@ begin
   end;
 end;
 
+function TCallResolver.IsRoutineSymbol(AId: Int64): Boolean;
+var
+  S: TSymbol;
+begin
+  if AId <= 0 then Exit(False);
+  S:= SymbolById(AId);
+  Result:= (S.Id > 0) and CanBeCallTarget(S.Kind);
+end;
+
 function TCallResolver.AncestorsOf(ATypeId: Int64): TArray<TTypeAncestor>;
 begin
   if FRows.Ancestors.TryGetValue(ATypeId, Result) then Exit;
@@ -2703,12 +2974,16 @@ begin
         name-based rung can still be right. Only the receiver WRITE is withheld,
         which is the part that destroys information. }
       Bytes:= TFile.ReadAllBytes(Path);
-      // The staleness probe hashes exactly what the indexer hashed: ANSI text.
-      Txt  := TEncoding.ANSI.GetString(Bytes);
-      if not FStore.FileIsUpToDate(Path,
-               DateTimeToUnix(TFile.GetLastWriteTime(Path), False),
-               THashSHA2.GetHashString(Txt)) then
-        FStaleFiles.AddOrSetValue(AFileId, True);
+      if not FProbedFiles.ContainsKey(AFileId) then
+      begin
+        FProbedFiles.Add(AFileId, True);
+        // The staleness probe hashes exactly what the indexer hashed: ANSI text.
+        Txt  := TEncoding.ANSI.GetString(Bytes);
+        if not FStore.FileIsUpToDate(Path,
+                 DateTimeToUnix(TFile.GetLastWriteTime(Path), False),
+                 THashSHA2.GetHashString(Txt)) then
+          FStaleFiles.AddOrSetValue(AFileId, True);
+      end;
       { resolver 1.14.0: the LINES are the text a ref's COLUMN indexes, which is
         not the ANSI text above. A ref stores 1 + a BYTE offset into the UTF-8
         buffer the indexer parsed (EnsureUtf8Bytes, then NormalizeLoneCR), so in a
@@ -2732,6 +3007,7 @@ begin
       FStaleFiles.AddOrSetValue(AFileId, True);
     end;
   FLineCache.Add(AFileId, Result);
+  FLinesOrder.Add(AFileId);
 end;
 
 function TCallResolver.FileIsStale(AFileId: Int64): Boolean;
@@ -2752,10 +3028,10 @@ var
   S   : TSymbol       ;
 begin
   Result:= Default(TSymbol);
-  Kids  := ChildrenOf(AParentId);
+  Kids  := ChildrenNamed(AParentId, AName); { was ChildrenOf + a SameText per child }
   if Kids = nil then Exit;
   for S in Kids do
-    if (S.Kind in AKinds) and SameText(S.Name, AName) then
+    if S.Kind in AKinds then
     begin
       if not ADeclineOnConflict then Exit(S);
       if Result.Id = 0 then Result:= S
@@ -2911,13 +3187,13 @@ var
     HS: TSymbol         ;
   begin
     if AForTypeId <= 0 then Exit;
-    for HE in FStore.FindHelpersOfTypeSymbol(AForTypeId) do
+    for HE in HelpersOf(AForTypeId) do
     begin
       if HE.HelperSymbolId <= 0 then Continue;
-      HK:= ChildrenOf(HE.HelperSymbolId);
+      HK:= ChildrenNamed(HE.HelperSymbolId, AMethodName);
       if HK = nil then Continue;
       for HS in HK do
-        if (HS.Kind in METHOD_KINDS) and SameText(HS.Name, AMethodName) then Matches.Add(HS);
+        if HS.Kind in METHOD_KINDS then Matches.Add(HS);
     end;
   end;
 
@@ -2929,10 +3205,10 @@ begin
   Matches:= TList<TSymbol>.Create;
   try
     // 1. the type's own methods.
-    Kids:= ChildrenOf(ATypeSymbolId);
+    Kids:= ChildrenNamed(ATypeSymbolId, AMethodName);
     if Kids <> nil then
       for S in Kids do
-        if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then Matches.Add(S);
+        if S.Kind in METHOD_KINDS then Matches.Add(S);
     // 2. inherited methods along the transitive ancestor chain. A method defined
     // on an ancestor counts too; overrides on the type itself already counted in
     // step 1 (so a class + its base each declaring M yields 2 matches ->
@@ -2940,10 +3216,10 @@ begin
     for A in AncestorsOf(ATypeSymbolId) do
     begin
       if not A.Resolved or (A.SymbolId <= 0) then Continue;
-      Kids:= ChildrenOf(A.SymbolId);
+      Kids:= ChildrenNamed(A.SymbolId, AMethodName);
       if Kids = nil then Continue;
       for S in Kids do
-        if (S.Kind in METHOD_KINDS) and SameText(S.Name, AMethodName) then Matches.Add(S);
+        if S.Kind in METHOD_KINDS then Matches.Add(S);
     end;
 
     { 3. HELPER methods -- but ONLY when steps 1 and 2 found nothing.
@@ -3248,6 +3524,17 @@ var
 begin
   Result:= 0;
   if AReceiver = '' then Exit;
+  { 2026-09-28 PERF: memoized. QualifiedValueTarget asks this for EVERY dotted
+    member-access whose member name is also an enum value's -- including the
+    ordinary `vQ.Open` whose receiver the shadow checks already ruled out, only
+    to count the decline -- and each ask was a FindSymbolsByExactName round trip
+    that materialises every symbol of that name (a common local such as vQ has
+    thousands). Measured: 74.6 s of the calls stage on a 2,245-file closure.
+    The store's symbols do not change during the resolve pass, so the answer is
+    a function of the receiver text. Keyed on the EXACT text, not LowerCase:
+    FindSymbolsByExactName tries an exact-case match before its NOCASE retry,
+    so two spellings can legitimately get different rows. }
+  if FUnitNameMemo.TryGetValue(AReceiver, Result) then Exit;
   Found := 0;
   Hits  := 0;
   { FindSymbolsByExactName already handles a DOTTED unit name verbatim -- a
@@ -3262,6 +3549,7 @@ begin
       Found:= S.FileId;
     end;
   if Hits = 1 then Result:= Found;
+  FUnitNameMemo.Add(AReceiver, Result);
 end;
 
 function TCallResolver.CollapseIdenticalEnumCopies(const AVisible: TArray<TEnumValueDecl>;
@@ -3415,6 +3703,7 @@ begin
   Result := 0;
   AReason:= '';
   if ARef.NameText = '' then Exit;
+  LoadFileRows(ARef.FileId);
   Lc:= LowerCase(ARef.NameText);
   { Not a candidate name, and NOT counted as a decline: the store's candidate SQL
     already filtered the stream to enum-value names, so reaching here means the
@@ -4770,6 +5059,7 @@ var
 begin
   Result      := Default(TCallEdge);
   Result.RefId:= ARef.Id;
+  LoadFileRows(ARef.FileId);
   { The site's own text decides three of the rules, so a line that does not
     match the index is a decline, not a guess -- the stale-file rule every other
     rung of this unit follows. }
@@ -4846,6 +5136,7 @@ var
 begin
   Result      := Default(TCallEdge);
   Result.RefId:= ARef.Id;
+  LoadFileRows(ARef.FileId);
   WType       := 0;
   ByWith      := False;
   M           := Default(TSymbol);
@@ -5549,10 +5840,15 @@ var
   Depth: Integer      ;
 begin
   if FWriteScopes.TryGetValue(AEnclosingSymbolId, Result) then Exit;
+  { Through the resolver's row caches, like every other rung: straight to the
+    store this cost a symbol read per routine, per parent and an ancestor walk
+    per class -- 7.2 s of 7.9 s for 13,288 write refs on a one-file ProjectA
+    incremental (2026-09-30). Same rows: the pass writes neither symbols nor
+    type_ancestors. }
   Result:= Default(TWriteScope);
   if AEnclosingSymbolId > 0 then
   begin
-    S:= FStore.GetSymbolById(AEnclosingSymbolId);
+    S:= SymbolById(AEnclosingSymbolId);
     { The routine and the routines around it -- the levels LexicalParenlessLookup
       climbs, and the function names whose RESULT a write may assign. The walk ends at
       the first non-routine parent, which is the owning type when there is one
@@ -5564,13 +5860,13 @@ begin
       Result.Chain:= Result.Chain + [S.Id];
       if S.Kind in [skFunction, skMethod] then Result.FnNames:= Result.FnNames + '|' + LowerCase(S.Name);
       if S.ParentId <= 0 then S:= Default(TSymbol)
-      else S:= FStore.GetSymbolById(S.ParentId);
+      else S:= SymbolById(S.ParentId);
     end;
     Result.FnNames:= Result.FnNames + '|';
     if (S.Id > 0) and (S.Kind in TYPE_KINDS) then
     begin
       Result.ClassChain:= [S.Id];
-      for A in FStore.GetTransitiveAncestors(S.Id) do
+      for A in AncestorsOf(S.Id) do
         if A.Resolved and (A.SymbolId > 0) then Result.ClassChain:= Result.ClassChain + [A.SymbolId];
     end;
   end;
@@ -5715,6 +6011,7 @@ var
 begin
   Result := 0;
   AReason:= '';
+  LoadFileRows(ARef.FileId);
   Verd   := wvNone;
   WType  := 0;
   WKind  := wmNone;
@@ -5770,6 +6067,54 @@ begin
   TallyWrite(AReason);
 end;
 
+{ PERF INSTRUMENTATION (2026-09-28) -- ResolveCallTargets' own profile line
+  reports ResolveOne as ONE number (252.6 s of the 401 s calls stage on a
+  2,245-file closure). These split it per rung, under the same DRAGLINT_PROFILE
+  switch and the same print-at-exit-on-stderr rule as the indexer's INDEX
+  PROFILE, so a normal run is byte-identical. Cost when unarmed: one Boolean
+  test per rung per ref. }
+type
+  { One slot per rung of ResolveOne, in the order the rungs run. }
+  TResProfSlot = (rpReceiverText, rpCountArgs, rpNearScopes, rpTypeReceiver, rpMethodOnType,
+    rpMemberOnType, rpQualifiedValue, rpUnitRoutine, rpExternal);
+const
+  RP_NAMES: array[TResProfSlot] of string = ('receiver text', 'count args', 'near scopes (with/lexical)',
+    'type receiver', 'method on type', 'member on type', 'qualified value', 'unit-level routine',
+    'external');
+var
+  GResProf     : array[TResProfSlot] of Int64;
+  GResProfOn   : Integer = -1; { -1 = not yet read from the environment }
+
+function ResProfOn: Boolean; inline;
+begin
+  if GResProfOn < 0 then GResProfOn:= Ord(GetEnvironmentVariable('DRAGLINT_PROFILE') <> '');
+  Result:= GResProfOn = 1;
+end;
+
+procedure ResProfAdd(ASlot: TResProfSlot; var AMark: Int64);
+var
+  T: Int64;
+begin
+  if not ResProfOn then Exit;
+  T:= TStopwatch.GetTimeStamp;
+  Inc(GResProf[ASlot], T - AMark);
+  AMark:= T;
+end;
+
+procedure WriteResolveProfile;
+var
+  Any: Boolean;
+begin
+  if not ResProfOn then Exit;
+  Any:= False;
+  for var Slot: TResProfSlot := Low(TResProfSlot) to High(TResProfSlot) do
+    if GResProf[Slot] <> 0 then Any:= True;
+  if not Any then Exit;
+  Writeln(ErrOutput, 'RESOLVE-ONE PROFILE');
+  for var Slot: TResProfSlot := Low(TResProfSlot) to High(TResProfSlot) do
+    Writeln(ErrOutput, Format('  %-28s %8.2f s', [RP_NAMES[Slot], GResProf[Slot] / TStopwatch.Frequency]));
+end;
+
 function TCallResolver.ResolveOne(const ACallRef: TReference): TCallEdge;
 begin
   { The argument texts live for ONE call: every other entry into PickFromMatches
@@ -5785,6 +6130,7 @@ end;
 
 function TCallResolver.ResolveOneAt(const ACallRef: TReference): TCallEdge;
 var
+  Mark    : Int64      ;
   Lines   : TStringList;
   Line    : string     ;
   Rcv     : string     ;
@@ -5796,11 +6142,13 @@ var
 begin
   Result:= Default(TCallEdge);
   Result.RefId:= ACallRef.Id;
+  LoadFileRows(ACallRef.FileId);
   Result.TargetSymbolId      := 0;
   Result.ReceiverTypeSymbolId:= 0;
   Result.Confidence          := '';
 
   if ACallRef.NameText = '' then Exit;
+  if ResProfOn then Mark:= TStopwatch.GetTimeStamp else Mark:= 0;
 
   // 1. read the source line and extract the receiver expression left of '.M'.
   Line := '';
@@ -5823,6 +6171,7 @@ begin
     survives. Resolution below still runs: a name-based rung can be right even
     when the source line is unusable. }
   Result.ReceiverUnknown:= FileIsStale(ACallRef.FileId);
+  ResProfAdd(rpReceiverText, Mark);
 
   // 1b. B1: count the arguments at this site, from the same cached lines. Unlike
   // the receiver scan -- which reads LEFT and cannot leave the line -- an
@@ -5830,6 +6179,7 @@ begin
   // whole file rather than the single line.
   FCurArgs:= CallArgTexts(Lines, ACallRef.StartLine, ACallRef.StartCol, ArgsKnown);
   ArgCount:= Length(FCurArgs);
+  ResProfAdd(rpCountArgs, Mark);
 
   // 1c. NESTED-CALL RESOLUTION: a BARE call is resolved by Delphi's lexical
   // scope chain BEFORE any receiver typing, because the innermost declaration
@@ -5845,17 +6195,21 @@ begin
       to the ENCLOSING class's same-named method -- the one the compiler does
       not pick. When the with scope decides (bound, or declined), nothing below
       may run for the call. }
-    if BareCallInNearScopes(ACallRef, ArgCount, ArgsKnown, Result) then Exit;
+    var Near: Boolean:= BareCallInNearScopes(ACallRef, ArgCount, ArgsKnown, Result);
+    ResProfAdd(rpNearScopes, Mark);
+    if Near then Exit;
   end;
 
   // 2. type the receiver -> a class/interface/record symbol id.
   TypeId:= TypeReceiver(ACallRef, Rcv);
   Result.ReceiverTypeSymbolId:= TypeId; // 0 when the receiver type is unknown
+  ResProfAdd(rpTypeReceiver, Mark);
 
   // 3. look the method up on the resolved type + its ancestor chain.
   if TypeId > 0 then
   begin
     Target:= LookupMethodOnType(TypeId, ACallRef.NameText, ArgCount, ArgsKnown, Conf);
+    ResProfAdd(rpMethodOnType, Mark);
     if Target > 0 then
     begin
       Result.TargetSymbolId:= Target;
@@ -5890,8 +6244,10 @@ begin
             Result.AccessorKind    := (if Acc.Kind = skField then 'field' else 'method');
           end;
         end;
+        ResProfAdd(rpMemberOnType, Mark);
         Exit;
       end;
+      ResProfAdd(rpMemberOnType, Mark);
     end;
   end;
 
@@ -5899,7 +6255,7 @@ begin
     enum-value-ref-binding, spec rule R6). `TEnum.value` types its receiver to
     the enum -- enums joined GetTypeCandidates on 2026-08-30 -- then finds no
     routine and no property/field, and until now fell out unbound; the store's
-    routine branch then refused it (QIsRoutine) and wrote NOTHING, so
+    routine branch then refused it (its routine-kind test) and wrote NOTHING, so
     refs.symbol_id stayed NULL. `Unit.value` never types at all.
 
     Placed AFTER 3b and BEFORE rung 4 on purpose: a routine or a property on the
@@ -5939,8 +6295,10 @@ begin
       end
       else
         Result.ValueOnly:= True;
+      ResProfAdd(rpQualifiedValue, Mark);
       Exit;
     end;
+    ResProfAdd(rpQualifiedValue, Mark);
   end;
 
   // 4. OPTION 4 -- the UNIT-LEVEL rung, and the LAST one. Reached only for a
@@ -5972,6 +6330,7 @@ begin
     Target:= LookupUnitLevelRoutine(ACallRef.FileId, ACallRef.NameText, ArgCount, ArgsKnown, Conf)
   else
     Target:= LookupUnitQualifiedRoutine(ACallRef, Rcv, TypeId, ArgCount, ArgsKnown, Conf);
+  ResProfAdd(rpUnitRoutine, Mark);
   if Target > 0 then
   begin
     // ReceiverTypeSymbolId is CLEARED, matching the lexical rung above. For a
@@ -5996,6 +6355,7 @@ begin
   // rejected.
   if (Result.TargetSymbolId = 0) and (Length(FExtraStores) > 0) then
     Result.ExternalTarget:= ResolveExternally(ACallRef, Rcv, ACallRef.NameText);
+  ResProfAdd(rpExternal, Mark);
 end;
 
 { v21. Consults the extra (library) stores for a call the primary index could not
@@ -6115,5 +6475,10 @@ begin
     if Hit <> '' then Exit(Hit);
   end;
 end;
+
+initialization
+
+finalization
+  WriteResolveProfile;
 
 end.

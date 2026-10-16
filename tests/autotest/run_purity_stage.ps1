@@ -151,8 +151,10 @@ if ($null -eq $py) {
 }
 
 Write-Host 'PER-FILE REINDEX RESTORES THE COLUMNS (acceptance 28)' -ForegroundColor Cyan
-# touch one file so the walk re-parses it (rows recreated with NULL columns), then assert nothing is NULL after the run
+# change one file's BYTES so the walk re-parses it (rows recreated with NULL columns), then assert nothing is NULL after
+# the run. A date-only touch is no longer enough: since 9c141c11 a moved date over identical bytes is re-stamped.
 $f = Join-Path $src 'uEffects.pas'
+[System.IO.File]::WriteAllText($f, ([System.IO.File]::ReadAllText($f) + "{ re-parse me }`r`n"), [System.Text.Encoding]::ASCII)
 [System.IO.File]::SetLastWriteTimeUtc($f, (Get-Date).ToUniversalTime().AddSeconds(5))
 $out2 = Run-Index @()
 $nulls = (& $Exe sql --db $db --format text --query "SELECT count(*) FROM symbol_facts WHERE ifnull(body_loc,0) > 0 AND effect_free IS NULL" 2>&1) -join "`n"

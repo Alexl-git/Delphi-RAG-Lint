@@ -59,6 +59,9 @@ type
       { Files this indexer got PAST the up-to-date skip for, i.e. every file it
         may have written rows for. Backs IIndexer.ParsedFiles -- see there. }
       FParsedFiles    : Integer                            ;
+      { Up-to-date files whose mtime had moved over identical bytes; a subset
+        of FSkippedUpToDate. Backs IIndexer.RestampedFiles. }
+      FRestampedFiles : Integer                            ;
       { The walk's in-scope set: every file a parser claimed, whether or not it
         was then parsed. Backs IIndexer.VisitedFiles -- see there for why the
         list is what it is. FVisitedKeys is the lowercase de-dup guard; the same
@@ -376,6 +379,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure IndexFile(const AFilePath: string);
+      { The body of IndexFile; IndexFile itself times it for DRAGLINT_PROFILE. }
+      procedure IndexFileBody(const AFilePath: string);
       /// <returns><!-- drag-lint:auto -->Integer -- Observed: FSkippedUpToDate.</returns>
       /// <remarks>
       /// <!-- drag-lint:auto BEGIN -->
@@ -406,6 +411,8 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       function ParsedFiles: Integer;
+      /// <summary>See IIndexer.RestampedFiles.</summary>
+      function RestampedFiles: Integer;
       /// <returns><!-- drag-lint:auto -->TArray&lt;string&gt; -- Observed:
       /// FVisited.ToArray.</returns>
       /// <remarks>
@@ -727,6 +734,11 @@ begin
   Result:= FParsedFiles;
 end;
 
+function TIndexer.RestampedFiles: Integer;
+begin
+  Result:= FRestampedFiles;
+end;
+
 function TIndexer.VisitedFiles: TArray<string>;
 begin
   Result:= FVisited.ToArray;
@@ -961,6 +973,9 @@ var
   GProfParse, GProfDocScan, GProfSymbols, GProfRefs,
   GProfUses, GProfLiterals, GProfFacts, GProfCommit, GProfFiles,
   GProfPre, GProfOpenTx: Int64;
+  { Whole IndexFile calls, split by outcome: files left as they were (the stamp
+    checks of an incremental run) and files parsed (everything, buckets or not). }
+  GProfWholeSkipped, GProfWholeParsed, GProfSkippedFiles: Int64;
 
 function ProfNow: Int64; inline;
 begin
@@ -1020,6 +1035,54 @@ begin
   end;
 end; // function
 
+{ INDEX THROUGHPUT (2026-09-28) -- the literals twin of BuildEnclosingLineMap.
+
+  Each string literal is attributed to the symbol whose DECLARATION span holds
+  its line, and that was one FindContainingSymbol SELECT per literal: an
+  idx_symbols_file range over every symbol in the file plus a sort, i.e.
+  O(literals x symbols) per file. Measured on a 2,245-file closure it cost 92 s
+  of SQL alone (mscorlib_TLB.pas: 14,946 literals x 12,525 symbols), before the
+  FireDAC round trip and the ~15 FieldByName lookups ReadSymbolFromQuery does to
+  hand back a whole TSymbol of which the caller reads only Id.
+
+  Same answer as the query, which is
+    WHERE file_id = :fid AND start_line <= :line AND end_line >= :line
+    ORDER BY start_line DESC LIMIT 1
+  -- the largest start_line wins, and among equal start_lines SQLite returns the
+  first row in rowid order (checked on 81,086 literals: every one of the 17 ties
+  went to the lower rowid). Symbols are inserted in array order, so array order
+  IS rowid order, and taking a new best only on a STRICTLY greater StartLine
+  reproduces the tie-break. A symbol missing from AIdxToId has no row, so the
+  query could never have returned it; it is skipped. 0 = "no containing symbol",
+  which the caller treats exactly as it treated an empty result. }
+function BuildContainingLineMap(const ASymbols: TArray<TSymbol>;  // dl:ok duplicate-code@040c -- REVIEWED 2026-09-30: BuildEnclosingLineMap paints routine BODY spans (ImplStart..ImplEnd) and keeps a missing id as 0; this paints DECLARATION spans and skips it, with a different tie-break -- one parametrized painter would put both indexer outputs behind a flag for a token-count heuristic
+  const AIdxToId: TDictionary<Integer, Int64>; ALineCount: Integer): TArray<Int64>;
+var
+  BestStart: TArray<Integer>;
+  I, L, Hi : Integer       ;
+  DbId     : Int64         ;
+begin
+  if ALineCount < 1 then ALineCount:= 1;
+  SetLength(Result   , ALineCount + 1); { zero-filled: 0 = no containing symbol }
+  SetLength(BestStart, ALineCount + 1);
+  Hi:= High(Result);
+  for I:= 0 to High(ASymbols) do
+  begin
+    if not AIdxToId.TryGetValue(I, DbId) then Continue;
+    L:= ASymbols[I].StartLine;
+    if L < 0 then L:= 0;
+    while (L <= ASymbols[I].EndLine) and (L <= Hi) do
+    begin
+      if (Result[L] = 0) or (ASymbols[I].StartLine > BestStart[L]) then
+      begin
+        BestStart[L]:= ASymbols[I].StartLine;
+        Result   [L]:= DbId;
+      end;
+      Inc(L);
+    end;
+  end;
+end; // function
+
 function TIndexer.SliceBodyLines(const ALines: TArray<string>; AFromLine, AToLine: Integer): TArray<string>;
 var
   Lo, Hi, J: Integer;
@@ -1036,6 +1099,19 @@ begin
 end; // function
 
 procedure TIndexer.IndexFile(const AFilePath: string);
+begin
+  var T:= ProfNow;
+  var Parsed:= FParsedFiles;
+  IndexFileBody(AFilePath);
+  if FParsedFiles > Parsed then Inc(GProfWholeParsed, ProfNow - T)
+  else
+  begin
+    Inc(GProfWholeSkipped, ProfNow - T);
+    Inc(GProfSkippedFiles);
+  end;
+end;
+
+procedure TIndexer.IndexFileBody(const AFilePath: string);
 var
   Parser        : IParser                    ;
   Source        : TBytes                     ; { raw on-disk bytes: sha/mtime/up-to-date }
@@ -1061,6 +1137,7 @@ var
   FactsBody     : TArray<string>             ; { v(ADP2 T2) }
   SymStartLines : TArray<Integer>            ; { adp2-docregion-fix: every symbol's StartLine, sorted ascending -- lets FindDocRegionAbove reject a region separated from its symbol by an intervening declaration }
   EnclosingByLine: TArray<Int64>             ; { v0.85 perf: line -> enclosing routine's db id, built once per file (see BuildEnclosingLineMap) }
+  ContainingByLine: TArray<Int64>            ; { 2026-09-28 perf: line -> containing declaration's db id, for literals (see BuildContainingLineMap) }
 begin
   Parser:= ParserFor(ExtractFileExt(AFilePath));
   if Parser = nil then Exit;
@@ -1094,6 +1171,22 @@ begin
       Exit;
     end;
   end;
+  { STAMP FAST PATH (2026-10-14). The up-to-date test below needs the file's
+    SHA, so every run read and hashed every file of the scope -- 1.3 s of a
+    nothing-changed run over 2,218 files. A row that recorded the size of the
+    bytes it hashed answers first: same write time and same size, the file is
+    taken as unchanged without a read, as make and git's index take it. A row
+    without a size (written before this) falls through to the full test, which
+    records the size for next time. A rewrite that keeps both the second and
+    the byte count is the one change this does not see. }
+  Mtime:= DateTimeToUnix(TFile.GetLastWriteTime(AFilePath), False);
+  var MayResume: Boolean:= (FResumeFingerprint <> '') and
+                           SameStr(FStore.FileIndexedFingerprint(AFilePath), FResumeFingerprint);
+  if ((not FForceReparse) or MayResume) and FStore.FileStampIsCurrent(AFilePath, Mtime, TFile.GetSize(AFilePath)) then
+  begin
+    Inc(FSkippedUpToDate);
+    Exit;
+  end;
   var TPre: Int64:= ProfNow;
   Source:= TFile.ReadAllBytes(AFilePath);
   // Sha/Mtime/up-to-date stay computed over the RAW on-disk bytes so file
@@ -1101,7 +1194,6 @@ begin
   // v0.86 encoding fix (changing the sha basis would invalidate every already
   // indexed file's stored sha -> forced mass reindex).
   Sha:= THashSHA2.GetHashString(TEncoding.ANSI.GetString(Source));
-  Mtime:= DateTimeToUnix(TFile.GetLastWriteTime(AFilePath), False);
   // v0.4: incremental skip. If the file's already in the DB with the same
   // mtime and sha256, nothing to do - the parser would emit the same
   // symbols. Saves a parse + the per-file transaction.
@@ -1122,11 +1214,19 @@ begin
     --force-reparse and --rebuild, which therefore skip nothing, and '' can never
     equal a stored stamp because FileIndexedFingerprint returns '' for
     "unknown". Both halves fail toward re-parsing. }
-  var MayResume: Boolean:= (FResumeFingerprint <> '') and
-                           SameStr(FStore.FileIndexedFingerprint(AFilePath), FResumeFingerprint);
   if ((not FForceReparse) or MayResume) and FStore.FileIsUpToDate(AFilePath, Mtime, Sha) then
   begin
+    FStore.RecordFileSize(AFilePath, Length(Source)); { arms the fast path above }
     Inc(FSkippedUpToDate);
+    Exit;
+  end;
+  { Issue drag-lint#1: same bytes, moved date -- re-stamp instead of re-parse.
+    Same guard as above: a forced run re-parses unchanged content on purpose. }
+  if ((not FForceReparse) or MayResume) and FStore.RestampFileIfSameContent(AFilePath, Mtime, Sha) then
+  begin
+    FStore.RecordFileSize(AFilePath, Length(Source));
+    Inc(FSkippedUpToDate);
+    Inc(FRestampedFiles);
     Exit;
   end;
   { COUNTED HERE, BEFORE THE PARSE, not at the commit. This counter's only job is
@@ -1201,6 +1301,7 @@ begin
   try
     TProf:= ProfNow;
     Token:= FStore.OpenFileTx(AFilePath, Mtime, Sha, Parser.LanguageName);
+    FStore.RecordFileSize(AFilePath, Length(Source)); { in the file's transaction: the bytes just hashed }
     // v0.16: clear stale doc rows for this file before emitting fresh ones
     // (OpenFileTx already cleared symbols and refs).
     FStore.DeleteFileDocs(Token.FileId);
@@ -1276,12 +1377,24 @@ begin
         Inc(GProfUses, ProfNow - TProf);
         TProf:= ProfNow;
         FStore.DeleteStringLiteralsForFile(Token.FileId);
+        { 2026-09-28: one in-memory map per file instead of one SELECT per
+          literal -- see BuildContainingLineMap. }
+        if Length(ParseRes.Literals) > 0 then
+          ContainingByLine:= BuildContainingLineMap(ParseRes.Symbols, IdxToId, Length(SourceLines) + 2);
         for I:= 0 to High(ParseRes.Literals) do
         begin
           Lit:= ParseRes.Literals[I];
           Lit.FileId:= Token.FileId;
-          Encl:= FStore.FindContainingSymbol(Token.FileId, Lit.StartLine);
-          if Encl.Id > 0 then Lit.SymbolId:= Encl.Id;
+          if (Lit.StartLine >= 0) and (Lit.StartLine <= High(ContainingByLine)) then
+          begin
+            if ContainingByLine[Lit.StartLine] > 0 then Lit.SymbolId:= ContainingByLine[Lit.StartLine];
+          end
+          else
+          begin
+            { Past the mapped range -- should not happen; keep the query's contract. }
+            Encl:= FStore.FindContainingSymbol(Token.FileId, Lit.StartLine);
+            if Encl.Id > 0 then Lit.SymbolId:= Encl.Id;
+          end;
           FStore.UpsertStringLiteral(Token, Lit);
         end;
         // v(ADP2 T2): index-time analysis facts -- one symbol_facts row per
@@ -1377,6 +1490,7 @@ begin
       // run never accumulates one tree per file. Safe even on the exception
       // path above: Clear only frees cached trees, it does not touch FStore.
       TAstParseCache.Clear;
+      ResetSymbolFactsFileCaches; { the facts analyses' per-file memos end with the file too }
       IdxToId.Free;
       // v(ADP3 T4e): flush the progress stream once per file, so an abnormal
       // termination cannot swallow COMPLETED lines from the tail of this log.
@@ -1577,8 +1691,11 @@ var
   end;
 begin
   if GetEnvironmentVariable('DRAGLINT_PROFILE') = '' then Exit;
-  if GProfFiles = 0 then Exit;
   Freq:= TStopwatch.Frequency;
+  if GProfSkippedFiles > 0 then
+    Writeln(ErrOutput, Format('INDEX WALK: %d file(s) left as they were in %.2f s; parsed file(s), whole: %.2f s',
+                              [GProfSkippedFiles, GProfWholeSkipped / Freq, GProfWholeParsed / Freq]));
+  if GProfFiles = 0 then Exit;
   Writeln(ErrOutput, Format('INDEX PROFILE (%d files)', [GProfFiles]));
   Line('read/pre'  , GProfPre     );
   Line('parse'     , GProfParse   );

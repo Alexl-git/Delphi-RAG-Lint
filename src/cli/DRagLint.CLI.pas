@@ -2196,6 +2196,22 @@ function ProjectTagFor(const AStore: ISymbolStore; const ADbPath: string; const 
 
 function ResolverFingerprint(const AStore: ISymbolStore): string; forward;
 
+{ TEST HOOK (#35): with DRAGLINT_TEST_DIE_BEFORE_CALLS set, an index run ends
+  the process where the call pass would begin -- after its files are committed,
+  before their edges are -- the way a kill does: no finalization, no rollback of
+  what is already on disk. run_index_calls_pending_after_kill.ps1 needs that
+  state deterministically; a timed kill of a fixture-sized run is a race. }
+procedure TestDieBeforeCalls;
+const
+  KILLED_EXIT_CODE = 9; { what the test expects, as from a kill }
+begin
+  if GetEnvironmentVariable('DRAGLINT_TEST_DIE_BEFORE_CALLS') <> '' then
+  begin
+    Flush(Output);
+    TerminateProcess(GetCurrentProcess, KILLED_EXIT_CODE);
+  end;
+end;
+
 { The version limb of a stored fingerprint whose FIRST limb is `<APrefix><ver>`
   (`v=` for the indexer, `r=` for the resolver), or '' when the stamp is absent
   or not in that form. }
@@ -3294,6 +3310,60 @@ end;
 /// stage completes would report the silence rather than break it. Exceptions
 /// propagate unchanged -- the heartbeat is stopped in a finally so a failing
 /// pass cannot leave a thread beating over the error message.</remarks>
+{ INDEX PHASES (DRAGLINT_PROFILE, 2026-10-14). The stage markers time the
+  resolve passes; nothing timed what comes before them -- opening, the define
+  profile, the closure, the walk -- and stdout timestamps cannot, because a
+  redirected stdout is block-buffered and its lines arrive in bursts. Each mark
+  records the seconds since the previous one (the first: since the unit was
+  initialized, i.e. process start); IndexPhasesReport prints them on stderr. }
+var
+  GPhaseLast : Int64 = 0;
+  GPhaseLines: string = '';
+
+{ CLOSURE CACHE: TClosureScan (the walk's view, name arrays) <-> TClosureCacheRow
+  (the store's row, names joined with '|' -- a unit or include file name never
+  contains one). }
+function ClosureScansOf(const ARows: TArray<TClosureCacheRow>): TArray<TClosureScan>;
+begin
+  SetLength(Result, Length(ARows));
+  for var I:= 0 to High(ARows) do
+  begin
+    Result[I].Path    := ARows[I].Path;
+    Result[I].MTime   := ARows[I].MTime;
+    Result[I].Size    := ARows[I].Size;
+    Result[I].UsesList:= ARows[I].UsesText.Split(['|'], TStringSplitOptions.ExcludeEmpty);
+    Result[I].Includes:= ARows[I].IncludesText.Split(['|'], TStringSplitOptions.ExcludeEmpty);
+  end;
+end;
+
+function ClosureCacheRowsOf(const AScans: TArray<TClosureScan>): TArray<TClosureCacheRow>;
+begin
+  SetLength(Result, Length(AScans));
+  for var I:= 0 to High(AScans) do
+  begin
+    Result[I].Path        := AScans[I].Path;
+    Result[I].MTime       := AScans[I].MTime;
+    Result[I].Size        := AScans[I].Size;
+    Result[I].UsesText    := string.Join('|', AScans[I].UsesList);
+    Result[I].IncludesText:= string.Join('|', AScans[I].Includes);
+  end;
+end;
+
+procedure IndexPhase(const ALabel: string);
+begin
+  if GetEnvironmentVariable('DRAGLINT_PROFILE') = '' then Exit;
+  var Stamp:= TStopwatch.GetTimeStamp;
+  GPhaseLines:= GPhaseLines + Format('  %-14s %7.2f s', [ALabel, (Stamp - GPhaseLast) / TStopwatch.Frequency]) + sLineBreak;
+  GPhaseLast:= Stamp;
+end;
+
+procedure IndexPhasesReport;
+begin
+  if GPhaseLines = '' then Exit;
+  Writeln(ErrOutput, 'INDEX PHASES' + sLineBreak + GPhaseLines.TrimRight);
+  GPhaseLines:= '';
+end;
+
 procedure Stage(const AIndent, ALabel: string; AProc: TProc);
 var
   T0  : TDateTime;
@@ -3814,6 +3884,12 @@ begin
     if AResolveOnly then
       Writeln('  Resolve-only: skipping the walk; re-deriving edges from the stored parses.')
     else
+    begin
+    { One outer transaction around the walk, committed a group of files at a
+      time -- see FILE BATCH in DRagLint.Storage.SQLite. Closed before the
+      eviction below, the first writer after the walk. }
+    Store.BeginFileBatch;
+    try
     case AItem.Mode of
       smFolderTree, smLibrary:
       begin
@@ -3916,6 +3992,10 @@ begin
         end; // try
       end; // begin
     end; // case
+    finally
+      Store.EndFileBatch;
+    end; // try
+    end;
 
     { OUT-OF-SCOPE EVICTION -- drop rows for files that still EXIST and are no
       longer part of this section. Without it a --recompile of a manifest section
@@ -3990,7 +4070,8 @@ begin
       fix meant to prevent it. ClearCallEdges also nulls refs.symbol_id. }
     if ResolverStale or AResolveOnly then Store.ClearCallEdges;
     var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or ARebuild or (Length(Evicted) > 0) or
-       Store.CallEdgesNeedRebuild or ResolverStale or AResolveOnly;
+       Store.CallEdgesNeedRebuild or Store.CallsPendingFromEarlierRun or ResolverStale or AResolveOnly;
+    TestDieBeforeCalls;
     if RanCalls then
       Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end) { v14 (D5): resolve call sites to target symbols }
     else
@@ -4773,16 +4854,23 @@ end;
 /// <remarks>Opens each store directly rather than through OpenReadOnlyStore, so
 ///  the probe prints neither the schema note nor the freshness note -- the verb's
 ///  own loop prints them once when it opens the store for real.</remarks>
+/// <summary>A read-only store over APath with no note printed -- the probe's
+///  own open. The interface reference is released when the caller's expression
+///  ends.</summary>
+/// <param name="APath">An existing database file.</param>
+/// <returns>The store.</returns>
+function OpenStoreSilently(const APath: string): ISymbolStore;
+begin
+  Result:= TSQLiteSymbolStore.Create(APath, {AReadOnly=}True);
+end; // function
+
 function AnyDbSchemaCurrent(const APaths: TArray<string>): Boolean;
 var
   Found   : Integer;
   Expected: Integer;
 begin
   for var P: string in APaths do
-  begin
-    var Probe: ISymbolStore:= TSQLiteSymbolStore.Create(P, {AReadOnly=}True);
-    if Probe.IsSchemaCurrent(Found, Expected) then Exit(True);
-  end;
+    if OpenStoreSilently(P).IsSchemaCurrent(Found, Expected) then Exit(True);
   Result:= False;
 end; // function
 
@@ -5515,6 +5603,7 @@ begin
     byte-identical. Exit 2, the code every other refusal in this verb uses. }
   if RefuseIfEngineOlderThanDb(Store, ResolvedDb) then Exit(2);
   Store.Migrate;
+  IndexPhase('open');
   { v0.42: deep scan emits identifier usage refs. Default deep, except a
     --scan-libraries scan defaults shallow (libraries are queried by call/type,
     and usage-refs would ~double the 1.3 GB library DB). --deep/--shallow wins.
@@ -5529,6 +5618,7 @@ begin
   // doc regions to symbols.
   { v0.40.5 Tier 1: register the Firebird SQL parser alongside Delphi/DFM. }
   Indexer:= TIndexer.Create(Store, [Parser, TDFMParser.Create, TFirebirdSqlParser.Create], AArgs.Docs);
+  IndexPhase('parsers');
 
   // PP-Task-9: enable the in-process directive preprocessor by default so
   // conditional-compilation branches are resolved PER-CONFIG before parsing;
@@ -5539,6 +5629,7 @@ begin
   if PpPlatform = '' then PpPlatform:= 'Win64';
   Indexer.SetPreprocess(not AArgs.NoPreprocess,
     ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+  IndexPhase('define-profile');
   { SIZE GUARD ON THE INDEX PATH TOO (INBOX-library-reindex-25x-slower-on-large-db).
 
     SizeGuardCheck was wired only into the CONSUMER commands (lint / lsp /
@@ -5556,6 +5647,7 @@ begin
     if AArgs.SizeGuardMBSet then IdxGuardMB:= AArgs.SizeGuardMB
     else IdxGuardMB:= CwdManifest.Settings.SizeGuardMB;
     SizeGuardCheck(ResolvedDb, IdxGuardMB, AArgs.Force32);
+    IndexPhase('size-guard');
   end;
   if not AArgs.NoPreprocess then Writeln('Preprocess: ON  (per-config directive resolution; platform=', PpPlatform, ')')
   else Writeln('Preprocess: OFF  (--no-preprocess: raw all-branch parsing)');
@@ -5672,7 +5764,14 @@ begin
           it were not compiled, and vice versa. }
         Cl.SetPreprocess(not AArgs.NoPreprocess,
           ResolveIndexProfile(AArgs.ProjectPath, AArgs.CheckPlatform, ''));
+        { CLOSURE CACHE (2026-10-14): the uses / include names of every unit the
+          last walk read, valid while each unit's stamp and the define profile
+          match. DRAGLINT_NO_CLOSURE_CACHE=1 walks cold (and records nothing). }
+        var UseClosureCache: Boolean:= GetEnvironmentVariable('DRAGLINT_NO_CLOSURE_CACHE') = '';
+        var ClosureFp: string:= DRAGLINT_EXTRACTOR_VERSION + '|' + Cl.ScanFingerprint;
+        if UseClosureCache then Cl.SeedScanCache(ClosureScansOf(Store.LoadClosureCache(ClosureFp)));
         var CR: TClosureResult:= Cl.Resolve(AArgs.ProjectPath, AArgs.ExcludeGlobs);
+        if UseClosureCache then Store.SaveClosureCache(ClosureFp, ClosureCacheRowsOf(Cl.FreshScans));
         for var W: string in CR.Warnings do Writeln('  ', W);
 
         { The closure is .pas/.inc only; ExpandProjectScope adds each unit's
@@ -5715,6 +5814,7 @@ begin
       so prune was never the mechanism for it. Out-of-scope eviction, below,
       is -- and it takes Folders as its in-scope set. }
     Writeln(Format('Compile closure: %d file(s):', [Length(Folders)]));
+    IndexPhase('closure');
     PrintScopeListing(Folders, AArgs.DryRun);
   end
   else Folders:= [AArgs.Path];
@@ -5866,6 +5966,7 @@ begin
   while True do
   begin
     StartTime:= Now;
+    IndexPhase('pre-walk');
     if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', Now), Interval]))
     else if not AArgs.ResolveOnly then Writeln('Indexing...');
     { --resolve-only: re-derive the edges from parses the index ALREADY holds,
@@ -5886,11 +5987,22 @@ begin
     if AArgs.ResolveOnly then
       Writeln('Resolve-only: skipping the walk; re-deriving edges from the stored parses.')
     else
-      for F in Folders do
-      begin
-        if TFile.Exists(F) then Indexer.IndexFile(F)
-        else Indexer.IndexFolder(F, True);
-      end;
+    begin
+      { One outer transaction around the walk -- see FILE BATCH in
+        DRagLint.Storage.SQLite. Closed before prune, the first writer after it. }
+      Store.BeginFileBatch;
+      try
+        for F in Folders do
+        begin
+          if TFile.Exists(F) then Indexer.IndexFile(F)
+          else Indexer.IndexFolder(F, True);
+        end;
+      finally
+        IndexPhase('walk');
+        Store.EndFileBatch;
+        IndexPhase('batch-commit');
+      end; // try
+    end;
     { --prune: drop rows for source that has been deleted, moved or renamed since
       the last run. The incremental walk adds and refreshes but has no notion of
       a file that went away, so without this the linter goes on reporting against
@@ -6115,6 +6227,7 @@ begin
       Store.SetMetaValue(DCC_NAMESPACE_KEY,
         string.Join(';', DccNamespacesFromDproj(ChangeFileExt(NsProject, '.dproj'), PpPlatform, '')));
     end;
+    IndexPhase('sweeps');
     Stage('', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
     Stage('', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
     { v23 (spec F2): inherited-field facts need RESOLVED ancestry, which the
@@ -6122,6 +6235,7 @@ begin
       run that parsed nothing does nothing (F7). }
     Stage('', 'facts-inherited', procedure begin Indexer.ApplyInheritedFieldFacts; end);
     Stage('', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
+    IndexPhase('global-stages');
     { A MISSING EDGE SET ALSO FORCES THE PASS. Every other term here asks "did
       anything change?", and the skip message's premise -- no file changed, so
       every call edge already holds -- is only true if the edges were there in
@@ -6144,9 +6258,13 @@ begin
       flag would announce a re-derive and then skip it -- the one outcome worse
       than not having the flag. }
     if ResolverStale or AArgs.ResolveOnly then Store.ClearCallEdges;
+    { #35: CallsPendingFromEarlierRun -- an earlier run committed files and died
+      before this pass did. Its refs are up to date on disk and never resolved,
+      so "no file changed" would skip them for good. }
     var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
-       (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or ResolverStale or
+       (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or Store.CallsPendingFromEarlierRun or ResolverStale or
        AArgs.ResolveOnly;
+    TestDieBeforeCalls;
     if RanCalls then
       Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end) { v14 (D5) + v21 cross-DB }
     else
@@ -6162,6 +6280,7 @@ begin
       Writeln('stage: purity -- skipped, calls did not run and every routine already carries a verdict.');
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
+    IndexPhase('calls+purity');
     CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform);
     { Rides the same completed-run guarantee as the fingerprints above: a
       database that says "project" was walked as a project, all the way through.
@@ -6216,10 +6335,18 @@ begin
       break, so without this the connection stays open indefinitely and a copy
       of the .sqlite alone is empty of everything this run just did. }
     Store.Checkpoint;
+    IndexPhase('stamp+checkpoint');
     Elapsed:= (Now - StartTime) * 86400;
-    if Indexer.SkippedUpToDate > 0 then Writeln(Format(
-        'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
+    { Issue drag-lint#1: say how many files were actually (re)parsed and how many
+      only had their date moved, so a slow run explains itself. }
+    if Indexer.RestampedFiles > 0 then Writeln(Format(
+        'Done. Files: %d, Symbols: %d, Refs: %d, parsed %d, skipped %d up-to-date (%d of them re-stamped: date changed, content identical), %.2fs',
+        [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.ParsedFiles, Indexer.SkippedUpToDate, Indexer.RestampedFiles, Elapsed]))
+    else if Indexer.SkippedUpToDate > 0 then Writeln(Format(
+        'Done. Files: %d, Symbols: %d, Refs: %d, parsed %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.ParsedFiles, Indexer.SkippedUpToDate, Elapsed]))
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Elapsed]));
+    IndexPhase('counts');
+    IndexPhasesReport;
     if not AArgs.Watch then Break;
     Sleep(Interval * 1000);
   end; // while
@@ -6265,12 +6392,21 @@ begin
   DParser.EmitUsageRefs:= ADeep; { v0.42: deep dictionaries get usage refs }
   Indexer:= TIndexer.Create(Store, [DParser, TDFMParser.Create, TFirebirdSqlParser.Create], ADocs);
   for Ex in AExcludeRoots do Indexer.AddExcludeRoot(Ex);
-  for F in AFolders do
-  begin
-    if TDirectory.Exists(F) then begin Writeln('  + ', F, '  (recursive, incl. subfolders)'); Indexer.IndexFolder(F, True); end
-    else if TFile.Exists(F) then Indexer.IndexFile(F)
-    else Writeln('  (skip, not found) ', F);
-  end;
+  Store.BeginFileBatch; { see FILE BATCH in DRagLint.Storage.SQLite }
+  try
+    for F in AFolders do
+    begin
+      if TDirectory.Exists(F) then
+      begin
+        Writeln('  + ', F, '  (recursive, incl. subfolders)');
+        Indexer.IndexFolder(F, True);
+      end
+      else if TFile.Exists(F) then Indexer.IndexFile(F)
+      else Writeln('  (skip, not found) ', F);
+    end;
+  finally
+    Store.EndFileBatch;
+  end; // try
   Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
   Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
   Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
@@ -6283,7 +6419,7 @@ begin
   { CallEdgesNeedRebuild: the third and last site that skips this pass on an
     unchanged corpus -- see the DoIndex site for the argument. A dictionary build
     can open a database whose edges were dropped just as the other two can. }
-  var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or Store.CallEdgesNeedRebuild;
+  var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or Store.CallEdgesNeedRebuild or Store.CallsPendingFromEarlierRun;
   if RanCalls then
     Stage('  ', 'calls', procedure begin Store.ResolveCallTargets; end) { v14 (D5): resolve call sites to target symbols }
   else
@@ -32517,6 +32653,7 @@ begin
 end; // function
 
 initialization
+  GPhaseLast:= TStopwatch.GetTimeStamp; { INDEX PHASES: the first mark counts from process start }
 
 finalization
   { This process's stand-in directory (TH-2). Best-effort: a file another

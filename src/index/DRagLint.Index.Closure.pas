@@ -31,6 +31,20 @@ uses
   ;
 
 type
+  /// <summary>What the closure walk reads out of one unit: the units its
+  /// (preprocessed) uses clauses name and the include files its raw text names,
+  /// with the file's stamp at the time. A caller keeps these between runs and
+  /// hands them back with SeedScanCache, so an unchanged unit is not read and
+  /// preprocessed again (2026-10-14: the closure walk was ~3 s of every
+  /// incremental index of the 2,222-file TestCopy ProjectA project).</summary>
+  TClosureScan = record
+    Path    : string        ;
+    MTime   : Int64         ; { last write, UTC, Unix seconds }
+    Size    : Int64         ;
+    UsesList: TArray<string>;
+    Includes: TArray<string>;
+  end;
+
   /// <summary>Holds the result of a compile-closure walk.</summary>
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
@@ -70,6 +84,11 @@ type
       FPreprocessEnabled : Boolean;
       FProfile           : TDefineProfile;
       FPreprocessFellBack: Boolean;
+      FScanCache         : TDictionary<string, TClosureScan>; // lowercased path -> a previous walk's scan
+      FScanFresh         : TList<TClosureScan>;                // scans this walk computed
+      { The uses and include names of one unit: from FScanCache when its stamp
+        still matches, else read, preprocessed and recorded in FScanFresh. }
+      procedure ScanUnit(const AFilePath: string; out AUses, AIncludes: TArray<string>);
 
       // Run the directive preprocessor over AContent under FProfile when
       // FPreprocessEnabled, returning the resolved text (inactive-branch bytes
@@ -313,6 +332,7 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       constructor Create(const ALibraryRoots: TArray<string>);
+      destructor Destroy; override;
 
       /// <summary>PP-Task-10: enable/disable per-config directive preprocessing of source
       /// content before its `uses` clause is scanned. When enabled, a unit
@@ -334,6 +354,15 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
+      /// <summary>Scans a previous walk recorded. One is used instead of reading
+      /// its unit when the file's write time and size still match.</summary>
+      procedure SeedScanCache(const AScans: TArray<TClosureScan>);
+      /// <summary>The scans this walk had to compute (new or changed units).</summary>
+      function FreshScans: TArray<TClosureScan>;
+      /// <summary>What a scan depends on besides the unit itself: whether the
+      /// directive preprocessor runs, and the define profile it runs under. A
+      /// cache recorded under another value must not be seeded.</summary>
+      function ScanFingerprint: string;
 
       /// <summary>Resolve the compile closure of a .dpr or .dproj project.
       /// Returns the set of project-local .pas/.inc files that get compiled:
@@ -366,7 +395,8 @@ type
 implementation
 
 uses
-  DRagLint.Index.Glob
+  System.DateUtils           // ScanUnit: the file stamp as Unix seconds
+  , DRagLint.Index.Glob
   , DRagLint.Preprocess       // PP-Task-10: Preprocess(bytes, profile)
   , DRagLint.Core.Encoding    // PP-Task-10: EnsureUtf8Bytes
   { StripPasCommentsKeepLayout -- ONE implementation, shared with
@@ -390,6 +420,67 @@ begin
   FPreprocessEnabled := False;
   FProfile           := Default(TDefineProfile);
   FPreprocessFellBack:= False;
+  FScanCache         := TDictionary<string, TClosureScan>.Create;
+  FScanFresh         := TList<TClosureScan>.Create;
+end;
+
+destructor TClosureResolver.Destroy;
+begin
+  FScanFresh.Free;
+  FScanCache.Free;
+  inherited Destroy;
+end;
+
+procedure TClosureResolver.SeedScanCache(const AScans: TArray<TClosureScan>);
+begin
+  for var S in AScans do FScanCache.AddOrSetValue(LowerCase(S.Path), S);
+end;
+
+function TClosureResolver.FreshScans: TArray<TClosureScan>;
+begin
+  Result:= FScanFresh.ToArray;
+end;
+
+function TClosureResolver.ScanFingerprint: string;
+var
+  Defs: TArray<string>;
+  Nums: TArray<string>;
+begin
+  Defs:= Copy(FProfile.Defines);
+  TArray.Sort<string>(Defs);
+  SetLength(Nums, Length(FProfile.NumericDefines));
+  for var I:= 0 to High(FProfile.NumericDefines) do
+    Nums[I]:= FProfile.NumericDefines[I].Key + '=' + IntToStr(FProfile.NumericDefines[I].Value);
+  TArray.Sort<string>(Nums);
+  Result:= Format('pp=%d;d=%s;n=%s', [Ord(FPreprocessEnabled), string.Join(',', Defs), string.Join(',', Nums)]);
+end;
+
+procedure TClosureResolver.ScanUnit(const AFilePath: string; out AUses, AIncludes: TArray<string>);
+var
+  Scan: TClosureScan;
+begin
+  Scan.Path := AFilePath;
+  Scan.MTime:= DateTimeToUnix(TFile.GetLastWriteTimeUtc(AFilePath), True);
+  Scan.Size := TFile.GetSize(AFilePath);
+  var Prior: TClosureScan;
+  if FScanCache.TryGetValue(LowerCase(AFilePath), Prior) and (Prior.MTime = Scan.MTime) and (Prior.Size = Scan.Size) then
+  begin
+    AUses    := Prior.UsesList;
+    AIncludes:= Prior.Includes;
+    Exit;
+  end;
+  // PP-Task-10: preprocess the unit source before its uses-scan so a unit
+  // pulled in only under an inactive branch of THIS member unit is likewise
+  // not discovered (per-config transitive closure). {$I}/{$INCLUDE} scanning
+  // uses the RAW content -- includes are file references we still want
+  // resolved regardless of branch, and MaybePreprocess blanks directives.
+  var RawUnitContent:= TFile.ReadAllText(AFilePath);
+  AUses    := ExtractUses(MaybePreprocess(RawUnitContent, AFilePath));
+  AIncludes:= ExtractIncludes(RawUnitContent);
+  Scan.UsesList:= AUses;
+  Scan.Includes:= AIncludes;
+  FScanCache.AddOrSetValue(LowerCase(AFilePath), Scan);
+  FScanFresh.Add(Scan);
 end;
 
 procedure TClosureResolver.SetPreprocess(AEnabled: Boolean; const AProfile: TDefineProfile);
@@ -866,6 +957,23 @@ var
   SubName     : string        ;
   Wi          : TWorkItem     ;
   BaseName    : string        ;
+  UnitFileMemo: TDictionary<string, string>; // unit name AS WRITTEN -> FindUnitFile's answer
+
+  { FindUnitFile over SearchArr, once per name. The walk asks for the same
+    library units -- System.SysUtils, Vcl.Forms, Windows -- from nearly every
+    member, and each ask is a TFile.Exists per search directory until one hits
+    (all of them for a name no directory holds). SearchArr is fixed before the
+    first ask, so the answer for a name cannot change within one Resolve. Keyed
+    by the name EXACTLY as written: FindUnitFile's path carries the written case,
+    and that path is what reaches Files. }
+  function FindUnitFileOnce(const AName: string): string;
+  begin
+    if not UnitFileMemo.TryGetValue(AName, Result) then
+    begin
+      Result:= FindUnitFile(AName, SearchArr);
+      UnitFileMemo.Add(AName, Result);
+    end;
+  end;
 
   procedure EnqueueFile(const AAbsPath, AUsingUnit: string);
   var
@@ -905,6 +1013,7 @@ begin
   UnitNames    := TStringList.Create;
   UnitFilePaths:= TStringList.Create;
   DprojRefFiles:= TStringList.Create;
+  UnitFileMemo := TDictionary<string, string>.Create;
   try
     // --- Step 1: build search paths -------------------------------------------
     // Always include the project base directory first
@@ -997,7 +1106,7 @@ begin
         end;
       end;
 
-      if ResolvedFile = '' then ResolvedFile:= FindUnitFile(UN, SearchArr);
+      if ResolvedFile = '' then ResolvedFile:= FindUnitFileOnce(UN);
 
       if (ResolvedFile <> '') and not IsLibraryFile(ResolvedFile) then
       begin
@@ -1021,16 +1130,9 @@ begin
       if FileExt = '.inc' then Continue; // don't recurse into .inc for uses, just leave it in Files
 
       UnitDir:= TPath.GetDirectoryName(Item.FilePath);
-      // PP-Task-10: preprocess the unit source before its uses-scan so a unit
-      // pulled in only under an inactive branch of THIS member unit is likewise
-      // not discovered (per-config transitive closure). {$I}/{$INCLUDE} scanning
-      // below uses the RAW content -- includes are file references we still want
-      // resolved regardless of branch, and MaybePreprocess blanks directives.
-      var RawUnitContent:= TFile.ReadAllText(Item.FilePath);
-      var UnitContent:= MaybePreprocess(RawUnitContent, Item.FilePath);
+      ScanUnit(Item.FilePath, SubUses, SubIncs);
 
       // (a) Recurse into `uses` references
-      SubUses:= ExtractUses(UnitContent);
       for SubName in SubUses do
       begin
         if SubName = '' then Continue;
@@ -1041,7 +1143,7 @@ begin
           (Fun_Helpers, UTextUtil, UWSPartnerC, ...), each unit twice, so every
           by-name lookup of their symbols saw two candidates. }
         if not ProjectUnit.TryGetValue(LowerCase(SubName), ResolvedFile) then
-          ResolvedFile:= FindUnitFile(SubName, SearchArr);
+          ResolvedFile:= FindUnitFileOnce(SubName);
         // Also try relative to the unit's own directory (not always on path)
         if (ResolvedFile = '') and TFile.Exists(TPath.Combine(UnitDir, SubName + '.pas')) then ResolvedFile:= TPath.GetFullPath( TPath.Combine(UnitDir, SubName + '.pas'));
 
@@ -1057,7 +1159,6 @@ begin
       // RAW content: MaybePreprocess blanks ALL directives (including {$I}), so
       // include discovery must read the original text. Include-file discovery is
       // intentionally all-branch and thus identical to the pre-Task-10 behaviour.
-      SubIncs:= ExtractIncludes(RawUnitContent);
       for IncFile in SubIncs do
       begin
         ResolvedFile:= FindIncFile(IncFile, UnitDir, SearchArr);
@@ -1073,6 +1174,7 @@ begin
     Result.Warnings:= Warnings  .ToArray;
     Result.UsedBy  := UsedByList.ToArray;
   finally
+    UnitFileMemo.Free;
     DprojRefFiles.Free;
     UnitFilePaths.Free;
     UnitNames.Free;

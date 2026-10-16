@@ -189,7 +189,7 @@ begin
   if (ADprojPath = '') or not TFile.Exists(ADprojPath) then Exit;
   try
     Content := TFile.ReadAllText(ADprojPath);
-  except
+  except  // dl:ok bare-except@8f3b, try-except-swallowed@8f3b -- REVIEWED 2026-09-30: an unreadable .dproj yields no scope names, the same contract ProfileFromDproj keeps for defines; resolution then falls back to rule B
     Exit;
   end;
   // MSBuild evaluates the four groups in this order; a group that writes

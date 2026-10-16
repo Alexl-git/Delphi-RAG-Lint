@@ -22,11 +22,15 @@
     2. Edit p2index.pas (add a blank line right after `implementation`, which
        shifts DoWork's ImplStartLine/ImplEndLine down by one), then reindex
        p2index.pas ONLY (anchor.pas is not re-touched).
-    3. AFTER edit: DoWork's CURRENT symbol id differs from its OLD one (the
-       canary proving the rowid-reuse concern above didn't mask the test); a
-       symbol_facts row exists for the NEW id (Present); NO symbol_facts row
-       remains for the OLD id (the actual cascade / invalidation proof);
-       total rows are still == 2 (no orphan, no duplicate).
+    3. AFTER edit: DoWork KEEPS its symbol id -- since 2026-10-14 a re-parse
+       updates a declaration that comes back in place (SYMBOL REUSE in
+       DRagLint.Storage.SQLite) -- and its row moved with the edit (impl start
+       line +1: a real reindex, not a no-op); a symbol_facts row exists for it
+       (re-emitted after OpenFileTx cleared it); total rows are still == 2.
+    4. RENAME DoWork: the old declaration does not come back, so its row is
+       deleted at commit and NO symbol_facts row remains for the OLD id (the
+       cascade / invalidation proof this suite was written for); the renamed
+       routine has its own Present row; still 2 rows, no orphan.
 
   Run from a NEUTRAL CWD (C:\TEMP), pwsh 7.
 #>
@@ -88,6 +92,8 @@ def main():
         (name,) + ROUTINE_KINDS).fetchone()
     symid = row[0] if row else -1
     print("SYMID={}".format(symid))
+    impl = cur.execute("SELECT impl_start_line FROM symbols WHERE id = ?", (symid,)).fetchone() if symid >= 0 else None
+    print("IMPL={}".format(impl[0] if impl else -1))
 
     present = 0
     if symid >= 0:
@@ -160,12 +166,24 @@ try {
 
   $after = Get-Snapshot 'DoWork'
   Check 'DoWork: symbol found post-edit'                        ($after.SYMID -ge 0)
-  Check 'DoWork: NEW id differs from OLD id (real reindex, not a no-op)' ($after.SYMID -ne $oldId)
-  Check 'DoWork: symbol_facts row PRESENT for the NEW id'        ($after.PRESENT -eq 1)
+  Check 'DoWork: id KEPT across the reindex (symbol reuse)'      ($after.SYMID -eq $oldId)
+  Check 'DoWork: its row moved with the edit (real reindex, not a no-op)' ($after.IMPL -eq ($before.IMPL + 1))
+  Check 'DoWork: symbol_facts row PRESENT for it'               ($after.PRESENT -eq 1)
   Check 'DB: still exactly 2 routine-with-body symbols'         ($after.ROUTINE_COUNT -eq 2)
   Check 'DB: still exactly 2 symbol_facts rows (no orphan/dup)' ($after.TOTAL -eq 2)
   Check 'DB: no orphan symbol_facts rows post-reindex'          ($after.ORPHANS -eq 0)
+
+  # --- rename DoWork: the old declaration goes away, so its row and, by the ---
+  # --- cascade, its symbol_facts row must go with it.                       ---
+  $src = Get-Content $target -Raw
+  $src = $src -replace '\bDoWork\b', 'DoWorkRenamed'
+  [System.IO.File]::WriteAllText($target, $src, [System.Text.Encoding]::ASCII)
+  & $exePath index $target --db $db 2>$null | Out-Null
+  Check 'reindex after the rename exits 0' ($LASTEXITCODE -eq 0)
+  $renamed = Get-Snapshot 'DoWorkRenamed'
+  Check 'DoWorkRenamed: symbol found with a Present facts row'  (($renamed.SYMID -ge 0) -and ($renamed.PRESENT -eq 1))
   Check "OLD id's symbol_facts row is GONE (ON DELETE CASCADE fired)" (-not (Has-SymId $oldId))
+  Check 'DB: still exactly 2 symbol_facts rows, no orphan'      (($renamed.TOTAL -eq 2) -and ($renamed.ORPHANS -eq 0))
 } finally { Pop-Location }
 
 if($script:Failed){ Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

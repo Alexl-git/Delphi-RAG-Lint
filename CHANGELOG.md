@@ -5,256 +5,284 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
-### `find-callees`: where each call is, where it goes, and a suggestion
+### Resolver: the per-file caches are bounded (no version bump)
 
-- Every callee line now carries the call site (`at <file>:<line>`) and the callee's
-  location (`-> <file>:<line>`), still one line per edge; `--json` adds `line`,
-  `call_site` and `target_where`. A qname that does not exist -- `UConfig.TConfig.SaveResult`
-  for the FREE routine `UConfig.SaveResult` -- still exits 1 and now lists `did you mean:`
-  routines of the same name. Guard: `tests\autotest\run_find_callees_sites.ps1`.
+- **A whole-DB resolve no longer keeps every file it touched in memory.** The call
+  resolver preloads each caller file's symbol rows (`LoadFileRows`) and reads its source
+  lines (`LinesOf`), and both caches lived until the end of the pass: +9% peak memory on
+  ProjectA when the preload landed, about +1 GB extrapolated to a 2.24 M-symbol library
+  index. They now hold at most 64 files (`TrimFileCaches`, run by the store between two
+  refs, never inside one); a dropped file is read again on its next ref, and keeps its
+  first staleness verdict. The enum-value, parenless, member-read and write passes now
+  read refs in file order, so a file is read once per pass. Measured on the 2,218-file
+  ProjectA closure (`index --project --resolve-only`, Release, same session): peak working
+  set 1,172 -> 953 MB, private 997 -> 784 MB, 151 -> 168 s; the database is IDENTICAL by
+  `tools\measure\index_db_diff.py`, so no version constant moves (both baselines re-pinned
+  with the reason). An incremental run touches few files and never reaches the cap.
+  `DRAGLINT_RESOLVER_FILE_CACHE=<n>` overrides the cap; `DRAGLINT_PROFILE` prints a
+  `file cache:` line. Guard: `tests\autotest\run_resolver_file_cache_bound.ps1`.
 
-### Resolver (`DRAGLINT_RESOLVER_VERSION` 1.12.0 -> 1.13.0-alpha; derived rows only -- remedy `index --all --resolve-only`)
+### Changed (index speed, unchanged files are not read -- no version constant moves)
 
-- **A forward declaration no longer hides its type from the call
-  resolver.** `TFoo = class;` followed later in the same unit by `TFoo = class(...) ... end;` is
-  two `class` rows with one qualified name. The readers fold the stub, but the call resolver's
-  type-candidate map kept both, so every `X: TFoo` receiver saw two in-scope candidates and was
-  left untyped: on ProjectA `vQ.GraveParametro` bound 3 times out of 35,813 references (TAppQuery,
-  stub at line 67 of UPrimary.pas, body at line 1362). `GetTypeCandidates` now drops the stub
-  with `DRagLint.Core.ForwardStub.PairForwardStubs` itself -- the readers' own test, applied per
-  (file, qualified name) -- in memory, because the equivalent correlated SQL cost 3.9 s per calls
-  pass against 0.1 s. Edges only appear; none moves to another target. Measured on ProjectA
-  (`--resolve-only`, before -> after): call edges 161,189 -> 236,782 (+75,593, +47%), none removed,
-  none retargeted, no confidence changed; `GraveParametro` 3 -> 16,973 bound sites. Guard:
-  `tests\callresolve\run_forward_stub_type_candidate.ps1` (two real same-named classes in scope
-  still decline; a one-line class WITH heritage is still a class).
-- **A type NAME binds only to a unit the calling file can see.**
-  `ResolveTypeNameToSymbol`'s last rung -- no candidate in the caller's uses scope, exactly one
-  in the whole database -- bound that one unconditionally. A project database holds no library
-  unit, so in a unit that uses `Vcl.Imaging.jpeg`, `TJPEGImage.Create` found exactly one
-  `TJpegImage` -- SynGdiPlus's, swept into the closure by some OTHER unit -- and bound it
-  `[certain]` (field report: `find-callees UAuxHash.ComprimirJPEG`; the `.dcu` references
-  Vcl.Imaging.jpeg only). The rung now binds only when the caller's uses clause NAMES the
-  candidate's unit -- as written, or as a bare name a namespace prefix completes (`Dialogs` for
-  a project-local `Vcl.Dialogs.pas`) -- or when the caller has no uses rows at all (an `.inc`).
-  The textual names come from the new `GetUnitUseNames` / `GetFileUnitNames`, because the
-  resolved uses graph drops exactly the library units that matter here. Measured on ProjectA:
-  1,924 edges removed (1,518 of them certain) -- `Neslib.Collections` bound for
-  `System.Generics.Collections` users the bulk, then SynGdiPlus, the `UHttpInterposer.TIdHTTP`
-  interposer for units that use only IdHTTP, and `mscorlib_TLB`; none added, none retargeted.
-  Sampled removals all came from callers whose uses clause does not name the target's unit.
-  Guard: `tests\callresolve\run_type_binding_uses_visibility.ps1`.
-  Same release: a type QUALIFIER is now a constraint rather than noise. The qualifier was
-  stripped before the lookup and the receiver rung passed only the last segment, so
-  `Vcl.Imaging.jpeg.TJPEGImage.Create` could bind SynGdiPlus's TJpegImage in a unit that used
-  both. What was written must now be a segment-aligned suffix of the candidate's qualified name
-  -- `uLibA.TWidget` and a nesting qualifier `TOuter.TInner` alike. Guard:
-  `tests\callresolve\run_type_qualifier_honoured.ps1`.
-- **Overloads with overlapping arity are told apart by the call's LITERAL
-  arguments.** `PickFromMatches` judged arity alone, and optional parameters make two overloads'
-  ranges overlap, so every such call was `[ambiguous]` -- 16 of ProjectA's 22 `GetReportPDFBase64`
-  callers (field report). `ArgsRuleOut` now rules a candidate out when a string, Boolean or
-  numeric literal meets a BUILTIN parameter of another family, or any literal meets a `var`/`out`
-  parameter; unknown types and non-literal arguments never rule out. The argument texts come
-  from `CallArgTexts`, the scan `CountCallArgs` now returns the length of, and live for one
-  `ResolveOne` call only. One survivor is `certain`; several narrow the ambiguous guess to the
-  first survivor. Measured on ProjectA: 244 edges ambiguous -> certain on the same target, 14
-  ambiguous -> certain on the other overload (e.g. `HP_NomeVariavel(S1, True)` had bound to
-  ITSELF, the `(S1, S2: String)` overload), 51 ambiguous edges narrowed to another overload, no
-  certain edge changed; all 22 `GetReportPDFBase64` callers are now certain. Guards:
-  `tests\callresolve\run_overload_literal_args.ps1`; `run_overload_arity.ps1`'s same-arity
-  control now calls with a VARIABLE (still ambiguous) and asserts that the string LITERAL picks
-  the string overload.
-- **A receiver that is a VALUE in scope types: unit-level vars, inherited fields,
-  value-headed chains.** `TypeReceiver` typed a bare receiver from a local or parameter, then a
-  member declared ON the enclosing class, then a type name -- never a unit-level var
-  (`FMain.Refresh`, `DM.Commit`: how Delphi code reaches its forms and data modules, and the
-  evaluation's largest source of missing callers), a field the class inherits, or a chain whose
-  head is a value (`FMain.QM.GetQuery`, `Self.FList.Open`), which the dotted rung read as a
-  qualified TYPE. The receiver rungs now use `TypeOfValueName` -- the same rungs the `with` path
-  already typed bare names with: local/parameter, enclosing-class chain member, exactly one
-  visible unit var -- and a value-headed chain walks `TypeOfMember` segment by segment. A value
-  shadows a type of the same name, as in Delphi. Measured on ProjectA: +32,957 edges (30,312
-  certain), none removed, none retargeted; the top receivers are `FMain` (9,114) and `FMain.QM`
-  (8,171), then report and data-entry globals (`RD`, `QREL`, `DE`). Guard:
-  `tests\callresolve\run_value_receiver_typing.ps1` (a local shadows the global; two visible
-  vars of one name decline).
-- **Source lines are read in the coordinates refs are stored in.** A ref's
-  column is 1 + a BYTE offset into the UTF-8 buffer the indexer parsed (`EnsureUtf8Bytes`, then
-  `NormalizeLoneCR`), but `LinesOf` decoded the file as ANSI -- one character per accented letter
-  where the column counts two bytes. In CP1252 (Portuguese) source every accented letter earlier
-  on a line pushed the call one character further than the column said, so the receiver scan read
-  the wrong text. `LinesOf` now builds its lines from the indexer's own buffer, one byte to one
-  character; the staleness probe still hashes the ANSI text. Measured on ProjectA: +585 edges (all
-  certain) and 8 removed -- each a wrong bind the misread column had made (after
-  `'Iniciando retificacao ...'`, the enum value `ELogKind.log` had bound to the method
-  `TPartnerWS.Log`; after `'Numero de errors: '`, `FErrorList.Count` to the class's own
-  `getCount`). Guard: `tests\callresolve\run_ansi_line_columns.ps1`, whose fixture is written as
-  CP1252 bytes.
-- **`--library-db` answers calls on VALUES, inherited members included.** The
-  cross-DB rung offered the library the receiver TEXT as a type name, so `vQ.Open` with
-  `vQ: TFDQuery` asked for a type called `vQ`; only a receiver that was itself a type name could
-  ever be answered. It also searched only the type's own members, so a method the type inherits
-  (TFDQuery.Open is TDataSet's) was never found. A value receiver is now looked up by its declared
-  type (`FindValueSymbol`, shared with the local rungs), the member on that type and then its
-  ancestors in the library store, nearest level first; several library types of one name
-  (`TList`) are told apart by the caller's uses. `refs.external_target` values appear; local edges
-  never move. Not measured on ProjectA, which has no library index configured. Guard:
-  `tests\callresolve\run_library_db_value_receiver.ps1`.
-- **A project index resolves a bare `uses` name through the project's own unit
-  scope names.** `uses Dialogs` in a VCL project means `Vcl.Dialogs`, and ProjectA keeps a local copy
-  of `Vcl.Dialogs.pas`; but rule B of `ResolveUnitUseTargets` infers a scope prefix only when one
-  indexed stem carries the name AND it is not a GUI framework -- it cannot know which framework a
-  project uses -- so the row stayed NULL. A project-scoped `index` now records the `.dproj`'s
-  `DCC_Namespace` (the four MSBuild groups, in dcc's search order) in `schema_meta`, and a new rule
-  C tries each prefix in order before rule B. It is the project's setting, not an inference, so the
-  GUI refusal does not apply; a library index records no list and is unchanged. Remedy: a project
-  `index` run (the list is written by a scope-establishing run, not by `--resolve-only`). Guard:
-  `tests\autotest\run_unit_uses_project_namespaces.ps1`.
-- **A call inside a routine NESTED in a method binds to the method's class.**
-  `TypeReceiver` typed the implicit receiver of a bare (or `Self.`) call as the enclosing symbol's
-  parent -- the class for a method, but the outer ROUTINE for a nested one, which owns no class
-  method. `_Read` inside `TWSPartner.ExportResults` calling `GetValorTag` bound to nothing, while the
-  same call in a `TWSPartner` method came out `[certain]`. It now takes the owner of the OUTERMOST
-  routine (`EnclosingClassChainDeclares`, whose header had named this defect), after the lexical
-  chain, so a nearer nested routine of the name still wins and a routine nested in a free one still
-  reaches the unit-level rung. Measured on the test bases (same sample, same ground truth):
-  TestCopy recall 93.7% -> 95.9%, ProjectB 75.2% -> 76.4%, precision unchanged, no hit lost; the
-  whole TestCopy database gains 851 edges, loses none, and RETARGETS 17 -- every one a call
-  from a nested routine of `TX.M` to a name `TX` declares as a method that had bound to a same-named
-  free routine of a used unit (`TFEDITC.ShowError` over `UHELPERS.showerror`), which the compiler never
-  picks inside the class. Remedy: `index --all --resolve-only`. Guard:
-  `tests\callresolve\run_nested_routine_reaches_class.ps1`.
-- **Overloads of one arity are told apart by a VARIABLE argument's declared type.**
-  The literal-argument choice above read only LITERAL arguments, so `LoadImage(aSource, vBitMap)` -- three overloads of two
-  parameters that differ only in the second (`TBitmap` / `TJPEGImage` / `TPngImage`) -- stayed
-  `[ambiguous]`. When arity and literals leave several candidates, an argument that is a plain
-  identifier the value rungs place (`FindValueSymbol`: local, parameter, class-chain member, the one
-  visible unit var) and that no `with` target can claim is typed from its declaration; the overload
-  whose exact-type matches strictly contain every other candidate's wins, `[certain]` -- Delphi's
-  preference for an exact match over a conversion. A tie, a split or no typed argument stays
-  ambiguous. On TestCopy: 0 edges added or removed, ambiguous edges 5,974 -> 4,901 (772 become
-  certain on the same target, 301 move to the overload the argument types name -- sampled and
-  checked in source, e.g. `ajcod(vDiasIdade, 2)` with an Integer local now reaches
-  `ajcod(Value: Integer; ...)` instead of the `String` one); ProjectB 948 -> 802. `ArgsRuleOut` reads
-  its parameters through the new `SignatureSlots`, unchanged in behaviour. Two controls that pinned the
-  old limitation now assert the compiler's choice. Remedy: `index --all --resolve-only`. Guard:
-  `tests\callresolve\run_overload_arg_types.ps1`.
-- **A free routine exported by two used units binds to the
-  unit whose uses entry comes LAST, as in Delphi.** `LookupUnitLevelRoutine` gathered every used
-  unit's candidate and, when arity could not choose, answered `ambiguous` with the FIRST unit's; the
-  compiler binds the later one (the implementation uses clause after the interface one, the later
-  unit within a clause). On ProjectA `UFSummaryReport` calls `SiteOnline` with `UAuxGeneric` at
-  :664 and `UAuxSupport` at :668, and the edge went to `UAuxGeneric` -- so `impact` on the real target
-  missed the caller. The rung now keeps the last-listed unit's candidates (`GetUnitScopeEdges` returns
-  each file's targets in source order); an `overload` set across units stays `ambiguous`, since
-  Delphi resolves it by signature. Measured on the TestCopy test repo (`--resolve-only` of the same
-  parse): 331 edges `ambiguous` -> `certain`, 74 of them retargeted (e.g. `UConfig.pas:6912 StrIn`
-  `UAuxGeneric` -> `UPrimary`, uses lines 38 vs 72); no `certain` edge changed, none added or lost;
-  callers benchmark identical (91.5% / 100% on today's sample, 240/249 on the 70 targets shared with
-  the 2026-09-30 run, as then). Guard: `tests\autotest\run_resolve_uses_order_precedence.ps1`.
-- **The project file's `in` names the unit's file.**
-  `ResolveUnitUseTargets` mapped a used-unit name to a `.pas` by stem alone, and with two indexed
-  copies the LAST path read won: a `DCCReference` to another copy, or a copy indexed into the same
-  database (on ProjectA an orphan `UErrors.pas` under `D:\Components`, which sorts after
-  `D:\WorkRepo`), took every `uses` of that unit, and `find-callers --resolved` went
-  silently empty for the real copy's routines. Rule D: a `.dpr`/`.dpk` `UFoo in 'path'`, resolved
-  against the project file's folder, names the target of every `uses UFoo` in the database; two
-  project files that disagree settle nothing. The resolve log says how many names it settled. On the
-  TestCopy test repo (a clean closure) it confirms 1,308 names and changes no `unit_uses` row and no
-  edge. Guard: `tests\autotest\run_unit_uses_in_path_wins.ps1`.
-- **A call with no routine around it is a caller.**
-  Two halves. (a) `TypeReceiver` gave up on a ref with no enclosing routine, and the unit-level value
-  set never held a `.dpr`'s own var section (the program has no symbol, so its vars have no parent):
-  `W.Run` in a program's `begin..end.`, with `W: TWorker` declared in the program, formed no edge. It
-  now skips only the rungs that need a routine and types the receiver from the file (program or
-  unit var, cast, type, chain); `GetUnitLevelValueDecls` includes a `.dpr`/`.dpk`'s parentless
-  var/const. (b) Read side, no derived row: `callgraph --direction callers`, `reverse-calltree` and
-  `butterfly` follow callers by routine and dropped every site without one; they now list it as a
-  leaf `(outside any routine) <file>:<line>` that navigates to the call (JSON `outside_routine`), and
-  `impact` adds `plus N call site(s) outside any routine` (JSON `outside_routine` per level). On the
-  TestCopy test repo: 18 edges added, all `certain`, all from initialization sections; none lost or
-  changed. Guard: `tests\autotest\run_calls_outside_routines.ps1`.
-- **An `ambiguous` guess no longer depends on id order.**
-  When nothing could choose between candidates, `PickFromMatches` named the first of the list,
-  i.e. the lowest symbol id -- an accident of indexing order. Re-parsing `UPrimary.pas` without
-  changing a byte moved 267 ambiguous `strin` edges to another unit, so an incremental database and
-  a `--rebuild` one differed. `LookupUnitLevelRoutine` now orders its candidates by (qualified name,
-  start line, signature) before picking; the edge is still marked `ambiguous`, and
-  `GetUnitLevelRoutines` carries `qualified_name` and `start_line` for it. A METHOD's candidates
-  keep their hierarchy order (own member before an ancestor's), which is the right guess -- a
-  first version that sorted those too bound `B.TransferFile` to an ancestor interface and was
-  caught by `run_doc_covered_by_dispatch.ps1`. On the TestCopy test repo no edge changes against the
-  #20 state (after #21 the unit-level ties left there were already in this order). Guard:
-  `tests\autotest\run_ambiguous_pick_stable.ps1` (the same sources indexed in two orders).
+- **A file whose write time and size match its row is taken as up to date without reading it.**
+  The up-to-date test compares the stored SHA, so every run read and hashed every file of its
+  scope: 1.3 s of a nothing-changed run over the 2,218 files of the TestCopy ProjectA closure.
+  `files` gains a `size` column (added by `Migrate`), the byte count of the content the row
+  describes, and the walk checks time and size first; a row without a size (an older database)
+  takes the full test once and is filled. Walk of a nothing-changed run 1.36 s -> 0.25 s;
+  scenarios (base database with sizes and the closure cache): nothing changed 4.8 s -> 3.7 s, one
+  changed unit (`UFEditA.pas`) 10.6 s -> 9.9 s. IDENTICAL by `index_db_diff.py`. A rewrite that
+  keeps both the second and the byte count is the one change this does not see -- the rule make
+  and git's index use. `tests\autotest\run_index_stamp_fast_path.ps1`. `tools\perf\scenarios.ps1`
+  now also clears the size of the files it forces stale, so they still take the SHA test.
+
+### Changed (index speed, the compile closure is cached -- no version constant moves)
+
+- **`index --project` keeps what the compile-closure walk read out of each unit.** The walk read
+  and preprocessed every unit of the project on every run to learn uses clauses that almost never
+  change. The uses and include names of each unit now go into the new table `closure_cache`,
+  stamped with the unit's write time and size and recorded under the define profile
+  (`schema_meta closure_cache_fp`); the next walk reads a unit again only when its stamp or the
+  profile changed. Closure step on the 2,222-file TestCopy ProjectA project 3.1 s -> 1.3 s;
+  scenarios (base database with the cache): nothing changed 5.5 s -> 4.8 s, one changed unit
+  12.6 s -> 10.6 s, ten 70.6 s -> 50.3 s. IDENTICAL by `index_db_diff.py`, which now skips the
+  cache table and its key. `DRAGLINT_NO_CLOSURE_CACHE=1` walks cold. `tests\autotest\
+  run_closure_cache.ps1` (cached and cold closures agree; an edited uses clause brings a new unit
+  in; a cache under another profile is dropped). A unit rewritten with the same size inside the
+  same second keeps its old row -- the same stamp rule the up-to-date check of the walk uses.
+
+### Changed (index speed, a scoped purity pass reads only its scope -- no version constant moves)
+
+Same scenarios, same base database: one changed unit (`UFEditA.pas`) 15.7 s -> 12.6 s, a small
+form (`UFEditI.pas`) 14.8 s -> 10.0 s, nothing changed 6.5 s -> 5.5 s; the purity stage of the
+one-unit run 8.0 s -> 2.6 s. IDENTICAL by `index_db_diff.py` (one and ten units).
+
+- **Call edges and member accesses are read for the scanned files only.** A scoped pass scans the
+  routines in scope and only the refs of their files, yet loaded both whole tables first (1.8 s).
+  They are now read after the scope is known, for those files (`ISymbolStore.DumpCallEdgesInFiles`
+  / `DumpMemberAccessesInFiles`); a whole pass still reads everything.
+- **Params and locals are read for the routines that get a context.** A context is built only for
+  a routine in scope, from its own params and locals and its enclosing routines'; a scoped pass
+  with up to 2,000 such parents asks for their children instead of the 93k rows of both kinds
+  (1.4 s).
+- **The reverse call graph is asked per routine the closure visits.** The closure over callers
+  read all 116k (caller, target) pairs (0.8 s) to visit a few dozen routines; it now asks
+  `ISymbolStore.CallerRoutinesOf` per dequeued routine and reads the whole graph only past 1,000
+  asks. The set it marks does not depend on the order.
+
+### Changed (index speed, fixed costs of an incremental run -- no version constant moves)
+
+Measured with `tools\perf\scenarios.ps1`, same base database, against the P2 exe: one changed unit
+23.2 s -> 15.7 s, nothing changed 9.2 s -> 6.5 s, ten units 77 s -> 73 s. IDENTICAL by
+`index_db_diff.py`.
+
+- **The per-file lookups of `files` use an index.** Up-to-date, re-stamp, fingerprint, upsert and
+  file-id lookups matched `path = :p OR LOWER(path) = LOWER(:p)`; the OR made SQLite scan `files`
+  once per lookup -- 2,218 x 2,218 rows on every run, 3.3 s of a nothing-changed run and 7.5 s once
+  a write transaction was open. They now say `LOWER(path) = LOWER(:p)` (the first branch implied
+  the second), answered by the new expression index `idx_files_path_lower`, which `Migrate` adds
+  to existing databases on their next open. The walk over 2,221 unchanged files: 7.5 s -> 1.3 s.
+- **The scoped call pass evaluates its scope once.** Each of its streams combined the two-term
+  scope predicate with its own `IN` list, which the planner answered at ~1 s per stream even for
+  a 164-ref scope. The scope's ref ids now go into `temp.dl_scope_refs` and every statement looks
+  them up by rowid: `calls` for one small form 3.3 s -> 1.0 s.
+- **`helpers` reads only the symbols a helper targets** instead of all 226,438: 1.5 s -> 0.1 s.
+  Which candidate wins never depended on their order.
+- **`DRAGLINT_PROFILE` times the whole run.** `INDEX PHASES` (stderr) gives the seconds of opening,
+  the define profile, the closure, the walk, the batch commit, the sweeps, the global stages,
+  calls + purity and the closing stamp; `INDEX WALK` splits the walk into files left as they were
+  and files parsed; the purity line splits its scope step. Stdout timestamps could not do this: a
+  redirected stdout is block-buffered.
+
+### Changed (index speed, symbol ids survive a re-parse -- no version constant moves)
+
+Measured with `tools\perf\scenarios.ps1` (which now warms each database copy first -- see below),
+TestCopy ProjectA closure, Release exes, same starting database, against the deployed exe of
+2026-10-14: one changed unit 72 s -> 23.2 s (the old exe's `calls` swung 23-39 s between runs; P2
+gives 23-25 s every time), ten changed units 421 s -> 77 s, nothing changed 9 s either way. Both
+databases are IDENTICAL to the old exe's by `tools\measure\index_db_diff.py`.
+
+- **A re-parsed file keeps the ids of the declarations that come back.** A re-parse deleted every
+  symbol of the file and inserted it again: new ids, and the FK cascade dropped every call edge,
+  member access and ref binding other files held into the file, so the scoped call pass had to
+  re-resolve every ref anywhere named like anything the file declared -- 4,403 refs for an edit
+  inside one routine of `UFEditA.pas`. Now `OpenFileTx` keeps the rows and reads them by natural
+  key (kind, name, qualified name, signature, occurrence), `UpsertSymbol` claims the matching row
+  (writing only what moved: nothing, the position columns, or every column), and the rows nobody
+  claims are deleted at commit with the cascade doing what it always did. A name enters the
+  resolve scope only when its declaration is new, gone, or changed in a way another file's binding
+  can see (modifiers, section, heritage, directives, visibility, accessor, generic parameters,
+  parent, or -- inside an overload group -- its line). The same edit now re-resolves the file's own
+  1,710 call-site refs: `calls` 3.3 s. Docs and facts of a kept row are cleared and re-emitted as
+  the cascade used to; `type_ancestors` and `type_helpers` are rebuilt by their stages as before.
+  `tests\autotest\run_symbol_reuse.ps1` (body edit keeps every id, a rename and a new overload
+  still match a whole-database pass).
+- **Fixed: a type whose heritage changed under the same name kept its members' old call edges**
+  (found while writing the guard above; present in the old exe). `TLib = class(TBase1)` edited to
+  `class(TBase2)`: a scoped pass left `Lib.Shared` bound to `TBase1.Shared`, while a whole-database
+  pass binds `TBase2.Shared` -- no name in the scope covered refs routed through the type. The
+  scoped pass now declines to the whole database for that run and says which type moved
+  (`the heritage of TLib changed, which moves calls made through it`).
+- **`tools\perf\scenarios.ps1` writes to each fresh database copy once before timing it.** The first
+  checkpoint into a freshly copied 500 MB file stalls about 20 s on the measuring machine (2 pages,
+  19.4 s, measured outside drag-lint; the second checkpoint is instant). It landed on whichever run
+  wrote first, which is why the P1 figures above, and the old exe's, were 20-40 s high in places.
+
+### Changed (index speed, incremental runs -- no version constant moves)
+
+Measured with `tools\perf\scenarios.ps1` on the TestCopy ProjectA closure (2,218 files),
+Release exes, the same starting database: one changed unit (`UFEditA.pas`) 47.7 s -> ~34-39 s;
+ten changed units 455 s -> ~120 s; nothing changed ~9 s (unchanged). Every database the new exe
+wrote is IDENTICAL to the old exe's by `tools\measure\index_db_diff.py`, both FTS5 indexes
+included. Identical runs vary by about 5 s on the measuring machine.
+
+- **An incremental `index` patches the two text-search indexes instead of feeding them row by
+  row.** `string_fts` / `string_fts_tri` were kept in step by triggers for the first 16 rewritten
+  files of a run. FTS5 flushes a segment at every statement boundary and each trigger firing is a
+  statement of its own, so every string literal became a one-row segment for the automerge to fold
+  into the 34 MB trigram index: 45 s for `UFEditB.pas` alone (16,103 literals), 259 s of
+  `literals` plus 73 s of `open-tx` for ten form units. The run now always drops the triggers,
+  records each deleted literal and each rewritten file in two temp tables, and closes with one
+  `'delete'` and one insert per index -- 3.9 s for the same ten units. A bulk load into an empty
+  table, or more than 150,000 changed rows, still rebuilds. The run prints which it did
+  (`resolve: fts  patched ...` / `rebuilt ...`). `tests\autotest\run_fts_targeted_patch.ps1`
+  compares the patched indexes with a rebuild (fts5vocab instance rows) and runs FTS5
+  `integrity-check`.
+- **The scoped call pass no longer widens through the changed file's params and locals**
+ . It re-resolves the refs of the rewritten files plus every ref
+  elsewhere named like a symbol those files declared, and that set included each `param` and
+  `local_var`. A ref in another file cannot bind to either -- 0 such bindings among ~93k of them on
+  ProjectA -- but a local `Text` and a param `SQL` pulled 37,014 refs from 1,936 files into a
+  one-file pass; it is now 4,403. `tests\autotest\run_scoped_resolve_locals.ps1`.
+- **The purity stage reads classes and heritage once instead of once per class.** `DetermineScope`
+  looked up each routine's container and each class's transitive ancestry through the store, a
+  query per container and per hop. `TPurityRun.Load` now preloads the container symbols and every
+  `type_ancestors` row (new `ISymbolStore.DumpDirectAncestors`) and replays
+  `GetTransitiveAncestors`' walk in memory; an unresolved edge goes through the store's own late
+  resolution, now `ISymbolStore.LateResolveAncestor`, so the two walks share the code and the memo.
+  `DRAGLINT_PURITY_CHECK_ANCESTORS=1` compares every replay with the store's walk: 0 of 2,555
+  classes differ on ProjectA. `DetermineScope` 4.3 s -> 2.4 s. The `DRAGLINT_PROFILE` purity line
+  now splits the load by table and shows the scope step on its own.
+- **`tools\perf\scenarios.ps1`**: the index-speed yardstick -- full rebuild, nothing changed, one
+  and ten files forced stale on a copy of the database (no source is written), with the stage
+  table of each run.
+
+### Resolver (`DRAGLINT_RESOLVER_VERSION` 1.13.0 -> 1.14.0-alpha; derived rows only -- remedy `index --all --resolve-only`)
+
+- **The index-speed work.**
+  Symbol ids survive a re-parse and the scoped call pass widens only through declarations that are
+  new, gone or changed; the scope is evaluated once; a scoped purity pass reads only its scope; a
+  type whose heritage changes under the same name declines the scoped pass (backlog #54: such a
+  pass left `Lib.Shared` bound to the OLD ancestor). Whole-database results are unchanged
+  (`index_db_diff.py` IDENTICAL on the TestCopy scenarios); the bump makes every database
+  re-derive its edges once on its next `index` (~3 min on ProjectA), which also drops any edge a
+  pre-#54 scoped pass left stale. The details are in the four `Changed (index speed ...)` sections
+  below. `tests\resolver-surface.txt` gains the store readers the scoped purity pass now uses.
+- **A purity WITNESS is canonical: the same rows whether the stage ran whole or
+  scoped.** `effect_witness` named "the first change in queue order", which depended on which callees
+  were still growing when a routine was visited, and plain call order made the members of a call
+  cycle point at each other (`A1 -> "calls B1"`, `B1 -> "calls A1"`, `run_purity_stage` check 9) so
+  the chain never reached the write that caused it. The witness is now re-derived after the fixpoint,
+  per strongly connected component of the call graph: the routine's own local effect, else a
+  contributing callee OUTSIDE its component in call order, else the in-component callee nearest a
+  source (BFS). The chain strictly descends and ends at a real write. `effect_free` and the summary
+  flags do not change -- only the wording of some witnesses. The scoped stage (Changed, below)
+  depends on it. Remedy: none by hand; the next `index` of each database re-derives edges and
+  verdicts once (minutes: 144 s on ProjectA). Guard:
+  `tests\autotest\run_purity_scoped_matches_full.ps1`; `run_purity_stage` check 9.
+
+### Changed
+
+- **The purity stage of an incremental `index` re-derives only what the change can reach.** On
+  ProjectA (2,227 files, 36,027 routines) it took 30.8 s of a 101 s one-form incremental, 29 s of it
+  loading and scanning every routine, while the verdicts that CAN move were 155. After a call pass
+  that ran scoped on the same store, the stage now re-derives the routines of the rewritten files;
+  the routines enclosing a ref whose binding the pass CHANGED (the pass snapshots the scope's old
+  `call_edges` / `member_accesses` rows before its DELETE and diffs them both ways -- the refs it
+  merely re-reads include every `Create` / `Free` of the corpus, 23,607 routines for one form); the
+  methods of classes whose own file, or an ancestor's file or name, is in the scope; all closed over
+  the reverse call graph, plus the same-named methods of descendants for a bare `inherited;`. Every
+  other routine keeps its stored verdict and is not rewritten. A whole call pass, `--rebuild`,
+  `--resolve-only` or `DRAGLINT_NO_SCOPED_PURITY=1` run the whole stage. The `resolve: purity` line
+  says `scoped to N routine(s) in M file(s)`. Acceptance, scoped against whole from the same database
+  copy: `UFEditA` 155 routines, 32.9 s -> 9.5 s; `UFSummaryReport` 306, 32.7 s -> 10.4 s; `ULib` (the
+  most-used unit) 14,259, 32.2 s -> 28.1 s; 0 of 36,027 `symbol_facts` rows differ in each. What is
+  left in the typical case is the ~8 s load, which still reads the whole database. Needs the
+  canonical witness (resolver 1.19.0-alpha, above). Guard:
+  `tests\autotest\run_purity_scoped_matches_full.ps1` (global write, a base method reaching a bare
+  `inherited`, a deleted callee, a new routine, a field removed from a base class; controls that the
+  run limited itself and that each edit moved a verdict).
+- **Index throughput, full run 2,153 s -> 794 s, identical database.** FTS5 triggers deferred and
+  rebuilt once on a bulk load; a per-file line -> containing-symbol map replaces one SELECT per
+  string literal; file batches commit through savepoints (256 files or 5 s) instead of once per
+  file; six missing FK child indexes (`--rebuild`'s clear 1,314 s -> 80 s); per-file and per-class
+  caches in facts; `ChildrenNamed` / `HelpersOf` / `UnitNameToFileId` memos in the resolver.
+  `tools\measure\index_db_diff.py` is the natural-key diff that proved the output unchanged. Both
+  version guards re-pinned, neither constant moved.
+- **Incremental `index`, one changed file 121.6 s -> 72.5 s; unchanged run 14.4 s -> 10.4 s; whole-DB
+  `calls` 283 s -> 91 s; identical database.** Measured on ProjectA (2,224 files, Release, one
+  widely used unit re-parsed; the commit alone swings 2-12 s between identical runs on that
+  machine). Where the time went, and what replaced it:
+  - `GetSymbolById` built and prepared a `TFDQuery` per call (~0.5 ms; purity asked 19,766
+    times). It now reuses one prepared statement.
+  - Row readers paid `FieldByName` -- a lower-case plus a dictionary probe -- per column per row:
+    `TSymbolRowReader` looks the fields up once per open query, in every symbol-read loop; the
+    refs and edge dumps do the same.
+  - Purity: its symbol cache is seeded with the routines it already loaded, a class's children
+    are read once instead of twice per descendant, and the scan reads `GetRoutineRefsFromFile`
+    (the four kinds and seven columns it uses) instead of every ref column. 53 s -> 31 s.
+  - The call resolver reads each file's symbols once (`GetSymbolsOfFile`) and answers
+    `SymbolById` / `ChildrenOf` from them; `WriteScopeOf` goes through the resolver's row
+    caches instead of the store (write stream 7.9 s -> 0.7 s); the member-access guard takes
+    the target's kind from the cache and the co-located-call test from each file's call
+    positions, read once (4.7 s -> 0.9 s; 118.8 s -> 1.6 s on the whole-DB pass).
+    `FindAllChildSymbols` orders `start_line, id`, the tie order it already returned on all
+    40,941 ProjectA parents.
+  - The compile closure memoizes `FindUnitFile` per name for one resolve (`--dry-run` 8.4 s ->
+    3.2 s, listing byte-identical).
+  - `DRAGLINT_PROFILE` now splits purity's load (contexts) and scan (refs, source), and the
+    `calls` stage by stream (prescan, delete, calls, enum-values, parenless, member-reads,
+    writes, commit).
+  Proof: `tools\measure\index_db_diff.py` IDENTICAL against the old exe for the one-file
+  incremental and for a whole-DB `--resolve-only`. The price is memory: the whole-DB resolve
+  peaks at 1,151 MB against 1,054 MB (+9%), the per-file rows the resolver now keeps. Both version
+  guards re-pinned, neither constant moved.
 
 ### Fixed
 
-- **Call trees show the call site downward too, and stop presenting guesses as resolved edges**
-  (no version constant moves). `reverse-calltree --direction callees` (and
-  butterfly's callees wing) printed `"site": ""` for every node; the site is now the parent's file and
-  the line of its FIRST call to the child, read from `refs.start_line` (`TCallEdge.CallLine`, read
-  side only). `file`/`line` still name the child's declaration -- the IDE plugin navigates there --
-  and the JSON envelope gains `"direction"`, since the children sit under `callers` either way.
-  `callgraph`, `reverse-calltree`, `butterfly` and `impact` dropped the edge confidence, so an
-  `ambiguous` edge, which can point at the wrong unit, looked exactly like a certain one in trees
-  documented as "resolved". A node reached only by a guessed edge is now marked `[ambiguous]` in
-  text, `"confidence"` in JSON, dashed in dot (`style=dashed`) and mermaid (`-.->`); a target reached
-  by any certain edge stays certain. `impact` adds `of which N reached only through ambiguous edges`
-  (JSON `ambiguous_only` per level) -- on ProjectA, 20 of the 77 callers of `UConfig.SaveResult` within
-  depth 3. Trees of certain edges print as before. Guard:
-  `tests\autotest\run_tree_sites_and_confidence.ps1`.
-- **`context` on an overloaded routine carries every overload's body** (no
-  version constant moves). The impl slice took `Syms[0]` only: on ProjectA `modify
-  UFSummaryReport.TSummaryPrint.ImportItems` showed the 6-line wrapper and left out the overload it calls,
-  where the work is, with nothing saying another body existed. `GetSymbolSlice` now emits the
-  recorded span of each overload in the file, in source order (so `slice` gains it too); the
-  markdown header says `OVERLOADED: <qname> names N routines` and the JSON summary carries
-  `"overloads"`. Guard: `tests\autotest\run_context_overload_bodies.ps1`.
-- **`find-callees` names the overload on both ends of an edge**. The callees of
-  every overload were unioned with nothing saying which overload an edge left from or reached, so a
-  wrapper overload calling its sibling listed the routine as a `[certain]` callee of itself. With
-  more than one overload the text prints a header per overload (signature and `file:line`), a call
-  to an overloaded target is suffixed `-> overload <signature> (<file>:<line>)`, and the JSON adds
-  `from_signature`/`from_where` and `target_signature`/`target_where`. A unique routine calling
-  unique targets prints exactly what it did. Guard: `tests\autotest\run_find_callees_overloads.ps1`.
-- **`impact` counts the routines that reach the target over the RESOLVED call graph** (no
-  version constant moves). It matched refs by NAME TEXT and took as the caller every symbol whose
-  DECLARATION range held the ref's line -- for a ref inside an implementation body, only the unit's --
-  so level 1 counted the units that mention the name, and level 2 followed refs to those unit names,
-  i.e. their `uses` clauses. On ProjectA `impact --qname UConfig.SaveResult` printed 21 callers, then 7 at
-  depth 2; the resolved graph has 22 direct callers and 30 more at depth 2. The walk now follows
-  `call_edges` from every overload of the qname (a bare name: every routine of that name), counts
-  each caller once at its shortest depth, and the text output ends with the total. `usages`, the
-  `context` impact summary (`refactor` / `delete` tasks), the LSP and the MCP `impact` tool read the
-  same walk. Guard: `tests\autotest\run_impact_resolved.ps1`.
-- **`context` lists the call sites bound to the routine, not every ref spelled like its last name
-  segment** (no version constant moves). For `context --task "modify UConfig.TConfig.Report"` on
-  ProjectA the bundle filled its caller cap from 663 `Report` refs -- `aRD.Report.Headless`, a
-  property of another class, first -- against 103 sites bound to that method, and it listed some
-  sites twice. For a routine with resolved call sites (every overload of the qname) only those are
-  kept, once each; a routine the call graph binds nothing to keeps the name list. Guard:
-  `tests\autotest\run_context_resolved_callers.ps1`.
-- **A unit the project names is that file for every unit that uses it.** The closure walk
-  resolved each `uses X` by searching the path, first hit wins, so a same-named COPY in another
-  folder on the path entered the closure beside the file the `.dpr` names -- dcc never searches
-  for a unit the project lists, so the copy is not compiled, but it was indexed and every by-name
-  lookup of its symbols saw two candidates. `TClosureResolver.Resolve` now records the project's
-  own unit -> file bindings (DCCReference, then the `.dpr`'s `in` paths, which win) and consults
-  them first. ProjectA's closure goes 2,249 -> 2,226 files: `Fun_Helpers`, `UTextUtil` and friends
-  from `D:\TEST_REPO_2\_SharedUnits`, the base forms of `R04Lib\source\Forms` the project replaces
-  with its `_lib_forms` copies, and `UWSPartnerC` / `UWSPartnerB` it takes from `SharedUnits\apoiado`. No
-  parse changes, so no version constant moves -- but copies in a folder no remaining closure file
-  shares are outside every eviction root, so run `index --project <x.dproj> --rebuild` once.
-  Guard: `tests\autotest\run_closure_project_unit_wins.ps1`.
-- **`wiring --qname TForm` lists only the DFM bindings that reach THAT form.**
-  `FindEventHandlersForForm` returned, for each method of the form class, every `event-binding`
-  of the same NAME in any DFM -- two dialogs that both have a `btnOKClick` each owned the other's
-  binding, and on ProjectA TFSavePrompt reported 911 handler bindings, 12 of them its own. Now only
-  the form's paired `.dfm` is admitted, plus a DESCENDANT form's paired `.dfm` (an `inherited`
-  form binding the ancestor's handler) unless that descendant declares its own method of the
-  name. The MCP `get_wiring` tool reads the same function. Guard:
-  `tests\autotest\run_wiring_form_scoped.ps1`.
+- **An `index` run killed between its file commits and its call pass no longer leaves the database
+  short for good.** A run commits parsed files in batches and derives their call edges at the end,
+  in one later transaction. Killed in between -- Ctrl+C, a closed terminal, a supervisor reaping a
+  background job -- it left files up to date on disk whose refs no pass ever resolved, and the next
+  run, finding nothing to parse, printed `calls -- skipped, no file changed, so every call edge
+  already holds` and kept the gap on every run after it (`CallEdgesNeedRebuild` sees only an EMPTY
+  table). Found on the daily ProjectA index: 87,571 of 269,823 edges (32%) had been missing since
+  2026-10-01 -- 0 retargeted, 0 extra. 553 of the 593 files that lost edges had been parsed in one
+  hour that day and kept 37% of their edges, against 100% for every file parsed before or after; the
+  resolver 1.19.0 re-derive put them back. Reproduced on a copy with the previous exe: killed as `stage: calls` began, the next run
+  skipped and stayed 31,905 edges short. Now the debt is recorded where the writes are:
+  `schema_meta.calls_pending` is written inside the transaction of a run's first write (a file, an
+  eviction, a clear) and deleted in the commit of the call pass; a run that finds it set takes a
+  whole-database call pass (`... whole database because an earlier run wrote files and stopped before
+  its call pass committed`), and with it a whole purity pass. No version constant moves: the rows a
+  completed run writes are unchanged. Guard: `tests\autotest\run_index_calls_pending_after_kill.ps1`
+  (test hook `DRAGLINT_TEST_DIE_BEFORE_CALLS`; controls that the dead run really lost the edges and
+  that the key does not stick).
+- **An incremental `index` no longer re-parses files whose date moved but whose bytes did not, and
+  a large incremental run stops paying the text index per file** (issue drag-lint#1). A
+  working-copy operation rewrote the dates of 1,138 ProjectA units without changing a byte; the
+  up-to-date test needs mtime AND sha256, so the next runs re-parsed all of them (31 min for ~600
+  files). Three changes, none moving a version constant, the stored rows unchanged:
+  a sha match under a moved mtime now only re-stamps the row (`RestampFileIfSameContent`);
+  `OpenFileTx` deletes a file's string literals BEFORE its symbols, so the `ON DELETE SET NULL`
+  cascade no longer rewrites both FTS5 indexes for rows deleted right after; and past 16 files an
+  incremental load defers the FTS5 sync triggers and rebuilds both indexes once at the end (~12 s),
+  as a bulk load already did. Measured on copies of the ProjectA index with 60 units forced to
+  re-parse, old exe then new: per-file loop 101 s -> 46 s (open-tx 18.6 -> 7.1 s, literals
+  75.9 -> 32.0 s), whole run 212 s -> 151 s, `index_db_diff.py` IDENTICAL including both FTS5
+  vocabularies; with only the dates moved, the same 60 units are re-stamped in a 10 s run. The
+  `Done.` line now says how many files were parsed and how many were only re-stamped. Guard:
+  `tests\autotest\run_index_restamp_same_content.ps1`.
 
 ## v1.31.1-alpha -- 2026-10-14
 
