@@ -84,3 +84,16 @@ From earlier branches (editor CLAUDE.md):
 - Trim `src\tools\convrules-editor\CLAUDE.md` (135 KB, ~34k tokens loaded by every
   converter session and subagent): move dated hand-over notes to a docs file,
   keep a current core of ~5-8 KB. Proposed 2026-10-16, awaiting owner go.
+  **Proposal made 2026-10-16 (awaiting the owner's choice: all four files, or the editor CLAUDE.md first):**
+  method = keep each rule, move its story into an archive, delete nothing.
+  (1) editor CLAUDE.md 135 KB -> ~8 KB core (engine pin + drift check, re-pinning, test kit + baseline, a
+  one-line-per-unit map, ~10 standing traps); dated hand-over sections moved word for word to
+  `docs\convrules-editor-HANDOVER-ARCHIVE.md`. (2) `C:\Projects\CLAUDE.md`: no-grep rules kept complete
+  as one ~3 KB block (exe, resolve-dbs, verb table, index-then-slice-Read, the 4 gap classes, both logs);
+  incident detail goes to `docs\AI-USAGE.md`. (3) Rules the harness has outgrown: the Everything HTTP API;
+  the MCP build tool (already denied in settings); Mercurial "use Bash" (contradicts the PowerShell rule);
+  the PowerShell section -> 3 lines; the 2026-07-23 plan stats; the "under 200 words" rule only for
+  general-purpose; the wiki section -> the `--check` command only; rules repeated across the 3 files
+  stated once. (4) MEMORY.md: keep resume pointers + 10-15 live lessons, move the rest to a lessons
+  index read on demand. Estimate ~50k -> ~12-15k tokens per session/subagent. Show the owner the list
+  of every rule kept / shortened / moved / dropped before committing.
