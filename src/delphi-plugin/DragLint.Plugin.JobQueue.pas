@@ -93,7 +93,11 @@ type
 
   ONCE PER EPISODE, not once per wait. The wait is 5 s and a default hold is
   120 s, so a per-wait log would write 24 identical lines for one deferral.
-  The flag clears when the hold lifts, so a second hold logs again. }
+  The flag clears when the hold lifts, so a second hold logs again.
+
+  ALSO the queue's run log (2026-10-16): RunOne reports every job's title and
+  command line when it starts and its exit code when it ends, from the WORKER
+  thread, through this same hook. }
 var
   GJobQueueDeferredHook: TProc<string> = nil;
 
@@ -258,8 +262,20 @@ begin
   end;
 end;
 
-procedure TDragLintJobQueue.RunOne(AJob: TDragLintJob);
-var
+{ One line through the queue's log hook, from the WORKER thread. Same contract
+  as the deferral log in WaitWhileEngineHeld: a hook that raises is disabled
+  rather than retried, because this IS the reporting channel. }
+procedure LogJobLine(const AText: string);
+begin
+  if not Assigned(GJobQueueDeferredHook) then Exit;
+  try
+    GJobQueueDeferredHook(AText);
+  except  // dl:ok try-except-swallowed@84ab -- this IS the log channel; a hook that raises is disabled, not retried
+    on E: Exception do GJobQueueDeferredHook:= nil;
+  end;
+end;
+
+procedure TDragLintJobQueue.RunOne(AJob: TDragLintJob);var
   ExitCode: Integer;
   Output  : string ;
   SB      : TStringBuilder;
@@ -267,6 +283,9 @@ var
 begin
   ExitCode:= 2;
   Output  := '';
+  { 2026-10-16: a reindex ran for hours against the WRONG project's DB and
+    nothing recorded what was run or how it ended. One line each way. }
+  LogJobLine(Format('JobQueue: start "%s": %s', [AJob.Title, AJob.CmdLine]));
 
   if Assigned(AJob.OnPreRun) then
     TThread.Synchronize(nil,
@@ -322,6 +341,7 @@ begin
   end;
 
   SetPercent(100);
+  LogJobLine(Format('JobQueue: end "%s": exit %d', [AJob.Title, ExitCode]));
 
   { Derive a short last-result string for the bar. For lint-all the last output
     line is the meaningful summary; otherwise a kind label. }

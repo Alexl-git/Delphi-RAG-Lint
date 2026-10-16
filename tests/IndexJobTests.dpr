@@ -30,6 +30,9 @@ uses
   DRagLint.Core.EngineHold in '..\src\core\DRagLint.Core.EngineHold.pas',
   DragLint.Plugin.ProcRun in '..\src\delphi-plugin\DragLint.Plugin.ProcRun.pas',
   DragLint.Plugin.JobQueue in '..\src\delphi-plugin\DragLint.Plugin.JobQueue.pas',
+  DRagLint.Core.Model in '..\src\core\DRagLint.Core.Model.pas',
+  DRagLint.Core.JsonFile in '..\src\core\DRagLint.Core.JsonFile.pas',
+  DRagLint.Index.Manifest in '..\src\index\DRagLint.Index.Manifest.pas',
   DragLint.Plugin.IndexJob in '..\src\delphi-plugin\DragLint.Plugin.IndexJob.pas';
 
 var
@@ -142,8 +145,41 @@ begin
   end;
 end;
 
+{ 2026-10-16: the save path paired the ACTIVE project with GLastProjectDb -- the
+  last project OPENED -- and wrote Micronite2027's closure into
+  Delphi13MigrationAssistant.sqlite for a whole session. The target DB is now
+  the manifest's unique owner of the active project, or nothing at all. }
+procedure TestReindexTarget;
+const
+  OTHER_DB = 'C:\Projects\Other\_D-RAG\Other.sqlite';
+var
+  Got, Why: string;
 begin
-  GPass:= 0;
+  Got:= ReindexTargetDb(PROJ, pdmUnique, DB, Why);
+  { the local is Got, not Db: Delphi is case-insensitive, so a local named Db
+    shadows the DB constant and 6a would compare a variable with itself. }
+  Check('6a POSITIVE CONTROL: a unique owner is the target', Got = DB,
+        Format('got [%s] why [%s]', [Got, Why]));
+  Check('6b ... with no refusal reason', Why = '', Why);
+
+  Got:= ReindexTargetDb(PROJ, pdmNone, OTHER_DB, Why);
+  Check('6c no owner -> nothing is written, whatever DB is to hand', Got = '',
+        'a reindex would land in a DB no section gives this project: ' + Got);
+  Check('6d ... and the reason names the project', ContainsText(Why, PROJ), Why);
+
+  Got:= ReindexTargetDb(PROJ, pdmAmbiguous, OTHER_DB, Why);
+  Check('6e two claimants -> refuse, never choose', Got = '', Got);
+  Check('6f ... and the reason says so', ContainsText(Why, 'two or more'), Why);
+
+  Got:= ReindexTargetDb('', pdmUnique, DB, Why);
+  Check('6g no active project -> nothing is written', Got = '', Got);
+  Check('6h ... and the reason says so', ContainsText(Why, 'no active project'), Why);
+
+  Got:= ReindexTargetDb(PROJ, pdmUnique, '', Why);
+  Check('6i a unique match with a blank DB is still a refusal', Got = '', Got);
+end;
+
+begin  GPass:= 0;
   GFail:= 0;
   Writeln('IndexJobTests');
 
@@ -153,6 +189,7 @@ begin
     TestQuoting;
     TestCoalesceKey;
     TestJob;
+    TestReindexTarget;
   except
     on E: Exception do
     begin
