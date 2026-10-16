@@ -219,12 +219,16 @@ begin
   for Leaf in ALeaves do
     if SameText(Leaf, 'Exception')
       or ((ALibStore <> nil) and ALibStore.IsDescendantOf(Leaf, 'Exception', 0)) then Exit(toException);
-  if ALibStore = nil then Exit(toUnknown);
+  { TObject is a certain plain-class root, known without any library index. }
   for Leaf in ALeaves do
-    if (not SameText(Leaf, 'TObject')) and (not LibraryKnowsType(ALibStore, Leaf)) then
+    if not SameText(Leaf, 'TObject') then
     begin
-      AUnknownLeaf:= Leaf;
-      Exit(toUnknown);
+      if ALibStore = nil then Exit(toUnknown);
+      if not LibraryKnowsType(ALibStore, Leaf) then
+      begin
+        AUnknownLeaf:= Leaf;
+        Exit(toUnknown);
+      end;
     end;
 end;
 
