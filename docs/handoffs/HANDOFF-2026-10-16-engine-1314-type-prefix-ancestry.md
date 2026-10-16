@@ -14,8 +14,10 @@ Autonomous mode is armed (`~/.claude/autonomy/mode.json`, runId 20261016-1640). 
 - `docs\NOTICE-2026-10-16-v1.31.3-released.md` is written. Like the other NOTICEs, it is untracked.
 
 ## Resume point (in order)
-1. Re-arm the loop: `/loop` with an hourly ScheduleWakeup (~3600 s), so work resumes after the
-   usage limit resets. Stop the loop when step 5 is done.
+1. **FIRST, before any work (owner instruction, 2026-10-16 evening):** start the wake timer -- `/loop`
+   (dynamic) with an hourly ScheduleWakeup (~3600 s) re-armed EVERY turn. The weekly token limit runs
+   out and resets around 14:00 on 2026-10-17; the timer is what makes the work resume by itself after
+   that. Stop the loop only when step 5 is done.
 2. Execute `docs\superpowers\plans\2026-10-16-type-name-prefix-ancestry.md` (gitignored, in the main
    tree only) with superpowers:subagent-driven-development. Use sonnet implementers for Tasks 1-4
    and haiku for Task 5. Decisions D1-D4 are DECIDED in its section 2.
