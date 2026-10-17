@@ -7,6 +7,10 @@ breaking changes** until v1.0.
 
 ### Added
 
+- **`hierarchy` is answered by the engine itself, in Delphi.** That makes 19 of the 26 questions in-process; the type's heritage and descendants come from the engine's own ancestors / descendants lookups in-process, the name lookup and the collision, self-reference and closure rules are the script's. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal). `Emit-Hierarchy.ps1` is no longer shipped (it stays in the repo as the parity reference).
+
+- **`butterfly` is answered by the engine itself, in Delphi.** That makes 18 of the 26 questions in-process; both wings come from the engine's own reverse and forward call-tree walks in-process, one row per symbol at its shallowest hop and one arrow per distinct parent-child pair. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal; the ExportPdf byte size in meta.json is masked in the parity compare because cairo's PDF size varies by a byte between two runs of one question). `Emit-Butterfly.ps1` is no longer shipped (it stays in the repo as the parity reference).
+
 - **`what-it-calls` is answered by the engine itself, in Delphi.** That makes 17 of the 26 questions in-process; the callee direction of the same unit as `who-calls`, over the engine's own forward call-tree walk. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal). `Emit-WhoCalls.ps1` is no longer shipped (it stays in the repo as the parity reference).
 - **`who-calls` is answered by the engine itself, in Delphi.** That makes 16 of the 26 questions in-process; it calls the engine's own reverse-calltree walk and find-callers name match in-process. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal).
 - **`drag-lint mcp-config (--claude-code | --vscode | --all)` -- registers `drag-lint serve` with
