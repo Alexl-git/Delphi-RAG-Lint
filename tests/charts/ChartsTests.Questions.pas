@@ -292,13 +292,25 @@ type
     [Test] procedure AmbiguousTypeIsRefused;
   end;
 
+  [TestFixture]
+  TWiringTests = class(TQuestionFixture)
+  public
+    [Test] procedure InterfaceMatchesPowerShell;
+    [Test] procedure ZeroRegistrationsIsAnAnswer;
+    [Test] procedure ClientDisclosesItsTotal;
+    [Test] procedure CapDisclosesHiddenRows;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure ClassIsRefused;
+    [Test] procedure UnknownInterfaceIsRefused;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, System.RegularExpressions, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
   DRagLint.Charts.Q.WhoCalls,
-  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, System.Generics.Collections,
+  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, System.Generics.Collections,
   DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
@@ -482,6 +494,21 @@ const
   HI_COLLIDE_FIELDS = 'Resolved="uDRA1_CLIENT.TDataService_DRA1_CLIENT",Kind="class",FocusDeclared=true,Ancestors=2,UnresolvedAnc=1,Descendants=0,ShownAncestors=2,ShownDescendants=0,HiddenAncestors=0,HiddenDescendants=0,Collisions=1,Unlocatable=0,SelfRefs=0,ClickTargets=1,Expected=1,AllClickable=true';
   HI_UNKNOWN = 'NoSuchType';
   HI_AMBIGUOUS = 'IDataService';
+  WI_TARGET = 'IABZLoggingSys';
+  WI_FIELDS = 'Interface="IABZLoggingSys",DeclaredHere=true,Registrations=2,ResolvedAt=4,EventHandlers=0,Lifetimes="singleton",IndexRegs=535,IndexIfaces=270,Clusters=3,ClickTargets=7,Expected=7,AllClickable=true';
+  WI_DOT_SHA = '7d37c8d1413f5926acbfa53ef7c9d1f8fe76ae5748e6b0db369d3783329958c4';
+  WI_LINES = 12;
+  WI_CLUSTERS = 3;
+  WI_ZERO_TARGET = 'IMicObject';
+  WI_ZERO_FIELDS = 'Interface="IMicObject",DeclaredHere=true,Registrations=0,ResolvedAt=0,EventHandlers=0,Lifetimes="",IndexRegs=535,IndexIfaces=270,Clusters=3,ClickTargets=1,Expected=1,AllClickable=true';
+  WI_ZERO_DOT_SHA = 'a535930680cf28eb582479d6a362cb0862a0efc86c2b07a3f1362f40fc419106';
+  WI_CLIENT_FIELDS = 'Interface="IABZLoggingSys",DeclaredHere=true,Registrations=1,ResolvedAt=2,EventHandlers=0,Lifetimes="singleton",IndexRegs=4,IndexIfaces=4,Clusters=3,ClickTargets=4,Expected=4,AllClickable=true';
+  WI_CLIENT_DOT_SHA = 'd1254f2464b69c2602508a3e3a83c3f1645d8c5855851991a2d783735700c76c';
+  WI_CAP = 1;
+  WI_CAP_FIELDS = 'Interface="IABZLoggingSys",DeclaredHere=true,Registrations=2,ResolvedAt=4,EventHandlers=0,Lifetimes="singleton",IndexRegs=535,IndexIfaces=270,Clusters=3,ClickTargets=3,Expected=3,AllClickable=true';
+  WI_CAP_DOT_SHA = '96c1a5da0ef33435af0472b1e68f7c3456160fec489e46ca4ada0e6644aa5b9c';
+  WI_CLASS = 'TABZLoggingSys';
+  WI_UNKNOWN = 'INoSuchService';
   FEEDS_FROM_ID = 'feeds-from';
   SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
   FF_STATS = 'IndexDs=54,IndexDsDfm=5,IndexDsCode=49,IndexDsOne=22,IndexDsMany=17,IndexDsByCol=6,IndexDsNone=9,IndexDsOther=6,' +
@@ -2830,6 +2857,83 @@ procedure THierarchyTests.UnknownTypeIsRefused;
 begin
   Assert.AreEqual(HI_UNKNOWN + ' is not in this index, and nothing in it inherits from or is inherited by that name',
     Refusal(HIERARCHY_ID, HI_UNKNOWN, CLIENT_CLONE));
+end;
+
+procedure TWiringTests.InterfaceMatchesPowerShell;
+begin
+  var C: TChartResult;
+  if not EmitChart(WIRING_ID, WI_TARGET, SERVER_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WI_FIELDS, Fields(C));
+  Assert.AreEqual(WI_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  for var Line in [':425<', ':429<', ':194<', ':227<'] do
+    Assert.IsTrue(Text.Contains(Line), Line);
+  Assert.AreEqual<Integer>(WI_CLUSTERS, TRegEx.Matches(Text, 'subgraph cluster_').Count);
+end;
+
+procedure TWiringTests.ZeroRegistrationsIsAnAnswer;  // dl:ok duplicate-code@2a85 -- REVIEWED 2026-10-17: fixture bodies repeat the EmitChart/Fields/FileSha shape of the sibling parity tests (precedent THierarchyTests)
+begin
+  var C: TChartResult;
+  if not EmitChart(WIRING_ID, WI_ZERO_TARGET, SERVER_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WI_ZERO_FIELDS, Fields(C));
+  Assert.AreEqual(WI_ZERO_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('nothing in this index registers it'));
+  Assert.IsTrue(Text.Contains('index-wide: 535 registration'));
+  Assert.IsTrue(Text.Contains('a registration made in another project index is not visible here'));
+end;
+
+procedure TWiringTests.ClientDisclosesItsTotal;
+begin
+  var C: TChartResult;
+  if not EmitChart(WIRING_ID, WI_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WI_CLIENT_FIELDS, Fields(C));
+  Assert.AreEqual(WI_CLIENT_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('index-wide: 4 registration'));
+  Assert.IsFalse(TRegEx.IsMatch(Text, '(?i)pipe'));
+end;
+
+procedure TWiringTests.CapDisclosesHiddenRows;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(WIRING_ID, WI_TARGET, SERVER_CLONE, A) then
+    Exit;
+  A.Cap:= WI_CAP;
+  Assert.IsTrue(FindChartQuestion(WIRING_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(WI_CAP_FIELDS, Fields(C));
+  Assert.AreEqual(WI_CAP_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('+1 more registrations not shown'));
+  Assert.IsTrue(Text.Contains('+3 more sites not shown'));
+end;
+
+procedure TWiringTests.AnswerMatchesPowerShell;
+begin
+  var L: TArray<string>;
+  if not Answer(WIRING_ID, WI_TARGET, SERVER_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(WI_LINES, Length(L));
+  Assert.AreEqual('CHART wiring ' + WI_TARGET + ' -- 2 registrations / 4 resolution sites', L[CS_CHART_LINE]);
+end;
+
+procedure TWiringTests.ClassIsRefused;
+begin
+  var R:= Refusal(WIRING_ID, WI_CLASS, SERVER_CLONE);
+  Assert.IsTrue(R.Contains('is a class, not a interface'));
+  Assert.IsTrue(R.Contains('wiring selects an INTERFACE -- ask hierarchy for a class'));
+end;
+
+procedure TWiringTests.UnknownInterfaceIsRefused;
+begin
+  Assert.AreEqual(WI_UNKNOWN + ' is not declared in this index and nothing in it registers that name. ' +
+    'This index has 535 registration(s) over 270 interface(s).', Refusal(WIRING_ID, WI_UNKNOWN, SERVER_CLONE));
 end;
 
 procedure THierarchyTests.AmbiguousTypeIsRefused;
