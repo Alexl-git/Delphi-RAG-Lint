@@ -322,13 +322,22 @@ type
     [Test] procedure MissingToIsRefused;
   end;
 
+  [TestFixture]
+  TArchitectureTests = class(TQuestionFixture)
+  public
+    [Test] procedure ProjectMatchesPowerShell;
+    [Test] procedure ClientMeasuresBackEdges;
+    [Test] procedure SingleFolderSaysSo;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, System.RegularExpressions, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
   DRagLint.Charts.Q.WhoCalls,
-  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, DRagLint.Charts.Q.Path, System.Generics.Collections,
+  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, DRagLint.Charts.Q.Path, DRagLint.Charts.Q.Architecture, System.Generics.Collections,
   DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
@@ -373,6 +382,7 @@ const
   SW_CAPPED_DOT_SHA = '7747fbc6a62ee382da46687f980377b9ce0877d4447d0e7d3714a1bc58b18f58';
   DEPS_ID = 'deps';
   DL_CLONE = 'DL-drag-lint.sqlite';
+  DATACOPY_CLONE = 'DataCopy-DataCopy.sqlite';
   DEPS_CLI = 'DRagLint.CLI';
   DEPS_CLI_FIELDS = 'UsedBy=1,Uses=40,UsedByTotal=1,UsesTotal=110,UsedByHidden=0,UsesHidden=70,ImplementationUses=40,ClickTargets=41,Expected=41,AllClickable=true';
   DEPS_CLI_DOT_SHA = '5ef4c130d1c2eef9274c240970b42a9aa9b7f0ce88a045c40352aaff8b463846';
@@ -546,7 +556,16 @@ const
   PA_AMB_DOT_SHA = '756ed19ee31c250c92f9509199ab248b64a3e2061002150732a344c347ab52fb';
   PA_UNKNOWN = 'Blueprint4.ViewModel.TBlueprint_ViewModel.NoSuchRoutine';
   PA_OVERLOAD = 'uPipeClientConnection.TPipeClientConnection.Log';
-  FEEDS_FROM_ID = 'feeds-from';
+  AR_TARGET = 'project';
+  AR_FIELDS = 'Units=137,Zones=23,InternalEdges=644,CrossZone=115,BackEdges=14,ExternalUnits=36,ExternalEdges=603,Groups=2,ClassifierGaps=0,Clusters=26,ClickTargets=89,Expected=89,AllClickable=true';
+  AR_DOT_SHA = 'a86132236cb5b86c02cb404ff7a7b33f64d140c31c30e3380106803b642e688d';
+  AR_LINES = 93;
+  AR_ZONES = 23;
+  AR_CLIENT_BACK = 3;
+  AR_CHART_LINE = 'CHART architecture project -- 137 project units / 14 back-edges';
+  AR_CLIENT_FIELDS = 'Units=563,Zones=3,InternalEdges=2859,CrossZone=6,BackEdges=3,ExternalUnits=293,ExternalEdges=6880,Groups=5,ClassifierGaps=1,Clusters=9,ClickTargets=18,Expected=18,AllClickable=true';
+  AR_CLIENT_DOT_SHA = '8168afe40de8581b3a8890667479b13ced64528f9a64952fdb245d46b3089ab2';
+  AR_DC_FIELDS = 'Units=37,Zones=1,InternalEdges=133,CrossZone=0,BackEdges=0,ExternalUnits=116,ExternalEdges=277,Groups=4,ClassifierGaps=1,Clusters=6,ClickTargets=6,Expected=6,AllClickable=true';  FEEDS_FROM_ID = 'feeds-from';
   SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
   FF_STATS = 'IndexDs=54,IndexDsDfm=5,IndexDsCode=49,IndexDsOne=22,IndexDsMany=17,IndexDsByCol=6,IndexDsNone=9,IndexDsOther=6,' +
     'Controls=808,CtlTable=471,CtlColumn=443,CtlNotColumn=28,CtlAmbiguous=37,CtlStops=77,CtlDangling=222,CtlNoDs=1,CtlStale=0,CoveragePct=58.3';
@@ -3114,6 +3133,57 @@ begin
   var R:= Refusal(HIERARCHY_ID, HI_AMBIGUOUS, CLIENT_CLONE);
   Assert.StartsWith(HI_AMBIGUOUS + ' is ambiguous -- ', R);
   Assert.IsTrue(R.Contains('they differ by generic parameters'));
+end;
+
+{ ---- architecture ---- }
+
+procedure TArchitectureTests.ProjectMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(ARCHITECTURE_ID, AR_TARGET, DL_CLONE, C) then
+    Exit;
+  Assert.AreEqual(AR_FIELDS, Fields(C));
+  Assert.AreEqual(AR_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.AreEqual(1, TRegEx.Matches(Text, 'cluster_focus_').Count);
+  Assert.AreEqual(AR_ZONES, TRegEx.Matches(Text, 'cluster_zone_').Count);
+end;
+
+procedure TArchitectureTests.ClientMeasuresBackEdges;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(ARCHITECTURE_ID, AR_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(AR_CLIENT_FIELDS, Fields(C));
+  Assert.AreEqual(AR_CLIENT_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('classifier gap: spring is in ''unknown'' but looks like Spring4D'));
+  Assert.AreEqual(AR_CLIENT_BACK, TRegEx.Matches(Text, ' back"\];').Count);
+  Assert.IsTrue(Text.Contains('a back-edge is an asymmetry this index measured'));
+end;
+
+procedure TArchitectureTests.SingleFolderSaysSo;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(ARCHITECTURE_ID, AR_TARGET, DATACOPY_CLONE, C) then
+    Exit;
+  Assert.AreEqual(AR_DC_FIELDS, Fields(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('this project keeps every unit in one folder, so there are no internal zones to draw'));
+  Assert.IsFalse(Text.Contains('back-edge:'));
+end;
+
+procedure TArchitectureTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(ARCHITECTURE_ID, AR_TARGET, DL_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(AR_LINES, Length(L));
+  Assert.AreEqual(AR_CHART_LINE, L[CS_CHART_LINE]);
 end;
 
 end.
