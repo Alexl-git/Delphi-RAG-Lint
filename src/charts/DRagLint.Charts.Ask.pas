@@ -673,6 +673,10 @@ begin
       TDirectory.Delete(Dir);
     raise;
   end;
+  if Chart.LeftLabel <> '' then
+    LeftLabel:= Chart.LeftLabel;
+  if Chart.RightLabel <> '' then
+    RightLabel:= Chart.RightLabel;
   MoveOver(Chart.Layout.Svg, TPath.Combine(Dir, GRAPH_SVG));
   MoveOver(Chart.Layout.Plain, TPath.Combine(Dir, GRAPH_PLAIN));
   MoveOver(Chart.Layout.Dot, TPath.Combine(Dir, GRAPH_DOT));

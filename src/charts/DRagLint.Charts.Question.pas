@@ -159,6 +159,12 @@ type
     LeftJson    : string;
     /// <summary>meta.json's rightCount literal when the PS value is not an integer; '' writes RightCount.</summary>
     RightJson   : string;
+    /// <summary>The emitter's own wording for the first count, New-DiagramArtifact's '&lt;Count&gt;Label'
+    /// property (:239-245); '' keeps QuestionVocab's label. Only who-writes / who-reads set one.</summary>
+    LeftLabel   : string;
+    /// <summary>The emitter's own wording for the second count; '' keeps QuestionVocab's label.
+    /// Only who-writes / who-reads set one.</summary>
+    RightLabel  : string;
     /// <summary>The emitter's ClickTargets.</summary>
     ClickTargets: Integer;
     /// <summary>The emitter's AllClickable.</summary>

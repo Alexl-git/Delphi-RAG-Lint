@@ -715,6 +715,9 @@ procedure TProducerDelphiTests.SharedEmitterScriptIsNamedNotDerived;
 begin
   { one emitter, two questions: what-it-calls is Emit-WhoCalls.ps1 -Direction callees (chart-questions.json) }
   Assert.AreEqual('Emit-WhoCalls.ps1', EmitterScriptName('what-it-calls'));
+  { chart-questions.json names Emit-MemberAccess.ps1 for both member-access questions }
+  Assert.AreEqual('Emit-MemberAccess.ps1', EmitterScriptName('who-writes'));
+  Assert.AreEqual('Emit-MemberAccess.ps1', EmitterScriptName('who-reads'));
   { an id outside the table keeps the derivation }
   Assert.AreEqual('Emit-CrossesBoundary.ps1', EmitterScriptName('crosses-boundary'));
 end;

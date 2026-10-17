@@ -136,9 +136,13 @@ type
   end;
 
 const
-  { the shared scripts, as features\families\chart-questions.json names them; only ported ids }
-  SHARED_EMITTERS: array[0..0] of TSharedEmitter = (
-    (Id: 'what-it-calls'; Script: 'Emit-WhoCalls.ps1'));
+  { the shared scripts, as features\families\chart-questions.json names them; only ported ids
+    (the who-writes / who-reads rows land one task before those ids register, so
+    EveryPortedIdHasAnEmitterScriptInTheRepo can never go red in between) }
+  SHARED_EMITTERS: array[0..2] of TSharedEmitter = (
+    (Id: 'what-it-calls'; Script: 'Emit-WhoCalls.ps1'),
+    (Id: 'who-writes'; Script: 'Emit-MemberAccess.ps1'),
+    (Id: 'who-reads'; Script: 'Emit-MemberAccess.ps1'));
 
 function ProducerForCompare: IReportProducer;
 begin
