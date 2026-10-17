@@ -250,6 +250,7 @@ uses
   DRagLint.Charts.Q.Butterfly in '..\charts\DRagLint.Charts.Q.Butterfly.pas',
   DRagLint.Charts.Q.Hierarchy in '..\charts\DRagLint.Charts.Q.Hierarchy.pas',
   DRagLint.Charts.Q.Wiring in '..\charts\DRagLint.Charts.Q.Wiring.pas',
+  DRagLint.Charts.Q.Path in '..\charts\DRagLint.Charts.Q.Path.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

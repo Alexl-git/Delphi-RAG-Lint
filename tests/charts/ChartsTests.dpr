@@ -85,6 +85,7 @@ uses
   , DRagLint.Charts.Q.Butterfly in '..\..\src\charts\DRagLint.Charts.Q.Butterfly.pas'
   , DRagLint.Charts.Q.Hierarchy in '..\..\src\charts\DRagLint.Charts.Q.Hierarchy.pas'
   , DRagLint.Charts.Q.Wiring in '..\..\src\charts\DRagLint.Charts.Q.Wiring.pas'
+  , DRagLint.Charts.Q.Path in '..\..\src\charts\DRagLint.Charts.Q.Path.pas'
   , ChartsTests.Questions in 'ChartsTests.Questions.pas'
   , DRagLint.Charts.Pairs in '..\..\src\charts\DRagLint.Charts.Pairs.pas'
   , DRagLint.Charts.Producer.Delphi in '..\..\src\charts\DRagLint.Charts.Producer.Delphi.pas'

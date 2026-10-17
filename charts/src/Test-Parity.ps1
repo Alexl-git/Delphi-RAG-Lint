@@ -36,6 +36,8 @@
                       POSITIVE CONTROL: on the first compared case a one-line change is planted in a copy
                       of the Delphi text and one byte flipped in a copy of its graph.dot; each must be
                       reported as a difference ('[PASS] POSITIVE CONTROL ...') or the run FAILS.
+                      EXTRA ARGUMENTS: a case's `extra` pair `-To <routine>` is passed to the probe as `--to <routine>`
+                      (the path question); any other extra name is a SETUP failure, never silently dropped.
 
   Usage:  pwsh -File charts\src\Test-Parity.ps1 -Mode Core -Only who-writes -Clone DL
           pwsh -File charts\src\Test-Parity.ps1 -Mode Question -Only touches-tables
@@ -872,8 +874,14 @@ function Invoke-QuestionMode {
   $compared = 0
   foreach ($c in $cases) {
     if ($ported -notcontains $c.question) { $rows.Add([pscustomobject]@{ Question = $c.question; Text = 'not ported'; Files = ''; PsS = ''; DlS = ''; Verdict = 'SKIP' }); continue }
-    if (@($c.extra).Count) {
-      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes the indexes (-CounterpartDb, -ServerDbPath, -SqlDbPath) and no extra arguments' }); $bad++; continue
+    # extra: ONLY `-To <routine>` is translated (the probe's `--to`, the path question); any other name keeps the SETUP verdict
+    $extraProbe = @(); $extraOther = $false
+    $ex = @($c.extra)
+    for ($xi = 0; $xi -lt $ex.Count; $xi += 2) {
+      if ([string]$ex[$xi] -eq '-To' -and ($xi + 1) -lt $ex.Count) { $extraProbe += @('--to', [string]$ex[$xi + 1]) } else { $extraOther = $true }
+    }
+    if ($extraOther) {
+      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes the indexes (-CounterpartDb, -ServerDbPath, -SqlDbPath) and no extra arguments other than -To' }); $bad++; continue
     }
     Write-Host "question: $($c.question) ..."
     $psFile = Join-Path $OutDir "$($c.question).ps.txt"
@@ -892,6 +900,7 @@ function Invoke-QuestionMode {
     if ($c.counterpartDb) { $pa += @('--counterpart-db', (Join-Path $DbRoot $c.counterpartDb)) }
     if ($c.serverDb)      { $pa += @('--server-db', (Join-Path $DbRoot $c.serverDb)) }
     if ($c.sqlDb)         { $pa += @('--sql-db', (Join-Path $DbRoot $c.sqlDb)) }
+    $pa += $extraProbe
     $dlOut = & $probeExe @pa 2>"$dlFile.err"
     $dlExit = $LASTEXITCODE
     $sw.Stop()

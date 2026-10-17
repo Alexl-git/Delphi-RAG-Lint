@@ -306,6 +306,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Butterfly.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Hierarchy.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Wiring.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Path.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

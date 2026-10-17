@@ -113,6 +113,7 @@ uses
   , DRagLint.Charts.Q.Butterfly  // dl:ok unused-unit-in-uses@b637 -- REVIEWED 2026-10-16: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Hierarchy  // dl:ok unused-unit-in-uses@fe1d -- REVIEWED 2026-10-16: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Wiring  // dl:ok unused-unit-in-uses@3045 -- REVIEWED 2026-10-16: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Path  // dl:ok unused-unit-in-uses@4462 -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   ;
 
 const

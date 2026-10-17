@@ -285,6 +285,13 @@ begin
   Result:= TRegEx.Replace(pTarget, RE_SLUG, '_');
 end;
 
+// the last two '.'-segments joined by '_' (New-DiagramArtifact.ps1:109, one end of the path slug)
+function LastSegments(const pQ: string): string;
+begin
+  var Parts:= pQ.Split(['.']);
+  Result:= if Length(Parts) > 1 then Parts[High(Parts) - 1] + '_' + Parts[High(Parts)] else pQ;
+end;
+
 function ReportCommandText(const pCmd: TReportCommand): string;
 begin
   var SB:= TStringBuilder.Create;
@@ -556,8 +563,11 @@ begin
       SB.Append(IND).Append('"emitter": {').Append(CRLF);
       for var K:= 0 to High(pChart.Fields) do
         SB.Append(JsonPair(IND2, pChart.Fields[K].Name, pChart.Fields[K].Json, K = High(pChart.Fields)));
-      SB.Append(IND).Append('}').Append(CRLF);
+      SB.Append(IND).Append(if SameText(pArgs.Question, PATH_QUESTION) then '},' else '}').Append(CRLF);
     end;
+    { path only: the second routine, a top-level key after the emitter (New-DiagramArtifact.ps1:293) }
+    if SameText(pArgs.Question, PATH_QUESTION) then
+      SB.Append(JsonPair(IND, 'to', PsJsonString(pArgs.Command.Get('To')), True));
     SB.Append('}').Append(CRLF);
     Result:= SB.ToString;
   finally
@@ -648,8 +658,11 @@ begin
   if not FindChartQuestion(pArgs.Question, Emitter) then
     raise EChartsQuestion.CreateFmt('%s is not ported to Delphi', [pArgs.Question]);
   QuestionVocab(pArgs.Question, LeftLabel, RightLabel);
-  { New-DiagramArtifact's slug: the target, then '.<Control>' when one is given }
+  { New-DiagramArtifact's slug: the target, then '.<Control>' when one is given; path names TWO routines, so its slug
+    is the last two segments of each (Class_Method__Class_Method) }
   var Slugged:= if pArgs.Command.Get('Control') <> '' then pArgs.Target + '.' + pArgs.Command.Get('Control') else pArgs.Target;
+  if SameText(pArgs.Question, PATH_QUESTION) then
+    Slugged:= LastSegments(pArgs.Target) + '__' + LastSegments(pArgs.Command.Get('To'));
   var Dir:= TPath.Combine(pArgs.OutRoot, pArgs.Question + '-' + BundleSlug(Slugged));
   var DirWasNew:= not TDirectory.Exists(Dir);
   ForceDirectories(Dir);

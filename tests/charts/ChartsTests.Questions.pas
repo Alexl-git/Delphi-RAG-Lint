@@ -304,13 +304,31 @@ type
     [Test] procedure UnknownInterfaceIsRefused;
   end;
 
+  [TestFixture]
+  TPathTests = class(TQuestionFixture)
+  private
+    function PathArgs(const pFrom, pTo, pClone: string; pCap: Integer; out pArgs: TQuestionArgs): Boolean;
+    function PathRefusal(const pFrom, pTo: string): string;
+    function FieldsWithoutPdf(const pChart: TChartResult): string;
+  public
+    [Test] procedure PathMatchesPowerShell;
+    [Test] procedure CapIsDisclosed;
+    [Test] procedure AmbiguousSitesAreLabelled;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure ReverseDirectionHasNoPath;
+    [Test] procedure UnknownRoutineIsRefused;
+    [Test] procedure SameRoutineIsRefused;
+    [Test] procedure OverloadIsRefused;
+    [Test] procedure MissingToIsRefused;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, System.RegularExpressions, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
   DRagLint.Charts.Q.WhoCalls,
-  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, System.Generics.Collections,
+  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, DRagLint.Charts.Q.Path, System.Generics.Collections,
   DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
@@ -509,6 +527,25 @@ const
   WI_CAP_DOT_SHA = '96c1a5da0ef33435af0472b1e68f7c3456160fec489e46ca4ada0e6644aa5b9c';
   WI_CLASS = 'TABZLoggingSys';
   WI_UNKNOWN = 'INoSuchService';
+  PA_FROM = 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation';
+  PA_TO = 'uPipeClientConnection.TPipeClientConnection.NextSeq';
+  PA_ENGINE_PATH = 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation -> Blueprint4.ViewModel.TBlueprint_ViewModel.ReserveNextID -> ' +
+    'uPipeClientConnection.TPipeClientConnection.ExecuteCommand -> uPipeClientConnection.TPipeClientConnection.NextSeq';
+  PA_FIELDS = 'Paths=2,PathsShown=2,Hops=3,Routines=5,Edges=5,Sites=5,Ambiguous=0,EnginePath="' + PA_ENGINE_PATH +
+    '",ClickTargets=10,Expected=10,AllClickable=true,ExportSvg=14141,ExportPng=109903';
+  PA_DOT_SHA = '31a69043a805d943a04fa6174657a58fe11dbab21bd830919e027223655006dd';
+  PA_LINES = 15;
+  PA_CAP = 1;
+  PA_CAP_FIELDS = 'Paths=2,PathsShown=1,Hops=3,Routines=4,Edges=3,Sites=3,Ambiguous=0,EnginePath="' + PA_ENGINE_PATH +
+    '",ClickTargets=7,Expected=7,AllClickable=true,ExportSvg=10643,ExportPng=63515';
+  PA_CAP_DOT_SHA = 'a9af5f3f891d8047237cc35e02457072cdd8f408abf94daaa13cd876e5d368bc';
+  PA_AMB_FROM = 'Blueprint4.ViewModel.TBlueprint_ViewModel.ImportJenVICI';
+  PA_AMB_TO = 'Blueprint4.ViewModel.TBlueprint_ViewModel.GetLastPersistError';
+  PA_AMB_FIELDS = 'Paths=1,PathsShown=1,Hops=1,Routines=2,Edges=1,Sites=2,Ambiguous=2,EnginePath="' + PA_AMB_FROM + ' -> ' + PA_AMB_TO +
+    '",ClickTargets=4,Expected=4,AllClickable=true,ExportSvg=6120,ExportPng=43447';
+  PA_AMB_DOT_SHA = '756ed19ee31c250c92f9509199ab248b64a3e2061002150732a344c347ab52fb';
+  PA_UNKNOWN = 'Blueprint4.ViewModel.TBlueprint_ViewModel.NoSuchRoutine';
+  PA_OVERLOAD = 'uPipeClientConnection.TPipeClientConnection.Log';
   FEEDS_FROM_ID = 'feeds-from';
   SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
   FF_STATS = 'IndexDs=54,IndexDsDfm=5,IndexDsCode=49,IndexDsOne=22,IndexDsMany=17,IndexDsByCol=6,IndexDsNone=9,IndexDsOther=6,' +
@@ -2934,6 +2971,142 @@ procedure TWiringTests.UnknownInterfaceIsRefused;
 begin
   Assert.AreEqual(WI_UNKNOWN + ' is not declared in this index and nothing in it registers that name. ' +
     'This index has 535 registration(s) over 270 interface(s).', Refusal(WIRING_ID, WI_UNKNOWN, SERVER_CLONE));
+end;
+
+{ ---- path ---- }
+
+{ args for a two-routine question: the -To value goes on the COMMAND as Ask-Report writes it }
+function TPathTests.PathArgs(const pFrom, pTo, pClone: string; pCap: Integer; out pArgs: TQuestionArgs): Boolean;
+begin
+  Result:= Args(PATH_ID, pFrom, pClone, pArgs);
+  if not Result then
+    Exit;
+  var T: TCommandArg;
+  T.Name:= 'To';
+  T.Value:= pTo;
+  pArgs.Command.Args:= pArgs.Command.Args + [T];
+  if pCap > 0 then
+    pArgs.Cap:= pCap;
+end;
+
+function TPathTests.PathRefusal(const pFrom, pTo: string): string;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  Result:= '';
+  if not PathArgs(pFrom, pTo, CLIENT_CLONE, 0, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(PATH_ID, E), 'path is not registered');
+  try
+    E(A, FOutRoot);
+    Assert.Fail('path was not refused');
+  except
+    on X: EChartsQuestion do Result:= X.Message;
+    on X: EChartsIndex do Result:= X.Message;
+  end;
+end;
+
+{ ExportPdf is a cairo PDF size, not byte-stable between runs: checked as present and positive; Test-Parity masks it }
+function TPathTests.FieldsWithoutPdf(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if F.Name = 'ExportPdf' then
+      Assert.IsTrue(StrToIntDef(F.Json, 0) > 0, 'the PDF was written')
+    else
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+procedure TPathTests.PathMatchesPowerShell;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not PathArgs(PA_FROM, PA_TO, CLIENT_CLONE, 0, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(PATH_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(PA_FIELDS, FieldsWithoutPdf(C));
+  Assert.AreEqual(PA_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('Blueprint4.ViewModel.pas:4084 &#183; certain'));
+  Assert.IsTrue(Text.Contains('cluster_focus_from'));
+  Assert.IsTrue(Text.Contains('cluster_focus_to'));
+  Assert.IsFalse(Text.Contains('not shown'));
+end;
+
+procedure TPathTests.CapIsDisclosed;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not PathArgs(PA_FROM, PA_TO, CLIENT_CLONE, PA_CAP, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(PATH_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(PA_CAP_FIELDS, FieldsWithoutPdf(C));
+  Assert.AreEqual(PA_CAP_DOT_SHA, FileSha(C.Layout.Dot));
+  Assert.IsTrue(TFile.ReadAllText(C.Layout.Dot).Contains('+1 more shortest path not shown'));
+end;
+
+procedure TPathTests.AmbiguousSitesAreLabelled;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not PathArgs(PA_AMB_FROM, PA_AMB_TO, CLIENT_CLONE, 0, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(PATH_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(PA_AMB_FIELDS, FieldsWithoutPdf(C));
+  Assert.AreEqual(PA_AMB_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('Blueprint4.ViewModel.pas:1841 &#183; ambiguous'));
+  Assert.IsTrue(Text.Contains('Blueprint4.ViewModel.pas:1843 &#183; ambiguous'));
+end;
+
+procedure TPathTests.AnswerMatchesPowerShell;
+var
+  A: TQuestionArgs;
+begin
+  if not PathArgs(PA_FROM, PA_TO, CLIENT_CLONE, 0, A) then
+    Exit;
+  var L:= AskChartQuestion(A).Lines;
+  Assert.AreEqual<Integer>(PA_LINES, Length(L));
+  Assert.AreEqual('CHART path ' + PA_FROM + ' -> ' + PA_TO + ' -- 2 shortest paths / 3 calls on each path', L[CS_CHART_LINE]);
+  Assert.AreEqual('  TARGET ' + PA_FROM + ' @Blueprint4.ViewModel.pas:4062', L[CS_CHART_LINE + 1]);
+  Assert.AreEqual('  TARGET ' + PA_TO + ' @uPipeClientConnection.pas:174', L[CS_CHART_LINE + 2]);
+end;
+
+procedure TPathTests.ReverseDirectionHasNoPath;
+begin
+  Assert.AreEqual('no call path from ' + PA_TO + ' to ' + PA_FROM + ' within 20 calls (engine call-path, found:false). ' +
+    'call-path walks the resolved call_edges only, so a call the index matched by name alone is not followed.',
+    PathRefusal(PA_TO, PA_FROM));
+end;
+
+procedure TPathTests.UnknownRoutineIsRefused;
+begin
+  Assert.AreEqual(PA_UNKNOWN + ' is not in this index (give the qualified name, Unit.Class.Method)', PathRefusal(PA_UNKNOWN, PA_TO));
+end;
+
+procedure TPathTests.SameRoutineIsRefused;
+begin
+  Assert.AreEqual('path: name two different routines -- -From and -To are both ' + PA_TO, PathRefusal(PA_TO, PA_TO));
+end;
+
+procedure TPathTests.OverloadIsRefused;
+begin
+  Assert.StartsWith(PA_OVERLOAD + ' names 2 symbols (an overload or a duplicate declaration): method @uPipeClientConnection.pas:',
+    PathRefusal(PA_OVERLOAD, PA_TO));
+end;
+
+procedure TPathTests.MissingToIsRefused;
+begin
+  Assert.AreEqual('path needs -To: the routine the path ends at (-Target is where it starts), both qualified (Unit.Class.Method)',
+    Refusal(PATH_ID, PA_FROM, CLIENT_CLONE));
 end;
 
 procedure THierarchyTests.AmbiguousTypeIsRefused;
