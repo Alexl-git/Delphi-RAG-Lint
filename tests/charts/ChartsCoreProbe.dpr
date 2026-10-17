@@ -88,6 +88,7 @@ uses
   , DRagLint.Charts.Q.Path in '..\..\src\charts\DRagLint.Charts.Q.Path.pas'
   , DRagLint.Charts.Q.Architecture in '..\..\src\charts\DRagLint.Charts.Q.Architecture.pas'
   , DRagLint.Charts.Q.Cycles in '..\..\src\charts\DRagLint.Charts.Q.Cycles.pas'
+  , DRagLint.Charts.MemberAccess in '..\..\src\charts\DRagLint.Charts.MemberAccess.pas'
   , DRagLint.Core.Model
   ;
 
