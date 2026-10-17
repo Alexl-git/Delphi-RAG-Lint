@@ -281,13 +281,24 @@ type
     [Test] procedure UnknownTargetIsRefused;
   end;
 
+  [TestFixture]
+  THierarchyTests = class(TQuestionFixture)
+  public
+    [Test] procedure TypeMatchesPowerShell;
+    [Test] procedure MissingFocusDrawsDescendants;
+    [Test] procedure CollidingAncestorIsUnanchored;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure UnknownTypeIsRefused;
+    [Test] procedure AmbiguousTypeIsRefused;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, System.RegularExpressions, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
   DRagLint.Charts.Q.WhoCalls,
-  DRagLint.Charts.Q.Butterfly, System.Generics.Collections,
+  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, System.Generics.Collections,
   DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
@@ -459,6 +470,18 @@ const
   BF_D6_TARGET = 'DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead';
   BF_FOCUS_IN = 9;
   BF_FOCUS_OUT = 2;
+  HI_TARGET = 'TBlueprint_ViewModel';
+  HI_FIELDS = 'Resolved="Blueprint4.ViewModel.TBlueprint_ViewModel",Kind="class",FocusDeclared=true,Ancestors=2,UnresolvedAnc=1,Descendants=0,ShownAncestors=2,ShownDescendants=0,HiddenAncestors=0,HiddenDescendants=0,Collisions=0,Unlocatable=0,SelfRefs=0,ClickTargets=2,Expected=2,AllClickable=true';
+  HI_DOT_SHA = 'ea5a318048c49d672f53eba8e08fcd106da0f4f5c2fffc546ebe30cbbdb71029';
+  HI_LINES = 7;
+  HI_TARGET_LINE = '  TARGET Blueprint4.ViewModel.TBlueprint_ViewModel @Blueprint4.ViewModel.pas:57';
+  HI_RTL_TARGET = 'TInterfacedObject';
+  HI_RTL_FIELDS = 'Resolved=null,Kind=null,FocusDeclared=false,Ancestors=0,UnresolvedAnc=0,Descendants=145,ShownAncestors=0,ShownDescendants=20,HiddenAncestors=0,HiddenDescendants=125,Collisions=0,Unlocatable=0,SelfRefs=0,ClickTargets=20,Expected=20,AllClickable=true';
+  HI_RTL_DOT_SHA = 'fc98f8fd06dc072d29ca4abee9a37a6e19bf16f422d498dd8bfa0a7d01973ddd';
+  HI_COLLIDE_TARGET = 'TDataService_DRA1_CLIENT';
+  HI_COLLIDE_FIELDS = 'Resolved="uDRA1_CLIENT.TDataService_DRA1_CLIENT",Kind="class",FocusDeclared=true,Ancestors=2,UnresolvedAnc=1,Descendants=0,ShownAncestors=2,ShownDescendants=0,HiddenAncestors=0,HiddenDescendants=0,Collisions=1,Unlocatable=0,SelfRefs=0,ClickTargets=1,Expected=1,AllClickable=true';
+  HI_UNKNOWN = 'NoSuchType';
+  HI_AMBIGUOUS = 'IDataService';
   FEEDS_FROM_ID = 'feeds-from';
   SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
   FF_STATS = 'IndexDs=54,IndexDsDfm=5,IndexDsCode=49,IndexDsOne=22,IndexDsMany=17,IndexDsByCol=6,IndexDsNone=9,IndexDsOther=6,' +
@@ -2758,6 +2781,62 @@ end;
 procedure TButterflyTests.UnknownTargetIsRefused;
 begin
   Assert.AreEqual('symbol not found: No.Such.Method', Refusal(BUTTERFLY_ID, 'No.Such.Method', CLIENT_CLONE));
+end;
+
+procedure THierarchyTests.TypeMatchesPowerShell;
+begin
+  var C: TChartResult;
+  if not EmitChart(HIERARCHY_ID, HI_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(HI_FIELDS, Fields(C));
+  Assert.AreEqual(HI_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('TInterfacedObject'));
+  Assert.IsTrue(Text.Contains('outside this project'));
+end;
+
+procedure THierarchyTests.MissingFocusDrawsDescendants;  // dl:ok duplicate-code@2bc1 -- REVIEWED 2026-10-16: fixture bodies repeat the EmitChart/Fields/FileSha shape of the sibling parity tests
+begin
+  var C: TChartResult;
+  if not EmitChart(HIERARCHY_ID, HI_RTL_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(HI_RTL_FIELDS, Fields(C));
+  Assert.AreEqual(HI_RTL_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('+125 more descendants not shown'));
+  Assert.IsTrue(Text.Contains('>TBlueprint_ViewModel<'));
+end;
+
+procedure THierarchyTests.CollidingAncestorIsUnanchored;
+begin
+  var C: TChartResult;
+  if not EmitChart(HIERARCHY_ID, HI_COLLIDE_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(HI_COLLIDE_FIELDS, Fields(C));
+  Assert.IsTrue(TFile.ReadAllText(C.Layout.Dot).Contains('2 types share this name'));
+end;
+
+procedure THierarchyTests.AnswerMatchesPowerShell;
+begin
+  var L: TArray<string>;
+  if not Answer(HIERARCHY_ID, HI_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(HI_LINES, Length(L));
+  Assert.AreEqual('CHART hierarchy ' + HI_TARGET + ' -- 2 ancestors / 0 descendants', L[CS_CHART_LINE]);
+  Assert.AreEqual(HI_TARGET_LINE, L[CS_CHART_LINE + 1]);
+end;
+
+procedure THierarchyTests.UnknownTypeIsRefused;
+begin
+  Assert.AreEqual(HI_UNKNOWN + ' is not in this index, and nothing in it inherits from or is inherited by that name',
+    Refusal(HIERARCHY_ID, HI_UNKNOWN, CLIENT_CLONE));
+end;
+
+procedure THierarchyTests.AmbiguousTypeIsRefused;
+begin
+  var R:= Refusal(HIERARCHY_ID, HI_AMBIGUOUS, CLIENT_CLONE);
+  Assert.StartsWith(HI_AMBIGUOUS + ' is ambiguous -- ', R);
+  Assert.IsTrue(R.Contains('they differ by generic parameters'));
 end;
 
 end.
