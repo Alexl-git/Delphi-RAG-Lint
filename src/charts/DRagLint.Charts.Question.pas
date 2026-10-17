@@ -133,6 +133,13 @@ type
     /// <returns>The field, indented for the emitter object of meta.json (members at six
     /// spaces, the closing brace at four); '{}' when pFields is empty.</returns>
     class function Obj(const pName: string; const pFields: TArray<TMetaField>): TMetaField; static;
+    /// <summary>A string-array field, as ConvertTo-Json -Depth 4 writes a [string[]] inside the emitter object.</summary>
+    /// <param name="pName">Property name.</param>
+    /// <param name="pValues">The elements, in order; each is escaped as ConvertTo-Json escapes a string.</param>
+    /// <returns>The field: elements at six spaces one per line, the closing bracket at four; '[]' when pValues is empty.</returns>
+    /// <remarks>Elements at six spaces one per line (PsJsonString), the closing bracket at four; '[]' when pValues is
+    /// empty; a one-element array stays an array (measured 2026-10-17 under pwsh 7). Mirrors Obj's indentation.</remarks>
+    class function StrList(const pName: string; const pValues: TArray<string>): TMetaField; static;
     /// <summary>A double encoded as ConvertTo-Json writes it.</summary>
     /// <param name="pValue">Value.</param>
     /// <returns>'24.0' for a whole number, else the shortest round-trip text with '.' as decimal point.</returns>
@@ -415,6 +422,34 @@ begin
       SB.Append(sLineBreak);
     end;
     SB.Append(CLOSE_INDENT).Append('}');
+    Result.Json:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+class function TMetaField.StrList(const pName: string; const pValues: TArray<string>): TMetaField;  // dl:ok duplicate-code@d745 -- REVIEWED 2026-10-17: the string-array twin of Obj, deliberately the same indentation scheme (H14); sharing the loop would cost a callback for six lines
+const
+  ELEMENT_INDENT = '      ';
+  CLOSE_INDENT = '    ';
+begin
+  Result.Name:= pName;
+  if Length(pValues) = 0 then
+  begin
+    Result.Json:= '[]';
+    Exit;
+  end;
+  var SB:= TStringBuilder.Create;
+  try
+    SB.Append('[').Append(sLineBreak);
+    for var K:= 0 to High(pValues) do
+    begin
+      SB.Append(ELEMENT_INDENT).Append(PsJsonString(pValues[K]));
+      if K < High(pValues) then
+        SB.Append(',');
+      SB.Append(sLineBreak);
+    end;
+    SB.Append(CLOSE_INDENT).Append(']');
     Result.Json:= SB.ToString;
   finally
     SB.Free;

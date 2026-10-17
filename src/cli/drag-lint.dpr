@@ -252,6 +252,7 @@ uses
   DRagLint.Charts.Q.Wiring in '..\charts\DRagLint.Charts.Q.Wiring.pas',
   DRagLint.Charts.Q.Path in '..\charts\DRagLint.Charts.Q.Path.pas',
   DRagLint.Charts.Q.Architecture in '..\charts\DRagLint.Charts.Q.Architecture.pas',
+  DRagLint.Charts.Q.Cycles in '..\charts\DRagLint.Charts.Q.Cycles.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

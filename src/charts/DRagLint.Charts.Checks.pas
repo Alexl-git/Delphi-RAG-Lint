@@ -37,7 +37,7 @@ function TestD12OwnNameWrite(const pName, pWitness: string; const pEffectKinds: 
 /// <remarks>Port of Test-InterfaceLoop (Emit-Common.ps1:2914). PS traps closed: the edge
 /// map and the visit state are @{} hashtables, so unit names match case-insensitively, and
 /// `-ne 'interface'` is case-insensitive.</remarks>
-function TestInterfaceLoop(const pEdges: TArray<TUnitEdge>; const pMembers: TArray<string>): Boolean;  // dl:ok unused-public-symbol@c0dd -- REVIEWED 2026-10-13: step-2 port of Emit-Common for the in-process emitters (spec P1/P3); no production caller until an emitter is ported; pinned by ChartsTests and the ChartsCoreProbe parity harness, which sit outside this project index
+function TestInterfaceLoop(const pEdges: TArray<TUnitEdge>; const pMembers: TArray<string>): Boolean;
 
 type
   /// <summary>consumers' reader / writer counts. Port of the Measure-ConsumerKeys result.</summary>

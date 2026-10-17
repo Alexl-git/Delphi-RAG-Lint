@@ -331,13 +331,27 @@ type
     [Test] procedure AnswerMatchesPowerShell;
   end;
 
+  [TestFixture]
+  TCyclesTests = class(TQuestionFixture)
+  private
+    function FieldsWithoutEdgeList(const pChart: TChartResult): string;
+    function EdgeListJson(const pChart: TChartResult): string;
+  public
+    [Test] procedure ProjectMatchesPowerShell;
+    [Test] procedure ClientGroupsAreMeasured;
+    [Test] procedure NoCyclesIsAnAnswer;
+    [Test] procedure UnitSelectsItsGroups;
+    [Test] procedure UnitInNoCycleIsRefused;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, System.RegularExpressions, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
   DRagLint.Charts.Q.WhoCalls,
-  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, DRagLint.Charts.Q.Path, DRagLint.Charts.Q.Architecture, System.Generics.Collections,
+  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, DRagLint.Charts.Q.Path, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Cycles, System.Generics.Collections,
   DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
@@ -566,6 +580,27 @@ const
   AR_CLIENT_FIELDS = 'Units=563,Zones=3,InternalEdges=2859,CrossZone=6,BackEdges=3,ExternalUnits=293,ExternalEdges=6880,Groups=5,ClassifierGaps=1,Clusters=9,ClickTargets=18,Expected=18,AllClickable=true';
   AR_CLIENT_DOT_SHA = '8168afe40de8581b3a8890667479b13ced64528f9a64952fdb245d46b3089ab2';
   AR_DC_FIELDS = 'Units=37,Zones=1,InternalEdges=133,CrossZone=0,BackEdges=0,ExternalUnits=116,ExternalEdges=277,Groups=4,ClassifierGaps=1,Clusters=6,ClickTargets=6,Expected=6,AllClickable=true';  FEEDS_FROM_ID = 'feeds-from';
+  CY_TARGET = 'project';
+  CY_FIELDS = 'Cycles=1,Shown=1,Edges=7,Anchored=5,Unanchored=0,Unwalkable=0,Clusters=2,ClickTargets=5,Expected=5,AllClickable=true';
+  CY_DOT_SHA = '8fa6e7eb1689c44a371662e7420a1970e01b6d1d1029b25b56ebbb811dd379c5';
+  CY_LINES = 10;
+  CY_IMPL_ARROWS = 6;
+  CY_CHART_LINE = 'CHART cycles project -- 1 groups / 7 uses edges';
+  CY_CLIENT_FIELDS = 'Cycles=2,Shown=2,Edges=5,Anchored=5,Unanchored=0,Unwalkable=0,Clusters=3,ClickTargets=5,Expected=5,AllClickable=true';
+  CY_CLIENT_DOT_SHA = 'effe952c9bafd7b4d9a00020708785b5eae75577db88911e1bdba060adfdc25b';
+  CY_DC_FIELDS = 'Cycles=0,Shown=0,Edges=0,Anchored=0,Unanchored=0,Unwalkable=0,Clusters=2,ClickTargets=0,Expected=0,AllClickable=true';
+  CY_UNIT = 'blueprint4';
+  CY_UNIT_FIELDS = 'Cycles=2,Shown=1,Edges=3,Anchored=3,Unanchored=0,Unwalkable=0,Clusters=2,ClickTargets=3,Expected=3,AllClickable=true';
+  CY_NO_CYCLE_UNIT = 'uMain';
+  CY_NO_CYCLE_TEXT = 'uMain is in no cycle in this index (2 cycle(s) exist). Run without -Unit to see them, or check the spelling -- the verb lowercases unit names.';
+  CY_EDGELIST: array[0..6] of string = (
+    'draglint.doc.harvest->draglint.doc.regions implementation 206',
+    'draglint.doc.facts->draglint.doc.harvest implementation 977',
+    'draglint.doc.projecttags->draglint.doc.regions implementation 304',
+    'draglint.doc.sharedfacts->draglint.doc.regions implementation 446',
+    'draglint.doc.sharedfacts->draglint.doc.projecttags implementation 447',
+    'draglint.doc.regions->draglint.doc.facts interface 42',
+    'draglint.doc.regions->draglint.doc.sharedfacts implementation 933');
   SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
   FF_STATS = 'IndexDs=54,IndexDsDfm=5,IndexDsCode=49,IndexDsOne=22,IndexDsMany=17,IndexDsByCol=6,IndexDsNone=9,IndexDsOther=6,' +
     'Controls=808,CtlTable=471,CtlColumn=443,CtlNotColumn=28,CtlAmbiguous=37,CtlStops=77,CtlDangling=222,CtlNoDs=1,CtlStale=0,CoveragePct=58.3';
@@ -3184,6 +3219,104 @@ begin
     Exit;
   Assert.AreEqual<Integer>(AR_LINES, Length(L));
   Assert.AreEqual(AR_CHART_LINE, L[CS_CHART_LINE]);
+end;
+
+{ ---- cycles ---- }
+
+{ EdgeList is a multi-line array: asserted on its own, so the other fields stay one comparable line }
+function TCyclesTests.FieldsWithoutEdgeList(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if F.Name <> 'EdgeList' then
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+function TCyclesTests.EdgeListJson(const pChart: TChartResult): string;
+begin
+  Result:= '';
+  for var F in pChart.Fields do
+    if F.Name = 'EdgeList' then
+      Result:= F.Json;
+end;
+
+procedure TCyclesTests.ProjectMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CYCLES_ID, CY_TARGET, DL_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CY_FIELDS, FieldsWithoutEdgeList(C));
+  var Items: TArray<string>:= [];
+  for var E in CY_EDGELIST do
+    Items:= Items + ['      "' + E + '"'];
+  Assert.AreEqual('[' + sLineBreak + string.Join(',' + sLineBreak, Items) + sLineBreak + '    ]', EdgeListJson(C));
+  Assert.AreEqual(CY_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('DRagLint.Doc.SharedFacts.pas&amp;line=446"'));
+  Assert.IsTrue(Text.Contains('>interface coupling: 1 of 7 uses interface-section; every loop crosses an implementation use<'));
+  Assert.IsFalse(Text.Contains('>interface cycle'));
+  Assert.AreEqual(1, TRegEx.Matches(Text, '-> n\d+:p\d+ \[color="#B02A37"').Count);
+  Assert.AreEqual(CY_IMPL_ARROWS, TRegEx.Matches(Text, '-> n\d+:p\d+ \[color="#B45309"').Count);
+end;
+
+procedure TCyclesTests.ClientGroupsAreMeasured;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CYCLES_ID, CY_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CY_CLIENT_FIELDS, FieldsWithoutEdgeList(C));
+  Assert.AreEqual(CY_CLIENT_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('Blueprint4.ViewModel'));
+  { the array-order edge (A-CY1-FAKE-EDGE) must not be drawn }
+  Assert.IsFalse(TRegEx.IsMatch(Text, 'Blueprint4</FONT>[^<]*</TD></TR>[^!]*uses controlplan2'));
+end;
+
+procedure TCyclesTests.NoCyclesIsAnAnswer;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CYCLES_ID, CY_TARGET, DATACOPY_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CY_DC_FIELDS, FieldsWithoutEdgeList(C));
+  Assert.AreEqual('[]', EdgeListJson(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('no cycles'));
+  Assert.IsTrue(Text.Contains('the index holds no unit cycle'));
+end;
+
+procedure TCyclesTests.UnitSelectsItsGroups;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CYCLES_ID, CY_UNIT, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CY_UNIT_FIELDS, FieldsWithoutEdgeList(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('cycles containing blueprint4'));
+  Assert.IsTrue(Text.Contains('2 cycle(s) in this index  &#183;  1 shown'));
+  Assert.IsTrue(C.Layout.Dot.EndsWith('cycles_blueprint4.dot'));
+end;
+
+procedure TCyclesTests.UnitInNoCycleIsRefused;
+begin
+  var Msg:= Refusal(CYCLES_ID, CY_NO_CYCLE_UNIT, CLIENT_CLONE);
+  if Msg = '' then
+    Exit;
+  Assert.AreEqual(CY_NO_CYCLE_TEXT, Msg);
+end;
+
+procedure TCyclesTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(CYCLES_ID, CY_TARGET, DL_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(CY_LINES, Length(L));
+  Assert.AreEqual(CY_CHART_LINE, L[CS_CHART_LINE]);
 end;
 
 end.
