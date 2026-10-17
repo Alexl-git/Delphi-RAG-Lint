@@ -43,8 +43,9 @@ implementation
 uses
   System.SysUtils, System.Classes, System.Generics.Collections, System.Generics.Defaults,
   System.RegularExpressions, DRagLint.Core.Model, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite,
-  DRagLint.Charts.Question, DRagLint.Charts.Index, DRagLint.Charts.Text, DRagLint.Charts.Dot,
-  DRagLint.Charts.PsSort;
+  DRagLint.Charts.Question,
+  DRagLint.Charts.Index, // dl:unit DRagLint.Charts.Index accepted -- RESOLVE_HINT_DEFAULT travels with the resolver it parameterises, so the refusal hint cannot drift from the CLI's
+  DRagLint.Charts.Text, DRagLint.Charts.Dot, DRagLint.Charts.PsSort;
 
 const
   ANC_BORDER = '#3B5BDB';

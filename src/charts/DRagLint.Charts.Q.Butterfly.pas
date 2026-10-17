@@ -20,9 +20,9 @@ unit DRagLint.Charts.Q.Butterfly;
   'symbol not found: <target>' (the verb's own line; the PS text names a process never started).
 
   FIELDS (F5). ExportSvg, ExportPng and ExportPdf are the FILE SIZES in bytes of the three layout
-  outputs (0 when a file is missing, as Get-FileSize does). They go into meta.json, which parity
-  compares masked on time and bundle root only, so they must match the PS run byte for byte; the
-  PDF size is stable between two PS runs (measured 2026-10-16: 38862 both).
+  outputs (0 when a file is missing, as Get-FileSize does). They go into meta.json. ExportSvg and
+  ExportPng must match the PS run byte for byte; ExportPdf is not byte-stable (cairo: 38862 / 38863
+  in two runs, 2026-10-16), so parity masks it (ruling R1) and the tests check it is > 0.
 
   PS traps closed: -eq and hashtable keys are case-blind (SameText, TIStringComparer.Ordinal);
   Sort-Object Level -Stable keeps the engine's order within a hop; Group-Object sorts its groups
