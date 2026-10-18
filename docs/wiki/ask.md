@@ -69,10 +69,10 @@ starts with `ask-report:`.
 
 ## How it answers
 
-The twenty-three questions ported to Delphi (`touches-tables`, `shown-where`, `deps`,
+The twenty-five questions ported to Delphi (`touches-tables`, `shown-where`, `deps`,
 `class-surface`, `event-wiring`, `tested-by`, `change-impact`, `crosses-boundary`,
 `protocol-trace`, `lifecycle`, `effects`, `feeds-from`, `lands-where`,
-`consumers`, `exception-paths`, `who-calls`, `what-it-calls`, `butterfly`, `hierarchy`, `wiring`, `path`, `architecture`, `cycles`) are answered inside the engine, from the live
+`consumers`, `exception-paths`, `who-calls`, `what-it-calls`, `butterfly`, `hierarchy`, `wiring`, `path`, `architecture`, `cycles`, `who-writes`, `who-reads`) are answered inside the engine, from the live
 index. `crosses-boundary` takes its counterpart from `--counterpart-db`, else from
 the pair in `report-pairs.json`; with neither it draws the one side and says so, as
 the script does. Every other question is
