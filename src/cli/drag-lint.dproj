@@ -313,6 +313,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.MemberAccess.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Trace.FormA.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Trace.Shim.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Trace.Anchor.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

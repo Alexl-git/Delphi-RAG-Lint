@@ -257,6 +257,7 @@ uses
   DRagLint.Charts.Q.MemberAccess in '..\charts\DRagLint.Charts.Q.MemberAccess.pas',
   DRagLint.Charts.Trace.FormA in '..\charts\DRagLint.Charts.Trace.FormA.pas',
   DRagLint.Charts.Trace.Shim in '..\charts\DRagLint.Charts.Trace.Shim.pas',
+  DRagLint.Charts.Trace.Anchor in '..\charts\DRagLint.Charts.Trace.Anchor.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

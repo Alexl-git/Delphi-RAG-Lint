@@ -92,6 +92,7 @@ uses
   , DRagLint.Charts.Q.MemberAccess in '..\..\src\charts\DRagLint.Charts.Q.MemberAccess.pas'
   , DRagLint.Charts.Trace.FormA in '..\..\src\charts\DRagLint.Charts.Trace.FormA.pas'
   , DRagLint.Charts.Trace.Shim in '..\..\src\charts\DRagLint.Charts.Trace.Shim.pas'
+  , DRagLint.Charts.Trace.Anchor in '..\..\src\charts\DRagLint.Charts.Trace.Anchor.pas'
   , DRagLint.Core.Model
   ;
 
