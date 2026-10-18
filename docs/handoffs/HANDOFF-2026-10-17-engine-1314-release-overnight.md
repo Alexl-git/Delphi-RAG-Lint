@@ -54,6 +54,17 @@ or early afternoon 2026-10-18.
 6. When CHARTS lands the last chart: build a TEST installer for another computer (engine release zip +
    plugin; see pack-lint-release.ps1 and the installer R2 notes, memory
    project_installer_r2_engine_duties.md). Deploy of BPL needs RAD Studio closed + owner "go".
+6b. CHARTS reply (2026-10-17 ~21:40): "go" for the 1.31.4 deploy. Round-trip ETA 01:00-03:00 Sunday
+   (Tasks 3-9 + final review left). Merge to main IN ORDER, all fast-forward (worktree archify-ir):
+   cb-compare-pairing @1f8f10f6 -> b1-who-calls @3e3c08cf -> b2-butterfly-hierarchy @23d60c68 ->
+   b3-wiring-path @c8e5defc -> b4-architecture-cycles @f6807f0b -> b5-member-access @49d6b789 ->
+   charts/d1-round-trip (tip when done). For the test installer, ENGINE must ALSO: (a) wire
+   build\build_uri_handler.bat into build_draglint_win64.bat / publish-release (Build-Installer throws
+   without drag-lint-open.exe); (b) regenerate doc-drift 'Used by' facts with `document --unit --apply`
+   on Core.Interfaces, Core.Model (~:891), Report.Deps, Query.Callers (:27/:99). After d1, no chart
+   uses PowerShell; the installer's own pwsh steps (protocol registration, MCP config, pwsh detection
+   page -- see .superpowers\sdd\user-side-powershell.md) remain to be replaced. CHARTS status doc:
+   C:\Projects\Delphi-RAG-lint-wt\archify-ir\docs\superpowers\RESUME-charts-2026-10-17.md.
 7. Owner handoff for publishing 1.31.4 (owner runs these, Sunday): `git push origin main`;
    `git tag -a v1.31.4-alpha 36dc1866 -m v1.31.4-alpha` (or the final HEAD); `git push origin v1.31.4-alpha`;
    `gh release create v1.31.4-alpha --verify-tag --prerelease <win64.zip> <win32.zip> --notes-file <notes>`.
