@@ -1,0 +1,69 @@
+# HANDOFF 2026-10-17 -- ENGINE -- 1.31.4 release run in flight + owner's overnight asks
+
+Supersedes HANDOFF-2026-10-16-engine-1314-type-prefix-ancestry.md (its steps 0-2 are DONE).
+Autonomous: global `~/.claude/autonomy/mode.json` is CHARTS' file (runId 20261016-1755); ENGINE only
+added an assumption line. ENGINE never sets its `phase`. Owner away overnight 2026-10-17 -> late morning
+or early afternoon 2026-10-18.
+
+## Status
+- 1.31.4-alpha CODE DONE on main, reviewed (SDD: 5 tasks + final whole-branch review + 1 fix wave):
+  66cb006e..36dc1866 (d5c20ad3, 608bd4b3, cb6780f0, 0b626cfa, 44a978b9, d9efd1d5, 36dc1866). NOT pushed.
+- Ledger with every ruling (R1-R11) and deferred minors:
+  `.superpowers\sdd\2026-10-16-type-name-prefix-ancestry\progress.md` (gitignored). Rulings the owner
+  should read: R2 (how D1 was read: untraceable ancestor with a library index = ERROR index-gap finding;
+  no library / no --db = silent except missing ancestor/TObject -> T, Exception -> E; stale class absent
+  from the project index = silent), R8 (fixture), R9 (deploy BEFORE battery), R10 (backlog-index guard
+  red = pre-existing INBOX-INDEX count drift, left alone).
+- Changed-line lint: lint 0 on all 4 units; lint-all 1 pre-existing duplicate-code (NamingChecks.pas:653).
+- RELEASE RUN IN FLIGHT (sonnet subagent, dispatched 20:46 2026-10-17), steps:
+  0 generic-name check (Box<T> must still fire T; STOP if silent) -> 1 back up dll-win64 exe as
+  `drag-lint.exe.bak-1.31.3-20261017` -> 2 wait until 21:15 (CHARTS was asked go/hold) -> 3
+  `ide-release` + `build\build_draglint_win64.bat` (deploys Debug 1.31.4) -> 4 full battery (~2 h) ->
+  5 `build\pack-lint-release.ps1 -Version 1.31.4-alpha` -> 6 `docs\NOTICE-2026-10-17-v1.31.4-ready.md`.
+  Its report: `.superpowers\sdd\2026-10-16-type-name-prefix-ancestry\release-report.md`;
+  logs: `C:\TEMP\claude\sdd-1314\release\` (battery.log).
+- Two read-only analysts in flight (owner asks), findings land in:
+  `.superpowers\sdd\library-rescan-check.md` and `.superpowers\sdd\user-side-powershell.md`.
+- CHARTS (session charts-61) asked for the last-chart ETA, branch/tip, whether it needs an engine
+  merge, and any remaining user-side PowerShell. Answer arrives as a cross-session message (may be lost
+  across /clear -- re-ask if none in the transcript).
+
+## Resume point (in order)
+1. Re-arm the hourly wake timer (`/loop` dynamic, ScheduleWakeup ~3600 s) -- owner is away overnight.
+2. Release run: read release-report.md. If missing, check `Get-Process pwsh,drag-lint`, the tail of
+   `C:\TEMP\claude\sdd-1314\release\battery.log`, and `third_party\dll-win64\drag-lint.exe --version`;
+   finish whichever step is open (never pack beside a running battery). STEP 0 BLOCKED = generic class
+   regression in ClassifyClassOrigin (`LibraryKnowsType(AStore, ATypeName)` ~NamingChecks.pas:246) ->
+   fix (sonnet implementer, add a Box<T> case to the runner), rebuild, then resume the run.
+3. Library rescan -- VERDICT (analyst, 21:00): YES, both DBs (Win64 4305/7001 changed, Win32 4632/7105,
+   resolver 1.11.0 vs engine 1.12.0; DevExpress folder 2026-10-13 newer than both DBs). Roots are
+   re-read from the IDE registry on every run (drag-lint.json:297-318 `registry-libraries`), so no root
+   edit is needed; `library-drift` (manual verb, not auto-run) lists 7 roots with no indexed files
+   (BonusKSVC 8.0.3, Raize DM2/IX2 Win64, DevExpress RS37 Win64). Command, AFTER the battery:
+   `drag-lint.exe index --all --only Library` (try `--dry-run` first), then `library-drift --json`
+   (expect 0). Duration undocumented -- log it. Owner: "now is a good time" (away overnight).
+   Details: read library-rescan-check.md. If a rescan is needed
+   (2026-10-16 note: library-Win64 reported 4305/7001 files changed + resolver version behind), run it
+   AFTER the battery finishes and BEFORE any other build; if IDE Library/Browsing paths changed
+   (Delphi + DevExpress upgrade), update the library roots first. Report whether roots are checked
+   automatically before each scan; if not, that is a backlog item (INBOX note).
+4. User-side PowerShell: read user-side-powershell.md; answer the owner (anything besides charts?).
+5. If CHARTS' ETA leaves time (> ~3 h) and the battery is done: fix ONE known bug from
+   `docs\superpowers\plans\2026-10-14-open-defects-triage.md` (batches 2-5) in a worktree, full SDD,
+   commit only. Do not deploy it.
+6. When CHARTS lands the last chart: build a TEST installer for another computer (engine release zip +
+   plugin; see pack-lint-release.ps1 and the installer R2 notes, memory
+   project_installer_r2_engine_duties.md). Deploy of BPL needs RAD Studio closed + owner "go".
+7. Owner handoff for publishing 1.31.4 (owner runs these, Sunday): `git push origin main`;
+   `git tag -a v1.31.4-alpha 36dc1866 -m v1.31.4-alpha` (or the final HEAD); `git push origin v1.31.4-alpha`;
+   `gh release create v1.31.4-alpha --verify-tag --prerelease <win64.zip> <win32.zip> --notes-file <notes>`.
+   Verify first: `git ls-remote origin 'refs/tags/v1.31.4-alpha^{}'`.
+8. Late morning 2026-10-18: billing split help -- memory `project_billing_split_orm3_dl.md`.
+
+## Gotchas
+- The autonomy guard blocks ANY shell command whose text contains drag-lint's engine stand-down verb
+  (it reads it as OS shutdown) -- even inside a heredoc or log text. Use Edit for ledger text; let
+  `stage-engine.ps1` deal with exe holders.
+- The test runner `run_type_prefix_exception_ancestor.ps1` defaults `-Exe` to dll-win64; before the
+  deploy it tests 1.31.3 and FAILS (expected).
+- Controller context ran to 86% of the 250k budget -- delegate bulky work.
