@@ -37,8 +37,8 @@ type
   /// caller ROUTINE's declaration line on resolved and callback rows (the
   /// CLI's `caller_line`) and the reference's own line on name-matched rows.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: DRagLint.Query.Callers.NameCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas)</para>
-  /// <para>Used in units: DRagLint.Query.Callers</para>
+  /// <para>Used by: DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.GroupRoutines (DRagLint.Charts.MemberAccess.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas), DRagLint.Query.Callers.NameCallersForName (DRagLint.Query.Callers.pas), DRagLint.Query.Callers.ResolvedCallersForName (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used in units: DRagLint.Charts.MemberAccess, DRagLint.Query.Callers</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TQueryCallerRow = record
@@ -98,7 +98,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Query.Callers.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Query.Callers.pas), DRagLint.Charts.MemberAccess.HitsOf (DRagLint.Charts.MemberAccess.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TQueryCallerRows = TArray<TQueryCallerRow>;
@@ -136,10 +136,9 @@ type
 /// (<c>N := NextId</c>, bound since resolver 1.7.0-alpha) and is already a
 /// resolved row, so a line holding one is not listed again as a callback.</para>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
-/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, ExtractFileName, Format, Trim</para>
-/// <para>Complexity: 12 (cyclomatic, outer body), 84 lines (full implementation)</para>
-/// <para>Pure</para>
+/// <para>Called from: DRagLint.Charts.MemberAccess.CollectMemberAccess (DRagLint.Charts.MemberAccess.pas), DRagLint.CLI.DoQuery (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
+/// <para>Calls: Default, DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName, DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Core.Interfaces.ISymbolStore.GetSymbolById, ExtractFileName, Format, LowerCase, Trim</para>
+/// <para>Complexity: 15 (cyclomatic, outer body), 103 lines (full implementation)</para>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindCallersByName"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindResolvedCallers"/>
 /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByExactName"/>

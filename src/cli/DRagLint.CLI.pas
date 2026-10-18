@@ -70,20 +70,21 @@ const
 
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: 2; DoIndexAll(Args);
 /// DoIndex(Args); DoQuery (Args); DoRules (Args); DoLint (Args).</returns>
+/// <exception cref="EConvertApplyWrite"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoConvertApply: cannot write %s: %s -- unit not changed, nothing written; via DRagLint.CLI.DoConvertApply: cannot write %s: the file is read-only -- unit not changed, nothing written; via DRagLint.CLI.DoConvertApply: write failed for %s: %s: %s -- rollback FAILED for %s: the unit may be PARTLY converted; %s (+1 more)</exception>
 /// <exception cref="EInvalidOperation"><!-- drag-lint:auto exc -->via DRagLint.Core.ControlChannel.TControlChannel.Create: TControlChannel must be created on the main thread -- the one the listener has to wake</exception>
 /// <exception cref="Exception"><!-- drag-lint:auto exc -->via DRagLint.CLI.DoLint: stand-in materialisation would write outside %s (computed %s) -- refusing; via DRagLint.CLI.ParseArgs: Unknown argument: %s</exception>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
 /// <para>Called from: declaration (drag-lint.dpr), DRagLint.CLI.Run (DRagLint.CLI.pas) ?</para>
-/// <para>Calls: DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompileCheck, DRagLint.CLI.DoContext (+106 more)</para>
-/// <para>Complexity: 116 (cyclomatic, outer body), 329 lines (full implementation)</para>
+/// <para>Calls: DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine, DRagLint.CLI.DoAllow, DRagLint.CLI.DoAmbiguousCalls, DRagLint.CLI.DoBenchContext, DRagLint.CLI.DoButterfly, DRagLint.CLI.DoCallGraph, DRagLint.CLI.DoCallPath, DRagLint.CLI.DoCheckAst, DRagLint.CLI.DoCheckUnit, DRagLint.CLI.DoCompare (+110 more)</para>
+/// <para>Complexity: 120 (cyclomatic, outer body), 333 lines (full implementation)</para>
 /// <para>Catches: Exception (empty); Exception (swallowed)</para>
 /// <para>Touches: file system</para>
+/// <seealso cref="DRagLint.Charts.AskVerb.RunAskVerbFromCommandLine"/>
 /// <seealso cref="DRagLint.CLI.DoAllow"/>
 /// <seealso cref="DRagLint.CLI.DoAmbiguousCalls"/>
 /// <seealso cref="DRagLint.CLI.DoBenchContext"/>
 /// <seealso cref="DRagLint.CLI.DoButterfly"/>
-/// <seealso cref="DRagLint.CLI.DoCallGraph"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
 function Run: Integer;

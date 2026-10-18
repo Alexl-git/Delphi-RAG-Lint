@@ -20,9 +20,9 @@ uses
 /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.RenderHoverPlain (DRagLint.CLI.pas)</para>
 /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.HoverHeaderName, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
 /// <para>Complexity: 11 (cyclomatic, outer body), 73 lines (full implementation)</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
 /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.StripTopics"/>
 /// <seealso cref="DRagLint.Hover.Renderer.HoverHeaderName"/>
@@ -56,9 +56,9 @@ function RenderHoverPlain(const ASym: TSymbol; const ADoc: TParsedDoc): string;
 /// <returns><!-- drag-lint:auto -->string -- Observed: SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverMarkdown (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: DRagLint.Doc.Regions.TDocRegions.StripForDisplay, DRagLint.Doc.Wiki.TWikiParser.StripTopics, DRagLint.Hover.Renderer.HasAnyParamDescription, DRagLint.Hover.Renderer.HoverHeaderName, DRagLint.Hover.Renderer.RenderSignatureParamsMarkdown, DRagLint.Hover.Renderer.UnescapeJsonText, DRagLint.Hover.Renderer.WikiIndicatorLines, Trim</para>
 /// <para>Complexity: 17 (cyclomatic, outer body), 136 lines (full implementation)</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Doc.Regions.TDocRegions.StripForDisplay"/>
 /// <seealso cref="DRagLint.Doc.Wiki.TWikiParser.StripTopics"/>
 /// <seealso cref="DRagLint.Hover.Renderer.HasAnyParamDescription"/>
@@ -73,6 +73,7 @@ function RenderHoverMarkdown(const ASym: TSymbol; const ADoc: TParsedDoc; const 
 /// <returns><!-- drag-lint:auto type -->string</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
+/// <para>Called from: DRagLint.CLI.DoHover (DRagLint.CLI.pas), DRagLint.CLI.RenderHoverJson (DRagLint.CLI.pas), DRagLint.LSP.Server.TLSPServer.HandleHoverBundle (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: DRagLint.Core.Model.DocFormatToStr, DRagLint.Core.Model.JsonEscape, DRagLint.Doc.Regions.TDocRegions.StripForDisplay, IfThen</para>
 /// <para>Overload 1 of 2</para>
 /// <para>Directives: overload</para>
@@ -91,10 +92,9 @@ function RenderHoverJson(const ASym: TSymbol; const ADoc: TParsedDoc): string; o
 /// <returns><!-- drag-lint:auto -->string -- Observed: ''; SB.ToString.</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
-/// <para>Called from: DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas) ?</para>
+/// <para>Called from: DRagLint.Hover.Renderer.RenderHoverMarkdown (DRagLint.Hover.Renderer.pas), DRagLint.LSP.Server.TLSPServer.ComputeHover (DRagLint.LSP.Server.pas)</para>
 /// <para>Calls: Copy, DRagLint.Hover.Renderer.LastTopLevelColon, DRagLint.Hover.Renderer.SplitTopLevel, Format, Pos, StartsText, Trim</para>
 /// <para>Complexity: 16 (cyclomatic, outer body), 82 lines (full implementation)</para>
-/// <para>Pure</para>
 /// <seealso cref="DRagLint.Hover.Renderer.LastTopLevelColon"/>
 /// <seealso cref="DRagLint.Hover.Renderer.SplitTopLevel"/>
 /// <!-- drag-lint:auto END -->
