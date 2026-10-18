@@ -643,10 +643,12 @@ begin
     if SameText(AF.RuleId, 'field-name-prefix') then Prefix:= ANaming.FieldPrefix
     else if SameText(AF.RuleId, 'param-name-prefix') then Prefix:= ANaming.ParamPrefix
     else if TryExpectedPrefixFromTypePrefixMessage(AF.Message, Prefix) then
+    begin
       // type-name-prefix: the letter comes from the finding itself. A second
       // classification here drifted (EKeyViolation -> TEKeyViolation,
       // 2026-10-16). The message is built by TypePrefixFindingMessage in
       // Lint.Config -- one source for checker and fixer.
+    end
     else if IsTypePrefixGapMessage(AF.Message) then
       Exit // index-gap finding: the E/T letter is undecidable, never rename
     else { type-name-prefix, message not ours: legacy fallback }
