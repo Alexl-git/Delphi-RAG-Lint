@@ -40,14 +40,14 @@ type
   /// managed fence, so HasManagedBlock is False for it and a batch run would
   /// otherwise have silently STOPPED removing decayed blocks.
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Document.pas)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Document.pas), DRagLint.CLI.DocActionWord (DRagLint.CLI.pas)</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TDocumentAction = (daCreated, daExtended, daUnchanged, daNotFound, daRemoved);
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Doc.Document.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas) (+3 more)</para>
+  /// <para>Used by: declaration (DRagLint.Doc.Document.pas), DRagLint.CLI.DoDocument (DRagLint.CLI.pas), DRagLint.Doc.Batch.HasManagedBlock (DRagLint.Doc.Batch.pas), DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/2 (DRagLint.Doc.Document.pas) (+4 more)</para>
   /// <para>Used in units: DRagLint.CLI, DRagLint.Doc.Batch, DRagLint.Doc.Document, DRagLint.Lint.DocRules</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
@@ -179,9 +179,9 @@ type
     /// ASym.QualifiedName.
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.Doc.Batch.TDocBatch.DocumentUnit (DRagLint.Doc.Batch.pas), DRagLint.Doc.Document.TDocumenter.BuildFor/10 (DRagLint.Doc.Document.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForDocDrift (DRagLint.Lint.DocRules.pas), DRagLint.Lint.DocRules.TDocLintRules.FixEditsForMissingDoc (DRagLint.Lint.DocRules.pas)</para>
-    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.ExtractSourceSpan, DRagLint.Doc.Document.FindDocRegionAbove (+21 more)</para>
+    /// <para>Calls: CharInSet, Default, DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile, DRagLint.Core.Interfaces.ISymbolStore.GetFilePath, DRagLint.Doc.Document.CommentLinesContain, DRagLint.Doc.Document.CommentLinesEqual, DRagLint.Doc.Document.CommentLinesIndentEqual, DRagLint.Doc.Document.CommentRunStartAbove, DRagLint.Doc.Document.ExtractSourceSpan, DRagLint.Doc.Document.FindDocRegionAbove (+25 more)</para>
     /// <para>Returns: Default(TDocumentResult)</para>
-    /// <para>Complexity: 29 (cyclomatic, outer body), 512 lines (full implementation)</para>
+    /// <para>Complexity: 29 (cyclomatic, outer body), 539 lines (full implementation)</para>
     /// <para>Touches: file system</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.FindSymbolsByFile"/>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.GetFilePath"/>
@@ -1189,6 +1189,15 @@ begin
     the whole rendering layer. }
   Merged:= TSharedFacts.MergeInboundFacts(Merged, Existing.Remarks, AStore, Path);
 
+  { v(1.31.5, B-07): the legacy `Pure` line survives a regeneration made for
+    ANY other reason, unless `--migrate-pure` asks for the migration or the
+    render proves `Effect-free (proven)` in its place. The checker already
+    treats the line as current (TSharedFacts.BlockDrifted); without this the
+    writer dropped it on every block it had to touch, and the two disagreed
+    (run_doc_fix_keeps_legacy_pure). SameButForLegacyPure below stays as the
+    no-change test for a block that differs in nothing else. }
+  Merged:= TSharedFacts.KeepLegacyPure(Merged, Existing.Remarks);
+
   { v(2026-08-14) THE STALE-ANCHOR ROOT CAUSE. One line, and it is the cause of
     INBOX-autodoc-not-idempotent-on-yadf, INBOX-document-qname-second-apply-nests-
     block-on-stale-anchor, and the "unexplained" block duplication -- all three.
@@ -1236,6 +1245,45 @@ begin
   // replaced by -- a blank stub, so the file ends up with no comment there
   // either way. A second run then sees the same absence and Merged is still
   // '', so this is a stable fixed point (daUnchanged), not a re-triggering edit.
+  { v(2026-08-14): NEVER delete another project's contribution.
+
+    A project that COMPILES a `dl:shared` unit but CALLS nothing in it renders
+    an empty block, so Merged is '' and control arrives at the one place the
+    engine emits a pure deletion (below). It would then strip a block whose
+    every entry was written by a project that CAN see those callers, and the
+    wide project rewrites it on its next run: the unbounded rewrite loop
+    `dl:shared` exists to end.
+
+    Neither half of TSharedFacts could prevent this on its own.
+    MergeInboundFacts ran a few lines above and could not help -- it merges
+    INTO a rendered block and there is no block to merge into -- and the
+    checker exits on its residual compare before any inbound label is
+    consulted. Both now ask HoldsForeignInboundEntries first.
+
+    Reported as daUnchanged, not daRemoved: nothing was removed, and D1's
+    whole point is that a deletion must stay distinguishable from a repair. }
+  { v(2026-09-23): nor is a block whose ONLY fact is the legacy `Pure` line
+    decayed -- that line is exempt until the owner's one-time migration
+    (`--migrate-pure`), and doc-drift calls such a block current. }
+  { v(1.31.5, B-05): the SAME rule whenever the regenerated comment has NO
+    managed fence, not only when it is empty. A hand-written <summary> above
+    a block whose every entry lives in a project this index does not hold (a
+    test-only helper under a closure index, DataCopy's shape) leaves Merged
+    holding the summary and no fence; MergeInboundFacts had no fence to merge
+    into, and the replace below wrote the summary alone: `Called from:` and
+    `Covered by:` were deleted whole, silently. Measured 2026-10-18 on
+    run_doc_apply_keeps_unseen_entries CASE-SUMMARY. The guard used to sit
+    inside the empty-comment branch behind RegionFullyEngineOwned; it now
+    runs before it, without that gate -- daUnchanged touches nothing, so a
+    human's text is at no risk either way, and the writer that cannot see
+    those facts keeps them. }
+  if Existing.HasContent and (Pos(AUTO_BEGIN, Merged) = 0)
+     and (TSharedFacts.HoldsForeignInboundEntries(TSharedFacts.StoredBlockBody(Existing.Remarks), AStore)
+          or TSharedFacts.IsLegacyPureOnlyBody(TSharedFacts.StoredBlockBody(Existing.Remarks))) then
+  begin
+    Result.Action:= daUnchanged;
+    Exit;
+  end;
   if Trim(Merged) = '' then
   begin
     // v(ADP3 T3 review round 2, Finding 3): CONSERVATIVE guard over the RAW
@@ -1244,33 +1292,6 @@ begin
     // correct by enumeration (an unmodeled tag type like <value> would still
     // be silently destroyed) where the raw-region check needs no future
     // maintenance as new tag types appear.
-    { v(2026-08-14): NEVER delete another project's contribution.
-
-      A project that COMPILES a `dl:shared` unit but CALLS nothing in it renders
-      an empty block, so Merged is '' and control arrives here -- at the one
-      place the engine emits a pure deletion. It would then strip a block whose
-      every entry was written by a project that CAN see those callers, and the
-      wide project rewrites it on its next run: the unbounded rewrite loop
-      `dl:shared` exists to end.
-
-      Neither half of TSharedFacts could prevent this on its own.
-      MergeInboundFacts ran a few lines above and could not help -- it merges
-      INTO a rendered block and there is no block to merge into -- and the
-      checker exits on its residual compare before any inbound label is
-      consulted. Both now ask HoldsForeignInboundEntries first.
-
-      Reported as daUnchanged, not daRemoved: nothing was removed, and D1's
-      whole point is that a deletion must stay distinguishable from a repair. }
-    { v(2026-09-23): nor is a block whose ONLY fact is the legacy `Pure` line
-      decayed -- that line is exempt until the owner's one-time migration
-      (`--migrate-pure`), and doc-drift calls such a block current. }
-    if Existing.HasContent and RegionFullyEngineOwned(Region.RawText)
-       and (TSharedFacts.HoldsForeignInboundEntries(TSharedFacts.StoredBlockBody(Existing.Remarks), AStore)
-            or TSharedFacts.IsLegacyPureOnlyBody(TSharedFacts.StoredBlockBody(Existing.Remarks))) then
-    begin
-      Result.Action:= daUnchanged;
-      Exit;
-    end;
     if Existing.HasContent and RegionFullyEngineOwned(Region.RawText) then
     begin
       E:= Default(TTextEdit);

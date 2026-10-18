@@ -189,6 +189,35 @@ type
     class function MergeInboundFacts(const ADocText, AStoredRemarks: string;
       const AStore: ISymbolStore; const AUnitPath: string): string;
 
+    /// <summary>Keeps a stored legacy `<para>Pure</para>` fact in a regenerated
+    /// comment that cannot replace it with the proven `Effect-free (proven)`
+    /// fact.</summary>
+    /// <param name="ADocText">The whole comment MergeComment just produced and
+    /// MergeInboundFacts merged, `///`-prefixed, holding the managed fence.</param>
+    /// <param name="AStoredRemarks">The existing parsed remarks, holding the old
+    /// block.</param>
+    /// <returns>ADocText with `<para>Pure</para>` re-inserted inside the fence,
+    /// at the slot the stored block held it (after its surviving stored
+    /// predecessor, as MergeInboundFacts re-inserts a label), when the stored
+    /// block carries the line, the fence carries NEITHER purity element and
+    /// MigrateLegacyPure is off. Otherwise ADocText, unchanged.</returns>
+    /// <remarks>
+    /// CHECKER AND FIXER MUST AGREE (B-07, 1.31.5,
+    /// docs\INBOX-doc-drift-fix-strips-pure-para.md). BlockDrifted takes the
+    /// legacy element out of the stored side before comparing (WithoutLegacyPure),
+    /// so the line never counts as drift -- owner ruling 2026-09-23, the
+    /// migration is the explicit `--migrate-pure`. The writer honoured that only
+    /// when the line was the ONLY difference (Doc.Document.SameButForLegacyPure):
+    /// a block regenerated for ANY other reason was written as rendered, and the
+    /// renderer never emits `Pure`, so the claim vanished while the checker then
+    /// called the new block current. A missing purity verdict says nothing
+    /// (Doc.Regions, purity v2: -1 is "nobody judged it"), so the writer cannot
+    /// DISPROVE the claim and keeps it. A render that DOES prove effect-freedom
+    /// carries `Effect-free (proven)` and the line is not re-inserted: the v2
+    /// fact replaces it, which the checker reads as the same claim.
+    /// </remarks>
+    class function KeepLegacyPure(const ADocText, AStoredRemarks: string): string;
+
     /// <summary>True when the stored block holds inbound entries this project
     /// cannot see, so deleting or replacing it would destroy another project's
     /// contribution.</summary>
@@ -306,7 +335,7 @@ type
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.IsLegacyPureOnlyBody"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.LegacyPureViews"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.KeepLegacyPure"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function CompareInboundEntries(const X, Y: string): Integer; static;
@@ -321,7 +350,7 @@ type
     /// Returning '' for unfenced text is the point, not an edge case: it is what
     /// stops a human's prose from being parsed as facts.
     /// <!-- drag-lint:auto BEGIN -->
-    /// <para>Called from: [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)</para>
+    /// <para>Called from: [drag-lint]DRagLint.Doc.Document.TDocumenter.BuildForSymbol (DRagLint.Doc.Document.pas), [drag-lint]DRagLint.Doc.Drift.TDocDrift.Analyze/4 (DRagLint.Doc.Drift.pas), [drag-lint]DRagLint.Doc.SharedFacts.TSharedFacts.KeepLegacyPure (DRagLint.Doc.SharedFacts.pas), [drag-lint]DRagLint.Doc.SharedFacts.TSharedFacts.MergeInboundFacts (DRagLint.Doc.SharedFacts.pas)</para>
     /// <para>Calls: DRagLint.Doc.SharedFacts.StoredBlockBody</para>
     /// <para>Returns: DRagLint.Doc.SharedFacts.StoredBlockBody(AText)</para>
     /// <para>Directives: static</para>
@@ -410,7 +439,7 @@ type
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.BlockDrifted"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.CompareInboundEntries"/>
     /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.HoldsForeignInboundEntries"/>
-    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.LegacyPureViews"/>
+    /// <seealso cref="DRagLint.Doc.SharedFacts.TSharedFacts.KeepLegacyPure"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     class function IsLegacyPureOnlyBody(const AStoredBody: string): Boolean;
@@ -796,6 +825,13 @@ end;
   caller -- tagged or not, certain or not -- are one entry; the TEXT the writer
   keeps is decided separately. A `Covered by:` entry has no `(file.pas)` part,
   so its identity is its bare qualified name. }
+{ Does AEntry (untagged) carry a confidence marker at all -- ' ?' or
+  ' (unverified)'? The complement of WithoutConfidence being a no-op. }
+function HasConfidenceMark(const AEntry: string): Boolean;
+begin
+  Result:= WithoutConfidence(AEntry) <> Trim(AEntry);
+end;
+
 function EntryKey(const AEntry: string): string;
 begin
   Result:= LowerCase(WithoutConfidence(BareEntry(AEntry)));
@@ -1203,6 +1239,19 @@ begin
       if FreshKeys.ContainsKey(K) then Continue;
       FreshKeys.Add(K, 1);
       if not StoredTags.TryGetValue(K, Tags) then Tags:= nil;
+      { CONFIDENCE IS MONOTONE (B-06, 1.31.5, docs\INBOX-docfix-shared-units-
+        and-db-tag-leak.md). A ' ?' (or ' (unverified)') says THIS index could
+        not bind the edge with confidence; a project that binds the same entry
+        without the marker has strictly more evidence, so the certain spelling
+        is kept once any project wrote it. Before this the rendered text won
+        the bare part unconditionally, and YADF.Options.pas never converged:
+        YADF rendered `YadfMain.ParseFlags (YadfMain.pas)`, YADFOT the same
+        edge with ' ?', and each --fix rewrote six blocks the other way, 12
+        edits per round, for ever (measured 2026-10-18 on 1.31.4). The reverse
+        -- stored uncertain, fresh certain -- is still the one-time upgrade it
+        always was. }
+      if HasConfidenceMark(Bare) and StoredBare.ContainsKey(K)
+         and (not HasConfidenceMark(StoredBare[K])) then Bare:= StoredBare[K];
       { An untagged stored entry keeps its untagged spelling in the lazy view. }
       Legacy:= StoredTags.ContainsKey(K) and (Length(Tags) = 0);
       if Own <> '' then Tags:= Tags + [Own];
@@ -1776,6 +1825,38 @@ begin
     end;
   finally
     SIn.Free;
+  end;
+end;
+
+class function TSharedFacts.KeepLegacyPure(const ADocText, AStoredRemarks: string): string;
+var
+  Lines  : TStringList;
+  Body   : string;
+  BeginAt: Integer;
+  EndAt  : Integer;
+  Prefix : string;
+begin
+  Result:= ADocText;
+  if MigrateLegacyPure then Exit;
+  Body:= StoredBlockBody(AStoredRemarks);
+  if Pos(LEGACY_PURE_PARA, Body) = 0 then Exit;
+  { Either purity element already in the regenerated text settles it: the v2
+    fact proves the claim, the legacy one is already kept. }
+  if (Pos(LEGACY_PURE_PARA, ADocText) > 0) or (Pos(EFFECT_FREE_PARA, ADocText) > 0) then Exit;
+  Lines:= TStringList.Create;
+  try
+    Lines.Text:= ADocText;   { round-trips the trailing EOL state, as MergeInboundFacts }
+    FenceBounds(Lines, BeginAt, EndAt);
+    { No fence to keep it in: the fresh render had nothing to say and the
+      caller's empty-render rule (IsLegacyPureOnlyBody) decides instead. }
+    if BeginAt < 0 then Exit;
+    Prefix:= Copy(Lines[BeginAt], 1, Pos(AUTO_BEGIN, Lines[BeginAt]) - 1);
+    { 'Pure' is a registered legacy label (ALL_LABELS), so ReinsertAt places it
+      after the surviving predecessor it had in the stored block. }
+    InsertFactLines(Lines, ReinsertAt(Lines, Body, 'Pure'), Prefix, LEGACY_PURE_PARA);
+    Result:= Lines.Text;
+  finally
+    Lines.Free;
   end;
 end;
 
