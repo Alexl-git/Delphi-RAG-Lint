@@ -24,6 +24,12 @@
       mismatch (R21); a .dproj member with no files row is stale in a preview
       (R19), reindexed by an apply (R20), and unverified with the rebuild hint
       when the reindex still leaves it out (R22).
+    * The whole-owner check covers the CLOSURE, not only declared members (INBOX
+      rename-owner-transitive-members-unchecked, B-03): a unit reached only
+      through a member's uses (uN uses uTrans; N.dpr never lists it), created
+      after N was indexed so no indexed file changed, is stale in a preview
+      (R23), reindexed by an apply (R24), and unverified with the rebuild hint
+      when the reindex still leaves it out (R25).
     * ChangedFilePaths returns the FULL changed list (5 of 5) where
       ProbeIndexFreshness keeps 3 examples, using the same comparison.
     * FindStaleEdit (fix round 1, ruling 8): a multi-project rename's edit set
@@ -61,7 +67,7 @@ $realBefore = if (Test-Path $RealDb) { $i = Get-Item $RealDb; "$($i.Length)|$($i
 Write-Host '== Rename owners: tri-state membership + discovery by full path ==' -ForegroundColor Cyan
 $Exe = (Resolve-Path $Exe).Path
 New-Item -ItemType Directory $WorkDir | Out-Null
-foreach ($d in 'shared', 'twin', 'A', 'T', 'many', 'M') { New-Item -ItemType Directory "$WorkDir\$d" | Out-Null }
+foreach ($d in 'shared', 'twin', 'A', 'T', 'many', 'M', 'N') { New-Item -ItemType Directory "$WorkDir\$d" | Out-Null }
 
 # --- fixture sources: one unit name, two different files ---
 $unit = @('unit uShared;', '', 'interface', '', 'const', '  My_Const = 1;', '', 'implementation', '', 'end.')
@@ -78,6 +84,9 @@ function MDproj([string[]]$Refs) {
 WriteAscii "$WorkDir\M\M.dpr"  @('program M;', '', 'uses', "  uM in 'uM.pas';", '', 'begin', 'end.')
 WriteAscii "$WorkDir\M\uM.pas" @('unit uM;', '', 'interface', '', 'implementation', '', 'end.')
 WriteAscii "$WorkDir\M\M.dproj" (MDproj @('uM.pas'))
+# N: a .dpr project whose only member uN uses uTrans -- never listed in N.dpr, and absent until AFTER indexing (B-03)
+WriteAscii "$WorkDir\N\N.dpr"  @('program N;', '', 'uses', "  uN in 'uN.pas';", '', 'begin', 'end.')
+WriteAscii "$WorkDir\N\uN.pas" @('unit uN;', '', 'interface', '', 'uses', '  uTrans;', '', 'implementation', '', 'end.')
 
 # --- fixture DBs, each with an explicit --db, cwd inside the work folder ---
 Push-Location $WorkDir
@@ -93,13 +102,21 @@ try {
   Check 'F4 indexed many\ (5 units) as a library DB' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\many.sqlite")) "exit=$LASTEXITCODE"
   $null = & $Exe index --project "$WorkDir\M\M.dproj" --db "$WorkDir\M.sqlite" 2>&1
   Check 'F5 indexed M.dproj' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\M.sqlite")) "exit=$LASTEXITCODE"
+  $null = & $Exe index --project "$WorkDir\N\N.dpr" --db "$WorkDir\N.sqlite" 2>&1
+  Check 'F6 indexed N.dpr (uTrans absent)' ($LASTEXITCODE -eq 0 -and (Test-Path "$WorkDir\N.sqlite")) "exit=$LASTEXITCODE"
 } finally { Pop-Location }
 # fresh copies of A for the callback-double cases (RefreshOwner never sees the original)
-foreach ($c in 'A_nostamp', 'A_fail', 'A_noop', 'A_preview', 'A_tag', 'A_notag') { Copy-Item "$WorkDir\A.sqlite" "$WorkDir\$c.sqlite" }
+foreach ($c in 'A_nostamp', 'A_fail', 'A_noop', 'A_preview', 'A_tag') { Copy-Item "$WorkDir\A.sqlite" "$WorkDir\$c.sqlite" }
+# R21's owner must BE T's closure (twin\uShared.pas), only without its tag: A's DB passed as T's only while the
+# owner check stopped at declared members (B-03) -- the closure check sees that A's index lacks twin\uShared.pas
+Copy-Item "$WorkDir\T.sqlite" "$WorkDir\T_notag.sqlite"
 # T2: a member added to M.dproj after M was indexed -- the copies lack it
 WriteAscii "$WorkDir\M\uLate.pas" @('unit uLate;', '', 'interface', '', 'implementation', '', 'end.')
 WriteAscii "$WorkDir\M\M.dproj" (MDproj @('uM.pas', 'uLate.pas'))
 foreach ($c in 'M_preview', 'M_apply', 'M_noop') { Copy-Item "$WorkDir\M.sqlite" "$WorkDir\$c.sqlite" }
+# B-03: the transitively used unit appears AFTER N was indexed; uN itself is unchanged, so no files row is stale
+WriteAscii "$WorkDir\N\uTrans.pas" @('unit uTrans;', '', 'interface', '', 'implementation', '', 'end.')
+foreach ($c in 'N_preview', 'N_apply', 'N_noop') { Copy-Item "$WorkDir\N.sqlite" "$WorkDir\$c.sqlite" }
 [System.IO.File]::WriteAllBytes("$WorkDir\bad.sqlite", [byte[]](,0xFF * 64))
 
 # --- manifests, parsed from text by the harness ---
@@ -223,6 +240,20 @@ Check 'R22 a reindex that still leaves the member out: unverified, with the rebu
   (($kv['r.membernoop'] -eq 'unverified') -and ($kv['r.membernoop.reindex_calls'] -eq '1') -and `
    ($kv['r.membernoop.reason'] -eq "still missing after reindex: 1 project member(s) not in the index: $late -- rebuild it: drag-lint index --project $mDproj --db $WorkDir\M_noop.sqlite --rebuild")) `
   "got: $($kv['r.membernoop']) calls=$($kv['r.membernoop.reindex_calls']) '$($kv['r.membernoop.reason'])'"
+Write-Host '-- RefreshOwner: the closure, not only declared members (B-03, transitive unit)' -ForegroundColor Cyan
+$nDpr = "$WorkDir\N\N.dpr"
+$trans = "$WorkDir\N\uTrans.pas"
+Check 'R23 a unit reached only through a member''s uses, missing from the index: a PREVIEW reports it stale, names it, never reindexes, writes nothing' `
+  (($kv['r.trans'] -eq 'stale') -and ($kv['r.trans.reindex_calls'] -eq '0') -and ($kv['r.trans.db_unchanged'] -eq 'TRUE') -and `
+   ($kv['r.trans.reason'] -eq "1 project member(s) not in the index: $trans")) `
+  "got: $($kv['r.trans']) calls=$($kv['r.trans.reindex_calls']) unchanged=$($kv['r.trans.db_unchanged']) '$($kv['r.trans.reason'])'"
+Check 'R24 ... an APPLY reindexes it once and the owner is reindexed' `
+  (($kv['r.transapply'] -eq 'reindexed') -and ($kv['r.transapply.reindex_calls'] -eq '1')) `
+  "got: $($kv['r.transapply']) calls=$($kv['r.transapply.reindex_calls']) '$($kv['r.transapply.reason'])'"
+Check 'R25 a reindex that still leaves it out: unverified, with the rebuild hint' `
+  (($kv['r.transnoop'] -eq 'unverified') -and ($kv['r.transnoop.reindex_calls'] -eq '1') -and `
+   ($kv['r.transnoop.reason'] -eq "still missing after reindex: 1 project member(s) not in the index: $trans -- rebuild it: drag-lint index --project $nDpr --db $WorkDir\N_noop.sqlite --rebuild")) `
+  "got: $($kv['r.transnoop']) calls=$($kv['r.transnoop.reindex_calls']) '$($kv['r.transnoop.reason'])'"
 Write-Host '-- FindStaleEdit: the write-time all-or-nothing guard (fix round 1, ruling 8)' -ForegroundColor Cyan
 Check 'G1 every edit still holds its expected text: not stale'      ($kv['wg.fresh'] -eq 'ok')        "got: $($kv['wg.fresh'])"
 Check 'G2 ONE edit''s line moved on disk: the set is stale'         ($kv['wg.moved'] -eq 'stale')     "got: $($kv['wg.moved'])"

@@ -33,9 +33,10 @@ const
   /// other closure's rows, so only the --rebuild named here can fix it.</remarks>
   REASON_TAG_MISMATCH = 'index was built from project %s, not %s -- rebuild it: '
     + 'drag-lint index --project %s --db %s --rebuild';
-  /// <summary>The evidence text for project members the index does not hold.
-  /// Format arguments: how many, and the first few member paths ', '-joined
-  /// (', ...' appended when there are more).</summary>
+  /// <summary>The evidence text for units of the project's compile closure --
+  /// declared members and the project-local units they use transitively --
+  /// that the index does not hold. Format arguments: how many, and the first
+  /// few paths ', '-joined (', ...' appended when there are more).</summary>
   REASON_MEMBERS_MISSING = '%d project member(s) not in the index: %s';
   /// <summary>RefreshOwner's AReason when an apply's reindex still left
   /// members out. Format arguments: the REASON_MEMBERS_MISSING text, the
@@ -227,7 +228,8 @@ function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFil
 /// reindex: &lt;first path&gt; -- if this DB was once widened by a folder
 /// index, rebuild it: ...', or the message of whatever was raised.</param>
 /// <returns>ofFresh when ChangedFilePaths is empty, the DB carries its
-/// INDEXED_AT_KEY stamp and (for a project owner) holds every declared member;
+/// INDEXED_AT_KEY stamp and (for a project owner) holds every .pas of its
+/// compile closure;
 /// ofStale when it is stale, has a project file and AReindex is nil;
 /// ofReindexed when it was stale and AReindex made it fresh; ofUnverified
 /// otherwise (a stale folder DB is unverified in a preview too, and a project
@@ -240,10 +242,13 @@ function FindRenameOwners(const AManifest: TIndexManifest; const APlatform, AFil
 /// (1) a non-empty PROJECT_TAG_KEY that is not SanitizeProjectTag of the project
 /// file's base name means the DB is another project's closure -- unverified at
 /// once, never reindexed; an empty tag (an index older than the stamp) is no
-/// mismatch. (2) A declared member -- a .dproj DCCReference .pas, or a .dpr/.dpk
-/// uses name with a same-named .pas in the project folder -- that exists on
-/// disk but has no files row is stale evidence, handled like a changed file.
-/// Units the closure reaches only transitively are not checked.</para>
+/// mismatch. (2) A .pas of the project's compile CLOSURE -- a declared member
+/// or a project-local unit one uses transitively, resolved as `index --project`
+/// resolves it (INBOX rename-owner-transitive-members-unchecked) -- that has no
+/// files row is stale evidence, handled like a changed file: a preview reports
+/// it, an apply reindexes and re-checks, and a unit still missing afterwards
+/// makes the owner unverified, so the rename is refused rather than written
+/// without that unit's references.</para>
 /// <para>Criterion 3 (changed files only) is met by the incremental
 /// `index --project` itself, which skips every up-to-date file; an in-process
 /// per-file path would duplicate DoIndex's resolve stages (Task 4 spike,
@@ -384,7 +389,8 @@ uses
   , DRagLint.Project.Resolver
   , DRagLint.Project.Members
   , DRagLint.Project.Coherence // dl:unit DRagLint.Project.Coherence accepted -- TagMismatch reads the PROJECT_TAG_KEY stamp this module defines beside ProjectTagConflicts, which compares it; the const travels with that call
-  , DRagLint.Lint.ProjectChecks.Parse
+  , DRagLint.Index.Closure
+  , DRagLint.Preprocess.Profile
   , DRagLint.Storage.FileMembership
   ;
 
@@ -488,44 +494,6 @@ begin
   if TFile.Exists(APath) and (AList.IndexOf(APath) < 0) then AList.Add(APath);
 end; // procedure
 
-{ The .pas members AProjectFile DECLARES, absolute, existing on disk, in
-  declaration order: the .dproj's DCCReferences, then each .dpr/.dpk uses name
-  that has a same-named .pas in the project folder. A .dpr finds its sibling
-  .dproj and a .dproj its sibling .dpr/.dpk. Units the closure reaches only
-  transitively are not members (out of scope). Reads files; writes nothing. }
-function DeclaredMembers(const AProjectFile: string): TArray<string>;
-var
-  Dproj    : string     ;
-  Prog     : string     ;
-  Ref      : string     ;
-  Name     : string     ;
-  StartLine: Integer    ;
-  List     : TStringList;
-begin
-  if SameText(ExtractFileExt(AProjectFile), '.dproj') then
-  begin
-    Dproj:= AProjectFile;
-    Prog := FindSiblingProgramFile(AProjectFile);
-  end
-  else
-  begin
-    Dproj:= ChangeFileExt(AProjectFile, '.dproj');
-    Prog := AProjectFile;
-  end;
-  List:= TStringList.Create;
-  try
-    for Ref in ReadDCCReferences(Dproj) do
-      if SameText(ExtractFileExt(Ref), '.pas') then
-        AddMember(List, if TPath.IsPathRooted(Ref) then Ref else TPath.GetFullPath(TPath.Combine(ExtractFilePath(Dproj), Ref)));
-    if Prog <> '' then
-      for Name in ExtractUsesNames(Prog, StartLine) do
-        AddMember(List, TPath.Combine(ExtractFilePath(AProjectFile), Name + '.pas'));
-    Result:= List.ToStringArray;
-  finally
-    List.Free;
-  end; // try
-end; // function
-
 function ProjectOwnedMembers(const ADeclared, ALibraryRoots: TArray<string>): TArray<string>;
 
   function Norm(const APath: string): string;
@@ -579,9 +547,43 @@ begin
   Result:= GLibraryRoots;
 end; // function
 
-{ REASON_MEMBERS_MISSING for the members of AProjectFile that AStore holds no
-  files row for; '' when it holds every one. A member under a library root is
-  not counted (ProjectOwnedMembers). Read-only. }
+{ Default platform of `index --project` without --platform (EffectiveIndexPlatform
+  in the CLI): the closure below must resolve the same branches the reindex
+  callback will. }
+const
+  INDEX_DEFAULT_PLATFORM = 'Win64';
+
+{ The .pas files of AProjectFile's compile CLOSURE, absolute, existing on
+  disk: the declared members and every project-local unit they use
+  transitively, as `index --project` resolves them -- the same resolver, the
+  same library-root exclusion, the same default profile (preprocess on,
+  Win64, Release). INBOX rename-owner-transitive-members-unchecked: a unit no
+  project file lists is still compiled, so a rename must still reach it.
+  .inc files are dropped: the index keeps no files row for them. Reads files;
+  writes nothing. Raises when the project file does not exist. }
+function ClosureUnits(const AProjectFile: string): TArray<string>;
+var
+  Resolver: TClosureResolver;
+  List    : TStringList     ;
+  F       : string          ;
+begin
+  Resolver:= TClosureResolver.Create(LibraryRoots);
+  List    := TStringList.Create;
+  try
+    Resolver.SetPreprocess(True, ProfileFromDproj(AProjectFile, INDEX_DEFAULT_PLATFORM, ''));
+    for F in Resolver.Resolve(AProjectFile, []).Files do
+      if SameText(ExtractFileExt(F), '.pas') then AddMember(List, F);
+    Result:= List.ToStringArray;
+  finally
+    List.Free;
+    Resolver.Free;
+  end; // try
+end; // function
+
+{ REASON_MEMBERS_MISSING for the closure units of AProjectFile that AStore
+  holds no files row for; '' when it holds every one. A unit under a library
+  root is not counted (the resolver excludes it; ProjectOwnedMembers is the
+  second belt). Read-only. }
 function MissingMembers(const AStore: ISymbolStore; const AProjectFile: string): string;
 var
   C    : TMemberCoherence;
@@ -590,7 +592,7 @@ var
 begin
   Count:= 0;
   Names:= nil;
-  for C in ComputeCoherence(AStore, PairDfmSiblings(ProjectOwnedMembers(DeclaredMembers(AProjectFile), LibraryRoots))) do
+  for C in ComputeCoherence(AStore, PairDfmSiblings(ProjectOwnedMembers(ClosureUnits(AProjectFile), LibraryRoots))) do
     if not C.Indexed then
     begin
       Inc(Count);
