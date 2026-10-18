@@ -93,7 +93,7 @@ try {
   Check '1c. the reason is the SPECIFIC one (the share latch, on a new database)' `
         ($r1 -match 'the database held no files before this run \(a new database\): 6 file\(s\), all new') `
         $(($r1 -split "`n" | Where-Object { $_ -match 'whole database because' }) -join ' ')
-  # 1.31.5 (V-C): the "running, not hung" line is gated on DB size (1,000 files
+  # 1.31.5 (V-C): the "running, not hung" line is gated on DB size (1M refs
   # by default); a 6-file DB must not get it. run_fresh_db_notes.ps1 proves the
   # gate still opens.
   Check '1d. a small DB does not get the expensive-shape warning' `

@@ -3363,18 +3363,20 @@ begin
   Result:= (TStopwatch.GetTimeStamp - AStart) / TStopwatch.Frequency;
 end;
 
-{ V-C (1.31.5): the indexed-file count from which a WHOLE-DB calls pass is worth
-  the "expensive shape ... running, not hung" warning. The measured anchor is
-  ~37 min on a 2 GB index (~11k files, so ~0.2 s per file); below 1,000 files
-  the pass ends within a few minutes, and on a small DB (127 files on the VM
-  that filed this) the line only alarms. DRAGLINT_WHOLEDB_SLOW_FILES overrides
-  the threshold -- it exists so run_fresh_db_notes.ps1 can prove the line is
-  gated, not deleted. }
-function WholeDbSlowFileThreshold: Int64;
+{ V-C (1.31.5): the REF count from which a WHOLE-DB calls pass is worth the
+  "expensive shape ... running, not hung" warning. Refs, not files: the pass
+  cost follows refs, and file count misleads both ways (drag-lint's own 205
+  files hold 312k refs and took 149 s). Measured anchors: 312k refs -> 149 s;
+  the 2 GB index (~3.3M refs) -> ~37 min, so ~1.5-2k refs/s. 1M refs is ~8-11
+  min -- below it the stage heartbeat ("still running, Nm elapsed") already
+  says the pass is alive, and the 37-minute line only alarms (the 127-file VM
+  run that filed this). DRAGLINT_WHOLEDB_SLOW_REFS overrides the threshold --
+  it exists so run_fresh_db_notes.ps1 can prove the line is gated, not deleted. }
+function WholeDbSlowRefThreshold: Int64;
 const
-  DEFAULT_SLOW_FILES = 1000;
+  DEFAULT_SLOW_REFS = 1000000;
 begin
-  Result:= StrToInt64Def(GetEnvironmentVariable('DRAGLINT_WHOLEDB_SLOW_FILES'), DEFAULT_SLOW_FILES);
+  Result:= StrToInt64Def(GetEnvironmentVariable('DRAGLINT_WHOLEDB_SLOW_REFS'), DEFAULT_SLOW_REFS);
 end;
 
 { Forward only. The definition stays down beside OpenFileTx -- the upsert it
@@ -5720,6 +5722,8 @@ end;
   resolving the file id and deleting its symbols -- the only moment at which the
   outgoing names still exist. One indexed lookup per re-indexed file. }
 procedure TSQLiteSymbolStore.NoteScopeRemoval(AFileId: Int64);
+const
+  SCOPE_SHARE_DIVISOR = 3; { "one file in three" -- see the latch below }
 var
   Q: TFDQuery;
 begin
@@ -5741,7 +5745,7 @@ begin
   if FScopeMaxFiles < 0 then
   begin
     if FScopeCorpusBefore < 0 then FScopeCorpusBefore:= CountFiles;
-    FScopeMaxFiles:= FScopeCorpusBefore div 3;
+    FScopeMaxFiles:= FScopeCorpusBefore div SCOPE_SHARE_DIVISOR;
   end;
   if FScopeFiles.Count > FScopeMaxFiles then
   begin
@@ -12453,7 +12457,7 @@ begin
     var WholeFiles: Int64:= CountFiles;
     ResolveLog(Format('calls      starting WHOLE-DB pass over all %d indexed file(s)', [WholeFiles]));
     ResolveLog(Format('calls      ... whole database because %s', [DeclineWhy]));
-    if WholeFiles >= WholeDbSlowFileThreshold then
+    if CountReferences >= WholeDbSlowRefThreshold then
       ResolveLog('calls      ... this is the expensive shape (~37 min on a 2 GB index) -- it is running, not hung');
   end;
   { Only the temp tables are built here. The DELETE they feed happens INSIDE the

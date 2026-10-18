@@ -20,7 +20,7 @@
     C  OLD DB, every file rewritten -> the one-in-three reason still appears,
                           with real counts (new vs changed).
     D  the slow-pass line is gated by size, not removed: with the threshold
-       lowered by DRAGLINT_WHOLEDB_SLOW_FILES=1 it prints again (positive
+       lowered by DRAGLINT_WHOLEDB_SLOW_REFS=1 it prints again (positive
        control for note 4).
 
   Needs Python (stdlib sqlite3) for the write in case B -- the `sql` verb is
@@ -138,9 +138,9 @@ try {
   Write-Host ''
   Write-Host 'CASE B -- an OLD database (stamps removed) still gets notes 1 and 2' -ForegroundColor Cyan
   & $py $pyDrop $db 2>&1 | Out-Null
-  $env:DRAGLINT_WHOLEDB_SLOW_FILES = '1'
+  $env:DRAGLINT_WHOLEDB_SLOW_REFS = '1'
   try { $b = & $Exe index $src --db $db 2>&1 | Out-String }
-  finally { [Environment]::SetEnvironmentVariable('DRAGLINT_WHOLEDB_SLOW_FILES', $null) }
+  finally { [Environment]::SetEnvironmentVariable('DRAGLINT_WHOLEDB_SLOW_REFS', $null) }
   Check 'B1 "no resolver stamp" note appears'   ($b -match $rxStamp) ''
   Check 'B2 "records no scan_type" note appears' ($b -match $rxScan) ''
 
