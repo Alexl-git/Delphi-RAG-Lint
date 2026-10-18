@@ -69,16 +69,15 @@ starts with `ask-report:`.
 
 ## How it answers
 
-The twenty-five questions ported to Delphi (`touches-tables`, `shown-where`, `deps`,
+All twenty-six questions (`touches-tables`, `shown-where`, `deps`,
 `class-surface`, `event-wiring`, `tested-by`, `change-impact`, `crosses-boundary`,
 `protocol-trace`, `lifecycle`, `effects`, `feeds-from`, `lands-where`,
-`consumers`, `exception-paths`, `who-calls`, `what-it-calls`, `butterfly`, `hierarchy`, `wiring`, `path`, `architecture`, `cycles`, `who-writes`, `who-reads`) are answered inside the engine, from the live
+`consumers`, `exception-paths`, `who-calls`, `what-it-calls`, `butterfly`, `hierarchy`, `wiring`, `path`, `architecture`, `cycles`, `who-writes`, `who-reads`, `round-trip`) are answered inside the engine, from the live
 index. `crosses-boundary` takes its counterpart from `--counterpart-db`, else from
 the pair in `report-pairs.json`; with neither it draws the one side and says so, as
-the script does. Every other question is
-handed to `charts\src\Ask-Report.ps1 -Plain`, which the engine runs itself -- so
-those need PowerShell 7 and the repository's chart scripts. Either way the text is
-the same: the ported questions are held to the PowerShell output byte for byte by
+the script does. No question is handed to PowerShell any more: the engine answers
+all of them itself, and `charts\src\Ask-Report.ps1 -Plain` stays in the repository
+as the parity reference. The text is the same either way: the questions are held to the PowerShell output byte for byte by
 the parity harness (`charts\src\Test-Parity.ps1 -Mode Question`).
 
 `charts\src\Ask-Report.ps1` still works; without `-Plain` it now runs this verb
