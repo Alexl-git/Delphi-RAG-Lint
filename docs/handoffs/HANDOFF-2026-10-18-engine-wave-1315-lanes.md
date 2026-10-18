@@ -55,7 +55,8 @@ Supersedes HANDOFF-2026-10-18-engine-1314-vm-retest.md (1.31.4 is PUBLISHED).
 - Plugin: job timeouts enforced while the engine runs; on expiry the process tree is killed and the
   job shows "timed out after N s"; a rename with stale owners gets 600 s per owner (B-19).
 - Fixed: index into a new database no longer prints the no-resolver-stamp / no-scan_type notes or 'limit 0'; the whole-DB reason gives real new/changed counts; the ~37-min warning prints only from 1M refs (DRAGLINT_WHOLEDB_SLOW_REFS overrides) (V-C). [lane 2, MERGED]
-- (lanes 6, 7: add from their reports)
+- Fixed: allow accepts a whole-routine metric marker where lint reports it (large files, nested routines, multi-line headers) -- lint/lint-all/allow share RoutineMetricFindings (B-10, B-11); an allow batch on a wrapped statement no longer deletes the continuation line's marker (B-12); lint-all refuses --file/--in (exit 2) instead of ignoring it. [lane 7, MERGED]
+- (lane 6: add from its report)
 - Lane 2 follow-ups: watch-mode FScopeWhole latch never reset between ticks; prune ids counted as 'changed' in the reason.
 
 ## Gotchas
