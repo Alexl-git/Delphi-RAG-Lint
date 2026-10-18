@@ -137,7 +137,7 @@ implementation
 
 uses
   System.Math
-  , DragLint.Plugin.ProcRun
+  , DragLint.Plugin.ProcRun  // dl:unit DragLint.Plugin.ProcRun accepted -- PROCRUN_TIMED_OUT_EXIT_CODE is the runner's own result code; the job reads it to report a timeout
   { The gate's only new dependency. Core.EngineHold reads a sentinel file
     and touches no process and no ToolsAPI, so the unit still compiles
     headless -- which the harness for this gate depends on. }
@@ -416,6 +416,8 @@ begin
     Res:= Trim(Output);
     Res:= Trim(Copy(Res, LastDelimiter(#10, Res) + 1, MaxInt));
   end
+  else if ExitCode = PROCRUN_TIMED_OUT_EXIT_CODE then
+    Res:= Res + Format(': timed out after %d s', [AJob.TimeoutMs div MSecsPerSec])
   else if ExitCode = 2 then
     Res:= Res + ': failed'
   else
