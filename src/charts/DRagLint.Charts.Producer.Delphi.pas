@@ -5,10 +5,11 @@ unit DRagLint.Charts.Producer.Delphi;
   every other question to a fallback producer -- the PowerShell one.
 
   WHAT IT ANSWERS IN-PROCESS: a ported question whose index is given (TProduceOptions.
-  DbOverride, the S4 / test path). Resolving -Project / -In to an index is the engine's
-  resolve-dbs (manifest, pairing file), which lives in DRagLint.CLI and is not linked from
-  src\charts, so a command that names only a project goes to the fallback, which resolves
-  it exactly as Ask-Report does. Freshness IS checked in-process, through the engine's own
+  DbOverride, the S4 / test path) or whose -Project is named (what drag-lint compare passes):
+  the project's index is the one the engine's own esolve-dbs --project names, asked through
+  DRagLint.Charts.Pairs.ResolveProjectIndex -- Ask-Report's step 1 and the ask verb's, so the
+  three cannot resolve a project differently. A command naming only -In (no project, no index)
+  still goes to the fallback. Freshness IS checked in-process, through the engine's own
   DRagLint.Index.Freshness: a stale index refuses with exit 3 unless AllowStale. The SERVER and SQL
   indexes a question reads, when not given, are paired from report-pairs.json in-process, through the
   same DRagLint.Charts.Pairs the ask verb uses (Ask-Report's step 2, its refusals included).
@@ -50,8 +51,9 @@ type
     constructor Create(const pFallback: IReportProducer; pAllowLiveDb: Boolean; const pOutRoot: string = '');
     /// <summary>Whether a command would be answered in-process.</summary>
     /// <param name="pCommand">The question.</param>
-    /// <param name="pOptions">The options; DbOverride must be set.</param>
-    /// <returns>True for a ported question with an index given. crosses-boundary's counterpart is
+    /// <param name="pOptions">The options; DbOverride, or the command's Project argument, names the index.</param>
+    /// <returns>True for a ported question with an index given or a project named (its index is
+    /// resolved in Produce, which refuses when it cannot be). crosses-boundary's counterpart is
     /// TProduceOptions.CounterpartDbOverride, else paired from report-pairs.json as Ask-Report pairs it;
     /// with no pair it draws one side, as Ask-Report does.</returns>
     function AnswersInProcess(const pCommand: TReportCommand; const pOptions: TProduceOptions): Boolean;
@@ -59,7 +61,8 @@ type
     /// <param name="pCommand">The question and its explicit arguments.</param>
     /// <param name="pOptions">Index override, staleness policy, engine, script, timeout.</param>
     /// <returns>As IReportProducer.Produce: exit 0 answered (plain text, CRLF lines, header first),
-    /// 1 refused (the emitter's message), 2 setup (index missing, a SERVER / SQL index the question
+    /// 1 refused (the emitter's message), 2 setup (index missing; a named project whose file is missing,
+    /// that no manifest section owns, or whose resolved index has not been built; a SERVER / SQL index the question
     /// reads neither given nor paired by report-pairs.json -- Ask-Report's own message --, charts folder not found, or a
     /// PORTED question that has to fall back while its Emit-*.ps1 is not beside Ask-Report.ps1 --
     /// an installed copy, which does not ship the ported scripts), 3 stale.</returns>
@@ -125,6 +128,7 @@ const
   EXIT_SETUP = 2;
   REPORTS_SUBDIR = 'drag-lint-reports';
   CROSSES_BOUNDARY = 'crosses-boundary';
+  PROJECT_ARG = 'Project';
   { Ask-Report's own override flags, named in its pairing refusals }
   ASK_REPORT_SERVER_FLAG = '-ServerDbPath';
   ASK_REPORT_SQL_FLAG = '-SqlDbPath';
@@ -175,7 +179,7 @@ function TDelphiProducer.AnswersInProcess(const pCommand: TReportCommand; const 
 var
   E: TChartEmitter;
 begin
-  Result:= (pOptions.DbOverride <> '') and FindChartQuestion(pCommand.Question, E);
+  Result:= ((pOptions.DbOverride <> '') or (pCommand.Get(PROJECT_ARG) <> '')) and FindChartQuestion(pCommand.Question, E);
 end;
 
 function Fail(pCode: Integer; const pReason: string): TProduceResult;
@@ -233,6 +237,23 @@ begin
     PairOtherIndexes(LoadReportPairs(pOptions.PairsFile, pOptions.ScriptPath), Req, Result);
 end;
 
+{ Ask-Report's step 1: the index given, else -- a command naming only a project, as compare passes
+  it -- the one the engine's resolve-dbs --project names (DRagLint.Charts.Pairs.ResolveProjectIndex,
+  the ask verb's resolver). Raises EReportPairStop with Ask-Report's setup code when the engine
+  names none, or names one that has not been built. }
+function ProjectIndex(const pCommand: TReportCommand; const pOptions: TProduceOptions): string;
+begin
+  Result:= pOptions.DbOverride;
+  if Result <> '' then Exit;
+  var Pj:= pCommand.Get(PROJECT_ARG);
+  var Why: string;
+  if not ResolveProjectIndex(pOptions.EnginePath, Pj, Result, Why) then
+    raise EReportPairStop.CreateCode(EXIT_SETUP, Why);
+  if not TFile.Exists(Result) then
+    raise EReportPairStop.CreateCode(EXIT_SETUP, Format('index not found: %s -- resolve-dbs --project %s names it, but it ' +
+      'has not been built; index the project first', [Result, ExpandFileName(Pj)]));
+end;
+
 { Hands a question to the fallback. A PORTED question falls back only when its PowerShell emitter
   is beside the resolved Ask-Report.ps1: the installer does not ship the ported Emit-*.ps1 (owner
   ruling), so in an installed copy the fallback would fail obscurely -- refuse with pWhy instead.
@@ -260,18 +281,20 @@ begin
   if not AnswersInProcess(pCommand, pOptions) then
   begin
     FLast:= 'Delphi in-process, fell back to: ' + FFallback.Describe;
-    var WhyNot:= 'no index given (--db / -Db); naming only a project needs the PowerShell fallback';
+    var WhyNot:= 'no index given (--db / -Db) and no project named (--project / -Project)';
     Exit(FallBack(pCommand, pOptions, WhyNot));
   end;
   FLast:= 'Delphi in-process (' + pCommand.Question.ToLower + ')';
+  var O:= pOptions;
   var Ix: TPairedIndexes;
   try
-    Ix:= PairedIndexes(pCommand, pOptions);
+    O.DbOverride:= ProjectIndex(pCommand, pOptions);
+    Ix:= PairedIndexes(pCommand, O);
   except
     on E: EReportPairStop do
       Exit(Fail(E.Code, E.Message));
   end;
-  var Db:= ExpandFileName(pOptions.DbOverride);
+  var Db:= ExpandFileName(O.DbOverride);
   var Server:= if Ix.Server <> '' then ExpandFileName(Ix.Server) else '';
   var Sql:= if Ix.Sql <> '' then ExpandFileName(Ix.Sql) else '';
   var Other:= if Ix.Other <> '' then ExpandFileName(Ix.Other) else '';

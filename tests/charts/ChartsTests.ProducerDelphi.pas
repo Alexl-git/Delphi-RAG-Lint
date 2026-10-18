@@ -36,6 +36,8 @@ type
     function BareScriptFolder: string;
     function PairsFile(const pClient, pServer, pSql: string): string;
     function FakeEngine(const pKnown: string): string;
+    function FakeProjectEngine(const pBody: string): string;
+    function ProjectFile: string;
     procedure CheckCounterpartDrawn(const pR: TProduceResult; const pOther, pTarget: string);
     function PairedOptions(const pDb, pClient, pServer, pKnown: string): TProduceOptions;
     procedure CheckFeedsFromReadsSql(const pR: TProduceResult; const pSql: string);
@@ -45,7 +47,10 @@ type
     [Test] procedure CompareGetsTheDelphiProducerOnLiveIndexes;
     [Test] procedure CloneGuardStaysOnWhenLiveIsNotAllowed;
     [Test] procedure UnregisteredQuestionFallsBack;
-    [Test] procedure ProjectWithoutIndexFallsBack;
+    [Test] procedure MissingProjectFileIsSetup;
+    [Test] procedure ProjectIsResolvedToItsIndexInProcess;
+    [Test] procedure ProjectWhoseIndexIsNotBuiltIsSetup;
+    [Test] procedure ProjectNoManifestSectionOwnsIsSetup;
     [Test] procedure PortedQuestionIsAnsweredInProcess;
     [Test] procedure StaleIndexRefusesWithoutAllowStale;
     [Test] procedure MissingIndexIsSetup;
@@ -222,11 +227,75 @@ begin
   Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
 end;
 
-procedure TProducerDelphiTests.ProjectWithoutIndexFallsBack;
+{ an empty X.dproj under the out root: resolution reads only the path, never the file }
+function TProducerDelphiTests.ProjectFile: string;
 begin
-  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET, 'X.dproj'), DefaultProduceOptions);
-  Assert.AreEqual(1, FFallback.Calls);
-  Assert.AreEqual(STUB_EXIT, R.ExitCode);
+  TDirectory.CreateDirectory(FOutRoot);
+  Result:= TPath.Combine(FOutRoot, 'X.dproj');
+  TFile.WriteAllText(Result, '');
+end;
+
+{ a stand-in engine whose whole answer is pBody (a cmd script), whatever it is asked }
+function TProducerDelphiTests.FakeProjectEngine(const pBody: string): string;
+begin
+  TDirectory.CreateDirectory(FOutRoot);
+  Result:= TPath.Combine(FOutRoot, 'fake-project-engine.cmd');
+  TFile.WriteAllText(Result, pBody + #13#10, TEncoding.ASCII);
+end;
+
+procedure TProducerDelphiTests.MissingProjectFileIsSetup;
+begin
+  { Ask-Report's step 1 refusal, before any engine is asked }
+  var Missing:= TPath.Combine(FOutRoot, 'NoSuch.dproj');
+  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET, Missing), DefaultProduceOptions);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('project file not found: ' + Missing, R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.ProjectIsResolvedToItsIndexInProcess;
+var
+  Db: string;
+begin
+  { compare names only a project: the index is the one esolve-dbs --project names, and the
+    question is answered in-process from it -- no fallback, no PowerShell }
+  if not Clone(SERVER_CLONE, Db) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.EnginePath:= FakeProjectEngine('@echo {"project":"x","section":"s","db":"' + Db.Replace('\', '\\') + '"}');
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET, ProjectFile), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.AreEqual(Db, R.IndexPaths[0]);
+  Assert.Contains(R.Text, #13#10'CHART touches-tables ' + TT_TARGET + ' -- ');
+  Assert.AreEqual('Delphi in-process (touches-tables)', FProducer.Describe);
+end;
+
+procedure TProducerDelphiTests.ProjectWhoseIndexIsNotBuiltIsSetup;
+begin
+  var Db:= TPath.Combine(TPath.Combine(FOutRoot, '_D-RAG'), 'X.sqlite');
+  var O:= DefaultProduceOptions;
+  O.EnginePath:= FakeProjectEngine('@echo {"project":"x","section":"s","db":"' + Db.Replace('\', '\\') + '"}');
+  var Pj:= ProjectFile;
+  var R:= FProducer.Produce(Cmd('who-writes', 'A.B', Pj), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('index not found: ' + Db + ' -- resolve-dbs --project ' + Pj + ' names it, but it has not been built; ' +
+    'index the project first', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.ProjectNoManifestSectionOwnsIsSetup;
+begin
+  { resolve-dbs --project exits 2 with no JSON: Ask-Report's own refusal }
+  var O:= DefaultProduceOptions;
+  O.EnginePath:= FakeProjectEngine('@exit /b 2');
+  var Pj:= ProjectFile;
+  var R:= FProducer.Produce(Cmd('round-trip', 'A.B', Pj), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('resolve-dbs --project ' + Pj + ' found no index (exit 2) -- the project is not in the engine''s index manifest', R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.PortedQuestionIsAnsweredInProcess;
@@ -348,7 +417,7 @@ end;
 
 procedure TProducerDelphiTests.CrossesBoundaryWithoutAnIndexFallsBack;
 begin
-  { naming only a project needs Ask-Report's own resolution, which only the fallback has }
+  { neither an index nor a project: nothing to resolve in-process, so the fallback is asked }
   var O:= DefaultProduceOptions;
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(1, FFallback.Calls);
@@ -678,7 +747,7 @@ begin
   O.ScriptPath:= BareScriptFolder;
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
-  Assert.AreEqual(NOT_INSTALLED + 'no index given (--db / -Db); naming only a project needs the PowerShell fallback', R.Reason);
+  Assert.AreEqual(NOT_INSTALLED + 'no index given (--db / -Db) and no project named (--project / -Project)', R.Reason);
   Assert.AreEqual(0, FFallback.Calls, 'a fallback that cannot run is not called');
 end;
 
