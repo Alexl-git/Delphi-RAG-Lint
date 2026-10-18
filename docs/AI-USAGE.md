@@ -1070,7 +1070,9 @@ rename-project: Micronite2027 index=fresh
 rename-project: DMTEST index=reindexed      (apply; a preview says index=stale (<n> changed file(s)))
 rename-project: TEST_X index=unverified (still stale after reindex: <file> -- ... rebuild it: ... --rebuild)
 rename-project: DMTEST index=unverified (index was built from project Micronite2027, not DMTEST.dproj -- rebuild it: ...)
-rename-project: TEST_Y index=stale (1 project member(s) not in the index: <file>)   (preview; the apply reindexes)
+rename-project: TEST_Y index=stale (1 project member(s) not in the index: <file>)   (preview; the apply reindexes;
+                                            a "member" is any .pas of the compile closure, transitively used units
+                                            included -- one still missing after the reindex refuses the rename)
 rename-unknown: <db>: <reason>             (a DB that exists but could not be read, or the manifest)
 rename-unindexed: <section> (<db>)         (a configured DB whose file does not exist: not checked)
 rename-target: L48 Lot_Notes -> LotNotes apply Micronite2027=3 DMTEST=1

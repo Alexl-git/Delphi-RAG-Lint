@@ -204,11 +204,12 @@ begin
   { T1: an index stamped with ANOTHER project's tag is not this project's
     index, however fresh its rows are -- unverified, and never reindexed. }
   Refresh('r.wrongtag', W + 'A_tag.sqlite', W + 'T\T.dpr', FakeReindex(True));
-  { ... but an EMPTY tag (an index built before the stamp) is no mismatch. }
-  Store:= TSQLiteSymbolStore.Create(W + 'A_notag.sqlite');
+  { ... but an EMPTY tag (an index built before the stamp) is no mismatch:
+    T's own index, tag cleared, is fresh for T.dpr. }
+  Store:= TSQLiteSymbolStore.Create(W + 'T_notag.sqlite');
   Store.SetMetaValue(PROJECT_TAG_KEY, '');
   Store:= nil;
-  Refresh('r.notag', W + 'A_notag.sqlite', W + 'T\T.dpr', FakeReindex(True));
+  Refresh('r.notag', W + 'T_notag.sqlite', W + 'T\T.dpr', FakeReindex(True));
 
   { T2: a .dproj member the index does not hold (added after indexing). A
     preview reports it stale and writes nothing; an apply reindexes once; a
@@ -218,6 +219,15 @@ begin
   Writeln('r.member.db_unchanged=', FileStamp(W + 'M_preview.sqlite') = Stamp);
   Refresh('r.memberapply', W + 'M_apply.sqlite', W + 'M\M.dproj', ShellReindex());
   Refresh('r.membernoop', W + 'M_noop.sqlite', W + 'M\M.dproj', FakeReindex(True));
+
+  { B-03: a unit the closure reaches only TRANSITIVELY (uN uses uTrans; N.dpr
+    never lists it), created after N was indexed -- no indexed file changed.
+    Same three outcomes as T2. }
+  Stamp:= FileStamp(W + 'N_preview.sqlite');
+  Refresh('r.trans', W + 'N_preview.sqlite', W + 'N\N.dpr', nil);
+  Writeln('r.trans.db_unchanged=', FileStamp(W + 'N_preview.sqlite') = Stamp);
+  Refresh('r.transapply', W + 'N_apply.sqlite', W + 'N\N.dpr', ShellReindex());
+  Refresh('r.transnoop', W + 'N_noop.sqlite', W + 'N\N.dpr', FakeReindex(True));
 
   Touch(Shared);
   C:= Changed(W + 'A.sqlite');
