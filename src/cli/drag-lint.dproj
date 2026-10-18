@@ -311,6 +311,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Cycles.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.MemberAccess.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.MemberAccess.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Trace.FormA.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

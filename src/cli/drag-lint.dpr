@@ -255,6 +255,7 @@ uses
   DRagLint.Charts.Q.Cycles in '..\charts\DRagLint.Charts.Q.Cycles.pas',
   DRagLint.Charts.MemberAccess in '..\charts\DRagLint.Charts.MemberAccess.pas',
   DRagLint.Charts.Q.MemberAccess in '..\charts\DRagLint.Charts.Q.MemberAccess.pas',
+  DRagLint.Charts.Trace.FormA in '..\charts\DRagLint.Charts.Trace.FormA.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

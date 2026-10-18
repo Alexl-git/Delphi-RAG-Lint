@@ -90,6 +90,7 @@ uses
   , DRagLint.Charts.Q.Cycles in '..\..\src\charts\DRagLint.Charts.Q.Cycles.pas'
   , DRagLint.Charts.MemberAccess in '..\..\src\charts\DRagLint.Charts.MemberAccess.pas'
   , DRagLint.Charts.Q.MemberAccess in '..\..\src\charts\DRagLint.Charts.Q.MemberAccess.pas'
+  , DRagLint.Charts.Trace.FormA in '..\..\src\charts\DRagLint.Charts.Trace.FormA.pas'
   , DRagLint.Core.Model
   ;
 
