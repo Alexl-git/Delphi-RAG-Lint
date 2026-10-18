@@ -163,6 +163,9 @@ type
     /// <summary>The calculated-field facts; nil unless the question unit asked DRagLint.Charts.Trace.Calc.
     /// Its runtime type is DRagLint.Charts.Trace.Calc.TCalcInfo, which this unit does not use. Owned by the result.</summary>
     Calc       : TObject;
+    /// <summary>The column exactly as the selection names it (the PS $Col, before the upper-casing of Column): ''
+    /// until the anchor reached a dataset. The question unit hands it to TCalcFactsReader.Apply.</summary>
+    FieldName  : string;
     constructor Create;
     destructor Destroy; override;
   end;
@@ -509,6 +512,7 @@ procedure TTraceAnchorResolver.CompleteAnchorFromDataSet(pR: TAnchorResult; cons
 begin
   pR.DataSet:= pDs;
   pR.HasDataSet:= True;
+  pR.FieldName:= pCol;
   pR.Items.Add(NewTraceStep(KIND_STEP, 'BINDS ' + pDs.Name + ' : ' + pDs.TypeName, TraceAnchorText(pDs.FileName, pDs.Line), pBindGrade,
     '', pBindNote));
   var Lit:= FWalker.DataSetTableLiterals(ChainOfDataSet(pDs));

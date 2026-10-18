@@ -96,6 +96,7 @@ uses
   , DRagLint.Charts.Trace.Calc in '..\..\src\charts\DRagLint.Charts.Trace.Calc.pas'
   , DRagLint.Charts.Trace.Walk in '..\..\src\charts\DRagLint.Charts.Trace.Walk.pas'
   , DRagLint.Charts.Trace.Chart in '..\..\src\charts\DRagLint.Charts.Trace.Chart.pas'
+  , DRagLint.Charts.Q.RoundTrip in '..\..\src\charts\DRagLint.Charts.Q.RoundTrip.pas'
   , DRagLint.Core.Model
   ;
 

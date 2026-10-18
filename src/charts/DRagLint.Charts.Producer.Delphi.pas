@@ -117,6 +117,7 @@ uses
   , DRagLint.Charts.Q.Architecture  // dl:ok unused-unit-in-uses@5f81 -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Cycles  // dl:ok unused-unit-in-uses@c264 -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.MemberAccess  // dl:ok unused-unit-in-uses@a96a -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported questions this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.RoundTrip  // dl:ok unused-unit-in-uses@8ca7 -- REVIEWED 2026-10-18: linked for its initialization section, which registers the round-trip question this producer answers; no symbol is referenced on purpose
   ;
 
 const

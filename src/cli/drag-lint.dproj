@@ -317,6 +317,7 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Trace.Calc.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Trace.Walk.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Trace.Chart.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.RoundTrip.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

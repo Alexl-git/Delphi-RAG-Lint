@@ -373,13 +373,35 @@ type
     [Test] procedure AnswerMatchesPowerShell;
   end;
 
+  [TestFixture]
+  TRoundTripTests = class(TQuestionFixture)
+  private
+    function RtArgs(const pTarget: string; out pArgs: TQuestionArgs): Boolean;
+    function RtEmit(const pTarget: string; out pChart: TChartResult): Boolean;
+    function FieldsWithoutLists(const pChart: TChartResult): string;
+    function ListJson(const pChart: TChartResult; const pName: string): string;
+    function FixtureText(const pName: string): string;
+    function RtRefusal(const pTarget, pSqlName: string; pDropSql: Boolean): string;
+    procedure CheckDot(const pChart: TChartResult; const pDotSha: string);
+  public
+    [Test] procedure HoldoutMatchesPowerShell;
+    [Test] procedure GoldenMatchesPowerShell;
+    [Test] procedure CalculatedAnchorOffersItsSources;
+    [Test] procedure NotBoundIsAOneStepTrace;
+    [Test] procedure TableColumnWithFiveDatasetsStops;
+    [Test] procedure TFieldVariableFormResolves;
+    [Test] procedure RefusalsMatchPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure DotFailureStillAnswersTheText;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, System.RegularExpressions, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
   DRagLint.Charts.Q.WhoCalls,
-  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, DRagLint.Charts.Q.Path, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.MemberAccess, System.Generics.Collections,
+  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, DRagLint.Charts.Q.Path, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.MemberAccess, DRagLint.Charts.Q.RoundTrip, System.Generics.Collections,
   DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
@@ -410,6 +432,49 @@ const
     '  TOOLASSG (written) @uPipeSessionBuilder.pas:1675|' +
     '  TOOLFLDR (written) @uPipeSessionBuilder.pas:1681';
   BUNDLE_LINE = 2;
+  ROUND_TRIP_FIXTURE_DIR = 'tests\charts\fixtures\roundtrip';
+  RT_VNUM = 'frmBlueprint4.dxDBGrid1FtrsVNum';
+  RT_VNUM_FIXTURE = 'frmBlueprint4_dxDBGrid1FtrsVNum.dlgraph';
+  RT_VNUM_STEPS = 103;
+  RT_VNUM_UNRESOLVED = 2;
+  RT_VNUM_DOT_SHA = 'a70c3f3555e20a9e7561c73dc64a8e0f3a5845638813c9f8c03620e70ab01425';
+  RT_VNUM_FIELDS = 'ChartError="",ChartNodes=25,Title="How MSCLIST.NUM reaches frmBlueprint4.dxDBGrid1FtrsVNum and goes back",Notes="",' +
+    'Anchor="MSCLIST.NUM",DataSet="FMTFtrs",Table="MSCLIST",Column="NUM",TableColumn="MSCLIST.NUM",Stop="",Steps=103,Conditions=35,' +
+    'Crossings=4,Unresolved=2,WriteSteps=38,ReadSteps=24,AlsoSteps=32,DerivedNote="",' +
+    'Sections="ANCHOR,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO",OnDbProof="625/471",ClickTargets=149,Expected=149,AllClickable=true';
+  RT_OPERATION = 'frmBlueprint4.dxDBGrid1OperationVName';
+  RT_OPERATION_FIXTURE = 'frmBlueprint4_dxDBGrid1OperationVName.dlgraph';
+  RT_OPERATION_DOT_SHA = 'a143756bd8c829dc430331b01b2ed2a552eae13e5b92d3f4a8db8d4fb6a78b49';
+  RT_OPERATION_FIELDS = 'ChartError="",ChartNodes=24,Title="How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back",' +
+    'Notes="",Anchor="OPERAT.NAME",DataSet="FMTOperation",Table="OPERAT",Column="NAME",TableColumn="OPERAT.NAME",Stop="",Steps=76,' +
+    'Conditions=31,Crossings=4,Unresolved=2,WriteSteps=34,ReadSteps=24,AlsoSteps=9,DerivedNote="",' +
+    'Sections="ANCHOR,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO",OnDbProof="625/471",ClickTargets=118,Expected=118,AllClickable=true';
+  RT_CALC = 'frmBlueprint4.dxDBGrid1FtrsVFtrName';
+  RT_CALC_FIXTURE = 'frmBlueprint4_dxDBGrid1FtrsVFtrName.dlgraph';
+  RT_CALC_DOT_SHA = '3979eeb73a0c4da49393086efa8254f0c5bc3e2692da86f2c52e418bc9347c87';
+  RT_CALC_TITLE = 'Why frmBlueprint4.dxDBGrid1FtrsVFtrName cannot be traced -- it is calculated';
+  RT_CALC_FIRST_DERIVED = '"FROM MSCLIST.NOTATION VIA FfFtrs_Notation => Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation"';
+  RT_CALC_TARGET = '-Target ''Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation''';
+  RT_CALC_ROWS = 18;
+  RT_GROUPBOX = 'frmBlueprint4.cxGroupBox16';
+  RT_GROUPBOX_FIXTURE = 'frmBlueprint4_cxGroupBox16.dlgraph';
+  RT_GROUPBOX_DOT_SHA = '5145dd9668917a8f628bd8d72f688a9f6f39147507f2b9d4b104cf7b260274fb';
+  RT_GROUPBOX_NOTES = 'WRITE=not walked: the trace stopped at [01] | SERVER=not walked: the trace stopped at [01] | ' +
+    'DATABASE=not walked: the trace stopped at [01] | RESPONSE=not walked: the trace stopped at [01] | ' +
+    'READ=not walked: the trace stopped at [01] | ALSO=not walked: the trace stopped at [01]';
+  RT_TABLECOL = 'OPERAT.NAME';
+  RT_TABLECOL_FIXTURE = 'OPERAT_NAME.dlgraph';
+  RT_TABLECOL_DOT_SHA = 'b9ad423fbeca30bc3dcdb83a345437c79c449091a08bb0fd1a19e4d8cc371f78';
+  RT_FIELDVAR = 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_USLLSLName';
+  RT_FIELDVAR_FIXTURE = 'Blueprint4_ViewModel_TBlueprint_ViewModel_FfFtrs_USLLSLName.dlgraph';
+  RT_FIELDVAR_DOT_SHA = '175f77161b0df988485d95c09059c931c0c554bcd29d3a727076ac0a339047e0';
+  RT_FIELDVAR_COUNTS = 'Steps=10,Conditions=8,Crossings=0,Unresolved=1,WriteSteps=0,ReadSteps=0,AlsoSteps=0';
+  RT_ALSO_CALLS = 17;
+  RT_ALSO_LOADS = 14;
+  RT_ANSWER_LINES = 185;
+  RT_HEAD_LINES = 6;
+  RT_INDEX_LINE = 3;
+  RT_ANCHOR_LEAVES = 12;
   SHOWN_WHERE_ID = 'shown-where';
   SW_FEW = 'FTRNAMESTR';
   SW_FEW_FIELDS = 'Column="FTRNAMESTR",Bindings=4,Forms=2,Unresolved=0,IndexRows=903,IndexColumns=459,Clusters=3,ClickTargets=4,Expected=4,AllClickable=true';
@@ -3592,6 +3657,244 @@ begin
     Exit;
   Assert.AreEqual<Integer>(WR_LINES, Length(L));
   Assert.AreEqual(WR_CHART, L[CS_CHART_LINE]);
+end;
+
+
+{ the three clones round-trip reads: CLIENT in DbPath, SERVER and SQL beside it, as the parity case passes them }
+function TRoundTripTests.RtArgs(const pTarget: string; out pArgs: TQuestionArgs): Boolean;
+begin
+  Result:= Args(ROUND_TRIP_ID, pTarget, CLIENT_CLONE, pArgs);
+  if not Result then
+    Exit;
+  var Dir:= ExtractFileDir(pArgs.DbPath);
+  var Server:= TPath.Combine(Dir, SERVER_CLONE);
+  var Sql:= TPath.Combine(Dir, SQL_CLONE);
+  Result:= TFile.Exists(Server) and TFile.Exists(Sql);
+  if not Result then
+  begin
+    Assert.Pass('clone missing: ' + Server + ' or ' + Sql);
+    Exit;
+  end;
+  pArgs.ServerDbPath:= Server;
+  pArgs.SqlDbPath:= Sql;
+  pArgs.Depth:= QuestionDefaultDepth(ROUND_TRIP_ID);
+end;
+
+{ one emit over the three clones }
+function TRoundTripTests.RtEmit(const pTarget: string; out pChart: TChartResult): Boolean;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  pChart:= Default(TChartResult);
+  Result:= RtArgs(pTarget, A);
+  if not Result then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(ROUND_TRIP_ID, E), ROUND_TRIP_ID + ' is not registered');
+  pChart:= E(A, FOutRoot);
+end;
+
+{ every field but the three string lists (their JSON is checked by ListJson) }
+function TRoundTripTests.FieldsWithoutLists(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if (F.Name <> 'Also') and (F.Name <> 'Derived') and (F.Name <> 'DerivedCommands') then
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+function TRoundTripTests.ListJson(const pChart: TChartResult; const pName: string): string;
+begin
+  Result:= '';
+  for var F in pChart.Fields do
+    if F.Name = pName then
+      Result:= F.Json;
+end;
+
+function TRoundTripTests.FixtureText(const pName: string): string;
+begin
+  Result:= TFile.ReadAllText(TPath.Combine(TPath.Combine(RepoRoot, ROUND_TRIP_FIXTURE_DIR), pName), TEncoding.ASCII);
+end;
+
+procedure TRoundTripTests.CheckDot(const pChart: TChartResult; const pDotSha: string);
+begin
+  Assert.AreEqual(pDotSha, FileSha(pChart.Layout.Dot));
+  Assert.AreEqual('', pChart.ChartError);
+end;
+
+{ the refusal of a target (pSqlName '' = the SQL clone; pDropSql = no SQL index given) }
+function TRoundTripTests.RtRefusal(const pTarget, pSqlName: string; pDropSql: Boolean): string;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  Result:= '';
+  if not RtArgs(pTarget, A) then
+    Exit;
+  if pDropSql then
+    A.SqlDbPath:= ''
+  else if pSqlName <> '' then
+    A.SqlDbPath:= TPath.Combine(ExtractFileDir(A.DbPath), pSqlName);
+  Assert.IsTrue(FindChartQuestion(ROUND_TRIP_ID, E), ROUND_TRIP_ID + ' is not registered');
+  try
+    E(A, FOutRoot);
+    Assert.Fail(pTarget + ' was not refused');
+  except
+    on X: EChartsQuestion do Result:= X.Message;
+  end;
+end;
+
+procedure TRoundTripTests.HoldoutMatchesPowerShell;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not RtArgs(RT_VNUM, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(ROUND_TRIP_ID, E), ROUND_TRIP_ID + ' is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(RT_VNUM_FIELDS, FieldsWithoutLists(C));
+  var Also: TArray<string>:= ['"FIRES FMTFtrs.AfterDelete -> DoAfterDeleteFtrs"'];
+  for var K:= 1 to RT_ALSO_CALLS do
+    Also:= Also + ['"CALLS TBlueprint_ViewModel.SendDeltaFtrs"'];
+  for var K:= 1 to RT_ALSO_LOADS do
+    Also:= Also + ['"LOADS FMTFtrs VIA TBlueprint_ViewModel.LoadOneTable ''MSCLIST''"'];
+  var Expected:= '[' + sLineBreak + '      ' + string.Join(',' + sLineBreak + '      ', Also) + sLineBreak + '    ]';
+  Assert.AreEqual(Expected, ListJson(C, 'Also'));
+  Assert.AreEqual('[]', ListJson(C, 'Derived'));
+  Assert.AreEqual('[]', ListJson(C, 'DerivedCommands'));
+  Assert.AreEqual(FixtureText(RT_VNUM_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_VNUM_DOT_SHA);
+  Assert.AreEqual<Integer>(RT_ANCHOR_LEAVES, Length(C.AnchorPaths));
+  Assert.AreEqual<Int64>(RT_VNUM_STEPS, C.LeftCount);
+  Assert.AreEqual<Int64>(RT_VNUM_UNRESOLVED, C.RightCount);
+  Assert.IsTrue(C.TracePath.EndsWith('roundtrip_frmBlueprint4_dxDBGrid1FtrsVNum.dlgraph'));
+end;
+
+procedure TRoundTripTests.GoldenMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not RtEmit(RT_OPERATION, C) then
+    Exit;
+  Assert.AreEqual(RT_OPERATION_FIELDS, FieldsWithoutLists(C));
+  Assert.AreEqual(FixtureText(RT_OPERATION_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_OPERATION_DOT_SHA);
+end;
+
+procedure TRoundTripTests.CalculatedAnchorOffersItsSources;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not RtArgs(RT_CALC, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(ROUND_TRIP_ID, E), ROUND_TRIP_ID + ' is not registered');
+  var C:= E(A, FOutRoot);
+  var F:= FieldsWithoutLists(C);
+  Assert.IsTrue(F.Contains('Title="' + RT_CALC_TITLE + '"'));
+  Assert.IsTrue(F.Contains('Sections="ANCHOR,DERIVED,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO"'));
+  Assert.AreEqual<Integer>(RT_CALC_ROWS, TRegEx.Matches(ListJson(C, 'Derived'), ' => ').Count);
+  Assert.IsTrue(ListJson(C, 'Derived').Contains(RT_CALC_FIRST_DERIVED));
+  var Cmds:= ListJson(C, 'DerivedCommands');
+  Assert.IsTrue(Cmds.Contains('"& ''') and Cmds.Contains(RT_CALC_TARGET));
+  Assert.AreEqual(FixtureText(RT_CALC_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_CALC_DOT_SHA);
+end;
+
+procedure TRoundTripTests.NotBoundIsAOneStepTrace;
+var
+  C: TChartResult;
+begin
+  if not RtEmit(RT_GROUPBOX, C) then
+    Exit;
+  var F:= FieldsWithoutLists(C);
+  Assert.IsTrue(F.Contains('Title="Why ' + RT_GROUPBOX + ' cannot be traced"'));
+  Assert.IsTrue(F.Contains('Notes="' + RT_GROUPBOX_NOTES + '"'));
+  Assert.IsTrue(F.Contains('Steps=1,Conditions=0,Crossings=0,Unresolved=1,WriteSteps=0'));
+  Assert.IsFalse(F.Contains('Stop=""'));
+  Assert.AreEqual(FixtureText(RT_GROUPBOX_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_GROUPBOX_DOT_SHA);
+end;
+
+procedure TRoundTripTests.TableColumnWithFiveDatasetsStops;
+var
+  C: TChartResult;
+begin
+  if not RtEmit(RT_TABLECOL, C) then
+    Exit;
+  var F:= FieldsWithoutLists(C);
+  Assert.IsTrue(F.Contains('Anchor="OPERAT.NAME"'));
+  Assert.IsTrue(F.Contains('Steps=1,'));
+  Assert.IsTrue(F.Contains('5 datasets load OPERAT in this index'));
+  Assert.AreEqual(FixtureText(RT_TABLECOL_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_TABLECOL_DOT_SHA);
+end;
+
+procedure TRoundTripTests.TFieldVariableFormResolves;
+var
+  C: TChartResult;
+begin
+  if not RtEmit(RT_FIELDVAR, C) then
+    Exit;
+  var F:= FieldsWithoutLists(C);
+  Assert.IsTrue(F.Contains(RT_FIELDVAR_COUNTS));
+  Assert.IsTrue(F.Contains('Title="Why ' + RT_FIELDVAR + ' cannot be traced -- it is calculated"'));
+  Assert.IsTrue(F.Contains('DerivedNote="USLLSLName is calculated from 2 fields'));
+  Assert.AreEqual(FixtureText(RT_FIELDVAR_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_FIELDVAR_DOT_SHA);
+end;
+
+procedure TRoundTripTests.RefusalsMatchPowerShell;
+begin
+  var Shape:= RtRefusal('frmBlueprint4', '', False);
+  Assert.IsTrue(Shape.StartsWith('round-trip: -Target takes <Form>.<Control>, <Unit>.<TForm>.<Control>, <Unit>.<TClass>.<TField variable> ' +
+    'or TABLE.COLUMN, got ''frmBlueprint4'''), Shape);
+  Assert.AreEqual('round-trip: no form or data module named frmNoSuchForm in this index', RtRefusal('frmNoSuchForm.x', '', False));
+  Assert.AreEqual('round-trip: no component named noSuchControl on frmBlueprint4', RtRefusal('frmBlueprint4.noSuchControl', '', False));
+  Assert.AreEqual('round-trip needs -ServerDbPath (the SERVER clone) and -SqlDbPath (the SQL-script clone); -DbPath is the CLIENT clone',
+    RtRefusal(RT_VNUM, '', True));
+  var NotSql:= RtRefusal(RT_VNUM, CLIENT_CLONE, False);
+  Assert.IsTrue(NotSql.Contains('is not a SQL index (0 sql_table symbols) -- -SqlDbPath takes the SQL-script clone'), NotSql);
+end;
+
+procedure TRoundTripTests.AnswerMatchesPowerShell;
+var
+  A: TQuestionArgs;
+begin
+  if not RtArgs(RT_VNUM, A) then
+    Exit;
+  var L:= AskChartQuestion(A).Lines;
+  Assert.AreEqual<Integer>(RT_ANSWER_LINES, Length(L));
+  Assert.IsTrue(L[RT_HEAD_LINES].StartsWith('TRACE MSCLIST.NUM'));
+  Assert.IsTrue(L[RT_INDEX_LINE].StartsWith('INDEX ') and not L[RT_INDEX_LINE].EndsWith(')'));
+  Assert.IsTrue(L[RT_INDEX_LINE + 1].EndsWith(' (server)'));
+  Assert.IsTrue(L[RT_INDEX_LINE + 2].EndsWith(' (sql)'));
+  Assert.AreEqual(FixtureText(RT_VNUM_FIXTURE), string.Join(#13#10, Copy(L, RT_HEAD_LINES, Length(L))) + #13#10);
+  for var Line in L do
+  begin
+    Assert.IsFalse(Line.StartsWith('CHART '));
+    Assert.IsFalse(Line.StartsWith('NOTE '));
+  end;
+end;
+
+procedure TRoundTripTests.DotFailureStillAnswersTheText;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not RtArgs(RT_GROUPBOX, A) then
+    Exit;
+  A.DotExe:= TPath.Combine(FOutRoot, 'no-such-dot.exe');
+  Assert.IsTrue(FindChartQuestion(ROUND_TRIP_ID, E), ROUND_TRIP_ID + ' is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreNotEqual('', C.ChartError);
+  Assert.AreEqual('', C.Layout.Svg);
+  Assert.AreEqual(FixtureText(RT_GROUPBOX_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  Assert.IsFalse(TFile.Exists(ChangeFileExt(C.TracePath, '.svg')));
+  var L:= AskChartQuestion(A).Lines;
+  Assert.IsTrue(L[High(L)].StartsWith('NOTE the chart could not be drawn: '), L[High(L)]);
 end;
 
 end.
