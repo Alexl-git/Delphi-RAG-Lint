@@ -68,17 +68,12 @@ function LoadConfigManifest(const AConfigPath: string;
 /// 'Saved to &lt;path&gt;'.</param>
 /// <returns>True only when the file was written.</returns>
 /// <remarks>
-/// <para>What is written is AOriginalText patched, not a fresh serialisation:
-/// a modelled key whose value the user did not change keeps its original text
-/// (or stays absent); a changed key is written; a key the edit removed (an
-/// optional section key) is removed; a section is matched by name, a deleted
-/// one is dropped and a new one appended. Every key the manifest parser does
-/// not model -- a "_comment", a "scan" block, a future setting -- is kept
-/// as it was. A renamed section is a delete plus an add, so its unmodelled
-/// keys go with the old name.</para>
+/// <para>What is written is AOriginalText with only the edits applied
+/// (TManifestIO.SaveEdits): unmodelled keys and untouched modelled keys keep
+/// their original text.</para>
 /// <para>Checks in this order: load error, validation, empty path, then the
 /// write itself. Never raises: a failing write becomes AReason. The write is
-/// atomic (WriteJsonFileAtomic), so a failed write leaves the old file
+/// atomic (TManifestIO.SaveEdits), so a failed write leaves the old file
 /// intact.</para></remarks>
 function TrySaveConfigManifest(const AManifest: TIndexManifest;
   const ALoadError, AOriginalText, APath: string; out AReason: string): Boolean;
@@ -87,9 +82,7 @@ implementation
 
 uses
   System.SysUtils,
-  System.IOUtils,
-  System.JSON,
-  DRagLint.Core.JsonFile;
+  System.IOUtils;
 
 // The manifest LoadConfigManifest hands back when AConfigPath gives it nothing
 // to parse: no sections, default settings, RootDir = the file's directory.
@@ -147,156 +140,10 @@ begin
   end;
 end;
 
-function SameJson(const A, B: TJSONValue): Boolean;
-begin
-  Result := (A <> nil) and (B <> nil) and (A.ToJSON = B.ToJSON);
-end;
-
-// Replace (or add) ADest's AKey with AValue, which ADest then owns.
-procedure SetKey(const ADest: TJSONObject; const AKey: string;
-  const AValue: TJSONValue);
-var
-  Pair: TJSONPair;
-begin
-  Pair := ADest.Get(AKey);
-  if Pair <> nil then
-    Pair.JsonValue := AValue
-  else
-    ADest.AddPair(AKey, AValue);
-end;
-
-function FindSectionByName(const AArr: TJSONArray; const AName: string): TJSONObject;
-var
-  V: TJSONValue;
-  N: TJSONValue;
-begin
-  Result := nil;
-  if AArr = nil then
-    Exit;
-  for V in AArr do
-    if V is TJSONObject then
-    begin
-      N := TJSONObject(V).GetValue('name');
-      if (N is TJSONString) and SameText(N.Value, AName) then
-        Exit(TJSONObject(V));
-    end;
-end;
-
-procedure PatchObject(const ADest, AOld, ANew: TJSONObject); forward;
-
-// The sections array, in the EDITED order: an unchanged section keeps its
-// original object verbatim; a changed one is the original patched; a new one
-// is the edited object; one the parser never modelled (not in AOld) is kept.
-function PatchSections(const ADest, AOld, ANew: TJSONArray): TJSONArray;
-var
-  V: TJSONValue;
-  NewSec, OldSec, DestSec: TJSONObject;
-  Name: string;
-begin
-  Result := TJSONArray.Create;
-  try
-    for V in ANew do
-    begin
-      NewSec := V as TJSONObject;
-      Name := NewSec.GetValue('name').Value;
-      OldSec := FindSectionByName(AOld, Name);
-      DestSec := FindSectionByName(ADest, Name);
-      if (DestSec <> nil) and (OldSec <> nil) then
-      begin
-        DestSec := TJSONObject(DestSec.Clone);
-        Result.AddElement(DestSec);
-        PatchObject(DestSec, OldSec, NewSec);
-      end
-      else
-        Result.AddElement(TJSONValue(NewSec.Clone));
-    end;
-    if ADest <> nil then
-      for V in ADest do
-        if (V is TJSONObject) and (TJSONObject(V).GetValue('name') is TJSONString) and
-          (FindSectionByName(AOld, TJSONObject(V).GetValue('name').Value) = nil) then
-          Result.AddElement(TJSONValue(V.Clone));
-  except  // dl:ok bare-except@041e -- frees the half-built result object and re-raises; nothing is swallowed
-    Result.Free;
-    raise;
-  end;
-end;
-
-// Apply the difference AOld -> ANew (both TManifestIO.ToJson output) to ADest
-// (the file as the user wrote it). Keys only ADest has are never touched.
-procedure PatchObject(const ADest, AOld, ANew: TJSONObject);
-var
-  Pair: TJSONPair;
-  Key: string;
-  NV, OV, DV: TJSONValue;
-begin
-  for Pair in ANew do
-  begin
-    Key := Pair.JsonString.Value;
-    NV := Pair.JsonValue;
-    OV := AOld.GetValue(Key);
-    if SameJson(OV, NV) then
-      Continue;
-    DV := ADest.GetValue(Key);
-    if (Key = 'sections') and (NV is TJSONArray) then
-      SetKey(ADest, Key, PatchSections(DV as TJSONArray, OV as TJSONArray, TJSONArray(NV)))
-    else if (NV is TJSONObject) and (OV is TJSONObject) and ((DV = nil) or (DV is TJSONObject)) then
-    begin
-      if DV = nil then
-      begin
-        DV := TJSONObject.Create;
-        ADest.AddPair(Key, DV);
-      end;
-      PatchObject(TJSONObject(DV), TJSONObject(OV), TJSONObject(NV));
-    end
-    else
-      SetKey(ADest, Key, TJSONValue(NV.Clone));
-  end;
-  for Pair in AOld do
-    if ANew.GetValue(Pair.JsonString.Value) = nil then
-      ADest.RemovePair(Pair.JsonString.Value).Free;
-end;
-
-// AOriginalText with the edits AEdited made to it, as a new object the caller owns.
-function MergeEdits(const AOriginalText, ARootDir: string;
-  const AEdited: TIndexManifest): TJSONObject;
-var
-  Parsed: TJSONValue;
-  OldJ, NewJ: TJSONObject;
-begin
-  if Trim(AOriginalText) = '' then
-    Result := TJSONObject.Create
-  else
-  begin
-    Parsed := TJSONObject.ParseJSONValue(AOriginalText, False, True);
-    if not (Parsed is TJSONObject) then
-    begin
-      Parsed.Free;
-      raise EManifestError.Create('(root): not a JSON object');
-    end;
-    Result := TJSONObject(Parsed);
-  end;
-  try
-    OldJ := nil;
-    NewJ := nil;
-    try
-      OldJ := TManifestIO.ToJson(TManifestIO.ParseText(AOriginalText, ARootDir));
-      NewJ := TManifestIO.ToJson(AEdited);
-      PatchObject(Result, OldJ, NewJ);
-    finally
-      NewJ.Free;
-      OldJ.Free;
-    end;
-  except  // dl:ok bare-except@041e -- frees the half-built result object and re-raises; nothing is swallowed
-    Result.Free;
-    raise;
-  end;
-end;
-
 function TrySaveConfigManifest(const AManifest: TIndexManifest;
   const ALoadError, AOriginalText, APath: string; out AReason: string): Boolean;
 var
   Err: string;
-  Root: TJSONObject;
 begin
   Result := False;
   if ALoadError <> '' then
@@ -317,12 +164,7 @@ begin
     Exit;
   end;
   try
-    Root := MergeEdits(AOriginalText, ExtractFileDir(APath), AManifest);
-    try
-      WriteJsonFileAtomic(APath, Root);
-    finally
-      Root.Free;
-    end;
+    TManifestIO.SaveEdits(AOriginalText, AManifest, APath);
     AReason := 'Saved to ' + APath;
     Result := True;
   except

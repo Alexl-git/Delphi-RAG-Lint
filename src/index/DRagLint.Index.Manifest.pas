@@ -368,6 +368,26 @@ type
       /// </remarks>
       class procedure Save(const AManifest: TIndexManifest; const APath: string); static;
 
+      /// <summary>Write AEdited to APath as AOriginalText with ONLY the edits
+      /// applied, atomically like Save. Use it to rewrite a file a user owns;
+      /// Save re-serialises the model and loses every key it does not hold.</summary>
+      /// <param name="AOriginalText">The file's text as it was parsed into the
+      /// manifest that was then edited; '' for a file that does not exist yet.
+      /// Must be a JSON object (or empty).</param>
+      /// <param name="AEdited">The manifest after the edits. Its RootDir must be
+      /// the one AOriginalText was parsed with.</param>
+      /// <param name="APath">Destination file.</param>
+      /// <exception cref="EManifestError">AOriginalText is not a JSON object.</exception>
+      /// <remarks>The edits are ToJson(ParseText(AOriginalText)) -> ToJson(AEdited).
+      /// A modelled key whose value did not change keeps its original text (or
+      /// stays absent); a changed key is written; a key the edit removed (an
+      /// optional section key such as "db") is removed. Sections are matched by
+      /// name: a deleted one is dropped, a new one appended, one the parser never
+      /// modelled kept. Keys the parser does not model ("_comment", "scan", a
+      /// future setting, a section "_note") are never touched. A renamed section
+      /// is a delete plus an add, so its unmodelled keys go with the old name.</remarks>
+      class procedure SaveEdits(const AOriginalText: string; const AEdited: TIndexManifest; const APath: string); static;
+
       /// <summary>Validate the manifest and return the first human-readable error,
       /// or '' if the manifest is valid.</summary>
       /// <param name="AManifest">Manifest to validate.</param>
@@ -1467,6 +1487,166 @@ begin
   try
     { The one implementation lives in src\core so the IDE plugin can share it
       without reaching into the extraction surface -- see that unit's header. }
+    WriteJsonFileAtomic(APath, Root);
+  finally
+    Root.Free;
+  end;
+end;
+
+{ ---------------------------------------------------------------------- }
+{  TManifestIO.SaveEdits -- write only what changed                         }
+{ ---------------------------------------------------------------------- }
+
+function SameJson(const A, B: TJSONValue): Boolean;
+begin
+  Result := (A <> nil) and (B <> nil) and (A.ToJSON = B.ToJSON);
+end;
+
+// Replace (or add) ADest's AKey with AValue, which ADest then owns.
+procedure SetKey(const ADest: TJSONObject; const AKey: string;
+  const AValue: TJSONValue);
+var
+  Pair: TJSONPair;
+begin
+  Pair := ADest.Get(AKey);
+  if Pair <> nil then
+    Pair.JsonValue := AValue
+  else
+    ADest.AddPair(AKey, AValue);
+end;
+
+function FindSectionByName(const AArr: TJSONArray; const AName: string): TJSONObject;
+var
+  V: TJSONValue;
+  N: TJSONValue;
+begin
+  Result := nil;
+  if AArr = nil then
+    Exit;
+  for V in AArr do
+    if V is TJSONObject then
+    begin
+      N := TJSONObject(V).GetValue('name');
+      if (N is TJSONString) and SameText(N.Value, AName) then
+        Exit(TJSONObject(V));
+    end;
+end;
+
+procedure PatchObject(const ADest, AOld, ANew: TJSONObject); forward;
+
+// The sections array, in the EDITED order: an unchanged section keeps its
+// original object verbatim; a changed one is the original patched; a new one
+// is the edited object; one the parser never modelled (not in AOld) is kept.
+function PatchSections(const ADest, AOld, ANew: TJSONArray): TJSONArray;
+var
+  V: TJSONValue;
+  NewSec, OldSec, DestSec: TJSONObject;
+  Name: string;
+begin
+  Result := TJSONArray.Create;
+  try
+    for V in ANew do
+    begin
+      NewSec := V as TJSONObject;
+      Name := NewSec.GetValue('name').Value;
+      OldSec := FindSectionByName(AOld, Name);
+      DestSec := FindSectionByName(ADest, Name);
+      if (DestSec <> nil) and (OldSec <> nil) then
+      begin
+        DestSec := TJSONObject(DestSec.Clone);
+        Result.AddElement(DestSec);
+        PatchObject(DestSec, OldSec, NewSec);
+      end
+      else
+        Result.AddElement(TJSONValue(NewSec.Clone));
+    end;
+    if ADest <> nil then
+      for V in ADest do
+        if (V is TJSONObject) and (TJSONObject(V).GetValue('name') is TJSONString) and
+          (FindSectionByName(AOld, TJSONObject(V).GetValue('name').Value) = nil) then
+          Result.AddElement(TJSONValue(V.Clone));
+  except  // dl:ok bare-except@041e -- frees the half-built result object and re-raises; nothing is swallowed
+    Result.Free;
+    raise;
+  end;
+end;
+
+// Apply the difference AOld -> ANew (both TManifestIO.ToJson output) to ADest
+// (the file as the user wrote it). Keys only ADest has are never touched.
+procedure PatchObject(const ADest, AOld, ANew: TJSONObject);
+var
+  Pair: TJSONPair;
+  Key: string;
+  NV, OV, DV: TJSONValue;
+begin
+  for Pair in ANew do
+  begin
+    Key := Pair.JsonString.Value;
+    NV := Pair.JsonValue;
+    OV := AOld.GetValue(Key);
+    if SameJson(OV, NV) then
+      Continue;
+    DV := ADest.GetValue(Key);
+    if (Key = 'sections') and (NV is TJSONArray) then
+      SetKey(ADest, Key, PatchSections(DV as TJSONArray, OV as TJSONArray, TJSONArray(NV)))
+    else if (NV is TJSONObject) and (OV is TJSONObject) and ((DV = nil) or (DV is TJSONObject)) then
+    begin
+      if DV = nil then
+      begin
+        DV := TJSONObject.Create;
+        ADest.AddPair(Key, DV);
+      end;
+      PatchObject(TJSONObject(DV), TJSONObject(OV), TJSONObject(NV));
+    end
+    else
+      SetKey(ADest, Key, TJSONValue(NV.Clone));
+  end;
+  for Pair in AOld do
+    if ANew.GetValue(Pair.JsonString.Value) = nil then
+      ADest.RemovePair(Pair.JsonString.Value).Free;
+end;
+
+// AOriginalText with the edits AEdited made to it, as a new object the caller owns.
+function MergeEdits(const AOriginalText: string; const AEdited: TIndexManifest): TJSONObject;
+var
+  Parsed: TJSONValue;
+  OldJ, NewJ: TJSONObject;
+begin
+  if Trim(AOriginalText) = '' then
+    Result := TJSONObject.Create
+  else
+  begin
+    Parsed := TJSONObject.ParseJSONValue(AOriginalText, False, True);
+    if not (Parsed is TJSONObject) then
+    begin
+      Parsed.Free;
+      raise EManifestError.Create('(root): not a JSON object');
+    end;
+    Result := TJSONObject(Parsed);
+  end;
+  try
+    OldJ := nil;
+    NewJ := nil;
+    try
+      OldJ := TManifestIO.ToJson(TManifestIO.ParseText(AOriginalText, AEdited.RootDir));
+      NewJ := TManifestIO.ToJson(AEdited);
+      PatchObject(Result, OldJ, NewJ);
+    finally
+      NewJ.Free;
+      OldJ.Free;
+    end;
+  except  // dl:ok bare-except@041e -- frees the half-built result object and re-raises; nothing is swallowed
+    Result.Free;
+    raise;
+  end;
+end;
+
+class procedure TManifestIO.SaveEdits(const AOriginalText: string; const AEdited: TIndexManifest; const APath: string);
+var
+  Root: TJSONObject;
+begin
+  Root:= MergeEdits(AOriginalText, AEdited);
+  try
     WriteJsonFileAtomic(APath, Root);
   finally
     Root.Free;
