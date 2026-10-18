@@ -1,0 +1,36 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{F305BF76-AE69-4C08-8CA1-7FA87D854A5C}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="dclDragLintWizard.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="dclDragLintWizard">
+        <MSBuild Projects="dclDragLintWizard.dproj"/>
+    </Target>
+    <Target Name="dclDragLintWizard:Clean">
+        <MSBuild Projects="dclDragLintWizard.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="dclDragLintWizard:Make">
+        <MSBuild Projects="dclDragLintWizard.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="dclDragLintWizard"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="dclDragLintWizard:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="dclDragLintWizard:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>

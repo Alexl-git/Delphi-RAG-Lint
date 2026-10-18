@@ -339,6 +339,14 @@
         ],
         "useIgnoreFiles": true,
         "sqlOnlyMS": true
+      },
+      {
+        "name": "Delphi13MigrationAssistant",
+        "include": [
+          "C:\\Projects\\Delphi-Version-migration-Assistant\\Delphi13MigrationAssistant.dproj"
+        ],
+        "useIgnoreFiles": true,
+        "sqlOnlyMS": true
       }
     ]
   }
