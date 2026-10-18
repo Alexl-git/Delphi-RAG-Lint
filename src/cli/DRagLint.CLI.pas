@@ -31345,6 +31345,7 @@ var
   Conn       : TFDConnection ;
   RowsBefore, RowsAfter: Int64;
   HgRoots    : TStringList   ;
+  OrigText   : string        ;
 begin
   Result    := 0;
   Moved     := 0;
@@ -31363,7 +31364,10 @@ begin
     Writeln('       Pass --config <drag-lint.json> naming the file to rewrite.');
     Exit(2);
   end;
-  Manifest:= TManifestIO.ParseText(TFile.ReadAllText(CfgPath), ExtractFilePath(TPath.GetFullPath(CfgPath)));
+  { OrigText is what each save patches: only the moved sections' "db" keys
+    change, every other byte of the user's manifest is kept (SaveEdits). }
+  OrigText:= TFile.ReadAllText(CfgPath);
+  Manifest:= TManifestIO.ParseText(OrigText, ExtractFilePath(TPath.GetFullPath(CfgPath)));
 
   { Probe EVERY lock before moving ANY file -- but only when actually
     APPLYING. A plain dry run only prints the plan and touches nothing, so it
@@ -31415,7 +31419,7 @@ begin
         if TFile.Exists(Dst) and DbLooksHealthy(Dst) then
         begin
           Manifest.Sections[I].Db:= '';   { now derivable }
-          TManifestIO.Save(Manifest, CfgPath);
+          TManifestIO.SaveEdits(OrigText, Manifest, CfgPath);
           MirrorPairedManifest(CfgPath);   { Fix 2: keep the win32/win64 pair in sync }
           Inc(Reconciled);
           Writeln('  RECONCILED: already at ', Dst, ' -- manifest entry updated');
@@ -31460,7 +31464,7 @@ begin
           path that no longer exists. A verification failure a few lines
           down does NOT move the file back, so it must not revert this. }
         Manifest.Sections[I].Db:= '';   { now derivable }
-        TManifestIO.Save(Manifest, CfgPath);
+        TManifestIO.SaveEdits(OrigText, Manifest, CfgPath);
         MirrorPairedManifest(CfgPath);   { Fix 2: keep the win32/win64 pair in sync }
         Inc(Moved);
 
