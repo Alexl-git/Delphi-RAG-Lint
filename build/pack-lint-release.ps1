@@ -87,6 +87,11 @@ foreach ($plat in 'win64','win32') {
                                      (Join-Path $stg "convrules\vendor") -Force | Out-Null
   Copy-Item (Join-Path $repo $exe) $stg
   foreach ($d in 'tree-sitter-delphi13.dll','tree-sitter-dfm.dll','tree-sitter.dll') { Copy-Item (Join-Path $repo "$dll\$d") $stg }
+  # sqlite3.dll: the engine loads it dynamically; without it a clean machine gets FTS5=False
+  # and "-314 Cannot load vendor library". Match the zip's bitness (bin64 = x64, bin = x86).
+  $sqliteSrc = if ($plat -eq 'win64') { 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin64\sqlite3.dll' } else { 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\sqlite3.dll' }
+  if (-not (Test-Path -LiteralPath $sqliteSrc)) { Write-Host "PACK FAILED: $sqliteSrc missing"; exit 1 }
+  Copy-Item $sqliteSrc $stg
   Copy-Item (Join-Path $repo "rules\*.scm") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\*.json") (Join-Path $stg "rules")
   Copy-Item (Join-Path $repo "rules\builtin-symbols.txt") (Join-Path $stg "rules")
@@ -148,7 +153,7 @@ foreach ($plat in 'win64','win32') {
     try { $names = @($zf.Entries | ForEach-Object { $_.FullName.Replace('\','/') }) }
     finally { $zf.Dispose() }
     $root = "drag-lint-v$Version-$plat"
-    foreach ($need in 'drag-lint.exe','ConvRulesEditor.exe') {
+    foreach ($need in 'drag-lint.exe','ConvRulesEditor.exe','sqlite3.dll') {
       if ($names -notcontains "$root/$need") {
         Write-Host "PACK FAILED: $z does not contain $root/$need" -ForegroundColor Red
         exit 1

@@ -40,6 +40,10 @@
   #error EngineDir is not defined -- build with installer\Build-Installer.ps1
 #endif
 
+#ifndef NumericVersion
+  #error NumericVersion is not defined -- build with installer\Build-Installer.ps1
+#endif
+
 #define AppName "drag-lint"
 #define IdeVer  "37.0"
 #define IdeKey  "Software\Embarcadero\BDS\" + IdeVer
@@ -52,6 +56,10 @@ AppId={{6E0A3C52-3D7B-4C1E-9B0D-7F2A4D8E5C11}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
+VersionInfoVersion={#NumericVersion}
+VersionInfoProductVersion={#NumericVersion}
+VersionInfoTextVersion={#AppVersion}
+VersionInfoProductTextVersion={#AppVersion}
 AppPublisher=Alexander Liberov
 AppPublisherURL=https://github.com/
 DefaultDirName={autopf}\drag-lint
@@ -98,6 +106,7 @@ Name: "mcp";      Description: "Register drag-lint as an MCP server for Claude C
 Source: "{#EngineDir}\drag-lint.exe";            DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\drag-lint-config.exe";     DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\drag-lint-switch.exe";     DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
+Source: "{#EngineDir}\sqlite3.dll";             DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\tree-sitter.dll";          DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\tree-sitter-delphi13.dll"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#EngineDir}\tree-sitter-dfm.dll";      DestDir: "{app}\bin"; Components: core; Flags: ignoreversion

@@ -41,7 +41,7 @@ if ($reported -ne "drag-lint $version") {
 # ---- every source the .iss names --------------------------------------------
 $need = @(
   "$EngineDir\drag-lint.exe", "$EngineDir\drag-lint-config.exe", "$EngineDir\drag-lint-switch.exe",
-  "$EngineDir\tree-sitter.dll", "$EngineDir\tree-sitter-delphi13.dll", "$EngineDir\tree-sitter-dfm.dll",
+  "$EngineDir\sqlite3.dll", "$EngineDir\tree-sitter.dll", "$EngineDir\tree-sitter-delphi13.dll", "$EngineDir\tree-sitter-dfm.dll",
   "$EngineDir\ConvRulesEditor.exe", "$EngineDir\drag_lint_graph.exe", "$EngineDir\dclDragLintWizard.bpl",
   "$Plugin32Dir\dclDragLintWizard.bpl",
   "$GraphvizBin\dot.exe", "$GraphvizBin\config8",
@@ -65,8 +65,14 @@ if ($bplAge.TotalDays -gt 7) { Write-Warning ("the Win32 plugin BPL is {0:N0} da
 $bpl64Age = (Get-Item "$EngineDir\drag-lint.exe").LastWriteTime - (Get-Item "$EngineDir\dclDragLintWizard.bpl").LastWriteTime
 if ($bpl64Age.TotalDays -gt 7) { Write-Warning ("the Win64 plugin BPL is {0:N0} days older than the engine" -f $bpl64Age.TotalDays) }
 
+# Numeric x.y.z.0 for the Windows version resource (Inno needs four numeric fields).
+$numMatch = [regex]::Match($version, '^(\d+)\.(\d+)\.(\d+)')
+if (-not $numMatch.Success) { throw "DRAGLINT_VERSION '$version' does not start with x.y.z" }
+$numericVersion = ($numMatch.Groups[1..3] | ForEach-Object { $_.Value }) -join '.'
+$numericVersion += '.0'
+
 $defines = [ordered]@{
-  AppVersion = $version; EngineDir = $EngineDir; Plugin32Dir = $Plugin32Dir; YadfDir = $YadfDir
+  AppVersion = $version; NumericVersion = $numericVersion; EngineDir = $EngineDir; Plugin32Dir = $Plugin32Dir; YadfDir = $YadfDir
   GraphvizBin = $GraphvizBin; RepoRoot = $repo; OutDir = $OutDir
 }
 "drag-lint installer $version"

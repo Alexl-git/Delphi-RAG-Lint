@@ -83,6 +83,22 @@ for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
     exit /b 1
   )
 )
+REM STAGE sqlite3.dll BESIDE EVERY STAGED ENGINE. The engine loads it dynamically
+REM (FireDAC); it was never shipped, so a machine without RAD Studio on PATH got
+REM FTS5=False and "-314 Cannot load vendor library sqlite3.dll". Guarded by
+REM tests\autotest\run_installed_layout_sqlite.ps1.
+set SQLITE_SRC=C:\Program Files (x86)\Embarcadero\Studio\37.0\bin64\sqlite3.dll
+if not exist "%SQLITE_SRC%" (
+  echo ERROR: x64 sqlite3.dll not found in Studio 37.0 bin64
+  exit /b 1
+)
+for %%D in ("%ROOT%\src\cli\Win64\Debug" "%ROOT%\third_party\dll-win64") do (
+  copy /Y "%SQLITE_SRC%" "%%~D\sqlite3.dll" >NUL
+  if errorlevel 1 (
+    echo ERROR: failed to stage sqlite3.dll into %%~D
+    exit /b 1
+  )
+)
 REM STAGE THE ENGINE. The plain copy stays FIRST and is the ordinary path: when
 REM nothing holds the target this is one copy and no PowerShell is launched.
 REM
