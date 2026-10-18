@@ -600,7 +600,9 @@ end;
 procedure TCfgBlock.AddItem(const ANode: TTSNode; AOpaque: Boolean; AWithEntity: Boolean);
 var It: TCfgItem;
 begin
-  It.Node := ANode; It.Opaque := AOpaque; It.WithEntity := AWithEntity;
+  It.Node := ANode;
+  It.Opaque := AOpaque;
+  It.WithEntity := AWithEntity;
   Items.Add(It);
 end;
 
