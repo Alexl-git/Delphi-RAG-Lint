@@ -3,6 +3,12 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## v1.31.4-alpha -- 2026-10-17
+
+### Fixed
+- **`type-name-prefix` traces the ancestor chain into the library index.** A class whose ancestry leaves the project index (`EKeyViolation = class(EDatabaseError)`, ORM3 `BASICS.PAS:446`) is now classified through the `--library-db` / manifest library index (`lint` and `lint-all`), so it asks for "E", not "T". An ancestor found in NEITHER index is reported once as an ERROR-severity index gap (`Ancestor "X" of class "Y" is in neither the project nor the library index ...`) and no prefix is guessed; with no library index, or no `--db` at all, an untraceable class is silent (only a missing ancestor, `TObject` or `Exception` decides the letter there). The 1.31.3 name heuristic no longer picks a letter.
+- **The `type-name-prefix` autofix takes its letter from the finding.** `lint --fix --fix-naming` reads the prefix from the finding's own message, so the fixer and the checker cannot disagree: `EKeyViolation` is never renamed `TEKeyViolation`, and an index-gap finding is never auto-fixed. Guard: `tests\autotest\run_type_prefix_exception_ancestor.ps1` (sections A, Y, B, B-all, C; fixture `tests\lint-project\typeprefix-split`).
+
 ## v1.31.3-alpha -- 2026-10-16
 
 ### Fixed

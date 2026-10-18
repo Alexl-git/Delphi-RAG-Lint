@@ -69,6 +69,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **Run AST Checks** -- Runs drag-lint's AST-level checks against a file. [More](Run-AST-Checks)
 * **Run Diagnostics (didSave)** -- Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification. [More](Run-Diagnostics-didSave)
 * **Run Lint All (Full Report)** -- Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check. [More](Run-Lint-All-Full-Report)
+* **type-name-prefix: expected letter from the ancestor chain** -- type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter. Before 1.31.4 a class whose ancestry left the project index was judged by its project-only chain, so EKeyViolation = class(EDatabaseError) was told to start with T and the fix renamed it TEKeyViolation. [More](Type-Name-Prefix-Origin)
 
 ## Documentation
 

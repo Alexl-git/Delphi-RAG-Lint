@@ -821,6 +821,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `link-orm` | [link-orm](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/link-orm) | Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both | index |
 | `lint-all` | [Fix all in project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Fix-all-in-project) | Applies autofixes for every fixable finding across the whole project, starting from the Structure form |  |
 | `lint-all` | [Run Lint All (Full Report)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Run-Lint-All-Full-Report) | Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check |  |
+| `lint-all` | [type-name-prefix: expected letter from the ancestor chain](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Type-Name-Prefix-Origin) | type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter |  |
 | `lint-project` | [lint-project](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-project) | Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol | index |
 | `lint-tree` | [lint-tree](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lint-tree) | Answers one question lint-all cannot: does an interface edit to this unit reach any dependent? |  |
 | `lint` | [Copy All Diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Copy-All-Diagnostics) | Puts every lint finding for the current unit onto the clipboard, starting from the Structure form |  |
@@ -830,6 +831,8 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `lint` | [Fix it](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Fix-it) | Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling |  |
 | `lint` | [Lint Buffer (Unsaved)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Lint-Buffer-Unsaved) | Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first |  |
 | `lint` | [Rename across every project that compiles a shared unit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Multi-Project-Rename) | A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects |  |
+| `lint` | [type-name-prefix: expected letter from the ancestor chain](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Type-Name-Prefix-Origin) | type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter |  |
+| `lint` | [type-name-prefix: expected letter from the ancestor chain](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Type-Name-Prefix-Origin) | type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter |  |
 | `lsp` | [lsp](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/lsp) | Starts the LSP (Language Server Protocol) stdio server | index |
 | `migrate-dbs` | [migrate-dbs](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/migrate-dbs) | Moves project index databases into each project's own D-RAG folder, matching the current index layout |  |
 | `outline` | [outline](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) | Prints the file-scoped symbol outline for one Pascal unit |  |
@@ -1000,7 +1003,7 @@ participates in `--fix` only when its id is listed in the `autofix` array of
     These rely on the reference index, which does **not yet** capture
     `Self.`-qualified field uses or type-annotation references, so those
     occurrences may be left unrenamed. `--fix` on either rule emits a **stderr
-    warning** telling you to review the resulting diff before committing.
+    warning** telling you to review the resulting diff before committing. The `--fix-naming` rename uses the letter the finding reports; an index-gap finding is never auto-fixed.
 
 Enable an autofix by adding its rule id, e.g. in `drag-lint-lint.json`:
 ```json

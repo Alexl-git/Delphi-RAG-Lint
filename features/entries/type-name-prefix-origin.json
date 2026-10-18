@@ -1,0 +1,33 @@
+{
+  "id": "type-name-prefix-origin",
+  "title": "type-name-prefix: expected letter from the ancestor chain",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.31.4-alpha",
+  "summary": "type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter",
+  "intro": "Before 1.31.4 a class whose ancestry left the project index was judged by its project-only chain, so EKeyViolation = class(EDatabaseError) was told to start with T and the fix renamed it TEKeyViolation.",
+  "wikiPage": "Type-Name-Prefix-Origin",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "lint <unit> --db <proj> --library-db <lib> --rule type-name-prefix"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all"
+    },
+    {
+      "type": "cli",
+      "verb": "lint",
+      "example": "lint <unit> --db <proj> --fix --fix-naming --rule type-name-prefix"
+    }
+  ],
+  "audience": "both",
+  "lastVerified": {
+    "date": "2026-10-17",
+    "by": "alexanderl",
+    "build": "1.31.4-alpha"
+  }
+}
