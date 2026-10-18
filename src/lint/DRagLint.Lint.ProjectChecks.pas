@@ -454,9 +454,9 @@ begin
         F.Severity := 'warning';
         F.Message  := Format(
           'Unit ''%s'' is used but resolves to no known unit (not a project ' +
-          'member, not in the library, not a known alias or RTL unit). Convert ' +
-          'it: comment it out, replace it (e.g. Orpheus->DevExpress, BDE-' +
-          '>FireDAC), or add it to the project.', [U.UnitName]);
+          'member, not in the library, not a known alias or RTL unit). Add its ' +
+          'folder or library to the index, add the unit to the project, or ' +
+          'remove the use.', [U.UnitName]);
         F.FilePath  := SrcPath;
         F.StartLine := U.StartLine;
         F.StartCol  := U.StartCol;
