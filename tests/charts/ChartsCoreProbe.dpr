@@ -91,6 +91,7 @@ uses
   , DRagLint.Charts.MemberAccess in '..\..\src\charts\DRagLint.Charts.MemberAccess.pas'
   , DRagLint.Charts.Q.MemberAccess in '..\..\src\charts\DRagLint.Charts.Q.MemberAccess.pas'
   , DRagLint.Charts.Trace.FormA in '..\..\src\charts\DRagLint.Charts.Trace.FormA.pas'
+  , DRagLint.Charts.Trace.Shim in '..\..\src\charts\DRagLint.Charts.Trace.Shim.pas'
   , DRagLint.Core.Model
   ;
 
