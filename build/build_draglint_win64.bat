@@ -105,4 +105,13 @@ if errorlevel 1 (
   )
 )
 echo OK: staged Win64 drag-lint.exe + tree-sitter companions
+
+REM The draglint:// protocol handler ships beside the engine: Build-Installer
+REM throws without drag-lint-open.exe, so every engine build also builds it.
+call "%HERE%build_uri_handler.bat"
+if errorlevel 1 (
+  echo ERROR: build_uri_handler.bat failed
+  exit /b 1
+)
+echo OK: staged drag-lint-open.exe
 endlocal
