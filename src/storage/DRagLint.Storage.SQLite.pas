@@ -3771,7 +3771,9 @@ var
     try
       FConn.ExecSQL('CREATE VIRTUAL TABLE IF NOT EXISTS temp.fts5_probe USING fts5(x)');
       TryExec('DROP TABLE IF EXISTS temp.fts5_probe');
-      Writeln(ErrOutput, '  FTS5 probe: AVAILABLE');
+      { A healthy probe prints NOTHING: Migrate also runs under lsp/serve (stdout
+        is the JSON-RPC wire) and --json modes, and a stderr line is a red
+        NativeCommandError in Windows PowerShell 5.1. Only UNAVAILABLE speaks. }
     except on E: Exception do
       if Pos('fts5', LowerCase(E.Message)) > 0 then
       begin
