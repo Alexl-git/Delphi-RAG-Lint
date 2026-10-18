@@ -24,7 +24,7 @@ Supersedes HANDOFF-2026-10-18-engine-1314-vm-retest.md (1.31.4 is PUBLISHED).
 - Lane 10 (verify): B-04, B-09, B-15, B-16(pchar), B-32 all FIXED on 1.31.4 -> close those INBOX notes.
 
 ## Resume point
-1. Lanes STILL RUNNING at handoff (background subagents of the old session; they commit to their
+1. (DONE: all lanes merged into wave/1315 by the old session.) Lanes STILL RUNNING at handoff (background subagents of the old session; they commit to their
    branches even after /clear): 2 `fix/1315-fresh-db-notes` (V-C), 6 `fix/1315-doc-tools`
    (B-05/06/07), 7 `fix/1315-allow` (B-10/11/12). Check: `git log --oneline main..<branch>` and
    process/mtime activity in `.claude\worktrees\agent-*`. If a branch has no fix commit and its
@@ -56,7 +56,8 @@ Supersedes HANDOFF-2026-10-18-engine-1314-vm-retest.md (1.31.4 is PUBLISHED).
   job shows "timed out after N s"; a rename with stale owners gets 600 s per owner (B-19).
 - Fixed: index into a new database no longer prints the no-resolver-stamp / no-scan_type notes or 'limit 0'; the whole-DB reason gives real new/changed counts; the ~37-min warning prints only from 1M refs (DRAGLINT_WHOLEDB_SLOW_REFS overrides) (V-C). [lane 2, MERGED]
 - Fixed: allow accepts a whole-routine metric marker where lint reports it (large files, nested routines, multi-line headers) -- lint/lint-all/allow share RoutineMetricFindings (B-10, B-11); an allow batch on a wrapped statement no longer deletes the continuation line's marker (B-12); lint-all refuses --file/--in (exit 2) instead of ignoring it. [lane 7, MERGED]
-- (lane 6: add from its report)
+- Fixed: document --apply keeps a managed facts block it cannot see when a hand-written summary leaves no fence (B-05 residue); shared units converge -- a certain caller is never downgraded to ' ?' by a project that cannot resolve it, ending the YADF/YADFOT rewrite loop (B-06); regeneration keeps the legacy Pure para the checker accepts (B-07). [lane 6, MERGED -- ALL 9 LANES MERGED]
+- Lane 6 follow-ups: lint --fix --apply without --project-rules silently skips doc-drift fixes; 'declaration' as a Used-by caller name; YADFOT new DB reports 162/174 files outside closure.
 - Lane 2 follow-ups: watch-mode FScopeWhole latch never reset between ticks; prune ids counted as 'changed' in the reason.
 
 ## Gotchas
