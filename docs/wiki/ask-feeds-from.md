@@ -4,7 +4,7 @@
 
 ## Asking it
 
-**Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
+Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
 
 From RAD Studio: *drag-lint > Reports > What feeds this control (back to the column)...* -- put the caret on the selection first (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
 
@@ -12,10 +12,10 @@ From RAD Studio: *drag-lint > Reports > What feeds this control (back to the col
 drag-lint ask --question feeds-from --target <Form>.<Control> --db <project.sqlite> --sql-db <sql-index.sqlite>
 ```
 
-Today, ask it through the chart pipeline:
+From a terminal:
 
 ```
-New-DiagramArtifact.ps1 -Question feeds-from -Target <Form>.<Control> -DbPath <Delphi project index> -SqlDbPath <SQL-script index>
+drag-lint ask feeds-from --target <Form>.<Control> --db <Delphi project index> --sql-db <SQL-script index>
 ```
 
 Example target: `frmCausFail.colREASON`.

@@ -379,7 +379,7 @@ end;
 
 { Quotes one argument for CreateProcess the way CommandLineToArgvW splits it: n backslashes
   before an embedded quote become 2n+1, n before the closing quote become 2n, others stay.
-  REFERENCE: the engine's QuoteArg in src\charts\DRagLint.Charts.Producer.PowerShell.pas --
+  REFERENCE: the engine's QuoteArg in src\charts\DRagLint.Charts.Process.pas --
   same rules, reproduced here because the plugin BPL does not link the charts units. }
 function QuoteCmdArg(const pValue: string): string;
 const

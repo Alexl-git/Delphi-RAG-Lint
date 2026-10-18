@@ -1,15 +1,18 @@
 unit DRagLint.Charts.Producer.Delphi;
 
-(* The in-process report producer (spec P2/P5): answers the questions ported to Delphi
-  (DRagLint.Charts.Question's registry) without starting pwsh or drag-lint.exe, and hands
-  every other question to a fallback producer -- the PowerShell one.
+(* The report producer (spec P2/P5): answers every chart question in-process
+  (DRagLint.Charts.Question's registry) without starting pwsh or drag-lint.exe. Since
+  2026-10-18 it is the ONLY producer: the PowerShell fallback (TPowerShellProducer, which ran
+  Ask-Report.ps1 -Plain) was removed once all 26 questions were ported, so a command this
+  producer cannot answer is REFUSED with the reason, never handed on. The charts\src\*.ps1
+  scripts stay in the repo only as the frozen parity reference (Test-Parity.ps1).
 
-  WHAT IT ANSWERS IN-PROCESS: a ported question whose index is given (TProduceOptions.
-  DbOverride, the S4 / test path) or whose -Project is named (what drag-lint compare passes):
-  the project's index is the one the engine's own esolve-dbs --project names, asked through
+  WHAT IT ANSWERS: a registered question whose index is given (TProduceOptions.DbOverride,
+  the S4 / test path) or whose -Project is named (what drag-lint compare passes): the
+  project's index is the one the engine's own resolve-dbs --project names, asked through
   DRagLint.Charts.Pairs.ResolveProjectIndex -- Ask-Report's step 1 and the ask verb's, so the
   three cannot resolve a project differently. A command naming only -In (no project, no index)
-  still goes to the fallback. Freshness IS checked in-process, through the engine's own
+  is refused with exit 2. Freshness IS checked in-process, through the engine's own
   DRagLint.Index.Freshness: a stale index refuses with exit 3 unless AllowStale. The SERVER and SQL
   indexes a question reads, when not given, are paired from report-pairs.json in-process, through the
   same DRagLint.Charts.Pairs the ask verb uses (Ask-Report's step 2, its refusals included).
@@ -28,75 +31,65 @@ uses
   ;
 
 type
-  /// <summary>Answers ported questions in-process; delegates the rest.</summary>
-  /// <remarks>Holds its fallback (reference-counted) and the description of the last call.
-  /// Not thread-safe: with AllowLiveDb set, an answer sets and restores a process environment
-  /// variable around the emitter, exactly as Ask-Report does around the bundler.</remarks>
+  /// <summary>Answers every chart question in-process; refuses what it cannot answer.</summary>
+  /// <remarks>Holds the description of the last call. Not thread-safe: with AllowLiveDb set, an
+  /// answer sets and restores a process environment variable around the emitter, exactly as
+  /// Ask-Report did around the bundler.</remarks>
   TDelphiProducer = class(TInterfacedObject, IReportProducer)
   private
-    FFallback   : IReportProducer;
     FAllowLiveDb: Boolean;
     FOutRoot    : string;
     FLast       : string;
-    function FallBack(const pCommand: TReportCommand; const pOptions: TProduceOptions; const pWhy: string): TProduceResult;
+    function Refuse(pCode: Integer; const pWhy: string): TProduceResult;
   public
     /// <summary>Whether a non-clone (live) index is let through the clone guard.</summary>
     property AllowLiveDb: Boolean read FAllowLiveDb;
     /// <summary>Creates the producer.</summary>
-    /// <param name="pFallback">Answers every question this producer does not; must not be nil.</param>
     /// <param name="pAllowLiveDb">Let a non-clone index through the clone guard for the emitter call
     /// (what Ask-Report does). False keeps the guard: only charts\scratch\db clones are answered.</param>
     /// <param name="pOutRoot">The bundle root; '' means %TEMP%\drag-lint-reports (Ask-Report's -OutRoot default).
     /// TProduceOptions.OutRoot, when set, wins over it for one call.</param>
-    constructor Create(const pFallback: IReportProducer; pAllowLiveDb: Boolean; const pOutRoot: string = '');
-    /// <summary>Whether a command would be answered in-process.</summary>
+    constructor Create(pAllowLiveDb: Boolean; const pOutRoot: string = '');
+    /// <summary>Whether a command can be answered at all.</summary>
     /// <param name="pCommand">The question.</param>
     /// <param name="pOptions">The options; DbOverride, or the command's Project argument, names the index.</param>
-    /// <returns>True for a ported question with an index given or a project named (its index is
+    /// <returns>True for a registered question with an index given or a project named (its index is
     /// resolved in Produce, which refuses when it cannot be). crosses-boundary's counterpart is
     /// TProduceOptions.CounterpartDbOverride, else paired from report-pairs.json as Ask-Report pairs it;
-    /// with no pair it draws one side, as Ask-Report does.</returns>
+    /// with no pair it draws one side, as Ask-Report does. False means Produce refuses with exit 2.</returns>
     function AnswersInProcess(const pCommand: TReportCommand; const pOptions: TProduceOptions): Boolean;
-    /// <summary>Answers one question, in-process when ported, else through the fallback.</summary>
+    /// <summary>Answers one question in-process.</summary>
     /// <param name="pCommand">The question and its explicit arguments.</param>
-    /// <param name="pOptions">Index override, staleness policy, engine, script, timeout.</param>
+    /// <param name="pOptions">Index override, staleness policy, engine, charts folder.</param>
     /// <returns>As IReportProducer.Produce: exit 0 answered (plain text, CRLF lines, header first),
-    /// 1 refused (the emitter's message), 2 setup (index missing; a named project whose file is missing,
-    /// that no manifest section owns, or whose resolved index has not been built; a SERVER / SQL index the question
-    /// reads neither given nor paired by report-pairs.json -- Ask-Report's own message --, charts folder not found, or a
-    /// PORTED question that has to fall back while its Emit-*.ps1 is not beside Ask-Report.ps1 --
-    /// an installed copy, which does not ship the ported scripts), 3 stale.</returns>
+    /// 1 refused (the emitter's message, or an unexpected failure of the in-process answer, named
+    /// with its exception class), 2 setup (an unknown question; no index given and no project named;
+    /// index missing; a named project whose file is missing, that no manifest section owns, or whose
+    /// resolved index has not been built; a SERVER / SQL index the question reads neither given nor
+    /// paired by report-pairs.json -- Ask-Report's own message --; an explicit charts folder that does
+    /// not exist), 3 stale.</returns>
+    /// <remarks>Never raises.</remarks>
     function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
     /// <summary>Says what answered the last call.</summary>
-    /// <returns>'Delphi in-process (&lt;ids&gt;)' or 'Delphi in-process, fell back to: &lt;fallback&gt;'.</returns>
+    /// <returns>'Delphi in-process (&lt;id&gt;)', 'Delphi in-process, refused: &lt;why&gt;' or
+    /// 'Delphi in-process failed (&lt;class&gt;: &lt;message&gt;)'; before any call, the registered ids.</returns>
     function Describe: string;
   end;
 
 /// <summary>The producer `drag-lint compare` uses: the ONE place that choice is made.</summary>
-/// <returns>A TDelphiProducer with live indexes allowed (owner ruling 2026-10-14) and a
-/// TPowerShellProducer as its fallback for every question not ported to Delphi.</returns>
+/// <returns>A TDelphiProducer with live indexes allowed (owner ruling 2026-10-14).</returns>
 /// <remarks>Live indexes are protected by the staleness refusal, not by the clone guard; the
 /// clone guard stays on only in the parity harness and the tests. The CLI's compare verb obtains
 /// its producer from this function.</remarks>
 function ProducerForCompare: IReportProducer;
 
-/// <summary>The file name of a question's PowerShell emitter, beside Ask-Report.ps1, or the
-/// shared script a question runs through.</summary>
-/// <param name="pId">A question id, e.g. crosses-boundary.</param>
-/// <returns>The shared script when the id is in the shared-script table (what-it-calls ->
-/// Emit-WhoCalls.ps1, as features\families\chart-questions.json names it); otherwise 'Emit-' +
-/// the id in PascalCase + '.ps1', e.g. Emit-CrossesBoundary.ps1. Every ported id resolves to a
-/// script in charts\src (guarded by a test).</returns>
-/// <remarks>A shared script is NAMED, never derived from the id: one emitter answering two
-/// questions has one name. Add a row when a question that shares an emitter is ported.</remarks>
-function EmitterScriptName(const pId: string): string;
 implementation
 
 uses
   System.SysUtils, System.IOUtils, DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness
   , DRagLint.Core.Model // dl:unit DRagLint.Core.Model accepted -- the engine version the header names is the product constant itself
   , DRagLint.Charts.Question // dl:unit DRagLint.Charts.Question accepted -- the bundler defaults and Ask-Report's refusal code travel with the question types
-  , DRagLint.Charts.Ask, DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Index, DRagLint.Charts.Tools, DRagLint.Charts.Pairs
+  , DRagLint.Charts.Ask, DRagLint.Charts.Index, DRagLint.Charts.Tools, DRagLint.Charts.Pairs
   , DRagLint.Charts.Q.TouchesTables  // dl:ok unused-unit-in-uses@5c7b -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.ShownWhere  // dl:ok unused-unit-in-uses@62b1 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Deps  // dl:ok unused-unit-in-uses@6504 -- REVIEWED 2026-10-13: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
@@ -134,43 +127,14 @@ const
   ASK_REPORT_SQL_FLAG = '-SqlDbPath';
   CRLF = #13#10;
 
-type
-  /// <summary>One question answered through a script whose name is not derived from its id.</summary>
-  TSharedEmitter = record
-    Id: string;
-    Script: string;
-  end;
-
-const
-  { the shared scripts, as features\families\chart-questions.json names them; only ported ids
-    (the who-writes / who-reads rows land one task before those ids register, so
-    EveryPortedIdHasAnEmitterScriptInTheRepo can never go red in between) }
-  SHARED_EMITTERS: array[0..2] of TSharedEmitter = (
-    (Id: 'what-it-calls'; Script: 'Emit-WhoCalls.ps1'),
-    (Id: 'who-writes'; Script: 'Emit-MemberAccess.ps1'),
-    (Id: 'who-reads'; Script: 'Emit-MemberAccess.ps1'));
-
 function ProducerForCompare: IReportProducer;
 begin
-  Result:= TDelphiProducer.Create(TPowerShellProducer.Create, True);
+  Result:= TDelphiProducer.Create(True);
 end;
 
-function EmitterScriptName(const pId: string): string;
-begin
-  for var Row in SHARED_EMITTERS do
-    if SameText(Row.Id, pId) then
-      Exit(Row.Script);
-  Result:= 'Emit-';
-  for var Part in pId.ToLower.Split(['-']) do
-    if Part <> '' then
-      Result:= Result + UpperCase(Part.Chars[0]) + Part.Substring(1);
-  Result:= Result + '.ps1';
-end;
-
-constructor TDelphiProducer.Create(const pFallback: IReportProducer; pAllowLiveDb: Boolean; const pOutRoot: string);
+constructor TDelphiProducer.Create(pAllowLiveDb: Boolean; const pOutRoot: string);
 begin
   inherited Create;
-  FFallback:= pFallback;
   FAllowLiveDb:= pAllowLiveDb;
   FOutRoot:= if pOutRoot <> '' then pOutRoot else TPath.Combine(TPath.GetTempPath, REPORTS_SUBDIR);
 end;
@@ -254,36 +218,23 @@ begin
       'has not been built; index the project first', [Result, ExpandFileName(Pj)]));
 end;
 
-{ Hands a question to the fallback. A PORTED question falls back only when its PowerShell emitter
-  is beside the resolved Ask-Report.ps1: the installer does not ship the ported Emit-*.ps1 (owner
-  ruling), so in an installed copy the fallback would fail obscurely -- refuse with pWhy instead.
-  An unresolvable Ask-Report.ps1 is left to the fallback, which reports it itself. }
-function TDelphiProducer.FallBack(const pCommand: TReportCommand; const pOptions: TProduceOptions; const pWhy: string): TProduceResult;
-var
-  E: TChartEmitter;
+{ A command this producer cannot answer: there is no other producer to hand it to (2026-10-18),
+  so it is refused with the reason, and Describe says so. }
+function TDelphiProducer.Refuse(pCode: Integer; const pWhy: string): TProduceResult;
 begin
-  if FindChartQuestion(pCommand.Question, E) then
-  begin
-    var NotFound: string;
-    var Script:= ResolveAskReportScript(pOptions.ScriptPath, NotFound);
-    if (Script <> '') and not TFile.Exists(TPath.Combine(ExtractFileDir(Script), EmitterScriptName(pCommand.Question))) then
-    begin
-      FLast:= 'Delphi in-process, no fallback installed: ' + pWhy;
-      Exit(Fail(EXIT_SETUP, Format('%s is answered by the engine in this install, and its PowerShell fallback is not installed: %s',
-        [pCommand.Question.ToLower, pWhy])));
-    end;
-  end;
-  Result:= FFallback.Produce(pCommand, pOptions);
+  FLast:= 'Delphi in-process, refused: ' + pWhy;
+  Result:= Fail(pCode, pWhy);
 end;
 
 function TDelphiProducer.Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
+var
+  Em: TChartEmitter;
 begin
+  if not FindChartQuestion(pCommand.Question, Em) then
+    Exit(Refuse(EXIT_SETUP, Format('unknown question ''%s'' -- one of: %s', [pCommand.Question, string.Join(', ', PortedQuestionIds)])));
   if not AnswersInProcess(pCommand, pOptions) then
-  begin
-    FLast:= 'Delphi in-process, fell back to: ' + FFallback.Describe;
-    var WhyNot:= 'no index given (--db / -Db) and no project named (--project / -Project)';
-    Exit(FallBack(pCommand, pOptions, WhyNot));
-  end;
+    Exit(Refuse(EXIT_SETUP, 'no index given (--db / -Db) and no project named (--project / -Project); name the project ' +
+      'whose index answers the question'));
   FLast:= 'Delphi in-process (' + pCommand.Question.ToLower + ')';
   var O:= pOptions;
   var Ix: TPairedIndexes;
@@ -298,14 +249,16 @@ begin
   var Server:= if Ix.Server <> '' then ExpandFileName(Ix.Server) else '';
   var Sql:= if Ix.Sql <> '' then ExpandFileName(Ix.Sql) else '';
   var Other:= if Ix.Other <> '' then ExpandFileName(Ix.Other) else '';
+  { a missing index, then a missing charts folder: either is a setup refusal (exit 2) }
+  var Setup:= '';
   for var D in TArray<string>.Create(Db, Server, Sql, Other) do
-    if (D <> '') and not TFile.Exists(D) then
-      Exit(Fail(EXIT_SETUP, 'index not found: ' + D));
-  var Why: string;
-  var Script:= ResolveAskReportScript(pOptions.ScriptPath, Why);
-  if Script = '' then
-    Exit(Fail(EXIT_SETUP, 'the charts folder was not found (it holds the clone root and the dot settings); looked for Ask-Report.ps1 at' +
-      sLineBreak + Why));
+    if (Setup = '') and (D <> '') and not TFile.Exists(D) then
+      Setup:= 'index not found: ' + D;
+  var ChartsRoot, ScriptDir, Why: string;
+  if (Setup = '') and not ResolveChartsHome(pOptions.ScriptPath, ChartsRoot, ScriptDir, Why) then
+    Setup:= 'the charts folder was not found (it holds the clone root and the dot settings): ' + Why;
+  if Setup <> '' then
+    Exit(Fail(EXIT_SETUP, Setup));
 
   var Q:= Default(TQuestionArgs);
   Q.Question:= pCommand.Question.ToLower;
@@ -315,8 +268,8 @@ begin
   Q.ServerDbPath:= Server;
   Q.SqlDbPath:= Sql;
   Q.OutRoot:= if pOptions.OutRoot <> '' then pOptions.OutRoot else FOutRoot;
-  Q.ChartsRoot:= ExtractFileDir(ExtractFileDir(Script));
-  Q.ScriptDir:= ExtractFileDir(Script);  { installed copy: <app>\bin, where graphviz\bin sits beside the scripts }
+  Q.ChartsRoot:= ChartsRoot;
+  Q.ScriptDir:= ScriptDir;  { installed copy: <app>\bin, where graphviz\bin sits beside the engine }
   Q.Cap:= NumArg(pCommand, 'Cap', DEFAULT_CAP);
   Q.Depth:= NumArg(pCommand, 'Depth', QuestionDefaultDepth(Q.Question));
   Q.SurfaceCap:= NumArg(pCommand, 'SurfaceCap', DEFAULT_SURFACE_CAP);
@@ -326,13 +279,13 @@ begin
   Q.AllowLiveDb:= FAllowLiveDb;
   Q.AskedOn:= Now;
   Q.EngineVersion:= DRAGLINT_VERSION;
-  { FAILURE POLICY (engine review 2026-10-13). A refusal Ask-Report.ps1 would ALSO give stays
-    a refusal with Ask-Report's exit code, so the two producers agree: index missing / no
-    charts folder -> 2 (above), stale -> 3, question or index-lookup refusal -> 1, tool or
+  { FAILURE POLICY (engine review 2026-10-13; fallback removed 2026-10-18). A refusal
+    Ask-Report.ps1 would ALSO give stays a refusal with Ask-Report's exit code: index missing /
+    no charts folder -> 2 (above), stale -> 3, question or index-lookup refusal -> 1, tool or
     clone-guard refusal -> 2. ANY OTHER exception -- including one from the freshness probe,
-    which is therefore inside this try -- is not a verdict about the question but a failure
-    of the in-process path, so the question is handed to the fallback producer and Describe
-    says why. Nothing escapes Produce. }
+    which is therefore inside this try -- is a failure of the in-process answer: exit 1, named
+    with its exception class so it reads as a defect and not as a verdict about the question.
+    Nothing escapes Produce. }
   try
     { every index the question reads, once each, in Ask-Report's order: project, server, sql, counterpart }
     var StaleLines:= '';
@@ -364,11 +317,12 @@ begin
       Result:= Fail(EXIT_SETUP, E.Message);
     on E: Exception do
     begin
-      FLast:= Format('Delphi in-process failed (%s: %s), fell back to: %s', [E.ClassName, E.Message, FFallback.Describe]);
-      Result:= FallBack(pCommand, pOptions, Format('the in-process answer failed (%s: %s)', [E.ClassName, E.Message]));
+      FLast:= Format('Delphi in-process failed (%s: %s)', [E.ClassName, E.Message]);
+      Result:= Fail(ASK_EXIT_REFUSED, Format('the in-process answer failed (%s: %s)', [E.ClassName, E.Message]));
     end;
   end;
 end;
+
 function TDelphiProducer.Describe: string;
 begin
   Result:= if FLast <> '' then FLast else 'Delphi in-process (' + string.Join(', ', PortedQuestionIds) + ')';

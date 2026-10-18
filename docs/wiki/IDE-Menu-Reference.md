@@ -68,7 +68,7 @@ Everything about what a unit depends on and what depends on it.
 
 ## Reports
 
-Every report question of the chart pipeline (`charts\src\Ask-Report.ps1`), asked
+Every report question of the chart pipeline (`drag-lint ask`), asked
 from the IDE. Grouped by what you select; every item needs a current **(index)**.
 
 What a click does:
@@ -83,9 +83,8 @@ What a click does:
    *This project* items need no target; the *table or column* items prompt for
    a name.
 2. **Runs in the background** through the plugin's job queue (the status bar
-   shows it), as `pwsh -File Ask-Report.ps1 ... -In <active file> -Open`.
-   Needs PowerShell 7 and the repository's `charts\src` two folders above the
-   engine exe; if either is missing the item says so.
+   shows it), as `drag-lint ask ... --in <active file> --open`.
+   Answered in-process by the engine; no PowerShell is needed.
 3. **Answers twice.** Charts open in your browser. The text answer is turned
    into a DocInsight `/// <remarks>` block -- 7-bit ASCII, wrapped under 100
    columns, `File.pas:line` anchors in parentheses, "+N more ... not shown" kept

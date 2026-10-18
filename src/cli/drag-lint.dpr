@@ -210,7 +210,6 @@ uses
   DRagLint.Charts.Adapters in '..\charts\DRagLint.Charts.Adapters.pas',
   DRagLint.Charts.Process in '..\charts\DRagLint.Charts.Process.pas',
   DRagLint.Charts.Producer in '..\charts\DRagLint.Charts.Producer.pas',
-  DRagLint.Charts.Producer.PowerShell in '..\charts\DRagLint.Charts.Producer.PowerShell.pas',
   DRagLint.Charts.Remarks in '..\charts\DRagLint.Charts.Remarks.pas',
   DRagLint.Charts.Snapshot in '..\charts\DRagLint.Charts.Snapshot.pas',
   DRagLint.Charts.Compare in '..\charts\DRagLint.Charts.Compare.pas',

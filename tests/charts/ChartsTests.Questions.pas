@@ -437,37 +437,37 @@ const
   RT_VNUM_FIXTURE = 'frmBlueprint4_dxDBGrid1FtrsVNum.dlgraph';
   RT_VNUM_STEPS = 103;
   RT_VNUM_UNRESOLVED = 2;
-  RT_VNUM_DOT_SHA = 'a70c3f3555e20a9e7561c73dc64a8e0f3a5845638813c9f8c03620e70ab01425';
+  RT_VNUM_DOT_SHA = '09d311ca439bd5b92c88c55dab4e54aa68baeea7666a3c9db2a148323f85fb3b';
   RT_VNUM_FIELDS = 'ChartError="",ChartNodes=25,Title="How MSCLIST.NUM reaches frmBlueprint4.dxDBGrid1FtrsVNum and goes back",Notes="",' +
     'Anchor="MSCLIST.NUM",DataSet="FMTFtrs",Table="MSCLIST",Column="NUM",TableColumn="MSCLIST.NUM",Stop="",Steps=103,Conditions=35,' +
     'Crossings=4,Unresolved=2,WriteSteps=38,ReadSteps=24,AlsoSteps=32,DerivedNote="",' +
     'Sections="ANCHOR,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO",OnDbProof="625/471",ClickTargets=149,Expected=149,AllClickable=true';
   RT_OPERATION = 'frmBlueprint4.dxDBGrid1OperationVName';
   RT_OPERATION_FIXTURE = 'frmBlueprint4_dxDBGrid1OperationVName.dlgraph';
-  RT_OPERATION_DOT_SHA = 'a143756bd8c829dc430331b01b2ed2a552eae13e5b92d3f4a8db8d4fb6a78b49';
+  RT_OPERATION_DOT_SHA = '566b492e9b4d487b5db04114b38ed28d354a531c225b9d5c50fc9576d4208f96';
   RT_OPERATION_FIELDS = 'ChartError="",ChartNodes=24,Title="How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back",' +
     'Notes="",Anchor="OPERAT.NAME",DataSet="FMTOperation",Table="OPERAT",Column="NAME",TableColumn="OPERAT.NAME",Stop="",Steps=76,' +
     'Conditions=31,Crossings=4,Unresolved=2,WriteSteps=34,ReadSteps=24,AlsoSteps=9,DerivedNote="",' +
     'Sections="ANCHOR,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO",OnDbProof="625/471",ClickTargets=118,Expected=118,AllClickable=true';
   RT_CALC = 'frmBlueprint4.dxDBGrid1FtrsVFtrName';
   RT_CALC_FIXTURE = 'frmBlueprint4_dxDBGrid1FtrsVFtrName.dlgraph';
-  RT_CALC_DOT_SHA = '3979eeb73a0c4da49393086efa8254f0c5bc3e2692da86f2c52e418bc9347c87';
+  RT_CALC_DOT_SHA = '7e555a5e300c307d795810ec45e678f59f1cf37f98dc6c781427ceb112d7847a';
   RT_CALC_TITLE = 'Why frmBlueprint4.dxDBGrid1FtrsVFtrName cannot be traced -- it is calculated';
   RT_CALC_FIRST_DERIVED = '"FROM MSCLIST.NOTATION VIA FfFtrs_Notation => Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation"';
-  RT_CALC_TARGET = '-Target ''Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation''';
+  RT_CALC_TARGET = '--target \"Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation\"';
   RT_CALC_ROWS = 18;
   RT_GROUPBOX = 'frmBlueprint4.cxGroupBox16';
   RT_GROUPBOX_FIXTURE = 'frmBlueprint4_cxGroupBox16.dlgraph';
-  RT_GROUPBOX_DOT_SHA = '5145dd9668917a8f628bd8d72f688a9f6f39147507f2b9d4b104cf7b260274fb';
+  RT_GROUPBOX_DOT_SHA = 'd8b83e783d91df8f53e04523b24d4d8b929f3968eb17b878bf1af834252fce2f';
   RT_GROUPBOX_NOTES = 'WRITE=not walked: the trace stopped at [01] | SERVER=not walked: the trace stopped at [01] | ' +
     'DATABASE=not walked: the trace stopped at [01] | RESPONSE=not walked: the trace stopped at [01] | ' +
     'READ=not walked: the trace stopped at [01] | ALSO=not walked: the trace stopped at [01]';
   RT_TABLECOL = 'OPERAT.NAME';
   RT_TABLECOL_FIXTURE = 'OPERAT_NAME.dlgraph';
-  RT_TABLECOL_DOT_SHA = 'b9ad423fbeca30bc3dcdb83a345437c79c449091a08bb0fd1a19e4d8cc371f78';
+  RT_TABLECOL_DOT_SHA = '4cca90913c3005dc77a2c559d9acd221aca3930ce975f495936039f22f1ed99d';
   RT_FIELDVAR = 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_USLLSLName';
   RT_FIELDVAR_FIXTURE = 'Blueprint4_ViewModel_TBlueprint_ViewModel_FfFtrs_USLLSLName.dlgraph';
-  RT_FIELDVAR_DOT_SHA = '175f77161b0df988485d95c09059c931c0c554bcd29d3a727076ac0a339047e0';
+  RT_FIELDVAR_DOT_SHA = 'bf1b7c471009f436be784efa737c64f3e8b6de61f457f2c9c148083e79f0b43e';
   RT_FIELDVAR_COUNTS = 'Steps=10,Conditions=8,Crossings=0,Unresolved=1,WriteSteps=0,ReadSteps=0,AlsoSteps=0';
   RT_ALSO_CALLS = 17;
   RT_ALSO_LOADS = 14;
@@ -3798,7 +3798,7 @@ begin
   Assert.AreEqual<Integer>(RT_CALC_ROWS, TRegEx.Matches(ListJson(C, 'Derived'), ' => ').Count);
   Assert.IsTrue(ListJson(C, 'Derived').Contains(RT_CALC_FIRST_DERIVED));
   var Cmds:= ListJson(C, 'DerivedCommands');
-  Assert.IsTrue(Cmds.Contains('"& ''') and Cmds.Contains(RT_CALC_TARGET));
+  Assert.IsTrue(Cmds.Contains('"drag-lint ask round-trip --target ') and Cmds.Contains(RT_CALC_TARGET));
   Assert.AreEqual(FixtureText(RT_CALC_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
   CheckDot(C, RT_CALC_DOT_SHA);
 end;

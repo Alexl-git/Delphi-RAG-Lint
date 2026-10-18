@@ -4,10 +4,11 @@ unit ChartsTests.Compare;
   of `drag-lint compare` -- load the OLD side from one of five sources, rerun its COMMAND
   through an IReportProducer, diff, warn, and write the snapshot / update-doc side effects.
 
-  Every rerun goes through the REAL TPowerShellProducer against
-  tests\charts\fixtures\producer\Stub-AskReport.ps1 (pwsh needed). The stub's knobs:
-  $env:STUB_VARIANT = 'B' adds one body row; -Project ending in stale.dproj (or -DbPath
-  ending in stale.sqlite) without -AllowStale exits 3.
+  Every rerun goes through TStubProducer, a private in-process IReportProducer that prints
+  the SHAPE of Ask-Report's plain answer (no engine, no index, no pwsh needed). Its knobs:
+  env STUB_VARIANT = 'B' adds one body row; env STUB_BUNDLE = folder writes graph.dot and
+  graph.svg there; a -Project ending in stale.dproj (or a DbOverride ending in stale.sqlite)
+  without AllowStale exits 3; target REFUSE exits 1.
 
   Files are written ONLY under a per-test temp folder; committed fixtures are copied there
   before anything could modify them.
@@ -58,13 +59,13 @@ implementation
 uses
   Winapi.Windows, System.SysUtils, System.Classes, System.IOUtils, System.DateUtils,
   DRagLint.Charts.Diff, DRagLint.Charts.ReportHeader, DRagLint.Charts.Adapters,
-  DRagLint.Charts.Producer, DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Remarks,
+  DRagLint.Charts.Producer, DRagLint.Charts.Remarks,
   DRagLint.Charts.Snapshot, DRagLint.Charts.DocInsight, DRagLint.Charts.Compare;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
   FIXTURE_DIR = 'tests\charts\fixtures';
-  FIXTURE_PROBE = 'producer\Stub-AskReport.ps1';
+  FIXTURE_PROBE = 'forms\a.csv';
   VARIANT_ENV = 'STUB_VARIANT';
   VARIANT_B = 'B';
   BUNDLE_ENV = 'STUB_BUNDLE';
@@ -75,7 +76,6 @@ const
   GRAPH_NODES_A = 21;
   STUB_NEW_NODES = 2;
   EMPTY_DOT = 'digraph G {' + #13#10 + '  rankdir=LR;' + #13#10 + '  a -- b;' + #13#10 + '}' + #13#10;
-  ENGINE_FIXTURE = 'C:\X\drag-lint.exe'; // dl:ok hardcoded-absolute-path@7ebd -- synthetic test input: never touches the filesystem
   COMMAND_STUB = 'who-writes -Target "OPERAT.NAME" -Project "C:\P\A.dproj" -Depth 3';
   COMMAND_DEPTH5 = 'who-writes -Target "OPERAT.NAME" -Project "C:\P\A.dproj" -Depth 5';
   COMMAND_STALE = 'who-writes -Target "OPERAT.NAME" -Project "C:\P\stale.dproj" -Depth 3';
@@ -87,7 +87,6 @@ const
   BLOCK1_FIRST = 9;
   BLOCK1_LAST = 16;
   NOT_REPORT_LINE = 7;
-  STUB_TIMEOUT_MS = 120000;
   EXIT_SAME = 0;
   EXIT_DIFFERENT = 1;
   EXIT_SETUP = 2;
@@ -137,6 +136,95 @@ begin
   Result:= EncodeDateTime(ASKED_YEAR, ASKED_MONTH, ASKED_DAY, ASKED_HOUR, ASKED_MIN, 0, 0);
 end;
 
+type
+  { The stand-in producer for every rerun: the shape of Ask-Report's plain answer (header sentence,
+    COMMAND, BUNDLE, INDEX, a small body), never touching an index or an engine. }
+  TStubProducer = class(TInterfacedObject, IReportProducer)
+  public
+    function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
+    function Describe: string;
+  end;
+
+const
+  STUB_DOT = 'digraph stub {'#13#10 +
+    '  node  [shape=plaintext, fontname="Consolas", fontsize=14];'#13#10 +
+    '  sa [label=<<TABLE BORDER="0" CELLBORDER="0"><TR><TD PORT="p1" ALIGN="LEFT" HREF="draglint://open?file=Unit1.pas&amp;line=10" TITLE="1 write site: 10:3"><FONT COLOR="#1F2933">StubA</FONT></TD></TR></TABLE>>];'#13#10 +
+    '  sb [label=<<TABLE BORDER="0" CELLBORDER="0"><TR><TD PORT="p1" ALIGN="LEFT" HREF="draglint://open?file=Unit1.pas&amp;line=42" TITLE="1 write site: 42:3"><FONT COLOR="#1F2933">StubB</FONT></TD></TR></TABLE>>];'#13#10 +
+    '  sa:p1 -> sb:p1 [color="#8A94A6"];'#13#10 +
+    '}'#13#10;
+  STUB_DEFAULT_INDEX = 'C:\stub\index.sqlite';
+  STUB_DEFAULT_BUNDLE = 'C:\stub\bundle';
+
+function StubFail(pExit: Integer; const pReason: string): TProduceResult;
+begin
+  Result:= Default(TProduceResult);
+  Result.ExitCode:= pExit;
+  Result.Reason:= pReason;
+end;
+
+{ the COMMAND line as the stub built it: -Target, -To, -Project (else -In), then the numeric and mode arguments }
+function StubCommandLine(const pCommand: TReportCommand): string;
+begin
+  Result:= 'COMMAND ' + pCommand.Question + ' -Target "' + pCommand.Get('Target') + '"';
+  if pCommand.Has('To') then Result:= Result + ' -To "' + pCommand.Get('To') + '"';
+  if pCommand.Has('Project') then Result:= Result + ' -Project "' + pCommand.Get('Project') + '"'
+  else if pCommand.Has('In') then Result:= Result + ' -In "' + pCommand.Get('In') + '"';
+  for var N in ['Depth', 'Cap', 'SurfaceCap'] do
+    if pCommand.Has(N) then Result:= Result + ' -' + N + ' ' + pCommand.Get(N);
+  if pCommand.Has('Control') then Result:= Result + ' -Control "' + pCommand.Get('Control') + '"';
+  if pCommand.Has('Mode') then Result:= Result + ' -Mode ' + pCommand.Get('Mode');
+  if pCommand.Has('MaxRows') then Result:= Result + ' -MaxRows ' + pCommand.Get('MaxRows');
+end;
+
+function TStubProducer.Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
+begin
+  var Target:= pCommand.Get('Target');
+  var Project:= if pCommand.Has('Project') then pCommand.Get('Project') else '';
+  if Target = 'REFUSE' then
+    Exit(StubFail(EXIT_DIFFERENT, 'no such symbol'));
+  if (pOptions.DbOverride <> '') and pOptions.DbOverride.EndsWith(STALE_DB) and not pOptions.AllowStale then
+    Exit(StubFail(EXIT_STALE, 'stale index: ' + pOptions.DbOverride));
+  if (Project <> '') and Project.EndsWith('stale.dproj') and not pOptions.AllowStale then
+    Exit(StubFail(EXIT_STALE, 'stale index for ' + Project));
+  var Sent:= if pCommand.Has('To') then Target + ' -> ' + pCommand.Get('To') else Target;
+  var Index:= if pOptions.DbOverride <> '' then pOptions.DbOverride else STUB_DEFAULT_INDEX;
+  var Bundle:= GetEnvironmentVariable(BUNDLE_ENV);
+  if Bundle <> '' then
+  begin
+    ForceDirectories(Bundle);
+    TFile.WriteAllText(TPath.Combine(Bundle, 'graph.dot'), STUB_DOT, TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(Bundle, 'graph.svg'), STUB_NEW_SVG, TEncoding.ASCII);
+  end
+  else
+    Bundle:= STUB_DEFAULT_BUNDLE;
+  var Lines:= TStringList.Create;
+  try
+    Lines.Add('Who writes this field (drag-lint report ' + pCommand.Question + ') for ' + Sent +
+      ', asked on 2026-10-10 14:32, engine 1.27.0.');
+    Lines.Add(StubCommandLine(pCommand));
+    Lines.Add('BUNDLE ' + Bundle);
+    Lines.Add('INDEX ' + Index);
+    Lines.Add('Totals: 2 write sites / 2 routines.');
+    Lines.Add('  Unit1.TFoo.SetName (Unit1.pas:10)');
+    Lines.Add('  Unit1.TFoo.Load (Unit1.pas:42)');
+    if GetEnvironmentVariable(VARIANT_ENV) = VARIANT_B then
+      Lines.Add('  Unit1.TFoo.Reset (Unit1.pas:77)');
+    Result:= Default(TProduceResult);
+    Result.Ok:= True;
+    Result.ExitCode:= EXIT_SAME;
+    Result.Text:= Lines.Text;
+    Result.IndexPaths:= [Index];
+    Result.BundlePath:= Bundle;
+  finally
+    Lines.Free;
+  end;
+end;
+
+function TStubProducer.Describe: string;
+begin
+  Result:= 'stub producer';
+end;
+
 { A request wired to the stub producer, with the snapshot folder inside the test's temp
   folder so nothing is ever written beside a real project. }
 function StubRequest(pSource: TCompareSource; const pSnapshotDir: string): TCompareRequest;
@@ -144,11 +232,8 @@ begin
   Result:= Default(TCompareRequest);
   Result.Source:= pSource;
   Result.SnapshotDir:= pSnapshotDir;
-  Result.Producer:= TPowerShellProducer.Create;
+  Result.Producer:= TStubProducer.Create;
   Result.Options:= DefaultProduceOptions;
-  Result.Options.ScriptPath:= Fixture('producer', 'Stub-AskReport.ps1');
-  Result.Options.EnginePath:= ENGINE_FIXTURE;
-  Result.Options.TimeoutMs:= STUB_TIMEOUT_MS;
   Result.Now:= AskedAt;
 end;
 

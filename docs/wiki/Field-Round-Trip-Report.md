@@ -34,7 +34,7 @@ caret on the grid column's declaration or any use of it
 Field round-trip (grid -> server -> SQL)...*. The plugin resolves the caret,
 rewrites `Blueprint4.TfrmBlueprint4.dxDBGrid1OperationVName` to
 `frmBlueprint4.dxDBGrid1OperationVName` from the DFM, shows it in a prompt, and
-runs `Ask-Report.ps1` in the background. The trace opens in your browser, and
+runs `drag-lint ask` in the background. The trace opens in your browser, and
 the text comes back as a DocInsight block on the clipboard and in a small
 window. The picture is *Reports > Callers and callees (butterfly chart)...* with
 the caret on `SendDeltaOperation`. (The engine `ask` verb is still planned; the
@@ -60,16 +60,16 @@ The pictures open in your browser, not in an IDE window. The docked
 | Field | Value |
 |---|---|
 | Title | `drag-lint: field round-trip` |
-| Program | `C:\Program Files\PowerShell\7\pwsh.exe` |
+| Program | `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe` |
 | Working dir | `C:\Projects\Delphi-RAG-lint` (users: your clone, see below) |
-| Parameters | `-NoProfile -NoExit -File "C:\Projects\Delphi-RAG-lint\charts\src\Ask-Report.ps1" -Question round-trip -In "$EDNAME" -Open -Target $PROMPT` |
+| Parameters | `ask round-trip --in "$EDNAME" --open --target $PROMPT` |
 
 Add a second entry for the pictures, identical except:
 
 | Field | Value |
 |---|---|
 | Title | `drag-lint: callers/callees chart` |
-| Parameters | `-NoProfile -NoExit -File "C:\Projects\Delphi-RAG-lint\charts\src\Ask-Report.ps1" -Question butterfly -In "$EDNAME" -Open -Target $PROMPT` |
+| Parameters | `ask butterfly --in "$EDNAME" --open --target $PROMPT` |
 
 * `$EDNAME` is the file in the active editor tab: the script uses it only to
   find the project's index (any `.pas`/`.dfm` of the project works).
@@ -106,13 +106,13 @@ Add a second entry for the pictures, identical except:
 From the repository folder:
 
 ```
-pwsh -NoProfile -File .\charts\src\Ask-Report.ps1 -Question round-trip `
-    -Target frmBlueprint4.dxDBGrid1OperationVName `
-    -Project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj -Open
+drag-lint ask round-trip `
+    --target frmBlueprint4.dxDBGrid1OperationVName `
+    --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --open
 
-pwsh -NoProfile -File .\charts\src\Ask-Report.ps1 -Question butterfly `
-    -Target Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation `
-    -Project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj -Open
+drag-lint ask butterfly `
+    --target Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation `
+    --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj --open
 ```
 
 * Answers land in `%TEMP%\drag-lint-reports\<question>-<target>\`.
@@ -145,16 +145,13 @@ IDE plugin. To produce this report you need:
 1. **A clone of the repository** (`git clone
    https://github.com/Alexl-git/Delphi-RAG-Lint.git`) -- the scripts live in its
    `charts\` folder.
-2. **PowerShell 7** (`pwsh`).
-3. **The engine.** The scripts default to
-   `C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`. Either
-   clone to `C:\Projects\Delphi-RAG-lint` and put the release's
-   `drag-lint.exe` (with its `.dll` files and `rules\`) in that folder, or add
-   `-Engine <path to drag-lint.exe>` to every `Ask-Report.ps1` command.
-4. **Graphviz 16.1** for the pictures. The chart scripts expect
-   `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe` and have no
-   override from `Ask-Report.ps1` yet -- install (or copy) Graphviz to that
-   folder. The text trace (`round-trip`) needs no Graphviz.
+2. **The engine** (`drag-lint.exe` with its `.dll` files and `rules\`); no
+   PowerShell is needed.
+4. **Graphviz 16.1** for the pictures. The engine uses the `dot.exe` named by
+   the `DRAGLINT_DOT` environment variable, else the one in its settings, else
+   `C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe` -- set the variable
+   or install Graphviz to that folder. The text trace (`round-trip`) needs no
+   Graphviz.
 5. **The three indexes**, built with the engine: the client project, the server
    project and the SQL scripts. Find each with
    `drag-lint resolve-dbs --project <your .dproj>` and build it with
@@ -171,8 +168,7 @@ and column.
 
 ## Not yet
 
-* An engine `ask` verb. The *drag-lint > Reports* menu exists (it runs
-  `Ask-Report.ps1`, so it still needs a repository clone and PowerShell 7);
+* The *drag-lint > Reports* menu runs `drag-lint ask` (no PowerShell);
   the Tools entries above remain the fallback without the plugin.
 * `round-trip` as a picture; today it is text.
 * A Graphviz location setting for the chart scripts.

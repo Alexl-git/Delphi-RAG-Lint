@@ -4,10 +4,10 @@
 
 ## Asking it
 
-**Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
+Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
 
 ```
-New-DiagramArtifact.ps1 -Question path -Target MyApp.Orders.TOrderService.Post -To MyApp.Db.TConnection.Commit -DbPath <project.sqlite>
+drag-lint ask path --target MyApp.Orders.TOrderService.Post --to MyApp.Db.TConnection.Commit --db <project.sqlite>
 ```
 
 In the IDE: drag-lint > Reports > **Call path from this routine to another...** with the caret on routine A; the menu then asks for routine B (a qualified name).

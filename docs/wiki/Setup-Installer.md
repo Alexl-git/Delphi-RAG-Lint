@@ -46,10 +46,8 @@ RAD Studio 13 (37.0) only.
 ## What it needs
 
 * **Windows x64.**
-* **PowerShell 7** for `draglint://` and the MCP task only (every chart question is
-  answered by the engine itself since the round-trip port). Setup does not bundle it: if `pwsh.exe` is missing it says so,
-  skips those two tasks and carries on. Install it from https://aka.ms/powershell
-  and run setup again.
+* **No PowerShell.** Every chart question is answered by the engine itself; setup
+  neither bundles nor looks for PowerShell and installs no `.ps1` file.
 * **RAD Studio must be closed** when installing or uninstalling a plugin -- a
   loaded BPL is locked. Setup refuses with that message rather than half-copying.
 

@@ -4,7 +4,7 @@
 
 ## Asking it
 
-**Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
+Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
 
 From RAD Studio: *drag-lint > Reports > What a change here would break...* -- put the caret on the selection first (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
 
@@ -12,10 +12,10 @@ From RAD Studio: *drag-lint > Reports > What a change here would break...* -- pu
 drag-lint ask --question change-impact --at <file.pas>:<line>:<col> --db <project.sqlite>
 ```
 
-The selection is the symbol under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). Today, ask it by name through the chart pipeline:
+The selection is the symbol under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). From a terminal, ask it by name:
 
 ```
-New-DiagramArtifact.ps1 -Question change-impact -Target DRagLint.Preprocess.Profile.ProfileFromDproj -DbPath <project.sqlite>
+drag-lint ask change-impact --target DRagLint.Preprocess.Profile.ProfileFromDproj --db <project.sqlite>
 ```
 
 ## You select

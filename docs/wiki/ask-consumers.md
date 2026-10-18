@@ -4,7 +4,7 @@
 
 ## Asking it
 
-**Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
+Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
 
 From RAD Studio: *drag-lint > Reports > Who uses this table or column...* -- type the name in the prompt (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
 
@@ -12,10 +12,10 @@ From RAD Studio: *drag-lint > Reports > Who uses this table or column...* -- typ
 drag-lint ask --question consumers --target <TABLE | TABLE.COLUMN> --db <project.sqlite> --sql-db <sql-index.sqlite>
 ```
 
-Today, ask it through the chart pipeline:
+From a terminal:
 
 ```
-New-DiagramArtifact.ps1 -Question consumers -Target TABLE|TABLE.COLUMN -DbPath <Delphi project index> -SqlDbPath <SQL-script index>
+drag-lint ask consumers --target TABLE|TABLE.COLUMN --db <Delphi project index> --sql-db <SQL-script index>
 ```
 
 ## You select

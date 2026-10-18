@@ -17,6 +17,7 @@ type
     FDir: string;
     FOldDot: string;
     FOldLive: string;
+    FOldCharts: string;
     function Touch(const pRelative: string; const pText: string = ''): string;
   public
     [Setup] procedure Setup;
@@ -30,6 +31,9 @@ type
     [Test] procedure DotBesideTheScriptsWins;
     [Test] procedure CloneDbAcceptsCloneOnly;
     [Test] procedure CloneDbOverrideAddsNote;
+    [Test] procedure ChartsHomeExplicitFileOrFolder;
+    [Test] procedure ChartsHomeInsistedMissingRefuses;
+    [Test] procedure ChartsHomeByLayoutAlwaysAnswers;
   end;
 
 implementation
@@ -54,8 +58,10 @@ begin
   ForceDirectories(FDir);
   FOldDot:= GetEnvironmentVariable(DOT_ENV_VAR);
   FOldLive:= GetEnvironmentVariable(ALLOW_LIVE_DB_ENV_VAR);
+  FOldCharts:= GetEnvironmentVariable(CHARTS_DIR_ENV_VAR);
   SetEnvironmentVariable(DOT_ENV_VAR, nil);
   SetEnvironmentVariable(ALLOW_LIVE_DB_ENV_VAR, nil);
+  SetEnvironmentVariable(CHARTS_DIR_ENV_VAR, nil);
 end;
 
 procedure TCoreToolsTests.TearDown;
@@ -66,6 +72,7 @@ begin
     SetEnvironmentVariable(DOT_ENV_VAR, nil);
   if FOldLive = '' then
     SetEnvironmentVariable(ALLOW_LIVE_DB_ENV_VAR, nil);
+  SetEnvironmentVariable(CHARTS_DIR_ENV_VAR, if FOldCharts = '' then nil else PChar(FOldCharts));
   TDirectory.Delete(FDir, True);
 end;
 
@@ -192,6 +199,48 @@ begin
   { the suffix rule is checked BEFORE the override: the override never reaches a history copy }
   Assert.StartsWith('refusing a database whose name does not end in .sqlite',
     MessageOf(procedure begin CloneDb(History, Root, Note); end));
+end;
+
+procedure TCoreToolsTests.ChartsHomeExplicitFileOrFolder;
+var
+  Root, Scripts, Why: string;
+begin
+  var Marker:= Touch('charts\src\any.txt');
+  Assert.IsTrue(ResolveChartsHome(Marker, Root, Scripts, Why), Why);
+  Assert.AreEqual(TPath.Combine(FDir, 'charts\src'), Scripts, 'a file names its folder');
+  Assert.AreEqual(TPath.Combine(FDir, 'charts'), Root, 'the charts folder is the one above');
+  Assert.AreEqual('', Why);
+  Assert.IsTrue(ResolveChartsHome(TPath.Combine(FDir, 'charts\src'), Root, Scripts, Why), Why);
+  Assert.AreEqual(TPath.Combine(FDir, 'charts\src'), Scripts, 'a folder names itself');
+  { the environment variable is used when nothing explicit is given, and loses to it }
+  SetEnvironmentVariable(CHARTS_DIR_ENV_VAR, PChar(FDir));
+  Assert.IsTrue(ResolveChartsHome('', Root, Scripts, Why), Why);
+  Assert.AreEqual(FDir, Scripts, 'DRAGLINT_CHARTS_DIR');
+  Assert.IsTrue(ResolveChartsHome(Marker, Root, Scripts, Why), Why);
+  Assert.AreEqual(TPath.Combine(FDir, 'charts\src'), Scripts, 'explicit wins over the variable');
+end;
+
+procedure TCoreToolsTests.ChartsHomeInsistedMissingRefuses;
+var
+  Root, Scripts, Why: string;
+begin
+  var Missing:= TPath.Combine(FDir, 'nowhere\Ask-Report.ps1');
+  Assert.IsFalse(ResolveChartsHome(Missing, Root, Scripts, Why));
+  Assert.AreEqual('explicit path: ' + Missing + ' (not found)', Why);
+  Assert.AreEqual('', Scripts);
+  SetEnvironmentVariable(CHARTS_DIR_ENV_VAR, PChar(Missing));
+  Assert.IsFalse(ResolveChartsHome('', Root, Scripts, Why));
+  Assert.AreEqual('environment variable ' + CHARTS_DIR_ENV_VAR + ': ' + Missing + ' (not found)', Why);
+end;
+
+procedure TCoreToolsTests.ChartsHomeByLayoutAlwaysAnswers;
+var
+  Root, Scripts, Why: string;
+begin
+  { no script is looked for: a layout folder, else the exe folder itself, so it never fails }
+  Assert.IsTrue(ResolveChartsHome('', Root, Scripts, Why), Why);
+  Assert.IsTrue(TDirectory.Exists(Scripts), Scripts);
+  Assert.AreEqual(ExtractFileDir(Scripts), Root);
 end;
 
 end.

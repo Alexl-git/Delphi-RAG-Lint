@@ -4,7 +4,7 @@
 
 ## Asking it
 
-**Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
+Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
 
 From RAD Studio: *drag-lint > Reports > Where this field lands in the database...* -- put the caret on the selection first (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
 
@@ -12,10 +12,10 @@ From RAD Studio: *drag-lint > Reports > Where this field lands in the database..
 drag-lint ask --question lands-where --target <selection> --db <client.sqlite> --server-db <server.sqlite> --sql-db <sql-index.sqlite>
 ```
 
-Today, ask it through the chart pipeline:
+From a terminal:
 
 ```
-New-DiagramArtifact.ps1 -Question lands-where -Target <selection> -DbPath <CLIENT index> -ServerDbPath <SERVER index> -SqlDbPath <SQL-script index>
+drag-lint ask lands-where --target <selection> --db <CLIENT index> --server-db <SERVER index> --sql-db <SQL-script index>
 ```
 
 ## You select

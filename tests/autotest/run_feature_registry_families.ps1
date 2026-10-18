@@ -55,7 +55,7 @@ Check 'round-trip wikiPage override applied' ($rtp.wikiPage -eq 'Field-Round-Tri
 $ww = $charts | Where-Object { $_.id -eq 'chart.who-writes' }
 Check 'who-writes emitter is Emit-MemberAccess (shared, never derived from the id)' ($ww.emitter -eq 'charts\src\Emit-MemberAccess.ps1')
 Check 'a chart child has menu + two script surfaces, owner CHARTS, title without ...' (($ww.surfaces.Count -eq 3) -and ($ww.surfaces[0].type -eq 'ide-menu') -and ($ww.surfaces[0].path -eq 'drag-lint > Reports > Who writes this field...') -and ($ww.owner -eq 'CHARTS') -and ($ww.title -eq 'Who writes this field'))
-Check 'family default requires applied' (($ww.requires -join ',') -eq 'index,powershell7,graphviz')
+Check 'family default requires applied' (($ww.requires -join ',') -eq 'index,graphviz')
 Check 'per-child requires override applied (round-trip adds sql-index)' ($rtp.requires -contains 'sql-index')
 Check 'chart children carry tests = Test-Emitters.ps1' ($ww.tests -contains 'charts\src\Test-Emitters.ps1')
 Check 'subgroup comes from ReportGroupCaption' ($ww.subgroup -eq $live.GroupCaptions['rtkMember'])

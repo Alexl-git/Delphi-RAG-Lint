@@ -6,7 +6,7 @@ TRACE OPERAT.NAME
   TITLE "How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back"
   FROM frmBlueprint4.dxDBGrid1OperationVName
   INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-10-05T16:25Z/2026-10-05T16:21Z/2026-10-05T16:11Z
-  REGENERATE & 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'frmBlueprint4.dxDBGrid1OperationVName' -DbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" -ServerDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" -SqlDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" -Depth 4
+  REGENERATE drag-lint ask round-trip --target "frmBlueprint4.dxDBGrid1OperationVName" --db "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" --server-db "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" --sql-db "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" --depth 4
   TIERS client -> pipe -> server -> database
 
 ANCHOR

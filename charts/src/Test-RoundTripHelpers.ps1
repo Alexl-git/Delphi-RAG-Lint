@@ -134,7 +134,7 @@ $res.HoldoutCandidates = Join-Rows $m9 { "$($_.n)=$($_.fld)" }
 # ---- 2. the Form A model round trip (AC-2, AC-3, AC-4, AC-11, AC-12) ------------------
 . (Join-Path $PSScriptRoot 'Trace.FormA.ps1')
 $T = New-Trace 'OPERAT.NAME' 'How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back' 'frmBlueprint4.dxDBGrid1OperationVName' `
-               'Micronite2027 + MicroniteMW1Service + SQL' '2026-09-24' 'New-DiagramArtifact.ps1 -Question round-trip -Target frmBlueprint4.dxDBGrid1OperationVName' 'client -> pipe -> server -> database'
+               'Micronite2027 + MicroniteMW1Service + SQL' '2026-09-24' 'drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1OperationVName' 'client -> pipe -> server -> database'
 $sA = Add-TraceSection $T 'ANCHOR'
 $s1 = New-TraceStep 'step' 'BINDS dxDBGrid1OperationVName : TcxGridDBColumn ONTO Name' 'Blueprint4.dfm:4534' '' '' 'DataBinding.FieldName'
 [void]$s1.Children.Add((New-TraceFacet 'VIA' 'dxDBGrid1OperationV.DataController.DataSource = Blueprint4_Model.dsrOperation' 'Blueprint4.dfm:4497' 'dangling: module Blueprint4_Model is declared nowhere in this index'))
@@ -1071,9 +1071,8 @@ $res.CalcFtrTitle = $pF.Title; $res.CalcFtrStop = $pF.Stop; $res.CalcFtrChildren
 $res.CalcFtrRows = $pF.Rows; $res.CalcFtrCounts = $pF.Counts; $res.CalcFtrCheck = $pF.Check
 # fix round 1 (M4): a row keeps `bound at :N via FF`, the shared reason is in the note -- the FtrType row, whole
 $res.CalcFtrRowLine = @(($rcF.Text -split "\r\n") | Where-Object { $_ -cmatch '^\[\d+\] FROM MSCLIST\.FTRTYPE ' })[0] -replace '^\[\d+\] ', ''
-# fix round 1 (M5): every REGENERATE (header and rows) is `& '<absolute path to New-DiagramArtifact.ps1>' ...`; fix round 2
-# (R2-6): its -Target value single-quoted
-$res.CalcCmdHeads = (@(($rcF.Text -split "\r\n") | Where-Object { $_ -cmatch '^( {2}| {7})REGENERATE ' } | ForEach-Object { if ($_ -cmatch "^\s+REGENERATE (& '[^']+' -Question round-trip -Target ')(?:[^']|'')+' -DbPath ") { $Matches[1] } else { 'OTHER' } } | Group-Object | ForEach-Object { "$($_.Count)x $($_.Name)" })) -join ' | '
+# every REGENERATE (header and rows) is `drag-lint ask round-trip --target "<T>" ...`
+$res.CalcCmdHeads = (@(($rcF.Text -split "\r\n") | Where-Object { $_ -cmatch '^( {2}| {7})REGENERATE ' } | ForEach-Object { if ($_ -cmatch "^\s+REGENERATE (drag-lint ask round-trip --target `")[^`"]+`" --db ") { $Matches[1] } else { 'OTHER' } } | Group-Object | ForEach-Object { "$($_.Count)x $($_.Name)" })) -join ' | '
 # the second corpus case: Tolerance (:760) -- five writes in a nested case, four source fields
 $rcT = & (Join-Path $PSScriptRoot 'Emit-RoundTrip.ps1') -Target 'frmBlueprint4.dxDBGrid1FtrsVTolerance' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutDir $work 6>$null
 $pT = Get-CalcTraceParts $rcT
@@ -1095,8 +1094,10 @@ $res.CalcUslOffer = "$($pU.Note) | $($pU.Rows) | $($pU.Counts) | $(($pU.Check -s
 # gate never writes into the owner's real charts\artifacts; the row TEXT is unchanged. The DimAbbr row -> MSCLIST.DIMABBR
 # through FMTFtrs and SendDeltaFtrs
 $res.CalcE2E = $(try {
-  $cmd = @($rcF.DerivedCommands | Where-Object { $_ -match "-Target '[^']*\.FfFtrs_DimAbbr' " })[0]
-  $art = Invoke-Expression ($cmd + " -OutRoot '$((Join-Path $work 'calc-e2e') -replace "'", "''")'") 6>$null
+  $cmd = @($rcF.DerivedCommands | Where-Object { $_ -match '--target "[^"]*\.FfFtrs_DimAbbr" ' })[0]
+  # the row's command is now `drag-lint ask round-trip --target "<T>" ... --depth N`; the PS reference runs the same trace
+  if ($cmd -notmatch '--target "([^"]*)".* --depth (\d+)$') { throw "DerivedCommands row not recognised: $cmd" }
+  $art = & (Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1') -Question round-trip -Target $Matches[1] -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -Depth ([int]$Matches[2]) -OutRoot (Join-Path $work 'calc-e2e') 6>$null
   $et = [IO.File]::ReadAllText((Join-Path $art.Bundle 'trace.dlgraph'))
   $end = @($et -split "\r\n" | Where-Object { $_ -clike 'END TRACE*' })[0]
   $ttl = $(if ($et -cmatch '(?m)^  TITLE "([^"]*)"\r$') { $Matches[1] } else { '' })

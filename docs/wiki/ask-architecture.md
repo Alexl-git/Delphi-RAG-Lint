@@ -4,7 +4,7 @@
 
 ## Asking it
 
-**Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
+Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
 
 From RAD Studio: *drag-lint > Reports > Project architecture (layered zones)...* -- no selection needed (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
 
@@ -12,10 +12,10 @@ From RAD Studio: *drag-lint > Reports > Project architecture (layered zones)...*
 drag-lint ask --question architecture --at <Project.dpr>:1:1 --db <project.sqlite>
 ```
 
-The selection is the symbol under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). Today, ask it by name through the chart pipeline:
+The selection is the symbol under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). From a terminal, ask it by name:
 
 ```
-New-DiagramArtifact.ps1 -Question architecture -Target project -DbPath <project.sqlite>
+drag-lint ask architecture --target project --db <project.sqlite>
 ```
 
 ## You select

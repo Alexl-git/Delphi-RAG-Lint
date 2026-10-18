@@ -273,15 +273,15 @@ $fp = [pscustomobject]@{
   testChart   = [bool]$r.TestChart
   clickTargets= $r.ClickTargets
   allClickable= $r.AllClickable
-  regenerate  = "New-DiagramArtifact.ps1 -Question $Question -Target $Target -DbPath `"$DbPath`"" +
-                $(if ($Question -in 'butterfly','who-calls','what-it-calls','change-impact','exception-paths','round-trip') { " -Depth $EffDepth" } else { '' }) +
-                $(if ($Question -in 'who-writes','who-reads','hierarchy','wiring','protocol-trace','shown-where','tested-by','crosses-boundary','exception-paths','consumers','feeds-from','lands-where','path') { " -Cap $Cap" } else { '' }) +
-                $(if ($Question -in 'consumers', 'feeds-from', 'lands-where', 'round-trip') { " -SqlDbPath `"$SqlDbPath`"" } else { '' }) +
-                $(if ($Question -in 'lands-where','round-trip') { " -ServerDbPath `"$ServerDbPath`"" } else { '' }) +
-                $(if ($Question -eq 'crosses-boundary' -and $CounterpartDb) { " -CounterpartDb `"$CounterpartDb`"" } else { '' }) +
-                $(if ($Question -eq 'class-surface') { " -SurfaceCap $SurfaceCap" } else { '' }) +
-                $(if ($Question -eq 'event-wiring' -and $Control) { " -Control $Control" } else { '' }) +
-                $(if ($Question -eq 'path') { " -To $To" } else { '' })
+  regenerate  = "drag-lint ask $Question --target $Target --db `"$DbPath`"" +
+                $(if ($Question -in 'butterfly','who-calls','what-it-calls','change-impact','exception-paths','round-trip') { " --depth $EffDepth" } else { '' }) +
+                $(if ($Question -in 'who-writes','who-reads','hierarchy','wiring','protocol-trace','shown-where','tested-by','crosses-boundary','exception-paths','consumers','feeds-from','lands-where','path') { " --cap $Cap" } else { '' }) +
+                $(if ($Question -in 'consumers', 'feeds-from', 'lands-where', 'round-trip') { " --sql-db `"$SqlDbPath`"" } else { '' }) +
+                $(if ($Question -in 'lands-where','round-trip') { " --server-db `"$ServerDbPath`"" } else { '' }) +
+                $(if ($Question -eq 'crosses-boundary' -and $CounterpartDb) { " --counterpart-db `"$CounterpartDb`"" } else { '' }) +
+                $(if ($Question -eq 'class-surface') { " --surface-cap $SurfaceCap" } else { '' }) +
+                $(if ($Question -eq 'event-wiring' -and $Control) { " --control $Control" } else { '' }) +
+                $(if ($Question -eq 'path') { " --to $To" } else { '' })
   # every count the emitter reported, not just the two the shell shows. The
   # ones the header omits are exactly the ones worth auditing later --
   # who-calls' NameOnly, event-wiring's DfmFallback, touches-tables' Unresolved.

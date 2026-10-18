@@ -6,17 +6,17 @@
 ; version from DRAGLINT_VERSION, checks the shipped engine reports that same
 ; version, checks every source exists, and passes the /D defines below.
 ;
-; LAYOUT (owner D1: the runtime is FLAT -- the plugin BPL, the engine and the
-; chart scripts share one folder):
+; LAYOUT (owner D1: the runtime is FLAT -- the plugin BPL and the engine
+; share one folder):
 ;   {app}\bin\                 drag-lint.exe + companions, tree-sitter DLLs, rules\,
-;                              the Win32 plugin BPL, the chart scripts, drag-lint.json
+;                              the Win32 plugin BPL, drag-lint.json
 ;   {app}\bin\x64\             the Win64 plugin BPL (64-bit IDE only; a second file
 ;                              of the same name cannot share bin\)
-;   {app}\bin\graphviz\bin\    dot.exe + its DLLs + config8 -- where the chart
-;                              scripts' resolver looks first (Emit-Common.ps1)
+;   {app}\bin\graphviz\bin\    dot.exe + its DLLs + config8 -- the engine finds its
+;                              charts folder and dot.exe by layout, with no scripts
 ;   {app}\yadf\                YADF.exe, YADFSetup.exe, YADFOT.bpl (Win32); x64\ (Win64)
 ;   {app}\licenses\
-;   {app}\report-pairs.example.json  (Ask-Report reads {app}\report-pairs.json)
+;   {app}\report-pairs.example.json  (the engine reads {app}\report-pairs.json)
 ;
 ; REGISTRY. Everything is per user (HKCU) in both install modes (owner D4), and
 ; uninstall removes only what this installer wrote:
@@ -108,9 +108,6 @@ Source: "{#EngineDir}\rules\*";                  DestDir: "{app}\bin\rules"; Com
 ; (drag-lint-config.exe edits it in place).
 Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; DestName: "drag-lint.json"; Components: core; Flags: onlyifdoesntexist uninsneveruninstall; Check: not IsAdminInstallMode
 Source: "{#RepoRoot}\installer\drag-lint.starter.json"; DestDir: "{app}\bin"; DestName: "drag-lint.json"; Components: core; Flags: onlyifdoesntexist uninsneveruninstall; Permissions: users-modify; Check: IsAdminInstallMode
-; chart scripts, flat beside the engine (owner D1); tests are not shipped, nor the emitters ported to Delphi
-; (owner 2026-10-14: they stay in the repo as the parity reference; the engine answers those questions)
-Source: "{#RepoRoot}\charts\src\*.ps1"; Excludes: "Test-*.ps1,New-ExampleGallery.ps1,Emit-TouchesTables.ps1,Emit-ShownWhere.ps1,Emit-Deps.ps1,Emit-ClassSurface.ps1,Emit-EventWiring.ps1,Emit-TestedBy.ps1,Emit-ChangeImpact.ps1,Emit-CrossesBoundary.ps1,Emit-ProtocolTrace.ps1,Emit-Lifecycle.ps1,Emit-Effects.ps1,Emit-FeedsFrom.ps1,Emit-LandsWhere.ps1,Emit-Consumers.ps1,Emit-ExceptionPaths.ps1,Emit-WhoCalls.ps1,Emit-Butterfly.ps1,Emit-Hierarchy.ps1,Emit-Wiring.ps1,Emit-Path.ps1,Emit-Architecture.ps1,Emit-Cycles.ps1,Emit-MemberAccess.ps1,Emit-RoundTrip.ps1,Trace.FormA.ps1,Trace.Walk.ps1,Trace.Chart.ps1"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
 Source: "{#RepoRoot}\charts\report-pairs.example.json"; DestDir: "{app}"; Components: core; Flags: ignoreversion
 ; ---- optional tools ---------------------------------------------------------
 Source: "{#EngineDir}\drag-lint-open.exe"; DestDir: "{app}\bin"; Components: core; Flags: ignoreversion
@@ -165,62 +162,6 @@ Filename: "{app}\bin\drag-lint.exe"; Parameters: "protocol unregister"; RunOnceI
 Filename: "{app}\bin\drag-lint.exe"; Parameters: "mcp-config --all --remove"; RunOnceId: "RemoveMcp"; Tasks: mcp; Flags: runhidden waituntilterminated
 
 [Code]
-var
-  PwshFound: string;     { '' until looked up; '-' = looked, not found }
-  PwshPage : TOutputMsgWizardPage;
-
-{ ---- PowerShell 7 (design note (d): detect, never bundle) ---------------- }
-
-function FindPwsh: string;
-var
-  Keys: TArrayOfString;
-  I   : Integer;
-  Loc, PathVar, Dir: string;
-  P   : Integer;
-begin
-  Result:= '';
-  if RegGetSubkeyNames(HKLM64, 'SOFTWARE\Microsoft\PowerShellCore\InstalledVersions', Keys) then
-    for I:= 0 to GetArrayLength(Keys) - 1 do
-      if RegQueryStringValue(HKLM64, 'SOFTWARE\Microsoft\PowerShellCore\InstalledVersions\' + Keys[I], 'InstallLocation', Loc) then
-        if FileExists(AddBackslash(Loc) + 'pwsh.exe') then
-        begin
-          Result:= AddBackslash(Loc) + 'pwsh.exe';
-          Exit;
-        end;
-  if FileExists(ExpandConstant('{commonpf64}\PowerShell\7\pwsh.exe')) then
-  begin
-    Result:= ExpandConstant('{commonpf64}\PowerShell\7\pwsh.exe');
-    Exit;
-  end;
-  PathVar:= GetEnv('PATH') + ';';
-  while PathVar <> '' do
-  begin
-    P:= Pos(';', PathVar);
-    Dir:= Trim(Copy(PathVar, 1, P - 1));
-    Delete(PathVar, 1, P);
-    if (Dir <> '') and FileExists(AddBackslash(Dir) + 'pwsh.exe') then
-    begin
-      Result:= AddBackslash(Dir) + 'pwsh.exe';
-      Exit;
-    end;
-  end;
-end;
-
-function PwshPath(Param: string): string;
-begin
-  if PwshFound = '' then
-  begin
-    PwshFound:= FindPwsh;
-    if PwshFound = '' then PwshFound:= '-';
-  end;
-  if PwshFound = '-' then Result:= '' else Result:= PwshFound;
-end;
-
-function HavePwsh: Boolean;
-begin
-  Result:= PwshPath('') <> '';
-end;
-
 { ---- IDE detection (owner D2: offer the plugin only where RAD Studio 13 is) - }
 
 function IdeRoot: string;
@@ -358,21 +299,6 @@ begin
   WizardForm.ComponentsList.Checked[I]:= False;
   WizardForm.ComponentsList.ItemEnabled[I]:= False;
   WizardForm.ComponentsList.ItemCaption[I]:= WizardForm.ComponentsList.ItemCaption[I] + ' -- ' + Why;
-end;
-
-procedure InitializeWizard;
-begin
-  PwshPage:= CreateOutputMsgPage(wpSelectTasks, 'PowerShell 7 was not found',
-    'The charts'' PowerShell fallback and the IDE plugin''s Reports menu need it.',
-    'drag-lint installs and the engine works without PowerShell 7. The charts'' PowerShell fallback ' +
-    'for the questions not yet answered in-process, and the IDE plugin''s Reports menu for those ' +
-    'questions, need it. draglint:// links and MCP registration do not.' + #13#10#13#10 +
-    'Install PowerShell 7 from https://aka.ms/powershell if you want them.' + #13#10#13#10 + 'Setup will continue.');
-end;
-
-function ShouldSkipPage(PageID: Integer): Boolean;
-begin
-  Result:= (PwshPage <> nil) and (PageID = PwshPage.ID) and HavePwsh;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);

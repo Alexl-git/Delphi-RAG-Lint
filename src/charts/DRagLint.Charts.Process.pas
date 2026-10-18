@@ -45,6 +45,13 @@ type
 function RunCapture(const pCommandLine, pWorkDir: string; pTimeoutMs: Cardinal;
   out pResult: TProcessResult): Boolean;
 
+/// <summary>Quotes one command-line argument for CreateProcess.</summary>
+/// <param name="pValue">The argument, any text.</param>
+/// <returns>pValue in double quotes, escaped the way CommandLineToArgvW splits it: n backslashes
+/// before an embedded quote become 2n+1, n before the closing quote become 2n, others stay.</returns>
+/// <remarks>Pure; thread-safe. Lives beside RunCapture, whose command line it builds.</remarks>
+function QuoteArg(const pValue: string): string;
+
 implementation
 
 uses
@@ -55,6 +62,39 @@ const
   WAIT_SLICE_MS = 10;
   KILL_WAIT_MS = 5000;
   NUL_DEVICE = 'NUL';
+  QUOTE: Char = '"';
+  BACKSLASH: Char = '\';
+
+{ Quotes one argument for CreateProcess the way CommandLineToArgvW splits it: n backslashes
+  before an embedded quote become 2n+1 (each doubled, plus one escaping the quote), n before the
+  closing quote become 2n, and backslashes anywhere else stay as they are. }
+function QuoteArg(const pValue: string): string;
+var
+  Slashes: Integer;
+begin
+  var SB:= TStringBuilder.Create;
+  try
+    SB.Append(QUOTE);
+    Slashes:= 0;
+    for var C in pValue do
+    begin
+      if C = BACKSLASH then
+        Inc(Slashes)
+      else
+      begin
+        if C = QUOTE then SB.Append(BACKSLASH, Slashes * 2 + 1)
+        else SB.Append(BACKSLASH, Slashes);
+        Slashes:= 0;
+        SB.Append(C);
+      end;
+    end;
+    SB.Append(BACKSLASH, Slashes * 2);
+    SB.Append(QUOTE);
+    Result:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
 
 { Moves whatever is waiting in pPipe into pSink, without blocking. A broken or empty pipe
   simply ends the loop. }

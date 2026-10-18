@@ -66,9 +66,9 @@ function ReportCommandText(const pCmd: TReportCommand): string;
 
 /// <summary>meta.json's regenerate command (New-DiagramArtifact.ps1's $meta.regenerate).</summary>
 /// <param name="pArgs">The question, resolved.</param>
-/// <returns>'New-DiagramArtifact.ps1 -Question q -Target t -DbPath "db"', then -Depth, -Cap,
-/// -SqlDbPath "s" and -ServerDbPath "s" for a question that reads them (even when ''), the
-/// counterpart (only when given), -SurfaceCap, -Control and -To, each per the script's lists.</returns>
+/// <returns>'drag-lint ask q --target t --db "db"', then --depth, --cap,
+/// --sql-db "s" and --server-db "s" for a question that reads them (even when ''), the
+/// counterpart (only when given), --surface-cap, --control and --to, each per the script's lists.</returns>
 function RegenerateText(const pArgs: TQuestionArgs): string;
 
 /// <summary>The INDEX lines of the answer (Ask-Report's "which index(es) answered").</summary>
@@ -141,7 +141,7 @@ const
   RE_NOT_PRINTABLE = '[^\x20-\x7E]';
   RE_NOT_SHOWN = 'not shown';
   RE_MORE = '^\+\d+ more';
-  RE_CAP_ARG = ' -(SurfaceCap|Cap) (\d+)';
+  RE_CAP_ARG = ' --(surface-cap|cap) (\d+)';
   RE_TIP_SEP = '\s--\s';
   RE_TIP_SPLIT = '\s+--\s+';
   RE_WHITESPACE = '\s';
@@ -443,8 +443,10 @@ function CapHow(const pRegenerate: string): string;
 begin
   var Cm:= TRegEx.Match(pRegenerate, RE_CAP_ARG);
   if Cm.Success then
-    Result:= Format(' (-%s %s; raise -%s to see them)',
-      [Cm.Groups[G_CAP_NAME].Value, Cm.Groups[G_CAP_VALUE].Value, Cm.Groups[G_CAP_NAME].Value])
+  begin
+    var CapName:= if Cm.Groups[G_CAP_NAME].Value = 'surface-cap' then 'SurfaceCap' else 'Cap';
+    Result:= Format(' (-%s %s; raise -%s to see them)', [CapName, Cm.Groups[G_CAP_VALUE].Value, CapName]);
+  end
   else
     Result:= ' (raise -Cap to see them)';
 end;
@@ -524,23 +526,23 @@ end;
 
 function RegenerateText(const pArgs: TQuestionArgs): string;
 begin
-  Result:= Format('New-DiagramArtifact.ps1 -Question %s -Target %s -DbPath "%s"', [pArgs.Question, pArgs.Target, pArgs.DbPath]);
+  Result:= Format('drag-lint ask %s --target %s --db "%s"', [pArgs.Question, pArgs.Target, pArgs.DbPath]);
   if InList(pArgs.Question, REGEN_DEPTH) then
-    Result:= Result + ' -Depth ' + IntToStr(pArgs.Depth);
+    Result:= Result + ' --depth ' + IntToStr(pArgs.Depth);
   if InList(pArgs.Question, REGEN_CAP) then
-    Result:= Result + ' -Cap ' + IntToStr(pArgs.Cap);
+    Result:= Result + ' --cap ' + IntToStr(pArgs.Cap);
   if QuestionReadsSqlIndex(pArgs.Question) then
-    Result:= Result + ' -SqlDbPath "' + pArgs.SqlDbPath + '"';
+    Result:= Result + ' --sql-db "' + pArgs.SqlDbPath + '"';
   if QuestionReadsServerIndex(pArgs.Question) then
-    Result:= Result + ' -ServerDbPath "' + pArgs.ServerDbPath + '"';
+    Result:= Result + ' --server-db "' + pArgs.ServerDbPath + '"';
   if SameText(pArgs.Question, CROSSES_BOUNDARY) and (pArgs.CounterpartDb <> '') then
-    Result:= Result + ' -CounterpartDb "' + pArgs.CounterpartDb + '"';
+    Result:= Result + ' --counterpart-db "' + pArgs.CounterpartDb + '"';
   if SameText(pArgs.Question, 'class-surface') then
-    Result:= Result + ' -SurfaceCap ' + IntToStr(pArgs.SurfaceCap);
+    Result:= Result + ' --surface-cap ' + IntToStr(pArgs.SurfaceCap);
   if SameText(pArgs.Question, 'event-wiring') and (pArgs.Command.Get('Control') <> '') then
-    Result:= Result + ' -Control ' + pArgs.Command.Get('Control');
+    Result:= Result + ' --control ' + pArgs.Command.Get('Control');
   if SameText(pArgs.Question, PATH_QUESTION) then
-    Result:= Result + ' -To ' + pArgs.Command.Get('To');
+    Result:= Result + ' --to ' + pArgs.Command.Get('To');
 end;
 
 { which index(es) answered (Ask-Report fix round 1, M-1): the project index, then any other the question read }

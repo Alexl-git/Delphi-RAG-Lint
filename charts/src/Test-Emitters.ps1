@@ -1243,7 +1243,7 @@ Step 'E-PATH' {
            -To 'Blueprint4.ViewModel.TBlueprint_ViewModel.GetLastPersistError' -DbPath $DbCli -OutRoot (Join-Path $OutDir 'bundle-path')
   $pm = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
   Chk 'A-PA-META' "$($pm.leftCount) $($pm.leftLabel) / $($pm.rightCount) $($pm.rightLabel)" '1 shortest paths / 1 calls on each path'
-  if ($pm.regenerate -notmatch ' -To Blueprint4\.ViewModel\.TBlueprint_ViewModel\.GetLastPersistError' -or $pm.regenerate -notmatch ' -Cap 20') { Fail 'A-PA-REGEN' "regenerate lacks -To / -Cap: $($pm.regenerate)" }
+  if ($pm.regenerate -notmatch ' --to Blueprint4\.ViewModel\.TBlueprint_ViewModel\.GetLastPersistError' -or $pm.regenerate -notmatch ' --cap 20') { Fail 'A-PA-REGEN' "regenerate lacks --to / --cap: $($pm.regenerate)" }
   if ((Split-Path -Leaf $art.Bundle) -notmatch 'GetLastPersistError') { Fail 'A-PA-SLUG' "the bundle folder does not name B: $($art.Bundle)" }
 }
 
@@ -2288,7 +2288,7 @@ Step 'FF-ART' {
   $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
   # RE-PINNED 2026-10-05 (Task 2) -- re-point followed: rightCount is A-FF0-PERCTL's CtlTable, 267 -> 471 (+204 dangling controls whose re-point reaches a table)
   Chk 'A-FF-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount)" '5 chain rows / 471'
-  if ($meta.regenerate -notmatch '-SqlDbPath ') { Fail 'A-FF-ART' 'the regenerate command drops -SqlDbPath' }
+  if ($meta.regenerate -notmatch '--sql-db ') { Fail 'A-FF-ART' 'the regenerate command drops --sql-db' }
 }
 # ---- PLAN-last-four-verbs, Task 4: lands-where -------------------------------------
 # THREE clones: CLIENT (-DbPath: ORM classes + DFM bindings), SERVER (-ServerDbPath:
@@ -2539,7 +2539,7 @@ Step 'LW-ART' {
   $art = & "$SRC\New-DiagramArtifact.ps1" -Question lands-where -Target 'uCAUSFAIL.TmcCAUSFAIL.REASON' -DbPath $DbCli -ServerDbPath $DbSrv -SqlDbPath $DbSql -OutRoot $artRoot
   $meta = Get-Content (Join-Path $art.Bundle 'meta.json') -Raw | ConvertFrom-Json
   Chk 'A-LW-ART'        "$($meta.leftCount) $($meta.leftLabel) / $($meta.rightCount) $($meta.rightLabel)" '4 server DataService rows / 1 triggers touching the column'
-  if ($meta.regenerate -notmatch '-SqlDbPath ' -or $meta.regenerate -notmatch '-ServerDbPath ') { Fail 'A-LW-ART' "the regenerate command drops a DB: $($meta.regenerate)" }
+  if ($meta.regenerate -notmatch '--sql-db ' -or $meta.regenerate -notmatch '--server-db ') { Fail 'A-LW-ART' "the regenerate command drops a DB: $($meta.regenerate)" }
 }
 # FIX ROUND 2: a -TestHideColumn run must not POISON the process-wide chains cache
 # ($global:DlFeedChains, keyed on the SQL set's .Db, which the doctored copy
@@ -3295,7 +3295,7 @@ Step 'RT-ART' {
   Chk 'A-RT-ART-LABELS' "$($meta.leftLabel)/$($meta.rightLabel)" 'steps/unresolved'
   Chk 'A-RT-ART-COUNTS' "$($meta.leftCount)/$($meta.rightCount)" "$($rt0.RtCounts -split '/' | Select-Object -First 1)/$($rt0.RtCounts -split '/' | Select-Object -Last 1)"
   Chk 'A-RT-ART-DEPTH'  $meta.depth 4
-  foreach ($flag in '-ServerDbPath ', '-SqlDbPath ', '-Depth 4') { if ($meta.regenerate -cnotlike "*$flag*") { Fail 'A-RT-ART' "the regenerate command drops $flag" } }
+  foreach ($flag in '--server-db ', '--sql-db ', '--depth 4') { if ($meta.regenerate -cnotlike "*$flag*") { Fail 'A-RT-ART' "the regenerate command drops $flag" } }
   if (-not (Test-Path (Join-Path $art.Bundle 'trace.dlgraph'))) { Fail 'A-RT-ART' 'no trace.dlgraph in the bundle' }
   $html = [IO.File]::ReadAllText((Join-Path $art.Bundle 'index.html'))
   if ($html -cnotmatch '<pre[^>]*>TRACE OPERAT\.NAME') { Fail 'A-RT-ART' 'index.html does not show the trace' }
@@ -3384,9 +3384,8 @@ Step 'RT-CALC' {
   Chk 'A-RTC-FTR-ROWS'   $rt0.CalcFtrRows ($ftrRows -join ' ## ')
   # M4: the row keeps `bound at :N via FF`; the ~150-char reason is the note's, once
   Chk 'A-RTC-FTR-ROWNOTE' $rt0.CalcFtrRowLine 'FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType [inferred] @Blueprint4.ViewModel.pas:990 -- in FtrsOnCalcFields; FtrType set at :978, FfFtrs_FtrType bound at :858 via FF; ask in-class-field-reads'
-  # M5: the header and all 18 row commands are runnable as written -- the call operator and the bundler's absolute path
-  $bundler = [IO.Path]::GetFullPath((Join-Path $SRC 'New-DiagramArtifact.ps1'))
-  Chk 'A-RTC-CMD'        $rt0.CalcCmdHeads "19x & '$bundler' -Question round-trip -Target '"
+  # the header and all 18 row commands are `drag-lint ask` commands
+  Chk 'A-RTC-CMD'        $rt0.CalcCmdHeads '19x drag-lint ask round-trip --target "'
   # the rows are anchored facts: counted in steps (9 + 18), never unresolved; the ONE unresolved is the STOPS
   Chk 'A-RTC-FTR-COUNTS' $rt0.CalcFtrCounts '27/2/0/1'
   Chk 'A-RTC-FTR-CHECK'  $rt0.CalcFtrCheck ("0|identical|True|ANCHOR,DERIVED,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO|DERIVED=FtrName is calculated from 18 fields -- trace one of them instead (every binding below: $bindWhy): | " +

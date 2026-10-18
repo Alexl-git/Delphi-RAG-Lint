@@ -1,10 +1,10 @@
 unit DRagLint.Charts.Producer;
 
 { The report-producer seam (spec P2). Compare obtains every NEW report through this one
-  interface. Step 1 has a single producer, TPowerShellProducer, which runs
-  charts\src\Ask-Report.ps1 -Plain; later a Delphi producer replaces it question by
-  question with no change to Compare. Pure types plus one default-options function: no
-  IO here. }
+  interface. It began with one producer that ran charts\src\Ask-Report.ps1 -Plain; the
+  Delphi producer (DRagLint.Charts.Producer.Delphi) replaced it question by question with no
+  change to Compare, and since 2026-10-18 is the only one. Pure types plus one default-options
+  function: no IO here. }
 
 interface
 
@@ -27,10 +27,9 @@ type
     /// <summary>The engine the producer should use (-Engine); DefaultProduceOptions sets the
     /// running executable.</summary>
     EnginePath : string;
-    /// <summary>The Ask-Report script; '' resolves it (ResolveAskReportScript).</summary>
+    /// <summary>A file or folder in the charts scripts folder; '' resolves it by layout
+    /// (DRagLint.Charts.Tools.ResolveChartsHome).</summary>
     ScriptPath : string;
-    /// <summary>Wall-clock limit for one question in milliseconds; 0 waits without limit.</summary>
-    TimeoutMs  : Cardinal;
     /// <summary>The SERVER index (-ServerDbPath); '' lets the producer pair it as usual.</summary>
     ServerDbOverride     : string;
     /// <summary>The SQL-script index (-SqlDbPath); '' lets the producer pair it as usual.</summary>
@@ -67,18 +66,17 @@ type
     ['{5D0B7A44-3C1E-4F6A-9B72-A8E4C5130F9D}']
     /// <summary>Answers one question.</summary>
     /// <param name="pCommand">The question and its explicit arguments (a parsed COMMAND line).</param>
-    /// <param name="pOptions">Index override, staleness policy, engine, script and timeout.</param>
+    /// <param name="pOptions">Index override, staleness policy, engine and charts folder.</param>
     /// <returns>Ok with the plain text on success; otherwise Ok False with the exit code and the
     /// reason. Never raises for a refusal or a missing tool.</returns>
     function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
     /// <summary>Says what this producer is, for diagnostics.</summary>
-    /// <returns>For example 'PowerShell Ask-Report.ps1 at C:\...\Ask-Report.ps1'.</returns>
+    /// <returns>For example 'Delphi in-process (who-writes)'.</returns>
     function Describe: string;
   end;
 
 /// <summary>The options a caller starts from.</summary>
-/// <returns>No override, AllowStale False, EnginePath = the running executable, ScriptPath '',
-/// TimeoutMs = 10 minutes.</returns>
+/// <returns>No override, AllowStale False, EnginePath = the running executable, ScriptPath ''.</returns>
 function DefaultProduceOptions: TProduceOptions;
 
 implementation
@@ -86,14 +84,10 @@ implementation
 uses
   System.SysUtils;
 
-const
-  DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
-
 function DefaultProduceOptions: TProduceOptions;
 begin
   Result:= Default(TProduceOptions);
   Result.EnginePath:= ParamStr(0);
-  Result.TimeoutMs:= DEFAULT_TIMEOUT_MS;
 end;
 
 end.

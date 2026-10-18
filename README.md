@@ -123,11 +123,10 @@ Auto Document leaves it alone. The same submenu holds **Forms for testers
 (CSV)...**, a spreadsheet of every form and how to reach it. See
 [IDE Menu Reference](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/IDE-Menu-Reference).
 
-**From a terminal or an AI agent:** `charts\src\Ask-Report.ps1 -Question <id>
--Target <name> -Project <x.dproj> [-Open]` -- it finds the indexes itself and
-prints the answer as text. A single engine verb, `drag-lint ask`, is planned
-and not shipped yet. The chart scripts live in the repository's `charts\`
-folder (not in the release zip) and need PowerShell 7 and Graphviz.
+**From a terminal or an AI agent:** `drag-lint ask <id> --target <name>
+--project <x.dproj> [--open]` -- it finds the indexes itself and prints the
+answer as text. Every question is answered in-process by the engine; no
+PowerShell is needed (pictures need Graphviz).
 
 drag-lint is not a model: every chart comes from a formal call, and every row in
 it is a fact from the index with a file and a line. Each answer is a bundle --

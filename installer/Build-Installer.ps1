@@ -48,7 +48,6 @@ $need = @(
   "$YadfDir\Win64\Release\EXE\YADF.exe", "$YadfDir\Win64\Release\EXE\YADFSetup.exe",
   "$YadfDir\Win32\Release\EXE\YADFOT.bpl", "$YadfDir\Win64\Release\EXE\YADFOT.bpl", "$YadfDir\LICENSE",
   "$repo\installer\drag-lint.starter.json", "$repo\charts\report-pairs.example.json",
-  "$repo\charts\src\Ask-Report.ps1", "$repo\charts\src\Emit-Common.ps1", "$repo\charts\src\New-DiagramArtifact.ps1",
   "$EngineDir\drag-lint-open.exe",
   "$repo\installer\licenses\drag-lint-LICENSE.txt", "$repo\installer\licenses\graphviz-EPL-2.0.txt"
 )

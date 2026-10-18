@@ -80,9 +80,6 @@ all of them itself, and `charts\src\Ask-Report.ps1 -Plain` stays in the reposito
 as the parity reference. The text is the same either way: the questions are held to the PowerShell output byte for byte by
 the parity harness (`charts\src\Test-Parity.ps1 -Mode Question`).
 
-`charts\src\Ask-Report.ps1` still works; without `-Plain` it now runs this verb
-with the same arguments.
-
 ## Examples
 
 ```

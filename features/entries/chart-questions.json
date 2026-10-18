@@ -5,21 +5,18 @@
   "owner": "CHARTS",
   "status": "shipped",
   "since": "1.20.2-alpha",
-  "summary": "Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS",
-  "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run drag-lint ask <id> --target <name> --project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index, Graphviz for the pictures, and PowerShell 7 for the questions not yet ported to Delphi.",
+  "summary": "Every chart question of the Reports submenu and drag-lint ask, imported from REPORT_QUESTIONS",
+  "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run drag-lint ask <id> --target <name> --project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index and Graphviz for the pictures.",
   "wikiPage": "Diagrams-and-Charts",
   "surfaces": [
     {
-      "type": "script",
-      "path": "charts\\src\\Ask-Report.ps1"
-    },
-    {
-      "type": "script",
-      "path": "charts\\src\\New-DiagramArtifact.ps1"
+      "type": "cli",
+      "verb": "ask",
+      "example": "drag-lint ask butterfly --target U.TForm.Method --project P.dproj"
     }
   ],
   "audience": "both",
-  "requires": ["index", "powershell7", "graphviz"],
+  "requires": ["index", "graphviz"],
   "family": "chart-questions",
   "lastVerified": {
     "date": "2026-10-06",

@@ -266,7 +266,6 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Adapters.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Process.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Producer.pas"/>
-    <DCCReference Include="..\charts\DRagLint.Charts.Producer.PowerShell.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Remarks.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Snapshot.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Compare.pas"/>

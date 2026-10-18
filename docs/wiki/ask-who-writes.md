@@ -4,7 +4,7 @@
 
 ## Asking it
 
-**Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
+Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
 
 From RAD Studio: *drag-lint > Reports > Who writes this field...* -- put the caret on the selection first (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
 
@@ -12,10 +12,10 @@ From RAD Studio: *drag-lint > Reports > Who writes this field...* -- put the car
 drag-lint ask --question who-writes --at <file.pas>:<line>:<col> --db <project.sqlite>
 ```
 
-The selection is the symbol under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). Today, ask it by name through the chart pipeline:
+The selection is the symbol under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). From a terminal, ask it by name:
 
 ```
-New-DiagramArtifact.ps1 -Question who-writes -Target MyApp.Orders.TOrder.Total -DbPath <project.sqlite>
+drag-lint ask who-writes --target MyApp.Orders.TOrder.Total --db <project.sqlite>
 ```
 
 ## You select

@@ -4,7 +4,7 @@
 
 ## Asking it
 
-**Planned engine verb -- `drag-lint ask` is not shipped yet.** Today ask this question with the chart pipeline command below, or with `Ask-Report.ps1` (see [Charts and the IDE](Charts-and-the-IDE)).
+Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
 
 From RAD Studio: *drag-lint > Reports > Which exceptions escape this routine...* -- put the caret on the selection first (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
 
@@ -12,10 +12,10 @@ From RAD Studio: *drag-lint > Reports > Which exceptions escape this routine...*
 drag-lint ask --question exception-paths --at <file.pas>:<line>:<col> --db <project.sqlite>
 ```
 
-The selection is the routine under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). Today, ask it by name through the chart pipeline:
+The selection is the routine under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). From a terminal, ask it by name:
 
 ```
-New-DiagramArtifact.ps1 -Question exception-paths -Target <Unit.Class.Method> -DbPath <project.sqlite> [-Depth 3] [-Cap N]
+drag-lint ask exception-paths --target <Unit.Class.Method> --db <project.sqlite> [--depth 3] [--cap N]
 ```
 
 ## You select

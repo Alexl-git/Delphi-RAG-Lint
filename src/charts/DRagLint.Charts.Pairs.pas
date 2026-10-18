@@ -61,8 +61,8 @@ type
 function SameIndexPath(const pA, pB: string): Boolean;
 
 /// <summary>The default report-pairs.json (Emit-Common's Resolve-ReportPairsFile).</summary>
-/// <param name="pScriptPath">The Ask-Report.ps1 to locate the charts folder from; '' resolves it
-/// (ResolveAskReportScript).</param>
+/// <param name="pScriptPath">A file or folder in the charts scripts folder; '' resolves it
+/// (DRagLint.Charts.Tools.ResolveChartsHome).</param>
 /// <returns>%APPDATA%\drag-lint\report-pairs.json when it exists, else charts\report-pairs.json
 /// when that exists (or APPDATA is unset), else the APPDATA path.</returns>
 function ResolveReportPairsFile(const pScriptPath: string = ''): string;
@@ -156,7 +156,7 @@ procedure PairOtherIndexes(const pPairs: TReportPairs; const pRequest: TPairRequ
 implementation
 
 uses
-  System.IOUtils, DRagLint.Charts.Process, DRagLint.Charts.DocInsight, DRagLint.Charts.Producer.PowerShell;
+  System.IOUtils, DRagLint.Charts.Process, DRagLint.Charts.DocInsight, DRagLint.Charts.Tools;
 
 const
   PAIRS_FILE_NAME = 'report-pairs.json';
@@ -180,9 +180,8 @@ function ResolveReportPairsFile(const pScriptPath: string): string;
 begin
   var AppData:= GetEnvironmentVariable('APPDATA');
   var User:= if AppData <> '' then TPath.Combine(AppData, USER_PAIRS_REL) else '';
-  var Why: string;
-  var Script:= ResolveAskReportScript(pScriptPath, Why);
-  var Repo:= if Script <> '' then TPath.Combine(ExtractFileDir(ExtractFileDir(Script)), PAIRS_FILE_NAME) else '';
+  var Root, Scripts, Why: string;
+  var Repo:= if ResolveChartsHome(pScriptPath, Root, Scripts, Why) then TPath.Combine(Root, PAIRS_FILE_NAME) else '';
   if (User <> '') and TFile.Exists(User) then Exit(User);
   if (Repo <> '') and (TFile.Exists(Repo) or (User = '')) then Exit(Repo);
   Result:= User;
