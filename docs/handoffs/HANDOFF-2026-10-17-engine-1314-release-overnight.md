@@ -48,6 +48,25 @@ or early afternoon 2026-10-18.
   roots with no .pas -> docs\INBOX-library-drift-win64-lib-dirs.md. Roots ARE re-read from the IDE
   registry on every run (no backlog item needed for that).
 
+## UPDATE 2026-10-18 07:00 -- charts stack merged to LOCAL main c7a82081 (not pushed)
+- Not a fast-forward (main had 33 newer commits): merged in worktree
+  C:\Projects\Delphi-RAG-lint-wt\merge-charts-probe (branch probe/merge-charts-20261018), then main
+  ff'd to it. Commits: d2593919 merge (CHANGELOG: charts Unreleased above v1.31.4), 7e71eec7 facts
+  regen (doc-drift 0), 3e745b78 merge charts/fix-project-db @9ed46700 (who-writes needed --db),
+  dc2d4735 build bat also builds drag-lint-open.exe (seam a), c7a82081 run_compare_verb redesigned
+  on a real fixture (tests\fixtures\compare-verb). Battery on c7a82081: 696/0/0.
+- dll-win64 still = 1.31.4 Debug from 36dc1866 (no redeploy of the merged engine: needs owner go).
+- Probe worktree needed gitignored outputs to run the battery: drag-lint-switch.exe,
+  build_lsp_switch.bat, self-index src\cli\_D-RAG, tests\fixtures\T2..T7 *.exe (copied from main).
+- TEST INSTALLER ON HOLD (owner via CHARTS): CHARTS is removing PowerShell from the product
+  (producer fallback, Ask-Report.ps1 lookup, .iss ships .ps1 + pwsh page, --help). Asked to stack on
+  main c7a82081. When CHARTS reports PS-free: merge (ff), battery, then installer\Build-Installer.ps1
+  -EngineDir <probe dll-win64> (default EngineDir is the MAIN dll-win64 = deployed exe; version check
+  requires engine version == DRAGLINT_VERSION).
+- INBOX filed: docs\INBOX-library-drift-win64-lib-dirs.md, docs\INBOX-compare-help-db-and-command-quoting.md.
+- Owner decisions open: library-Win32 --rebuild (~3 h, files 7318 > walked 6943); publish 1.31.4
+  (step 7) -- note main now also carries the charts stack beyond 36dc1866 (tag 36dc1866 or a later HEAD).
+
 ## Resume point (in order)
 1. Re-arm the hourly wake timer (`/loop` dynamic, ScheduleWakeup ~3600 s) -- owner is away overnight.
 2. Release run: read release-report.md. If missing, check `Get-Process pwsh,drag-lint`, the tail of
