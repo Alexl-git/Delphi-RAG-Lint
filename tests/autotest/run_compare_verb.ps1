@@ -1,20 +1,22 @@
 <#
-  run_compare_verb.ps1 -- `drag-lint compare` end to end, against a STUB report producer.
+  run_compare_verb.ps1 -- `drag-lint compare` end to end, against the REAL in-process engine.
 
-  The verb reruns a saved report's COMMAND through charts\src\Ask-Report.ps1 -Plain and diffs
-  the normalised text. Here DRAGLINT_ASK_REPORT points at
-  tests\charts\fixtures\producer\Stub-AskReport.ps1, which prints the same SHAPE as the real
-  script (header sentence, COMMAND, BUNDLE, INDEX, body) without touching an index, so every
-  exit code and output format can be pinned deterministically:
+  The verb reruns a saved report's COMMAND and diffs the normalised text. Every chart question
+  is answered in-process by the engine, so this test copies the fixture project
+  tests\fixtures\compare-verb (Cmp.dproj: TFoo.FName written by SetName and Load) into a temp
+  folder, indexes it into a PRIVATE temp DB and passes that DB with --db on every rerun (the
+  fixture is in no manifest; no real DB is touched). The old report is the engine's own
+  `ask who-writes --plain`. DRAGLINT_ASK_REPORT points at a script that does not exist, so a
+  rerun that silently fell back to PowerShell could not pass:
 
-    C-SAME      same answer          -> exit 0, "result: no differences"
-    C-DIFF      STUB_VARIANT=B       -> exit 1, exactly one added row
+    C-SAME      same index, same answer -> exit 0, "result: no differences", NEW names the temp DB
+    C-DIFF      Reset made a writer + reindex -> exit 1, + Reset row, totals line changed
     C-JSON      --format json        -> parses, schema compare/1, exit_code 1
     C-HTML      --format html        -> file written, light/dark CSS, path printed
     C-NOCMD     no source at all     -> exit 2 + usage on stderr
     C-NOCMD2    legacy old, no --command -> exit 2 naming --command
     C-WARN      legacy old + --command   -> WARNING line first
-    C-STALE     stub says stale      -> exit 3, ERROR on stderr, JSON envelope still parses
+    C-STALE     a member file edited, not reindexed -> exit 3, ERROR on stderr, JSON envelope parses
     C-REMARKS   --in U.pas --line N --update-doc -> only block 2 rewritten
     C-SHOW      --show report        -> HTML page
     C-CSV       two forms CSVs       -> exit 1
@@ -51,56 +53,80 @@ function Skip($n,$why){ Write-Host ("[SKIP] {0}" -f $n) -ForegroundColor Yellow;
 $Exe  = (Resolve-Path $Exe).Path
 $Repo = (Resolve-Path $Repo).Path
 $Fix  = Join-Path $Repo 'tests\charts\fixtures'
-$Stub = Join-Path $Fix 'producer\Stub-AskReport.ps1'
-$Pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
-if (-not $Pwsh) { Skip 'all' 'pwsh 7 not on PATH'; exit 0 }
+$Proj0 = Join-Path $Repo 'tests\fixtures\compare-verb'
+if (-not (Test-Path (Join-Path $Proj0 'Cmp.dproj'))) { Check 'fixture tests\fixtures\compare-verb\Cmp.dproj present' $false; exit 1 }
 $Work = Join-Path ([IO.Path]::GetTempPath()) ('dl-compare-verb-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $Work | Out-Null
+$PDir = Join-Path $Work 'proj'
+New-Item -ItemType Directory -Force -Path $PDir | Out-Null
+Copy-Item (Join-Path $Proj0 '*') $PDir
+$Proj   = Join-Path $PDir 'Cmp.dproj'
+$Db     = Join-Path $Work 'cmp.sqlite'
+$PasU   = Join-Path $PDir 'Unit1.pas'
+$Target = 'Unit1.TFoo.FName'
 
-# Runs the engine; returns .Code .Out .Err. Environment overrides ride along.
-function Invoke-Compare([string[]]$ArgList, [hashtable]$Env = @{}) {
+# Runs the engine; returns .Code .Out .Err. DRAGLINT_ASK_REPORT names a missing script: no PowerShell fallback.
+function Invoke-Compare([string[]]$ArgList) {
   $psi = [Diagnostics.ProcessStartInfo]::new($Exe)
   foreach ($a in $ArgList) { $psi.ArgumentList.Add($a) }
   $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true; $psi.UseShellExecute = $false
-  $psi.Environment['DRAGLINT_ASK_REPORT'] = $Stub
-  foreach ($k in $Env.Keys) { $psi.Environment[$k] = [string]$Env[$k] }
+  $psi.Environment['DRAGLINT_ASK_REPORT'] = (Join-Path $Work 'no-such-Ask-Report.ps1')
   $p = [Diagnostics.Process]::Start($psi)
   $o = $p.StandardOutput.ReadToEndAsync(); $e = $p.StandardError.ReadToEndAsync()
   $p.WaitForExit()
   [pscustomobject]@{ Code = $p.ExitCode; Out = $o.Result; Err = $e.Result }
 }
-# The old report: the stub's own plain answer, kept as a file (UTF-8, no BOM).
-function New-OldReport([string]$Path, [string]$Question, [string]$Target, [string]$Project) {
-  $txt = & $Pwsh -NoProfile -File $Stub -Question $Question -Target $Target -Project $Project -Plain -AllowStale | Out-String
-  [IO.File]::WriteAllText($Path, $txt, [Text.UTF8Encoding]::new($false))
+# (Re)indexes the temp copy into the private temp DB; incremental after the first run.
+function Update-Index {
+  $r = Invoke-Compare @('index','--project',$Proj,'--db',$Db)
+  Check 'setup: index the fixture into the temp DB' ($r.Code -eq 0 -and (Test-Path $Db)) "exit=$($r.Code) err=$($r.Err)"
+}
+# Rewrites one exact piece of the temp copy's Unit1.pas (ASCII, CRLF kept); the piece must be there.
+function Edit-Unit([string]$From, [string]$To) {
+  $t = [IO.File]::ReadAllText($PasU)
+  Check "setup: Unit1.pas holds [$From]" ($t.Contains($From))
+  [IO.File]::WriteAllText($PasU, $t.Replace($From, $To), [Text.Encoding]::ASCII)
+}
+# The old report: the engine's own plain answer from the temp DB, kept as a file (UTF-8, no BOM).
+function New-OldReport([string]$Path) {
+  $r = Invoke-Compare @('ask','who-writes','--target',$Target,'--project',$Proj,'--db',$Db,'--plain','--out-root',(Join-Path $Work 'bundles'))
+  Check 'setup: ask --plain wrote the old report' ($r.Code -eq 0 -and $r.Out -match '(?m)^COMMAND who-writes ') "exit=$($r.Code) err=$($r.Err)"
+  [IO.File]::WriteAllText($Path, $r.Out, [Text.UTF8Encoding]::new($false))
 }
 
 try {
-  $Proj = 'C:\P\A.dproj'
+  Update-Index
   $Old  = Join-Path $Work 'old.txt'
-  New-OldReport $Old 'who-writes' 'Unit1.TFoo.Name' $Proj
+  New-OldReport $Old
 
-  # C-SAME
-  $r = Invoke-Compare @('compare','--old',$Old)
+  # C-SAME: nothing changed between the two runs
+  $r = Invoke-Compare @('compare','--old',$Old,'--db',$Db)
   Check 'C-SAME exit 0' ($r.Code -eq 0) "exit=$($r.Code) err=$($r.Err)"
   Check 'C-SAME says no differences' ($r.Out -match 'result: no differences') $r.Out
+  Check 'C-SAME new run read the temp DB, fresh' ($r.Out -match '(?m)^NEW .*index cmp\.sqlite .*\(fresh\)') $r.Out
 
-  # C-DIFF
-  $r = Invoke-Compare @('compare','--old',$Old) @{ STUB_VARIANT = 'B' }
-  $adds = @($r.Out -split "`r?`n" | Where-Object { $_ -match '^\+ ' })
+  # C-DIFF: a real change -- Reset now writes FName -- reindexed, so the rerun answers differently
+  Edit-Unit "procedure TFoo.Reset;`r`nbegin`r`n" "procedure TFoo.Reset;`r`nbegin`r`n  FName:= '';`r`n"
+  Update-Index
+  $r = Invoke-Compare @('compare','--old',$Old,'--db',$Db)
+  $lines = @($r.Out -split "`r?`n")
+  $adds = @($lines | Where-Object { $_ -match '^\+ ' })
+  $dels = @($lines | Where-Object { $_ -match '^- ' })
   Check 'C-DIFF exit 1' ($r.Code -eq 1) "exit=$($r.Code) err=$($r.Err)"
-  Check 'C-DIFF one added row' ($adds.Count -eq 1 -and $adds[0] -match 'Reset') ($adds -join '|')
+  Check 'C-DIFF Reset row added' (@($adds | Where-Object { $_ -match 'TFoo\.Reset @Unit1\.pas:\d+ -- 1 write site' }).Count -eq 1) ($adds -join '|')
+  Check 'C-DIFF totals 2 -> 3, nothing else changed' ($adds.Count -eq 2 -and $dels.Count -eq 1 -and $dels[0] -match '2 write sites / 2 routines' -and ($adds -match '3 write sites / 3 routines')) (($dels + $adds) -join '|')
 
   # C-JSON
-  $r = Invoke-Compare @('compare','--old',$Old,'--format','json') @{ STUB_VARIANT = 'B' }
+  $r = Invoke-Compare @('compare','--old',$Old,'--db',$Db,'--format','json')
   $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
   Check 'C-JSON parses' ($null -ne $j) $r.Out
   Check 'C-JSON schema compare/1' ($j -and $j.schema -eq 'compare/1')
   Check 'C-JSON exit_code 1' ($j -and $j.exit_code -eq 1 -and $r.Code -eq 1) "exit=$($r.Code)"
+  Check 'C-JSON counts 1 removed / 2 added' ($j -and $j.counts.removed -eq 1 -and $j.counts.added -eq 2) ($j.counts | ConvertTo-Json -Compress)
 
   # C-HTML
   $html = Join-Path $Work 'out.html'
-  $r = Invoke-Compare @('compare','--old',$Old,'--format','html','--output',$html) @{ STUB_VARIANT = 'B' }
+  $r = Invoke-Compare @('compare','--old',$Old,'--db',$Db,'--format','html','--output',$html)
   Check 'C-HTML exit 1' ($r.Code -eq 1) "exit=$($r.Code) err=$($r.Err)"
   Check 'C-HTML file written' (Test-Path $html)
   Check 'C-HTML light/dark css' ((Test-Path $html) -and ([IO.File]::ReadAllText($html) -match 'prefers-color-scheme'))
@@ -117,30 +143,37 @@ try {
   Check 'C-NOCMD2 names --command' ($r.Err -match '--command') $r.Err
 
   # C-WARN
-  $r = Invoke-Compare @('compare','--old',$legacy,'--command','who-writes -Target "Unit1.TFoo.Name" -Project "C:\P\A.dproj"')
+  # The command is unquoted: the engine's ParamStr does not undo the \" escaping ArgumentList applies.
+  $r = Invoke-Compare @('compare','--old',$legacy,'--db',$Db,'--command',"who-writes -Target $Target -Project $Proj")
   $first = ($r.Out -split "`r?`n")[0]
   Check 'C-WARN WARNING line first' ($first -match '^WARNING: .*original command is unknown') "first=[$first] exit=$($r.Code) err=$($r.Err)"
+  Check 'C-WARN the rerun answered (exit 0/1)' ($r.Code -in 0, 1) "exit=$($r.Code) err=$($r.Err)"
 
-  # C-STALE
-  $stale = Join-Path $Work 'stale.txt'
-  New-OldReport $stale 'who-writes' 'Unit1.TFoo.Name' 'C:\P\stale.dproj'
-  $r = Invoke-Compare @('compare','--old',$stale)
-  Check 'C-STALE exit 3' ($r.Code -eq 3) "exit=$($r.Code)"
-  Check 'C-STALE ERROR on stderr' ($r.Err -match '(?m)^ERROR: ') $r.Err
-  $r = Invoke-Compare @('compare','--old',$stale,'--format','json')
+  # C-STALE: a member file changed since the index was built; the new run must refuse
+  Edit-Unit "  FName:= '';`r`n" "  FName:= ''; // edited, not reindexed`r`n"
+  $r = Invoke-Compare @('compare','--old',$Old,'--db',$Db)
+  Check 'C-STALE exit 3' ($r.Code -eq 3) "exit=$($r.Code) err=$($r.Err)"
+  Check 'C-STALE ERROR on stderr' ($r.Err -match '(?m)^ERROR: .*stale') $r.Err
+  $r = Invoke-Compare @('compare','--old',$Old,'--db',$Db,'--format','json')
   $j = $null; try { $j = $r.Out | ConvertFrom-Json } catch { }
   Check 'C-STALE json envelope parses' ($r.Code -eq 3 -and $j -and $j.exit_code -eq 3 -and $j.message) "exit=$($r.Code) out=$($r.Out)"
+  Update-Index
+  # positive control: the same compare after the reindex is no longer refused as stale
+  Check 'C-STALE reindexed -> answers again (exit 1)' ((Invoke-Compare @('compare','--old',$Old,'--db',$Db)).Code -eq 1)
 
-  # C-REMARKS
+  # C-REMARKS: block 2 is pointed at the fixture's question (its body is not the real answer)
   $unit = Join-Path $Work 'TwoBlocks.pas'
-  Copy-Item (Join-Path $Fix 'remarks\TwoBlocks.pas') $unit
+  $tb = [IO.File]::ReadAllText((Join-Path $Fix 'remarks\TwoBlocks.pas'))
+  $tb = $tb.Replace('COMMAND who-calls -Target "TFoo.Two" -Project "C:\P\A.dproj" -Depth 3', "COMMAND who-writes -Target `"$Target`" -Project `"$Proj`"")
+  [IO.File]::WriteAllText($unit, $tb, [Text.Encoding]::ASCII)
   $before = [IO.File]::ReadAllLines($unit)
-  $line2  = 1 + [array]::FindIndex($before, [Predicate[string]]{ param($s) $s -like '*COMMAND who-calls*' })
-  $r = Invoke-Compare @('compare','--in',$unit,'--line',"$line2",'--update-doc')
+  $line2  = 1 + [array]::FindIndex($before, [Predicate[string]]{ param($s) $s -like "*COMMAND who-writes -Target ""$Target""*" })
+  Check 'setup: TwoBlocks block 2 retargeted' ($line2 -gt 6)
+  $r = Invoke-Compare @('compare','--in',$unit,'--line',"$line2",'--db',$Db,'--update-doc')
   $after = [IO.File]::ReadAllLines($unit)
   Check 'C-REMARKS exit 1' ($r.Code -eq 1) "exit=$($r.Code) err=$($r.Err) out=$($r.Out)"
   Check 'C-REMARKS block 1 identical' (($before[0..($line2 - 6)] -join "`n") -eq ($after[0..($line2 - 6)] -join "`n"))
-  Check 'C-REMARKS block 2 rewritten' (($after -join "`n") -match 'Unit1\.TFoo\.SetName' -and ($after -join "`n") -notmatch 'TFoo\.Bar \(Foo\.pas:10\)\s*\r?\n\s*/// </remarks>\s*\r?\n\s*procedure Two')
+  Check 'C-REMARKS block 2 rewritten' (($after -join "`n") -match 'TFoo\.SetName \(Unit1\.pas:\d+\)' -and ($after -join "`n") -notmatch 'TFoo\.Bar \(Foo\.pas:10\)\s*\r?\n\s*/// </remarks>\s*\r?\n\s*procedure Two') (($after[($line2 - 3)..($after.Count - 1)]) -join ' | ')
   Check 'C-REMARKS usage: --update-doc needs --in' ((Invoke-Compare @('compare','--old',$Old,'--update-doc')).Code -eq 2)
 
   # C-SHOW
@@ -256,12 +289,18 @@ try {
 
   # C-SAVE / C-AUTO
   $snaps = Join-Path $Work 'snaps'
-  $r = Invoke-Compare @('compare','--question','who-writes','--target','Unit1.TFoo.Name','--project',$Proj,'--save','--auto','--snapshot-dir',$snaps)
+  $r = Invoke-Compare @('compare','--question','who-writes','--target',$Target,'--project',$Proj,'--db',$Db,'--save','--auto','--snapshot-dir',$snaps)
   $auto = @(Get-ChildItem (Join-Path $snaps 'auto') -Filter '*.txt' -ErrorAction SilentlyContinue)
   Check 'C-SAVE exit 0' ($r.Code -eq 0) "exit=$($r.Code) err=$($r.Err)"
   Check 'C-SAVE auto snapshot written' ($auto.Count -eq 1) $r.Out
-  $r = Invoke-Compare @('compare','--auto','--question','who-writes','--target','Unit1.TFoo.Name','--project',$Proj,'--snapshot-dir',$snaps)
+  Check 'C-SAVE snapshot is the real answer' ($auto.Count -eq 1 -and ([IO.File]::ReadAllText($auto[0].FullName) -match 'TFoo\.Reset @Unit1\.pas'))
+  $r = Invoke-Compare @('compare','--auto','--question','who-writes','--target',$Target,'--project',$Proj,'--db',$Db,'--snapshot-dir',$snaps)
   Check 'C-AUTO compares against the snapshot' ($r.Code -eq 0 -and $r.Out -match 'no differences') "exit=$($r.Code) err=$($r.Err) out=$($r.Out)"
+  # positive control: Reset stops writing FName, reindex -> the same --auto compare now differs
+  Edit-Unit "  FName:= ''; // edited, not reindexed`r`n" ''
+  Update-Index
+  $r = Invoke-Compare @('compare','--auto','--question','who-writes','--target',$Target,'--project',$Proj,'--db',$Db,'--snapshot-dir',$snaps)
+  Check 'C-AUTO a real change since the snapshot -> exit 1' ($r.Code -eq 1 -and $r.Out -match '(?m)^- .*TFoo\.Reset') "exit=$($r.Code) err=$($r.Err) out=$($r.Out)"
 
   # C-USAGE: every exit 2/3 the verb decides itself still prints the compare/1 envelope in json mode
   $r = Invoke-Compare @('compare','--format','json')
