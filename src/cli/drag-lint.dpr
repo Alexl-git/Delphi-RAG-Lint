@@ -260,6 +260,7 @@ uses
   DRagLint.Charts.Trace.Anchor in '..\charts\DRagLint.Charts.Trace.Anchor.pas',
   DRagLint.Charts.Trace.Calc in '..\charts\DRagLint.Charts.Trace.Calc.pas',
   DRagLint.Charts.Trace.Walk in '..\charts\DRagLint.Charts.Trace.Walk.pas',
+  DRagLint.Charts.Trace.Chart in '..\charts\DRagLint.Charts.Trace.Chart.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

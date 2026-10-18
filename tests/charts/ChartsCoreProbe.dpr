@@ -95,6 +95,7 @@ uses
   , DRagLint.Charts.Trace.Anchor in '..\..\src\charts\DRagLint.Charts.Trace.Anchor.pas'
   , DRagLint.Charts.Trace.Calc in '..\..\src\charts\DRagLint.Charts.Trace.Calc.pas'
   , DRagLint.Charts.Trace.Walk in '..\..\src\charts\DRagLint.Charts.Trace.Walk.pas'
+  , DRagLint.Charts.Trace.Chart in '..\..\src\charts\DRagLint.Charts.Trace.Chart.pas'
   , DRagLint.Core.Model
   ;
 

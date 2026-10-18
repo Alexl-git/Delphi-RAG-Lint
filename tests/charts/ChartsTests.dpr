@@ -100,6 +100,8 @@ uses
   , DRagLint.Charts.Trace.Anchor in '..\..\src\charts\DRagLint.Charts.Trace.Anchor.pas'
   , DRagLint.Charts.Trace.Calc in '..\..\src\charts\DRagLint.Charts.Trace.Calc.pas'
   , DRagLint.Charts.Trace.Walk in '..\..\src\charts\DRagLint.Charts.Trace.Walk.pas'
+  , DRagLint.Charts.Trace.Chart in '..\..\src\charts\DRagLint.Charts.Trace.Chart.pas'
+  , ChartsTests.CoreTraceChart in 'ChartsTests.CoreTraceChart.pas'
   , ChartsTests.Questions in 'ChartsTests.Questions.pas'
   , DRagLint.Charts.Pairs in '..\..\src\charts\DRagLint.Charts.Pairs.pas'
   , DRagLint.Charts.Producer.Delphi in '..\..\src\charts\DRagLint.Charts.Producer.Delphi.pas'
