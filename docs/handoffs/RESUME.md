@@ -15,7 +15,8 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Open
 
-- 2026-10-18 | engine | 1.31.4 + PS-free charts deployed (engine Win64, BPL Win32+Win64), main pushed; installer built; waits owner VM test then publish (tag 7f437dca) | open | [HANDOFF-2026-10-18-engine-1314-installer-vm-test.md](HANDOFF-2026-10-18-engine-1314-installer-vm-test.md)
+- 2026-10-18 | engine | VM test found sqlite3.dll not shipped -> fixed 28b73f28 (unpushed) + installer version 1.31.4.0; owner re-tests installer on VM, then push + publish | open | [HANDOFF-2026-10-18-engine-1314-vm-retest.md](HANDOFF-2026-10-18-engine-1314-vm-retest.md)
+- 2026-10-18 | engine | 1.31.4 + PS-free charts deployed (engine Win64, BPL Win32+Win64), main pushed; installer built; waits owner VM test then publish (tag 7f437dca) | closed | [HANDOFF-2026-10-18-engine-1314-installer-vm-test.md](HANDOFF-2026-10-18-engine-1314-installer-vm-test.md)
 - 2026-10-18 | engine | charts PS-free merged e2231cb3 (probe battery 692/4, all 4 explained + green on rerun); Win64 engine + Win32/Win64 BPLs deployed 11:04-11:12; test installer built from main; library-Win32 rebuilt 3h41m, drift 0; main pushed; owner tests installer on a VM, then publishes 1.31.4 | closed | [HANDOFF-2026-10-18-engine-charts-merged-installer-next.md](HANDOFF-2026-10-18-engine-charts-merged-installer-next.md)
 - 2026-10-18 | charts | PS-free: committed on charts/ps-free (ChartsTests 508/12 = live-index drift only, parity 26/0 + controls, guards green); handed to engine for merge + installer | closed | [HANDOFF-2026-10-18-charts-ps-free](HANDOFF-2026-10-18-charts-ps-free.md)
 - 2026-10-17 | engine | 1.31.4 code done 66cb006e..36dc1866 (reviewed, unpushed); release run (deploy+battery+pack) in flight; owner asks: library rescan, user-side PowerShell, installer after charts | resumed | [HANDOFF-2026-10-17-engine-1314-release-overnight.md](HANDOFF-2026-10-17-engine-1314-release-overnight.md)
