@@ -58,7 +58,10 @@ or early afternoon 2026-10-18.
    `git tag -a v1.31.4-alpha 36dc1866 -m v1.31.4-alpha` (or the final HEAD); `git push origin v1.31.4-alpha`;
    `gh release create v1.31.4-alpha --verify-tag --prerelease <win64.zip> <win32.zip> --notes-file <notes>`.
    Verify first: `git ls-remote origin 'refs/tags/v1.31.4-alpha^{}'`.
-7b. Owner ask (2026-10-17 ~21:10): ENFORCE nogrep with hooks, not CLAUDE.md text. Build
+7b. DONE 2026-10-17 ~21:30: hooks\draglint-first.js + test (8/8) wired in settings.json (backup
+   settings.json.bak-20261017-nogrep); global CLAUDE.md prose replaced by one line; nogrep SKILL.md
+   note added. Known gaps (optional follow-up): Grep over a folder with no glob/type is not caught;
+   a shell pattern ending in Foo.pas can false-deny. ORIGINAL ask, for reference: Build
    `~/.claude/hooks/draglint-first.js` (PreToolUse on Grep|Glob|Read + Bash|PowerShell grep/rg/Select-String)
    + a PostToolUse recorder of drag-lint.exe calls (state file per session). Deny Grep/search on
    .pas/.dfm/.dpr/.dpk under a folder with `_D-RAG\*.sqlite` unless a drag-lint query ran in this session
