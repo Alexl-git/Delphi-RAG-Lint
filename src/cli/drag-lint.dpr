@@ -258,6 +258,7 @@ uses
   DRagLint.Charts.Trace.FormA in '..\charts\DRagLint.Charts.Trace.FormA.pas',
   DRagLint.Charts.Trace.Shim in '..\charts\DRagLint.Charts.Trace.Shim.pas',
   DRagLint.Charts.Trace.Anchor in '..\charts\DRagLint.Charts.Trace.Anchor.pas',
+  DRagLint.Charts.Trace.Calc in '..\charts\DRagLint.Charts.Trace.Calc.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

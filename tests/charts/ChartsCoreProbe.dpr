@@ -93,6 +93,7 @@ uses
   , DRagLint.Charts.Trace.FormA in '..\..\src\charts\DRagLint.Charts.Trace.FormA.pas'
   , DRagLint.Charts.Trace.Shim in '..\..\src\charts\DRagLint.Charts.Trace.Shim.pas'
   , DRagLint.Charts.Trace.Anchor in '..\..\src\charts\DRagLint.Charts.Trace.Anchor.pas'
+  , DRagLint.Charts.Trace.Calc in '..\..\src\charts\DRagLint.Charts.Trace.Calc.pas'
   , DRagLint.Core.Model
   ;
 

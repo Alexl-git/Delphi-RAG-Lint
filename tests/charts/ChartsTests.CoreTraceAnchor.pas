@@ -32,12 +32,28 @@ type
     [Test] procedure PureHelpersAndPopulationRows;
   end;
 
+  /// <summary>Cases for DRagLint.Charts.Trace.Calc, the calculated anchor field (Trace.Walk.ps1 Part 6). The real-index cases run on
+  /// the CLIENT and SQL clones and pass vacuously when they are missing; the synthetic cases (no index) pin the pure decision and the
+  /// Form A items against the strings Test-Emitters.ps1 pins for the same synthetic facts (A-RTC-SYN-*).</summary>
+  [TestFixture]
+  TCoreTraceCalcTests = class
+  public
+    [Test] procedure FtrNameIsCalculatedFromEighteenFields;
+    [Test] procedure ToleranceNamesItsCasesAndSelectors;
+    [Test] procedure ResolveCalcFieldOnSyntheticFacts;
+    [Test] procedure SyntheticShapesAndChoosers;
+    [Test] procedure AnotherEventsHandlerIsNamedNotOffered;
+    [Test] procedure LookupFieldIsNamedNotOffered;
+    [Test] procedure StaleHandlerFileRefusesByName;
+  end;
+
 implementation
 
 uses
-  System.SysUtils, System.IOUtils, System.Generics.Collections, DRagLint.Charts.Index, DRagLint.Charts.Source,
+  System.SysUtils, System.IOUtils, System.StrUtils, System.RegularExpressions, System.Generics.Collections, DRagLint.Charts.Index,
+  DRagLint.Charts.Source,
   DRagLint.Charts.Sql, DRagLint.Charts.Chain, DRagLint.Charts.Columns, DRagLint.Charts.Trace.FormA,
-  DRagLint.Charts.Trace.Anchor;
+  DRagLint.Charts.Trace.Anchor, DRagLint.Charts.Trace.Calc;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
@@ -621,6 +637,553 @@ begin
       'the newest of 2 declaration(s), MS1.SQL:2595), nor a quoted identifier in that declaration',
       C.Resolver.ColumnFactNote(Cs, Set_), 'any other state keeps the label, made safe for a note');
   finally
+    C.Free;
+  end;
+end;
+
+{ ---- TCoreTraceCalcTests ---- }
+
+const
+  VM_QNAME = 'Blueprint4.ViewModel.TBlueprint_ViewModel';
+  VM_PAS = 'C:\Projects\DB\ORM3\CLIENT\Blueprint4.ViewModel.pas';  // dl:ok hardcoded-absolute-path@2e6b -- REVIEWED 2026-10-17: the indexed path of the live ORM3 unit the clones were built from; the stale-handler case skips when the file is absent, so the path is the fixture, not configuration
+  FTRS_HEAD = 'Blueprint4.ViewModel.pas:986';
+  CALC_COLS = 18;
+  FF_REASON = 'the TField variable via FF(dataset, literal), assumed to return the dataset''s field named by the literal, and FMTFtrs ' +
+    'matched by name among the class''s dataset fields';
+  FTR_STOP = 'FtrName is a calculated field of FMTFtrs (created (FieldKind fkCalculated) at :756, computed in FtrsOnCalcFields at ' +
+    ':961-1119), not a column of MSCLIST in the SQL index';
+  FTR_NOTE = 'wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735';
+  FTR_LEAD = 'FtrName is calculated from 18 fields -- trace one of them instead (every binding below: ' + FF_REASON + '):';
+  FTR_VARS: array[0..CALC_COLS - 1] of string = ('Notation', 'SpecType', 'USL', 'LSL', 'Decimals', 'Nominal', 'UpperTol', 'LowerTol',
+    'FtrType', 'MathLine', 'DimAbbr', 'DimName', 'FtrSuffix', 'AttrName', 'AttrType', 'AttrCode', 'ID', 'MasterID');
+  FTR_LINES: array[0..CALC_COLS - 1] of Integer = (987, 987, 988, 988, 988, 989, 989, 989, 990, 990, 990, 990, 991, 991, 991, 992, 993, 993);
+  FTR_BOUND: array[0..CALC_COLS - 1] of Integer = (879, 900, 907, 866, 832, 878, 908, 868, 858, 875, 833, 834, 857, 821, 822, 820, 860, 870);
+  FF_WHY = 'FF assumed to return the named field';
+  WIRED = 'wired as FMT.OnCalcFields at :20, the handler matched by name';
+  LOOP_WHY = 'not read as a guard: the statement at :4 sits under a while statement, a shape the source shim does not read';
+  SPEC_PARTS = 3;
+  BIND_LINE = 30;
+  WIRE_LINE = 20;
+  CREATE_LINE = 12;
+  KIND_LINE = 40;
+  CASE_ARM_AT = 5;
+  BIND_Z = 'is written on 2 line(s) naming 2 (dataset field, column literal) pairs';
+
+function CmdFor(pTarget: string): string;
+begin
+  Result:= 'CMD ' + pTarget;
+end;
+
+function NewCalcReader(pC: TClones): TCalcFactsReader;
+begin
+  Result:= TCalcFactsReader.Create(pC.Client, pC.ClientReader, pC.Resolver, pC.Catalog, pC.Catalog.TableSet);
+end;
+
+procedure FreeItems(var pItems: TCalcFieldItems);
+begin
+  pItems.Stop.Free;
+  pItems.Rows.Free;
+end;
+
+function CalcOf(pClones: TClones; pReader: TCalcFactsReader; const pControl, pCol: string; out pAnchor: TAnchorResult): TCalcInfo;
+begin
+  pAnchor:= pClones.Resolver.ResolveTraceAnchor(pControl);
+  pReader.Apply(pAnchor, pCol);
+  Result:= pAnchor.Calc as TCalcInfo;
+end;
+
+procedure AssertFtrRow(pK: Integer; pRow: TTraceItem);
+begin
+  var Via:= 'FfFtrs_' + FTR_VARS[pK];
+  var Text:= 'FROM MSCLIST.' + UpperCase(FTR_VARS[pK]) + ' VIA ' + Via;
+  var Note:= Via + ' bound at :' + IntToStr(FTR_BOUND[pK]) + ' via FF';
+  if FTR_VARS[pK] = 'FtrType' then
+  begin
+    Text:= 'FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType';
+    Note:= 'FtrType set at :978, ' + Note;
+  end;
+  Assert.AreEqual(string.Join('|', ['step', Text, 'Blueprint4.ViewModel.pas:' + IntToStr(FTR_LINES[pK]), 'inferred', 'FtrsOnCalcFields', Note,
+    'in-class-field-reads']), string.Join('|', [pRow.Kind, pRow.Text, pRow.Anchor, pRow.Grade, pRow.Routine, pRow.Note, pRow.Ask]),
+    'row ' + IntToStr(pK + 1));
+  Assert.AreEqual('REGENERATE|CMD ' + VM_QNAME + '.' + Via, pRow.Children[0].Head + '|' + pRow.Children[0].Text,
+    'the REGENERATE facet of row ' + IntToStr(pK + 1));
+end;
+
+procedure TCoreTraceCalcTests.FtrNameIsCalculatedFromEighteenFields;
+begin
+  var C:= TClones.Open;
+  if C = nil then
+  begin
+    Assert.Pass('clones missing');
+    Exit;
+  end;
+  try
+    var Rd:= NewCalcReader(C);
+    try
+      var A: TAnchorResult;
+      var Info:= CalcOf(C, Rd, 'frmBlueprint4.dxDBGrid1FtrsVFtrName', 'FtrName', A);
+      try
+        Assert.IsNotNull(Info, 'the field is calculated');
+        Assert.AreEqual(CALC_KIND_CALCULATED, Info.Kind);
+        Assert.AreEqual(FTR_STOP, A.Stop, 'the anchor stop is replaced');
+        Assert.AreEqual(FTRS_HEAD, A.StopAnchor);
+        Assert.AreEqual(FTR_NOTE, Info.StopNote);
+        Assert.AreEqual('UNLESS|DataSet.State = dsInsert|973|else Exit at :973;WHEN|Assigned(FfFtrs_FtrName)|985|',
+          Info.Conds[0].Keyword + '|' + Info.Conds[0].Condition + '|' + IntToStr(Info.Conds[0].Line) + '|' + Info.Conds[0].Note + ';' +
+          Info.Conds[1].Keyword + '|' + Info.Conds[1].Condition + '|' + IntToStr(Info.Conds[1].Line) + '|' + Info.Conds[1].Note);
+        Assert.AreEqual('FtrNameString|MSCTYPES.PAS:840|computed by this call at :986, its body is not walked, nor are those of TagOf',
+          Info.HeadCall.Name + '|' + Info.HeadCall.Anchor + '|' + Info.HeadCall.Note);
+        var Items:= NewCalcFieldItems(Info, CmdFor);
+        try
+          Assert.AreEqual(FTR_STOP, Items.Stop.Text);
+          Assert.AreEqual(FTRS_HEAD, Items.Stop.Anchor);
+          Assert.AreEqual('FtrsOnCalcFields|E3', Items.Stop.Routine + '|' + Items.Stop.Ask);
+          Assert.AreEqual(FTR_LEAD, Items.Note);
+          Assert.AreEqual(CALC_COLS, Integer(Items.Rows.Count));
+          for var K:= 0 to CALC_COLS - 1 do
+            AssertFtrRow(K, Items.Rows[K]);
+        finally
+          FreeItems(Items);
+        end;
+      finally
+        A.Free;
+      end;
+    finally
+      Rd.Free;
+    end;
+  finally
+    C.Free;
+  end;
+end;
+
+procedure TCoreTraceCalcTests.ToleranceNamesItsCasesAndSelectors;
+begin
+  var C:= TClones.Open;
+  if C = nil then
+  begin
+    Assert.Pass('clones missing');
+    Exit;
+  end;
+  try
+    var Rd:= NewCalcReader(C);
+    try
+      var A: TAnchorResult;
+      var Info:= CalcOf(C, Rd, 'frmBlueprint4.dxDBGrid1FtrsVTolerance', 'Tolerance', A);
+      try
+        Assert.IsNotNull(Info);
+        Assert.AreEqual('Blueprint4.ViewModel.pas:1045', A.StopAnchor);
+        Assert.AreEqual(FTR_NOTE + ', the formula is chosen by the case at :1043 (writes at :1045, :1046, :1047, :1049, :1050) and the ' +
+          'case at :1044 (writes at :1045, :1046, :1047), their selectors are offered below', Info.StopNote);
+        Assert.AreEqual('UNLESS DataSet.State = dsInsert @973 else Exit at :973 | WHEN Assigned(FfFtrs_Tolerance) @1041 ',
+          Format('%s %s @%d %s | %s %s @%d %s', [Info.Conds[0].Keyword, Info.Conds[0].Condition, Info.Conds[0].Line, Info.Conds[0].Note,
+          Info.Conds[1].Keyword, Info.Conds[1].Condition, Info.Conds[1].Line, Info.Conds[1].Note]));
+        var Items:= NewCalcFieldItems(Info, CmdFor);
+        try
+          Assert.AreEqual('Tolerance is calculated from 4 fields, and the value is chosen by 2 more (case at :1043, :1044) -- trace one of ' +
+            'them instead (every binding below: ' + FF_REASON + '):', Items.Note);
+          var Got: TArray<string>:= [];
+          for var R in Items.Rows do
+            Got:= Got + [R.Text + ' => ' + R.Children[0].Text];
+          var Want: TArray<string>:= [];
+          for var V in ['USL', 'LSL', 'UpperTol', 'LowerTol'] do
+            Want:= Want + ['FROM MSCLIST.' + UpperCase(V) + ' VIA FfFtrs_' + V + ' => CMD ' + VM_QNAME + '.FfFtrs_' + V];
+          Want:= Want + ['FROM MSCLIST.SPECTYPE VIA FfFtrs_SpecType, chooses the value (case at :1043) => CMD ' + VM_QNAME + '.FfFtrs_SpecType',
+            'FROM MSCLIST.NOTATION VIA FfFtrs_Notation, chooses the value (case at :1044) => CMD ' + VM_QNAME + '.FfFtrs_Notation'];
+          Assert.AreEqual(string.Join(' ## ', Want), string.Join(' ## ', Got));
+        finally
+          FreeItems(Items);
+        end;
+      finally
+        A.Free;
+      end;
+    finally
+      Rd.Free;
+    end;
+  finally
+    C.Free;
+  end;
+end;
+
+{ ---- synthetic facts (NO index) ---- }
+
+{ writes the handler to a scratch .pas so the shim reads its stripped copy }
+function SynthLines(const pName: string; const pSrc: TArray<string>; out pStripped: TArray<string>): string;
+begin
+  Result:= TPath.Combine(TPath.GetTempPath, pName + '.pas');
+  var Sb:= TStringBuilder.Create;
+  try
+    for var S in pSrc do
+      Sb.Append(S).Append(#13#10);
+    TFile.WriteAllText(Result, Sb.ToString, TEncoding.ASCII);
+  finally
+    Sb.Free;
+  end;
+  var Rd:= TSourceReader.Create(nil);
+  try
+    pStripped:= Rd.StrippedSourceLines(Result);
+  finally
+    Rd.Free;
+  end;
+end;
+
+{ each spec: `line|kind:name[:receiver|!boundkind]|...`, placed left to right on its line (the column of the next whole-word match) }
+function SynthRefs(const pSrc, pSpecs: TArray<string>): TArray<TCalcRef>;
+begin
+  Result:= nil;
+  for var Spec in pSpecs do
+  begin
+    var Items:= Spec.Split(['|']);
+    var Ln:= StrToInt(Items[0]);
+    var Pos_:= 0;
+    for var K:= 1 to High(Items) do
+    begin
+      var P:= Items[K].Split([':'], SPEC_PARTS);
+      var M:= TRegEx.Match(Copy(pSrc[Ln - 1], Pos_ + 1, MaxInt), '\b' + TRegEx.Escape(P[1]) + '\b');
+      Assert.IsTrue(M.Success, P[1] + ' not on line ' + IntToStr(Ln));
+      var R:= Default(TCalcRef);
+      R.Kind:= P[0];
+      R.Nm:= P[1];
+      R.Line:= Ln;
+      R.Col:= Pos_ + M.Index;  // TMatch.Index is 1-based
+      Pos_:= R.Col - 1 + Length(P[1]);
+      R.ECol:= R.Col + Length(P[1]);
+      if (Length(P) > 2) and (P[2] <> '') then
+        if P[2].StartsWith('!') then
+        begin
+          R.Tid:= 1;
+          R.TKind:= P[2].Substring(1);
+        end
+        else
+          R.Recv:= P[2];
+      Result:= Result + [R];
+    end;
+  end;
+end;
+
+type
+  TSynthOpts = record
+    Field        : string;
+    Vars         : string;
+    Event        : string;
+    Creating     : Boolean;
+    CreatingKind : string;
+    TableDataSets: Integer;
+  end;
+
+function SynthDefaults: TSynthOpts;
+begin
+  Result.Field:= 'A';
+  Result.Vars:= 'FfA';
+  Result.Event:= 'OnCalcFields';
+  Result.Creating:= False;
+  Result.CreatingKind:= '';
+  Result.TableDataSets:= 2;
+end;
+
+procedure AddSynthBindings(pFacts: TCalcFacts; const pPath: string);
+begin
+  for var V in ['FfA', 'FfB', 'FfC', 'FfK'] do
+  begin
+    var B:= Default(TCalcBinding);
+    B.VarName:= V;
+    B.DataSet:= 'FMT';
+    B.Literal:= V.Substring(2);
+    B.Line:= BIND_LINE;
+    B.Path:= pPath;
+    B.Qname:= 'uSynth.TSynth.' + V;
+    B.Grade:= 'inferred';
+    B.Reason:= 'FF assumed to return the named field';
+    B.Via:= 'via FF';
+    pFacts.Bindings.Add(V, B);
+  end;
+  var Z:= Default(TCalcBinding);
+  Z.VarName:= 'FfZ';
+  Z.Why:= BIND_Z;
+  pFacts.Bindings.Add('FfZ', Z);
+  for var F in ['FfA', 'FfB', 'FfC', 'FfK', 'FfZ'] do
+    pFacts.ClassFields.Add(F, 'TField');
+  pFacts.ClassFields.Add('FNum', 'Integer');
+  pFacts.ClassFields.Add('FMT', 'TFDMemTable');
+end;
+
+function SynthFacts(const pName: string; const pSrc, pSpecs: TArray<string>; const pOpts: TSynthOpts): TCalcFacts;
+begin
+  var Stripped: TArray<string>;
+  var Path:= SynthLines(pName, pSrc, Stripped);
+  Result:= TCalcFacts.Create;
+  Result.Field:= pOpts.Field;
+  Result.DsName:= 'FMT';
+  Result.Table:= 'T';
+  Result.OwnerClass:= 'TSynth';
+  if pOpts.Vars <> '' then
+    Result.Vars:= [pOpts.Vars];
+  AddSynthBindings(Result, Path);
+  Result.TableDataSets:= pOpts.TableDataSets;
+  Result.IsColumn:= function(pLit: string): Boolean begin Result:= MatchText(pLit, ['B', 'K', 'W']); end;
+  if pOpts.Event <> '' then
+  begin
+    var W:= TCalcWiring.Create;
+    Result.Wirings.Add(W);
+    W.Event:= pOpts.Event;
+    W.Line:= WIRE_LINE;
+    W.Handler:= 'CalcH';
+    W.WirePath:= Path;
+    W.H:= TCalcHandler.Create;
+    W.H.Name:= 'CalcH';
+    W.H.Path:= Path;
+    W.H.ImplStart:= 1;
+    W.H.ImplEnd:= Length(pSrc);
+    W.H.Refs:= SynthRefs(pSrc, pSpecs);
+    W.H.Locals.Add('L', 'local_var');
+    W.H.Locals.Add('DataSet', 'param');
+    W.H.Raw:= pSrc;
+    W.H.Stripped:= Stripped;
+  end;
+  if pOpts.Creating then
+  begin
+    Result.Creating.Present:= True;
+    Result.Creating.Line:= CREATE_LINE;
+    Result.Creating.Path:= Path;
+    Result.Creating.Call:= if pOpts.Event = '' then 'MakeLookup' else 'C';
+    Result.Creating.Kind:= pOpts.CreatingKind;
+    if pOpts.CreatingKind <> '' then
+    begin
+      Result.Creating.KindLine:= KIND_LINE;
+      Result.Creating.KindPath:= Path;
+    end;
+  end;
+end;
+
+{ a calculated result as one string: kind | stop text -- stop note | conditions and facets | the DERIVED note | each row }
+function FormatSynth(pInfo: TCalcInfo): string;
+begin
+  if pInfo = nil then
+    Exit('not calculated');
+  if pInfo.Kind <> CALC_KIND_CALCULATED then
+    Exit(pInfo.Kind + ' | ' + pInfo.StopText + ' @' + pInfo.Anchor);
+  var Items:= NewCalcFieldItems(pInfo, CmdFor);
+  try
+    var Ch: TArray<string>:= [];
+    for var K in Items.Stop.Children do
+      Ch:= Ch + [if K.Kind = 'cond' then K.Keyword + ' ' + K.Condition + (if K.Note <> '' then ' -- ' + K.Note else '')
+        else K.Head + ' ' + K.Text + ' -- ' + K.Note];
+    var Rw: TArray<string>:= [];
+    for var R in Items.Rows do
+    begin
+      var Kids: TArray<string>:= [];
+      for var K in R.Children do
+        Kids:= Kids + [K.Text];
+      Rw:= Rw + [R.Text + (if R.Grade <> '' then ' [' + R.Grade + ']' else '') + (if R.Note <> '' then ' -- ' + R.Note else '') + ' => ' +
+        string.Join('', Kids)];
+    end;
+    Result:= 'calculated | ' + Items.Stop.Text + ' @' + Items.Stop.Anchor + ' -- ' + Items.Stop.Note + ' | ' + string.Join(' / ', Ch) + ' | ' +
+      Items.Note + ' | ' + string.Join(' ## ', Rw);
+  finally
+    FreeItems(Items);
+  end;
+end;
+
+{ the decision on pFacts (freed here), formatted by pFormat }
+function SynthResult(pFacts: TCalcFacts; const pFormat: TFunc<TCalcInfo, string>): string;
+begin
+  try
+    var Info:= ResolveCalcField(pFacts);
+    try
+      Result:= pFormat(Info);
+    finally
+      Info.Free;
+    end;
+  finally
+    pFacts.Free;
+  end;
+end;
+
+function Synth(const pName: string; const pSrc, pSpecs: TArray<string>; const pOpts: TSynthOpts): string;
+begin
+  Result:= SynthResult(SynthFacts(pName, pSrc, pSpecs, pOpts), FormatSynth);
+end;
+
+function Arr(const pItems: array of string): TArray<string>;
+begin
+  SetLength(Result, Length(pItems));
+  for var K:= 0 to High(pItems) do
+    Result[K]:= pItems[K];
+end;
+
+const
+  SYN_SRC: array[0..9] of string = ('procedure TSynth.CalcH(DataSet: TDataSet);', 'var', '  L: Integer;', 'begin',
+    '  if DataSet.State = dsInsert then Exit;', '  L:= TagOf(FfK);', '  if Assigned(FfA) then',
+    '    FfA.AsString:= Fmt(FfB.AsString, L, FfC.AsFloat, Zz, FNum, FfZ.AsString, ffFixed, TKind.Name);',
+    '  FfC.AsFloat:= FfB.AsFloat * 2;', 'end;');
+  SYN_SPEC: array[0..4] of string = ('5|read:DataSet|member-access:State:DataSet|read:dsInsert:!enum_value|call:Exit',
+    '6|write:L|call:TagOf|read:FfK', '7|call:Assigned|read:FfA',
+    '8|read:FfA|member-access:AsString:FfA|call:Fmt|read:FfB|member-access:AsString:FfB|read:L|read:FfC|member-access:AsFloat:FfC|' +
+    'read:Zz|read:FNum|read:FfZ|member-access:AsString:FfZ|read:ffFixed|read:TKind|member-access:Name:TKind',
+    '9|read:FfC|member-access:AsFloat:FfC|read:FfB|member-access:AsFloat:FfB');
+  CASE_SRC: array[0..9] of string = ('procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', '  if Assigned(FfA) then', '  begin',
+    '    case TagOf(FfK) of', '      1: FfA.AsFloat:= FfB.AsFloat;', '      else FfA.AsFloat:= 0;', '    end;', '  end;', 'end;');
+  CASE_SPEC: array[0..3] of string = ('3|call:Assigned|read:FfA', '5|call:TagOf|read:FfK',
+    '6|read:FfA|member-access:AsFloat:FfA|read:FfB|member-access:AsFloat:FfB', '7|read:FfA|member-access:AsFloat:FfA');
+  LOOP_SRC: array[0..4] of string = ('procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', '  while N > 0 do',
+    '    FfA.AsFloat:= FfB.AsFloat;', 'end;');
+  LOOP_SPEC: array[0..1] of string = ('3|read:N', '4|read:FfA|member-access:AsFloat:FfA|read:FfB|member-access:AsFloat:FfB');
+  FBR_SRC: array[0..3] of string = ('procedure TSynth.CalcH(DataSet: TDataSet);', 'begin',
+    '  FfA.AsString:= DataSet.FieldByName(''B'').AsString + DataSet.FieldByName(''W'').AsString + DataSet.FieldByName(''B'').AsString;', 'end;');
+  FBR_SPEC: array[0..0] of string = ('3|read:FfA|member-access:AsString:FfA|read:DataSet|member-access:FieldByName:DataSet|' +
+    'member-access:AsString|read:DataSet|member-access:FieldByName:DataSet|member-access:AsString|read:DataSet|' +
+    'member-access:FieldByName:DataSet|member-access:AsString');
+
+procedure TCoreTraceCalcTests.ResolveCalcFieldOnSyntheticFacts;
+begin
+  { the positive: the Exit guard and the enclosing if, verbatim; B a column, L one hop to K, C itself calculated (marked, not
+    expanded), FfZ a FIELD it cannot bind, Zz / FNum other values -- named, NOT guessed; ffFixed and the receiver TKind are constants }
+  Assert.AreEqual('calculated | A is a calculated field of FMT (computed in CalcH at :1-10), not a column of T in the SQL index @calc-syn.pas:8 -- ' +
+    WIRED + ' | UNLESS DataSet.State = dsInsert -- else Exit at :5 / WHEN Assigned(FfA) / VIA Fmt -- computed by this call at :8, its body ' +
+    'is not walked | A is calculated from 4 fields, and 3 other values the walk cannot map -- trace one of them instead (every binding ' +
+    'below: ' + FF_WHY + '): | FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB ## FROM T.K VIA L, set from ' +
+    'FfK [inferred] -- L set at :6, FfK bound at :30 via FF => CMD uSynth.TSynth.FfK ## FROM C (calculated) VIA FfC [inferred] -- itself ' +
+    'calculated in CalcH, not expanded, FfC bound at :30 via FF => CMD uSynth.TSynth.FfC ## FROM Zz, not mapped: not a field, local or ' +
+    'parameter the walk can place =>  ## FROM FNum, not mapped: a field of TSynth of type Integer, not a TField variable =>  ## FROM FfZ, ' +
+    'not mapped: FfZ ' + BIND_Z + ' =>  ## FROM ffFixed, not mapped: not a field, local or parameter the walk can place => ',
+    Synth('calc-syn', Arr(SYN_SRC), Arr(SYN_SPEC), SynthDefaults));
+  { wired, but the handler never writes the field -> not calculated; a field CREATED calculated with no OnCalcFields wiring -> not calculated }
+  var O:= SynthDefaults;
+  O.Field:= 'Q';
+  O.Vars:= 'FfQ';
+  var NoWrite:= Synth('calc-nowrite', Arr(SYN_SRC), Arr(SYN_SPEC), O);
+  O:= SynthDefaults;
+  O.Event:= '';
+  O.Creating:= True;
+  O.CreatingKind:= 'fkCalculated';
+  Assert.AreEqual('not calculated|not calculated', NoWrite + '|' + Synth('calc-nowire', Arr(SYN_SRC), Arr(SYN_SPEC), O));
+  { FieldByName('<name>') written directly (no TField variable) is a write too }
+  O:= SynthDefaults;
+  O.Vars:= '';
+  Assert.AreEqual('calculated | A is a calculated field of FMT (computed in CalcH at :1-4), not a column of T in the SQL index @calc-fbn.pas:3 -- ' +
+    WIRED + ' |  | A is calculated from 1 field -- trace it instead (the binding below: ' + FF_WHY + '): | FROM T.B VIA FfB [inferred] -- ' +
+    'FfB bound at :30 via FF => CMD uSynth.TSynth.FfB',
+    Synth('calc-fbn', Arr(['procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', '  DataSet.FieldByName(''A'').AsString:= FfB.AsString;', 'end;']),
+      Arr(['3|read:DataSet|member-access:FieldByName:DataSet|member-access:AsString|read:FfB|member-access:AsString:FfB']), O));
+end;
+
+procedure TCoreTraceCalcTests.SyntheticShapesAndChoosers;
+begin
+  { DataSet.FieldByName READS: one row per literal (a repeat is one source), the parameter taken as the anchor dataset [inferred] }
+  var Head:= 'calculated | A is a calculated field of FMT (computed in CalcH at :1-4), not a column of T in the SQL index @calc-fbr%s.pas:3 -- ' +
+    WIRED + ' |  | ';
+  var RowB:= 'FROM T.B VIA DataSet.FieldByName [inferred] -- DataSet is a parameter of CalcH, taken as FMT, traced through FfB, bound at :30 ' +
+    'via FF => CMD uSynth.TSynth.FfB';
+  var One:= SynthDefaults;
+  One.TableDataSets:= 1;
+  Assert.AreEqual(Format(Head, ['']) + 'A is calculated from 2 fields -- trace it instead: | ' + RowB + ' ## FROM T.W VIA DataSet.FieldByName ' +
+    '[inferred] -- DataSet is a parameter of CalcH, taken as FMT, no -Target resolves to FMT: 2 datasets load T and no TField variable is ' +
+    'bound to ''W'' =>  || ' + Format(Head, ['1']) + 'A is calculated from 2 fields -- trace one of them instead: | ' + RowB + ' ## FROM T.W VIA ' +
+    'DataSet.FieldByName [inferred] -- DataSet is a parameter of CalcH, taken as FMT, traced as T.W, the one dataset that loads T => CMD T.W',
+    Synth('calc-fbr', Arr(FBR_SRC), Arr(FBR_SPEC), SynthDefaults) + ' || ' + Synth('calc-fbr1', Arr(FBR_SRC), Arr(FBR_SPEC), One));
+  { writes in the arms of `case TagOf(FfK) of` inside `if Assigned(FfA)`: the if is written for both writes (no `around`), the case is no
+    guard: named in the stop note, its selector FfK a row that chooses the value }
+  var CaseText:= 'the formula is chosen by the case at :5 (writes at :6, :7), its selector is offered below | WHEN Assigned(FfA) | A is ' +
+    'calculated from 1 field, and the value is chosen by 1 more (case at :5) -- trace one of them instead (every binding below: ' + FF_WHY +
+    '): | FROM T.B VIA FfB [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB ## FROM T.K VIA FfK, chooses the value ' +
+    '(case at :5) [inferred] -- FfK bound at :30 via FF => CMD uSynth.TSynth.FfK';
+  Assert.AreEqual('calculated | A is a calculated field of FMT (computed in CalcH at :1-10), not a column of T in the SQL index @calc-case.pas:6 -- ' +
+    WIRED + ', ' + CaseText, Synth('calc-case', Arr(CASE_SRC), Arr(CASE_SPEC), SynthDefaults));
+  { a begin-wrapped case arm (`1: begin .. end;`) is under the case like a bare arm }
+  var Cb:= Arr(CASE_SRC);
+  Cb[CASE_ARM_AT]:= '      1: begin FfA.AsFloat:= FfB.AsFloat; end;';
+  Assert.AreEqual('calculated | A is a calculated field of FMT (computed in CalcH at :1-10), not a column of T in the SQL index @calc-caseb.pas:6 -- ' +
+    WIRED + ', ' + CaseText, Synth('calc-caseb', Cb, Arr(CASE_SPEC), SynthDefaults));
+  { a shape the shim cannot place (a while loop) reaches the stop note with the shim's reason }
+  Assert.AreEqual('calculated | A is a calculated field of FMT (computed in CalcH at :1-5), not a column of T in the SQL index @calc-loop.pas:4 -- ' +
+    WIRED + ', ' + LOOP_WHY + ' |  | A is calculated from 1 field -- trace it instead (the binding below: ' + FF_WHY + '): | FROM T.B VIA FfB ' +
+    '[inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB', Synth('calc-loop', Arr(LOOP_SRC), Arr(LOOP_SPEC), SynthDefaults));
+  { "created (FieldKind <k>)" only with the kind proven; otherwise the line only NAMES the field }
+  var StopNote: TFunc<TCalcInfo, string>:= function(pInfo: TCalcInfo): string begin Result:= pInfo.StopText + ' -- ' + pInfo.StopNote; end;
+  var Cr:= SynthDefaults;
+  Cr.Creating:= True;
+  Cr.CreatingKind:= 'fkCalculated';
+  var Named:= SynthResult(SynthFacts('calc-creating', Arr(LOOP_SRC), Arr(LOOP_SPEC), Cr), StopNote);
+  Cr.CreatingKind:= '';
+  Assert.AreEqual('A is a calculated field of FMT (created (FieldKind fkCalculated) at :12, computed in CalcH at :1-5), not a column of T in the SQL ' +
+    'index -- ' + WIRED + ', C sets FieldKind fkCalculated at :40, ' + LOOP_WHY + ' ## A is a calculated field of FMT (named at :12, computed in ' +
+    'CalcH at :1-5), not a column of T in the SQL index -- ' + WIRED + ', ' + LOOP_WHY,
+    Named + ' ## ' + SynthResult(SynthFacts('calc-creating', Arr(LOOP_SRC), Arr(LOOP_SPEC), Cr), StopNote));
+  { an UNBOUND receiver (an inherited TField variable) is a named row, counted; TKind (type shape) and Integer(...) are constants }
+  Assert.AreEqual('calculated | A is a calculated field of FMT (computed in CalcH at :1-4), not a column of T in the SQL index @calc-inh.pas:3 -- ' +
+    WIRED + ' |  | A is calculated from 1 field, and 1 other value the walk cannot map -- trace it instead (the binding below: ' + FF_WHY +
+    '): | FROM FfInherited, not mapped: not a field, local or parameter the walk can place =>  ## FROM T.B VIA FfB [inferred] -- FfB bound ' +
+    'at :30 via FF => CMD uSynth.TSynth.FfB',
+    Synth('calc-inh', Arr(['procedure TSynth.CalcH(DataSet: TDataSet);', 'begin',
+      '  FfA.AsFloat:= FfInherited.AsFloat + TKind.Size + Integer(FfB.AsInteger);', 'end;']),
+      Arr(['3|read:FfA|member-access:AsFloat:FfA|read:FfInherited|member-access:AsFloat:FfInherited|read:TKind|member-access:Size:TKind|' +
+        'read:Integer|read:FfB|member-access:AsInteger:FfB']), SynthDefaults));
+  { every write a constant, chosen by an if on FfB -- "from no field, but its value is chosen by 1" }
+  Assert.AreEqual('calculated | A is a calculated field of FMT (computed in CalcH at :1-5), not a column of T in the SQL index @calc-if.pas:3 -- ' +
+    WIRED + ' | WHEN FfB.AsInteger > 0 -- around the write at :3 / UNLESS FfB.AsInteger > 0 -- around the write at :4 | A is calculated from no ' +
+    'field, but its value is chosen by 1 (if at :3) -- trace it instead (the binding below: ' + FF_WHY + '): | FROM T.B VIA FfB, chooses the ' +
+    'value (if at :3) [inferred] -- FfB bound at :30 via FF => CMD uSynth.TSynth.FfB',
+    Synth('calc-if', Arr(['procedure TSynth.CalcH(DataSet: TDataSet);', 'begin', '  if FfB.AsInteger > 0 then FfA.AsString:= ''Yes''',
+      '  else FfA.AsString:= ''No'';', 'end;']),
+      Arr(['3|read:FfB|member-access:AsInteger:FfB|read:FfA|member-access:AsString:FfA', '4|read:FfA|member-access:AsString:FfA']), SynthDefaults));
+end;
+
+procedure TCoreTraceCalcTests.AnotherEventsHandlerIsNamedNotOffered;
+begin
+  var O:= SynthDefaults;
+  O.Event:= 'AfterScroll';
+  Assert.AreEqual('event | A is not a column of T in the SQL index: it is set in CalcH, wired as FMT.AfterScroll at :20, not in an OnCalcFields ' +
+    'handler, so no source fields are offered @calc-event.pas:8', Synth('calc-event', Arr(SYN_SRC), Arr(SYN_SPEC), O));
+end;
+
+procedure TCoreTraceCalcTests.LookupFieldIsNamedNotOffered;
+begin
+  var O:= SynthDefaults;
+  O.Event:= '';
+  O.Creating:= True;
+  O.CreatingKind:= 'fkLookup';
+  Assert.AreEqual('lookup | A is a lookup field of FMT: MakeLookup sets FieldKind fkLookup at :40, not a column of T in the SQL index, so no ' +
+    'source fields are offered @calc-lookup.pas:12', Synth('calc-lookup', Arr(SYN_SRC), Arr(SYN_SPEC), O));
+end;
+
+procedure TCoreTraceCalcTests.StaleHandlerFileRefusesByName;
+begin
+  var C:= TClones.Open;
+  if (C = nil) or not TFile.Exists(VM_PAS) then
+  begin
+    C.Free;
+    Assert.Pass('clones or the ORM3 source missing');
+    Exit;
+  end;
+  var Stale:= TPath.Combine(TPath.GetTempPath, 'Blueprint4.ViewModel.stale.pas');
+  try
+    var Bytes:= TFile.ReadAllBytes(VM_PAS);
+    SetLength(Bytes, Length(Bytes) + 1);
+    Bytes[High(Bytes)]:= BYTE_SPACE;
+    TFile.WriteAllBytes(Stale, Bytes);
+    var Rd:= NewCalcReader(C);
+    try
+      { the anchor is resolved on the FRESH file (its chain reads the same unit); only the handler read meets the stale copy }
+      var A:= C.Resolver.ResolveTraceAnchor('frmBlueprint4.dxDBGrid1FtrsVFtrName');
+      try
+        C.ClientReader.AddOverride(VM_PAS, Stale);
+        var Msg:= '';
+        try
+          Rd.Apply(A, 'FtrName');
+        except
+          on E: EChartsTrace do
+            Msg:= E.Message;
+        end;
+        Assert.AreEqual('round-trip: Blueprint4.ViewModel.pas differs from the indexed copy (sha256) -- refusing to read it. Reindex the project, ' +
+          'then re-run.', Msg);
+        Assert.IsNull(A.Calc, 'no half-built offer');
+      finally
+        A.Free;
+      end;
+    finally
+      Rd.Free;
+    end;
+  finally
+    TFile.Delete(Stale);
     C.Free;
   end;
 end;
