@@ -21,14 +21,19 @@ type
   /// Opaque items live inside a `with` statement; their identifier
   /// reads are not trusted (a `with` aliases fields), so definite-assignment
   /// ignores their uses and liveness treats them as using everything.
+  /// WithEntity marks the entity expression of a `with` statement itself (the
+  /// `F` in `with F do`); it is set ONLY by the `with` branch of the builder, so
+  /// definite-assignment can treat a bare RECORD entity as a definition rather
+  /// than a read (B-14) -- see ApplyWithRecordEntity.
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.AddItem (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Cfg.TCfgBlock.Create (DRagLint.Analysis.Cfg.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.TransferDirect (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TFreedState.Transfer (DRagLint.Analysis.Flow.Lattices.pas) (+3 more)</para>
   /// <para>Used in units: DRagLint.Analysis.Cfg, DRagLint.Analysis.Flow.Lattices, DRagLint.Diagnostics.FlowChecks</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>
   TCfgItem = record
-    Node  : TTSNode;
-    Opaque: Boolean;
+    Node      : TTSNode;
+    Opaque    : Boolean;
+    WithEntity: Boolean;
   end;
 
   /// <summary>A `for`-loop control variable plus the index of the block control
@@ -114,6 +119,8 @@ type
     /// <summary>Append an item (an assignment / call / condition node).</summary>
     /// <param name="ANode"><!-- drag-lint:auto type -->const TTSNode</param>
     /// <param name="AOpaque"><!-- drag-lint:auto type -->Boolean</param>
+    /// <param name="AWithEntity">True only for the entity expression of a
+    /// <c>with</c> statement (see TCfgItem.WithEntity).</param>
     /// <remarks>
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Reads: Items</para>
@@ -123,7 +130,7 @@ type
     /// <seealso cref="DRagLint.Analysis.Cfg.TCfgBlock.Destroy"/>
     /// <!-- drag-lint:auto END -->
     /// </remarks>
-    procedure AddItem(const ANode: TTSNode; AOpaque: Boolean);
+    procedure AddItem(const ANode: TTSNode; AOpaque: Boolean; AWithEntity: Boolean = False);
     /// <summary>Record an edge from this block to block AToIdx (no duplicates).</summary>
     /// <param name="AToIdx"><!-- drag-lint:auto type -->Integer</param>
     /// <remarks>
@@ -590,10 +597,10 @@ begin
   inherited;
 end;
 
-procedure TCfgBlock.AddItem(const ANode: TTSNode; AOpaque: Boolean);
+procedure TCfgBlock.AddItem(const ANode: TTSNode; AOpaque: Boolean; AWithEntity: Boolean);
 var It: TCfgItem;
 begin
-  It.Node := ANode; It.Opaque := AOpaque;
+  It.Node := ANode; It.Opaque := AOpaque; It.WithEntity := AWithEntity;
   Items.Add(It);
 end;
 
@@ -1439,7 +1446,7 @@ begin
   if K = 'with' then
   begin
     EntityN := ANode.ChildByField('entity');
-    if not EntityN.IsNull then Cfg.Blocks[ACur].AddItem(EntityN, WithDepth > 0);
+    if not EntityN.IsNull then Cfg.Blocks[ACur].AddItem(EntityN, WithDepth > 0, True);
     Inc(WithDepth);
     try
       Result := EmitStmt(ACur, ANode.ChildByField('body'));
