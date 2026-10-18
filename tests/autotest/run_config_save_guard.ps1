@@ -15,6 +15,19 @@
 #      it, and the created file re-loads cleanly
 #   F  a path whose FOLDER does not exist (an unreachable share reads the
 #      same): LOADERR names the folder, not saved, nothing created
+#   I  no --config (B-22): an empty engine dir and a local .drag-lint.json above
+#      the start dir -- the target is <exeDir>\drag-lint.json, it loads EMPTY,
+#      and a Save writes none of the local file's sections into it (control:
+#      TManifestIO.Load from the same start dir DOES see the local section)
+#   J  keys the parser does not model ("_comment", "scan", settings.futureKnob,
+#      a section "_note") survive an unchanged Save, and the file is
+#      JSON-equal to what it was
+#   K  an edit (settings.maxJobs) IS written (positive control), the unmodelled
+#      keys survive it, and no defaulted key the file did not have is added
+#   L  an added section is written; the untouched one keeps its "_note"
+#   M  a deleted section is gone; the other keeps its "_note"
+#   N  a local-style file holding only "_comment" + "scan" keeps exactly those
+#      two top-level keys after a Save (no settings/docs/indexes injected)
 #   D  structural: no src\config unit but Config.ManifestSession calls
 #      TManifestIO.Save/ParseText/ParseTextEx/Load, and MainForm routes both
 #      writers through TrySaveConfigManifest (with its own positive control)
@@ -74,11 +87,11 @@ if (-not $buildOk -or -not (Test-Path $exe)) {
     exit 1
 }
 
-function Invoke-Harness([string]$Path) {
-    $out = (& $exe $Path 2>&1 | Out-String)
+function Invoke-Harness([string]$Path, [string[]]$More = @()) {
+    $out = (& $exe $Path @More 2>&1 | Out-String)
     $h = @{ RAW = $out.Trim() -replace "`r?`n", ' | ' }
     foreach ($line in ($out -split "`r?`n")) {
-        if ($line -match '^(LOADERR|SECTIONS|SAVED|REASON)=(.*)$') { $h[$Matches[1]] = $Matches[2] }
+        if ($line -match '^(TARGET|LOADERR|SECTIONS|SAVED|REASON)=(.*)$') { $h[$Matches[1]] = $Matches[2] }
     }
     $h
 }
@@ -146,6 +159,82 @@ Check 'F: SAVED=0' ($f.SAVED -eq '0') "SAVED='$($f.SAVED)' REASON='$($f.REASON)'
 Check 'F: REASON starts "Not saved:"' ([string]$f.REASON -like 'Not saved:*') "REASON='$($f.REASON)'"
 Check 'F: the folder still does not exist' (-not (Test-Path -LiteralPath $noDir))
 Check 'F: the file still does not exist' (-not (Test-Path -LiteralPath $noDirFile))
+
+# --- I: no --config -- never save the engine's MERGED view (B-22) ------------
+# Measured on 1.31.4: the Config tool started with no --config and no exe-side
+# drag-lint.json loaded through TManifestIO.Load, which merges a local
+# .drag-lint.json found above the working directory, then saved that merge to
+# <exeDir>\drag-lint.json -- the local file's sections became global.
+$iExe   = "$WorkDir\i-engine"
+$iLocal = "$WorkDir\i-proj"
+New-Item -ItemType Directory $iExe, "$iLocal\sub" | Out-Null
+$iLocalFile = "$iLocal\.drag-lint.json"
+[IO.File]::WriteAllText($iLocalFile, '{"indexes":{"sections":[{"name":"LocalOnly","include":["C:\\x\\L.dproj"]}]}}', [Text.Encoding]::ASCII)
+$iLocalSha = Get-Sha $iLocalFile
+$ic = Invoke-Harness '--discover' @($iExe, "$iLocal\sub")
+Check 'I control: the engine merge DOES see the local section from that start dir' ($ic.SECTIONS -eq '1') "got='$($ic.RAW)'"
+$i = Invoke-Harness '--no-config' @($iExe, "$iLocal\sub")
+$iTarget = "$iExe\drag-lint.json"
+Check 'I: target is <exeDir>\drag-lint.json' ($i.TARGET -eq $iTarget) "TARGET='$($i.TARGET)'"
+Check 'I: loads EMPTY (no merge)' (($i.LOADERR -eq '') -and ($i.SECTIONS -eq '0')) "got='$($i.RAW)'"
+Check 'I: SAVED=1' ($i.SAVED -eq '1') "REASON='$($i.REASON)'"
+$iText = if (Test-Path -LiteralPath $iTarget) { [IO.File]::ReadAllText($iTarget) } else { '<missing>' }
+Check 'I: the new global file holds none of the local sections' (($iText -ne '<missing>') -and ($iText -notmatch 'LocalOnly')) "file='$($iText -replace '\s+', ' ')'"
+Check 'I: nothing was edited, so the new file holds no key at all (no zeroed docs block)' (($iText -ne '<missing>') -and ((@(($iText | ConvertFrom-Json).PSObject.Properties)).Count -eq 0)) "file='$($iText -replace '\s+', ' ')'"
+Check 'I: the local file is unchanged' ((Get-Sha $iLocalFile) -eq $iLocalSha)
+
+# --- J..N: Save writes only what the user edited --------------------------------
+# Measured on 1.31.4: an unchanged Save of a valid file rewrote it from the
+# parser's model -- "_comment", "scan", settings.futureKnob and a section's
+# "_note" were dropped, and every defaulted key was added.
+function Read-Json([string]$Path) { [IO.File]::ReadAllText($Path) | ConvertFrom-Json }
+function Get-Section($Json, [string]$Name) { @($Json.indexes.sections | Where-Object { $_.name -eq $Name }) }
+$keysText = '{"_comment":"keep me","settings":{"maxJobs":2,"futureKnob":7},"indexes":{"sections":[{"name":"Good","include":["C:\\x\\Good.dproj"],"_note":"mine"},{"name":"Other","include":["C:\\x\\Other.dproj"],"_note":"theirs"}]},"scan":{"x":1}}'
+function New-KeysFile([string]$Name) { $p = "$WorkDir\$Name"; [IO.File]::WriteAllText($p, $keysText, [Text.Encoding]::ASCII); $p }
+
+$jp = New-KeysFile 'j.json'
+$jBefore = (Read-Json $jp | ConvertTo-Json -Depth 20 -Compress)
+$j = Invoke-Harness $jp
+Check 'J: SAVED=1' ($j.SAVED -eq '1') "got='$($j.RAW)'"
+$jj = Read-Json $jp
+Check 'J: "_comment" survives' ($jj._comment -eq 'keep me')
+Check 'J: "scan" survives' ($jj.scan.x -eq 1)
+Check 'J: settings.futureKnob survives' ($jj.settings.futureKnob -eq 7)
+Check 'J: section "_note" survives' ((Get-Section $jj 'Good')[0]._note -eq 'mine')
+$jAfter = ($jj | ConvertTo-Json -Depth 20 -Compress)
+Check 'J: an unchanged Save is JSON-equal to the file it loaded' ($jAfter -eq $jBefore) "after='$jAfter'"
+
+$kp = New-KeysFile 'k.json'
+$k = Invoke-Harness $kp @('--set-maxjobs', '5')
+$kj = Read-Json $kp
+Check 'K: SAVED=1' ($k.SAVED -eq '1') "got='$($k.RAW)'"
+Check 'K: the edit is written (settings.maxJobs=5)' ($kj.settings.maxJobs -eq 5) "maxJobs='$($kj.settings.maxJobs)'"
+Check 'K: unmodelled keys survive the edit' (($kj._comment -eq 'keep me') -and ($kj.scan.x -eq 1) -and ($kj.settings.futureKnob -eq 7) -and ((Get-Section $kj 'Good')[0]._note -eq 'mine'))
+Check 'K: no defaulted key is added (no "docs", no settings.defaultPlatform, no section sqlOnlyMS)' `
+    ((-not $kj.PSObject.Properties['docs']) -and (-not $kj.settings.PSObject.Properties['defaultPlatform']) -and (-not (Get-Section $kj 'Good')[0].PSObject.Properties['sqlOnlyMS'])) ([IO.File]::ReadAllText($kp) -replace '\s+', ' ')
+
+$lp = New-KeysFile 'l.json'
+$l = Invoke-Harness $lp @('--add-section', 'NewOne')
+$lj = Read-Json $lp
+Check 'L: SAVED=1' ($l.SAVED -eq '1') "got='$($l.RAW)'"
+Check 'L: the added section is written' ((Get-Section $lj 'NewOne').Count -eq 1) ([IO.File]::ReadAllText($lp) -replace '\s+', ' ')
+Check 'L: the untouched sections keep their "_note"' (((Get-Section $lj 'Good')[0]._note -eq 'mine') -and ((Get-Section $lj 'Other')[0]._note -eq 'theirs'))
+Check 'L: unmodelled top-level keys survive' (($lj._comment -eq 'keep me') -and ($lj.scan.x -eq 1))
+
+$mp = New-KeysFile 'm.json'
+$m = Invoke-Harness $mp @('--drop-section', 'Good')
+$mj = Read-Json $mp
+Check 'M: SAVED=1' ($m.SAVED -eq '1') "got='$($m.RAW)'"
+Check 'M: the deleted section is gone' ((Get-Section $mj 'Good').Count -eq 0) ([IO.File]::ReadAllText($mp) -replace '\s+', ' ')
+Check 'M: the other section keeps its "_note"' ((Get-Section $mj 'Other')[0]._note -eq 'theirs')
+
+$np = "$WorkDir\n.json"
+[IO.File]::WriteAllText($np, '{"_comment":"shared defaults","scan":{"exclude":["**\\__history\\**"]}}', [Text.Encoding]::ASCII)
+$nn = Invoke-Harness $np
+$nj = Read-Json $np
+Check 'N: SAVED=1' ($nn.SAVED -eq '1') "got='$($nn.RAW)'"
+$nKeys = (@($nj.PSObject.Properties.Name) | Sort-Object) -join ','
+Check 'N: a local-style file keeps exactly its own top-level keys' ($nKeys -eq '_comment,scan') "keys='$nKeys'"
 
 # --- D: structural -- one door in and out of the manifest file ---------------
 function Test-ConfigWriters([string]$Dir) {
