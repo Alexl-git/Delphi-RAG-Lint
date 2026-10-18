@@ -13465,6 +13465,41 @@ begin
   end;
 end;
 
+/// <summary>Runs the checker that produces the whole-routine metric rule ARuleId
+/// over APath at the thresholds lint uses, and returns its findings.</summary>
+/// <param name="APath">The .pas file to measure.</param>
+/// <param name="ARuleId">One of the seven IsRoutineMetricRule ids. For the four
+/// rules CheckRoutineMetrics produces together (too-many-parameters,
+/// too-many-locals, method-too-long, deep-nesting) the findings of ALL FOUR come
+/// back; callers filter by RuleId.</param>
+/// <param name="ACfg">The effective lint config (LoadLintConfig).</param>
+/// <returns>The checker's findings, each anchored where lint reports it.</returns>
+/// <remarks>THE ONE PLACE lint, lint-all and allow measure these rules (1.31.5
+/// B-10/B-11). allow used to re-measure at threshold 1 so "every routine
+/// reports", but each checker stops at 200 findings, so on a big file the
+/// routine lint reported was past the cap and allow refused the very line the
+/// stale hint told the operator to pass. Same function, same thresholds = the
+/// same anchor and the same measured value, by construction.</remarks>
+function RoutineMetricFindings(const APath, ARuleId: string; const ACfg: TLintConfig): TArray<TLintFinding>;
+const
+  { The historic defaults lint has always passed; one copy now, here. }
+  DEFAULT_MAX_EXIT_POINTS = 5;
+  DEFAULT_MAX_PARAMETERS  = 7;
+  DEFAULT_MAX_LOCALS      = 25;
+  DEFAULT_MAX_NESTING     = 5;
+begin
+  if SameText(ARuleId, 'too-many-exit-points') then
+    Result:= DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(APath, ACfg.ThresholdFor('too-many-exit-points', DEFAULT_MAX_EXIT_POINTS))
+  else if SameText(ARuleId, 'cyclomatic-complexity') then
+    Result:= DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(APath, ACfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD))
+  else if SameText(ARuleId, 'cognitive-complexity') then
+    Result:= DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(APath, ACfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD))
+  else
+    Result:= DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(APath,
+      ACfg.ThresholdFor('too-many-parameters', DEFAULT_MAX_PARAMETERS), ACfg.ThresholdFor('too-many-locals', DEFAULT_MAX_LOCALS),
+      ACfg.ThresholdFor('method-too-long', DEFAULT_METHOD_TOO_LONG), ACfg.ThresholdFor('deep-nesting', DEFAULT_MAX_NESTING));
+end;
+
 function DoLint(const AArgs: TArgs): Integer;
 var
   Linter      : DRagLint.Lint.Linter.TLinter;
@@ -14008,9 +14043,7 @@ begin
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       { v0.48: routine size/complexity metrics (conservative defaults: params>7, locals>25, body>120 lines, nesting>5) }
       if LintRuleWants(NarrowRule, LINT_GATE_ROUTINE_METRICS) then
-        for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(
-          EffPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', DEFAULT_METHOD_TOO_LONG),
-          Cfg.ThresholdFor('deep-nesting', 5)) do
+        for F in RoutineMetricFindings(EffPath, 'method-too-long', Cfg) do
           if (NarrowRule = '') or (NarrowRule = F.RuleId) then Findings:= Findings + [F];
       { with-scope hiding: ONE walk emits both ids. It used to sit under the
         type-aware gate below, whose id list names enum-read-inside-with but not
@@ -14067,14 +14100,11 @@ begin
       { v0.63: critical section acquired without a matching Leave/Release in finally }
       if (NarrowRule = '') or (NarrowRule = 'criticalsection-not-released') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(EffPath);
       { v0.63: routine with more than 5 Exit statements }
-      if (NarrowRule = '') or (NarrowRule = 'too-many-exit-points') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(
-        EffPath, Cfg.ThresholdFor('too-many-exit-points', 5));
+      if (NarrowRule = '') or (NarrowRule = 'too-many-exit-points') then Findings:= Findings + RoutineMetricFindings(EffPath, 'too-many-exit-points', Cfg);
       if (NarrowRule = '') or (NarrowRule = 'stat-gated-destructive') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckStatGatedDestructive(EffPath);
       { v0.63: cyclomatic complexity over 15 }
-      if (NarrowRule = '') or (NarrowRule = 'cyclomatic-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(
-        EffPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD));
-      if (NarrowRule = '') or (NarrowRule = 'cognitive-complexity') then Findings:= Findings + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(
-        EffPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD));
+      if (NarrowRule = '') or (NarrowRule = 'cyclomatic-complexity') then Findings:= Findings + RoutineMetricFindings(EffPath, 'cyclomatic-complexity', Cfg);
+      if (NarrowRule = '') or (NarrowRule = 'cognitive-complexity') then Findings:= Findings + RoutineMetricFindings(EffPath, 'cognitive-complexity', Cfg);
       { v0.63: virtual/dynamic method called from a constructor of its own class }
       if (NarrowRule = '') or (NarrowRule = 'virtual-method-in-constructor') then Findings:= Findings
         + DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(EffPath, FlowStore, FlowFid);
@@ -19470,6 +19500,18 @@ const
   LINTALL_SCAN_PCT    = 90;
   LINTALL_TAIL_PHASES = 13;
 
+{ --file / --in used to be accepted by lint-all and IGNORED, so a "scoped"
+  `lint-all --rule doc-drift --fix --file X` planned the whole project (1.31.5
+  B-11). One unit is `lint`'s job; say so instead of pretending. True = refused
+  (the message is printed); the caller exits 2. }
+function LintAllRefusesFile(const AArgs: TArgs): Boolean;
+begin
+  Result:= AArgs.InFile <> '';
+  if Result then
+    Writeln(ErrOutput, Format('lint-all does not take --file (got %s): it lints the whole index. ' +
+      'For one unit run: drag-lint lint "%s" --db <db> [--rule <id>] [--fix]', [AArgs.InFile, AArgs.InFile]));
+end;
+
 function DoLintAll(const AArgs: TArgs): Integer;
 var
   Dbs      : TArray<string>              ;
@@ -19528,7 +19570,7 @@ var
   end;
 
 begin
-  if not ExplicitDbsExist(AArgs, 'lint-all') then Exit(2);
+  if LintAllRefusesFile(AArgs) or not ExplicitDbsExist(AArgs, 'lint-all') then Exit(2);
   TailPhase:= 0;
   { PREPROCESS THE LINT WALK, with the SAME profile resolution the index path
     uses (Indexer.SetPreprocess above does exactly this call). Before this, the
@@ -19763,9 +19805,7 @@ begin
           for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckMissingInherited(PasPath) do Findings:= Findings + [F];
         ScanMark(7);
         if LintRuleWants(Nr, LINT_GATE_ROUTINE_METRICS) then
-          for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(
-            PasPath, Cfg.ThresholdFor('too-many-parameters', 7), Cfg.ThresholdFor('too-many-locals', 25), Cfg.ThresholdFor('method-too-long', DEFAULT_METHOD_TOO_LONG),
-            Cfg.ThresholdFor('deep-nesting', 5)) do Findings:= Findings + [F];
+          for F in RoutineMetricFindings(PasPath, 'method-too-long', Cfg) do Findings:= Findings + [F];
         ScanMark(8);
         if LintRuleWants(Nr, LINT_GATE_TYPE_AWARE) then
           for F in DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTypeAware(PasPath, Store, Store.FindFileIdByPath(PasPath)) do { v11 (M1): exact type resolution }
@@ -19803,13 +19843,13 @@ begin
         if LintRuleWants(Nr, ['criticalsection-not-released']) then
           ScanAdd(24, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCriticalSection(PasPath));
         if LintRuleWants(Nr, ['too-many-exit-points']) then
-          ScanAdd(25, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckTooManyExitPoints(PasPath, Cfg.ThresholdFor('too-many-exit-points', 5)));
+          ScanAdd(25, RoutineMetricFindings(PasPath, 'too-many-exit-points', Cfg));  // dl:ok magic-literal@0d24, large-magic-number@0d24 -- REVIEWED 2026-10-18 profiler scan-slot id of the ScanAdd table, not a quantity
         if LintRuleWants(Nr, ['stat-gated-destructive']) then
           ScanAdd(25, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckStatGatedDestructive(PasPath)); { stat-gated-destructive: both verbs build their rule lists separately -- see the note at the top of DoLint }
         if LintRuleWants(Nr, ['cyclomatic-complexity']) then
-          ScanAdd(26, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCyclomaticComplexity(PasPath, Cfg.ThresholdFor('cyclomatic-complexity', DEFAULT_CYCLOMATIC_THRESHOLD)));
+          ScanAdd(26, RoutineMetricFindings(PasPath, 'cyclomatic-complexity', Cfg));  // dl:ok magic-literal@1efd, large-magic-number@1efd -- REVIEWED 2026-10-18 profiler scan-slot id of the ScanAdd table, not a quantity
         if LintRuleWants(Nr, ['cognitive-complexity']) then
-          ScanAdd(27, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckCognitiveComplexity(PasPath, Cfg.ThresholdFor('cognitive-complexity', DEFAULT_COGNITIVE_THRESHOLD)));
+          ScanAdd(27, RoutineMetricFindings(PasPath, 'cognitive-complexity', Cfg));  // dl:ok magic-literal@283d, large-magic-number@283d -- REVIEWED 2026-10-18 profiler scan-slot id of the ScanAdd table, not a quantity
         if LintRuleWants(Nr, ['virtual-method-in-constructor']) then
           ScanAdd(28, DRagLint.Diagnostics.AstChecks.TAstChecker.CheckVirtualInConstructor(PasPath, Store, Store.FindFileIdByPath(PasPath))); { v12 (M1): cross-unit }
         if LintRuleWants(Nr, LINT_GATE_FLOW) then
@@ -28292,7 +28332,17 @@ begin
   for var SL: Integer:= AFixLine + 1 to Min(AFixLine + MAX_STATEMENT_SPAN_LINES, Length(AWinLines)) do
   begin
     var Cand: string:= TReviewMarkers.RemoveFrom(AWinLines[SL - 1], AFixRule);
-    if Cand <> AWinLines[SL - 1] then
+    { A MARKER HASHED AT ITS OWN LINE IS ANOTHER FINDING'S, NOT A SUPERSEDED ONE
+      (1.31.5 B-12). A wrapped statement can carry a finding on its continuation
+      line too (a literal there); its marker verifies against THAT line's window,
+      exactly the test lint's misplacement hint makes (SelfHash in the marker
+      check). Removing it, as a batch `allow 8` then `allow 7` did, re-opened the
+      line-8 finding. }
+    var OwnLine: Boolean:= False;
+    for var OM: TReviewMarker in TReviewMarkers.Parse(AWinLines[SL - 1]) do
+      if SameText(OM.RuleId, AFixRule) and SameText(OM.Hash, TReviewMarkers.HashWindow(AWinLines, SL - 1)) then
+        OwnLine:= True;
+    if (Cand <> AWinLines[SL - 1]) and not OwnLine then
     begin
       ASupLine:= SL;
       ASupNew := Cand;
@@ -28437,21 +28487,18 @@ begin
 
     The checker binds these seven rules' hashes to the measured value, so the
     writer must measure it too -- from the SAME file text -- or it writes a
-    marker that can never verify. Each checker is a static per-file function
-    needing no store, and threshold 1 makes it report every routine so the one at
-    FixLine is certain to be among them.
+    marker that can never verify. It measures through RoutineMetricFindings,
+    the function lint itself uses, at lint's thresholds: the old threshold-1
+    re-measure hit each checker's 200-finding cap on a big file and then refused
+    the routine lint reported (B-10/B-11, see RoutineMetricFindings).
 
-    No finding at that line means this rule does not apply to that routine at
-    all, and writing a marker anyway would produce exactly the artefact this
-    command's round-trip check exists to prevent: a `dl:ok` that reads as a human
-    review and suppresses nothing. }
+    No finding at that line means lint reports nothing there for this rule, and
+    writing a marker anyway would produce exactly the artefact this command's
+    round-trip check exists to prevent: a `dl:ok` that reads as a human review
+    and suppresses nothing. }
   if DRagLint.Lint.RuleCatalog.IsRoutineMetricRule(AArgs.FixRule) then
   begin
-    var MetricFindings: TArray<TLintFinding>:= nil;
-    if      SameText(AArgs.FixRule, 'too-many-exit-points' ) then MetricFindings:= TAstChecker.CheckTooManyExitPoints    (AArgs.Target, 1)
-    else if SameText(AArgs.FixRule, 'cyclomatic-complexity') then MetricFindings:= TAstChecker.CheckCyclomaticComplexity (AArgs.Target, 1)
-    else if SameText(AArgs.FixRule, 'cognitive-complexity' ) then MetricFindings:= TAstChecker.CheckCognitiveComplexity  (AArgs.Target, 1)
-    else MetricFindings:= TAstChecker.CheckRoutineMetrics(AArgs.Target, 1, 1, 1, 1);
+    var MetricFindings: TArray<TLintFinding>:= RoutineMetricFindings(AArgs.Target, AArgs.FixRule, LoadLintConfig(AArgs));
 
     var FoundMetric: Boolean:= False;
     for var MF: TLintFinding in MetricFindings do
