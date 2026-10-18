@@ -28,6 +28,16 @@ or early afternoon 2026-10-18.
   merge, and any remaining user-side PowerShell. Answer arrives as a cross-session message (may be lost
   across /clear -- re-ask if none in the transcript).
 
+## Release run state at ~21:45 (agent handed back mid-run; NO release-report.md written)
+- STEP 0 PASS: Box<T> fires T, EBox<T> silent, controls fire; index stores `Box<T>`.
+- STEP 1: backup `third_party\dll-win64\drag-lint.exe.bak-1.31.3-20261017`, sha256 1F2F92BB...0CBF.
+- STEP 3 DONE: dll-win64 = Debug 1.31.4-alpha, sha256 584450377055F913AEC0EBE49DCADDEBF00679FEC1621E695F688154B1F00F1C.
+- STEP 4 RUNNING: battery started 21:15:58, `C:\TEMP\claude\sdd-1314\release\battery.log` (+ battery.err).
+  Three pre-existing drag-lint.exe (PIDs 135936, 165708, 172520) were alive -- possible timeout source.
+- TODO: wait for the battery to end (check `Get-Process pwsh` + log mtime); read the count line; re-run each
+  failure alone (backlog-index guard is known red, R10); then STEP 5 `build\pack-lint-release.ps1
+  -Version 1.31.4-alpha` and STEP 6 NOTICE (see Status for its contents). Then the library rescan.
+
 ## Resume point (in order)
 1. Re-arm the hourly wake timer (`/loop` dynamic, ScheduleWakeup ~3600 s) -- owner is away overnight.
 2. Release run: read release-report.md. If missing, check `Get-Process pwsh,drag-lint`, the tail of
