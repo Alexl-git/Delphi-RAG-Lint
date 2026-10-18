@@ -66,6 +66,12 @@ Check 'P1 text dfm indexed' `
   ((& $exePath query --text 'text form' --db $db --source dfm 2>&1 | Out-String) -match 'uTxtForm\.dfm') $all
 Check 'P1b diagnostic names only the binary file' (-not ($all -match 'uTxtForm\.dfm[^\r\n]*(binary|parse error)')) $all
 
+Write-Host "`n--- lint / lint-all must not crash on the binary dfm ---" -ForegroundColor Cyan
+$lo = & $exePath lint (Join-Path $src 'uBinForm.dfm') --db $db 2>&1 | Out-String
+Check 'lint <binary.dfm> does not raise' (($LASTEXITCODE -lt 2) -and -not ($lo -match 'EEncodingError|Exception')) $lo
+$la = & $exePath lint-all --db $db 2>&1 | Out-String
+Check 'lint-all over the fixture DB does not raise' (($LASTEXITCODE -lt 2) -and -not ($la -match 'EEncodingError|Exception')) $la
+Check 'lint-all control: still reports/finishes on the text dfm + pas (non-empty output)' ($la.Trim().Length -gt 0) $la
 Write-Host "`n--- V-B: FTS5 probe not on stderr ---" -ForegroundColor Cyan
 Check 'V-B stderr has no "FTS5 probe: AVAILABLE"' (-not ($se -match 'FTS5 probe: AVAILABLE')) $se
 

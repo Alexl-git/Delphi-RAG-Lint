@@ -1035,6 +1035,16 @@ begin
   for J:= Lo to Hi do Result[J - Lo]:= ALines[J - 1];
 end; // function
 
+const
+  BinaryDfmMagic: array[0..2] of Byte = ($FF, $0A, $00);  { Win resource header of a binary DFM }
+
+{ True iff ABytes starts with the binary-DFM resource header FF 0A 00. }
+function HasBinaryDfmHeader(const ABytes: TBytes): Boolean;
+begin
+  Result:= (Length(ABytes) >= Length(BinaryDfmMagic))
+    and CompareMem(@ABytes[0], @BinaryDfmMagic[0], Length(BinaryDfmMagic));
+end;
+
 procedure TIndexer.IndexFile(const AFilePath: string);
 var
   Parser        : IParser                    ;
@@ -1140,7 +1150,11 @@ begin
   // parse/slice pipeline (which assumes UTF-8). A valid CP1252 file (0xAE/0xA9
   // in a resourcestring -- the SOFTWID.PAS class) was SKIPPED here with
   // EEncodingError; now it parses. Downstream slice helpers see UTF-8.
-  Utf8:= EnsureUtf8Bytes(Source);
+  // Binary DFM (FF 0A 00 resource header): hand the RAW bytes to the parser so its own
+  // binary-DFM diagnostic fires (transcoding would turn $FF into C3 BF and defeat it).
+  // Checked here, not in EnsureUtf8Bytes, whose other callers all UTF8.GetString its result.
+  var IsBinaryDfm: Boolean:= HasBinaryDfmHeader(Source);
+  if IsBinaryDfm then Utf8:= Source else Utf8:= EnsureUtf8Bytes(Source);
   // PP-Task-9: when preprocessing is enabled, resolve compiler-directive
   // branches per the active define profile BEFORE parsing. Preprocess blanks
   // inactive-branch and directive bytes to spaces (LF preserved) and returns a
@@ -1148,7 +1162,7 @@ begin
   // symbol/ref span the parser emits still maps 1:1 back to the original file
   // with NO source map. A per-file exception must NOT hard-fail the whole run:
   // log once, then index the RAW UTF-8 for that file (pre-Task-9 behaviour).
-  if FPreprocessEnabled then
+  if FPreprocessEnabled and not IsBinaryDfm then
   begin
     try
       // v(2026-08-16, INBOX-parse-error-shellshock-units): 'defines-only', NOT
@@ -1190,10 +1204,10 @@ begin
   // positions agree. Blanking preserves byte length + LF, so the line structure
   // is identical to the raw file; blanked regions carry no doc-comments. For
   // pure-ASCII files with preprocessing off this is the prior UTF-8 decode.
-  // A binary DFM (FF 0A 00 header) reaches here UNCHANGED from EnsureUtf8Bytes
+  // A binary DFM (see IsBinaryDfm above) reaches here as raw bytes
   // (so the parser can name it) and is not decodable text: it yields no symbols,
   // so there is nothing to scan -- use empty text instead of an EEncodingError.
-  if (Length(ParseBytes) >= 3) and (ParseBytes[0] = $FF) and (ParseBytes[1] = $0A) and (ParseBytes[2] = $00) then
+  if IsBinaryDfm then
     SourceText:= ''
   else
     SourceText:= TEncoding.UTF8.GetString(ParseBytes);
