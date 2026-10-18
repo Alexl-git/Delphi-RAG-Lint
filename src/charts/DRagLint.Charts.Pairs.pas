@@ -93,6 +93,18 @@ function AskEngine(const pEngine: string; const pArgs: array of string; out pExi
 /// <returns>Empty for anything but an array. Pure.</returns>
 function JsonStrings(const pValue: TJSONValue): TArray<string>;
 
+/// <summary>The index that owns a project, as the engine's own `resolve-dbs --project` names it
+/// (the manifest section that claims the project file) -- Ask-Report's step 1, shared by the ask
+/// verb and the in-process producer so the two cannot resolve a project differently.</summary>
+/// <param name="pEngine">The engine executable asked.</param>
+/// <param name="pProject">The project file (.dproj / .dpr); a relative path resolves against the
+/// current directory.</param>
+/// <param name="pDb">Receives the index the engine names, or '' when it names none.</param>
+/// <param name="pWhy">Receives Ask-Report's refusal when the result is False ('project file not
+/// found: ...', or 'resolve-dbs --project ... found no index (exit n) -- ...'); '' otherwise.</param>
+/// <returns>True when the engine names an index. Whether that file exists is NOT tested: an index
+/// the manifest names may not have been built yet, and the caller words that refusal.</returns>
+function ResolveProjectIndex(const pEngine, pProject: string; out pDb, pWhy: string): Boolean;
 type
   /// <summary>What one question needs paired, and how its caller names its own flags.</summary>
   /// <remarks>A value record.</remarks>
@@ -253,6 +265,29 @@ begin
   if not (pValue is TJSONArray) then Exit;
   for var V in TJSONArray(pValue) do
     if (V is TJSONString) and (V.Value <> '') then Result:= Result + [V.Value];
+end;
+
+function ResolveProjectIndex(const pEngine, pProject: string; out pDb, pWhy: string): Boolean;
+var
+  Code: Integer;
+begin
+  pDb:= '';
+  pWhy:= '';
+  if not TFile.Exists(pProject) then
+  begin
+    pWhy:= 'project file not found: ' + pProject;
+    Exit(False);
+  end;
+  var Pj:= ExpandFileName(pProject);
+  var J:= AskEngine(pEngine, ['resolve-dbs', '--project', Pj, '--json'], Code);
+  try
+    if J is TJSONObject then pDb:= TJSONObject(J).GetValue<string>('db', '');
+  finally
+    J.Free;
+  end;
+  Result:= pDb <> '';
+  if not Result then
+    pWhy:= Format('resolve-dbs --project %s found no index (exit %d) -- the project is not in the engine''s index manifest', [Pj, Code]);
 end;
 
 { No pair names the project index and a server or SQL index is needed: Ask-Report's two refusals. }

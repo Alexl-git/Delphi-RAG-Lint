@@ -374,18 +374,9 @@ begin
   if Args.DbPath <> '' then Exit;
   if Args.Project <> '' then
   begin
-    if not TFile.Exists(Args.Project) then Stop(ASK_VERB_EXIT_SETUP, 'project file not found: ' + Args.Project);
-    var Pj:= ExpandFileName(Args.Project);
-    var J:= AskEngine(Engine, ['resolve-dbs', '--project', Pj, '--json'], Code);
-    try
-      var Db:= '';
-      if J is TJSONObject then Db:= TJSONObject(J).GetValue<string>('db', '');
-      if Db = '' then
-        Stop(ASK_VERB_EXIT_SETUP, Format('resolve-dbs --project %s found no index (exit %d) -- the project is not in the engine''s index manifest', [Pj, Code]));
-      Args.DbPath:= Db;
-    finally
-      J.Free;
-    end;
+    var Db, Why: string;
+    if not ResolveProjectIndex(Engine, Args.Project, Db, Why) then Stop(ASK_VERB_EXIT_SETUP, Why);
+    Args.DbPath:= Db;
   end
   else if Args.InFile <> '' then
   begin
