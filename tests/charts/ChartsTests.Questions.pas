@@ -345,13 +345,41 @@ type
     [Test] procedure AnswerMatchesPowerShell;
   end;
 
+  [TestFixture]
+  TWhoWritesTests = class(TQuestionFixture)
+  private
+    function FieldsWithoutBacking(const pChart: TChartResult): string;
+    function BackingJson(const pChart: TChartResult): string;
+  public
+    [Test] procedure FNoRecursionMatchesPowerShell;
+    [Test] procedure FConnectedListsBothWrites;
+    [Test] procedure ZeroWritesIsAnAnswer;
+    [Test] procedure FLotsizeNamesTheUnboundWrite;
+    [Test] procedure MethodIsRefused;
+    [Test] procedure MissingIsRefused;
+    [Test] procedure AmbiguousIsRefused;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
+  [TestFixture]
+  TWhoReadsTests = class(TQuestionFixture)
+  private
+    function FieldsWithoutBacking(const pChart: TChartResult): string;
+    function BackingJson(const pChart: TChartResult): string;
+  public
+    [Test] procedure FNoRecursionMatchesPowerShell;
+    [Test] procedure ConnectedIsCappedAndDisclosed;
+    [Test] procedure VerdictNamesItsAccessors;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.Hash, System.RegularExpressions, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
   DRagLint.Charts.Q.WhoCalls,
-  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, DRagLint.Charts.Q.Path, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Cycles, System.Generics.Collections,
+  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, DRagLint.Charts.Q.Path, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.MemberAccess, System.Generics.Collections,
   DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
@@ -3317,6 +3345,253 @@ begin
     Exit;
   Assert.AreEqual<Integer>(CY_LINES, Length(L));
   Assert.AreEqual(CY_CHART_LINE, L[CS_CHART_LINE]);
+end;
+
+{ ---- who-writes / who-reads ---- }
+
+const
+  MA_TARGET = 'Blueprint4.TfrmBlueprint4.FNoRecursion';
+  MA_FCONNECTED = 'uPipeClientConnection.TPipeClientConnection.FConnected';
+  MA_CONNECTED = 'uPipeClientConnection.TPipeClientConnection.Connected';
+  MA_FLOTSIZE = 'uPLANLIST.TmcPLANLIST.fLOTSIZE';
+  MA_VERDICT = 'iINSPRSLT.ImcINSPRSLT.VERDICT';
+  MA_METHOD = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  MA_MISSING = 'No.Such.Field';
+  MA_AMBIGUOUS = 'ID';
+  MA_READS_CAP = 25;
+  { the unbound reads every FNoRecursion chart names, and the wording of the count they qualify }
+  MA_NOREC_LINES = ':1950,:2084,:2113,:2138,:2163,:2179,:2238,:3142,:3546';
+  MA_NOREC_READS_LABEL = 'resolved read sites reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas';
+  MA_ROUTINES_LABEL = 'routines reported by find-callers';
+  { the measured middle of a chart that draws no row: Backing is removed from the compared text, CrossCheck follows it }
+  MA_ZERO_ROWS = 'ShownWriters=0,ShownReaders=0,Shown=0,HiddenRoutines=0,HiddenSites=0,Unanchored=0,CrossCheck="agree",';
+  WW_FIELDS = 'Question="who-writes",Mode="write",Kind="field",Resolved="' + MA_TARGET + '",Writes=48,Reads=0,Routines=26,Sites=48,' +
+    'ShownWriters=20,ShownReaders=0,Shown=20,HiddenRoutines=6,HiddenSites=6,Unanchored=0,CrossCheck="agree",D13SameFile=0,' +
+    'D13Elsewhere=0,ReadsSameFile=9,ReadsElsewhere=0,ReadsSameLines="' + MA_NOREC_LINES + '",' +
+    'WritesUnreported=0,ReadsUnreported=9,WritesLabel=null,ReadsLabel="' + MA_NOREC_READS_LABEL + '",RoutinesLabel=null,' +
+    'ClickTargets=21,Expected=21,AllClickable=true';
+  WW_DOT_SHA = '52ecbeea37d2dd3069f88424dd766f27bbd7d97aa2dbe2bd67dd8ce4f17c897a';
+  WW_LINES = 27;
+  WW_CHART = 'CHART who-writes ' + MA_TARGET + ' -- 48 write sites / 26 routines';
+  WW_FCONNECTED_FIELDS = 'Question="who-writes",Mode="write",Kind="field",Resolved="' + MA_FCONNECTED + '",Writes=4,Reads=602,Routines=3,Sites=4,' +
+    'ShownWriters=3,ShownReaders=0,Shown=3,HiddenRoutines=0,HiddenSites=0,Unanchored=0,CrossCheck="agree",D13SameFile=0,' +
+    'D13Elsewhere=0,ReadsSameFile=3,ReadsElsewhere=0,ReadsSameLines=":467,:490,:518",WritesUnreported=0,ReadsUnreported=3,' +
+    'WritesLabel=null,ReadsLabel="resolved read sites reported by find-callers + 3 unbound read(s) named FConnected in ' +
+    'uPipeClientConnection.pas",RoutinesLabel=null,ClickTargets=4,Expected=4,AllClickable=true';
+  WW_CONNECTED_FIELDS = 'Question="who-writes",Mode="write",Kind="property",Resolved="' + MA_CONNECTED + '",Writes=0,Reads=602,Routines=0,Sites=0,' +
+    MA_ZERO_ROWS + 'D13SameFile=0,D13Elsewhere=0,ReadsSameFile=0,ReadsElsewhere=0,ReadsSameLines="",WritesUnreported=0,' +
+    'ReadsUnreported=0,WritesLabel=null,ReadsLabel=null,RoutinesLabel=null,ClickTargets=1,Expected=1,AllClickable=true';
+  WW_FLOTSIZE_FIELDS = 'Question="who-writes",Mode="write",Kind="field",Resolved="' + MA_FLOTSIZE + '",Writes=5,Reads=1,Routines=5,Sites=5,' +
+    'ShownWriters=5,ShownReaders=0,Shown=5,HiddenRoutines=0,HiddenSites=0,Unanchored=0,CrossCheck="agree",D13SameFile=1,' +
+    'D13Elsewhere=0,ReadsSameFile=12,ReadsElsewhere=7,ReadsSameLines=":1201,:1274,:2050,:2414,:2536,:2574,:2574,:2631,:3057,' +
+    ':3059,:3094,:3540",WritesUnreported=1,ReadsUnreported=19,WritesLabel="resolved write sites reported by find-callers + 1 ' +
+    'unbound write(s) named fLOTSIZE in uPLANLIST.PAS",ReadsLabel="resolved read sites reported by find-callers + 12 unbound ' +
+    'read(s) named fLOTSIZE in uPLANLIST.PAS + 7 unbound same-name read(s) in other files (may be other symbols)",' +
+    'RoutinesLabel="' + MA_ROUTINES_LABEL + '",ClickTargets=6,Expected=6,AllClickable=true';
+  WR_FIELDS = 'Question="who-reads",Mode="read",Kind="field",Resolved="' + MA_TARGET + '",Writes=48,Reads=0,Routines=0,Sites=0,' +
+    MA_ZERO_ROWS + 'D13SameFile=0,D13Elsewhere=0,ReadsSameFile=9,ReadsElsewhere=0,ReadsSameLines="' + MA_NOREC_LINES + '",' +
+    'WritesUnreported=0,ReadsUnreported=9,WritesLabel=null,ReadsLabel="' + MA_NOREC_READS_LABEL + '",RoutinesLabel="' +
+    MA_ROUTINES_LABEL + '",ClickTargets=1,Expected=1,AllClickable=true';
+  WR_DOT_SHA = '2fd99af478b06afbac1c6e686c81f1c3a0d12905e7061586672c8922fa6c2fa5';
+  WR_LINES = 7;
+  WR_LEFT_LABEL = MA_NOREC_READS_LABEL;
+  WR_RIGHT_LABEL = 'routines reported by find-callers';
+  WR_CHART = 'CHART who-reads ' + MA_TARGET + ' -- 0 ' + MA_NOREC_READS_LABEL + ' / 0 routines reported by find-callers';
+  WR_CONNECTED_FIELDS = 'Question="who-reads",Mode="read",Kind="property",Resolved="' + MA_CONNECTED + '",Writes=0,Reads=602,Routines=598,Sites=602,' +
+    'ShownWriters=0,ShownReaders=25,Shown=25,HiddenRoutines=573,HiddenSites=573,Unanchored=0,CrossCheck="agree",D13SameFile=0,' +
+    'D13Elsewhere=0,ReadsSameFile=0,ReadsElsewhere=0,ReadsSameLines="",WritesUnreported=0,ReadsUnreported=0,WritesLabel=null,' +
+    'ReadsLabel=null,RoutinesLabel=null,ClickTargets=26,Expected=26,AllClickable=true';
+  WR_VERDICT_FIELDS = 'Question="who-reads",Mode="read",Kind="property",Resolved="' + MA_VERDICT + '",Writes=34,Reads=12,Routines=12,Sites=12,' +
+    'ShownWriters=0,ShownReaders=12,Shown=12,HiddenRoutines=0,HiddenSites=0,Unanchored=0,CrossCheck="agree",D13SameFile=0,' +
+    'D13Elsewhere=0,ReadsSameFile=0,ReadsElsewhere=0,ReadsSameLines="",WritesUnreported=0,ReadsUnreported=0,WritesLabel=null,' +
+    'ReadsLabel=null,RoutinesLabel=null,ClickTargets=13,Expected=13,AllClickable=true';
+
+function TWhoWritesTests.FieldsWithoutBacking(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if F.Name <> 'Backing' then
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+function TWhoWritesTests.BackingJson(const pChart: TChartResult): string;
+begin
+  Result:= '';
+  for var F in pChart.Fields do
+    if F.Name = 'Backing' then
+      Result:= F.Json;
+end;
+
+procedure TWhoWritesTests.FNoRecursionMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_WRITES_ID, MA_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WW_FIELDS, FieldsWithoutBacking(C));
+  Assert.AreEqual('[]', BackingJson(C));
+  Assert.AreEqual(WW_DOT_SHA, FileSha(C.Layout.Dot));
+  Assert.AreEqual('', C.LeftLabel);
+  Assert.AreEqual('', C.RightLabel);
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.AreEqual(1, TRegEx.Matches(Text, 'cluster_writers').Count);
+  Assert.IsFalse(Text.Contains('cluster_readers'));
+  Assert.IsTrue(Text.Contains('reads (not drawn): 0 resolved read(s) reported by find-callers + 9 unbound read(s) named ' +
+    'FNoRecursion in Blueprint4.pas'));
+  Assert.IsFalse(Text.Contains('no write sites'));
+  Assert.IsTrue(C.Layout.Dot.EndsWith('Blueprint4_TfrmBlueprint4_FNoRecursion_write.dot'));
+end;
+
+procedure TWhoWritesTests.FConnectedListsBothWrites;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_WRITES_ID, MA_FCONNECTED, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WW_FCONNECTED_FIELDS, FieldsWithoutBacking(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('TITLE="2 write sites: 320:3, 455:3"'));
+  Assert.IsTrue(Text.Contains('line=164"'));
+  Assert.IsTrue(Text.Contains('line=320"'));
+  Assert.IsTrue(Text.Contains('line=543"'));
+  Assert.IsTrue(Text.Contains('reads (not drawn): 602 resolved read(s) reported by find-callers + 3 unbound read(s) ' +
+    'named FConnected in uPipeClientConnection.pas'));
+end;
+
+procedure TWhoWritesTests.ZeroWritesIsAnAnswer;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_WRITES_ID, MA_CONNECTED, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WW_CONNECTED_FIELDS, FieldsWithoutBacking(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('no write sites (602 reads)'));
+  Assert.IsFalse(Text.Contains('cluster_writers'));
+end;
+
+procedure TWhoWritesTests.FLotsizeNamesTheUnboundWrite;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_WRITES_ID, MA_FLOTSIZE, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WW_FLOTSIZE_FIELDS, FieldsWithoutBacking(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('engine D13: 1 UNBOUND write(s) named fLOTSIZE in uPLANLIST.PAS at :2547 -- by name, NOT counted above'));
+end;
+
+procedure TWhoWritesTests.MethodIsRefused;
+begin
+  var Msg:= Refusal(WHO_WRITES_ID, MA_METHOD, CLIENT_CLONE);
+  if Msg = '' then
+    Exit;
+  Assert.AreEqual(MA_METHOD + ' is a method, not a field or property -- ask who-calls instead', Msg);
+end;
+
+procedure TWhoWritesTests.MissingIsRefused;
+begin
+  var Msg:= Refusal(WHO_WRITES_ID, MA_MISSING, CLIENT_CLONE);
+  if Msg = '' then
+    Exit;
+  Assert.AreEqual(MA_MISSING + ' is not in this index', Msg);
+end;
+
+procedure TWhoWritesTests.AmbiguousIsRefused;
+begin
+  var Msg:= Refusal(WHO_WRITES_ID, MA_AMBIGUOUS, CLIENT_CLONE);
+  if Msg = '' then
+    Exit;
+  Assert.StartsWith(MA_AMBIGUOUS + ' is ambiguous -- 154 symbols share that name: ', Msg);
+end;
+
+procedure TWhoWritesTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(WHO_WRITES_ID, MA_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(WW_LINES, Length(L));
+  Assert.AreEqual(WW_CHART, L[CS_CHART_LINE]);
+end;
+
+function TWhoReadsTests.FieldsWithoutBacking(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if F.Name <> 'Backing' then
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+function TWhoReadsTests.BackingJson(const pChart: TChartResult): string;
+begin
+  Result:= '';
+  for var F in pChart.Fields do
+    if F.Name = 'Backing' then
+      Result:= F.Json;
+end;
+
+procedure TWhoReadsTests.FNoRecursionMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_READS_ID, MA_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WR_FIELDS, FieldsWithoutBacking(C));
+  Assert.AreEqual(WR_LEFT_LABEL, C.LeftLabel);
+  Assert.AreEqual(WR_RIGHT_LABEL, C.RightLabel);
+  Assert.AreEqual(WR_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('0 resolved read(s) reported by find-callers + 9 unbound read(s) named FNoRecursion in ' +
+    'Blueprint4.pas (48 writes)'));
+  Assert.IsTrue(Text.Contains('engine: 9 UNBOUND read(s) named FNoRecursion in Blueprint4.pas at :1950, :2084, :2113, :2138, ' +
+    ':2163, :2179, :2238, :3142, :3546 -- by name, NOT counted above'));
+  Assert.IsFalse(Text.Contains('cluster_readers'));
+  Assert.IsFalse(Text.Contains('BOUND to FNoRecursion'));
+end;
+
+procedure TWhoReadsTests.ConnectedIsCappedAndDisclosed;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(WHO_READS_ID, MA_CONNECTED, CLIENT_CLONE, A) then
+    Exit;
+  A.Cap:= MA_READS_CAP;
+  Assert.IsTrue(FindChartQuestion(WHO_READS_ID, E), WHO_READS_ID + ' is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(WR_CONNECTED_FIELDS, FieldsWithoutBacking(C));
+  Assert.AreEqual('[' + sLineBreak + '      "FConnected"' + sLineBreak + '    ]', BackingJson(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('+573 more routines'));
+  Assert.IsTrue(Text.Contains('backed by FConnected -- ask who-writes on it for writes that bypass this property'));
+  Assert.AreEqual(MA_READS_CAP, TRegEx.Matches(Text, 'focus -> nr:p\d+ \[').Count);
+end;
+
+procedure TWhoReadsTests.VerdictNamesItsAccessors;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_READS_ID, MA_VERDICT, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WR_VERDICT_FIELDS, FieldsWithoutBacking(C));
+  Assert.AreEqual('[' + sLineBreak + '      "GetVERDICT",' + sLineBreak + '      "SetVERDICT"' + sLineBreak + '    ]', BackingJson(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('accessor GetVERDICT -- ask who-calls on it'));
+  Assert.IsTrue(Text.Contains('accessor SetVERDICT -- ask who-calls on it'));
+  Assert.IsTrue(Text.Contains('<B> iINSPRSLT &#183; property </B>'));
+end;
+
+procedure TWhoReadsTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(WHO_READS_ID, MA_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(WR_LINES, Length(L));
+  Assert.AreEqual(WR_CHART, L[CS_CHART_LINE]);
 end;
 
 end.
