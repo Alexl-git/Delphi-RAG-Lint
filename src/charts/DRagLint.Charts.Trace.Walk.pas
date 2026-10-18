@@ -118,35 +118,50 @@ type
   /// <summary>One routine's body facts. Port of the Get-RoutineFacts object.</summary>
   /// <remarks>Owns Refs and Lits. Cached by the walker per side and id; never free one the walker returned.</remarks>
   TRoutineFacts = class
+  private
+    FIdent: Integer;
+    FName: string;
+    FQName: string;
+    FShort: string;
+    FPath: string;
+    FFid: Integer;
+    FPid: Integer;
+    FImplStart: Integer;
+    FImplEnd: Integer;
+    FDecl: Integer;
+    FSqlReads: string;
+    FSqlWrites: string;
+    FRefs: TObjectList<TIndexRow>;
+    FLits: TObjectList<TIndexRow>;
   public
     /// <summary>symbols.id.</summary>
-    Id       : Integer;
+    property Id: Integer read FIdent write FIdent;
     /// <summary>symbols.name.</summary>
-    Name     : string;
+    property Name: string read FName write FName;
     /// <summary>symbols.qualified_name.</summary>
-    QName    : string;
+    property QName: string read FQName write FQName;
     /// <summary>The qualified name without its unit (Class.Method).</summary>
-    Short    : string;
+    property Short: string read FShort write FShort;
     /// <summary>The declaring file as indexed.</summary>
-    Path     : string;
+    property Path: string read FPath write FPath;
     /// <summary>files.id of Path.</summary>
-    Fid      : Integer;
+    property Fid: Integer read FFid write FFid;
     /// <summary>symbols.parent_id; 0 when NULL.</summary>
-    Pid      : Integer;
+    property Pid: Integer read FPid write FPid;
     /// <summary>symbols.impl_start_line; 0 when there is no body.</summary>
-    ImplStart: Integer;
+    property ImplStart: Integer read FImplStart write FImplStart;
     /// <summary>symbols.impl_end_line.</summary>
-    ImplEnd  : Integer;
+    property ImplEnd: Integer read FImplEnd write FImplEnd;
     /// <summary>symbols.start_line (the declaration).</summary>
-    Decl     : Integer;
+    property Decl: Integer read FDecl write FDecl;
     /// <summary>symbol_facts.sql_reads; '' when NULL.</summary>
-    SqlReads : string;
+    property SqlReads: string read FSqlReads write FSqlReads;
     /// <summary>symbol_facts.sql_writes; '' when NULL.</summary>
-    SqlWrites: string;
+    property SqlWrites: string read FSqlWrites write FSqlWrites;
     /// <summary>Every ref of the body (rid kind nm recv line col ecol tid tkind tname tq tistart tdecl tpath tfid tpipe), by line, column, id.</summary>
-    Refs     : TObjectList<TIndexRow>;
+    property Refs: TObjectList<TIndexRow> read FRefs write FRefs;
     /// <summary>Every literal / format literal of the body (kind text line col ecol), by line, column, id.</summary>
-    Lits     : TObjectList<TIndexRow>;
+    property Lits: TObjectList<TIndexRow> read FLits write FLits;
     /// <summary>Constructor: empty lists.</summary>
     constructor Create;
     /// <summary>Frees the lists.</summary>
@@ -165,25 +180,35 @@ type
   /// <remarks>Owns Seen. The PS copies the hashtable per fill route with Seen cleared (Clone) and per dry walk with Seen copied
   /// (Clone(True)). Not thread-safe.</remarks>
   TTraceContext = class
+  private
+    FTable: string;
+    FColumn: string;
+    FTableColumn: string;
+    FDataSet: TTraceDataSet;
+    FHasDataSet: Boolean;
+    FLikes: string;
+    FNearIndex: string;
+    FFarIndex: string;
+    FSeen: TDictionary<string, Byte>;
   public
     /// <summary>The anchor table; '' when none.</summary>
-    Table      : string;
+    property Table: string read FTable write FTable;
     /// <summary>The anchor column.</summary>
-    Column     : string;
+    property Column: string read FColumn write FColumn;
     /// <summary>TABLE.COLUMN.</summary>
-    TableColumn: string;
+    property TableColumn: string read FTableColumn write FTableColumn;
     /// <summary>The anchor dataset; valid when HasDataSet.</summary>
-    DataSet    : TTraceDataSet;
+    property DataSet: TTraceDataSet read FDataSet write FDataSet;
     /// <summary>False for the PS $null dataset.</summary>
-    HasDataSet : Boolean;
+    property HasDataSet: Boolean read FHasDataSet write FHasDataSet;
     /// <summary>The transport-unit condition on symbols u (BoundaryLikes).</summary>
-    Likes      : string;
+    property Likes: string read FLikes write FLikes;
     /// <summary>The CLIENT index's name (the FROM facet of a crossing).</summary>
-    NearIndex  : string;
+    property NearIndex: string read FNearIndex write FNearIndex;
     /// <summary>The SERVER index's name (the TO facet; named in the server's stop texts).</summary>
-    FarIndex   : string;
+    property FarIndex: string read FFarIndex write FFarIndex;
     /// <summary>`<path>|<line>` of every FIB$ literal already shown; case-insensitive keys.</summary>
-    Seen       : TDictionary<string, Byte>;
+    property Seen: TDictionary<string, Byte> read FSeen write FSeen;
     /// <summary>Constructor: an empty context.</summary>
     constructor Create;
     /// <summary>Frees Seen.</summary>
@@ -197,11 +222,14 @@ type
   /// <summary>What one Walk-Routine returned: the items and the conditions no step of the body could host.</summary>
   /// <remarks>Owns both lists and what is in them. The caller frees it.</remarks>
   TWalkResult = class
+  private
+    FItems: TObjectList<TTraceItem>;
+    FConds: TObjectList<TTraceChild>;
   public
     /// <summary>The trace items, in walk order; owned.</summary>
-    Items: TObjectList<TTraceItem>;
+    property Items: TObjectList<TTraceItem> read FItems write FItems;
     /// <summary>The pending conditions for the caller's CALLS step; owned.</summary>
-    Conds: TObjectList<TTraceChild>;
+    property Conds: TObjectList<TTraceChild> read FConds write FConds;
     /// <summary>Constructor: empty lists.</summary>
     constructor Create;
     /// <summary>Frees the lists and their contents.</summary>
@@ -211,21 +239,29 @@ type
   /// <summary>The server side of one command. Port of the Get-ServerHandling object.</summary>
   /// <remarks>Owns Items. Stop is BORROWED from Items (nil when the server side was walked).</remarks>
   TServerHandling = class
+  private
+    FItems: TObjectList<TTraceItem>;
+    FResponses: TArray<string>;
+    FHasContract: Boolean;
+    FContractText: string;
+    FContractAnchor: string;
+    FWalked: Boolean;
+    FStop: TTraceItem;
   public
     /// <summary>The ROUTES / CALLS / handler items, or the one STOPS; owned.</summary>
-    Items         : TObjectList<TTraceItem>;
+    property Items: TObjectList<TTraceItem> read FItems write FItems;
     /// <summary>The rsp* constants the walked routines read, Sort-Object -Unique order.</summary>
-    Responses     : TArray<string>;
+    property Responses: TArray<string> read FResponses write FResponses;
     /// <summary>False for the PS $null contract.</summary>
-    HasContract   : Boolean;
+    property HasContract: Boolean read FHasContract write FHasContract;
     /// <summary>The dispatch target's qualified name.</summary>
-    ContractText  : string;
+    property ContractText: string read FContractText write FContractText;
     /// <summary>The target's declaration anchor.</summary>
-    ContractAnchor: string;
+    property ContractAnchor: string read FContractAnchor write FContractAnchor;
     /// <summary>True when a handler was reached and walked (final-review I2).</summary>
-    Walked        : Boolean;
+    property Walked: Boolean read FWalked write FWalked;
     /// <summary>The STOPS that ended the server side; nil when Walked. Borrowed from Items.</summary>
-    Stop          : TTraceItem;
+    property Stop: TTraceItem read FStop write FStop;
     /// <summary>Constructor: an empty list.</summary>
     constructor Create;
     /// <summary>Frees Items.</summary>
@@ -235,11 +271,14 @@ type
   /// <summary>The DATABASE steps of one direction. Port of Get-DatabaseSteps' array plus the select stop's After.</summary>
   /// <remarks>Owns Items. After is BORROWED from the server items the steps were built from.</remarks>
   TDatabaseSteps = class
+  private
+    FItems: TObjectList<TTraceItem>;
+    FAfter: TTraceItem;
   public
     /// <summary>The STOPS / column steps; owned.</summary>
-    Items: TObjectList<TTraceItem>;
+    property Items: TObjectList<TTraceItem> read FItems write FItems;
     /// <summary>A read: the server step that RUNS the query (the DATABASE steps stand right after it); nil when none.</summary>
-    After: TTraceItem;
+    property After: TTraceItem read FAfter write FAfter;
     /// <summary>Constructor: an empty list.</summary>
     constructor Create;
     /// <summary>Frees Items.</summary>
@@ -249,25 +288,35 @@ type
   /// <summary>One fill route of the anchor dataset. Port of a Get-FillRoutes row.</summary>
   /// <remarks>Owns Walk and Ctx.</remarks>
   TFillRoute = class
+  private
+    FLine: Integer;
+    FRoutine: string;
+    FTargetId: Integer;
+    FTargetShort: string;
+    FTargetPath: string;
+    FTargetImpl: Integer;
+    FLits: string;
+    FWalk: TWalkResult;
+    FCtx: TTraceContext;
   public
     /// <summary>The fill call's line.</summary>
-    Line       : Integer;
+    property Line: Integer read FLine write FLine;
     /// <summary>The routine holding the call (Class.Method); '' when none.</summary>
-    Routine    : string;
+    property Routine: string read FRoutine write FRoutine;
     /// <summary>The callee's symbols.id.</summary>
-    TargetId   : Integer;
+    property TargetId: Integer read FTargetId write FTargetId;
     /// <summary>The callee's short name.</summary>
-    TargetShort: string;
+    property TargetShort: string read FTargetShort write FTargetShort;
     /// <summary>The callee's file as indexed.</summary>
-    TargetPath : string;
+    property TargetPath: string read FTargetPath write FTargetPath;
     /// <summary>The callee's impl start line.</summary>
-    TargetImpl : Integer;
+    property TargetImpl: Integer read FTargetImpl write FTargetImpl;
     /// <summary>The fill line's literals, quoted from source, each after a space; '' when none.</summary>
-    Lits       : string;
+    property Lits: string read FLits write FLits;
     /// <summary>The callee's walk (it holds a crossing); owned.</summary>
-    Walk       : TWalkResult;
+    property Walk: TWalkResult read FWalk write FWalk;
     /// <summary>The route's own context (Seen of its own); owned.</summary>
-    Ctx        : TTraceContext;
+    property Ctx: TTraceContext read FCtx write FCtx;
     /// <summary>Frees Walk and Ctx.</summary>
     destructor Destroy; override;
   end;
@@ -845,39 +894,61 @@ type
 
   { a condition on its way to a host step (the PS $co / $conds entries) }
   TCondRec = class
+  private
+    FIfLine: Integer;
+    FGuard: Boolean;
+    FItem: TTraceChild;
+    FPlaced: Boolean;
+    FHasHostFrom: Boolean;
+    FHostFrom: Integer;
+    FHostTo: Integer;
+    FHasHostLines: Boolean;
+    FHostLines: TArray<Integer>;
+    FIsStrict: Boolean;
   public
-    IfLine      : Integer;
-    Guard       : Boolean;
-    Item        : TTraceChild;
-    Placed      : Boolean;
-    HasHostFrom : Boolean;
-    HostFrom    : Integer;
-    HostTo      : Integer;
-    HasHostLines: Boolean;
-    HostLines   : TArray<Integer>;
-    IsStrict    : Boolean;
+    property IfLine: Integer read FIfLine write FIfLine;
+    property Guard: Boolean read FGuard write FGuard;
+    property Item: TTraceChild read FItem write FItem;
+    property Placed: Boolean read FPlaced write FPlaced;
+    property HasHostFrom: Boolean read FHasHostFrom write FHasHostFrom;
+    property HostFrom: Integer read FHostFrom write FHostFrom;
+    property HostTo: Integer read FHostTo write FHostTo;
+    property HasHostLines: Boolean read FHasHostLines write FHasHostLines;
+    property HostLines: TArray<Integer> read FHostLines write FHostLines;
+    property IsStrict: Boolean read FIsStrict write FIsStrict;
     destructor Destroy; override;
   end;
 
   { one if of the body's branch structure (the PS $br / $xb entries) }
   TBranch = class
+  private
+    FE: TShimResult;
+    FThenLines: TList<Integer>;
+    FElseLines: TList<Integer>;
+    FRemoved: TList<Integer>;
+    FSide: string;
   public
-    E        : TShimResult;
-    ThenLines: TList<Integer>;
-    ElseLines: TList<Integer>;
-    Removed  : TList<Integer>;
-    Side     : string;
+    property E: TShimResult read FE write FE;
+    property ThenLines: TList<Integer> read FThenLines write FThenLines;
+    property ElseLines: TList<Integer> read FElseLines write FElseLines;
+    property Removed: TList<Integer> read FRemoved write FRemoved;
+    property Side: string read FSide write FSide;
     constructor Create(const pE: TShimResult);
     destructor Destroy; override;
   end;
 
   { an On* handler attached to a dataset, waiting for its ApplyUpdates }
   TDeferred = class
+  private
+    FRecv: string;
+    FEvent: string;
+    FHs: TTraceWalker.TCallTarget;
+    FLine: Integer;
   public
-    Recv : string;
-    Event: string;
-    Hs   : TTraceWalker.TCallTarget;
-    Line : Integer;
+    property Recv: string read FRecv write FRecv;
+    property Event: string read FEvent write FEvent;
+    property Hs: TTraceWalker.TCallTarget read FHs write FHs;
+    property Line: Integer read FLine write FLine;
   end;
 
   TRoutineWalk = class  // dl:ok god-class@504e, high-response@504e -- REVIEWED 2026-10-18: the state of ONE Walk-Routine call (its PS locals) and its five blocks, one method each; splitting it would pass that state between classes and lose the line-for-line map to Trace.Walk.ps1:1290-1601
@@ -2153,9 +2224,17 @@ begin
       Exit;
     var S:= NewTraceStep(KIND_STEP, 'CALLS ' + pTgt.Short + pLits, TraceAnchorText(pTgt.Path, pTgt.Line), pTgt.Grade, pCaller.Short,
       if pNote <> '' then pNote else Format('from :%d', [pSiteLine]), pTgt.Ask);
-    S.CalleeId:= pTgt.Id;
-    MoveConds(pSub.Conds, S.Children);
-    AddRtItem(pList, S, pSiteLine, pCaller.Id);
+    { S is nobody's until pList holds it: an error before that frees it here }
+    var Held:= False;
+    try
+      S.CalleeId:= pTgt.Id;
+      MoveConds(pSub.Conds, S.Children);
+      AddRtItem(pList, S, pSiteLine, pCaller.Id);
+      Held:= True;
+    finally
+      if not Held then
+        S.Free;
+    end;
     MoveItems(pSub.Items, pList);
   finally
     pSub.Free;
@@ -2859,7 +2938,7 @@ begin
     var Tb:= FSet.Table(pCtx.Table);
     var TbAnchor:= if Tb <> nil then TraceAnchorText(Tb.Path, Tb.Line) else TraceAnchorText('', 0);
     if (Length(Fact) = 0) and not IsWrite then
-      AddRtItem(Result.Items, SelectStop(pServerItems, pCtx, Result.After), 0, 0)
+      AddRtItem(Result.Items, SelectStop(pServerItems, pCtx, Result.FAfter), 0, 0)
     else if Length(Fact) = 0 then
       AddRtItem(Result.Items, WriteStatementStop(pServerItems, pCtx), 0, 0);
     var Cs:= SqlColumnState(FCatalog, FSet, pCtx.Table, pCtx.Column, TServerSqlHit.None, '');

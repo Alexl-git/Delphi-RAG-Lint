@@ -79,23 +79,32 @@ type
   /// <summary>One handler's facts: its refs, its locals and parameters and its FRESH source.</summary>
   /// <remarks>Owns Locals. Nested routines' refs are left out, as the PS Get-RoutineFacts does.</remarks>
   TCalcHandler = class
+  private
+    FName: string;
+    FPath: string;
+    FImplStart: Integer;
+    FImplEnd: Integer;
+    FRefs: TArray<TCalcRef>;
+    FLocals: TDictionary<string, string>;
+    FRaw: TArray<string>;
+    FStripped: TArray<string>;
   public
     /// <summary>The handler method's name.</summary>
-    Name     : string;
+    property Name: string read FName write FName;
     /// <summary>The handler's file as indexed.</summary>
-    Path     : string;
+    property Path: string read FPath write FPath;
     /// <summary>The implementation start line.</summary>
-    ImplStart: Integer;
+    property ImplStart: Integer read FImplStart write FImplStart;
     /// <summary>The implementation end line.</summary>
-    ImplEnd  : Integer;
+    property ImplEnd: Integer read FImplEnd write FImplEnd;
     /// <summary>The refs by line then column.</summary>
-    Refs     : TArray<TCalcRef>;
+    property Refs: TArray<TCalcRef> read FRefs write FRefs;
     /// <summary>Name -> 'local_var' or 'param' (case-insensitive).</summary>
-    Locals   : TDictionary<string, string>;
+    property Locals: TDictionary<string, string> read FLocals write FLocals;
     /// <summary>The raw lines, 1-based line = index + 1.</summary>
-    Raw      : TArray<string>;
+    property Raw: TArray<string> read FRaw write FRaw;
     /// <summary>The comment/string-stripped lines with the same columns.</summary>
-    Stripped : TArray<string>;
+    property Stripped: TArray<string> read FStripped write FStripped;
     /// <summary>Constructor.</summary>
     constructor Create;
     /// <summary>Frees Locals.</summary>
@@ -105,17 +114,23 @@ type
   /// <summary>One event wired on the dataset, with its handler's facts.</summary>
   /// <remarks>Owns H.</remarks>
   TCalcWiring = class
+  private
+    FEvent: string;
+    FLine: Integer;
+    FHandler: string;
+    FWirePath: string;
+    FH: TCalcHandler;
   public
     /// <summary>The event name as written.</summary>
-    Event   : string;
+    property Event: string read FEvent write FEvent;
     /// <summary>The wiring line.</summary>
-    Line    : Integer;
+    property Line: Integer read FLine write FLine;
     /// <summary>The handler method's name.</summary>
-    Handler : string;
+    property Handler: string read FHandler write FHandler;
     /// <summary>The file that wires it.</summary>
-    WirePath: string;
+    property WirePath: string read FWirePath write FWirePath;
     /// <summary>The handler's facts.</summary>
-    H       : TCalcHandler;
+    property H: TCalcHandler read FH write FH;
     /// <summary>Destructor.</summary>
     destructor Destroy; override;
   end;
@@ -167,29 +182,41 @@ type
   /// <summary>The facts ResolveCalcField decides on (read from the index and the fresh source, or synthetic).</summary>
   /// <remarks>Owns Bindings, ClassFields and Wirings. IsColumn is the SQL catalogue's column test for the anchor table.</remarks>
   TCalcFacts = class
+  private
+    FField: string;
+    FDsName: string;
+    FTable: string;
+    FOwnerClass: string;
+    FVars: TArray<string>;
+    FBindings: TDictionary<string, TCalcBinding>;
+    FClassFields: TDictionary<string, string>;
+    FWirings: TObjectList<TCalcWiring>;
+    FCreating: TCalcCreating;
+    FTableDataSets: Integer;
+    FIsColumn: TFunc<string, Boolean>;
   public
     /// <summary>The field as the selection names it.</summary>
-    Field        : string;
+    property Field: string read FField write FField;
     /// <summary>The anchor dataset field's name.</summary>
-    DsName       : string;
+    property DsName: string read FDsName write FDsName;
     /// <summary>The anchor table.</summary>
-    Table        : string;
+    property Table: string read FTable write FTable;
     /// <summary>The dataset's class name.</summary>
-    OwnerClass   : string;
+    property OwnerClass: string read FOwnerClass write FOwnerClass;
     /// <summary>The TField variables bound to the field.</summary>
-    Vars         : TArray<string>;
+    property Vars: TArray<string> read FVars write FVars;
     /// <summary>Variable -> binding (case-insensitive).</summary>
-    Bindings     : TDictionary<string, TCalcBinding>;
+    property Bindings: TDictionary<string, TCalcBinding> read FBindings write FBindings;
     /// <summary>Class field -> declared type (case-insensitive).</summary>
-    ClassFields  : TDictionary<string, string>;
+    property ClassFields: TDictionary<string, string> read FClassFields write FClassFields;
     /// <summary>The wired events: OnCalcFields first, then by line.</summary>
-    Wirings      : TObjectList<TCalcWiring>;
+    property Wirings: TObjectList<TCalcWiring> read FWirings write FWirings;
     /// <summary>The creating line.</summary>
-    Creating     : TCalcCreating;
+    property Creating: TCalcCreating read FCreating write FCreating;
     /// <summary>How many datasets load Table.</summary>
-    TableDataSets: Integer;
+    property TableDataSets: Integer read FTableDataSets write FTableDataSets;
     /// <summary>Whether a literal is a column of Table.</summary>
-    IsColumn     : TFunc<string, Boolean>;
+    property IsColumn: TFunc<string, Boolean> read FIsColumn write FIsColumn;
     /// <summary>Constructor.</summary>
     constructor Create;
     /// <summary>Frees what it owns.</summary>
@@ -246,33 +273,47 @@ type
 
   /// <summary>What ResolveCalcField decided: self-contained, so the facts may be freed.</summary>
   TCalcInfo = class
+  private
+    FKind: string;
+    FField: string;
+    FDsName: string;
+    FTable: string;
+    FStopText: string;
+    FStopNote: string;
+    FAnchor: string;
+    FHandlerName: string;
+    FHandlerPath: string;
+    FConds: TArray<TCalcCond>;
+    FCondUnknown: TArray<string>;
+    FSources: TArray<TCalcSource>;
+    FHeadCall: TCalcHeadCall;
   public
     /// <summary>CALC_KIND_CALCULATED, CALC_KIND_EVENT or CALC_KIND_LOOKUP.</summary>
-    Kind       : string;
+    property Kind: string read FKind write FKind;
     /// <summary>The field as the selection names it.</summary>
-    Field      : string;
+    property Field: string read FField write FField;
     /// <summary>The dataset field's name.</summary>
-    DsName     : string;
+    property DsName: string read FDsName write FDsName;
     /// <summary>The anchor table.</summary>
-    Table      : string;
+    property Table: string read FTable write FTable;
     /// <summary>The stop text replacing the plain column stop.</summary>
-    StopText   : string;
+    property StopText: string read FStopText write FStopText;
     /// <summary>The stop's note ('' for event and lookup).</summary>
-    StopNote   : string;
+    property StopNote: string read FStopNote write FStopNote;
     /// <summary>The stop's anchor (File.ext:line).</summary>
-    Anchor     : string;
+    property Anchor: string read FAnchor write FAnchor;
     /// <summary>The handler method's name (calculated only).</summary>
-    HandlerName: string;
+    property HandlerName: string read FHandlerName write FHandlerName;
     /// <summary>The handler's file as indexed (calculated only).</summary>
-    HandlerPath: string;
+    property HandlerPath: string read FHandlerPath write FHandlerPath;
     /// <summary>The guards and enclosing conditions (calculated only).</summary>
-    Conds      : TArray<TCalcCond>;
+    property Conds: TArray<TCalcCond> read FConds write FConds;
     /// <summary>Generated reasons for shapes the shim cannot read (calculated only).</summary>
-    CondUnknown: TArray<string>;
+    property CondUnknown: TArray<string> read FCondUnknown write FCondUnknown;
     /// <summary>The offered sources, in source order (calculated only).</summary>
-    Sources    : TArray<TCalcSource>;
+    property Sources: TArray<TCalcSource> read FSources write FSources;
     /// <summary>The call that computes the value.</summary>
-    HeadCall   : TCalcHeadCall;
+    property HeadCall: TCalcHeadCall read FHeadCall write FHeadCall;
   end;
 
   /// <summary>The Form A items of a calculated anchor.</summary>
@@ -1600,7 +1641,7 @@ begin
   try
     if Call.Count = 0 then
       Exit;
-    pFacts.Creating.Call:= Call[0].S('nm');
+    pFacts.FCreating.Call:= Call[0].S('nm');
     if Call[0].I('tid') = 0 then
       Exit;
     { the kind only when the body sets FieldKind on exactly ONE line (a helper that sets it on several, by branch, proves no kind) }
@@ -1612,9 +1653,9 @@ begin
     try
       if Fk.Count = 1 then
       begin
-        pFacts.Creating.Kind:= Fk[0].S('k');
-        pFacts.Creating.KindLine:= Fk[0].I('line');
-        pFacts.Creating.KindPath:= Fk[0].S('path');
+        pFacts.FCreating.Kind:= Fk[0].S('k');
+        pFacts.FCreating.KindLine:= Fk[0].I('line');
+        pFacts.FCreating.KindPath:= Fk[0].S('path');
       end;
     finally
       Fk.Free;

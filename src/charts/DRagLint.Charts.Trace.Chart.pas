@@ -118,27 +118,38 @@ type
   /// head&gt;|&lt;anchor or text&gt;' with the same values (a REGENERATE facet goes
   /// 'tooltip:&lt;node&gt;:&lt;port&gt;'). Owned by the caller of TraceChart.</remarks>
   TChartManifest = class
+  private
+    FSteps: TDictionary<string, string>;
+    FConds: TDictionary<string, string>;
+    FFacets: TDictionary<string, string>;
+    FCollapses: TList<string>;
+    FNodes: Integer;
+    FLanes: string;
+    FMerged: string;
+    FUnlinked: Integer;
+    FShortened: Integer;
+    FLadder: string;
   public
     /// <summary>Step number -> where it went.</summary>
-    Steps    : TDictionary<string, string>;
+    property Steps: TDictionary<string, string> read FSteps write FSteps;
     /// <summary>Condition key -> where it went.</summary>
-    Conds    : TDictionary<string, string>;
+    property Conds: TDictionary<string, string> read FConds write FConds;
     /// <summary>Facet key -> where it went.</summary>
-    Facets   : TDictionary<string, string>;
+    property Facets: TDictionary<string, string> read FFacets write FFacets;
     /// <summary>The Legend rows that hid numbers.</summary>
-    Collapses: TList<string>;
+    property Collapses: TList<string> read FCollapses write FCollapses;
     /// <summary>The node count (before any fold: folding removes rows, not nodes).</summary>
-    Nodes    : Integer;
+    property Nodes: Integer read FNodes write FNodes;
     /// <summary>'client/pipe/server/database' card counts.</summary>
-    Lanes    : string;
+    property Lanes: string read FLanes write FLanes;
     /// <summary>The multi-number rows, '[21]/[51]' joined by ','.</summary>
-    Merged   : string;
+    property Merged: string read FMerged write FMerged;
     /// <summary>Anchored cells that had no single full path.</summary>
-    Unlinked : Integer;
+    property Unlinked: Integer read FUnlinked write FUnlinked;
     /// <summary>Step labels shortened to the line limit.</summary>
-    Shortened: Integer;
+    property Shortened: Integer read FShortened write FShortened;
     /// <summary>The ladder rungs used, 'also,cards' (in order, no repeats).</summary>
-    Ladder   : string;
+    property Ladder: string read FLadder write FLadder;
     /// <summary>Constructor: creates an empty manifest.</summary>
     constructor Create;
     /// <summary>Frees the maps.</summary>
@@ -268,49 +279,77 @@ const
 
 type
   TChartRow = class
+  private
+    FSig: string;
+    FItem: TTraceItem;
+    FNums: TList<Integer>;
+    FGuarded: Boolean;
+    FFolded: Boolean;
+    FPort: string;
   public
-    Sig      : string;
-    Item     : TTraceItem;
-    Nums     : TList<Integer>;
-    Guarded  : Boolean;
-    Folded   : Boolean;
-    Port     : string;
+    property Sig: string read FSig write FSig;
+    property Item: TTraceItem read FItem write FItem;
+    property Nums: TList<Integer> read FNums write FNums;
+    property Guarded: Boolean read FGuarded write FGuarded;
+    property Folded: Boolean read FFolded write FFolded;
+    property Port: string read FPort write FPort;
     constructor Create;
     destructor Destroy; override;
   end;
 
   TChartNode = class
+  private
+    FKey: string;
+    FId: string;
+    FKind: string;
+    FLane: string;
+    FTitle: string;
+    FRows: TObjectList<TChartRow>;
+    FFold: string;
+    FFoldLegend: string;
   public
-    Key       : string;
-    Id        : string;
-    Kind      : string;
-    Lane      : string;
-    Title     : string;
-    Rows      : TObjectList<TChartRow>;
-    Fold      : string;
-    FoldLegend: string;
+    property Key: string read FKey write FKey;
+    property Id: string read FId write FId;
+    property Kind: string read FKind write FKind;
+    property Lane: string read FLane write FLane;
+    property Title: string read FTitle write FTitle;
+    property Rows: TObjectList<TChartRow> read FRows write FRows;
+    property Fold: string read FFold write FFold;
+    property FoldLegend: string read FFoldLegend write FFoldLegend;
     constructor Create;
     destructor Destroy; override;
   end;
 
   TChartEdge = class
+  private
+    FFrom: TChartNode;
+    FDest: TChartNode;
+    FKind: string;
+    FNums: TList<Integer>;
+    FExtras: TList<string>;
   public
-    From  : TChartNode;
-    Dest  : TChartNode;
-    Kind  : string;
-    Nums  : TList<Integer>;
-    Extras: TList<string>;
+    property From: TChartNode read FFrom write FFrom;
+    property Dest: TChartNode read FDest write FDest;
+    property Kind: string read FKind write FKind;
+    property Nums: TList<Integer> read FNums write FNums;
+    property Extras: TList<string> read FExtras write FExtras;
     constructor Create;
     destructor Destroy; override;
   end;
 
   TChartFail = class
+  private
+    FId: string;
+    FText: string;
+    FAnchor: string;
+    FLane: string;
+    FEdges: TList<string>;
   public
-    Id    : string;
-    Text  : string;
-    Anchor: string;
-    Lane  : string;
-    Edges : TList<string>;
+    property Id: string read FId write FId;
+    property Text: string read FText write FText;
+    property Anchor: string read FAnchor write FAnchor;
+    property Lane: string read FLane write FLane;
+    property Edges: TList<string> read FEdges write FEdges;
     constructor Create;
     destructor Destroy; override;
   end;

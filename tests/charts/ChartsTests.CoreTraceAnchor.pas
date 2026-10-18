@@ -941,16 +941,18 @@ begin
   end;
   if pOpts.Creating then
   begin
-    Result.Creating.Present:= True;
-    Result.Creating.Line:= CREATE_LINE;
-    Result.Creating.Path:= Path;
-    Result.Creating.Call:= if pOpts.Event = '' then 'MakeLookup' else 'C';
-    Result.Creating.Kind:= pOpts.CreatingKind;
+    var Cr:= Result.Creating;
+    Cr.Present:= True;
+    Cr.Line:= CREATE_LINE;
+    Cr.Path:= Path;
+    Cr.Call:= if pOpts.Event = '' then 'MakeLookup' else 'C';
+    Cr.Kind:= pOpts.CreatingKind;
     if pOpts.CreatingKind <> '' then
     begin
-      Result.Creating.KindLine:= KIND_LINE;
-      Result.Creating.KindPath:= Path;
+      Cr.KindLine:= KIND_LINE;
+      Cr.KindPath:= Path;
     end;
+    Result.Creating:= Cr;
   end;
 end;
 

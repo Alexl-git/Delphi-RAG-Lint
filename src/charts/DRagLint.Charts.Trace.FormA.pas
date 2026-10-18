@@ -71,64 +71,91 @@ type
   /// <summary>A line under a step: a condition (Kind 'cond') or a facet (Kind 'facet').</summary>
   /// <remarks>One class; the two PowerShell objects differ by Kind. Owned by its TTraceItem.</remarks>
   TTraceChild = class
+  private
+    FKind: string;
+    FKeyword: string;
+    FCondition: string;
+    FHead: string;
+    FText: string;
+    FAnchor: string;
+    FNote: string;
+    FAsk: string;
+    FRoutine: string;
   public
     /// <summary>'cond' or 'facet'.</summary>
-    Kind     : string;
+    property Kind: string read FKind write FKind;
     /// <summary>cond: WHEN or UNLESS.</summary>
-    Keyword  : string;
+    property Keyword: string read FKeyword write FKeyword;
     /// <summary>cond: the guard text, verbatim.</summary>
-    Condition: string;
+    property Condition: string read FCondition write FCondition;
     /// <summary>facet: the head word (one of FORMA_FACETS).</summary>
-    Head     : string;
+    property Head: string read FHead write FHead;
     /// <summary>facet: the text after the head.</summary>
-    Text     : string;
+    property Text: string read FText write FText;
     /// <summary>The anchor '&lt;file&gt;:&lt;line&gt;' ('' allowed for a facet).</summary>
-    Anchor   : string;
+    property Anchor: string read FAnchor write FAnchor;
     /// <summary>The free-text note part.</summary>
-    Note     : string;
+    property Note: string read FNote write FNote;
     /// <summary>cond: the ask part (E-number).</summary>
-    Ask      : string;
+    property Ask: string read FAsk write FAsk;
     /// <summary>cond: the routine the condition hangs on when it is another routine's ('in Routine' note part).</summary>
-    Routine  : string;
+    property Routine: string read FRoutine write FRoutine;
   end;
 
   /// <summary>One numbered line of the trace (Kind step | stops | crosses) with its child lines.</summary>
   /// <remarks>Owns Children. The walker fields (Line .. Omits) are set by Trace.Walk and ignored by
   /// WriteFormA; they are Add-Member properties in the PowerShell. Number is assigned by WriteFormA.</remarks>
   TTraceItem = class
+  private
+    FKind: string;
+    FNumber: Integer;
+    FActor: string;
+    FText: string;
+    FGrade: string;
+    FAnchor: string;
+    FRoutine: string;
+    FNote: string;
+    FAsk: string;
+    FChildren: TObjectList<TTraceChild>;
+    FLine: Integer;
+    FOwner: Integer;
+    FCommand: string;
+    FCalleeId: Integer;
+    FCallerConds: Integer;
+    FOmits: Boolean;
   public
     /// <summary>'step', 'stops' or 'crosses'.</summary>
-    Kind       : string;
+    property Kind: string read FKind write FKind;
     /// <summary>The 1-based number WriteFormA (or ReadFormA) assigned.</summary>
-    Number     : Integer;
+    property Number: Integer read FNumber write FNumber;
     /// <summary>USER, CLIENT, SERVER, DATABASE or ''.</summary>
-    Actor      : string;
+    property Actor: string read FActor write FActor;
     /// <summary>The line text (never opens with an actor, kind or counted head word).</summary>
-    Text       : string;
+    property Text: string read FText write FText;
     /// <summary>'', 'by name' or 'inferred'.</summary>
-    Grade      : string;
+    property Grade: string read FGrade write FGrade;
     /// <summary>The anchor '&lt;file&gt;:&lt;line&gt;' (required for every kind, AC-11).</summary>
-    Anchor     : string;
+    property Anchor: string read FAnchor write FAnchor;
     /// <summary>The 'in Routine' note part.</summary>
-    Routine    : string;
+    property Routine: string read FRoutine write FRoutine;
     /// <summary>The free-text note part.</summary>
-    Note       : string;
+    property Note: string read FNote write FNote;
     /// <summary>The 'ask E' note part.</summary>
-    Ask        : string;
+    property Ask: string read FAsk write FAsk;
     /// <summary>The condition and facet lines under the step; owned.</summary>
-    Children   : TObjectList<TTraceChild>;
+    property Children: TObjectList<TTraceChild> read FChildren write FChildren;
     /// <summary>Trace.Walk only: the source line the step was found on (0 = unset).</summary>
-    Line       : Integer;
+    property Line: Integer read FLine write FLine;
     /// <summary>Trace.Walk only: the owning routine's symbol id (0 = unset).</summary>
-    Owner      : Integer;
+    property Owner: Integer read FOwner write FOwner;
     /// <summary>Trace.Walk only: a CROSSES item's pipe command name.</summary>
-    Command    : string;
+    property Command: string read FCommand write FCommand;
     /// <summary>Trace.Walk only: the callee's symbol id on a CALLS step (0 = unset).</summary>
-    CalleeId   : Integer;
+    property CalleeId: Integer read FCalleeId write FCalleeId;
     /// <summary>Trace.Walk only: how many caller conditions were hung on the step (0 = none).</summary>
-    CallerConds: Integer;
+    property CallerConds: Integer read FCallerConds write FCallerConds;
     /// <summary>Trace.Walk only: True on an OMITS step.</summary>
-    Omits      : Boolean;
+    property Omits: Boolean read FOmits write FOmits;
     /// <summary>Constructor: creates an empty item with an empty Children list.</summary>
     constructor Create;
     /// <summary>Frees Children.</summary>
@@ -138,13 +165,17 @@ type
   /// <summary>A named group of items.</summary>
   /// <remarks>Owns Items. Note stands for an EMPTY section (or leads DERIVED's rows).</remarks>
   TTraceSection = class
+  private
+    FName: string;
+    FNote: string;
+    FItems: TObjectList<TTraceItem>;
   public
     /// <summary>The upper-case section name.</summary>
-    Name : string;
+    property Name: string read FName write FName;
     /// <summary>The generated '  -- note' line under the header.</summary>
-    Note : string;
+    property Note: string read FNote write FNote;
     /// <summary>The numbered items; owned.</summary>
-    Items: TObjectList<TTraceItem>;
+    property Items: TObjectList<TTraceItem> read FItems write FItems;
     /// <summary>Constructor: creates an empty section.</summary>
     constructor Create;
     /// <summary>Frees Items.</summary>
@@ -154,23 +185,32 @@ type
   /// <summary>The whole trace: header attributes plus sections.</summary>
   /// <remarks>Owns Sections and everything under them. Free it when done.</remarks>
   TTrace = class
+  private
+    FName: string;
+    FTitle: string;
+    FFrom: string;
+    FIndex: string;
+    FAsOf: string;
+    FRegenerate: string;
+    FTiers: string;
+    FSections: TObjectList<TTraceSection>;
   public
     /// <summary>The TRACE name.</summary>
-    Name      : string;
+    property Name: string read FName write FName;
     /// <summary>The quoted TITLE (no double-quote).</summary>
-    Title     : string;
+    property Title: string read FTitle write FTitle;
     /// <summary>The FROM selection.</summary>
-    From      : string;
+    property From: string read FFrom write FFrom;
     /// <summary>The INDEX list.</summary>
-    Index     : string;
+    property Index: string read FIndex write FIndex;
     /// <summary>The single-word AS OF date.</summary>
-    AsOf      : string;
+    property AsOf: string read FAsOf write FAsOf;
     /// <summary>The REGENERATE command.</summary>
-    Regenerate: string;
+    property Regenerate: string read FRegenerate write FRegenerate;
     /// <summary>The TIERS chain.</summary>
-    Tiers     : string;
+    property Tiers: string read FTiers write FTiers;
     /// <summary>The sections in order; owned.</summary>
-    Sections  : TObjectList<TTraceSection>;
+    property Sections: TObjectList<TTraceSection> read FSections write FSections;
     /// <summary>Constructor: creates an empty trace.</summary>
     constructor Create;
     /// <summary>Frees Sections.</summary>
@@ -425,7 +465,7 @@ end;
 destructor TTraceItem.Destroy;
 begin
   Children.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 { TTraceSection }
@@ -439,7 +479,7 @@ end;
 destructor TTraceSection.Destroy;
 begin
   Items.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 { TTrace }
@@ -453,7 +493,7 @@ end;
 destructor TTrace.Destroy;
 begin
   Sections.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 procedure TestTraceTitle(const pTitle: string);

@@ -139,33 +139,46 @@ type
   /// <summary>The anchor of one target: graded steps, the dataset, the column or the reason it stops.</summary>
   /// <remarks>Port of the New-AnchorResult object. Owns Items and Calc. Not thread-safe.</remarks>
   TAnchorResult = class
+  private
+    FItems: TObjectList<TTraceItem>;
+    FDataSet: TTraceDataSet;
+    FHasDataSet: Boolean;
+    FTable: string;
+    FColumn: string;
+    FTableColumn: string;
+    FStop: string;
+    FStopAnchor: string;
+    FStaleFile: string;
+    FGrades: TArray<string>;
+    FCalc: TObject;
+    FFieldName: string;
   public
     /// <summary>The graded steps, in order; the result owns them.</summary>
-    Items      : TObjectList<TTraceItem>;
+    property Items: TObjectList<TTraceItem> read FItems write FItems;
     /// <summary>The anchor dataset; valid when HasDataSet.</summary>
-    DataSet    : TTraceDataSet;
+    property DataSet: TTraceDataSet read FDataSet write FDataSet;
     /// <summary>False for the PS $null dataset.</summary>
-    HasDataSet : Boolean;
+    property HasDataSet: Boolean read FHasDataSet write FHasDataSet;
     /// <summary>The table; '' when none.</summary>
-    Table      : string;
+    property Table: string read FTable write FTable;
     /// <summary>The column, upper case; '' when none.</summary>
-    Column     : string;
+    property Column: string read FColumn write FColumn;
     /// <summary>TABLE.COLUMN; '' when the anchor stops before a column (a TABLE.COLUMN target keeps its asked text).</summary>
-    TableColumn: string;
+    property TableColumn: string read FTableColumn write FTableColumn;
     /// <summary>The reason the anchor stops; '' when it reaches the column.</summary>
-    Stop       : string;
+    property Stop: string read FStop write FStop;
     /// <summary>File.ext:line of the last step the stop hangs on.</summary>
-    StopAnchor : string;
+    property StopAnchor: string read FStopAnchor write FStopAnchor;
     /// <summary>'' or the indexed path that differs from the indexed copy (the emitter REFUSES).</summary>
-    StaleFile  : string;
+    property StaleFile: string read FStaleFile write FStaleFile;
     /// <summary>'by name' once the class -> DFM object convention hop was taken.</summary>
-    Grades     : TArray<string>;
+    property Grades: TArray<string> read FGrades write FGrades;
     /// <summary>The calculated-field facts; nil unless the question unit asked DRagLint.Charts.Trace.Calc.
     /// Its runtime type is DRagLint.Charts.Trace.Calc.TCalcInfo, which this unit does not use. Owned by the result.</summary>
-    Calc       : TObject;
+    property Calc: TObject read FCalc write FCalc;
     /// <summary>The column exactly as the selection names it (the PS $Col, before the upper-casing of Column): ''
     /// until the anchor reached a dataset. The question unit hands it to TCalcFactsReader.Apply.</summary>
-    FieldName  : string;
+    property FieldName: string read FFieldName write FFieldName;
     constructor Create;
     destructor Destroy; override;
   end;

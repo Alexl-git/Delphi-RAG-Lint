@@ -180,7 +180,7 @@ type
     function BackStep(pXing: TTraceItem; pSrv: TServerHandling; const pNote: string): TTraceItem;
     procedure PlaceServerItems(pSrv: TServerHandling; pSec: TTraceSection);
     procedure WalkWrite;
-    procedure WriteThroughCrossing(pClient: TList<TTraceItem>; pXi: Integer);
+    procedure WriteThroughCrossing(pClient: TObjectList<TTraceItem>; pXi: Integer);
     procedure WalkRead(pRoutes: TObjectList<TFillRoute>);
     procedure ReadThroughRoute(pRoute: TFillRoute);
     procedure WalkAlso(pRoutes: TObjectList<TFillRoute>);
@@ -203,6 +203,18 @@ begin
   pList.OwnsObjects:= False;
   try
     pList.Clear;
+  finally
+    pList.OwnsObjects:= True;
+  end;
+end;
+
+{ the first pCount items have a new owner: the list forgets them without freeing and keeps owning the rest (an error
+  past this point frees only what the list still holds) }
+procedure Disown(pList: TObjectList<TTraceItem>; pCount: Integer); overload;
+begin
+  pList.OwnsObjects:= False;
+  try
+    pList.DeleteRange(0, pCount);
   finally
     pList.OwnsObjects:= True;
   end;
@@ -448,7 +460,7 @@ begin
   FSecW.Items.Add(NewTraceStep(KIND_STEP, Format('FIRES %s.%s -> %s', [Ds.Name, W0.Event, W0.Handler]), TraceAnchorText(Ds.FileName, W0.Line),
     W0.Grade, W0.Routine, NOTE_HANDLER_NAMED, ASK_E3));
   var Visited:= TDictionary<Integer, Byte>.Create;
-  var Client:= TList<TTraceItem>.Create;
+  var Client:= TObjectList<TTraceItem>.Create;
   try
     var Sub:= FWalker.WalkRoutine(tsClient, W0.HandlerId, FDepth, Visited, FCtx);
     try
@@ -476,8 +488,10 @@ begin
     begin
       for var I in Client do
         FSecW.Items.Add(I);
+      var LastAnchor:= Client.Last.Anchor;
+      Disown(Client);
       FWStop:= NewTraceStep(KIND_STOPS, Format('%s never reaches a transport call carrying a protocol constant within %d call levels',
-        [W0.HandlerShort, FDepth]), Client.Last.Anchor, '', W0.HandlerShort, '', '');
+        [W0.HandlerShort, FDepth]), LastAnchor, '', W0.HandlerShort, '', '');
       FSecW.Items.Add(FWStop);
       for var S in [FSecS, FSecD, FSecR] do
         AddNotWalked(S, FWStop, DIR_WRITE);
@@ -499,11 +513,12 @@ begin
 end;
 
 { PS :192-214: the client items to the crossing, the server on its own index, the database, the response and the rest }
-procedure TRoundTripRun.WriteThroughCrossing(pClient: TList<TTraceItem>; pXi: Integer);
+procedure TRoundTripRun.WriteThroughCrossing(pClient: TObjectList<TTraceItem>; pXi: Integer);
 begin
+  var Xing:= pClient[pXi];
   for var K:= 0 to pXi do
     FSecW.Items.Add(pClient[K]);
-  var Xing:= pClient[pXi];
+  Disown(pClient, pXi + 1);
   var Srv:= FWalker.ServerHandling(Xing.Command, FCtx, FDepth);
   try
     if Srv.HasContract then
@@ -530,8 +545,9 @@ begin
   finally
     Srv.Free;
   end;
-  for var K:= pXi + 1 to pClient.Count - 1 do
-    FSecR.Items.Add(pClient[K]);
+  for var I in pClient do
+    FSecR.Items.Add(I);
+  Disown(pClient);
 end;
 
 { ---- 6. READ ---- }
@@ -562,7 +578,7 @@ begin
   for var C in pRoute.Walk.Conds do
     Entry.Children.Add(C);
   Disown(pRoute.Walk.Conds);
-  var Ri:= TList<TTraceItem>.Create;
+  var Ri:= TObjectList<TTraceItem>.Create;
   try
     Ri.Add(Entry);
     for var I in pRoute.Walk.Items do
@@ -575,9 +591,10 @@ begin
         Xi:= K;
         Break;
       end;
+    var Xr:= Ri[Xi];
     for var K:= 0 to Xi do
       FSecRd.Items.Add(Ri[K]);
-    var Xr:= Ri[Xi];
+    Disown(Ri, Xi + 1);
     { the far side on the SERVER index, then its DATABASE facts, still on the SERVER index (AC-9) }
     var Srv:= FWalker.ServerHandling(Xr.Command, pRoute.Ctx, FDepth);
     try
@@ -620,11 +637,12 @@ begin
     finally
       Srv.Free;
     end;
-    for var K:= Xi + 1 to Ri.Count - 1 do
+    for var I in Ri do
     begin
-      Ri[K].Actor:= ACTOR_CLIENT;
-      FSecRd.Items.Add(Ri[K]);
+      I.Actor:= ACTOR_CLIENT;
+      FSecRd.Items.Add(I);
     end;
+    Disown(Ri);
   finally
     Ri.Free;
   end;
