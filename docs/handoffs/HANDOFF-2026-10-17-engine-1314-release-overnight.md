@@ -58,6 +58,15 @@ or early afternoon 2026-10-18.
    `git tag -a v1.31.4-alpha 36dc1866 -m v1.31.4-alpha` (or the final HEAD); `git push origin v1.31.4-alpha`;
    `gh release create v1.31.4-alpha --verify-tag --prerelease <win64.zip> <win32.zip> --notes-file <notes>`.
    Verify first: `git ls-remote origin 'refs/tags/v1.31.4-alpha^{}'`.
+7b. Owner ask (2026-10-17 ~21:10): ENFORCE nogrep with hooks, not CLAUDE.md text. Build
+   `~/.claude/hooks/draglint-first.js` (PreToolUse on Grep|Glob|Read + Bash|PowerShell grep/rg/Select-String)
+   + a PostToolUse recorder of drag-lint.exe calls (state file per session). Deny Grep/search on
+   .pas/.dfm/.dpr/.dpk under a folder with `_D-RAG\*.sqlite` unless a drag-lint query ran in this session
+   in the last ~5 min (deny reason names the right verb); deny whole-file Read of .pas/.dfm > ~2000 lines
+   without offset/limit (reason: `outline --file` first); auto-log allowed fallbacks to
+   `stats\draglint-gaps.log`. Applies to subagents too. Deny, never "ask" (autonomous mode). Test with a
+   small node test; use the update-config skill to wire settings.json. Then propose trimming the CLAUDE.md
+   drag-lint block. No Delphi build needed -- can run beside the battery.
 8. Late morning 2026-10-18: billing split help -- memory `project_billing_split_orm3_dl.md`.
 
 ## Gotchas
