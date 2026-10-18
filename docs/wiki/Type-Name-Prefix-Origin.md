@@ -38,6 +38,7 @@ order. The first step that matches decides the result.
 | # | Condition | Result |
 |---|-----------|--------|
 | 1 | No exception prefix is configured (`ExceptionPrefix` is empty) | Class: the class prefix (`T`) applies; no chain is traced |
+| 2a | The class is not in the project index at all (stale index: unit edited after indexing) | Silent; no letter, no gap finding, never auto-fixed |
 | 2 | The project chain reaches `Exception` | `E` |
 | 3 | The project chain has no unresolved leaves | `T` |
 | 4 | A leaf is `TObject`; it counts as a known plain-class root, even with no library store | Known root; continue to the verdict on the remaining leaves |

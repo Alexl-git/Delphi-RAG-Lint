@@ -187,7 +187,9 @@ end;
    2. AStore = nil (store-less lint)     -> only the direct ancestor as written
       is certain: none or TObject -> toClass, Exception -> toException, anything
       else -> toUnknown (silent).
-   3. AStore says descendant of Exception -> toException.
+   3. AStore has no class/interface/record named ATypeName (stale index: the
+      unit was edited after indexing) -> toUnknown (silent, no gap error).
+      AStore says descendant of Exception -> toException.
    4. No unresolved ancestor leaves       -> toClass (fully in-project chain).
    5. Any leaf is Exception, or descends it in ALibStore -> toException.
    6. ALibStore = nil                     -> toClass when every leaf is TObject,
@@ -241,6 +243,7 @@ begin
   AUnknownLeaf:= '';
   if AExcPrefix = '' then Result:= toClass
   else if AStore = nil then Result:= ClassifyByWrittenAncestor(ADirectAncestorText)
+  else if not LibraryKnowsType(AStore, ATypeName) then Result:= toUnknown
   else if AStore.IsDescendantOf(ATypeName, 'Exception', AFileId) then Result:= toException
   else
   begin
