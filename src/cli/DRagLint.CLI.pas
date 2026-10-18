@@ -1101,6 +1101,7 @@ begin
   Writeln('                               file): the ACTIVE PROJECT''s db first, then the folder-matched db.');
   Writeln('                               Omit --project to model "no project active". Same resolution the IDE');
   Writeln('                               uses, so this is how it is verified without an IDE.');
+  Writeln('                               No covering index: stdout empty ([] with --json), exit 0, a NOTE on stderr.');
   Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
   Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
@@ -29437,7 +29438,7 @@ begin
   // same function, DRagLint.Index.Manifest.ResolveReadDbs. --project may be
   // omitted to model "no active project", which is how the fallback behaviour
   // gets asserted. Prints the ordered list, one path per line; exit 0 always,
-  // an empty list printing nothing.
+  // an empty list printing nothing on stdout and a NOTE on stderr.
   if AArgs.InFile <> '' then
   begin
     EngineDir := ExtractFilePath(ParamStr(0));
@@ -29465,6 +29466,13 @@ begin
       `outline --file X` came to report "no project database resolves here"
       for a file this verb listed three databases for. }
     Paths:= ResolveReadDbsForFileWith(Manifest, AArgs);
+    { An empty list must not be SILENT: it reads as "nothing to report" and
+      sends the caller to Grep without saying the index was never asked about
+      this file (B-20). stdout stays the bare list and exit stays 0 -- scripts
+      capture stdout as paths -- so the explanation goes to stderr. }
+    if Length(Paths) = 0 then
+      Writeln(ErrOutput, Format('NOTE: no index covers %s -- no manifest section includes it or its folder. ' +
+        'Add its project with: drag-lint register-project <file.dproj> --apply', [AArgs.InFile]));
 
     if AArgs.AsJson then
     begin
