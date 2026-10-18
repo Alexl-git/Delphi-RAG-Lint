@@ -3640,6 +3640,8 @@ begin
       other failed section, and the OLD fingerprint stays in place. }
     if RefuseIfEngineOlderThanDb(Store, AItem.DbPath) then Exit(False);
     Store.Migrate;
+    { V-C (1.31.5): a section DB with no files yet has no stale stamp to report. }
+    var SecDbWasEmpty: Boolean:= Store.CountFiles = 0;
 
     { THE OPENING HALF OF A PAIR. The section already announces how it ENDED;
       until now it never announced that it had BEGUN, and the difference is not
@@ -3740,7 +3742,9 @@ begin
     if PrevRfp <> CurRfp then
     begin
       ResolverStale:= True;
-      if PrevRfp = '' then
+      if SecDbWasEmpty then
+        Writeln(Format('  New database (resolver %s).', [CurRfp]))
+      else if PrevRfp = '' then
         Writeln(Format('  This DB carries no resolver stamp (-> %s): re-deriving every edge.',
                        [CurRfp]))
       else
@@ -5518,6 +5522,11 @@ begin
     end;
   end;
   Store.Migrate;
+  { V-C (1.31.5): a DB with no files before this run (created by it, or never
+    filled) has nothing stale -- the stamp / scan_type notes below are real
+    warnings only on a DB that already holds an index. Read before any rebuild
+    clears the files, so a --rebuild of an old DB is not mistaken for new. }
+  var DbWasEmpty: Boolean:= Store.CountFiles = 0;
   { v0.42: deep scan emits identifier usage refs. Default deep, except a
     --scan-libraries scan defaults shallow (libraries are queried by call/type,
     and usage-refs would ~double the 1.3 GB library DB). --deep/--shallow wins.
@@ -5589,7 +5598,9 @@ begin
   if PrevResolverFp <> CurResolverFp then
   begin
     ResolverStale:= True;
-    if PrevResolverFp = '' then
+    if DbWasEmpty then
+      Writeln(Format('New database (resolver %s).', [CurResolverFp]))
+    else if PrevResolverFp = '' then
       Writeln(Format('This DB carries no resolver stamp (-> %s): re-deriving every edge.',
                      [CurResolverFp]))
     else
@@ -5855,7 +5866,7 @@ begin
       Exit(2);
     end;
 
-    if DbScanType = '' then
+    if (DbScanType = '') and (not DbWasEmpty) then
       Writeln(ErrOutput, 'NOTE: this database records no scan_type (it predates the stamp), so a '
                        + 'folder scan cannot be refused on evidence. If it is a PROJECT index, stop '
                        + 'and re-run as `index --project <file.dproj> --db <db>` or '

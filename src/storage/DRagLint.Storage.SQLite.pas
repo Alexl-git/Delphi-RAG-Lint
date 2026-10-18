@@ -267,6 +267,13 @@ type
       { Files this run may touch before scoping stops being worth it, read once
         from the corpus size on the first recorded write. -1 = not yet read. }
       FScopeMaxFiles         : Integer;
+      { V-C: the corpus size read with FScopeMaxFiles (-1 = not yet read), every
+        file write this run recorded (counted on past the latch, so the reason
+        can give real numbers), and whether the latch was the share limit. }
+      FScopeCorpusBefore     : Int64;
+      FScopeWrites           : Integer;
+      FScopeNewWrites        : Integer;
+      FScopeWholeByShare     : Boolean;
       /// <summary>True if ASQL returns at least one row. For EXISTS-style probes;
       /// pass a LIMIT 1 query so SQLite stops at the first hit.</summary>
       /// <param name="ASQL">A SELECT. Must not require parameters.</param>
@@ -3356,6 +3363,22 @@ begin
   Result:= (TStopwatch.GetTimeStamp - AStart) / TStopwatch.Frequency;
 end;
 
+{ V-C (1.31.5): the REF count from which a WHOLE-DB calls pass is worth the
+  "expensive shape ... running, not hung" warning. Refs, not files: the pass
+  cost follows refs, and file count misleads both ways (drag-lint's own 205
+  files hold 312k refs and took 149 s). Measured anchors: 312k refs -> 149 s;
+  the 2 GB index (~3.3M refs) -> ~37 min, so ~1.5-2k refs/s. 1M refs is ~8-11
+  min -- below it the stage heartbeat ("still running, Nm elapsed") already
+  says the pass is alive, and the 37-minute line only alarms (the 127-file VM
+  run that filed this). DRAGLINT_WHOLEDB_SLOW_REFS overrides the threshold --
+  it exists so run_fresh_db_notes.ps1 can prove the line is gated, not deleted. }
+function WholeDbSlowRefThreshold: Int64;
+const
+  DEFAULT_SLOW_REFS = 1000000;
+begin
+  Result:= StrToInt64Def(GetEnvironmentVariable('DRAGLINT_WHOLEDB_SLOW_REFS'), DEFAULT_SLOW_REFS);
+end;
+
 { Forward only. The definition stays down beside OpenFileTx -- the upsert it
   exists to serve -- where its full rationale is written; it is announced here
   because PHASE C B6 gave it two callers that sit ABOVE that point
@@ -3393,6 +3416,10 @@ begin
   FScopeWhole      := False;
   FScopeWholeWhy   := '';
   FScopeMaxFiles   := -1;
+  FScopeCorpusBefore:= -1;
+  FScopeWrites     := 0;
+  FScopeNewWrites  := 0;
+  FScopeWholeByShare:= False;
   Connect(ADbPath, AReadOnly);
   { v0.86 Task 4: a read-only open still needs its SELECT queries built. In the
     write path PrepareStatements is Migrate's last step; read verbs never call
@@ -4956,6 +4983,9 @@ var
   NP: string  ;
 begin
   NP:= NormalizeStoredPath(APath);
+  { V-C: the corpus size BEFORE this run's first write -- read ahead of the
+    upsert, which would otherwise count the run's first new file as old. }
+  if FScopeCorpusBefore < 0 then FScopeCorpusBefore:= CountFiles;
   FConn.StartTransaction;
   try
     { UPDATE existing row in-place (no DELETE -- no cascade -- no FTS5 trigger).
@@ -4968,6 +4998,7 @@ begin
     FQUpsertFile.ExecSQL;
     if FQUpsertFile.RowsAffected = 0 then
     begin
+      Inc(FScopeNewWrites);
       FQInsertFile.ParamByName('path'  ).AsString   := NP;
       FQInsertFile.ParamByName('mtime' ).AsLargeInt := AMtimeUnix;
       FQInsertFile.ParamByName('sha'   ).AsString   := ASha;
@@ -5367,6 +5398,19 @@ begin
     the compiler as an uncontrolled variable. }
   if GetEnvironmentVariable('DRAGLINT_NO_SCOPED_RESOLVE') <> '' then
     Exit('DRAGLINT_NO_SCOPED_RESOLVE is set');
+  { V-C: the share latch is reported with the run's FINAL counts, not the ones
+    at the moment it tripped (always limit+1, and "1 changed, limit 0" on a new
+    database whose every file was new). New = rows OpenFileTx inserted; a DB
+    that held no files before this run is named as new. }
+  if FScopeWhole and FScopeWholeByShare then
+  begin
+    if FScopeCorpusBefore = 0 then
+      Exit(Format('the database held no files before this run (a new database): %d file(s), all new, ' +
+                  'so there is no unchanged part to scope around', [FScopeNewWrites]));
+    Exit(Format('this run rewrote more than one file in three (%d written: %d new, %d changed, ' +
+                'of %d indexed before; limit %d) -- above that share the scoped pass costs more than it saves',
+                [FScopeWrites, FScopeNewWrites, FScopeWrites - FScopeNewWrites, FScopeCorpusBefore, FScopeMaxFiles]));
+  end;
   if FScopeWhole then
     if FScopeWholeWhy <> '' then Exit(FScopeWholeWhy)
     else Exit('the whole-database latch was set (clear/prune/eviction, or the changed-file share)');
@@ -5680,9 +5724,12 @@ end;
   resolving the file id and deleting its symbols -- the only moment at which the
   outgoing names still exist. One indexed lookup per re-indexed file. }
 procedure TSQLiteSymbolStore.NoteScopeRemoval(AFileId: Int64);
+const
+  SCOPE_SHARE_DIVISOR = 3; { "one file in three" -- see the latch below }
 var
   Q: TFDQuery;
 begin
+  Inc(FScopeWrites);
   if FScopeWhole then Exit;
   FScopeFiles.AddOrSetValue(AFileId, True);
   { STOP ACCUMULATING once this run covers a third of the corpus. Past that the
@@ -5697,10 +5744,15 @@ begin
     Read the corpus size once -- it is the size BEFORE this run, which is the
     right denominator: a run that adds files is adding to what it must resolve
     against, not shrinking it. }
-  if FScopeMaxFiles < 0 then FScopeMaxFiles:= CountFiles div 3;
+  if FScopeMaxFiles < 0 then
+  begin
+    if FScopeCorpusBefore < 0 then FScopeCorpusBefore:= CountFiles;
+    FScopeMaxFiles:= FScopeCorpusBefore div SCOPE_SHARE_DIVISOR;
+  end;
   if FScopeFiles.Count > FScopeMaxFiles then
   begin
     FScopeWhole:= True;
+    FScopeWholeByShare:= True;
     FScopeWholeWhy:= Format('this run rewrote more than one file in three (%d changed, limit %d) -- ' +
                             'above that share the scoped pass costs more than it saves',
                             [FScopeFiles.Count, FScopeMaxFiles]);
@@ -12404,9 +12456,11 @@ begin
     ResolveLog(Format('calls      starting SCOPED pass over %d changed file(s)', [FScopeFiles.Count]))
   else
   begin
-    ResolveLog(Format('calls      starting WHOLE-DB pass over all %d indexed file(s)', [CountFiles]));
+    var WholeFiles: Int64:= CountFiles;
+    ResolveLog(Format('calls      starting WHOLE-DB pass over all %d indexed file(s)', [WholeFiles]));
     ResolveLog(Format('calls      ... whole database because %s', [DeclineWhy]));
-    ResolveLog('calls      ... this is the expensive shape (~37 min on a 2 GB index) -- it is running, not hung');
+    if CountReferences >= WholeDbSlowRefThreshold then
+      ResolveLog('calls      ... this is the expensive shape (~37 min on a 2 GB index) -- it is running, not hung');
   end;
   { Only the temp tables are built here. The DELETE they feed happens INSIDE the
     rebuild transaction below -- see the note there. MaterializeResolveScope

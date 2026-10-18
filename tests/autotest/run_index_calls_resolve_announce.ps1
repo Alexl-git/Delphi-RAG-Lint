@@ -88,11 +88,16 @@ try {
   # wrong route was this suite's first failure, and it is exactly the confusion
   # the reason string exists to end, so it is asserted rather than accepted as
   # 'some reason was printed'.
-  Check '1c. the reason is the SPECIFIC one (the one-in-three share)' `
-        ($r1 -match 'rewrote more than one file in three \(\d+ changed, limit \d+\)') `
+  # 1.31.5 (V-C): on a NEW database the share latch is named as such, with the
+  # real file count -- "1 changed, limit 0" on a first index was false.
+  Check '1c. the reason is the SPECIFIC one (the share latch, on a new database)' `
+        ($r1 -match 'the database held no files before this run \(a new database\): 6 file\(s\), all new') `
         $(($r1 -split "`n" | Where-Object { $_ -match 'whole database because' }) -join ' ')
-  Check '1d. it says it is running rather than hung' `
-        ($r1 -match 'running, not hung')
+  # 1.31.5 (V-C): the "running, not hung" line is gated on DB size (1M refs
+  # by default); a 6-file DB must not get it. run_fresh_db_notes.ps1 proves the
+  # gate still opens.
+  Check '1d. a small DB does not get the expensive-shape warning' `
+        (-not ($r1 -match 'running, not hung'))
 
   # ORDERING. The completion line already existed; announcing AFTER the pass is
   # the bug, so a text match alone proves nothing.
