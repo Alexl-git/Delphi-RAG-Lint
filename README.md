@@ -131,8 +131,10 @@ folder (not in the release zip) and need PowerShell 7 and Graphviz.
 
 drag-lint is not a model: every chart comes from a formal call, and every row in
 it is a fact from the index with a file and a line. Each answer is a bundle --
-`graph.svg` whose rows link back to the source (`draglint://open`, handled by the
-IDE plugin), PNG and PDF exports of the same layout, a browser shell, a
+`graph.svg` whose rows link back to the source (`draglint://open`: a click is received by
+`drag-lint-open.exe`, which hands it to the IDE plugin, once `drag-lint protocol register` has made
+the link clickable -- see
+[Click-to-source links](#click-to-source-links-draglint)), PNG and PDF exports of the same layout, a browser shell, a
 `meta.json` that fingerprints the index and records the command that regenerates
 the chart, and a ready-to-paste DocInsight `<remarks>` reference. Full reference,
 one page per question: **[Diagrams and Charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Diagrams-and-Charts)**.
@@ -679,7 +681,30 @@ diagnostics (publishDiagnostics on didSave), workspaceSymbols.
 
 ### MCP server (Claude / Cursor)
 
-Add to your MCP config (e.g. `~/.claude/claude_desktop_config.json`):
+Register it with Claude Code and VS Code in one step:
+
+```
+drag-lint mcp-config --all [--db C:\Projects\MyApp\_D-RAG\MyApp.sqlite] [--dry-run]
+drag-lint mcp-config --claude-code --remove
+```
+
+`--claude-code` edits the top-level `"mcpServers"` object of `~\.claude.json`
+(`%CLAUDE_CONFIG_DIR%\.claude.json` when that is set); `--vscode` edits `"servers"` in
+`%APPDATA%\Code\User\mcp.json`; `--all` does both and skips a client that is not installed.
+The entry is `{"type":"stdio","command":"<engine>","args":["serve"(,"--db","<index>")]}`
+(plus `"env":{}` for Claude Code); `--engine <exe>` overrides the default (this exe), `--name <n>`
+the entry name (default `drag-lint`). The edit is **merged** (only that one entry changes; every
+other key and server is kept, numbers keep their text), **backed up** (`<file>.bak-<stamp>`) and
+**idempotent** (a matching entry is `unchanged` and nothing is written); keys you added to the entry,
+such as `env`, survive an update, and `env` / `headers` values print as `***` (an entry refused as not ours is never printed). An entry by that name that runs
+something other than `drag-lint.exe` is refused, as is a file holding comments or trailing commas
+(the entry to paste by hand is printed instead) or one that is not valid JSON. `--remove` takes only
+our entry out; `--dry-run` writes nothing; `--json` prints one object per target;
+`--config-path <file>` edits another file (with exactly one target), and `--home-dir` /
+`--appdata-dir` move where the default files are looked for (tests). Exit 0 done or unchanged,
+1 refused, 2 usage/setup. This verb replaces `charts\src\Set-DragLintMcpConfig.ps1`.
+
+Or add it to your MCP config by hand (e.g. `~/.claude/claude_desktop_config.json`):
 
 ```json
 {
@@ -693,6 +718,25 @@ Add to your MCP config (e.g. `~/.claude/claude_desktop_config.json`):
 15 tools are then available to Claude: `find_symbol`, `find_callers`,
 `get_symbol_doc`, `get_context_bundle`, `rename_symbol`, `run_compile_check`,
 and more (see [MCP tools](#mcp-tools-15) below).
+
+### Click-to-source links (draglint://)
+
+Chart rows link to `draglint://open?file=...&line=...`. One per-user registry key
+(`HKCU\Software\Classes\draglint`, never HKLM, no elevation) hands such a click to
+`drag-lint-open.exe`, which validates the link and hands it to the IDE plugin, which opens the line in the running IDE:
+
+```
+drag-lint protocol register [--handler <drag-lint-open.exe>] [--dry-run] [--force]
+drag-lint protocol status [--json]          # ours | legacy-powershell | foreign | none; exit 0 only when ours
+drag-lint protocol unregister [--dry-run] [--force]
+```
+
+`register` defaults to the `drag-lint-open.exe` beside `drag-lint.exe` and registers it in
+place. It refuses a handler inside a `*-wt\` worktree and a registration that belongs to
+another program unless `--force` is given; the older PowerShell registration made by
+`charts\src\Register-DragLintProtocol.ps1` is replaced silently, and its copy
+`%LOCALAPPDATA%\drag-lint\Open-DragLintUri.ps1` is deleted. `--dry-run` prints what would
+be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1`.
 
 ### RAD Studio 13 plugin
 
@@ -728,7 +772,7 @@ and more (see [MCP tools](#mcp-tools-15) below).
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
 | [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 19 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
-| [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 5 (+ 26 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
+| [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 26 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
 | [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |

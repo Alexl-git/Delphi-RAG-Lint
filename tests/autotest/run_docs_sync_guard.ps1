@@ -1168,6 +1168,24 @@ $askFlags = @($(if ($askSpan -and $askSpan.Success) { [regex]::Matches($askSpan.
 Check 'check 9: the ask verb''s own flag table was read' ($askFlags.Count -ge 20) `
   "only $($askFlags.Count) flag(s) read from FLAG_NAMES in $askSrcPath -- was the table renamed or moved?"
 foreach ($af in $askFlags) { [void]$accepted.Add($af) }
+# `protocol` likewise parses its own flags, from PROTOCOL_FLAG_NAMES of DRagLint.Core.ProtocolReg;
+# same shape, same non-emptiness control.
+$protoSrcPath = Join-Path $Repo 'src\core\DRagLint.Core.ProtocolReg.pas'
+$protoSpan = $(if (Test-Path -LiteralPath $protoSrcPath) {
+  [regex]::Match([IO.File]::ReadAllText($protoSrcPath), "(?s)PROTOCOL_FLAG_NAMES\s*:\s*array\[TProtocolFlag\]\s*of\s*string\s*=\s*\((.*?)\);") })
+$protoFlags = @($(if ($protoSpan -and $protoSpan.Success) { [regex]::Matches($protoSpan.Groups[1].Value, "'($FlagRx)'") | ForEach-Object { $_.Groups[1].Value } }))
+Check 'check 9: the protocol verb''s own flag table was read' ($protoFlags.Count -ge 4) `
+  "only $($protoFlags.Count) flag(s) read from PROTOCOL_FLAG_NAMES in $protoSrcPath -- was the table renamed or moved?"
+foreach ($pf in $protoFlags) { [void]$accepted.Add($pf) }
+# `mcp-config` likewise parses its own flags, from MCP_CONFIG_FLAG_NAMES of DRagLint.MCP.ClientConfig;
+# same shape, same non-emptiness control.
+$mcpCfgSrcPath = Join-Path $Repo 'src\mcp\DRagLint.MCP.ClientConfig.pas'
+$mcpCfgSpan = $(if (Test-Path -LiteralPath $mcpCfgSrcPath) {
+  [regex]::Match([IO.File]::ReadAllText($mcpCfgSrcPath), "(?s)MCP_CONFIG_FLAG_NAMES\s*:\s*array\[TMcpConfigFlag\]\s*of\s*string\s*=\s*\((.*?)\);") })
+$mcpCfgFlags = @($(if ($mcpCfgSpan -and $mcpCfgSpan.Success) { [regex]::Matches($mcpCfgSpan.Groups[1].Value, "'($FlagRx)'") | ForEach-Object { $_.Groups[1].Value } }))
+Check 'check 9: the mcp-config verb''s own flag table was read' ($mcpCfgFlags.Count -ge 12) `
+  "only $($mcpCfgFlags.Count) flag(s) read from MCP_CONFIG_FLAG_NAMES in $mcpCfgSrcPath -- was the table renamed or moved?"
+foreach ($mf in $mcpCfgFlags) { [void]$accepted.Add($mf) }
 
 $helpSet = Get-FlagSet $helpText $FlagRx
 

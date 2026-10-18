@@ -36,13 +36,15 @@ type
     function BareScriptFolder: string;
     function PairsFile(const pClient, pServer, pSql: string): string;
     function FakeEngine(const pKnown: string): string;
+    procedure CheckCounterpartDrawn(const pR: TProduceResult; const pOther, pTarget: string);
+    function PairedOptions(const pDb, pClient, pServer, pKnown: string): TProduceOptions;
     procedure CheckFeedsFromReadsSql(const pR: TProduceResult; const pSql: string);
   public
     [Setup] procedure Setup;
     [TearDown] procedure TearDown;
     [Test] procedure CompareGetsTheDelphiProducerOnLiveIndexes;
     [Test] procedure CloneGuardStaysOnWhenLiveIsNotAllowed;
-    [Test] procedure UnportedQuestionFallsBack;
+    [Test] procedure UnregisteredQuestionFallsBack;
     [Test] procedure ProjectWithoutIndexFallsBack;
     [Test] procedure PortedQuestionIsAnsweredInProcess;
     [Test] procedure StaleIndexRefusesWithoutAllowStale;
@@ -51,7 +53,12 @@ type
     [Test] procedure UnknownTargetIsExitOne;
     [Test] procedure CloneGuardRefusalIsSetup;
     [Test] procedure UnexpectedFailureFallsBack;
-    [Test] procedure CrossesBoundaryWithoutCounterpartFallsBack;
+    [Test] procedure CrossesBoundaryPairsItsCounterpartFromThePairsFile;
+    [Test] procedure CrossesBoundaryWithoutAPairDrawsOneSideAsAskReportDoes;
+    [Test] procedure CrossesBoundaryWithoutAnIndexFallsBack;
+    [Test] procedure CrossesBoundaryFromTheServerSideDbPairsTheClient;
+    [Test] procedure CrossesBoundaryWithAMissingCounterpartFileIsSetup;
+    [Test] procedure CrossesBoundaryWithAnUnconfiguredPairEntryIsRefused;
     [Test] procedure CrossesBoundaryWithCounterpartIsInProcess;
     [Test] procedure OtherIndexesAQuestionDoesNotReadAreIgnored;
     [Test] procedure MissingSqlIndexOfAReadingQuestionIsSetup;
@@ -66,6 +73,7 @@ type
     [Test] procedure PortedFallbackWithEmitterScriptFallsBack;
     [Test] procedure UnexpectedFailureWithoutEmitterScriptIsSetup;
     [Test] procedure EveryPortedIdHasAnEmitterScriptInTheRepo;
+    [Test] procedure SharedEmitterScriptIsNamedNotDerived;
   end;
 
 implementation
@@ -199,13 +207,16 @@ begin
   Assert.AreEqual(0, FFallback.Calls);
 end;
 
-procedure TProducerDelphiTests.UnportedQuestionFallsBack;
+{ Since the round-trip port every one of the 26 question ids is registered, so the registry-miss fallback is reached
+  only by an id outside the registry; 'member-access' is not a question id (QuestionIds has 26), which is exactly
+  what makes it a registry miss. The mechanism under test (registry miss -> FallBack) is unchanged. }
+procedure TProducerDelphiTests.UnregisteredQuestionFallsBack;
 begin
   var O:= DefaultProduceOptions;
   O.DbOverride:= 'any.sqlite';
-  var R:= FProducer.Produce(Cmd('butterfly', 'A.B'), O);
+  var R:= FProducer.Produce(Cmd('member-access', 'A.B'), O);
   Assert.AreEqual(1, FFallback.Calls);
-  Assert.AreEqual('butterfly', FFallback.LastQuestion);
+  Assert.AreEqual('member-access', FFallback.LastQuestion);
   Assert.AreEqual('any.sqlite', FFallback.LastDb);
   Assert.AreEqual(STUB_EXIT, R.ExitCode);
   Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
@@ -335,15 +346,92 @@ begin
   Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
 end;
 
-procedure TProducerDelphiTests.CrossesBoundaryWithoutCounterpartFallsBack;
+procedure TProducerDelphiTests.CrossesBoundaryWithoutAnIndexFallsBack;
 begin
-  { Ask-Report would pair the far side from report-pairs.json, which only the fallback reads }
+  { naming only a project needs Ask-Report's own resolution, which only the fallback has }
   var O:= DefaultProduceOptions;
-  O.DbOverride:= 'any.sqlite';
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(1, FFallback.Calls);
   Assert.AreEqual(STUB_EXIT, R.ExitCode);
   Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryPairsItsCounterpartFromThePairsFile;
+var
+  Db, Other: string;
+begin
+  { compare passes only --db (R5): the far side is paired from report-pairs.json as Ask-Report's
+    step 2 pairs it (the pair's other side), checked with resolve-dbs, and carried like any index }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SERVER_CLONE, Other) then
+    Exit;
+  var O:= PairedOptions(Db, Db, Other, Other);
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  CheckCounterpartDrawn(R, Other, CB_TARGET);
+  Assert.Contains(R.Text, 'CHART crosses-boundary ' + CB_TARGET + ' -- 2 commands / 1 transport calls'#13#10);
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryWithoutAPairDrawsOneSideAsAskReportDoes;
+var
+  Db: string;
+begin
+  { Ask-Report.ps1:262 -- no pair names the project: no refusal, no counterpart, one side drawn }
+  if not Clone(CLIENT_CLONE, Db) then
+    Exit;
+  var O:= DefaultProduceOptions;
+  O.DbOverride:= Db;
+  O.PairsFile:= PairsFile(TPath.Combine(FOutRoot, 'someone-else.sqlite'), TPath.Combine(FOutRoot, 'server.sqlite'), '');
+  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  O.AllowStale:= True;
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(R.Ok, R.Reason);
+  Assert.IsFalse(R.Text.Contains('(counterpart)'), 'no counterpart line');
+  Assert.AreEqual<Integer>(1, Length(R.IndexPaths));
+  Assert.AreEqual('Delphi in-process (crosses-boundary)', FProducer.Describe);
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryFromTheServerSideDbPairsTheClient;
+var
+  Db, Other: string;
+begin
+  { --db is the pair's SERVER: the counterpart is the pair's CLIENT (Ask-Report.ps1:270, the else side) }
+  if not Clone(SERVER_CLONE, Db) or not Clone(CLIENT_CLONE, Other) then
+    Exit;
+  var O:= PairedOptions(Db, Other, Db, Other);
+  var R:= FProducer.Produce(Cmd('crosses-boundary', TT_TARGET), O);
+  CheckCounterpartDrawn(R, Other, TT_TARGET);
+  Assert.AreEqual(Other, R.IndexPaths[1]);
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryWithAMissingCounterpartFileIsSetup;
+var
+  Db: string;
+begin
+  { the paired counterpart is configured but its file is gone: Ask-Report.ps1:298, exit 2, no fallback }
+  if not Clone(CLIENT_CLONE, Db) then
+    Exit;
+  var Missing:= TPath.Combine(FOutRoot, 'missing-server.sqlite');
+  var O:= PairedOptions(Db, Db, Missing, Missing);
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual('index not found: ' + Missing, R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
+end;
+
+procedure TProducerDelphiTests.CrossesBoundaryWithAnUnconfiguredPairEntryIsRefused;
+var
+  Db, Other: string;
+begin
+  { the pairs file names a counterpart the engine's manifest no longer configures (resolve-dbs):
+    Ask-Report.ps1:279, exit 2, before any index is opened }
+  if not Clone(CLIENT_CLONE, Db) or not Clone(SERVER_CLONE, Other) then
+    Exit;
+  var O:= PairedOptions(Db, Db, Other, Db);
+  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.AreEqual(O.PairsFile + ' names ' + Other + ', which the engine''s manifest no longer configures (resolve-dbs) -- fix the pair',
+    R.Reason);
+  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.CrossesBoundaryWithCounterpartIsInProcess;
@@ -495,6 +583,26 @@ begin
   TFile.WriteAllText(Result, '@echo ["' + pKnown.Replace('\', '\\') + '"]' + #13#10, TEncoding.ASCII);
 end;
 
+{ a crosses-boundary answer in-process, with pOther carried as the counterpart: no fallback, two indexes }
+procedure TProducerDelphiTests.CheckCounterpartDrawn(const pR: TProduceResult; const pOther, pTarget: string);
+begin
+  Assert.AreEqual(0, FFallback.Calls);
+  Assert.IsTrue(pR.Ok, pR.Reason);
+  Assert.Contains(pR.Text, #13#10'INDEX ' + pOther + ' (counterpart)'#13#10'CHART crosses-boundary ' + pTarget + ' -- ');
+  Assert.AreEqual<Integer>(2, Length(pR.IndexPaths));
+end;
+
+{ options for a --db-only compare run: pairs file with one client/server pair, fake engine listing pKnown as configured }
+function TProducerDelphiTests.PairedOptions(const pDb, pClient, pServer, pKnown: string): TProduceOptions;
+begin
+  Result:= DefaultProduceOptions;
+  Result.DbOverride:= pDb;
+  Result.PairsFile:= PairsFile(pClient, pServer, '');
+  Result.EnginePath:= FakeEngine(pKnown);
+  Result.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
+  Result.AllowStale:= True;
+end;
+
 procedure TProducerDelphiTests.ReadingQuestionPairsItsSqlIndexFromThePairsFile;
 var
   Db, Sql: string;
@@ -567,18 +675,16 @@ end;
 procedure TProducerDelphiTests.PortedFallbackWithoutEmitterScriptIsSetup;
 begin
   var O:= DefaultProduceOptions;
-  O.DbOverride:= 'any.sqlite';
   O.ScriptPath:= BareScriptFolder;
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
-  Assert.AreEqual(NOT_INSTALLED + 'no counterpart index given (--counterpart-db / -CounterpartDb, or report-pairs.json)', R.Reason);
+  Assert.AreEqual(NOT_INSTALLED + 'no index given (--db / -Db); naming only a project needs the PowerShell fallback', R.Reason);
   Assert.AreEqual(0, FFallback.Calls, 'a fallback that cannot run is not called');
 end;
 
 procedure TProducerDelphiTests.PortedFallbackWithEmitterScriptFallsBack;
 begin
   var O:= DefaultProduceOptions;
-  O.DbOverride:= 'any.sqlite';
   O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(1, FFallback.Calls, 'the repo has Emit-CrossesBoundary.ps1, so the fallback answers');
@@ -606,6 +712,17 @@ begin
   Assert.IsTrue(Length(PortedQuestionIds) > 0, 'questions are registered');
   for var Id in PortedQuestionIds do
     Assert.IsTrue(TFile.Exists(TPath.Combine(Src, EmitterScriptName(Id))), Id + ' -> ' + EmitterScriptName(Id) + ' is not in charts\src');
+end;
+
+procedure TProducerDelphiTests.SharedEmitterScriptIsNamedNotDerived;
+begin
+  { one emitter, two questions: what-it-calls is Emit-WhoCalls.ps1 -Direction callees (chart-questions.json) }
+  Assert.AreEqual('Emit-WhoCalls.ps1', EmitterScriptName('what-it-calls'));
+  { chart-questions.json names Emit-MemberAccess.ps1 for both member-access questions }
+  Assert.AreEqual('Emit-MemberAccess.ps1', EmitterScriptName('who-writes'));
+  Assert.AreEqual('Emit-MemberAccess.ps1', EmitterScriptName('who-reads'));
+  { an id outside the table keeps the derivation }
+  Assert.AreEqual('Emit-CrossesBoundary.ps1', EmitterScriptName('crosses-boundary'));
 end;
 
 end.

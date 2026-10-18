@@ -83,6 +83,26 @@ try {
       Check 'compare names Ask-Report''s pairing refusal verbatim' ($psMsg -and $out.Contains("the new run failed (exit 2): $psMsg")) "ask-report: $psMsg`ncompare: $out"
     }
   }
+
+  # crosses-boundary: compare passes only --db, so the in-process producer pairs the counterpart
+  # from report-pairs.json as Ask-Report's step 2 does. A clone is in no pair, so Ask-Report
+  # proceeds with ONE side drawn (Ask-Report.ps1:262) and so must compare -- answered in-process,
+  # no PowerShell fallback, same text.
+  $CbTarget = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation'
+  $oldCb = Join-Path $Work 'old-cb.txt'
+  $txt = & $Pwsh -NoProfile -File $Ask -Question crosses-boundary -Target $CbTarget -DbPath $Clone -AllowStale -Plain -Engine $Exe | Out-String
+  $made = $LASTEXITCODE -eq 0 -and $txt -match 'drag-lint report crosses-boundary'
+  Check 'crosses-boundary old side produced by Ask-Report on the clone (no pair)' $made "exit=$LASTEXITCODE first=[$(($txt -split "`r?`n")[0])]"
+  if ($made) {
+    [IO.File]::WriteAllText($oldCb, $txt, [Text.UTF8Encoding]::new($false))
+    $out = & $Exe compare --old $oldCb --command "crosses-boundary -Target $CbTarget" --db $Clone 2>&1 | Out-String
+    $code = $LASTEXITCODE
+    if ($code -eq 3) {
+      Skip 'compare answers crosses-boundary unpaired' "exit 3: the frozen clone is stale against the sources here. $($out.Trim())"
+    } else {
+      Check 'compare answers crosses-boundary without the fallback (exit 0 or 1)' ($code -in 0,1) "exit=$code`n$out"
+    }
+  }
 }
 finally {
   Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue

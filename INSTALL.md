@@ -435,13 +435,15 @@ need a one-time, per-user registration -- one key under
 `HKCU:\Software\Classes\draglint`, no elevation:
 
 ```
-pwsh -NoProfile -File C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1 -DryRun   # shows what it would write; writes nothing
-pwsh -NoProfile -File C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1           # registers
+drag-lint protocol register --dry-run   # shows what it would write; writes nothing
+drag-lint protocol register             # registers
+drag-lint protocol status               # ours | legacy-powershell | foreign | none
 ```
 
-It copies the handler to `%LOCALAPPDATA%\drag-lint\Open-DragLintUri.ps1` and
-registers the copy. It refuses a script that sits in a `*-wt\` worktree
-unless you add `-Force`. A click reaches the IDE only when RAD Studio is
+It registers `drag-lint-open.exe`, the handler installed beside `drag-lint.exe`,
+in place. It refuses a handler that sits in a `*-wt\` worktree, or a
+registration that belongs to another program, unless you add `--force`; the
+installer's optional task runs the same command. A click reaches the IDE only when RAD Studio is
 running with the plugin loaded; otherwise the file opens in Notepad.
 
 Everything else -- the questions, reading a trace, the bundle files, what the
@@ -538,15 +540,15 @@ stderr: `rules\` is not beside the exe. Move it back, or pass
 3. Delete the indexes you built: each project's `_D-RAG\` folder beside its
    `.dproj`, and the manifest's `outDir` (the library and folder-section
    databases).
-4. If you registered `draglint://`, remove it (add `-DryRun` first to see what
+4. If you registered `draglint://`, remove it (add `--dry-run` first to see what
    it would remove):
 
    ```
-   pwsh -NoProfile -File C:\Projects\Delphi-RAG-lint\charts\src\Register-DragLintProtocol.ps1 -Unregister
+   drag-lint protocol unregister
    ```
 
-   It removes `HKCU:\Software\Classes\draglint` and the handler copy in
-   `%LOCALAPPDATA%\drag-lint\`.
+   It removes `HKCU:\Software\Classes\draglint` when it is ours (or the older
+   PowerShell registration); a foreign one needs `--force`.
 5. Delete `%LOCALAPPDATA%\drag-lint\` (the handler log and the control-channel
    audit log live there).
 6. IDE plugin: in RAD Studio, **Component > Install Packages...**, select the

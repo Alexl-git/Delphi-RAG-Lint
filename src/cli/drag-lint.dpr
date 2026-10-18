@@ -70,6 +70,11 @@ uses
   DRagLint.Core.Indexer in '..\core\DRagLint.Core.Indexer.pas',
   DRagLint.Core.JsonFile in '..\core\DRagLint.Core.JsonFile.pas',
   DRagLint.Core.StudioEnv in '..\core\DRagLint.Core.StudioEnv.pas',
+  // The next unit and DragLint.Plugin.OpenSourcePath are listed so the CLI project index and lint cover the
+  // draglint:// gate shared with drag-lint-open.exe (the engine does not use them); keep them for reconcile-project.
+  DRagLint.Core.DragLintUri in '..\core\DRagLint.Core.DragLintUri.pas',
+  DRagLint.Core.ProtocolReg in '..\core\DRagLint.Core.ProtocolReg.pas',
+  DragLint.Plugin.OpenSourcePath in '..\delphi-plugin\DragLint.Plugin.OpenSourcePath.pas',
   DRagLint.Storage.Schema in '..\storage\DRagLint.Storage.Schema.pas',
   DRagLint.Storage.SQLite in '..\storage\DRagLint.Storage.SQLite.pas',
   DRagLint.Storage.FileMembership in '..\storage\DRagLint.Storage.FileMembership.pas',
@@ -106,6 +111,7 @@ uses
   DRagLint.FormsMap in '..\forms\DRagLint.FormsMap.pas',
   DRagLint.FormsMap.Dfm in '..\forms\DRagLint.FormsMap.Dfm.pas',
   DRagLint.MCP.Server in '..\mcp\DRagLint.MCP.Server.pas',
+  DRagLint.MCP.ClientConfig in '..\mcp\DRagLint.MCP.ClientConfig.pas',
   DRagLint.LSP.Server in '..\lsp\DRagLint.LSP.Server.pas',
   DRagLint.Core.LiveDocs in '..\core\DRagLint.Core.LiveDocs.pas',
   DRagLint.LSP.Completion in '..\lsp\DRagLint.LSP.Completion.pas',
@@ -240,6 +246,22 @@ uses
   DRagLint.Charts.Q.LandsWhere in '..\charts\DRagLint.Charts.Q.LandsWhere.pas',
   DRagLint.Charts.Q.Consumers in '..\charts\DRagLint.Charts.Q.Consumers.pas',
   DRagLint.Charts.Q.ExceptionPaths in '..\charts\DRagLint.Charts.Q.ExceptionPaths.pas',
+  DRagLint.Charts.Q.WhoCalls in '..\charts\DRagLint.Charts.Q.WhoCalls.pas',
+  DRagLint.Charts.Q.Butterfly in '..\charts\DRagLint.Charts.Q.Butterfly.pas',
+  DRagLint.Charts.Q.Hierarchy in '..\charts\DRagLint.Charts.Q.Hierarchy.pas',
+  DRagLint.Charts.Q.Wiring in '..\charts\DRagLint.Charts.Q.Wiring.pas',
+  DRagLint.Charts.Q.Path in '..\charts\DRagLint.Charts.Q.Path.pas',
+  DRagLint.Charts.Q.Architecture in '..\charts\DRagLint.Charts.Q.Architecture.pas',
+  DRagLint.Charts.Q.Cycles in '..\charts\DRagLint.Charts.Q.Cycles.pas',
+  DRagLint.Charts.MemberAccess in '..\charts\DRagLint.Charts.MemberAccess.pas',
+  DRagLint.Charts.Q.MemberAccess in '..\charts\DRagLint.Charts.Q.MemberAccess.pas',
+  DRagLint.Charts.Trace.FormA in '..\charts\DRagLint.Charts.Trace.FormA.pas',
+  DRagLint.Charts.Trace.Shim in '..\charts\DRagLint.Charts.Trace.Shim.pas',
+  DRagLint.Charts.Trace.Anchor in '..\charts\DRagLint.Charts.Trace.Anchor.pas',
+  DRagLint.Charts.Trace.Calc in '..\charts\DRagLint.Charts.Trace.Calc.pas',
+  DRagLint.Charts.Trace.Walk in '..\charts\DRagLint.Charts.Trace.Walk.pas',
+  DRagLint.Charts.Trace.Chart in '..\charts\DRagLint.Charts.Trace.Chart.pas',
+  DRagLint.Charts.Q.RoundTrip in '..\charts\DRagLint.Charts.Q.RoundTrip.pas',
   DRagLint.CLI in 'DRagLint.CLI.pas';
 
 begin

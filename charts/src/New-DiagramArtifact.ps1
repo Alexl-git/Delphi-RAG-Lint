@@ -31,7 +31,7 @@
   server "the one piece genuinely missing". That was true when written on
   2026-09-16 and is NOT true now -- the unit is dated 2026-09-11 and is in the
   .dpk. Only the BROWSER hop needed building, because a browser cannot write to
-  a named pipe: see Register-DragLintProtocol.ps1.
+  a named pipe: see drag-lint protocol register.
 #>
 [CmdletBinding()]
 param(
@@ -332,7 +332,7 @@ if ($isText) {
           "    written as <code class=`"k`">@File.pas:line</code>; an anchor whose file the indexes name exactly`n" +
           "    once is a <code class=`"k`">draglint://open?file=..&amp;line=..</code> link that opens the line in`n" +
           "    your running IDE, through the protocol handler`n" +
-          "    (<code class=`"k`">charts\src\Register-DragLintProtocol.ps1</code>, once per user). An anchor left`n" +
+          "    (<code class=`"k`">drag-lint protocol register</code>, once per user). An anchor left`n" +
           "    as plain text names a file the indexes hold at zero or several paths.</p>`n" +
           "    <p style=`"margin-top:10px`">The picture above the text is drawn FROM it (no second walk): lanes client, pipe,`n" +
           "    server, database; a numbered row per step, its WHEN / UNLESS guards under it verbatim; anything not drawn is`n" +
@@ -353,8 +353,8 @@ if ($isText) {
     <code class="k">&lt;file&gt;&lt;TAB&gt;&lt;line&gt;&lt;LF&gt;</code>.</p>
     <p style="margin-top:10px">A browser cannot write to a named pipe, so the
     one-time bridge is a protocol handler:
-    <code class="k">charts\src\Register-DragLintProtocol.ps1</code> (HKCU only,
-    no elevation, <code class="k">-Unregister</code> to undo). A click also shows
+    <code class="k">drag-lint protocol register</code> (HKCU only,
+    no elevation, <code class="k">drag-lint protocol unregister</code> to undo). A click also shows
     a short note naming the file and line it asked for; if nothing opens, the
     handler is not registered on this machine. The handler opens only a local
     source file (.pas .dfm .dpr .inc .sql .fmx) and, when the IDE is not
@@ -433,7 +433,7 @@ $note
     clearTimeout(timer); timer = setTimeout(function () { t.classList.remove('on'); }, 5200);
   }
   // DOC-R1: the click is NEVER cancelled. The browser hands the draglint:// URI to the registered
-  // protocol handler (Register-DragLintProtocol.ps1 -> Open-DragLintUri.ps1 -> the IDE plugin's pipe
+  // protocol handler (drag-lint protocol register -> drag-lint-open.exe -> the IDE plugin's pipe
   // \\.\pipe\drag-lint-open-source); the toast only says what was asked, and what to do if nothing opens.
   document.querySelector('.stage').addEventListener('click', function (ev) {
     var a = ev.target.closest('a'); if (!a) return;
@@ -442,7 +442,7 @@ $note
     var m = /file=([^&]*)&(?:amp;)?line=(\d+)/.exec(href);
     var what = href;
     if (m) { try { what = decodeURIComponent(m[1]) + ':' + m[2]; } catch (e) { what = m[1] + ':' + m[2]; } }
-    toast('opening ' + what + ' in the IDE -- if nothing opens, register the handler once: charts\\src\\Register-DragLintProtocol.ps1');
+    toast('opening ' + what + ' in the IDE -- if nothing opens, register the handler once: drag-lint protocol register');
   });
 })();
 </script>

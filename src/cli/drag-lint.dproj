@@ -114,6 +114,9 @@
         <DCCReference Include="..\core\DRagLint.Core.JsonFile.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.StudioEnv.pas"/>
         <DCCReference Include="..\core\DRagLint.Core.LiveDocs.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.DragLintUri.pas"/>
+        <DCCReference Include="..\core\DRagLint.Core.ProtocolReg.pas"/>
+        <DCCReference Include="..\delphi-plugin\DragLint.Plugin.OpenSourcePath.pas"/>
         <DCCReference Include="..\storage\DRagLint.Storage.Schema.pas"/>
         <DCCReference Include="..\storage\DRagLint.Storage.SQLite.pas"/>
         <DCCReference Include="..\storage\DRagLint.Storage.FileMembership.pas"/>
@@ -151,6 +154,7 @@
         <DCCReference Include="..\forms\DRagLint.FormsMap.pas"/>
         <DCCReference Include="..\forms\DRagLint.FormsMap.Dfm.pas"/>
         <DCCReference Include="..\mcp\DRagLint.MCP.Server.pas"/>
+        <DCCReference Include="..\mcp\DRagLint.MCP.ClientConfig.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Server.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Completion.pas"/>
         <DCCReference Include="..\lsp\DRagLint.LSP.Proxy.pas"/>
@@ -298,6 +302,22 @@
     <DCCReference Include="..\charts\DRagLint.Charts.Q.LandsWhere.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.Consumers.pas"/>
     <DCCReference Include="..\charts\DRagLint.Charts.Q.ExceptionPaths.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.WhoCalls.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Butterfly.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Hierarchy.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Wiring.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Path.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Architecture.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.Cycles.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.MemberAccess.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.MemberAccess.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Trace.FormA.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Trace.Shim.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Trace.Anchor.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Trace.Calc.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Trace.Walk.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Trace.Chart.pas"/>
+    <DCCReference Include="..\charts\DRagLint.Charts.Q.RoundTrip.pas"/>
   </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Delphi.Personality.12</Borland.Personality>

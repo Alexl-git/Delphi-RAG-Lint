@@ -3,6 +3,58 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
+## Unreleased
+
+### Added
+
+- **`round-trip` is answered by the engine itself, in Delphi -- every one of the 26 chart questions is now in-process.** The trace is the same Form A document (`trace.dlgraph`): the anchor from the selection through the datasource chain, the WRITE half (wiring, handler, crossing, server dispatch, apply, column, response) and the READ half (the fill route, the server query, the rows back), every step anchored, every guard quoted verbatim from fresh source, every hop the walk cannot make a numbered STOPS, ALSO derived from the index, a calculated anchor offering its source fields; the chart is drawn from the written text, never from a second walk, and the bundle page links every anchor the indexes hold once. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 8 of 9 bundle files equal including `trace.dlgraph` byte for byte). `Emit-RoundTrip.ps1`, `Trace.FormA.ps1`, `Trace.Walk.ps1` and `Trace.Chart.ps1` are no longer shipped (they stay in the repo as the parity reference). PowerShell 7 is no longer needed for any chart question.
+
+- **`who-writes` and `who-reads` are answered by the engine itself, in Delphi.** That makes 25 of the 26 questions in-process -- only `round-trip` still runs through PowerShell. The routines come from the engine's own resolved find-callers computation in-process (uncapped), every row anchors its first access site by line AND column from a bounded site query, the two routes are cross-checked and a disagreement is reported, not averaged, and what the index holds UNBOUND is disclosed by name and never counted -- so a zero in one direction is always printed beside the other direction's count. The bundle header takes the emitter's own wording for a count find-callers does not fully report, exactly as the script did. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal, for both questions). `Emit-MemberAccess.ps1` is no longer shipped (it stays in the repo as the parity reference).
+
+- **`cycles` is answered by the engine itself, in Delphi.** That makes 23 of the 26 questions in-process; the strongly-connected groups come from the engine's own uses-graph walk in-process, every arrow is a measured `unit_uses` edge, and the verdict counts the sections exactly as the script does. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal; meta.json now carries a string array, `EdgeList`, exactly as ConvertTo-Json writes it). `Emit-Cycles.ps1` is no longer shipped (it stays in the repo as the parity reference).
+
+- **`architecture` is answered by the engine itself, in Delphi.** That makes 22 of the 26 questions in-process; the source-directory zones, the zone-to-zone edge counts and the back-edges come from the index in-process, the third-party groups from the engine's own deps-report rollup. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal). `Emit-Architecture.ps1` is no longer shipped (it stays in the repo as the parity reference).
+
+- **`path` is answered by the engine itself, in Delphi.** That makes 21 of the 26 questions in-process; the engine's own call-path walk decides found and length in-process, and one recursive query over the same resolved call_edges enumerates every shortest path, with the script's exact count, cap and disclosure. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal; the parity probe now takes `--to`, so the two-routine question is compared like the others). `Emit-Path.ps1` is no longer shipped (it stays in the repo as the parity reference).
+
+- **`wiring` is answered by the engine itself, in Delphi.** That makes 20 of the 26 questions in-process; registrations, resolution sites and event handlers come from the engine's own di_bindings lookups in-process, the index-wide total and the kind check are the script's. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal). `Emit-Wiring.ps1` is no longer shipped (it stays in the repo as the parity reference).
+
+- **`hierarchy` is answered by the engine itself, in Delphi.** That makes 19 of the 26 questions in-process; the type's heritage and descendants come from the engine's own ancestors / descendants lookups in-process, the name lookup and the collision, self-reference and closure rules are the script's. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal). `Emit-Hierarchy.ps1` is no longer shipped (it stays in the repo as the parity reference).
+
+- **`butterfly` is answered by the engine itself, in Delphi.** That makes 18 of the 26 questions in-process; both wings come from the engine's own reverse and forward call-tree walks in-process, one row per symbol at its shallowest hop and one arrow per distinct parent-child pair. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal; the ExportPdf byte size in meta.json is masked in the parity compare because cairo's PDF size varies by a byte between two runs of one question). `Emit-Butterfly.ps1` is no longer shipped (it stays in the repo as the parity reference).
+
+- **`what-it-calls` is answered by the engine itself, in Delphi.** That makes 17 of the 26 questions in-process; the callee direction of the same unit as `who-calls`, over the engine's own forward call-tree walk. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal). `Emit-WhoCalls.ps1` is no longer shipped (it stays in the repo as the parity reference).
+- **`who-calls` is answered by the engine itself, in Delphi.** That makes 16 of the 26 questions in-process; it calls the engine's own reverse-calltree walk and find-callers name match in-process. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 7 of 8 bundle files equal).
+- **`drag-lint mcp-config (--claude-code | --vscode | --all)` -- registers `drag-lint serve` with
+  MCP clients.** Writes `{"type":"stdio","command":"<engine>","args":["serve"(,"--db","<index>")]}`
+  (plus `"env":{}` for Claude Code) into `~\.claude.json` `"mcpServers"` (`CLAUDE_CONFIG_DIR` wins)
+  and/or `%APPDATA%\Code\User\mcp.json` `"servers"`: merged (only the named entry changes, numbers
+  keep their text), backed up (`<file>.bak-<stamp>`), written through `<file>.tmp-<pid>` after a
+  re-check that the file did not change, idempotent (`unchanged` writes nothing), in the file's own
+  line-ending style, UTF-8 without BOM. `--remove` takes only our entry out; an entry by that name
+  running something other than `drag-lint.exe` is refused, as is a file with comments or trailing
+  commas (the entry to paste is printed) or invalid JSON (exit 1). `--all` skips a client that is not
+  installed; naming one that is not installed, or a `--db` that does not exist, is exit 2. `env` / `headers` values
+  print as `***`. `--dry-run`, `--json`, `--name`, `--engine`, `--config-path`, `--home-dir`,
+  `--appdata-dir`. File edit only -- the script's `claude mcp` CLI mode is not ported. Replaces
+  `charts\src\Set-DragLintMcpConfig.ps1`. Guard: `tests\autotest\run_mcp_config_verb.ps1` (scratch
+  copies only, golden parity with the retired script, asserts the real files unchanged).
+- **`drag-lint protocol register|unregister|status` -- the `draglint://` click-to-source registration is
+  an engine verb.** It writes one per-user key, `HKCU\Software\Classes\draglint` (never HKLM), pointing
+  at `drag-lint-open.exe` in place (default: beside `drag-lint.exe`). `status` classifies the current
+  registration as `ours`, `legacy-powershell`, `foreign` or `none` (exit 0 only for `ours`;
+  `--json` schema `protocol/1`). `register` refuses a missing handler (exit 2), a `*-wt\` worktree
+  path and a foreign registration (exit 1) unless `--force`; it replaces the legacy PowerShell
+  registration silently and deletes that script's `%LOCALAPPDATA%\drag-lint\Open-DragLintUri.ps1`
+  copy. `--dry-run` writes nothing. Replaces `charts\src\Register-DragLintProtocol.ps1`. Guard:
+  `tests\autotest\run_protocol_verb.ps1` (scratch registry root only; asserts the real key unchanged).
+- **`drag-lint-open.exe` -- the `draglint://` handler is a GUI helper, not a PowerShell script.** It validates the
+  link before anything else (local drive path, source extension, digits-only line/col, case-insensitive
+  scheme), writes to the plugin's pipe and falls back to Notepad; rejections go to
+  `%LOCALAPPDATA%\drag-lint\logs\uri-handler.log`. The installer's `draglint://` and MCP tasks now run the two
+  verbs above. Docs: `docs\wiki\Draglint-Protocol-Handler.md`, `docs\wiki\Register-MCP-Server.md`, feature
+  registry entry `protocol-handler`.
+
 ## v1.31.4-alpha -- 2026-10-17
 
 ### Fixed

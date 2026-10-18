@@ -94,6 +94,12 @@ begin
   Assert.AreEqual('{' + sLineBreak + '      "field": 174,' + sLineBreak + '      "method": 101' + sLineBreak + '    }',
     TMetaField.Obj('ByKind', [TMetaField.Int('field', FIELD_COUNT), TMetaField.Int('method', METHOD_COUNT)]).Json);
   Assert.AreEqual('{}', TMetaField.Obj('ByKind', []).Json);
+  { a [string[]] in the emitter object (Emit-Cycles EdgeList): elements at six spaces, the bracket at four }
+  Assert.AreEqual('[' + sLineBreak + '      "a"' + ',' + sLineBreak + '      "b"' + sLineBreak + '    ]', TMetaField.StrList('EdgeList', ['a', 'b']).Json);
+  Assert.AreEqual('[' + sLineBreak + '      "a"' + sLineBreak + '    ]', TMetaField.StrList('EdgeList', ['a']).Json);
+  Assert.AreEqual('[]', TMetaField.StrList('EdgeList', []).Json);
+  { the PS wrote $null: the value was not asked (Emit-WhoCalls NameMatches walking callees) }
+  Assert.AreEqual('null', TMetaField.Null('NameMatches').Json);
 end;
 
 procedure TQuestionTests.UnportedQuestionIsRefused;

@@ -27,8 +27,9 @@
                       (ChartsCoreProbe --ported): Ask-Report.ps1 -Plain as Determinism runs it, and the
                       probe's question mode (the in-process Delphi question, same index, the SAME
                       -OutRoot after the PS bundle is moved aside). The text is compared with `drag-lint compare` (the step-1 diff and its
-                      spec-s5 normalisation, nothing looser); every bundle file both sides wrote is
-                      compared too: graph.dot/.svg/.plain/.png byte for byte, meta.json/index.html/
+                      spec-s5 normalisation, nothing looser); every comparable bundle file both sides wrote is
+                      compared too (graph.pdf is reported, never compared): graph.dot/.svg/.plain/.png and
+                      trace.dlgraph (a text question's Form A document) byte for byte, meta.json/index.html/
                       xref.txt with only the generated time and the bundle root masked (the facts N1
                       already drops from the text), graph.pdf reported and not compared (see
                       $BundleSkipped). Questions not ported are listed as SKIP. The probe is rebuilt
@@ -36,6 +37,8 @@
                       POSITIVE CONTROL: on the first compared case a one-line change is planted in a copy
                       of the Delphi text and one byte flipped in a copy of its graph.dot; each must be
                       reported as a difference ('[PASS] POSITIVE CONTROL ...') or the run FAILS.
+                      EXTRA ARGUMENTS: a case's `extra` pair `-To <routine>` is passed to the probe as `--to <routine>`
+                      (the path question); any other extra name is a SETUP failure, never silently dropped.
 
   Usage:  pwsh -File charts\src\Test-Parity.ps1 -Mode Core -Only who-writes -Clone DL
           pwsh -File charts\src\Test-Parity.ps1 -Mode Question -Only touches-tables
@@ -766,6 +769,9 @@ function Get-MaskedBundleText([string] $Path, [string] $Root) {
   $t = [IO.File]::ReadAllText($Path)
   $t = $t.Replace($Root, '<BUNDLE-ROOT>')
   $t = [regex]::Replace($t, '(?<="generated": ")[^"]*', '<GENERATED>')
+  # ExportPdf is the SIZE of the cairo PDF, which is not byte-stable (measured 2026-10-16: the same
+  # question gave 38862 and 38863 bytes in two runs of one build), so the number is masked like graph.pdf.
+  $t = [regex]::Replace($t, '(?<="ExportPdf": )\d+', '<SIZE>')
   $t = [regex]::Replace($t, '(?<=generated <b>)[^<]*', '<GENERATED>')
   [regex]::Replace($t, '(?<=/// Generated: )\S+', '<GENERATED>')
 }
@@ -773,7 +779,7 @@ function Get-MaskedBundleText([string] $Path, [string] $Root) {
 # Per bundle file: 'same' or why not. graph.pdf is reported, never compared: dot's cairo PDF is not
 # byte-stable (two PS runs of one question differ, measured 2026-10-13), and its content is the
 # .dot source, which IS compared byte for byte.
-$BundleBytewise = @('graph.dot', 'graph.svg', 'graph.plain', 'graph.png')
+$BundleBytewise = @('graph.dot', 'graph.svg', 'graph.plain', 'graph.png', 'trace.dlgraph')
 $BundleMasked   = @('meta.json', 'index.html', 'xref.txt')
 $BundleSkipped  = @{ 'graph.pdf' = 'not compared: cairo PDF output differs between two PS runs of the same question' }
 function Compare-Bundle([string] $PsDir, [string] $DlDir, [string] $PsRoot, [string] $DlRoot) {
@@ -869,8 +875,14 @@ function Invoke-QuestionMode {
   $compared = 0
   foreach ($c in $cases) {
     if ($ported -notcontains $c.question) { $rows.Add([pscustomobject]@{ Question = $c.question; Text = 'not ported'; Files = ''; PsS = ''; DlS = ''; Verdict = 'SKIP' }); continue }
-    if (@($c.extra).Count) {
-      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes the indexes (-CounterpartDb, -ServerDbPath, -SqlDbPath) and no extra arguments' }); $bad++; continue
+    # extra: ONLY `-To <routine>` is translated (the probe's `--to`, the path question); any other name keeps the SETUP verdict
+    $extraProbe = @(); $extraOther = $false
+    $ex = @($c.extra)
+    for ($xi = 0; $xi -lt $ex.Count; $xi += 2) {
+      if ([string]$ex[$xi] -eq '-To' -and ($xi + 1) -lt $ex.Count) { $extraProbe += @('--to', [string]$ex[$xi + 1]) } else { $extraOther = $true }
+    }
+    if ($extraOther) {
+      $rows.Add([pscustomobject]@{ Question = $c.question; Text = ''; Files = ''; PsS = ''; DlS = ''; Verdict = 'SETUP: the probe passes the indexes (-CounterpartDb, -ServerDbPath, -SqlDbPath) and no extra arguments other than -To' }); $bad++; continue
     }
     Write-Host "question: $($c.question) ..."
     $psFile = Join-Path $OutDir "$($c.question).ps.txt"
@@ -889,6 +901,7 @@ function Invoke-QuestionMode {
     if ($c.counterpartDb) { $pa += @('--counterpart-db', (Join-Path $DbRoot $c.counterpartDb)) }
     if ($c.serverDb)      { $pa += @('--server-db', (Join-Path $DbRoot $c.serverDb)) }
     if ($c.sqlDb)         { $pa += @('--sql-db', (Join-Path $DbRoot $c.sqlDb)) }
+    $pa += $extraProbe
     $dlOut = & $probeExe @pa 2>"$dlFile.err"
     $dlExit = $LASTEXITCODE
     $sw.Stop()

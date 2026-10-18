@@ -2,6 +2,10 @@
   New-ExampleGallery.ps1 -- three worked HTML examples per shipped question,
   written to charts\docs\examples\<question>\.
 
+  DEV-ONLY, NOT SHIPPED: needs the frozen clones in charts\scratch\db. Since 2026-10-14
+  every example is rendered by `drag-lint ask`, so a ported question runs in-process
+  and the rest fall back inside the engine.
+
   WHY THIS EXISTS. The emitters are verified by numbers in Test-Emitters.ps1,
   which proves they are CORRECT but shows nobody what they LOOK like. A reviewer
   should be able to open three real charts per question without installing
@@ -201,8 +205,23 @@ foreach ($e in $EX) {
   New-Item -ItemType Directory -Force $dir | Out-Null
   $label = "{0,-15} {1}" -f $e.Q, $e.T
   try {
-    $splat = @{ Question = $e.Q; Target = $e.T; DbPath = $e.D; OutRoot = $dir } + $e.A
-    $r = & (Join-Path $PSScriptRoot 'New-DiagramArtifact.ps1') @splat 6>$null
+    # one `drag-lint ask` per example; $e.A keeps the New-DiagramArtifact names, mapped to ask's flags here
+    $askArgs = @('ask', $e.Q, '--target', $e.T, '--db', $e.D, '--out-root', $dir, '--plain', '--allow-stale')
+    $flagOf = @{ Depth = '--depth'; Cap = '--cap'; CounterpartDb = '--counterpart-db'; ServerDbPath = '--server-db'; SqlDbPath = '--sql-db' }
+    foreach ($k in $e.A.Keys) { $askArgs += @($flagOf[$k], [string]$e.A[$k]) }
+    $out = @(& $EngineExe @askArgs 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+      $rep = @($out | ForEach-Object { "$_" } | Where-Object { $_ -match 'ask-report:' } | Select-Object -First 1)
+      throw $(if ($rep.Count) { $rep[0] } else { "ask exit $LASTEXITCODE" })
+    }
+    $bl = @($out | ForEach-Object { "$_" } | Where-Object { $_ -match '^BUNDLE ' } | Select-Object -First 1)
+    if (-not $bl.Count) { throw 'ask printed no BUNDLE line' }
+    $shell = Join-Path ($bl[0] -replace '^BUNDLE\s+', '').Trim() 'index.html'
+    $bundle = Split-Path $shell -Parent
+    $meta = Join-Path $bundle 'meta.json'
+    $clicks = 0
+    if (Test-Path $meta) { $mj = Get-Content $meta -Raw | ConvertFrom-Json; if ($null -ne $mj.clickTargets) { $clicks = [int]$mj.clickTargets } }
+    $r = [pscustomobject]@{ Bundle = $bundle; Shell = $shell; ClickTargets = $clicks }
     if (-not (Test-Path $r.Shell)) { throw 'no index.html produced' }
     # a TEXT bundle (round-trip): its @file:line anchors are links into the IDE (DOC-R1), counted apart from chart click targets
     $isText = Test-Path (Join-Path $r.Bundle 'trace.dlgraph')

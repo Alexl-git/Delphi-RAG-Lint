@@ -51,9 +51,9 @@ type
     /// <summary>Whether a command would be answered in-process.</summary>
     /// <param name="pCommand">The question.</param>
     /// <param name="pOptions">The options; DbOverride must be set.</param>
-    /// <returns>True for a ported question with an index given; crosses-boundary also needs
-    /// TProduceOptions.CounterpartDbOverride (without it Ask-Report pairs the far side from
-    /// report-pairs.json, which only the fallback reads).</returns>
+    /// <returns>True for a ported question with an index given. crosses-boundary's counterpart is
+    /// TProduceOptions.CounterpartDbOverride, else paired from report-pairs.json as Ask-Report pairs it;
+    /// with no pair it draws one side, as Ask-Report does.</returns>
     function AnswersInProcess(const pCommand: TReportCommand; const pOptions: TProduceOptions): Boolean;
     /// <summary>Answers one question, in-process when ported, else through the fallback.</summary>
     /// <param name="pCommand">The question and its explicit arguments.</param>
@@ -77,10 +77,15 @@ type
 /// its producer from this function.</remarks>
 function ProducerForCompare: IReportProducer;
 
-/// <summary>The file name of a question's PowerShell emitter, beside Ask-Report.ps1.</summary>
+/// <summary>The file name of a question's PowerShell emitter, beside Ask-Report.ps1, or the
+/// shared script a question runs through.</summary>
 /// <param name="pId">A question id, e.g. crosses-boundary.</param>
-/// <returns>'Emit-' + the id in PascalCase + '.ps1', e.g. Emit-CrossesBoundary.ps1. Every ported
-/// id follows this convention (guarded by a test against charts\src).</returns>
+/// <returns>The shared script when the id is in the shared-script table (what-it-calls ->
+/// Emit-WhoCalls.ps1, as features\families\chart-questions.json names it); otherwise 'Emit-' +
+/// the id in PascalCase + '.ps1', e.g. Emit-CrossesBoundary.ps1. Every ported id resolves to a
+/// script in charts\src (guarded by a test).</returns>
+/// <remarks>A shared script is NAMED, never derived from the id: one emitter answering two
+/// questions has one name. Add a row when a question that shares an emitter is ported.</remarks>
 function EmitterScriptName(const pId: string): string;
 implementation
 
@@ -104,6 +109,15 @@ uses
   , DRagLint.Charts.Q.LandsWhere  // dl:ok unused-unit-in-uses@43f8 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.Consumers  // dl:ok unused-unit-in-uses@e7fa -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
   , DRagLint.Charts.Q.ExceptionPaths  // dl:ok unused-unit-in-uses@4e99 -- REVIEWED 2026-10-14: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.WhoCalls  // dl:ok unused-unit-in-uses@eb43 -- REVIEWED 2026-10-15: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Butterfly  // dl:ok unused-unit-in-uses@b637 -- REVIEWED 2026-10-16: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Hierarchy  // dl:ok unused-unit-in-uses@fe1d -- REVIEWED 2026-10-16: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Wiring  // dl:ok unused-unit-in-uses@3045 -- REVIEWED 2026-10-16: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Path  // dl:ok unused-unit-in-uses@4462 -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Architecture  // dl:ok unused-unit-in-uses@5f81 -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.Cycles  // dl:ok unused-unit-in-uses@c264 -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported question this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.MemberAccess  // dl:ok unused-unit-in-uses@a96a -- REVIEWED 2026-10-17: linked for its initialization section, which registers the ported questions this producer answers; no symbol is referenced on purpose
+  , DRagLint.Charts.Q.RoundTrip  // dl:ok unused-unit-in-uses@8ca7 -- REVIEWED 2026-10-18: linked for its initialization section, which registers the round-trip question this producer answers; no symbol is referenced on purpose
   ;
 
 const
@@ -116,6 +130,22 @@ const
   ASK_REPORT_SQL_FLAG = '-SqlDbPath';
   CRLF = #13#10;
 
+type
+  /// <summary>One question answered through a script whose name is not derived from its id.</summary>
+  TSharedEmitter = record
+    Id: string;
+    Script: string;
+  end;
+
+const
+  { the shared scripts, as features\families\chart-questions.json names them; only ported ids
+    (the who-writes / who-reads rows land one task before those ids register, so
+    EveryPortedIdHasAnEmitterScriptInTheRepo can never go red in between) }
+  SHARED_EMITTERS: array[0..2] of TSharedEmitter = (
+    (Id: 'what-it-calls'; Script: 'Emit-WhoCalls.ps1'),
+    (Id: 'who-writes'; Script: 'Emit-MemberAccess.ps1'),
+    (Id: 'who-reads'; Script: 'Emit-MemberAccess.ps1'));
+
 function ProducerForCompare: IReportProducer;
 begin
   Result:= TDelphiProducer.Create(TPowerShellProducer.Create, True);
@@ -123,6 +153,9 @@ end;
 
 function EmitterScriptName(const pId: string): string;
 begin
+  for var Row in SHARED_EMITTERS do
+    if SameText(Row.Id, pId) then
+      Exit(Row.Script);
   Result:= 'Emit-';
   for var Part in pId.ToLower.Split(['-']) do
     if Part <> '' then
@@ -142,10 +175,7 @@ function TDelphiProducer.AnswersInProcess(const pCommand: TReportCommand; const 
 var
   E: TChartEmitter;
 begin
-  { crosses-boundary without -CounterpartDb: Ask-Report would pair it from report-pairs.json,
-    which only the fallback reads, so the fallback answers it }
-  Result:= (pOptions.DbOverride <> '') and FindChartQuestion(pCommand.Question, E)
-    and not (SameText(pCommand.Question, CROSSES_BOUNDARY) and (pOptions.CounterpartDbOverride = ''));
+  Result:= (pOptions.DbOverride <> '') and FindChartQuestion(pCommand.Question, E);
 end;
 
 function Fail(pCode: Integer; const pReason: string): TProduceResult;
@@ -178,8 +208,11 @@ begin
 end;
 
 { The SERVER and SQL indexes, only for a question that reads them (Ask-Report's $needServer /
-  $needSql): as given, else paired from report-pairs.json exactly as Ask-Report's step 2 pairs
-  them -- compare passes only --db (R5). Raises EReportPairStop with Ask-Report's code and message. }
+  $needSql), and crosses-boundary's counterpart ($wantOther): as given, else paired from
+  report-pairs.json exactly as Ask-Report's step 2 pairs them -- compare passes only --db (R5).
+  Raises EReportPairStop with Ask-Report's code and message.
+  crosses-boundary with no pair keeps Other '' and goes on, as Ask-Report does (Ask-Report.ps1:262):
+  one side drawn. }
 function PairedIndexes(const pCommand: TReportCommand; const pOptions: TProduceOptions): TPairedIndexes;
 begin
   Result:= Default(TPairedIndexes);
@@ -189,13 +222,17 @@ begin
   Req.Engine:= pOptions.EnginePath;
   Req.NeedServer:= QuestionReadsServerIndex(Req.Question);
   Req.NeedSql:= QuestionReadsSqlIndex(Req.Question);
+  Req.WantOther:= SameText(Req.Question, CROSSES_BOUNDARY);
   Req.ServerFlag:= ASK_REPORT_SERVER_FLAG;
   Req.SqlFlag:= ASK_REPORT_SQL_FLAG;
   if Req.NeedServer then Result.Server:= pOptions.ServerDbOverride;
   if Req.NeedSql then Result.Sql:= pOptions.SqlDbOverride;
-  if (Req.NeedServer and (Result.Server = '')) or (Req.NeedSql and (Result.Sql = '')) then
+  if Req.WantOther then Result.Other:= pOptions.CounterpartDbOverride;
+  var Missing:= (Req.NeedServer and (Result.Server = '')) or (Req.NeedSql and (Result.Sql = ''));
+  if Missing or (Req.WantOther and (Result.Other = '')) then
     PairOtherIndexes(LoadReportPairs(pOptions.PairsFile, pOptions.ScriptPath), Req, Result);
 end;
+
 { Hands a question to the fallback. A PORTED question falls back only when its PowerShell emitter
   is beside the resolved Ask-Report.ps1: the installer does not ship the ported Emit-*.ps1 (owner
   ruling), so in an installed copy the fallback would fail obscurely -- refuse with pWhy instead.
@@ -223,8 +260,7 @@ begin
   if not AnswersInProcess(pCommand, pOptions) then
   begin
     FLast:= 'Delphi in-process, fell back to: ' + FFallback.Describe;
-    var WhyNot:= if pOptions.DbOverride = '' then 'no index given (--db / -Db); naming only a project needs the PowerShell fallback'
-      else 'no counterpart index given (--counterpart-db / -CounterpartDb, or report-pairs.json)';
+    var WhyNot:= 'no index given (--db / -Db); naming only a project needs the PowerShell fallback';
     Exit(FallBack(pCommand, pOptions, WhyNot));
   end;
   FLast:= 'Delphi in-process (' + pCommand.Question.ToLower + ')';
@@ -238,7 +274,7 @@ begin
   var Db:= ExpandFileName(pOptions.DbOverride);
   var Server:= if Ix.Server <> '' then ExpandFileName(Ix.Server) else '';
   var Sql:= if Ix.Sql <> '' then ExpandFileName(Ix.Sql) else '';
-  var Other:= if pOptions.CounterpartDbOverride <> '' then ExpandFileName(pOptions.CounterpartDbOverride) else '';
+  var Other:= if Ix.Other <> '' then ExpandFileName(Ix.Other) else '';
   for var D in TArray<string>.Create(Db, Server, Sql, Other) do
     if (D <> '') and not TFile.Exists(D) then
       Exit(Fail(EXIT_SETUP, 'index not found: ' + D));

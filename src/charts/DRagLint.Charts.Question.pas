@@ -123,16 +123,35 @@ type
     /// <param name="pValue">Value.</param>
     /// <returns>The field: a whole number keeps a '.0' suffix (24.0), any other prints round-trip.</returns>
     class function Real(const pName: string; pValue: Double): TMetaField; static;
+    /// <summary>A JSON null: the PS wrote $null -- the value was not asked, not measured empty.</summary>
+    /// <param name="pName">Property name.</param>
+    /// <returns>The field, Json 'null' (never 0, which would read as a measured absence).</returns>
+    class function Null(const pName: string): TMetaField; static;
     /// <summary>A nested object field (an [ordered] dictionary of the emitter result).</summary>
     /// <param name="pName">Property name.</param>
     /// <param name="pFields">The members, in order, already JSON-encoded.</param>
     /// <returns>The field, indented for the emitter object of meta.json (members at six
     /// spaces, the closing brace at four); '{}' when pFields is empty.</returns>
     class function Obj(const pName: string; const pFields: TArray<TMetaField>): TMetaField; static;
+    /// <summary>A string-array field, as ConvertTo-Json -Depth 4 writes a [string[]] inside the emitter object.</summary>
+    /// <param name="pName">Property name.</param>
+    /// <param name="pValues">The elements, in order; each is escaped as ConvertTo-Json escapes a string.</param>
+    /// <returns>The field: elements at six spaces one per line, the closing bracket at four; '[]' when pValues is empty.</returns>
+    /// <remarks>Elements at six spaces one per line (PsJsonString), the closing bracket at four; '[]' when pValues is
+    /// empty; a one-element array stays an array (measured 2026-10-17 under pwsh 7). Mirrors Obj's indentation.</remarks>
+    class function StrList(const pName: string; const pValues: TArray<string>): TMetaField; static;
     /// <summary>A double encoded as ConvertTo-Json writes it.</summary>
     /// <param name="pValue">Value.</param>
     /// <returns>'24.0' for a whole number, else the shortest round-trip text with '.' as decimal point.</returns>
     class function RealJson(pValue: Double): string; static;
+  end;
+
+  /// <summary>One leaf -> full path pair of a text question's link table.</summary>
+  TAnchorPath = record
+    /// <summary>The file leaf as an anchor writes it (e.g. 'Blueprint4.pas'); matched case-insensitively.</summary>
+    Leaf: string;
+    /// <summary>The ONE full path the indexes hold for the leaf.</summary>
+    Path: string;
   end;
 
   /// <summary>What a ported chart emitter hands back (the PS emitter's result object).</summary>
@@ -148,12 +167,28 @@ type
     LeftJson    : string;
     /// <summary>meta.json's rightCount literal when the PS value is not an integer; '' writes RightCount.</summary>
     RightJson   : string;
+    /// <summary>The emitter's own wording for the first count, New-DiagramArtifact's '&lt;Count&gt;Label'
+    /// property (:239-245); '' keeps QuestionVocab's label. Only who-writes / who-reads set one.</summary>
+    LeftLabel   : string;
+    /// <summary>The emitter's own wording for the second count; '' keeps QuestionVocab's label.
+    /// Only who-writes / who-reads set one.</summary>
+    RightLabel  : string;
     /// <summary>The emitter's ClickTargets.</summary>
     ClickTargets: Integer;
     /// <summary>The emitter's AllClickable.</summary>
     AllClickable: Boolean;
     /// <summary>Every emitter property except the file paths, in the PS object's order.</summary>
     Fields      : TArray<TMetaField>;
+    /// <summary>The emitter's Trace: the Form A document it wrote (a file path); '' for a chart question.
+    /// A non-empty value makes AskChartQuestion bundle the question as a TEXT question: the file becomes
+    /// trace.dlgraph and the shell page quotes it instead of drawing only a chart.</summary>
+    TracePath   : string;
+    /// <summary>Why the chart could not be drawn, '' when it was; a text question only. The text is still
+    /// delivered, with a line saying the chart is missing.</summary>
+    ChartError  : string;
+    /// <summary>The emitter's AnchorPaths: leaf -> the ONE full path the indexes hold; a text question only.
+    /// An anchor whose leaf is absent stays plain text on the shell page.</summary>
+    AnchorPaths : TArray<TAnchorPath>;
   end;
 
   /// <summary>A ported chart emitter.</summary>
@@ -383,6 +418,12 @@ begin
   Result.Json:= RealJson(pValue);
 end;
 
+class function TMetaField.Null(const pName: string): TMetaField;
+begin
+  Result.Name:= pName;
+  Result.Json:= 'null';
+end;
+
 class function TMetaField.Obj(const pName: string; const pFields: TArray<TMetaField>): TMetaField;
 const
   MEMBER_INDENT = '      ';
@@ -405,6 +446,34 @@ begin
       SB.Append(sLineBreak);
     end;
     SB.Append(CLOSE_INDENT).Append('}');
+    Result.Json:= SB.ToString;
+  finally
+    SB.Free;
+  end;
+end;
+
+class function TMetaField.StrList(const pName: string; const pValues: TArray<string>): TMetaField;  // dl:ok duplicate-code@d745 -- REVIEWED 2026-10-17: the string-array twin of Obj, deliberately the same indentation scheme (H14); sharing the loop would cost a callback for six lines
+const
+  ELEMENT_INDENT = '      ';
+  CLOSE_INDENT = '    ';
+begin
+  Result.Name:= pName;
+  if Length(pValues) = 0 then
+  begin
+    Result.Json:= '[]';
+    Exit;
+  end;
+  var SB:= TStringBuilder.Create;
+  try
+    SB.Append('[').Append(sLineBreak);
+    for var K:= 0 to High(pValues) do
+    begin
+      SB.Append(ELEMENT_INDENT).Append(PsJsonString(pValues[K]));
+      if K < High(pValues) then
+        SB.Append(',');
+      SB.Append(sLineBreak);
+    end;
+    SB.Append(CLOSE_INDENT).Append(']');
     Result.Json:= SB.ToString;
   finally
     SB.Free;

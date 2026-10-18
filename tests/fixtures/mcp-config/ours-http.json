@@ -1,0 +1,1 @@
+{ "servers": { "drag-lint": { "type": "http", "command": "C:\\old\\drag-lint.exe", "url": "https://x", "headers": { "Authorization": "Bearer TOPSECRET-MCV" }, "env": "ENVSECRET-MCV" } } }

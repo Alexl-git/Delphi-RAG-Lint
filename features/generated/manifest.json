@@ -2448,6 +2448,31 @@
       "homeOrder": 45
     },
     {
+      "id": "protocol-handler",
+      "title": "Click-to-source: the draglint:// handler",
+      "group": "diagrams-charts",
+      "owner": "CHARTS",
+      "status": "shipped",
+      "since": "1.31.0-alpha",
+      "summary": "Registers draglint:// so a chart row opens its line in RAD Studio; a GUI helper exe, no PowerShell",
+      "intro": "Run drag-lint protocol register once per user (the installer does it); status says what is registered; unregister undoes it. The handler drag-lint-open.exe validates the link before anything else and writes to the plugin's pipe; with no IDE running it opens the file in Notepad.",
+      "wikiPage": "Draglint-Protocol-Handler",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "protocol",
+          "example": "register --dry-run"
+        },
+        {
+          "type": "exe",
+          "name": "drag-lint-open.exe"
+        }
+      ],
+      "audience": "both",
+      "aliases": ["Open-DragLintUri", "Register-DragLintProtocol", "draglint://"],
+      "related": ["ask", "charts-and-the-ide"]
+    },
+    {
       "id": "compare",
       "title": "Compare a report with current code",
       "group": "diagrams-charts",
@@ -2925,18 +2950,17 @@
       "status": "shipped",
       "since": "1.26.1-alpha",
       "summary": "Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable",
-      "intro": "Run Set-DragLintMcpConfig.ps1 -All (try -DryRun first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass -DbPath to pin one index per entry (-Name); -Remove takes only its own entry out again. Needs PowerShell 7 and the engine found by the charts' lookup.",
+      "intro": "Run drag-lint mcp-config --all (try --dry-run first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass --db to pin one index per entry (--name); --remove takes only its own entry out again.",
       "wikiPage": "Register-MCP-Server",
       "surfaces": [
         {
-          "type": "script",
-          "path": "charts\\src\\Set-DragLintMcpConfig.ps1",
-          "args": "-All -DryRun"
+          "type": "cli",
+          "verb": "mcp-config",
+          "example": "--all --dry-run"
         }
       ],
       "audience": "both",
-      "requires": ["powershell7"],
-      "aliases": ["claude mcp add", "mcp setup", "mcp.json"],
+      "aliases": ["Set-DragLintMcpConfig", "claude mcp add", "mcp setup", "mcp.json"],
       "related": ["serve"]
     },
     {

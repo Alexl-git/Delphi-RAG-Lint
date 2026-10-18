@@ -34,7 +34,7 @@ program ChartsCoreProbe;
   under --out-root (graph.*, meta.json, index.html, xref.txt):
 
     ChartsCoreProbe --question <id> --target <t> --db <index.sqlite> --out-root <dir>
-                    --charts-root <repo\charts> [--cap n] [--depth n] [--max-rows n]
+                    --charts-root <repo\charts> [--cap n] [--depth n] [--max-rows n] [--to <routine>]
                     [--counterpart-db <index.sqlite>]   (crosses-boundary's -CounterpartDb)
                     [--server-db <index.sqlite>] [--sql-db <index.sqlite>]   (-ServerDbPath / -SqlDbPath)
 
@@ -81,6 +81,22 @@ uses
   , DRagLint.Charts.Q.LandsWhere in '..\..\src\charts\DRagLint.Charts.Q.LandsWhere.pas'
   , DRagLint.Charts.Q.Consumers in '..\..\src\charts\DRagLint.Charts.Q.Consumers.pas'
   , DRagLint.Charts.Q.ExceptionPaths in '..\..\src\charts\DRagLint.Charts.Q.ExceptionPaths.pas'
+  , DRagLint.Charts.Q.WhoCalls in '..\..\src\charts\DRagLint.Charts.Q.WhoCalls.pas'
+  , DRagLint.Charts.Q.Butterfly in '..\..\src\charts\DRagLint.Charts.Q.Butterfly.pas'
+  , DRagLint.Charts.Q.Hierarchy in '..\..\src\charts\DRagLint.Charts.Q.Hierarchy.pas'
+  , DRagLint.Charts.Q.Wiring in '..\..\src\charts\DRagLint.Charts.Q.Wiring.pas'
+  , DRagLint.Charts.Q.Path in '..\..\src\charts\DRagLint.Charts.Q.Path.pas'
+  , DRagLint.Charts.Q.Architecture in '..\..\src\charts\DRagLint.Charts.Q.Architecture.pas'
+  , DRagLint.Charts.Q.Cycles in '..\..\src\charts\DRagLint.Charts.Q.Cycles.pas'
+  , DRagLint.Charts.MemberAccess in '..\..\src\charts\DRagLint.Charts.MemberAccess.pas'
+  , DRagLint.Charts.Q.MemberAccess in '..\..\src\charts\DRagLint.Charts.Q.MemberAccess.pas'
+  , DRagLint.Charts.Trace.FormA in '..\..\src\charts\DRagLint.Charts.Trace.FormA.pas'
+  , DRagLint.Charts.Trace.Shim in '..\..\src\charts\DRagLint.Charts.Trace.Shim.pas'
+  , DRagLint.Charts.Trace.Anchor in '..\..\src\charts\DRagLint.Charts.Trace.Anchor.pas'
+  , DRagLint.Charts.Trace.Calc in '..\..\src\charts\DRagLint.Charts.Trace.Calc.pas'
+  , DRagLint.Charts.Trace.Walk in '..\..\src\charts\DRagLint.Charts.Trace.Walk.pas'
+  , DRagLint.Charts.Trace.Chart in '..\..\src\charts\DRagLint.Charts.Trace.Chart.pas'
+  , DRagLint.Charts.Q.RoundTrip in '..\..\src\charts\DRagLint.Charts.Q.RoundTrip.pas'
   , DRagLint.Core.Model
   ;
 
@@ -118,6 +134,7 @@ type
     MaxRows   : string;
     Counterpart: string;
     ServerDb  : string;
+    ToRoutine : string;
   end;
 
 function Num(pValue: Int64): TJSONNumber;
@@ -151,6 +168,8 @@ begin
     pArgs.Counterpart:= pValue
   else if SameText(pName, '--server-db') then
     pArgs.ServerDb:= pValue
+  else if SameText(pName, '--to') then
+    pArgs.ToRoutine:= pValue
   else
     Result:= False;
 end;
@@ -1016,6 +1035,13 @@ begin
   Q.Command.Args:= [Default(TCommandArg)];
   Q.Command.Args[0].Name:= 'Target';
   Q.Command.Args[0].Value:= pArgs.Target;
+  { path's second routine (-To): on the COMMAND line right after -Target, as Ask-Report writes it }
+  if pArgs.ToRoutine <> '' then
+  begin
+    Q.Command.Args:= Q.Command.Args + [Default(TCommandArg)];
+    Q.Command.Args[High(Q.Command.Args)].Name:= 'To';
+    Q.Command.Args[High(Q.Command.Args)].Value:= pArgs.ToRoutine;
+  end;
   AddNumberArg(Q, 'Depth', pArgs.Depth, Q.Depth);
   AddNumberArg(Q, 'Cap', pArgs.Cap, Q.Cap);
   AddNumberArg(Q, 'MaxRows', pArgs.MaxRows, Q.MaxRows);

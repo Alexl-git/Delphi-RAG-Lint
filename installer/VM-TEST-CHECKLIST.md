@@ -57,10 +57,10 @@ If the VM has no PowerShell 7, do pass A first without it, then install it
 9. Registry -- only these may exist:
    * `HKCU\Software\YADF\ExePath` = `...\drag-lint\yadf\YADF.exe`
    * `HKCU\Software\Classes\draglint` and `HKCU\Software\drag-lint\Installer\ProtocolRegisteredBy`
-     (only with PowerShell 7)
+     (written by `drag-lint protocol register`)
    * **nothing** under `HKCU\Software\Embarcadero`
    * the uninstall entry under `...\CurrentVersion\Uninstall\`
-10. `draglint://` (PowerShell 7 only): `Start-Process 'draglint://open?file=C%3A%5Ctmp%5Cx.pas&line=1'`
+10. `draglint://` (no PowerShell needed; `drag-lint protocol status` must exit 0): `Start-Process 'draglint://open?file=C%3A%5Ctmp%5Cx.pas&line=1'`
     runs the handler (with no IDE it reports that nothing is listening -- that is fine).
 
 ### Uninstall pass A

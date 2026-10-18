@@ -1,0 +1,10 @@
+{
+  "numStartups": 1.50,
+  "big": 12345678901234567890,
+  "name": "caf\u00e9 <x>",
+  "mcpServers": {
+    "keep-me": { "type": "stdio", "command": "C:\\a b\\k.exe", "args": ["--x", "1"], "env": { "K": "v" } },
+    "drag-lint": { "type": "stdio", "command": "{{ENGINE}}", "args": ["serve", "--db", "{{DB1}}"], "env": {} }
+  },
+  "projects": { "C:/p": { "allowedTools": [], "n": 0.1e2 } }
+}

@@ -24,6 +24,7 @@ type
     function EmitChart(const pQuestion, pTarget, pCloneName: string; out pChart: TChartResult): Boolean;
     function Refusal(const pQuestion, pTarget, pCloneName: string): string;
     function Answer(const pQuestion, pTarget, pCloneName: string; out pLines: TArray<string>): Boolean;
+    procedure CheckAtDepth(const pQuestion, pTarget: string; pDepth: Integer; const pFields, pDotSha: string);
   public
     [Setup] procedure Setup;
     [TearDown] procedure TearDown;
@@ -216,7 +217,9 @@ type
   [TestFixture]
   TExceptionPathsTests = class(TQuestionFixture)
   private
-    procedure Check(const pDb, pTarget, pFields, pDotSha: string);
+    function FrozenDl(var pArgs: TQuestionArgs): Boolean;
+    function FrozenDotSha(const pDot: string): string;
+    procedure Check(const pDb, pTarget, pFields, pDotSha: string; pFrozenDl: Boolean = False);
   public
     [Test] procedure CaughtOnOneEdgeAndEscapingOnAnother;
     [Test] procedure CaughtTwoLevelsUp;
@@ -237,12 +240,169 @@ type
     [Test] procedure HashtableKeyOrderMatchesPowerShell;
   end;
 
+  [TestFixture]
+  TWhoCallsTests = class(TQuestionFixture)
+  private
+    procedure CheckDepth(pDepth: Integer; const pFields, pDotSha: string);
+  public
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure CycleRowAndNameOnlyMatchPowerShell;
+    [Test] procedure DepthLimitTouchedIsTruncated;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure EventHandlerIsRefused;
+    [Test] procedure UnknownTargetIsRefused;
+    [Test] procedure AmbiguousTargetIsRefused;
+  end;
+
+  [TestFixture]
+  TWhatItCallsTests = class(TQuestionFixture)
+  private
+    procedure CheckDepth(pDepth: Integer; const pFields, pDotSha: string);
+  public
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure DepthOneIsTruncated;
+    [Test] procedure CyclesAtDepthThreeMatchPowerShell;
+    [Test] procedure EdgesLeaveTheFocus;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure LeafIsRefused;
+    [Test] procedure UnknownTargetIsRefused;
+  end;
+
+  [TestFixture]
+  TButterflyTests = class(TQuestionFixture)
+  private
+    function FieldsWithoutPdf(const pChart: TChartResult): string;
+  public
+    [Test] procedure MethodMatchesPowerShell;
+    [Test] procedure DepthOneMatchesPowerShell;
+    [Test] procedure ArrowsFollowTheTree;
+    [Test] procedure NoDuplicateRowPerSide;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure UnknownTargetIsRefused;
+  end;
+
+  [TestFixture]
+  THierarchyTests = class(TQuestionFixture)
+  public
+    [Test] procedure TypeMatchesPowerShell;
+    [Test] procedure MissingFocusDrawsDescendants;
+    [Test] procedure CollidingAncestorIsUnanchored;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure UnknownTypeIsRefused;
+    [Test] procedure AmbiguousTypeIsRefused;
+  end;
+
+  [TestFixture]
+  TWiringTests = class(TQuestionFixture)
+  public
+    [Test] procedure InterfaceMatchesPowerShell;
+    [Test] procedure ZeroRegistrationsIsAnAnswer;
+    [Test] procedure ClientDisclosesItsTotal;
+    [Test] procedure CapDisclosesHiddenRows;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure ClassIsRefused;
+    [Test] procedure UnknownInterfaceIsRefused;
+  end;
+
+  [TestFixture]
+  TPathTests = class(TQuestionFixture)
+  private
+    function PathArgs(const pFrom, pTo, pClone: string; pCap: Integer; out pArgs: TQuestionArgs): Boolean;
+    function PathRefusal(const pFrom, pTo: string): string;
+    function FieldsWithoutPdf(const pChart: TChartResult): string;
+  public
+    [Test] procedure PathMatchesPowerShell;
+    [Test] procedure CapIsDisclosed;
+    [Test] procedure AmbiguousSitesAreLabelled;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure ReverseDirectionHasNoPath;
+    [Test] procedure UnknownRoutineIsRefused;
+    [Test] procedure SameRoutineIsRefused;
+    [Test] procedure OverloadIsRefused;
+    [Test] procedure MissingToIsRefused;
+  end;
+
+  [TestFixture]
+  TArchitectureTests = class(TQuestionFixture)
+  public
+    [Test] procedure ProjectMatchesPowerShell;
+    [Test] procedure ClientMeasuresBackEdges;
+    [Test] procedure SingleFolderSaysSo;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
+  [TestFixture]
+  TCyclesTests = class(TQuestionFixture)
+  private
+    function FieldsWithoutEdgeList(const pChart: TChartResult): string;
+    function EdgeListJson(const pChart: TChartResult): string;
+  public
+    [Test] procedure ProjectMatchesPowerShell;
+    [Test] procedure ClientGroupsAreMeasured;
+    [Test] procedure NoCyclesIsAnAnswer;
+    [Test] procedure UnitSelectsItsGroups;
+    [Test] procedure UnitInNoCycleIsRefused;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
+  [TestFixture]
+  TWhoWritesTests = class(TQuestionFixture)
+  private
+    function FieldsWithoutBacking(const pChart: TChartResult): string;
+    function BackingJson(const pChart: TChartResult): string;
+  public
+    [Test] procedure FNoRecursionMatchesPowerShell;
+    [Test] procedure FConnectedListsBothWrites;
+    [Test] procedure ZeroWritesIsAnAnswer;
+    [Test] procedure FLotsizeNamesTheUnboundWrite;
+    [Test] procedure MethodIsRefused;
+    [Test] procedure MissingIsRefused;
+    [Test] procedure AmbiguousIsRefused;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
+  [TestFixture]
+  TWhoReadsTests = class(TQuestionFixture)
+  private
+    function FieldsWithoutBacking(const pChart: TChartResult): string;
+    function BackingJson(const pChart: TChartResult): string;
+  public
+    [Test] procedure FNoRecursionMatchesPowerShell;
+    [Test] procedure ConnectedIsCappedAndDisclosed;
+    [Test] procedure VerdictNamesItsAccessors;
+    [Test] procedure AnswerMatchesPowerShell;
+  end;
+
+  [TestFixture]
+  TRoundTripTests = class(TQuestionFixture)
+  private
+    function RtArgs(const pTarget: string; out pArgs: TQuestionArgs): Boolean;
+    function RtEmit(const pTarget: string; out pChart: TChartResult): Boolean;
+    function FieldsWithoutLists(const pChart: TChartResult): string;
+    function ListJson(const pChart: TChartResult; const pName: string): string;
+    function FixtureText(const pName: string): string;
+    function RtRefusal(const pTarget, pSqlName: string; pDropSql: Boolean): string;
+    procedure CheckDot(const pChart: TChartResult; const pDotSha: string);
+  public
+    [Test] procedure HoldoutMatchesPowerShell;
+    [Test] procedure GoldenMatchesPowerShell;
+    [Test] procedure CalculatedAnchorOffersItsSources;
+    [Test] procedure NotBoundIsAOneStepTrace;
+    [Test] procedure TableColumnWithFiveDatasetsStops;
+    [Test] procedure TFieldVariableFormResolves;
+    [Test] procedure RefusalsMatchPowerShell;
+    [Test] procedure AnswerMatchesPowerShell;
+    [Test] procedure DotFailureStillAnswersTheText;
+  end;
+
 implementation
 
 uses
-  System.SysUtils, System.IOUtils, System.Hash, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
+  System.SysUtils, System.IOUtils, System.Hash, System.RegularExpressions, DRagLint.Charts.ReportHeader, DRagLint.Charts.Ask,
   DRagLint.Charts.Index, DRagLint.Charts.Q.TouchesTables, DRagLint.Charts.Q.ClassSurface, DRagLint.Charts.Q.ExceptionPaths,
-  DRagLint.Charts.Exceptions;
+  DRagLint.Charts.Q.WhoCalls,
+  DRagLint.Charts.Q.Butterfly, DRagLint.Charts.Q.Hierarchy, DRagLint.Charts.Q.Wiring, DRagLint.Charts.Q.Path, DRagLint.Charts.Q.Architecture, DRagLint.Charts.Q.Cycles, DRagLint.Charts.Q.MemberAccess, DRagLint.Charts.Q.RoundTrip, System.Generics.Collections,
+  DRagLint.Charts.Exceptions, DRagLint.Charts.Text, DRagLint.Charts.Tools, FireDAC.Comp.Client, Winapi.Windows;
 
 const
   REPO_ROOT_ENV = 'DRAGLINT_REPO_ROOT';
@@ -272,6 +432,49 @@ const
     '  TOOLASSG (written) @uPipeSessionBuilder.pas:1675|' +
     '  TOOLFLDR (written) @uPipeSessionBuilder.pas:1681';
   BUNDLE_LINE = 2;
+  ROUND_TRIP_FIXTURE_DIR = 'tests\charts\fixtures\roundtrip';
+  RT_VNUM = 'frmBlueprint4.dxDBGrid1FtrsVNum';
+  RT_VNUM_FIXTURE = 'frmBlueprint4_dxDBGrid1FtrsVNum.dlgraph';
+  RT_VNUM_STEPS = 103;
+  RT_VNUM_UNRESOLVED = 2;
+  RT_VNUM_DOT_SHA = 'a70c3f3555e20a9e7561c73dc64a8e0f3a5845638813c9f8c03620e70ab01425';
+  RT_VNUM_FIELDS = 'ChartError="",ChartNodes=25,Title="How MSCLIST.NUM reaches frmBlueprint4.dxDBGrid1FtrsVNum and goes back",Notes="",' +
+    'Anchor="MSCLIST.NUM",DataSet="FMTFtrs",Table="MSCLIST",Column="NUM",TableColumn="MSCLIST.NUM",Stop="",Steps=103,Conditions=35,' +
+    'Crossings=4,Unresolved=2,WriteSteps=38,ReadSteps=24,AlsoSteps=32,DerivedNote="",' +
+    'Sections="ANCHOR,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO",OnDbProof="625/471",ClickTargets=149,Expected=149,AllClickable=true';
+  RT_OPERATION = 'frmBlueprint4.dxDBGrid1OperationVName';
+  RT_OPERATION_FIXTURE = 'frmBlueprint4_dxDBGrid1OperationVName.dlgraph';
+  RT_OPERATION_DOT_SHA = 'a143756bd8c829dc430331b01b2ed2a552eae13e5b92d3f4a8db8d4fb6a78b49';
+  RT_OPERATION_FIELDS = 'ChartError="",ChartNodes=24,Title="How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back",' +
+    'Notes="",Anchor="OPERAT.NAME",DataSet="FMTOperation",Table="OPERAT",Column="NAME",TableColumn="OPERAT.NAME",Stop="",Steps=76,' +
+    'Conditions=31,Crossings=4,Unresolved=2,WriteSteps=34,ReadSteps=24,AlsoSteps=9,DerivedNote="",' +
+    'Sections="ANCHOR,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO",OnDbProof="625/471",ClickTargets=118,Expected=118,AllClickable=true';
+  RT_CALC = 'frmBlueprint4.dxDBGrid1FtrsVFtrName';
+  RT_CALC_FIXTURE = 'frmBlueprint4_dxDBGrid1FtrsVFtrName.dlgraph';
+  RT_CALC_DOT_SHA = '3979eeb73a0c4da49393086efa8254f0c5bc3e2692da86f2c52e418bc9347c87';
+  RT_CALC_TITLE = 'Why frmBlueprint4.dxDBGrid1FtrsVFtrName cannot be traced -- it is calculated';
+  RT_CALC_FIRST_DERIVED = '"FROM MSCLIST.NOTATION VIA FfFtrs_Notation => Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation"';
+  RT_CALC_TARGET = '-Target ''Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation''';
+  RT_CALC_ROWS = 18;
+  RT_GROUPBOX = 'frmBlueprint4.cxGroupBox16';
+  RT_GROUPBOX_FIXTURE = 'frmBlueprint4_cxGroupBox16.dlgraph';
+  RT_GROUPBOX_DOT_SHA = '5145dd9668917a8f628bd8d72f688a9f6f39147507f2b9d4b104cf7b260274fb';
+  RT_GROUPBOX_NOTES = 'WRITE=not walked: the trace stopped at [01] | SERVER=not walked: the trace stopped at [01] | ' +
+    'DATABASE=not walked: the trace stopped at [01] | RESPONSE=not walked: the trace stopped at [01] | ' +
+    'READ=not walked: the trace stopped at [01] | ALSO=not walked: the trace stopped at [01]';
+  RT_TABLECOL = 'OPERAT.NAME';
+  RT_TABLECOL_FIXTURE = 'OPERAT_NAME.dlgraph';
+  RT_TABLECOL_DOT_SHA = 'b9ad423fbeca30bc3dcdb83a345437c79c449091a08bb0fd1a19e4d8cc371f78';
+  RT_FIELDVAR = 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_USLLSLName';
+  RT_FIELDVAR_FIXTURE = 'Blueprint4_ViewModel_TBlueprint_ViewModel_FfFtrs_USLLSLName.dlgraph';
+  RT_FIELDVAR_DOT_SHA = '175f77161b0df988485d95c09059c931c0c554bcd29d3a727076ac0a339047e0';
+  RT_FIELDVAR_COUNTS = 'Steps=10,Conditions=8,Crossings=0,Unresolved=1,WriteSteps=0,ReadSteps=0,AlsoSteps=0';
+  RT_ALSO_CALLS = 17;
+  RT_ALSO_LOADS = 14;
+  RT_ANSWER_LINES = 185;
+  RT_HEAD_LINES = 6;
+  RT_INDEX_LINE = 3;
+  RT_ANCHOR_LEAVES = 12;
   SHOWN_WHERE_ID = 'shown-where';
   SW_FEW = 'FTRNAMESTR';
   SW_FEW_FIELDS = 'Column="FTRNAMESTR",Bindings=4,Forms=2,Unresolved=0,IndexRows=903,IndexColumns=459,Clusters=3,ClickTargets=4,Expected=4,AllClickable=true';
@@ -286,6 +489,7 @@ const
   SW_CAPPED_DOT_SHA = '7747fbc6a62ee382da46687f980377b9ce0877d4447d0e7d3714a1bc58b18f58';
   DEPS_ID = 'deps';
   DL_CLONE = 'DL-drag-lint.sqlite';
+  DATACOPY_CLONE = 'DataCopy-DataCopy.sqlite';
   DEPS_CLI = 'DRagLint.CLI';
   DEPS_CLI_FIELDS = 'UsedBy=1,Uses=40,UsedByTotal=1,UsesTotal=110,UsedByHidden=0,UsesHidden=70,ImplementationUses=40,ClickTargets=41,Expected=41,AllClickable=true';
   DEPS_CLI_DOT_SHA = '5ef4c130d1c2eef9274c240970b42a9aa9b7f0ce88a045c40352aaff8b463846';
@@ -380,7 +584,116 @@ const
   EF_NA_FIELDS = 'TestChart=false,Qname="uSetupDefaults.TGlobalSetupDefaults.GetDebug1",Outcome="not-analysed",EffectFree="NULL",Summary="",Effects=0,Unknown=0,Unnamed=0,D12Suspect=false,ParamCount=0,Witness="",Clusters=2,ClickTargets=1,Expected=1,AllClickable=true';
   EF_NA_DOT_SHA = 'de3e372524e883ca452e15acb8aa5191fe0b2ed56575926b411520b66c33b73f';
   EF_LINES = 7;
-  FEEDS_FROM_ID = 'feeds-from';
+  WC_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  WC_FIELDS = 'Direction="callers",Question="who-calls",Rows=9,Callers=9,Callees=0,NodeCount=10,Cycles=0,MaxDepth=1.0,Truncated=false,Clusters=1,NameMatches=9,NameOnly=0,NameRendered=false,ClickTargets=10,Expected=10,AllClickable=true';
+  WC_DOT_SHA = 'db146e8ebfb5296a27fb16979197e7f9a1c865d9cd277edc255d69a3cf49fa24';
+  WC_LINES = 15;
+  WC_CYCLE_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.ReserveNextID';
+  WC_CYCLE_DEPTH = 3;
+  WC_CYCLE_FIELDS = 'Direction="callers",Question="who-calls",Rows=10,Callers=10,Callees=0,NodeCount=11,Cycles=1,MaxDepth=2.0,Truncated=false,Clusters=2,NameMatches=18,NameOnly=9,NameRendered=false,ClickTargets=11,Expected=11,AllClickable=true';
+  WC_CYCLE_DOT_SHA = 'a8c534920dc06417affc8254c33ec9a34e0b688ffdcac2f9544c8ba4e627c890';
+  WC_D1_DEPTH = 1;
+  WC_D1_FIELDS = 'Direction="callers",Question="who-calls",Rows=9,Callers=9,Callees=0,NodeCount=10,Cycles=0,MaxDepth=1.0,Truncated=true,Clusters=1,NameMatches=18,NameOnly=9,NameRendered=false,ClickTargets=10,Expected=10,AllClickable=true';
+  WC_D1_DOT_SHA = 'a9fb422c9009732f94971e6d8fe88eefae41a82a8f3158c3df9650a734f0bbcc';
+  WC_EVENT_TARGET = 'uMain.TfrmMAIN.FormCreate';
+  WIC_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  WIC_FIELDS = 'Direction="callees",Question="what-it-calls",Rows=9,Callers=0,Callees=9,NodeCount=10,Cycles=0,MaxDepth=2.0,Truncated=true,Clusters=5,NameMatches=null,NameOnly=null,NameRendered=false,ClickTargets=10,Expected=10,AllClickable=true';
+  WIC_DOT_SHA = '44e51833342d4b21eaa858edae414c6f4786c886fc8f52856327f5000c6a99b9';
+  WIC_LINES = 15;
+  WIC_D1_DEPTH = 1;
+  WIC_D1_FIELDS = 'Direction="callees",Question="what-it-calls",Rows=2,Callers=0,Callees=2,NodeCount=3,Cycles=0,MaxDepth=1.0,Truncated=true,Clusters=2,NameMatches=null,NameOnly=null,NameRendered=false,ClickTargets=3,Expected=3,AllClickable=true';
+  WIC_D1_DOT_SHA = '6af60a47cd68157628ba8eb118af76eb33be2a742db4aaf54c859d682c9783b0';
+  WIC_D3_DEPTH = 3;
+  WIC_D3_FIELDS = 'Direction="callees",Question="what-it-calls",Rows=18,Callers=0,Callees=18,NodeCount=19,Cycles=5,MaxDepth=3.0,Truncated=true,Clusters=8,NameMatches=null,NameOnly=null,NameRendered=false,ClickTargets=19,Expected=19,AllClickable=true';
+  WIC_D3_DOT_SHA = '267f441b767c6c5513cf9c8a66230286ea57869198052904b0b7b1b1ea1625e4';
+  WIC_LEAF_TARGET = 'AssignGroups.ViewModel.TAssignGroupsViewModel.CanAddGroup';
+  BF_TARGET = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  BF_FIELDS = 'Callers=9,Callees=9,Edges=18,FocusIn=9,FocusOut=2,ClickTargets=19,Expected=19,AllClickable=true,ExportSvg=25143,ExportPng=152765';
+  BF_DOT_SHA = '9901072e0c3a63637d8f4834f555380b881e9406babe75e2eb2b5fcb62bc40a6';
+  BF_LINES = 24;
+  BF_D1_DEPTH = 1;
+  BF_D1_FIELDS = 'Callers=9,Callees=2,Edges=11,FocusIn=9,FocusOut=2,ClickTargets=12,Expected=12,AllClickable=true,ExportSvg=15504,ExportPng=96589';
+  BF_D1_DOT_SHA = 'fda13591d2006ad492c2565b3ec0b81473080a67505ac21762dbeedf5721a101';
+  BF_D6_TARGET = 'DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead';
+  BF_FOCUS_IN = 9;
+  BF_FOCUS_OUT = 2;
+  HI_TARGET = 'TBlueprint_ViewModel';
+  HI_FIELDS = 'Resolved="Blueprint4.ViewModel.TBlueprint_ViewModel",Kind="class",FocusDeclared=true,Ancestors=2,UnresolvedAnc=1,Descendants=0,ShownAncestors=2,ShownDescendants=0,HiddenAncestors=0,HiddenDescendants=0,Collisions=0,Unlocatable=0,SelfRefs=0,ClickTargets=2,Expected=2,AllClickable=true';
+  HI_DOT_SHA = 'ea5a318048c49d672f53eba8e08fcd106da0f4f5c2fffc546ebe30cbbdb71029';
+  HI_LINES = 7;
+  HI_TARGET_LINE = '  TARGET Blueprint4.ViewModel.TBlueprint_ViewModel @Blueprint4.ViewModel.pas:57';
+  HI_RTL_TARGET = 'TInterfacedObject';
+  HI_RTL_FIELDS = 'Resolved=null,Kind=null,FocusDeclared=false,Ancestors=0,UnresolvedAnc=0,Descendants=145,ShownAncestors=0,ShownDescendants=20,HiddenAncestors=0,HiddenDescendants=125,Collisions=0,Unlocatable=0,SelfRefs=0,ClickTargets=20,Expected=20,AllClickable=true';
+  HI_RTL_DOT_SHA = 'fc98f8fd06dc072d29ca4abee9a37a6e19bf16f422d498dd8bfa0a7d01973ddd';
+  HI_COLLIDE_TARGET = 'TDataService_DRA1_CLIENT';
+  HI_COLLIDE_FIELDS = 'Resolved="uDRA1_CLIENT.TDataService_DRA1_CLIENT",Kind="class",FocusDeclared=true,Ancestors=2,UnresolvedAnc=1,Descendants=0,ShownAncestors=2,ShownDescendants=0,HiddenAncestors=0,HiddenDescendants=0,Collisions=1,Unlocatable=0,SelfRefs=0,ClickTargets=1,Expected=1,AllClickable=true';
+  HI_UNKNOWN = 'NoSuchType';
+  HI_AMBIGUOUS = 'IDataService';
+  WI_TARGET = 'IABZLoggingSys';
+  WI_FIELDS = 'Interface="IABZLoggingSys",DeclaredHere=true,Registrations=2,ResolvedAt=4,EventHandlers=0,Lifetimes="singleton",IndexRegs=535,IndexIfaces=270,Clusters=3,ClickTargets=7,Expected=7,AllClickable=true';
+  WI_DOT_SHA = '7d37c8d1413f5926acbfa53ef7c9d1f8fe76ae5748e6b0db369d3783329958c4';
+  WI_LINES = 12;
+  WI_CLUSTERS = 3;
+  WI_ZERO_TARGET = 'IMicObject';
+  WI_ZERO_FIELDS = 'Interface="IMicObject",DeclaredHere=true,Registrations=0,ResolvedAt=0,EventHandlers=0,Lifetimes="",IndexRegs=535,IndexIfaces=270,Clusters=3,ClickTargets=1,Expected=1,AllClickable=true';
+  WI_ZERO_DOT_SHA = 'a535930680cf28eb582479d6a362cb0862a0efc86c2b07a3f1362f40fc419106';
+  WI_CLIENT_FIELDS = 'Interface="IABZLoggingSys",DeclaredHere=true,Registrations=1,ResolvedAt=2,EventHandlers=0,Lifetimes="singleton",IndexRegs=4,IndexIfaces=4,Clusters=3,ClickTargets=4,Expected=4,AllClickable=true';
+  WI_CLIENT_DOT_SHA = 'd1254f2464b69c2602508a3e3a83c3f1645d8c5855851991a2d783735700c76c';
+  WI_CAP = 1;
+  WI_CAP_FIELDS = 'Interface="IABZLoggingSys",DeclaredHere=true,Registrations=2,ResolvedAt=4,EventHandlers=0,Lifetimes="singleton",IndexRegs=535,IndexIfaces=270,Clusters=3,ClickTargets=3,Expected=3,AllClickable=true';
+  WI_CAP_DOT_SHA = '96c1a5da0ef33435af0472b1e68f7c3456160fec489e46ca4ada0e6644aa5b9c';
+  WI_CLASS = 'TABZLoggingSys';
+  WI_UNKNOWN = 'INoSuchService';
+  PA_FROM = 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation';
+  PA_TO = 'uPipeClientConnection.TPipeClientConnection.NextSeq';
+  PA_ENGINE_PATH = 'Blueprint4.ViewModel.TBlueprint_ViewModel.AddOperation -> Blueprint4.ViewModel.TBlueprint_ViewModel.ReserveNextID -> ' +
+    'uPipeClientConnection.TPipeClientConnection.ExecuteCommand -> uPipeClientConnection.TPipeClientConnection.NextSeq';
+  PA_FIELDS = 'Paths=2,PathsShown=2,Hops=3,Routines=5,Edges=5,Sites=5,Ambiguous=0,EnginePath="' + PA_ENGINE_PATH +
+    '",ClickTargets=10,Expected=10,AllClickable=true,ExportSvg=14141,ExportPng=109903';
+  PA_DOT_SHA = '31a69043a805d943a04fa6174657a58fe11dbab21bd830919e027223655006dd';
+  PA_LINES = 15;
+  PA_CAP = 1;
+  PA_CAP_FIELDS = 'Paths=2,PathsShown=1,Hops=3,Routines=4,Edges=3,Sites=3,Ambiguous=0,EnginePath="' + PA_ENGINE_PATH +
+    '",ClickTargets=7,Expected=7,AllClickable=true,ExportSvg=10643,ExportPng=63515';
+  PA_CAP_DOT_SHA = 'a9af5f3f891d8047237cc35e02457072cdd8f408abf94daaa13cd876e5d368bc';
+  PA_AMB_FROM = 'Blueprint4.ViewModel.TBlueprint_ViewModel.ImportJenVICI';
+  PA_AMB_TO = 'Blueprint4.ViewModel.TBlueprint_ViewModel.GetLastPersistError';
+  PA_AMB_FIELDS = 'Paths=1,PathsShown=1,Hops=1,Routines=2,Edges=1,Sites=2,Ambiguous=2,EnginePath="' + PA_AMB_FROM + ' -> ' + PA_AMB_TO +
+    '",ClickTargets=4,Expected=4,AllClickable=true,ExportSvg=6120,ExportPng=43447';
+  PA_AMB_DOT_SHA = '756ed19ee31c250c92f9509199ab248b64a3e2061002150732a344c347ab52fb';
+  PA_UNKNOWN = 'Blueprint4.ViewModel.TBlueprint_ViewModel.NoSuchRoutine';
+  PA_OVERLOAD = 'uPipeClientConnection.TPipeClientConnection.Log';
+  AR_TARGET = 'project';
+  AR_FIELDS = 'Units=137,Zones=23,InternalEdges=644,CrossZone=115,BackEdges=14,ExternalUnits=36,ExternalEdges=603,Groups=2,ClassifierGaps=0,Clusters=26,ClickTargets=89,Expected=89,AllClickable=true';
+  AR_DOT_SHA = 'a86132236cb5b86c02cb404ff7a7b33f64d140c31c30e3380106803b642e688d';
+  AR_LINES = 93;
+  AR_ZONES = 23;
+  AR_CLIENT_BACK = 3;
+  AR_CHART_LINE = 'CHART architecture project -- 137 project units / 14 back-edges';
+  AR_CLIENT_FIELDS = 'Units=563,Zones=3,InternalEdges=2859,CrossZone=6,BackEdges=3,ExternalUnits=293,ExternalEdges=6880,Groups=5,ClassifierGaps=1,Clusters=9,ClickTargets=18,Expected=18,AllClickable=true';
+  AR_CLIENT_DOT_SHA = '8168afe40de8581b3a8890667479b13ced64528f9a64952fdb245d46b3089ab2';
+  AR_DC_FIELDS = 'Units=37,Zones=1,InternalEdges=133,CrossZone=0,BackEdges=0,ExternalUnits=116,ExternalEdges=277,Groups=4,ClassifierGaps=1,Clusters=6,ClickTargets=6,Expected=6,AllClickable=true';  FEEDS_FROM_ID = 'feeds-from';
+  CY_TARGET = 'project';
+  CY_FIELDS = 'Cycles=1,Shown=1,Edges=7,Anchored=5,Unanchored=0,Unwalkable=0,Clusters=2,ClickTargets=5,Expected=5,AllClickable=true';
+  CY_DOT_SHA = '8fa6e7eb1689c44a371662e7420a1970e01b6d1d1029b25b56ebbb811dd379c5';
+  CY_LINES = 10;
+  CY_IMPL_ARROWS = 6;
+  CY_CHART_LINE = 'CHART cycles project -- 1 groups / 7 uses edges';
+  CY_CLIENT_FIELDS = 'Cycles=2,Shown=2,Edges=5,Anchored=5,Unanchored=0,Unwalkable=0,Clusters=3,ClickTargets=5,Expected=5,AllClickable=true';
+  CY_CLIENT_DOT_SHA = 'effe952c9bafd7b4d9a00020708785b5eae75577db88911e1bdba060adfdc25b';
+  CY_DC_FIELDS = 'Cycles=0,Shown=0,Edges=0,Anchored=0,Unanchored=0,Unwalkable=0,Clusters=2,ClickTargets=0,Expected=0,AllClickable=true';
+  CY_UNIT = 'blueprint4';
+  CY_UNIT_FIELDS = 'Cycles=2,Shown=1,Edges=3,Anchored=3,Unanchored=0,Unwalkable=0,Clusters=2,ClickTargets=3,Expected=3,AllClickable=true';
+  CY_NO_CYCLE_UNIT = 'uMain';
+  CY_NO_CYCLE_TEXT = 'uMain is in no cycle in this index (2 cycle(s) exist). Run without -Unit to see them, or check the spelling -- the verb lowercases unit names.';
+  CY_EDGELIST: array[0..6] of string = (
+    'draglint.doc.harvest->draglint.doc.regions implementation 206',
+    'draglint.doc.facts->draglint.doc.harvest implementation 977',
+    'draglint.doc.projecttags->draglint.doc.regions implementation 304',
+    'draglint.doc.sharedfacts->draglint.doc.regions implementation 446',
+    'draglint.doc.sharedfacts->draglint.doc.projecttags implementation 447',
+    'draglint.doc.regions->draglint.doc.facts interface 42',
+    'draglint.doc.regions->draglint.doc.sharedfacts implementation 933');
   SQL_CLONE = 'SQL-drag-lint-sql.sqlite';
   FF_STATS = 'IndexDs=54,IndexDsDfm=5,IndexDsCode=49,IndexDsOne=22,IndexDsMany=17,IndexDsByCol=6,IndexDsNone=9,IndexDsOther=6,' +
     'Controls=808,CtlTable=471,CtlColumn=443,CtlNotColumn=28,CtlAmbiguous=37,CtlStops=77,CtlDangling=222,CtlNoDs=1,CtlStale=0,CoveragePct=58.3';
@@ -837,9 +1150,9 @@ const
     'rtial:Format:652,partial:Format:690",WalkSentence="no handler found within 3 caller levels (3 caller' +
     's evaluated); reaches 1 caller with no resolved caller of its own; 2 caught at only some call sites;' +
     ' 2 callers not read: source changed since indexing",FilesTouched=2,StaleFiles=1,IndexCandidates=152,' +
-    'IndexRaise=30,IndexHandle=45,IndexDropped=8,IndexRaiseRoutines=20,IndexHandleRoutines=31,Clusters=5,' +
+    'IndexRaise=40,IndexHandle=59,IndexDropped=10,IndexRaiseRoutines=30,IndexHandleRoutines=45,Clusters=5,' +
     'ClickTargets=8,Expected=8,AllClickable=true';
-  EP_PARTIAL_DOT_SHA = 'fc5d4a14e99ac015a1a89549acb7eb66cade487f3000deeb88606ad8f43f3ea6';
+  EP_PARTIAL_DOT_SHA = 'c820e0c3c716c9416068e7e8576a05074d30f54207f60d9457cda8a3b524799f';
   EP_WIDE_FIELDS = 'Qname="DRagLint.Sql.Guarded.TSqlGuard.Create",Raises=5,RaiseTypes=1,RaiseTypeNames="ESqlGuardError",' +
     'RaiseLines="412,414,416,425,427",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,Bare' +
     'Excepts=0,InferredLines="",StaleRows=0,FocusFresh=true,Callers=2,CallerLevels=2,CallerNames="d1:DoSq' +
@@ -848,9 +1161,27 @@ const
     'ing=0,NotGuardingUndrawn=0,NotEvaluated="",NoVerdicts=0,StaleCallers=2,Events="",WalkSentence="no ha' +
     'ndler found within 3 caller levels (2 callers evaluated); reaches 1 caller with no resolved caller o' +
     'f its own; 2 callers not read: source changed since indexing",FilesTouched=2,StaleFiles=1,IndexCandi' +
-    'dates=152,IndexRaise=30,IndexHandle=45,IndexDropped=8,IndexRaiseRoutines=20,IndexHandleRoutines=31,C' +
+    'dates=152,IndexRaise=40,IndexHandle=59,IndexDropped=10,IndexRaiseRoutines=30,IndexHandleRoutines=45,C' +
     'lusters=4,ClickTargets=8,Expected=8,AllClickable=true';
-  EP_WIDE_DOT_SHA = '83acbff111f4960350735aae2ca349339cc1316d87d5ebb15c203379f05cdb4b';
+  EP_WIDE_DOT_SHA = 'ad12b701629679fff6e951a09e4d6b9f88cf8a6d1f42ef15d1c50e63a4112635';
+  { DL_CLONE's FROZEN source: every file of the clone at the sha256 it was indexed with (recovered
+    from git by that sha; third_party\delphi-tree-sitter\TreeSitterLib.pas has no such blob and is
+    absent, so stale). The live tree the clone indexed, EP_DL_INDEXED_ROOT, is edited and re-indexed
+    all day, so its freshness is no fixture. EP_PARTIAL / EP_WIDE values: the PS bundler over the
+    same rewritten copy (DRAGLINT_CHARTS_ALLOW_LIVE_DB=1), its graph.dot hashed as FrozenDotSha does. }
+  EP_DL_SOURCE = 'charts\scratch\src\DL-drag-lint';
+  EP_DL_INDEXED_ROOT = 'C:\Projects\Delphi-RAG-lint\';  // dl:ok hardcoded-absolute-path@d2c6 -- REVIEWED 2026-10-14: the root the FROZEN DL clone indexed, matched against its files table and never opened; the fixture re-roots it to EP_DL_SOURCE
+  { stale BY CONSTRUCTION (its recorded sha256 replaced): the state the 2026-10-13 PS reference was
+    printed in, and the one the PS can still answer -- with this file fresh the PS SpawnAndCapture
+    walk dies on an Int32 -Pos (29385 * 100000 + 15) }
+  EP_DL_STALE_UNIT = '%\src\cli\DRagLint.CLI.pas';
+  EP_DL_STALE_SHA = 'stale-by-construction';
+  EP_ALLOW_LIVE_ON = '1';
+  EP_SQLITE_DRIVER = 'SQLite';
+  EP_SQLITE_DATABASE = 'Database';
+  EP_DL_REROOT_SQL = 'UPDATE files SET path = :root || substr(path, :cut) WHERE substr(path, 1, :len) = :old COLLATE NOCASE';
+  EP_DL_FILES_SQL = 'SELECT count(*) FROM files';
+  EP_DL_STALE_SQL ='UPDATE files SET sha256 = :sha WHERE path LIKE :unit';
   EP_CAP_FIELDS = 'Qname="MStreams.TABZMemoryStream.EnsureMoreCapacity",Raises=1,RaiseTypes=1,RaiseTypeNames="EStreamEr' +
     'ror",RaiseLines="2163",Handles=0,HandleLines="",Dropped=0,Inferred=0,InferredRaises=0,BareExcepts=0,' +
     'InferredLines="",StaleRows=0,FocusFresh=true,Callers=150,CallerLevels=2,CallerNames="d1:Read,d1:Writ' +
@@ -1052,6 +1383,14 @@ begin
   Result:= H.HashAsString;
 end;
 
+{ pPath exactly as RowHref escapes it into a draglint:// link (between "file=" and the "&") }
+function HrefPath(const pPath: string): string;
+begin
+  var H:= RowHref(pPath, 0);
+  var From:= Pos('=', H) + 1;
+  Result:= Copy(H, From, Pos('&', H) - From);
+end;
+
 procedure TQuestionFixture.Setup;
 begin
   FOutRoot:= TPath.Combine(TPath.GetTempPath, 'drag-lint-charts-q-' + TGUID.NewGuid.ToString);
@@ -1156,6 +1495,21 @@ begin
   Result:= Args(pQuestion, pTarget, pCloneName, A);
   if Result then
     pLines:= AskChartQuestion(A).Lines;
+end;
+
+{ a -Depth run on the CLIENT clone: through FindChartQuestion with the depth set, as Ask-Report passes it }
+procedure TQuestionFixture.CheckAtDepth(const pQuestion, pTarget: string; pDepth: Integer; const pFields, pDotSha: string);
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(pQuestion, pTarget, CLIENT_CLONE, A) then
+    Exit;
+  A.Depth:= pDepth;
+  Assert.IsTrue(FindChartQuestion(pQuestion, E), pQuestion + ' is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(pFields, Fields(C));
+  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
 end;
 
 { ---- touches-tables ---- }
@@ -2237,19 +2591,72 @@ end;
 
 { ---- exception-paths ---- }
 
-{ the bundler's -Depth for exception-paths (3) and -Cap (20), as New-DiagramArtifact passes them }
-procedure TExceptionPathsTests.Check(const pDb, pTarget, pFields, pDotSha: string);
+{ pArgs.DbPath (DL_CLONE) copied into this test's scratch with its files table re-rooted from
+  EP_DL_INDEXED_ROOT to EP_DL_SOURCE and EP_DL_STALE_UNIT made stale, so nothing reads the live
+  tree; False (with a passing note) when the frozen source is missing, as for a missing clone }
+function TExceptionPathsTests.FrozenDl(var pArgs: TQuestionArgs): Boolean;
+begin
+  var Src:= TPath.Combine(RepoRoot, EP_DL_SOURCE);
+  Result:= TDirectory.Exists(Src);
+  if not Result then
+  begin
+    Assert.Pass('frozen source missing: ' + Src);
+    Exit;
+  end;
+  TDirectory.CreateDirectory(FOutRoot);
+  var Db:= TPath.Combine(FOutRoot, DL_CLONE);
+  TFile.Copy(pArgs.DbPath, Db);
+  var Conn:= TFDConnection.Create(nil);
+  try
+    Conn.DriverName:= EP_SQLITE_DRIVER;
+    Conn.Params.Values[EP_SQLITE_DATABASE]:= Db;
+    { every row re-rooted: not one file is left to be read from the live tree }
+    var Files:= Integer(Conn.ExecSQLScalar(EP_DL_FILES_SQL));
+    Assert.AreEqual(Files, Conn.ExecSQL(EP_DL_REROOT_SQL, [IncludeTrailingPathDelimiter(Src), Length(EP_DL_INDEXED_ROOT) + 1,
+      Length(EP_DL_INDEXED_ROOT), EP_DL_INDEXED_ROOT]), EP_DL_INDEXED_ROOT);
+    Assert.AreEqual(1, Conn.ExecSQL(EP_DL_STALE_SQL, [EP_DL_STALE_SHA, EP_DL_STALE_UNIT]), EP_DL_STALE_UNIT);
+  finally
+    Conn.Free;
+  end;
+  pArgs.DbPath:= Db;
+end;
+
+{ the sha256 of graph.dot as the clone would draw it in place: the frozen root in every escaped
+  href read back as EP_DL_INDEXED_ROOT, so the hash does not depend on where the worktree is }
+function TExceptionPathsTests.FrozenDotSha(const pDot: string): string;
+begin
+  var Dot:= TFile.ReadAllText(pDot, TEncoding.UTF8);
+  Dot:= Dot.Replace(HrefPath(IncludeTrailingPathDelimiter(TPath.Combine(RepoRoot, EP_DL_SOURCE))),
+    HrefPath(EP_DL_INDEXED_ROOT));
+  Result:= THashSHA2.GetHashString(Dot);
+end;
+
+{ the bundler's -Depth for exception-paths (3) and -Cap (20), as New-DiagramArtifact passes them;
+  pFrozenDl runs DL_CLONE against its frozen source (FrozenDl) }
+procedure TExceptionPathsTests.Check(const pDb, pTarget, pFields, pDotSha: string; pFrozenDl: Boolean);
 var
   A: TQuestionArgs;
   E: TChartEmitter;
 begin
   if not Args(EP_ID, pTarget, pDb, A) then
     Exit;
+  if pFrozenDl and not FrozenDl(A) then
+    Exit;
   A.Depth:= QuestionDefaultDepth(EP_ID);
   Assert.IsTrue(FindChartQuestion(EP_ID, E));
-  var C:= E(A, FOutRoot);
+  { the re-rooted copy sits outside the clone root: CloneDb admits it only under the override }
+  var Prev:= GetEnvironmentVariable(ALLOW_LIVE_DB_ENV_VAR);
+  if pFrozenDl then
+    SetEnvironmentVariable(ALLOW_LIVE_DB_ENV_VAR, EP_ALLOW_LIVE_ON);
+  var C: TChartResult;
+  try
+    C:= E(A, FOutRoot);
+  finally
+    if pFrozenDl then
+      SetEnvironmentVariable(ALLOW_LIVE_DB_ENV_VAR, if Prev = '' then nil else PChar(Prev));
+  end;
   Assert.AreEqual(pFields, Fields(C));
-  Assert.AreEqual(pDotSha, FileSha(C.Layout.Dot));
+  Assert.AreEqual(pDotSha, if pFrozenDl then FrozenDotSha(C.Layout.Dot) else FileSha(C.Layout.Dot));
 end;
 
 procedure TExceptionPathsTests.CaughtOnOneEdgeAndEscapingOnAnother;
@@ -2304,14 +2711,16 @@ end;
 
 procedure TExceptionPathsTests.CaughtAtOnlySomeCallSites;
 begin
-  { Format calls SpawnAndCapture twice, once inside its try: "caught ... for k of n call sites" (partial) }
-  Check(DL_CLONE, EP_PARTIAL, EP_PARTIAL_FIELDS, EP_PARTIAL_DOT_SHA);
+  { Format calls SpawnAndCapture twice, once inside its try: "caught ... for k of n call sites" (partial).
+    Against the frozen source: the live tree drifts under every reindex and edit (FrozenDl) }
+  Check(DL_CLONE, EP_PARTIAL, EP_PARTIAL_FIELDS, EP_PARTIAL_DOT_SHA, True);
 end;
 
 procedure TExceptionPathsTests.LinesPastTheIntegerRangeKeepTheirNumbers;
 begin
-  { a caller in DRagLint.CLI.pas calls at line 29442: line * 100000 overflows an Integer, the PS widens it }
-  Check(DL_CLONE, EP_WIDE, EP_WIDE_FIELDS, EP_WIDE_DOT_SHA);
+  { a caller in DRagLint.CLI.pas calls at line 29442: line * 100000 overflows an Integer, the PS widens it.
+    Against the frozen source: the live tree drifts under every reindex and edit (FrozenDl) }
+  Check(DL_CLONE, EP_WIDE, EP_WIDE_FIELDS, EP_WIDE_DOT_SHA, True);
 end;
 
 procedure TExceptionPathsTests.CallerWalkCappedAt150;
@@ -2363,6 +2772,1129 @@ begin
   for var K:= 1 to EP_HT_COUNT do
     Keys:= Keys + [K * EP_HT_STEP + EP_HT_OFFSET];
   Assert.AreEqual(EP_HT_ORDER, IntsText(PsHashtableOrder(Keys)));
+end;
+
+{ ---- who-calls ---- }
+
+{ the -Depth runs on ReserveNextID }
+procedure TWhoCallsTests.CheckDepth(pDepth: Integer; const pFields, pDotSha: string);
+begin
+  CheckAtDepth(WHO_CALLS_ID, WC_CYCLE_TARGET, pDepth, pFields, pDotSha);
+end;
+
+procedure TWhoCallsTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_CALLS_ID, WC_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WC_FIELDS, Fields(C));
+  Assert.AreEqual(WC_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TWhoCallsTests.CycleRowAndNameOnlyMatchPowerShell;
+begin
+  { AddOperation is reached again at :4102 as a cycle row; 9 of the 18 name matches are sibling classes' own ReserveNextID }
+  CheckDepth(WC_CYCLE_DEPTH, WC_CYCLE_FIELDS, WC_CYCLE_DOT_SHA);
+end;
+
+procedure TWhoCallsTests.DepthLimitTouchedIsTruncated;
+begin
+  { Truncated means the depth limit was TOUCHED by a node that has callers, not that rows were dropped }
+  CheckDepth(WC_D1_DEPTH, WC_D1_FIELDS, WC_D1_DOT_SHA);
+end;
+
+procedure TWhoCallsTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(WHO_CALLS_ID, WC_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(WC_LINES, Length(L));
+  Assert.AreEqual('CHART who-calls ' + WC_TARGET + ' -- 9 call sites / 0 cycle rows', L[CS_CHART_LINE]);
+end;
+
+procedure TWhoCallsTests.EventHandlerIsRefused;
+begin
+  Assert.StartsWith(WC_EVENT_TARGET + ' has 0 callers in call_edges (node_count 1). If it is an event handler the ' +
+    'caller is the DFM -- ask event-wiring instead.', Refusal(WHO_CALLS_ID, WC_EVENT_TARGET, CLIENT_CLONE));
+end;
+
+procedure TWhoCallsTests.UnknownTargetIsRefused;
+begin
+  Assert.AreEqual('symbol not found: No.Such.Method', Refusal(WHO_CALLS_ID, 'No.Such.Method', CLIENT_CLONE));
+end;
+
+procedure TWhoCallsTests.AmbiguousTargetIsRefused;
+begin
+  { an overloaded routine: two declarations share this qualified name, so the root is not one symbol (D3) }
+  Assert.AreEqual('MStreams.TABZMemoryStream.Seek resolves to 2 symbols in this index -- name one qualified routine',
+    Refusal(WHO_CALLS_ID, 'MStreams.TABZMemoryStream.Seek', CLIENT_CLONE));
+end;
+
+{ ---- what-it-calls ---- }
+
+{ the -Depth runs on SendDeltaOperation }
+procedure TWhatItCallsTests.CheckDepth(pDepth: Integer; const pFields, pDotSha: string);
+begin
+  CheckAtDepth(WHAT_IT_CALLS_ID, WIC_TARGET, pDepth, pFields, pDotSha);
+end;
+
+procedure TWhatItCallsTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  { NameMatches / NameOnly are null walking callees: the name bucket answers the caller question only }
+  if not EmitChart(WHAT_IT_CALLS_ID, WIC_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WIC_FIELDS, Fields(C));
+  Assert.AreEqual(WIC_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TWhatItCallsTests.DepthOneIsTruncated;
+begin
+  CheckDepth(WIC_D1_DEPTH, WIC_D1_FIELDS, WIC_D1_DOT_SHA);
+end;
+
+procedure TWhatItCallsTests.CyclesAtDepthThreeMatchPowerShell;
+begin
+  CheckDepth(WIC_D3_DEPTH, WIC_D3_FIELDS, WIC_D3_DOT_SHA);
+end;
+
+procedure TWhatItCallsTests.EdgesLeaveTheFocus;
+var
+  C: TChartResult;
+begin
+  { the arrow means "calls": walking callees the focus calls the row (Test-Emitters A-WIC3-EDGEDIR/EDGEDIR2) }
+  if not EmitChart(WHAT_IT_CALLS_ID, WIC_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains(' focus -> '), 'an edge leaves the focus');
+  Assert.IsFalse(TRegEx.IsMatch(Text, '(?m)^\s+n\d+:p\d+ -> focus'), 'no edge enters the focus');
+end;
+
+procedure TWhatItCallsTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(WHAT_IT_CALLS_ID, WIC_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(WIC_LINES, Length(L));
+  Assert.AreEqual('CHART what-it-calls ' + WIC_TARGET + ' -- 9 call sites / 0 cycle rows', L[CS_CHART_LINE]);
+end;
+
+procedure TWhatItCallsTests.LeafIsRefused;
+begin
+  { a leaf calls nothing; a DFM is never a callee, so the event-wiring hint must not appear (Test-Emitters N8-HINT) }
+  var R:= Refusal(WHAT_IT_CALLS_ID, WIC_LEAF_TARGET, CLIENT_CLONE);
+  Assert.StartsWith(WIC_LEAF_TARGET + ' calls nothing in call_edges (node_count 1).', R);
+  Assert.IsFalse(R.Contains('event-wiring'), 'no event-wiring hint walking callees');
+end;
+
+procedure TWhatItCallsTests.UnknownTargetIsRefused;
+begin
+  Assert.AreEqual('symbol not found: No.Such.Method', Refusal(WHAT_IT_CALLS_ID, 'No.Such.Method', CLIENT_CLONE));
+end;
+
+{ ---- butterfly ---- }
+
+{ ExportPdf is the size of a cairo PDF, which is not byte-stable between two runs (38862 / 38863 measured
+  on one build), so it is checked as present and positive, not for equality; Test-Parity masks it likewise }
+function TButterflyTests.FieldsWithoutPdf(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if F.Name = 'ExportPdf' then
+      Assert.IsTrue(StrToIntDef(F.Json, 0) > 0, 'the PDF was written')
+    else
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+procedure TButterflyTests.MethodMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(BUTTERFLY_ID, BF_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(BF_FIELDS, FieldsWithoutPdf(C));
+  Assert.AreEqual(BF_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TButterflyTests.DepthOneMatchesPowerShell;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(BUTTERFLY_ID, BF_TARGET, CLIENT_CLONE, A) then
+    Exit;
+  A.Depth:= BF_D1_DEPTH;
+  Assert.IsTrue(FindChartQuestion(BUTTERFLY_ID, E), 'butterfly is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(BF_D1_FIELDS, FieldsWithoutPdf(C));
+  Assert.AreEqual(BF_D1_DOT_SHA, FileSha(C.Layout.Dot));
+end;
+
+procedure TButterflyTests.ArrowsFollowTheTree;
+var
+  C: TChartResult;
+begin
+  { only the engine's depth-1 children touch the focus box (Test-Emitters A-BF-FOCUSIN / A-BF-FOCUSOUT) }
+  if not EmitChart(BUTTERFLY_ID, BF_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.AreEqual<Integer>(BF_FOCUS_IN, TRegEx.Matches(Text, '(?m)^\s+\S+ -> focus \[').Count);
+  Assert.AreEqual<Integer>(BF_FOCUS_OUT, TRegEx.Matches(Text, '(?m)^\s+focus -> \S+ \[').Count);
+end;
+
+procedure TButterflyTests.NoDuplicateRowPerSide;
+var
+  C: TChartResult;
+begin
+  { D6 (Test-Emitters E-BF-D6): a symbol is one row per side, an arrow one distinct pair }
+  if not EmitChart(BUTTERFLY_ID, BF_D6_TARGET, DL_CLONE, C) then
+    Exit;
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  var Titles:= TDictionary<string, Boolean>.Create;
+  try
+    for var M in TRegEx.Matches(Text, '(?s)subgraph (cluster_(in|out)_\d+) \{.*?\n  \}') do
+      for var T in TRegEx.Matches(M.Value, 'TITLE="([^"]*)"') do
+      begin
+        var Key:= M.Groups[2].Value + '|' + T.Groups[1].Value;
+        Assert.IsFalse(Titles.ContainsKey(Key), 'duplicate row ' + Key);
+        Titles.Add(Key, True);
+      end;
+  finally
+    Titles.Free;
+  end;
+  var Edges:= TDictionary<string, Boolean>.Create;
+  try
+    for var E in TRegEx.Matches(Text, '(?m)^\s+(\S+ -> \S+) \[') do
+    begin
+      Assert.IsFalse(Edges.ContainsKey(E.Groups[1].Value), 'duplicate edge ' + E.Groups[1].Value);
+      Edges.Add(E.Groups[1].Value, True);
+    end;
+  finally
+    Edges.Free;
+  end;
+end;
+
+procedure TButterflyTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(BUTTERFLY_ID, BF_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(BF_LINES, Length(L));
+  Assert.AreEqual('CHART butterfly ' + BF_TARGET + ' -- 9 callers / 9 callees', L[CS_CHART_LINE]);
+end;
+
+procedure TButterflyTests.UnknownTargetIsRefused;
+begin
+  Assert.AreEqual('symbol not found: No.Such.Method', Refusal(BUTTERFLY_ID, 'No.Such.Method', CLIENT_CLONE));
+end;
+
+procedure THierarchyTests.TypeMatchesPowerShell;
+begin
+  var C: TChartResult;
+  if not EmitChart(HIERARCHY_ID, HI_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(HI_FIELDS, Fields(C));
+  Assert.AreEqual(HI_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('TInterfacedObject'));
+  Assert.IsTrue(Text.Contains('outside this project'));
+end;
+
+procedure THierarchyTests.MissingFocusDrawsDescendants;  // dl:ok duplicate-code@2bc1 -- REVIEWED 2026-10-16: fixture bodies repeat the EmitChart/Fields/FileSha shape of the sibling parity tests
+begin
+  var C: TChartResult;
+  if not EmitChart(HIERARCHY_ID, HI_RTL_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(HI_RTL_FIELDS, Fields(C));
+  Assert.AreEqual(HI_RTL_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('+125 more descendants not shown'));
+  Assert.IsTrue(Text.Contains('>TBlueprint_ViewModel<'));
+end;
+
+procedure THierarchyTests.CollidingAncestorIsUnanchored;
+begin
+  var C: TChartResult;
+  if not EmitChart(HIERARCHY_ID, HI_COLLIDE_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(HI_COLLIDE_FIELDS, Fields(C));
+  Assert.IsTrue(TFile.ReadAllText(C.Layout.Dot).Contains('2 types share this name'));
+end;
+
+procedure THierarchyTests.AnswerMatchesPowerShell;
+begin
+  var L: TArray<string>;
+  if not Answer(HIERARCHY_ID, HI_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(HI_LINES, Length(L));
+  Assert.AreEqual('CHART hierarchy ' + HI_TARGET + ' -- 2 ancestors / 0 descendants', L[CS_CHART_LINE]);
+  Assert.AreEqual(HI_TARGET_LINE, L[CS_CHART_LINE + 1]);
+end;
+
+procedure THierarchyTests.UnknownTypeIsRefused;
+begin
+  Assert.AreEqual(HI_UNKNOWN + ' is not in this index, and nothing in it inherits from or is inherited by that name',
+    Refusal(HIERARCHY_ID, HI_UNKNOWN, CLIENT_CLONE));
+end;
+
+procedure TWiringTests.InterfaceMatchesPowerShell;
+begin
+  var C: TChartResult;
+  if not EmitChart(WIRING_ID, WI_TARGET, SERVER_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WI_FIELDS, Fields(C));
+  Assert.AreEqual(WI_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  for var Line in [':425<', ':429<', ':194<', ':227<'] do
+    Assert.IsTrue(Text.Contains(Line), Line);
+  Assert.AreEqual<Integer>(WI_CLUSTERS, TRegEx.Matches(Text, 'subgraph cluster_').Count);
+end;
+
+procedure TWiringTests.ZeroRegistrationsIsAnAnswer;  // dl:ok duplicate-code@2a85 -- REVIEWED 2026-10-17: fixture bodies repeat the EmitChart/Fields/FileSha shape of the sibling parity tests (precedent THierarchyTests)
+begin
+  var C: TChartResult;
+  if not EmitChart(WIRING_ID, WI_ZERO_TARGET, SERVER_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WI_ZERO_FIELDS, Fields(C));
+  Assert.AreEqual(WI_ZERO_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('nothing in this index registers it'));
+  Assert.IsTrue(Text.Contains('index-wide: 535 registration'));
+  Assert.IsTrue(Text.Contains('a registration made in another project index is not visible here'));
+end;
+
+procedure TWiringTests.ClientDisclosesItsTotal;
+begin
+  var C: TChartResult;
+  if not EmitChart(WIRING_ID, WI_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WI_CLIENT_FIELDS, Fields(C));
+  Assert.AreEqual(WI_CLIENT_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('index-wide: 4 registration'));
+  Assert.IsFalse(TRegEx.IsMatch(Text, '(?i)pipe'));
+end;
+
+procedure TWiringTests.CapDisclosesHiddenRows;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(WIRING_ID, WI_TARGET, SERVER_CLONE, A) then
+    Exit;
+  A.Cap:= WI_CAP;
+  Assert.IsTrue(FindChartQuestion(WIRING_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(WI_CAP_FIELDS, Fields(C));
+  Assert.AreEqual(WI_CAP_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('+1 more registrations not shown'));
+  Assert.IsTrue(Text.Contains('+3 more sites not shown'));
+end;
+
+procedure TWiringTests.AnswerMatchesPowerShell;
+begin
+  var L: TArray<string>;
+  if not Answer(WIRING_ID, WI_TARGET, SERVER_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(WI_LINES, Length(L));
+  Assert.AreEqual('CHART wiring ' + WI_TARGET + ' -- 2 registrations / 4 resolution sites', L[CS_CHART_LINE]);
+end;
+
+procedure TWiringTests.ClassIsRefused;
+begin
+  var R:= Refusal(WIRING_ID, WI_CLASS, SERVER_CLONE);
+  Assert.IsTrue(R.Contains('is a class, not a interface'));
+  Assert.IsTrue(R.Contains('wiring selects an INTERFACE -- ask hierarchy for a class'));
+end;
+
+procedure TWiringTests.UnknownInterfaceIsRefused;
+begin
+  Assert.AreEqual(WI_UNKNOWN + ' is not declared in this index and nothing in it registers that name. ' +
+    'This index has 535 registration(s) over 270 interface(s).', Refusal(WIRING_ID, WI_UNKNOWN, SERVER_CLONE));
+end;
+
+{ ---- path ---- }
+
+{ args for a two-routine question: the -To value goes on the COMMAND as Ask-Report writes it }
+function TPathTests.PathArgs(const pFrom, pTo, pClone: string; pCap: Integer; out pArgs: TQuestionArgs): Boolean;
+begin
+  Result:= Args(PATH_ID, pFrom, pClone, pArgs);
+  if not Result then
+    Exit;
+  var T: TCommandArg;
+  T.Name:= 'To';
+  T.Value:= pTo;
+  pArgs.Command.Args:= pArgs.Command.Args + [T];
+  if pCap > 0 then
+    pArgs.Cap:= pCap;
+end;
+
+function TPathTests.PathRefusal(const pFrom, pTo: string): string;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  Result:= '';
+  if not PathArgs(pFrom, pTo, CLIENT_CLONE, 0, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(PATH_ID, E), 'path is not registered');
+  try
+    E(A, FOutRoot);
+    Assert.Fail('path was not refused');
+  except
+    on X: EChartsQuestion do Result:= X.Message;
+    on X: EChartsIndex do Result:= X.Message;
+  end;
+end;
+
+{ ExportPdf is a cairo PDF size, not byte-stable between runs: checked as present and positive; Test-Parity masks it }
+function TPathTests.FieldsWithoutPdf(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if F.Name = 'ExportPdf' then
+      Assert.IsTrue(StrToIntDef(F.Json, 0) > 0, 'the PDF was written')
+    else
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+procedure TPathTests.PathMatchesPowerShell;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not PathArgs(PA_FROM, PA_TO, CLIENT_CLONE, 0, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(PATH_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(PA_FIELDS, FieldsWithoutPdf(C));
+  Assert.AreEqual(PA_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('Blueprint4.ViewModel.pas:4084 &#183; certain'));
+  Assert.IsTrue(Text.Contains('cluster_focus_from'));
+  Assert.IsTrue(Text.Contains('cluster_focus_to'));
+  Assert.IsFalse(Text.Contains('not shown'));
+end;
+
+procedure TPathTests.CapIsDisclosed;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not PathArgs(PA_FROM, PA_TO, CLIENT_CLONE, PA_CAP, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(PATH_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(PA_CAP_FIELDS, FieldsWithoutPdf(C));
+  Assert.AreEqual(PA_CAP_DOT_SHA, FileSha(C.Layout.Dot));
+  Assert.IsTrue(TFile.ReadAllText(C.Layout.Dot).Contains('+1 more shortest path not shown'));
+end;
+
+procedure TPathTests.AmbiguousSitesAreLabelled;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not PathArgs(PA_AMB_FROM, PA_AMB_TO, CLIENT_CLONE, 0, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(PATH_ID, E));
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(PA_AMB_FIELDS, FieldsWithoutPdf(C));
+  Assert.AreEqual(PA_AMB_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('Blueprint4.ViewModel.pas:1841 &#183; ambiguous'));
+  Assert.IsTrue(Text.Contains('Blueprint4.ViewModel.pas:1843 &#183; ambiguous'));
+end;
+
+procedure TPathTests.AnswerMatchesPowerShell;
+var
+  A: TQuestionArgs;
+begin
+  if not PathArgs(PA_FROM, PA_TO, CLIENT_CLONE, 0, A) then
+    Exit;
+  var L:= AskChartQuestion(A).Lines;
+  Assert.AreEqual<Integer>(PA_LINES, Length(L));
+  Assert.AreEqual('CHART path ' + PA_FROM + ' -> ' + PA_TO + ' -- 2 shortest paths / 3 calls on each path', L[CS_CHART_LINE]);
+  Assert.AreEqual('  TARGET ' + PA_FROM + ' @Blueprint4.ViewModel.pas:4062', L[CS_CHART_LINE + 1]);
+  Assert.AreEqual('  TARGET ' + PA_TO + ' @uPipeClientConnection.pas:174', L[CS_CHART_LINE + 2]);
+end;
+
+procedure TPathTests.ReverseDirectionHasNoPath;
+begin
+  Assert.AreEqual('no call path from ' + PA_TO + ' to ' + PA_FROM + ' within 20 calls (engine call-path, found:false). ' +
+    'call-path walks the resolved call_edges only, so a call the index matched by name alone is not followed.',
+    PathRefusal(PA_TO, PA_FROM));
+end;
+
+procedure TPathTests.UnknownRoutineIsRefused;
+begin
+  Assert.AreEqual(PA_UNKNOWN + ' is not in this index (give the qualified name, Unit.Class.Method)', PathRefusal(PA_UNKNOWN, PA_TO));
+end;
+
+procedure TPathTests.SameRoutineIsRefused;
+begin
+  Assert.AreEqual('path: name two different routines -- -From and -To are both ' + PA_TO, PathRefusal(PA_TO, PA_TO));
+end;
+
+procedure TPathTests.OverloadIsRefused;
+begin
+  Assert.StartsWith(PA_OVERLOAD + ' names 2 symbols (an overload or a duplicate declaration): method @uPipeClientConnection.pas:',
+    PathRefusal(PA_OVERLOAD, PA_TO));
+end;
+
+procedure TPathTests.MissingToIsRefused;
+begin
+  Assert.AreEqual('path needs -To: the routine the path ends at (-Target is where it starts), both qualified (Unit.Class.Method)',
+    Refusal(PATH_ID, PA_FROM, CLIENT_CLONE));
+end;
+
+procedure THierarchyTests.AmbiguousTypeIsRefused;
+begin
+  var R:= Refusal(HIERARCHY_ID, HI_AMBIGUOUS, CLIENT_CLONE);
+  Assert.StartsWith(HI_AMBIGUOUS + ' is ambiguous -- ', R);
+  Assert.IsTrue(R.Contains('they differ by generic parameters'));
+end;
+
+{ ---- architecture ---- }
+
+procedure TArchitectureTests.ProjectMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(ARCHITECTURE_ID, AR_TARGET, DL_CLONE, C) then
+    Exit;
+  Assert.AreEqual(AR_FIELDS, Fields(C));
+  Assert.AreEqual(AR_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.AreEqual(1, TRegEx.Matches(Text, 'cluster_focus_').Count);
+  Assert.AreEqual(AR_ZONES, TRegEx.Matches(Text, 'cluster_zone_').Count);
+end;
+
+procedure TArchitectureTests.ClientMeasuresBackEdges;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(ARCHITECTURE_ID, AR_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(AR_CLIENT_FIELDS, Fields(C));
+  Assert.AreEqual(AR_CLIENT_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('classifier gap: spring is in ''unknown'' but looks like Spring4D'));
+  Assert.AreEqual(AR_CLIENT_BACK, TRegEx.Matches(Text, ' back"\];').Count);
+  Assert.IsTrue(Text.Contains('a back-edge is an asymmetry this index measured'));
+end;
+
+procedure TArchitectureTests.SingleFolderSaysSo;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(ARCHITECTURE_ID, AR_TARGET, DATACOPY_CLONE, C) then
+    Exit;
+  Assert.AreEqual(AR_DC_FIELDS, Fields(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('this project keeps every unit in one folder, so there are no internal zones to draw'));
+  Assert.IsFalse(Text.Contains('back-edge:'));
+end;
+
+procedure TArchitectureTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(ARCHITECTURE_ID, AR_TARGET, DL_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(AR_LINES, Length(L));
+  Assert.AreEqual(AR_CHART_LINE, L[CS_CHART_LINE]);
+end;
+
+{ ---- cycles ---- }
+
+{ EdgeList is a multi-line array: asserted on its own, so the other fields stay one comparable line }
+function TCyclesTests.FieldsWithoutEdgeList(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if F.Name <> 'EdgeList' then
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+function TCyclesTests.EdgeListJson(const pChart: TChartResult): string;
+begin
+  Result:= '';
+  for var F in pChart.Fields do
+    if F.Name = 'EdgeList' then
+      Result:= F.Json;
+end;
+
+procedure TCyclesTests.ProjectMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CYCLES_ID, CY_TARGET, DL_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CY_FIELDS, FieldsWithoutEdgeList(C));
+  var Items: TArray<string>:= [];
+  for var E in CY_EDGELIST do
+    Items:= Items + ['      "' + E + '"'];
+  Assert.AreEqual('[' + sLineBreak + string.Join(',' + sLineBreak, Items) + sLineBreak + '    ]', EdgeListJson(C));
+  Assert.AreEqual(CY_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('DRagLint.Doc.SharedFacts.pas&amp;line=446"'));
+  Assert.IsTrue(Text.Contains('>interface coupling: 1 of 7 uses interface-section; every loop crosses an implementation use<'));
+  Assert.IsFalse(Text.Contains('>interface cycle'));
+  Assert.AreEqual(1, TRegEx.Matches(Text, '-> n\d+:p\d+ \[color="#B02A37"').Count);
+  Assert.AreEqual(CY_IMPL_ARROWS, TRegEx.Matches(Text, '-> n\d+:p\d+ \[color="#B45309"').Count);
+end;
+
+procedure TCyclesTests.ClientGroupsAreMeasured;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CYCLES_ID, CY_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CY_CLIENT_FIELDS, FieldsWithoutEdgeList(C));
+  Assert.AreEqual(CY_CLIENT_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('Blueprint4.ViewModel'));
+  { the array-order edge (A-CY1-FAKE-EDGE) must not be drawn }
+  Assert.IsFalse(TRegEx.IsMatch(Text, 'Blueprint4</FONT>[^<]*</TD></TR>[^!]*uses controlplan2'));
+end;
+
+procedure TCyclesTests.NoCyclesIsAnAnswer;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CYCLES_ID, CY_TARGET, DATACOPY_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CY_DC_FIELDS, FieldsWithoutEdgeList(C));
+  Assert.AreEqual('[]', EdgeListJson(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('no cycles'));
+  Assert.IsTrue(Text.Contains('the index holds no unit cycle'));
+end;
+
+procedure TCyclesTests.UnitSelectsItsGroups;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(CYCLES_ID, CY_UNIT, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(CY_UNIT_FIELDS, FieldsWithoutEdgeList(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('cycles containing blueprint4'));
+  Assert.IsTrue(Text.Contains('2 cycle(s) in this index  &#183;  1 shown'));
+  Assert.IsTrue(C.Layout.Dot.EndsWith('cycles_blueprint4.dot'));
+end;
+
+procedure TCyclesTests.UnitInNoCycleIsRefused;
+begin
+  var Msg:= Refusal(CYCLES_ID, CY_NO_CYCLE_UNIT, CLIENT_CLONE);
+  if Msg = '' then
+    Exit;
+  Assert.AreEqual(CY_NO_CYCLE_TEXT, Msg);
+end;
+
+procedure TCyclesTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(CYCLES_ID, CY_TARGET, DL_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(CY_LINES, Length(L));
+  Assert.AreEqual(CY_CHART_LINE, L[CS_CHART_LINE]);
+end;
+
+{ ---- who-writes / who-reads ---- }
+
+const
+  MA_TARGET = 'Blueprint4.TfrmBlueprint4.FNoRecursion';
+  MA_FCONNECTED = 'uPipeClientConnection.TPipeClientConnection.FConnected';
+  MA_CONNECTED = 'uPipeClientConnection.TPipeClientConnection.Connected';
+  MA_FLOTSIZE = 'uPLANLIST.TmcPLANLIST.fLOTSIZE';
+  MA_VERDICT = 'iINSPRSLT.ImcINSPRSLT.VERDICT';
+  MA_METHOD = 'Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation';
+  MA_MISSING = 'No.Such.Field';
+  MA_AMBIGUOUS = 'ID';
+  MA_READS_CAP = 25;
+  { the unbound reads every FNoRecursion chart names, and the wording of the count they qualify }
+  MA_NOREC_LINES = ':1950,:2084,:2113,:2138,:2163,:2179,:2238,:3142,:3546';
+  MA_NOREC_READS_LABEL = 'resolved read sites reported by find-callers + 9 unbound read(s) named FNoRecursion in Blueprint4.pas';
+  MA_ROUTINES_LABEL = 'routines reported by find-callers';
+  { the measured middle of a chart that draws no row: Backing is removed from the compared text, CrossCheck follows it }
+  MA_ZERO_ROWS = 'ShownWriters=0,ShownReaders=0,Shown=0,HiddenRoutines=0,HiddenSites=0,Unanchored=0,CrossCheck="agree",';
+  WW_FIELDS = 'Question="who-writes",Mode="write",Kind="field",Resolved="' + MA_TARGET + '",Writes=48,Reads=0,Routines=26,Sites=48,' +
+    'ShownWriters=20,ShownReaders=0,Shown=20,HiddenRoutines=6,HiddenSites=6,Unanchored=0,CrossCheck="agree",D13SameFile=0,' +
+    'D13Elsewhere=0,ReadsSameFile=9,ReadsElsewhere=0,ReadsSameLines="' + MA_NOREC_LINES + '",' +
+    'WritesUnreported=0,ReadsUnreported=9,WritesLabel=null,ReadsLabel="' + MA_NOREC_READS_LABEL + '",RoutinesLabel=null,' +
+    'ClickTargets=21,Expected=21,AllClickable=true';
+  WW_DOT_SHA = '52ecbeea37d2dd3069f88424dd766f27bbd7d97aa2dbe2bd67dd8ce4f17c897a';
+  WW_LINES = 27;
+  WW_CHART = 'CHART who-writes ' + MA_TARGET + ' -- 48 write sites / 26 routines';
+  WW_FCONNECTED_FIELDS = 'Question="who-writes",Mode="write",Kind="field",Resolved="' + MA_FCONNECTED + '",Writes=4,Reads=602,Routines=3,Sites=4,' +
+    'ShownWriters=3,ShownReaders=0,Shown=3,HiddenRoutines=0,HiddenSites=0,Unanchored=0,CrossCheck="agree",D13SameFile=0,' +
+    'D13Elsewhere=0,ReadsSameFile=3,ReadsElsewhere=0,ReadsSameLines=":467,:490,:518",WritesUnreported=0,ReadsUnreported=3,' +
+    'WritesLabel=null,ReadsLabel="resolved read sites reported by find-callers + 3 unbound read(s) named FConnected in ' +
+    'uPipeClientConnection.pas",RoutinesLabel=null,ClickTargets=4,Expected=4,AllClickable=true';
+  WW_CONNECTED_FIELDS = 'Question="who-writes",Mode="write",Kind="property",Resolved="' + MA_CONNECTED + '",Writes=0,Reads=602,Routines=0,Sites=0,' +
+    MA_ZERO_ROWS + 'D13SameFile=0,D13Elsewhere=0,ReadsSameFile=0,ReadsElsewhere=0,ReadsSameLines="",WritesUnreported=0,' +
+    'ReadsUnreported=0,WritesLabel=null,ReadsLabel=null,RoutinesLabel=null,ClickTargets=1,Expected=1,AllClickable=true';
+  WW_FLOTSIZE_FIELDS = 'Question="who-writes",Mode="write",Kind="field",Resolved="' + MA_FLOTSIZE + '",Writes=5,Reads=1,Routines=5,Sites=5,' +
+    'ShownWriters=5,ShownReaders=0,Shown=5,HiddenRoutines=0,HiddenSites=0,Unanchored=0,CrossCheck="agree",D13SameFile=1,' +
+    'D13Elsewhere=0,ReadsSameFile=12,ReadsElsewhere=7,ReadsSameLines=":1201,:1274,:2050,:2414,:2536,:2574,:2574,:2631,:3057,' +
+    ':3059,:3094,:3540",WritesUnreported=1,ReadsUnreported=19,WritesLabel="resolved write sites reported by find-callers + 1 ' +
+    'unbound write(s) named fLOTSIZE in uPLANLIST.PAS",ReadsLabel="resolved read sites reported by find-callers + 12 unbound ' +
+    'read(s) named fLOTSIZE in uPLANLIST.PAS + 7 unbound same-name read(s) in other files (may be other symbols)",' +
+    'RoutinesLabel="' + MA_ROUTINES_LABEL + '",ClickTargets=6,Expected=6,AllClickable=true';
+  WR_FIELDS = 'Question="who-reads",Mode="read",Kind="field",Resolved="' + MA_TARGET + '",Writes=48,Reads=0,Routines=0,Sites=0,' +
+    MA_ZERO_ROWS + 'D13SameFile=0,D13Elsewhere=0,ReadsSameFile=9,ReadsElsewhere=0,ReadsSameLines="' + MA_NOREC_LINES + '",' +
+    'WritesUnreported=0,ReadsUnreported=9,WritesLabel=null,ReadsLabel="' + MA_NOREC_READS_LABEL + '",RoutinesLabel="' +
+    MA_ROUTINES_LABEL + '",ClickTargets=1,Expected=1,AllClickable=true';
+  WR_DOT_SHA = '2fd99af478b06afbac1c6e686c81f1c3a0d12905e7061586672c8922fa6c2fa5';
+  WR_LINES = 7;
+  WR_LEFT_LABEL = MA_NOREC_READS_LABEL;
+  WR_RIGHT_LABEL = 'routines reported by find-callers';
+  WR_CHART = 'CHART who-reads ' + MA_TARGET + ' -- 0 ' + MA_NOREC_READS_LABEL + ' / 0 routines reported by find-callers';
+  WR_CONNECTED_FIELDS = 'Question="who-reads",Mode="read",Kind="property",Resolved="' + MA_CONNECTED + '",Writes=0,Reads=602,Routines=598,Sites=602,' +
+    'ShownWriters=0,ShownReaders=25,Shown=25,HiddenRoutines=573,HiddenSites=573,Unanchored=0,CrossCheck="agree",D13SameFile=0,' +
+    'D13Elsewhere=0,ReadsSameFile=0,ReadsElsewhere=0,ReadsSameLines="",WritesUnreported=0,ReadsUnreported=0,WritesLabel=null,' +
+    'ReadsLabel=null,RoutinesLabel=null,ClickTargets=26,Expected=26,AllClickable=true';
+  WR_VERDICT_FIELDS = 'Question="who-reads",Mode="read",Kind="property",Resolved="' + MA_VERDICT + '",Writes=34,Reads=12,Routines=12,Sites=12,' +
+    'ShownWriters=0,ShownReaders=12,Shown=12,HiddenRoutines=0,HiddenSites=0,Unanchored=0,CrossCheck="agree",D13SameFile=0,' +
+    'D13Elsewhere=0,ReadsSameFile=0,ReadsElsewhere=0,ReadsSameLines="",WritesUnreported=0,ReadsUnreported=0,WritesLabel=null,' +
+    'ReadsLabel=null,RoutinesLabel=null,ClickTargets=13,Expected=13,AllClickable=true';
+
+function TWhoWritesTests.FieldsWithoutBacking(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if F.Name <> 'Backing' then
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+function TWhoWritesTests.BackingJson(const pChart: TChartResult): string;
+begin
+  Result:= '';
+  for var F in pChart.Fields do
+    if F.Name = 'Backing' then
+      Result:= F.Json;
+end;
+
+procedure TWhoWritesTests.FNoRecursionMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_WRITES_ID, MA_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WW_FIELDS, FieldsWithoutBacking(C));
+  Assert.AreEqual('[]', BackingJson(C));
+  Assert.AreEqual(WW_DOT_SHA, FileSha(C.Layout.Dot));
+  Assert.AreEqual('', C.LeftLabel);
+  Assert.AreEqual('', C.RightLabel);
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.AreEqual(1, TRegEx.Matches(Text, 'cluster_writers').Count);
+  Assert.IsFalse(Text.Contains('cluster_readers'));
+  Assert.IsTrue(Text.Contains('reads (not drawn): 0 resolved read(s) reported by find-callers + 9 unbound read(s) named ' +
+    'FNoRecursion in Blueprint4.pas'));
+  Assert.IsFalse(Text.Contains('no write sites'));
+  Assert.IsTrue(C.Layout.Dot.EndsWith('Blueprint4_TfrmBlueprint4_FNoRecursion_write.dot'));
+end;
+
+procedure TWhoWritesTests.FConnectedListsBothWrites;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_WRITES_ID, MA_FCONNECTED, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WW_FCONNECTED_FIELDS, FieldsWithoutBacking(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('TITLE="2 write sites: 320:3, 455:3"'));
+  Assert.IsTrue(Text.Contains('line=164"'));
+  Assert.IsTrue(Text.Contains('line=320"'));
+  Assert.IsTrue(Text.Contains('line=543"'));
+  Assert.IsTrue(Text.Contains('reads (not drawn): 602 resolved read(s) reported by find-callers + 3 unbound read(s) ' +
+    'named FConnected in uPipeClientConnection.pas'));
+end;
+
+procedure TWhoWritesTests.ZeroWritesIsAnAnswer;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_WRITES_ID, MA_CONNECTED, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WW_CONNECTED_FIELDS, FieldsWithoutBacking(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('no write sites (602 reads)'));
+  Assert.IsFalse(Text.Contains('cluster_writers'));
+end;
+
+procedure TWhoWritesTests.FLotsizeNamesTheUnboundWrite;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_WRITES_ID, MA_FLOTSIZE, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WW_FLOTSIZE_FIELDS, FieldsWithoutBacking(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('engine D13: 1 UNBOUND write(s) named fLOTSIZE in uPLANLIST.PAS at :2547 -- by name, NOT counted above'));
+end;
+
+procedure TWhoWritesTests.MethodIsRefused;
+begin
+  var Msg:= Refusal(WHO_WRITES_ID, MA_METHOD, CLIENT_CLONE);
+  if Msg = '' then
+    Exit;
+  Assert.AreEqual(MA_METHOD + ' is a method, not a field or property -- ask who-calls instead', Msg);
+end;
+
+procedure TWhoWritesTests.MissingIsRefused;
+begin
+  var Msg:= Refusal(WHO_WRITES_ID, MA_MISSING, CLIENT_CLONE);
+  if Msg = '' then
+    Exit;
+  Assert.AreEqual(MA_MISSING + ' is not in this index', Msg);
+end;
+
+procedure TWhoWritesTests.AmbiguousIsRefused;
+begin
+  var Msg:= Refusal(WHO_WRITES_ID, MA_AMBIGUOUS, CLIENT_CLONE);
+  if Msg = '' then
+    Exit;
+  Assert.StartsWith(MA_AMBIGUOUS + ' is ambiguous -- 154 symbols share that name: ', Msg);
+end;
+
+procedure TWhoWritesTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(WHO_WRITES_ID, MA_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(WW_LINES, Length(L));
+  Assert.AreEqual(WW_CHART, L[CS_CHART_LINE]);
+end;
+
+function TWhoReadsTests.FieldsWithoutBacking(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if F.Name <> 'Backing' then
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+function TWhoReadsTests.BackingJson(const pChart: TChartResult): string;
+begin
+  Result:= '';
+  for var F in pChart.Fields do
+    if F.Name = 'Backing' then
+      Result:= F.Json;
+end;
+
+procedure TWhoReadsTests.FNoRecursionMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_READS_ID, MA_TARGET, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WR_FIELDS, FieldsWithoutBacking(C));
+  Assert.AreEqual(WR_LEFT_LABEL, C.LeftLabel);
+  Assert.AreEqual(WR_RIGHT_LABEL, C.RightLabel);
+  Assert.AreEqual(WR_DOT_SHA, FileSha(C.Layout.Dot));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('0 resolved read(s) reported by find-callers + 9 unbound read(s) named FNoRecursion in ' +
+    'Blueprint4.pas (48 writes)'));
+  Assert.IsTrue(Text.Contains('engine: 9 UNBOUND read(s) named FNoRecursion in Blueprint4.pas at :1950, :2084, :2113, :2138, ' +
+    ':2163, :2179, :2238, :3142, :3546 -- by name, NOT counted above'));
+  Assert.IsFalse(Text.Contains('cluster_readers'));
+  Assert.IsFalse(Text.Contains('BOUND to FNoRecursion'));
+end;
+
+procedure TWhoReadsTests.ConnectedIsCappedAndDisclosed;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not Args(WHO_READS_ID, MA_CONNECTED, CLIENT_CLONE, A) then
+    Exit;
+  A.Cap:= MA_READS_CAP;
+  Assert.IsTrue(FindChartQuestion(WHO_READS_ID, E), WHO_READS_ID + ' is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(WR_CONNECTED_FIELDS, FieldsWithoutBacking(C));
+  Assert.AreEqual('[' + sLineBreak + '      "FConnected"' + sLineBreak + '    ]', BackingJson(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('+573 more routines'));
+  Assert.IsTrue(Text.Contains('backed by FConnected -- ask who-writes on it for writes that bypass this property'));
+  Assert.AreEqual(MA_READS_CAP, TRegEx.Matches(Text, 'focus -> nr:p\d+ \[').Count);
+end;
+
+procedure TWhoReadsTests.VerdictNamesItsAccessors;
+var
+  C: TChartResult;
+begin
+  if not EmitChart(WHO_READS_ID, MA_VERDICT, CLIENT_CLONE, C) then
+    Exit;
+  Assert.AreEqual(WR_VERDICT_FIELDS, FieldsWithoutBacking(C));
+  Assert.AreEqual('[' + sLineBreak + '      "GetVERDICT",' + sLineBreak + '      "SetVERDICT"' + sLineBreak + '    ]', BackingJson(C));
+  var Text:= TFile.ReadAllText(C.Layout.Dot);
+  Assert.IsTrue(Text.Contains('accessor GetVERDICT -- ask who-calls on it'));
+  Assert.IsTrue(Text.Contains('accessor SetVERDICT -- ask who-calls on it'));
+  Assert.IsTrue(Text.Contains('<B> iINSPRSLT &#183; property </B>'));
+end;
+
+procedure TWhoReadsTests.AnswerMatchesPowerShell;
+var
+  L: TArray<string>;
+begin
+  if not Answer(WHO_READS_ID, MA_TARGET, CLIENT_CLONE, L) then
+    Exit;
+  Assert.AreEqual<Integer>(WR_LINES, Length(L));
+  Assert.AreEqual(WR_CHART, L[CS_CHART_LINE]);
+end;
+
+
+{ the three clones round-trip reads: CLIENT in DbPath, SERVER and SQL beside it, as the parity case passes them }
+function TRoundTripTests.RtArgs(const pTarget: string; out pArgs: TQuestionArgs): Boolean;
+begin
+  Result:= Args(ROUND_TRIP_ID, pTarget, CLIENT_CLONE, pArgs);
+  if not Result then
+    Exit;
+  var Dir:= ExtractFileDir(pArgs.DbPath);
+  var Server:= TPath.Combine(Dir, SERVER_CLONE);
+  var Sql:= TPath.Combine(Dir, SQL_CLONE);
+  Result:= TFile.Exists(Server) and TFile.Exists(Sql);
+  if not Result then
+  begin
+    Assert.Pass('clone missing: ' + Server + ' or ' + Sql);
+    Exit;
+  end;
+  pArgs.ServerDbPath:= Server;
+  pArgs.SqlDbPath:= Sql;
+  pArgs.Depth:= QuestionDefaultDepth(ROUND_TRIP_ID);
+end;
+
+{ one emit over the three clones }
+function TRoundTripTests.RtEmit(const pTarget: string; out pChart: TChartResult): Boolean;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  pChart:= Default(TChartResult);
+  Result:= RtArgs(pTarget, A);
+  if not Result then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(ROUND_TRIP_ID, E), ROUND_TRIP_ID + ' is not registered');
+  pChart:= E(A, FOutRoot);
+end;
+
+{ every field but the three string lists (their JSON is checked by ListJson) }
+function TRoundTripTests.FieldsWithoutLists(const pChart: TChartResult): string;
+begin
+  var Parts: TArray<string>:= [];
+  for var F in pChart.Fields do
+    if (F.Name <> 'Also') and (F.Name <> 'Derived') and (F.Name <> 'DerivedCommands') then
+      Parts:= Parts + [F.Name + '=' + F.Json];
+  Result:= string.Join(',', Parts);
+end;
+
+function TRoundTripTests.ListJson(const pChart: TChartResult; const pName: string): string;
+begin
+  Result:= '';
+  for var F in pChart.Fields do
+    if F.Name = pName then
+      Result:= F.Json;
+end;
+
+function TRoundTripTests.FixtureText(const pName: string): string;
+begin
+  Result:= TFile.ReadAllText(TPath.Combine(TPath.Combine(RepoRoot, ROUND_TRIP_FIXTURE_DIR), pName), TEncoding.ASCII);
+end;
+
+procedure TRoundTripTests.CheckDot(const pChart: TChartResult; const pDotSha: string);
+begin
+  Assert.AreEqual(pDotSha, FileSha(pChart.Layout.Dot));
+  Assert.AreEqual('', pChart.ChartError);
+end;
+
+{ the refusal of a target (pSqlName '' = the SQL clone; pDropSql = no SQL index given) }
+function TRoundTripTests.RtRefusal(const pTarget, pSqlName: string; pDropSql: Boolean): string;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  Result:= '';
+  if not RtArgs(pTarget, A) then
+    Exit;
+  if pDropSql then
+    A.SqlDbPath:= ''
+  else if pSqlName <> '' then
+    A.SqlDbPath:= TPath.Combine(ExtractFileDir(A.DbPath), pSqlName);
+  Assert.IsTrue(FindChartQuestion(ROUND_TRIP_ID, E), ROUND_TRIP_ID + ' is not registered');
+  try
+    E(A, FOutRoot);
+    Assert.Fail(pTarget + ' was not refused');
+  except
+    on X: EChartsQuestion do Result:= X.Message;
+  end;
+end;
+
+procedure TRoundTripTests.HoldoutMatchesPowerShell;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not RtArgs(RT_VNUM, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(ROUND_TRIP_ID, E), ROUND_TRIP_ID + ' is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreEqual(RT_VNUM_FIELDS, FieldsWithoutLists(C));
+  var Also: TArray<string>:= ['"FIRES FMTFtrs.AfterDelete -> DoAfterDeleteFtrs"'];
+  for var K:= 1 to RT_ALSO_CALLS do
+    Also:= Also + ['"CALLS TBlueprint_ViewModel.SendDeltaFtrs"'];
+  for var K:= 1 to RT_ALSO_LOADS do
+    Also:= Also + ['"LOADS FMTFtrs VIA TBlueprint_ViewModel.LoadOneTable ''MSCLIST''"'];
+  var Expected:= '[' + sLineBreak + '      ' + string.Join(',' + sLineBreak + '      ', Also) + sLineBreak + '    ]';
+  Assert.AreEqual(Expected, ListJson(C, 'Also'));
+  Assert.AreEqual('[]', ListJson(C, 'Derived'));
+  Assert.AreEqual('[]', ListJson(C, 'DerivedCommands'));
+  Assert.AreEqual(FixtureText(RT_VNUM_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_VNUM_DOT_SHA);
+  Assert.AreEqual<Integer>(RT_ANCHOR_LEAVES, Length(C.AnchorPaths));
+  Assert.AreEqual<Int64>(RT_VNUM_STEPS, C.LeftCount);
+  Assert.AreEqual<Int64>(RT_VNUM_UNRESOLVED, C.RightCount);
+  Assert.IsTrue(C.TracePath.EndsWith('roundtrip_frmBlueprint4_dxDBGrid1FtrsVNum.dlgraph'));
+end;
+
+procedure TRoundTripTests.GoldenMatchesPowerShell;
+var
+  C: TChartResult;
+begin
+  if not RtEmit(RT_OPERATION, C) then
+    Exit;
+  Assert.AreEqual(RT_OPERATION_FIELDS, FieldsWithoutLists(C));
+  Assert.AreEqual(FixtureText(RT_OPERATION_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_OPERATION_DOT_SHA);
+end;
+
+procedure TRoundTripTests.CalculatedAnchorOffersItsSources;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not RtArgs(RT_CALC, A) then
+    Exit;
+  Assert.IsTrue(FindChartQuestion(ROUND_TRIP_ID, E), ROUND_TRIP_ID + ' is not registered');
+  var C:= E(A, FOutRoot);
+  var F:= FieldsWithoutLists(C);
+  Assert.IsTrue(F.Contains('Title="' + RT_CALC_TITLE + '"'));
+  Assert.IsTrue(F.Contains('Sections="ANCHOR,DERIVED,WRITE,SERVER,DATABASE,RESPONSE,READ,ALSO"'));
+  Assert.AreEqual<Integer>(RT_CALC_ROWS, TRegEx.Matches(ListJson(C, 'Derived'), ' => ').Count);
+  Assert.IsTrue(ListJson(C, 'Derived').Contains(RT_CALC_FIRST_DERIVED));
+  var Cmds:= ListJson(C, 'DerivedCommands');
+  Assert.IsTrue(Cmds.Contains('"& ''') and Cmds.Contains(RT_CALC_TARGET));
+  Assert.AreEqual(FixtureText(RT_CALC_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_CALC_DOT_SHA);
+end;
+
+procedure TRoundTripTests.NotBoundIsAOneStepTrace;
+var
+  C: TChartResult;
+begin
+  if not RtEmit(RT_GROUPBOX, C) then
+    Exit;
+  var F:= FieldsWithoutLists(C);
+  Assert.IsTrue(F.Contains('Title="Why ' + RT_GROUPBOX + ' cannot be traced"'));
+  Assert.IsTrue(F.Contains('Notes="' + RT_GROUPBOX_NOTES + '"'));
+  Assert.IsTrue(F.Contains('Steps=1,Conditions=0,Crossings=0,Unresolved=1,WriteSteps=0'));
+  Assert.IsFalse(F.Contains('Stop=""'));
+  Assert.AreEqual(FixtureText(RT_GROUPBOX_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_GROUPBOX_DOT_SHA);
+end;
+
+procedure TRoundTripTests.TableColumnWithFiveDatasetsStops;
+var
+  C: TChartResult;
+begin
+  if not RtEmit(RT_TABLECOL, C) then
+    Exit;
+  var F:= FieldsWithoutLists(C);
+  Assert.IsTrue(F.Contains('Anchor="OPERAT.NAME"'));
+  Assert.IsTrue(F.Contains('Steps=1,'));
+  Assert.IsTrue(F.Contains('5 datasets load OPERAT in this index'));
+  Assert.AreEqual(FixtureText(RT_TABLECOL_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_TABLECOL_DOT_SHA);
+end;
+
+procedure TRoundTripTests.TFieldVariableFormResolves;
+var
+  C: TChartResult;
+begin
+  if not RtEmit(RT_FIELDVAR, C) then
+    Exit;
+  var F:= FieldsWithoutLists(C);
+  Assert.IsTrue(F.Contains(RT_FIELDVAR_COUNTS));
+  Assert.IsTrue(F.Contains('Title="Why ' + RT_FIELDVAR + ' cannot be traced -- it is calculated"'));
+  Assert.IsTrue(F.Contains('DerivedNote="USLLSLName is calculated from 2 fields'));
+  Assert.AreEqual(FixtureText(RT_FIELDVAR_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  CheckDot(C, RT_FIELDVAR_DOT_SHA);
+end;
+
+procedure TRoundTripTests.RefusalsMatchPowerShell;
+begin
+  var Shape:= RtRefusal('frmBlueprint4', '', False);
+  Assert.IsTrue(Shape.StartsWith('round-trip: -Target takes <Form>.<Control>, <Unit>.<TForm>.<Control>, <Unit>.<TClass>.<TField variable> ' +
+    'or TABLE.COLUMN, got ''frmBlueprint4'''), Shape);
+  Assert.AreEqual('round-trip: no form or data module named frmNoSuchForm in this index', RtRefusal('frmNoSuchForm.x', '', False));
+  Assert.AreEqual('round-trip: no component named noSuchControl on frmBlueprint4', RtRefusal('frmBlueprint4.noSuchControl', '', False));
+  Assert.AreEqual('round-trip needs -ServerDbPath (the SERVER clone) and -SqlDbPath (the SQL-script clone); -DbPath is the CLIENT clone',
+    RtRefusal(RT_VNUM, '', True));
+  var NotSql:= RtRefusal(RT_VNUM, CLIENT_CLONE, False);
+  Assert.IsTrue(NotSql.Contains('is not a SQL index (0 sql_table symbols) -- -SqlDbPath takes the SQL-script clone'), NotSql);
+end;
+
+procedure TRoundTripTests.AnswerMatchesPowerShell;
+var
+  A: TQuestionArgs;
+begin
+  if not RtArgs(RT_VNUM, A) then
+    Exit;
+  var L:= AskChartQuestion(A).Lines;
+  Assert.AreEqual<Integer>(RT_ANSWER_LINES, Length(L));
+  Assert.IsTrue(L[RT_HEAD_LINES].StartsWith('TRACE MSCLIST.NUM'));
+  Assert.IsTrue(L[RT_INDEX_LINE].StartsWith('INDEX ') and not L[RT_INDEX_LINE].EndsWith(')'));
+  Assert.IsTrue(L[RT_INDEX_LINE + 1].EndsWith(' (server)'));
+  Assert.IsTrue(L[RT_INDEX_LINE + 2].EndsWith(' (sql)'));
+  Assert.AreEqual(FixtureText(RT_VNUM_FIXTURE), string.Join(#13#10, Copy(L, RT_HEAD_LINES, Length(L))) + #13#10);
+  for var Line in L do
+  begin
+    Assert.IsFalse(Line.StartsWith('CHART '));
+    Assert.IsFalse(Line.StartsWith('NOTE '));
+  end;
+end;
+
+procedure TRoundTripTests.DotFailureStillAnswersTheText;
+var
+  A: TQuestionArgs;
+  E: TChartEmitter;
+begin
+  if not RtArgs(RT_GROUPBOX, A) then
+    Exit;
+  A.DotExe:= TPath.Combine(FOutRoot, 'no-such-dot.exe');
+  Assert.IsTrue(FindChartQuestion(ROUND_TRIP_ID, E), ROUND_TRIP_ID + ' is not registered');
+  var C:= E(A, FOutRoot);
+  Assert.AreNotEqual('', C.ChartError);
+  Assert.AreEqual('', C.Layout.Svg);
+  Assert.AreEqual(FixtureText(RT_GROUPBOX_FIXTURE), TFile.ReadAllText(C.TracePath, TEncoding.ASCII));
+  Assert.IsFalse(TFile.Exists(ChangeFileExt(C.TracePath, '.svg')));
+  var L:= AskChartQuestion(A).Lines;
+  Assert.IsTrue(L[High(L)].StartsWith('NOTE the chart could not be drawn: '), L[High(L)]);
 end;
 
 end.

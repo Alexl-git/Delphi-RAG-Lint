@@ -105,10 +105,10 @@ regenerated artifact), never in the comment.
 
 Each row in `graph.svg` links to `draglint://open?file=<path>&line=<n>`. With
 the protocol registered (one HKCU key, no elevation:
-`Register-DragLintProtocol.ps1`; `-Unregister` undoes it), a click opens the
-line in RAD Studio through the drag-lint IDE plugin's open-source pipe
-(`\\.\pipe\drag-lint-open-source`), or in the default editor when no IDE is
-listening.
+`drag-lint protocol register`; `drag-lint protocol unregister` undoes it), a
+click opens the line in RAD Studio through the drag-lint IDE plugin's
+open-source pipe (`\\.\pipe\drag-lint-open-source`), or in Notepad when no IDE
+is listening. See [the handler](Draglint-Protocol-Handler).
 
 ## Requirements
 

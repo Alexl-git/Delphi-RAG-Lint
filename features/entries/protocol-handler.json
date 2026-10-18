@@ -1,0 +1,30 @@
+{
+  "id": "protocol-handler",
+  "title": "Click-to-source: the draglint:// handler",
+  "group": "diagrams-charts",
+  "owner": "CHARTS",
+  "status": "shipped",
+  "since": "1.31.0-alpha",
+  "summary": "Registers draglint:// so a chart row opens its line in RAD Studio; a GUI helper exe, no PowerShell",
+  "intro": "Run drag-lint protocol register once per user (the installer does it); status says what is registered; unregister undoes it. The handler drag-lint-open.exe validates the link before anything else and writes to the plugin's pipe; with no IDE running it opens the file in Notepad.",
+  "wikiPage": "Draglint-Protocol-Handler",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "protocol",
+      "example": "register --dry-run"
+    },
+    {
+      "type": "exe",
+      "name": "drag-lint-open.exe"
+    }
+  ],
+  "audience": "both",
+  "aliases": ["Open-DragLintUri", "Register-DragLintProtocol", "draglint://"],
+  "related": ["ask", "charts-and-the-ide"],
+  "lastVerified": {
+    "date": "2026-10-14",
+    "by": "alexanderl",
+    "build": "1.31.0-alpha"
+  }
+}

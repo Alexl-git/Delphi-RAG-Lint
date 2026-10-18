@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "drag-lint": { "type": "stdio", "command": "C:\\old\\drag-lint.exe", "args": [], "env": { "API_KEY": "S3cr3t-Value-MCV" }, "timeout": 30 }
+  }
+}
