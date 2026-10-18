@@ -46,15 +46,18 @@ type
     /// <summary>Why the loaded file could not be used; '' when it loaded
     /// cleanly -- while set, nothing is written.</summary>
     FLoadError:      string;
+    /// <summary>FConfigPath's text as loaded; what a Save patches with the
+    /// edits, so keys the parser does not model survive.</summary>
+    FOriginalText:   string;
     FIndexFrame:     TIndexesFrame;
     FSettingsFrame:  TSettingsFrame;
     FOpenDialog:     TOpenDialog;
-    /// <summary>Resolve the config path: --config arg, then &lt;ExeDir&gt;\drag-lint.json,
-    /// else empty (load via TManifestIO discovery).</summary>
-    /// <returns>Resolved absolute path, or empty string if not found by arg/default.</returns>
+    /// <summary>Resolve the config path: the --config arg, else
+    /// &lt;ExeDir&gt;\drag-lint.json (see ConfigTargetPath).</summary>
+    /// <returns>Absolute path of the one file this session loads and saves; never ''.</returns>
     function ResolveConfigPath: string;
-    /// <summary>Load the manifest from FConfigPath (or by TManifestIO discovery when
-    /// FConfigPath is empty) and push the result into FManifest and FIndexFrame.
+    /// <summary>Load the manifest from FConfigPath (never by discovery, which would
+    /// merge a local .drag-lint.json) and push the result into FManifest and FIndexFrame.
     /// Records the load error in FLoadError and tells the user when it is set.</summary>
     procedure LoadManifest;
     /// <summary>Push the current FManifest into the frame so its controls reflect
@@ -80,10 +83,9 @@ implementation
 function TMainForm.ResolveConfigPath: string;
 var
   I: Integer;
-  Arg, Next: string;
-  ExeDir, Candidate: string;
+  Arg, Next, Explicit: string;
 begin
-  Result := '';
+  Explicit := '';
 
   { Check --config <path> command-line argument }
   for I := 1 to ParamCount - 1 do
@@ -94,31 +96,19 @@ begin
       Next := ParamStr(I + 1);
       if Next <> '' then
       begin
-        Result := TPath.GetFullPath(Next);
-        Exit;
+        Explicit := Next;
+        Break;
       end;
     end;
   end;
 
-  { Fall back to <ExeDir>\drag-lint.json }
-  ExeDir := TPath.GetDirectoryName(ParamStr(0));
-  Candidate := TPath.Combine(ExeDir, 'drag-lint.json');
-  if TFile.Exists(Candidate) then
-  begin
-    Result := Candidate;
-    Exit;
-  end;
+  { No --config: <ExeDir>\drag-lint.json, existing or not -- never '' }
+  Result := ConfigTargetPath(Explicit, TPath.GetDirectoryName(ParamStr(0)));
 end;
 
 procedure TMainForm.LoadManifest;
-var
-  ExeDir: string;
 begin
-  ExeDir := TPath.GetDirectoryName(ParamStr(0));
-  FLoadError := LoadConfigManifest(FConfigPath, ExeDir, GetCurrentDir, FManifest);
-  { If still no config path, derive one beside the EXE for Save operations }
-  if FConfigPath = '' then
-    FConfigPath := TPath.Combine(ExeDir, 'drag-lint.json');
+  FLoadError := LoadConfigManifest(FConfigPath, FManifest, FOriginalText);
   if FLoadError <> '' then
     ShowMessage('Error loading config: ' + FLoadError + sLineBreak +
       'Saving is disabled until the file loads cleanly (fix it, then Reload).');
@@ -163,8 +153,8 @@ begin
         { A validation or write failure stays silent (the engine reports it
           against whatever is on disk); a file that did not load is SAID,
           because the Build then runs against the file as it is, unsaved. }
-        if not TrySaveConfigManifest(FManifest, FLoadError, FConfigPath, Reason)
-          and (FLoadError <> '') then
+        if not TrySaveConfigManifest(FManifest, FLoadError, FOriginalText,
+          FConfigPath, Reason) and (FLoadError <> '') then
           ShowMessage(Reason);
       end;
   end;
@@ -191,7 +181,7 @@ begin
   if FSettingsFrame <> nil then
     FSettingsFrame.FlushToManifest;
   { Saved or refused, Reason says which; the Boolean is for the autosave. }
-  TrySaveConfigManifest(FManifest, FLoadError, FConfigPath, Reason);
+  TrySaveConfigManifest(FManifest, FLoadError, FOriginalText, FConfigPath, Reason);
   ShowMessage(Reason);
 end;
 
