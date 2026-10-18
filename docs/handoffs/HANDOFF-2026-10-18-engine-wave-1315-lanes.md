@@ -54,7 +54,9 @@ Supersedes HANDOFF-2026-10-18-engine-1314-vm-retest.md (1.31.4 is PUBLISHED).
   local is not a use (class local still fires).
 - Plugin: job timeouts enforced while the engine runs; on expiry the process tree is killed and the
   job shows "timed out after N s"; a rename with stale owners gets 600 s per owner (B-19).
-- (lanes 2, 6, 7: add from their reports)
+- Fixed: index into a new database no longer prints the no-resolver-stamp / no-scan_type notes or 'limit 0'; the whole-DB reason gives real new/changed counts; the ~37-min warning prints only from 1M refs (DRAGLINT_WHOLEDB_SLOW_REFS overrides) (V-C). [lane 2, MERGED]
+- (lanes 6, 7: add from their reports)
+- Lane 2 follow-ups: watch-mode FScopeWhole latch never reset between ticks; prune ids counted as 'changed' in the reason.
 
 ## Gotchas
 - Never build on main: build bat deploys to the shared third_party\dll-win64 (needs owner go).
