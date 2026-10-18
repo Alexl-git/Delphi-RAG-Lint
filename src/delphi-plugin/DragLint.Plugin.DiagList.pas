@@ -78,6 +78,22 @@ function ParseRenamePreview(const AOutput: string): TRenamePreview;
 /// was printed, else rpaApply. Pinned by run_diaglist_harness.ps1 R56-R61.</returns>
 function RenamePreviewAction(const APreview: TRenamePreview): TRenamePreviewAction;
 
+const
+  /// <summary>Budget for one stale owner's reindex inside a rename apply: the
+  /// engine's own per-project index run (measured up to ~528 s on Micronite2027,
+  /// 2026-10-13).</summary>
+  RENAME_STALE_REINDEX_MS = 600000;
+
+/// <summary>The job timeout for a rename APPLY that follows a preview (B-19).</summary>
+/// <param name="APreview">A value returned by ParseRenamePreview.</param>
+/// <param name="ABaseMs">The fix's own timeout (Fix it 60 s, Fix all 120 s);
+/// &lt;=0 = no deadline.</param>
+/// <returns>ABaseMs plus RENAME_STALE_REINDEX_MS per owner the preview reported
+/// index=stale, since the apply reindexes those before it writes (Ruling 12);
+/// ABaseMs unchanged when there is no stale owner or no deadline. Pinned by
+/// run_diaglist_harness.ps1 R67-R69.</returns>
+function RenameApplyTimeoutMs(const APreview: TRenamePreview; ABaseMs: Integer): Integer;
+
 /// <summary>The confirmation shown before a multi-project rename, or a naming
 /// rename with unindexed projects configured, is written.</summary>
 /// <param name="AUnit">File name of the unit being fixed.</param>
@@ -515,6 +531,11 @@ begin
       [Names[I], (if States[I] <> '' then States[I] else 'index not reported'), Refs[I]])];
     if StartsText(CStaleState, States[I]) then Inc(Result.StaleCount);
   end;
+end;
+
+function RenameApplyTimeoutMs(const APreview: TRenamePreview; ABaseMs: Integer): Integer;
+begin
+  Result:= if ABaseMs <= 0 then ABaseMs else ABaseMs + APreview.StaleCount * RENAME_STALE_REINDEX_MS;
 end;
 
 function RenamePreviewAction(const APreview: TRenamePreview): TRenamePreviewAction;

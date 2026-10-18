@@ -190,6 +190,10 @@ Check 'R64 a missing-member owner keeps its stale reason verbatim' ($kv['tm.proj
 Check 'R65 ... and counts as stale (unverified does not)' ($kv['tm.stale'] -eq '1') "got: $($kv['tm.stale'])"
 Check 'R66 ... and the refusal wins -> refuse' ($kv['tm.action'] -eq '2') "got: $($kv['tm.action'])"
 
+# ta: B-19 -- the rename apply's timeout covers the reindex of every stale owner
+Check 'R67 one stale owner adds one reindex budget to the apply timeout' ($kv['ta.stale1'] -eq '660000') "got: $($kv['ta.stale1'])"
+Check 'R68 no deadline stays no deadline' ($kv['ta.nodeadline'] -eq '0') "got: $($kv['ta.nodeadline'])"
+Check 'R69 no stale owner -> the fix''s own timeout' ($kv['ta.fresh'] -eq '60000') "got: $($kv['ta.fresh'])"
 [System.IO.Directory]::Delete($WorkDir, $true)
 Write-Host ''
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
