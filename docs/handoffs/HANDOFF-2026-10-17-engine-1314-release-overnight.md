@@ -38,6 +38,16 @@ or early afternoon 2026-10-18.
   failure alone (backlog-index guard is known red, R10); then STEP 5 `build\pack-lint-release.ps1
   -Version 1.31.4-alpha` and STEP 6 NOTICE (see Status for its contents). Then the library rescan.
 
+## UPDATE 2026-10-18 02:00 -- release run + library rescan DONE
+- Battery 690/3/0 (backlog_index R10; convert_apply_inherited_retype PASS alone; manual_freshness ->
+  manual regenerated, PASS). Pack exit 0, zips C:\TEMP\rel-1.31.4-alpha\. NOTICE committed 9d903dc5.
+  release-report.md written. Steps 2 and 3 below are DONE; step 7 (owner publish) is next for 1.31.4.
+- Library rescan `index --all --only Library`: 3h10m (22:44 -> 01:54), exit 0, 2/2 sections OK.
+  Win64 files=7155 walked=7160; Win32 files=7318 walked=6943 (files > walked -> a `--rebuild` of
+  library-Win32 is due, ~3 h, NOT run: owner's call). library-drift: Win32 0, Win64 4 compiled-lib
+  roots with no .pas -> docs\INBOX-library-drift-win64-lib-dirs.md. Roots ARE re-read from the IDE
+  registry on every run (no backlog item needed for that).
+
 ## Resume point (in order)
 1. Re-arm the hourly wake timer (`/loop` dynamic, ScheduleWakeup ~3600 s) -- owner is away overnight.
 2. Release run: read release-report.md. If missing, check `Get-Process pwsh,drag-lint`, the tail of
