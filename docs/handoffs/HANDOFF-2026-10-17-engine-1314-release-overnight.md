@@ -91,6 +91,20 @@ or early afternoon 2026-10-18.
    `stats\draglint-gaps.log`. Applies to subagents too. Deny, never "ask" (autonomous mode). Test with a
    small node test; use the update-config skill to wire settings.json. Then propose trimming the CLAUDE.md
    drag-lint block. No Delphi build needed -- can run beside the battery.
+7c. Owner ask (2026-10-17 ~22:00): the PRODUCT's AI instructions (docs\AI-USAGE.md, README AI section,
+   docs\wiki AI pages) do not reflect reality and only MENTION drag-lint. Update them to tell users to
+   INSTALL the enforcement hooks. Steps:
+   - Wait until the hook agent finishes extension 2 (Agent-dispatch + manual-tracing nudges, stats).
+   - Ship the hook as a product file, e.g. `integrations\claude-code\draglint-first.js` + test + a settings
+     snippet. Make it generic: no C:\Projects paths; exe and stats paths from env/config, defaulting to
+     the installed layout (memory project_installed_layout_v2.md).
+   - Add an install step: an install verb or a documented copy step. The installer may offer it; that
+     is the CHARTS/installer seam, so coordinate.
+   - Rewrite AI-USAGE so it matches the real verb surface (docs-sync guard), with a "question shape ->
+     verb" table and "install the hook" as step 1.
+   - Feature-registry entry (-Surface for the integration file), build-feature-pages -Normalise, then
+     run the docs-sync and registry guards.
+   SDD with a written plan first (spec-loop): this is a product feature, not a doc tweak.
 8. Late morning 2026-10-18: billing split help -- memory `project_billing_split_orm3_dl.md`.
 
 ## Gotchas
