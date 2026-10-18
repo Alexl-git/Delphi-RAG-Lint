@@ -27,8 +27,9 @@
                       (ChartsCoreProbe --ported): Ask-Report.ps1 -Plain as Determinism runs it, and the
                       probe's question mode (the in-process Delphi question, same index, the SAME
                       -OutRoot after the PS bundle is moved aside). The text is compared with `drag-lint compare` (the step-1 diff and its
-                      spec-s5 normalisation, nothing looser); every bundle file both sides wrote is
-                      compared too: graph.dot/.svg/.plain/.png byte for byte, meta.json/index.html/
+                      spec-s5 normalisation, nothing looser); every comparable bundle file both sides wrote is
+                      compared too (graph.pdf is reported, never compared): graph.dot/.svg/.plain/.png and
+                      trace.dlgraph (a text question's Form A document) byte for byte, meta.json/index.html/
                       xref.txt with only the generated time and the bundle root masked (the facts N1
                       already drops from the text), graph.pdf reported and not compared (see
                       $BundleSkipped). Questions not ported are listed as SKIP. The probe is rebuilt
@@ -778,7 +779,7 @@ function Get-MaskedBundleText([string] $Path, [string] $Root) {
 # Per bundle file: 'same' or why not. graph.pdf is reported, never compared: dot's cairo PDF is not
 # byte-stable (two PS runs of one question differ, measured 2026-10-13), and its content is the
 # .dot source, which IS compared byte for byte.
-$BundleBytewise = @('graph.dot', 'graph.svg', 'graph.plain', 'graph.png')
+$BundleBytewise = @('graph.dot', 'graph.svg', 'graph.plain', 'graph.png', 'trace.dlgraph')
 $BundleMasked   = @('meta.json', 'index.html', 'xref.txt')
 $BundleSkipped  = @{ 'graph.pdf' = 'not compared: cairo PDF output differs between two PS runs of the same question' }
 function Compare-Bundle([string] $PsDir, [string] $DlDir, [string] $PsRoot, [string] $DlRoot) {

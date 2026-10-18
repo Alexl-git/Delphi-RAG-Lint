@@ -146,6 +146,14 @@ type
     class function RealJson(pValue: Double): string; static;
   end;
 
+  /// <summary>One leaf -> full path pair of a text question's link table.</summary>
+  TAnchorPath = record
+    /// <summary>The file leaf as an anchor writes it (e.g. 'Blueprint4.pas'); matched case-insensitively.</summary>
+    Leaf: string;
+    /// <summary>The ONE full path the indexes hold for the leaf.</summary>
+    Path: string;
+  end;
+
   /// <summary>What a ported chart emitter hands back (the PS emitter's result object).</summary>
   TChartResult = record
     /// <summary>The files of the one dot layout run, and the SVG anchor count.</summary>
@@ -171,6 +179,16 @@ type
     AllClickable: Boolean;
     /// <summary>Every emitter property except the file paths, in the PS object's order.</summary>
     Fields      : TArray<TMetaField>;
+    /// <summary>The emitter's Trace: the Form A document it wrote (a file path); '' for a chart question.
+    /// A non-empty value makes AskChartQuestion bundle the question as a TEXT question: the file becomes
+    /// trace.dlgraph and the shell page quotes it instead of drawing only a chart.</summary>
+    TracePath   : string;
+    /// <summary>Why the chart could not be drawn, '' when it was; a text question only. The text is still
+    /// delivered, with a line saying the chart is missing.</summary>
+    ChartError  : string;
+    /// <summary>The emitter's AnchorPaths: leaf -> the ONE full path the indexes hold; a text question only.
+    /// An anchor whose leaf is absent stays plain text on the shell page.</summary>
+    AnchorPaths : TArray<TAnchorPath>;
   end;
 
   /// <summary>A ported chart emitter.</summary>

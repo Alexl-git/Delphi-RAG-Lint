@@ -1,0 +1,29 @@
+TRACE frmBlueprint4.cxGroupBox16
+  TITLE "Why frmBlueprint4.cxGroupBox16 cannot be traced"
+  FROM frmBlueprint4.cxGroupBox16
+  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-10-05T16:25Z/2026-10-05T16:21Z/2026-10-05T16:11Z
+  REGENERATE & 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'frmBlueprint4.cxGroupBox16' -DbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" -ServerDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" -SqlDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" -Depth 4
+  TIERS client -> pipe -> server -> database
+
+ANCHOR
+[01] STOPS frmBlueprint4.cxGroupBox16 (TcxGroupBox) is not data-bound: no field binding and no DataSource on it or its two enclosing components in the DFM @Blueprint4.dfm:180
+
+WRITE
+  -- not walked: the trace stopped at [01]
+
+SERVER
+  -- not walked: the trace stopped at [01]
+
+DATABASE
+  -- not walked: the trace stopped at [01]
+
+RESPONSE
+  -- not walked: the trace stopped at [01]
+
+READ
+  -- not walked: the trace stopped at [01]
+
+ALSO
+  -- not walked: the trace stopped at [01]
+
+END TRACE  1 steps, 0 conditions, 0 crossings, 1 unresolved.

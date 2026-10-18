@@ -1,0 +1,29 @@
+TRACE OPERAT.NAME
+  TITLE "Why OPERAT.NAME cannot be traced"
+  FROM OPERAT.NAME
+  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-10-05T16:25Z/2026-10-05T16:21Z/2026-10-05T16:11Z
+  REGENERATE & 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'OPERAT.NAME' -DbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" -ServerDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" -SqlDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" -Depth 4
+  TIERS client -> pipe -> server -> database
+
+ANCHOR
+[01] STOPS OPERAT.NAME: 5 datasets load OPERAT in this index (AssignGroups.ViewModel.TAssignGroupsViewModel.FMTOperat, AssignTools2.ViewModel.TAssignTools2ViewModel.FMTOperat, Blueprint4.ViewModel.TBlueprint_ViewModel.FMTOperation, CompGroup2.ViewModel.TCompGroup2ViewModel.FMTOperation, ControlPlan2.ViewModel.TControlPlan_ViewModel.FMTOperation) - pass the control or the dataset field @AssignGroups.ViewModel.pas:42
+
+WRITE
+  -- not walked: the trace stopped at [01]
+
+SERVER
+  -- not walked: the trace stopped at [01]
+
+DATABASE
+  -- not walked: the trace stopped at [01]
+
+RESPONSE
+  -- not walked: the trace stopped at [01]
+
+READ
+  -- not walked: the trace stopped at [01]
+
+ALSO
+  -- not walked: the trace stopped at [01]
+
+END TRACE  1 steps, 0 conditions, 0 crossings, 1 unresolved.

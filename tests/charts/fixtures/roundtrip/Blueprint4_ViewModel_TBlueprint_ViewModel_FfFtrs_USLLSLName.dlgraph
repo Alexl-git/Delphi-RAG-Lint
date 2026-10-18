@@ -1,0 +1,55 @@
+TRACE Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_USLLSLName
+  TITLE "Why Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_USLLSLName cannot be traced -- it is calculated"
+  FROM Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_USLLSLName
+  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-10-05T16:25Z/2026-10-05T16:21Z/2026-10-05T16:11Z
+  REGENERATE & 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_USLLSLName' -DbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" -ServerDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" -SqlDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" -Depth 4
+  TIERS client -> pipe -> server -> database
+
+ANCHOR
+[01] SETS FfFtrs_USLLSLName := FMTFtrs field 'USLLSLName' [inferred] @Blueprint4.ViewModel.pas:945 -- the TField variable via FF(dataset, literal), assumed to return the dataset's field named by the literal, and FMTFtrs matched by name among the class's dataset fields; ask in-class-field-reads
+[02] BINDS FMTFtrs : TFDMemTable @Blueprint4.ViewModel.pas:77 -- the anchor dataset
+[03] READS MSCLIST [inferred] @Blueprint4.ViewModel.pas:754 -- in BuildSchema; the table literal beside FMTFtrs on 16 line(s)
+[04] STOPS USLLSLName is a calculated field of FMTFtrs (created (FieldKind fkCalculated) at :758, computed in FtrsOnCalcFields at :961-1119), not a column of MSCLIST in the SQL index @Blueprint4.ViewModel.pas:1019 -- in FtrsOnCalcFields; wired as FMTFtrs.OnCalcFields at :790, the handler matched by name, C sets FieldKind fkCalculated at :735; ask E3
+       UNLESS DataSet.State = dsInsert @Blueprint4.ViewModel.pas:973 -- else Exit at :973
+       WHEN FtrType = Integer(FtrType_Variable) @Blueprint4.ViewModel.pas:1003 -- around the write at :1019
+       WHEN Assigned(FfFtrs_USLLSLName) @Blueprint4.ViewModel.pas:1001
+       WHEN FfFtrs_ID.AsLargeInt <> FfFtrs_MasterID.AsLargeInt @Blueprint4.ViewModel.pas:1023 -- around the write at :1024
+       WHEN FtrType = Integer(FtrType_Attribute) @Blueprint4.ViewModel.pas:1021 -- around the writes at :1024, :1026
+       UNLESS FtrType = Integer(FtrType_Variable) @Blueprint4.ViewModel.pas:1003 -- around the writes at :1024, :1026, :1029
+       UNLESS FfFtrs_ID.AsLargeInt <> FfFtrs_MasterID.AsLargeInt @Blueprint4.ViewModel.pas:1023 -- around the write at :1026
+       UNLESS FtrType = Integer(FtrType_Attribute) @Blueprint4.ViewModel.pas:1021 -- around the write at :1029
+       VIA LowerCase @Blueprint4.ViewModel.pas:1024 -- computed by this call at :1024, its body is not walked, nor are those of UpperCase
+
+DERIVED
+  -- USLLSLName is calculated from 2 fields, and the value is chosen by 3 more (if at :1003, :1023), and 1 other value the walk cannot map -- trace one of them instead (every binding below: the TField variable via FF(dataset, literal), assumed to return the dataset's field named by the literal, and FMTFtrs matched by name among the class's dataset fields):
+[05] FROM Spec, not mapped: a local of FtrsOnCalcFields set at 5 places before this read @Blueprint4.ViewModel.pas:1019 -- in FtrsOnCalcFields
+[06] FROM MSCLIST.ATTRNAME VIA FfFtrs_AttrName [inferred] @Blueprint4.ViewModel.pas:1024 -- in FtrsOnCalcFields; FfFtrs_AttrName bound at :821 via FF; ask in-class-field-reads
+       REGENERATE & 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_AttrName' -DbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" -ServerDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" -SqlDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" -Depth 4
+[07] FROM MSCLIST.DIMNAME VIA FfFtrs_DimName [inferred] @Blueprint4.ViewModel.pas:1029 -- in FtrsOnCalcFields; FfFtrs_DimName bound at :834 via FF; ask in-class-field-reads
+       REGENERATE & 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_DimName' -DbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" -ServerDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" -SqlDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" -Depth 4
+[08] FROM MSCLIST.FTRTYPE VIA FtrType, set from FfFtrs_FtrType, chooses the value (if at :1003) [inferred] @Blueprint4.ViewModel.pas:1003 -- in FtrsOnCalcFields; FtrType set at :978, FfFtrs_FtrType bound at :858 via FF; ask in-class-field-reads
+       REGENERATE & 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_FtrType' -DbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" -ServerDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" -SqlDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" -Depth 4
+[09] FROM MSCLIST.ID VIA FfFtrs_ID, chooses the value (if at :1023) [inferred] @Blueprint4.ViewModel.pas:1023 -- in FtrsOnCalcFields; FfFtrs_ID bound at :860 via FF; ask in-class-field-reads
+       REGENERATE & 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_ID' -DbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" -ServerDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" -SqlDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" -Depth 4
+[10] FROM MSCLIST.MASTERID VIA FfFtrs_MasterID, chooses the value (if at :1023) [inferred] @Blueprint4.ViewModel.pas:1023 -- in FtrsOnCalcFields; FfFtrs_MasterID bound at :870 via FF; ask in-class-field-reads
+       REGENERATE & 'C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_MasterID' -DbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\CLIENT-Micronite2027.sqlite" -ServerDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite" -SqlDbPath "C:\Projects\Delphi-RAG-lint-wt\archify-ir\charts\scratch\db\SQL-drag-lint-sql.sqlite" -Depth 4
+
+WRITE
+  -- not walked: the trace stopped at [04]
+
+SERVER
+  -- not walked: the trace stopped at [04]
+
+DATABASE
+  -- not walked: the trace stopped at [04]
+
+RESPONSE
+  -- not walked: the trace stopped at [04]
+
+READ
+  -- not walked: the trace stopped at [04]
+
+ALSO
+  -- not walked: the trace stopped at [04]
+
+END TRACE  10 steps, 8 conditions, 0 crossings, 1 unresolved.

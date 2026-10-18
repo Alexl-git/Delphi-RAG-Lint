@@ -9,8 +9,14 @@ unit DRagLint.Charts.Ask;
   bytes, and the answer is Ask-Report's plain lines -- the header sentence, COMMAND,
   BUNDLE, INDEX, the CHART line and one line per row read back from graph.dot.
 
-  NOT PORTED, because no ported question needs it: the round-trip text branch
-  (trace.dlgraph). The -ServerDbPath / -SqlDbPath / -CounterpartDb parts of the regenerate
+  The TEXT branch (round-trip): a result whose TracePath is set is a text question
+  (New-DiagramArtifact.ps1:254-255 and 297-342, Ask-Report.ps1:350-354). Its document is
+  moved to trace.dlgraph beside the chart drawn from it; the shell page quotes the
+  document in a <pre> with every anchor whose leaf AnchorPaths names becoming a draglint://
+  link (the chart, or a line saying why none could be drawn, above it); the plain answer is
+  the document's lines instead of the CHART line and rows, plus a NOTE line when ChartError
+  is set. A text question without a chart is not an error; a chart question without an svg
+  still is. The -ServerDbPath / -SqlDbPath / -CounterpartDb parts of the regenerate
   command and of the INDEX lines ARE ported (RegenerateText, AnswerIndexLines). Index resolution
   (-Project / -In), the pairing file and the freshness check are the producer's job,
   before this unit is called.
@@ -99,7 +105,7 @@ implementation
 
 uses
   Winapi.Windows, System.Classes, System.IOUtils, System.StrUtils, System.Character, System.DateUtils,
-  System.Generics.Collections, System.RegularExpressions, DRagLint.Charts.Text
+  System.Generics.Collections, System.Generics.Defaults, System.RegularExpressions, DRagLint.Charts.Text
   , DRagLint.Charts.Tools // dl:unit DRagLint.Charts.Tools accepted -- the clone-guard override's variable name travels with the guard (CloneDb) that reads it
   ;
 
@@ -239,6 +245,30 @@ const
     '  });' + LF +
     '})();' + LF +
     '</script>';
+
+  { The text branch (round-trip): New-DiagramArtifact.ps1:308-340, verbatim }
+  HR_RULE = '<hr style="border:0;border-top:1px solid var(--line);margin:16px 0">';
+  PRE_OPEN = '<pre style="margin:0;font:13px/1.5 var(--mono);white-space:pre">';
+  PRE_CLOSE = '</pre>';
+  ERR_OPEN = '<p class="k"><b>The chart could not be drawn:</b> ';
+  ERR_CLOSE = '</p>';
+  ANCHOR_SPAN_TEXT = '<span><b>%d</b> of <b>%d</b> @file:line anchors link to the IDE</span>';
+  FOOT_FILES_TEXT = 'trace.dlgraph (Form A text) &middot; ';
+  TRACE_DLGRAPH = 'trace.dlgraph';
+  NOTE_CHART_FAIL = 'NOTE the chart could not be drawn: ';
+  RE_TRACE_ANCHOR = '(?<= )@([A-Za-z0-9_$.\-]+\.(?:pas|dfm|dpr|inc|sql)):([1-9]\d*)';
+  NOTE_TEXT =
+    '    <p><b>The answer is the document; the picture is drawn from it.</b> <code class="k">@@QUESTION@@</code> answers in' + LF +
+    '    Form A TEXT (<code class="k">trace.dlgraph</code>; grammar:' + LF +
+    '    <code class="k">charts\form-a-grammar-spec.md</code> section 8). Each step''s anchor is' + LF +
+    '    written as <code class="k">@File.pas:line</code>; an anchor whose file the indexes name exactly' + LF +
+    '    once is a <code class="k">draglint://open?file=..&amp;line=..</code> link that opens the line in' + LF +
+    '    your running IDE, through the protocol handler' + LF +
+    '    (<code class="k">drag-lint protocol register</code>, once per user). An anchor left' + LF +
+    '    as plain text names a file the indexes hold at zero or several paths.</p>' + LF +
+    '    <p style="margin-top:10px">The picture above the text is drawn FROM it (no second walk): lanes client, pipe,' + LF +
+    '    server, database; a numbered row per step, its WHEN / UNLESS guards under it verbatim; anything not drawn is' + LF +
+    '    named in the chart''s Legend. Its rows open the same lines in the IDE.</p>';
 
   NOTE_CHART =
     '    <p><b>Clicks open the file in your running IDE.</b> Every row is a real anchor' + LF +
@@ -580,9 +610,100 @@ begin
   Result:= pS.Replace(CRLF, LF).Replace(LF, CRLF);
 end;
 
+type
+  { Counts and links the anchors of a text question's document: TRegEx.Replace takes a method of object. }
+  TAnchorLinker = class
+  strict private
+    FPaths : TDictionary<string, string>;
+    FTotal : Integer;
+    FLinked: Integer;
+  public
+    constructor Create(const pPaths: TArray<TAnchorPath>);
+    destructor Destroy; override;
+    function Link(const pMatch: TMatch): string;
+    property Total: Integer read FTotal;
+    property Linked: Integer read FLinked;
+  end;
+
+constructor TAnchorLinker.Create(const pPaths: TArray<TAnchorPath>);
+begin
+  inherited Create;
+  FPaths:= TDictionary<string, string>.Create(TIStringComparer.Ordinal);
+  for var A in pPaths do
+    if not FPaths.ContainsKey(A.Leaf) then
+      FPaths.Add(A.Leaf, A.Path);
+end;
+
+destructor TAnchorLinker.Destroy;
+begin
+  FPaths.Free;
+  inherited Destroy;
+end;
+
+{ A hashtable lookup in the PS: case-insensitive, an empty path is no link. }
+function TAnchorLinker.Link(const pMatch: TMatch): string;
+begin
+  Inc(FTotal);
+  var Full: string;
+  if not FPaths.TryGetValue(pMatch.Groups[G_FILE].Value, Full) or (Full = '') then
+    Exit(pMatch.Value);
+  Inc(FLinked);
+  Result:= '<a href="' + RowHref(Full, StrToInt(pMatch.Groups[G_LINE].Value)) + '">' + pMatch.Value + '</a>';
+end;
+
+{ The <pre> of a text question's document: escaped, each ` @leaf.ext:N` whose leaf pChart.AnchorPaths names a link.
+  pTotal / pLinked count the anchors. }
+function TraceBody(const pChart: TChartResult; const pTracePath: string; out pTotal, pLinked: Integer): string;
+begin
+  var Linker:= TAnchorLinker.Create(pChart.AnchorPaths);
+  try
+    var Esc:= TFile.ReadAllText(pTracePath, TEncoding.UTF8).Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;');
+    Esc:= TRegEx.Replace(Esc, RE_TRACE_ANCHOR, Linker.Link, [roIgnoreCase]);
+    pTotal:= Linker.Total;
+    pLinked:= Linker.Linked;
+    Result:= PRE_OPEN + Esc + PRE_CLOSE;
+  finally
+    Linker.Free;
+  end;
+end;
+
+{ The shell of a TEXT question (New-DiagramArtifact.ps1:301-340): the chart above the document when graph.svg exists,
+  else the reason it was not drawn above it, else the document alone. }
+function TextShellHtml(const pArgs: TQuestionArgs; const pChart: TChartResult; const pLeftLabel, pRightLabel,
+  pGenerated, pSvgPath: string): string;
+begin
+  var Total, Linked: Integer;
+  var Pre:= TraceBody(pChart, TPath.Combine(ExtractFilePath(pSvgPath), TRACE_DLGRAPH), Total, Linked);
+  var Body:= Pre;
+  var FootFiles:= FOOT_FILES_TEXT;
+  if TFile.Exists(pSvgPath) then
+  begin
+    Body:= TRegEx.Replace(TFile.ReadAllText(pSvgPath, TEncoding.UTF8), RE_SVG_PROLOG, '') + HR_RULE + Pre;
+    FootFiles:= FOOT_FILES + FOOT_FILES_TEXT;
+  end
+  else if pChart.ChartError <> '' then
+    Body:= ERR_OPEN + pChart.ChartError.Replace('&', '&amp;').Replace('<', '&lt;') + ERR_CLOSE + Pre;
+  Result:= HTML_TEMPLATE
+    .Replace('@@QUESTION@@', pArgs.Question)
+    .Replace('@@SHORT@@', pArgs.Target)
+    .Replace('@@LEFTCOUNT@@', IntToStr(pChart.LeftCount))
+    .Replace('@@LEFTLABEL@@', pLeftLabel)
+    .Replace('@@RIGHTCOUNT@@', IntToStr(pChart.RightCount))
+    .Replace('@@RIGHTLABEL@@', pRightLabel)
+    .Replace('@@ANCHORSPAN@@', Format(ANCHOR_SPAN_TEXT, [Linked, Total]))
+    .Replace('@@INDEXNAME@@', FileNameOf(pArgs.DbPath))
+    .Replace('@@GENERATED@@', pGenerated)
+    .Replace('@@FOOTFILES@@', FootFiles)
+    .Replace('@@NOTE@@', NOTE_TEXT.Replace('@@QUESTION@@', pArgs.Question))
+    .Replace('@@SVG@@', Body);
+  Result:= ToCrlf(Result);
+end;
+
 function ShellHtml(const pArgs: TQuestionArgs; const pChart: TChartResult; const pLeftLabel, pRightLabel,
   pGenerated, pSvgPath: string): string;
 begin
+  if pChart.TracePath <> '' then
+    Exit(TextShellHtml(pArgs, pChart, pLeftLabel, pRightLabel, pGenerated, pSvgPath));
   var Svg:= TRegEx.Replace(TFile.ReadAllText(pSvgPath, TEncoding.UTF8), RE_SVG_PROLOG, '');
   var Short:= if SameText(pArgs.Question, PATH_QUESTION) then pArgs.Target + ' -&gt; ' + pArgs.Command.Get('To') else pArgs.Target;
   Result:= HTML_TEMPLATE
@@ -682,13 +803,15 @@ begin
   MoveOver(Chart.Layout.Dot, TPath.Combine(Dir, GRAPH_DOT));
   MoveOver(Chart.Layout.Png, TPath.Combine(Dir, GRAPH_PNG));
   MoveOver(Chart.Layout.Pdf, TPath.Combine(Dir, GRAPH_PDF));
+  var IsText:= Chart.TracePath <> '';
+  MoveOver(Chart.TracePath, TPath.Combine(Dir, TRACE_DLGRAPH));
 
   var Generated:= FormatDateTime(ISO_UTC, TTimeZone.Local.ToUniversalTime(Now));
   var Regenerate:= RegenerateText(pArgs);
   TFile.WriteAllText(TPath.Combine(Dir, META_JSON), MetaJson(pArgs, Chart, LeftLabel, RightLabel, Generated, Regenerate),
     TEncoding.ASCII);
   var SvgPath:= TPath.Combine(Dir, GRAPH_SVG);
-  if not TFile.Exists(SvgPath) then
+  if not IsText and not TFile.Exists(SvgPath) then
     raise EChartsQuestion.CreateFmt('%s drew no chart: %s is missing', [pArgs.Question, SvgPath]);
   var ShellPath:= ExpandFileName(TPath.Combine(Dir, SHELL_HTML));
   TFile.WriteAllBytes(ShellPath, TEncoding.UTF8.GetBytes(ShellHtml(pArgs, Chart, LeftLabel, RightLabel, Generated, SvgPath)));
@@ -701,6 +824,16 @@ begin
       SentTarget, FormatDateTime(ASKED_ON, pArgs.AskedOn), pArgs.EngineVersion]),
     ReportCommandText(pArgs.Command),
     'BUNDLE ' + Dir] + AnswerIndexLines(pArgs);
+  if IsText then
+  begin
+    { Ask-Report.ps1:350-354: the document's lines, then the reason the chart is missing }
+    Lines:= Lines + TFile.ReadAllText(TPath.Combine(Dir, TRACE_DLGRAPH), TEncoding.UTF8).TrimRight([#13, #10]).Split([CRLF]);
+    if Chart.ChartError <> '' then
+      Lines:= Lines + [NOTE_CHART_FAIL + Chart.ChartError];
+    Result.Lines:= Lines;
+    Result.BundleDir:= Dir;
+    Exit;
+  end;
   Lines:= Lines + [Format('CHART %s %s -- %d %s / %d %s', [pArgs.Question, SentTarget, Chart.LeftCount, LeftLabel, Chart.RightCount, RightLabel])];
   var DotPath:= TPath.Combine(Dir, GRAPH_DOT);
   var DotLines: TArray<string>:= [];

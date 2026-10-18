@@ -44,7 +44,7 @@ type
     [TearDown] procedure TearDown;
     [Test] procedure CompareGetsTheDelphiProducerOnLiveIndexes;
     [Test] procedure CloneGuardStaysOnWhenLiveIsNotAllowed;
-    [Test] procedure UnportedQuestionFallsBack;
+    [Test] procedure UnregisteredQuestionFallsBack;
     [Test] procedure ProjectWithoutIndexFallsBack;
     [Test] procedure PortedQuestionIsAnsweredInProcess;
     [Test] procedure StaleIndexRefusesWithoutAllowStale;
@@ -207,13 +207,16 @@ begin
   Assert.AreEqual(0, FFallback.Calls);
 end;
 
-procedure TProducerDelphiTests.UnportedQuestionFallsBack;
+{ Since the round-trip port every one of the 26 question ids is registered, so the registry-miss fallback is reached
+  only by an id outside the registry; 'member-access' is not a question id (QuestionIds has 26), which is exactly
+  what makes it a registry miss. The mechanism under test (registry miss -> FallBack) is unchanged. }
+procedure TProducerDelphiTests.UnregisteredQuestionFallsBack;
 begin
   var O:= DefaultProduceOptions;
   O.DbOverride:= 'any.sqlite';
-  var R:= FProducer.Produce(Cmd('round-trip', 'A.B'), O);
+  var R:= FProducer.Produce(Cmd('member-access', 'A.B'), O);
   Assert.AreEqual(1, FFallback.Calls);
-  Assert.AreEqual('round-trip', FFallback.LastQuestion);
+  Assert.AreEqual('member-access', FFallback.LastQuestion);
   Assert.AreEqual('any.sqlite', FFallback.LastDb);
   Assert.AreEqual(STUB_EXIT, R.ExitCode);
   Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
