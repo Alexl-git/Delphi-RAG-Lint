@@ -13,16 +13,12 @@ reg export HKCU\Software C:\before-hkcu.reg /y
 Get-ChildItem HKCU:\Software | Select-Object Name
 ```
 
-If the VM has no PowerShell 7, do pass A first without it, then install it
-(https://aka.ms/powershell) and do pass B.
-
 ## Pass A -- "Just for me", everything ticked (default)
 
 1. Run `drag-lint-setup-<version>.exe`. Choose **Just for me**.
 2. **Components page:** the four IDE plugin lines are greyed out and say
    "RAD Studio 13 not found" / "64-bit IDE not found". Everything else is ticked.
-3. **Without PowerShell 7:** a page says "PowerShell 7 was not found" and setup
-   continues. With it, that page does not appear.
+3. No PowerShell 7 page appears (the installer no longer looks for pwsh).
 4. Finish. Folder `%LOCALAPPDATA%\Programs\drag-lint` holds `bin\`, `bin\rules\`,
    `bin\graphviz\bin\dot.exe`, `yadf\`, `licenses\` and `report-pairs.example.json`.
    There is **no** `bin\x64\` and **no** `.bpl` anywhere (no IDE, so no plugin).
@@ -43,14 +39,16 @@ If the VM has no PowerShell 7, do pass A first without it, then install it
    .\drag-lint.exe lint-all --db C:\sample\_D-RAG\App.sqlite
    ```
 
-7. Charts (needs PowerShell 7):
+7. Charts (no PowerShell installed or needed):
 
    ```
-   pwsh -File .\Ask-Report.ps1 -List
+   .\drag-lint.exe ask --help         # lists the 26 questions
+   .\drag-lint.exe ask who-calls --target <X> --project C:\sample\App.dproj
    ```
 
-   then one question against the sample index; the SVG/HTML opens and has a
-   drawing (Graphviz found beside the scripts).
+   the question answers in-process; the SVG/HTML opens and has a drawing
+   (Graphviz found beside the engine). Also check that `bin\` contains no
+   `*.ps1` (`Get-ChildItem bin -Recurse -Filter *.ps1` returns nothing).
 8. Open `drag-lint-config.exe`, `ConvRulesEditor.exe`, `drag_lint_graph.exe`,
    `..\yadf\YADF.exe --help`, `..\yadf\YADFSetup.exe`: each starts without a
    "missing DLL" or "package not found" error.
@@ -98,7 +96,7 @@ in Apps, `bin\drag-lint.json` unchanged, `--version` reports N+1.
 
 On a machine with RAD Studio 13: plugin lines are enabled, `Known Packages`
 gets one value per ticked plugin, the IDE loads both drag-lint and YADF
-plugins, *drag-lint > Reports* finds `Ask-Report.ps1` beside the engine,
+plugins, *drag-lint > Reports* calls `drag-lint ask` (no PowerShell),
 setup refuses while `bds.exe` runs, and uninstall removes only those values.
 If the developer's own `dll-win32` plugin is registered, setup warns about the
 duplicate before installing; a `/VERYSILENT` install skips that plugin and logs

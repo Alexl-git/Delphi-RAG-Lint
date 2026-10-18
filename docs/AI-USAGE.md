@@ -374,8 +374,8 @@ pure-diagnostic verbs are broken out in 2b.
 | `find-unit --name X --in F` | add the declaring unit to F's `uses` clause |
 | `usages --name X` | every read/write/use of X (`--width narrow\|wide\|very-wide`) |
 | `outline --file F.pas` | all symbols declared in one file. Since extractor 1.17.0 that includes nested-routine locals and inline `var` / `for var` declarations, emitted as `local_var` symbols parented to the INNERMOST routine (`U.T.M.Nested.I`). A forward stub row is tagged `[forward -> line N]` (`forward_target_line` in JSON); both rows are listed. |
-| `compare --old R --command "<id> -Target T -Project P"` / `--in U.pas --line L [--update-doc]` | is this report still true? Reruns the report's COMMAND (in-process for a ported question, else `charts\src\Ask-Report.ps1 -Plain`) against the current index and diffs the normalised text (forms CSV by row, chart by nodes and edges). Exit 0 same, 1 differs, 2 usage/setup, 3 stale index (the new run never accepts a stale index). `--new F` (two saved outputs, no rerun) / `--question ID --target T` / `--old-db` / `--auto` / `--save` / `--snapshot-dir D` / `--show` / `--format text\|json\|html` / `--open`; `--format json` is schema `compare/1`. Page: [compare](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) |
-| `ask <id> --target T --project P` / `--in U.pas` / `--db D` | one report question (26 ids) as text: the DocInsight remarks block the IDE Reports menu copies, or `--plain` for the plain answer (header, COMMAND, BUNDLE, INDEX, text). Ported questions answer in-process on the live index; the rest run `charts\src\Ask-Report.ps1 -Plain`. Exit 0 answered, 1 refused, 2 usage/setup, 3 stale index (stderr prints the incremental reindex command; `--allow-stale` answers anyway). `--to B` / `--server-db` / `--sql-db` / `--counterpart-db` / `--depth` / `--cap` / `--surface-cap` / `--control` / `--mode` / `--max-rows` / `--out-root` / `--pairs-file` / `--open` / `--resolve-only`. Page: [ask](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) |
+| `compare --old R --command "<id> -Target T -Project P"` / `--in U.pas --line L [--update-doc]` | is this report still true? Reruns the report's COMMAND (in-process, no PowerShell) against the current index and diffs the normalised text (forms CSV by row, chart by nodes and edges). Exit 0 same, 1 differs, 2 usage/setup, 3 stale index (the new run never accepts a stale index). `--new F` (two saved outputs, no rerun) / `--question ID --target T` / `--old-db` / `--auto` / `--save` / `--snapshot-dir D` / `--show` / `--format text\|json\|html` / `--open`; `--format json` is schema `compare/1`. Page: [compare](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) |
+| `ask <id> --target T --project P` / `--in U.pas` / `--db D` | one report question (26 ids) as text: the DocInsight remarks block the IDE Reports menu copies, or `--plain` for the plain answer (header, COMMAND, BUNDLE, INDEX, text). Every question is answered in-process on the live index; no PowerShell is needed. Exit 0 answered, 1 refused, 2 usage/setup, 3 stale index (stderr prints the incremental reindex command; `--allow-stale` answers anyway). `--to B` / `--server-db` / `--sql-db` / `--counterpart-db` / `--depth` / `--cap` / `--surface-cap` / `--control` / `--mode` / `--max-rows` / `--out-root` / `--pairs-file` / `--open` / `--resolve-only`. Page: [ask](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) |
 | `surface --qname U.T` | class surface / member signatures (`--include-impl`, `--all-visibility`) |
 | `slice --qname U.T.M` | one symbol's source body |
 | `typeat F:L:C` | resolve the identifier at a cursor position |
@@ -759,14 +759,15 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `allow` | [allow](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/allow) | Records a dl:ok review of one finding, so it stops being reported without being fixed |  |
 | `allow` | [Allow this message](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Allow-this-message) | Records a dl:ok review of one finding, so it stops being reported without being fixed |  |
 | `ambiguous-calls` | [ambiguous-calls](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ambiguous-calls) | Resolver-coverage diagnostic that reports call sites the engine could not pin to exactly one target -- unresolved or ambiguous calls | index |
-| `ask` | [ask](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) | Ask one report question and print the answer as text | index, powershell7, graphviz |
+| `ask` | [ask](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) | Ask one report question and print the answer as text | index, graphviz |
+| `ask` | [Chart questions](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Diagrams-and-Charts) | Every chart question of the Reports submenu and drag-lint ask, imported from REPORT_QUESTIONS | index, graphviz |
 | `bench-context` | [bench-context](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/bench-context) | Benchmarks the context command by building context bundles for a sample of symbols against a database |  |
 | `butterfly` | [butterfly](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/butterfly) | Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command | index |
 | `call-path` | [call-path](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/call-path) | Finds the shortest resolved call path from one symbol to another | index |
 | `callgraph` | [callgraph](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/callgraph) | Prints an N-deep resolved call tree for a symbol, in either direction | index |
 | `check-ast` | [Run AST Checks](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Run-AST-Checks) | Runs drag-lint's AST-level checks against a file |  |
 | `check-unit` | [Add Missing Units to uses (whole unit)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Add-Missing-Units-to-uses-whole-unit) | The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them |  |
-| `compare` | [Compare a report with current code](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) | Reruns a saved or pasted report and shows before / delta / after | index, powershell7 |
+| `compare` | [Compare a report with current code](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) | Reruns a saved or pasted report and shows before / delta / after | index |
 | `compile-check` | [compile-check](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compile-check) | Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result |  |
 | `context` | [context](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/context) | Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers |  |
 | `contrast-selftest` | [contrast-selftest](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Self-test for the hover contrast computation, driven by a test runner |  |
@@ -1279,12 +1280,11 @@ a named pipe). Separate and even-more-experimental ? feedback welcome there too.
 
 The report verbs answer a PATH or a SET: what happens when a grid field is edited and saved, who
 writes or reads a field, who calls a routine, what a change breaks, which tables it touches. Each row
-of the answer is anchored `@File.pas:line`. They are PowerShell scripts under `charts\src`, not engine
-verbs; one command asks any of them, resolves every index itself and never reindexes (a stale index
+of the answer is anchored `@File.pas:line`. They are answered in-process by the engine's `ask` verb; one command asks any of them, resolves every index itself and never reindexes (a stale index
 stops it, exit 3, with the reindex command on stderr). A human in RAD Studio asks the same questions
-from drag-lint > Reports (caret -> typeat -> Ask-Report.ps1); an agent uses the command line:
+from drag-lint > Reports (caret -> typeat -> `drag-lint ask`); an agent uses the command line:
 
-    pwsh -NoProfile -File C:\Projects\Delphi-RAG-lint\charts\src\Ask-Report.ps1 -Question round-trip -Target frmBlueprint4.dxDBGrid1FtrsVNum -Project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
+    drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1FtrsVNum --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
 
 A path or set across units, forms or processes -> the verb first. One member in one file -> `query` /
 `find-callers` or Grep. Question ids, target forms, output and exit codes: `charts\README.md`

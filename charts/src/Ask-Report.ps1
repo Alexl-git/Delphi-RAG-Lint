@@ -369,8 +369,9 @@ try {
           $txt = ([Net.WebUtility]::HtmlDecode(($m.Groups[1].Value -replace '<[^>]+>', '')).Trim()) -replace '[^\x20-\x7E]', ' '
           if ($txt -notmatch 'not shown') { continue }
           if ($txt -match '^\+\d+ more') {
-            $cm = [regex]::Match("$($meta.regenerate)", ' -(SurfaceCap|Cap) (\d+)')
-            $capHow = $(if ($cm.Success) { " (-$($cm.Groups[1].Value) $($cm.Groups[2].Value); raise -$($cm.Groups[1].Value) to see them)" } else { ' (raise -Cap to see them)' })
+            $cm = [regex]::Match("$($meta.regenerate)", ' --(surface-cap|cap) (\d+)')
+            $capName = $(if ($cm.Success -and $cm.Groups[1].Value -eq 'surface-cap') { 'SurfaceCap' } else { 'Cap' })
+            $capHow = $(if ($cm.Success) { " (-$capName $($cm.Groups[2].Value); raise -$capName to see them)" } else { ' (raise -Cap to see them)' })
             $txt += $capHow
           }
           if (-not $notShown.Contains($txt)) { $notShown.Add($txt) }

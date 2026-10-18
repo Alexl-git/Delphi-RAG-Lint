@@ -324,7 +324,7 @@ const
     'TRACE OPERAT.NAME' + CRLF +
     '  TITLE "How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back"' + CRLF +
     '  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-09-28T22:19Z' + CRLF +
-    '  REGENERATE & ''C:\x\New-DiagramArtifact.ps1'' -Question round-trip -Target x' + CRLF +
+    '  REGENERATE drag-lint ask round-trip --target x' + CRLF +
     '  TIERS client -> pipe -> server -> database' + CRLF +
     '' + CRLF +
     'ANCHOR' + CRLF +

@@ -27,7 +27,7 @@ unit DRagLint.Charts.Q.RoundTrip;
   PS traps closed: `$A.Items[-1]` is the LAST item of a non-empty list (the entry step always exists);
   `@($wiring | Select-Object -Skip 1)` is every wiring after the first; `$notes` are written AFTER the walk so
   each STOPS has its final number; `[Math]::Min` / `Max` order the two stop numbers; Get-RegenerateCommand
-  doubles `'` in the -Target and in the bundler path; `$chartOut` names are deleted when dot fails; `-eq` /
+  double-quotes the --target and each index path; `$chartOut` names are deleted when dot fails; `-eq` /
   `-ne` / `-in` are case-insensitive (SameText); `Select-Object -Unique` keeps first-seen order (SkipIds, the
   anchor leaves: case-SENSITIVE) while a hashtable keyed by leaf is case-INSENSITIVE; a STOP is not a refusal
   (AC-13): a control that is not data-bound is a one-step trace. *)
@@ -71,8 +71,6 @@ const
   ACTOR_SERVER = 'SERVER';
   ACTOR_DATABASE = 'DATABASE';
   ASK_E3 = 'E3';
-  BUNDLER_SCRIPT = 'New-DiagramArtifact.ps1';
-  SCRIPTS_SUBDIR = 'src';
   OUT_PREFIX = 'roundtrip_';
   TRACE_EXT = '.dlgraph';
   TRACE_BUNDLE_NAME = 'trace.dlgraph';
@@ -105,8 +103,8 @@ const
   SERVER_PREFIX_RX = '^SERVER-';
   { PS :296: every ` @<leaf>.<pas|dfm|dpr|inc|sql>:<line>` the text anchors, IgnoreCase }
   ANCHOR_LEAF_RX = ' @([A-Za-z0-9_$.\-]+\.(?:pas|dfm|dpr|inc|sql)):[1-9]\d*';
-  { PS :363: the command that traces a DERIVED row's field, its -Target single-quoted with `'` doubled }
-  TARGET_RX = '-Target ''((?:[^'']|'''')*)''';
+  { PS :360: the field a DERIVED row's REGENERATE traces -- its --target, double-quoted (a qualified name holds no ") }
+  TARGET_RX = '--target "([^"]*)"';
   SQL_FILES_COUNT = 'SELECT COUNT(*) AS n FROM files';
   SQL_ANCHOR_PATHS = 'SELECT DISTINCT path AS p FROM files WHERE %s';
   TITLE_REACHES = 'How %s reaches %s and goes back';
@@ -148,7 +146,6 @@ type
     FWalker    : TTraceWalker;
     FCliName   : string;
     FSrvName   : string;
-    FBundler   : string;
     FName      : string;
     FTrace     : TTrace;
     FAnchor    : TAnchorResult;
@@ -304,8 +301,8 @@ end;
 { PS :105: the command that traces a target on these three indexes at this depth }
 function TRoundTripRun.Regenerate(const pFor: string): string;
 begin
-  Result:= Format('& ''%s'' -Question round-trip -Target ''%s'' -DbPath "%s" -ServerDbPath "%s" -SqlDbPath "%s" -Depth %d',
-    [FBundler, pFor.Replace('''', ''''''), FCliDb, FSrvDb, FSqlDb, FDepth]);
+  Result:= Format('drag-lint ask round-trip --target "%s" --db "%s" --server-db "%s" --sql-db "%s" --depth %d',
+    [pFor, FCliDb, FSrvDb, FSqlDb, FDepth]);
 end;
 
 { PS :93-99: each index's own last-indexed stamp, in the order the INDEX line names them }
@@ -789,7 +786,7 @@ begin
       begin
         var M:= TRegEx.Match(C.Text, TARGET_RX, [roIgnoreCase]);
         if M.Success then
-          Targets:= Targets + [M.Groups[1].Value.Replace('''''', '''')];
+          Targets:= Targets + [M.Groups[1].Value];
       end;
     Result:= Result + [Item.Text + ' => ' + string.Join('', Targets)];
   end;
@@ -844,8 +841,6 @@ begin
   Result:= Default(TChartResult);
   FCliName:= TRegEx.Replace(ChangeFileExt(ExtractFileName(FCliDb), ''), CLIENT_PREFIX_RX, '', [roIgnoreCase]);
   FSrvName:= TRegEx.Replace(ChangeFileExt(ExtractFileName(FSrvDb), ''), SERVER_PREFIX_RX, '', [roIgnoreCase]);
-  var ScriptDir:= if FArgs.ScriptDir <> '' then FArgs.ScriptDir else TPath.Combine(FArgs.ChartsRoot, SCRIPTS_SUBDIR);
-  FBundler:= TPath.Combine(ScriptDir, BUNDLER_SCRIPT).Replace('''', '''''');
   RemoveOutputs;
   CheckSqlIndex;
   BuildAnchor;

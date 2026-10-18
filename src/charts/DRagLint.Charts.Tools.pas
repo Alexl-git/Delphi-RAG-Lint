@@ -21,6 +21,8 @@ const
   SHARED_DOT_DEFAULT = 'C:\Projects\GraphWiz\Graphviz-16.1.0-win64\bin\dot.exe';  // dl:ok hardcoded-absolute-path@e72b -- REVIEWED 2026-10-13: the PS reference's own -SharedDefault (Resolve-GraphvizDot); only the LAST candidate of the walk and a parameter of ResolveGraphvizDot -- callers may pass another
   /// <summary>The environment variable that lets CloneDb accept a non-clone database.</summary>
   ALLOW_LIVE_DB_ENV_VAR = 'DRAGLINT_CHARTS_ALLOW_LIVE_DB';
+  /// <summary>The environment variable that names the charts scripts folder (ResolveChartsHome).</summary>
+  CHARTS_DIR_ENV_VAR = 'DRAGLINT_CHARTS_DIR';
 
 type
   /// <summary>A tool or database the charts need could not be located, or was refused.</summary>
@@ -94,6 +96,23 @@ function ResolveChartTool(const pWhat, pParamName, pExplicit: string; const pSte
 /// entry by entry rather than through FileSearch, which looks in the current folder first.</remarks>
 function ResolveGraphvizDot(const pExplicit, pSettingsPath, pChartsRoot, pScriptDir, pSharedDefault: string): string;
 
+/// <summary>Where the charts' files live: the charts folder (report-pairs.json, the clone root)
+/// and the scripts folder (graphviz\bin beside it in an installed copy).</summary>
+/// <param name="pExplicit">A file or folder the caller insists on ('' skips this step): a file
+/// names its folder as the scripts folder, a folder names itself.</param>
+/// <param name="pChartsRoot">The folder above the scripts folder.</param>
+/// <param name="pScriptDir">The scripts folder, full path.</param>
+/// <param name="pWhy">'' on success; otherwise the place that was insisted on and is missing.</param>
+/// <returns>False only when pExplicit, or the environment variable DRAGLINT_CHARTS_DIR, names a
+/// path that does not exist. Otherwise the first of: pExplicit; DRAGLINT_CHARTS_DIR;
+/// ..\charts from the exe folder (installed v2, {app}\charts beside {app}\bin); ..\..\charts\src
+/// (the repo's third_party\dll-win64); ..\..\..\..\charts\src (the repo's src\cli\Win64\Debug);
+/// the exe folder itself (installed, scripts flat beside the engine) -- which always exists.</returns>
+/// <remarks>Replaces the Ask-Report.ps1 lookup the in-process producer used as its anchor
+/// (2026-10-18): the engine ships no PowerShell, so the folder is found by layout, never by a
+/// script in it. Reads the environment; otherwise pure.</remarks>
+function ResolveChartsHome(const pExplicit: string; out pChartsRoot, pScriptDir, pWhy: string): Boolean;
+
 /// <summary>A database path made full, refusing anything but a live clone.</summary>
 /// <param name="pPath">The database path.</param>
 /// <param name="pCloneRoot">The clone folder (the PS uses charts\scratch\db).</param>
@@ -120,6 +139,50 @@ const
   SQLITE_EXT = '.sqlite';
   ALLOW_LIVE_ON = '1';
   PATH_LIST_SEP = ';';
+  { the folder layouts, relative to the exe folder, in the order ResolveChartsHome tries them }
+  CHARTS_LAYOUTS: array[0..2] of string = ('..\charts', '..\..\charts\src', '..\..\..\..\charts\src');
+  { what pWhy calls each insisted-on source, in ResolveChartsHome's order: the explicit path, then the env var }
+  INSIST_LABELS: array[0..1] of string = ('explicit path', 'environment variable ' + CHARTS_DIR_ENV_VAR);
+
+{ A file names its folder, a folder names itself; '' when the path does not exist. }
+function ScriptFolderOf(const pPath: string): string;
+begin
+  var Full:= ExpandFileName(pPath);
+  if TFile.Exists(Full) then Exit(ExtractFileDir(Full));
+  if TDirectory.Exists(Full) then Exit(ExcludeTrailingPathDelimiter(Full));
+  Result:= '';
+end;
+
+function ResolveChartsHome(const pExplicit: string; out pChartsRoot, pScriptDir, pWhy: string): Boolean;
+begin
+  pChartsRoot:= '';
+  pScriptDir:= '';
+  pWhy:= '';
+  var Insisted:= TArray<string>.Create(pExplicit, GetEnvironmentVariable(CHARTS_DIR_ENV_VAR));
+  for var I:= 0 to High(Insisted) do
+    if Insisted[I] <> '' then
+    begin
+      pScriptDir:= ScriptFolderOf(Insisted[I]);
+      if pScriptDir = '' then
+      begin
+        pWhy:= INSIST_LABELS[I] + ': ' + Insisted[I] + ' (not found)';
+        Exit(False);
+      end;
+      Break;
+    end;
+  var ExeDir:= ExtractFilePath(ParamStr(0));
+  if pScriptDir = '' then
+    for var Rel in CHARTS_LAYOUTS do
+      if TDirectory.Exists(ExeDir + Rel) then
+      begin
+        pScriptDir:= ExcludeTrailingPathDelimiter(ExpandFileName(ExeDir + Rel));
+        Break;
+      end;
+  if pScriptDir = '' then
+    pScriptDir:= ExcludeTrailingPathDelimiter(ExeDir);
+  pChartsRoot:= ExtractFileDir(pScriptDir);
+  Result:= True;
+end;
 
 function IsBlank(const pS: string): Boolean;
 begin

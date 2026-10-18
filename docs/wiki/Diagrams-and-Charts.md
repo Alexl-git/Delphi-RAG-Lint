@@ -5,16 +5,14 @@ formal question about one selected symbol into a clickable diagram: who calls
 this, what breaks if I change it, which tests reach it, what does this form
 wire, where does this protocol command travel. **In RAD Studio, ask from
 drag-lint > Reports** with the caret on the symbol. Outside the IDE the
-questions run through the chart pipeline -- `charts\src\New-DiagramArtifact.ps1`,
-and `Ask-Report.ps1` for a text answer (see [Charts and the IDE](Charts-and-the-IDE)).
-A single engine verb, `drag-lint ask`, is **planned and not shipped yet**; its
-design is below.
+questions are answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
+The engine verb `drag-lint ask` ships; the full call design is below.
 
 drag-lint is not a model, and these charts are not drawn from prose. Every
 diagram comes from a FORMAL CALL -- a question id, a selection and parameters
 -- and every row in it is a fact from the index with a file and a line.
 
-## The call (planned engine verb -- not shipped yet)
+## The call (design; see the ask page for the flags that ship)
 
 ```
 drag-lint ask --list --at <file.pas>:<line>:<col> --db <project.sqlite> --json

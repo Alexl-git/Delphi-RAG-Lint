@@ -13,15 +13,10 @@
       "type": "cli",
       "verb": "compare",
       "example": "drag-lint compare --in U.pas --line 120"
-    },
-    {
-      "type": "script",
-      "path": "charts\\src\\Ask-Report.ps1",
-      "args": "-Plain prints the report header"
     }
   ],
   "audience": "both",
-  "requires": ["index", "powershell7"],
+  "requires": ["index"],
   "lastVerified": {
     "date": "2026-10-11",
     "by": "alexanderl",

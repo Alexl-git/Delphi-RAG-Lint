@@ -827,15 +827,15 @@ begin
   Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
   Writeln('  drag-lint compare            --show <report|csv|bundle> [--output <f.html>] [--open]   any report as the HTML page');
   Writeln('  drag-lint compare            --question <id> --target <T> --project <P.dproj> --save [--auto]   take a snapshot');
-  Writeln('                               Reruns the old report''s COMMAND (in-process for a ported question, else Ask-Report.ps1 -Plain) and diffs the normalised');
+  Writeln('                               Reruns the old report''s COMMAND in-process (no PowerShell) and diffs the normalised');
   Writeln('                               text: exit 0 same, 1 differences, 2 usage/setup, 3 stale index. Diff ignores step numbers,');
   Writeln('                               :line anchors, the header date/engine, BUNDLE/INDEX/AS OF/REGENERATE lines and wrapping.');
   Writeln('  drag-lint ask <question>     --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]');
   Writeln('                               [--sql-db <idx>] [--counterpart-db <idx>] [--depth N] [--cap N] [--surface-cap N] [--control <C>]');
   Writeln('                               [--mode write|read|both] [--max-rows N] [--out-root <dir>] [--pairs-file <f.json>] [--allow-stale]');
   Writeln('                               [--plain] [--open] [--resolve-only]   one report question (26 ids; `ask --help` lists them) as text:');
-  Writeln('                               the DocInsight remarks block, or with --plain the plain answer. Ported questions answer in-process,');
-  Writeln('                               the rest through charts\src\Ask-Report.ps1. Exit 0 answered, 1 refused, 2 setup, 3 stale index.');
+  Writeln('                               the DocInsight remarks block, or with --plain the plain answer. Every question answers in-process');
+  Writeln('                               (no PowerShell). Exit 0 answered, 1 refused, 2 setup, 3 stale index.');
   Writeln('  drag-lint query type-usage   --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]');
   Writeln('                               of these type names, which does THIS file actually REFERENCE? Answers a');
   Writeln('                               LIST in one pass (an RTL surface, say). Counts declarations, X.Create');

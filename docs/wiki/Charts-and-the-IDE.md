@@ -11,8 +11,8 @@ Status, 6 October 2026: **27 of the 28 catalogue questions ship**; only
 call path from one routine to another; on the Reports menu with the plugin's next
 question-list update, from the scripts today). The chart
 tool-set lives in the `charts\` folder of the repository. **In RAD Studio every
-question is on the drag-lint > Reports menu** (below). The engine has no `ask`
-verb yet -- outside the IDE a question is asked with the PowerShell scripts below.
+question is on the drag-lint > Reports menu** (below). Every question is answered in-process by the engine's `ask`
+verb (`drag-lint ask`), so no PowerShell is needed.
 
 ## From RAD Studio: drag-lint > Reports
 
@@ -41,8 +41,8 @@ verb yet -- outside the IDE a question is asked with the PowerShell scripts belo
 
 When the index is stale the menu says so and offers the incremental reindex
 command; when a question is refused (an ambiguous target, a missing index
-pair) the reason is shown. The menu runs the same `Ask-Report.ps1` described
-below, so it needs a repository clone, PowerShell 7 and, for pictures,
+pair) the reason is shown. The menu runs `drag-lint ask` (described
+below); no PowerShell is needed, and for pictures it needs
 Graphviz. **Forms for testers (CSV)...** sits on the same submenu.
 
 ## What a chart is
@@ -55,9 +55,8 @@ a text trace; every other question answers with a picture (Graphviz).
 
 ## What you need
 
-* PowerShell 7 (`pwsh`).
-* The engine (`drag-lint.exe`) and Graphviz (`dot.exe`, 16.1). Every chart script
-  finds them by the first of: `-Engine` / `-Dot`; `DRAGLINT_ENGINE` /
+* The engine (`drag-lint.exe`) and Graphviz (`dot.exe`, 16.1). The engine and
+  the repository's chart scripts find them by the first of: `-Engine` / `-Dot`; `DRAGLINT_ENGINE` /
   `DRAGLINT_DOT`; the `engine` / `dot` key of `%APPDATA%\drag-lint\settings.json`;
   the installed layout beside the scripts; then the shared defaults
   (`C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe`, `dot.exe` on
@@ -110,24 +109,23 @@ linked from [Diagrams and Charts](Diagrams-and-Charts) give each one.
 
 ## One command, for AI agents and scripts
 
-`charts\src\Ask-Report.ps1` asks any question with no setup and prints the
-answer as text:
+`drag-lint ask` asks any question with no setup and prints the
+answer as text; the engine answers it itself and starts no PowerShell:
 
 ```
-pwsh -NoProfile -File .\charts\src\Ask-Report.ps1 -Question round-trip `
-    -Target frmBlueprint4.dxDBGrid1FtrsVNum `
-    -Project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
+drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1FtrsVNum `
+    --project C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj
 ```
 
-* It finds the project's index with the engine's `resolve-dbs` (`-Project`, or
-  `-In` with any `.pas` / `.dfm` of the project) and takes the server and SQL
+* It finds the project's index with the engine's `resolve-dbs` (`--project`, or
+  `--in` with any `.pas` / `.dfm` of the project) and takes the server and SQL
   indexes that belong with it from `charts\report-pairs.json`.
 * It checks every index it will read for freshness first. A stale one stops the
   run (exit 3) with the incremental `index` command on stderr; it never indexes.
 * The bundle goes under `%TEMP%\drag-lint-reports`. By default stdout is a
   DocInsight `/// <remarks>` block, byte for byte what the IDE's drag-lint >
   Reports menu puts on the clipboard, ready to paste above a declaration; it
-  carries no `BUNDLE` / `INDEX` lines. With `-Plain` stdout is
+  carries no `BUNDLE` / `INDEX` lines. With `--plain` stdout is
   `BUNDLE <folder>`, one `INDEX <db>` line per index read, then the answer:
   the whole trace for `round-trip`, otherwise a `CHART` header with the
   counts and one `<name> @File.pas:line` line per row, ending with a
@@ -282,7 +280,7 @@ TITLE "Why frmBlueprint4.dxDBGrid1FtrsVFtrName cannot be traced -- it is calcula
 DERIVED
   -- FtrName is calculated from 18 fields -- trace one of them instead ...:
 [10] FROM MSCLIST.NOTATION VIA FfFtrs_Notation [inferred] @Blueprint4.ViewModel.pas:987 -- in FtrsOnCalcFields; ...
-       REGENERATE & '<charts>\src\New-DiagramArtifact.ps1' -Question round-trip -Target 'Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation' ...
+       REGENERATE drag-lint ask round-trip --target "Blueprint4.ViewModel.TBlueprint_ViewModel.FfFtrs_Notation" ...
 ```
 
 * The `STOPS` step names where the field is created and computed, with the
@@ -297,8 +295,8 @@ DERIVED
   several places, or any other value the walk cannot map, is a named row
   (`not mapped: ...`) with no command. A row marked `(calculated)` is itself a
   calculated field.
-* Each `REGENERATE` line is a complete command: paste it into `pwsh` to trace
-  that field instead.
+* Each `REGENERATE` line is a complete `drag-lint ask round-trip` command: run
+  it in any shell to trace that field instead.
 
 A field set in another event handler, or a lookup field, stops with a named
 reason and offers nothing.

@@ -141,19 +141,19 @@ end;
 
 procedure TAskTests.RegenerateNamesTheIndexesAQuestionReads;
 begin
-  { New-DiagramArtifact.ps1 $meta.regenerate: -SqlDbPath before -ServerDbPath, both after -Cap }
-  Assert.AreEqual('New-DiagramArtifact.ps1 -Question feeds-from -Target T.X -DbPath "C:\d.sqlite" -Cap 20 -SqlDbPath "C:\q.sqlite"',
+  { the meta.regenerate `drag-lint ask` command: --sql-db before --server-db, both after --cap }
+  Assert.AreEqual('drag-lint ask feeds-from --target T.X --db "C:\d.sqlite" --cap 20 --sql-db "C:\q.sqlite"',
     RegenerateText(QArgs('feeds-from')));
-  Assert.AreEqual('New-DiagramArtifact.ps1 -Question lands-where -Target T.X -DbPath "C:\d.sqlite" -Cap 20 -SqlDbPath "C:\q.sqlite"' +
-    ' -ServerDbPath "C:\s.sqlite"', RegenerateText(QArgs('lands-where')));
-  Assert.AreEqual('New-DiagramArtifact.ps1 -Question round-trip -Target T.X -DbPath "C:\d.sqlite" -Depth 2 -SqlDbPath "C:\q.sqlite"' +
-    ' -ServerDbPath "C:\s.sqlite"', RegenerateText(QArgs('round-trip')));
+  Assert.AreEqual('drag-lint ask lands-where --target T.X --db "C:\d.sqlite" --cap 20 --sql-db "C:\q.sqlite"' +
+    ' --server-db "C:\s.sqlite"', RegenerateText(QArgs('lands-where')));
+  Assert.AreEqual('drag-lint ask round-trip --target T.X --db "C:\d.sqlite" --depth 2 --sql-db "C:\q.sqlite"' +
+    ' --server-db "C:\s.sqlite"', RegenerateText(QArgs('round-trip')));
   { a question that does not read them never names them, even when they are carried }
-  Assert.AreEqual('New-DiagramArtifact.ps1 -Question deps -Target T.X -DbPath "C:\d.sqlite"', RegenerateText(QArgs('deps')));
+  Assert.AreEqual('drag-lint ask deps --target T.X --db "C:\d.sqlite"', RegenerateText(QArgs('deps')));
   { the script names them unconditionally for a question that reads them }
   var A:= QArgs('consumers');
   A.SqlDbPath:= '';
-  Assert.AreEqual('New-DiagramArtifact.ps1 -Question consumers -Target T.X -DbPath "C:\d.sqlite" -Cap 20 -SqlDbPath ""', RegenerateText(A));
+  Assert.AreEqual('drag-lint ask consumers --target T.X --db "C:\d.sqlite" --cap 20 --sql-db ""', RegenerateText(A));
 end;
 
 procedure TAskTests.IndexLinesNameTheIndexesAQuestionReads;
@@ -207,7 +207,7 @@ begin
       '<TR><TD HREF="draglint://open?file=C%3A%5Cx%5CV.pas&amp;line=7" TITLE="V.Baz"><FONT>Baz</FONT></TD></TR>' +
       '<TR><TD ALIGN="LEFT"><FONT>Code-driven display is NOT SHOWN &#183; here</FONT></TD></TR><TR><TD ALIGN="LEFT"><FONT>nothing hidden</FONT></TD></TR></TABLE>>];',
     '}'];
-  var Rows:= DotAnswerRows(Lines, 'New-DiagramArtifact.ps1 -Question shown-where -Target X -DbPath "d" -Cap 20', MAX_ROWS_TWO,
+  var Rows:= DotAnswerRows(Lines, 'drag-lint ask shown-where --target X --db "d" --cap 20', MAX_ROWS_TWO,
     'b\graph.dot', 'b\index.html');
   Assert.AreEqual(
     '  TARGET U.TFoo.Bar @U.pas:12|' +
@@ -221,7 +221,7 @@ end;
 procedure TAskTests.DotRowsWithNoAnchoredRow;
 begin
   var Rows:= DotAnswerRows(['  n [label=<<TABLE><TR><TD><FONT>+2 more units not shown</FONT></TD></TR></TABLE>>];'],
-    'New-DiagramArtifact.ps1 -Question deps', DEFAULT_MAX_ROWS, 'g.dot', 'b\index.html');
+    'drag-lint ask deps', DEFAULT_MAX_ROWS, 'g.dot', 'b\index.html');
   Assert.AreEqual('  (no anchored result rows -- open b\index.html)|  ... +2 more units not shown (raise -Cap to see them)',
     string.Join('|', Rows));
 end;

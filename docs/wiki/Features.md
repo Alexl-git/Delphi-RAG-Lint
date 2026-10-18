@@ -260,10 +260,10 @@ Ask a question about a symbol and get a clickable chart.
 | Feature | Surfaces | Status |
 |---|---|---|
 | [ask](ask) | `ask`; drag-lint > Reports |  |
-| [Chart questions](Diagrams-and-Charts) | 26 questions; `charts\src\Ask-Report.ps1`; `charts\src\New-DiagramArtifact.ps1` |  |
+| [Chart questions](Diagrams-and-Charts) | 26 questions; `ask` |  |
 | [Charts and the IDE](Charts-and-the-IDE) | procedure: `docs\wiki\Charts-and-the-IDE.md` |  |
 | [Click-to-source: the draglint:// handler](Draglint-Protocol-Handler) | `protocol`; `drag-lint-open.exe` |  |
-| [Compare a report with current code](compare) | `compare`; `charts\src\Ask-Report.ps1 -Plain prints the report header` |  |
+| [Compare a report with current code](compare) | `compare` |  |
 | [Where the charts find the engine and Graphviz](Charts-and-the-IDE) | procedure: `charts\README.md` |  |
 
 ## Compiler integration

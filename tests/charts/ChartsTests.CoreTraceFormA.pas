@@ -92,7 +92,7 @@ function BuildSynthetic: TTrace;
 begin
   Result:= NewTrace('OPERAT.NAME', 'How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back',
     'frmBlueprint4.dxDBGrid1OperationVName', 'Micronite2027 + MicroniteMW1Service + SQL', '2026-09-24',
-    'New-DiagramArtifact.ps1 -Question round-trip -Target frmBlueprint4.dxDBGrid1OperationVName', 'client -> pipe -> server -> database');
+    'drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1OperationVName', 'client -> pipe -> server -> database');
   var SecA:= AddTraceSection(Result, 'ANCHOR');
   var S1:= NewTraceStep('step', 'BINDS dxDBGrid1OperationVName : TcxGridDBColumn ONTO Name', 'Blueprint4.dfm:4534', '', '', 'DataBinding.FieldName');
   SecA.Items.Add(S1);
@@ -128,7 +128,7 @@ begin
     '  TITLE "How OPERAT.NAME reaches frmBlueprint4.dxDBGrid1OperationVName and goes back"',
     '  FROM frmBlueprint4.dxDBGrid1OperationVName',
     '  INDEX Micronite2027 + MicroniteMW1Service + SQL AS OF 2026-09-24',
-    '  REGENERATE New-DiagramArtifact.ps1 -Question round-trip -Target frmBlueprint4.dxDBGrid1OperationVName',
+    '  REGENERATE drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1OperationVName',
     '  TIERS client -> pipe -> server -> database',
     '',
     'ANCHOR',

@@ -7,8 +7,7 @@ true -- without rereading it by eye.
 
 ## What it answers
 
-"Is this report still true?" A report that `Ask-Report.ps1 -Plain` (or
-`drag-lint ask`, plain or DocInsight) produced carries the exact question that made it on a
+"Is this report still true?" A report that `drag-lint ask` (plain or DocInsight) produced carries the exact question that made it on a
 `COMMAND` line. `compare` reads that line, asks the same question again through the
 current engine and diffs the two answers: a report by its normalised text, a forms
 CSV by row, a chart by its nodes and edges.
@@ -135,10 +134,7 @@ question and target, newest 20, and are a local convenience, not a record.
 * A very long unbroken token in a report is cut for the HTML view; the diff still sees it.
 * In a chart, edges are identified by their endpoint titles, so two different edges
   between the same pair of nodes count as one.
-* The new answer comes from `charts\src\Ask-Report.ps1 -Plain` run in a PowerShell 7
-  child process; without `pwsh` the verb exits `2` with the reason. Its stdout is read
-  as UTF-8, which is what pwsh 7 writes to a redirected stdout (measured on pwsh 7.6);
-  no charts script emits a non-ASCII character today.
+* The new answer is produced in-process by the engine; no PowerShell is needed or started.
 * A forms CSV is compared only as two saved files (`--old a.csv --new b.csv`): no
   question reruns into a CSV, so `--old a.csv` alone has nothing to compare it with.
 * `--save --open` is refused: `--save` with no old side only takes a snapshot, and a

@@ -16,9 +16,9 @@ unit DRagLint.Charts.AskVerb;
     4. freshness: every index it will read is probed (DRagLint.Index.Freshness); a stale one
        stops the run with exit 3 and the exact incremental reindex command, unless
        --allow-stale. It never indexes anything itself.
-    5. the answer comes from a producer: TDelphiProducer (in-process for the ported
-       questions, on the LIVE index -- owner ruling 2026-10-14) with TPowerShellProducer
-       (Ask-Report.ps1 -Plain) as its fallback for every other question.
+    5. the answer comes from a producer: TDelphiProducer, in-process for every question, on
+       the LIVE index (owner ruling 2026-10-14). There is no PowerShell fallback (removed
+       2026-10-18): pwsh is never started.
     6. stdout: --plain prints exactly what Ask-Report -Plain prints; the default prints the
        DocInsight remarks block (DRagLint.Charts.DocInsight), exactly what Ask-Report's
        default mode printed. --open opens the bundle's index.html.
@@ -144,7 +144,7 @@ function FormatAskAnswer(const pQuestion, pShownTarget, pPlainText: string; pPla
 /// <summary>Runs `drag-lint ask`.</summary>
 /// <param name="pArgs">The parsed arguments.</param>
 /// <param name="pProducer">The producer to answer with; nil = TDelphiProducer (live indexes
-/// allowed, bundle under pArgs.OutRoot) with a TPowerShellProducer fallback.</param>
+/// allowed, bundle under pArgs.OutRoot).</param>
 /// <param name="pOut">Receives each stdout line.</param>
 /// <param name="pErr">Receives each stderr line.</param>
 /// <returns>0 answered, 1 refused or failed, 2 usage or setup, 3 stale index.</returns>
@@ -169,7 +169,7 @@ uses
   , DRagLint.Core.Interfaces, DRagLint.Storage.SQLite, DRagLint.Index.Freshness
   , DRagLint.Charts.DocInsight, DRagLint.Charts.Render
   , DRagLint.Charts.Question  // dl:unit DRagLint.Charts.Question accepted -- the question catalog and its caption phrase travel with the question types
-  , DRagLint.Charts.Producer.PowerShell, DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Pairs
+  , DRagLint.Charts.Producer.Delphi, DRagLint.Charts.Pairs
   ;
 
 const
@@ -516,10 +516,10 @@ begin
   for var L in AnswerLines(pText) do pWriter(L);
 end;
 
-{ The producer of real use: ported questions in-process on the live index, the rest through Ask-Report.ps1. }
+{ The producer of real use: every question in-process, on the live index. }
 function DefaultAskProducer(const pOutRoot: string): IReportProducer;
 begin
-  Result:= TDelphiProducer.Create(TPowerShellProducer.Create, True, pOutRoot);
+  Result:= TDelphiProducer.Create(True, pOutRoot);
 end;
 
 function RunAskCore(const pArgs: TAskVerbArgs; const pProducer: IReportProducer;

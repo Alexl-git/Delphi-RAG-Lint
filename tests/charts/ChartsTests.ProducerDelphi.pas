@@ -2,8 +2,8 @@ unit ChartsTests.ProducerDelphi;
 
 { Cases for DRagLint.Charts.Producer.Delphi: which producer compare gets (the Delphi one, on live
   indexes), that the clone guard still holds where live is not allowed, what is answered
-  in-process and what is delegated, and the exit codes of Ask-Report's contract. The
-  in-process cases run against the FROZEN clones (a missing clone passes with a note). }
+  in-process and what is refused (there is no fallback), and the exit codes of Ask-Report's
+  contract. The in-process cases run against the FROZEN clones (a missing clone passes with a note). }
 
 interface
 
@@ -11,29 +11,12 @@ uses
   DUnitX.TestFramework, DRagLint.Charts.ReportHeader, DRagLint.Charts.Producer;
 
 type
-  /// <summary>A fallback that records whether it was asked.</summary>
-  TRecordingProducer = class(TInterfacedObject, IReportProducer)
-  private
-    FCalls: Integer;
-    FLastQuestion: string;
-    FLastDb: string;
-  public
-    property Calls: Integer read FCalls;
-    property LastQuestion: string read FLastQuestion;
-    property LastDb: string read FLastDb;
-    function Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
-    function Describe: string;
-  end;
-
   [TestFixture]
   TProducerDelphiTests = class
   private
-    FFallback: TRecordingProducer;
-    FKeep    : IReportProducer;
     FProducer: IReportProducer;
     FOutRoot : string;
     function Clone(const pName: string; out pPath: string): Boolean;
-    function BareScriptFolder: string;
     function PairsFile(const pClient, pServer, pSql: string): string;
     function FakeEngine(const pKnown: string): string;
     function FakeProjectEngine(const pBody: string): string;
@@ -46,7 +29,7 @@ type
     [TearDown] procedure TearDown;
     [Test] procedure CompareGetsTheDelphiProducerOnLiveIndexes;
     [Test] procedure CloneGuardStaysOnWhenLiveIsNotAllowed;
-    [Test] procedure UnregisteredQuestionFallsBack;
+    [Test] procedure UnregisteredQuestionIsRefused;
     [Test] procedure MissingProjectFileIsSetup;
     [Test] procedure ProjectIsResolvedToItsIndexInProcess;
     [Test] procedure ProjectWhoseIndexIsNotBuiltIsSetup;
@@ -57,10 +40,10 @@ type
     [Test] procedure RefusalIsExitOne;
     [Test] procedure UnknownTargetIsExitOne;
     [Test] procedure CloneGuardRefusalIsSetup;
-    [Test] procedure UnexpectedFailureFallsBack;
+    [Test] procedure UnexpectedFailureIsRefusedExitOne;
     [Test] procedure CrossesBoundaryPairsItsCounterpartFromThePairsFile;
     [Test] procedure CrossesBoundaryWithoutAPairDrawsOneSideAsAskReportDoes;
-    [Test] procedure CrossesBoundaryWithoutAnIndexFallsBack;
+    [Test] procedure CrossesBoundaryWithoutAnIndexIsSetup;
     [Test] procedure CrossesBoundaryFromTheServerSideDbPairsTheClient;
     [Test] procedure CrossesBoundaryWithAMissingCounterpartFileIsSetup;
     [Test] procedure CrossesBoundaryWithAnUnconfiguredPairEntryIsRefused;
@@ -74,11 +57,6 @@ type
     [Test] procedure ReadingQuestionWithoutAPairsFileIsAskReportsSetup;
     [Test] procedure ReadingQuestionWithNoEntryIsAskReportsSetup;
     [Test] procedure ServerIndexIsPairedOnlyFromTheClient;
-    [Test] procedure PortedFallbackWithoutEmitterScriptIsSetup;
-    [Test] procedure PortedFallbackWithEmitterScriptFallsBack;
-    [Test] procedure UnexpectedFailureWithoutEmitterScriptIsSetup;
-    [Test] procedure EveryPortedIdHasAnEmitterScriptInTheRepo;
-    [Test] procedure SharedEmitterScriptIsNamedNotDerived;
   end;
 
 implementation
@@ -101,8 +79,6 @@ const
   FF_TARGET = 'frmCausFail.colREASON';
   LW_TARGET = 'uCAUSFAIL.TmcCAUSFAIL.REASON';
   EXIT_SETUP = 2;
-  STUB_EXIT = 42;
-  NOT_INSTALLED = 'crosses-boundary is answered by the engine in this install, and its PowerShell fallback is not installed: ';
 
 function RepoRoot: string;
 begin
@@ -145,32 +121,15 @@ begin
   end;
 end;
 
-function TRecordingProducer.Produce(const pCommand: TReportCommand; const pOptions: TProduceOptions): TProduceResult;
-begin
-  Inc(FCalls);
-  FLastQuestion:= pCommand.Question;
-  FLastDb:= pOptions.DbOverride;
-  Result:= Default(TProduceResult);
-  Result.ExitCode:= STUB_EXIT;
-end;
-
-function TRecordingProducer.Describe: string;
-begin
-  Result:= 'recording stub';
-end;
-
 procedure TProducerDelphiTests.Setup;
 begin
-  FFallback:= TRecordingProducer.Create;
-  FKeep:= FFallback;
   FOutRoot:= TPath.Combine(TPath.GetTempPath, 'drag-lint-charts-p-' + TGUID.NewGuid.ToString);
-  FProducer:= TDelphiProducer.Create(FKeep, True, FOutRoot);
+  FProducer:= TDelphiProducer.Create(True, FOutRoot);
 end;
 
 procedure TProducerDelphiTests.TearDown;
 begin
   FProducer:= nil;
-  FKeep:= nil;
   if TDirectory.Exists(FOutRoot) then
     TDirectory.Delete(FOutRoot, True);
 end;
@@ -202,29 +161,26 @@ begin
   var Live:= TPath.Combine(FOutRoot, 'live.sqlite');
   var Store: ISymbolStore:= TSQLiteSymbolStore.Create(Live, False);  // dl:ok write-only-local@e429 -- REVIEWED 2026-10-14: held only so the store CREATES the index file; released (nil) before Produce opens it
   Store:= nil;
-  FProducer:= TDelphiProducer.Create(FKeep, False, FOutRoot);
+  FProducer:= TDelphiProducer.Create(False, FOutRoot);
   var O:= DefaultProduceOptions;
   O.DbOverride:= Live;
   O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
   var R:= FProducer.Produce(Cmd('deps', 'X'), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.StartsWith('refusing a non-clone database: ', R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 { Since the round-trip port every one of the 26 question ids is registered, so the registry-miss fallback is reached
   only by an id outside the registry; 'member-access' is not a question id (QuestionIds has 26), which is exactly
   what makes it a registry miss. The mechanism under test (registry miss -> FallBack) is unchanged. }
-procedure TProducerDelphiTests.UnregisteredQuestionFallsBack;
+procedure TProducerDelphiTests.UnregisteredQuestionIsRefused;
 begin
   var O:= DefaultProduceOptions;
   O.DbOverride:= 'any.sqlite';
   var R:= FProducer.Produce(Cmd('member-access', 'A.B'), O);
-  Assert.AreEqual(1, FFallback.Calls);
-  Assert.AreEqual('member-access', FFallback.LastQuestion);
-  Assert.AreEqual('any.sqlite', FFallback.LastDb);
-  Assert.AreEqual(STUB_EXIT, R.ExitCode);
-  Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.StartsWith('unknown question ''member-access'' -- one of: ', R.Reason);
+  Assert.Contains(FProducer.Describe, 'Delphi in-process, refused: unknown question');
 end;
 
 { an empty X.dproj under the out root: resolution reads only the path, never the file }
@@ -250,14 +206,13 @@ begin
   var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET, Missing), DefaultProduceOptions);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual('project file not found: ' + Missing, R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.ProjectIsResolvedToItsIndexInProcess;
 var
   Db: string;
 begin
-  { compare names only a project: the index is the one esolve-dbs --project names, and the
+  { compare names only a project: the index is the one resolve-dbs --project names, and the
     question is answered in-process from it -- no fallback, no PowerShell }
   if not Clone(SERVER_CLONE, Db) then
     Exit;
@@ -266,7 +221,6 @@ begin
   O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
   O.AllowStale:= True;
   var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET, ProjectFile), O);
-  Assert.AreEqual(0, FFallback.Calls);
   Assert.IsTrue(R.Ok, R.Reason);
   Assert.AreEqual(Db, R.IndexPaths[0]);
   Assert.Contains(R.Text, #13#10'CHART touches-tables ' + TT_TARGET + ' -- ');
@@ -283,7 +237,6 @@ begin
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual('index not found: ' + Db + ' -- resolve-dbs --project ' + Pj + ' names it, but it has not been built; ' +
     'index the project first', R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.ProjectNoManifestSectionOwnsIsSetup;
@@ -295,7 +248,6 @@ begin
   var R:= FProducer.Produce(Cmd('round-trip', 'A.B', Pj), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual('resolve-dbs --project ' + Pj + ' found no index (exit 2) -- the project is not in the engine''s index manifest', R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.PortedQuestionIsAnsweredInProcess;
@@ -309,7 +261,6 @@ begin
   O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
   O.AllowStale:= True;
   var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET), O);
-  Assert.AreEqual(0, FFallback.Calls);
   Assert.IsTrue(R.Ok, R.Reason);
   Assert.Contains(R.Text, #13#10'CHART touches-tables ' + TT_TARGET + ' -- 5 tables read / 5 tables written'#13#10);
   Assert.AreEqual(Db, R.IndexPaths[0]);
@@ -344,7 +295,6 @@ begin
   var R:= FProducer.Produce(Cmd('deps', 'X'), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode);
   Assert.StartsWith('index not found: ', R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.RefusalIsExitOne;
@@ -377,7 +327,6 @@ begin
   var R:= FProducer.Produce(Cmd('touches-tables', NO_SUCH_TARGET), O);
   Assert.AreEqual(1, R.ExitCode, R.Reason);
   Assert.Contains(R.Reason, 'is not in this index');
-  Assert.AreEqual(0, FFallback.Calls, 'a refusal PowerShell would also give is not handed to the fallback');
 end;
 
 procedure TProducerDelphiTests.CloneGuardRefusalIsSetup;
@@ -387,7 +336,7 @@ begin
   { a history copy in the clone root: a valid index, but the clone guard refuses its name }
   if not Clone(CLIENT_HISTORY, Db) then
     Exit;
-  FProducer:= TDelphiProducer.Create(FKeep, False, FOutRoot);  { clone guard ON for this case }
+  FProducer:= TDelphiProducer.Create(False, FOutRoot);  { clone guard ON for this case }
   var O:= DefaultProduceOptions;
   O.DbOverride:= Db;
   O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
@@ -395,13 +344,12 @@ begin
   var R:= FProducer.Produce(Cmd('touches-tables', TT_TARGET), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.StartsWith('refusing a database whose name does not end in .sqlite', R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
-procedure TProducerDelphiTests.UnexpectedFailureFallsBack;
+procedure TProducerDelphiTests.UnexpectedFailureIsRefusedExitOne;
 begin
   { not an index at all: the freshness probe fails inside the try, which is a failure of the
-    in-process path, not a verdict -- so the fallback answers and nothing escapes }
+    in-process path, not a verdict -- it is refused with exit 1 and nothing escapes }
   TDirectory.CreateDirectory(FOutRoot);
   var Bad:= TPath.Combine(FOutRoot, 'corrupt.sqlite');
   TFile.WriteAllText(Bad, 'this is not an SQLite database');
@@ -409,20 +357,19 @@ begin
   O.DbOverride:= Bad;
   O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
   var R:= FProducer.Produce(Cmd('deps', 'X'), O);
-  Assert.AreEqual(1, FFallback.Calls, 'the fallback answers an unexpected failure');
-  Assert.AreEqual(STUB_EXIT, R.ExitCode);
+  Assert.AreEqual(1, R.ExitCode, R.Reason);
+  Assert.StartsWith('the in-process answer failed (', R.Reason);
   Assert.Contains(FProducer.Describe, 'Delphi in-process failed (');
-  Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
 end;
 
-procedure TProducerDelphiTests.CrossesBoundaryWithoutAnIndexFallsBack;
+procedure TProducerDelphiTests.CrossesBoundaryWithoutAnIndexIsSetup;
 begin
-  { neither an index nor a project: nothing to resolve in-process, so the fallback is asked }
+  { neither an index nor a project: nothing to resolve in-process, so the question is refused }
   var O:= DefaultProduceOptions;
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
-  Assert.AreEqual(1, FFallback.Calls);
-  Assert.AreEqual(STUB_EXIT, R.ExitCode);
-  Assert.Contains(FProducer.Describe, 'fell back to: recording stub');
+  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
+  Assert.StartsWith('no index given (--db / -Db) and no project named', R.Reason);
+  Assert.Contains(FProducer.Describe, 'Delphi in-process, refused: no index given');
 end;
 
 procedure TProducerDelphiTests.CrossesBoundaryPairsItsCounterpartFromThePairsFile;
@@ -452,7 +399,6 @@ begin
   O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
   O.AllowStale:= True;
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
-  Assert.AreEqual(0, FFallback.Calls);
   Assert.IsTrue(R.Ok, R.Reason);
   Assert.IsFalse(R.Text.Contains('(counterpart)'), 'no counterpart line');
   Assert.AreEqual<Integer>(1, Length(R.IndexPaths));
@@ -484,7 +430,6 @@ begin
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual('index not found: ' + Missing, R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.CrossesBoundaryWithAnUnconfiguredPairEntryIsRefused;
@@ -500,7 +445,6 @@ begin
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual(O.PairsFile + ' names ' + Other + ', which the engine''s manifest no longer configures (resolve-dbs) -- fix the pair',
     R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.CrossesBoundaryWithCounterpartIsInProcess;
@@ -515,7 +459,6 @@ begin
   O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
   O.AllowStale:= True;
   var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
-  Assert.AreEqual(0, FFallback.Calls);
   Assert.IsTrue(R.Ok, R.Reason);
   Assert.Contains(R.Text, #13#10'INDEX ' + Other + ' (counterpart)'#13#10'CHART crosses-boundary ' + CB_TARGET +
     ' -- 2 commands / 1 transport calls'#13#10);
@@ -561,13 +504,11 @@ begin
   var R:= FProducer.Produce(Cmd('feeds-from', FF_TARGET), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual('index not found: ' + Missing, R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 { answered in-process, with the SQL index in the freshness list after the project index and named in the answer }
 procedure TProducerDelphiTests.CheckFeedsFromReadsSql(const pR: TProduceResult; const pSql: string);
 begin
-  Assert.AreEqual(0, FFallback.Calls);
   Assert.IsTrue(pR.Ok, pR.Reason);
   Assert.AreEqual<Integer>(2, Length(pR.IndexPaths));
   Assert.AreEqual(pSql, pR.IndexPaths[1]);
@@ -607,7 +548,6 @@ begin
   var R:= FProducer.Produce(Cmd('lands-where', LW_TARGET), O);
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual('index not found: ' + Missing, R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.ServerAndSqlIndexesAreCarriedInAskReportOrder;
@@ -626,7 +566,6 @@ begin
   O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
   O.AllowStale:= True;
   var R:= FProducer.Produce(Cmd('lands-where', LW_TARGET), O);
-  Assert.AreEqual(0, FFallback.Calls);
   Assert.IsTrue(R.Ok, R.Reason);
   Assert.AreEqual<Integer>(PROJECT_SERVER_SQL, Length(R.IndexPaths));
   Assert.AreEqual(Server, R.IndexPaths[1]);
@@ -655,7 +594,6 @@ end;
 { a crosses-boundary answer in-process, with pOther carried as the counterpart: no fallback, two indexes }
 procedure TProducerDelphiTests.CheckCounterpartDrawn(const pR: TProduceResult; const pOther, pTarget: string);
 begin
-  Assert.AreEqual(0, FFallback.Calls);
   Assert.IsTrue(pR.Ok, pR.Reason);
   Assert.Contains(pR.Text, #13#10'INDEX ' + pOther + ' (counterpart)'#13#10'CHART crosses-boundary ' + pTarget + ' -- ');
   Assert.AreEqual<Integer>(2, Length(pR.IndexPaths));
@@ -702,7 +640,6 @@ begin
   Assert.AreEqual('feeds-from also reads the SQL-script index, and report-pairs.json not found at ' + Missing +
     ', so no pairs are configured -- copy charts\report-pairs.example.json to that path and fill in client, server and sql ' +
     '(each checked with resolve-dbs), or pass -SqlDbPath', R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.ReadingQuestionWithNoEntryIsAskReportsSetup;
@@ -716,7 +653,6 @@ begin
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual('lands-where also reads the SERVER index and the SQL-script index, and ' + O.PairsFile +
     ' has no entry for any.sqlite -- add one (client, server, sql; check each with resolve-dbs), or pass -ServerDbPath and -SqlDbPath', R.Reason);
-  Assert.AreEqual(0, FFallback.Calls);
 end;
 
 procedure TProducerDelphiTests.ServerIndexIsPairedOnlyFromTheClient;
@@ -731,67 +667,6 @@ begin
   Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
   Assert.AreEqual('lands-where starts from the CLIENT index; ' + Server + ' is the SERVER of pair ''t'' in ' + O.PairsFile +
     ' -- pass the client project', R.Reason);
-end;
-{ a folder holding only an empty Ask-Report.ps1: an installed copy, where the ported Emit-*.ps1 are not shipped }
-function TProducerDelphiTests.BareScriptFolder: string;
-begin
-  var Dir:= TPath.Combine(FOutRoot, 'bin');
-  TDirectory.CreateDirectory(Dir);
-  Result:= TPath.Combine(Dir, 'Ask-Report.ps1');
-  TFile.WriteAllText(Result, '');
-end;
-
-procedure TProducerDelphiTests.PortedFallbackWithoutEmitterScriptIsSetup;
-begin
-  var O:= DefaultProduceOptions;
-  O.ScriptPath:= BareScriptFolder;
-  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
-  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
-  Assert.AreEqual(NOT_INSTALLED + 'no index given (--db / -Db) and no project named (--project / -Project)', R.Reason);
-  Assert.AreEqual(0, FFallback.Calls, 'a fallback that cannot run is not called');
-end;
-
-procedure TProducerDelphiTests.PortedFallbackWithEmitterScriptFallsBack;
-begin
-  var O:= DefaultProduceOptions;
-  O.ScriptPath:= TPath.Combine(RepoRoot, CHARTS_MARK);
-  var R:= FProducer.Produce(Cmd('crosses-boundary', CB_TARGET), O);
-  Assert.AreEqual(1, FFallback.Calls, 'the repo has Emit-CrossesBoundary.ps1, so the fallback answers');
-  Assert.AreEqual(STUB_EXIT, R.ExitCode);
-end;
-
-procedure TProducerDelphiTests.UnexpectedFailureWithoutEmitterScriptIsSetup;
-begin
-  var Script:= BareScriptFolder;
-  var Bad:= TPath.Combine(FOutRoot, 'corrupt.sqlite');
-  TFile.WriteAllText(Bad, 'this is not an SQLite database');
-  var O:= DefaultProduceOptions;
-  O.DbOverride:= Bad;
-  O.ScriptPath:= Script;
-  var R:= FProducer.Produce(Cmd('deps', 'X'), O);
-  Assert.AreEqual(EXIT_SETUP, R.ExitCode, R.Reason);
-  Assert.StartsWith('deps is answered by the engine in this install, and its PowerShell fallback is not installed: ' +
-    'the in-process answer failed (', R.Reason);
-  Assert.AreEqual(0, FFallback.Calls, 'a fallback that cannot run is not called');
-end;
-
-procedure TProducerDelphiTests.EveryPortedIdHasAnEmitterScriptInTheRepo;
-begin
-  var Src:= ExtractFileDir(TPath.Combine(RepoRoot, CHARTS_MARK));
-  Assert.IsTrue(Length(PortedQuestionIds) > 0, 'questions are registered');
-  for var Id in PortedQuestionIds do
-    Assert.IsTrue(TFile.Exists(TPath.Combine(Src, EmitterScriptName(Id))), Id + ' -> ' + EmitterScriptName(Id) + ' is not in charts\src');
-end;
-
-procedure TProducerDelphiTests.SharedEmitterScriptIsNamedNotDerived;
-begin
-  { one emitter, two questions: what-it-calls is Emit-WhoCalls.ps1 -Direction callees (chart-questions.json) }
-  Assert.AreEqual('Emit-WhoCalls.ps1', EmitterScriptName('what-it-calls'));
-  { chart-questions.json names Emit-MemberAccess.ps1 for both member-access questions }
-  Assert.AreEqual('Emit-MemberAccess.ps1', EmitterScriptName('who-writes'));
-  Assert.AreEqual('Emit-MemberAccess.ps1', EmitterScriptName('who-reads'));
-  { an id outside the table keeps the derivation }
-  Assert.AreEqual('Emit-CrossesBoundary.ps1', EmitterScriptName('crosses-boundary'));
 end;
 
 end.

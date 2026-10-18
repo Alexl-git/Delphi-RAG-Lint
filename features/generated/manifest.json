@@ -2387,7 +2387,7 @@
       "status": "shipped",
       "since": "1.30.0-alpha",
       "summary": "Ask one report question and print the answer as text",
-      "intro": "Read this when you want a report answer on stdout -- drag-lint ask <question> --target <T> --project <P.dproj> prints the DocInsight block the Reports menu copies (or the plain answer with --plain), with Ask-Report's exit codes. Ported questions answer in-process; the rest run charts\\src\\Ask-Report.ps1, so they need PowerShell 7.",
+      "intro": "Read this when you want a report answer on stdout -- drag-lint ask <question> --target <T> --project <P.dproj> prints the DocInsight block the Reports menu copies (or the plain answer with --plain). Every question is answered inside the engine; no PowerShell is needed.",
       "wikiPage": "ask",
       "surfaces": [
         {
@@ -2401,7 +2401,7 @@
         }
       ],
       "audience": "both",
-      "requires": ["index", "powershell7", "graphviz"]
+      "requires": ["index", "graphviz"]
     },
     {
       "id": "chart-questions",
@@ -2410,21 +2410,18 @@
       "owner": "CHARTS",
       "status": "shipped",
       "since": "1.20.2-alpha",
-      "summary": "Every chart question of the Reports submenu and Ask-Report.ps1, imported from REPORT_QUESTIONS",
-      "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run drag-lint ask <id> --target <name> --project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index, Graphviz for the pictures, and PowerShell 7 for the questions not yet ported to Delphi.",
+      "summary": "Every chart question of the Reports submenu and drag-lint ask, imported from REPORT_QUESTIONS",
+      "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run drag-lint ask <id> --target <name> --project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index and Graphviz for the pictures.",
       "wikiPage": "Diagrams-and-Charts",
       "surfaces": [
         {
-          "type": "script",
-          "path": "charts\\src\\Ask-Report.ps1"
-        },
-        {
-          "type": "script",
-          "path": "charts\\src\\New-DiagramArtifact.ps1"
+          "type": "cli",
+          "verb": "ask",
+          "example": "drag-lint ask butterfly --target U.TForm.Method --project P.dproj"
         }
       ],
       "audience": "both",
-      "requires": ["index", "powershell7", "graphviz"],
+      "requires": ["index", "graphviz"],
       "family": "chart-questions",
       "homeOrder": 44
     },
@@ -2487,15 +2484,10 @@
           "type": "cli",
           "verb": "compare",
           "example": "drag-lint compare --in U.pas --line 120"
-        },
-        {
-          "type": "script",
-          "path": "charts\\src\\Ask-Report.ps1",
-          "args": "-Plain prints the report header"
         }
       ],
       "audience": "both",
-      "requires": ["index", "powershell7"]
+      "requires": ["index"]
     },
     {
       "id": "chart-engine-dot-lookup",
@@ -2504,8 +2496,8 @@
       "owner": "CHARTS",
       "status": "shipped",
       "since": "1.26.1-alpha",
-      "summary": "Every chart script finds drag-lint.exe and dot.exe by -Engine/-Dot, env, settings.json, the installed layout, then the shared defaults",
-      "intro": "Point the charts at a different engine or Graphviz without editing a script: pass -Engine / -Dot, set DRAGLINT_ENGINE / DRAGLINT_DOT, or put engine / dot keys in %APPDATA%\\drag-lint\\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then the shared defaults.",
+      "summary": "The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, then the shared default",
+      "intro": "Point the charts at a different Graphviz without editing anything: set DRAGLINT_DOT, or put a dot key in %APPDATA%\\drag-lint\\settings.json. A path you set that does not exist is an error naming where it was set; nothing set means the installed layout, then the shared default.",
       "wikiPage": "Charts-and-the-IDE",
       "surfaces": [
         {
@@ -2514,7 +2506,6 @@
         }
       ],
       "audience": "both",
-      "requires": ["powershell7"],
       "aliases": ["DRAGLINT_DOT", "DRAGLINT_ENGINE", "settings.json"],
       "related": ["chart-questions"]
     },
@@ -7322,7 +7313,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Routine at the cursor",
@@ -7354,7 +7345,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "aliases": ["callers", "who uses"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
@@ -7387,7 +7378,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "aliases": ["callees"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
@@ -7420,7 +7411,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "aliases": ["call path", "route"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
@@ -7453,7 +7444,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "aliases": ["purity", "side effects"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
@@ -7486,7 +7477,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Routine at the cursor",
@@ -7518,7 +7509,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Routine at the cursor",
@@ -7550,7 +7541,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Routine at the cursor",
@@ -7582,7 +7573,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Routine at the cursor",
@@ -7614,7 +7605,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7"],
+        "requires": ["index"],
         "aliases": ["blast radius", "impact"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
@@ -7647,7 +7638,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Routine at the cursor",
@@ -7679,7 +7670,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Field, property or grid column at the cursor",
@@ -7711,7 +7702,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Field, property or grid column at the cursor",
@@ -7743,7 +7734,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "sql-index", "powershell7", "graphviz"],
+        "requires": ["index", "sql-index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Field, property or grid column at the cursor",
@@ -7775,7 +7766,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "sql-index", "powershell7", "graphviz"],
+        "requires": ["index", "sql-index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Field, property or grid column at the cursor",
@@ -7807,7 +7798,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "sql-index", "powershell7"],
+        "requires": ["index", "sql-index"],
         "homeOrder": 50,
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
@@ -7840,7 +7831,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Type at the cursor",
@@ -7872,7 +7863,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Type at the cursor",
@@ -7904,7 +7895,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Type at the cursor",
@@ -7936,7 +7927,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Type at the cursor",
@@ -7968,7 +7959,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Type at the cursor",
@@ -8000,7 +7991,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "This unit",
@@ -8032,7 +8023,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "This project",
@@ -8064,7 +8055,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "This project",
@@ -8096,7 +8087,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Table or column (typed name)",
@@ -8128,7 +8119,7 @@
           }
         ],
         "audience": "both",
-        "requires": ["index", "powershell7", "graphviz"],
+        "requires": ["index", "graphviz"],
         "tests": ["charts\\src\\Test-Emitters.ps1"],
         "parent": "chart-questions",
         "subgroup": "Table or column (typed name)",
