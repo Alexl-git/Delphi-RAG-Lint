@@ -190,7 +190,8 @@ end;
    3. AStore says descendant of Exception -> toException.
    4. No unresolved ancestor leaves       -> toClass (fully in-project chain).
    5. Any leaf is Exception, or descends it in ALibStore -> toException.
-   6. ALibStore = nil                     -> toUnknown (silent: no index for the hop).
+   6. ALibStore = nil                     -> toClass when every leaf is TObject,
+      else toUnknown (silent: no index for the hop).
    7. Every leaf is TObject or known to the library as a class/interface/record
       -> toClass.
    8. Otherwise                           -> toUnknown, AUnknownLeaf = first

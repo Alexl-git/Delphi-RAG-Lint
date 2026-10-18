@@ -19585,7 +19585,7 @@ begin
   var LibWhy2: string;
   LibStore:= OpenLibraryStoreIfCurrent(LibDb, LibWhy2);
   if LibWhy2 <> '' then
-    EmitStatusLine(AArgs, Format('WARNING: %s -- ownership and DCU checks degrade to project-only.', [LibWhy2]));
+    EmitStatusLine(AArgs, Format('WARNING: %s -- ownership and DCU checks degrade to project-only, and type-name-prefix ancestry falls silent for unresolved ancestors.', [LibWhy2]));
   Findings:= nil;
 
   { --project: restrict the whole run to the units this project actually
