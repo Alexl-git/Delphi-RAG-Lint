@@ -23,6 +23,8 @@ uses
 /// <list type="bullet">
 /// <item>UTF-8 BOM (EF BB BF): the BOM is stripped; the remainder is returned unchanged.</item>
 /// <item>UTF-16 LE BOM (FF FE) / BE BOM (FE FF): transcoded to UTF-8.</item>
+/// <item>Binary DFM resource header (FF 0A 00): returned UNCHANGED (the one exception to "valid UTF-8"), so the
+/// parser's own binary-DFM diagnostic fires instead of a bogus parse error.</item>
 /// <item>Already-valid UTF-8 (no BOM): returned unchanged (identity passthrough).</item>
 /// <item>Anything else: treated as ANSI (Windows-1252) and transcoded to UTF-8.</item>
 /// </list></returns>
@@ -131,6 +133,12 @@ begin
     if N - 3 > 0 then Move(ABytes[3], Result[0], N - 3);
     Exit;
   end;
+
+  { Binary DFM (FF 0A 00 + class name: the Win resource header): not text, so
+    pass it through UNCHANGED. Transcoding would turn $FF into C3 BF and defeat
+    the binary-DFM guard in TDFMParser.Parse (ASource[0] = $FF). }
+  if (N >= 3) and (ABytes[0] = $FF) and (ABytes[1] = $0A) and (ABytes[2] = $00) then
+    Exit(ABytes);
 
   { UTF-16 LE BOM (FF FE) -> decode as UTF-16LE, re-encode UTF-8. }
   if (N >= 2) and (ABytes[0] = $FF) and (ABytes[1] = $FE) then

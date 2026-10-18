@@ -1190,7 +1190,13 @@ begin
   // positions agree. Blanking preserves byte length + LF, so the line structure
   // is identical to the raw file; blanked regions carry no doc-comments. For
   // pure-ASCII files with preprocessing off this is the prior UTF-8 decode.
-  SourceText:= TEncoding.UTF8.GetString(ParseBytes);
+  // A binary DFM (FF 0A 00 header) reaches here UNCHANGED from EnsureUtf8Bytes
+  // (so the parser can name it) and is not decodable text: it yields no symbols,
+  // so there is nothing to scan -- use empty text instead of an EEncodingError.
+  if (Length(ParseBytes) >= 3) and (ParseBytes[0] = $FF) and (ParseBytes[1] = $0A) and (ParseBytes[2] = $00) then
+    SourceText:= ''
+  else
+    SourceText:= TEncoding.UTF8.GetString(ParseBytes);
   { Split ONCE here rather than just before the facts pass: BuildEnclosingLineMap
     (called earlier, in the refs loop) needs the line count to size its map, and
     the facts pass below reuses the same array. }
