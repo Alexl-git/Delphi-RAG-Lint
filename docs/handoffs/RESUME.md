@@ -15,7 +15,8 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Open
 
-- 2026-10-17 | engine | 1.31.4 code done 66cb006e..36dc1866 (reviewed, unpushed); release run (deploy+battery+pack) in flight; owner asks: library rescan, user-side PowerShell, installer after charts | open | [HANDOFF-2026-10-17-engine-1314-release-overnight.md](HANDOFF-2026-10-17-engine-1314-release-overnight.md)
+- 2026-10-18 | engine | 1.31.4 deployed+packed (unpushed); charts merged to LOCAL main c7a82081 (696/0/0); Win32 library rebuild running detached; test installer after CHARTS PS-free | open | [HANDOFF-2026-10-18-engine-charts-merged-installer-next.md](HANDOFF-2026-10-18-engine-charts-merged-installer-next.md)
+- 2026-10-17 | engine | 1.31.4 code done 66cb006e..36dc1866 (reviewed, unpushed); release run (deploy+battery+pack) in flight; owner asks: library rescan, user-side PowerShell, installer after charts | resumed | [HANDOFF-2026-10-17-engine-1314-release-overnight.md](HANDOFF-2026-10-17-engine-1314-release-overnight.md)
 - 2026-10-16 | engine | 1.31.3 DONE (release + zips); next 1.31.4 type-prefix ancestry plan -> battery, commit, deploy, pack; NO push (owner Sunday) | resumed | [HANDOFF-2026-10-16-engine-1314-type-prefix-ancestry](HANDOFF-2026-10-16-engine-1314-type-prefix-ancestry.md)
 - 2026-10-16 | engine | 1.31.3 pushed + tagged (1a5e40eb), GH pre-release up WITHOUT zips; battery running; then 1.31.4 plan, commit+deploy+pack only, owner publishes Sunday | closed (1.31.3 done) | [HANDOFF-2026-10-16-engine-release-1313-done-1314-plan](HANDOFF-2026-10-16-engine-release-1313-done-1314-plan.md)
 - 2026-10-16 | engine | v1.31.3-alpha committed (cd9fa7ee), NOT pushed; fix 9 battery fails, publish, push+tag+release (approved); then type-prefix ancestry plan -> 1.31.4, hourly /loop | resumed | [HANDOFF-2026-10-16-engine-release-1313-type-prefix-ancestry](HANDOFF-2026-10-16-engine-release-1313-type-prefix-ancestry.md)
