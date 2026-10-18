@@ -194,3 +194,7 @@ third_party/engine-pinned/
 # (docs/examples/convrules/sample.rules.bak{,.2}) reached main before this rule.
 *.rules.bak
 *.rules.bak.[0-9]
+
+# local rollback copies of deployed engine/BPL (never versioned)
+third_party/dll-win*/*.bak-*
+
