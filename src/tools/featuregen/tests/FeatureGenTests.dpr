@@ -904,7 +904,7 @@ begin
       (Length(lE.Surfaces) = 2) and (lE.Surfaces[0].Usage = 'drag-lint v2verb go --name <N> [--db <db>]')
       and (Length(lE.Surfaces[0].Flags) = 2) and (lE.Surfaces[0].Flags[0].Name = '--name') and (lE.Surfaces[0].Flags[0].Arg = '<N>')
       and (lE.Surfaces[0].Flags[0].Summary = 'The bare member name') and (lE.Surfaces[0].Flags[0].DefaultValue = 'none')
-      and (lE.Surfaces[0].Flags[1].DefaultValue = '')
+      and (lE.Surfaces[0].Flags[1].DefaultValue = '<db>')
       and (Length(lE.Surfaces[1].Steps) = 2) and (lE.Surfaces[1].Steps[1] = 'Click V2 sample')
       and (Length(lE.Pitfalls) = 2) and (lE.Pitfalls[1] = 'Reindex after an edit')
       and (Length(lE.Questions) = 1) and (lE.Questions[0].Ask = 'Who calls Bar?') and (lE.Questions[0].Command = 'drag-lint v2verb go --name Bar')
@@ -936,7 +936,7 @@ begin
   // the same entry with the v2 keys written in a wrong order: must come back byte-identical
   lScrambled := '{"verified": {"surfaceHash": "abc123", "build": "1.32.0", "by": "ENGINE", "date": "2026-10-19"}, "pitfalls": ["Pass the BARE member name; TFoo.Bar returns 0", "Reindex after an edit"], '
     + '"questions": [{"command": "drag-lint v2verb go --name Bar", "ask": "Who calls Bar?"}], "audience": "both", "surfaces": ['
-    + '{"flags": [{"default": "none", "summary": "The bare member name", "arg": "<N>", "name": "--name"}, {"default": "", "summary": "Index to read; a|b", "arg": "<db>", "name": "--db"}], '
+    + '{"flags": [{"default": "none", "summary": "The bare member name", "arg": "<N>", "name": "--name"}, {"default": "<db>", "summary": "Index to read; a|b", "arg": "<db>", "name": "--db"}], '
     + '"usage": "drag-lint v2verb go --name <N> [--db <db>]", "example": "drag-lint v2verb go --name X", "sub": "go", "verb": "v2verb", "type": "cli"}, '
     + '{"steps": ["Open the Search menu", "Click V2 sample"], "path": "drag-lint > Search > V2 sample", "type": "ide-menu"}], '
     + '"helpContext": "v2-help-id", "summary": "Exercises every schema v2 field for the featuregen tests", "since": "0.86.0-alpha", "status": "shipped", "owner": "ENGINE", '
@@ -948,6 +948,21 @@ begin
     lVal.Free;
   end;
   Check('Json.V2FixedOrdersFromScrambled', lBack = lText, Copy(lBack, 1, 200));
+end;
+
+procedure TestEmptyArraysV2;
+var
+  lVal: TJSONValue;
+  lBack: string;
+begin
+  lVal := TJSONObject.ParseJSONValue('{"id": "x-empty", "surfaces": [{"type": "cli", "verb": "x", "flags": []}, {"type": "ide-menu", "path": "drag-lint > X", "steps": []}], "pitfalls": []}', True, False);
+  try
+    lBack := CanonicalJson(lVal, TArray<string>.Create('id', 'surfaces', 'pitfalls'));
+  finally
+    lVal.Free;
+  end;
+  Check('Json.V2EmptySurfaceArraysKeptEntryEmptyDropped',
+    (Pos('"flags": []', lBack) > 0) and (Pos('"steps": []', lBack) > 0) and (Pos('pitfalls', lBack) = 0), lBack);
 end;
 
 procedure TestLeafV2;
@@ -971,7 +986,7 @@ begin
       (Pos('```text'#10'drag-lint v2verb go --name <N> [--db <db>]'#10'```', lOut) > 0) and (Pos('WRONG-FROM-HELP', lOut) = 0), lOut);
     Check('Leaf.FlagsTable',
       Pos('## Flags'#10#10'| Flag | Argument | Meaning | Default |'#10'| --- | --- | --- | --- |'#10
-        + '| `--name` | `<N>` | The bare member name | none |'#10'| `--db` | `<db>` | Index to read; a\|b |  |'#10, lOut) > 0, lOut);
+        + '| `--name` | `<N>` | The bare member name | `none` |'#10'| `--db` | `<db>` | Index to read; a\|b | `<db>` |'#10, lOut) > 0, lOut);
     Check('Leaf.PitfallsBullets',
       Pos('## Pitfalls'#10#10'* Pass the BARE member name; TFoo.Bar returns 0'#10'* Reindex after an edit'#10, lOut) > 0, lOut);
     Check('Leaf.StepsNumberedUnderSurface',
@@ -995,7 +1010,7 @@ begin
   TFile.WriteAllText(TPath.Combine(lRepo, 'features\entries\v2cli.json'),
     '{ "id": "v2cli", "title": "V2 cli", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.50.0-alpha", '
     + '"summary": "A verb with schema v2 flags", "audience": "both", "surfaces": [ { "type": "cli", "verb": "v2cli", '
-    + '"usage": "drag-lint v2cli --x <n>", "flags": [ { "name": "--x", "arg": "<n>", "summary": "The x", "default": "1" } ] } ] }', TEncoding.ASCII);
+    + '"usage": "drag-lint v2cli --x <n>", "flags": [ { "name": "--x", "arg": "<n>", "summary": "The x", "default": "1" }, { "name": "--db", "summary": "Db", "default": "<db>" }, { "name": "--t", "summary": "Tick", "default": "a`b" }, { "name": "--e", "summary": "Empty" } ] } ] }', TEncoding.ASCII);
   lHelp := TLiveHelp.Create;
   try
     lHelp.LoadFromText(SITE_HELP);
@@ -1004,7 +1019,7 @@ begin
     lCli := ReadSiteFile(lOut, 'cli.md');
     Check('Cli.FlagsTable',
       (Pos('### v2cli'#10, lCli) > 0) and (Pos('```text'#10'drag-lint v2cli --x <n>'#10'```'#10#10'| Flag | Argument | Meaning | Default |'#10
-        + '| --- | --- | --- | --- |'#10'| `--x` | `<n>` | The x | 1 |'#10, lCli) > 0), lCli);
+        + '| --- | --- | --- | --- |'#10'| `--x` | `<n>` | The x | `1` |'#10'| `--db` |  | Db | `<db>` |'#10'| `--t` |  | Tick | `` a`b `` |'#10'| `--e` |  | Empty |  |'#10, lCli) > 0), lCli);
   finally
     lHelp.Free;
   end;
@@ -1057,6 +1072,7 @@ begin
     TestLeaves;
     TestModelV2;
     TestJsonV2;
+    TestEmptyArraysV2;
     TestLeafV2;
     TestCliV2;
     TestEntryTextGuardV2;

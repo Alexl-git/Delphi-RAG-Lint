@@ -140,6 +140,8 @@ function CodeCell(const pText: string): string;
 begin
   if pText = '' then
     Result := ''
+  else if Pos('`', pText) > 0 then
+    Result := '`` ' + TableCell(pText) + ' ``'
   else
     Result := '`' + TableCell(pText) + '`';
 end;
@@ -155,7 +157,7 @@ begin
   Result := '| Flag | Argument | Meaning | Default |'#10'| --- | --- | --- | --- |'#10;
   for lF in pFlags do
     Result := Result + '| ' + CodeCell(lF.Name) + ' | ' + CodeCell(lF.Arg) + ' | ' + TableCell(lF.Summary) + ' | '
-      + TableCell(lF.DefaultValue) + ' |'#10;
+      + CodeCell(lF.DefaultValue) + ' |'#10;
   Result := Result + #10;
 end;
 
@@ -738,7 +740,7 @@ begin
       CheckField(pEntry, 'surfaces.flags.name', lF.Name, True);
       CheckField(pEntry, 'surfaces.flags.arg', lF.Arg, True);
       CheckField(pEntry, 'surfaces.flags.summary', lF.Summary, False);
-      CheckField(pEntry, 'surfaces.flags.default', lF.DefaultValue, False);
+      CheckField(pEntry, 'surfaces.flags.default', lF.DefaultValue, True);
     end;
     for lR in lS.Steps do
       CheckField(pEntry, 'surfaces.steps', lR, False);
