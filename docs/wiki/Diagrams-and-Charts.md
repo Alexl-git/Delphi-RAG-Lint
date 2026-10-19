@@ -32,8 +32,8 @@ drag-lint ask --question <id> --at <file.pas>:<line>:<col> --db <project.sqlite>
 What runs TODAY -- the same questions by NAME, through the chart pipeline:
 
 ```
-New-DiagramArtifact.ps1 -Question <id> -Target <Unit.TType.Member | Unit | project> -DbPath <project.sqlite>
-                        [-Depth N] [-Cap N] [-OutRoot <dir>] [-Open]
+drag-lint ask <id> --target <Unit.TType.Member | Unit | project> --db <project.sqlite>
+               [--depth N] [--cap N] [--out-root <dir>] [--open]
 ```
 
 ## The questions
@@ -134,9 +134,8 @@ depth 3: **15 routines** over 1 unit reach it within 3 caller hops --
 (`BuildProjectFileScope`), `index`, `lint`, `lint-all`, `reconcile-project` and
 `document --project`. That is why the platform-PropertyGroup fix to this one
 function moved the extractor version. Command:
-`Emit-ChangeImpact.ps1 -Target DRagLint.Preprocess.Profile.ProfileFromDproj -DbPath <copy of drag-lint.sqlite> -Depth 3 -Cap 16`
-(the question's emitter, run directly so all 16 rows show; `New-DiagramArtifact.ps1`
-uses 8 rows per zone and discloses the rest).
+`drag-lint ask change-impact --target DRagLint.Preprocess.Profile.ProfileFromDproj --db <drag-lint.sqlite> --depth 3 --cap 16`
+(`--cap 16` so all 16 rows show; the default draws 8 rows per zone and discloses the rest).
 [SVG](https://raw.githubusercontent.com/Alexl-git/Delphi-RAG-Lint/main/docs/Images/charts/change-impact-ProfileFromDproj.svg)
 
 ### deps: where the linter sits in the layering
@@ -147,7 +146,7 @@ Question `deps`, target `DRagLint.Lint.Linter`: **6 units use it** (the CLI unit
 program file, two LSP units, the MCP server, one lint unit) and **it uses 9** (core, parser,
 diagnostics, tree-sitter, three lint units), each grouped by `src\` folder.
 Dashed = an implementation-section `uses`. Command:
-`New-DiagramArtifact.ps1 -Question deps -Target DRagLint.Lint.Linter -DbPath <copy of drag-lint.sqlite>`.
+`drag-lint ask deps --target DRagLint.Lint.Linter --db <drag-lint.sqlite>`.
 The whole-project [`architecture`](ask-architecture) question on the same index
 draws 129 units in 23 zones with 598 internal edges -- accurate and too dense
 to read at page size, which is why a one-unit `deps` is the sample here.
@@ -162,7 +161,7 @@ Question `butterfly`, target
 **2 callers** (the store's enum-value and call-target resolve passes) and
 **14 callee rows** (scope checks, the identical-copy collapse, and the symbol
 store lookups). Command:
-`New-DiagramArtifact.ps1 -Question butterfly -Target DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead -DbPath <copy of drag-lint.sqlite> -Depth 2`.
+`drag-lint ask butterfly --target DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead --db <drag-lint.sqlite> --depth 2`.
 [SVG](https://raw.githubusercontent.com/Alexl-git/Delphi-RAG-Lint/main/docs/Images/charts/butterfly-ResolveEnumValueRead.svg)
 
 ## Related verbs that print graphs as text

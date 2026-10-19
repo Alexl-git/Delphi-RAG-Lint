@@ -138,8 +138,9 @@ the link clickable -- see
 the chart, and a ready-to-paste DocInsight `<remarks>` reference. Full reference,
 one page per question: **[Diagrams and Charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Diagrams-and-Charts)**.
 
-The three charts below are drag-lint's own code, produced by the chart pipeline
-(`New-DiagramArtifact.ps1`) against a copy of its self-index at v1.17.0-alpha.
+The three charts below are drag-lint's own code, produced by the engine's
+`drag-lint ask` verb against a copy of its self-index at v1.17.0-alpha. (The PowerShell
+emitters under `charts\src` remain in the repository only as an internal parity reference.)
 
 ### change-impact -- one function feeds closure, parse and lint
 
@@ -150,8 +151,8 @@ depth 3. **15 routines** reach it: `pp-profile` and the index-profile resolver
 directly, then the project closure (`BuildProjectFileScope`), `index`, `lint`,
 `lint-all`, `reconcile-project` and `document` for a project. This is why reading
 the platform PropertyGroups in that one function moved the extractor version.
-Produced by `Emit-ChangeImpact.ps1 -Target DRagLint.Preprocess.Profile.ProfileFromDproj -Depth 3 -Cap 16`
-(the question's emitter, with every row shown).
+Produced by `drag-lint ask change-impact --target DRagLint.Preprocess.Profile.ProfileFromDproj --depth 3 --cap 16`
+(with every row shown).
 
 ### deps -- where the linter sits in the layering
 
@@ -161,7 +162,7 @@ Question `deps`, target `DRagLint.Lint.Linter`. **6 units use it** (the CLI and
 its program file, two LSP units, the MCP server, one lint unit); **it uses 9**
 (core, parser, diagnostics, tree-sitter and three lint units). Boxes are `src\`
 folders; a dashed edge is an implementation-section `uses`. Produced by
-`New-DiagramArtifact.ps1 -Question deps -Target DRagLint.Lint.Linter`. The
+`drag-lint ask deps --target DRagLint.Lint.Linter`. The
 whole-project `architecture` question on the same index draws 129 units in 23
 zones with 598 internal edges -- correct, and too dense for a page, which is why
 the one-unit view is shown here.
@@ -175,7 +176,7 @@ Question `butterfly`, target
 **2 callers** (the store's enum-value and call-target resolve passes) and
 **14 callee rows** (scope checks, the identical-copy collapse, the symbol-store
 lookups). Produced by
-`New-DiagramArtifact.ps1 -Question butterfly -Target DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead -Depth 2`.
+`drag-lint ask butterfly --target DRagLint.Index.CallResolver.TCallResolver.ResolveEnumValueRead --depth 2`.
 
 ---
 
@@ -888,7 +889,7 @@ Win64 build.
 | [`usages`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/usages) `--name <n>` | Grouped usage report (backs the IDE Symbol Search dialog) | `--width narrow\|wide\|very-wide`, `--depth N` |
 | [`outline`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) `--file <f.pas>` | Unit outline (backs the IDE Structure form) | `--format text\|json` |
 | [`compare`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) `--old <report\|csv\|bundle> [--command "<id> ..."]` / `--in <U.pas> --line <L>` | Rerun a saved report's question and show before / delta / after (exit 0 same, 1 differs, 2 setup, 3 stale index) | `--new <f>` (two saved outputs), `--question <id> --target <T>`, `--update-doc`, `--old-db`, `--db <f>`, `--auto`, `--save`, `--snapshot-dir <dir>`, `--show`, `--format text\|json\|html`, `--open` |
-| [`ask`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) `<question> --target <T> [--project <P.dproj>\|--in <U.pas>\|--db <idx>]` | Ask one report question (the 26 chart questions) and print the answer: the DocInsight remarks block the Reports menu copies, or the plain answer. Ported questions answer in-process, the rest through `charts\src\Ask-Report.ps1` (exit 0 answered, 1 refused, 2 setup, 3 stale index) | `--to <B>`, `--server-db`, `--sql-db`, `--counterpart-db`, `--depth N`, `--cap N`, `--surface-cap N`, `--control <C>`, `--mode write\|read\|both`, `--max-rows N`, `--out-root <dir>`, `--pairs-file <f>`, `--allow-stale`, `--plain`, `--open`, `--resolve-only` |
+| [`ask`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) `<question> --target <T> [--project <P.dproj>\|--in <U.pas>\|--db <idx>]` | Ask one report question (the 26 chart questions) and print the answer: the DocInsight remarks block the Reports menu copies, or the plain answer. All 26 questions answer in-process in the engine (exit 0 answered, 1 refused, 2 setup, 3 stale index) | `--to <B>`, `--server-db`, `--sql-db`, `--counterpart-db`, `--depth N`, `--cap N`, `--surface-cap N`, `--control <C>`, `--mode write\|read\|both`, `--max-rows N`, `--out-root <dir>`, `--pairs-file <f>`, `--allow-stale`, `--plain`, `--open`, `--resolve-only` |
 | `hover --qname <q>` | Hover card for a symbol | `--format plain\|md\|json` |
 | `typeat <file>:<line>:<col>` | Resolve the type of the expression at a cursor position | `--format text\|json` |
 | [`find-unit`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/find-unit) `--name <X> --in <file>` | Find which unit declares `X`, to add to `uses` | `--apply` |
