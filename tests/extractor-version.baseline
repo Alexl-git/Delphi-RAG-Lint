@@ -974,4 +974,13 @@
 #   text file can differ. A binary DFM yielded zero symbols before (transcoded junk, parse error)
 #   and yields zero symbols now; only its diagnostic text changes. Re-pinned over lane 4's pin.
 #   Superseded: 1.21.1-alpha|28617e2f21ef90d69649df4608146b0b834005636e63ab41c97abeae52830502
-1.21.1-alpha|9d56cc96e2e365f7e25764f8cf119ac0c43f6962ff9f090ce61b08bad4ac3f06
+# 2026-10-19: hash re-pinned WITHIN 1.21.1-alpha (bug-fix wave 3, lane J, B-02), per the
+#   "cannot affect extraction" rule above. DRagLint.Core.Indexer.pas: the name / marker /
+#   glob half of TIndexer.ShouldPruneDir moved VERBATIM into the public function
+#   DirPrunedByFilter(ADir, AFilter); ShouldPruneDir is now IsUnderExcludeRoot OR
+#   DirPrunedByFilter(ADir, FWalkFilter) -- the same five tests, all ending in True, so
+#   the walk prunes exactly the same directories and admits exactly the same files.
+#   src\index\DRagLint.Index.Drift.pas (library-drift, read-only, never called from a walk)
+#   gained a filter-aware AnalyzeLibraryDrift overload. No parse can differ.
+#   Superseded: 1.21.1-alpha|9d56cc96e2e365f7e25764f8cf119ac0c43f6962ff9f090ce61b08bad4ac3f06
+1.21.1-alpha|b611ec75531a3d7da6ec27c2e71562357de6a1cbcee30e7e0d63bdb22b29e067
