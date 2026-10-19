@@ -361,6 +361,8 @@ begin
     lMsg := RaisedMessage('fine'#10'ok'#10'a <b>bold</b> word'#10, lMap);
     Check('Md.RawHtmlFails', (Pos('ask', lMsg) > 0) and (Pos('line 3', lMsg) > 0), lMsg);
     lMsg := RaisedMessage('fine `<tag>` and'#10'```'#10'<b>'#10'```'#10, lMap);
+    lOut := TransformWikiBody('see [`deps`](Outline) and [x `<b>`](Gone) and `<i>`', lMap, 'ask', lImg);
+    Check('Md.LinkWithCodeSpanText', lOut = 'see [`deps`](outline.md) and x `<b>` and `<i>`', lOut);
     Check('Md.HtmlInCodeAllowed', lMsg = '', lMsg);
     lMsg := RaisedMessage('one'#10'caf' + Char($00E9), lMap);
     Check('Md.NonAsciiFails', (Pos('ask', lMsg) > 0) and (Pos('line 2', lMsg) > 0), lMsg);
@@ -420,6 +422,14 @@ begin
         + 'product: DL'#10'group: search-navigation'#10'order: 30'#10'since: 0.86.0-alpha'#10'status: shipped'#10'updated: 0.86.0-alpha'#10
         + '---'#10#10'# outline'#10#10'Prints the file-scoped symbol outline for one Pascal unit.'#10#10'## How to run it'#10),
       Copy(lOut, 1, 400));
+    lFmt.ExcludeAudiences := TArray<string>.Create('both');
+    lE := EntryById(lReg, 'outline');
+    lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
+    Check('Leaf.LinkToExcludedEntryIsPlainText', (Pos('allow-this-message.md', lOut) = 0) and (Pos('See Allow-this-message and', lOut) > 0), lOut);
+    lFmt := MiniFormat(lHelp);
+    lHelp.LoadFromText('  drag-lint ask-deps --target T'#10'  drag-lint ask   <q>  --x');
+    Check('Live.UsageForNotHyphenSibling', lHelp.UsageFor('ask') = 'drag-lint ask <q> --x', lHelp.UsageFor('ask'));
+    lHelp.LoadFromText(HELP_SNIPPET);
     lE := EntryById(lReg, 'add-missing-units-to-uses-whole-unit');
     lE.Title := 'Add: units';
     lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
@@ -470,7 +480,7 @@ begin
   lMap := TWikiLinkMap.Create;
   try
     lReg.Load(MiniDir);
-    lMap.Load(lReg);
+    lMap.Load(lReg, MiniFormat(nil));
     Check('Md.WikiLinkMapFromRegistry', lMap.TryGet('outline', lId) and (lId = 'outline') and lMap.TryGet('Allow-this-message', lId)
       and (lId = 'allow-this-message') and not lMap.TryGet('zzz', lId));
   finally

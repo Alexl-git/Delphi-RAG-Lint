@@ -10,6 +10,7 @@ uses
   System.SysUtils
   , System.Generics.Collections
   , FeatureGen.Model
+  , FeatureGen.SiteFormat
   ;
 
 type
@@ -33,9 +34,10 @@ type
     /// <param name="pPage">Wiki page name, without .md.</param>
     /// <param name="pId">Entry id.</param>
     procedure Add(const pPage, pId: string);
-    /// <summary>Adds every entry that names a wikiPage.</summary>
+    /// <summary>Adds every site-included entry that names a wikiPage; links to excluded entries stay unmapped (plain text).</summary>
+    /// <param name="pFmt">Site format deciding which entries are included.</param>
     /// <param name="pReg">Loaded registry.</param>
-    procedure Load(const pReg: TRegistry);
+    procedure Load(const pReg: TRegistry; const pFmt: TSiteFormat);
     /// <summary>Looks a page up.</summary>
     /// <param name="pPage">Wiki page name, without .md.</param>
     /// <param name="pId">Receives the entry id.</param>
@@ -91,12 +93,13 @@ begin
     FMap.AddOrSetValue(lKey, pId);
 end;
 
-procedure TWikiLinkMap.Load(const pReg: TRegistry);
+procedure TWikiLinkMap.Load(const pReg: TRegistry; const pFmt: TSiteFormat);
 var
   lE: TFeatureEntry;
 begin
   for lE in pReg.Entries do
-    Add(lE.WikiPage, lE.Id);
+    if SiteIncludes(pFmt, lE.Status, lE.Audience) then
+      Add(lE.WikiPage, lE.Id);
 end;
 
 function TWikiLinkMap.TryGet(const pPage: string; out pId: string): Boolean;
@@ -207,19 +210,24 @@ function TransformLine(pWork: TBodyWork; const pLine: string): string;
 var
   lSpans: TMatchCollection;
   lM: TMatch;
-  lPos: Integer;
+  lPos, i: Integer;
+  lCode: TArray<string>;
 begin
   Result := '';
   lPos := 1;
   lSpans := TRegEx.Matches(pLine, '`[^`]*`');
+  SetLength(lCode, 0);
   for lM in lSpans do
   begin
-    Result := Result + pWork.Segment(Copy(pLine, lPos, lM.Index - lPos)) + lM.Value;
+    SetLength(lCode, Length(lCode) + 1);
+    lCode[High(lCode)] := lM.Value;
+    Result := Result + Copy(pLine, lPos, lM.Index - lPos) + #1 + IntToStr(High(lCode)) + #2;
     lPos := lM.Index + lM.Length;
   end;
-  Result := Result + pWork.Segment(Copy(pLine, lPos, MaxInt));
+  Result := pWork.Segment(Result + Copy(pLine, lPos, MaxInt));
+  for i := High(lCode) downto 0 do
+    Result := StringReplace(Result, #1 + IntToStr(i) + #2, lCode[i], [rfReplaceAll]);
 end;
-
 procedure CheckAscii(pWork: TBodyWork; const pLine: string);
 var
   i: Integer;

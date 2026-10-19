@@ -29,7 +29,7 @@ type
     procedure LoadFromText(const pText: string);
     /// <summary>First help line that starts a verb entry.</summary>
     /// <param name="pVerb">Verb, or "verb sub" (single spaces).</param>
-    /// <returns>The first line matching ^\s{2}drag-lint\s+verb\b, trimmed, runs of spaces collapsed to one; '' when none.</returns>
+    /// <returns>The first line matching ^\s{2}drag-lint\s+verb(?=\s|$), trimmed, runs of spaces collapsed to one; '' when none.</returns>
     function UsageFor(const pVerb: string): string;
   end;
 
@@ -115,7 +115,7 @@ var
   lLine: string;
 begin
   Result := '';
-  lRe := TRegEx.Create('^\s{2}drag-lint\s+' + TRegEx.Escape(pVerb) + '\b');
+  lRe := TRegEx.Create('^\s{2}drag-lint\s+' + TRegEx.Escape(pVerb) + '(?=\s|$)');
   for lLine in FLines do
     if lRe.IsMatch(lLine) then
       Exit(TRegEx.Replace(Trim(lLine), ' {2,}', ' '));

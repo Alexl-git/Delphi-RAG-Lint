@@ -163,7 +163,7 @@ begin
   begin
     lMap := TWikiLinkMap.Create;
     try
-      lMap.Load(pReg);
+      lMap.Load(pReg, pFmt);
       lBody := TFile.ReadAllText(lWikiFile, TEncoding.UTF8);
       lHasCliSection := TRegEx.IsMatch(lBody, '(?im)^#{1,6}[ \t]+(Running it from the CLI|Usage)[ \t]*\r?$');
       lBody := TransformWikiBody(lBody, lMap, pEntry.Id, pImages, pFmt.FenceDefaultLang);
