@@ -217,6 +217,63 @@ type
     HasIntf: Boolean;
   end;
 
+  /// <summary>Whether a cycle's plan can be applied without a human.</summary>
+  TCycleVerdict = (cvMechanical, cvRefused);
+
+  /// <summary>One reason a cycle's plan cannot be applied mechanically.</summary>
+  /// <remarks>Kind is one of the strings of the 2026-10-10 contract 4.4:
+  /// manual-edit, blocked-symbol, unresolved-edge, directive, leaf-uses-cycle,
+  /// qualified-ref, class-ctor, base-class, outside-roots. Line is 0 when the
+  /// refusal has no single line (an edge, a unit).</remarks>
+  TRefusal = record
+    Kind    : string;
+    Symbol  : string;
+    FilePath: string;
+    Reason  : string;
+    Line    : Integer;
+  end;
+
+  /// <summary>A unit the plan creates: its name, its file and its full text.</summary>
+  TNewUnit = record
+    UnitName: string;
+    Path    : string;
+    Text    : TArray<string>;
+  end;
+
+  /// <summary>Everything BuildPlan computed for one circular group, as data,
+  /// so a caller can render it (RenderPlan) or apply it.</summary>
+  /// <remarks>
+  /// <para>Edits is created by BuildPlan and owns its lists: call Release when
+  /// done. It holds the edits of every touched unit EXCEPT the project's .dpr,
+  /// each list ordered bottom-up (the order the playbook prints them); the .dpr
+  /// edits are in DprEdits, the .dproj edits in DprojEdits (index order).
+  /// Touched is the file order the playbook prints (cycle members first, the
+  /// .dpr last).</para>
+  /// <para>A plan with any refusal has Verdict = cvRefused but still carries
+  /// every step the playbook prints.</para>
+  /// </remarks>
+  TCycleFixPlan = record
+    CycleIndex: Integer;                          // 1-based, DoCycles order
+    Units     : TArray<string>;                   // stems
+    HasIntf   : Boolean;
+    Part      : Char;                             // 'A' or 'B'
+    Verdict   : TCycleVerdict;
+    Refusals  : TArray<TRefusal>;
+    Items     : TArray<TMoveItem>;
+    Decisions : TArray<TUsesDecision>;
+    NewUnits  : TArray<TNewUnit>;
+    Edits     : TDictionary<Int64, TList<TFileEdit>>;  // fid -> edits, EditOrder applied
+    DprojEdits: TArray<TFileEdit>;
+    DprEdits  : TArray<TFileEdit>;
+    Touched   : TArray<Int64>;                    // fids
+    Predicted : TArray<TPredGroup>;
+    ExpectedOutput: TArray<string>;
+    CutEdge   : TEdgeEval;                        // Part B
+    Evals     : TArray<TEdgeEval>;                // Part B: every edge weighed
+    /// <summary>Frees Edits (and its lists); safe to call twice.</summary>
+    procedure Release;
+  end;
+
   TCyclePlanner = class  // dl:ok god-class@8d65, high-response@8d65 -- implementation-private; one per cycles --plan run, holding the shared per-cycle state that every small step reads; its many methods are the steps, each short
   private
     FStore      : ISymbolStore;
@@ -348,8 +405,13 @@ type
     procedure RenderCompileHelp;
     procedure RenderDone(pIntf: Boolean);
     procedure RenderPartB;
-    procedure RenderIntfCycle(pSelf: Integer);
-    procedure RenderImplCycle(pSelf: Integer);
+    procedure RenderIntfCycle(const pPlan: TCycleFixPlan);
+    procedure RenderImplCycle(const pPlan: TCycleFixPlan);
+    // planning (no output)
+    procedure PlanIntfCycle;
+    function PlanImplCycle: TArray<TEdgeEval>;
+    procedure CapturePlan(var pPlan: TCycleFixPlan);
+    procedure CaptureRefusals(var pPlan: TCycleFixPlan);
     procedure RenderNoMechanicalCut(const pEvals: TArray<TEdgeEval>);
     procedure RenderRemedy;
     function ReindexCommand: string;
@@ -360,8 +422,29 @@ type
     constructor Create(const pStore: ISymbolStore; const pDbPath: string;
       const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
     destructor Destroy; override;
+    /// <summary>Computes the plan for one SCC without rendering.</summary>
+    /// <param name="pCycleIndex">1-based index into the circular groups
+    /// (DoCycles order).</param>
+    /// <returns>The plan; the caller must call its Release.</returns>
+    /// <remarks>Resets and refills the planner's per-cycle state, which then
+    /// stays that of the returned plan until the next BuildPlan.</remarks>
+    function BuildPlan(pCycleIndex: Integer): TCycleFixPlan;
+    /// <summary>Renders the playbook for one SCC from a plan built by BuildPlan.</summary>
+    /// <param name="pPlan">The plan the LAST BuildPlan call returned.</param>
+    /// <exception cref="EInvalidOpException">Raised when pPlan is not the plan of the
+    /// planner's current per-cycle state (another BuildPlan ran since).</exception>
+    /// <remarks>The detail sections still read the planner's per-cycle state,
+    /// which BuildPlan left in place; hence the guard.</remarks>
+    procedure RenderPlan(const pPlan: TCycleFixPlan);
     procedure Run;
   end;
+
+{ TCycleFixPlan }
+
+procedure TCycleFixPlan.Release;
+begin
+  FreeAndNil(Edits);
+end;
 
 { ---------------------------------------------------------------------------
   small text helpers
@@ -2633,17 +2716,12 @@ begin
   Emit('');
 end;
 
-procedure TCyclePlanner.RenderIntfCycle(pSelf: Integer);
+procedure TCyclePlanner.PlanIntfCycle;
 var
   Seeds: TList<TNeed>;
   Cut  : TObjectDictionary<Int64, TList<Int64>>;
   Why  : string;
 begin
-  Emit('Status: **interface coupling** -- units of this cycle use each other in their INTERFACE ' +
-    'uses clauses.');
-  Emit('');
-  RenderFiles;
-  RenderIntfWhy;
   Seeds:= TList<TNeed>.Create;
   Cut  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   try
@@ -2678,6 +2756,15 @@ begin
     Seeds.Free;
   end;
   Materialize;
+end;
+
+procedure TCyclePlanner.RenderIntfCycle(const pPlan: TCycleFixPlan);
+begin
+  Emit('Status: **interface coupling** -- units of this cycle use each other in their INTERFACE ' +
+    'uses clauses.');
+  Emit('');
+  RenderFiles;
+  RenderIntfWhy;
   Emit('### Goal');
   Emit('Part A (steps 1-4, required) removes the INTERFACE coupling: each symbol above -- and ' +
     'whatever it needs -- moves into a new leaf unit, or its class gets a base class there, so no ' +
@@ -2689,7 +2776,7 @@ begin
   RenderDecisions(CStepUses);
   RenderLeafUnits(CStepCreate);
   RenderEdits(CStepEdit);
-  RenderChecklist(pSelf);
+  RenderChecklist(pPlan.CycleIndex - 1);
   RenderPartB;
 end;
 
@@ -2704,17 +2791,11 @@ begin
   Emit('');
 end;
 
-procedure TCyclePlanner.RenderImplCycle(pSelf: Integer);
+function TCyclePlanner.PlanImplCycle: TArray<TEdgeEval>;
 var
   Evals: TList<TEdgeEval>;
   Why  : string;
 begin
-  Emit('Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile ' +
-    'blast radius). Optional to fix; the steps below are for when you want a fully acyclic uses-graph.');
-  Emit('');
-  RenderFiles;
-  RenderImplWhy;
-  Emit('### Recommended fix (optional)');
   Evals:= TList<TEdgeEval>.Create;
   try
     for var A in FComp do
@@ -2725,23 +2806,170 @@ begin
           Evals.Add(Ev);
           if Ev.Movable and ((FCutEdge.FromStem = '') or (Ev.Cost < FCutEdge.Cost)) then FCutEdge:= Ev;
         end;
-    if FCutEdge.FromStem = '' then RenderNoMechanicalCut(Evals.ToArray);
+    Result:= Evals.ToArray;
   finally
     Evals.Free;
   end;
   if FCutEdge.FromStem = '' then Exit;
-  EmitFmt('Cut the edge `%s -> %s`: everything `%s` uses from `%s` can move into a new leaf unit, ' +
-    'the smallest mechanical cut in this cycle.', [FCutEdge.FromStem, FCutEdge.ToStem,
-    FCutEdge.FromStem, FCutEdge.ToStem]);
-  Emit('');
   for var N in FCutEdge.Needs do TryAdd(N.Owner, nil, Why);
   Materialize;
+end;
+
+procedure TCyclePlanner.RenderImplCycle(const pPlan: TCycleFixPlan);
+begin
+  Emit('Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile ' +
+    'blast radius). Optional to fix; the steps below are for when you want a fully acyclic uses-graph.');
+  Emit('');
+  RenderFiles;
+  RenderImplWhy;
+  Emit('### Recommended fix (optional)');
+  if pPlan.CutEdge.FromStem = '' then
+  begin
+    RenderNoMechanicalCut(pPlan.Evals);
+    Exit;
+  end;
+  EmitFmt('Cut the edge `%s -> %s`: everything `%s` uses from `%s` can move into a new leaf unit, ' +
+    'the smallest mechanical cut in this cycle.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem,
+    pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem]);
+  Emit('');
   RenderDone(False);
   RenderMoves(CStepMoves);
   RenderDecisions(CStepUses);
   RenderLeafUnits(CStepCreate);
   RenderEdits(CStepEdit);
-  RenderChecklist(pSelf);
+  RenderChecklist(pPlan.CycleIndex - 1);
+end;
+
+procedure TCyclePlanner.CaptureRefusals(var pPlan: TCycleFixPlan);
+var
+  L: TList<TRefusal>;
+
+  procedure Add(const pKind, pSymbol, pFilePath, pReason: string; pLine: Integer);
+  var
+    R: TRefusal;
+  begin
+    R.Kind    := pKind;
+    R.Symbol  := pSymbol;
+    R.FilePath:= pFilePath;
+    R.Reason  := pReason;
+    R.Line    := pLine;
+    L.Add(R);
+  end;
+
+begin
+  L:= TList<TRefusal>.Create;
+  try
+    { the facts the playbook already prints: MANUAL items, base-class extractions
+      (refused until Task 7), interface edges the index could not resolve, and
+      the per-file steps it can only describe }
+    for var M in FManual do
+      Add((if M.Kind = mvBlocked then 'blocked-symbol' else 'manual-edit'), M.Sym.Name,
+        PathOf(M.Sym.FileId), M.Reason, M.Decl.First);
+    for var Id in FOrder do
+      if FItems[Id].Kind = mvBase then
+        Add('base-class', FItems[Id].Sym.Name, PathOf(FItems[Id].Sym.FileId),
+          'a base class must be extracted', FItems[Id].Decl.First);
+    if pPlan.HasIntf then
+    begin
+      for var A in FComp do
+        for var B in FComp do
+        begin
+          if (A = B) or not FGraph.IntfEdges.ContainsKey(A + '->' + B) then Continue;
+          var Resolved:= False;
+          for var N in NeedsOf(FidOfStem(A)) do
+            if (N.Sect = scIntf) and (N.OwnerStem = B) then Resolved:= True;
+          if not Resolved then
+            Add('unresolved-edge', A + ' -> ' + B, PathOf(FidOfStem(A)),
+              'the index could not resolve what the interface uses', 0);
+        end;
+    end
+    else if pPlan.CutEdge.FromStem = '' then
+    begin
+      for var Ev in pPlan.Evals do
+        Add((if Length(Ev.Needs) = 0 then 'unresolved-edge' else 'manual-edit'),
+          Ev.FromStem + ' -> ' + Ev.ToStem, PathOf(FidOfStem(Ev.FromStem)), Ev.Why, 0);
+    end;
+    for var Fid in pPlan.Touched do
+      for var E in EditsOf(Fid) do
+        if E.Kind = ekManual then Add('manual-edit', '', PathOf(Fid), E.Note, E.First);
+    for var E in pPlan.DprojEdits do
+      if E.Kind = ekManual then Add('manual-edit', '', FProjectFile, E.Note, E.First);
+    pPlan.Refusals:= L.ToArray;
+  finally
+    L.Free;
+  end;
+  pPlan.Verdict:= if Length(pPlan.Refusals) > 0 then cvRefused else cvMechanical;
+end;
+
+procedure TCyclePlanner.CapturePlan(var pPlan: TCycleFixPlan);
+var
+  Items : TList<TMoveItem>;
+  Leaves: TList<TNewUnit>;
+begin
+  Items := TList<TMoveItem>.Create;
+  Leaves:= TList<TNewUnit>.Create;
+  try
+    for var Id in FOrder do Items.Add(FItems[Id]);
+    pPlan.Items:= Items.ToArray;
+    for var Stem in LeafStems do
+    begin
+      var U:= Default(TNewUnit);
+      U.UnitName:= FLeafName[Stem];
+      U.Path    := FLeafPath[Stem];
+      U.Text    := LeafUnitText(Stem);
+      Leaves.Add(U);
+    end;
+    pPlan.NewUnits:= Leaves.ToArray;
+  finally
+    Leaves.Free;
+    Items.Free;
+  end;
+  pPlan.Decisions:= FDecisions.ToArray;
+  pPlan.Touched  := EditOrder;
+  pPlan.Edits    := TObjectDictionary<Int64, TList<TFileEdit>>.Create([doOwnsValues]);
+  for var Fid in pPlan.Touched do
+    if (FProjectFid > 0) and (Fid = FProjectFid) then pPlan.DprEdits:= EditsOf(Fid)
+    else
+    begin
+      var L:= TList<TFileEdit>.Create;
+      pPlan.Edits.Add(Fid, L);
+      L.AddRange(EditsOf(Fid));
+    end;
+  pPlan.DprojEdits    := FDprojEdits.ToArray;
+  pPlan.Predicted     := FPredicted.ToArray;
+  pPlan.ExpectedOutput:= ExpectedOutput(pPlan.CycleIndex - 1);
+  pPlan.CutEdge       := FCutEdge;
+  CaptureRefusals(pPlan);
+end;
+
+function TCyclePlanner.BuildPlan(pCycleIndex: Integer): TCycleFixPlan;
+begin
+  ResetCycle(FSccs[pCycleIndex - 1]);
+  Result:= Default(TCycleFixPlan);
+  Result.CycleIndex:= pCycleIndex;
+  Result.Units     := FComp;
+  Result.HasIntf   := GroupHasIntf(FComp);
+  Result.Part      := if Result.HasIntf then 'A' else 'B';
+  if Result.HasIntf then PlanIntfCycle
+  else Result.Evals:= PlanImplCycle;
+  try
+    CapturePlan(Result);
+  except
+    Result.Release;
+    raise;
+  end;
+end;
+
+procedure TCyclePlanner.RenderPlan(const pPlan: TCycleFixPlan);
+begin
+  if (pPlan.CycleIndex < 1) or (pPlan.CycleIndex > FSccs.Count) or
+    (string.Join(',', pPlan.Units) <> string.Join(',', FComp)) then
+    raise EInvalidOpException.CreateFmt('RenderPlan: plan of cycle %d is not the planner''s current cycle',
+      [pPlan.CycleIndex]);
+  EmitFmt('## Cycle %d: %s', [pPlan.CycleIndex, string.Join(' <-> ', pPlan.Units)]);
+  Emit('');
+  if pPlan.HasIntf then RenderIntfCycle(pPlan)
+  else RenderImplCycle(pPlan);
 end;
 
 procedure TCyclePlanner.Run;
@@ -2752,13 +2980,14 @@ begin
     Emit('No circular unit dependencies. Nothing to do.');
     Exit;
   end;
-  for var I:= 0 to FSccs.Count - 1 do
+  for var I:= 1 to FSccs.Count do
   begin
-    ResetCycle(FSccs[I]);
-    EmitFmt('## Cycle %d: %s', [I + 1, string.Join(' <-> ', FComp)]);
-    Emit('');
-    if GroupHasIntf(FComp) then RenderIntfCycle(I)
-    else RenderImplCycle(I);
+    var Plan:= BuildPlan(I);
+    try
+      RenderPlan(Plan);
+    finally
+      Plan.Release;
+    end;
   end;
 end;
 
