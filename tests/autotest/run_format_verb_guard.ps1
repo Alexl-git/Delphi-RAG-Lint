@@ -190,7 +190,14 @@ $vDbg = if (Test-Path $yDbg) { (Get-Item $yDbg).VersionInfo.FileVersion } else {
 
 if ($vDbg -and $vRel) {
   Write-Host "      [NOTE] real YADF builds: Release=$vRel  Debug=$vDbg" -ForegroundColor DarkGray
-
+}
+# A6 needs a Debug build BELOW the 1.0.6.6 floor; a rebuilt Debug YADF (1.0.20.0 on
+# 2026-10-19) is above it, and the engine is right to accept it -- skip loudly, never FAIL.
+$dbgBelowFloor = $vDbg -and ([version]$vDbg -lt [version]'1.0.6.6')
+if ($vDbg -and $vRel -and -not $dbgBelowFloor) {
+  Skip 'A6 version-floor refusal' "the Debug YADF ($vDbg) is not below the 1.0.6.6 floor; no below-floor binary to test with"
+}
+if ($dbgBelowFloor -and $vRel) {
   $f6 = NewFixture 'floor.pas'; $h6 = Sha $f6
   $o6 = (& $Exe format $f6 --yadf-path $yDbg 2>&1) -join "`n"; $e6 = $LASTEXITCODE
   Check "A6 a BELOW-FLOOR YADF ($vDbg) is refused" ($e6 -ne 0) "exit=$e6`n$o6"
@@ -198,7 +205,8 @@ if ($vDbg -and $vRel) {
   Check 'A6c the refusal names the found version, the floor, and the path' `
         (($o6 -match [regex]::Escape($vDbg)) -and ($o6 -match '1\.0\.6\.6') -and ($o6 -match '(?i)yadf\.exe')) `
         "the operator cannot see WHICH binary was rejected or why:`n$o6"
-
+}
+if ($vDbg -and $vRel) {
   # POSITIVE CONTROL 2, the plan's own: the refusal must key on the VERSION,
   # not on "it was a real YADF" or "it was a Debug build".
   $f7 = NewFixture 'abovefloor.pas'; $h7 = Sha $f7
