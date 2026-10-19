@@ -387,6 +387,24 @@ begin
   Writeln('lm.noroots=', Length(ProjectOwnedMembers(['C:\P\App\Main.pas', 'C:\Lib\X.pas'], nil)));
 end; // procedure
 
+{ B-23: a DB in the middle of `index --rebuild` has had its files rows cleared
+  and not yet re-walked. It cannot vouch for a file either way, so it must read
+  UNKNOWN, not a confident notmember. ClearAllFiles is exactly the state a
+  rebuild is in until its walk completes (or forever, if it was killed). The
+  positive control: an ordinary index run that COMPLETES makes it a member again. }
+procedure RebuildChecks;
+var
+  Store: ISymbolStore;
+begin
+  Store:= TSQLiteSymbolStore.Create(W + 'A_rebuild.sqlite');
+  Store.ClearAllFiles;
+  Store:= nil;
+  Probe('A_rebuilding', W + 'A_rebuild.sqlite', Shared);
+  Writeln('A_rebuild.reindexed=',
+    BoolToStr(RunQuiet('"' + Exe + '" index --project "' + W + 'A\A.dpr" --db "' + W + 'A_rebuild.sqlite"'), True));
+  Probe('A_rebuilt', W + 'A_rebuild.sqlite', Shared);
+end; // procedure
+
 begin  try
     W     := IncludeTrailingPathDelimiter(ParamStr(1));
     Shared:= W + 'shared\uShared.pas';
@@ -404,6 +422,7 @@ begin  try
     CaseChecks;
     AtWriteChecks;
     LibraryMemberChecks;
+    RebuildChecks;
     Writeln('DONE');
   except
     on E: Exception do Writeln('EXCEPTION=', E.ClassName, ': ', E.Message);

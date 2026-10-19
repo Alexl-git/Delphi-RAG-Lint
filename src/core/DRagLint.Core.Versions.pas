@@ -22,6 +22,16 @@ const
   /// startup. One spelling here so the writer and its readers cannot drift.</remarks>
   INDEXER_FINGERPRINT_META_KEY = 'indexer_fingerprint';
 
+  /// <summary>schema_meta key a `--rebuild` sets to '1' in the same commit that
+  /// clears the files table, and a COMPLETED index walk resets to ''.</summary>
+  /// <remarks>While it reads '1' the files table is partial or empty, so
+  /// DRagLint.Storage.FileMembership.DbMembership answers dmUnknown on a miss
+  /// rather than dmNotMember (B-23). Written by TSQLiteSymbolStore.ClearAllFiles;
+  /// cleared by DRagLint.CLI.CommitIndexerFingerprint. A killed rebuild leaves it
+  /// set, which is right: that DB cannot vouch for a file until a walk completes.
+  /// Pinned by tests\autotest\run_rename_owners_harness.ps1 (M9-M11).</remarks>
+  REBUILD_IN_PROGRESS_META_KEY = 'rebuild_in_progress';
+
 /// <summary>Orders two dotted version strings SEMANTICALLY -- numeric limb by
 /// numeric limb -- so that '1.100.0' is above '1.16.0' and '1.9.0' is below
 /// '1.10.0', which is exactly where a string comparison gets both wrong.</summary>
