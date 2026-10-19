@@ -189,7 +189,7 @@ begin
   lBody := '';
   lHasCliSection := False;
   lWikiFile := '';
-  if pEntry.WikiPage <> '' then
+  if (pEntry.WikiPage <> '') and not IsGeneratedWikiPage(pFmt, pEntry.WikiPage) then
     lWikiFile := TPath.Combine(pRepo, 'docs\wiki\' + pEntry.WikiPage + '.md');
   if (lWikiFile <> '') and TFile.Exists(lWikiFile) then
   begin
@@ -198,7 +198,7 @@ begin
       lMap.Load(pReg, pFmt);
       lBody := TFile.ReadAllText(lWikiFile, TEncoding.UTF8);
       lHasCliSection := TRegEx.IsMatch(lBody, '(?im)^#{1,6}[ \t]+(Running it from the CLI|Usage)[ \t]*\r?$');
-      lBody := TransformWikiBody(lBody, lMap, pEntry.Id, pImages, pFmt.FenceDefaultLang);
+      lBody := TransformWikiBody(lBody, lMap, pEntry.Id, pImages, pFmt.FenceDefaultLang, pRepo);
     finally
       lMap.Free;
     end;
@@ -579,7 +579,7 @@ begin
   end;
 end;
 
-function WikiMapJson(const pInc: TArray<TFeatureEntry>): string;
+function WikiMapJson(const pFmt: TSiteFormat; const pInc: TArray<TFeatureEntry>): string;
 var
   lMap: TDictionary<string, string>;
   lE: TFeatureEntry;
@@ -589,7 +589,7 @@ begin
   lMap := TDictionary<string, string>.Create;
   try
     for lE in pInc do
-      if lE.WikiPage <> '' then
+      if (lE.WikiPage <> '') and not IsGeneratedWikiPage(pFmt, lE.WikiPage) then
         if (not lMap.TryGetValue(lE.WikiPage, lOld)) or (CompareStr(lE.Id, lOld) < 0) then
           lMap.AddOrSetValue(lE.WikiPage, lE.Id);
     lKeys := lMap.Keys.ToArray;
@@ -638,7 +638,7 @@ begin
   pW.Put('cli.md', CliMd(pFmt, lInc), 'cli.md');
   pW.Put('ide.md', IdeMd(pFmt, lInc), 'ide.md');
   pW.Put('whats-new.md', WhatsNewMd(pFmt, lInc), 'whats-new.md');
-  pW.Put('wiki-map.json', WikiMapJson(lInc), 'wiki-map.json');
+  pW.Put('wiki-map.json', WikiMapJson(pFmt, lInc), 'wiki-map.json');
 end;
 
 procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter);

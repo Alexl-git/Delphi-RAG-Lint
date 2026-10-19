@@ -34,6 +34,8 @@ type
     UndocumentedSource: string;
     /// <summary>Cli verbs keyed in the $UndocumentedOnPurpose block of UndocumentedSource; an entry with such a verb is not on the site. Filled by LoadSiteFormat.</summary>
     ExcludedVerbs: TArray<string>;
+    /// <summary>Wiki page names (no .md, any case) of GENERATED pages; an entry naming one has no wiki page of its own.</summary>
+    GeneratedWikiPages: TArray<string>;
     Help: TLiveHelp;
   end;
 
@@ -62,6 +64,12 @@ function EntryOnSite(const pFmt: TSiteFormat; const pEntry: TFeatureEntry): Bool
 /// <param name="pAudience">Entry audience ('' when absent).</param>
 /// <returns>Status is in IncludeStatuses and audience is not in ExcludeAudiences.</returns>
 function SiteIncludes(const pFmt: TSiteFormat; const pStatus, pAudience: string): Boolean;
+
+/// <summary>True when a wikiPage value names a generated page (GeneratedWikiPages).</summary>
+/// <param name="pFmt">Format.</param>
+/// <param name="pPage">wikiPage value, with or without .md; '' is not generated.</param>
+/// <returns>Case-insensitive match against GeneratedWikiPages; such an entry gets a leaf without Details and no wiki-map row.</returns>
+function IsGeneratedWikiPage(const pFmt: TSiteFormat; const pPage: string): Boolean;
 
 implementation
 
@@ -119,6 +127,21 @@ begin
     raise EFeatureGen.CreateFmt('$UndocumentedOnPurpose block not found or empty in %s', [pFile]);
 end;
 
+function IsGeneratedWikiPage(const pFmt: TSiteFormat; const pPage: string): Boolean;
+var
+  lS, lName: string;
+begin
+  Result := False;
+  lName := pPage;
+  if SameText(ExtractFileExt(lName), '.md') then
+    lName := Copy(lName, 1, Length(lName) - 3);
+  if lName = '' then
+    Exit;
+  for lS in pFmt.GeneratedWikiPages do
+    if SameText(lS, lName) then
+      Result := True;
+end;
+
 function EntryOnSite(const pFmt: TSiteFormat; const pEntry: TFeatureEntry): Boolean;
 var
   lS: TSurface;
@@ -152,6 +175,7 @@ begin
     Result.MicroniteWhatsNew := Prop(lMic, 'whatsNew');
     Result.ImageDir := Prop(lRoot, 'imageDir');
     Result.Engine := Prop(lRoot, 'engine');
+    Result.GeneratedWikiPages := Strs(lRoot, 'generatedWikiPages');
     Result.UndocumentedSource := Prop(lRoot, 'undocumentedSource');
     if Result.UndocumentedSource = '' then
       raise EFeatureGen.Create('site-format.json: undocumentedSource is missing');

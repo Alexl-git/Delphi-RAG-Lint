@@ -4,6 +4,7 @@
   "frontMatterKeys": ["id", "title", "summary", "product", "group", "order", "since", "status", "updated"],
   "includeStatuses": ["shipped", "experimental"],
   "excludeAudiences": ["agent"],
+  "generatedWikiPages": ["Home", "Features", "Feature-Index", "Quick-Help"],
   "fenceDefaultLang": "text",
   "micronite": {
     "index": "Built alongside Micronite ([www.htrmicronite.com](https://www.htrmicronite.com)).",

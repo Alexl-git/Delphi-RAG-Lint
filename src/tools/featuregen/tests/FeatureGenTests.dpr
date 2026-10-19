@@ -134,7 +134,7 @@ begin
 end;
 
 const
-  SCRATCH = 'C:\TEMP\claude\featuregen-task2';
+  SCRATCH = 'C:\TEMP\claude\featuregen-task4\scratch';
 
 function FreshDir(const pName: string): string;
 begin
@@ -728,6 +728,95 @@ begin
   end;
 end;
 
+function CopySiteRepo(const pName: string): string;
+begin
+  ForceDirectories(SCRATCH);
+  Result := TPath.Combine(SCRATCH, pName);
+  if TDirectory.Exists(Result) then
+    TDirectory.Delete(Result, True);
+  TDirectory.Copy(SiteDir, Result);
+end;
+
+procedure AppendText(const pFile, pText: string);
+begin
+  TFile.WriteAllText(pFile, TFile.ReadAllText(pFile, TEncoding.ASCII) + pText, TEncoding.ASCII);
+end;
+
+{ Builds pRepo as a site into pOut; returns '' or the EFeatureGen message. }
+function TryBuild(const pRepo, pOut: string): string;
+var
+  lFmt: TSiteFormat;
+  lW: TOutputWriter;
+begin
+  Result := '';
+  if TDirectory.Exists(pOut) then
+    TDirectory.Delete(pOut, True);
+  lFmt := LoadSiteFormat(pRepo);
+  lW := TOutputWriter.Create(pOut, False, True);
+  try
+    try
+      BuildSite(pRepo, lFmt, lW);
+      lW.Finish;
+    except
+      on E: EFeatureGen do
+        Result := E.Message;
+    end;
+  finally
+    lW.Free;
+  end;
+end;
+
+procedure TestGeneratedWikiPage;
+var
+  lRepo, lOut, lMsg, lLeaf, lAsk: string;
+begin
+  lRepo := CopySiteRepo('gen-repo');
+  TFile.WriteAllText(TPath.Combine(lRepo, 'features\entries\gen-page.json'),
+    '{ "id": "gen-page", "title": "Gen page", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.9.0-alpha",'
+    + ' "summary": "Lives on a generated page", "wikiPage": "Features", "surfaces": [ { "type": "cli", "verb": "genverb" } ], "audience": "both" }', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lRepo, 'docs\wiki\Features.md'), '# Features'#13#10#13#10'Use <file> here.'#13#10, TEncoding.ASCII);
+  AppendText(TPath.Combine(lRepo, 'docs\wiki\Ask.md'), #13#10'See [[Features]] now.'#13#10);
+  lOut := TPath.Combine(SCRATCH, 'gen-out');
+  lMsg := TryBuild(lRepo, lOut);
+  Check('Site.GeneratedWikiPageBuilds', lMsg = '', lMsg);
+  if lMsg = '' then
+  begin
+    lLeaf := ReadSiteFile(lOut, 'features/gen-page.md');
+    lAsk := ReadSiteFile(lOut, 'features/ask.md');
+    Check('Site.GeneratedWikiPageLeafNoDetailsNoMapRow',
+      (Pos('title: Gen page', lLeaf) > 0) and (Pos('## Details', lLeaf) = 0) and (Pos('Use ', lLeaf) = 0)
+      and (Pos('"Features"', ReadSiteFile(lOut, 'wiki-map.json')) = 0) and (Pos('See Features now.', lAsk) > 0) and (Pos('gen-page.md', lAsk) = 0), lLeaf);
+  end;
+end;
+
+procedure TestRemoteImages;
+var
+  lRepo, lOut, lMsg, lAsk: string;
+begin
+  lRepo := CopySiteRepo('img-repo');
+  ForceDirectories(TPath.Combine(lRepo, 'docs\Images\charts'));
+  TFile.WriteAllText(TPath.Combine(lRepo, 'docs\Images\charts\c1.png'), 'PNGDATA', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lRepo, 'docs\Images\charts\c1.svg'), 'SVGDATA', TEncoding.ASCII);
+  AppendText(TPath.Combine(lRepo, 'docs\wiki\Ask.md'), #13#10'![chart](https://raw.githubusercontent.com/o/r/main/docs/Images/charts/c1.png)'#13#10
+    + '[SVG](https://raw.githubusercontent.com/o/r/main/docs/Images/charts/c1.svg) [gh](https://github.com/o/r/issues/1) [rel](../Images/charts/c1.svg)'#13#10);
+  lOut := TPath.Combine(SCRATCH, 'img-out');
+  lMsg := TryBuild(lRepo, lOut);
+  Check('Site.RemoteImageBuilds', lMsg = '', lMsg);
+  if lMsg = '' then
+  begin
+    lAsk := ReadSiteFile(lOut, 'features/ask.md');
+    Check('Site.RemoteChartImageCopiedAndRenamed',
+      (Pos('![chart](img/ask-1.png)', lAsk) > 0) and (Pos('[SVG](img/ask-2.svg)', lAsk) > 0) and (Pos('[rel](img/ask-3.svg)', lAsk) > 0)
+      and (ReadSiteFile(lOut, 'features/img/ask-1.png') = 'PNGDATA') and (ReadSiteFile(lOut, 'features/img/ask-2.svg') = 'SVGDATA')
+      and (Pos('githubusercontent', lAsk) = 0), lAsk);
+    Check('Site.GithubLinkBecomesPlainText', (Pos(' gh ', lAsk) > 0) and (Pos('github.com', lAsk) = 0), lAsk);
+  end;
+  lRepo := CopySiteRepo('img-missing-repo');
+  AppendText(TPath.Combine(lRepo, 'docs\wiki\Ask.md'), #13#10'![x](https://raw.githubusercontent.com/o/r/main/docs/Images/charts/nope.png)'#13#10);
+  lMsg := TryBuild(lRepo, TPath.Combine(SCRATCH, 'img-missing-out'));
+  Check('Site.MissingImageFileFailsNamingPageAndLink', (Pos('"ask"', lMsg) > 0) and (Pos('nope.png', lMsg) > 0), lMsg);
+end;
+
 procedure TestCheckLinks;
 var
   lOut: string;
@@ -777,6 +866,8 @@ begin
     TestUndocumentedVerbs;
     TestSite;
     TestSiteDanglingLink;
+    TestGeneratedWikiPage;
+    TestRemoteImages;
     TestCheckLinks;
     if lRepo <> '' then
       TestSiteFormatFile(lRepo);

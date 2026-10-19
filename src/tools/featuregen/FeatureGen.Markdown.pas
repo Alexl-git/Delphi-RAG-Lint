@@ -51,12 +51,13 @@ type
 /// <param name="pLeafId">Id of the leaf being built; names the images and the error messages.</param>
 /// <param name="pImages">Receives the images found, numbered from 1 in order of appearance.</param>
 /// <param name="pFenceLang">Language tag put on every opening fence that has none.</param>
+/// <param name="pRepo">Repo root; when not empty, a file under docs\Images that is missing fails. '' skips the check.</param>
 /// <returns>The body with LF line ends, trimmed. The first "# " title line is dropped, headings are one level deeper,
-/// links into the set point at id.md[#anchor], other links are plain text.</returns>
+/// links into the set point at id.md[#anchor], other links are plain text. A link or image to a file under docs\Images (relative, or a github / raw.githubusercontent URL) is queued in pImages and points at img/<id>-<n>.<ext>; any other github.com / raw.githubusercontent.com link becomes plain text.</returns>
 /// <exception cref="EFeatureGen">Raw HTML outside code, a non-ASCII character, or an image outside docs\Images; the message names the leaf and the 1-based line.</exception>
 /// <remarks>Code means fenced blocks and inline backtick spans; HTML and link rewriting never look inside it.</remarks>
 function TransformWikiBody(const pMd: string; const pMap: TWikiLinkMap; const pLeafId: string;
-  out pImages: TArray<TImageRef>; const pFenceLang: string = 'text'): string;
+  out pImages: TArray<TImageRef>; const pFenceLang: string = 'text'; const pRepo: string = ''): string;
 
 implementation
 
@@ -98,7 +99,7 @@ var
   lE: TFeatureEntry;
 begin
   for lE in pReg.Entries do
-    if EntryOnSite(pFmt, lE) then
+    if EntryOnSite(pFmt, lE) and not IsGeneratedWikiPage(pFmt, lE.WikiPage) then
       Add(lE.WikiPage, lE.Id);
 end;
 
@@ -114,6 +115,8 @@ type
     LeafId: string;
     Images: TList<TImageRef>;
     Line: Integer;
+    Repo: string;
+    function ImageRef(const pSrc: string): string;
     function Fail(const pWhat: string): EFeatureGen;
     function Image(const pAlt, pSrc: string): string;
     function ImageMatch(const pM: TMatch): string;
@@ -126,23 +129,44 @@ begin
   Result := EFeatureGen.CreateFmt('wiki body of leaf "%s", line %d: %s', [LeafId, Line, pWhat]);
 end;
 
-function TBodyWork.Image(const pAlt, pSrc: string): string;
+{ True when pTarget is a file under docs\Images (any depth): a relative path, or a github / raw.githubusercontent
+  URL ending in docs/Images/...; pRel receives the path below Images with backslashes. }
+function ImageSource(const pTarget: string; out pRel: string): Boolean;
 var
   lM: TMatch;
-  lRef: TImageRef;
-  lExt, lName: string;
 begin
-  lM := TRegEx.Match(pSrc, '(?i)(?:^|[\\/])Images[\\/]([^\\/]+)$');
-  if (not lM.Success) or (Pos('://', pSrc) > 0) then
-    raise Fail('image "' + pSrc + '" is not under docs\Images');
-  lExt := LowerCase(ExtractFileExt(lM.Groups[1].Value));
-  lName := Format('%s-%d%s', [LeafId, Images.Count + 1, lExt]);
-  lRef.Source := 'docs\Images\' + lM.Groups[1].Value;
-  lRef.Target := 'img\' + lName;
-  Images.Add(lRef);
-  Result := '![' + pAlt + '](img/' + lName + ')';
+  lM := TRegEx.Match(pTarget, '(?i)^https://(?:raw\.githubusercontent\.com|(?:www\.)?github\.com)/[^/]+/[^/]+/(?:(?:blob|raw)/)?[^/]+/docs/Images/([^?#]+)');
+  if not lM.Success then
+    if Pos('://', pTarget) = 0 then
+      lM := TRegEx.Match(pTarget, '(?i)(?:^|[\\/])Images[\\/]([^?#]+)$');
+  Result := lM.Success;
+  if Result then
+    pRel := lM.Groups[1].Value.Replace('/', '\')
+  else
+    pRel := '';
 end;
 
+{ Registers the image behind pSrc and returns its site-relative path img/<id>-<n>.<ext>. }
+function TBodyWork.ImageRef(const pSrc: string): string;
+var
+  lRel, lName: string;
+  lRef: TImageRef;
+begin
+  if not ImageSource(pSrc, lRel) then
+    raise Fail('image "' + pSrc + '" is not under docs\Images');
+  lRef.Source := 'docs\Images\' + lRel;
+  if (Repo <> '') and not FileExists(Repo + '\' + lRef.Source) then
+    raise Fail('link "' + pSrc + '" resolves to ' + lRef.Source + ', which does not exist');
+  lName := Format('%s-%d%s', [LeafId, Images.Count + 1, LowerCase(ExtractFileExt(lRel))]);
+  lRef.Target := 'img\' + lName;
+  Images.Add(lRef);
+  Result := 'img/' + lName;
+end;
+
+function TBodyWork.Image(const pAlt, pSrc: string): string;
+begin
+  Result := '![' + pAlt + '](' + ImageRef(pSrc) + ')';
+end;
 function TBodyWork.ImageMatch(const pM: TMatch): string;
 begin
   Result := Image(pM.Groups[1].Value, pM.Groups[2].Value);
@@ -176,6 +200,10 @@ begin
   begin
     GroupText(pM, 4, lText);
     GroupText(pM, 5, lTarget);
+    if ImageSource(lTarget, lG) then
+      Exit('[' + lText + '](' + ImageRef(lTarget) + ')');
+    if TRegEx.IsMatch(lTarget, '^(?i)https?://(?:www\.)?(?:github\.com|raw\.githubusercontent\.com)/') then
+      Exit(lText);
     if TRegEx.IsMatch(lTarget, '^(?i)[a-z][a-z0-9+.-]*:') or (lTarget[1] = '#') then
       Exit(pM.Value);
     lHash := Pos('#', lTarget);
@@ -238,7 +266,7 @@ begin
 end;
 
 function TransformWikiBody(const pMd: string; const pMap: TWikiLinkMap; const pLeafId: string;
-  out pImages: TArray<TImageRef>; const pFenceLang: string): string;
+  out pImages: TArray<TImageRef>; const pFenceLang: string; const pRepo: string): string;
 var
   lWork: TBodyWork;
   lLines: TArray<string>;
@@ -252,6 +280,7 @@ begin
   try
     lWork.Map := pMap;
     lWork.LeafId := pLeafId;
+    lWork.Repo := pRepo;
     lWork.Images := TList<TImageRef>.Create;
     lLines := pMd.Replace(#13#10, #10).Replace(#13, #10).Split([#10]);
     lInFence := False;
