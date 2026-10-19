@@ -55,6 +55,28 @@ breaking changes** until v1.0.
   verbs above. Docs: `docs\wiki\Draglint-Protocol-Handler.md`, `docs\wiki\Register-MCP-Server.md`, feature
   registry entry `protocol-handler`.
 
+## v1.31.6-alpha -- 2026-10-19
+
+### Fixed
+- **`lint --project-rules` no longer prints the stale "STILL NOT reported: doc-drift/missing-doc" banner** (B-26); `lint --fix --apply` without `--project-rules` says on stderr that doc-drift fixes are not produced.
+- **`find-callers` with 0 results hints at `usages`** on stderr (field reads are not calls) (B-38).
+- **`compare`: `--db` is on its `--help` line, and a quoted `--command "...\"path\"..."` arrives intact** (B-25).
+- **`query --text` finds short string literals** (exact whole-text matches rank first, before `--limit` cuts) **and accepts a Pascal-quoted `--substring`** (B-27).
+- **A DB in the middle of `index --rebuild` answers membership "unknown", not "not a member"** (B-23).
+- **Doc facts label a call from a `.dpr` main block or an initialization/finalization section as such**, not as "declaration".
+- **`index --watch` re-scopes every tick**: the whole-DB resolve latch, the resolver-stale flag and the parsed-file count are per tick, and a WAL checkpoint no longer leaves a statement open (every later tick used to fail with "SQL statements in progress").
+- **The whole-DB reason counts pruned files as "removed"**, not "changed".
+- **`used-before-assignment`: a shadowing inline `var` re-declaration gets its own slot** -- an outer variable is no longer treated as assigned (or unassigned) by an inner block's same-named inline var (B-14).
+- **`format`: a YADF exit 3 ("declined") is not a failure** -- exit 0 with a "Declined:" line; exits 1/2 still fail (B-36).
+- **Resolver version 1.12.1-alpha** (the `--watch` per-tick resolve scope): every index re-resolves its call edges once on its next `index` run -- seconds to minutes, no re-parse.
+- `lint-all` / `lint-project` / `check-ast --fix --apply` no longer print the per-file `lint` note telling them to pass `--project-rules`, a flag they do not take.
+
+### IDE plugin
+- **Streaming jobs have a deadline, a cancelled job kills its whole process tree (job object), and the job queue cancels a running child on shutdown** instead of waiting for it.
+
+### Tooling
+- `publish-release.ps1` builds the installer instead of zips (B-01/T-19); `tests\autotest\prepare_battery.ps1` creates the artifacts a fresh worktree lacks; docs-sync / rename-owners / lsp-switch guards default `-Exe` to the worktree's own build; the legacy doctest wrapper puts the engine folder on PATH (a rebuilt `T7_storage.exe` imports tree-sitter).
+
 ## v1.31.5-alpha -- 2026-10-18
 
 ### Fixed

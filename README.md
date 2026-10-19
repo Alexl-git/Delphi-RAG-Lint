@@ -885,7 +885,7 @@ Win64 build.
 | `query hints` | List stored compiler hints/warnings | `--name <code>`, `--rule <severity>` |
 | [`usages`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/usages) `--name <n>` | Grouped usage report (backs the IDE Symbol Search dialog) | `--width narrow\|wide\|very-wide`, `--depth N` |
 | [`outline`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/outline) `--file <f.pas>` | Unit outline (backs the IDE Structure form) | `--format text\|json` |
-| [`compare`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) `--old <report\|csv\|bundle> [--command "<id> ..."]` / `--in <U.pas> --line <L>` | Rerun a saved report's question and show before / delta / after (exit 0 same, 1 differs, 2 setup, 3 stale index) | `--new <f>` (two saved outputs), `--question <id> --target <T>`, `--update-doc`, `--old-db`, `--auto`, `--save`, `--snapshot-dir <dir>`, `--show`, `--format text\|json\|html`, `--open` |
+| [`compare`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/compare) `--old <report\|csv\|bundle> [--command "<id> ..."]` / `--in <U.pas> --line <L>` | Rerun a saved report's question and show before / delta / after (exit 0 same, 1 differs, 2 setup, 3 stale index) | `--new <f>` (two saved outputs), `--question <id> --target <T>`, `--update-doc`, `--old-db`, `--db <f>`, `--auto`, `--save`, `--snapshot-dir <dir>`, `--show`, `--format text\|json\|html`, `--open` |
 | [`ask`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/ask) `<question> --target <T> [--project <P.dproj>\|--in <U.pas>\|--db <idx>]` | Ask one report question (the 26 chart questions) and print the answer: the DocInsight remarks block the Reports menu copies, or the plain answer. Ported questions answer in-process, the rest through `charts\src\Ask-Report.ps1` (exit 0 answered, 1 refused, 2 setup, 3 stale index) | `--to <B>`, `--server-db`, `--sql-db`, `--counterpart-db`, `--depth N`, `--cap N`, `--surface-cap N`, `--control <C>`, `--mode write\|read\|both`, `--max-rows N`, `--out-root <dir>`, `--pairs-file <f>`, `--allow-stale`, `--plain`, `--open`, `--resolve-only` |
 | `hover --qname <q>` | Hover card for a symbol | `--format plain\|md\|json` |
 | `typeat <file>:<line>:<col>` | Resolve the type of the expression at a cursor position | `--format text\|json` |
@@ -975,7 +975,7 @@ before writing. Details: [Multi-Project-Rename](https://github.com/Alexl-git/Del
 | [`create-enum-helper`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/create-enum-helper) `--qname <TEnum>` | Generate a Byte-family record helper for an enum | `--methods <csv>`, `--tostring rtti\|case` |
 | `uses-audit <unit.pas> --db <db>` | Propose interface->implementation moves + unused units | `--format text\|json` |
 | `uses-fix <unit.pas> --project <dproj> --db <db>` | Compiler-verified `uses` cleanup; `--only <Unit>` also decides a library (RTL/VCL) unit: remove, else move to implementation | `--apply`, `--remove-unused`, `--format json\|text`, `--only <unit,...>` |
-| `format <file>` | Format a `.pas` file with the YADF formatter. **Rewrites the file in place.** Refuses a YADF older than 1.0.6.6 (exit 4, nothing written) and restores the file if formatting changed what the unit *declares* (exit 5) | `--yadf-path`, `--dry-run`, `--diff` |
+| `format <file>` | Format a `.pas` file with the YADF formatter. **Rewrites the file in place.** Refuses a YADF older than 1.0.6.6 (exit 4, nothing written) and restores the file if formatting changed what the unit *declares* (exit 5). A YADF *decline* (its exit 3: content guard refused, file unchanged) is not a failure: exit 0 with a `Declined:` line | `--yadf-path`, `--dry-run`, `--diff` |
 
 **Formatting is safe for your suppressions.** drag-lint drives **YADF** for the
 current unit or the whole active project straight from the IDE menu, and neither
@@ -1383,7 +1383,7 @@ the PowerShell battery.
 ## Version history
 
 See [CHANGELOG.md](CHANGELOG.md) for the detailed history. The current release is
-**v1.31.5-alpha**; development continues daily.
+**v1.31.6-alpha**; development continues daily.
 
 ---
 

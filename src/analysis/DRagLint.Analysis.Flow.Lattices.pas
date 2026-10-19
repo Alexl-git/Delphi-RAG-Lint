@@ -46,6 +46,12 @@ type
     DeclLine: Integer;
     DeclCol : Integer;
     Captured: Boolean;
+    { Byte range [ScopeStart, ScopeEnd) in which THIS declaration owns its name.
+      ScopeEnd = 0 means the whole routine (params, Result, the var section).
+      An inline declaration's scope runs from its name to the end of the
+      enclosing block, so a re-declared name gets its own slot (B-14). }
+    ScopeStart: Integer;
+    ScopeEnd  : Integer;
   end;
 
   /// <summary>Maps a routine's locals/params/Result to dense indices 0..N-1.</summary>
@@ -59,6 +65,7 @@ type
   strict private
     FVars  : TList<TRoutineVar>;
     FByName: TDictionary<string, Integer>;
+    FMultiDecl: TDictionary<string, Boolean>; { names with more than one declaration slot }
   public
     /// <summary><!-- drag-lint:auto sum -->----- TRoutineVarTable -----</summary>
     /// <remarks>
@@ -116,6 +123,16 @@ type
     /// <!-- drag-lint:auto END -->
     /// </remarks>
     function IndexOf(const ALowerName: string): Integer;
+    /// <summary>The slot of the declaration of ALowerName that is in scope at
+    /// byte offset APos: the inline declaration with the latest ScopeStart whose
+    /// [ScopeStart, ScopeEnd) contains APos, else the name's first slot.</summary>
+    /// <param name="ALowerName">Lower-cased identifier text.</param>
+    /// <param name="APos">Byte offset of the referencing identifier in the source.</param>
+    /// <returns>Slot index, or -1 when the name is not a routine variable.</returns>
+    /// <remarks>Equals IndexOf unless the routine declares the name more than
+    /// once (inline `var` in disjoint blocks) -- each declaration is its own
+    /// slot, with its own type and its own assigned-ness (B-14).</remarks>
+    function IndexOfAt(const ALowerName: string; APos: Integer): Integer;
     function Get(AIdx: Integer): TRoutineVar;
     /// <param name="AVar"><!-- drag-lint:auto type -->const TRoutineVar</param>
     /// <remarks>
@@ -1012,7 +1029,7 @@ function NodeText(const N: TTSNode; const ASrc: TBytes): string;
 /// <param name="ASrc"><!-- drag-lint:auto type -->const TBytes</param>
 /// <param name="AVars"><!-- drag-lint:auto type -->TRoutineVarTable</param>
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1;
-/// AVars.IndexOf(LowerCase(NodeStr(Cur, ASrc))); AVars.IndexOf(LowerCase(NodeStr(IdN,
+/// AVars.IndexOfAt(LowerCase(NodeStr(Cur, ASrc)), Integer(Cur.StartByte)); AVars.IndexOf(LowerCase(NodeStr(IdN,
 /// ASrc))).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -1090,7 +1107,7 @@ procedure ApplyWithRecordEntity(const AItem: TCfgItem; const ASrc: TBytes;
 /// <param name="ASrc"><!-- drag-lint:auto type -->const TBytes</param>
 /// <param name="AVars"><!-- drag-lint:auto type -->TRoutineVarTable</param>
 /// <returns><!-- drag-lint:auto -->Integer -- Observed: -1;
-/// AVars.IndexOf(LowerCase(NodeStr(Lhs, ASrc))); AVars.IndexOf(LowerCase(NodeStr(IdN,
+/// AVars.IndexOfAt(LowerCase(NodeStr(Lhs, ASrc)), Integer(Lhs.StartByte)); AVars.IndexOf(LowerCase(NodeStr(IdN,
 /// ASrc))).</returns>
 /// <remarks>
 /// <!-- drag-lint:auto BEGIN -->
@@ -1220,10 +1237,16 @@ constructor TRoutineVarTable.Create;
 begin
   inherited; FVars := TList<TRoutineVar>.Create;
   FByName := TDictionary<string, Integer>.Create;
+  FMultiDecl := TDictionary<string, Boolean>.Create;
 end;
 
 destructor TRoutineVarTable.Destroy;
-begin FByName.Free; FVars.Free; inherited; end;
+begin
+  FMultiDecl.Free;
+  FByName.Free;
+  FVars.Free;
+  inherited; // dl:ok inherited-bare@246d -- the destructor idiom; TObject.Destroy is the intended ancestor
+end;
 
 function TRoutineVarTable.Count: Integer; begin Result := FVars.Count; end;
 function TRoutineVarTable.Get(AIdx: Integer): TRoutineVar; begin Result := FVars[AIdx]; end;
@@ -1231,9 +1254,39 @@ function TRoutineVarTable.Get(AIdx: Integer): TRoutineVar; begin Result := FVars
 function TRoutineVarTable.IndexOf(const ALowerName: string): Integer;
 begin if not FByName.TryGetValue(ALowerName, Result) then Result := -1; end;
 
-procedure TRoutineVarTable.Add(const AVar: TRoutineVar);
+function TRoutineVarTable.IndexOfAt(const ALowerName: string; APos: Integer): Integer;
+var I, BestStart: Integer; V: TRoutineVar;
 begin
-  if FByName.ContainsKey(AVar.Name) then Exit;
+  Result := IndexOf(ALowerName);
+  if (Result < 0) or not FMultiDecl.ContainsKey(ALowerName) then Exit;
+  BestStart := -1;
+  for I := 0 to FVars.Count - 1 do
+  begin
+    V := FVars[I];
+    if (V.ScopeEnd > 0) and (V.Name = ALowerName) and (APos >= V.ScopeStart)
+       and (APos < V.ScopeEnd) and (V.ScopeStart > BestStart) then
+    begin
+      BestStart := V.ScopeStart;
+      Result := I;
+    end;
+  end;
+end;
+
+procedure TRoutineVarTable.Add(const AVar: TRoutineVar);
+var I: Integer;
+begin
+  if FByName.ContainsKey(AVar.Name) then
+  begin
+    { A second declaration of the name gets its OWN slot only when it is an
+      inline one (it has a scope); a re-visit of the same declaration does not. }
+    if AVar.ScopeEnd <= 0 then Exit;
+    for I := 0 to FVars.Count - 1 do
+      if (FVars[I].Name = AVar.Name) and (FVars[I].DeclLine = AVar.DeclLine)
+         and (FVars[I].DeclCol = AVar.DeclCol) then Exit;
+    FMultiDecl.AddOrSetValue(AVar.Name, True);
+    FVars.Add(AVar);
+    Exit;
+  end;
   FByName.Add(AVar.Name, FVars.Count);
   FVars.Add(AVar);
 end;
@@ -1286,6 +1339,7 @@ var
   I, ResultIdx: Integer;
   Sec: TTSNode;
   RV: TRoutineVar;
+  PendingDefs: TArray<TTSNode>;   { bare inline `var X: T;` nodes, in source order }
 
   { The `absolute <ident>` target of a declVar, as a slot index in Tbl, or -1.
 
@@ -1330,7 +1384,7 @@ var
       for a declared name. }
     if Integer(Abs_.StartByte) < ALimit then ALimit := Integer(Abs_.StartByte);
     if Tgt.IsNull then Exit;
-    Result := Tbl.IndexOf(LowerCase(NodeStr(Tgt, ASrc)));
+    Result := Tbl.IndexOfAt(LowerCase(NodeStr(Tgt, ASrc)), Integer(Tgt.StartByte));
   end;
 
   procedure AddDeclVars(const ASection: TTSNode);
@@ -1403,13 +1457,47 @@ var
     end;
   end;
 
-  { inline `var x := e` / nested declVars in the body. }
+  { End byte of the statement list an inline declaration lives in: its scope
+    ends there (B-14). Falls back to the whole routine. }
+  function EnclosingListEnd(const N: TTSNode): Integer;
+  var P: TTSNode;
+  begin
+    P := N.Parent;
+    while not P.IsNull do
+    begin
+      if (P.NodeType = 'block') or (P.NodeType = 'statements') then Exit(Integer(P.EndByte));
+      P := P.Parent;
+    end;
+    Result := MaxInt;
+  end;
+
+  { One slot per inline DECLARATION: the name owns this slot from AIdN to
+    AScopeEnd, so a later re-declaration of the name in another block is a
+    different variable with its own type and assigned-ness (B-14). }
+  procedure AddInline(const AIdN, ATypeN: TTSNode; AScopeEnd: Integer);
+  var R: TRoutineVar;
+  begin
+    R := Default(TRoutineVar);
+    R.Name := LowerCase(NodeStr(AIdN, ASrc));
+    R.Display := NodeStr(AIdN, ASrc);
+    R.Kind := vkLocal;
+    if not ATypeN.IsNull then R.TypeText := Trim(NodeStr(ATypeN, ASrc));
+    R.DeclLine := Integer(AIdN.StartPoint.Row) + 1;
+    R.DeclCol  := Integer(AIdN.StartPoint.Column) + 1;
+    R.ScopeStart := Integer(AIdN.StartByte);
+    R.ScopeEnd := AScopeEnd;
+    Tbl.Add(R);
+  end;
+
+  { inline `var x := e` / `var x: T;` / nested declVars in the body. }
   procedure AddInlineVars(const N: TTSNode);
-  var I: Integer; Lhs, IdN: TTSNode; R: TRoutineVar;
+  var I: Integer; Lhs, IdN: TTSNode;
   begin
     if N.IsNull then Exit;
     if (N.NodeType = 'defProc') or (N.NodeType = 'lambda') then Exit; { own scope }
     if N.NodeType = 'declVars' then AddDeclVars(N);
+    if N.NodeType = 'varDef' then
+      PendingDefs := PendingDefs + [N];   { registered after the walk, see below }
     if N.NodeType = 'foreach' then
     begin
       { `for var X in` declares an inline loop variable }
@@ -1417,15 +1505,7 @@ var
       if (not ItN.IsNull) and (ItN.NodeType = 'varAssignDef') then
       begin
         IdN := FirstIdentChild(ItN);
-        if not IdN.IsNull then
-        begin
-          R := Default(TRoutineVar);
-          R.Name := LowerCase(NodeStr(IdN, ASrc)); R.Display := NodeStr(IdN, ASrc);
-          R.Kind := vkLocal; R.TypeText := '';
-          R.DeclLine := Integer(IdN.StartPoint.Row) + 1;
-          R.DeclCol  := Integer(IdN.StartPoint.Column) + 1;
-          Tbl.Add(R);
-        end;
+        if not IdN.IsNull then AddInline(IdN, Default(TTSNode), Integer(N.EndByte));
       end;
     end;
     if N.NodeType = 'assignment' then
@@ -1435,19 +1515,33 @@ var
       begin
         IdN := Lhs.ChildByField('name');
         if IdN.IsNull then IdN := FirstIdentChild(Lhs);
-        if not IdN.IsNull then
-        begin
-          R := Default(TRoutineVar);
-          R.Name := LowerCase(NodeStr(IdN, ASrc));
-          R.Display := NodeStr(IdN, ASrc);
-          R.Kind := vkLocal; R.TypeText := '';
-          R.DeclLine := Integer(IdN.StartPoint.Row) + 1;
-          R.DeclCol  := Integer(IdN.StartPoint.Column) + 1;
-          Tbl.Add(R);
-        end;
+        if not IdN.IsNull then AddInline(IdN, Lhs.ChildByField('type'), EnclosingListEnd(N));
       end;
     end;
     for I := 0 to N.NamedChildCount - 1 do AddInlineVars(N.NamedChild(I));
+  end;
+
+  { A bare inline `var X: T;` gets a slot ONLY when its name is declared more
+    than once in the routine -- that is the B-14 case, where it must not share
+    the other declaration's slot. A name declared once by a varDef stays
+    unregistered, as before: registering every varDef widens all flow rules to
+    a new population (measured 2026-10-19 on drag-lint itself: +3
+    overwrite-before-read, one of them a try/except false positive), which is a
+    separate decision from B-14. }
+  procedure RegisterRedeclaredDefs;
+  var K, M, Hits: Integer; IdN: TTSNode; Nm: string;
+  begin
+    for K := 0 to High(PendingDefs) do
+    begin
+      IdN := FirstIdentChild(PendingDefs[K]);
+      if IdN.IsNull then Continue;
+      Nm := LowerCase(NodeStr(IdN, ASrc));
+      Hits := 0;
+      for M := 0 to High(PendingDefs) do
+        if (M <> K) and (LowerCase(NodeStr(FirstIdentChild(PendingDefs[M]), ASrc)) = Nm) then Inc(Hits);
+      if (Hits > 0) or (Tbl.IndexOf(Nm) >= 0) then
+        AddInline(IdN, PendingDefs[K].ChildByField('type'), EnclosingListEnd(PendingDefs[K]));
+    end;
   end;
 
   { mark outer vars referenced inside any nested defProc as captured. }
@@ -1457,7 +1551,7 @@ var
     if N.IsNull then Exit;
     if (N.NodeType = 'identifier') and (ADepth > 0) then
     begin
-      Idx := Tbl.IndexOf(LowerCase(NodeStr(N, ASrc)));
+      Idx := Tbl.IndexOfAt(LowerCase(NodeStr(N, ASrc)), Integer(N.StartByte));
       if Idx >= 0 then Tbl.MarkCaptured(Idx);
     end;
     for I := 0 to N.NamedChildCount - 1 do
@@ -1498,7 +1592,9 @@ begin
     Sec := AProc.NamedChild(I);
     if Sec.NodeType = 'declVars' then AddDeclVars(Sec);
   end;
+  PendingDefs := nil;
   AddInlineVars(AProc.ChildByField('body'));
+  RegisterRedeclaredDefs;
   { nested routines are `local:` defProc siblings of the body (declared before
     `begin`), so walk the whole defProc -- not just the body -- to find captures. }
   MarkCaptures(AProc, 0);
@@ -1517,13 +1613,13 @@ begin
   begin
     Inc(Guard);
     if Cur.NodeType = 'identifier' then
-      Exit(AVars.IndexOf(LowerCase(NodeStr(Cur, ASrc))));
+      Exit(AVars.IndexOfAt(LowerCase(NodeStr(Cur, ASrc)), Integer(Cur.StartByte)));
     if Cur.NodeType = 'varAssignDef' then
     begin
       IdN := Cur.ChildByField('name');
       if IdN.IsNull then IdN := FirstIdentChild(Cur);
       if IdN.IsNull then Exit(-1);
-      Exit(AVars.IndexOf(LowerCase(NodeStr(IdN, ASrc))));
+      Exit(AVars.IndexOfAt(LowerCase(NodeStr(IdN, ASrc)), Integer(IdN.StartByte)));
     end;
     Nxt := Cur.ChildByField('lhs');
     if Nxt.IsNull then Nxt := Cur.ChildByField('entity');
@@ -1554,7 +1650,7 @@ begin
   if not AItem.WithEntity then Exit;
   if not Assigned(AIsRecordMethodDef) then Exit;
   if AItem.Node.NodeType <> 'identifier' then Exit;
-  Idx := AVars.IndexOf(LowerCase(NodeStr(AItem.Node, ASrc)));
+  Idx := AVars.IndexOfAt(LowerCase(NodeStr(AItem.Node, ASrc)), Integer(AItem.Node.StartByte));
   if Idx < 0 then Exit;
   if not AIsRecordMethodDef(AVars.Get(Idx).TypeText, '') then Exit;
   AReads.Remove(Idx);
@@ -1610,7 +1706,7 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
     begin
       if not AAfterDot then
       begin
-        Idx := AVars.IndexOf(LowerCase(NodeStr(N, ASrc)));
+        Idx := AVars.IndexOfAt(LowerCase(NodeStr(N, ASrc)), Integer(N.StartByte));
         if (Idx >= 0) and (AReads.IndexOf(Idx) < 0) then AReads.Add(Idx);
       end;
       Exit;
@@ -1630,7 +1726,7 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
         a read, so a genuinely uninitialised record field access still flags. }
       if Assigned(AIsRecordMethodDef) and (Lhs.NodeType = 'identifier') then
       begin
-        Idx := AVars.IndexOf(LowerCase(NodeStr(Lhs, ASrc)));
+        Idx := AVars.IndexOfAt(LowerCase(NodeStr(Lhs, ASrc)), Integer(Lhs.StartByte));
         if (Idx >= 0) and AIsRecordMethodDef(AVars.Get(Idx).TypeText, NodeStr(N.ChildByField('rhs'), ASrc)) then
         begin
           if ACallDefs.IndexOf(Idx) < 0 then ACallDefs.Add(Idx);
@@ -1795,7 +1891,7 @@ begin
   Lhs := ANode.ChildByField('lhs');
   if Lhs.IsNull then Exit;
   if Lhs.NodeType = 'identifier' then
-    Result := AVars.IndexOf(LowerCase(NodeStr(Lhs, ASrc)))
+    Result := AVars.IndexOfAt(LowerCase(NodeStr(Lhs, ASrc)), Integer(Lhs.StartByte))
   else if Lhs.NodeType = 'varAssignDef' then
   begin
     IdN := Lhs.ChildByField('name');
@@ -1807,7 +1903,7 @@ begin
       definition, so the freed/dangling state of X survived the loop back-edge
       and `X.Free` inside the loop body was reported as a double free. }
     if IdN.IsNull then IdN := FirstIdentChild(Lhs);
-    if not IdN.IsNull then Result := AVars.IndexOf(LowerCase(NodeStr(IdN, ASrc)));
+    if not IdN.IsNull then Result := AVars.IndexOfAt(LowerCase(NodeStr(IdN, ASrc)), Integer(IdN.StartByte));
   end;
   { indexed/qualified writes (a[i] := / x.f :=) are NOT whole-var definitions }
 end;
@@ -1822,11 +1918,17 @@ procedure ApplyEntryDefs(const ABlock: TCfgBlock; AVars: TRoutineVarTable;
   var AMust, AMay: TArray<Boolean>; AValue: Boolean);
 var J, Idx: Integer;
 begin
+  { EntryDefs carry a NAME, not a position: a name declared in several blocks
+    (B-14, one slot per declaration) is defined in every slot it owns. Only the
+    block's own slot is live here; the others are out of scope and unread. }
   for J := 0 to High(ABlock.EntryDefs) do
-  begin
-    Idx := AVars.IndexOf(ABlock.EntryDefs[J]);
-    if Idx >= 0 then begin AMust[Idx] := AValue; AMay[Idx] := AValue; end;
-  end;
+    for Idx := 0 to AVars.Count - 1 do
+      if (AVars.Get(Idx).Name = ABlock.EntryDefs[J])
+         or (Idx = AVars.IndexOf(ABlock.EntryDefs[J])) then { an alias name }
+      begin
+        AMust[Idx] := AValue;
+        AMay[Idx] := AValue;
+      end;
 end;
 
 { ----- TDefiniteAssignment ----- }
@@ -2244,7 +2346,7 @@ begin
   Result := -1;
   if N.IsNull then Exit;
   if N.NodeType <> 'identifier' then Exit;
-  Result := AVars.IndexOf(LowerCase(NodeStr(N, ASrc)));
+  Result := AVars.IndexOfAt(LowerCase(NodeStr(N, ASrc)), Integer(N.StartByte));
 end;
 
 function DetectFreedVar(const ANode: TTSNode; const ASrc: TBytes; AVars: TRoutineVarTable): Integer;
@@ -2428,7 +2530,7 @@ begin
           end
           else if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
           begin
-            SrcIdx := FVars.IndexOf(LowerCase(NodeStr(Rhs, FSrc)));
+            SrcIdx := FVars.IndexOfAt(LowerCase(NodeStr(Rhs, FSrc)), Integer(Rhs.StartByte));
             if SrcIdx >= 0 then
             begin Result[Tgt] := Result[SrcIdx]; Result[SrcIdx] := False; end { alias: ownership moves }
             else Result[Tgt] := False;
@@ -2438,7 +2540,7 @@ begin
         else if (not Rhs.IsNull) and (Rhs.NodeType = 'identifier') then
         begin
           { lhs is Result / a field / a partial write -> a bare local rhs escapes }
-          SrcIdx := FVars.IndexOf(LowerCase(NodeStr(Rhs, FSrc)));
+          SrcIdx := FVars.IndexOfAt(LowerCase(NodeStr(Rhs, FSrc)), Integer(Rhs.StartByte));
           if SrcIdx >= 0 then Result[SrcIdx] := False;
         end;
       end;

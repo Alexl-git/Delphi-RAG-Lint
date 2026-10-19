@@ -101,8 +101,8 @@ or the generator failed.
 3. `tools\build-manual.ps1` -- exactly once, after the last doc change
 4. `tests\run_battery.ps1`
 5. `tools\publish-wiki.ps1` (re-runs the `-Check` gate itself)
-6. `build\pack-lint-release.ps1 -Version <ver>` -- the deployed Debug engine in
-   `third_party\dll-win64` is backed up first and restored byte-identically (sha256)
+6. `installer\Build-Installer.ps1` -- the Inno Setup installer is the release package;
+   no zip archives are built (the deployed engine is not touched)
 7. prints the `git tag` and `gh release create` commands, which are still run by hand
 
 The manual is built BEFORE the battery, not after it as the spec's section 12

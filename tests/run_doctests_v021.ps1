@@ -59,6 +59,11 @@ $Exe = (Resolve-Path $Exe).Path
 
 $log = Join-Path $env:TEMP ("drag-lint-doctests-v021-{0}.log" -f $PID)
 $env:EXE = $Exe   # every fixture defers to a pre-set EXE
+# T2..T7 link the engine units, and DRagLint.Storage.SQLite reaches tree-sitter,
+# so a freshly built T7_storage.exe imports tree-sitter.dll and dies with
+# 0xC0000135 (DLL not found) unless the engine's own folder is on PATH.
+# prepare_battery.ps1 rebuilds them; the stale May-2026 exes never imported it.
+$env:PATH = (Split-Path $Exe -Parent) + ';' + $env:PATH
 
 Write-Host 'Running the legacy .bat doctest chain against the current engine' -ForegroundColor Cyan
 $p = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $driver `

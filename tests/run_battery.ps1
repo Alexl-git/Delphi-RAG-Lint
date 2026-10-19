@@ -219,7 +219,11 @@ param(
   [double]$HeartbeatMin = 10,
 
   # Where per-runner transcripts go. Default: a timestamped dir under $env:TEMP.
-  [string]$LogDir = ''
+  [string]$LogDir = '',
+
+  # Do not run tests\autotest\prepare_battery.ps1 (builds the untracked fixtures,
+  # sqlite DBs and exes the guards need; idempotent, fast when they exist).
+  [switch]$SkipPrepare
 )
 
 $ErrorActionPreference = 'Continue'
@@ -234,6 +238,15 @@ $DefaultExclusions = [ordered]@{
 }
 
 $repoRoot  = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+
+# A fresh worktree lacks the untracked artifacts ~7 guards need; create them first.
+# DRAGLINT_BATTERY_PREPARED stops a nested battery run (the battery_*_guard
+# runners start one) from re-preparing.
+if (-not $List -and -not $SkipPrepare -and -not $env:DRAGLINT_BATTERY_PREPARED) {
+  $env:DRAGLINT_BATTERY_PREPARED = '1'
+  & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'autotest\prepare_battery.ps1')
+  if ($LASTEXITCODE -ne 0) { Write-Host 'prepare_battery: some prerequisites are missing; guards that need them will fail.' -ForegroundColor Yellow }
+}
 $testsRoot = (Resolve-Path $PSScriptRoot).Path
 
 function RelPath([string]$full) {

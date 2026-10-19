@@ -97,7 +97,7 @@ uses
   , System.SysUtils
   , System.Classes
   , System.IOUtils
-  , DRagLint.Core.Versions { CompareDottedVersions + INDEXER_FINGERPRINT_META_KEY: the never-downgrade gate }
+  , DRagLint.Core.Versions // dl:unit DRagLint.Core.Versions accepted -- the schema_meta keys travel with the gate that reads them: INDEXER_FINGERPRINT_META_KEY (never-downgrade) and REBUILD_IN_PROGRESS_META_KEY (B-23, cleared on a completed walk)
   , System.NetEncoding { TNetEncoding.URL -- encodes the vault name into the obsidian:// URI }
   , System.JSON
   , System.StrUtils
@@ -672,7 +672,7 @@ type
     SnapshotDir   : string ; // --snapshot-dir <dir>
   end; // record
 
-procedure PrintHelp;  // dl:ok method-too-long@7f59 -- REVIEWED 2026-10-14 (483 lines: 1.27.x banner lines merged from main + compare lines + the 1.30.0 ask lines + the protocol / mcp-config lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
+procedure PrintHelp;  // dl:ok method-too-long@3442 -- (483 lines: 1.27.x banner lines merged from main + compare lines + the 1.30.0 ask lines + the protocol / mcp-config lines): run_docs_sync_guard.ps1 harvests the banner as ONE surface, so splitting this into helpers would scatter verb lines across routines and defeat that check
 begin
   Writeln('drag-lint ', VERSION, ' - Delphi-RAG-Lint: symbol-aware index + RAG + lint for Delphi/Pascal');
   Writeln('');
@@ -822,7 +822,7 @@ begin
   Writeln('  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]');
   Writeln('                               unit outline; backs the IDE Structure form.');
   Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
-  Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
+  Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
   Writeln('                               [--format text|json|html] [--output <file>] [--open]');
   Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
   Writeln('  drag-lint compare            --show <report|csv|bundle> [--output <f.html>] [--open]   any report as the HTML page');
@@ -5377,6 +5377,10 @@ begin
     written only after a run whose resolve pass completed. See
     ResolverFingerprint for why it is separate from the indexer one. }
   AStore.SetMetaValue(RESOLVER_FP_KEY, ResolverFingerprint(AStore));
+  { B-23: the walk completed, so a --rebuild that cleared this DB is over and
+    DbMembership may answer member / notmember again. Same guarantee as above:
+    a killed rebuild never reaches here and its DB keeps reading UNKNOWN. }
+  AStore.SetMetaValue(REBUILD_IN_PROGRESS_META_KEY, '');
 end;
 
 { v21: opens --library-db paths as read-only extra stores for cross-DB call
@@ -5880,6 +5884,10 @@ begin
   while True do
   begin
     StartTime:= Now;
+    { Indexer.ParsedFiles is CUMULATIVE over the indexer's life, and --watch keeps
+      one indexer: measured against 0, every idle tick after the first "parsed"
+      files and ran the whole-database calls pass (run_watch_scope_reset W4). }
+    var ParsedBeforeTick: Integer:= Indexer.ParsedFiles;
     if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', Now), Interval]))
     else if not AArgs.ResolveOnly then Writeln('Indexing...');
     { --resolve-only: re-derive the edges from parses the index ALREADY holds,
@@ -6149,9 +6157,9 @@ begin
       flag would announce a re-derive and then skip it -- the one outcome worse
       than not having the flag. }
     if ResolverStale or AArgs.ResolveOnly then Store.ClearCallEdges;
-    var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
-       (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or ResolverStale or
-       AArgs.ResolveOnly;
+    var CorpusMoved: Boolean:= (Indexer.ParsedFiles > ParsedBeforeTick) or AArgs.Rebuild or (SweptRows > 0);
+    var RanCalls: Boolean:= CorpusMoved or (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or
+       ResolverStale or AArgs.ResolveOnly;
     if RanCalls then
       Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end) { v14 (D5) + v21 cross-DB }
     else
@@ -6168,6 +6176,11 @@ begin
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
     CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform);
+    { --watch: ResolverStale was read ONCE, before the loop. This tick derived
+      the edges with the current resolver and stamped it, so a later tick must
+      not clear every edge again (it did, on every tick of a new or restamped DB,
+      and no tick could scope -- run_watch_scope_reset W2). }
+    ResolverStale:= False;
     { Rides the same completed-run guarantee as the fingerprints above: a
       database that says "project" was walked as a project, all the way through.
       This is what lets the next `index <dir> --db` refuse instead of guessing
@@ -7953,7 +7966,11 @@ begin
           end; // for Row
         end; // for DbPath
         if AArgs.AsJson then Writeln(JOut.Format(2))
-        else if TotalCallers = 0 then Writeln('0 caller(s)');
+        else if TotalCallers = 0 then
+        begin
+          Writeln('0 caller(s)');
+          Writeln(ErrOutput, 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ', AArgs.Name);
+        end;
       finally
         JOut.Free;
       end; // try
@@ -7983,7 +8000,11 @@ begin
         Inc(TotalRefs, Length(Refs));
       end;
     end; // for
-    if (TotalRefs = 0) and (not AArgs.AsJson) then Writeln('0 caller(s)');
+    if (TotalRefs = 0) and (not AArgs.AsJson) then
+    begin
+      Writeln('0 caller(s)');
+      Writeln(ErrOutput, 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ', AArgs.Name);
+    end;
     if TotalRefs = 0 then Result:= 1
     else Result:= 0;
     Exit;
@@ -14332,7 +14353,8 @@ begin
     if FlowStoreSeen then
       Writeln(ErrOutput,
         'drag-lint: note: project rules ran for this file. STILL NOT reported here: ' +
-        'doc-drift/missing-doc (pass --project-rules), cross-file ' +
+        (if AArgs.ProjectRules then '' else 'doc-drift/missing-doc (pass --project-rules), ') +
+        'cross-file ' +
         'duplicate-code, interface-reference-cycle, exception-class enrichment, and ' +
         'unit-not-in-dpr without --project.')
     else
@@ -14367,6 +14389,12 @@ begin
   { See the argument's comment below for why a stand-in run withholds this. }
   var MarkerScanSet: TArray<string>:= ScannedFiles;
   if StandInLogical <> '' then MarkerScanSet:= nil;
+
+  { Here, not in the shared FinalizeAndOutput: --project-rules is a per-file
+    `lint` flag, and lint-all / lint-project / check-ast reach that routine too
+    (run_flag_verb_map caught the note pointing them at a flag they lack). }
+  if AArgs.Fix and AArgs.Apply and (not AArgs.ProjectRules) then
+    Writeln(ErrOutput, 'drag-lint: note: --fix --apply without --project-rules: doc-drift/missing-doc findings are not produced, so no doc fixes are applied.');
 
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
@@ -27122,7 +27150,7 @@ var
   // (and its freshness checked) the FIRST time a unit reaches that step, then
   // reused: a single --unit run keeps its old order, a batch pays for both and
   // for every class's members once. Returns the unit's exit code (0 / 1 / 2).
-  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@a8c9 -- REVIEWED 2026-10-10: each Exit is a distinct per-unit outcome (refusal, rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
+  function RunUnit(const AUnitPas: string): Integer;  // dl:ok too-many-exit-points@f440 -- each Exit is a distinct per-unit outcome (refusal, rule errors, freshness, an unexecutable castlib (1.27.0), plan failure, write failure, dry run) moved from DoConvertApply, which carried the same shape; one result per early outcome is the convert-apply contract
   var
     UnitStart: Integer; { Trees.ClassesBuilt when this unit started }
     ValHere  : Integer; { classes this unit's call to the book validation built (0 after the first) }
@@ -28147,7 +28175,8 @@ end; // function
   has to be able to tell "no formatter" from "the formatter is too old" from
   "the formatter corrupted the file and I put it back":
 
-    0  formatted (or dry-run/diff completed)
+    0  formatted (or dry-run/diff completed), or YADF DECLINED the file (its
+       exit 3: content guard refused, file unchanged -- B-36; not a failure)
     2  usage: no target, or the target does not exist
     3  no usable YADF resolved            (TFormatResult -3)
     4  resolved YADF is BELOW the floor   (TFormatResult -4) -- nothing written
@@ -28185,6 +28214,13 @@ begin
     else
       Exit(1);
     end;
+  end;
+
+  if Res.Declined then
+  begin
+    if Trim(Res.StdoutText) <> '' then Writeln(Res.StdoutText);
+    Writeln(Format('Declined: %s  (YADF''s content guard left it unchanged; not a failure)', [Target]));
+    Exit(0);
   end;
 
   case Mode of
@@ -31710,6 +31746,13 @@ begin
   if AArgs.CompareCommand <> '' then
   begin
     Result:= ParseCommandLine(AArgs.CompareCommand, ACmd);
+    { B-25: ParamStr drops the quote of an MSVC-style \" escape and keeps its backslash, so
+      a quoted value arrived as \C:\P\A.dproj\ . No Target / Project value starts AND ends
+      with a backslash, so that pair is the escape's remains. }
+    if Result then
+      for var CmdArgIx: Integer:= 0 to High(ACmd.Args) do
+        if (Length(ACmd.Args[CmdArgIx].Value) > 2) and ACmd.Args[CmdArgIx].Value.StartsWith('\') and ACmd.Args[CmdArgIx].Value.EndsWith('\') then
+          ACmd.Args[CmdArgIx].Value:= Copy(ACmd.Args[CmdArgIx].Value, 2, Length(ACmd.Args[CmdArgIx].Value) - 2);
     if not Result then
       AErr:= 'cannot read --command "' + AArgs.CompareCommand + '" -- it must start with the question id';
   end

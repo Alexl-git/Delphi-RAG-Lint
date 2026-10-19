@@ -190,7 +190,14 @@ $vDbg = if (Test-Path $yDbg) { (Get-Item $yDbg).VersionInfo.FileVersion } else {
 
 if ($vDbg -and $vRel) {
   Write-Host "      [NOTE] real YADF builds: Release=$vRel  Debug=$vDbg" -ForegroundColor DarkGray
-
+}
+# A6 needs a Debug build BELOW the 1.0.6.6 floor; a rebuilt Debug YADF (1.0.20.0 on
+# 2026-10-19) is above it, and the engine is right to accept it -- skip loudly, never FAIL.
+$dbgBelowFloor = $vDbg -and ([version]$vDbg -lt [version]'1.0.6.6')
+if ($vDbg -and $vRel -and -not $dbgBelowFloor) {
+  Skip 'A6 version-floor refusal' "the Debug YADF ($vDbg) is not below the 1.0.6.6 floor; no below-floor binary to test with"
+}
+if ($dbgBelowFloor -and $vRel) {
   $f6 = NewFixture 'floor.pas'; $h6 = Sha $f6
   $o6 = (& $Exe format $f6 --yadf-path $yDbg 2>&1) -join "`n"; $e6 = $LASTEXITCODE
   Check "A6 a BELOW-FLOOR YADF ($vDbg) is refused" ($e6 -ne 0) "exit=$e6`n$o6"
@@ -198,7 +205,8 @@ if ($vDbg -and $vRel) {
   Check 'A6c the refusal names the found version, the floor, and the path' `
         (($o6 -match [regex]::Escape($vDbg)) -and ($o6 -match '1\.0\.6\.6') -and ($o6 -match '(?i)yadf\.exe')) `
         "the operator cannot see WHICH binary was rejected or why:`n$o6"
-
+}
+if ($vDbg -and $vRel) {
   # POSITIVE CONTROL 2, the plan's own: the refusal must key on the VERSION,
   # not on "it was a real YADF" or "it was a Debug build".
   $f7 = NewFixture 'abovefloor.pas'; $h7 = Sha $f7
@@ -210,6 +218,40 @@ if ($vDbg -and $vRel) {
   Skip 'A6/A7 version-floor assertions' `
        "YADF not installed at $yRel / $yDbg -- this machine cannot answer the version question either way. Assertions NOT counted as passing."
 }
+
+# ---------------------------------------------------------------------------
+# A8 -- B-36: YADF exit 3 = DECLINED (its content guard refused; the file on
+# disk is unchanged). That is not a failure: `format` exits 0 and says so.
+# A8e/A9 are the controls: a decline in --diff mode is accepted too, and a REAL
+# failure (exit 1) still fails -- without A9 the A8 rows would pass against a
+# build that simply ignored every non-zero YADF exit.
+# ---------------------------------------------------------------------------
+$stubDecline = Join-Path $WorkDir 'yadf_decline.bat'
+Write-Ascii $stubDecline @'
+@echo off
+echo declined %1 (content guard: NUL byte)
+exit /b 3
+'@
+$stubFail = Join-Path $WorkDir 'yadf_fail.bat'
+Write-Ascii $stubFail @'
+@echo off
+echo.>> %1
+echo stub-fail could not format %1
+exit /b 1
+'@
+$f8 = NewFixture 'declined.pas'; $h8 = Sha $f8
+$o8 = (& $Exe format $f8 --yadf-path $stubDecline 2>&1) -join "`n"; $e8 = $LASTEXITCODE
+Check 'A8 a YADF decline (exit 3) exits 0' ($e8 -eq 0) "exit=$e8`n$o8"
+Check 'A8b and the file is unchanged' ((Sha $f8) -eq $h8) "a declined file changed:`n$o8"
+Check 'A8c and the output says it was declined' ($o8 -match '(?i)declined') "$o8"
+Check 'A8d and it is not reported as a failure' (-not ($o8 -match '(?i)format failed')) "$o8"
+$f8e = NewFixture 'declined_diff.pas'
+$o8e = (& $Exe format $f8e --yadf-path $stubDecline --diff 2>&1) -join "`n"; $e8e = $LASTEXITCODE
+Check 'A8e a decline under --diff exits 0' ($e8e -eq 0) "exit=$e8e`n$o8e"
+$f9 = NewFixture 'failed.pas'; $h9 = Sha $f9
+$o9 = (& $Exe format $f9 --yadf-path $stubFail 2>&1) -join "`n"; $e9 = $LASTEXITCODE
+Check 'A9 CONTROL a YADF failure (exit 1) still exits non-zero' ($e9 -ne 0) "exit=$e9`n$o9"
+Check 'A9b CONTROL and the original is restored' ((Sha $f9) -eq $h9) "a failed format left the file changed:`n$o9"
 
 Write-Host ''
 if ($script:fail) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

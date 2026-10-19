@@ -45,7 +45,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe        = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$FixtureDir = "$PSScriptRoot\fixtures\renameowners",
   [string]$WorkDir    = "$env:TEMP\draglint-owners-$([guid]::NewGuid().ToString('N'))"
 )
@@ -110,6 +110,8 @@ foreach ($c in 'A_nostamp', 'A_fail', 'A_noop', 'A_preview', 'A_tag') { Copy-Ite
 # R21's owner must BE T's closure (twin\uShared.pas), only without its tag: A's DB passed as T's only while the
 # owner check stopped at declared members (B-03) -- the closure check sees that A's index lacks twin\uShared.pas
 Copy-Item "$WorkDir\T.sqlite" "$WorkDir\T_notag.sqlite"
+# B-23: a copy of A the harness clears the way --rebuild does, then probes mid-rebuild
+Copy-Item "$WorkDir\A.sqlite" "$WorkDir\A_rebuild.sqlite"
 # T2: a member added to M.dproj after M was indexed -- the copies lack it
 WriteAscii "$WorkDir\M\uLate.pas" @('unit uLate;', '', 'interface', '', 'implementation', '', 'end.')
 WriteAscii "$WorkDir\M\M.dproj" (MDproj @('uM.pas', 'uLate.pas'))
@@ -173,6 +175,10 @@ Check 'M5 ... and says why'                                        ($kv['bad.rea
 Check 'M6 a DB file that does not exist is unknown'                ($kv['missing'] -eq 'unknown')   "got: $($kv['missing'])"
 Check 'M7 ... with reason "db file not found"'                     ($kv['missing.reason'] -eq 'db file not found') "got: $($kv['missing.reason'])"
 Check 'M8 a definite answer carries no reason'                     (($kv['A.reason'] -eq '') -and ($kv['T.reason'] -eq '')) ''
+# B-23 (INBOX-membership-during-rebuild-reads-not-member.md)
+Check 'M9 a DB mid --rebuild (rows cleared, walk not completed) is unknown, not notmember' ($kv['A_rebuilding'] -eq 'unknown') "got: $($kv['A_rebuilding']) '$($kv['A_rebuilding.reason'])'"
+Check 'M10 ... and says the rebuild is in progress' ($kv['A_rebuilding.reason'] -match 'rebuild') "got: '$($kv['A_rebuilding.reason'])'"
+Check 'M11 positive control: a completed index run makes it a member again' (($kv['A_rebuild.reindexed'] -eq 'True') -and ($kv['A_rebuilt'] -eq 'member')) "got: reindexed=$($kv['A_rebuild.reindexed']) $($kv['A_rebuilt']) '$($kv['A_rebuilt.reason'])'"
 
 Write-Host '-- FindRenameOwners (8a, 8b, 8c, 8d)' -ForegroundColor Cyan
 Check 'O1 every manifest DB for the platform is probed'             ($kv['probed'] -eq '3')                  "got: $($kv['probed'])"

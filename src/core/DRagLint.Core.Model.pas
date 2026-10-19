@@ -14,7 +14,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.31.5-alpha';
+  DRAGLINT_VERSION = '1.31.6-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -267,7 +267,7 @@ const
   /// row (~31k reads on ORM3 SERVER, ~21k on CLIENT by the 2026-09-28 decline
   /// counters). The reservation for C2.3 + the IsStub unification MOVES from
   /// 1.12.0 to 1.13.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.12.0-alpha';
+  DRAGLINT_RESOLVER_VERSION = '1.12.1-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

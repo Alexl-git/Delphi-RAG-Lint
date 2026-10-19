@@ -189,8 +189,8 @@ type
     dmMember,
     /// <summary>The DB was read and its files table does not hold the path.</summary>
     dmNotMember,
-    /// <summary>The DB is missing, unopenable, locked, corrupt or has no files
-    /// table; AReason says which.</summary>
+    /// <summary>The DB is missing, unopenable, locked, corrupt, has no files
+    /// table, or is mid --rebuild; AReason says which.</summary>
     dmUnknown);
 
 /// <summary>Asks the index at ADbPath whether its files table holds
@@ -200,10 +200,13 @@ type
 /// different file with the same unit name never matches.</param>
 /// <param name="AReason">'' on dmMember / dmNotMember. On dmUnknown: 'db file
 /// not found' for a missing (or empty) ADbPath, 'no file path' for an empty
-/// AFilePath, otherwise the message of the exception the open or query raised.</param>
+/// AFilePath, 'index rebuild in progress (...)' for a miss in a DB stamped
+/// REBUILD_IN_PROGRESS_META_KEY, otherwise the message of the exception the open
+/// or query raised.</param>
 /// <returns>dmMember on a byte-exact or case-insensitive match, dmNotMember
 /// when the files table was read and holds no such path, dmUnknown on every
-/// failure to determine either. Never raises.</returns>
+/// failure to determine either -- including a miss in a DB whose --rebuild has
+/// not completed (B-23). Never raises.</returns>
 /// <remarks>
 /// Same normalisation, exact-then-NOCASE order, read-only open and
 /// header-preserving connect as DbContainsFile, whose body this is (see its
@@ -300,6 +303,7 @@ uses
   , FireDAC.Stan.Param
   , FireDAC.Phys.SQLite
   , FireDAC.DApt
+  , DRagLint.Core.Versions { REBUILD_IN_PROGRESS_META_KEY (B-23) }
   ;
 
 { Same two rules as DRagLint.Storage.SQLite.NormalizeStoredPath. Duplicated
@@ -378,6 +382,26 @@ end; // procedure
 const
   MEMBERSHIP_BUSY_TIMEOUT_MS = 2000; { a probe answers "no" sooner than a verb gives up }
 
+{ B-23: True when schema_meta carries REBUILD_IN_PROGRESS_META_KEY = '1'. AQuery
+  is a closed query on the probe's connection; it is left closed. A DB with no
+  schema_meta (built before the stamp existed) answers False. }
+function RebuildInProgress(AQuery: TFDQuery): Boolean;
+begin
+  Result:= False;
+  AQuery.SQL.Text:= 'SELECT value FROM schema_meta WHERE key = :k LIMIT 1';
+  AQuery.ParamByName('k').AsString:= REBUILD_IN_PROGRESS_META_KEY;
+  try
+    try
+      AQuery.Open;
+      Result:= (not AQuery.Eof) and (AQuery.Fields[0].AsString = '1');
+    finally
+      AQuery.Close;
+    end; // try
+  except
+    { no schema_meta (a pre-stamp DB): nothing says a rebuild is running }
+  end; // try
+end; // function
+
 function DbMembership(const ADbPath, AFilePath: string; out AReason: string): TDbMembership;
 var
   Conn : TFDConnection;
@@ -439,8 +463,17 @@ begin
             Q.ParamByName('p').AsString:= NP;
             Q.Open;
             Found:= not Q.Eof;
+            Q.Close;
           end;
           Result:= if Found then dmMember else dmNotMember;
+
+          { B-23: a miss is only a "no" from a COMPLETE files table. A DB whose
+            --rebuild cleared it and has not finished the walk says nothing. }
+          if (not Found) and RebuildInProgress(Q) then
+          begin
+            Result := dmUnknown;
+            AReason:= 'index rebuild in progress (files cleared, walk not completed)';
+          end;
         finally
           Q.Close;
         end; // try

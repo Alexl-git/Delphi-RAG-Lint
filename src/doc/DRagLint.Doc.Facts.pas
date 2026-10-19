@@ -3745,11 +3745,24 @@ var
     // 'declaration (YADF.Options.pas)' -- and several declaration-position refs
     // in one file now fold into that single honest entry rather than repeating a
     // fabricated one.
-    if Result.Display = '' then Result.Display:= 'declaration';
+    // Wave 1.31.6 lane B: that reading holds for a TYPE only. A CALL row (the
+    // target is a call target and the row has no read/write Mode) with no
+    // enclosing routine is a call from a program's main block or from a unit's
+    // initialization / finalization section -- labelling it 'declaration' read
+    // as a caller of that name ('Called from: declaration (drag-lint.dpr)').
+    // Guard: tests\autotest\run_doc_body_call_site_label.ps1.
+    if Result.Display = '' then
+    begin
+      if CanBeCallTarget(ASym.Kind) and (ARC.Mode = '') then
+        Result.Display:= if SameText(ExtractFileExt(ARC.Location), '.dpr')
+                           then 'main block' else 'initialization/finalization'
+      else
+        Result.Display:= 'declaration';
+    end
     // PHASE C B2: an overload set shares ONE qualified name, so a rendered edge
     // that names only that name cannot say WHICH overload -- and on a delegating
     // pair (the shape B1 fixes) it reads as self-recursion.
-    if Result.Display <> 'declaration' then
+    else
       Result.Display:= Result.Display + OverloadArityTag(AOwningStore, ARC.EnclosingSymbolId);
     Result.Location  := ARC.Location;
     Result.Confidence:= ARC.Confidence;
