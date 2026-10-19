@@ -12,7 +12,7 @@ foreach ($l in 'Config', 'Releases', 'Articles', 'Render', 'Check') { . (Join-Pa
 function Write-SiteFile([string]$RelPath, [string]$Text) {
     $p = Join-Path $Out $RelPath
     [void][IO.Directory]::CreateDirectory((Split-Path $p -Parent))
-    [IO.File]::WriteAllText($p, ($Text -replace "\r?\n", "`r`n"), [Text.ASCIIEncoding]::new())
+    [IO.File]::WriteAllBytes($p, (ConvertTo-AsciiBytes ($Text -replace "\r?\n", "`r`n") $RelPath))
 }
 
 try {
@@ -67,9 +67,8 @@ try {
     Write-SiteFile 'robots.txt' "User-agent: *`nAllow: /`nSitemap: $($cfg.baseUrl)/sitemap.xml`n"
 
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets') -Destination $Out -Recurse
-    [xml]$wc = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'web.config'))
-    if ($NoRewrite) { $n = $wc.configuration.'system.webServer'.rewrite; [void]$n.ParentNode.RemoveChild($n) }
-    $wc.Save((Join-Path $Out 'web.config'))
+    $wcSrc = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'web.config'))
+    Write-SiteFile 'web.config' (New-WebConfigText $wcSrc $NoRewrite)
 
     $problems = @(Test-SiteOutput $Out $cfg)
     if ($problems.Count) { $problems | ForEach-Object { Write-Host "CHECK $_" }; throw "$($problems.Count) site check problem(s)" }

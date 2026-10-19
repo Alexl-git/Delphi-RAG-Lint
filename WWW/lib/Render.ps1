@@ -7,8 +7,31 @@ $script:CspMeta = ($script:Csp -replace "frame-ancestors 'none'; ", '')
 $script:TemplateDir = Join-Path $PSScriptRoot '..\templates'
 
 function ConvertTo-HtmlText([string]$Text) {
-    # Raw text in, safe HTML text out; non-ASCII becomes numeric entities.
-    [Net.WebUtility]::HtmlEncode($Text)
+    # Raw text in, safe HTML text out; every non-ASCII character becomes a numeric entity
+    # (HtmlEncode alone leaves characters above U+00FF, e.g. smart quotes, as they are).
+    $e = [Net.WebUtility]::HtmlEncode($Text)
+    [regex]::Replace($e, '[\uD800-\uDBFF][\uDC00-\uDFFF]|[^\x00-\x7F]', { param($m) "&#$([char]::ConvertToUtf32($m.Value, 0));" })
+}
+
+# 7-bit ASCII bytes of a built file; throws "<source>:<line>: non-ASCII character U+XXXX"
+# instead of letting an encoder write '?' in its place.
+function ConvertTo-AsciiBytes([string]$Text, [string]$Source) {
+    $m = [regex]::Match($Text, '[^\x00-\x7F]')
+    if ($m.Success) {
+        $line = 1 + ($Text.Substring(0, $m.Index).Split("`n").Count - 1)
+        throw "${Source}:${line}: non-ASCII character U+$('{0:X4}' -f [int]$Text[$m.Index]) (write it as an HTML entity)"
+    }
+    [Text.Encoding]::ASCII.GetBytes($Text)
+}
+
+# web.config text from the source file; $NoRewrite drops <rewrite> for an IIS without
+# the URL Rewrite module (the headers, errors and MIME map stay).
+function New-WebConfigText([string]$Source, [bool]$NoRewrite) {
+    [xml]$wc = $Source
+    if ($NoRewrite) { $n = $wc.configuration.'system.webServer'.rewrite; if ($n) { [void]$n.ParentNode.RemoveChild($n) } }
+    $sw = [IO.StringWriter]::new()
+    $wc.Save($sw)
+    $sw.ToString() -replace 'encoding="utf-16"', 'encoding="us-ascii"'
 }
 
 function Get-ShortName($Product) { if ($Product.short) { $Product.short } else { $Product.name } }

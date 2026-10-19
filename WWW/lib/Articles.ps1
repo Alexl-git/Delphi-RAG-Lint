@@ -21,6 +21,11 @@ function Read-Article([string]$Path) {
     foreach ($k in $script:ArticleKeys) {
         if (-not $meta[$k]) { throw "${Path}:1: $k missing in the article block" }
     }
+    foreach ($k in 'title', 'summary') {
+        if ($meta[$k] -match '&(#\d+|#x[0-9a-fA-F]+|[a-zA-Z]+);') {
+            throw "${Path}:1: $k contains the entity '$($Matches[0])': title and summary are plain ASCII text, they are escaped for you"
+        }
+    }
     if ($meta.date -notmatch '^\d{4}-\d{2}-\d{2}$') { throw "${Path}:1: date must be yyyy-MM-dd" }
     if ($meta.slug -notmatch '^[a-z0-9]+(-[a-z0-9]+)*$') { throw "${Path}:1: slug must be lowercase words joined by hyphens" }
     $dir = Split-Path $Path -Parent

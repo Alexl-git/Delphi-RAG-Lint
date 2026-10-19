@@ -8,7 +8,10 @@ param(
     [switch]$AcceptExistingRemote
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'lib\Config.ps1')
+. (Join-Path $PSScriptRoot 'lib\Render.ps1')
 . (Join-Path $PSScriptRoot 'lib\Publish.ps1')
+$base = (Read-SiteConfig (Join-Path $PSScriptRoot 'site.json')).baseUrl
 $site = Join-Path $PSScriptRoot '_site'
 $session = $null
 
@@ -57,22 +60,25 @@ try {
 
     # 9. live checks
     $ok = $true
-    $home200 = Get-HttpStatus 'https://www.delphi-rag-lint.com/'
-    if ($home200.Status -eq 500 -and -not $noRewrite) {
-        Write-Host 'GET https://www.delphi-rag-lint.com/ = 500: retrying without the rewrite section'
-        & (Join-Path $PSScriptRoot 'build.ps1') -Out $site -NoRewrite
-        if ($LASTEXITCODE -ne 0) { throw 'build -NoRewrite failed' }
-        Send-PublishFiles $session $cred.RemoteRoot $site @('web.config')
-        $noRewrite = $true
-        Write-PublishManifest $cred (Get-SiteHashes $site) $true
-        Write-Host 'URL Rewrite missing on IONOS: switch on HTTPS forwarding in the IONOS panel'
-        $home200 = Get-HttpStatus 'https://www.delphi-rag-lint.com/'
+    $live = Get-HttpStatus "$base/"
+    if ($live.Status -eq 500 -and -not $noRewrite) {
+        Write-Host "GET $base/ = 500: uploading web.config without the rewrite section"
+        $plain = New-WebConfigText ([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'web.config'))) $true
+        $put = { param($local, $rel) Send-PublishFile $session $cred.RemoteRoot $local $rel }
+        $fb = Invoke-RewriteFallback $files $plain $put { (Get-HttpStatus "$base/").Status }
+        $files = $fb.Files
+        $noRewrite = $fb.NoRewrite
+        Write-PublishManifest $cred $files $noRewrite
+        if ($noRewrite) { Write-Host 'URL Rewrite missing on IONOS: switch on HTTPS forwarding in the IONOS panel' }
+        else { Write-Host "still $($fb.Status) without <rewrite>: another web.config section is refused by IONOS; check the IONOS error log" }
+        $live = Get-HttpStatus "$base/"
     }
-    Write-Host "GET https://www.delphi-rag-lint.com/ = $($home200.Status)"
-    if ($home200.Status -ne 200) { $ok = $false }
-    $bare = Get-HttpStatus 'http://delphi-rag-lint.com/'
-    Write-Host "GET http://delphi-rag-lint.com/ = $($bare.Status) $($bare.Location)"
-    if ($bare.Status -ne 301 -or -not $bare.Location.StartsWith('https://www.delphi-rag-lint.com')) {
+    Write-Host "GET $base/ = $($live.Status)"
+    if (-not (Test-LiveHome $live $base)) { Write-Host 'the live home page is not ours (placeholder or error page)'; $ok = $false }
+    $bareUrl = $base -replace '^https://www\.', 'http://'
+    $bare = Get-HttpStatus "$bareUrl/"
+    Write-Host "GET $bareUrl/ = $($bare.Status) $($bare.Location)"
+    if ($bare.Status -ne 301 -or -not $bare.Location.StartsWith($base)) {
         if ($noRewrite) { Write-Host 'redirect missing: switch on HTTPS forwarding in the IONOS panel' }
         $ok = $false
     }

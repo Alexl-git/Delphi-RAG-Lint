@@ -3,10 +3,15 @@
 (function () {
   'use strict';
 
+  // A usable release: a non-empty tag and a yyyy-mm-dd date (never blank the static text).
+  function valid(tag, date) {
+    return typeof tag === 'string' && tag.length > 0 && typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date);
+  }
+
   function readCache(storage, repo) {
     try {
       var v = JSON.parse(storage.getItem('rel:' + repo));
-      return v && typeof v.tag === 'string' && typeof v.date === 'string' ? v : null;
+      return v && valid(v.tag, v.date) ? v : null;
     } catch (e) { return null; }
   }
 
@@ -26,8 +31,9 @@
       .then(function () { return fetchFn('https://api.github.com/repos/' + repo + '/releases/latest'); })
       .then(function (r) { return r.status === 200 ? r.json() : null; })
       .then(function (j) {
-        return j && typeof j.tag_name === 'string' && typeof j.published_at === 'string'
-          ? { tag: j.tag_name, date: j.published_at.slice(0, 10) } : null;
+        if (!j || typeof j.published_at !== 'string') return null;
+        var rel = { tag: j.tag_name, date: j.published_at.slice(0, 10) };
+        return valid(rel.tag, rel.date) ? rel : null;
       })
       .catch(function () { return null; });
   }
@@ -49,7 +55,7 @@
 
   if (typeof module !== 'undefined') module.exports = { refresh: refresh };
 
-  if (typeof document !== 'undefined') {
+  if (typeof document !== 'undefined' && typeof window !== 'undefined' && typeof window.fetch === 'function') {
     document.addEventListener('DOMContentLoaded', function () {
       var storage = null;
       try { storage = window.sessionStorage; } catch (e) { /* blocked */ }

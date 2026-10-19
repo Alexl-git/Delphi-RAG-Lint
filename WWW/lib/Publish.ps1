@@ -125,6 +125,13 @@ function Get-RemoteNames($Session, [string]$Root) {
     @($Session.ListDirectory($Root).Files | Where-Object { $_.Name -ne '.' -and $_.Name -ne '..' } | ForEach-Object Name)
 }
 
+function Send-PublishFile($Session, [string]$Root, [string]$LocalPath, [string]$Rel) {
+    $t = New-Object WinSCP.TransferOptions
+    $t.TransferMode = [WinSCP.TransferMode]::Binary
+    $Session.PutFiles($Session.EscapeFileMask($LocalPath), (Join-RemotePath $Root $Rel), $false, $t).Check()
+    Write-Host "  put $Rel"
+}
+
 function Send-PublishFiles($Session, [string]$Root, [string]$LocalDir, [string[]]$Paths) {
     $t = New-Object WinSCP.TransferOptions
     $t.TransferMode = [WinSCP.TransferMode]::Binary
@@ -152,8 +159,33 @@ function Remove-PublishFiles($Session, [string]$Root, [string[]]$Paths) {
     }
 }
 
-# HTTP status (and Location) of one GET, redirects not followed.
+# HTTP status, Location and body of one GET, redirects not followed.
 function Get-HttpStatus([string]$Url) {
     $r = Invoke-WebRequest -Uri $Url -MaximumRedirection 0 -SkipHttpErrorCheck -ErrorAction SilentlyContinue
-    [pscustomobject]@{ Status = [int]$r.StatusCode; Location = [string]($r.Headers['Location'] | Select-Object -First 1) }
+    [pscustomobject]@{ Status = [int]$r.StatusCode; Location = [string]($r.Headers['Location'] | Select-Object -First 1); Content = [string]$r.Content }
+}
+
+# True only when the response is OUR home page (200 and our canonical link), so a
+# placeholder that IIS still serves with 200 is not mistaken for a successful publish.
+function Test-LiveHome($Response, [string]$BaseUrl) {
+    $Response.Status -eq 200 -and ([string]$Response.Content).Contains("<link rel=""canonical"" href=""$BaseUrl/"">")
+}
+
+# The HTTP 500 fallback: upload the prepared rewrite-free web.config (no rebuild, no gh),
+# probe again, and keep NoRewrite only if the site now answers 200.
+# $Put = { param($localPath, $relPath) }; $Probe = { -> status code }.
+# Returns {NoRewrite; Status; Files} where Files is a copy of $Files with only the
+# web.config entry changed to what is now on the server.
+function Invoke-RewriteFallback([hashtable]$Files, [string]$WebConfigText, [scriptblock]$Put, [scriptblock]$Probe) {
+    $tmp = Join-Path ([IO.Path]::GetTempPath()) ("web-norewrite-" + [guid]::NewGuid().ToString('N') + '.config')
+    try {
+        [IO.File]::WriteAllText($tmp, $WebConfigText, [Text.ASCIIEncoding]::new())
+        & $Put $tmp 'web.config'
+        $out = $Files.Clone()
+        $out['web.config'] = (Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash
+    } finally {
+        [IO.File]::Delete($tmp)
+    }
+    $status = [int](& $Probe)
+    [pscustomobject]@{ NoRewrite = ($status -eq 200); Status = $status; Files = $out }
 }

@@ -65,7 +65,10 @@ test('keeps static text on failure', async function () {
   const failing = [
     function () { return Promise.reject(new Error('offline')); },
     respond(403, { message: 'API rate limit exceeded' }),
-    respond(200, { published_at: '2026-10-18T09:00:00Z' })
+    respond(200, { published_at: '2026-10-18T09:00:00Z' }),
+    respond(200, { tag_name: '', published_at: '2026-10-18T09:00:00Z' }),
+    respond(200, { tag_name: 'v1', published_at: 'soon' }),
+    function () { return Promise.resolve({ status: 200, json: function () { return Promise.reject(new Error('bad json')); } }); }
   ];
   for (const f of failing) {
     const doc = fakeDoc([REPO]);
@@ -86,6 +89,16 @@ test('uses cache without fetching', async function () {
   assert.strictEqual(f.calls.length, 0);
   assert.strictEqual(doc.blocks[0].tag.textContent, 'v9-cached');
   assert.strictEqual(doc.blocks[0].date.textContent, '2026-10-01');
+});
+
+test('an empty cached entry is ignored and refetched', async function () {
+  const doc = fakeDoc([REPO]);
+  const st = memStorage();
+  st.setItem('rel:' + REPO, JSON.stringify({ tag: '', date: '' }));
+  const f = respond(200, { tag_name: 'v-net', published_at: '2026-10-18T09:00:00Z' });
+  await refresh(doc, f, st);
+  assert.strictEqual(f.calls.length, 1);
+  assert.strictEqual(doc.blocks[0].tag.textContent, 'v-net');
 });
 
 test('storage that throws is ignored', async function () {
