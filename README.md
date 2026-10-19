@@ -394,6 +394,8 @@ managed:
 0). If a folder still shows as `MISSING`, the component didn't register that path
 on the IDE search paths; add it under **Tools -> Options -> Language -> Delphi ->
 Library** (Library or Browsing path) for the right platform, then rebuild again.
+A root listed as `EXCLUDED BY CONFIG` (JSON `excludedRoots`) is pruned by the
+section's `exclude` globs (e.g. `"Win64"`) and is not counted as drift.
 
 Notes:
 

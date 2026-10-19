@@ -1104,7 +1104,7 @@ begin
   Writeln('                               No covering index: stdout empty ([] with --json), exit 0, a NOTE on stderr.');
   Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
-  Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
+  Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift; roots the section exclude prunes are listed as excluded, not counted)');
   Writeln('  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project''s _D-RAG folder');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help             (aliases -h / -?). Accepted AFTER A VERB too: `drag-lint lint --help`,');
@@ -29949,14 +29949,21 @@ end; // function
 // selftest drift: call AnalyzeLibraryDrift with roots from --root flags.
 // Prints MISSING <root> for each missing root, then DRIFT-OK or DRIFT-MISSING N.
 // Exits 0 in all cases (test assertions are done by the caller script).
+// B-02: --exclude <glob> (repeatable) is the walk filter's SectionExclude;
+// a root it prunes prints EXCLUDED <root> and is not counted as drift.
 function DoSelfTestDrift(const AArgs: TArgs): Integer;
 var
-  Missing: TArray<string>;
-  M      : string        ;
+  Missing : TArray<string>;
+  Excluded: TArray<string>;
+  M       : string        ;
+  WF      : TWalkFilter   ;
 begin
   if NoDbResolved(AArgs.DbPath, 'self-test-drift') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
-  Missing:= AnalyzeLibraryDrift(AArgs.DbPath, AArgs.Roots);
+  WF:= TWalkFilter.Create;
+  WF.SectionExclude:= AArgs.ExcludeGlobs;
+  Missing:= AnalyzeLibraryDrift(AArgs.DbPath, AArgs.Roots, WF, Excluded);
+  for M in Excluded do Writeln('EXCLUDED ', M);
   for M in Missing do Writeln('MISSING ', M);
   if Length(Missing) = 0 then Writeln('DRIFT-OK')
   else Writeln('DRIFT-MISSING ', Length(Missing));
@@ -31175,6 +31182,7 @@ var
   PFilter   : TArray<string>                            ;
   Roots     : TArray<string>                            ;
   Missing   : TArray<string>                            ;
+  Excluded  : TArray<string>                            ;
   TotalMiss : Integer                                   ;
   PlatCnt   : Integer                                   ;
   R         : string                                    ;
@@ -31217,7 +31225,7 @@ begin
           if not TFile.Exists(Item.DbPath) then Continue;
           Inc(PlatCnt);
           Roots:= Resolver.ReadPlatformLibraryPaths(Item.Platform);
-          Missing:= AnalyzeLibraryDrift(Item.DbPath, Roots);
+          Missing:= AnalyzeLibraryDrift(Item.DbPath, Roots, Item.Filter, Excluded);
           Inc(TotalMiss, Length(Missing));
           JPlatObj:= TJSONObject.Create;
           JPlatObj.AddPair('platform', Item.Platform);
@@ -31225,6 +31233,11 @@ begin
           JMissArr:= TJSONArray.Create;
           for R in Missing do JMissArr.Add(R);
           JPlatObj.AddPair('missingRoots', JMissArr);
+          { B-02: roots the section's exclude prunes -- always present, never
+            counted toward the exit code. }
+          JMissArr:= TJSONArray.Create;
+          for R in Excluded do JMissArr.Add(R);
+          JPlatObj.AddPair('excludedRoots', JMissArr);
           JPlatArr.AddElement(JPlatObj);
         end; // for
         JRoot.AddPair('platforms', JPlatArr);
@@ -31241,7 +31254,7 @@ begin
         if not TFile.Exists(Item.DbPath) then Continue;
         Inc(PlatCnt);
         Roots:= Resolver.ReadPlatformLibraryPaths(Item.Platform);
-        Missing:= AnalyzeLibraryDrift(Item.DbPath, Roots);
+        Missing:= AnalyzeLibraryDrift(Item.DbPath, Roots, Item.Filter, Excluded);
         Inc(TotalMiss, Length(Missing));
         Writeln('platform: ', Item.Platform, ', db: ', Item.DbPath);
         { Reworded (was a bare "MISSING: <root>"): these roots have indexable
@@ -31251,6 +31264,8 @@ begin
           with no companion .pas will show here too; its real .pas source
           usually lives in a sibling Source\ folder -- index that folder. }
         for R in Missing do Writeln('  SOURCE NOT INDEXED (.pas/.inc/.dfm on disk, none in index): ', R);
+        { B-02: not drift -- the section's exclude prunes the root itself. }
+        for R in Excluded do Writeln('  EXCLUDED BY CONFIG (the walk prunes this root; not counted): ', R);
         if Length(Missing) = 0 then Writeln('  (clean)');
       end;
       Writeln('library-drift: ', PlatCnt, ' platforms checked, ', TotalMiss, ' library root(s) with source not yet indexed');

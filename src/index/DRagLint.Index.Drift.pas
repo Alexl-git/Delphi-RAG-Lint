@@ -10,6 +10,7 @@ interface
 
 uses
   System.SysUtils
+  , DRagLint.Core.Interfaces
   ;
 
 /// <summary>Read-only: returns the subset of ACurrentRoots that BOTH have no
@@ -38,13 +39,31 @@ uses
 /// <seealso cref="DRagLint.Index.Drift.NormRoot"/>
 /// <!-- drag-lint:auto END -->
 /// </remarks>
-function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<string>): TArray<string>;
+function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<string>): TArray<string>; overload;
+
+/// <summary>As the two-argument overload, but a root that the indexer's walk
+/// with AFilter would prune by its own name (an exclude glob such as the
+/// manifest's "Win64", a built-in pruned name, a .scanignore marker) is NOT
+/// drift: it goes to AExcluded instead of the result.</summary>
+/// <param name="ADbPath">Path to the SQLite database file. Must exist.</param>
+/// <param name="ACurrentRoots">Library root paths to check for coverage.</param>
+/// <param name="AFilter">The walk filter the index section uses
+/// (TPlanSection.Filter for a library section).</param>
+/// <param name="AExcluded">Out: roots with no indexed file and source on disk
+/// that the walk prunes by configuration -- reported, never counted as drift.</param>
+/// <returns>Roots with source on disk, no indexed file, and not pruned by
+/// AFilter.</returns>
+/// <remarks>B-02: without the filter, the four Win64 compiled-lib roots
+/// (...\Lib\RX13\Win64) read as "missing" after every full rescan, because the
+/// manifest's global exclude "Win64" prunes the walk ROOT itself, so no rescan
+/// can ever index them. Not thread-safe; call from a single thread.</remarks>
+function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<string>; const AFilter: TWalkFilter; out AExcluded: TArray<string>): TArray<string>; overload;
 
 implementation
 
 uses
   System.IOUtils
-  , DRagLint.Core   .Interfaces
+  , DRagLint.Core   .Indexer
   , DRagLint.Storage.SQLite
   ;
 
@@ -150,6 +169,13 @@ end; // function
 
 function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<string>): TArray<string>;
 var
+  Excluded: TArray<string>;
+begin
+  Result:= AnalyzeLibraryDrift(ADbPath, ACurrentRoots, TWalkFilter.Create, Excluded);
+end;
+
+function AnalyzeLibraryDrift(const ADbPath: string; const ACurrentRoots: TArray<string>; const AFilter: TWalkFilter; out AExcluded: TArray<string>): TArray<string>;
+var
   Store    : ISymbolStore   ;
   FileIds  : TArray<Int64>  ;
   FilePath : string         ;
@@ -161,8 +187,10 @@ var
   P        : Integer        ;
   Missing  : TArray<string> ;
   MissCnt  : Integer        ;
+  ExclCnt  : Integer        ;
 begin
   Result:= nil;
+  AExcluded:= nil;
   if Length(ACurrentRoots) = 0 then Exit;
 
   { Normalise all roots once. }
@@ -200,19 +228,29 @@ begin
   { Collect missing roots in ORIGINAL casing -- but only if the root
     actually contains indexable source on disk. Roots with no source
     (DCU/DCP/BPL output folders, empty dirs) are silently excluded:
-    they have nothing to index and are not genuine drift. }
+    they have nothing to index and are not genuine drift.
+    B-02: a root the walk prunes by configuration is not drift either -- no
+    rescan can index it -- so it is reported apart, in AExcluded. }
   MissCnt:= 0;
-  SetLength(Missing, Length(ACurrentRoots));
+  ExclCnt:= 0;
+  SetLength(Missing  , Length(ACurrentRoots));
+  SetLength(AExcluded, Length(ACurrentRoots));
   for R:= 0 to High(ACurrentRoots) do
-    if not Covered[R] then
+    if (not Covered[R]) and DirHasSource(ACurrentRoots[R]) then
     begin
-      if DirHasSource(ACurrentRoots[R]) then
+      if DirPrunedByFilter(ACurrentRoots[R], AFilter) then
+      begin
+        AExcluded[ExclCnt]:= ACurrentRoots[R];
+        Inc(ExclCnt);
+      end
+      else
       begin
         Missing[MissCnt]:= ACurrentRoots[R];
         Inc(MissCnt);
       end;
     end;
-  SetLength(Missing, MissCnt);
+  SetLength(Missing  , MissCnt);
+  SetLength(AExcluded, ExclCnt);
   Result:= Missing;
 end; // function
 
