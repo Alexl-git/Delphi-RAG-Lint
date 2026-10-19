@@ -338,6 +338,34 @@ try {
   Start-Sleep -Seconds 1
   Check 'depth.newfile.shows.default' ((Sel $cb) -eq 4) ("sel=" + (Sel $cb))
 } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+# --- 4. C-3: an INVALID / DUPLICATE #depth shows NO selection; ANY pick, 5 included, repairs the book ---
+# The negative control is the first check of each pair: on an editor without the fix the combo shows 5
+# (index 4), so depth.invalid.no.selection FAILS, and picking 5 fires nothing, so the repair check FAILS.
+$bad = @(
+  @{ name = 'invalid';   file = (Join-Path $tmp 'Invalid.rules');   text = "#depth deep`r`n#unuse OldUnitZ`r`n" },
+  @{ name = 'duplicate'; file = (Join-Path $tmp 'Duplicate.rules'); text = "#depth 2`r`n#depth 9`r`n#unuse OldUnitZ`r`n" }
+)
+foreach ($b in $bad) {
+  [IO.File]::WriteAllText($b.file, $b.text, [Text.Encoding]::ASCII)
+  $p = Start-Process $Exe -ArgumentList ('"' + $b.file + '"') -PassThru
+  try {
+    $main = WaitCls $p.Id 'TConvRulesForm' 30
+    $cb = DepthCombo $main
+    Check ("depth.$($b.name).no.selection") (($cb -ne [IntPtr]::Zero) -and ((Sel $cb) -eq -1)) ("sel=" + (Sel $cb))
+    if ($hasDepth -and $cb -ne [IntPtr]::Zero) {
+      Choose $cb 4   # depth 5: the value the engine falls back to
+      Start-Sleep -Milliseconds 1500
+      Check ("depth.$($b.name).pick.five.selected") ((Sel $cb) -eq 4) ("sel=" + (Sel $cb))
+      Check ("depth.$($b.name).pick.five.saved") ([W]::InvokeMenu($main, 'File|Save'))
+      Start-Sleep -Milliseconds 800
+      $txt = [IO.File]::ReadAllText($b.file)
+      Check ("depth.$($b.name).pick.five.repairs") (($txt -match '(?m)^#depth 5\r$') -and (([regex]::Matches($txt, '#depth')).Count -eq 1) -and ($txt -notmatch 'deep|#depth 2|#depth 9')) $txt
+    }
+    [void][W]::InvokeMenu($main, 'File|Exit')
+    Start-Sleep -Milliseconds 500
+    Answer $p.Id '&No' | Out-Null
+  } finally { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+}
 [IO.Directory]::Delete($tmp, $true)
 "RESULT pass=$script:pass fail=$script:fail"
 if ($script:fail -gt 0) { exit 1 }

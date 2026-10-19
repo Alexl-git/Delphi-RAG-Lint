@@ -17,6 +17,7 @@ interface
 uses
   System.SysUtils
   , System.Generics.Collections
+  , Vcl.Dialogs // TMsgDlgButtons: OfferButtons
   ;
 
 const
@@ -452,6 +453,13 @@ function AncestorChain(const AUnit: TUnitInheritance): TArray<string>;
 /// <param name="AList">The source list.</param>
 /// <returns>In AChain order.</returns>
 function MissingAncestors(const AChain, AList: TArray<string>): TArray<string>;
+
+/// <summary>PURE: the buttons of the E6 question.</summary>
+/// <param name="ARemainingAfterThis">How many more units of the same add still have a
+/// missing ancestor to ask about after this one.</param>
+/// <returns>[mbYes, mbNo] when 0; otherwise also mbYesToAll and mbNoToAll, so a multi-file
+/// add does not ask once per unit.</returns>
+function OfferButtons(ARemainingAfterThis: Integer): TMsgDlgButtons;
 
 /// <summary>PURE: the E6 question, 'Add &lt;chain&gt; ahead of &lt;unit&gt;?', with file names.</summary>
 /// <param name="AChain">The units the offer would add: MissingAncestors(AncestorChain(unit),
@@ -1525,6 +1533,14 @@ begin
   end;
   for var I: Integer:= 0 to High(LUnits) do
     Result[I]:= LUnits[I].PasPath;
+end;
+
+function OfferButtons(ARemainingAfterThis: Integer): TMsgDlgButtons;
+begin
+  if ARemainingAfterThis > 0 then
+    Result:= [mbYes, mbYesToAll, mbNo, mbNoToAll]
+  else
+    Result:= [mbYes, mbNo];
 end;
 
 function MissingAncestors(const AChain, AList: TArray<string>): TArray<string>;

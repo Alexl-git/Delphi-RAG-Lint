@@ -404,6 +404,16 @@ function CapabilitiesJson: string;
 /// <returns>0 written; 1 any failure (never raises).</returns>
 function WriteCapabilitiesFile(const APath: string): Integer;
 
+/// <summary>PURE: the status text after a --convert-request when the editor also had a
+/// --form start-up error.</summary>
+/// <param name="AStartupError">The --form failure text; '' = none.</param>
+/// <param name="ACurrentStatus">The status text the request left on the bar.</param>
+/// <param name="ARequestOk">True when the request was applied (its own status is shown).</param>
+/// <returns>'' = leave the status as it is (no start-up error, or the request succeeded:
+/// a success shows its own status, not an error); otherwise AStartupError + ' ' +
+/// ACurrentStatus, so a refused request does not hide the --form failure.</returns>
+function StartupErrorStatus(const AStartupError, ACurrentStatus: string; ARequestOk: Boolean): string;
+
 implementation
 
 uses
@@ -455,8 +465,9 @@ begin
 end;
 
 { Reads AKey of AObj as a string. Absent or null: AValue = '' -- refused when
-  ARequired. Present but not a JSON string: refused, naming the key. An empty
-  string for a required key counts as missing. }
+  ARequired ("is missing"). Present but not a JSON string: refused, naming the key.
+  A string that is empty or only whitespace, for a required key, is refused as
+  "is blank". }
 function ReadStr(AObj: TJSONObject; const AKey: string; ARequired: Boolean; out AValue, AError: string): Boolean;
 var
   V: TJSONValue;
@@ -471,7 +482,7 @@ begin
     AValue:= V.Value;
   end;
   if ARequired and (Trim(AValue) = '') then
-    Exit(Fail(Format('"%s" is missing', [AKey]), AError));
+    Exit(Fail(Format(if V is TJSONString then '"%s" is blank' else '"%s" is missing', [AKey]), AError));
   Result:= True;
 end;
 
@@ -988,6 +999,14 @@ begin
     on Exception do
       Result:= 1; // the exit code is the report; a GUI exe has no stderr to print to
   end;
+end;
+
+function StartupErrorStatus(const AStartupError, ACurrentStatus: string; ARequestOk: Boolean): string;
+begin
+  if (AStartupError = '') or ARequestOk then
+    Result:= ''
+  else
+    Result:= AStartupError + ' ' + ACurrentStatus;
 end;
 
 end.

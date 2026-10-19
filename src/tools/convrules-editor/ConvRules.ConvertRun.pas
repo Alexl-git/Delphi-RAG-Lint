@@ -158,6 +158,10 @@ type
     /// it. A known limitation, not a fault. Ok is False; Error holds the engine's
     /// "reason".</summary>
     Refused   : Boolean;
+    /// <summary>True when the engine's output held no apply/1 object -- a raised call,
+    /// a crash dump; Ok is False and Error holds its head. Such an answer says nothing
+    /// about the --only names, so no unmatched-name hint follows it.</summary>
+    Unparsed  : Boolean;
     /// <summary>'' when Ok; else the engine's refusal reason, the engine error,
     /// the first rule error ("line N: message") or the head of the unparseable
     /// output.</summary>
@@ -332,16 +336,22 @@ function SourceRowText(const AUnitPas: string; const AIndexedFiles: TArray<strin
 /// minus unit-rules-only ones while unsupported, and minus G-link books while glyph_stitch is unsupported.</returns>
 function Preflight(const ABooks: TArray<TBookEntry>; const AUnits, AIndexedFiles: TArray<string>; AUnitRulesSupported, AGlyphSupported: Boolean): TPreflight;
 
+/// <summary>Every apply/1 feature -- for tests and captures that predate the feature
+/// gate; a run passes the engine's real set (ApplyFeaturesOf).</summary>
+const
+  APPLY_FEATURES_ALL: TApplyFeatures = [Low(TApplyFeature)..High(TApplyFeature)];
+
 /// <summary>Reads convert-apply's --format json output (schema apply/1).</summary>
 /// <param name="AJson">The engine's merged stdout+stderr; text before the first
 /// '{' and after the last '}' (the "(loaded defaults ...)" line) is ignored.</param>
 /// <param name="AFeatures">The engine's 1.27.0 apply/1 features (ApplyFeaturesOf its
 /// capabilities). A field of a feature not in the set is left empty, so an older
-/// engine's output reads exactly as before. The default (every feature) is for the
-/// test seams; a real run passes what the engine reported.</param>
+/// engine's output reads exactly as before. There is no default: a real run passes
+/// what the engine reported; tests and captures that predate the gate pass
+/// APPLY_FEATURES_ALL.</param>
 /// <returns>See TApplyRow; never raises. Unknown items[] kinds and unknown keys are
 /// ignored; a missing array reads as empty.</returns>
-function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures = [Low(TApplyFeature)..High(TApplyFeature)]): TApplyRow;
+function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures): TApplyRow;
 
 /// <summary>PURE: the apply/1 features an engine reported.</summary>
 /// <param name="ACapNames">The capability names info --json reported true
@@ -1345,7 +1355,8 @@ begin
   try
     if not (Root is TJSONObject) then
     begin
-      Result.Error:= 'unparseable engine output: ' + Copy(Trim(AJson), 1, ERR_HEAD_CHARS);
+      Result.Error   := 'unparseable engine output: ' + Copy(Trim(AJson), 1, ERR_HEAD_CHARS);
+      Result.Unparsed:= True;
       Exit;
     end;
     Obj:= TJSONObject(Root);

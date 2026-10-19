@@ -1,5 +1,5 @@
 # Driven GUI check for C8 (inherited instances, editor half -- spec 2026-10-05-c8-inherited-instances-design.md E5-E8).
-# Usage: pwsh -NoProfile -File drive-inherited-offer.ps1 -Exe <path\ConvRulesEditor.exe> [-ProofNoInheritance]
+# Usage: pwsh -NoProfile -File drive-inherited-offer.ps1 -Exe <path\ConvRulesEditor.exe> [-ProofNoInheritance] [-ProofGateYes]
 #        A FROZEN drag-lint.exe must sit beside the exe (a staged pin copy, never dll-win64); the fixture is indexed with it.
 # Fixture (temp folder, _D-RAG layout): Fix.dproj / Fix.dpr with Anc (TAncForm, object Label1: TLabel) and Desc
 #   (TDescForm = class(TAncForm), inherited Label1: TLabel), Desc2 (no .dfm block; its CODE writes Label1.Caption --
@@ -21,7 +21,12 @@
 #   Run both stages: one stage proves only one branch. Re-measured after Task 8 fix round 1 (same exe on both):
 #   1.22.0 15 / 0 and proof 8 / 6; 1.21.1 15 / 0 and proof 7 / 7. The E6 / E7 / cancel texts branch on
 #   inherited_retype (engine N2, proposed key): absent on both pins, so the "until N2" wording is asserted.
-param([string]$Exe, [switch]$ProofNoInheritance)
+# -ProofGateYes (opt-in, C-minors D2): LAST step, after the 15 checks -- the order gate answered YES runs a
+#   REAL conversion (~20 s on this fixture, hence opt-in). Desc is listed above Anc again, Convert is pressed, the
+#   warning is answered Yes, and order.yes.runs checks the run finished ('Converted ...' on the status line) and
+#   left a .BCK1 restore point beside Anc or Desc. The default run is unchanged: 16 / 0 (15 + D3's
+#   offer.no.to.all.once); with the switch 17 / 0.
+param([string]$Exe, [switch]$ProofNoInheritance, [switch]$ProofGateYes)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
@@ -267,6 +272,14 @@ function Click($h) { [void][W]::PostMessage($h, 0x00F5, [IntPtr]::Zero, [IntPtr]
 # The status line. FLblStatus is a TLabel -- a TGraphicControl, no window, so no
 # message reads it; SetStatus/SetError write the SAME text to the TStatusBar, and
 # SetError prefixes it '[!] ' there.
+# Polls $Cond (a scriptblock) every 200 ms for at most $Sec seconds; $true as soon as it holds.
+# Replaces a fixed sleep after an answer / click (C-minors D1): the wait ends when the editor has
+# done what the next check reads, and the cap keeps a failure bounded.
+function WaitFor([scriptblock]$Cond, $Sec) {
+  $t0 = Get-Date
+  while (((Get-Date) - $t0).TotalSeconds -lt $Sec) { if (& $Cond) { return $true }; Start-Sleep -Milliseconds 200 }
+  [bool](& $Cond)
+}
 function Status($main) { (@(Find $main 'TStatusBar' $null) | ForEach-Object { [W]::Txt($_) }) -join ' | ' }
 function WriteAscii($path, $text) { [IO.File]::WriteAllText($path, ($text -replace "`r?`n", "`r`n"), [Text.ASCIIEncoding]::new()) }
 # Add... -> the common Open dialog ('#32770'): the file name goes into its 'Edit', then '&Open'.
@@ -524,9 +537,11 @@ try {
   while ($main -eq [IntPtr]::Zero -and ((Get-Date) - $t0).TotalSeconds -lt 60) { Start-Sleep -Milliseconds 500; $m = [W]::Tops($p.Id) | Where-Object { [W]::Cls($_) -eq 'TConvRulesForm' } | Select-Object -First 1; if ($m) { $main = $m } }
   Check 'main.window' ($main -ne [IntPtr]::Zero)
   if ($main -eq [IntPtr]::Zero) { return }
-  Start-Sleep -Seconds 2
+  # The window exists; wait for the startup status line to appear (the menu is usable then).
+  [void](WaitFor { (Status $main) -ne '' } 10)
   [void][W]::InvokeMenu($main, 'Conversion|Convert...')
-  Start-Sleep -Seconds 2
+  # The Convert tab's button (it sits beside a progress bar) shows once the menu command ran.
+  [void](WaitFor { @(Find $main 'TButton' 'Convert' | Where-Object { [W]::IsWindowVisible($_) -and @(Find ([CT]::Parent($_)) 'TProgressBar' $null).Count -eq 1 }).Count -eq 1 } 10)
   $conv = @(Find $main 'TButton' 'Convert' | Where-Object { [W]::IsWindowVisible($_) -and @(Find ([CT]::Parent($_)) 'TProgressBar' $null).Count -eq 1 })
   if ($conv.Count -ne 1) { Check 'tab.controls' $false "Convert buttons: $($conv.Count)"; return }
   $conv = $conv[0]
@@ -546,7 +561,7 @@ try {
   $st = Status $main
   Check 'offer.prompt' (($e -eq '') -and ($prompt -ne [IntPtr]::Zero) -and ($st -eq $offerText)) "$e status: $st; forms: $(TopsNow $p.Id)"
   if ($prompt -ne [IntPtr]::Zero) { $e = Answer $p.Id 'No'; Check 'offer.answer.no' ($e -eq '') $e }
-  Start-Sleep -Seconds 2
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 1 } 10)
   $items = [CT]::Items($src)
   Check 'offer.no.only.desc' (($items.Count -eq 1) -and ($items[0] -eq $desc)) ($items -join ' | ')
   # --- E5: the row note, as the source summary on the status bar ---
@@ -564,7 +579,7 @@ try {
   $st = Status $main
   Check 'order.warning' (($warn -ne [IntPtr]::Zero) -and ($st -like $orderText)) "status: $st; forms: $(TopsNow $p.Id)"
   if ($warn -ne [IntPtr]::Zero) { [void](Answer $p.Id 'No') }
-  Start-Sleep -Seconds 2
+  [void](WaitFor { (Status $main) -eq $cancelText } 10)
   $st = Status $main
   Check 'order.no.runs.nothing' (($st -eq $cancelText) -and -not (Test-Path -LiteralPath ($desc + '.BCK1'))) $st
   # --- E10 gate: without inherited_instances the run notes say the engine will refuse Desc ---
@@ -578,7 +593,8 @@ try {
   $e = PickFile $p.Id $add $desc
   $prompt = WaitCls $p.Id 'TMessageForm' 20
   if ($prompt -ne [IntPtr]::Zero) { $e = Answer $p.Id 'Yes' } else { $e = 'no prompt' }
-  Start-Sleep -Seconds 2
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 2 } 10)
+  WaitAddSettled $p.Id $main 2   # the add finishes its inherited check before the next Add... click
   $items = [CT]::Items($src)
   Check 'offer.yes.inserts.above' (($e -eq '') -and ($items.Count -eq 2) -and ($items[0] -eq $anc) -and ($items[1] -eq $desc)) "$e items: $($items -join ' | ')"
 
@@ -587,6 +603,39 @@ try {
   WaitAddSettled $p.Id $main 3
   $st = Status $main
   Check 'note.code.use' (($e -eq '') -and ((WaitCls $p.Id 'TMessageForm' 0) -eq [IntPtr]::Zero) -and ($st -like '*Desc2.pas: inherits 1 TLabel instance(s) from Anc -- convert it first (recommended)*')) "$e status: $st"
+
+  # --- D3: two descendants in ONE add -> one prompt with "No to All"; answering it lists both, no Anc ---
+  ClearSources $src $del
+  [void](WaitFor { @([CT]::Items($src)).Count -eq 0 } 10)
+  $e = PickFile $p.Id $add ('"' + $desc + '" "' + $desc2 + '"')
+  $prompt = WaitCls $p.Id 'TMessageForm' 20
+  $noAll = @()
+  if ($prompt -ne [IntPtr]::Zero) { $noAll = @(Find $prompt 'TButton' $null | Where-Object { ([W]::Txt($_) -replace '&', '') -eq 'No to All' }) }
+  $e = if ($prompt -ne [IntPtr]::Zero) { Answer $p.Id 'No to All' } else { 'no prompt' }
+  WaitAddSettled $p.Id $main 2
+  Start-Sleep -Milliseconds 500   # the answered dialog is still on screen for a moment as it closes
+  $second = WaitCls $p.Id 'TMessageForm' 2
+  $items = [CT]::Items($src)
+  Check 'offer.no.to.all.once' (($noAll.Count -eq 1) -and ($e -eq '') -and ($second -eq [IntPtr]::Zero) -and ($items.Count -eq 2) -and ($items -contains $desc) -and ($items -contains $desc2) -and -not ($items -contains $anc)) "noAllButton=$($noAll.Count) answer=$e secondPrompt=$($second -ne [IntPtr]::Zero) forms: $(TopsNow $p.Id) status: $(Status $main) items: $($items -join ' | ')"
+
+  # --- D2 (opt-in): the order gate's Yes starts the run. Desc above Anc again, Convert, Yes, wait for the end. ---
+  if ($ProofGateYes) {
+    ClearSources $src $del
+    [void](WaitFor { @([CT]::Items($src)).Count -eq 0 } 10)
+    $e = PickFile $p.Id $add $desc
+    $prompt = WaitCls $p.Id 'TMessageForm' 20
+    if ($prompt -ne [IntPtr]::Zero) { [void](Answer $p.Id 'No') }
+    [void](WaitFor { @([CT]::Items($src)).Count -eq 1 } 10)
+    $e = PickFile $p.Id $add $anc
+    WaitAddSettled $p.Id $main 2
+    Click $conv
+    $warn = WaitCls $p.Id 'TMessageForm' 30
+    $yes = if ($warn -ne [IntPtr]::Zero) { Answer $p.Id 'Yes' } else { 'no gate warning' }
+    $ended = WaitFor { (Status $main) -like 'Converted *' } 90
+    $st = Status $main
+    $bck = (Test-Path -LiteralPath ($anc + '.BCK1')) -or (Test-Path -LiteralPath ($desc + '.BCK1'))
+    Check 'order.yes.runs' (($yes -eq '') -and $ended -and $bck) "answer: $yes; ended=$ended; BCK1=$bck; status: $st"
+  }
 }
 finally {
   if ($null -ne $p -and -not $p.HasExited) { $p.Kill($true); [void]$p.WaitForExit(15000) }

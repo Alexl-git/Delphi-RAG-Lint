@@ -89,6 +89,16 @@ function ConvKindLabel(AKind: TConvKind): string;
 /// when the conversion carries one.</returns>
 function ConvOptionText(const AOption: TConvOption): string;
 
+/// <summary>The one-line explanation of an option, shown beside the list: its target
+/// type and its Detail.</summary>
+/// <param name="AOption">The option to explain.</param>
+/// <returns>'&lt;ToType&gt; -- &lt;Detail&gt;', e.g. 'string -- value transform: strip-db'
+/// or 'TdxSmartGlyph -- {dst}.Assign({src});'; for identity the Detail is 'same type -- no
+/// cast', so 'Integer -- same type -- no cast'. '' when Detail is empty.</returns>
+/// <remarks>ConvOptionText is NOT changed: the list text is pinned by the convcat.text
+/// checks and read by the GUI drivers.</remarks>
+function ConvOptionHint(const AOption: TConvOption): string;
+
 implementation
 
 uses
@@ -113,6 +123,13 @@ begin
       [AOption.ToType, ConvKindLabel(AOption.Kind), AOption.CastName])
   else
     Result := Format('%s  [%s]', [AOption.ToType, ConvKindLabel(AOption.Kind)]);
+end;
+
+function ConvOptionHint(const AOption: TConvOption): string;
+begin
+  Result:= '';
+  if AOption.Detail <> '' then
+    Result:= AOption.ToType + ' -- ' + AOption.Detail;
 end;
 
 { The representative target type for each scalar family.

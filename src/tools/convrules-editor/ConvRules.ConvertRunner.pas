@@ -250,7 +250,7 @@ function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AJob: TC
 /// on a unit nothing has changed yet, which restores nothing and drops the backup. An
 /// apply returning ENGINE_EXIT_CONFIG gives a csConfigError row and stops the RUN (no
 /// later book or unit). This test seam reads the apply/1 output with every 1.27.0
-/// feature (ParseApplyJson's default); the TConvertJob overload uses
+/// feature (APPLY_FEATURES_ALL); the TConvertJob overload uses
 /// TConvertJob.ApplyFeatures. Never raises: file I/O failures and exceptions from
 /// AApply / AIndex become row outcomes (see TConvertStatus).</remarks>
 function RunConversionUnits(const AUnits, ABooks: TArray<string>; const AApply: TApplyFn; const AIndex: TIndexFn; const AProgress: TConvertProgress; const ACancelled: TFunc<Boolean>; AInheritedSupported: Boolean = False; ARetypeSupported: Boolean = False): TArray<TConvertRow>; overload;
@@ -358,6 +358,15 @@ function TallyRows(const ARows: TArray<TConvertRow>): TRunTally;
 /// M = APairs - OutOfScope, plus ' K pair(s) skipped -- not in scope.' when K &gt; 0.</returns>
 function ConvertedSummaryText(const ATally: TRunTally; APairs: Integer): string;
 
+/// <summary>PURE: the book x unit pairs a run could reach.</summary>
+/// <param name="ABooks">Books of the job.</param>
+/// <param name="AUnits">Units of the job.</param>
+/// <param name="ANotReached">Units the run never started (a cancel, a cast library stop).</param>
+/// <returns>ABooks * (AUnits - ANotReached), never negative. Every pair on a unit the run
+/// never started is left out; out-of-scope pairs are subtracted by ConvertedSummaryText
+/// itself.</returns>
+function PairsReached(ABooks, AUnits, ANotReached: Integer): Integer;
+
 /// <summary>PURE: the units ARows converted (C8 R4: an ancestor converted EARLIER IN THE
 /// SAME RUN converts its descendants' code uses too, so the editor-side code-use note
 /// omits it; the engine's inherited[] is never filtered by this).</summary>
@@ -423,6 +432,16 @@ function ApplyItemReportLines(const ARow: TConvertRow): TArray<string>;
 /// csConverted: a refused row carries fixes too.</returns>
 function QualifyReportLines(const ARow: TConvertRow): TArray<string>;
 
+/// <summary>PURE: every report line of one row after its main line, in the ORDER the
+/// row's note reads (ConvertedRowNote: inherited, then value / cast / uses; the glyph
+/// suffix last, ConvertRunner's note build).</summary>
+/// <param name="ARow">A run row.</param>
+/// <param name="AInheritedSupported">See InheritedReportLines.</param>
+/// <param name="ARetypeSupported">See InheritedReportLines.</param>
+/// <returns>InheritedReportLines + ApplyItemReportLines + GlyphReportLines; [] unless
+/// ARow is csConverted.</returns>
+function RowReportLines(const ARow: TConvertRow; AInheritedSupported, ARetypeSupported: Boolean): TArray<string>;
+
 /// <summary>PURE: the run-level error of a run a cast library stopped (exit
 /// ENGINE_EXIT_CONFIG).</summary>
 /// <param name="ARows">The run's rows.</param>
@@ -477,6 +496,7 @@ implementation
 uses
   System.IOUtils
   , System.StrUtils
+  , System.Math
   , System.Diagnostics
   , ConvRules.Glyph
   , ConvRules.UnitStatus  // TFileProbe (FileProbe's return type) is declared here
@@ -524,6 +544,11 @@ begin
   Result:= Format('Converted %d of %d unit x book pair(s); %d failed and were restored.', [ATally.Converted, APairs - ATally.OutOfScope, ATally.Restored]);
   if ATally.OutOfScope > 0 then
     Result:= Result + Format(' %d pair(s) skipped -- not in scope.', [ATally.OutOfScope]);
+end;
+
+function PairsReached(ABooks, AUnits, ANotReached: Integer): Integer;
+begin
+  Result:= ABooks * Max(AUnits - ANotReached, 0);
 end;
 
 function UnitsConvertedIn(const ARows: TArray<TConvertRow>): TArray<string>;
@@ -610,6 +635,11 @@ begin
       LNote:= LNote + '; or: ' + LFix.Alternative;
     Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_QUALIFY, '', '', '', '', LNote])];
   end;
+end;
+
+function RowReportLines(const ARow: TConvertRow; AInheritedSupported, ARetypeSupported: Boolean): TArray<string>;
+begin
+  Result:= InheritedReportLines(ARow, AInheritedSupported, ARetypeSupported) + ApplyItemReportLines(ARow) + GlyphReportLines(ARow);
 end;
 
 // The index of the row that stopped the run (StoppedRun); -1 when there is none.
@@ -1069,7 +1099,7 @@ var
         LReason:= LReason + QualifyFixNote(Row.Apply);
         if LScoped and Row.Apply.Refused then
           LReason:= LReason + RefusalHint(LReason)
-        else if LScoped and (Row.Apply.EditsCount = 0) and not ApplyEditSetRefused(Row.Apply) then
+        else if LScoped and (Row.Apply.EditsCount = 0) and not ApplyEditSetRefused(Row.Apply) and not Row.Apply.Unparsed then
           LReason:= LReason + (if Assigned(AOnlyHint) then AOnlyHint(LOnly) else UnmatchedOnlyHint(LOnly)); // measured shape of an --only name that matches nothing
         // An edit-set refusal (1.25.1+) wrote nothing, like a refusal: FailUnit's
         // csRefused path restores only when an earlier book changed the unit.
@@ -1182,19 +1212,19 @@ begin
   Result:= Rows;
 end;
 
-// WorkRunOf's identity of a row: the unit and every pas_uses field, so only an exact
-// repeat is dropped (compared case-insensitively, as Pascal names are).
-function PasUseKey(const ARow: TPasUseRow; const ALines: string): string;
+// WorkRunOf's identity of a row: the unit and every pas_uses field EXCEPT the line numbers
+// (a later book that re-reports the use at shifted lines replaces the earlier row).
+function PasUseKey(const ARow: TPasUseRow): string;
 begin
   Result:= string.Join(#9, [ARow.UnitPas, ARow.Instance, ARow.FromType, ARow.ToType, ARow.Member, ARow.Kind,
-    ARow.Visibility, ARow.Status, ARow.DeclaringUnit, ARow.DeclaredIn, ALines, ARow.Resolution, string.Join(',', ARow.Candidates)]);
+    ARow.Visibility, ARow.Status, ARow.DeclaringUnit, ARow.DeclaredIn, ARow.Resolution, string.Join(',', ARow.Candidates)]);
 end;
 
 function WorkRunOf(const ARows: TArray<TConvertRow>; ARunId: Integer; APasUses: Boolean): TWorkRun;
 var
   LSeen : TArray<string>;
   LKey  : string;
-  LLines: string;
+  LAt   : Integer;
   LUse  : TPasUseRow;
 begin
   Result:= Default(TWorkRun);
@@ -1216,12 +1246,14 @@ begin
       LUse:= LParsed;
       LUse.RunId  := ARunId;
       LUse.UnitPas:= LRow.UnitPas;
-      LLines:= '';
-      for var LLine: Integer in LUse.Lines do
-        LLines:= LLines + IntToStr(LLine) + ',';
-      LKey:= PasUseKey(LUse, LLines);
-      if MatchText(LKey, LSeen) then
+      LKey:= PasUseKey(LUse);
+      LAt := IndexText(LKey, LSeen);
+      if LAt >= 0 then
+      begin
+        // The later book ran on the already-edited unit: its line numbers are current.
+        Result.Rows[LAt]:= LUse;
         Continue;
+      end;
       LSeen:= LSeen + [LKey];
       Result.Rows:= Result.Rows + [LUse];
     end;

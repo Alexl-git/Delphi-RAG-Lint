@@ -16,7 +16,7 @@
 #   project_db that does not exist -> refused. An unindexed unit -> the status says Convert will refuse, in red.
 #   Probe: --write-capabilities writes within 5 s, no window.
 # -ProofNoRequest launches every request run WITHOUT --convert-request: the request checks FAIL (the proof they can).
-#   Expected 6 pass / 19 fail; the PROOF lines name the 6 passes: 4 positive controls and 2 checks that CANNOT
+#   Expected 6 pass / 22 fail; the PROOF lines name the 6 passes: 4 positive controls and 2 checks that CANNOT
 #   discriminate (req.label2.untouched, req.exit) -- they hold with or without a request, so they prove nothing.
 # The editor is killed (with its engine children) and the fixture deleted on exit.
 param([string]$Exe, [switch]$ProofNoRequest)
@@ -622,6 +622,32 @@ try {
   Launch (RequestArgs $reqLoose $true)
   $st5 = if ($main -ne [IntPtr]::Zero) { Status $main } else { 'no main window' }
   Check 'req.unindexed.tail' ($st5 -like "``[!``] Request from the IDE: convert 1 selected component(s) on Loose: Label9 (TLabel)*Also: $loosePas is not in the project index -- Convert will refuse.*") $st5
+  StopEditor
+
+  # ===== B2: a --form that does not exist AND a request -- both facts stay on the status bar =====
+  $bogus = Join-Path $tmp 'Bogus.pas'
+  $argsB2 = @(); if (-not $ProofNoRequest) { $argsB2 += "--convert-request `"$reqSel`"" }
+  $argsB2 += "--form `"$bogus`""; $argsB2 += "--project-db `"$db`""
+  Launch ($argsB2 -join ' ')
+  $stB2 = if ($main -ne [IntPtr]::Zero) { Status $main } else { 'no main window' }
+  # A request that SUCCEEDS shows its own status: the --form error is gone, and the line is not an error.
+  Check 'req.form.error.success.own.status' (($stB2 -like 'Request from the IDE:*') -and ($stB2 -notlike '*--form*')) $stB2
+  StopEditor
+  # A request that is REFUSED keeps the --form error beside the refusal (both facts).
+  $argsB2b = @(); if (-not $ProofNoRequest) { $argsB2b += "--convert-request `"$reqNoFolder`"" }
+  $argsB2b += "--form `"$bogus`""; $argsB2b += "--project-db `"$db`""
+  Launch ($argsB2b -join ' ')
+  $stB2b = if ($main -ne [IntPtr]::Zero) { Status $main } else { 'no main window' }
+  Check 'req.form.error.kept.on.refusal' (($stB2b -like '`[!`] --form "*Bogus.pas" does not exist. Convert request*refused:*')) $stB2b
+  StopEditor
+
+  # ===== B3: a .rules file FIRST on the command line, then the request -- the request runs after the load =====
+  $argsB3 = @("`"$(Join-Path $rulesDir 'Fix.rules')`"")
+  if (-not $ProofNoRequest) { $argsB3 += "--convert-request `"$reqSel`"" }
+  $argsB3 += "--project-db `"$db`""
+  Launch ($argsB3 -join ' ')
+  $stB3 = if ($main -ne [IntPtr]::Zero) { Status $main } else { 'no main window' }
+  Check 'req.after.show' (($main -ne [IntPtr]::Zero) -and ($stB3 -like '*Request from the IDE:*') -and ((ActiveTabs $main) -contains 'Convert')) ("$stB3; tabs: " + ((ActiveTabs $main) -join ', '))
   StopEditor
 
   # ===== the capabilities probe: written within 5 s, no window =====

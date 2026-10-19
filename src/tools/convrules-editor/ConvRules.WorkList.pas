@@ -128,10 +128,10 @@ type
   TWorkListState = (wlsNoRun, wlsNoCapability, wlsNoConverted, wlsRows);
 
   /// <summary>One run's Work list, handed from the Convert tab to the host.</summary>
-  /// <remarks>Known limits (deferred to the final review): two books on one unit that
-  /// report the same global at shifted lines give two rows (WorkRunOf drops exact repeats
-  /// only). A Convert that is refused before it runs (Preflight, a gate) hands no TWorkRun,
-  /// so the Work list keeps the previous run's rows.</remarks>
+  /// <remarks>Known limit (deferred to the final review): a Convert that is refused
+  /// before it runs (Preflight, a gate) hands no TWorkRun, so the Work list keeps the
+  /// previous run's rows. Two books on one unit that report the same use give ONE row
+  /// (WorkRunOf): the later book's line numbers win.</remarks>
   TWorkRun = record
     /// <summary>The Convert tab's run counter; every row carries it.</summary>
     RunId: Integer;

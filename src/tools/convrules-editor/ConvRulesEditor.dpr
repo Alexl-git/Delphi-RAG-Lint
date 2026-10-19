@@ -298,5 +298,7 @@ begin
     on E: Exception do
       Application.MessageBox(PChar('Could not open ' + ParamStr(1) + #13#10 + E.ClassName + ': ' + E.Message), 'ConvRulesEditor', 0);
   end;
+  // C12: the --convert-request runs after the file above has loaded (LoadFile may pump).
+  Form.PostPendingRequest;
   Application.Run;
 end. // begin

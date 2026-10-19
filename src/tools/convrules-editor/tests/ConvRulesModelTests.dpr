@@ -11,6 +11,7 @@ uses
   , System.IOUtils
   , System.Classes
   , System.StrUtils
+  , Vcl.Dialogs // mbYes ..: OfferButtons
   , System.Generics.Collections
   , System.JSON
   , Winapi.Windows
@@ -1564,48 +1565,48 @@ procedure TestApplyHalfWritten;
 var
   Row: TApplyRow;
 begin
-  Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DFM_LINE + sLineBreak + HALF_DEFAULTS + sLineBreak);
+  Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DFM_LINE + sLineBreak + HALF_DEFAULTS + sLineBreak, APPLY_FEATURES_ALL);
   Check('half.parse.still.ok', Row.Ok and (Row.EditsCount = HALF_EDITS), Row.Error);
   Check('half.parse.refusal.read', (Length(Row.EditRefusals) = 1) and (Row.EditRefusals[0] = HALF_DFM_LINE), string.Join(' | ', Row.EditRefusals));
   Check('half.detected', ApplyHalfWritten(Row));
   Check('half.note', HalfWrittenNote(Row) = 'engine left the unit half-converted (.dfm edits refused: 74 edit(s), overlapping delete ranges) -- restored from backup; engine fix pending', HalfWrittenNote(Row));
   // The same line BEFORE the document (another capture order) reads the same.
-  Row:= ParseApplyJson(HALF_DFM_LINE + sLineBreak + HALF_OK_JSON);
+  Row:= ParseApplyJson(HALF_DFM_LINE + sLineBreak + HALF_OK_JSON, APPLY_FEATURES_ALL);
   Check('half.detected.before.document', Row.Ok and ApplyHalfWritten(Row), string.Join(' | ', Row.EditRefusals));
   // An ordinary success: nothing refused, nothing half-written.
-  Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DEFAULTS);
+  Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DEFAULTS, APPLY_FEATURES_ALL);
   Check('half.ordinary.success', Row.Ok and (Length(Row.EditRefusals) = 0) and not ApplyHalfWritten(Row), string.Join(' | ', Row.EditRefusals));
   // The phrase inside an unrelated warning is not the applier's refusal line.
   Row:= ParseApplyJson(StringReplace(HALF_OK_JSON, '"warnings":[]',
-    '"warnings":["line 12: warning: Fields: overlapping delete ranges are not a property"]', []));
+    '"warnings":["line 12: warning: Fields: overlapping delete ranges are not a property"]', []), APPLY_FEATURES_ALL);
   Check('half.phrase.in.warning.no.trigger', Row.Ok and not ApplyHalfWritten(Row), string.Join(' | ', Row.EditRefusals));
   // The applier's line carried in warnings[] (a later engine) counts, once.
   Row:= ParseApplyJson(StringReplace(HALF_OK_JSON, '"warnings":[]',
-    '"warnings":["' + StringReplace(HALF_DFM_LINE, '\', '\\', [rfReplaceAll]) + '"]', []) + sLineBreak + HALF_DFM_LINE);
+    '"warnings":["' + StringReplace(HALF_DFM_LINE, '\', '\\', [rfReplaceAll]) + '"]', []) + sLineBreak + HALF_DFM_LINE, APPLY_FEATURES_ALL);
   Check('half.in.warnings.once', ApplyHalfWritten(Row) and (Length(Row.EditRefusals) = 1), string.Join(' | ', Row.EditRefusals));
   // A failed row is not "half-written": it fails on its own already.
-  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}' + sLineBreak + HALF_DFM_LINE);
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}' + sLineBreak + HALF_DFM_LINE, APPLY_FEATURES_ALL);
   Check('half.not.ok.is.plain.failure', (not Row.Ok) and not ApplyHalfWritten(Row));
   // Both files refused: one part each, in order.
   Row:= ParseApplyJson(HALF_OK_JSON + sLineBreak + HALF_DFM_LINE + sLineBreak +
-    'drag-lint: refused 3 edit(s) to C:\fix\DMREADINGS.pas -- overlapping delete ranges (an engine defect; the file is left unchanged)');
+    'drag-lint: refused 3 edit(s) to C:\fix\DMREADINGS.pas -- overlapping delete ranges (an engine defect; the file is left unchanged)', APPLY_FEATURES_ALL);
   Check('half.note.two.files', HalfWrittenNote(Row) = 'engine left the unit half-converted (.dfm edits refused: 74 edit(s), overlapping delete ranges; ' +
     '.pas edits refused: 3 edit(s), overlapping delete ranges) -- restored from backup; engine fix pending', HalfWrittenNote(Row));
 
   // --- engine 1.25.1+: the plan is checked BEFORE any write; ok=false, exit 1, nothing written ---
-  Row:= ParseApplyJson(NEW_REFUSED_JSON + sLineBreak + HALF_DEFAULTS);
+  Row:= ParseApplyJson(NEW_REFUSED_JSON + sLineBreak + HALF_DEFAULTS, APPLY_FEATURES_ALL);
   Check('editset.new.read.from.error', (not Row.Ok) and (not Row.Refused) and (Row.RuleErrorCount = 0) and ApplyEditSetRefused(Row) and not ApplyHalfWritten(Row),
     string.Join(' | ', Row.EditRefusals));
   Check('editset.new.note', EditSetRefusedNote(Row) = NEW_REFUSED_NOTE, EditSetRefusedNote(Row));
   // The same line on stderr (text-mode prefix 'ERROR: ') after a generic document.
-  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"","rule_errors":[]}' + sLineBreak + NEW_REFUSED_LINE);
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"","rule_errors":[]}' + sLineBreak + NEW_REFUSED_LINE, APPLY_FEATURES_ALL);
   Check('editset.new.read.from.stderr', ApplyEditSetRefused(Row) and (EditSetRefusedNote(Row) = NEW_REFUSED_NOTE), string.Join(' | ', Row.EditRefusals));
   // An ordinary failure is not an edit-set refusal.
-  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}');
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}', APPLY_FEATURES_ALL);
   Check('editset.plain.failure.no', not ApplyEditSetRefused(Row));
   // The pattern is case-insensitive and takes 'edit', 'edits' and 'edit(s)'.
   Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"","rule_errors":[]}' + sLineBreak +
-    'Error: Refused 1 edit to C:\fix\DMREADINGS.dfm -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written');
+    'Error: Refused 1 edit to C:\fix\DMREADINGS.dfm -- overlapping delete ranges (an engine defect) -- unit not changed, nothing written', APPLY_FEATURES_ALL);
   Check('editset.variant.case.singular', ApplyEditSetRefused(Row) and (Pos('.dfm edits refused: 1 edit(s)', EditSetRefusedNote(Row)) > 0), string.Join(' | ', Row.EditRefusals));
 end; // procedure
 
@@ -1699,34 +1700,34 @@ begin
   // --- ParseApplyJson (schema apply/1) ---
   Row:= ParseApplyJson('{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":3,' +
     '"converted":["Label1: TLabel -> TStaticText"],"access_sites":[],"creator_sites":[],' +
-    '"todos":["t1"],"reemit_notes":["n1"],"warnings":["w1"],"items":[]}');
+    '"todos":["t1"],"reemit_notes":["n1"],"warnings":["w1"],"items":[]}', APPLY_FEATURES_ALL);
   Check('convertrun.json.ok', Row.Ok and (Row.EditsCount = JSON_EDITS) and (Length(Row.Converted) = 1));
   Check('convertrun.json.remainder', string.Join(',', Row.Remainder) = 't1,n1,w1', string.Join(',', Row.Remainder));
   Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"","rule_errors":[{"line":7,"message":"link ToPath not found"}],' +
-    '"edits_count":0,"converted":[],"access_sites":[],"creator_sites":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}');
+    '"edits_count":0,"converted":[],"access_sites":[],"creator_sites":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}', APPLY_FEATURES_ALL);
   Check('convertrun.json.rule.error', (not Row.Ok) and (Pos('line 7', Row.Error) > 0) and (Row.RuleErrorCount = 1), Row.Error);
-  Row:= ParseApplyJson('FATAL: something');
+  Row:= ParseApplyJson('FATAL: something', APPLY_FEATURES_ALL);
   Check('convertrun.json.unparseable', (not Row.Ok) and (Pos('FATAL', Row.Error) > 0), Row.Error);
   // The engine prints "(loaded defaults from ...)" on stderr, and RunCapture merges
   // stderr into the same pipe: the document starts at the first '{'.
   Row:= ParseApplyJson('(loaded defaults from C:\x.json)' + sLineBreak + '{"schema":"apply/1","ok":true,"error":"","rule_errors":[],"edits_count":2,' +
-    '"converted":[],"access_sites":[],"creator_sites":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}');
+    '"converted":[],"access_sites":[],"creator_sites":[],"todos":[],"reemit_notes":[],"warnings":[],"items":[]}', APPLY_FEATURES_ALL);
   Check('convertrun.json.leading.noise', Row.Ok and (Row.EditsCount = 2), Row.Error);
   // Measured 2026-09-29: the real engine writes that line AFTER the document, so
   // the parse must also stop at the last '}'.
   Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"conversion rules failed validation","rule_errors":[{"line":2,"message":"link ToPath not found"}],' +
-    '"edits_count":0,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}' + sLineBreak + '(loaded defaults from C:\x.json)' + sLineBreak);
+    '"edits_count":0,"converted":[],"todos":[],"reemit_notes":[],"warnings":[]}' + sLineBreak + '(loaded defaults from C:\x.json)' + sLineBreak, APPLY_FEATURES_ALL);
   Check('convertrun.json.trailing.noise', (not Row.Ok) and (Row.RuleErrorCount = 1) and (Pos('line 2', Row.Error) > 0), Row.Error);
   // engine 1.20.6 refusal: ok=false, refused=true, reason, file untouched
   // (unreachable[] is always present in 1.20.6 apply/1 and must not disturb the parse)
-  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"refused":true,"reason":"inherited instances of TTable are not converted yet -- unit not changed","rule_errors":[],"edits_count":0,"unreachable":[]}');
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"refused":true,"reason":"inherited instances of TTable are not converted yet -- unit not changed","rule_errors":[],"edits_count":0,"unreachable":[]}', APPLY_FEATURES_ALL);
   Check('apply.refused.flag', (not Row.Ok) and Row.Refused);
   Check('apply.refused.reason', Row.Error = 'inherited instances of TTable are not converted yet -- unit not changed', Row.Error);
-  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"refused":true,"rule_errors":[]}');
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"refused":true,"rule_errors":[]}', APPLY_FEATURES_ALL);
   Check('apply.refused.no.reason', Row.Refused and (Row.Error = 'convert-apply refused the unit and gave no reason'), Row.Error);
-  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}');
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"error":"boom","rule_errors":[]}', APPLY_FEATURES_ALL);
   Check('apply.failed.not.refused', (not Row.Ok) and (not Row.Refused) and (Row.Error = 'boom'), Row.Error);
-  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"refused":false,"error":"boom"}');
+  Row:= ParseApplyJson('{"schema":"apply/1","ok":false,"refused":false,"error":"boom"}', APPLY_FEATURES_ALL);
   Check('apply.refused.false.is.failure', not Row.Refused);
   Check('status.text.refused', ConvertStatusText(csRefused) = 'refused -- not changed');
   Check('status.text.restore.failed.unchanged', ConvertStatusText(csRestoreFailed) = 'FAILED -- NOT restored');
@@ -9654,7 +9655,7 @@ var
   end;
 
 begin
-  Row:= ParseApplyJson(INH_JSON);
+  Row:= ParseApplyJson(INH_JSON, APPLY_FEATURES_ALL);
   Check('apply.inherited.parsed', Row.Ok and (Length(Row.InheritedLeft) = ITEMS), IntToStr(Length(Row.InheritedLeft)));
   if Length(Row.InheritedLeft) = ITEMS then
   begin
@@ -9662,11 +9663,11 @@ begin
     Check('apply.inherited.fields.ancestor', (Row.InheritedLeft[0].AncestorUnit = 'PathToData') and (Row.InheritedLeft[0].AncestorState = 'unconverted')
       and (Row.InheritedLeft[2].AncestorState = 'outside'));
   end;
-  Check('apply.inherited.absent.key', Length(ParseApplyJson(OLD_JSON).InheritedLeft) = 0);
-  Bad:= ParseApplyJson(BAD_ITEMS_JSON);
+  Check('apply.inherited.absent.key', Length(ParseApplyJson(OLD_JSON, APPLY_FEATURES_ALL).InheritedLeft) = 0);
+  Bad:= ParseApplyJson(BAD_ITEMS_JSON, APPLY_FEATURES_ALL);
   Check('apply.inherited.malformed.items', Bad.Ok and (Length(Bad.InheritedLeft) = 1) and (Bad.InheritedLeft[0].Name = 'tblA') and (Bad.InheritedLeft[0].Line = 0)
     and (Bad.InheritedLeft[0].TypeName = ''), Format('ok=%s n=%d %s', [BoolToStr(Bad.Ok, True), Length(Bad.InheritedLeft), Bad.Error]));
-  Bad:= ParseApplyJson(BAD_KEY_JSON);
+  Bad:= ParseApplyJson(BAD_KEY_JSON, APPLY_FEATURES_ALL);
   Check('apply.inherited.malformed.key', Bad.Ok and (Length(Bad.InheritedLeft) = 0), Bad.Error);
   Check('apply.inherited.note', InheritedLeftNote(Row.InheritedLeft, True) = NOTE_LEFT, InheritedLeftNote(Row.InheritedLeft, True));
   Check('apply.inherited.note.empty', InheritedLeftNote(nil, True) = '');
@@ -9678,15 +9679,15 @@ begin
     Check('apply.inherited.report.outside', InheritedReportNote(Row.InheritedLeft[2], True) = 'qryLib: TQuery line 12 -- ancestor not determinable -- ' + REASON_LIB,
       InheritedReportNote(Row.InheritedLeft[2], True));
   end;
-  Bad:= ParseApplyJson(SKIPPED_JSON);
-  Check('apply.component.part', Bad.Ok and (Bad.ComponentPart = 'skipped-no-instances') and (ParseApplyJson(OLD_JSON).ComponentPart = ''), Bad.ComponentPart);
+  Bad:= ParseApplyJson(SKIPPED_JSON, APPLY_FEATURES_ALL);
+  Check('apply.component.part', Bad.Ok and (Bad.ComponentPart = 'skipped-no-instances') and (ParseApplyJson(OLD_JSON, APPLY_FEATURES_ALL).ComponentPart = ''), Bad.ComponentPart);
   Check('apply.note.skipped', ConvertedRowNote(Bad, True, False) = NOTE_SKIPPED, ConvertedRowNote(Bad, True, False));
   Check('apply.note.skipped.retype', ConvertedRowNote(Bad, True, True) = NOTE_SKIPPED_RETYPE, ConvertedRowNote(Bad, True, True));
-  Check('apply.note.plain', ConvertedRowNote(ParseApplyJson(OLD_JSON), True, False) = '1 edit(s), 0 remaining for manual work', ConvertedRowNote(ParseApplyJson(OLD_JSON), True, False));
+  Check('apply.note.plain', ConvertedRowNote(ParseApplyJson(OLD_JSON, APPLY_FEATURES_ALL), True, False) = '1 edit(s), 0 remaining for manual work', ConvertedRowNote(ParseApplyJson(OLD_JSON, APPLY_FEATURES_ALL), True, False));
   Check('apply.note.skipped.gated', ConvertedRowNote(Bad, False, False) = '0 edit(s), 0 remaining for manual work; no component of its own to convert', ConvertedRowNote(Bad, False, False));
-  Check('apply.remainder.excludes.inherited', (Length(Bad.Remainder) = 0) and (Length(ParseApplyJson(MIXED_JSON).Remainder) = 1)
-    and (ParseApplyJson(MIXED_JSON).Remainder[0] = 'line 9: warning: something else'), string.Join(' | ', ParseApplyJson(MIXED_JSON).Remainder));
-  Check('apply.remainder.no.list.keeps', Length(ParseApplyJson(NO_LIST_JSON).Remainder) = 1);
+  Check('apply.remainder.excludes.inherited', (Length(Bad.Remainder) = 0) and (Length(ParseApplyJson(MIXED_JSON, APPLY_FEATURES_ALL).Remainder) = 1)
+    and (ParseApplyJson(MIXED_JSON, APPLY_FEATURES_ALL).Remainder[0] = 'line 9: warning: something else'), string.Join(' | ', ParseApplyJson(MIXED_JSON, APPLY_FEATURES_ALL).Remainder));
+  Check('apply.remainder.no.list.keeps', Length(ParseApplyJson(NO_LIST_JSON, APPLY_FEATURES_ALL).Remainder) = 1);
 
   Dir:= TPath.Combine(TPath.GetTempPath, 'c8apply-' + TPath.GetGUIDFileName);
   TDirectory.CreateDirectory(Dir);
@@ -9770,7 +9771,7 @@ var
   Code : TInheritedLeft;
 begin
   // Pre-N2 (1.22.0, no action): today's behaviour, both capability states.
-  A:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json'));
+  A:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json'), APPLY_FEATURES_ALL);
   Check('inh.action.n1.parsed', A.Ok and (Length(A.InheritedLeft) = 1) and (A.InheritedLeft[0].Action = '') and not IsRetypedInstance(A.InheritedLeft[0]));
   Check('inh.action.n1.note', ConvertedRowNote(A, True, False) = N1_NOTE, ConvertedRowNote(A, True, False));
   Check('inh.action.missing.is.left', ConvertedRowNote(A, True, True) = N1_NOTE_RETYPE, ConvertedRowNote(A, True, True));
@@ -9780,7 +9781,7 @@ begin
   Check('inh.action.n1.report.line', Length(InheritedReportLines(Row, True, False)) = 1);
 
   // N2 (1.26.2): the descendant's instance was RETYPED -- not left.
-  A:= ParseApplyJson(InheritedFixture('apply-desc-1262-retyped.json'));
+  A:= ParseApplyJson(InheritedFixture('apply-desc-1262-retyped.json'), APPLY_FEATURES_ALL);
   Check('inh.action.n2.parsed', A.Ok and (Length(A.InheritedLeft) = 1) and (A.InheritedLeft[0].Action = 'retyped') and (A.InheritedLeft[0].AncestorState = 'converted'));
   Check('inh.action.retyped.is.retyped', (Length(A.InheritedLeft) = 1) and IsRetypedInstance(A.InheritedLeft[0]));
   Check('inh.action.n2.note', ConvertedRowNote(A, True, True) = '3 edit(s), 0 remaining for manual work; 1 inherited instance(s) retyped', ConvertedRowNote(A, True, True));
@@ -9790,7 +9791,7 @@ begin
   Check('inh.action.n2.no.report.line', Length(InheritedReportLines(Row, True, True)) = 0, string.Join(' | ', InheritedReportLines(Row, True, True)));
 
   // One entry per action value (hand-written sample).
-  A:= ParseApplyJson(InheritedFixture('apply-inherited-actions-sample.json'));
+  A:= ParseApplyJson(InheritedFixture('apply-inherited-actions-sample.json'), APPLY_FEATURES_ALL);
   Check('inh.action.sample.parsed', Length(A.InheritedLeft) = SAMPLE_ENTRIES, IntToStr(Length(A.InheritedLeft)));
   Check('inh.action.retyped.note', InheritedRetypedNote(A.InheritedLeft) = '2 inherited instance(s) retyped', InheritedRetypedNote(A.InheritedLeft));
   Check('inh.action.sample.note', ConvertedRowNote(A, True, True) = SAMPLE_NOTE, ConvertedRowNote(A, True, True));
@@ -10142,7 +10143,7 @@ begin
   Row.UnitPas:= 'x\Desc.pas';
   Row.Book   := 'B.rules';
   Row.Status := csConverted;
-  Row.Apply  := ParseApplyJson(INH_JSON);
+  Row.Apply  := ParseApplyJson(INH_JSON, APPLY_FEATURES_ALL);
   Lines:= InheritedReportLines(Row, True, True);
   Cols := if Length(Lines) > 0 then Lines[0].Split([#9]) else nil;
   LShape:= (Length(Lines) = Length(Row.Apply.InheritedLeft)) and (Length(Cols) = REPORT_COLS);
@@ -10951,7 +10952,7 @@ begin
   Check('apply1270.features.of.all', ApplyFeaturesOf(['cast_site_refusal', 'value_cast_strip_db', 'uses_reconcile', 'pas_uses'])
     = [afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses]);
 
-  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
   Check('apply1270.cast.site.parsed', Cast.Ok and (Length(Cast.CastSites) = 1), IntToStr(Length(Cast.CastSites)));
   if Length(Cast.CastSites) = 1 then
   begin
@@ -10961,7 +10962,7 @@ begin
       Cast.CastSites[0].FileName + ':' + IntToStr(Cast.CastSites[0].Line) + ' rule ' + IntToStr(Cast.CastSites[0].RuleLine));
   end;
   Check('apply1270.cast.site.note', CastSiteNote(Cast) = '; 1 cast site(s) to convert by hand', CastSiteNote(Cast));
-  Strip:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  Strip:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), APPLY_FEATURES_ALL);
   Check('apply1270.value.cast.parsed', Strip.Ok and (Length(Strip.ValueCasts) = VALUE_CASTS), IntToStr(Length(Strip.ValueCasts)));
   if Length(Strip.ValueCasts) = VALUE_CASTS then
   begin
@@ -10986,7 +10987,7 @@ var
   Uses1: TApplyRow;
   Where: Boolean;
 begin
-  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
   Check('apply1270.cast.uses.kept', (Length(Cast.UsesRows) = 1) and (Cast.UsesRows[0].Action = 'kept') and (Cast.UsesRows[0].UnitName = 'Vcl.Buttons'));
   if Length(Cast.UsesRows) = 1 then
     Check('apply1270.cast.uses.needed.by', (string.Join(',', Cast.UsesRows[0].NeededBy) = 'SpeedButton1: TSpeedButton') and (Length(Cast.UsesRows[0].Dangling) = 0),
@@ -10994,7 +10995,7 @@ begin
   Check('apply1270.cast.uses.note.kept.only', UsesNote(Cast) = '', UsesNote(Cast));
   Check('apply1270.cast.reindex', Cast.UsesReindex = 'done', Cast.UsesReindex);
 
-  Uses1:= ParseApplyJson(Apply1270Fixture('apply-uses-1270.json'));
+  Uses1:= ParseApplyJson(Apply1270Fixture('apply-uses-1270.json'), APPLY_FEATURES_ALL);
   Check('apply1270.uses.rows.parsed', (Length(Uses1.UsesRows) = 2) and (Uses1.UsesRows[0].Action = 'remove') and (Uses1.UsesRows[1].Action = 'add'),
     IntToStr(Length(Uses1.UsesRows)));
   if Length(Uses1.UsesRows) = 2 then
@@ -11025,23 +11026,23 @@ var
   Empty : Boolean;
   Kept  : Boolean;
 begin
-  Strip:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  Strip:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), APPLY_FEATURES_ALL);
   // Every part, in the runner's order: C8, then StripDB, cast sites, uses, then C10's glyph suffix.
   Comb:= Default(TApplyRow);
   Comb.Ok        := True;
   Comb.EditsCount:= 2;
-  Comb.InheritedLeft:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json')).InheritedLeft;
+  Comb.InheritedLeft:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json'), APPLY_FEATURES_ALL).InheritedLeft;
   Comb.ValueCasts := Strip.ValueCasts;
   Comb.ValueChecks:= Strip.ValueChecks;
-  Comb.CastSites  := ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json')).CastSites;
-  Comb.UsesRows   := ParseApplyJson(Apply1270Fixture('apply-uses-1270.json')).UsesRows;
-  Comb.Glyphs     := ParseApplyJson(TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph\apply-glyphs-sample.json')))).Glyphs;
+  Comb.CastSites  := ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL).CastSites;
+  Comb.UsesRows   := ParseApplyJson(Apply1270Fixture('apply-uses-1270.json'), APPLY_FEATURES_ALL).UsesRows;
+  Comb.Glyphs     := ParseApplyJson(TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\glyph\apply-glyphs-sample.json'))), APPLY_FEATURES_ALL).Glyphs;
   Check('apply1270.note.order', ConvertedRowNote(Comb, True, True) + GlyphNoteSuffix(Comb.Glyphs) = NOTE_ORDER, ConvertedRowNote(Comb, True, True) + GlyphNoteSuffix(Comb.Glyphs));
 
   // Hand-written malformed entries: kept with what is known; nothing raises.
   Raised:= '';
   try
-    Bad:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'));
+    Bad:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'), APPLY_FEATURES_ALL);
   except
     on E: Exception do
       Raised:= E.ClassName + ': ' + E.Message;
@@ -11070,7 +11071,7 @@ begin
   Empty:= (Length(Old.CastSites) + Length(Old.ValueCasts) + Length(Old.ValueChecks) + Length(Old.UsesRows) + Length(Old.UsesUnresolved) = 0) and (Old.UsesReindex = '');
   Check('apply1270.old.engine.unchanged', Empty and (ConvertedRowNote(Old, True, True) = '3 edit(s), 0 remaining for manual work; 1 inherited instance(s) retyped'),
     ConvertedRowNote(Old, True, True));
-  Old:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json'));
+  Old:= ParseApplyJson(InheritedFixture('apply-desc-1220-n1.json'), APPLY_FEATURES_ALL);
   Check('apply1270.old.capture.all.features.empty', Length(Old.CastSites) + Length(Old.ValueCasts) + Length(Old.UsesRows) + Length(Old.UsesUnresolved) = 0);
   // A 1.27.0 document read without the features (the probe said no) keeps today's note.
   Gated:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), []);
@@ -11096,7 +11097,7 @@ begin
   Row.Book   := 'B.rules';
   Row.UnitPas:= 'dmToolStats.pas';
   Row.Status := csConverted;
-  Row.Apply  := ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  Row.Apply  := ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), APPLY_FEATURES_ALL);
   Lines:= ApplyItemReportLines(Row);
   Check('apply1270.report.count', Length(Lines) = STRIP_REPORT, string.Join(' | ', Lines));
   if Length(Lines) = STRIP_REPORT then
@@ -11105,14 +11106,14 @@ begin
     Check('apply1270.report.check', Lines[LINE_CHECK] = HEAD + 'value check'#9#9#9#9#9 + Row.Apply.ValueChecks[0].Text, Lines[LINE_CHECK]);
     Check('apply1270.report.uses', Lines[High(Lines)] = HEAD + 'uses remove'#9#9#9#9#9'Bde.DBTables (interface, source rule)', Lines[High(Lines)]);
   end;
-  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  Cast:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
   Row.Apply:= Cast;
   Lines:= ApplyItemReportLines(Row);
   Check('apply1270.report.cast.count', (Length(Lines) = 2) and (Length(Cast.CastSites) = 1), string.Join(' | ', Lines));
   if (Length(Lines) = 2) and (Length(Cast.CastSites) = 1) then
     Check('apply1270.report.cast', (Lines[0] = HEAD + 'cast site'#9#9#9#9#9 + Cast.CastSites[0].Text)
       and (Lines[1] = HEAD + 'uses kept'#9#9#9#9#9'Vcl.Buttons (interface, source rule); needed by: SpeedButton1: TSpeedButton'), string.Join(' | ', Lines));
-  Row.Apply:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'));
+  Row.Apply:= ParseApplyJson(Apply1270Fixture('apply-missing-fields-sample.json'), APPLY_FEATURES_ALL);
   Lines:= ApplyItemReportLines(Row);
   Check('apply1270.report.unresolved', (Length(Lines) = SAMPLE_REPORT) and (Lines[High(Lines)] = HEAD + 'uses unresolved'#9#9#9#9#9'not-found'),
     string.Join(' | ', Lines));
@@ -11311,12 +11312,12 @@ const
 var
   A: TApplyRow;
 begin
-  A:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'));
+  A:= ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL);
   Check('apply1270.remainder.cast.once', Length(A.Remainder) = CAST_REMAINDER, IntToStr(Length(A.Remainder)));
   Check('apply1270.remainder.cast.note', ConvertedRowNote(A, True, True) = '5 edit(s), 11 remaining for manual work; 1 cast site(s) to convert by hand',
     ConvertedRowNote(A, True, True));
   Check('apply1270.remainder.cast.gated', Length(ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), []).Remainder) = CAST_ALL);
-  A:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'));
+  A:= ParseApplyJson(Apply1270Fixture('apply-stripdb-1270.json'), APPLY_FEATURES_ALL);
   Check('apply1270.remainder.check.once', Length(A.Remainder) = STRIP_REMAINDER, IntToStr(Length(A.Remainder)));
   Check('apply1270.remainder.check.note', ConvertedRowNote(A, True, True) = '19 edit(s), 27 remaining for manual work; StripDB: 3 value(s) changed, 1 to check by hand; uses: +0 -1 moved 0',
     ConvertedRowNote(A, True, True));
@@ -11351,7 +11352,7 @@ begin
     Skip('glyph.apply.fixture', 'missing ' + P);
     Exit;
   end;
-  Row:= ParseApplyJson('(loaded defaults from x)'#13#10 + TFile.ReadAllText(P) + #13#10'(loaded defaults from y)');
+  Row:= ParseApplyJson('(loaded defaults from x)'#13#10 + TFile.ReadAllText(P) + #13#10'(loaded defaults from y)', APPLY_FEATURES_ALL);
   Check('glyph.apply.ok', Row.Ok and (Row.EditsCount = EDITS), Row.Error);
   Check('glyph.apply.count', Length(Row.Glyphs) = OUTCOMES, IntToStr(Length(Row.Glyphs)));
   if Length(Row.Glyphs) = OUTCOMES then
@@ -11365,13 +11366,13 @@ begin
     Check('glyph.apply.note', GlyphNoteSuffix(Row.Glyphs) = '; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', GlyphNoteSuffix(Row.Glyphs));
   end;
   Check('glyph.apply.remainder.unchanged', Length(Row.Remainder) = 1, 'todos[] still feeds Remainder');
-  Row:= ParseApplyJson('{"ok":true,"edits_count":0}');
+  Row:= ParseApplyJson('{"ok":true,"edits_count":0}', APPLY_FEATURES_ALL);
   Check('glyph.apply.absent.array', Row.Ok and (Length(Row.Glyphs) = 0));
-  Row:= ParseApplyJson(NO_SLOTS_KEY);
+  Row:= ParseApplyJson(NO_SLOTS_KEY, APPLY_FEATURES_ALL);
   Check('glyph.apply.no.dropped.key', (Length(Row.Glyphs) = 1) and (Length(Row.Glyphs[0].DroppedSlots) = 0));
   Check('glyph.apply.unknown.kind.is.todo', (Length(Row.Glyphs) = 1) and IsGlyphTodo(Row.Glyphs[0]) and (Row.Glyphs[0].Message = 'm'));
   // R8: a wrongly-typed value degrades to its default; a non-object entry is skipped.
-  Row:= ParseApplyJson(BAD_TYPES);
+  Row:= ParseApplyJson(BAD_TYPES, APPLY_FEATURES_ALL);
   Check('glyph.apply.bad.types.ok', Row.Ok and (Length(Row.Glyphs) = TWO_ENTRIES), IntToStr(Length(Row.Glyphs)));
   if Length(Row.Glyphs) = TWO_ENTRIES then
   begin
@@ -11381,7 +11382,7 @@ begin
     Check('glyph.apply.bad.slots.skipped', (Length(Row.Glyphs[1].DroppedSlots) = TWO_ENTRIES) and (Row.Glyphs[1].DroppedSlots[0] = SLOT_TWO)
       and (Row.Glyphs[1].DroppedSlots[1] = SLOT_THREE));
   end;
-  Row:= ParseApplyJson(NOT_ARRAY);
+  Row:= ParseApplyJson(NOT_ARRAY, APPLY_FEATURES_ALL);
   Check('glyph.apply.not.array', Row.Ok and (Length(Row.Glyphs) = 0));
 end;
 
@@ -11429,7 +11430,7 @@ begin
     begin
       Check('glyph.runner.converted', Rows[0].Status = csConverted, ConvertStatusText(Rows[0].Status) + ' ' + Rows[0].Note);
       Check('glyph.runner.note', Rows[0].Note = '3 edit(s), 1 remaining for manual work; glyphs: 2 stitched, 1 slot(s) dropped by rule, 1 TODO(s)', Rows[0].Note);
-      Check('glyph.runner.row.glyphs', Length(Rows[0].Apply.Glyphs) = Length(ParseApplyJson(Json).Glyphs));
+      Check('glyph.runner.row.glyphs', Length(Rows[0].Apply.Glyphs) = Length(ParseApplyJson(Json, APPLY_FEATURES_ALL).Glyphs));
     end;
   finally
     TDirectory.Delete(Dir, True);
@@ -12724,7 +12725,7 @@ begin
     try
       Check('runner.live.only.index', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
       LCode:= Eng.ApplyConversion(Pas, Book, [Db, LIB64], ['Label1'], LJson);
-      LRow := ParseApplyJson(LJson);
+      LRow := ParseApplyJson(LJson, APPLY_FEATURES_ALL);
       LDfm := TFile.ReadAllText(Dfm);
       Check('runner.live.only.converts.named', (LCode = 0) and LRow.Ok and (Pos('Label1: TStaticText', LDfm) > 0), Copy(LJson, 1, JSON_HEAD_CHARS));
       Check('runner.live.only.leaves.other', Pos('Label2: TLabel', LDfm) > 0, LDfm);
@@ -12734,7 +12735,7 @@ begin
       Check('runner.live.only.reindex', Eng.IndexProject(Dpr, Db, Output) = 0, Output);
       // MEASURED FOR N3 -- the outcome goes into the task report, whatever it is:
       LCode:= Eng.ApplyConversion(Pas, Book, [Db, LIB64], ['NoSuchName'], LJson);
-      LRow := ParseApplyJson(LJson);
+      LRow := ParseApplyJson(LJson, APPLY_FEATURES_ALL);
       Writeln(Format('MEASURE runner.live.only.unknown.name: exit=%d ok=%s refused=%s edits=%d remaining=%d reason=%s',
         [LCode, BoolToStr(LRow.Ok, True), BoolToStr(LRow.Refused, True), LRow.EditsCount, Length(LRow.Remainder), LRow.Error]));
       Writeln('MEASURE runner.live.only.unknown.name.json: ', StringReplace(Copy(LJson, 1, JSON_HEAD_CHARS), sLineBreak, ' ', [rfReplaceAll]));
@@ -12791,7 +12792,7 @@ end;
 
 function WorkRealRows: TArray<TPasUseRow>;
 begin
-  Result:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json')).PasUses;
+  Result:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json'), APPLY_FEATURES_ALL).PasUses;
 end;
 
 procedure TestWorkListParse;
@@ -12819,8 +12820,8 @@ begin
       string.Join('|', RowDisplay(Kind)));
   end;
   Check('worklist.parse.gated', Length(ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json'), [afUsesReconcile]).PasUses) = 0);
-  Who  := StatusCount(ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json')).PasUses, PAS_USE_CAST_REFUSED) = 1;
-  Where:= StatusCount(ParseApplyJson(Apply1270Fixture('apply-uses-1270.json')).PasUses, PAS_USE_GLOBAL_DANGLING) = WORK_PAIR_N;
+  Who  := StatusCount(ParseApplyJson(Apply1270Fixture('apply-cast-site-1270.json'), APPLY_FEATURES_ALL).PasUses, PAS_USE_CAST_REFUSED) = 1;
+  Where:= StatusCount(ParseApplyJson(Apply1270Fixture('apply-uses-1270.json'), APPLY_FEATURES_ALL).PasUses, PAS_USE_GLOBAL_DANGLING) = WORK_PAIR_N;
   Check('worklist.parse.other.captures', Who and Where);
 
   // worklist.global.row -- instance '' renders as a global.
@@ -12939,7 +12940,7 @@ begin
     finally
       Arr.Free;
     end; // try
-    Check('worklist.bad.json.doc.no.raise', (ParseApplyJson(BAD_DOC).Ok) and (Length(ParseApplyJson(BAD_DOC).PasUses) = 0));
+    Check('worklist.bad.json.doc.no.raise', (ParseApplyJson(BAD_DOC, APPLY_FEATURES_ALL).Ok) and (Length(ParseApplyJson(BAD_DOC, APPLY_FEATURES_ALL).PasUses) = 0));
     Check('worklist.bad.json.nil.array', Length(ParsePasUses(nil, 'U.pas', WORK_RUN_OLD)) = 0);
     Arr:= TJSONObject.ParseJSONValue(BAD_NUMS) as TJSONArray;
     try
@@ -12996,7 +12997,7 @@ var
   Only : Boolean;
 begin
   // WorkRunOf -- converted rows only, stamped, exact repeats once; the two empty states.
-  Pas  := ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json'));
+  Pas  := ParseApplyJson(Apply1270Fixture('apply-pas-uses-1270.json'), APPLY_FEATURES_ALL);
   Unit1:= WORK_FIX_DIR + 'Unit1.pas';
   SetLength(Conv, CONV_ROWS);
   Conv[0].UnitPas:= Unit1;
@@ -13088,7 +13089,7 @@ var
   Twin  : TPasUseRow;
 begin
   // worklist.resolution.ambiguous -- the real capture: candidates named, nothing guessed.
-  Real:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-resolution-1282.json')).PasUses;
+  Real:= ParseApplyJson(Apply1270Fixture('apply-pas-uses-resolution-1282.json'), APPLY_FEATURES_ALL).PasUses;
   Shown:= if Length(Real) = REAL_ROWS then string.Join('|', RowDisplay(Real[High(Real)])) else IntToStr(Length(Real)) + ' rows';
   Check('worklist.resolution.ambiguous', Shown = 'Unit1.pas|Label1|TLabel -> TPanel|WordWrap|(unknown)|unmapped|25|ambiguous: FMX.StdCtrls, Vcl.StdCtrls', Shown);
   Check('worklist.resolution.ambiguous.fields', (Length(Real) = REAL_ROWS) and (Real[0].Resolution = PAS_RES_AMBIGUOUS)
@@ -13484,6 +13485,214 @@ begin
   end;
 end;
 
+{ Converter C-minors, group A: apply/1 Unparsed flag (A2), pairs reached (A3), the
+  report-line order (A4), one Work list row per use (A5). }
+procedure TestConverterMinorsA;
+const
+  NO_MATCH_JSON = '{"schema":"apply/1","ok":false,"error":"no convertible instances found (no #convert rule matched a .dfm instance, or --only filtered everything out)",' +
+                  '"refused":false,"reason":"","rule_errors":[],"edits_count":0}';
+  BOOKS_N   = 2;
+  UNITS_N   = 3;
+  ALL_PAIRS = 6;
+  STOP_PAIRS = 4;
+  LINE_FIRST = 10;
+  LINE_LATER = 12;
+  STATUS_COL = 2;
+  ORDER_N    = 3;
+var
+  Row    : TApplyRow;
+  Dir    : string;
+  LPas   : string;
+  LRows  : TArray<TConvertRow>;
+  Tally  : TRunTally;
+  Conv   : TConvertRow;
+  Lines  : TArray<string>;
+  Statuses: string;
+  Two    : TArray<TConvertRow>;
+  Run    : TWorkRun;
+  UseA   : TPasUseRow;
+  UseB   : TPasUseRow;
+  Hits   : TArray<TPasUseRow>;
+begin
+  // A2 -- the Unparsed flag, with a positive control (a real answer is not Unparsed).
+  Row:= ParseApplyJson('FATAL: something', APPLY_FEATURES_ALL);
+  Check('apply.unparsed.flag', Row.Unparsed and not Row.Ok);
+  Row:= ParseApplyJson(NO_MATCH_JSON, APPLY_FEATURES_ALL);
+  Check('apply.parsed.flag', (not Row.Unparsed) and (not Row.Ok) and (Row.EditsCount = 0));
+  Dir:= TPath.Combine(TPath.GetTempPath, 'cmina2-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    LPas:= TPath.Combine(Dir, 'F.pas');
+    TFile.WriteAllText(LPas, 'unit F; interface implementation end.', TEncoding.ASCII);
+    TFile.WriteAllText(ChangeFileExt(LPas, '.dfm'), 'object F: TF' + sLineBreak + 'end' + sLineBreak, TEncoding.ASCII);
+    var LIndex: TIndexFn:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result:= 0;
+      end;
+    var LScope: TScopeFn:= function(const AUnitPas, ABook: string; out ANames: TArray<string>): Boolean
+      begin
+        ANames:= ['Label1'];
+        Result:= True;
+      end;
+    // Unparseable engine output on a scoped run: the failure stands, no --only hint.
+    var LFatal: TApplyOnlyFn:= function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
+      begin
+        AJson:= 'FATAL: x';
+        Result:= 1;
+      end;
+    var LNoMatch: TApplyOnlyFn:= function(const AUnitPas, ARulesFile: string; const AOnly: TArray<string>; out AJson: string): Integer
+      begin
+        AJson:= NO_MATCH_JSON;
+        Result:= 1;
+      end;
+    LRows:= RunConversionUnits([LPas], ['Label.rules'], LFatal, LIndex, LScope, nil, nil);
+    Check('runner.scoped.unparsed.no.hint', (Length(LRows) = 1) and (LRows[0].Status = csFailedRestored) and (Pos('--only asked', LRows[0].Note) = 0)
+      and (Pos('FATAL', LRows[0].Note) > 0), LRows[0].Note);
+    // Positive control: an unmatched name on the same scoped run still carries the hint.
+    LRows:= RunConversionUnits([LPas], ['Label.rules'], LNoMatch, LIndex, LScope, nil, nil);
+    Check('runner.scoped.unmatched.keeps.hint', (Length(LRows) = 1) and (Pos('--only asked', LRows[0].Note) > 0), LRows[0].Note);
+  finally
+    TDirectory.Delete(Dir, True);
+  end; // try
+
+  // A3 -- the pairs a run could reach.
+  Check('pairs.reached.all', PairsReached(BOOKS_N, UNITS_N, 0) = ALL_PAIRS);
+  Check('pairs.reached.stop', PairsReached(BOOKS_N, UNITS_N, 1) = STOP_PAIRS);
+  Check('pairs.reached.none', PairsReached(BOOKS_N, UNITS_N, UNITS_N + 1) = 0);
+  Tally:= Default(TRunTally);
+  Tally.Converted:= 1;
+  Check('summary.after.stop', ConvertedSummaryText(Tally, PairsReached(BOOKS_N, UNITS_N, 1)).StartsWith('Converted 1 of 4 '), ConvertedSummaryText(Tally, STOP_PAIRS));
+
+  // A4 -- the report lines of a row read in note order: inherited, cast, glyph.
+  Conv:= Default(TConvertRow);
+  Conv.Book   := 'B.rules';
+  Conv.UnitPas:= 'U.pas';
+  Conv.Status := csConverted;
+  Conv.Apply.InheritedLeft:= [Default(TInheritedLeft)];
+  Conv.Apply.InheritedLeft[0].Name:= 'Inh1';
+  Conv.Apply.CastSites:= [Default(TApplyItem)];
+  Conv.Apply.Glyphs   := [Default(TGlyphOutcome)];
+  Lines:= RowReportLines(Conv, True, True);
+  Statuses:= '';
+  for var LLine: string in Lines do
+    Statuses:= Statuses + '|' + LLine.Split([#9])[STATUS_COL];
+  Check('report.row.order', (Length(Lines) = ORDER_N) and (Statuses = '|' + REPORT_STATUS_INHERITED_LEFT + '|' + REPORT_STATUS_CAST_SITE + '|' + REPORT_STATUS_GLYPH), Statuses);
+  Conv.Status:= csRolledBack;
+  Check('report.row.rolledback.empty', Length(RowReportLines(Conv, True, True)) = 0);
+
+  // A5 -- two books, one unit, the same use at shifted lines: ONE row, the later lines.
+  UseA:= Default(TPasUseRow);
+  UseA.Member := 'Caption';
+  UseA.Kind   := 'property';
+  UseA.Status := PAS_USE_UNMAPPED;
+  UseA.Lines  := [LINE_FIRST];
+  UseB:= UseA;
+  UseB.Lines := [LINE_LATER];
+  SetLength(Two, 2);
+  Two[0].UnitPas:= 'U.pas';
+  Two[0].Status := csConverted;
+  Two[0].Apply.PasUses:= [UseA];
+  Two[1].UnitPas:= 'U.pas';
+  Two[1].Status := csConverted;
+  Two[1].Apply.PasUses:= [UseB];
+  Run:= WorkRunOf(Two, 1, True);
+  Check('workrun.two.books.one.row', (Length(Run.Rows) = 1) and (Length(Run.Rows[0].Lines) = 1) and (Run.Rows[0].Lines[0] = LINE_LATER), IntToStr(Length(Run.Rows)));
+  // Positive control: a different status is a different use -- two rows.
+  UseB.Status:= PAS_USE_GLOBAL_DANGLING;
+  Two[1].Apply.PasUses:= [UseB];
+  Hits:= WorkRunOf(Two, 1, True).Rows;
+  Check('workrun.different.status.two.rows', Length(Hits) = 2, IntToStr(Length(Hits)));
+end;
+
+{ Converter C-minors, group B: a blank required request value says "blank", an absent one "missing" (B1). }
+procedure TestConverterMinorsB;
+var
+  O: TRequestOutcome;
+begin
+  O:= ParseEditedRequest('"project_file":"C:\\P\\App.dproj"', '"project_file":"   "');
+  Check('request.blank.required', (not O.Ok) and (Pos('project_file', O.Error) > 0) and (Pos('is blank', O.Error) > 0) and (Pos('is missing', O.Error) = 0), O.Error);
+  O:= ParseEditedRequest('"project_file":"C:\\P\\App.dproj",', '');
+  Check('request.absent.required', (not O.Ok) and (Pos('project_file', O.Error) > 0) and (Pos('is missing', O.Error) > 0) and (Pos('is blank', O.Error) = 0), O.Error);
+end;
+
+{ Converter C-minors, group C: ConvOptionHint shows an option's Detail (C1). }
+procedure TestConverterMinorsC;
+var
+  Opt : TConvOption;
+  Opts: TArray<TConvOption>;
+begin
+  Opt:= Default(TConvOption);
+  Opt.ToType:= 'string';
+  Opt.Kind  := ckValue;
+  Opt.Detail:= 'value transform: strip-db';
+  Check('convcat.hint.value', ConvOptionHint(Opt) = 'string -- value transform: strip-db', ConvOptionHint(Opt));
+  Opt.ToType:= 'TdxSmartGlyph';
+  Opt.Kind  := ckClass;
+  Opt.Detail:= '{dst}.Assign({src});';
+  Check('convcat.hint.class', ConvOptionHint(Opt) = 'TdxSmartGlyph -- {dst}.Assign({src});', ConvOptionHint(Opt));
+  Opts:= ConversionsFor('Integer', nil, nil);
+  Check('convcat.hint.identity', (Length(Opts) > 0) and (Opts[0].Kind = ckIdentity) and (ConvOptionHint(Opts[0]) = 'Integer -- same type -- no cast'),
+    if Length(Opts) > 0 then ConvOptionHint(Opts[0]) else 'no options');
+  Opt.Detail:= '';
+  Check('convcat.hint.empty', ConvOptionHint(Opt) = '', ConvOptionHint(Opt));
+end;
+
+{ Converter C-minors, group D: OfferButtons -- "Yes to all" / "No to all" only while more
+  prompts follow (D3). }
+procedure TestConverterMinorsD;
+const
+  MANY_LEFT = 5;
+begin
+  Check('offer.buttons.single', OfferButtons(0) = [mbYes, mbNo]);
+  Check('offer.buttons.many', OfferButtons(1) = [mbYes, mbYesToAll, mbNo, mbNoToAll]);
+  Check('offer.buttons.many.more', OfferButtons(MANY_LEFT) = [mbYes, mbYesToAll, mbNo, mbNoToAll]);
+end;
+
+{ Converter C-minors, C-3: the depth combo shows NO selection on a broken or duplicated
+  #depth, so any pick -- 5 included -- fires and repairs the book. }
+procedure TestConverterMinorsDepth;
+const
+  CRLF       = #13#10;
+  PICK_FIVE  = 5;
+  PICK_THREE = 3;
+var
+  B: TRuleBook;
+begin
+  B:= TRuleBook.Create;
+  try
+    B.LoadFromString('#unuse OldUnitZ' + CRLF);
+    Check('depth.combo.index.absent', B.DepthComboIndex = BOOK_DEPTH_DEFAULT - BOOK_DEPTH_MIN, IntToStr(B.DepthComboIndex));
+    B.LoadFromString('#depth 3' + CRLF);
+    Check('depth.combo.index.valid', B.DepthComboIndex = PICK_THREE - BOOK_DEPTH_MIN, IntToStr(B.DepthComboIndex));
+    B.LoadFromString('#depth deep' + CRLF);
+    Check('depth.combo.index.invalid.none', B.DepthComboIndex = -1, IntToStr(B.DepthComboIndex));
+    Check('depth.pick.five.on.invalid.repairs', B.DepthPickWrites(PICK_FIVE));
+    B.SetDepth(PICK_FIVE);
+    Check('depth.invalid.repaired.one.line', (B.DepthState = bdsValid) and (B.Depth = PICK_FIVE)
+      and (Pos('deep', B.Snapshot) = 0) and (B.Snapshot = '#depth 5' + CRLF), B.Snapshot);
+    B.LoadFromString('#depth 2' + CRLF + '#depth 9' + CRLF);
+    Check('depth.combo.index.duplicate.none', B.DepthComboIndex = -1, IntToStr(B.DepthComboIndex));
+    B.SetDepth(PICK_FIVE);
+    Check('depth.duplicate.repaired.one.line', (B.DepthState = bdsValid) and (B.Snapshot = '#depth 5' + CRLF), B.Snapshot);
+    Check('depth.combo.index.repaired', B.DepthComboIndex = PICK_FIVE - BOOK_DEPTH_MIN, IntToStr(B.DepthComboIndex));
+  finally
+    B.Free;
+  end; // try
+end;
+
+{ Converter C-minors, review fix 1: a --form start-up error survives only a request that fails. }
+procedure TestConverterMinorsStartup;
+const
+  FORM_ERR = '--form "X.pas" does not exist.';
+  REQ_STATUS = 'Request from the IDE: convert 1 selected component(s)';
+  REQ_REFUSED = 'Convert request r.json refused: no book';
+begin
+  Check('startup.error.request.ok.shows.own.status', StartupErrorStatus(FORM_ERR, REQ_STATUS, True) = '');
+  Check('startup.error.request.failed.keeps.both', StartupErrorStatus(FORM_ERR, REQ_REFUSED, False) = FORM_ERR + ' ' + REQ_REFUSED);
+  Check('startup.error.none.leaves.status', StartupErrorStatus('', REQ_REFUSED, False) = '');
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -13707,6 +13916,12 @@ begin
     TestQualifyNotes;
     TestQualifyFix;
     TestQualifyRunner;
+    TestConverterMinorsA;
+    TestConverterMinorsB;
+    TestConverterMinorsC;
+    TestConverterMinorsD;
+    TestConverterMinorsDepth;
+    TestConverterMinorsStartup;
 
     FreeAndNil(GParseBook);
 

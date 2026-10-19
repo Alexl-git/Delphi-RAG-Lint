@@ -296,6 +296,17 @@ type
       /// <param name="AType">The dialog's icon.</param>
       /// <returns>The MessageDlg result.</returns>
       function AskBlockingDrops(const AText: string; AType: TMsgDlgType): Integer;
+      /// <summary>AskBlockingDrops with the caller's buttons (OfferButtons).</summary>
+      /// <param name="AText">The question.</param>
+      /// <param name="AType">The dialog's icon.</param>
+      /// <param name="AButtons">The dialog's buttons.</param>
+      /// <returns>The MessageDlg result.</returns>
+      function AskBlockingDropsWith(const AText: string; AType: TMsgDlgType; AButtons: TMsgDlgButtons): Integer;
+      /// <summary>How many units of AAdded after index AAt still have a missing ancestor.</summary>
+      /// <param name="AAdded">The units this add listed.</param>
+      /// <param name="AAt">Index of the unit being asked about.</param>
+      /// <returns>The count, against the CURRENT source list.</returns>
+      function OffersAfter(const AAdded: TArray<string>; AAt: Integer): Integer;
     public
       /// <summary>Builds the tab's controls; nothing is listed until RefreshBooks.</summary>
       /// <param name="AOwner">Owner (the main form).</param>
@@ -1028,12 +1039,25 @@ end;
 
 function TConvertTab.AskBlockingDrops(const AText: string; AType: TMsgDlgType): Integer;
 begin
+  Result:= AskBlockingDropsWith(AText, AType, [mbYes, mbNo]);
+end;
+
+function TConvertTab.AskBlockingDropsWith(const AText: string; AType: TMsgDlgType; AButtons: TMsgDlgButtons): Integer;
+begin
   FPrompting:= True;
   try
-    Result:= MessageDlg(AText, AType, [mbYes, mbNo], 0);
+    Result:= MessageDlg(AText, AType, AButtons, 0);
   finally
     FPrompting:= False;
   end; // try
+end;
+
+function TConvertTab.OffersAfter(const AAdded: TArray<string>; AAt: Integer): Integer;
+begin
+  Result:= 0;
+  for var I: Integer:= AAt + 1 to High(AAdded) do
+    if Length(MissingAncestors(AncestorChain(InheritanceOf(AAdded[I])), FSources.Items.ToStringArray)) > 0 then
+      Inc(Result);
 end;
 
 procedure TConvertTab.OfferAncestors(const AAdded: TArray<string>; const APairs: TArray<TTypePair>);
@@ -1042,20 +1066,33 @@ var
   LList   : TArray<string>;
   LMissing: TArray<string>;
   LPrompt : string;
+  LAnswer : Integer;
+  LYesAll : Boolean;
 begin
-  for var LPath: string in AAdded do
+  LYesAll:= False;
+  for var I: Integer:= 0 to High(AAdded) do
   begin
+    var LPath: string:= AAdded[I];
     LChain  := AncestorChain(InheritanceOf(LPath));
     LList   := FSources.Items.ToStringArray;
     LMissing:= MissingAncestors(LChain, LList);
     if Length(LMissing) = 0 then
       Continue;
-    LPrompt:= OfferText(LMissing, LPath, UnconvertedTypes(InheritanceOf(LPath)), FRetypeOk);
-    // Mirrored on the status line: a TMessageForm's text is a TLabel with no window,
-    // so the GUI driver reads the status bar while the dialog is up.
-    FHost.SetStatus(LPrompt, False);
-    if AskBlockingDrops(LPrompt, mtConfirmation) <> mrYes then
-      Continue;
+    if not LYesAll then
+    begin
+      LPrompt:= OfferText(LMissing, LPath, UnconvertedTypes(InheritanceOf(LPath)), FRetypeOk);
+      // Mirrored on the status line: a TMessageForm's text is a TLabel with no window,
+      // so the GUI driver reads the status bar while the dialog is up.
+      FHost.SetStatus(LPrompt, False);
+      // "Yes to all" / "No to all" only while more prompts follow (OfferButtons).
+      LAnswer:= AskBlockingDropsWith(LPrompt, mtConfirmation, OfferButtons(OffersAfter(AAdded, I)));
+      if LAnswer = mrNoToAll then
+        Break;
+      if LAnswer = mrYesToAll then
+        LYesAll:= True
+      else if LAnswer <> mrYes then
+        Continue;
+    end;
     SetSources(InsertAncestors(LList, LPath, LChain));
     FHost.FeedHarvest(LMissing);
     Analyze(LMissing, APairs);
@@ -1554,14 +1591,8 @@ begin
         if LRan then IntToStr(LRow.Apply.EditsCount) else '',
         if LRan then IntToStr(Length(LRow.Apply.Remainder)) else '',
         LRow.Backup, LRow.BackupDfm, LRow.Note]));
-      // C8 E10: one line per instance the engine says the converted unit left (unfiltered, ruling M4).
-      for var LLine: string in InheritedReportLines(LRow, FRunInheritedOk, FRunRetypeOk) do
-        LLines.Add(LLine);
-      // C10 E13: one 8-column line per glyph outcome, converted rows only.
-      for var LLine: string in GlyphReportLines(LRow) do
-        LLines.Add(LLine);
-      // Engine 1.27.0: cast sites, value casts and checks, uses rows -- converted rows only.
-      for var LLine: string in ApplyItemReportLines(LRow) do
+      // One order, the note's: inherited left (E10), cast / value / uses items (1.27.0), glyphs (E13).
+      for var LLine: string in RowReportLines(LRow, FRunInheritedOk, FRunRetypeOk) do
         LLines.Add(LLine);
       // Engine 1.28.3: qualify lines for EVERY row -- a refused row carries fixes too.
       for var LLine: string in QualifyReportLines(LRow) do
@@ -1618,7 +1649,7 @@ begin
     AddResultRow(['', ExtractFileName(LUnit), if LStop <> '' then STATUS_NOT_REACHED_STOPPED else STATUS_NOT_REACHED, '', '', '', '', '']);
   // C12: out-of-scope pairs are counted apart and leave the "of M" denominator.
   Tally:= TallyRows(FRunRows);
-  Msg:= ConvertedSummaryText(Tally, Length(AJob.Books) * Length(AJob.Units));
+  Msg:= ConvertedSummaryText(Tally, PairsReached(Length(AJob.Books), Length(AJob.Units), Length(NotReached)));
   if Tally.Refused > 0 then
     Msg:= Msg + Format(' %d unit(s) refused by the engine and left unchanged (a known limitation -- see each row''s note).', [Tally.Refused]);
   // After the refused sentence: a roll-back follows a failure OR a refusal, and

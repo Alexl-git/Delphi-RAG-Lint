@@ -68,6 +68,9 @@ const
   /// same name to reach the menu while a VCL style has detached it from the
   /// window.</summary>
   MAIN_MENU_QUERY_MSG = 'ConvRulesEditor.MainMenuHandle';
+  /// <summary>Private window message that runs the --convert-request (see
+  /// TConvRulesForm.PostPendingRequest).</summary>
+  WM_APPLY_REQUEST = WM_APP + 1;
   /// <summary>Value under EDITOR_REG_KEY holding the folder the form-file Open
   /// dialog last started in, so browsing resumes where the user left off rather
   /// than at the process working directory.</summary>
@@ -215,6 +218,11 @@ type
       above it is still where a target is chosen. }
     FConvList     : TListBox;
     FLblConv      : TLabel;
+    { The options FConvList shows (same index) and the caption RefreshConvOptions gave
+      FLblConv: selecting an option appends its ConvOptionHint to that caption. }
+    FConvOpts     : TArray<TConvOption>;
+    FConvCaption  : string;
+    FConvHintBase : string; // FConvList's static hint; a selected option's hint is shown ABOVE it
       // rules library
       FRules : TListView;
       { Parallel to FRules.Items, same index -- RefreshRulesList fills both from
@@ -299,6 +307,8 @@ type
       FSkipMarksDirty    : Boolean;
       FLastSkipLoadFailed: Boolean; // set by LoadSkipList; blocks that flush on a failed read
       FLastFormDir : string; // where the Open-form dialog resumes
+      FStartupError: string; // a --form failure the --convert-request status must not hide (C12)
+      FRequestPosted: Boolean; // PostPendingRequest posted WM_APPLY_REQUEST already
       // Three descendant sets, fetched ONCE each (~1.5 s per call, measured against
       // the 3.4 GB Win32 library). They replace a per-type DeclaringUnitOf, which
       // costs 1.7 s PER TYPE and blocked the UI for ~78 s on VARINSP's 46 types.
@@ -778,9 +788,9 @@ type
       /// <param name="ADfmTexts">The .dfm contents Examine just read.</param>
       /// <remarks>
       /// Deliberately independent of FActiveHdr: the panel exists to CHOOSE
-      /// a From class, so it must work before any conversion is selected. Manual
-      /// re-enables are carried over by type name so a re-Examine of the same form
-      /// does not silently undo them. Also calls ApplySkipMarks after the rebuild
+      /// a From class, so it must work before any conversion is selected. Skip marks
+      /// are re-applied after every rebuild (ApplySkipMarks, from the persisted skip
+      /// file), so a re-Examine of the same form never undoes a mark. Also calls ApplySkipMarks after the rebuild
       /// (fix round 1/5, Task 9 CRITICAL #1) -- this is the "Open form..."/Examine
       /// BUTTON path, a different entry point from LoadFile's --form path, and it
       /// did not re-stamp from the persisted skip file: a class already marked
@@ -2004,6 +2014,11 @@ type
       /// Classes tab, with the reason in red. Never starts the run, never deletes the
       /// file.</remarks>
       procedure ApplyConvertRequest(const APath: string);
+      procedure ConvListClick(Sender: TObject);
+      /// <summary>Runs the --convert-request once PostPendingRequest posted it.</summary>
+      /// <param name="Message">WM_APPLY_REQUEST; unused.</param>
+      procedure WMApplyRequest(var Message: TMessage); message WM_APPLY_REQUEST;
+      function ApplyConvertRequestText(const APath: string): Boolean;
       procedure AddSourceFiles(const APaths: TArray<string>);
       procedure AddSourceText(const AText: string);
       procedure DoAddSource(Sender: TObject);
@@ -2534,6 +2549,12 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure LoadFile(const APath: string);
+      /// <summary>Posts the --convert-request to the message queue, once.</summary>
+      /// <remarks>Called by the .dpr AFTER its command-line LoadFile and before
+      /// Application.Run: LoadFile may pump messages (EngineWait), and a request queued
+      /// from Create would then run before the file finished loading. A no-op without
+      /// --convert-request and on the second call.</remarks>
+      procedure PostPendingRequest;
       /// <summary>Makes AText the open book: parses it, resets grid / pool /
       /// lists / Raw DSL exactly as a file load does, and takes the unsaved-
       /// changes snapshot.</summary>
@@ -2798,20 +2819,30 @@ begin
     if TFile.Exists(GEditorFormPath) then
       LoadFormFiles(ExpandUnitSiblings([GEditorFormPath]))
     else
-      SetError(Format('--form "%s" does not exist.', [GEditorFormPath]));
+    begin
+      FStartupError:= Format('--form "%s" does not exist.', [GEditorFormPath]);
+      SetError(FStartupError);
+    end;
   end
   else
     SetStatus('Ready. Open a .rules file, or pick From/To classes and choose ' + '"Conversion > New Conversion".');
 
-  // C12: after the window shows (ruling R2) -- and after a .rules file the .dpr opens
-  // once CreateForm returns, so nothing queued before it overwrites the request's status.
-  if GEditorConvertRequest <> '' then
-    TThread.ForceQueue(nil,
-      procedure
-      begin
-        ApplyConvertRequest(GEditorConvertRequest);
-      end);
+  // C12: the request runs from PostPendingRequest, which the .dpr calls after a .rules
+  // file it opens, so nothing queued earlier overwrites the request's status.
 end; // constructor
+
+procedure TConvRulesForm.PostPendingRequest;
+begin
+  if (GEditorConvertRequest = '') or FRequestPosted then
+    Exit;
+  FRequestPosted:= True;
+  PostMessage(Handle, WM_APPLY_REQUEST, 0, 0);
+end;
+
+procedure TConvRulesForm.WMApplyRequest(var Message: TMessage);
+begin
+  ApplyConvertRequest(GEditorConvertRequest);
+end;
 
 procedure TConvRulesForm.FormCloseHandler(Sender: TObject; var Action: TCloseAction);
 begin
@@ -3651,6 +3682,8 @@ begin
     + 'Identity, scalar casts, and .castlib class/enum casts. Read-only -- '
     + 'pick the actual target in the pool above.';
   FConvList.ShowHint:= True;
+  FConvHintBase:= FConvList.Hint;
+  FConvList.OnClick:= ConvListClick;
 
   Split2:= TSplitter.Create(Self);
   Split2.Parent:= Self; Split2.Align:= alRight; Split2.Width:= 4;
@@ -5488,7 +5521,8 @@ begin
   Hdr:= HeaderIndexFor(FBook, AEntry);
   if Hdr < 0 then
   begin
-    SetError(Format('%s is catalogued in %s but no #convert for it was found there. ' + 'The index is stale -- press "Rescan rules".', [TypeName, ExtractFileName(AEntry.FilePath)]));
+    SetError(Format('%s is catalogued in %s but no #convert for it was found there. ' + 'The index is stale -- press "Rescan rules".',
+      [TypeName, ExtractFileName(if AEntry.FilePath <> '' then AEntry.FilePath else FFilePath)]));
     Exit;
   end;
 
@@ -6265,7 +6299,7 @@ begin
       FLblDepthNote.Font.Color:= StyleServices.GetSystemColor(clWindowText); // seFont is off: resolve the style's text colour here
     end;
     bdsInvalid:
-      FLblDepthNote.Caption:= Format('(book value invalid -- using %d)', [BOOK_DEPTH_DEFAULT]);
+      FLblDepthNote.Caption:= Format('(book value invalid -- pick a depth to repair it; the engine uses %d)', [BOOK_DEPTH_DEFAULT]);
     bdsDuplicate:
       FLblDepthNote.Caption:= '(several #depth lines -- the engine rejects this book; pick a depth to repair it)';
   end; // case
@@ -6282,8 +6316,10 @@ var
   D  : Integer  ;
   Hdr: TRuleNode;
 begin
-  D:= FCbDepth.ItemIndex + BOOK_DEPTH_MIN;
   FDepthPending:= False;
+  if FCbDepth.ItemIndex < 0 then
+    Exit; // no selection (an invalid / duplicate book awaiting a pick): nothing was picked
+  D:= FCbDepth.ItemIndex + BOOK_DEPTH_MIN;
   // An explicit pick is recorded -- the default on a book without #depth too (owner
   // decision, 2026-10-04) -- unless the book already holds exactly that one valid
   // value. On a duplicate / invalid book the write IS the repair (ruling R11).
@@ -6407,7 +6443,7 @@ end;
 
 procedure TConvRulesForm.SyncDepthCombo;
 begin
-  FCbDepth.ItemIndex:= FBook.Depth - BOOK_DEPTH_MIN;
+  FCbDepth.ItemIndex:= FBook.DepthComboIndex;
 end;
 
 function TConvRulesForm.InMenuLoop: Boolean;
@@ -6502,6 +6538,7 @@ begin
   FConvList.Items.BeginUpdate;
   try
     FConvList.Items.Clear;
+    FConvOpts:= nil;
     if (ARow < 1) or (ARow >= FGrid.RowCount) then
     begin
       FLblConv.Caption:= 'Can convert to: (select a From row)';
@@ -6518,13 +6555,28 @@ begin
       Exit;
     end;
     Opts:= ConversionsFor(FromType, FCastDefs, FEnumDefs);
+    FConvOpts:= Opts;
     for O in Opts do
       FConvList.Items.Add(ConvOptionText(O));
-    FLblConv.Caption:= Format('Can convert to: %s (%s) -- %d option(s)',
+    FConvCaption:= Format('Can convert to: %s (%s) -- %d option(s)',
       [FromPath, FromType, Length(Opts)]);
+    FLblConv.Caption:= FConvCaption;
   finally
     FConvList.Items.EndUpdate;
   end;
+end;
+
+{ C1: selecting an option shows its Detail after the caption and as the list's hint
+  (ConvOptionHint); no selection restores the caption. }
+procedure TConvRulesForm.ConvListClick(Sender: TObject);
+var
+  LHint: string;
+begin
+  LHint:= '';
+  if (FConvList.ItemIndex >= 0) and (FConvList.ItemIndex < Length(FConvOpts)) then
+    LHint:= ConvOptionHint(FConvOpts[FConvList.ItemIndex]);
+  FLblConv.Caption:= if LHint <> '' then FConvCaption + ' -- ' + LHint else FConvCaption;
+  FConvList.Hint:= if LHint <> '' then LHint + sLineBreak + FConvHintBase else FConvHintBase;
 end;
 
 procedure TConvRulesForm.DoAssign(Sender: TObject);
@@ -8202,9 +8254,28 @@ end;
 
 procedure TConvRulesForm.ApplyConvertRequest(const APath: string);
 var
+  LOk  : Boolean;
+  LText: string;
+begin
+  LOk:= False;
+  try
+    LOk:= ApplyConvertRequestText(APath);
+  finally
+    // A --form failure survives a request that fails (both facts stay on the bar); a
+    // request that succeeds shows its own status (StartupErrorStatus).
+    LText:= StartupErrorStatus(FStartupError, string(FLblStatus.Caption), LOk);
+    if LText <> '' then
+      SetError(LText);
+    FStartupError:= '';
+  end;
+end;
+
+function TConvRulesForm.ApplyConvertRequestText(const APath: string): Boolean;
+var
   LText: string;
   LPrep: TPreparedRequest;
 begin
+  Result:= False;
   try
     LText:= TFile.ReadAllText(APath, TEncoding.UTF8);
   except
@@ -8237,6 +8308,7 @@ begin
   DoShowConvertTab(nil);     // its OnShow re-lists the books (ConvertTabShow)
   FConvertTab.RefreshBooks;  // R2: explicit -- the tab may already have been the active page
   FConvertTab.LoadRequest(LPrep.Request, LPrep.Scope);
+  Result:= True;
 end;
 
 procedure TConvRulesForm.AddHarvest(const AAdded: TArray<THarvestedUnit>; const AErrors: TArray<string>; const AWhat: string; AActivate: Boolean);

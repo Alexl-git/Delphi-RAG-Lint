@@ -45,7 +45,7 @@ two different builds have reported the same version; compare SHA256 and build st
 * **Model tests:** `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
   tests SKIP; first line says which). Baseline on the 1.31.5 pin:
-  **2249 pass / 5 fail / 0 skip** -- the 5 are the VARINSP fixture
+  **2281 pass / 5 fail / 0 skip** -- the 5 are the VARINSP fixture
   (`picker.unit.has.VARINSP`, `fill.from-unit.*`). A rebuild of `dll-win64` mid-run
   kills it: discard that run.
 * **GUI drivers** (`tests\gui\`, by hand): `pwsh -NoProfile -File <driver> -Exe
@@ -57,12 +57,12 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-file-menu.ps1` 19 -- New / Save As / Exit, unsaved guard
   * `drive-owning-open.ps1` 6 -- cross-book double-click through `ConfirmDiscard`
   * `drive-engine-wait.ps1` 9 -- progress window, Cancel, retry, cached reload
-  * `drive-book-depth.ps1` 13 -- `#depth` combo
+  * `drive-book-depth.ps1` 21 -- `#depth` combo
   * `drive-convert-tab.ps1` 23 -- Convert tab end to end (`-ProofNoIndex`)
   * `drive-validate-scope.ps1` 18 -- scoped validation on Save, Auto-Match gate
-  * `drive-inherited-offer.ps1` 15 -- C8 inherited instances (`-ProofNoInheritance`)
+  * `drive-inherited-offer.ps1` 16 -- C8 inherited instances (`-ProofNoInheritance`; `-ProofGateYes` adds a ~20 s real conversion, 17)
   * `drive-glyph-link.ps1` 23 -- glyph expressions (`-ProofNoGlyph`)
-  * `drive-convert-request.ps1` 25 -- IDE convert request (`-ProofNoRequest`)
+  * `drive-convert-request.ps1` 28 -- IDE convert request (`-ProofNoRequest`)
   * `drive-work-list.ps1` 13 -- Work list tab (`-ProofNoPasUses`)
   * `drive-qualify-fix.ps1` 20 -- qualify quick fix (`-ProofNoFix` = 15 pass / 5 fail)
 

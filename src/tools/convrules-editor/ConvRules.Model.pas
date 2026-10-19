@@ -568,6 +568,11 @@ type
       /// bdsDuplicate / bdsInvalid book, where the write is the repair.</returns>
       /// <remarks>Only explicit picks reach this; opening and saving never add #depth.</remarks>
       function DepthPickWrites(AValue: Integer): Boolean;
+      /// <summary>Which item of the 1..10 depth combo the book selects.</summary>
+      /// <returns>Depth - BOOK_DEPTH_MIN for bdsAbsent (the default) and bdsValid; -1 (no
+      /// selection) for bdsInvalid and bdsDuplicate, so that ANY pick -- the engine's
+      /// fallback value included -- changes the selection, fires, and repairs the book.</returns>
+      function DepthComboIndex: Integer;
   end;
 
 const
@@ -1336,6 +1341,14 @@ end;
 function TRuleBook.DepthPickWrites(AValue: Integer): Boolean;
 begin
   Result:= not ((DepthState = bdsValid) and (Depth = AValue));
+end;
+
+function TRuleBook.DepthComboIndex: Integer;
+begin
+  if DepthState in [bdsInvalid, bdsDuplicate] then
+    Result:= -1
+  else
+    Result:= Depth - BOOK_DEPTH_MIN;
 end;
 
 function TRuleBook.DepthState: TBookDepthState;
