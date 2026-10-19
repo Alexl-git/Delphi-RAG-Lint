@@ -6,6 +6,7 @@
     {
       "id": "dl",
       "name": "DL (drag-lint)",
+      "short": "DL",
       "repo": "Alexl-git/Delphi-RAG-Lint",
       "changelog": "https://github.com/Alexl-git/Delphi-RAG-Lint/blob/main/CHANGELOG.md",
       "blurb": "Index, query and lint Delphi code - from the command line and inside RAD Studio."
