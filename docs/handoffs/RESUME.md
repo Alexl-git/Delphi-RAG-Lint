@@ -15,6 +15,7 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Open
 
+- 2026-10-19 | converter | A2 + C squash-merged to LOCAL main (3cdadd60, 1d888db1; owner pushes); apply-fields (B1/B3/B6-B8, C-2) + testkit branches wait for the 1.22 re-parse, then re-pin 1.32.0 | open | [HANDOFF-2026-10-19-converter-a-c-done-reparse-wait.md](HANDOFF-2026-10-19-converter-a-c-done-reparse-wait.md)
 - 2026-10-19 | ENGINE | 1.22 bundle on rel/1.22 (extractor + B-13 + C18 slice 1), one rescan; wave/1317 battery -> main | open | [HANDOFF-2026-10-19-engine-rel-122.md](HANDOFF-2026-10-19-engine-rel-122.md)
 - 2026-10-19 | engine | AUTONOMOUS: wave/1316 (1.31.6, battery running) + wave/1317 (1.31.7, lane G pending) merged on integration branches; next: battery -> ff main, finish 1317, INBOX retire | resumed (superseded by rel-122 handoff) | [HANDOFF-2026-10-19-engine-waves-1316-1317.md](HANDOFF-2026-10-19-engine-waves-1316-1317.md)
 - 2026-10-19 | engine | 1.31.5 RELEASED + deployed, worktrees cleaned; next: plan + run wave 2 (bugs + TODOs); RESUMED 2026-10-19: plan docs\superpowers\plans\2026-10-19-bugfix-wave-1.31.6.md, lanes A-F dispatched; superseded by waves-1316-1317 | closed | [HANDOFF-2026-10-19-engine-wave2-start.md](HANDOFF-2026-10-19-engine-wave2-start.md)
@@ -29,7 +30,7 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 - 2026-10-16 | engine | 1.31.3 pushed + tagged (1a5e40eb), GH pre-release up WITHOUT zips; battery running; then 1.31.4 plan, commit+deploy+pack only, owner publishes Sunday | closed (1.31.3 done) | [HANDOFF-2026-10-16-engine-release-1313-done-1314-plan](HANDOFF-2026-10-16-engine-release-1313-done-1314-plan.md)
 - 2026-10-16 | engine | v1.31.3-alpha committed (cd9fa7ee), NOT pushed; fix 9 battery fails, publish, push+tag+release (approved); then type-prefix ancestry plan -> 1.31.4, hourly /loop | resumed | [HANDOFF-2026-10-16-engine-release-1313-type-prefix-ancestry](HANDOFF-2026-10-16-engine-release-1313-type-prefix-ancestry.md)
 - 2026-10-16 | engine | 1.31.2 deployed (reindex targets active project DB); push now rides 1.31.3; Toxicity yes/no pending | resumed | [HANDOFF-2026-10-16-engine-reindex-active-db](HANDOFF-2026-10-16-engine-reindex-active-db.md)
-- 2026-10-16 | converter | no code since 3756831c; waiting for the all-teams 1.22 extractor release + full re-parse, then ONE re-pin (top block) | open | [RESUME-CONVERTER-2026-10-05.md](../RESUME-CONVERTER-2026-10-05.md)
+- 2026-10-16 | converter | no code since 3756831c; waiting for the all-teams 1.22 extractor release + full re-parse, then ONE re-pin (top block) | resumed | [RESUME-CONVERTER-2026-10-05.md](../RESUME-CONVERTER-2026-10-05.md)
 - 2026-10-14 | engine | 1.31.1 deployed + pushed; 1.22.0 extractor branch ready, held for CHARTS group F; read BACKLOG-INDEX-ENGINE-2026-10-14.md first | open | [RESUME-ENGINE-2026-10-14.md](../RESUME-ENGINE-2026-10-14.md)
 - 2026-10-13 | engine | IDE Diagnostics-panel / lint-fix session; linked from the 2026-10-14 backlog index | open | [RESUME-ENGINE-2026-10-13.md](../RESUME-ENGINE-2026-10-13.md)
 - 2026-10-11 | engine | conversion / engine resume -- ON HOLD by the owner (2026-10-13); read its FINAL STATE block | open (on hold) | [RESUME-ENGINE-2026-10-11.md](../RESUME-ENGINE-2026-10-11.md)
