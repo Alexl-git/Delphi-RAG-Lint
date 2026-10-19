@@ -24,6 +24,7 @@ Supersedes HANDOFF-2026-10-18-engine-wave-1315-lanes.md (closed). Autonomous run
   is their notification.
 
 ## Resume point (all owner-gated)
+0. DONE 2026-10-19 on owner 'go': engine 1.31.5 (sha 201DE760) + drag-lint-config.exe staged to dll-win64 (.bak-1.31.4 kept); BPLs Win32+Win64 deployed, commit 693ae603. Step 1 below is complete.
 1. Owner "go" -> deploy engine then BPL (RAD Studio closed): engine via
    `build\stage-engine.ps1 -FreshExe <wave-1315>\third_party\dll-win64\drag-lint.exe -Target
    third_party\dll-win64\drag-lint.exe`; BPLs from `<wave-1315>\third_party\dll-win32|dll-win64\
