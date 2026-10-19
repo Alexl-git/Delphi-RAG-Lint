@@ -1,0 +1,58 @@
+---
+id: lint-buffer-unsaved
+title: Lint Buffer (Unsaved)
+summary: Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first
+product: DL
+group: linting
+order: 30012
+since: 0.1.0-alpha
+status: shipped
+updated: 0.1.0-alpha
+---
+
+# Lint Buffer (Unsaved)
+
+Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first.
+
+## How to run it
+
+Full flag list: [lint in the CLI reference](../cli.md#lint).
+
+## Where to click
+
+* drag-lint About window, button **Lint Buffer (Unsaved)**
+
+## Details
+
+Lints the current editor buffer's in-memory content, including unsaved
+edits, without writing it to disk first. Reach for it to see lint findings
+for changes you have not saved yet.
+
+### Running it from the CLI
+The feature map lists this action's CliVerb as `lint`, but its Mechanism
+is "in-process" -- the IDE lints the in-memory buffer directly rather than
+shelling out to the CLI. The nearest CLI equivalent operates on a saved
+file on disk:
+```text
+drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json]
+```
+
+### Reaching it in the IDE
+drag-lint > Lint Buffer (Unsaved)
+
+### What it needs
+No index needed. This action lints the buffer's content directly; the
+feature map marks this row's Index column "no".
+
+### Example
+Illustrative only, showing the CLI verb this action's findings correspond
+to once a file is saved:
+```text
+drag-lint lint C:\Projects\MyApp\Unit1.pas --json
+```
+The IDE action produces the equivalent findings for the unsaved buffer,
+in-process, without this shell-out.
+
+---
+
+[All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

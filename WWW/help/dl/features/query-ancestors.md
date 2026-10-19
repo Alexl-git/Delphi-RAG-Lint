@@ -1,0 +1,57 @@
+---
+id: query-ancestors
+title: query ancestors
+summary: Resolves the transitive class/interface hierarchy of a type
+product: DL
+group: search-navigation
+order: 20016
+since: 0.1.0-alpha
+status: shipped
+updated: 0.1.0-alpha
+---
+
+# query ancestors
+
+Resolves the transitive class/interface hierarchy of a type.
+
+## How to run it
+
+Full flag list: [query in the CLI reference](../cli.md#query).
+
+## Details
+
+Resolves the transitive class/interface hierarchy of a type. Reach for it
+to see everything a type descends from -- or to check whether it descends
+from one specific ancestor -- read straight from the index.
+
+### Running it from the CLI
+
+```text
+drag-lint query ancestors --name <type> [--of <ancestor>] [--db ...] [--json]
+```
+
+`--name` is the type to resolve. `--of <ancestor>` narrows the query to a
+specific ancestor.
+
+### Reaching it in the IDE
+
+No IDE surface -- this is a CLI-only feature.
+
+### What it needs
+
+The `--db` flag is optional -- drag-lint auto-resolves the index when
+omitted. An index must still exist.
+
+### Example
+
+Illustrative:
+
+```text
+drag-lint query ancestors --name TMyForm --db C:\Projects\MyApp\_D-RAG\MyApp.sqlite
+```
+
+This would list `TMyForm`'s full transitive ancestor chain.
+
+---
+
+[All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)
