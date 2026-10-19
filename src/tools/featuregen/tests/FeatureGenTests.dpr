@@ -789,6 +789,48 @@ begin
   end;
 end;
 
+procedure TestEntryTextGuard;
+var
+  lRepo, lPath, lMsg, lTxt: string;
+begin
+  lRepo := CopySiteRepo('entrytext-repo');
+  lPath := TPath.Combine(lRepo, 'features\entries\ask.json');
+  lTxt := TFile.ReadAllText(lPath, TEncoding.ASCII);
+  TFile.WriteAllText(lPath, lTxt.Replace('"summary": "Asks a question"', '"summary": "Asks a question", "intro": "Run drag-lint ask <question> now and `<ok>` too."'), TEncoding.ASCII);
+  lMsg := TryBuild(lRepo, TPath.Combine(SCRATCH, 'entrytext-out'));
+  Check('Site.EntryIntroRawHtmlFailsNamingEntryAndField', (Pos('ask', lMsg) > 0) and (Pos('intro', lMsg) > 0) and (Pos('<question>', lMsg) > 0)
+    and (Pos('<ok>', lMsg) = 0), lMsg);
+  lRepo := CopySiteRepo('entrytext2-repo');
+  lPath := TPath.Combine(lRepo, 'features\entries\ask.json');
+  lTxt := TFile.ReadAllText(lPath, TEncoding.ASCII);
+  TFile.WriteAllText(lPath, lTxt.Replace('"summary": "Asks a question"', '"summary": "Asks a question", "intro": "Run drag-lint ask `<question>` now."'), TEncoding.ASCII);
+  lMsg := TryBuild(lRepo, TPath.Combine(SCRATCH, 'entrytext2-out'));
+  Check('Site.EntryIntroPlaceholderInCodeBuilds', lMsg = '', lMsg);
+end;
+
+procedure TestOutDirRefusal;
+var
+  lDir, lMsg: string;
+  lHelp: TLiveHelp;
+begin
+  lDir := FreshDir('refuse-out');
+  TFile.WriteAllText(TPath.Combine(lDir, 'keep.txt'), 'precious', TEncoding.ASCII);
+  lHelp := TLiveHelp.Create;
+  try
+    lMsg := '';
+    try
+      BuildFixture(SiteDir, lDir, False, lHelp);
+    except
+      on E: EFeatureGen do
+        lMsg := E.Message;
+    end;
+  finally
+    lHelp.Free;
+  end;
+  Check('Site.NonEmptyDirWithoutIndexJsonRefused', (Pos(lDir, lMsg) > 0) and (Pos('index.json', lMsg) > 0)
+    and TFile.Exists(TPath.Combine(lDir, 'keep.txt')) and not TFile.Exists(TPath.Combine(lDir, 'index.md')), lMsg);
+end;
+
 procedure TestRemoteImages;
 var
   lRepo, lOut, lMsg, lAsk: string;
@@ -868,6 +910,8 @@ begin
     TestSiteDanglingLink;
     TestGeneratedWikiPage;
     TestRemoteImages;
+    TestEntryTextGuard;
+    TestOutDirRefusal;
     TestCheckLinks;
     if lRepo <> '' then
       TestSiteFormatFile(lRepo);

@@ -32,7 +32,7 @@ function RenderLeaf(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const 
 /// <param name="pRepo">Repo root (features\, docs\wiki\, docs\Images\).</param>
 /// <param name="pFmt">Site format (ExcludedVerbs filled by LoadSiteFormat; Help may be nil).</param>
 /// <param name="pWriter">Receives every file; the caller calls Finish.</param>
-/// <exception cref="EFeatureGen">A render has raw HTML or non-ASCII, an entry names an unknown group, or CheckLinks finds a violation.
+/// <exception cref="EFeatureGen">The writer root is non-empty and has no index.json (it would be wiped); an entry field or wiki body has raw HTML outside code or non-ASCII (entry id and field named), an entry names an unknown group, or CheckLinks finds a violation.
 /// Nothing is written to the writer then: the set is first generated into a check-only writer.</exception>
 /// <remarks>Writes index.md, index.json, cli.md, ide.md, whats-new.md, wiki-map.json, features/&lt;id&gt;.md and the images.</remarks>
 procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter);
@@ -611,6 +611,42 @@ begin
   end;
 end;
 
+procedure CheckField(const pEntry: TFeatureEntry; const pField, pText: string; pCodeOnly: Boolean);
+var
+  lM: TMatch;
+  lI: Integer;
+begin
+  for lI := 1 to Length(pText) do
+    if pText[lI] > #127 then
+      raise EFeatureGen.CreateFmt('entry %s, field %s: non-ASCII character U+%.4X', [pEntry.Id, pField, Ord(pText[lI])]);
+  if pCodeOnly then
+    Exit;
+  lM := TRegEx.Match(TRegEx.Replace(pText, '`[^`]*`', ''), '<[a-zA-Z/][^>]*>');
+  if lM.Success then
+    raise EFeatureGen.CreateFmt('entry %s, field %s: raw HTML tag "%s" outside code (wrap it in backticks)', [pEntry.Id, pField, lM.Value]);
+end;
+
+{ The same raw-HTML and non-ASCII guard the wiki body gets, over every entry field a page renders. }
+procedure CheckEntryText(const pEntry: TFeatureEntry);
+var
+  lS: TSurface;
+  lR: string;
+begin
+  CheckField(pEntry, 'title', pEntry.Title, False);
+  CheckField(pEntry, 'summary', pEntry.Summary, False);
+  CheckField(pEntry, 'intro', pEntry.Intro, False);
+  for lR in pEntry.Requires do
+    CheckField(pEntry, 'requires', lR, False);
+  for lS in pEntry.Surfaces do
+  begin
+    CheckField(pEntry, 'surfaces.path', lS.Path, False);
+    CheckField(pEntry, 'surfaces.caption', lS.Caption, False);
+    CheckField(pEntry, 'surfaces.host', lS.Host, False);
+    CheckField(pEntry, 'surfaces.verb', lS.Verb, False);
+    CheckField(pEntry, 'surfaces.example', lS.Example, True);
+  end;
+end;
+
 procedure GenerateSite(const pRepo: string; const pFmt: TSiteFormat; const pReg: TRegistry; const pW: TOutputWriter);
 var
   lInc: TArray<TFeatureEntry>;
@@ -629,6 +665,7 @@ begin
         lKnown := True;
     if not lKnown then
       raise EFeatureGen.CreateFmt('entry %s: group "%s" is not in groups.json', [lE.Id, lE.Group]);
+    CheckEntryText(lE);
     pW.Put('features/' + lE.Id + '.md', RenderLeaf(lE, pFmt, pReg, pRepo, lImgs), 'entry ' + lE.Id + ' (leaf)');
     for lImg in lImgs do
       pW.PutBinary('features\' + lImg.Target, TPath.Combine(pRepo, lImg.Source));
@@ -647,6 +684,8 @@ var
   lProbe: TOutputWriter;
   lBad: TArray<string>;
 begin
+  if TDirectory.Exists(pWriter.Root) and not TDirectory.IsEmpty(pWriter.Root) and not TFile.Exists(TPath.Combine(pWriter.Root, 'index.json')) then
+    raise EFeatureGen.CreateFmt('refusing to use %s as the site root: it is not empty and has no index.json at its top level', [pWriter.Root]);
   lReg := TRegistry.Create;
   try
     lReg.Load(pRepo);
