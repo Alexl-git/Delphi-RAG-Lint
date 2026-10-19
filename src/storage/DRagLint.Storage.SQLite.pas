@@ -273,6 +273,10 @@ type
       FScopeCorpusBefore     : Int64;
       FScopeWrites           : Integer;
       FScopeNewWrites        : Integer;
+      { Rows this run DELETED through prune/eviction. They enter FScopeFiles (and
+        so the share latch) exactly like a rewrite, but are not writes: counted
+        apart so the reason does not call a removed file "changed". }
+      FScopeRemovals         : Integer;
       FScopeWholeByShare     : Boolean;
       /// <summary>True if ASQL returns at least one row. For EXISTS-style probes;
       /// pass a LIMIT 1 query so SQLite stops at the first hit.</summary>
@@ -581,6 +585,14 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       procedure NoteScopeRemoval(AFileId: Int64);
+      /// <summary>Forget everything the resolve scope recorded: the scoped file
+      /// and name sets, the whole-database latch and its reason, and the share
+      /// counters. Called when ResolveCallTargets has consumed the scope.</summary>
+      /// <remarks>The scope describes the writes since the last calls pass, not
+      /// the life of the instance: `index --watch` keeps one store across ticks,
+      /// and without this the latch tick 1 sets (a new database is always whole)
+      /// held for every later tick (run_watch_scope_reset).</remarks>
+      procedure ResetResolveScope;
       /// <param name="ADbPath"><!-- drag-lint:auto type -->const string</param>
       /// <param name="AReadOnly"><!-- drag-lint:auto type -->Boolean</param>
       /// <remarks>
@@ -3417,6 +3429,7 @@ begin
   FScopeWholeWhy   := '';
   FScopeMaxFiles   := -1;
   FScopeCorpusBefore:= -1;
+  FScopeRemovals   := 0;
   FScopeWrites     := 0;
   FScopeNewWrites  := 0;
   FScopeWholeByShare:= False;
@@ -4913,14 +4926,39 @@ end; // procedure
 // cannot be checkpointed (read-only, or a non-WAL DB) must not fail the run
 // that produced the data.
 procedure TSQLiteSymbolStore.Checkpoint;
+
+  { wal_checkpoint RETURNS A ROW (busy, log, checkpointed). FConn.ExecSQL runs it
+    on the connection's cached command, steps it once to that row and never
+    resets it, so the statement stays "in progress". A one-shot run exits right
+    after, so nothing noticed -- but `index --watch` keeps the connection, and
+    the NEXT tick's first file commit failed with "cannot commit transaction -
+    SQL statements in progress" on every changed file, for the life of the
+    process (1.31.6 lane E; run_watch_scope_reset). A query of its own, opened
+    and CLOSED, finishes the statement before anything else uses the
+    connection. }
+  procedure RunPragma(const ASql: string);
+  var
+    Q: TFDQuery;
+  begin
+    Q:= TFDQuery.Create(nil);
+    try
+      Q.Connection:= FConn;
+      Q.SQL.Text  := ASql;
+      Q.Open;
+      Q.Close;
+    finally
+      Q.Free;
+    end;
+  end;
+
 begin
   try
-    FConn.ExecSQL('PRAGMA wal_checkpoint(FULL)');
+    RunPragma('PRAGMA wal_checkpoint(FULL)');
   except
     { non-WAL or read-only DB -- best-effort }
   end;
   try
-    FConn.ExecSQL('PRAGMA wal_checkpoint(TRUNCATE)');
+    RunPragma('PRAGMA wal_checkpoint(TRUNCATE)');
   except
     { a live reader can block the reset; FULL above already did the copying }
   end;
@@ -5030,6 +5068,7 @@ begin
       the deletes below -- once FQDeleteFileSymbols has run, the names this file
       used to declare are unrecoverable, and they are exactly what tells
       ResolveCallTargets which OTHER files' refs lost an edge to the cascade. }
+    Inc(FScopeWrites);
     NoteScopeRemoval(Result.FileId);
 
     // Phase 1: full re-emit semantics. Clear old symbols/refs for this file
@@ -5407,6 +5446,13 @@ begin
     if FScopeCorpusBefore = 0 then
       Exit(Format('the database held no files before this run (a new database): %d file(s), all new, ' +
                   'so there is no unchanged part to scope around', [FScopeNewWrites]));
+    { Pruned/evicted rows count toward the share but are NOT writes: name them
+      apart rather than as "changed" (1.31.6 lane E; run_whole_db_reason_prune). }
+    if FScopeRemovals > 0 then
+      Exit(Format('this run rewrote or removed more than one file in three (%d written: %d new, %d changed; ' +
+                  '%d removed; of %d indexed before; limit %d) -- above that share the scoped pass costs more than it saves',
+                  [FScopeWrites, FScopeNewWrites, FScopeWrites - FScopeNewWrites, FScopeRemovals,
+                   FScopeCorpusBefore, FScopeMaxFiles]));
     Exit(Format('this run rewrote more than one file in three (%d written: %d new, %d changed, ' +
                 'of %d indexed before; limit %d) -- above that share the scoped pass costs more than it saves',
                 [FScopeWrites, FScopeNewWrites, FScopeWrites - FScopeNewWrites, FScopeCorpusBefore, FScopeMaxFiles]));
@@ -5720,6 +5766,26 @@ begin
            ' OR refs.name_text COLLATE NOCASE IN (SELECT n FROM temp.dl_scope_names)';
 end;
 
+{ Back to the constructor's state. -1 on the two size fields re-reads the corpus
+  at the next write, so the next pass's share is measured against the database
+  as it is THEN, not as it was before the first tick. }
+procedure TSQLiteSymbolStore.ResetResolveScope;
+begin
+  FScopeFiles        .Clear;
+  FScopeNames        .Clear;
+  FScopeTypesBefore  .Clear;
+  FScopeTypeAncestors.Clear;
+  FScopeTypesAfter   .Clear;
+  FScopeWhole        := False;
+  FScopeWholeWhy     := '';
+  FScopeWholeByShare := False;
+  FScopeMaxFiles     := -1;
+  FScopeCorpusBefore := -1;
+  FScopeWrites       := 0;
+  FScopeNewWrites    := 0;
+  FScopeRemovals     := 0;
+end;
+
 { Read out the names a file is about to lose. Called from OpenFileTx between
   resolving the file id and deleting its symbols -- the only moment at which the
   outgoing names still exist. One indexed lookup per re-indexed file. }
@@ -5729,7 +5795,8 @@ const
 var
   Q: TFDQuery;
 begin
-  Inc(FScopeWrites);
+  { FScopeWrites / FScopeRemovals are counted by the CALLERS (OpenFileTx,
+    DeleteFilesByIds): this routine serves both, and only they know which. }
   if FScopeWhole then Exit;
   FScopeFiles.AddOrSetValue(AFileId, True);
   { STOP ACCUMULATING once this run covers a third of the corpus. Past that the
@@ -6951,7 +7018,11 @@ begin
     latch), and the two cases that moved are the DECLINE REASON and the
     procs-only file taking the scoped path. }
   try
-    for I:= 0 to AIds.Count - 1 do NoteScopeRemoval(AIds[I]);
+    for I:= 0 to AIds.Count - 1 do
+    begin
+      Inc(FScopeRemovals); { a removal, not a write -- see FScopeRemovals }
+      NoteScopeRemoval(AIds[I]);
+    end;
   except
     on E: Exception do
     begin
@@ -13036,6 +13107,10 @@ begin
     QStale.Free;
     Resolver.Free;
   end; // try
+  { The scope is consumed: the next pass on this instance (a later --watch tick)
+    must be judged by ITS writes. Not reached when the pass raised, which leaves
+    the scope wider than the truth -- the safe direction. }
+  ResetResolveScope;
 end; // procedure
 
 function TSQLiteSymbolStore.GetTransitiveAncestors(ASymbolId: Int64): TArray<TTypeAncestor>;
