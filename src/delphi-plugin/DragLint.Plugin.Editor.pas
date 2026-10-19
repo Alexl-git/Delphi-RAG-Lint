@@ -2319,9 +2319,14 @@ begin
   CmdLine:= Format('"%s" format "%s"', [ExePath, FilePath]);
   ExitCode:= RunAndCaptureStdout(CmdLine, Output, 60000);
 
-  if ExitCode = 2 then
+  if ExitCode = -1 then
   begin
     ShowMessage( 'drag-lint: failed to spawn format command.'#13#10 + 'Ensure drag-lint.exe is on PATH or next to the BPL.');
+    Exit;
+  end;
+  if ExitCode = 2 then
+  begin
+    ShowMessage( 'drag-lint: the format command rejected its arguments (usage error, exit 2).'#13#10 + Trim(Output));
     Exit;
   end;
 

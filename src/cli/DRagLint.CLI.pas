@@ -5888,6 +5888,7 @@ begin
       one indexer: measured against 0, every idle tick after the first "parsed"
       files and ran the whole-database calls pass (run_watch_scope_reset W4). }
     var ParsedBeforeTick: Integer:= Indexer.ParsedFiles;
+    var SkippedBeforeTick: Integer:= Indexer.SkippedUpToDate;  // cumulative like ParsedFiles; the Done line reports this tick's delta
     if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', Now), Interval]))
     else if not AArgs.ResolveOnly then Writeln('Indexing...');
     { --resolve-only: re-derive the edges from parses the index ALREADY holds,
@@ -6235,8 +6236,8 @@ begin
       of the .sqlite alone is empty of everything this run just did. }
     Store.Checkpoint;
     Elapsed:= (Now - StartTime) * 86400;
-    if Indexer.SkippedUpToDate > 0 then Writeln(Format(
-        'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
+    if Indexer.SkippedUpToDate - SkippedBeforeTick > 0 then Writeln(Format(
+        'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate - SkippedBeforeTick, Elapsed]))
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Elapsed]));
     if not AArgs.Watch then Break;
     Sleep(Interval * 1000);
