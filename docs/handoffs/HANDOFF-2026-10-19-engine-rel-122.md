@@ -68,3 +68,10 @@ wave handoff HANDOFF-2026-10-19-engine-waves-1316-1317.md for everything after w
    (CLAUDE.md "Two controllers" block).
 5. STOP: owner go for runbook steps 4-6 in docs\superpowers\plans\2026-10-14-open-defects-triage.md
    (announce, dll-win64 swap, `index --all --jobs 0` ~5 h, spot checks, push, CONVERTER re-pin).
+
+## CONVERTER request (2026-10-19, after checkpoint)
+- docs\INBOX-REPLY-2026-10-19-converter-to-engine-qualify-and-castlib.md: (1) one rule line can give two
+  qualify_fixes[] (From + To); each eplacement qualifies only its side, so applying both clobbers -- document
+  it or make eplacement self-contained; (2) owner-ruled: StripDB value cast must accept string aliases
+  (TFileName) in the castlib. Decide whether (2) rides 1.22 (convert-apply, no extractor bump) before the swap.
+  CONVERTER's A2 + C work is ready on branches; they re-pin on the swap announcement.
