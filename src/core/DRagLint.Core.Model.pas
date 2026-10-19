@@ -14,7 +14,7 @@ const
   /// This unit is the right home because it is the one both sides already use:
   /// DRagLint.LSP.Server uses Core.Model, and CLI uses LSP.Server, so a
   /// constant here reaches both with no new dependency and no cycle.</remarks>
-  DRAGLINT_VERSION = '1.31.6-alpha';
+  DRAGLINT_VERSION = '1.31.7-alpha';
 
   /// <summary>The identity of what this build EXTRACTS from a byte sequence.
   /// Part of the indexer fingerprint; <see cref="DRAGLINT_VERSION"/> is not.
@@ -653,6 +653,12 @@ type
     // mislabelling `Self.Run` as one. Populated by the ref-reading store
     // methods; '' when the column is absent (pre-v20 DB) or NULL.
     ReceiverText: string;
+    // 2026-10-19 (wave 3 lane G): member_accesses.mode for this ref -- 'read' |
+    // 'write' when the resolver bound a qualified field/property access
+    // (`AJob.Streaming`, `LJob.Streaming := True`; refs.kind 'member-access'
+    // carries no direction of its own). '' when there is no member_accesses
+    // row. Filled by FindCallersByName only; `usages` buckets on it.
+    AccessMode: string;
   end;
 
   /// <summary>v14 (D5): one resolved call-site edge, written by the

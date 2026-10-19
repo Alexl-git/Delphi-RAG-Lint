@@ -55,6 +55,20 @@ breaking changes** until v1.0.
   verbs above. Docs: `docs\wiki\Draglint-Protocol-Handler.md`, `docs\wiki\Register-MCP-Server.md`, feature
   registry entry `protocol-handler`.
 
+## v1.31.7-alpha -- 2026-10-19
+
+### Fixed
+- **`library-drift` no longer reports a library root as missing when the section's own walk filter excludes it** (e.g. a `...\Win64` lib folder under the global `"Win64"` exclude): such roots are listed as `excludedRoots` / "EXCLUDED BY CONFIG" and do not fail the exit code (B-02).
+- **`convert-apply` checks the target unit's own `.pas` and `.dfm` against the index**: a stale target is a dry-run WARNING (`freshness.fresh=false` + reason) and is refused under `--apply`, instead of writing output computed from the stale index (B-18).
+- **`reconcile-project --db` heal runs the same post-walk link stages as `index`** (uses-targets, ancestry, facts-inherited, helpers -- one shared list): a healed unit no longer loses its inherited-field facts (B-24). Indexes healed by an older engine keep the wrong facts until the file is re-parsed or `--rebuild`.
+- **`rename` refuses (exit 2) when the old name occurs as an identifier in an `.inc` file of the project closure**, naming the file(s) -- include text has no refs until the 1.22 extractor release.
+- **`index --watch` reports `skipped N up-to-date` per tick**, not cumulatively.
+- **`usages` splits field accesses into reads and writes** (from `member_accesses.mode`) instead of counting every `X.Field` as a call, and a qualified `--name TFoo.Field` finds its refs (CLI and LSP share one helper).
+- **"no database" refusals go to stderr** (`NoDbResolved`, shared by 15 verbs, and `outline`'s not-found lines); exit codes unchanged (B-21).
+
+### IDE plugin
+- **A `format` exit 2 is reported as a usage error** (with the engine output), not as a failure to start the engine.
+
 ## v1.31.6-alpha -- 2026-10-19
 
 ### Fixed

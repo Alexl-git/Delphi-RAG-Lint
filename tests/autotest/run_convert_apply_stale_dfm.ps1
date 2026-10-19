@@ -10,6 +10,9 @@
     S  a line added ABOVE the instance after indexing: exit 1, REFUSED text line,
        json refused=true with reason "<name>: index is stale for this .dfm -- reindex",
        the .pas and .dfm byte-identical (--apply and dry run).
+       1.31.7 (B-18): --apply is now refused EARLIER by the target freshness
+       check ("index is stale for <Frm.dfm> ... -- reindex"); the dry run still
+       plans and is refused with the span reason above (x4 pins that).
     N  a line added INSIDE the instance block (opener still on StartLine, the
        closing end no longer on EndLine): refused the same way.
     F  control: a fresh index converts, refused=false, and the .dfm changes.
@@ -142,19 +145,24 @@ function Json([string]$s) {
 function Hashes([string]$Dir) { return ((Get-FileHash (Join-Path $Dir 'Frm.pas')).Hash + (Get-FileHash (Join-Path $Dir 'Frm.dfm')).Hash) }
 
 function CheckRefusal([string]$Tag, [string]$Dir, [string]$Why = $Reason, [string[]]$Only = @()) {
+  # 1.31.7 (B-18): an edited .dfm now fails convert-apply's TARGET freshness
+  # check first, so --apply is refused with "index is stale for <Frm.dfm> ..."
+  # before planning; the dry run still plans, and its refusal (x4) is the span
+  # check's own reason -- that keeps the span check covered.
+  $ApplyWhy = 'index is stale for ' + [regex]::Escape((Join-Path $Dir 'Frm.dfm')) + ' .* -- reindex'
   $h = Hashes $Dir
   $r = Run $Dir (@('--apply', '--no-backup') + $Only)
-  Check "$Tag`1 text --apply: exit 1, one 'REFUSED: <reason>' line, no ERROR: line" `
+  Check "$Tag`1 text --apply: exit 1, one 'REFUSED: <stale .dfm>' line, no ERROR: line" `
     (($r.Code -eq 1) -and (@($r.Out -split "`n" | Where-Object { $_ -match '^REFUSED: ' }).Count -eq 1) -and `
-     ($r.Out -match ('(?m)^REFUSED: ' + [regex]::Escape($Why) + '\r?$')) -and -not ($r.Out -match '(?m)^ERROR:')) $r.Out
+     ($r.Out -match ('(?m)^REFUSED: ' + $ApplyWhy + '\r?$')) -and -not ($r.Out -match '(?m)^ERROR:')) $r.Out
   $r = Run $Dir (@('--apply', '--no-backup', '--format', 'json') + $Only)
   $j = Json $r.Out
-  Check "$Tag`2 json --apply: exit 1, ok=false, refused=true, reason matches" `
-    (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.refused -is [bool]) -and ($j.refused -eq $true) -and ($j.reason -eq $Why)) $r.Out
+  Check "$Tag`2 json --apply: exit 1, ok=false, refused=true, reason names the stale .dfm" `
+    (($r.Code -eq 1) -and ($null -ne $j) -and (-not $j.ok) -and ($j.refused -is [bool]) -and ($j.refused -eq $true) -and ($j.reason -match "^$ApplyWhy$")) $r.Out
   Check "$Tag`3 .pas and .dfm byte-identical" ((Hashes $Dir) -eq $h)
   $r = Run $Dir (@('--format', 'json') + $Only)
   $j = Json $r.Out
-  Check "$Tag`4 json dry run is refused too" (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true)) $r.Out
+  Check "$Tag`4 json dry run is refused by the span check" (($r.Code -eq 1) -and ($null -ne $j) -and ($j.refused -eq $true) -and ($j.reason -eq $Why)) $r.Out
 }
 
 # ---- S: a line added ABOVE the instance after indexing ----------------------

@@ -966,6 +966,7 @@ begin
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
   Writeln('  drag-lint rename --kind param  --file <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
+  Writeln('      (--qname and --kind symbol refuse, exit 2, when the old name is used in an indexed .inc file: no {$I} refs until 1.22)');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
   Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only)');
@@ -1104,7 +1105,7 @@ begin
   Writeln('                               No covering index: stdout empty ([] with --json), exit 0, a NOTE on stderr.');
   Writeln('  drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>]  - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed');
   Writeln('                             --db heals the index+findings for every project member (re-scan + recompile) WITHOUT editing the .dpr; --full forces the recompile even when nothing is incoherent');
-  Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift)');
+  Writeln('  drag-lint library-drift [--platform <p>] [--config <path>] [--json]               - registry library roots that have source on disk but none in the index (exit 2 if drift; roots the section exclude prunes are listed as excluded, not counted)');
   Writeln('  drag-lint migrate-dbs        [--config <drag-lint.json>] [--apply]   move project indexes into each project''s _D-RAG folder');
   Writeln('  drag-lint --version');
   Writeln('  drag-lint --help             (aliases -h / -?). Accepted AFTER A VERB too: `drag-lint lint --help`,');
@@ -3292,6 +3293,31 @@ begin
   Flush(Output);
 end;
 
+/// <summary>Runs the post-walk LINK stages, in their one valid order:
+/// uses-targets, ancestry, facts-inherited, helpers.</summary>
+/// <param name="AIndent">Leading whitespace for the stage lines (see Stage).</param>
+/// <param name="AStore">The store the walk just wrote; must not be nil.</param>
+/// <param name="AIndexer">The indexer that parsed THIS run; must not be nil. Its
+/// held unclassified names are what facts-inherited resolves, so it must be
+/// the same instance that ran the walk.</param>
+/// <remarks>THE ONLY COPY of this list (B-24). Every site that re-parses files
+/// into an index -- DoIndex, BuildPlanItem (index --all), IndexDictionary and
+/// the reconcile-project --db heal -- calls it; the call and purity stages
+/// stay at the sites because each gates them differently. Four hand-copied
+/// lists drifted: the reconcile heal had no facts-inherited, so a healed unit
+/// lost every inherited field from reads_fields / writes_fields and kept that
+/// loss through later incremental runs (its files row was fresh). Pinned by
+/// tests\autotest\run_index_stage_list_facts_inherited.ps1.
+/// facts-inherited needs RESOLVED ancestry (v23, spec F2), and a run that
+/// parsed nothing makes it a no-op (F7).</remarks>
+procedure RunLinkStages(const AIndent: string; const AStore: ISymbolStore; const AIndexer: IIndexer);
+begin
+  Stage(AIndent, 'uses-targets',    procedure begin AStore.ResolveUnitUseTargets; end);
+  Stage(AIndent, 'ancestry',        procedure begin AStore.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
+  Stage(AIndent, 'facts-inherited', procedure begin AIndexer.ApplyInheritedFieldFacts; end);
+  Stage(AIndent, 'helpers',         procedure begin AStore.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
+end;
+
 { ---------------------------------------------------------------------------
   DOC-APPLY DAMAGE GUARD
 
@@ -3946,13 +3972,7 @@ begin
       Only the call pass is guarded -- see the DoIndex note for why the other
       three stay unconditional (they are the repair path, and they cost ~21 s
       together on that same index). }
-    Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
-    Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
-    { v23 (spec F2): inherited-field facts need RESOLVED ancestry, which the
-      stage above just wrote. Runs on the indexer that parsed this run, so a
-      run that parsed nothing does nothing (F7). }
-    Stage('  ', 'facts-inherited', procedure begin Indexer.ApplyInheritedFieldFacts; end);
-    Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
+    RunLinkStages('  ', Store, Indexer); { B-24: the one stage list }
     { CallEdgesNeedRebuild: see the DoIndex site for the full argument. Short
       version -- "no file changed" only implies "every edge still holds" if the
       edges existed to begin with, and this is the path `index --all` takes, so
@@ -4652,14 +4672,17 @@ end; // function
   the fix for the stray-index problem and changed nothing -- a stray that exists
   passes an existence test. Existence is not sufficiency.
 
-  Returns True when there is nothing to open, having said so. }
+  Returns True when there is nothing to open, having said so -- on STDERR
+  (B-21, 2026-10-19: it went to stdout, where a caller parsing the verb's
+  answer read the refusal AS the answer). Every caller exits 2 on True.
+  Pinned by run_nodb_error_on_stderr.ps1. }
 function NoDbResolved(const ADbPath, AVerb: string): Boolean;
 begin
   Result:= ADbPath = '';
   if not Result then Exit;
-  Writeln('ERROR: ', AVerb, ': no --db was given and no project database resolves here.');
-  Writeln('       Run "drag-lint resolve-dbs" to list the configured databases,');
-  Writeln('       or pass --db <file.sqlite> explicitly.');
+  Writeln(ErrOutput, 'ERROR: ', AVerb, ': no --db was given and no project database resolves here.');
+  Writeln(ErrOutput, '       Run "drag-lint resolve-dbs" to list the configured databases,');
+  Writeln(ErrOutput, '       or pass --db <file.sqlite> explicitly.');
 end;
 
 /// <summary>Refuses a run whose EXPLICIT --db list names a file that does not
@@ -5888,6 +5911,7 @@ begin
       one indexer: measured against 0, every idle tick after the first "parsed"
       files and ran the whole-database calls pass (run_watch_scope_reset W4). }
     var ParsedBeforeTick: Integer:= Indexer.ParsedFiles;
+    var SkippedBeforeTick: Integer:= Indexer.SkippedUpToDate;  // cumulative like ParsedFiles; the Done line reports this tick's delta
     if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', Now), Interval]))
     else if not AArgs.ResolveOnly then Writeln('Indexing...');
     { --resolve-only: re-derive the edges from parses the index ALREADY holds,
@@ -6128,13 +6152,7 @@ begin
       principle leave a call edge that was derived from the broken uses graph.
       `--force-reparse` re-runs everything, and DRAGLINT_NO_SCOPED_RESOLVE=1
       forces the full-corpus call pass; both are one flag away. }
-    Stage('', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
-    Stage('', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
-    { v23 (spec F2): inherited-field facts need RESOLVED ancestry, which the
-      stage above just wrote. Runs on the indexer that parsed this run, so a
-      run that parsed nothing does nothing (F7). }
-    Stage('', 'facts-inherited', procedure begin Indexer.ApplyInheritedFieldFacts; end);
-    Stage('', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
+    RunLinkStages('', Store, Indexer); { B-24: the one stage list }
     { A MISSING EDGE SET ALSO FORCES THE PASS. Every other term here asks "did
       anything change?", and the skip message's premise -- no file changed, so
       every call edge already holds -- is only true if the edges were there in
@@ -6235,8 +6253,8 @@ begin
       of the .sqlite alone is empty of everything this run just did. }
     Store.Checkpoint;
     Elapsed:= (Now - StartTime) * 86400;
-    if Indexer.SkippedUpToDate > 0 then Writeln(Format(
-        'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate, Elapsed]))
+    if Indexer.SkippedUpToDate - SkippedBeforeTick > 0 then Writeln(Format(
+        'Done. Files: %d, Symbols: %d, Refs: %d, skipped %d up-to-date, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Indexer.SkippedUpToDate - SkippedBeforeTick, Elapsed]))
     else Writeln(Format('Done. Files: %d, Symbols: %d, Refs: %d, %.2fs', [Store.CountFiles, Store.CountSymbols, Store.CountReferences, Elapsed]));
     if not AArgs.Watch then Break;
     Sleep(Interval * 1000);
@@ -6289,9 +6307,7 @@ begin
     else if TFile.Exists(F) then Indexer.IndexFile(F)
     else Writeln('  (skip, not found) ', F);
   end;
-  Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
-  Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
-  Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
+  RunLinkStages('  ', Store, Indexer); { B-24: the one stage list (facts-inherited was missing here) }
   { GUARDED, v0.86 -- see the long note at the DoIndex call site. This function's
     only writer is the Indexer walk above: it does not clear, prune or evict, so
     ParsedFiles alone is the whole precondition here.
@@ -9948,7 +9964,12 @@ begin
   if Length(Dbs) = 0 then
   begin
     if NoDbResolved(AArgs.DbPath, 'outline') then Exit(2);
-    if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
+    if not TFile.Exists(AArgs.DbPath) then
+    begin
+      Writeln(ErrOutput, 'ERROR: database not found: ', AArgs.DbPath);
+      Writeln(ErrOutput, 'Run "drag-lint index <path>" first.');
+      Exit(2);
+    end;
     Dbs:= [AArgs.DbPath];
   end;
 
@@ -10064,14 +10085,16 @@ var
     AArr.AddElement(O);
   end;
 
-  function GroupFor(const AKind: string): TJSONArray;
+  { The bucket is DRagLint.Query.Callers.UsageBucketOf's, shared with the LSP. }
+  function GroupFor(const ARef: TReference): TJSONArray;
   begin
-    if AKind      = 'read' then Result:= JReads
-    else if AKind = 'write'         then Result:= JWrites
-    else if AKind = 'type_use'      then Result:= JTypes
-    else if AKind = 'attribute'     then Result:= JAttrs
-    else if AKind = 'event-binding' then Result:= JEvents
-    else Result:= JCalls; { call + anything else }
+    var Bucket: string:= UsageBucketOf(ARef);
+    if Bucket      = 'reads'      then Result:= JReads
+    else if Bucket = 'writes'     then Result:= JWrites
+    else if Bucket = 'types'      then Result:= JTypes
+    else if Bucket = 'attributes' then Result:= JAttrs
+    else if Bucket = 'events'     then Result:= JEvents
+    else Result:= JCalls;
   end;
 
 var
@@ -10133,7 +10156,8 @@ begin
         Continue;
       end;
 
-      for S in Store.FindSymbolsByExactName(AArgs.Name) do
+      var Decls: TArray<TSymbol>:= Store.FindSymbolsByExactName(AArgs.Name);
+      for S in Decls do
       begin
         DeclO:= TJSONObject.Create;
         DeclO.AddPair('kind', S.Kind.ToText);
@@ -10144,7 +10168,7 @@ begin
         JDecls.AddElement(DeclO);
       end;
 
-      for R in Store.FindCallersByName(AArgs.Name) do AddRefRow(GroupFor(R.Kind), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol);
+      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol);
 
       if (Width = 'wide') or (Width = 'very-wide') then
         for L in Store.FindTransitiveCallers(AArgs.Name, Depth) do
@@ -20722,6 +20746,13 @@ begin
       var Reason: string:= TRenameRefactoring.ConflictReason(KStore, QN, AArgs.RenameTo);
       if Reason <> '' then
       begin Writeln('ERROR: cannot rename -- ' + Reason); Exit(2); end;
+      { stopgap until 1.22 emits include refs: refuse instead of a partial rename }
+      Reason:= TRenameRefactoring.IncludeUseReason(KStore, QN);
+      if Reason <> '' then
+      begin
+        Writeln('ERROR: cannot rename -- ' + Reason);
+        Exit(2);
+      end;
       Edits:= TRenameRefactoring.Build(KStore, QN, AArgs.RenameTo);
     end // if
     else begin Writeln('ERROR: --kind must be symbol or param'); Exit (2 ); end;
@@ -20775,6 +20806,13 @@ begin
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk); { READ-ONLY (D24): edits source, never the index }
   if not RoOk then Exit(2);
+  { stopgap until 1.22 emits include refs: refuse instead of a partial rename }
+  var IncReason: string:= TRenameRefactoring.IncludeUseReason(Store, AArgs.QName);
+  if IncReason <> '' then
+  begin
+    Writeln('ERROR: cannot rename -- ' + IncReason);
+    Exit(2);
+  end;
   Edits:= TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
   if Length(Edits) = 0 then begin Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName])); Exit(1); end;
 
@@ -27314,7 +27352,16 @@ var
       FreshChecked:= True;
       Freshness   := CheckFreshness(Stores, Rules);
     end;
+    { B-18 (1.31.7): the unit's OWN .pas and .dfm too -- per unit, never cached.
+      A stale target warns on a dry run (merged into freshness) and REFUSES
+      --apply below; a stale From/To type keeps its own error path. }
+    var UnitFresh: TFreshnessResult:= CheckUnitFreshness(Stores, UnitPas, DfmPath);
     JCtx.Freshness:= Freshness;
+    if not UnitFresh.Fresh then
+    begin
+      JCtx.Freshness.Fresh  := False;
+      JCtx.Freshness.Reasons:= JCtx.Freshness.Reasons + UnitFresh.Reasons;
+    end;
     if not Freshness.Fresh then
     begin
       if AArgs.Apply then
@@ -27338,6 +27385,15 @@ var
           already carried structurally by freshness.fresh=false + reasons. }
         Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
         for var S: string in Freshness.Reasons do Writeln('  ' + S);
+      end;
+    end;
+    if not UnitFresh.Fresh then
+    begin
+      if AArgs.Apply then Exit(RefuseUnit(UnitFresh.Reasons[0]));
+      if not UseJson then
+      begin
+        Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
+        for var S: string in UnitFresh.Reasons do Writeln('  ' + S);
       end;
     end;
 
@@ -29953,14 +30009,21 @@ end; // function
 // selftest drift: call AnalyzeLibraryDrift with roots from --root flags.
 // Prints MISSING <root> for each missing root, then DRIFT-OK or DRIFT-MISSING N.
 // Exits 0 in all cases (test assertions are done by the caller script).
+// B-02: --exclude <glob> (repeatable) is the walk filter's SectionExclude;
+// a root it prunes prints EXCLUDED <root> and is not counted as drift.
 function DoSelfTestDrift(const AArgs: TArgs): Integer;
 var
-  Missing: TArray<string>;
-  M      : string        ;
+  Missing : TArray<string>;
+  Excluded: TArray<string>;
+  M       : string        ;
+  WF      : TWalkFilter   ;
 begin
   if NoDbResolved(AArgs.DbPath, 'self-test-drift') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
-  Missing:= AnalyzeLibraryDrift(AArgs.DbPath, AArgs.Roots);
+  WF:= TWalkFilter.Create;
+  WF.SectionExclude:= AArgs.ExcludeGlobs;
+  Missing:= AnalyzeLibraryDrift(AArgs.DbPath, AArgs.Roots, WF, Excluded);
+  for M in Excluded do Writeln('EXCLUDED ', M);
   for M in Missing do Writeln('MISSING ', M);
   if Length(Missing) = 0 then Writeln('DRIFT-OK')
   else Writeln('DRIFT-MISSING ', Length(Missing));
@@ -30693,7 +30756,7 @@ var
   JCoh        : TJSONObject                               ;
   Store       : ISymbolStore                              ;
   DP2         : TDelphi13Parser                           ;
-  Indexer2    : TIndexer                                  ;
+  Indexer2    : IIndexer                                  ; { interface, not TIndexer: RunLinkStages takes IIndexer, and a temp interface ref on a bare object would free it }
   Members     : TArray<TProjectMember>                    ;
   Coh         : TArray<TMemberCoherence>                  ;
   MI          : Integer                                   ;
@@ -30912,9 +30975,7 @@ begin
           // index site's post-pass) so unit_uses / ancestry / calls resolve.
           if CohScanned > 0 then
           begin
-            Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
-            Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end);
-            Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);
+            RunLinkStages('  ', Store, Indexer2); { B-24: the one stage list (facts-inherited was missing here) }
             Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
             Stage('  ', 'purity',       procedure begin TPurityStage.Run(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
           end;
@@ -30941,7 +31002,7 @@ begin
           Flush(Output);
           CloseFile(Output);
           Move(SavedOut, TTextRec(Output), SizeOf(TTextRec)); // restore stdout
-          Indexer2.Free;
+          Indexer2:= nil; // refcounted: releases the indexer (and its store reference)
           Store:= nil; // release the shared connection
         end; // try
       end;
@@ -31179,6 +31240,7 @@ var
   PFilter   : TArray<string>                            ;
   Roots     : TArray<string>                            ;
   Missing   : TArray<string>                            ;
+  Excluded  : TArray<string>                            ;
   TotalMiss : Integer                                   ;
   PlatCnt   : Integer                                   ;
   R         : string                                    ;
@@ -31221,7 +31283,7 @@ begin
           if not TFile.Exists(Item.DbPath) then Continue;
           Inc(PlatCnt);
           Roots:= Resolver.ReadPlatformLibraryPaths(Item.Platform);
-          Missing:= AnalyzeLibraryDrift(Item.DbPath, Roots);
+          Missing:= AnalyzeLibraryDrift(Item.DbPath, Roots, Item.Filter, Excluded);
           Inc(TotalMiss, Length(Missing));
           JPlatObj:= TJSONObject.Create;
           JPlatObj.AddPair('platform', Item.Platform);
@@ -31229,6 +31291,11 @@ begin
           JMissArr:= TJSONArray.Create;
           for R in Missing do JMissArr.Add(R);
           JPlatObj.AddPair('missingRoots', JMissArr);
+          { B-02: roots the section's exclude prunes -- always present, never
+            counted toward the exit code. }
+          JMissArr:= TJSONArray.Create;
+          for R in Excluded do JMissArr.Add(R);
+          JPlatObj.AddPair('excludedRoots', JMissArr);
           JPlatArr.AddElement(JPlatObj);
         end; // for
         JRoot.AddPair('platforms', JPlatArr);
@@ -31245,7 +31312,7 @@ begin
         if not TFile.Exists(Item.DbPath) then Continue;
         Inc(PlatCnt);
         Roots:= Resolver.ReadPlatformLibraryPaths(Item.Platform);
-        Missing:= AnalyzeLibraryDrift(Item.DbPath, Roots);
+        Missing:= AnalyzeLibraryDrift(Item.DbPath, Roots, Item.Filter, Excluded);
         Inc(TotalMiss, Length(Missing));
         Writeln('platform: ', Item.Platform, ', db: ', Item.DbPath);
         { Reworded (was a bare "MISSING: <root>"): these roots have indexable
@@ -31255,6 +31322,8 @@ begin
           with no companion .pas will show here too; its real .pas source
           usually lives in a sibling Source\ folder -- index that folder. }
         for R in Missing do Writeln('  SOURCE NOT INDEXED (.pas/.inc/.dfm on disk, none in index): ', R);
+        { B-02: not drift -- the section's exclude prunes the root itself. }
+        for R in Excluded do Writeln('  EXCLUDED BY CONFIG (the walk prunes this root; not counted): ', R);
         if Length(Missing) = 0 then Writeln('  (clean)');
       end;
       Writeln('library-drift: ', PlatCnt, ' platforms checked, ', TotalMiss, ' library root(s) with source not yet indexed');

@@ -524,6 +524,20 @@ type
       function ApplyInheritedFieldFacts: Integer;
   end;
 
+/// <summary>True when a folder walk with AFilter prunes ADir by its own
+/// properties: a built-in pruned name (__history, .git, node_modules, ...), a
+/// name containing 'backup', a .scanignore marker inside it, or a base name
+/// matching a GlobalExclude / SectionExclude glob (case-insensitive).</summary>
+/// <param name="ADir">Directory path; a trailing delimiter is ignored.</param>
+/// <param name="AFilter">The walk filter the indexer would use for ADir.</param>
+/// <returns>True when TIndexer would not descend into ADir.</returns>
+/// <remarks>The one rule TIndexer.ShouldPruneDir applies, minus the per-run
+/// --exclude-under roots, so a caller outside a walk (library-drift) decides
+/// "is this root indexable at all" exactly as the walker does. A walk root is
+/// tested too: a root whose own name matches an exclude yields no files.
+/// Touches the file system (the .scanignore probe); thread-safe.</remarks>
+function DirPrunedByFilter(const ADir: string; const AFilter: TWalkFilter): Boolean;
+
 implementation
 
 uses
@@ -1470,7 +1484,14 @@ function TIndexer.ShouldPruneDir(const ADir: string): Boolean;
   already-indexed (--exclude-under) trees are skipped wholesale rather than
   walked and then filtered file-by-file (which took ~8.7h over C:\Projects).
   v0.45: after built-in checks, also prune dirs whose base name matches any
-  GlobalExclude or SectionExclude glob from the walk filter. }
+  GlobalExclude or SectionExclude glob from the walk filter.
+  B-02 (1.31.7): the name/marker/glob part moved to DirPrunedByFilter so
+  library-drift asks the same question the walker does. }
+begin
+  Result:= IsUnderExcludeRoot(IncludeTrailingPathDelimiter(ADir)) or DirPrunedByFilter(ADir, FWalkFilter);
+end;
+
+function DirPrunedByFilter(const ADir: string; const AFilter: TWalkFilter): Boolean;
 const
   PRUNE_NAMES: array[0..5] of string = ( '__history', '__recovery', '.git', '.svn', '.hg', 'node_modules');
 var
@@ -1482,12 +1503,11 @@ begin
   for PN in PRUNE_NAMES do
     if Name = PN then Exit;
   if Pos('backup', Name) > 0 then Exit; { *BACKUP* folders }
-  if IsUnderExcludeRoot(IncludeTrailingPathDelimiter(ADir)) then Exit;
   if TFile.Exists(TPath.Combine(ADir, '.scanignore')) then Exit; { marker file }
   { v0.45: glob-based directory exclusion (uses base name only, case-insensitive).
     Re-use Name (already lower-cased above); TGlob.MatchesAny is case-insensitive. }
-  if TGlob.MatchesAny(Name, FWalkFilter.GlobalExclude ) then Exit;
-  if TGlob.MatchesAny(Name, FWalkFilter.SectionExclude) then Exit;
+  if TGlob.MatchesAny(Name, AFilter.GlobalExclude ) then Exit;
+  if TGlob.MatchesAny(Name, AFilter.SectionExclude) then Exit;
   Result:= False;
 end;
 

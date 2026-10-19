@@ -394,6 +394,8 @@ managed:
 0). If a folder still shows as `MISSING`, the component didn't register that path
 on the IDE search paths; add it under **Tools -> Options -> Language -> Delphi ->
 Library** (Library or Browsing path) for the right platform, then rebuild again.
+A root listed as `EXCLUDED BY CONFIG` (JSON `excludedRoots`) is pruned by the
+section's `exclude` globs (e.g. `"Win64"`) and is not counted as drift.
 
 Notes:
 
@@ -967,7 +969,7 @@ before writing. Details: [Multi-Project-Rename](https://github.com/Alexl-git/Del
 
 | Command | What it does | Notable flags |
 |---|---|---|
-| `rename --kind symbol --name <q> --to <new> --db <db>` | Cross-unit rename (declaration + every reference) | `--apply`, `--no-backup`, `--json` |
+| `rename --kind symbol --name <q> --to <new> --db <db>` | Cross-unit rename (declaration + every reference). Refuses (exit 2, naming the file) when the old name is used in an indexed `.inc` include: refs inside `{$I}` text are not indexed until extractor 1.22 | `--apply`, `--no-backup`, `--json` |
 | `rename --kind param --file <f> --line <L> --col <C> --to <new>` | Routine-local rename (parameter/variable) | `--apply` |
 | `find-unit --name <X> --in <file> --apply` | Add the declaring unit to `uses` | |
 | [`safe-delete`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/safe-delete) `--name <q> --db <db>` | Delete a symbol iff it has zero references | `--apply`, `--json` |
@@ -1383,7 +1385,7 @@ the PowerShell battery.
 ## Version history
 
 See [CHANGELOG.md](CHANGELOG.md) for the detailed history. The current release is
-**v1.31.6-alpha**; development continues daily.
+**v1.31.7-alpha**; development continues daily.
 
 ---
 

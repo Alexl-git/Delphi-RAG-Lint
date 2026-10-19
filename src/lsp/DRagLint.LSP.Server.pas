@@ -2473,13 +2473,14 @@ var
   { The ref-kind -> bucket mapping is the CLI verb's, including its catch-all:
     'call + anything else' lands in calls. Changing it here would make the two
     shapes disagree on a row's bucket while both still "work". }
-  function GroupFor(const AKind: string): TJSONArray;
+  function GroupFor(const ARef: TReference): TJSONArray;
   begin
-    if AKind      = 'read'          then Result:= JReads
-    else if AKind = 'write'         then Result:= JWrites
-    else if AKind = 'type_use'      then Result:= JTypes
-    else if AKind = 'attribute'     then Result:= JAttrs
-    else if AKind = 'event-binding' then Result:= JEvents
+    var Bucket: string:= UsageBucketOf(ARef); { DRagLint.Query.Callers, shared with the CLI }
+    if Bucket      = 'reads'      then Result:= JReads
+    else if Bucket = 'writes'     then Result:= JWrites
+    else if Bucket = 'types'      then Result:= JTypes
+    else if Bucket = 'attributes' then Result:= JAttrs
+    else if Bucket = 'events'     then Result:= JEvents
     else Result:= JCalls;
   end;
 
@@ -2528,7 +2529,8 @@ begin
     for St in FStores do
     begin
       if St = nil then Continue;
-      for S in St.FindSymbolsByExactName(Nm) do
+      var Decls: TArray<TSymbol>:= St.FindSymbolsByExactName(Nm);
+      for S in Decls do
       begin
         DeclO:= TJSONObject.Create;
         DeclO.AddPair('kind'     , S.Kind.ToText);
@@ -2538,8 +2540,8 @@ begin
         DeclO.AddPair('signature', S.Signature);
         JDecls.AddElement(DeclO);
       end;
-      for R in St.FindCallersByName(Nm) do
-        AddRefRow(GroupFor(R.Kind), St.GetFilePath(R.FileId), R.StartLine, R.StartCol);
+      for R in UsageRefsForName(St, Nm, Decls) do
+        AddRefRow(GroupFor(R), St.GetFilePath(R.FileId), R.StartLine, R.StartCol);
       if Width = 'very-wide' then
         for L in St.FindTransitiveCallers(Nm, Depth) do
         begin
