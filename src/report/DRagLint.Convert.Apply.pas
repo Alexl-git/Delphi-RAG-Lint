@@ -936,6 +936,28 @@ function QualifyInferredText(const AFix: TQualifyFix): string;
 /// </remarks>
 function CheckFreshness(const AStores: TArray<ISymbolStore>; const ARules: TConversionRuleSet): TFreshnessResult;
 
+/// <summary>Verifies the TARGET unit's own .pas and sibling .dfm are current
+/// in the index convert-apply is about to plan from (B-18, 1.31.7).</summary>
+/// <param name="AStores">The symbol indexes, in --db order; for each file the
+/// first store that holds a files row for it decides.</param>
+/// <param name="AUnitPas">The unit being converted (full path).</param>
+/// <param name="ADfmPath">Its sibling .dfm (full path); skipped when it does
+/// not exist on disk.</param>
+/// <returns>Fresh=True when every such file that a store holds matches that
+/// store's recorded (mtime, sha). Fresh=False with one Reasons entry per
+/// stale file: 'index is stale for &lt;path&gt; (changed on disk since it was
+/// indexed) -- reindex'.</returns>
+/// <remarks>
+/// CheckFreshness only covers the files declaring the #convert From/To
+/// types, so a unit whose .dfm or .pas changed after indexing read as fresh
+/// and --apply planned spans and access sites from the stale index. Same
+/// (mtime, sha) basis as CheckFreshness. A file no store holds is not
+/// reported here (other guards own "not indexed"). Pure read-only; the
+/// caller decides the outcome (convert-apply: dry run warns, --apply
+/// refuses the unit).
+/// </remarks>
+function CheckUnitFreshness(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string): TFreshnessResult;
+
 /// <summary>The INHERITED and INLINE objects of a .dfm whose class is the From
 /// type of a #convert block, each with its declaring ancestor resolved -- the
 /// instances convert-apply skips and reports (C8 engine items N1, N3).</summary>
@@ -3531,6 +3553,22 @@ end;
 // consulted further for this class. Appends a human-readable reason to
 // AReasons and returns False on either failure mode: unresolved in ANY store
 // (not indexed at all) or resolved-but-stale in the store that resolved it.
+// True when APath's on-disk (mtime, sha) is exactly what AStore recorded.
+// Sha/Mtime basis mirrors DRagLint.Core.Indexer.IndexFile exactly (raw bytes,
+// ANSI-decoded for the sha) so this check compares apples to apples against
+// what FileIsUpToDate was given when the file was last indexed.
+function FileStampIsCurrent(const AStore: ISymbolStore; const APath: string): Boolean;
+var
+  RawBytes : TBytes;
+  Sha      : string;
+  MtimeUnix: Int64;
+begin
+  RawBytes := TFile.ReadAllBytes(APath);
+  Sha      := THashSHA2.GetHashString(TEncoding.ANSI.GetString(RawBytes));
+  MtimeUnix:= DateTimeToUnix(TFile.GetLastWriteTime(APath), False);
+  Result   := AStore.FileIsUpToDate(APath, MtimeUnix, Sha);
+end;
+
 function CheckTypeFreshness(const AStores: TArray<ISymbolStore>; const AClassName: string;
   AReasons: TList<string>): Boolean;
 var
@@ -3539,9 +3577,6 @@ var
   Found  : Boolean;
   ClassSym: TSymbol;
   FilePath: string;
-  RawBytes: TBytes;
-  Sha    : string;
-  MtimeUnix: Int64;
   St     : ISymbolStore;
   ResolvedStore: ISymbolStore;
 begin
@@ -3569,14 +3604,7 @@ begin
     Exit(False);
   end;
 
-  RawBytes := TFile.ReadAllBytes(FilePath);
-  // Sha/Mtime basis mirrors DRagLint.Core.Indexer.IndexFile exactly (raw bytes,
-  // ANSI-decoded for the sha) so this check compares apples to apples against
-  // what FileIsUpToDate was given when the file was last indexed.
-  Sha      := THashSHA2.GetHashString(TEncoding.ANSI.GetString(RawBytes));
-  MtimeUnix:= DateTimeToUnix(TFile.GetLastWriteTime(FilePath), False);
-
-  if not ResolvedStore.FileIsUpToDate(FilePath, MtimeUnix, Sha) then
+  if not FileStampIsCurrent(ResolvedStore, FilePath) then
   begin
     AReasons.Add(Format('%s: index is stale for %s (file changed on disk since last index) -- reindex before converting', [AClassName, FilePath]));
     Exit(False);
@@ -3624,6 +3652,27 @@ begin
   finally
     Seen.Free;
     Reasons.Free;
+  end;
+end;
+
+function CheckUnitFreshness(const AStores: TArray<ISymbolStore>; const AUnitPas, ADfmPath: string): TFreshnessResult;
+begin
+  Result:= Default(TFreshnessResult);
+  Result.Fresh:= True;
+  for var Given: string in [AUnitPas, ADfmPath] do
+  begin
+    if (Given = '') or not TFile.Exists(Given) then Continue;
+    var P: string:= TPath.GetFullPath(Given); { a relative --unit still matches the stored full path }
+    for var St: ISymbolStore in AStores do
+      if St.FindFileIdByPath(P) > 0 then
+      begin
+        if not FileStampIsCurrent(St, P) then
+        begin
+          Result.Fresh  := False;
+          Result.Reasons:= Result.Reasons + [Format('index is stale for %s (changed on disk since it was indexed) -- reindex', [P])];
+        end;
+        Break;
+      end;
   end;
 end;
 
