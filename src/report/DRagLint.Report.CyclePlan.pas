@@ -243,8 +243,9 @@ type
   /// <summary>Everything BuildPlan computed for one circular group, as data,
   /// so a caller can render it (RenderPlan) or apply it.</summary>
   /// <remarks>
-  /// <para>Edits is created by BuildPlan and owns its lists: call Release when
-  /// done. It holds the edits of every touched unit EXCEPT the project's .dpr,
+  /// <para>Ownership: the record owns Edits (created by BuildPlan, owning its
+  /// lists). Do not copy the record -- a copy shares the same Edits object --
+  /// and call Release exactly once, on the one copy you keep. It holds the edits of every touched unit EXCEPT the project's .dpr,
   /// each list ordered bottom-up (the order the playbook prints them); the .dpr
   /// edits are in DprEdits, the .dproj edits in DprojEdits (index order).
   /// Touched is the file order the playbook prints (cycle members first, the
@@ -412,6 +413,7 @@ type
     function PlanImplCycle: TArray<TEdgeEval>;
     procedure CapturePlan(var pPlan: TCycleFixPlan);
     procedure CaptureRefusals(var pPlan: TCycleFixPlan);
+    procedure DumpPlanForTests(const pPlan: TCycleFixPlan);
     procedure RenderNoMechanicalCut(const pEvals: TArray<TEdgeEval>);
     procedure RenderRemedy;
     function ReindexCommand: string;
@@ -2972,6 +2974,46 @@ begin
   else RenderImplCycle(pPlan);
 end;
 
+{ E18 T1 fix round 1: TEST SEAM, inert unless the environment variable names a
+  file. With DRAGLINT_TEST_DUMP_PLAN=<path>, every plan Run builds appends one
+  tab-separated line of its counts and names to <path>, so
+  run_cycle_plan_split_identity.ps1 can check the plan DATA against the playbook
+  TEXT rendered in the same run -- RenderPlan still prints the details from the
+  planner's live state, and later tasks APPLY the plan's arrays. }
+procedure TCyclePlanner.DumpPlanForTests(const pPlan: TCycleFixPlan);
+const
+  CDumpPlanVar = 'DRAGLINT_TEST_DUMP_PLAN';
+  CVerdictText: array[TCycleVerdict] of string = ('mechanical', 'refused');
+var
+  Path : string;
+  Kinds: TList<string>;
+  Names: TList<string>;
+  Files: TList<string>;
+begin
+  Path:= GetEnvironmentVariable(CDumpPlanVar);
+  if Path = '' then Exit;
+  Kinds:= TList<string>.Create;
+  Names:= TList<string>.Create;
+  Files:= TList<string>.Create;
+  try
+    for var R in pPlan.Refusals do
+      if not Kinds.Contains(R.Kind) then Kinds.Add(R.Kind);
+    for var U in pPlan.NewUnits do Names.Add(U.UnitName);
+    for var Fid in pPlan.Touched do
+      if pPlan.Edits.ContainsKey(Fid) then
+        Files.Add(Format('%s:%d', [ExtractFileName(PathOf(Fid)), pPlan.Edits[Fid].Count]));
+    TFile.AppendAllText(Path, Format('cycle=%d'#9'verdict=%s'#9'refusals=%s'#9'items=%d'#9'decisions=%d'#9 +
+      'newunits=%s'#9'edits=%s'#9'dpr=%d'#9'dproj=%d'#9'predicted=%d',
+      [pPlan.CycleIndex, CVerdictText[pPlan.Verdict], string.Join(',', Kinds.ToArray), Length(pPlan.Items),
+       Length(pPlan.Decisions), string.Join('|', Names.ToArray), string.Join('|', Files.ToArray),
+       Length(pPlan.DprEdits), Length(pPlan.DprojEdits), Length(pPlan.Predicted)]) + sLineBreak, TEncoding.ASCII);
+  finally
+    Files.Free;
+    Names.Free;
+    Kinds.Free;
+  end;
+end;
+
 procedure TCyclePlanner.Run;
 begin
   RenderHeader;
@@ -2984,6 +3026,7 @@ begin
   begin
     var Plan:= BuildPlan(I);
     try
+      DumpPlanForTests(Plan);
       RenderPlan(Plan);
     finally
       Plan.Release;
