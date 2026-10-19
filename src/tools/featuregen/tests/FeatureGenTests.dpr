@@ -12,6 +12,7 @@ uses
   , System.JSON
   , FeatureGen.Json in '..\FeatureGen.Json.pas'
   , FeatureGen.Model in '..\FeatureGen.Model.pas'
+  , FeatureGen.Output in '..\FeatureGen.Output.pas'
   ;
 
 var
@@ -128,6 +129,184 @@ begin
   end;
 end;
 
+const
+  SCRATCH = 'C:\TEMP\claude\featuregen-task2';
+
+function FreshDir(const pName: string): string;
+begin
+  Result := TPath.Combine(SCRATCH, pName);
+  if TDirectory.Exists(Result) then
+    TDirectory.Delete(Result, True);
+  ForceDirectories(Result);
+end;
+
+function ReadBytesText(const pPath: string): string;
+begin
+  Result := TEncoding.ASCII.GetString(TFile.ReadAllBytes(pPath));
+end;
+
+procedure TestWriteOnlyWhenDifferent;
+var
+  lDir, lFile: string;
+  lW: TOutputWriter;
+  lR: TOutputResult;
+  lOld, lNew: TDateTime;
+  lR2: TOutputResult;
+begin
+  lDir := FreshDir('wowd');
+  lFile := TPath.Combine(lDir, 'a\b.txt');
+  lW := TOutputWriter.Create(lDir, False, False);
+  try
+    lW.Put('a\b.txt', 'one'#13#10'two'#13#10, 'ctx');
+    lR := lW.Finish;
+  finally
+    lW.Free;
+  end;
+  Check('Output.WriteOnlyWhenDifferent.first', (Length(lR.Written) = 1) and TFile.Exists(lFile));
+  lOld := EncodeDate(2001, 2, 3);
+  TFile.SetLastWriteTime(lFile, lOld);
+  lW := TOutputWriter.Create(lDir, False, False);
+  try
+    lW.Put('a\b.txt', 'one'#13#10'two'#13#10, 'ctx');
+    lR2 := lW.Finish;
+  finally
+    lW.Free;
+  end;
+  lNew := TFile.GetLastWriteTime(lFile);
+  Check('Output.WriteOnlyWhenDifferent', (lNew = lOld) and (Length(lR2.Written) = 0) and (Length(lR2.Changed) = 0),
+    DateTimeToStr(lNew));
+end;
+
+procedure TestLfBecomesCrlf;
+var
+  lDir: string;
+  lW: TOutputWriter;
+begin
+  lDir := FreshDir('crlf');
+  lW := TOutputWriter.Create(lDir, False, False);
+  try
+    lW.Put('x.txt', 'a'#10'b'#13#10'c', 'ctx');
+    lW.Finish;
+  finally
+    lW.Free;
+  end;
+  Check('Output.LfBecomesCrlf', ReadBytesText(TPath.Combine(lDir, 'x.txt')) = 'a'#13#10'b'#13#10'c',
+    ReadBytesText(TPath.Combine(lDir, 'x.txt')));
+end;
+
+procedure TestNonAsciiRaisesWithContext;
+var
+  lW: TOutputWriter;
+  lMsg: string;
+begin
+  lMsg := '';
+  lW := TOutputWriter.Create(FreshDir('nonascii'), False, False);
+  try
+    try
+      lW.Put('x.txt', 'ok'#10'bad ' + Char($00E9), 'entry foo field intro');
+    except
+      on E: EFeatureGen do
+        lMsg := E.Message;
+    end;
+  finally
+    lW.Free;
+  end;
+  Check('Output.NonAsciiRaisesWithContext', (Pos('entry foo field intro', lMsg) > 0) and (Pos('line 2', lMsg) > 0), lMsg);
+end;
+
+procedure TestCheckWritesNothing;
+var
+  lDir: string;
+  lW: TOutputWriter;
+  lR: TOutputResult;
+begin
+  lDir := FreshDir('check');
+  TFile.WriteAllText(TPath.Combine(lDir, 'old.txt'), 'a'#13#10'b'#13#10, TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lDir, 'stale.txt'), 's', TEncoding.ASCII);
+  lW := TOutputWriter.Create(lDir, True, True);
+  try
+    lW.Put('old.txt', 'a'#13#10'c'#13#10, 'ctx');
+    lW.Put('new.txt', 'n', 'ctx');
+    lR := lW.Finish;
+  finally
+    lW.Free;
+  end;
+  Check('Output.CheckWritesNothing',
+    (ReadBytesText(TPath.Combine(lDir, 'old.txt')) = 'a'#13#10'b'#13#10) and not TFile.Exists(TPath.Combine(lDir, 'new.txt'))
+    and TFile.Exists(TPath.Combine(lDir, 'stale.txt')) and (Length(lR.Written) = 0) and (Length(lR.Removed) = 0)
+    and (Length(lR.Changed) = 3), IntToStr(Length(lR.Changed)));
+  Check('Output.CheckDiffHead', (Length(lR.Changed) > 0) and (Pos('first difference at line 2', lR.Changed[0]) > 0)
+    and (Pos('-b', lR.Changed[0]) > 0) and (Pos('+c', lR.Changed[0]) > 0), lR.Changed[0]);
+end;
+
+procedure TestOwnedRootRemovesStale;
+var
+  lDir: string;
+  lW: TOutputWriter;
+  lR: TOutputResult;
+begin
+  lDir := FreshDir('owned');
+  ForceDirectories(TPath.Combine(lDir, 'sub'));
+  TFile.WriteAllText(TPath.Combine(lDir, 'sub\stale.txt'), 's', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lDir, 'keep.txt'), 'k', TEncoding.ASCII);
+  lW := TOutputWriter.Create(lDir, False, True);
+  try
+    lW.Put('keep.txt', 'k', 'ctx');
+    lR := lW.Finish;
+  finally
+    lW.Free;
+  end;
+  Check('Output.OwnedRootRemovesStale', not TFile.Exists(TPath.Combine(lDir, 'sub\stale.txt'))
+    and TFile.Exists(TPath.Combine(lDir, 'keep.txt')) and (Length(lR.Removed) = 1) and (Length(lR.Written) = 0),
+    IntToStr(Length(lR.Removed)));
+end;
+
+procedure TestNeverOutsideRoot;
+var
+  lDir: string;
+  lW: TOutputWriter;
+  lRaised, lRaisedAbs: Boolean;
+begin
+  lDir := FreshDir('outside');
+  lRaised := False;
+  lRaisedAbs := False;
+  lW := TOutputWriter.Create(lDir, False, False);
+  try
+    try
+      lW.Put('..\x.txt', 'x', 'ctx');
+    except
+      on EFeatureGen do
+        lRaised := True;
+    end;
+    try
+      lW.Put('C:\TEMP\claude\featuregen-task2\x.txt', 'x', 'ctx');
+    except
+      on EFeatureGen do
+        lRaisedAbs := True;
+    end;
+  finally
+    lW.Free;
+  end;
+  Check('Output.NeverOutsideRoot', lRaised and lRaisedAbs and not TFile.Exists(TPath.Combine(SCRATCH, 'x.txt')));
+end;
+
+procedure TestPutBinary;
+var
+  lDir, lSrc: string;
+  lW: TOutputWriter;
+begin
+  lDir := FreshDir('bin');
+  lSrc := TPath.Combine(lDir, 'src.bin');
+  TFile.WriteAllBytes(lSrc, TBytes.Create(0, 200, 13, 10, 255));
+  lW := TOutputWriter.Create(TPath.Combine(lDir, 'out'), False, False);
+  try
+    lW.PutBinary('i\p.bin', lSrc);
+    lW.Finish;
+  finally
+    lW.Free;
+  end;
+  Check('Output.PutBinary', TFile.ReadAllBytes(TPath.Combine(lDir, 'out\i\p.bin'))[1] = 200);
+end;
 var
   lRepo: string;
 begin
@@ -138,6 +317,13 @@ begin
       TestRoundTripRealEntries(lRepo);
     TestProp;
     TestLoadMini;
+    TestWriteOnlyWhenDifferent;
+    TestLfBecomesCrlf;
+    TestNonAsciiRaisesWithContext;
+    TestCheckWritesNothing;
+    TestOwnedRootRemovesStale;
+    TestNeverOutsideRoot;
+    TestPutBinary;
   except
     on E: Exception do
     begin
