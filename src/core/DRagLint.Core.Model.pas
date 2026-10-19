@@ -1143,7 +1143,7 @@ type
 
   /// <remarks>
   /// <!-- drag-lint:auto BEGIN -->
-  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), declaration (DRagLint.Analysis.SurfaceFingerprint.pas), DRagLint.Analysis.LintTree.InterfaceUsesOf (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.SurfaceFingerprint.InterfaceUsesLine (DRagLint.Analysis.SurfaceFingerprint.pas) (+38 more)</para>
+  /// <para>Used by: declaration (DRagLint.Analysis.LintTree.pas), declaration (DRagLint.Analysis.SurfaceFingerprint.pas), DRagLint.Analysis.LintTree.InterfaceUsesOf (DRagLint.Analysis.LintTree.pas), DRagLint.Analysis.SurfaceAdapters.TryFingerprintOfIndex (DRagLint.Analysis.SurfaceAdapters.pas), DRagLint.Analysis.SurfaceFingerprint.InterfaceUsesLine (DRagLint.Analysis.SurfaceFingerprint.pas) (+37 more)</para>
   /// <para>Used in units: DRagLint.Analysis.LintTree, DRagLint.Analysis.SurfaceAdapters, DRagLint.Analysis.SurfaceFingerprint, DRagLint.CLI, DRagLint.Convert.Apply, DRagLint.Core.Interfaces, DRagLint.Lint.ProjectChecks, DRagLint.Lint.ProjectRules, DRagLint.Parser.Delphi13, DRagLint.Refactor.EnumHelper, DRagLint.Refactor.TextEdit, DRagLint.Report.CyclePlan, DRagLint.Storage.SQLite</para>
   /// <!-- drag-lint:auto END -->
   /// </remarks>

@@ -673,16 +673,6 @@ type
     Stop : Integer;
   end;
 
-  { One uses clause as TUsesLexer reads it; offsets are 1-based into the
-    scanned text, Seps[I] sits between Entries[I] and Entries[I + 1]. }
-  TClauseScan = record
-    Ok     : Boolean;
-    UsesTok: TTok;
-    Entries: TArray<TUsesEntry>;
-    Seps   : TArray<TTok>;
-    Semi   : TTok;
-  end;
-
 const
   CClauseBreak = #13#10;
   CRefDirective = 'directive';
@@ -694,68 +684,41 @@ begin
   Result.Stop := pStop;
 end;
 
-function IsSymTok(const pTok: TTok; const pSym: string): Boolean;
-begin
-  Result:= (pTok.Kind = tkSym) and (pTok.Text = pSym);
-end;
-
-function IsWordTok(const pTok: TTok; const pWord: string): Boolean;
-begin
-  Result:= (pTok.Kind = tkIdent) and not pTok.Escaped and SameText(pTok.Text, pWord);
-end;
-
-{ The first `uses` clause of the lexer's text; Ok = False on any other shape. }
-function ScanClause(pLex: TUsesLexer): TClauseScan;
+{ The first `uses` clause of the lexer's text, read by UnitRules' ParseClause
+  (one uses grammar); Present = False when there is none or it does not parse. }
+function ScanClause(pLex: TUsesLexer): TUsesClause;
 var
-  T      : TTok;
-  E      : TUsesEntry;
-  Entries: TList<TUsesEntry>;
-  Seps   : TList<TTok>;
+  T: TTok;
 begin
-  Result:= Default(TClauseScan);
+  Result:= Default(TUsesClause);
   repeat
     T:= pLex.Next;
-  until (T.Kind = tkEof) or IsWordTok(T, 'uses');
-  if T.Kind = tkEof then Exit;
-  Result.UsesTok:= T;
-  Entries:= TList<TUsesEntry>.Create;
-  Seps   := TList<TTok>.Create;
+  until (T.Kind = tkEof) or ((T.Kind = tkIdent) and not T.Escaped and SameText(T.Text, 'uses'));
+  if (T.Kind = tkEof) or not ParseClause(pLex, T, Result) then Result.Present:= False;
+end;
+
+{ True when the entry span holds anything but its own tokens -- a comment or a
+  directive -- asked of the lexer, so an `in 'path'` literal holding `{` or
+  `//` is just a string. }
+function EntryHasTrivia(const pText: string; const pE: TUsesEntry): Boolean;
+var
+  Lex : TUsesLexer;
+  T   : TTok;
+  Body: string;
+  At  : Integer;
+begin
+  Body:= Copy(pText, pE.Start, pE.Stop - pE.Start);
+  Lex := TUsesLexer.Create(Body);
   try
+    At:= 1;
+    Result:= False;
     repeat
-      T:= pLex.Next;
-      if T.Kind <> tkIdent then Exit;
-      E:= Default(TUsesEntry);
-      E.Name := T.Text;
-      E.Start:= T.Start - Ord(T.Escaped);  // dl:ok duplicate-code@15bd -- REVIEWED 2026-10-19 (E18 T3a): the entry loop of UnitRules.ParseClause on purpose -- this scan must also return the `uses` and `;` tokens (the `;` Depth refuses an add inside a conditional) and take an '&ident' entry's ampersand into its span; exporting ParseClause + TUsesClause would widen T3a's interface move for one caller
-      E.Stop := T.Stop;
-      E.Depth:= T.Depth;
-      T:= pLex.Next;
-      while IsSymTok(T, '.') do
-      begin
-        T:= pLex.Next;
-        if T.Kind <> tkIdent then Exit;
-        E.Name:= E.Name + '.' + T.Text;
-        E.Stop:= T.Stop;
-        T:= pLex.Next;
-      end;
-      if IsWordTok(T, 'in') then
-      begin
-        T:= pLex.Next;
-        if T.Kind <> tkString then Exit;
-        E.Stop:= T.Stop;
-        T:= pLex.Next;
-      end;
-      Entries.Add(E);
-      if IsSymTok(T, ',') then Seps.Add(T)
-      else if not IsSymTok(T, ';') then Exit;
-    until IsSymTok(T, ';');
-    Result.Semi   := T;
-    Result.Entries:= Entries.ToArray;
-    Result.Seps   := Seps.ToArray;
-    Result.Ok     := True;
+      T:= Lex.Next;
+      if Trim(Copy(Body, At, T.Start - At)) <> '' then Result:= True;
+      At:= T.Stop;
+    until Result or (T.Kind = tkEof);
   finally
-    Seps.Free;
-    Entries.Free;
+    Lex.Free;
   end;
 end;
 
@@ -787,7 +750,7 @@ begin
 end;
 
 { Adds pEntry after the last entry; returns the refusal kind or ''. }
-function AddClauseEntry(var pText: string; pLex: TUsesLexer; const pScan: TClauseScan; const pEntry: string): string;
+function AddClauseEntry(var pText: string; pLex: TUsesLexer; const pScan: TUsesClause; const pEntry: string): string;
 var
   L        : TUsesEntry;
   At       : Integer;
@@ -796,6 +759,7 @@ var
 begin
   if pScan.Semi.Depth > 0 then Exit(CRefDirective);
   L := pScan.Entries[High(pScan.Entries)];
+  L.Start:= L.Start - Ord(L.Escaped);
   At:= if pLex.DirectiveIn(L.Stop, pScan.Semi.Start) then pScan.Semi.Start else L.Stop;
   LineStart:= L.Start;
   while (LineStart > 1) and not CharInSet(pText[LineStart - 1], [#10, #13]) do Dec(LineStart);
@@ -807,15 +771,15 @@ begin
 end;
 
 { Removes entry pIdx with one separator; returns the refusal kind or ''. }
-function RemoveClauseEntry(var pText: string; pLex: TUsesLexer; const pScan: TClauseScan; pIdx: Integer): string;
+function RemoveClauseEntry(var pText: string; pLex: TUsesLexer; const pScan: TUsesClause; pIdx: Integer): string;
 var
   E: TUsesEntry;
   S: TTok;
 begin
   E:= pScan.Entries[pIdx];
   if E.Depth > 0 then Exit(CRefDirective);
-  var Body:= Copy(pText, E.Start, E.Stop - E.Start);
-  if ContainsStr(Body, '{') or ContainsStr(Body, '(*') or ContainsStr(Body, '//') then Exit(CRefManual);
+  if EntryHasTrivia(pText, E) then Exit(CRefManual);
+  E.Start:= E.Start - Ord(E.Escaped);  { an '&ident' entry's span starts at its '&' }
   Result:= CRefDirective;
   if Length(pScan.Entries) = 1 then
   begin
@@ -827,22 +791,22 @@ begin
       Result:= '';
     end;
   end
-  else if (pIdx < High(pScan.Entries)) and (pScan.Seps[pIdx].Depth = 0) and
-    not pLex.DirectiveIn(E.Start, pScan.Seps[pIdx].Stop) then
+  else if (pIdx < High(pScan.Entries)) and (pScan.Commas[pIdx].Depth = 0) and
+    not pLex.DirectiveIn(E.Start, pScan.Commas[pIdx].Stop) then
   begin
-    S:= pScan.Seps[pIdx];
+    S:= pScan.Commas[pIdx];
     DeleteSpans(pText, [OfsSpan(E.Start, E.Stop), OfsSpan(S.Start, S.Stop)], True);
     Result:= '';
   end
-  else if (pIdx > 0) and (pScan.Seps[pIdx - 1].Depth = 0) and not pLex.DirectiveIn(pScan.Seps[pIdx - 1].Start, E.Stop) then
+  else if (pIdx > 0) and (pScan.Commas[pIdx - 1].Depth = 0) and not pLex.DirectiveIn(pScan.Commas[pIdx - 1].Start, E.Stop) then
   begin
-    S:= pScan.Seps[pIdx - 1];
+    S:= pScan.Commas[pIdx - 1];
     DeleteSpans(pText, [OfsSpan(S.Start, S.Stop), OfsSpan(E.Start, E.Stop)], False);
     Result:= '';
   end;
 end;
 
-function IndexOfEntry(const pScan: TClauseScan; const pStem: string): Integer;
+function IndexOfEntry(const pScan: TUsesClause; const pStem: string): Integer;
 begin
   for var I:= 0 to High(pScan.Entries) do
     if SameText(pScan.Entries[I].Name, pStem) then Exit(I);
@@ -860,8 +824,8 @@ var
   Old   : TArray<string>;
   Src   : string;           // the clause onward, unedited
   Text  : string;           // the same, as the ops edit it
-  Orig  : TClauseScan;
-  Cur   : TClauseScan;
+  Orig  : TUsesClause;
+  Cur   : TUsesClause;
   Lex   : TUsesLexer;
   Ops   : TList<string>;  // '+entry' / '-stem', in order
   Kind  : string;
@@ -881,8 +845,8 @@ begin
   finally
     Lex.Free;
   end;
-  BadOfs:= if Orig.Ok then Orig.UsesTok.Start else 1;
-  if not Orig.Ok then Kind:= CRefManual;
+  BadOfs:= if Orig.Present then Orig.UsesTok.Start else 1;
+  if not Orig.Present then Kind:= CRefManual;
   Ops:= TList<string>.Create;
   try
     if Kind = '' then
@@ -906,7 +870,7 @@ begin
       Lex:= TUsesLexer.Create(Text);
       try
         Cur:= ScanClause(Lex);
-        if not Cur.Ok then Kind:= CRefManual
+        if not Cur.Present then Kind:= CRefManual
         else if Op[1] = '+' then
         begin
           Kind:= AddClauseEntry(Text, Lex, Cur, Copy(Op, 2, MaxInt));
@@ -914,8 +878,16 @@ begin
         end
         else
         begin
-          Kind:= RemoveClauseEntry(Text, Lex, Cur, IndexOfEntry(Cur, Copy(Op, 2, MaxInt)));
-          BadOfs:= Orig.Entries[IndexOfEntry(Orig, Copy(Op, 2, MaxInt))].Start;
+          { both indexes exist by construction (a removal is queued only for an
+            entry of Orig, and adds never remove one) -- refuse, never index -1 }
+          var InCur := IndexOfEntry(Cur, Copy(Op, 2, MaxInt));
+          var InOrig:= IndexOfEntry(Orig, Copy(Op, 2, MaxInt));
+          if (InCur < 0) or (InOrig < 0) then Kind:= CRefManual
+          else
+          begin
+            Kind  := RemoveClauseEntry(Text, Lex, Cur, InCur);
+            BadOfs:= Orig.Entries[InOrig].Start;
+          end;
         end;
       finally
         Lex.Free;

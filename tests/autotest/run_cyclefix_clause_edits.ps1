@@ -123,9 +123,8 @@ try {
 
   # end to end: follow the plan on the copy, re-index, the cycle is gone
   $fo = & pwsh -NoProfile -File $Follower -PlanFile $plan.File -Cycle 1 2>&1 | Out-String
-  Check 'follow-cycle-plan applies the plan' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
-  # the follower SKIPS an unparseable step with a REFUSE line and still exits 0 -- read its output too
-  Check 'follow-cycle-plan refuses no step' ($fo -notmatch 'REFUSE') ($fo.Trim() -replace "`r?`n", ' | ')
+  # every follower REFUSE exits 2 (b7fb3387), so exit 0 means every step applied
+  Check 'follow-cycle-plan applies every step (exit 0)' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $after = [IO.File]::ReadAllText((Join-Path $c.Root 'CfAlpha.pas'))
   Check 'applied CfAlpha keeps the comment line' ($after.Contains('  // CfBeta supplies the limit')) ''
   Check 'applied CfAlpha keeps the trailing comment' ($after -match 'CfBeta\.Contracts; // why: the limit lives there') ''
@@ -145,6 +144,55 @@ try {
   Check 'refusal kind directive' ($plan.Dump -match 'refusals=[^\t]*\bdirective\b') $plan.Dump.Trim()
   $alpha = Get-FileBlock $plan.Text 'CfAlpha.pas'
   Check 'CfAlpha gets no Replace/Delete edit (the directive is never rewritten)' ($alpha -notmatch '(?m)^E\d+\. (Replace|Delete) ') ($alpha -replace "`r?`n", ' | ')
+
+  # ---------------------------------------------------------------- clause variants (fix round 1)
+  # commentclause with CfAlpha's implementation clause (its lines 14-17) swapped for each shape below.
+  # Each case follows the plan on the copy and compares the APPLIED clause with the exact expected
+  # text, then re-indexes: the cycle must be gone. The exact text is the control: a wrong separator,
+  # a left-over blank line or a lost directive changes it.
+  $base = [IO.File]::ReadAllText((Join-Path $Fixtures 'commentclause\CfAlpha.pas'))
+  $old  = "uses`r`n  System.SysUtils,`r`n  // CfBeta supplies the limit`r`n  CfBeta; // why: the limit lives there"
+  Check 'variants: the commentclause clause block is where the cases expect it' ($base.Contains($old)) ''
+  $cases = @(
+    @{ N = 'first';  In = "uses`r`n  CfBeta,`r`n  System.SysUtils;";
+       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Contracts;`r`n" },
+    @{ N = 'middle'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta,`r`n  System.Classes;";
+       Out = "uses`r`n  System.SysUtils,`r`n  System.Classes,`r`n  CfBeta.Contracts;`r`n" },
+    @{ N = 'only';   In = "uses`r`n  CfBeta;";
+       Out = "uses`r`n  CfBeta.Contracts;`r`n" },
+    @{ N = 'inline'; In = "uses System.SysUtils, CfBeta, System.Classes;";
+       Out = "uses System.SysUtils, System.Classes, CfBeta.Contracts;`r`n" },
+    # J5 positive: a directive in the clause but OUTSIDE the span the removal deletes does not refuse
+    @{ N = 'j5';     In = "uses`r`n  System.SysUtils {`$IFDEF MSWINDOWS}, System.Classes {`$ENDIF},`r`n  CfBeta;";
+       Out = "uses`r`n  System.SysUtils {`$IFDEF MSWINDOWS}, System.Classes {`$ENDIF},`r`n  CfBeta.Contracts;`r`n" },
+    # an `in 'path'` literal holding `{` and `//` is a string token, not a comment
+    @{ N = 'inpath'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta in '.\{b}\..\.//CfBeta.pas';";
+       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Contracts;`r`n" }
+  )
+  foreach ($k in $cases) {
+    $tag  = 'variant-' + $k.N
+    $root = Join-Path $WorkDir $tag
+    if (Test-Path $root) { [IO.Directory]::Delete($root, $true) }
+    [void](New-Item -ItemType Directory -Force $root)
+    Get-ChildItem (Join-Path $Fixtures 'commentclause') -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $root $_.Name) }
+    [IO.File]::WriteAllText((Join-Path $root 'CfAlpha.pas'), $base.Replace($old, $k.In), [Text.Encoding]::ASCII)
+    $db = Join-Path $WorkDir ($tag + '.sqlite')
+    if (Test-Path $db) { [IO.File]::Delete($db) }
+    $proj = Join-Path $root 'CommentClause.dproj'
+    & $Exe index --project $proj --db $db *> (Join-Path $WorkDir ($tag + '-index.log'))
+    $n, $raw = Get-CycleCount $db
+    Check "$($k.N): control -- the cycle exists before the plan" ($raw -match '(?i)cfalpha' -and $raw -notmatch 'No circular') ''
+    $plan = Get-Plan $db $tag
+    Check "$($k.N): verdict mechanical, no refusal" ($plan.Dump -match "verdict=mechanical`trefusals=`t") $plan.Dump.Trim()
+    $fo = & pwsh -NoProfile -File $Follower -PlanFile $plan.File -Cycle 1 2>&1 | Out-String
+    Check "$($k.N): follower applies every step (exit 0)" ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
+    $after = [IO.File]::ReadAllText((Join-Path $root 'CfAlpha.pas'))
+    $got   = [regex]::Match($after, '(?s)(?<=implementation\r\n\r\n)uses.*?;[^\r\n]*\r\n').Value
+    Check "$($k.N): applied clause is exactly the expected text" ($got -ceq $k.Out) ("got [" + ($got -replace "`r`n", '\n') + "]")
+    & $Exe index --project $proj --db $db *> (Join-Path $WorkDir ($tag + '-reindex.log'))
+    $n2, $raw2 = Get-CycleCount $db
+    Check "$($k.N): after the plan, no cycle" ($raw2 -match 'No circular') ($raw2.Trim() -replace "`r?`n", ' | ')
+  }
 } finally {
   if ($script:Failed) { Write-Host "work dir kept: $WorkDir" -ForegroundColor DarkGray }
 }

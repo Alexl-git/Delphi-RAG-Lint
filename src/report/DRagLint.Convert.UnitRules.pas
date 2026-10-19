@@ -76,6 +76,26 @@ type
     Start: Integer;
     Stop : Integer;
     Depth: Integer;
+    Escaped: Boolean;  { first token was '&ident': its '&' sits at Start - 1 }
+  end;
+
+  /// <summary>One section's uses clause as ParseClause reads it.</summary>
+  /// <remarks>Commas[i] sits between Entries[i] and Entries[i + 1]. Start is
+  /// the `uses` token's start, Stop the `;` token's stop (exclusive); UsesTok
+  /// and Semi are those two tokens (Semi.Depth tells whether the `;` sits in a
+  /// conditional region). Section / Present / KwLine are filled by the caller
+  /// (KwLine: the section keyword's line, kept for a clause that has to be
+  /// created).</remarks>
+  TUsesClause = record
+    Section: string;
+    Present: Boolean;
+    KwLine : Integer;
+    Start  : Integer;
+    Stop   : Integer;
+    Entries: TArray<TUsesEntry>;
+    Commas : TArray<TTok>;
+    UsesTok: TTok;
+    Semi   : TTok;
   end;
 
   /// <summary>A small Pascal lexer for uses clauses: skips whitespace and
@@ -341,6 +361,19 @@ function UnitRuleWatchList(const ARules: TConversionRuleSet; const AExtraAdds: T
 /// <remarks>Pure.</remarks>
 function ImplementationKeywordLine(const AText: string): Integer;
 
+/// <summary>Reads one uses clause, 'Name[.Name...] [in 'path']' (, ...) ';',
+/// after an already-consumed `uses` token.</summary>
+/// <param name="ALex">The lexer, positioned just after AUsesTok; it is left
+/// just after the `;`, and its DirectiveIn then knows every directive up to
+/// there.</param>
+/// <param name="AUsesTok">The `uses` token ALex returned.</param>
+/// <param name="AClause">Receives Start, Stop, Entries, Commas, UsesTok,
+/// Semi and Present = True on success; Section and KwLine are untouched.</param>
+/// <returns>False on any other shape (AClause then partly filled; ignore it).</returns>
+/// <remarks>Shared by the unit-rule planner and DRagLint.Report.CyclePlan
+/// (E18 T3a), so the uses grammar lives in one place.</remarks>
+function ParseClause(ALex: TUsesLexer; const AUsesTok: TTok; var AClause: TUsesClause): Boolean;
+
 implementation
 
 uses
@@ -362,19 +395,6 @@ const
   PAR_OPEN_LEN = 3;  // paren + star + dollar
 
 type
-  { One section's uses clause. Commas[i] sits between Entries[i] and
-    Entries[i + 1]. KwLine is the section keyword's line, kept for a clause
-    that has to be created. }
-  TUsesClause = record
-    Section: string;
-    Present: Boolean;
-    KwLine : Integer;
-    Start  : Integer;
-    Stop   : Integer;
-    Entries: TArray<TUsesEntry>;
-    Commas : TArray<TTok>;
-  end;
-
   TSpan = record
     Start: Integer;
     Stop : Integer;
@@ -573,8 +593,6 @@ begin
   Result:= (T.Kind = tkSym) and (T.Text = ASym);
 end;
 
-{ Reads 'Name[.Name...] [in 'path']' (, ...) ';' after an already-consumed
-  'uses' token. False on any other shape. }
 function ParseClause(ALex: TUsesLexer; const AUsesTok: TTok; var AClause: TUsesClause): Boolean;
 var
   T      : TTok;
@@ -586,7 +604,8 @@ begin
   Entries:= TList<TUsesEntry>.Create;
   Commas := TList<TTok>.Create;
   try
-    AClause.Start:= AUsesTok.Start;
+    AClause.Start  := AUsesTok.Start;
+    AClause.UsesTok:= AUsesTok;
     repeat
       T:= ALex.Next;
       if T.Kind <> tkIdent then Exit;
@@ -595,6 +614,7 @@ begin
       E.Start:= T.Start;
       E.Stop := T.Stop;
       E.Depth:= T.Depth;
+      E.Escaped:= T.Escaped;
       T:= ALex.Next;
       while IsSym(T, '.') do
       begin
@@ -618,6 +638,7 @@ begin
         Exit;
     until IsSym(T, ';');
     AClause.Stop   := T.Stop;
+    AClause.Semi   := T;
     AClause.Present:= True;
     AClause.Entries:= Entries.ToArray;
     AClause.Commas := Commas.ToArray;
