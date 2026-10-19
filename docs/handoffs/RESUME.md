@@ -15,7 +15,8 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Open
 
-- 2026-10-18 | engine | 1.31.5 merged to main (34175807), installer built, engine+BPL DEPLOYED 10-19; owner gates: VM test, push+tag, publish | open | [HANDOFF-2026-10-18-engine-1315-owner-gates.md](HANDOFF-2026-10-18-engine-1315-owner-gates.md)
+- 2026-10-19 | engine | 1.31.5 RELEASED + deployed, worktrees cleaned; next: plan + run wave 2 (bugs + TODOs) | open | [HANDOFF-2026-10-19-engine-wave2-start.md](HANDOFF-2026-10-19-engine-wave2-start.md)
+- 2026-10-18 | engine | 1.31.5 merged to main (34175807), installer built, engine+BPL DEPLOYED 10-19; owner gates: VM test, push+tag, publish | closed | [HANDOFF-2026-10-18-engine-1315-owner-gates.md](HANDOFF-2026-10-18-engine-1315-owner-gates.md)
 - 2026-10-18 | engine | wave 1.31.5: 6 lanes merged into wave/1315, lanes 2/6/7 running; then baseline, battery, main, installer | closed | [HANDOFF-2026-10-18-engine-wave-1315-lanes.md](HANDOFF-2026-10-18-engine-wave-1315-lanes.md)
 - 2026-10-18 | engine | VM test found sqlite3.dll not shipped -> fixed 28b73f28 (unpushed) + installer version 1.31.4.0; owner re-tests installer on VM, then push + publish | closed | [HANDOFF-2026-10-18-engine-1314-vm-retest.md](HANDOFF-2026-10-18-engine-1314-vm-retest.md)
 - 2026-10-18 | engine | 1.31.4 + PS-free charts deployed (engine Win64, BPL Win32+Win64), main pushed; installer built; waits owner VM test then publish (tag 7f437dca) | closed | [HANDOFF-2026-10-18-engine-1314-installer-vm-test.md](HANDOFF-2026-10-18-engine-1314-installer-vm-test.md)
