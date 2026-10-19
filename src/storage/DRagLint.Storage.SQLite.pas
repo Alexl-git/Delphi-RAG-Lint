@@ -3315,6 +3315,7 @@ uses
   , System.Diagnostics        { v0.86: resolve-pass progress timing -- see ResolveLog }
   , DRagLint.Storage.Schema
   , DRagLint.Storage.FileMembership { HeaderSaysWal: the read-only Connect names the journal mode the file already has }
+  , DRagLint.Core.Versions { REBUILD_IN_PROGRESS_META_KEY: ClearAllFiles stamps it (B-23) }
   , DRagLint.Query  .Fuzzy
   { DRagLint.Index.CallResolver (v14, D5: the receiver-typing engine for
     ResolveCallTargets) moved to the INTERFACE uses on 2026-09-23 -- see the
@@ -7215,7 +7216,15 @@ begin
   finally
     Q.Free;
   end;
-  if Result = 0 then Exit; { nothing to clear -- do not open a transaction }
+  { B-23: stamp the DB "rebuild in progress" so DbMembership reads it as
+    UNKNOWN until CommitIndexerFingerprint (a completed walk) clears the stamp.
+    Without it a probe between this clear and the end of the walk -- or after a
+    killed rebuild -- found no files row and answered a confident notmember. }
+  if Result = 0 then
+  begin
+    SetMetaValue(REBUILD_IN_PROGRESS_META_KEY, '1');
+    Exit; { nothing to clear -- do not open a transaction }
+  end;
 
   { RESOLVE SCOPE: everything is going, so nothing this instance later records
     describes the change. --rebuild always takes the whole-database pass, which
@@ -7226,6 +7235,7 @@ begin
   try
     FConn.ExecSQL('DELETE FROM string_literals'); { fire the FTS5 sync triggers }
     FConn.ExecSQL('DELETE FROM files');           { cascades everything else    }
+    SetMetaValue(REBUILD_IN_PROGRESS_META_KEY, '1'); { same commit as the clear }
     FConn.Commit;
   except
     FConn.Rollback;
@@ -7255,26 +7265,34 @@ begin
   Q:= TFDQuery.Create(nil);
   try
     Q.Connection:= FConn;
+    { B-27b: string_literals.text is stored WITHOUT its Pascal quotes, so a query
+      spelled the way the source spells it -- 'declaration' -- never matched in
+      the trigram table (unicode61 drops the quote as a separator, so only
+      --substring missed). Strip one enclosing pair and un-double the inner
+      quotes, exactly as the extractor did when it stored the text. }
+    var Needle:= AQuery;
+    if (Length(Needle) >= 2) and Needle.StartsWith('''') and Needle.EndsWith('''') then
+      Needle:= StringReplace(Copy(Needle, 2, Length(Needle) - 2), '''''', '''', [rfReplaceAll]);
     if SameText(AMode, 'substring') then
     begin
       FtsTable := 'string_fts_tri';
-      MatchExpr:= QuotePhrase(AQuery); // trigram: phrase-quote -> substring match
+      MatchExpr:= QuotePhrase(Needle); // trigram: phrase-quote -> substring match
     end
     else if SameText(AMode, 'anyorder') then
     begin
       FtsTable := 'string_fts';
       MatchExpr:= '';
-      for var Term in AQuery.Split([' ', #9, #10, #13], TStringSplitOptions.ExcludeEmpty) do
+      for var Term in Needle.Split([' ', #9, #10, #13], TStringSplitOptions.ExcludeEmpty) do
       begin
         if MatchExpr <> '' then MatchExpr := MatchExpr + ' ';
         MatchExpr := MatchExpr + QuotePhrase(Term);
       end;
-      if MatchExpr = '' then MatchExpr := QuotePhrase(AQuery);
+      if MatchExpr = '' then MatchExpr := QuotePhrase(Needle);
     end
     else
     begin
       FtsTable := 'string_fts';
-      MatchExpr:= QuotePhrase(AQuery); // default: exact phrase, in order
+      MatchExpr:= QuotePhrase(Needle); // default: exact phrase, in order
     end;
     { 2026-08-17: owner_name used to come back EMPTY for every .pas literal, and
       `encl` resolved to the UNIT -- so "which routine issues this string?" was
@@ -7324,9 +7342,17 @@ begin
       prose passes --kind comment. Empty means no filter, which is the
       default and returns both. }
     if AKind <> '' then Sql:= Sql + 'AND sl.kind = :knd ';
-    Sql:= Sql + 'ORDER BY f.path, sl.start_line LIMIT :lim';
+    { B-27a: LIMIT used to cut a window ordered by path alone, so comment / doc
+      rows in an earlier file pushed a short literal out of `--limit 3` (the
+      five 'null' literals were stored; none was shown). Rank first: a literal
+      whose WHOLE text is the needle, then string kinds before comment prose,
+      then the old path/line order. The row SET is unchanged; only which rows
+      survive the cut. Guard: tests\autotest\run_query_text_short_literal.ps1. }
+    Sql:= Sql + 'ORDER BY (lower(sl.text) = lower(:qraw)) DESC, ' +
+      '(sl.kind IN (''comment'', ''doc'')), f.path, sl.start_line LIMIT :lim';
     Q.SQL.Text:= Sql;
     Q.ParamByName('q').AsString:= MatchExpr;
+    Q.ParamByName('qraw').AsString:= Needle;
     if ASource <> '' then Q.ParamByName('src').AsString:= ASource;
     if AKind   <> '' then Q.ParamByName('knd').AsString:= AKind;
     Q.ParamByName('lim').AsInteger:= ALimit;

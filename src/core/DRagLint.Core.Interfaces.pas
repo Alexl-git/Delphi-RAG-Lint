@@ -810,6 +810,9 @@ type
     /// produced by a source walk, so a source rebuild has no business
     /// discarding them.
     /// Not thread-safe; call on the indexing thread with no walk in flight.
+    /// Stamps schema_meta REBUILD_IN_PROGRESS_META_KEY = '1' (in the clearing
+    /// commit), so DbMembership reads the DB as unknown until a completed walk
+    /// clears the stamp (B-23).
     /// <!-- drag-lint:auto BEGIN -->
     /// <para>Called from: DRagLint.CLI.BuildPlanItem (DRagLint.CLI.pas), DRagLint.CLI.DoIndex (DRagLint.CLI.pas)</para>
     /// <seealso cref="DRagLint.Core.Interfaces.ISymbolStore.CallEdgesNeedRebuild"/>
@@ -1967,7 +1970,10 @@ type
     /// <summary>Full-text search over indexed string literals. AMode selects the
     /// FTS strategy: 'phrase' (default, exact order), 'anyorder' (all words any
     /// order), 'substring' (trigram-based). ASource filters by source language
-    /// ('pas'|'dfm'|'sql'); '' = all. Returns up to ALimit hits.</summary>
+    /// ('pas'|'dfm'|'sql'); '' = all. Returns up to ALimit hits, ranked: a row
+    /// whose whole text equals the query first, then string kinds before
+    /// 'comment'/'doc' prose, then by path and line (B-27). A query wrapped in
+    /// Pascal quotes ('x') is unquoted first, since stored text has no quotes.</summary>
     /// <param name="AQuery"><!-- drag-lint:auto type -->const string</param>
     /// <param name="AMode"><!-- drag-lint:auto type -->string</param>
     /// <param name="ASource"><!-- drag-lint:auto type -->const string</param>

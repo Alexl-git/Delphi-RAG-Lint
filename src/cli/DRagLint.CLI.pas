@@ -97,7 +97,7 @@ uses
   , System.SysUtils
   , System.Classes
   , System.IOUtils
-  , DRagLint.Core.Versions { CompareDottedVersions + INDEXER_FINGERPRINT_META_KEY: the never-downgrade gate }
+  , DRagLint.Core.Versions // dl:unit DRagLint.Core.Versions accepted -- the schema_meta keys travel with the gate that reads them: INDEXER_FINGERPRINT_META_KEY (never-downgrade) and REBUILD_IN_PROGRESS_META_KEY (B-23, cleared on a completed walk)
   , System.NetEncoding { TNetEncoding.URL -- encodes the vault name into the obsidian:// URI }
   , System.JSON
   , System.StrUtils
@@ -5377,6 +5377,10 @@ begin
     written only after a run whose resolve pass completed. See
     ResolverFingerprint for why it is separate from the indexer one. }
   AStore.SetMetaValue(RESOLVER_FP_KEY, ResolverFingerprint(AStore));
+  { B-23: the walk completed, so a --rebuild that cleared this DB is over and
+    DbMembership may answer member / notmember again. Same guarantee as above:
+    a killed rebuild never reaches here and its DB keeps reading UNKNOWN. }
+  AStore.SetMetaValue(REBUILD_IN_PROGRESS_META_KEY, '');
 end;
 
 { v21: opens --library-db paths as read-only extra stores for cross-DB call
