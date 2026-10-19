@@ -21,8 +21,7 @@ No IDE surface -- this is a CLI-only feature.
 
 ## What it needs
 An index IS required -- `convert-scaffold` reads the project's index
-database. The project's DB lives at `<project folder>\_D-RAG\<project
-file>.sqlite`; run `drag-lint resolve-dbs --project <X.dproj>` if you are
+database. The project's DB lives at `<project folder>\_D-RAG\<project file>.sqlite`; run `drag-lint resolve-dbs --project <X.dproj>` if you are
 unsure which one.
 
 ## Example

@@ -53,8 +53,7 @@ Who writes this field (drag-lint report who-writes) for OPERAT.NAME, asked on 20
 COMMAND who-writes -Target "OPERAT.NAME" -Project "C:\Projects\DB\ORM3\CLIENT\Micronite2027.dproj" -Depth 3
 ```
 
-`COMMAND <id> [-Target "v"] [-To "v"] (-Project "v" | -In "v") [-Depth n] [-Cap n]
-[-SurfaceCap n] [-Control "v"] [-Mode v] [-MaxRows n]` lists only the arguments the
+`COMMAND <id> [-Target "v"] [-To "v"] (-Project "v" | -In "v") [-Depth n] [-Cap n] [-SurfaceCap n] [-Control "v"] [-Mode v] [-MaxRows n]` lists only the arguments the
 caller gave explicitly, in that fixed order. In a unit the same two lines appear as
 `///` comment lines (the `COMMAND` line XML-escaped and never wrapped). A report
 without them is a legacy report: it parses with an empty time, engine and command,
