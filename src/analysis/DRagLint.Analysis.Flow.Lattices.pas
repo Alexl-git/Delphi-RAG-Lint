@@ -1241,7 +1241,12 @@ begin
 end;
 
 destructor TRoutineVarTable.Destroy;
-begin FMultiDecl.Free; FByName.Free; FVars.Free; inherited; end;
+begin
+  FMultiDecl.Free;
+  FByName.Free;
+  FVars.Free;
+  inherited; // dl:ok inherited-bare@246d -- the destructor idiom; TObject.Destroy is the intended ancestor
+end;
 
 function TRoutineVarTable.Count: Integer; begin Result := FVars.Count; end;
 function TRoutineVarTable.Get(AIdx: Integer): TRoutineVar; begin Result := FVars[AIdx]; end;
@@ -1334,6 +1339,7 @@ var
   I, ResultIdx: Integer;
   Sec: TTSNode;
   RV: TRoutineVar;
+  PendingDefs: TArray<TTSNode>;   { bare inline `var X: T;` nodes, in source order }
 
   { The `absolute <ident>` target of a declVar, as a slot index in Tbl, or -1.
 
@@ -1491,10 +1497,7 @@ var
     if (N.NodeType = 'defProc') or (N.NodeType = 'lambda') then Exit; { own scope }
     if N.NodeType = 'declVars' then AddDeclVars(N);
     if N.NodeType = 'varDef' then
-    begin
-      IdN := FirstIdentChild(N);
-      if not IdN.IsNull then AddInline(IdN, N.ChildByField('type'), EnclosingListEnd(N));
-    end;
+      PendingDefs := PendingDefs + [N];   { registered after the walk, see below }
     if N.NodeType = 'foreach' then
     begin
       { `for var X in` declares an inline loop variable }
@@ -1516,6 +1519,29 @@ var
       end;
     end;
     for I := 0 to N.NamedChildCount - 1 do AddInlineVars(N.NamedChild(I));
+  end;
+
+  { A bare inline `var X: T;` gets a slot ONLY when its name is declared more
+    than once in the routine -- that is the B-14 case, where it must not share
+    the other declaration's slot. A name declared once by a varDef stays
+    unregistered, as before: registering every varDef widens all flow rules to
+    a new population (measured 2026-10-19 on drag-lint itself: +3
+    overwrite-before-read, one of them a try/except false positive), which is a
+    separate decision from B-14. }
+  procedure RegisterRedeclaredDefs;
+  var K, M, Hits: Integer; IdN: TTSNode; Nm: string;
+  begin
+    for K := 0 to High(PendingDefs) do
+    begin
+      IdN := FirstIdentChild(PendingDefs[K]);
+      if IdN.IsNull then Continue;
+      Nm := LowerCase(NodeStr(IdN, ASrc));
+      Hits := 0;
+      for M := 0 to High(PendingDefs) do
+        if (M <> K) and (LowerCase(NodeStr(FirstIdentChild(PendingDefs[M]), ASrc)) = Nm) then Inc(Hits);
+      if (Hits > 0) or (Tbl.IndexOf(Nm) >= 0) then
+        AddInline(IdN, PendingDefs[K].ChildByField('type'), EnclosingListEnd(PendingDefs[K]));
+    end;
   end;
 
   { mark outer vars referenced inside any nested defProc as captured. }
@@ -1566,7 +1592,9 @@ begin
     Sec := AProc.NamedChild(I);
     if Sec.NodeType = 'declVars' then AddDeclVars(Sec);
   end;
+  PendingDefs := nil;
   AddInlineVars(AProc.ChildByField('body'));
+  RegisterRedeclaredDefs;
   { nested routines are `local:` defProc siblings of the body (declared before
     `begin`), so walk the whole defProc -- not just the body -- to find captures. }
   MarkCaptures(AProc, 0);
