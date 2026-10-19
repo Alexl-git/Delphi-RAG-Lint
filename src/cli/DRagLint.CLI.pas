@@ -822,7 +822,7 @@ begin
   Writeln('  drag-lint outline            --file <path.pas> [--db <path>] [--format text|json]');
   Writeln('                               unit outline; backs the IDE Structure form.');
   Writeln('  drag-lint compare            --old <report.txt|forms.csv|bundle dir> [--command "<id> -Target T -Project P ...>"] [--project <P.dproj>]');
-  Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
+  Writeln('                               [--new <same kind>] [--old-db <old.sqlite>] [--db <new.sqlite>] [--auto] [--save] [--snapshot-dir <dir>]');
   Writeln('                               [--format text|json|html] [--output <file>] [--open]');
   Writeln('  drag-lint compare            --in <U.pas> --line <L> [--update-doc]            the remarks block at the caret (S1)');
   Writeln('  drag-lint compare            --show <report|csv|bundle> [--output <f.html>] [--open]   any report as the HTML page');
@@ -7953,7 +7953,11 @@ begin
           end; // for Row
         end; // for DbPath
         if AArgs.AsJson then Writeln(JOut.Format(2))
-        else if TotalCallers = 0 then Writeln('0 caller(s)');
+        else if TotalCallers = 0 then
+        begin
+          Writeln('0 caller(s)');
+          Writeln(ErrOutput, 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ', AArgs.Name);
+        end;
       finally
         JOut.Free;
       end; // try
@@ -7983,7 +7987,11 @@ begin
         Inc(TotalRefs, Length(Refs));
       end;
     end; // for
-    if (TotalRefs = 0) and (not AArgs.AsJson) then Writeln('0 caller(s)');
+    if (TotalRefs = 0) and (not AArgs.AsJson) then
+    begin
+      Writeln('0 caller(s)');
+      Writeln(ErrOutput, 'hint: find-callers reports calls only; field/property reads are not callers. Try: drag-lint usages --name ', AArgs.Name);
+    end;
     if TotalRefs = 0 then Result:= 1
     else Result:= 0;
     Exit;
@@ -12402,6 +12410,8 @@ begin
     { Minor 2: fix mode cannot emit SARIF. Warn on stderr and fall through to
       JSON/text output rather than silently swallowing --format sarif. }
     if SameText(AArgs.Format, 'sarif') then Writeln(ErrOutput, '--fix does not support SARIF output; using text output.');
+    if AArgs.Apply and (not AArgs.ProjectRules) then
+      Writeln(ErrOutput, 'drag-lint: note: --fix --apply without --project-rules: doc-drift/missing-doc findings are not produced, so no doc fixes are applied.');
 
     { AutoFix Chunk 1 (Task 3): narrow to a single finding when --fix-line and/or
       --fix-rule are given. Each SET flag filters; an unset flag matches all. With
@@ -14332,7 +14342,8 @@ begin
     if FlowStoreSeen then
       Writeln(ErrOutput,
         'drag-lint: note: project rules ran for this file. STILL NOT reported here: ' +
-        'doc-drift/missing-doc (pass --project-rules), cross-file ' +
+        (if AArgs.ProjectRules then '' else 'doc-drift/missing-doc (pass --project-rules), ') +
+        'cross-file ' +
         'duplicate-code, interface-reference-cycle, exception-class enrichment, and ' +
         'unit-not-in-dpr without --project.')
     else
@@ -31710,6 +31721,13 @@ begin
   if AArgs.CompareCommand <> '' then
   begin
     Result:= ParseCommandLine(AArgs.CompareCommand, ACmd);
+    { B-25: ParamStr drops the quote of an MSVC-style \" escape and keeps its backslash, so
+      a quoted value arrived as \C:\P\A.dproj\ . No Target / Project value starts AND ends
+      with a backslash, so that pair is the escape's remains. }
+    if Result then
+      for var CmdArgIx: Integer:= 0 to High(ACmd.Args) do
+        if (Length(ACmd.Args[CmdArgIx].Value) > 2) and ACmd.Args[CmdArgIx].Value.StartsWith('\') and ACmd.Args[CmdArgIx].Value.EndsWith('\') then
+          ACmd.Args[CmdArgIx].Value:= Copy(ACmd.Args[CmdArgIx].Value, 2, Length(ACmd.Args[CmdArgIx].Value) - 2);
     if not Result then
       AErr:= 'cannot read --command "' + AArgs.CompareCommand + '" -- it must start with the question id';
   end
