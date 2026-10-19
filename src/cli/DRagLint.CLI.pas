@@ -1014,7 +1014,7 @@ begin
   Writeln('  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)');
   Writeln('                               Safe to run any time: prints "nothing pending." when there is nothing to do.');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
-  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text]   (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)');
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text]   (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output; --format json --causes adds per-group edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
@@ -22273,6 +22273,16 @@ begin
           JO.AddPair('size', TJSONNumber.Create(Length(Comp)));
           JO.AddPair('interface_cycle', TJSONBool.Create(HasIntf));
           JArr.AddElement(JO);
+        end;
+        if AArgs.Causes then
+        begin
+          { E18 T4: per-edge surfaces (TEdgeSurface) -- only on request, so the default call stays fast }
+          var EdgeGraph: TCycleGraph;
+          EdgeGraph.Adj      := Adj;
+          EdgeGraph.IntfEdges:= IntfEdges;
+          EdgeGraph.UnitFile := UnitFile;
+          EdgeGraph.UnitFid  := UnitFid;
+          AddCycleEdgeSurfaces(Store, Sccs, EdgeGraph, JArr);
         end;
         Writeln(JArr.ToJson);
       finally

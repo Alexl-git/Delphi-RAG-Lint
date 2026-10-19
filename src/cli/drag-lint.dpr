@@ -157,6 +157,7 @@ uses
   DRagLint.Report.Deps in '..\report\DRagLint.Report.Deps.pas',
   DRagLint.Report.RCallTree in '..\report\DRagLint.Report.RCallTree.pas',
   DRagLint.Report.CyclePlan in '..\report\DRagLint.Report.CyclePlan.pas',
+  DRagLint.Report.CycleEdge in '..\report\DRagLint.Report.CycleEdge.pas',
   DRagLint.Analysis.Liveness in '..\analysis\DRagLint.Analysis.Liveness.pas',
   DRagLint.Core.Encoding in '..\core\DRagLint.Core.Encoding.pas',
   DRagLint.Doc.Batch in '..\doc\DRagLint.Doc.Batch.pas',

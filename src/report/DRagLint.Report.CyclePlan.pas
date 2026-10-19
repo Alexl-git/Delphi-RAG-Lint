@@ -22,7 +22,7 @@ unit DRagLint.Report.CyclePlan;  // dl:ok unit-too-large@252c -- one self-contai
 interface
 
 uses
-  System.Classes, System.Generics.Collections,
+  System.Classes, System.Generics.Collections, System.JSON,
   DRagLint.Core.Interfaces;
 
 const
@@ -82,12 +82,25 @@ type
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
 
+/// <summary>Adds an `edges` array to every group object of a `cycles --format json`
+/// report: one entry per uses edge inside the group, with that edge's surface
+/// (DRagLint.Report.CycleEdge.EdgeSurfaceToJson).</summary>
+/// <param name="pStore">Open index the graph was built from; read only.</param>
+/// <param name="pSccs">The circular groups, as lower-case unit stems.</param>
+/// <param name="pGraph">The uses graph the groups were computed from.</param>
+/// <param name="pGroups">The report's group objects, index-aligned with pSccs; each
+/// must be a TJSONObject. The new arrays become owned by those objects.</param>
+/// <remarks>Edges are listed member by member in group order (from, then to), the
+/// order the impl-cycle planner weighs them. Reads every member_accesses row once.</remarks>
+procedure AddCycleEdgeSurfaces(const pStore: ISymbolStore; const pSccs: TList<TArray<string>>;
+  const pGraph: TCycleGraph; const pGroups: TJSONArray);
+
 implementation
 
 uses
   System.SysUtils, System.IOUtils, System.StrUtils, System.RegularExpressions, System.Math,
   System.Generics.Defaults,
-  DRagLint.Core.Model, DRagLint.Convert.UnitRules;
+  DRagLint.Core.Model, DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge;
 
 const
   CLeafSuffix    = '.Contracts';
@@ -211,6 +224,7 @@ type
     Movable : Boolean;
     Why     : string;
     Cost    : Integer;
+    Surface : TEdgeSurface;  // what FromStem takes from ToStem (E18 T4)
   end;
 
   TPredGroup = record
@@ -276,8 +290,9 @@ type
     procedure Release;
   end;
 
-  TCyclePlanner = class  // dl:ok god-class@8d65, high-response@8d65 -- implementation-private; one per cycles --plan run, holding the shared per-cycle state that every small step reads; its many methods are the steps, each short
+  TCyclePlanner = class(TNoRefCountObject, IEdgeSurfaceSource)  // dl:ok god-class@ac0b, high-response@ac0b -- implementation-private; one per cycles --plan run, holding the shared per-cycle state that every small step reads; its many methods are the steps, each short
   private
+    FAccess     : TDictionary<Int64, TCallEdge>;  // ref id -> member_accesses row, loaded on first use
     FStore      : ISymbolStore;
     FDbPath     : string;
     FSccs       : TList<TArray<string>>;
@@ -346,7 +361,6 @@ type
     function AddDependencies(const pItem: TMoveItem; out pWhy: string): Boolean;
     function AddCompanions(const pItem: TMoveItem; out pWhy: string): Boolean;
     procedure NotePulledBy(const pSym, pBy: TSymbol);
-    function SigTypesOutsideScc(const pSig: string; out pUnits: TArray<string>): Boolean;
     procedure Rollback(pSnap: Integer);
     function IsMovedFor(const pOwner: TSymbol; pFid: Int64): Boolean;
     // materialise
@@ -423,6 +437,13 @@ type
     function CyclesCommand(pPlan: Boolean): string;
     function KindLabel(const pItem: TMoveItem): string;
     function MemberNames: string;
+    // IEdgeSurfaceSource (DRagLint.Report.CycleEdge); FidOfStem above is the fourth
+    function Store: ISymbolStore;
+    function FileLines(pFid: Int64): TArray<string>;
+    function BindName(pFid: Int64; pLine: Integer; const pName: string; out pOwner: TSymbol;
+      out pStem: string): Boolean;
+    function IsSccStem(const pStem: string): Boolean;
+    function MemberAccessOf(pRefId: Int64; out pAccess: TCallEdge): Boolean;
   public
     constructor Create(const pStore: ISymbolStore; const pDbPath: string;
       const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
@@ -442,6 +463,12 @@ type
     /// which BuildPlan left in place; hence the guard.</remarks>
     procedure RenderPlan(const pPlan: TCycleFixPlan);
     procedure Run;
+    /// <summary>The surface of every uses edge inside one SCC.</summary>
+    /// <param name="pCycleIndex">1-based index into the circular groups.</param>
+    /// <returns>One surface per edge A -&gt; B with A, B in the group and B in A's
+    /// uses, in group order.</returns>
+    /// <remarks>Resets the planner's per-cycle state to that group.</remarks>
+    function EdgeSurfacesOf(pCycleIndex: Integer): TArray<TEdgeSurface>;
   end;
 
 { TCycleFixPlan }
@@ -1036,6 +1063,7 @@ begin
   FStemFid.Free;
   FPaths.Free;
   FFiles.Free;
+  FAccess.Free;
   inherited Destroy;
 end;
 
@@ -1654,51 +1682,6 @@ begin
   FPulledBy.AddOrSetValue(pSym.Id, Format('%s `%s`', [(if pBy.Kind = skVarDecl then 'var' else 'declaration'), pBy.Name]));
 end;
 
-{ SigTypesOutsideScc -- do all TYPES a routine's stored signature names live outside the cycle?
-  pSig  : symbols.signature, e.g. `(const pFolderId: Integer): IFoo`. Only the text after a ':' of
-          each `;`/`,`/`(`/`)` group is read (parameter names are not types); `= default` tails,
-          the words const var out array of function procedure reference to, and the unit prefix
-          of a dotted name are dropped; every remaining identifier is looked up via CandidatesFor.
-  pUnits: the distinct unit names that declare those identifiers (an identifier no index row
-          resolves, e.g. Integer, is ignored).
-  Result: True when at least one identifier resolved and NO candidate of any identifier lives in a
-          unit of the cycle (FComp), so a pointer / event type for the routine could be declared
-          in pUnits without touching the cycle; False otherwise (nothing resolved, or one candidate
-          is inside the cycle). Task 4 moves this helper into CycleEdge.pas. }
-function TCyclePlanner.SigTypesOutsideScc(const pSig: string; out pUnits: TArray<string>): Boolean;
-const
-  CNotTypeWords = ' const var out array of function procedure reference to packed ';
-var
-  Units: TList<string>;
-begin
-  Result:= False;
-  pUnits:= nil;
-  Units := TList<string>.Create;
-  try
-    for var Group in pSig.Split([';', ',', '(', ')']) do
-    begin
-      var P:= Group.LastIndexOf(':');
-      if P < 0 then Continue;
-      var TypeText:= Group.Substring(P + 1);
-      var Eq:= TypeText.IndexOf('=');
-      if Eq >= 0 then TypeText:= TypeText.Substring(0, Eq);
-      for var M in TRegEx.Matches(TypeText, '[A-Za-z_][A-Za-z0-9_.]*') do
-      begin
-        var Ident:= M.Value.Substring(M.Value.LastIndexOf('.') + 1);
-        if (Ident = '') or ContainsText(CNotTypeWords, ' ' + Ident + ' ') then Continue;
-        for var C in CandidatesFor(Ident) do
-        begin
-          if MatchStr(C.Stem, FComp) then Exit(False);
-          if not Units.Contains(UnitNameOfStem(C.Stem)) then Units.Add(UnitNameOfStem(C.Stem));
-        end;
-      end;
-    end;
-    pUnits:= Units.ToArray;
-    Result:= Units.Count > 0;
-  finally
-    Units.Free;
-  end;
-end;
 procedure TCyclePlanner.Rollback(pSnap: Integer);
 begin
   while FOrder.Count > pSnap do
@@ -2372,12 +2355,13 @@ function TCyclePlanner.EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArr
 var
   Snap : Integer;
   Why  : string;
-  Units: TArray<string>;
+  Stems: TArray<string>;
 begin
   Result:= Default(TEdgeEval);
   Result.FromStem:= pFrom;
   Result.ToStem  := pTo;
   Result.Needs   := pNeeds;
+  Result.Surface := BuildEdgeSurface(Self, FidOfStem(pFrom), pTo);
   Result.Movable := Length(pNeeds) > 0;
   if not Result.Movable then Result.Why:= 'the index resolved no symbol for this edge';
   Snap:= FOrder.Count;
@@ -2386,9 +2370,13 @@ begin
     begin
       Result.Movable:= False;
       Result.Why    := Format('`%s` (%s): %s', [N.Owner.Name, N.Owner.Kind.ToText, Why]);
-      if (N.Owner.Kind in [skProcedure, skFunction]) and SigTypesOutsideScc(N.Owner.Signature, Units) then
+      if (N.Owner.Kind in [skProcedure, skFunction]) and SigTypesOutsideScc(
+        SignatureTypes(Self, N.Owner.FileId, N.Owner.StartLine, N.Owner.Signature), Stems) then
+      begin
+        for var I:= 0 to High(Stems) do Stems[I]:= UnitNameOfStem(Stems[I]);
         Result.Why:= Format('`%s` (%s) -- a routine; could be called through a pointer declared in %s (not automated)',
-          [N.Owner.Name, N.Owner.Kind.ToText, QuoteList(Units)]);
+          [N.Owner.Name, N.Owner.Kind.ToText, QuoteList(Stems)]);
+      end;
       Break;
     end;
   Result.Cost:= FOrder.Count - Snap;
@@ -3338,6 +3326,72 @@ begin
   end;
 end;
 
+{ ---------------------------------------------------------------------------
+  IEdgeSurfaceSource -- the index access DRagLint.Report.CycleEdge reads
+  --------------------------------------------------------------------------- }
+
+function TCyclePlanner.Store: ISymbolStore;
+begin
+  Result:= FStore;
+end;
+
+function TCyclePlanner.FileLines(pFid: Int64): TArray<string>;
+begin
+  Result:= GetFile(pFid).Lines;
+end;
+
+function TCyclePlanner.BindName(pFid: Int64; pLine: Integer; const pName: string; out pOwner: TSymbol;
+  out pStem: string): Boolean;
+var
+  Cands: TArray<TCandidate>;
+  Best : Integer;
+  F    : TPlanFile;
+begin
+  pOwner:= Default(TSymbol);
+  pStem := '';
+  Cands := CandidatesFor(pName);
+  if Length(Cands) = 0 then Exit(False);
+  F   := GetFile(pFid);
+  Best:= PickCandidate(F, SectOf(F, pLine), Cands);
+  if Best = CNotFound then Exit(False);
+  pOwner:= Cands[Best].Owner;
+  pStem := Cands[Best].Stem;
+  Result:= True;
+end;
+
+function TCyclePlanner.IsSccStem(const pStem: string): Boolean;
+begin
+  Result:= FMembers.ContainsKey(pStem);
+end;
+
+function TCyclePlanner.MemberAccessOf(pRefId: Int64; out pAccess: TCallEdge): Boolean;
+begin
+  if FAccess = nil then
+  begin
+    FAccess:= TDictionary<Int64, TCallEdge>.Create;
+    for var E in FStore.DumpAllMemberAccesses do FAccess.AddOrSetValue(E.RefId, E);
+  end;
+  Result:= FAccess.TryGetValue(pRefId, pAccess);
+end;
+
+function TCyclePlanner.EdgeSurfacesOf(pCycleIndex: Integer): TArray<TEdgeSurface>;
+var
+  L   : TList<TEdgeSurface>;
+  Used: TList<string>;
+begin
+  ResetCycle(FSccs[pCycleIndex - 1]);
+  L:= TList<TEdgeSurface>.Create;
+  try
+    for var A in FComp do
+      if FGraph.Adj.TryGetValue(A, Used) then
+        for var B in FComp do
+          if (A <> B) and Used.Contains(B) then L.Add(BuildEdgeSurface(Self, FidOfStem(A), B));
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
 var
@@ -3346,6 +3400,24 @@ begin
   Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, pOut);
   try
     Planner.Run;
+  finally
+    Planner.Free;
+  end;
+end;
+
+procedure AddCycleEdgeSurfaces(const pStore: ISymbolStore; const pSccs: TList<TArray<string>>;
+  const pGraph: TCycleGraph; const pGroups: TJSONArray);
+var
+  Planner: TCyclePlanner;
+begin
+  Planner:= TCyclePlanner.Create(pStore, '', pSccs, pGraph, nil);
+  try
+    for var I:= 1 to pSccs.Count do
+    begin
+      var Edges:= TJSONArray.Create;
+      (pGroups.Items[I - 1] as TJSONObject).AddPair('edges', Edges);
+      for var S in Planner.EdgeSurfacesOf(I) do Edges.AddElement(EdgeSurfaceToJson(S));
+    end;
   finally
     Planner.Free;
   end;
