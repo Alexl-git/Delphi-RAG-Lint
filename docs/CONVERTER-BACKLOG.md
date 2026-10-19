@@ -15,15 +15,22 @@ may already be done. Measure against the tree before working on one.
    drivers; re-capture the `tests\fixtures\apply1270\` uses rows (1.28.1 changed
    them). Re-judge lint (editor 971 / tests 413) -- new rule
    `confusable-identifier` and naming fixes arrived after 1.27.0.
-2. **Owner request: one-click "qualify #convert" quick fix** from apply/1
-   `qualify_fixes[]` (capability `convert_qualify_fix`). Contract in
-   `docs\NOTICE-2026-10-11-v1.28.3-released.md`. Brainstorm/spec first.
+2. ~~**Owner request: one-click "qualify #convert" quick fix**~~ -- DONE 2026-10-19 on
+   branch `feat/convert-qualify-fix` (commits d7b84ca3, 97c6e234 + docs): Convert tab
+   `Qualify #convert...` button / double-click, dialog, report `qualify` lines, wiki
+   `convrules-editor-qualify-fix`, `drive-qualify-fix.ps1` 20. Spec/plan
+   `docs\superpowers\specs|plans\2026-10-19-convert-qualify-fix*.md`. Open follow-ups:
+   D4 option B (apply the text-only `alternative`), D6 option B (fix a whole run).
 3. **Owner's minor reworks** -- section C below.
 4. **C18 member replacement, slice 1** (`#migrate X -> DL_NONE` + rename) once
    the engine builds `docs\superpowers\specs\2026-10-11-member-replacement-design.md`
    (owner answered Q1-Q4, Q5 deferred).
 
 ## B. Engine-contract follow-ups (re-check each -- recorded 2026-10-06/07)
+
+- Qualify fix, optional (spec section 12): G1 a `qualified_line` carrying every side's
+  candidate (`replacement` is whole-line and single-side); G2 the refusal reason and the
+  From-side text word the uses edit differently -- `alternative` is the only discriminator.
 
 - Scoped note from `only_matched[]` / `only_unmatched[]` ("converted N of M").
 - E10 refusal hint gated on `only_skips_unit_rules`.

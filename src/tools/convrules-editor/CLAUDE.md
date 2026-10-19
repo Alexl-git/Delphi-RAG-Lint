@@ -44,8 +44,8 @@ two different builds have reported the same version; compare SHA256 and build st
   compile breaks. Testable decisions belong in the pure units below, not in forms.
 * **Model tests:** `tests\ConvRulesModelTests.exe`, engine chosen explicitly: a
   `drag-lint.exe` beside the runner, else `CONVRULES_TEST_ENGINE`, else none (live
-  tests SKIP; first line says which). Baseline on the 1.27.0 pin:
-  **2194 pass / 5 fail / 0 skip** -- the 5 are the VARINSP fixture
+  tests SKIP; first line says which). Baseline on the 1.31.5 pin:
+  **2249 pass / 5 fail / 0 skip** -- the 5 are the VARINSP fixture
   (`picker.unit.has.VARINSP`, `fill.from-unit.*`). A rebuild of `dll-win64` mid-run
   kills it: discard that run.
 * **GUI drivers** (`tests\gui\`, by hand): `pwsh -NoProfile -File <driver> -Exe
@@ -64,6 +64,7 @@ two different builds have reported the same version; compare SHA256 and build st
   * `drive-glyph-link.ps1` 23 -- glyph expressions (`-ProofNoGlyph`)
   * `drive-convert-request.ps1` 25 -- IDE convert request (`-ProofNoRequest`)
   * `drive-work-list.ps1` 13 -- Work list tab (`-ProofNoPasUses`)
+  * `drive-qualify-fix.ps1` 20 -- qualify quick fix (`-ProofNoFix` = 15 pass / 5 fail)
 
 ## Unit map (who owns which decision)
 
@@ -79,6 +80,7 @@ two different builds have reported the same version; compare SHA256 and build st
 * `ConvertRunner` -- executes a run: per-unit backup/apply/restore, steps, report lines.
 * `ConvertTab` -- Convert tab UI (editor-only); `ConvertRequest` -- `convert-request/1` parse, validate, scope.
 * `WorkList` (pure) / `WorkListTab` (UI) -- pas_uses work list.
+* `QualifyFix` (decisions) / `QualifyForm` (dialog) -- the one-click qualify #convert quick fix (apply/1 `qualify_fixes[]`).
 * `ConvCatalog` / `Casts` -- cast options incl. `ckValue` (StripDB).
 * `Engine` -- `TEngineAdapter`: every engine call, pipes, timeouts, capabilities, resolve cache.
 * `EngineWait` -- progress window / cancellable long call (editor-only). `DropTarget` -- OLE glue only.

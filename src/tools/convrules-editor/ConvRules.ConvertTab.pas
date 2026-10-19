@@ -30,6 +30,7 @@ uses
   , ConvRules.ConvertRequest  // dl:unit ConvRules.ConvertRequest accepted -- WHOLE_UNIT_SCOPE_TEXT is the E4 Scope line ScopeText returns for no scope; it travels with ScopeText so the reset caption cannot drift from it
   , ConvRules.Inheritance  // dl:unit ConvRules.Inheritance accepted -- ANALYSIS_CANCELLED is the analysis's own cancel text, reused for a reindex skipped by the same cancel
   , ConvRules.WorkList  // TWorkRun: TConvertHost.WorkListReady's parameter
+  , ConvRules.QualifyFix  // TQualifyPick: TConvertHost.QualifyBook's parameter
   ;
 
 type
@@ -82,6 +83,11 @@ type
     /// converted unit, keyed by the run's id), once per run, from RunFinished on the UI
     /// thread; may be nil.</summary>
     WorkListReady : TProc<TWorkRun>;
+    /// <summary>Writes the Qualify dialog's picks into a book (engine 1.28.3 qualify_fixes[]):
+    /// (book path, picks) -> the status text. The host opens the book first when it is not the
+    /// open one (the unsaved-changes guard applies), edits its model and leaves it unsaved. May
+    /// be nil = the Qualify button stays hidden.</summary>
+    QualifyBook   : TFunc<string, TArray<TQualifyPick>, string>;
   end;
 
   /// <summary>The Convert tab: a checklist of rule books, a list of source
@@ -141,6 +147,7 @@ type
       FBtnClearScope  : TButton;            // C12 E4: 'Clear scope'
       FBtnConvert     : TButton;
       FBtnCancel      : TButton;
+      FBtnQualify     : TButton;            // 'Qualify #convert...' (BtnQualify): shown with the capability, enabled on a row that has fixes
       FProgress       : TProgressBar;
       FLblRunStep     : TLabel;             // C16: the run's progress line (named LblRunStep), '' when no run
       FStepTimer      : TTimer;             // C16: re-renders the progress line once a second while a run is in progress
@@ -182,6 +189,15 @@ type
       function InheritanceChecksPass(const AUnits: TArray<string>): Boolean;
       procedure ConvertClick(Sender: TObject);
       procedure CancelClick(Sender: TObject);
+      /// <summary>The index into FRunRows of the selected results row.</summary>
+      /// <returns>The index; -1 for a note row or no selection.</returns>
+      function SelectedRunRow: Integer;
+      /// <summary>Qualify #convert... is enabled only outside a run, on a row with qualify fixes.</summary>
+      procedure UpdateQualifyButton;
+      procedure ResultsSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+      /// <summary>Opens the Qualify dialog for the selected row and hands its picks to the host.</summary>
+      /// <param name="Sender">FBtnQualify, or FResults (double-click).</param>
+      procedure QualifyClick(Sender: TObject);
       procedure SetRunning(ARunning: Boolean);
       /// <summary>Appends one results-grid row.</summary>
       /// <param name="ACells">Book, Unit, Status, Edits, Remaining, Backup, Backup .dfm, Note -- the grid's columns in order.</param>
@@ -328,6 +344,7 @@ uses
   , Vcl.Graphics
   , ConvRules.InheritanceEngine
   , ConvRules.Glyph
+  , ConvRules.QualifyForm
   ;
 
 const
@@ -338,6 +355,7 @@ const
   BTN_COL_WIDTH   = 84;   // the books' button column
   BTN_WIDTH       = 75;
   CANCEL_WIDTH    = 170;  // fits 'Cancelling after this unit...'
+  QUALIFY_WIDTH   = 140;  // fits 'Qualify #convert...'
   ROW_HEIGHT      = 31;   // a one-button row
   COL_BOOK_W      = 110;
   COL_UNIT_W      = 110;
@@ -502,6 +520,16 @@ begin
   FBtnCancel.Caption         := CAP_CANCEL;
   FBtnCancel.Enabled         := False;
   FBtnCancel.OnClick         := CancelClick;
+  FBtnQualify:= TButton.Create(Self);
+  FBtnQualify.Parent          := LRow;
+  FBtnQualify.Name            := 'BtnQualify';
+  FBtnQualify.SetBounds(High(Word), 0, QUALIFY_WIDTH, FBtnQualify.Height); // right of Cancel (see NewButton)
+  FBtnQualify.Align           := alLeft;
+  FBtnQualify.AlignWithMargins:= True;
+  FBtnQualify.Caption         := 'Qualify #convert...';
+  FBtnQualify.Visible         := False; // RefreshBooks shows it once the engine reports convert_qualify_fix
+  FBtnQualify.Enabled         := False;
+  FBtnQualify.OnClick         := QualifyClick;
   FProgress:= TProgressBar.Create(Self);
   FProgress.Parent          := LRow;
   FProgress.Align           := alClient;
@@ -528,6 +556,8 @@ begin
   FResults.ReadOnly        := True;
   FResults.RowSelect       := True;
   FResults.HideSelection   := False;
+  FResults.OnSelectItem    := ResultsSelectItem;
+  FResults.OnDblClick      := QualifyClick;
   FResults.Columns.Add.Caption:= 'Book';
   FResults.Columns[0].Width   := COL_BOOK_W;
   FResults.Columns.Add.Caption:= 'Unit';
@@ -601,6 +631,7 @@ begin
     FRetypeOk   := MatchText(CAPABILITY_INHERITED_RETYPE, LCaps);
     FGlyphOk    := MatchText(CAPABILITY_GLYPH_STITCH, LCaps);
     FApplyFeatures:= ApplyFeaturesOf(LCaps);
+    FBtnQualify.Visible:= (afQualifyFix in FApplyFeatures) and Assigned(FHost.QualifyBook);
     FProbed     := True;
   end;
   Folder:= FHost.GetRulesFolder();
@@ -1172,6 +1203,7 @@ begin
     if LRan then IntToStr(LRow.Apply.EditsCount) else '',
     if LRan then IntToStr(Length(LRow.Apply.Remainder)) else '',
     ExtractFileName(LRow.Backup), ExtractFileName(LRow.BackupDfm), LRow.Note]);
+  FResults.Items[FResults.Items.Count - 1].Data:= Pointer(Length(FRunRows)); // 1-based index into FRunRows; note rows keep nil (SelectedRunRow)
 end;
 
 procedure TConvertTab.QueueRow(const ARow: TConvertRow; ADone: Integer);
@@ -1230,8 +1262,41 @@ begin
   FBtnClearScope.Enabled:= (not ARunning) and (FScope.Kind <> skWholeUnit); // lockable, but only with a scope
   FBtnCancel.Caption:= CAP_CANCEL;
   FBtnCancel.Enabled:= ARunning;
+  UpdateQualifyButton;
   if Assigned(FHost.RunStateChanged) then
     FHost.RunStateChanged(ARunning);
+end;
+
+function TConvertTab.SelectedRunRow: Integer;
+begin
+  Result:= -1;
+  if (FResults.Selected <> nil) and (NativeInt(FResults.Selected.Data) > 0) then
+    Result:= NativeInt(FResults.Selected.Data) - 1;
+  if Result >= Length(FRunRows) then
+    Result:= -1;
+end;
+
+procedure TConvertTab.UpdateQualifyButton;
+begin
+  var LAt: Integer:= SelectedRunRow;
+  FBtnQualify.Enabled:= (not FRunning) and (LAt >= 0) and (Length(FRunRows[LAt].Apply.QualifyFixes) > 0);
+end;
+
+procedure TConvertTab.ResultsSelectItem(Sender: TObject; Item: TListItem; Selected: Boolean);
+begin
+  UpdateQualifyButton;
+end;
+
+procedure TConvertTab.QualifyClick(Sender: TObject);
+var
+  LPicks: TArray<TQualifyPick>;
+begin
+  UpdateQualifyButton;
+  if not (FBtnQualify.Visible and FBtnQualify.Enabled) then
+    Exit; // a double-click on a row without fixes, or while a run is in progress
+  var LRow: TConvertRow:= FRunRows[SelectedRunRow];
+  if TQualifyForm.Run(Self, LRow.Book, LRow.Apply.QualifyFixes, LPicks) then
+    FHost.SetStatus(FHost.QualifyBook(LRow.Book, LPicks), False);
 end;
 
 procedure TConvertTab.CancelClick(Sender: TObject);
@@ -1339,6 +1404,7 @@ begin
   Pre:= Preflight(FEntries, Units, Idx, FUnitRulesOk, FGlyphOk);
   FResults.Items.Clear;
   FRunRows:= nil;
+  UpdateQualifyButton;
   FNotes  := Pre.Notes;
   for var LNote: string in FNotes do
     AddResultRow(['', '', 'note', '', '', '', '', LNote]);
@@ -1496,6 +1562,9 @@ begin
         LLines.Add(LLine);
       // Engine 1.27.0: cast sites, value casts and checks, uses rows -- converted rows only.
       for var LLine: string in ApplyItemReportLines(LRow) do
+        LLines.Add(LLine);
+      // Engine 1.28.3: qualify lines for EVERY row -- a refused row carries fixes too.
+      for var LLine: string in QualifyReportLines(LRow) do
         LLines.Add(LLine);
     end;
     var LStopped: Boolean:= CastLibStopText(FRunRows, FRunCastLib) <> '';

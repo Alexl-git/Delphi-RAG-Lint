@@ -39,6 +39,7 @@ uses
   , ConvRules.WorkList in '..\ConvRules.WorkList.pas'  // dl:unit ConvRules.WorkList accepted -- the tests read the PAS_USE_* statuses and WORK_* texts to pin the unit's own contract, so the consts travel with the unit under test
   , ConvRules.ConvertRun in '..\ConvRules.ConvertRun.pas'
   , ConvRules.ConvertRunner in '..\ConvRules.ConvertRunner.pas'
+  , ConvRules.QualifyFix in '..\ConvRules.QualifyFix.pas'
   , ConvRules.ConvertRequest in '..\ConvRules.ConvertRequest.pas'  // dl:unit ConvRules.ConvertRequest accepted -- the tests read SCOPE_PROJECT_UNSUPPORTED to pin the refusal text of the contract, so the const travels with the unit under test
   , ConvRules.ValidateScope in '..\ConvRules.ValidateScope.pas'
   , ConvRules.EngineProgress in '..\ConvRules.EngineProgress.pas'  // dl:unit ConvRules.EngineProgress accepted -- the tests read ENGINE_OUTCOME_TIMEOUT / ENGINE_OUTCOME_CANCELLED / PROGRESS_INTERVAL_S to pin the exit-code contract, so the consts travel with the unit under test
@@ -13143,6 +13144,346 @@ begin
   Check('worklist.run.of.key.resolution', Length(WorkRunOf(Conv, WORK_RUN_NEW, True).Rows) = KEY_ROWS, IntToStr(Length(WorkRunOf(Conv, WORK_RUN_NEW, True).Rows)));
 end;
 
+{ qualify_fixes[] fixtures (engine 1.31.5, convert_qualify_fix):
+    qualify/apply-qualify-both-1315.json      REAL capture: a refused row (outcome inferred + refused, M1 pair on one line)
+    qualify/apply-qualify-inferred-1315.json  REAL capture: a converted row with one inferred fix }
+function QualifyFixture(const AName: string): string;
+begin
+  Result:= TFile.ReadAllText(TPath.GetFullPath(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\qualify\' + AName)));
+end;
+
+function QualifyBothRow: TApplyRow;
+begin
+  Result:= ParseApplyJson(QualifyFixture('apply-qualify-both-1315.json'), [afQualifyFix]);
+end;
+
+function QualifyInferredRow: TApplyRow;
+begin
+  Result:= ParseApplyJson(QualifyFixture('apply-qualify-inferred-1315.json'), [afQualifyFix]);
+end;
+
+// One fix as a single comparable line: line|current|name|side|outcome|chosen|inference|alternative|suggestion count.
+function QualifyFixSig(const AFix: TQualifyFix): string;
+begin
+  Result:= Format('%d|%s|%s|%s|%s|%s|%s|%s|%d', [AFix.RuleLine, AFix.Current, AFix.Name, AFix.Side, AFix.Outcome, AFix.Chosen,
+    AFix.Inference, AFix.Alternative, Length(AFix.Suggestions)]);
+end;
+
+// One suggestion as a single comparable line: replacement|candidate|why|alternative.
+function QualifySugSig(const ASug: TQualifySuggestion): string;
+begin
+  Result:= Format('%s|%s|%s|%s', [ASug.Replacement, ASug.Candidate, ASug.Why, ASug.Alternative]);
+end;
+
+procedure TestQualifyParseBoth(const ABoth: TApplyRow);
+const
+  FIX0_SIG = '1|#convert TLabel -> TSolo|TLabel|from|inferred|Vcl.StdCtrls.TLabel|the project framework VCL (Fix.dproj)|add Vcl.StdCtrls to the unit''s uses|2';
+  FIX1_SIG = '1|#convert TLabel -> TSolo|TSolo|to|refused|||#use LibA|2';
+  SUG00    = '#convert Vcl.StdCtrls.TLabel -> TSolo|Vcl.StdCtrls.TLabel|inferred from the project framework VCL (Fix.dproj)|add Vcl.StdCtrls to the unit''s uses';
+  SUG01    = '#convert FMX.StdCtrls.TLabel -> TSolo|FMX.StdCtrls.TLabel|framework mismatch: the project is VCL (Fix.dproj)|add FMX.StdCtrls to the unit''s uses';
+  SUG10    = '#convert TLabel -> LibA.TSolo|LibA.TSolo|not in the unit''s uses|#use LibA';
+  SUG11    = '#convert TLabel -> LibB.TSolo|LibB.TSolo|not in the unit''s uses|#use LibB';
+begin
+  Check('qualify.both.fix0', (QualifyFixSig(ABoth.QualifyFixes[0]) = FIX0_SIG)
+    and (QualifySugSig(ABoth.QualifyFixes[0].Suggestions[0]) = SUG00)
+    and (QualifySugSig(ABoth.QualifyFixes[0].Suggestions[1]) = SUG01), QualifyFixSig(ABoth.QualifyFixes[0]));
+  Check('qualify.both.fix1', (QualifyFixSig(ABoth.QualifyFixes[1]) = FIX1_SIG)
+    and (QualifySugSig(ABoth.QualifyFixes[1].Suggestions[0]) = SUG10)
+    and (QualifySugSig(ABoth.QualifyFixes[1].Suggestions[1]) = SUG11), QualifyFixSig(ABoth.QualifyFixes[1]));
+end;
+
+procedure TestQualifyParse;
+const
+  MALFORMED  = '{"ok":true,"qualify_fixes":[7,{"rule_line":"x","current":5,"suggestions":[3,{"candidate":"A.T"}]}]}';
+  NO_KEY     = '{"ok":true,"edits_count":0}';
+  BOTH_FIXES = 2;
+  INF_EDITS  = 5;
+  INF_CURRENT = '#convert TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls';
+  INF_REPLACE = '#convert Vcl.StdCtrls.TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls';
+var
+  Both : TApplyRow;
+  Inf  : TApplyRow;
+  Bad  : TApplyRow;
+begin
+  Check('qualify.features.of', ApplyFeaturesOf(['CONVERT_QUALIFY_FIX']) = [afQualifyFix]);
+  Check('qualify.features.of.none', not (afQualifyFix in ApplyFeaturesOf(['pas_uses'])));
+  Both:= QualifyBothRow;
+  Check('qualify.both.count', Length(Both.QualifyFixes) = BOTH_FIXES, IntToStr(Length(Both.QualifyFixes)));
+  Check('qualify.both.refused', (not Both.Ok) and Both.Refused);
+  if Length(Both.QualifyFixes) = BOTH_FIXES then
+    TestQualifyParseBoth(Both)
+  else
+  begin
+    Check('qualify.both.fix0', False, 'no fixes');
+    Check('qualify.both.fix1', False, 'no fixes');
+  end;
+  Inf:= QualifyInferredRow;
+  Check('qualify.inferred.count', (Length(Inf.QualifyFixes) = 1) and Inf.Ok and (Inf.EditsCount = INF_EDITS), IntToStr(Length(Inf.QualifyFixes)));
+  Check('qualify.inferred.fix0', (Length(Inf.QualifyFixes) = 1) and (Inf.QualifyFixes[0].Side = 'from')
+    and (Inf.QualifyFixes[0].Current = INF_CURRENT) and (Inf.QualifyFixes[0].Suggestions[0].Replacement = INF_REPLACE));
+  Check('qualify.gated.off', (Length(ParseApplyJson(QualifyFixture('apply-qualify-both-1315.json'), []).QualifyFixes) = 0)
+    and ParseApplyJson(QualifyFixture('apply-qualify-both-1315.json'), []).Refused);
+  Bad:= ParseApplyJson(MALFORMED, [afQualifyFix]);
+  Check('qualify.malformed', (Length(Bad.QualifyFixes) = 1) and (Bad.QualifyFixes[0].RuleLine = 0) and (Bad.QualifyFixes[0].Current = '')
+    and (Length(Bad.QualifyFixes[0].Suggestions) = 1) and (Bad.QualifyFixes[0].Suggestions[0].Candidate = 'A.T'));
+  Check('qualify.absent', (Length(ParseApplyJson(NO_KEY, [afQualifyFix]).QualifyFixes) = 0) and (Length(Both.QualifyFixes) = BOTH_FIXES));
+end;
+
+procedure TestQualifyNotes;
+const
+  COLS    = 8;
+  COL_ST  = 2;
+  COL_NOTE = 7;
+  LINE_A  = 'line 1 from TLabel inferred Vcl.StdCtrls.TLabel (the project framework VCL (Fix.dproj)) -- replace with: '
+    + '#convert Vcl.StdCtrls.TLabel -> TSolo | #convert FMX.StdCtrls.TLabel -> TSolo; or: add Vcl.StdCtrls to the unit''s uses';
+  LINE_B  = 'line 1 to TSolo refused -- replace with: #convert TLabel -> LibA.TSolo | #convert TLabel -> LibB.TSolo; or: #use LibA';
+var
+  Both : TApplyRow;
+  Row  : TConvertRow;
+  Lines: TArray<string>;
+  Cols1: TArray<string>;
+  Cols2: TArray<string>;
+begin
+  Both:= QualifyBothRow;
+  Check('qualify.note.two', QualifyFixNote(Both) = '; 2 #convert side(s) to qualify', QualifyFixNote(Both));
+  Check('qualify.note.one', QualifyFixNote(QualifyInferredRow) = '; 1 #convert side(s) to qualify');
+  Check('qualify.note.none', QualifyFixNote(ParseApplyJson(QualifyFixture('apply-qualify-both-1315.json'), [])) = '');
+  Row:= Default(TConvertRow);
+  Row.Book   := 'Fix.rules';
+  Row.UnitPas:= 'FixUnit.pas';
+  Row.Status := csRefused;
+  Row.Apply  := Both;
+  Lines:= QualifyReportLines(Row);
+  Check('qualify.report.lines', Length(Lines) = 2, IntToStr(Length(Lines)));
+  if Length(Lines) = 2 then
+  begin
+    Cols1:= Lines[0].Split([#9]);
+    Cols2:= Lines[1].Split([#9]);
+    Check('qualify.report.cols', (Length(Cols1) = COLS) and (Length(Cols2) = COLS) and (Cols1[COL_ST] = 'qualify') and (Cols2[COL_ST] = 'qualify'));
+    Check('qualify.report.line1', (Length(Cols1) = COLS) and (Cols1[COL_NOTE] = LINE_A), Lines[0]);
+    Check('qualify.report.line2', (Length(Cols2) = COLS) and (Cols2[COL_NOTE] = LINE_B), Lines[1]);
+  end
+  else
+  begin
+    Check('qualify.report.cols', False);
+    Check('qualify.report.line1', False);
+    Check('qualify.report.line2', False);
+  end;
+  Row.Apply:= ParseApplyJson('{"ok":true}', [afQualifyFix]);
+  Check('qualify.report.none', Length(QualifyReportLines(Row)) = 0);
+end;
+
+function QualifyPickOf(const AFix: TQualifyFix; const ACandidate: string): TQualifyPick;
+begin
+  Result.Fix      := AFix;
+  Result.Candidate:= ACandidate;
+end;
+
+procedure TestQualifyFix;
+const
+  CRLF    = #13#10;
+  HDR     = '#convert TLabel -> TSolo';
+  AFTER_A = '#convert Vcl.StdCtrls.TLabel -> TSolo';
+  AFTER_B = '#convert Vcl.StdCtrls.TLabel -> LibA.TSolo';
+  MARKED  = 1;
+  LINE_3  = 3;
+  LINE_4  = 4;
+var
+  Books : TObjectList<TRuleBook>;
+  BookFix  : string;
+  BookOther: string;
+  Both  : TApplyRow;
+  Inf   : TApplyRow;
+  F0    : TQualifyFix;
+  F1    : TQualifyFix;
+  Book  : TRuleBook;
+  Tgt   : TQualifyTarget;
+  Out1  : TQualifyOutcome;
+  Outs  : TArray<TQualifyOutcome>;
+  Snap  : string;
+  Wrong : TQualifyFix;
+  FixB  : TQualifyFix;
+  FixR  : TQualifyFix;
+
+  // The status text for a book kept in a sub-folder: only the file name may show.
+  function StatusOf(const AOutcomes: TArray<TQualifyOutcome>): string;
+  begin
+    Result:= QualifyStatusText(TPath.Combine('books', 'Fix.rules'), AOutcomes);
+  end;
+
+  function Make(const AText: string): TRuleBook;
+  begin
+    Result:= TRuleBook.Create;
+    Books.Add(Result);
+    Result.LoadFromString(AText);
+  end;
+
+begin
+  Books:= TObjectList<TRuleBook>.Create(True);
+  try
+    Both:= QualifyBothRow;
+    Inf := QualifyInferredRow;
+    if (Length(Both.QualifyFixes) < 2) or (Length(Inf.QualifyFixes) < 1) then
+    begin
+      Check('qualify.fixtures.loaded', False);
+      Exit;
+    end;
+    F0:= Both.QualifyFixes[0];
+    F1:= Both.QualifyFixes[1];
+
+    Book:= Make(HDR + CRLF + '#link Caption <- Caption');
+    Tgt:= FindQualifyTarget(Book, F0);
+    Check('qualify.target.by.line', (Tgt.State = qtFound) and (Tgt.NodeIndex = 0), IntToStr(Ord(Tgt.State)) + ' ' + Tgt.Reason);
+    // Two headers read the same: only the recorded line tells them apart (by text it is ambiguous).
+    Book:= Make(HDR + CRLF + '#link A <- B' + CRLF + HDR);
+    Wrong:= F0;
+    Wrong.RuleLine:= LINE_3;
+    Tgt:= FindQualifyTarget(Book, Wrong);
+    Check('qualify.target.by.line.dup', (Tgt.State = qtFound) and (Tgt.NodeIndex = 2), IntToStr(Ord(Tgt.State)) + ' ' + Tgt.Reason);
+    Tgt:= FindQualifyTarget(Book, F0);
+    Check('qualify.target.by.line.first', (Tgt.State = qtFound) and (Tgt.NodeIndex = 0), IntToStr(Ord(Tgt.State)) + ' ' + Tgt.Reason);
+    Book:= Make('#depth 3' + CRLF + HDR);
+    Tgt:= FindQualifyTarget(Book, F0);
+    Check('qualify.target.by.text', (Tgt.State = qtFound) and (Tgt.NodeIndex = 1), IntToStr(Ord(Tgt.State)) + ' ' + Tgt.Reason);
+    Book:= Make('#depth 3' + CRLF + HDR + CRLF + '#link A <- B' + CRLF + HDR);
+    Tgt:= FindQualifyTarget(Book, F0);
+    Check('qualify.target.ambiguous', (Tgt.State = qtAmbiguous) and (Pos('lines 2, 4', Tgt.Reason) > 0), Tgt.Reason);
+    Book:= Make('#convert TLabel -> TOther');
+    Tgt:= FindQualifyTarget(Book, F0);
+    Check('qualify.target.stale', (Tgt.State = qtStale) and (Pos('no longer reads', Tgt.Reason) > 0), Tgt.Reason);
+    Wrong:= F0;
+    Wrong.Name:= 'TNope';
+    Tgt:= FindQualifyTarget(Make(HDR), Wrong);
+    Check('qualify.target.wrong.side', Tgt.State = qtWrongSide, Tgt.Reason);
+    Tgt:= FindQualifyTarget(Make('#link A <- B'), F0);
+    Check('qualify.target.not.convert', Tgt.State = qtStale);
+
+    Book:= Make(HDR + CRLF + '#link Caption <- Caption');
+    Book.Nodes[1].Marks:= [Default(TRuleMark)];
+    Book.Nodes[0].Marks:= [Default(TRuleMark)];
+    Snap:= Book.Snapshot;
+    Out1:= ApplyQualifyPick(Book, QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'));
+    Check('qualify.apply.from', Out1.Applied and (Out1.Before = HDR) and (Out1.After = AFTER_A) and Book.Nodes[0].Dirty
+      and (Length(Book.Nodes[0].Marks) = 0), Out1.Before + ' / ' + Out1.After + ' / ' + Out1.Reason);
+    Check('qualify.apply.other.side.kept', Book.Nodes[0].ToType = 'TSolo');
+    Check('qualify.apply.marks.header.only', (Length(Book.Nodes[1].Marks) = MARKED) and (Length(Book.Nodes[0].Marks) = 0));
+    Check('qualify.apply.dirty', (Book.Snapshot <> Snap) and (Make(HDR + CRLF + '#link Caption <- Caption').Snapshot = Make(HDR + CRLF + '#link Caption <- Caption').Snapshot));
+    Out1:= ApplyQualifyPick(Book, QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'));
+    Check('qualify.apply.twice', (not Out1.Applied) and (Pos('already qualified', Out1.Reason) > 0), Out1.Reason);
+
+    Book:= Make(HDR);
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F1, 'LibA.TSolo')]);
+    Check('qualify.apply.to.after.from', (Length(Outs) = 2) and Outs[0].Applied and Outs[1].Applied and (Outs[1].After = AFTER_B)
+      and (Book.Nodes[0].FromType = 'Vcl.StdCtrls.TLabel'), Outs[1].Reason);
+    Book:= Make(HDR);
+    Out1:= ApplyQualifyPick(Book, QualifyPickOf(F1, 'LibA.TSolo'));
+    Check('qualify.apply.from.kept', Out1.Applied and (Book.Nodes[0].FromType = 'TLabel') and (Out1.After = '#convert TLabel -> LibA.TSolo'), Out1.After);
+
+    Book:= Make('#convert TLabel -> Vcl.StdCtrls.TStaticText, Vcl.StdCtrls');
+    Out1:= ApplyQualifyPick(Book, QualifyPickOf(Inf.QualifyFixes[0], 'Vcl.StdCtrls.TLabel'));
+    Check('qualify.apply.keeps.units', Out1.Applied and (Out1.After = Inf.QualifyFixes[0].Suggestions[0].Replacement), Out1.After + ' / ' + Out1.Reason);
+
+    Out1:= ApplyQualifyPick(Make(HDR), QualifyPickOf(F1, ''));
+    Check('qualify.apply.no.pick', (not Out1.Applied) and (Out1.Reason = 'pick a candidate for line 1 to TSolo'), Out1.Reason);
+
+    Check('qualify.default.inferred', DefaultCandidateIndex(F0) = 0);
+    Check('qualify.default.refused', DefaultCandidateIndex(F1) = -1);
+    // A refused fix that still carries a Chosen naming a listed suggestion: only the outcome gate says no.
+    FixR:= F0;
+    FixR.Outcome:= 'refused';
+    Check('qualify.default.refused.chosen', (FixR.Chosen <> '') and (DefaultCandidateIndex(FixR) = -1));
+    Check('qualify.preview.union', QualifyPreviewText(HDR, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F1, 'LibA.TSolo')]) = AFTER_B,
+      QualifyPreviewText(HDR, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F1, 'LibA.TSolo')]));
+    Check('qualify.preview.nopick', QualifyPreviewText(HDR, [QualifyPickOf(F1, '')]) = HDR);
+    Check('qualify.row.text', (QualifyFixRowText(F0) = 'line 1  from  TLabel  inferred -> Vcl.StdCtrls.TLabel') and (QualifyFixRowText(F1) = 'line 1  to  TSolo  refused'),
+      QualifyFixRowText(F0) + ' | ' + QualifyFixRowText(F1));
+    Check('qualify.candidate.text', QualifyCandidateText(F1.Suggestions[0]) = 'LibA.TSolo    { not in the unit''s uses }', QualifyCandidateText(F1.Suggestions[0]));
+
+    Book:= Make(HDR);
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F1, 'LibA.TSolo')]);
+    Check('qualify.status.applied', StatusOf(Outs)
+      = 'Qualified 2 #convert side(s) in Fix.rules (line 1) -- not saved: File > Save, then Convert again', StatusOf(Outs));
+    Book:= Make(HDR);
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(F1, '')]);
+    Check('qualify.status.skipped', EndsText('; 1 skipped: pick a candidate for line 1 to TSolo', StatusOf(Outs)), StatusOf(Outs));
+    // The host must not apply picks to a book other than the run's (LoadFile leaves the old one open when the file is gone).
+    BookFix  := TPath.Combine('books', 'Fix.rules');
+    BookOther:= TPath.Combine('books', 'Other.rules');
+    Check('qualify.book.open.same', QualifyBookIsOpen(BookFix, UpperCase(BookFix)));
+    Check('qualify.book.open.other', not QualifyBookIsOpen(BookOther, BookFix));
+    Check('qualify.book.open.none', not QualifyBookIsOpen('', BookFix));
+    Check('qualify.book.missing.text', QualifyBookMissingText(BookFix) = 'Qualify cancelled -- could not open the run''s book: Fix.rules', QualifyBookMissingText(BookFix));
+    // The re-target path (same header, second side) keeps the side check: a fix whose name is not on that side is refused.
+    Book:= Make(HDR);
+    FixB:= F1;
+    FixB.Name:= 'TNope';
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(FixB, 'LibA.TNope')]);
+    Check('qualify.apply.retarget.wrong.side', (Length(Outs) = 2) and Outs[0].Applied and (not Outs[1].Applied)
+      and (Pos('not "TNope"', Outs[1].Reason) > 0) and (Book.Nodes[0].ToType = 'TSolo'), Outs[1].Reason);
+    // Two different headers: the lines are listed, plural.
+    Book:= Make(HDR + CRLF + '#link A <- B' + CRLF + '#link C <- D' + CRLF + '#convert TButton -> TSolo');
+    FixB:= F0;
+    FixB.RuleLine:= LINE_4;
+    FixB.Current := '#convert TButton -> TSolo';
+    FixB.Name    := 'TButton';
+    Outs:= ApplyQualifyPicks(Book, [QualifyPickOf(F0, 'Vcl.StdCtrls.TLabel'), QualifyPickOf(FixB, 'Vcl.StdCtrls.TButton')]);
+    Check('qualify.status.plural', ContainsText(StatusOf(Outs), 'Qualified 2 #convert side(s) in Fix.rules (lines 1, 4) --'), StatusOf(Outs));
+    Outs:= ApplyQualifyPicks(Make(HDR), [QualifyPickOf(F0, ''), QualifyPickOf(F1, '')]);
+    Check('qualify.status.none', StartsText('Nothing qualified in Fix.rules', StatusOf(Outs)), StatusOf(Outs));
+  finally
+    FreeAndNil(Books);
+  end;
+end;
+
+procedure TestQualifyRunner;
+const
+  ORIG = 'unit U;' + sLineBreak + 'interface' + sLineBreak + 'implementation' + sLineBreak + 'end.' + sLineBreak;
+var
+  Dir  : string;
+  Rows : TArray<TConvertRow>;
+  Index: TIndexFn;
+
+  // One unit, one book, the engine answering AJson with exit code AExit.
+  function RunOne(const AName, AJson: string; AExit: Integer): TArray<TConvertRow>;
+  var
+    LPas: string;
+  begin
+    LPas:= TPath.Combine(Dir, AName);
+    TFile.WriteAllText(LPas, ORIG, TEncoding.ASCII);
+    Result:= RunConversionUnits([LPas], ['A.rules'],
+      function(const AUnitPas, ARulesFile: string; out AJsonOut: string): Integer
+      begin
+        AJsonOut:= AJson;
+        Result  := AExit;
+      end, Index, nil, nil);
+  end;
+
+  function Shown(const ARows: TArray<TConvertRow>): string;
+  begin
+    Result:= IntToStr(Length(ARows)) + ' ' + (if Length(ARows) > 0 then ConvertStatusText(ARows[0].Status) + ': ' + ARows[0].Note else '');
+  end;
+
+begin
+  Dir:= TPath.Combine(TPath.GetTempPath, 'convrunner-qualify-' + TPath.GetGUIDFileName);
+  TDirectory.CreateDirectory(Dir);
+  try
+    Index:= function(out AOutput: string): Integer
+      begin
+        AOutput:= '';
+        Result := 0;
+      end;
+    Rows:= RunOne('Q1.pas', QualifyFixture('apply-qualify-both-1315.json'), 1);
+    Check('qualify.runner.refused.note', (Length(Rows) = 1) and (Rows[0].Status = csRefused)
+      and EndsText('; 2 #convert side(s) to qualify', Rows[0].Note) and (Length(Rows[0].Apply.QualifyFixes) = 2), Shown(Rows));
+    Rows:= RunOne('Q2.pas', QualifyFixture('apply-qualify-inferred-1315.json'), 0);
+    Check('qualify.runner.converted.note', (Length(Rows) = 1) and (Rows[0].Status = csConverted)
+      and EndsText('; 1 #convert side(s) to qualify', Rows[0].Note), Shown(Rows));
+    Check('qualify.runner.report.converted', (Length(Rows) = 1) and (Length(QualifyReportLines(Rows[0])) = 1));
+  finally
+    TDirectory.Delete(Dir, True);
+  end;
+end;
+
 begin
   try
     if ResolveExe <> '' then
@@ -13362,6 +13703,10 @@ begin
     TestWorkListSummaryMerge;
     TestWorkListRunGoTo;
     TestWorkListResolution;
+    TestQualifyParse;
+    TestQualifyNotes;
+    TestQualifyFix;
+    TestQualifyRunner;
 
     FreeAndNil(GParseBook);
 

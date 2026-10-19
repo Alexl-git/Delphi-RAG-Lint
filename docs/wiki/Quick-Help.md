@@ -112,6 +112,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **ConvRulesEditor** -- Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27). [More](Features)
 * **glyph-vacuum** -- Measure every streamed glyph or picture under a tree before writing a glyph rule. [More](Features)
 * **proptree** -- Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties. [More](proptree)
+* **Qualify #convert quick fix** -- ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book. Fix an ambiguous bare #convert class the way the engine suggests, without retyping the line. [More](convrules-editor-qualify-fix)
 * **Reindex project** -- ConvRulesEditor command: incremental index --project of the editor's project index, cancellable. Refresh the project index after IDE edits or between conversion stages. [More](convrules-editor-reindex-project)
 * **Work list** -- ConvRulesEditor tab: what the last Convert run's converted code still uses from the old components (engine pas_uses). Get the manual to-do list of a conversion: unmapped members, dangling globals, refused casts. [More](convrules-editor-work-list)
 
@@ -238,6 +239,7 @@ The guard verifies CLI verbs, menu captions, MCP tools, scripts and pages. The s
 * IDE Menu Reference: procedure docs\wiki\IDE-Menu-Reference.md
 * Installation: procedure docs\wiki\Installation.md
 * Maintenance: procedure docs\wiki\Maintenance.md
+* Qualify #convert quick fix: menu 'Convert tab > Qualify #convert...' inside ConvRulesEditor.exe
 * Reindex project: menu 'Conversion > Reindex project' inside ConvRulesEditor.exe
 * Rename across every project that compiles a shared unit: host 'Structure form' (the caption is verified, the host is declared)
 * Rescan this unit: host 'Structure form' (the caption is verified, the host is declared)

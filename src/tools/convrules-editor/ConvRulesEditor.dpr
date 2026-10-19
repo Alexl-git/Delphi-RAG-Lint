@@ -53,6 +53,8 @@ uses
   , ConvRules.WorkListTab in 'ConvRules.WorkListTab.pas'
   , ConvRules.ValidateScope in 'ConvRules.ValidateScope.pas'
   , ConvRules.GlyphForm in 'ConvRules.GlyphForm.pas'
+  , ConvRules.QualifyFix in 'ConvRules.QualifyFix.pas'
+  , ConvRules.QualifyForm in 'ConvRules.QualifyForm.pas'
   , ConvRules.MainForm in 'ConvRules.MainForm.pas'
   ;
 

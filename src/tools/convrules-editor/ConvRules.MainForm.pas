@@ -2646,6 +2646,7 @@ uses
   , ConvRules.Inheritance    // C12: DiskTextReader, the .dfm reader the request's scope is built from
   , ConvRules.ConvertRun     // C17: ReindexRefusal / ReindexOutcomeText
   , ConvRules.WorkList       // Task 3: TWorkRun, the Convert host's WorkListReady parameter
+  , ConvRules.QualifyFix     // A2: ApplyQualifyPicks / QualifyStatusText behind the Convert host's QualifyBook
   , System.Diagnostics       // C17: TStopwatch, the reindex's elapsed time
   ; // ConvRules.Usage moved UP to the interface uses -- TUsedUnitRef types a field
 
@@ -3537,6 +3538,36 @@ begin
   LHost.WorkListReady:= procedure(ARun: TWorkRun)
     begin
       FWorkListTab.ShowRun(ARun);
+    end;
+  // A2: the Qualify #convert dialog's picks edit the model of the row's book and leave it unsaved.
+  LHost.QualifyBook:= function(ABook: string; APicks: TArray<TQualifyPick>): string
+    var
+      LOutcomes: TArray<TQualifyOutcome>;
+      LSelected: Boolean;
+    begin
+      if not SameText(ABook, FFilePath) then
+      begin
+        if not ConfirmDiscard then
+          Exit('Qualify cancelled -- the open book was not saved');
+        LoadFile(ABook);
+        if not QualifyBookIsOpen(FFilePath, ABook) then
+          Exit(QualifyBookMissingText(ABook));
+      end;
+      LOutcomes:= ApplyQualifyPicks(FBook, APicks);
+      RefreshRulesList;
+      SyncRawFromModel;
+      LSelected:= False;
+      for var LOut: TQualifyOutcome in LOutcomes do
+        if LOut.Applied and not LSelected then
+          for var k: Integer:= 0 to FRules.Items.Count - 1 do
+            if Integer(FRules.Items[k].Data) = LOut.NodeIndex then
+            begin
+              FRules.ItemIndex:= k;
+              FRules.Items[k].Selected:= True;
+              LSelected:= True;
+              Break;
+            end;
+      Result:= QualifyStatusText(ABook, LOutcomes);
     end;
   FConvertTab:= TConvertTab.Create(Self, LHost);
   FConvertTab.Parent:= FTabConvert;

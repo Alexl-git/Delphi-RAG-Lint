@@ -30,6 +30,8 @@ const
   REPORT_STATUS_GLYPH = 'glyph';
   /// <summary>The run report's Status column on a cast-not-applied line (ApplyItemReportLines).</summary>
   REPORT_STATUS_CAST_SITE = 'cast site';
+  /// <summary>The run report's Status column on a qualify_fixes[] line (QualifyReportLines).</summary>
+  REPORT_STATUS_QUALIFY = 'qualify';
   /// <summary>The run report's Status column on a value-cast-applied line.</summary>
   REPORT_STATUS_VALUE_CAST = 'value cast';
   /// <summary>The run report's Status column on a value-cast-check line.</summary>
@@ -412,6 +414,15 @@ function GlyphReportLines(const ARow: TConvertRow): TArray<string>;
 /// away, as for GlyphReportLines).</returns>
 function ApplyItemReportLines(const ARow: TConvertRow): TArray<string>;
 
+/// <summary>PURE: the run report's qualify lines of one row.</summary>
+/// <param name="ARow">A run row.</param>
+/// <returns>One 8-column TAB line per Apply.QualifyFixes entry (Status REPORT_STATUS_QUALIFY),
+/// Note: 'line N &lt;side&gt; &lt;name&gt; &lt;outcome&gt;', then ' &lt;chosen&gt; (&lt;inference&gt;)' when the
+/// engine inferred one, then ' -- replace with: &lt;replacement&gt; | &lt;replacement&gt;' and
+/// '; or: &lt;alternative&gt;' when it sent them. Unlike ApplyItemReportLines it is NOT limited to
+/// csConverted: a refused row carries fixes too.</returns>
+function QualifyReportLines(const ARow: TConvertRow): TArray<string>;
+
 /// <summary>PURE: the run-level error of a run a cast library stopped (exit
 /// ENGINE_EXIT_CONFIG).</summary>
 /// <param name="ARows">The run's rows.</param>
@@ -577,6 +588,28 @@ begin
     Result:= Result + [Line(REPORT_STATUS_USES + LUses.Action, UsesReportNote(LUses))];
   for var LText: string in ARow.Apply.UsesUnresolved do
     Result:= Result + [Line(REPORT_STATUS_USES + 'unresolved', LText)];
+end;
+
+function QualifyReportLines(const ARow: TConvertRow): TArray<string>;
+var
+  LNote: string;
+  LRepl: string;
+begin
+  Result:= nil;
+  for var LFix: TQualifyFix in ARow.Apply.QualifyFixes do
+  begin
+    LNote:= Format('line %d %s %s %s', [LFix.RuleLine, LFix.Side, LFix.Name, LFix.Outcome]);
+    if LFix.Chosen <> '' then
+      LNote:= LNote + ' ' + LFix.Chosen + (if LFix.Inference <> '' then ' (' + LFix.Inference + ')' else '');
+    LRepl:= '';
+    for var LSug: TQualifySuggestion in LFix.Suggestions do
+      LRepl:= LRepl + (if LRepl = '' then '' else ' | ') + LSug.Replacement;
+    if LRepl <> '' then
+      LNote:= LNote + ' -- replace with: ' + LRepl;
+    if LFix.Alternative <> '' then
+      LNote:= LNote + '; or: ' + LFix.Alternative;
+    Result:= Result + [string.Join(#9, [ARow.Book, ARow.UnitPas, REPORT_STATUS_QUALIFY, '', '', '', '', LNote])];
+  end;
 end;
 
 // The index of the row that stopped the run (StoppedRun); -1 when there is none.
@@ -1033,6 +1066,7 @@ var
       begin
         // The E10 hint only on a scoped run: an unscoped run never asked for --only.
         LReason:= if ApplyEditSetRefused(Row.Apply) then EditSetRefusedNote(Row.Apply) else Row.Apply.Error;
+        LReason:= LReason + QualifyFixNote(Row.Apply);
         if LScoped and Row.Apply.Refused then
           LReason:= LReason + RefusalHint(LReason)
         else if LScoped and (Row.Apply.EditsCount = 0) and not ApplyEditSetRefused(Row.Apply) then
@@ -1061,7 +1095,7 @@ var
     Row.Status:= csConverted;
     // The engine's inherited[] is shown unfiltered (ruling M4): the unit was reindexed
     // before its first book, so the engine already knows which ancestors this run converted.
-    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(Row.Apply.Glyphs);
+    Row.Note  := ConvertedRowNote(Row.Apply, AInheritedSupported, ARetypeSupported) + GlyphNoteSuffix(Row.Apply.Glyphs) + QualifyFixNote(Row.Apply);
     if LScoped then
       Row.Note:= ScopedConvertedNote(LOnly, Row.Note);
     Add;

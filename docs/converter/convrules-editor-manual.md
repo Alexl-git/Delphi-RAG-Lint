@@ -693,6 +693,16 @@ out immediately.
 
 ---
 
+## Qualify #convert (Convert tab)
+
+When Convert refuses a unit, or warns, because a `#convert` line names a class by a bare
+name that is ambiguous (`#convert TLabel -> TSolo` with two `TSolo`), the row's Note ends
+with `; N #convert side(s) to qualify`. Select the row and press **Qualify #convert...**
+(or double-click it): pick a candidate per fix, **Apply**. The qualified class is written into
+the open book -- unsaved -- so File > Save, then Convert again. Needs an engine reporting
+`convert_qualify_fix`. Details and the skipped-fix texts:
+[Qualify #convert quick fix](../wiki/convrules-editor-qualify-fix.md).
+
 ## Troubleshooting
 
 **"X is not in the current index set" for a type you know exists.**

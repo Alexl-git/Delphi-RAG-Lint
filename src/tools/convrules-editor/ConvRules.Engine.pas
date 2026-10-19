@@ -102,6 +102,10 @@ const
   /// (resolved / ambiguous / class-not-found / member-not-found / kind-unknown) and
   /// candidates[] -- the From class is resolved in the unit's scope (engine 1.28.2).</summary>
   CAPABILITY_PAS_USES_RESOLUTION = 'pas_uses_resolution';
+  /// <summary>info --json capability: apply/1 qualify_fixes[] -- for each bare #convert
+  /// class the engine could not resolve, the qualified #convert line(s) that would
+  /// (engine 1.28.3).</summary>
+  CAPABILITY_CONVERT_QUALIFY_FIX = 'convert_qualify_fix';
 
 type
   /// <summary>One flattened property leaf from `proptree --format json`

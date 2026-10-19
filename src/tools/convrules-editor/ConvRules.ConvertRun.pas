@@ -102,14 +102,50 @@ type
     Dangling: TArray<string>;
   end;
 
+  /// <summary>One suggested replacement of a #convert line (apply/1 qualify_fixes[].suggestions[]).</summary>
+  TQualifySuggestion = record
+    /// <summary>`replacement` -- the whole #convert line with this candidate written in.</summary>
+    Replacement: string;
+    /// <summary>`candidate` -- the qualified class name to write.</summary>
+    Candidate  : string;
+    /// <summary>`why` -- the engine's reason for offering it.</summary>
+    Why        : string;
+    /// <summary>`alternative` -- the engine's text-only alternative (a `#use` line or a uses change).</summary>
+    Alternative: string;
+  end;
+
+  /// <summary>One #convert side that needs qualifying (apply/1 qualify_fixes[] entry).</summary>
+  /// <remarks>A missing or wrongly-typed field reads as '' / 0; a non-object entry is skipped.</remarks>
+  TQualifyFix = record
+    /// <summary>`rule_line` -- 1-based line of the #convert header in the book at run time; 0 when absent.</summary>
+    RuleLine   : Integer;
+    /// <summary>`current` -- the header line as the run saw it.</summary>
+    Current    : string;
+    /// <summary>`name` -- the bare class name on the side to qualify.</summary>
+    Name       : string;
+    /// <summary>`side` -- 'from' or 'to'.</summary>
+    Side       : string;
+    /// <summary>`outcome` -- 'inferred' (the engine picked one) or 'refused' (several, none picked).</summary>
+    Outcome    : string;
+    /// <summary>`chosen` -- the qualified name the engine inferred; '' for a refused side.</summary>
+    Chosen     : string;
+    /// <summary>`inference` -- why the engine inferred it; '' for a refused side.</summary>
+    Inference  : string;
+    /// <summary>`suggestions[]` -- the candidates, engine order.</summary>
+    Suggestions: TArray<TQualifySuggestion>;
+    /// <summary>`alternative` -- the engine's preferred text-only alternative.</summary>
+    Alternative: string;
+  end;
+
   /// <summary>An engine 1.27.0 apply/1 feature, one per info --json capability.</summary>
   /// <remarks>afCastSiteRefusal: cast_site_refusal (items[] cast-not-applied, one per
   /// .pas site); afValueStripDb: value_cast_strip_db (value-cast-applied /
   /// value-cast-check); afUsesReconcile: uses_reconcile (uses[] rows, uses_unresolved[],
   /// uses_reindex); afPasUses: pas_uses (pas_uses[]); afPasUsesResolution:
   /// pas_uses_resolution (engine 1.28.2: each pas_uses[] row's resolution and
-  /// candidates[]; without it both are cleared).</remarks>
-  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses, afPasUsesResolution);
+  /// candidates[]; without it both are cleared); afQualifyFix: convert_qualify_fix
+  /// (engine 1.28.3: qualify_fixes[]).</remarks>
+  TApplyFeature = (afCastSiteRefusal, afValueStripDb, afUsesReconcile, afPasUses, afPasUsesResolution, afQualifyFix);
   /// <summary>The apply/1 features the run's engine reported.</summary>
   TApplyFeatures = set of TApplyFeature;
 
@@ -180,6 +216,9 @@ type
     /// uses from the old components -- the Work list. UnitPas is apply/1 'unit' and
     /// RunId 0 until the Convert tab stamps them (WorkRunOf); [] without the feature.</summary>
     PasUses: TArray<TPasUseRow>;
+    /// <summary>qualify_fixes[] (afQualifyFix): the #convert sides to qualify, on a converted AND a
+    /// refused row; [] without the feature.</summary>
+    QualifyFixes: TArray<TQualifyFix>;
   end;
 
   /// <summary>The verdict before any file is touched.</summary>
@@ -308,8 +347,8 @@ function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures = [Low(TA
 /// <param name="ACapNames">The capability names info --json reported true
 /// (TEngineAdapter.CapabilityNames).</param>
 /// <returns>One feature per matching name, case-insensitive: cast_site_refusal,
-/// value_cast_strip_db, uses_reconcile, pas_uses, pas_uses_resolution (ConvRules.Engine
-/// CAPABILITY_*).</returns>
+/// value_cast_strip_db, uses_reconcile, pas_uses, pas_uses_resolution, convert_qualify_fix
+/// (ConvRules.Engine CAPABILITY_*).</returns>
 function ApplyFeaturesOf(const ACapNames: TArray<string>): TApplyFeatures;
 
 /// <summary>PURE: the converted row's StripDB part.</summary>
@@ -322,6 +361,12 @@ function ValueCastNote(const ARow: TApplyRow): string;
 /// <param name="ARow">The book's apply/1 answer.</param>
 /// <returns>'; N cast site(s) to convert by hand' (N = CastSites); '' when 0.</returns>
 function CastSiteNote(const ARow: TApplyRow): string;
+
+/// <summary>PURE: the row's qualify part.</summary>
+/// <param name="ARow">The book's apply/1 answer.</param>
+/// <returns>'; N #convert side(s) to qualify' (N = QualifyFixes), on a converted AND a refused
+/// row; '' when 0 (also without the afQualifyFix feature, which leaves QualifyFixes empty).</returns>
+function QualifyFixNote(const ARow: TApplyRow): string;
 
 /// <summary>PURE: the converted row's uses part.</summary>
 /// <param name="ARow">The book's apply/1 answer.</param>
@@ -569,6 +614,7 @@ const
   USES_REINDEX_FAILED    = 'failed';
   VALUE_CAST_NOTE_FMT    = '; StripDB: %d value(s) changed, %d to check by hand';
   CAST_SITE_NOTE_FMT     = '; %d cast site(s) to convert by hand';
+  QUALIFY_NOTE_FMT       = '; %d #convert side(s) to qualify';
   USES_NOTE_FMT          = '; uses: +%d -%d moved %d';
   VALUE_CAST_REPORT_FMT  = '%s:%d %s.%s: %s -> %s';
 
@@ -910,6 +956,8 @@ begin
     Include(Result, afPasUses);
   if MatchText(CAPABILITY_PAS_USES_RESOLUTION, ACapNames) then
     Include(Result, afPasUsesResolution);
+  if MatchText(CAPABILITY_CONVERT_QUALIFY_FIX, ACapNames) then
+    Include(Result, afQualifyFix);
 end;
 
 function ValueCastNote(const ARow: TApplyRow): string;
@@ -917,6 +965,11 @@ begin
   if Length(ARow.ValueCasts) + Length(ARow.ValueChecks) = 0 then
     Exit('');
   Result:= Format(VALUE_CAST_NOTE_FMT, [Length(ARow.ValueCasts), Length(ARow.ValueChecks)]);
+end;
+
+function QualifyFixNote(const ARow: TApplyRow): string;
+begin
+  Result:= if Length(ARow.QualifyFixes) > 0 then Format(QUALIFY_NOTE_FMT, [Length(ARow.QualifyFixes)]) else '';
 end;
 
 function CastSiteNote(const ARow: TApplyRow): string;
@@ -1167,6 +1220,55 @@ function ParseApplyJson(const AJson: string; AFeatures: TApplyFeatures): TApplyR
       end;
   end;
 
+  // apply/1 qualify_fixes[] (engine 1.28.3). Type-checked like InheritedItems: a malformed
+  // entry costs only its own fields, never the row.
+  function QualifyFixes(AObj: TJSONObject): TArray<TQualifyFix>;  // dl:ok duplicate-code@5a19 -- REVIEWED 2026-10-19 the same type-checked array-of-objects reader shape as InheritedItems on purpose: each apply/1 array reads its own fields, a shared generic reader would hide which keys each contract takes
+
+    function Suggestions(AFix: TJSONObject): TArray<TQualifySuggestion>;
+    var
+      LSug: TQualifySuggestion;  // dl:ok duplicate-code@3ff0 -- REVIEWED 2026-10-19 the inner reader of QualifyFixes, the same shape as InheritedItems (see QualifyFixes)
+    begin
+      Result:= nil;
+      if not (AFix.Values['suggestions'] is TJSONArray) then
+        Exit;
+      for var LVal: TJSONValue in TJSONArray(AFix.Values['suggestions']) do
+        if LVal is TJSONObject then
+        begin
+          LSug:= Default(TQualifySuggestion);
+          LSug.Replacement:= Str(TJSONObject(LVal), 'replacement');
+          LSug.Candidate  := Str(TJSONObject(LVal), 'candidate');
+          LSug.Why        := Str(TJSONObject(LVal), 'why');
+          LSug.Alternative:= Str(TJSONObject(LVal), 'alternative');
+          Result:= Result + [LSug];
+        end;
+    end;
+
+  var
+    LFix: TQualifyFix;
+    LNum: TJSONValue;
+  begin
+    Result:= nil;
+    if not (AObj.Values['qualify_fixes'] is TJSONArray) then
+      Exit;
+    for var LVal: TJSONValue in TJSONArray(AObj.Values['qualify_fixes']) do
+      if LVal is TJSONObject then
+      begin
+        LFix:= Default(TQualifyFix);
+        LFix.Current    := Str(TJSONObject(LVal), 'current');
+        LFix.Name       := Str(TJSONObject(LVal), 'name');
+        LFix.Side       := Str(TJSONObject(LVal), 'side');
+        LFix.Outcome    := Str(TJSONObject(LVal), 'outcome');
+        LFix.Chosen     := Str(TJSONObject(LVal), 'chosen');
+        LFix.Inference  := Str(TJSONObject(LVal), 'inference');
+        LFix.Alternative:= Str(TJSONObject(LVal), 'alternative');
+        LFix.Suggestions:= Suggestions(TJSONObject(LVal));
+        LNum:= TJSONObject(LVal).Values['rule_line'];
+        if not ((LNum is TJSONNumber) and TryStrToInt(LNum.Value, LFix.RuleLine)) then
+          LFix.RuleLine:= 0;
+        Result:= Result + [LFix];
+      end;
+  end;
+
   // AWarnings minus the engine's per-instance inherited warnings when inherited[] is
   // there (AHasList): those are the "left" note's, so counting them as manual remainder
   // too would count each instance twice. Without inherited[] they stay.
@@ -1268,6 +1370,8 @@ begin
       Result.UsesUnresolved:= UsesUnresolved(Obj);
       Result.UsesReindex   := UsesReindex(Obj);
     end;
+    if afQualifyFix in AFeatures then
+      Result.QualifyFixes:= QualifyFixes(Obj);
     if (afPasUses in AFeatures) and (Obj.Values['pas_uses'] is TJSONArray) then
       Result.PasUses:= ParsePasUses(TJSONArray(Obj.Values['pas_uses']), Str(Obj, 'unit'), 0);
     // Engine 1.28.2: resolution / candidates[] are this contract only with the capability.
