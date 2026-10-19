@@ -31,6 +31,7 @@ src/storage/DRagLint.Storage.SQLite.pas::ResolveUnitUseTargets
 src/storage/DRagLint.Storage.SQLite.pas::ResolveAncestry
 src/storage/DRagLint.Storage.SQLite.pas::ResolveHelpers
 src/storage/DRagLint.Storage.SQLite.pas::ResolveCallTargets
+src/storage/DRagLint.Storage.SQLite.pas::ResetResolveScope
 
 # What ResolveCallTargets calls (autodoc facts, not inference).
 src/storage/DRagLint.Storage.SQLite.pas::UpsertCallEdge
