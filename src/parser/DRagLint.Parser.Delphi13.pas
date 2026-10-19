@@ -289,6 +289,31 @@ begin
   Result:= IsDottedIdentChain(ANode.ChildByField('lhs'));
 end;
 
+{ Ref-gap G3 support (B-13, 2026-10-19): is this node an INDEXED receiver --
+  `S[i]`, `A[i].B`, `A[i].B.C` -- i.e. an exprSubscript, or a dotted chain of
+  identifier members whose root is one?
+
+  WHY IT EXISTS. Ref-gap G / G2 emit the member of `obj.M` and `A.B.C.M` only;
+  an indexed receiver was left to "the future expression stage". So
+  `S[First].IsWhiteSpace` in a condition emitted NO ref, and unused-unit-in-uses
+  -- which name-matches type-helper members against the file's ref names --
+  reported System.Character (TCharHelper) as a dead import whose removal fails
+  E2671. The member NAME is what the rule and find-callers need; the receiver
+  text (`S[First]`) is recovered from the source by the resolve pass, exactly as
+  for `A[i].Method;`, which EmitStatementCall already emitted as a call.
+
+  A CALL receiver (`F(x).M`) still answers False: deliberately out of scope. }
+function IsIndexedMemberReceiver(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'exprSubscript' then Exit(True);
+  if ANode.NodeType <> 'exprDot' then Exit;
+  var R:= ANode.ChildByField('rhs');
+  if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+  Result:= IsIndexedMemberReceiver(ANode.ChildByField('lhs'));
+end;
+
 procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string); forward;
 
 // v0.8: every `typeref` node that appears in a parameter type, field type,
@@ -505,7 +530,17 @@ begin
     if Op.IsNull or ((Op.NodeType <> 'kIs') and (Op.NodeType <> 'kAs')) then ReadField('rhs');
   end
   else if NT = 'exprSubscript' then ReadField('entity')    // A[i]  -- args recurse as exprArgs
-  else if (NT = 'if') or (NT = 'while') or (NT = 'repeat') then ReadField('condition')
+  else if (NT = 'if') or (NT = 'ifElse') or (NT = 'while') or (NT = 'repeat') then ReadField('condition')
+  { An if-EXPRESSION in expression position (`N:= if C then A else B`): all
+    three slots are expressions. A STATEMENT-position exprIf never reaches
+    here -- Walk's statement arm routes it to WalkStatementExprIf, whose
+    branches are calls, not reads. }
+  else if NT = 'exprIf' then
+  begin
+    ReadField('condition');
+    ReadField('then');
+    ReadField('else');
+  end
   else if NT = 'with'    then ReadWithEntities            // ALL entity slots, not just the first
   else if NT = 'foreach' then ReadField('iterable')        // `for X in Coll` -- Coll only;
                                                            // the iterator is written, not read
@@ -2143,6 +2178,64 @@ var
   NodeType : string ;
   i        : Integer;
   IsInClass: Boolean;
+
+  // A paren-less call in STATEMENT position: `Foo;` (identifier) or
+  // `Obj.Foo;` (exprDot -- the rhs is the callee). Anything else (an exprCall
+  // emits its own ref when Walk reaches it) contributes nothing here.
+  // REF_KIND_CALL (T3i): see EmitCallReference's note -- one declaration.
+  procedure EmitStatementCall(const AExpr: TTSNode);
+  var
+    RhsNode: TTSNode;
+  begin
+    if AExpr.NodeType = 'identifier' then AState.EmitRef(REF_KIND_CALL, NodeText(AExpr, AState.Source), AExpr)
+    else if AExpr.NodeType = 'exprDot' then
+    begin
+      RhsNode:= AExpr.ChildByField('rhs');
+      if not RhsNode.IsNull then AState.EmitRef(REF_KIND_CALL, NodeText(RhsNode, AState.Source), RhsNode);
+    end;
+  end;
+
+  { An if-EXPRESSION sitting in STATEMENT position. Delphi 13's inline
+    `if C then A else B` conflicts with the if-statement in the grammar
+    ([$.exprIf, $.statementTr]), and when BOTH branches are expressions GLR
+    keeps the expression reading. Dumped against tree_sitter_delphi13:
+        `if A = B then Foo else Bar;`
+        -> (statement (exprIf condition: (exprBinary ..)
+                              then: (identifier) else: (identifier)))
+    while `if F then Foo;` is (if .. then: (statement (identifier))). An
+    expression statement can only be a call, so each branch IS a statement and
+    gets the statement-call treatment -- recursively, since `else if` nests
+    another exprIf in the else slot. The condition is an ordinary expression:
+    a bare identifier there is a 'read' (the B3 ambiguity, under the same
+    EmitUsageRefs gate), anything else is
+    reached by Walk. The branches are NOT handed to Walk's exprIf arm in
+    EmitExpressionIdentReads, which would add a 'read' at the same span as
+    the call (the co-located duplicate shape, register E1).
+    Pinned by tests\autotest\run_bare_call_in_exprif_refs.ps1. }
+  procedure WalkStatementExprIf(const AExprIf: TTSNode);
+  var
+    Cond  : TTSNode;
+    Branch: TTSNode;
+  begin
+    Cond:= AExprIf.ChildByField('condition');
+    if (not Cond.IsNull) and (Cond.NodeType = 'identifier') then
+    begin
+      if AState.EmitUsageRefs then AState.EmitRef('read', NodeText(Cond, AState.Source), Cond); // same gate as B3
+    end
+    else Walk(Cond, AState, AParentSymbolIdx, AParentQualifiedName);
+    for var Slot in ['then', 'else'] do
+    begin
+      Branch:= AExprIf.ChildByField(Slot);
+      if Branch.IsNull then Continue;
+      if Branch.NodeType = 'exprIf' then WalkStatementExprIf(Branch)
+      else
+      begin
+        EmitStatementCall(Branch);
+        Walk(Branch, AState, AParentSymbolIdx, AParentQualifiedName);
+      end;
+    end;
+  end;
+
 begin
   if ANode.IsNull then Exit;
   NodeType:= ANode.NodeType;
@@ -2621,19 +2714,13 @@ begin
   // common idiom for stateful procedures (RepointJobHeaderToFolder; etc).
   if NodeType = 'statement' then
   begin
-    if ANode.NamedChildCount >= 1 then
+    if (ANode.NamedChildCount >= 1) and (ANode.NamedChild(0).NodeType = 'exprIf') then
+      WalkStatementExprIf(ANode.NamedChild(0))
+    else
     begin
-      var ExprChild:= ANode.NamedChild(0);
-      var ChildKind:= ExprChild.NodeType;
-      // REF_KIND_CALL (T3i): see EmitCallReference's note -- one declaration.
-      if ChildKind      = 'identifier' then AState.EmitRef(REF_KIND_CALL, NodeText(ExprChild, AState.Source), ExprChild)
-      else if ChildKind = 'exprDot' then
-      begin
-        var RhsNode:= ExprChild.ChildByField('rhs');
-        if not RhsNode.IsNull then AState.EmitRef(REF_KIND_CALL, NodeText(RhsNode, AState.Source), RhsNode);
-      end;
+      if ANode.NamedChildCount >= 1 then EmitStatementCall(ANode.NamedChild(0));
+      for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     end;
-    for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
     Exit;
   end; // if
 
@@ -2730,7 +2817,8 @@ begin
       // and rhs must be a plain identifier. Chained (a.b.Member), call (f().Member),
       // and indexed (arr[i].Member) receivers are excluded -- each exprDot LEVEL with
       // a plain-identifier lhs emits its own member-access via the recursion below;
-      // complex receivers are the future expression stage's problem. A DISTINCT kind
+      // complex receivers are the future expression stage's problem (chained: G2
+      // below; indexed: G3 below, B-13 2026-10-19). A DISTINCT kind
       // ('member-access') keeps existing read/write/type_use consumers untouched.
       if (not L.IsNull) and (L.NodeType = 'identifier')
          and (not SameText(Trim(NodeText(L, AState.Source)), 'Self')) then
@@ -2763,6 +2851,15 @@ begin
         var RG2:= ANode.ChildByField('rhs');
         if (not RG2.IsNull) and (RG2.NodeType = 'identifier') then
           AState.EmitRef('member-access', NodeText(RG2, AState.Source), RG2);
+      end;
+      // Ref-gap G3 (B-13): the same capture when the receiver is INDEXED --
+      // `S[First].IsWhiteSpace`, `A[I].Field:= 1`, `A[I].Sub.Leaf`. See
+      // IsIndexedMemberReceiver for why; 'member-access' for the reasons G2 gives.
+      if IsIndexedMemberReceiver(L) then
+      begin
+        var RG3:= ANode.ChildByField('rhs');
+        if (not RG3.IsNull) and (RG3.NodeType = 'identifier') then
+          AState.EmitRef('member-access', NodeText(RG3, AState.Source), RG3);
       end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;

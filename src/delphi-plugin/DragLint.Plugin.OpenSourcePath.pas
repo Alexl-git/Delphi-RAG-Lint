@@ -11,7 +11,8 @@ unit DragLint.Plugin.OpenSourcePath;
 
   This unit is the gate, kept free of ToolsAPI so a console test can drive it
   (tests\fixtures\T66_open_source_path.dpr). Its rules mirror the browser-side
-  handler, charts\src\Open-DragLintUri.ps1; the one deliberate difference is
+  handler, src\tools\uri-handler\drag-lint-open.dpr (it replaced
+  charts\src\Open-DragLintUri.ps1); the one deliberate difference is
   that .dpr is allowed here (owner ruling 2026-09-29: it loads the project into
   the IDE, and nothing builds). }
 

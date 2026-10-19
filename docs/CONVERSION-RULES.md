@@ -504,7 +504,7 @@ is captured as a parse error (never raised).
 | `#unuse <unit>` | remove a unit from the PAS `uses` clause. **convert-apply 1.27.0 (C9):** a WATCH LIST entry -- kept while a component the converted `.dfm` still streams has a class declared in it (`kept` row + warning), removed when only `.pas` code needs it (dangling references named on the row), kept when no `--db` knows it; scope-alias aware (`#unuse DBTables` matches `Bde.DBTables`). `--no-reconcile-uses` = the unconditional 1.26 removal. |
 | `#remove <property>` | remove a property from PAS and DFM |
 | `#remove DFM: <property>` | remove a property from the DFM only |
-| `#migrate [<Class>:] [<obj>.] <old> -> <new> [, <unit> ...]` | replace `old` with `new`; optional class-scope / object-scope; optional uses-add(s) |
+| `#migrate [<Class>:] [<obj>.] <old> -> <new> [, <unit> ...]` | replace `old` with `new`; optional class-scope / object-scope; optional uses-add(s). Inside a `#convert` block convert-apply applies the plain forms `#migrate Old -> New` and `#migrate Old -> DL_NONE` to the converted instances' `.pas` sites (C18 slice 1, see "Member migration") |
 | `<pcre-search> -> <pcre-replace>` | raw PCRE find/replace (escape hatch: any non-`#` line containing ` -> `) |
 
 Real reFind sample lines (from the BDE2FD sample):
@@ -1209,6 +1209,28 @@ unresolved row prints `(declaring class ambiguous: <units>)` or its
 resolution instead). Not listed: a member reached with no receiver (`with
 X do`) and a site the index cannot vouch for. `info --json`:
 `capabilities.pas_uses: true`, `capabilities.pas_uses_resolution: true`.
+
+   **Member migration (C18 slice 1).** Inside a `#convert From -> To` block,
+   `#migrate Old -> New` renames the member at every bound access site of the
+   block's converted instances -- methods, events and properties alike
+   (`btnTop.Click` -> `btnTop.Press`, `btnTop.OnClick := H` -> `btnTop.OnPress := H`),
+   items[] `migrate-applied` (field `access_sites`; `path` Old, `value` New,
+   `old_value` the member as written). `#migrate Old -> DL_NONE` is a
+   DELIBERATE BREAK: the site's member access is wrapped, keeping the old text,
+   `N := btnTop.Count;` -> `N := DL_NONE(btnTop.Count);`, so the unit fails to
+   compile on exactly those lines (E2003 `DL_NONE`) until converted by hand;
+   items[] `deliberate-break` (field `todos`, `value` `DL_NONE`, `old_value` the
+   wrapped text). Both feed `pas_uses[]` status `mapped`. Sites use the `#link`
+   rename's own discovery and binding; columns are converted from the index's
+   UTF-8 bytes. NEVER rewritten, each an items[] `migrate-check` warning: a member
+   reached through `with inst do` (the with line), a site whose receiver the
+   index cannot vouch for, and a whole rule slice 1 does not realise -- a scoped
+   form (`Class:` / `obj.`), a call / assignment template, trailing uses units,
+   or a member a `#link` (or an earlier `#migrate`) of the block already
+   converts. A `#migrate` before the first `#convert` is not a member migration
+   and stays unapplied, as before. Idempotent: a renamed site no longer names
+   Old, and a wrapped one is not wrapped twice. `info --json`:
+   `capabilities.migrate_members: true`.
 5. **Runtime-creator retype + TODO marker** -- every explicit `FromType.Xxx(...)`
    construction (e.g. `Edit1 := TOldEdit.Create(Self);`) gets its type token
    rewritten to ToType, PLUS an unconditional `{ TODO: drag-lint convert --

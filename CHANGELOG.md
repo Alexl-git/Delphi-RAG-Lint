@@ -5,7 +5,13 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v1.32.0-alpha -- 2026-10-19
+
+Extractor 1.22.0-alpha: every index re-parses ONCE on its next run (hours for large trees).
+
 ### Added
+
+- **`convert-apply` applies `#migrate` inside a `#convert` block (C18 member replacement, slice 1).** `#migrate Old -> New` renames the member at every bound `.pas` access site of the block's converted instances -- methods and events as well as properties (items[] `migrate-applied`); `#migrate Old -> DL_NONE` wraps each site as `DL_NONE(inst.Old)`, keeping the old text, so the unit fails to compile on exactly those lines until converted by hand (items[] `deliberate-break`, field `todos`). Both make the member `mapped` in `pas_uses[]`. A `with` block, an unverified receiver, a scoped / template / uses-unit form, or a member a `#link` already converts is never rewritten (items[] `migrate-check`). Idempotent; `info --json` capability `migrate_members`. Index columns are now converted from UTF-8 bytes to characters for every `.pas` access-site rewrite (`#link` renames and the StripDB value cast too), so a non-ASCII character earlier on the line no longer hides or shifts a site. Guard: `tests\autotest\run_convert_apply_migrate.ps1`.
 
 - **`round-trip` is answered by the engine itself, in Delphi -- every one of the 26 chart questions is now in-process.** The trace is the same Form A document (`trace.dlgraph`): the anchor from the selection through the datasource chain, the WRITE half (wiring, handler, crossing, server dispatch, apply, column, response) and the READ half (the fill route, the server query, the rows back), every step anchored, every guard quoted verbatim from fresh source, every hop the walk cannot make a numbered STOPS, ALSO derived from the index, a calculated anchor offering its source fields; the chart is drawn from the written text, never from a second walk, and the bundle page links every anchor the indexes hold once. Output matches the PowerShell emitter (`Test-Parity -Mode Question`: text 0 differences, 8 of 9 bundle files equal including `trace.dlgraph` byte for byte). `Emit-RoundTrip.ps1`, `Trace.FormA.ps1`, `Trace.Walk.ps1` and `Trace.Chart.ps1` are no longer shipped (they stay in the repo as the parity reference). PowerShell 7 is no longer needed for any chart question.
 
@@ -54,6 +60,10 @@ breaking changes** until v1.0.
   `%LOCALAPPDATA%\drag-lint\logs\uri-handler.log`. The installer's `draglint://` and MCP tasks now run the two
   verbs above. Docs: `docs\wiki\Draglint-Protocol-Handler.md`, `docs\wiki\Register-MCP-Server.md`, feature
   registry entry `protocol-handler`.
+
+### Fixed
+
+- **Extractor (1.22.0-alpha): a member on an indexed receiver is now a reference.** `S[First].IsWhiteSpace`, `A[I].Field:= 1`, `N:= A[0].Fn` and `A[I].Sub.Leaf` emitted no ref, so `unused-unit-in-uses` flagged `System.Character` (TCharHelper) as a dead import whose removal fails E2671, and `find-callers` under-reported such members. They now emit `member-access` refs (B-13; guard `run_indexed_receiver_member_refs.ps1`).
 
 ## v1.31.7-alpha -- 2026-10-19
 
@@ -162,6 +172,22 @@ Extractor unchanged (1.21.1): no reindex needed.
   which widens a project DB); it is now `index --project <the .dproj>`. The "scan libraries"
   setting no longer affects this spawn (a library scan does not belong in a project DB).
 - **IDE plugin: the job queue logs each job's command line at start and its exit code at end.**
+Extractor 1.22.0-alpha (one re-parse for all three fixes).
+
+### Fixed
+
+- **Bare calls in a statement-level inline if** (`if C then Foo else Bar;`)
+  now emit call refs for both branches. Guard:
+  `tests\autotest\run_bare_call_in_exprif_refs.ps1`.
+- **`$` in an unquoted SQL identifier** -- `FIB$ENUMVALUES` is no longer cut
+  to `FIB` in `sql_writes`, and a SELECT from such a table keeps its
+  `sql_reads`. Guard: `tests\autotest\run_sql_dollar_identifier.ps1`.
+- **Double-quoted SQL identifiers** (`FROM "Mixed Case"`, `INSERT INTO "T"`,
+  `UPDATE OR INSERT INTO "FIB$X"`, multi-`Add` queries) are now recorded in
+  `sql_reads` / `sql_writes` verbatim -- quotes stripped, case preserved,
+  `""` unescaped -- instead of yielding no fact. Guard:
+  `tests\autotest\run_sql_quoted_identifier.ps1`.
+
 ## v1.31.1-alpha -- 2026-10-14
 
 ### Fixed

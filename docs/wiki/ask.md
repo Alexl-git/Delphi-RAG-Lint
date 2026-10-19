@@ -75,9 +75,9 @@ All twenty-six questions (`touches-tables`, `shown-where`, `deps`,
 `consumers`, `exception-paths`, `who-calls`, `what-it-calls`, `butterfly`, `hierarchy`, `wiring`, `path`, `architecture`, `cycles`, `who-writes`, `who-reads`, `round-trip`) are answered inside the engine, from the live
 index. `crosses-boundary` takes its counterpart from `--counterpart-db`, else from
 the pair in `report-pairs.json`; with neither it draws the one side and says so, as
-the script does. No question is handed to PowerShell any more: the engine answers
+the script does. No question is handed to PowerShell: the engine answers
 all of them itself, and `charts\src\Ask-Report.ps1 -Plain` stays in the repository
-as the parity reference. The text is the same either way: the questions are held to the PowerShell output byte for byte by
+only as an internal parity oracle (not shipped, not a user tool). The text is the same either way: the questions are held to the PowerShell output byte for byte by
 the parity harness (`charts\src\Test-Parity.ps1 -Mode Question`).
 
 ## Examples

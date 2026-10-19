@@ -321,7 +321,10 @@ published while `modifiers` says `public` for both.
 >   (status `mapped` / `cast-refused` / `not-rewritten` / `same-name` / `unmapped` / `global-dangling`); `pas_uses_resolution`
 >   -- JSON `true` since 1.28.2: each `pas_uses[]` row carries `resolution` (`resolved` / `ambiguous` /
 >   `class-not-found` / `member-not-found` / `kind-unknown`) and `candidates[]`; the From class is
->   resolved through the unit's uses scope, never by bare name; `convert_qualify_fix` -- JSON `true` since the link-scope fix (owner ruling 2026-10-11): an ambiguous bare `#convert` class is inferred (project framework, `.dfm` properties) with a `convert-class-inferred` warning or refused, either way with apply/1 `qualify_fixes[]` (ready-to-paste qualified lines); `inherited_retype`
+>   resolved through the unit's uses scope, never by bare name; `migrate_members` -- JSON `true`
+>   since C18 slice 1: `#migrate Old -> New` / `#migrate Old -> DL_NONE` inside a `#convert` block
+>   rename or wrap (`DL_NONE(inst.Old)`) the member at the converted instances' bound `.pas` sites --
+>   items[] `migrate-applied` / `deliberate-break` / `migrate-check`, `pas_uses[]` status `mapped`; `convert_qualify_fix` -- JSON `true` since the link-scope fix (owner ruling 2026-10-11): an ambiguous bare `#convert` class is inferred (project framework, `.dfm` properties) with a `convert-class-inferred` warning or refused, either way with apply/1 `qualify_fixes[]` (ready-to-paste qualified lines); `inherited_retype`
 >   -- JSON `true` since 1.26.0: an inherited instance of a converted ancestor is
 >   retyped, and its fields followed in code, `inherited[].action`). Read-only. This is what the IDE
 >   Help>About box calls. Each `--db <index>` adds that index's freshness
@@ -772,6 +775,7 @@ have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 | `context` | [context](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/context) | Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers |  |
 | `contrast-selftest` | [contrast-selftest](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | Self-test for the hover contrast computation, driven by a test runner |  |
 | `convert-apply` | [convert-apply](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-apply) | Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add | index |
+| `convert-apply` | [convert-apply #migrate (member rename / DL_NONE)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-apply-migrate) | #migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site | index |
 | `convert-reemit` | [convert-reemit](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Maintenance) | The DFM re-emit stage of the conversion pipeline, driven by convert-apply and by test runners |  |
 | `convert-scaffold` | [convert-scaffold](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-scaffold) | Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type | index |
 | `convert-validate` | [convert-validate](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/convert-validate) | Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees |  |

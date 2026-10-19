@@ -1,0 +1,4 @@
+#convert TSrcBtn -> TDstBtn
+#link Caption <- Caption
+#migrate Click -> Press
+#migrate OnClick -> OnPress

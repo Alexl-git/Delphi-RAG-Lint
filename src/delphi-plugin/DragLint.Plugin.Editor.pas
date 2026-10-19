@@ -6201,7 +6201,7 @@ begin
   AddWrappedItem(SubUses, 'Uses Report (CSV)...'                                       , InvokeUsesReportCsv   );
   AddWrappedItem(SubUses, 'Dependency Report (third-party rollup)...'                  , InvokeDepsReport      );
 
-  { Reports submenu (2026-10-05): every Ask-Report.ps1 question, grouped by
+  { Reports submenu (2026-10-05): every `ask` question, grouped by
     what the user selects. DragLint.Plugin.Reports owns the catalog and the
     runner; the items are still created HERE, through AddWrappedItem /
     AddSeparator / AddSectionHeader, so GMenuItems and GWrappers stay the one
