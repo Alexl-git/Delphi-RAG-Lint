@@ -51,11 +51,13 @@ try {
     $plan.Delete | ForEach-Object { Write-Host "  - $_" }
     if ($DryRun) { Write-Host 'dry run: nothing changed'; exit 0 }
 
-    # 6-7. upload, then delete
-    Send-PublishFiles $session $cred.RemoteRoot $site $plan.Upload
-    Remove-PublishFiles $session $cred.RemoteRoot $plan.Delete
-
-    # 8. manifest only after full success
+    # 6-8. upload, then delete; the manifest is saved after every step, so a publish that
+    # dies half-way records exactly what it put on the server (and the retry needs no guard)
+    $files = Invoke-PublishPlan $plan $old $files `
+        { param($rel) Send-PublishFiles $session $cred.RemoteRoot $site @($rel) } `
+        { param($rel) Remove-PublishFile $session $cred.RemoteRoot $rel } `
+        { param($f) Write-PublishManifest $cred $f $noRewrite }
+    Remove-EmptiedRemoteDirs $session $cred.RemoteRoot (Get-EmptiedRemoteDirs $plan.Delete @($files.Keys))
     Write-PublishManifest $cred $files $noRewrite
 
     # 9. live checks

@@ -115,6 +115,8 @@ function Open-PublishSession($Cred) {
     $s = New-Object WinSCP.Session
     $exe = Join-Path $dir 'WinSCP.exe'
     if (Test-Path -LiteralPath $exe) { $s.ExecutablePath = $exe }
+    [void][IO.Directory]::CreateDirectory($script:PublishDir)
+    $s.SessionLogPath = Join-Path $script:PublishDir 'winscp-session.log'
     $s.Open($o)
     $s
 }
@@ -151,18 +153,51 @@ function Send-PublishFiles($Session, [string]$Root, [string]$LocalDir, [string[]
     }
 }
 
-function Remove-PublishFiles($Session, [string]$Root, [string[]]$Paths) {
-    foreach ($rel in $Paths) {
-        $r = Join-RemotePath $Root $rel
-        if ($Session.FileExists($r)) { $Session.RemoveFiles($Session.EscapeFileMask($r)).Check() }
-        Write-Host "  del $rel"
+function Remove-PublishFile($Session, [string]$Root, [string]$Rel) {
+    $r = Join-RemotePath $Root $Rel
+    if ($Session.FileExists($r)) { $Session.RemoveFiles($Session.EscapeFileMask($r)).Check(); Write-Host "  del $Rel" }
+    else { Write-Host "  del $Rel (already gone)" }
+}
+
+# Runs the plan one file at a time and calls $Save with the manifest after EVERY step,
+# so a publish that dies half-way still records exactly what is on the server.
+# $Put / $Remove = { param($rel) }; $Save = { param([hashtable]$files) }. Returns the final manifest.
+function Invoke-PublishPlan($Plan, [hashtable]$OldFiles, [hashtable]$NewFiles, [scriptblock]$Put, [scriptblock]$Remove, [scriptblock]$Save) {
+    $state = if ($OldFiles) { $OldFiles.Clone() } else { @{} }
+    foreach ($rel in @($Plan.Upload)) { & $Put $rel; $state[$rel] = $NewFiles[$rel]; & $Save $state }
+    foreach ($rel in @($Plan.Delete)) { & $Remove $rel; $state.Remove($rel); & $Save $state }
+    $state
+}
+
+# Remote folders left empty by the deletes, deepest first; the root is never one of them.
+function Get-EmptiedRemoteDirs([string[]]$Deleted, [string[]]$Remaining) {
+    $dirs = @{}
+    foreach ($p in @($Deleted)) {
+        $parts = $p.Split('/')
+        for ($i = $parts.Length - 1; $i -ge 1; $i--) { $dirs[($parts[0..($i - 1)] -join '/')] = $true }
+    }
+    @($dirs.Keys | Where-Object { $d = "$_/"; -not @($Remaining | Where-Object { $_.StartsWith($d) }).Count } |
+        Sort-Object @{ Expression = { $_.Split('/').Length }; Descending = $true }, @{ Expression = { $_ } })
+}
+
+function Remove-EmptiedRemoteDirs($Session, [string]$Root, [string[]]$Dirs) {
+    foreach ($d in $Dirs) {
+        $r = Join-RemotePath $Root $d
+        if (-not $Session.FileExists($r)) { continue }
+        $left = @($Session.ListDirectory($r).Files | Where-Object { $_.Name -ne '.' -and $_.Name -ne '..' })
+        if ($left.Count -eq 0) { $Session.RemoveFiles($Session.EscapeFileMask($r)).Check(); Write-Host "  rmdir $d" }
     }
 }
 
 # HTTP status, Location and body of one GET, redirects not followed.
+# A DNS, TLS or connection failure is Status 0, never an exception.
 function Get-HttpStatus([string]$Url) {
-    $r = Invoke-WebRequest -Uri $Url -MaximumRedirection 0 -SkipHttpErrorCheck -ErrorAction SilentlyContinue
-    [pscustomobject]@{ Status = [int]$r.StatusCode; Location = [string]($r.Headers['Location'] | Select-Object -First 1); Content = [string]$r.Content }
+    try {
+        $r = Invoke-WebRequest -Uri $Url -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 30 -ErrorAction Stop
+        [pscustomobject]@{ Status = [int]$r.StatusCode; Location = [string]($r.Headers['Location'] | Select-Object -First 1); Content = [string]$r.Content }
+    } catch {
+        [pscustomobject]@{ Status = 0; Location = ''; Content = ''; Error = $_.Exception.Message }
+    }
 }
 
 # True only when the response is OUR home page (200 and our canonical link), so a

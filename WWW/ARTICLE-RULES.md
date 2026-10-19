@@ -31,6 +31,10 @@ summary: One sentence, the standfirst's first sentence.
 -->
 ```
 
+`title` and `summary` are plain ASCII text with no HTML entities: the builder escapes them
+(write `R&D`, never `&amp;`; write `Cafe`, never `Caf&eacute;`). The build refuses an entity
+there. Entities belong in the body only.
+
 The folder must be named `yyyy-mm-dd-<slug>`.
 The file is `index.html` inside that folder.
 
@@ -43,6 +47,8 @@ If the original has one, move it to a class in `style.css` and reference the cla
 
 In the opening paragraph or close to it, one natural sentence that says the work comes from building Micronite, quality and production-control software (link to https://www.htrmicronite.com).
 The wording varies per article so none repeats.
+The build refuses an article whose first 3000 characters of body have no link to
+`https://www.htrmicronite.com`.
 
 ### Phrasings already used
 

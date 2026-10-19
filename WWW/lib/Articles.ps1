@@ -37,6 +37,9 @@ function Read-Article([string]$Path) {
         $line = 1 + ($text.Substring(0, $m.Length + $bad.Index) -split "`n").Count - 1
         throw "${Path}:${line}: forbidden markup '$($bad.Value.Trim())' (no scripts, <style> or style= in articles)"
     }
+    if (-not $body.Substring(0, [Math]::Min(3000, $body.Length)).Contains('href="https://www.htrmicronite.com')) {
+        throw "${Path}: no Micronite mention near the top (a link to https://www.htrmicronite.com in the first 3000 characters; see ARTICLE-RULES.md)"
+    }
     [pscustomobject]@{
         Title = $meta.title; Date = $meta.date; Slug = $meta.slug; Summary = $meta.summary
         Body = $body; Dir = $dir

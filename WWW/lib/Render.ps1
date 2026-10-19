@@ -24,11 +24,17 @@ function ConvertTo-AsciiBytes([string]$Text, [string]$Source) {
     [Text.Encoding]::ASCII.GetBytes($Text)
 }
 
-# web.config text from the source file; $NoRewrite drops <rewrite> for an IIS without
-# the URL Rewrite module (the headers, errors and MIME map stay).
+# web.config text from the source file. $NoRewrite is the HTTP 500 fallback: it drops the
+# sections a shared IIS may lack or lock -- <rewrite> (URL Rewrite module) and <security>
+# (removeServerHeader, IIS 10+) -- while the headers, errors and MIME map stay.
 function New-WebConfigText([string]$Source, [bool]$NoRewrite) {
     [xml]$wc = $Source
-    if ($NoRewrite) { $n = $wc.configuration.'system.webServer'.rewrite; if ($n) { [void]$n.ParentNode.RemoveChild($n) } }
+    if ($NoRewrite) {
+        foreach ($s in 'rewrite', 'security') {
+            $n = $wc.configuration.'system.webServer'.$s
+            if ($n) { [void]$n.ParentNode.RemoveChild($n) }
+        }
+    }
     $sw = [IO.StringWriter]::new()
     $wc.Save($sw)
     $sw.ToString() -replace 'encoding="utf-16"', 'encoding="us-ascii"'

@@ -13,7 +13,7 @@ Assert-Equal 3 (ConvertTo-AsciiBytes "a`r`n" 'x').Length 'ASCII text passes thro
 $d = New-TestDir
 $art = Join-Path $d '2026-10-20-ent'
 [void][IO.Directory]::CreateDirectory($art)
-$meta = "<!--article`r`ntitle: Caf&eacute; notes`r`ndate: 2026-10-20`r`nslug: ent`r`nsummary: R&D only.`r`n-->`r`n<p>x</p>`r`n"
+$meta = "<!--article`r`ntitle: Caf&eacute; notes`r`ndate: 2026-10-20`r`nslug: ent`r`nsummary: R&D only.`r`n-->`r`n<p><a href=""https://www.htrmicronite.com"">Micronite</a></p>`r`n"
 [IO.File]::WriteAllText("$art\index.html", $meta)
 Assert-Throws { Read-Article "$art\index.html" } '*title*plain ASCII*'
 [IO.File]::WriteAllText("$art\index.html", $meta.Replace('Caf&eacute;', 'Cafe'))

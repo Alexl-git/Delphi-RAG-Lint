@@ -29,6 +29,16 @@ function Test-SiteOutput([string]$Dir, $Config) {
             $target = if ($path.EndsWith('/')) { Join-Path $local 'index.html' } else { $local }
             if (-not (Test-Path -LiteralPath $target)) { $problems.Add("${rel}: dangling link $path") }
         }
+        # relative links resolve against the page's own folder (anchors, schemes, // skipped)
+        foreach ($m in [regex]::Matches($h, '\s(?:href|src)="(?![a-zA-Z][\w+.-]*:|/|#)([^"]+)"')) {
+            $path = ($m.Groups[1].Value -split '[?#]')[0]
+            if (-not $path) { continue }
+            $local = [IO.Path]::GetFullPath((Join-Path (Split-Path $f.FullName -Parent) $path.Replace('/', '\')))
+            $target = if ($path.EndsWith('/')) { Join-Path $local 'index.html' } else { $local }
+            if (-not $local.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path -LiteralPath $target)) {
+                $problems.Add("${rel}: dangling link $path")
+            }
+        }
     }
     $problems.ToArray()
 }
