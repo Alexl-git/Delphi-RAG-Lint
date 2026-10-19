@@ -105,6 +105,56 @@ try {
     $sw = @($pred); $t = $sw[1]; $sw[1] = $sw[2]; $sw[2] = $t
     Check 'POSITIVE CONTROL: swapped group lines no longer compare equal' (($sw -join "`n") -cne ($actual -join "`n"))
   }
+  # ---- fix round 2: single new unit under -Root, and every REFUSE exits 2 ----
+  $FX = Join-Path $WorkDir 'fx'; $FXR = Join-Path $WorkDir 'fxroot'
+  foreach ($d in $FX, $FXR) {
+    New-Item -ItemType Directory -Force -Path $d | Out-Null
+    [IO.File]::WriteAllText((Join-Path $d 'Existing.pas'), "unit Existing;`r`ninterface`r`nimplementation`r`nend.`r`n", [Text.Encoding]::ASCII)
+  }
+  function New-MiniPlan([string]$Dir, [string[]]$Step3, [string[]]$Step4) {
+    $l = @('## Cycle 1: a <-> b', '', '### Step 3')
+    $l += $Step3
+    $l += '### Step 4'
+    $l += $Step4
+    $l += '### Checklist'
+    $f = Join-Path $WorkDir ('mini-' + [Guid]::NewGuid().ToString('N') + '.txt')
+    [IO.File]::WriteAllText($f, ($l -join "`r`n") + "`r`n", [Text.Encoding]::ASCII)
+    return $f
+  }
+  function Unit3([string]$Dir, [string]$Name) { @(('#### `' + $Name + '` -> `' + (Join-Path $Dir ($Name + '.pas')) + '`'), '```', ('unit ' + $Name + ';'), '```') }
+  function Head4([string]$Dir) { ,@(('#### `Existing.pas`  (`' + (Join-Path $Dir 'Existing.pas') + '`)')) }
+  $okEdit = @('E1. After line 1 (`unit Existing;`), insert:', '```', '// added', '```')
+  function Run-Follow([string]$Plan, [string[]]$More = @()) {
+    $o = & pwsh -NoProfile -File $Follow -PlanFile $Plan -Cycle 1 @More 2>&1 | Out-String
+    return @{ Exit = $LASTEXITCODE; Out = $o }
+  }
+
+  # exactly ONE new unit (+ one edit) followed with -Root
+  $p1 = New-MiniPlan $FX (Unit3 $FX 'OnlyNew') (@(Head4 $FX) + $okEdit)
+  $r = Run-Follow $p1 @('-Root', $FXR)
+  Check '-Root with exactly one new unit and one edit: exit 0' ($r.Exit -eq 0) $r.Out
+  Check '-Root one new unit: file created under the new root' (Test-Path (Join-Path $FXR 'OnlyNew.pas'))
+  Check '-Root one new unit: original root untouched' (-not (Test-Path (Join-Path $FX 'OnlyNew.pas')))
+  # exactly one new unit and no edits
+  $p1b = New-MiniPlan $FX (Unit3 $FX 'OnlyNew2') @()
+  $r = Run-Follow $p1b @('-Root', $FXR)
+  Check '-Root with exactly one new unit and no edits: exit 0' ($r.Exit -eq 0) $r.Out
+
+  # every REFUSE exits 2
+  $cases = [ordered]@{
+    'unparseable edit step beside a valid one' = (New-MiniPlan $FX @() (@(Head4 $FX) + $okEdit + @('E2. Frobnicate line 3.')))
+    'anchor line beyond EOF'                   = (New-MiniPlan $FX @() (@(Head4 $FX) + @('E1. After line 99 (`x`), insert:', '```', '// y', '```')))
+    'current-text mismatch'                    = (New-MiniPlan $FX @() (@(Head4 $FX) + @('E1. Replace line 1. Current text:', '```', 'not the text', '```', 'New text:', '```', 'unit Z;', '```')))
+    'new unit already exists'                  = (New-MiniPlan $FX (Unit3 $FX 'Existing') @())
+    'no mechanical steps'                      = (New-MiniPlan $FX @() @())
+  }
+  foreach ($k in $cases.Keys) {
+    $r = Run-Follow $cases[$k]
+    Check "REFUSE exits 2: $k" (($r.Exit -eq 2) -and ($r.Out -match 'REFUSE')) ("exit=" + $r.Exit + " " + $r.Out)
+  }
+  $r = Run-Follow $p1 @()
+  $r = & pwsh -NoProfile -File $Follow -PlanFile $p1 -Cycle 7 2>&1 | Out-String
+  Check 'REFUSE exits 2: cycle not in plan' (($LASTEXITCODE -eq 2) -and ($r -match 'REFUSE: cycle 7')) $r
 } finally {
   Pop-Location
 }

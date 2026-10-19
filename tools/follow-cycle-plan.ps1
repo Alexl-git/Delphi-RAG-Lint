@@ -1,6 +1,6 @@
 # follow-cycle-plan.ps1 -- a MECHANICAL follower for `drag-lint cycles --plan` text.
 # Parses Step 3 (new units) and Step 4 (edits) of ONE cycle and applies them verbatim.
-# Refuses (exit 2) on: unparseable step, "Current text" mismatch, missing anchor.
+# Every REFUSE exits 2 and writes nothing. Refuses on: unparseable step, "Current text" mismatch, missing anchor.
 # No judgement anywhere: if a step needs one, this script cannot do it.
 # A trailing `(loaded defaults from ...)` line (stderr note captured with the plan) is ignored.
 # -Root <dir> replaces the common directory prefix of the plan's absolute paths with <dir>, so a
@@ -24,7 +24,7 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
   }
 }
 if ($start -lt 0) { Write-Output "REFUSE: cycle $Cycle not in plan"; exit 2 }
-$blk = $lines[$start..($end-1)]
+$blk = @($lines[$start..($end-1)])
 
 function Read-Fence([string[]]$b, [ref]$idx) {
   # expects b[idx] to be a ``` opener; returns the fenced lines, idx moves past the closer
@@ -82,11 +82,12 @@ while ($i -lt $blk.Count) {
 
 Write-Output ("parsed: {0} new unit(s), {1} edit(s), {2} refusal(s)" -f $newUnits.Count, $edits.Count, $refusals.Count)
 $refusals | ForEach-Object { Write-Output "REFUSE: $_" }
+if ($refusals.Count -gt 0) { Write-Output "REFUSE: $($refusals.Count) unparseable step(s); nothing written"; exit 2 }
 if ($newUnits.Count -eq 0 -and $edits.Count -eq 0) { Write-Output "REFUSE: plan has no mechanical steps for cycle $Cycle"; exit 2 }
 
 # --- -Root: swap the common directory prefix of all plan paths for $Root
 if ($Root -ne '') {
-  $allPaths = @(($newUnits | ForEach-Object { $_.Path }) + ($edits | ForEach-Object { $_.Path }) | Select-Object -Unique)
+  $allPaths = @(@($newUnits | ForEach-Object { $_.Path }) + @($edits | ForEach-Object { $_.Path }) | Select-Object -Unique)
   $prefix = $null
   foreach ($p in $allPaths) {
     $d = ([IO.Path]::GetDirectoryName($p) + '').TrimEnd('\')
