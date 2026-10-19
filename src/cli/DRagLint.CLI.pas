@@ -966,6 +966,7 @@ begin
   Writeln('  drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db>   - cross-unit rename');
   Writeln('  drag-lint rename --kind param  --file <F> --line <L> --col <C> --to <New> [--json|--apply|--no-backup]  - routine-local rename (param/var autofix)');
   Writeln('  drag-lint rename --qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]');
+  Writeln('      (--qname and --kind symbol refuse, exit 2, when the old name is used in an indexed .inc file: no {$I} refs until 1.22)');
   Writeln('  drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]');
   Writeln('  drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH]   - generate/repair a managed DocInsight comment');
   Writeln('  drag-lint document --unit <file.pas> [--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH]         - document every public decl in the unit (facts-only)');
@@ -20718,6 +20719,13 @@ begin
       var Reason: string:= TRenameRefactoring.ConflictReason(KStore, QN, AArgs.RenameTo);
       if Reason <> '' then
       begin Writeln('ERROR: cannot rename -- ' + Reason); Exit(2); end;
+      { stopgap until 1.22 emits include refs: refuse instead of a partial rename }
+      Reason:= TRenameRefactoring.IncludeUseReason(KStore, QN);
+      if Reason <> '' then
+      begin
+        Writeln('ERROR: cannot rename -- ' + Reason);
+        Exit(2);
+      end;
       Edits:= TRenameRefactoring.Build(KStore, QN, AArgs.RenameTo);
     end // if
     else begin Writeln('ERROR: --kind must be symbol or param'); Exit (2 ); end;
@@ -20771,6 +20779,13 @@ begin
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk); { READ-ONLY (D24): edits source, never the index }
   if not RoOk then Exit(2);
+  { stopgap until 1.22 emits include refs: refuse instead of a partial rename }
+  var IncReason: string:= TRenameRefactoring.IncludeUseReason(Store, AArgs.QName);
+  if IncReason <> '' then
+  begin
+    Writeln('ERROR: cannot rename -- ' + IncReason);
+    Exit(2);
+  end;
   Edits:= TRenameRefactoring.Build(Store, AArgs.QName, AArgs.RenameTo);
   if Length(Edits) = 0 then begin Writeln(Format('No edits computed for %s (symbol may not exist)', [AArgs.QName])); Exit(1); end;
 
