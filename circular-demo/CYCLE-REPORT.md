@@ -93,7 +93,7 @@ After it, these units still form a cycle, but only through IMPLEMENTATION uses. 
      - `DemoLogger.pas` interface (first use: line 20)
      - `DemoLogger.pas` implementation (first use: line 46)
      - `DemoConfig.pas` interface (first use: line 23)
-     - `DemoConfig.pas` implementation (first use: line 58)
+     - `DemoConfig.pas` implementation (first use: line 52)
      - `CircularDemo.dpr` program uses (first use: line 37)
 3. `TDemoAuditKind` -- **enum**, declared at `DemoAudit.pas` lines 23-24.
    - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoAudit.Contracts`.
