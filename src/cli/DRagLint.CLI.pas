@@ -28158,7 +28158,8 @@ end; // function
   has to be able to tell "no formatter" from "the formatter is too old" from
   "the formatter corrupted the file and I put it back":
 
-    0  formatted (or dry-run/diff completed)
+    0  formatted (or dry-run/diff completed), or YADF DECLINED the file (its
+       exit 3: content guard refused, file unchanged -- B-36; not a failure)
     2  usage: no target, or the target does not exist
     3  no usable YADF resolved            (TFormatResult -3)
     4  resolved YADF is BELOW the floor   (TFormatResult -4) -- nothing written
@@ -28196,6 +28197,13 @@ begin
     else
       Exit(1);
     end;
+  end;
+
+  if Res.Declined then
+  begin
+    if Trim(Res.StdoutText) <> '' then Writeln(Res.StdoutText);
+    Writeln(Format('Declined: %s  (YADF''s content guard left it unchanged; not a failure)', [Target]));
+    Exit(0);
   end;
 
   case Mode of

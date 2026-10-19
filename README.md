@@ -975,7 +975,7 @@ before writing. Details: [Multi-Project-Rename](https://github.com/Alexl-git/Del
 | [`create-enum-helper`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/create-enum-helper) `--qname <TEnum>` | Generate a Byte-family record helper for an enum | `--methods <csv>`, `--tostring rtti\|case` |
 | `uses-audit <unit.pas> --db <db>` | Propose interface->implementation moves + unused units | `--format text\|json` |
 | `uses-fix <unit.pas> --project <dproj> --db <db>` | Compiler-verified `uses` cleanup; `--only <Unit>` also decides a library (RTL/VCL) unit: remove, else move to implementation | `--apply`, `--remove-unused`, `--format json\|text`, `--only <unit,...>` |
-| `format <file>` | Format a `.pas` file with the YADF formatter. **Rewrites the file in place.** Refuses a YADF older than 1.0.6.6 (exit 4, nothing written) and restores the file if formatting changed what the unit *declares* (exit 5) | `--yadf-path`, `--dry-run`, `--diff` |
+| `format <file>` | Format a `.pas` file with the YADF formatter. **Rewrites the file in place.** Refuses a YADF older than 1.0.6.6 (exit 4, nothing written) and restores the file if formatting changed what the unit *declares* (exit 5). A YADF *decline* (its exit 3: content guard refused, file unchanged) is not a failure: exit 0 with a `Declined:` line | `--yadf-path`, `--dry-run`, `--diff` |
 
 **Formatting is safe for your suppressions.** drag-lint drives **YADF** for the
 current unit or the whole active project straight from the IDE menu, and neither
