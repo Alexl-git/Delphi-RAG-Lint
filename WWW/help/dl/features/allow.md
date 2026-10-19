@@ -18,6 +18,20 @@ Records a dl:ok review of one finding, so it stops being reported without being 
 
 Full flag list: [allow in the CLI reference](../cli.md#allow).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--fix-line` | `<L>` |  |  |
+| `--fix-rule` | `<id>` |  |  |
+| `--apply` |  |  |  |
+| `--rules-dir` | `<dir>` |  |  |
+| `--config` | `<file>` |  |  |
+| `--profile` | `<name>` |  |  |
+| `--enable` |  |  |  |
+| `--disable` |  |  |  |
+| `--stand-in-for` | `<realpath>` |  |  |
+
 ## Details
 
 Records a `dl:ok` review of one finding, so it stops being reported without

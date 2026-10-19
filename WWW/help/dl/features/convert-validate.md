@@ -18,6 +18,16 @@ Parses and validates a conversion-rules file (a reFind-superset DSL), checking i
 
 Full flag list: [convert-validate in the CLI reference](../cli.md#convert-validate).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--rules` | `<file>` |  |  |
+| `--from` | `<FromType>` |  |  |
+| `--to` | `<ToType>` |  |  |
+| `--print-parsed` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Details
 
 Parses and validates a conversion-rules file (a reFind-superset DSL), checking

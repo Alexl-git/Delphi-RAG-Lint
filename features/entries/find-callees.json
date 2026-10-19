@@ -10,7 +10,21 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "find-callees"
+      "verb": "find-callees",
+      "usage": "drag-lint find-callees --qname <Foo.Bar> --db PATH [--json] (resolved outgoing calls of routine X)",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.Bar>"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

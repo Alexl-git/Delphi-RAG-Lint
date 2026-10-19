@@ -18,6 +18,21 @@ Lists every symbol of one kind -- every unit, every class, every enum -- with no
 
 Full flag list: [query in the CLI reference](../cli.md#query).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<symbol-name>` |  |  |
+| `--db` |  |  |  |
+| `--json` |  |  |  |
+| `--case-sensitive` |  |  |  |
+| `--exact` |  |  |  |
+
+## Pitfalls
+
+* a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.
+* STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed.
+
 ## Details
 
 Lists every symbol of one kind -- every unit, every class, every enum -- with

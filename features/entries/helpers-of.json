@@ -10,7 +10,17 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "helpers-of"
+      "verb": "helpers-of",
+      "usage": "drag-lint helpers-of <T> [--json] --db <db> - list record/class helper edges targeting type T anywhere in the index",
+      "flags": [
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        }
+      ]
     }
   ],
   "audience": "both",

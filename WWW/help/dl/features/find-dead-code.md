@@ -18,6 +18,14 @@ Scans the index for code with no references -- candidates to delete.
 
 Full flag list: [find-deadcode in the CLI reference](../cli.md#find-deadcode).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--kind` |  |  |  |
+| `--include-private` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Find Dead Code...**

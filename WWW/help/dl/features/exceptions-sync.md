@@ -22,6 +22,15 @@ drag-lint exceptions-sync [--db <file.sqlite>] [--config <lint.json>] [--apply] 
 
 Full flag list: [exceptions-sync in the CLI reference](../cli.md#exceptions-sync).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--config` | `<lint.json>` |  |  |
+| `--apply` |  |  |  |
+| `--json` |  |  |  |
+
 ---
 
 [All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

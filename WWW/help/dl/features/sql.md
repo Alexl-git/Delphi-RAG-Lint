@@ -18,6 +18,19 @@ Runs one read-only SQL statement against an index database and prints the result
 
 Full flag list: [sql in the CLI reference](../cli.md#sql).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--query` |  |  |  |
+| `--file` | `<q.sql>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+| `--limit` | `N` |  |  |
+| `--timeout-ms` | `N` |  |  |
+| `--output` | `<file>` |  |  |
+
 **Needs:** index
 
 ## Details

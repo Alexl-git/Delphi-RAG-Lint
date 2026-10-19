@@ -18,6 +18,22 @@ Returns a compact context bundle for a symbol -- its doc comment, class surface 
 
 Full flag list: [context in the CLI reference](../cli.md#context).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--task` |  |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--format` |  |  |  |
+| `--no-docs` |  |  |  |
+| `--full-surface` |  |  |  |
+| `--max-callers` | `N` |  |  |
+| `--context` | `N` |  |  |
+
+## Pitfalls
+
+* ~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work.
+
 ## Details
 
 Returns a compact context bundle for a symbol -- its doc comment, class

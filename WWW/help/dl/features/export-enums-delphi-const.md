@@ -18,6 +18,14 @@ Uses export enums with --format delphi-const to dump indexed enum types as Delph
 
 Full flag list: [export in the CLI reference](../cli.md#export).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--format` |  |  |  |
+| `--output` | `<file>` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Export Enums (Delphi const)...**

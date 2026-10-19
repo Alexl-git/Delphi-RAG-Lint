@@ -10,7 +10,14 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "serve"
+      "verb": "serve",
+      "usage": "drag-lint serve --db <file.sqlite> (MCP stdio server)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        }
+      ]
     }
   ],
   "audience": "both",

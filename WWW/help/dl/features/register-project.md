@@ -22,6 +22,14 @@ drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json] (a
 
 Full flag list: [register-project in the CLI reference](../cli.md#register-project).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<Section>` |  |  |
+| `--apply` |  |  |  |
+| `--json` |  |  |  |
+
 ---
 
 [All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

@@ -30,6 +30,14 @@ register --dry-run
 
 Full flag list: [protocol in the CLI reference](../cli.md#protocol).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--handler` | `<drag-lint-open.exe>` |  |  |
+| `--dry-run` |  |  |  |
+| `--force` |  |  |  |
+
 ## Details
 
 **Makes a click on a chart row or a trace anchor open its line in RAD Studio.** A browser cannot write to the IDE plugin's named pipe, so one per-user registry key hands the `draglint://` link to `drag-lint-open.exe`, a small GUI helper (no console window, no PowerShell), which checks the link and passes it on. Part of [Charts and the IDE](chart-engine-dot-lookup.md).

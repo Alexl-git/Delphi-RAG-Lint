@@ -18,6 +18,14 @@ Runs drag-lint's AST-level checks against a file.
 
 Full flag list: [check-ast in the CLI reference](../cli.md#check-ast).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `PATH` |  |  |
+| `--rule` | `<id>` |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * drag-lint About window, button **Run AST Checks**

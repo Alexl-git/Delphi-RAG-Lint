@@ -22,6 +22,16 @@ drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [-
 
 Full flag list: [shutdown in the CLI reference](../cli.md#shutdown).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--wait` | `<sec>` |  |  |
+| `--dry-run` |  |  |  |
+| `--all` |  |  |  |
+| `--force` |  |  |  |
+
 ---
 
 [All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

@@ -18,6 +18,16 @@ Looks up the dl:wiki concept topics a team has written into their own doc commen
 
 Full flag list: [wiki in the CLI reference](../cli.md#wiki).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--term` |  |  |  |
+| `--list` |  |  |  |
+| `--check` |  |  |  |
+| `--json` |  |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+
 **Needs:** index
 
 ## Details

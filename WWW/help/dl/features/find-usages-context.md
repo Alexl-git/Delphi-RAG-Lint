@@ -18,6 +18,17 @@ Lists references to the symbol represented by a Structure-tree node.
 
 Full flag list: [usages in the CLI reference](../cli.md#usages).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<X>` |  |  |
+| `--width` |  |  |  |
+| `--db` | `<path>` |  |  |
+| `--depth` | `N` |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+
 ## Where to click
 
 * Right-click in the Structure form: **Find Usages**

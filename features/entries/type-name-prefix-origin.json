@@ -12,19 +12,134 @@
     {
       "type": "cli",
       "verb": "lint",
-      "example": "lint <unit> --db <proj> --library-db <lib> --rule type-name-prefix"
+      "example": "lint <unit> --db <proj> --library-db <lib> --rule type-name-prefix",
+      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
+      "flags": [
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--disable"
+        },
+        {
+          "name": "--rules-dir",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-preprocess"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib.sqlite>"
+        },
+        {
+          "name": "--db",
+          "arg": "<index.sqlite>"
+        },
+        {
+          "name": "--project-rules"
+        },
+        {
+          "name": "--stand-in-for",
+          "arg": "<realpath>"
+        }
+      ]
     },
     {
       "type": "cli",
-      "verb": "lint-all"
+      "verb": "lint-all",
+      "usage": "drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--project",
+          "arg": "<.dproj>"
+        },
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--disable"
+        },
+        {
+          "name": "--output",
+          "arg": "<report.txt>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--quiet",
+          "summary": "suppress per-file progress lines written to stderr"
+        },
+        {
+          "name": "--lint-third-party"
+        },
+        {
+          "name": "--no-preprocess"
+        },
+        {
+          "name": "--fix"
+        },
+        {
+          "name": "--fix-naming"
+        },
+        {
+          "name": "--apply"
+        }
+      ]
     },
     {
       "type": "cli",
       "verb": "lint",
-      "example": "lint <unit> --db <proj> --fix --fix-naming --rule type-name-prefix"
+      "example": "lint <unit> --db <proj> --fix --fix-naming --rule type-name-prefix",
+      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
+      "flags": [
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--disable"
+        },
+        {
+          "name": "--rules-dir",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-preprocess"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib.sqlite>"
+        },
+        {
+          "name": "--db",
+          "arg": "<index.sqlite>"
+        },
+        {
+          "name": "--project-rules"
+        },
+        {
+          "name": "--stand-in-for",
+          "arg": "<realpath>"
+        }
+      ]
     }
   ],
   "audience": "both",
+  "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."],
   "lastVerified": {
     "date": "2026-10-17",
     "by": "alexanderl",

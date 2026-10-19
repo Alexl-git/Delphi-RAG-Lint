@@ -18,6 +18,12 @@ Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Cla
 
 Full flag list: [serve in the CLI reference](../cli.md#serve).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+
 **Needs:** index
 
 ## Details

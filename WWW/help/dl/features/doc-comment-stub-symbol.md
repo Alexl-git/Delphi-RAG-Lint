@@ -18,6 +18,14 @@ Uses generate-docs to produce a doc-comment stub for one qualified symbol.
 
 Full flag list: [generate-docs in the CLI reference](../cli.md#generate-docs).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<Foo.TBar.Baz>` |  |  |
+| `--format` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Doc Comment Stub (symbol)...**

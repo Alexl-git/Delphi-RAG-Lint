@@ -20,6 +20,25 @@ Full flag list: [format in the CLI reference](../cli.md#format).
 
 Full flag list: [index in the CLI reference](../cli.md#index).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--yadf-path` | `PATH` |  |  |
+| `--dry-run` |  |  |  |
+| `--diff` |  |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--watch` |  |  |  |
+| `--interval` | `N` |  |  |
+| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve. |  |
+| `--max-file-kb` | `N` |  |  |
+| `--no-use-ignore` |  |  |  |
+| `--no-sql-ms` |  |  |  |
+| `--deep` |  |  |  |
+| `--shallow` |  |  |  |
+| `--exclude-under` |  |  |  |
+| `--include-only` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Format Whole Project with YADF...**

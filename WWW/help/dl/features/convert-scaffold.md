@@ -18,6 +18,19 @@ Auto-generates a valid conversion-rules file from the real property trees of a f
 
 Full flag list: [convert-scaffold in the CLI reference](../cli.md#convert-scaffold).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--from` | `<FromType>` |  |  |
+| `--to` | `<ToType>` |  |  |
+| `--output` | `<file>` |  |  |
+| `--surface` |  |  |  |
+| `--depth` | `N` |  |  |
+| `--rules` | `<file>` |  |  |
+| `--progress-interval` | `S` |  |  |
+| `--db` | `PATH` |  |  |
+
 **Needs:** index
 
 ## Details

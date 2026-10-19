@@ -24,6 +24,20 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 
 Full flag list: [lint in the CLI reference](../cli.md#lint).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--rule` | `<id>` |  |  |
+| `--disable` |  |  |  |
+| `--rules-dir` | `<dir>` |  |  |
+| `--json` |  |  |  |
+| `--no-preprocess` |  |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
+| `--db` | `<index.sqlite>` |  |  |
+| `--project-rules` |  |  |  |
+| `--stand-in-for` | `<realpath>` |  |  |
+
 ## Where to click
 
 * Right-click in the Structure form: **Fix all in unit**

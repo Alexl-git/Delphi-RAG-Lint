@@ -18,6 +18,15 @@ Recompiles a project's stale units and refreshes its stored compiler findings, f
 
 Full flag list: [refresh-findings in the CLI reference](../cli.md#refresh-findings).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<X.dproj>` |  |  |
+| `--db` | `<db>` |  |  |
+| `--full` |  |  |  |
+| `--json` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Full Compile Sweep**

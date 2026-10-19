@@ -18,6 +18,18 @@ Renames a symbol across the whole indexed project.
 
 Full flag list: [rename in the CLI reference](../cli.md#rename).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--kind` |  |  |  |
+| `--name` | `<QName>` |  |  |
+| `--to` | `<New>` |  |  |
+| `--json` |  |  |  |
+| `--apply` |  |  |  |
+| `--no-backup` |  |  |  |
+| `--db` | `<db>` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Rename Symbol...**

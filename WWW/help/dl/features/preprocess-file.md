@@ -18,6 +18,17 @@ Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given
 
 Full flag list: [preprocess-file in the CLI reference](../cli.md#preprocess-file).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--file` | `PATH` |  |  |
+| `--define` | `SYM` |  |  |
+| `--numeric` | `K` |  |  |
+| `--include-mode` |  |  |  |
+| `--no-near-search` |  |  |  |
+| `--tolerances` |  |  |  |
+
 ## Details
 
 Diagnostic that prints a file's `{$IFDEF}`-resolved source to stdout under a

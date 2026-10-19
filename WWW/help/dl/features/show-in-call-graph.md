@@ -18,6 +18,17 @@ Opens the call graph rooted at the symbol represented by a Structure-tree node.
 
 Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltree).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<X>` |  |  |
+| `--direction` |  |  |  |
+| `--depth` | `N` |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Where to click
 
 * Right-click in the Structure form: **Show in Call Graph**

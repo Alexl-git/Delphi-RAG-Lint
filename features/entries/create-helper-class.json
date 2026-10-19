@@ -15,7 +15,34 @@
     },
     {
       "type": "cli",
-      "verb": "create-enum-helper"
+      "verb": "create-enum-helper",
+      "usage": "drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] - generate a Byte-family record helper for an enum",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<TEnum>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--methods",
+          "arg": "<csv>"
+        },
+        {
+          "name": "--tostring"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "both"

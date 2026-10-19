@@ -18,6 +18,13 @@ A size escape hatch for an index database that has grown too large: it drops loc
 
 Full flag list: [purge-locals in the CLI reference](../cli.md#purge-locals).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `PATH` |  |  |
+| `--json` |  |  |  |
+
 **Needs:** index
 
 ## Details

@@ -18,9 +18,23 @@ Shows the public surface of a class: its members and signatures, without the met
 
 Full flag list: [surface in the CLI reference](../cli.md#surface).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<Foo.TBar>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--include-impl` |  |  |  |
+| `--all-visibility` |  |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Inspect Symbol > Class Surface...**
+
+## Pitfalls
+
+* names, TYPES and trailing comments. outline --file lists them with line numbers.
 
 ## Details
 

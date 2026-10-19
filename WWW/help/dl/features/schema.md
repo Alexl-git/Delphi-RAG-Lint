@@ -18,6 +18,14 @@ Prints the live schema of an index database: schemaversion, every table and colu
 
 Full flag list: [schema in the CLI reference](../cli.md#schema).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--format` |  |  |  |
+| `--output` | `<file>` |  |  |
+
 **Needs:** index
 
 ## Details

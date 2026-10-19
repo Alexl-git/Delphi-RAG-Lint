@@ -18,6 +18,15 @@ Runs project-scoped structural lint rules against an index -- checks such as god
 
 Full flag list: [lint-project in the CLI reference](../cli.md#lint-project).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--rule` |  |  |  |
+| `--layers` | `<f.json>` |  |  |
+| `--json` |  |  |  |
+
 **Needs:** index
 
 ## Details

@@ -14,7 +14,21 @@
     },
     {
       "type": "cli",
-      "verb": "generate-test"
+      "verb": "generate-test",
+      "usage": "drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.TBar.Baz>"
+        },
+        {
+          "name": "--framework"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "both"

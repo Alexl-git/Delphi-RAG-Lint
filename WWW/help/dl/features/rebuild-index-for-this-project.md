@@ -18,6 +18,22 @@ Walks a project's .dproj compile closure and (re)builds its index.
 
 Full flag list: [index in the CLI reference](../cli.md#index).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--watch` |  |  |  |
+| `--interval` | `N` |  |  |
+| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve. |  |
+| `--max-file-kb` | `N` |  |  |
+| `--no-use-ignore` |  |  |  |
+| `--no-sql-ms` |  |  |  |
+| `--deep` |  |  |  |
+| `--shallow` |  |  |  |
+| `--exclude-under` |  |  |  |
+| `--include-only` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Index & Maintenance > Rebuild Index for This Project**

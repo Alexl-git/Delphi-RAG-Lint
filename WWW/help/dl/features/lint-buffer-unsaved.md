@@ -18,6 +18,20 @@ Lints the current editor buffer's in-memory content, including unsaved edits, wi
 
 Full flag list: [lint in the CLI reference](../cli.md#lint).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--rule` | `<id>` |  |  |
+| `--disable` |  |  |  |
+| `--rules-dir` | `<dir>` |  |  |
+| `--json` |  |  |  |
+| `--no-preprocess` |  |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
+| `--db` | `<index.sqlite>` |  |  |
+| `--project-rules` |  |  |  |
+| `--stand-in-for` | `<realpath>` |  |  |
+
 ## Where to click
 
 * drag-lint About window, button **Lint Buffer (Unsaved)**

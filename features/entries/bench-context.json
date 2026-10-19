@@ -10,7 +10,18 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "bench-context"
+      "verb": "bench-context",
+      "usage": "drag-lint bench-context [--db <file.sqlite>] [--n N]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--n",
+          "arg": "N"
+        }
+      ]
     }
   ],
   "audience": "both",

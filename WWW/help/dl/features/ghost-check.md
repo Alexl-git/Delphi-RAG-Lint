@@ -18,6 +18,21 @@ Compiles a project with one or more units' content temporarily replaced by their
 
 Full flag list: [ghost-check in the CLI reference](../cli.md#ghost-check).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--unit` | `<real.pas>` |  |  |
+| `--buffer` | `<buf>` |  |  |
+| `--overlays` | `<manifest>` |  |  |
+| `--platform` |  |  |  |
+| `--in-place` |  |  |  |
+| `--format` |  |  |  |
+
+## Pitfalls
+
+* compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written. --in-place restores the old behaviour (overwrites the real files for the compile, then restores them) -- it can lose live edits if the IDE reloads inside that window. compile the UNSAVED editor buffer by overlaying it on the real unit. Backs the IDE's "Compile Buffer (unsaved)". Restores the original on exit.
+
 ## Details
 
 Compiles a project with one or more units' content temporarily replaced by

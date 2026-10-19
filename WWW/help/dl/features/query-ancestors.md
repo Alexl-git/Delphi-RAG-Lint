@@ -18,6 +18,15 @@ Resolves the transitive class/interface hierarchy of a type.
 
 Full flag list: [query in the CLI reference](../cli.md#query).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<type>` |  |  |
+| `--of` | `<ancestor>` |  |  |
+| `--db` |  |  |  |
+| `--json` |  |  |  |
+
 ## Details
 
 Resolves the transitive class/interface hierarchy of a type. Reach for it

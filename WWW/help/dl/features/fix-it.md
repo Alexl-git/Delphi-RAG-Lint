@@ -20,6 +20,27 @@ Full flag list: [lint in the CLI reference](../cli.md#lint).
 
 Full flag list: [uses-fix in the CLI reference](../cli.md#uses-fix).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--rule` | `<id>` |  |  |
+| `--disable` |  |  |  |
+| `--rules-dir` | `<dir>` |  |  |
+| `--json` |  |  |  |
+| `--no-preprocess` |  |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
+| `--db` | `<index.sqlite>` |  |  |
+| `--project-rules` |  |  |  |
+| `--stand-in-for` | `<realpath>` |  |  |
+| `--project` | `<dproj>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--platform` |  |  |  |
+| `--apply` |  |  |  |
+| `--remove-unused` |  |  |  |
+| `--only` | `<unit,...>` |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * Right-click in the Structure form: **Fix it**

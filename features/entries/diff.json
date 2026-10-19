@@ -10,7 +10,17 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "diff"
+      "verb": "diff",
+      "usage": "drag-lint diff --db <old.sqlite> --db <new.sqlite> [--json]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<old.sqlite>"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

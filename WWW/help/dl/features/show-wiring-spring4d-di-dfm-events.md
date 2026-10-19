@@ -18,6 +18,14 @@ Surfaces bindings the compiler does not make obvious: Spring4D container registr
 
 Full flag list: [wiring in the CLI reference](../cli.md#wiring).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<IIntf\|TForm>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Show Wiring (Spring4D DI + DFM events)...**

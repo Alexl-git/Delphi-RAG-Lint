@@ -18,6 +18,17 @@ The same reverse call tree, rendered into the IDE's Messages window so each line
 
 Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltree).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<X>` |  |  |
+| `--direction` |  |  |  |
+| `--depth` | `N` |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 **Needs:** index
 
 ## Details

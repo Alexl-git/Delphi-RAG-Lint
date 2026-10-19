@@ -20,6 +20,31 @@ Read this when you want a report answer on stdout -- `drag-lint ask <question> -
 
 Full flag list: [ask in the CLI reference](../cli.md#ask).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--target` | `<T>` |  |  |
+| `--project` | `<P.dproj>` |  |  |
+| `--in` | `<U.pas>` |  |  |
+| `--db` | `<idx>` |  |  |
+| `--to` | `<B>` |  |  |
+| `--server-db` | `<idx>` |  |  |
+| `--sql-db` | `<idx>` |  |  |
+| `--counterpart-db` | `<idx>` |  |  |
+| `--depth` | `N` |  |  |
+| `--cap` | `N` |  |  |
+| `--surface-cap` | `N` |  |  |
+| `--control` | `<C>` |  |  |
+| `--mode` |  |  |  |
+| `--max-rows` | `N` |  |  |
+| `--out-root` | `<dir>` |  |  |
+| `--pairs-file` | `<f.json>` |  |  |
+| `--allow-stale` |  |  |  |
+| `--plain` |  |  |  |
+| `--open` |  |  |  |
+| `--resolve-only` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Reports**

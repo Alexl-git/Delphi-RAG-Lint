@@ -18,6 +18,13 @@ Compares two index databases and reports what changed between them -- for exampl
 
 Full flag list: [diff in the CLI reference](../cli.md#diff).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<old.sqlite>` |  |  |
+| `--json` |  |  |  |
+
 **Needs:** index
 
 ## Details

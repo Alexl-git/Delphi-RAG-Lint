@@ -14,7 +14,17 @@
     },
     {
       "type": "cli",
-      "verb": "uses-audit"
+      "verb": "uses-audit",
+      "usage": "drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text] (interface->impl moves + unused units)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
   "audience": "both",

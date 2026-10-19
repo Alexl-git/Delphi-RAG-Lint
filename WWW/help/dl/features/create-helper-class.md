@@ -18,6 +18,18 @@ Generates a Byte-family record helper for an enum type represented by a Structur
 
 Full flag list: [create-enum-helper in the CLI reference](../cli.md#create-enum-helper).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<TEnum>` |  |  |
+| `--apply` |  |  |  |
+| `--json` |  |  |  |
+| `--no-backup` |  |  |  |
+| `--methods` | `<csv>` |  |  |
+| `--tostring` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Where to click
 
 * Right-click in the Structure form: **Create helper class**

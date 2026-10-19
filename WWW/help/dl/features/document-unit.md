@@ -18,6 +18,17 @@ Generates or repairs managed DocInsight comments for every public declaration in
 
 Full flag list: [document in the CLI reference](../cli.md#document).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<Foo.TBar.Baz>` |  |  |
+| `--apply` |  |  |  |
+| `--json` |  |  |  |
+| `--no-backup` |  |  |  |
+| `--migrate-pure` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Where to click
 
 * Right-click in the Structure form: **Document unit**

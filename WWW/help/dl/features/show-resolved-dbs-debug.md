@@ -18,9 +18,21 @@ Prints which database(s) drag-lint would actually use for a given project, file,
 
 Full flag list: [resolve-dbs in the CLI reference](../cli.md#resolve-dbs).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--platform` |  |  |  |
+| `--config` | `<path>` |  |  |
+| `--json` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Index & Maintenance > Show Resolved DBs (debug)...**
+
+## Pitfalls
+
+* never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`.
 
 ## Details
 

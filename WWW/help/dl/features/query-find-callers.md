@@ -18,6 +18,20 @@ Lists callers of a routine by name, with an option to restrict results to precis
 
 Full flag list: [query in the CLI reference](../cli.md#query).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<callee-name>` |  |  |
+| `--context` | `N` |  |  |
+| `--resolved` |  | precise callers via resolved call_edges (grouped by target, certain\|ambiguous); a PROPERTY/FIELD name lists its bound accesses [certain, read\|write]; an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha) |  |
+| `--db` |  |  |  |
+| `--json` |  |  |  |
+
+## Pitfalls
+
+* the BARE member name. --name TFoo.Bar silently returns 0; --name Bar returns the sites.
+
 ## Details
 
 Lists callers of a routine by name, with an option to restrict results to

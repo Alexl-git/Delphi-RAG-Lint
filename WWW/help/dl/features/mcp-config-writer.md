@@ -30,6 +30,23 @@ Example:
 
 Full flag list: [mcp-config in the CLI reference](../cli.md#mcp-config).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--claude-code` |  |  |  |
+| `--vscode` |  |  |  |
+| `--all` |  |  |  |
+| `--remove` |  |  |  |
+| `--dry-run` |  |  |  |
+| `--name` | `<n>` |  |  |
+| `--db` | `<index>` |  |  |
+| `--engine` | `<exe>` |  |  |
+| `--config-path` | `<file>` |  |  |
+| `--json` |  |  |  |
+| `--home-dir` |  |  |  |
+| `--appdata-dir` |  |  |  |
+
 ## Details
 
 **Adds drag-lint's MCP server (`drag-lint serve`) to Claude Code and VS Code in one command**, so an AI client can query the index without hand-editing JSON. The installer runs it with `--all` as an optional task; the verb is `drag-lint mcp-config`.

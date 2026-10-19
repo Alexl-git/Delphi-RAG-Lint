@@ -18,6 +18,15 @@ Ranks indexed symbols by fan-in -- how many places reference them.
 
 Full flag list: [top in the CLI reference](../cli.md#top).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--by` |  |  |  |
+| `--limit` | `N` |  |  |
+| `--json` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Top Symbols (fan-in)...**

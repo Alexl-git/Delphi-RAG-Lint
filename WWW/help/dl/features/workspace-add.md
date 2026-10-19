@@ -18,6 +18,12 @@ Registers a project file into a .drag-lint-workspace.json workspace config, so m
 
 Full flag list: [workspace in the CLI reference](../cli.md#workspace).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--config` | `<.drag-lint-workspace.json>` |  |  |
+
 ## Details
 
 Registers a project file into a `.drag-lint-workspace.json` workspace

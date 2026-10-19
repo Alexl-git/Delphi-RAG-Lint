@@ -18,9 +18,30 @@ Runs the whole rule catalog against a project's indexed code and reports every s
 
 Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--project` | `<.dproj>` |  |  |
+| `--rule` | `<id>` |  |  |
+| `--disable` |  |  |  |
+| `--output` | `<report.txt>` |  |  |
+| `--json` |  |  |  |
+| `--quiet` |  | suppress per-file progress lines written to stderr |  |
+| `--lint-third-party` |  |  |  |
+| `--no-preprocess` |  |  |  |
+| `--fix` |  |  |  |
+| `--fix-naming` |  |  |  |
+| `--apply` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Run Lint All (Full Report)...**
+
+## Pitfalls
+
+* lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.
 
 ## Details
 

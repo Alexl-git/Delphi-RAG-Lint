@@ -12,7 +12,85 @@
     {
       "type": "cli",
       "verb": "ask",
-      "example": "drag-lint ask butterfly --target U.TForm.Method --project P.dproj"
+      "example": "drag-lint ask butterfly --target U.TForm.Method --project P.dproj",
+      "usage": "drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db <idx>] [--to <B>] [--server-db <idx>]",
+      "flags": [
+        {
+          "name": "--target",
+          "arg": "<T>"
+        },
+        {
+          "name": "--project",
+          "arg": "<P.dproj>"
+        },
+        {
+          "name": "--in",
+          "arg": "<U.pas>"
+        },
+        {
+          "name": "--db",
+          "arg": "<idx>"
+        },
+        {
+          "name": "--to",
+          "arg": "<B>"
+        },
+        {
+          "name": "--server-db",
+          "arg": "<idx>"
+        },
+        {
+          "name": "--sql-db",
+          "arg": "<idx>"
+        },
+        {
+          "name": "--counterpart-db",
+          "arg": "<idx>"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--cap",
+          "arg": "N"
+        },
+        {
+          "name": "--surface-cap",
+          "arg": "N"
+        },
+        {
+          "name": "--control",
+          "arg": "<C>"
+        },
+        {
+          "name": "--mode"
+        },
+        {
+          "name": "--max-rows",
+          "arg": "N"
+        },
+        {
+          "name": "--out-root",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--pairs-file",
+          "arg": "<f.json>"
+        },
+        {
+          "name": "--allow-stale"
+        },
+        {
+          "name": "--plain"
+        },
+        {
+          "name": "--open"
+        },
+        {
+          "name": "--resolve-only"
+        }
+      ]
     }
   ],
   "audience": "both",

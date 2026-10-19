@@ -18,6 +18,14 @@ Diagnostic that computes deterministic doc-vs-code drift findings for one symbol
 
 Full flag list: [doc-drift in the CLI reference](../cli.md#doc-drift).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `X` |  |  |
+| `--db` | `PATH` |  |  |
+| `--json` |  |  |  |
+
 **Needs:** index
 
 ## Details

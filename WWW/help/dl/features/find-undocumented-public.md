@@ -18,9 +18,30 @@ Uses query find to list indexed symbols filtered by documentation state, kind, o
 
 Full flag list: [query in the CLI reference](../cli.md#query).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--doc-tag` | `X` |  |  |
+| `--doc-contains` | `Y` |  |  |
+| `--decl-contains` | `Z` |  |  |
+| `--no-docs` |  |  |  |
+| `--kind` | `K` |  |  |
+| `--name` | `N` |  |  |
+| `--unit` | `U` |  |  |
+| `--public` |  |  |  |
+| `--db` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Find Undocumented (public)...**
+
+## Pitfalls
+
+* --no-docs is a FILTER (UNDOCUMENTED symbols only), not "hide the docs" -- to list them all use query --kind `<k>` --all
+* --decl-contains searches the DECLARING SOURCE LINE (`stored X`, `default V`, `read F write S`) -- clauses the index does not model. Needs --kind, --name or --unit; it re-reads source per candidate.
+* case-insensitive, over /// blocks and harvested // above a declaration.
+* declaration clauses the index does not model. `query --text` sees string literals and comment prose, not declaring lines -- this reads the declaring line instead.
 
 ## Details
 

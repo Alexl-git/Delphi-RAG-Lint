@@ -18,6 +18,17 @@ Starts the LSP (Language Server Protocol) stdio server.
 
 Full flag list: [lsp in the CLI reference](../cli.md#lsp).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--stdio` |  |  |  |
+| `--clientProcessId` |  |  |  |
+| `--proxy` |  |  |  |
+| `--delphi-lsp` | `<path>` |  |  |
+| `--trace` | `<file>` |  |  |
+
 **Needs:** index
 
 ## Details

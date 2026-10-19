@@ -18,6 +18,17 @@ Builds the tree of callers of a chosen symbol, transitively, to a chosen depth.
 
 Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltree).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<X>` |  |  |
+| `--direction` |  |  |  |
+| `--depth` | `N` |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...**

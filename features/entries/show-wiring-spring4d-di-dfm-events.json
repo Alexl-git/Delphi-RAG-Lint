@@ -14,7 +14,21 @@
     },
     {
       "type": "cli",
-      "verb": "wiring"
+      "verb": "wiring",
+      "usage": "drag-lint wiring --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json] (Spring4D DI + DFM event edges)",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<IIntf|TForm>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
   "audience": "both"

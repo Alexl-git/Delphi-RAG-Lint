@@ -18,6 +18,25 @@ Answers one question lint-all cannot: does an interface edit to this unit reach 
 
 Full flag list: [lint-tree in the CLI reference](../cli.md#lint-tree).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--unit` | `<B.pas>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--buffer` | `<buf>` |  |  |
+| `--project` | `<.dproj>` |  |  |
+| `--baseline` | `<f.json>` |  |  |
+| `--write-baseline` | `<f.json>` |  |  |
+| `--platform` |  |  |  |
+| `--with-rules` |  |  |  |
+| `--compile` |  |  |  |
+| `--format` |  |  |  |
+
+## Pitfalls
+
+* does an interface edit to `<B.pas>` reach any dependent? Exits 0 whether or not it found anything; 2 means it could NOT run. --baseline pins the OLD side to an edit-episode capture -- without it the OLD side is the live index, which is CLI/manual use only.
+
 ## Details
 
 Answers one question `lint-all` cannot: **does an interface edit to this unit

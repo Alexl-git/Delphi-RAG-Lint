@@ -48,6 +48,45 @@ lint <unit> --db <proj> --fix --fix-naming --rule type-name-prefix
 
 Full flag list: [lint in the CLI reference](../cli.md#lint).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--rule` | `<id>` |  |  |
+| `--disable` |  |  |  |
+| `--rules-dir` | `<dir>` |  |  |
+| `--json` |  |  |  |
+| `--no-preprocess` |  |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
+| `--db` | `<index.sqlite>` |  |  |
+| `--project-rules` |  |  |  |
+| `--stand-in-for` | `<realpath>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--project` | `<.dproj>` |  |  |
+| `--rule` | `<id>` |  |  |
+| `--disable` |  |  |  |
+| `--output` | `<report.txt>` |  |  |
+| `--json` |  |  |  |
+| `--quiet` |  | suppress per-file progress lines written to stderr |  |
+| `--lint-third-party` |  |  |  |
+| `--no-preprocess` |  |  |  |
+| `--fix` |  |  |  |
+| `--fix-naming` |  |  |  |
+| `--apply` |  |  |  |
+| `--rule` | `<id>` |  |  |
+| `--disable` |  |  |  |
+| `--rules-dir` | `<dir>` |  |  |
+| `--json` |  |  |  |
+| `--no-preprocess` |  |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
+| `--db` | `<index.sqlite>` |  |  |
+| `--project-rules` |  |  |  |
+| `--stand-in-for` | `<realpath>` |  |  |
+
+## Pitfalls
+
+* lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.
+
 ## Details
 
 `type-name-prefix` decides whether a class should start with `T` or `E` (or `I`

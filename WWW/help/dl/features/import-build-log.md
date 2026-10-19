@@ -18,6 +18,12 @@ Parses an external dcc or msbuild build log and folds its errors and warnings in
 
 Full flag list: [import-log in the CLI reference](../cli.md#import-log).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+
 ## Where to click
 
 * drag-lint About window, button **Import Build Log...**

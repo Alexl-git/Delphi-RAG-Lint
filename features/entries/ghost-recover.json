@@ -10,7 +10,8 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "ghost-recover"
+      "verb": "ghost-recover",
+      "usage": "drag-lint ghost-recover <dproj> (restore any file left overlaid by an INTERRUPTED ghost-check)"
     }
   ],
   "audience": "both"

@@ -18,6 +18,18 @@ Pulls a run of statements out of a routine into a new method.
 
 Full flag list: [extract-method in the CLI reference](../cli.md#extract-method).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--file` | `<F>` |  |  |
+| `--from-line` | `<L1>` |  |  |
+| `--to-line` | `<L2>` |  |  |
+| `--name` | `<N>` |  |  |
+| `--json` |  |  |  |
+| `--apply` |  |  |  |
+| `--no-backup` |  |  |  |
+
 ## Details
 
 Pulls a run of statements out of a routine into a new method. Reach for it

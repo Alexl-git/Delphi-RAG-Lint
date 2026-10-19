@@ -18,6 +18,16 @@ Finds uses cycles among indexed units and, on request, proposes a followable ref
 
 Full flag list: [cycles in the CLI reference](../cli.md#cycles).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--edges` |  |  |  |
+| `--causes` |  |  |  |
+| `--plan` |  |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...**

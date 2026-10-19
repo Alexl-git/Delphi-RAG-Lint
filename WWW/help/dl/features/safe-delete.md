@@ -18,6 +18,16 @@ Deletes a symbol if and only if it has zero references in the index.
 
 Full flag list: [safe-delete in the CLI reference](../cli.md#safe-delete).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<QName>` |  |  |
+| `--json` |  |  |  |
+| `--apply` |  |  |  |
+| `--no-backup` |  |  |  |
+| `--db` | `<db>` |  |  |
+
 **Needs:** index
 
 ## Details

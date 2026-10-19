@@ -22,6 +22,16 @@ drag-lint project-facts --dproj PATH [--platform win32|win64] [--config Release|
 
 Full flag list: [project-facts in the CLI reference](../cli.md#project-facts).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--dproj` | `PATH` |  |  |
+| `--platform` |  |  |  |
+| `--config` |  |  |  |
+| `--db` | `PATH` |  |  |
+| `--json` |  |  |  |
+
 ---
 
 [All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

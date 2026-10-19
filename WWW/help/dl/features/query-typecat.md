@@ -18,6 +18,14 @@ Resolves a type's category -- float, string, class, interface, and so on.
 
 Full flag list: [query in the CLI reference](../cli.md#query).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<type>` |  |  |
+| `--db` |  |  |  |
+| `--json` |  |  |  |
+
 ## Details
 
 Resolves a type's category -- float, string, class, interface, and so on.

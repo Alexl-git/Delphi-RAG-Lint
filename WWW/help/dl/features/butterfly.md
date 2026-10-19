@@ -18,6 +18,16 @@ Composes a symbol's callers (upward wing) and callees (downward wing) into one c
 
 Full flag list: [butterfly in the CLI reference](../cli.md#butterfly).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<X>` |  |  |
+| `--depth` | `N` |  |  |
+| `--format` |  |  |  |
+| `--output` | `F` |  |  |
+| `--db` | `PATH` |  |  |
+
 **Needs:** index
 
 ## Details

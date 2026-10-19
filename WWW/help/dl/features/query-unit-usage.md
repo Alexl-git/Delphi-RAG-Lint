@@ -18,6 +18,20 @@ Answers one question, about one unit and one file.
 
 Full flag list: [query in the CLI reference](../cli.md#query).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--unit` | `<UnitName>` |  |  |
+| `--in` | `<file.pas>` |  |  |
+| `--db` |  |  |  |
+| `--json` |  |  |  |
+
+## Pitfalls
+
+* omit --in for the project-wide answer; add --in `<F.pas>` to ask about ONE file.
+* for an RTL/VCL/third-party unit pass the platform library DB too (--db `<proj>` --db `<library>`) for the reference breakdown. With the project DB alone you still get the importer list; only the --in form exits 2.
+
 ## Details
 
 Answers one question, about **one unit** and **one file**:

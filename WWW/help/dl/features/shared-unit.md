@@ -18,6 +18,15 @@ Reads or extends the dl:shared marker on a unit, recording which projects share 
 
 Full flag list: [shared-unit in the CLI reference](../cli.md#shared-unit).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--in` | `<file.pas>` |  |  |
+| `--add-project` | `<name>` |  |  |
+| `--apply` |  |  |  |
+| `--json` |  |  |  |
+
 ## Details
 
 Reads or extends the `dl:shared` marker on a unit, recording which projects

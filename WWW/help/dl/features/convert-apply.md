@@ -18,6 +18,23 @@ Locates .dfm component instances that match a #convert rule from a conversion-ru
 
 Full flag list: [convert-apply in the CLI reference](../cli.md#convert-apply).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--unit` | `<F.pas>` |  |  |
+| `--rules` | `<file>` |  |  |
+| `--db` | `PATH` |  |  |
+| `--only` |  |  |  |
+| `--castlib` | `<file>` |  |  |
+| `--apply` |  |  |  |
+| `--no-backup` |  |  |  |
+| `--no-warn-unlinked` |  |  |  |
+| `--no-reconcile-uses` |  |  |  |
+| `--no-reindex` |  |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+
 **Needs:** index
 
 ## Details

@@ -18,6 +18,12 @@ Reports the status of every project registered in a .drag-lint-workspace.json wo
 
 Full flag list: [workspace in the CLI reference](../cli.md#workspace).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--config` | `<.drag-lint-workspace.json>` |  |  |
+
 ## Details
 
 Reports the status of every project registered in a

@@ -18,6 +18,20 @@ Puts the current file's lint findings onto the clipboard.
 
 Full flag list: [lint in the CLI reference](../cli.md#lint).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--rule` | `<id>` |  |  |
+| `--disable` |  |  |  |
+| `--rules-dir` | `<dir>` |  |  |
+| `--json` |  |  |  |
+| `--no-preprocess` |  |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
+| `--db` | `<index.sqlite>` |  |  |
+| `--project-rules` |  |  |  |
+| `--stand-in-for` | `<realpath>` |  |  |
+
 ## Where to click
 
 * drag-lint About window, button **Copy Diagnostics (Current File)**

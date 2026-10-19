@@ -10,8 +10,33 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "ghost-check"
+      "verb": "ghost-check",
+      "usage": "drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <manifest> ) [--platform win32|win64] [--in-place] [--format json|text]",
+      "flags": [
+        {
+          "name": "--unit",
+          "arg": "<real.pas>"
+        },
+        {
+          "name": "--buffer",
+          "arg": "<buf>"
+        },
+        {
+          "name": "--overlays",
+          "arg": "<manifest>"
+        },
+        {
+          "name": "--platform"
+        },
+        {
+          "name": "--in-place"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "pitfalls": ["compiles each UNSAVED buffer from a shadow dir; your real files are NEVER written. --in-place restores the old behaviour (overwrites the real files for the compile, then restores them) -- it can lose live edits if the IDE reloads inside that window. compile the UNSAVED editor buffer by overlaying it on the real unit. Backs the IDE's \"Compile Buffer (unsaved)\". Restores the original on exit."]
 }

@@ -18,6 +18,17 @@ Compares a project file's declared member list against what is on disk and in th
 
 Full flag list: [reconcile-project in the CLI reference](../cli.md#reconcile-project).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--apply` |  |  |  |
+| `--only` | `<unit,...>` |  |  |
+| `--db` | `<db>` |  |  |
+| `--full` |  |  |  |
+| `--json` |  |  |  |
+| `--config` | `<path>` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)...**

@@ -14,7 +14,21 @@
     },
     {
       "type": "cli",
-      "verb": "check-ast"
+      "verb": "check-ast",
+      "usage": "drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
   "audience": "both"

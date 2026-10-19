@@ -10,9 +10,37 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "context"
+      "verb": "context",
+      "usage": "drag-lint context --task \"verb qname\" [--db <file.sqlite>] [--format md|json|raw] [--no-docs] [--full-surface] (AI-ready symbol bundle: doc + class surface + the target body + capped callers. When the task phrase matches a dl:wiki topic ALIAS, up to 2 topics ride along as a \"## Wiki\" section -- suppressed by --no-docs. A qname that resolves to nothing now exits 1 and SAYS so)",
+      "flags": [
+        {
+          "name": "--task"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--no-docs"
+        },
+        {
+          "name": "--full-surface"
+        },
+        {
+          "name": "--max-callers",
+          "arg": "N"
+        },
+        {
+          "name": "--context",
+          "arg": "N"
+        }
+      ]
     }
   ],
   "audience": "both",
+  "pitfalls": ["~60x leaner than the source. Add --full-surface ONLY for DFM/component/event work."],
   "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:633"
 }

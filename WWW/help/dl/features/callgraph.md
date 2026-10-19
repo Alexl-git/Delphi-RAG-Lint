@@ -18,6 +18,16 @@ Prints an N-deep resolved call tree for a symbol, in either direction.
 
 Full flag list: [callgraph in the CLI reference](../cli.md#callgraph).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<X>` |  |  |
+| `--direction` |  |  |  |
+| `--depth` | `N` |  |  |
+| `--db` | `PATH` |  |  |
+| `--json` |  |  |  |
+
 **Needs:** index
 
 ## Details

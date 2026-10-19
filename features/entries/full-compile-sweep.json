@@ -14,7 +14,24 @@
     },
     {
       "type": "cli",
-      "verb": "refresh-findings"
+      "verb": "refresh-findings",
+      "usage": "drag-lint refresh-findings --project <X.dproj> [--db <db>] [--full] [--json] (recompile stale units + refresh compiler_findings; >=2 stale -> full build; no --db = the project's own DB)",
+      "flags": [
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--full"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

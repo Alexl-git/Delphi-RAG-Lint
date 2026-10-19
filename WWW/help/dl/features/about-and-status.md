@@ -22,6 +22,13 @@ drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extra
 
 Full flag list: [info in the CLI reference](../cli.md#info).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--json` |  |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > About**

@@ -18,6 +18,14 @@ The reverse of query ancestors: lists every class that descends from a given anc
 
 Full flag list: [query in the CLI reference](../cli.md#query).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--of` | `<ancestor>` |  |  |
+| `--db` |  |  |  |
+| `--json` |  |  |  |
+
 ## Details
 
 The reverse of [`query ancestors`](query-ancestors.md): lists every **class**

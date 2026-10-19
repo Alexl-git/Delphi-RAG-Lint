@@ -20,6 +20,15 @@ Hand a tester one spreadsheet that says how to reach every form: drag-lint > Rep
 
 Full flag list: [forms-csv in the CLI reference](../cli.md#forms-csv).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<X.dproj>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--output` | `<f.csv>` |  |  |
+| `--root` | `<TfrmMAIN>` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Reports > Forms for testers (CSV)...**

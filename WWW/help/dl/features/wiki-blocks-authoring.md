@@ -22,6 +22,16 @@ drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>
 
 Full flag list: [wiki in the CLI reference](../cli.md#wiki).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--term` |  |  |  |
+| `--list` |  |  |  |
+| `--check` |  |  |  |
+| `--json` |  |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+
 **Needs:** index
 
 ## Details

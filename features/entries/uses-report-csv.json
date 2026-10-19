@@ -14,7 +14,31 @@
     },
     {
       "type": "cli",
-      "verb": "uses-report"
+      "verb": "uses-report",
+      "usage": "drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>] (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)",
+      "flags": [
+        {
+          "name": "--output",
+          "arg": "<out.csv>"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--include-external"
+        },
+        {
+          "name": "--all-sources"
+        },
+        {
+          "name": "--name",
+          "arg": "<pattern>"
+        }
+      ]
     }
   ],
   "audience": "both"

@@ -18,6 +18,14 @@ Prints the file-scoped symbol outline for one Pascal unit.
 
 Full flag list: [outline in the CLI reference](../cli.md#outline).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--file` | `<path.pas>` |  |  |
+| `--db` | `<path>` |  |  |
+| `--format` |  |  |  |
+
 ## Details
 
 Prints the file-scoped symbol outline for one Pascal unit. Reach for it when

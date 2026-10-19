@@ -18,6 +18,14 @@ Runs a compiler-backed check against a single Delphi project (.dproj) or source 
 
 Full flag list: [compile-check in the CLI reference](../cli.md#compile-check).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<X.dproj>` |  |  |
+| `--db` | `PATH` |  |  |
+| `--format` |  |  |  |
+
 ## Details
 
 Runs a compiler-backed check against a single Delphi project (`.dproj`) or

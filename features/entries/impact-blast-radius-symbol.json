@@ -14,7 +14,25 @@
     },
     {
       "type": "cli",
-      "verb": "impact"
+      "verb": "impact",
+      "usage": "drag-lint impact --qname <Foo.Bar> [--db <file.sqlite>] [--depth N] [--format text|json]",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.Bar>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
   "audience": "both"

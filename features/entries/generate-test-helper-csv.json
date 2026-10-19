@@ -15,7 +15,26 @@
     },
     {
       "type": "cli",
-      "verb": "forms-csv"
+      "verb": "forms-csv",
+      "usage": "drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [--root <TfrmMAIN>] (tester CSV, one row per form: menu/ribbon/tab path, control, handler, modal, confidence)",
+      "flags": [
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--output",
+          "arg": "<f.csv>"
+        },
+        {
+          "name": "--root",
+          "arg": "<TfrmMAIN>"
+        }
+      ]
     }
   ],
   "audience": "both",

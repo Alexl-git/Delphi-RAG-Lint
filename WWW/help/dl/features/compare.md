@@ -20,6 +20,23 @@ Read this when a DocInsight report, a tester sheet or a chart may have gone stal
 
 Full flag list: [compare in the CLI reference](../cli.md#compare).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--old` | `<report.txt\|forms.csv\|bundle dir>` |  |  |
+| `--command` |  |  |  |
+| `--project` | `<P.dproj>` |  |  |
+| `--new` | `<same kind>` |  |  |
+| `--old-db` | `<old.sqlite>` |  |  |
+| `--db` | `<new.sqlite>` |  |  |
+| `--auto` |  |  |  |
+| `--save` |  |  |  |
+| `--snapshot-dir` | `<dir>` |  |  |
+| `--format` |  |  |  |
+| `--output` | `<file>` |  |  |
+| `--open` |  |  |  |
+
 **Needs:** index
 
 ## Details

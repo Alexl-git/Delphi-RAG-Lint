@@ -18,6 +18,12 @@ Links a project's code index to a SQL index so ORM-style relationships between D
 
 Full flag list: [link-orm in the CLI reference](../cli.md#link-orm).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<projDb.sqlite>` |  |  |
+
 **Needs:** index
 
 ## Details

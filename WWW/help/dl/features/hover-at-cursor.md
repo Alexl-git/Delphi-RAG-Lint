@@ -18,6 +18,14 @@ Shows a hover card for the symbol under the editor caret: signature, documentati
 
 Full flag list: [hover in the CLI reference](../cli.md#hover).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<Foo.Bar>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Hover at Cursor**

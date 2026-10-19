@@ -18,6 +18,14 @@ Lists the resolved outgoing calls of one routine.
 
 Full flag list: [find-callees in the CLI reference](../cli.md#find-callees).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<Foo.Bar>` |  |  |
+| `--db` | `PATH` |  |  |
+| `--json` |  |  |  |
+
 **Needs:** index
 
 ## Details

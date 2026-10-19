@@ -18,6 +18,22 @@ Recursive deep-property enumerator for a class: flattens its own and inherited p
 
 Full flag list: [proptree in the CLI reference](../cli.md#proptree).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<X>` |  |  |
+| `--depth` | `N` |  |  |
+| `--rules` | `<file>` |  |  |
+| `--progress-interval` | `S` |  |  |
+| `--no-to-persistent` |  |  |  |
+| `--refs-as-leaves` |  |  |  |
+| `--no-write-back` |  |  |  |
+| `--min-visibility` |  |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 **Needs:** index
 
 ## Details

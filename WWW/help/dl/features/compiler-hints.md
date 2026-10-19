@@ -18,6 +18,14 @@ Uses query hints to surface compiler hint/warning findings that have been import
 
 Full flag list: [query in the CLI reference](../cli.md#query).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--name` | `<code>` |  |  |
+| `--rule` | `<severity>` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Code Quality > Compiler Hints...**

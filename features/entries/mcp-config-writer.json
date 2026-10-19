@@ -12,7 +12,50 @@
     {
       "type": "cli",
       "verb": "mcp-config",
-      "example": "--all --dry-run"
+      "example": "--all --dry-run",
+      "usage": "drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]",
+      "flags": [
+        {
+          "name": "--claude-code"
+        },
+        {
+          "name": "--vscode"
+        },
+        {
+          "name": "--all"
+        },
+        {
+          "name": "--remove"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--name",
+          "arg": "<n>"
+        },
+        {
+          "name": "--db",
+          "arg": "<index>"
+        },
+        {
+          "name": "--engine",
+          "arg": "<exe>"
+        },
+        {
+          "name": "--config-path",
+          "arg": "<file>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--home-dir"
+        },
+        {
+          "name": "--appdata-dir"
+        }
+      ]
     }
   ],
   "audience": "both",

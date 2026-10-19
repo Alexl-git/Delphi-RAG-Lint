@@ -18,6 +18,13 @@ For one unit, reports which uses entries could move from the interface section t
 
 Full flag list: [uses-audit in the CLI reference](../cli.md#uses-audit).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Uses Audit -- interface->impl moves + unused (this unit)...**

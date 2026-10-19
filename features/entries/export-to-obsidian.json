@@ -15,7 +15,21 @@
     {
       "type": "cli",
       "verb": "export",
-      "sub": "obsidian"
+      "sub": "obsidian",
+      "usage": "drag-lint export obsidian --db <file.sqlite> --output-dir <dir> [--open]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--output-dir",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--open"
+        }
+      ]
     }
   ],
   "audience": "both",

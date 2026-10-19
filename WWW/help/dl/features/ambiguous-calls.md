@@ -18,6 +18,15 @@ Resolver-coverage diagnostic that reports call sites the engine could not pin to
 
 Full flag list: [ambiguous-calls in the CLI reference](../cli.md#ambiguous-calls).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<Foo.Bar>` |  |  |
+| `--file` | `<file>` |  |  |
+| `--db` | `PATH` |  |  |
+| `--json` |  |  |  |
+
 **Needs:** index
 
 ## Details

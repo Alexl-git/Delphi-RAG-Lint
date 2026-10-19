@@ -18,6 +18,18 @@ The removals a Uses Audit suggests, but verified by actually compiling.
 
 Full flag list: [uses-fix in the CLI reference](../cli.md#uses-fix).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<dproj>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--platform` |  |  |  |
+| `--apply` |  |  |  |
+| `--remove-unused` |  |  |  |
+| `--only` | `<unit,...>` |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Uses Cleanup Preview (compiler-verified, this unit)...**

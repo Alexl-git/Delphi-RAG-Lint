@@ -18,6 +18,12 @@ Indexes every project registered in a .drag-lint-workspace.json workspace config
 
 Full flag list: [workspace in the CLI reference](../cli.md#workspace).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--config` | `<.drag-lint-workspace.json>` |  |  |
+
 ## Details
 
 Indexes every project registered in a `.drag-lint-workspace.json` workspace

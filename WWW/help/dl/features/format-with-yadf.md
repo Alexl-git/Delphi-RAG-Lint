@@ -18,6 +18,14 @@ Reformats one Pascal unit by driving the external YADF formatter.
 
 Full flag list: [format in the CLI reference](../cli.md#format).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--yadf-path` | `PATH` |  |  |
+| `--dry-run` |  |  |  |
+| `--diff` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Format with YADF**

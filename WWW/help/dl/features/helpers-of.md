@@ -18,6 +18,13 @@ Lists record/class helper edges targeting a given type, anywhere in the index.
 
 Full flag list: [helpers-of in the CLI reference](../cli.md#helpers-of).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--json` |  |  |  |
+| `--db` | `<db>` |  |  |
+
 **Needs:** index
 
 ## Details

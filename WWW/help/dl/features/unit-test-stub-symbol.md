@@ -18,6 +18,14 @@ Uses generate-test to produce a unit-test skeleton for one qualified symbol.
 
 Full flag list: [generate-test in the CLI reference](../cli.md#generate-test).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<Foo.TBar.Baz>` |  |  |
+| `--framework` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Unit Test Stub (symbol)...**

@@ -12,7 +12,42 @@
     {
       "type": "cli",
       "verb": "lint",
-      "example": "lint --file <f> --fix --fix-line <L> --fix-rule const-casing --db <db>"
+      "example": "lint --file <f> --fix --fix-line <L> --fix-rule const-casing --db <db>",
+      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
+      "flags": [
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--disable"
+        },
+        {
+          "name": "--rules-dir",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-preprocess"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib.sqlite>"
+        },
+        {
+          "name": "--db",
+          "arg": "<index.sqlite>"
+        },
+        {
+          "name": "--project-rules"
+        },
+        {
+          "name": "--stand-in-for",
+          "arg": "<realpath>"
+        }
+      ]
     },
     {
       "type": "ide-context",

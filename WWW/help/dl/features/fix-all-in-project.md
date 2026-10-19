@@ -18,9 +18,30 @@ Applies autofixes for every fixable finding across the whole project, starting f
 
 Full flag list: [lint-all in the CLI reference](../cli.md#lint-all).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--project` | `<.dproj>` |  |  |
+| `--rule` | `<id>` |  |  |
+| `--disable` |  |  |  |
+| `--output` | `<report.txt>` |  |  |
+| `--json` |  |  |  |
+| `--quiet` |  | suppress per-file progress lines written to stderr |  |
+| `--lint-third-party` |  |  |  |
+| `--no-preprocess` |  |  |  |
+| `--fix` |  |  |  |
+| `--fix-naming` |  |  |  |
+| `--apply` |  |  |  |
+
 ## Where to click
 
 * Right-click in the Structure form: **Fix all in project**
+
+## Pitfalls
+
+* lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all.
 
 ## Details
 

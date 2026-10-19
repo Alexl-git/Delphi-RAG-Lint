@@ -18,6 +18,13 @@ Benchmarks the context command by building context bundles for a sample of symbo
 
 Full flag list: [bench-context in the CLI reference](../cli.md#bench-context).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--n` | `N` |  |  |
+
 ## Details
 
 Benchmarks the `context` command by building context bundles for a sample

@@ -18,6 +18,13 @@ Prints engine self-info: version, build date, license (MIT), tree-sitter details
 
 Full flag list: [info in the CLI reference](../cli.md#info).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--json` |  |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+
 ## Details
 
 Prints engine self-info: version, build date, license (MIT), tree-sitter

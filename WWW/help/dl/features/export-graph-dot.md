@@ -18,6 +18,15 @@ Uses graph to export the indexed call/reference graph in DOT format, either whol
 
 Full flag list: [graph in the CLI reference](../cli.md#graph).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--format` |  |  |  |
+| `--name` | `<root-substr>` |  |  |
+| `--output` | `<file>` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Export Graph (DOT)...**

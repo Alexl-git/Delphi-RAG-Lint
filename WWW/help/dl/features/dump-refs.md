@@ -18,6 +18,12 @@ Diagnostic that dumps every ref in a file together with its enclosingsymbolid at
 
 Full flag list: [dump-refs in the CLI reference](../cli.md#dump-refs).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `PATH` |  |  |
+
 **Needs:** index
 
 ## Details

@@ -18,6 +18,13 @@ Resolves the static type of the expression under the editor caret.
 
 Full flag list: [typeat in the CLI reference](../cli.md#typeat).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Inspect Symbol > Type at Cursor**

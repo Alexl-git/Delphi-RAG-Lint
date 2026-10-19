@@ -18,6 +18,16 @@ Finds the shortest resolved call path from one symbol to another.
 
 Full flag list: [call-path in the CLI reference](../cli.md#call-path).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--from` | `<A>` |  |  |
+| `--to` | `<B>` |  |  |
+| `--max-depth` | `N` |  |  |
+| `--db` | `PATH` |  |  |
+| `--json` |  |  |  |
+
 **Needs:** index
 
 ## Details

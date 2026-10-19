@@ -22,6 +22,18 @@ drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<Ne
 
 Full flag list: [doc-forget in the CLI reference](../cli.md#doc-forget).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--scope` | `<file.pas\|dir>` |  |  |
+| `--project` | `<Tag>` |  |  |
+| `--rename` | `<Tag>` |  |  |
+| `--untagged` |  |  |  |
+| `--list-tags` |  |  |  |
+| `--apply` |  |  |  |
+| `--no-backup` |  |  |  |
+
 ---
 
 [All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

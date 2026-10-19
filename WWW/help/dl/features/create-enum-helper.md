@@ -18,6 +18,18 @@ Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/To
 
 Full flag list: [create-enum-helper in the CLI reference](../cli.md#create-enum-helper).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<TEnum>` |  |  |
+| `--apply` |  |  |  |
+| `--json` |  |  |  |
+| `--no-backup` |  |  |  |
+| `--methods` | `<csv>` |  |  |
+| `--tostring` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Details
 
 Generates a Byte-family record helper (ToByte/FromByte/ToInteger/

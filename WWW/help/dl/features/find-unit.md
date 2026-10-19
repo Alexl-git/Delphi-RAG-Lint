@@ -18,7 +18,22 @@ Finds which indexed unit declares a symbol, and adds that unit to a file's uses 
 
 Full flag list: [find-unit in the CLI reference](../cli.md#find-unit).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<Symbol>` |  |  |
+| `--in` | `<file>` |  |  |
+| `--json` |  |  |  |
+| `--apply` |  |  |  |
+| `--no-backup` |  |  |  |
+| `--db` | `<db>` |  |  |
+
 **Needs:** index
+
+## Pitfalls
+
+* for an RTL/VCL/third-party X, point --db at the PLATFORM LIBRARY database (resolve-dbs --platform win64) -- a project DB holds only that project's units.
 
 ## Details
 

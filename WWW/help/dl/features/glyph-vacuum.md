@@ -22,6 +22,15 @@ drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db
 
 Full flag list: [glyph-vacuum in the CLI reference](../cli.md#glyph-vacuum).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--root` | `DIR` |  |  |
+| `--output` | `DIR` |  |  |
+| `--append` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ---
 
 [All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

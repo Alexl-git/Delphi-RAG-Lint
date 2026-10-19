@@ -18,6 +18,14 @@ Uses export obsidian to write the indexed project out as a set of Obsidian vault
 
 Full flag list: [export in the CLI reference](../cli.md#export).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--output-dir` | `<dir>` |  |  |
+| `--open` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Export to Obsidian...**

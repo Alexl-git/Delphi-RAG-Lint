@@ -18,6 +18,15 @@ Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe chil
 
 Full flag list: [ide-release in the CLI reference](../cli.md#ide-release).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--seconds` | `N` |  |  |
+| `--resume` |  |  |  |
+| `--status` |  |  |  |
+| `--json` |  |  |  |
+
 ## Details
 
 Asks a running drag-lint **Delphi IDE plugin** not to respawn its

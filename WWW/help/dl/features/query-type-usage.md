@@ -18,6 +18,16 @@ Answers one question, of a list of type names, about one file.
 
 Full flag list: [query in the CLI reference](../cli.md#query).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--in` | `<file.pas>` |  |  |
+| `--names` | `A` |  |  |
+| `--names-file` | `<f>` |  |  |
+| `--db` |  |  |  |
+| `--json` |  |  |  |
+
 ## Details
 
 Answers one question, of a **list** of type names, about **one file**:

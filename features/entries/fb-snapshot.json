@@ -10,7 +10,17 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "fb-snapshot"
+      "verb": "fb-snapshot",
+      "usage": "drag-lint fb-snapshot --connection \"Database=...;User=...;Password=...;DriverID=FB\" --db <sql.sqlite>",
+      "flags": [
+        {
+          "name": "--connection"
+        },
+        {
+          "name": "--db",
+          "arg": "<sql.sqlite>"
+        }
+      ]
     }
   ],
   "audience": "both",

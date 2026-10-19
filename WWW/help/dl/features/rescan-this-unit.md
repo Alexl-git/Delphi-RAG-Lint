@@ -20,6 +20,22 @@ Use it when the Diagnostics panel still shows a finding you have already fixed. 
 
 Full flag list: [index in the CLI reference](../cli.md#index).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--watch` |  |  |  |
+| `--interval` | `N` |  |  |
+| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve. |  |
+| `--max-file-kb` | `N` |  |  |
+| `--no-use-ignore` |  |  |  |
+| `--no-sql-ms` |  |  |  |
+| `--deep` |  |  |  |
+| `--shallow` |  |  |  |
+| `--exclude-under` |  |  |  |
+| `--include-only` |  |  |  |
+
 ## Where to click
 
 * Right-click in the Structure form: **Rescan this unit**

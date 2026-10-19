@@ -18,6 +18,18 @@ Documents every public declaration in every indexed unit, with no project scope.
 
 Full flag list: [document-all in the CLI reference](../cli.md#document-all).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--stubs` |  |  |  |
+| `--apply` |  |  |  |
+| `--json` |  |  |  |
+| `--no-backup` |  |  |  |
+| `--include-accessors` |  |  |  |
+| `--migrate-pure` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Details
 
 Documents every public declaration in every indexed unit, with no project

@@ -18,6 +18,15 @@ Reports what would be affected if a chosen symbol changes -- the set of code to 
 
 Full flag list: [impact in the CLI reference](../cli.md#impact).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<Foo.Bar>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--depth` | `N` |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Impact / Blast Radius (symbol)...**

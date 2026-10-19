@@ -18,6 +18,14 @@ Shows the slice of code relevant to one symbol: its declaration, body, and immed
 
 Full flag list: [slice in the CLI reference](../cli.md#slice).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<Foo.TBar>` |  |  |
+| `--db` | `<file.sqlite>` |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Inspect Symbol > Symbol Slice...**

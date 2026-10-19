@@ -18,6 +18,13 @@ Connects to a Firebird database and captures a snapshot into a sqlite index.
 
 Full flag list: [fb-snapshot in the CLI reference](../cli.md#fb-snapshot).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--connection` |  |  |  |
+| `--db` | `<sql.sqlite>` |  |  |
+
 **Needs:** index
 
 ## Details

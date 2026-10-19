@@ -18,6 +18,14 @@ Flags registered library roots that have source on disk but nothing in the index
 
 Full flag list: [library-drift in the CLI reference](../cli.md#library-drift).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--platform` | `<p>` |  |  |
+| `--config` | `<path>` |  |  |
+| `--json` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Index & Maintenance > Library Drift Check...**

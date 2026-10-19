@@ -18,9 +18,24 @@ Searches symbols by name across the indexed projects.
 
 Full flag list: [query in the CLI reference](../cli.md#query).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<symbol-name>` |  |  |
+| `--db` |  |  |  |
+| `--json` |  |  |  |
+| `--case-sensitive` |  |  |  |
+| `--exact` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Symbol Search...**
+
+## Pitfalls
+
+* a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.
+* STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed.
 
 ## Details
 

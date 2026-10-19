@@ -18,6 +18,14 @@ Diagnostic that prints the resolved preprocessor define profile for a project, o
 
 Full flag list: [pp-profile in the CLI reference](../cli.md#pp-profile).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--dproj` | `PATH` |  |  |
+| `--platform` |  |  |  |
+| `--config` |  |  |  |
+
 ## Details
 
 Diagnostic that prints the resolved preprocessor define profile for a

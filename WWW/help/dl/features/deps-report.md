@@ -18,6 +18,18 @@ Produces a third-party dependency rollup from an index: which external units/lib
 
 Full flag list: [deps-report in the CLI reference](../cli.md#deps-report).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--depth` | `N` |  |  |
+| `--edges` |  |  |  |
+| `--all-sources` |  |  |  |
+| `--name` | `<pat>` |  |  |
+| `--format` |  |  |  |
+| `--output` | `<file>` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)...**

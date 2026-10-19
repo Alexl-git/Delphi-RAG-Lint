@@ -18,6 +18,17 @@ Shows callers and callees of one symbol together in a single "butterfly" view.
 
 Full flag list: [reverse-calltree in the CLI reference](../cli.md#reverse-calltree).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--qname` | `<X>` |  |  |
+| `--direction` |  |  |  |
+| `--depth` | `N` |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Call Graph (Butterfly)...**

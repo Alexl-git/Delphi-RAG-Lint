@@ -18,6 +18,12 @@ Diagnostic that dumps every resolved call edge in the index as refid|targetqname
 
 Full flag list: [dump-call-edges in the CLI reference](../cli.md#dump-call-edges).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `PATH` |  |  |
+
 **Needs:** index
 
 ## Details

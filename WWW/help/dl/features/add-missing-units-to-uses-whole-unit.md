@@ -18,6 +18,17 @@ The whole-unit form of the undeclared-identifier quick-fix: resolves every unres
 
 Full flag list: [check-unit in the CLI reference](../cli.md#check-unit).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--project` | `<dproj>` |  |  |
+| `--platform` |  |  |  |
+| `--shadow` | `<dir>` |  |  |
+| `--resolve-uses` |  |  |  |
+| `--db` | `PATH` |  |  |
+| `--format` |  |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)...**

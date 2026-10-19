@@ -15,7 +15,21 @@
     {
       "type": "cli",
       "verb": "export",
-      "sub": "enums"
+      "sub": "enums",
+      "usage": "drag-lint export enums --db <file.sqlite> [--format firebird-sql|csv|json|delphi-const] [--output <file>]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--output",
+          "arg": "<file>"
+        }
+      ]
     }
   ],
   "audience": "both",

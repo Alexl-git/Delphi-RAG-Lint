@@ -18,6 +18,14 @@ Shows the catalog of lint rules in the context of a specific project.
 
 Full flag list: [rules in the CLI reference](../cli.md#rules).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--json` |  |  |  |
+| `--category` | `<name>` |  |  |
+| `--rules-dir` | `<dir>` |  |  |
+
 ## Where to click
 
 * Right-click in the Project Manager: **drag-lint: Project Rules**

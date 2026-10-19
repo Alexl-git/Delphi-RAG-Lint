@@ -18,6 +18,17 @@ Exports the project's unit-dependency data as a CSV file.
 
 Full flag list: [uses-report in the CLI reference](../cli.md#uses-report).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--output` | `<out.csv>` |  |  |
+| `--db` |  |  |  |
+| `--depth` | `N` |  |  |
+| `--include-external` |  |  |  |
+| `--all-sources` |  |  |  |
+| `--name` | `<pattern>` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Uses & Dependencies > Uses Report (CSV)...**

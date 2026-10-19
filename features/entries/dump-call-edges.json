@@ -10,7 +10,14 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "dump-call-edges"
+      "verb": "dump-call-edges",
+      "usage": "drag-lint dump-call-edges --db PATH (diagnostic: resolved call edges: ref_id|target_qname|confidence)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "both",

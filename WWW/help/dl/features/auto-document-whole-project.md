@@ -20,6 +20,28 @@ Full flag list: [index in the CLI reference](../cli.md#index).
 
 Full flag list: [document in the CLI reference](../cli.md#document).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--db` | `<file.sqlite>` |  |  |
+| `--watch` |  |  |  |
+| `--interval` | `N` |  |  |
+| `--library-db` | `<lib.sqlite>` | consult another index for calls THIS one cannot resolve. |  |
+| `--max-file-kb` | `N` |  |  |
+| `--no-use-ignore` |  |  |  |
+| `--no-sql-ms` |  |  |  |
+| `--deep` |  |  |  |
+| `--shallow` |  |  |  |
+| `--exclude-under` |  |  |  |
+| `--include-only` |  |  |  |
+| `--qname` | `<Foo.TBar.Baz>` |  |  |
+| `--apply` |  |  |  |
+| `--json` |  |  |  |
+| `--no-backup` |  |  |  |
+| `--migrate-pure` |  |  |  |
+| `--db` | `PATH` |  |  |
+
 ## Where to click
 
 * RAD Studio main menu: **drag-lint > Generate & Export > Auto-Document Whole Project...**

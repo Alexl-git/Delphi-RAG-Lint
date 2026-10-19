@@ -18,6 +18,14 @@ Every lint rule the engine ships, imported from rules --json.
 
 Full flag list: [rules in the CLI reference](../cli.md#rules).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--json` |  |  |  |
+| `--category` | `<name>` |  |  |
+| `--rules-dir` | `<dir>` |  |  |
+
 ## Details
 
 Lists the full lint rule catalog: every rule drag-lint can check, with its

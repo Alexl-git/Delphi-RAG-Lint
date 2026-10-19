@@ -18,6 +18,13 @@ Moves project index databases into each project's own D-RAG folder, matching the
 
 Full flag list: [migrate-dbs in the CLI reference](../cli.md#migrate-dbs).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--config` | `<drag-lint.json>` |  |  |
+| `--apply` |  |  |  |
+
 ## Details
 
 Moves project index databases into each project's own `_D-RAG` folder,

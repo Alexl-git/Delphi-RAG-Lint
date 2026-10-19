@@ -18,6 +18,17 @@ Finds usage sites of a named symbol, with a choice of report width.
 
 Full flag list: [usages in the CLI reference](../cli.md#usages).
 
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<X>` |  |  |
+| `--width` |  |  |  |
+| `--db` | `<path>` |  |  |
+| `--depth` | `N` |  |  |
+| `--format` |  |  |  |
+| `--json` |  |  |  |
+
 ## Details
 
 Finds usage sites of a named symbol, with a choice of report width. Reach for
