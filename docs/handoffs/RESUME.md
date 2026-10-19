@@ -15,7 +15,9 @@ the main working tree; their links do not resolve in a fresh clone or worktree.
 
 ## Open
 
-- 2026-10-19 | engine | 1.31.5 RELEASED + deployed, worktrees cleaned; next: plan + run wave 2 (bugs + TODOs) | open | [HANDOFF-2026-10-19-engine-wave2-start.md](HANDOFF-2026-10-19-engine-wave2-start.md)
+- 2026-10-19 | ENGINE | 1.22 bundle on rel/1.22 (extractor + B-13 + C18 slice 1), one rescan; wave/1317 battery -> main | open | [HANDOFF-2026-10-19-engine-rel-122.md](HANDOFF-2026-10-19-engine-rel-122.md)
+- 2026-10-19 | engine | AUTONOMOUS: wave/1316 (1.31.6, battery running) + wave/1317 (1.31.7, lane G pending) merged on integration branches; next: battery -> ff main, finish 1317, INBOX retire | resumed (superseded by rel-122 handoff) | [HANDOFF-2026-10-19-engine-waves-1316-1317.md](HANDOFF-2026-10-19-engine-waves-1316-1317.md)
+- 2026-10-19 | engine | 1.31.5 RELEASED + deployed, worktrees cleaned; next: plan + run wave 2 (bugs + TODOs); RESUMED 2026-10-19: plan docs\superpowers\plans\2026-10-19-bugfix-wave-1.31.6.md, lanes A-F dispatched; superseded by waves-1316-1317 | closed | [HANDOFF-2026-10-19-engine-wave2-start.md](HANDOFF-2026-10-19-engine-wave2-start.md)
 - 2026-10-18 | engine | 1.31.5 merged to main (34175807), installer built, engine+BPL DEPLOYED 10-19; owner gates: VM test, push+tag, publish | closed | [HANDOFF-2026-10-18-engine-1315-owner-gates.md](HANDOFF-2026-10-18-engine-1315-owner-gates.md)
 - 2026-10-18 | engine | wave 1.31.5: 6 lanes merged into wave/1315, lanes 2/6/7 running; then baseline, battery, main, installer | closed | [HANDOFF-2026-10-18-engine-wave-1315-lanes.md](HANDOFF-2026-10-18-engine-wave-1315-lanes.md)
 - 2026-10-18 | engine | VM test found sqlite3.dll not shipped -> fixed 28b73f28 (unpushed) + installer version 1.31.4.0; owner re-tests installer on VM, then push + publish | closed | [HANDOFF-2026-10-18-engine-1314-vm-retest.md](HANDOFF-2026-10-18-engine-1314-vm-retest.md)
