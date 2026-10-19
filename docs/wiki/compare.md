@@ -40,7 +40,7 @@ drag-lint compare --question <id> --target <T> --project <P.dproj> --save [--aut
 | `--format text\|json\|html` | Output format (default `text`); `--open` alone means `html`. |
 | `--output <file>` | Write there instead of stdout (HTML always goes to a file). |
 | `--open` | Open the HTML page in the default browser. |
-| `--db <file>` | Pin the index the new run reads. A question that also reads the SERVER or SQL-script index (`round-trip`, `lands-where`, `consumers`, `feeds-from`) pairs it from `report-pairs.json`, exactly as `ask` and `Ask-Report.ps1` do; no pair is exit 2 with their message. |
+| `--db <file>` | Pin the index the new run reads. A question that also reads the SERVER or SQL-script index (`round-trip`, `lands-where`, `consumers`, `feeds-from`) pairs it from `report-pairs.json`, exactly as `ask` does; no pair is exit 2 with its message. |
 
 Exactly one old side may be named: `--old`, `--in`, `--old-db` or `--auto`.
 

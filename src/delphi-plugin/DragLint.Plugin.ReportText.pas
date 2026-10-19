@@ -220,8 +220,8 @@ function IsValidReportTarget(const pTarget: string): Boolean;
 /// <remarks>--plain is load-bearing: HandleReportDone wraps the answer in its
 /// own DocInsight block (FormatReportAsDocInsight), and without --plain the
 /// verb would print a block of its own, wrapped twice. No pwsh and no
-/// Ask-Report.ps1 are needed here: the engine answers the ported questions
-/// in-process and runs Ask-Report.ps1 itself for the rest.</remarks>
+/// Ask-Report.ps1 are needed here: the engine answers every question
+/// in-process (all 26 since the CHARTS port).</remarks>
 function BuildAskCmdLine(const pEngine, pQuestionId, pTarget, pInFile: string; const pTo: string = ''): string;
 /// <summary>The reason `drag-lint ask` gave for a non-zero exit.</summary>
 /// <param name="pOutput">The captured stdout+stderr.</param>

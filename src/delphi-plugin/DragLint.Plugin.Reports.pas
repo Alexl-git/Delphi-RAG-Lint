@@ -17,8 +17,8 @@ unit DragLint.Plugin.Reports;
        background runner, the job queue (no second runner), so a report never
        collides with a reindex or lint-all on the same database. Charts open in
        the browser (--open). No pwsh and no Ask-Report.ps1 are looked for here:
-       the engine answers the ported questions in-process and runs
-       Ask-Report.ps1 itself for the rest.
+       the engine answers every question in-process (all 26 since the
+       CHARTS port).
     3. On exit 0 the text answer becomes a DocInsight block
        (DragLint.Plugin.ReportText), put on the clipboard and shown in a small
        modeless window with a Copy button. Exit 1 and 2 show the verb's
