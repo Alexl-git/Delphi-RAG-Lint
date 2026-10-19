@@ -130,15 +130,13 @@ New text:
 ```pascal
     FOrders: TArray<TOrderBase>;   { references TOrder from Orders -> forces the uses }
 ```
-E4. Replace lines 5-6. Current text:
+E4. Replace line 6. Current text:
 ```pascal
-uses
   Orders;   { <-- interface-section use of Orders: half of the cycle }
 ```
 New text:
 ```pascal
-uses
-  Orders.Contracts;
+  Orders.Contracts;   { <-- interface-section use of Orders: half of the cycle }
 ```
 
 #### `Orders.pas`  (`circular-uses-demo\Orders.pas`)

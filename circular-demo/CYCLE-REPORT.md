@@ -232,16 +232,12 @@ type
   /// <summary>Severity of a log line, ordered from least to most severe.</summary>
   TDemoLogLevel = (llDebug, llInfo, llWarn, llError);
 ```
-E5. Replace lines 9-11. Current text:
+E5. Replace line 11. Current text:
 ```pascal
-uses
-  System.SysUtils,
   DemoSession;
 ```
 New text:
 ```pascal
-uses
-  System.SysUtils,
   DemoSession.Contracts,
   DemoLogger.Contracts;
 ```
@@ -253,16 +249,12 @@ E1. After line 45 (`implementation`), insert:
 uses
   DemoLogger;
 ```
-E2. Replace lines 9-11. Current text:
+E2. Replace line 11. Current text:
 ```pascal
-uses
-  System.SysUtils,
   DemoLogger;
 ```
 New text:
 ```pascal
-uses
-  System.SysUtils,
   DemoLogger.Contracts;
 ```
 
@@ -272,16 +264,12 @@ E1. Delete lines 23-24. Current text:
   /// <summary>Classification recorded with each audit entry.</summary>
   TDemoAuditKind = (akOpen, akWork, akClose);
 ```
-E2. Replace lines 18-20. Current text:
+E2. Replace line 20. Current text:
 ```pascal
-uses
-  System.SysUtils,
   System.Classes;
 ```
 New text:
 ```pascal
-uses
-  System.SysUtils,
   System.Classes,
   DemoAudit.Contracts;
 ```
@@ -313,49 +301,23 @@ New text:
 ```pascal
   TDemoSession = class(TDemoSessionBase)
 ```
-E5. Replace lines 9-11. Current text:
+E5. Replace line 11. Current text:
 ```pascal
-uses
-  System.SysUtils,
   DemoAudit;
 ```
 New text:
 ```pascal
-uses
-  System.SysUtils,
   DemoSession.Contracts,
   DemoAudit.Contracts;
 ```
 
 #### `CircularDemo.dpr`  (`circular-demo\CircularDemo.dpr`)
-E1. Replace lines 28-39. Current text:
+E1. Replace line 39. Current text:
 ```pascal
-uses
-  System.SysUtils,
-  DemoAudit in 'DemoAudit.pas',
-  DemoSession in 'DemoSession.pas',
-  DemoLogger in 'DemoLogger.pas',
-  DemoConfig in 'DemoConfig.pas',
-  DemoBlueprint.Interfaces in 'DemoBlueprint.Interfaces.pas',
-  DemoBlueprint in 'DemoBlueprint.pas',
-  DemoBlueprint.ViewModel in 'DemoBlueprint.ViewModel.pas',
-  DemoControlPlan in 'DemoControlPlan.pas',
-  DemoGagePort in 'DemoGagePort.pas',
   DemoUIConnect in 'DemoUIConnect.pas';
 ```
 New text:
 ```pascal
-uses
-  System.SysUtils,
-  DemoAudit in 'DemoAudit.pas',
-  DemoSession in 'DemoSession.pas',
-  DemoLogger in 'DemoLogger.pas',
-  DemoConfig in 'DemoConfig.pas',
-  DemoBlueprint.Interfaces in 'DemoBlueprint.Interfaces.pas',
-  DemoBlueprint in 'DemoBlueprint.pas',
-  DemoBlueprint.ViewModel in 'DemoBlueprint.ViewModel.pas',
-  DemoControlPlan in 'DemoControlPlan.pas',
-  DemoGagePort in 'DemoGagePort.pas',
   DemoUIConnect in 'DemoUIConnect.pas',
   DemoLogger.Contracts in 'DemoLogger.Contracts.pas',
   DemoAudit.Contracts in 'DemoAudit.Contracts.pas',

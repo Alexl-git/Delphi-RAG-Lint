@@ -87,7 +87,7 @@ implementation
 uses
   System.SysUtils, System.IOUtils, System.StrUtils, System.RegularExpressions, System.Math,
   System.Generics.Defaults,
-  DRagLint.Core.Model;
+  DRagLint.Core.Model, DRagLint.Convert.UnitRules;
 
 const
   CLeafSuffix    = '.Contracts';
@@ -201,6 +201,7 @@ type
     Last    : Integer;
     NewLines: TArray<string>;
     Note    : string;
+    Refusal : string;  // ekManual only: the refusal kind ('' = manual-edit)
   end;
 
   TEdgeEval = record
@@ -364,7 +365,6 @@ type
     procedure DelUses(pFid: Int64; pSect: TSect; const pStem: string);
     procedure Touch(pFid: Int64);
     function EntryText(const pF: TPlanFile; const pU: TUnitUse): string;
-    function EntryComment(const pF: TPlanFile; const pU: TUnitUse): string;
     function UsesEntryFor(const pF: TPlanFile; const pLeafStem: string): string;
     procedure DedupeAdds;
     procedure BuildUsesEdits;
@@ -653,6 +653,321 @@ begin
     Row:= CEntryIndent + pIndent + pEntries[I] + (if I = High(pEntries) then ';' else ',');
     if (I <= High(pComments)) and (pComments[I] <> '') then Row:= Row + ' ' + pComments[I];
     Result[I + 1]:= Row;
+  end;
+end;
+
+{ ---------------------------------------------------------------------------
+  E18 T3a: minimal edits to an EXISTING uses clause, computed over TUsesLexer
+  tokens. The lexer treats comments as trivia, and only tokens -- plus a BLANK
+  gap between two deleted tokens -- are ever deleted, so every comment
+  survives. Add = `, <Unit>` after the last entry (before the `;` when a
+  directive sits between the two). Remove = the entry and ONE separator: the
+  following one (its line then goes away whole), or the preceding one for the
+  last entry or when the following side holds a directive. An entry in a
+  conditional region, or a directive inside the span a removal deletes,
+  refuses with `directive`; a directive elsewhere in the clause does not.
+  --------------------------------------------------------------------------- }
+type
+  TOfsSpan = record
+    Start: Integer;
+    Stop : Integer;
+  end;
+
+  { One uses clause as TUsesLexer reads it; offsets are 1-based into the
+    scanned text, Seps[I] sits between Entries[I] and Entries[I + 1]. }
+  TClauseScan = record
+    Ok     : Boolean;
+    UsesTok: TTok;
+    Entries: TArray<TUsesEntry>;
+    Seps   : TArray<TTok>;
+    Semi   : TTok;
+  end;
+
+const
+  CClauseBreak = #13#10;
+  CRefDirective = 'directive';
+  CRefManual    = 'manual-edit';
+
+function OfsSpan(pStart, pStop: Integer): TOfsSpan;
+begin
+  Result.Start:= pStart;
+  Result.Stop := pStop;
+end;
+
+function IsSymTok(const pTok: TTok; const pSym: string): Boolean;
+begin
+  Result:= (pTok.Kind = tkSym) and (pTok.Text = pSym);
+end;
+
+function IsWordTok(const pTok: TTok; const pWord: string): Boolean;
+begin
+  Result:= (pTok.Kind = tkIdent) and not pTok.Escaped and SameText(pTok.Text, pWord);
+end;
+
+{ The first `uses` clause of the lexer's text; Ok = False on any other shape. }
+function ScanClause(pLex: TUsesLexer): TClauseScan;
+var
+  T      : TTok;
+  E      : TUsesEntry;
+  Entries: TList<TUsesEntry>;
+  Seps   : TList<TTok>;
+begin
+  Result:= Default(TClauseScan);
+  repeat
+    T:= pLex.Next;
+  until (T.Kind = tkEof) or IsWordTok(T, 'uses');
+  if T.Kind = tkEof then Exit;
+  Result.UsesTok:= T;
+  Entries:= TList<TUsesEntry>.Create;
+  Seps   := TList<TTok>.Create;
+  try
+    repeat
+      T:= pLex.Next;
+      if T.Kind <> tkIdent then Exit;
+      E:= Default(TUsesEntry);
+      E.Name := T.Text;
+      E.Start:= T.Start - Ord(T.Escaped);  // dl:ok duplicate-code@15bd -- REVIEWED 2026-10-19 (E18 T3a): the entry loop of UnitRules.ParseClause on purpose -- this scan must also return the `uses` and `;` tokens (the `;` Depth refuses an add inside a conditional) and take an '&ident' entry's ampersand into its span; exporting ParseClause + TUsesClause would widen T3a's interface move for one caller
+      E.Stop := T.Stop;
+      E.Depth:= T.Depth;
+      T:= pLex.Next;
+      while IsSymTok(T, '.') do
+      begin
+        T:= pLex.Next;
+        if T.Kind <> tkIdent then Exit;
+        E.Name:= E.Name + '.' + T.Text;
+        E.Stop:= T.Stop;
+        T:= pLex.Next;
+      end;
+      if IsWordTok(T, 'in') then
+      begin
+        T:= pLex.Next;
+        if T.Kind <> tkString then Exit;
+        E.Stop:= T.Stop;
+        T:= pLex.Next;
+      end;
+      Entries.Add(E);
+      if IsSymTok(T, ',') then Seps.Add(T)
+      else if not IsSymTok(T, ';') then Exit;
+    until IsSymTok(T, ';');
+    Result.Semi   := T;
+    Result.Entries:= Entries.ToArray;
+    Result.Seps   := Seps.ToArray;
+    Result.Ok     := True;
+  finally
+    Seps.Free;
+    Entries.Free;
+  end;
+end;
+
+{ Deletes the token spans pSpans (ascending) from pText, and every gap between
+  two of them that is blank -- a gap holding a comment stays. pEatBlanks also
+  deletes the spaces / tabs right after the last span. }
+procedure DeleteSpans(var pText: string; const pSpans: array of TOfsSpan; pEatBlanks: Boolean);
+var
+  Runs: TList<TOfsSpan>;
+  Cur : TOfsSpan;
+begin
+  Runs:= TList<TOfsSpan>.Create;
+  try
+    Cur:= pSpans[0];
+    for var I:= 1 to High(pSpans) do
+      if Trim(Copy(pText, Cur.Stop, pSpans[I].Start - Cur.Stop)) = '' then Cur.Stop:= pSpans[I].Stop
+      else
+      begin
+        Runs.Add(Cur);
+        Cur:= pSpans[I];
+      end;
+    if pEatBlanks then
+      while (Cur.Stop <= Length(pText)) and CharInSet(pText[Cur.Stop], [' ', #9]) do Inc(Cur.Stop);
+    Runs.Add(Cur);
+    for var I:= Runs.Count - 1 downto 0 do Delete(pText, Runs[I].Start, Runs[I].Stop - Runs[I].Start);
+  finally
+    Runs.Free;
+  end;
+end;
+
+{ Adds pEntry after the last entry; returns the refusal kind or ''. }
+function AddClauseEntry(var pText: string; pLex: TUsesLexer; const pScan: TClauseScan; const pEntry: string): string;
+var
+  L        : TUsesEntry;
+  At       : Integer;
+  LineStart: Integer;
+  Indent   : string;
+begin
+  if pScan.Semi.Depth > 0 then Exit(CRefDirective);
+  L := pScan.Entries[High(pScan.Entries)];
+  At:= if pLex.DirectiveIn(L.Stop, pScan.Semi.Start) then pScan.Semi.Start else L.Stop;
+  LineStart:= L.Start;
+  while (LineStart > 1) and not CharInSet(pText[LineStart - 1], [#10, #13]) do Dec(LineStart);
+  Indent:= Copy(pText, LineStart, L.Start - LineStart);
+  { one entry per line stays one entry per line; an inline clause stays inline }
+  if (Trim(Indent) = '') and (LineStart > pScan.UsesTok.Stop) then Insert(',' + CClauseBreak + Indent + pEntry, pText, At)
+  else Insert(', ' + pEntry, pText, At);
+  Result:= '';
+end;
+
+{ Removes entry pIdx with one separator; returns the refusal kind or ''. }
+function RemoveClauseEntry(var pText: string; pLex: TUsesLexer; const pScan: TClauseScan; pIdx: Integer): string;
+var
+  E: TUsesEntry;
+  S: TTok;
+begin
+  E:= pScan.Entries[pIdx];
+  if E.Depth > 0 then Exit(CRefDirective);
+  var Body:= Copy(pText, E.Start, E.Stop - E.Start);
+  if ContainsStr(Body, '{') or ContainsStr(Body, '(*') or ContainsStr(Body, '//') then Exit(CRefManual);
+  Result:= CRefDirective;
+  if Length(pScan.Entries) = 1 then
+  begin
+    { the last entry goes: so does the clause }
+    if not pLex.DirectiveIn(pScan.UsesTok.Start, pScan.Semi.Stop) then
+    begin
+      DeleteSpans(pText, [OfsSpan(pScan.UsesTok.Start, pScan.UsesTok.Stop), OfsSpan(E.Start, E.Stop),
+        OfsSpan(pScan.Semi.Start, pScan.Semi.Stop)], True);
+      Result:= '';
+    end;
+  end
+  else if (pIdx < High(pScan.Entries)) and (pScan.Seps[pIdx].Depth = 0) and
+    not pLex.DirectiveIn(E.Start, pScan.Seps[pIdx].Stop) then
+  begin
+    S:= pScan.Seps[pIdx];
+    DeleteSpans(pText, [OfsSpan(E.Start, E.Stop), OfsSpan(S.Start, S.Stop)], True);
+    Result:= '';
+  end
+  else if (pIdx > 0) and (pScan.Seps[pIdx - 1].Depth = 0) and not pLex.DirectiveIn(pScan.Seps[pIdx - 1].Start, E.Stop) then
+  begin
+    S:= pScan.Seps[pIdx - 1];
+    DeleteSpans(pText, [OfsSpan(S.Start, S.Stop), OfsSpan(E.Start, E.Stop)], False);
+    Result:= '';
+  end;
+end;
+
+function IndexOfEntry(const pScan: TClauseScan; const pStem: string): Integer;
+begin
+  for var I:= 0 to High(pScan.Entries) do
+    if SameText(pScan.Entries[I].Name, pStem) then Exit(I);
+  Result:= -1;
+end;
+
+{ The ONE minimal edit applying pAdds (entry texts) and pDels (stems) to the
+  existing uses clause whose `uses` keyword is on line pUsesLine. Adds go
+  first, so a removal never empties a clause that gains an entry. First = 0
+  when nothing changes; a refusal is an ekManual edit on the line it names,
+  its Refusal the kind. }
+function ClauseEdit(const pLines: TArray<string>; pUsesLine: Integer; const pSectLabel: string;
+  const pAdds, pDels: TArray<string>): TFileEdit;
+var
+  Old   : TArray<string>;
+  Src   : string;           // the clause onward, unedited
+  Text  : string;           // the same, as the ops edit it
+  Orig  : TClauseScan;
+  Cur   : TClauseScan;
+  Lex   : TUsesLexer;
+  Ops   : TList<string>;  // '+entry' / '-stem', in order
+  Kind  : string;
+  BadOfs: Integer;
+  Pre   : Integer;
+  Suf   : Integer;
+  Mid   : TList<string>;
+begin
+  Result:= Default(TFileEdit);
+  Old   := Copy(pLines, pUsesLine - 1, MaxInt);
+  Src   := string.Join(CClauseBreak, Old);
+  Text  := Src;
+  Kind  := '';
+  Lex   := TUsesLexer.Create(Src);
+  try
+    Orig:= ScanClause(Lex);
+  finally
+    Lex.Free;
+  end;
+  BadOfs:= if Orig.Ok then Orig.UsesTok.Start else 1;
+  if not Orig.Ok then Kind:= CRefManual;
+  Ops:= TList<string>.Create;
+  try
+    if Kind = '' then
+    begin
+      for var S in pAdds do
+      begin
+        var I:= IndexOfEntry(Orig, StemOfEntry(S));
+        if I < 0 then Ops.Add('+' + S);
+      end;
+      { a stem both removed and added again stays where it is }
+      for var S in pDels do
+        if IndexOfEntry(Orig, S) >= 0 then
+        begin
+          var Readded:= False;
+          for var A in pAdds do Readded:= Readded or SameText(StemOfEntry(A), S);
+          if not Readded then Ops.Add('-' + S);
+        end;
+    end;
+    for var Op in Ops do
+    begin
+      Lex:= TUsesLexer.Create(Text);
+      try
+        Cur:= ScanClause(Lex);
+        if not Cur.Ok then Kind:= CRefManual
+        else if Op[1] = '+' then
+        begin
+          Kind:= AddClauseEntry(Text, Lex, Cur, Copy(Op, 2, MaxInt));
+          BadOfs:= Orig.Semi.Start;
+        end
+        else
+        begin
+          Kind:= RemoveClauseEntry(Text, Lex, Cur, IndexOfEntry(Cur, Copy(Op, 2, MaxInt)));
+          BadOfs:= Orig.Entries[IndexOfEntry(Orig, Copy(Op, 2, MaxInt))].Start;
+        end;
+      finally
+        Lex.Free;
+      end;
+      if Kind <> '' then Break;
+    end;
+  finally
+    Ops.Free;
+  end;
+  if Kind <> '' then
+  begin
+    { the line the refusal names, counted in the UNEDITED clause }
+    Result.Kind   := ekManual;
+    Result.Refusal:= Kind;
+    Result.First  := pUsesLine;
+    for var I:= 1 to BadOfs - 1 do
+      if Src[I] = #10 then Inc(Result.First);
+    Result.Last   := Result.First;
+    Result.Note   := Format('refused: %s -- the %s uses clause, line %d, cannot be edited token by token (%s). ' +
+      'Edit it by hand: remove %s; add %s.', [Kind, pSectLabel, Result.First,
+      (if Kind = CRefDirective then 'the edit would touch a compiler directive or a conditional entry'
+       else 'a comment inside an entry, or a clause shape the lexer does not read'),
+      (if Length(pDels) > 0 then QuoteList(pDels) else 'nothing'), (if Length(pAdds) > 0 then QuoteList(pAdds) else 'nothing')]);
+    Exit;
+  end;
+  var Fresh:= Text.Split([CClauseBreak]);
+  Pre:= 0;
+  while (Pre < Length(Old)) and (Pre < Length(Fresh)) and (Old[Pre] = Fresh[Pre]) do Inc(Pre);
+  Suf:= 0;
+  while (Suf < Length(Old) - Pre) and (Suf < Length(Fresh) - Pre) and (Old[High(Old) - Suf] = Fresh[High(Fresh) - Suf]) do
+    Inc(Suf);
+  Mid:= TList<string>.Create;
+  try
+    { a line an edit left blank goes away with it }
+    for var I:= Pre to High(Fresh) - Suf do
+      if Trim(Fresh[I]) <> '' then Mid.Add(Fresh[I]);
+    if (Length(Old) - Pre - Suf = 0) and (Mid.Count = 0) then Exit;
+    Result.NewLines:= Mid.ToArray;
+  finally
+    Mid.Free;
+  end;
+  if Length(Old) - Pre - Suf = 0 then
+  begin
+    Result.Kind := ekInsertAfter;
+    Result.First:= pUsesLine + Pre - 1;
+    Result.Last := Result.First;
+  end
+  else
+  begin
+    Result.Kind := if Length(Result.NewLines) = 0 then ekDelete else ekReplace;
+    Result.First:= pUsesLine + Pre;
+    Result.Last := pUsesLine + Length(Old) - Suf - 1;
   end;
 end;
 
@@ -1683,16 +1998,6 @@ begin
   end;
 end;
 
-function TCyclePlanner.EntryComment(const pF: TPlanFile; const pU: TUnitUse): string;
-var
-  Rest: string;
-begin
-  Rest:= Trim(Copy(LineAt(pF.Lines, pU.EndLine), pU.EndCol, MaxInt));
-  if StartsStr(',', Rest) or StartsStr(';', Rest) then Rest:= Trim(Copy(Rest, 2, MaxInt));
-  if StartsStr('//', Rest) or StartsStr('{', Rest) then Result:= Rest
-  else Result:= '';
-end;
-
 function TCyclePlanner.UsesEntryFor(const pF: TPlanFile; const pLeafStem: string): string;
 begin
   Result:= FLeafName[pLeafStem];
@@ -1759,12 +2064,8 @@ var
   Entries : TArray<TUnitUse>;
   Adds    : TList<string>;
   Dels    : TList<string>;
-  Kept    : TList<string>;
-  Notes   : TList<string>;
-  Stems   : TList<string>;
   E       : TFileEdit;
   UsesLine: Integer;
-  Clean   : Boolean;
 begin
   Entries:= SectionEntries(pF, pSect);
   Adds   := ListOf(FUsesAdd, pF.Fid, pSect);
@@ -1785,58 +2086,14 @@ begin
     EditList(pF.Fid).Add(E);
     Exit;
   end;
-  { the clause runs from the `uses` keyword to the last entry; a clause that
-    holds anything else (a directive, a comment line) gets a manual edit }
+  { E18 T3a: an existing clause gets ONE minimal edit computed over its
+    TUsesLexer tokens (ClauseEdit), never a whole-clause rewrite: comments
+    survive, a directive the edit would touch refuses the cycle }
   UsesLine:= Entries[0].StartLine;
   while (UsesLine > 1) and not TRegEx.IsMatch(CodePart(LineAt(pF.Lines, UsesLine)), '\buses\b', [roIgnoreCase]) do
     Dec(UsesLine);
-  E.First:= UsesLine;
-  E.Last := Entries[High(Entries)].EndLine;
-  Clean  := SameText(Trim(CodePart(LineAt(pF.Lines, UsesLine))), 'uses');
-  for var L:= UsesLine + 1 to E.Last do
-  begin
-    var Covered:= Trim(LineAt(pF.Lines, L)) = '';
-    for var U in Entries do
-      if (L >= U.StartLine) and (L <= U.EndLine) then Covered:= True;
-    Clean:= Clean and Covered;
-  end;
-  Kept := TList<string>.Create;
-  Notes:= TList<string>.Create;
-  Stems:= TList<string>.Create;
-  try
-    for var U in Entries do
-      if not Dels.Contains(LowerCase(U.UnitName)) then
-      begin
-        Kept.Add(EntryText(pF, U));
-        Notes.Add(EntryComment(pF, U));
-        Stems.Add(LowerCase(U.UnitName));
-      end;
-    for var S in Adds do
-      if not Stems.Contains(StemOfEntry(S)) then
-      begin
-        Kept.Add(S);
-        Notes.Add('');
-        Stems.Add(StemOfEntry(S));
-      end;
-    if not Clean then
-    begin
-      E.Kind:= ekManual;
-      E.Note:= Format('In the %s uses clause (lines %d-%d): remove %s; add %s. Keep the commas and ' +
-        'the final semicolon correct.', [SectLabel(pSect), E.First, E.Last,
-        (if Dels.Count > 0 then QuoteList(Dels.ToArray) else 'nothing'), (if Adds.Count > 0 then QuoteList(Adds.ToArray) else 'nothing')]);
-    end
-    else if Kept.Count = 0 then E.Kind:= ekDelete
-    else
-    begin
-      E.Kind    := ekReplace;
-      E.NewLines:= FormatUses(TRegEx.Match(LineAt(pF.Lines, UsesLine), '^\s*').Value, Kept.ToArray, Notes.ToArray);
-    end;
-  finally
-    Stems.Free;
-    Notes.Free;
-    Kept.Free;
-  end;
-  EditList(pF.Fid).Add(E);
+  E:= ClauseEdit(pF.Lines, UsesLine, SectLabel(pSect), Adds.ToArray, Dels.ToArray);
+  if E.First > 0 then EditList(pF.Fid).Add(E);
 end;
 
 function TCyclePlanner.EditList(pFid: Int64): TList<TFileEdit>;
@@ -2897,7 +3154,8 @@ begin
     end;
     for var Fid in pPlan.Touched do
       for var E in EditsOf(Fid) do
-        if E.Kind = ekManual then Add('manual-edit', '', PathOf(Fid), E.Note, E.First);
+        if E.Kind = ekManual then
+          Add((if E.Refusal <> '' then E.Refusal else 'manual-edit'), '', PathOf(Fid), E.Note, E.First);
     for var E in pPlan.DprojEdits do
       if E.Kind = ekManual then Add('manual-edit', '', FProjectFile, E.Note, E.First);
     pPlan.Refusals:= L.ToArray;
