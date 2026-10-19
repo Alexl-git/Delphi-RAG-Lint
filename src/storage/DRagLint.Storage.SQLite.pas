@@ -8227,7 +8227,17 @@ begin
       index's headline query, and made unused-private-member call a live routine
       dead code. There is no index on refs(name_text) (only idx_refs_enclosing),
       so this was already a scan -- NOCASE costs nothing here. }
-    Q.SQL.Text:= 'SELECT * FROM refs WHERE name_text = :name COLLATE NOCASE ' + 'ORDER BY file_id, start_line';
+    { 2026-10-19: carry member_accesses.mode as access_mode. A qualified field
+      access is refs.kind 'member-access' for a read AND a write; the direction
+      lives only in member_accesses, so `usages` filed every `X.Field` under
+      calls. ref_id is that table's PRIMARY KEY, so the LEFT JOIN cannot add
+      or drop a row -- every other caller sees the same rows as before. }
+    if HasMemberAccesses then
+      Q.SQL.Text:= 'SELECT refs.*, ma.mode AS access_mode FROM refs ' +
+                   'LEFT JOIN member_accesses ma ON ma.ref_id = refs.id ' +
+                   'WHERE refs.name_text = :name COLLATE NOCASE ORDER BY refs.file_id, refs.start_line'
+    else
+      Q.SQL.Text:= 'SELECT * FROM refs WHERE name_text = :name COLLATE NOCASE ' + 'ORDER BY file_id, start_line';
     Q.ParamByName('name').AsString:= ACalleeName;
     Q.Open;
     while not Q.Eof do
@@ -8256,6 +8266,9 @@ begin
       if (RcvF <> nil) and not RcvF.IsNull then R.ReceiverText:= RcvF.AsString
       else R.ReceiverText:= '';
       R.ContextText:= ''; // v0.17: initialize context (unless set by FindCallersByNameWithContext)
+      var ModeF: TField:= Q.FindField('access_mode');
+      if (ModeF <> nil) and not ModeF.IsNull then R.AccessMode:= ModeF.AsString
+      else R.AccessMode:= '';
       List.Add(R);
       Q.Next;
     end; // while

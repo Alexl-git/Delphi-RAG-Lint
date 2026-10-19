@@ -4672,14 +4672,17 @@ end; // function
   the fix for the stray-index problem and changed nothing -- a stray that exists
   passes an existence test. Existence is not sufficiency.
 
-  Returns True when there is nothing to open, having said so. }
+  Returns True when there is nothing to open, having said so -- on STDERR
+  (B-21, 2026-10-19: it went to stdout, where a caller parsing the verb's
+  answer read the refusal AS the answer). Every caller exits 2 on True.
+  Pinned by run_nodb_error_on_stderr.ps1. }
 function NoDbResolved(const ADbPath, AVerb: string): Boolean;
 begin
   Result:= ADbPath = '';
   if not Result then Exit;
-  Writeln('ERROR: ', AVerb, ': no --db was given and no project database resolves here.');
-  Writeln('       Run "drag-lint resolve-dbs" to list the configured databases,');
-  Writeln('       or pass --db <file.sqlite> explicitly.');
+  Writeln(ErrOutput, 'ERROR: ', AVerb, ': no --db was given and no project database resolves here.');
+  Writeln(ErrOutput, '       Run "drag-lint resolve-dbs" to list the configured databases,');
+  Writeln(ErrOutput, '       or pass --db <file.sqlite> explicitly.');
 end;
 
 /// <summary>Refuses a run whose EXPLICIT --db list names a file that does not
@@ -9961,7 +9964,12 @@ begin
   if Length(Dbs) = 0 then
   begin
     if NoDbResolved(AArgs.DbPath, 'outline') then Exit(2);
-    if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
+    if not TFile.Exists(AArgs.DbPath) then
+    begin
+      Writeln(ErrOutput, 'ERROR: database not found: ', AArgs.DbPath);
+      Writeln(ErrOutput, 'Run "drag-lint index <path>" first.');
+      Exit(2);
+    end;
     Dbs:= [AArgs.DbPath];
   end;
 
@@ -10077,14 +10085,16 @@ var
     AArr.AddElement(O);
   end;
 
-  function GroupFor(const AKind: string): TJSONArray;
+  { The bucket is DRagLint.Query.Callers.UsageBucketOf's, shared with the LSP. }
+  function GroupFor(const ARef: TReference): TJSONArray;
   begin
-    if AKind      = 'read' then Result:= JReads
-    else if AKind = 'write'         then Result:= JWrites
-    else if AKind = 'type_use'      then Result:= JTypes
-    else if AKind = 'attribute'     then Result:= JAttrs
-    else if AKind = 'event-binding' then Result:= JEvents
-    else Result:= JCalls; { call + anything else }
+    var Bucket: string:= UsageBucketOf(ARef);
+    if Bucket      = 'reads'      then Result:= JReads
+    else if Bucket = 'writes'     then Result:= JWrites
+    else if Bucket = 'types'      then Result:= JTypes
+    else if Bucket = 'attributes' then Result:= JAttrs
+    else if Bucket = 'events'     then Result:= JEvents
+    else Result:= JCalls;
   end;
 
 var
@@ -10146,7 +10156,8 @@ begin
         Continue;
       end;
 
-      for S in Store.FindSymbolsByExactName(AArgs.Name) do
+      var Decls: TArray<TSymbol>:= Store.FindSymbolsByExactName(AArgs.Name);
+      for S in Decls do
       begin
         DeclO:= TJSONObject.Create;
         DeclO.AddPair('kind', S.Kind.ToText);
@@ -10157,7 +10168,7 @@ begin
         JDecls.AddElement(DeclO);
       end;
 
-      for R in Store.FindCallersByName(AArgs.Name) do AddRefRow(GroupFor(R.Kind), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol);
+      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol);
 
       if (Width = 'wide') or (Width = 'very-wide') then
         for L in Store.FindTransitiveCallers(AArgs.Name, Depth) do
