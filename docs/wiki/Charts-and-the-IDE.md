@@ -64,37 +64,32 @@ a text trace; every other question answers with a picture (Graphviz).
   does not exist is an error naming where it was set -- a typo never silently picks
   another file. The full order is in `charts\README.md` ("Where the engine and
   Graphviz are found").
-* For `New-DiagramArtifact.ps1`: an index **clone** under `charts\scratch\db\`
-  (a copy of a project's `_D-RAG\<project>.sqlite`). The script refuses any
-  other database so that a re-index cannot change a chart mid-run. To use a live
-  index deliberately, set `DRAGLINT_CHARTS_ALLOW_LIVE_DB=1` in that shell first.
-  (`Ask-Report.ps1`, below, reads the live indexes and sets that variable for
-  its own call only.)
+* `drag-lint ask` reads the live indexes (`--project <P.dproj>`, `--in <U.pas>`
+  or `--db <index>`) and refuses a stale one (exit 3; stderr names the reindex
+  command) unless you pass `--allow-stale`. No PowerShell is needed.
 * Keep the output folder short: `dot.exe` cannot write a path of 260 characters
   or more, and the script refuses one before it runs.
 
 ## Asking a question
 
-Run `charts\src\New-DiagramArtifact.ps1` with a question, a target and the
-database. `-Open` opens the result in your browser.
+Run `drag-lint ask` with a question, a target and the project (or index).
+`--open` opens the result in your browser.
 
 **A chart question** -- callers and callees of one method:
 
 ```
-.\charts\src\New-DiagramArtifact.ps1 -Question butterfly `
-    -Target Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation `
-    -DbPath .\charts\scratch\db\CLIENT-Micronite2027.sqlite -Open
+drag-lint ask butterfly --target Blueprint4.ViewModel.TBlueprint_ViewModel.SendDeltaOperation ^
+    --project CLIENT\Micronite2027.dproj --open
 ```
 
 **`round-trip`** -- one edited grid field, both ways through the pipe. It reads
 three indexes: the client project, the server project and the SQL-script index.
 
 ```
-.\charts\src\New-DiagramArtifact.ps1 -Question round-trip `
-    -Target frmBlueprint4.dxDBGrid1OperationVName `
-    -DbPath       .\charts\scratch\db\CLIENT-Micronite2027.sqlite `
-    -ServerDbPath .\charts\scratch\db\SERVER-MicroniteMW1Service.sqlite `
-    -SqlDbPath    .\charts\scratch\db\SQL-drag-lint-sql.sqlite -Open
+drag-lint ask round-trip --target frmBlueprint4.dxDBGrid1OperationVName ^
+    --project CLIENT\Micronite2027.dproj ^
+    --server-db SERVER\_D-RAG\MicroniteMW1Service.sqlite ^
+    --sql-db SQL\_D-RAG\drag-lint-sql.sqlite --open
 ```
 
 A `round-trip` target can be a control (`<Form>.<Control>` or
