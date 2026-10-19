@@ -5,6 +5,16 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+### Changed
+- `circular-demo` carries three cycles instead of one (E18 phase 2): the original
+  interface-coupled four-unit cycle, unchanged; a three-unit implementation-only cycle whose
+  only cheap cut is a single routine call (`DemoBlueprint -> DemoBlueprint.ViewModel`); and a
+  two-unit one whose only cheap cut is a member access behind `is` / `as`
+  (`DemoUIConnect -> DemoGagePort`). Both new shapes are modelled on real client cycles that
+  `cycles --plan` refuses today; `CYCLE-REPORT.md` records the hand-written recipes that cut
+  them (0 errors, output identical) and the two compile traps (E2010 const-signature, E2015
+  `TObject` receiver). README / wiki excerpts and `run_cycles_plan_followable.ps1` follow.
+
 ## v1.32.0-alpha -- 2026-10-19
 
 Extractor 1.22.0-alpha: every index re-parses ONCE on its next run (hours for large trees).

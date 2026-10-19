@@ -17,7 +17,7 @@ drag-lint index  --project circular-demo\CircularDemo.dproj --db circular-demo\_
 drag-lint cycles --db circular-demo\_D-RAG\CircularDemo.sqlite --edges --causes --plan --format text
 ```
 
-Indexing this project takes well under a second (5 files, 73 symbols, 223 refs).
+Indexing this project takes well under a second (11 files, 134 symbols, 451 refs).
 
 ## Can a model follow it?
 
@@ -39,6 +39,12 @@ cut is the one nominated, and there are no unrelated edits.
 * **2026-09-28, re-run on engine 1.19.0-alpha with this exact report: PASSED 4/4 again.**
   0 errors, 0 warnings, identical program output, the predicted `cycles` output byte-for-byte,
   only the six named files touched plus the three new units.
+* **2026-10-19, engine 1.32.0-alpha, the project extended to three cycles (10 units).** Part A
+  and then Part B of this report, applied by a 150-line script that only parses the playbook's
+  own markup (no Pascal knowledge): 0 errors, 0 warnings, program output byte-identical,
+  `cycles` then reporting exactly the two cycles the playbook refuses. The script refuses
+  cycles 2 and 3 itself -- the report has no steps for them (see "The two cycles the playbook
+  refuses" below).
 
 ## The report, verbatim
 
@@ -94,7 +100,7 @@ After it, these units still form a cycle, but only through IMPLEMENTATION uses. 
      - `DemoLogger.pas` implementation (first use: line 46)
      - `DemoConfig.pas` interface (first use: line 23)
      - `DemoConfig.pas` implementation (first use: line 52)
-     - `CircularDemo.dpr` program uses (first use: line 37)
+     - `CircularDemo.dpr` program uses (first use: line 56)
 3. `TDemoAuditKind` -- **enum**, declared at `DemoAudit.pas` lines 23-24.
    - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoAudit.Contracts`.
    - Used by (each needs `DemoAudit.Contracts` in the uses clause of that section; the edit step does it):
@@ -102,7 +108,7 @@ After it, these units still form a cycle, but only through IMPLEMENTATION uses. 
      - `DemoAudit.pas` implementation (first use: line 71)
      - `DemoSession.pas` interface (first use: line 35)
      - `DemoSession.pas` implementation (first use: line 72)
-     - `CircularDemo.dpr` program uses (first use: line 36)
+     - `CircularDemo.dpr` program uses (first use: line 55)
 
 ### Step 2: uses clauses -- keep, move or remove the old unit
 For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.
@@ -322,14 +328,20 @@ uses
 ```
 
 #### `CircularDemo.dpr`  (`circular-demo\CircularDemo.dpr`)
-E1. Replace lines 18-23. Current text:
+E1. Replace lines 28-39. Current text:
 ```pascal
 uses
   System.SysUtils,
   DemoAudit in 'DemoAudit.pas',
   DemoSession in 'DemoSession.pas',
   DemoLogger in 'DemoLogger.pas',
-  DemoConfig in 'DemoConfig.pas';
+  DemoConfig in 'DemoConfig.pas',
+  DemoBlueprint.Interfaces in 'DemoBlueprint.Interfaces.pas',
+  DemoBlueprint in 'DemoBlueprint.pas',
+  DemoBlueprint.ViewModel in 'DemoBlueprint.ViewModel.pas',
+  DemoControlPlan in 'DemoControlPlan.pas',
+  DemoGagePort in 'DemoGagePort.pas',
+  DemoUIConnect in 'DemoUIConnect.pas';
 ```
 New text:
 ```pascal
@@ -339,6 +351,12 @@ uses
   DemoSession in 'DemoSession.pas',
   DemoLogger in 'DemoLogger.pas',
   DemoConfig in 'DemoConfig.pas',
+  DemoBlueprint.Interfaces in 'DemoBlueprint.Interfaces.pas',
+  DemoBlueprint in 'DemoBlueprint.pas',
+  DemoBlueprint.ViewModel in 'DemoBlueprint.ViewModel.pas',
+  DemoControlPlan in 'DemoControlPlan.pas',
+  DemoGagePort in 'DemoGagePort.pas',
+  DemoUIConnect in 'DemoUIConnect.pas',
   DemoLogger.Contracts in 'DemoLogger.Contracts.pas',
   DemoAudit.Contracts in 'DemoAudit.Contracts.pas',
   DemoSession.Contracts in 'DemoSession.Contracts.pas';
@@ -373,7 +391,9 @@ Tick each box in order. Do not skip the compile.
 11. [ ] Re-index: `drag-lint index --project "circular-demo\CircularDemo.dproj" --db "circular-demo\_D-RAG\CircularDemo.sqlite"`
 12. [ ] Run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite"`. It must print exactly:
 ```text
-1 circular unit group(s) found:
+3 circular unit group(s) found:
+  [2 units] demouiconnect <-> demogageport   (implementation-only -- legal, lower impact)
+  [3 units] demoblueprint <-> democontrolplan <-> demoblueprint.viewmodel   (implementation-only -- legal, lower impact)
   [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (implementation-only -- legal, lower impact)
   (add --edges for the uses lines, --causes for the symbols to refactor)
 ```
@@ -395,6 +415,55 @@ After Part A these units still use each other through these edges (predicted):
 
 The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
 To do it: finish Part A (every checklist item), then run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite" --plan` again. It prints Part B as the same kind of numbered, mechanical steps, with line numbers for the edited files. The edge it will cut is `demoaudit -> democonfig`.
+
+## Cycle 2: demouiconnect <-> demogageport
+
+Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile blast radius). Optional to fix; the steps below are for when you want a fully acyclic uses-graph.
+
+Files:
+- `demouiconnect` -> `circular-demo\DemoUIConnect.pas`
+- `demogageport` -> `circular-demo\DemoGagePort.pas`
+
+### Why it cycles (implementation-section edges)
+- `demouiconnect` uses `demogageport` in its **implementation** section (`DemoUIConnect.pas`) via:
+    - line 47: `TDemoGagePort`  [class]  -> declared in `demogageport`
+- `demogageport` uses `demouiconnect` in its **implementation** section (`DemoGagePort.pas`) via:
+    - line 66: `GDemoUIConnect`  [var]  -> declared in `demouiconnect`
+    - line 76: `TDemoUIConnect`  [class]  -> declared in `demouiconnect`
+
+### Recommended fix (optional)
+No edge of this cycle can be cut mechanically:
+- `demouiconnect -> demogageport`: `TDemoGagePort` (class): its method bodies use `GDemoUIConnect`, `TDemoUIConnect`, which live in units of this cycle -- they would have to move with it
+- `demogageport -> demouiconnect`: `GDemoUIConnect` (var): it needs `TDemoUIConnect` (class), which cannot move: its method bodies use `TDemoGagePort`, which live in units of this cycle -- they would have to move with it
+
+The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
+This cycle is legal Delphi and compiles; leaving it is acceptable.
+
+## Cycle 3: demoblueprint <-> democontrolplan <-> demoblueprint.viewmodel
+
+Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile blast radius). Optional to fix; the steps below are for when you want a fully acyclic uses-graph.
+
+Files:
+- `demoblueprint` -> `circular-demo\DemoBlueprint.pas`
+- `democontrolplan` -> `circular-demo\DemoControlPlan.pas`
+- `demoblueprint.viewmodel` -> `circular-demo\DemoBlueprint.ViewModel.pas`
+
+### Why it cycles (implementation-section edges)
+- `demoblueprint` uses `demoblueprint.viewmodel` in its **implementation** section (`DemoBlueprint.pas`) via:
+    - line 74: `DemoBlueprintViewModelCreate`  [function]  -> declared in `demoblueprint.viewmodel`
+- `democontrolplan` uses `demoblueprint` in its **implementation** section (`DemoControlPlan.pas`) via:
+    - line 58: `TDemoBlueprint`  [class]  -> declared in `demoblueprint`
+- `demoblueprint.viewmodel` uses `democontrolplan` in its **implementation** section (`DemoBlueprint.ViewModel.pas`) via:
+    - line 69: `TDemoControlPlan`  [class]  -> declared in `democontrolplan`
+
+### Recommended fix (optional)
+No edge of this cycle can be cut mechanically:
+- `demoblueprint -> demoblueprint.viewmodel`: `DemoBlueprintViewModelCreate` (function): it is a routine: its body would have to move together with everything it uses, or be handed over as a parameter / event instead of being called by name
+- `democontrolplan -> demoblueprint`: `TDemoBlueprint` (class): its method bodies use `DemoBlueprintViewModelCreate`, which live in units of this cycle -- they would have to move with it
+- `demoblueprint.viewmodel -> democontrolplan`: `TDemoControlPlan` (class): its method bodies use `TDemoBlueprint`, which live in units of this cycle -- they would have to move with it
+
+The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
+This cycle is legal Delphi and compiles; leaving it is acceptable.
 ````
 
 ## What is worth noticing in that output
@@ -439,10 +508,53 @@ why.
 F1026 -- and the fix for each, because the index can miss a reference (for example a `set`
 type) and the compile is the final check.
 
+## The two cycles the playbook refuses -- and what would cut them
+
+Cycles 2 and 3 of the report above end in `No edge of this cycle can be cut mechanically`,
+with a reason per edge. Both are modelled on cycles found in a real client application, and
+both are shapes the playbook's one recipe -- move plain declarations into a leaf unit --
+cannot handle, because nothing on any edge is a plain declaration:
+
+| Cycle | Cheap edge | What is on it | Recipe (not in the engine today) |
+|---|---|---|---|
+| 3: `DemoBlueprint -> DemoBlueprint.ViewModel -> DemoControlPlan -> DemoBlueprint` | `DemoBlueprint -> DemoBlueprint.ViewModel` | ONE routine call, `DemoBlueprintViewModelCreate(FFolderId)` at `DemoBlueprint.pas:74`. Its signature uses only `Integer` and `IDemoBlueprintViewModel`, declared in the leaf `DemoBlueprint.Interfaces` that both units already use in their interface section. | **Routine-call inversion**: a procedural type mirroring the routine's signature, and a variable of it, in that leaf; assigned in `DemoBlueprint.ViewModel`'s `initialization`; `DemoBlueprint` calls the variable instead of the routine and drops the uses entry. |
+| 2: `DemoUIConnect <-> DemoGagePort` | `DemoUIConnect -> DemoGagePort` | The class `TDemoGagePort` as an `is` / `as` operand (4 sites) and READS of two members, `Log` and `LastGage`. No construction, no write, no class method. | **Member hand-over through an extracted interface**: a new leaf `DemoGagePort.Contracts` declaring `IDemoGagePortSurface` with the two members as read-only properties; `TDemoGagePort` implements it with two one-line getters; in `DemoUIConnect` `is` becomes `Supports(...)`, `as TDemoGagePort` becomes `as IDemoGagePortSurface`, and the uses entry switches to the leaf. |
+
+The other edges of each cycle construct a class or write a global, which no mechanical recipe
+covers -- but a cycle needs only ONE edge cut.
+
+Measured on 2026-10-19 (engine 1.32.0-alpha, Win64 Debug): the two recipes, written by hand
+in the playbook's own step format and applied by the same script that knows nothing about
+Pascal, compiled with 0 errors and 0 warnings, left the program's output byte-identical, and
+`cycles` then reported only the four-unit cycle. Two traps surfaced on the way, each a Delphi
+rule a recipe must encode:
+
+* **The procedural type must mirror the routine's signature verbatim.** `TFunc<Integer,
+  IDemoBlueprintViewModel>` looks equivalent, but the routine takes `const pFolderId: Integer`
+  and the result is `DemoBlueprint.ViewModel.pas(81): error E2010: Incompatible types:
+  'TFunc<Integer,IDemoBlueprintViewModel>' and 'Procedure'`. `function(const pFolderId:
+  Integer): IDemoBlueprintViewModel` compiles.
+* **`as <interface>` needs a receiver whose STATIC type implements `IInterface`.** `Owner` is
+  a `TComponent`, so `Owner as IDemoGagePortSurface` compiles; `Sender` is a `TObject`, so
+  `Sender as IDemoGagePortSurface` is `DemoUIConnect.pas(57): error E2015: Operator not
+  applicable to this operand type` (plus three follow-on errors). `TComponent(Sender) as
+  IDemoGagePortSurface` compiles, and behaves the same because the `Supports` guard runs
+  first, as the `is` guard did before.
+
+Neither recipe is in `cycles --plan` yet; E18 (`cycles --fix`) is the implementation plan for
+them. Until then this section is the record of what "mechanical" has to mean for these two
+shapes.
+
 ## Honest caveats
 
 * The report's own preamble says the index can miss a reference, so every procedure ends with
   a compile and a re-check. That caveat is drag-lint's, not ours.
+* The predicted `cycles` block at the end of Part A lists the three groups in a different
+  ORDER than `cycles` prints them after the edit (`[2 units]`, `[3 units]`, `[4 units]`
+  predicted; `[4 units]` first in the live output). The content is identical, and the
+  checklist only excuses a different order of the units INSIDE a group. A comparison that keys
+  on group order -- `tools\score-cycle-playbook.ps1` does -- reports that as a mismatch;
+  tracked under E18.
 * Fix ONE cycle at a time and re-run `cycles --plan`: after the first edit, the line numbers
   given for any other cycle are stale.
 * This project is deliberately small. It exists to make the output legible and to be the
@@ -451,8 +563,8 @@ type) and the compile is the final check.
 
 ## The globals, and why they matter here
 
-Seven module-level globals are shared across unit boundaries, each touched by at least two
-units:
+Seven module-level globals of the four-unit cycle are shared across unit boundaries, each
+touched by at least two units:
 
 | Global | Declared in | Written by | Read by |
 |---|---|---|---|

@@ -80,6 +80,12 @@
         <DCCReference Include="DemoSession.pas"/>
         <DCCReference Include="DemoLogger.pas"/>
         <DCCReference Include="DemoConfig.pas"/>
+        <DCCReference Include="DemoBlueprint.Interfaces.pas"/>
+        <DCCReference Include="DemoBlueprint.pas"/>
+        <DCCReference Include="DemoBlueprint.ViewModel.pas"/>
+        <DCCReference Include="DemoControlPlan.pas"/>
+        <DCCReference Include="DemoGagePort.pas"/>
+        <DCCReference Include="DemoUIConnect.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

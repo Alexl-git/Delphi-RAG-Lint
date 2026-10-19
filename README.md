@@ -491,10 +491,14 @@ drag-lint uses-fix MyUnit.pas --project MyApp.dproj --db myapp.sqlite --apply   
 
 ### A cycle report, generated not written
 
-[`circular-demo/`](circular-demo/) is a small (4-unit) sample project with a
-genuine four-unit `uses` cycle that still compiles -- one of the four edges is
-an `implementation` uses rather than an `interface` uses, which is exactly
-what makes it legal Delphi. The full writeup is at
+[`circular-demo/`](circular-demo/) is a small sample project (10 units) with
+three genuine `uses` cycles that still compile, each a different shape: a
+four-unit cycle coupled through `interface` uses and shared globals (one of its
+four edges is an `implementation` uses, which is exactly what makes it legal
+Delphi); a three-unit implementation-only cycle whose only cheap cut is a single
+routine call; and a two-unit implementation-only cycle whose only cheap cut is a
+member access behind `is` / `as`. The report plans the first one mechanically
+and says, per edge, why it refuses the other two. The full writeup is at
 [circular-demo/CYCLE-REPORT.md](circular-demo/CYCLE-REPORT.md).
 
 **This report is produced by drag-lint, not written by an AI.** It is the
@@ -522,7 +526,8 @@ elision):
    - Recipe: **extract a base class** and keep `TDemoSession` where it is. Why: its method bodies use `GDemoSessionCount`, `GDemoAuditCount`, `GDemoAuditTrail`, which live in units of this cycle; moving the class would mean moving those bodies (lines 64-73, 75-80, 82-86, 88-95, 97-100) AND everything they use.
 ...
 12. [ ] Run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite"`. It must print exactly:
-1 circular unit group(s) found:
+3 circular unit group(s) found:
+...
   [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (implementation-only -- legal, lower impact)
 ```
 
