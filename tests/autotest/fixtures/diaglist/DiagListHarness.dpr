@@ -301,5 +301,10 @@ begin
   Writeln('tm.project2=', JoinS(Prev.ProjectLines, 2));
   Writeln('tm.stale=', Prev.StaleCount);
   Writeln('tm.action=', Ord(RenamePreviewAction(Prev)));
-  Writeln('DONE');
-end.
+  { ta: B-19 -- once the plugin enforces job timeouts, a rename APPLY whose
+    preview reported a stale owner reindexes it first and needs that budget }
+  Writeln('ta.stale1=', RenameApplyTimeoutMs(Prev, 60000));
+  Writeln('ta.nodeadline=', RenameApplyTimeoutMs(Prev, 0));
+  Prev:= ParseRenamePreview('rename-owners: 1 of 1 indexes'#13#10 + 'rename-project: A index=fresh'#13#10);
+  Writeln('ta.fresh=', RenameApplyTimeoutMs(Prev, 60000));
+  Writeln('DONE');end.

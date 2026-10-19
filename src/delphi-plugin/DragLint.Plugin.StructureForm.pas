@@ -1614,9 +1614,9 @@ begin
                    if RenamePreviewAction(Preview) = rpaConfirm
                      then RenameConfirmText(ExtractFileName(FilePath), Preview.OldName, Preview.NewName, Preview)
                      else RenameLocalConfirmText(AProject, Preview),
-                   mtConfirmation, [mbYes, mbNo], 0, mbNo) = mrYes then EnqueueFixJob(FilePath, ATitle, ApplyCmd, ATimeoutMs, '')
+                   mtConfirmation, [mbYes, mbNo], 0, mbNo) = mrYes then EnqueueFixJob(FilePath, ATitle, ApplyCmd, RenameApplyTimeoutMs(Preview, ATimeoutMs), '')
               else Note:= 'cancelled -- nothing written';
-            rpaApply  : EnqueueFixJob(FilePath, ATitle, ApplyCmd, ATimeoutMs, '');
+            rpaApply  : EnqueueFixJob(FilePath, ATitle, ApplyCmd, RenameApplyTimeoutMs(Preview, ATimeoutMs), '');
           end; // case
         if Note = '' then Exit;
         ShowFixResultInPanels(FilePath, Title + ': ' + Note);

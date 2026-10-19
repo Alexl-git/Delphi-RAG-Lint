@@ -19,6 +19,8 @@
 
   Cases: preview, apply-all, cand-split (+ refusal), batch-drop, stale-owner,
   wrongdb (a DB stamped with another project's tag), member-missing,
+  transitive-missing (B-03: a closure unit no project file lists, created after
+  indexing -- the apply must rename it too, proven by re-index + dcc64),
   corrupt-db, library-owner, single-project (criterion 15: no rename- lines).
 
   Exit code: 0 on full pass, 1 on any failure.
@@ -72,8 +74,8 @@ function RunStdout([string[]]$EngArgs) {
   return $o
 }
 
-function UnitUser([string]$Name, [string]$Expr, [string[]]$Extra = @()) {
-  $l = @("unit $Name;", '', 'interface', '', 'uses', '  uShared;', '')
+function UnitUser([string]$Name, [string]$Expr, [string[]]$Extra = @(), [string[]]$Uses = @('uShared')) {
+  $l = @("unit $Name;", '', 'interface', '', 'uses', ('  ' + ($Uses -join ', ') + ';'), '')
   if ($Extra.Count -gt 0) { $l += 'const'; $l += $Extra; $l += '' }
   $l += @('function Get: Integer;', '', 'implementation', '', 'function Get: Integer;', 'begin', "  Result:= $Expr;", 'end;', '', 'end.')
   return $l
@@ -82,7 +84,8 @@ function UnitUser([string]$Name, [string]$Expr, [string[]]$Extra = @()) {
 # Rebuilds the whole fixture from scratch and indexes every project.
 function Reset {
   param([string[]]$SharedConsts = @('  My_Const = 1;'), [string]$Expr = 'My_Const',
-        [string[]]$BExtra = @(), [string[]]$ConstCase = @(), [switch]$Library, [switch]$NoOptIn, [switch]$Unindexed)
+        [string[]]$BExtra = @(), [string[]]$ConstCase = @(), [switch]$Library, [switch]$NoOptIn, [switch]$Unindexed,
+        [string[]]$MidUses = @('uShared'))
   foreach ($d in 'shared', 'twin', 'A', 'B', 'C', 'D') {
     if (Test-Path "$work\$d") { [IO.Directory]::Delete("$work\$d", $true) }
     New-Item -ItemType Directory "$work\$d" | Out-Null
@@ -94,7 +97,7 @@ function Reset {
   WriteAscii "$work\twin\uShared.pas"   $shared
   WriteAscii "$work\A\uA.pas" (UnitUser 'uA' $Expr @('  Local_Const = 5;'))
   WriteAscii "$work\B\uB.pas" (UnitUser 'uB' $Expr $BExtra)
-  WriteAscii "$work\C\uMid.pas" (UnitUser 'uMid' $Expr)
+  WriteAscii "$work\C\uMid.pas" (UnitUser 'uMid' $Expr @() $MidUses)
   WriteAscii "$work\D\uD.pas" (UnitUser 'uD' $Expr)
   WriteAscii "$work\A\A.dpr" @('program A;', '', 'uses', "  uShared in '..\shared\uShared.pas',", "  uA in 'uA.pas';", '', 'begin', 'end.')
   WriteAscii "$work\B\B.dpr" @('program B;', '', 'uses', "  uShared in '..\shared\uShared.pas',", "  uB in 'uB.pas';", '', 'begin', 'end.')
@@ -274,6 +277,38 @@ try {
   Check 'MM4 apply: C is reindexed' ($o -match '(?m)^rename-project: C index=reindexed\r?$') (Lines $o '^rename-project')
   Check 'MM5 ... uLate is rewritten' (((Txt 'C\uLate.pas') -cmatch 'Result:= MyConst;') -and ((Txt 'C\uLate.pas') -notmatch 'My_Const')) (Lines $o '^(rename-|autofix)')
   Check 'MM6 ... and C counts both of its references' ($o -match '(?m)^rename-target: L6 My_Const -> MyConst apply A=1 B=1 C=2\r?$') (Lines $o '^rename-target')
+
+  # ---------------------------------------------------------------- transitive-missing (B-03)
+  # INBOX rename-owner-transitive-members-unchecked: uMid's uses names uExtra, which C.dpr/C.dproj never list and
+  # which did not exist when C was indexed. Created afterwards, no indexed file changed, so per-row freshness and
+  # the declared-member check (T2) both read "fresh" -- and the apply left shared\uExtra.pas reading My_Const:
+  # project C no longer compiled. The owner check must cover the CLOSURE.
+  Check 'TM0 reset with uMid using uShared AND uExtra (absent at index time)' (Reset -MidUses @('uShared', 'uExtra')) ''
+  $extra = "$work\shared\uExtra.pas"
+  WriteAscii $extra (UnitUser 'uExtra' 'My_Const')
+  $h0 = (Hashes) + (Get-FileHash $extra).Hash
+  $cStamp = DbStamp "$work\C.sqlite"
+  $o = FixShared 6
+  Check 'TM1 preview: C is stale and names the transitive unit the index lacks (Ruling 12)' `
+    ($o -match ('(?m)^rename-project: C index=stale \(1 project member\(s\) not in the index: ' + [regex]::Escape($extra) + '\)\r?$')) (Lines $o '^rename-project')
+  Check 'TM2 ... and writes nothing: no source, not C.sqlite' ((((Hashes) + (Get-FileHash $extra).Hash) -eq $h0) -and ((DbStamp "$work\C.sqlite") -eq $cStamp)) ''
+  $o = FixShared 6 -Apply
+  Check 'TM3 apply: C is reindexed' ($o -match '(?m)^rename-project: C index=reindexed\r?$') (Lines $o '^rename-project')
+  Check 'TM4 ... uExtra is rewritten; no My_Const left in uMid or uExtra' `
+    (((Txt 'shared\uExtra.pas') -cmatch 'Result:= MyConst;') -and -not (((Txt 'shared\uExtra.pas') + (Txt 'C\uMid.pas')) -match 'My_Const')) (Lines $o '^(rename-|autofix)')
+  Check 'TM5 ... and C counts both of its references' ($o -match '(?m)^rename-target: L6 My_Const -> MyConst apply A=1 B=1 C=2\r?$') (Lines $o '^rename-target')
+  # the bytes, not the plan: C's index after a fresh incremental run holds no My_Const, and dcc64 compiles C
+  $null = Run @('index', '--project', $cDproj, '--db', "$work\C.sqlite")
+  # symbols AND refs: the declaration is renamed in every case; a reference left behind in uExtra is a refs row
+  $sq = RunStdout @('sql', '--query', "select (select count(*) from symbols where name = 'My_Const') + (select count(*) from refs where name_text = 'My_Const')", '--db', "$work\C.sqlite", '--json')
+  $left = try { [string](($sq | ConvertFrom-Json).rows[0][0]) } catch { "unparsed: $sq" }
+  Check 'TM6 ... re-indexed C holds no My_Const symbol or reference' ($left -eq '0') "got: $left"
+  $cOut = "$work\C\out"
+  New-Item -ItemType Directory -Force $cOut | Out-Null
+  WriteAscii "$work\C\build_c.bat" @('@echo off', 'call "C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat"', "cd /d `"$work\C`"", "dcc64 -U`"..\shared`" -E`"$cOut`" -N0`"$cOut`" C.dpr", 'echo BUILD_EXITCODE=%ERRORLEVEL%')
+  $null = Start-Process cmd.exe -ArgumentList '/c', "`"$work\C\build_c.bat`"" -RedirectStandardOutput "$work\C\build_c.log" -RedirectStandardError "$work\C\build_c.err" -NoNewWindow -Wait -PassThru
+  $cLog = Get-Content "$work\C\build_c.log" -Raw -ErrorAction SilentlyContinue
+  Check 'TM7 ... and project C COMPILES after the apply (dcc64, C.exe produced)' (($cLog -match 'BUILD_EXITCODE=0') -and (Test-Path "$cOut\C.exe")) (Lines $cLog 'Error|Fatal|BUILD_EXITCODE')
   # ---------------------------------------------------------------- unindexed (Ruling 14)
   # a configured section whose DB FILE does not exist is "no index": not an owner, not unknown, not blocking
   Check 'W0 reset with a section E whose DB was never built' (Reset -Unindexed) ''

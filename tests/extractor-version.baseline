@@ -958,4 +958,20 @@
 #   writes nothing. No parser, preprocessor or indexer path reaches it, so no stored parse
 #   can differ. Lives under src\index, hence inside the hashed surface.
 #   Superseded: 1.21.1-alpha|dc59cf349ac20a0a676b3c002bd9ecfab9294f15bc50140debd99642393140a3
-1.21.1-alpha|ba5b43cfb9f5257c609ea491739d4f6dffe56f43b701518b247a90afbaff13e5
+# 2026-10-18: hash re-pinned WITHIN 1.21.1-alpha (bug-fix wave 1.31.5, lane 4), per the
+#   "cannot affect extraction" rule above. src\index\DRagLint.Index.Manifest.pas gained
+#   TManifestIO.SaveEdits and its private JSON patch helpers (moved from
+#   Config.ManifestSession): a manifest WRITER used by the Config tool and migrate-dbs.
+#   ParseText / ParseTextEx / Load are byte-identical; no parser, preprocessor or indexer
+#   path calls SaveEdits, so no stored parse can differ.
+#   Superseded: 1.21.1-alpha|ba5b43cfb9f5257c609ea491739d4f6dffe56f43b701518b247a90afbaff13e5
+# 2026-10-18 (2nd): hash re-pinned WITHIN 1.21.1-alpha (bug-fix wave 1.31.5, lane 1), per the
+#   "cannot affect extraction" rule above. DRagLint.Core.Indexer.pas: TIndexer.IndexFile now
+#   checks the RAW bytes for the binary-DFM resource header FF 0A 00 (HasBinaryDfmHeader). On a
+#   hit it hands the raw bytes to the parser (so its binary-DFM diagnostic fires instead of
+#   "parse error (1,1)"), skips the preprocessor and scans empty text. Every file WITHOUT that
+#   header takes the old path byte-for-byte (EnsureUtf8Bytes unchanged), so no stored parse of a
+#   text file can differ. A binary DFM yielded zero symbols before (transcoded junk, parse error)
+#   and yields zero symbols now; only its diagnostic text changes. Re-pinned over lane 4's pin.
+#   Superseded: 1.21.1-alpha|28617e2f21ef90d69649df4608146b0b834005636e63ab41c97abeae52830502
+1.21.1-alpha|9d56cc96e2e365f7e25764f8cf119ac0c43f6962ff9f090ce61b08bad4ac3f06

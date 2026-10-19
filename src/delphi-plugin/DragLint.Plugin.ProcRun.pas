@@ -46,6 +46,14 @@ const
   /// grandchildren.</summary>
   PROCRUN_KILL_WAIT_MS = 5000;
 
+  /// <summary>What RunCaptureStdout and RunCaptureStdoutCancellable return
+  /// when ATimeoutMs elapsed while the child was still running (B-19). By then
+  /// the child's whole process tree has been killed and AOutput ends with a
+  /// 'timed out after N s' line. Negative like a spawn failure, so a caller
+  /// testing &lt; 0 already treats it as "no result"; compare with this
+  /// constant to tell the two apart.</summary>
+  PROCRUN_TIMED_OUT_EXIT_CODE = -2;
+
 type
   /// <summary>Line callback for RunCaptureStreaming. TProc&lt;string&gt; allows
   /// anonymous closures so callers can capture local variables inline.</summary>
@@ -56,8 +64,11 @@ type
 /// <param name="ACmdLine">Full command line, as CreateProcessW takes it.</param>
 /// <param name="AOutput">Receives everything the child wrote to stdout and
 /// stderr, interleaved.</param>
-/// <param name="ATimeoutMs">Milliseconds to wait for the exit; &lt;=0 = INFINITE.</param>
-/// <returns>The child exit code, or a negative value if it could not start.</returns>
+/// <param name="ATimeoutMs">Deadline for the WHOLE run, in milliseconds,
+/// enforced while the output is being read: on expiry the child's process tree
+/// is killed. &lt;=0 = no deadline.</param>
+/// <returns>The child exit code; PROCRUN_TIMED_OUT_EXIT_CODE when the deadline
+/// expired; -1 if it could not start.</returns>
 function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer): Integer;
 
 /// <summary>As RunCaptureStdout, but publishes the child's process handle and
@@ -66,7 +77,8 @@ function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutM
 /// <param name="ACmdLine">Full command line, as CreateProcessW takes it.</param>
 /// <param name="AOutput">Receives stdout and stderr, interleaved. MEANINGLESS
 /// on a run that was superseded -- discard it rather than parse it.</param>
-/// <param name="ATimeoutMs">Milliseconds to wait for the exit; &lt;=0 = INFINITE.</param>
+/// <param name="ATimeoutMs">Deadline for the whole run, as for RunCaptureStdout;
+/// &lt;=0 = no deadline.</param>
 /// <param name="APriority">Priority class for the child: 0 to inherit the
 /// parent's, BELOW_NORMAL_PRIORITY_CLASS for background work.</param>
 /// <param name="AHandle">Receives the process handle as soon as the child
@@ -76,8 +88,8 @@ function RunCaptureStdout(const ACmdLine: string; out AOutput: string; ATimeoutM
 /// <param name="APid">Receives the child's process id, for supersession
 /// telemetry. A PID is the only identity that can distinguish THIS child from
 /// the resident LSP drag-lint.exe, which a name-based check cannot.</param>
-/// <returns>The child exit code, or a negative value if it could not start.
-/// A KILLED child still returns here (the pipe closes), so a caller that
+/// <returns>The child exit code; PROCRUN_TIMED_OUT_EXIT_CODE when the deadline
+/// expired; -1 if it could not start. A KILLED child still returns here (the pipe closes), so a caller that
 /// superseded the run must discard the result rather than read this.</returns>
 /// <remarks>Safe to call KillProcess(AHandle) from another thread while this
 /// call is in progress; that is what it is for.</remarks>
@@ -126,12 +138,33 @@ const
     still share by value rather than by call. }
   PROCRUN_PIPE_CHUNK = 4096;
 
+  { Idle slice of RunCore's bounded read loop: how long it parks on the child's
+    handle while the pipe is empty before it looks at the pipe and the clock
+    again. It bounds both the timeout's overshoot and the latency of output from
+    a child that is still running. }
+  PROCRUN_POLL_MS = 25;
+
+{ The line RunCore appends to AOutput on a timeout. }
+function TimedOutText(ATimeoutMs: Integer): string;
+begin
+  Result:= Format('drag-lint plugin: timed out after %d s; the child process tree was killed',
+                  [(ATimeoutMs + MSecsPerSec div 2) div MSecsPerSec]);
+end;
+
 { The one body behind RunCaptureStdout and RunCaptureStdoutCancellable.
 
   AHandleOut = nil  -> this function owns PI.hProcess and closes it (the
                        original, uncancellable contract).
   AHandleOut <> nil -> the handle is published to the caller the instant the
-                       child exists, and the CALLER closes it. }
+                       child exists, and the CALLER closes it.
+
+  THE DEADLINE COVERS THE WHOLE RUN (B-19). Until 1.31.5 the loop sat in a
+  blocking ReadFile until EOF and only then waited ATimeoutMs, so the timeout
+  bounded the wait AFTER the child had finished writing and never fired on a
+  hung child. Now the pipe is peeked, read only when it holds data, and the
+  clock is checked on every pass; an idle pass parks on the child's handle for
+  PROCRUN_POLL_MS. On expiry the whole job -- the child and everything it
+  spawned -- is terminated. }
 function RunCore(const ACmdLine: string; out AOutput: string; ATimeoutMs: Integer;
   ACreationFlags: DWORD; AHandleOut: PHandle; APidOut: PDWORD): Integer;
 var
@@ -146,6 +179,11 @@ var
   WideCmd  : string                    ;
   SB       : TStringBuilder            ;
   TV       : DWORD                     ;
+  Job      : THandle                   ;
+  Avail    : DWORD                     ;
+  Deadline : UInt64                    ;
+  NowMs    : UInt64                    ;
+  TimedOut : Boolean                   ;
 begin
   Result:= -1;
   AOutput:= '';
@@ -155,6 +193,12 @@ begin
   SA.bInheritHandle:= True;
   SA.lpSecurityDescriptor:= nil;
   if not CreatePipe(ReadPipe, WritePipe, @SA, 0) then Exit;
+  { The job is what makes a timeout kill the TREE: a cmd.exe /c wrapper, or the
+    engine's own dcc / graph children, inherit the pipe's write end, and killing
+    only the direct child leaves them holding it open. No KILL_ON_JOB_CLOSE: a
+    child that ends normally may leave a detached process behind on purpose,
+    and closing the job must not take that down. }
+  Job:= CreateJobObject(nil, nil);
   try
     SetHandleInformation(ReadPipe, HANDLE_FLAG_INHERIT, 0);
     FillChar(SI, SizeOf(SI), 0);
@@ -166,42 +210,87 @@ begin
     FillChar(PI, SizeOf(PI), 0);
     WideCmd:= ACmdLine;
     UniqueString(WideCmd);
-    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, ACreationFlags, nil, nil, SI, PI) then
+    { Suspended, so the child cannot spawn anything before it is in the job. }
+    if not CreateProcessW(nil, PWideChar(WideCmd), nil, nil, True, ACreationFlags or CREATE_SUSPENDED,
+                          nil, nil, SI, PI) then
     begin
       CloseHandle(WritePipe);
       Exit;
     end;
-    { BEFORE the blocking read below, never after it -- see the unit header. }
+    { A job that cannot take the child (an enclosing job that forbids nesting)
+      degrades to killing the direct child only. }
+    if (Job <> 0) and not AssignProcessToJobObject(Job, PI.hProcess) then
+    begin
+      CloseHandle(Job);
+      Job:= 0;
+    end;
+    { BEFORE the read loop below, never after it -- see the unit header. }
     if AHandleOut <> nil then AHandleOut^:= PI.hProcess    ;
     if APidOut    <> nil then APidOut^   := PI.dwProcessId ;
+    ResumeThread(PI.hThread);
     CloseHandle(WritePipe);
+    Deadline:= if ATimeoutMs > 0 then GetTickCount64 + UInt64(ATimeoutMs) else High(UInt64);
+    TimedOut:= False;
     SB:= TStringBuilder.Create;
     try
-      { The dl:ok below: Buf is an OUTPUT buffer. ReadFile fills it and reports
-        how many bytes it wrote; nothing here reads it first. The flow lattice
-        cannot see through an untyped var parameter, so it scores the call as a
-        read of uninitialised memory. }
       repeat
+        if GetTickCount64 >= Deadline then
+        begin
+          TimedOut:= True;
+          Break;
+        end;
+        Avail:= 0;
+        { A failed peek is the broken pipe: every writer has closed it -- EOF. }
+        if not PeekNamedPipe(ReadPipe, nil, 0, nil, @Avail, nil) then Break;
+        if Avail = 0 then
+        begin
+          { Idle. Once the child has exited its handle is signalled, and the
+            slice becomes a plain sleep while a grandchild still holding the
+            pipe finishes. }
+          if WaitForSingleObject(PI.hProcess, PROCRUN_POLL_MS) = WAIT_OBJECT_0 then Sleep(PROCRUN_POLL_MS);
+          Continue;
+        end;
+        if Avail > SizeOf(Buf) - 1 then Avail:= SizeOf(Buf) - 1;
         BytesRead:= 0;
-        if not ReadFile(ReadPipe, Buf[0], SizeOf(Buf) - 1, BytesRead, nil) then Break;  // dl:ok used-before-assignment@50aa
+        if not ReadFile(ReadPipe, Buf[0], Avail, BytesRead, nil) then Break;
         if BytesRead = 0 then Break;
         Buf[BytesRead]:= #0;
         SB.Append(string(AnsiString(Buf)));
       until False;
+      if not TimedOut then
+      begin
+        { EOF is normally the exit, but a child can close its stdout and keep
+          running: the exit is bounded by what is left of the deadline. }
+        NowMs:= GetTickCount64;
+        if ATimeoutMs <= 0 then TV:= INFINITE
+        else TV:= if NowMs >= Deadline then 0 else DWORD(Deadline - NowMs);
+        TimedOut:= WaitForSingleObject(PI.hProcess, TV) = WAIT_TIMEOUT;
+      end;
+      if TimedOut then
+      begin
+        if (Job = 0) or not TerminateJobObject(Job, PROCRUN_KILLED_EXIT_CODE) then
+          TerminateProcess(PI.hProcess, PROCRUN_KILLED_EXIT_CODE);
+        WaitForSingleObject(PI.hProcess, PROCRUN_KILL_WAIT_MS);
+        if (SB.Length > 0) and (SB.Chars[SB.Length - 1] <> #10) then SB.AppendLine;
+        SB.Append(TimedOutText(ATimeoutMs));
+        Result:= PROCRUN_TIMED_OUT_EXIT_CODE;
+      end
+      else
+      begin
+        GetExitCodeProcess(PI.hProcess, ExitCode);
+        Result:= Integer(ExitCode);
+      end;
       AOutput:= SB.ToString;
     finally
       SB.Free;
     end;
-    if ATimeoutMs <= 0 then TV:= INFINITE else TV:= DWORD(ATimeoutMs);
-    WaitForSingleObject(PI.hProcess, TV);
-    GetExitCodeProcess (PI.hProcess, ExitCode);
-    Result:= Integer(ExitCode);
     { A published handle belongs to the caller: a killer thread may be holding
       it right now, and closing it here would be a use-after-close. }
     if AHandleOut = nil then CloseHandle(PI.hProcess);
     CloseHandle(PI.hThread );
   finally
     CloseHandle(ReadPipe);
+    if Job <> 0 then CloseHandle(Job);
   end;
 end;
 

@@ -2452,6 +2452,7 @@ var
               CollectReadsAndCallDefs(It.Node.ChildByField('rhs'), PF.Src, Vars, Reads, CallDefs, RecMethodDef, ParamMode)
             else
               CollectReadsAndCallDefs(It.Node, PF.Src, Vars, Reads, CallDefs, RecMethodDef, ParamMode);
+            ApplyWithRecordEntity(It, PF.Src, Vars, Reads, CallDefs, RecMethodDef); { B-14: `with Rec do` }
             { flag reads of unmanaged locals not yet must-assigned (skip opaque with-bodies) }
             { Left-to-right sequencing inside this item's own and/or chains, so
               `Supports(.., V) and V.Method` and
@@ -3248,6 +3249,9 @@ begin
         if OracleHit(AStore.FlowOracles.RecDef, DK, Cached, Verifying) then Exit(Cached);
         if not Verifying then Miss := True;
         if not IsRecordType(ATypeText, AStore, AFileId) then Exit;
+        { An EMPTY member name asks only "is this a record type" -- the `with Rec
+          do` entity (ApplyWithRecordEntity, B-14) names no member. }
+        if AMemberName = '' then Exit(True);
         RecSym := AStore.ResolveTypeNameToClass(Trim(ATypeText), AFileId);
         if RecSym.Id <= 0 then Exit;
         { records have no ancestry (no class heritage), so a direct child lookup

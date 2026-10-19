@@ -414,6 +414,98 @@ begin
     if LowName = ALIASES[I] then Exit(True);
 end;
 
+const
+  { Unscoped (pre-XE2) spellings of the scoped RTL/VCL units, so a legacy
+    'uses ActiveX, ComObj, CommCtrl;' resolves without a library index. Derived
+    MECHANICALLY (2026-10-18, V-D) from the RAD Studio 37.0 source tree: every
+    <scope>.<Name>.pas with a single-segment Name, scope in Winapi, System.Win,
+    Data.Win, Vcl.Imaging/Touch/Samples/Shell, Vcl, Data, Bde, System. Includes
+    the Delphi-classic names that survive only as scoped units (Ole2, OleAuto,
+    CommCtrl, ...). Regenerate by the same walk when a new RAD Studio ships. }
+  CUnscopedRtlUnits =
+    'abaccessibility,accctrl,aclapi,actions,activex,actncolormaps,actnctrls,actnlist,actnman,' +
+    'actnmenus,actnpopup,adoconed,adoconst,adodb,adoint,ai,analytics,ansistrings,appanalytics,' +
+    'appevnts,applicationmodel,asptlb,axctrls,bandactn,baseimagecollection,bdeconst,beacon,' +
+    'bluetooth,bluetoothle,bluetoothwinrt,buttongroup,buttons,calendar,captioneddocktree,' +
+    'categorybuttons,character,checklst,classes,clipbrd,cmadmctl,colorgrd,comadmin,comconst,' +
+    'comctrls,commctrl,commdlg,commonnames,commontypes,comobj,comobjwrapper,comserv,comstrs,' +
+    'comsvcs,consts,contnrs,controllist,controls,convutils,cor,corerror,corhdr,cpl,crtl,curl,' +
+    'customizedlg,d2d1,d3d10,d3d10_1,d3d11,d3d11_1,d3d11_2,d3d11_3,d3d11on12,d3d11sdklayers,' +
+    'd3d11shader,d3d11shadertracing,d3d12,d3d12sdklayers,d3d12shader,d3dcommon,d3dcompiler,d3dx10,' +
+    'd3dx8,d3dx9,datart,dateutils,db,dbactns,dbbdeweb,dbbytebuffer,dbcgrids,dbclientactns,dbcommon,' +
+    'dbcommontypes,dbconnadmin,dbconsts,dbctrls,dbgrids,dbjson,dblogdlg,dblookup,dbolectl,dbpwdlg,' +
+    'dbtables,dbxcdsreaders,dbxclassregistry,dbxclient,dbxclientresstrs,dbxcommon,dbxcommonindy,' +
+    'dbxcommonresstrs,dbxcommontable,dbxcompressionfilter,dbxdataexpressmetadataprovider,' +
+    'dbxdatasets,dbxdatasnap,dbxdb2,dbxdb2metadata,dbxdb2metadatareader,dbxdb2metadatawriter,' +
+    'dbxdb2readonlymetadata,dbxdbreaders,dbxdelegate,dbxdynalink,dbxdynalinknative,dbxencryption,' +
+    'dbxfirebird,dbxfirebirdmetadata,dbxfirebirdmetadatareader,dbxfirebirdmetadatawriter,' +
+    'dbxfirebirdreadonlymetadata,dbxhttplayer,dbxinformix,dbxinformixmetadata,' +
+    'dbxinformixmetadatareader,dbxinformixmetadatawriter,dbxinformixreadonlymetadata,dbxinterbase,' +
+    'dbxinterbasemetadata,dbxinterbasemetadatareader,dbxinterbasemetadatawriter,' +
+    'dbxinterbasereadonlymetadata,dbxjson,dbxjsoncommon,dbxjsonreflect,dbxmemoryrow,' +
+    'dbxmessagehandlercommon,dbxmessagehandlerjsonclient,dbxmessagehandlerjsoncommon,' +
+    'dbxmessagehandlerjsonserver,dbxmessagehandlerserver,dbxmetadatacommandfactory,' +
+    'dbxmetadatacommon,dbxmetadatanames,dbxmetadataprovider,dbxmetadatareader,dbxmetadatautil,' +
+    'dbxmetadatawriter,dbxmetadatawriterfactory,dbxmssql,dbxmssqlmetadata,dbxmssqlmetadatareader,' +
+    'dbxmssqlmetadatawriter,dbxmssqlreadonlymetadata,dbxmysql,dbxmysqlmetadata,' +
+    'dbxmysqlmetadatareader,dbxmysqlmetadatawriter,dbxmysqlreadonlymetadata,dbxodbc,' +
+    'dbxodbcmetadata,dbxodbcmetadatareader,dbxodbcmetadatawriter,dbxodbcreadonlymetadata,' +
+    'dbxodbcresstrs,dbxopenssl,dbxopensslres,dbxoracle,dbxoraclemetadata,dbxoraclemetadatareader,' +
+    'dbxoraclemetadatawriter,dbxoraclereadonlymetadata,dbxplatform,dbxpool,dbxsocketchannelnative,' +
+    'dbxsqlite,dbxsqlitemetadata,dbxsqlitemetadatareader,dbxsqlitemetadatawriter,' +
+    'dbxsqlitereadonlymetadata,dbxsqliteresstrs,dbxsqlscanner,dbxstream,dbxstreamplatform,' +
+    'dbxsybaseasa,dbxsybaseasametadata,dbxsybaseasametadatareader,dbxsybaseasametadatawriter,' +
+    'dbxsybaseasareadonlymetadata,dbxsybasease,dbxsybaseasemetadata,dbxsybaseasemetadatareader,' +
+    'dbxsybaseasemetadatawriter,dbxsybaseasereadonlymetadata,dbxtablefactory,dbxtrace,dbxtransport,' +
+    'dbxtransportfilter,dbxtypedtablestorage,ddeman,ddeml,devices,diagnostics,dialogs,direct2d,' +
+    'direct3d,direct3d8,direct3d9,directdraw,directinput,directmusic,directplay8,directshow9,' +
+    'directsound,diroutln,dlgs,docktabset,drtable,dsutil,dwmapi,dx7todx8,dxdiag,dxfile,dxgi,' +
+    'dxgi1_2,dxgi1_3,dxgi1_4,dxgiformat,dxgitype,dxtypes,edge,edgeconst,edgeutils,extactns,' +
+    'extctrls,extdlgs,filectrl,firedacjsonconsts,firedacjsonreflect,flatsb,fmtbcd,forms,' +
+    'formtabsbar,foundation,functiondiscovery,gaming,gauges,gdipapi,gdipobj,gdiputil,gestureconsts,' +
+    'gesturectrls,gesturemgr,gestures,gifconsts,gifimg,globalization,graphics,graphicsrt,graphutil,' +
+    'grids,hash,helpintfs,highdpi,hstringiterables,htmlhelpviewer,idantifreeze,ieinterfaces,' +
+    'imagecollection,imagehlp,imagelist,imglist,imm,imouse,inifiles,internetexplorer,ioutils,' +
+    'ipexport,iphlpapi,iprtrmib,iptypes,isapi,isapi2,jconsts,jpeg,json,jsonconsts,jumplist,' +
+    'keyboard,keyboardtypes,knownfolders,listactns,locationapi,lzexpand,management,manipulations,' +
+    'mapi,mask,masks,maskutils,math,media,menus,messages,messaging,mlang,mmsystem,mplayer,msctf,' +
+    'mshtmhst,msinkaut,msinkaut15,msxml,msxmlintf,mtsobj,mtx,multimon,navview,nb30,netconsts,' +
+    'netencoding,networking,notification,numberbox,objauto,objcomauto,objectarray,odbc,ole2,oleacc,' +
+    'oleauto,oleconst,olecontrols,olectl,olectnrs,olectrls,oledb,oledlg,oleserver,oleservers,' +
+    'opengl,openglext,outline,peninputpanel,penwin,perception,permissions,' +
+    'platformdefaultstyleactnctrls,pngimage,pnglang,portabledevicetypes,printers,propkey,propsys,' +
+    'psapi,pushnotification,qos,recerror,registry,regstr,regularexpressions,regularexpressionsapi,' +
+    'regularexpressionsconsts,regularexpressionscore,richedit,rpmalloc,rtlconsts,rtscom,rtti,' +
+    'scktcomp,security,sensors,sensorsapi,servicesrt,shadowwnd,sharecontract,sharemem,' +
+    'shellanimations,shellapi,shellconsts,shellctrls,shellscaling,shfolder,shlobj,shlwapi,' +
+    'simplesharemem,skia,smintf,spellcheck,spin,sqlconst,sqlexpr,sqlite,sqltimst,startupcopy,' +
+    'stdactnmenus,stdactns,stdconvs,stdctrls,stdstyleactnctrls,stdvcl,storage,structuredquery,' +
+    'structuredquerycondition,strutils,styleapi,stylebitmap,styles,svcmgr,syncobjs,sysconst,' +
+    'sysstyles,systemrt,sysutils,tabnotbk,tabs,tabview,taskbar,taskbarcore,themedactnctrls,themes,' +
+    'threading,timespan,titlebarctrls,tlhelp32,toolwin,tpcshrd,types,typinfo,ui,uiactrlprovider,' +
+    'uiautomation,uiconsts,uitypes,urlmon,userenv,uxtheme,valedit,varcmplx,varconv,variants,' +
+    'varutils,vclcom,vdbconsts,viewctrlutil,virtualimage,virtualimagelist,vulkan,wbem,webrt,' +
+    'webview2,wicimageinit,widestrings,widestrutils,wincodec,wincred,windows,windowsstore,' +
+    'winhelpviewer,winhttp,wininet,winrt,winrtmetadata,winsafer,winsock,winsock2,winspool,winsvc,' +
+    'winxcalendars,winxctrls,winxpanels,winxpickers,wmf9,wtsapi32,xpactnctrls,xpman,' +
+    'xpstyleactnctrls,zip,zlib,zlibconst';
+
+var
+  GUnscopedRtlUnits: THashSet<string>;
+
+function IsUnscopedRtlUnit(const ALowName: string): Boolean;
+var
+  Name: string;
+begin
+  if GUnscopedRtlUnits = nil then
+  begin
+    GUnscopedRtlUnits:= THashSet<string>.Create;
+    for Name in CUnscopedRtlUnits.Split([',']) do
+      GUnscopedRtlUnits.Add(Name);
+  end;
+  Result:= GUnscopedRtlUnits.Contains(ALowName);
+end;
+
 function IsRtlNamespaceUnit(const AUnitName: string): Boolean;
 const
   NS: array[0..8] of string = ('system.', 'vcl.', 'fmx.', 'winapi.', 'data.', 'datasnap.', 'soap.', 'web.', 'firedac.');
@@ -430,6 +522,7 @@ begin
     if StartsText(NS[I], LowName) then Exit(True);
   for I:= System.Low(BARE) to System.High(BARE) do
     if LowName = BARE[I] then Exit(True);
+  Result:= IsUnscopedRtlUnit(LowName);
 end;
 
 function ResolveUsedUnit(const AUnitName: string;
@@ -450,5 +543,10 @@ begin
   if IsRtlNamespaceUnit(AUnitName) then
     begin Result.Resolvable:= True; Result.Via:= urvRtlNamespace; Exit; end;
 end;
+
+initialization
+
+finalization
+  GUnscopedRtlUnits.Free;
 
 end.

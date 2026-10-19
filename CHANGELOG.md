@@ -55,6 +55,23 @@ breaking changes** until v1.0.
   verbs above. Docs: `docs\wiki\Draglint-Protocol-Handler.md`, `docs\wiki\Register-MCP-Server.md`, feature
   registry entry `protocol-handler`.
 
+## v1.31.5-alpha -- 2026-10-18
+
+### Fixed
+- **A binary `.dfm` is named, not a parse error.** `index` reports "binary DFM (TPF0) -- save as Text DFM..." instead of "parse error (1,1)". Text files are extracted byte-for-byte as before (no re-parse). Guard: `tests\autotest\run_vm_polish_guard.ps1`.
+- **`index` no longer writes "FTS5 probe: AVAILABLE" to stderr** (it showed as a red NativeCommandError in PowerShell 5.1).
+- **`used-unit-not-resolvable` knows the unscoped RTL/VCL names** (`ActiveX`, `ComObj`, `CommCtrl` ... 490 names walked from the Studio 37 source), and its advice text is neutral instead of Orpheus/BDE hints. Guard: `run_used_unit_rtl_aliases.ps1`.
+- **Config tool Save writes only your edits into the file it opened** -- unmodelled keys are kept and no merged local manifest is written into the global file (B-22). `migrate-dbs` keeps unmodelled keys too. Guards: `run_config_save_guard.ps1`, `run_migrate_dbs_keeps_unmodelled_keys.ps1`.
+- **`resolve-dbs --in` prints a stderr NOTE for a file no index covers** instead of silence (B-20). Guard: `run_resolve_dbs_in_uncovered.ps1`.
+- **Multi-project rename checks each owner against its compile closure**: a unit reached transitively but missing from the index refuses the rename instead of a partial apply and a broken build (B-03).
+- **`object-leak` ignores `TArray<T>.Create`; `used-before-assignment` does not count `with Rec do` on a record local as a use** (a class local still fires) (B-08, B-14).
+- **Index into a new database is quiet and accurate**: no no-resolver-stamp / no-scan_type notes and no "limit 0"; the whole-DB reason gives real new/changed counts; the ~37-minute warning prints only from 1M refs (`DRAGLINT_WHOLEDB_SLOW_REFS` overrides).
+- **`allow` accepts a whole-routine metric marker wherever `lint` reports it** (large files, nested routines, multi-line headers) -- `lint`, `lint-all` and `allow` share one routine-metric pass (B-10, B-11). An `allow` batch on a wrapped statement no longer deletes the continuation line's marker (B-12). `lint-all` refuses `--file` / `--in` (exit 2) instead of ignoring them.
+- **`document --apply` keeps what it cannot see**: a managed facts block is kept when a hand-written summary leaves no fence (B-05); shared units converge -- a certain caller is never downgraded to `?` by a project that cannot resolve it, ending the YADF/YADFOT rewrite loop (B-06); regeneration keeps the legacy Pure paragraph the checker accepts (B-07).
+
+### IDE plugin
+- **Job timeouts are enforced while the engine runs.** On expiry the process tree is killed and the job shows "timed out after N s"; a rename with stale owners gets 600 s per owner (B-19).
+
 ## v1.31.4-alpha -- 2026-10-17
 
 ### Distribution

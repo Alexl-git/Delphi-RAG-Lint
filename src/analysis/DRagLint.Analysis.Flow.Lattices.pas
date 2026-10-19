@@ -228,6 +228,8 @@ type
   /// style) way to establish its initial state. Nil on every store-free
   /// CollectReadsAndCallDefs caller -- every dot-access then keeps today's
   /// plain-read behaviour, so the bare lint path (no ISymbolStore) is unaffected.
+  /// An EMPTY AMemberName asks only whether ATypeText is a record type (used by
+  /// ApplyWithRecordEntity for `with Rec do`, B-14).
   /// <!-- drag-lint:auto BEGIN -->
   /// <para>Used by: declaration (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Analysis.Flow.Lattices.TDefiniteAssignment.Create (DRagLint.Analysis.Flow.Lattices.pas), DRagLint.Diagnostics.FlowChecks.TFlowChecker.Check (DRagLint.Diagnostics.FlowChecks.pas)</para>
   /// <!-- drag-lint:auto END -->
@@ -887,7 +889,10 @@ type
   end;
 
 /// <summary>True if the expression subtree is a constructor call (`T.Create...`):
-/// it contains an `exprDot` whose member identifier is `Create`.</summary>
+/// it contains an `exprDot` whose member identifier is `Create`. The dynamic-array
+/// constructor intrinsic `TArray&lt;T&gt;.Create(..)` / `System.TArray&lt;T&gt;.Create(..)` is
+/// NOT a constructor here: it yields a reference-counted array, never an object to
+/// free (B-08).</summary>
 /// <param name="N"><!-- drag-lint:auto type -->const TTSNode</param>
 /// <param name="ASrc"><!-- drag-lint:auto type -->const TBytes</param>
 /// <returns><!-- drag-lint:auto -->Boolean -- Observed: False;
@@ -1053,6 +1058,29 @@ procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>;
   const AIsRecordMethodDef: TRecordMethodDefPredicate = nil;
   const AParamMode: TParamModeLookup = nil);
+
+/// <summary>Reclassifies the entity of `with F do` from a READ of F to a
+/// DEFINITION of F when F is a bare RECORD local: moves its index from AReads to
+/// ACallDefs. No-op for any other item.</summary>
+/// <param name="AItem">The CFG item whose reads/defs were just collected into
+/// AReads / ACallDefs; only an item with WithEntity set qualifies.</param>
+/// <param name="ASrc">Source bytes of the unit.</param>
+/// <param name="AVars">The routine's variable table.</param>
+/// <param name="AReads">Read indices collected for AItem; edited in place.</param>
+/// <param name="ACallDefs">Possible-def indices collected for AItem; edited in place.</param>
+/// <param name="AIsRecordMethodDef">The record-method seam predicate; asked with an
+/// EMPTY member name, which means "is ATypeText a record type". Nil (store-free
+/// lint) makes this a no-op, so the bare path keeps today's behaviour.</param>
+/// <remarks>B-14. `with` on a record takes its address and reads no value; the
+/// with-body is opaque, and filling the fields in it is how such a record gets its
+/// value -- the same assumption the record-method-call seam makes for `F.Init`. A
+/// CLASS entity (`with Obj do`) dereferences Obj, so it never qualifies and an
+/// unassigned class local in a `with` keeps being reported. Only a bare
+/// `identifier` entity qualifies; `with A.B do` / `with TFoo.Create do` are left
+/// alone. Pinned by tests\autotest\run_uba_with_record.ps1.</remarks>
+procedure ApplyWithRecordEntity(const AItem: TCfgItem; const ASrc: TBytes;
+  AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>;
+  const AIsRecordMethodDef: TRecordMethodDefPredicate);
 
 /// <summary>Index of the variable an `assignment` node defines as a WHOLE
 /// (its plain lhs), or -1 when the lhs is an indexed/qualified write (a[i] / x.f)
@@ -1518,6 +1546,21 @@ begin
   end;
 end;
 
+procedure ApplyWithRecordEntity(const AItem: TCfgItem; const ASrc: TBytes;
+  AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>;
+  const AIsRecordMethodDef: TRecordMethodDefPredicate);
+var Idx: Integer;
+begin
+  if not AItem.WithEntity then Exit;
+  if not Assigned(AIsRecordMethodDef) then Exit;
+  if AItem.Node.NodeType <> 'identifier' then Exit;
+  Idx := AVars.IndexOf(LowerCase(NodeStr(AItem.Node, ASrc)));
+  if Idx < 0 then Exit;
+  if not AIsRecordMethodDef(AVars.Get(Idx).TypeText, '') then Exit;
+  AReads.Remove(Idx);
+  if ACallDefs.IndexOf(Idx) < 0 then ACallDefs.Add(Idx);
+end;
+
 procedure CollectReadsAndCallDefs(const ANode: TTSNode; const ASrc: TBytes;
   AVars: TRoutineVarTable; AReads, ACallDefs: TList<Integer>;
   const AIsRecordMethodDef: TRecordMethodDefPredicate = nil;
@@ -1910,6 +1953,7 @@ begin
       else
       begin
         CollectReadsAndCallDefs(It.Node, FSrc, FVars, Reads, CallDefs, FIsRecordMethodDef, FParamMode);
+        ApplyWithRecordEntity(It, FSrc, FVars, Reads, CallDefs, FIsRecordMethodDef); { B-14: `with Rec do` }
         { a var passed to a call (or @x) may be a var/out param the callee assigns
           (e.g. SetLength(Result,..)); treat as assigned to suppress the finding }
         for J := 0 to CallDefs.Count - 1 do begin Result.Must[CallDefs[J]] := True; Result.May[CallDefs[J]] := True; end;
@@ -2157,18 +2201,29 @@ end;
 
 { ----- escape / object-leak helpers + TEscape ----- }
 
+{ B-08: `TArray<T>.Create(..)` (also `System.TArray<T>`) is the dynamic-array
+  constructor intrinsic -- a reference-counted array, nothing to free. The
+  receiver text is compared with whitespace removed so `TArray< string >` counts. }
+function ReceiverIsDynArrayType(const ADot: TTSNode; const ASrc: TBytes): Boolean;
+var R: string;
+begin
+  R := StringReplace(NodeText(ADot.ChildByField('lhs'), ASrc), ' ', '', [rfReplaceAll]);
+  if R.StartsWith('system.') then R := Copy(R, Length('system.') + 1, MaxInt);
+  Result := R.StartsWith('tarray<');
+end;
+
 function ExprIsConstructor(const N: TTSNode; const ASrc: TBytes): Boolean;
 var Ent: TTSNode;
 begin
   Result := False;
   if N.IsNull then Exit;
   if N.NodeType = 'exprDot' then
-    Exit(NodeText(N.ChildByField('rhs'), ASrc) = 'create');
+    Exit((NodeText(N.ChildByField('rhs'), ASrc) = 'create') and not ReceiverIsDynArrayType(N, ASrc));
   if N.NodeType = 'exprCall' then
   begin
     Ent := N.ChildByField('entity');
     if (not Ent.IsNull) and (Ent.NodeType = 'exprDot') then
-      Exit(NodeText(Ent.ChildByField('rhs'), ASrc) = 'create');
+      Exit((NodeText(Ent.ChildByField('rhs'), ASrc) = 'create') and not ReceiverIsDynArrayType(Ent, ASrc));
   end;
 end;
 
