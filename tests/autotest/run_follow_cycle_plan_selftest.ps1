@@ -16,7 +16,7 @@
   Cycles 2 and 3 are refused by the planner: the follower must exit 2 with
   `REFUSE: plan has no mechanical steps`. No compiler involved.
   POSITIVE CONTROL: swapping two predicted group lines in memory must make the
-  compare FAIL. Also: -Root applies the same plan to a second copy (DryRun, exit 0).
+  compare FAIL. Also: -Root applies the same plan to a second copy (real run; the first copy must stay byte-unchanged) and\n  is refused (exit 2) when the plan paths share no common directory.
 #>
 [CmdletBinding()]
 param(
@@ -42,7 +42,7 @@ function Keep([string]$Text) {
   @($Text -split "\r?\n" | ForEach-Object { $_.TrimEnd() } |
     Where-Object { $_ -ne '' -and $_ -notmatch '^\(loaded|^drag-lint: note:|^\s+resolver:' })
 }
-function Run([string[]]$a, [string]$cwd) {
+function Run([string[]]$a) {
   $o = & $Exe @a 2>$null | Out-String
   return $o
 }
@@ -55,16 +55,35 @@ try {
   & $Exe index --project $dproj --db $db *> $null
   Check 'index the copy' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $plan = Join-Path $WorkDir 'plan.txt'
-  [IO.File]::WriteAllText($plan, (Run @('cycles', '--db', $db, '--plan') $WorkDir), [Text.Encoding]::ASCII)
+  [IO.File]::WriteAllText($plan, (Run @('cycles', '--db', $db, '--plan')), [Text.Encoding]::ASCII)
 
-  # -Root: the same plan, applied to a second copy (dry run)
+  # -Root: the same plan, applied for real to a second copy; the first copy must not change
+  function Get-Hashes([string]$Dir) {
+    $h = [ordered]@{}
+    foreach ($f in Get-ChildItem -LiteralPath $Dir -File | Sort-Object Name) { $h[$f.Name] = (Get-FileHash -LiteralPath $f.FullName).Hash }
+    return $h
+  }
   $S2 = Join-Path $WorkDir 'copy2'; Copy-Demo $S2
-  $dr = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 1 -Root $S2 -DryRun 2>&1 | Out-String
-  Check '-Root -DryRun on a second copy exits 0' ($LASTEXITCODE -eq 0) $dr
-
+  $h1 = (Get-Hashes $S | ConvertTo-Json -Compress); $h2 = (Get-Hashes $S2 | ConvertTo-Json -Compress)
+  $ro = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 1 -Root $S2 2>&1 | Out-String
+  Check '-Root run on a second copy exits 0' ($LASTEXITCODE -eq 0) $ro
+  Check '-Root: copy2 got the 3 new files' ((@('DemoSession.Contracts.pas', 'DemoLogger.Contracts.pas', 'DemoAudit.Contracts.pas') | Where-Object { Test-Path (Join-Path $S2 $_) }).Count -eq 3)
+  Check '-Root: copy2 changed' ((Get-Hashes $S2 | ConvertTo-Json -Compress) -cne $h2)
+  Check '-Root: the original copy is byte-unchanged' ((Get-Hashes $S | ConvertTo-Json -Compress) -ceq $h1)
+  # POSITIVE CONTROL (checked after the Cycle 1 follow below): without -Root the plan edits `copy`, not copy3
+  $S3 = Join-Path $WorkDir 'copy3'; Copy-Demo $S3
+  $h3 = (Get-Hashes $S3 | ConvertTo-Json -Compress)
+  # -Root with paths sharing no common directory is refused
+  $odd = ([IO.File]::ReadAllText($plan)) -replace '(?m)^(#### `DemoAudit\.Contracts` -> `)[^`]*(DemoAudit\.Contracts\.pas`)', '${1}D:\elsewhere\${2}'
+  $oddPlan = Join-Path $WorkDir 'plan-odd.txt'; [IO.File]::WriteAllText($oddPlan, $odd, [Text.Encoding]::ASCII)
+  $ro2 = & pwsh -NoProfile -File $Follow -PlanFile $oddPlan -Cycle 1 -Root $S3 2>&1 | Out-String
+  Check '-Root with no common directory: exit 2 with REFUSE' ($LASTEXITCODE -eq 2 -and $ro2 -match 'REFUSE: -Root given but') $ro2
   $out = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 1 2>&1 | Out-String
   Check 'Cycle 1 follows: exit 0' ($LASTEXITCODE -eq 0) $out
   Check 'Cycle 1 created 3 new files' (([regex]::Matches($out, '(?m)^created ')).Count -eq 3) $out
+
+  Check 'POSITIVE CONTROL: without -Root the plan changed its own tree (copy)' ((Get-Hashes $S | ConvertTo-Json -Compress) -cne $h1)
+  Check 'POSITIVE CONTROL: without -Root the plan did not touch copy3' ((Get-Hashes $S3 | ConvertTo-Json -Compress) -ceq $h3)
 
   foreach ($c in 2, 3) {
     $o = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle $c 2>&1 | Out-String
@@ -73,7 +92,7 @@ try {
   }
 
   & $Exe index --project $dproj --db $db *> $null
-  $actual = Keep (Run @('cycles', '--db', $db) $WorkDir)
+  $actual = Keep (Run @('cycles', '--db', $db))
 
   $pt = [IO.File]::ReadAllText($plan)
   $m = [regex]::Match($pt, '(?s)## Cycle 1:.*?It must print exactly:\s*\r?\n```text\r?\n(.*?)\r?\n```')

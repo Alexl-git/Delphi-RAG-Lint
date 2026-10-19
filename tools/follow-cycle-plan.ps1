@@ -89,13 +89,14 @@ if ($Root -ne '') {
   $allPaths = @(($newUnits | ForEach-Object { $_.Path }) + ($edits | ForEach-Object { $_.Path }) | Select-Object -Unique)
   $prefix = $null
   foreach ($p in $allPaths) {
-    $d = [IO.Path]::GetDirectoryName($p)
+    $d = ([IO.Path]::GetDirectoryName($p) + '').TrimEnd('\')
     if ($null -eq $prefix) { $prefix = $d; continue }
     while ($prefix -ne '' -and -not ($d + '\').StartsWith($prefix + '\', [StringComparison]::OrdinalIgnoreCase)) {
-      $prefix = [IO.Path]::GetDirectoryName($prefix); if ($null -eq $prefix) { $prefix = '' }
+      $prefix = ([IO.Path]::GetDirectoryName($prefix) + '').TrimEnd('\')
     }
   }
-  $remap = { param($p) if ($prefix) { (Join-Path $Root $p.Substring($prefix.Length).TrimStart('\')) } else { $p } }
+  if (-not $prefix) { Write-Output "REFUSE: -Root given but the plan's paths share no common directory; nothing remapped, nothing written"; exit 2 }
+  $remap = { param($p) Join-Path $Root $p.Substring($prefix.Length).TrimStart('\') }
   foreach ($u in $newUnits) { $u.Path = & $remap $u.Path }
   foreach ($e in $edits) { $e.Path = & $remap $e.Path }
 }
@@ -109,6 +110,7 @@ $bad = 0
 foreach ($e in $edits) {
   $src = [IO.File]::ReadAllLines($e.Path)   # original, for anchor checks
   if ($e.Kind -eq 'insertAfter') {
+    if ($e.First -gt $src.Count) { Write-Output ("REFUSE: {0}: anchor line {1} is beyond end of file ({2} lines); nothing written" -f $e.File,$e.First,$src.Count); exit 2 }
     $have = $src[$e.First-1].Trim()
     if ($have -ne $e.Anchor.Trim()) { Write-Output ("MISMATCH {0}:{1} anchor expected [{2}] found [{3}]" -f $e.File,$e.First,$e.Anchor,$have); $bad++ }
   } else {
