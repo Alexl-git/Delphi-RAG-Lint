@@ -6025,6 +6025,10 @@ begin
   LJob.CoalesceKey:= 'lint-all:' + LowerCase(Db);
   LJob.CmdLine    := Cmd;
   LJob.Streaming  := True;
+  { 1.31.6: a streaming job's deadline is now ENFORCED (it had none), so it is
+    set here rather than inherited from the 180 s default: one hour bounds a hung
+    engine without killing a slow lint-all on a large closure. }
+  LJob.TimeoutMs  := MinsPerHour * SecsPerMin * MSecsPerSec;
   LJob.OnDone     :=
     procedure(AExit: Integer; AOut: string)
     var

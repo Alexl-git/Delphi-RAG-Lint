@@ -66,6 +66,9 @@ type
     FWake    : TEvent;
     FWorker  : TThread;
     FShutdown: Boolean;
+    { Manual-reset; set by Destroy. The running job's child polls it, so a
+      shutdown kills that child's tree instead of waiting it out (1.31.6). }
+    FCancel  : TEvent;
     FState   : TQueueState;
     { Worker thread only: whether THIS deferral episode has been logged.
       Cleared when the hold lifts, so a later hold is reported again. }
@@ -78,6 +81,9 @@ type
     procedure SetLastResult(const AText: string);
   public
     constructor Create;
+    /// <summary>Stops the worker: signals the cancel event, so a running job's
+    /// child process tree is killed rather than waited out, then joins the
+    /// worker. Pending jobs are dropped without their OnDone.</summary>
     destructor Destroy; override;
     /// <summary>Enqueue AJob (queue takes ownership). A pending job with the
     /// same non-empty CoalesceKey is dropped first. Call from the main thread.</summary>
@@ -219,6 +225,7 @@ begin
   FLock    := TCriticalSection.Create;
   FPending := TObjectList<TDragLintJob>.Create(True { owns });
   FWake    := TEvent.Create(nil, False { auto-reset }, False, '');
+  FCancel  := TEvent.Create(nil, True { manual-reset }, False, '');
   FShutdown:= False;
   FDeferredLogged:= False;
   FState.Running   := False;
@@ -229,8 +236,13 @@ end;
 
 destructor TDragLintJobQueue.Destroy;
 begin
-  { Stop the worker cleanly BEFORE freeing anything it touches (avoids unload AV). }
+  { Stop the worker cleanly BEFORE freeing anything it touches (avoids unload AV).
+    CANCEL, THEN WAIT: the running job's child -- and its whole tree -- is
+    killed within one poll slice, so closing the IDE no longer waits out a
+    reindex. A job dequeued but not yet spawned sees the event and spawns
+    nothing. }
   FShutdown:= True;
+  if FCancel <> nil then FCancel.SetEvent;
   if FWake <> nil then FWake.SetEvent;
   if FWorker <> nil then
   begin
@@ -239,6 +251,7 @@ begin
   end;
   FPending.Free;
   FWake.Free;
+  FCancel.Free;
   FLock.Free;
   inherited;
 end;
@@ -387,7 +400,7 @@ begin
           if Assigned(AJob.OnLine) then
             try AJob.OnLine(ALine) except end;
         end,
-        ExitCode);
+        ExitCode, AJob.TimeoutMs, FCancel.Handle);
       Output:= SB.ToString;
     finally
       SB.Free;
@@ -396,7 +409,7 @@ begin
   else
   begin
     SetPercent(-1); { indeterminate -> marquee }
-    ExitCode:= RunCaptureStdout(AJob.CmdLine, Output, AJob.TimeoutMs);
+    ExitCode:= RunCaptureStdout(AJob.CmdLine, Output, AJob.TimeoutMs, FCancel.Handle);
   end;
 
   SetPercent(100);
@@ -418,6 +431,8 @@ begin
   end
   else if ExitCode = PROCRUN_TIMED_OUT_EXIT_CODE then
     Res:= Res + Format(': timed out after %d s', [AJob.TimeoutMs div MSecsPerSec])
+  else if ExitCode = PROCRUN_CANCELLED_EXIT_CODE then
+    Res:= Res + ': cancelled'
   else if ExitCode = 2 then
     Res:= Res + ': failed'
   else
