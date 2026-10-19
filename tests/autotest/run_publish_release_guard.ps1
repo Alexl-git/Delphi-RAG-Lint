@@ -46,9 +46,9 @@ Check 'POSITIVE CONTROL: a sabotaged restore is reported, never silent' ($threw 
 $ver = [regex]::Match((Get-Content -LiteralPath (Join-Path $Repo 'src\core\DRagLint.Core.Model.pas') -Raw), "DRAGLINT_VERSION\s*=\s*'([^']+)'").Groups[1].Value
 $out = & pwsh -NoProfile -File $orch -Version $ver -DryRun 2>&1 | Out-String
 Check 'dry run exits 0 on the live version' ($LASTEXITCODE -eq 0) (($out -split "`n" | Select-Object -Last 2) -join ' ')
-$idx = @('build the engine', 'build-feature-pages.ps1 -Check', 'build-manual.ps1', 'run_battery.ps1', 'publish-wiki.ps1', 'pack-lint-release.ps1', 'git tag') | ForEach-Object { $out.IndexOf($_) }
+$idx = @('build the engine', 'build-feature-pages.ps1 -Check', 'build-manual.ps1', 'run_battery.ps1', 'publish-wiki.ps1', 'Build-Installer.ps1', 'git tag') | ForEach-Object { $out.IndexOf($_) }
 Check 'dry run lists all seven steps' (@($idx | Where-Object { $_ -lt 0 }).Count -eq 0) ($idx -join ',')
-Check 'steps are in order: build, generate -Check, manual, battery, wiki, pack, tag' ((($idx | ForEach-Object { $_ }) -join ',') -eq (($idx | Sort-Object) -join ','))
+Check 'steps are in order: build, generate -Check, manual, battery, wiki, installer, tag' ((($idx | ForEach-Object { $_ }) -join ',') -eq (($idx | Sort-Object) -join ','))
 Check 'dry run says it is a dry run and ran the -Check gate' (($out -match 'DRY RUN') -and ($out -match 'feature pages: current'))
 $out = & pwsh -NoProfile -File $orch -Version '0.0.1-alpha' -DryRun 2>&1 | Out-String
 Check 'a version that is not DRAGLINT_VERSION stops at preflight' (($LASTEXITCODE -eq 1) -and ($out -match 'DRAGLINT_VERSION'))
@@ -75,7 +75,7 @@ function New-StubTree([string]$Root) {
   Write-Ascii (Join-Path $Root 'tools\build-manual.ps1') (& $ps 'manual' '')
   Write-Ascii (Join-Path $Root 'tests\run_battery.ps1') (& $ps 'battery' '')
   Write-Ascii (Join-Path $Root 'tools\publish-wiki.ps1') (& $ps 'wiki' '')
-  Write-Ascii (Join-Path $Root 'build\pack-lint-release.ps1') ("param([string]`$Version)`n" + (& $ps 'pack' "[IO.File]::WriteAllBytes('$(Join-Path $Root 'third_party\dll-win64\drag-lint.exe')', [byte[]](9, 9, 9))"))
+  Write-Ascii (Join-Path $Root 'installer\Build-Installer.ps1') ("param([string]`$EngineDir, [string]`$Plugin32Dir)`n" +(& $ps 'installer' ''))
   New-Item -ItemType Directory -Path (Join-Path $Root 'tools\lib') -Force | Out-Null
   Copy-Item -LiteralPath $orch -Destination (Join-Path $Root 'tools\publish-release.ps1')
   Copy-Item -LiteralPath $lib -Destination (Join-Path $Root 'tools\lib\ReleaseGuard.ps1')
@@ -88,18 +88,18 @@ function Invoke-Stub([string]$Root, [string[]]$Extra) {
 $stubSha = $null
 $s1 = Join-Path $WorkDir 'stub-ok'; New-StubTree $s1; $stubSha = Sha (Join-Path $s1 'third_party\dll-win64\drag-lint.exe')
 $x = Invoke-Stub $s1 @()
-Check 'stub run: every step runs, in order build,gate,manual,battery,wiki,pack' (($x.Exit -eq 0) -and ($x.Steps -eq 'build,gate,manual,battery,wiki,pack')) "exit=$($x.Exit) steps=$($x.Steps)"
+Check 'stub run: every step runs, in order build,gate,manual,battery,wiki,installer' (($x.Exit -eq 0) -and ($x.Steps -eq 'build,gate,manual,battery,wiki,installer')) "exit=$($x.Exit) steps=$($x.Steps)"
 Check 'stub run: the manual is built exactly once' (@($x.Steps -split ',' | Where-Object { $_ -eq 'manual' }).Count -eq 1)
-Check 'stub run: the engine the pack overwrote is restored byte-identically' (($x.EngineSha -eq $stubSha) -and ($x.Out -match 'engine restored'))
+Check 'stub run: the deployed engine is untouched and no zip is built or named (B-01 / T-19)' (($x.EngineSha -eq $stubSha) -and ($x.Out -notmatch '\.zip') -and ($x.Out -notmatch 'pack-lint-release'))
 $s2 = Join-Path $WorkDir 'stub-gate'; New-StubTree $s2; Write-Ascii (Join-Path $s2 'fail-gate') "x`n"
 $x = Invoke-Stub $s2 @()
 Check 'POSITIVE CONTROL: a stale-pages gate stops the run at step 2, nothing after it runs' (($x.Exit -eq 1) -and ($x.Steps -eq 'build,gate') -and ($x.Out -match 'STOP at step 2')) "exit=$($x.Exit) steps=$($x.Steps)"
 $x = Invoke-Stub $s2 @('-DryRun')
 Check 'POSITIVE CONTROL: a stale-pages gate fails the dry run too' (($x.Exit -eq 1) -and ($x.Out -match 'STOP at step 2') -and ($x.Out -notmatch 'step 3/7')) "exit=$($x.Exit)"
-$s3 = Join-Path $WorkDir 'stub-pack'; New-StubTree $s3; Write-Ascii (Join-Path $s3 'fail-pack') "x`n"
+$s3 = Join-Path $WorkDir 'stub-installer'; New-StubTree $s3; Write-Ascii (Join-Path $s3 'fail-installer') "x`n"
 $x = Invoke-Stub $s3 @('-SkipBuild', '-SkipBattery')
-Check 'a failing pack stops at step 6 and the engine is STILL restored' (($x.Exit -eq 1) -and ($x.Out -match 'STOP at step 6') -and ($x.EngineSha -eq $stubSha)) "exit=$($x.Exit) steps=$($x.Steps)"
-Check '-SkipBuild and -SkipBattery skip exactly those steps' ($x.Steps -eq 'gate,manual,wiki,pack') $x.Steps
+Check 'a failing installer build stops at step 6 and the engine is untouched' (($x.Exit -eq 1) -and ($x.Out -match 'STOP at step 6') -and ($x.EngineSha -eq $stubSha)) "exit=$($x.Exit) steps=$($x.Steps)"
+Check '-SkipBuild and -SkipBattery skip exactly those steps' ($x.Steps -eq 'gate,manual,wiki,installer') $x.Steps
 $s4 = Join-Path $WorkDir 'stub-dry'; New-StubTree $s4
 $x = Invoke-Stub $s4 @('-DryRun')
 Check 'a dry run executes the gate and nothing else' (($x.Exit -eq 0) -and ($x.Steps -eq 'gate') -and ($x.EngineSha -eq $stubSha)) "exit=$($x.Exit) steps=$($x.Steps)"
@@ -132,7 +132,7 @@ Check 'publish-wiki.ps1 runs build-feature-pages.ps1 -Check before cloning' (($p
 $pk = Get-Content -LiteralPath (Join-Path $Repo 'build\pack-lint-release.ps1') -Raw
 Check 'pack-lint-release.ps1 runs build-feature-pages.ps1 -Check before msbuild' (($pk -match 'build-feature-pages\.ps1') -and ($pk.IndexOf('build-feature-pages.ps1') -lt $pk.IndexOf('msbuild')))
 $or = Get-Content -LiteralPath $orch -Raw
-Check 'the pack step is wrapped in Invoke-WithEngineBackup' ($or -match 'Invoke-WithEngineBackup[^\r\n]*pack-lint-release' -or $or -match '(?s)Invoke-WithEngineBackup.*pack-lint-release\.ps1')
+Check 'step 6 invokes installer\Build-Installer.ps1 and builds no zip' (($or -match 'installer\\Build-Installer\.ps1') -and ($or -notmatch 'Invoke-WithEngineBackup') -and ($or -notmatch '(?m)^\s*Invoke-Step[^\r\n]*pack-lint-release'))
 Check 'the plugin build is opt-in (it deploys into the live IDE)' ($or -match '\[switch\]\$BuildPlugin')
 
 Write-Host ''
