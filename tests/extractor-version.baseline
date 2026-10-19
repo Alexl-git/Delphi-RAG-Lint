@@ -996,4 +996,8 @@
 #   (quotes stripped, case kept, '""' unescaped) in sql_reads/sql_writes instead of nothing.
 #   Guard: run_sql_quoted_identifier.ps1.
 #   Superseded: 1.22.0-alpha|222fab4b909ee849195766b4b469f8e6298ccdf17eb1b6dec79d1d5cbe13cd6a
-1.22.0-alpha|a15260d618a6bd5d2496ca9b1436db17df3669b177a2f2b88ddeaf9f277be9f4
+# 2026-10-19: hash re-pinned WITHIN 1.22.0-alpha (still unreleased): rel/1.22 = wave/1317 (main + 1.31.6/1.31.7
+#   fixes, incl. the 1.21.1 in-version re-pins above) merged with the 1.22 branch; the hash
+#   changed only because both sides' hashed files met. One re-parse still covers all of it.
+#   Superseded: 1.22.0-alpha|a15260d618a6bd5d2496ca9b1436db17df3669b177a2f2b88ddeaf9f277be9f4
+1.22.0-alpha|1f3cc280c96b5a19307e585ab1641624a118be67b9d0f969d3cd5e76de44cd64
