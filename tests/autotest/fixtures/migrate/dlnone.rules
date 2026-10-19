@@ -1,0 +1,5 @@
+#convert TSrcBtn -> TDstBtn
+#link Caption <- Caption
+#migrate Click -> Press
+#migrate Count -> DL_NONE
+#migrate Hint -> DL_NONE

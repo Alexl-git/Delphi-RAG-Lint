@@ -105,6 +105,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 ## Component conversion
 
 * **Convert progress** -- ConvRulesEditor Convert tab: per-step progress (unit, book, phase, elapsed) on the status bar and the tab. See where a long Convert run is and how long each unit takes. [More](convrules-editor-convert-progress)
+* **convert-apply #migrate (member rename / DL_NONE)** -- #migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site. Member replacement slice 1 (C18): rename methods, events and properties of a converted component in code, or mark them for hand conversion. [More](convert-apply-migrate)
 * **convert-apply** -- Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add. [More](convert-apply)
 * **convert-reemit** (internal) -- The DFM re-emit stage of the conversion pipeline, driven by convert-apply and by test runners. [More](Maintenance)
 * **convert-scaffold** -- Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type. [More](convert-scaffold)
