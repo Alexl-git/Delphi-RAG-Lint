@@ -16,8 +16,9 @@
                                                run_manual_freshness_guard.ps1 sees it)
     4  tests\run_battery.ps1                  [-SkipBattery]
     5  tools\publish-wiki.ps1                 (itself re-runs the -Check gate)
-    6  build\pack-lint-release.ps1 -Version   wrapped in Invoke-WithEngineBackup: the
-       deployed DEBUG engine in third_party\dll-win64 is restored byte-identically (sha256)
+    6  installer\Build-Installer.ps1        the Inno Setup installer is the release package
+       (1.31.4+); no zip archives are built any more (B-01 / T-19). The installer build
+       does not touch the deployed engine, so no engine backup/restore is needed.
     7  prints the git tag + gh release create commands (still run by hand)
 
   -DryRun  prints the plan with resolved paths and runs only steps 0 and 2;
@@ -37,7 +38,6 @@ param([Parameter(Mandatory)][string]$Version, [switch]$DryRun, [switch]$SkipBuil
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Repo = (Resolve-Path -LiteralPath $Repo).Path
-. (Join-Path $PSScriptRoot 'lib\ReleaseGuard.ps1')
 $engine = Join-Path $Repo 'third_party\dll-win64\drag-lint.exe'
 if ($DryRun) { Write-Host "DRY RUN -- plan for v$Version (steps 0 and 2 run, the rest are printed)" -ForegroundColor Yellow }
 
@@ -73,20 +73,11 @@ Invoke-Step 3 'build-manual.ps1' @('pwsh', '-NoProfile', '-File', (Join-Path $Re
 Invoke-Step 4 'run_battery.ps1' @('pwsh', '-NoProfile', '-File', (Join-Path $Repo 'tests\run_battery.ps1')) -Skip $SkipBattery.IsPresent
 # ---- 5 the wiki -------------------------------------------------------------------
 Invoke-Step 5 'publish-wiki.ps1' @('pwsh', '-NoProfile', '-File', (Join-Path $Repo 'tools\publish-wiki.ps1'))
-# ---- 6 the release archives, with the deployed engine protected -------------------
-Write-Host '== step 6/7: pack-lint-release.ps1 (deployed Debug engine backed up, restored, sha-verified)' -ForegroundColor Cyan
-$packScript = Join-Path $Repo 'build\pack-lint-release.ps1'
-Write-Host ("   pwsh -NoProfile -File {0} -Version {1}" -f $packScript, $Version) -ForegroundColor DarkGray
-Write-Host ("   protected: {0}" -f $engine) -ForegroundColor DarkGray
-if ($DryRun) { Write-Host '   (dry run: not executed)' -ForegroundColor DarkGray }
-else {
-  $r = Invoke-WithEngineBackup -EnginePath $engine -Action { & pwsh -NoProfile -File $packScript -Version $Version | Out-Host; if ($LASTEXITCODE -ne 0) { throw "pack-lint-release.ps1 exited $LASTEXITCODE" } }
-  Write-Host ("   engine restored: sha {0}... == {1}..." -f $r.ShaBefore.Substring(0, 12), $r.ShaAfter.Substring(0, 12)) -ForegroundColor Green
-  if ($r.ActionError) { Stop-At 6 $r.ActionError }
-}
+# ---- 6 the installer (the release package; no zip archives) ---------------------------
+Invoke-Step 6 'Build-Installer.ps1 (the installer is the release package)' @('pwsh', '-NoProfile', '-File', (Join-Path $Repo 'installer\Build-Installer.ps1'), '-EngineDir', (Join-Path $Repo 'third_party\dll-win64'), '-Plugin32Dir', (Join-Path $Repo 'third_party\dll-win32'))
 # ---- 7 tag + release: still by hand -------------------------------------------------
 Write-Host '== step 7/7: git tag + gh release create (run by hand)' -ForegroundColor Cyan
 Write-Host "   git tag v$Version && git push origin v$Version" -ForegroundColor Yellow
-Write-Host "   gh release create v$Version C:\TEMP\rel-$Version\drag-lint-v$Version-win64.zip C:\TEMP\rel-$Version\drag-lint-v$Version-win32.zip --title v$Version --notes-file <notes.md>" -ForegroundColor Yellow
+Write-Host "   gh release create v$Version $Repo\installer\Output\drag-lint-setup-$Version.exe --title v$Version --notes-file <notes.md>" -ForegroundColor Yellow
 Write-Host $(if ($DryRun) { "DRY RUN complete for v$Version" } else { "publish pipeline complete for v$Version" }) -ForegroundColor Green
 exit 0

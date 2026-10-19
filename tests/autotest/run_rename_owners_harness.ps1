@@ -45,7 +45,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$Exe        = "$PSScriptRoot\..\..\src\cli\Win64\Debug\drag-lint.exe",
   [string]$FixtureDir = "$PSScriptRoot\fixtures\renameowners",
   [string]$WorkDir    = "$env:TEMP\draglint-owners-$([guid]::NewGuid().ToString('N'))"
 )
