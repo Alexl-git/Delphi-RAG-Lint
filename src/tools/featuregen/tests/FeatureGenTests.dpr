@@ -104,8 +104,8 @@ begin
   try
     lReg.Load(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\mini'));
     lE := lReg.Entries;
-    Check('Model.LoadMini.count', Length(lE) = 3, IntToStr(Length(lE)));
-    if Length(lE) = 3 then
+    Check('Model.LoadMini.count', Length(lE) = 4, IntToStr(Length(lE)));
+    if Length(lE) = 4 then
     begin
       Check('Model.LoadMini.ordinal',
         (lE[0].Id = 'add-missing-units-to-uses-whole-unit') and (lE[1].Id = 'allow-this-message') and (lE[2].Id = 'outline'),
@@ -885,6 +885,156 @@ begin
   end;
 end;
 
+{ ---- Task 5: schema v2 fields ---- }
+
+const
+  V2_HELP = '  drag-lint v2verb go --name WRONG-FROM-HELP'#10;
+
+procedure TestModelV2;
+var
+  lReg: TRegistry;
+  lE, lO: TFeatureEntry;
+begin
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(MiniDir);
+    lE := EntryById(lReg, 'v2-sample');
+    lO := EntryById(lReg, 'outline');
+    Check('Model.ReadsV2Fields',
+      (Length(lE.Surfaces) = 2) and (lE.Surfaces[0].Usage = 'drag-lint v2verb go --name <N> [--db <db>]')
+      and (Length(lE.Surfaces[0].Flags) = 2) and (lE.Surfaces[0].Flags[0].Name = '--name') and (lE.Surfaces[0].Flags[0].Arg = '<N>')
+      and (lE.Surfaces[0].Flags[0].Summary = 'The bare member name') and (lE.Surfaces[0].Flags[0].DefaultValue = 'none')
+      and (lE.Surfaces[0].Flags[1].DefaultValue = '')
+      and (Length(lE.Surfaces[1].Steps) = 2) and (lE.Surfaces[1].Steps[1] = 'Click V2 sample')
+      and (Length(lE.Pitfalls) = 2) and (lE.Pitfalls[1] = 'Reindex after an edit')
+      and (Length(lE.Questions) = 1) and (lE.Questions[0].Ask = 'Who calls Bar?') and (lE.Questions[0].Command = 'drag-lint v2verb go --name Bar')
+      and (lE.HelpContext = 'v2-help-id') and (lO.HelpContext = 'outline')
+      and (lE.VerifiedDate = '2026-10-19') and (lE.VerifiedBy = 'ENGINE') and (lE.VerifiedBuild = '1.32.0') and (lE.VerifiedSurfaceHash = 'abc123')
+      and (Length(lO.Surfaces[0].Flags) = 0) and (lO.Surfaces[0].Usage = '') and (Length(lO.Pitfalls) = 0) and (lO.VerifiedBuild = ''),
+      lE.HelpContext + '|' + lE.Surfaces[0].Usage);
+  finally
+    lReg.Free;
+  end;
+end;
+
+procedure TestJsonV2;
+var
+  lFile, lText, lScrambled, lBack: string;
+  lOrder: TArray<string>;
+  lVal: TJSONValue;
+begin
+  lOrder := EntryKeyOrder(TPath.Combine(MiniDir, 'features\schema\entry.schema.json'));
+  lFile := TPath.Combine(MiniDir, 'features\entries\v2-sample.json');
+  lText := ReadAllBytesAsText(lFile);
+  lVal := ReadJsonFile(lFile);
+  try
+    lBack := CanonicalJson(lVal, lOrder);
+  finally
+    lVal.Free;
+  end;
+  Check('Json.V2KeyOrderCanonical', lBack = lText, Copy(lBack, 1, 200));
+  // the same entry with the v2 keys written in a wrong order: must come back byte-identical
+  lScrambled := '{"verified": {"surfaceHash": "abc123", "build": "1.32.0", "by": "ENGINE", "date": "2026-10-19"}, "pitfalls": ["Pass the BARE member name; TFoo.Bar returns 0", "Reindex after an edit"], '
+    + '"questions": [{"command": "drag-lint v2verb go --name Bar", "ask": "Who calls Bar?"}], "audience": "both", "surfaces": ['
+    + '{"flags": [{"default": "none", "summary": "The bare member name", "arg": "<N>", "name": "--name"}, {"default": "", "summary": "Index to read; a|b", "arg": "<db>", "name": "--db"}], '
+    + '"usage": "drag-lint v2verb go --name <N> [--db <db>]", "example": "drag-lint v2verb go --name X", "sub": "go", "verb": "v2verb", "type": "cli"}, '
+    + '{"steps": ["Open the Search menu", "Click V2 sample"], "path": "drag-lint > Search > V2 sample", "type": "ide-menu"}], '
+    + '"helpContext": "v2-help-id", "summary": "Exercises every schema v2 field for the featuregen tests", "since": "0.86.0-alpha", "status": "shipped", "owner": "ENGINE", '
+    + '"group": "search-navigation", "title": "Schema v2 sample", "id": "v2-sample"}';
+  lVal := TJSONObject.ParseJSONValue(lScrambled, True, False);
+  try
+    lBack := CanonicalJson(lVal, lOrder);
+  finally
+    lVal.Free;
+  end;
+  Check('Json.V2FixedOrdersFromScrambled', lBack = lText, Copy(lBack, 1, 200));
+end;
+
+procedure TestLeafV2;
+var
+  lReg: TRegistry;
+  lHelp: TLiveHelp;
+  lFmt: TSiteFormat;
+  lImg: TArray<TImageRef>;
+  lOut: string;
+  lE: TFeatureEntry;
+begin
+  lReg := TRegistry.Create;
+  lHelp := TLiveHelp.Create;
+  try
+    lReg.Load(MiniDir);
+    lHelp.LoadFromText(V2_HELP);
+    lFmt := MiniFormat(lHelp);
+    lE := EntryById(lReg, 'v2-sample');
+    lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
+    Check('Leaf.UsageFieldWinsOverHelp',
+      (Pos('```text'#10'drag-lint v2verb go --name <N> [--db <db>]'#10'```', lOut) > 0) and (Pos('WRONG-FROM-HELP', lOut) = 0), lOut);
+    Check('Leaf.FlagsTable',
+      Pos('## Flags'#10#10'| Flag | Argument | Meaning | Default |'#10'| --- | --- | --- | --- |'#10
+        + '| `--name` | `<N>` | The bare member name | none |'#10'| `--db` | `<db>` | Index to read; a\|b |  |'#10, lOut) > 0, lOut);
+    Check('Leaf.PitfallsBullets',
+      Pos('## Pitfalls'#10#10'* Pass the BARE member name; TFoo.Bar returns 0'#10'* Reindex after an edit'#10, lOut) > 0, lOut);
+    Check('Leaf.StepsNumberedUnderSurface',
+      Pos('* RAD Studio main menu: **drag-lint > Search > V2 sample**'#10'   1. Open the Search menu'#10'   2. Click V2 sample'#10, lOut) > 0, lOut);
+    lE := EntryById(lReg, 'outline');
+    lHelp.LoadFromText(HELP_SNIPPET);
+    lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
+    Check('Leaf.NoV2SectionsWhenAbsent', (Pos('## Flags', lOut) = 0) and (Pos('## Pitfalls', lOut) = 0), lOut);
+  finally
+    lHelp.Free;
+    lReg.Free;
+  end;
+end;
+
+procedure TestCliV2;
+var
+  lRepo, lOut, lCli: string;
+  lHelp: TLiveHelp;
+begin
+  lRepo := CopySiteRepo('v2cli-repo');
+  TFile.WriteAllText(TPath.Combine(lRepo, 'features\entries\v2cli.json'),
+    '{ "id": "v2cli", "title": "V2 cli", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.50.0-alpha", '
+    + '"summary": "A verb with schema v2 flags", "audience": "both", "surfaces": [ { "type": "cli", "verb": "v2cli", '
+    + '"usage": "drag-lint v2cli --x <n>", "flags": [ { "name": "--x", "arg": "<n>", "summary": "The x", "default": "1" } ] } ] }', TEncoding.ASCII);
+  lHelp := TLiveHelp.Create;
+  try
+    lHelp.LoadFromText(SITE_HELP);
+    lOut := FreshDir('v2cli-out');
+    BuildFixture(lRepo, lOut, False, lHelp);
+    lCli := ReadSiteFile(lOut, 'cli.md');
+    Check('Cli.FlagsTable',
+      (Pos('### v2cli'#10, lCli) > 0) and (Pos('```text'#10'drag-lint v2cli --x <n>'#10'```'#10#10'| Flag | Argument | Meaning | Default |'#10
+        + '| --- | --- | --- | --- |'#10'| `--x` | `<n>` | The x | 1 |'#10, lCli) > 0), lCli);
+  finally
+    lHelp.Free;
+  end;
+end;
+
+procedure TestEntryTextGuardV2;
+var
+  lRepo, lMsg, lPath, lTxt: string;
+  lCases: array[0..3] of TArray<string>;
+  i: Integer;
+begin
+  lCases[0] := TArray<string>.Create('"pitfalls": ["Run <ask> now"]', 'pitfalls', 'raw HTML');
+  lCases[1] := TArray<string>.Create('"questions": [ { "ask": "What <is> it?", "command": "x" } ]', 'questions', 'raw HTML');
+  lCases[2] := TArray<string>.Create('"surfaces": [ { "type": "cli", "verb": "ask", "usage": "drag-lint ask \u00e9" } ]', 'usage', 'non-ASCII');
+  lCases[3] := TArray<string>.Create('"surfaces": [ { "type": "cli", "verb": "ask", "flags": [ { "name": "--a", "summary": "Takes <b> raw" } ] } ]', 'flags', 'raw HTML');
+  for i := 0 to High(lCases) do
+  begin
+    lRepo := CopySiteRepo('v2guard-repo' + IntToStr(i));
+    lPath := TPath.Combine(lRepo, 'features\entries\ask.json');
+    lTxt := TFile.ReadAllText(lPath, TEncoding.ASCII);
+    if i < 2 then
+      lTxt := lTxt.Replace('"audience": "both"', '"audience": "both", ' + lCases[i][0])
+    else
+      lTxt := lTxt.Replace('"surfaces": [ { "type": "cli", "verb": "ask" } ]', lCases[i][0]);
+    TFile.WriteAllText(lPath, lTxt, TEncoding.ASCII);
+    lMsg := TryBuild(lRepo, TPath.Combine(SCRATCH, 'v2guard-out' + IntToStr(i)));
+    Check('Site.EntryTextGuardV2.' + lCases[i][1], (Pos('ask', lMsg) > 0) and (Pos(lCases[i][1], lMsg) > 0) and (Pos(lCases[i][2], lMsg) > 0), lMsg);
+  end;
+end;
+
 var
   lRepo: string;
 begin
@@ -905,6 +1055,11 @@ begin
     TestMarkdown;
     TestWikiLinkMapFromRegistry;
     TestLeaves;
+    TestModelV2;
+    TestJsonV2;
+    TestLeafV2;
+    TestCliV2;
+    TestEntryTextGuardV2;
     TestUndocumentedVerbs;
     TestSite;
     TestSiteDanglingLink;

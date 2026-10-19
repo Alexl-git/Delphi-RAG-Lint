@@ -30,7 +30,7 @@ function EntryKeyOrder(const pSchemaPath: string): TArray<string>;
 
 /// <summary>Renders a value exactly as the PowerShell canonical writer does.</summary>
 /// <param name="pValue">Value to render; not modified.</param>
-/// <param name="pKeyOrder">Non-empty: pValue is a registry entry - top-level keys follow this order then ordinal, empty values are dropped (surfaces stays, as []), related/aliases are sorted unique, surface/example/lastVerified keys use their fixed orders. Empty: generic mode, objects keep document order and nothing is dropped.</param>
+/// <param name="pKeyOrder">Non-empty: pValue is a registry entry - top-level keys follow this order then ordinal, empty values are dropped (surfaces stays, as []), related/aliases are sorted unique, surface/example/lastVerified/flag/question/verified keys use their fixed orders. Empty: generic mode, objects keep document order and nothing is dropped.</param>
 /// <returns>The text, CRLF line ends, ending in CRLF.</returns>
 /// <exception cref="EFeatureJson">A string holds a character above 127.</exception>
 function CanonicalJson(const pValue: TJSONValue; const pKeyOrder: TArray<string>): string;
@@ -52,7 +52,7 @@ uses
   ;
 
 type
-  TCtx = (cxPlain, cxEntry, cxSurface, cxExample, cxLastVerified);
+  TCtx = (cxPlain, cxEntry, cxSurface, cxExample, cxLastVerified, cxFlag, cxQuestion, cxVerified);
 
 function ReadJsonFile(const pPath: string): TJSONValue;
 begin
@@ -104,15 +104,15 @@ end;
 function SurfaceOrder(const pType: string): TArray<string>;
 begin
   if pType = 'cli' then
-    Result := ['type', 'verb', 'sub', 'example']
+    Result := ['type', 'verb', 'sub', 'example', 'usage', 'flags']
   else if pType = 'ide-menu' then
-    Result := ['type', 'path']
+    Result := ['type', 'path', 'steps']
   else if pType = 'ide-context' then
-    Result := ['type', 'host', 'caption']
+    Result := ['type', 'host', 'caption', 'steps']
   else if pType = 'ide-about' then
-    Result := ['type', 'caption']
+    Result := ['type', 'caption', 'steps']
   else if pType = 'tool-window' then
-    Result := ['type', 'path']
+    Result := ['type', 'path', 'steps']
   else if pType = 'shortcut' then
     Result := ['type', 'keys']
   else if pType = 'lsp' then
@@ -286,6 +286,9 @@ begin
         end;
       cxExample: lOrder := ['kind', 'text', 'path', 'note'];
       cxLastVerified: lOrder := ['date', 'by', 'build'];
+      cxFlag: lOrder := ['name', 'arg', 'summary', 'default'];
+      cxQuestion: lOrder := ['ask', 'command'];
+      cxVerified: lOrder := ['date', 'by', 'build', 'surfaceHash'];
     else
       lOrder := nil;
     end;
@@ -313,7 +316,7 @@ begin
       begin
         if (pCtx = cxEntry) and (lKeys[i] <> 'surfaces') and IsEmptyValue(lV) then
           lKeys.Delete(i)
-        else if (pCtx in [cxSurface, cxExample, cxLastVerified]) and (lV is TJSONNull) and (i < Length(lOrder)) then
+        else if (pCtx in [cxSurface, cxExample, cxLastVerified, cxFlag, cxQuestion, cxVerified]) and (lV is TJSONNull) and (i < Length(lOrder)) then
           lKeys.Delete(i);
       end;
     if lKeys.Count = 0 then
@@ -340,9 +343,15 @@ begin
           AppendArray(pSb, ArrayItems(TJSONArray(lV)), pLevel + 1, cxExample)
         else if (lName = 'lastVerified') and (lV is TJSONObject) then
           AppendObject(pSb, TJSONObject(lV), pLevel + 1, cxLastVerified, nil)
+        else if (lName = 'verified') and (lV is TJSONObject) then
+          AppendObject(pSb, TJSONObject(lV), pLevel + 1, cxVerified, nil)
+        else if (lName = 'questions') and (lV is TJSONArray) then
+          AppendArray(pSb, ArrayItems(TJSONArray(lV)), pLevel + 1, cxQuestion)
         else
           AppendValue(pSb, lV, pLevel + 1, cxPlain, nil);
       end
+      else if (pCtx = cxSurface) and (lName = 'flags') and (lV is TJSONArray) then
+        AppendArray(pSb, ArrayItems(TJSONArray(lV)), pLevel + 1, cxFlag)
       else
       begin
         lItemCtx := cxPlain;

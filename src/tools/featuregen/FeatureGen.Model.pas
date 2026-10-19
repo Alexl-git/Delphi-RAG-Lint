@@ -11,6 +11,21 @@ uses
   ;
 
 type
+  /// <summary>One flag of a cli surface (schema v2 flags[]).</summary>
+  TFlag = record
+    Name: string;
+    Arg: string;
+    Summary: string;
+    /// <summary>The flag's default value; '' when none.</summary>
+    DefaultValue: string;
+  end;
+
+  /// <summary>One "I want to ..." question of an entry (schema v2 questions[]).</summary>
+  TQuestion = record
+    Ask: string;
+    Command: string;
+  end;
+
   /// <summary>One entry surface (a cli verb, a menu path, a shortcut ...).</summary>
   /// <remarks>Only the members of this surface's Kind are filled; the rest read ''. Args is the JSON text of a non-string value.</remarks>
   TSurface = record
@@ -28,6 +43,12 @@ type
     Args: string;
     Menu: string;
     Doc: string;
+    /// <summary>cli: synopsis line (schema v2); '' when absent.</summary>
+    Usage: string;
+    /// <summary>cli: every flag the verb accepts (schema v2).</summary>
+    Flags: TArray<TFlag>;
+    /// <summary>ide-menu / ide-context / ide-about / tool-window: click-by-click steps (schema v2).</summary>
+    Steps: TArray<string>;
   end;
 
   /// <summary>One example row of an entry.</summary>
@@ -67,6 +88,13 @@ type
     LastVerifiedDate: string;
     LastVerifiedBy: string;
     LastVerifiedBuild: string;
+    /// <summary>helpContext (schema v2); defaults to Id when absent.</summary>
+    HelpContext: string;
+    /// <summary>verified.* (schema v2, tool-written); '' when absent.</summary>
+    VerifiedDate: string;
+    VerifiedBy: string;
+    VerifiedBuild: string;
+    VerifiedSurfaceHash: string;
     /// <summary>0 when absent.</summary>
     HomeOrder: Integer;
     Surfaces: TArray<TSurface>;
@@ -75,6 +103,8 @@ type
     Related: TArray<string>;
     Tests: TArray<string>;
     Examples: TArray<TExample>;
+    Pitfalls: TArray<string>;
+    Questions: TArray<TQuestion>;
   end;
 
   /// <summary>The loaded registry of one repo (or fixture) root.</summary>
@@ -154,6 +184,9 @@ begin
 end;
 
 function ToSurface(pObj: TJSONValue): TSurface;
+var
+  lItems: TArray<TJSONValue>;
+  i: Integer;
 begin
   Result.Kind := Prop(pObj, 'type');
   Result.Verb := Prop(pObj, 'verb');
@@ -169,11 +202,22 @@ begin
   Result.Args := ArgsText(pObj);
   Result.Menu := Prop(pObj, 'menu');
   Result.Doc := Prop(pObj, 'doc');
+  Result.Usage := Prop(pObj, 'usage');
+  Result.Steps := StrList(pObj, 'steps');
+  lItems := ObjList(pObj, 'flags');
+  SetLength(Result.Flags, Length(lItems));
+  for i := 0 to High(lItems) do
+  begin
+    Result.Flags[i].Name := Prop(lItems[i], 'name');
+    Result.Flags[i].Arg := Prop(lItems[i], 'arg');
+    Result.Flags[i].Summary := Prop(lItems[i], 'summary');
+    Result.Flags[i].DefaultValue := Prop(lItems[i], 'default');
+  end;
 end;
 
 function ToEntry(pObj: TJSONValue): TFeatureEntry;
 var
-  lLv: TJSONValue;
+  lLv, lVer: TJSONValue;
   lItems: TArray<TJSONValue>;
   i: Integer;
 begin
@@ -197,6 +241,22 @@ begin
   Result.LastVerifiedDate := Prop(lLv, 'date');
   Result.LastVerifiedBy := Prop(lLv, 'by');
   Result.LastVerifiedBuild := Prop(lLv, 'build');
+  Result.HelpContext := Prop(pObj, 'helpContext');
+  if Result.HelpContext = '' then
+    Result.HelpContext := Result.Id;
+  lVer := TJSONObject(pObj).GetValue('verified');
+  Result.VerifiedDate := Prop(lVer, 'date');
+  Result.VerifiedBy := Prop(lVer, 'by');
+  Result.VerifiedBuild := Prop(lVer, 'build');
+  Result.VerifiedSurfaceHash := Prop(lVer, 'surfaceHash');
+  Result.Pitfalls := StrList(pObj, 'pitfalls');
+  lItems := ObjList(pObj, 'questions');
+  SetLength(Result.Questions, Length(lItems));
+  for i := 0 to High(lItems) do
+  begin
+    Result.Questions[i].Ask := Prop(lItems[i], 'ask');
+    Result.Questions[i].Command := Prop(lItems[i], 'command');
+  end;
   Result.Requires := StrList(pObj, 'requires');
   Result.Aliases := StrList(pObj, 'aliases');
   Result.Related := StrList(pObj, 'related');

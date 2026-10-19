@@ -54,11 +54,11 @@ if (Test-Path -LiteralPath $script:HarvestLibPath) { . $script:HarvestLibPath }
 # enum of 'type' mirrors the keys here; run_feature_registry_canonical.ps1
 # asserts the two lists agree.
 $script:SurfaceKeys = [ordered]@{
-  'cli'         = @('type', 'verb', 'sub', 'example')
-  'ide-menu'    = @('type', 'path')
-  'ide-context' = @('type', 'host', 'caption')
-  'ide-about'   = @('type', 'caption')
-  'tool-window' = @('type', 'path')
+  'cli'         = @('type', 'verb', 'sub', 'example', 'usage', 'flags')
+  'ide-menu'    = @('type', 'path', 'steps')
+  'ide-context' = @('type', 'host', 'caption', 'steps')
+  'ide-about'   = @('type', 'caption', 'steps')
+  'tool-window' = @('type', 'path', 'steps')
   'shortcut'    = @('type', 'keys')
   'lsp'         = @('type', 'method')
   'mcp'         = @('type', 'tool')
@@ -75,6 +75,9 @@ $script:ContextHosts = @('Structure form', 'Project Manager', 'Editor')
 $script:ChildOnlyKeys = @('parent', 'subgroup', 'emitter', 'wikiAnchor')
 $script:ExampleKeys = @('kind', 'text', 'path', 'note')
 $script:LastVerifiedKeys = @('date', 'by', 'build')
+$script:FlagKeys = @('name', 'arg', 'summary', 'default')
+$script:QuestionKeys = @('ask', 'command')
+$script:VerifiedKeys = @('date', 'by', 'build', 'surfaceHash')
 
 function Get-RegistryPaths {
   param([string]$Repo = (Split-Path -Parent $PSScriptRoot))
@@ -240,9 +243,12 @@ function ConvertTo-CanonicalEntry {
     switch ($k) {
       'related'      { $v = Sort-OrdinalUnique ([string[]]@($v)) }
       'aliases'      { $v = Sort-OrdinalUnique ([string[]]@($v)) }
-      'surfaces'     { $v = @(foreach ($s in @($v)) { $t = [string]$s['type']; $order = if ($script:SurfaceKeys.Contains($t)) { $script:SurfaceKeys[$t] } else { @('type') }; Select-OrderedKeys $s $order }) }
+      'surfaces'     { $v = @(foreach ($s in @($v)) { $t = [string]$s['type']; $order = if ($script:SurfaceKeys.Contains($t)) { $script:SurfaceKeys[$t] } else { @('type') }; $so = Select-OrderedKeys $s $order; if ($so.Contains('flags')) { $so['flags'] = @(foreach ($f in @($so['flags'])) { Select-OrderedKeys $f $script:FlagKeys }) }; $so }) }
       'examples'     { $v = @(foreach ($x in @($v)) { Select-OrderedKeys $x $script:ExampleKeys }) }
       'lastVerified' { $v = Select-OrderedKeys $v $script:LastVerifiedKeys }
+      'verified'     { $v = Select-OrderedKeys $v $script:VerifiedKeys }
+      'questions'    { $v = @(foreach ($q in @($v)) { Select-OrderedKeys $q $script:QuestionKeys }) }
+      'pitfalls'     { $v = @($v | ForEach-Object { [string]$_ }) }
       'requires'     { $v = @($v | ForEach-Object { [string]$_ }) }
       'tests'        { $v = @($v | ForEach-Object { [string]$_ }) }
       'homeOrder'    { $v = [int]$v }

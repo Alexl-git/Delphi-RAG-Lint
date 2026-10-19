@@ -2235,7 +2235,7 @@
       "status": "shipped",
       "since": "0.44.0-alpha",
       "summary": "A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form",
-      "intro": "Hand a tester one spreadsheet that says how to reach every form: drag-lint > Reports > Forms for testers (CSV)... or drag-lint forms-csv --project <dproj> --db <db>. Each row gives the menu, ribbon or tab path, the control, the handler, the modal flag and the preconditions per hop; popup forms the index cannot trace go under popupForms in drag-lint-project.json. Needs the project index.",
+      "intro": "Hand a tester one spreadsheet that says how to reach every form: drag-lint > Reports > Forms for testers (CSV)... or `drag-lint forms-csv --project <dproj> --db <db>`. Each row gives the menu, ribbon or tab path, the control, the handler, the modal flag and the preconditions per hop; popup forms the index cannot trace go under popupForms in drag-lint-project.json. Needs the project index.",
       "wikiPage": "Generate-Test-Helper-CSV",
       "surfaces": [
         {
@@ -2428,7 +2428,7 @@
       "status": "shipped",
       "since": "1.30.0-alpha",
       "summary": "Ask one report question and print the answer as text",
-      "intro": "Read this when you want a report answer on stdout -- drag-lint ask <question> --target <T> --project <P.dproj> prints the DocInsight block the Reports menu copies (or the plain answer with --plain). Every question is answered inside the engine; no PowerShell is needed.",
+      "intro": "Read this when you want a report answer on stdout -- `drag-lint ask <question> --target <T> --project <P.dproj>` prints the DocInsight block the Reports menu copies (or the plain answer with --plain). Every question is answered inside the engine; no PowerShell is needed.",
       "wikiPage": "ask",
       "surfaces": [
         {
@@ -2452,7 +2452,7 @@
       "status": "shipped",
       "since": "1.20.2-alpha",
       "summary": "Every chart question of the Reports submenu and drag-lint ask, imported from REPORT_QUESTIONS",
-      "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run drag-lint ask <id> --target <name> --project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index and Graphviz for the pictures.",
+      "intro": "Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run `drag-lint ask <id> --target <name> --project <dproj>`; you get a clickable chart and a DocInsight text answer. Needs a fresh project index and Graphviz for the pictures.",
       "wikiPage": "Diagrams-and-Charts",
       "surfaces": [
         {
@@ -3021,7 +3021,7 @@
       "status": "experimental",
       "since": "1.28.3-alpha",
       "summary": "One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF",
-      "intro": "drag-lint-setup-<version>.exe installs the whole tool set per user or for all users, registers the IDE plugins only where RAD Studio 13 is installed, and uninstalls only what it wrote.",
+      "intro": "`drag-lint-setup-<version>.exe` installs the whole tool set per user or for all users, registers the IDE plugins only where RAD Studio 13 is installed, and uninstalls only what it wrote.",
       "wikiPage": "Setup-Installer",
       "surfaces": [
         {

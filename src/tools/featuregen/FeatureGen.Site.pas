@@ -21,9 +21,10 @@ uses
 /// <param name="pImages">Receives the images the wiki body pulls in.</param>
 /// <returns>The page text with LF line ends: front matter, title, summary, intro, How to run it, Where to click, Needs,
 /// Details and the footer. When the wiki body has its own "Running it from the CLI" or "Usage" section, How to run it keeps
-/// only the link to cli.md.</returns>
+/// only the link to cli.md. A cli surface usage field replaces the --help line; flags render as a Flags table; pitfalls as a
+/// Pitfalls list; steps as a numbered list under the surface bullet.</returns>
 /// <exception cref="EFeatureGen">The wiki body holds raw HTML or a non-ASCII character, or a front matter key is unknown.</exception>
-/// <remarks>updated is LastVerifiedBuild, else Since. order is the group order times 1000 plus the 1-based place among the
+/// <remarks>updated is verified.build, else LastVerifiedBuild, else Since. order is the group order times 1000 plus the 1-based place among the
 /// site entries of the group (ordinal by id); index.json carries the same number.</remarks>
 function RenderLeaf(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const pReg: TRegistry; const pRepo: string;
   out pImages: TArray<TImageRef>): string;
@@ -89,7 +90,9 @@ function FrontMatter(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const
 var
   lKey, lVal, lUpdated: string;
 begin
-  lUpdated := pEntry.LastVerifiedBuild;
+  lUpdated := pEntry.VerifiedBuild;
+  if lUpdated = '' then
+    lUpdated := pEntry.LastVerifiedBuild;
   if lUpdated = '' then
     lUpdated := pEntry.Since;
   Result := '---'#10;
@@ -128,6 +131,34 @@ begin
     Result := Result + ' ' + pS.Sub;
 end;
 
+function TableCell(const pText: string): string;
+begin
+  Result := StringReplace(pText, '|', '\|', [rfReplaceAll]);
+end;
+
+function CodeCell(const pText: string): string;
+begin
+  if pText = '' then
+    Result := ''
+  else
+    Result := '`' + TableCell(pText) + '`';
+end;
+
+{ The Flags table of a flag list, ending in a blank line; '' for no flags. }
+function FlagsTable(const pFlags: TArray<TFlag>): string;
+var
+  lF: TFlag;
+begin
+  Result := '';
+  if Length(pFlags) = 0 then
+    Exit;
+  Result := '| Flag | Argument | Meaning | Default |'#10'| --- | --- | --- | --- |'#10;
+  for lF in pFlags do
+    Result := Result + '| ' + CodeCell(lF.Name) + ' | ' + CodeCell(lF.Arg) + ' | ' + TableCell(lF.Summary) + ' | '
+      + TableCell(lF.DefaultValue) + ' |'#10;
+  Result := Result + #10;
+end;
+
 function HowToRun(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; pLinkOnly: Boolean): string;
 var
   lS: TSurface;
@@ -141,8 +172,8 @@ begin
         Result := '## How to run it'#10#10;
       if not pLinkOnly then
       begin
-        lUsage := '';
-        if pFmt.Help <> nil then
+        lUsage := lS.Usage;
+        if (lUsage = '') and (pFmt.Help <> nil) then
           lUsage := pFmt.Help.UsageFor(VerbName(lS));
         if lUsage = '' then
           lUsage := 'drag-lint ' + VerbName(lS);
@@ -154,10 +185,38 @@ begin
     end;
 end;
 
+function FlagsSection(const pEntry: TFeatureEntry): string;
+var
+  lS: TSurface;
+  lF: TFlag;
+  lAll: TArray<TFlag>;
+begin
+  SetLength(lAll, 0);
+  for lS in pEntry.Surfaces do
+    if lS.Kind = 'cli' then
+      for lF in lS.Flags do
+        lAll := lAll + [lF];
+  Result := '';
+  if Length(lAll) > 0 then
+    Result := '## Flags'#10#10 + FlagsTable(lAll);
+end;
+
+function PitfallsSection(const pEntry: TFeatureEntry): string;
+var
+  lP: string;
+begin
+  Result := '';
+  for lP in pEntry.Pitfalls do
+    Result := Result + '* ' + lP + #10;
+  if Result <> '' then
+    Result := '## Pitfalls'#10#10 + Result + #10;
+end;
+
 function WhereToClick(const pEntry: TFeatureEntry): string;
 var
   lS: TSurface;
   lLine: string;
+  lI: Integer;
 begin
   Result := '';
   for lS in pEntry.Surfaces do
@@ -173,6 +232,8 @@ begin
     else
       Continue;
     Result := Result + lLine + #10;
+    for lI := 0 to High(lS.Steps) do
+      Result := Result + '   ' + IntToStr(lI + 1) + '. ' + lS.Steps[lI] + #10;
   end;
   if Result <> '' then
     Result := '## Where to click'#10#10 + Result + #10;
@@ -209,12 +270,13 @@ begin
   Result := FrontMatter(pEntry, pFmt, pReg) + #10'# ' + pEntry.Title + #10#10 + lSummary + #10#10;
   if pEntry.Intro <> '' then
     Result := Result + pEntry.Intro + #10#10;
-  Result := Result + HowToRun(pEntry, pFmt, lHasCliSection) + WhereToClick(pEntry);
+  Result := Result + HowToRun(pEntry, pFmt, lHasCliSection) + FlagsSection(pEntry) + WhereToClick(pEntry);
   if Length(pEntry.Requires) > 0 then
   begin
     lNeeds := string.Join(', ', pEntry.Requires);
     Result := Result + '**Needs:** ' + lNeeds + #10#10;
   end;
+  Result := Result + PitfallsSection(pEntry);
   if lBody <> '' then
     Result := Result + '## Details'#10#10 + lBody + #10#10;
   Result := Result + '---'#10#10'[All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)'#10;
@@ -351,6 +413,9 @@ var
   lI: Integer;
   lVerb, lUsage, lUsages, lSub: string;
   lSubs: TList<string>;
+  lFlags: TList<TFlag>;
+  lF: TFlag;
+  lSeen: TList<string>;
 begin
   lVerbs := TObjectDictionary<string, TList<Integer>>.Create([doOwnsValues]);
   try
@@ -385,7 +450,11 @@ begin
         for lSub in lSubs do
         begin
           lUsage := '';
-          if pFmt.Help <> nil then
+          for lI in lVerbs[lVerb] do
+            for lS in pInc[lI].Surfaces do
+              if (lUsage = '') and (lS.Kind = 'cli') and (lS.Verb = lVerb) and (lS.Sub = lSub) then
+                lUsage := lS.Usage;
+          if (lUsage = '') and (pFmt.Help <> nil) then
             lUsage := pFmt.Help.UsageFor(Trim(lVerb + ' ' + lSub));
           if (lUsage <> '') and (Pos(lUsage + #10, lUsages) = 0) then
             lUsages := lUsages + lUsage + #10;
@@ -396,6 +465,23 @@ begin
       if lUsages = '' then
         lUsages := 'drag-lint ' + lVerb + #10;
       Result := Result + '### ' + lVerb + #10#10 + Sentence(lE.Summary) + #10#10'```text'#10 + lUsages + '```'#10#10;
+      lFlags := TList<TFlag>.Create;
+      lSeen := TList<string>.Create;
+      try
+        for lI in lVerbs[lVerb] do
+          for lS in pInc[lI].Surfaces do
+            if (lS.Kind = 'cli') and (lS.Verb = lVerb) then
+              for lF in lS.Flags do
+                if not lSeen.Contains(lF.Name) then
+                begin
+                  lSeen.Add(lF.Name);
+                  lFlags.Add(lF);
+                end;
+        Result := Result + FlagsTable(lFlags.ToArray);
+      finally
+        lSeen.Free;
+        lFlags.Free;
+      end;
       if lVerbs[lVerb].Count = 1 then
         Result := Result + 'Described in ' + LeafLink(lE, lE.Title) + '.'#10#10
       else
@@ -631,6 +717,8 @@ procedure CheckEntryText(const pEntry: TFeatureEntry);
 var
   lS: TSurface;
   lR: string;
+  lF: TFlag;
+  lQ: TQuestion;
 begin
   CheckField(pEntry, 'title', pEntry.Title, False);
   CheckField(pEntry, 'summary', pEntry.Summary, False);
@@ -644,6 +732,23 @@ begin
     CheckField(pEntry, 'surfaces.host', lS.Host, False);
     CheckField(pEntry, 'surfaces.verb', lS.Verb, False);
     CheckField(pEntry, 'surfaces.example', lS.Example, True);
+    CheckField(pEntry, 'surfaces.usage', lS.Usage, True);
+    for lF in lS.Flags do
+    begin
+      CheckField(pEntry, 'surfaces.flags.name', lF.Name, True);
+      CheckField(pEntry, 'surfaces.flags.arg', lF.Arg, True);
+      CheckField(pEntry, 'surfaces.flags.summary', lF.Summary, False);
+      CheckField(pEntry, 'surfaces.flags.default', lF.DefaultValue, False);
+    end;
+    for lR in lS.Steps do
+      CheckField(pEntry, 'surfaces.steps', lR, False);
+  end;
+  for lR in pEntry.Pitfalls do
+    CheckField(pEntry, 'pitfalls', lR, False);
+  for lQ in pEntry.Questions do
+  begin
+    CheckField(pEntry, 'questions.ask', lQ.Ask, False);
+    CheckField(pEntry, 'questions.command', lQ.Command, True);
   end;
 end;
 

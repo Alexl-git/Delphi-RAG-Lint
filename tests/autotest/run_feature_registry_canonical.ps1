@@ -33,7 +33,7 @@ $p = Get-RegistryPaths -Repo $Repo
 $keys = @(Get-EntryKeyOrder -Paths $p)
 Check 'entry key order read from the schema' ($keys.Count -ge 20) "($($keys.Count) keys)"
 Check 'key order starts id, title, group, owner' (($keys[0..3] -join ',') -eq 'id,title,group,owner')
-Check 'key order ends lastVerified, homeOrder, tests' (($keys[-3..-1] -join ',') -eq 'lastVerified,homeOrder,tests')
+Check 'key order ends lastVerified, verified, homeOrder, tests' (($keys[-4..-1] -join ',') -eq 'lastVerified,verified,homeOrder,tests')
 $schemaTypes = @((Get-Content -LiteralPath (Join-Path $p.Schema 'entry.schema.json') -Raw | ConvertFrom-Json).properties.surfaces.items.properties.type.enum)
 $modTypes = @((Get-Module FeatureRegistry).SessionState.PSVariable.GetValue('SurfaceKeys').Keys)
 Check 'schema surface types == module surface types' ((($schemaTypes | Sort-Object) -join ',') -eq (($modTypes | Sort-Object) -join ',')) "schema: $($schemaTypes -join ' ')"

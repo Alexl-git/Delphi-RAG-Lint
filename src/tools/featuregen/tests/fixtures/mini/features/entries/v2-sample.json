@@ -1,0 +1,52 @@
+{
+  "id": "v2-sample",
+  "title": "Schema v2 sample",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.86.0-alpha",
+  "summary": "Exercises every schema v2 field for the featuregen tests",
+  "helpContext": "v2-help-id",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "v2verb",
+      "sub": "go",
+      "example": "drag-lint v2verb go --name X",
+      "usage": "drag-lint v2verb go --name <N> [--db <db>]",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<N>",
+          "summary": "The bare member name",
+          "default": "none"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>",
+          "summary": "Index to read; a|b",
+          "default": ""
+        }
+      ]
+    },
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Search > V2 sample",
+      "steps": ["Open the Search menu", "Click V2 sample"]
+    }
+  ],
+  "audience": "both",
+  "pitfalls": ["Pass the BARE member name; TFoo.Bar returns 0", "Reindex after an edit"],
+  "questions": [
+    {
+      "ask": "Who calls Bar?",
+      "command": "drag-lint v2verb go --name Bar"
+    }
+  ],
+  "verified": {
+    "date": "2026-10-19",
+    "by": "ENGINE",
+    "build": "1.32.0",
+    "surfaceHash": "abc123"
+  }
+}
