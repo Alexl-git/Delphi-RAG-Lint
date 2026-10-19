@@ -24,6 +24,8 @@ stays HELD (not in the order). No publish / deploy in this run.
   B-21 outline no-DB error on stdout) was STILL RUNNING at checkpoint. Its worktree:
   `C:\Projects\Delphi-RAG-lint\.claude\worktrees\agent-ac663cbea1e4e5553`. Check `git log wave/1316..fix/1317-g-usages`.
 
+## BATTERY RESULT (wave/1316, finished): 712/716 PASS, 4 FAIL -- run_flag_verb_map, run_lsp_switch_guard, run_resolver_version_guard, run_doctests_v021 (366 s). Per-runner logs: scratchpad\wave\battery2\. Triage each against the deployed 1.31.5 engine / main FIRST (pre-existing vs wave regression); lsp_switch may be the battery-prerequisite exe (lane F prepare_battery). Do NOT merge to main until each is explained or fixed.
+
 ## Resume point (in order)
 1. Battery on wave/1316: read the tail of battery2.txt. Any FAIL: compare against main's deployed
    engine before blaming the wave (A6 lesson); fix on wave/1316, re-run that runner.
