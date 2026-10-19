@@ -5880,6 +5880,10 @@ begin
   while True do
   begin
     StartTime:= Now;
+    { Indexer.ParsedFiles is CUMULATIVE over the indexer's life, and --watch keeps
+      one indexer: measured against 0, every idle tick after the first "parsed"
+      files and ran the whole-database calls pass (run_watch_scope_reset W4). }
+    var ParsedBeforeTick: Integer:= Indexer.ParsedFiles;
     if AArgs.Watch then Writeln(Format('[%s] Indexing tick (interval=%ds)...', [FormatDateTime('hh:nn:ss', Now), Interval]))
     else if not AArgs.ResolveOnly then Writeln('Indexing...');
     { --resolve-only: re-derive the edges from parses the index ALREADY holds,
@@ -6149,9 +6153,9 @@ begin
       flag would announce a re-derive and then skip it -- the one outcome worse
       than not having the flag. }
     if ResolverStale or AArgs.ResolveOnly then Store.ClearCallEdges;
-    var RanCalls: Boolean:= (Indexer.ParsedFiles > 0) or AArgs.Rebuild or (SweptRows > 0) or
-       (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or ResolverStale or
-       AArgs.ResolveOnly;
+    var CorpusMoved: Boolean:= (Indexer.ParsedFiles > ParsedBeforeTick) or AArgs.Rebuild or (SweptRows > 0);
+    var RanCalls: Boolean:= CorpusMoved or (Length(AArgs.LibraryDbs) > 0) or Store.CallEdgesNeedRebuild or
+       ResolverStale or AArgs.ResolveOnly;
     if RanCalls then
       Stage('', 'calls', procedure begin Store.ResolveCallTargets(OpenLibraryStores(AArgs)); end) { v14 (D5) + v21 cross-DB }
     else
@@ -6168,6 +6172,11 @@ begin
     { Walk + resolve both finished -- see CommitIndexerFingerprint for why the
       stamp waits until here rather than happening before the walk. }
     CommitIndexerFingerprint(Store, not AArgs.NoPreprocess, PpPlatform);
+    { --watch: ResolverStale was read ONCE, before the loop. This tick derived
+      the edges with the current resolver and stamped it, so a later tick must
+      not clear every edge again (it did, on every tick of a new or restamped DB,
+      and no tick could scope -- run_watch_scope_reset W2). }
+    ResolverStale:= False;
     { Rides the same completed-run guarantee as the fingerprints above: a
       database that says "project" was walked as a project, all the way through.
       This is what lets the next `index <dir> --db` refuse instead of guessing
