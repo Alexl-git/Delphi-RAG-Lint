@@ -2036,13 +2036,17 @@ begin
     else
     begin
       L.Add(Format(CCycleCountFmt, [N]));
+      // Prediction order = SCC discovery order (the order DoCycles prints): a
+      // group never moves. Untouched SCCs keep their FSccs index; the groups the
+      // edited SCC splits into take that SCC's place.
       for var I:= 0 to FSccs.Count - 1 do
         if I <> pSelf then
           L.Add(Format(CCycleGroupFmt, [Length(FSccs[I]), string.Join(' <-> ', FSccs[I]),
-            (if GroupHasIntf(FSccs[I]) then CCycleTagInterface else CCycleTagImplOnly)]));
-      for var G in FPredicted do
-        L.Add(Format(CCycleGroupFmt, [Length(G.Members), string.Join(' <-> ', G.Members),
-          (if G.HasIntf then CCycleTagInterface else CCycleTagImplOnly)]));
+            (if GroupHasIntf(FSccs[I]) then CCycleTagInterface else CCycleTagImplOnly)]))
+        else
+          for var G in FPredicted do
+            L.Add(Format(CCycleGroupFmt, [Length(G.Members), string.Join(' <-> ', G.Members),
+              (if G.HasIntf then CCycleTagInterface else CCycleTagImplOnly)]));
       L.Add(CCycleEdgesHint);
     end;
     Result:= L.ToArray;

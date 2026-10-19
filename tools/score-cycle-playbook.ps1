@@ -64,7 +64,8 @@ if (($named.Count -eq 0) -or ($created.Count -eq 0) -or -not $expM.Success) {
 }
 function Normalize-Cycles([string]$Text) {
   # One line per non-informational line; inside "[N units] a <-> b <-> c" the
-  # unit order is not significant, so the names are sorted.
+  # unit order is not significant, so the names are sorted; the group lines
+  # themselves are sorted too (the scorer compares SETS of groups, not their print order).
   $out = @()
   foreach ($l in ($Text -split "\r?\n")) {
     $t = $l.TrimEnd()
@@ -75,6 +76,11 @@ function Normalize-Cycles([string]$Text) {
       $t = $m.Groups[1].Value + $units + $m.Groups[3].Value
     }
     $out += $t
+  }
+  $gi = @(0..($out.Count - 1) | Where-Object { $out[$_] -match '^\s*\[\d+ units\]' })
+  if ($gi.Count -gt 1) {
+    $sorted = @($gi | ForEach-Object { $out[$_] } | Sort-Object { $_ } -CaseSensitive)
+    for ($k = 0; $k -lt $gi.Count; $k++) { $out[$gi[$k]] = $sorted[$k] }
   }
   return ($out -join "`n")
 }

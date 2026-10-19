@@ -392,9 +392,9 @@ Tick each box in order. Do not skip the compile.
 12. [ ] Run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite"`. It must print exactly:
 ```text
 3 circular unit group(s) found:
+  [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (implementation-only -- legal, lower impact)
   [2 units] demouiconnect <-> demogageport   (implementation-only -- legal, lower impact)
   [3 units] demoblueprint <-> democontrolplan <-> demoblueprint.viewmodel   (implementation-only -- legal, lower impact)
-  [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (implementation-only -- legal, lower impact)
   (add --edges for the uses lines, --causes for the symbols to refactor)
 ```
    The units inside a group may be listed in a different order. Lines starting with `(loaded`, `drag-lint: note:` or `  resolver:` are informational -- ignore them.
