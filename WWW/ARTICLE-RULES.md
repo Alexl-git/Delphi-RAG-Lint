@@ -46,7 +46,7 @@ The wording varies per article so none repeats.
 
 ### Phrasings already used
 
-- "We build drag-lint alongside our main product, Micronite — quality and production-control software for manufacturers — and the parsing questions below came straight out of that codebase."
+- "We build drag-lint alongside our main product, Micronite -- quality and production-control software for manufacturers -- and the parsing questions below came straight out of that codebase."
 
 ## Add an article
 

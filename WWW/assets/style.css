@@ -217,6 +217,7 @@ li::marker{color:var(--muted)}
 .scroll{overflow-x:auto;border:1px solid var(--rule);background:var(--surface)}
 table{border-collapse:collapse;width:100%;min-width:760px;font-size:14.5px}
 th,td{text-align:left;padding:13px 16px;vertical-align:top;border-bottom:1px solid var(--rule-soft)}
+th .sub{color:var(--muted)}
 thead th{
   font-family:var(--f-mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;
   font-weight:500;background:var(--surface-sunk);border-bottom:1px solid var(--rule);
