@@ -8,7 +8,7 @@
   (b) A routine that blocks an edge, whose signature types all resolve OUTSIDE the cycle, names
       the unit a pointer / event could be declared in instead of the generic "it is a routine".
   (c) The `(loaded defaults from ...)` note is a STDERR line: the plan on stdout must not hold
-      it, and must end with the plan's own last line. Positive control: the note is on stderr.
+      it, and must end with the plan's own last line. Hard positive control: the note IS on stderr.
 #>
 [CmdletBinding()]
 param(
@@ -37,6 +37,7 @@ function Get-Plan([string]$Db, [string]$Tag) {
 }
 
 New-Item -ItemType Directory -Force $WorkDir | Out-Null
+try {
 # An empty defaults file in the work dir makes the engine print its note, so (c) is not vacuous.
 [IO.File]::WriteAllText((Join-Path $WorkDir '.drag-lint.json'), '{}')
 $root = Join-Path $WorkDir 'circular-demo'
@@ -53,8 +54,8 @@ Check 'c1 stdout has no "(loaded defaults" note' ($p0.Out -notmatch 'loaded defa
 Check 'c2 stdout ends with plan text, not a note' (($p0.Out.TrimEnd() -split "`r?`n")[-1] -notmatch '^\(') (($p0.Out.TrimEnd() -split "`r?`n")[-1])
 $ctl = Get-Plan $db 'ctl'
 $withCfg = $ctl.Err -match 'loaded defaults'
-if ($withCfg) { Check 'c3 control: the note is on stderr when a defaults file is found' $true }
-else { Write-Host '  [SKIP] c3 control: no defaults file reachable from the work dir (nothing to print)' -ForegroundColor Yellow }
+# Hard control: this runner wrote .drag-lint.json itself, so a missing note means (c1/c2) are vacuous.
+Check 'c3 control: the note is on stderr (defaults file written by this runner)' $withCfg ('stderr=[' + $ctl.Err.Trim() + ']')
 
 Write-Host '== (b) routine edge in cycle 3' -ForegroundColor Cyan
 $flat = ($p0.Out -replace '\s+', ' ')
@@ -62,8 +63,12 @@ $wantB = '`demoblueprint -> demoblueprint.viewmodel`: `DemoBlueprintViewModelCre
 Check 'b1 edge line names the routine and the interface unit' ($flat.Contains($wantB))
 
 Write-Host '== (a) companion type after Part A' -ForegroundColor Cyan
-$null = & (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $p0.File -Cycle 1 -Root $root 2>&1 | Out-Null
-Check 'Part A of cycle 1 applied' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
+$before = (Get-ChildItem $root -Filter *.pas | Sort-Object Name | ForEach-Object { (Get-FileHash $_.FullName).Hash }) -join ','
+$fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $p0.File -Cycle 1 -Root $root 2>&1 | Out-String
+$rcA = $LASTEXITCODE
+$after = (Get-ChildItem $root -Filter *.pas | Sort-Object Name | ForEach-Object { (Get-FileHash $_.FullName).Hash }) -join ','
+Check 'Part A of cycle 1 applied (exit 0)' ($rcA -eq 0) ('exit=' + $rcA + ' ' + ($fo.Trim() -replace "`r?`n", ' | '))
+Check 'Part A changed the demo sources' ($before -ne $after)
 & $Exe index --project (Join-Path $root 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir 'index2.log')
 Check 'demo re-indexed' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
 $p1 = Get-Plan $db '1'
@@ -76,6 +81,8 @@ if ($i -ge 0) {
   for ($k = $i + 1; $k -lt $lines.Count -and $lines[$k] -match '^   '; $k++) { $blk += $lines[$k] }
   Check 'a1 item says "Used by: only the moved var `GDemoSettings`"' ($blk -contains '   - Used by: only the moved var `GDemoSettings`') ($blk -join ' | ')
 }
+} finally {
+  if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
+}
 
-if ($script:Failed) { Write-Host 'run_cyclefix_plan_wording: FAIL' -ForegroundColor Red; exit 1 }
-Write-Host 'run_cyclefix_plan_wording: PASS' -ForegroundColor Green
+if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }
