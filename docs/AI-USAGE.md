@@ -418,7 +418,7 @@ pure-diagnostic verbs are broken out in 2b.
 **Refactor / fix (write source; dry-run unless `--apply`)**
 | Verb | What it does |
 |------|--------------|
-| `rename --kind symbol --name QName --to New` | cross-unit rename (interface + impl header + call sites) |
+| `rename --kind symbol --name QName --to New` | cross-unit rename (interface + impl header + call sites); refuses (exit 2, names the file) when the old name is used in an indexed `.inc` -- no `{$I}` refs until extractor 1.22 |
 | `rename --kind param --file F --line L --col C --to New` | routine-local param/var rename |
 | `safe-delete --name QName` | delete a symbol iff it has zero references |
 | `extract-method --file F --from-line L1 --to-line L2 --name N` | pull a statement run into a new method |

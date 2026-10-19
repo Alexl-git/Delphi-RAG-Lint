@@ -20,6 +20,13 @@ Two related forms also exist: `--kind param --file <F> --line <L> --col <C>
 `--qname <Foo.TBar.Baz> --to <NewName> [--db PATH] [--dry-run] [--no-backup]`.
 Without `--apply` (or with `--dry-run`), the run is a preview only.
 
+**Include files.** The index records no references inside `{$I}` included
+text yet (extractor 1.22). So when the old name is used as an identifier in an
+`.inc` file the index holds (comments and string literals are ignored), both
+the preview and `--apply` REFUSE with exit 2 and name the `.inc` file(s),
+instead of renaming the declaration and leaving those uses stale. Rename the
+include's uses by hand together with the declaration.
+
 ## What it needs
 An index IS required. The project's DB lives at
 `<project folder>\_D-RAG\<project file>.sqlite`; run

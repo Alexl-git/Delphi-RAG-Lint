@@ -128,6 +128,22 @@ type
       /// <!-- drag-lint:auto END -->
       /// </remarks>
       class function ConflictReason(const AStore: ISymbolStore; const AQName, ANewName: string): string;
+      /// <summary>Non-empty human reason when the short name of AQName occurs as an
+      /// identifier token in an .inc file the index holds; '' otherwise. A rename
+      /// must then be refused: the index records no references inside {$I}
+      /// included text (until extractor 1.22), so Build would rewrite the
+      /// declaration and leave every use inside the include stale.</summary>
+      /// <param name="AStore">Open index; its `files` rows are the project closure
+      /// that is scanned. Must not be nil.</param>
+      /// <param name="AQName">Qualified name of the symbol to rename; only its last
+      /// dot segment is matched (case-insensitive, whole identifier).</param>
+      /// <returns>'' when no indexed .inc file uses the name; else a message that
+      /// names every such .inc file.</returns>
+      /// <remarks>A text scan, deliberately conservative: comments ({ }, (* *), //)
+      /// and string literals are skipped, but any other same-named identifier in an
+      /// include refuses the rename even if it binds to a different symbol. An .inc
+      /// that is listed but missing on disk is ignored.</remarks>
+      class function IncludeUseReason(const AStore: ISymbolStore; const AQName: string): string;
       /// <summary>Routine-local rename of the parameter or local variable whose
       /// declaration identifier sits at (ALine, ACol) (1-based) in AFile. Emits a
       /// TRenameEdit for the declaration, every in-scope use within the owning
@@ -727,6 +743,92 @@ begin
   Sib:= AStore.FindChildSymbolByName(Syms[0].ParentId, ANewName);
   if Sib.Id <> 0 then
     Exit(Format('a symbol named "%s" already exists in the same scope', [ANewName]));
+end;
+
+{ True when AName occurs in AText as a whole Pascal identifier token outside
+  comments and string literals (case-insensitive). }
+const
+  IDENT_START = ['A'..'Z', 'a'..'z', '_'];
+  IDENT_CHARS = ['A'..'Z', 'a'..'z', '_', '0'..'9'];
+
+{ Index just past the comment, string literal or numeric run that starts at
+  APos in AText; APos itself when none starts there. A number, hex ($FF) or
+  char code (#13) is skipped whole so its digit run never reads as a name. }
+function SkipNonIdent(const AText: string; APos: Integer): Integer;
+var
+  Len: Integer;
+begin
+  Len:= Length(AText);
+  Result:= APos;
+  if AText[APos] = '{' then
+    Result:= Pos('}', AText, APos + 1)
+  else if Copy(AText, APos, 2) = '(*' then
+    Result:= Pos('*)', AText, APos + 2) + 1
+  else if Copy(AText, APos, 2) = '//' then
+    Result:= Pos(#10, AText, APos + 2)
+  else if AText[APos] = '''' then
+    Result:= Pos('''', AText, APos + 1)
+  else if CharInSet(AText[APos], ['0'..'9', '$', '#']) then
+  begin
+    Result:= APos + 1;
+    while (Result <= Len) and CharInSet(AText[Result], IDENT_CHARS) do Inc(Result);
+    Exit;
+  end
+  else
+    Exit;
+  { an unterminated comment or string runs to the end of the text }
+  if Result <= APos then Result:= Len;
+  Inc(Result);
+end;
+
+function IdentOccursIn(const AText, AName: string): Boolean;
+var
+  I, Len, Start, Next: Integer;
+begin
+  Result:= False;
+  Len:= Length(AText);
+  I:= 1;
+  while I <= Len do
+  begin
+    Next:= SkipNonIdent(AText, I);
+    if Next > I then
+      I:= Next
+    else if CharInSet(AText[I], IDENT_START) then
+    begin
+      Start:= I;
+      while (I <= Len) and CharInSet(AText[I], IDENT_CHARS) do Inc(I);
+      if SameText(Copy(AText, Start, I - Start), AName) then Exit(True);
+    end
+    else
+      Inc(I);
+  end;
+end;
+
+class function TRenameRefactoring.IncludeUseReason(const AStore: ISymbolStore;
+  const AQName: string): string;
+var
+  ShortName: string;
+  Hits     : TStringList;
+  Stamp    : TFileStamp;
+begin
+  Result:= '';
+  ShortName:= LastDotSegment(AQName);
+  if ShortName = '' then Exit;
+  Hits:= TStringList.Create;
+  try
+    for Stamp in AStore.GetAllFileStamps do
+      if SameText(ExtractFileExt(Stamp.Path), '.inc') and FileExists(Stamp.Path)
+        and IdentOccursIn(TFile.ReadAllText(Stamp.Path, TEncoding.ANSI), ShortName) then
+        Hits.Add(Stamp.Path);
+    if Hits.Count = 0 then Exit;
+    Hits.Sort;
+    Result:= Format('"%s" is used in include file(s) %s -- the index records no ' +
+      'references inside {$I} included text yet (extractor 1.22), so those uses ' +
+      'would be left stale. Rename them by hand together with the declaration.',
+      [ShortName, string.Join(', ', Hits.ToStringArray)]);
+  finally
+    Hits.Free;
+  end;
 end;
 
 end.
