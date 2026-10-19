@@ -27,13 +27,12 @@ stays HELD (not in the order). No publish / deploy in this run.
 ## Resume point (in order)
 1. Battery on wave/1316: read the tail of battery2.txt. Any FAIL: compare against main's deployed
    engine before blaming the wave (A6 lesson); fix on wave/1316, re-run that runner.
-2. Battery green -> `git -C C:\Projects\Delphi-RAG-lint merge --ff-only wave/1316` on main (main is
-   at 2681941b + only docs edits uncommitted: docs/handoffs/RESUME.md, this file). Tag nothing.
+2. Battery green -> `git -C C:\Projects\Delphi-RAG-lint merge --no-ff wave/1316` on main (main has the handoff commit 73880364 on top of 2681941b, so not a fast-forward). Tag nothing.
 3. (DONE: lane G merged, guards PASS.) Was: lane G: if committed, merge into wave/1317, add its CHANGELOG lines under v1.31.7, rebuild
    (`...\scratchpad\wave3\b.bat`), run its guard + docs-sync. If unfinished/abandoned, list G's items
    as open for the owner.
 4. wave/1317: rebuild, `tools\build-feature-pages.ps1 -Normalise` (Home/manifest take the version
-   from the built exe), commit, full battery once, then ff main to wave/1317.
+   from the built exe), commit, full battery once, then merge wave/1317 into main (--no-ff).
 5. INBOX hygiene in the MAIN checkout (gitignored): notes for B-02 (INBOX-library-drift-win64-lib-dirs.md)
    and B-18 (INBOX-2026-10-05-freshness-misses-edited-dfm.md) were set to `status=fixed`, B-24
    (INBOX-index-stage-list-copies-skip-facts-inherited.md) to `fixed-on-branch` -- NOT valid for
