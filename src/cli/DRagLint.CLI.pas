@@ -4652,14 +4652,17 @@ end; // function
   the fix for the stray-index problem and changed nothing -- a stray that exists
   passes an existence test. Existence is not sufficiency.
 
-  Returns True when there is nothing to open, having said so. }
+  Returns True when there is nothing to open, having said so -- on STDERR
+  (B-21, 2026-10-19: it went to stdout, where a caller parsing the verb's
+  answer read the refusal AS the answer). Every caller exits 2 on True.
+  Pinned by run_nodb_error_on_stderr.ps1. }
 function NoDbResolved(const ADbPath, AVerb: string): Boolean;
 begin
   Result:= ADbPath = '';
   if not Result then Exit;
-  Writeln('ERROR: ', AVerb, ': no --db was given and no project database resolves here.');
-  Writeln('       Run "drag-lint resolve-dbs" to list the configured databases,');
-  Writeln('       or pass --db <file.sqlite> explicitly.');
+  Writeln(ErrOutput, 'ERROR: ', AVerb, ': no --db was given and no project database resolves here.');
+  Writeln(ErrOutput, '       Run "drag-lint resolve-dbs" to list the configured databases,');
+  Writeln(ErrOutput, '       or pass --db <file.sqlite> explicitly.');
 end;
 
 /// <summary>Refuses a run whose EXPLICIT --db list names a file that does not
@@ -9948,7 +9951,12 @@ begin
   if Length(Dbs) = 0 then
   begin
     if NoDbResolved(AArgs.DbPath, 'outline') then Exit(2);
-    if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Writeln('Run "drag-lint index <path>" first.'); Exit (2 ); end;
+    if not TFile.Exists(AArgs.DbPath) then
+    begin
+      Writeln(ErrOutput, 'ERROR: database not found: ', AArgs.DbPath);
+      Writeln(ErrOutput, 'Run "drag-lint index <path>" first.');
+      Exit(2);
+    end;
     Dbs:= [AArgs.DbPath];
   end;
 
