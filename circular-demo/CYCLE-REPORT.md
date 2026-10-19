@@ -420,7 +420,7 @@ Files:
 
 ### Recommended fix (optional)
 No edge of this cycle can be cut mechanically:
-- `demoblueprint -> demoblueprint.viewmodel`: `DemoBlueprintViewModelCreate` (function): it is a routine: its body would have to move together with everything it uses, or be handed over as a parameter / event instead of being called by name
+- `demoblueprint -> demoblueprint.viewmodel`: `DemoBlueprintViewModelCreate` (function) -- a routine; could be called through a pointer declared in `DemoBlueprint.Interfaces` (not automated)
 - `democontrolplan -> demoblueprint`: `TDemoBlueprint` (class): its method bodies use `DemoBlueprintViewModelCreate`, which live in units of this cycle -- they would have to move with it
 - `demoblueprint.viewmodel -> democontrolplan`: `TDemoControlPlan` (class): its method bodies use `TDemoBlueprint`, which live in units of this cycle -- they would have to move with it
 

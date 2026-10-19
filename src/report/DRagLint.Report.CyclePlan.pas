@@ -305,6 +305,7 @@ type
     FLeafPath   : TDictionary<string, string>;
     FLeafDeps   : TObjectDictionary<string, TList<string>>;
     FConsumers  : TObjectDictionary<Int64, TList<TConsumer>>;
+    FPulledBy   : TDictionary<Int64, string>;
     FDecisions  : TList<TUsesDecision>;
     FUsesAdd    : TObjectDictionary<string, TList<string>>;
     FUsesDel    : TObjectDictionary<string, TList<string>>;
@@ -344,6 +345,8 @@ type
     function TryAdd(const pSym: TSymbol; const pCut: TArray<Int64>; out pWhy: string): Boolean;
     function AddDependencies(const pItem: TMoveItem; out pWhy: string): Boolean;
     function AddCompanions(const pItem: TMoveItem; out pWhy: string): Boolean;
+    procedure NotePulledBy(const pSym, pBy: TSymbol);
+    function SigTypesOutsideScc(const pSig: string; out pUnits: TArray<string>): Boolean;
     procedure Rollback(pSnap: Integer);
     function IsMovedFor(const pOwner: TSymbol; pFid: Int64): Boolean;
     // materialise
@@ -996,6 +999,7 @@ begin
   FLeafPath  := TDictionary<string, string>.Create;
   FLeafDeps  := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
   FConsumers := TObjectDictionary<Int64, TList<TConsumer>>.Create([doOwnsValues]);
+  FPulledBy  := TDictionary<Int64, string>.Create;
   FDecisions := TList<TUsesDecision>.Create;
   FUsesAdd   := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
   FUsesDel   := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
@@ -1013,6 +1017,7 @@ begin
   FUsesDel.Free;
   FUsesAdd.Free;
   FDecisions.Free;
+  FPulledBy.Free;
   FConsumers.Free;
   FLeafDeps.Free;
   FLeafPath.Free;
@@ -1258,6 +1263,7 @@ begin
   FLeafPath.Clear;
   FLeafDeps.Clear;
   FConsumers.Clear;
+  FPulledBy.Clear;
   FDecisions.Clear;
   FUsesAdd.Clear;
   FUsesDel.Clear;
@@ -1609,6 +1615,7 @@ begin
   for var N in NeedsInRanges(GetFile(pItem.Sym.FileId), MovedRanges(pItem)) do
   begin
     if (N.Owner.Id = pItem.Sym.Id) or not FMembers.ContainsKey(N.OwnerStem) then Continue;
+    NotePulledBy(N.Owner, pItem.Sym);
     if not TryAdd(N.Owner, nil, Why) then
     begin
       pWhy:= Format('it needs `%s` (%s), which cannot move: %s', [N.Owner.Name, N.Owner.Kind.ToText, Why]);
@@ -1630,6 +1637,7 @@ begin
   begin
     if (S.Id = pItem.Sym.Id) or not InRanges(S.StartLine, WithRange(pItem.Decl, nil)) then Continue;
     if (S.Kind = skEnumValue) or not OwnerOf(S, Owner) or (Owner.Id <> S.Id) then Continue;
+    NotePulledBy(S, pItem.Sym);
     if not TryAdd(S, nil, Why) then
     begin
       pWhy:= Format('`%s` is declared on the same lines and cannot move: %s', [S.Name, Why]);
@@ -1639,6 +1647,58 @@ begin
   Result:= True;
 end;
 
+procedure TCyclePlanner.NotePulledBy(const pSym, pBy: TSymbol);
+begin
+  { overwrites a stale entry of a probe that Rollback undid; an item already planned keeps none }
+  if FItems.ContainsKey(pSym.Id) then Exit;
+  FPulledBy.AddOrSetValue(pSym.Id, Format('%s `%s`', [(if pBy.Kind = skVarDecl then 'var' else 'declaration'), pBy.Name]));
+end;
+
+{ SigTypesOutsideScc -- do all TYPES a routine's stored signature names live outside the cycle?
+  pSig  : symbols.signature, e.g. `(const pFolderId: Integer): IFoo`. Only the text after a ':' of
+          each `;`/`,`/`(`/`)` group is read (parameter names are not types); `= default` tails,
+          the words const var out array of function procedure reference to, and the unit prefix
+          of a dotted name are dropped; every remaining identifier is looked up via CandidatesFor.
+  pUnits: the distinct unit names that declare those identifiers (an identifier no index row
+          resolves, e.g. Integer, is ignored).
+  Result: True when at least one identifier resolved and NO candidate of any identifier lives in a
+          unit of the cycle (FComp), so a pointer / event type for the routine could be declared
+          in pUnits without touching the cycle; False otherwise (nothing resolved, or one candidate
+          is inside the cycle). Task 4 moves this helper into CycleEdge.pas. }
+function TCyclePlanner.SigTypesOutsideScc(const pSig: string; out pUnits: TArray<string>): Boolean;
+const
+  CNotTypeWords = ' const var out array of function procedure reference to packed ';
+var
+  Units: TList<string>;
+begin
+  Result:= False;
+  pUnits:= nil;
+  Units := TList<string>.Create;
+  try
+    for var Group in pSig.Split([';', ',', '(', ')']) do
+    begin
+      var P:= Group.LastIndexOf(':');
+      if P < 0 then Continue;
+      var TypeText:= Group.Substring(P + 1);
+      var Eq:= TypeText.IndexOf('=');
+      if Eq >= 0 then TypeText:= TypeText.Substring(0, Eq);
+      for var M in TRegEx.Matches(TypeText, '[A-Za-z_][A-Za-z0-9_.]*') do
+      begin
+        var Ident:= M.Value.Substring(M.Value.LastIndexOf('.') + 1);
+        if (Ident = '') or ContainsText(CNotTypeWords, ' ' + Ident + ' ') then Continue;
+        for var C in CandidatesFor(Ident) do
+        begin
+          if MatchStr(C.Stem, FComp) then Exit(False);
+          if not Units.Contains(UnitNameOfStem(C.Stem)) then Units.Add(UnitNameOfStem(C.Stem));
+        end;
+      end;
+    end;
+    pUnits:= Units.ToArray;
+    Result:= Units.Count > 0;
+  finally
+    Units.Free;
+  end;
+end;
 procedure TCyclePlanner.Rollback(pSnap: Integer);
 begin
   while FOrder.Count > pSnap do
@@ -2310,8 +2370,9 @@ end;
 
 function TCyclePlanner.EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>): TEdgeEval;
 var
-  Snap: Integer;
-  Why : string;
+  Snap : Integer;
+  Why  : string;
+  Units: TArray<string>;
 begin
   Result:= Default(TEdgeEval);
   Result.FromStem:= pFrom;
@@ -2325,6 +2386,9 @@ begin
     begin
       Result.Movable:= False;
       Result.Why    := Format('`%s` (%s): %s', [N.Owner.Name, N.Owner.Kind.ToText, Why]);
+      if (N.Owner.Kind in [skProcedure, skFunction]) and SigTypesOutsideScc(N.Owner.Signature, Units) then
+        Result.Why:= Format('`%s` (%s) -- a routine; could be called through a pointer declared in %s (not automated)',
+          [N.Owner.Name, N.Owner.Kind.ToText, QuoteList(Units)]);
       Break;
     end;
   Result.Cost:= FOrder.Count - Snap;
@@ -2495,7 +2559,13 @@ procedure TCyclePlanner.RenderConsumers(const pItem: TMoveItem);
 var
   L: TList<TConsumer>;
 begin
-  if not FConsumers.TryGetValue(pItem.Sym.Id, L) then Exit;
+  if not FConsumers.TryGetValue(pItem.Sym.Id, L) then
+  begin
+    { a companion pulled in only by another moved declaration has no consumer of its own }
+    var By: string;
+    if FPulledBy.TryGetValue(pItem.Sym.Id, By) then EmitFmt('   - Used by: only the moved %s', [By]);
+    Exit;
+  end;
   EmitFmt('   - Used by (each needs `%s` in the uses clause of that section; the edit step does it):',
     [FLeafName[pItem.Stem]]);
   for var C in L do
