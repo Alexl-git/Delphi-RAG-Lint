@@ -171,6 +171,33 @@ function ResolvedCallersForName(const AStore: ISymbolStore; const AName: string)
 /// </remarks>
 function NameCallersForName(const AStore: ISymbolStore; const AName: string; AContextLines: Integer = 1): TQueryCallerRows;
 
+/// <summary>The references `usages` reports for <paramref name="AName"/> in one
+/// store: the CLI verb and the LSP `draglint/usages` reply both call this, so
+/// the two cannot disagree on which rows exist.</summary>
+/// <param name="AStore">An open store; must not be nil.</param>
+/// <param name="AName">A bare name (`Streaming`) or a qualified one
+/// (`TJob.Streaming`, `uJob.TJob.Streaming`).</param>
+/// <param name="ADecls">The declarations AStore.FindSymbolsByExactName returned
+/// for AName; used only for a qualified name.</param>
+/// <returns>A bare name: every ref whose name_text matches, kind-blind (the
+/// historical behaviour). A qualified name: the refs named by its LAST segment
+/// that the resolver bound to one of ADecls -- refs.name_text never carries a
+/// dot, so matching the dotted string answered 0 for everything.</returns>
+/// <remarks>A qualified query drops UNBOUND refs: an unbound `X.Streaming`
+/// cannot be attributed to TJob rather than to any other Streaming.</remarks>
+function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const ADecls: TArray<TSymbol>): TArray<TReference>;
+
+/// <summary>The `usages` bucket a reference belongs to.</summary>
+/// <param name="ARef">A reference from UsageRefsForName.</param>
+/// <returns>'reads' | 'writes' | 'calls' | 'types' | 'attributes' | 'events'.
+/// A 'member-access' ref goes by its AccessMode (member_accesses.mode): 'read'
+/// -> 'reads', 'write' -> 'writes'; one with no mode, and every unknown kind,
+/// stays in 'calls' as before.</returns>
+/// <remarks>Before 2026-10-19 the kind alone decided, so every qualified field
+/// access (`AJob.Streaming`) was a CALL and `reads` read 0 for a field read
+/// all over the plugin. Pinned by run_usages_field_access.ps1.</remarks>
+function UsageBucketOf(const ARef: TReference): string;
+
 implementation
 
 { Pull the call site's OWN line out of the indexed context blob.
@@ -328,6 +355,40 @@ begin
     Row.EnclosingSymbolId:= Refs[i].EnclosingSymbolId;
     Result[i]:= Row;
   end;
+end; // function
+
+function UsageRefsForName(const AStore: ISymbolStore; const AName: string; const ADecls: TArray<TSymbol>): TArray<TReference>;
+var
+  DotAt: Integer;
+  Kept : TList<TReference>;
+begin
+  DotAt:= LastDelimiter('.', AName);
+  if DotAt = 0 then Exit(AStore.FindCallersByName(AName));
+  Kept:= TList<TReference>.Create;
+  try
+    for var R in AStore.FindCallersByName(Copy(AName, DotAt + 1, MaxInt)) do
+      for var D in ADecls do
+        if (R.SymbolId <> 0) and (R.SymbolId = D.Id) then
+        begin
+          Kept.Add(R);
+          Break;
+        end;
+    Result:= Kept.ToArray;
+  finally
+    Kept.Free;
+  end;
+end; // function
+
+function UsageBucketOf(const ARef: TReference): string;
+begin
+  if ARef.Kind      = 'read'          then Result:= 'reads'
+  else if ARef.Kind = 'write'         then Result:= 'writes'
+  else if ARef.Kind = 'type_use'      then Result:= 'types'
+  else if ARef.Kind = 'attribute'     then Result:= 'attributes'
+  else if ARef.Kind = 'event-binding' then Result:= 'events'
+  else if (ARef.Kind = 'member-access') and (ARef.AccessMode = 'read' ) then Result:= 'reads'
+  else if (ARef.Kind = 'member-access') and (ARef.AccessMode = 'write') then Result:= 'writes'
+  else Result:= 'calls'; { call + anything else }
 end; // function
 
 end.

@@ -10072,14 +10072,16 @@ var
     AArr.AddElement(O);
   end;
 
-  function GroupFor(const AKind: string): TJSONArray;
+  { The bucket is DRagLint.Query.Callers.UsageBucketOf's, shared with the LSP. }
+  function GroupFor(const ARef: TReference): TJSONArray;
   begin
-    if AKind      = 'read' then Result:= JReads
-    else if AKind = 'write'         then Result:= JWrites
-    else if AKind = 'type_use'      then Result:= JTypes
-    else if AKind = 'attribute'     then Result:= JAttrs
-    else if AKind = 'event-binding' then Result:= JEvents
-    else Result:= JCalls; { call + anything else }
+    var Bucket: string:= UsageBucketOf(ARef);
+    if Bucket      = 'reads'      then Result:= JReads
+    else if Bucket = 'writes'     then Result:= JWrites
+    else if Bucket = 'types'      then Result:= JTypes
+    else if Bucket = 'attributes' then Result:= JAttrs
+    else if Bucket = 'events'     then Result:= JEvents
+    else Result:= JCalls;
   end;
 
 var
@@ -10141,7 +10143,8 @@ begin
         Continue;
       end;
 
-      for S in Store.FindSymbolsByExactName(AArgs.Name) do
+      var Decls: TArray<TSymbol>:= Store.FindSymbolsByExactName(AArgs.Name);
+      for S in Decls do
       begin
         DeclO:= TJSONObject.Create;
         DeclO.AddPair('kind', S.Kind.ToText);
@@ -10152,7 +10155,7 @@ begin
         JDecls.AddElement(DeclO);
       end;
 
-      for R in Store.FindCallersByName(AArgs.Name) do AddRefRow(GroupFor(R.Kind), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol);
+      for R in UsageRefsForName(Store, AArgs.Name, Decls) do AddRefRow(GroupFor(R), Store.GetFilePath(R.FileId), R.StartLine, R.StartCol);
 
       if (Width = 'wide') or (Width = 'very-wide') then
         for L in Store.FindTransitiveCallers(AArgs.Name, Depth) do
