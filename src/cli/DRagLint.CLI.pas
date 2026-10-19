@@ -27310,7 +27310,16 @@ var
       FreshChecked:= True;
       Freshness   := CheckFreshness(Stores, Rules);
     end;
+    { B-18 (1.31.7): the unit's OWN .pas and .dfm too -- per unit, never cached.
+      A stale target warns on a dry run (merged into freshness) and REFUSES
+      --apply below; a stale From/To type keeps its own error path. }
+    var UnitFresh: TFreshnessResult:= CheckUnitFreshness(Stores, UnitPas, DfmPath);
     JCtx.Freshness:= Freshness;
+    if not UnitFresh.Fresh then
+    begin
+      JCtx.Freshness.Fresh  := False;
+      JCtx.Freshness.Reasons:= JCtx.Freshness.Reasons + UnitFresh.Reasons;
+    end;
     if not Freshness.Fresh then
     begin
       if AArgs.Apply then
@@ -27334,6 +27343,15 @@ var
           already carried structurally by freshness.fresh=false + reasons. }
         Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
         for var S: string in Freshness.Reasons do Writeln('  ' + S);
+      end;
+    end;
+    if not UnitFresh.Fresh then
+    begin
+      if AArgs.Apply then Exit(RefuseUnit(UnitFresh.Reasons[0]));
+      if not UseJson then
+      begin
+        Writeln('WARNING: freshness guard failed (dry-run only, would refuse on --apply):');
+        for var S: string in UnitFresh.Reasons do Writeln('  ' + S);
       end;
     end;
 
