@@ -5,6 +5,10 @@ breaking changes** until v1.0.
 
 ## Unreleased
 
+## v1.32.0-alpha -- 2026-10-19
+
+Extractor 1.22.0-alpha: every index re-parses ONCE on its next run (hours for large trees).
+
 ### Added
 
 - **`convert-apply` applies `#migrate` inside a `#convert` block (C18 member replacement, slice 1).** `#migrate Old -> New` renames the member at every bound `.pas` access site of the block's converted instances -- methods and events as well as properties (items[] `migrate-applied`); `#migrate Old -> DL_NONE` wraps each site as `DL_NONE(inst.Old)`, keeping the old text, so the unit fails to compile on exactly those lines until converted by hand (items[] `deliberate-break`, field `todos`). Both make the member `mapped` in `pas_uses[]`. A `with` block, an unverified receiver, a scoped / template / uses-unit form, or a member a `#link` already converts is never rewritten (items[] `migrate-check`). Idempotent; `info --json` capability `migrate_members`. Index columns are now converted from UTF-8 bytes to characters for every `.pas` access-site rewrite (`#link` renames and the StripDB value cast too), so a non-ASCII character earlier on the line no longer hides or shifts a site. Guard: `tests\autotest\run_convert_apply_migrate.ps1`.
