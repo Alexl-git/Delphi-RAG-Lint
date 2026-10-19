@@ -3292,6 +3292,31 @@ begin
   Flush(Output);
 end;
 
+/// <summary>Runs the post-walk LINK stages, in their one valid order:
+/// uses-targets, ancestry, facts-inherited, helpers.</summary>
+/// <param name="AIndent">Leading whitespace for the stage lines (see Stage).</param>
+/// <param name="AStore">The store the walk just wrote; must not be nil.</param>
+/// <param name="AIndexer">The indexer that parsed THIS run; must not be nil. Its
+/// held unclassified names are what facts-inherited resolves, so it must be
+/// the same instance that ran the walk.</param>
+/// <remarks>THE ONLY COPY of this list (B-24). Every site that re-parses files
+/// into an index -- DoIndex, BuildPlanItem (index --all), IndexDictionary and
+/// the reconcile-project --db heal -- calls it; the call and purity stages
+/// stay at the sites because each gates them differently. Four hand-copied
+/// lists drifted: the reconcile heal had no facts-inherited, so a healed unit
+/// lost every inherited field from reads_fields / writes_fields and kept that
+/// loss through later incremental runs (its files row was fresh). Pinned by
+/// tests\autotest\run_index_stage_list_facts_inherited.ps1.
+/// facts-inherited needs RESOLVED ancestry (v23, spec F2), and a run that
+/// parsed nothing makes it a no-op (F7).</remarks>
+procedure RunLinkStages(const AIndent: string; const AStore: ISymbolStore; const AIndexer: IIndexer);
+begin
+  Stage(AIndent, 'uses-targets',    procedure begin AStore.ResolveUnitUseTargets; end);
+  Stage(AIndent, 'ancestry',        procedure begin AStore.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
+  Stage(AIndent, 'facts-inherited', procedure begin AIndexer.ApplyInheritedFieldFacts; end);
+  Stage(AIndent, 'helpers',         procedure begin AStore.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
+end;
+
 { ---------------------------------------------------------------------------
   DOC-APPLY DAMAGE GUARD
 
@@ -3946,13 +3971,7 @@ begin
       Only the call pass is guarded -- see the DoIndex note for why the other
       three stay unconditional (they are the repair path, and they cost ~21 s
       together on that same index). }
-    Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
-    Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
-    { v23 (spec F2): inherited-field facts need RESOLVED ancestry, which the
-      stage above just wrote. Runs on the indexer that parsed this run, so a
-      run that parsed nothing does nothing (F7). }
-    Stage('  ', 'facts-inherited', procedure begin Indexer.ApplyInheritedFieldFacts; end);
-    Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
+    RunLinkStages('  ', Store, Indexer); { B-24: the one stage list }
     { CallEdgesNeedRebuild: see the DoIndex site for the full argument. Short
       version -- "no file changed" only implies "every edge still holds" if the
       edges existed to begin with, and this is the path `index --all` takes, so
@@ -6128,13 +6147,7 @@ begin
       principle leave a call edge that was derived from the broken uses graph.
       `--force-reparse` re-runs everything, and DRAGLINT_NO_SCOPED_RESOLVE=1
       forces the full-corpus call pass; both are one flag away. }
-    Stage('', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
-    Stage('', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
-    { v23 (spec F2): inherited-field facts need RESOLVED ancestry, which the
-      stage above just wrote. Runs on the indexer that parsed this run, so a
-      run that parsed nothing does nothing (F7). }
-    Stage('', 'facts-inherited', procedure begin Indexer.ApplyInheritedFieldFacts; end);
-    Stage('', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
+    RunLinkStages('', Store, Indexer); { B-24: the one stage list }
     { A MISSING EDGE SET ALSO FORCES THE PASS. Every other term here asks "did
       anything change?", and the skip message's premise -- no file changed, so
       every call edge already holds -- is only true if the edges were there in
@@ -6289,9 +6302,7 @@ begin
     else if TFile.Exists(F) then Indexer.IndexFile(F)
     else Writeln('  (skip, not found) ', F);
   end;
-  Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
-  Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end); { v11 (M1): link class/interface heritage cross-unit }
-  Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);  { v15: link record/class helper targets cross-unit }
+  RunLinkStages('  ', Store, Indexer); { B-24: the one stage list (facts-inherited was missing here) }
   { GUARDED, v0.86 -- see the long note at the DoIndex call site. This function's
     only writer is the Indexer walk above: it does not clear, prune or evict, so
     ParsedFiles alone is the whole precondition here.
@@ -30689,7 +30700,7 @@ var
   JCoh        : TJSONObject                               ;
   Store       : ISymbolStore                              ;
   DP2         : TDelphi13Parser                           ;
-  Indexer2    : TIndexer                                  ;
+  Indexer2    : IIndexer                                  ; { interface, not TIndexer: RunLinkStages takes IIndexer, and a temp interface ref on a bare object would free it }
   Members     : TArray<TProjectMember>                    ;
   Coh         : TArray<TMemberCoherence>                  ;
   MI          : Integer                                   ;
@@ -30908,9 +30919,7 @@ begin
           // index site's post-pass) so unit_uses / ancestry / calls resolve.
           if CohScanned > 0 then
           begin
-            Stage('  ', 'uses-targets', procedure begin Store.ResolveUnitUseTargets; end);
-            Stage('  ', 'ancestry',     procedure begin Store.ResolveAncestry; end);
-            Stage('  ', 'helpers',      procedure begin Store.ResolveHelpers; end);
+            RunLinkStages('  ', Store, Indexer2); { B-24: the one stage list (facts-inherited was missing here) }
             Stage('  ', 'calls',        procedure begin Store.ResolveCallTargets; end);
             Stage('  ', 'purity',       procedure begin TPurityStage.Run(Store); end);   { Purity v2: verdicts follow the edges; no gate, this block already runs only when files were scanned }
           end;
@@ -30937,7 +30946,7 @@ begin
           Flush(Output);
           CloseFile(Output);
           Move(SavedOut, TTextRec(Output), SizeOf(TTextRec)); // restore stdout
-          Indexer2.Free;
+          Indexer2:= nil; // refcounted: releases the indexer (and its store reference)
           Store:= nil; // release the shared connection
         end; // try
       end;
