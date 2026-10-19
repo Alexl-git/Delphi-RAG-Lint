@@ -82,12 +82,14 @@ breaking changes** until v1.0.
 - **The whole-DB reason counts pruned files as "removed"**, not "changed".
 - **`used-before-assignment`: a shadowing inline `var` re-declaration gets its own slot** -- an outer variable is no longer treated as assigned (or unassigned) by an inner block's same-named inline var (B-14).
 - **`format`: a YADF exit 3 ("declined") is not a failure** -- exit 0 with a "Declined:" line; exits 1/2 still fail (B-36).
+- **Resolver version 1.12.1-alpha** (the `--watch` per-tick resolve scope): every index re-resolves its call edges once on its next `index` run -- seconds to minutes, no re-parse.
+- `lint-all` / `lint-project` / `check-ast --fix --apply` no longer print the per-file `lint` note telling them to pass `--project-rules`, a flag they do not take.
 
 ### IDE plugin
 - **Streaming jobs have a deadline, a cancelled job kills its whole process tree (job object), and the job queue cancels a running child on shutdown** instead of waiting for it.
 
 ### Tooling
-- `publish-release.ps1` builds the installer instead of zips (B-01/T-19); `tests\autotest\prepare_battery.ps1` creates the artifacts a fresh worktree lacks; docs-sync / rename-owners guards default `-Exe` to the worktree's own build.
+- `publish-release.ps1` builds the installer instead of zips (B-01/T-19); `tests\autotest\prepare_battery.ps1` creates the artifacts a fresh worktree lacks; docs-sync / rename-owners / lsp-switch guards default `-Exe` to the worktree's own build; the legacy doctest wrapper puts the engine folder on PATH (a rebuilt `T7_storage.exe` imports tree-sitter).
 
 ## v1.31.5-alpha -- 2026-10-18
 

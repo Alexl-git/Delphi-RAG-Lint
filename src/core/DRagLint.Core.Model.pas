@@ -267,7 +267,7 @@ const
   /// row (~31k reads on ORM3 SERVER, ~21k on CLIENT by the 2026-09-28 decline
   /// counters). The reservation for C2.3 + the IsStub unification MOVES from
   /// 1.12.0 to 1.13.0-alpha.</para>
-  DRAGLINT_RESOLVER_VERSION = '1.12.0-alpha';
+  DRAGLINT_RESOLVER_VERSION = '1.12.1-alpha';
 
   /// <summary>Hidden per-project folder holding everything drag-lint keeps for
   /// one Delphi project: its index, its drag-lint-project.json, its reports, and

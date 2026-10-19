@@ -28,7 +28,7 @@
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint-switch.exe",
+  [string]$Exe     = "$PSScriptRoot\..\..\src\tools\lsp-switch\Win64\Debug\drag-lint-switch.exe",  # the repo build (prepare_battery.ps1), as run_lsp_switch_params_guard
   [string]$WorkDir = "$env:TEMP\drag-lint-switch-guard-$PID",
   [string]$RegRoot = 'Software\DragLintSwitchTest\LSP\UserDefined'
 )

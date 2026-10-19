@@ -12447,8 +12447,6 @@ begin
     { Minor 2: fix mode cannot emit SARIF. Warn on stderr and fall through to
       JSON/text output rather than silently swallowing --format sarif. }
     if SameText(AArgs.Format, 'sarif') then Writeln(ErrOutput, '--fix does not support SARIF output; using text output.');
-    if AArgs.Apply and (not AArgs.ProjectRules) then
-      Writeln(ErrOutput, 'drag-lint: note: --fix --apply without --project-rules: doc-drift/missing-doc findings are not produced, so no doc fixes are applied.');
 
     { AutoFix Chunk 1 (Task 3): narrow to a single finding when --fix-line and/or
       --fix-rule are given. Each SET flag filters; an unset flag matches all. With
@@ -14415,6 +14413,12 @@ begin
   { See the argument's comment below for why a stand-in run withholds this. }
   var MarkerScanSet: TArray<string>:= ScannedFiles;
   if StandInLogical <> '' then MarkerScanSet:= nil;
+
+  { Here, not in the shared FinalizeAndOutput: --project-rules is a per-file
+    `lint` flag, and lint-all / lint-project / check-ast reach that routine too
+    (run_flag_verb_map caught the note pointing them at a flag they lack). }
+  if AArgs.Fix and AArgs.Apply and (not AArgs.ProjectRules) then
+    Writeln(ErrOutput, 'drag-lint: note: --fix --apply without --project-rules: doc-drift/missing-doc findings are not produced, so no doc fixes are applied.');
 
   Result:= FinalizeAndOutput(
     AArgs, Findings, DefDisabled,
