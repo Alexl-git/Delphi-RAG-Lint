@@ -26,6 +26,18 @@ stays HELD (not in the order). No publish / deploy in this run.
 
 ## BATTERY RESULT (wave/1316, finished): 712/716 PASS, 4 FAIL -- run_flag_verb_map, run_lsp_switch_guard, run_resolver_version_guard, run_doctests_v021 (366 s). Per-runner logs: scratchpad\wave\battery2\. Triage each against the deployed 1.31.5 engine / main FIRST (pre-existing vs wave regression); lsp_switch may be the battery-prerequisite exe (lane F prepare_battery). Do NOT merge to main until each is explained or fixed.
 
+## PROGRESS (session 2, 2026-10-19)
+- Triage DONE on wave/1316 (3db4c4e0, a38199af): flag_verb_map (lane A note moved from shared
+  FinalizeAndOutput into DoLint), resolver guard (ResetResolveScope on manifest, RESOLVER 1.12.1-alpha,
+  baseline re-pinned), lsp_switch guard default -Exe = repo build, doctest wrapper puts engine dir
+  on PATH (rebuilt T7 imports tree-sitter). Each runner re-run green.
+- MERGED: main f2f5690d = merge --no-ff wave/1316. NOT pushed (owner).
+- wave/1317 merged wave/1316 (50152d89, Home.md conflict -> regenerated, 2bbfb325); build EXIT 0,
+  1.31.7-alpha; resolver/flag-map/extractor/docs-sync/registry/encoding guards PASS.
+  FULL BATTERY on wave/1317 running: log `C:\TEMP\claude\c--Projects-Delphi-RAG-lint\8c0901e5-7e0b-4f15-b5e4-5ea20042145d\scratchpad\battery1317.txt`.
+- Lane G resolver gap filed: docs\INBOX-result-receiver-member-write-unbound.md (open; INDEX counts not yet updated).
+- Remaining: battery 1317 green -> merge --no-ff wave/1317 into main; step 5 INBOX hygiene (+1 open note above); step 6.
+
 ## Resume point (in order)
 1. Battery on wave/1316: read the tail of battery2.txt. Any FAIL: compare against main's deployed
    engine before blaming the wave (A6 lesson); fix on wave/1316, re-run that runner.
