@@ -31,6 +31,9 @@ type
     /// <param name="pVerb">Verb, or "verb sub" (single spaces).</param>
     /// <returns>The first line matching ^\s{2}drag-lint\s+verb(?=\s|$), trimmed, runs of spaces collapsed to one; '' when none.</returns>
     function UsageFor(const pVerb: string): string;
+    /// <summary>The loaded help text, one element per line (no line ending).</summary>
+    /// <returns>Empty before any load.</returns>
+    function Lines: TArray<string>;
   end;
 
 implementation
@@ -107,6 +110,11 @@ end;
 procedure TLiveHelp.LoadFromText(const pText: string);
 begin
   FLines := pText.Replace(#13#10, #10).Replace(#13, #10).Split([#10]);
+end;
+
+function TLiveHelp.Lines: TArray<string>;
+begin
+  Result := FLines;
 end;
 
 function TLiveHelp.UsageFor(const pVerb: string): string;

@@ -17,6 +17,7 @@ uses
   , FeatureGen.SiteFormat in '..\FeatureGen.SiteFormat.pas'
   , FeatureGen.Markdown in '..\FeatureGen.Markdown.pas'
   , FeatureGen.Site in '..\FeatureGen.Site.pas'
+  , FeatureGen.HelpImport in '..\FeatureGen.HelpImport.pas'
   ;
 
 var
@@ -1025,6 +1026,100 @@ begin
   end;
 end;
 
+function ImportRun(const pEntryJson: string; out pU: Boolean; out pF, pP: Integer): TJSONObject;
+var
+  lHelp: TLiveHelp;
+begin
+  Result := TJSONObject.ParseJSONValue(pEntryJson) as TJSONObject;
+  lHelp := TLiveHelp.Create;
+  try
+    lHelp.LoadFromText(TFile.ReadAllText(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\help-1.32.0.txt'), TEncoding.ASCII));
+    ImportEntry(Result, lHelp, pU, pF, pP);
+  finally
+    lHelp.Free;
+  end;
+end;
+
+function ImportFlagNames(pEntry: TJSONObject): string;
+var
+  lFlags: TJSONArray;
+  lI: Integer;
+begin
+  Result := '';
+  lFlags := ((pEntry.GetValue('surfaces') as TJSONArray).Items[0] as TJSONObject).GetValue('flags') as TJSONArray;
+  if lFlags = nil then
+    Exit;
+  for lI := 0 to lFlags.Count - 1 do
+    Result := Result + (lFlags.Items[lI] as TJSONObject).GetValue<string>('name') + ' ';
+end;
+
+procedure TestImport;
+const
+  CALLERS = '{ "id": "x", "surfaces": [ { "type": "cli", "verb": "query", "sub": "find-callers" } ] }';
+var
+  lE: TJSONObject;
+  lU: Boolean;
+  lF, lP: Integer;
+  lSurf: TJSONObject;
+  lPit: TJSONArray;
+begin
+  lE := ImportRun(CALLERS, lU, lF, lP);
+  try
+    lSurf := (lE.GetValue('surfaces') as TJSONArray).Items[0] as TJSONObject;
+    Check('Import.ParsesFlagsBlock',
+      lU and (Pos('drag-lint query find-callers --name', lSurf.GetValue<string>('usage')) = 1)
+      and (ImportFlagNames(lE) = '--name --context --resolved --db --json '), ImportFlagNames(lE));
+    Check('Import.FlagSummaryFromBlock',
+      Pos('precise callers via resolved call_edges', lSurf.ToJSON) > 0, lSurf.ToJSON);
+    lPit := lE.GetValue('pitfalls') as TJSONArray;
+    Check('Import.PitfallFromCaret', (lPit <> nil) and (lP > 0) and (Pos('BARE member name', lPit.Items[0].Value) > 0),
+      lE.ToJSON);
+    Check('Import.NeverWritesVerified', lE.GetValue('verified') = nil);
+  finally
+    lE.Free;
+  end;
+  lE := ImportRun('{ "id": "x", "verified": { "date": "d", "by": "b", "build": "1", "surfaceHash": "h" }, '
+    + '"surfaces": [ { "type": "cli", "verb": "query", "sub": "find-callers" } ] }', lU, lF, lP);
+  try
+    Check('Import.KeepsExistingVerified',
+      lE.GetValue('verified').ToJSON = '{"date":"d","by":"b","build":"1","surfaceHash":"h"}', lE.GetValue('verified').ToJSON);
+  finally
+    lE.Free;
+  end;
+  lE := ImportRun('{ "id": "x", "pitfalls": [ "mine" ], "surfaces": [ { "type": "cli", "verb": "query", "sub": "find-callers", '
+    + '"usage": "keep me" } ] }', lU, lF, lP);
+  try
+    lSurf := (lE.GetValue('surfaces') as TJSONArray).Items[0] as TJSONObject;
+    Check('Import.FillsOnlyMissing',
+      (lSurf.GetValue<string>('usage') = 'keep me') and not lU and (lF = 5) and (lP = 0)
+      and ((lE.GetValue('pitfalls') as TJSONArray).Count = 1) and (ImportFlagNames(lE) = '--name --context --resolved --db --json '),
+      lE.ToJSON);
+  finally
+    lE.Free;
+  end;
+  lE := ImportRun('{ "id": "x", "surfaces": [ { "type": "cli", "verb": "query", "sub": "find-callers", "flags": [ { "name": "--z" } ] } ] }',
+    lU, lF, lP);
+  try
+    Check('Import.KeepsExistingFlags', lU and (lF = 0) and (ImportFlagNames(lE) = '--z '), ImportFlagNames(lE));
+  finally
+    lE.Free;
+  end;
+  lE := ImportRun('{ "id": "x", "surfaces": [ { "type": "cli", "verb": "no-such-verb" }, { "type": "ide-menu", "path": "a" } ] }',
+    lU, lF, lP);
+  try
+    Check('Import.UnknownVerbUntouched', not lU and (lF = 0) and (lP = 0) and (lE.GetValue('pitfalls') = nil));
+  finally
+    lE.Free;
+  end;
+  lE := ImportRun('{ "id": "x", "surfaces": [ { "type": "cli", "verb": "query", "sub": "find" } ] }', lU, lF, lP);
+  try
+    Check('Import.PlaceholdersBackticked',
+      Pos('`<k>`', lE.ToJSON) > 0, lE.ToJSON);
+  finally
+    lE.Free;
+  end;
+end;
+
 procedure TestEntryTextGuardV2;
 var
   lRepo, lMsg, lPath, lTxt: string;
@@ -1075,6 +1170,7 @@ begin
     TestEmptyArraysV2;
     TestLeafV2;
     TestCliV2;
+    TestImport;
     TestEntryTextGuardV2;
     TestUndocumentedVerbs;
     TestSite;

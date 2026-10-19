@@ -8,6 +8,7 @@ program featuregen;
 
 uses
   System.SysUtils
+  , System.StrUtils
   , System.IOUtils
   , FeatureGen.Json in 'FeatureGen.Json.pas'
   , FeatureGen.Model in 'FeatureGen.Model.pas'
@@ -16,6 +17,7 @@ uses
   , FeatureGen.SiteFormat in 'FeatureGen.SiteFormat.pas'
   , FeatureGen.Markdown in 'FeatureGen.Markdown.pas'
   , FeatureGen.Site in 'FeatureGen.Site.pas'
+  , FeatureGen.HelpImport in 'FeatureGen.HelpImport.pas'
   ;
 
 procedure PrintUsage;
@@ -24,6 +26,9 @@ begin
   Writeln('  build --site [--check] [--repo <dir>] [--engine <exe>] [--out <dir>]');
   Writeln('      writes the website help set (default root from features\site-format.json);');
   Writeln('      --check writes nothing and exits 1 when any file would change.');
+  Writeln('  import-help [--dry-run] [--repo <dir>] [--engine <exe>]');
+  Writeln('      seeds usage / flags / pitfalls of cli surfaces that lack them from the engine --help;');
+  Writeln('      never overwrites a present field and never writes verified.');
 end;
 
 { Walks up from pStart to the first dir holding features\entries. }
@@ -146,6 +151,81 @@ begin
   end;
 end;
 
+function ImportHelpCommand(pArgs: TArray<string>): Integer;
+var
+  lDry: Boolean;
+  lRepo, lEngine, lArg: string;
+  lI: Integer;
+  lFmt: TSiteFormat;
+  lHelp: TLiveHelp;
+  lTotals: TImportTotals;
+begin
+  lDry := False;
+  lRepo := '';
+  lEngine := '';
+  lI := 0;
+  while lI < Length(pArgs) do
+  begin
+    lArg := pArgs[lI];
+    if lArg = '--dry-run' then
+      lDry := True
+    else if (lArg = '--repo') or (lArg = '--engine') then
+    begin
+      Inc(lI);
+      if lI >= Length(pArgs) then
+      begin
+        Writeln('featuregen: ', lArg, ' needs a value');
+        Exit(2);
+      end;
+      if lArg = '--repo' then
+        lRepo := pArgs[lI]
+      else
+        lEngine := pArgs[lI];
+    end
+    else
+    begin
+      Writeln('featuregen: unknown option ', lArg);
+      Exit(2);
+    end;
+    Inc(lI);
+  end;
+  Result := 1;
+  try
+    if lRepo = '' then
+      lRepo := FindRepo(GetCurrentDir);
+    if lRepo = '' then
+      lRepo := FindRepo(ExtractFilePath(ParamStr(0)));
+    if lRepo = '' then
+      raise EFeatureGen.Create('no repo found (no features\entries above the current dir); pass --repo');
+    lRepo := TPath.GetFullPath(lRepo);
+    if lEngine = '' then
+    begin
+      lFmt := LoadSiteFormat(lRepo);
+      lEngine := TPath.Combine(lRepo, lFmt.Engine);
+    end;
+    lHelp := TLiveHelp.Create;
+    try
+      lHelp.Load(lEngine);
+      lTotals := ImportHelp(lRepo, lHelp, lDry,
+        procedure(pLine: string)
+        begin
+          Writeln(pLine);
+        end);
+    finally
+      lHelp.Free;
+    end;
+    Writeln(Format('%sentries=%d usage=%d flags=%d pitfalls=%d',
+      [IfThen(lDry, 'dry-run: ', ''), lTotals.Entries, lTotals.Usage, lTotals.Flags, lTotals.Pitfalls]));
+    Result := 0;
+  except
+    on E: Exception do
+    begin
+      Writeln('featuregen: ', E.Message);
+      Result := 1;
+    end;
+  end;
+end;
+
 var
   lArgs: TArray<string>;
   lI: Integer;
@@ -156,6 +236,13 @@ begin
     for lI := 2 to ParamCount do
       lArgs[lI - 2] := ParamStr(lI);
     ExitCode := BuildSiteCommand(lArgs);
+  end
+  else if (ParamCount >= 1) and (ParamStr(1) = 'import-help') then
+  begin
+    SetLength(lArgs, ParamCount - 1);
+    for lI := 2 to ParamCount do
+      lArgs[lI - 2] := ParamStr(lI);
+    ExitCode := ImportHelpCommand(lArgs);
   end
   else
   begin
