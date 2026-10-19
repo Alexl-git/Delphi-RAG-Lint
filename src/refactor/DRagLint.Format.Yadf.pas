@@ -85,6 +85,10 @@ type
   /// one of the named <c>FMT_*</c> constants below -- <c>FMT_SPAWN_ERROR</c>,
   /// <c>FMT_TIMEOUT</c>, <c>FMT_NO_YADF</c>, <c>FMT_BELOW_FLOOR</c> (nothing
   /// was written) and <c>FMT_VERIFY_FAILED</c> (the file was restored).</para>
+  /// <para><c>Declined</c> (B-36): YADF exited <c>YADF_EXIT_DECLINED</c> -- its
+  /// content guard refused the file and left it UNCHANGED. That is a success
+  /// with a note, not a failure: <c>Success</c> is True, <c>ExitCode</c> 0, and
+  /// there was nothing to restore.</para>
   /// <para><c>ResolvedPath</c> and <c>YadfVersion</c> are filled whenever they
   /// are known, including on a refusal -- an operator debugging a refusal needs
   /// to see WHICH binary was rejected, which was exactly what the old
@@ -101,6 +105,7 @@ type
     ResolvedPath: string ;
     YadfVersion : string ;
     DiffText    : string ;
+    Declined    : Boolean;
   end;
 
   /// <summary>Resolves, vets and runs YADF over a single Delphi source file.
@@ -317,6 +322,12 @@ const
   FMT_NO_YADF       = -3; /// <summary>No usable YADF resolved from --yadf-path or the registry.</summary>
   FMT_BELOW_FLOOR   = -4; /// <summary>The resolved YADF is older than YADF_MIN_VERSION. Nothing was written.</summary>
   FMT_VERIFY_FAILED = -5; /// <summary>Formatting changed what the unit declares. The original was restored.</summary>
+
+  /// <summary>YADF.exe's OWN exit code for a decline (B-36, YADF WP8 / F2): its
+  /// content guard refused at least one file, nothing failed, and the file is
+  /// unchanged. Not a failure. YADF's 1 = failure and 2 = usage error stay
+  /// failures, and a failure outranks a decline there.</summary>
+  YADF_EXIT_DECLINED = 3;
 
 implementation
 
@@ -655,6 +666,15 @@ begin
           Exit;
         end;
       end;
+      if ExitCode = YADF_EXIT_DECLINED then
+      begin
+        { declined: the copy is unchanged, so there is no diff to show }
+        Result.StdoutText:= Output;
+        Result.ExitCode  := 0;
+        Result.Declined  := True;
+        Result.Success   := True;
+        Exit;
+      end;
       if ExitCode <> 0 then
       begin
         Result.ExitCode  := ExitCode;
@@ -693,6 +713,17 @@ begin
         TFile.Copy(BackupFile, AFile, True);
         Exit;
       end;
+    end;
+
+    { B-36: a DECLINE is not a failure. YADF left the file untouched, so there
+      is nothing to restore and nothing to verify. }
+    if ExitCode = YADF_EXIT_DECLINED then
+    begin
+      Result.ExitCode  := 0;
+      Result.StdoutText:= Output;
+      Result.Declined  := True;
+      Result.Success   := True;
+      Exit;
     end;
 
     if ExitCode <> 0 then
