@@ -419,7 +419,7 @@ begin
     lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
     Check('Leaf.FrontMatterExact',
       lOut.StartsWith('---'#10'id: outline'#10'title: outline'#10'summary: Prints the file-scoped symbol outline for one Pascal unit'#10
-        + 'product: DL'#10'group: search-navigation'#10'order: 30'#10'since: 0.86.0-alpha'#10'status: shipped'#10'updated: 0.86.0-alpha'#10
+        + 'product: DL'#10'group: search-navigation'#10'order: 20001'#10'since: 0.86.0-alpha'#10'status: shipped'#10'updated: 0.86.0-alpha'#10
         + '---'#10#10'# outline'#10#10'Prints the file-scoped symbol outline for one Pascal unit.'#10#10'## How to run it'#10),
       Copy(lOut, 1, 400));
     lFmt.ExcludeAudiences := TArray<string>.Create('both');
@@ -489,6 +489,271 @@ begin
   end;
 end;
 
+{ ---- Task 4: the site set ---- }
+
+const
+  SITE_HELP = '  drag-lint ask   <q> [--db <d>]'#10'  drag-lint query find-callers --name N'#10'  drag-lint query text --t T'#10;
+
+function SiteDir: string;
+begin
+  Result := TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\site');
+end;
+
+function ReadSiteFile(const pRoot, pRel: string): string;
+begin
+  Result := ReadBytesText(TPath.Combine(pRoot, pRel.Replace('/', '\'))).Replace(#13#10, #10);
+end;
+
+{ Builds the fixture site into pOut. Returns the writer result. }
+function BuildFixture(const pRepo, pOut: string; pCheck: Boolean; pHelp: TLiveHelp): TOutputResult;
+var
+  lFmt: TSiteFormat;
+  lW: TOutputWriter;
+begin
+  lFmt := LoadSiteFormat(pRepo);
+  lFmt.Help := pHelp;
+  lW := TOutputWriter.Create(pOut, pCheck, True);
+  try
+    BuildSite(pRepo, lFmt, lW);
+    Result := lW.Finish;
+  finally
+    lW.Free;
+  end;
+end;
+
+function Occurrences(const pText, pSub: string): Integer;
+var
+  lP: Integer;
+begin
+  Result := 0;
+  lP := Pos(pSub, pText);
+  while lP > 0 do
+  begin
+    Inc(Result);
+    lP := Pos(pSub, pText, lP + Length(pSub));
+  end;
+end;
+
+procedure TestUndocumentedVerbs;
+var
+  lVerbs: TArray<string>;
+  lTmp, lMsg: string;
+  lFmt: TSiteFormat;
+begin
+  lVerbs := ReadUndocumentedVerbs(TPath.Combine(SiteDir, 'guard.ps1'));
+  Check('Site.UndocumentedKeysRead', (Length(lVerbs) = 2) and (lVerbs[0] = 'selftest') and (lVerbs[1] = 'dump-thing'), IntToStr(Length(lVerbs)));
+  lFmt := LoadSiteFormat(SiteDir);
+  Check('Site.FormatLoadsExcludedVerbs', (Length(lFmt.ExcludedVerbs) = 2) and not SiteIncludes(lFmt, 'internal', ''));
+  lTmp := FreshDir('noblock');
+  TFile.WriteAllText(TPath.Combine(lTmp, 'g.ps1'), '$Other = 1'#13#10, TEncoding.ASCII);
+  lMsg := '';
+  try
+    ReadUndocumentedVerbs(TPath.Combine(lTmp, 'g.ps1'));
+  except
+    on E: EFeatureGen do
+      lMsg := E.Message;
+  end;
+  Check('Site.UndocumentedBlockMissingFails', Pos('UndocumentedOnPurpose', lMsg) > 0, lMsg);
+  TFile.WriteAllText(TPath.Combine(lTmp, 'e.ps1'), '$UndocumentedOnPurpose = [ordered]@{'#13#10'}'#13#10, TEncoding.ASCII);
+  lMsg := '';
+  try
+    ReadUndocumentedVerbs(TPath.Combine(lTmp, 'e.ps1'));
+  except
+    on E: EFeatureGen do
+      lMsg := E.Message;
+  end;
+  Check('Site.UndocumentedEmptyBlockFails', Pos('UndocumentedOnPurpose', lMsg) > 0, lMsg);
+end;
+
+procedure TestSite;
+var
+  lHelp: TLiveHelp;
+  lOutA, lOutB, lFile, lIndex, lJson, lCli, lIde, lNew, lMap, lAll, lRel, lLeaf, lSentI, lSentN: string;
+  lRes: TOutputResult;
+  lFmt: TSiteFormat;
+  lIds, lOrders: TArray<string>;
+  lId: string;
+  lArr: TJSONArray;
+  lVal: TJSONValue;
+  lBad, lI: Integer;
+  lFiles: TArray<string>;
+  lSame: Boolean;
+begin
+  lHelp := TLiveHelp.Create;
+  try
+    lHelp.LoadFromText(SITE_HELP);
+    lOutA := FreshDir('siteA');
+    lOutB := FreshDir('siteB');
+    BuildFixture(SiteDir, lOutA, False, lHelp);
+    lIndex := ReadSiteFile(lOutA, 'index.md');
+    lIds := TArray<string>.Create('ask', 'find-callers', 'find-text', 'fix-refactor', 'fix-uses');
+    lBad := 0;
+    for lId in lIds do
+      if (Occurrences(lIndex, '](features/' + lId + '.md)') <> 1) or not TFile.Exists(TPath.Combine(lOutA, 'features\' + lId + '.md')) then
+        Inc(lBad);
+    Check('Site.IndexLinksEveryIncludedLeafOnce', (lBad = 0) and (Occurrences(lIndex, '](features/') = 5), lIndex);
+    Check('Site.IndexGroupsTablesPipeEscaped', (Pos('## IDE group', lIndex) < Pos('## Search group', lIndex)) and (Pos('Empty group', lIndex) = 0)
+      and (Pos('| Feature | What it does | Since |', lIndex) > 0) and (Pos('| [Find callers](features/find-callers.md) | Finds callers \| of a name | 0.86.0-alpha |', lIndex) > 0)
+      and (Pos('| [Ask](features/ask.md) |', lIndex) < Pos('| [Find callers]', lIndex)), lIndex);
+
+    lAll := '';
+    for lFile in TDirectory.GetFiles(lOutA, '*', TSearchOption.soAllDirectories) do
+      lAll := lAll + #10 + ReadBytesText(lFile);
+    lCli := ReadSiteFile(lOutA, 'cli.md');
+    Check('Site.InternalEntryAbsentEverywhere',
+      not TFile.Exists(TPath.Combine(lOutA, 'features\internal-thing.md')) and not TFile.Exists(TPath.Combine(lOutA, 'features\selftest-thing.md'))
+      and (Pos('internal-thing', lAll) = 0) and (Pos('selftest-thing', lAll) = 0) and (Pos('### hidden', lCli) = 0) and (Pos('### selftest', lCli) = 0)
+      and (Pos('Selftest-thing', ReadSiteFile(lOutA, 'features/ask.md')) > 0), lAll);
+
+    lJson := ReadSiteFile(lOutA, 'index.json');
+    lVal := TJSONObject.ParseJSONValue(lJson);
+    try
+      lBad := 0;
+      lArr := nil;
+      if lVal is TJSONArray then
+        lArr := TJSONArray(lVal);
+      Check('Site.IndexJsonIsArrayOfFive', (lArr <> nil) and (lArr.Count = 5), lJson);
+      if (lArr <> nil) and (lArr.Count = 5) then
+      begin
+        lOrders := TArray<string>.Create('10001', '10002', '20001', '20002', '20003');
+        lIds := TArray<string>.Create('fix-refactor', 'fix-uses', 'ask', 'find-callers', 'find-text');
+        for lI := 0 to 4 do
+        begin
+          lRel := lArr.Items[lI].GetValue<string>('file');
+          lLeaf := ReadSiteFile(lOutA, lRel);
+          if (lArr.Items[lI].GetValue<string>('id') <> lIds[lI]) or (lArr.Items[lI].GetValue<string>('order') <> lOrders[lI])
+            or (lRel <> 'features/' + lIds[lI] + '.md') or (Pos(#10'order: ' + lOrders[lI] + #10, lLeaf) = 0)
+            or (Pos(#10'title: ' + lArr.Items[lI].GetValue<string>('title') + #10, lLeaf) = 0)
+            or (lArr.Items[lI].GetValue<string>('since') = '') or (lArr.Items[lI].GetValue<string>('group') = '')
+            or (lArr.Items[lI].GetValue<string>('summary') = '') then
+            Inc(lBad);
+        end;
+        Check('Site.IndexJsonMatchesFiles', lBad = 0, lJson);
+      end;
+    finally
+      lVal.Free;
+    end;
+
+    lIde := ReadSiteFile(lOutA, 'ide.md');
+    Check('Site.IdeTreeSameCaptionTwoParents',
+      Pos('* drag-lint'#10'  * Refactor'#10'    * [Fix](features/fix-refactor.md)'#10'  * Uses'#10'    * [Fix](features/fix-uses.md)'#10, lIde) > 0, lIde);
+    Check('Site.IdeTreeHasEveryLevel', (Occurrences(lIde, '* drag-lint'#10) = 1) and (Pos('  * Uses'#10, lIde) > 0) and (Pos('  * Refactor'#10, lIde) > 0)
+      and (Occurrences(lIde, '[Fix](') = 2), lIde);
+
+    lMap := ReadSiteFile(lOutA, 'wiki-map.json');
+    Check('Site.WikiMapLowestId', lMap = '{'#10'  "Ask": "ask",'#10'  "Shared": "find-callers"'#10'}'#10, lMap);
+
+    lNew := ReadSiteFile(lOutA, 'whats-new.md');
+    Check('Site.WhatsNewDescendingNumericOrdinalBullets',
+      (Pos('## 0.86.0-alpha', lNew) > 0) and (Pos('## 0.86.0-alpha', lNew) < Pos('## 0.50.0-alpha', lNew)) and (Pos('## 0.50.0-alpha', lNew) < Pos('## 0.9.0-alpha', lNew))
+      and (Pos('[Find callers]', lNew) < Pos('[Fix uses]', lNew)) and (Pos('[Fix uses]', lNew) < Pos('## 0.50.0-alpha', lNew)), lNew);
+
+    Check('Site.CliOneHeadingPerVerbWithUsageAndLeaves',
+      (Occurrences(lCli, '### query'#10) = 1) and (Pos('### ask'#10, lCli) < Pos('### query'#10, lCli)) and (Pos('drag-lint ask <q> [--db <d>]', lCli) > 0)
+      and (Pos('drag-lint query find-callers --name N', lCli) > 0) and (Pos('* [Find callers](features/find-callers.md)', lCli) > 0)
+      and (Pos('* [Find text](features/find-text.md)', lCli) > 0) and (Pos('Described in [Ask](features/ask.md).', lCli) > 0), lCli);
+
+    lFmt := LoadSiteFormat(SiteDir);
+    lSentI := lFmt.MicroniteIndex;
+    lSentN := lFmt.MicroniteWhatsNew;
+    lBad := 0;
+    for lFile in TDirectory.GetFiles(lOutA, '*', TSearchOption.soAllDirectories) do
+    begin
+      lRel := Copy(lFile, Length(lOutA) + 2, MaxInt).Replace('\', '/');
+      if (Pos('htrmicronite', ReadBytesText(lFile)) > 0) <> ((lRel = 'index.md') or (lRel = 'whats-new.md')) then
+        Inc(lBad);
+    end;
+    Check('Site.MicroniteOnlyInIndexAndWhatsNew', (lBad = 0) and (lSentI <> lSentN) and (Pos(lSentI, lIndex) > 0) and (Pos(lSentI, lIndex) < Pos('## ', lIndex))
+      and (Pos(lSentN, lNew) > 0) and (Pos(lSentN, lNew) < Pos('## ', lNew)) and (Pos(lSentN, lIndex) = 0) and (Pos(lSentI, lNew) = 0),
+      IntToStr(lBad));
+
+    BuildFixture(SiteDir, lOutB, False, lHelp);
+    lFiles := TDirectory.GetFiles(lOutA, '*', TSearchOption.soAllDirectories);
+    lSame := Length(lFiles) = Length(TDirectory.GetFiles(lOutB, '*', TSearchOption.soAllDirectories));
+    for lFile in lFiles do
+    begin
+      lRel := Copy(lFile, Length(lOutA) + 2, MaxInt);
+      if not TFile.Exists(TPath.Combine(lOutB, lRel)) or (ReadBytesText(lFile) <> ReadBytesText(TPath.Combine(lOutB, lRel))) then
+        lSame := False;
+    end;
+    lRes := BuildFixture(SiteDir, lOutA, False, lHelp);
+    Check('Site.TwoBuildsByteIdentical', lSame and (Length(lFiles) > 8) and (Length(lRes.Written) = 0) and (Length(lRes.Changed) = 0), IntToStr(Length(lFiles)));
+    lRes := BuildFixture(SiteDir, lOutA, True, lHelp);
+    Check('Site.CheckModeCleanAfterBuild', Length(lRes.Changed) = 0);
+
+    ForceDirectories(TPath.Combine(lOutA, 'features'));
+    TFile.WriteAllText(TPath.Combine(lOutA, 'features\old-gone.md'), 'x', TEncoding.ASCII);
+    TFile.WriteAllText(TPath.Combine(lOutA, 'junk.txt'), 'x', TEncoding.ASCII);
+    lRes := BuildFixture(SiteDir, lOutA, True, lHelp);
+    Check('Site.CheckModeReportsStaleWritesNothing', (Length(lRes.Changed) = 2) and TFile.Exists(TPath.Combine(lOutA, 'junk.txt')));
+    lRes := BuildFixture(SiteDir, lOutA, False, lHelp);
+    Check('Site.StaleFileRemoved', (Length(lRes.Removed) = 2) and not TFile.Exists(TPath.Combine(lOutA, 'features\old-gone.md'))
+      and not TFile.Exists(TPath.Combine(lOutA, 'junk.txt')) and (Length(lRes.Written) = 0), IntToStr(Length(lRes.Removed)));
+  finally
+    lHelp.Free;
+  end;
+end;
+
+procedure TestSiteDanglingLink;
+var
+  lRepo, lOut, lMsg, lPath, lTxt: string;
+  lFmt: TSiteFormat;
+  lW: TOutputWriter;
+begin
+  lRepo := TPath.Combine(SCRATCH, 'dangling-repo');
+  if TDirectory.Exists(lRepo) then
+    TDirectory.Delete(lRepo, True);
+  TDirectory.Copy(SiteDir, lRepo);
+  lPath := TPath.Combine(lRepo, 'features\entries\ask.json');
+  lTxt := TFile.ReadAllText(lPath, TEncoding.ASCII);
+  lTxt := lTxt.Replace('"summary": "Asks a question"', '"summary": "Asks a question", "intro": "See [gone](gone.md)."');
+  TFile.WriteAllText(lPath, lTxt, TEncoding.ASCII);
+  lOut := TPath.Combine(SCRATCH, 'dangling-out');
+  if TDirectory.Exists(lOut) then
+    TDirectory.Delete(lOut, True);
+  lFmt := LoadSiteFormat(lRepo);
+  lW := TOutputWriter.Create(lOut, False, True);
+  try
+    lMsg := '';
+    try
+      BuildSite(lRepo, lFmt, lW);
+    except
+      on E: EFeatureGen do
+        lMsg := E.Message;
+    end;
+    Check('Site.DanglingLinkFails', (Pos('features/ask.md', lMsg) > 0) and (Pos('"gone.md"', lMsg) > 0) and (Pos('does not exist', lMsg) > 0)
+      and not TDirectory.Exists(lOut), lMsg);
+  finally
+    lW.Free;
+  end;
+end;
+
+procedure TestCheckLinks;
+var
+  lOut: string;
+  lW: TOutputWriter;
+  lBad: TArray<string>;
+  lJoined: string;
+begin
+  lOut := FreshDir('checklinks');
+  lW := TOutputWriter.Create(lOut, True, False);
+  try
+    lW.Put('a.md', '[ok](b.md) [ok2](sub/../b.md#frag) [anchor](#top) [miss](missing.md) [h](http://x.org/a) [s](https://ok.org/p) ![i](img/p.png)'#10
+      + '[f](file:///c:/x.md) [d](C:\x\y.md) [bs](sub\b.md) [up](../x.md)'#10'```text'#10'[z](nope.md)'#10'```'#10'`[c](nope2.md)`'#10, 'ctx');
+    lW.Put('b.md', 'b', 'ctx');
+    lW.Put('sub/c.md', '[back](../b.md) [self](c.md) [bad](b.md)', 'ctx');
+    lW.PutBinary('img/p.png', ParamStr(0));
+    lBad := CheckLinks(lW);
+    lJoined := string.Join('|', lBad);
+    Check('Site.CheckLinksRules', (Length(lBad) = 7) and (Pos('a.md: link "missing.md"', lJoined) > 0) and (Pos('"http://x.org/a" -- external link is not https', lJoined) > 0)
+      and (Pos('"file:///c:/x.md" -- local path', lJoined) > 0) and (Pos('"C:\x\y.md" -- local path', lJoined) > 0)
+      and (Pos('"sub\b.md" -- local path', lJoined) > 0) and (Pos('"../x.md" -- leaves the site', lJoined) > 0)
+      and (Pos('nope', lJoined) = 0) and (Pos('sub/c.md: link "b.md" -- target file does not exist', lJoined) > 0), lJoined);
+  finally
+    lW.Free;
+  end;
+end;
+
 var
   lRepo: string;
 begin
@@ -509,6 +774,10 @@ begin
     TestMarkdown;
     TestWikiLinkMapFromRegistry;
     TestLeaves;
+    TestUndocumentedVerbs;
+    TestSite;
+    TestSiteDanglingLink;
+    TestCheckLinks;
     if lRepo <> '' then
       TestSiteFormatFile(lRepo);
   except

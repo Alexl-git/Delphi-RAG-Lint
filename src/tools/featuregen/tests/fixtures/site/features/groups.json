@@ -1,0 +1,7 @@
+{
+  "groups": [
+    { "id": "g-ide", "title": "IDE group", "order": 10, "summary": "Menu things." },
+    { "id": "g-search", "title": "Search group", "order": 20, "summary": "Search things." },
+    { "id": "g-empty", "title": "Empty group", "order": 30, "summary": "Nothing included." }
+  ]
+}

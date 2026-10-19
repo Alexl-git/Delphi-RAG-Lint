@@ -1,0 +1,12 @@
+{
+  "id": "ask",
+  "title": "Ask",
+  "group": "g-search",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.50.0-alpha",
+  "summary": "Asks a question",
+  "wikiPage": "Ask",
+  "surfaces": [ { "type": "cli", "verb": "ask" } ],
+  "audience": "both"
+}

@@ -98,7 +98,7 @@ var
   lE: TFeatureEntry;
 begin
   for lE in pReg.Entries do
-    if SiteIncludes(pFmt, lE.Status, lE.Audience) then
+    if EntryOnSite(pFmt, lE) then
       Add(lE.WikiPage, lE.Id);
 end;
 

@@ -1,0 +1,15 @@
+{
+  "root": "out",
+  "product": "DL",
+  "frontMatterKeys": ["id", "title", "summary", "product", "group", "order", "since", "status", "updated"],
+  "includeStatuses": ["shipped", "experimental"],
+  "excludeAudiences": ["agent"],
+  "fenceDefaultLang": "text",
+  "micronite": {
+    "index": "Built alongside Micronite ([www.htrmicronite.com](https://www.htrmicronite.com)).",
+    "whatsNew": "Grows out of the Micronite work ([https://www.htrmicronite.com](https://www.htrmicronite.com))."
+  },
+  "imageDir": "features/img",
+  "engine": "none.exe",
+  "undocumentedSource": "guard.ps1"
+}

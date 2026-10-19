@@ -37,6 +37,8 @@ type
     FCheckOnly: Boolean;
     FOwnsRoot: Boolean;
     FProduced: TDictionary<string, Boolean>;
+    FNames: TDictionary<string, string>;
+    FTexts: TDictionary<string, string>;
     FWritten: TList<string>;
     FChanged: TList<string>;
     FRemoved: TList<string>;
@@ -63,6 +65,14 @@ type
     /// <summary>Completes the run: removes stale files (owned root, not check mode) and reports.</summary>
     /// <returns>Written, Changed and Removed paths.</returns>
     function Finish: TOutputResult;
+    /// <summary>Root-relative paths (backslashes) of every file queued so far, text and binary.</summary>
+    function ProducedFiles: TArray<string>;
+    /// <summary>The text queued for a file, with LF line ends.</summary>
+    /// <param name="pRelPath">Root-relative path as given to Put (either slash).</param>
+    /// <returns>The text; '' when the file was not queued by Put.</returns>
+    function TextOf(const pRelPath: string): string;
+    /// <summary>The full path of the output root, no trailing delimiter.</summary>
+    property Root: string read FRoot;
   end;
 
 /// <summary>First-difference text of two strings, as Get-DiffHead in FeatureRegistry.psm1.</summary>
@@ -131,6 +141,8 @@ begin
   FCheckOnly := pCheckOnly;
   FOwnsRoot := pOwnsRoot;
   FProduced := TDictionary<string, Boolean>.Create;
+  FNames := TDictionary<string, string>.Create;
+  FTexts := TDictionary<string, string>.Create;
   FWritten := TList<string>.Create;
   FChanged := TList<string>.Create;
   FRemoved := TList<string>.Create;
@@ -141,6 +153,8 @@ begin
   FRemoved.Free;
   FChanged.Free;
   FWritten.Free;
+  FTexts.Free;
+  FNames.Free;
   FProduced.Free;
   inherited;
 end;
@@ -169,6 +183,7 @@ begin
   lFull := ResolvePath(pRelPath);
   lKey := Copy(lFull, Length(FRoot) + 2, MaxInt);
   FProduced.AddOrSetValue(LowerCase(lKey), True);
+  FNames.AddOrSetValue(LowerCase(lKey), lKey);
   lDiffers := True;
   if TFile.Exists(lFull) then
   begin
@@ -208,6 +223,18 @@ begin
   end;
   lNorm := pText.Replace(#13#10, #10).Replace(#13, #10).Replace(#10, #13#10);
   Store(pRelPath, TEncoding.ASCII.GetBytes(lNorm));
+  FTexts.AddOrSetValue(LowerCase(pRelPath.Replace('/', '\')), pText.Replace(#13#10, #10).Replace(#13, #10));
+end;
+
+function TOutputWriter.ProducedFiles: TArray<string>;
+begin
+  Result := FNames.Values.ToArray;
+end;
+
+function TOutputWriter.TextOf(const pRelPath: string): string;
+begin
+  if not FTexts.TryGetValue(LowerCase(pRelPath.Replace('/', '\')), Result) then
+    Result := '';
 end;
 
 procedure TOutputWriter.PutBinary(const pRelPath, pSourceFile: string);

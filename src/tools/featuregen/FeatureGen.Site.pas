@@ -1,6 +1,7 @@
 unit FeatureGen.Site;
 
-{ The website set (spec 5.2). This part: the leaf page features/<id>.md. }
+{ The website set (spec 5.2): leaf pages features/<id>.md, the root pages index.md,
+  cli.md, ide.md, whats-new.md, and index.json / wiki-map.json. }
 
 interface
 
@@ -9,6 +10,7 @@ uses
   , FeatureGen.Model
   , FeatureGen.SiteFormat
   , FeatureGen.Markdown
+  , FeatureGen.Output
   ;
 
 /// <summary>Renders the website leaf page of one entry.</summary>
@@ -21,9 +23,26 @@ uses
 /// Details and the footer. When the wiki body has its own "Running it from the CLI" or "Usage" section, How to run it keeps
 /// only the link to cli.md.</returns>
 /// <exception cref="EFeatureGen">The wiki body holds raw HTML or a non-ASCII character, or a front matter key is unknown.</exception>
-/// <remarks>updated is LastVerifiedBuild, else Since. order is 10 times the 1-based place among the included entries.</remarks>
+/// <remarks>updated is LastVerifiedBuild, else Since. order is the group order times 1000 plus the 1-based place among the
+/// site entries of the group (ordinal by id); index.json carries the same number.</remarks>
 function RenderLeaf(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const pReg: TRegistry; const pRepo: string;
   out pImages: TArray<TImageRef>): string;
+
+/// <summary>Writes the whole website set through the writer.</summary>
+/// <param name="pRepo">Repo root (features\, docs\wiki\, docs\Images\).</param>
+/// <param name="pFmt">Site format (ExcludedVerbs filled by LoadSiteFormat; Help may be nil).</param>
+/// <param name="pWriter">Receives every file; the caller calls Finish.</param>
+/// <exception cref="EFeatureGen">A render has raw HTML or non-ASCII, an entry names an unknown group, or CheckLinks finds a violation.
+/// Nothing is written to the writer then: the set is first generated into a check-only writer.</exception>
+/// <remarks>Writes index.md, index.json, cli.md, ide.md, whats-new.md, wiki-map.json, features/&lt;id&gt;.md and the images.</remarks>
+procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter);
+
+/// <summary>Checks every link of the Markdown files queued in the writer.</summary>
+/// <param name="pWriter">Writer after the set was Put.</param>
+/// <returns>One message per violation, naming the page and the link; empty when all is well.</returns>
+/// <remarks>Violations: a relative target (path part) that is not among the files queued; an external link that is not https;
+/// a local path (drive letter, backslash, file:). Links inside code fences and code spans are not links.</remarks>
+function CheckLinks(const pWriter: TOutputWriter): TArray<string>;
 
 implementation
 
@@ -31,7 +50,8 @@ uses
   System.Classes
   , System.IOUtils
   , System.RegularExpressions
-  , FeatureGen.Output
+  , System.Generics.Collections
+  , System.Generics.Defaults
   ;
 
 function YamlScalar(const pValue: string): string;
@@ -43,14 +63,26 @@ begin
     Result := pValue;
 end;
 
-function LeafOrder(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const pReg: TRegistry): Integer;
+function GroupOrder(const pReg: TRegistry; const pGroup: string): Integer;
+var
+  lG: TNamedRow;
+begin
+  Result := 0;
+  for lG in pReg.Groups do
+    if lG.Id = pGroup then
+      Result := lG.Order;
+end;
+
+function SiteOrder(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const pReg: TRegistry): Integer;
 var
   lE: TFeatureEntry;
+  lPlace: Integer;
 begin
-  Result := 10;
+  lPlace := 1;
   for lE in pReg.Entries do
-    if SiteIncludes(pFmt, lE.Status, lE.Audience) and (CompareStr(lE.Id, pEntry.Id) < 0) then
-      Inc(Result, 10);
+    if EntryOnSite(pFmt, lE) and (lE.Group = pEntry.Group) and (CompareStr(lE.Id, pEntry.Id) < 0) then
+      Inc(lPlace);
+  Result := GroupOrder(pReg, pEntry.Group) * 1000 + lPlace;
 end;
 
 function FrontMatter(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const pReg: TRegistry): string;
@@ -74,7 +106,7 @@ begin
     else if lKey = 'group' then
       lVal := pEntry.Group
     else if lKey = 'order' then
-      lVal := IntToStr(LeafOrder(pEntry, pFmt, pReg))
+      lVal := IntToStr(SiteOrder(pEntry, pFmt, pReg))
     else if lKey = 'since' then
       lVal := pEntry.Since
     else if lKey = 'status' then
@@ -186,6 +218,558 @@ begin
   if lBody <> '' then
     Result := Result + '## Details'#10#10 + lBody + #10#10;
   Result := Result + '---'#10#10'[All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)'#10;
+end;
+
+{ ---- root pages ---- }
+
+function Sentence(const pText: string): string;
+begin
+  Result := pText;
+  if not TRegEx.IsMatch(Result, '[.!?]$') then
+    Result := Result + '.';
+end;
+
+function RootFront(const pFmt: TSiteFormat; const pId, pTitle, pSummary: string): string;
+var
+  lKey, lVal: string;
+begin
+  Result := '---'#10;
+  for lKey in pFmt.FrontMatterKeys do
+  begin
+    if lKey = 'id' then
+      lVal := pId
+    else if lKey = 'title' then
+      lVal := pTitle
+    else if lKey = 'summary' then
+      lVal := pSummary
+    else if lKey = 'product' then
+      lVal := pFmt.Product
+    else
+      Continue;
+    Result := Result + lKey + ': ' + YamlScalar(lVal) + #10;
+  end;
+  Result := Result + '---'#10#10;
+end;
+
+function CellText(const pText: string): string;
+begin
+  Result := pText.Replace('|', '\|');
+end;
+
+function LeafLink(const pEntry: TFeatureEntry; const pText: string): string;
+begin
+  Result := '[' + pText + '](features/' + pEntry.Id + '.md)';
+end;
+
+function JsonStr(const pText: string): string;
+var
+  lCh: Char;
+begin
+  Result := '"';
+  for lCh in pText do
+    case lCh of
+      '"': Result := Result + '\"';
+      '\': Result := Result + '\\';
+      #10: Result := Result + '\n';
+      #13: Result := Result + '\r';
+      #9: Result := Result + '\t';
+    else
+      if lCh < ' ' then
+        Result := Result + '\u' + IntToHex(Ord(lCh), 4)
+      else
+        Result := Result + lCh;
+    end;
+  Result := Result + '"';
+end;
+
+function IncludedEntries(const pFmt: TSiteFormat; const pReg: TRegistry): TArray<TFeatureEntry>;
+var
+  lE: TFeatureEntry;
+  lList: TList<TFeatureEntry>;
+begin
+  lList := TList<TFeatureEntry>.Create;
+  try
+    for lE in pReg.Entries do
+      if EntryOnSite(pFmt, lE) then
+        lList.Add(lE);
+    Result := lList.ToArray;
+  finally
+    lList.Free;
+  end;
+end;
+
+function IndexMd(const pFmt: TSiteFormat; const pReg: TRegistry; const pInc: TArray<TFeatureEntry>): string;
+var
+  lG: TNamedRow;
+  lE: TFeatureEntry;
+  lRows: string;
+begin
+  Result := RootFront(pFmt, 'index', 'drag-lint help', 'Every drag-lint feature, by group.')
+    + '# drag-lint help'#10#10 + pFmt.MicroniteIndex + #10#10;
+  for lG in pReg.Groups do
+  begin
+    lRows := '';
+    for lE in pInc do
+      if lE.Group = lG.Id then
+        lRows := lRows + '| ' + LeafLink(lE, CellText(lE.Title)) + ' | ' + CellText(lE.Summary) + ' | ' + CellText(lE.Since) + ' |'#10;
+    if lRows = '' then
+      Continue;
+    Result := Result + '## ' + lG.Title + #10#10;
+    if lG.Summary <> '' then
+      Result := Result + Sentence(lG.Summary) + #10#10;
+    Result := Result + '| Feature | What it does | Since |'#10'| --- | --- | --- |'#10 + lRows + #10;
+  end;
+end;
+
+function IndexJson(const pFmt: TSiteFormat; const pReg: TRegistry; const pInc: TArray<TFeatureEntry>): string;
+var
+  lG: TNamedRow;
+  lE: TFeatureEntry;
+  lItems: string;
+begin
+  lItems := '';
+  for lG in pReg.Groups do
+    for lE in pInc do
+      if lE.Group = lG.Id then
+      begin
+        if lItems <> '' then
+          lItems := lItems + ','#10;
+        lItems := lItems + '  {'#10'    "id": ' + JsonStr(lE.Id) + ','#10'    "title": ' + JsonStr(lE.Title) + ','#10
+          + '    "summary": ' + JsonStr(lE.Summary) + ','#10'    "group": ' + JsonStr(lE.Group) + ','#10
+          + '    "order": ' + IntToStr(SiteOrder(lE, pFmt, pReg)) + ','#10'    "since": ' + JsonStr(lE.Since) + ','#10
+          + '    "file": ' + JsonStr('features/' + lE.Id + '.md') + #10'  }';
+      end;
+  Result := '['#10 + lItems + #10']'#10;
+end;
+
+function CliMd(const pFmt: TSiteFormat; const pInc: TArray<TFeatureEntry>): string;
+var
+  lVerbs: TDictionary<string, TList<Integer>>;
+  lKeys: TArray<string>;
+  lE: TFeatureEntry;
+  lS: TSurface;
+  lI: Integer;
+  lVerb, lUsage, lUsages, lSub: string;
+  lSubs: TList<string>;
+begin
+  lVerbs := TObjectDictionary<string, TList<Integer>>.Create([doOwnsValues]);
+  try
+    for lI := 0 to High(pInc) do
+      for lS in pInc[lI].Surfaces do
+        if (lS.Kind = 'cli') and (lS.Verb <> '') then
+        begin
+          if not lVerbs.ContainsKey(lS.Verb) then
+            lVerbs.Add(lS.Verb, TList<Integer>.Create);
+          if not lVerbs[lS.Verb].Contains(lI) then
+            lVerbs[lS.Verb].Add(lI);
+        end;
+    lKeys := lVerbs.Keys.ToArray;
+    TArray.Sort<string>(lKeys, TComparer<string>.Construct(
+      function(const pA, pB: string): Integer
+      begin
+        Result := CompareStr(pA, pB);
+      end));
+    Result := RootFront(pFmt, 'cli', 'CLI reference', 'Every drag-lint command, with its usage and the feature that describes it.')
+      + '# CLI reference'#10#10'Every drag-lint command, with its usage and the features that describe it.'#10#10'## Commands'#10#10;
+    for lVerb in lKeys do
+    begin
+      lE := pInc[lVerbs[lVerb][0]];
+      lUsages := '';
+      lSubs := TList<string>.Create;
+      try
+        lSubs.Add('');
+        for lI in lVerbs[lVerb] do
+          for lS in pInc[lI].Surfaces do
+            if (lS.Kind = 'cli') and (lS.Verb = lVerb) and (lS.Sub <> '') and not lSubs.Contains(lS.Sub) then
+              lSubs.Add(lS.Sub);
+        for lSub in lSubs do
+        begin
+          lUsage := '';
+          if pFmt.Help <> nil then
+            lUsage := pFmt.Help.UsageFor(Trim(lVerb + ' ' + lSub));
+          if (lUsage <> '') and (Pos(lUsage + #10, lUsages) = 0) then
+            lUsages := lUsages + lUsage + #10;
+        end;
+      finally
+        lSubs.Free;
+      end;
+      if lUsages = '' then
+        lUsages := 'drag-lint ' + lVerb + #10;
+      Result := Result + '### ' + lVerb + #10#10 + Sentence(lE.Summary) + #10#10'```text'#10 + lUsages + '```'#10#10;
+      if lVerbs[lVerb].Count = 1 then
+        Result := Result + 'Described in ' + LeafLink(lE, lE.Title) + '.'#10#10
+      else
+      begin
+        Result := Result + 'Described in:'#10#10;
+        for lI in lVerbs[lVerb] do
+          Result := Result + '* ' + LeafLink(pInc[lI], pInc[lI].Title) + #10;
+        Result := Result + #10;
+      end;
+    end;
+  finally
+    lVerbs.Free;
+  end;
+end;
+
+type
+  TMenuItemRef = record
+    Segs: TArray<string>;
+    Entry: Integer;
+  end;
+
+procedure EmitMenuLevel(const pItems: TArray<TMenuItemRef>; pDepth: Integer; const pInc: TArray<TFeatureEntry>; var pOut: string);
+var
+  lNames: TList<string>;
+  lItem: TMenuItemRef;
+  lName: string;
+  lSub: TList<TMenuItemRef>;
+  lLinks: TList<Integer>;
+  lI: Integer;
+  lLine: string;
+begin
+  lNames := TList<string>.Create;
+  try
+    for lItem in pItems do
+      if not lNames.Contains(lItem.Segs[pDepth]) then
+        lNames.Add(lItem.Segs[pDepth]);
+    lNames.Sort(TComparer<string>.Construct(
+      function(const pA, pB: string): Integer
+      begin
+        Result := CompareStr(pA, pB);
+      end));
+    for lName in lNames do
+    begin
+      lSub := TList<TMenuItemRef>.Create;
+      lLinks := TList<Integer>.Create;
+      try
+        for lItem in pItems do
+          if lItem.Segs[pDepth] = lName then
+          begin
+            if Length(lItem.Segs) = pDepth + 1 then
+            begin
+              if not lLinks.Contains(lItem.Entry) then
+                lLinks.Add(lItem.Entry);
+            end
+            else
+              lSub.Add(lItem);
+          end;
+        lLinks.Sort;
+        lLine := StringOfChar(' ', pDepth * 2) + '* ';
+        if lLinks.Count = 0 then
+          lLine := lLine + lName
+        else if lLinks.Count = 1 then
+          lLine := lLine + LeafLink(pInc[lLinks[0]], lName)
+        else
+        begin
+          lLine := lLine + lName + ': ';
+          for lI := 0 to lLinks.Count - 1 do
+          begin
+            if lI > 0 then
+              lLine := lLine + ', ';
+            lLine := lLine + LeafLink(pInc[lLinks[lI]], pInc[lLinks[lI]].Title);
+          end;
+        end;
+        pOut := pOut + lLine + #10;
+        if lSub.Count > 0 then
+          EmitMenuLevel(lSub.ToArray, pDepth + 1, pInc, pOut);
+      finally
+        lLinks.Free;
+        lSub.Free;
+      end;
+    end;
+  finally
+    lNames.Free;
+  end;
+end;
+
+function IdeMd(const pFmt: TSiteFormat; const pInc: TArray<TFeatureEntry>): string;
+var
+  lItems: TList<TMenuItemRef>;
+  lRef: TMenuItemRef;
+  lS: TSurface;
+  lI, lJ: Integer;
+  lParts: TArray<string>;
+  lTree: string;
+begin
+  lItems := TList<TMenuItemRef>.Create;
+  try
+    for lI := 0 to High(pInc) do
+      for lS in pInc[lI].Surfaces do
+        if (lS.Kind = 'ide-menu') and (lS.Path <> '') then
+        begin
+          lParts := lS.Path.Split(['>']);
+          for lJ := 0 to High(lParts) do
+            lParts[lJ] := Trim(lParts[lJ]);
+          lRef.Segs := lParts;
+          lRef.Entry := lI;
+          lItems.Add(lRef);
+        end;
+    lTree := '';
+    if lItems.Count > 0 then
+      EmitMenuLevel(lItems.ToArray, 0, pInc, lTree);
+  finally
+    lItems.Free;
+  end;
+  Result := RootFront(pFmt, 'ide', 'IDE menus', 'The drag-lint menu tree in the RAD Studio IDE, every item linked to its feature.')
+    + '# IDE menus'#10#10'The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it starts.'#10#10 + lTree;
+end;
+
+function VersionKey(const pSince: string): TArray<Integer>;
+var
+  lParts: TArray<string>;
+  lI: Integer;
+begin
+  lParts := pSince.Split(['-'])[0].Split(['.']);
+  SetLength(Result, Length(lParts));
+  for lI := 0 to High(lParts) do
+    Result[lI] := StrToIntDef(lParts[lI], 0);
+end;
+
+function CompareVersion(const pA, pB: string): Integer;
+var
+  lA, lB: TArray<Integer>;
+  lI, lN: Integer;
+begin
+  lA := VersionKey(pA);
+  lB := VersionKey(pB);
+  lN := Length(lA);
+  if Length(lB) > lN then
+    lN := Length(lB);
+  Result := 0;
+  for lI := 0 to lN - 1 do
+  begin
+    if lI >= Length(lA) then
+      Exit(-1);
+    if lI >= Length(lB) then
+      Exit(1);
+    if lA[lI] <> lB[lI] then
+      Exit(lA[lI] - lB[lI]);
+  end;
+  Result := CompareStr(pA, pB);
+end;
+
+function WhatsNewMd(const pFmt: TSiteFormat; const pInc: TArray<TFeatureEntry>): string;
+var
+  lSinces: TList<string>;
+  lE: TFeatureEntry;
+  lSince: string;
+begin
+  Result := RootFront(pFmt, 'whats-new', 'What''s new', 'Features grouped by the version that introduced them, newest first.')
+    + '# What''s new'#10#10 + pFmt.MicroniteWhatsNew + #10#10;
+  lSinces := TList<string>.Create;
+  try
+    for lE in pInc do
+      if not lSinces.Contains(lE.Since) then
+        lSinces.Add(lE.Since);
+    lSinces.Sort(TComparer<string>.Construct(
+      function(const pA, pB: string): Integer
+      begin
+        Result := CompareVersion(pB, pA);
+      end));
+    for lSince in lSinces do
+    begin
+      Result := Result + '## ' + lSince + #10#10;
+      for lE in pInc do
+        if lE.Since = lSince then
+          Result := Result + '* ' + LeafLink(lE, lE.Title) + ' -- ' + Sentence(lE.Summary) + #10;
+      Result := Result + #10;
+    end;
+  finally
+    lSinces.Free;
+  end;
+end;
+
+function WikiMapJson(const pInc: TArray<TFeatureEntry>): string;
+var
+  lMap: TDictionary<string, string>;
+  lE: TFeatureEntry;
+  lKeys: TArray<string>;
+  lOld, lKey, lItems: string;
+begin
+  lMap := TDictionary<string, string>.Create;
+  try
+    for lE in pInc do
+      if lE.WikiPage <> '' then
+        if (not lMap.TryGetValue(lE.WikiPage, lOld)) or (CompareStr(lE.Id, lOld) < 0) then
+          lMap.AddOrSetValue(lE.WikiPage, lE.Id);
+    lKeys := lMap.Keys.ToArray;
+    TArray.Sort<string>(lKeys, TComparer<string>.Construct(
+      function(const pA, pB: string): Integer
+      begin
+        Result := CompareStr(pA, pB);
+      end));
+    lItems := '';
+    for lKey in lKeys do
+    begin
+      if lItems <> '' then
+        lItems := lItems + ','#10;
+      lItems := lItems + '  ' + JsonStr(lKey) + ': ' + JsonStr(lMap[lKey]);
+    end;
+    Result := '{'#10 + lItems + #10'}'#10;
+  finally
+    lMap.Free;
+  end;
+end;
+
+procedure GenerateSite(const pRepo: string; const pFmt: TSiteFormat; const pReg: TRegistry; const pW: TOutputWriter);
+var
+  lInc: TArray<TFeatureEntry>;
+  lE: TFeatureEntry;
+  lImgs: TArray<TImageRef>;
+  lImg: TImageRef;
+  lG: TNamedRow;
+  lKnown: Boolean;
+begin
+  lInc := IncludedEntries(pFmt, pReg);
+  for lE in lInc do
+  begin
+    lKnown := False;
+    for lG in pReg.Groups do
+      if lG.Id = lE.Group then
+        lKnown := True;
+    if not lKnown then
+      raise EFeatureGen.CreateFmt('entry %s: group "%s" is not in groups.json', [lE.Id, lE.Group]);
+    pW.Put('features/' + lE.Id + '.md', RenderLeaf(lE, pFmt, pReg, pRepo, lImgs), 'entry ' + lE.Id + ' (leaf)');
+    for lImg in lImgs do
+      pW.PutBinary('features\' + lImg.Target, TPath.Combine(pRepo, lImg.Source));
+  end;
+  pW.Put('index.md', IndexMd(pFmt, pReg, lInc), 'index.md');
+  pW.Put('index.json', IndexJson(pFmt, pReg, lInc), 'index.json');
+  pW.Put('cli.md', CliMd(pFmt, lInc), 'cli.md');
+  pW.Put('ide.md', IdeMd(pFmt, lInc), 'ide.md');
+  pW.Put('whats-new.md', WhatsNewMd(pFmt, lInc), 'whats-new.md');
+  pW.Put('wiki-map.json', WikiMapJson(lInc), 'wiki-map.json');
+end;
+
+procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter);
+var
+  lReg: TRegistry;
+  lProbe: TOutputWriter;
+  lBad: TArray<string>;
+begin
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    lProbe := TOutputWriter.Create(pWriter.Root, True, False);
+    try
+      GenerateSite(pRepo, pFmt, lReg, lProbe);
+      lBad := CheckLinks(lProbe);
+    finally
+      lProbe.Free;
+    end;
+    if Length(lBad) > 0 then
+      raise EFeatureGen.Create('link check failed:'#13#10 + string.Join(#13#10, lBad));
+    GenerateSite(pRepo, pFmt, lReg, pWriter);
+  finally
+    lReg.Free;
+  end;
+end;
+
+{ ---- link check ---- }
+
+function StripCode(const pText: string): string;
+var
+  lLine: string;
+  lFence: Boolean;
+begin
+  Result := '';
+  lFence := False;
+  for lLine in pText.Split([#10]) do
+  begin
+    if lLine.TrimLeft.StartsWith('```') then
+    begin
+      lFence := not lFence;
+      Continue;
+    end;
+    if not lFence then
+      Result := Result + TRegEx.Replace(lLine, '`[^`]*`', '') + #10;
+  end;
+end;
+
+function NormalisePath(const pPageDir, pTarget: string; out pOk: Boolean): string;
+var
+  lParts: TList<string>;
+  lPart: string;
+begin
+  pOk := True;
+  lParts := TList<string>.Create;
+  try
+    if pPageDir <> '' then
+      for lPart in pPageDir.Split(['/']) do
+        lParts.Add(lPart);
+    for lPart in pTarget.Split(['/']) do
+      if (lPart = '') or (lPart = '.') then
+        Continue
+      else if lPart = '..' then
+      begin
+        if lParts.Count = 0 then
+          pOk := False
+        else
+          lParts.Delete(lParts.Count - 1);
+      end
+      else
+        lParts.Add(lPart);
+    Result := string.Join('/', lParts.ToArray);
+  finally
+    lParts.Free;
+  end;
+end;
+
+function CheckLinks(const pWriter: TOutputWriter): TArray<string>;
+var
+  lFiles: TDictionary<string, Boolean>;
+  lFile, lPage, lDir, lTarget, lPath, lResolved, lReason: string;
+  lM: TMatch;
+  lOk: Boolean;
+  lBad: TList<string>;
+  lSlash: Integer;
+begin
+  lFiles := TDictionary<string, Boolean>.Create;
+  lBad := TList<string>.Create;
+  try
+    for lFile in pWriter.ProducedFiles do
+      lFiles.AddOrSetValue(lFile.Replace('\', '/'), True);
+    for lFile in pWriter.ProducedFiles do
+    begin
+      lPage := lFile.Replace('\', '/');
+      if not lPage.EndsWith('.md') then
+        Continue;
+      lSlash := lPage.LastIndexOf('/');
+      lDir := '';
+      if lSlash >= 0 then
+        lDir := Copy(lPage, 1, lSlash);
+      for lM in TRegEx.Matches(StripCode(pWriter.TextOf(lFile)), '\]\(([^)\s]+)(?:\s+"[^"]*")?\)') do
+      begin
+        lTarget := lM.Groups[1].Value;
+        lReason := '';
+        if TRegEx.IsMatch(lTarget, '^[A-Za-z]:[\\/]') or lTarget.StartsWith('file:', True) or (Pos('\', lTarget) > 0) then
+          lReason := 'local path'
+        else if lTarget.StartsWith('https://') then
+          Continue
+        else if TRegEx.IsMatch(lTarget, '^([A-Za-z][A-Za-z0-9+.\-]*:|//)') then
+          lReason := 'external link is not https'
+        else if lTarget.StartsWith('#') then
+          Continue
+        else
+        begin
+          lPath := lTarget;
+          if Pos('#', lPath) > 0 then
+            lPath := Copy(lPath, 1, Pos('#', lPath) - 1);
+          lResolved := NormalisePath(lDir, lPath, lOk);
+          if not lOk then
+            lReason := 'leaves the site'
+          else if not lFiles.ContainsKey(lResolved) then
+            lReason := 'target file does not exist';
+        end;
+        if lReason <> '' then
+          lBad.Add(lPage + ': link "' + lTarget + '" -- ' + lReason);
+      end;
+    end;
+    Result := lBad.ToArray;
+  finally
+    lBad.Free;
+    lFiles.Free;
+  end;
 end;
 
 end.

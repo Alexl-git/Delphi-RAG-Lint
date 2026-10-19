@@ -8,6 +8,7 @@ interface
 uses
   System.SysUtils
   , FeatureGen.Live
+  , FeatureGen.Model
   ;
 
 type
@@ -31,14 +32,29 @@ type
     Engine: string;
     /// <summary>Repo-relative path of the docs-sync guard that lists $UndocumentedOnPurpose.</summary>
     UndocumentedSource: string;
+    /// <summary>Cli verbs keyed in the $UndocumentedOnPurpose block of UndocumentedSource; an entry with such a verb is not on the site. Filled by LoadSiteFormat.</summary>
+    ExcludedVerbs: TArray<string>;
     Help: TLiveHelp;
   end;
 
 /// <summary>Reads features\site-format.json.</summary>
 /// <param name="pRepo">Repo root holding features\.</param>
-/// <returns>The format; Help is nil.</returns>
+/// <returns>The format; Help is nil; ExcludedVerbs is read from UndocumentedSource.</returns>
 /// <exception cref="EFeatureJson">The file is missing or malformed.</exception>
+/// <exception cref="EFeatureGen">undocumentedSource is missing, or its $UndocumentedOnPurpose block cannot be found or holds no key (never read as empty).</exception>
 function LoadSiteFormat(const pRepo: string): TSiteFormat;
+
+/// <summary>Reads the keys of the $UndocumentedOnPurpose = [ordered]@{ 'verb' = '...' } block of a PowerShell file.</summary>
+/// <param name="pFile">Full path of the file.</param>
+/// <returns>The keys, in file order.</returns>
+/// <exception cref="EFeatureGen">The file is missing, the block is not found, or it holds no key.</exception>
+function ReadUndocumentedVerbs(const pFile: string): TArray<string>;
+
+/// <summary>True when an entry belongs on the site: SiteIncludes holds and none of its cli verbs is in ExcludedVerbs.</summary>
+/// <param name="pFmt">Format.</param>
+/// <param name="pEntry">The entry.</param>
+/// <returns>Whether the entry gets a page and may be linked.</returns>
+function EntryOnSite(const pFmt: TSiteFormat; const pEntry: TFeatureEntry): Boolean;
 
 /// <summary>True when an entry belongs on the site.</summary>
 /// <param name="pFmt">Format holding the include/exclude lists.</param>
@@ -52,7 +68,9 @@ implementation
 uses
   System.IOUtils
   , System.JSON
+  , System.RegularExpressions
   , FeatureGen.Json
+  , FeatureGen.Output
   ;
 
 function Strs(pObj: TJSONValue; const pName: string): TArray<string>;
@@ -69,6 +87,49 @@ begin
   SetLength(Result, TJSONArray(lV).Count);
   for i := 0 to High(Result) do
     Result[i] := TJSONArray(lV).Items[i].Value;
+end;
+
+function ReadUndocumentedVerbs(const pFile: string): TArray<string>;
+var
+  lLine: string;
+  lIn: Boolean;
+  lM: TMatch;
+begin
+  if not TFile.Exists(pFile) then
+    raise EFeatureGen.CreateFmt('undocumented-verb source not found: %s', [pFile]);
+  lIn := False;
+  SetLength(Result, 0);
+  for lLine in TFile.ReadAllLines(pFile) do
+  begin
+    if not lIn then
+    begin
+      lIn := TRegEx.IsMatch(lLine, '^\$UndocumentedOnPurpose\s*=\s*\[ordered\]@\{');
+      Continue;
+    end;
+    if TRegEx.IsMatch(lLine, '^\}') then
+      Break;
+    lM := TRegEx.Match(lLine, '^\s*''([^'']+)''\s*=');
+    if lM.Success then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := lM.Groups[1].Value;
+    end;
+  end;
+  if (not lIn) or (Length(Result) = 0) then
+    raise EFeatureGen.CreateFmt('$UndocumentedOnPurpose block not found or empty in %s', [pFile]);
+end;
+
+function EntryOnSite(const pFmt: TSiteFormat; const pEntry: TFeatureEntry): Boolean;
+var
+  lS: TSurface;
+  lV: string;
+begin
+  Result := SiteIncludes(pFmt, pEntry.Status, pEntry.Audience);
+  for lS in pEntry.Surfaces do
+    if lS.Kind = 'cli' then
+      for lV in pFmt.ExcludedVerbs do
+        if lV = lS.Verb then
+          Result := False;
 end;
 
 function LoadSiteFormat(const pRepo: string): TSiteFormat;
@@ -92,6 +153,9 @@ begin
     Result.ImageDir := Prop(lRoot, 'imageDir');
     Result.Engine := Prop(lRoot, 'engine');
     Result.UndocumentedSource := Prop(lRoot, 'undocumentedSource');
+    if Result.UndocumentedSource = '' then
+      raise EFeatureGen.Create('site-format.json: undocumentedSource is missing');
+    Result.ExcludedVerbs := ReadUndocumentedVerbs(TPath.Combine(pRepo, Result.UndocumentedSource));
   finally
     lRoot.Free;
   end;

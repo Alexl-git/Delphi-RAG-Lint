@@ -1,0 +1,12 @@
+{
+  "id": "find-text",
+  "title": "Find text",
+  "group": "g-search",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.9.0-alpha",
+  "summary": "Finds text",
+  "wikiPage": "Shared",
+  "surfaces": [ { "type": "cli", "verb": "query", "sub": "text" } ],
+  "audience": "both"
+}

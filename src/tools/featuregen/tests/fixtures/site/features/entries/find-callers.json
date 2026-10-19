@@ -1,0 +1,12 @@
+{
+  "id": "find-callers",
+  "title": "Find callers",
+  "group": "g-search",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.86.0-alpha",
+  "summary": "Finds callers | of a name",
+  "wikiPage": "Shared",
+  "surfaces": [ { "type": "cli", "verb": "query", "sub": "find-callers" } ],
+  "audience": "both"
+}
