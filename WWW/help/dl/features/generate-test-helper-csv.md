@@ -14,7 +14,7 @@ updated: 1.26.1-alpha
 
 A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form.
 
-Hand a tester one spreadsheet that says how to reach every form: drag-lint > Reports > Forms for testers (CSV)... or drag-lint forms-csv --project <dproj> --db <db>. Each row gives the menu, ribbon or tab path, the control, the handler, the modal flag and the preconditions per hop; popup forms the index cannot trace go under popupForms in drag-lint-project.json. Needs the project index.
+Hand a tester one spreadsheet that says how to reach every form: drag-lint > Reports > Forms for testers (CSV)... or `drag-lint forms-csv --project <dproj> --db <db>`. Each row gives the menu, ribbon or tab path, the control, the handler, the modal flag and the preconditions per hop; popup forms the index cannot trace go under popupForms in drag-lint-project.json. Needs the project index.
 
 ## How to run it
 

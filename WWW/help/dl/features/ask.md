@@ -14,7 +14,7 @@ updated: 1.26.1-alpha
 
 Ask one report question and print the answer as text.
 
-Read this when you want a report answer on stdout -- drag-lint ask <question> --target <T> --project <P.dproj> prints the DocInsight block the Reports menu copies (or the plain answer with --plain). Every question is answered inside the engine; no PowerShell is needed.
+Read this when you want a report answer on stdout -- `drag-lint ask <question> --target <T> --project <P.dproj>` prints the DocInsight block the Reports menu copies (or the plain answer with --plain). Every question is answered inside the engine; no PowerShell is needed.
 
 ## How to run it
 

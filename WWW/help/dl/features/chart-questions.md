@@ -14,7 +14,7 @@ updated: 1.26.1-alpha
 
 Every chart question of the Reports submenu and drag-lint ask, imported from REPORT_QUESTIONS.
 
-Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run drag-lint ask <id> --target <name> --project <dproj>; you get a clickable chart and a DocInsight text answer. Needs a fresh project index and Graphviz for the pictures.
+Put the caret on a routine, field, type or unit and pick a question from drag-lint > Reports, or run `drag-lint ask <id> --target <name> --project <dproj>`; you get a clickable chart and a DocInsight text answer. Needs a fresh project index and Graphviz for the pictures.
 
 ## How to run it
 
