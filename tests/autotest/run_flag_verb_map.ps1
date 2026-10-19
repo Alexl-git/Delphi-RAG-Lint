@@ -107,7 +107,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 # (lint-all, schema, export, butterfly, sql, uses-report, graph, deps-report),
 # and export / forms-csv / convert-scaffold gained --output on their own lines
 # (3 cells). Six verbs had nothing else missing and left the table.
-$BaselineCells = 112
+$BaselineCells = 110
 $BaselineVerbs = 27
 
 $Repo = (Resolve-Path $Repo).Path
