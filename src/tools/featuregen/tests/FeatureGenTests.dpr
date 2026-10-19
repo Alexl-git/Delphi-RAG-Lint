@@ -13,6 +13,10 @@ uses
   , FeatureGen.Json in '..\FeatureGen.Json.pas'
   , FeatureGen.Model in '..\FeatureGen.Model.pas'
   , FeatureGen.Output in '..\FeatureGen.Output.pas'
+  , FeatureGen.Live in '..\FeatureGen.Live.pas'
+  , FeatureGen.SiteFormat in '..\FeatureGen.SiteFormat.pas'
+  , FeatureGen.Markdown in '..\FeatureGen.Markdown.pas'
+  , FeatureGen.Site in '..\FeatureGen.Site.pas'
   ;
 
 var
@@ -307,6 +311,174 @@ begin
   end;
   Check('Output.PutBinary', TFile.ReadAllBytes(TPath.Combine(lDir, 'out\i\p.bin'))[1] = 200);
 end;
+function MiniDir: string;
+begin
+  Result := TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\mini');
+end;
+
+function NewMap: TWikiLinkMap;
+begin
+  Result := TWikiLinkMap.Create;
+  Result.Add('ask', 'ask');
+  Result.Add('Outline', 'outline');
+end;
+
+function RaisedMessage(const pMd: string; const pMap: TWikiLinkMap): string;
+var
+  lImg: TArray<TImageRef>;
+begin
+  Result := '';
+  try
+    TransformWikiBody(pMd, pMap, 'ask', lImg);
+  except
+    on E: EFeatureGen do
+      Result := E.Message;
+  end;
+end;
+
+procedure TestMarkdown;
+var
+  lMap: TWikiLinkMap;
+  lImg: TArray<TImageRef>;
+  lOut, lMsg: string;
+begin
+  lMap := NewMap;
+  try
+    lOut := TransformWikiBody('# ask'#10#10'## Flags'#10'text'#10'```'#10'# not a heading'#10'```'#10'```pascal'#10'x'#10'```'#10, lMap, 'ask', lImg);
+    Check('Md.DemoteAndTagFences',
+      (Pos('# ask', lOut) = 0) and (Pos('### Flags', lOut) > 0) and (Pos('```text'#10'# not a heading'#10'```'#10'```pascal', lOut) > 0),
+      lOut);
+    lOut := TransformWikiBody('see [[ask#flags]] and [[ask|the verb]] and [ask](ask.md#x) and [o](Outline) and `[[ask]]`', lMap, 'ask', lImg);
+    Check('Md.LinkInSetKeepsAnchor',
+      (Pos('[ask](ask.md#flags)', lOut) > 0) and (Pos('[the verb](ask.md)', lOut) > 0) and (Pos('[ask](ask.md#x)', lOut) > 0)
+      and (Pos('[o](outline.md)', lOut) > 0) and (Pos('`[[ask]]`', lOut) > 0), lOut);
+    lOut := TransformWikiBody('see [[Gone]] and [[Gone|that page]] and [t](Gone.md#a) and [e](https://x.org/a)', lMap, 'ask', lImg);
+    Check('Md.LinkOutOfSetBecomesText', lOut = 'see Gone and that page and t and [e](https://x.org/a)', lOut);
+    lOut := TransformWikiBody('![a](../Images/x.PNG) and ![b](../Images/y.svg)', lMap, 'ask', lImg);
+    Check('Md.ImageCopiedAndRenamed',
+      (lOut = '![a](img/ask-1.png) and ![b](img/ask-2.svg)') and (Length(lImg) = 2) and (lImg[0].Source = 'docs\Images\x.PNG')
+      and (lImg[0].Target = 'img\ask-1.png') and (lImg[1].Target = 'img\ask-2.svg'), lOut);
+    lMsg := RaisedMessage('fine'#10'ok'#10'a <b>bold</b> word'#10, lMap);
+    Check('Md.RawHtmlFails', (Pos('ask', lMsg) > 0) and (Pos('line 3', lMsg) > 0), lMsg);
+    lMsg := RaisedMessage('fine `<tag>` and'#10'```'#10'<b>'#10'```'#10, lMap);
+    Check('Md.HtmlInCodeAllowed', lMsg = '', lMsg);
+    lMsg := RaisedMessage('one'#10'caf' + Char($00E9), lMap);
+    Check('Md.NonAsciiFails', (Pos('ask', lMsg) > 0) and (Pos('line 2', lMsg) > 0), lMsg);
+  finally
+    lMap.Free;
+  end;
+end;
+
+const
+  HELP_SNIPPET = 'drag-lint 1.0'#13#10'Commands:'#13#10'  drag-lint outline   --file <f>  [--db <d>]'#13#10
+    + '  drag-lint query find-callers --name N'#13#10'  drag-lint outlines x'#13#10;
+
+function MiniFormat(pHelp: TLiveHelp): TSiteFormat;
+begin
+  Result := Default(TSiteFormat);
+  Result.Product := 'DL';
+  Result.FrontMatterKeys := TArray<string>.Create('id', 'title', 'summary', 'product', 'group', 'order', 'since', 'status', 'updated');
+  Result.IncludeStatuses := TArray<string>.Create('shipped', 'experimental');
+  Result.ExcludeAudiences := TArray<string>.Create('agent');
+  Result.FenceDefaultLang := 'text';
+  Result.Help := pHelp;
+end;
+
+function EntryById(const pReg: TRegistry; const pId: string): TFeatureEntry;
+var
+  lE: TFeatureEntry;
+begin
+  Result := Default(TFeatureEntry);
+  for lE in pReg.Entries do
+    if lE.Id = pId then
+      Result := lE;
+end;
+
+procedure TestLeaves;
+var
+  lReg: TRegistry;
+  lHelp: TLiveHelp;
+  lFmt: TSiteFormat;
+  lImg: TArray<TImageRef>;
+  lOut, lHow: string;
+  lP: Integer;
+  lE: TFeatureEntry;
+begin
+  lReg := TRegistry.Create;
+  lHelp := TLiveHelp.Create;
+  try
+    lReg.Load(MiniDir);
+    lHelp.LoadFromText(HELP_SNIPPET);
+    Check('Live.UsageFor', (lHelp.UsageFor('outline') = 'drag-lint outline --file <f> [--db <d>]')
+      and (lHelp.UsageFor('query find-callers') = 'drag-lint query find-callers --name N') and (lHelp.UsageFor('nope') = ''),
+      lHelp.UsageFor('outline'));
+    lFmt := MiniFormat(lHelp);
+    lE := EntryById(lReg, 'outline');
+    lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
+    Check('Leaf.FrontMatterExact',
+      lOut.StartsWith('---'#10'id: outline'#10'title: outline'#10'summary: Prints the file-scoped symbol outline for one Pascal unit'#10
+        + 'product: DL'#10'group: search-navigation'#10'order: 30'#10'since: 0.86.0-alpha'#10'status: shipped'#10'updated: 0.86.0-alpha'#10
+        + '---'#10#10'# outline'#10#10'Prints the file-scoped symbol outline for one Pascal unit.'#10#10'## How to run it'#10),
+      Copy(lOut, 1, 400));
+    lE := EntryById(lReg, 'add-missing-units-to-uses-whole-unit');
+    lE.Title := 'Add: units';
+    lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
+    Check('Leaf.NoWikiPageStillRenders',
+      (Pos('title: "Add: units"', lOut) > 0) and (Pos('## Details', lOut) = 0) and (Pos('## Where to click', lOut) > 0)
+      and (Pos('* RAD Studio main menu: **drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)...**', lOut) > 0)
+      and (Pos('[All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)', lOut) > 0)
+      and (Pos('## How to run it', lOut) > 0) and (Pos('drag-lint check-unit', lOut) > 0), lOut);
+    lE := EntryById(lReg, 'outline');
+    lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
+    lP := Pos('## Details', lOut);
+    lHow := Copy(lOut, 1, lP);
+    Check('Leaf.NoDuplicateUsageWhenWikiHasCliSection',
+      (lP > 0) and (Pos('## How to run it', lHow) > 0) and (Pos('../cli.md#outline', lHow) > 0) and (Pos('--file', lHow) = 0)
+      and (Pos('--file <path.pas>', Copy(lOut, lP, MaxInt)) > 0) and (Pos('[Allow-this-message](allow-this-message.md)', lOut) > 0)
+      and (Pos('a page that is not on the site', lOut) > 0) and (Pos('Nowhere', lOut) = 0), lOut);
+    lE.Surfaces[0].Example := 'drag-lint outline --file U.pas';
+    lE.WikiPage := '';
+    lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
+    Check('Leaf.ExampleFencedWithText',
+      (Pos('```text'#10'drag-lint outline --file <f> [--db <d>]'#10'```'#10#10'Example:'#10#10'```text'#10'drag-lint outline --file U.pas'#10'```'#10, lOut) > 0)
+      and (Pos('Full flag list: [outline in the CLI reference](../cli.md#outline).', lOut) > 0), lOut);
+  finally
+    lHelp.Free;
+    lReg.Free;
+  end;
+end;
+
+procedure TestSiteFormatFile(const pRepo: string);
+var
+  lFmt: TSiteFormat;
+begin
+  lFmt := LoadSiteFormat(pRepo);
+  Check('SiteFormat.Load', (lFmt.Root = 'WWW\help\dl') and (lFmt.Product = 'DL') and (Length(lFmt.FrontMatterKeys) = 9)
+    and (lFmt.FenceDefaultLang = 'text') and (lFmt.ImageDir = 'features/img') and (lFmt.UndocumentedSource = 'tests\autotest\run_docs_sync_guard.ps1')
+    and (lFmt.MicroniteIndex <> lFmt.MicroniteWhatsNew) and (Pos('https://www.htrmicronite.com', lFmt.MicroniteIndex) > 0)
+    and (Pos('https://www.htrmicronite.com', lFmt.MicroniteWhatsNew) > 0) and SiteIncludes(lFmt, 'shipped', 'both')
+    and not SiteIncludes(lFmt, 'internal', 'both') and not SiteIncludes(lFmt, 'shipped', 'agent'), lFmt.Root);
+end;
+
+procedure TestWikiLinkMapFromRegistry;
+var
+  lReg: TRegistry;
+  lMap: TWikiLinkMap;
+  lId: string;
+begin
+  lReg := TRegistry.Create;
+  lMap := TWikiLinkMap.Create;
+  try
+    lReg.Load(MiniDir);
+    lMap.Load(lReg);
+    Check('Md.WikiLinkMapFromRegistry', lMap.TryGet('outline', lId) and (lId = 'outline') and lMap.TryGet('Allow-this-message', lId)
+      and (lId = 'allow-this-message') and not lMap.TryGet('zzz', lId));
+  finally
+    lMap.Free;
+    lReg.Free;
+  end;
+end;
+
 var
   lRepo: string;
 begin
@@ -324,6 +496,11 @@ begin
     TestOwnedRootRemovesStale;
     TestNeverOutsideRoot;
     TestPutBinary;
+    TestMarkdown;
+    TestWikiLinkMapFromRegistry;
+    TestLeaves;
+    if lRepo <> '' then
+      TestSiteFormatFile(lRepo);
   except
     on E: Exception do
     begin

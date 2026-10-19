@@ -1,0 +1,15 @@
+{
+  "root": "WWW\\help\\dl",
+  "product": "DL",
+  "frontMatterKeys": ["id", "title", "summary", "product", "group", "order", "since", "status", "updated"],
+  "includeStatuses": ["shipped", "experimental"],
+  "excludeAudiences": ["agent"],
+  "fenceDefaultLang": "text",
+  "micronite": {
+    "index": "drag-lint is developed alongside Micronite, our quality and production-control software ([www.htrmicronite.com](https://www.htrmicronite.com)).",
+    "whatsNew": "drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software."
+  },
+  "imageDir": "features/img",
+  "engine": "third_party\\dll-win64\\drag-lint.exe",
+  "undocumentedSource": "tests\\autotest\\run_docs_sync_guard.ps1"
+}
