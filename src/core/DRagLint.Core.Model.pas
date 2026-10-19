@@ -97,7 +97,17 @@ const
     unit whose type appeared only in such a signature read as unused
     (unused-unit-in-uses false positive). Guard:
     tests\autotest\run_impl_only_signature_type_uses.ps1 }
-  DRAGLINT_EXTRACTOR_VERSION = '1.21.1-alpha';
+  { 1.21.1 -> 1.22.0 (2026-10-14, two fixes, one re-parse):
+    (1) a statement-level `if C then Foo else Bar;` parses as
+    (statement (exprIf ..)) -- the inline if-EXPRESSION -- and its bare-call
+    branches emitted NO ref; they are now call refs. Siblings in the same
+    change: a bare-identifier `ifElse` condition and the three slots of an
+    expression-position exprIf now emit 'read'. Guard:
+    tests\autotest\run_bare_call_in_exprif_refs.ps1.
+    (2) symbol_facts SQL tables were cut at '$' (FIB$ENUMVALUES -> 'FIB', and
+    a SELECT FROM such a table lost its read entirely). Guard:
+    tests\autotest\run_sql_dollar_identifier.ps1. }
+  DRAGLINT_EXTRACTOR_VERSION = '1.22.0-alpha';
 
   /// <summary>The identity of what this build DERIVES from parses it already
   /// has -- call_edges, type_ancestors, type_helpers and unit_uses targets.

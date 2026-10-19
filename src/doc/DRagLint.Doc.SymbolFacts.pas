@@ -1657,28 +1657,79 @@ end;
 
 // True when C can continue a SQL identifier token on the ALREADY-UPPERCASED
 // text this whole extractor works on (see ExtractSqlTables): letters/
-// digits/underscore. '.' (a schema-qualified name's separator) is handled
-// separately by ScanSqlIdent, not here, since it is valid mid-token but
-// never as the first character.
+// digits/underscore/dollar -- Firebird's unquoted-identifier alphabet. '$' was
+// missing until 2026-10-14, which cut every FIBPlus/system table at it:
+// 'INTO FIB$ENUMVALUES' stored the write 'FIB', and a SELECT FROM one was
+// rejected outright by SelectFromIsSqlShaped's prose gate ('$ENUMVALUES'
+// after the table is not a clause boundary), so its read was lost. Pinned by
+// tests\autotest\run_sql_dollar_identifier.ps1. '$' is a CONTINUATION
+// character only: ScanSqlIdent still requires a letter/underscore first.
+// '.' (a schema-qualified name's separator) is handled separately by
+// ScanSqlIdent, not here, since it is valid mid-token but never as the first
+// character. A double-quoted identifier is not made of these characters at
+// all: ScanSqlIdent reads it as one quoted token, and SqlUpperCase (below)
+// leaves its text in ORIGINAL case, because a Firebird quoted name is
+// case-sensitive.
 function IsSqlIdentChar(C: Char): Boolean;
 begin
-  Result:= (C = '_') or ((C >= 'A') and (C <= 'Z')) or ((C >= '0') and (C <= '9'));
+  Result:= CharInSet(C, ['A'..'Z', '0'..'9', '_', '$']);
 end;
 
-// Reads one identifier token -- letters/digits/underscore, '.' allowed
+// The upper-cased working copy every helper in this pipeline scans (see
+// ExtractSqlTables), EXCEPT that the text of a double-quoted identifier keeps
+// its original case: Firebird compares a quoted name case-sensitively, so
+// '"Mixed Case"' must be stored as 'Mixed Case', never 'MIXED CASE'. Same
+// length as S, so every offset is shared with a plain UpperCase. A '"' inside
+// a single-quoted string literal does not open an identifier; a doubled '""'
+// inside an identifier toggles twice and so stays inside it.
+function SqlUpperCase(const S: string): string;
+var I: Integer; InQuoted, InString: Boolean;
+begin
+  Result:= S;
+  InQuoted:= False;
+  InString:= False;
+  for I:= 1 to Length(Result) do
+  begin
+    if (Result[I] = '"') and not InString then
+      InQuoted:= not InQuoted
+    else if (Result[I] = '''') and not InQuoted then
+      InString:= not InString;
+    if not InQuoted then Result[I]:= UpCase(Result[I]);
+  end;
+end;
+
+// Reads one identifier token -- IsSqlIdentChar characters, '.' allowed
 // MID-token for a 'schema.table' reference (kept whole; see ExtractSqlTables'
 // header comment for why the whole dotted name is the chosen convention) --
 // starting at S[APos] after skipping leading spaces; advances APos past it.
 // Returns '' (APos left just past any skipped spaces, at the first non-
 // identifier-start character) when nothing identifier-shaped is there -- a
 // subquery's '(', end of string, a stray comma -- the caller's cue to stop
-// rather than guess (absence over a wrong table).
+// rather than guess (absence over a wrong table). A double-quoted identifier
+// ('"Mixed Case"', '"He said ""hi"""') is returned as ONE token WITH its
+// quotes and any doubled '""' intact, so no caller mistakes it for a keyword
+// or an English word; AddSqlTable unquotes it. An unterminated or empty
+// quoted token yields '' with APos at the opening quote.
 function ScanSqlIdent(const S: string; var APos: Integer): string;
 var Start, N: Integer;
 begin
   N:= Length(S);
   while (APos <= N) and (S[APos] = ' ') do Inc(APos);
   Result:= '';
+  if (APos <= N) and (S[APos] = '"') then
+  begin
+    Start:= APos + 1;
+    while Start <= N do
+    begin
+      if S[Start] <> '"' then Inc(Start)
+      else if (Start < N) and (S[Start + 1] = '"') then Inc(Start, 2)
+      else Break;
+    end;
+    if (Start > N) or (Start = APos + 1) then Exit;
+    Result:= Copy(S, APos, Start - APos + 1);
+    APos:= Start + 1;
+    Exit;
+  end;
   if (APos > N) or not ((S[APos] = '_') or ((S[APos] >= 'A') and (S[APos] <= 'Z'))) then Exit;
   Start:= APos;
   while (APos <= N) and (IsSqlIdentChar(S[APos]) or (S[APos] = '.')) do Inc(APos);
@@ -1973,7 +2024,7 @@ function ClassifySqlText(const AText: string): Boolean;
 var T, U: string;
 begin
   T:= Trim(AText);
-  U:= UpperCase(T);
+  U:= SqlUpperCase(T);
   Result:= (StartsText('SELECT', T) and SelectFromIsSqlShaped(U)) or
            (StartsText('INSERT', T) and InsertIntoIsSqlShaped(U)) or
            (StartsText('UPDATE', T) and UpdateIsSqlShaped(U)) or
@@ -2013,10 +2064,15 @@ end;
 // word, never a real table. Centralizing the check here (rather than
 // repeating an 'if not IsEnglishStopwordTable(...) then' six times inline)
 // means the drop rule cannot accidentally be applied to some call sites and
-// missed on others.
+// missed on others. A double-quoted token from ScanSqlIdent is added
+// VERBATIM -- outer quotes stripped, '""' unescaped to '"', case kept -- and
+// is exempt from the English-word drop: quoting a name is deliberate.
 procedure AddSqlTable(AList: TStringList; const ATbl: string);
 begin
-  if not IsEnglishStopwordTable(ATbl) then AList.Add(ATbl);
+  if ATbl.StartsWith('"') then
+    AList.Add(StringReplace(Copy(ATbl, 2, Length(ATbl) - 2), '""', '"', [rfReplaceAll]))
+  else if not IsEnglishStopwordTable(ATbl) then
+    AList.Add(ATbl);
 end;
 
 // ADP2 T7: extracts table references from ASql (an ALREADY-CONFIRMED-SQL
@@ -2076,7 +2132,7 @@ var
   Next1 : string;
   Refs  : TArray<string>;
 begin
-  Upper:= UpperCase(Trim(ASql));
+  Upper:= SqlUpperCase(Trim(ASql));
   if Upper = '' then Exit;
 
   if FindSqlKeyword(Upper, 'WITH', 1) = 1 then Exit; // CTE -- conservative skip, see header comment

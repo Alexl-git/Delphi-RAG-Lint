@@ -162,6 +162,22 @@ Extractor unchanged (1.21.1): no reindex needed.
   which widens a project DB); it is now `index --project <the .dproj>`. The "scan libraries"
   setting no longer affects this spawn (a library scan does not belong in a project DB).
 - **IDE plugin: the job queue logs each job's command line at start and its exit code at end.**
+Extractor 1.22.0-alpha (one re-parse for all three fixes).
+
+### Fixed
+
+- **Bare calls in a statement-level inline if** (`if C then Foo else Bar;`)
+  now emit call refs for both branches. Guard:
+  `tests\autotest\run_bare_call_in_exprif_refs.ps1`.
+- **`$` in an unquoted SQL identifier** -- `FIB$ENUMVALUES` is no longer cut
+  to `FIB` in `sql_writes`, and a SELECT from such a table keeps its
+  `sql_reads`. Guard: `tests\autotest\run_sql_dollar_identifier.ps1`.
+- **Double-quoted SQL identifiers** (`FROM "Mixed Case"`, `INSERT INTO "T"`,
+  `UPDATE OR INSERT INTO "FIB$X"`, multi-`Add` queries) are now recorded in
+  `sql_reads` / `sql_writes` verbatim -- quotes stripped, case preserved,
+  `""` unescaped -- instead of yielding no fact. Guard:
+  `tests\autotest\run_sql_quoted_identifier.ps1`.
+
 ## v1.31.1-alpha -- 2026-10-14
 
 ### Fixed
