@@ -1385,7 +1385,7 @@ the PowerShell battery.
 ## Version history
 
 See [CHANGELOG.md](CHANGELOG.md) for the detailed history. The current release is
-**v1.31.6-alpha**; development continues daily.
+**v1.31.7-alpha**; development continues daily.
 
 ---
 
