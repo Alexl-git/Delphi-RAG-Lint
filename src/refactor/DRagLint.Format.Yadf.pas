@@ -568,7 +568,7 @@ begin
   end;
 end; // function
 
-class function TYadfFormatter.Format(const AFile: string; const AYadfPath: string = '';  // dl:ok too-many-exit-points@5d31 -- all ten are GUARD CLAUSES (not-found, below-floor, dry-run, diff, spawn failure, verification failure), which is the remedy the rule itself recommends; consolidating them into nested ifs would bury the refusal paths this verb exists to make obvious
+class function TYadfFormatter.Format(const AFile: string; const AYadfPath: string = '';  // dl:ok too-many-exit-points@2944 -- all twelve are GUARD CLAUSES (not-found, below-floor, dry-run, diff, spawn failure, YADF decline, verification failure), which is the remedy the rule itself recommends; consolidating them into nested ifs would bury the refusal paths this verb exists to make obvious
   AMode: TFormatMode = fmApply): TFormatResult;
 const
   TIMEOUT_MS = 30000;
