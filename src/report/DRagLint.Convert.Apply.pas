@@ -320,11 +320,27 @@ type
     aikValueCastCheck,       { 1.27.0 (C15): a value-cast site with no edit --
                                a .dfm value or .pas right-hand side that is not
                                ONE string literal, or a read. A warning. }
-    aikConvertClassInferred); { owner ruling 2026-10-11: a bare #convert class
+    aikConvertClassInferred, { owner ruling 2026-10-11: a bare #convert class
                                several units declare, settled by INFERENCE (the
                                project framework, the .dfm's properties) -- a
                                warning; RuleLine set, the structured row is
                                apply/1 qualify_fixes[] outcome 'inferred'. }
+    aikMigrateApplied,       { C18 slice 1: a '#migrate Old -> New' inside a
+                               #convert block renamed the member token at a
+                               bound access site. Field access_sites; Instance,
+                               FilePath, Line, RuleLine, Path (Old), Value (New),
+                               OldValue (the member as written) set. }
+    aikMigrateCheck,         { C18 slice 1: a #migrate site or rule NOT applied
+                               -- a with block, an unverified receiver, a rule
+                               form slice 1 does not realise, a member another
+                               rule already converts. A warning; RuleLine and
+                               Path (Old) set, Line / Instance when per site. }
+    aikDeliberateBreak);     { C18 slice 1: '#migrate Old -> DL_NONE' wrapped a
+                               site's member access, inst.Old ->
+                               DL_NONE(inst.Old), so the unit does not compile
+                               there until converted by hand (owner Q2: the old
+                               text is kept). Field todos; Value 'DL_NONE',
+                               OldValue the wrapped text. }
 
   /// <summary>Which of TApplyReport's six legacy arrays an item was reported
   /// in. The wire spelling is produced by ApplyFieldName.</summary>
@@ -1378,7 +1394,8 @@ const
     'inherited-instance-retyped', 'access-site-unverified',
     'book-warning', 'ref-path-like', 'ref-dangling', 'ref-not-checked',
     'unit-rule-kept', 'uses-unit-ambiguous', 'unit-rule-unverified', 'unit-rule-dangling',
-    'value-cast-applied', 'value-cast-check', 'convert-class-inferred');
+    'value-cast-applied', 'value-cast-check', 'convert-class-inferred',
+    'migrate-applied', 'migrate-check', 'deliberate-break');
 begin
   Result:= NAMES[AKind];
 end;
@@ -4130,6 +4147,54 @@ begin
   Result:= CharInSet(C, ['A'..'Z', 'a'..'z', '0'..'9', '_']);
 end;
 
+// True when ALine opens a `with` statement whose targets (the text between
+// `with` and `do` on that line) include AName. A text scan of one line, the
+// shape PlanAccessSites' with-block report has always used; C18 shares it.
+function WithNamesTarget(const ALine, AName: string): Boolean;
+const
+  KW_WITH = 'with ';
+  KW_DO   = ' do';
+begin
+  var Low: string:= LowerCase(ALine);
+  var WithAt: Integer:= Pos(KW_WITH, Low);
+  if (WithAt = 0) or ((WithAt > 1) and IsIdentChar(Low[WithAt - 1])) then Exit(False);
+  var After: string:= Copy(Low, WithAt + Length(KW_WITH), MaxInt);
+  var DoAt: Integer:= Pos(KW_DO, After);
+  var Targets: string:= if DoAt > 0 then Copy(After, 1, DoAt - 1) else After;
+  for var Tg: string in Targets.Split([',']) do
+    if SameText(Trim(Tg), AName) then Exit(True);
+  Result:= False;
+end;
+
+// C18: the 1-based character column where the member-access expression ending
+// in the member token at AMemberCol starts -- `inst` of `inst.Member`, or
+// `Self` of `Self.inst.Member` -- or 0 when the text before the member is not
+// that shape. The same backward scan as ResolveMemberAccessReceiver.
+function MemberAccessStart(const ALine: string; AMemberCol: Integer): Integer;
+const
+  SELF_TEXT = 'Self';
+
+  { the start of the identifier before the '.' that precedes column AFrom, 0 if none }
+  function IdentBeforeDot(AFrom: Integer): Integer;
+  begin
+    var P: Integer:= AFrom - 1;
+    while (P >= 1) and (ALine[P] = ' ') do Dec(P);
+    if (P < 1) or (ALine[P] <> '.') then Exit(0);
+    Dec(P);
+    while (P >= 1) and (ALine[P] = ' ') do Dec(P);
+    var NameEnd: Integer:= P;
+    while (P >= 1) and IsIdentChar(ALine[P]) do Dec(P);
+    Result:= if P + 1 > NameEnd then 0 else P + 1;
+  end;
+
+begin
+  Result:= IdentBeforeDot(AMemberCol);
+  if Result = 0 then Exit;
+  var SelfAt: Integer:= IdentBeforeDot(Result);
+  if (SelfAt > 0) and SameText(Copy(ALine, SelfAt, Length(SELF_TEXT)), SELF_TEXT) and
+     not IsIdentChar(ALine[SelfAt + Length(SELF_TEXT)]) then Result:= SelfAt;
+end;
+
 // Resolves the RECEIVER of a member-access ref at (ALine, AMemberCol) --
 // i.e. the base identifier immediately before the '.' that precedes the
 // member token -- by reading the source line text directly rather than a
@@ -4200,7 +4265,10 @@ begin
       if not SameText(R.Kind, 'member-access') then Continue;
       if (AFromMember <> '') and not SameText(R.NameText, AFromMember) then Continue;
 
-      Receiver:= ResolveMemberAccessReceiver(APasLines, R.StartLine, R.StartCol);
+      { C18: the index column counts UTF-8 bytes; the scan reads characters }
+      if (R.StartLine < 1) or (R.StartLine > APasLines.Count) then Continue;
+      Receiver:= ResolveMemberAccessReceiver(APasLines, R.StartLine,
+        CharColumn(APasLines[R.StartLine - 1], R.StartCol));
       if Receiver = '' then Continue;
 
       IsConverted:= False;
@@ -4718,6 +4786,23 @@ begin
   Result:= if Dotted and not Identity then PAS_USE_NOT_REWRITTEN else PAS_USE_MAPPED;
 end;
 
+const
+  { C18: the '#migrate Old -> DL_NONE' replacement -- a deliberate break }
+  DL_NONE_MARK = 'DL_NONE';
+
+// C18 slice 1: '' when convert-apply realises the #migrate rule ARule (a plain
+// member renamed to a plain identifier, or to DL_NONE), else why it does not.
+// A refused rule is reported (migrate-check), never applied in part.
+function MigrateRuleRefusal(const ARule: TConversionRule): string;
+begin
+  if ARule.Scope <> '' then Exit('a scoped #migrate (Class: / obj.) is not applied yet');
+  if not IsValidIdent(ARule.Old) then Exit('only a plain member name is migrated; call and assignment forms are not applied yet');
+  if ARule.New = '' then Exit('it names no replacement');
+  if not IsValidIdent(ARule.New) then Exit('only a member rename or DL_NONE is applied; replacement templates are not applied yet');
+  if Length(ARule.UnitsAdd) > 0 then Exit('uses units after a member #migrate are not added by convert-apply');
+  Result:= '';
+end;
+
 // The precedence of the link-given pas_uses statuses (higher wins).
 function PasStatusRank(const AStatus: string): Integer;
 const
@@ -4842,6 +4927,17 @@ begin
           Cover.AddOrSetValue(K, LinkStatus);
       end;
     end;
+    { C18 slice 1: a #migrate convert-apply realises maps its member; a #link
+      covering the same member keeps its own status (PlanMigrateSites refuses
+      the #migrate then) }
+    for var M: TConversionRule in AIn.Book.Rules.Rules do
+    begin
+      if (M.Kind <> rkMigrate) or (MigrateRuleRefusal(M) <> '') then Continue;
+      var MBlock: Integer:= LinkRuleBlock(AIn.Book.Rules, M);
+      if MBlock = 0 then Continue; { file scope: not a member migration }
+      for var N: string in ScopeFromBlocks(AIn.Converted, Blocks, MBlock) do
+        Cover.TryAdd(UpperCase(N + '|' + M.Old), PAS_USE_MAPPED);
+    end;
     for var S: TAccessSite in BoundAccessSites(AIn.Store, AIn.FileId, AIn.DfmPath,
       FindMemberAccessSites(AIn.Store, AIn.FileId, AIn.PasLines, '', AIn.Converted.ToArray), Unv) do
     begin
@@ -4911,6 +5007,180 @@ begin
     Rows.Free;
     Index.Free;
     Cover.Free;
+  end;
+end;
+
+// C18 slice 1 (docs\superpowers\specs\2026-10-11-member-replacement-design.md):
+// the '#migrate Old -> New' / '#migrate Old -> DL_NONE' rules of each #convert
+// block, realised at the bound access sites of that block's converted
+// instances -- the #link rename's own site discovery (FindMemberAccessSites +
+// BoundAccessSites). New renames the member token; DL_NONE wraps the
+// member-access expression, inst.Old -> DL_NONE(inst.Old), keeping the old
+// text (owner Q2) so the unit stops compiling exactly there. Columns are
+// converted from the index's UTF-8 bytes to characters, and every edit carries
+// ExpectText. NEVER rewritten, each a migrate-check warning: a site the index
+// cannot vouch for, a `with` naming the instance, a site whose text changed
+// since it was indexed, and a whole rule MigrateRuleRefusal declines or whose
+// member a #link (or an earlier #migrate) of the block already converts. A
+// file-scope #migrate (before the first #convert) is not a member migration
+// and is left alone, as before. An already wrapped site gets no second wrap.
+procedure PlanMigrateSites(const AIn: TPasUsesInput; const AUnitPas: string;
+  out AEdits: TArray<TTextEdit>; out AItems: TArray<TApplyItem>);
+var
+  Blocks: TDictionary<string, Integer>;  { instance -> its #convert block }
+  Taken : TDictionary<string, Integer>;  { UPPER block|member -> the book line converting it }
+  Said  : TDictionary<string, Boolean>;  { UPPER line|instance -> a with block already reported }
+  Unv   : TArray<TAccessSite>;
+  Edits : TList<TTextEdit>;
+  Items : TList<TApplyItem>;
+
+  function Item(AKind: TApplyItemKind; AField: TApplyField; const ARule: TConversionRule;
+    const AInst: string; ALine: Integer; const AText: string): TApplyItem;
+  begin
+    Result:= Default(TApplyItem);
+    Result.Kind    := AKind;
+    Result.Field   := AField;
+    Result.Instance:= AInst;
+    Result.FilePath:= AUnitPas;
+    Result.Path    := ARule.Old;
+    Result.Value   := ARule.New;
+    Result.RuleLine:= ARule.LineNo;
+    Result.Line    := ALine;
+    Result.Text    := AText;
+  end;
+
+  function Check(const ARule: TConversionRule; const AInst: string; ALine: Integer; const AText: string): TApplyItem;
+  begin
+    Result:= Item(aikMigrateCheck, afWarnings, ARule, AInst, ALine, AText);
+  end;
+
+  { True when the text before AStart is 'DL_NONE(' -- the site is wrapped already }
+  function AlreadyMarked(const ALine: string; AStart: Integer): Boolean;
+  begin
+    var Q: Integer:= AStart - 1;
+    while (Q >= 1) and (ALine[Q] = ' ') do Dec(Q);
+    if (Q < 1) or (ALine[Q] <> '(') then Exit(False);
+    Dec(Q);
+    while (Q >= 1) and (ALine[Q] = ' ') do Dec(Q);
+    var MarkAt: Integer:= Q - Length(DL_NONE_MARK) + 1;
+    Result:= (MarkAt >= 1) and SameText(Copy(ALine, MarkAt, Length(DL_NONE_MARK)), DL_NONE_MARK) and
+             ((MarkAt = 1) or not IsIdentChar(ALine[MarkAt - 1]));
+  end;
+
+  { one bound site of ARule: its edit and its item }
+  procedure PlanSite(const ARule: TConversionRule; const ASite: TAccessSite);
+  begin
+    var LineText: string:= AIn.PasLines[ASite.Line - 1];
+    var MemberAt: Integer:= CharColumn(LineText, ASite.Col);
+    var MemberEnd: Integer:= CharColumn(LineText, ASite.EndCol);
+    var Written: string:= Copy(LineText, MemberAt, MemberEnd - MemberAt);
+    var Where: string:= Format('%s:%d', [ExtractFileName(AUnitPas), ASite.Line]);
+    if not SameText(Written, ARule.Old) then
+    begin
+      Items.Add(Check(ARule, ASite.InstanceName, ASite.Line, Format('#migrate site %s %s.%s: the line changed since it was indexed -- not rewritten',
+        [Where, ASite.InstanceName, ARule.Old])));
+      Exit;
+    end;
+    var E: TTextEdit:= Default(TTextEdit);
+    E.FilePath:= AUnitPas;
+    E.Kind    := tekReplaceInLine;
+    E.Line    := ASite.Line;
+    if not SameText(ARule.New, DL_NONE_MARK) then
+    begin
+      E.Col       := MemberAt;
+      E.EndCol    := MemberEnd;
+      E.Text      := ARule.New;
+      E.ExpectText:= Written;
+      Edits.Add(E);
+      var It: TApplyItem:= Item(aikMigrateApplied, afAccessSites, ARule, ASite.InstanceName, ASite.Line,
+        Format('%s.%s -> %s.%s (L%d, #migrate)', [ASite.InstanceName, Written, ASite.InstanceName, ARule.New, ASite.Line]));
+      It.OldValue:= Written;
+      Items.Add(It);
+      Exit;
+    end;
+    var StartAt: Integer:= MemberAccessStart(LineText, MemberAt);
+    if StartAt = 0 then
+    begin
+      Items.Add(Check(ARule, ASite.InstanceName, ASite.Line, Format('#migrate site %s %s.%s: no inst.member expression at the site -- not wrapped in DL_NONE',
+        [Where, ASite.InstanceName, ARule.Old])));
+      Exit;
+    end;
+    var Old: string:= Copy(LineText, StartAt, MemberEnd - StartAt);
+    var Brk: TApplyItem:= Item(aikDeliberateBreak, afTodos, ARule, ASite.InstanceName, ASite.Line, '');
+    Brk.OldValue:= Old;
+    if AlreadyMarked(LineText, StartAt) then
+      Brk.Text:= Format('%s: %s is already DL_NONE-marked (#migrate line %d) -- convert it by hand', [Where, Old, ARule.LineNo])
+    else
+    begin
+      E.Col       := StartAt;
+      E.EndCol    := MemberEnd;
+      E.Text      := DL_NONE_MARK + '(' + Old + ')';
+      E.ExpectText:= Old;
+      Edits.Add(E);
+      Brk.Text:= Format('%s: %s -> %s (#migrate line %d) -- a deliberate break: the unit does not compile here until it is converted by hand',
+        [Where, Old, E.Text, ARule.LineNo]);
+    end;
+    Items.Add(Brk);
+  end;
+
+begin
+  AEdits:= nil;
+  AItems:= nil;
+  if (AIn.FileId <= 0) or (AIn.Converted = nil) or (AIn.Converted.Count = 0) then Exit;
+  Blocks:= InstanceConvertBlocks(AIn.Book.Rules, AIn.Converted, AIn.FromTypes);
+  Taken := TDictionary<string, Integer>.Create;
+  Said  := TDictionary<string, Boolean>.Create;
+  Edits := TList<TTextEdit>.Create;
+  Items := TList<TApplyItem>.Create;
+  try
+    { a #link that edits or refuses the member's .pas sites owns them }
+    for var L: TConversionRule in AIn.Book.Rules.Rules do
+    begin
+      var PlainLink: Boolean:= (L.Kind = rkLink) and (L.FromPath <> '') and (L.ToPath <> '') and (Pos('.', L.FromPath) = 0);
+      var Renames  : Boolean:= (Pos('.', L.ToPath) = 0) and not SameText(L.FromPath, L.ToPath);
+      if PlainLink and ((L.Cast <> '') or Renames) then
+        Taken.AddOrSetValue(UpperCase(IntToStr(LinkRuleBlock(AIn.Book.Rules, L)) + '|' + L.FromPath), L.LineNo);
+    end;
+    var Block: Integer:= 0;
+    for var R: TConversionRule in AIn.Book.Rules.Rules do
+    begin
+      if R.Kind = rkConvert then Inc(Block);
+      if (R.Kind <> rkMigrate) or (Block = 0) then Continue;
+      var Scope: TArray<string>:= ScopeFromBlocks(AIn.Converted, Blocks, Block);
+      if Length(Scope) = 0 then Continue; { no instance of this block in the unit }
+      var Why: string:= MigrateRuleRefusal(R);
+      var Prior: Integer;
+      if (Why = '') and (Taken.TryGetValue(UpperCase(IntToStr(Block) + '|' + R.Old), Prior) or
+                         Taken.TryGetValue(UpperCase('0|' + R.Old), Prior)) then
+        Why:= Format('book line %d already converts %s', [Prior, R.Old]);
+      if Why <> '' then
+      begin
+        Items.Add(Check(R, '', 0, Format('line %d: #migrate %s -> %s NOT applied -- %s; convert its sites by hand',
+          [R.LineNo, R.Old, R.New, Why])));
+        Continue;
+      end;
+      Taken.Add(UpperCase(IntToStr(Block) + '|' + R.Old), R.LineNo);
+      var Sites: TArray<TAccessSite>:= BoundAccessSites(AIn.Store, AIn.FileId, AIn.DfmPath,
+        FindMemberAccessSites(AIn.Store, AIn.FileId, AIn.PasLines, R.Old, Scope), Unv);
+      for var U: TAccessSite in Unv do
+        Items.Add(Check(R, U.InstanceName, U.Line, Format('#migrate site %s:%d %s.%s not verified against the index -- not rewritten',
+          [ExtractFileName(AUnitPas), U.Line, U.InstanceName, R.Old])));
+      for var LineNo: Integer:= 1 to AIn.PasLines.Count do
+        for var N: string in Scope do
+          if WithNamesTarget(AIn.PasLines[LineNo - 1], N) and Said.TryAdd(UpperCase(IntToStr(LineNo) + '|' + N), True) then
+            Items.Add(Check(R, N, LineNo, Format('#migrate site %s:%d with %s do ... not verified against the index -- ' +
+              'a member reached through a with block is not rewritten; convert it by hand', [ExtractFileName(AUnitPas), LineNo, N])));
+      if SameText(R.Old, R.New) then Continue; { identity: nothing to rename }
+      for var S: TAccessSite in Sites do PlanSite(R, S);
+    end;
+    AEdits:= Edits.ToArray;
+    AItems:= Items.ToArray;
+  finally
+    Items.Free;
+    Edits.Free;
+    Said.Free;
+    Taken.Free;
+    Blocks.Free;
   end;
 end;
 
@@ -5068,7 +5338,7 @@ begin
   ALitEnd:= 0;
   if (ALine < 1) or (ALine > APasLines.Count) then Exit(vskRead);
   S:= APasLines[ALine - 1];
-  P:= ACol;
+  P:= CharColumn(S, ACol); { C18: ACol is the index's UTF-8 byte column }
   while (P <= Length(S)) and IsIdentChar(S[P]) do Inc(P);
   P:= SkipBlanksAndComments(S, P);
   if Copy(S, P, Length(ASSIGN_OP)) <> ASSIGN_OP then Exit(vskRead);
@@ -5274,7 +5544,7 @@ begin
   end;
 end;
 
-function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@f756 -- (297 lines: +InstToType and the 1.27.0 pas_uses input record, the surfaces themselves live outside it): parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own
+function BuildApplyPlan(const ATrees: TConvertTreeCache; const AUnitPas, ADfmPath: string;  // dl:ok too-many-parameters@3d90, method-too-long@b578 -- (308 lines: +the C18 #migrate hook, PlanMigrateSites itself lives outside it; +InstToType and the 1.27.0 pas_uses input record, the surfaces themselves live outside it): parameters -- the eighth is the unit's inherited[] entries (C8 N2), per-unit and updated in place, while the book and the cast library are per-run, so no existing record fits it; length -- 264 lines at 1.25.0, 272 at 1.25.1, 276 with C8 N2 (each addition a one-line hook into a nested routine); every surface is already its own nested routine and the remaining body is the per-instance loop, whose split is a refactor of its own
   const ABook: TApplyBook; const AOnly: TArray<string>;
   const ACastLib: TCastLib; AWarnUnlinked: Boolean;
   var AInherited: TArray<TInheritedInstance>): TApplyResult;
@@ -5908,35 +6178,23 @@ var
       the site, so the rewrite cannot see them -- each `with` naming a converted
       instance is REPORTED for hand conversion }
     procedure ReportWithBlocks;
-    const
-      KW_WITH = 'with ';
-      KW_DO   = ' do';
     begin
       var Renames: Boolean:= False;
       for var Q: TConversionRule in ABook.Rules.Rules do
         if (Q.Kind = rkLink) and (Q.FromPath <> '') and (Q.ToPath <> '') and not SameText(Q.FromPath, Q.ToPath) then Renames:= True;
       if not Renames then Exit; { nothing a with block could hide }
       for var LineNo: Integer:= 1 to PasLines.Count do
-      begin
-        var Low: string:= LowerCase(PasLines[LineNo - 1]);
-        var WithAt: Integer:= Pos(KW_WITH, Low);
-        if (WithAt = 0) or ((WithAt > 1) and IsIdentChar(Low[WithAt - 1])) then Continue;
-        var After: string:= Copy(Low, WithAt + Length(KW_WITH), MaxInt);
-        var DoAt: Integer:= Pos(KW_DO, After);
-        var Targets: string:= if DoAt > 0 then Copy(After, 1, DoAt - 1) else After;
         for var N: string in ConvertedInstNames do
-          for var Tg: string in Targets.Split([',']) do
-            if SameText(Trim(Tg), N) then
-            begin
-              var WIt: TApplyItem:= PlainItem(aikAccessSiteUnverified, afWarnings,
-                Format('access site %s:%d with %s do ... not verified against the index -- not rewritten (a member reached through a with block is converted by hand)',
-                  [ExtractFileName(AUnitPas), LineNo, N]));
-              WIt.Instance:= N;
-              WIt.FilePath:= AUnitPas;
-              WIt.Line    := LineNo;
-              Emit(WIt);
-            end;
-      end;
+          if WithNamesTarget(PasLines[LineNo - 1], N) then
+          begin
+            var WIt: TApplyItem:= PlainItem(aikAccessSiteUnverified, afWarnings,
+              Format('access site %s:%d with %s do ... not verified against the index -- not rewritten (a member reached through a with block is converted by hand)',
+                [ExtractFileName(AUnitPas), LineNo, N]));
+            WIt.Instance:= N;
+            WIt.FilePath:= AUnitPas;
+            WIt.Line    := LineNo;
+            Emit(WIt);
+          end;
     end;
 
   begin
@@ -6096,8 +6354,9 @@ var
         E.FilePath:= AUnitPas;
         E.Kind    := tekReplaceInLine;
         E.Line    := Site.Line;
-        E.Col     := Site.Col;
-        E.EndCol  := Site.EndCol;
+        { C18: index byte columns -> character columns (the C9 lesson) }
+        E.Col     := CharColumn(PasLines[Site.Line - 1], Site.Col);
+        E.EndCol  := CharColumn(PasLines[Site.Line - 1], Site.EndCol);
         E.Text    := LinkRule.ToPath;
         Edits.Add(E);
 
@@ -6667,6 +6926,11 @@ begin
     PU.FromTypes:= InstFromType;
     PU.ToTypes  := InstToType;
     PU.CastLib  := ACastLib;
+    var MigEdits: TArray<TTextEdit>;
+    var MigItems: TArray<TApplyItem>;
+    PlanMigrateSites(PU, AUnitPas, MigEdits, MigItems); { C18 slice 1 }
+    for var ME: TTextEdit in MigEdits do Edits.Add(ME);
+    for var MI: TApplyItem in MigItems do Emit(MI);
     Result.Report.PasUses:= CollectPasUses(PU); { 1.27.0; PlanUsesAdditions appends the globals }
     var UsesPlan: TUsesPlan;
     var UnitAdds    : TArray<string>:= nil;

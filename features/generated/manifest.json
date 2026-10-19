@@ -1,6 +1,6 @@
 {
   "product": "1.31.7-alpha",
-  "extractor": "1.21.1-alpha",
+  "extractor": "1.22.0-alpha",
   "resolver": "1.12.1-alpha",
   "schema": 23,
   "groups": [
@@ -1806,6 +1806,27 @@
       ],
       "audience": "both",
       "related": ["convrules-editor"]
+    },
+    {
+      "id": "convert-apply-migrate",
+      "title": "convert-apply #migrate (member rename / DL_NONE)",
+      "group": "component-conversion",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.22.0-alpha",
+      "summary": "#migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site",
+      "intro": "Member replacement slice 1 (C18): rename methods, events and properties of a converted component in code, or mark them for hand conversion.",
+      "wikiPage": "convert-apply-migrate",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "convert-apply",
+          "example": "convert-apply --unit Form1.pas --rules book.rules --db x.sqlite --apply"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index"],
+      "related": ["convert-apply"]
     },
     {
       "id": "convert-apply",

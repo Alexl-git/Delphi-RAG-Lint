@@ -203,6 +203,18 @@ function ReconcileUses(AIndex: TUsesUnitIndex; const AIn: TUsesReconcileInput): 
 /// <remarks>A parser failure propagates; ReconcileUses turns it into 'degraded'.</remarks>
 function ReindexText(const APath, AText: string): TParseResult;
 
+/// <summary>The 1-based character column of an index (tree-sitter) column in
+/// ALine.</summary>
+/// <param name="ALine">The source line as read (a Delphi string).</param>
+/// <param name="AByteCol">A 1-based column as the index stores it: UTF-8
+/// BYTES, so each non-ASCII character before it adds one or more.</param>
+/// <returns>The 1-based character column in ALine; a column past the line's
+/// end maps to Length(ALine) + 1.</returns>
+/// <remarks>Pure. Shared by the uses reconciliation and convert-apply's
+/// access-site rewrites (C9 lesson: a CP1252 character in a string before a
+/// reference shifted every splice on its line).</remarks>
+function CharColumn(const ALine: string; AByteCol: Integer): Integer;
+
 implementation
 
 uses
@@ -557,9 +569,6 @@ begin
 end;
 
 
-{ The 1-based character column of a tree-sitter column in ALine. The parsers
-  are fed UTF-8 (ReindexText), so AByteCol counts BYTES: each non-ASCII
-  character before it (a CP1252 copyright sign in a string) adds one or more. }
 function CharColumn(const ALine: string; AByteCol: Integer): Integer;
 var
   Bytes: TBytes;

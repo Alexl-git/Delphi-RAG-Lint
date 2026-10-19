@@ -1069,6 +1069,7 @@ begin
     'every unit the #convert surface adds (a To type''s unit, a #convert header''s trailing unit) is an add row too (rule #convert, source rule, counted by uses_added; none when already present); ' +
     'json: uses[] action remove|add|skipped|kept|moved with source rule|reconcile|convert and needed_by[] {name,line,section}, uses_kept, uses_moved, uses_unresolved[] {name,line,section,reason ambiguous|not-found,candidates[] {unit,db}}, uses_reconcile on|off|degraded, items[] kinds unit-rule-kept, unit-rule-dangling, unit-rule-unverified, uses-unit-ambiguous (all warnings); ' +
     'after --apply the unit''s OWN project DB -- the one --db that indexes it, a project index holding one .dproj/.dpr -- is refreshed with ''index --project <it> --db <it>'' in a child process (json uses_reindex {status done|skipped|failed|dry-run|off,db,project,ms,reason}; a child still running after 10 minutes is terminated: failed; --no-reindex skips it; no other DB is ever written); info capability uses_reconcile; ' +
+    'inside a #convert block ''#migrate Old -> New'' renames the member at every bound .pas access site of the block''s converted instances (methods, events, properties; json items[] migrate-applied) and ''#migrate Old -> DL_NONE'' wraps each site, inst.Old -> DL_NONE(inst.Old), a deliberate break that does not compile until converted by hand (items[] deliberate-break, field todos); both make pas_uses[] status mapped; a with block, an unverified receiver, a scoped / template / uses-unit form or a member a #link already converts is never rewritten (items[] migrate-check); info capability migrate_members (C18 slice 1); ' +
     '--only names match case-insensitively; a name matching no #convert instance is ignored, never an error, and reported (json only_matched[] / only_unmatched[], always present; text ''--only: no #convert instance named X (ignored)''); ' +
     '--unit may repeat (1.23.0): every unit runs in ONE process sharing one rule-book validation and one member cache -- text: one ''=== unit i of N: <path> ==='' section per unit, then ''batch: N unit(s) -- a ok, b refused, c failed; classes_built K; exit E''; json: ONE apply-batch/1 document {mode,rules_file,units_count,ok,exit_code,ok_count,refused_count,failed_count,classes_built (the run total),units[]: one apply/1 per unit, each equal to that unit''s single run -- its classes_built is the unit''s own}; under --apply a file a unit cannot write fails that unit before anything is written (exit 2); a unit''s refusal or failure never stops the others; exit = the worst unit''s; info capability batch_units; ' +
     'json has ok=false, refused=true (a JSON bool) and reason = that text -- every other outcome, success or failure, has refused=false and reason '''')');
@@ -17190,6 +17191,12 @@ begin
         the .dfm and in .pas literal assignments -- items[] value-cast-applied
         (old_value, value) and value-cast-check (no edit, check by hand). }
       JCap.AddPair('value_cast_strip_db', TJSONBool.Create(True));
+      { C18 slice 1, same contract: '#migrate Old -> New' and '#migrate Old ->
+        DL_NONE' inside a #convert block are applied at the converted
+        instances' bound .pas access sites -- items[] migrate-applied,
+        deliberate-break (inst.Old -> DL_NONE(inst.Old)), migrate-check;
+        pas_uses[] status mapped for the member. }
+      JCap.AddPair('migrate_members', TJSONBool.Create(True));
       { 1.25.0, same contract: convert-apply lists the descendant units that
         still stream or use an instance it converts (apply/1 descendants[],
         items[] kind descendant-not-converted) -- a warning, never a refusal. }
@@ -26170,10 +26177,12 @@ procedure EmitApplyJson(const ACtx: TApplyJsonCtx);
     Result.AddPair('line'     , TJSONNumber.Create(AItem.Line));
     Result.AddPair('rule_line', TJSONNumber.Create(AItem.RuleLine));
     { 1.26.5: additive, and only on the kinds that are ABOUT a value }
-    if AItem.Kind in [aikBookWarning, aikRefPathLike, aikRefDangling, aikCastNotApplied, aikValueCastApplied, aikValueCastCheck] then
+    if AItem.Kind in [aikBookWarning, aikRefPathLike, aikRefDangling, aikCastNotApplied, aikValueCastApplied, aikValueCastCheck,
+                      aikMigrateApplied, aikMigrateCheck, aikDeliberateBreak] then
       Result.AddPair('value', AItem.Value);
-    { 1.27.0 (C15): the literal a value cast replaced }
-    if AItem.Kind = aikValueCastApplied then
+    { 1.27.0 (C15): the literal a value cast replaced; C18: the member text a
+      #migrate renamed or wrapped }
+    if AItem.Kind in [aikValueCastApplied, aikMigrateApplied, aikDeliberateBreak] then
       Result.AddPair('old_value', AItem.OldValue);
   end;
 
