@@ -142,6 +142,12 @@ try {
   $idleRan = @($idle | Where-Object { $_ -match 'starting (WHOLE-DB|SCOPED) pass' })
   Check 'W4 an idle tick (nothing parsed) skips the calls pass' (($idle.Count -gt 0) -and ($idleRan.Count -eq 0)) `
     "idle ticks: $($idle.Count), of which ran the calls pass: $($idleRan.Count)"
+  # W5: 'skipped N up-to-date' is PER TICK. Indexer.SkippedUpToDate is cumulative over the
+  # watch's life, so an unreported delta printed 9, 18, 27 ... on successive idle ticks.
+  $skips = @($idle | ForEach-Object { if ($_ -match '(?m)^Done\..*skipped (\d+) up-to-date') { [int]$Matches[1] } else { -1 } })
+  $skipSet = @($skips | Sort-Object -Unique)
+  Check 'W5 an idle tick reports its OWN skipped count, not a running total' (($skips.Count -ge 2) -and ($skipSet.Count -eq 1) -and ($skipSet[0] -eq 9)) `
+    "idle skipped counts: $($skips -join ',')"
 
   Write-Host ''
   Write-Host 'CONTROL -- the same one-file change through a one-shot run' -ForegroundColor Cyan

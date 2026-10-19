@@ -127,7 +127,8 @@
 
   IT COMPARES A BUILT ARTIFACT AGAINST SOURCE, AND THAT IS A REAL BOUND
   ---------------------------------------------------------------------
-  `--help` comes from third_party\dll-win64\drag-lint.exe; the accepted-verb list
+  `--help` comes from the -Exe engine (default src\cli\Win64\Debug\drag-lint.exe);
+  the accepted-verb list
   comes from src\cli\DRagLint.CLI.pas ON DISK. Those are two different points in
   time. Edit PrintHelp and do not rebuild, and check 1 reads the OLD help against
   the NEW dispatch -- reporting doc drift for what is really a stale build. It
