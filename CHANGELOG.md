@@ -55,6 +55,10 @@ breaking changes** until v1.0.
   verbs above. Docs: `docs\wiki\Draglint-Protocol-Handler.md`, `docs\wiki\Register-MCP-Server.md`, feature
   registry entry `protocol-handler`.
 
+### Fixed
+
+- **Extractor (1.22.0-alpha): a member on an indexed receiver is now a reference.** `S[First].IsWhiteSpace`, `A[I].Field:= 1`, `N:= A[0].Fn` and `A[I].Sub.Leaf` emitted no ref, so `unused-unit-in-uses` flagged `System.Character` (TCharHelper) as a dead import whose removal fails E2671, and `find-callers` under-reported such members. They now emit `member-access` refs (B-13; guard `run_indexed_receiver_member_refs.ps1`).
+
 ## v1.31.7-alpha -- 2026-10-19
 
 ### Fixed

@@ -289,6 +289,31 @@ begin
   Result:= IsDottedIdentChain(ANode.ChildByField('lhs'));
 end;
 
+{ Ref-gap G3 support (B-13, 2026-10-19): is this node an INDEXED receiver --
+  `S[i]`, `A[i].B`, `A[i].B.C` -- i.e. an exprSubscript, or a dotted chain of
+  identifier members whose root is one?
+
+  WHY IT EXISTS. Ref-gap G / G2 emit the member of `obj.M` and `A.B.C.M` only;
+  an indexed receiver was left to "the future expression stage". So
+  `S[First].IsWhiteSpace` in a condition emitted NO ref, and unused-unit-in-uses
+  -- which name-matches type-helper members against the file's ref names --
+  reported System.Character (TCharHelper) as a dead import whose removal fails
+  E2671. The member NAME is what the rule and find-callers need; the receiver
+  text (`S[First]`) is recovered from the source by the resolve pass, exactly as
+  for `A[i].Method;`, which EmitStatementCall already emitted as a call.
+
+  A CALL receiver (`F(x).M`) still answers False: deliberately out of scope. }
+function IsIndexedMemberReceiver(const ANode: TTSNode): Boolean;
+begin
+  Result:= False;
+  if ANode.IsNull then Exit;
+  if ANode.NodeType = 'exprSubscript' then Exit(True);
+  if ANode.NodeType <> 'exprDot' then Exit;
+  var R:= ANode.ChildByField('rhs');
+  if R.IsNull or (R.NodeType <> 'identifier') then Exit;
+  Result:= IsIndexedMemberReceiver(ANode.ChildByField('lhs'));
+end;
+
 procedure Walk(const ANode: TTSNode; const AState: TWalkState; AParentSymbolIdx: Integer; const AParentQualifiedName: string); forward;
 
 // v0.8: every `typeref` node that appears in a parameter type, field type,
@@ -2792,7 +2817,8 @@ begin
       // and rhs must be a plain identifier. Chained (a.b.Member), call (f().Member),
       // and indexed (arr[i].Member) receivers are excluded -- each exprDot LEVEL with
       // a plain-identifier lhs emits its own member-access via the recursion below;
-      // complex receivers are the future expression stage's problem. A DISTINCT kind
+      // complex receivers are the future expression stage's problem (chained: G2
+      // below; indexed: G3 below, B-13 2026-10-19). A DISTINCT kind
       // ('member-access') keeps existing read/write/type_use consumers untouched.
       if (not L.IsNull) and (L.NodeType = 'identifier')
          and (not SameText(Trim(NodeText(L, AState.Source)), 'Self')) then
@@ -2825,6 +2851,15 @@ begin
         var RG2:= ANode.ChildByField('rhs');
         if (not RG2.IsNull) and (RG2.NodeType = 'identifier') then
           AState.EmitRef('member-access', NodeText(RG2, AState.Source), RG2);
+      end;
+      // Ref-gap G3 (B-13): the same capture when the receiver is INDEXED --
+      // `S[First].IsWhiteSpace`, `A[I].Field:= 1`, `A[I].Sub.Leaf`. See
+      // IsIndexedMemberReceiver for why; 'member-access' for the reasons G2 gives.
+      if IsIndexedMemberReceiver(L) then
+      begin
+        var RG3:= ANode.ChildByField('rhs');
+        if (not RG3.IsNull) and (RG3.NodeType = 'identifier') then
+          AState.EmitRef('member-access', NodeText(RG3, AState.Source), RG3);
       end;
       for i:= 0 to ANode.NamedChildCount - 1 do Walk(ANode.NamedChild(i), AState, AParentSymbolIdx, AParentQualifiedName);
       Exit;
