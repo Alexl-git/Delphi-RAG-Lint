@@ -1020,8 +1020,10 @@ end;
   gap between two deleted tokens -- are ever deleted, so every comment
   survives. Add = `, <Unit>` after the last entry (before the `;` when a
   directive sits between the two). Remove = the entry and ONE separator: the
-  following one (its line then goes away whole), or the preceding one for the
-  last entry or when the following side holds a directive. An entry in a
+  following one (its line then goes away whole), or the preceding one when the
+  following side holds a directive or a comment parts the entry from it while the
+  preceding one is adjacent; the LAST entry takes the preceding separator and the
+  `;`, which moves to the entry before (T17b D3). An entry in a
   conditional region, or a directive inside the span a removal deletes,
   refuses with `directive`; a directive elsewhere in the clause does not.
   --------------------------------------------------------------------------- }
@@ -1128,6 +1130,17 @@ begin
   Result:= '';
 end;
 
+{ True when entry pIdx has a preceding separator that a removal may take (outside a
+  conditional, no directive up to the entry's end) with only blanks between the two. }
+function PrevAdjacent(const pText: string; pLex: TUsesLexer; const pScan: TUsesClause; pIdx: Integer): Boolean;
+begin
+  if pIdx = 0 then Exit(False);
+  var S:= pScan.Commas[pIdx - 1];
+  var E:= pScan.Entries[pIdx];
+  E.Start:= E.Start - Ord(E.Escaped);
+  Result:= (S.Depth = 0) and not pLex.DirectiveIn(S.Start, E.Stop) and (Trim(Copy(pText, S.Stop, E.Start - S.Stop)) = '');
+end;
+
 { Removes entry pIdx with one separator; returns the refusal kind or ''. }
 function RemoveClauseEntry(var pText: string; pLex: TUsesLexer; const pScan: TUsesClause; pIdx: Integer): string;
 var
@@ -1149,9 +1162,25 @@ begin
       Result:= '';
     end;
   end
-  else if (pIdx < High(pScan.Entries)) and (pScan.Commas[pIdx].Depth = 0) and
-    not pLex.DirectiveIn(E.Start, pScan.Commas[pIdx].Stop) then
+  else if (pIdx = High(pScan.Entries)) and (pScan.Commas[pIdx - 1].Depth = 0) and (pScan.Semi.Depth = 0) and
+    not pLex.DirectiveIn(pScan.Entries[pIdx - 1].Stop, pScan.Semi.Stop) then
   begin
+    { T17b D3: the last entry goes with its separator AND the `;`, which moves to the
+      entry before -- so neither a leading-comma clause (`  , X` / `  , Y;`) nor a
+      comment line before the entry leaves a line holding only `;` }
+    S:= pScan.Commas[pIdx - 1];
+    DeleteSpans(pText, [OfsSpan(S.Start, S.Stop), OfsSpan(E.Start, E.Stop),
+      OfsSpan(pScan.Semi.Start, pScan.Semi.Stop)], False);
+    Insert(';', pText, pScan.Entries[pIdx - 1].Stop);
+    Result:= '';
+  end
+  else if (pIdx < High(pScan.Entries)) and (pScan.Commas[pIdx].Depth = 0) and
+    not pLex.DirectiveIn(E.Start, pScan.Commas[pIdx].Stop) and
+    ((Trim(Copy(pText, E.Stop, pScan.Commas[pIdx].Start - E.Stop)) = '') or not PrevAdjacent(pText, pLex, pScan, pIdx)) then
+  begin
+    { the following separator -- unless a comment parts the entry from it while the
+      preceding one is adjacent (T17b D3: `  , X` then `  // why` then `  , Y` lost
+      X and the comma before Y, leaving a line `  , `) }
     S:= pScan.Commas[pIdx];
     DeleteSpans(pText, [OfsSpan(E.Start, E.Stop), OfsSpan(S.Start, S.Stop)], True);
     Result:= '';
@@ -3377,12 +3406,18 @@ begin
     if pSect = scIntf then Result:= FInversion.LeafUses;
     Exit;
   end;
+  { T17b D2: the source may already use its leaf (a pass after Part A) -- a unit never
+    goes into its own uses clause (F2092) }
+  var Own: string;
+  if not FLeafName.TryGetValue(pStem, Own) then Own:= '';
   Entries:= TList<string>.Create;
   try
     for var U in SectionEntries(P, pSect) do
-      if not FMembers.ContainsKey(LowerCase(U.UnitName)) then Entries.Add(EntryText(P, U));
+      if not FMembers.ContainsKey(LowerCase(U.UnitName)) and not SameText(U.UnitName, Own) then
+        Entries.Add(EntryText(P, U));
     if (pSect = scIntf) and FLeafDeps.ContainsKey(pStem) then
-      for var S in FLeafDeps[pStem] do AddUnique(Entries, S);
+      for var S in FLeafDeps[pStem] do
+        if not SameText(S, Own) then AddUnique(Entries, S);
     Result:= Entries.ToArray;
   finally
     Entries.Free;
