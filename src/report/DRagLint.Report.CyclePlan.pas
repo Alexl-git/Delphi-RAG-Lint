@@ -324,6 +324,35 @@ procedure AddCycleFixHints(const pStore: ISymbolStore; const pDbPath: string;
 procedure AddCycleEdgeSurfaces(const pStore: ISymbolStore; const pSccs: TList<TArray<string>>;
   const pGraph: TCycleGraph; const pGroups: TJSONArray);
 
+/// <summary>Builds the unit-uses graph `cycles` works on from every indexed `.pas` file's
+/// unit_uses rows.</summary>
+/// <param name="pStore">Open index; read only.</param>
+/// <returns>A graph whose four dictionaries are NEW and owned by the caller: release them with
+/// FreeCycleGraph.</returns>
+/// <remarks>Keys are lower-case file stems; an edge's target is the lower-case unit name as
+/// written in the uses clause, so a library unit is a node with no outgoing list. E18 T15b:
+/// hoisted out of DoCycles so `lint &lt;file&gt;` builds the same graph.</remarks>
+function BuildCycleGraph(const pStore: ISymbolStore): TCycleGraph;
+
+/// <summary>Frees the four dictionaries (and the adjacency lists) of a graph from BuildCycleGraph
+/// and sets them to nil.</summary>
+/// <param name="pGraph">The graph; safe to call twice.</param>
+procedure FreeCycleGraph(var pGraph: TCycleGraph);
+
+/// <summary>The circular unit groups of a graph: Tarjan's strongly-connected components of more
+/// than one unit.</summary>
+/// <param name="pGraph">A graph from BuildCycleGraph; read only.</param>
+/// <returns>A NEW list owned by the caller, one array of lower-case stems per group, in the order
+/// `cycles` prints them.</returns>
+/// <remarks>The one SCC pass behind `cycles` (DoCycles) and the per-file circular-uses finding of
+/// `lint &lt;file&gt;` (E18 T15b), so the two cannot disagree on which units cycle.</remarks>
+function ComputeSccs(const pGraph: TCycleGraph): TList<TArray<string>>; overload;
+
+/// <summary>The circular unit groups of an index (BuildCycleGraph, then ComputeSccs).</summary>
+/// <param name="pStore">Open index; read only.</param>
+/// <returns>A NEW list owned by the caller, one array of lower-case stems per group.</returns>
+function ComputeSccs(const pStore: ISymbolStore): TList<TArray<string>>; overload;
+
 implementation
 
 uses
@@ -4818,6 +4847,147 @@ begin
     end;
   finally
     Planner.Free;
+  end;
+end;
+
+function BuildCycleGraph(const pStore: ISymbolStore): TCycleGraph;
+var
+  Fid  : Int64        ;
+  Path : string       ;
+  UFrom: string       ;
+  UTo  : string       ;
+  L    : TList<string>;
+  Uo   : TUnitUse     ;
+begin
+  Result.Adj      := TDictionary<string, TList<string>>.Create;
+  Result.IntfEdges:= TDictionary<string, Boolean>.Create;
+  Result.UnitFile := TDictionary<string, string>.Create;
+  Result.UnitFid  := TDictionary<string, Int64>.Create;
+  try
+    for Fid in pStore.GetAllFileIds do
+    begin
+      Path:= pStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      { indexed paths may use '/' -- normalise so ExtractFileName strips the dir }
+      UFrom:= LowerCase(ChangeFileExt(ExtractFileName(StringReplace(Path, '/', '\', [rfReplaceAll])), ''));
+      if UFrom = '' then Continue;
+      Result.UnitFile.AddOrSetValue(UFrom, Path);
+      Result.UnitFid .AddOrSetValue(UFrom, Fid );
+      if not Result.Adj.TryGetValue(UFrom, L) then
+      begin
+        L:= TList<string>.Create;
+        Result.Adj.AddOrSetValue(UFrom, L);
+      end;
+      for Uo in pStore.GetUnitUsesForFile(Fid) do
+      begin
+        UTo:= LowerCase(Uo.UnitName);
+        if UTo = '' then Continue;
+        if not L.Contains(UTo) then L.Add(UTo);
+        if Uo.Section = uusInterface then Result.IntfEdges.AddOrSetValue(UFrom + '->' + UTo, True);
+      end;
+    end;
+  except
+    on Exception do
+    begin
+      FreeCycleGraph(Result); { fix round 1: a raise midway must not leak the partial graph }
+      raise;
+    end;
+  end;
+end;
+
+procedure FreeCycleGraph(var pGraph: TCycleGraph);
+begin
+  if pGraph.Adj <> nil then
+    for var L in pGraph.Adj.Values do L.Free;
+  FreeAndNil(pGraph.Adj);
+  FreeAndNil(pGraph.IntfEdges);
+  FreeAndNil(pGraph.UnitFile);
+  FreeAndNil(pGraph.UnitFid);
+end;
+
+function ComputeSccs(const pGraph: TCycleGraph): TList<TArray<string>>;
+var
+  Index  : TDictionary<string, Integer>;
+  Lowlink: TDictionary<string, Integer>;
+  OnStack: TDictionary<string, Boolean>;
+  Stack  : TList<string>               ;
+  Counter: Integer                     ;
+  Sccs   : TList<TArray<string>>       ;
+  Done   : Boolean                     ;
+
+  procedure StrongConnect(const AV: string);
+  var
+    W        : string       ;
+    Comp     : TList<string>;
+    Top      : string       ;
+    Neighbors: TList<string>;
+  begin
+    Index  .AddOrSetValue(AV, Counter);
+    Lowlink.AddOrSetValue(AV, Counter);
+    Inc(Counter);
+    Stack.Add(AV);
+    OnStack.AddOrSetValue(AV, True);
+    if pGraph.Adj.TryGetValue(AV, Neighbors) then
+      for W in Neighbors do
+      begin
+        if not Index.ContainsKey(W) then
+        begin
+          { external/library unit -- a leaf, cannot be part of a cycle }
+          if not pGraph.Adj.ContainsKey(W) then Continue;
+          StrongConnect(W);  // dl:ok duplicate-code@6627 -- the Tarjan pass DRagLint.Charts.Q.Cycles also runs; merging the charts query onto ComputeSccs is outside E18 T15b
+          if Lowlink[W] < Lowlink[AV] then Lowlink[AV]:= Lowlink[W];
+        end
+        else if OnStack.ContainsKey(W) and OnStack[W] then
+          if Index[W] < Lowlink[AV] then Lowlink[AV]:= Index[W];
+      end;
+    if Lowlink[AV] = Index[AV] then
+    begin
+      Comp:= TList<string>.Create;
+      try
+        repeat
+          Top:= Stack[Stack.Count - 1];
+          Stack.Delete(Stack.Count - 1);
+          OnStack.AddOrSetValue(Top, False);
+          Comp.Add(Top);
+        until Top = AV;
+        if Comp.Count > 1 then Sccs.Add(Comp.ToArray);
+      finally
+        Comp.Free;
+      end;
+    end;
+  end;
+
+begin
+  Sccs   := TList<TArray<string>>.Create;
+  Index  := TDictionary<string, Integer>.Create;
+  Lowlink:= TDictionary<string, Integer>.Create;
+  OnStack:= TDictionary<string, Boolean>.Create;
+  Stack  := TList<string>.Create;
+  Done   := False;
+  try
+    Counter:= 0;
+    for var K in pGraph.Adj.Keys do
+      if not Index.ContainsKey(K) then StrongConnect(K);
+    Done:= True;
+  finally
+    Stack.Free;
+    OnStack.Free;
+    Lowlink.Free;
+    Index.Free;
+    if not Done then FreeAndNil(Sccs); { a raise must not leak the caller's list }
+  end;
+  Result:= Sccs;
+end;
+
+function ComputeSccs(const pStore: ISymbolStore): TList<TArray<string>>;
+var
+  Graph: TCycleGraph;
+begin
+  Graph:= BuildCycleGraph(pStore);
+  try
+    Result:= ComputeSccs(Graph);
+  finally
+    FreeCycleGraph(Graph);
   end;
 end;
 

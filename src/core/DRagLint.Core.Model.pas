@@ -1071,6 +1071,11 @@ type
       anchor was "unused" in the other scope. Not serialised to --json or LSP. }
     RelatedFile: string;
     RelatedLine: Integer;
+    { The COMMAND that fixes this finding when the fix is a verb, not `lint --fix` -- today only
+      the per-file circular-uses finding of `lint <file>` (E18 T15b):
+      `cycles --fix --project "<X.dproj>" --db "<db>" --unit <stem>`. '' for every other finding.
+      Serialised to `--format json` as `fix_hint` only when set; never to the rule cache. }
+    FixHint: string;
   end;
 
   /// <remarks>
