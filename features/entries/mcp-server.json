@@ -1,0 +1,79 @@
+{
+  "id": "mcp-server",
+  "title": "MCP server",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.32.0-alpha",
+  "summary": "Exposes the index to MCP clients as 15 tools",
+  "intro": "The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 15 tools.",
+  "wikiPage": "Register-MCP-Server",
+  "surfaces": [
+    {
+      "type": "mcp",
+      "tool": "find_symbol"
+    },
+    {
+      "type": "mcp",
+      "tool": "find_callers"
+    },
+    {
+      "type": "mcp",
+      "tool": "lint"
+    },
+    {
+      "type": "mcp",
+      "tool": "get_symbol_doc"
+    },
+    {
+      "type": "mcp",
+      "tool": "find_by_doc_tag"
+    },
+    {
+      "type": "mcp",
+      "tool": "find_undocumented"
+    },
+    {
+      "type": "mcp",
+      "tool": "get_impact"
+    },
+    {
+      "type": "mcp",
+      "tool": "get_wiring"
+    },
+    {
+      "type": "mcp",
+      "tool": "get_surface"
+    },
+    {
+      "type": "mcp",
+      "tool": "get_slice"
+    },
+    {
+      "type": "mcp",
+      "tool": "get_context_bundle"
+    },
+    {
+      "type": "mcp",
+      "tool": "get_type_at_position"
+    },
+    {
+      "type": "mcp",
+      "tool": "rename_symbol"
+    },
+    {
+      "type": "mcp",
+      "tool": "run_ast_checks"
+    },
+    {
+      "type": "mcp",
+      "tool": "run_compile_check"
+    }
+  ],
+  "audience": "both",
+  "lastVerified": {
+    "date": "2026-10-19",
+    "by": "agent-task9",
+    "build": "1.32.0-alpha"
+  }
+}

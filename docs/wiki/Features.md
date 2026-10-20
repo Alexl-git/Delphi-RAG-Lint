@@ -311,6 +311,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [ide-release](ide-release) | `ide-release` |  |
 | [Installation](Installation) | `drag-lint.exe`; procedure: `docs\wiki\Installation.md` |  |
 | [lsp](lsp) | `lsp` |  |
+| [MCP server](Register-MCP-Server) | `mcp find_symbol`; `mcp find_callers`; `mcp lint`; `mcp get_symbol_doc`; `mcp find_by_doc_tag`; `mcp find_undocumented`; `mcp get_impact`; `mcp get_wiring`; `mcp get_surface`; `mcp get_slice`; `mcp get_context_bundle`; `mcp get_type_at_position`; `mcp rename_symbol`; `mcp run_ast_checks`; `mcp run_compile_check` |  |
 | [Register the MCP server (Claude Code, VS Code)](Register-MCP-Server) | `mcp-config` |  |
 | [serve](serve) | `serve` |  |
 | [Setup installer](Setup-Installer) | procedure: `docs\wiki\Setup-Installer.md` | experimental |

@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.32.0-alpha
+
+* [MCP server](features/mcp-server.md) -- Exposes the index to MCP clients as 15 tools.
+
 ## 1.31.5-alpha
 
 * [Qualify #convert quick fix](features/convrules-qualify-fix.md) -- ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book.

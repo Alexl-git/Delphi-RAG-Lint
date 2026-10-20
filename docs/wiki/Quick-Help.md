@@ -181,6 +181,7 @@ One line per feature, grouped as on [Features](Features), with the short help an
 * **ide-release** -- Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request. [More](ide-release)
 * **Installation** -- Getting the CLI, the IDE plugin, or the LSP running. [More](Installation)
 * **lsp** -- Starts the LSP (Language Server Protocol) stdio server. [More](lsp)
+* **MCP server** -- Exposes the index to MCP clients as 15 tools. The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 15 tools. [More](Register-MCP-Server)
 * **Register the MCP server (Claude Code, VS Code)** -- Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable. Run drag-lint mcp-config --all (try --dry-run first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass --db to pin one index per entry (--name); --remove takes only its own entry out again. [More](Register-MCP-Server)
   aliases: Set-DragLintMcpConfig, claude mcp add, mcp setup, mcp.json
 * **serve** -- Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index. [More](serve)

@@ -230,6 +230,7 @@ The RAD Studio plugin, the language server, MCP and workspaces.
 | [Installation](features/installation.md) | Getting the CLI, the IDE plugin, or the LSP running | 0.21.0-alpha |
 | [lsp](features/lsp.md) | Starts the LSP (Language Server Protocol) stdio server | 0.6.0-alpha |
 | [Register the MCP server (Claude Code, VS Code)](features/mcp-config-writer.md) | Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable | 1.26.1-alpha |
+| [MCP server](features/mcp-server.md) | Exposes the index to MCP clients as 15 tools | 1.32.0-alpha |
 | [serve](features/serve.md) | Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index | 0.4.0-alpha |
 | [Setup installer](features/setup-installer.md) | One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF | 1.28.3-alpha |
 | [workspace add](features/workspace-add.md) | Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it | 0.6.0-alpha |

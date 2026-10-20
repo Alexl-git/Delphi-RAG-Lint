@@ -4,7 +4,7 @@ title: Setup installer
 summary: One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF
 product: DL
 group: editor-integration
-order: 110012
+order: 110013
 since: 1.28.3-alpha
 status: experimental
 updated: 1.28.3-alpha
