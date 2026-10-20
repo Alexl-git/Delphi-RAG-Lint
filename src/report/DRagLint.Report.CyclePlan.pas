@@ -713,6 +713,7 @@ type
     procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
     procedure RenderMemberHandOver(pStep: Integer);
     function InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
+    function LeavesProgramReason(const pSteps: TRecipeSteps): string;
     procedure MaterializeInversion;
     function IsInversionStem(const pStem: string): Boolean;
     function InversionDeclLines(const pStem: string): TArray<string>;
@@ -4070,6 +4071,11 @@ begin
             Break;
           end;
     end;
+    if Refusal.Kind = '' then
+    begin
+      Refusal.Reason:= LeavesProgramReason(Steps);
+      if Refusal.Reason <> '' then Refusal.Kind:= 'unit-leaves-program';
+    end;
     if Refusal.Kind <> '' then
     begin
       Ev.Refusal:= Refusal.Kind;
@@ -4146,6 +4152,30 @@ begin
   for var S in F.Syms do
     if SameText(S.Section, 'interface') and not (S.Kind in [skUnit, skProgram, skPackage]) and
       (S.EndLine > Result.InsertAfterLine) then Result.InsertAfterLine:= S.EndLine;
+end;
+
+{ Refusal unit-leaves-program (E18 final review F2): R1 assigns the pointer in the
+  declaring unit's initialization section, so that unit must stay in the program
+  once the consumer stops naming it. It stays when the program file (.dpr) lists it
+  or any unit other than the consumer uses it -- both are unit_uses rows (FUsersOf).
+  Otherwise the consumer was its only way in: the linker drops it, its initialization
+  never runs and the first call through the pointer is a nil call at run time,
+  although the project compiles. A DCCReference alone does not link a unit (dcc
+  compiles from the .dpr), so the .dproj is not consulted. With no indexed .dpr
+  (a package, a directory index) nothing is decided here. Returns the reason, or ''. }
+function TCyclePlanner.LeavesProgramReason(const pSteps: TRecipeSteps): string;
+var
+  Users: TList<Int64>;
+begin
+  Result:= '';
+  if FProjectFid = 0 then Exit;
+  if FUsersOf.TryGetValue(pSteps.DeclStem, Users) then
+    for var Fid in Users do
+      if Fid <> pSteps.ConsumerFid then Exit;
+  Result:= Format('`%s` is used only by `%s` and `%s` does not list it: after the cut it leaves the program, ' +
+    'its initialization never assigns `%s` and the call is a nil call at run time -- add it to the program''s uses',
+    [UnitNameOfStem(pSteps.DeclStem), ExtractFileName(PathOf(pSteps.ConsumerFid)), ExtractFileName(PathOf(FProjectFid)),
+     pSteps.PtrVar]);
 end;
 
 function TCyclePlanner.IsInversionStem(const pStem: string): Boolean;

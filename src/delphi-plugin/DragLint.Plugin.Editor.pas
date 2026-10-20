@@ -4455,7 +4455,7 @@ begin
     ShowMessage('drag-lint: no project/index found.');
     Exit;
   end;
-  DLRunReport(CycleFixMenuArgs(Proj, Db), 'drag-lint-circular-uses-fix.txt', CYCLE_FIX_TIMEOUT_MS);
+  DLRunReport(CycleFixMenuArgs(Proj, Db, GetActivePlatformForLibrary), 'drag-lint-circular-uses-fix.txt', CYCLE_FIX_TIMEOUT_MS);
 end;
 
 procedure InvokeUsesAudit(Sender: TObject);

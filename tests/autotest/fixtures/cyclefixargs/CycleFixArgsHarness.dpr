@@ -54,10 +54,11 @@ begin
   try
     Dir:= ParamStr(1);
 
-    Emit('args.dry'  , CycleFixDryRunArgs('<P>', '<D>', 2));
-    Emit('args.apply', CycleFixApplyArgs ('<P>', '<D>', 2));
-    Emit('args.menu' , CycleFixMenuArgs  ('<P>', '<D>'));
-    Emit('args.list' , CycleListArgs     ('<P>', '<D>'));
+    Emit('args.dry'  , CycleFixDryRunArgs('<P>', '<D>', 'Win32', 2));
+    Emit('args.apply', CycleFixApplyArgs ('<P>', '<D>', 'Win32', 2));
+    Emit('args.menu' , CycleFixMenuArgs  ('<P>', '<D>', 'Win32'));
+    Emit('args.list' , CycleListArgs     ('<P>', '<D>', 'Win32'));
+    Emit('args.dry.noplat', CycleFixDryRunArgs('<P>', '<D>', '', 2));
     Emit('timeout.cyclefix', IntToStr(CYCLE_FIX_TIMEOUT_MS));
 
     Rows:= ParseCycleRows(BANNER + Fixture('causes.json') + NOTE);
@@ -69,6 +70,7 @@ begin
       Emit('rows.0.fixable', B(Rows[0].Fixable));
       Emit('rows.0.part'   , Rows[0].Part);
       Emit('rows.0.caption', CycleRowCaption(Rows[0]));
+      Emit('confirm.apply' , StringReplace(CycleFixApplyConfirmText(Rows[0]), sLineBreak, ' | ', [rfReplaceAll]));
       Emit('rows.1.cycle'  , IntToStr(Rows[1].Cycle));
       Emit('rows.1.fixable', B(Rows[1].Fixable));
       Emit('rows.1.reason' , Rows[1].Reason);

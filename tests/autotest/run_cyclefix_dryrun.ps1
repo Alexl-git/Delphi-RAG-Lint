@@ -13,6 +13,8 @@
         `--cycle 1` -> exit 1, refusals[0].kind = stale-file.
     (e) POSITIVE CONTROL: `--format text` prints `Verdict:`; a refused group prints
         `Verdict: refused` and one `  - <kind>: ` line per refusal.
+    (j) a --library-db that does not open, --format json: exit 2 with a cycle-fix/1 error document
+        (final review M1); --format text keeps `ERROR: ...`.
     (f) the dry run writes NOTHING: SHA-256 of every file of the copy and of its index DB
         is the same before and after every run above.
 
@@ -195,6 +197,14 @@ try {
   Check 'd: exit 1' ($r.Exit -eq 1) "exit $($r.Exit) out: $($r.Out)"
   Check 'd: refusals[0].kind = stale-file' ($r.Json -and $r.Json.cycles[0].refusals[0].kind -eq 'stale-file') $r.Out
   Check 'd: the stale refusal names DemoLogger.pas' ($r.Json -and $r.Json.cycles[0].refusals[0].file -like '*DemoLogger.pas') $r.Out
+
+  Write-Host '== (j) final review M1: a library that does not open, --format json' -ForegroundColor Cyan
+  $nolib = Join-Path $WorkDir 'no-such-library.sqlite'
+  $r = Run-Fix $stale $sdb @('--cycle', '1', '--no-compile', '--library-db', $nolib)
+  Check 'j: exit 2 and a cycle-fix/1 error document (not plain-text ERROR:) naming the library' `
+    ($r.Exit -eq 2 -and $r.Json -and $r.Json.schema -eq 'cycle-fix/1' -and $r.Json.ok -eq $false -and $r.Json.exit_code -eq 2 -and "$($r.Json.error)" -like '*no-such-library.sqlite*') $r.Out
+  $r = Run-Fix $stale $sdb @('--cycle', '1', '--no-compile', '--library-db', $nolib) $false
+  Check 'j: POSITIVE CONTROL --format text keeps the plain ERROR: line' ($r.Exit -eq 2 -and $r.Out -match '(?m)^ERROR: .*no-such-library\.sqlite') $r.Out
 } finally {
   Pop-Location
 }

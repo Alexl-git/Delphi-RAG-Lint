@@ -11,7 +11,9 @@
        files (every edited file, every new unit) and byte-identical content.
   Controls: (c1) the file comparison is not vacuous -- one flipped byte in a shadow copy is
   reported; (c2) the shadow holds the new leaf units; (c3) with no --shadow-out the default dir
-  C:\TEMP\draglint_cyclefix_<pid>\ is announced and exists.
+  C:\TEMP\draglint_cyclefix_<pid>\ is announced and exists; (c4) a successful run deletes it and says so on the
+  Shadow line; (c7, final review F5) a FAILED run keeps its scratch, names it on stderr, and the log its
+  message cites still exists (needs RAD Studio, else SKIP).
   The platform library is never opened in place: R2 uses a scratch copy (SKIPped without one).
   Run from any CWD, pwsh 7.
 #>
@@ -155,13 +157,13 @@ try {
   try {
     $txt = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null | Out-String)
   } finally { $env:DRAGLINT_CYCLEFIX_KEEP_SCRATCH = $null }
-  $m = [regex]::Match($txt, '(?m)^Shadow tree: (.+?)\s*$')
+  $m = [regex]::Match($txt, '(?m)^Shadow tree: (\S+)')
   Check 'c3: text output announces "Shadow tree: <product root>\draglint_cyclefix_<pid>"' ($m.Success -and $m.Groups[1].Value -match '^C:\\TEMP\\draglint_cyclefix_\d+\\?$') $txt
   Check 'c3: that directory exists and holds files' ($m.Success -and (Test-Path $m.Groups[1].Value) -and (@(Get-ChildItem $m.Groups[1].Value -Recurse -File).Count -gt 0)) ''
   if ($m.Success -and (Test-Path $m.Groups[1].Value)) { [IO.Directory]::Delete($m.Groups[1].Value, $true) }
   # c4: without the seam the product deletes the default shadow it created; a --shadow-out dir is never deleted
   $txt2 = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null | Out-String)
-  $m2 = [regex]::Match($txt2, '(?m)^Shadow tree: (.+?)\s*$')
+  $m2 = [regex]::Match($txt2, '(?m)^Shadow tree: (\S+)')
   Check 'c4: the run announced a default shadow dir (SANITY) and it is gone after the run' `
     ($m2.Success -and $m2.Groups[1].Value -match '^C:\\TEMP\\draglint_cyclefix_\d+\\?$' -and -not (Test-Path $m2.Groups[1].Value) -and -not (Test-Path ($m2.Groups[1].Value.TrimEnd('\') + '_build'))) $txt2
   if ($m2.Success -and (Test-Path $m2.Groups[1].Value)) { [IO.Directory]::Delete($m2.Groups[1].Value, $true) }
@@ -177,7 +179,7 @@ try {
     $txt3 = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null | Out-String)
     $code3 = $LASTEXITCODE
   } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null }
-  $m3 = [regex]::Match($txt3, '(?m)^Shadow tree: (.+?)\s*$')
+  $m3 = [regex]::Match($txt3, '(?m)^Shadow tree: (\S+)')
   Check 'c5: the run still succeeds (exit 0) and announces a DIFFERENT shadow dir than the planted name' `
     ($code3 -eq 0 -and $m3.Success -and $m3.Groups[1].Value.TrimEnd('\') -ne $plShadow -and $m3.Groups[1].Value -like (Join-Path $ProductRoot "draglint_cyclefix_${fake}_*")) $txt3
   Check 'c5: the planted dirs and their marker files survive' `
@@ -194,6 +196,34 @@ try {
   $own = Join-Path $WorkDir 'c4-own-shadow'
   $null = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none --shadow-out $own 2>$null | Out-String)
   Check 'c4: POSITIVE CONTROL an explicit --shadow-out dir survives the run, with files' ((Test-Path $own) -and (@(Get-ChildItem $own -Recurse -File).Count -gt 0)) ''
+  # final review F5: the Shadow line says what becomes of a default dir; a --shadow-out line has no such note
+  Check 'c4: the Shadow line of a successful run says "(deleted at exit; --shadow-out keeps it)"' ($txt2 -match '(?m)^Shadow tree: \S+ \(deleted at exit; --shadow-out keeps it\)\s*$') $txt2
+  # c7 (final review F5): a run that FAILS keeps its scratch and names it on stderr -- its messages cite the
+  # logs in there. The 1 ms build seam (project under TEMP) makes the baseline time out: exit 1, build-timeout.
+  $rsv = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
+  if (Test-Path $rsv) {
+    $fake7 = 'failrun' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+    $build7 = Join-Path $ProductRoot "draglint_cyclefix_${fake7}_build"
+    $err7f = Join-Path $WorkDir 'c7-stderr.txt'
+    $env:DRAGLINT_TEST_SCRATCH_PID = $fake7
+    $env:DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS = '1'
+    try {
+      $out7 = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --cycle 1 --library-db none --format json 2>$err7f | Out-String)
+      $code7 = $LASTEXITCODE
+    } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null; $env:DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS = $null }
+    $err7 = [IO.File]::ReadAllText($err7f)
+    $j7 = try { $out7 | ConvertFrom-Json } catch { $null }
+    $msg7 = if ($j7) { "$(@($j7.baseline.errors)[0])" } else { '' }
+    $cited = [regex]::Match($msg7, 'see (\S+)$').Groups[1].Value
+    Check 'c7: SANITY the baseline timed out: exit 1, a build-timeout message citing a log' ($code7 -eq 1 -and $msg7 -like 'build-timeout:*' -and $cited -ne '') "exit=$code7 $out7"
+    # the 1 ms kill lands before msbuild opens its log, so the check is on the dir the message cites: it
+    # still exists and holds the build script this run wrote (old behaviour: the whole dir was deleted)
+    $citedDir = if ($cited -ne '') { Split-Path $cited -Parent } else { '' }
+    Check 'c7: the dir of the log the message cites still exists after the run, with its build script (the scratch was kept)' `
+      (($citedDir -ne '') -and $cited.StartsWith($build7) -and (Test-Path -LiteralPath (Join-Path $citedDir 'baseline.bat'))) "cited=$cited"
+    Check 'c7: stderr names the kept scratch dir' ($err7.Contains('its scratch is kept for the logs it cites: ' + $build7)) $err7
+    if (Test-Path $build7) { [IO.Directory]::Delete($build7, $true) }
+  } else { Write-Host '  SKIP c7: no RAD Studio (rsvars.bat)' -ForegroundColor Yellow }
   # --- fix round 1 -------------------------------------------------------------------------
   # Index a fresh demo copy after Patch(proj) changed it; run `cycles --fix` with an explicit shadow dir.
   function Run-Patched([string]$Tag, [scriptblock]$Patch, [hashtable]$Env = @{}, [string[]]$Extra = @()) {

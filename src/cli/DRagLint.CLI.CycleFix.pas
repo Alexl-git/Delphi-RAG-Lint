@@ -19,7 +19,7 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections,
-  DRagLint.Core.Interfaces, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.TextEdit; // dl:unit DRagLint.Report.CyclePlan accepted -- CCYCLENONE is the no-edge marker string the plan prints; it travels with the planner whose output CycleFix reads back
+  DRagLint.Core.Interfaces, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.TextEdit; // dl:unit DRagLint.Report.CyclePlan accepted -- uses-global-census counts one shared const (CCycleNone, the no-cycle line both print); the unit is needed anyway for the planner itself (TCyclePlanView, TRefusal, VisitCyclePlans), so the const stays with the planner it belongs to
 
 type
   /// <summary>The `cycles --fix` flags, as DoCycles parsed them.</summary>
@@ -345,6 +345,15 @@ function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
   const pLibStore: ISymbolStore = nil): Integer;
 
+/// <summary>Reports a `cycles --fix` error that ends the run before RunCycleFix is reached
+/// (e.g. the platform library does not open): with pOpts.Json a `cycle-fix/1` document
+/// {schema, error, ok:false, exit_code:2} on stdout, else `ERROR: <message>`.</summary>
+/// <param name="pOpts">The run's options; only Json is read.</param>
+/// <param name="pMessage">The error, one line.</param>
+/// <remarks>The caller exits 2. E18 final review M1: a JSON caller (the IDE) must get a
+/// document it can parse, never plain text.</remarks>
+procedure ReportCycleFixError(const pOpts: TCycleFixOptions; const pMessage: string);
+
 implementation
 
 uses
@@ -377,7 +386,14 @@ const
   { the C9 bound of convert-apply's child re-index (RefreshProjectIndex): ten minutes }
   CReindexTimeoutMs = 10 * 60 * 1000;
   CPartAll          = 'all';
-  CAllIterationMs   = 2 * CBuildTimeoutMs + CReindexTimeoutMs; // one --part all child: two builds and a re-index
+  { The longest one --apply can legitimately run before its own limits fire and it rolls back: the
+    baseline build, the after build and its one repair rebuild (CSecondBuild), then the child
+    re-index and the child `cycles` of VerifyAfterCore. A caller that kills an --apply must wait
+    longer than this, or the kill lands before the rollback (E18 final review F1). The plugin's
+    CYCLE_FIX_TIMEOUT_MS is pinned above it by tests\autotest\run_cyclefix_timeouts.ps1. }
+  CApplyWorstMs     = (1 + CSecondBuild) * CBuildTimeoutMs + 2 * CReindexTimeoutMs;
+  CKillMarginMs     = 10 * 60 * 1000; // slack above CApplyWorstMs for start-up, writes and backups
+  CAllIterationMs   = CApplyWorstMs + CKillMarginMs; // one --part all child is one whole --apply
   CChildKillWaitMs = 5000;  // how long to wait for a killed child to exit
   CKilledExitCode  = 1;     // the exit code a killed child is given
   CExitApplyUnverified = 1; // --apply: written and compiled, but not verified
@@ -1896,6 +1912,11 @@ begin
   else Writeln('ERROR: ', pMessage);
 end;
 
+procedure ReportCycleFixError(const pOpts: TCycleFixOptions; const pMessage: string);
+begin
+  ReportError(pOpts, pMessage);
+end;
+
 // A refusal of the whole run before any group is planned (dirty-baseline, no-compiler): exit 1,
 // nothing staged. JSON: the top-level `refusals` and `baseline`, `cycles` empty.
 // A cycle-fix/1 document holding the run's header pairs: schema, mode, project, db, platform.
@@ -2472,6 +2493,16 @@ begin
   end;
 end;
 
+// The dry run's `Shadow tree: <dir>` line, told what becomes of the dir at exit (E18 final review F5): a
+// default dir is deleted when the run exits 0 and kept otherwise (DeleteDefaultScratch); --shadow-out is
+// never deleted and keeps the line as it is.
+function ShadowLineAtExit(const pLine: string; const pOpts: TCycleFixOptions; pExitCode: Integer): string;
+begin
+  Result:= pLine;
+  if (pOpts.ShadowOut <> '') or not StartsStr(CShadowLine, pLine) then Exit;
+  Result:= pLine + (if pExitCode = CExitMechanical then ' (deleted at exit; --shadow-out keeps it)' else ' (kept: the run failed)');
+end;
+
 function RunCycleFixGroups(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 var
@@ -2572,7 +2603,12 @@ begin
       try
         Doc.AddPair('cycles', Cycles);
         Cycles:= nil;
-        if ShadowUsed <> '' then Doc.AddPair('shadow', ShadowUsed);
+        if ShadowUsed <> '' then
+        begin
+          Doc.AddPair('shadow', ShadowUsed);
+          { F5: the default shadow is deleted when the run exits 0; --shadow-out or a failed run keeps it }
+          Doc.AddPair('shadow_kept', TJSONBool.Create((pOpts.ShadowOut <> '') or (Result <> CExitMechanical)));
+        end;
         Doc.AddPair('baseline', BaselineToJson(Gate));
         Doc.AddPair('refusals', TJSONArray.Create);
         if Applied.Error <> '' then Doc.AddPair('error', Applied.Error);
@@ -2587,7 +2623,7 @@ begin
     begin
       if pSccs.Count = 0 then Writeln(CCycleNone);
       for var Line in Playbook do Writeln(Line);
-      for var Line in Summary do Writeln(Line);
+      for var Line in Summary do Writeln(ShadowLineAtExit(Line, pOpts, Result));
       if (pSccs.Count > 0) and (Only = 0) and not Chosen then Writeln(CVerdictRefused);
       WriteNotPlanned(Only, pSccs.Count, Planned);
       var Timing:= TimingLine(Gate);
@@ -2616,10 +2652,12 @@ begin
   else Result:= RunAll(pOpts, pSccs, pGraph, Only);
 end;
 
-// E18 T13 fix round: the scratch THIS run created is deleted when the run ends, success or failure --
-// the default shadow dir (never a user's --shadow-out) and the compile gate's _build dir.
-// DRAGLINT_CYCLEFIX_KEEP_SCRATCH=1 keeps them for a test that inspects them.
-procedure DeleteDefaultScratch(const pOpts: TCycleFixOptions);
+// E18 T13 fix round: the scratch THIS run created -- the default shadow dir (never a user's --shadow-out)
+// and the compile gate's _build dir -- is deleted when the run ends with exit 0. A run that ends with any
+// other code KEEPS it and names it on stderr (E18 final review F5): its messages cite the build logs,
+// reindex.log and all-iteration-<n>.json in there. DRAGLINT_CYCLEFIX_KEEP_SCRATCH=1 keeps it always,
+// for a test that inspects it.
+procedure DeleteDefaultScratch(const pOpts: TCycleFixOptions; pExitCode: Integer);
 const
   CKeepScratchVar = 'DRAGLINT_CYCLEFIX_KEEP_SCRATCH';
 begin
@@ -2628,6 +2666,13 @@ begin
     a default dir picked none and deletes nothing }
   var Dirs: TArray<string>:= [GBuildPick];
   if pOpts.ShadowOut = '' then Dirs:= Dirs + [GShadowPick];
+  if pExitCode <> CExitMechanical then
+  begin
+    for var D in Dirs do
+      if (D <> '') and TDirectory.Exists(D) then
+        Writeln(ErrOutput, Format('drag-lint: note: cycles --fix exited %d; its scratch is kept for the logs it cites: %s', [pExitCode, D]));
+    Exit;
+  end;
   for var D in Dirs do
     if D <> '' then
     try
@@ -2640,11 +2685,12 @@ end;
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 begin
+  Result:= CExitError; { an exception leaves this code, so the scratch it may cite is kept }
   try
     if SameText(pOpts.Part, CPartAll) then Result:= RunAllSelected(pOpts, pSccs, pGraph)
     else Result:= RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore);
   finally
-    DeleteDefaultScratch(pOpts);
+    DeleteDefaultScratch(pOpts, Result);
   end;
 end;
 

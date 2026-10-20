@@ -17,14 +17,20 @@ interface
 
 const
   /// <summary>Time limit, in ms, for every IDE-started `cycles --fix` run (the
-  /// tab's Dry run and Apply, and the menu's dry run): 35 minutes.</summary>
-  /// <remarks>Deliberately ABOVE the engine's own 30-minute build timeout. At the
-  /// plugin's limit ProcRun kills the whole process tree (engine + msbuild/dcc);
-  /// a kill in the middle of an --apply bypasses the engine's atomic rollback and
-  /// can leave half-edited files. With the plugin's limit higher, the engine's
-  /// timeout always fires first and the engine rolls back itself. The other
-  /// Uses &amp; Deps sections keep their own 180 s limit.</remarks>
-  CYCLE_FIX_TIMEOUT_MS = 35 * 60 * 1000;
+  /// tab's Dry run and Apply, and the menu's dry run): 120 minutes.</summary>
+  /// <remarks>Deliberately ABOVE the longest run the engine's own limits allow
+  /// one --apply: three builds of up to 30 minutes each (baseline, after, one
+  /// repair rebuild) plus a re-index and a `cycles` of up to 10 minutes each,
+  /// 110 minutes (CApplyWorstMs in DRagLint.CLI.CycleFix), plus 10 minutes of
+  /// slack. At the plugin's limit ProcRun kills the whole process tree (engine +
+  /// msbuild/dcc); a kill in the middle of an --apply bypasses the engine's
+  /// atomic rollback and can leave half-edited files. With the plugin's limit
+  /// higher, an engine limit always fires first and the engine rolls back
+  /// itself. tests\autotest\run_cyclefix_timeouts.ps1 pins the inequality
+  /// against the engine's constants. The job is asynchronous, so the IDE stays
+  /// usable while it waits. The other Uses &amp; Deps sections keep their own
+  /// 180 s limit.</remarks>
+  CYCLE_FIX_TIMEOUT_MS = 120 * 60 * 1000;
 
 type
   /// <summary>One strongly connected component of the project's uses graph, as
@@ -82,28 +88,34 @@ type
 /// engine picks the SCC itself (cycle 1 on circular-demo).</summary>
 /// <param name="AProj">The active .dproj, unquoted.</param>
 /// <param name="ADb">The project index, unquoted.</param>
-/// <returns>`cycles --fix --project "P" --db "D" --format text` -- never --apply.</returns>
-function CycleFixMenuArgs(const AProj, ADb: string): string;
+/// <param name="APlatform">The IDE's active platform (e.g. 'Win32'); sent lower-case as
+/// `--platform p`, so the engine's build gate and platform library match the IDE;
+/// '' omits the flag (the engine's win64 default).</param>
+/// <returns>`cycles --fix --project "P" --db "D" [--platform p] --format text` -- never --apply.</returns>
+function CycleFixMenuArgs(const AProj, ADb, APlatform: string): string;
 
 /// <summary>The tab's list query: every SCC with its causes and fix object.</summary>
 /// <param name="AProj">The active .dproj, unquoted.</param>
 /// <param name="ADb">The project index, unquoted.</param>
-/// <returns>`cycles --project "P" --db "D" --format json --causes`.</returns>
-function CycleListArgs(const AProj, ADb: string): string;
+/// <param name="APlatform">As CycleFixMenuArgs.</param>
+/// <returns>`cycles --project "P" --db "D" [--platform p] --format json --causes`.</returns>
+function CycleListArgs(const AProj, ADb, APlatform: string): string;
 
 /// <summary>The tab's Dry run button for one SCC.</summary>
 /// <param name="AProj">The active .dproj, unquoted.</param>
 /// <param name="ADb">The project index, unquoted.</param>
+/// <param name="APlatform">As CycleFixMenuArgs.</param>
 /// <param name="ACycle">The row's 1-based TCycleRow.Cycle.</param>
-/// <returns>`cycles --fix --project "P" --db "D" --cycle n --format json`.</returns>
-function CycleFixDryRunArgs(const AProj, ADb: string; ACycle: Integer): string;
+/// <returns>`cycles --fix --project "P" --db "D" [--platform p] --cycle n --format json`.</returns>
+function CycleFixDryRunArgs(const AProj, ADb, APlatform: string; ACycle: Integer): string;
 
 /// <summary>The tab's Apply button: CycleFixDryRunArgs plus ` --apply`.</summary>
 /// <param name="AProj">The active .dproj, unquoted.</param>
 /// <param name="ADb">The project index, unquoted.</param>
+/// <param name="APlatform">As CycleFixMenuArgs.</param>
 /// <param name="ACycle">The row's 1-based TCycleRow.Cycle.</param>
 /// <returns>The dry-run command line with ` --apply` appended.</returns>
-function CycleFixApplyArgs(const AProj, ADb: string; ACycle: Integer): string;
+function CycleFixApplyArgs(const AProj, ADb, APlatform: string; ACycle: Integer): string;
 
 /// <summary>Reads the SCC rows out of `cycles --format json --causes` output.</summary>
 /// <param name="AText">Raw engine output; a banner before the JSON array and
@@ -116,6 +128,15 @@ function ParseCycleRows(const AText: string): TArray<TCycleRow>;
 /// <param name="ARow">The row to caption.</param>
 /// <returns>`n. a &lt;-&gt; b   -- fixable (part a)` or `... -- not fixable: reason`.</returns>
 function CycleRowCaption(const ARow: TCycleRow): string;
+
+/// <summary>The question the tab's Apply button asks before it runs
+/// `cycles --fix --cycle n --apply` -- the same Yes/No (default No) gate the
+/// Structure tree puts in front of its apply.</summary>
+/// <param name="ARow">The ticked row.</param>
+/// <returns>Several lines: the group number and units, what --apply does to
+/// the project (writes with .BCK backups, builds, re-indexes, rolls back a failed
+/// build) and that Dry run shows the plan first.</returns>
+function CycleFixApplyConfirmText(const ARow: TCycleRow): string;
 
 /// <summary>Reads a `cycle-fix/1` document out of raw engine output.</summary>
 /// <param name="AText">Raw engine output; a banner before the JSON object is
@@ -151,25 +172,41 @@ const
 
 { ---- command lines ---------------------------------------------------------- }
 
-function CycleFixMenuArgs(const AProj, ADb: string): string;
+{ ` --platform p` (lower-case) or '' -- the engine defaults to win64 for its msbuild
+  gate and its platform library, so a Win32 IDE must say so (E18 final review F3). }
+function PlatformArg(const APlatform: string): string;
 begin
-  Result:= Format('cycles --fix --project "%s" --db "%s" --format text', [AProj, ADb]);
+  Result:= if APlatform = '' then '' else ' --platform ' + LowerCase(APlatform);
 end;
 
-function CycleListArgs(const AProj, ADb: string): string;
+function CycleFixMenuArgs(const AProj, ADb, APlatform: string): string;
 begin
-  Result:= Format('cycles --project "%s" --db "%s" --format json --causes', [AProj, ADb]);
+  Result:= Format('cycles --fix --project "%s" --db "%s"%s --format text', [AProj, ADb, PlatformArg(APlatform)]);
 end;
 
-function CycleFixDryRunArgs(const AProj, ADb: string; ACycle: Integer): string;
+function CycleListArgs(const AProj, ADb, APlatform: string): string;
 begin
-  Result:= Format('cycles --fix --project "%s" --db "%s" --cycle %d --format json',
-                  [AProj, ADb, ACycle]);
+  Result:= Format('cycles --project "%s" --db "%s"%s --format json --causes', [AProj, ADb, PlatformArg(APlatform)]);
 end;
 
-function CycleFixApplyArgs(const AProj, ADb: string; ACycle: Integer): string;
+function CycleFixDryRunArgs(const AProj, ADb, APlatform: string; ACycle: Integer): string;
 begin
-  Result:= CycleFixDryRunArgs(AProj, ADb, ACycle) + ' --apply';
+  Result:= Format('cycles --fix --project "%s" --db "%s"%s --cycle %d --format json',
+                  [AProj, ADb, PlatformArg(APlatform), ACycle]);
+end;
+
+function CycleFixApplyArgs(const AProj, ADb, APlatform: string; ACycle: Integer): string;
+begin
+  Result:= CycleFixDryRunArgs(AProj, ADb, APlatform, ACycle) + ' --apply';
+end;
+
+function CycleFixApplyConfirmText(const ARow: TCycleRow): string;
+begin
+  Result:= Format('Apply the mechanical fix to circular group %d?', [ARow.Cycle]) + sLineBreak + sLineBreak
+         + ARow.Units + sLineBreak + sLineBreak
+         + 'drag-lint writes the edited and new units into the project (with .BCK backups), '
+         + 'builds it and re-indexes it; a failed build is rolled back. '
+         + 'Use Dry run first to see the plan.';
 end;
 
 { ---- JSON plumbing ---------------------------------------------------------- }

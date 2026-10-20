@@ -171,7 +171,8 @@ type
     protected
       /// <summary>One row per SCC: units, fix state, fix.reason.</summary>
       procedure Render; override;
-      /// <summary>Runs `cycles --fix --cycle n --apply` for the ticked SCC.</summary>
+      /// <summary>Runs `cycles --fix --cycle n --apply` for the ticked SCC, after a
+      /// Yes/No confirmation (CycleFixApplyConfirmText; default No).</summary>
       /// <param name="Sender">The button; unused.</param>
       procedure HandleApply(Sender: TObject); override;
     public
@@ -234,6 +235,8 @@ uses
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Telemetry
   , DragLint.Plugin.JobQueue
+  , Vcl.Dialogs    { MessageDlg: the Apply confirmation }
+  , System.UITypes { mtConfirmation / mbYes / mbNo / mrYes }
   ;
 
 const
@@ -746,7 +749,7 @@ end; // procedure
 
 var
   { Every live TCircularUsesSection, main thread only. A cycles --fix job's
-    OnDone runs on the main thread up to 35 minutes after it was queued; the
+    OnDone runs on the main thread up to 120 minutes after it was queued; the
     dock may have been closed (and the section freed) in between, so OnDone
     checks membership here before it touches the section. }
   GLiveCycleSections: TList<TCircularUsesSection> = nil;
@@ -850,7 +853,7 @@ begin
     Exit;
   end;
   SaveAllModules;
-  if RunEngine(CycleListArgs(Scope.Proj, Scope.Db), Output) < 0 then
+  if RunEngine(CycleListArgs(Scope.Proj, Scope.Db, GetActivePlatformForLibrary), Output) < 0 then
   begin
     Report('drag-lint.exe not found -- check drag-lint Options.');
     Exit;
@@ -871,8 +874,9 @@ end; // procedure
   as StructureForm.EnqueueFixJob: a fix that builds the project two or three
   times would otherwise freeze the IDE for minutes. Busy gives the wait cursor
   and makes JobQueueBusy refuse a second fix anywhere in the plugin; the limit
-  is CYCLE_FIX_TIMEOUT_MS, above the engine's own build timeout, so a kill can
-  never land in the middle of an --apply. }
+  is CYCLE_FIX_TIMEOUT_MS, above the longest --apply the engine's own limits
+  allow (three builds, a re-index, a cycles run), so a kill can never land in
+  the middle of an --apply. }
 procedure TCircularUsesSection.RunFix(AApply: Boolean);
 var
   N      : Integer     ;
@@ -905,6 +909,14 @@ begin
     Report('drag-lint.exe not found -- check drag-lint Options.');
     Exit;
   end;
+  { the same Yes/No gate (default No) the Structure tree asks before its apply }
+  if AApply then
+    for var Row in FCycles do
+      if (Row.Cycle = N) and (MessageDlg(CycleFixApplyConfirmText(Row), mtConfirmation, [mbYes, mbNo], 0, mbNo) <> mrYes) then
+      begin
+        Report('cycles --fix: cancelled -- nothing written.');
+        Exit;
+      end;
   SaveAllModules;
   Job:= TDragLintJob.Create;
   Job.Kind       := jkGeneric;
@@ -912,8 +924,8 @@ begin
   Job.Title      := Format('cycles --fix cycle %d (%s)', [N, if AApply then 'apply' else 'dry run']);
   Job.CoalesceKey:= 'cyclefix:' + LowerCase(Scope.Db);
   Job.CmdLine    := Format('"%s" %s', [Exe,
-                      if AApply then CycleFixApplyArgs(Scope.Proj, Scope.Db, N)
-                      else CycleFixDryRunArgs(Scope.Proj, Scope.Db, N)]);
+                      if AApply then CycleFixApplyArgs(Scope.Proj, Scope.Db, GetActivePlatformForLibrary, N)
+                      else CycleFixDryRunArgs(Scope.Proj, Scope.Db, GetActivePlatformForLibrary, N)]);
   Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS;
   Job.Streaming  := False;
   { Locals, so the closure captures copies; Sec is checked for liveness before

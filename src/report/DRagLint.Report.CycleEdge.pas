@@ -300,7 +300,10 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// `qualified-ref` (the consumer names anything as `B.X`, B the declaring unit), `init-order` (a call line lies in
 /// A's initialization section, or that section -- from `initialization` to `end.` --
 /// names the enclosing routine as a whole word: the variable is still nil there),
-/// `unsupported-directive` (varargs, or a directive word it cannot classify, on the declaration).</para>
+/// `unsupported-directive` (varargs, or a directive word it cannot classify, on the declaration).
+/// The planner (DRagLint.Report.CyclePlan, PlanInversion) refuses two more after this one:
+/// `duplicate-identifier` (the leaf declares the pointer's names) and `unit-leaves-program` (the
+/// declaring unit would drop out of the program after the cut, so its initialization never runs).</para>
 /// <para>A calling convention on the declaration (register pascal cdecl stdcall safecall
 /// winapi) is carried into the procedural type; inline, overload, external, forward and the
 /// hint directives do not change it and are skipped.</para>

@@ -7,7 +7,9 @@
   WHAT IT PINS
     A  the exact engine command lines: the menu's dry run (never --apply), the
        tab's list query, its Dry run (`--cycle n --format json`) and its Apply
-       (the same + ` --apply`).
+       (the same + ` --apply`), each with the IDE's active platform as
+       `--platform <p>` (final review F3; left out when none is known), and the
+       tab's Apply question (final review M4: asked before anything is saved).
     L  the SCC rows read from a captured `cycles --format json --causes` run on
        circular-demo (tests\fixtures\cyclefix\causes.json): one row per SCC,
        1-based --cycle numbers, fix.available / fix.reason, a banner before the
@@ -72,18 +74,36 @@ try {
   Check 'harness ran to completion' ($out -match '(?m)^DONE') $out
 
   Write-Host '-- A: command lines' -ForegroundColor Cyan
-  $dry = 'cycles --fix --project "<P>" --db "<D>" --cycle 2 --format json'
+  $dry = 'cycles --fix --project "<P>" --db "<D>" --platform win32 --cycle 2 --format json'
   Check 'A1 Dry run for cycle 2'           ($kv['args.dry'] -ceq $dry) "got: $($kv['args.dry'])"
   Check 'A2 Apply = the dry run + --apply' ($kv['args.apply'] -ceq "$dry --apply") "got: $($kv['args.apply'])"
   Check 'A3 the menu runs a text dry run (engine-picked SCC), never --apply' `
-    ($kv['args.menu'] -ceq 'cycles --fix --project "<P>" --db "<D>" --format text') "got: $($kv['args.menu'])"
+    ($kv['args.menu'] -ceq 'cycles --fix --project "<P>" --db "<D>" --platform win32 --format text') "got: $($kv['args.menu'])"
   Check 'A4 the list query carries --causes (the fix object lives there)' `
-    ($kv['args.list'] -ceq 'cycles --project "<P>" --db "<D>" --format json --causes') "got: $($kv['args.list'])"
+    ($kv['args.list'] -ceq 'cycles --project "<P>" --db "<D>" --platform win32 --format json --causes') "got: $($kv['args.list'])"
+  # Final review F3: the engine defaults to win64 for its msbuild gate and platform library, so every
+  # IDE-started cycles run names the IDE's active platform (lower-case), as the Structure tree does.
+  Check 'A5 no platform known: the flag is left out (the engine''s win64 default)' `
+    ($kv['args.dry.noplat'] -ceq 'cycles --fix --project "<P>" --db "<D>" --cycle 2 --format json') "got: $($kv['args.dry.noplat'])"
+  $frameA = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.UsesDepsFrame.pas'))
+  $editA  = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.Editor.pas'))
+  Check 'A6 the tab''s list, Dry run and Apply and the menu pass the active platform' `
+    ($frameA.Contains('CycleListArgs(Scope.Proj, Scope.Db, GetActivePlatformForLibrary)') -and
+     $frameA.Contains('CycleFixApplyArgs(Scope.Proj, Scope.Db, GetActivePlatformForLibrary, N)') -and
+     $frameA.Contains('CycleFixDryRunArgs(Scope.Proj, Scope.Db, GetActivePlatformForLibrary, N)') -and
+     $editA.Contains('CycleFixMenuArgs(Proj, Db, GetActivePlatformForLibrary)')) ''
+  # Final review M4: the tab's Apply asks Yes/No (default No) before --apply, like the tree.
+  Check 'A7 the Apply question names the group, its units, the backups and the rollback' `
+    ($kv['confirm.apply'] -ceq ('Apply the mechanical fix to circular group 1? |  | ' + $kv['rows.0.units'] + ' |  | drag-lint writes the edited and new units into the project (with .BCK backups), builds it and re-indexes it; a failed build is rolled back. Use Dry run first to see the plan.')) "got: $($kv['confirm.apply'])"
+  $runFixA = [regex]::Match($frameA, 'procedure TCircularUsesSection\.RunFix\([\s\S]*?end; // procedure').Value
+  $askAt  = $runFixA.IndexOf('MessageDlg(CycleFixApplyConfirmText(Row), mtConfirmation, [mbYes, mbNo], 0, mbNo) <> mrYes')
+  Check 'A8 RunFix asks before it saves or queues anything, and only for Apply' `
+    (($askAt -gt 0) -and ($askAt -lt $runFixA.IndexOf('SaveAllModules;')) -and $runFixA.Contains('if AApply then')) ''
 
   Write-Host '-- T: time limits (fix round 1, R1)' -ForegroundColor Cyan
   # A kill at the plugin's limit takes engine + msbuild/dcc down mid-apply, past the engine's own
   # rollback; the plugin's limit must therefore sit ABOVE the engine's 30 min build timeout.
-  Check 'T1 CYCLE_FIX_TIMEOUT_MS is 35 min' ($kv['timeout.cyclefix'] -eq '2100000') "got: $($kv['timeout.cyclefix'])"
+  Check 'T1 CYCLE_FIX_TIMEOUT_MS is 120 min (run_cyclefix_timeouts.ps1 pins it above the engine)' ($kv['timeout.cyclefix'] -eq '7200000') "got: $($kv['timeout.cyclefix'])"
   Check 'T2 ... which is above the engine''s 30 min build timeout' ([int]"0$($kv['timeout.cyclefix'])" -gt 1800000) "got: $($kv['timeout.cyclefix'])"
   $frameSrc  = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.UsesDepsFrame.pas'))
   $editorSrc = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.Editor.pas'))
@@ -91,7 +111,7 @@ try {
     (($frameSrc -match '(?m)^\s*ENGINE_TIMEOUT_MS\s*=\s*180000;') -and ($frameSrc.Contains('AOutput, ENGINE_TIMEOUT_MS)'))) ''
   Check 'T4 the tab''s Dry run / Apply job runs under CYCLE_FIX_TIMEOUT_MS' ($frameSrc -match 'Job\.TimeoutMs\s*:=\s*CYCLE_FIX_TIMEOUT_MS;') ''
   Check 'T5 the menu dry run passes CYCLE_FIX_TIMEOUT_MS; other menu reports keep 180 s' `
-    ($editorSrc.Contains("DLRunReport(CycleFixMenuArgs(Proj, Db), 'drag-lint-circular-uses-fix.txt', CYCLE_FIX_TIMEOUT_MS);") -and ($editorSrc -match 'REPORT_TIMEOUT_MS\s*=\s*180000;') -and ($editorSrc.Contains('RunAndCaptureStdout(Cmd, Output, ATimeoutMs);'))) ''
+    ($editorSrc.Contains("DLRunReport(CycleFixMenuArgs(Proj, Db, GetActivePlatformForLibrary), 'drag-lint-circular-uses-fix.txt', CYCLE_FIX_TIMEOUT_MS);") -and ($editorSrc -match 'REPORT_TIMEOUT_MS\s*=\s*180000;') -and ($editorSrc.Contains('RunAndCaptureStdout(Cmd, Output, ATimeoutMs);'))) ''
   $runFix = [regex]::Match($frameSrc, 'procedure TCircularUsesSection\.RunFix\([\s\S]*?end; // procedure').Value
   Check 'T6 Dry run / Apply go through the JobQueue, not the blocking RunEngine' `
     (($runFix -ne '') -and $runFix.Contains('JobQueue.Enqueue(Job)') -and $runFix.Contains('Job.Busy       := True') -and -not $runFix.Contains('RunEngine(')) ''

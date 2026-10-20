@@ -38,6 +38,10 @@
   (n) `export; stdcall;` -- an unclassified directive refuses (stdcall is no longer silently lost).
   (o) `R1Title.R1TitleCount` -- any name qualified by the declaring unit refuses `qualified-ref`.
   (p) `TR1Local.R1TitleOf` -- a same-named method through a non-unit receiver does NOT refuse.
+  Final review F2 (RED on the 038c6b75 engine):
+  (q) r1extend with R1Title in neither the .dpr nor the .dproj: R1Form is its only user, so after the
+      cut it drops out of the program and the pointer stays nil -- `refused: unit-leaves-program`.
+      POSITIVE CONTROL: listed in the .dpr only -- still cut. A DCCReference alone -- still refused.
   The compile of every applied tree is run_cyclefix_r1_dcc.ps1 (needs RAD Studio).
 #>
 [CmdletBinding()]
@@ -395,7 +399,22 @@ try {
   $vp = Get-Variant 'r1objrcv' 'R1Form.pas' "class procedure TR1Form.Open(const pId: Integer);`r`nbegin`r`n" `
     ("type`r`n  TR1Local = class`r`n    class function R1TitleOf: string;`r`n  end;`r`n`r`nclass function TR1Local.R1TitleOf: string;`r`nbegin`r`n  Result := 'local';`r`nend;`r`n`r`nclass procedure TR1Form.Open(const pId: Integer);`r`nbegin`r`n  Writeln(TR1Local.R1TitleOf);`r`n")
   Check 'p1 `TR1Local.R1TitleOf` is no unit-qualified call: still cut by R1, no refusal' `
-    ($vp.Ok -and ($vp.Dump.verdict -eq 'mechanical') -and $vp.Text.Contains('by **routine-call inversion**')) "[$($vp.Dump.verdict) / $($vp.Dump.refusals)]"} finally {
+    ($vp.Ok -and ($vp.Dump.verdict -eq 'mechanical') -and $vp.Text.Contains('by **routine-call inversion**')) "[$($vp.Dump.verdict) / $($vp.Dump.refusals)]"
+  # --- (q) final review F2: the declaring unit must stay in the program after the cut -----------
+  Write-Host '== (q) R1Title used only by R1Form and not listed in the .dpr' -ForegroundColor Cyan
+  $dprLine   = "  R1Title in 'R1Title.pas',`r`n"
+  $dprojLine = "        <DCCReference Include=`"R1Title.pas`"/>`r`n"
+  $vq = Get-Variant 'r1unlisted' 'R1Extend.dpr' $dprLine '' 'R1Extend.dproj' $dprojLine ''
+  Check 'q1 refused: unit-leaves-program (R1Title would drop out; its initialization never assigns the pointer)' `
+    ($vq.Ok -and $vq.Text.Contains('refused: unit-leaves-program -- `R1Title` is used only by `R1Form.pas` and `R1Extend.dpr` does not list it') -and
+     ($vq.Dump.verdict -eq 'refused') -and (($vq.Dump.refusals -split ',') -contains 'unit-leaves-program')) "[$($vq.Dump.verdict) / $($vq.Dump.refusals)]"
+  $vq2 = Get-Variant 'r1dprlisted' 'R1Extend.dproj' $dprojLine ''
+  Check 'q2 positive control: listed in the .dpr (no DCCReference) -- still cut by R1, no refusal' `
+    ($vq2.Ok -and ($vq2.Dump.verdict -eq 'mechanical') -and $vq2.Text.Contains('by **routine-call inversion**')) "[$($vq2.Dump.verdict) / $($vq2.Dump.refusals)]"
+  $vq3 = Get-Variant 'r1dprojonly' 'R1Extend.dpr' $dprLine ''
+  Check 'q3 a DCCReference alone does not keep it linked: refused: unit-leaves-program' `
+    ($vq3.Ok -and ($vq3.Dump.verdict -eq 'refused') -and (($vq3.Dump.refusals -split ',') -contains 'unit-leaves-program')) "[$($vq3.Dump.verdict) / $($vq3.Dump.refusals)]"
+} finally {
   $env:DRAGLINT_TEST_DUMP_PLAN = $null
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }
