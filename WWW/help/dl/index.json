@@ -1310,7 +1310,7 @@
     "summary": "Exposes the index to MCP clients as 15 tools",
     "group": "editor-integration",
     "order": 110011,
-    "since": "1.32.0-alpha",
+    "since": "0.4.0-alpha",
     "file": "features/mcp-server.md"
   },
   {

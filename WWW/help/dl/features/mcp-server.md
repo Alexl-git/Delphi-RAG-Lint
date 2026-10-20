@@ -5,7 +5,7 @@ summary: Exposes the index to MCP clients as 15 tools
 product: DL
 group: editor-integration
 order: 110011
-since: 1.32.0-alpha
+since: 0.4.0-alpha
 status: shipped
 updated: 1.32.0-alpha
 ---

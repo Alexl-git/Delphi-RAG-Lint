@@ -4,7 +4,7 @@
   "group": "editor-integration",
   "owner": "ENGINE",
   "status": "shipped",
-  "since": "1.32.0-alpha",
+  "since": "0.4.0-alpha",
   "summary": "Exposes the index to MCP clients as 15 tools",
   "intro": "The drag-lint MCP server lets an MCP client (an AI assistant) query the index and run checks through 15 tools.",
   "wikiPage": "Register-MCP-Server",
