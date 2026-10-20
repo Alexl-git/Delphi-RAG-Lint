@@ -79,13 +79,14 @@ exe). `--no-compile` skips it. Exit 0 mechanical, 1 refused, 2 error (bad flags,
 `win64`; the IDE passes its active platform). The Release configuration is never built.
 
 **Scratch.** The default shadow tree and the gate's `C:\TEMP\draglint_cyclefix_<pid>_build\`
-(build logs, `reindex.log`, `all-iteration-<n>.json`) are **deleted when the run exits 0** -- the
-text dry run says so on its line: `Shadow tree: <dir> (deleted at exit; --shadow-out keeps it)`.
-A run that exits with any other code **keeps** them, so the logs its messages cite still exist,
-and names each kept dir on stderr:
-`drag-lint: note: cycles --fix exited 1; its scratch is kept for the logs it cites: <dir>`.
-A `--shadow-out` dir is never deleted. In the JSON, `shadow_kept` says whether `shadow` still
-exists after the run.
+(build logs, `reindex.log`, `all-iteration-<n>.json`) are **deleted at exit** -- the text dry run
+says so on its line: `Shadow tree: <dir> (deleted at exit; --shadow-out keeps it)`. A run whose
+output **cites a file in there** (a build log after an msbuild failure or timeout, `reindex.log`,
+`all-iteration-<n>.json`, ...) **keeps** them, so the cited file still exists, and names each kept
+dir on stderr: `drag-lint: note: cycles --fix exited 1; its scratch is kept for the files it cites: <dir>`.
+A message cites a scratch file only when it exists. An ordinary refusal cites none and keeps
+nothing. A `--shadow-out` dir is never deleted. In the JSON, `shadow_kept` says whether `shadow`
+still exists after the run.
 
 **Apply.** `--apply` runs the same plan, then:
 1. the baseline build must pass (else `dirty-baseline`, nothing written);

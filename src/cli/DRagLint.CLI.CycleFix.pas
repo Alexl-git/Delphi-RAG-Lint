@@ -451,6 +451,17 @@ end;
 var
   GShadowPick: string; // the default shadow dir this process picked (never one that existed); '' = not asked yet
   GBuildPick : string; // the same for the compile gate's _build dir
+  GScratchCited: Boolean; // a message of this run names a file in its scratch: DeleteDefaultScratch keeps it
+
+// The text a message uses to cite pPath, a file in this run's scratch: Format(pFmt, [pPath]) when the file
+// exists -- and the scratch is then kept at exit (E18 final review F5, amended) -- else '' (a message never
+// names a file that is not there, e.g. the log of a build killed before msbuild opened it).
+function CiteScratch(const pPath, pFmt: string): string;
+begin
+  if not TFile.Exists(pPath) then Exit('');
+  GScratchCited:= True;
+  Result:= Format(pFmt, [pPath]);
+end;
 
 // A scratch name under C:\TEMP that does not exist NOW: the pid-based name, else the same with a random
 // suffix. A leftover dir of an earlier process with this pid is therefore never reused (its contents
@@ -941,14 +952,14 @@ begin
   Result.Seconds:= Watch.Elapsed.TotalSeconds;
   if Result.TimedOut then
   begin
-    Result.Errors:= [Format('build-timeout: msbuild did not finish within %d ms and was killed; see %s', [Limit, Log])];
+    Result.Errors:= [Format('build-timeout: msbuild did not finish within %d ms and was killed', [Limit]) + CiteScratch(Log, '; see %s')];
     Exit;
   end;
   var Text:= if TFile.Exists(Log) then TFile.ReadAllText(Log, TEncoding.ANSI) else '';
   Result.Errors:= DccErrorLines(Text);
   Result.Ok:= ContainsStr(Text, 'BUILD_EXITCODE=0') and (Length(Result.Errors) = 0);
   if not Result.Ok and (Length(Result.Errors) = 0) then
-    Result.Errors:= ['msbuild failed without a dcc error line; see ' + Log];
+    Result.Errors:= ['msbuild failed without a dcc error line' + CiteScratch(Log, '; see %s')];
 end;
 
 function BaselineCompile(const pOpts: TCycleFixOptions; const pLogDir: string): TBuildOutcome;
@@ -1551,7 +1562,7 @@ begin
     Result.ReindexStatus:= 'failed';
     if Result.ReindexReason = '' then
       Result.ReindexReason:= if TimedOut then Format('index did not finish within %d s; the child was terminated', [CReindexTimeoutMs div CMsPerSecond])
-                             else Format('index exited %d (log %sreindex.log)', [Code, Dir]);
+                             else Format('index exited %d', [Code]) + CiteScratch(Dir + 'reindex.log', ' (log %s)');
     Result.ReindexReason:= Result.ReindexReason + Format(' -- run: drag-lint index --project "%s" --db "%s"', [Result.ReindexProject, pOpts.Db]);
     Result.Reason:= 're-index failed';
     Exit;
@@ -1567,7 +1578,7 @@ begin
   end;
   if Result.Actual = '' then
   begin
-    Result.Reason:= '`cycles` on the re-indexed DB printed nothing (see ' + OutFile + ')';
+    Result.Reason:= '`cycles` on the re-indexed DB printed nothing' + CiteScratch(OutFile, ' (see %s)');
     Exit;
   end;
   Result.Verified:= SameCyclesOutput(pView.Predicted, Result.Actual);
@@ -2277,13 +2288,13 @@ begin
   var TimedOut:= False;
   var Code:= RunBounded(Format('%s cycles --db %s --edges', [Quoted(ChildExe(pOpts)), Quoted(pOpts.Db)]), OutFile, CReindexTimeoutMs, TimedOut);
   if TimedOut or (Code <> 0) or not TFile.Exists(OutFile) then
-    raise EInvalidOperation.CreateFmt('could not list the circular groups of %s (exit %d, see %s)', [pOpts.Db, Code, OutFile]);
+    raise EInvalidOperation.CreateFmt('could not list the circular groups of %s (exit %d)%s', [pOpts.Db, Code, CiteScratch(OutFile, ' (see %s)')]);
   var Text:= TFile.ReadAllText(OutFile, TEncoding.ANSI);
   var Groups:= ParseListedGroups(Text);
   if Length(Groups) = 0 then
   begin
     if not Text.Contains(CNoGroupsLine) then
-      raise EInvalidOperation.CreateFmt('the group listing of %s is neither groups nor "%s" (see %s)', [pOpts.Db, CNoGroupsLine, OutFile]);
+      raise EInvalidOperation.CreateFmt('the group listing of %s is neither groups nor "%s"%s', [pOpts.Db, CNoGroupsLine, CiteScratch(OutFile, ' (see %s)')]);
     Exit;
   end;
   for var G in Groups do
@@ -2335,7 +2346,7 @@ begin
     if TimedOut or not (Doc is TJSONObject) then
     begin
       S.Code   := CExitError;
-      S.Error  := Format('iteration %d: the child run printed no cycle-fix/1 document (see %s)', [S.Iterations, OutFile]);
+      S.Error  := Format('iteration %d: the child run printed no cycle-fix/1 document', [S.Iterations]) + CiteScratch(OutFile, ' (see %s)');
       S.Stopped:= S.Error;
       Exit;
     end;
@@ -2494,13 +2505,13 @@ begin
 end;
 
 // The dry run's `Shadow tree: <dir>` line, told what becomes of the dir at exit (E18 final review F5): a
-// default dir is deleted when the run exits 0 and kept otherwise (DeleteDefaultScratch); --shadow-out is
-// never deleted and keeps the line as it is.
-function ShadowLineAtExit(const pLine: string; const pOpts: TCycleFixOptions; pExitCode: Integer): string;
+// default dir is deleted at exit unless a message of the run cites a file in its scratch (CiteScratch,
+// DeleteDefaultScratch); --shadow-out is never deleted and keeps the line as it is.
+function ShadowLineAtExit(const pLine: string; const pOpts: TCycleFixOptions): string;
 begin
   Result:= pLine;
   if (pOpts.ShadowOut <> '') or not StartsStr(CShadowLine, pLine) then Exit;
-  Result:= pLine + (if pExitCode = CExitMechanical then ' (deleted at exit; --shadow-out keeps it)' else ' (kept: the run failed)');
+  Result:= pLine + (if GScratchCited then ' (kept: this run cites a file in its scratch)' else ' (deleted at exit; --shadow-out keeps it)');
 end;
 
 function RunCycleFixGroups(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
@@ -2606,8 +2617,8 @@ begin
         if ShadowUsed <> '' then
         begin
           Doc.AddPair('shadow', ShadowUsed);
-          { F5: the default shadow is deleted when the run exits 0; --shadow-out or a failed run keeps it }
-          Doc.AddPair('shadow_kept', TJSONBool.Create((pOpts.ShadowOut <> '') or (Result <> CExitMechanical)));
+          { F5: the default shadow is deleted at exit unless the run cites a file in its scratch; --shadow-out is kept }
+          Doc.AddPair('shadow_kept', TJSONBool.Create((pOpts.ShadowOut <> '') or GScratchCited));
         end;
         Doc.AddPair('baseline', BaselineToJson(Gate));
         Doc.AddPair('refusals', TJSONArray.Create);
@@ -2623,7 +2634,7 @@ begin
     begin
       if pSccs.Count = 0 then Writeln(CCycleNone);
       for var Line in Playbook do Writeln(Line);
-      for var Line in Summary do Writeln(ShadowLineAtExit(Line, pOpts, Result));
+      for var Line in Summary do Writeln(ShadowLineAtExit(Line, pOpts));
       if (pSccs.Count > 0) and (Only = 0) and not Chosen then Writeln(CVerdictRefused);
       WriteNotPlanned(Only, pSccs.Count, Planned);
       var Timing:= TimingLine(Gate);
@@ -2653,10 +2664,10 @@ begin
 end;
 
 // E18 T13 fix round: the scratch THIS run created -- the default shadow dir (never a user's --shadow-out)
-// and the compile gate's _build dir -- is deleted when the run ends with exit 0. A run that ends with any
-// other code KEEPS it and names it on stderr (E18 final review F5): its messages cite the build logs,
-// reindex.log and all-iteration-<n>.json in there. DRAGLINT_CYCLEFIX_KEEP_SCRATCH=1 keeps it always,
-// for a test that inspects it.
+// and the compile gate's _build dir -- is deleted when the run ends. E18 final review F5 (amended): a run
+// whose output cites a file in there (CiteScratch: a build log, reindex.log, all-iteration-<n>.json, ...)
+// KEEPS it and names it on stderr, so the cited file exists; an ordinary refusal cites none and deletes it.
+// DRAGLINT_CYCLEFIX_KEEP_SCRATCH=1 keeps it always, for a test that inspects it.
 procedure DeleteDefaultScratch(const pOpts: TCycleFixOptions; pExitCode: Integer);
 const
   CKeepScratchVar = 'DRAGLINT_CYCLEFIX_KEEP_SCRATCH';
@@ -2666,11 +2677,11 @@ begin
     a default dir picked none and deletes nothing }
   var Dirs: TArray<string>:= [GBuildPick];
   if pOpts.ShadowOut = '' then Dirs:= Dirs + [GShadowPick];
-  if pExitCode <> CExitMechanical then
+  if GScratchCited then
   begin
     for var D in Dirs do
       if (D <> '') and TDirectory.Exists(D) then
-        Writeln(ErrOutput, Format('drag-lint: note: cycles --fix exited %d; its scratch is kept for the logs it cites: %s', [pExitCode, D]));
+        Writeln(ErrOutput, Format('drag-lint: note: cycles --fix exited %d; its scratch is kept for the files it cites: %s', [pExitCode, D]));
     Exit;
   end;
   for var D in Dirs do
@@ -2685,7 +2696,7 @@ end;
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 begin
-  Result:= CExitError; { an exception leaves this code, so the scratch it may cite is kept }
+  Result:= CExitError; { the exit code the kept-scratch note prints when an exception leaves this code }
   try
     if SameText(pOpts.Part, CPartAll) then Result:= RunAllSelected(pOpts, pSccs, pGraph)
     else Result:= RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore);

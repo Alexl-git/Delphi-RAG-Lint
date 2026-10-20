@@ -25,8 +25,8 @@ No extractor change (1.22.0-alpha): no re-parse.
   `blocked-symbol`, `unresolved-edge`, `edge-still-used`, ...; the full list is on the wiki
   page). Every build is `msbuild /p:Config=Debug` for `--platform` (default win64). A rollback
   restores the sources, not the DCUs the failed build wrote: rebuild after a rollback. The
-  default scratch (shadow tree, build logs) is deleted when the run exits 0 and kept -- and
-  named on stderr -- when it does not, so the logs a failure cites exist; the dry run's
+  default scratch (shadow tree, build logs) is deleted at exit unless the run's output cites a
+  file in it; then it is kept and named on stderr, so the cited file exists; the dry run's
   `Shadow tree:` line says which. A `--library-db` that does not open answers `--format json`
   with a `cycle-fix/1` error document. Without `--cycle` / `--unit` the text output names the groups the run did
   not plan, with a `--cycle <n>` hint. `info --json` capability `cycle_fix`.

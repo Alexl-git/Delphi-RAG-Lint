@@ -12,8 +12,8 @@
   Controls: (c1) the file comparison is not vacuous -- one flipped byte in a shadow copy is
   reported; (c2) the shadow holds the new leaf units; (c3) with no --shadow-out the default dir
   C:\TEMP\draglint_cyclefix_<pid>\ is announced and exists; (c4) a successful run deletes it and says so on the
-  Shadow line; (c7, final review F5) a FAILED run keeps its scratch, names it on stderr, and the log its
-  message cites still exists (needs RAD Studio, else SKIP).
+  Shadow line; final review F5 (amended; needs RAD Studio, else SKIP): (c7) a run whose message cites a scratch
+  file keeps it and names it on stderr; (c7b) a log never created is never cited; (c8) a refused dry run keeps nothing.
   The platform library is never opened in place: R2 uses a scratch copy (SKIPped without one).
   Run from any CWD, pwsh 7.
 #>
@@ -198,32 +198,66 @@ try {
   Check 'c4: POSITIVE CONTROL an explicit --shadow-out dir survives the run, with files' ((Test-Path $own) -and (@(Get-ChildItem $own -Recurse -File).Count -gt 0)) ''
   # final review F5: the Shadow line says what becomes of a default dir; a --shadow-out line has no such note
   Check 'c4: the Shadow line of a successful run says "(deleted at exit; --shadow-out keeps it)"' ($txt2 -match '(?m)^Shadow tree: \S+ \(deleted at exit; --shadow-out keeps it\)\s*$') $txt2
-  # c7 (final review F5): a run that FAILS keeps its scratch and names it on stderr -- its messages cite the
-  # logs in there. The 1 ms build seam (project under TEMP) makes the baseline time out: exit 1, build-timeout.
+  # Final review F5 (amended): the default scratch is KEPT only when the run's output cites a file in it,
+  # and a message cites a scratch file only when it exists. Every case below needs RAD Studio (a real build).
   $rsv = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
-  if (Test-Path $rsv) {
-    $fake7 = 'failrun' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
-    $build7 = Join-Path $ProductRoot "draglint_cyclefix_${fake7}_build"
-    $err7f = Join-Path $WorkDir 'c7-stderr.txt'
-    $env:DRAGLINT_TEST_SCRATCH_PID = $fake7
-    $env:DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS = '1'
+  # Runs `cycles --fix` on pDir's CircularDemo.dproj with a planted scratch pid; returns exit, JSON, stderr, dirs.
+  function Run-Scratch([string]$Tag, [string]$Dir, [string]$Db, [hashtable]$Env = @{}) {
+    $fk = $Tag + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+    $errf = Join-Path $WorkDir "$Tag-stderr.txt"
+    $env:DRAGLINT_TEST_SCRATCH_PID = $fk
+    foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $Env[$k]) }
     try {
-      $out7 = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --cycle 1 --library-db none --format json 2>$err7f | Out-String)
-      $code7 = $LASTEXITCODE
-    } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null; $env:DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS = $null }
-    $err7 = [IO.File]::ReadAllText($err7f)
-    $j7 = try { $out7 | ConvertFrom-Json } catch { $null }
-    $msg7 = if ($j7) { "$(@($j7.baseline.errors)[0])" } else { '' }
+      $o = (& $Exe cycles --fix --project (Join-Path $Dir 'CircularDemo.dproj') --db $Db --cycle 1 --library-db none --format json 2>$errf | Out-String)
+      $code = $LASTEXITCODE
+    } finally {
+      $env:DRAGLINT_TEST_SCRATCH_PID = $null
+      foreach ($k in $Env.Keys) { [Environment]::SetEnvironmentVariable($k, $null) }
+    }
+    $j = try { $o | ConvertFrom-Json } catch { $null }
+    return @{ Exit = $code; Json = $j; Out = $o; Err = [IO.File]::ReadAllText($errf)
+              Build = (Join-Path $ProductRoot "draglint_cyclefix_${fk}_build"); Shadow = (Join-Path $ProductRoot "draglint_cyclefix_$fk") }
+  }
+  function Clear-Planted($r) { foreach ($d in $r.Build, $r.Shadow) { if (Test-Path $d) { [IO.Directory]::Delete($d, $true) } } }
+  if (Test-Path $rsv) {
+    # c7: a msbuild failure with no dcc line cites its log -> the scratch is kept, the log exists, stderr names the dir.
+    # The .dproj is broken AFTER indexing (text after </Project>: an msbuild XML error, not a dcc error).
+    $bp = Join-Path $WorkDir 'c7-proj'
+    Copy-Tree $Demo $bp
+    $bdb = Join-Path $WorkDir 'c7.sqlite'
+    & $Exe index --project (Join-Path $bp 'CircularDemo.dproj') --db $bdb *> (Join-Path $WorkDir 'c7-index.log')
+    [IO.File]::AppendAllText((Join-Path $bp 'CircularDemo.dproj'), "not xml`r`n")
+    $r7 = Run-Scratch 'cite' $bp $bdb
+    $msg7 = if ($r7.Json) { "$(@($r7.Json.baseline.errors)[0])" } else { '' }
     $cited = [regex]::Match($msg7, 'see (\S+)$').Groups[1].Value
-    Check 'c7: SANITY the baseline timed out: exit 1, a build-timeout message citing a log' ($code7 -eq 1 -and $msg7 -like 'build-timeout:*' -and $cited -ne '') "exit=$code7 $out7"
-    # the 1 ms kill lands before msbuild opens its log, so the check is on the dir the message cites: it
-    # still exists and holds the build script this run wrote (old behaviour: the whole dir was deleted)
-    $citedDir = if ($cited -ne '') { Split-Path $cited -Parent } else { '' }
-    Check 'c7: the dir of the log the message cites still exists after the run, with its build script (the scratch was kept)' `
-      (($citedDir -ne '') -and $cited.StartsWith($build7) -and (Test-Path -LiteralPath (Join-Path $citedDir 'baseline.bat'))) "cited=$cited"
-    Check 'c7: stderr names the kept scratch dir' ($err7.Contains('its scratch is kept for the logs it cites: ' + $build7)) $err7
-    if (Test-Path $build7) { [IO.Directory]::Delete($build7, $true) }
-  } else { Write-Host '  SKIP c7: no RAD Studio (rsvars.bat)' -ForegroundColor Yellow }
+    Check 'c7: SANITY the baseline fails without a dcc line: exit 1, a message citing a log in the run''s _build dir' `
+      ($r7.Exit -eq 1 -and $msg7 -like 'msbuild failed without a dcc error line; see *' -and $cited.StartsWith($r7.Build)) "exit=$($r7.Exit) $($r7.Out)"
+    Check 'c7: the cited log still exists after the run (the scratch was kept)' (($cited -ne '') -and (Test-Path -LiteralPath $cited)) "cited=$cited"
+    Check 'c7: stderr names the kept scratch dir' ($r7.Err.Contains('its scratch is kept for the files it cites: ' + $r7.Build)) $r7.Err
+    Clear-Planted $r7
+    # c7b: a build killed before msbuild opened its log cites NO log, and then nothing is kept (1 ms seam, project under TEMP).
+    $r7b = Run-Scratch 'kill' $dproj $ddb @{ DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS = '1' }
+    $msg7b = if ($r7b.Json) { "$(@($r7b.Json.baseline.errors)[0])" } else { '' }
+    $cited7b = [regex]::Match($msg7b, 'see (\S+)$').Groups[1].Value
+    Check 'c7b: SANITY exit 1, build-timeout' ($r7b.Exit -eq 1 -and $msg7b -like 'build-timeout:*') "exit=$($r7b.Exit) $($r7b.Out)"
+    Check 'c7b: a cited log exists (its dir kept); with no citation the run leaves no scratch dir' `
+      ((($cited7b -ne '') -and (Test-Path -LiteralPath $cited7b)) -or (($cited7b -eq '') -and -not (Test-Path $r7b.Build) -and -not (Test-Path $r7b.Shadow))) "msg=$msg7b"
+    Clear-Planted $r7b
+    # c8: an ordinary refusal (a file touched after indexing: stale-file, exit 1) builds the baseline, cites
+    # no scratch file, and deletes its scratch like a success.
+    $sp = Join-Path $WorkDir 'c8-proj'
+    Copy-Tree $Demo $sp
+    $sdb8 = Join-Path $WorkDir 'c8.sqlite'
+    & $Exe index --project (Join-Path $sp 'CircularDemo.dproj') --db $sdb8 *> (Join-Path $WorkDir 'c8-index.log')
+    Start-Sleep -Milliseconds 1100
+    [IO.File]::AppendAllText((Join-Path $sp 'DemoLogger.pas'), "`r`n")
+    $r8 = Run-Scratch 'refuse' $sp $sdb8
+    Check 'c8: SANITY a refused dry run with a baseline build: exit 1, stale-file, baseline ok' `
+      ($r8.Exit -eq 1 -and $r8.Json -and $r8.Json.baseline.status -eq 'ok' -and @($r8.Json.cycles[0].refusals | Where-Object { $_.kind -eq 'stale-file' }).Count -ge 1) $r8.Out
+    Check 'c8: the refused run leaves no draglint_cyclefix_<pid>_* dir and prints no kept-scratch note' `
+      (-not (Test-Path $r8.Build) -and -not (Test-Path $r8.Shadow) -and -not $r8.Err.Contains('scratch is kept')) "$($r8.Build) $($r8.Err)"
+    Clear-Planted $r8
+  } else { Write-Host '  SKIP c7/c7b/c8: no RAD Studio (rsvars.bat)' -ForegroundColor Yellow }
   # --- fix round 1 -------------------------------------------------------------------------
   # Index a fresh demo copy after Patch(proj) changed it; run `cycles --fix` with an explicit shadow dir.
   function Run-Patched([string]$Tag, [scriptblock]$Patch, [hashtable]$Env = @{}, [string[]]$Extra = @()) {
