@@ -22,6 +22,13 @@ Assert-True ([IO.File]::ReadAllText("$out\robots.txt").Contains('Sitemap: https:
 $dlp = [IO.File]::ReadAllText("$out\downloads\index.html")
 Assert-True ($dlp.Contains('href="https://github.com/Alexl-git/YADF/releases/latest"')) 'download link'
 Assert-True ($dlp.Contains('v1.2.3-alpha')) 'version on downloads'
+Assert-True ($idx.Contains('<nav class="menu"><a href="/products/">Products</a><a href="/articles/">')) 'Products first in the menu'
+Assert-True (Test-Path "$out\products\index.html") 'products index exists'
+Assert-True ([IO.File]::ReadAllText("$out\products\index.html").Contains('href="/products/yadf/"')) 'products index lists yadf'
+Assert-True ($dlp.Contains('<h2><a href="/products/dl/">DL (drag-lint)</a></h2>')) 'downloads name links to product page'
+Assert-True ($idx.Contains('class="dl-name" href="/products/dl/"')) 'sidebar name links to product page'
+Assert-True ($idx.Contains('<a class="meta" href="https://github.com/Alexl-git/YADF/releases/latest">Download</a>')) 'sidebar Download link'
+Assert-True ([IO.File]::ReadAllText("$out\sitemap.xml").Contains('<loc>https://www.delphi-rag-lint.com/products/</loc>')) 'sitemap has products index'
 
 [xml]$w = [IO.File]::ReadAllText("$out\web.config")
 $csp = $w.configuration.'system.webServer'.httpProtocol.customHeaders.add | Where-Object name -eq 'Content-Security-Policy'

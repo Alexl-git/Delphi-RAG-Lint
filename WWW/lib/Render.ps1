@@ -44,15 +44,15 @@ function Get-ShortName($Product) { if ($Product.short) { $Product.short } else {
 
 function New-Menu($Config) {
     $m = $Config.micronite
-    '<nav class="menu"><a href="/articles/">Articles</a><a href="/downloads/">Downloads</a>' +
+    '<nav class="menu"><a href="/products/">Products</a><a href="/articles/">Articles</a><a href="/downloads/">Downloads</a>' +
     '<a href="/help/">Help</a><a href="/community/">Community</a>' +
     "<a class=""htr"" href=""$($m.url)"">$(ConvertTo-HtmlText $m.name)</a></nav>"
 }
 
 function New-ReleaseBox($Product, $Release) {
-    "<div class=""dl"" data-repo=""$($Product.repo)""><a class=""dl-name"" href=""$($Release.Url)"">$(ConvertTo-HtmlText $Product.name)</a>" +
+    "<div class=""dl"" data-repo=""$($Product.repo)""><a class=""dl-name"" href=""/products/$($Product.id)/"">$(ConvertTo-HtmlText $Product.name)</a>" +
     "<span class=""meta""><span class=""rel-tag"">$(ConvertTo-HtmlText $Release.Tag)</span> - <span class=""rel-date"">$($Release.Date)</span></span>" +
-    "<a class=""meta"" href=""$($Release.Changelog)"">Change log</a></div>"
+    "<a class=""meta"" href=""$($Release.Url)"">Download</a><a class=""meta"" href=""$($Release.Changelog)"">Change log</a></div>"
 }
 
 function New-Sidebar($Config, $Releases, $Articles, [string]$Skip = '') {

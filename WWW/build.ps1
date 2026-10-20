@@ -53,6 +53,10 @@ try {
         Get-ChildItem -LiteralPath $p.Dir -File | Where-Object { $_.Extension -in '.png', '.jpg', '.jpeg' } |
             Copy-Item -Destination (Join-Path $Out "products\$($p.Id)\")
     }
+    $pl = foreach ($p in $cfg.products) {
+        "<li><a class=""title"" href=""/products/$($p.id)/"">$(ConvertTo-HtmlText $p.name)</a><p>$(ConvertTo-HtmlText $p.blurb)</p></li>"
+    }
+    Add-Page '/products/' 'Products' 'DL (drag-lint) and YADF.' "<div class=""page""><h1>Products</h1><ul class=""list"">$($pl -join "`n")</ul></div>"
     $li = foreach ($a in $articles) {
         "<li><a class=""title"" href=""/articles/$($a.Slug)/"">$(ConvertTo-HtmlText $a.Title)</a><span class=""meta"">$($a.Date)</span><p>$(ConvertTo-HtmlText $a.Summary)</p></li>"
     }
@@ -60,7 +64,7 @@ try {
 
     $prod = for ($i = 0; $i -lt $cfg.products.Count; $i++) {
         $p = $cfg.products[$i]; $r = $releases[$i]
-        "<div class=""product"" data-repo=""$($p.repo)""><h2>$(ConvertTo-HtmlText $p.name)</h2><p>$(ConvertTo-HtmlText $p.blurb)</p>" +
+        "<div class=""product"" data-repo=""$($p.repo)""><h2><a href=""/products/$($p.id)/"">$(ConvertTo-HtmlText $p.name)</a></h2><p>$(ConvertTo-HtmlText $p.blurb)</p>" +
         "<span class=""meta"">Latest: <span class=""rel-tag"">$(ConvertTo-HtmlText $r.Tag)</span> - <span class=""rel-date"">$($r.Date)</span></span>" +
         "<a class=""btn"" href=""$($r.Url)"">Download (GitHub release)</a><a class=""btn"" href=""$($r.Changelog)"">Change log</a></div>"
     }
