@@ -156,7 +156,7 @@ try {
     $txt = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null | Out-String)
   } finally { $env:DRAGLINT_CYCLEFIX_KEEP_SCRATCH = $null }
   $m = [regex]::Match($txt, '(?m)^Shadow tree: (.+?)\s*$')
-  Check 'c3: text output announces "Shadow tree: C:\TEMP\draglint_cyclefix_<pid>"' ($m.Success -and $m.Groups[1].Value -match '^C:\\TEMP\\draglint_cyclefix_\d+\\?$') $txt
+  Check 'c3: text output announces "Shadow tree: <product root>\draglint_cyclefix_<pid>"' ($m.Success -and $m.Groups[1].Value -match '^C:\\TEMP\\draglint_cyclefix_\d+\\?$') $txt
   Check 'c3: that directory exists and holds files' ($m.Success -and (Test-Path $m.Groups[1].Value) -and (@(Get-ChildItem $m.Groups[1].Value -Recurse -File).Count -gt 0)) ''
   if ($m.Success -and (Test-Path $m.Groups[1].Value)) { [IO.Directory]::Delete($m.Groups[1].Value, $true) }
   # c4: without the seam the product deletes the default shadow it created; a --shadow-out dir is never deleted
@@ -166,8 +166,11 @@ try {
     ($m2.Success -and $m2.Groups[1].Value -match '^C:\\TEMP\\draglint_cyclefix_\d+\\?$' -and -not (Test-Path $m2.Groups[1].Value) -and -not (Test-Path ($m2.Groups[1].Value.TrimEnd('\') + '_build'))) $txt2
   if ($m2.Success -and (Test-Path $m2.Groups[1].Value)) { [IO.Directory]::Delete($m2.Groups[1].Value, $true) }
   # c5: a leftover dir with the would-be name (an earlier process with this pid) is never reused and never deleted
+  # the planted dirs must sit where the PRODUCT looks (its fixed default root, CycleFix.pas DefaultShadowDir),
+  # so they cannot live in this run's WorkDir; their names are per run (a GUID through $fake)
+  $ProductRoot = 'C:\TEMP'
   $fake = 'planted' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
-  $plShadow = "C:\TEMP\draglint_cyclefix_$fake"; $plBuild = "C:\TEMP\draglint_cyclefix_${fake}_build"
+  $plShadow = Join-Path $ProductRoot "draglint_cyclefix_$fake"; $plBuild = Join-Path $ProductRoot "draglint_cyclefix_${fake}_build"
   foreach ($pl in $plShadow, $plBuild) { New-Item -ItemType Directory -Force $pl | Out-Null; [IO.File]::WriteAllText((Join-Path $pl 'marker.txt'), 'keep me') }
   $env:DRAGLINT_TEST_SCRATCH_PID = $fake
   try {
@@ -176,14 +179,14 @@ try {
   } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null }
   $m3 = [regex]::Match($txt3, '(?m)^Shadow tree: (.+?)\s*$')
   Check 'c5: the run still succeeds (exit 0) and announces a DIFFERENT shadow dir than the planted name' `
-    ($code3 -eq 0 -and $m3.Success -and $m3.Groups[1].Value.TrimEnd('\') -ne $plShadow -and $m3.Groups[1].Value -like "C:\TEMP\draglint_cyclefix_${fake}_*") $txt3
+    ($code3 -eq 0 -and $m3.Success -and $m3.Groups[1].Value.TrimEnd('\') -ne $plShadow -and $m3.Groups[1].Value -like (Join-Path $ProductRoot "draglint_cyclefix_${fake}_*")) $txt3
   Check 'c5: the planted dirs and their marker files survive' `
     ((Get-Content (Join-Path $plShadow 'marker.txt') -Raw) -eq 'keep me' -and (Get-Content (Join-Path $plBuild 'marker.txt') -Raw) -eq 'keep me' -and @(Get-ChildItem $plShadow -Recurse -File).Count -eq 1) ''
   Check 'c5: the dir this run created is gone' ($m3.Success -and -not (Test-Path $m3.Groups[1].Value)) ''
   foreach ($pl in $plShadow, $plBuild) { if (Test-Path $pl) { [IO.Directory]::Delete($pl, $true) } }
   # c6: a run that needs no default dir (validation error) deletes nothing either
   $fake2 = 'planted' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
-  $pl2 = "C:\TEMP\draglint_cyclefix_$fake2"; New-Item -ItemType Directory -Force $pl2 | Out-Null; [IO.File]::WriteAllText((Join-Path $pl2 'marker.txt'), 'keep me')
+  $pl2 = Join-Path $ProductRoot "draglint_cyclefix_$fake2"; New-Item -ItemType Directory -Force $pl2 | Out-Null; [IO.File]::WriteAllText((Join-Path $pl2 'marker.txt'), 'keep me')
   $env:DRAGLINT_TEST_SCRATCH_PID = $fake2
   try { $null = (& $Exe cycles --fix --db $ddb --library-db none 2>$null | Out-String); $code4 = $LASTEXITCODE } finally { $env:DRAGLINT_TEST_SCRATCH_PID = $null }
   Check 'c6: a --fix run that fails validation (no --project: exit 2) leaves the planted dir alone' ($code4 -eq 2 -and (Test-Path (Join-Path $pl2 'marker.txt'))) "exit=$code4"
