@@ -20,6 +20,7 @@ uses
   , FeatureGen.HelpImport in '..\FeatureGen.HelpImport.pas'
   , FeatureGen.Wiki in '..\FeatureGen.Wiki.pas'
   , FeatureGen.Check in '..\FeatureGen.Check.pas'
+  , FeatureGen.Commands in '..\FeatureGen.Commands.pas'
   , System.Generics.Collections
   , System.Generics.Defaults
   , System.RegularExpressions
@@ -2015,6 +2016,261 @@ begin
   end;
 end;
 
+{ ---- Task 9: registry edit commands (run on a scratch COPY of the repo's registry, never on features\) ---- }
+
+function CmdRepo(const pRepo, pName: string): string;
+var
+  lRel: string;
+begin
+  Result := FreshDir(pName);
+  for lRel in ['features', 'docs\wiki'] do
+    TDirectory.Copy(TPath.Combine(pRepo, lRel), TPath.Combine(Result, lRel));
+  for lRel in ['CHANGELOG.md', 'src\core\DRagLint.Core.Model.pas', 'src\delphi-plugin\DragLint.Plugin.ReportText.pas'] do
+    CopyFileTo(pRepo, Result, lRel);
+end;
+
+function RunCmd(const pVerb: string; const pArgs: TArray<string>; out pText: string): Integer;
+var
+  lSb: TStringBuilder;
+begin
+  lSb := TStringBuilder.Create;
+  try
+    Result := RunRegistryCommand(pVerb, pArgs, '',
+      procedure(const pLine: string)
+      begin
+        lSb.AppendLine(pLine);
+      end);
+    pText := lSb.ToString;
+  finally
+    lSb.Free;
+  end;
+end;
+
+function AddProbeArgs(const pCopy: string; const pGroup: string = 'maintenance'; const pOwner: string = 'CONVERTER'): TArray<string>;
+begin
+  Result := ['--repo', pCopy, '--id', 'zz-probe', '--title', 'Probe entry', '--group', pGroup, '--owner', pOwner,
+    '--summary', 'A probe entry for the edit command tests', '--intro', 'Probe intro.', '--wiki-page', 'Home',
+    '--surface', 'cli:zz-verb/sub|zz-verb sub --x ;; shortcut:Ctrl+Alt+Z', '--related', 'outline,ask,outline',
+    '--aliases', 'bb,aa,bb', '--by', 'tester'];
+end;
+
+procedure TestCmdAdd(const pRepo: string);
+var
+  lCopy, lOut, lFile, lRaw: string;
+  lExit: Integer;
+  lVal: TJSONValue;
+  lReg: TRegistry;
+  lF: TArray<TFinding>;
+begin
+  lCopy := CmdRepo(pRepo, 'cmd-add');
+  lExit := RunCmd('add', AddProbeArgs(lCopy), lOut);
+  lFile := TPath.Combine(lCopy, 'features\entries\zz-probe.json');
+  Check('Cmd.AddWritesCanonical.exit', (lExit = 0) and TFile.Exists(lFile), IntToStr(lExit) + ' ' + lOut);
+  if not TFile.Exists(lFile) then
+    Exit;
+  lRaw := ReadBytesText(lFile);
+  lVal := ReadJsonFile(lFile);
+  try
+    Check('Cmd.AddWritesCanonical.bytes', lRaw = CanonicalJson(lVal, EntryKeyOrder(TPath.Combine(lCopy, 'features\schema\entry.schema.json'))), lRaw);
+  finally
+    lVal.Free;
+  end;
+  // CanonicalJson paths pinned through add: related / aliases deduped and sorted, surface keys in schema order,
+  // defaults (status, audience, since, lastVerified) filled, unset optional keys absent.
+  Check('Cmd.AddWritesCanonical.dedupeSorted', (Pos('"related": ["ask", "outline"]', lRaw) > 0) and (Pos('"aliases": ["aa", "bb"]', lRaw) > 0), lRaw);
+  Check('Cmd.AddWritesCanonical.surfaceOrder', Pos('"type": "cli",'#13#10'      "verb": "zz-verb",'#13#10'      "sub": "sub",'#13#10'      "example": "zz-verb sub --x"', lRaw) > 0, lRaw);
+  Check('Cmd.AddWritesCanonical.defaults', (Pos('"status": "shipped"', lRaw) > 0) and (Pos('"audience": "both"', lRaw) > 0)
+    and (Pos('"by": "tester"', lRaw) > 0) and (Pos('"notes"', lRaw) = 0), lRaw);
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(lCopy);
+    lF := RunChecks(lReg, nil, clWellFormed);
+    Check('Cmd.AddWritesCanonical.wellFormed', FindingsNaming(lF, 'zz-probe') = '', FindingsNaming(lF, 'zz-probe'));
+  finally
+    lReg.Free;
+  end;
+  lExit := RunCmd('add', AddProbeArgs(lCopy), lOut);
+  Check('Cmd.AddRefusesExisting', (lExit = 1) and (Pos('already exists', lOut) > 0), lOut);
+end;
+
+procedure TestCmdAddRefusals(const pRepo: string);
+var
+  lCopy, lOut: string;
+  lExit: Integer;
+  lArgs: TArray<string>;
+begin
+  lCopy := CmdRepo(pRepo, 'cmd-add-refuse');
+  lArgs := AddProbeArgs(lCopy, 'maintenence');
+  lExit := RunCmd('add', lArgs, lOut);
+  Check('Cmd.AddRejectsUnknownGroup', (lExit = 1) and (Pos('nearest: maintenance', lOut) > 0)
+    and not TFile.Exists(TPath.Combine(lCopy, 'features\entries\zz-probe.json')), IntToStr(lExit) + ' ' + lOut);
+  lArgs := AddProbeArgs(lCopy, 'maintenance', 'CONVERTOR');
+  lExit := RunCmd('add', lArgs, lOut);
+  Check('Cmd.AddRejectsUnknownOwner', (lExit = 1) and (Pos('nearest: CONVERTER', lOut) > 0), IntToStr(lExit) + ' ' + lOut);
+  lExit := RunCmd('add', AddProbeArgs(lCopy) + ['--title', 'Caf' + Char($E9)], lOut);
+  Check('Cmd.AddRefusesNonAscii', (lExit = 1) and not TFile.Exists(TPath.Combine(lCopy, 'features\entries\zz-probe.json')), IntToStr(lExit) + ' ' + lOut);
+  lExit := RunCmd('add', ['--repo', lCopy, '--title', 'x'], lOut);
+  Check('Cmd.AddNeedsId', (lExit = 1) and (Pos('--id is required', lOut) > 0), lOut);
+  lExit := RunCmd('add', ['--repo', lCopy, '--bogus', 'x'], lOut);
+  Check('Cmd.UnknownOptionIsUsageError', lExit = 2, lOut);
+  lExit := RunCmd('add', ['--repo'], lOut);
+  Check('Cmd.MissingValueIsUsageError', lExit = 2, lOut);
+  // a new group + team are created atomically with the entry
+  lArgs := AddProbeArgs(lCopy, 'zz-group', 'ZZTEAM');
+  lExit := RunCmd('add', lArgs + ['--new-group', '--group-title', 'Zz group', '--group-summary', 'Probe group',
+    '--new-team', '--team-title', 'Zz team', '--team-summary', 'Probe team'], lOut);
+  Check('Cmd.AddNewGroupAndTeam', (lExit = 0) and (Pos('{ "id": "zz-group", "title": "Zz group", "order": ', ReadBytesText(TPath.Combine(lCopy, 'features\groups.json'))) > 0)
+    and (Pos('{ "id": "ZZTEAM", "title": "Zz team", "order": ', ReadBytesText(TPath.Combine(lCopy, 'features\teams.json'))) > 0), lOut);
+end;
+
+procedure TestCmdUpdate(const pRepo: string);
+var
+  lCopy, lOut, lFile, lBefore, lRaw: string;
+  lExit: Integer;
+begin
+  lCopy := CmdRepo(pRepo, 'cmd-update');
+  RunCmd('add', AddProbeArgs(lCopy), lOut);
+  lFile := TPath.Combine(lCopy, 'features\entries\zz-probe.json');
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'zz-probe', '--set', 'notes=hello ;; aliases=["zz","yy","zz"] ;; homeOrder=7'], lOut);
+  lRaw := ReadBytesText(lFile);
+  Check('Cmd.UpdateSetAndRemove.set', (lExit = 0) and (Pos('"notes": "hello"', lRaw) > 0) and (Pos('"aliases": ["yy", "zz"]', lRaw) > 0)
+    and (Pos('"homeOrder": 7', lRaw) > 0), lOut + lRaw);
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'zz-probe', '--set', 'notes=keep ;; homeOrder='], lOut);
+  lRaw := ReadBytesText(lFile);
+  Check('Cmd.UpdateSetAndRemove.removeEmptyValue', (lExit = 0) and (Pos('"homeOrder"', lRaw) = 0) and (Pos('"notes": "keep"', lRaw) > 0), lOut + lRaw);
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'zz-probe', '--set', 'notes='], lOut);
+  lRaw := ReadBytesText(lFile);
+  Check('Cmd.UpdateSetAndRemove.remove', (lExit = 0) and (Pos('"notes"', lRaw) = 0), lOut + lRaw);
+  lBefore := lRaw;
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'zz-probe', '--set', 'status=bogus'], lOut);
+  Check('Cmd.UpdateRefusesInvalid', (lExit = 1) and (Pos('would not be valid; file untouched', lOut) > 0) and (ReadBytesText(lFile) = lBefore), lOut);
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'zz-nope', '--set', 'notes=x'], lOut);
+  Check('Cmd.UpdateUnknownId', (lExit = 1) and (Pos('no entry', lOut) > 0), lOut);
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'zz-probe'], lOut);
+  Check('Cmd.UpdateNeedsSet', (lExit = 1) and (Pos('--set field=value is required', lOut) > 0), lOut);
+end;
+
+procedure TestCmdUpdateNormalisesHandEdits(const pRepo: string);
+var
+  lCopy, lOut, lFile, lRaw: string;
+  lExit: Integer;
+begin
+  // A hand-edited, non-canonical entry: empty string, unsorted + duplicated related. Any update re-writes it canonical,
+  // which pins CanonicalJson's empty-drop and dedupe paths on input the real (already canonical) entries never exercise.
+  lCopy := CmdRepo(pRepo, 'cmd-update-hand');
+  lFile := TPath.Combine(lCopy, 'features\entries\outline.json');
+  lRaw := ReadBytesText(lFile);
+  ReplaceInFile(lFile, '"audience": "both"', '"audience": "both", "notes": "", "related": ["ask", "about-and-status", "ask"]');
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'outline', '--set', 'notes=n'], lOut);
+  lRaw := ReadBytesText(lFile);
+  Check('Cmd.UpdateRewritesNonCanonical', (lExit = 0) and (Pos('"related": ["about-and-status", "ask"]', lRaw) > 0) and (Pos('"notes": "n"', lRaw) > 0), lOut + lRaw);
+  ReplaceInFile(lFile, '"notes": "n"', '"notes": "", "pitfalls": []');
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'outline', '--set', 'homeOrder=3'], lOut);
+  lRaw := ReadBytesText(lFile);
+  Check('Cmd.UpdateDropsEmpty', (lExit = 0) and (Pos('"notes"', lRaw) = 0) and (Pos('"pitfalls"', lRaw) = 0) and (Pos('"homeOrder": 3', lRaw) > 0), lOut + lRaw);
+end;
+
+procedure TestCmdDeprecate(const pRepo: string);
+var
+  lCopy, lOut, lRaw: string;
+  lExit: Integer;
+begin
+  lCopy := CmdRepo(pRepo, 'cmd-deprecate');
+  RunCmd('add', AddProbeArgs(lCopy), lOut);
+  lExit := RunCmd('deprecate', ['--repo', lCopy, '--id', 'zz-probe', '--superseded-by', 'outline', '--removed-in', '1.0.0'], lOut);
+  lRaw := ReadBytesText(TPath.Combine(lCopy, 'features\entries\zz-probe.json'));
+  Check('Cmd.DeprecateSetsFields', (lExit = 0) and (Pos('"status": "deprecated"', lRaw) > 0) and (Pos('"supersededBy": "outline"', lRaw) > 0)
+    and (Pos('"removedIn": "1.0.0"', lRaw) > 0), lOut + lRaw);
+  lExit := RunCmd('deprecate', ['--repo', lCopy], lOut);
+  Check('Cmd.DeprecateNeedsId', (lExit = 1) and (Pos('--id is required', lOut) > 0), lOut);
+end;
+
+procedure TestCmdFindAndBlast(const pRepo: string);
+var
+  lCopy, lOut, lWith: string;
+  lExit: Integer;
+begin
+  lCopy := CmdRepo(pRepo, 'cmd-find');
+  lExit := RunCmd('find', ['--repo', lCopy, '--text', 'outline'], lOut);
+  Check('Cmd.Find.hits', (lExit = 0) and (Pos('outline', lOut) > 0), lOut);
+  lExit := RunCmd('find', ['--repo', lCopy, '--text', 'zz-no-such-thing-zz'], lOut);
+  Check('Cmd.Find.noHitsExit1', lExit = 1, lOut);
+  lExit := RunCmd('find', ['--repo', lCopy, '--text', 'unit-not-in-dpr'], lOut);
+  Check('Cmd.FindIncludesChildrenFlag.without', Pos('rule.unit-not-in-dpr', lOut) = 0, lOut);
+  if TFile.Exists(MAIN_ENGINE) then
+  begin
+    lExit := RunCmd('find', ['--repo', lCopy, '--text', 'unit-not-in-dpr', '--include-children', '--engine', MAIN_ENGINE], lWith);
+    Check('Cmd.FindIncludesChildrenFlag.with', (lExit = 0) and (Pos('rule.unit-not-in-dpr', lWith) > 0), lWith);
+  end
+  else
+    Writeln('SKIP Cmd.FindIncludesChildrenFlag.with (no engine)');
+  lExit := RunCmd('find', ['--repo', lCopy, '--text', 'x', '--json'], lOut);
+  Check('Cmd.Find.json', (lExit = 0) and lOut.TrimLeft.StartsWith('[') and (Pos('"Id"', lOut) > 0), lOut);
+  lExit := RunCmd('blast-radius', ['--repo', lCopy, '--menu-path', 'drag-lint > Reports'], lOut);
+  Check('Cmd.BlastRadiusByMenuPath', (lExit = 0) and (Pos('ask', lOut) > 0) and (Pos('Forms for testers (CSV)...', lOut) > 0)
+    and (Pos('(family chart-questions)', lOut) > 0), lOut);
+  lExit := RunCmd('blast-radius', ['--repo', lCopy, '--menu-path', 'drag-lint > Zz No Such Node'], lOut);
+  Check('Cmd.BlastRadiusNoHitsExit1', lExit = 1, lOut);
+  lExit := RunCmd('blast-radius', ['--repo', lCopy, '--verb-name', 'outline'], lOut);
+  Check('Cmd.BlastRadiusByVerb', (lExit = 0) and (Pos('cli outline', lOut) > 0), lOut);
+  lExit := RunCmd('blast-radius', ['--repo', lCopy], lOut);
+  Check('Cmd.BlastRadiusNeedsSelector', (lExit = 1) and (Pos('give --menu-path', lOut) > 0), lOut);
+end;
+
+procedure TestCmdMoveMenu(const pRepo: string);
+var
+  lCopy, lOut, lFam, lFamBefore, lAsk, lCsv: string;
+  lExit: Integer;
+begin
+  lCopy := CmdRepo(pRepo, 'cmd-move');
+  lFam := TPath.Combine(lCopy, 'features\families\chart-questions.json');
+  lFamBefore := ReadBytesText(lFam);
+  lExit := RunCmd('move-menu', ['--repo', lCopy, '--from', 'drag-lint > Reports', '--to', 'Elsewhere > X'], lOut);
+  Check('Cmd.MoveMenuRefusesBadTarget', lExit = 1, lOut);
+  lExit := RunCmd('move-menu', ['--repo', lCopy, '--from', 'drag-lint > Reports', '--to', 'drag-lint > Charts', '--what-if'], lOut);
+  Check('Cmd.MoveMenuWhatIfWritesNothing', (lExit = 0) and (ReadBytesText(lFam) = lFamBefore)
+    and (Pos('drag-lint > Reports"', ReadBytesText(TPath.Combine(lCopy, 'features\entries\ask.json'))) > 0), lOut);
+  lExit := RunCmd('move-menu', ['--repo', lCopy, '--from', 'drag-lint > Reports', '--to', 'drag-lint > Charts'], lOut);
+  lAsk := ReadBytesText(TPath.Combine(lCopy, 'features\entries\ask.json'));
+  lCsv := ReadBytesText(TPath.Combine(lCopy, 'features\entries\generate-test-helper-csv.json'));
+  Check('Cmd.MoveMenuRewritesAllLevels', (lExit = 0) and (Pos('"path": "drag-lint > Charts"', lAsk) > 0)
+    and (Pos('"path": "drag-lint > Charts > Forms for testers (CSV)..."', lCsv) > 0) and (Pos('"path": "drag-lint > Reports', lCsv) = 0) and (Pos('"path": "drag-lint > Reports', lAsk) = 0), lOut + lCsv);
+  Check('Cmd.MoveMenuRewritesFamilyInPlace', (Pos('"menuPrefix": "drag-lint > Charts"', ReadBytesText(lFam)) > 0)
+    and (ReadBytesText(lFam).Replace('drag-lint > Charts', 'drag-lint > Reports') = lFamBefore), lOut);
+  lExit := RunCmd('move-menu', ['--repo', lCopy, '--from', 'drag-lint > Zz Nothing', '--to', 'drag-lint > Q'], lOut);
+  Check('Cmd.MoveMenuNothingToMove', (lExit = 1) and (Pos('nothing changed', lOut) > 0), lOut);
+end;
+
+procedure TestCmdNormalise(const pRepo: string);
+var
+  lCopy, lOut, lGroups: string;
+  lExit: Integer;
+begin
+  lCopy := CmdRepo(pRepo, 'cmd-normalise');
+  lExit := RunCmd('normalise', ['--repo', lCopy], lOut);
+  Check('Cmd.NormaliseCanonicalTreeUnchanged', (lExit = 0) and (Pos('normalised 0 file(s)', lOut) > 0), lOut);
+  lGroups := TPath.Combine(lCopy, 'features\groups.json');
+  TFile.WriteAllText(lGroups, ReadBytesText(lGroups).Replace(' "order"', '  "order"'), TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\templates\Home.intro.md'),
+    ReadBytesText(TPath.Combine(lCopy, 'features\templates\Home.intro.md')).Replace(#13#10, #10), TEncoding.ASCII);
+  lExit := RunCmd('normalise', ['--repo', lCopy], lOut);
+  Check('Cmd.NormaliseRepairs', (lExit = 0) and (Pos('normalised 2 file(s)', lOut) > 0) and (Pos('groups.json', lOut) > 0)
+    and (Pos('Home.intro.md', lOut) > 0), lOut);
+  lExit := RunCmd('normalise', ['--repo', lCopy], lOut);
+  Check('Cmd.NormaliseIdempotent', Pos('normalised 0 file(s)', lOut) > 0, lOut);
+end;
+
+procedure TestCommands(const pRepo: string);
+begin
+  TestCmdAdd(pRepo);
+  TestCmdAddRefusals(pRepo);
+  TestCmdUpdate(pRepo);
+  TestCmdUpdateNormalisesHandEdits(pRepo);
+  TestCmdDeprecate(pRepo);
+  TestCmdFindAndBlast(pRepo);
+  TestCmdMoveMenu(pRepo);
+  TestCmdNormalise(pRepo);
+end;
 var
   lRepo, lSeeded: string;
 begin
@@ -2076,6 +2332,7 @@ begin
       TestPositiveControls(lRepo);
       TestPlannedSkipsLive(lRepo);
       TestWellFormedCatchesBadEntry(lRepo);
+      TestCommands(lRepo);
     end;
   except
     on E: Exception do

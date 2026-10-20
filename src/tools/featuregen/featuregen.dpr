@@ -1,7 +1,8 @@
 program featuregen;
 
 { featuregen: owns the drag-lint feature registry (features\) and generates docs
-  from it. Verbs so far: build [--site | --all], import-help, check. Exit 0 ok, 1 changed (check mode) or failed,
+  from it. Verbs so far: build [--site | --all], import-help, check, add, update, find,
+  blast-radius, move-menu, deprecate, normalise. Exit 0 ok, 1 changed (check mode) or failed,
   2 usage. }
 
 {$APPTYPE CONSOLE}
@@ -20,6 +21,7 @@ uses
   , FeatureGen.HelpImport in 'FeatureGen.HelpImport.pas'
   , FeatureGen.Wiki in 'FeatureGen.Wiki.pas'
   , FeatureGen.Check in 'FeatureGen.Check.pas'
+  , FeatureGen.Commands in 'FeatureGen.Commands.pas'
   ;
 
 procedure PrintUsage;
@@ -38,6 +40,11 @@ begin
   Writeln('      the registry guard''s checks A-E; wellformed = check A only (no engine);');
   Writeln('      full (default) adds the live surface (B, C), generated outputs (D) and staleness notes (E).');
   Writeln('      exits 1 when any check fails.');
+  PrintRegistryUsage(
+    procedure(const pLine: string)
+    begin
+      Writeln(pLine);
+    end);
 end;
 
 { Walks up from pStart to the first dir holding features\entries. }
@@ -363,6 +370,17 @@ begin
     for lI := 2 to ParamCount do
       lArgs[lI - 2] := ParamStr(lI);
     ExitCode := CheckCommand(lArgs);
+  end
+  else if (ParamCount >= 1) and IsRegistryVerb(ParamStr(1)) then
+  begin
+    SetLength(lArgs, ParamCount - 1);
+    for lI := 2 to ParamCount do
+      lArgs[lI - 2] := ParamStr(lI);
+    ExitCode := RunRegistryCommand(ParamStr(1), lArgs, (if FindRepo(GetCurrentDir) <> '' then FindRepo(GetCurrentDir) else FindRepo(ExtractFilePath(ParamStr(0)))),
+      procedure(const pLine: string)
+      begin
+        Writeln(pLine);
+      end);
   end
   else
   begin
