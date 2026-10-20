@@ -30,7 +30,7 @@ type
     Db: string;
     /// <summary>--platform, '' = win64; only echoed in the JSON.</summary>
     Platform: string;
-    /// <summary>--apply: write the chosen group's plan into the project (Task 11; --part all is Task 12).</summary>
+    /// <summary>--apply: write the chosen group's plan into the project (Task 11); with --part all, loop until the group is gone (Task 12).</summary>
     Apply: Boolean;
     /// <summary>--no-backup (apply only).</summary>
     NoBackup: Boolean;
@@ -46,6 +46,8 @@ type
     UnitStem: string;
     /// <summary>--part: 'a', 'b', 'all' or '' (the group's default).</summary>
     Part: string;
+    /// <summary>--library-db as given ('none' or a path); '' = the manifest's library. Passed on to the --part all child runs.</summary>
+    LibraryDb: string;
     /// <summary>--format json.</summary>
     Json: Boolean;
     /// <summary>--shadow-out (debug): the directory the shadow tree is staged in; '' = DefaultShadowDir.</summary>
@@ -329,7 +331,12 @@ function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
 /// <remarks>The dry run writes no source file of the project; unless --no-compile, the baseline build writes what any build
 /// of the project writes (dcu, exe) and refuses the run (dirty-baseline, exit 1) when it fails. The first mechanical group is chosen when neither --cycle nor --unit is given.
 /// --apply: baseline gate, stage the shadow, WriteAll, CompileAfter in place (at most one repair),
-/// then RollBack (compile-error / build-timeout) or VerifyAfter.</remarks>
+/// then RollBack (compile-error / build-timeout) or VerifyAfter.
+/// --part all (needs --apply, not --no-reindex; Task 12): the group is --cycle N / the one holding --unit / cycle 1. Each iteration is
+/// one child `cycles --fix --apply --unit` (so ApplyGroup, planned on the index the last iteration re-indexed); its cycle object is
+/// appended to the JSON `cycles[]`. The loop ends when no unit of the group is circular any more (exit 0), when an iteration fails
+/// (its code is the exit code; earlier iterations stay applied), when an iteration wrote nothing ("no edge is cuttable", exit 1)
+/// or after as many iterations as the group had edges (exit 1).</remarks>
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
   const pLibStore: ISymbolStore = nil): Integer;
@@ -366,6 +373,8 @@ const
   CBuildTimeoutMs  = 30 * 60 * 1000;
   { the C9 bound of convert-apply's child re-index (RefreshProjectIndex): ten minutes }
   CReindexTimeoutMs = 10 * 60 * 1000;
+  CPartAll          = 'all';
+  CAllIterationMs   = 2 * CBuildTimeoutMs + CReindexTimeoutMs; // one --part all child: two builds and a re-index
   CChildKillWaitMs = 5000;  // how long to wait for a killed child to exit
   CKilledExitCode  = 1;     // the exit code a killed child is given
   CExitApplyUnverified = 1; // --apply: written and compiled, but not verified
@@ -1808,8 +1817,10 @@ begin
     Result:= 'cycles --fix --apply always builds the project (baseline and after); --no-compile is for the dry run only'
   else if not MatchText(pOpts.Part, ['', 'a', 'b', 'all']) then
     Result:= 'cycles --fix --part must be a, b or all'
-  else if SameText(pOpts.Part, 'all') then
-    Result:= 'cycles --fix --part all is not available yet (E18 Task 12)'
+  else if SameText(pOpts.Part, CPartAll) and not pOpts.Apply then
+    Result:= 'cycles --fix --part all needs --apply: a dry run of all parts would show stale line numbers after the first part'
+  else if SameText(pOpts.Part, CPartAll) and pOpts.NoReindex then
+    Result:= 'cycles --fix --part all cannot use --no-reindex: every iteration re-plans on the re-indexed project'
   else if pOpts.CycleGiven and (pOpts.CycleIndex < 1) then
     Result:= 'cycles --fix --cycle needs a group number of 1 or more (see `drag-lint cycles` for the groups)';
   if Result <> '' then Exit;
@@ -2077,7 +2088,222 @@ begin
   end;
 end;
 
-function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
+const
+  CDocMarker    = '{"schema":"' + CSchema + '"';
+  CGroupsMarker = '[{"units"';
+
+type
+  // The state of one --part all run: the iterations' JSON, why it stopped, the exit code.
+  TAllState = record
+    Cycles    : TJSONArray;
+    Baseline  : TJSONValue;
+    Refusals  : TJSONValue;
+    Error     : string;
+    Stopped   : string;
+    Code      : Integer;
+    Iterations: Integer;
+    Lines     : TStringList;
+  end;
+
+// The command line of one --part all iteration: a single-group --apply of the group holding pStem
+// (its default part), as a child of this engine so it plans on the index the last iteration refreshed.
+function AllIterationCmd(const pOpts: TCycleFixOptions; const pStem: string): string;
+begin
+  Result:= Format('"%s" cycles --fix --apply --project "%s" --db "%s" --unit "%s" --format json',
+    [ParamStr(0), pOpts.Project, pOpts.Db, pStem]);
+  if pOpts.Platform <> '' then Result:= Result + Format(' --platform "%s"', [pOpts.Platform]);
+  if pOpts.LibraryDb <> '' then Result:= Result + Format(' --library-db "%s"', [pOpts.LibraryDb]);
+  if pOpts.NoBackup then Result:= Result + ' --no-backup';
+end;
+
+// pFile holds the child's stdout and stderr (merged); a stderr note can sit in front of the JSON on the same
+// line, so the document is found by its opening marker. Parses from the last pMarker to the end of its line;
+// nil when the marker is absent or the text is not JSON.
+function ParseJsonFrom(const pFile, pMarker: string): TJSONValue;
+begin
+  Result:= nil;
+  if not TFile.Exists(pFile) then Exit;
+  var Text:= TFile.ReadAllText(pFile, TEncoding.ANSI);
+  var From:= Text.LastIndexOf(pMarker);
+  if From < 0 then Exit;
+  var Stop:= Text.IndexOf(#10, From);
+  Result:= TJSONObject.ParseJSONValue(Text.Substring(From, if Stop < 0 then MaxInt else Stop - From).Trim);
+end;
+
+// The first circular group of the (re-indexed) project DB that holds a unit of pMembers; False when none does.
+function NextGroup(const pOpts: TCycleFixOptions; const pMembers: TArray<string>; out pGroup: TArray<string>): Boolean;
+begin
+  Result:= False;
+  pGroup:= nil;
+  var OutFile:= BuildScratchDir + 'all-groups.json';
+  var TimedOut:= False;
+  RunBounded(Format('"%s" cycles --db "%s" --format json', [ParamStr(0), pOpts.Db]), OutFile, CReindexTimeoutMs, TimedOut);
+  var Doc:= ParseJsonFrom(OutFile, CGroupsMarker);
+  if Doc = nil then Doc:= ParseJsonFrom(OutFile, '[]');
+  try
+    if TimedOut or not (Doc is TJSONArray) then
+      raise EInvalidOperation.CreateFmt('could not list the circular groups of %s (see %s)', [pOpts.Db, OutFile]);
+    for var Item in TJSONArray(Doc) do
+    begin
+      var Group: TArray<string>:= [];
+      for var U in TJSONObject(Item).GetValue('units') as TJSONArray do Group:= Group + [U.Value];
+      for var G in Group do
+        if MatchText(G, pMembers) then
+        begin
+          pGroup:= Group;
+          Exit(True);
+        end;
+    end;
+  finally
+    Doc.Free;
+  end;
+end;
+
+// One iteration: the child run for the group holding pStem; its cycle object is appended to S.Cycles.
+// True = it applied something and exited 0; otherwise S.Code / S.Stopped / S.Error say why the loop ends.
+function AllIteration(const pOpts: TCycleFixOptions; const pStem: string; var S: TAllState): Boolean;
+begin
+  Result:= False;
+  Inc(S.Iterations);
+  var OutFile:= BuildScratchDir + Format('all-iteration-%d.json', [S.Iterations]);
+  var TimedOut:= False;
+  S.Code:= RunBounded(AllIterationCmd(pOpts, pStem), OutFile, CAllIterationMs, TimedOut);
+  var Doc:= ParseJsonFrom(OutFile, CDocMarker);
+  try
+    if TimedOut or not (Doc is TJSONObject) then
+    begin
+      S.Code   := CExitError;
+      S.Error  := Format('iteration %d: the child run printed no cycle-fix/1 document (see %s)', [S.Iterations, OutFile]);
+      S.Stopped:= S.Error;
+      Exit;
+    end;
+    var Obj:= TJSONObject(Doc);
+    if (S.Baseline = nil) and (Obj.GetValue('baseline') <> nil) then S.Baseline:= Obj.GetValue('baseline').Clone as TJSONValue;
+    if Obj.GetValue('error') <> nil then S.Error:= Obj.GetValue('error').Value;
+    var Arr:= Obj.GetValue('cycles') as TJSONArray;
+    if (Arr = nil) or (Arr.Count = 0) then
+    begin
+      if Obj.GetValue('refusals') <> nil then S.Refusals:= Obj.GetValue('refusals').Clone as TJSONValue;
+      S.Stopped:= Format('iteration %d: refused before a group was planned (exit %d)', [S.Iterations, S.Code]);
+      Exit;
+    end;
+    var Cy:= Arr.Items[0].Clone as TJSONObject;
+    S.Cycles.AddElement(Cy);
+    var Written:= Cy.GetValue('written') as TJSONArray;
+    var WrittenCount:= if Written = nil then 0 else Written.Count;
+    S.Lines.Add(Format('Iteration %d: part %s, edge %s: %d file(s) written, verified %s', [S.Iterations,
+      Cy.GetValue('part').Value, Cy.GetValue('edge').Value, WrittenCount, Cy.GetValue('verified').ToString]));
+    if S.Code <> CExitMechanical then
+      S.Stopped:= Format('iteration %d ended with exit %d (%s)', [S.Iterations, S.Code,
+        IfThen(Cy.GetValue('rolled_back').ToString = 'true', 'rolled back', 'see the cycle object')])
+    else if WrittenCount = 0 then
+    begin
+      S.Code   := CExitRefused;
+      S.Stopped:= Format('iteration %d: no edge is cuttable (nothing was cut)', [S.Iterations]);
+    end
+    else Result:= True;
+  finally
+    Doc.Free;
+  end;
+end;
+
+// The --part all loop over the group pMembers: ApplyGroup, via one child `cycles --fix --apply --unit`
+// per iteration, until the group is gone, an iteration fails, nothing is cuttable, or pBound (the group's
+// edge count) is used up.
+procedure LoopAll(const pOpts: TCycleFixOptions; const pMembers: TArray<string>; pBound: Integer; var S: TAllState);
+begin
+  var Stem:= pMembers[0];
+  while AllIteration(pOpts, Stem, S) do
+  begin
+    var Group: TArray<string>;
+    if not NextGroup(pOpts, pMembers, Group) then
+    begin
+      S.Stopped:= Format('the selected circular group is gone after %d iteration(s)', [S.Iterations]);
+      Exit;
+    end;
+    if S.Iterations >= pBound then
+    begin
+      S.Code   := CExitRefused;
+      S.Stopped:= Format('stopped after %d iteration(s), the bound (the group had %d edge(s)); it is still circular', [S.Iterations, pBound]);
+      Exit;
+    end;
+    Stem:= Group[0];
+  end;
+end;
+
+// Prints the --part all result: the cycle-fix/1 document (cycles[] = every iteration) or the text lines.
+procedure PrintAll(const pOpts: TCycleFixOptions; var S: TAllState);
+begin
+  if pOpts.Json then
+  begin
+    var Doc:= NewRunDoc(pOpts);
+    try
+      Doc.AddPair('part', CPartAll);
+      Doc.AddPair('iterations', TJSONNumber.Create(S.Iterations));
+      Doc.AddPair('stopped', S.Stopped);
+      Doc.AddPair('cycles', S.Cycles);
+      S.Cycles:= nil;
+      if S.Baseline <> nil then Doc.AddPair('baseline', S.Baseline);
+      S.Baseline:= nil;
+      if S.Refusals <> nil then Doc.AddPair('refusals', S.Refusals)
+      else Doc.AddPair('refusals', TJSONArray.Create);
+      S.Refusals:= nil;
+      if S.Error <> '' then Doc.AddPair('error', S.Error);
+      Doc.AddPair('ok', TJSONBool.Create(S.Code = CExitMechanical));
+      Doc.AddPair('exit_code', TJSONNumber.Create(S.Code));
+      Writeln(Doc.ToJSON);
+    finally
+      Doc.Free;
+    end;
+  end
+  else
+  begin
+    for var Line in S.Lines do Writeln(Line);
+    Writeln(S.Stopped);
+    if S.Error <> '' then Writeln('ERROR: ', S.Error);
+  end;
+end;
+
+// `--part all --apply`: loops over the group selected by pOnly (0 = cycle 1). Every iteration is
+// ApplyGroup in a child run (it re-plans on the refreshed index); the first failure ends the loop and
+// keeps the earlier iterations applied (each one compiled and verified).
+function RunAll(const pOpts: TCycleFixOptions; const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
+  pOnly: Integer): Integer;
+var
+  S: TAllState;
+begin
+  S:= Default(TAllState);
+  S.Cycles:= TJSONArray.Create;
+  S.Lines := TStringList.Create;
+  try
+    if pSccs.Count = 0 then
+    begin
+      S.Stopped:= CCycleNone;
+      PrintAll(pOpts, S);
+      Exit(CExitMechanical);
+    end;
+    var Members:= pSccs[Max(pOnly, 1) - 1];
+    try
+      LoopAll(pOpts, Members, Max(IntfEdgeCount(Members, pGraph, False), 1), S);
+    except
+      on E: Exception do
+      begin
+        S.Code   := CExitError;
+        S.Error  := E.ClassName + ': ' + E.Message;
+        S.Stopped:= 'the --part all loop could not continue';
+      end;
+    end;
+    Result:= S.Code;
+    PrintAll(pOpts, S);
+  finally
+    S.Lines.Free;
+    S.Cycles.Free;
+    S.Baseline.Free;
+    S.Refusals.Free;
+  end;
+end;
+
+function RunCycleFixGroups(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 var
   Problem : string;
@@ -2199,6 +2425,28 @@ begin
     Playbook.Free;
     Cycles.Free;
   end;
+end;
+
+// `--part all`: select the group (the flags are checked as for the single run), then loop.
+function RunAllSelected(const pOpts: TCycleFixOptions; const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph): Integer;
+var
+  Own : TOwnRoots;
+  Only: Integer;
+begin
+  var Problem:= ResolveSelection(pOpts, pSccs, Own, Only);
+  if Problem <> '' then
+  begin
+    ReportError(pOpts, Problem);
+    Result:= CExitError;
+  end
+  else Result:= RunAll(pOpts, pSccs, pGraph, Only);
+end;
+
+function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
+begin
+  if SameText(pOpts.Part, CPartAll) then Result:= RunAllSelected(pOpts, pSccs, pGraph)
+  else Result:= RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore);
 end;
 
 end.
