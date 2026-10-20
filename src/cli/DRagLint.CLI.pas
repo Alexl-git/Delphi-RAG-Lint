@@ -431,6 +431,7 @@ type
     FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
     FixPart        : string ; // --part a|b|all (cycles --fix)
     NoCompile      : Boolean; // --no-compile (cycles --fix: skip the baseline build)
+    ShadowOut      : string ; // --shadow-out <dir> (cycles --fix, debug: where the shadow tree is staged)
     Apply          : Boolean; // --apply (uses-fix / autofix: write changes, not dry-run)
     Fix            : Boolean; // --fix (lint: autofix findings that have a quick-fix; dry-run unless --apply)
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting. Each SET flag
@@ -1019,7 +1020,7 @@ begin
   Writeln('  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)');
   Writeln('                               Safe to run any time: prints "nothing pending." when there is nothing to do.');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
-  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --fix = dry run of the mechanical cycle fix for ONE group (verdict + cycle-fix/1 JSON; writes nothing; exit 0 mechanical / 1 refused / 2 error); --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output; --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); --format json --causes adds per-group edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --fix = dry run of the mechanical cycle fix for ONE group (verdict + cycle-fix/1 JSON; writes nothing; exit 0 mechanical / 1 refused / 2 error; stages the result in a shadow tree, default C:\TEMP\draglint_cyclefix_<pid>\, --shadow-out names another); --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output; --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); --format json --causes adds per-group edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
@@ -1842,6 +1843,7 @@ begin
     else if (A = '--cycle') and (i < ParamCount) then begin Inc(i); Result.FixCycle:= StrToIntDef(ParamStr(i), 0); Result.FixCycleGiven:= True; end // cycles --fix
     else if (A = '--part') and (i < ParamCount) then begin Inc(i); Result.FixPart:= LowerCase(ParamStr(i)); end // cycles --fix
     else if A = '--no-compile' then Result.NoCompile:= True // cycles --fix
+    else if (A = '--shadow-out') and (i < ParamCount) then begin Inc(i); Result.ShadowOut:= ParamStr(i); end // cycles --fix
     // v0.69 D2a: rename --kind param positional args
     // Note: --kind  already parsed into Result.Kind   (line ~638)
     //       --file  already parsed into Result.InFile (line ~433)
@@ -22316,6 +22318,7 @@ begin
         FixOpts.NoBackup := AArgs.NoBackup;
         FixOpts.NoReindex:= AArgs.NoReindex;
         FixOpts.NoCompile:= AArgs.NoCompile;
+        FixOpts.ShadowOut:= AArgs.ShadowOut;
         FixOpts.CycleIndex:= AArgs.FixCycle;
         FixOpts.CycleGiven:= AArgs.FixCycleGiven;
         FixOpts.UnitStem := AArgs.GhostUnit;

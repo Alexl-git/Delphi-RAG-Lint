@@ -6,14 +6,16 @@ unit DRagLint.CLI.CycleFix;
 // add the mechanisability gate (stale-file, outside-roots, manual-edit) and
 // print the verdict as the playbook text or as `cycle-fix/1` JSON
 // (docs\superpowers\plans\2026-10-10-auto-cycle-fix.md, contract 4.4).
-// Writes NOTHING. Applying (--apply) arrives with Tasks 9-12.
+// Writes nothing to the project. Since Task 9 a mechanical verdict also stages the plan's result
+// in a SHADOW TREE (anchored TTextEdits applied in memory, new units, project files); the
+// shadow is what the dry run proves would be written. Applying (--apply) arrives with Tasks 10-12.
 // ---------------------------------------------------------------------------
 
 interface
 
 uses
   System.Generics.Collections,
-  DRagLint.Core.Interfaces, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan;
+  DRagLint.Core.Interfaces, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.TextEdit;
 
 type
   /// <summary>The `cycles --fix` flags, as DoCycles parsed them.</summary>
@@ -42,6 +44,8 @@ type
     Part: string;
     /// <summary>--format json.</summary>
     Json: Boolean;
+    /// <summary>--shadow-out (debug): the directory the shadow tree is staged in; '' = DefaultShadowDir.</summary>
+    ShadowOut: string;
   end;
 
 /// <summary>The refusals the front end adds to the planner's own: outside-roots.</summary>
@@ -55,6 +59,35 @@ type
 /// path is refused explicitly.</remarks>
 function MechanisabilityGate(const pView: TCyclePlanView; const pOwn: TOwnRoots): TArray<TRefusal>;
 
+/// <summary>The default shadow directory: C:\TEMP\draglint_cyclefix_&lt;pid&gt;\.</summary>
+/// <returns>The directory name with a trailing path delimiter; nothing is created.</returns>
+function DefaultShadowDir: string;
+
+/// <summary>Turns the edits of a plan into anchored TTextEdits.</summary>
+/// <param name="pView">The plan of one group.</param>
+/// <returns>Per edit of an existing file: a replace or delete becomes delete-lines (First..Last)
+/// plus, for a replace, insert-lines after First-1; an insert-after becomes insert-lines after the
+/// anchor line. Each carries ExpectLine/ExpectText (the first line of the plan's "Current text", or
+/// the anchor line's text) as the applier's stale guard. A line that is blank or starts a comment
+/// cannot be guarded by the applier (it never accepts a comment line as an anchor) and is left
+/// unguarded; StageShadow checks every line exactly instead. Manual edits are skipped.</returns>
+/// <remarks>Pure. Per file the edits are in top-to-bottom order of the playbook's list reversed, so
+/// edits that tie on a line land in the file in the order a follower of the playbook produces.</remarks>
+function ToTextEdits(const pView: TCyclePlanView): TArray<TTextEdit>;
+
+/// <summary>Stages the result of a plan in a shadow directory without touching the project.</summary>
+/// <param name="pView">The plan of one group.</param>
+/// <param name="pProjectDir">The project folder; the shadow mirrors paths relative to it.
+/// A file outside it is staged under `_outside\&lt;drive&gt;\...`.</param>
+/// <param name="pShadowDir">Receives the staged files; existing files of the same name are overwritten.</param>
+/// <returns>The refusals (kind anchor-mismatch) or an empty array when the shadow was written.</returns>
+/// <remarks>Everything is computed in memory first; nothing is written when any refusal arises.
+/// Refuses when a file is missing or a line of it differs from the plan's "Current text" / anchor
+/// (compared exactly, as the follow-cycle-plan oracle does), when TTextEditApplier.RefusalOf finds
+/// the edit set unappliable, when the applier drops an edit (line count check), or when a new unit's
+/// file already exists. Edited files are written ANSI with the applier's CRLF; new units ASCII,
+/// CRLF, one trailing CRLF.</remarks>
+function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string): TArray<TRefusal>;
 /// <summary>Runs `cycles --fix` as a dry run and prints the result to stdout.</summary>
 /// <param name="pOpts">The flags.</param>
 /// <param name="pStore">Open index of the project; read only.</param>
@@ -82,6 +115,7 @@ const
   CNeedsProject    = 'cycles --fix needs --project <X.dproj>';
   CVerdictOk       = 'Verdict: mechanical (dry run; add --apply to write)';
   CVerdictRefused  = 'Verdict: refused';
+  CShadowLine      = 'Shadow tree: ';
 
 function MakeRefusal(const pKind, pSymbol, pFile, pReason: string; pLine: Integer): TRefusal;
 begin
@@ -133,6 +167,195 @@ begin
   end;
 end;
 
+function GetCurrentProcessId: Cardinal; stdcall; external 'kernel32.dll' name 'GetCurrentProcessId';
+
+function DefaultShadowDir: string;
+begin
+  Result:= Format('C:\TEMP\draglint_cyclefix_%d\', [GetCurrentProcessId]); // dl:ok hardcoded-absolute-path@6532 -- the debug shadow location is fixed by the E18 design; --shadow-out overrides it
+end;
+
+// The text the applier's stale guard can hold: '' for a blank line or one that starts a comment
+// (AnchorIsValid never accepts a comment line as an anchor).
+function GuardText(const pLine: string): string;
+begin
+  Result:= Trim(pLine);
+  if (Result <> '') and (StartsStr('//', Result) or StartsStr('{', Result) or StartsStr('(*', Result)) then
+    Result:= '';
+end;
+
+function ToTextEdits(const pView: TCyclePlanView): TArray<TTextEdit>;
+var
+  L: TList<TTextEdit>;
+
+  function Make(pKind: TTextEditKind; const pPath: string; pLine, pEndLine: Integer; const pText, pGuard: string;
+    pGuardLine: Integer): TTextEdit;
+  begin
+    Result:= Default(TTextEdit);
+    Result.FilePath  := pPath;
+    Result.Kind      := pKind;
+    Result.Line      := pLine;
+    Result.EndLine   := pEndLine;
+    Result.Text      := pText;
+    Result.ExpectText:= pGuard;
+    Result.ExpectLine:= if pGuard = '' then 0 else pGuardLine;
+  end;
+
+begin
+  L:= TList<TTextEdit>.Create;
+  try
+    for var I:= High(pView.Edits) downto 0 do
+    begin
+      var E:= pView.Edits[I];
+      if SameText(E.Kind, 'delete') or SameText(E.Kind, 'replace') then
+      begin
+        var Guard:= if Length(E.CurrentLines) > 0 then GuardText(E.CurrentLines[0]) else '';
+        L.Add(Make(tekDeleteLines, E.FilePath, E.First, E.Last, '', Guard, E.First));
+        if (E.Kind = 'replace') and (Length(E.NewLines) > 0) then
+          L.Add(Make(tekInsertLines, E.FilePath, E.First - 1, 0, string.Join(#13#10, E.NewLines), Guard, E.First));
+      end
+      else if SameText(E.Kind, 'insert') and (Length(E.NewLines) > 0) then
+        L.Add(Make(tekInsertLines, E.FilePath, E.First, 0, string.Join(#13#10, E.NewLines), GuardText(E.AnchorText), E.First));
+    end;
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+// The shadow path of pPath: relative to the project folder, else _outside\<drive>\rest.
+function ShadowPathOf(const pShadowDir, pProjectDir, pPath: string): string;
+begin
+  var Full:= ExpandFileName(pPath);
+  var Root:= IncludeTrailingPathDelimiter(ExpandFileName(pProjectDir));
+  if StartsText(Root, Full) then Result:= Copy(Full, Length(Root) + 1, MaxInt)
+  else Result:= '_outside\' + StringReplace(Full, ':', '', [rfReplaceAll]);
+  Result:= IncludeTrailingPathDelimiter(pShadowDir) + TrimLeft(Result);
+end;
+
+function AnchorRefusal(const pFile, pReason: string; pLine: Integer): TRefusal;
+begin
+  Result:= MakeRefusal('anchor-mismatch', '', pFile, pReason, pLine);
+end;
+
+// Exact check of every edit of one file against the lines on disk; adds a refusal per mismatch.
+procedure CheckAnchors(const pPath: string; const pView: TCyclePlanView; pLines: TStrings; pOut: TList<TRefusal>);
+begin
+  for var E in pView.Edits do
+  begin
+    if not SameText(E.FilePath, pPath) then Continue;
+    if SameText(E.Kind, 'insert') then
+    begin
+      if (E.First < 1) or (E.First > pLines.Count) then
+        pOut.Add(AnchorRefusal(pPath, Format('anchor line %d is beyond the end of the file (%d lines)', [E.First, pLines.Count]), E.First))
+      else if Trim(pLines[E.First - 1]) <> Trim(E.AnchorText) then
+        pOut.Add(AnchorRefusal(pPath, Format('the anchor line differs from the plan: expected [%s], found [%s]',
+          [Trim(E.AnchorText), Trim(pLines[E.First - 1])]), E.First));
+    end
+    else if SameText(E.Kind, 'delete') or SameText(E.Kind, 'replace') then
+    begin
+      if Length(E.CurrentLines) <> E.Last - E.First + 1 then
+        pOut.Add(AnchorRefusal(pPath, Format('the plan lists %d current line(s) for lines %d-%d',
+          [Length(E.CurrentLines), E.First, E.Last]), E.First))
+      else
+        for var K:= 0 to High(E.CurrentLines) do
+        begin
+          var No:= E.First + K;
+          if (No > pLines.Count) or (pLines[No - 1] <> E.CurrentLines[K]) then
+          begin
+            pOut.Add(AnchorRefusal(pPath, Format('line %d differs from the plan''s "Current text": expected [%s], found [%s]',
+              [No, E.CurrentLines[K], if No > pLines.Count then '<end of file>' else pLines[No - 1]]), No));
+            Break;
+          end;
+        end;
+    end;
+  end;
+end;
+
+// Lines the edits of pPath add minus lines they delete.
+function NetLineChange(const pPath: string; const pEdits: TArray<TTextEdit>): Integer;
+begin
+  Result:= 0;
+  for var E in pEdits do
+  begin
+    if not SameText(E.FilePath, pPath) then Continue;
+    if E.Kind = tekDeleteLines then Dec(Result, E.EndLine - E.Line + 1)
+    else Inc(Result, Length(E.Text.Replace(#13#10, #10).Split([#10])));
+  end;
+end;
+
+function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string): TArray<TRefusal>;
+type
+  TStaged = record
+    Path : string;
+    Bytes: TBytes;
+  end;
+var
+  Refs   : TList<TRefusal>;
+  Staged : TList<TStaged>;
+  Edits  : TArray<TTextEdit>;
+  Done   : TList<string>;
+  Lines  : TStringList;
+  Item   : TStaged;
+begin
+  Refs  := TList<TRefusal>.Create;
+  Staged:= TList<TStaged>.Create;
+  Done  := TList<string>.Create;
+  Lines := TStringList.Create;
+  try
+    Edits:= ToTextEdits(pView);
+    var Why:= TTextEditApplier.RefusalOf(Edits);
+    if Why <> '' then Refs.Add(AnchorRefusal('', Why, 0));
+    for var P in pView.TouchedPaths do
+    begin
+      if Done.Contains(LowerCase(P)) then Continue;
+      Done.Add(LowerCase(P));
+      if not TFile.Exists(P) then
+      begin
+        Refs.Add(AnchorRefusal(P, 'the file to edit does not exist', 0));
+        Continue;
+      end;
+      var Content:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(P));
+      Lines.Text:= Content;
+      var Before:= Refs.Count;
+      CheckAnchors(P, pView, Lines, Refs);
+      if Refs.Count > Before then Continue;
+      var Expected:= Lines.Count + NetLineChange(P, Edits);
+      var Text:= TTextEditApplier.ApplyToText(P, Content, Edits);
+      Lines.Text:= Text;
+      if Lines.Count <> Expected then
+      begin
+        Refs.Add(AnchorRefusal(P, 'the edit applier dropped an edit of this file', 0));
+        Continue;
+      end;
+      Item.Path := ShadowPathOf(pShadowDir, pProjectDir, P);
+      Item.Bytes:= TEncoding.ANSI.GetBytes(Text);
+      Staged.Add(Item);
+    end;
+    for var N in pView.NewUnits do
+    begin
+      if TFile.Exists(N.Path) then
+      begin
+        Refs.Add(AnchorRefusal(N.Path, 'the new unit''s file already exists', 0));
+        Continue;
+      end;
+      Item.Path := ShadowPathOf(pShadowDir, pProjectDir, N.Path);
+      Item.Bytes:= TEncoding.ASCII.GetBytes(string.Join(#13#10, N.Text) + #13#10);
+      Staged.Add(Item);
+    end;
+    if Refs.Count = 0 then
+      for Item in Staged do
+      begin
+        ForceDirectories(ExtractFilePath(Item.Path));
+        TFile.WriteAllBytes(Item.Path, Item.Bytes);
+      end;
+    Result:= Refs.ToArray;
+  finally
+    Lines.Free;
+    Done.Free;
+    Staged.Free;
+    Refs.Free;
+  end;
+end;
 function IntfEdgeCount(const pUnits: TArray<string>; const pGraph: TCycleGraph; pIntfOnly: Boolean): Integer;
 var
   Targets: TList<string>;
@@ -324,6 +547,9 @@ var
   Summary : TStringList;
   Chosen  : Boolean;
   BadPart : string;
+  ProjectDir: string;
+  ShadowDir : string;
+  ShadowUsed: string;
 begin
   Problem:= ResolveSelection(pOpts, pSccs, Own, Only);
   if Problem <> '' then
@@ -334,6 +560,9 @@ begin
 
   Chosen  := False;
   BadPart := '';
+  ShadowUsed:= '';
+  ProjectDir:= ExtractFilePath(ExpandFileName(pOpts.Project));
+  ShadowDir := if pOpts.ShadowOut <> '' then IncludeTrailingPathDelimiter(ExpandFileName(pOpts.ShadowOut)) else DefaultShadowDir;
   Cycles  := TJSONArray.Create;
   Playbook:= TStringList.Create;
   Summary := TStringList.Create;
@@ -348,7 +577,6 @@ begin
           All.AddRange(pView.Refusals);
           All.AddRange(MechanisabilityGate(pView, Own));
           All.AddRange(StaleRefusals(pStore, pView));
-          var Verdict:= All.ToArray;
           var Wanted:= pOpts.Part;
           if (Wanted <> '') and not SameText(Wanted, string(pView.Part)) then
           begin
@@ -361,12 +589,20 @@ begin
             end;
             Exit(True);
           end;
+          { a plan the gate passes is staged in the shadow tree; an anchor mismatch refuses the group }
+          if All.Count = 0 then All.AddRange(StageShadow(pView, ProjectDir, ShadowDir));
+          var Verdict:= All.ToArray;
+          if Length(Verdict) = 0 then ShadowUsed:= ShadowDir;
           Cycles.AddElement(CycleToJson(pView, Verdict, pGraph));
           Chosen:= Length(Verdict) = 0;
           if (not pOpts.Json) and ((Only > 0) or Chosen) then Playbook.AddStrings(pRender());
           if Chosen then
           begin
-            if not pOpts.Json then Summary.Add(CVerdictOk);
+            if not pOpts.Json then
+            begin
+              Summary.Add(CVerdictOk);
+              Summary.Add(CShadowLine + ShadowDir);
+            end;
           end
           else if Only > 0 then
           begin
@@ -400,6 +636,7 @@ begin
         Doc.AddPair('platform', if pOpts.Platform = '' then CDefaultPlatform else LowerCase(pOpts.Platform));
         Doc.AddPair('cycles', Cycles);
         Cycles:= nil;
+        if ShadowUsed <> '' then Doc.AddPair('shadow', ShadowUsed);
         Doc.AddPair('ok', TJSONBool.Create(Result = CExitMechanical));
         Doc.AddPair('exit_code', TJSONNumber.Create(Result));
         Writeln(Doc.ToJSON);

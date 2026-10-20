@@ -114,6 +114,8 @@ type
     UnitName: string;
     /// <summary>Target file path.</summary>
     Path: string;
+    /// <summary>The unit's full text, one string per line (no line terminators).</summary>
+    Text: TArray<string>;
   end;
 
   /// <summary>One edit of an existing file.</summary>
@@ -126,6 +128,12 @@ type
     First: Integer;
     /// <summary>Last line, as indexed.</summary>
     Last: Integer;
+    /// <summary>delete/replace: the lines First..Last as the planner read them (the playbook's "Current text"); else empty.</summary>
+    CurrentLines: TArray<string>;
+    /// <summary>replace/insert: the lines that go in; else empty.</summary>
+    NewLines: TArray<string>;
+    /// <summary>insert: the full text of line First, the line the lines go after; else ''.</summary>
+    AnchorText: string;
   end;
 
   /// <summary>A plan for one circular group as plain data, for the `cycles --fix` front end.</summary>
@@ -4164,7 +4172,7 @@ var
   UseList: TList<TPlanUse>;
   Created: TList<TPlanNewUnit>;
 
-  procedure AddEdits(const pPath: string; const pList: TArray<TFileEdit>);
+  procedure AddEdits(const pPath: string; const pList: TArray<TFileEdit>; const pLines: TArray<string>);
   begin
     for var E in pList do
     begin
@@ -4173,6 +4181,11 @@ var
       V.Kind    := CEditKind[E.Kind];
       V.First   := E.First;
       V.Last    := E.Last;
+      V.NewLines:= E.NewLines;
+      case E.Kind of
+        ekDelete, ekReplace: V.CurrentLines:= SliceLines(pLines, OneRange(E.First, E.Last));
+        ekInsertAfter      : V.AnchorText  := LineAt(pLines, E.First);
+      end;
       Edits.Add(V);
     end;
   end;
@@ -4194,13 +4207,20 @@ begin
     for var Fid in pPlan.Touched do
     begin
       Paths.Add(PathOf(Fid));
-      if pPlan.Edits.ContainsKey(Fid) then AddEdits(PathOf(Fid), pPlan.Edits[Fid].ToArray)
-      else if Fid = FProjectFid then AddEdits(PathOf(Fid), pPlan.DprEdits);
+      if pPlan.Edits.ContainsKey(Fid) then AddEdits(PathOf(Fid), pPlan.Edits[Fid].ToArray, GetFile(Fid).Lines)
+      else if Fid = FProjectFid then AddEdits(PathOf(Fid), pPlan.DprEdits, GetFile(Fid).Lines);
     end;
     if Length(pPlan.DprojEdits) > 0 then
     begin
       Paths.Add(FProjectFile);
-      AddEdits(FProjectFile, pPlan.DprojEdits);
+      { the playbook's order (RenderEdits), so a consumer applying them in list order does what a follower of the text does }
+      var Sorted:= Copy(pPlan.DprojEdits);
+      TArray.Sort<TFileEdit>(Sorted, TComparer<TFileEdit>.Construct(
+        function(const pLeft, pRight: TFileEdit): Integer
+        begin
+          Result:= pRight.First - pLeft.First;
+        end));
+      AddEdits(FProjectFile, Sorted, TFile.ReadAllLines(FProjectFile));
     end;
     for var It in pPlan.Items do
     begin
@@ -4228,6 +4248,7 @@ begin
       var V:= Default(TPlanNewUnit);
       V.UnitName:= N.UnitName;
       V.Path    := N.Path;
+      V.Text    := N.Text;
       Created.Add(V);
     end;
     Result.Edits       := Edits.ToArray;
