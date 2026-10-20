@@ -80,6 +80,8 @@ uses
     DragLint.Plugin.StatusBar
   , { EnqueueReindexThenRelint: Rescan this unit }
     DragLint.Plugin.SaveNotifier
+  , { CYCLE_FIX_TIMEOUT_MS: the one time limit of every IDE cycle-fix run }
+    DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit (controller ruling, E18 T15b fix round 1); a second copy here is what let it drift to 10 min
   ;
 
 { ---- TStructureNodeData: stores line info in tree node.Data ---- }
@@ -234,8 +236,6 @@ const
   CUnusedUnitRule = 'unused-unit-in-uses';
   { E18 T15b: the rule whose fix is `cycles --fix` (the tree's two cycle items) }
   CCircularUsesRule = 'circular-uses';
-  { a cycle fix runs two full msbuilds (baseline + after), plus a re-index on --apply }
-  CCycleFixTimeoutMs = 600000;
 
 var
   GStructureForm: TDragLintStructureForm = nil;
@@ -1726,7 +1726,7 @@ begin
   Job.Title      := Title;
   Job.CoalesceKey:= 'cyclefix-apply:' + LowerCase(FilePath);
   Job.CmdLine    := AApplyCmd;
-  Job.TimeoutMs  := CCycleFixTimeoutMs;
+  Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS; { DragLint.Plugin.CycleFix: above the engine's build timeout, so its rollback fires first }
   Job.Streaming  := False;
   Job.OnDone:=
     procedure(AExit: Integer; AOutput: string)
@@ -1770,7 +1770,7 @@ begin
   Job.Title      := Title + (if Apply then ' (dry run first)' else '');
   Job.CoalesceKey:= 'cyclefix-dry:' + LowerCase(FilePath);
   Job.CmdLine    := DryCmd;
-  Job.TimeoutMs  := CCycleFixTimeoutMs;
+  Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS; { DragLint.Plugin.CycleFix: above the engine's build timeout, so its rollback fires first }
   Job.Streaming  := False;
   Job.OnDone:=
     procedure(AExit: Integer; AOutput: string)

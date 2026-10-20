@@ -4863,26 +4863,34 @@ begin
   Result.IntfEdges:= TDictionary<string, Boolean>.Create;
   Result.UnitFile := TDictionary<string, string>.Create;
   Result.UnitFid  := TDictionary<string, Int64>.Create;
-  for Fid in pStore.GetAllFileIds do
-  begin
-    Path:= pStore.GetFilePath(Fid);
-    if not SameText(ExtractFileExt(Path), '.pas') then Continue;
-    { indexed paths may use '/' -- normalise so ExtractFileName strips the dir }
-    UFrom:= LowerCase(ChangeFileExt(ExtractFileName(StringReplace(Path, '/', '\', [rfReplaceAll])), ''));
-    if UFrom = '' then Continue;
-    Result.UnitFile.AddOrSetValue(UFrom, Path);
-    Result.UnitFid .AddOrSetValue(UFrom, Fid );
-    if not Result.Adj.TryGetValue(UFrom, L) then
+  try
+    for Fid in pStore.GetAllFileIds do
     begin
-      L:= TList<string>.Create;
-      Result.Adj.AddOrSetValue(UFrom, L);
+      Path:= pStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      { indexed paths may use '/' -- normalise so ExtractFileName strips the dir }
+      UFrom:= LowerCase(ChangeFileExt(ExtractFileName(StringReplace(Path, '/', '\', [rfReplaceAll])), ''));
+      if UFrom = '' then Continue;
+      Result.UnitFile.AddOrSetValue(UFrom, Path);
+      Result.UnitFid .AddOrSetValue(UFrom, Fid );
+      if not Result.Adj.TryGetValue(UFrom, L) then
+      begin
+        L:= TList<string>.Create;
+        Result.Adj.AddOrSetValue(UFrom, L);
+      end;
+      for Uo in pStore.GetUnitUsesForFile(Fid) do
+      begin
+        UTo:= LowerCase(Uo.UnitName);
+        if UTo = '' then Continue;
+        if not L.Contains(UTo) then L.Add(UTo);
+        if Uo.Section = uusInterface then Result.IntfEdges.AddOrSetValue(UFrom + '->' + UTo, True);
+      end;
     end;
-    for Uo in pStore.GetUnitUsesForFile(Fid) do
+  except
+    on Exception do
     begin
-      UTo:= LowerCase(Uo.UnitName);
-      if UTo = '' then Continue;
-      if not L.Contains(UTo) then L.Add(UTo);
-      if Uo.Section = uusInterface then Result.IntfEdges.AddOrSetValue(UFrom + '->' + UTo, True);
+      FreeCycleGraph(Result); { fix round 1: a raise midway must not leak the partial graph }
+      raise;
     end;
   end;
 end;

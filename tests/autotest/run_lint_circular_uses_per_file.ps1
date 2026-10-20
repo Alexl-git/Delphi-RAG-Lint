@@ -20,6 +20,9 @@
         DemoUIConnect's implementation uses), re-indexed -> 0 findings for DemoUIConnect.pas.
         (The brief's "apply R2 by the follower" needs the platform library, which this runner
         never opens or copies; the hand cut is the same graph change.)
+    (g) fix round 1, tests\fixtures\cyclefix\incuses: a cycle closed inside {$IFDEF} -> exactly one
+        finding + fix_hint on each unit; a cycle closed through {$I} is printed as a NOTE (the index
+        records no uses row from an include).
   Run from any CWD, pwsh 7. -KeepScratch keeps the scratch dir on failure.
 #>
 [CmdletBinding()]
@@ -135,6 +138,26 @@ try {
   Check 'f: DemoUIConnect.pas in the cut copy -> 0 findings' ($null -ne $r.Rows -and $r.Rows.Count -eq 0) $r.Out
   $r = Lint-One (Join-Path $cut 'DemoAudit.pas') $cdb
   Check 'f: CONTROL the untouched 4-unit cycle still reports on DemoAudit.pas' ($r.Rows -and $r.Rows.Count -eq 1) $r.Out
+
+  Write-Host '== (g) fix round 1: a closing edge inside {$IFDEF} / {$I} (tests\fixtures\cyclefix\incuses)' -ForegroundColor Cyan
+  $inc = Join-Path $WorkDir 'incuses'
+  New-Item -ItemType Directory -Force $inc | Out-Null
+  Copy-Item (Join-Path $Repo 'tests\fixtures\cyclefix\incuses\*') $inc -Force
+  $idb = Join-Path $WorkDir 'incuses.sqlite'
+  $iout = & $Exe index --project (Join-Path $inc 'IncUses.dproj') --db $idb --library-db none 2>&1 | Out-String
+  Check 'g: SANITY incuses indexed with 0 errors' ($iout -match 'DefB\.pas\s*->.*0 errors' -and $iout -notmatch '[1-9]\d* errors') $iout
+  foreach ($u in @(@('DefA.pas', 15, 'defa'), @('DefB.pas', 16, 'defb'))) {
+    $r = Lint-One (Join-Path $inc $u[0]) $idb
+    Check "g: $($u[0]): exactly 1 circular-uses finding" ($r.Rows -and $r.Rows.Count -eq 1) $r.Out
+    Check "g: $($u[0]): on its uses entry, line $($u[1])" ($r.Rows -and $r.Rows[0].start_line -eq $u[1]) $r.Out
+    Check "g: $($u[0]): fix_hint --unit $($u[2])" ($r.Rows -and "$($r.Rows[0].fix_hint)" -like "*--unit $($u[2])") $r.Out
+  }
+  # {$I}: the index records NO unit_uses row for a uses clause inside an include, so the IncA <-> IncB
+  # cycle does not exist for lint-all, cycles or lint <file> alike (an extractor gap, reported, not
+  # pinned here: a check would fail the day the gap is fixed).
+  $cyc = & $Exe cycles --db $idb 2>$null | Out-String
+  $r = Lint-One (Join-Path $inc 'IncB.pas') $idb
+  Write-Host ("  NOTE include cycle: cycles groups=" + ([regex]::Matches($cyc, '\[\d+ units\]')).Count + ", lint IncB.pas findings=" + @($r.Rows).Count) -ForegroundColor DarkGray
 } finally {
   Pop-Location
 }

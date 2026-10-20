@@ -112,6 +112,20 @@ Write-Host '-- CycleFixEditedFiles: the buffers that must be saved before --appl
 Check 'E1 the distinct edits[].file of the dry run' ($kv['edited.dry'] -eq "$dryFiles") "want $dryFiles got: $($kv['edited.dry'])"
 Check 'E2 unreadable -> none' ($kv['edited.garbage'] -eq '0') "got: $($kv['edited.garbage'])"
 
+Write-Host '-- the cycle-fix jobs use the ONE plugin time limit (fix round 1)' -ForegroundColor Cyan
+# CYCLE_FIX_TIMEOUT_MS (DragLint.Plugin.CycleFix, 35 min) is above the engine's 30-min build
+# timeout, so the engine's own rollback fires before the job queue kills an --apply mid-write.
+$sf = [IO.File]::ReadAllText((Join-Path $PluginDir 'DragLint.Plugin.StructureForm.pas'))
+$a  = $sf.IndexOf('procedure EnqueueCycleFixApply')
+$b  = $sf.IndexOf('function TDragLintStructureForm.NodeIsCycleFinding')
+$region = if ($a -ge 0 -and $b -gt $a) { $sf.Substring($a, $b - $a) } else { '' }
+Check 'T0 SANITY the two cycle-fix job procedures are found' ($region -ne '') ''
+Check 'T1 both cycle-fix jobs set Job.TimeoutMs := CYCLE_FIX_TIMEOUT_MS' `
+  ([regex]::Matches($region, 'Job\.TimeoutMs\s*:=\s*CYCLE_FIX_TIMEOUT_MS\s*;').Count -eq 2) ''
+Check 'T2 ... and no other TimeoutMs assignment there' ([regex]::Matches($region, 'TimeoutMs\s*:=').Count -eq 2) ''
+Check 'T3 no private cycle-fix timeout constant or literal in StructureForm' `
+  (($sf -notmatch 'CCycleFixTimeoutMs') -and ($region -notmatch '\b\d{4,}\b')) ''
+
 Write-Host ("{0} PASS" -f $script:Passed)
 Remove-Scratch
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }

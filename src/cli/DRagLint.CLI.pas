@@ -13635,8 +13635,16 @@ begin
 
   ImplLine:= 0;
   IntfLine:= 0;
+  var AnyImpl: Integer:= 0; { first line of ANY uses entry: the fallback anchor }
+  var AnyIntf: Integer:= 0;
   for var U in AStore.GetUnitUsesForFile(AFileId) do
   begin
+    if U.StartLine <= 0 then Continue;
+    if U.Section = uusImplementation then
+    begin
+      if (AnyImpl = 0) or (U.StartLine < AnyImpl) then AnyImpl:= U.StartLine;
+    end
+    else if (AnyIntf = 0) or (U.StartLine < AnyIntf) then AnyIntf:= U.StartLine;
     var Target: string:= LowerCase(U.UnitName);
     if (Target = MyStem) or not MatchText(Target, Mine) then Continue;
     if U.Section = uusImplementation then
@@ -13646,7 +13654,12 @@ begin
     else if (IntfLine = 0) or (U.StartLine < IntfLine) then IntfLine:= U.StartLine;
   end;
   if ImplLine = 0 then ImplLine:= IntfLine;
-  if ImplLine <= 0 then Exit;
+  { Fix round 1 (controller ruling): no line-bearing entry names another unit of the cycle --
+    the unit is still in it, so it still gets its ONE finding (with the hint): on its uses
+    clause (implementation first), else line 1. }
+  if ImplLine <= 0 then ImplLine:= AnyImpl;
+  if ImplLine <= 0 then ImplLine:= AnyIntf;
+  if ImplLine <= 0 then ImplLine:= 1;
 
   Result:= nil;
   for F in AFindings do
