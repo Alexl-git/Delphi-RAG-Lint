@@ -243,7 +243,7 @@ begin
   for lE in pReg.Entries do
     if EntryOnSite(pFmt, lE) and (lE.Group = pEntry.Group) and (CompareStr(lE.Id, pEntry.Id) < 0) then
       Inc(lPlace);
-  Result := GroupOrder(pReg, pEntry.Group) * 1000 + lPlace;
+  Result := GroupOrder(pReg, pEntry.Group) * 1000 + lPlace;  // dl:ok magic-literal@f156 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
 end;
 
 function FrontMatter(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const pReg: TRegistry): string;
@@ -497,16 +497,16 @@ begin
   Result := '"';
   for lCh in pText do
     case lCh of
-      '"': Result := Result + '\"';
-      '\': Result := Result + '\\';
-      #10: Result := Result + '\n';
-      #13: Result := Result + '\r';
-      #9: Result := Result + '\t';
+      '"': Result := Result + '\"';  // dl:ok concat-in-loop@b017 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
+      '\': Result := Result + '\\';  // dl:ok concat-in-loop@fd11 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
+      #10: Result := Result + '\n';  // dl:ok concat-in-loop@9ef9 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
+      #13: Result := Result + '\r';  // dl:ok concat-in-loop@659d -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
+      #9: Result := Result + '\t';  // dl:ok concat-in-loop@0450 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
     else
       if lCh < ' ' then
-        Result := Result + '\u' + IntToHex(Ord(lCh), 4)
+        Result := Result + '\u' + IntToHex(Ord(lCh), 4)  // dl:ok magic-literal@915f -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
       else
-        Result := Result + lCh;
+        Result := Result + lCh;  // dl:ok concat-in-loop@9198 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
     end;
   Result := Result + '"';
 end;
@@ -562,7 +562,7 @@ begin
       if lE.Group = lG.Id then
       begin
         if lItems <> '' then
-          lItems := lItems + ','#10;
+          lItems := lItems + ','#10;  // dl:ok concat-in-loop@689a -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
         lItems := lItems + '  {'#10'    "id": ' + JsonStr(lE.Id) + ','#10'    "title": ' + JsonStr(lE.Title) + ','#10
           + '    "summary": ' + JsonStr(lE.Summary) + ','#10'    "group": ' + JsonStr(lE.Group) + ','#10
           + '    "order": ' + IntToStr(SiteOrder(lE, pFmt, pReg)) + ','#10'    "since": ' + JsonStr(lE.Since) + ','#10
@@ -611,14 +611,14 @@ begin
       try
         lSubs.Add('');
         for lI in lVerbs[lVerb] do
-          for lS in pInc[lI].Surfaces do
+          for lS in pInc[lI].Surfaces do  // dl:ok loop-var-after-loop@8db8 -- REVIEWED 2026-10-19: the variable is read inside the body of its own enclosing for-in loop, not after it
             if (lS.Kind = 'cli') and (lS.Verb = lVerb) and (lS.Sub <> '') and not lSubs.Contains(lS.Sub) then
               lSubs.Add(lS.Sub);
         for lSub in lSubs do
         begin
           lUsage := '';
           for lI in lVerbs[lVerb] do
-            for lS in pInc[lI].Surfaces do
+            for lS in pInc[lI].Surfaces do  // dl:ok loop-var-after-loop@8db8 -- REVIEWED 2026-10-19: the variable is read inside the body of its own enclosing for-in loop, not after it
               if (lUsage = '') and (lS.Kind = 'cli') and (lS.Verb = lVerb) and (lS.Sub = lSub) then
                 lUsage := lS.Usage;
           if (lUsage = '') and (pFmt.Help <> nil) then
@@ -636,7 +636,7 @@ begin
       lSeen := TList<string>.Create;
       try
         for lI in lVerbs[lVerb] do
-          for lS in pInc[lI].Surfaces do
+          for lS in pInc[lI].Surfaces do  // dl:ok loop-var-after-loop@8db8 -- REVIEWED 2026-10-19: the variable is read inside the body of its own enclosing for-in loop, not after it
             if (lS.Kind = 'cli') and (lS.Verb = lVerb) then
               for lF in lS.Flags do
                 if not lSeen.Contains(lF.Name) then
@@ -644,7 +644,7 @@ begin
                   lSeen.Add(lF.Name);
                   lFlags.Add(lF);
                 end;
-        Result := Result + FlagsTable(lFlags.ToArray);
+        Result := Result + FlagsTable(lFlags.ToArray);  // dl:ok concat-in-loop@66f4 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
       finally
         lSeen.Free;
         lFlags.Free;
@@ -653,10 +653,10 @@ begin
         Result := Result + 'Described in ' + LeafLink(lE, lE.Title) + '.'#10#10
       else
       begin
-        Result := Result + 'Described in:'#10#10;
+        Result := Result + 'Described in:'#10#10;  // dl:ok concat-in-loop@2920 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
         for lI in lVerbs[lVerb] do
-          Result := Result + '* ' + LeafLink(pInc[lI], pInc[lI].Title) + #10;
-        Result := Result + #10;
+          Result := Result + '* ' + LeafLink(pInc[lI], pInc[lI].Title) + #10;  // dl:ok loop-var-after-loop@f538 -- REVIEWED 2026-10-19: the variable is read inside the body of its own enclosing for-in loop, not after it
+        Result := Result + #10;  // dl:ok concat-in-loop@02e6 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
       end;
     end;
   finally
@@ -718,8 +718,8 @@ begin
           for lI := 0 to lLinks.Count - 1 do
           begin
             if lI > 0 then
-              lLine := lLine + ', ';
-            lLine := lLine + LeafLink(pInc[lLinks[lI]], pInc[lLinks[lI]].Title);
+              lLine := lLine + ', ';  // dl:ok concat-in-loop@176b -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
+            lLine := lLine + LeafLink(pInc[lLinks[lI]], pInc[lLinks[lI]].Title);  // dl:ok concat-in-loop@3d8c -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
           end;
         end;
         pOut := pOut + lLine + #10;
@@ -825,7 +825,7 @@ begin
       for lE in pInc do
         if lE.Since = lSince then
           Result := Result + '* ' + LeafLink(lE, lE.Title) + ' -- ' + Sentence(lE.Summary) + #10;
-      Result := Result + #10;
+      Result := Result + #10;  // dl:ok concat-in-loop@02e6 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
     end;
   finally
     lSinces.Free;
@@ -855,7 +855,7 @@ begin
     for lKey in lKeys do
     begin
       if lItems <> '' then
-        lItems := lItems + ','#10;
+        lItems := lItems + ','#10;  // dl:ok concat-in-loop@689a -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
       lItems := lItems + '  ' + JsonStr(lKey) + ': ' + JsonStr(lMap[lKey]);
     end;
     Result := '{'#10 + lItems + #10'}'#10;

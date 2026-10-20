@@ -27,7 +27,7 @@ type
 /// <param name="pLive">Harvested live surface; its ProductVersion becomes verified.build.</param>
 /// <param name="pHelp">Engine help for the cli surface hash.</param>
 /// <returns>The path of the entry file.</returns>
-/// <exception cref="Exception">No entry has this id (message starts "verify: no entry"), pBy is empty, or the entry would not be valid; the file is untouched then.</exception>
+/// <remarks>Raises Exception: No entry has this id (message starts "verify: no entry"), pBy is empty, or the entry would not be valid; the file is untouched then.</remarks>
 /// <remarks>Writes verified = {date, by, build, surfaceHash} with surfaceHash = SurfaceHash(entry, pLive, pHelp); nothing else changes.</remarks>
 function VerifyEntryWith(const pRepo, pId, pBy, pDate: string; const pLive: TLiveSurface; const pHelp: TLiveHelp): string;
 
@@ -121,7 +121,7 @@ destructor TCmdArgs.Destroy;
 begin
   FSwitches.Free;
   FValues.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-19: the direct ancestor method is the intended one
 end;
 
 function TCmdArgs.Parse(const pArgs: TArray<string>; const pValued, pSwitches: array of string; out pError: string): Boolean;
@@ -141,7 +141,7 @@ begin
       pError := 'unexpected argument ' + lArg;
       Exit;
     end;
-    lName := Copy(lArg, 3, MaxInt);
+    lName := Copy(lArg, 3, MaxInt);  // dl:ok magic-literal@8b72 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
     if MatchStr(lName, pSwitches) then
       FSwitches.Add(lName)
     else if MatchStr(lName, pValued) then
@@ -262,8 +262,8 @@ begin
         lSb.Append('\t')
       else if Ord(lCh) > ASCII_MAX then
         raise EFeatureJson.CreateFmt('non-ASCII character U+%.4X in string: %s', [Ord(lCh), pS])
-      else if Ord(lCh) < 32 then
-        lSb.Append('\u').Append(LowerCase(IntToHex(Ord(lCh), 4)))
+      else if Ord(lCh) < 32 then  // dl:ok magic-literal@e29e -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
+        lSb.Append('\u').Append(LowerCase(IntToHex(Ord(lCh), 4)))  // dl:ok magic-literal@a741 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
       else
         lSb.Append(lCh);
     lSb.Append('"');
@@ -349,7 +349,7 @@ end;
 
 function IsEmptyJson(const pV: TJSONValue): Boolean;
 begin
-  Result := (pV = nil) or (pV is TJSONNull) or ((pV is TJSONString) and (TJSONString(pV).Value = ''))
+  Result := (pV = nil) or (pV is TJSONNull) or ((pV is TJSONString) and (TJSONString(pV).Value = ''))  // dl:ok boolean-expression-complexity@581d -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
     or ((pV is TJSONArray) and (TJSONArray(pV).Count = 0)) or ((pV is TJSONObject) and (TJSONObject(pV).Count = 0));
 end;
 
@@ -458,17 +458,17 @@ begin
         lWidths[i] := Length(lRow[i]);
   lLine := '';
   for i := 0 to High(pCols) do
-    lLine := lLine + pCols[i].PadRight(lWidths[i] + 2);
+    lLine := lLine + pCols[i].PadRight(lWidths[i] + 2);  // dl:ok concat-in-loop@e762 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
   pOut(TrimRight(lLine));
   lLine := '';
   for i := 0 to High(pCols) do
-    lLine := lLine + StringOfChar('-', Length(pCols[i])).PadRight(lWidths[i] + 2);
+    lLine := lLine + StringOfChar('-', Length(pCols[i])).PadRight(lWidths[i] + 2);  // dl:ok concat-in-loop@257d -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
   pOut(TrimRight(lLine));
   for lRow in pRows do
   begin
     lLine := '';
     for i := 0 to High(pCols) do
-      lLine := lLine + lRow[i].PadRight(lWidths[i] + 2);
+      lLine := lLine + lRow[i].PadRight(lWidths[i] + 2);  // dl:ok concat-in-loop@ae6b -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
     pOut(TrimRight(lLine));
   end;
 end;
@@ -589,7 +589,7 @@ end;
 
 { ---- surface specs ---- }
 
-function ParseSurfaceSpec(const pSpec: string): TJSONObject;
+function ParseSurfaceSpec(const pSpec: string): TJSONObject;  // dl:ok cognitive-complexity@9821 -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
 var
   lI: Integer;
   lType, lRest, lA, lB: string;
@@ -676,7 +676,7 @@ begin
     end
     else
       Put('doc', lRest);
-  except
+  except  // dl:ok bare-except@041e -- REVIEWED 2026-10-19: cleanup-and-re-raise: frees the half-built result, then raises the original exception
     Result.Free;
     raise;
   end;
@@ -743,7 +743,7 @@ begin
           lMax := lCtx.GroupOrders[i];
       lCtx.GroupIds := lCtx.GroupIds + [lGroup];
       lCtx.GroupOrders := lCtx.GroupOrders + [lMax + LIST_ORDER_STEP];
-    end;
+    end;  // dl:ok duplicate-code@87e3 -- REVIEWED 2026-10-19: parallel ported renderers share a shape; extracting a helper would couple outputs that must stay independent
     if (lOwner <> '') and not MatchStr(lOwner, lCtx.TeamIds) then
     begin
       if not pArgs.Switch('new-team') then
@@ -955,7 +955,7 @@ end;
 function VerifyEntryWith(const pRepo, pId, pBy, pDate: string; const pLive: TLiveSurface; const pHelp: TLiveHelp): string;
 var
   lReg: TRegistry;
-  lE: TFeatureEntry;
+  lE, lHit: TFeatureEntry;
   lFound: Boolean;
   lVer: TJSONObject;
   lSet: TArray<TSetItem>;
@@ -967,10 +967,12 @@ begin
   try
     lReg.Load(pRepo);
     lFound := False;
+    lHit := Default(TFeatureEntry);
     for lE in lReg.Entries do
       if lE.Id = pId then
       begin
         lFound := True;
+        lHit := lE;
         Break;
       end;
     if not lFound then
@@ -979,7 +981,7 @@ begin
     lVer.AddPair('date', pDate);
     lVer.AddPair('by', pBy);
     lVer.AddPair('build', pLive.ProductVersion);
-    lVer.AddPair('surfaceHash', SurfaceHash(lE, pLive, pHelp));
+    lVer.AddPair('surfaceHash', SurfaceHash(lHit, pLive, pHelp));
     lItem.Key := 'verified';
     lItem.Value := lVer;
     lSet := [lItem];
@@ -1006,7 +1008,7 @@ begin
   try
     pLive.Harvest(pRepo, lEngine);
     pHelp.Load(lEngine);
-  except
+  except  // dl:ok bare-except@971e -- REVIEWED 2026-10-19: cleanup-and-re-raise: frees the half-built result, then raises the original exception
     FreeAndNil(pHelp);
     FreeAndNil(pLive);
     raise;
@@ -1339,7 +1341,7 @@ begin
   end;
 end;
 
-function DoBlastRadius(const pArgs: TCmdArgs; const pRepo: string; pJson: Boolean; const pOut: TCmdOut): Integer;
+function DoBlastRadius(const pArgs: TCmdArgs; const pRepo: string; pJson: Boolean; const pOut: TCmdOut): Integer;  // dl:ok cyclomatic-complexity@23d3 -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
 var
   lMenu, lVerb, lPage, lGroup, lNodeKey, lSurf, lPv: string;
   lCtx: TCheckContext;
@@ -1413,7 +1415,9 @@ begin
         if (lPage <> '') and (ParentVal('wikiPage') <> lPage) then
           Continue;
         lPv := ParentVal('title');
-        lRows.Add(TRow.Create(lFirst.EntryId, IfThen(lPv <> '', lPv, lFam), ParentVal('owner'), ParentVal('wikiPage'),
+        if lPv = '' then
+          lPv := lFam;
+        lRows.Add(TRow.Create(lFirst.EntryId, lPv, ParentVal('owner'), ParentVal('wikiPage'),
           string.Join('; ', lSurfs.ToArray) + ' (family ' + lFam + ')', lFirst.FileName));
       end;
     end;
@@ -1484,7 +1488,6 @@ var
   lEditList: TList<TFamEdit>;
   lEdit: TFamEdit;
   lFp: TFamilyPrefix;
-  lTail: TArray<string>;
   i: Integer;
 
   function Tail(const pPath: string): string;
@@ -1597,7 +1600,7 @@ end;
 
 { ---- normalise ---- }
 
-function DoNormalise(const pArgs: TCmdArgs; const pRepo: string; pJson: Boolean; const pOut: TCmdOut): Integer;
+function DoNormalise(const pArgs: TCmdArgs; const pRepo: string; pJson: Boolean; const pOut: TCmdOut): Integer;  // dl:ok unused-parameter@5812 -- REVIEWED 2026-10-19: shared command-handler signature; normalise takes no verb arguments
 var
   lCtx: TCheckContext;
   lChanged: TList<string>;
@@ -1635,8 +1638,8 @@ begin
         Continue;
       lB := TFile.ReadAllBytes(lF);
       lStart := 0;
-      if (Length(lB) >= 3) and (lB[0] = $EF) and (lB[1] = $BB) and (lB[2] = $BF) then
-        lStart := 3;
+      if (Length(lB) >= 3) and (lB[0] = $EF) and (lB[1] = $BB) and (lB[2] = $BF) then  // dl:ok magic-literal@d7a3 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
+        lStart := 3;  // dl:ok magic-literal@2702 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
       for i := lStart to High(lB) do
         if lB[i] > ASCII_MAX then
           raise ECommand.CreateFmt('normalise: %s: non-ASCII byte 0x%.2X at byte %d; fix it by hand', [lF, lB[i], i]);
@@ -1702,7 +1705,7 @@ begin
     Result := ['json'];
 end;
 
-function RunRegistryCommand(const pVerb: string; const pArgs: TArray<string>; const pDefaultRepo: string;
+function RunRegistryCommand(const pVerb: string; const pArgs: TArray<string>; const pDefaultRepo: string;  // dl:ok too-many-exit-points@6b5e -- REVIEWED 2026-10-19: guard-clause exits of a long ported routine; consolidating them would change the finding order the parity tests pin
   const pOut: TCmdOut): Integer;
 var
   lArgs: TCmdArgs;

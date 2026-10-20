@@ -1,0 +1,15 @@
+{
+  "_comment": [
+    "drag-lint's lint config for featuregen's own source (found first when walking up from",
+    "src\\tools\\featuregen\\_D-RAG\\featuregen.sqlite).",
+    "",
+    "local-var-casing is OFF here: the rule wants PascalCase locals, but this tool follows the",
+    "repository's Delphi house style (locals lFoo, parameters pFoo, fields FFoo -- C:\\Projects\\CLAUDE.md",
+    "and every other unit in the repo). It reported 1,406 findings, every one the house prefix,",
+    "none a defect. Renaming 1,400 locals in ported code would only add risk to byte-identical output."
+  ],
+  "disabled": ["local-var-casing"],
+  "exclude_paths": [
+    "*\\third_party\\*"
+  ]
+}

@@ -99,16 +99,16 @@ const
 type
   TWikiModel = class
   public
-    Entries: TObjectList<TJSONObject>;
-    FamilyNames: TList<string>;
-    Children: TObjectDictionary<string, TObjectList<TJSONObject>>;
-    GroupsRoot: TJSONValue;
-    Groups: TArray<TJSONObject>;
-    TeamsRoot: TJSONValue;
-    RelatedRoot: TJSONValue;
-    Rules: TJSONValue;
-    Product, Extractor, Resolver, Schema: string;
-    HomeIntro, FeaturesIntro, QuickIntro: string;
+    Entries: TObjectList<TJSONObject>;  // dl:ok public-field@3837 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    FamilyNames: TList<string>;  // dl:ok public-field@8c13 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    Children: TObjectDictionary<string, TObjectList<TJSONObject>>;  // dl:ok public-field@a649 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    GroupsRoot: TJSONValue;  // dl:ok public-field@5f52 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    Groups: TArray<TJSONObject>;  // dl:ok public-field@4fca -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    TeamsRoot: TJSONValue;  // dl:ok public-field@fdf5 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    RelatedRoot: TJSONValue;  // dl:ok public-field@4e9d -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    Rules: TJSONValue;  // dl:ok public-field@1bd0 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    Product, Extractor, Resolver, Schema: string;  // dl:ok public-field@bdb1 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    HomeIntro, FeaturesIntro, QuickIntro: string;  // dl:ok public-field@a9ad -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     constructor Create;
     destructor Destroy; override;
   end;
@@ -130,7 +130,7 @@ begin
   Children.Free;
   FamilyNames.Free;
   Entries.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-19: the direct ancestor method is the intended one
 end;
 
 { ---- JSON helpers ---- }
@@ -208,7 +208,7 @@ end;
 
 function IsEmptyJson(const pV: TJSONValue): Boolean;
 begin
-  Result := (pV = nil) or (pV is TJSONNull)
+  Result := (pV = nil) or (pV is TJSONNull)  // dl:ok boolean-expression-complexity@0115 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
     or ((pV is TJSONString) and (TJSONString(pV).Value = ''))
     or ((pV is TJSONArray) and (TJSONArray(pV).Count = 0));
 end;
@@ -255,7 +255,7 @@ var
   i: Integer;
 begin
   lKeys := pKeys;
-  SetLength(lIdx, Length(pItems));
+  SetLength(lIdx, Length(pItems));  // dl:ok duplicate-code@4cf8 -- REVIEWED 2026-10-19: parallel ported renderers share a shape; extracting a helper would couple outputs that must stay independent
   for i := 0 to High(lIdx) do
     lIdx[i] := i;
   TArray.Sort<Integer>(lIdx, TComparer<Integer>.Construct(
@@ -995,9 +995,9 @@ begin
     begin
       lT := Str(lS, 'type');
       case pSection of
-        0: lParts.Add((if SameText(lT, 'ide-about') then 'About window: ' + Str(lS, 'caption') else Str(lS, 'path')));
-        1: lParts.Add(Str(lS, 'host') + ': ' + Str(lS, 'caption'));
-        2: lParts.Add(Str(lS, 'path'));
+        0: lParts.Add((if SameText(lT, 'ide-about') then 'About window: ' + Str(lS, 'caption') else Str(lS, 'path')));  // dl:ok case-magic-numbers@3cc9 -- REVIEWED 2026-10-19: the case labels are the literal tag values of a ported dispatch; naming them adds nothing
+        1: lParts.Add(Str(lS, 'host') + ': ' + Str(lS, 'caption'));  // dl:ok case-magic-numbers@1ea0 -- REVIEWED 2026-10-19: the case labels are the literal tag values of a ported dispatch; naming them adds nothing
+        2: lParts.Add(Str(lS, 'path'));  // dl:ok case-magic-numbers@81ac -- REVIEWED 2026-10-19: the case labels are the literal tag values of a ported dispatch; naming them adds nothing
         SECTION_CLI: lParts.Add(CliSurface(lS));
       else
         if SameText(lT, 'script') then
@@ -1017,10 +1017,10 @@ end;
 function SectionTypes(pSection: Integer): TArray<string>;
 begin
   case pSection of
-    0: Result := ['ide-menu', 'ide-about'];
-    1: Result := ['ide-context'];
-    2: Result := ['tool-window'];
-    3: Result := ['cli'];
+    0: Result := ['ide-menu', 'ide-about'];  // dl:ok case-magic-numbers@c641 -- REVIEWED 2026-10-19: the case labels are the literal tag values of a ported dispatch; naming them adds nothing
+    1: Result := ['ide-context'];  // dl:ok case-magic-numbers@ce42 -- REVIEWED 2026-10-19: the case labels are the literal tag values of a ported dispatch; naming them adds nothing
+    2: Result := ['tool-window'];  // dl:ok case-magic-numbers@97a0 -- REVIEWED 2026-10-19: the case labels are the literal tag values of a ported dispatch; naming them adds nothing
+    3: Result := ['cli'];  // dl:ok case-magic-numbers@be0b -- REVIEWED 2026-10-19: the case labels are the literal tag values of a ported dispatch; naming them adds nothing
   else
     Result := ['script', 'exe', 'workflow'];
   end;

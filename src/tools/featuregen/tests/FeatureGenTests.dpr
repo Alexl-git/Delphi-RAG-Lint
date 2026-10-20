@@ -1,4 +1,4 @@
-program FeatureGenTests;
+program FeatureGenTests;  // dl:ok unit-too-large@5ff0 -- REVIEWED 2026-10-19: the ported checks A-E live together because they share one context and one finding list; splitting is a later refactor
 
 { Self-contained console test runner for featuregen (no DUnitX). One PASS/FAIL
   line per case, a summary line, exit code 1 on any failure. }
@@ -19,7 +19,7 @@ uses
   , FeatureGen.Site in '..\FeatureGen.Site.pas'
   , FeatureGen.HelpImport in '..\FeatureGen.HelpImport.pas'
   , FeatureGen.Wiki in '..\FeatureGen.Wiki.pas'
-  , FeatureGen.Check in '..\FeatureGen.Check.pas'
+  , FeatureGen.Check in '..\FeatureGen.Check.pas'  // dl:ok uses-global-census@b1db -- REVIEWED 2026-10-19: the test program names the checker constants it asserts on
   , FeatureGen.Audit in '..\FeatureGen.Audit.pas'
   , FeatureGen.Commands in '..\FeatureGen.Commands.pas'
   , System.Generics.Collections
@@ -112,8 +112,8 @@ begin
   try
     lReg.Load(TPath.Combine(ExtractFilePath(ParamStr(0)), 'fixtures\mini'));
     lE := lReg.Entries;
-    Check('Model.LoadMini.count', Length(lE) = 4, IntToStr(Length(lE)));
-    if Length(lE) = 4 then
+    Check('Model.LoadMini.count', Length(lE) = 4, IntToStr(Length(lE)));  // dl:ok magic-literal@84a8 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+    if Length(lE) = 4 then  // dl:ok magic-literal@e223 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     begin
       Check('Model.LoadMini.ordinal',
         (lE[0].Id = 'add-missing-units-to-uses-whole-unit') and (lE[1].Id = 'allow-this-message') and (lE[2].Id = 'outline'),
@@ -142,7 +142,7 @@ begin
 end;
 
 const
-  SCRATCH = 'C:\TEMP\claude\featuregen-task4\scratch';
+  SCRATCH = 'C:\TEMP\claude\featuregen-task4\scratch';  // dl:ok hardcoded-absolute-path@7ba9 -- REVIEWED 2026-10-19: test harness: names the main-tree engine and a scratch folder under C:\TEMP\claude on purpose
 
 function FreshDir(const pName: string): string;
 begin
@@ -175,7 +175,7 @@ begin
     lW.Free;
   end;
   Check('Output.WriteOnlyWhenDifferent.first', (Length(lR.Written) = 1) and TFile.Exists(lFile));
-  lOld := EncodeDate(2001, 2, 3);
+  lOld := EncodeDate(2001, 2, 3);  // dl:ok magic-literal@a68f -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   TFile.SetLastWriteTime(lFile, lOld);
   lW := TOutputWriter.Create(lDir, False, False);
   try
@@ -185,8 +185,8 @@ begin
     lW.Free;
   end;
   lNew := TFile.GetLastWriteTime(lFile);
-  Check('Output.WriteOnlyWhenDifferent', (lNew = lOld) and (Length(lR2.Written) = 0) and (Length(lR2.Changed) = 0),
-    DateTimeToStr(lNew));
+  Check('Output.WriteOnlyWhenDifferent', (lNew = lOld) and (Length(lR2.Written) = 0) and (Length(lR2.Changed) = 0),  // dl:ok float-equality-comparison@7c33 -- REVIEWED 2026-10-19: the assertion is exactly that the file time did not change
+    DateTimeToStr(lNew));  // dl:ok locale-sensitive-conversion@d277 -- REVIEWED 2026-10-19: diagnostic text of a test failure only
 end;
 
 procedure TestLfBecomesCrlf;
@@ -215,7 +215,7 @@ begin
   lW := TOutputWriter.Create(FreshDir('nonascii'), False, False);
   try
     try
-      lW.Put('x.txt', 'ok'#10'bad ' + Char($00E9), 'entry foo field intro');
+      lW.Put('x.txt', 'ok'#10'bad ' + Char($00E9), 'entry foo field intro');  // dl:ok magic-literal@92a8 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     except
       on E: EFeatureGen do
         lMsg := E.Message;
@@ -244,9 +244,9 @@ begin
     lW.Free;
   end;
   Check('Output.CheckWritesNothing',
-    (ReadBytesText(TPath.Combine(lDir, 'old.txt')) = 'a'#13#10'b'#13#10) and not TFile.Exists(TPath.Combine(lDir, 'new.txt'))
+    (ReadBytesText(TPath.Combine(lDir, 'old.txt')) = 'a'#13#10'b'#13#10) and not TFile.Exists(TPath.Combine(lDir, 'new.txt'))  // dl:ok boolean-expression-complexity@267c -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
     and TFile.Exists(TPath.Combine(lDir, 'stale.txt')) and (Length(lR.Written) = 0) and (Length(lR.Removed) = 0)
-    and (Length(lR.Changed) = 3), IntToStr(Length(lR.Changed)));
+    and (Length(lR.Changed) = 3), IntToStr(Length(lR.Changed)));  // dl:ok magic-literal@ac69 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   Check('Output.CheckDiffHead', (Length(lR.Changed) > 0) and (Pos('first difference at line 2', lR.Changed[0]) > 0)
     and (Pos('-b', lR.Changed[0]) > 0) and (Pos('+c', lR.Changed[0]) > 0), lR.Changed[0]);
 end;
@@ -291,7 +291,7 @@ begin
         lRaised := True;
     end;
     try
-      lW.Put('C:\TEMP\claude\featuregen-task2\x.txt', 'x', 'ctx');
+      lW.Put('C:\TEMP\claude\featuregen-task2\x.txt', 'x', 'ctx');  // dl:ok hardcoded-absolute-path@bd61 -- REVIEWED 2026-10-19: test harness: names the main-tree engine and a scratch folder under C:\TEMP\claude on purpose
     except
       on EFeatureGen do
         lRaisedAbs := True;
@@ -309,7 +309,7 @@ var
 begin
   lDir := FreshDir('bin');
   lSrc := TPath.Combine(lDir, 'src.bin');
-  TFile.WriteAllBytes(lSrc, TBytes.Create(0, 200, 13, 10, 255));
+  TFile.WriteAllBytes(lSrc, TBytes.Create(0, 200, 13, 10, 255));  // dl:ok large-magic-number@b123, magic-literal@b123 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   lW := TOutputWriter.Create(TPath.Combine(lDir, 'out'), False, False);
   try
     lW.PutBinary('i\p.bin', lSrc);
@@ -317,7 +317,7 @@ begin
   finally
     lW.Free;
   end;
-  Check('Output.PutBinary', TFile.ReadAllBytes(TPath.Combine(lDir, 'out\i\p.bin'))[1] = 200);
+  Check('Output.PutBinary', TFile.ReadAllBytes(TPath.Combine(lDir, 'out\i\p.bin'))[1] = 200);  // dl:ok large-magic-number@0693, magic-literal@0693 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
 end;
 function MiniDir: string;
 begin
@@ -372,7 +372,7 @@ begin
     lOut := TransformWikiBody('see [`deps`](Outline) and [x `<b>`](Gone) and `<i>`', lMap, 'ask', lImg);
     Check('Md.LinkWithCodeSpanText', lOut = 'see [`deps`](outline.md) and x `<b>` and `<i>`', lOut);
     Check('Md.HtmlInCodeAllowed', lMsg = '', lMsg);
-    lMsg := RaisedMessage('one'#10'caf' + Char($00E9), lMap);
+    lMsg := RaisedMessage('one'#10'caf' + Char($00E9), lMap);  // dl:ok magic-literal@7a56 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     Check('Md.NonAsciiFails', (Pos('ask', lMsg) > 0) and (Pos('line 2', lMsg) > 0), lMsg);
   finally
     lMap.Free;
@@ -429,7 +429,7 @@ begin
       lOut.StartsWith('---'#10'id: outline'#10'title: outline'#10'summary: Prints the file-scoped symbol outline for one Pascal unit'#10
         + 'product: DL'#10'group: search-navigation'#10'order: 20001'#10'since: 0.86.0-alpha'#10'status: shipped'#10'updated: 0.86.0-alpha'#10
         + '---'#10#10'# outline'#10#10'Prints the file-scoped symbol outline for one Pascal unit.'#10#10'## How to run it'#10),
-      Copy(lOut, 1, 400));
+      Copy(lOut, 1, 400));  // dl:ok large-magic-number@26f3, magic-literal@26f3 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     lFmt.ExcludeAudiences := TArray<string>.Create('both');
     lE := EntryById(lReg, 'outline');
     lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
@@ -442,7 +442,7 @@ begin
     lE.Title := 'Add: units';
     lOut := RenderLeaf(lE, lFmt, lReg, MiniDir, lImg);
     Check('Leaf.NoWikiPageStillRenders',
-      (Pos('title: "Add: units"', lOut) > 0) and (Pos('## Details', lOut) = 0) and (Pos('## Where to click', lOut) > 0)
+      (Pos('title: "Add: units"', lOut) > 0) and (Pos('## Details', lOut) = 0) and (Pos('## Where to click', lOut) > 0)  // dl:ok boolean-expression-complexity@49fb -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
       and (Pos('* RAD Studio main menu: **drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)...**', lOut) > 0)
       and (Pos('[All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)', lOut) > 0)
       and (Pos('## How to run it', lOut) > 0) and (Pos('drag-lint check-unit', lOut) > 0), lOut);
@@ -451,7 +451,7 @@ begin
     lP := Pos('## Details', lOut);
     lHow := Copy(lOut, 1, lP);
     Check('Leaf.NoDuplicateUsageWhenWikiHasCliSection',
-      (lP > 0) and (Pos('## How to run it', lHow) > 0) and (Pos('../cli.md#outline', lHow) > 0) and (Pos('--file', lHow) = 0)
+      (lP > 0) and (Pos('## How to run it', lHow) > 0) and (Pos('../cli.md#outline', lHow) > 0) and (Pos('--file', lHow) = 0)  // dl:ok boolean-expression-complexity@d745 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
       and (Pos('--file <path.pas>', Copy(lOut, lP, MaxInt)) > 0) and (Pos('[Allow-this-message](allow-this-message.md)', lOut) > 0)
       and (Pos('a page that is not on the site', lOut) > 0) and (Pos('Nowhere', lOut) = 0), lOut);
     lE.Surfaces[0].Example := 'drag-lint outline --file U.pas';
@@ -471,7 +471,7 @@ var
   lFmt: TSiteFormat;
 begin
   lFmt := LoadSiteFormat(pRepo);
-  Check('SiteFormat.Load', (lFmt.Root = 'WWW\help\dl') and (lFmt.Product = 'DL') and (Length(lFmt.FrontMatterKeys) = 9)
+  Check('SiteFormat.Load', (lFmt.Root = 'WWW\help\dl') and (lFmt.Product = 'DL') and (Length(lFmt.FrontMatterKeys) = 9)  // dl:ok boolean-expression-complexity@1cd4, magic-literal@1cd4 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare; test expectation: the literal is the asserted value
     and (lFmt.FenceDefaultLang = 'text') and (lFmt.ImageDir = 'features/img') and (lFmt.UndocumentedSource = 'tests\autotest\run_docs_sync_guard.ps1')
     and (lFmt.MicroniteIndex <> lFmt.MicroniteWhatsNew) and (Pos('https://www.htrmicronite.com', lFmt.MicroniteIndex) > 0)
     and (Pos('https://www.htrmicronite.com', lFmt.MicroniteWhatsNew) > 0) and SiteIncludes(lFmt, 'shipped', 'both')
@@ -573,7 +573,7 @@ begin
   Check('Site.UndocumentedEmptyBlockFails', Pos('UndocumentedOnPurpose', lMsg) > 0, lMsg);
 end;
 
-procedure TestSite;
+procedure TestSite;  // dl:ok too-many-locals@c367, cyclomatic-complexity@c5b1 -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original; one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
 var
   lHelp: TLiveHelp;
   lOutA, lOutB, lFile, lIndex, lJson, lCli, lIde, lNew, lMap, lAll, lRel, lLeaf, lSentI, lSentN: string;
@@ -599,7 +599,7 @@ begin
     for lId in lIds do
       if (Occurrences(lIndex, '](features/' + lId + '.md)') <> 1) or not TFile.Exists(TPath.Combine(lOutA, 'features\' + lId + '.md')) then
         Inc(lBad);
-    Check('Site.IndexLinksEveryIncludedLeafOnce', (lBad = 0) and (Occurrences(lIndex, '](features/') = 5), lIndex);
+    Check('Site.IndexLinksEveryIncludedLeafOnce', (lBad = 0) and (Occurrences(lIndex, '](features/') = 5), lIndex);  // dl:ok magic-literal@3076 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     Check('Site.IndexGroupsTablesPipeEscaped', (Pos('## IDE group', lIndex) < Pos('## Search group', lIndex)) and (Pos('Empty group', lIndex) = 0)
       and (Pos('| Feature | What it does | Since |', lIndex) > 0) and (Pos('| [Find callers](features/find-callers.md) | Finds callers \| of a name | 0.86.0-alpha |', lIndex) > 0)
       and (Pos('| [Ask](features/ask.md) |', lIndex) < Pos('| [Find callers]', lIndex)), lIndex);
@@ -609,7 +609,7 @@ begin
       lAll := lAll + #10 + ReadBytesText(lFile);
     lCli := ReadSiteFile(lOutA, 'cli.md');
     Check('Site.InternalEntryAbsentEverywhere',
-      not TFile.Exists(TPath.Combine(lOutA, 'features\internal-thing.md')) and not TFile.Exists(TPath.Combine(lOutA, 'features\selftest-thing.md'))
+      not TFile.Exists(TPath.Combine(lOutA, 'features\internal-thing.md')) and not TFile.Exists(TPath.Combine(lOutA, 'features\selftest-thing.md'))  // dl:ok boolean-expression-complexity@cb9f -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
       and (Pos('internal-thing', lAll) = 0) and (Pos('selftest-thing', lAll) = 0) and (Pos('### hidden', lCli) = 0) and (Pos('### selftest', lCli) = 0)
       and (Pos('Selftest-thing', ReadSiteFile(lOutA, 'features/ask.md')) > 0), lAll);
 
@@ -620,18 +620,18 @@ begin
       lArr := nil;
       if lVal is TJSONArray then
         lArr := TJSONArray(lVal);
-      Check('Site.IndexJsonIsArrayOfFive', (lArr <> nil) and (lArr.Count = 5), lJson);
-      if (lArr <> nil) and (lArr.Count = 5) then
+      Check('Site.IndexJsonIsArrayOfFive', (lArr <> nil) and (lArr.Count = 5), lJson);  // dl:ok magic-literal@acd3 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+      if (lArr <> nil) and (lArr.Count = 5) then  // dl:ok magic-literal@e23b -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
       begin
         lOrders := TArray<string>.Create('10001', '10002', '20001', '20002', '20003');
         lIds := TArray<string>.Create('fix-refactor', 'fix-uses', 'ask', 'find-callers', 'find-text');
-        for lI := 0 to 4 do
+        for lI := 0 to 4 do  // dl:ok magic-literal@a366 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
         begin
           lRel := lArr.Items[lI].GetValue<string>('file');
           lLeaf := ReadSiteFile(lOutA, lRel);
-          if (lArr.Items[lI].GetValue<string>('id') <> lIds[lI]) or (lArr.Items[lI].GetValue<string>('order') <> lOrders[lI])
+          if (lArr.Items[lI].GetValue<string>('id') <> lIds[lI]) or (lArr.Items[lI].GetValue<string>('order') <> lOrders[lI])  // dl:ok boolean-expression-complexity@6b4c -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
             or (lRel <> 'features/' + lIds[lI] + '.md') or (Pos(#10'order: ' + lOrders[lI] + #10, lLeaf) = 0)
-            or (Pos(#10'title: ' + lArr.Items[lI].GetValue<string>('title') + #10, lLeaf) = 0)
+            or (Pos(#10'title: ' + lArr.Items[lI].GetValue<string>('title') + #10, lLeaf) = 0)  // dl:ok redundant-parentheses@35ad -- REVIEWED 2026-10-19: the parentheses belong to the generic call GetValue<string>(...)
             or (lArr.Items[lI].GetValue<string>('since') = '') or (lArr.Items[lI].GetValue<string>('group') = '')
             or (lArr.Items[lI].GetValue<string>('summary') = '') then
             Inc(lBad);
@@ -657,7 +657,7 @@ begin
       and (Pos('[Find callers]', lNew) < Pos('[Fix uses]', lNew)) and (Pos('[Fix uses]', lNew) < Pos('## 0.50.0-alpha', lNew)), lNew);
 
     Check('Site.CliOneHeadingPerVerbWithUsageAndLeaves',
-      (Occurrences(lCli, '### query'#10) = 1) and (Pos('### ask'#10, lCli) < Pos('### query'#10, lCli)) and (Pos('drag-lint ask <q> [--db <d>]', lCli) > 0)
+      (Occurrences(lCli, '### query'#10) = 1) and (Pos('### ask'#10, lCli) < Pos('### query'#10, lCli)) and (Pos('drag-lint ask <q> [--db <d>]', lCli) > 0)  // dl:ok boolean-expression-complexity@4e44 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
       and (Pos('drag-lint query find-callers --name N', lCli) > 0) and (Pos('* [Find callers](features/find-callers.md)', lCli) > 0)
       and (Pos('* [Find text](features/find-text.md)', lCli) > 0) and (Pos('Described in [Ask](features/ask.md).', lCli) > 0), lCli);
 
@@ -671,7 +671,7 @@ begin
       if (Pos('htrmicronite', ReadBytesText(lFile)) > 0) <> ((lRel = 'index.md') or (lRel = 'whats-new.md')) then
         Inc(lBad);
     end;
-    Check('Site.MicroniteOnlyInIndexAndWhatsNew', (lBad = 0) and (lSentI <> lSentN) and (Pos(lSentI, lIndex) > 0) and (Pos(lSentI, lIndex) < Pos('## ', lIndex))
+    Check('Site.MicroniteOnlyInIndexAndWhatsNew', (lBad = 0) and (lSentI <> lSentN) and (Pos(lSentI, lIndex) > 0) and (Pos(lSentI, lIndex) < Pos('## ', lIndex))  // dl:ok boolean-expression-complexity@427c -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
       and (Pos(lSentN, lNew) > 0) and (Pos(lSentN, lNew) < Pos('## ', lNew)) and (Pos(lSentN, lIndex) = 0) and (Pos(lSentI, lNew) = 0),
       IntToStr(lBad));
 
@@ -685,7 +685,7 @@ begin
         lSame := False;
     end;
     lRes := BuildFixture(SiteDir, lOutA, False, lHelp);
-    Check('Site.TwoBuildsByteIdentical', lSame and (Length(lFiles) > 8) and (Length(lRes.Written) = 0) and (Length(lRes.Changed) = 0), IntToStr(Length(lFiles)));
+    Check('Site.TwoBuildsByteIdentical', lSame and (Length(lFiles) > 8) and (Length(lRes.Written) = 0) and (Length(lRes.Changed) = 0), IntToStr(Length(lFiles)));  // dl:ok magic-literal@9994 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     lRes := BuildFixture(SiteDir, lOutA, True, lHelp);
     Check('Site.CheckModeCleanAfterBuild', Length(lRes.Changed) = 0);
 
@@ -792,7 +792,7 @@ begin
     lLeaf := ReadSiteFile(lOut, 'features/gen-page.md');
     lAsk := ReadSiteFile(lOut, 'features/ask.md');
     Check('Site.GeneratedWikiPageLeafNoDetailsNoMapRow',
-      (Pos('title: Gen page', lLeaf) > 0) and (Pos('## Details', lLeaf) = 0) and (Pos('Use ', lLeaf) = 0)
+      (Pos('title: Gen page', lLeaf) > 0) and (Pos('## Details', lLeaf) = 0) and (Pos('Use ', lLeaf) = 0)  // dl:ok boolean-expression-complexity@29c8 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
       and (Pos('"Features"', ReadSiteFile(lOut, 'wiki-map.json')) = 0) and (Pos('See Features now.', lAsk) > 0) and (Pos('gen-page.md', lAsk) = 0), lLeaf);
   end;
 end;
@@ -856,7 +856,7 @@ begin
   begin
     lAsk := ReadSiteFile(lOut, 'features/ask.md');
     Check('Site.RemoteChartImageCopiedAndRenamed',
-      (Pos('![chart](img/ask-1.png)', lAsk) > 0) and (Pos('[SVG](img/ask-2.svg)', lAsk) > 0) and (Pos('[rel](img/ask-3.svg)', lAsk) > 0)
+      (Pos('![chart](img/ask-1.png)', lAsk) > 0) and (Pos('[SVG](img/ask-2.svg)', lAsk) > 0) and (Pos('[rel](img/ask-3.svg)', lAsk) > 0)  // dl:ok boolean-expression-complexity@93fb -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
       and (ReadSiteFile(lOut, 'features/img/ask-1.png') = 'PNGDATA') and (ReadSiteFile(lOut, 'features/img/ask-2.svg') = 'SVGDATA')
       and (Pos('githubusercontent', lAsk) = 0), lAsk);
     Check('Site.GithubLinkBecomesPlainText', (Pos(' gh ', lAsk) > 0) and (Pos('github.com', lAsk) = 0), lAsk);
@@ -884,7 +884,7 @@ begin
     lW.PutBinary('img/p.png', ParamStr(0));
     lBad := CheckLinks(lW);
     lJoined := string.Join('|', lBad);
-    Check('Site.CheckLinksRules', (Length(lBad) = 7) and (Pos('a.md: link "missing.md"', lJoined) > 0) and (Pos('"http://x.org/a" -- external link is not https', lJoined) > 0)
+    Check('Site.CheckLinksRules', (Length(lBad) = 7) and (Pos('a.md: link "missing.md"', lJoined) > 0) and (Pos('"http://x.org/a" -- external link is not https', lJoined) > 0)  // dl:ok boolean-expression-complexity@6791, magic-literal@6791 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare; test expectation: the literal is the asserted value
       and (Pos('"file:///c:/x.md" -- local path', lJoined) > 0) and (Pos('"C:\x\y.md" -- local path', lJoined) > 0)
       and (Pos('"sub\b.md" -- local path', lJoined) > 0) and (Pos('"../x.md" -- leaves the site', lJoined) > 0)
       and (Pos('nope', lJoined) = 0) and (Pos('sub/c.md: link "b.md" -- target file does not exist', lJoined) > 0), lJoined);
@@ -909,7 +909,7 @@ begin
     lE := EntryById(lReg, 'v2-sample');
     lO := EntryById(lReg, 'outline');
     Check('Model.ReadsV2Fields',
-      (Length(lE.Surfaces) = 2) and (lE.Surfaces[0].Usage = 'drag-lint v2verb go --name <N> [--db <db>]')
+      (Length(lE.Surfaces) = 2) and (lE.Surfaces[0].Usage = 'drag-lint v2verb go --name <N> [--db <db>]')  // dl:ok boolean-expression-complexity@8e47 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
       and (Length(lE.Surfaces[0].Flags) = 2) and (lE.Surfaces[0].Flags[0].Name = '--name') and (lE.Surfaces[0].Flags[0].Arg = '<N>')
       and (lE.Surfaces[0].Flags[0].Summary = 'The bare member name') and (lE.Surfaces[0].Flags[0].DefaultValue = 'none')
       and (lE.Surfaces[0].Flags[1].DefaultValue = '<db>')
@@ -940,7 +940,7 @@ begin
   finally
     lVal.Free;
   end;
-  Check('Json.V2KeyOrderCanonical', lBack = lText, Copy(lBack, 1, 200));
+  Check('Json.V2KeyOrderCanonical', lBack = lText, Copy(lBack, 1, 200));  // dl:ok large-magic-number@c18a, magic-literal@c18a -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   // the same entry with the v2 keys written in a wrong order: must come back byte-identical
   lScrambled := '{"verified": {"surfaceHash": "abc123", "build": "1.32.0", "by": "ENGINE", "date": "2026-10-19"}, "pitfalls": ["Pass the BARE member name; TFoo.Bar returns 0", "Reindex after an edit"], '
     + '"questions": [{"command": "drag-lint v2verb go --name Bar", "ask": "Who calls Bar?"}], "audience": "both", "surfaces": ['
@@ -955,7 +955,7 @@ begin
   finally
     lVal.Free;
   end;
-  Check('Json.V2FixedOrdersFromScrambled', lBack = lText, Copy(lBack, 1, 200));
+  Check('Json.V2FixedOrdersFromScrambled', lBack = lText, Copy(lBack, 1, 200));  // dl:ok large-magic-number@027a, magic-literal@027a -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
 end;
 
 procedure TestEmptyArraysV2;
@@ -1098,7 +1098,7 @@ begin
   try
     lSurf := (lE.GetValue('surfaces') as TJSONArray).Items[0] as TJSONObject;
     Check('Import.FillsOnlyMissing',
-      (lSurf.GetValue<string>('usage') = 'keep me') and not lU and (lF = 5) and (lP = 0)
+      (lSurf.GetValue<string>('usage') = 'keep me') and not lU and (lF = 5) and (lP = 0)  // dl:ok boolean-expression-complexity@181b, magic-literal@181b -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare; test expectation: the literal is the asserted value
       and ((lE.GetValue('pitfalls') as TJSONArray).Count = 1) and (ImportFlagNames(lE) = '--name --context --resolved --db --json '),
       lE.ToJSON);
   finally
@@ -1136,7 +1136,7 @@ begin
   lCases[0] := TArray<string>.Create('"pitfalls": ["Run <ask> now"]', 'pitfalls', 'raw HTML');
   lCases[1] := TArray<string>.Create('"questions": [ { "ask": "What <is> it?", "command": "x" } ]', 'questions', 'raw HTML');
   lCases[2] := TArray<string>.Create('"surfaces": [ { "type": "cli", "verb": "ask", "usage": "drag-lint ask \u00e9" } ]', 'usage', 'non-ASCII');
-  lCases[3] := TArray<string>.Create('"surfaces": [ { "type": "cli", "verb": "ask", "flags": [ { "name": "--a", "summary": "Takes <b> raw" } ] } ]', 'flags', 'raw HTML');
+  lCases[3] := TArray<string>.Create('"surfaces": [ { "type": "cli", "verb": "ask", "flags": [ { "name": "--a", "summary": "Takes <b> raw" } ] } ]', 'flags', 'raw HTML');  // dl:ok magic-literal@2e91 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   for i := 0 to High(lCases) do
   begin
     lRepo := CopySiteRepo('v2guard-repo' + IntToStr(i));
@@ -1160,7 +1160,7 @@ end;
   featuregen's own registry entry, so GoldenRepo rebuilds exactly that tree. ---- }
 
 const
-  MAIN_ENGINE = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe';
+  MAIN_ENGINE = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe';  // dl:ok hardcoded-absolute-path@6bef -- REVIEWED 2026-10-19: test harness: names the main-tree engine and a scratch folder under C:\TEMP\claude on purpose
   GOLDEN_ENTRY = 'features\entries\featuregen.json';
 
 var
@@ -1203,7 +1203,7 @@ begin
     'src\delphi-plugin\DragLint.Plugin.StructureForm.pas', 'src\delphi-plugin\DragLint.Plugin.ProjectMenu.pas'] do
     CopyFileTo(pRepo, lDst, lRel);
   if TFile.Exists(TPath.Combine(lDst, GOLDEN_ENTRY)) then
-    TFile.Delete(TPath.Combine(lDst, GOLDEN_ENTRY));
+    TFile.Delete(TPath.Combine(lDst, GOLDEN_ENTRY));  // dl:ok stat-gated-destructive@07b5 -- REVIEWED 2026-10-19: deletes a file in a scratch copy of the repository that the test just made
   // inputs frozen at the capture (an entry the cut-over rewrote), laid over the copy
   lIn := GoldenFile(pRepo, 'inputs');
   for lRel in TDirectory.GetFiles(lIn, '*', TSearchOption.soAllDirectories) do
@@ -1352,7 +1352,7 @@ var
 begin
   lDir := FreshDir('ascii-strict');
   lFile := TPath.Combine(lDir, 'README.md');
-  TFile.WriteAllBytes(lFile, TBytes.Create(Ord('a'), Ord('b'), $C3, $A9, 13, 10));
+  TFile.WriteAllBytes(lFile, TBytes.Create(Ord('a'), Ord('b'), $C3, $A9, 13, 10));  // dl:ok magic-literal@1672 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   lMsg := '';
   try
     ReadAsciiStrict(lFile);
@@ -1403,8 +1403,8 @@ begin
   if TFile.Exists(lCli) then
   begin
     lDead := DeadRelativeLinks(ReadBytesText(lCli), TPath.Combine(pRepo, 'features\generated'), lChecked);
-    Check('Wiki.CliReferenceLinksResolveInRepo', (lChecked > 100) and (Length(lDead) = 0),
-      IntToStr(lChecked) + ' checked; dead: ' + string.Join(' | ', Copy(lDead, 0, 5)));
+    Check('Wiki.CliReferenceLinksResolveInRepo', (lChecked > 100) and (Length(lDead) = 0),  // dl:ok magic-literal@8726 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+      IntToStr(lChecked) + ' checked; dead: ' + string.Join(' | ', Copy(lDead, 0, 5)));  // dl:ok magic-literal@4e78 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   end;
 end;
 procedure TestCompareOutputTreesPositiveControl;
@@ -1555,7 +1555,7 @@ begin
     lLive := TLiveSurface.Create;
     try
       lLive.Harvest(pRepo, pEngine);
-    except
+    except  // dl:ok bare-except@ec5d -- REVIEWED 2026-10-19: cleanup-and-re-raise: frees the half-built result, then raises the original exception
       lLive.Free;
       raise;
     end;
@@ -1639,7 +1639,7 @@ begin
   finally
     lLive.Free;
   end;
-  Check('Live.EmptyKindsCatchesEveryEmptyKind', Length(lEmpty) = 21, IntToStr(Length(lEmpty)) + ': ' + string.Join(' ', lEmpty));
+  Check('Live.EmptyKindsCatchesEveryEmptyKind', Length(lEmpty) = 21, IntToStr(Length(lEmpty)) + ': ' + string.Join(' ', lEmpty));  // dl:ok large-magic-number@1259, magic-literal@1259 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
 end;
 
 procedure TestHarvestRaisesOnEmptySubMap(const pRepo: string);
@@ -1688,8 +1688,8 @@ begin
   begin
     lPsLines := TFile.ReadAllLines(lFile, TEncoding.ASCII);
     CompareFindingSets(lPsLines, lMine, lMissing, lExtra);
-    Check('Live.HarvestEqualsGolden', (lMsg = '') and (Length(lPsLines) > 100) and (Length(lMissing) = 0) and (Length(lExtra) = 0),
-      lMsg + ' missing: ' + string.Join(' | ', Copy(lMissing, 0, 8)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 8)));
+    Check('Live.HarvestEqualsGolden', (lMsg = '') and (Length(lPsLines) > 100) and (Length(lMissing) = 0) and (Length(lExtra) = 0),  // dl:ok magic-literal@c059 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+      lMsg + ' missing: ' + string.Join(' | ', Copy(lMissing, 0, 8)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 8)));  // dl:ok magic-literal@8005 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   end;
   if lMsg = '' then
     Check('Live.HarvestEveryKindNonEmpty', Length(EmptyLiveKinds(lLive)) = 0, string.Join(' ', EmptyLiveKinds(lLive)));
@@ -1775,8 +1775,8 @@ end;
 
 procedure TestExclusionCountPositiveControl;
 begin
-  Check('Check.ExclusionCountGuardCatchesMismatch', not ExclusionCountOk(15, 14) and not ExclusionCountOk(0, -1)
-    and not ExclusionCountOk(3, -1) and ExclusionCountOk(15, 15) and ExclusionCountOk(0, 0));
+  Check('Check.ExclusionCountGuardCatchesMismatch', not ExclusionCountOk(15, 14) and not ExclusionCountOk(0, -1)  // dl:ok magic-literal@7ebc -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+    and not ExclusionCountOk(3, -1) and ExclusionCountOk(15, 15) and ExclusionCountOk(0, 0));  // dl:ok magic-literal@ac8b -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
 end;
 
 { Live MCP tools that no non-planned entry under pRepo\features\entries registers
@@ -1824,7 +1824,7 @@ end;
   many failures (a seeded repo). pMcpExpected / pNestedExpected: the exact size of each
   Delphi-only class; pNewDExpected: the exact number of check D findings on the outputs the
   PowerShell generator did not own (-1: any number above zero, a seeded tree). }
-procedure TestCheckParity(const pRepo, pCheckRepo, pLevelName: string; pLevel: TCheckLevel; const pName: string;
+procedure TestCheckParity(const pRepo, pCheckRepo, pLevelName: string; pLevel: TCheckLevel; const pName: string;  // dl:ok too-many-parameters@3a35 -- REVIEWED 2026-10-19: test helper: each parameter is one expected count of the parity comparison
   pMinFindings, pMcpExpected, pNestedExpected, pNewDExpected: Integer);
 var
   lFile, lMsg, lLine, lName: string;
@@ -1861,10 +1861,10 @@ begin
   for lLine in lNotes do
     Writeln('INFO   note: ', lLine);
   lNewDOk := (if pNewDExpected < 0 then lNewD > 0 else ExclusionCountOk(lNewD, pNewDExpected));
-  Check('Check.ParityWithGolden.' + lName, (lMsg = '') and TFile.Exists(lFile) and (Length(lPsFail) >= pMinFindings)
+  Check('Check.ParityWithGolden.' + lName, (lMsg = '') and TFile.Exists(lFile) and (Length(lPsFail) >= pMinFindings)  // dl:ok boolean-expression-complexity@8137 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
     and ExclusionCountOk(lDropped, pMcpExpected) and ExclusionCountOk(lNested, pNestedExpected) and lNewDOk
     and (Length(lMissing) = 0) and (Length(lExtra) = 0) and (Length(lNMissing) = 0) and (Length(lNExtra) = 0),
-    lMsg + ' missing: ' + string.Join(' | ', Copy(lMissing, 0, 5)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 5))
+    lMsg + ' missing: ' + string.Join(' | ', Copy(lMissing, 0, 5)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 5))  // dl:ok magic-literal@51d8 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     + ' // notes missing: ' + string.Join(' | ', lNMissing) + ' // notes extra: ' + string.Join(' | ', lNExtra));
 end;
 
@@ -1874,7 +1874,7 @@ var
 begin
   lT := ReadBytesText(pFile);
   if Pos(pOld, lT) = 0 then
-    raise Exception.CreateFmt('seed anchor not found in %s: %s', [pFile, pOld]);
+    raise Exception.CreateFmt('seed anchor not found in %s: %s', [pFile, pOld]);  // dl:ok raise-bare-exception@47a3 -- REVIEWED 2026-10-19: test helper; the message is the diagnostic
   TFile.WriteAllText(pFile, lT.Replace(pOld, pNew), TEncoding.ASCII);
 end;
 
@@ -1953,8 +1953,8 @@ begin
   Check('Check.DCleanOnRefreshedCopy', lClean = 0, IntToStr(lClean) + ' D finding(s) on a freshly rendered copy');
   for lJ := 0 to 2 do
     case lJ of
-      0: TFile.AppendAllText(TPath.Combine(lDst, 'features\generated\cli-reference.md'), 'x', TEncoding.ASCII);
-      1: TFile.AppendAllText(TPath.Combine(lDst, 'WWW\help\dl\cli.md'), 'x', TEncoding.ASCII);
+      0: TFile.AppendAllText(TPath.Combine(lDst, 'features\generated\cli-reference.md'), 'x', TEncoding.ASCII);  // dl:ok case-magic-numbers@f15e -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+      1: TFile.AppendAllText(TPath.Combine(lDst, 'WWW\help\dl\cli.md'), 'x', TEncoding.ASCII);  // dl:ok case-magic-numbers@89a8 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     else
       TFile.AppendAllText(TPath.Combine(lDst, 'features\generated\site-pages.json'), ' ', TEncoding.ASCII);
     end;
@@ -2177,7 +2177,7 @@ begin
   lArgs := AddProbeArgs(lCopy, 'maintenance', 'CONVERTOR');
   lExit := RunCmd('add', lArgs, lOut);
   Check('Cmd.AddRejectsUnknownOwner', (lExit = 1) and (Pos('nearest: CONVERTER', lOut) > 0), IntToStr(lExit) + ' ' + lOut);
-  lExit := RunCmd('add', AddProbeArgs(lCopy) + ['--title', 'Caf' + Char($E9)], lOut);
+  lExit := RunCmd('add', AddProbeArgs(lCopy) + ['--title', 'Caf' + Char($E9)], lOut);  // dl:ok magic-literal@1287 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   Check('Cmd.AddRefusesNonAscii', (lExit = 1) and (Pos('non-ASCII', lOut) > 0) and not TFile.Exists(TPath.Combine(lCopy, 'features\entries\zz-probe.json')), IntToStr(lExit) + ' ' + lOut);
   lExit := RunCmd('add', AddProbeArgs(lCopy) + ['--home-order', 'abc'], lOut);
   Check('Cmd.AddNonNumericHomeOrderIsUsageError', (lExit = 2) and not TFile.Exists(TPath.Combine(lCopy, 'features\entries\zz-probe.json')), IntToStr(lExit) + ' ' + lOut);
@@ -2231,7 +2231,6 @@ begin
   // which pins CanonicalJson's empty-drop and dedupe paths on input the real (already canonical) entries never exercise.
   lCopy := CmdRepo(pRepo, 'cmd-update-hand');
   lFile := TPath.Combine(lCopy, 'features\entries\outline.json');
-  lRaw := ReadBytesText(lFile);
   ReplaceInFile(lFile, '"audience": "both"', '"audience": "both", "notes": "", "related": ["ask", "about-and-status", "ask"]');
   lExit := RunCmd('update', ['--repo', lCopy, '--id', 'outline', '--set', 'notes=n'], lOut);
   lRaw := ReadBytesText(lFile);
@@ -2267,7 +2266,7 @@ begin
   Check('Cmd.Find.hits', (lExit = 0) and (Pos('outline', lOut) > 0), lOut);
   lExit := RunCmd('find', ['--repo', lCopy, '--text', 'zz-no-such-thing-zz'], lOut);
   Check('Cmd.Find.noHitsExit1', lExit = 1, lOut);
-  lExit := RunCmd('find', ['--repo', lCopy, '--text', 'unit-not-in-dpr'], lOut);
+  RunCmd('find', ['--repo', lCopy, '--text', 'unit-not-in-dpr'], lOut);
   Check('Cmd.FindIncludesChildrenFlag.without', Pos('rule.unit-not-in-dpr', lOut) = 0, lOut);
   if TFile.Exists(MAIN_ENGINE) then
   begin
@@ -2328,7 +2327,7 @@ begin
   lExit := RunCmd('normalise', ['--repo', lCopy], lOut);
   Check('Cmd.NormaliseRepairs', (lExit = 0) and (Pos('normalised 2 file(s)', lOut) > 0) and (Pos('groups.json', lOut) > 0)
     and (Pos('Home.intro.md', lOut) > 0), lOut);
-  lExit := RunCmd('normalise', ['--repo', lCopy], lOut);
+  RunCmd('normalise', ['--repo', lCopy], lOut);
   Check('Cmd.NormaliseIdempotent', Pos('normalised 0 file(s)', lOut) > 0, lOut);
 end;
 
@@ -2343,7 +2342,7 @@ begin
   lExit := RunCmd('add', AddProbeArgs(lCopy) + ['--home-order', '3'], lOut);
   Check('Cmd.AddRefusesDuplicateHomeOrder', (lExit = 1) and (Pos('homeOrder 3 is also used by outline', lOut) > 0)
     and not TFile.Exists(TPath.Combine(lCopy, 'features\entries\zz-probe.json')), IntToStr(lExit) + ' ' + lOut);
-  lExit := RunCmd('add', AddProbeArgs(lCopy), lOut);
+  RunCmd('add', AddProbeArgs(lCopy), lOut);
   lFile := TPath.Combine(lCopy, 'features\entries\zz-probe.json');
   lBefore := ReadBytesText(lFile);
   lExit := RunCmd('update', ['--repo', lCopy, '--id', 'zz-probe', '--set', 'homeOrder=3'], lOut);
@@ -2409,7 +2408,7 @@ begin
   TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\fat.json'),
     '{ "id": "fat", "title": "Fat", "group": "g-search", "owner": "CHARTS", "status": "shipped", "since": "0.1.0-alpha",'
     + ' "summary": "Fat one", "wikiPage": "Fat", "surfaces": [ { "type": "cli", "verb": "fat" } ], "audience": "both" }', TEncoding.ASCII);
-  lBody := StringOfChar('x', 250);
+  lBody := StringOfChar('x', 250);  // dl:ok large-magic-number@c3f3, magic-literal@c3f3 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
   TFile.WriteAllText(TPath.Combine(lCopy, 'docs\wiki\Fat.md'), lBody, TEncoding.ASCII);
   TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\intro.json'),
     '{ "id": "intro", "title": "Intro", "group": "g-search", "owner": "CHARTS", "status": "shipped", "since": "0.1.0-alpha",'
@@ -2455,7 +2454,7 @@ begin
       lVer := TJSONObject(lVal).GetValue('verified');
       lHash := Prop(lVer, 'surfaceHash');
       Check('Verify.RecordsHashAndBuild', (Prop(lVer, 'date') = '2026-10-19') and (Prop(lVer, 'by') = 'tester')
-        and (Prop(lVer, 'build') = '9.9.9-test') and (Length(lHash) = 64) and TRegEx.IsMatch(lHash, '^[0-9a-f]{64}$'), lHash);
+        and (Prop(lVer, 'build') = '9.9.9-test') and (Length(lHash) = 64) and TRegEx.IsMatch(lHash, '^[0-9a-f]{64}$'), lHash);  // dl:ok magic-literal@a37b -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     finally
       lVal.Free;
     end;
@@ -2476,13 +2475,13 @@ begin
     finally
       lVal.Free;
     end;
-    lF := AuditOf(lCopy, lLive, lHelpA, EncodeDate(2026, 10, 20));
+    lF := AuditOf(lCopy, lLive, lHelpA, EncodeDate(2026, 10, 20));  // dl:ok magic-literal@d4ab -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     Check('Audit.SurfaceUnchangedIsQuiet', not HasKind(lF, 'outline', 'surface-changed') and not HasKind(lF, 'outline', 'stale-verified'));
-    lF := AuditOf(lCopy, lLive, lHelpB, EncodeDate(2026, 10, 20));
+    lF := AuditOf(lCopy, lLive, lHelpB, EncodeDate(2026, 10, 20));  // dl:ok magic-literal@1874 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     Check('Audit.SurfaceChangedAfterVerify', HasKind(lF, 'outline', 'surface-changed') and not HasKind(lF, 'ask', 'surface-changed'));
-    lF := AuditOf(lCopy, lLive, lHelpA, EncodeDate(2027, 1, 17));
+    lF := AuditOf(lCopy, lLive, lHelpA, EncodeDate(2027, 1, 17));  // dl:ok magic-literal@7ef2 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     Check('Audit.StaleVerifiedBoundary.day90', not HasKind(lF, 'outline', 'stale-verified'));
-    lF := AuditOf(lCopy, lLive, lHelpA, EncodeDate(2027, 1, 18));
+    lF := AuditOf(lCopy, lLive, lHelpA, EncodeDate(2027, 1, 18));  // dl:ok magic-literal@d053 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
     Check('Audit.StaleVerifiedBoundary.day91', HasKind(lF, 'outline', 'stale-verified'));
   finally
     lLive.Free;
@@ -2631,8 +2630,8 @@ begin
       TestCheckParity(lRepo, lGold, 'Full', clFull, 'Full', 0, ExpectedMcpExclusions(lGold, SharedLive(lRepo).McpTools), 0, 0);
       lSeeded := SeededRepo(lGold);
       // the seeded copy carries the same MCP server source, so the live tool list is the same
-      TestCheckParity(lRepo, lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0, 1, 0);
-      TestCheckParity(lRepo, lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, SharedLive(lRepo).McpTools), 1, -1);
+      TestCheckParity(lRepo, lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0, 1, 0);  // dl:ok magic-literal@e226 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
+      TestCheckParity(lRepo, lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, SharedLive(lRepo).McpTools), 1, -1);  // dl:ok magic-literal@f009 -- REVIEWED 2026-10-19: test expectation: the literal is the asserted value
       TestCheckDCoversAllOutputs(lRepo);
       TestPositiveControls(lRepo);
       TestPlannedSkipsLive(lRepo);
@@ -2651,3 +2650,4 @@ begin
   if GFail > 0 then
     Halt(1);
 end.
+ -- REVIEWED 2026-10-19: the ported checks A-E live together because they share one context and one finding list; splitting is a later refactor

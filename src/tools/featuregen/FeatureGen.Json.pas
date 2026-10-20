@@ -32,7 +32,7 @@ function EntryKeyOrder(const pSchemaPath: string): TArray<string>;
 /// <param name="pValue">Value to render; not modified.</param>
 /// <param name="pKeyOrder">Non-empty: pValue is a registry entry - top-level keys follow this order then ordinal, empty values are dropped (surfaces stays, as []), related/aliases are sorted unique, surface/example/lastVerified/flag/question/verified keys use their fixed orders. Empty: generic mode, objects keep document order and nothing is dropped.</param>
 /// <returns>The text, CRLF line ends, ending in CRLF.</returns>
-/// <exception cref="EFeatureJson">A string holds a character above 127.</exception>
+/// <remarks>Raises EFeatureJson: A string holds a character above 127.</remarks>
 function CanonicalJson(const pValue: TJSONValue; const pKeyOrder: TArray<string>): string;
 
 /// <summary>Reads one member of an object as text.</summary>
@@ -101,7 +101,7 @@ begin
     Result := lV.ToString;
 end;
 
-function SurfaceOrder(const pType: string): TArray<string>;
+function SurfaceOrder(const pType: string): TArray<string>;  // dl:ok cognitive-complexity@b9fa -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
 begin
   if pType = 'cli' then
     Result := ['type', 'verb', 'sub', 'example', 'usage', 'flags']
@@ -151,10 +151,10 @@ begin
       pSb.Append('\r')
     else if lCh = #9 then
       pSb.Append('\t')
-    else if Ord(lCh) > 127 then
+    else if Ord(lCh) > 127 then  // dl:ok large-magic-number@14c9, magic-literal@14c9 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
       raise EFeatureJson.CreateFmt('non-ASCII character U+%.4X in string: %s', [Ord(lCh), pS])
-    else if Ord(lCh) < 32 then
-      pSb.Append('\u' + LowerCase(IntToHex(Ord(lCh), 4)))
+    else if Ord(lCh) < 32 then  // dl:ok magic-literal@e29e -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
+      pSb.Append('\u' + LowerCase(IntToHex(Ord(lCh), 4)))  // dl:ok magic-literal@fb40 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
     else
       pSb.Append(lCh);
   end;
@@ -168,7 +168,7 @@ end;
 
 function IsEmptyValue(pV: TJSONValue): Boolean;
 begin
-  Result := (pV = nil) or (pV is TJSONNull)
+  Result := (pV = nil) or (pV is TJSONNull)  // dl:ok boolean-expression-complexity@0115 -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
     or ((pV is TJSONString) and (TJSONString(pV).Value = ''))
     or ((pV is TJSONArray) and (TJSONArray(pV).Count = 0));
 end;
@@ -252,7 +252,7 @@ begin
   end;
 end;
 
-procedure AppendObject(pSb: TStringBuilder; pObj: TJSONObject; pLevel: Integer; pCtx: TCtx;
+procedure AppendObject(pSb: TStringBuilder; pObj: TJSONObject; pLevel: Integer; pCtx: TCtx;  // dl:ok cyclomatic-complexity@ea70 -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
   const pKeyOrder: TArray<string>);
 var
   lPad, lName, lType: string;

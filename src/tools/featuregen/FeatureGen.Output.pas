@@ -66,6 +66,7 @@ type
     /// <returns>Written, Changed and Removed paths.</returns>
     function Finish: TOutputResult;
     /// <summary>Root-relative paths (backslashes) of every file queued so far, text and binary.</summary>
+    /// <returns>The paths, in the order the files were queued.</returns>
     function ProducedFiles: TArray<string>;
     /// <summary>The text queued for a file, with LF line ends.</summary>
     /// <param name="pRelPath">Root-relative path as given to Put (either slash).</param>
@@ -156,7 +157,7 @@ begin
   FTexts.Free;
   FNames.Free;
   FProduced.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-19: the direct ancestor method is the intended one
 end;
 
 function TOutputWriter.ResolvePath(const pRelPath: string): string;

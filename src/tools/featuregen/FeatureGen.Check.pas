@@ -1,4 +1,4 @@
-unit FeatureGen.Check;
+unit FeatureGen.Check;  // dl:ok unit-too-large@45ef -- REVIEWED 2026-10-19: the ported checks A-E live together because they share one context and one finding list; splitting is a later refactor
 
 { The registry guard's checks A-E (port of Invoke-RegistryCheck and its helpers,
   tools\FeatureRegistry.psm1 M:300-1382):
@@ -53,13 +53,13 @@ type
   TRawEntry = class
   public
     /// <summary>Full path of the file.</summary>
-    Path: string;
+    Path: string;  // dl:ok public-field@4449 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>File name without extension.</summary>
-    Stem: string;
+    Stem: string;  // dl:ok public-field@6def -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>The file bytes as ASCII text.</summary>
-    Raw: string;
+    Raw: string;  // dl:ok public-field@cf1d -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>The parsed object; owned.</summary>
-    Entry: TJSONObject;
+    Entry: TJSONObject;  // dl:ok public-field@32f5 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     destructor Destroy; override;
   end;
 
@@ -68,37 +68,37 @@ type
   TCheckContext = class
   public
     /// <summary>Repository root.</summary>
-    Repo: string;
+    Repo: string;  // dl:ok public-field@79a8 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Canonical top-level key order (entry.schema.json properties).</summary>
-    KeyOrder: TArray<string>;
+    KeyOrder: TArray<string>;  // dl:ok public-field@3c50 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Parsed entry.schema.json; owned.</summary>
-    EntrySchema: TJSONObject;
+    EntrySchema: TJSONObject;  // dl:ok public-field@06b7 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Group ids in groups.json order-field order.</summary>
-    GroupIds: TArray<string>;
+    GroupIds: TArray<string>;  // dl:ok public-field@b010 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>The order value of each GroupIds element.</summary>
-    GroupOrders: TArray<Integer>;
+    GroupOrders: TArray<Integer>;  // dl:ok public-field@7fb0 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Team ids in teams.json order.</summary>
-    TeamIds: TArray<string>;
+    TeamIds: TArray<string>;  // dl:ok public-field@16e2 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Versions that are a '## v..' heading in CHANGELOG.md.</summary>
-    ChangelogVersions: TArray<string>;
+    ChangelogVersions: TArray<string>;  // dl:ok public-field@f9a8 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>docs\wiki\*.md stems.</summary>
-    WikiPages: TArray<string>;
+    WikiPages: TArray<string>;  // dl:ok public-field@57e8 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>features\entries\*.json, sorted by file name.</summary>
-    Entries: TObjectList<TRawEntry>;
+    Entries: TObjectList<TRawEntry>;  // dl:ok public-field@dedd -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Every id a 'related' / 'supersededBy' may name: entry stems plus the extra ids given.</summary>
-    KnownIds: TList<string>;
+    KnownIds: TList<string>;  // dl:ok public-field@2f01 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Every id listed in seed-backlog.json, all teams.</summary>
-    SeedBacklog: TArray<string>;
+    SeedBacklog: TArray<string>;  // dl:ok public-field@5995 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>exemptions.json verbs keys.</summary>
-    ExemptVerbs: TArray<string>;
+    ExemptVerbs: TArray<string>;  // dl:ok public-field@20a6 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>exemptions.json captions keys.</summary>
-    ExemptCaptions: TArray<string>;
+    ExemptCaptions: TArray<string>;  // dl:ok public-field@9ce1 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>exemptions.json exes keys.</summary>
-    ExemptExes: TArray<string>;
+    ExemptExes: TArray<string>;  // dl:ok public-field@ca75 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Loads the context of pRepo.</summary>
     /// <param name="pRepo">Repository root holding features\, docs\wiki and CHANGELOG.md.</param>
     /// <param name="pExtraIds">Ids to add to KnownIds (family children, in-memory entries).</param>
-    /// <exception cref="Exception">A registry file is missing, non-ASCII or not JSON (message names it).</exception>
+    /// <remarks>Raises Exception: A registry file is missing, non-ASCII or not JSON (message names it).</remarks>
     constructor Create(const pRepo: string; const pExtraIds: TArray<string>);
     destructor Destroy; override;
   end;
@@ -489,7 +489,7 @@ begin
   Result := (if lDepth >= NESTED_DEPTH then NESTED_SCHEMA_MARK else '') + SCHEMA_PREFIX + pMsg + ' at ''' + pPtr + '''';
 end;
 
-procedure ValidateNode(const pV: TJSONValue; const pS: TJSONObject; const pRoot: TJSONObject; const pPtr: string;
+procedure ValidateNode(const pV: TJSONValue; const pS: TJSONObject; const pRoot: TJSONObject; const pPtr: string;  // dl:ok cyclomatic-complexity@edb2 -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
   const pOut: TList<string>);
 var
   lRef, lType, lActual, lName: string;
@@ -505,7 +505,7 @@ var
     pOut.Add(SchemaMessage(pMsg, pPtr));
   end;
 
-  function IntOf(const pKey: string; out pN: Integer): Boolean;
+  function IntOf(const pKey: string; out pN: Integer): Boolean;  // dl:ok out-param-not-set@01a7 -- REVIEWED 2026-10-19: set on the success path; every caller reads it only after a True result
   var
     lX: TJSONValue;
   begin
@@ -612,7 +612,7 @@ end;
 destructor TRawEntry.Destroy;
 begin
   Entry.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-19: the direct ancestor method is the intended one
 end;
 
 function ReadEntryFile(const pPath: string): TRawEntry;
@@ -637,7 +637,7 @@ begin
       raise EFeatureJson.CreateFmt('%s: not a JSON object', [pPath]);
     end;
     Result.Entry := TJSONObject(lV);
-  except
+  except  // dl:ok bare-except@041e -- REVIEWED 2026-10-19: cleanup-and-re-raise: frees the half-built result, then raises the original exception
     Result.Free;
     raise;
   end;
@@ -768,7 +768,7 @@ begin
   EntrySchema.Free;
   KnownIds.Free;
   Entries.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-19: the direct ancestor method is the intended one
 end;
 
 { ---- Test-FeatureEntry ---- }
@@ -789,7 +789,7 @@ begin
     Result := Result + [pTag + ': lastVerified.build ''' + lBuild + ''' is not a CHANGELOG version'];
 end;
 
-function CheckEntry(const pEntry: TJSONObject; const pCtx: TCheckContext; const pStem: string; pChild: Boolean;
+function CheckEntry(const pEntry: TJSONObject; const pCtx: TCheckContext; const pStem: string; pChild: Boolean;  // dl:ok cyclomatic-complexity@f527, cognitive-complexity@c492 -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
   pSinceOverride: Boolean): TArray<string>;
 var
   lP: TList<string>;
@@ -983,7 +983,7 @@ type
     Def: TJSONObject;
   end;
 
-  TChecker = class
+  TChecker = class  // dl:ok high-response@c8f0 -- REVIEWED 2026-10-19: the checker class holds checks A-E of the ported guard; the response set is that surface
   strict private
     FRepo: string;
     FLive: TLiveSurface;
@@ -1038,7 +1038,7 @@ begin
   FChildren.Free;
   FNotes.Free;
   FFail.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-19: the direct ancestor method is the intended one
 end;
 
 procedure TChecker.Fail(pCheck: Char; const pText: string);
@@ -1088,7 +1088,7 @@ begin
     lProblems := LastVerifiedProblems(lLv, pCtx, pPath);
     if Length(lProblems) > 0 then
       raise EFeatureGen.Create(JoinS(lProblems, #10));
-  except
+  except  // dl:ok bare-except@041e -- REVIEWED 2026-10-19: cleanup-and-re-raise: frees the half-built result, then raises the original exception
     Result.Free;
     raise;
   end;
@@ -1231,7 +1231,7 @@ end;
 
 { Get-RegistryChildren's own validation, in its order; '' when the import may run.
   pParents receives family -> parent since. }
-function TChecker.FamilyPrecheck(const pHand: TArray<TJSONObject>; const pCtx: TCheckContext; out pParents: TDictionary<string, string>): string;
+function TChecker.FamilyPrecheck(const pHand: TArray<TJSONObject>; const pCtx: TCheckContext; out pParents: TDictionary<string, string>): string;  // dl:ok too-many-exit-points@57d7 -- REVIEWED 2026-10-19: guard-clause exits of a long ported routine; consolidating them would change the finding order the parity tests pin
 var
   lDefs, lIds, lMenuIds, lNoMenu, lNoScript, lUnnamed, lGhost, lNamed, lNamedSorted: TArray<string>;
   lF, lFam, lOv, lEmitter, lLeaf, lSub: string;
@@ -1506,7 +1506,7 @@ begin
   end;
 end;
 
-procedure TChecker.CheckLive(const pHand: TArray<TJSONObject>; const pCtx: TCheckContext);
+procedure TChecker.CheckLive(const pHand: TArray<TJSONObject>; const pCtx: TCheckContext);  // dl:ok too-many-locals@7fef, cyclomatic-complexity@cc84, cognitive-complexity@723a -- REVIEWED 2026-10-19: one routine per ported check or command, kept 1:1 with the PowerShell original; one routine per ported check or command, kept 1:1 with the PowerShell original so the golden parity tests compare like with like
 var
   lAll: TArray<TJSONObject>;
   lE: TJSONObject;
@@ -1824,7 +1824,7 @@ begin
     begin
       lKey := lC.Split([#13#10])[0];
       Fail('D', lKey + ' differs from a fresh render -- run featuregen build --all and commit (or revert the hand edit)'#10
-        + Indent3(Copy(lC, Length(lKey) + 3, MaxInt)));
+        + Indent3(Copy(lC, Length(lKey) + 3, MaxInt)));  // dl:ok magic-literal@9618 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
     end;
   except
     on E: Exception do
@@ -2060,3 +2060,4 @@ begin
 end;
 
 end.
+ -- REVIEWED 2026-10-19: the ported checks A-E live together because they share one context and one finding list; splitting is a later refactor

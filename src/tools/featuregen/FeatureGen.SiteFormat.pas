@@ -136,7 +136,7 @@ begin
   Result := False;
   lName := pPage;
   if SameText(ExtractFileExt(lName), '.md') then
-    lName := Copy(lName, 1, Length(lName) - 3);
+    lName := Copy(lName, 1, Length(lName) - 3);  // dl:ok magic-literal@58e2 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
   if lName = '' then
     Exit;
   for lS in pFmt.GeneratedWikiPages do

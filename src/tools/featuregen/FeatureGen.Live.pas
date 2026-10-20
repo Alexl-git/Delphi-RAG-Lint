@@ -66,55 +66,55 @@ type
   TLiveSurface = class
   public
     /// <summary>Repository root the surface was harvested from; '' for an in-memory surface.</summary>
-    Repo: string;
+    Repo: string;  // dl:ok public-field@79a8 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Engine exe the surface was harvested with; check D renders with it.</summary>
-    Engine: string;
+    Engine: string;  // dl:ok public-field@925b -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Set by the caller when Harvest raised (its message); the checks then report it as one B finding and stop.</summary>
-    HarvestError: string;
+    HarvestError: string;  // dl:ok public-field@87dc -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Verbs listed by --help (TLiveHelp.Verbs).</summary>
-    HelpVerbs: TArray<string>;
+    HelpVerbs: TArray<string>;  // dl:ok public-field@881d -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Verbs dispatched by DRagLint.CLI.pas (Args.Command = '..'), sorted unique.</summary>
-    DispatchVerbs: TArray<string>;
+    DispatchVerbs: TArray<string>;  // dl:ok public-field@0a5a -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>verb -> sorted subcommands (CliFlagVerbMap.ps1 Get-CliVerbSubcommandMap); verbs with none are absent. Keys are case-insensitive.
     /// Harvest raises when it is empty (unlike Get-LiveSurface), so check B cannot pass vacuously.</summary>
-    SubMap: TDictionary<string, TArray<string>>;
+    SubMap: TDictionary<string, TArray<string>>;  // dl:ok public-field@16bc -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Main-menu captions (menu items, section headers, About buttons, report rows and group headers), dialog buttons excluded; first-seen order, unique (ordinal).</summary>
-    Captions: TArray<string>;
+    Captions: TArray<string>;  // dl:ok public-field@e790 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>TButton / TBitBtn / TSpeedButton captions of the menu sources.</summary>
-    DialogButtons: TArray<string>;
+    DialogButtons: TArray<string>;  // dl:ok public-field@d253 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>About window button captions (Add(Proc)Button).</summary>
-    AboutButtons: TArray<string>;
+    AboutButtons: TArray<string>;  // dl:ok public-field@25c2 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>ide-context hosts that have a harvester, in harvest order.</summary>
-    ContextHosts: TArray<string>;
+    ContextHosts: TArray<string>;  // dl:ok public-field@6cb7 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>host -> its context-menu captions (single '&amp;' accelerator dropped). Keys are case-insensitive.</summary>
-    ContextCaptions: TDictionary<string, TArray<string>>;
+    ContextCaptions: TDictionary<string, TArray<string>>;  // dl:ok public-field@273d -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>MCP tools announced by HandleToolsList (ToolDescriptor calls), sorted unique.</summary>
-    McpTools: TArray<string>;
+    McpTools: TArray<string>;  // dl:ok public-field@c21c -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>MCP tools dispatched (ToolName = '..'), sorted unique.</summary>
-    McpDispatch: TArray<string>;
+    McpDispatch: TArray<string>;  // dl:ok public-field@d4ad -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>The parsed "rules --json" output; owned.</summary>
-    RuleCatalog: TJSONValue;
+    RuleCatalog: TJSONValue;  // dl:ok public-field@773c -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>REPORT_QUESTIONS rows in source order.</summary>
-    ReportQuestions: TArray<TReportQuestion>;
+    ReportQuestions: TArray<TReportQuestion>;  // dl:ok public-field@2e3a -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>The REPORT_QUESTION_COUNT constant.</summary>
-    ReportQuestionCount: Integer;
+    ReportQuestionCount: Integer;  // dl:ok public-field@6ff2 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>rtk* kind -> report group caption (the case 'else' arm fills kinds no arm names). Keys are case-insensitive.</summary>
-    GroupCaptions: TDictionary<string, string>;
+    GroupCaptions: TDictionary<string, string>;  // dl:ok public-field@bbcc -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>The -Question ValidateSet of charts\src\New-DiagramArtifact.ps1, in declaration order.</summary>
-    ChartValidateSet: TArray<string>;
+    ChartValidateSet: TArray<string>;  // dl:ok public-field@903c -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>charts\src\Emit-*.ps1 file names except Emit-Common.ps1, sorted.</summary>
-    EmitterFiles: TArray<string>;
+    EmitterFiles: TArray<string>;  // dl:ok public-field@42e6 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>Exe names build\pack-lint-release.ps1 requires in the payload.</summary>
-    PackExes: TArray<string>;
+    PackExes: TArray<string>;  // dl:ok public-field@e813 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>DRAGLINT_VERSION.</summary>
-    ProductVersion: string;
+    ProductVersion: string;  // dl:ok public-field@47b8 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>DRAGLINT_EXTRACTOR_VERSION.</summary>
-    ExtractorVersion: string;
+    ExtractorVersion: string;  // dl:ok public-field@625d -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>DRAGLINT_RESOLVER_VERSION.</summary>
-    ResolverVersion: string;
+    ResolverVersion: string;  // dl:ok public-field@ced4 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     /// <summary>SCHEMA_VERSION of the storage schema.</summary>
-    SchemaVersion: string;
-    /// <summary>Creates an empty surface (all lists empty, dictionaries allocated).</summary>
+    SchemaVersion: string;  // dl:ok public-field@fb00 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    /// <summary>Constructor: creates an empty surface (all lists empty, dictionaries allocated).</summary>
     constructor Create;
     destructor Destroy; override;
     /// <summary>Harvests every surface kind from pRepo's sources and the engine, replacing the current contents.</summary>
@@ -162,7 +162,6 @@ uses
   , System.IOUtils
   , System.RegularExpressions
   , System.Generics.Defaults
-  , System.StrUtils
   ;
 
 const
@@ -179,7 +178,7 @@ var
   lSi: TStartupInfo;
   lPi: TProcessInformation;
   lCmd: string;
-  lBuf: array[0..4095] of Byte;
+  lBuf: array[0..4095] of Byte;  // dl:ok large-magic-number@f9bb -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
   lGot: DWORD;
   lMem: TMemoryStream;
   lBytes: TBytes;
@@ -361,8 +360,8 @@ type
 
   TCondFrame = class
   public
-    IsActive: Boolean;
-    Decided: Boolean;
+    IsActive: Boolean;  // dl:ok public-field@0096 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    Decided: Boolean;  // dl:ok public-field@2073 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
   end;
 
 function IsLineBreak(pCh: Char): Boolean;
@@ -773,7 +772,7 @@ begin
   GroupCaptions.Free;
   ContextCaptions.Free;
   SubMap.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-19: the direct ancestor method is the intended one
 end;
 
 function TLiveSurface.SubVerbs: TArray<string>;
@@ -788,7 +787,7 @@ var
 begin
   Result := '';
   for lF in ['DragLint.Plugin.Editor.pas', 'DragLint.Plugin.AboutForm.pas', 'DragLint.Plugin.ReportText.pas'] do
-    Result := Result + ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\' + lF));
+    Result := Result + ReadText(TPath.Combine(pRepo, 'src\delphi-plugin\' + lF));  // dl:ok concat-in-loop@e2ec -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
 end;
 
 { Get-DialogButtonCaptionRegex; '' when no button variable is declared. }

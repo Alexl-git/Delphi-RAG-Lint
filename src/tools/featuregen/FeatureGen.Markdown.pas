@@ -54,7 +54,7 @@ type
 /// <param name="pRepo">Repo root; when not empty, a file under docs\Images that is missing fails. '' skips the check.</param>
 /// <returns>The body with LF line ends, trimmed. The first "# " title line is dropped, headings are one level deeper,
 /// links into the set point at id.md[#anchor], other links are plain text. A link or image to a file under docs\Images (relative, or a github / raw.githubusercontent URL) is queued in pImages and points at img/<id>-<n>.<ext>; any other github.com / raw.githubusercontent.com link becomes plain text.</returns>
-/// <exception cref="EFeatureGen">Raw HTML outside code, a non-ASCII character, or an image outside docs\Images; the message names the leaf and the 1-based line.</exception>
+/// <remarks>Raises EFeatureGen: Raw HTML outside code, a non-ASCII character, or an image outside docs\Images; the message names the leaf and the 1-based line.</remarks>
 /// <remarks>Code means fenced blocks and inline backtick spans; HTML and link rewriting never look inside it.</remarks>
 function TransformWikiBody(const pMd: string; const pMap: TWikiLinkMap; const pLeafId: string;
   out pImages: TArray<TImageRef>; const pFenceLang: string = 'text'; const pRepo: string = ''): string;
@@ -82,7 +82,7 @@ end;
 destructor TWikiLinkMap.Destroy;
 begin
   FMap.Free;
-  inherited;
+  inherited;  // dl:ok inherited-bare@246d -- REVIEWED 2026-10-19: the direct ancestor method is the intended one
 end;
 
 procedure TWikiLinkMap.Add(const pPage, pId: string);
@@ -111,11 +111,11 @@ end;
 type
   TBodyWork = class
   public
-    Map: TWikiLinkMap;
-    LeafId: string;
-    Images: TList<TImageRef>;
-    Line: Integer;
-    Repo: string;
+    Map: TWikiLinkMap;  // dl:ok public-field@8a86 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    LeafId: string;  // dl:ok public-field@b9b6 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    Images: TList<TImageRef>;  // dl:ok public-field@9c0f -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    Line: Integer;  // dl:ok public-field@ad9d -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
+    Repo: string;  // dl:ok public-field@79a8 -- REVIEWED 2026-10-19: plain data-holder class read directly by the generator units (the PowerShell original was a hashtable); a property adds no encapsulation here
     function ImageRef(const pSrc: string): string;
     function Fail(const pWhat: string): EFeatureGen;
     function Image(const pAlt, pSrc: string): string;
@@ -193,13 +193,13 @@ begin
     if GroupText(pM, 2, lG) then
       lAnchor := '#' + Trim(lG);
     lText := lPage;
-    if GroupText(pM, 3, lG) then
+    if GroupText(pM, 3, lG) then  // dl:ok magic-literal@b5d2 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
       lText := Trim(lG);
   end
   else
   begin
-    GroupText(pM, 4, lText);
-    GroupText(pM, 5, lTarget);
+    GroupText(pM, 4, lText);  // dl:ok magic-literal@fc9d -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
+    GroupText(pM, 5, lTarget);  // dl:ok magic-literal@f57c -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
     if ImageSource(lTarget, lG) then
       Exit('[' + lText + '](' + ImageRef(lTarget) + ')');
     if TRegEx.IsMatch(lTarget, '^(?i)https?://(?:www\.)?(?:github\.com|raw\.githubusercontent\.com)/') then
@@ -215,7 +215,7 @@ begin
     end;
     lPage := ExtractFileName(StringReplace(lTarget, '/', '\', [rfReplaceAll]));
     if SameText(ExtractFileExt(lPage), '.md') then
-      lPage := Copy(lPage, 1, Length(lPage) - 3);
+      lPage := Copy(lPage, 1, Length(lPage) - 3);  // dl:ok magic-literal@7d90 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
   end;  if Map.TryGet(lPage, lId) then
     Result := '[' + lText + '](' + lId + '.md' + lAnchor + ')'
   else
@@ -261,7 +261,7 @@ var
   i: Integer;
 begin
   for i := 1 to Length(pLine) do
-    if Ord(pLine[i]) > 127 then
+    if Ord(pLine[i]) > 127 then  // dl:ok large-magic-number@4b26, magic-literal@4b26 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
       raise pWork.Fail(Format('non-ASCII character U+%.4X', [Ord(pLine[i])]));
 end;
 

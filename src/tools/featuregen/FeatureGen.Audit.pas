@@ -192,7 +192,7 @@ begin
     Result := Length(TFile.ReadAllText(lFile, TEncoding.UTF8));
 end;
 
-function VerifiedAgeDays(const pDate: string; pToday: TDateTime; out pAge: Integer): Boolean;
+function VerifiedAgeDays(const pDate: string; pToday: TDateTime; out pAge: Integer): Boolean;  // dl:ok out-param-not-set@2908 -- REVIEWED 2026-10-19: set on the success path; every caller reads it only after a True result
 var
   lM: TMatch;
   lD: TDateTime;
@@ -201,7 +201,7 @@ begin
   lM := TRegEx.Match(pDate, '^(\d{4})-(\d{2})-(\d{2})$');
   if not lM.Success then
     Exit;
-  if not TryEncodeDate(StrToInt(lM.Groups[1].Value), StrToInt(lM.Groups[2].Value), StrToInt(lM.Groups[3].Value), lD) then
+  if not TryEncodeDate(StrToInt(lM.Groups[1].Value), StrToInt(lM.Groups[2].Value), StrToInt(lM.Groups[3].Value), lD) then  // dl:ok magic-literal@ea38 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
     Exit;
   pAge := DaysBetween(Trunc(pToday), lD);
   if lD > Trunc(pToday) then

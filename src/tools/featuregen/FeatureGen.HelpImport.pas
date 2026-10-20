@@ -248,7 +248,7 @@ var
   lV: TJSONValue;
 begin
   lV := pObj.GetValue(pName);
-  Result := (lV <> nil) and not (lV is TJSONNull) and not ((lV is TJSONArray) and (TJSONArray(lV).Count = 0))
+  Result := (lV <> nil) and not (lV is TJSONNull) and not ((lV is TJSONArray) and (TJSONArray(lV).Count = 0))  // dl:ok boolean-expression-complexity@50fc -- REVIEWED 2026-10-19: ported predicate with one operand per source condition; splitting it would hide the 1:1 port the parity tests compare
     and not ((lV is TJSONString) and (TJSONString(lV).Value = ''));
 end;
 
@@ -261,7 +261,7 @@ begin
   pObj.AddPair(pName, pValue);
 end;
 
-procedure ImportEntry(pEntry: TJSONObject; pHelp: TLiveHelp; out pUsage: Boolean; out pFlags, pPitfalls: Integer);
+procedure ImportEntry(pEntry: TJSONObject; pHelp: TLiveHelp; out pUsage: Boolean; out pFlags, pPitfalls: Integer);  // dl:ok deep-nesting@028f -- REVIEWED 2026-10-19: ported import routine; flattening it is a later refactor and the import tests pin its behaviour
 var
   lSurfaces, lFlagArr, lPitArr: TJSONArray;
   lSurf, lFlagObj: TJSONObject;

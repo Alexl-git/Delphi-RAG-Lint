@@ -156,7 +156,7 @@ begin
     Result[i] := TJSONArray(lV).Items[i].Value;
 end;
 
-function ObjList(pObj: TJSONValue; const pName: string): TArray<TJSONValue>;
+function ObjList(pObj: TJSONValue; const pName: string): TArray<TJSONValue>;  // dl:ok duplicate-code@0666 -- REVIEWED 2026-10-19: parallel ported renderers share a shape; extracting a helper would couple outputs that must stay independent
 var
   lV: TJSONValue;
   i: Integer;
