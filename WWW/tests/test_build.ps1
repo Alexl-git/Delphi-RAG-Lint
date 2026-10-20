@@ -5,9 +5,14 @@ Assert-Equal 0 $LASTEXITCODE 'build exit'
 
 foreach ($f in 'index.html', 'articles\index.html', 'articles\newest\index.html', 'articles\a-one\index.html',
                'downloads\index.html', 'help\index.html', 'community\index.html', '404.html', 'sitemap.xml',
-               'robots.txt', 'web.config', 'assets\style.css', 'assets\releases.js') {
+               'robots.txt', 'web.config', '.htaccess', 'assets\style.css', 'assets\releases.js') {
     Assert-True (Test-Path (Join-Path $out $f)) "missing $f"
 }
+# IONOS IIS has no URL Rewrite module but honours .htaccess: http and the bare host go to baseUrl
+$ht = [IO.File]::ReadAllText("$out\.htaccess")
+Assert-True ($ht.Contains('RewriteCond %{SERVER_PORT} !=443 [OR]')) '.htaccess: http redirected'
+Assert-True ($ht.Contains('RewriteCond %{HTTP_HOST} !^www\. [NC]')) '.htaccess: bare host redirected (short pattern: the full one looped live)'
+Assert-True ($ht.Contains('RewriteRule ^/?(.*)$ https://www.delphi-rag-lint.com/$1 [L,R=301]')) '.htaccess: target keeps the path'
 $idx = [IO.File]::ReadAllText("$out\index.html")
 Assert-True ($idx.Contains('Newest fixture &amp; friends')) 'home shows newest article'
 Assert-True ($idx.Contains('<title>Delphi-RAG-Lint</title>')) 'home title'

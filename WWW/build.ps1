@@ -69,6 +69,10 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'assets') -Destination $Out -Recurse
     $wcSrc = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'web.config'))
     Write-SiteFile 'web.config' (New-WebConfigText $wcSrc $NoRewrite)
+    # IONOS IIS lacks URL Rewrite but runs an .htaccess add-on (it answers 302 whatever the flag).
+    # Keep the host test to ^www\. : the full host pattern made www redirect to itself (live, 2026-10-20).
+    Write-SiteFile '.htaccess' ("RewriteEngine On`nRewriteCond %{SERVER_PORT} !=443 [OR]`nRewriteCond %{HTTP_HOST} !^www\. [NC]`n" +
+        "RewriteRule ^/?(.*)$ $($cfg.baseUrl)/`$1 [L,R=301]`n")
 
     $problems = @(Test-SiteOutput $Out $cfg)
     if ($problems.Count) { $problems | ForEach-Object { Write-Host "CHECK $_" }; throw "$($problems.Count) site check problem(s)" }

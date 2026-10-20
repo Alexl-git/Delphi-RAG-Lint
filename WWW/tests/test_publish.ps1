@@ -46,3 +46,20 @@ $ftp = $ok.PSObject.Copy(); $ftp.Protocol = 'ftp'
 Assert-Throws { Test-PublishCredential $ftp } '*ftp*'
 $nofp = $ok.PSObject.Copy(); $nofp.TlsFingerprint = ''
 Assert-Throws { Test-PublishCredential $nofp } '*TlsFingerprint*'
+
+# test_http_status_sees_redirect: pwsh 7.6 Invoke-WebRequest -MaximumRedirection 0 THROWS on a 302,
+# which made the live redirect check read 0 although the redirect worked (2026-10-20)
+$port = Get-Random -Minimum 20000 -Maximum 40000
+$l = [Net.HttpListener]::new(); $l.Prefixes.Add("http://localhost:$port/"); $l.Start()
+$job = Start-ThreadJob { param($l)
+    $c = $l.GetContext(); $c.Response.StatusCode = 302; $c.Response.RedirectLocation = 'https://www.example.com/x'; $c.Response.Close()
+    $c = $l.GetContext(); $b = [Text.Encoding]::ASCII.GetBytes('<p>hi</p>'); $c.Response.OutputStream.Write($b, 0, $b.Length); $c.Response.Close()
+} -ArgumentList $l
+try {
+    $r = Get-HttpStatus "http://localhost:$port/"
+    Assert-Equal 302 $r.Status 'redirect status, not followed'
+    Assert-Equal 'https://www.example.com/x' $r.Location 'redirect location'
+    $r = Get-HttpStatus "http://localhost:$port/"
+    Assert-Equal 200 $r.Status 'plain 200'
+    Assert-Equal '<p>hi</p>' $r.Content '200 body'
+} finally { $job | Wait-Job -Timeout 5 | Out-Null; $l.Close(); $job | Wait-Job -Timeout 5 | Out-Null; $job | Remove-Job -Force }

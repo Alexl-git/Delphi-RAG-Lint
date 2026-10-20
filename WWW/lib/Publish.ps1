@@ -192,12 +192,16 @@ function Remove-EmptiedRemoteDirs($Session, [string]$Root, [string[]]$Dirs) {
 # HTTP status, Location and body of one GET, redirects not followed.
 # A DNS, TLS or connection failure is Status 0, never an exception.
 function Get-HttpStatus([string]$Url) {
+    # HttpClient, not Invoke-WebRequest: pwsh 7.6 IWR -MaximumRedirection 0 throws on any 3xx
+    $h = [Net.Http.HttpClientHandler]::new(); $h.AllowAutoRedirect = $false
+    $c = [Net.Http.HttpClient]::new($h); $c.Timeout = [TimeSpan]::FromSeconds(30)
     try {
-        $r = Invoke-WebRequest -Uri $Url -MaximumRedirection 0 -SkipHttpErrorCheck -TimeoutSec 30 -ErrorAction Stop
-        [pscustomobject]@{ Status = [int]$r.StatusCode; Location = [string]($r.Headers['Location'] | Select-Object -First 1); Content = [string]$r.Content }
+        $r = $c.GetAsync($Url).GetAwaiter().GetResult()
+        $loc = if ($r.Headers.Location) { $r.Headers.Location.OriginalString } else { '' }
+        [pscustomobject]@{ Status = [int]$r.StatusCode; Location = $loc; Content = $r.Content.ReadAsStringAsync().GetAwaiter().GetResult() }
     } catch {
         [pscustomobject]@{ Status = 0; Location = ''; Content = ''; Error = $_.Exception.Message }
-    }
+    } finally { $c.Dispose() }
 }
 
 # True only when the response is OUR home page (200 and our canonical link), so a
