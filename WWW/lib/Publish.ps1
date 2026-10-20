@@ -22,7 +22,7 @@ function Get-PublishPlan($OldManifest, [hashtable]$NewFiles) {
 
 # True when the remote root is empty or holds only the IONOS placeholder page.
 function Test-FirstPublishTarget([string[]]$RemoteNames) {
-    foreach ($n in @($RemoteNames)) {
+    foreach ($n in @($RemoteNames | Where-Object { $_ })) {   # an empty listing arrives as $null
         if ($n -notmatch '^(index|default)\.(html?|aspx?|php)$') { return $false }
     }
     $true

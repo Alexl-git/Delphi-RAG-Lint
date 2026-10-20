@@ -32,6 +32,11 @@ Assert-True (Test-FirstPublishTarget @('index.html')) 'index.html placeholder'
 Assert-True (Test-FirstPublishTarget @('Default.htm')) 'Default.htm placeholder'
 Assert-True (-not (Test-FirstPublishTarget @('index.html', 'cgi-bin'))) 'cgi-bin is real content'
 Assert-True (Test-FirstPublishTarget @()) 'empty root'
+# what publish.ps1 really passes for an empty folder: a function returning @() yields $null
+$emptyDir = [pscustomobject]@{} | Add-Member -PassThru ScriptMethod ListDirectory { param($p) [pscustomobject]@{ Files = @() } }
+$names = Get-RemoteNames $emptyDir '/x'
+Assert-True (Test-FirstPublishTarget $names) 'empty root as returned by Get-RemoteNames'
+Assert-True (Test-FirstPublishTarget $null) 'empty root passed as $null'
 
 # test_refuses_plain_ftp
 $ok = [pscustomobject]@{ Protocol = 'ftps'; Host = 'h'; Port = 21; User = 'u'
