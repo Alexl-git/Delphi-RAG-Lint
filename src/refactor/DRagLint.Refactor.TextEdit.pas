@@ -277,6 +277,15 @@ type
       out ARefuseReason: string): TArray<TTextEdit>;
   end;
 
+/// <summary>TEST SEAM for an atomic multi-file write: raises before the AWriteNo-th write of one
+/// write transaction when DRAGLINT_TEST_FAIL_WRITE_AT names that number; inert otherwise.</summary>
+/// <param name="AWriteNo">1-based number of the write about to happen in this transaction.</param>
+/// <param name="APath">The file about to be written (named in the message).</param>
+/// <exception cref="EInOutError">Raised when DRAGLINT_TEST_FAIL_WRITE_AT equals AWriteNo.</exception>
+/// <remarks>Called by TTextEditApplier.Apply (convert-apply) and by `cycles --fix --apply`
+/// (DRagLint.CLI.CycleFix.WriteAll), so their rollback can be proven by a test.</remarks>
+procedure FailWriteForTests(AWriteNo: Integer; const APath: string);
+
 implementation
 
 { Sort key for back-to-front application within a file: larger line first; for

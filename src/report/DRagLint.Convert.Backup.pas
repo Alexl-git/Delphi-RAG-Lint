@@ -104,6 +104,16 @@ procedure BackupFiles(const APaths: TArray<string>; out AMappings: TArray<string
 procedure WriteRecoveryRecord(const AUnitFolder, ATimestamp, ARulesFile: string;
   const AMappings: TArray<string>);
 
+/// <summary>Appends one recovery block with a caller-given header line to
+/// "recovery.txt" in AFolder, creating the file if it does not yet exist.</summary>
+/// <param name="AFolder">The folder of recovery.txt.</param>
+/// <param name="AHeader">The block's first line, without a line break (e.g.
+/// "[&lt;timestamp&gt;] cycles --fix --apply --project &lt;p&gt;").</param>
+/// <param name="AMappings">The "orig -&gt; backup" lines, one per backed-up file.</param>
+/// <remarks>The format of WriteRecoveryRecord (which calls it): the header, then each
+/// mapping indented by two spaces, ANSI, CRLF. Used by `cycles --fix --apply`.</remarks>
+procedure AppendRecoveryBlock(const AFolder, AHeader: string; const AMappings: TArray<string>);
+
 /// <summary>Prepends a short provenance comment block atop the converted
 /// .pas file at APasPath.</summary>
 /// <param name="APasPath">The already-converted .pas file to stamp (the write
@@ -171,16 +181,21 @@ end;
 
 procedure WriteRecoveryRecord(const AUnitFolder, ATimestamp, ARulesFile: string;
   const AMappings: TArray<string>);
+begin
+  AppendRecoveryBlock(AUnitFolder, Format('[%s] convert-apply --rules %s', [ATimestamp, ARulesFile]), AMappings);
+end;
+
+procedure AppendRecoveryBlock(const AFolder, AHeader: string; const AMappings: TArray<string>);
 var
   RecoveryPath: string;
   SB: TStringBuilder;
   M: string;
   Existing: TBytes;
 begin
-  RecoveryPath:= TPath.Combine(AUnitFolder, 'recovery.txt');
+  RecoveryPath:= TPath.Combine(AFolder, 'recovery.txt');
   SB:= TStringBuilder.Create;
   try
-    SB.Append(Format('[%s] convert-apply --rules %s', [ATimestamp, ARulesFile])).Append(#13#10);
+    SB.Append(AHeader).Append(#13#10);
     for M in AMappings do
       SB.Append('  ').Append(M).Append(#13#10);
 

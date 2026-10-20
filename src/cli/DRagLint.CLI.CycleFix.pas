@@ -1,4 +1,4 @@
-unit DRagLint.CLI.CycleFix;
+unit DRagLint.CLI.CycleFix; // dl:ok unit-too-large@1a23 -- one verb's pipeline (plan, gate, stage, build, write, verify) in one unit by the E18 plan's file list; the split belongs to the T18 whole-branch review
 
 // ---------------------------------------------------------------------------
 // `drag-lint cycles --fix` -- the dry run (E18 Task 8): pick ONE circular group,
@@ -10,13 +10,15 @@ unit DRagLint.CLI.CycleFix;
 // in a SHADOW TREE (anchored TTextEdits applied in memory, new units, project files); the
 // shadow is what the dry run proves would be written. Since Task 10 the COMPILE GATE builds the untouched
 // project first (RunMsBuild; refusal dirty-baseline) and provides the after gate with its bounded repairs R4
-// (CompileAfter / TryRepair) for the apply. Applying (--apply) arrives with Tasks 11-12.
+// (CompileAfter / TryRepair) for the apply. Since Task 11 --apply writes the shadow into the project
+// (WriteAll: all files or none, under backups), builds it in place, rolls back byte-identical on any
+// failure (RollBack) and verifies the result against the prediction after a child re-index (VerifyAfter).
 // ---------------------------------------------------------------------------
 
 interface
 
 uses
-  System.Generics.Collections,
+  System.SysUtils, System.Generics.Collections,
   DRagLint.Core.Interfaces, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.TextEdit;
 
 type
@@ -28,7 +30,7 @@ type
     Db: string;
     /// <summary>--platform, '' = win64; only echoed in the JSON.</summary>
     Platform: string;
-    /// <summary>--apply (Tasks 9-12; refused with exit 2 today).</summary>
+    /// <summary>--apply: write the chosen group's plan into the project (Task 11; --part all is Task 12).</summary>
     Apply: Boolean;
     /// <summary>--no-backup (apply only).</summary>
     NoBackup: Boolean;
@@ -58,6 +60,8 @@ type
     Errors: TArray<string>;
     /// <summary>Wall-clock seconds of the build.</summary>
     Seconds: Double;
+    /// <summary>True when the build ran past its time limit and was killed (Ok is False).</summary>
+    TimedOut: Boolean;
   end;
 
   /// <summary>One bounded repair (R4) the compile gate made; an item of `repairs[]` in cycle-fix/1.</summary>
@@ -84,6 +88,60 @@ type
     Builds: Integer;
     /// <summary>Seconds of every build together.</summary>
     Seconds: Double;
+    /// <summary>True when the last build was killed at its time limit.</summary>
+    TimedOut: Boolean;
+  end;
+
+  /// <summary>What WriteAll wrote and everything RollBack needs to undo it.</summary>
+  /// <remarks>Owns no object; the original bytes are held in memory, so a rollback never depends on
+  /// the backup files.</remarks>
+  TApplyTransaction = record
+    /// <summary>The project paths written, new files first, in write order.</summary>
+    Written: TArray<string>;
+    /// <summary>The new files among Written.</summary>
+    NewFiles: TArray<string>;
+    /// <summary>Every existing file the plan touches (written or not: a repair may edit it).</summary>
+    Held: TArray<string>;
+    /// <summary>The original bytes of Held, index for index.</summary>
+    Originals: TArray<TBytes>;
+    /// <summary>The original last-write times of Held (UTC), restored with the bytes so the index sees no change.</summary>
+    Stamps: TArray<TDateTime>;
+    /// <summary>The "orig -&gt; backup" lines of the backups made (empty with --no-backup).</summary>
+    Backups: TArray<string>;
+    /// <summary>The backup files made.</summary>
+    BackupPaths: TArray<string>;
+    /// <summary>The folders created for new files, outermost first.</summary>
+    CreatedDirs: TArray<string>;
+    /// <summary>recovery.txt in the project folder ('' with --no-backup).</summary>
+    RecoveryPath: string;
+    /// <summary>True when recovery.txt existed before the write.</summary>
+    RecoveryExisted: Boolean;
+    /// <summary>Its bytes before the write.</summary>
+    RecoveryBefore: TBytes;
+    /// <summary>Why the write failed; '' when it succeeded.</summary>
+    Error: string;
+    /// <summary>When the write failed: the files the rollback could not restore; '' = restored.</summary>
+    RollbackFailure: string;
+  end;
+
+  /// <summary>The post-apply verification (VerifyAfter): the child re-index and the comparison.</summary>
+  TVerifyResult = record
+    /// <summary>done | failed | skipped (--no-reindex, or the target guard refused the DB) | dry-run.</summary>
+    ReindexStatus: string;
+    /// <summary>Why the re-index was skipped or failed; ''.</summary>
+    ReindexReason: string;
+    /// <summary>The DB re-indexed (the run's --db).</summary>
+    ReindexDb: string;
+    /// <summary>The project file the DB records.</summary>
+    ReindexProject: string;
+    /// <summary>Milliseconds of the child re-index.</summary>
+    ReindexMs: Int64;
+    /// <summary>What `cycles` printed on the re-indexed DB; '' when it did not run.</summary>
+    Actual: string;
+    /// <summary>True when Actual equals the prediction, order-insensitively on groups.</summary>
+    Verified: Boolean;
+    /// <summary>'' when verified; else `not re-indexed`, `re-index failed` or `the cycles output differs from the prediction`.</summary>
+    Reason: string;
   end;
 
 /// <summary>Builds a whole project with msbuild, the recipe of tools\score-cycle-playbook.ps1
@@ -96,7 +154,10 @@ type
 /// <returns>Ok, the distinct `error E`/`fatal F` lines and the seconds taken. A missing rsvars.bat
 /// gives Ok = False with one line saying so (CompilerAvailable tells beforehand).</returns>
 /// <remarks>The build writes what any build of the project writes (dcu, exe) into the project's
-/// own output folders; it writes no source file.</remarks>
+/// own output folders; it writes no source file. The build is bounded: a run past CBuildTimeoutMs
+/// (30 minutes) is killed with its whole process tree (a job object) and returns Ok = False,
+/// TimedOut = True and one `build-timeout` line. The test seam DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS
+/// lowers the limit for a project under %TEMP% / C:\TEMP only.</remarks>
 function RunMsBuild(const pProject, pPlatform, pLogPath: string): TBuildOutcome;
 
 /// <summary>True when the RAD Studio rsvars.bat RunMsBuild calls exists.</summary>
@@ -141,7 +202,52 @@ function TryRepair(const pView: TCyclePlanView; const pErrors: TArray<string>;
 function CompileAfter(const pView: TCyclePlanView; const pProjectDir, pBuildProject, pPlatform,
   pLogDir: string): TCompileAfterResult;
 
-/// <summary>The DRAGLINT_CYCLEFIX_BREAK test seam: 1 or 2 when set AND the project file lies under
+/// <summary>Writes the staged shadow into the project: all files or none.</summary>
+/// <param name="pView">The plan that was staged.</param>
+/// <param name="pProjectDir">The project folder; the plan's paths map into the shadow by ShadowPathOf.</param>
+/// <param name="pShadowDir">The shadow StageShadow filled (staged WITHOUT the tamper seam).</param>
+/// <param name="pNoBackup">--no-backup: no `.BCK&lt;n&gt;` copies and no recovery.txt.</param>
+/// <param name="pTx">Receives what was written and what a rollback needs.</param>
+/// <returns>True when every file was written; False when anything failed, in which case the
+/// project is already rolled back (pTx.Error says why, pTx.RollbackFailure what could not be restored).</returns>
+/// <remarks>Order: every touched file's original bytes are read into memory; unless pNoBackup each
+/// changed file is copied to its NextBackupName sibling and a recovery.txt block is appended
+/// (AppendRecoveryBlock) BEFORE any write; then the new files are written, then the changed
+/// files (the .dpr / .dproj among them). A file whose staged bytes equal the original is not
+/// written. Each write passes FailWriteForTests (DRAGLINT_TEST_FAIL_WRITE_AT).</remarks>
+function WriteAll(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string; pNoBackup: Boolean;
+  out pTx: TApplyTransaction): Boolean;
+
+/// <summary>Undoes WriteAll byte-identically.</summary>
+/// <param name="pTx">The transaction WriteAll returned.</param>
+/// <returns>'' when every file is restored; else the files that could not be, with the reason.</returns>
+/// <remarks>Restores every held original whose bytes changed (a repair's edits included) with its last-write time, deletes
+/// the new files and the folders made for them, the backups made, and restores recovery.txt (or
+/// deletes it when the write created it). Never raises.</remarks>
+function RollBack(const pTx: TApplyTransaction): string;
+
+/// <summary>The post-apply verification: re-index the project DB in a child process, run
+/// `cycles` on it and compare with the plan's prediction.</summary>
+/// <param name="pView">The plan that was applied (Predicted).</param>
+/// <param name="pOpts">The flags (Db, Project, NoReindex).</param>
+/// <param name="pStore">The run's index of pOpts.Db; read for the target guard only.</param>
+/// <returns>The re-index status and the verdict; never raises.</returns>
+/// <remarks>Target guard: the child `index --project &lt;P&gt; --db &lt;D&gt;` runs only when D is a
+/// PROJECT index (scan_type) holding exactly one project file, that file is pOpts.Project, and D
+/// indexes every unit (.pas) the plan edits -- else skipped with the reason and nothing is written to
+/// any DB. --no-reindex skips it. Without a re-index Verified is False, Reason `not re-indexed`.
+/// A mismatch keeps the files (they compiled; the prediction is the suspect).</remarks>
+function VerifyAfter(const pView: TCyclePlanView; const pOpts: TCycleFixOptions;
+  const pStore: ISymbolStore): TVerifyResult;
+
+/// <summary>Compares two `cycles` outputs the way the scorer does (Task 2 rule).</summary>
+/// <param name="pPredicted">The plan's prediction.</param>
+/// <param name="pActual">What `cycles` printed.</param>
+/// <returns>True when they are equal after dropping blank and informational lines and sorting the
+/// units inside each group line and the group lines themselves (a SET of groups).</returns>
+function SameCyclesOutput(const pPredicted, pActual: string): Boolean;
+
+/// <summary>The DRAGLINT_CYCLEFIX_BREAK test seam: 1, 2 or 3 when set AND the project file lies under
 /// %TEMP% or C:\TEMP, else 0.</summary>
 /// <param name="pOpts">The flags.</param>
 /// <returns>The break mode to apply to the plan before staging (ApplyTestBreak), or 0.</returns>
@@ -154,7 +260,8 @@ function BreakSeam(const pOpts: TCycleFixOptions): Integer;
 /// <param name="pMode">1: a `&lt;Anc&gt;(expr) as I...` line loses its cast (dcc E2015); 2: the pointer
 /// type is emitted as `reference to function(...)` without its `const` -- TFunc's own definition,
 /// spelled inline because TFunc itself needs System.SysUtils (measured: E2003 'TFunc&lt;,&gt;') -- (dcc
-/// E2010 '...' and 'Procedure' on the pointer assignment). Any other value: unchanged.</param>
+/// E2010 '...' and 'Procedure' on the pointer assignment); 3: every new unit gets a stray line after
+/// `interface` that no repair covers (the after gate fails, the apply rolls back). Any other value: unchanged.</param>
 /// <returns>A copy; pView's arrays are not modified.</returns>
 function ApplyTestBreak(const pView: TCyclePlanView; pMode: Integer): TCyclePlanView;
 
@@ -208,15 +315,19 @@ function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir:
 /// pTamperAllowed = False (the default).</remarks>
 function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
 
-/// <summary>Runs `cycles --fix` as a dry run and prints the result to stdout.</summary>
+/// <summary>Runs `cycles --fix` (dry run, or --apply) and prints the result to stdout.</summary>
 /// <param name="pOpts">The flags.</param>
-/// <param name="pStore">Open index of the project; read only.</param>
+/// <param name="pStore">Open index of the project; read only (a child process re-indexes it after --apply).</param>
 /// <param name="pSccs">The circular groups, lower-case stems.</param>
 /// <param name="pGraph">The uses graph the groups come from.</param>
 /// <param name="pLibStore">Platform library index (read only) or nil.</param>
-/// <returns>0 mechanical, 1 refused, 2 error (bad flags, no such group).</returns>
-/// <remarks>Writes no source file of the project; unless --no-compile, the baseline build writes what any build
-/// of the project writes (dcu, exe) and refuses the run (dirty-baseline, exit 1) when it fails. The first mechanical group is chosen when neither --cycle nor --unit is given.</remarks>
+/// <returns>Dry run: 0 mechanical, 1 refused, 2 error (bad flags, no such group). --apply: 0 applied
+/// (and verified, or --no-reindex), 1 refused / rolled back after a compile error or build timeout /
+/// applied but not verified, 2 error (a write failed part-way: rolled back, project not changed).</returns>
+/// <remarks>The dry run writes no source file of the project; unless --no-compile, the baseline build writes what any build
+/// of the project writes (dcu, exe) and refuses the run (dirty-baseline, exit 1) when it fails. The first mechanical group is chosen when neither --cycle nor --unit is given.
+/// --apply: baseline gate, stage the shadow, WriteAll, CompileAfter in place (at most one repair),
+/// then RollBack (compile-error / build-timeout) or VerifyAfter.</remarks>
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
   const pLibStore: ISymbolStore = nil): Integer;
@@ -224,9 +335,9 @@ function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
 implementation
 
 uses
-  System.SysUtils, System.Classes, System.IOUtils, System.JSON, System.DateUtils, System.Hash,
-  System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math,
-  DRagLint.Diagnostics.CompileCheck;
+  System.Classes, System.IOUtils, System.JSON, System.DateUtils, System.Hash,
+  System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math, Winapi.Windows,
+  DRagLint.Core.Model, DRagLint.Convert.Backup;
 
 const
   CExitMechanical = 0;
@@ -246,6 +357,15 @@ const
   CSecondBuild     = 2;    // CompileAfter builds at most twice
   CJsonDecimals    = -2;   // seconds in the JSON, to 1/100
   CProbeWithLines  = 2;    // DRAGLINT_CYCLEFIX_REPAIR_PROBE=<tree>|<errors file>
+  CBreakNoRepair   = 3;    // DRAGLINT_CYCLEFIX_BREAK=3: a stray line in every new unit, no repair covers it
+  { A whole-project msbuild of the demo takes seconds and a large project (Micronite) a few minutes;
+    30 minutes is far past either and still bounds a hung build of an unattended --apply. }
+  CBuildTimeoutMs  = 30 * 60 * 1000;
+  { the C9 bound of convert-apply's child re-index (RefreshProjectIndex): ten minutes }
+  CReindexTimeoutMs = 10 * 60 * 1000;
+  CChildKillWaitMs = 5000;  // how long to wait for a killed child to exit
+  CKilledExitCode  = 1;     // the exit code a killed child is given
+  CExitApplyUnverified = 1; // --apply: written and compiled, but not verified
 
 function MakeRefusal(const pKind, pSymbol, pFile, pReason: string; pLine: Integer): TRefusal;
 begin
@@ -296,8 +416,6 @@ begin
     L.Free;
   end;
 end;
-
-function GetCurrentProcessId: Cardinal; stdcall; external 'kernel32.dll' name 'GetCurrentProcessId';
 
 function DefaultShadowDir: string;
 begin
@@ -570,8 +688,20 @@ type
     AfterFiles    : Integer;
   end;
 
+  // What --apply did to one group (ApplyGroup), for the JSON, the text and the exit code.
+  TApplyReport = record
+    Ran       : Boolean;            // the write was attempted
+    Tx        : TApplyTransaction;
+    Refusals  : TArray<TRefusal>;   // write-failed / compile-error / build-timeout
+    RolledBack: Boolean;
+    Verify    : TVerifyResult;
+    ExitCode  : Integer;
+    Error     : string;             // the top-level error of an exit 2
+  end;
+
 const
   CStatusSkipped = 'skipped';
+  CKindBuildTimeout = 'build-timeout';
   CSectionStop   = '^\s*(type|const|var|threadvar|resourcestring|procedure|function|constructor|destructor|' +
                    'class|begin|initialization|finalization|exports|end\.)\b';
 
@@ -635,6 +765,88 @@ begin
   end;
 end;
 
+function IsUnderTemp(const pPath: string): Boolean;
+begin
+  var Full:= ExpandFileName(pPath);
+  var Temp:= GetEnvironmentVariable('TEMP');
+  Result:= StartsText('C:\TEMP\', Full) or // dl:ok hardcoded-absolute-path@485b -- the test seams' fixed scratch root (ruling T10)
+    ((Temp <> '') and StartsText(IncludeTrailingPathDelimiter(ExpandFileName(Temp)), Full));
+end;
+
+// The time limit of a build of pProject: CBuildTimeoutMs, or the test seam
+// DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS for a project under %TEMP% / C:\TEMP.
+function BuildTimeoutMs(const pProject: string): Cardinal;
+begin
+  Result:= CBuildTimeoutMs;
+  var Seam:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS'), 0);
+  if (Seam > 0) and IsUnderTemp(pProject) then Result:= Seam;
+end;
+
+{ Runs pCmd as a child in its own job object and waits at most pTimeoutMs. pOutFile <> '': the
+  child's stdout and stderr go to that file (created). On expiry the WHOLE job is terminated (a
+  cmd.exe -> msbuild -> dcc tree dies with it) and pTimedOut is set. Returns the exit code, or -1
+  after a kill. Raises EOSError when the child cannot start. Replaces TCompileChecker.RunCommand
+  for the gate's builds: that one waits INFINITE (CompileCheck.pas), and stays so for its callers. }
+function RunBounded(const pCmd, pOutFile: string; pTimeoutMs: Cardinal; out pTimedOut: Boolean): Integer;
+var
+  SA     : TSecurityAttributes;
+  SI     : TStartupInfo;
+  PI     : TProcessInformation;
+  Job    : THandle;
+  Output : THandle;
+  Code   : Cardinal;
+begin
+  pTimedOut:= False;
+  Output:= INVALID_HANDLE_VALUE;
+  FillChar(SI, SizeOf(SI), 0);
+  SI.cb         := SizeOf(SI);
+  SI.dwFlags    := STARTF_USESHOWWINDOW;
+  SI.wShowWindow:= SW_HIDE;
+  if pOutFile <> '' then
+  begin
+    SA.nLength:= SizeOf(SA);
+    SA.lpSecurityDescriptor:= nil;
+    SA.bInheritHandle:= True;
+    ForceDirectories(ExtractFilePath(pOutFile));
+    Output:= CreateFile(PChar(pOutFile), GENERIC_WRITE, FILE_SHARE_READ, @SA, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    if Output = INVALID_HANDLE_VALUE then RaiseLastOSError;
+    SI.dwFlags   := SI.dwFlags or STARTF_USESTDHANDLES;
+    SI.hStdOutput:= Output;
+    SI.hStdError := Output;
+    SI.hStdInput := 0;
+  end;
+  Job:= CreateJobObject(nil, nil);
+  try
+    var Cmd:= pCmd;
+    UniqueString(Cmd);
+    if not CreateProcess(nil, PChar(Cmd), nil, nil, pOutFile <> '', CREATE_NO_WINDOW or CREATE_SUSPENDED, nil, nil, SI, PI) then  // dl:ok unsafe-shellexecute@5152 -- the gate's own generated .bat, or this engine (ParamStr(0)) on the run's own --db / --project
+      RaiseLastOSError;
+    try
+      if Job <> 0 then AssignProcessToJobObject(Job, PI.hProcess);
+      ResumeThread(PI.hThread);
+      if WaitForSingleObject(PI.hProcess, pTimeoutMs) = WAIT_OBJECT_0 then
+      begin
+        GetExitCodeProcess(PI.hProcess, Code);
+        Result:= Integer(Code);
+      end
+      else
+      begin
+        pTimedOut:= True;
+        if Job <> 0 then TerminateJobObject(Job, CKilledExitCode)
+        else TerminateProcess(PI.hProcess, CKilledExitCode);
+        WaitForSingleObject(PI.hProcess, CChildKillWaitMs);
+        Result:= -1;
+      end;
+    finally
+      CloseHandle(PI.hThread);
+      CloseHandle(PI.hProcess);
+    end;
+  finally
+    if Job <> 0 then CloseHandle(Job);
+    if Output <> INVALID_HANDLE_VALUE then CloseHandle(Output);
+  end;
+end;
+
 function RunMsBuild(const pProject, pPlatform, pLogPath: string): TBuildOutcome;
 begin
   Result:= Default(TBuildOutcome);
@@ -659,8 +871,14 @@ begin
     { redirection FIRST: `echo X=%ERRORLEVEL%>> f` expands to `X=0>> f`, a redirect of handle 0 }
     Format('>> "%s" echo BUILD_EXITCODE=%%ERRORLEVEL%%', [Log])]) + #13#10, TEncoding.ASCII);
   var Watch:= TStopwatch.StartNew;
-  TCompileChecker.RunCommand('cmd.exe /c ""' + Bat + '""');
+  var Limit:= BuildTimeoutMs(Project);
+  RunBounded('cmd.exe /c ""' + Bat + '""', '', Limit, Result.TimedOut);
   Result.Seconds:= Watch.Elapsed.TotalSeconds;
+  if Result.TimedOut then
+  begin
+    Result.Errors:= [Format('build-timeout: msbuild did not finish within %d ms and was killed; see %s', [Limit, Log])];
+    Exit;
+  end;
   var Text:= if TFile.Exists(Log) then TFile.ReadAllText(Log, TEncoding.ANSI) else '';
   Result.Errors:= DccErrorLines(Text);
   Result.Ok:= ContainsStr(Text, 'BUILD_EXITCODE=0') and (Length(Result.Errors) = 0);
@@ -956,22 +1174,335 @@ begin
       Result.Seconds:= Result.Seconds + B.Seconds;
     end;
   end;
-  Result.Ok    := B.Ok;
-  Result.Errors:= B.Errors;
+  Result.Ok      := B.Ok;
+  Result.Errors  := B.Errors;
+  Result.TimedOut:= B.TimedOut;
 end;
 
-function IsUnderTemp(const pPath: string): Boolean;
+{ ---- the write, the rollback, the verification (E18 Task 11) ---------------------------------- }
+
+function SameBytes(const pA, pB: TBytes): Boolean;
 begin
-  var Full:= ExpandFileName(pPath);
-  var Temp:= GetEnvironmentVariable('TEMP');
-  Result:= StartsText('C:\TEMP\', Full) or // dl:ok hardcoded-absolute-path@485b -- the test seams' fixed scratch root (ruling T10)
-    ((Temp <> '') and StartsText(IncludeTrailingPathDelimiter(ExpandFileName(Temp)), Full));
+  Result:= (Length(pA) = Length(pB)) and ((Length(pA) = 0) or CompareMem(@pA[0], @pB[0], Length(pA)));
+end;
+
+// pPaths expanded, each once (case-insensitive), in first-seen order.
+function DistinctPaths(const pPaths: TArray<string>): TArray<string>;
+var
+  Seen: TList<string>;
+begin
+  Seen:= TList<string>.Create;
+  try
+    Result:= nil;
+    for var P in pPaths do
+    begin
+      var Full:= ExpandFileName(P);
+      if Seen.Contains(LowerCase(Full)) then Continue;
+      Seen.Add(LowerCase(Full));
+      Result:= Result + [Full];
+    end;
+  finally
+    Seen.Free;
+  end;
+end;
+
+// Creates pDir and records every folder it had to make, outermost first.
+procedure MakeDirs(const pDir: string; var pTx: TApplyTransaction);
+begin
+  var Missing: TArray<string>:= nil;
+  var D:= ExcludeTrailingPathDelimiter(pDir);
+  while (D <> '') and not TDirectory.Exists(D) do
+  begin
+    Missing:= [D] + Missing;
+    var Up:= ExcludeTrailingPathDelimiter(ExtractFilePath(D));
+    if Up = D then Break;
+    D:= Up;
+  end;
+  if Length(Missing) = 0 then Exit;
+  pTx.CreatedDirs:= pTx.CreatedDirs + Missing;
+  ForceDirectories(pDir);
+end;
+
+// The backups of pChanged (NextBackupName siblings) and the recovery.txt block, before any write.
+procedure BackUpChanged(const pChanged: TArray<string>; const pProjectDir, pHeader: string; var pTx: TApplyTransaction);
+begin
+  for var P in pChanged do
+  begin
+    var B:= NextBackupName(P);
+    pTx.BackupPaths:= pTx.BackupPaths + [B];
+    TFile.Copy(P, B);
+    pTx.Backups:= pTx.Backups + [Format('%s -> %s', [P, B])];
+  end;
+  pTx.RecoveryPath   := TPath.Combine(pProjectDir, 'recovery.txt');
+  pTx.RecoveryExisted:= TFile.Exists(pTx.RecoveryPath);
+  if pTx.RecoveryExisted then pTx.RecoveryBefore:= TFile.ReadAllBytes(pTx.RecoveryPath);
+  AppendRecoveryBlock(pProjectDir, pHeader, pTx.Backups);
+end;
+
+function WriteAll(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string; pNoBackup: Boolean;
+  out pTx: TApplyTransaction): Boolean;
+var
+  Changed: TList<string>;
+  Staged : TDictionary<string, TBytes>;
+  Writes : Integer;
+
+  function StagedBytes(const pPath: string): TBytes;
+  begin
+    var S:= ShadowPathOf(pShadowDir, pProjectDir, pPath);
+    if not TFile.Exists(S) then raise EInOutError.CreateFmt('the shadow holds no staged copy of %s (%s)', [pPath, S]);
+    Result:= TFile.ReadAllBytes(S);
+  end;
+
+  procedure WriteOne(const pPath: string);
+  begin
+    Inc(Writes);
+    FailWriteForTests(Writes, pPath);
+    TFile.WriteAllBytes(pPath, Staged[LowerCase(pPath)]);
+    pTx.Written:= pTx.Written + [pPath];
+  end;
+
+begin
+  pTx:= Default(TApplyTransaction);
+  Changed:= TList<string>.Create;
+  Staged := TDictionary<string, TBytes>.Create;
+  try
+    try
+      { everything is read before anything is written: a missing staged file fails here }
+      for var P in DistinctPaths(pView.TouchedPaths) do
+      begin
+        var Orig:= TFile.ReadAllBytes(P);
+        pTx.Held     := pTx.Held + [P];
+        pTx.Originals:= pTx.Originals + [Orig];
+        pTx.Stamps   := pTx.Stamps + [TFile.GetLastWriteTimeUtc(P)];
+        var Bytes:= StagedBytes(P);
+        if SameBytes(Bytes, Orig) then Continue;
+        Changed.Add(P);
+        Staged.AddOrSetValue(LowerCase(P), Bytes);
+      end;
+      var News: TArray<string>:= nil;
+      for var N in pView.NewUnits do News:= News + [N.Path];
+      News:= DistinctPaths(News);
+      for var P in News do
+      begin
+        if TFile.Exists(P) then raise EInOutError.CreateFmt('the new unit''s file already exists: %s', [P]);
+        Staged.AddOrSetValue(LowerCase(P), StagedBytes(P));
+      end;
+      if not pNoBackup then
+        BackUpChanged(Changed.ToArray, pProjectDir, Format('[%s] cycles --fix --apply: cycle %d (%s), %d file(s) changed, %d new',
+          [FormatDateTime('yyyy-mm-dd hh:nn:ss', Now), pView.CycleIndex, string.Join(' <-> ', pView.Units), Changed.Count, Length(News)]), pTx);
+      Writes:= 0;
+      for var P in News do
+      begin
+        MakeDirs(ExtractFilePath(P), pTx);
+        pTx.NewFiles:= pTx.NewFiles + [P];
+        WriteOne(P);
+      end;
+      for var P in Changed do WriteOne(P);
+      Result:= True;
+    except
+      on E: Exception do
+      begin
+        pTx.Error          := E.Message;
+        pTx.RollbackFailure:= RollBack(pTx);
+        Result:= False;
+      end;
+    end;
+  finally
+    Staged.Free;
+    Changed.Free;
+  end;
+end;
+
+// Deletes pPath; a file that is not there is fine, any other failure raises.
+procedure DeleteIfPresent(const pPath: string);
+begin
+  if not System.SysUtils.DeleteFile(pPath) and (GetLastError <> ERROR_FILE_NOT_FOUND) then RaiseLastOSError;
+end;
+
+function RollBack(const pTx: TApplyTransaction): string;
+var
+  Fails: TList<string>;
+
+  procedure Attempt(const pWhat: string; const pStep: TProc);
+  begin
+    try
+      pStep();
+    except
+      on E: Exception do Fails.Add(pWhat + ': ' + E.Message);
+    end;
+  end;
+
+begin
+  Fails:= TList<string>.Create;
+  try
+    for var I:= 0 to High(pTx.Held) do
+    begin
+      var P:= pTx.Held[I];
+      var Orig:= pTx.Originals[I];
+      var Stamp:= pTx.Stamps[I];
+      Attempt('restore ' + P, procedure
+        begin
+          if TFile.Exists(P) and SameBytes(TFile.ReadAllBytes(P), Orig) then Exit;
+          TFile.WriteAllBytes(P, Orig);
+          TFile.SetLastWriteTimeUtc(P, Stamp);
+        end);
+    end;
+    for var P in pTx.NewFiles do
+      Attempt('delete ' + P, procedure begin DeleteIfPresent(P); end);
+    for var I:= High(pTx.CreatedDirs) downto 0 do
+    begin
+      var D:= pTx.CreatedDirs[I];
+      Attempt('remove folder ' + D, procedure begin if TDirectory.Exists(D) then TDirectory.Delete(D); end);
+    end;
+    for var P in pTx.BackupPaths do
+      Attempt('delete ' + P, procedure begin DeleteIfPresent(P); end);
+    if pTx.RecoveryPath <> '' then
+      Attempt('restore ' + pTx.RecoveryPath, procedure
+        begin
+          if pTx.RecoveryExisted then TFile.WriteAllBytes(pTx.RecoveryPath, pTx.RecoveryBefore)
+          else DeleteIfPresent(pTx.RecoveryPath);
+        end);
+    Result:= string.Join('; ', Fails.ToArray);
+  finally
+    Fails.Free;
+  end;
+end;
+
+// The lines of a `cycles` output without the informational ones (blank, `(loaded ...`, notes, resolver).
+function CyclesLines(const pText: string): TArray<string>;
+begin
+  Result:= nil;
+  for var Raw in pText.Split([#10]) do
+  begin
+    var T:= TrimRight(Raw);
+    if (Trim(T) = '') or StartsStr('(loaded', T) or StartsStr('drag-lint: note:', T) or TRegEx.IsMatch(T, '^\s+resolver:') then Continue;
+    Result:= Result + [T];
+  end;
+end;
+
+function SameCyclesOutput(const pPredicted, pActual: string): Boolean;
+
+  function Normalized(const pText: string): string;
+  begin
+    var Lines:= CyclesLines(pText);
+    var Groups: TArray<string>:= nil;
+    var Slots : TArray<Integer>:= nil;
+    for var I:= 0 to High(Lines) do
+    begin
+      var M:= TRegEx.Match(Lines[I], '^(?<head>\s*\[\d+ units\]\s+)(?<units>.+?)(?<tag>\s{2,}\(.*)$');
+      if not M.Success then Continue;
+      var Units:= TRegEx.Split(M.Groups['units'].Value, '\s*<->\s*');
+      TArray.Sort<string>(Units);
+      Lines[I]:= M.Groups['head'].Value + string.Join(' <-> ', Units) + M.Groups['tag'].Value;
+      Groups:= Groups + [Lines[I]];
+      Slots := Slots + [I];
+    end;
+    TArray.Sort<string>(Groups);
+    for var K:= 0 to High(Slots) do Lines[Slots[K]]:= Groups[K];
+    Result:= string.Join(#10, Lines);
+  end;
+
+begin
+  Result:= Normalized(pPredicted) = Normalized(pActual);
+end;
+
+// The target guard of the child re-index: '' when pOpts.Db is the project DB that indexes the plan's
+// files (pProject receives its project file), else why not.
+function ReindexTargetProblem(const pView: TCyclePlanView; const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
+  out pProject: string): string;
+var
+  Indexed: TDictionary<string, Boolean>;
+begin
+  pProject:= '';
+  if pStore = nil then Exit('no index of ' + pOpts.Db + ' is open');
+  var Scan:= pStore.GetMetaValue('scan_type');
+  if not SameText(Scan, 'project') then
+    Exit(Format('%s is not a project index (scan_type "%s"): only the project DB that indexes the units is re-indexed', [pOpts.Db, Scan]));
+  Indexed:= TDictionary<string, Boolean>.Create;
+  try
+    var Proj: TArray<string>:= nil;
+    var Dpr : TArray<string>:= nil;
+    for var FS in pStore.GetAllFileStamps do
+    begin
+      Indexed.AddOrSetValue(LowerCase(ExpandFileName(FS.Path)), True);
+      if SameText(ExtractFileExt(FS.Path), '.dproj') then Proj:= Proj + [FS.Path]
+      else if SameText(ExtractFileExt(FS.Path), '.dpr') then Dpr:= Dpr + [FS.Path];
+    end;
+    if Length(Proj) = 0 then Proj:= Dpr;
+    if Length(Proj) <> 1 then
+      Exit(Format('%s holds %d project files: cannot name the one to re-index', [pOpts.Db, Length(Proj)]));
+    if not SameText(ChangeFileExt(ExpandFileName(Proj[0]), ''), ChangeFileExt(ExpandFileName(pOpts.Project), '')) then
+      Exit(Format('%s is the index of %s, not of --project %s', [pOpts.Db, Proj[0], pOpts.Project]));
+    for var P in pView.TouchedPaths do
+      if SameText(ExtractFileExt(P), '.pas') and not Indexed.ContainsKey(LowerCase(ExpandFileName(P))) then
+        Exit(Format('%s does not index %s', [pOpts.Db, P]));
+    pProject:= Proj[0];
+    Result:= '';
+  finally
+    Indexed.Free;
+  end;
+end;
+
+function VerifyAfter(const pView: TCyclePlanView; const pOpts: TCycleFixOptions;
+  const pStore: ISymbolStore): TVerifyResult;
+const
+  CMsPerSecond = 1000;
+begin
+  Result:= Default(TVerifyResult);
+  Result.ReindexDb    := pOpts.Db;
+  Result.ReindexStatus:= CStatusSkipped;
+  Result.Reason       := 'not re-indexed';
+  if pOpts.NoReindex then
+  begin
+    Result.ReindexReason:= '--no-reindex';
+    Exit;
+  end;
+  Result.ReindexReason:= ReindexTargetProblem(pView, pOpts, pStore, Result.ReindexProject);
+  if Result.ReindexReason <> '' then Exit;
+  var Dir:= BuildScratchDir;
+  var Exe:= ParamStr(0);
+  var TimedOut:= False;
+  var Code:= -1;
+  var Watch:= TStopwatch.StartNew;
+  try
+    Code:= RunBounded(Format('"%s" index --project "%s" --db "%s"', [Exe, Result.ReindexProject, pOpts.Db]),
+      Dir + 'reindex.log', CReindexTimeoutMs, TimedOut);
+  except
+    on E: Exception do Result.ReindexReason:= 'could not start the re-index (' + E.Message + ')';
+  end;
+  Result.ReindexMs:= Watch.ElapsedMilliseconds;
+  if TimedOut or (Code <> 0) then
+  begin
+    Result.ReindexStatus:= 'failed';
+    if Result.ReindexReason = '' then
+      Result.ReindexReason:= if TimedOut then Format('index did not finish within %d s; the child was terminated', [CReindexTimeoutMs div CMsPerSecond])
+                             else Format('index exited %d (log %sreindex.log)', [Code, Dir]);
+    Result.ReindexReason:= Result.ReindexReason + Format(' -- run: drag-lint index --project "%s" --db "%s"', [Result.ReindexProject, pOpts.Db]);
+    Result.Reason:= 're-index failed';
+    Exit;
+  end;
+  Result.ReindexStatus:= 'done';
+  var OutFile:= Dir + 'cycles-after.txt';
+  try
+    RunBounded(Format('"%s" cycles --db "%s"', [Exe, pOpts.Db]), OutFile, CReindexTimeoutMs, TimedOut);
+    if not TimedOut and TFile.Exists(OutFile) then
+      Result.Actual:= string.Join(#10, CyclesLines(TFile.ReadAllText(OutFile, TEncoding.ANSI)));
+  except
+    on E: Exception do OutFile:= OutFile + ': ' + E.Message;
+  end;
+  if Result.Actual = '' then
+  begin
+    Result.Reason:= '`cycles` on the re-indexed DB printed nothing (see ' + OutFile + ')';
+    Exit;
+  end;
+  Result.Verified:= SameCyclesOutput(pView.Predicted, Result.Actual);
+  Result.Reason  := if Result.Verified then '' else 'the cycles output differs from the prediction';
 end;
 
 function BreakSeam(const pOpts: TCycleFixOptions): Integer;
 begin
   Result:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_CYCLEFIX_BREAK'), 0);
-  if ((Result <> CBreakCast) and (Result <> CBreakPointer)) or not IsUnderTemp(pOpts.Project) then Result:= 0;
+  if not (Result in [CBreakCast, CBreakPointer, CBreakNoRepair]) or not IsUnderTemp(pOpts.Project) then Result:= 0;
 end;
 
 function BreakLine(const pView: TCyclePlanView; const pLine: string; pMode: Integer): string;
@@ -992,22 +1523,30 @@ begin
   end;
 end;
 
+// A broken copy of pLines (BreakLine on each); pLines is not modified.
+function BrokenLines(const pView: TCyclePlanView; const pLines: TArray<string>; pMode: Integer): TArray<string>;
+begin
+  Result:= Copy(pLines);
+  for var K:= 0 to High(Result) do Result[K]:= BreakLine(pView, Result[K], pMode);
+end;
+
 function ApplyTestBreak(const pView: TCyclePlanView; pMode: Integer): TCyclePlanView;
 begin
   Result:= pView;
   Result.Edits:= Copy(pView.Edits);
   for var I:= 0 to High(Result.Edits) do
-  begin
-    Result.Edits[I].NewLines:= Copy(pView.Edits[I].NewLines);
-    for var K:= 0 to High(Result.Edits[I].NewLines) do
-      Result.Edits[I].NewLines[K]:= BreakLine(pView, Result.Edits[I].NewLines[K], pMode);
-  end;
+    Result.Edits[I].NewLines:= BrokenLines(pView, pView.Edits[I].NewLines, pMode);
   Result.NewUnits:= Copy(pView.NewUnits);
   for var I:= 0 to High(Result.NewUnits) do
   begin
-    Result.NewUnits[I].Text:= Copy(pView.NewUnits[I].Text);
-    for var K:= 0 to High(Result.NewUnits[I].Text) do
-      Result.NewUnits[I].Text[K]:= BreakLine(pView, Result.NewUnits[I].Text[K], pMode);
+    Result.NewUnits[I].Text:= BrokenLines(pView, pView.NewUnits[I].Text, pMode);
+    if pMode = CBreakNoRepair then
+      for var K:= 0 to High(Result.NewUnits[I].Text) do
+        if SameText(Trim(Result.NewUnits[I].Text[K]), 'interface') then
+        begin
+          Insert('  CycleFixTestBreak !', Result.NewUnits[I].Text, K + 1);
+          Break;
+        end;
   end;
 end;
 
@@ -1109,7 +1648,7 @@ begin
 end;
 
 function CycleToJson(const pView: TCyclePlanView; const pRefusals: TArray<TRefusal>;
-  const pGraph: TCycleGraph; const pGate: TGateReport): TJSONObject;
+  const pGraph: TCycleGraph; const pGate: TGateReport; const pApply: TApplyReport): TJSONObject;
 var
   Arr: TJSONArray;
   O  : TJSONObject;
@@ -1189,15 +1728,30 @@ begin
     Arr.AddElement(O);
   end;
   Result.AddPair('repairs', Arr);
-  Result.AddPair('written', TJSONArray.Create);
-  Result.AddPair('backups', TJSONArray.Create);
+  Result.AddPair('written', StringsToJson(pApply.Tx.Written));
+  Result.AddPair('new_files', StringsToJson(pApply.Tx.NewFiles));
+  Arr:= TJSONArray.Create;
+  for var B in pApply.Tx.Backups do
+  begin
+    var Parts:= B.Split([' -> ']);
+    O:= TJSONObject.Create;
+    O.AddPair('file', Parts[0]);
+    O.AddPair('backup', if Length(Parts) > 1 then Parts[1] else '');
+    Arr.AddElement(O);
+  end;
+  Result.AddPair('backups', Arr);
+  Result.AddPair('rolled_back', TJSONBool.Create(pApply.RolledBack));
   O:= TJSONObject.Create;
-  O.AddPair('status', 'dry-run');
-  O.AddPair('ms', TJSONNumber.Create(0));
+  O.AddPair('status', if pApply.Verify.ReindexStatus = '' then 'dry-run' else pApply.Verify.ReindexStatus);
+  O.AddPair('ms', TJSONNumber.Create(pApply.Verify.ReindexMs));
+  O.AddPair('db', pApply.Verify.ReindexDb);
+  O.AddPair('project', pApply.Verify.ReindexProject);
+  O.AddPair('reason', pApply.Verify.ReindexReason);
   Result.AddPair('reindex', O);
   Result.AddPair('predicted', pView.Predicted);
-  Result.AddPair('actual', '');
-  Result.AddPair('verified', TJSONBool.Create(False));
+  Result.AddPair('actual', pApply.Verify.Actual);
+  Result.AddPair('verified', TJSONBool.Create(pApply.Verify.Verified));
+  Result.AddPair('verify_reason', pApply.Verify.Reason);
 end;
 
 // The 1-based group holding pStem (with or without .pas), 0 when none does.
@@ -1221,8 +1775,6 @@ begin
   if pOpts.Project = '' then Result:= CNeedsProject
   else if pOpts.Apply and pOpts.NoCompile then
     Result:= 'cycles --fix --apply always builds the project (baseline and after); --no-compile is for the dry run only'
-  else if pOpts.Apply then
-    Result:= 'cycles --fix --apply is not available yet (E18 Tasks 9-12); the dry run needs no --apply'
   else if not MatchText(pOpts.Part, ['', 'a', 'b', 'all']) then
     Result:= 'cycles --fix --part must be a, b or all'
   else if SameText(pOpts.Part, 'all') then
@@ -1267,17 +1819,23 @@ end;
 
 // A refusal of the whole run before any group is planned (dirty-baseline, no-compiler): exit 1,
 // nothing staged. JSON: the top-level `refusals` and `baseline`, `cycles` empty.
+// A cycle-fix/1 document holding the run's header pairs: schema, mode, project, db, platform.
+function NewRunDoc(const pOpts: TCycleFixOptions): TJSONObject;
+begin
+  Result:= TJSONObject.Create;
+  Result.AddPair('schema', CSchema);
+  Result.AddPair('mode', if pOpts.Apply then 'apply' else 'dry-run');
+  Result.AddPair('project', pOpts.Project);
+  Result.AddPair('db', pOpts.Db);
+  Result.AddPair('platform', if pOpts.Platform = '' then CDefaultPlatform else LowerCase(pOpts.Platform));
+end;
+
 procedure ReportGateRefusal(const pOpts: TCycleFixOptions; const pGate: TGateReport; const pRefusal: TRefusal);
 begin
   if pOpts.Json then
   begin
-    var Doc:= TJSONObject.Create;
+    var Doc:= NewRunDoc(pOpts);
     try
-      Doc.AddPair('schema', CSchema);
-      Doc.AddPair('mode', if pOpts.Apply then 'apply' else 'dry-run');
-      Doc.AddPair('project', pOpts.Project);
-      Doc.AddPair('db', pOpts.Db);
-      Doc.AddPair('platform', if pOpts.Platform = '' then CDefaultPlatform else LowerCase(pOpts.Platform));
       Doc.AddPair('baseline', BaselineToJson(pGate));
       Doc.AddPair('refusals', TJSONArray.Create.Add(RefusalToJson(pRefusal)));
       Doc.AddPair('cycles', TJSONArray.Create);
@@ -1308,6 +1866,8 @@ begin
     Writeln(ErrOutput, Format('cycles --fix: TEST BREAK active (DRAGLINT_CYCLEFIX_BREAK=%d; the project lies under TEMP)', [Result]));
   pProbe:= ProbeSpec(pOpts, pProbeTree, pProbeLines);
   if pProbe then Writeln(ErrOutput, 'cycles --fix: TEST REPAIR PROBE active (dry run only): ' + pProbeTree);
+  if BuildTimeoutMs(pOpts.Project) <> CBuildTimeoutMs then
+    Writeln(ErrOutput, Format('cycles --fix: TEST BUILD TIMEOUT active (DRAGLINT_CYCLEFIX_BUILD_TIMEOUT_MS=%d; the project lies under TEMP)', [BuildTimeoutMs(pOpts.Project)]));
 end;
 
 // The baseline gate: the UNTOUCHED project must build before anything is planned or staged. False =
@@ -1329,7 +1889,10 @@ begin
   pGate.Baseline:= BaselineCompile(pOpts, BuildScratchDir);
   pGate.BaselineStatus:= if pGate.Baseline.Ok then 'ok' else 'error';
   Result:= pGate.Baseline.Ok;
-  if not Result then
+  if pGate.Baseline.TimedOut then
+    ReportGateRefusal(pOpts, pGate, MakeRefusal(CKindBuildTimeout, '', pOpts.Project,
+      'the baseline build ' + pGate.Baseline.Errors[0], 0))
+  else if not Result then
     ReportGateRefusal(pOpts, pGate, MakeRefusal('dirty-baseline', '', pOpts.Project,
       Format('the project does not build before any edit (%d dcc error line(s), first: %s); fix it, then retry',
         [Length(pGate.Baseline.Errors), pGate.Baseline.Errors[0]]), 0));
@@ -1347,6 +1910,121 @@ begin
   pGate.After      := CompileAfter(pStaged, pProjectDir, pTree + ExtractFileName(pOpts.Project), pOpts.Platform, BuildScratchDir);
   pGate.AfterStatus:= if pGate.After.Ok then 'ok' else 'error';
   pGate.AfterFiles := Length(PlanFiles(pStaged));
+end;
+
+
+// A report for a run that wrote nothing (the dry run, or a group that was not applied).
+function NoApply: TApplyReport;
+begin
+  Result:= Default(TApplyReport);
+  Result.Verify.ReindexStatus:= 'dry-run';
+end;
+
+// --apply of one mechanical group, after the baseline gate passed and pStaged was staged in pShadowDir:
+// WriteAll, CompileAfter in place (one repair at most), then RollBack or VerifyAfter.
+function ApplyGroup(const pStaged: TCyclePlanView; const pOpts: TCycleFixOptions; const pProjectDir, pShadowDir: string;
+  const pStore: ISymbolStore; var pGate: TGateReport): TApplyReport;
+begin
+  Result:= NoApply;
+  Result.Ran:= True;
+  Result.Verify.ReindexStatus:= CStatusSkipped;
+  Result.Verify.Reason:= 'not re-indexed';
+  if not WriteAll(pStaged, pProjectDir, pShadowDir, pOpts.NoBackup, Result.Tx) then
+  begin
+    Result.RolledBack:= Result.Tx.RollbackFailure = '';
+    Result.Refusals:= [MakeRefusal('write-failed', '', '', Result.Tx.Error, 0)];
+    Result.ExitCode:= CExitError;
+    Result.Error:= if Result.RolledBack then 'rolled back, project not changed: ' + Result.Tx.Error
+                   else 'write failed (' + Result.Tx.Error + ') and the rollback FAILED: ' + Result.Tx.RollbackFailure +
+                     ' -- the project may be PARTLY changed; recovery.txt names the backups';
+    Exit;
+  end;
+  pGate.After      := CompileAfter(pStaged, pProjectDir, pOpts.Project, pOpts.Platform, BuildScratchDir);
+  pGate.AfterStatus:= if pGate.After.Ok then 'ok' else 'error';
+  pGate.AfterFiles := Length(Result.Tx.Written);
+  if not pGate.After.Ok then
+  begin
+    var Failure:= RollBack(Result.Tx);
+    Result.RolledBack:= Failure = '';
+    var Kind:= if pGate.After.TimedOut then CKindBuildTimeout else 'compile-error';
+    var First:= if Length(pGate.After.Errors) > 0 then pGate.After.Errors[0] else '';
+    Result.Refusals:= [MakeRefusal(Kind, '', pOpts.Project,
+      Format('the project does not build after the edit (%d dcc line(s), first: %s); ', [Length(pGate.After.Errors), First]) +
+      (if Result.RolledBack then 'rolled back, project not changed' else 'the rollback FAILED: ' + Failure), 0)];
+    Result.ExitCode:= if Result.RolledBack then CExitRefused else CExitError;
+    if not Result.RolledBack then Result.Error:= 'compile error and the rollback FAILED: ' + Failure;
+    Exit;
+  end;
+  Result.Verify  := VerifyAfter(pStaged, pOpts, pStore);
+  Result.ExitCode:= if Result.Verify.Verified or pOpts.NoReindex then CExitMechanical else CExitApplyUnverified;
+end;
+
+// The text lines of an applied (or rolled-back) group.
+procedure AddApplyLines(const pApply: TApplyReport; const pView: TCyclePlanView; pOut: TStrings);
+begin
+  if Length(pApply.Refusals) > 0 then
+  begin
+    pOut.Add(if pApply.RolledBack then 'rolled back, project not changed' else 'ERROR: ' + pApply.Error);
+    for var R in pApply.Refusals do pOut.Add(RefusalLine(R));
+    Exit;
+  end;
+  pOut.Add(Format('Applied: %d file(s) written, %d new; compile ok', [Length(pApply.Tx.Written), Length(pApply.Tx.NewFiles)]));
+  for var B in pApply.Tx.Backups do pOut.Add('  backup: ' + B);
+  pOut.Add(Format('Re-index: %s%s', [pApply.Verify.ReindexStatus,
+    IfThen(pApply.Verify.ReindexReason <> '', ' (' + pApply.Verify.ReindexReason + ')')]));
+  if pApply.Verify.Verified then
+  begin
+    pOut.Add('Verified: the re-indexed `cycles` output matches the prediction');
+    Exit;
+  end;
+  pOut.Add('Not verified: ' + pApply.Verify.Reason);
+  if pApply.Verify.Actual = '' then Exit;
+  pOut.Add('Predicted:');
+  pOut.AddStrings(pView.Predicted.Split([#10]));
+  pOut.Add('Actual:');
+  pOut.AddStrings(pApply.Verify.Actual.Split([#10]));
+end;
+
+// The text lines of a refused group: every refusal for an explicit group, the first one in a scan.
+procedure AddRefusedLines(const pView: TCyclePlanView; const pVerdict: TArray<TRefusal>; pExplicit: Boolean; pOut: TStrings);
+begin
+  if pExplicit then
+  begin
+    pOut.Add(CVerdictRefused);
+    for var R in pVerdict do pOut.Add(RefusalLine(R));
+    Exit;
+  end;
+  pOut.Add(Format('Cycle %d: %s', [pView.CycleIndex, string.Join(' <-> ', pView.Units)]));
+  pOut.Add(RefusalLine(pVerdict[0]));
+end;
+
+// Stages the plan in the shadow tree (StageShadow).
+function StageFor(const pOpts: TCycleFixOptions; const pStaged: TCyclePlanView; const pProjectDir, pShadowDir: string): TArray<TRefusal>;
+begin
+  if pOpts.Apply then
+    { WRITE PATH: --apply writes exactly this shadow into the project (WriteAll), so it is staged with
+      pTamperAllowed = False -- the T9 tamper seam is dry-run only and must never reach a write }
+    Result:= StageShadow(pStaged, pProjectDir, pShadowDir, False)
+  else
+    Result:= StageShadow(pStaged, pProjectDir, pShadowDir, TamperAllowed(pOpts));
+end;
+
+// The text lines of one visited group: applied / mechanical / refused.
+procedure AddGroupLines(const pOpts: TCycleFixOptions; const pStaged: TCyclePlanView; const pVerdict: TArray<TRefusal>;
+  pExplicit: Boolean; const pApplied: TApplyReport; const pShadowDir: string; pOut: TStrings);
+begin
+  if Length(pVerdict) > 0 then
+    AddRefusedLines(pStaged, pVerdict, pExplicit, pOut)
+  else if pOpts.Apply then
+  begin
+    pOut.Add('Verdict: mechanical');
+    AddApplyLines(pApplied, pStaged, pOut);
+  end
+  else
+  begin
+    pOut.Add(CVerdictOk);
+    pOut.Add(CShadowLine + pShadowDir);
+  end;
 end;
 
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
@@ -1368,6 +2046,7 @@ var
   Probe     : Boolean;
   ProbeTree : string;
   ProbeLines: string;
+  Applied   : TApplyReport;
 begin
   Problem:= ResolveSelection(pOpts, pSccs, Own, Only);
   if Problem <> '' then
@@ -1379,6 +2058,7 @@ begin
   Chosen  := False;
   BadPart := '';
   ShadowUsed:= '';
+  Applied := NoApply;
   Brk:= AnnounceSeams(pOpts, Probe, ProbeTree, ProbeLines);
   if not PassBaselineGate(pOpts, pSccs.Count > 0, Gate) then Exit(CExitRefused);
   ProjectDir:= ExtractFilePath(ExpandFileName(pOpts.Project));
@@ -1392,6 +2072,10 @@ begin
       var
         All: TList<TRefusal>;
       begin
+        { the after gate's results belong to ONE group: never carried into the next group's JSON }
+        Gate.After      := Default(TCompileAfterResult);
+        Gate.AfterStatus:= CStatusSkipped;
+        Gate.AfterFiles := 0;
         All:= TList<TRefusal>.Create;
         try
           All.AddRange(pView.Refusals);
@@ -1407,37 +2091,21 @@ begin
             Exit(Only = 0);
           end;
           { a plan the gate passes is staged in the shadow tree; an anchor mismatch refuses the group }
-          { Task 11: the apply's write path must NOT pass TamperAllowed(pOpts) here -- stage with False }
           { DRAGLINT_CYCLEFIX_BREAK (test seam, project under TEMP only) spoils the plan before staging }
           var Staged:= pView;
           if Brk <> 0 then Staged:= ApplyTestBreak(pView, Brk);
-          if All.Count = 0 then All.AddRange(StageShadow(Staged, ProjectDir, ShadowDir, TamperAllowed(pOpts)));
+          if All.Count = 0 then All.AddRange(StageFor(pOpts, Staged, ProjectDir, ShadowDir));
           var Verdict:= All.ToArray;
           if Length(Verdict) = 0 then ShadowUsed:= ShadowDir;
-          { Task 11: the apply writes the shadow into the project, then CompileAfter(Staged, ProjectDir,
-            pOpts.Project, ...) builds it in place and repairs once; not Ok -> roll back, compile-error }
           if (Length(Verdict) = 0) and Probe then RunRepairProbe(Staged, pOpts, ProjectDir, ProbeTree, ProbeLines, Gate);
-          Cycles.AddElement(CycleToJson(pView, Verdict, pGraph, Gate));
+          { --apply: write the shadow under backups, build in place (repair once), roll back or verify }
+          if (Length(Verdict) = 0) and pOpts.Apply then
+            Applied:= ApplyGroup(Staged, pOpts, ProjectDir, ShadowDir, pStore, Gate);
+          var Report:= if Applied.Ran then Applied else NoApply;
+          Cycles.AddElement(CycleToJson(pView, Verdict + Report.Refusals, pGraph, Gate, Report));
           Chosen:= Length(Verdict) = 0;
           if (not pOpts.Json) and ((Only > 0) or Chosen) then Playbook.AddStrings(pRender());
-          if Chosen then
-          begin
-            if not pOpts.Json then
-            begin
-              Summary.Add(CVerdictOk);
-              Summary.Add(CShadowLine + ShadowDir);
-            end;
-          end
-          else if Only > 0 then
-          begin
-            Summary.Add(CVerdictRefused);
-            for var R in Verdict do Summary.Add(RefusalLine(R));
-          end
-          else
-          begin
-            Summary.Add(Format('Cycle %d: %s', [pView.CycleIndex, string.Join(' <-> ', pView.Units)]));
-            Summary.Add(RefusalLine(Verdict[0]));
-          end;
+          if not (Chosen and pOpts.Json) then AddGroupLines(pOpts, Staged, Verdict, Only > 0, Applied, ShadowDir, Summary);
           Exit(not Chosen);
         finally
           All.Free;
@@ -1449,20 +2117,17 @@ begin
       Exit(CExitError);
     end;
     Result:= if Chosen or (pSccs.Count = 0) then CExitMechanical else CExitRefused;
+    if Applied.Ran then Result:= Applied.ExitCode;
     if pOpts.Json then
     begin
-      var Doc:= TJSONObject.Create;
+      var Doc:= NewRunDoc(pOpts);
       try
-        Doc.AddPair('schema', CSchema);
-        Doc.AddPair('mode', 'dry-run');
-        Doc.AddPair('project', pOpts.Project);
-        Doc.AddPair('db', pOpts.Db);
-        Doc.AddPair('platform', if pOpts.Platform = '' then CDefaultPlatform else LowerCase(pOpts.Platform));
         Doc.AddPair('cycles', Cycles);
         Cycles:= nil;
         if ShadowUsed <> '' then Doc.AddPair('shadow', ShadowUsed);
         Doc.AddPair('baseline', BaselineToJson(Gate));
         Doc.AddPair('refusals', TJSONArray.Create);
+        if Applied.Error <> '' then Doc.AddPair('error', Applied.Error);
         Doc.AddPair('ok', TJSONBool.Create(Result = CExitMechanical));
         Doc.AddPair('exit_code', TJSONNumber.Create(Result));
         Writeln(Doc.ToJSON);

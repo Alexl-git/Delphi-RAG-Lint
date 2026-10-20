@@ -124,8 +124,9 @@ try {
     (($r.Out -match '(?m)^Verdict: refused') -and ($r.Out -match '(?m)^  - [\w-]+: ')) $r.Out
   Check 'e: --part b on an interface-coupled group is an error (exit 2)' `
     ((Run-Fix $demo $db @('--cycle', '1', '--part', 'b', '--no-compile', '--library-db', 'none') $false).Exit -eq 2) ''
-  Check 'e: --apply is refused today (exit 2)' `
-    ((Run-Fix $demo $db @('--apply', '--library-db', 'none') $false).Exit -eq 2) ''
+  # --apply writes since E18 Task 11 (run_cyclefix_atomic.ps1); here only its flag rule, which writes nothing
+  Check 'e: --apply --no-compile is refused (exit 2)' `
+    ((Run-Fix $demo $db @('--apply', '--no-compile', '--library-db', 'none') $false).Exit -eq 2) ''
 
   Write-Host '== (f) the dry run wrote nothing' -ForegroundColor Cyan
   Check 'f: SHA-256 of every file of the copy and of its DB unchanged' ((Get-TreeHash $demo $db) -eq $hashBefore) ''
