@@ -22323,7 +22323,8 @@ begin
         FixOpts.CycleGiven:= AArgs.FixCycleGiven;
         FixOpts.UnitStem := AArgs.GhostUnit;
         FixOpts.Part     := AArgs.FixPart;
-        FixOpts.LibraryDb:= if Length(AArgs.LibraryDbs) > 0 then AArgs.LibraryDbs[0] else '';
+        FixOpts.LibraryDbs:= AArgs.LibraryDbs;
+        FixOpts.RulesDir  := AArgs.RulesDir;
         FixOpts.Json     := SameText(AArgs.Format, 'json');
         FixCode:= RunCycleFix(FixOpts, Store, Sccs, Graph, LibStore);
       end

@@ -78,7 +78,7 @@ function Run-Fix([hashtable]$D, [string[]]$Extra, [hashtable]$Env = @{}, [bool]$
   $err = if (Test-Path $errf) { [IO.File]::ReadAllText($errf) } else { '' }
   $j = $null
   if ($Json) { try { $j = $out | ConvertFrom-Json } catch { $j = $null } }
-  return @{ Exit = $code; Out = $out; Err = $err; Json = $j }
+  return @{ Exit = $code; Out = $out; Err = $err; Json = $j; Log = '' }
 }
 function Cycles-Text($D) { return (& $Exe cycles --db $D.Db 2>$null | Out-String) }
 
@@ -88,6 +88,7 @@ $A = New-Demo 'a'
 Check 'setup: demo indexed' (Test-Path $A.Db) ''
 $r = Run-Fix $A @('--part', 'all', '--apply')
 $cys = @($r.Json.cycles)
+$cysDoc = $r.Out.Trim()
 Check 'a: exit 0' ($r.Exit -eq 0) "exit=$($r.Exit) $($r.Out) $($r.Err)"
 Check 'a: document is cycle-fix/1, mode apply, part all' (($r.Json.schema -eq 'cycle-fix/1') -and ($r.Json.mode -eq 'apply') -and ($r.Json.part -eq 'all')) $r.Out
 Check 'a: cycles[] has 2 iterations' ($cys.Count -eq 2) "count=$($cys.Count) $($r.Out)"
@@ -153,6 +154,57 @@ $r = Run-Fix $G @('--unit', 'demouiconnect', '--part', 'all', '--apply') @{} $tr
 Check 'g: exit 1' ($r.Exit -eq 1) "exit=$($r.Exit) $($r.Out) $($r.Err)"
 Check 'g: cycles[0] verdict refused, nothing written' ((@($r.Json.cycles).Count -eq 1) -and (@($r.Json.cycles)[0].verdict -eq 'refused')) $r.Out
 Check 'g: tree byte-identical' ((Get-TreeHash $G.Proj) -eq $hG) ''
+
+# ---------------------------------------------------------------- (h)-(k) the child protocol (test seams, project under TEMP)
+# DRAGLINT_CYCLEFIX_ALL_CHILD runs a stub in place of the engine for the iteration child; the stub forwards
+# every other command (the group listing) to the real exe. DRAGLINT_CYCLEFIX_ALL_PLANT plants a stale output file.
+Write-Host '== (h) a failed child launch never reads a stale file' -ForegroundColor Cyan
+$H = New-Demo 'h'
+$hH = Get-TreeHash $H.Proj
+$stale = Join-Path $WorkDir 'stale-success.json'
+[IO.File]::WriteAllText($stale, ($cysDoc + "`r`n"), [Text.Encoding]::ASCII)
+$r = Run-Fix $H @('--part', 'all', '--apply') @{ DRAGLINT_CYCLEFIX_ALL_CHILD = 'C:\no-such-dir\drag-lint.exe'; DRAGLINT_CYCLEFIX_ALL_PLANT = $stale }
+Check 'h: exit 2, not the planted success' (($r.Exit -eq 2) -and ($r.Json.ok -eq $false)) "exit=$($r.Exit) $($r.Out)"
+Check 'h: no iteration was recorded from the stale file' (@($r.Json.cycles).Count -eq 0) $r.Out
+Check 'h: error says the loop could not continue' ("$($r.Json.error)" -ne '') $r.Out
+Check 'h: tree byte-identical' ((Get-TreeHash $H.Proj) -eq $hH) ''
+
+$stub = Join-Path $WorkDir 'stub-child.bat'
+$bat = @('@echo off',
+  'if "%~3"=="--apply" goto it',
+  '"%STUB_REAL%" %*',
+  'exit /b %errorlevel%',
+  ':it',
+  'echo %* >> "%STUB_LOG%"',
+  'if "%STUB_MODE%"=="empty" echo {"schema":"cycle-fix/1","cycles":[]}',
+  'if "%STUB_MODE%"=="refused" echo {"schema":"cycle-fix/1","cycles":[],"refusals":[{"kind":"dirty-baseline","symbol":"","file":"","line":0,"reason":"stub"}],"ok":false,"exit_code":1}',
+  'if "%STUB_MODE%"=="noop" echo {"schema":"cycle-fix/1","cycles":[{"n":1,"part":"a","edge":"stub->stub","written":["x.pas"],"verified":true,"rolled_back":false}],"ok":true,"exit_code":0}',
+  'if "%STUB_MODE%"=="refused" exit /b 1',
+  'exit /b 0')
+[IO.File]::WriteAllText($stub, (($bat -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
+function Run-Stub([string]$Tag, [string]$Mode, [string[]]$Extra = @()) {
+  $D = New-Demo $Tag
+  $log = Join-Path $WorkDir "$Tag-stub.log"
+  $r = Run-Fix $D (@('--part', 'all', '--apply') + $Extra) @{ DRAGLINT_CYCLEFIX_ALL_CHILD = $stub; STUB_REAL = $Exe; STUB_MODE = $Mode; STUB_LOG = $log }
+  $r.Log = if (Test-Path $log) { [IO.File]::ReadAllText($log) } else { '' }
+  return $r
+}
+
+Write-Host '== (i) a refused iteration is kept in cycles[]' -ForegroundColor Cyan
+$r = Run-Stub 'i' 'refused'
+Check 'i: exit 1 (the child''s code)' ($r.Exit -eq 1) "exit=$($r.Exit) $($r.Out)"
+Check 'i: cycles[] holds a synthetic refused entry with the refusal' ((@($r.Json.cycles).Count -eq 1) -and (@($r.Json.cycles)[0].verdict -eq 'refused') -and (@(@($r.Json.cycles)[0].refusals)[0].kind -eq 'dirty-baseline')) $r.Out
+
+Write-Host '== (j) a child that exits 0 with no cycles[] is a failure' -ForegroundColor Cyan
+$r = Run-Stub 'j' 'empty'
+Check 'j: exit 2' (($r.Exit -eq 2) -and ($r.Json.ok -eq $false)) "exit=$($r.Exit) $($r.Out)"
+Check 'j: error names the empty child' ("$($r.Json.error)" -match 'planned no group') $r.Out
+
+Write-Host '== (k) an iteration that leaves the group unchanged: no edge is cuttable; target flags are forwarded' -ForegroundColor Cyan
+$r = Run-Stub 'k' 'noop' @('--library-db', $Lib, '--rules-dir', $WorkDir)
+Check 'k: exit 1' ($r.Exit -eq 1) "exit=$($r.Exit) $($r.Out)"
+Check 'k: stopped = no edge is cuttable, after 1 iteration' (("$($r.Json.stopped)" -match 'no edge is cuttable') -and ($r.Json.iterations -eq 1)) $r.Out
+Check 'k: the child got both --library-db and --rules-dir' ((([regex]::Matches($r.Log, '--library-db')).Count -eq 2) -and $r.Log.Contains('--rules-dir')) $r.Log
 
 Write-Host ''
 if ($script:Failed) { Write-Host "FAILED ($script:Passed passed)" -ForegroundColor Red; exit 1 }

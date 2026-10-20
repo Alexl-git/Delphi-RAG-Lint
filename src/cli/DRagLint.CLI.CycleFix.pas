@@ -46,8 +46,10 @@ type
     UnitStem: string;
     /// <summary>--part: 'a', 'b', 'all' or '' (the group's default).</summary>
     Part: string;
-    /// <summary>--library-db as given ('none' or a path); '' = the manifest's library. Passed on to the --part all child runs.</summary>
-    LibraryDb: string;
+    /// <summary>Every --library-db as given ('none' or a path); empty = the manifest's library. Passed on to the --part all child runs.</summary>
+    LibraryDbs: TArray<string>;
+    /// <summary>--rules-dir as given, '' = not given. Passed on to the --part all child runs (the fix itself reads no rule files).</summary>
+    RulesDir: string;
     /// <summary>--format json.</summary>
     Json: Boolean;
     /// <summary>--shadow-out (debug): the directory the shadow tree is staged in; '' = DefaultShadowDir.</summary>
@@ -2090,7 +2092,11 @@ end;
 
 const
   CDocMarker    = '{"schema":"' + CSchema + '"';
-  CGroupsMarker = '[{"units"';
+  CEdgeSection  = 3;                                // regex group of the edge's section in `cycles --edges`
+  CEdgeIndent   = 6;                                // the indent of an edge line of `cycles --edges`
+  CNoGroupsLine = 'No circular unit dependencies found.';
+  CEnvAllChild  = 'DRAGLINT_CYCLEFIX_ALL_CHILD';   // test seam (project under TEMP): the exe the --part all children run
+  CEnvAllPlant  = 'DRAGLINT_CYCLEFIX_ALL_PLANT';   // test seam (project under TEMP): a file copied over each child output file before the run
 
 type
   // The state of one --part all run: the iterations' JSON, why it stopped, the exit code.
@@ -2105,14 +2111,40 @@ type
     Lines     : TStringList;
   end;
 
+// A double-quoted command-line argument; trailing backslashes are dropped (they would escape the closing quote).
+function Quoted(const pValue: string): string;
+begin
+  Result:= '"' + pValue.TrimRight(['\']) + '"';
+end;
+
+// The exe the --part all children run: this engine, or the DRAGLINT_CYCLEFIX_ALL_CHILD test seam.
+function ChildExe(const pOpts: TCycleFixOptions): string;
+begin
+  Result:= ParamStr(0);
+  if IsUnderTemp(pOpts.Project) and (GetEnvironmentVariable(CEnvAllChild) <> '') then
+    Result:= GetEnvironmentVariable(CEnvAllChild);
+end;
+
+// Makes pOutFile ready for a child's output: deletes what an earlier run left (a failed launch must never
+// make a stale file look like this run's result). Test seam CEnvAllPlant first plants a stale file there.
+procedure PrepareChildOutput(const pOpts: TCycleFixOptions; const pOutFile: string);
+begin
+  ForceDirectories(ExtractFilePath(pOutFile));
+  if IsUnderTemp(pOpts.Project) and (GetEnvironmentVariable(CEnvAllPlant) <> '') then
+    TFile.Copy(GetEnvironmentVariable(CEnvAllPlant), pOutFile, True);
+  if not Winapi.Windows.DeleteFile(PChar(pOutFile)) and (GetLastError <> ERROR_FILE_NOT_FOUND) then RaiseLastOSError;
+end;
+
 // The command line of one --part all iteration: a single-group --apply of the group holding pStem
 // (its default part), as a child of this engine so it plans on the index the last iteration refreshed.
+// Every target flag the parent received is forwarded (--library-db as often as given, --rules-dir).
 function AllIterationCmd(const pOpts: TCycleFixOptions; const pStem: string): string;
 begin
-  Result:= Format('"%s" cycles --fix --apply --project "%s" --db "%s" --unit "%s" --format json',
-    [ParamStr(0), pOpts.Project, pOpts.Db, pStem]);
-  if pOpts.Platform <> '' then Result:= Result + Format(' --platform "%s"', [pOpts.Platform]);
-  if pOpts.LibraryDb <> '' then Result:= Result + Format(' --library-db "%s"', [pOpts.LibraryDb]);
+  Result:= Format('%s cycles --fix --apply --project %s --db %s --unit %s --format json',
+    [Quoted(ChildExe(pOpts)), Quoted(pOpts.Project), Quoted(pOpts.Db), Quoted(pStem)]);
+  if pOpts.Platform <> '' then Result:= Result + ' --platform ' + Quoted(pOpts.Platform);
+  for var Lib in pOpts.LibraryDbs do Result:= Result + ' --library-db ' + Quoted(Lib);
+  if pOpts.RulesDir <> '' then Result:= Result + ' --rules-dir ' + Quoted(pOpts.RulesDir);
   if pOpts.NoBackup then Result:= Result + ' --no-backup';
 end;
 
@@ -2130,33 +2162,105 @@ begin
   Result:= TJSONObject.ParseJSONValue(Text.Substring(From, if Stop < 0 then MaxInt else Stop - From).Trim);
 end;
 
+type
+  // One circular group as `cycles --edges` prints it.
+  TListedGroup = record
+    Units    : TArray<string>;
+    Signature: string;   // sorted units + sorted `from>to:section` edges: equal = no edge was cut
+  end;
+
+// Closes pCur: fills its signature from pEdges, appends it to pOut, clears pEdges.
+procedure FlushGroup(var pCur: TListedGroup; pEdges: TList<string>; pOut: TList<TListedGroup>);
+begin
+  var U:= Copy(pCur.Units);
+  TArray.Sort<string>(U);
+  pEdges.Sort;
+  pCur.Signature:= string.Join(',', U) + '|' + string.Join(';', pEdges.ToArray);
+  pOut.Add(pCur);
+  pEdges.Clear;
+  pCur:= Default(TListedGroup);
+end;
+
+// The groups of pText (`cycles --edges` output): units and edges, signature filled.
+function ParseListedGroups(const pText: string): TArray<TListedGroup>;
+begin
+  var Edges:= TList<string>.Create;
+  var Groups:= TList<TListedGroup>.Create;
+  try
+    var Cur: TListedGroup:= Default(TListedGroup);
+    for var Line in pText.Split([#10]) do
+    begin
+      var H:= TRegEx.Match(Line, '^\s+\[\d+ units?\]\s+(.+?)\s{2,}\(');
+      if H.Success then
+      begin
+        if Length(Cur.Units) > 0 then FlushGroup(Cur, Edges, Groups);
+        Cur.Units:= LowerCase(H.Groups[1].Value).Split([' <-> ']);
+        Continue;
+      end;
+      var E:= TRegEx.Match(Line, '^\s{' + IntToStr(CEdgeIndent) + '}(\S+) uses (\S+)\s+\[(interface|implementation)');
+      if (Length(Cur.Units) > 0) and E.Success then
+        Edges.Add(LowerCase(E.Groups[1].Value) + '>' + LowerCase(E.Groups[2].Value) + ':' + E.Groups[CEdgeSection].Value);
+    end;
+    if Length(Cur.Units) > 0 then FlushGroup(Cur, Edges, Groups);
+    Result:= Groups.ToArray;
+  finally
+    Groups.Free;
+    Edges.Free;
+  end;
+end;
+
 // The first circular group of the (re-indexed) project DB that holds a unit of pMembers; False when none does.
-function NextGroup(const pOpts: TCycleFixOptions; const pMembers: TArray<string>; out pGroup: TArray<string>): Boolean;
+// Raises when the child `cycles --edges` fails or its output is neither groups nor the no-groups line.
+function NextGroup(const pOpts: TCycleFixOptions; const pMembers: TArray<string>; out pGroup: TListedGroup): Boolean;
 begin
   Result:= False;
-  pGroup:= nil;
-  var OutFile:= BuildScratchDir + 'all-groups.json';
+  pGroup:= Default(TListedGroup);
+  var OutFile:= BuildScratchDir + 'all-groups.txt';
+  PrepareChildOutput(pOpts, OutFile);
   var TimedOut:= False;
-  RunBounded(Format('"%s" cycles --db "%s" --format json', [ParamStr(0), pOpts.Db]), OutFile, CReindexTimeoutMs, TimedOut);
-  var Doc:= ParseJsonFrom(OutFile, CGroupsMarker);
-  if Doc = nil then Doc:= ParseJsonFrom(OutFile, '[]');
-  try
-    if TimedOut or not (Doc is TJSONArray) then
-      raise EInvalidOperation.CreateFmt('could not list the circular groups of %s (see %s)', [pOpts.Db, OutFile]);
-    for var Item in TJSONArray(Doc) do
-    begin
-      var Group: TArray<string>:= [];
-      for var U in TJSONObject(Item).GetValue('units') as TJSONArray do Group:= Group + [U.Value];
-      for var G in Group do
-        if MatchText(G, pMembers) then
-        begin
-          pGroup:= Group;
-          Exit(True);
-        end;
-    end;
-  finally
-    Doc.Free;
+  var Code:= RunBounded(Format('%s cycles --db %s --edges', [Quoted(ChildExe(pOpts)), Quoted(pOpts.Db)]), OutFile, CReindexTimeoutMs, TimedOut);
+  if TimedOut or (Code <> 0) or not TFile.Exists(OutFile) then
+    raise EInvalidOperation.CreateFmt('could not list the circular groups of %s (exit %d, see %s)', [pOpts.Db, Code, OutFile]);
+  var Text:= TFile.ReadAllText(OutFile, TEncoding.ANSI);
+  var Groups:= ParseListedGroups(Text);
+  if Length(Groups) = 0 then
+  begin
+    if not Text.Contains(CNoGroupsLine) then
+      raise EInvalidOperation.CreateFmt('the group listing of %s is neither groups nor "%s" (see %s)', [pOpts.Db, CNoGroupsLine, OutFile]);
+    Exit;
   end;
+  for var G in Groups do
+    for var U in G.Units do
+      if MatchText(U, pMembers) then
+      begin
+        pGroup:= G;
+        Exit(True);
+      end;
+end;
+
+// A child document without a cycles[] entry: a refusal before any group was planned (dirty-baseline, ...)
+// keeps the child's exit code and gets a synthetic cycles[] entry carrying its refusals; exit 0 with no entry is a failure.
+procedure EmptyIteration(const pObj: TJSONObject; const pStem: string; var S: TAllState);
+begin
+  if S.Code = CExitMechanical then
+  begin
+    S.Code   := CExitError;
+    S.Error  := Format('iteration %d: the child run exited 0 but planned no group', [S.Iterations]);
+    S.Stopped:= S.Error;
+    Exit;
+  end;
+  var Entry:= TJSONObject.Create;
+  Entry.AddPair('n', TJSONNumber.Create(0));
+  Entry.AddPair('unit', pStem);
+  Entry.AddPair('verdict', 'refused');
+  if pObj.GetValue('refusals') <> nil then Entry.AddPair('refusals', pObj.GetValue('refusals').Clone as TJSONValue)
+  else Entry.AddPair('refusals', TJSONArray.Create);
+  Entry.AddPair('written', TJSONArray.Create);
+  Entry.AddPair('rolled_back', TJSONBool.Create(False));
+  Entry.AddPair('verified', TJSONBool.Create(False));
+  S.Cycles.AddElement(Entry);
+  S.Lines.Add(Format('Iteration %d: refused before a group was planned', [S.Iterations]));
+  S.Stopped:= Format('iteration %d: refused before a group was planned (exit %d)', [S.Iterations, S.Code]);
 end;
 
 // One iteration: the child run for the group holding pStem; its cycle object is appended to S.Cycles.
@@ -2167,6 +2271,7 @@ begin
   Inc(S.Iterations);
   var OutFile:= BuildScratchDir + Format('all-iteration-%d.json', [S.Iterations]);
   var TimedOut:= False;
+  PrepareChildOutput(pOpts, OutFile);
   S.Code:= RunBounded(AllIterationCmd(pOpts, pStem), OutFile, CAllIterationMs, TimedOut);
   var Doc:= ParseJsonFrom(OutFile, CDocMarker);
   try
@@ -2183,8 +2288,7 @@ begin
     var Arr:= Obj.GetValue('cycles') as TJSONArray;
     if (Arr = nil) or (Arr.Count = 0) then
     begin
-      if Obj.GetValue('refusals') <> nil then S.Refusals:= Obj.GetValue('refusals').Clone as TJSONValue;
-      S.Stopped:= Format('iteration %d: refused before a group was planned (exit %d)', [S.Iterations, S.Code]);
+      EmptyIteration(Obj, pStem, S);
       Exit;
     end;
     var Cy:= Arr.Items[0].Clone as TJSONObject;
@@ -2212,13 +2316,24 @@ end;
 // edge count) is used up.
 procedure LoopAll(const pOpts: TCycleFixOptions; const pMembers: TArray<string>; pBound: Integer; var S: TAllState);
 begin
-  var Stem:= pMembers[0];
-  while AllIteration(pOpts, Stem, S) do
+  var Group: TListedGroup;
+  if not NextGroup(pOpts, pMembers, Group) then
   begin
-    var Group: TArray<string>;
+    S.Stopped:= 'the selected group is not circular';
+    Exit;
+  end;
+  while AllIteration(pOpts, Group.Units[0], S) do
+  begin
+    var Before:= Group.Signature;
     if not NextGroup(pOpts, pMembers, Group) then
     begin
       S.Stopped:= Format('the selected circular group is gone after %d iteration(s)', [S.Iterations]);
+      Exit;
+    end;
+    if Group.Signature = Before then
+    begin
+      S.Code   := CExitRefused;
+      S.Stopped:= Format('iteration %d: no edge is cuttable (the group is unchanged: same units, same edges)', [S.Iterations]);
       Exit;
     end;
     if S.Iterations >= pBound then
@@ -2227,7 +2342,6 @@ begin
       S.Stopped:= Format('stopped after %d iteration(s), the bound (the group had %d edge(s)); it is still circular', [S.Iterations, pBound]);
       Exit;
     end;
-    Stem:= Group[0];
   end;
 end;
 
