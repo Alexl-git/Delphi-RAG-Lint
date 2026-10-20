@@ -11,13 +11,29 @@ unit FeatureGen.Commands;
 
 interface
 
+uses
+  FeatureGen.Live
+  ;
+
 type
   /// <summary>Receives one output line (no line ending).</summary>
   TCmdOut = reference to procedure(const pLine: string);
 
+/// <summary>Stamps the verified block of one entry (the only writer of verified).</summary>
+/// <param name="pRepo">Repo root.</param>
+/// <param name="pId">Entry id.</param>
+/// <param name="pBy">Who verified; must not be empty.</param>
+/// <param name="pDate">Date text yyyy-mm-dd.</param>
+/// <param name="pLive">Harvested live surface; its ProductVersion becomes verified.build.</param>
+/// <param name="pHelp">Engine help for the cli surface hash.</param>
+/// <returns>The path of the entry file.</returns>
+/// <exception cref="Exception">No entry has this id (message starts "verify: no entry"), pBy is empty, or the entry would not be valid; the file is untouched then.</exception>
+/// <remarks>Writes verified = {date, by, build, surfaceHash} with surfaceHash = SurfaceHash(entry, pLive, pHelp); nothing else changes.</remarks>
+function VerifyEntryWith(const pRepo, pId, pBy, pDate: string; const pLive: TLiveSurface; const pHelp: TLiveHelp): string;
+
 /// <summary>Tells whether pVerb is one of the registry edit verbs.</summary>
 /// <param name="pVerb">First command-line word.</param>
-/// <returns>True for add, update, find, blast-radius, move-menu, deprecate, normalise.</returns>
+/// <returns>True for add, update, find, blast-radius, move-menu, deprecate, normalise, verify, audit.</returns>
 function IsRegistryVerb(const pVerb: string): Boolean;
 
 /// <summary>Writes the usage lines of the registry edit verbs.</summary>
@@ -50,14 +66,15 @@ uses
   , System.Generics.Collections
   , System.Generics.Defaults
   , FeatureGen.Json
-  , FeatureGen.Live
+  , FeatureGen.Model
   , FeatureGen.SiteFormat
   , FeatureGen.Wiki
   , FeatureGen.Check
+  , FeatureGen.Audit
   ;
 
 const
-  VERBS: array[0..6] of string = ('add', 'update', 'find', 'blast-radius', 'move-menu', 'deprecate', 'normalise');
+  VERBS: array[0..8] of string = ('add', 'update', 'find', 'blast-radius', 'move-menu', 'deprecate', 'normalise', 'verify', 'audit');
   SURFACE_TYPES: array[0..10] of string = ('cli', 'ide-menu', 'ide-context', 'ide-about', 'tool-window', 'shortcut', 'lsp',
     'mcp', 'script', 'exe', 'workflow');
   ASCII_MAX = 127;
@@ -202,6 +219,9 @@ begin
   pOut('  move-menu --from "<old prefix>" --to "<new prefix>" [--what-if] [--repo <dir>] [--json]');
   pOut('  deprecate --id <id> [--superseded-by <id>] [--removed-in <ver>] [--repo <dir>] [--json]');
   pOut('  normalise [--repo <dir>] [--json]   (entries canonical; groups/teams one row per line; other files bytes only)');
+  pOut('  verify --id <id> --by <who> [--engine <exe>] [--repo <dir>] [--json]   (stamps verified: date, by, build, surfaceHash of the live surface)');
+  pOut('  audit [--owner <team>] [--engine <exe>] [--repo <dir>] [--json]   (one "id<TAB>owner<TAB>kind" line per gap: thin-leaf, no-usage,');
+  pOut('      no-flags, no-steps, no-questions, stale-verified, surface-changed, no-wiki-page; exit 0 always)');
 end;
 
 { ---- small helpers ---- }
@@ -930,6 +950,166 @@ begin
   end;
 end;
 
+{ ---- verify / audit ---- }
+
+function VerifyEntryWith(const pRepo, pId, pBy, pDate: string; const pLive: TLiveSurface; const pHelp: TLiveHelp): string;
+var
+  lReg: TRegistry;
+  lE: TFeatureEntry;
+  lFound: Boolean;
+  lVer: TJSONObject;
+  lSet: TArray<TSetItem>;
+  lItem: TSetItem;
+begin
+  if Trim(pBy) = '' then
+    raise ECommand.Create('verify: --by is required');
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    lFound := False;
+    for lE in lReg.Entries do
+      if lE.Id = pId then
+      begin
+        lFound := True;
+        Break;
+      end;
+    if not lFound then
+      raise ECommand.CreateFmt('verify: no entry ''%s''', [pId]);
+    lVer := TJSONObject.Create;
+    lVer.AddPair('date', pDate);
+    lVer.AddPair('by', pBy);
+    lVer.AddPair('build', pLive.ProductVersion);
+    lVer.AddPair('surfaceHash', SurfaceHash(lE, pLive, pHelp));
+    lItem.Key := 'verified';
+    lItem.Value := lVer;
+    lSet := [lItem];
+    try
+      Result := UpdateEntry(pRepo, pId, lSet);
+    finally
+      FreeSet(lSet);
+    end;
+  finally
+    lReg.Free;
+  end;
+end;
+
+{ Harvests the live surface and the engine help; the caller frees both. }
+procedure HarvestLive(const pArgs: TCmdArgs; const pRepo: string; out pLive: TLiveSurface; out pHelp: TLiveHelp);
+var
+  lEngine: string;
+begin
+  lEngine := pArgs.Get('engine');
+  if lEngine = '' then
+    lEngine := TPath.Combine(pRepo, LoadSiteFormat(pRepo).Engine);
+  pLive := TLiveSurface.Create;
+  pHelp := TLiveHelp.Create;
+  try
+    pLive.Harvest(pRepo, lEngine);
+    pHelp.Load(lEngine);
+  except
+    FreeAndNil(pHelp);
+    FreeAndNil(pLive);
+    raise;
+  end;
+end;
+
+procedure DoVerify(const pArgs: TCmdArgs; const pRepo: string; pJson: Boolean; const pOut: TCmdOut);
+var
+  lLive: TLiveSurface;
+  lHelp: TLiveHelp;
+  lId, lFile: string;
+  lReg: TRegistry;
+  lE: TFeatureEntry;
+  lFound: Boolean;
+begin
+  lId := pArgs.Get('id');
+  if lId = '' then
+    raise ECommand.Create('verify: --id is required');
+  if Trim(pArgs.Get('by')) = '' then
+    raise ECommand.Create('verify: --by is required');
+  // an unknown id is refused before the (slow) live harvest
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    lFound := False;
+    for lE in lReg.Entries do
+      if lE.Id = lId then
+        lFound := True;
+  finally
+    lReg.Free;
+  end;
+  if not lFound then
+    raise ECommand.CreateFmt('verify: no entry ''%s''', [lId]);
+  HarvestLive(pArgs, pRepo, lLive, lHelp);
+  try
+    lFile := VerifyEntryWith(pRepo, lId, pArgs.Get('by'), FormatDateTime('yyyy-mm-dd', Date), lLive, lHelp);
+    EmitText(pJson, 'verified ' + lFile + ' (build ' + lLive.ProductVersion + ')', pOut);
+  finally
+    lHelp.Free;
+    lLive.Free;
+  end;
+end;
+
+procedure DoAudit(const pArgs: TCmdArgs; const pRepo: string; pJson: Boolean; const pOut: TCmdOut);
+var
+  lReg: TRegistry;
+  lLive: TLiveSurface;
+  lHelp: TLiveHelp;
+  lE: TFeatureEntry;
+  lFindings: TArray<TAuditFinding>;
+  lF: TAuditFinding;
+  lArr: TJSONArray;
+  lObj: TJSONObject;
+  lOwner: string;
+  lNeedLive: Boolean;
+begin
+  lOwner := pArgs.Get('owner');
+  lLive := nil;
+  lHelp := nil;
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    lNeedLive := False;
+    for lE in lReg.Entries do
+      if lE.VerifiedSurfaceHash <> '' then
+        lNeedLive := True;
+    if lNeedLive then
+      try
+        HarvestLive(pArgs, pRepo, lLive, lHelp);
+      except
+        on E: Exception do
+          if not pJson then
+            pOut('# audit: live surface unavailable (' + E.Message + '); surface-changed not checked');
+      end;
+    lFindings := AuditRegistry(lReg, pRepo, lLive, lHelp, Date);
+    lArr := TJSONArray.Create;
+    try
+      for lF in lFindings do
+        if (lOwner = '') or (lF.Owner = lOwner) then
+        begin
+          if pJson then
+          begin
+            lObj := TJSONObject.Create;
+            lObj.AddPair('id', lF.Id);
+            lObj.AddPair('owner', lF.Owner);
+            lObj.AddPair('kind', lF.Kind);
+            lArr.AddElement(lObj);
+          end
+          else
+            pOut(lF.Id + #9 + lF.Owner + #9 + lF.Kind);
+        end;
+      if pJson then
+        pOut(lArr.ToJSON);
+    finally
+      lArr.Free;
+    end;
+  finally
+    lReg.Free;
+    lHelp.Free;
+    lLive.Free;
+  end;
+end;
+
 { ---- find / blast-radius ---- }
 
 function EngineOf(const pArgs: TCmdArgs; const pRepo: string): string;
@@ -1502,6 +1682,10 @@ begin
     Result := ['from', 'to', 'repo']
   else if pVerb = 'deprecate' then
     Result := ['id', 'superseded-by', 'removed-in', 'repo']
+  else if pVerb = 'verify' then
+    Result := ['id', 'by', 'engine', 'repo']
+  else if pVerb = 'audit' then
+    Result := ['owner', 'engine', 'repo']
   else
     Result := ['repo'];
 end;
@@ -1553,6 +1737,10 @@ begin
         DoUpdate(lArgs, lRepo, lJson, pOut)
       else if pVerb = 'deprecate' then
         DoDeprecate(lArgs, lRepo, lJson, pOut)
+      else if pVerb = 'verify' then
+        DoVerify(lArgs, lRepo, lJson, pOut)
+      else if pVerb = 'audit' then
+        DoAudit(lArgs, lRepo, lJson, pOut)
       else if pVerb = 'find' then
         Exit(DoFind(lArgs, lRepo, lJson, pOut))
       else if pVerb = 'blast-radius' then

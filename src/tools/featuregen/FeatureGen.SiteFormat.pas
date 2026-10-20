@@ -37,6 +37,8 @@ type
     /// <summary>Wiki page names (no .md, any case) of GENERATED pages; an entry naming one has no wiki page of its own.</summary>
     GeneratedWikiPages: TArray<string>;
     Help: TLiveHelp;
+    /// <summary>Product version for the per-page updated value; set by BuildSite from its TSitePages. '' (default): updated falls back to verified.build, lastVerified build, since.</summary>
+    Version: string;
   end;
 
 /// <summary>Reads features\site-format.json.</summary>

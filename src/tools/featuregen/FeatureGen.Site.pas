@@ -11,7 +11,50 @@ uses
   , FeatureGen.SiteFormat
   , FeatureGen.Markdown
   , FeatureGen.Output
+  , System.Generics.Collections
   ;
+
+type
+  /// <summary>The stored fingerprint of one site page: the hash of its text with the updated value blanked, and the version it was last changed in.</summary>
+  TPageStamp = record
+    Hash: string;
+    Version: string;
+  end;
+
+  /// <summary>The per-page "updated" bookkeeping (spec Q6): features\generated\site-pages.json.</summary>
+  /// <remarks>updated of a page is the stored version while the page text (updated blanked) hashes the same as last time,
+  /// else the current product version. Kept out of manifest.json so that file stays identical to the PowerShell generator.
+  /// Resolve is idempotent: it reads the loaded map and records into a separate new map, so GenerateSite's two passes agree.
+  /// Not thread-safe.</remarks>
+  TSitePages = class
+  strict private
+    FVersion: string;
+    FOld: TDictionary<string, TPageStamp>;
+    FNew: TDictionary<string, TPageStamp>;
+  public
+    /// <summary>Creates an empty map.</summary>
+    /// <param name="pVersion">The current product version (DRAGLINT_VERSION) a changed or new page gets.</param>
+    constructor Create(const pVersion: string);
+    destructor Destroy; override;
+    /// <summary>Loads the stored map, replacing any earlier one; a missing file is an empty map.</summary>
+    /// <param name="pFile">Full path of site-pages.json.</param>
+    /// <exception cref="EFeatureGen">The file is not a JSON object of {hash, version} objects.</exception>
+    procedure LoadFromFile(const pFile: string);
+    /// <summary>Settles the updated value of one page.</summary>
+    /// <param name="pPath">Page path relative to the site root, with forward slashes (the map key).</param>
+    /// <param name="pTokenText">The page text whose updated value is UPDATED_TOKEN.</param>
+    /// <returns>The text with the token replaced by the page's version.</returns>
+    function Resolve(const pPath, pTokenText: string): string;
+    /// <summary>The map of the pages resolved so far, as canonical JSON.</summary>
+    /// <returns>Keys sorted ordinally, 2-space indent, CRLF, ending in CRLF.</returns>
+    function ToJson: string;
+    /// <summary>The current product version.</summary>
+    property Version: string read FVersion;
+  end;
+
+const
+  /// <summary>Stands in for the updated value while a leaf is hashed (set when TSiteFormat.Version is non-empty).</summary>
+  UPDATED_TOKEN = 'UPDATEDVERSIONTOKEN';
 
 /// <summary>Renders the website leaf page of one entry.</summary>
 /// <param name="pEntry">The entry.</param>
@@ -24,7 +67,7 @@ uses
 /// only the link to cli.md. A cli surface usage field replaces the --help line; flags render as a Flags table; pitfalls as a
 /// Pitfalls list; steps as a numbered list under the surface bullet.</returns>
 /// <exception cref="EFeatureGen">The wiki body holds raw HTML or a non-ASCII character, or a front matter key is unknown.</exception>
-/// <remarks>updated is verified.build, else LastVerifiedBuild, else Since. order is the group order times 1000 plus the 1-based place among the
+/// <remarks>updated is UPDATED_TOKEN when pFmt.Version is set (BuildSite then settles it per page, see TSitePages); otherwise verified.build, else LastVerifiedBuild, else Since. order is the group order times 1000 plus the 1-based place among the
 /// site entries of the group (ordinal by id); index.json carries the same number.</remarks>
 function RenderLeaf(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const pReg: TRegistry; const pRepo: string;
   out pImages: TArray<TImageRef>): string;
@@ -36,7 +79,15 @@ function RenderLeaf(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const 
 /// <exception cref="EFeatureGen">The writer root is non-empty and has no index.json (it would be wiped); an entry field or wiki body has raw HTML outside code or non-ASCII (entry id and field named), an entry names an unknown group, or CheckLinks finds a violation.
 /// Nothing is written to the writer then: the set is first generated into a check-only writer.</exception>
 /// <remarks>Writes index.md, index.json, cli.md, ide.md, whats-new.md, wiki-map.json, features/&lt;id&gt;.md and the images.</remarks>
-procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter);
+procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter); overload;
+
+/// <summary>Writes the whole website set through the writer, with per-page updated values.</summary>
+/// <param name="pRepo">Repo root.</param>
+/// <param name="pFmt">Site format; its Version is overridden by pPages.Version.</param>
+/// <param name="pWriter">Receives every file; the caller calls Finish.</param>
+/// <param name="pPages">Loaded stored map (nil: as the three-argument overload). After the call it holds the map of this build; the caller writes pPages.ToJson.</param>
+/// <exception cref="EFeatureGen">As the three-argument overload.</exception>
+procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter; const pPages: TSitePages); overload;
 
 /// <summary>Checks every link of the Markdown files queued in the writer.</summary>
 /// <param name="pWriter">Writer after the set was Put.</param>
@@ -61,9 +112,97 @@ uses
   System.Classes
   , System.IOUtils
   , System.RegularExpressions
-  , System.Generics.Collections
   , System.Generics.Defaults
+  , System.Hash
+  , System.JSON
+  , FeatureGen.Json
   ;
+
+function YamlScalar(const pValue: string): string; forward;
+
+{ ---- TSitePages ---- }
+
+constructor TSitePages.Create(const pVersion: string);
+begin
+  inherited Create;
+  FVersion := pVersion;
+  FOld := TDictionary<string, TPageStamp>.Create;
+  FNew := TDictionary<string, TPageStamp>.Create;
+end;
+
+destructor TSitePages.Destroy;
+begin
+  FNew.Free;
+  FOld.Free;
+  inherited Destroy;
+end;
+
+procedure TSitePages.LoadFromFile(const pFile: string);
+var
+  lRoot: TJSONValue;
+  lPair: TJSONPair;
+  lStamp: TPageStamp;
+begin
+  FOld.Clear;
+  FNew.Clear;
+  if not TFile.Exists(pFile) then
+    Exit;
+  lRoot := ReadJsonFile(pFile);
+  try
+    if lRoot is not TJSONObject then
+      raise EFeatureGen.CreateFmt('%s: expected a JSON object keyed by page path', [pFile]);
+    for lPair in TJSONObject(lRoot) do
+    begin
+      lStamp.Hash := Prop(lPair.JsonValue, 'hash');
+      lStamp.Version := Prop(lPair.JsonValue, 'version');
+      if (lPair.JsonValue is not TJSONObject) or (lStamp.Hash = '') or (lStamp.Version = '') then
+        raise EFeatureGen.CreateFmt('%s: page "%s" needs a hash and a version', [pFile, lPair.JsonString.Value]);
+      FOld.AddOrSetValue(lPair.JsonString.Value, lStamp);
+    end;
+  finally
+    lRoot.Free;
+  end;
+end;
+
+function TSitePages.Resolve(const pPath, pTokenText: string): string;
+var
+  lStamp, lOld: TPageStamp;
+begin
+  lStamp.Hash := THashSHA2.GetHashString(pTokenText, SHA256);
+  if FOld.TryGetValue(pPath, lOld) and (lOld.Hash = lStamp.Hash) then
+    lStamp.Version := lOld.Version
+  else
+    lStamp.Version := FVersion;
+  FNew.AddOrSetValue(pPath, lStamp);
+  Result := pTokenText.Replace(UPDATED_TOKEN, YamlScalar(lStamp.Version));
+end;
+
+function TSitePages.ToJson: string;
+var
+  lKeys: TArray<string>;
+  lKey: string;
+  lRoot, lObj: TJSONObject;
+begin
+  lKeys := FNew.Keys.ToArray;
+  TArray.Sort<string>(lKeys, TComparer<string>.Construct(
+    function(const pA, pB: string): Integer
+    begin
+      Result := CompareStr(pA, pB);
+    end));
+  lRoot := TJSONObject.Create;
+  try
+    for lKey in lKeys do
+    begin
+      lObj := TJSONObject.Create;
+      lObj.AddPair('hash', FNew[lKey].Hash);
+      lObj.AddPair('version', FNew[lKey].Version);
+      lRoot.AddPair(lKey, lObj);
+    end;
+    Result := CanonicalJson(lRoot, nil);
+  finally
+    lRoot.Free;
+  end;
+end;
 
 function YamlScalar(const pValue: string): string;
 begin
@@ -100,11 +239,16 @@ function FrontMatter(const pEntry: TFeatureEntry; const pFmt: TSiteFormat; const
 var
   lKey, lVal, lUpdated: string;
 begin
-  lUpdated := pEntry.VerifiedBuild;
-  if lUpdated = '' then
-    lUpdated := pEntry.LastVerifiedBuild;
-  if lUpdated = '' then
-    lUpdated := pEntry.Since;
+  if pFmt.Version <> '' then
+    lUpdated := UPDATED_TOKEN
+  else
+  begin
+    lUpdated := pEntry.VerifiedBuild;
+    if lUpdated = '' then
+      lUpdated := pEntry.LastVerifiedBuild;
+    if lUpdated = '' then
+      lUpdated := pEntry.Since;
+  end;
   Result := '---'#10;
   for lKey in pFmt.FrontMatterKeys do
   begin
@@ -764,8 +908,9 @@ begin
   end;
 end;
 
-procedure GenerateSite(const pRepo: string; const pFmt: TSiteFormat; const pReg: TRegistry; const pW: TOutputWriter);
+procedure GenerateSite(const pRepo: string; const pFmt: TSiteFormat; const pReg: TRegistry; const pW: TOutputWriter; const pPages: TSitePages);
 var
+  lLeaf: string;
   lInc: TArray<TFeatureEntry>;
   lE: TFeatureEntry;
   lImgs: TArray<TImageRef>;
@@ -783,7 +928,10 @@ begin
     if not lKnown then
       raise EFeatureGen.CreateFmt('entry %s: group "%s" is not in groups.json', [lE.Id, lE.Group]);
     CheckEntryText(lE);
-    pW.Put('features/' + lE.Id + '.md', RenderLeaf(lE, pFmt, pReg, pRepo, lImgs), 'entry ' + lE.Id + ' (leaf)');
+    lLeaf := RenderLeaf(lE, pFmt, pReg, pRepo, lImgs);
+    if pPages <> nil then
+      lLeaf := pPages.Resolve('features/' + lE.Id + '.md', lLeaf);
+    pW.Put('features/' + lE.Id + '.md', lLeaf, 'entry ' + lE.Id + ' (leaf)');
     for lImg in lImgs do
       pW.PutBinary('features\' + lImg.Target, TPath.Combine(pRepo, lImg.Source));
   end;
@@ -862,11 +1010,20 @@ begin
 end;
 
 procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter);
+begin
+  BuildSite(pRepo, pFmt, pWriter, nil);
+end;
+
+procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter; const pPages: TSitePages);
 var
   lReg: TRegistry;
   lProbe: TOutputWriter;
   lBad: TArray<string>;
+  lFmt: TSiteFormat;
 begin
+  lFmt := pFmt;
+  if pPages <> nil then
+    lFmt.Version := pPages.Version;
   if TDirectory.Exists(pWriter.Root) and not TDirectory.IsEmpty(pWriter.Root) and not TFile.Exists(TPath.Combine(pWriter.Root, 'index.json')) then
     raise EFeatureGen.CreateFmt('refusing to use %s as the site root: it is not empty and has no index.json at its top level', [pWriter.Root]);
   lReg := TRegistry.Create;
@@ -874,14 +1031,14 @@ begin
     lReg.Load(pRepo);
     lProbe := TOutputWriter.Create(pWriter.Root, True, False);
     try
-      GenerateSite(pRepo, pFmt, lReg, lProbe);
+      GenerateSite(pRepo, lFmt, lReg, lProbe, pPages);
       lBad := CheckLinks(lProbe);
     finally
       lProbe.Free;
     end;
     if Length(lBad) > 0 then
       raise EFeatureGen.Create('link check failed:'#13#10 + string.Join(#13#10, lBad));
-    GenerateSite(pRepo, pFmt, lReg, pWriter);
+    GenerateSite(pRepo, lFmt, lReg, pWriter, pPages);
   finally
     lReg.Free;
   end;

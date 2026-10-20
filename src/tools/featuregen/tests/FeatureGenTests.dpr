@@ -20,6 +20,7 @@ uses
   , FeatureGen.HelpImport in '..\FeatureGen.HelpImport.pas'
   , FeatureGen.Wiki in '..\FeatureGen.Wiki.pas'
   , FeatureGen.Check in '..\FeatureGen.Check.pas'
+  , FeatureGen.Audit in '..\FeatureGen.Audit.pas'
   , FeatureGen.Commands in '..\FeatureGen.Commands.pas'
   , System.Generics.Collections
   , System.Generics.Defaults
@@ -2300,8 +2301,197 @@ begin
   lExit := RunCmd('move-menu', ['--repo', lCopy, '--from', 'drag-lint > Reports', '--to', 'drag-lint > Charts'], lOut);
   Check('Cmd.MoveMenuLeavesPrefixSiblingAlone', (lExit = 0) and (ReadBytesText(lFile) = lBefore) and (Pos('zz-probe', lOut) = 0), lOut);
 end;
+{ ---- Task 10: audit, verify, per-page updated ---- }
+
+function HasKind(const pFindings: TArray<TAuditFinding>; const pId, pKind: string): Boolean;
+var
+  lF: TAuditFinding;
+begin
+  Result := False;
+  for lF in pFindings do
+    if (lF.Id = pId) and (lF.Kind = pKind) then
+      Exit(True);
+end;
+
+function AuditOf(const pRepo: string; pLive: TLiveSurface; pHelp: TLiveHelp; pToday: TDateTime): TArray<TAuditFinding>;
+var
+  lReg: TRegistry;
+begin
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    Result := AuditRegistry(lReg, pRepo, pLive, pHelp, pToday);
+  finally
+    lReg.Free;
+  end;
+end;
+
+procedure TestAuditThin;
+var
+  lCopy, lOut, lBody: string;
+  lF: TArray<TAuditFinding>;
+  lExit: Integer;
+begin
+  lCopy := CopySiteRepo('audit-thin');
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\thin.json'),
+    '{ "id": "thin", "title": "Thin", "group": "g-search", "owner": "ENGINE", "status": "shipped", "since": "0.1.0-alpha",'
+    + ' "summary": "Thin one", "wikiPage": "Thin", "surfaces": [ { "type": "cli", "verb": "thin" } ], "audience": "both" }', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lCopy, 'docs\wiki\Thin.md'), 'Only a few words.', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\fat.json'),
+    '{ "id": "fat", "title": "Fat", "group": "g-search", "owner": "CHARTS", "status": "shipped", "since": "0.1.0-alpha",'
+    + ' "summary": "Fat one", "wikiPage": "Fat", "surfaces": [ { "type": "cli", "verb": "fat" } ], "audience": "both" }', TEncoding.ASCII);
+  lBody := StringOfChar('x', 250);
+  TFile.WriteAllText(TPath.Combine(lCopy, 'docs\wiki\Fat.md'), lBody, TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lCopy, 'features\entries\intro.json'),
+    '{ "id": "intro", "title": "Intro", "group": "g-search", "owner": "CHARTS", "status": "shipped", "since": "0.1.0-alpha",'
+    + ' "summary": "Has intro", "intro": "A real introduction.", "wikiPage": "Missing-page", "surfaces": [ { "type": "cli", "verb": "intro" } ], "audience": "both" }', TEncoding.ASCII);
+  lF := AuditOf(lCopy, nil, nil, Date);
+  Check('Audit.ThinEntryListed', HasKind(lF, 'thin', 'thin-leaf') and HasKind(lF, 'thin', 'no-usage') and HasKind(lF, 'thin', 'no-flags')
+    and HasKind(lF, 'thin', 'no-questions') and not HasKind(lF, 'thin', 'no-wiki-page'));
+  Check('Audit.ThinPositiveControls', not HasKind(lF, 'fat', 'thin-leaf') and not HasKind(lF, 'intro', 'thin-leaf')
+    and HasKind(lF, 'intro', 'no-wiki-page') and not HasKind(lF, 'fat', 'no-wiki-page'));
+  lExit := RunCmd('audit', ['--repo', lCopy, '--owner', 'ENGINE'], lOut);
+  Check('Audit.CommandListsTabSeparatedAndFiltersOwner', (lExit = 0) and (Pos('thin'#9'ENGINE'#9'thin-leaf', lOut) > 0)
+    and (Pos(#9'CHARTS'#9, lOut) = 0), lOut);
+  lExit := RunCmd('audit', ['--repo', lCopy, '--json'], lOut);
+  Check('Audit.CommandJson', (lExit = 0) and (Pos('{"id":"thin","owner":"ENGINE","kind":"thin-leaf"}', lOut) > 0), lOut);
+end;
+
+procedure TestAuditVerify(const pRepo: string);
+const
+  HELP_A = '  drag-lint outline --file <U.pas> [--db <d>]'#10'  drag-lint ask   <q> [--db <d>]'#10;
+  HELP_B = '  drag-lint outline --file <U.pas> [--db <d>] [--new-flag]'#10'  drag-lint ask   <q> [--db <d>]'#10;
+var
+  lCopy, lOut, lFile, lRaw: string;
+  lHelpA, lHelpB: TLiveHelp;
+  lLive: TLiveSurface;
+  lF: TArray<TAuditFinding>;
+  lVal, lVer: TJSONValue;
+  lReg: TRegistry;
+  lE: TFeatureEntry;
+  lExit: Integer;
+  lHash: string;
+begin
+  lCopy := CmdRepo(pRepo, 'audit-verify');
+  lHelpA := TLiveHelp.Create;
+  lHelpB := TLiveHelp.Create;
+  lLive := TLiveSurface.Create;
+  try
+    lHelpA.LoadFromText(HELP_A);
+    lHelpB.LoadFromText(HELP_B);
+    lLive.ProductVersion := '9.9.9-test';
+    lFile := VerifyEntryWith(lCopy, 'outline', 'tester', '2026-10-19', lLive, lHelpA);
+    lVal := ReadJsonFile(lFile);
+    try
+      lVer := TJSONObject(lVal).GetValue('verified');
+      lHash := Prop(lVer, 'surfaceHash');
+      Check('Verify.RecordsHashAndBuild', (Prop(lVer, 'date') = '2026-10-19') and (Prop(lVer, 'by') = 'tester')
+        and (Prop(lVer, 'build') = '9.9.9-test') and (Length(lHash) = 64) and TRegEx.IsMatch(lHash, '^[0-9a-f]{64}$'), lHash);
+    finally
+      lVal.Free;
+    end;
+    lReg := TRegistry.Create;
+    try
+      lReg.Load(lCopy);
+      for lE in lReg.Entries do
+        if lE.Id = 'outline' then
+          Check('Verify.HashMatchesSurfaceHash', (lE.VerifiedSurfaceHash = lHash)
+            and (SurfaceHash(lE, lLive, lHelpA) = lHash) and (SurfaceHash(lE, lLive, lHelpB) <> lHash), lHash);
+    finally
+      lReg.Free;
+    end;
+    lRaw := ReadBytesText(lFile);
+    lVal := ReadJsonFile(lFile);
+    try
+      Check('Verify.FileStaysCanonical', lRaw = CanonicalJson(lVal, EntryKeyOrder(TPath.Combine(lCopy, 'features\schema\entry.schema.json'))), lRaw);
+    finally
+      lVal.Free;
+    end;
+    lF := AuditOf(lCopy, lLive, lHelpA, EncodeDate(2026, 10, 20));
+    Check('Audit.SurfaceUnchangedIsQuiet', not HasKind(lF, 'outline', 'surface-changed') and not HasKind(lF, 'outline', 'stale-verified'));
+    lF := AuditOf(lCopy, lLive, lHelpB, EncodeDate(2026, 10, 20));
+    Check('Audit.SurfaceChangedAfterVerify', HasKind(lF, 'outline', 'surface-changed') and not HasKind(lF, 'ask', 'surface-changed'));
+    lF := AuditOf(lCopy, lLive, lHelpA, EncodeDate(2027, 1, 17));
+    Check('Audit.StaleVerifiedBoundary.day90', not HasKind(lF, 'outline', 'stale-verified'));
+    lF := AuditOf(lCopy, lLive, lHelpA, EncodeDate(2027, 1, 18));
+    Check('Audit.StaleVerifiedBoundary.day91', HasKind(lF, 'outline', 'stale-verified'));
+  finally
+    lLive.Free;
+    lHelpB.Free;
+    lHelpA.Free;
+  end;
+  lExit := RunCmd('verify', ['--repo', lCopy, '--id', 'zz-nope', '--by', 'tester'], lOut);
+  Check('Verify.RefusesUnknownId', (lExit = 1) and (Pos('no entry ''zz-nope''', lOut) > 0), IntToStr(lExit) + ' ' + lOut);
+  lExit := RunCmd('verify', ['--repo', lCopy, '--id', 'outline'], lOut);
+  Check('Verify.NeedsBy', (lExit = 1) and (Pos('--by is required', lOut) > 0), IntToStr(lExit) + ' ' + lOut);
+  lExit := RunCmd('verify', ['--repo', lCopy, '--bogus', 'x'], lOut);
+  Check('Verify.UnknownOptionIsUsageError', lExit = 2, lOut);
+end;
+
+function BuildWithPages(const pRepo, pOut: string; const pPages: TSitePages): TOutputResult;
+var
+  lFmt: TSiteFormat;
+  lW: TOutputWriter;
+  lHelp: TLiveHelp;
+begin
+  lHelp := TLiveHelp.Create;
+  try
+    lHelp.LoadFromText(SITE_HELP);
+    lFmt := LoadSiteFormat(pRepo);
+    lFmt.Help := lHelp;
+    lW := TOutputWriter.Create(pOut, False, True);
+    try
+      BuildSite(pRepo, lFmt, lW, pPages);
+      Result := lW.Finish;
+    finally
+      lW.Free;
+    end;
+  finally
+    lHelp.Free;
+  end;
+end;
+
+procedure TestSiteUpdated;
+var
+  lCopy, lOutA, lOutB, lOutC, lPagesFile, lJsonA, lJsonB: string;
+  lP1, lP2, lP3: TSitePages;
+begin
+  lCopy := CopySiteRepo('site-updated');
+  lPagesFile := TPath.Combine(lCopy, 'site-pages.json');
+  lOutA := FreshDir('updA');
+  lOutB := FreshDir('updB');
+  lOutC := FreshDir('updC');
+  lP1 := TSitePages.Create('1.0.0');
+  lP2 := TSitePages.Create('2.0.0');
+  lP3 := TSitePages.Create('3.0.0');
+  try
+    BuildWithPages(lCopy, lOutA, lP1);
+    lJsonA := lP1.ToJson;
+    TFile.WriteAllText(lPagesFile, lJsonA, TEncoding.ASCII);
+    Check('Site.UpdatedFirstRunGetsCurrentVersion', (Pos(#10'updated: 1.0.0'#10, ReadSiteFile(lOutA, 'features/ask.md')) > 0)
+      and (Pos('UPDATEDVERSIONTOKEN', ReadSiteFile(lOutA, 'features/ask.md')) = 0)
+      and (Pos('"features/ask.md": {', lJsonA) > 0) and (Pos('"features/ask.md"', lJsonA) < Pos('"features/find-callers.md"', lJsonA)), lJsonA);
+    lP2.LoadFromFile(lPagesFile);
+    BuildWithPages(lCopy, lOutB, lP2);
+    lJsonB := lP2.ToJson;
+    Check('Site.UpdatedStableWhenPageUnchanged', (Pos(#10'updated: 1.0.0'#10, ReadSiteFile(lOutB, 'features/ask.md')) > 0)
+      and (Pos('2.0.0', lJsonB) = 0) and (lJsonA = lJsonB)
+      and (ReadSiteFile(lOutA, 'features/ask.md') = ReadSiteFile(lOutB, 'features/ask.md')), lJsonB);
+    AppendText(TPath.Combine(lCopy, 'docs\wiki\Ask.md'), #13#10'More words about asking.'#13#10);
+    lP3.LoadFromFile(lPagesFile);
+    BuildWithPages(lCopy, lOutC, lP3);
+    Check('Site.UpdatedBumpsWhenPageChanges', (Pos(#10'updated: 3.0.0'#10, ReadSiteFile(lOutC, 'features/ask.md')) > 0)
+      and (Pos(#10'updated: 1.0.0'#10, ReadSiteFile(lOutC, 'features/find-callers.md')) > 0), lP3.ToJson);
+  finally
+    lP3.Free;
+    lP2.Free;
+    lP1.Free;
+  end;
+end;
+
 procedure TestCommands(const pRepo: string);
 begin
+  TestAuditVerify(pRepo);
   TestCmdHomeOrderAndNull(pRepo);
   TestCmdMoveMenuSibling(pRepo);
   TestCmdAdd(pRepo);
@@ -2350,6 +2540,8 @@ begin
     TestCheckLinks;
     TestMarkedBlock;
     TestCompareOutputTreesPositiveControl;
+    TestAuditThin;
+    TestSiteUpdated;
     if lRepo <> '' then
       TestSiteFormatFile(lRepo);
     TestReadAsciiStrict;

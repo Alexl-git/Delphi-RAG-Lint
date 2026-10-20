@@ -2,7 +2,7 @@ program featuregen;
 
 { featuregen: owns the drag-lint feature registry (features\) and generates docs
   from it. Verbs so far: build [--site | --all], import-help, check, add, update, find,
-  blast-radius, move-menu, deprecate, normalise. Exit 0 ok, 1 changed (check mode) or failed,
+  blast-radius, move-menu, deprecate, normalise, verify, audit. Exit 0 ok, 1 changed (check mode) or failed,
   2 usage. }
 
 {$APPTYPE CONSOLE}
@@ -11,6 +11,7 @@ uses
   System.SysUtils
   , System.StrUtils
   , System.IOUtils
+  , System.RegularExpressions
   , FeatureGen.Json in 'FeatureGen.Json.pas'
   , FeatureGen.Model in 'FeatureGen.Model.pas'
   , FeatureGen.Output in 'FeatureGen.Output.pas'
@@ -21,6 +22,7 @@ uses
   , FeatureGen.HelpImport in 'FeatureGen.HelpImport.pas'
   , FeatureGen.Wiki in 'FeatureGen.Wiki.pas'
   , FeatureGen.Check in 'FeatureGen.Check.pas'
+  , FeatureGen.Audit in 'FeatureGen.Audit.pas'
   , FeatureGen.Commands in 'FeatureGen.Commands.pas'
   ;
 
@@ -30,7 +32,8 @@ begin
   Writeln('  build [--site | --all] [--check] [--repo <dir>] [--engine <exe>] [--out <dir>]');
   Writeln('      no target flag: the ported wiki outputs (docs\wiki pages, README / AI-USAGE blocks,');
   Writeln('      features\generated\manifest.json and cli-reference.md), --out renders them elsewhere;');
-  Writeln('      --site: the website help set (default root from features\site-format.json);');
+  Writeln('      --site: the website help set (default root from features\site-format.json) and features\generated\site-pages.json,');
+  Writeln('      the per-page "updated" map (not written with --out);');
   Writeln('      --all: both (--out not allowed);');
   Writeln('      --check writes nothing and exits 1 when any file would change.');
   Writeln('  import-help [--dry-run] [--repo <dir>] [--engine <exe>]');
@@ -65,6 +68,19 @@ begin
   Result := '';
 end;
 
+{ DRAGLINT_VERSION of the repo: the version a changed site page is stamped with. }
+function ProductVersionOf(const pRepo: string): string;
+var
+  lFile: string;
+  lM: TMatch;
+begin
+  lFile := TPath.Combine(pRepo, 'src\core\DRagLint.Core.Model.pas');
+  lM := TRegEx.Match(TFile.ReadAllText(lFile), 'DRAGLINT_VERSION\s*=\s*''([^'']+)''');
+  if not lM.Success then
+    raise EFeatureGen.CreateFmt('DRAGLINT_VERSION not found in %s', [lFile]);
+  Result := lM.Groups[1].Value;
+end;
+
 function BuildSiteCommand(pArgs: TArray<string>): Integer;
 var
   lCheck, lSite, lAll, lWikiChanged: Boolean;
@@ -73,8 +89,10 @@ var
   lFmt: TSiteFormat;
   lHelp: TLiveHelp;
   lWriter: TOutputWriter;
-  lRes: TOutputResult;
+  lRes, lPagesRes: TOutputResult;
   lFile: string;
+  lPages: TSitePages;
+  lDefaultOut: Boolean;
 begin
   lCheck := False;
   lSite := False;
@@ -149,15 +167,18 @@ begin
       if not lAll then
         Exit(if lWikiChanged then 1 else 0);
     end;
-    if lOut = '' then
+    lDefaultOut := lOut = '';
+    if lDefaultOut then
       lOut := TPath.Combine(lRepo, lFmt.Root);
     lHelp := TLiveHelp.Create;
+    lPages := TSitePages.Create(ProductVersionOf(lRepo));
     try
       lHelp.Load(lEngine);
       lFmt.Help := lHelp;
+      lPages.LoadFromFile(TPath.Combine(lRepo, 'features\generated\site-pages.json'));
       lWriter := TOutputWriter.Create(lOut, lCheck, True);
       try
-        BuildSite(lRepo, lFmt, lWriter);
+        BuildSite(lRepo, lFmt, lWriter, lPages);
         lLeaves := 0;
         for lFile in lWriter.ProducedFiles do
           if lFile.StartsWith('features\') and lFile.EndsWith('.md') then
@@ -166,7 +187,21 @@ begin
       finally
         lWriter.Free;
       end;
+      if lDefaultOut then
+      begin
+        // the per-page updated map lives beside manifest.json, not in the site root
+        lWriter := TOutputWriter.Create(TPath.Combine(lRepo, 'features\generated'), lCheck, False);
+        try
+          lWriter.Put('site-pages.json', lPages.ToJson, 'site-pages.json');
+          lPagesRes := lWriter.Finish;
+        finally
+          lWriter.Free;
+        end;
+        lRes.Written := lRes.Written + lPagesRes.Written;
+        lRes.Changed := lRes.Changed + lPagesRes.Changed;
+      end;
     finally
+      lPages.Free;
       lHelp.Free;
     end;
     Writeln(Format('site root: %s', [lOut]));
