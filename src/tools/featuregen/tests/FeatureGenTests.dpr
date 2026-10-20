@@ -20,6 +20,7 @@ uses
   , FeatureGen.HelpImport in '..\FeatureGen.HelpImport.pas'
   , FeatureGen.Wiki in '..\FeatureGen.Wiki.pas'
   , System.Generics.Collections
+  , System.RegularExpressions
   ;
 
 var
@@ -1226,11 +1227,72 @@ begin
   end;
 end;
 
+{ Every relative markdown link in pText whose target (anchor cut) is not an existing
+  file under pBaseDir; https / http / # / mailto links are not checked. Also returns
+  the number of relative links checked in pChecked. }
+function DeadRelativeLinks(const pText, pBaseDir: string; out pChecked: Integer): TArray<string>;
+var
+  lM: TMatch;
+  lTarget, lPath: string;
+  lList: TList<string>;
+begin
+  pChecked := 0;
+  lList := TList<string>.Create;
+  try
+    for lM in TRegEx.Matches(pText, '(?<!!)\[((?:\\.|[^\]\\])*)\]\(([^)\s]+)\)') do
+    begin
+      lTarget := lM.Groups[2].Value;
+      if lTarget.StartsWith('https://') or lTarget.StartsWith('http://') or lTarget.StartsWith('#') or lTarget.StartsWith('mailto:') then
+        Continue;
+      Inc(pChecked);
+      lPath := lTarget;
+      if Pos('#', lPath) > 0 then
+        lPath := Copy(lPath, 1, Pos('#', lPath) - 1);
+      if not TFile.Exists(TPath.GetFullPath(TPath.Combine(pBaseDir, lPath.Replace('/', '\')))) then
+        lList.Add(lTarget);
+    end;
+    Result := lList.ToArray;
+  finally
+    lList.Free;
+  end;
+end;
+
+procedure TestDeadLinkPositiveControl(const pRepo: string);
+var
+  lDead: TArray<string>;
+  lChecked: Integer;
+begin
+  lDead := DeadRelativeLinks('[a](../../docs/wiki/Home.md) [b](../../docs/wiki/No-Such-Page-xyz.md#x) [c](https://x.org/a) [d](#top)',
+    TPath.Combine(pRepo, 'features\generated'), lChecked);
+  Check('Wiki.DeadLinkCheckCatchesDeadLink', (lChecked = 2) and (Length(lDead) = 1) and (lDead[0] = '../../docs/wiki/No-Such-Page-xyz.md#x'),
+    IntToStr(lChecked) + ' ' + string.Join(' | ', lDead));
+end;
+
+procedure TestReadAsciiStrict;
+var
+  lDir, lFile, lMsg: string;
+begin
+  lDir := FreshDir('ascii-strict');
+  lFile := TPath.Combine(lDir, 'README.md');
+  TFile.WriteAllBytes(lFile, TBytes.Create(Ord('a'), Ord('b'), $C3, $A9, 13, 10));
+  lMsg := '';
+  try
+    ReadAsciiStrict(lFile);
+  except
+    on E: Exception do
+      lMsg := E.Message;
+  end;
+  Check('Wiki.ReadAsciiStrictRaisesOnHighByte', (Pos(lFile, lMsg) > 0) and (Pos('offset 2', lMsg) > 0), lMsg);
+  TFile.WriteAllText(lFile, 'plain'#13#10, TEncoding.ASCII);
+  Check('Wiki.ReadAsciiStrictReadsAscii', ReadAsciiStrict(lFile) = 'plain'#13#10);
+end;
+
 procedure TestWikiParity(const pRepo: string);
 var
   lA, lB, lPs, lCli, lMsg: string;
   lW: TOutputWriter;
-  lBad: TArray<string>;
+  lBad, lDead: TArray<string>;
+  lChecked: Integer;
 begin
   if not TFile.Exists(MAIN_ENGINE) then
   begin
@@ -1259,6 +1321,12 @@ begin
   lCli := TPath.Combine(lB, 'features\generated\cli-reference.md');
   Check('Wiki.CliReferenceIsCliMdWithoutFrontMatter', TFile.Exists(lCli) and ReadBytesText(lCli).StartsWith('# CLI reference'#13#10#13#10)
     and (Pos('## Commands', ReadBytesText(lCli)) > 0), lCli);
+  if TFile.Exists(lCli) then
+  begin
+    lDead := DeadRelativeLinks(ReadBytesText(lCli), TPath.Combine(pRepo, 'features\generated'), lChecked);
+    Check('Wiki.CliReferenceLinksResolveInRepo', (lChecked > 100) and (Length(lDead) = 0),
+      IntToStr(lChecked) + ' checked; dead: ' + string.Join(' | ', Copy(lDead, 0, 5)));
+  end;
 end;
 
 procedure TestCompareOutputTreesPositiveControl;
@@ -1334,6 +1402,9 @@ begin
     TestCompareOutputTreesPositiveControl;
     if lRepo <> '' then
       TestSiteFormatFile(lRepo);
+    TestReadAsciiStrict;
+    if lRepo <> '' then
+      TestDeadLinkPositiveControl(lRepo);
     if lRepo <> '' then
       TestWikiParity(lRepo);
   except

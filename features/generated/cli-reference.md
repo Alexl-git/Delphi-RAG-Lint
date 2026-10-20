@@ -26,8 +26,8 @@ drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <di
 
 Described in:
 
-* [allow](features/allow.md)
-* [Allow this message](features/allow-this-message.md)
+* [allow](../../docs/wiki/allow.md)
+* [Allow this message](../../docs/wiki/Allow-this-message.md)
 
 ### ambiguous-calls
 
@@ -44,7 +44,7 @@ drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json] (
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
-Described in [ambiguous-calls](features/ambiguous-calls.md).
+Described in [ambiguous-calls](../../docs/wiki/ambiguous-calls.md).
 
 ### ask
 
@@ -79,8 +79,8 @@ drag-lint ask <question> --target <T> [--project <P.dproj> | --in <U.pas> | --db
 
 Described in:
 
-* [ask](features/ask.md)
-* [Chart questions](features/chart-questions.md)
+* [ask](../../docs/wiki/ask.md)
+* [Chart questions](../../docs/wiki/Diagrams-and-Charts.md)
 
 ### bench-context
 
@@ -95,7 +95,7 @@ drag-lint bench-context [--db <file.sqlite>] [--n N]
 | `--db` | `<file.sqlite>` |  |  |
 | `--n` | `N` |  |  |
 
-Described in [bench-context](features/bench-context.md).
+Described in [bench-context](../../docs/wiki/bench-context.md).
 
 ### butterfly
 
@@ -113,7 +113,7 @@ drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--
 | `--output` | `F` |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [butterfly](features/butterfly.md).
+Described in [butterfly](../../docs/wiki/butterfly.md).
 
 ### call-path
 
@@ -131,7 +131,7 @@ drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json] (shor
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
-Described in [call-path](features/call-path.md).
+Described in [call-path](../../docs/wiki/call-path.md).
 
 ### callgraph
 
@@ -149,7 +149,7 @@ drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db P
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
-Described in [callgraph](features/callgraph.md).
+Described in [callgraph](../../docs/wiki/callgraph.md).
 
 ### check-ast
 
@@ -165,7 +165,7 @@ drag-lint check-ast <file> [--db PATH] [--rule <id>] [--format text|json]
 | `--rule` | `<id>` |  |  |
 | `--format` |  |  |  |
 
-Described in [Run AST Checks](features/run-ast-checks.md).
+Described in [Run AST Checks](../../docs/wiki/Run-AST-Checks.md).
 
 ### check-unit
 
@@ -184,7 +184,7 @@ drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--
 | `--db` | `PATH` |  |  |
 | `--format` |  |  |  |
 
-Described in [Add Missing Units to uses (whole unit)](features/add-missing-units-to-uses-whole-unit.md).
+Described in [Add Missing Units to uses (whole unit)](../../docs/wiki/Add-Missing-Units-to-uses-whole-unit.md).
 
 ### compare
 
@@ -209,7 +209,7 @@ drag-lint compare --old <report.txt|forms.csv|bundle dir> [--command "<id> -Targ
 | `--output` | `<file>` |  |  |
 | `--open` |  |  |  |
 
-Described in [Compare a report with current code](features/compare.md).
+Described in [Compare a report with current code](../../docs/wiki/compare.md).
 
 ### compile-check
 
@@ -225,7 +225,7 @@ drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [-
 | `--db` | `PATH` |  |  |
 | `--format` |  |  |  |
 
-Described in [compile-check](features/compile-check.md).
+Described in [compile-check](../../docs/wiki/compile-check.md).
 
 ### context
 
@@ -245,7 +245,7 @@ drag-lint context --task "verb qname" [--db <file.sqlite>] [--format md|json|raw
 | `--max-callers` | `N` |  |  |
 | `--context` | `N` |  |  |
 
-Described in [context](features/context.md).
+Described in [context](../../docs/wiki/context.md).
 
 ### convert-apply
 
@@ -272,8 +272,8 @@ drag-lint convert-apply --unit <F.pas> [--unit <G.pas> ...] --rules <file> --db 
 
 Described in:
 
-* [convert-apply](features/convert-apply.md)
-* [convert-apply #migrate (member rename / DL_NONE)](features/convert-apply-migrate.md)
+* [convert-apply](../../docs/wiki/convert-apply.md)
+* [convert-apply #migrate (member rename / DL_NONE)](../../docs/wiki/convert-apply-migrate.md)
 
 ### convert-scaffold
 
@@ -294,7 +294,7 @@ drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--
 | `--progress-interval` | `S` |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [convert-scaffold](features/convert-scaffold.md).
+Described in [convert-scaffold](../../docs/wiki/convert-scaffold.md).
 
 ### convert-validate
 
@@ -312,7 +312,7 @@ drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [-
 | `--print-parsed` |  |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [convert-validate](features/convert-validate.md).
+Described in [convert-validate](../../docs/wiki/convert-validate.md).
 
 ### create-enum-helper
 
@@ -334,8 +334,8 @@ drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--met
 
 Described in:
 
-* [create-enum-helper](features/create-enum-helper.md)
-* [Create helper class](features/create-helper-class.md)
+* [create-enum-helper](../../docs/wiki/create-enum-helper.md)
+* [Create helper class](../../docs/wiki/Create-helper-class.md)
 
 ### cycles
 
@@ -353,7 +353,7 @@ drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json
 | `--plan` |  |  |  |
 | `--format` |  |  |  |
 
-Described in [Circular Uses Report (cycles + fix plan)](features/circular-uses-report-cycles-fix-plan.md).
+Described in [Circular Uses Report (cycles + fix plan)](../../docs/wiki/Circular-Uses-Report-cycles-fix-plan.md).
 
 ### deps-report
 
@@ -373,7 +373,7 @@ drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all
 | `--format` |  |  |  |
 | `--output` | `<file>` |  |  |
 
-Described in [deps-report](features/deps-report.md).
+Described in [deps-report](../../docs/wiki/deps-report.md).
 
 ### diff
 
@@ -388,7 +388,7 @@ drag-lint diff --db <old.sqlite> --db <new.sqlite> [--json]
 | `--db` | `<old.sqlite>` |  |  |
 | `--json` |  |  |  |
 
-Described in [diff](features/diff.md).
+Described in [diff](../../docs/wiki/diff.md).
 
 ### doc-drift
 
@@ -404,7 +404,7 @@ drag-lint doc-drift --qname X --db PATH [--json] (diagnostic: deterministic doc-
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
-Described in [doc-drift](features/doc-drift.md).
+Described in [doc-drift](../../docs/wiki/doc-drift.md).
 
 ### doc-forget
 
@@ -424,7 +424,7 @@ drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<Ne
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
 
-Described in [doc-forget](features/doc-forget.md).
+Described in [doc-forget](../../docs/wiki/Features.md).
 
 ### document
 
@@ -445,10 +445,10 @@ drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-
 
 Described in:
 
-* [Auto-Document Whole Project](features/auto-document-whole-project.md)
-* [Document it](features/document-it.md)
-* [Document project](features/document-project.md)
-* [Document unit](features/document-unit.md)
+* [Auto-Document Whole Project](../../docs/wiki/Auto-Document-Whole-Project.md)
+* [Document it](../../docs/wiki/Document-it.md)
+* [Document project](../../docs/wiki/Document-project.md)
+* [Document unit](../../docs/wiki/Document-unit.md)
 
 ### document-all
 
@@ -468,7 +468,7 @@ drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|-
 | `--migrate-pure` |  |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [document-all](features/document-all.md).
+Described in [document-all](../../docs/wiki/document-all.md).
 
 ### dump-call-edges
 
@@ -482,7 +482,7 @@ drag-lint dump-call-edges --db PATH (diagnostic: resolved call edges: ref_id|tar
 | --- | --- | --- | --- |
 | `--db` | `PATH` |  |  |
 
-Described in [dump-call-edges](features/dump-call-edges.md).
+Described in [dump-call-edges](../../docs/wiki/dump-call-edges.md).
 
 ### dump-refs
 
@@ -496,7 +496,7 @@ drag-lint dump-refs <file> --db PATH (diagnostic: refs + enclosing_symbol_id att
 | --- | --- | --- | --- |
 | `--db` | `PATH` |  |  |
 
-Described in [dump-refs](features/dump-refs.md).
+Described in [dump-refs](../../docs/wiki/dump-refs.md).
 
 ### exceptions-sync
 
@@ -513,7 +513,7 @@ drag-lint exceptions-sync [--db <file.sqlite>] [--config <lint.json>] [--apply] 
 | `--apply` |  |  |  |
 | `--json` |  |  |  |
 
-Described in [exceptions-sync](features/exceptions-sync.md).
+Described in [exceptions-sync](../../docs/wiki/Features.md).
 
 ### export
 
@@ -534,8 +534,8 @@ drag-lint export obsidian --db <file.sqlite> --output-dir <dir> [--open]
 
 Described in:
 
-* [Export Enums (Delphi const)](features/export-enums-delphi-const.md)
-* [Export to Obsidian](features/export-to-obsidian.md)
+* [Export Enums (Delphi const)](../../docs/wiki/Export-Enums-Delphi-const.md)
+* [Export to Obsidian](../../docs/wiki/Export-to-Obsidian.md)
 
 ### extract-method
 
@@ -555,7 +555,7 @@ drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [
 | `--apply` |  |  |  |
 | `--no-backup` |  |  |  |
 
-Described in [extract-method](features/extract-method.md).
+Described in [extract-method](../../docs/wiki/extract-method.md).
 
 ### fb-snapshot
 
@@ -570,7 +570,7 @@ drag-lint fb-snapshot --connection "Database=...;User=...;Password=...;DriverID=
 | `--connection` |  |  |  |
 | `--db` | `<sql.sqlite>` |  |  |
 
-Described in [fb-snapshot](features/fb-snapshot.md).
+Described in [fb-snapshot](../../docs/wiki/fb-snapshot.md).
 
 ### find-callees
 
@@ -586,7 +586,7 @@ drag-lint find-callees --qname <Foo.Bar> --db PATH [--json] (resolved outgoing c
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
-Described in [find-callees](features/find-callees.md).
+Described in [find-callees](../../docs/wiki/find-callees.md).
 
 ### find-deadcode
 
@@ -602,7 +602,7 @@ drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db P
 | `--include-private` |  |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [Find Dead Code](features/find-dead-code.md).
+Described in [Find Dead Code](../../docs/wiki/Find-Dead-Code.md).
 
 ### find-unit
 
@@ -621,7 +621,7 @@ drag-lint find-unit --name <Symbol> --in <file> [--json|--apply|--no-backup] --d
 | `--no-backup` |  |  |  |
 | `--db` | `<db>` |  |  |
 
-Described in [find-unit](features/find-unit.md).
+Described in [find-unit](../../docs/wiki/find-unit.md).
 
 ### format
 
@@ -639,8 +639,8 @@ drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the fi
 
 Described in:
 
-* [Format Whole Project with YADF](features/format-whole-project-with-yadf.md)
-* [Format with YADF](features/format-with-yadf.md)
+* [Format Whole Project with YADF](../../docs/wiki/Format-Whole-Project-with-YADF.md)
+* [Format with YADF](../../docs/wiki/Format-with-YADF.md)
 
 ### forms-csv
 
@@ -657,7 +657,7 @@ drag-lint forms-csv --project <X.dproj> --db <file.sqlite> [--output <f.csv>] [-
 | `--output` | `<f.csv>` |  |  |
 | `--root` | `<TfrmMAIN>` |  |  |
 
-Described in [Forms for testers (CSV)](features/generate-test-helper-csv.md).
+Described in [Forms for testers (CSV)](../../docs/wiki/Generate-Test-Helper-CSV.md).
 
 ### generate-docs
 
@@ -673,7 +673,7 @@ drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PA
 | `--format` |  |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [Doc Comment Stub (symbol)](features/doc-comment-stub-symbol.md).
+Described in [Doc Comment Stub (symbol)](../../docs/wiki/Doc-Comment-Stub-symbol.md).
 
 ### generate-test
 
@@ -689,7 +689,7 @@ drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db 
 | `--framework` |  |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [Unit Test Stub (symbol)](features/unit-test-stub-symbol.md).
+Described in [Unit Test Stub (symbol)](../../docs/wiki/Unit-Test-Stub-symbol.md).
 
 ### ghost-check
 
@@ -708,7 +708,7 @@ drag-lint ghost-check <dproj> ( --unit <real.pas> --buffer <buf> | --overlays <m
 | `--in-place` |  |  |  |
 | `--format` |  |  |  |
 
-Described in [ghost-check](features/ghost-check.md).
+Described in [ghost-check](../../docs/wiki/ghost-check.md).
 
 ### ghost-recover
 
@@ -718,7 +718,7 @@ Scans a project's hidden D-RAG folder for recovery journals left behind when a g
 drag-lint ghost-recover <dproj> (restore any file left overlaid by an INTERRUPTED ghost-check)
 ```
 
-Described in [ghost-recover](features/ghost-recover.md).
+Described in [ghost-recover](../../docs/wiki/ghost-recover.md).
 
 ### glyph-vacuum
 
@@ -735,7 +735,7 @@ drag-lint glyph-vacuum --root DIR [--root DIR ...] --output DIR [--append] [--db
 | `--append` |  |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [glyph-vacuum](features/glyph-vacuum.md).
+Described in [glyph-vacuum](../../docs/wiki/Features.md).
 
 ### graph
 
@@ -752,7 +752,7 @@ drag-lint graph --db <file.sqlite> [--format dot|mermaid] [--name <root-substr>]
 | `--name` | `<root-substr>` |  |  |
 | `--output` | `<file>` |  |  |
 
-Described in [Export Graph (DOT)](features/export-graph-dot.md).
+Described in [Export Graph (DOT)](../../docs/wiki/Export-Graph-DOT.md).
 
 ### helpers-of
 
@@ -767,7 +767,7 @@ drag-lint helpers-of <T> [--json] --db <db> - list record/class helper edges tar
 | `--json` |  |  |  |
 | `--db` | `<db>` |  |  |
 
-Described in [helpers-of](features/helpers-of.md).
+Described in [helpers-of](../../docs/wiki/helpers-of.md).
 
 ### hover
 
@@ -783,7 +783,7 @@ drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json]
 | `--db` | `<file.sqlite>` |  |  |
 | `--format` |  |  |  |
 
-Described in [Hover at Cursor](features/hover-at-cursor.md).
+Described in [Hover at Cursor](../../docs/wiki/Hover-at-Cursor.md).
 
 ### ide-release
 
@@ -800,7 +800,7 @@ drag-lint ide-release [--seconds N] [--resume] [--status] [--json] (writes a hol
 | `--status` |  |  |  |
 | `--json` |  |  |  |
 
-Described in [ide-release](features/ide-release.md).
+Described in [ide-release](../../docs/wiki/ide-release.md).
 
 ### impact
 
@@ -817,7 +817,7 @@ drag-lint impact --qname <Foo.Bar> [--db <file.sqlite>] [--depth N] [--format te
 | `--depth` | `N` |  |  |
 | `--format` |  |  |  |
 
-Described in [Impact / Blast Radius (symbol)](features/impact-blast-radius-symbol.md).
+Described in [Impact / Blast Radius (symbol)](../../docs/wiki/Impact-Blast-Radius-symbol.md).
 
 ### import-log
 
@@ -831,7 +831,7 @@ drag-lint import-log <logfile> --db <file.sqlite> (parse dcc/msbuild log)
 | --- | --- | --- | --- |
 | `--db` | `<file.sqlite>` |  |  |
 
-Described in [Import Build Log](features/import-build-log.md).
+Described in [Import Build Log](../../docs/wiki/Import-Build-Log.md).
 
 ### index
 
@@ -857,10 +857,10 @@ drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-
 
 Described in:
 
-* [Auto-Document Whole Project](features/auto-document-whole-project.md)
-* [Format Whole Project with YADF](features/format-whole-project-with-yadf.md)
-* [Rebuild Index for This Project](features/rebuild-index-for-this-project.md)
-* [Rescan this unit](features/rescan-this-unit.md)
+* [Auto-Document Whole Project](../../docs/wiki/Auto-Document-Whole-Project.md)
+* [Format Whole Project with YADF](../../docs/wiki/Format-Whole-Project-with-YADF.md)
+* [Rebuild Index for This Project](../../docs/wiki/Rebuild-Index-for-This-Project.md)
+* [Rescan this unit](../../docs/wiki/Rescan-this-unit.md)
 
 ### info
 
@@ -877,8 +877,8 @@ drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extra
 
 Described in:
 
-* [About and Status](features/about-and-status.md)
-* [info](features/info.md)
+* [About and Status](../../docs/wiki/About-and-Status.md)
+* [info](../../docs/wiki/info.md)
 
 ### library-drift
 
@@ -894,7 +894,7 @@ drag-lint library-drift [--platform <p>] [--config <path>] [--json] - registry l
 | `--config` | `<path>` |  |  |
 | `--json` |  |  |  |
 
-Described in [Library Drift Check](features/library-drift-check.md).
+Described in [Library Drift Check](../../docs/wiki/Library-Drift-Check.md).
 
 ### link-orm
 
@@ -908,7 +908,7 @@ drag-lint link-orm --db <projDb.sqlite> --db <sqlDb.sqlite>
 | --- | --- | --- | --- |
 | `--db` | `<projDb.sqlite>` |  |  |
 
-Described in [link-orm](features/link-orm.md).
+Described in [link-orm](../../docs/wiki/link-orm.md).
 
 ### lint
 
@@ -932,14 +932,14 @@ drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--j
 
 Described in:
 
-* [Copy All Diagnostics](features/copy-all-diagnostics.md)
-* [Copy Diagnostics (Current File)](features/copy-diagnostics-current-file.md)
-* [Fix all in unit](features/fix-all-in-unit.md)
-* [Fix all reliability (1.31.3)](features/fix-all-reliability.md)
-* [Fix it](features/fix-it.md)
-* [Lint Buffer (Unsaved)](features/lint-buffer-unsaved.md)
-* [Rename across every project that compiles a shared unit](features/multi-project-rename.md)
-* [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md)
+* [Copy All Diagnostics](../../docs/wiki/Copy-All-Diagnostics.md)
+* [Copy Diagnostics (Current File)](../../docs/wiki/Copy-Diagnostics-Current-File.md)
+* [Fix all in unit](../../docs/wiki/Fix-all-in-unit.md)
+* [Fix all reliability (1.31.3)](../../docs/wiki/Fix-all-reliability.md)
+* [Fix it](../../docs/wiki/Fix-it.md)
+* [Lint Buffer (Unsaved)](../../docs/wiki/Lint-Buffer-Unsaved.md)
+* [Rename across every project that compiles a shared unit](../../docs/wiki/Multi-Project-Rename.md)
+* [type-name-prefix: expected letter from the ancestor chain](../../docs/wiki/Type-Name-Prefix-Origin.md)
 
 ### lint-all
 
@@ -966,9 +966,9 @@ drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--di
 
 Described in:
 
-* [Fix all in project](features/fix-all-in-project.md)
-* [Run Lint All (Full Report)](features/run-lint-all-full-report.md)
-* [type-name-prefix: expected letter from the ancestor chain](features/type-name-prefix-origin.md)
+* [Fix all in project](../../docs/wiki/Fix-all-in-project.md)
+* [Run Lint All (Full Report)](../../docs/wiki/Run-Lint-All-Full-Report.md)
+* [type-name-prefix: expected letter from the ancestor chain](../../docs/wiki/Type-Name-Prefix-Origin.md)
 
 ### lint-project
 
@@ -985,7 +985,7 @@ drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol
 | `--layers` | `<f.json>` |  |  |
 | `--json` |  |  |  |
 
-Described in [lint-project](features/lint-project.md).
+Described in [lint-project](../../docs/wiki/lint-project.md).
 
 ### lint-tree
 
@@ -1008,7 +1008,7 @@ drag-lint lint-tree --unit <B.pas> --db <file.sqlite> [--buffer <buf>] [--projec
 | `--compile` |  |  |  |
 | `--format` |  |  |  |
 
-Described in [lint-tree](features/lint-tree.md).
+Described in [lint-tree](../../docs/wiki/lint-tree.md).
 
 ### lsp
 
@@ -1027,7 +1027,7 @@ drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>]
 | `--delphi-lsp` | `<path>` |  |  |
 | `--trace` | `<file>` |  |  |
 
-Described in [lsp](features/lsp.md).
+Described in [lsp](../../docs/wiki/lsp.md).
 
 ### mcp-config
 
@@ -1052,7 +1052,7 @@ drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [
 | `--home-dir` |  |  |  |
 | `--appdata-dir` |  |  |  |
 
-Described in [Register the MCP server (Claude Code, VS Code)](features/mcp-config-writer.md).
+Described in [Register the MCP server (Claude Code, VS Code)](../../docs/wiki/Register-MCP-Server.md).
 
 ### migrate-dbs
 
@@ -1067,7 +1067,7 @@ drag-lint migrate-dbs [--config <drag-lint.json>] [--apply] move project indexes
 | `--config` | `<drag-lint.json>` |  |  |
 | `--apply` |  |  |  |
 
-Described in [migrate-dbs](features/migrate-dbs.md).
+Described in [migrate-dbs](../../docs/wiki/migrate-dbs.md).
 
 ### outline
 
@@ -1083,7 +1083,7 @@ drag-lint outline --file <path.pas> [--db <path>] [--format text|json]
 | `--db` | `<path>` |  |  |
 | `--format` |  |  |  |
 
-Described in [outline](features/outline.md).
+Described in [outline](../../docs/wiki/outline.md).
 
 ### pp-profile
 
@@ -1099,7 +1099,7 @@ drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|D
 | `--platform` |  |  |  |
 | `--config` |  |  |  |
 
-Described in [pp-profile](features/pp-profile.md).
+Described in [pp-profile](../../docs/wiki/pp-profile.md).
 
 ### preprocess-file
 
@@ -1118,7 +1118,7 @@ drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--in
 | `--no-near-search` |  |  |  |
 | `--tolerances` |  |  |  |
 
-Described in [preprocess-file](features/preprocess-file.md).
+Described in [preprocess-file](../../docs/wiki/preprocess-file.md).
 
 ### project-facts
 
@@ -1136,7 +1136,7 @@ drag-lint project-facts --dproj PATH [--platform win32|win64] [--config Release|
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
-Described in [project-facts](features/project-facts.md).
+Described in [project-facts](../../docs/wiki/Features.md).
 
 ### proptree
 
@@ -1160,7 +1160,7 @@ drag-lint proptree --qname <X> [--depth N] [--rules <file>] [--progress-interval
 | `--json` |  |  |  |
 | `--db` | `PATH` |  |  |
 
-Described in [proptree](features/proptree.md).
+Described in [proptree](../../docs/wiki/proptree.md).
 
 ### protocol
 
@@ -1176,7 +1176,7 @@ drag-lint protocol register [--handler <drag-lint-open.exe>] [--dry-run] [--forc
 | `--dry-run` |  |  |  |
 | `--force` |  |  |  |
 
-Described in [Click-to-source: the draglint:// handler](features/protocol-handler.md).
+Described in [Click-to-source: the draglint:// handler](../../docs/wiki/Draglint-Protocol-Handler.md).
 
 ### purge-locals
 
@@ -1191,7 +1191,7 @@ drag-lint purge-locals --db PATH [--json] (size escape hatch: drop skLocalVar/sk
 | `--db` | `PATH` |  |  |
 | `--json` |  |  |  |
 
-Described in [purge-locals](features/purge-locals.md).
+Described in [purge-locals](../../docs/wiki/purge-locals.md).
 
 ### query
 
@@ -1233,17 +1233,17 @@ drag-lint query unit-usage --unit <UnitName> [--in <file.pas>] [--db ...] [--jso
 
 Described in:
 
-* [Compiler Hints](features/compiler-hints.md)
-* [Find Undocumented (public)](features/find-undocumented-public.md)
-* [query ancestors](features/query-ancestors.md)
-* [query descendants](features/query-descendants.md)
-* [query find-callers](features/query-find-callers.md)
-* [query --kind --all](features/query-kind-all.md)
-* [query --name-like](features/query-name-like.md)
-* [query type-usage](features/query-type-usage.md)
-* [query typecat](features/query-typecat.md)
-* [query unit-usage](features/query-unit-usage.md)
-* [Symbol Search](features/symbol-search.md)
+* [Compiler Hints](../../docs/wiki/Compiler-Hints.md)
+* [Find Undocumented (public)](../../docs/wiki/Find-Undocumented-public.md)
+* [query ancestors](../../docs/wiki/query-ancestors.md)
+* [query descendants](../../docs/wiki/query-descendants.md)
+* [query find-callers](../../docs/wiki/query-find-callers.md)
+* [query --kind --all](../../docs/wiki/query-kind-all.md)
+* [query --name-like](../../docs/wiki/query-name-like.md)
+* [query type-usage](../../docs/wiki/query-type-usage.md)
+* [query typecat](../../docs/wiki/query-typecat.md)
+* [query unit-usage](../../docs/wiki/query-unit-usage.md)
+* [Symbol Search](../../docs/wiki/Symbol-Search.md)
 
 ### reconcile-project
 
@@ -1262,7 +1262,7 @@ drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db
 | `--json` |  |  |  |
 | `--config` | `<path>` |  |  |
 
-Described in [Reconcile Project Members (.dpr/.dproj)](features/reconcile-project-members-dpr-dproj.md).
+Described in [Reconcile Project Members (.dpr/.dproj)](../../docs/wiki/Reconcile-Project-Members-dpr-dproj.md).
 
 ### refresh-findings
 
@@ -1279,7 +1279,7 @@ drag-lint refresh-findings --project <X.dproj> [--db <db>] [--full] [--json] (re
 | `--full` |  |  |  |
 | `--json` |  |  |  |
 
-Described in [Full Compile Sweep](features/full-compile-sweep.md).
+Described in [Full Compile Sweep](../../docs/wiki/Full-Compile-Sweep.md).
 
 ### register-project
 
@@ -1295,7 +1295,7 @@ drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json] (a
 | `--apply` |  |  |  |
 | `--json` |  |  |  |
 
-Described in [register-project](features/register-project.md).
+Described in [register-project](../../docs/wiki/Features.md).
 
 ### rename
 
@@ -1315,7 +1315,7 @@ drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-ba
 | `--no-backup` |  |  |  |
 | `--db` | `<db>` |  |  |
 
-Described in [Rename Symbol](features/rename-symbol.md).
+Described in [Rename Symbol](../../docs/wiki/Rename-Symbol.md).
 
 ### resolve-dbs
 
@@ -1331,7 +1331,7 @@ drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json] (print
 | `--config` | `<path>` |  |  |
 | `--json` |  |  |  |
 
-Described in [Show Resolved DBs (debug)](features/show-resolved-dbs-debug.md).
+Described in [Show Resolved DBs (debug)](../../docs/wiki/Show-Resolved-DBs-debug.md).
 
 ### reverse-calltree
 
@@ -1352,10 +1352,10 @@ drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N]
 
 Described in:
 
-* [Call Graph (Butterfly)](features/call-graph-butterfly.md)
-* [Reverse Call Tree (clickable, Messages window)](features/reverse-call-tree-clickable-messages-window.md)
-* [Reverse Call Tree (who calls this, N-deep)](features/reverse-call-tree-who-calls-this-n-deep.md)
-* [Show in Call Graph](features/show-in-call-graph.md)
+* [Call Graph (Butterfly)](../../docs/wiki/Call-Graph-Butterfly.md)
+* [Reverse Call Tree (clickable, Messages window)](../../docs/wiki/Reverse-Call-Tree-clickable-Messages-window.md)
+* [Reverse Call Tree (who calls this, N-deep)](../../docs/wiki/Reverse-Call-Tree-who-calls-this-N-deep.md)
+* [Show in Call Graph](../../docs/wiki/Show-in-Call-Graph.md)
 
 ### rules
 
@@ -1373,8 +1373,8 @@ drag-lint rules [--json] [--category <name>] [--rules-dir <dir>] - list every li
 
 Described in:
 
-* [drag-lint: Project Rules](features/drag-lint-project-rules.md)
-* [Lint rules](features/lint-rules.md)
+* [drag-lint: Project Rules](../../docs/wiki/drag-lint-Project-Rules.md)
+* [Lint rules](../../docs/wiki/rules.md)
 
 ### safe-delete
 
@@ -1392,7 +1392,7 @@ drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db> - de
 | `--no-backup` |  |  |  |
 | `--db` | `<db>` |  |  |
 
-Described in [safe-delete](features/safe-delete.md).
+Described in [safe-delete](../../docs/wiki/safe-delete.md).
 
 ### schema
 
@@ -1408,7 +1408,7 @@ drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>] (self
 | `--format` |  |  |  |
 | `--output` | `<file>` |  |  |
 
-Described in [schema](features/schema.md).
+Described in [schema](../../docs/wiki/schema.md).
 
 ### serve
 
@@ -1422,7 +1422,7 @@ drag-lint serve --db <file.sqlite> (MCP stdio server)
 | --- | --- | --- | --- |
 | `--db` | `<file.sqlite>` |  |  |
 
-Described in [serve](features/serve.md).
+Described in [serve](../../docs/wiki/serve.md).
 
 ### shared-unit
 
@@ -1439,7 +1439,7 @@ drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json] 
 | `--apply` |  |  |  |
 | `--json` |  |  |  |
 
-Described in [shared-unit](features/shared-unit.md).
+Described in [shared-unit](../../docs/wiki/shared-unit.md).
 
 ### shutdown
 
@@ -1457,7 +1457,7 @@ drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [-
 | `--all` |  |  |  |
 | `--force` |  |  |  |
 
-Described in [shutdown](features/shutdown.md).
+Described in [shutdown](../../docs/wiki/Features.md).
 
 ### slice
 
@@ -1473,7 +1473,7 @@ drag-lint slice --qname <Foo.TBar> [--db <file.sqlite>] [--format text|json]
 | `--db` | `<file.sqlite>` |  |  |
 | `--format` |  |  |  |
 
-Described in [Symbol Slice](features/symbol-slice.md).
+Described in [Symbol Slice](../../docs/wiki/Symbol-Slice.md).
 
 ### sql
 
@@ -1494,7 +1494,7 @@ drag-lint sql --query "SELECT ..." | --file <q.sql> --db <file.sqlite> [--format
 | `--timeout-ms` | `N` |  |  |
 | `--output` | `<file>` |  |  |
 
-Described in [sql](features/sql.md).
+Described in [sql](../../docs/wiki/sql.md).
 
 ### surface
 
@@ -1512,7 +1512,7 @@ drag-lint surface --qname <Foo.TBar> [--db <file.sqlite>] [--include-impl] [--al
 | `--all-visibility` |  |  |  |
 | `--format` |  |  |  |
 
-Described in [Class Surface](features/class-surface.md).
+Described in [Class Surface](../../docs/wiki/Class-Surface.md).
 
 ### todos
 
@@ -1522,7 +1522,7 @@ Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers.
 drag-lint todos [<path>] (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])
 ```
 
-Described in [Scan TODOs / FIXMEs](features/scan-todos-fixmes.md).
+Described in [Scan TODOs / FIXMEs](../../docs/wiki/Scan-TODOs-FIXMEs.md).
 
 ### top
 
@@ -1539,7 +1539,7 @@ drag-lint top --db <file.sqlite> [--by fanin] [--limit N] [--json]
 | `--limit` | `N` |  |  |
 | `--json` |  |  |  |
 
-Described in [Top Symbols (fan-in)](features/top-symbols-fan-in.md).
+Described in [Top Symbols (fan-in)](../../docs/wiki/Top-Symbols-fan-in.md).
 
 ### typeat
 
@@ -1554,7 +1554,7 @@ drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]
 | `--db` | `<file.sqlite>` |  |  |
 | `--format` |  |  |  |
 
-Described in [Type at Cursor](features/type-at-cursor.md).
+Described in [Type at Cursor](../../docs/wiki/Type-at-Cursor.md).
 
 ### usages
 
@@ -1575,8 +1575,8 @@ drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--dep
 
 Described in:
 
-* [Find Usages](features/find-usages-context.md)
-* [usages](features/usages.md)
+* [Find Usages](../../docs/wiki/Find-Usages-context.md)
+* [usages](../../docs/wiki/usages.md)
 
 ### uses-audit
 
@@ -1591,7 +1591,7 @@ drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text] (interfa
 | `--db` | `<file.sqlite>` |  |  |
 | `--format` |  |  |  |
 
-Described in [Uses Audit -- interface->impl moves + unused (this unit)](features/uses-audit-interface-impl-moves-unused-this-unit.md).
+Described in [Uses Audit -- interface->impl moves + unused (this unit)](../../docs/wiki/Uses-Audit-interface-impl-moves-unused-this-unit.md).
 
 ### uses-fix
 
@@ -1613,8 +1613,8 @@ drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform w
 
 Described in:
 
-* [Fix it](features/fix-it.md)
-* [Uses Cleanup Preview (compiler-verified, this unit)](features/uses-cleanup-preview-compiler-verified-this-unit.md)
+* [Fix it](../../docs/wiki/Fix-it.md)
+* [Uses Cleanup Preview (compiler-verified, this unit)](../../docs/wiki/Uses-Cleanup-Preview-compiler-verified-this-unit.md)
 
 ### uses-report
 
@@ -1633,7 +1633,7 @@ drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-exter
 | `--all-sources` |  |  |  |
 | `--name` | `<pattern>` |  |  |
 
-Described in [Uses Report (CSV)](features/uses-report-csv.md).
+Described in [Uses Report (CSV)](../../docs/wiki/Uses-Report-CSV.md).
 
 ### wiki
 
@@ -1653,8 +1653,8 @@ drag-lint wiki --term "<phrase>" | --list | --check [--json] [--db <file.sqlite>
 
 Described in:
 
-* [wiki](features/wiki.md)
-* [dl:wiki concept blocks](features/wiki-blocks-authoring.md)
+* [wiki](../../docs/wiki/wiki.md)
+* [dl:wiki concept blocks](../../docs/wiki/Wiki-Blocks-Authoring.md)
 
 ### wiring
 
@@ -1670,7 +1670,7 @@ drag-lint wiring --qname <IIntf|TForm> [--db <file.sqlite>] [--format text|json]
 | `--db` | `<file.sqlite>` |  |  |
 | `--format` |  |  |  |
 
-Described in [Show Wiring (Spring4D DI + DFM events)](features/show-wiring-spring4d-di-dfm-events.md).
+Described in [Show Wiring (Spring4D DI + DFM events)](../../docs/wiki/Show-Wiring-Spring4D-DI-DFM-events.md).
 
 ### workspace
 
@@ -1688,7 +1688,7 @@ drag-lint workspace status [--config <.drag-lint-workspace.json>]
 
 Described in:
 
-* [workspace add](features/workspace-add.md)
-* [workspace index](features/workspace-index.md)
-* [workspace status](features/workspace-status.md)
+* [workspace add](../../docs/wiki/workspace-add.md)
+* [workspace index](../../docs/wiki/workspace-index.md)
+* [workspace status](../../docs/wiki/workspace-status.md)
 

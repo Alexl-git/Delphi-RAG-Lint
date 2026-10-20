@@ -45,11 +45,15 @@ procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter:
 /// a local path (drive letter, backslash, file:). Links inside code fences and code spans are not links.</remarks>
 function CheckLinks(const pWriter: TOutputWriter): TArray<string>;
 
-/// <summary>The agent CLI reference (spec 5.3): the site cli.md text without its front matter.</summary>
+/// <summary>The agent CLI reference (spec 5.3): the site cli.md text without its front matter,
+/// with every link target rewritten for features\generated\cli-reference.md.</summary>
 /// <param name="pFmt">Site format; its Help must be loaded (usage lines come from it).</param>
 /// <param name="pReg">Loaded registry; only site-included entries are listed, as on the site.</param>
-/// <returns>LF text starting with '# CLI reference'; links stay site-relative (features/&lt;id&gt;.md).</returns>
-function CliReferenceMd(const pFmt: TSiteFormat; const pReg: TRegistry): string;
+/// <param name="pRepo">Repository root; link targets are checked against it.</param>
+/// <returns>LF text starting with '# CLI reference'. A leaf link features/&lt;id&gt;.md becomes
+/// ../../docs/wiki/&lt;wikiPage&gt;.md when that page exists; https and #anchor links are kept; any
+/// other link is kept only if it resolves from features\generated\, else it becomes its plain text.</returns>
+function CliReferenceMd(const pFmt: TSiteFormat; const pReg: TRegistry; const pRepo: string): string;
 
 implementation
 
@@ -791,19 +795,70 @@ begin
   pW.Put('wiki-map.json', WikiMapJson(pFmt, lInc), 'wiki-map.json');
 end;
 
-function CliReferenceMd(const pFmt: TSiteFormat; const pReg: TRegistry): string;
+{ One cli.md link target, re-aimed from features\generated\; '' = render as plain text. }
+function CliReferenceTarget(const pTarget: string; const pReg: TRegistry; const pRepo: string): string;
+const
+  GEN_DIR = 'features\generated';
+var
+  lM: TMatch;
+  lE: TFeatureEntry;
+  lPath, lAnchor: string;
+  lHash: Integer;
+begin
+  if pTarget.StartsWith('https://') or pTarget.StartsWith('http://') or pTarget.StartsWith('#') then
+    Exit(pTarget);
+  lM := TRegEx.Match(pTarget, '^features/([^/#]+)\.md(#.*)?$');
+  if lM.Success then
+  begin
+    lAnchor := if lM.Groups.Count > 2 then lM.Groups[2].Value else '';
+    for lE in pReg.Entries do
+      if (lE.Id = lM.Groups[1].Value) and (lE.WikiPage <> '')
+        and TFile.Exists(TPath.Combine(pRepo, 'docs\wiki\' + lE.WikiPage + '.md')) then
+        Exit('../../docs/wiki/' + lE.WikiPage + '.md' + lAnchor);
+    Exit('');
+  end;
+  lPath := pTarget;
+  lHash := Pos('#', lPath);
+  if lHash > 0 then
+    lPath := Copy(lPath, 1, lHash - 1);
+  if (lPath <> '') and TFile.Exists(TPath.GetFullPath(TPath.Combine(TPath.Combine(pRepo, GEN_DIR), lPath.Replace('/', '\')))) then
+    Result := pTarget
+  else
+    Result := '';
+end;
+
+function CliReferenceMd(const pFmt: TSiteFormat; const pReg: TRegistry; const pRepo: string): string;
 const
   FRONT_END = #10'---'#10#10;
+  LINK_RE = '(?<!!)\[((?:\\.|[^\]\\])*)\]\(([^)\s]+)\)';
 var
-  lMd: string;
-  lAt: Integer;
+  lMd, lTarget: string;
+  lAt, lFrom: Integer;
+  lM: TMatch;
+  lSb: TStringBuilder;
 begin
   lMd := CliMd(pFmt, IncludedEntries(pFmt, pReg));
   lAt := Pos(FRONT_END, lMd);
   if lMd.StartsWith('---'#10) and (lAt > 0) then
-    Result := Copy(lMd, lAt + Length(FRONT_END), MaxInt)
-  else
-    Result := lMd;
+    lMd := Copy(lMd, lAt + Length(FRONT_END), MaxInt);
+  lSb := TStringBuilder.Create;
+  try
+    lFrom := 1;
+    for lM in TRegEx.Matches(lMd, LINK_RE) do
+    begin
+      lSb.Append(Copy(lMd, lFrom, lM.Index - lFrom));
+      lTarget := CliReferenceTarget(lM.Groups[2].Value, pReg, pRepo);
+      if lTarget <> '' then
+        lSb.Append('[' + lM.Groups[1].Value + '](' + lTarget + ')')
+      else
+        lSb.Append(lM.Groups[1].Value);
+      lFrom := lM.Index + lM.Length;
+    end;
+    lSb.Append(Copy(lMd, lFrom, MaxInt));
+    Result := lSb.ToString;
+  finally
+    lSb.Free;
+  end;
 end;
 
 procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter);
