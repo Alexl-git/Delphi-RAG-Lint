@@ -59,7 +59,7 @@ An excerpt (the full output is in [REPORT.md](REPORT.md)):
 ### Step 1: what moves where
 1. `TOrder` -- **class with methods**, declared at `Orders.pas` lines 6-19; method bodies at `Orders.pas` lines 30-35, 37-44.
    - Recipe: **extract a base class** and keep `TOrder` where it is. Why: its method bodies use `TCustomer`, which live in units of this cycle; moving the class would mean moving those bodies (lines 30-35, 37-44) AND everything they use.
-   - New class `TOrderBase` in `Orders.Contracts` carries exactly what the units below use: nothing (an empty base).
+   - New class `TOrderBase` in `Orders.Untangle` carries exactly what the units below use: nothing (an empty base).
    - `TOrder` stays in `Orders.pas` and becomes `TOrder = class(TOrderBase)`; the members above are deleted from it.
    - Units that switch to `TOrderBase` (the name is replaced on these lines): `Customers.pas` lines 13, 16, 30.
 

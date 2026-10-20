@@ -24,7 +24,7 @@
   ASSERTS
     commentclause: plan verdict mechanical, no refusal, no "In the ... uses
       clause" manual step; CfAlpha's edit is `Replace line 17` whose New text
-      names CfBeta.Contracts and still holds `// why`; the comment line 16 is
+      names CfBeta.Untangle and still holds `// why`; the comment line 16 is
       not part of any edit. END TO END: tools\follow-cycle-plan.ps1 applies the
       plan to the copy, both comments survive, and after a reindex `cycles`
       finds no cycle.
@@ -116,7 +116,7 @@ try {
   Check 'CfAlpha: Replace line 17 (the trailing-comment line)' $m.Success ($alpha -replace "`r?`n", ' | ')
   if ($m.Success) {
     Check 'New text keeps `// why`' ($m.Groups['new'].Value -match '// why') $m.Groups['new'].Value
-    Check 'New text names CfBeta.Contracts' ($m.Groups['new'].Value -match 'CfBeta\.Contracts') $m.Groups['new'].Value
+    Check 'New text names CfBeta.Untangle' ($m.Groups['new'].Value -match 'CfBeta\.Untangle') $m.Groups['new'].Value
     Check 'New text drops the CfBeta entry' ($m.Groups['new'].Value -notmatch '\bCfBeta[;,]') $m.Groups['new'].Value
   }
   Check 'the comment line 16 is in no edit' ($alpha -notmatch 'CfBeta supplies the limit') ''
@@ -127,7 +127,7 @@ try {
   Check 'follow-cycle-plan applies every step (exit 0)' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
   $after = [IO.File]::ReadAllText((Join-Path $c.Root 'CfAlpha.pas'))
   Check 'applied CfAlpha keeps the comment line' ($after.Contains('  // CfBeta supplies the limit')) ''
-  Check 'applied CfAlpha keeps the trailing comment' ($after -match 'CfBeta\.Contracts; // why: the limit lives there') ''
+  Check 'applied CfAlpha keeps the trailing comment' ($after -match 'CfBeta\.Untangle; // why: the limit lives there') ''
   $proj = (Get-ChildItem $c.Root -Filter *.dproj | Select-Object -First 1).FullName
   & $Exe index --project $proj --db $c.Db *> (Join-Path $WorkDir 'commentclause-reindex.log')
   $n2, $raw2 = Get-CycleCount $c.Db
@@ -155,19 +155,19 @@ try {
   Check 'variants: the commentclause clause block is where the cases expect it' ($base.Contains($old)) ''
   $cases = @(
     @{ N = 'first';  In = "uses`r`n  CfBeta,`r`n  System.SysUtils;";
-       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Contracts;`r`n" },
+       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle;`r`n" },
     @{ N = 'middle'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta,`r`n  System.Classes;";
-       Out = "uses`r`n  System.SysUtils,`r`n  System.Classes,`r`n  CfBeta.Contracts;`r`n" },
+       Out = "uses`r`n  System.SysUtils,`r`n  System.Classes,`r`n  CfBeta.Untangle;`r`n" },
     @{ N = 'only';   In = "uses`r`n  CfBeta;";
-       Out = "uses`r`n  CfBeta.Contracts;`r`n" },
+       Out = "uses`r`n  CfBeta.Untangle;`r`n" },
     @{ N = 'inline'; In = "uses System.SysUtils, CfBeta, System.Classes;";
-       Out = "uses System.SysUtils, System.Classes, CfBeta.Contracts;`r`n" },
+       Out = "uses System.SysUtils, System.Classes, CfBeta.Untangle;`r`n" },
     # J5 positive: a directive in the clause but OUTSIDE the span the removal deletes does not refuse
     @{ N = 'j5';     In = "uses`r`n  System.SysUtils {`$IFDEF MSWINDOWS}, System.Classes {`$ENDIF},`r`n  CfBeta;";
-       Out = "uses`r`n  System.SysUtils {`$IFDEF MSWINDOWS}, System.Classes {`$ENDIF},`r`n  CfBeta.Contracts;`r`n" },
+       Out = "uses`r`n  System.SysUtils {`$IFDEF MSWINDOWS}, System.Classes {`$ENDIF},`r`n  CfBeta.Untangle;`r`n" },
     # an `in 'path'` literal holding `{` and `//` is a string token, not a comment
     @{ N = 'inpath'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta in '.\{b}\..\.//CfBeta.pas';";
-       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Contracts;`r`n" }
+       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle;`r`n" }
   )
   foreach ($k in $cases) {
     $tag  = 'variant-' + $k.N

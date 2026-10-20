@@ -65,10 +65,10 @@ After it, these units form no cycle at all.
 ### Step 1: what moves where
 1. `TOrder` -- **class with methods**, declared at `Orders.pas` lines 6-19; method bodies at `Orders.pas` lines 30-35, 37-44.
    - Recipe: **extract a base class** and keep `TOrder` where it is. Why: its method bodies use `TCustomer`, which live in units of this cycle; moving the class would mean moving those bodies (lines 30-35, 37-44) AND everything they use.
-   - New class `TOrderBase` in `Orders.Contracts` carries exactly what the units below use: nothing (an empty base).
+   - New class `TOrderBase` in `Orders.Untangle` carries exactly what the units below use: nothing (an empty base).
    - `TOrder` stays in `Orders.pas` and becomes `TOrder = class(TOrderBase)`; the members above are deleted from it.
    - Units that switch to `TOrderBase` (the name is replaced on these lines): `Customers.pas` lines 13, 16, 30.
-   - Used by (each needs `Orders.Contracts` in the uses clause of that section; the edit step does it):
+   - Used by (each needs `Orders.Untangle` in the uses clause of that section; the edit step does it):
      - `Orders.pas` interface (first use: line 10)
      - `Customers.pas` interface (first use: line 13)
      - `Customers.pas` implementation (first use: line 30)
@@ -78,11 +78,11 @@ For each unit of the cycle that uses a unit whose declarations move. A unit can 
 - `Customers.pas` / `Orders`: nothing from it is used there any more -> **remove** it from the interface uses.
 
 ### Step 3: create the new units
-Each new unit may use only RTL / library units and other new `*.Contracts` units -- never a unit of this cycle (`Customers`, `Orders`). Create each file with EXACTLY this text:
+Each new unit may use only RTL / library units and other new `*.Untangle` units -- never a unit of this cycle (`Customers`, `Orders`). Create each file with EXACTLY this text:
 
-#### `Orders.Contracts` -> `circular-uses-demo\Orders.Contracts.pas`
+#### `Orders.Untangle` -> `circular-uses-demo\Orders.Untangle.pas`
 ```pascal
-unit Orders.Contracts;
+unit Orders.Untangle;
 
 // Created by `drag-lint cycles --plan`: declarations moved here from Orders
 // to break a circular unit dependency. This unit may use only units OUTSIDE
@@ -136,7 +136,7 @@ E4. Replace line 6. Current text:
 ```
 New text:
 ```pascal
-  Orders.Contracts;   { <-- interface-section use of Orders: half of the cycle }
+  Orders.Untangle;   { <-- interface-section use of Orders: half of the cycle }
 ```
 
 #### `Orders.pas`  (`circular-uses-demo\Orders.pas`)
@@ -152,12 +152,12 @@ E2. After line 3 (`interface`), insert:
 ```pascal
 
 uses
-  Orders.Contracts;
+  Orders.Untangle;
 ```
 
 ### Checklist
 Tick each box in order. Do not skip the compile.
-1. [ ] Create `circular-uses-demo\Orders.Contracts.pas` with the exact text given for `Orders.Contracts`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+1. [ ] Create `circular-uses-demo\Orders.Untangle.pas` with the exact text given for `Orders.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
 2. [ ] Apply every edit listed for `Customers.pas`, in the order listed.
 3. [ ] Apply every edit listed for `Orders.pas`, in the order listed.
 4. [ ] Compile the project. Expect 0 errors; on an error see "If the compile fails" below.

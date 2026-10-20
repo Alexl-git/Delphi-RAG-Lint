@@ -102,7 +102,7 @@ try {
         ($plan -match '`DemoSession\.pas` / `DemoAudit`: [^\n]*\*\*move\*\*') $plan
 
   # --- 4. new units + their uses rule ---------------------------------------
-  foreach ($u in 'DemoLogger.Contracts','DemoAudit.Contracts','DemoSession.Contracts') {
+  foreach ($u in 'DemoLogger.Untangle','DemoAudit.Untangle','DemoSession.Untangle') {
     Check "new unit ${u}: full content given" (Has $plan "unit $u;") $plan
   }
   Check 'new units: the uses rule names the cycle units it must never use' `
@@ -110,9 +110,9 @@ try {
 
   # --- 5. registration ------------------------------------------------------
   Check '.dpr registration line for a new unit' `
-        (Has $plan "DemoLogger.Contracts in 'DemoLogger.Contracts.pas'") $plan
+        (Has $plan "DemoLogger.Untangle in 'DemoLogger.Untangle.pas'") $plan
   Check '.dproj DCCReference line for a new unit' `
-        (Has $plan '<DCCReference Include="DemoLogger.Contracts.pas"/>') $plan
+        (Has $plan '<DCCReference Include="DemoLogger.Untangle.pas"/>') $plan
 
   # --- 6. edits are bottom-up with the current text quoted -------------------
   Check 'edits: bottom-up ordering is stated' (Has $plan 'from the bottom of the file to the top') $plan

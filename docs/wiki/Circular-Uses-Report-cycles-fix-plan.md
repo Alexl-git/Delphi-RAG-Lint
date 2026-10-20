@@ -17,7 +17,7 @@ follow it literally:
 
 * **What moves where** -- each symbol that ties the cycle together, with its kind
   and the recipe for that kind. Enums, records, constants and variables move
-  unchanged into a new leaf unit `<Declaring>.Contracts` (exact line ranges, doc
+  unchanged into a new leaf unit `<Declaring>.Untangle` (or into an existing one that is still a leaf) (exact line ranges, doc
   comment included). A class whose method bodies use the cycle is not moved: a
   base class with just the members its consumers use is extracted instead, and
   the playbook says why. Every consuming unit is listed with its section and

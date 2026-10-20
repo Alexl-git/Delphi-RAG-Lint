@@ -70,7 +70,8 @@ type
 /// <remarks>
 /// <para>An INTERFACE-coupled group gets Part A: every symbol that one member's
 /// interface takes from another moves into a new leaf unit
-/// `&lt;Declaring&gt;.Contracts` -- a class whose method bodies use the cycle is
+/// `&lt;Declaring&gt;.Untangle` (an existing one is extended while it is still a
+/// leaf for the group, DRagLint.Report.UntangleCatalog) -- a class whose method bodies use the cycle is
 /// NOT moved; a base class carrying the members its consumers use is
 /// extracted instead. An implementation-only group gets the cheapest edge
 /// that can be cut the same way, or a statement that none can.</para>
@@ -100,10 +101,11 @@ implementation
 uses
   System.SysUtils, System.IOUtils, System.StrUtils, System.RegularExpressions, System.Math,
   System.Generics.Defaults,
-  DRagLint.Core.Model, DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge;
+  DRagLint.Core.Model, DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge,
+  DRagLint.Report.UntangleCatalog;
 
 const
-  CLeafSuffix    = '.Contracts';
+  CLeafSuffix    = CUntangleSuffix;
   CBaseSuffix    = 'Base';
   CCodeFence     = '```';
   CPascalFence   = '```pascal';
@@ -318,6 +320,7 @@ type
     FExtraEdits : TObjectDictionary<Int64, TList<TFileEdit>>;
     FLeafName   : TDictionary<string, string>;
     FLeafPath   : TDictionary<string, string>;
+    FLeafInfo   : TDictionary<string, TUntangleLeaf>;  // source stem -> the catalog's answer
     FLeafDeps   : TObjectDictionary<string, TList<string>>;
     FConsumers  : TObjectDictionary<Int64, TList<TConsumer>>;
     FPulledBy   : TDictionary<Int64, string>;
@@ -366,7 +369,7 @@ type
     // materialise
     procedure Materialize;
     procedure AssignLeafNames;
-    function LeafStems: TArray<string>;
+    function LeafStems(pDecision: TUntangleDecision): TArray<string>;
     procedure MarkDeleted(pFid: Int64; const pRange: TLineRange);
     function IsDeleted(pFid: Int64; pLine: Integer): Boolean;
     procedure MarkReplaced(pFid: Int64; pLine: Integer; const pText: string);
@@ -378,6 +381,9 @@ type
     procedure DecideUses;
     procedure DecideOne(const pA: TPlanFile; const pU: TUnitUse);
     procedure RegisterLeaves;
+    procedure ExtendLeaves;
+    function MergeLeafUses(const pF: TPlanFile; pSect: TSect; pAnchor: Integer;
+      const pEntries: TArray<string>): TArray<string>;
     procedure AddUses(pFid: Int64; pSect: TSect; const pEntry: string);
     procedure DelUses(pFid: Int64; pSect: TSect; const pStem: string);
     procedure Touch(pFid: Int64);
@@ -415,6 +421,8 @@ type
     procedure RenderDecisions(pStep: Integer);
     procedure RenderLeafUnits(pStep: Integer);
     function LeafUnitText(const pStem: string): TArray<string>;
+    function LeafEntries(const pStem: string; pSect: TSect): TArray<string>;
+    function LeafDeclLines(const pStem: string; pBodies: TList<TLineRange>): TArray<string>;
     function BaseClassText(const pItem: TMoveItem): TArray<string>;
     procedure RenderEdits(pStep: Integer);
     procedure RenderFileEdits(const pTitle: string; const pLines: TArray<string>;
@@ -1024,6 +1032,7 @@ begin
   FExtraEdits:= TObjectDictionary<Int64, TList<TFileEdit>>.Create([doOwnsValues]);
   FLeafName  := TDictionary<string, string>.Create;
   FLeafPath  := TDictionary<string, string>.Create;
+  FLeafInfo  := TDictionary<string, TUntangleLeaf>.Create;
   FLeafDeps  := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
   FConsumers := TObjectDictionary<Int64, TList<TConsumer>>.Create([doOwnsValues]);
   FPulledBy  := TDictionary<Int64, string>.Create;
@@ -1047,6 +1056,7 @@ begin
   FPulledBy.Free;
   FConsumers.Free;
   FLeafDeps.Free;
+  FLeafInfo.Free;
   FLeafPath.Free;
   FLeafName.Free;
   FExtraEdits.Free;
@@ -1289,6 +1299,7 @@ begin
   FExtraEdits.Clear;
   FLeafName.Clear;
   FLeafPath.Clear;
+  FLeafInfo.Clear;
   FLeafDeps.Clear;
   FConsumers.Clear;
   FPulledBy.Clear;
@@ -1715,37 +1726,36 @@ begin
   CollectLeafDeps;
   DecideUses;
   RegisterLeaves;
+  ExtendLeaves;
   BuildUsesEdits;
   Predict;
 end;
 
 procedure TCyclePlanner.AssignLeafNames;
 begin
+  { E18 T4b: the catalog names the leaf `<Source>.Untangle` and finds an existing
+    one that is still a leaf for this group (udExtend) }
+  var Root:= if FProjectFid > 0 then ExtractFilePath(PathOf(FProjectFid)) else '';
   for var Id in FOrder do
   begin
     var Stem:= FItems[Id].Stem;
     if FLeafName.ContainsKey(Stem) then Continue;
-    var F:= GetFile(FidOfStem(Stem));
-    var Name:= F.UnitName + CLeafSuffix;
-    var N:= 1;
-    while TFile.Exists(ExtractFilePath(F.Path) + Name + '.pas') do
-    begin
-      Inc(N);
-      Name:= F.UnitName + CLeafSuffix + IntToStr(N);
-    end;
-    FLeafName.Add(Stem, Name);
-    FLeafPath.Add(Stem, ExtractFilePath(F.Path) + Name + '.pas');
+    var Leaf:= ResolveUntangleLeaf(FStore, Stem, FComp, Root);
+    FLeafInfo.Add(Stem, Leaf);
+    FLeafName.Add(Stem, Leaf.UnitName);
+    FLeafPath.Add(Stem, Leaf.Path);
   end;
 end;
 
-function TCyclePlanner.LeafStems: TArray<string>;
+function TCyclePlanner.LeafStems(pDecision: TUntangleDecision): TArray<string>;
 var
   L: TList<string>;
 begin
   L:= TList<string>.Create;
   try
     for var Id in FOrder do
-      if FLeafName.ContainsKey(FItems[Id].Stem) then AddUnique(L, FItems[Id].Stem);
+      if FLeafInfo.ContainsKey(FItems[Id].Stem) and (FLeafInfo[FItems[Id].Stem].Decision = pDecision) then
+        AddUnique(L, FItems[Id].Stem);
     Result:= L.ToArray;
   finally
     L.Free;
@@ -1954,13 +1964,15 @@ var
 begin
   if FProjectFid = 0 then Exit;
   var Prj:= GetFile(FProjectFid);
-  for var Stem in LeafStems do AddUses(FProjectFid, scProg, UsesEntryFor(Prj, Stem));
+  { only a CREATED leaf is registered; an extended one is in the project already }
+  var Created:= LeafStems(udCreate);
+  for var Stem in Created do AddUses(FProjectFid, scProg, UsesEntryFor(Prj, Stem));
   if not (SameText(ExtractFileExt(FProjectFile), '.dproj') and TFile.Exists(FProjectFile)) then Exit;
   Dproj:= TFile.ReadAllLines(FProjectFile);
   for var U in Prj.UsesList do
   begin
     var Stem:= LowerCase(U.UnitName);
-    if (U.InPath = '') or not FLeafName.ContainsKey(Stem) then Continue;
+    if (U.InPath = '') or not MatchText(Stem, Created) then Continue;
     for var I:= 0 to High(Dproj) do
       if ContainsText(Dproj[I], 'Include="' + U.InPath + '"') then
       begin
@@ -1972,6 +1984,89 @@ begin
         FDprojEdits.Add(E);
         Break;
       end;
+  end;
+end;
+
+{ The uses entries pEntries for section pSect of the existing leaf pF. A section
+  that has a clause gets them through AddUses (the T3a lexer add, which skips an
+  entry already there); one without a clause gets a new clause after its keyword
+  -- also through AddUses, unless the insert at pAnchor sits on that keyword
+  line too: two inserts after one line have no order, so the clause is then
+  returned to lead the insert's own text. }
+function TCyclePlanner.MergeLeafUses(const pF: TPlanFile; pSect: TSect; pAnchor: Integer;
+  const pEntries: TArray<string>): TArray<string>;
+begin
+  Result:= nil;
+  if Length(pEntries) = 0 then Exit;
+  var KeyLine:= if pSect = scIntf then pF.IntfLine else pF.ImplLine;
+  if (Length(SectionEntries(pF, pSect)) = 0) and (pAnchor = KeyLine) then
+    Exit(PrependBlank(FormatUses('', pEntries, nil)));
+  for var S in pEntries do AddUses(pF.Fid, pSect, S);
+end;
+
+procedure TCyclePlanner.ExtendLeaves;
+var
+  Bodies: TList<TLineRange>;
+  E     : TFileEdit;
+  Lines : TList<string>;
+begin
+  { E18 T4b: a leaf the catalog found (udExtend) gets the moved declarations
+    inserted after its last interface declaration, the bodies before the end of
+    its implementation section, and the uses entries they need merged in }
+  Bodies:= TList<TLineRange>.Create;
+  Lines := TList<string>.Create;
+  try
+    for var Stem in LeafStems(udExtend) do
+    begin
+      var Leaf:= FLeafInfo[Stem];
+      var F   := GetFile(Leaf.Fid);
+      Bodies.Clear;
+      var Decls:= LeafDeclLines(Stem, Bodies);
+      var At:= Leaf.InsertAfterLine;
+      if At = 0 then
+      begin
+        { no interface declaration: after the interface uses clause, else the keyword }
+        At:= F.IntfLine;
+        for var U in SectionEntries(F, scIntf) do
+          if U.EndLine > At then At:= U.EndLine;
+        while (At > F.IntfLine) and (At < Length(F.Lines)) and not ContainsStr(CodePart(LineAt(F.Lines, At)), ';') do Inc(At);
+      end;
+      Lines.Clear;
+      Lines.AddRange(MergeLeafUses(F, scIntf, At, LeafEntries(Stem, scIntf)));
+      Lines.AddRange(Decls);
+      E:= Default(TFileEdit);
+      E.Kind    := ekInsertAfter;
+      E.First   := At;
+      E.Last    := At;
+      E.NewLines:= Lines.ToArray;
+      EditList(F.Fid).Add(E);
+      if Bodies.Count = 0 then Continue;
+      { the bodies go before `initialization` / `finalization` / `end.` }
+      At:= Length(F.Lines);
+      for var L:= F.ImplLine + 1 to Length(F.Lines) do
+        if MatchText(Trim(CodePart(LineAt(F.Lines, L))), ['initialization', 'finalization', 'end.']) then
+        begin
+          At:= L;
+          Break;
+        end;
+      Dec(At);
+      Lines.Clear;
+      Lines.AddRange(MergeLeafUses(F, scImpl, At, LeafEntries(Stem, scImpl)));
+      for var R in Bodies do
+      begin
+        Lines.Add('');
+        Lines.AddRange(SliceLines(GetFile(FidOfStem(Stem)).Lines, R));
+      end;
+      E:= Default(TFileEdit);
+      E.Kind    := ekInsertAfter;
+      E.First   := At;
+      E.Last    := At;
+      E.NewLines:= Lines.ToArray;
+      EditList(F.Fid).Add(E);
+    end;
+  finally
+    Lines.Free;
+    Bodies.Free;
   end;
 end;
 
@@ -2712,40 +2807,41 @@ begin
   end;
 end;
 
-function TCyclePlanner.LeafUnitText(const pStem: string): TArray<string>;
+{ The uses entries a leaf of pStem needs in section pSect: the source unit's own
+  entries of that section that are not members of the cycle, plus (interface)
+  the units the moved declarations use. }
+function TCyclePlanner.LeafEntries(const pStem: string; pSect: TSect): TArray<string>;
+var
+  Entries: TList<string>;
+begin
+  var P:= GetFile(FidOfStem(pStem));
+  Entries:= TList<string>.Create;
+  try
+    for var U in SectionEntries(P, pSect) do
+      if not FMembers.ContainsKey(LowerCase(U.UnitName)) then Entries.Add(EntryText(P, U));
+    if (pSect = scIntf) and FLeafDeps.ContainsKey(pStem) then
+      for var S in FLeafDeps[pStem] do AddUnique(Entries, S);
+    Result:= Entries.ToArray;
+  finally
+    Entries.Free;
+  end;
+end;
+
+{ The interface text of everything that moves out of pStem, each item led by a
+  blank line and, when it changes, its block keyword; pBodies receives the
+  method-body ranges of the items that move with their bodies. }
+function TCyclePlanner.LeafDeclLines(const pStem: string; pBodies: TList<TLineRange>): TArray<string>;
 var
   L      : TList<string>;
-  P      : TPlanFile;
-  Entries: TList<string>;
-  Keyword: string;
-  Bodies : TList<TLineRange>;
   Items  : TList<TMoveItem>;
+  Keyword: string;
 begin
-  P      := GetFile(FidOfStem(pStem));
-  L      := TList<string>.Create;
-  Entries:= TList<string>.Create;
-  Bodies := TList<TLineRange>.Create;
-  Items  := TList<TMoveItem>.Create;
+  var P:= GetFile(FidOfStem(pStem));
+  L    := TList<string>.Create;
+  Items:= TList<TMoveItem>.Create;
   try
-    L.Add('unit ' + FLeafName[pStem] + ';');
-    L.Add('');
-    L.Add('// Created by `drag-lint cycles --plan`: declarations moved here from ' + P.UnitName);
-    L.Add('// to break a circular unit dependency. This unit may use only units OUTSIDE');
-    L.Add('// that cycle -- never ' + MemberNames.Replace('`', '') + '.');
-    L.Add('');
-    L.Add('interface');
-    for var U in SectionEntries(P, scIntf) do
-      if not FMembers.ContainsKey(LowerCase(U.UnitName)) then Entries.Add(EntryText(P, U));
-    if FLeafDeps.ContainsKey(pStem) then
-      for var S in FLeafDeps[pStem] do AddUnique(Entries, S);
-    if Entries.Count > 0 then
-    begin
-      L.Add('');
-      L.AddRange(FormatUses('', Entries.ToArray, nil));
-    end;
     { SOURCE order, not closure order: a variable is added before the type it
       needs, and Delphi requires the type to be declared first }
-    Items.Clear;
     for var Id in FOrder do
       if FItems[Id].Stem = pStem then Items.Add(FItems[Id]);
     Items.Sort(TComparer<TMoveItem>.Construct(
@@ -2762,19 +2858,49 @@ begin
       Keyword:= KW;
       if Item.Kind = mvBase then L.AddRange(BaseClassText(Item))
       else L.AddRange(SliceLines(P.Lines, Item.Decl));
-      if Item.Kind = mvWithBodies then Bodies.AddRange(Item.Bodies);
+      if Item.Kind = mvWithBodies then pBodies.AddRange(Item.Bodies);
     end;
+    Result:= L.ToArray;
+  finally
+    Items.Free;
+    L.Free;
+  end;
+end;
+
+function TCyclePlanner.LeafUnitText(const pStem: string): TArray<string>;
+var
+  L      : TList<string>;
+  P      : TPlanFile;
+  Entries: TArray<string>;
+  Bodies : TList<TLineRange>;
+begin
+  P     := GetFile(FidOfStem(pStem));
+  L     := TList<string>.Create;
+  Bodies:= TList<TLineRange>.Create;
+  try
+    L.Add('unit ' + FLeafName[pStem] + ';');
+    L.Add('');
+    L.Add('// Created by `drag-lint cycles --plan`: declarations moved here from ' + P.UnitName);
+    L.Add('// to break a circular unit dependency. This unit may use only units OUTSIDE');
+    L.Add('// that cycle -- never ' + MemberNames.Replace('`', '') + '.');
+    L.Add('');
+    L.Add('interface');
+    Entries:= LeafEntries(pStem, scIntf);
+    if Length(Entries) > 0 then
+    begin
+      L.Add('');
+      L.AddRange(FormatUses('', Entries, nil));
+    end;
+    L.AddRange(LeafDeclLines(pStem, Bodies));
     L.Add('');
     L.Add('implementation');
     if Bodies.Count > 0 then
     begin
-      Entries.Clear;
-      for var U in SectionEntries(P, scImpl) do
-        if not FMembers.ContainsKey(LowerCase(U.UnitName)) then Entries.Add(EntryText(P, U));
-      if Entries.Count > 0 then
+      Entries:= LeafEntries(pStem, scImpl);
+      if Length(Entries) > 0 then
       begin
         L.Add('');
-        L.AddRange(FormatUses('', Entries.ToArray, nil));
+        L.AddRange(FormatUses('', Entries, nil));
       end;
       for var R in Bodies do
       begin
@@ -2786,9 +2912,7 @@ begin
     L.Add('end.');
     Result:= L.ToArray;
   finally
-    Items.Free;
     Bodies.Free;
-    Entries.Free;
     L.Free;
   end;
 end;
@@ -2796,10 +2920,25 @@ end;
 procedure TCyclePlanner.RenderLeafUnits(pStep: Integer);
 begin
   EmitFmt('### Step %d: create the new units', [pStep]);
+  { E18 T4b: why a `<Source>.Untangle` that exists was passed over, and which
+    existing leaves receive declarations instead of a new unit }
+  for var D:= Low(TUntangleDecision) to High(TUntangleDecision) do
+    for var Stem in LeafStems(D) do
+      if FLeafInfo[Stem].Reason <> '' then EmitFmt('- Note: %s.', [FLeafInfo[Stem].Reason]);
+  for var Stem in LeafStems(udExtend) do
+    EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: what moves out of `%s` goes ' +
+      'into it. Do not create it again; the edit step lists the insert.', [FLeafName[Stem], FLeafPath[Stem],
+      UnitNameOfStem(Stem)]);
+  if Length(LeafStems(udCreate)) = 0 then
+  begin
+    Emit('No new unit is needed.');
+    Emit('');
+    Exit;
+  end;
   EmitFmt('Each new unit may use only RTL / library units and other new `*%s` units -- never a ' +
     'unit of this cycle (%s). Create each file with EXACTLY this text:', [CLeafSuffix, MemberNames]);
   Emit('');
-  for var Stem in LeafStems do
+  for var Stem in LeafStems(udCreate) do
   begin
     EmitFmt('#### `%s` -> `%s`', [FLeafName[Stem], FLeafPath[Stem]]);
     EmitBlock(CPascalFence, LeafUnitText(Stem));
@@ -2906,7 +3045,7 @@ begin
   No:= 0;
   { IDE-9 run 2 (2026-09-23): a cheap model followed the plan 4/4 but saved the
     NEW units with LF endings -- the plan never said how to save them. Say it. }
-  for var Stem in LeafStems do
+  for var Stem in LeafStems(udCreate) do
     Item(Format('Create `%s` with the exact text given for `%s`. Save it as plain ASCII with ' +
       'Windows CRLF line endings, like the existing units.', [FLeafPath[Stem], FLeafName[Stem]]));
   for var Fid in EditOrder do
@@ -3205,7 +3344,7 @@ begin
   try
     for var Id in FOrder do Items.Add(FItems[Id]);
     pPlan.Items:= Items.ToArray;
-    for var Stem in LeafStems do
+    for var Stem in LeafStems(udCreate) do
     begin
       var U:= Default(TNewUnit);
       U.UnitName:= FLeafName[Stem];

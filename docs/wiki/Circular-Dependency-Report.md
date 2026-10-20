@@ -107,9 +107,9 @@ Status: **interface coupling** -- units of this cycle use each other in their IN
 ### Step 1: what moves where
 1. `TDemoSession` -- **class with methods**, declared at `DemoSession.pas` lines 14-47; method bodies at `DemoSession.pas` lines 64-73, 75-80, 82-86, 88-95, 97-100.
    - Recipe: **extract a base class** and keep `TDemoSession` where it is. Why: its method bodies use `GDemoSessionCount`, `GDemoAuditCount`, `GDemoAuditTrail`, which live in units of this cycle; moving the class would mean moving those bodies (lines 64-73, 75-80, 82-86, 88-95, 97-100) AND everything they use.
-   - New class `TDemoSessionBase` in `DemoSession.Contracts` carries exactly what the units below use: `FId`, `FUser`, `Id`, `User`.
+   - New class `TDemoSessionBase` in `DemoSession.Untangle` carries exactly what the units below use: `FId`, `FUser`, `Id`, `User`.
 2. `TDemoLogLevel` -- **enum**, declared at `DemoLogger.pas` lines 14-15.
-   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoLogger.Contracts`.
+   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoLogger.Untangle`.
 
 ### Step 2: uses clauses -- keep, move or remove the old unit
 - `DemoConfig.pas` / `DemoLogger`: the interface no longer needs it; the implementation still does (`GDemoMinLevel` line 56, `DemoLog` line 58, `DemoLogLevelName` line 59, `GDemoLogCount` line 67) -> **move** it from the interface uses to the implementation uses.
@@ -128,7 +128,7 @@ Status: **interface coupling** -- units of this cycle use each other in their IN
 Applied literally (a script that only knows the playbook's own markup), Part A
 compiles and `cycles` prints the predicted three groups, the four-unit one now
 implementation-only; re-running `--plan` then prints Part B, which moves
-`TDemoSettings` + `GDemoSettings` into `DemoConfig.Contracts`, compiles, and
+`TDemoSettings` + `GDemoSettings` into `DemoConfig.Untangle`, compiles, and
 leaves only the two cycles the playbook refuses. The program's output is
 unchanged throughout.
 The full, unabridged report -- regenerated from the current engine and checked

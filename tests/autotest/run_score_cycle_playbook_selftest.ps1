@@ -12,7 +12,7 @@
   EXPECTED on an unedited copy:
     1-CYCLE  FAIL  -- the tree still has the INTERFACE coupling the plan removes
     2-BUILD  PASS  -- the demo compiles as shipped
-    3-CUT    FAIL  -- none of the three nominated *.Contracts units exists
+    3-CUT    FAIL  -- none of the three nominated *.Untangle units exists
     4-SCOPE  PASS  -- nothing changed, so nothing changed outside the report
   and an overall exit 1. The positive half (a model's edited tree scoring 4/4)
   needs a model and is recorded in

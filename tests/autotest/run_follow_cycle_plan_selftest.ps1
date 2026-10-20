@@ -67,14 +67,14 @@ try {
   $h1 = (Get-Hashes $S | ConvertTo-Json -Compress); $h2 = (Get-Hashes $S2 | ConvertTo-Json -Compress)
   $ro = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 1 -Root $S2 2>&1 | Out-String
   Check '-Root run on a second copy exits 0' ($LASTEXITCODE -eq 0) $ro
-  Check '-Root: copy2 got the 3 new files' ((@('DemoSession.Contracts.pas', 'DemoLogger.Contracts.pas', 'DemoAudit.Contracts.pas') | Where-Object { Test-Path (Join-Path $S2 $_) }).Count -eq 3)
+  Check '-Root: copy2 got the 3 new files' ((@('DemoSession.Untangle.pas', 'DemoLogger.Untangle.pas', 'DemoAudit.Untangle.pas') | Where-Object { Test-Path (Join-Path $S2 $_) }).Count -eq 3)
   Check '-Root: copy2 changed' ((Get-Hashes $S2 | ConvertTo-Json -Compress) -cne $h2)
   Check '-Root: the original copy is byte-unchanged' ((Get-Hashes $S | ConvertTo-Json -Compress) -ceq $h1)
   # POSITIVE CONTROL (checked after the Cycle 1 follow below): without -Root the plan edits `copy`, not copy3
   $S3 = Join-Path $WorkDir 'copy3'; Copy-Demo $S3
   $h3 = (Get-Hashes $S3 | ConvertTo-Json -Compress)
   # -Root with paths sharing no common directory is refused
-  $odd = ([IO.File]::ReadAllText($plan)) -replace '(?m)^(#### `DemoAudit\.Contracts` -> `)[^`]*(DemoAudit\.Contracts\.pas`)', '${1}D:\elsewhere\${2}'
+  $odd = ([IO.File]::ReadAllText($plan)) -replace '(?m)^(#### `DemoAudit\.Untangle` -> `)[^`]*(DemoAudit\.Untangle\.pas`)', '${1}D:\elsewhere\${2}'
   $oddPlan = Join-Path $WorkDir 'plan-odd.txt'; [IO.File]::WriteAllText($oddPlan, $odd, [Text.Encoding]::ASCII)
   $ro2 = & pwsh -NoProfile -File $Follow -PlanFile $oddPlan -Cycle 1 -Root $S3 2>&1 | Out-String
   Check '-Root with no common directory: exit 2 with REFUSE' ($LASTEXITCODE -eq 2 -and $ro2 -match 'REFUSE: -Root given but') $ro2

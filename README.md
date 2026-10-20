@@ -443,7 +443,7 @@ Per cycle it gives:
 * **uses decisions** -- per unit, whether the old cycle partner is kept, moved
   from the interface to the implementation uses, or removed (only when nothing
   else from it is used in that section);
-* **the new units** (`<Declaring>.Contracts.pas`) with their full text, and the
+* **the new units** (`<Declaring>.Untangle.pas`; an existing `<Declaring>.Untangle` that still uses no unit of the cycle is extended in place instead) with their full text, and the
   rule for their uses clause (never a unit of the cycle);
 * **every edit** to every file, `.dpr` and `.dproj` included, as current text +
   new text, listed bottom-up so line numbers stay valid;

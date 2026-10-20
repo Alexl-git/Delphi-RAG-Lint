@@ -86,24 +86,24 @@ After it, these units still form a cycle, but only through IMPLEMENTATION uses. 
 ### Step 1: what moves where
 1. `TDemoSession` -- **class with methods**, declared at `DemoSession.pas` lines 14-47; method bodies at `DemoSession.pas` lines 64-73, 75-80, 82-86, 88-95, 97-100.
    - Recipe: **extract a base class** and keep `TDemoSession` where it is. Why: its method bodies use `GDemoSessionCount`, `GDemoAuditCount`, `GDemoAuditTrail`, which live in units of this cycle; moving the class would mean moving those bodies (lines 64-73, 75-80, 82-86, 88-95, 97-100) AND everything they use.
-   - New class `TDemoSessionBase` in `DemoSession.Contracts` carries exactly what the units below use: `FId`, `FUser`, `Id`, `User`.
+   - New class `TDemoSessionBase` in `DemoSession.Untangle` carries exactly what the units below use: `FId`, `FUser`, `Id`, `User`.
    - `TDemoSession` stays in `DemoSession.pas` and becomes `TDemoSession = class(TDemoSessionBase)`; the members above are deleted from it.
    - Units that switch to `TDemoSessionBase` (the name is replaced on these lines): `DemoLogger.pas` lines 40, 53.
-   - Used by (each needs `DemoSession.Contracts` in the uses clause of that section; the edit step does it):
+   - Used by (each needs `DemoSession.Untangle` in the uses clause of that section; the edit step does it):
      - `DemoSession.pas` interface (first use: line 20)
      - `DemoLogger.pas` interface (first use: line 40)
      - `DemoLogger.pas` implementation (first use: line 53)
 2. `TDemoLogLevel` -- **enum**, declared at `DemoLogger.pas` lines 14-15.
-   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoLogger.Contracts`.
-   - Used by (each needs `DemoLogger.Contracts` in the uses clause of that section; the edit step does it):
+   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoLogger.Untangle`.
+   - Used by (each needs `DemoLogger.Untangle` in the uses clause of that section; the edit step does it):
      - `DemoLogger.pas` interface (first use: line 20)
      - `DemoLogger.pas` implementation (first use: line 46)
      - `DemoConfig.pas` interface (first use: line 23)
      - `DemoConfig.pas` implementation (first use: line 52)
      - `CircularDemo.dpr` program uses (first use: line 56)
 3. `TDemoAuditKind` -- **enum**, declared at `DemoAudit.pas` lines 23-24.
-   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoAudit.Contracts`.
-   - Used by (each needs `DemoAudit.Contracts` in the uses clause of that section; the edit step does it):
+   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoAudit.Untangle`.
+   - Used by (each needs `DemoAudit.Untangle` in the uses clause of that section; the edit step does it):
      - `DemoAudit.pas` interface (first use: line 45)
      - `DemoAudit.pas` implementation (first use: line 71)
      - `DemoSession.pas` interface (first use: line 35)
@@ -117,11 +117,11 @@ For each unit of the cycle that uses a unit whose declarations move. A unit can 
 - `DemoSession.pas` / `DemoAudit`: the interface no longer needs it; the implementation still does (`GDemoAuditCount` line 71, `GDemoAuditTrail` line 84) -> **move** it from the interface uses to the implementation uses.
 
 ### Step 3: create the new units
-Each new unit may use only RTL / library units and other new `*.Contracts` units -- never a unit of this cycle (`DemoAudit`, `DemoConfig`, `DemoLogger`, `DemoSession`). Create each file with EXACTLY this text:
+Each new unit may use only RTL / library units and other new `*.Untangle` units -- never a unit of this cycle (`DemoAudit`, `DemoConfig`, `DemoLogger`, `DemoSession`). Create each file with EXACTLY this text:
 
-#### `DemoSession.Contracts` -> `circular-demo\DemoSession.Contracts.pas`
+#### `DemoSession.Untangle` -> `circular-demo\DemoSession.Untangle.pas`
 ```pascal
-unit DemoSession.Contracts;
+unit DemoSession.Untangle;
 
 // Created by `drag-lint cycles --plan`: declarations moved here from DemoSession
 // to break a circular unit dependency. This unit may use only units OUTSIDE
@@ -151,11 +151,11 @@ implementation
 
 end.
 ```
-Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoSession.Contracts in 'DemoSession.Contracts.pas'`; the .dproj lists it as `<DCCReference Include="DemoSession.Contracts.pas"/>`.
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoSession.Untangle in 'DemoSession.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="DemoSession.Untangle.pas"/>`.
 
-#### `DemoLogger.Contracts` -> `circular-demo\DemoLogger.Contracts.pas`
+#### `DemoLogger.Untangle` -> `circular-demo\DemoLogger.Untangle.pas`
 ```pascal
-unit DemoLogger.Contracts;
+unit DemoLogger.Untangle;
 
 // Created by `drag-lint cycles --plan`: declarations moved here from DemoLogger
 // to break a circular unit dependency. This unit may use only units OUTSIDE
@@ -174,11 +174,11 @@ implementation
 
 end.
 ```
-Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoLogger.Contracts in 'DemoLogger.Contracts.pas'`; the .dproj lists it as `<DCCReference Include="DemoLogger.Contracts.pas"/>`.
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoLogger.Untangle in 'DemoLogger.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="DemoLogger.Untangle.pas"/>`.
 
-#### `DemoAudit.Contracts` -> `circular-demo\DemoAudit.Contracts.pas`
+#### `DemoAudit.Untangle` -> `circular-demo\DemoAudit.Untangle.pas`
 ```pascal
-unit DemoAudit.Contracts;
+unit DemoAudit.Untangle;
 
 // Created by `drag-lint cycles --plan`: declarations moved here from DemoAudit
 // to break a circular unit dependency. This unit may use only units OUTSIDE
@@ -198,7 +198,7 @@ implementation
 
 end.
 ```
-Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoAudit.Contracts in 'DemoAudit.Contracts.pas'`; the .dproj lists it as `<DCCReference Include="DemoAudit.Contracts.pas"/>`.
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoAudit.Untangle in 'DemoAudit.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="DemoAudit.Untangle.pas"/>`.
 
 ### Step 4: edit the existing files
 Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
@@ -238,8 +238,8 @@ E5. Replace line 11. Current text:
 ```
 New text:
 ```pascal
-  DemoSession.Contracts,
-  DemoLogger.Contracts;
+  DemoSession.Untangle,
+  DemoLogger.Untangle;
 ```
 
 #### `DemoConfig.pas`  (`circular-demo\DemoConfig.pas`)
@@ -255,7 +255,7 @@ E2. Replace line 11. Current text:
 ```
 New text:
 ```pascal
-  DemoLogger.Contracts;
+  DemoLogger.Untangle;
 ```
 
 #### `DemoAudit.pas`  (`circular-demo\DemoAudit.pas`)
@@ -271,7 +271,7 @@ E2. Replace line 20. Current text:
 New text:
 ```pascal
   System.Classes,
-  DemoAudit.Contracts;
+  DemoAudit.Untangle;
 ```
 
 #### `DemoSession.pas`  (`circular-demo\DemoSession.pas`)
@@ -307,8 +307,8 @@ E5. Replace line 11. Current text:
 ```
 New text:
 ```pascal
-  DemoSession.Contracts,
-  DemoAudit.Contracts;
+  DemoSession.Untangle,
+  DemoAudit.Untangle;
 ```
 
 #### `CircularDemo.dpr`  (`circular-demo\CircularDemo.dpr`)
@@ -319,30 +319,30 @@ E1. Replace line 39. Current text:
 New text:
 ```pascal
   DemoUIConnect in 'DemoUIConnect.pas',
-  DemoLogger.Contracts in 'DemoLogger.Contracts.pas',
-  DemoAudit.Contracts in 'DemoAudit.Contracts.pas',
-  DemoSession.Contracts in 'DemoSession.Contracts.pas';
+  DemoLogger.Untangle in 'DemoLogger.Untangle.pas',
+  DemoAudit.Untangle in 'DemoAudit.Untangle.pas',
+  DemoSession.Untangle in 'DemoSession.Untangle.pas';
 ```
 
 #### `CircularDemo.dproj`  (`circular-demo\CircularDemo.dproj`)
 E1. After line 81 (`<DCCReference Include="DemoLogger.pas"/>`), insert:
 ```xml
-        <DCCReference Include="DemoLogger.Contracts.pas"/>
+        <DCCReference Include="DemoLogger.Untangle.pas"/>
 ```
 E2. After line 80 (`<DCCReference Include="DemoSession.pas"/>`), insert:
 ```xml
-        <DCCReference Include="DemoSession.Contracts.pas"/>
+        <DCCReference Include="DemoSession.Untangle.pas"/>
 ```
 E3. After line 79 (`<DCCReference Include="DemoAudit.pas"/>`), insert:
 ```xml
-        <DCCReference Include="DemoAudit.Contracts.pas"/>
+        <DCCReference Include="DemoAudit.Untangle.pas"/>
 ```
 
 ### Checklist
 Tick each box in order. Do not skip the compile.
-1. [ ] Create `circular-demo\DemoSession.Contracts.pas` with the exact text given for `DemoSession.Contracts`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
-2. [ ] Create `circular-demo\DemoLogger.Contracts.pas` with the exact text given for `DemoLogger.Contracts`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
-3. [ ] Create `circular-demo\DemoAudit.Contracts.pas` with the exact text given for `DemoAudit.Contracts`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+1. [ ] Create `circular-demo\DemoSession.Untangle.pas` with the exact text given for `DemoSession.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+2. [ ] Create `circular-demo\DemoLogger.Untangle.pas` with the exact text given for `DemoLogger.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+3. [ ] Create `circular-demo\DemoAudit.Untangle.pas` with the exact text given for `DemoAudit.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
 4. [ ] Apply every edit listed for `DemoLogger.pas`, in the order listed.
 5. [ ] Apply every edit listed for `DemoConfig.pas`, in the order listed.
 6. [ ] Apply every edit listed for `DemoAudit.pas`, in the order listed.
@@ -480,7 +480,7 @@ cannot handle, because nothing on any edge is a plain declaration:
 | Cycle | Cheap edge | What is on it | Recipe (not in the engine today) |
 |---|---|---|---|
 | 3: `DemoBlueprint -> DemoBlueprint.ViewModel -> DemoControlPlan -> DemoBlueprint` | `DemoBlueprint -> DemoBlueprint.ViewModel` | ONE routine call, `DemoBlueprintViewModelCreate(FFolderId)` at `DemoBlueprint.pas:74`. Its signature uses only `Integer` and `IDemoBlueprintViewModel`, declared in the leaf `DemoBlueprint.Interfaces` that both units already use in their interface section. | **Routine-call inversion**: a procedural type mirroring the routine's signature, and a variable of it, in that leaf; assigned in `DemoBlueprint.ViewModel`'s `initialization`; `DemoBlueprint` calls the variable instead of the routine and drops the uses entry. |
-| 2: `DemoUIConnect <-> DemoGagePort` | `DemoUIConnect -> DemoGagePort` | The class `TDemoGagePort` as an `is` / `as` operand (4 sites) and READS of two members, `Log` and `LastGage`. No construction, no write, no class method. | **Member hand-over through an extracted interface**: a new leaf `DemoGagePort.Contracts` declaring `IDemoGagePortSurface` with the two members as read-only properties; `TDemoGagePort` implements it with two one-line getters; in `DemoUIConnect` `is` becomes `Supports(...)`, `as TDemoGagePort` becomes `as IDemoGagePortSurface`, and the uses entry switches to the leaf. |
+| 2: `DemoUIConnect <-> DemoGagePort` | `DemoUIConnect -> DemoGagePort` | The class `TDemoGagePort` as an `is` / `as` operand (4 sites) and READS of two members, `Log` and `LastGage`. No construction, no write, no class method. | **Member hand-over through an extracted interface**: a new leaf `DemoGagePort.Untangle` declaring `IDemoGagePortSurface` with the two members as read-only properties; `TDemoGagePort` implements it with two one-line getters; in `DemoUIConnect` `is` becomes `Supports(...)`, `as TDemoGagePort` becomes `as IDemoGagePortSurface`, and the uses entry switches to the leaf. |
 
 The other edges of each cycle construct a class or write a global, which no mechanical recipe
 covers -- but a cycle needs only ONE edge cut.
