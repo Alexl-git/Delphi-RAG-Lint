@@ -1,0 +1,54 @@
+<!--product
+id: yadf
+title: YADF
+summary: One formatter for Delphi source: command line, live settings editor and RAD Studio IDE, from the same settings files.
+image: share.png
+-->
+<header class="masthead">
+  <span class="eyebrow">Products &middot; YADF</span>
+  <h1>One formatter. Command line, settings editor and IDE.</h1>
+  <p class="standfirst">YADF (Yet Another Delphi Formatter) reformats .pas, .dpr and .inc source by a rule set you configure: line-length budgeting, structural re-indentation, capitalization and column alignment.</p>
+  <p>One engine drives the command-line tool, a live-preview settings editor and a Delphi IDE package, from the same settings files. Formatting is idempotent: formatting formatted code changes nothing. A content guard checks every result against its input, and malformed source does not crash it.</p>
+  <div class="cta"><a class="primary" href="https://github.com/Alexl-git/YADF/releases/latest">Download YADF</a><a href="https://github.com/Alexl-git/YADF#features">Full feature list &rarr;</a><a href="https://github.com/Alexl-git/YADF/blob/main/CHANGELOG.md">Changelog</a></div>
+  <div class="byline"><span>Written in Delphi 13</span><span>Open source on GitHub</span></div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="sec-num">01 &mdash; How it works</span><h2>Set it once, format everywhere</h2></div>
+  <div class="howit">
+    <div><b>1. Tune your style</b>In YADFSetup or on the IDE settings page, watching the result change live.</div>
+    <div><b>2. Save it as a profile</b>Keep any number of profiles; assign up to two to the IDE shortcuts. The CLI uses the same files.</div>
+    <div><b>3. Format anywhere</b>A buffer in the IDE, or a whole project from the command line, with the same result.</div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">02 &mdash; What it does</span><h2>What it does</h2></div>
+  <div class="tiles">
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Format in the IDE</h3><p>Ctrl+Shift+Alt+F formats the current buffer with your F profile, Ctrl+Shift+Alt+R with your R profile. No restart.</p></div><a class="more" href="https://github.com/Alexl-git/YADF#features">More &rarr;</a></div>
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Whole projects from the CLI</h3><p>Files, folders, or a .dpr/.dproj in one run.</p></div><a class="more" href="https://github.com/Alexl-git/YADF#features">More &rarr;</a></div>
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Line length you choose</h3><p>Full reflow: joins lines that fit, breaks lines that overflow, one item per line in uses clauses and argument lists.</p></div><a class="more" href="https://github.com/Alexl-git/YADF#features">More &rarr;</a></div>
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Smart column alignment</h3><p>Lines up <code>:</code> in declarations, <code>=</code> in const blocks, <code>:=</code> and trailing comments, keeping columns tight.</p></div><a class="more" href="https://github.com/Alexl-git/YADF#features">More &rarr;</a></div>
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Structural re-indent</h3><p>Sections, classes and records, begin/end, case/try, loop bodies, else-if chains.</p></div><a class="more" href="https://github.com/Alexl-git/YADF#features">More &rarr;</a></div>
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Consistent capitalization</h3><p>Lowercase keywords, upper-case hex digits and directive names, consistent identifier casing.</p></div><a class="more" href="https://github.com/Alexl-git/YADF#features">More &rarr;</a></div>
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Safe by design</h3><p>Idempotent output, a content guard on every result, optional backups, <code>--check</code> round-trip, fixed exit codes; the original is never lost if a save fails.</p></div><a class="more" href="https://github.com/Alexl-git/YADF#features">More &rarr;</a></div>
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Live settings editor</h3><p>YADFSetup: Settings | Source | Result, re-formatting as you change a setting.</p></div><a class="more" href="https://github.com/Alexl-git/YADF#features">More &rarr;</a></div>
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Profiles and a profile catalog</h3><p>Two active profiles: F for the main shortcut and the CLI, R for a second shortcut. Keep any number of saved profiles and assign them with Set F / Set R on the IDE Options page (Tools &gt; Options &gt; Third Party &gt; YADF), with a live before/after preview. Changes apply on the next format, no restart.</p></div><a class="more" href="https://github.com/Alexl-git/YADF#features">More &rarr;</a></div>
+    <div class="tile"><div class="shot">screenshot coming</div><div class="tb"><h3>Delphi 10 downgrade (experimental)</h3><p>Moves inline var declarations into a classic var block so code from 11-13 builds on 10.2.3.</p></div><a class="more" href="https://github.com/Alexl-git/YADF#features">More &rarr;</a></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">03 &mdash; Where it works</span><h2>Embarcadero RAD Studio and the command line</h2></div>
+  <div class="where">
+    <div><b>RAD Studio IDE</b><br>YADFOT plugin, Win32 and Win64 packages; Help &gt; Tools &gt; Format Current Buffer.</div>
+    <div><b>Command line</b><br>YADF.exe, Win64, no Delphi installation needed.</div>
+    <div><b>Settings editor</b><br>YADFSetup.exe, Win64.</div>
+    <div><b>Not yet</b><br>VS Code and other editors; Linux, macOS.</div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="sec-num">04 &mdash; Built for our own work</span><h2>Formats Micronite every day</h2></div>
+  <p>Like DL, YADF grew out of the development of <a href="https://www.htrmicronite.com">HTR Micronite</a>, our quality and production-control software for manufacturers.</p>
+</section>

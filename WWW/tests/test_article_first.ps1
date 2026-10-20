@@ -25,7 +25,7 @@ foreach ($c in $classes) {
 }
 
 $out = New-TestDir
-& (Join-Path $PSScriptRoot '..\build.ps1') -Out $out -ProductsRoot "$PSScriptRoot\fixtures\products" | Out-Null
+& (Join-Path $PSScriptRoot '..\build.ps1') -Out $out | Out-Null
 Assert-Equal 0 $LASTEXITCODE 'build.ps1 exit code'
 . (Join-Path $PSScriptRoot '..\lib\Config.ps1')
 . (Join-Path $PSScriptRoot '..\lib\Check.ps1')
