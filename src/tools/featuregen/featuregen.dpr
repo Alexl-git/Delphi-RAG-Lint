@@ -1,7 +1,7 @@
 program featuregen;
 
 { featuregen: owns the drag-lint feature registry (features\) and generates docs
-  from it. Verbs so far: build [--site | --all], import-help. Exit 0 ok, 1 changed (check mode) or failed,
+  from it. Verbs so far: build [--site | --all], import-help, check. Exit 0 ok, 1 changed (check mode) or failed,
   2 usage. }
 
 {$APPTYPE CONSOLE}
@@ -19,6 +19,7 @@ uses
   , FeatureGen.Site in 'FeatureGen.Site.pas'
   , FeatureGen.HelpImport in 'FeatureGen.HelpImport.pas'
   , FeatureGen.Wiki in 'FeatureGen.Wiki.pas'
+  , FeatureGen.Check in 'FeatureGen.Check.pas'
   ;
 
 procedure PrintUsage;
@@ -33,6 +34,10 @@ begin
   Writeln('  import-help [--dry-run] [--repo <dir>] [--engine <exe>]');
   Writeln('      seeds usage / flags / pitfalls of cli surfaces that lack them from the engine --help;');
   Writeln('      never overwrites a present field and never writes verified.');
+  Writeln('  check [--level wellformed|full] [--repo <dir>] [--engine <exe>]');
+  Writeln('      the registry guard''s checks A-E; wellformed = check A only (no engine);');
+  Writeln('      full (default) adds the live surface (B, C), generated outputs (D) and staleness notes (E).');
+  Writeln('      exits 1 when any check fails.');
 end;
 
 { Walks up from pStart to the first dir holding features\entries. }
@@ -251,6 +256,89 @@ begin
   end;
 end;
 
+function CheckCommand(pArgs: TArray<string>): Integer;
+var
+  lRepo, lEngine, lArg, lLevelText, lNote: string;
+  lI: Integer;
+  lLevel: TCheckLevel;
+  lFmt: TSiteFormat;
+  lFindings: TArray<TFinding>;
+  lF: TFinding;
+  lNotes: TArray<string>;
+begin
+  lRepo := '';
+  lEngine := '';
+  lLevelText := 'full';
+  lI := 0;
+  while lI < Length(pArgs) do
+  begin
+    lArg := pArgs[lI];
+    if (lArg = '--repo') or (lArg = '--engine') or (lArg = '--level') then
+    begin
+      Inc(lI);
+      if lI >= Length(pArgs) then
+      begin
+        Writeln('featuregen: ', lArg, ' needs a value');
+        Exit(2);
+      end;
+      if lArg = '--repo' then
+        lRepo := pArgs[lI]
+      else if lArg = '--engine' then
+        lEngine := pArgs[lI]
+      else
+        lLevelText := LowerCase(pArgs[lI]);
+    end
+    else
+    begin
+      Writeln('featuregen: unknown option ', lArg);
+      Exit(2);
+    end;
+    Inc(lI);
+  end;
+  if lLevelText = 'wellformed' then
+    lLevel := clWellFormed
+  else if lLevelText = 'full' then
+    lLevel := clFull
+  else
+  begin
+    Writeln('featuregen: --level must be wellformed or full');
+    Exit(2);
+  end;
+  Result := 1;
+  try
+    if lRepo = '' then
+      lRepo := FindRepo(GetCurrentDir);
+    if lRepo = '' then
+      lRepo := FindRepo(ExtractFilePath(ParamStr(0)));
+    if lRepo = '' then
+      raise EFeatureGen.Create('no repo found (no features\entries above the current dir); pass --repo');
+    lRepo := TPath.GetFullPath(lRepo);
+    if (lEngine = '') and (lLevel = clFull) then
+    begin
+      lFmt := LoadSiteFormat(lRepo);
+      lEngine := TPath.Combine(lRepo, lFmt.Engine);
+    end;
+    lFindings := RunCheckCommand(lRepo, lEngine, lLevel, lNotes);
+    for lNote in lNotes do
+      Writeln('  [NOTE] ', lNote);
+    for lF in lFindings do
+      Writeln(FindingText(lF));
+    if Length(lFindings) > 0 then
+      Writeln(Format('check: %d failure(s)', [Length(lFindings)]))
+    else
+    begin
+      Writeln(Format('check (%s): PASS', [lLevelText]));
+      Result := 0;
+    end;
+  except
+    on E: Exception do
+    begin
+      Writeln('featuregen: ', E.Message);
+      Result := 1;
+    end;
+  end;
+end;
+
 var
   lArgs: TArray<string>;
   lI: Integer;
@@ -268,6 +356,13 @@ begin
     for lI := 2 to ParamCount do
       lArgs[lI - 2] := ParamStr(lI);
     ExitCode := ImportHelpCommand(lArgs);
+  end
+  else if (ParamCount >= 1) and (ParamStr(1) = 'check') then
+  begin
+    SetLength(lArgs, ParamCount - 1);
+    for lI := 2 to ParamCount do
+      lArgs[lI - 2] := ParamStr(lI);
+    ExitCode := CheckCommand(lArgs);
   end
   else
   begin

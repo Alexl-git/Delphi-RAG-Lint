@@ -19,7 +19,9 @@ uses
   , FeatureGen.Site in '..\FeatureGen.Site.pas'
   , FeatureGen.HelpImport in '..\FeatureGen.HelpImport.pas'
   , FeatureGen.Wiki in '..\FeatureGen.Wiki.pas'
+  , FeatureGen.Check in '..\FeatureGen.Check.pas'
   , System.Generics.Collections
+  , System.Generics.Defaults
   , System.RegularExpressions
   ;
 
@@ -1363,8 +1365,482 @@ begin
   Check('Wiki.MarkedBlockOutOfOrderRaises', Pos('markers absent', lMsg) > 0, lMsg);
 end;
 
+{ ---- Task 8: live harvest + checks A-E. As in Task 7, the comparison
+  (CompareFindingSets) is separate from how the PowerShell reference set was produced
+  (ProducePowerShellCheck / ProducePowerShellLive), so the reference can become frozen
+  golden files without touching the comparison. ---- }
+
+// Reference producer: Invoke-RegistryCheck with the engine set to pEngine; writes a JSON
+// object with Failures and Notes string arrays to pOutFile. Returns the pwsh stdout.
+function ProducePowerShellCheck(const pRepo, pEngine, pLevel, pOutFile: string): string;
 var
-  lRepo: string;
+  lScript: string;
+begin
+  lScript := TPath.Combine(SCRATCH, 'run-ps-check.ps1');
+  ForceDirectories(SCRATCH);
+  TFile.WriteAllText(lScript,
+    'param([string]$Repo, [string]$Engine, [string]$Level, [string]$OutFile)'#13#10
+    + '$ErrorActionPreference = ''Stop'''#13#10
+    + 'Import-Module (Join-Path $Repo ''tools\FeatureRegistry.psm1'') -Force'#13#10
+    + '$paths = Get-RegistryPaths -Repo $Repo'#13#10
+    + '$paths.Exe = $Engine'#13#10
+    + '$res = Invoke-RegistryCheck -Paths $paths -Level $Level'#13#10
+    + '$o = [ordered]@{ Failures = [string[]]@($res.Failures); Notes = [string[]]@($res.Notes) }'#13#10
+    + '[IO.File]::WriteAllText($OutFile, ($o | ConvertTo-Json -Depth 4), [Text.Encoding]::UTF8)'#13#10
+    + '"ps-check: $($res.Failures.Count) failure(s), $($res.Notes.Count) note(s)"'#13#10, TEncoding.ASCII);
+  Result := RunCapture(PwshExe, '-NoProfile -ExecutionPolicy Bypass -File "' + lScript + '" -Repo "' + pRepo
+    + '" -Engine "' + pEngine + '" -Level ' + pLevel + ' -OutFile "' + pOutFile + '"');
+end;
+
+{ Reference producer: Get-LiveSurface, flattened to "kind<TAB>value" lines in pOutFile. }
+function ProducePowerShellLive(const pRepo, pEngine, pOutFile: string): string;
+var
+  lScript: string;
+begin
+  lScript := TPath.Combine(SCRATCH, 'run-ps-live.ps1');
+  ForceDirectories(SCRATCH);
+  TFile.WriteAllText(lScript,
+    'param([string]$Repo, [string]$Engine, [string]$OutFile)'#13#10
+    + '$ErrorActionPreference = ''Stop'''#13#10
+    + 'Import-Module (Join-Path $Repo ''tools\FeatureRegistry.psm1'') -Force'#13#10
+    + '$paths = Get-RegistryPaths -Repo $Repo'#13#10
+    + '$paths.Exe = $Engine'#13#10
+    + '$l = Get-LiveSurface -Paths $paths'#13#10
+    + '$o = New-Object System.Collections.Generic.List[string]'#13#10
+    + 'foreach ($x in $l.HelpVerbs) { $o.Add("help`t$x") }'#13#10
+    + 'foreach ($x in $l.DispatchVerbs) { $o.Add("dispatch`t$x") }'#13#10
+    + 'foreach ($v in $l.SubMap.VerbSubs.Keys) { foreach ($s in $l.SubMap.VerbSubs[$v]) { $o.Add("sub`t$v $s") } }'#13#10
+    + 'foreach ($x in $l.Captions) { $o.Add("caption`t$x") }'#13#10
+    + 'foreach ($x in $l.DialogButtons) { $o.Add("dialog`t$x") }'#13#10
+    + 'foreach ($x in $l.AboutButtons) { $o.Add("about`t$x") }'#13#10
+    + 'foreach ($h in $l.ContextCaptions.get_Keys()) { foreach ($c in $l.ContextCaptions[$h]) { $o.Add("context`t$h|$c") } }'#13#10
+    + 'foreach ($x in $l.McpTools) { $o.Add("mcp`t$x") }'#13#10
+    + 'foreach ($x in $l.McpDispatch) { $o.Add("mcp-dispatch`t$x") }'#13#10
+    + 'foreach ($q in $l.ReportQuestions) { $o.Add("question`t$($q.Id)|$($q.Caption)|$($q.Kind)") }'#13#10
+    + '$o.Add("question-count`t$($l.ReportQuestionCount)")'#13#10
+    + 'foreach ($k in $l.GroupCaptions.Keys) { $o.Add("group-caption`t$k|$($l.GroupCaptions[$k])") }'#13#10
+    + 'foreach ($x in $l.ChartValidateSet) { $o.Add("validateset`t$x") }'#13#10
+    + 'foreach ($x in $l.EmitterFiles) { $o.Add("emitter`t$x") }'#13#10
+    + 'foreach ($x in $l.PackExes) { $o.Add("pack`t$x") }'#13#10
+    + '$o.Add("rules-total`t$($l.RuleCatalog.summary.total)")'#13#10
+    + '$o.Add("version`t$($l.Versions.Product)|$($l.Versions.Extractor)|$($l.Versions.Resolver)|$($l.Versions.Schema)")'#13#10
+    + '[IO.File]::WriteAllLines($OutFile, $o, [Text.Encoding]::UTF8)'#13#10
+    + '"ps-live: $($o.Count) line(s)"'#13#10, TEncoding.ASCII);
+  Result := RunCapture(PwshExe, '-NoProfile -ExecutionPolicy Bypass -File "' + lScript + '" -Repo "' + pRepo
+    + '" -Engine "' + pEngine + '" -OutFile "' + pOutFile + '"');
+end;
+
+{ The Delphi harvest in the same "kind<TAB>value" shape as ProducePowerShellLive. }
+function LiveLines(const pLive: TLiveSurface): TArray<string>;
+var
+  lList: TList<string>;
+  lS, lV: string;
+  lQ: TReportQuestion;
+  lK: string;
+begin
+  lList := TList<string>.Create;
+  try
+    for lS in pLive.HelpVerbs do lList.Add('help'#9 + lS);
+    for lS in pLive.DispatchVerbs do lList.Add('dispatch'#9 + lS);
+    for lV in pLive.SubVerbs do
+      for lS in pLive.SubMap[lV] do
+        lList.Add('sub'#9 + lV + ' ' + lS);
+    for lS in pLive.Captions do lList.Add('caption'#9 + lS);
+    for lS in pLive.DialogButtons do lList.Add('dialog'#9 + lS);
+    for lS in pLive.AboutButtons do lList.Add('about'#9 + lS);
+    for lV in pLive.ContextHosts do
+      for lS in pLive.ContextCaptions[lV] do
+        lList.Add('context'#9 + lV + '|' + lS);
+    for lS in pLive.McpTools do lList.Add('mcp'#9 + lS);
+    for lS in pLive.McpDispatch do lList.Add('mcp-dispatch'#9 + lS);
+    for lQ in pLive.ReportQuestions do lList.Add('question'#9 + lQ.Id + '|' + lQ.Caption + '|' + lQ.Kind);
+    lList.Add('question-count'#9 + IntToStr(pLive.ReportQuestionCount));
+    for lK in pLive.GroupCaptions.Keys do lList.Add('group-caption'#9 + lK + '|' + pLive.GroupCaptions[lK]);
+    for lS in pLive.ChartValidateSet do lList.Add('validateset'#9 + lS);
+    for lS in pLive.EmitterFiles do lList.Add('emitter'#9 + lS);
+    for lS in pLive.PackExes do lList.Add('pack'#9 + lS);
+    lList.Add('rules-total'#9 + TJSONObject(TJSONObject(pLive.RuleCatalog).GetValue('summary')).GetValue('total').Value);
+    lList.Add('version'#9 + pLive.ProductVersion + '|' + pLive.ExtractorVersion + '|' + pLive.ResolverVersion + '|' + pLive.SchemaVersion);
+    Result := lList.ToArray;
+  finally
+    lList.Free;
+  end;
+end;
+
+{ Set comparison (ordinal, order ignored, duplicates kept): items only in pExpected and only in pActual. }
+procedure CompareFindingSets(const pExpected, pActual: TArray<string>; out pMissing, pExtra: TArray<string>);
+var
+  lA, lB: TList<string>;
+  lS: string;
+  lI: Integer;
+begin
+  lA := TList<string>.Create;
+  lB := TList<string>.Create(pActual);
+  try
+    for lS in pExpected do
+    begin
+      lI := lB.IndexOf(lS);
+      if lI >= 0 then
+        lB.Delete(lI)
+      else
+        lA.Add(lS);
+    end;
+    pMissing := lA.ToArray;
+    pExtra := lB.ToArray;
+  finally
+    lB.Free;
+    lA.Free;
+  end;
+end;
+
+function KindCounts(const pLines: TArray<string>): string;
+var
+  lCounts: TDictionary<string, Integer>;
+  lS, lK: string;
+  lKeys: TArray<string>;
+begin
+  lCounts := TDictionary<string, Integer>.Create;
+  try
+    for lS in pLines do
+    begin
+      lK := lS.Split([#9])[0];
+      if lCounts.ContainsKey(lK) then
+        lCounts[lK] := lCounts[lK] + 1
+      else
+        lCounts.Add(lK, 1);
+    end;
+    lKeys := lCounts.Keys.ToArray;
+    TArray.Sort<string>(lKeys);
+    Result := '';
+    for lK in lKeys do
+      Result := Result + lK + '=' + IntToStr(lCounts[lK]) + ' ';
+  finally
+    lCounts.Free;
+  end;
+end;
+
+procedure TestCompareFindingSetsPositiveControl;
+var
+  lMissing, lExtra: TArray<string>;
+begin
+  CompareFindingSets(['A: x', 'B: y', 'B: y'], ['B: y', 'C: z', 'A: x'], lMissing, lExtra);
+  Check('Check.CompareFindingSetsCatchesDifferences', (Length(lMissing) = 1) and (lMissing[0] = 'B: y')
+    and (Length(lExtra) = 1) and (lExtra[0] = 'C: z'), string.Join(' | ', lMissing) + ' // ' + string.Join(' | ', lExtra));
+end;
+
+var
+  GLive: TLiveSurface = nil;
+
+function SharedLive(const pRepo: string): TLiveSurface;
+begin
+  if GLive = nil then
+  begin
+    GLive := TLiveSurface.Create;
+    GLive.Harvest(pRepo, MAIN_ENGINE);
+  end;
+  Result := GLive;
+end;
+
+procedure TestLiveHarvestParity(const pRepo: string);
+var
+  lFile, lPs: string;
+  lPsLines, lMine, lMissing, lExtra: TArray<string>;
+  lLive: TLiveSurface;
+  lMsg: string;
+begin
+  lFile := TPath.Combine(FreshDir('live-parity'), 'ps-live.txt');
+  lPs := ProducePowerShellLive(pRepo, MAIN_ENGINE, lFile);
+  lMsg := '';
+  lMine := nil;
+  try
+    lLive := SharedLive(pRepo);
+    lMine := LiveLines(lLive);
+  except
+    on E: Exception do
+      lMsg := E.ClassName + ': ' + E.Message;
+  end;
+  lPsLines := nil;
+  if TFile.Exists(lFile) then
+    lPsLines := TFile.ReadAllLines(lFile, TEncoding.UTF8);
+  CompareFindingSets(lPsLines, lMine, lMissing, lExtra);
+  Writeln('INFO live harvest (Delphi): ', KindCounts(lMine));
+  Check('Live.HarvestEqualsPowerShell', (lMsg = '') and (Length(lPsLines) > 100) and (Length(lMissing) = 0) and (Length(lExtra) = 0),
+    lMsg + ' [' + lPs.Trim + '] missing: ' + string.Join(' | ', Copy(lMissing, 0, 8)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 8)));
+end;
+
+function ReadPsCheck(const pFile: string; out pNotes: TArray<string>): TArray<string>;
+var
+  lV: TJSONValue;
+  lA: TJSONValue;
+  i: Integer;
+begin
+  Result := nil;
+  pNotes := nil;
+  if not TFile.Exists(pFile) then
+    Exit;
+  lV := TJSONObject.ParseJSONValue(TFile.ReadAllText(pFile, TEncoding.UTF8));
+  try
+    lA := TJSONObject(lV).GetValue('Failures');
+    if lA is TJSONArray then
+      for i := 0 to TJSONArray(lA).Count - 1 do
+        Result := Result + [TJSONArray(lA).Items[i].Value];
+    lA := TJSONObject(lV).GetValue('Notes');
+    if lA is TJSONArray then
+      for i := 0 to TJSONArray(lA).Count - 1 do
+        pNotes := pNotes + [TJSONArray(lA).Items[i].Value];
+  finally
+    lV.Free;
+  end;
+end;
+
+const
+  // The one finding class featuregen reports and the PowerShell guard cannot
+  // (spec criterion 5: an unregistered MCP tool fails). Kept OUT of the set
+  // comparison by name, and counted, so it can never hide another difference.
+  DELPHI_ONLY_PREFIX = 'B: every MCP tool is registered -- ';
+
+function WithoutDelphiOnly(const pItems: TArray<string>; out pDropped: Integer): TArray<string>;
+var
+  lS: string;
+begin
+  Result := nil;
+  pDropped := 0;
+  for lS in pItems do
+    if lS.StartsWith(DELPHI_ONLY_PREFIX) then
+      Inc(pDropped)
+    else
+      Result := Result + [lS];
+end;
+
+{ pMinFindings: the PowerShell set must hold at least this many failures (a seeded
+  repo); the Delphi-only class must hold exactly pDelphiOnly (-1 = any). }
+procedure TestCheckParity(const pRepo, pLevelName: string; pLevel: TCheckLevel; const pName: string = '';
+  pMinFindings: Integer = 0; pDelphiOnly: Integer = -1);
+var
+  lFile, lPs, lMsg, lLine, lName: string;
+  lPsFail, lPsNotes, lNotes, lMine, lCompared, lMissing, lExtra, lNMissing, lNExtra: TArray<string>;
+  lFindings: TArray<TFinding>;
+  lF: TFinding;
+  lDropped: Integer;
+begin
+  lName := (if pName <> '' then pName else pLevelName);
+  lFile := TPath.Combine(FreshDir('check-parity-' + lName), 'ps-check.json');
+  lPs := ProducePowerShellCheck(pRepo, MAIN_ENGINE, pLevelName, lFile);
+  lPsFail := ReadPsCheck(lFile, lPsNotes);
+  lMsg := '';
+  lMine := nil;
+  lNotes := nil;
+  try
+    lFindings := RunCheckCommand(pRepo, MAIN_ENGINE, pLevel, lNotes);
+    for lF in lFindings do
+      lMine := lMine + [FindingText(lF)];
+  except
+    on E: Exception do
+      lMsg := E.ClassName + ': ' + E.Message;
+  end;
+  lCompared := WithoutDelphiOnly(lMine, lDropped);
+  CompareFindingSets(lPsFail, lCompared, lMissing, lExtra);
+  CompareFindingSets(lPsNotes, lNotes, lNMissing, lNExtra);
+  Writeln('INFO check ', lName, ': PowerShell ', Length(lPsFail), ' failure(s) / ', Length(lPsNotes), ' note(s); featuregen ',
+    Length(lMine), ' (', lDropped, ' Delphi-only MCP) / ', Length(lNotes));
+  for lLine in lMine do
+    Writeln('INFO   finding: ', lLine.Split([#10])[0]);
+  for lLine in lNotes do
+    Writeln('INFO   note: ', lLine);
+  Check('Check.ParityWithPowerShell.' + lName, (lMsg = '') and TFile.Exists(lFile) and (Length(lPsFail) >= pMinFindings)
+    and ((pDelphiOnly < 0) or (lDropped = pDelphiOnly))
+    and (Length(lMissing) = 0) and (Length(lExtra) = 0) and (Length(lNMissing) = 0) and (Length(lNExtra) = 0),
+    lMsg + ' [' + lPs.Trim + '] missing: ' + string.Join(' | ', Copy(lMissing, 0, 5)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 5))
+    + ' // notes missing: ' + string.Join(' | ', lNMissing) + ' // notes extra: ' + string.Join(' | ', lNExtra));
+end;
+
+procedure CopyFileTo(const pRepo, pDst, pRel: string);
+begin
+  ForceDirectories(ExtractFilePath(TPath.Combine(pDst, pRel)));
+  TFile.Copy(TPath.Combine(pRepo, pRel), TPath.Combine(pDst, pRel), True);
+end;
+
+procedure ReplaceInFile(const pFile, pOld, pNew: string);
+var
+  lT: string;
+begin
+  lT := ReadBytesText(pFile);
+  if Pos(pOld, lT) = 0 then
+    raise Exception.CreateFmt('seed anchor not found in %s: %s', [pFile, pOld]);
+  TFile.WriteAllText(pFile, lT.Replace(pOld, pNew), TEncoding.ASCII);
+end;
+
+{ A scratch copy of everything the full check reads, with seeded faults, so the
+  parity comparison runs on a NON-EMPTY PowerShell set (the real repo has none). }
+function SeededRepo(const pRepo: string): string;
+var
+  lDst, lRel: string;
+begin
+  lDst := FreshDir('seeded-repo');
+  for lRel in ['features', 'docs\wiki', 'charts\src', 'tests\autotest\lib'] do
+    TDirectory.Copy(TPath.Combine(pRepo, lRel), TPath.Combine(lDst, lRel));
+  for lRel in ['README.md', 'CHANGELOG.md', 'docs\AI-USAGE.md', 'tools\FeatureRegistry.psm1', 'build\pack-lint-release.ps1',
+    'tests\autotest\run_docs_sync_guard.ps1',
+    'src\cli\DRagLint.CLI.pas', 'src\mcp\DRagLint.MCP.Server.pas', 'src\core\DRagLint.Core.Model.pas',
+    'src\storage\DRagLint.Storage.Schema.pas', 'src\delphi-plugin\DragLint.Plugin.Editor.pas',
+    'src\delphi-plugin\DragLint.Plugin.AboutForm.pas', 'src\delphi-plugin\DragLint.Plugin.ReportText.pas',
+    'src\delphi-plugin\DragLint.Plugin.StructureForm.pas', 'src\delphi-plugin\DragLint.Plugin.ProjectMenu.pas'] do
+    CopyFileTo(pRepo, lDst, lRel);
+  // A: summary period, unknown key (also non-canonical)
+  ReplaceInFile(TPath.Combine(lDst, 'features\entries\ask.json'), '"audience": "both"', '"audience": "both", "zzKey": "x"');
+  // C: dangling cli verb, mcp tool and menu leaf; A: since not a CHANGELOG version
+  TFile.WriteAllText(TPath.Combine(lDst, 'features\entries\zz-dangling.json'),
+    '{'#13#10'  "id": "zz-dangling",'#13#10'  "title": "Dangling probe",'#13#10'  "group": "maintenance",'#13#10
+    + '  "owner": "CONVERTER",'#13#10'  "status": "shipped",'#13#10'  "since": "9.9.9",'#13#10
+    + '  "summary": "A probe whose surfaces are all gone.",'#13#10'  "intro": "Probe.",'#13#10'  "wikiPage": "Hom",'#13#10
+    + '  "surfaces": [ { "type": "cli", "verb": "zz-gone" }, { "type": "mcp", "tool": "zz_gone" }, { "type": "ide-menu", "path": "drag-lint > Zz Gone Away" } ],'#13#10
+    + '  "audience": "both",'#13#10'  "related": ["ask", "zz-nope"],'#13#10
+    + '  "lastVerified": { "date": "2026-01-01", "by": "probe", "build": "9.9.9" }'#13#10'}'#13#10, TEncoding.ASCII);
+  // B: a --help verb loses its entry (and A: the seed backlog names a missing entry)
+  TFile.Delete(TPath.Combine(lDst, 'features\entries\outline.json'));
+  // B: a stale caption exemption
+  ReplaceInFile(TPath.Combine(lDst, 'features\exemptions.json'), '"captions": {', '"captions": {'#13#10'    "Zz Stale Exemption": "probe",');
+  // D: a hand edit of a generated page
+  ReplaceInFile(TPath.Combine(lDst, 'docs\wiki\Quick-Help.md'), '## Declared, not harvested', '## Declared, not harvestec');
+  Result := lDst;
+end;
+
+function HasFinding(const pFindings: TArray<TFinding>; pCheck: Char; const pPart: string): Boolean;
+var
+  lF: TFinding;
+begin
+  Result := False;
+  for lF in pFindings do
+    if (lF.Check = pCheck) and (Pos(pPart, lF.Text) > 0) then
+      Exit(True);
+end;
+
+function FindingsNaming(const pFindings: TArray<TFinding>; const pPart: string): string;
+var
+  lF: TFinding;
+begin
+  Result := '';
+  for lF in pFindings do
+    if Pos(pPart, lF.Text) > 0 then
+      Result := Result + FindingText(lF).Split([#10])[0] + ' | ';
+end;
+
+{ Runs the full check with one extra live item; the live surface is restored after. }
+procedure TestPositiveControls(const pRepo: string);
+var
+  lLive: TLiveSurface;
+  lReg: TRegistry;
+  lSaved: TArray<string>;
+  lF: TArray<TFinding>;
+  lNotes: TArray<string>;
+begin
+  lLive := SharedLive(pRepo);
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    lSaved := lLive.HelpVerbs;
+    lLive.HelpVerbs := lLive.HelpVerbs + ['zz-not-a-verb'];
+    try
+      lF := RunChecks(lReg, lLive, clFull, nil, True, lNotes);
+    finally
+      lLive.HelpVerbs := lSaved;
+    end;
+    Check('Check.UnregisteredVerbFails', HasFinding(lF, 'B', 'unregistered: ''zz-not-a-verb''')
+      and HasFinding(lF, 'B', 'features\entries\zz-not-a-verb.json'), FindingsNaming(lF, 'zz-'));
+    lSaved := lLive.Captions;
+    lLive.Captions := lLive.Captions + ['Zz Not A Real Menu Item'];
+    try
+      lF := RunChecks(lReg, lLive, clFull, nil, True, lNotes);
+    finally
+      lLive.Captions := lSaved;
+    end;
+    Check('Check.UnregisteredCaptionFails', HasFinding(lF, 'B', 'unregistered: ''Zz Not A Real Menu Item'''), FindingsNaming(lF, 'Zz'));
+    lSaved := lLive.McpTools;
+    lLive.McpTools := lLive.McpTools + ['zz_probe_tool'];
+    try
+      lF := RunChecks(lReg, lLive, clFull, nil, True, lNotes);
+    finally
+      lLive.McpTools := lSaved;
+    end;
+    Check('Check.UnregisteredMcpToolFails', HasFinding(lF, 'B', 'unregistered: ''zz_probe_tool'''), FindingsNaming(lF, 'zz_'));
+  finally
+    lReg.Free;
+  end;
+end;
+
+function PlannedProbe(const pStatus: string): TJSONObject;
+begin
+  Result := TJSONObject.ParseJSONValue(
+    '{"id": "zz-planned-probe", "title": "Planned probe", "group": "maintenance", "owner": "CONVERTER", "status": "' + pStatus + '",'
+    + ' "since": "1.0.0", "summary": "A probe entry whose surfaces are not live yet",'
+    + ' "intro": "Probe.", "wikiPage": "Home",'
+    + ' "surfaces": [ { "type": "cli", "verb": "zz-planned-verb" }, { "type": "mcp", "tool": "zz_planned_tool" } ],'
+    + ' "audience": "both", "lastVerified": { "date": "2026-10-19", "by": "test", "build": "1.0.0" } }') as TJSONObject;
+end;
+
+procedure TestPlannedSkipsLive(const pRepo: string);
+var
+  lLive: TLiveSurface;
+  lReg: TRegistry;
+  lE: TJSONObject;
+  lF: TArray<TFinding>;
+  lNotes: TArray<string>;
+  lPlannedNote: Boolean;
+  lN: string;
+begin
+  lLive := SharedLive(pRepo);
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    lE := PlannedProbe('planned');
+    try
+      lF := RunChecks(lReg, lLive, clFull, [lE], True, lNotes);
+    finally
+      lE.Free;
+    end;
+    lPlannedNote := False;
+    for lN in lNotes do
+      if lN = 'planned, surfaces not checked: zz-planned-probe' then
+        lPlannedNote := True;
+    Check('Check.PlannedSkipsLive', lPlannedNote and not HasFinding(lF, 'C', 'zz-planned-probe'), FindingsNaming(lF, 'zz-planned'));
+    lE := PlannedProbe('shipped');
+    try
+      lF := RunChecks(lReg, lLive, clFull, [lE], True, lNotes);
+    finally
+      lE.Free;
+    end;
+    Check('Check.ShippedProbeChecksLive', HasFinding(lF, 'C', 'zz-planned-probe: cli verb ''zz-planned-verb'' is not in --help')
+      and HasFinding(lF, 'C', 'zz-planned-probe: mcp tool ''zz_planned_tool'' is not in HandleToolsList'), FindingsNaming(lF, 'zz-planned'));
+  finally
+    lReg.Free;
+  end;
+end;
+
+procedure TestWellFormedCatchesBadEntry(const pRepo: string);
+var
+  lReg: TRegistry;
+  lE: TJSONObject;
+  lF: TArray<TFinding>;
+  lNotes: TArray<string>;
+begin
+  lReg := TRegistry.Create;
+  try
+    lReg.Load(pRepo);
+    lE := PlannedProbe('bogus');
+    try
+      lF := RunChecks(lReg, nil, clWellFormed, [lE], True, lNotes);
+    finally
+      lE.Free;
+    end;
+    Check('Check.WellFormedNeedsNoLiveAndCatchesBadStatus', HasFinding(lF, 'A', 'zz-planned-probe.json: schema: ')
+      and HasFinding(lF, 'A', 'at ''/status'''), FindingsNaming(lF, 'zz-planned'));
+  finally
+    lReg.Free;
+  end;
+end;
+
+var
+  lRepo, lSeeded: string;
 begin
   try
     lRepo := FindRepoRoot;
@@ -1407,6 +1883,19 @@ begin
       TestDeadLinkPositiveControl(lRepo);
     if lRepo <> '' then
       TestWikiParity(lRepo);
+    TestCompareFindingSetsPositiveControl;
+    if lRepo <> '' then
+    begin
+      TestLiveHarvestParity(lRepo);
+      TestCheckParity(lRepo, 'WellFormed', clWellFormed);
+      TestCheckParity(lRepo, 'Full', clFull);
+      lSeeded := SeededRepo(lRepo);
+      TestCheckParity(lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0);
+      TestCheckParity(lSeeded, 'Full', clFull, 'SeededFull', 8, -1);
+      TestPositiveControls(lRepo);
+      TestPlannedSkipsLive(lRepo);
+      TestWellFormedCatchesBadEntry(lRepo);
+    end;
   except
     on E: Exception do
     begin
@@ -1414,6 +1903,7 @@ begin
       Writeln('FAIL EXCEPTION ', E.ClassName, ': ', E.Message);
     end;
   end;
+  FreeAndNil(GLive);
   Writeln(Format('SUMMARY pass=%d fail=%d', [GPass, GFail]));
   if GFail > 0 then
     Halt(1);

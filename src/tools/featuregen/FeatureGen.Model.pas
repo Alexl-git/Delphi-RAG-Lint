@@ -113,6 +113,7 @@ type
     FEntries: TArray<TFeatureEntry>;
     FGroups: TArray<TNamedRow>;
     FTeams: TArray<TNamedRow>;
+    FRoot: string;
   public
     /// <summary>Loads features\entries\*.json, features\groups.json and features\teams.json under pRepo, replacing any earlier load.</summary>
     /// <param name="pRepo">Root holding a features folder.</param>
@@ -124,6 +125,8 @@ type
     property Groups: TArray<TNamedRow> read FGroups;
     /// <summary>Teams in teams.json order.</summary>
     property Teams: TArray<TNamedRow> read FTeams;
+    /// <summary>The root given to the last Load ('' before any load); the registry checks read the raw files under it.</summary>
+    property Root: string read FRoot;
   end;
 
 implementation
@@ -308,6 +311,7 @@ var
   lRow: TNamedRow;
   i: Integer;
 begin
+  FRoot := pRepo;
   FGroups := LoadRows(TPath.Combine(pRepo, 'features\groups.json'), 'groups');
   FTeams := LoadRows(TPath.Combine(pRepo, 'features\teams.json'), 'teams');
   lFiles := TDirectory.GetFiles(TPath.Combine(pRepo, 'features\entries'), '*.json');

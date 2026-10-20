@@ -16,6 +16,7 @@ interface
 
 uses
   System.SysUtils
+  , System.JSON
   , FeatureGen.Output
   ;
 
@@ -45,6 +46,19 @@ procedure BuildWiki(const pRepo: string; const pWriter: TOutputWriter; const pEn
 /// <exception cref="EFeatureGen">Either marker is absent, or end comes before begin (never appends blindly).</exception>
 function UpdateMarkedBlock(const pText, pName, pBody: string): string;
 
+/// <summary>The family children (rule.*, chart.*) the importers derive for a set of hand entries.</summary>
+/// <param name="pRepo">Repository root (features\families, the plugin's ReportText.pas).</param>
+/// <param name="pEntries">Hand entries; read only (cloned).</param>
+/// <param name="pRules">The parsed "rules --json" output; read only (cloned).</param>
+/// <param name="pKeyOrder">Canonical entry key order (entry.schema.json).</param>
+/// <returns>New canonical child objects, lint-rules first then chart-questions, each in importer
+/// order. The caller owns and must Free every element.</returns>
+/// <exception cref="EFeatureGen">A family definition or harvested source is missing or inconsistent.</exception>
+/// <remarks>Same derivation as the generator; the validation that never changes an output
+/// (chart ValidateSet, emitter drift, child entry checks) is the caller's (FeatureGen.Check).</remarks>
+function ImportFamilyChildren(const pRepo: string; const pEntries: TArray<TJSONObject>; const pRules: TJSONValue;
+  const pKeyOrder: TArray<string>): TArray<TJSONObject>;
+
 /// <summary>Reads a file that must be 7-bit ASCII.</summary>
 /// <param name="pPath">File to read.</param>
 /// <returns>The file text, unchanged.</returns>
@@ -57,7 +71,6 @@ implementation
 uses
   System.Classes
   , System.IOUtils
-  , System.JSON
   , System.RegularExpressions
   , System.StrUtils
   , System.Generics.Collections
@@ -610,6 +623,32 @@ begin
     end;
   finally
     lDefs.Free;
+  end;
+end;
+
+function ImportFamilyChildren(const pRepo: string; const pEntries: TArray<TJSONObject>; const pRules: TJSONValue;
+  const pKeyOrder: TArray<string>): TArray<TJSONObject>;
+var
+  lM: TWikiModel;
+  lE: TJSONObject;
+  lFam: string;
+  lList: TList<TJSONObject>;
+begin
+  lList := TList<TJSONObject>.Create;
+  lM := TWikiModel.Create;
+  try
+    for lE in pEntries do
+      lM.Entries.Add(lE.Clone as TJSONObject);
+    if pRules <> nil then
+      lM.Rules := pRules.Clone as TJSONValue;
+    LoadChildren(pRepo, lM, pKeyOrder);
+    for lFam in lM.FamilyNames do
+      for lE in lM.Children[lFam] do
+        lList.Add(lE.Clone as TJSONObject);
+    Result := lList.ToArray;
+  finally
+    lM.Free;
+    lList.Free;
   end;
 end;
 
