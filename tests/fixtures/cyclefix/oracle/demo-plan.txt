@@ -324,7 +324,7 @@ After Part A these units still use each other through these edges (predicted):
 - `demosession -> demoaudit`: `GDemoAuditCount (var)`, `GDemoAuditTrail (var)` -- not mechanical: `GDemoAuditTrail` (var): it needs `TDemoAuditTrail` (class), which cannot move: its method bodies use `GDemoSettings`, which live in units of this cycle -- they would have to move with it
 
 The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
-To do it: finish Part A (every checklist item), then run `drag-lint cycles --db "@@DB@@" --plan` again. It prints Part B as the same kind of numbered, mechanical steps, with line numbers for the edited files. The edge it will cut is `demoaudit -> democonfig`.
+To do it: finish Part A (every checklist item), then run `drag-lint cycles --db "@@DB@@" --plan` again. It prints Part B as the same kind of numbered, mechanical steps, with line numbers for the edited files. The edge it will cut is `demoaudit -> democonfig`. Recipe: move globals.
 
 ## Cycle 2: demouiconnect <-> demogageport
 

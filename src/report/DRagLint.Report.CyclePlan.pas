@@ -1086,6 +1086,41 @@ begin
   Result:= tsParam;
 end;
 
+{ E18 T7 F5: the end of a routine's implementation header in lines pFirst..pLast:
+  the first `;` outside the parameter list (pLine, pCol). False when none. }
+function HeaderEnd(const pLines: TArray<string>; pFirst, pLast: Integer; out pLine, pCol: Integer): Boolean;
+var
+  Depth: Integer;
+begin
+  Depth:= 0;
+  for var L:= pFirst to pLast do
+  begin
+    var Code:= CodePart(LineAt(pLines, L));
+    for var I:= 1 to Length(Code) do
+      if Code[I] = '(' then Inc(Depth)
+      else if Code[I] = ')' then Dec(Depth)
+      else if (Code[I] = ';') and (Depth = 0) then
+      begin
+        pLine:= L;
+        pCol := I;
+        Exit(True);
+      end;
+  end;
+  pLine := 0;
+  pCol  := 0;
+  Result:= False;
+end;
+
+{ E18 T7 F5: the occurrence of a name at pIndex (length pLen) in pCode is a
+  receiver (`p.`) or one side of a nil test (`p = nil`, `p <> nil`, `nil = p`). }
+function IsReceiverOrNilTest(const pCode: string; pIndex, pLen: Integer): Boolean;
+begin
+  var Rest  := Copy(pCode, pIndex + pLen, MaxInt);
+  var Before:= Copy(pCode, 1, pIndex - 1);
+  Result:= TRegEx.IsMatch(Rest, '^\s*\.') or TRegEx.IsMatch(Rest, '^\s*(=|<>)\s*nil\b', [roIgnoreCase]) or
+    TRegEx.IsMatch(Before, '\bnil\s*(=|<>)\s*$', [roIgnoreCase]);
+end;
+
 { E18 T7 R3: the order the recipes are preferred in (lower first). }
 function RecipeRank(pRecipe: TCutRecipe): Integer;
 begin
@@ -1790,60 +1825,57 @@ begin
   Result:= '';
 end;
 
-{ E18 T7 F5: '' when the routine whose implementation header holds pLine uses
-  pParam only to read one of its members (member_accesses mode read, receiver =
-  the parameter) or to compare it with nil; otherwise what it does, with the line.
-  A line outside every routine body (an interface or class declaration) has no
-  body to check here -- its implementation header is a switched site too. }
+{ E18 T7 F5: '' when the routine pLine belongs to uses pParam only to read one
+  of its members (member_accesses mode read, receiver = the parameter) or to
+  compare it with nil; otherwise what it does, with the line. pLine is in the
+  routine's implementation header, or in its declaration (interface or class),
+  whose body is then checked through the declaration's implementation range.
+  No body at all (abstract, external, a forward never implemented here) is a
+  refusal: nothing shows the base class is enough for the overrides or callees.
+  Every occurrence of the name in the body is classified by its own column:
+  followed by `.` (a receiver: the member ref must be a read) or by `= nil` /
+  `<> nil` (or preceded by `nil =` / `nil <>`); anything else refuses. }
 function TCyclePlanner.ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string): string;
 var
   Routine: TSymbol;
   MA     : TCallEdge;
-  Bare   : TDictionary<Integer, Integer>;
-  Allowed: TDictionary<Integer, Integer>;
-  N      : Integer;
+  BodyAt : Integer;
+  BodyCol: Integer;
 begin
-  Result := '';
   Routine:= Default(TSymbol);
   var F:= GetFile(pFid);
   for var S in F.Syms do
     if (S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and
       (S.ImplStartLine > 0) and (S.ImplStartLine <= pLine) and (pLine <= S.ImplEndLine) and
       (S.ImplStartLine > Routine.ImplStartLine) then Routine:= S;
-  if Routine.Id = 0 then Exit;
-  Bare   := TDictionary<Integer, Integer>.Create;
-  Allowed:= TDictionary<Integer, Integer>.Create;
-  try
-    for var R in F.Refs do
+  if Routine.Id = 0 then
+    for var S in F.Syms do
+      if (S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and
+        (S.StartLine <= pLine) and (pLine <= S.EndLine) then Routine:= S;
+  if (Routine.Id = 0) or (Routine.ImplStartLine <= 0) or (Routine.ImplEndLine < Routine.ImplStartLine) then
+    Exit(Format('it belongs to no routine body in this file (abstract, external or not ' +
+      'implemented here), so nothing shows a base class is enough for `%s`', [pParam]));
+  if not HeaderEnd(F.Lines, Routine.ImplStartLine, Routine.ImplEndLine, BodyAt, BodyCol) then Exit(Format('the header of `%s` (line %d) could not be read', [Routine.Name, Routine.ImplStartLine]));
+  for var L:= BodyAt to Routine.ImplEndLine do
+  begin
+    var Code:= CodePart(LineAt(F.Lines, L));
+    for var M in TRegEx.Matches(Code, '\b' + pParam + '\b', [roIgnoreCase]) do
     begin
-      if (R.StartLine < Routine.ImplStartLine) or (R.StartLine > Routine.ImplEndLine) then Continue;
-      if SameText(R.ReceiverText, pParam) then
-      begin
-        if not (SameText(R.Kind, 'member-access') and MemberAccessOf(R.Id, MA) and SameText(MA.MemberMode, 'read')) then
-          Exit(Format('line %d: `%s.%s` is not a read of a member', [R.StartLine, pParam, R.NameText]));
-        if not Allowed.TryGetValue(R.StartLine, N) then N:= 0;
-        Allowed.AddOrSetValue(R.StartLine, N + 1);
-      end
-      else if SameText(R.NameText, pParam) and (R.ReceiverText = '') then
-      begin
-        if not Bare.TryGetValue(R.StartLine, N) then N:= 0;
-        Bare.AddOrSetValue(R.StartLine, N + 1);
-      end;
+      if (L = BodyAt) and (M.Index <= BodyCol) then Continue;
+      if IsReceiverOrNilTest(Code, M.Index, M.Length) then Continue;
+      Exit(Format('line %d (column %d) uses `%s` other than to read a member or compare it with nil',
+        [L, M.Index, pParam]));
     end;
-    for var P in Bare do
-    begin
-      if not Allowed.TryGetValue(P.Key, N) then N:= 0;
-      Inc(N, TRegEx.Matches(CodePart(LineAt(F.Lines, P.Key)), '\b' + pParam + '\s*(=|<>)\s*nil\b',
-        [roIgnoreCase]).Count);
-      if P.Value > N then
-        Exit(Format('line %d uses `%s` other than to read a member or compare it with nil', [P.Key, pParam]));
-    end;
-  finally
-    Allowed.Free;
-    Bare.Free;
+  end;
+  Result:= '';
+  for var R in F.Refs do
+  begin
+    if (R.StartLine < Routine.ImplStartLine) or (R.StartLine > Routine.ImplEndLine) then Continue;
+    if SameText(R.ReceiverText, pParam) and
+      not (SameText(R.Kind, 'member-access') and MemberAccessOf(R.Id, MA) and SameText(MA.MemberMode, 'read')) then
+      Exit(Format('line %d: `%s.%s` is not a read of a member', [R.StartLine, pParam, R.NameText]));
   end;
 end;
-
 function TCyclePlanner.TryAdd(const pSym: TSymbol; const pCut: TArray<Int64>; out pWhy: string): Boolean;
 var
   Item: TMoveItem;
@@ -3362,6 +3394,8 @@ procedure TCyclePlanner.RenderPartB;
 var
   Best : TEdgeEval;
   Names: TList<string>;
+  Evals: TList<TEdgeEval>;
+  Texts: TList<string>;
 begin
   Emit('### Part B (optional): remove the implementation-only cycle too');
   if FPredicted.Count = 0 then
@@ -3373,6 +3407,8 @@ begin
   Emit('After Part A these units still use each other through these edges (predicted):');
   Best := Default(TEdgeEval);
   Names:= TList<string>.Create;
+  Evals:= TList<TEdgeEval>.Create;
+  Texts:= TList<string>.Create;
   try
     for var G in FPredicted do
       for var A in G.Members do
@@ -3385,12 +3421,24 @@ begin
           if Ev.Movable then Ev.Recipe:= crMoveGlobals;
           Names.Clear;
           for var N in Needs do Names.Add(Format('%s (%s)', [N.Owner.Name, N.Owner.Kind.ToText]));
-          EmitFmt('- `%s -> %s`: %s -- %s', [A, B, QuoteList(Names.ToArray),
-            (if Ev.Movable then 'mechanical: these can move into a new leaf unit' else 'not mechanical: ' + Ev.Why)]);
-          { R3's order; Part B predicts only move-globals cuts (R1 / R2 are weighed on the re-run) }
-          if BetterCut(Ev, Best) then Best:= Ev;
+          Evals.Add(Ev);
+          Texts.Add(QuoteList(Names.ToArray));
         end;
+    { E18 T7 R3: the same recipes and order the re-run after Part A uses }
+    PlanInversion(Evals);
+    PlanMemberHandOver(Evals);
+    for var I:= 0 to Evals.Count - 1 do
+    begin
+      var Ev:= Evals[I];
+      EmitFmt('- `%s -> %s`: %s -- %s', [Ev.FromStem, Ev.ToStem, Texts[I],
+        (if Ev.Recipe = crMoveGlobals then 'mechanical: these can move into a new leaf unit'
+         else if Ev.Recipe <> crNone then 'mechanical: recipe: ' + RecipeLabel(Ev.Recipe)
+         else 'not mechanical: ' + Ev.Why)]);
+      if BetterCut(Ev, Best) then Best:= Ev;
+    end;
   finally
+    Texts.Free;
+    Evals.Free;
     Names.Free;
   end;
   Emit('');
@@ -3398,12 +3446,15 @@ begin
   if Best.FromStem <> '' then
     EmitFmt('To do it: finish Part A (every checklist item), then run `%s` again. It prints Part B as ' +
       'the same kind of numbered, mechanical steps, with line numbers for the edited files. The edge ' +
-      'it will cut is `%s -> %s`.', [CyclesCommand(True), Best.FromStem, Best.ToStem])
+      'it will cut is `%s -> %s`. Recipe: %s.', [CyclesCommand(True), Best.FromStem, Best.ToStem,
+      RecipeLabel(Best.Recipe)])
   else
-    Emit('No edge above can be cut mechanically; leaving the implementation-only cycle is acceptable.');
+    EmitFmt('No edge above can be cut mechanically as the units stand before Part A. Part A changes what ' +
+      'these edges carry, so after it run `%s` again: it weighs move globals, routine-call inversion and ' +
+      'member hand-over against the edited units. Leaving the implementation-only cycle is acceptable.',
+      [CyclesCommand(True)]);
   Emit('');
 end;
-
 procedure TCyclePlanner.PlanIntfCycle;
 var
   Seeds: TList<TNeed>;

@@ -100,8 +100,8 @@ Tick each box in order. Do not skip the compile.
 ### Part B (optional): remove the implementation-only cycle too
 After Part A these units still use each other through these edges (predicted):
 - `customers -> orders`: `TOrder (class)` -- not mechanical: `TOrder` (class): its method bodies use `TCustomer`, which live in units of this cycle -- they would have to move with it
-- `orders -> customers`: `TCustomer (class)` -- not mechanical: `TCustomer` (class): its method bodies use `TOrder`, which live in units of this cycle -- they would have to move with it
+- `orders -> customers`: `TCustomer (class)` -- not mechanical: `TCustomer` (class): refused: type-cast -- line 41 casts to `TCustomer`, which would still need its unit (`Result := Format('Order %d for %s', [FId, TCustomer(FCustomerRef).Name])`)
 
 The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
-No edge above can be cut mechanically; leaving the implementation-only cycle is acceptable.
+No edge above can be cut mechanically as the units stand before Part A. Part A changes what these edges carry, so after it run `drag-lint cycles --db "demo.sqlite" --plan` again: it weighs move globals, routine-call inversion and member hand-over against the edited units. Leaving the implementation-only cycle is acceptable.
 ````

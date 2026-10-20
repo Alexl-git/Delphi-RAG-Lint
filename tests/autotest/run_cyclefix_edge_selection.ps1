@@ -23,6 +23,14 @@
         takes `var pSession: TDemoSession`): Part A prints
         `refused: base-class` on a line naming `DemoLogger.pas:`, and the plan
         dump lists `base-class`.
+    (c)-(e) basevar variants with a const parameter: a bare use in the body
+        (basebody), a nil test inside a string beside a bare use on one line
+        (basestring: each occurrence is classified by its own column), and an
+        abstract method with no body to check (basenobody: fail closed).
+    (f) tests\fixtures\cyclefix\tiebreak: three move-globals edges where
+        members-then-refs, refs alone and cost alone each pick a different edge.
+    (g) tests\fixtures\cyclefix\partbr1: Part B predicts the routine-call
+        inversion cut and names its recipe.
   POSITIVE CONTROL: both copies index with 0 errors and the plain report finds
   the 4-unit group with interface coupling.
 
@@ -180,8 +188,70 @@ try {
   $bbDb = Index-Copy $bbDir 'BaseVar.dproj' 'basebody' 4
   $c = Get-Cycles $bbDb 'basebody' @('--plan', '--library-db', ('"' + $Lib + '"'))
   $bb1 = Get-Block $c.Out 1
-  Check 'basebody: refused: base-class naming DemoLogger.pas:53 line 62' `
-    ($bb1 -match '(?m)^.*refused: base-class -- `DemoLogger\.pas:53`: parameter `pSession` -- line 62 ') $bb1
+  Check 'basebody: refused: base-class naming DemoLogger.pas and body line 62' `
+    ($bb1 -match '(?m)^.*refused: base-class -- `DemoLogger\.pas:\d+`: parameter `pSession` -- line 62 ') $bb1
+
+  Write-Host '== (d) basestring: each occurrence is classified by its own column (a nil test inside a string does not excuse a bare use)' -ForegroundColor Cyan
+  # one line holds `pSession = nil` in code, `pSession = nil` inside a string, and Assigned(pSession):
+  # a per-line count (2 bare refs vs 2 nil matches) let it pass; the occurrence in Assigned( must refuse.
+  $bsDir = Join-Path $WorkDir 'basestring'
+  Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\basevar') $bsDir
+  $lg = Join-Path $bsDir 'DemoLogger.pas'
+  $txt = [IO.File]::ReadAllText($lg).Replace('var pSession: TDemoSession;', 'const pSession: TDemoSession;')
+  $txt = $txt.Replace('LId := if pSession = nil then 0 else pSession.Id;',
+    'LId := if pSession = nil then 0 else 1; Writeln(''pSession = nil: '', Ord(Assigned(pSession)));')
+  [IO.File]::WriteAllText($lg, $txt, [Text.Encoding]::ASCII)
+  Check 'basestring: SANITY the variant edit applied' ($txt.Contains('Ord(Assigned(pSession))') -and -not $txt.Contains('var pSession')) ''
+  $bsDb = Index-Copy $bsDir 'BaseVar.dproj' 'basestring' 4
+  $c = Get-Cycles $bsDb 'basestring' @('--plan', '--library-db', ('"' + $Lib + '"'))
+  $bs1 = Get-Block $c.Out 1
+  Check 'basestring: refused: base-class at line 62, column of Assigned(pSession)' `
+    ($bs1 -match '(?m)^.*refused: base-class -- `DemoLogger\.pas:\d+`: parameter `pSession` -- line 62 \(column \d+\) uses') $bs1
+
+  Write-Host '== (e) basenobody: a parameter with no routine body to check refuses (fail closed)' -ForegroundColor Cyan
+  $bnDir = Join-Path $WorkDir 'basenobody'
+  Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\basevar') $bnDir
+  $lg = Join-Path $bnDir 'DemoLogger.pas'
+  $txt = [IO.File]::ReadAllText($lg).Replace('var pSession: TDemoSession;', 'const pSession: TDemoSession;')
+  $txt = $txt.Replace("  TDemoLogLevel = (llDebug, llInfo, llWarn, llError);`r`n",
+    "  TDemoLogLevel = (llDebug, llInfo, llWarn, llError);`r`n`r`n  /// <summary>A sink nobody implements here.</summary>`r`n  TDemoSink = class`r`n    procedure Put(const pSession: TDemoSession); virtual; abstract;`r`n  end;`r`n")
+  [IO.File]::WriteAllText($lg, $txt, [Text.Encoding]::ASCII)
+  Check 'basenobody: SANITY the variant edit applied' ($txt.Contains('virtual; abstract;') -and -not $txt.Contains('var pSession')) ''
+  $bnDb = Index-Copy $bnDir 'BaseVar.dproj' 'basenobody' 4
+  $c = Get-Cycles $bnDb 'basenobody' @('--plan', '--library-db', ('"' + $Lib + '"'))
+  $bn1 = Get-Block $c.Out 1
+  Check 'basenobody: refused: base-class naming the abstract method site' `
+    ($bn1 -match '(?m)^.*refused: base-class -- `DemoLogger\.pas:\d+`: parameter `pSession` -- .*belongs to no routine body') $bn1
+
+  Write-Host '== (f) tiebreak: three move-globals edges; fewest members, then fewest refs decides' -ForegroundColor Cyan
+  # tiea -> tieb: members 0, refs 5, cost 1; tieb -> tiec: members 0, refs 3, cost 2;
+  # tiec -> tiea: members 1, refs 2, cost 2. Cost first would cut tiea -> tieb, refs first tiec -> tiea.
+  $tbDir = Join-Path $WorkDir 'tiebreak'
+  Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\tiebreak') $tbDir
+  $tbDb = Join-Path $tbDir 'tiebreak.sqlite'
+  $idx = & $Exe index --project (Join-Path $tbDir 'TieBreak.dproj') --db $tbDb 2>&1 | Out-String
+  Check 'tiebreak: SANITY the 3 units indexed with 0 errors' (([regex]::Matches($idx, 'Tie\w\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 3) $idx
+  $c = Get-Cycles $tbDb 'tiebreak' @('--plan', '--library-db', ('"' + $Lib + '"'))
+  $tbFix = Get-Block $c.Out 1 'Recommended fix'
+  Check 'tiebreak: POSITIVE CONTROL all three edges can move globals' `
+    (([regex]::Matches($tbFix, '(?m)^- `tie\w -> tie\w`: recipe: move globals')).Count -eq 3) $tbFix
+  Check 'tiebreak: cuts tieb -> tiec (members, then refs)' ($tbFix.Contains('Cut the edge `tieb -> tiec`')) $tbFix
+
+  Write-Host '== (g) partbr1: Part B predicts the R1 cut, naming its recipe' -ForegroundColor Cyan
+  $pbDir = Join-Path $WorkDir 'partbr1'
+  Copy-Tree (Join-Path $Repo 'tests\fixtures\cyclefix\partbr1') $pbDir
+  $pbDb = Join-Path $pbDir 'partbr1.sqlite'
+  $idx = & $Exe index --project (Join-Path $pbDir 'PartBR1.dproj') --db $pbDb 2>&1 | Out-String
+  Check 'partbr1: SANITY the 2 units indexed with 0 errors' (([regex]::Matches($idx, 'PartB\w\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 2) $idx
+  $c = Get-Cycles $pbDb 'partbr1' @('--plan', '--library-db', ('"' + $Lib + '"'))
+  $pb = Get-Block $c.Out 1 'Part B'
+  Check 'partbr1: POSITIVE CONTROL Part B lists both predicted edges' `
+    (([regex]::Matches($pb, '(?m)^- `partb\w -> partb\w`: ')).Count -eq 2) $pb
+  Check 'partbr1: partbb -> partba is mechanical by routine-call inversion' `
+    ($pb -match '(?m)^- `partbb -> partba`: .* -- mechanical: recipe: routine-call inversion') $pb
+  Check 'partbr1: Part B names the edge and its recipe' `
+    ($pb.Contains('The edge it will cut is `partbb -> partba`. Recipe: routine-call inversion.')) $pb
+  Check 'partbr1: no "No edge above can be cut" verdict' (-not $pb.Contains('No edge above can be cut')) $pb
 } finally {
   Pop-Location
   if (Test-Path $Lib) { [IO.File]::Delete($Lib) }
