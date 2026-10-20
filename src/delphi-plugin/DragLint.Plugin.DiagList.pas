@@ -210,6 +210,50 @@ function UsesFixSummary(const AOutput, AUnitName: string): string;
 /// <returns>True for 'applied N edit(s)' with N above zero.</returns>
 function AutofixApplied(const ASummary: string): Boolean;
 
+/// <summary>Summarises a `cycles --fix --format json` document (schema cycle-fix/1) in one line,
+/// for the Diagnostics root row and the Messages pane -- the "Fix this cycle" result (E18 T15b).</summary>
+/// <param name="AJson">The engine's output. Text before the first '{' and after the last '}' (stderr
+/// notes sharing the pipe) is ignored.</param>
+/// <returns>
+/// <para>'applied: &lt;units&gt; -- &lt;recipe&gt; cut &lt;edge&gt;; &lt;N&gt; file(s) written, &lt;M&gt; new; compile ok (&lt;s&gt; s); verified'
+/// -- or '...; not verified: &lt;verify_reason&gt;' when the re-index did not confirm it;</para>
+/// <para>'refused: &lt;kind&gt; -- &lt;reason&gt;' for the first refusal (top level first, then the group's);
+/// for dirty-baseline the reason is the first dcc error line;</para>
+/// <para>'rolled back: &lt;reason&gt;' when the engine undid its writes;</para>
+/// <para>'dry run: &lt;verdict&gt; -- &lt;recipe&gt; cut &lt;edge&gt;; baseline ok (&lt;s&gt; s); add --apply';</para>
+/// <para>'failed: &lt;error&gt;' for any other engine error; 'cycle fix: no circular group to fix' for an
+/// empty run; 'cycle fix: unreadable output' when there is no cycle-fix/1 object.</para>
+/// </returns>
+/// <remarks>Pure. Units are joined with ', ' in the engine's order; the group reported is the LAST
+/// one (a default scan lists the groups it skipped first). ' cut &lt;edge&gt;' is left out when the recipe
+/// has no single edge (a Part A move). Seconds have one decimal, '.' separator.</remarks>
+function CycleFixSummary(const AJson: string): string;
+
+/// <summary>Tells whether a `cycles --fix` DRY RUN may be offered for --apply.</summary>
+/// <param name="AJson">The dry run's output (as CycleFixSummary reads it).</param>
+/// <returns>True only for mode dry-run, no error, no refusal at either level, baseline status ok
+/// and a mechanical verdict on the group.</returns>
+function CycleFixCanApply(const AJson: string): Boolean;
+
+/// <summary>The "Apply cycle fix" confirmation, built from a dry run's document.</summary>
+/// <param name="AJson">The dry run's output; CycleFixCanApply should be True for it.</param>
+/// <returns>Lines joined by CRLF: the question naming the cycle's units, the recipe and the edge it
+/// cuts, the number of files edited, the new unit names (or 'none'), the baseline build status and
+/// time, and what happens on a failed build; '' when AJson is unreadable.</returns>
+function CycleFixConfirmText(const AJson: string): string;
+
+/// <summary>The files an applied `cycles --fix` wrote: the group's written[] array.</summary>
+/// <param name="AJson">The apply run's output.</param>
+/// <returns>Absolute paths in the engine's order; empty when nothing was written or AJson is unreadable.</returns>
+function CycleFixWrittenFiles(const AJson: string): TArray<string>;
+
+/// <summary>The files a `cycles --fix` plan edits: the distinct edits[].file of the group.</summary>
+/// <param name="AJson">A dry run's output.</param>
+/// <returns>Distinct paths (compared case-insensitively), sorted; empty when AJson is unreadable.</returns>
+/// <remarks>The IDE refuses --apply while any of them has unsaved edits: the apply rewrites them on
+/// disk and reloads the buffers, which would drop those edits.</remarks>
+function CycleFixEditedFiles(const AJson: string): TArray<string>;
+
 implementation
 
 uses
@@ -219,6 +263,7 @@ uses
   , System.RegularExpressions
   , System.StrUtils
   , System.JSON
+  , System.Classes { TStringList -- the distinct edited files of a cycle fix }
   ;
 
 function DiagDisplayOrder(const ADiags: TArray<TDragLintDiagnostic>): TArray<Integer>;
@@ -659,6 +704,288 @@ begin
   for M in TRegEx.Matches(AOutput, 'autofix: applied (\d+) edit') do
     if StrToIntDef(M.Groups[1].Value, 0) > 0 then Exit(True);
   Result:= False;
+end;
+
+{ ---- E18 T15b: `cycles --fix --format json` (cycle-fix/1) ---- }
+
+const
+  CCycleFixSchema   = 'cycle-fix/1';
+  CCycleFixRolled   = 'rolled back';
+  CCycleFixDirty    = 'dirty-baseline';
+  CCycleFixOk       = 'ok';
+  CCycleFixDryRun   = 'dry-run';
+  CCycleFixApply    = 'apply';
+  CCycleMechanical  = 'mechanical';
+  CCycleUnreadable  = 'cycle fix: unreadable output';
+
+// The cycle-fix/1 object in AJson, or nil; the caller frees it. The document runs from the first
+// opening brace to the LAST closing brace that ends it: a stderr note after it may carry braces.
+function ParseCycleFix(const AJson: string): TJSONObject;
+var
+  P, Q: Integer;
+  V   : TJSONValue;
+begin
+  Result:= nil;
+  P:= Pos('{', AJson);
+  if P = 0 then Exit;
+  Q:= Length(AJson);
+  while Q > P do
+  begin
+    if AJson[Q] = '}' then
+    begin
+      V:= TJSONObject.ParseJSONValue(Copy(AJson, P, Q - P + 1));
+      if (V is TJSONObject) and SameText(TJSONObject(V).GetValue<string>('schema', ''), CCycleFixSchema) then
+        Exit(TJSONObject(V));
+      V.Free;
+    end;
+    Dec(Q);
+  end;
+end;
+
+{ The group the run reported on: the LAST element of cycles[], or nil. }
+function LastCycle(const ARoot: TJSONObject): TJSONObject;
+var
+  Arr: TJSONArray;
+begin
+  Result:= nil;
+  if not ARoot.TryGetValue<TJSONArray>('cycles', Arr) then Exit;
+  if Arr.Count = 0 then Exit;
+  if Arr.Items[Arr.Count - 1] is TJSONObject then Result:= TJSONObject(Arr.Items[Arr.Count - 1]);
+end;
+
+{ The strings of a JSON array field of AObj, '' entries kept. }
+function StringsOf(const AObj: TJSONObject; const AField: string): TArray<string>;
+var
+  Arr: TJSONArray;
+begin
+  Result:= nil;
+  if (AObj = nil) or not AObj.TryGetValue<TJSONArray>(AField, Arr) then Exit;
+  for var V in Arr do Result:= Result + [V.Value];
+end;
+
+{ The first element of AObj.refusals as an object, or nil. }
+function FirstRefusal(const AObj: TJSONObject): TJSONObject;
+var
+  Arr: TJSONArray;
+begin
+  Result:= nil;
+  if AObj = nil then Exit;
+  if not AObj.TryGetValue<TJSONArray>('refusals', Arr) then Exit;
+  if Arr.Count = 0 then Exit;
+  if Arr.Items[0] is TJSONObject then Result:= TJSONObject(Arr.Items[0]);
+end;
+
+{ '<s> s' with one decimal from AObj.<AField>.seconds; '' when absent. }
+function SecondsOf(const AObj: TJSONObject; const AField: string): string;
+var
+  Sub: TJSONObject;
+begin
+  Result:= '';
+  if (AObj = nil) or not AObj.TryGetValue<TJSONObject>(AField, Sub) then Exit;
+  Result:= Format('%.1f s', [Sub.GetValue<Double>('seconds', 0)], TFormatSettings.Invariant);
+end;
+
+{ AObj.<AField>.status, or ''. }
+function StatusOf(const AObj: TJSONObject; const AField: string): string;
+var
+  Sub: TJSONObject;
+begin
+  Result:= '';
+  if (AObj <> nil) and AObj.TryGetValue<TJSONObject>(AField, Sub) then Result:= Sub.GetValue<string>('status', '');
+end;
+
+{ '<recipe> cut <edge>', or '<recipe>' when the recipe has no single edge. }
+function RecipeCut(const ACycle: TJSONObject): string;
+var
+  Edge: string;
+begin
+  Result:= ACycle.GetValue<string>('recipe', '');
+  Edge  := ACycle.GetValue<string>('edge', '');
+  if Edge <> '' then Result:= Result + ' cut ' + Edge;
+end;
+
+{ 'refused: <kind> -- <reason>'; dirty-baseline names the first dcc line. }
+function RefusalText(const ARoot, ARefusal: TJSONObject): string;
+var
+  Kind, Why: string;
+  Errs     : TArray<string>;
+  Base     : TJSONObject;
+begin
+  Kind:= ARefusal.GetValue<string>('kind', '');
+  Why := ARefusal.GetValue<string>('reason', '');
+  if SameText(Kind, CCycleFixDirty) and ARoot.TryGetValue<TJSONObject>('baseline', Base) then
+  begin
+    Errs:= StringsOf(Base, 'errors');
+    if Length(Errs) > 0 then Why:= Errs[0];
+  end;
+  Result:= Format('refused: %s -- %s', [Kind, Why]);
+end;
+
+{ 'rolled back: <reason>' from a top-level error 'rolled back, project not changed: <reason>'. }
+function RolledBackText(const AError: string): string;
+begin
+  Result:= CCycleFixRolled + ': ' + (if Pos(': ', AError) > 0 then Copy(AError, Pos(': ', AError) + 2, MaxInt) else AError);
+end;
+
+{ 'rolled back: <reason>' for a group whose rolled_back is true: the first compile error, else
+  the verify reason. }
+function GroupRolledBackText(const ACycle: TJSONObject): string;
+var
+  Comp: TJSONObject;
+  Errs: TArray<string>;
+  Why : string;
+begin
+  Errs:= nil;
+  if ACycle.TryGetValue<TJSONObject>('compile', Comp) then Errs:= StringsOf(Comp, 'errors');
+  Why:= if Length(Errs) > 0 then Errs[0] else ACycle.GetValue<string>('verify_reason', '');
+  Result:= CCycleFixRolled + ': ' + (if Why <> '' then Why else 'the change did not build');
+end;
+
+{ 'applied: <units> -- <recipe> cut <edge>; N file(s) written, M new; compile ok (s); verified'. }
+function AppliedText(const ACycle: TJSONObject): string;
+begin
+  Result:= Format('applied: %s -- %s; %d file(s) written, %d new; compile %s (%s)',
+    [string.Join(', ', StringsOf(ACycle, 'units')), RecipeCut(ACycle), Length(StringsOf(ACycle, 'written')),
+     Length(StringsOf(ACycle, 'new_files')), StatusOf(ACycle, 'compile'), SecondsOf(ACycle, 'compile')]);
+  if ACycle.GetValue<Boolean>('verified', False) then Result:= Result + '; verified'
+  else Result:= Result + '; not verified: ' + ACycle.GetValue<string>('verify_reason', '');
+end;
+
+{ 'dry run: <verdict> -- <recipe> cut <edge>; baseline ok (s); add --apply'. }
+function DryRunText(const ARoot, ACycle: TJSONObject): string;
+begin
+  Result:= Format('dry run: %s -- %s; baseline %s', [ACycle.GetValue<string>('verdict', ''), RecipeCut(ACycle),
+    StatusOf(ARoot, 'baseline')]);
+  if SameText(StatusOf(ARoot, 'baseline'), CCycleFixOk) then Result:= Result + ' (' + SecondsOf(ARoot, 'baseline') + ')';
+  Result:= Result + '; add --apply';
+end;
+
+function CycleFixSummary(const AJson: string): string;
+var
+  Root: TJSONObject;
+  Cyc : TJSONObject;
+  Ref : TJSONObject;
+  Err : string;
+begin
+  Root:= ParseCycleFix(AJson);
+  if Root = nil then Exit(CCycleUnreadable);
+  try
+    Err:= Root.GetValue<string>('error', '');
+    Cyc:= LastCycle(Root);
+    { a top-level refusal (dirty-baseline) outranks the group's own }
+    Ref:= FirstRefusal(Root);
+    if (Ref = nil) and (Cyc <> nil) then Ref:= FirstRefusal(Cyc);
+    if StartsText(CCycleFixRolled, Err) then Result:= RolledBackText(Err)
+    else if Err <> '' then Result:= 'failed: ' + Err
+    else if Ref <> nil then Result:= RefusalText(Root, Ref)
+    else if Cyc = nil then Result:= 'cycle fix: no circular group to fix'
+    else if Cyc.GetValue<Boolean>('rolled_back', False) then Result:= GroupRolledBackText(Cyc)
+    else if SameText(Root.GetValue<string>('mode', ''), CCycleFixApply) then Result:= AppliedText(Cyc)
+    else Result:= DryRunText(Root, Cyc);
+  finally
+    Root.Free;
+  end;
+end;
+
+function CycleFixCanApply(const AJson: string): Boolean;
+var
+  Root: TJSONObject;
+  Cyc : TJSONObject;
+begin
+  Root:= ParseCycleFix(AJson);
+  if Root = nil then Exit(False);
+  try
+    Cyc:= LastCycle(Root);
+    var RunClean: Boolean:= SameText(Root.GetValue<string>('mode', ''), CCycleFixDryRun)
+         and (Root.GetValue<string>('error', '') = '') and (FirstRefusal(Root) = nil);
+    var BaselineOk: Boolean:= SameText(StatusOf(Root, 'baseline'), CCycleFixOk);
+    var GroupOk: Boolean:= (Cyc <> nil) and (FirstRefusal(Cyc) = nil)
+         and SameText(Cyc.GetValue<string>('verdict', ''), CCycleMechanical);
+    Result:= RunClean and BaselineOk and GroupOk;
+  finally
+    Root.Free;
+  end;
+end;
+
+{ The distinct edits[].file of ACycle (nil-safe), sorted, case-insensitive. }
+function EditedFilesOf(const ACycle: TJSONObject): TArray<string>;
+var
+  Arr  : TJSONArray;
+  Files: TStringList;
+begin
+  Result:= nil;
+  if ACycle = nil then Exit;
+  Files:= TStringList.Create;
+  try
+    Files.Sorted       := True;
+    Files.Duplicates   := dupIgnore;
+    Files.CaseSensitive:= False;
+    if ACycle.TryGetValue<TJSONArray>('edits', Arr) then
+      for var V in Arr do
+        if V is TJSONObject then Files.Add(TJSONObject(V).GetValue<string>('file', ''));
+    Result:= Files.ToStringArray;
+  finally
+    Files.Free;
+  end;
+end;
+
+function CycleFixEditedFiles(const AJson: string): TArray<string>;
+var
+  Root: TJSONObject;
+begin
+  Root:= ParseCycleFix(AJson);
+  if Root = nil then Exit(nil);
+  try
+    Result:= EditedFilesOf(LastCycle(Root));
+  finally
+    Root.Free;
+  end;
+end;
+
+function CycleFixConfirmText(const AJson: string): string;
+var
+  Root : TJSONObject;
+  Cyc  : TJSONObject;
+  Arr  : TJSONArray;
+  News : TArray<string>;
+  Edge : string;
+begin
+  Result:= '';
+  Root:= ParseCycleFix(AJson);
+  if Root = nil then Exit;
+  try
+    Cyc:= LastCycle(Root);
+    if Cyc = nil then Exit;
+    News:= nil;
+    if Cyc.TryGetValue<TJSONArray>('new_units', Arr) then
+      for var V in Arr do
+        if V is TJSONObject then News:= News + [TJSONObject(V).GetValue<string>('unit', '')];
+    Edge:= Cyc.GetValue<string>('edge', '');
+    Result:= string.Join(#13#10, [
+      Format('Apply the cycle fix to %s?', [string.Join(', ', StringsOf(Cyc, 'units'))]),
+      '',
+      'Recipe: ' + Cyc.GetValue<string>('recipe', '') + (if Edge <> '' then ', cutting ' + Edge else ''),
+      Format('Files edited: %d', [Length(EditedFilesOf(Cyc))]),
+      'New units: ' + (if Length(News) > 0 then string.Join(', ', News) else 'none'),
+      Format('Baseline build: %s (%s)', [StatusOf(Root, 'baseline'), SecondsOf(Root, 'baseline')]),
+      '',
+      'Every edited file is backed up first; the project is rolled back when the build after the edit fails.']);
+  finally
+    Root.Free;
+  end;
+end;
+
+function CycleFixWrittenFiles(const AJson: string): TArray<string>;
+var
+  Root: TJSONObject;
+begin
+  Root:= ParseCycleFix(AJson);
+  if Root = nil then Exit(nil);
+  try
+    Result:= StringsOf(LastCycle(Root), 'written');
+  finally
+    Root.Free;
+  end;
 end;
 
 end.
