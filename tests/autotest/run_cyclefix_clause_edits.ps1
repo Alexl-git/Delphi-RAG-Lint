@@ -177,7 +177,22 @@ try {
        Out = "uses`r`n  System.SysUtils {`$IFDEF MSWINDOWS}, System.Classes {`$ENDIF},`r`n  CfBeta.Untangle;`r`n" },
     # an `in 'path'` literal holding `{` and `//` is a string token, not a comment
     @{ N = 'inpath'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta in '.\{b}\..\.//CfBeta.pas';";
-       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle;`r`n" }
+       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle;`r`n" },
+    # T17b D3 (the ORM3 Blueprint4.pas shape): a leading-comma entry followed by a comment line lost the
+    # entry and the comma of the NEXT entry, leaving a line `  , `
+    @{ N = 'leading-comment'; In = "uses`r`n  System.SysUtils`r`n  , CfBeta`r`n  // note`r`n  , System.Classes;";
+       Out = "uses`r`n  System.SysUtils`r`n  // note`r`n  , System.Classes, CfBeta.Untangle;`r`n" },
+    @{ N = 'middle-comment'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta,`r`n  // note`r`n  System.Classes;";
+       Out = "uses`r`n  System.SysUtils,`r`n  // note`r`n  System.Classes,`r`n  CfBeta.Untangle;`r`n" },
+    @{ N = 'leading-first'; In = "uses`r`n  CfBeta`r`n  , System.SysUtils;";
+       Out = "uses`r`n  System.SysUtils, CfBeta.Untangle;`r`n" },
+    # the LAST entry before `;` (the leaf is already listed, so nothing is added after it)
+    @{ N = 'last'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle,`r`n  CfBeta;";
+       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle;`r`n" },
+    @{ N = 'leading-last'; In = "uses`r`n  System.SysUtils`r`n  , CfBeta.Untangle`r`n  , CfBeta;";
+       Out = "uses`r`n  System.SysUtils`r`n  , CfBeta.Untangle;`r`n" },
+    @{ N = 'last-comment'; In = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle,`r`n  // note`r`n  CfBeta;";
+       Out = "uses`r`n  System.SysUtils,`r`n  CfBeta.Untangle;`r`n"; Keep = "  CfBeta.Untangle;`r`n  // note`r`n`r`n" }
   )
   foreach ($k in $cases) {
     $tag  = 'variant-' + $k.N
@@ -199,6 +214,7 @@ try {
     $after = [IO.File]::ReadAllText((Join-Path $root 'CfAlpha.pas'))
     $got   = [regex]::Match($after, '(?s)(?<=implementation\r\n\r\n)uses.*?;[^\r\n]*\r\n').Value
     Check "$($k.N): applied clause is exactly the expected text" ($got -ceq $k.Out) ("got [" + ($got -replace "`r`n", '\n') + "]")
+    if ($k.Keep) { Check "$($k.N): the comment line survives right after the clause" $after.Contains($k.Keep) '' }
     & $Exe index --project $proj --db $db *> (Join-Path $WorkDir ($tag + '-reindex.log'))
     $n2, $raw2 = Get-CycleCount $db
     Check "$($k.N): after the plan, no cycle" ($raw2 -match 'No circular') ($raw2.Trim() -replace "`r?`n", ' | ')

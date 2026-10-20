@@ -1937,9 +1937,21 @@ begin
     end;
   end;
 end;
+{ True when the name starting at the 1-based column pCol of line pLine is qualified: the
+  last code character before it (on that line, else at the end of the line before) is a
+  `.`, as in `Self.InBuf`. The index records `Self.X` as two bare reads, so the source
+  is the only witness. A qualified name binds through its qualifier, never through a
+  `with` subject. }
+function QualifiedAt(const pLines: TArray<string>; pLine, pCol: Integer): Boolean;
+begin
+  var Before:= TrimRight(Copy(LineOf(pLines, pLine), 1, pCol - 1));
+  if Before = '' then Before:= TrimRight(LineOf(pLines, pLine - 1));
+  Result:= EndsStr('.', Before) and not EndsStr('..', Before);
+end;
+
 { No name inside a `with X as TClass do` body may change its binding when the interface
   replaces the class: a member of the class chain the interface does not carry, a getter
-  name, an IInterface method. }
+  name, an IInterface method. A qualified name (`Self.InBuf`) cannot rebind (T17b D1). }
 function TMemberPlan.CheckWithBodies: Boolean;
 var
   Names: TStringList;
@@ -1968,7 +1980,7 @@ begin
         var InBody:= (R.StartLine >= W) and (R.StartLine <= Last) and (R.ReceiverText = '');
         var InHead:= (R.StartLine = W) and DoAt.Success and (R.StartCol < DoAt.Index);
         if InBody and not InHead and not MatchText(R.Kind, ['type_use', 'member-access']) and
-          (Names.IndexOf(R.NameText) >= 0) then
+          (Names.IndexOf(R.NameText) >= 0) and not QualifiedAt(FLines, R.StartLine, R.StartCol) then
           Exit(Refuse('with-member', R.NameText, FFromFid, R.StartLine, Format('inside `with ... as %s do` ' +
             '(line %d), `%s` at line %d names a member of `%s` or its ancestors that the interface does not ' +
             'carry: after the rewrite it would bind to something else', [FCls.Name, W, R.NameText, R.StartLine,

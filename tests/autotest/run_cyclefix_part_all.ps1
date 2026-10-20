@@ -173,7 +173,7 @@ $H = New-Demo 'h'
 $hH = Get-TreeHash $H.Proj
 $stale = Join-Path $WorkDir 'stale-success.json'
 [IO.File]::WriteAllText($stale, ($cysDoc + "`r`n"), [Text.Encoding]::ASCII)
-$r = Run-Fix $H @('--part', 'all', '--apply') @{ DRAGLINT_CYCLEFIX_ALL_CHILD = 'C:\no-such-dir\drag-lint.exe'; DRAGLINT_CYCLEFIX_ALL_PLANT = $stale }
+$r = Run-Fix $H @('--part', 'all', '--apply') @{ DRAGLINT_CYCLEFIX_ALL_CHILD = (Join-Path (Join-Path $WorkDir 'no-such-dir') 'drag-lint.exe'); DRAGLINT_CYCLEFIX_ALL_PLANT = $stale }
 Check 'h: exit 2, not the planted success' (($r.Exit -eq 2) -and ($r.Json.ok -eq $false)) "exit=$($r.Exit) $($r.Out)"
 Check 'h: no iteration was recorded from the stale file' (@($r.Json.cycles).Count -eq 0) $r.Out
 Check 'h: error says the loop could not continue' ("$($r.Json.error)" -ne '') $r.Out

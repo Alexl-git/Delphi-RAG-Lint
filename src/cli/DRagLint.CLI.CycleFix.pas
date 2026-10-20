@@ -167,7 +167,8 @@ type
 function RunMsBuild(const pProject, pPlatform, pLogPath: string): TBuildOutcome;
 
 /// <summary>True when the RAD Studio rsvars.bat RunMsBuild calls exists.</summary>
-/// <returns>False on a machine without RAD Studio 37.0.</returns>
+/// <returns>False when no Studio root resolves (TStudioEnv: $BDS, the registry, the fallback) or
+/// its rsvars.bat is missing.</returns>
 function CompilerAvailable: Boolean;
 
 /// <summary>The baseline gate: builds the UNTOUCHED project before anything is staged.</summary>
@@ -348,7 +349,7 @@ implementation
 uses
   System.Classes, System.IOUtils, System.JSON, System.DateUtils, System.Hash,
   System.StrUtils, System.RegularExpressions, System.Diagnostics, System.Math, Winapi.Windows,
-  DRagLint.Core.Model, DRagLint.Convert.Backup;
+  DRagLint.Convert.Backup, DRagLint.Core.StudioEnv;
 
 const
   CExitMechanical = 0;
@@ -362,7 +363,6 @@ const
   CShadowLine      = 'Shadow tree: ';
   CMaxAsciiOrd     = 127;  // the last ASCII code point
   CTamperParts     = 3;    // File.pas|from|to
-  CRsvars          = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'; // dl:ok hardcoded-absolute-path@ef69 -- the RAD Studio 37.0 install the E18 design builds with (the playbook scorer's recipe)
   CBreakCast       = 1;    // DRAGLINT_CYCLEFIX_BREAK=1: drop the cast before `as I...`
   CBreakPointer    = 2;    // DRAGLINT_CYCLEFIX_BREAK=2: the pointer type as a reference type
   CSecondBuild     = 2;    // CompileAfter builds at most twice
@@ -768,9 +768,17 @@ begin
   TFile.WriteAllBytes(FPath, EncodeSource(Text, FEnc));
 end;
 
+{ The Studio build-environment batch, from the repo's one Studio-root resolver (T17b D4:
+  run_studio_root_guard); '' when no root resolves. }
+function BuildEnvBat: string;
+begin
+  Result:= if TStudioEnv.RootOrEmpty = '' then '' else TStudioEnv.RsvarsBat;
+end;
+
 function CompilerAvailable: Boolean;
 begin
-  Result:= TFile.Exists(CRsvars);
+  var Bat:= BuildEnvBat;
+  Result:= (Bat <> '') and TFile.Exists(Bat);
 end;
 
 function MsBuildPlatform(const pPlatform: string): string;
@@ -892,7 +900,7 @@ begin
   Result:= Default(TBuildOutcome);
   if not CompilerAvailable then
   begin
-    Result.Errors:= ['cannot build: rsvars.bat not found: ' + CRsvars];
+    Result.Errors:= ['cannot build: the RAD Studio build environment was not found: ' + BuildEnvBat];
     Exit;
   end;
   var Project:= ExpandFileName(pProject);
@@ -904,7 +912,7 @@ begin
   System.SysUtils.DeleteFile(Log); // a stale log of an earlier run must not be read as this one's; absent = fine
   TFile.WriteAllText(Bat, string.Join(#13#10, [
     '@echo off',
-    Format('call "%s"', [CRsvars]),
+    Format('call "%s"', [BuildEnvBat]),
     Format('cd /d "%s"', [ExcludeTrailingPathDelimiter(ExtractFilePath(Project))]),
     Format('msbuild /t:Build /p:Config=Debug /p:Platform=%s /v:minimal "%s" > "%s" 2>&1',
       [MsBuildPlatform(pPlatform), Project, Log]),
@@ -1953,7 +1961,8 @@ begin
   begin
     pGate.BaselineStatus:= 'unavailable';
     ReportGateRefusal(pOpts, pGate, MakeRefusal('no-compiler', '', pOpts.Project,
-      'rsvars.bat not found (' + CRsvars + '): the compile gate cannot run; a dry run without it needs --no-compile', 0));
+      'the RAD Studio build environment was not found (' + BuildEnvBat + '): the compile gate cannot run; a dry run without ' +
+      'it needs --no-compile', 0));
     Exit(False);
   end;
   pGate.Baseline:= BaselineCompile(pOpts, BuildScratchDir);

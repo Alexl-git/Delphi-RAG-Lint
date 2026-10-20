@@ -191,6 +191,27 @@ try {
   Check 'c2 the plan says why' `
     (($blkC -join "`n").Contains('existing DemoAudit.Untangle uses DemoLogger, a unit of this cycle -- creating DemoAudit.Untangle2')) ''
   Check 'c3 nothing is inserted into the colliding unit' ((Get-FileEdits $blkC 'DemoAudit.Untangle.pas').Count -eq 0) ''
+
+  # --- (d) T17b D2: the source already uses its leaf (a second pass after Part A) --------------
+  Write-Host '== (d) DemoAudit uses DemoAudit.Untangle: no self-use is planned' -ForegroundColor Cyan
+  $rd = Join-Path $WorkDir 'selfuse'
+  Copy-Tree $fx $rd
+  $ap = Join-Path $rd 'DemoAudit.pas'
+  $t = [IO.File]::ReadAllText($ap).Replace("  System.SysUtils,`r`n  System.Classes;`r`n`r`ntype", "  System.SysUtils,`r`n  System.Classes,`r`n  DemoAudit.Untangle;`r`n`r`ntype")
+  [IO.File]::WriteAllText($ap, $t, $Ascii)
+  Check 'd0 DemoAudit now uses DemoAudit.Untangle in its interface' $t.Contains("  DemoAudit.Untangle;`r`n`r`ntype") ''
+  $dbD = Join-Path $WorkDir 'selfuse.sqlite'
+  Check 'd1 fixture indexed' ((Invoke-Index (Join-Path $rd 'UntangleReuse.dproj') $dbD 'd') -eq 0)
+  $pd = Get-Cycles $dbD 'd' @('--plan')
+  $blkD = Get-CycleBlock $pd.Out 1
+  $leafD = (Get-FileEdits $blkD 'DemoAudit.Untangle.pas') -join "`n"
+  Check 'd2 the existing leaf is still extended (positive control: the edits are there)' $leafD.Contains('  TDemoAuditKind = (akOpen, akWork, akClose);') $leafD
+  Check 'd3 no edit of DemoAudit.Untangle.pas adds DemoAudit.Untangle to its own uses' `
+    (-not ($leafD -match '(?m)^\s*DemoAudit\.Untangle[;,]')) $leafD
+  $fo = & pwsh -NoProfile -File (Join-Path $Repo 'tools\follow-cycle-plan.ps1') -PlanFile $pd.File -Cycle 1 -Root $rd 2>&1 | Out-String
+  Check 'd4 the follower applies cycle 1 (exit 0)' ($LASTEXITCODE -eq 0) ($fo.Trim() -replace "`r?`n", ' | ')
+  $c2 = Invoke-Compile $rd 'UntangleReuse.dpr'
+  Check 'd5 the followed tree compiles (no F2092 self-use)' $c2.Ok ($c2.Log -split "`r?`n" | Select-String 'Error|Fatal' | Select-Object -First 3)
 } finally {
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 }
