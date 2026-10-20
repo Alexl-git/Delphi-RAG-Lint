@@ -431,9 +431,34 @@ begin
   end;
 end;
 
+var
+  GShadowPick: string; // the default shadow dir this process picked (never one that existed); '' = not asked yet
+  GBuildPick : string; // the same for the compile gate's _build dir
+
+// A scratch name under C:\TEMP that does not exist NOW: the pid-based name, else the same with a random
+// suffix. A leftover dir of an earlier process with this pid is therefore never reused (its contents
+// never reach a build) and never deleted: whatever exists under a picked name at the end of the run,
+// THIS run created.
+function FreshScratchName(const pTail: string): string;
+const
+  CGuidHexFrom = 2; // past the opening brace
+  CGuidHexLen  = 8;
+var
+  Pid: string;
+begin
+  { DRAGLINT_TEST_SCRATCH_PID (test seam, only names a dir under C:\TEMP): stands in for the pid, so a runner
+    can plant the would-be name before the run }
+  Pid:= GetEnvironmentVariable('DRAGLINT_TEST_SCRATCH_PID');
+  if Pid = '' then Pid:= IntToStr(GetCurrentProcessId);
+  Result:= Format('C:\TEMP\draglint_cyclefix_%s%s\', [Pid, pTail]); // dl:ok hardcoded-absolute-path@022b -- the debug shadow location is fixed by the E18 design; --shadow-out overrides it
+  if TDirectory.Exists(Result) then
+    Result:= Format('C:\TEMP\draglint_cyclefix_%s_%s%s\', [Pid, Copy(GUIDToString(TGUID.NewGuid), CGuidHexFrom, CGuidHexLen), pTail]); // dl:ok hardcoded-absolute-path@b155 -- same fixed location
+end;
+
 function DefaultShadowDir: string;
 begin
-  Result:= Format('C:\TEMP\draglint_cyclefix_%d\', [GetCurrentProcessId]); // dl:ok hardcoded-absolute-path@6532 -- the debug shadow location is fixed by the E18 design; --shadow-out overrides it
+  if GShadowPick = '' then GShadowPick:= FreshScratchName('');
+  Result:= GShadowPick;
 end;
 
 // The text the applier's stale guard can hold: '' for a blank line or one that starts a comment
@@ -758,7 +783,8 @@ end;
 // The folder of the gate's .bat files and logs: never inside the project or the shadow tree.
 function BuildScratchDir: string;
 begin
-  Result:= Format('C:\TEMP\draglint_cyclefix_%d_build\', [GetCurrentProcessId]); // dl:ok hardcoded-absolute-path@4b37 -- next to the fixed debug shadow location of the E18 design
+  if GBuildPick = '' then GBuildPick:= FreshScratchName('_build');
+  Result:= GBuildPick;
 end;
 
 // The distinct `error E....` / `fatal F....` lines of a build log, trimmed, in log order.
@@ -2564,9 +2590,12 @@ const
   CKeepScratchVar = 'DRAGLINT_CYCLEFIX_KEEP_SCRATCH';
 begin
   if GetEnvironmentVariable(CKeepScratchVar) = '1' then Exit;
-  var Dirs: TArray<string>:= [BuildScratchDir];
-  if pOpts.ShadowOut = '' then Dirs:= Dirs + [DefaultShadowDir];
+  { only the names this run picked (FreshScratchName: they did not exist then); a run that never needed
+    a default dir picked none and deletes nothing }
+  var Dirs: TArray<string>:= [GBuildPick];
+  if pOpts.ShadowOut = '' then Dirs:= Dirs + [GShadowPick];
   for var D in Dirs do
+    if D <> '' then
     try
       if TDirectory.Exists(D) then TDirectory.Delete(D, True);
     except

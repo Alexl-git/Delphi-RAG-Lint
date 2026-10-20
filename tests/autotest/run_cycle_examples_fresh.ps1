@@ -37,6 +37,7 @@ param(
   [switch]$Update,
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+
 # E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
 # -KeepScratch is passed (the path is printed).
 function Remove-Scratch {
@@ -60,6 +61,7 @@ $Exe  = (Resolve-Path $Exe).Path
 $Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
+try {
 $LibArgs = @()
 if (Test-Path $LibraryDb) {
   $LibCopy = Join-Path $WorkDir 'library-copy.sqlite'
@@ -236,7 +238,9 @@ foreach ($ex in $Examples) {
     Pop-Location
   }
 }
+} finally {
+  Remove-Scratch
+}
 
 Write-Host ''
-Remove-Scratch
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 } else { Write-Host 'PASS' -ForegroundColor Green; exit 0 }

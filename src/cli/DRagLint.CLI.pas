@@ -22394,7 +22394,7 @@ begin
           var JsonLibMessage: string;
           var JsonLib: ISymbolStore:= OpenPlanLibrary(JsonLibFailed, JsonLibMessage);
           AddCycleFixHints(Store, AArgs.DbPath, Sccs, EdgeGraph, JsonLib, AArgs.ProjectPath, JArr,
-            (if JsonLibFailed then 'library unavailable: ' + JsonLibMessage else ''));
+            (if JsonLibFailed then 'library unavailable: ' + (if JsonLibMessage <> '' then JsonLibMessage else 'the platform library could not be opened') else ''));
         end;
         Writeln(JArr.ToJson);
       finally
