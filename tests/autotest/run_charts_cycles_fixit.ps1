@@ -26,7 +26,7 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory)][string]$Exe,
+  [string]$Exe = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
   [switch]$KeepScratch,
   [string]$WorkDir = "$env:TEMP\drag-lint-charts-cycles-fixit-$PID"
 )
