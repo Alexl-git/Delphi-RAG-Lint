@@ -24,7 +24,8 @@ $yadf = Read-ProductPage (Join-Path $PSScriptRoot '..\products\yadf\index.html')
 $y = $yadf.Body
 foreach ($s in 'Smart column alignment', 'Set F / Set R', 'Ctrl+Shift+Alt+R', 'In YADFSetup or on the IDE settings page',
                'href="https://www.htrmicronite.com',
-               # yadf-6c read-back 2026-10-20
+               # yadf-6c read-back 2026-10-20 (.dpk: owner 2026-10-20)
+               'reformats .pas, .dpr, .dpk and .inc source',
                'Help &gt; Tools &gt; YADFOT: Format Current Buffer',
                'so code from 11-13 can build on 10.2.3. Best effort: ambiguous cases are left marked for you to finish.') {
     Assert-True ($y.Contains($s)) "YADF page contains '$s'"
