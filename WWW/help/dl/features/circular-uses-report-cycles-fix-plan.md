@@ -111,13 +111,27 @@ prints the verdict. No source file of the project is written -- but the dry run 
 project by default** (the baseline gate), and that build writes what any build writes (dcu,
 exe). `--no-compile` skips it. Exit 0 mechanical, 1 refused, 2 error (bad flags, no such group).
 
+**Builds.** Every build is `msbuild /p:Config=Debug` of the project for `--platform` (default
+`win64`; the IDE passes its active platform). The Release configuration is never built.
+
+**Scratch.** The default shadow tree and the gate's `C:\TEMP\draglint_cyclefix_<pid>_build\`
+(build logs, `reindex.log`, `all-iteration-<n>.json`) are **deleted when the run exits 0** -- the
+text dry run says so on its line: `Shadow tree: <dir> (deleted at exit; --shadow-out keeps it)`.
+A run that exits with any other code **keeps** them, so the logs its messages cite still exist,
+and names each kept dir on stderr:
+`drag-lint: note: cycles --fix exited 1; its scratch is kept for the logs it cites: <dir>`.
+A `--shadow-out` dir is never deleted. In the JSON, `shadow_kept` says whether `shadow` still
+exists after the run.
+
 **Apply.** `--apply` runs the same plan, then:
 1. the baseline build must pass (else `dirty-baseline`, nothing written);
 2. every file it touches is backed up as `<file>.BCK<n>` (the lowest free n) plus a
    `recovery.txt`, unless `--no-backup`;
 3. the edits are written and the project is built in place; one bounded repair (R4: a cast
    through the plan's ancestor, a missing leaf unit in `uses`, a re-emitted pointer type) is
-   tried on a compile error, otherwise every file is rolled back;
+   tried on a compile error, otherwise every file is rolled back. The rollback restores the
+   sources byte for byte but not the DCUs the failed build wrote: **rebuild the project after a
+   rollback** before you trust its output;
 4. the project is re-indexed (unless `--no-reindex`) and `cycles` re-run: the output must
    equal the plan's prediction.
 
@@ -143,7 +157,9 @@ implements an `I<Class>Surface` interface declared in its leaf, and the consumer
 **JSON.** `--format json` prints one `cycle-fix/1` document: `mode`, `cycles[]` (per group:
 `n`, `units`, `part`, `verdict`, `recipe`, `edge`, `refusals[]`, `moves`, `uses`, `new_units`,
 `edits`, `compile`, `baseline`, `repairs`, `written`, `backups`, `reindex`, `predicted`,
-`actual`, `verified`), `shadow`, `baseline`, `ok`, `exit_code`. Separately,
+`actual`, `verified`), `shadow`, `shadow_kept`, `baseline`, `ok`, `exit_code`. An error that
+ends the run before any group is planned (bad flags, a `--library-db` that does not open) is
+the document `{schema, error, ok: false, exit_code: 2}`. Separately,
 `cycles --format json --causes [--project <X.dproj>]` adds a `fix` object to every group of
 the report -- `available`, `part`, `dry_run` and `apply` (the exact commands; `--project` names
 the project in them, else `<your.dproj>`), `edges[]`, `reason`, and for a Part A group whose
@@ -164,11 +180,20 @@ The engine never guesses; every kind it can give:
   the file is ANSI), `outside-roots` (the plan would edit a file outside the project's own
   roots).
 * **Plan:** `base-class` (a class whose bodies use the cycle would need a base class
-  extracted -- a manual step), `directive` (a compiler directive inside an edited region),
-  `manual-edit` (the default for any edit the planner cannot make mechanically).
+  extracted -- a manual step), `blocked-symbol` (a declaration the move needs cannot move: a
+  routine, a class whose method bodies use the cycle, an unrecognised declaration block),
+  `directive` (a compiler directive inside an edited region), `unresolved-edge` (the index
+  could not resolve what one unit of the group uses from another), `edge-still-used` (after
+  an R1 / R2 cut the consumer still uses the declaring unit for another name, so the uses
+  entry -- and the edge -- would stay), `manual-edit` (the default for any edit the planner
+  cannot make mechanically).
 * **R1 (routine-call inversion):** `not-a-routine`, `signature-in-cycle`,
   `overloaded-routine`, `signature-unknown`, `qualified-ref`, `routine-not-called`,
-  `init-order`, `unsupported-directive`.
+  `init-order`, `unsupported-directive`, `duplicate-identifier` (the leaf already declares the
+  pointer type or variable), `unit-leaves-program` (the declaring unit is used only by the
+  consumer and the program's `.dpr` does not list it: after the cut the linker drops it, its
+  initialization never assigns the pointer and the call is a nil call at run time -- add the
+  unit to the `.dpr` uses; a `DCCReference` alone does not link it).
 * **R2 (member hand-over):** `member-write`, `construction`, `class-method`, `class-ref`,
   `type-decl`, `type-cast`, `other-ref`, `multiple-classes`, `member-unsupported`,
   `duplicate-identifier`, `no-iinterface`, `ref-counted`, `receiver-unknown`, `cast-unseen`,
@@ -194,13 +219,18 @@ keeps one finding per cycle and no hint.
   run only (the engine picks the group; no `--apply` from a menu click). Save first: the
   engine plans and compiles from the files on disk.
 * View > Tool Windows > drag-lint > Uses & Deps tab, section *This project -- Circular uses
-  (cycles --fix)*: one row per group, Dry run / Apply buttons.
+  (cycles --fix)*: one row per group, Dry run / Apply buttons. Apply asks first (Yes / No,
+  default No), like the Structure tree.
 * drag-lint Structure window, Diagnostics tree, right-click a `circular-uses` finding:
   *Fix this cycle (dry run)...* and *Apply cycle fix...* (a dry run, your confirmation, then
   `--apply`).
 
-The IDE gives each cycle-fix job a 35 minute limit, because the engine builds the project
-(baseline and, on apply, after the edit) inside that one job.
+Every IDE-started run passes the IDE's active platform as `--platform`. The IDE gives each
+cycle-fix job a 120 minute limit: above the longest run the engine's own limits allow one
+`--apply` (three builds of up to 30 minutes -- baseline, after, one repair rebuild -- plus a
+re-index and a `cycles` run of up to 10 minutes each), so the engine always times out and
+rolls back first; a kill by the IDE would bypass the rollback. A `--part all` iteration gets
+the same 120 minutes.
 
 ### What it needs
 Required. You must have indexed the project before running this -- cycle

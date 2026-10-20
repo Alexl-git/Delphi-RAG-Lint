@@ -21,8 +21,14 @@ No extractor change (1.22.0-alpha): no re-parse.
   `--apply --no-compile` is exit 2.
   `--part all` (needs `--apply`, refuses `--no-reindex`) applies Part A then Part B. Every
   refusal is named (`dirty-baseline`, `compile-error`, `build-timeout`, `anchor-mismatch`,
-  `non-ascii-text`, `base-class`, `receiver-unknown`, `manual-edit`, ...; the full list is on
-  the wiki page). Without `--cycle` / `--unit` the text output names the groups the run did
+  `non-ascii-text`, `base-class`, `receiver-unknown`, `unit-leaves-program`, `manual-edit`,
+  `blocked-symbol`, `unresolved-edge`, `edge-still-used`, ...; the full list is on the wiki
+  page). Every build is `msbuild /p:Config=Debug` for `--platform` (default win64). A rollback
+  restores the sources, not the DCUs the failed build wrote: rebuild after a rollback. The
+  default scratch (shadow tree, build logs) is deleted when the run exits 0 and kept -- and
+  named on stderr -- when it does not, so the logs a failure cites exist; the dry run's
+  `Shadow tree:` line says which. A `--library-db` that does not open answers `--format json`
+  with a `cycle-fix/1` error document. Without `--cycle` / `--unit` the text output names the groups the run did
   not plan, with a `--cycle <n>` hint. `info --json` capability `cycle_fix`.
 - **Part B recipes R1 and R2.** R1 routine-call inversion: an edge that is exactly one routine
   whose signature types live outside the cycle is called through a procedural variable
@@ -36,7 +42,11 @@ No extractor change (1.22.0-alpha): no re-parse.
   Dependencies > Fix Circular Uses Mechanically (dry run)...*, the Uses & Deps tab's
   *Circular uses* section (Dry run / Apply per group), and *Fix this cycle (dry run)...* /
   *Apply cycle fix...* on a `circular-uses` finding in the Structure window's Diagnostics
-  tree (35 minute job limit).
+  tree. Every IDE-started run passes the active platform as `--platform`; the tab's Apply
+  asks Yes / No first, like the tree; each job has a 120 minute limit, above the longest run
+  the engine's own limits allow one `--apply` (3 builds x 30 min + re-index + `cycles`
+  10 min each), so the engine always rolls back before the IDE could kill it (the
+  `--part all` iteration limit is the same).
 
 ### Fixed
 - `cycles --plan`'s predicted re-check output lists the groups in the order `cycles` really
@@ -46,6 +56,9 @@ No extractor change (1.22.0-alpha): no re-parse.
   dropping it.
 
 ### Changed
+- The `circular-uses` message, in `lint` AND `lint-all`, now ends with
+  ` fix: drag-lint cycles --fix --project <X.dproj> --unit <stem>` (the project given to
+  `lint`, else that placeholder); a tool that matches the whole message text must allow for it.
 - `circular-demo` carries three cycles instead of one (E18 phase 2): the original
   interface-coupled four-unit cycle, unchanged; a three-unit implementation-only cycle whose
   only cheap cut is a single routine call (`DemoBlueprint -> DemoBlueprint.ViewModel`); and a
