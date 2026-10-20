@@ -1528,6 +1528,7 @@ type
     function CheckWithBodies: Boolean;
     function LibUnitOf(const pIdent: string): string;
     function IsUnitName(const pPrefix: string): Boolean;
+    function LibDeclaresIn(const pIdent, pUnit: string): Boolean;
     function AddLeafUse(const pM: TSymbol; const pTypeName, pShown: string): Boolean;
     function AddNestedLeafUse(const pM: TSymbol; const pOuter, pShown: string): Boolean;
     function CheckCastExceptions: Boolean;
@@ -1982,6 +1983,16 @@ begin
   end;
 end;
 
+{ Whether the platform library declares pIdent in the unit pUnit (a unit written in full, as
+  `System.Classes.TStrings` does, though the class unit's uses names it by a unit-scope short name). }
+function TMemberPlan.LibDeclaresIn(const pIdent, pUnit: string): Boolean;
+begin
+  Result:= False;
+  if FIdx.Lib = nil then Exit;
+  for var S in FIdx.Lib.FindSymbolsByExactName(pIdent) do
+    if SameText(UnitOfFile(FIdx.Lib.GetFilePath(S.FileId)), pUnit) then Exit(True);
+end;
+
 { Whether a dotted prefix of a type name is a UNIT: a project unit stem, a unit the class
   unit's uses name (as written), or System. Otherwise it is the outer type of a nested type. }
 function TMemberPlan.IsUnitName(const pPrefix: string): Boolean;
@@ -2014,7 +2025,9 @@ begin
   var Ident:= pTypeName.Substring(Dot + 1);
   var Prefix:= if Dot > 0 then pTypeName.Substring(0, Dot) else '';
   { fix round 1: `TOuter.TInner` -- the leaf needs the unit that declares TOuter, never `uses TOuter` }
-  if (Prefix <> '') and not IsUnitName(Prefix) then Exit(AddNestedLeafUse(pM, Prefix, pShown));
+  { T6-follow: the LONGEST dotted prefix that is a known unit wins (`System.Classes.TStrings`), before the nested path }
+  if (Prefix <> '') and not IsUnitName(Prefix) and not LibDeclaresIn(Ident, Prefix) then
+    Exit(AddNestedLeafUse(pM, Prefix, pShown));
   if (Prefix = '') and (ContainsText(CNotTypeWords, ' ' + Ident + ' ') or ContainsText(CBuiltinTypes, ' ' + Ident + ' ')) then
     Exit(True);
   Stem:= '';

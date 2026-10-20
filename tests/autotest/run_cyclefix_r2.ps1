@@ -394,6 +394,13 @@ try {
   $v25 = Get-VariantPlan (New-Variant $cleanDir 'v-f25' @(, @($U, $AttachGuarded, $AttachTryGuarded))) 'v-f25' $Lib
   Check 'f25 control for f24: EInvalidCast handled, but every `as` follows its `is` guard -- still cut' `
     ($v25.Ok -and ($v25.Dump.verdict -eq 'mechanical') -and $v25.Text.Contains('by **member hand-over through an extracted interface**')) "[$($v25.Dump.verdict) / $($v25.Dump.refusals)]"
+  # E18 T6-follow (b): a signature type written `System.Classes.TStrings` while the class unit's uses
+  # names `Classes` (unit scope): the longest dotted prefix `System.Classes` is the UNIT, never `System`.
+  $v26 = Get-VariantPlan (New-Variant $cleanDir 'v-f26' @(@($G, "  System.Classes;`n`ntype", "  Classes;`n`ntype"),
+    @($G, '    property Log: TStrings read FLog;', '    property Log: System.Classes.TStrings read FLog;'))) 'v-f26' $Lib
+  Check 'f26 a dotted unit-qualified signature type `System.Classes.TStrings`: cut, the leaf uses System.Classes (never `uses System`)' `
+    ($v26.Ok -and ($v26.Dump.verdict -eq 'mechanical') -and ($v26.Text -match "(?s)unit DemoGagePort\.Untangle;.*uses\n  System\.Classes;") -and
+     ($v26.Text -notmatch '(?m)^  System[;,]\r?$') -and $v26.Text.Contains('property Log: System.Classes.TStrings read GetLog;')) "[$($v26.Dump.verdict) / $($v26.Dump.refusals)]"
   Check 'a13 the demo plan names the exception change of `as` (EInvalidCast -> EIntfCastError)' `
     ($txA.Contains('a failed `as IDemoGagePortSurface` raises EIntfCastError, not EInvalidCast')) ''
 

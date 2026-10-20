@@ -13,8 +13,9 @@
   re-index, `cycles` -> actual. The predicted block is the text between the
   `It must print exactly:` fence of Cycle 1. Both sides drop informational lines
   (`(loaded`, `drag-lint: note:`, `  resolver:`) and are compared line for line.
-  Cycles 2 and 3 are refused by the planner: the follower must exit 2 with
-  `REFUSE: plan has no mechanical steps`. No compiler involved.
+  Cycle 2 is refused by the planner (no platform library in this run): the follower must exit 2
+  with `REFUSE: plan has no mechanical steps`. Cycle 3 is cut by R1 (E18 Task 5) and followed on
+  its own -Root copy. No compiler involved.
   POSITIVE CONTROL: swapping two predicted group lines in memory must make the
   compare FAIL. Also: -Root applies the same plan to a second copy (real run; the first copy must stay byte-unchanged) and\n  is refused (exit 2) when the plan paths share no common directory.
 #>
@@ -85,11 +86,18 @@ try {
   Check 'POSITIVE CONTROL: without -Root the plan changed its own tree (copy)' ((Get-Hashes $S | ConvertTo-Json -Compress) -cne $h1)
   Check 'POSITIVE CONTROL: without -Root the plan did not touch copy3' ((Get-Hashes $S3 | ConvertTo-Json -Compress) -ceq $h3)
 
-  foreach ($c in 2, 3) {
-    $o = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle $c 2>&1 | Out-String
-    Check "Cycle $c is refused (exit 2)" ($LASTEXITCODE -eq 2) $o
-    Check "Cycle $c says no mechanical steps" ($o -match 'REFUSE: plan has no mechanical steps') $o
-  }
+  # Cycle 2 stays REFUSED (this run opens no platform library, so R2 cannot classify its ancestry): the refusal control.
+  $o = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 2 2>&1 | Out-String
+  Check 'Cycle 2 is refused (exit 2)' ($LASTEXITCODE -eq 2) $o
+  Check 'Cycle 2 says no mechanical steps' ($o -match 'REFUSE: plan has no mechanical steps') $o
+  # Cycle 3 is cut mechanically by recipe R1 (routine-call inversion, E18 Task 5). It is followed on its OWN copy
+  # (-Root), so `copy` stays the Cycle 1 tree the predicted block describes.
+  $S4 = Join-Path $WorkDir 'copy4'; Copy-Demo $S4
+  $h4 = (Get-Hashes $S4 | ConvertTo-Json -Compress)
+  $o3 = & pwsh -NoProfile -File $Follow -PlanFile $plan -Cycle 3 -Root $S4 2>&1 | Out-String
+  Check 'Cycle 3 follows mechanically (R1): exit 0' ($LASTEXITCODE -eq 0) $o3
+  Check 'Cycle 3 is not refused' ($o3 -notmatch 'REFUSE') $o3
+  Check 'Cycle 3 changed its copy' ((Get-Hashes $S4 | ConvertTo-Json -Compress) -cne $h4)
 
   & $Exe index --project $dproj --db $db *> $null
   $actual = Keep (Run @('cycles', '--db', $db))
