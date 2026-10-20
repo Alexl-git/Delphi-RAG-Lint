@@ -27,7 +27,7 @@ try {
   if (-not $SkipBuild) {
     if (-not (Test-Path -LiteralPath $bat)) { Write-Host "FEATUREGEN TESTS: FAIL -- build script missing: $bat" -ForegroundColor Red; exit 1 }
     $blog = Join-Path $work 'build.log'
-    Start-Process -FilePath cmd.exe -ArgumentList '/c', "`"$bat`" > `"$blog`" 2>&1" -Wait -NoNewWindow
+    Start-Process -FilePath cmd.exe -ArgumentList (('/c ' + [char]34 + [char]34 + $bat + [char]34 + ' > ' + [char]34 + $blog + [char]34 + ' 2>&1' + [char]34)) -Wait -NoNewWindow
     $bl = Get-Content -LiteralPath $blog -Raw
     if (($bl -notmatch 'BUILD_EXITCODE=0') -or ($bl -match '\[dcc\w*\] Error|: error ')) {
       Write-Host "FEATUREGEN TESTS: FAIL -- the test runner did not build (log: $blog)" -ForegroundColor Red

@@ -1560,10 +1560,10 @@ The registry is the master list of what drag-lint ships; the page is yours, the
 list is the registry's. Spec (local, gitignored design spec): `docs\superpowers\specs\2026-10-05-feature-registry-design.md`;
 page: `docs\wiki\Feature-Registry.md`.
 
-1. Register it: `featuregen add --id <id> --title ... --group ... --owner ...
-   --summary ... --intro ... --wiki-page ... --surface "<type>:<...> ;; <type>:<...>"` -- surfaces
+1. Register it: `featuregen add` (id, title, group, owner, summary, intro, wiki page and the
+   surfaces as `"<type>:<...> ;; <type>:<...>"`; `featuregen --help` has the option names) -- surfaces
    carry the FULL menu path (`ide-menu:<Top> > Submenu > Caption`), every level. Moving a
-   menu item? `featuregen blast-radius --menu-path "<node>"` first, then `featuregen move-menu --from ... --to ...`, in
+   menu item? `featuregen blast-radius` on the menu node first, then `featuregen move-menu` (old and new prefix), in
    the same commit as the plugin change.
 2. Write or update the wiki page named in `wikiPage` -- you own it; the registry links to it.
 3. Run `featuregen normalise` and `featuregen build --all` and commit the regenerated `docs\wiki` pages, the
@@ -1572,7 +1572,7 @@ page: `docs\wiki\Feature-Registry.md`.
    prints the JSON skeleton; a red battery is the only reminder there is.
 5. Never hand-edit `Home.md`, `Features.md`, `Feature-Index.md`, `Quick-Help.md` or a
    `dl:registry` block -- edit the entry or the template under `features\templates\` and
-   regenerate. Groups and teams are data (`--new-group` / `--new-team`), not an enum.
+   regenerate. Groups and teams are data (`featuregen add` creates a new one on request), not an enum.
 
 `status: internal` is for accepted-but-unadvertised verbs; docs-sync check 1's
 `$UndocumentedOnPurpose` stays a separate list in v1 (owner decision 2026-10-05).
