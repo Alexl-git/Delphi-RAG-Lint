@@ -22,7 +22,7 @@ unit DRagLint.Report.CyclePlan;  // dl:ok unit-too-large@252c -- one self-contai
 interface
 
 uses
-  System.Classes, System.Generics.Collections, System.JSON,
+  System.Classes, System.SysUtils, System.Generics.Collections, System.JSON,
   DRagLint.Core.Interfaces;
 
 const
@@ -58,6 +58,127 @@ type
     /// <summary>Unit stem -> file id in the index.</summary>
     UnitFid: TDictionary<string, Int64>;
   end;
+
+  /// <summary>One reason a cycle's plan cannot be applied mechanically.</summary>
+  /// <remarks>Kind is one of the strings of the 2026-10-10 contract 4.4:
+  /// manual-edit, blocked-symbol, unresolved-edge, directive, leaf-uses-cycle,
+  /// qualified-ref, class-ctor, base-class, outside-roots; R1 (E18 T5) adds
+  /// signature-in-cycle, signature-unknown, routine-not-called, init-order,
+  /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive; R2 (E18 T6) adds
+  /// member-write, construction, class-method, class-ref, type-decl, type-cast, other-ref,
+  /// multiple-classes, member-unsupported, no-iinterface, ref-counted, receiver-unknown,
+  /// cast-unseen, with-member, ancestry-unknown, type-unresolved, unresolved-qualified-type, exception-semantics (and reuses leaf-uses-cycle,
+  /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit). Line is 0 when the
+  /// refusal has no single line (an edge, a unit).</remarks>
+  TRefusal = record
+    Kind    : string;
+    Symbol  : string;
+    FilePath: string;
+    Reason  : string;
+    Line    : Integer;
+  end;
+
+  /// <summary>One symbol a plan moves into a leaf unit.</summary>
+  TPlanMove = record
+    /// <summary>Declared name.</summary>
+    Symbol: string;
+    /// <summary>Declaration keyword (record, class, type, ...) or the symbol kind.</summary>
+    Kind: string;
+    /// <summary>decl, with-bodies, base or blocked.</summary>
+    Recipe: string;
+    /// <summary>Source file as indexed.</summary>
+    FromFile: string;
+    /// <summary>Receiving leaf unit; '' when none is named.</summary>
+    ToUnit: string;
+    /// <summary>First declaration line, as indexed.</summary>
+    First: Integer;
+    /// <summary>Last declaration line, as indexed.</summary>
+    Last: Integer;
+  end;
+
+  /// <summary>One decision on a uses entry.</summary>
+  TPlanUse = record
+    /// <summary>File whose uses clause is judged.</summary>
+    FilePath: string;
+    /// <summary>The entry's unit name.</summary>
+    UnitName: string;
+    /// <summary>interface or implementation.</summary>
+    Section: string;
+    /// <summary>move, remove or keep.</summary>
+    Action: string;
+  end;
+
+  /// <summary>A unit file the plan creates.</summary>
+  TPlanNewUnit = record
+    /// <summary>Unit name.</summary>
+    UnitName: string;
+    /// <summary>Target file path.</summary>
+    Path: string;
+  end;
+
+  /// <summary>One edit of an existing file.</summary>
+  TPlanEdit = record
+    /// <summary>The edited file.</summary>
+    FilePath: string;
+    /// <summary>delete, insert, replace or manual.</summary>
+    Kind: string;
+    /// <summary>First line, as indexed.</summary>
+    First: Integer;
+    /// <summary>Last line, as indexed.</summary>
+    Last: Integer;
+  end;
+
+  /// <summary>A plan for one circular group as plain data, for the `cycles --fix` front end.</summary>
+  /// <remarks>Built by VisitCyclePlans from the planner's TCycleFixPlan; it owns nothing.</remarks>
+  TCyclePlanView = record
+    /// <summary>1-based group index (DoCycles order).</summary>
+    CycleIndex: Integer;
+    /// <summary>The group's unit stems.</summary>
+    Units: TArray<string>;
+    /// <summary>True when an interface uses edge is part of the group.</summary>
+    HasIntf: Boolean;
+    /// <summary>'A' for an interface-coupled group, 'B' for an implementation-only one.</summary>
+    Part: Char;
+    /// <summary>True when the planner found no refusal.</summary>
+    Mechanical: Boolean;
+    /// <summary>The planner's refusals.</summary>
+    Refusals: TArray<TRefusal>;
+    /// <summary>Symbols moved.</summary>
+    Moves: TArray<TPlanMove>;
+    /// <summary>Uses-entry decisions.</summary>
+    UseDecisions: TArray<TPlanUse>;
+    /// <summary>Units created.</summary>
+    NewUnits: TArray<TPlanNewUnit>;
+    /// <summary>Every edit of an existing file, the .dpr and .dproj included.</summary>
+    Edits: TArray<TPlanEdit>;
+    /// <summary>Paths of every file the plan edits (the .dproj when it is edited).</summary>
+    TouchedPaths: TArray<string>;
+    /// <summary>move-globals, routine-inversion, member-interface or ''.</summary>
+    Recipe: string;
+    /// <summary>The cut edge as 'from->to' (Part B), else ''.</summary>
+    Edge: string;
+    /// <summary>The expected `cycles` output after the plan, one line per #10.</summary>
+    Predicted: string;
+  end;
+
+  /// <summary>Called once per planned group by VisitCyclePlans.</summary>
+  /// <param name="pView">The group's plan as data; valid during the call only.</param>
+  /// <param name="pRender">Returns the playbook of this group, one string per line; call at most once.</param>
+  /// <returns>True to continue with the next group, False to stop.</returns>
+  TCyclePlanVisit = reference to function(const pView: TCyclePlanView; const pRender: TFunc<TArray<string>>): Boolean;
+
+/// <summary>Plans each circular group (or one) and hands every plan to pVisit as data.</summary>
+/// <param name="pStore">Open index the graph was built from; read only.</param>
+/// <param name="pDbPath">Path of that index.</param>
+/// <param name="pSccs">The circular groups, lower-case stems.</param>
+/// <param name="pGraph">The uses graph the groups were computed from.</param>
+/// <param name="pLibStore">Platform library index (read only) or nil.</param>
+/// <param name="pVisit">The consumer.</param>
+/// <param name="pOnly">1-based group to plan, or 0 for every group in order.</param>
+/// <remarks>Writes nothing. Groups after the one that made pVisit return False are not planned.</remarks>
+procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
+  const pLibStore: ISymbolStore; const pVisit: TCyclePlanVisit; pOnly: Integer = 0);
 
 /// <summary>Renders the `cycles --plan` markdown playbook for every circular
 /// unit group into <paramref name="pOut"/>, one output line per item.</summary>
@@ -106,7 +227,7 @@ procedure AddCycleEdgeSurfaces(const pStore: ISymbolStore; const pSccs: TList<TA
 implementation
 
 uses
-  System.SysUtils, System.IOUtils, System.StrUtils, System.RegularExpressions, System.Math,
+  System.IOUtils, System.StrUtils, System.RegularExpressions, System.Math, System.TypInfo,
   System.Generics.Defaults,
   DRagLint.Core.Model, DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge,
   DRagLint.Report.UntangleCatalog;
@@ -125,6 +246,7 @@ const
   CAbstractTail  = ' virtual; abstract;';
   CMaxNamesShown = 6;
   CIntfMark      = '!';
+  CKindPrefix    = 'sk';
   CStepMoves     = 1;
   CStepUses      = 2;
   CStepCreate    = 3;
@@ -247,25 +369,6 @@ type
 
   /// <summary>Whether a cycle's plan can be applied without a human.</summary>
   TCycleVerdict = (cvMechanical, cvRefused);
-
-  /// <summary>One reason a cycle's plan cannot be applied mechanically.</summary>
-  /// <remarks>Kind is one of the strings of the 2026-10-10 contract 4.4:
-  /// manual-edit, blocked-symbol, unresolved-edge, directive, leaf-uses-cycle,
-  /// qualified-ref, class-ctor, base-class, outside-roots; R1 (E18 T5) adds
-  /// signature-in-cycle, signature-unknown, routine-not-called, init-order,
-  /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive; R2 (E18 T6) adds
-  /// member-write, construction, class-method, class-ref, type-decl, type-cast, other-ref,
-  /// multiple-classes, member-unsupported, no-iinterface, ref-counted, receiver-unknown,
-  /// cast-unseen, with-member, ancestry-unknown, type-unresolved, unresolved-qualified-type, exception-semantics (and reuses leaf-uses-cycle,
-  /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit). Line is 0 when the
-  /// refusal has no single line (an edge, a unit).</remarks>
-  TRefusal = record
-    Kind    : string;
-    Symbol  : string;
-    FilePath: string;
-    Reason  : string;
-    Line    : Integer;
-  end;
 
   /// <summary>A unit the plan creates: its name, its file and its full text.</summary>
   TNewUnit = record
@@ -468,6 +571,7 @@ type
     procedure RenderInversion(pStep: Integer);
     function InversionStillUsed: string;
     procedure CapturePlan(var pPlan: TCycleFixPlan);
+    function BuildView(const pPlan: TCycleFixPlan): TCyclePlanView;
     procedure CaptureRefusals(var pPlan: TCycleFixPlan);
     procedure DumpPlanForTests(const pPlan: TCycleFixPlan);
     procedure RenderNoMechanicalCut(const pEvals: TArray<TEdgeEval>);
@@ -4047,6 +4151,110 @@ begin
   end;
 end;
 
+function TCyclePlanner.BuildView(const pPlan: TCycleFixPlan): TCyclePlanView;
+const
+  CMoveRecipe: array[TMoveKind] of string = ('decl', 'with-bodies', 'base', 'blocked');
+  CEditKind  : array[TEditKind] of string = ('delete', 'replace', 'insert', 'manual');
+  CSection   : array[TSect] of string = ('interface', 'implementation', 'implementation');
+  CUseAction : array[TUsesVerdict] of string = ('keep', 'keep', 'move', 'remove');
+var
+  Edits  : TList<TPlanEdit>;
+  Paths  : TList<string>;
+  Moves  : TList<TPlanMove>;
+  UseList: TList<TPlanUse>;
+  Created: TList<TPlanNewUnit>;
+
+  procedure AddEdits(const pPath: string; const pList: TArray<TFileEdit>);
+  begin
+    for var E in pList do
+    begin
+      var V:= Default(TPlanEdit);
+      V.FilePath:= pPath;
+      V.Kind    := CEditKind[E.Kind];
+      V.First   := E.First;
+      V.Last    := E.Last;
+      Edits.Add(V);
+    end;
+  end;
+
+begin
+  Result:= Default(TCyclePlanView);
+  Result.CycleIndex:= pPlan.CycleIndex;
+  Result.Units     := pPlan.Units;
+  Result.HasIntf   := pPlan.HasIntf;
+  Result.Part      := pPlan.Part;
+  Result.Mechanical:= pPlan.Verdict = cvMechanical;
+  Result.Refusals  := pPlan.Refusals;
+  Edits  := TList<TPlanEdit>.Create;
+  Paths  := TList<string>.Create;
+  Moves  := TList<TPlanMove>.Create;
+  UseList:= TList<TPlanUse>.Create;
+  Created:= TList<TPlanNewUnit>.Create;
+  try
+    for var Fid in pPlan.Touched do
+    begin
+      Paths.Add(PathOf(Fid));
+      if pPlan.Edits.ContainsKey(Fid) then AddEdits(PathOf(Fid), pPlan.Edits[Fid].ToArray)
+      else if Fid = FProjectFid then AddEdits(PathOf(Fid), pPlan.DprEdits);
+    end;
+    if Length(pPlan.DprojEdits) > 0 then
+    begin
+      Paths.Add(FProjectFile);
+      AddEdits(FProjectFile, pPlan.DprojEdits);
+    end;
+    for var It in pPlan.Items do
+    begin
+      var M:= Default(TPlanMove);
+      M.Symbol  := It.Sym.Name;
+      M.Kind    := if It.Keyword <> '' then It.Keyword else LowerCase(Copy(GetEnumName(TypeInfo(TSymbolKind), Ord(It.Sym.Kind)), Succ(Length(CKindPrefix))));
+      M.Recipe  := CMoveRecipe[It.Kind];
+      M.FromFile:= PathOf(It.Sym.FileId);
+      M.First   := It.Decl.First;
+      M.Last    := It.Decl.Last;
+      if FLeafName.ContainsKey(It.Stem) then M.ToUnit:= FLeafName[It.Stem];
+      Moves.Add(M);
+    end;
+    for var D in pPlan.Decisions do
+    begin
+      var U:= Default(TPlanUse);
+      U.FilePath:= PathOf(D.Fid);
+      U.UnitName:= UnitNameOfStem(D.PartnerStem);
+      U.Section := CSection[D.Sect];
+      U.Action  := CUseAction[D.Verdict];
+      UseList.Add(U);
+    end;
+    for var N in pPlan.NewUnits do
+    begin
+      var V:= Default(TPlanNewUnit);
+      V.UnitName:= N.UnitName;
+      V.Path    := N.Path;
+      Created.Add(V);
+    end;
+    Result.Edits       := Edits.ToArray;
+    Result.TouchedPaths:= Paths.ToArray;
+    Result.Moves       := Moves.ToArray;
+    Result.UseDecisions:= UseList.ToArray;
+    Result.NewUnits    := Created.ToArray;
+  finally
+    Created.Free;
+    UseList.Free;
+    Moves.Free;
+    Paths.Free;
+    Edits.Free;
+  end;
+  if pPlan.HasIntf then Result.Recipe:= 'move-globals'
+  else if pPlan.CutEdge.FromStem <> '' then
+  begin
+    Result.Edge:= pPlan.CutEdge.FromStem + '->' + pPlan.CutEdge.ToStem;
+    case pPlan.CutEdge.Recipe of
+      crRoutineInversion: Result.Recipe:= 'routine-inversion';
+      crMemberInterface : Result.Recipe:= 'member-interface';
+    else Result.Recipe:= 'move-globals';
+    end;
+  end;
+  Result.Predicted:= string.Join(#10, pPlan.ExpectedOutput);
+end;
+
 procedure TCyclePlanner.RenderPlan(const pPlan: TCycleFixPlan);
 begin
   if (pPlan.CycleIndex < 1) or (pPlan.CycleIndex > FSccs.Count) or
@@ -4196,6 +4404,38 @@ begin
     Planner.Run;
   finally
     Planner.Free;
+  end;
+end;
+
+procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
+  const pLibStore: ISymbolStore; const pVisit: TCyclePlanVisit; pOnly: Integer);
+var
+  Planner: TCyclePlanner;
+  Lines  : TStringList;
+begin
+  Lines  := TStringList.Create;
+  Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, Lines, pLibStore);
+  try
+    for var I:= 1 to pSccs.Count do
+    begin
+      if (pOnly > 0) and (I <> pOnly) then Continue;
+      var Plan:= Planner.BuildPlan(I);
+      try
+        if not pVisit(Planner.BuildView(Plan),
+          function: TArray<string>
+          begin
+            Lines.Clear;
+            Planner.RenderPlan(Plan);
+            Result:= Lines.ToStringArray;
+          end) then Break;
+      finally
+        Plan.Release;
+      end;
+    end;
+  finally
+    Planner.Free;
+    Lines.Free;
   end;
 end;
 

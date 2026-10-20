@@ -219,6 +219,7 @@ uses
   , DRagLint.Report    .Deps
   , DRagLint.Report    .RCallTree
   , DRagLint.Report    .CyclePlan // dl:unit DRagLint.Report.CyclePlan accepted -- the report's line formats travel with the playbook that predicts them, so the predicted output cannot drift from what cycles prints
+  , DRagLint.CLI       .CycleFix
   , DRagLint.Convert   .PropTree
   , DRagLint.Convert   .PropCache
   , DRagLint.Convert   .Rules
@@ -426,6 +427,9 @@ type
     Edges          : Boolean; // --edges (cycles: show the actual uses edges)
     Causes         : Boolean; // --causes (cycles: pinpoint the symbols forcing each interface edge)
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
+    FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan; 0 = first mechanical)
+    FixPart        : string ; // --part a|b|all (cycles --fix)
+    NoCompile      : Boolean; // --no-compile (cycles --fix: skip the baseline build)
     Apply          : Boolean; // --apply (uses-fix / autofix: write changes, not dry-run)
     Fix            : Boolean; // --fix (lint: autofix findings that have a quick-fix; dry-run unless --apply)
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting. Each SET flag
@@ -1014,7 +1018,7 @@ begin
   Writeln('  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)');
   Writeln('                               Safe to run any time: prints "nothing pending." when there is nothing to do.');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
-  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output; --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); --format json --causes adds per-group edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --fix = dry run of the mechanical cycle fix for ONE group (verdict + cycle-fix/1 JSON; writes nothing; exit 0 mechanical / 1 refused / 2 error); --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output; --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); --format json --causes adds per-group edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
@@ -1834,6 +1838,9 @@ begin
     else if (A = '--n') and (i < ParamCount) then begin Inc(i); Result.BenchN:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--to') and (i < ParamCount) then begin Inc(i); Result.RenameTo:= ParamStr(i); end
     else if A = '--no-backup' then Result.NoBackup:= True
+    else if (A = '--cycle') and (i < ParamCount) then begin Inc(i); Result.FixCycle:= StrToIntDef(ParamStr(i), 0); end // cycles --fix
+    else if (A = '--part') and (i < ParamCount) then begin Inc(i); Result.FixPart:= LowerCase(ParamStr(i)); end // cycles --fix
+    else if A = '--no-compile' then Result.NoCompile:= True // cycles --fix
     // v0.69 D2a: rename --kind param positional args
     // Note: --kind  already parsed into Result.Kind   (line ~638)
     //       --file  already parsed into Result.InFile (line ~433)
@@ -22197,7 +22204,9 @@ var
   UTo  : string          ;
   K    : string          ;
   L    : TList<string>   ;
+  FixCode: Integer       ; { cycles --fix: RunCycleFix's exit code; -1 = not a --fix run }
 begin
+  FixCode:= -1;
   if NoDbResolved(AArgs.DbPath, 'cycles') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   var RoOk: Boolean;
@@ -22239,9 +22248,9 @@ begin
     for K in Adj.Keys do
       if not Index.ContainsKey(K) then StrongConnect(K);
 
-    if AArgs.Plan then
+    if AArgs.Plan or AArgs.Fix then
     begin
-      { mechanical markdown refactoring playbook -- DRagLint.Report.CyclePlan }
+      { mechanical markdown refactoring playbook -- DRagLint.Report.CyclePlan; --fix = its dry-run verdict }
       var Graph: TCycleGraph;
       Graph.Adj      := Adj;
       Graph.IntfEdges:= IntfEdges;
@@ -22296,13 +22305,32 @@ begin
         Writeln(ErrOutput, 'drag-lint: note: cycles --plan reads class ancestry from ' +
           (if LibStore <> nil then LibPath else '(none: ' + LibPath + ' did not open)'));
       end;
-      var PlanLines:= TStringList.Create;
-      try
-        RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore);
-        for var PlanLine in PlanLines do Writeln(PlanLine);
-      finally
-        PlanLines.Free;
-      end; // try
+      if AArgs.Fix then
+      begin
+        var FixOpts: TCycleFixOptions;
+        FixOpts.Project  := AArgs.ProjectPath;
+        FixOpts.Db       := AArgs.DbPath;
+        FixOpts.Platform := AArgs.CheckPlatform;
+        FixOpts.Apply    := AArgs.Apply;
+        FixOpts.NoBackup := AArgs.NoBackup;
+        FixOpts.NoReindex:= AArgs.NoReindex;
+        FixOpts.NoCompile:= AArgs.NoCompile;
+        FixOpts.CycleIndex:= AArgs.FixCycle;
+        FixOpts.UnitStem := AArgs.GhostUnit;
+        FixOpts.Part     := AArgs.FixPart;
+        FixOpts.Json     := SameText(AArgs.Format, 'json');
+        FixCode:= RunCycleFix(FixOpts, Store, Sccs, Graph, LibStore);
+      end
+      else
+      begin
+        var PlanLines:= TStringList.Create;
+        try
+          RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore);
+          for var PlanLine in PlanLines do Writeln(PlanLine);
+        finally
+          PlanLines.Free;
+        end; // try
+      end;
     end // if
     else if SameText(AArgs.Format, 'json') then
     begin
@@ -22436,7 +22464,7 @@ begin
         if not (AArgs.Edges or AArgs.Causes) then Writeln(CCycleEdgesHint);
       end; // else
     end; // else
-    Result:= 0;
+    Result:= if FixCode >= 0 then FixCode else 0;
   finally
     for L in Adj.Values do L.Free;
     Adj.Free; IntfEdges.Free; UnitFile.Free; UnitFid.Free; Index.Free; Lowlink.Free;
