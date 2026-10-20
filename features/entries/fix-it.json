@@ -15,11 +15,73 @@
     },
     {
       "type": "cli",
-      "verb": "lint"
+      "verb": "lint",
+      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
+      "flags": [
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--disable"
+        },
+        {
+          "name": "--rules-dir",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-preprocess"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib.sqlite>"
+        },
+        {
+          "name": "--db",
+          "arg": "<index.sqlite>"
+        },
+        {
+          "name": "--project-rules"
+        },
+        {
+          "name": "--stand-in-for",
+          "arg": "<realpath>"
+        }
+      ]
     },
     {
       "type": "cli",
-      "verb": "uses-fix"
+      "verb": "uses-fix",
+      "usage": "drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text] (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)",
+      "flags": [
+        {
+          "name": "--project",
+          "arg": "<dproj>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--platform"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--remove-unused"
+        },
+        {
+          "name": "--only",
+          "arg": "<unit,...>"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
   "audience": "both"

@@ -1,0 +1,18 @@
+{
+  "id": "compile-buffer-unsaved",
+  "title": "Compile Buffer (unsaved)",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Compiles a project with the current editor buffer's unsaved content substituted for its file on disk, then restores the original file unchanged",
+  "wikiPage": "Compile-Buffer-unsaved",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Compile Buffer (unsaved)"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

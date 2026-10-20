@@ -1,0 +1,40 @@
+{
+  "id": "export-graph-dot",
+  "title": "Export Graph (DOT)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring",
+  "wikiPage": "Export-Graph-DOT",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Generate & Export > Export Graph (DOT)..."
+    },
+    {
+      "type": "cli",
+      "verb": "graph",
+      "usage": "drag-lint graph --db <file.sqlite> [--format dot|mermaid] [--name <root-substr>] [--output <file>]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--name",
+          "arg": "<root-substr>"
+        },
+        {
+          "name": "--output",
+          "arg": "<file>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

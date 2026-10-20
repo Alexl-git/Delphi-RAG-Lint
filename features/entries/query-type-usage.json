@@ -11,7 +11,28 @@
     {
       "type": "cli",
       "verb": "query",
-      "sub": "type-usage"
+      "sub": "type-usage",
+      "usage": "drag-lint query type-usage --in <file.pas> (--names A,B,C | --names-file <f>) [--db ...] [--json]",
+      "flags": [
+        {
+          "name": "--in",
+          "arg": "<file.pas>"
+        },
+        {
+          "name": "--names",
+          "arg": "A"
+        },
+        {
+          "name": "--names-file",
+          "arg": "<f>"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both"

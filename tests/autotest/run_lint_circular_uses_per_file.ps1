@@ -8,13 +8,16 @@
   every run passes --library-db none):
     (a) `lint DemoUIConnect.pas --rule circular-uses --format json`: exactly 1 finding,
         rule circular-uses, severity warning, start_line 43 (DemoGagePort in the implementation
-        uses), start_col 1, the SAME message lint-all prints for that cycle, and a fix_hint
+        uses), start_col 1, the SAME message lint-all prints for that cycle up to its fix pointer
+        (T16: ` fix: drag-lint cycles --fix --project <X.dproj> --unit <stem>`, this unit's stem and
+        the --project given, in JSON and text), and a fix_hint
         `cycles --fix --project "<X.dproj>" --db "<db>" --unit demouiconnect` (placeholder
         project without --project; the given one with it).
     (b) the SCC's anchor unit (DemoGagePort.pas) gets ONE finding too, at its own uses line 56 --
         not the 1:1 anchor AND the uses line.
     (c) DemoBlueprint.Interfaces.pas (in no cycle) -> 0 findings.
-    (d) lint-all is unchanged: one finding per SCC, at the first unit `:1:1`, no fix_hint.
+    (d) lint-all: one finding per SCC, at the first unit `:1:1`, no fix_hint; its message ends with
+        the fix pointer (anchor stem; --project names the project), text output too.
     (e) `rules --json` keeps circular-uses fixable:false (the fix is a verb, not lint --fix).
     (f) POSITIVE CONTROL: a copy with the cycle cut by hand (DemoGagePort removed from
         DemoUIConnect's implementation uses), re-indexed -> 0 findings for DemoUIConnect.pas.
@@ -91,6 +94,17 @@ try {
     ((@($all | ForEach-Object { [IO.Path]::GetFileName($_.file_path) } | Sort-Object) -join ',') -eq 'DemoAudit.pas,DemoBlueprint.pas,DemoGagePort.pas') $allOut
   Check 'd: no fix_hint on a lint-all finding' (@($all | Where-Object { $_.PSObject.Properties.Name -contains 'fix_hint' }).Count -eq 0) $allOut
   $gageMsg = @($all | Where-Object { $_.file_path -like '*DemoGagePort.pas' } | ForEach-Object { $_.message }) | Select-Object -First 1
+  # E18 T16: the message carries the command pointer (the IDE Messages pane shows the message, not fix_hint)
+  $sfx = ' fix: drag-lint cycles --fix --project {0} --unit {1}'
+  Check 'd: lint-all message ends with the fix pointer (placeholder project, anchor stem)' `
+    ("$gageMsg".EndsWith(($sfx -f '<X.dproj>', 'demogageport'))) "got: $gageMsg"
+  $allTxt = (& $Exe lint-all --db $db --rule circular-uses --library-db none 2>$null | Out-String)
+  Check 'd: lint-all TEXT output carries the fix pointer' `
+    ($allTxt -match [regex]::Escape(($sfx -f '<X.dproj>', 'demogageport'))) $allTxt
+  $allTxtP = (& $Exe lint-all --db $db --project $dproj --rule circular-uses --library-db none 2>$null | Out-String)
+  Check 'd: lint-all --project: the fix pointer names that project' `
+    ($allTxtP -match [regex]::Escape(($sfx -f $dproj, 'demogageport'))) $allTxtP
+  $gageBase = "$gageMsg" -replace ' fix: drag-lint cycles --fix .*$', ''
 
   Write-Host '== (a) lint DemoUIConnect.pas: the finding, on the uses line' -ForegroundColor Cyan
   $r = Lint-One (Join-Path $demo 'DemoUIConnect.pas') $db
@@ -99,7 +113,8 @@ try {
   Check 'a: rule = circular-uses, severity warning' ($f -and $f.rule -eq 'circular-uses' -and $f.severity -eq 'warning') $r.Out
   Check 'a: file_path = DemoUIConnect.pas' ($f -and $f.file_path -like '*DemoUIConnect.pas') $r.Out
   Check 'a: start_line 43 (DemoGagePort in the implementation uses), start_col 1' ($f -and $f.start_line -eq 43 -and $f.start_col -eq 1) $r.Out
-  Check 'a: the same message lint-all prints for the cycle' ($f -and $gageMsg -and $f.message -eq $gageMsg) "per-file: $($f.message) | lint-all: $gageMsg"
+  Check 'a: the same message lint-all prints for the cycle, up to the fix pointer' `
+    ($f -and $gageBase -and $f.message -eq ($gageBase + ($sfx -f '<X.dproj>', 'demouiconnect'))) "per-file: $($f.message) | lint-all: $gageMsg"
   Check 'a: fix_hint names the unit' ($f -and "$($f.fix_hint)" -like '*--unit demouiconnect*') $r.Out
   Check 'a: fix_hint without --project carries the placeholder and the db' `
     ($f -and "$($f.fix_hint)" -eq ('cycles --fix --project "<X.dproj>" --db "{0}" --unit demouiconnect' -f $db)) "got: $($f.fix_hint)"
@@ -107,8 +122,12 @@ try {
   $f = if ($r.Rows -and $r.Rows.Count -ge 1) { $r.Rows[0] } else { $null }
   Check 'a: with --project the fix_hint names it' `
     ($f -and "$($f.fix_hint)" -eq ('cycles --fix --project "{0}" --db "{1}" --unit demouiconnect' -f $dproj, $db)) "got: $($f.fix_hint) out: $($r.Out)"
+  Check 'a: with --project the message fix pointer names it and the unit' `
+    ($f -and "$($f.message)".EndsWith(($sfx -f $dproj, 'demouiconnect'))) "got: $($f.message)"
   $r = & $Exe lint (Join-Path $demo 'DemoUIConnect.pas') --db $db --rule circular-uses --library-db none 2>$null | Out-String
   Check 'a: text output has the one-line finding at :43:1' ($r -match 'DemoUIConnect\.pas:43:1  \[warning\] circular-uses: Circular unit dependency among 2 units') $r
+  Check 'a: lint <file> TEXT output carries the fix pointer for this unit' `
+    ($r -match ('(?m)DemoUIConnect\.pas:43:1 .*' + [regex]::Escape(($sfx -f '<X.dproj>', 'demouiconnect')) + '\r?$')) $r
 
   Write-Host '== (b) the anchor unit: one finding, on its own uses line' -ForegroundColor Cyan
   $r = Lint-One (Join-Path $demo 'DemoGagePort.pas') $db

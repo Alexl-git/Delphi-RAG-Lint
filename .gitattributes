@@ -47,3 +47,6 @@ tests/preprocess/fixtures/tolerance/*.expected -text
 *.rsm    binary
 *.pdb    binary
 *.sqlite binary
+
+# featuregen golden fixtures: exact bytes (CRLF) are the regression pin; never let autocrlf rewrite them
+src/tools/featuregen/tests/fixtures/** -text

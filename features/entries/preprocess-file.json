@@ -10,7 +10,31 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "preprocess-file"
+      "verb": "preprocess-file",
+      "usage": "drag-lint preprocess-file --file PATH [--define SYM]... [--numeric K=V]... [--include-mode off|defines-only] [--no-near-search] [--tolerances] (diagnostic: print {$IFDEF}-resolved source to stdout)",
+      "flags": [
+        {
+          "name": "--file",
+          "arg": "PATH"
+        },
+        {
+          "name": "--define",
+          "arg": "SYM"
+        },
+        {
+          "name": "--numeric",
+          "arg": "K"
+        },
+        {
+          "name": "--include-mode"
+        },
+        {
+          "name": "--no-near-search"
+        },
+        {
+          "name": "--tolerances"
+        }
+      ]
     }
   ],
   "audience": "both"

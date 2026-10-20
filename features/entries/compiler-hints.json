@@ -15,7 +15,22 @@
     {
       "type": "cli",
       "verb": "query",
-      "sub": "hints"
+      "sub": "hints",
+      "usage": "drag-lint query hints --db <file.sqlite> [--name <code>] [--rule <severity>]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--name",
+          "arg": "<code>"
+        },
+        {
+          "name": "--rule",
+          "arg": "<severity>"
+        }
+      ]
     }
   ],
   "audience": "both",

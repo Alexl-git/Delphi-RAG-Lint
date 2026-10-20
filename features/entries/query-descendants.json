@@ -11,7 +11,20 @@
     {
       "type": "cli",
       "verb": "query",
-      "sub": "descendants"
+      "sub": "descendants",
+      "usage": "drag-lint query descendants --of <ancestor> [--db ...] [--json] (the REVERSE of ancestors: every CLASS descending from <ancestor>, across all scanned DBs. Derived INTERFACES are deliberately excluded -- this backs the conversion editor's class pickers. exit 1 = no such ancestor)",
+      "flags": [
+        {
+          "name": "--of",
+          "arg": "<ancestor>"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both"

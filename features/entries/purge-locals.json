@@ -10,7 +10,17 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "purge-locals"
+      "verb": "purge-locals",
+      "usage": "drag-lint purge-locals --db PATH [--json] (size escape hatch: drop skLocalVar/skParam symbols + VACUUM; call graph unchanged; re-inflated on next index)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

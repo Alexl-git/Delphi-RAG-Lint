@@ -1,0 +1,46 @@
+{
+  "id": "extract-method",
+  "title": "extract-method",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.85.0-alpha",
+  "summary": "Pulls a run of statements out of a routine into a new method",
+  "wikiPage": "extract-method",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "extract-method",
+      "usage": "drag-lint extract-method --file <F> --from-line <L1> --to-line <L2> --name <N> [--json|--apply|--no-backup] - pull a statement run into a new method",
+      "flags": [
+        {
+          "name": "--file",
+          "arg": "<F>"
+        },
+        {
+          "name": "--from-line",
+          "arg": "<L1>"
+        },
+        {
+          "name": "--to-line",
+          "arg": "<L2>"
+        },
+        {
+          "name": "--name",
+          "arg": "<N>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--no-backup"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.Keyboard.pas:319"
+}

@@ -1,0 +1,67 @@
+{
+  "id": "fix-all-in-project",
+  "title": "Fix all in project",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.61.0-alpha",
+  "summary": "Applies autofixes for every fixable finding across the whole project, starting from the Structure form",
+  "wikiPage": "Fix-all-in-project",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Fix all in project"
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "usage": "drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--project",
+          "arg": "<.dproj>"
+        },
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--disable"
+        },
+        {
+          "name": "--output",
+          "arg": "<report.txt>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--quiet",
+          "summary": "suppress per-file progress lines written to stderr"
+        },
+        {
+          "name": "--lint-third-party"
+        },
+        {
+          "name": "--no-preprocess"
+        },
+        {
+          "name": "--fix"
+        },
+        {
+          "name": "--fix-naming"
+        },
+        {
+          "name": "--apply"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."]
+}

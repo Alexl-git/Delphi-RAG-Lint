@@ -10,7 +10,35 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "deps-report"
+      "verb": "deps-report",
+      "usage": "drag-lint deps-report --db <file.sqlite> [--db ...] [--depth N] [--edges] [--all-sources] [--name <pat>] [--format text|json|csv] [--output <file>] (third-party dependency rollup)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--edges"
+        },
+        {
+          "name": "--all-sources"
+        },
+        {
+          "name": "--name",
+          "arg": "<pat>"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--output",
+          "arg": "<file>"
+        }
+      ]
     },
     {
       "type": "ide-menu",

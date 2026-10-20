@@ -14,7 +14,21 @@
     },
     {
       "type": "cli",
-      "verb": "hover"
+      "verb": "hover",
+      "usage": "drag-lint hover --qname <Foo.Bar> [--db <file.sqlite>] [--format plain|md|json]",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.Bar>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
   "audience": "both"

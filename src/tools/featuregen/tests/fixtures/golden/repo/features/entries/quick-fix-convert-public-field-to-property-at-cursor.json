@@ -1,0 +1,18 @@
+{
+  "id": "quick-fix-convert-public-field-to-property-at-cursor",
+  "title": "Quick-Fix: Convert Public Field to Property at Cursor",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Rewrites a public field under the caret as a property",
+  "wikiPage": "Quick-Fix-Convert-Public-Field-to-Property-at-Cursor",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Convert Public Field to Property at Cursor"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: moved from Uses & Dependencies to the root menu on 2026-09-07; the page title still says Quick-Fix; seed: since unknown"
+}

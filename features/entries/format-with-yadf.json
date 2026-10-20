@@ -14,7 +14,20 @@
     },
     {
       "type": "cli",
-      "verb": "format"
+      "verb": "format",
+      "usage": "drag-lint format <file> [--yadf-path PATH] [--dry-run] [--diff] (rewrites the file IN PLACE via YADF; --dry-run resolves + version-checks and writes nothing, --diff formats a copy and prints the diff. Refuses YADF older than 1.0.6.6 (exit 4) and restores the file if formatting changes what the unit declares (exit 5))",
+      "flags": [
+        {
+          "name": "--yadf-path",
+          "arg": "PATH"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--diff"
+        }
+      ]
     }
   ],
   "audience": "both"

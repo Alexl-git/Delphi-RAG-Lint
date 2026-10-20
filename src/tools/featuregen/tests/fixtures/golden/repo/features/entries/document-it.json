@@ -1,0 +1,45 @@
+{
+  "id": "document-it",
+  "title": "Document it",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.90.0-alpha",
+  "summary": "Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node",
+  "wikiPage": "Document-it",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Document it"
+    },
+    {
+      "type": "cli",
+      "verb": "document",
+      "usage": "drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.TBar.Baz>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--migrate-pure"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

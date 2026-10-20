@@ -10,12 +10,12 @@
        [-BuildPlugin] also src\delphi-plugin\_bpl_build.bat -- OFF by default: that
        build writes the BPL into third_party\dll-win32, the registered Known
        Packages path, i.e. it DEPLOYS into the live IDE (RAD Studio must be closed)
-    2  tools\build-feature-pages.ps1 -Check   (gate: generated pages are committed)
+    2  tools\featuregen-gate.ps1             (gate: featuregen build --all --check; generated pages are committed)
     3  tools\build-manual.ps1                 (exactly once, after the last doc change,
                                                BEFORE the battery so
                                                run_manual_freshness_guard.ps1 sees it)
     4  tests\run_battery.ps1                  [-SkipBattery]
-    5  tools\publish-wiki.ps1                 (itself re-runs the -Check gate)
+    5  tools\publish-wiki.ps1                 (itself re-runs the featuregen gate)
     6  installer\Build-Installer.ps1        the Inno Setup installer is the release package
        (1.31.4+); no zip archives are built any more (B-01 / T-19). The installer build
        does not touch the deployed engine, so no engine backup/restore is needed.
@@ -66,7 +66,7 @@ Write-Host "   version $Version, engine sha $((Get-FileHash -LiteralPath $engine
 Invoke-Step 1 'build the engine' @('cmd.exe', '/c', (Join-Path $Repo 'build\build_draglint_win64.bat')) -Skip $SkipBuild.IsPresent
 if ($BuildPlugin) { Invoke-Step 1 'build the plugin (DEPLOYS into the live IDE)' @('cmd.exe', '/c', $pluginBat) -Skip $SkipBuild.IsPresent }
 # ---- 2 gate: generated pages are current ------------------------------------------
-Invoke-Step 2 'build-feature-pages.ps1 -Check' @('pwsh', '-NoProfile', '-File', (Join-Path $Repo 'tools\build-feature-pages.ps1'), '-Check') -RunInDryRun $true
+Invoke-Step 2 'featuregen-gate.ps1' @('pwsh', '-NoProfile', '-File', (Join-Path $Repo 'tools\featuregen-gate.ps1'), '-Repo', $Repo) -RunInDryRun $true
 # ---- 3 the manual, once -----------------------------------------------------------
 Invoke-Step 3 'build-manual.ps1' @('pwsh', '-NoProfile', '-File', (Join-Path $Repo 'tools\build-manual.ps1'))
 # ---- 4 the battery ----------------------------------------------------------------

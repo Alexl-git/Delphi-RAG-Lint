@@ -1,0 +1,29 @@
+{
+  "id": "bench-context",
+  "title": "bench-context",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.18.0-alpha",
+  "summary": "Benchmarks the context command by building context bundles for a sample of symbols against a database",
+  "wikiPage": "bench-context",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "bench-context",
+      "usage": "drag-lint bench-context [--db <file.sqlite>] [--n N]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--n",
+          "arg": "N"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: group guessed"
+}

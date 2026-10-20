@@ -29,15 +29,12 @@ a member / instance text filter. Rows sort by status, then unit, then instance
 
 ## Going to the code
 Double-click a row: the full path and line, `<path>(<line>)`, are copied to the
-clipboard and the status bar says `Copied <file>(<line>) to the clipboard --
-line <N>`. The IDE's Go to line dialog takes only the line number. A file that is
+clipboard and the status bar says `Copied <file>(<line>) to the clipboard -- line <N>`. The IDE's Go to line dialog takes only the line number. A file that is
 gone, or a line past its end, is reported on the status bar instead.
 
 ## What it needs
 An engine that reports `pas_uses` in `info --json` (drag-lint 1.27.0 and
-later). With an older engine the tab says `no work list (engine has no
-pas_uses)`. A run in which no unit converted says `no work list (no unit
-converted)`; before any run it says `no work list yet -- run Convert first`.
+later). With an older engine the tab says `no work list (engine has no pas_uses)`. A run in which no unit converted says `no work list (no unit converted)`; before any run it says `no work list yet -- run Convert first`.
 
 ## Limits
 The list is what the engine reported for the units that CONVERTED; a failed,

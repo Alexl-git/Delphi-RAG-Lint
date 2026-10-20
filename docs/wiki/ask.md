@@ -63,8 +63,7 @@ selection and one `<name> @File.pas:line` row per result.
 Exit codes: 0 answered; 1 the question was refused (the reason is on stderr);
 2 setup -- usage, or the indexes could not be resolved (stderr says what to pass
 or edit); 3 an index is stale -- stderr names it and prints the incremental
-reindex command (`index --project '<p>' --db '<db>'` or `index --all --only
-<Section>`). It never indexes anything itself. Every refusal line on stderr
+reindex command (`index --project '<p>' --db '<db>'` or `index --all --only <Section>`). It never indexes anything itself. Every refusal line on stderr
 starts with `ask-report:`.
 
 ## How it answers

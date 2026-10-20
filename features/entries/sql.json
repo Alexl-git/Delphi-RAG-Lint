@@ -10,7 +10,39 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "sql"
+      "verb": "sql",
+      "usage": "drag-lint sql --query \"SELECT ...\" | --file <q.sql> --db <file.sqlite> [--format text|json] [--json] [--limit N] [--timeout-ms N] [--output <file>] (guarded READ-ONLY SQL over the index: exactly one statement, an sqlite3 authorizer refuses ATTACH/PRAGMA/DDL/writes, row cap 200 and time cap 10000 ms; ask `schema --format json` for the columns)",
+      "flags": [
+        {
+          "name": "--query"
+        },
+        {
+          "name": "--file",
+          "arg": "<q.sql>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--limit",
+          "arg": "N"
+        },
+        {
+          "name": "--timeout-ms",
+          "arg": "N"
+        },
+        {
+          "name": "--output",
+          "arg": "<file>"
+        }
+      ]
     }
   ],
   "audience": "both",

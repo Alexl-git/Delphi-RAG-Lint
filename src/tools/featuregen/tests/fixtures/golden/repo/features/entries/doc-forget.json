@@ -1,0 +1,45 @@
+{
+  "id": "doc-forget",
+  "title": "doc-forget",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.17.0-alpha",
+  "summary": "Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "doc-forget",
+      "usage": "drag-lint doc-forget --scope <file.pas|dir> (--project <Tag> [--rename <Tag>=<New>] | --untagged | --list-tags) [--apply|--no-backup] - reap project tags on inbound doc facts",
+      "flags": [
+        {
+          "name": "--scope",
+          "arg": "<file.pas|dir>"
+        },
+        {
+          "name": "--project",
+          "arg": "<Tag>"
+        },
+        {
+          "name": "--rename",
+          "arg": "<Tag>"
+        },
+        {
+          "name": "--untagged"
+        },
+        {
+          "name": "--list-tags"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--no-backup"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page"
+}

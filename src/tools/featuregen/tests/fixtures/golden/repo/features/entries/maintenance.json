@@ -1,0 +1,19 @@
+{
+  "id": "maintenance",
+  "title": "Maintenance",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Indexes, the manifest, reindexing, and what to do when something looks wrong",
+  "wikiPage": "Maintenance",
+  "surfaces": [
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\Maintenance.md"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown",
+  "homeOrder": 30
+}

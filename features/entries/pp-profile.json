@@ -10,7 +10,20 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "pp-profile"
+      "verb": "pp-profile",
+      "usage": "drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug] (diagnostic: print the resolved define profile, one symbol per line)",
+      "flags": [
+        {
+          "name": "--dproj",
+          "arg": "PATH"
+        },
+        {
+          "name": "--platform"
+        },
+        {
+          "name": "--config"
+        }
+      ]
     }
   ],
   "audience": "both"

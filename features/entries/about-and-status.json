@@ -14,7 +14,17 @@
     },
     {
       "type": "cli",
-      "verb": "info"
+      "verb": "info",
+      "usage": "drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)",
+      "flags": [
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        }
+      ]
     },
     {
       "type": "ide-about",

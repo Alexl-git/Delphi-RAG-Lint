@@ -10,7 +10,21 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "doc-drift"
+      "verb": "doc-drift",
+      "usage": "drag-lint doc-drift --qname X --db PATH [--json] (diagnostic: deterministic doc-vs-code drift findings for one symbol)",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "X"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

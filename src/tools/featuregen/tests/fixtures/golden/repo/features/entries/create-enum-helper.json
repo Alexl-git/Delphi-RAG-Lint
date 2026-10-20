@@ -1,0 +1,45 @@
+{
+  "id": "create-enum-helper",
+  "title": "create-enum-helper",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.94.0-alpha",
+  "summary": "Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type",
+  "wikiPage": "create-enum-helper",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "create-enum-helper",
+      "usage": "drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] - generate a Byte-family record helper for an enum",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<TEnum>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--methods",
+          "arg": "<csv>"
+        },
+        {
+          "name": "--tostring"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.StructureForm.pas:1226"
+}

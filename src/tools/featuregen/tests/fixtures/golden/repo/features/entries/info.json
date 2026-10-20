@@ -1,0 +1,28 @@
+{
+  "id": "info",
+  "title": "info",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.19.0-alpha",
+  "summary": "Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities",
+  "wikiPage": "info",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "info",
+      "usage": "drag-lint info [--json] [--db <file.sqlite>]... (engine self-info: product/extractor/resolver versions, build date, MIT, tree-sitter + capabilities; read-only)",
+      "flags": [
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.About.pas:217"
+}

@@ -22,9 +22,7 @@ Pure Object Pascal at runtime -- no Python, Node, or Rust. No cloud AI.
 > analysis, linting, diagnostics, documentation, refactoring, AI integration, IDE
 > integration, reporting and the Component Converter), plus **what changed in this
 > release** and an **upcoming roadmap** of everything currently planned.
-> [`docs/drag-lint-features-2026-09-16.html`](docs/drag-lint-features-2026-09-16.html)
-> ([rendered](https://htmlpreview.github.io/?https://github.com/Alexl-git/Delphi-RAG-Lint/blob/main/docs/drag-lint-features-2026-09-16.html))
-> -- and Word, [`docs/drag-lint-features-2026-09-16.docx`](docs/drag-lint-features-2026-09-16.docx).
+> [Features](docs/wiki/Features.md) (generated from the feature registry), and Word, [`docs/drag-lint-features-2026-09-16.docx`](docs/drag-lint-features-2026-09-16.docx).
 > Every count in it is read from the shipping build, not from the previous edition.
 
 Built on [`tree-sitter-delphi13`](https://github.com/Alexl-git/tree-sitter-delphi13)
@@ -536,6 +534,23 @@ hand to a model. It, this excerpt and the wiki's are regenerated from and
 checked against the current engine by `tests\autotest\run_cycle_examples_fresh.ps1`,
 so none of them can silently fall behind the playbook again.
 
+**Or let drag-lint make the edits: `cycles --fix`.** `drag-lint cycles --fix --project
+circular-demo\CircularDemo.dproj --db circular-demo\_D-RAG\CircularDemo.sqlite` is a dry run
+of the same plan for ONE group (the first mechanical one, or `--cycle <n>` / `--unit <stem>`):
+it builds the project first (a baseline that fails refuses the run; `--no-compile` skips
+the build), stages the edits in a shadow tree and prints the verdict, writing no source
+file. Add `--apply` to write them: every touched file is backed up as `<file>.BCK<n>`
+first, the project is built again (a compile error rolls every file back), the index
+refreshed, and `cycles` re-run against the prediction -- exit 0 written and verified (or
+written with `--no-reindex`, unverified); 1 refused, rolled back after a compile error or build
+timeout, or written but not verified; 2 error -- a write or build failed part-way (rolled back,
+project not changed, or the rollback failure is named), or bad flags (`--part all` applies
+Part A then Part B in one run). A group the engine cannot cut
+mechanically is refused with a named reason, never guessed at. The IDE offers it under
+*Uses & Dependencies*, on the Uses & Deps tab's *Circular uses* section, and on a
+`circular-uses` finding in the Structure window; details on the wiki page
+[Circular Uses Report (cycles + fix plan)](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Uses-Report-cycles-fix-plan).
+
 Longer walkthrough: [wiki -- Circular Dependency Report](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report).
 
 ### Third-party dependency report
@@ -778,12 +793,12 @@ be written and writes nothing. This verb replaces `Register-DragLintProtocol.ps1
 | [Documentation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#documentation) | 10 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#documentation) |
 | [Refactoring and code generation](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#refactoring-and-code-generation) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#refactoring-and-code-generation) |
 | [Component conversion](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#component-conversion) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#component-conversion) |
-| [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 19 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
+| [Graphs and reports](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#graphs-and-reports) | 20 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#graphs-and-reports) |
 | [Diagrams and charts](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#diagrams-and-charts) | 6 (+ 26 questions) | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#diagrams-and-charts) |
 | [Compiler integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#compiler-integration) | 12 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#compiler-integration) |
 | [Database and Firebird](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#database-and-firebird) | 2 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#database-and-firebird) |
-| [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 15 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
-| [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 20 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
+| [Editor integration](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#editor-integration) | 16 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#editor-integration) |
+| [Maintenance and diagnostics](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Features#maintenance-and-diagnostics) | 21 | [Quick Help](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Quick-Help#maintenance-and-diagnostics) |
 <!-- dl:registry:end feature-summary -->
 
 The table is generated from the feature registry (`features\`); the one-line-per-feature
@@ -1046,7 +1061,7 @@ reason with no stamp, an invalid or future date, or a stamp older than
 
 | Command | What it does | Notable flags |
 |---|---|---|
-| `cycles --db <db>` | Circular unit dependencies -- see the [worked example](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report) below | `--edges`, `--causes` (blame the exact symbols), `--plan` (refactoring playbook), `--fix --project <X.dproj>` (dry-run verdict for one group: `--cycle <n>`, `--unit <stem>`, `--part a\|b\|all`, `--no-compile`, `--shadow-out <dir>` (debug: where the shadow tree of the result is staged, default `C:\TEMP\draglint_cyclefix_<pid>\`), `--apply`, `--no-backup`, `--no-reindex`; exit 0 mechanical / 1 refused / 2 error), `--format json\|text` |
+| `cycles --db <db>` | Circular unit dependencies -- see the [worked example](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/Circular-Dependency-Report) below | `--edges`, `--causes` (blame the exact symbols), `--plan` (refactoring playbook), `--fix --project <X.dproj>` (mechanical fix of one group: `--cycle <n>`, `--unit <stem>`, `--part a\|b\|all`, `--no-compile`, `--shadow-out <dir>` (debug: where the shadow tree of the result is staged, default `C:\TEMP\draglint_cyclefix_<pid>\`); dry run exit 0 mechanical / 1 refused / 2 error; `--apply` writes with `.BCK<n>` backups (`--no-backup`), builds, re-indexes (`--no-reindex`) and verifies: exit 0 written and verified (or written with `--no-reindex`, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified / 2 error: a write or build failed part-way (rolled back) or bad flags), `--format json\|text` |
 | `top --db <db>` | Top symbols by fan-in | `--by fanin`, `--limit N` |
 | `graph --db <db>` | Export the symbol graph | `--format dot\|mermaid`, `--name <substr>`, `--output <f>` |
 | [`callgraph`](https://github.com/Alexl-git/Delphi-RAG-Lint/wiki/callgraph) `--qname <X> --db <db>` | N-deep resolved call tree | `--direction callers\|callees`, `--depth N` |

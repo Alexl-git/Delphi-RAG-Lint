@@ -1,106 +1,94 @@
 # CONVERTER backlog -- delayed tasks (do not lose; do not read every session)
 
-Created 2026-10-16 from the resume doc, the archived 1.27 adoption ledger and the
-editor CLAUDE.md hand-over notes. A handoff LINKS to this file instead of
-repeating it. Open it when picking the next converter job, not at session start.
+Created 2026-10-16; **rewritten 2026-10-19** from the re-triage proposal
+`docs\handoffs\CONVERTER-BACKLOG-proposed-2026-10-19.md` (full measurements, file:line
+evidence and the engine JSON shapes live THERE -- open it when working an item) with the
+owner's 2026-10-19 answers applied. A handoff LINKS to this file instead of repeating it.
+Open it when picking the next converter job, not at session start.
 
-**Status caution:** items marked (re-check) were recorded before later merges and
-may already be done. Measure against the tree before working on one.
+Sizes S/M/L; model = haiku / sonnet / session (owner rule 2a). **Measure against the tree
+before working on an item.**
+
+## State at the rewrite
+
+* Pin `third_party\engine-pinned\1.31.5-alpha-20261019-071827`; re-pin to 1.32.0-alpha
+  (extractor 1.22) waits for ENGINE's "re-parse done".
+* On main (pushed 4fa585c4): A2 qualify fix (3cdadd60), C minors + `#depth` repair (1d888db1).
+  Merged-tree baseline on the 1.31.5 pin: model tests 2281 pass / 5 fail (VARINSP), 14 drivers.
+* Unmerged, under review: `feat/converter-apply-fields` (B1 B3 B6 B7 B8, C-2, B4 helpers) and
+  `fix/converter-testkit` (D1, N5); worktrees `C:\Projects\Delphi-RAG-lint-wt\conv-apply-fields`
+  and `conv-testkit`.
 
 ## A. Queued work, in order
 
-1. **Re-pin** once, after the engine's all-teams 1.22 extractor release + full
-   re-parse (owner ruling relayed by ENGINE 2026-10-14). Verify the sha yourself.
-   Procedure: editor CLAUDE.md "Re-pinning"; baseline model tests 2194/5, 13
-   drivers; re-capture the `tests\fixtures\apply1270\` uses rows (1.28.1 changed
-   them). Re-judge lint (editor 971 / tests 413) -- new rule
-   `confusable-identifier` and naming fixes arrived after 1.27.0.
-2. ~~**Owner request: one-click "qualify #convert" quick fix**~~ -- DONE 2026-10-19 on
-   branch `feat/convert-qualify-fix` (commits d7b84ca3, 97c6e234 + docs): Convert tab
-   `Qualify #convert...` button / double-click, dialog, report `qualify` lines, wiki
-   `convrules-editor-qualify-fix`, `drive-qualify-fix.ps1` 20. Spec/plan
-   `docs\superpowers\specs|plans\2026-10-19-convert-qualify-fix*.md`. Open follow-ups:
-   D4 option B (apply the text-only `alternative`), D6 option B (fix a whole run).
-3. **Owner's minor reworks** -- section C below.
-4. **C18 member replacement, slice 1** (`#migrate X -> DL_NONE` + rename) once
-   the engine builds `docs\superpowers\specs\2026-10-11-member-replacement-design.md`
-   (owner answered Q1-Q4, Q5 deferred).
+1. **Re-pin to 1.32.0 + baseline** -- S, session. After "re-parse done". Procedure: editor
+   CLAUDE.md "Re-pin"; then model tests + all 14 drivers on main; re-judge lint (new rule
+   `confusable-identifier`).
+2. **Merge `feat/converter-apply-fields`** -- M, session. Review + mutation positive controls,
+   `ParseApplyJson` bad-shape reads, B8 legacy text match keep/drop; drivers owed: convert-tab,
+   convert-request, work-list (+ refused Convert keeps rows with the "previous run" summary),
+   validate-scope, inherited-offer.
+3. **Merge `fix/converter-testkit`** -- S, sonnet. Run drive-file-menu with a forced FAIL
+   (must exit 1) and drive-work-list.
+4. **A4 C18 member replacement, slice 1** (`#migrate X -> Y` / `-> DL_NONE` + rename) -- M,
+   session. Contract `docs\NOTICE-2026-10-19-c18-slice1-migrate.md`; design
+   `docs\superpowers\specs\2026-10-11-member-replacement-design.md` (Q1-Q4 answered, Q5
+   deferred). Spec + plan first, owner approves, then implement on the 1.32.0 pin.
+5. **N1 Convert click lost while an analysis or Save validation is pending** -- M, session.
+6. **N3 re-create the apply1270 capture project as a script**, then re-capture the
+   `tests\fixtures\apply1270\` uses rows -- M, sonnet. Needs an indexed unit (after the re-parse).
+7. **B9 `#warn` / `#check-ref` in the Model + display + BDE book lines** -- M, sonnet.
+8. **D4 + D6 qualify follow-ups** -- M each, sonnet. Owner ADDED both 2026-10-19.
+9. **B4 runner batch mode** (`apply-batch/1`) -- L, session. Parse helpers exist on
+   apply-fields (not wired).
+10. **B10 `inherited_code_unconverted` capability + model test on a real capture** -- S, sonnet.
+11. **N2 QualifyFix mutant Q08 "retarget ignores Applied" survives** -- S, sonnet (low).
+12. **D2 `drive-engine-wait.ps1` `wait.reload.no.window` flake** -- M, sonnet.
+13. **E2 one doc line: in a worktree pass `--db <wt>\src\tools\convrules-editor\_D-RAG\
+    ConvRulesEditor.sqlite` and index with `--project ConvRulesEditor.dpr`** -- S, haiku.
 
-## B. Engine-contract follow-ups (re-check each -- recorded 2026-10-06/07)
+## B. Engine-contract follow-ups
 
-- Qualify fix, optional (spec section 12): G1 a `qualified_line` carrying every side's
-  candidate (`replacement` is whole-line and single-side); G2 the refusal reason and the
-  From-side text word the uses edit differently -- `alternative` is the only discriminator.
+- **B1** scoped note from `only_matched[]` / `only_unmatched[]` -- on apply-fields (A2 above).
+- **B2** E10 refusal hint gated on `only_skips_unit_rules` -- DROPPED (owner 2026-10-19):
+  never fires on 1.31.5 (uses reconciliation keeps the unit). `RefusalHint` is dead code;
+  delete it with its test when next in `ConvertRequest` (S, haiku).
+- **B3** C13 index-gap refusal reads "fix the index" -- on apply-fields.
+- **B4** runner batch mode -- A9.
+- **B5** C8 code refs filtered to field-resolved -- DROPPED (owner 2026-10-19): the engine's
+  `inherited[]` is authoritative (ruling M4) and the note is off when it reports.
+- **B6** `descendants[]` on the ancestor's row + report -- on apply-fields.
+- **B7** `only_included[]` / `unlinked[]` -- on apply-fields (texts were already done).
+- **B8** half-apply guard on the exit contract -- on apply-fields; text match kept as a legacy
+  fallback pending the review's keep/drop decision.
+- **B9** `#warn` / `#check-ref` -- A7.
+- **B10** `inherited_code_unconverted` -- A10.
+- **B11** castlib `dfmdata` -- DONE (shared parser reads it).
 
-- Scoped note from `only_matched[]` / `only_unmatched[]` ("converted N of M").
-- E10 refusal hint gated on `only_skips_unit_rules`.
-- C13 index-gap REFUSED text shown as "fix the index", not "edit the book".
-- Runner batch mode (`batch_units`, apply-batch/1; 45.7 s vs 114.7 s for 3 units).
-- C8 code refs: keep only refs RESOLVED TO A FIELD (E5).
-- Show `descendants[]` (descendant_warnings) on the converted ancestor's row + report.
-- Distinct texts for "rolled back" vs "PARTLY converted"; show `only_included[]`;
-  surface `unlinked[]` dropped collections on the row/report.
-- Tighten the half-apply guard to the engine's all-or-nothing exit contract and
-  drop the text match.
-- E17 `#warn` / `#check-ref`: parser round-trip (ParseLine, Emit, BlockFile) +
-  display of book-warning / ref-path-like / ref-dangling; then add
-  `#warn IndexName "..."` and `#check-ref ConnectionName ...` to the BDE book.
-- 1.26.7 `inherited_code_unconverted`: CodeUseNoteDue per engine state + a model
-  test on a real 1.26.7 capture.
-- 1.26.2 castlib key `dfmdata ...`: check the shared CastLib parser shows it.
+## C. Owner minors
 
-## C. Deferred minors (owner reworks)
-
-From the 1.27 adoption ledger
-(`docs\superpowers\sdd-archive\2026-10-11-editor-1270-adoption\progress.md`):
-- Picker does not offer StripDB for a `TFileName` From (string alias).
-- Cast option Detail text never shown.
-- `TestConvCatalogValueCast` SKIPs all 4 checks without `casts.castlib` beside the engine.
-- `ParseApplyJson` default `AFeatures` = all is a trap; make `[]` the default.
-- "Converted N of M" counts pairs never run after a stop.
-- Report line order (inherited, glyph, new) differs from note order.
-- Drive-by `TestGrammarGuard` path change; ConvertRun Remainder comment on a code
-  line; ConvertRunner `TConvertStatus` remarks at column 0.
-- Two books on one unit can list a global twice at shifted lines (Work list).
-- A preflight-refused Convert keeps the previous Work list.
-- Editor CLAUDE.md verification-kit paragraph wording; registry
-  `convrules-work-list` since=1.28.0-alpha.
-
-From earlier branches (editor CLAUDE.md):
-- C8: multi-file drop of N descendants prompts once each on No (no "No to all");
-  Convert gate Yes/No has no GUI check; `drive-inherited-offer.ps1` fixed 2 s sleep.
-- C12: queued `ApplyConvertRequest` could run before the form is visible; a
-  `--form` error is overwritten by the request status; whitespace-only required
-  value reads "is missing"; unmatched-name hint fires on unparseable output.
-- Depth: on a `bdsInvalid` book picking 5 does not fire OnChange; on
-  `bdsDuplicate` the red note stays -- owner to accept or change.
-- Pre-existing oddities: blank filename in `HeaderIndexFor`/`LoadFile` stale
-  message; dead `BlockPercent` (H2219); stale hand comment above
-  `HarvestUnitFile`; `HarvestFormTypes` comment; `FormTypeDrawItem` 4px inset
-  written three times.
+- **C-1 Picker does not offer StripDB for a `TFileName` From** -- BLOCKED on ENGINE castlib
+  (`accepts string, TFileName`), asked in
+  `docs\INBOX-REPLY-2026-10-19-converter-to-engine-qualify-and-castlib.md`. Then verify the
+  picker (S, haiku).
+- **C-2 Refused Convert keeps the previous Work list** -- DONE on apply-fields (owner chose:
+  keep rows, label "from the previous run ...; the last Convert was refused").
+- All other section-C minors -- DONE, merged in 1d888db1 (plan
+  `docs\superpowers\plans\2026-10-19-converter-c-minors.md`, triage table names the closed ones).
 
 ## D. Test-kit debts
 
-- `drive-file-menu.ps1` exits 0 even with a FAIL.
-- `drive-engine-wait.ps1` `wait.reload.no.window` flaky since 1.25.2 (cause
-  unconfirmed); its `WaitIdle` still has the reused-PID child filter.
-- `drive-file-menu` / `drive-engine-wait` fail once under machine load -- rerun alone.
+- **D1** `drive-file-menu.ps1` exit 1 on FAIL -- on fix/converter-testkit (A3).
+- **D2** `wait.reload.no.window` flake -- A12.
+- **D3** "rerun alone under load" -- DROPPED as an item (note kept in D2).
+- **D4 / D6** -- A8.
+- **N5** `drive-work-list.ps1` clipboard retry -- on fix/converter-testkit (A3).
 
-## E. Housekeeping (owner)
+## E. Housekeeping
 
-- Trim `src\tools\convrules-editor\CLAUDE.md` (135 KB, ~34k tokens loaded by every
-  converter session and subagent): move dated hand-over notes to a docs file,
-  keep a current core of ~5-8 KB. Proposed 2026-10-16, awaiting owner go.
-  **Proposal made 2026-10-16 (awaiting the owner's choice: all four files, or the editor CLAUDE.md first):**
-  method = keep each rule, move its story into an archive, delete nothing.
-  (1) editor CLAUDE.md 135 KB -> ~8 KB core (engine pin + drift check, re-pinning, test kit + baseline, a
-  one-line-per-unit map, ~10 standing traps); dated hand-over sections moved word for word to
-  `docs\convrules-editor-HANDOVER-ARCHIVE.md`. (2) `C:\Projects\CLAUDE.md`: no-grep rules kept complete
-  as one ~3 KB block (exe, resolve-dbs, verb table, index-then-slice-Read, the 4 gap classes, both logs);
-  incident detail goes to `docs\AI-USAGE.md`. (3) Rules the harness has outgrown: the Everything HTTP API;
-  the MCP build tool (already denied in settings); Mercurial "use Bash" (contradicts the PowerShell rule);
-  the PowerShell section -> 3 lines; the 2026-07-23 plan stats; the "under 200 words" rule only for
-  general-purpose; the wiki section -> the `--check` command only; rules repeated across the 3 files
-  stated once. (4) MEMORY.md: keep resume pointers + 10-15 live lessons, move the rest to a lessons
-  index read on demand. Estimate ~50k -> ~12-15k tokens per session/subagent. Show the owner the list
-  of every rule kept / shortened / moved / dropped before committing.
+- **E1 instruction-file trim** -- DONE 2026-10-19 (editor CLAUDE.md 7.5 KB, archive in
+  `docs\handoffs\archive\convrules-editor-HANDOVER-ARCHIVE.md`).
+- **E2 worktree `--db` doc line** -- A13 (N4 "no .dproj" is not a defect).
+- **E3 merged/scratch worktrees** (conv-trial, conv-qualify-fix, conv-c-minors,
+  conv-integrate + branches tmp/conv-trial, feat/convert-qualify-fix, fix/converter-c-minors,
+  conv/integrate) -- remove, owner approval batched.

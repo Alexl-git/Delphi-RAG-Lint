@@ -1,0 +1,23 @@
+{
+  "id": "convrules-editor",
+  "title": "ConvRulesEditor",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27)",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe"
+    },
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Convert tab (--convert-request <file>; the IDE plugin probes --write-capabilities <file>)"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page (manual: docs\\converter\\convrules-editor-manual.md); seed: since unknown"
+}

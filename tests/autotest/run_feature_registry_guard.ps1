@@ -1,38 +1,36 @@
 #Requires -Version 7.3
 <#
-  run_feature_registry_guard.ps1 -- every live surface has a registry entry
-  and every entry points at something that exists; the generated pages are
-  current and untouched. Spec section 9.
+  run_feature_registry_guard.ps1 -- every live surface has a registry entry and every
+  entry points at something that exists; the generated pages are current and untouched.
+  Spec section 9. Since the 2026-10 cut-over the checks live in featuregen.exe
+  (src\tools\featuregen); this runner is the battery's door to them.
 
   A  well-formed (schema, canonical bytes, groups/teams, references, ASCII+CRLF)
-  B  live -> registry: every --help verb, subcommand, IDE caption, rule,
+  B  live -> registry: every --help verb, subcommand, IDE caption, MCP tool, rule,
      chart question and release exe is registered or exempted WITH a reason
   C  registry -> live: every cli / ide-* / tool-window / mcp surface is live
-  D  Home.md, Features.md, Feature-Index.md, Quick-Help.md, the two dl:registry
-     blocks and manifest.json are byte-identical to a fresh render
+  D  every generated output is byte-identical to a fresh render: the four wiki
+     pages, the two dl:registry blocks, manifest.json, cli-reference.md, the
+     website set (WWW\help\dl) and site-pages.json
   E  staleness is a [NOTE], never a FAIL (the periodic review consumes it)
 
-  POSITIVE CONTROLS run first and declare the guard BROKEN (exit 1) if any
-  fails: an injected entry with a missing page must fail C; an injected verb
-  and an injected caption must fail B; a flipped byte must fail D; the chart
-  importer's count must equal REPORT_QUESTION_COUNT and the ValidateSet.
-  Also: an entry outside seed-backlog.json with no intro must fail A (the
-  phase-in does not leak); an ide-context surface missing from its host's
-  context menu must fail C; an injected Structure-form context item must fail B;
-  a caption that merely STARTS with a short registered key ('Refresh Zz Probe')
-  must fail B, and an entry leaf that merely prefixes a live caption must fail C.
-  IDE captions are matched by LEAF only (spec 18 v1), exactly or by a prefix of
-  >= 12 characters (docs-sync check 5's looser rule is for prose, not here);
-  ide-context surfaces are matched against their own host's context menu.
+  This runner executes  featuregen check --level full  and  featuregen build --all --check
+  on the real repo. A MISSING or stale featuregen.exe is rebuilt (tools\featuregen-ensure.ps1); a failed rebuild
+  or a missing engine is "GUARD BROKEN" (exit 1), never a pass. Before the real run it proves, on a scratch copy of the registry, that the tool goes
+  RED on a seeded defect and green on the unseeded copy (the positive control); the
+  injected-verb / caption / MCP-tool / hand-edit controls for B, C and D live in
+  src\tools\featuregen\tests\FeatureGenTests.dpr (run by run_featuregen_tests.ps1).
 
   Parameters:
     -Repo     repo root (default: two levels above this script)
-    -WorkDir  scratch folder for the check-D control render (created, then
-              removed on exit; default under $env:TEMP, unique per process)
+    -WorkDir  scratch folder for the control (created, removed on exit; unique per process)
+    -Engine   drag-lint.exe whose live surface is checked (default: <Repo>\third_party\dll-win64\drag-lint.exe;
+              a worktree passes its own src\cli\Win64\Debug build, which needs rules\ beside it)
 #>
 [CmdletBinding()]
 param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path,
-      [string]$WorkDir = "$env:TEMP\drag-lint-feature-registry-guard-$PID")
+      [string]$WorkDir = "$env:TEMP\drag-lint-feature-registry-guard-$PID",
+      [string]$Engine = '')
 Set-StrictMode -Version Latest
 try {
 $ErrorActionPreference = 'Stop'
@@ -43,91 +41,66 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
   Write-Host ("  [{0}] {1} {2}" -f $s, $Name, $Detail) -ForegroundColor $c
   if (-not $Ok) { $script:Failed = $true }
 }
-Write-Host '== feature registry guard ==' -ForegroundColor Cyan
-$mod = Join-Path $Repo 'tools\FeatureRegistry.psm1'
-if (-not (Test-Path -LiteralPath $mod)) { Write-Host "GUARD BROKEN: $mod missing" -ForegroundColor Red; exit 1 }
-Import-Module $mod -Force
-$p = Get-RegistryPaths -Repo $Repo
-if (-not (Get-Command Invoke-RegistryCheck -ErrorAction SilentlyContinue).Parameters.ContainsKey('InjectEntries')) { Write-Host 'GUARD BROKEN: Invoke-RegistryCheck has no -InjectEntries (Full level not implemented)' -ForegroundColor Red; exit 1 }
+Write-Host '== feature registry guard (featuregen) ==' -ForegroundColor Cyan
+. (Join-Path $Repo 'tools\featuregen-ensure.ps1')
+$engine = if ($Engine) { $Engine } else { Join-Path $Repo 'third_party\dll-win64\drag-lint.exe' }
+try { $exe = Get-FeatureGenExe -Repo $Repo }
+catch { Write-Host "GUARD BROKEN: $($_.Exception.Message) (build\_build_featuregen_local.bat builds it)" -ForegroundColor Red; exit 1 }
+# ---- control 0: the freshness rule itself goes RED on a missing / stale exe -------------
+$fresh = Join-Path $env:TEMP "drag-lint-featuregen-fresh-$PID-$([guid]::NewGuid().ToString('N'))"
+$fdir = Join-Path $fresh 'src\tools\featuregen'
+New-Item -ItemType Directory -Path $fdir -Force | Out-Null
+try {
+  [IO.File]::WriteAllText((Join-Path $fdir 'x.pas'), "unit x;`r`n", [Text.Encoding]::ASCII)
+  $miss = $null; try { Get-FeatureGenExe -Repo $fresh -NoBuild | Out-Null } catch { $miss = $_.Exception.Message }
+  if ($miss -notmatch 'is missing') { Write-Host 'GUARD BROKEN: a missing featuregen.exe was not refused' -ForegroundColor Red; exit 1 }
+  $fx = Join-Path $fdir 'featuregen.exe'
+  [IO.File]::WriteAllText($fx, 'x', [Text.Encoding]::ASCII)
+  (Get-Item -LiteralPath $fx).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddHours(-1)
+  $stale = $null; try { Get-FeatureGenExe -Repo $fresh -NoBuild | Out-Null } catch { $stale = $_.Exception.Message }
+  if ($stale -notmatch 'older than its sources') { Write-Host 'GUARD BROKEN: a stale featuregen.exe was not refused' -ForegroundColor Red; exit 1 }
+  (Get-Item -LiteralPath $fx).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddHours(1)
+  $ok = $null; try { $ok = Get-FeatureGenExe -Repo $fresh -NoBuild } catch { $ok = $null }
+  if ($ok -ne $fx) { Write-Host 'GUARD BROKEN: a fresh featuregen.exe was refused' -ForegroundColor Red; exit 1 }
+} finally { [IO.Directory]::Delete($fresh, $true) }
+Write-Host '  [CTRL] the freshness rule refuses a missing and a stale featuregen.exe and accepts a fresh one' -ForegroundColor DarkGray
+if (-not (Test-Path -LiteralPath $engine)) { Write-Host "GUARD BROKEN: engine not found: $engine" -ForegroundColor Red; exit 1 }
 if (Test-Path -LiteralPath $WorkDir) { Remove-Item -LiteralPath $WorkDir -Recurse -Force }
 New-Item -ItemType Directory -Path $WorkDir | Out-Null
 
-# ---- controls first ----------------------------------------------------------
-Write-Host '-- controls' -ForegroundColor Cyan
-$live = Get-LiveSurface -Paths $p
-$script:broken = $false
-function Control([string]$Name, [bool]$Ok, [string]$Detail = '') {
-  if ($Ok) { Write-Host "  [CTRL] $Name" -ForegroundColor DarkGray } else { Write-Host "  [GUARD BROKEN] $Name $Detail" -ForegroundColor Red; $script:broken = $true }
-}
-$ghostEntry = [ordered]@{ id = 'zz-ghost-page'; title = 'Ghost page entry'; group = 'maintenance'; owner = 'ENGINE'; status = 'shipped'; since = $live.Versions.Product
-  summary = 'Injected by the guard to prove check C can fail'; intro = 'Control.'; wikiPage = 'Zz-No-Such-Page'; surfaces = @([ordered]@{ type = 'cli'; verb = 'info' }); audience = 'both'
-  lastVerified = [ordered]@{ date = (Get-Date -Format 'yyyy-MM-dd'); by = 'guard'; build = $live.Versions.Product } }
-# Not in seed-backlog.json, so the full standard applies: no intro, no lastVerified must fail A.
-$noIntroEntry = [ordered]@{ id = 'zz-no-intro'; title = 'No intro entry'; group = 'maintenance'; owner = 'ENGINE'; status = 'shipped'; since = $live.Versions.Product
-  summary = 'Injected by the guard to prove the backlog tolerance does not leak'; wikiPage = 'Home'; surfaces = @([ordered]@{ type = 'cli'; verb = 'info' }); audience = 'both' }
-# An ide-context surface is checked against ITS host's menu, not the main menu.
-$ghostContext = [ordered]@{ id = 'zz-ghost-context'; title = 'Ghost context entry'; group = 'maintenance'; owner = 'ENGINE'; status = 'shipped'; since = $live.Versions.Product
-  summary = 'Injected by the guard to prove the context-menu check can fail'; intro = 'Control.'; wikiPage = 'Home'; surfaces = @([ordered]@{ type = 'ide-context'; host = 'Structure form'; caption = 'Zz Ghost Context Item' }); audience = 'both'
-  lastVerified = [ordered]@{ date = (Get-Date -Format 'yyyy-MM-dd'); by = 'guard'; build = $live.Versions.Product } }
-# Caption matching is exact, or a prefix only when the shorter key is >= 12
-# characters: a short registered key ('refresh', 'about') must not cover every
-# caption that starts with it (B), and a short entry leaf must not match a long
-# live caption (C). 'Uses Au' is a 7-character prefix of the live 'Uses Audit ...'.
-$shortLeaf = [ordered]@{ id = 'zz-short-leaf'; title = 'Short leaf entry'; group = 'maintenance'; owner = 'ENGINE'; status = 'shipped'; since = $live.Versions.Product
-  summary = 'Injected by the guard to prove a short leaf is not a prefix match'; intro = 'Control.'; wikiPage = 'Home'; surfaces = @([ordered]@{ type = 'ide-menu'; path = 'drag-lint > Uses Au' }); audience = 'both'
-  lastVerified = [ordered]@{ date = (Get-Date -Format 'yyyy-MM-dd'); by = 'guard'; build = $live.Versions.Product } }
-$guid = [Guid]::NewGuid().ToString('N').Substring(0, 8)
-$ctl = Invoke-RegistryCheck -Paths $p -Level Full -Live $live -SkipGenerated -InjectEntries @($ghostEntry, $noIntroEntry, $ghostContext, $shortLeaf) -InjectHelpVerbs @("zz-not-a-verb-$guid") -InjectCaptions @('Zz Not A Real Menu Item', 'Refresh Zz Probe', 'OK') -InjectContextCaptions @('Zz Not A Context Item')
-Control 'an entry whose wikiPage does not exist is reported (C/A)' (@($ctl.Failures | Where-Object { $_ -like '*Zz-No-Such-Page*' }).Count -gt 0)
-Control 'an entry outside the seed backlog with no intro is reported (A)' (@($ctl.Failures | Where-Object { $_ -like 'A: zz-no-intro.json: intro is required*' }).Count -gt 0)
-Control 'an ide-context surface absent from its host menu is reported (C)' (@($ctl.Failures | Where-Object { $_ -like 'C: zz-ghost-context: ide-context*Zz Ghost Context Item*' }).Count -gt 0)
-Control 'an unregistered context-menu item is reported (B)' (@($ctl.Failures | Where-Object { $_ -like 'B: *Zz Not A Context Item*' }).Count -gt 0)
-Control 'an unregistered --help verb is reported with a skeleton (B)' (@($ctl.Failures | Where-Object { $_ -like "B: *zz-not-a-verb-$guid*" -and $_ -like '*"id":*' }).Count -gt 0)
-Control 'an unregistered caption is reported (B)' (@($ctl.Failures | Where-Object { $_ -like 'B: *Zz Not A Real Menu Item*' }).Count -gt 0)
-Control 'a caption that only starts with a short registered key is reported (B)' (@($ctl.Failures | Where-Object { $_ -like "B: *unregistered: 'Refresh Zz Probe'*" }).Count -gt 0)
-Control 'a short entry leaf that only prefixes a live caption is reported (C)' (@($ctl.Failures | Where-Object { $_ -like "C: zz-short-leaf: ide-menu 'drag-lint > Uses Au'*" }).Count -gt 0)
-# Dialog-button policy: the harvest classifies by the source construct, not by
-# the word -- a MENU caption that reads like a button ('OK') is still a feature.
-Control 'a menu caption that reads like a dialog button (OK) is still reported (B)' (@($ctl.Failures | Where-Object { $_ -like "B: *unregistered: 'OK'*" }).Count -gt 0)
-[void](Invoke-RegistryGenerate -Paths $p -OutDir $WorkDir)
-$fp = Join-Path $WorkDir 'docs\wiki\Quick-Help.md'
-$before = [IO.File]::ReadAllText($fp)
-$after = $before.Replace('## Declared, not harvested', '## Declared, not harvestec')
-Control 'the D control found its flip anchor in the rendered Quick-Help.md' ($after -cne $before)
-[IO.File]::WriteAllText($fp, $after, [Text.Encoding]::ASCII)
-$flip = Invoke-RegistryGenerate -Paths $p -OutDir $WorkDir -Check
-Control 'a flipped byte in a generated page is reported (D)' (($flip.Changed.Count -eq 1) -and ($flip.Changed[0].Path -eq 'docs\wiki\Quick-Help.md'))
-$ctx = Get-RegistryContext -Paths $p
-$kids = Get-RegistryChildren -Live $live -Entries @($ctx.Entries | ForEach-Object { $_.Entry }) -Paths $p
-Control 'chart importer count == REPORT_QUESTION_COUNT == ValidateSet' (($kids.Contains('chart-questions')) -and (@($kids['chart-questions']).Count -eq $live.ReportQuestionCount) -and ($live.ChartValidateSet.Count -eq $live.ReportQuestionCount)) "children=$(@($kids['chart-questions']).Count) const=$($live.ReportQuestionCount) validateset=$($live.ChartValidateSet.Count)"
-Control 'lint importer count == summary.total' (($kids.Contains('lint-rules')) -and (@($kids['lint-rules']).Count -eq [int]$live.RuleCatalog.summary.total))
-if ($script:broken) { Write-Host 'FEATURE REGISTRY GUARD: GUARD BROKEN -- a control failed; no real check was reported as passed' -ForegroundColor Red; exit 1 }
+# ---- control first: the tool goes red on a seeded defect, green without it ------------
+Write-Host '-- control' -ForegroundColor Cyan
+$scratch = Join-Path $WorkDir 'repo'
+New-Item -ItemType Directory -Path (Join-Path $scratch 'docs') -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $Repo 'features') -Destination (Join-Path $scratch 'features') -Recurse
+Copy-Item -LiteralPath (Join-Path $Repo 'docs\wiki') -Destination (Join-Path $scratch 'docs\wiki') -Recurse
+Copy-Item -LiteralPath (Join-Path $Repo 'CHANGELOG.md') -Destination $scratch
+# The scratch tree has no src\, build\ or tools\, so check A also reports the paths entries name;
+# the control therefore compares the two runs: only the seeded one may name the seeded entry.
+$clean = & $exe check --level wellformed --repo $scratch 2>&1 | Out-String
+if ($clean -match 'zz-guard-control') { Write-Host 'GUARD BROKEN: the unseeded scratch copy already names the control entry' -ForegroundColor Red; exit 1 }
+$seed = Join-Path $scratch 'features\entries\zz-guard-control.json'
+[IO.File]::WriteAllText($seed, "{`n  `"id`": `"zz-guard-control`",`n  `"zzUnknownKey`": 1`n}`n", [Text.Encoding]::ASCII)
+$red = & $exe check --level wellformed --repo $scratch 2>&1 | Out-String
+if (($LASTEXITCODE -ne 1) -or ($red -notmatch 'zz-guard-control\.json')) { Write-Host "GUARD BROKEN: a seeded bad entry did not fail check A naming it (exit $LASTEXITCODE): $($red.Trim())" -ForegroundColor Red; exit 1 }
+Write-Host '  [CTRL] a seeded bad entry fails check A and is named; the unseeded copy never names it' -ForegroundColor DarkGray
 
-# ---- the real run ------------------------------------------------------------
-Write-Host '-- checks' -ForegroundColor Cyan
-$res = Invoke-RegistryCheck -Paths $p -Level Full -Live $live
-foreach ($n in $res.Notes) { Write-Host "  [NOTE] $n" -ForegroundColor DarkGray }
-Check 'thresholds: entries >= 50, verbs > 20, captions >= 40, rules > 0, questions == constant' (($res.Stats['entries'] -ge 50) -and ($live.HelpVerbs.Count -gt 20) -and ($live.Captions.Count -ge 40) -and ([int]$live.RuleCatalog.summary.total -gt 0) -and ($live.ReportQuestions.Count -eq $live.ReportQuestionCount)) "entries=$($res.Stats['entries']) verbs=$($live.HelpVerbs.Count) captions=$($live.Captions.Count) rules=$($live.RuleCatalog.summary.total)"
-foreach ($letter in 'A', 'B', 'C', 'D') {
-  $f = @($res.Failures | Where-Object { $_.StartsWith("$letter`: ") })
-  $name = switch ($letter) { 'A' { 'A well-formed' } 'B' { 'B live -> registry (nothing unregistered)' } 'C' { 'C registry -> live (nothing dangling)' } 'D' { 'D generated outputs current and untouched' } }
-  Check $name ($f.Count -eq 0) "($($f.Count) failure(s))"
-  foreach ($x in $f) { Write-Host ("        " + ($x -replace "`n", "`n        ")) -ForegroundColor Red }
-}
-# Dialog buttons (Go To, Fix, Cancel, ...) are not features: they are harvested
-# apart and need no exemption, so exemptions.json must not carry one.
-$dlg = if ($live.PSObject.Properties.Name -contains 'DialogButtons') { [string[]]@($live.DialogButtons) } else { [string[]]@() }
-$exCapNames = @((Get-Content -LiteralPath $p.Exemptions -Raw | ConvertFrom-Json -AsHashtable)['captions'].get_Keys())
-Check 'POLICY: dialog buttons are harvested apart (Go To, Fix)' (($dlg -contains 'Go To') -and ($dlg -contains 'Fix')) ($dlg -join ' | ')
-Check 'POLICY: exemptions.json carries no dialog-button caption' (@($exCapNames | Where-Object { $dlg -contains $_ }).Count -eq 0) ((@($exCapNames | Where-Object { $dlg -contains $_ })) -join ' | ')
-Check 'POLICY: no B failure names a dialog button' (@($res.Failures | Where-Object { $x = $_; $x.StartsWith('B: ') -and @($dlg | Where-Object { $x -like "*unregistered: '$_'*" }).Count }).Count -eq 0)
-$other = @($res.Failures | Where-Object { $_ -notmatch '^[ABCD]: ' })
-Check 'no uncategorised failure' ($other.Count -eq 0) ($other -join ' | ')
+# ---- the real repo ----------------------------------------------------------------------
+Write-Host '-- checks A-E (check --level full)' -ForegroundColor Cyan
+$out = & $exe check --level full --repo $Repo --engine $engine 2>&1 | Out-String
+$code = $LASTEXITCODE
+Check 'registry check A-E: no failures' ($code -eq 0) "(exit $code)"
+if ($code -ne 0) { Write-Host ($out.TrimEnd() -replace '(?m)^', '    ') -ForegroundColor Red }
+Write-Host '-- generated outputs current (build --all --check)' -ForegroundColor Cyan
+$out = & $exe build --all --check --repo $Repo --engine $engine 2>&1 | Out-String
+$code = $LASTEXITCODE
+Check 'every generated output is current' ($code -eq 0) "(exit $code)"
+if ($code -ne 0) { Write-Host ($out.TrimEnd() -replace '(?m)^', '    ') -ForegroundColor Red }
 
 Write-Host ''
 if ($script:Failed) { Write-Host 'FEATURE REGISTRY GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'FEATURE REGISTRY GUARD: PASS' -ForegroundColor Green
 exit 0
 } finally {
-  if ($WorkDir -and (Test-Path -LiteralPath $WorkDir)) { Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue }
+  if (Test-Path -LiteralPath $WorkDir) { Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue }
 }

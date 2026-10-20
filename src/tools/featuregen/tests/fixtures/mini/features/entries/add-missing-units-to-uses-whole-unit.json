@@ -1,0 +1,21 @@
+{
+  "id": "add-missing-units-to-uses-whole-unit",
+  "title": "Add Missing Units to uses (whole unit)",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.43.0-alpha",
+  "summary": "The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them",
+  "wikiPage": "Add-Missing-Units-to-uses-whole-unit",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Add Missing Units to uses (whole unit)..."
+    },
+    {
+      "type": "cli",
+      "verb": "check-unit"
+    }
+  ],
+  "audience": "both"
+}

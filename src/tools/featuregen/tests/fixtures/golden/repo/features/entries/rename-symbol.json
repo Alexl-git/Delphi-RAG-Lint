@@ -1,0 +1,49 @@
+{
+  "id": "rename-symbol",
+  "title": "Rename Symbol",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.24.0-alpha",
+  "summary": "Renames a symbol across the whole indexed project",
+  "wikiPage": "Rename-Symbol",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Rename Symbol..."
+    },
+    {
+      "type": "cli",
+      "verb": "rename",
+      "usage": "drag-lint rename --kind symbol --name <QName> --to <New> [--json|--apply|--no-backup] --db <db> - cross-unit rename",
+      "flags": [
+        {
+          "name": "--kind"
+        },
+        {
+          "name": "--name",
+          "arg": "<QName>"
+        },
+        {
+          "name": "--to",
+          "arg": "<New>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

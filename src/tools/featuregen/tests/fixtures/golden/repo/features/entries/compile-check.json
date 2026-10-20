@@ -1,0 +1,32 @@
+{
+  "id": "compile-check",
+  "title": "compile-check",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.26.0-alpha",
+  "summary": "Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result",
+  "wikiPage": "compile-check",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "compile-check",
+      "usage": "drag-lint compile-check <target.dproj|.pas> [--project <X.dproj>] [--db PATH] [--format json|text] (no --db: caches only into the project's unique manifest owner, else reports uncached)",
+      "flags": [
+        {
+          "name": "--project",
+          "arg": "<X.dproj>"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--format"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.Editor.pas:2037"
+}

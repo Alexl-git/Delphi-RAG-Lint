@@ -10,7 +10,21 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "schema"
+      "verb": "schema",
+      "usage": "drag-lint schema --db <file.sqlite> [--format text|json] [--output <file>] (self-documenting LIVE index schema: schema_version + tables + columns + row counts, read-only)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--output",
+          "arg": "<file>"
+        }
+      ]
     }
   ],
   "audience": "both",

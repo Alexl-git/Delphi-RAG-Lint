@@ -1,0 +1,35 @@
+{
+  "id": "query-ancestors",
+  "title": "query ancestors",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Resolves the transitive class/interface hierarchy of a type",
+  "wikiPage": "query-ancestors",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "query",
+      "sub": "ancestors",
+      "usage": "drag-lint query ancestors --name <type> [--of <ancestor>] [--db ...] [--json] (transitive class/interface hierarchy)",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<type>"
+        },
+        {
+          "name": "--of",
+          "arg": "<ancestor>"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

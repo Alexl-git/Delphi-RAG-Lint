@@ -10,7 +10,27 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "shutdown"
+      "verb": "shutdown",
+      "usage": "drag-lint shutdown [--db <file.sqlite>]... [--wait <sec>] [--dry-run] [--all] [--force] (ask running `lsp` engines to stand down: close every store, exit 0)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--wait",
+          "arg": "<sec>"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--all"
+        },
+        {
+          "name": "--force"
+        }
+      ]
     }
   ],
   "audience": "both",

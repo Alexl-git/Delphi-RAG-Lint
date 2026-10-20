@@ -1,0 +1,18 @@
+{
+  "id": "go-to-definition",
+  "title": "Go to Definition",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Jumps the editor caret to the declaration of the symbol under the cursor",
+  "wikiPage": "Go-to-Definition",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Go to Definition"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

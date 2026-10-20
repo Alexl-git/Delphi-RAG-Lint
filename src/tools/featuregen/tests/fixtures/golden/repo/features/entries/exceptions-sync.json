@@ -1,0 +1,35 @@
+{
+  "id": "exceptions-sync",
+  "title": "exceptions-sync",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.8.0-alpha",
+  "summary": "Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "exceptions-sync",
+      "usage": "drag-lint exceptions-sync [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json] (materialise the project's derived exception classes)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--config",
+          "arg": "<lint.json>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page"
+}

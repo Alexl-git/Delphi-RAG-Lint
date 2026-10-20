@@ -1,0 +1,41 @@
+{
+  "id": "circular-uses-report-cycles-fix-plan",
+  "title": "Circular Uses Report (cycles + fix plan)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.43.0-alpha",
+  "summary": "Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them",
+  "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)..."
+    },
+    {
+      "type": "cli",
+      "verb": "cycles",
+      "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json|text] (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--edges"
+        },
+        {
+          "name": "--causes"
+        },
+        {
+          "name": "--plan"
+        },
+        {
+          "name": "--format"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}
