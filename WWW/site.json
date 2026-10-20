@@ -1,0 +1,28 @@
+{
+  "baseUrl": "https://www.delphi-rag-lint.com",
+  "siteName": "Delphi-RAG-Lint",
+  "micronite": { "name": "HTR Micronite", "url": "https://www.htrmicronite.com" },
+  "products": [
+    {
+      "id": "dl",
+      "name": "DL (drag-lint)",
+      "short": "DL",
+      "repo": "Alexl-git/Delphi-RAG-Lint",
+      "changelog": "https://github.com/Alexl-git/Delphi-RAG-Lint/blob/main/CHANGELOG.md",
+      "blurb": "Index, query and lint Delphi code - from the command line and inside RAD Studio.",
+      "facts": { "rules": 190, "categories": 16, "fixable": 23 }
+    },
+    {
+      "id": "yadf",
+      "name": "YADF",
+      "repo": "Alexl-git/YADF",
+      "changelog": "https://github.com/Alexl-git/YADF/blob/main/CHANGELOG.md",
+      "blurb": "Yet Another Delphi Formatter - a configurable Pascal/Delphi source formatter."
+    }
+  ],
+  "help": [
+    { "title": "DL wiki", "url": "https://github.com/Alexl-git/Delphi-RAG-Lint/wiki" },
+    { "title": "YADF on GitHub", "url": "https://github.com/Alexl-git/YADF#readme" }
+  ],
+  "sidebarArticles": 8
+}
