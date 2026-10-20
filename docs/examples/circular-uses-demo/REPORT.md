@@ -104,4 +104,6 @@ After Part A these units still use each other through these edges (predicted):
 
 The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
 No edge above can be cut mechanically as the units stand before Part A. Part A changes what these edges carry, so after it run `drag-lint cycles --db "demo.sqlite" --plan` again: it weighs move globals, routine-call inversion and member hand-over against the edited units. Leaving the implementation-only cycle is acceptable.
+
+Fix it: not available -- base-class
 ````

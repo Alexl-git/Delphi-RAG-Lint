@@ -1020,7 +1020,9 @@ begin
   Writeln('  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)');
   Writeln('                               Safe to run any time: prints "nothing pending." when there is nothing to do.');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
-  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --fix = dry run of the mechanical cycle fix for ONE group (verdict + cycle-fix/1 JSON; writes nothing; exit 0 mechanical / 1 refused / 2 error; stages the result in a shadow tree, default C:\TEMP\draglint_cyclefix_<pid>\, --shadow-out names another); --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output; --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); --format json --causes adds per-group edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan [--project <X.dproj>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --fix = dry run of the mechanical cycle fix for ONE group (verdict + cycle-fix/1 JSON; writes nothing; exit 0 mechanical / 1 refused / 2 error; stages the result in a shadow tree, default C:\TEMP\draglint_cyclefix_<pid>\, --shadow-out names another); --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); ' +
+    '--library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); ' +
+    '--format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason} and edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
@@ -22199,6 +22201,63 @@ var
     end;
   end; // procedure
 
+  { E18 T6: recipe R2 reads class ancestry from the platform library -- the explicit
+    --library-db, else the manifest's library section for --platform (default win64),
+    as `resolve-dbs --platform` lists it. Opened READ-ONLY; without one, R2 refuses
+    wherever the answer needs it. `--library-db none` opens no library at all (fix
+    round 1: test runners must never reach the real one through the manifest).
+    E18 T13: shared by --plan, --fix and the --causes JSON (its fix object). }
+  function OpenPlanLibrary(out pFailed: Boolean): ISymbolStore;
+  var
+    LibPath: string;
+  begin
+    pFailed:= False;
+    Result := nil;
+    LibPath:= '';
+    if (Length(AArgs.LibraryDbs) > 0) and SameText(AArgs.LibraryDbs[0], 'none') then
+      Writeln(ErrOutput, 'drag-lint: note: cycles --plan reads no platform library (--library-db none)')
+    else if Length(AArgs.LibraryDbs) > 0 then
+    begin
+      LibPath:= AArgs.LibraryDbs[0];
+      if not TFile.Exists(LibPath) then
+      begin
+        Writeln('ERROR: library database not found: ', LibPath);
+        pFailed:= True;
+        Exit;
+      end;
+    end
+    else
+      try
+        var Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+        var LibDbs  := LibrarySectionDbs(Manifest);
+        var LibRes  := DRagLint.Project.Resolver.TProjectResolver.Create;
+        try
+          for var D in TDbSelect.Resolve(Manifest, (if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else 'win64'),
+            LibRes, True) do
+            if IsLibrarySectionDb(LibDbs, D) and TFile.Exists(D) then
+            begin
+              LibPath:= D;
+              Break;
+            end;
+        finally
+          LibRes.Free;
+        end;
+      except
+        on E: Exception do
+        begin
+          LibPath:= '';
+          Writeln(ErrOutput, Format('drag-lint: note: cycles --plan: no platform library (%s: %s)', [E.ClassName, E.Message]));
+        end;
+      end;
+    if (LibPath <> '') and not SameText(ExpandFileName(LibPath), ExpandFileName(AArgs.DbPath)) then
+    begin
+      var LibOk: Boolean;
+      Result:= OpenReadOnlyStore(LibPath, LibOk);
+      if not LibOk then Result:= nil;
+      Writeln(ErrOutput, 'drag-lint: note: cycles --plan reads class ancestry from ' +
+        (if Result <> nil then LibPath else '(none: ' + LibPath + ' did not open)'));
+    end;
+  end;
 var
   UU   : TArray<TUnitUse>;
   Uo   : TUnitUse        ;
@@ -22259,55 +22318,10 @@ begin
       Graph.IntfEdges:= IntfEdges;
       Graph.UnitFile := UnitFile;
       Graph.UnitFid  := UnitFid;
-      { E18 T6: recipe R2 reads class ancestry from the platform library -- the explicit
-        --library-db, else the manifest's library section for --platform (default win64),
-        as `resolve-dbs --platform` lists it. Opened READ-ONLY; without one, R2 refuses
-        wherever the answer needs it. `--library-db none` opens no library at all (fix
-        round 1: test runners must never reach the real one through the manifest). }
-      var LibPath:= '';
-      if (Length(AArgs.LibraryDbs) > 0) and SameText(AArgs.LibraryDbs[0], 'none') then
-        Writeln(ErrOutput, 'drag-lint: note: cycles --plan reads no platform library (--library-db none)')
-      else if Length(AArgs.LibraryDbs) > 0 then
-      begin
-        LibPath:= AArgs.LibraryDbs[0];
-        if not TFile.Exists(LibPath) then
-        begin
-          Writeln('ERROR: library database not found: ', LibPath);
-          Exit(2);
-        end;
-      end
-      else
-        try
-          var Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
-          var LibDbs  := LibrarySectionDbs(Manifest);
-          var LibRes  := DRagLint.Project.Resolver.TProjectResolver.Create;
-          try
-            for var D in TDbSelect.Resolve(Manifest, (if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else 'win64'),
-              LibRes, True) do
-              if IsLibrarySectionDb(LibDbs, D) and TFile.Exists(D) then
-              begin
-                LibPath:= D;
-                Break;
-              end;
-          finally
-            LibRes.Free;
-          end;
-        except
-          on E: Exception do
-          begin
-            LibPath:= '';
-            Writeln(ErrOutput, Format('drag-lint: note: cycles --plan: no platform library (%s: %s)', [E.ClassName, E.Message]));
-          end;
-        end;
-      var LibStore: ISymbolStore:= nil;
-      if (LibPath <> '') and not SameText(ExpandFileName(LibPath), ExpandFileName(AArgs.DbPath)) then
-      begin
-        var LibOk: Boolean;
-        LibStore:= OpenReadOnlyStore(LibPath, LibOk);
-        if not LibOk then LibStore:= nil;
-        Writeln(ErrOutput, 'drag-lint: note: cycles --plan reads class ancestry from ' +
-          (if LibStore <> nil then LibPath else '(none: ' + LibPath + ' did not open)'));
-      end;
+      { E18 T6 / T13: the platform library for recipe R2 (OpenPlanLibrary) }
+      var LibFailed: Boolean;
+      var LibStore: ISymbolStore:= OpenPlanLibrary(LibFailed);
+      if LibFailed then Exit(2);
       if AArgs.Fix then
       begin
         var FixOpts: TCycleFixOptions;
@@ -22332,7 +22346,7 @@ begin
       begin
         var PlanLines:= TStringList.Create;
         try
-          RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore);
+          RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore, AArgs.ProjectPath);
           for var PlanLine in PlanLines do Writeln(PlanLine);
         finally
           PlanLines.Free;
@@ -22367,6 +22381,11 @@ begin
           EdgeGraph.UnitFile := UnitFile;
           EdgeGraph.UnitFid  := UnitFid;
           AddCycleEdgeSurfaces(Store, Sccs, EdgeGraph, JArr);
+          { E18 T13: the fix object per group -- the planner's verdict, edges and the exact commands }
+          var JsonLibFailed: Boolean;
+          var JsonLib: ISymbolStore:= OpenPlanLibrary(JsonLibFailed);
+          if JsonLibFailed then Exit(2);
+          AddCycleFixHints(Store, AArgs.DbPath, Sccs, EdgeGraph, JsonLib, AArgs.ProjectPath, JArr);
         end;
         Writeln(JArr.ToJson);
       finally

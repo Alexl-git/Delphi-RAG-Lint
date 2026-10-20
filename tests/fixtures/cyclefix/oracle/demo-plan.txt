@@ -326,6 +326,13 @@ After Part A these units still use each other through these edges (predicted):
 The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
 To do it: finish Part A (every checklist item), then run `drag-lint cycles --db "@@DB@@" --plan` again. It prints Part B as the same kind of numbered, mechanical steps, with line numbers for the edited files. The edge it will cut is `demoaudit -> democonfig`. Recipe: move globals.
 
+Fix it (mechanical, compile-gated):
+  dry run : drag-lint cycles --fix --project <your.dproj> --db "@@DB@@" --cycle 1
+  apply   : drag-lint cycles --fix --project <your.dproj> --db "@@DB@@" --cycle 1 --apply
+  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units)
+  then    : Part B, optional, after Part A: demoaudit -> democonfig (move globals)
+  requires: the project builds with 0 errors before the fix (the dry run checks this)
+
 ## Cycle 2: demouiconnect <-> demogageport
 
 Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile blast radius). Optional to fix; the steps below are for when you want a fully acyclic uses-graph.
@@ -523,6 +530,12 @@ Tick each box in order. Do not skip the compile.
 - `F2047 Circular unit reference`: a new unit names a unit of this cycle in its uses. Remove that entry -- the new units may use only what the "create the new units" step lists.
 - `F1026 File not found`: a new unit's file name must equal its unit name plus `.pas`.
 
+Fix it (mechanical, compile-gated):
+  dry run : drag-lint cycles --fix --project <your.dproj> --db "@@DB@@" --cycle 2
+  apply   : drag-lint cycles --fix --project <your.dproj> --db "@@DB@@" --cycle 2 --apply
+  cuts    : demouiconnect -> demogageport (member hand-over through an extracted interface) (chosen)
+  requires: the project builds with 0 errors before the fix (the dry run checks this)
+
 ## Cycle 3: demoblueprint <-> democontrolplan <-> demoblueprint.viewmodel
 
 Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile blast radius). Optional to fix; the steps below are for when you want a fully acyclic uses-graph.
@@ -635,4 +648,10 @@ Tick each box in order. Do not skip the compile.
 - `E2010 Incompatible types: 'TX' and 'TXBase'` or `E2033 Types of actual and formal var parameters must be identical`: a routine now takes or returns the base class. Cast at that line: `TX(value)`.
 - `F2047 Circular unit reference`: a new unit names a unit of this cycle in its uses. Remove that entry -- the new units may use only what the "create the new units" step lists.
 - `F1026 File not found`: a new unit's file name must equal its unit name plus `.pas`.
+
+Fix it (mechanical, compile-gated):
+  dry run : drag-lint cycles --fix --project <your.dproj> --db "@@DB@@" --cycle 3
+  apply   : drag-lint cycles --fix --project <your.dproj> --db "@@DB@@" --cycle 3 --apply
+  cuts    : demoblueprint -> demoblueprint.viewmodel (routine-call inversion) (chosen)
+  requires: the project builds with 0 errors before the fix (the dry run checks this)
 

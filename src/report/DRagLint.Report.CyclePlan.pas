@@ -184,6 +184,41 @@ type
     PtrTypeDecl: string;
   end;
 
+  /// <summary>One edge a `Fix it` block names, as the planner weighed it.</summary>
+  TFixEdge = record
+    /// <summary>The using unit's stem.</summary>
+    FromUnit: string;
+    /// <summary>The used unit's stem.</summary>
+    ToUnit: string;
+    /// <summary>move-globals, routine-inversion or member-interface.</summary>
+    Recipe: string;
+    /// <summary>True for the edge `cycles --fix` cuts (the planner's CutEdge).</summary>
+    Chosen: Boolean;
+  end;
+
+  /// <summary>What a `Fix it` block (text) or `fix` object (JSON) says about one circular group.</summary>
+  /// <remarks>Taken only from the planner's plan of the group; nothing is re-derived.</remarks>
+  TCycleFixHint = record
+    /// <summary>1-based group index (DoCycles order).</summary>
+    CycleIndex: Integer;
+    /// <summary>'A' for an interface-coupled group, 'B' for an implementation-only one.</summary>
+    Part: Char;
+    /// <summary>True when the planner found a mechanical cut with no refusal.</summary>
+    Available: Boolean;
+    /// <summary>The `cycles --fix` dry-run command.</summary>
+    DryRun: string;
+    /// <summary>The `cycles --fix --apply` command.</summary>
+    Apply: string;
+    /// <summary>The first refusal as 'kind: reason', or '' when Available.</summary>
+    Reason: string;
+    /// <summary>Part B groups: every edge with a recipe, the chosen one first; Part A: empty.</summary>
+    Edges: TArray<TFixEdge>;
+    /// <summary>Part A groups: True when Part B would cut an edge afterwards (see Followup).</summary>
+    HasFollowup: Boolean;
+    /// <summary>Part A groups: the edge Part B cuts after Part A (Chosen = True); else empty.</summary>
+    Followup: TFixEdge;
+  end;
+
   /// <summary>Called once per planned group by VisitCyclePlans.</summary>
   /// <param name="pView">The group's plan as data; valid during the call only.</param>
   /// <param name="pRender">Returns the playbook of this group, one string per line; call at most once.</param>
@@ -237,6 +272,8 @@ procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
 /// <param name="pLibStore">The platform library index, opened read-only by the caller, or nil.
 /// Recipe R2 reads class ancestry, inherited members and the units of library types from it;
 /// without it R2 refuses wherever the answer needs the library.</param>
+/// <param name="pFixProject">The project file named in each cycle's `Fix it` commands, or '' to print
+/// the placeholder `&lt;your.dproj&gt;`.</param>
 /// <remarks>
 /// <para>An INTERFACE-coupled group gets Part A: every symbol that one member's
 /// interface takes from another moves into a new leaf unit
@@ -255,7 +292,23 @@ procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
 /// </remarks>
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
-  const pLibStore: ISymbolStore = nil);
+  const pLibStore: ISymbolStore = nil; const pFixProject: string = '');
+
+/// <summary>Adds a `fix` object (TCycleFixHint) to every group object of a `cycles --format json` report.</summary>
+/// <param name="pStore">Open index the graph was built from; read only.</param>
+/// <param name="pDbPath">Path of that index, quoted in the commands.</param>
+/// <param name="pSccs">The circular groups, as lower-case unit stems.</param>
+/// <param name="pGraph">The uses graph the groups were computed from.</param>
+/// <param name="pLibStore">Platform library index (read only) or nil.</param>
+/// <param name="pFixProject">The project file to name in the commands, or '' for the placeholder.</param>
+/// <param name="pGroups">The report's group objects, index-aligned with pSccs; each must be a
+/// TJSONObject. The new objects become owned by those objects.</param>
+/// <remarks>Runs the planner once per group, so it is only for `--causes`. Writes nothing.
+/// Fields: available, part, dry_run, apply, edges[{from,to,recipe,chosen}], reason, and for a
+/// Part A group `followup` {from,to,recipe} when Part B cuts an edge afterwards.</remarks>
+procedure AddCycleFixHints(const pStore: ISymbolStore; const pDbPath: string;
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore;
+  const pFixProject: string; const pGroups: TJSONArray);
 
 /// <summary>Adds an `edges` array to every group object of a `cycles --format json`
 /// report: one entry per uses edge inside the group, with that edge's surface
@@ -499,6 +552,9 @@ type
     FPredicted  : TList<TPredGroup>;
     FCutEdge    : TEdgeEval;
     FInversion  : TRecipeSteps;  // R1 / R2 steps of FCutEdge; Recipe = crNone otherwise
+    FPartBBest  : TEdgeEval;     // Part A groups: the edge Part B cuts after Part A (FromStem = '' when none)
+    FPartBDone  : Boolean;       // FPartBBest has been computed for the current group
+    FFixProject : string;        // the project named in the Fix it commands; '' = placeholder
     // loading + resolution
     procedure IndexAllFiles;
     function GetFile(pFid: Int64): TPlanFile;
@@ -602,6 +658,10 @@ type
     procedure RenderCompileHelp;
     procedure RenderDone(pIntf: Boolean);
     procedure RenderPartB;
+    procedure CollectPartB(const pEvals: TList<TEdgeEval>; const pTexts: TList<string>);
+    function PartBBest: TEdgeEval;
+    procedure RenderFixIt(const pPlan: TCycleFixPlan);
+    function FixCommand(pCycle: Integer; pApply: Boolean): string;
     procedure RenderIntfCycle(const pPlan: TCycleFixPlan);
     procedure RenderImplCycle(const pPlan: TCycleFixPlan);
     // planning (no output)
@@ -653,6 +713,15 @@ type
     /// which BuildPlan left in place; hence the guard.</remarks>
     procedure RenderPlan(const pPlan: TCycleFixPlan);
     procedure Run;
+    /// <summary>What the Fix it block (text) and fix object (JSON) say about one group.</summary>
+    /// <param name="pPlan">The plan the LAST BuildPlan call returned.</param>
+    /// <returns>Availability, commands, cuttable edges and the first refusal, all taken from pPlan.</returns>
+    /// <remarks>Availability is the planner's verdict: a mechanical cut with no refusal. It does not
+    /// build; the dry run checks the baseline. Part A groups run the Part B weighing once, only to
+    /// name the follow-up edge.</remarks>
+    function FixHintOf(const pPlan: TCycleFixPlan): TCycleFixHint;
+    /// <summary>The project named in the Fix it commands; '' prints the placeholder `&lt;your.dproj&gt;`.</summary>
+    property FixProject: string read FFixProject write FFixProject;
     /// <summary>The surface of every uses edge inside one SCC.</summary>
     /// <param name="pCycleIndex">1-based index into the circular groups.</param>
     /// <returns>One surface per edge A -&gt; B with A, B in the group and B in A's
@@ -1658,6 +1727,8 @@ begin
   FPredicted.Clear;
   FCutEdge  := Default(TEdgeEval);
   FInversion:= Default(TRecipeSteps);
+  FPartBBest:= Default(TEdgeEval);
+  FPartBDone:= False;
 end;
 
 function TCyclePlanner.BodyRanges(const pSym: TSymbol): TArray<TLineRange>;
@@ -3579,25 +3650,13 @@ begin
     'or be handed over as a parameter / event instead of being called by name.');
 end;
 
-procedure TCyclePlanner.RenderPartB;
+{ E18 T13: Part B's weighing of every remaining edge, shared by the Part B text and the Fix it
+  block, so the edge the block names is the edge Part B prints. }
+procedure TCyclePlanner.CollectPartB(const pEvals: TList<TEdgeEval>; const pTexts: TList<string>);
 var
-  Best : TEdgeEval;
   Names: TList<string>;
-  Evals: TList<TEdgeEval>;
-  Texts: TList<string>;
 begin
-  Emit('### Part B (optional): remove the implementation-only cycle too');
-  if FPredicted.Count = 0 then
-  begin
-    Emit('Nothing to do: after Part A no cycle remains among these units.');
-    Emit('');
-    Exit;
-  end;
-  Emit('After Part A these units still use each other through these edges (predicted):');
-  Best := Default(TEdgeEval);
   Names:= TList<string>.Create;
-  Evals:= TList<TEdgeEval>.Create;
-  Texts:= TList<string>.Create;
   try
     for var G in FPredicted do
       for var A in G.Members do
@@ -3610,12 +3669,57 @@ begin
           if Ev.Movable then Ev.Recipe:= crMoveGlobals;
           Names.Clear;
           for var N in Needs do Names.Add(Format('%s (%s)', [N.Owner.Name, N.Owner.Kind.ToText]));
-          Evals.Add(Ev);
-          Texts.Add(QuoteList(Names.ToArray));
+          pEvals.Add(Ev);
+          pTexts.Add(QuoteList(Names.ToArray));
         end;
     { E18 T7 R3: the same recipes and order the re-run after Part A uses }
-    PlanInversion(Evals);
-    PlanMemberHandOver(Evals);
+    PlanInversion(pEvals);
+    PlanMemberHandOver(pEvals);
+  finally
+    Names.Free;
+  end;
+  FPartBBest:= Default(TEdgeEval);
+  for var Ev in pEvals do
+    if BetterCut(Ev, FPartBBest) then FPartBBest:= Ev;
+  FPartBDone:= True;
+end;
+
+function TCyclePlanner.PartBBest: TEdgeEval;
+var
+  Evals: TList<TEdgeEval>;
+  Texts: TList<string>;
+begin
+  if not FPartBDone then
+  begin
+    Evals:= TList<TEdgeEval>.Create;
+    Texts:= TList<string>.Create;
+    try
+      CollectPartB(Evals, Texts);
+    finally
+      Texts.Free;
+      Evals.Free;
+    end;
+  end;
+  Result:= FPartBBest;
+end;
+
+procedure TCyclePlanner.RenderPartB;
+var
+  Evals: TList<TEdgeEval>;
+  Texts: TList<string>;
+begin
+  Emit('### Part B (optional): remove the implementation-only cycle too');
+  if FPredicted.Count = 0 then
+  begin
+    Emit('Nothing to do: after Part A no cycle remains among these units.');
+    Emit('');
+    Exit;
+  end;
+  Emit('After Part A these units still use each other through these edges (predicted):');
+  Evals:= TList<TEdgeEval>.Create;
+  Texts:= TList<string>.Create;
+  try
+    CollectPartB(Evals, Texts);
     for var I:= 0 to Evals.Count - 1 do
     begin
       var Ev:= Evals[I];
@@ -3623,13 +3727,12 @@ begin
         (if Ev.Recipe = crMoveGlobals then 'mechanical: these can move into a new leaf unit'
          else if Ev.Recipe <> crNone then 'mechanical: recipe: ' + RecipeLabel(Ev.Recipe)
          else 'not mechanical: ' + Ev.Why)]);
-      if BetterCut(Ev, Best) then Best:= Ev;
     end;
   finally
     Texts.Free;
     Evals.Free;
-    Names.Free;
   end;
+  var Best:= FPartBBest;
   Emit('');
   RenderRemedy;
   if Best.FromStem <> '' then
@@ -3642,6 +3745,92 @@ begin
       'these edges carry, so after it run `%s` again: it weighs move globals, routine-call inversion and ' +
       'member hand-over against the edited units. Leaving the implementation-only cycle is acceptable.',
       [CyclesCommand(True)]);
+  Emit('');
+end;
+
+function TCyclePlanner.FixCommand(pCycle: Integer; pApply: Boolean): string;
+begin
+  Result:= Format('drag-lint cycles --fix --project %s --db "%s" --cycle %d',
+    [(if FFixProject <> '' then '"' + FFixProject + '"' else '<your.dproj>'), FDbPath, pCycle]) +
+    (if pApply then ' --apply' else '');
+end;
+
+function TCyclePlanner.FixHintOf(const pPlan: TCycleFixPlan): TCycleFixHint;
+const
+  CRecipeId: array[TCutRecipe] of string = ('', 'move-globals', 'routine-inversion', 'member-interface');
+
+  function EdgeOf(const pEv: TEdgeEval; pChosen: Boolean): TFixEdge;
+  begin
+    Result.FromUnit:= pEv.FromStem;
+    Result.ToUnit  := pEv.ToStem;
+    Result.Recipe  := CRecipeId[pEv.Recipe];
+    Result.Chosen  := pChosen;
+  end;
+
+begin
+  Result:= Default(TCycleFixHint);
+  Result.CycleIndex:= pPlan.CycleIndex;
+  Result.Part      := pPlan.Part;
+  Result.Available := pPlan.Verdict = cvMechanical;
+  Result.DryRun    := FixCommand(pPlan.CycleIndex, False);
+  Result.Apply     := FixCommand(pPlan.CycleIndex, True);
+  if Length(pPlan.Refusals) > 0 then
+    Result.Reason:= pPlan.Refusals[0].Kind + ': ' + pPlan.Refusals[0].Reason;
+  if pPlan.HasIntf then
+  begin
+    var Best:= PartBBest;
+    Result.HasFollowup:= Best.FromStem <> '';
+    if Result.HasFollowup then Result.Followup:= EdgeOf(Best, True);
+    Exit;
+  end;
+  { the chosen edge first, then every other edge that has a recipe, in the planner's order }
+  var L:= TList<TFixEdge>.Create;
+  try
+    if pPlan.CutEdge.FromStem <> '' then L.Add(EdgeOf(pPlan.CutEdge, True));
+    for var Ev in pPlan.Evals do
+      if (Ev.Recipe <> crNone) and not ((Ev.FromStem = pPlan.CutEdge.FromStem) and (Ev.ToStem = pPlan.CutEdge.ToStem)) then
+        L.Add(EdgeOf(Ev, False));
+    Result.Edges:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+procedure TCyclePlanner.RenderFixIt(const pPlan: TCycleFixPlan);
+const
+  CRecipeText: array[TCutRecipe] of string = ('', 'move globals', 'routine-call inversion',
+    'member hand-over through an extracted interface');
+
+  function EdgeText(const pEdge: TFixEdge): string;
+  begin
+    Result:= Format('%s -> %s (%s)', [pEdge.FromUnit, pEdge.ToUnit,
+      (if pEdge.Recipe = 'routine-inversion' then CRecipeText[crRoutineInversion]
+       else if pEdge.Recipe = 'member-interface' then CRecipeText[crMemberInterface]
+       else CRecipeText[crMoveGlobals])]);
+  end;
+
+begin
+  var H:= FixHintOf(pPlan);
+  if not H.Available then
+  begin
+    { the kind only: the full reason is already printed in the refusing step above, and is in the JSON }
+    EmitFmt('Fix it: not available -- %s', [(if Length(pPlan.Refusals) > 0 then pPlan.Refusals[0].Kind else 'refused')]);
+    Emit('');
+    Exit;
+  end;
+  Emit('Fix it (mechanical, compile-gated):');
+  EmitFmt('  dry run : %s', [H.DryRun]);
+  EmitFmt('  apply   : %s', [H.Apply]);
+  if H.Part = 'A' then
+  begin
+    Emit('  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units)');
+    if H.HasFollowup then
+      EmitFmt('  then    : Part B, optional, after Part A: %s', [EdgeText(H.Followup)]);
+  end
+  else
+    for var E in H.Edges do
+      EmitFmt('  cuts    : %s%s', [EdgeText(E), (if E.Chosen then ' (chosen)' else '')]);
+  Emit('  requires: the project builds with 0 errors before the fix (the dry run checks this)');
   Emit('');
 end;
 procedure TCyclePlanner.PlanIntfCycle;
@@ -4373,6 +4562,7 @@ begin
   Emit('');
   if pPlan.HasIntf then RenderIntfCycle(pPlan)
   else RenderImplCycle(pPlan);
+  RenderFixIt(pPlan);
 end;
 
 { E18 T1 fix round 1: TEST SEAM, inert unless the environment variable names a
@@ -4503,12 +4693,13 @@ end;
 
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
-  const pLibStore: ISymbolStore);
+  const pLibStore: ISymbolStore; const pFixProject: string);
 var
   Planner: TCyclePlanner;
 begin
   Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, pOut, pLibStore);
   try
+    Planner.FixProject:= pFixProject;
     Planner.Run;
   finally
     Planner.Free;
@@ -4544,6 +4735,50 @@ begin
   finally
     Planner.Free;
     Lines.Free;
+  end;
+end;
+
+procedure AddCycleFixHints(const pStore: ISymbolStore; const pDbPath: string;
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore;
+  const pFixProject: string; const pGroups: TJSONArray);
+
+  function EdgeJson(const pEdge: TFixEdge; pWithChosen: Boolean): TJSONObject;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('from', pEdge.FromUnit);
+    Result.AddPair('to', pEdge.ToUnit);
+    Result.AddPair('recipe', pEdge.Recipe);
+    if pWithChosen then Result.AddPair('chosen', TJSONBool.Create(pEdge.Chosen));
+  end;
+
+var
+  Planner: TCyclePlanner;
+begin
+  Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, nil, pLibStore);
+  try
+    Planner.FixProject:= pFixProject;
+    for var I:= 1 to pSccs.Count do
+    begin
+      var Plan:= Planner.BuildPlan(I);
+      try
+        var H:= Planner.FixHintOf(Plan);
+        var Fix:= TJSONObject.Create;
+        Fix.AddPair('available', TJSONBool.Create(H.Available));
+        Fix.AddPair('part', LowerCase(H.Part));
+        Fix.AddPair('dry_run', H.DryRun);
+        Fix.AddPair('apply', H.Apply);
+        var Edges:= TJSONArray.Create;
+        for var E in H.Edges do Edges.AddElement(EdgeJson(E, True));
+        Fix.AddPair('edges', Edges);
+        if H.HasFollowup then Fix.AddPair('followup', EdgeJson(H.Followup, False));
+        Fix.AddPair('reason', H.Reason);
+        (pGroups.Items[I - 1] as TJSONObject).AddPair('fix', Fix);
+      finally
+        Plan.Release;
+      end;
+    end;
+  finally
+    Planner.Free;
   end;
 end;
 
