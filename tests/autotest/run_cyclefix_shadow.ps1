@@ -144,6 +144,67 @@ try {
   $m = [regex]::Match($txt, '(?m)^Shadow tree: (.+?)\s*$')
   Check 'c3: text output announces "Shadow tree: C:\TEMP\draglint_cyclefix_<pid>"' ($m.Success -and $m.Groups[1].Value -match '^C:\\TEMP\\draglint_cyclefix_\d+\\?$') $txt
   Check 'c3: that directory exists and holds files' ($m.Success -and (Test-Path $m.Groups[1].Value) -and (@(Get-ChildItem $m.Groups[1].Value -Recurse -File).Count -gt 0)) ''
+  # --- fix round 1 -------------------------------------------------------------------------
+  # Index a fresh demo copy after Patch(proj) changed it; run `cycles --fix` with an explicit shadow dir.
+  function Run-Patched([string]$Tag, [scriptblock]$Patch, [hashtable]$Env = @{}) {
+    $proj = Join-Path $WorkDir "$Tag-proj"
+    $shadow = Join-Path $WorkDir "$Tag-shadow"
+    Copy-Tree $Demo $proj
+    & $Patch $proj
+    $db = Join-Path $WorkDir "$Tag.sqlite"
+    & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+    foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
+    try {
+      $out = (& $Exe cycles --fix --project (Join-Path $proj 'CircularDemo.dproj') --db $db --cycle 1 `
+        --no-compile --library-db none --shadow-out $shadow --format json 2>$null | Out-String)
+      $code = $LASTEXITCODE
+    } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
+    $j = try { $out | ConvertFrom-Json } catch { $null }
+    $n = if (Test-Path $shadow) { @(Get-ChildItem $shadow -Recurse -File).Count } else { 0 }
+    return @{ Exit = $code; Json = $j; Out = $out; Shadow = $shadow; ShadowFiles = $n; Proj = $proj }
+  }
+  function Patch-Bytes([string]$Path, [string]$From, [byte[]]$To) {
+    $b = [IO.File]::ReadAllBytes($Path)
+    $s = [Text.Encoding]::GetEncoding(28591).GetString($b)
+    $i = $s.IndexOf($From)
+    if ($i -lt 0) { throw "patch anchor not found: $From" }
+    $nb = [byte[]]($b[0..($i - 1)] + $To + $b[($i + $From.Length)..($b.Length - 1)])
+    [IO.File]::WriteAllBytes($Path, $nb)
+  }
+
+  Write-Host '== e1: a non-ASCII char in a line the recipe copies into a new unit' -ForegroundColor Cyan
+  # 0xE9 (e-acute, cp1252) in the doc comment of TDemoLogLevel, which Part A moves into a new unit.
+  $r = Run-Patched 'e1' { param($p) Patch-Bytes (Join-Path $p 'DemoLogger.pas') 'Severity of a log line' ([byte[]](0x53,0xE9,0x76,0xE9,0x72,0x69,0x74,0xE9)) }
+  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  Check 'e1: exit 1, refusal non-ascii-text' ($r.Exit -eq 1 -and $kinds -contains 'non-ascii-text') $r.Out
+  Check 'e1: nothing staged (shadow empty or absent)' ($r.ShadowFiles -eq 0) "files=$($r.ShadowFiles)"
+
+  Write-Host '== e2: a UTF-8 BOM file keeps its BOM and bytes outside the edits' -ForegroundColor Cyan
+  $r = Run-Patched 'e2' { param($p)
+    $f = Join-Path $p 'DemoLogger.pas'
+    $txt = [IO.File]::ReadAllText($f).Replace('CYCLE ROLE', ('CYCLE R' + [char]0xD4 + 'LE'))
+    [IO.File]::WriteAllText($f, $txt, (New-Object Text.UTF8Encoding($true))) }
+  Check 'e2: exit 0, mechanical' ($r.Exit -eq 0 -and $r.Json -and $r.Json.cycles[0].verdict -eq 'mechanical') $r.Out
+  $sb = Join-Path $r.Shadow 'DemoLogger.pas'
+  $bytes = if (Test-Path $sb) { [IO.File]::ReadAllBytes($sb) } else { [byte[]]@() }
+  Check 'e2: staged DemoLogger.pas starts with the UTF-8 BOM' ($bytes.Length -gt 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) ''
+  Check 'e2: the non-ASCII char survives as UTF-8 (C3 94 not C3 83 ..)' (([Text.Encoding]::UTF8.GetString($bytes)).Contains('CYCLE R' + [char]0xD4 + 'LE')) ''
+
+  Write-Host '== e3: anchor-mismatch (test seam: DRAGLINT_CYCLEFIX_TEST_TAMPER edits the staged text in memory only)' -ForegroundColor Cyan
+  $r0 = Run-Patched 'e3c' { param($p) }
+  Check 'e3: CONTROL without the seam the same plan is mechanical (exit 0)' ($r0.Exit -eq 0) $r0.Out
+  $r = Run-Patched 'e3' { param($p) } @{ DRAGLINT_CYCLEFIX_TEST_TAMPER = 'DemoLogger.pas|llWarn, llError|llWarn, llXError' }
+  $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
+  Check 'e3: exit 1, refusal anchor-mismatch' ($r.Exit -eq 1 -and $kinds -contains 'anchor-mismatch') $r.Out
+  Check 'e3: shadow empty or absent' ($r.ShadowFiles -eq 0) "files=$($r.ShadowFiles)"
+
+  Write-Host '== e4: --shadow-out must be empty' -ForegroundColor Cyan
+  $busy = Join-Path $WorkDir 'busy'
+  New-Item -ItemType Directory -Force $busy | Out-Null
+  [IO.File]::WriteAllText((Join-Path $busy 'keep.txt'), 'x')
+  $out = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none --shadow-out $busy --format json 2>$null | Out-String)
+  Check 'e4: exit 2, "shadow-out dir not empty"' ($LASTEXITCODE -eq 2 -and $out -match 'shadow-out dir not empty') $out
+  Check 'e4: the directory is untouched' ((Test-Path (Join-Path $busy 'keep.txt')) -and @(Get-ChildItem $busy -Recurse -File).Count -eq 1) ''
 } finally {
   Pop-Location
 }

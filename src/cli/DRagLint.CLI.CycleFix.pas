@@ -116,6 +116,8 @@ const
   CVerdictOk       = 'Verdict: mechanical (dry run; add --apply to write)';
   CVerdictRefused  = 'Verdict: refused';
   CShadowLine      = 'Shadow tree: ';
+  CMaxAsciiOrd     = 127;  // the last ASCII code point
+  CTamperParts     = 3;    // File.pas|from|to
 
 function MakeRefusal(const pKind, pSymbol, pFile, pReason: string; pLine: Integer): TRefusal;
 begin
@@ -283,6 +285,37 @@ begin
   end;
 end;
 
+function HasNonAscii(const pLines: TArray<string>): Boolean;
+begin
+  Result:= False;
+  for var Ln in pLines do
+    for var Ch in Ln do
+      if Ord(Ch) > CMaxAsciiOrd then Exit(True);
+end;
+
+// Test seam, inert unless DRAGLINT_CYCLEFIX_TEST_TAMPER = 'File.pas|from|to' is set: replaces the first
+// occurrence of `from` in that file's text as staging reads it (in memory only), so a runner can make the
+// file differ from what the planner saw -- the one way to reach the anchor-mismatch refusal.
+procedure ApplyTestTamper(const pPath: string; var pContent: string);
+begin
+  var Spec:= GetEnvironmentVariable('DRAGLINT_CYCLEFIX_TEST_TAMPER').Split(['|']);
+  if (Length(Spec) = CTamperParts) and SameText(ExtractFileName(pPath), Spec[0]) then
+    pContent:= StringReplace(pContent, Spec[1], Spec[2], []);
+end;
+
+// Refusals for text the file's encoding cannot carry faithfully: for an ANSI file anything non-ASCII
+// that the edits insert (it may come from a file in another code page).
+procedure CheckInsertedText(const pPath: string; const pView: TCyclePlanView; pEnc: TEncoding; pOut: TList<TRefusal>);
+begin
+  if pEnc = TEncoding.UTF8 then Exit;
+  for var E in pView.Edits do
+    if SameText(E.FilePath, pPath) and HasNonAscii(E.NewLines) then
+    begin
+      pOut.Add(MakeRefusal('non-ascii-text', '', pPath,
+        'an inserted line holds a non-ASCII character and the file is ANSI; edit this file by hand', E.First));
+      Exit;
+    end;
+end;
 function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string): TArray<TRefusal>;
 type
   TStaged = record
@@ -290,6 +323,7 @@ type
     Bytes: TBytes;
   end;
 var
+  Enc    : TEncoding;
   Refs   : TList<TRefusal>;
   Staged : TList<TStaged>;
   Edits  : TArray<TTextEdit>;
@@ -314,10 +348,12 @@ begin
         Refs.Add(AnchorRefusal(P, 'the file to edit does not exist', 0));
         Continue;
       end;
-      var Content:= TEncoding.ANSI.GetString(TFile.ReadAllBytes(P));
+      var Content:= DecodeSource(TFile.ReadAllBytes(P), Enc);
+      ApplyTestTamper(P, Content);
       Lines.Text:= Content;
       var Before:= Refs.Count;
       CheckAnchors(P, pView, Lines, Refs);
+      CheckInsertedText(P, pView, Enc, Refs);
       if Refs.Count > Before then Continue;
       var Expected:= Lines.Count + NetLineChange(P, Edits);
       var Text:= TTextEditApplier.ApplyToText(P, Content, Edits);
@@ -328,7 +364,7 @@ begin
         Continue;
       end;
       Item.Path := ShadowPathOf(pShadowDir, pProjectDir, P);
-      Item.Bytes:= TEncoding.ANSI.GetBytes(Text);
+      Item.Bytes:= EncodeSource(Text, Enc);
       Staged.Add(Item);
     end;
     for var N in pView.NewUnits do
@@ -336,6 +372,11 @@ begin
       if TFile.Exists(N.Path) then
       begin
         Refs.Add(AnchorRefusal(N.Path, 'the new unit''s file already exists', 0));
+        Continue;
+      end;
+      if HasNonAscii(N.Text) then
+      begin
+        Refs.Add(MakeRefusal('non-ascii-text', '', N.Path, 'the new unit would hold a non-ASCII character copied from the sources; move it by hand', 0));
         Continue;
       end;
       Item.Path := ShadowPathOf(pShadowDir, pProjectDir, N.Path);
@@ -356,6 +397,7 @@ begin
     Refs.Free;
   end;
 end;
+
 function IntfEdgeCount(const pUnits: TArray<string>; const pGraph: TCycleGraph; pIntfOnly: Boolean): Integer;
 var
   Targets: TList<string>;
@@ -504,6 +546,9 @@ begin
   else if pOpts.CycleGiven and (pOpts.CycleIndex < 1) then
     Result:= 'cycles --fix --cycle needs a group number of 1 or more (see `drag-lint cycles` for the groups)';
   if Result <> '' then Exit;
+  if (pOpts.ShadowOut <> '') and TDirectory.Exists(ExpandFileName(pOpts.ShadowOut)) and
+     (Length(TDirectory.GetFileSystemEntries(ExpandFileName(pOpts.ShadowOut))) > 0) then
+    Exit('cycles --fix: shadow-out dir not empty: ' + ExpandFileName(pOpts.ShadowOut) + ' (name an empty or new directory; nothing is deleted)');
   pOwn:= TOwnRoots.Load(ExtractFilePath(ExpandFileName(pOpts.Project)));
   if pOwn.Error <> '' then Exit(pOwn.Error);
   if pOpts.CycleGiven then pOnly:= pOpts.CycleIndex

@@ -175,6 +175,29 @@ type
   /// <returns>True to continue with the next group, False to stop.</returns>
   TCyclePlanVisit = reference to function(const pView: TCyclePlanView; const pRender: TFunc<TArray<string>>): Boolean;
 
+/// <summary>The encoding a source file is read and written in: UTF-8 when it starts with the
+/// UTF-8 BOM, else the system ANSI code page (the indexer's basis).</summary>
+/// <param name="pBytes">The file's raw bytes.</param>
+/// <returns>TEncoding.UTF8 or TEncoding.ANSI; not owned by the caller.</returns>
+function SourceEncodingOf(const pBytes: TBytes): TEncoding;
+
+/// <summary>Decodes a source file's bytes in its own encoding.</summary>
+/// <param name="pBytes">The file's raw bytes.</param>
+/// <param name="pEncoding">Receives the encoding used (SourceEncodingOf).</param>
+/// <returns>The text without the BOM.</returns>
+function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
+
+/// <summary>Encodes text for a source file; the inverse of DecodeSource.</summary>
+/// <param name="pText">The text.</param>
+/// <param name="pEncoding">The file's encoding from DecodeSource.</param>
+/// <returns>The bytes, with the UTF-8 BOM first when the encoding is UTF-8.</returns>
+function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
+
+/// <summary>Reads a source file as lines in its own encoding (DecodeSource), the one routine both
+/// the planner and the cycle-fix staging use so they agree on every character.</summary>
+/// <param name="pPath">The file.</param>
+/// <returns>The lines without terminators.</returns>
+function ReadSourceLines(const pPath: string): TArray<string>;
 /// <summary>Plans each circular group (or one) and hands every plan to pVisit as data.</summary>
 /// <param name="pStore">Open index the graph was built from; read only.</param>
 /// <param name="pDbPath">Path of that index.</param>
@@ -687,6 +710,45 @@ begin
   Result:= pLine;
 end;
 
+function SourceEncodingOf(const pBytes: TBytes): TEncoding;
+const
+  CBomLen = 3;  // the UTF-8 BOM EF BB BF
+  CBomEF  = $EF;
+  CBomBB  = $BB;
+  CBomBF  = $BF;
+begin
+  if (Length(pBytes) >= CBomLen) and (pBytes[0] = CBomEF) and (pBytes[1] = CBomBB) and (pBytes[2] = CBomBF) then
+    Result:= TEncoding.UTF8
+  else Result:= TEncoding.ANSI;
+end;
+
+function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
+const
+  CBomLen = 3;  // the UTF-8 BOM EF BB BF
+begin
+  pEncoding:= SourceEncodingOf(pBytes);
+  if pEncoding = TEncoding.UTF8 then Result:= TEncoding.UTF8.GetString(pBytes, CBomLen, Length(pBytes) - CBomLen)
+  else Result:= TEncoding.ANSI.GetString(pBytes);
+end;
+
+function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
+begin
+  Result:= pEncoding.GetBytes(pText);
+  if pEncoding = TEncoding.UTF8 then Result:= TEncoding.UTF8.GetPreamble + Result;
+end;
+
+function ReadSourceLines(const pPath: string): TArray<string>;
+var
+  Enc: TEncoding;
+begin
+  var Lines:= TStringList.Create;
+  try
+    Lines.Text:= DecodeSource(TFile.ReadAllBytes(pPath), Enc);
+    Result:= Lines.ToStringArray;
+  finally
+    Lines.Free;
+  end;
+end;
 function LineAt(const pLines: TArray<string>; pLine: Integer): string;
 begin
   if (pLine >= 1) and (pLine <= Length(pLines)) then Result:= pLines[pLine - 1]
@@ -1408,7 +1470,7 @@ begin
   Result.UnitName := UnitNameOfPath(Result.Path);
   Result.Stem     := LowerCase(Result.UnitName);
   Result.IsProgram:= MatchText(ExtractFileExt(Result.Path), ['.dpr', '.dpk']);
-  if TFile.Exists(Result.Path) then Result.Lines:= TFile.ReadAllLines(Result.Path);
+  if TFile.Exists(Result.Path) then Result.Lines:= ReadSourceLines(Result.Path);
   Result.IntfLine:= FindKeywordLine(Result.Lines, 'interface');
   Result.ImplLine:= FindKeywordLine(Result.Lines, 'implementation');
   Result.Syms    := FStore.FindSymbolsByFile(Result.Path);
@@ -2342,7 +2404,7 @@ begin
   var Created:= LeafStems(udCreate);
   for var Stem in Created do AddUses(FProjectFid, scProg, UsesEntryFor(Prj, Stem));
   if not (SameText(ExtractFileExt(FProjectFile), '.dproj') and TFile.Exists(FProjectFile)) then Exit;
-  Dproj:= TFile.ReadAllLines(FProjectFile);
+  Dproj:= ReadSourceLines(FProjectFile);
   for var U in Prj.UsesList do
   begin
     var Stem:= LowerCase(U.UnitName);
@@ -3405,7 +3467,7 @@ begin
       Result:= pRight.First - pLeft.First;
     end));
   RenderFileEdits(Format('#### `%s`  (`%s`)', [ExtractFileName(FProjectFile), FProjectFile]),
-    TFile.ReadAllLines(FProjectFile), Arr, CXmlFence);
+    ReadSourceLines(FProjectFile), Arr, CXmlFence);
 end;
 
 procedure TCyclePlanner.RenderCompileHelp;
@@ -4220,7 +4282,7 @@ begin
         begin
           Result:= pRight.First - pLeft.First;
         end));
-      AddEdits(FProjectFile, Sorted, TFile.ReadAllLines(FProjectFile));
+      AddEdits(FProjectFile, Sorted, ReadSourceLines(FProjectFile));
     end;
     for var It in pPlan.Items do
     begin
