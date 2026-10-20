@@ -149,6 +149,13 @@ try {
     $null = Edit-File (Join-Path $Dir 'MemberWrite.dproj') '        <DCCReference Include="DemoGagePort.pas"/>' "        <DCCReference Include=`"DemoGageKinds.pas`"/>`n        <DCCReference Include=`"DemoGagePort.pas`"/>"
   }
   $null = Test-Tree 'r2nested' (Join-Path $Fx 'memberwrite') 'MemberWrite.dproj' 1 $nested
+  # T6-follow: a dotted unit-qualified member type `System.Classes.TStrings`: the leaf uses System.Classes and compiles
+  $dotted = {
+    param($Dir)
+    $null = & $dropWrite $Dir
+    $null = Edit-File (Join-Path $Dir 'DemoGagePort.pas') '    property Log: TStrings read FLog;' '    property Log: System.Classes.TStrings read FLog;'
+  }
+  $null = Test-Tree 'r2dotted' (Join-Path $Fx 'memberwrite') 'MemberWrite.dproj' 1 $dotted
   $emptyLeaf = {
     param($Dir)
     $null = Edit-File (Join-Path $Dir 'DemoGagePort.Untangle.pas') "type`n  /// <summary>The unit a gage reads in.</summary>`n  TDemoGageUnit = (guMillimetre, guInch);`n`n" ''

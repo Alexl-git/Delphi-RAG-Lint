@@ -401,6 +401,35 @@ try {
   Check 'f26 a dotted unit-qualified signature type `System.Classes.TStrings`: cut, the leaf uses System.Classes (never `uses System`)' `
     ($v26.Ok -and ($v26.Dump.verdict -eq 'mechanical') -and ($v26.Text -match "(?s)unit DemoGagePort\.Untangle;.*uses\n  System\.Classes;") -and
      ($v26.Text -notmatch '(?m)^  System[;,]\r?$') -and $v26.Text.Contains('property Log: System.Classes.TStrings read GetLog;')) "[$($v26.Dump.verdict) / $($v26.Dump.refusals)]"
+  # T6-follow fix round 1: a type the LIBRARY does not declare (a name made up for the plan) written through the
+  # unit scope `System.Classes.` while the uses says `Classes`: the unit comes from the class unit's uses entry
+  # under the default unit scope `System` (rule iii), never from the library, and never `uses System`.
+  # (`--library-db none` cannot reach the leaf at all: R2 refuses `receiver-unknown`, no ancestry -- see g1 / i2.)
+  $v26n = Get-VariantPlan (New-Variant $cleanDir 'v-f26n' @(@($G, "  System.Classes;`n`ntype", "  Classes;`n`ntype"),
+    @($G, '    property Log: TStrings read FLog;', '    property Log: System.Classes.TNoSuchInClasses read FLog;'))) 'v-f26n' $Lib
+  Check 'f26n a dotted type the library does not declare: cut, the leaf uses System.Classes via the uses entry `Classes` (never `uses System`)' `
+    ($v26n.Ok -and ($v26n.Dump.verdict -eq 'mechanical') -and ($v26n.Text -match "(?s)unit DemoGagePort\.Untangle;.*uses\n  System\.Classes;") -and
+     ($v26n.Text -notmatch '(?m)^  System[;,]\r?$')) "[$($v26n.Dump.verdict) / $($v26n.Dump.refusals)]"
+  # a PROJECT unit with a dotted name declares the member type: the whole dotted prefix is the unit
+  $SubUnit = "unit DemoGage.Kinds;`n`n// T6-follow fix round 1 variant: a dotted project unit outside the cycle.`n`ninterface`n`ntype`n  /// <summary>How a reading is scaled.</summary>`n  TGageScale = (gsPlain, gsScaled);`n`nimplementation`n`nend.`n"
+  $SubEdits = @(@('DemoGage.Kinds.pas', '<new>', $SubUnit),
+    @($G, "  System.Classes;`n`ntype", "  System.Classes,`n  DemoGage.Kinds;`n`ntype"),
+    @('MemberWrite.dpr', "  DemoGagePort in 'DemoGagePort.pas',", "  DemoGage.Kinds in 'DemoGage.Kinds.pas',`n  DemoGagePort in 'DemoGagePort.pas',"),
+    @('MemberWrite.dproj', '        <DCCReference Include="DemoGagePort.pas"/>', "        <DCCReference Include=`"DemoGage.Kinds.pas`"/>`n        <DCCReference Include=`"DemoGagePort.pas`"/>"),
+    @($G, '    FLastGage: Integer;', "    FLastGage: Integer;`n    FScale: DemoGage.Kinds.TGageScale;"),
+    @($G, '    property LastGage: Integer read FLastGage write FLastGage;', "    property LastGage: Integer read FLastGage write FLastGage;`n    /// <summary>The scaling.</summary>`n    property Scale: DemoGage.Kinds.TGageScale read FScale;"),
+    @($U, "    Log.Add('data ' + InBuf);", "    Log.Add('data ' + InBuf + IntToStr(Ord(Scale)));"))
+  $v27 = Get-VariantPlan (New-Variant (Join-Path $Fx 'memberwrite') 'v-f27' ($Clean + $SubEdits)) 'v-f27' $Lib
+  Check 'f27 a type of a dotted PROJECT unit `DemoGage.Kinds.TGageScale` (whole dotted prefix is a project stem): cut, the leaf uses DemoGage.Kinds (never `uses DemoGage`)' `
+    ($v27.Ok -and ($v27.Dump.verdict -eq 'mechanical') -and ($v27.Text -match "(?s)unit DemoGagePort\.Untangle;.*uses\n  System\.Classes,\n  DemoGage\.Kinds;") -and
+     ($v27.Text -notmatch '(?m)^  DemoGage[;,]\r?$') -and $v27.Text.Contains('property Scale: DemoGage.Kinds.TGageScale read GetScale;')) "[$($v27.Dump.verdict) / $($v27.Dump.refusals)]"
+  # an unresolvable dotted type (a unit-scope prefix naming no unit): refused, never a `uses System`
+  $v28 = Get-VariantPlan (New-Variant $cleanDir 'v-f28' @(@($G, '    FLastGage: Integer;', "    FLastGage: Integer;`n    FGauge: System.NoSuchUnit.TNoSuchGauge;"),
+    @($G, '    property LastGage: Integer read FLastGage write FLastGage;', "    property LastGage: Integer read FLastGage write FLastGage;`n    property Gauge: System.NoSuchUnit.TNoSuchGauge read FGauge;"),
+    @($U, "    Log.Add('data ' + InBuf);", "    Log.Add('data ' + InBuf);`n    if Gauge <> nil then`n      Exit;"))) 'v-f28' $Lib
+  Check 'f28 an unresolvable dotted type `System.NoSuchUnit.TNoSuchGauge`: refused unresolved-qualified-type' `
+    ($v28.Ok -and ($v28.Dump.verdict -eq 'refused') -and (@($v28.Dump.refusals -split ',') -contains 'unresolved-qualified-type') -and
+     $v28.Text.Contains('refused: unresolved-qualified-type -- ') -and ($v28.Text -notmatch '(?m)^  System[;,]\r?$')) "[$($v28.Dump.verdict) / $($v28.Dump.refusals)]"
   Check 'a13 the demo plan names the exception change of `as` (EInvalidCast -> EIntfCastError)' `
     ($txA.Contains('a failed `as IDemoGagePortSurface` raises EIntfCastError, not EInvalidCast')) ''
 

@@ -372,8 +372,9 @@ function AncestorImplementingIInterface(const pProject, pLibrary: ISymbolStore; 
 /// routine refuses `exception-semantics`.</para>
 /// <para>Leaf: the units declaring the member types -- a project unit as bound from B, else
 /// the library unit B's interface uses names (`type-unresolved`); never a unit of the
-/// group (`leaf-uses-cycle`). A dotted prefix is a unit only when it names one (a project
-/// unit, a uses entry of B, System); otherwise it is the outer type of a nested type and the
+/// group (`leaf-uses-cycle`). The dotted prefixes are walked longest to shortest; the first that names a unit wins (a
+/// project unit, a uses entry of B, a uses entry under a default unit scope, a library unit declaring
+/// the type); with none and a unit-scope first segment the plan refuses `unresolved-qualified-type`; otherwise it is the outer type of a nested type and the
 /// unit declaring that outer type is used (`member-unsupported` when none resolves).</para>
 /// </remarks>
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
@@ -386,6 +387,10 @@ uses
   System.Generics.Collections, System.Generics.Defaults, System.Hash;
 
 const
+  { The Delphi default unit-scope names (.dproj DCC_Namespace when it sets none); a type written
+    `System.Classes.TStrings` names the unit through such a scope when the uses says `Classes`. }
+  CUnitScopeNames: array[0..8] of string = ('System', 'Xml', 'Data', 'Datasnap', 'Web', 'Soap', 'Vcl', 'Winapi', 'System.Win');
+  CUnitScopeRoots = ' System Xml Data Datasnap Web Soap Vcl Winapi ';
   CNotTypeWords = ' const var out array of function procedure reference to packed ';
   { System-unit types every unit sees without a uses entry (R1, J2) }
   CBuiltinTypes = ' integer cardinal shortint smallint longint int64 uint64 byte word longword nativeint ' +
@@ -1527,7 +1532,7 @@ type
     function CheckCastUnit: Boolean;
     function CheckWithBodies: Boolean;
     function LibUnitOf(const pIdent: string): string;
-    function IsUnitName(const pPrefix: string): Boolean;
+    function KnownUnitPrefix(const pSegments: TArray<string>; pCount: Integer): string;
     function LibDeclaresIn(const pIdent, pUnit: string): Boolean;
     function AddLeafUse(const pM: TSymbol; const pTypeName, pShown: string): Boolean;
     function AddNestedLeafUse(const pM: TSymbol; const pOuter, pShown: string): Boolean;
@@ -1993,14 +1998,28 @@ begin
     if SameText(UnitOfFile(FIdx.Lib.GetFilePath(S.FileId)), pUnit) then Exit(True);
 end;
 
-{ Whether a dotted prefix of a type name is a UNIT: a project unit stem, a unit the class
-  unit's uses name (as written), or System. Otherwise it is the outer type of a nested type. }
-function TMemberPlan.IsUnitName(const pPrefix: string): Boolean;
+{ The unit a dotted prefix of a type name names, walking the prefixes from the LONGEST to the shortest
+  (`A.B.C` then `A.B` then `A`); the first that is a unit wins and the rest is a nested type inside it.
+  A prefix is a unit when it is a project unit stem, a uses entry of the class unit, a uses entry
+  under a default unit-scope namespace (`System.` + `Classes`), or the library declares pNext in it.
+  pNext is the segment after the prefix. '' when no prefix is a unit (the prefix is the outer type of
+  a nested type, or unresolvable). The bare unit `System` counts only as the whole prefix. }
+function TMemberPlan.KnownUnitPrefix(const pSegments: TArray<string>; pCount: Integer): string;
 begin
-  if SameText(pPrefix, 'System') or (FSource.FidOfStem(LowerCase(pPrefix)) > 0) then Exit(True);
-  for var U in FStore.GetUnitUsesForFile(FClsFid) do
-    if SameText(U.UnitName, pPrefix) then Exit(True);
-  Result:= False;
+  for var N:= pCount downto 1 do
+  begin
+    var P:= string.Join('.', Copy(pSegments, 0, N));
+    var Next:= pSegments[N];
+    if ((N = pCount) and SameText(P, 'System')) or (FSource.FidOfStem(LowerCase(P)) > 0) then Exit(P);
+    for var U in FStore.GetUnitUsesForFile(FClsFid) do
+    begin
+      if SameText(U.UnitName, P) then Exit(P);
+      for var NS in CUnitScopeNames do
+        if SameText(NS + '.' + U.UnitName, P) then Exit(P);
+    end;
+    if LibDeclaresIn(Next, P) then Exit(P);
+  end;
+  Result:= '';
 end;
 
 { The leaf uses entry of a nested type pShown = `<pOuter>.<Inner>`: the unit declaring its
@@ -2026,17 +2045,29 @@ begin
   var Prefix:= if Dot > 0 then pTypeName.Substring(0, Dot) else '';
   { fix round 1: `TOuter.TInner` -- the leaf needs the unit that declares TOuter, never `uses TOuter` }
   { T6-follow: the LONGEST dotted prefix that is a known unit wins (`System.Classes.TStrings`), before the nested path }
-  if (Prefix <> '') and not IsUnitName(Prefix) and not LibDeclaresIn(Ident, Prefix) then
-    Exit(AddNestedLeafUse(pM, Prefix, pShown));
+  var UnitPart:= '';
+  if Prefix <> '' then
+  begin
+    var Segs:= pTypeName.Split(['.']);
+    UnitPart:= KnownUnitPrefix(Segs, Length(Segs) - 1);
+    if UnitPart = '' then
+    begin
+      if ContainsText(CUnitScopeRoots, ' ' + Segs[0] + ' ') then
+        Exit(Refuse('unresolved-qualified-type', pShown, FClsFid, pM.StartLine, Format('`%s`, the type of `%s.%s`, ' +
+          'is written with a unit-scope prefix that names no unit this plan can find (pass --library-db, or add the unit to ' +
+          'the uses clause)', [pShown, FCls.Name, pM.Name])));
+      Exit(AddNestedLeafUse(pM, Prefix, pShown));
+    end;
+  end;
   if (Prefix = '') and (ContainsText(CNotTypeWords, ' ' + Ident + ' ') or ContainsText(CBuiltinTypes, ' ' + Ident + ' ')) then
     Exit(True);
   Stem:= '';
-  if Prefix <> '' then Stem:= LowerCase(Prefix)
+  if UnitPart <> '' then Stem:= LowerCase(UnitPart)
   else if not FSource.BindName(FClsFid, pM.StartLine, Ident, Owner, Stem) then Stem:= '';
   if (Stem <> '') and FSource.IsSccStem(Stem) then
     Exit(Refuse('leaf-uses-cycle', pShown, FClsFid, pM.StartLine, Format('`%s`, the type of `%s.%s`, is declared ' +
       'in `%s`, a unit of this cycle: the leaf cannot use it', [pShown, FCls.Name, pM.Name, Stem])));
-  if Prefix <> '' then Entry:= Prefix
+  if UnitPart <> '' then Entry:= UnitPart
   else if Stem <> '' then Entry:= UnitOfFile(FStore.GetFilePath(FSource.FidOfStem(Stem)))
   else Entry:= LibUnitOf(Ident);
   if Entry = '' then

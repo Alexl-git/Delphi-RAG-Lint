@@ -255,7 +255,7 @@ type
   /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive; R2 (E18 T6) adds
   /// member-write, construction, class-method, class-ref, type-decl, type-cast, other-ref,
   /// multiple-classes, member-unsupported, no-iinterface, ref-counted, receiver-unknown,
-  /// cast-unseen, with-member, ancestry-unknown, type-unresolved, exception-semantics (and reuses leaf-uses-cycle,
+  /// cast-unseen, with-member, ancestry-unknown, type-unresolved, unresolved-qualified-type, exception-semantics (and reuses leaf-uses-cycle,
   /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit). Line is 0 when the
   /// refusal has no single line (an edge, a unit).</remarks>
   TRefusal = record
