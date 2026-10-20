@@ -187,7 +187,8 @@ type
     PtrType: string;
     /// <summary>`&lt;Routine&gt;Ptr`.</summary>
     PtrVar: string;
-    /// <summary>`T&lt;Routine&gt;Ptr = function(&lt;signature verbatim&gt;);` (no indent).</summary>
+    /// <summary>`T&lt;Routine&gt;Ptr = function(&lt;signature verbatim&gt;);` plus the declaration's
+    /// calling convention, e.g. ` stdcall;` (no indent).</summary>
     TypeDecl: string;
     /// <summary>`&lt;Routine&gt;Ptr: T&lt;Routine&gt;Ptr;` (no indent).</summary>
     VarDecl: string;
@@ -260,11 +261,16 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 /// <remarks>
 /// <para>Refusals, checked in this order: `not-a-routine` (RoutineName ''),
 /// `signature-in-cycle` (a SigTypes entry is InScc; names the type),
-/// `signature-unknown` (a function with no stored signature), `routine-not-called`
+/// `overloaded-routine` (two signatures of the name in its unit), `signature-unknown` (a function
+/// with no stored signature), `routine-not-called`
 /// (a ref of the edge is not a call -- `@Foo`, `X := Foo` as a value),
-/// `qualified-ref` (a call written `Unit.Foo`), `init-order` (a call line lies in
+/// `qualified-ref` (the consumer names `.Foo` anywhere), `init-order` (a call line lies in
 /// A's initialization section, or that section -- from `initialization` to `end.` --
-/// names the enclosing routine as a whole word: the variable is still nil there).</para>
+/// names the enclosing routine as a whole word: the variable is still nil there),
+/// `unsupported-directive` (varargs on the declaration, or directives it cannot read).</para>
+/// <para>A calling convention on the declaration (register pascal cdecl stdcall safecall
+/// winapi) is carried into the procedural type; inline, overload, external, forward and the
+/// hint directives do not change it and are skipped.</para>
 /// <para>Leaf (J2): the first resolved signature type's unit that is outside the group,
 /// used by BOTH A and B in their interface sections, declares every resolved signature
 /// type, and leaves only System built-ins unresolved; else LeafStem '' (the planner
@@ -280,7 +286,7 @@ function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface:
 implementation
 
 uses
-  System.SysUtils, System.StrUtils, System.Classes, System.RegularExpressions,
+  System.SysUtils, System.StrUtils, System.Classes, System.RegularExpressions, System.Math,
   System.Generics.Collections;
 
 const
@@ -290,6 +296,11 @@ const
     'nativeuint boolean bytebool wordbool longbool char ansichar widechar string ansistring widestring ' +
     'unicodestring shortstring rawbytestring single double extended currency real comp pointer pchar ' +
     'pansichar pwidechar tobject tclass iinterface iunknown variant olevariant tdatetime tguid hresult ';
+  { R1 directive classes (fix round 1): carried into the procedural type / refused / no effect on it }
+  CConventionWords       = ' register pascal cdecl stdcall safecall winapi ';
+  CUnsupportedDirectives = ' varargs ';
+  CNeutralDirectives     = ' inline overload external forward deprecated platform library experimental assembler delayed ';
+  CMaxDeclLines          = 8;  { a routine declaration and its directives span at most this many lines }
 
 function StemOfPath(const pPath: string): string;
 begin
@@ -773,9 +784,13 @@ begin
   Result:= pEdit.Line > 0;
 end;
 
-{ R1 refusals a signature can give: not one routine, a type of the cycle, no stored signature. }
+{ R1 refusals a signature can give: not one routine, a type of the cycle, no stored
+  signature, an overloaded name (the index binds a call of an overload by NAME, so the
+  surface's signature may be another overload's -- E2010 in the run that found it). }
 function SignatureRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pDeclFid: Int64;
   out pRoutine: TSymbol): TRecipeRefusal;
+var
+  Sigs: TList<string>;
 begin
   Result  := Default(TRecipeRefusal);
   pRoutine:= Default(TSymbol);
@@ -788,25 +803,119 @@ begin
         '`%s`, declared in `%s`, a unit of this cycle -- a procedural type outside the cycle cannot name it',
         [Name, T.Name, T.DeclStem])));
   pRoutine:= pSource.Store.GetSymbolById(pSurface.Refs[0].SymbolId);
-  if (pRoutine.Kind = skFunction) and (pSurface.RoutineSig = '') then
-    Result:= MakeRefusal('signature-unknown', Name, pDeclFid, pRoutine.StartLine,
-      Format('the index holds no signature for the function `%s`', [Name]));
+  Sigs:= TList<string>.Create;
+  try
+    for var S in pSource.Store.FindSymbolsByExactName(Name) do
+      if (S.FileId = pDeclFid) and (S.Kind in [skFunction, skProcedure]) and not Sigs.Contains(S.Signature) then
+        Sigs.Add(S.Signature);
+    if Sigs.Count > 1 then
+      Result:= MakeRefusal('overloaded-routine', Name, pDeclFid, pRoutine.StartLine, Format('`%s` is ' +
+        'overloaded (%d signatures); the index cannot tell which one each call binds to', [Name, Sigs.Count]))
+    else if (pRoutine.Kind = skFunction) and (pSurface.RoutineSig = '') then
+      Result:= MakeRefusal('signature-unknown', Name, pDeclFid, pRoutine.StartLine,
+        Format('the index holds no signature for the function `%s`', [Name]));
+  finally
+    Sigs.Free;
+  end;
 end;
 
-{ R1 refusals a call site can give: not a call, a unit-qualified call, init order (J4). }
+{ Skips pText[pPos..] up to and past the next `;` outside a string literal; False when there is none. }
+function SkipPastSemicolon(const pText: string; var pPos: Integer): Boolean;
+var
+  InStr: Boolean;
+begin
+  InStr:= False;
+  while pPos <= Length(pText) do
+  begin
+    if pText[pPos] = '''' then InStr:= not InStr
+    else if (pText[pPos] = ';') and not InStr then
+    begin
+      Inc(pPos);
+      Exit(True);
+    end;
+    Inc(pPos);
+  end;
+  Result:= False;
+end;
+
+{ The calling convention of the routine pName declared at line pLine, read from the
+  directives after its signature. False, with pWhy, on a directive that changes the
+  procedural type in a way R1 does not carry (varargs), or on text it cannot read. }
+function DeclConvention(const pLines: TArray<string>; pLine: Integer; const pName: string;
+  out pConv, pWhy: string): Boolean;
+var
+  Depth: Integer;
+begin
+  pConv:= '';
+  pWhy := '';
+  var SB:= TStringBuilder.Create;
+  try
+    for var L:= pLine to Min(pLine + CMaxDeclLines - 1, Length(pLines)) do SB.Append(BareCode(LineOf(pLines, L))).Append(' ');
+    var Text:= SB.ToString;
+    if ContainsStr(Text, '{$') or ContainsStr(Text, '(*$') then
+    begin
+      pWhy:= 'a compiler directive inside its declaration';
+      Exit(False);
+    end;
+    Text:= TRegEx.Replace(TRegEx.Replace(Text, '\{[^}]*\}', ' '), '\(\*.*?\*\)', ' ');
+    var M:= TRegEx.Match(Text, '\b(function|procedure)\s+' + TRegEx.Escape(pName) + '\b', [roIgnoreCase]);
+    if not M.Success then
+    begin
+      pWhy:= Format('its declaration at line %d could not be read', [pLine]);
+      Exit(False);
+    end;
+    var P:= M.Index + M.Length;
+    while (P <= Length(Text)) and (Text[P] = ' ') do Inc(P);
+    if (P <= Length(Text)) and (Text[P] = '(') then
+    begin
+      Depth:= 0;
+      repeat
+        if Text[P] = '(' then Inc(Depth) else if Text[P] = ')' then Dec(Depth);
+        Inc(P);
+      until (Depth = 0) or (P > Length(Text));
+    end;
+    if not SkipPastSemicolon(Text, P) then
+    begin
+      pWhy:= Format('its declaration at line %d could not be read', [pLine]);
+      Exit(False);
+    end;
+    while True do
+    begin
+      var W:= TRegEx.Match(Text.Substring(P - 1), '^\s*([A-Za-z_]\w*)');
+      if not W.Success then Break;
+      var Word:= LowerCase(W.Groups[1].Value);
+      if ContainsStr(CConventionWords, ' ' + Word + ' ') then pConv:= Word
+      else if ContainsStr(CUnsupportedDirectives, ' ' + Word + ' ') then
+      begin
+        pWhy:= Format('the directive `%s` changes its procedural type', [Word]);
+        Exit(False);
+      end
+      else if not ContainsStr(CNeutralDirectives, ' ' + Word + ' ') then Break;
+      Inc(P, W.Length);
+      if not SkipPastSemicolon(Text, P) then Break;
+    end;
+    Result:= True;
+  finally
+    SB.Free;
+  end;
+end;
+
+{ R1 refusals a call site can give: not a call, a unit-qualified call anywhere in the
+  consumer (the uses entry it needs would be removed), init order (J4). }
 function CallRefusal(const pSurface: TEdgeSurface; pFromFid: Int64; const pLines: TArray<string>;
   const pFromUnit: string): TRecipeRefusal;
 begin
   Result:= Default(TRecipeRefusal);
   var Name:= pSurface.RoutineName;
+  for var L:= 1 to Length(pLines) do
+    if TRegEx.IsMatch(BareCode(pLines[L - 1]), '\.\s*' + TRegEx.Escape(Name) + '\b', [roIgnoreCase]) then
+      Exit(MakeRefusal('qualified-ref', Name, pFromFid, L, Format('line %d names `%s` qualified (`%s`); ' +
+        'that call would keep needing the unit whose uses entry the cut removes', [L, Name, Trim(pLines[L - 1])])));
   for var R in pSurface.Refs do
   begin
     if R.Kind <> erCall then
       Exit(MakeRefusal('routine-not-called', Name, pFromFid, R.Line, Format('line %d uses `%s` without ' +
         'calling it (`%s`)', [R.Line, Name, R.LineText])));
-    if TRegEx.IsMatch(LineOf(pLines, R.Line), '\.\s*' + TRegEx.Escape(Name) + '\b', [roIgnoreCase]) then
-      Exit(MakeRefusal('qualified-ref', Name, pFromFid, R.Line, Format('line %d calls `%s` qualified by ' +
-        'its unit', [R.Line, Name])));
     var Why:= InitOrderWhy(pLines, R, pFromUnit);
     if Why <> '' then Exit(MakeRefusal('init-order', Name, pFromFid, R.Line, Why));
   end;
@@ -819,6 +928,8 @@ var
   Edits  : TList<TRecipeEdit>;
   Done   : TList<Integer>;
   E      : TRecipeEdit;
+  Conv   : string;
+  Why    : string;
 begin
   Result  := Default(TRecipeSteps);
   var FromFid:= pSource.FidOfStem(pSurface.FromStem);
@@ -829,6 +940,8 @@ begin
   if pRefusal.Kind = '' then
     pRefusal:= CallRefusal(pSurface, FromFid, Lines,
       ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(FromFid)), ''));
+  if (pRefusal.Kind = '') and not DeclConvention(pSource.FileLines(DeclFid), Routine.StartLine, Name, Conv, Why) then
+    pRefusal:= MakeRefusal('unsupported-directive', Name, DeclFid, Routine.StartLine, Format('`%s`: %s', [Name, Why]));
   if pRefusal.Kind <> '' then Exit;
   Result.Recipe     := crRoutineInversion;
   Result.RoutineId  := Routine.Id;
@@ -837,8 +950,9 @@ begin
   Result.ConsumerFid:= FromFid;
   Result.PtrVar     := Name + 'Ptr';
   Result.PtrType    := 'T' + Result.PtrVar;
-  Result.TypeDecl   := Format('%s = %s%s;', [Result.PtrType,
-    (if Routine.Kind = skFunction then 'function' else 'procedure'), pSurface.RoutineSig]);
+  Result.TypeDecl   := Format('%s = %s%s;%s', [Result.PtrType,
+    (if Routine.Kind = skFunction then 'function' else 'procedure'), pSurface.RoutineSig,
+    (if Conv <> '' then ' ' + Conv + ';' else '')]);
   Result.VarDecl    := Format('%s: %s;', [Result.PtrVar, Result.PtrType]);
   Result.LeafStem   := PickExistingLeaf(pSource, pSurface, FromFid, DeclFid);
   Edits:= TList<TRecipeEdit>.Create;

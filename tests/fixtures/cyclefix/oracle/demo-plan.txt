@@ -377,7 +377,7 @@ After it, these units form no cycle at all.
 Nothing moves. Recipe: **routine-call inversion** -- `DemoBlueprintViewModelCreate` stays in `DemoBlueprint.ViewModel`; callers outside this cycle keep calling it by name.
 - `DemoBlueprint.Interfaces` gets the procedural type `TDemoBlueprintViewModelCreatePtr` -- the routine's own signature, copied verbatim (keep every `const` and parameter name) -- and the variable `DemoBlueprintViewModelCreatePtr`.
 - `DemoBlueprint.ViewModel` assigns `DemoBlueprintViewModelCreatePtr := DemoBlueprintViewModelCreate;` as the first statement of its initialization section.
-- `DemoBlueprint.pas` calls `DemoBlueprintViewModelCreatePtr` instead of `DemoBlueprintViewModelCreate` (line 74). None of these calls is reachable from an initialization section the index can see, so the variable is assigned before it is called.
+- `DemoBlueprint.pas` calls `DemoBlueprintViewModelCreatePtr` instead of `DemoBlueprintViewModelCreate` (line 74). Checked: its own initialization section makes none of these calls and does not name the routine that makes them. NOT checked: an initialization section of another unit that reaches them through a call chain.
 
 ### Step 2: uses clauses -- keep, move or remove the old unit
 For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.

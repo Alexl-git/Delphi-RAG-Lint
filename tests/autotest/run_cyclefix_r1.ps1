@@ -24,6 +24,14 @@
       duplicate-identifier`, nothing inserted.
   (f) r1extend without R1Title.Untangle: the leaf is CREATED and registered; followed + re-indexed,
       no cycle remains.
+  Fix round 1 (each refusal check was RED with its refusal disabled):
+  (g) tests\fixtures\cyclefix\r1stdcall: the pointer type carries `stdcall;`.
+  (h) `overload;` on a single routine is a neutral directive: still mechanical, nothing carried.
+  (i) `cdecl; varargs;` -- `refused: unsupported-directive`.
+  (j) a second, unit-qualified call `R1Title.R1TitleOf(...)` -- `refused: qualified-ref` (the cut would
+      remove the uses entry that call needs).
+  (k) a second overload in R1Title -- `refused: overloaded-routine` (the index binds an overload's
+      call by name; the pointer type could mirror the wrong signature -- E2010 seen).
   The compile of every applied tree is run_cyclefix_r1_dcc.ps1 (needs RAD Studio).
 #>
 [CmdletBinding()]
@@ -302,6 +310,49 @@ try {
   Check 'f4 re-indexed' ((Invoke-Index $dpj $dbF 'f2') -eq 0)
   $af = Get-Cycles $dbF 'f-after' @()
   Check 'f5 no cycle remains' ((Get-Groups @($af.Out -split "`r?`n")) -eq 'No circular unit dependencies found.') ($af.Out.Trim())
+
+  # --- (g)-(k) fix round 1: directives, qualified calls, overloads -------------------------------
+  # Each case is a copy of r1extend with ONE edit; returns cycle 1's block text and plan dump.
+  function Get-Variant([string]$Tag, [string]$File, [string]$Old, [string]$New) {
+    $dir = Join-Path $WorkDir $Tag
+    Copy-Tree (Join-Path $Fx 'r1extend') $dir
+    $p = Join-Path $dir $File
+    $t = [IO.File]::ReadAllText($p)
+    Set-Text $p ($t.Replace($Old, $New))
+    $db = Join-Path $WorkDir "$Tag.sqlite"
+    $okIdx = ([IO.File]::ReadAllText($p) -ne $t) -and ((Invoke-Index (Join-Path $dir 'R1Extend.dproj') $db $Tag) -eq 0)
+    $pl = Get-Cycles $db $Tag @('--plan')
+    return @{ Ok = $okIdx; Text = ((Get-CycleBlock $pl.Out 1) -join "`n"); Dump = $pl.Dump[1] }
+  }
+  $declOld = "function R1TitleOf(const pId: Integer): string;`r`n`r`nimplementation"
+  Write-Host '== (g) r1stdcall: the calling convention is carried into the pointer type' -ForegroundColor Cyan
+  $sd = Join-Path $WorkDir 'r1stdcall'
+  Copy-Tree (Join-Path $Fx 'r1stdcall') $sd
+  $dbSd = Join-Path $WorkDir 'r1stdcall.sqlite'
+  Check 'g0 indexed' ((Invoke-Index (Join-Path $sd 'R1Extend.dproj') $dbSd 'g') -eq 0)
+  $pg = Get-Cycles $dbSd 'g' @('--plan')
+  $txG = (Get-CycleBlock $pg.Out 1) -join "`n"
+  Check 'g1 TR1TitleOfPtr carries `stdcall;`' ($txG.Contains('  TR1TitleOfPtr = function(const pId: Integer): string; stdcall;') -and ($pg.Dump[1].verdict -eq 'mechanical')) ''
+  $vh = Get-Variant 'r1neutral' 'R1Title.pas' $declOld "function R1TitleOf(const pId: Integer): string; overload;`r`n`r`nimplementation"
+  Check 'h1 a directive that does not change the type (`overload` on a single routine) is skipped, not refused' `
+    ($vh.Ok -and ($vh.Dump.verdict -eq 'mechanical') -and $vh.Text.Contains('  TR1TitleOfPtr = function(const pId: Integer): string;' + "`n")) "[$($vh.Dump.verdict) / $($vh.Dump.refusals)]"
+  Write-Host '== (i) unsupported directive' -ForegroundColor Cyan
+  $vi = Get-Variant 'r1varargs' 'R1Title.pas' $declOld "function R1TitleOf(const pId: Integer): string; cdecl; varargs;`r`n`r`nimplementation"
+  Check 'i1 `varargs` on the declaration: refused: unsupported-directive' `
+    ($vi.Ok -and $vi.Text.Contains('refused: unsupported-directive -- `R1TitleOf`: the directive `varargs` changes its procedural type') -and
+     (($vi.Dump.refusals -split ',') -contains 'unsupported-directive')) "[$($vi.Dump.verdict) / $($vi.Dump.refusals)]"
+  Write-Host '== (j) a second, unit-qualified call' -ForegroundColor Cyan
+  $vj = Get-Variant 'r1qualified' 'R1Form.pas' "  Writeln(Format('[form] %s', [R1TitleOf(pId)]));" `
+    ("  Writeln(Format('[form] %s', [R1TitleOf(pId)]));`r`n  Writeln(R1Title.R1TitleOf(pId + 1));")
+  Check 'j1 refused: qualified-ref, naming the qualified line (its uses entry must stay)' `
+    ($vj.Ok -and $vj.Text.Contains('refused: qualified-ref -- line 27 names `R1TitleOf` qualified') -and
+     (($vj.Dump.refusals -split ',') -contains 'qualified-ref')) "[$($vj.Dump.verdict) / $($vj.Dump.refusals)]"
+  Write-Host '== (k) an overloaded routine' -ForegroundColor Cyan
+  $vk = Get-Variant 'r1overload' 'R1Title.pas' "/// <summary>Title of one item.</summary>" `
+    ("function R1TitleOf(const pName: string): string; overload;`r`n`r`n/// <summary>Title of one item.</summary>")
+  Check 'k1 refused: overloaded-routine (the index binds an overload by name)' `
+    ($vk.Ok -and $vk.Text.Contains('refused: overloaded-routine -- `R1TitleOf` is overloaded (2 signatures)') -and
+     (($vk.Dump.refusals -split ',') -contains 'overloaded-routine')) "[$($vk.Dump.verdict) / $($vk.Dump.refusals)]"
 } finally {
   $env:DRAGLINT_TEST_DUMP_PLAN = $null
   if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }

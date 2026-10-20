@@ -3,7 +3,8 @@
   the program behaves exactly as before. Needs RAD Studio (msbuild via rsvars).
 
   For each tree -- circular-demo (cycle 3, leaf DemoBlueprint.Interfaces), tests\fixtures\cyclefix\
-  r1extend (existing R1Title.Untangle extended) and r1extend without that leaf (R1Title.Untangle
+  r1extend (existing R1Title.Untangle extended), r1stdcall (the same with a stdcall routine: the
+  pointer type must carry the calling convention) and r1extend without that leaf (R1Title.Untangle
   created) -- the runner builds the untouched copy (msbuild, Win64 Debug) and keeps its stdout,
   plans `cycles --plan` on a second copy, applies the cycle with tools\follow-cycle-plan.ps1,
   builds it (BUILD_EXITCODE=0, no `error E` / `fatal F` line), runs it and compares stdout
@@ -103,6 +104,8 @@ New-Item -ItemType Directory -Force $WorkDir | Out-Null
 try {
   $demo = Test-Tree 'demo' (Join-Path $Repo 'circular-demo') 'CircularDemo.dproj' 3 $null
   $null = Test-Tree 'r1extend' (Join-Path $Fx 'r1extend') 'R1Extend.dproj' 1 $null
+  # fix round 1: a stdcall routine -- the pointer type must carry the convention (E2010 otherwise)
+  $null = Test-Tree 'r1stdcall' (Join-Path $Fx 'r1stdcall') 'R1Extend.dproj' 1 $null
   $dropLeaf = {
     param($Dir)
     [IO.File]::Delete((Join-Path $Dir 'R1Title.Untangle.pas'))

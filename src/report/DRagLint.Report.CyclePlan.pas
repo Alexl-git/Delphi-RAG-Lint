@@ -245,7 +245,7 @@ type
   /// manual-edit, blocked-symbol, unresolved-edge, directive, leaf-uses-cycle,
   /// qualified-ref, class-ctor, base-class, outside-roots; R1 (E18 T5) adds
   /// signature-in-cycle, signature-unknown, routine-not-called, init-order,
-  /// duplicate-identifier, edge-still-used. Line is 0 when the
+  /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive. Line is 0 when the
   /// refusal has no single line (an edge, a unit).</remarks>
   TRefusal = record
     Kind    : string;
@@ -3430,8 +3430,9 @@ begin
       FInversion.PtrType, FInversion.PtrVar]);
     EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
       [Decl, FInversion.PtrVar, FInversion.RoutineName]);
-    EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). None of these calls is reachable from an ' +
-      'initialization section the index can see, so the variable is assigned before it is called.',
+    EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). Checked: its own initialization section ' +
+      'makes none of these calls and does not name the routine that makes them. NOT checked: an ' +
+      'initialization section of another unit that reaches them through a call chain.',
       [ExtractFileName(PathOf(FInversion.ConsumerFid)), FInversion.PtrVar, FInversion.RoutineName,
        string.Join(', ', Calls.ToArray)]);
   finally
