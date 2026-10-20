@@ -55,7 +55,7 @@ try {
   & $Exe index --project $dproj --db $db *> $null
   Check 'index the copy' ($LASTEXITCODE -eq 0) "exit=$LASTEXITCODE"
   $plan = Join-Path $WorkDir 'plan.txt'
-  [IO.File]::WriteAllText($plan, (Run @('cycles', '--db', $db, '--plan')), [Text.Encoding]::ASCII)
+  [IO.File]::WriteAllText($plan, (Run @('cycles', '--db', $db, '--plan', '--library-db', 'none')), [Text.Encoding]::ASCII)
 
   # -Root: the same plan, applied for real to a second copy; the first copy must not change
   function Get-Hashes([string]$Dir) {

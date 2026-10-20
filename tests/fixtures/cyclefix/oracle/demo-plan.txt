@@ -355,6 +355,7 @@ Nothing moves. Recipe: **member hand-over through an extracted interface** -- `T
 - `DemoUIConnect.pas`: `X is TDemoGagePort` becomes `Supports(X, IDemoGagePortSurface)` (line 47, 55).
 - `DemoUIConnect.pas`: `X as TDemoGagePort` becomes `X as IDemoGagePortSurface` (line 49, 57); a receiver whose type does not implement IInterface is cast through `TComponent` first.
 - Checked: no name inside a `with` body changes what it binds to; the members carried are fields and properties of the class itself, read only.
+- Exceptions: a failed `as IDemoGagePortSurface` raises EIntfCastError, not EInvalidCast as `as TDemoGagePort` did -- a handler for EInvalidCast no longer catches it. Checked: `DemoUIConnect.pas` handles no EInvalidCast, or each `as` follows its `is` guard.
 
 ### Step 2: uses clauses -- keep, move or remove the old unit
 For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.

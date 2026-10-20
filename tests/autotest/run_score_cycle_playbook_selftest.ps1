@@ -48,7 +48,7 @@ $report = Join-Path $WorkDir 'report.txt'
 Push-Location (Join-Path $WorkDir 'orig')
 try {
   & $exePath index --project 'circular-demo\CircularDemo.dproj' --db (Join-Path $WorkDir 'rep.sqlite') 2>&1 | Out-Null
-  & $exePath cycles --db (Join-Path $WorkDir 'rep.sqlite') --edges --causes --plan --format text 2>$null |
+  & $exePath cycles --db (Join-Path $WorkDir 'rep.sqlite') --edges --causes --plan --format text --library-db none 2>$null |
     Set-Content -LiteralPath $report -Encoding ascii
 } finally { Pop-Location }
 Check 'V the engine printed a plan with a checklist' ((Get-Content $report -Raw) -match 'It must print exactly:') $report

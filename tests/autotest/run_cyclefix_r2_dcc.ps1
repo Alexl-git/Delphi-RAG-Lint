@@ -6,7 +6,8 @@
   For each tree -- circular-demo (cycle 2: a TComponent receiver cast as is, a TObject receiver
   cast through TComponent), the memberwrite pair without its write (leaf DemoGagePort.Untangle
   created and registered), tests\fixtures\cyclefix\r2extend (the existing leaf extended) and
-  r2extend with an empty leaf (ExtendLeaves' At=0 anchor) -- the runner builds the untouched copy
+  r2extend with an empty leaf (ExtendLeaves' At=0 anchor), and the pair with a member of a nested type
+  TDemoGageInfo.TKind declared outside the cycle (fix round 1) -- the runner builds the untouched copy
   (msbuild, Win64 Debug) and keeps its stdout, plans `cycles --plan` on a second copy, applies the
   cycle with tools\follow-cycle-plan.ps1, builds it (BUILD_EXITCODE=0, no `error E` / `fatal F`
   line), runs it and compares stdout BYTE-FOR-BYTE with the untouched build's.
@@ -132,6 +133,22 @@ try {
   }
   $null = Test-Tree 'r2create' (Join-Path $Fx 'memberwrite') 'MemberWrite.dproj' 1 $dropWrite
   $null = Test-Tree 'r2extend' (Join-Path $Fx 'r2extend') 'R2Extend.dproj' 1 $null
+  # fix round 1: a member of a NESTED type `TDemoGageInfo.TKind` declared outside the cycle --
+  # the leaf must use DemoGageKinds (the 5e91bdd6 engine wrote `uses TDemoGageInfo;`)
+  $nested = {
+    param($Dir)
+    $null = & $dropWrite $Dir
+    $info = "  /// <summary>Describes a gage.</summary>`n  TDemoGageInfo = class`n  public`n    type`n      /// <summary>How a reading is scaled.</summary>`n      TKind = (gkPlain, gkScaled);`n  end;`n"
+    Set-Text (Join-Path $Dir 'DemoGageKinds.pas') "unit DemoGageKinds;`n`n// E18 T6 fix round 1 variant: a unit outside the cycle that declares a nested type.`n`ninterface`n`ntype`n$info`nimplementation`n`nend.`n"
+    $g = Join-Path $Dir 'DemoGagePort.pas'
+    $null = Edit-File $g "  System.Classes;`n`ntype" "  System.Classes,`n  DemoGageKinds;`n`ntype"
+    $null = Edit-File $g '    FLastGage: Integer;' "    FLastGage: Integer;`n    FKind: TDemoGageInfo.TKind;"
+    $null = Edit-File $g '    property LastGage: Integer read FLastGage write FLastGage;' "    property LastGage: Integer read FLastGage write FLastGage;`n    /// <summary>The scaling.</summary>`n    property Kind: TDemoGageInfo.TKind read FKind;"
+    $null = Edit-File (Join-Path $Dir 'DemoUIConnect.pas') "    Log.Add('data ' + InBuf);" "    Log.Add('data ' + InBuf + IntToStr(Ord(Kind)));"
+    $null = Edit-File (Join-Path $Dir 'MemberWrite.dpr') "  DemoGagePort in 'DemoGagePort.pas'," "  DemoGageKinds in 'DemoGageKinds.pas',`n  DemoGagePort in 'DemoGagePort.pas',"
+    $null = Edit-File (Join-Path $Dir 'MemberWrite.dproj') '        <DCCReference Include="DemoGagePort.pas"/>' "        <DCCReference Include=`"DemoGageKinds.pas`"/>`n        <DCCReference Include=`"DemoGagePort.pas`"/>"
+  }
+  $null = Test-Tree 'r2nested' (Join-Path $Fx 'memberwrite') 'MemberWrite.dproj' 1 $nested
   $emptyLeaf = {
     param($Dir)
     $null = Edit-File (Join-Path $Dir 'DemoGagePort.Untangle.pas') "type`n  /// <summary>The unit a gage reads in.</summary>`n  TDemoGageUnit = (guMillimetre, guInch);`n`n" ''

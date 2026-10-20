@@ -75,7 +75,7 @@ function Get-PlanFile([string]$Dproj, [string]$Tag) {
   & $Exe index --project $Dproj --db $db *> (Join-Path $WorkDir "index-$Tag.log")
   $o = Join-Path $WorkDir "plan-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
-    -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan') `
+    -ArgumentList @('cycles', '--db', ('"' + $db + '"'), '--plan', '--library-db', 'none') `
     -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "plan-$Tag.err")
   return @{ Exit = $p.ExitCode; File = $o }
 }

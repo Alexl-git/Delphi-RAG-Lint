@@ -367,10 +367,14 @@ function AncestorImplementingIInterface(const pProject, pLibrary: ISymbolStore; 
 /// `with X as TClass do` body that is a member of the class or of an ancestor but not
 /// carried, a getter name or an IInterface method refuses `with-member` (it would bind to
 /// something else after the rewrite); an ancestry no index completes refuses
-/// `ancestry-unknown`.</para>
+/// `ancestry-unknown`. A failed `as ISurface` raises EIntfCastError, not EInvalidCast: when
+/// A names EInvalidCast, an `as` without an earlier `is` guard on the same receiver in its
+/// routine refuses `exception-semantics`.</para>
 /// <para>Leaf: the units declaring the member types -- a project unit as bound from B, else
 /// the library unit B's interface uses names (`type-unresolved`); never a unit of the
-/// group (`leaf-uses-cycle`).</para>
+/// group (`leaf-uses-cycle`). A dotted prefix is a unit only when it names one (a project
+/// unit, a uses entry of B, System); otherwise it is the outer type of a nested type and the
+/// unit declaring that outer type is used (`member-unsupported` when none resolves).</para>
 /// </remarks>
 function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
   const pSurface: TEdgeSurface; const pLeafUnit: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
@@ -1523,7 +1527,10 @@ type
     function CheckCastUnit: Boolean;
     function CheckWithBodies: Boolean;
     function LibUnitOf(const pIdent: string): string;
-    function AddLeafUse(const pM: TSymbol; const pTypeName: string): Boolean;
+    function IsUnitName(const pPrefix: string): Boolean;
+    function AddLeafUse(const pM: TSymbol; const pTypeName, pShown: string): Boolean;
+    function AddNestedLeafUse(const pM: TSymbol; const pOuter, pShown: string): Boolean;
+    function CheckCastExceptions: Boolean;
     function CollectLeafUses: Boolean;
     procedure AddEdit(pFid: Int64; pLine: Integer; pReplace: Boolean; const pLines: TArray<string>);
     procedure BuildClassEdits;
@@ -1878,6 +1885,36 @@ begin
   if not ConsumerSees(DeclUnit) then FUses.Add(DeclUnit);
 end;
 
+{ Fix round 1: `as I` raises EIntfCastError where `as TClass` raised EInvalidCast. When the
+  consumer handles EInvalidCast anywhere, every `X as TClass` must follow an `X is TClass`
+  guard of its routine (the guard becomes Supports, so the cast cannot fail there). }
+function TMemberPlan.CheckCastExceptions: Boolean;
+begin
+  Result:= True;
+  var Handles:= False;
+  for var L in FLines do
+    if TRegEx.IsMatch(PlainCode(L), '\bEInvalidCast\b', [roIgnoreCase]) then Handles:= True;
+  if not Handles then Exit;
+  var C:= TRegEx.Escape(FCls.Name);
+  for var R in FSurface.Refs do
+  begin
+    if R.Kind <> erTypeAs then Continue;
+    for var M in TRegEx.Matches(R.LineText, '(?<![\w.)\]])([A-Za-z_]\w*)\s+as\s+' + C + '\b', [roIgnoreCase]) do
+    begin
+      var Guarded:= False;
+      for var G in FSurface.Refs do
+      begin
+        var Before:= (G.Kind = erTypeIs) and (G.EnclosingId = R.EnclosingId) and (G.Line < R.Line);
+        if Before and TRegEx.IsMatch(G.LineText, '\b' + TRegEx.Escape(M.Groups[1].Value) + '\s+is\s+' + C + '\b',
+          [roIgnoreCase]) then Guarded:= True;
+      end;
+      if not Guarded then
+        Exit(Refuse('exception-semantics', FCls.Name, FFromFid, R.Line, Format('line %d casts with `as %s` without ' +
+          'an `is` guard, and `%s` handles EInvalidCast: a failed `as %s` raises EIntfCastError instead', [R.Line,
+          FCls.Name, UnitOfFile(FStore.GetFilePath(FFromFid)), FIface])));
+    end;
+  end;
+end;
 { No name inside a `with X as TClass do` body may change its binding when the interface
   replaces the class: a member of the class chain the interface does not carry, a getter
   name, an IInterface method. }
@@ -1945,8 +1982,29 @@ begin
   end;
 end;
 
-{ The leaf uses entry for one type name of a member's signature. }
-function TMemberPlan.AddLeafUse(const pM: TSymbol; const pTypeName: string): Boolean;
+{ Whether a dotted prefix of a type name is a UNIT: a project unit stem, a unit the class
+  unit's uses name (as written), or System. Otherwise it is the outer type of a nested type. }
+function TMemberPlan.IsUnitName(const pPrefix: string): Boolean;
+begin
+  if SameText(pPrefix, 'System') or (FSource.FidOfStem(LowerCase(pPrefix)) > 0) then Exit(True);
+  for var U in FStore.GetUnitUsesForFile(FClsFid) do
+    if SameText(U.UnitName, pPrefix) then Exit(True);
+  Result:= False;
+end;
+
+{ The leaf uses entry of a nested type pShown = `<pOuter>.<Inner>`: the unit declaring its
+  outer type; `member-unsupported` when no index resolves that outer type. }
+function TMemberPlan.AddNestedLeafUse(const pM: TSymbol; const pOuter, pShown: string): Boolean;
+begin
+  Result:= AddLeafUse(pM, pOuter, pShown);
+  if not Result and (FRefusal.Kind = 'type-unresolved') then
+    Result:= Refuse('member-unsupported', pShown, FClsFid, pM.StartLine, Format('`%s`, the type of `%s.%s`, is a ' +
+      'nested type whose outer type `%s` no index given resolves', [pShown, FCls.Name, pM.Name, pOuter]));
+end;
+
+{ The leaf uses entry for one type name of a member's signature. pShown is the name as the
+  signature writes it (a nested `TOuter.TInner` is resolved through its outer type). }
+function TMemberPlan.AddLeafUse(const pM: TSymbol; const pTypeName, pShown: string): Boolean;
 var
   Owner: TSymbol;
   Stem : string;
@@ -1954,28 +2012,31 @@ var
 begin
   var Dot  := pTypeName.LastIndexOf('.');
   var Ident:= pTypeName.Substring(Dot + 1);
-  if ContainsText(CNotTypeWords, ' ' + Ident + ' ') or ContainsText(CBuiltinTypes, ' ' + Ident + ' ') then Exit(True);
+  var Prefix:= if Dot > 0 then pTypeName.Substring(0, Dot) else '';
+  { fix round 1: `TOuter.TInner` -- the leaf needs the unit that declares TOuter, never `uses TOuter` }
+  if (Prefix <> '') and not IsUnitName(Prefix) then Exit(AddNestedLeafUse(pM, Prefix, pShown));
+  if (Prefix = '') and (ContainsText(CNotTypeWords, ' ' + Ident + ' ') or ContainsText(CBuiltinTypes, ' ' + Ident + ' ')) then
+    Exit(True);
   Stem:= '';
-  if Dot > 0 then Stem:= LowerCase(pTypeName.Substring(0, Dot))
+  if Prefix <> '' then Stem:= LowerCase(Prefix)
   else if not FSource.BindName(FClsFid, pM.StartLine, Ident, Owner, Stem) then Stem:= '';
   if (Stem <> '') and FSource.IsSccStem(Stem) then
-    Exit(Refuse('leaf-uses-cycle', Ident, FClsFid, pM.StartLine, Format('`%s`, the type of `%s.%s`, is declared ' +
-      'in `%s`, a unit of this cycle: the leaf cannot use it', [Ident, FCls.Name, pM.Name, Stem])));
-  if Dot > 0 then Entry:= pTypeName.Substring(0, Dot)
+    Exit(Refuse('leaf-uses-cycle', pShown, FClsFid, pM.StartLine, Format('`%s`, the type of `%s.%s`, is declared ' +
+      'in `%s`, a unit of this cycle: the leaf cannot use it', [pShown, FCls.Name, pM.Name, Stem])));
+  if Prefix <> '' then Entry:= Prefix
   else if Stem <> '' then Entry:= UnitOfFile(FStore.GetFilePath(FSource.FidOfStem(Stem)))
   else Entry:= LibUnitOf(Ident);
   if Entry = '' then
-    Exit(Refuse('type-unresolved', Ident, FClsFid, pM.StartLine, Format('no index given tells which unit ' +
-      'declares `%s`, the type of `%s.%s` (pass --library-db)', [Ident, FCls.Name, pM.Name])));
+    Exit(Refuse('type-unresolved', pShown, FClsFid, pM.StartLine, Format('no index given tells which unit ' +
+      'declares `%s`, the type of `%s.%s` (pass --library-db)', [pShown, FCls.Name, pM.Name])));
   if not FLeafUses.Contains(Entry) then FLeafUses.Add(Entry);
   Result:= True;
 end;
-
 function TMemberPlan.CollectLeafUses: Boolean;
 begin
   for var M in FMembers do
     for var T in TRegEx.Matches(M.Signature, '[A-Za-z_][A-Za-z0-9_.]*') do
-      if not AddLeafUse(M, T.Value) then Exit(False);
+      if not AddLeafUse(M, T.Value, T.Value) then Exit(False);
   Result:= True;
 end;
 
@@ -2057,7 +2118,8 @@ begin
   begin
     FIface:= 'I' + (if (Length(FCls.Name) > 1) and (UpCase(FCls.Name[1]) = 'T') then Copy(FCls.Name, 2, MaxInt)
       else FCls.Name) + 'Surface';
-    Ok:= CheckMembers and CheckClass and RewriteConsumer and CheckWithBodies and CollectLeafUses;
+    Ok:= CheckMembers and CheckClass and RewriteConsumer;
+    Ok:= Ok and CheckCastExceptions and CheckWithBodies and CollectLeafUses;
   end;
   pRefusal:= FRefusal;
   if not Ok then

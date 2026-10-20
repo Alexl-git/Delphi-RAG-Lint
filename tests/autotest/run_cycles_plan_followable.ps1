@@ -69,7 +69,7 @@ try {
   Check 'POSITIVE CONTROL: plain report finds the 4-unit group with interface coupling' `
         ($report -match '\[4 units\].*has interface coupling') $report
 
-  $plan = (& $exePath cycles --plan --db $db 2>&1 | Out-String) -replace "`r`n", "`n"
+  $plan = (& $exePath cycles --plan --library-db none --db $db 2>&1 | Out-String) -replace "`r`n", "`n"
   Set-Content -Path (Join-Path $scratch 'plan.md') -Value $plan -Encoding ascii
 
   # --- 1. kind + recipe per symbol ------------------------------------------

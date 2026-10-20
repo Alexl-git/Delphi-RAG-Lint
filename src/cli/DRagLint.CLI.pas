@@ -1014,7 +1014,7 @@ begin
   Writeln('  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)');
   Writeln('                               Safe to run any time: prints "nothing pending." when there is nothing to do.');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
-  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output; --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64); --format json --causes adds per-group edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output; --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); --format json --causes adds per-group edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
@@ -22250,9 +22250,12 @@ begin
       { E18 T6: recipe R2 reads class ancestry from the platform library -- the explicit
         --library-db, else the manifest's library section for --platform (default win64),
         as `resolve-dbs --platform` lists it. Opened READ-ONLY; without one, R2 refuses
-        wherever the answer needs it. }
+        wherever the answer needs it. `--library-db none` opens no library at all (fix
+        round 1: test runners must never reach the real one through the manifest). }
       var LibPath:= '';
-      if Length(AArgs.LibraryDbs) > 0 then
+      if (Length(AArgs.LibraryDbs) > 0) and SameText(AArgs.LibraryDbs[0], 'none') then
+        Writeln(ErrOutput, 'drag-lint: note: cycles --plan reads no platform library (--library-db none)')
+      else if Length(AArgs.LibraryDbs) > 0 then
       begin
         LibPath:= AArgs.LibraryDbs[0];
         if not TFile.Exists(LibPath) then

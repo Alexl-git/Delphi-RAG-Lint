@@ -255,7 +255,7 @@ type
   /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive; R2 (E18 T6) adds
   /// member-write, construction, class-method, class-ref, type-decl, type-cast, other-ref,
   /// multiple-classes, member-unsupported, no-iinterface, ref-counted, receiver-unknown,
-  /// cast-unseen, with-member, ancestry-unknown, type-unresolved (and reuses leaf-uses-cycle,
+  /// cast-unseen, with-member, ancestry-unknown, type-unresolved, exception-semantics (and reuses leaf-uses-cycle,
   /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit). Line is 0 when the
   /// refusal has no single line (an edge, a unit).</remarks>
   TRefusal = record
@@ -3578,6 +3578,9 @@ begin
           'is cast through `%s` first', [FInversion.CastAncestor]) else '')]);
     Emit('- Checked: no name inside a `with` body changes what it binds to; the members carried are fields and ' +
       'properties of the class itself, read only.');
+    EmitFmt('- Exceptions: a failed `as %s` raises EIntfCastError, not EInvalidCast as `as %s` did -- a handler ' +
+      'for EInvalidCast no longer catches it. Checked: `%s` handles no EInvalidCast, or each `as` follows its ' +
+      '`is` guard.', [FInversion.IfaceName, FInversion.ClassTypeName, Consumer]);
   finally
     AsLines.Free;
     IsLines.Free;

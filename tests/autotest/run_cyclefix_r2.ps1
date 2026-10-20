@@ -191,6 +191,7 @@ function New-Variant([string]$From, [string]$Tag, [object[]]$Edits) {
   $ok = $true
   foreach ($e in $Edits) {
     $p = Join-Path $dir $e[0]
+    if ($e[1] -eq '<new>') { Set-Text $p $e[2]; continue }  # creates a file
     $t = [IO.File]::ReadAllText($p)
     $n = $t.Replace(($e[1] -replace "`r?`n", "`r`n"), ($e[2] -replace "`r?`n", "`r`n"))
     if ($n -eq $t) { $ok = $false }
@@ -335,6 +336,18 @@ try {
   $cleanDir = Join-Path $WorkDir 'clean-src'
   $null = New-Variant (Join-Path $Fx 'memberwrite') 'clean-src' $Clean
   $U = 'DemoUIConnect.pas'; $G = 'DemoGagePort.pas'
+  $InfoDecl = "  /// <summary>Describes a gage.</summary>`n  TDemoGageInfo = class`n  public`n    type`n      /// <summary>How a reading is scaled.</summary>`n      TKind = (gkPlain, gkScaled);`n  end;`n"
+  $KindMember = @(@($G, '    FLastGage: Integer;', "    FLastGage: Integer;`n    FKind: TDemoGageInfo.TKind;"),
+    @($G, '    property LastGage: Integer read FLastGage write FLastGage;', "    property LastGage: Integer read FLastGage write FLastGage;`n    /// <summary>The scaling.</summary>`n    property Kind: TDemoGageInfo.TKind read FKind;"),
+    @($U, "    Log.Add('data ' + InBuf);", "    Log.Add('data ' + InBuf + IntToStr(Ord(Kind)));"))
+  $NestedIn = @(, @($G, "type`n  /// <summary>Stand-in for the gage-port form", "type`n$InfoDecl`n  /// <summary>Stand-in for the gage-port form")) + $KindMember
+  $NestedOut = @(@('DemoGageKinds.pas', '<new>', "unit DemoGageKinds;`n`n// E18 T6 fix round 1 variant: a unit outside the cycle that declares a nested type.`n`ninterface`n`ntype`n$InfoDecl`nimplementation`n`nend.`n"),
+    @($G, "  System.Classes;`n`ntype", "  System.Classes,`n  DemoGageKinds;`n`ntype"),
+    @('MemberWrite.dpr', "  DemoGagePort in 'DemoGagePort.pas',", "  DemoGageKinds in 'DemoGageKinds.pas',`n  DemoGagePort in 'DemoGagePort.pas',"),
+    @('MemberWrite.dproj', '        <DCCReference Include="DemoGagePort.pas"/>', "        <DCCReference Include=`"DemoGageKinds.pas`"/>`n        <DCCReference Include=`"DemoGagePort.pas`"/>")) + $KindMember
+  $AttachGuarded = "  if not (Owner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n    Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n"
+  $AttachTryUnguarded = "  try`n    with Owner as TDemoGagePort do`n      Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n  except`n    on EInvalidCast do`n      Exit;`n  end;`n"
+  $AttachTryGuarded = "  if not (Owner is TDemoGagePort) then`n    Exit;`n  try`n    with Owner as TDemoGagePort do`n      Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n  except`n    on EInvalidCast do`n      Exit;`n  end;`n"
   $Cases = @(
     @('f1', 'class-method', 'line 65 calls the method `ReadGage`', $cleanDir, @(, @($U, "    Log.Add(Format('gage now %d', [LastGage]));`n  end;", "    Log.Add(Format('gage now %d', [LastGage]));`n    ReadGage(1);`n  end;"))),
     @('f2', 'construction', 'line 52 constructs `TDemoGagePort`', $cleanDir, @(, @($U, '  with Owner as TDemoGagePort do', "  TDemoGagePort.Create(nil).Free;`n  with Owner as TDemoGagePort do"))),
@@ -356,7 +369,11 @@ try {
     @('f18', 'ancestry-unknown', 'the ancestry of `TDemoGagePort` stops at `TComponent`', $cleanDir, @(@($U, "  if not (Owner is TDemoGagePort) then`n    Exit;`n  with Owner as TDemoGagePort do`n    Log.Add(Format('ui connected (last gage %d)', [LastGage]));`n", ''), @($U, 'Sender: TObject', 'Sender: TComponent')), 'stub'),
     @('f19', 'leaf-uses-cycle', '`TDemoGageUnit`, the type of `TDemoGagePort.GageUnit`, is declared in `demogageport`', $cleanDir, @(@($G, "type`n  /// <summary>Stand-in", "type`n  /// <summary>Units.</summary>`n  TDemoGageUnit = (guMm, guInch);`n`n  /// <summary>Stand-in"), @($G, '    FLastGage: Integer;', "    FLastGage: Integer;`n    FUnit: TDemoGageUnit;"), @($G, '    property LastGage: Integer read FLastGage write FLastGage;', "    property LastGage: Integer read FLastGage write FLastGage;`n    property GageUnit: TDemoGageUnit read FUnit;"), @($U, "    Log.Add(Format('gage now %d', [LastGage]));", "    Log.Add(Format('gage now %d %d', [LastGage, Ord(GageUnit)]));"))),
     @('f20', 'type-unresolved', 'which unit declares `TNoSuchGauge`', $cleanDir, @(@($G, '    FLastGage: Integer;', "    FLastGage: Integer;`n    FGauge: TNoSuchGauge;"), @($G, '    property LastGage: Integer read FLastGage write FLastGage;', "    property LastGage: Integer read FLastGage write FLastGage;`n    property Gauge: TNoSuchGauge read FGauge;"), @($U, "    Log.Add('data ' + InBuf);", "    Log.Add('data ' + InBuf);`n    if Gauge <> nil then`n      Exit;"))),
-    @('f21', 'edge-still-used', 'still uses `DemoGagePort`: `LastGage`', $cleanDir, @(, @($G, "  end;`n`nimplementation", "  end;`n`n/// <summary>A routine named like the member.</summary>`nfunction LastGage: Integer;`n`nimplementation")))
+    @('f21', 'edge-still-used', 'still uses `DemoGagePort`: `LastGage`', $cleanDir, @(, @($G, "  end;`n`nimplementation", "  end;`n`n/// <summary>A routine named like the member.</summary>`nfunction LastGage: Integer;`n`nimplementation"))),
+    # fix round 1: a NESTED member type of a class of the cycle (`TDemoGageInfo.TKind`) -- its owner's unit, never `uses TDemoGageInfo`
+    @('f22', 'leaf-uses-cycle', '`TDemoGageInfo.TKind`, the type of `TDemoGagePort.Kind`, is declared in `demogageport`', $cleanDir, $NestedIn),
+    # fix round 1: the consumer handles EInvalidCast and casts with an unguarded `as`
+    @('f24', 'exception-semantics', 'line 51 casts with `as TDemoGagePort` without an `is` guard', $cleanDir, @(, @($U, $AttachGuarded, $AttachTryUnguarded)))
   )
   foreach ($c in $Cases) {
     $useLib = if ($c.Count -gt 5 -and $c[5] -eq 'stub') { $Stub } else { $Lib }
@@ -366,6 +383,33 @@ try {
       ($v.Ok -and ($v.Dump.verdict -eq 'refused') -and ($kinds -contains $c[1]) -and $v.Text.Contains('refused: ' + $c[1] + ' -- ') -and $v.Text.Contains($c[2])) `
       ("[$($v.Dump.verdict) / $($v.Dump.refusals)] ok=$($v.Ok)")
   }
+
+  # --- fix round 1: positive controls of f22 / f24 ----------------------------------------------
+  Write-Host '== (f) fix round 1 controls: a nested type outside the cycle; a guarded cast' -ForegroundColor Cyan
+  $v23 = Get-VariantPlan (New-Variant (Join-Path $Fx 'memberwrite') 'v-f23' ($Clean + $NestedOut)) 'v-f23' $Lib
+  $leaf23 = $v23.Text
+  Check 'f23 a nested member type declared OUTSIDE the cycle: cut, the leaf uses its owner unit DemoGageKinds (never `uses TDemoGageInfo`)' `
+    ($v23.Ok -and ($v23.Dump.verdict -eq 'mechanical') -and ($leaf23 -match "(?s)unit DemoGagePort\.Untangle;.*uses\n  System\.Classes,\n  DemoGageKinds;") -and
+     ($leaf23 -notmatch '(?m)^  TDemoGageInfo[;,]$') -and $leaf23.Contains('    property Kind: TDemoGageInfo.TKind read GetKind;')) "[$($v23.Dump.verdict) / $($v23.Dump.refusals)]"
+  $v25 = Get-VariantPlan (New-Variant $cleanDir 'v-f25' @(, @($U, $AttachGuarded, $AttachTryGuarded))) 'v-f25' $Lib
+  Check 'f25 control for f24: EInvalidCast handled, but every `as` follows its `is` guard -- still cut' `
+    ($v25.Ok -and ($v25.Dump.verdict -eq 'mechanical') -and $v25.Text.Contains('by **member hand-over through an extracted interface**')) "[$($v25.Dump.verdict) / $($v25.Dump.refusals)]"
+  Check 'a13 the demo plan names the exception change of `as` (EInvalidCast -> EIntfCastError)' `
+    ($txA.Contains('a failed `as IDemoGagePortSurface` raises EIntfCastError, not EInvalidCast')) ''
+
+  # --- (i) --library-db none ----------------------------------------------------------------------
+  Write-Host '== (i) --library-db none opens no library' -ForegroundColor Cyan
+  $demoI = Join-Path $WorkDir 'circular-demo-i'
+  Copy-Tree (Join-Path $Repo 'circular-demo') $demoI
+  $dbI = Join-Path $WorkDir 'demo-i.sqlite'
+  $null = Invoke-Index (Join-Path $demoI 'CircularDemo.dproj') $dbI 'i'
+  $pi = Get-Cycles $dbI 'i' @('--plan', '--library-db', 'none')
+  $errI = [IO.File]::ReadAllText((Join-Path $WorkDir 'cycles-i.err'))
+  Check 'i1 `--library-db none`: exit 0, the note says no library, no "reads class ancestry from" line' `
+    (($pi.Exit -eq 0) -and $errI.Contains('reads no platform library (--library-db none)') -and -not $errI.Contains('reads class ancestry from')) ($errI.Trim() -replace "`r?`n", ' | ')
+  Check 'i2 and cycle 2 is refused, as without a library' (($pi.Dump[2].verdict -eq 'refused') -and ((Get-CycleBlock $pi.Out 2) -join "`n").Contains('`TDemoGagePort` (class): refused: ')) "[$($pi.Dump[2].verdict) / $($pi.Dump[2].refusals)]"
+  $errLib = [IO.File]::ReadAllText((Join-Path $WorkDir 'cycles-a.err'))
+  Check 'i3 control: with a library given the note names it' ($errLib.Contains('reads class ancestry from ' + $Lib)) ($errLib.Trim() -replace "`r?`n", ' | ')
 
   # --- (g) the stub library, (h) a missing --library-db ------------------------------------------
   Write-Host '== (g) the demo without the platform library; (h) a missing --library-db' -ForegroundColor Cyan

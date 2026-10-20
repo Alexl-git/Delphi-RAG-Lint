@@ -51,7 +51,7 @@ function Invoke-Index([string]$Dproj, [string]$Db, [string]$Tag) {
 function Get-Cycles([string]$Db, [string]$Tag, [string[]]$Extra) {
   $o = Join-Path $WorkDir "cycles-$Tag.out"
   $p = Start-Process -FilePath $Exe -WorkingDirectory $WorkDir -NoNewWindow -Wait -PassThru `
-    -ArgumentList (@('cycles', '--db', ('"' + $Db + '"')) + $Extra) `
+    -ArgumentList (@('cycles', '--db', ('"' + $Db + '"')) + $Extra + $(if ($Extra -contains '--plan') { @('--library-db', 'none') } else { @() })) `
     -RedirectStandardOutput $o -RedirectStandardError (Join-Path $WorkDir "cycles-$Tag.err")
   return @{ Exit = $p.ExitCode; Out = [IO.File]::ReadAllText($o); File = $o }
 }
