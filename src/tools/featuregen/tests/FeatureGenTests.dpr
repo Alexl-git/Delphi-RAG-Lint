@@ -18,6 +18,8 @@ uses
   , FeatureGen.Markdown in '..\FeatureGen.Markdown.pas'
   , FeatureGen.Site in '..\FeatureGen.Site.pas'
   , FeatureGen.HelpImport in '..\FeatureGen.HelpImport.pas'
+  , FeatureGen.Wiki in '..\FeatureGen.Wiki.pas'
+  , System.Generics.Collections
   ;
 
 var
@@ -1145,6 +1147,154 @@ begin
   end;
 end;
 
+{ ---- Task 7: wiki parity. The comparison (CompareOutputTrees) is separate from how
+  the reference tree was produced (ProducePowerShellReference), so the reference can
+  later become frozen golden files without touching the comparison. ---- }
+
+const
+  MAIN_ENGINE = 'C:\Projects\Delphi-RAG-lint\third_party\dll-win64\drag-lint.exe';
+
+function PwshExe: string;
+begin
+  Result := 'C:\Program Files\PowerShell\7\pwsh.exe';
+  if not TFile.Exists(Result) then
+    Result := FileSearch('pwsh.exe', GetEnvironmentVariable('PATH'));
+end;
+
+{ Reference producer: the PowerShell generator with its engine set to pEngine, into pOut. }
+function ProducePowerShellReference(const pRepo, pEngine, pOut: string): string;
+var
+  lScript: string;
+begin
+  lScript := TPath.Combine(SCRATCH, 'run-ps-generator.ps1');
+  TFile.WriteAllText(lScript,
+    'param([string]$Repo, [string]$Engine, [string]$OutDir)'#13#10
+    + '$ErrorActionPreference = ''Stop'''#13#10
+    + 'Import-Module (Join-Path $Repo ''tools\FeatureRegistry.psm1'') -Force'#13#10
+    + '$paths = Get-RegistryPaths -Repo $Repo'#13#10
+    + '$paths.Exe = $Engine'#13#10
+    + '$res = Invoke-RegistryGenerate -Paths $paths -OutDir $OutDir'#13#10
+    + '"ps-generator: wrote $($res.Written.Count) of $($res.Outputs.Count)"'#13#10, TEncoding.ASCII);
+  Result := RunCapture(PwshExe, '-NoProfile -ExecutionPolicy Bypass -File "' + lScript + '" -Repo "' + pRepo
+    + '" -Engine "' + pEngine + '" -OutDir "' + pOut + '"');
+end;
+
+function ShowLine(const pLine: string): string;
+begin
+  Result := pLine.Replace(#13, '\r');
+end;
+
+{ First differing line of two texts, CR shown as \r. }
+function FirstDifference(const pExpected, pActual: string): string;
+var
+  lA, lB: TArray<string>;
+  i, lN: Integer;
+begin
+  lA := pExpected.Split([#10]);
+  lB := pActual.Split([#10]);
+  lN := Length(lA);
+  if Length(lB) < lN then
+    lN := Length(lB);
+  for i := 0 to lN - 1 do
+    if lA[i] <> lB[i] then
+      Exit(Format('first difference at line %d: expected "%s" got "%s"', [i + 1, ShowLine(lA[i]), ShowLine(lB[i])]));
+  Result := Format('expected %d lines (%d chars), got %d lines (%d chars)', [Length(lA), Length(pExpected), Length(lB), Length(pActual)]);
+end;
+
+{ Byte comparison of pFiles under two roots; one message per mismatching file. }
+function CompareOutputTrees(const pExpectedRoot, pActualRoot: string; const pFiles: TArray<string>): TArray<string>;
+var
+  lRel, lA, lB: string;
+  lList: TList<string>;
+begin
+  lList := TList<string>.Create;
+  try
+    for lRel in pFiles do
+    begin
+      lA := TPath.Combine(pExpectedRoot, lRel);
+      lB := TPath.Combine(pActualRoot, lRel);
+      if not TFile.Exists(lA) then
+        lList.Add(lRel + ': reference missing')
+      else if not TFile.Exists(lB) then
+        lList.Add(lRel + ': not produced')
+      else if ReadBytesText(lA) <> ReadBytesText(lB) then
+        lList.Add(lRel + ': ' + FirstDifference(ReadBytesText(lA), ReadBytesText(lB)));
+    end;
+    Result := lList.ToArray;
+  finally
+    lList.Free;
+  end;
+end;
+
+procedure TestWikiParity(const pRepo: string);
+var
+  lA, lB, lPs, lCli, lMsg: string;
+  lW: TOutputWriter;
+  lBad: TArray<string>;
+begin
+  if not TFile.Exists(MAIN_ENGINE) then
+  begin
+    Check('Parity.WikiOutputsEqualPowerShell', False, 'engine missing: ' + MAIN_ENGINE);
+    Exit;
+  end;
+  lA := FreshDir('wiki-parity-ps');
+  lB := FreshDir('wiki-parity-fg');
+  lPs := ProducePowerShellReference(pRepo, MAIN_ENGINE, lA);
+  lMsg := '';
+  try
+    lW := TOutputWriter.Create(lB, False, False);
+    try
+      BuildWiki(pRepo, lW, MAIN_ENGINE);
+      lW.Finish;
+    finally
+      lW.Free;
+    end;
+  except
+    on E: Exception do
+      lMsg := E.ClassName + ': ' + E.Message;
+  end;
+  lBad := CompareOutputTrees(lA, lB, WikiOutputPaths);
+  Check('Parity.WikiOutputsEqualPowerShell', (lMsg = '') and (Length(lBad) = 0) and (Pos('wrote 7 of 7', lPs) > 0),
+    lMsg + ' [' + lPs.Trim + '] ' + string.Join(' | ', lBad));
+  lCli := TPath.Combine(lB, 'features\generated\cli-reference.md');
+  Check('Wiki.CliReferenceIsCliMdWithoutFrontMatter', TFile.Exists(lCli) and ReadBytesText(lCli).StartsWith('# CLI reference'#13#10#13#10)
+    and (Pos('## Commands', ReadBytesText(lCli)) > 0), lCli);
+end;
+
+procedure TestCompareOutputTreesPositiveControl;
+var
+  lA, lB: string;
+  lBad: TArray<string>;
+begin
+  lA := FreshDir('cmp-a');
+  lB := FreshDir('cmp-b');
+  TFile.WriteAllText(TPath.Combine(lA, 'x.md'), 'one'#13#10'two'#13#10, TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lB, 'x.md'), 'one'#13#10'twO'#13#10, TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lA, 'y.md'), 'same', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lB, 'y.md'), 'same', TEncoding.ASCII);
+  TFile.WriteAllText(TPath.Combine(lA, 'z.md'), 'only in reference', TEncoding.ASCII);
+  lBad := CompareOutputTrees(lA, lB, ['x.md', 'y.md', 'z.md']);
+  Check('Parity.CompareOutputTreesCatchesDifferences', (Length(lBad) = 2) and (Pos('x.md: first difference at line 2', lBad[0]) > 0)
+    and (lBad[1] = 'z.md: not produced'), string.Join(' | ', lBad));
+end;
+
+procedure TestMarkedBlock;
+var
+  lMsg: string;
+begin
+  Check('Wiki.MarkedBlockReplacesBody',
+    UpdateMarkedBlock('a<!-- dl:registry:begin x -->'#13#10'old'#13#10'<!-- dl:registry:end x -->b', 'x', 'new'#13#10)
+      = 'a<!-- dl:registry:begin x -->'#13#10'new'#13#10'<!-- dl:registry:end x -->b');
+  lMsg := '';
+  try
+    UpdateMarkedBlock('<!-- dl:registry:end x --> <!-- dl:registry:begin x -->', 'x', 'new');
+  except
+    on E: Exception do
+      lMsg := E.Message;
+  end;
+  Check('Wiki.MarkedBlockOutOfOrderRaises', Pos('markers absent', lMsg) > 0, lMsg);
+end;
+
 var
   lRepo: string;
 begin
@@ -1180,8 +1330,12 @@ begin
     TestEntryTextGuard;
     TestOutDirRefusal;
     TestCheckLinks;
+    TestMarkedBlock;
+    TestCompareOutputTreesPositiveControl;
     if lRepo <> '' then
       TestSiteFormatFile(lRepo);
+    if lRepo <> '' then
+      TestWikiParity(lRepo);
   except
     on E: Exception do
     begin

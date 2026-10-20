@@ -36,6 +36,14 @@ type
     function Lines: TArray<string>;
   end;
 
+/// <summary>Runs a console program and returns its stdout, decoded as UTF-8.</summary>
+/// <param name="pExe">Full path of the program (no PATH lookup).</param>
+/// <param name="pArgs">Command-line arguments, already quoted.</param>
+/// <returns>Everything the program wrote to stdout; '' when nothing.</returns>
+/// <exception cref="EFeatureGenLive">The pipe cannot be created or the program cannot be started.</exception>
+/// <remarks>stderr is discarded; waits for the program to exit; no timeout.</remarks>
+function RunCapture(const pExe, pArgs: string): string;
+
 implementation
 
 uses

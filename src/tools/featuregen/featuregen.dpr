@@ -1,7 +1,7 @@
 program featuregen;
 
 { featuregen: owns the drag-lint feature registry (features\) and generates docs
-  from it. Verbs so far: build --site. Exit 0 ok, 1 changed (check mode) or failed,
+  from it. Verbs so far: build [--site | --all], import-help. Exit 0 ok, 1 changed (check mode) or failed,
   2 usage. }
 
 {$APPTYPE CONSOLE}
@@ -18,13 +18,17 @@ uses
   , FeatureGen.Markdown in 'FeatureGen.Markdown.pas'
   , FeatureGen.Site in 'FeatureGen.Site.pas'
   , FeatureGen.HelpImport in 'FeatureGen.HelpImport.pas'
+  , FeatureGen.Wiki in 'FeatureGen.Wiki.pas'
   ;
 
 procedure PrintUsage;
 begin
   Writeln('usage: featuregen <verb> [options]');
-  Writeln('  build --site [--check] [--repo <dir>] [--engine <exe>] [--out <dir>]');
-  Writeln('      writes the website help set (default root from features\site-format.json);');
+  Writeln('  build [--site | --all] [--check] [--repo <dir>] [--engine <exe>] [--out <dir>]');
+  Writeln('      no target flag: the ported wiki outputs (docs\wiki pages, README / AI-USAGE blocks,');
+  Writeln('      features\generated\manifest.json and cli-reference.md), --out renders them elsewhere;');
+  Writeln('      --site: the website help set (default root from features\site-format.json);');
+  Writeln('      --all: both (--out not allowed);');
   Writeln('      --check writes nothing and exits 1 when any file would change.');
   Writeln('  import-help [--dry-run] [--repo <dir>] [--engine <exe>]');
   Writeln('      seeds usage / flags / pitfalls of cli surfaces that lack them from the engine --help;');
@@ -51,7 +55,7 @@ end;
 
 function BuildSiteCommand(pArgs: TArray<string>): Integer;
 var
-  lCheck, lSite: Boolean;
+  lCheck, lSite, lAll, lWikiChanged: Boolean;
   lRepo, lEngine, lOut, lArg: string;
   lI, lLeaves: Integer;
   lFmt: TSiteFormat;
@@ -62,6 +66,7 @@ var
 begin
   lCheck := False;
   lSite := False;
+  lAll := False;
   lRepo := '';
   lEngine := '';
   lOut := '';
@@ -71,6 +76,8 @@ begin
     lArg := pArgs[lI];
     if lArg = '--site' then
       lSite := True
+    else if lArg = '--all' then
+      lAll := True
     else if lArg = '--check' then
       lCheck := True
     else if (lArg = '--repo') or (lArg = '--engine') or (lArg = '--out') then
@@ -95,9 +102,9 @@ begin
     end;
     Inc(lI);
   end;
-  if not lSite then
+  if lAll and (lOut <> '') then
   begin
-    Writeln('featuregen: build needs --site');
+    Writeln('featuregen: --out cannot be combined with --all');
     Exit(2);
   end;
   Result := 1;
@@ -112,6 +119,24 @@ begin
     lFmt := LoadSiteFormat(lRepo);
     if lEngine = '' then
       lEngine := TPath.Combine(lRepo, lFmt.Engine);
+    lWikiChanged := False;
+    if lAll or not lSite then
+    begin
+      lWriter := TOutputWriter.Create((if lOut <> '' then lOut else lRepo), lCheck, False);
+      try
+        BuildWiki(lRepo, lWriter, lEngine);
+        lRes := lWriter.Finish;
+      finally
+        lWriter.Free;
+      end;
+      Writeln(Format('wiki outputs: written=%d changed=%d', [Length(lRes.Written), Length(lRes.Changed)]));
+      if lCheck then
+        for lFile in lRes.Changed do
+          Writeln(lFile);
+      lWikiChanged := lCheck and (Length(lRes.Changed) > 0);
+      if not lAll then
+        Exit(if lWikiChanged then 1 else 0);
+    end;
     if lOut = '' then
       lOut := TPath.Combine(lRepo, lFmt.Root);
     lHelp := TLiveHelp.Create;
@@ -141,7 +166,7 @@ begin
       if Length(lRes.Changed) > 0 then
         Exit(1);
     end;
-    Result := 0;
+    Result := if lWikiChanged then 1 else 0;
   except
     on E: Exception do
     begin

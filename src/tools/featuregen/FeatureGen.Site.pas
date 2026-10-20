@@ -45,6 +45,12 @@ procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter:
 /// a local path (drive letter, backslash, file:). Links inside code fences and code spans are not links.</remarks>
 function CheckLinks(const pWriter: TOutputWriter): TArray<string>;
 
+/// <summary>The agent CLI reference (spec 5.3): the site cli.md text without its front matter.</summary>
+/// <param name="pFmt">Site format; its Help must be loaded (usage lines come from it).</param>
+/// <param name="pReg">Loaded registry; only site-included entries are listed, as on the site.</param>
+/// <returns>LF text starting with '# CLI reference'; links stay site-relative (features/&lt;id&gt;.md).</returns>
+function CliReferenceMd(const pFmt: TSiteFormat; const pReg: TRegistry): string;
+
 implementation
 
 uses
@@ -783,6 +789,21 @@ begin
   pW.Put('ide.md', IdeMd(pFmt, lInc), 'ide.md');
   pW.Put('whats-new.md', WhatsNewMd(pFmt, lInc), 'whats-new.md');
   pW.Put('wiki-map.json', WikiMapJson(pFmt, lInc), 'wiki-map.json');
+end;
+
+function CliReferenceMd(const pFmt: TSiteFormat; const pReg: TRegistry): string;
+const
+  FRONT_END = #10'---'#10#10;
+var
+  lMd: string;
+  lAt: Integer;
+begin
+  lMd := CliMd(pFmt, IncludedEntries(pFmt, pReg));
+  lAt := Pos(FRONT_END, lMd);
+  if lMd.StartsWith('---'#10) and (lAt > 0) then
+    Result := Copy(lMd, lAt + Length(FRONT_END), MaxInt)
+  else
+    Result := lMd;
 end;
 
 procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter);
