@@ -1,4 +1,4 @@
-unit DRagLint.Report.CycleEdge;
+unit DRagLint.Report.CycleEdge;  // dl:ok unit-too-large@9f6f -- the edge surface and the two recipes read from it (R1, R2) share this unit's private helpers (BareCode, LineOf, MakeRefusal, UnitQualifiedLine); the E18 plan places both recipes here
 
 // ---------------------------------------------------------------------------
 // E18 Task 4 -- the SURFACE of one unit edge A -> B of a circular group: what
@@ -51,6 +51,8 @@ type
     /// <summary>Id of the symbol of B the ref binds to (the member for a member
     /// access, the top-level declaration otherwise).</summary>
     SymbolId: Int64;
+    /// <summary>refs.enclosing_symbol_id: the routine whose body holds the ref; 0 outside a body.</summary>
+    EnclosingId: Int64;
   end;
 
   /// <summary>One type a routine signature names.</summary>
@@ -83,7 +85,8 @@ type
     /// <summary>A calls a non-constructor method through a class of B.</summary>
     HasClassMethod: Boolean;
     /// <summary>A passes a class of B as a value (a read of the class name with no
-    /// call through it on that line -- the `FindMDIChildForFolder(TfrmX, ...)` shape).</summary>
+    /// call or member access through it on that line -- the `FindMDIChildForFolder(TfrmX, ...)`
+    /// shape; `TfrmX.ClassName` is a class-method call, HasClassMethod).</summary>
     HasClassRefArg: Boolean;
     /// <summary>A declares something of a type of B (`X: TFoo`).</summary>
     HasDecl: Boolean;
@@ -138,7 +141,8 @@ type
   /// <summary>The recipe that cuts one edge of a circular group.</summary>
   /// <remarks>crMoveGlobals = move the declarations into a leaf unit (the playbook's
   /// original recipe); crRoutineInversion = R1, call one routine through a
-  /// procedural variable (PlanRoutineInversion); crMemberInterface = R2 (Task 6).</remarks>
+  /// procedural variable (PlanRoutineInversion); crMemberInterface = R2, read the
+  /// members through an extracted interface (PlanMemberInterface).</remarks>
   TCutRecipe = (crNone, crMoveGlobals, crRoutineInversion, crMemberInterface);
 
   /// <summary>One line edit a recipe makes in an existing unit.</summary>
@@ -167,13 +171,14 @@ type
     Reason: string;
   end;
 
-  /// <summary>What recipe R1 (routine-call inversion) does to one edge, as data the
-  /// planner maps onto its leaf machinery and file edits.</summary>
+  /// <summary>What recipe R1 (routine-call inversion) or R2 (member hand-over) does to
+  /// one edge, as data the planner maps onto its leaf machinery and file edits.</summary>
   /// <remarks>The leaf's new unit, its .dpr / .dproj registration and every uses-clause
   /// edit are NOT here: the planner derives them (UntangleCatalog leaf, Task 3a lexer
-  /// edits) from LeafStem / DeclStem / ConsumerFid.</remarks>
+  /// edits) from LeafStem / DeclStem / ConsumerFid (R2: also LeafUses / ConsumerUses).
+  /// The R1 fields are empty for R2 and the R2 fields empty for R1.</remarks>
   TRecipeSteps = record
-    /// <summary>crRoutineInversion when filled; crNone otherwise.</summary>
+    /// <summary>crRoutineInversion or crMemberInterface when filled; crNone otherwise.</summary>
     Recipe: TCutRecipe;
     /// <summary>symbols.id of the routine.</summary>
     RoutineId: Int64;
@@ -195,10 +200,38 @@ type
     /// <summary>Stem of the EXISTING unit outside the group that receives TypeDecl / VarDecl
     /// (J2); '' = the declaring unit's `&lt;Source&gt;.Untangle` leaf.</summary>
     LeafStem: string;
-    /// <summary>The call-site replacements (consumer) and the initialization assignment
-    /// (declaring unit).</summary>
+    /// <summary>R1: the call-site replacements (consumer) and the initialization assignment
+    /// (declaring unit). R2: the `is` / `as` rewrites (consumer), the heritage line, the
+    /// getter declarations and the getter bodies (class unit).</summary>
     Edits: TArray<TRecipeEdit>;
+    /// <summary>R2: the class whose members the interface hands over.</summary>
+    ClassTypeName: string;
+    /// <summary>R2: symbols.id of that class.</summary>
+    ClassId: Int64;
+    /// <summary>R2: `I&lt;Class without its T&gt;Surface`.</summary>
+    IfaceName: string;
+    /// <summary>R2: its GUID text `{8-4-4-4-12}` (SurfaceGuid of `&lt;Leaf&gt;.&lt;IfaceName&gt;`).</summary>
+    IfaceGuid: string;
+    /// <summary>R2: the interface declaration, indented for a `type` block, without the keyword.</summary>
+    IfaceDecl: TArray<string>;
+    /// <summary>R2: the uses entries the leaf's interface section needs for the member types.</summary>
+    LeafUses: TArray<string>;
+    /// <summary>R2: entries the consumer's implementation uses must gain (System.SysUtils for
+    /// Supports, the unit of a cast ancestor), each not visible there yet.</summary>
+    ConsumerUses: TArray<string>;
+    /// <summary>R2: `Name: Type` of every member carried, in declaration order.</summary>
+    MemberSigs: TArray<string>;
+    /// <summary>R2: the ancestor a receiver that does not implement IInterface is cast
+    /// through; '' when no line needs a cast.</summary>
+    CastAncestor: string;
   end;
+
+const
+  /// <summary>Classes that implement IInterface for their descendants (R2): a receiver of
+  /// one of these types can be cast with `as ISurface` as is; any other receiver is cast
+  /// through the first such ancestor of the class.</summary>
+  CIInterfaceRoots: array[0..4] of string = ('TInterfacedObject', 'TComponent', 'TInterfacedPersistent',
+    'TAggregatedObject', 'TContainedObject');
 
 /// <summary>Tells which kind of type use a refs.kind 'type_use' row is, from its line.</summary>
 /// <param name="pLineText">The source line of the reference.</param>
@@ -283,11 +316,70 @@ function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;
   out pRefusal: TRecipeRefusal): TRecipeSteps;
 
+/// <summary>The deterministic GUID of an extracted interface (R2).</summary>
+/// <param name="pText">`&lt;LeafUnit&gt;.&lt;Interface&gt;`, e.g. `DemoGagePort.Untangle.IDemoGagePortSurface`.</param>
+/// <returns>The MD5 of pText (UTF-8) as `{8-4-4-4-12}` upper-case hex, so a plan is
+/// reproducible and its text can be pinned.</returns>
+function SurfaceGuid(const pText: string): string;
+
+/// <summary>The first ancestor of a class through which `as ISurface` compiles (R2).</summary>
+/// <param name="pProject">The project index; must not be nil.</param>
+/// <param name="pLibrary">The platform library index, or nil (the walk then stops at the
+/// first ancestor the project does not declare).</param>
+/// <param name="pClass">The class (a symbol of pProject).</param>
+/// <param name="pAncestor">Receives that ancestor's name; '' when there is none.</param>
+/// <returns>True when an ancestor (the class itself excluded) is one of CIInterfaceRoots or
+/// lists an interface in its heritage. Walks symbols.heritage in pProject, then pLibrary;
+/// TObject and a chain ending at a name no index declares give False.</returns>
+function AncestorImplementingIInterface(const pProject, pLibrary: ISymbolStore; const pClass: TSymbol;
+  out pAncestor: string): Boolean;
+
+/// <summary>Recipe R2, member hand-over through an extracted interface: the edge A -&gt; B is
+/// `is` / `as` tests against ONE class of B plus reads of its fields and properties; the
+/// class implements a new interface carrying read-only properties for those members,
+/// declared in B's `&lt;B&gt;.Untangle` leaf, and A tests and casts against the interface.</summary>
+/// <param name="pSource">Index access; must not be nil; IsSccStem answers for the edge's group.</param>
+/// <param name="pLibrary">The platform library index (class ancestry, inherited members, the
+/// units of library types); nil = project only, which refuses whenever the answer needs it.</param>
+/// <param name="pSurface">The edge's surface (BuildEdgeSurface).</param>
+/// <param name="pLeafUnit">The unit name of the leaf that will hold the interface (its GUID
+/// is derived from it).</param>
+/// <param name="pRefusal">Receives why the recipe does not apply; Kind '' when it does.</param>
+/// <returns>The steps; Recipe = crNone when refused.</returns>
+/// <remarks>
+/// <para>Shape (first offending ref, in line order): every ref must be erTypeIs, erTypeAs or
+/// erMemberRead -- else `member-write`, `construction`, `class-method` (a method called
+/// through the class or an instance, e.g. in a `with` body), `class-ref`, `type-decl`,
+/// `type-cast`, `other-ref` (a routine or variable of B); then `multiple-classes`,
+/// `qualified-ref` (`B.X` anywhere in A).</para>
+/// <para>Members: each must be a field or a non-indexed property declared in the class itself
+/// (`member-unsupported`; a method is `class-method`); `duplicate-identifier` when the class
+/// already has `Get&lt;M&gt;`. Class: its heritage on its declaration line and its `end;` line
+/// (`manual-edit`); an ancestor implementing IInterface (`no-iinterface`); no reference
+/// counting on the way -- TInterfacedObject, TAggregatedObject, TContainedObject or an
+/// unknown implementation would free the object when the temporary interface is released
+/// (`ref-counted`).</para>
+/// <para>Consumer: `X is TClass` -&gt; `Supports(X, ISurface)`; `X as TClass` -&gt; `X as
+/// ISurface` when X's static type implements IInterface, else `TAnc(X) as ISurface` (TAnc =
+/// AncestorImplementingIInterface). X must be `Self`, a parameter or local of the enclosing
+/// routine, or a field / property of the enclosing class or its ancestors (`receiver-unknown`);
+/// a project TAnc must not be declared in B (`cast-unseen`). Every name used inside a
+/// `with X as TClass do` body that is a member of the class or of an ancestor but not
+/// carried, a getter name or an IInterface method refuses `with-member` (it would bind to
+/// something else after the rewrite); an ancestry no index completes refuses
+/// `ancestry-unknown`.</para>
+/// <para>Leaf: the units declaring the member types -- a project unit as bound from B, else
+/// the library unit B's interface uses names (`type-unresolved`); never a unit of the
+/// group (`leaf-uses-cycle`).</para>
+/// </remarks>
+function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
+  const pSurface: TEdgeSurface; const pLeafUnit: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
+
 implementation
 
 uses
   System.SysUtils, System.StrUtils, System.Classes, System.RegularExpressions, System.Math,
-  System.Generics.Collections;
+  System.Generics.Collections, System.Generics.Defaults, System.Hash;
 
 const
   CNotTypeWords = ' const var out array of function procedure reference to packed ';
@@ -407,6 +499,7 @@ type
     procedure AddRef(const pR: TReference; pKind: TEdgeRefKind; pSymbolId: Int64);
     function TakeMemberAccess(const pR: TReference): Boolean;
     function TakeReceiverRef(const pR: TReference): Boolean;
+    procedure TakeClassMemberAccess(const pR: TReference);
     procedure TakeBareRef(const pR: TReference);
     procedure Finish;
     procedure Collect;
@@ -502,6 +595,7 @@ begin
   E.Name    := pR.NameText;
   E.LineText:= LineText(pR.StartLine);
   E.SymbolId:= pSymbolId;
+  E.EnclosingId:= pR.EnclosingSymbolId;
   if pR.EnclosingSymbolId > 0 then E.Enclosing:= Sym(pR.EnclosingSymbolId).Name;
   FRefs.Add(E);
 end;
@@ -558,6 +652,29 @@ begin
   Inc(FSurface.CallCount);
   FOwners.AddOrSetValue(TopLevel(Sym(pR.SymbolId)).Id, TopLevel(Sym(pR.SymbolId)));
   AddRef(pR, erCall, pR.SymbolId);
+end;
+
+{ A 'member-access' row whose receiver is a class of B and that no call row on its line
+  already took (TakeReceiverRef keys those lines): `TFoo.ClassName`, `TFoo.Create` written
+  without parentheses -- a call through the class all the same. }
+procedure TSurfaceBuilder.TakeClassMemberAccess(const pR: TReference);
+var
+  Cls : TSymbol;
+  Stem: string;
+begin
+  if pR.ReceiverText = '' then Exit;
+  var Rcv:= pR.ReceiverText.Substring(pR.ReceiverText.LastIndexOf('.') + 1);
+  if not (FSource.BindName(FFromFid, pR.StartLine, Rcv, Cls, Stem) and (Stem = FSurface.ToStem) and
+    (Cls.Kind = skClass) and SameText(Cls.Name, Rcv)) then Exit;
+  var Key:= Format('%d:%s', [pR.StartLine, LowerCase(Cls.Name)]);
+  if FRcvLines.ContainsKey(Key) then Exit;
+  if SameText(pR.NameText, 'Create') or (FStore.FindChildSymbolByName(Cls.Id, pR.NameText).Kind = skConstructor) then
+    FSurface.HasConstruction:= True
+  else FSurface.HasClassMethod:= True;
+  FClasses.Add(Cls.Name);
+  FOwners.AddOrSetValue(Cls.Id, Cls);
+  FRcvLines.Add(Key, True);
+  AddRef(pR, erClassReceiver, Cls.Id);
 end;
 
 procedure TSurfaceBuilder.TakeBareRef(const pR: TReference);
@@ -619,7 +736,13 @@ begin
   for var R in FStore.GetReferencesFromFile(FFromFid) do
   begin
     if TakeMemberAccess(R) then Continue;
-    if SameText(R.Kind, 'member-access') then Continue;  { the companion row of a call }
+    if SameText(R.Kind, 'member-access') then
+    begin
+      { the companion row of a call -- or, without one, a member reached through a
+        class of B with no call row (`TFoo.ClassName`): a class method (E18 T6) }
+      TakeClassMemberAccess(R);
+      Continue;
+    end;
     if TakeReceiverRef(R) then Continue;
     TakeBareRef(R);
   end;
@@ -1031,6 +1154,943 @@ begin
   finally
     Done.Free;
     Edits.Free;
+  end;
+end;
+
+{ ---------------------------------------------------------------------------
+  R2 -- member hand-over through an extracted interface
+  --------------------------------------------------------------------------- }
+
+const
+  CMaxAncestorHops = 32;  { a heritage walk longer than this is a loop in the index }
+  { IInterface roots whose _Release never frees the object / roots that count references }
+  CSafeRoots      : array[0..1] of string = ('TComponent', 'TInterfacedPersistent');
+  CRefCountedRoots: array[0..2] of string = ('TInterfacedObject', 'TAggregatedObject', 'TContainedObject');
+  CIInterfaceMethods: array[0..2] of string = ('QueryInterface', '_AddRef', '_Release');
+  CGuidGroups     : array[0..4] of Integer = (8, 4, 4, 4, 12);
+  CSysUtilsUnit   = 'System.SysUtils';
+  CRootClass      = 'TObject';
+
+function SurfaceGuid(const pText: string): string;
+var
+  MD5: THashMD5;
+  P  : Integer;
+begin
+  MD5:= THashMD5.Create;
+  MD5.Update(TEncoding.UTF8.GetBytes(pText));
+  var Hex:= UpperCase(MD5.HashAsString);
+  var Parts: TArray<string>;
+  SetLength(Parts, Length(CGuidGroups));
+  P:= 1;
+  for var I:= 0 to High(CGuidGroups) do
+  begin
+    Parts[I]:= Copy(Hex, P, CGuidGroups[I]);
+    Inc(P, CGuidGroups[I]);
+  end;
+  Result:= '{' + string.Join('-', Parts) + '}';
+end;
+
+type
+  { A class / interface symbol and the index that holds it. }
+  TStoredType = record
+    Sym  : TSymbol;
+    Store: ISymbolStore;
+  end;
+
+  { The indexes R2 reads types from: the project first, then the platform library.
+    A library type's ancestors are looked up in the library only. }
+  TTypeIndex = record
+    Project: ISymbolStore;
+    Lib    : ISymbolStore;
+    function Find(const pName: string; pLibOnly: Boolean; out pType: TStoredType): Boolean;
+    function IsLib(const pType: TStoredType): Boolean;
+    function IsInterfaceName(const pName: string; pLibOnly: Boolean): Boolean;
+    function ParentOf(const pType: TStoredType): string;
+    function ListsInterface(const pType: TStoredType): Boolean;
+  end;
+
+{ A type name without unit prefix and generic arguments. }
+function BareTypeName(const pName: string): string;
+begin
+  Result:= Trim(pName);
+  var Lt:= Result.IndexOf('<');
+  if Lt >= 0 then Result:= Result.Substring(0, Lt);
+  Result:= Trim(Result.Substring(Result.LastIndexOf('.') + 1));
+end;
+
+function UnitOfFile(const pPath: string): string;
+begin
+  Result:= ChangeFileExt(ExtractFileName(StringReplace(pPath, '/', '\', [rfReplaceAll])), '');
+end;
+
+{ symbols.heritage split at its top-level commas. }
+function SplitHeritage(const pText: string): TArray<string>;
+var
+  L    : TList<string>;
+  Depth: Integer;
+  Start: Integer;
+begin
+  L:= TList<string>.Create;
+  try
+    Depth:= 0;
+    Start:= 1;
+    for var I:= 1 to Length(pText) do
+      if pText[I] = '<' then Inc(Depth)
+      else if pText[I] = '>' then Dec(Depth)
+      else if (pText[I] = ',') and (Depth = 0) then
+      begin
+        L.Add(Trim(Copy(pText, Start, I - Start)));
+        Start:= I + 1;
+      end;
+    var Last:= Trim(Copy(pText, Start, MaxInt));
+    if Last <> '' then L.Add(Last);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+{ The widest class / interface row named pName in pStore (a forward declaration spans one line). }
+function PickType(const pStore: ISymbolStore; const pName: string; var pType: TStoredType): Boolean;
+var
+  Best: Integer;
+begin
+  Result:= False;
+  Best  := -1;
+  if (pStore = nil) or (pName = '') then Exit;
+  for var S in pStore.FindSymbolsByExactName(pName) do
+    if (S.Kind in [skClass, skInterface]) and (S.EndLine - S.StartLine > Best) then
+    begin
+      Best       := S.EndLine - S.StartLine;
+      pType.Sym  := S;
+      pType.Store:= pStore;
+      Result     := True;
+    end;
+end;
+
+function TTypeIndex.Find(const pName: string; pLibOnly: Boolean; out pType: TStoredType): Boolean;
+begin
+  pType:= Default(TStoredType);
+  var N:= BareTypeName(pName);
+  Result:= ((not pLibOnly) and PickType(Project, N, pType)) or PickType(Lib, N, pType);
+end;
+
+function TTypeIndex.IsLib(const pType: TStoredType): Boolean;
+begin
+  Result:= (Lib <> nil) and (pType.Store = Lib);
+end;
+
+function TTypeIndex.IsInterfaceName(const pName: string; pLibOnly: Boolean): Boolean;
+var
+  T: TStoredType;
+begin
+  if Find(pName, pLibOnly, T) then Exit(T.Sym.Kind = skInterface);
+  Result:= TRegEx.IsMatch(BareTypeName(pName), '^I[A-Z]');  { no index declares it: the naming convention }
+end;
+
+function TTypeIndex.ParentOf(const pType: TStoredType): string;
+begin
+  if (pType.Sym.Kind <> skClass) or SameText(pType.Sym.Name, CRootClass) then Exit('');
+  var Parts:= SplitHeritage(pType.Sym.Heritage);
+  Result:= if (Length(Parts) = 0) or IsInterfaceName(Parts[0], IsLib(pType)) then CRootClass else Parts[0];
+end;
+
+function TTypeIndex.ListsInterface(const pType: TStoredType): Boolean;
+begin
+  var Parts:= SplitHeritage(pType.Sym.Heritage);
+  Result:= (Length(Parts) > 1) or ((Length(Parts) = 1) and IsInterfaceName(Parts[0], IsLib(pType)));
+end;
+
+{ The first ancestor of pStart (itself excluded) that is a CIInterfaceRoots class or lists
+  an interface; False at TObject or at a name no index declares. }
+function WalkToIInterface(const pIdx: TTypeIndex; const pStart: TStoredType; out pAncestor: string): Boolean;
+var
+  Next: TStoredType;
+begin
+  pAncestor:= '';
+  var Cur:= pStart;
+  for var Hop:= 1 to CMaxAncestorHops do
+  begin
+    var P:= BareTypeName(pIdx.ParentOf(Cur));
+    if (P = '') or SameText(P, CRootClass) then Break;
+    if MatchText(P, CIInterfaceRoots) then
+    begin
+      pAncestor:= P;
+      Break;
+    end;
+    if not pIdx.Find(P, pIdx.IsLib(Cur), Next) then Break;
+    if pIdx.ListsInterface(Next) then
+    begin
+      pAncestor:= Next.Sym.Name;
+      Break;
+    end;
+    Cur:= Next;
+  end;
+  Result:= pAncestor <> '';
+end;
+
+function AncestorImplementingIInterface(const pProject, pLibrary: ISymbolStore; const pClass: TSymbol;
+  out pAncestor: string): Boolean;
+var
+  Idx  : TTypeIndex;
+  Start: TStoredType;
+begin
+  Idx.Project:= pProject;
+  Idx.Lib    := pLibrary;
+  Start.Sym  := pClass;
+  Start.Store:= pProject;
+  Result:= WalkToIInterface(Idx, Start, pAncestor);
+end;
+
+{ Whether a static type implements IInterface: an interface, a CIInterfaceRoots class, a
+  class that lists an interface, or one with such an ancestor. TObject and an unindexed
+  name do not. }
+function ImplementsIInterface(const pIdx: TTypeIndex; const pTypeName: string): Boolean;
+var
+  T  : TStoredType;
+  Anc: string;
+begin
+  var N:= BareTypeName(pTypeName);
+  if MatchText(N, CIInterfaceRoots) then Exit(True);
+  if SameText(N, CRootClass) or not pIdx.Find(N, False, T) then Exit(False);
+  Result:= (T.Sym.Kind = skInterface) or pIdx.ListsInterface(T) or WalkToIInterface(pIdx, T, Anc);
+end;
+
+{ '' when the class gets IInterface from TComponent or TInterfacedPersistent (neither frees
+  the object on _Release); else why `as` / Supports could free it. }
+function RefCountWhy(const pIdx: TTypeIndex; const pClass: TStoredType): string;
+var
+  Next: TStoredType;
+begin
+  var Cur:= pClass;
+  var N  := Cur.Sym.Name;
+  for var Hop:= 1 to CMaxAncestorHops do
+  begin
+    if MatchText(N, CSafeRoots) then Exit('');
+    if MatchText(N, CRefCountedRoots) then
+      Exit(Format('`%s` descends from `%s`, which counts references: releasing the temporary interface ' +
+        'of `as` / Supports would free the object', [pClass.Sym.Name, N]));
+    N:= BareTypeName(pIdx.ParentOf(Cur));
+    if (N = '') or SameText(N, CRootClass) then Break;
+    if MatchText(N, CSafeRoots) or MatchText(N, CRefCountedRoots) then Continue;
+    if not pIdx.Find(N, pIdx.IsLib(Cur), Next) then Break;
+    Cur:= Next;
+  end;
+  Result:= Format('`%s` gets IInterface from neither TComponent nor TInterfacedPersistent: whether releasing ' +
+    'the temporary interface of `as` / Supports frees the object is unknown', [pClass.Sym.Name]);
+end;
+
+{ Adds the member names (no params / locals) of pClass and every ancestor to pNames; False,
+  with pStop, when the chain reaches a name no index declares. }
+function ChainMembers(const pIdx: TTypeIndex; const pClass: TStoredType; pNames: TStringList;
+  out pStop: string): Boolean;
+var
+  Next: TStoredType;
+begin
+  pStop := pClass.Sym.Name;
+  Result:= False;
+  var Cur:= pClass;
+  for var Hop:= 1 to CMaxAncestorHops do
+  begin
+    for var S in Cur.Store.FindAllChildSymbols(Cur.Sym.Id) do
+      if not (S.Kind in [skParam, skLocalVar]) then pNames.Add(S.Name);
+    var P:= pIdx.ParentOf(Cur);
+    if P = '' then Exit(True);
+    pStop:= BareTypeName(P);
+    if not pIdx.Find(P, pIdx.IsLib(Cur), Next) then Break;
+    Cur:= Next;
+  end;
+end;
+
+{ The type (symbols.signature) of the field or property pName of pClass or an ancestor. }
+function MemberTypeInChain(const pIdx: TTypeIndex; const pClass: TStoredType; const pName: string;
+  out pType: string): Boolean;
+var
+  Next: TStoredType;
+begin
+  pType:= '';
+  var Cur:= pClass;
+  for var Hop:= 1 to CMaxAncestorHops do
+  begin
+    var M:= Cur.Store.FindChildSymbolByName(Cur.Sym.Id, pName);
+    if (M.Id > 0) and (M.Kind in [skField, skProperty]) then
+    begin
+      pType:= Trim(M.Signature);
+      Break;
+    end;
+    if not pIdx.Find(pIdx.ParentOf(Cur), pIdx.IsLib(Cur), Next) then Break;
+    Cur:= Next;
+  end;
+  Result:= pType <> '';
+end;
+
+// The code of a line without string literals and brace comments.
+function PlainCode(const pLine: string): string;
+begin
+  Result:= TRegEx.Replace(TRegEx.Replace(BareCode(pLine), '''[^'']*''', ''''''), '\{[^}]*\}', ' ');
+end;
+
+{ The last line of the statement the `with ... do` at line pLine governs: a begin..end
+  block, or one statement up to its `;` (an enclosing `end` also ends it). }
+function WithBodyEnd(const pLines: TArray<string>; pLine: Integer): Integer;
+var
+  Depth : Integer;
+  SeenDo: Boolean;
+begin
+  Depth := 0;
+  SeenDo:= False;
+  for var L:= pLine to Length(pLines) do
+  begin
+    var Code:= PlainCode(LineOf(pLines, L));
+    if not SeenDo then
+    begin
+      var M:= TRegEx.Match(Code, '\bdo\b', [roIgnoreCase]);
+      if not M.Success then Continue;
+      SeenDo:= True;
+      Code  := Code.Substring(M.Index + M.Length - 1);
+    end;
+    for var T in TRegEx.Matches(Code, '\b(begin|case|try|asm|end)\b|;', [roIgnoreCase]) do
+      if T.Value = ';' then
+      begin
+        if Depth = 0 then Exit(L);
+      end
+      else if SameText(T.Value, 'end') then
+      begin
+        Dec(Depth);
+        if Depth <= 0 then Exit(L);
+      end
+      else Inc(Depth);
+  end;
+  Result:= Length(pLines);
+end;
+
+// Where the getter bodies go in the class unit: after the `$R *.dfm` resource line when the
+// unit has one, else after its implementation uses clause, else after `implementation`.
+function BodyAnchor(const pLines: TArray<string>): Integer;
+begin
+  var Impl:= 0;
+  for var L:= 1 to Length(pLines) do
+    if SameText(BareCode(pLines[L - 1]), 'implementation') then
+    begin
+      Impl:= L;
+      Break;
+    end;
+  if Impl = 0 then Exit(0);
+  for var L:= Impl + 1 to Length(pLines) do
+    if TRegEx.IsMatch(pLines[L - 1], '^\s*\{\$R\s+\*\.(dfm|fmx)\}', [roIgnoreCase]) then Exit(L);
+  Result:= Impl;
+  var L:= Impl + 1;
+  while (L <= Length(pLines)) and (PlainCode(pLines[L - 1]) = '') do Inc(L);
+  if (L > Length(pLines)) or not TRegEx.IsMatch(PlainCode(pLines[L - 1]), '^uses\b', [roIgnoreCase]) then Exit;
+  while (L <= Length(pLines)) and not ContainsStr(PlainCode(pLines[L - 1]), ';') do Inc(L);
+  if L <= Length(pLines) then Result:= L;
+end;
+
+type
+  { One PlanMemberInterface run: the edge, the class, and the steps being built. }
+  TMemberPlan = class  // dl:ok high-response@c843, god-class@c843 -- implementation-private one-shot planner of one edge; the response set is its check steps plus the store and RTL calls they make
+  private
+    FSource  : IEdgeSurfaceSource;
+    FStore   : ISymbolStore;
+    FIdx     : TTypeIndex;
+    FSurface : TEdgeSurface;
+    FFromFid : Int64;
+    FClsFid  : Int64;
+    FLines   : TArray<string>;
+    FClsLines: TArray<string>;
+    FCls     : TSymbol;
+    FIface   : string;
+    FMembers : TList<TSymbol>;
+    FGetters : TList<string>;
+    FReads   : TList<string>;  // per member: what its getter returns
+    FEdits   : TList<TRecipeEdit>;
+    FUses    : TList<string>;  // consumer implementation uses to add
+    FLeafUses: TList<string>;
+    FWithLines: TList<Integer>;
+    FCastUsed: Boolean;
+    FCastAnc : string;
+    FRefusal : TRecipeRefusal;
+    function Refuse(const pKind, pSymbol: string; pFid: Int64; pLine: Integer; const pReason: string): Boolean;
+    function Stored(const pSym: TSymbol): TStoredType;
+    function RefRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
+    function CheckShape: Boolean;
+    function CheckMembers: Boolean;
+    function CheckClass: Boolean;
+    function ConsumerSees(const pUnit: string): Boolean;
+    function ReceiverType(const pX: string; pEnclosing: Int64; out pType: string): Boolean;
+    function RewriteLine(pLine: Integer; pEnclosing: Int64; out pText: string): Boolean;
+    function RewriteConsumer: Boolean;
+    function CheckCastUnit: Boolean;
+    function CheckWithBodies: Boolean;
+    function LibUnitOf(const pIdent: string): string;
+    function AddLeafUse(const pM: TSymbol; const pTypeName: string): Boolean;
+    function CollectLeafUses: Boolean;
+    procedure AddEdit(pFid: Int64; pLine: Integer; pReplace: Boolean; const pLines: TArray<string>);
+    procedure BuildClassEdits;
+    function IfaceDecl(const pLeafUnit: string): TArray<string>;
+  public
+    constructor Create(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore; const pSurface: TEdgeSurface);
+    destructor Destroy; override;
+    function Run(const pLeafUnit: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
+  end;
+
+constructor TMemberPlan.Create(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
+  const pSurface: TEdgeSurface);
+begin
+  inherited Create;
+  FSource     := pSource;
+  FStore      := pSource.Store;
+  FIdx.Project:= FStore;
+  FIdx.Lib    := pLibrary;
+  FSurface    := pSurface;
+  FFromFid    := pSource.FidOfStem(pSurface.FromStem);
+  FClsFid     := pSource.FidOfStem(pSurface.ToStem);
+  FLines      := pSource.FileLines(FFromFid);
+  FClsLines   := pSource.FileLines(FClsFid);
+  FMembers    := TList<TSymbol>.Create;
+  FGetters    := TList<string>.Create;
+  FReads      := TList<string>.Create;
+  FEdits      := TList<TRecipeEdit>.Create;
+  FUses       := TList<string>.Create;
+  FLeafUses   := TList<string>.Create;
+  FWithLines  := TList<Integer>.Create;
+end;
+
+destructor TMemberPlan.Destroy;
+begin
+  FWithLines.Free;
+  FLeafUses.Free;
+  FUses.Free;
+  FEdits.Free;
+  FReads.Free;
+  FGetters.Free;
+  FMembers.Free;
+  inherited Destroy;
+end;
+
+function TMemberPlan.Refuse(const pKind, pSymbol: string; pFid: Int64; pLine: Integer; const pReason: string): Boolean;
+begin
+  FRefusal:= MakeRefusal(pKind, pSymbol, pFid, pLine, pReason);
+  Result  := False;
+end;
+
+function TMemberPlan.Stored(const pSym: TSymbol): TStoredType;
+begin
+  Result.Sym  := pSym;
+  Result.Store:= FStore;
+end;
+
+{ Whether one ref of the edge has a shape the interface cannot carry: its kind and what it does. }
+function TMemberPlan.RefRefusal(const pR: TEdgeRef; out pKind, pWhat: string): Boolean;
+begin
+  pKind:= '';
+  pWhat:= '';
+  var S:= if pR.SymbolId > 0 then FStore.GetSymbolById(pR.SymbolId) else Default(TSymbol);
+  case pR.Kind of
+    erTypeIs, erTypeAs, erMemberRead: Exit(False);
+    erMemberWrite:
+      begin
+        pKind:= 'member-write';
+        pWhat:= Format('writes `%s`; the interface carries reads only', [pR.Name]);
+      end;
+    erClassReceiver:
+      if SameText(pR.Name, 'Create') or (FStore.FindChildSymbolByName(pR.SymbolId, pR.Name).Kind = skConstructor) then
+      begin
+        pKind:= 'construction';
+        pWhat:= Format('constructs `%s`; an interface cannot create the object', [S.Name]);
+      end
+      else
+      begin
+        pKind:= 'class-method';
+        pWhat:= Format('calls `%s` through the class `%s`; the interface carries field and property reads only',
+          [pR.Name, S.Name]);
+      end;
+    erTypeDecl:
+      begin
+        pKind:= 'type-decl';
+        pWhat:= Format('declares something of type `%s`, which would still need its unit', [pR.Name]);
+      end;
+    erTypeCast:
+      begin
+        pKind:= 'type-cast';
+        pWhat:= Format('casts to `%s`, which would still need its unit', [pR.Name]);
+      end;
+    erCall:
+      if (S.Kind = skClass) and SameText(pR.Name, S.Name) then
+      begin
+        pKind:= 'type-cast';
+        pWhat:= Format('casts to `%s`, which would still need its unit', [pR.Name]);
+      end
+      else if (S.Kind = skClass) or ((S.ParentId > 0) and (FStore.GetSymbolById(S.ParentId).Kind in [skClass, skRecord])) then
+      begin
+        pKind:= 'class-method';
+        pWhat:= Format('calls the method `%s`; the interface carries field and property reads only', [pR.Name]);
+      end
+      else
+      begin
+        pKind:= 'other-ref';
+        pWhat:= Format('calls the routine `%s`, which no interface of a class carries', [pR.Name]);
+      end;
+  else
+    if S.Kind = skClass then
+    begin
+      pKind:= 'class-ref';
+      pWhat:= Format('passes the class `%s` as a value', [S.Name]);
+    end
+    else
+    begin
+      pKind:= 'other-ref';
+      pWhat:= Format('uses `%s`, which is no member of a class', [pR.Name]);
+    end;
+  end;
+  Result:= True;
+end;
+
+{ Every ref is an `is` / `as` operand or a member read, on one class; no `B.X` in A. }
+function TMemberPlan.CheckShape: Boolean;
+var
+  Kind, What, BestKind, BestWhat, Member: string;
+  Best: TEdgeRef;
+begin
+  Best:= Default(TEdgeRef);
+  for var R in FSurface.Refs do
+    if (FCls.Id = 0) and (R.Kind in [erTypeIs, erTypeAs]) and (R.SymbolId > 0) then FCls:= FStore.GetSymbolById(R.SymbolId);
+  { the first offending line; on one line, what is done through the class (a call, a
+    construction) names it rather than the plain read of the class name it comes with }
+  for var R in FSurface.Refs do
+  begin
+    if not RefRefusal(R, Kind, What) then Continue;
+    var Earlier := (Best.Line = 0) or (R.Line < Best.Line);
+    var Stronger:= (R.Line = Best.Line) and (Best.Kind = erOther) and (R.Kind <> erOther);
+    if Earlier or Stronger then
+    begin
+      Best    := R;
+      BestKind:= Kind;
+      BestWhat:= What;
+    end;
+  end;
+  if Best.Line > 0 then
+    Exit(Refuse(BestKind, Best.Name, FFromFid, Best.Line, Format('line %d %s (`%s`)', [Best.Line, BestWhat,
+      Best.LineText])));
+  if Length(FSurface.ClassNames) <> 1 then
+    Exit(Refuse('multiple-classes', string.Join(', ', FSurface.ClassNames), FFromFid, 0,
+      Format('the edge names %d classes (%s); one interface hands over the members of one class',
+      [Length(FSurface.ClassNames), string.Join(', ', FSurface.ClassNames)])));
+  if (FCls.Id = 0) or (FCls.Kind <> skClass) or (FCls.FileId <> FClsFid) then
+    Exit(Refuse('other-ref', FSurface.ClassNames[0], FFromFid, 0, Format('no `is` / `as` operand of the edge ' +
+      'binds to the class `%s` of `%s`', [FSurface.ClassNames[0], FSurface.ToStem])));
+  var Q:= UnitQualifiedLine(FSource, FLines, UnitOfFile(FStore.GetFilePath(FClsFid)), Member);
+  if Q > 0 then
+    Exit(Refuse('qualified-ref', Member, FFromFid, Q, Format('line %d names `%s` qualified by its unit (`%s`); ' +
+      'that use keeps needing the uses entry the cut removes', [Q, Member, Trim(LineOf(FLines, Q))])));
+  Result:= True;
+end;
+
+{ Each member read is a field or a non-indexed property of the class itself, and the class
+  has no `Get<Member>` yet. Members are kept in declaration order. }
+function TMemberPlan.CheckMembers: Boolean;
+var
+  Ids: TList<Int64>;
+begin
+  Ids:= TList<Int64>.Create;
+  try
+    for var R in FSurface.Refs do
+      if (R.Kind = erMemberRead) and not Ids.Contains(R.SymbolId) then
+      begin
+        Ids.Add(R.SymbolId);
+        var M:= FStore.GetSymbolById(R.SymbolId);
+        if M.Kind in [skMethod, skFunction, skProcedure] then
+          Exit(Refuse('class-method', M.Name, FFromFid, R.Line, Format('line %d calls the method `%s` of `%s` ' +
+            '(`%s`); the interface carries field and property reads only', [R.Line, M.Name, FCls.Name, R.LineText])));
+        if M.ParentId <> FCls.Id then
+          Exit(Refuse('member-unsupported', M.Name, FFromFid, R.Line, Format('line %d reads `%s`, which is not ' +
+            'declared in `%s` itself', [R.Line, M.Name, FCls.Name])));
+        var Sig:= Trim(M.Signature);
+        { an indexed property keeps only its element type in symbols.signature: read the declaration }
+        var Indexed:= (M.Kind = skProperty) and TRegEx.IsMatch(BareCode(LineOf(FClsLines, M.StartLine)),
+          '\bproperty\s+' + TRegEx.Escape(M.Name) + '\s*\[', [roIgnoreCase]);
+        if not (M.Kind in [skField, skProperty]) or Indexed or (Sig = '') or
+          (Sig.IndexOfAny(['[', ']', ':', '(', ')', ';']) >= 0) then
+          Exit(Refuse('member-unsupported', M.Name, FFromFid, R.Line, Format('`%s.%s` is not a field or a ' +
+            'non-indexed property with a stored type', [FCls.Name, M.Name])));
+        var Dup:= FStore.FindChildSymbolByName(FCls.Id, 'Get' + M.Name);
+        if Dup.Id > 0 then
+          Exit(Refuse('duplicate-identifier', Dup.Name, FClsFid, Dup.StartLine, Format('`%s` already declares ' +
+            '`%s` (line %d), the getter the interface needs', [FCls.Name, Dup.Name, Dup.StartLine])));
+        FMembers.Add(M);
+      end;
+  finally
+    Ids.Free;
+  end;
+  FMembers.Sort(TComparer<TSymbol>.Construct(
+    function(const pLeft, pRight: TSymbol): Integer
+    begin
+      Result:= pLeft.StartLine - pRight.StartLine;
+    end));
+  for var M in FMembers do
+  begin
+    FGetters.Add('Get' + M.Name);
+    var Read:= M.Name;
+    if M.Kind = skProperty then
+    begin
+      var Parts: TArray<string>:= nil;
+      for var L:= M.StartLine to Max(M.StartLine, M.EndLine) do Parts:= Parts + [BareCode(LineOf(FClsLines, L))];
+      var RM:= TRegEx.Match(string.Join(' ', Parts), '\bread\s+([A-Za-z_][\w.]*)', [roIgnoreCase]);
+      if RM.Success then Read:= RM.Groups[1].Value;
+    end;
+    FReads.Add(Read);
+  end;
+  Result:= True;
+end;
+
+{ The class: heritage on its declaration line, an `end;` line, an IInterface ancestor and
+  no reference counting on the way. }
+function TMemberPlan.CheckClass: Boolean;
+begin
+  if not SameText(FCls.Section, 'interface') or
+    not TRegEx.IsMatch(LineOf(FClsLines, FCls.StartLine), '=\s*class\b[^(;]*\([^)]*\)', [roIgnoreCase]) then
+    Exit(Refuse('manual-edit', FCls.Name, FClsFid, FCls.StartLine, Format('the heritage of `%s` is not on its ' +
+      'declaration line %d in the interface section', [FCls.Name, FCls.StartLine])));
+  if (FCls.EndLine <= FCls.StartLine) or not TRegEx.IsMatch(BareCode(LineOf(FClsLines, FCls.EndLine)), '^end\b',
+    [roIgnoreCase]) then
+    Exit(Refuse('manual-edit', FCls.Name, FClsFid, FCls.EndLine, Format('the declaration of `%s` does not end ' +
+      'with an `end;` line', [FCls.Name])));
+  if not AncestorImplementingIInterface(FStore, FIdx.Lib, FCls, FCastAnc) then
+    Exit(Refuse('no-iinterface', FCls.Name, FClsFid, FCls.StartLine, Format('no ancestor of `%s` implements ' +
+      'IInterface (or the ancestry leaves the indexes given): it cannot implement an interface', [FCls.Name])));
+  var Why:= RefCountWhy(FIdx, Stored(FCls));
+  if Why <> '' then Exit(Refuse('ref-counted', FCls.Name, FClsFid, FCls.StartLine, Why));
+  Result:= True;
+end;
+
+function TMemberPlan.ConsumerSees(const pUnit: string): Boolean;
+begin
+  for var U in FStore.GetUnitUsesForFile(FFromFid) do
+    if SameText(U.UnitName, pUnit) or EndsText('.' + U.UnitName, pUnit) then Exit(True);
+  Result:= FUses.Contains(pUnit);
+end;
+
+{ The static type of the receiver pX: Self, a parameter or local of the enclosing routine,
+  else a field / property of the enclosing class or an ancestor. }
+function TMemberPlan.ReceiverType(const pX: string; pEnclosing: Int64; out pType: string): Boolean;
+begin
+  pType:= '';
+  var Cur:= if pEnclosing > 0 then FStore.GetSymbolById(pEnclosing) else Default(TSymbol);
+  var IsSelf:= SameText(pX, 'Self');
+  while (Cur.Id > 0) and not (Cur.Kind in [skClass, skRecord, skUnit, skProgram, skPackage]) do
+  begin
+    var L:= FStore.FindChildSymbolByName(Cur.Id, pX);
+    if not IsSelf and (L.Id > 0) and (L.Kind in [skParam, skLocalVar]) then
+    begin
+      pType:= Trim(L.Signature);
+      Exit(TRegEx.IsMatch(pType, '^[A-Za-z_][\w.]*$'));
+    end;
+    Cur:= if Cur.ParentId > 0 then FStore.GetSymbolById(Cur.ParentId) else Default(TSymbol);
+  end;
+  if (Cur.Id = 0) or (Cur.Kind <> skClass) then Exit(False);
+  if IsSelf then
+  begin
+    pType:= Cur.Name;
+    Exit(True);
+  end;
+  Result:= MemberTypeInChain(FIdx, Stored(Cur), pX, pType) and TRegEx.IsMatch(pType, '^[A-Za-z_][\w.]*$');
+end;
+
+{ One consumer line with every `X is TClass` / `X as TClass` rewritten to the interface. }
+function TMemberPlan.RewriteLine(pLine: Integer; pEnclosing: Int64; out pText: string): Boolean;
+var
+  Ty: string;
+begin
+  var C:= TRegEx.Escape(FCls.Name);
+  pText:= LineOf(FLines, pLine);
+  pText:= TRegEx.Replace(pText, '\(\s*([A-Za-z_][\w.]*)\s+is\s+' + C + '\s*\)', 'Supports($1, ' + FIface + ')', [roIgnoreCase]);
+  pText:= TRegEx.Replace(pText, '(?<![\w.)\]])([A-Za-z_][\w.]*)\s+is\s+' + C + '\b', 'Supports($1, ' + FIface + ')',
+    [roIgnoreCase]);
+  if ContainsStr(pText, 'Supports(') and not ConsumerSees(CSysUtilsUnit) then FUses.Add(CSysUtilsUnit);
+  while True do
+  begin
+    var M:= TRegEx.Match(pText, '(?<![\w.)\]])([A-Za-z_]\w*)\s+as\s+' + C + '\b', [roIgnoreCase]);
+    if not M.Success then Break;
+    var X:= M.Groups[1].Value;
+    if not ReceiverType(X, pEnclosing, Ty) then
+      Exit(Refuse('receiver-unknown', X, FFromFid, pLine, Format('line %d: the static type of `%s` in `%s as %s` ' +
+        'is not that of Self, a parameter, a local, or a field or property of the class', [pLine, X, X, FCls.Name])));
+    var Repl:= X + ' as ' + FIface;
+    if not ImplementsIInterface(FIdx, Ty) then
+    begin
+      Repl     := Format('%s(%s) as %s', [FCastAnc, X, FIface]);
+      FCastUsed:= True;
+    end;
+    pText:= Copy(pText, 1, M.Index - 1) + Repl + Copy(pText, M.Index + M.Length, MaxInt);
+  end;
+  if TRegEx.IsMatch(PlainCode(pText), '\b' + C + '\b', [roIgnoreCase]) then
+    Exit(Refuse('receiver-unknown', FCls.Name, FFromFid, pLine, Format('line %d still names `%s` after the rewrite ' +
+      '(`%s`): an `is` / `as` operand that is not a plain name', [pLine, FCls.Name, Trim(pText)])));
+  Result:= True;
+end;
+
+function TMemberPlan.RewriteConsumer: Boolean;
+var
+  Done: TList<Integer>;
+  Text: string;
+begin
+  Done:= TList<Integer>.Create;
+  try
+    for var R in FSurface.Refs do
+    begin
+      if not (R.Kind in [erTypeIs, erTypeAs]) or Done.Contains(R.Line) then Continue;
+      Done.Add(R.Line);
+      if not RewriteLine(R.Line, R.EnclosingId, Text) then Exit(False);
+      AddEdit(FFromFid, R.Line, True, [Text]);
+      if TRegEx.IsMatch(PlainCode(LineOf(FLines, R.Line)), '\bwith\b.*\bas\s+' + TRegEx.Escape(FCls.Name) + '\b',
+        [roIgnoreCase]) then FWithLines.Add(R.Line);
+    end;
+  finally
+    Done.Free;
+  end;
+  Result:= CheckCastUnit;
+end;
+
+{ A cast ancestor must be visible in the consumer without the class unit. }
+function TMemberPlan.CheckCastUnit: Boolean;
+var
+  T       : TStoredType;
+  DeclUnit: string;
+begin
+  Result:= True;
+  if not FCastUsed then
+  begin
+    FCastAnc:= '';
+    Exit;
+  end;
+  if not FIdx.Find(FCastAnc, False, T) then
+    Exit(Refuse('cast-unseen', FCastAnc, FFromFid, 0, Format('no index given declares `%s`, the ancestor of ' +
+      '`%s` a receiver is cast through (pass --library-db)', [FCastAnc, FCls.Name])));
+  DeclUnit:= UnitOfFile(T.Store.GetFilePath(T.Sym.FileId));
+  if not FIdx.IsLib(T) then
+  begin
+    var Stem:= LowerCase(DeclUnit);
+    if Stem = FSurface.FromStem then Exit;
+    if (Stem = FSurface.ToStem) or (FSource.IsSccStem(Stem) and not ConsumerSees(DeclUnit)) then
+      Exit(Refuse('cast-unseen', FCastAnc, FFromFid, 0, Format('`%s`, the ancestor a receiver is cast through, ' +
+        'is declared in `%s`, a unit of this cycle', [FCastAnc, DeclUnit])));
+  end;
+  if not ConsumerSees(DeclUnit) then FUses.Add(DeclUnit);
+end;
+
+{ No name inside a `with X as TClass do` body may change its binding when the interface
+  replaces the class: a member of the class chain the interface does not carry, a getter
+  name, an IInterface method. }
+function TMemberPlan.CheckWithBodies: Boolean;
+var
+  Names: TStringList;
+  Stop : string;
+begin
+  Result:= True;
+  if FWithLines.Count = 0 then Exit;
+  Names:= TStringList.Create(dupIgnore, True, False);
+  try
+    if not ChainMembers(FIdx, Stored(FCls), Names, Stop) then
+      Exit(Refuse('ancestry-unknown', Stop, FClsFid, FCls.StartLine, Format('the ancestry of `%s` stops at ' +
+        '`%s`, which no index given declares: what a `with` body binds to it cannot be checked (pass --library-db)',
+        [FCls.Name, Stop])));
+    Names.AddStrings(FGetters.ToArray);
+    Names.AddStrings(CIInterfaceMethods);
+    for var M in FMembers do
+      if Names.IndexOf(M.Name) >= 0 then Names.Delete(Names.IndexOf(M.Name));
+    var Refs:= FStore.GetReferencesFromFile(FFromFid);
+    for var W in FWithLines do
+    begin
+      var DoAt:= TRegEx.Match(LineOf(FLines, W), '\bdo\b', [roIgnoreCase]);
+      var Last:= WithBodyEnd(FLines, W);
+      for var R in Refs do
+      begin
+        { a bare name of the body; the `with` expression itself (before `do`) is outside it }
+        var InBody:= (R.StartLine >= W) and (R.StartLine <= Last) and (R.ReceiverText = '');
+        var InHead:= (R.StartLine = W) and DoAt.Success and (R.StartCol < DoAt.Index);
+        if InBody and not InHead and not MatchText(R.Kind, ['type_use', 'member-access']) and
+          (Names.IndexOf(R.NameText) >= 0) then
+          Exit(Refuse('with-member', R.NameText, FFromFid, R.StartLine, Format('inside `with ... as %s do` ' +
+            '(line %d), `%s` at line %d names a member of `%s` or its ancestors that the interface does not ' +
+            'carry: after the rewrite it would bind to something else', [FCls.Name, W, R.NameText, R.StartLine,
+            FCls.Name])));
+      end;
+    end;
+  finally
+    Names.Free;
+  end;
+end;
+
+{ The uses entry of the class unit's interface section that a library type pIdent binds
+  to (the last that declares it); '' when none does. }
+function TMemberPlan.LibUnitOf(const pIdent: string): string;
+var
+  Units: TList<string>;
+begin
+  Result:= '';
+  if FIdx.Lib = nil then Exit;
+  Units:= TList<string>.Create;
+  try
+    for var S in FIdx.Lib.FindSymbolsByExactName(pIdent) do
+      if S.Kind in [skClass, skInterface, skRecord, skEnum, skTypeAlias] then
+        Units.Add(UnitOfFile(FIdx.Lib.GetFilePath(S.FileId)));
+    var Entries:= FStore.GetUnitUsesForFile(FClsFid);
+    for var I:= High(Entries) downto 0 do
+      if Entries[I].Section = uusInterface then
+        for var U in Units do
+          if SameText(U, Entries[I].UnitName) or EndsText('.' + Entries[I].UnitName, U) then
+            Exit(Entries[I].UnitName);
+  finally
+    Units.Free;
+  end;
+end;
+
+{ The leaf uses entry for one type name of a member's signature. }
+function TMemberPlan.AddLeafUse(const pM: TSymbol; const pTypeName: string): Boolean;
+var
+  Owner: TSymbol;
+  Stem : string;
+  Entry: string;
+begin
+  var Dot  := pTypeName.LastIndexOf('.');
+  var Ident:= pTypeName.Substring(Dot + 1);
+  if ContainsText(CNotTypeWords, ' ' + Ident + ' ') or ContainsText(CBuiltinTypes, ' ' + Ident + ' ') then Exit(True);
+  Stem:= '';
+  if Dot > 0 then Stem:= LowerCase(pTypeName.Substring(0, Dot))
+  else if not FSource.BindName(FClsFid, pM.StartLine, Ident, Owner, Stem) then Stem:= '';
+  if (Stem <> '') and FSource.IsSccStem(Stem) then
+    Exit(Refuse('leaf-uses-cycle', Ident, FClsFid, pM.StartLine, Format('`%s`, the type of `%s.%s`, is declared ' +
+      'in `%s`, a unit of this cycle: the leaf cannot use it', [Ident, FCls.Name, pM.Name, Stem])));
+  if Dot > 0 then Entry:= pTypeName.Substring(0, Dot)
+  else if Stem <> '' then Entry:= UnitOfFile(FStore.GetFilePath(FSource.FidOfStem(Stem)))
+  else Entry:= LibUnitOf(Ident);
+  if Entry = '' then
+    Exit(Refuse('type-unresolved', Ident, FClsFid, pM.StartLine, Format('no index given tells which unit ' +
+      'declares `%s`, the type of `%s.%s` (pass --library-db)', [Ident, FCls.Name, pM.Name])));
+  if not FLeafUses.Contains(Entry) then FLeafUses.Add(Entry);
+  Result:= True;
+end;
+
+function TMemberPlan.CollectLeafUses: Boolean;
+begin
+  for var M in FMembers do
+    for var T in TRegEx.Matches(M.Signature, '[A-Za-z_][A-Za-z0-9_.]*') do
+      if not AddLeafUse(M, T.Value) then Exit(False);
+  Result:= True;
+end;
+
+procedure TMemberPlan.AddEdit(pFid: Int64; pLine: Integer; pReplace: Boolean; const pLines: TArray<string>);
+var
+  E: TRecipeEdit;
+begin
+  E.Fid     := pFid;
+  E.Line    := pLine;
+  E.Replace := pReplace;
+  E.NewLines:= pLines;
+  FEdits.Add(E);
+end;
+
+{ The class unit: the interface appended to the heritage, the getter declarations before
+  the class's `end;`, the getter bodies at BodyAnchor. }
+procedure TMemberPlan.BuildClassEdits;
+var
+  Decls : TList<string>;
+  Bodies: TList<string>;
+begin
+  var Head:= LineOf(FClsLines, FCls.StartLine);
+  var M:= TRegEx.Match(Head, '(=\s*class\b[^(;]*\([^)]*)\)', [roIgnoreCase]);
+  AddEdit(FClsFid, FCls.StartLine, True, [Copy(Head, 1, M.Index - 1) + M.Groups[1].Value + ', ' + FIface + ')' +
+    Copy(Head, M.Index + M.Length, MaxInt)]);
+  var Prev:= LineOf(FClsLines, FCls.EndLine - 1);
+  var Indent:= if Trim(Prev) <> '' then Copy(Prev, 1, Length(Prev) - Length(TrimLeft(Prev)))
+    else Copy(Head, 1, Length(Head) - Length(TrimLeft(Head))) + '    ';
+  Decls := TList<string>.Create;
+  Bodies:= TList<string>.Create;
+  try
+    for var I:= 0 to FMembers.Count - 1 do
+    begin
+      var Ty:= Trim(FMembers[I].Signature);
+      Decls.Add(Format('%s/// <summary>%s: returns %s (cycles --plan, member hand-over).</summary>', [Indent, FIface,
+        FMembers[I].Name]));
+      Decls.Add(Format('%sfunction %s: %s;', [Indent, FGetters[I], Ty]));
+      Bodies.Add('');
+      Bodies.Add(Format('function %s.%s: %s;', [FCls.Name, FGetters[I], Ty]));
+      Bodies.Add('begin');
+      Bodies.Add(Format('  Result := %s;', [FReads[I]]));
+      Bodies.Add('end;');
+    end;
+    AddEdit(FClsFid, FCls.EndLine - 1, False, Decls.ToArray);
+    AddEdit(FClsFid, BodyAnchor(FClsLines), False, Bodies.ToArray);
+  finally
+    Bodies.Free;
+    Decls.Free;
+  end;
+end;
+
+function TMemberPlan.IfaceDecl(const pLeafUnit: string): TArray<string>;
+var
+  L: TList<string>;
+begin
+  L:= TList<string>.Create;
+  try
+    L.Add(Format('  /// <summary>The surface of <c>%s</c> that <c>%s</c> uses.</summary>', [FCls.Name,
+      UnitOfFile(FStore.GetFilePath(FFromFid))]));
+    L.Add(Format('  %s = interface', [FIface]));
+    L.Add(Format('    [''%s'']', [SurfaceGuid(pLeafUnit + '.' + FIface)]));
+    for var I:= 0 to FMembers.Count - 1 do
+      L.Add(Format('    function %s: %s;', [FGetters[I], Trim(FMembers[I].Signature)]));
+    for var I:= 0 to FMembers.Count - 1 do
+      L.Add(Format('    property %s: %s read %s;', [FMembers[I].Name, Trim(FMembers[I].Signature), FGetters[I]]));
+    L.Add('  end;');
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+function TMemberPlan.Run(const pLeafUnit: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
+begin
+  Result  := Default(TRecipeSteps);
+  FRefusal:= Default(TRecipeRefusal);
+  var Ok:= (FFromFid > 0) and (FClsFid > 0) and CheckShape;
+  if Ok then
+  begin
+    FIface:= 'I' + (if (Length(FCls.Name) > 1) and (UpCase(FCls.Name[1]) = 'T') then Copy(FCls.Name, 2, MaxInt)
+      else FCls.Name) + 'Surface';
+    Ok:= CheckMembers and CheckClass and RewriteConsumer and CheckWithBodies and CollectLeafUses;
+  end;
+  pRefusal:= FRefusal;
+  if not Ok then
+  begin
+    if pRefusal.Kind = '' then pRefusal:= MakeRefusal('manual-edit', '', FFromFid, 0, 'the edge cannot be read');
+    Exit;
+  end;
+  BuildClassEdits;
+  Result.Recipe       := crMemberInterface;
+  Result.DeclStem     := FSurface.ToStem;
+  Result.ConsumerFid  := FFromFid;
+  Result.ClassTypeName:= FCls.Name;
+  Result.ClassId      := FCls.Id;
+  Result.IfaceName    := FIface;
+  Result.IfaceGuid    := SurfaceGuid(pLeafUnit + '.' + FIface);
+  Result.IfaceDecl    := IfaceDecl(pLeafUnit);
+  Result.LeafUses     := FLeafUses.ToArray;
+  Result.ConsumerUses := FUses.ToArray;
+  Result.CastAncestor := FCastAnc;
+  Result.Edits        := FEdits.ToArray;
+  for var M in FMembers do Result.MemberSigs:= Result.MemberSigs + [M.Name + ': ' + Trim(M.Signature)];
+end;
+
+function PlanMemberInterface(const pSource: IEdgeSurfaceSource; const pLibrary: ISymbolStore;
+  const pSurface: TEdgeSurface; const pLeafUnit: string; out pRefusal: TRecipeRefusal): TRecipeSteps;
+var
+  P: TMemberPlan;
+begin
+  P:= TMemberPlan.Create(pSource, pLibrary, pSurface);
+  try
+    Result:= P.Run(pLeafUnit, pRefusal);
+  finally
+    P.Free;
   end;
 end;
 

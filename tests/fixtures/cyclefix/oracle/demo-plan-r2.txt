@@ -1,0 +1,142 @@
+# E18 Task 6 oracle: Steps 3 and 4 of `cycles --plan` for circular-demo cycle 2 (recipe R2,
+# member hand-over through an extracted interface). Compared by tests\autotest\run_cyclefix_r2.ps1
+# on its code lines only (headings, E<n>. lines, fenced text; blank, Pascal comment, prose and
+# these `# ` lines ignored); @@ROOT@@ = the demo copy; the GUID line by pattern. Captured from the
+# engine and reviewed against the hand-written C:\TEMP\claude\e18-fable\demo-plan-r2-proper.txt,
+# with DemoGagePort.Contracts renamed DemoGagePort.Untangle. Differences, all deliberate: the GUID is
+# MD5(<leaf>.<interface>) (pinnable); the consumer's uses entry is edited by the Task 3a lexer, which
+# keeps its trailing comment; the .dpr gains the leaf by appending to its last uses entry (as R1).
+
+### Step 3: create the new units
+Each new unit may use only RTL / library units and other new `*.Untangle` units -- never a unit of this cycle (`DemoGagePort`, `DemoUIConnect`). Create each file with EXACTLY this text:
+
+#### `DemoGagePort.Untangle` -> `@@ROOT@@\DemoGagePort.Untangle.pas`
+```pascal
+unit DemoGagePort.Untangle;
+
+// Created by `drag-lint cycles --plan`: the interface TDemoGagePort (DemoGagePort) implements, extracted
+// to break a circular unit dependency. This unit may use only units OUTSIDE
+// that cycle -- never DemoGagePort, DemoUIConnect.
+
+interface
+
+uses
+  System.Classes;
+
+type
+  /// <summary>The surface of <c>TDemoGagePort</c> that <c>DemoUIConnect</c> uses.</summary>
+  IDemoGagePortSurface = interface
+    ['{60014EC1-4FF2-B804-877E-DBE382355481}']
+    function GetLog: TStrings;
+    function GetLastGage: Integer;
+    property Log: TStrings read GetLog;
+    property LastGage: Integer read GetLastGage;
+  end;
+
+implementation
+
+end.
+```
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoGagePort.Untangle in 'DemoGagePort.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="DemoGagePort.Untangle.pas"/>`.
+
+### Step 4: edit the existing files
+Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
+
+#### `DemoUIConnect.pas`  (`@@ROOT@@\DemoUIConnect.pas`)
+E1. Replace line 57. Current text:
+```pascal
+  with Sender as TDemoGagePort do
+```
+New text:
+```pascal
+  with TComponent(Sender) as IDemoGagePortSurface do
+```
+E2. Replace line 55. Current text:
+```pascal
+  if not (Sender is TDemoGagePort) then
+```
+New text:
+```pascal
+  if not Supports(Sender, IDemoGagePortSurface) then
+```
+E3. Replace line 49. Current text:
+```pascal
+  with Owner as TDemoGagePort do
+```
+New text:
+```pascal
+  with Owner as IDemoGagePortSurface do
+```
+E4. Replace line 47. Current text:
+```pascal
+  if not (Owner is TDemoGagePort) then
+```
+New text:
+```pascal
+  if not Supports(Owner, IDemoGagePortSurface) then
+```
+E5. Replace line 43. Current text:
+```pascal
+  DemoGagePort; // <-- the edge to cut: `is`/`as` + two member reads
+```
+New text:
+```pascal
+  DemoGagePort.Untangle; // <-- the edge to cut: `is`/`as` + two member reads
+```
+
+#### `DemoGagePort.pas`  (`@@ROOT@@\DemoGagePort.pas`)
+E1. After line 56 (`DemoUIConnect; // constructs TDemoUIConnect, writes GDemoUIConnect: not a mechanical cut`), insert:
+```pascal
+
+function TDemoGagePort.GetLog: TStrings;
+begin
+  Result := FLog;
+end;
+
+function TDemoGagePort.GetLastGage: Integer;
+begin
+  Result := FLastGage;
+end;
+```
+E2. After line 50 (`property LastGage: Integer read FLastGage;`), insert:
+```pascal
+    /// <summary>IDemoGagePortSurface: returns Log (cycles --plan, member hand-over).</summary>
+    function GetLog: TStrings;
+    /// <summary>IDemoGagePortSurface: returns LastGage (cycles --plan, member hand-over).</summary>
+    function GetLastGage: Integer;
+```
+E3. Replace line 33. Current text:
+```pascal
+  TDemoGagePort = class(TComponent)
+```
+New text:
+```pascal
+  TDemoGagePort = class(TComponent, IDemoGagePortSurface)
+```
+E4. Replace line 28. Current text:
+```pascal
+  System.Classes;
+```
+New text:
+```pascal
+  System.Classes,
+  DemoGagePort.Untangle;
+```
+
+#### `CircularDemo.dpr`  (`@@ROOT@@\CircularDemo.dpr`)
+E1. Replace line 39. Current text:
+```pascal
+  DemoUIConnect in 'DemoUIConnect.pas';
+```
+New text:
+```pascal
+  DemoUIConnect in 'DemoUIConnect.pas',
+  DemoGagePort.Untangle in 'DemoGagePort.Untangle.pas';
+```
+
+#### `CircularDemo.dproj`  (`@@ROOT@@\CircularDemo.dproj`)
+E1. After line 87 (`<DCCReference Include="DemoGagePort.pas"/>`), insert:
+```xml
+        <DCCReference Include="DemoGagePort.Untangle.pas"/>
+```
+

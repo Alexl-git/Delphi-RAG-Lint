@@ -24,12 +24,17 @@
   POSITIVE CONTROL: each marker's block must be non-empty and the doc must
   contain at least one marker -- a doc with the markers stripped would
   otherwise pass by comparing nothing.
+
+  PLATFORM LIBRARY (E18 T6): `cycles --plan` reads class ancestry from it (recipe R2), so every
+  `cycles` run gets --library-db on a COPY of -LibraryDb in the scratch dir -- never the real
+  one. Without -LibraryDb on disk the circular-demo examples are SKIPPED.
 #>
 [CmdletBinding()]
 param(
-  [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
-  [string]$WorkDir = "$env:TEMP\drag-lint-cycle-examples-$PID",
-  [switch]$Update
+  [string]$Exe       = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [string]$WorkDir   = "$env:TEMP\drag-lint-cycle-examples-$PID",
+  [switch]$Update,
+  [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -45,6 +50,12 @@ $Exe  = (Resolve-Path $Exe).Path
 $Repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (Test-Path $WorkDir) { Remove-Item -Recurse -Force $WorkDir }
 New-Item -ItemType Directory $WorkDir | Out-Null
+$LibArgs = @()
+if (Test-Path $LibraryDb) {
+  $LibCopy = Join-Path $WorkDir 'library-copy.sqlite'
+  Copy-Item $LibraryDb $LibCopy
+  $LibArgs = @('--library-db', $LibCopy)
+}
 
 # One entry per example: where the project lives (repo-relative), the doc that
 # carries its verbatim blocks, the directory the doc's commands run from, and
@@ -87,6 +98,10 @@ function Split-Args([string]$Text) {
 }
 
 foreach ($ex in $Examples) {
+  if (($LibArgs.Count -eq 0) -and ($ex.Project -eq 'circular-demo')) {
+    Write-Host ("== {0}: SKIPPED (no platform library DB at {1})" -f $ex.Name, $LibraryDb) -ForegroundColor Yellow
+    continue
+  }
   Write-Host ''
   Write-Host ("== {0} ({1})" -f $ex.Name, $ex.Doc) -ForegroundColor Cyan
   $docPath = Join-Path $Repo $ex.Doc
@@ -130,7 +145,7 @@ foreach ($ex in $Examples) {
         $fence = $Matches[1]
         $close = $open + 1
         while ($close -lt $lines.Count -and $lines[$close] -ne $fence) { $close++ }
-        $cycArgs = @('cycles', '--db', $ex.Db) + (Split-Args $argText)
+        $cycArgs = @('cycles', '--db', $ex.Db) + (Split-Args $argText) + $LibArgs
         $raw = & $Exe @cycArgs 2>$null
         $freshSet = New-Object 'System.Collections.Generic.HashSet[string]'
         foreach ($f in @($raw | ForEach-Object { ("$_").Replace($runDir + '\', '').Replace($WorkDir + '\', '').TrimEnd() })) { [void]$freshSet.Add($f) }
@@ -166,7 +181,7 @@ foreach ($ex in $Examples) {
         $current = @()
         for ($k = $open + 1; $k -lt $close; $k++) { $current += $lines[$k] }
 
-        $cycArgs = @('cycles', '--db', $ex.Db) + (Split-Args $argText)
+        $cycArgs = @('cycles', '--db', $ex.Db) + (Split-Args $argText) + $LibArgs
         $raw = & $Exe @cycArgs 2>$null
         $exit = $LASTEXITCODE
         # Paths relative to the directory the doc's commands run FROM (so the

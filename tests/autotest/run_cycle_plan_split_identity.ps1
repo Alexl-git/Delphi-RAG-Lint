@@ -31,9 +31,14 @@
   headers (Step 3), `E<n>.` lines per file heading (Step 4; the .dpr and .dproj
   headings for DprEdits / DprojEdits), and the group lines of the expected
   `cycles` output (Predicted = groups - (cycles - 1)). Demo verdicts are pinned:
-  Cycle 1 refuses with `base-class`, Cycle 2 with `manual-edit`; Cycle 3 is mechanical since E18 T5 (recipe R1, routine-call inversion). Its own
+  Cycle 1 refuses with `base-class`; Cycle 2 is mechanical since E18 T6 (recipe R2, member
+  hand-over through an extracted interface); Cycle 3 is mechanical since E18 T5 (recipe R1, routine-call inversion). Its own
   positive control: one dumped count is changed in memory and the same compare
   must then report a mismatch.
+
+  PLATFORM LIBRARY (E18 T6): R2 reads class ancestry from it, so every plan runs with
+  --library-db on a COPY of -LibraryDb in the scratch dir (deleted at the end) -- never on the
+  real one. Without -LibraryDb on disk the demo section is SKIPPED (its oracle needs the library).
 #>
 [CmdletBinding()]
 param(
@@ -41,7 +46,8 @@ param(
   [string]$WorkDir    = "$env:TEMP\drag-lint-cycle-split-$PID",
   [string]$SelfDb     = '',
   [string]$SelfOracle = '',
-  [string]$SelfRoot   = ''
+  [string]$SelfRoot   = '',
+  [string]$LibraryDb  = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
@@ -66,7 +72,7 @@ function Get-PlanText([string]$Db, [string]$RunDir) {
   $env:DRAGLINT_TEST_DUMP_PLAN = $dumpFile
   try {
     $p = Start-Process -FilePath $Exe -WorkingDirectory $RunDir -NoNewWindow -Wait -PassThru `
-      -ArgumentList @('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', 'text') `
+      -ArgumentList (@('cycles', '--db', ('"' + $Db + '"'), '--edges', '--causes', '--plan', '--format', 'text') + $LibArgs) `
       -RedirectStandardOutput $outFile -RedirectStandardError (Join-Path $WorkDir 'plan-stderr.txt')
   } finally {
     $env:DRAGLINT_TEST_DUMP_PLAN = $null
@@ -157,13 +163,22 @@ function Compare-Text([string]$Name, [string]$Actual, [string]$Expected) {
 
 if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
 New-Item -ItemType Directory $WorkDir | Out-Null
+$LibCopy = Join-Path $WorkDir 'library-copy.sqlite'
+$LibArgs = @()
+if (Test-Path $LibraryDb) {
+  Copy-Item $LibraryDb $LibCopy
+  $LibArgs = @('--library-db', ('"' + $LibCopy + '"'))
+}
+try {
 
 # --- demo ---------------------------------------------------------------------
 Write-Host ''
 Write-Host '== circular-demo' -ForegroundColor Cyan
 $oraclePath = Join-Path $Repo 'tests\fixtures\cyclefix\oracle\demo-plan.txt'
 Check 'demo oracle exists' (Test-Path $oraclePath) $oraclePath
-if (Test-Path $oraclePath) {
+if ($LibArgs.Count -eq 0) {
+  Write-Host "== circular-demo: SKIPPED (no platform library DB at $LibraryDb)" -ForegroundColor Yellow
+} elseif (Test-Path $oraclePath) {
   $root = Join-Path $WorkDir 'circular-demo'
   New-Item -ItemType Directory $root | Out-Null
   Get-ChildItem (Join-Path $Repo 'circular-demo') -File |
@@ -193,7 +208,8 @@ if (Test-Path $oraclePath) {
   $byCycle = @{}
   foreach ($l in $run.Dump) { $d = ConvertFrom-DumpLine $l; $byCycle[[int]$d['cycle']] = $d }
   Check 'demo: cycle 1 is refused with base-class' (($byCycle[1].verdict -eq 'refused') -and (($byCycle[1].refusals -split ',') -contains 'base-class')) "[$($byCycle[1].verdict) / $($byCycle[1].refusals)]"
-  Check "demo: cycle 2 is refused with manual-edit" (($byCycle[2].verdict -eq 'refused') -and (($byCycle[2].refusals -split ',') -contains 'manual-edit')) "[$($byCycle[2].verdict) / $($byCycle[2].refusals)]"
+  # E18 T6: cycle 2 is cut by R2 (member hand-over through an extracted interface) -- mechanical.
+  Check "demo: cycle 2 is mechanical (R2)" (($byCycle[2].verdict -eq 'mechanical') -and ($byCycle[2].refusals -eq '')) "[$($byCycle[2].verdict) / $($byCycle[2].refusals)]"
   # E18 T5: cycle 3 is cut by R1 (routine-call inversion) -- mechanical, no refusal.
   Check "demo: cycle 3 is mechanical (R1)" (($byCycle[3].verdict -eq 'mechanical') -and ($byCycle[3].refusals -eq '')) "[$($byCycle[3].verdict) / $($byCycle[3].refusals)]"
   Check 'demo: cycle 1 plan is non-trivial (items, new units, edits)' (([int]$byCycle[1].items -gt 0) -and ($byCycle[1].newunits -ne '') -and ($byCycle[1].edits -ne '')) $run.Dump[0]
@@ -222,6 +238,9 @@ if ($SelfDb -ne '' -and $SelfOracle -ne '' -and (Test-Path $SelfDb) -and (Test-P
   Check 'self: plan arrays equal the rendered playbook' ($bad.Count -eq 0) ($bad -join '; ')
 } else {
   Write-Host '== self: SKIPPED (pass -SelfDb and -SelfOracle)' -ForegroundColor Yellow
+}
+} finally {
+  if (Test-Path -LiteralPath $LibCopy) { [IO.File]::Delete($LibCopy) }
 }
 
 Write-Host ''

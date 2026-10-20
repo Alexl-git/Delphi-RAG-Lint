@@ -67,6 +67,9 @@ type
 /// more than one unit), as lower-case unit stems.</param>
 /// <param name="pGraph">The uses graph the groups were computed from.</param>
 /// <param name="pOut">Receives the markdown; lines are appended.</param>
+/// <param name="pLibStore">The platform library index, opened read-only by the caller, or nil.
+/// Recipe R2 reads class ancestry, inherited members and the units of library types from it;
+/// without it R2 refuses wherever the answer needs the library.</param>
 /// <remarks>
 /// <para>An INTERFACE-coupled group gets Part A: every symbol that one member's
 /// interface takes from another moves into a new leaf unit
@@ -74,14 +77,18 @@ type
 /// leaf for the group, DRagLint.Report.UntangleCatalog) -- a class whose method bodies use the cycle is
 /// NOT moved; a base class carrying the members its consumers use is
 /// extracted instead. An implementation-only group gets the cheapest edge
-/// that can be cut the same way, or a statement that none can.</para>
+/// that can be cut the same way; else an edge that is one routine call (R1,
+/// routine-call inversion); else an edge that is `is` / `as` plus member reads
+/// of one class (R2, member hand-over through an extracted interface); or a
+/// statement that none can.</para>
 /// <para>Line numbers are those of the files as indexed. Each file's edits are
 /// listed bottom-up so they can be applied in order without renumbering.</para>
 /// <para>The expected `cycles` output is predicted by replaying the planned
 /// uses changes on the graph; it assumes the other groups are left alone.</para>
 /// </remarks>
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
-  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
+  const pLibStore: ISymbolStore = nil);
 
 /// <summary>Adds an `edges` array to every group object of a `cycles --format json`
 /// report: one entry per uses edge inside the group, with that edge's surface
@@ -245,7 +252,11 @@ type
   /// manual-edit, blocked-symbol, unresolved-edge, directive, leaf-uses-cycle,
   /// qualified-ref, class-ctor, base-class, outside-roots; R1 (E18 T5) adds
   /// signature-in-cycle, signature-unknown, routine-not-called, init-order,
-  /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive. Line is 0 when the
+  /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive; R2 (E18 T6) adds
+  /// member-write, construction, class-method, class-ref, type-decl, type-cast, other-ref,
+  /// multiple-classes, member-unsupported, no-iinterface, ref-counted, receiver-unknown,
+  /// cast-unseen, with-member, ancestry-unknown, type-unresolved (and reuses leaf-uses-cycle,
+  /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit). Line is 0 when the
   /// refusal has no single line (an edge, a unit).</remarks>
   TRefusal = record
     Kind    : string;
@@ -301,6 +312,7 @@ type
   private
     FAccess     : TDictionary<Int64, TCallEdge>;  // ref id -> member_accesses row, loaded on first use
     FStore      : ISymbolStore;
+    FLibStore   : ISymbolStore;  // platform library (R2 ancestry), read-only; nil when none
     FDbPath     : string;
     FSccs       : TList<TArray<string>>;
     FGraph      : TCycleGraph;
@@ -336,7 +348,7 @@ type
     FTouched    : TList<Int64>;
     FPredicted  : TList<TPredGroup>;
     FCutEdge    : TEdgeEval;
-    FInversion  : TRecipeSteps;  // R1 steps of FCutEdge; Recipe = crNone otherwise
+    FInversion  : TRecipeSteps;  // R1 / R2 steps of FCutEdge; Recipe = crNone otherwise
     // loading + resolution
     procedure IndexAllFiles;
     function GetFile(pFid: Int64): TPlanFile;
@@ -443,6 +455,8 @@ type
     procedure PlanIntfCycle;
     function PlanImplCycle: TArray<TEdgeEval>;
     procedure PlanInversion(pEvals: TList<TEdgeEval>);
+    procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
+    procedure RenderMemberHandOver(pStep: Integer);
     function InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
     procedure MaterializeInversion;
     function IsInversionStem(const pStem: string): Boolean;
@@ -467,7 +481,8 @@ type
     function MemberAccessOf(pRefId: Int64; out pAccess: TCallEdge): Boolean;
   public
     constructor Create(const pStore: ISymbolStore; const pDbPath: string;
-      const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
+      const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
+      const pLibStore: ISymbolStore = nil);
     destructor Destroy; override;
     /// <summary>Computes the plan for one SCC without rendering.</summary>
     /// <param name="pCycleIndex">1-based index into the circular groups
@@ -1021,10 +1036,12 @@ end;
   --------------------------------------------------------------------------- }
 
 constructor TCyclePlanner.Create(const pStore: ISymbolStore; const pDbPath: string;
-  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
+  const pLibStore: ISymbolStore);
 begin
   inherited Create;
   FStore     := pStore;
+  FLibStore  := pLibStore;
   FDbPath    := pDbPath;
   FSccs      := pSccs;
   FGraph     := pGraph;
@@ -1722,6 +1739,9 @@ var
 begin
   { R1: the consumer's calls of the inverted routine go through the pointer }
   if (FInversion.Recipe = crRoutineInversion) and (pOwner.Id = FInversion.RoutineId) and
+    (pFid = FInversion.ConsumerFid) then Exit(True);
+  { R2: the consumer names the interface instead of the class }
+  if (FInversion.Recipe = crMemberInterface) and (pOwner.Id = FInversion.ClassId) and
     (pFid = FInversion.ConsumerFid) then Exit(True);
   if not FItems.TryGetValue(pOwner.Id, Item) then Exit(False);
   if Item.Kind in [mvDecl, mvWithBodies] then Exit(True);
@@ -2837,6 +2857,13 @@ begin
   { R1 into an existing unit (J2): its signature types are declared there or are
     System built-ins -- it needs no new uses entry }
   if IsInversionStem(pStem) and (FInversion.LeafStem <> '') then Exit(nil);
+  { R2: the units that declare the member types (PlanMemberInterface), nothing else }
+  if IsInversionStem(pStem) and (FInversion.Recipe = crMemberInterface) then
+  begin
+    Result:= nil;
+    if pSect = scIntf then Result:= FInversion.LeafUses;
+    Exit;
+  end;
   Entries:= TList<string>.Create;
   try
     for var U in SectionEntries(P, pSect) do
@@ -2903,7 +2930,11 @@ begin
   try
     L.Add('unit ' + FLeafName[pStem] + ';');
     L.Add('');
-    L.Add('// Created by `drag-lint cycles --plan`: declarations moved here from ' + P.UnitName);
+    if IsInversionStem(pStem) and (FInversion.Recipe = crMemberInterface) then
+      L.Add(Format('// Created by `drag-lint cycles --plan`: the interface %s (%s) implements, extracted',
+        [FInversion.ClassTypeName, P.UnitName]))
+    else
+      L.Add('// Created by `drag-lint cycles --plan`: declarations moved here from ' + P.UnitName);
     L.Add('// to break a circular unit dependency. This unit may use only units OUTSIDE');
     L.Add('// that cycle -- never ' + MemberNames.Replace('`', '') + '.');
     L.Add('');
@@ -2949,7 +2980,11 @@ begin
     for var Stem in LeafStems(D) do
       if FLeafInfo[Stem].Reason <> '' then EmitFmt('- Note: %s.', [FLeafInfo[Stem].Reason]);
   for var Stem in LeafStems(udExtend) do
-    if IsInversionStem(Stem) then
+    if IsInversionStem(Stem) and (FInversion.Recipe = crMemberInterface) then
+      EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: it receives the interface `%s`. ' +
+        'Do not create it again; the edit step lists the insert.', [FLeafName[Stem], FLeafPath[Stem],
+        FInversion.IfaceName])
+    else if IsInversionStem(Stem) then
       EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: it receives the procedural ' +
         'type and variable of `%s`. Do not create it again; the edit step lists the insert.',
         [FLeafName[Stem], FLeafPath[Stem], FInversion.RoutineName])
@@ -3269,12 +3304,14 @@ begin
     { E18 T5: no edge can MOVE -- try R1 on the edges that are one routine }
     if FCutEdge.FromStem = '' then PlanInversion(Evals)
     else FCutEdge.Recipe:= crMoveGlobals;
+    { E18 T6: nor one routine -- try R2 on the edges that are `is` / `as` + member reads }
+    if FCutEdge.FromStem = '' then PlanMemberHandOver(Evals);
     Result:= Evals.ToArray;
   finally
     Evals.Free;
   end;
   if FCutEdge.FromStem = '' then Exit;
-  if FCutEdge.Recipe = crRoutineInversion then
+  if FCutEdge.Recipe in [crRoutineInversion, crMemberInterface] then
   begin
     MaterializeInversion;
     Exit;
@@ -3325,6 +3362,49 @@ begin
   FInversion:= FCutEdge.Steps;
 end;
 
+{ R2 on every edge whose surface tests or casts against a class with `is` / `as`: as
+  PlanInversion, a refusal is recorded on the edge; the applicable edge with the fewest
+  edits becomes the cut edge. The interface goes into the class unit's Untangle leaf,
+  which must not declare its name already. }
+procedure TCyclePlanner.PlanMemberHandOver(pEvals: TList<TEdgeEval>);
+var
+  Refusal: TRecipeRefusal;
+begin
+  var Root:= if FProjectFid > 0 then ExtractFilePath(PathOf(FProjectFid)) else '';
+  for var I:= 0 to pEvals.Count - 1 do
+  begin
+    var Ev:= pEvals[I];
+    var Tested:= False;
+    for var R in Ev.Surface.Refs do
+      if R.Kind in [erTypeIs, erTypeAs] then Tested:= True;
+    if (Ev.Surface.RoutineName <> '') or not Tested then Continue;
+    var Leaf := ResolveUntangleLeaf(FStore, Ev.Surface.ToStem, FComp, Root);
+    var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, Refusal);
+    if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then
+      for var S in GetFile(Leaf.Fid).Syms do
+        if SameText(S.Name, Steps.IfaceName) then
+        begin
+          Refusal.Kind  := 'duplicate-identifier';
+          Refusal.Reason:= Format('`%s` already declares `%s` (line %d)', [Leaf.UnitName, S.Name, S.StartLine]);
+          Break;
+        end;
+    if Refusal.Kind <> '' then
+    begin
+      Ev.Refusal:= Refusal.Kind;
+      Ev.Why    := Format('`%s` (class): refused: %s -- %s', [string.Join(', ', Ev.Surface.ClassNames), Refusal.Kind,
+        Refusal.Reason]);
+      pEvals[I]:= Ev;
+      Continue;
+    end;
+    Ev.Recipe:= crMemberInterface;
+    Ev.Steps := Steps;
+    Ev.Cost  := Length(Steps.Edits);
+    pEvals[I]:= Ev;
+    if (FCutEdge.FromStem = '') or (Ev.Cost < FCutEdge.Cost) then FCutEdge:= Ev;
+  end;
+  FInversion:= FCutEdge.Steps;
+end;
+
 { The unit that receives R1's procedural type and variable: the existing unit J2
   chose, else the catalog's `<Declaring>.Untangle` (created or extended). }
 function TCyclePlanner.InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
@@ -3346,8 +3426,8 @@ end;
 
 function TCyclePlanner.IsInversionStem(const pStem: string): Boolean;
 begin
-  Result:= (FInversion.Recipe = crRoutineInversion) and (pStem <> '') and (pStem = FInversion.DeclStem) and
-    FLeafInfo.ContainsKey(pStem);
+  Result:= (FInversion.Recipe in [crRoutineInversion, crMemberInterface]) and (pStem <> '') and
+    (pStem = FInversion.DeclStem) and FLeafInfo.ContainsKey(pStem);
 end;
 
 { R1's file edits and leaf, through the same leaf machinery as a move: the
@@ -3376,7 +3456,14 @@ begin
   for var R in FInversion.Edits do
     if R.Fid = Consumer.Fid then AddUses(Consumer.Fid, SectOf(Consumer, R.Line), UsesEntryFor(Consumer, Stem));
   var Decl:= GetFile(FidOfStem(Stem));
-  AddUses(Decl.Fid, scImpl, UsesEntryFor(Decl, Stem));
+  if FInversion.Recipe = crMemberInterface then
+  begin
+    { R2: the heritage names the interface, so the class unit's INTERFACE uses the leaf;
+      the consumer gains Supports' unit / a cast ancestor's unit when it does not see them }
+    AddUses(Decl.Fid, scIntf, UsesEntryFor(Decl, Stem));
+    for var U in FInversion.ConsumerUses do AddUses(Consumer.Fid, scImpl, U);
+  end
+  else AddUses(Decl.Fid, scImpl, UsesEntryFor(Decl, Stem));
   Materialize;
 end;
 
@@ -3399,6 +3486,12 @@ begin
   try
     L.Add('');
     if not InType then L.Add('type');
+    if FInversion.Recipe = crMemberInterface then
+    begin
+      { R2: the extracted interface }
+      L.AddRange(FInversion.IfaceDecl);
+      Exit(L.ToArray);
+    end;
     L.Add(Format('  /// <summary>Signature of %s (%s), copied verbatim.</summary>',
       [FInversion.RoutineName, UnitNameOfStem(pStem)]));
     L.Add('  ' + FInversion.TypeDecl);
@@ -3454,6 +3547,44 @@ begin
   Emit('');
 end;
 
+procedure TCyclePlanner.RenderMemberHandOver(pStep: Integer);
+var
+  IsLines, AsLines: TList<string>;
+begin
+  EmitFmt('### Step %d: what moves where', [pStep]);
+  IsLines:= TList<string>.Create;
+  AsLines:= TList<string>.Create;
+  try
+    for var R in FCutEdge.Surface.Refs do
+      if (R.Kind = erTypeIs) and not IsLines.Contains(IntToStr(R.Line)) then IsLines.Add(IntToStr(R.Line))
+      else if (R.Kind = erTypeAs) and not AsLines.Contains(IntToStr(R.Line)) then AsLines.Add(IntToStr(R.Line));
+    var Decl    := UnitNameOfStem(FInversion.DeclStem);
+    var Consumer:= ExtractFileName(PathOf(FInversion.ConsumerFid));
+    EmitFmt('Nothing moves. Recipe: **member hand-over through an extracted interface** -- `%s` stays in `%s`; ' +
+      'units outside this cycle keep using it as before.', [FInversion.ClassTypeName, Decl]);
+    EmitFmt('- `%s` gets the interface `%s` (GUID `%s`), with a read-only property for each member `%s` reads: %s.',
+      [FLeafName[FInversion.DeclStem], FInversion.IfaceName, FInversion.IfaceGuid, Consumer,
+       string.Join(', ', FInversion.MemberSigs)]);
+    EmitFmt('- `%s` implements it: `%s` is appended to its heritage, and a getter per member is declared before ' +
+      'the class''s `end;` and implemented in its implementation section.', [FInversion.ClassTypeName,
+      FInversion.IfaceName]);
+    if IsLines.Count > 0 then
+      EmitFmt('- `%s`: `X is %s` becomes `Supports(X, %s)` (line %s).', [Consumer, FInversion.ClassTypeName,
+        FInversion.IfaceName, string.Join(', ', IsLines.ToArray)]);
+    if AsLines.Count > 0 then
+      EmitFmt('- `%s`: `X as %s` becomes `X as %s` (line %s)%s.', [Consumer, FInversion.ClassTypeName,
+        FInversion.IfaceName, string.Join(', ', AsLines.ToArray),
+        (if FInversion.CastAncestor <> '' then Format('; a receiver whose type does not implement IInterface ' +
+          'is cast through `%s` first', [FInversion.CastAncestor]) else '')]);
+    Emit('- Checked: no name inside a `with` body changes what it binds to; the members carried are fields and ' +
+      'properties of the class itself, read only.');
+  finally
+    AsLines.Free;
+    IsLines.Free;
+  end;
+  Emit('');
+end;
+
 procedure TCyclePlanner.RenderImplCycle(const pPlan: TCycleFixPlan);
 begin
   Emit('Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile ' +
@@ -3481,6 +3612,27 @@ begin
     Emit('');
     RenderDone(False);
     RenderInversion(CStepMoves);
+    RenderDecisions(CStepUses);
+    RenderLeafUnits(CStepCreate);
+    RenderEdits(CStepEdit);
+    RenderChecklist(pPlan.CycleIndex - 1);
+    Exit;
+  end;
+  if pPlan.CutEdge.Recipe = crMemberInterface then
+  begin
+    EmitFmt('Cut the edge `%s -> %s` by **member hand-over through an extracted interface**: `%s` takes from ' +
+      '`%s` only `is` / `as` tests against `%s` and reads of its members. `%s` implements a new interface `%s`, ' +
+      'declared in `%s`, and `%s` tests and casts against that instead. No edge of this cycle can be cut by ' +
+      'moving declarations or by routine-call inversion.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem,
+      pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, FInversion.ClassTypeName, FInversion.ClassTypeName,
+      FInversion.IfaceName, FLeafName[FInversion.DeclStem], pPlan.CutEdge.FromStem]);
+    var Still:= InversionStillUsed;
+    if Still <> '' then
+      EmitFmt('refused: edge-still-used -- %s. The steps below keep that uses entry, so the edge stays: ' +
+        'do not follow them.', [Still]);
+    Emit('');
+    RenderDone(False);
+    RenderMemberHandOver(CStepMoves);
     RenderDecisions(CStepUses);
     RenderLeafUnits(CStepCreate);
     RenderEdits(CStepEdit);
@@ -3548,11 +3700,13 @@ begin
         Add((if Ev.Refusal <> '' then Ev.Refusal else if Length(Ev.Needs) = 0 then 'unresolved-edge' else 'manual-edit'),
           Ev.FromStem + ' -> ' + Ev.ToStem, PathOf(FidOfStem(Ev.FromStem)), Ev.Why, 0);
     end
-    else if pPlan.CutEdge.Recipe = crRoutineInversion then
+    else if pPlan.CutEdge.Recipe in [crRoutineInversion, crMemberInterface] then
     begin
-      { R1 cuts the edge only when the consumer drops the uses entry }
+      { R1 / R2 cut the edge only when the consumer drops the uses entry }
       var Still:= InversionStillUsed;
-      if Still <> '' then Add('edge-still-used', FInversion.RoutineName, PathOf(FInversion.ConsumerFid), Still, 0);
+      if Still <> '' then
+        Add('edge-still-used', (if FInversion.Recipe = crMemberInterface then FInversion.ClassTypeName
+          else FInversion.RoutineName), PathOf(FInversion.ConsumerFid), Still, 0);
     end;
     for var Fid in pPlan.Touched do
       for var E in EditsOf(Fid) do
@@ -3765,11 +3919,12 @@ begin
 end;
 
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
-  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
+  const pLibStore: ISymbolStore);
 var
   Planner: TCyclePlanner;
 begin
-  Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, pOut);
+  Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, pOut, pLibStore);
   try
     Planner.Run;
   finally

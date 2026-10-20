@@ -49,6 +49,12 @@ cut is the one nominated, and there are no unrelated edits.
   the same script, the tree compiles and the program's output stays byte-identical
   (`tests\autotest\run_cyclefix_r1_dcc.ps1`); `cycles` then reports the four- and two-unit
   cycles only.
+* **2026-10-19, E18 Task 6: the report now cuts cycle 2 too** (member hand-over through an
+  extracted interface). Followed by the same script, the tree compiles and the program's output
+  stays byte-identical (`tests\autotest\run_cyclefix_r2_dcc.ps1`); `cycles` then reports the
+  four- and three-unit cycles only. This recipe reads class ancestry from the platform library
+  index (`--library-db`, else the manifest's library for `--platform`, default win64); without
+  one, cycle 2 is refused instead.
 
 ## The report, verbatim
 
@@ -398,12 +404,181 @@ Files:
     - line 76: `TDemoUIConnect`  [class]  -> declared in `demouiconnect`
 
 ### Recommended fix (optional)
-No edge of this cycle can be cut mechanically:
-- `demouiconnect -> demogageport`: `TDemoGagePort` (class): its method bodies use `GDemoUIConnect`, `TDemoUIConnect`, which live in units of this cycle -- they would have to move with it
-- `demogageport -> demouiconnect`: `GDemoUIConnect` (var): it needs `TDemoUIConnect` (class), which cannot move: its method bodies use `TDemoGagePort`, which live in units of this cycle -- they would have to move with it
+Cut the edge `demouiconnect -> demogageport` by **member hand-over through an extracted interface**: `demouiconnect` takes from `demogageport` only `is` / `as` tests against `TDemoGagePort` and reads of its members. `TDemoGagePort` implements a new interface `IDemoGagePortSurface`, declared in `DemoGagePort.Untangle`, and `demouiconnect` tests and casts against that instead. No edge of this cycle can be cut by moving declarations or by routine-call inversion.
 
-The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
-This cycle is legal Delphi and compiles; leaving it is acceptable.
+### DONE
+This plan cuts the edge `demouiconnect -> demogageport`, the cheapest edge of this cycle that can be cut mechanically. It is DONE when both hold: (1) the project compiles with 0 errors, and (2) `drag-lint cycles` prints exactly the output given in the last checklist item.
+After it, these units form no cycle at all.
+
+### Step 1: what moves where
+Nothing moves. Recipe: **member hand-over through an extracted interface** -- `TDemoGagePort` stays in `DemoGagePort`; units outside this cycle keep using it as before.
+- `DemoGagePort.Untangle` gets the interface `IDemoGagePortSurface` (GUID `{60014EC1-4FF2-B804-877E-DBE382355481}`), with a read-only property for each member `DemoUIConnect.pas` reads: Log: TStrings, LastGage: Integer.
+- `TDemoGagePort` implements it: `IDemoGagePortSurface` is appended to its heritage, and a getter per member is declared before the class's `end;` and implemented in its implementation section.
+- `DemoUIConnect.pas`: `X is TDemoGagePort` becomes `Supports(X, IDemoGagePortSurface)` (line 47, 55).
+- `DemoUIConnect.pas`: `X as TDemoGagePort` becomes `X as IDemoGagePortSurface` (line 49, 57); a receiver whose type does not implement IInterface is cast through `TComponent` first.
+- Checked: no name inside a `with` body changes what it binds to; the members carried are fields and properties of the class itself, read only.
+
+### Step 2: uses clauses -- keep, move or remove the old unit
+For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.
+- `DemoUIConnect.pas` / `DemoGagePort`: nothing from it is used there any more -> **remove** it from the implementation uses.
+
+### Step 3: create the new units
+Each new unit may use only RTL / library units and other new `*.Untangle` units -- never a unit of this cycle (`DemoGagePort`, `DemoUIConnect`). Create each file with EXACTLY this text:
+
+#### `DemoGagePort.Untangle` -> `circular-demo\DemoGagePort.Untangle.pas`
+```pascal
+unit DemoGagePort.Untangle;
+
+// Created by `drag-lint cycles --plan`: the interface TDemoGagePort (DemoGagePort) implements, extracted
+// to break a circular unit dependency. This unit may use only units OUTSIDE
+// that cycle -- never DemoGagePort, DemoUIConnect.
+
+interface
+
+uses
+  System.Classes;
+
+type
+  /// <summary>The surface of <c>TDemoGagePort</c> that <c>DemoUIConnect</c> uses.</summary>
+  IDemoGagePortSurface = interface
+    ['{60014EC1-4FF2-B804-877E-DBE382355481}']
+    function GetLog: TStrings;
+    function GetLastGage: Integer;
+    property Log: TStrings read GetLog;
+    property LastGage: Integer read GetLastGage;
+  end;
+
+implementation
+
+end.
+```
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoGagePort.Untangle in 'DemoGagePort.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="DemoGagePort.Untangle.pas"/>`.
+
+### Step 4: edit the existing files
+Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
+
+#### `DemoUIConnect.pas`  (`circular-demo\DemoUIConnect.pas`)
+E1. Replace line 57. Current text:
+```pascal
+  with Sender as TDemoGagePort do
+```
+New text:
+```pascal
+  with TComponent(Sender) as IDemoGagePortSurface do
+```
+E2. Replace line 55. Current text:
+```pascal
+  if not (Sender is TDemoGagePort) then
+```
+New text:
+```pascal
+  if not Supports(Sender, IDemoGagePortSurface) then
+```
+E3. Replace line 49. Current text:
+```pascal
+  with Owner as TDemoGagePort do
+```
+New text:
+```pascal
+  with Owner as IDemoGagePortSurface do
+```
+E4. Replace line 47. Current text:
+```pascal
+  if not (Owner is TDemoGagePort) then
+```
+New text:
+```pascal
+  if not Supports(Owner, IDemoGagePortSurface) then
+```
+E5. Replace line 43. Current text:
+```pascal
+  DemoGagePort; // <-- the edge to cut: `is`/`as` + two member reads
+```
+New text:
+```pascal
+  DemoGagePort.Untangle; // <-- the edge to cut: `is`/`as` + two member reads
+```
+
+#### `DemoGagePort.pas`  (`circular-demo\DemoGagePort.pas`)
+E1. After line 56 (`DemoUIConnect; // constructs TDemoUIConnect, writes GDemoUIConnect: not a mechanical cut`), insert:
+```pascal
+
+function TDemoGagePort.GetLog: TStrings;
+begin
+  Result := FLog;
+end;
+
+function TDemoGagePort.GetLastGage: Integer;
+begin
+  Result := FLastGage;
+end;
+```
+E2. After line 50 (`property LastGage: Integer read FLastGage;`), insert:
+```pascal
+    /// <summary>IDemoGagePortSurface: returns Log (cycles --plan, member hand-over).</summary>
+    function GetLog: TStrings;
+    /// <summary>IDemoGagePortSurface: returns LastGage (cycles --plan, member hand-over).</summary>
+    function GetLastGage: Integer;
+```
+E3. Replace line 33. Current text:
+```pascal
+  TDemoGagePort = class(TComponent)
+```
+New text:
+```pascal
+  TDemoGagePort = class(TComponent, IDemoGagePortSurface)
+```
+E4. Replace line 28. Current text:
+```pascal
+  System.Classes;
+```
+New text:
+```pascal
+  System.Classes,
+  DemoGagePort.Untangle;
+```
+
+#### `CircularDemo.dpr`  (`circular-demo\CircularDemo.dpr`)
+E1. Replace line 39. Current text:
+```pascal
+  DemoUIConnect in 'DemoUIConnect.pas';
+```
+New text:
+```pascal
+  DemoUIConnect in 'DemoUIConnect.pas',
+  DemoGagePort.Untangle in 'DemoGagePort.Untangle.pas';
+```
+
+#### `CircularDemo.dproj`  (`circular-demo\CircularDemo.dproj`)
+E1. After line 87 (`<DCCReference Include="DemoGagePort.pas"/>`), insert:
+```xml
+        <DCCReference Include="DemoGagePort.Untangle.pas"/>
+```
+
+### Checklist
+Tick each box in order. Do not skip the compile.
+1. [ ] Create `circular-demo\DemoGagePort.Untangle.pas` with the exact text given for `DemoGagePort.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+2. [ ] Apply every edit listed for `DemoUIConnect.pas`, in the order listed.
+3. [ ] Apply every edit listed for `DemoGagePort.pas`, in the order listed.
+4. [ ] Apply every edit listed for `CircularDemo.dpr`, in the order listed.
+5. [ ] Apply every edit listed for `CircularDemo.dproj`.
+6. [ ] Compile `CircularDemo.dproj` (RAD Studio: Project > Build; or `msbuild "circular-demo\CircularDemo.dproj" /t:Build` from a RAD Studio Command Prompt). Expect 0 errors; on an error see "If the compile fails" below, fix, and compile again.
+7. [ ] Re-index: `drag-lint index --project "circular-demo\CircularDemo.dproj" --db "circular-demo\_D-RAG\CircularDemo.sqlite"`
+8. [ ] Run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite"`. It must print exactly:
+```text
+2 circular unit group(s) found:
+  [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (has interface coupling -- widest recompile blast radius)
+  [3 units] demoblueprint <-> democontrolplan <-> demoblueprint.viewmodel   (implementation-only -- legal, lower impact)
+  (add --edges for the uses lines, --causes for the symbols to refactor)
+```
+   The units inside a group may be listed in a different order. Lines starting with `(loaded`, `drag-lint: note:` or `  resolver:` are informational -- ignore them.
+
+#### If the compile fails
+- `E2003 Undeclared identifier: 'X'` in file F at line N: the index missed a use of X. If X is listed in the "what moves where" step, add that step's new unit to F's uses clause of the section holding line N (interface above `implementation`, implementation below it). Otherwise X still lives in a unit you moved or removed in the uses step: add that unit back to the same section.
+- `E2065 Unsatisfied forward or external declaration`: a class moved without its method bodies. Move the bodies listed for it as well.
+- `E2010 Incompatible types: 'TX' and 'TXBase'` or `E2033 Types of actual and formal var parameters must be identical`: a routine now takes or returns the base class. Cast at that line: `TX(value)`.
+- `F2047 Circular unit reference`: a new unit names a unit of this cycle in its uses. Remove that entry -- the new units may use only what the "create the new units" step lists.
+- `F1026 File not found`: a new unit's file name must equal its unit name plus `.pas`.
 
 ## Cycle 3: demoblueprint <-> democontrolplan <-> demoblueprint.viewmodel
 
@@ -561,8 +736,8 @@ type) and the compile is the final check.
 Cycles 2 and 3 of the report above are modelled on cycles found in a real client application,
 and both are shapes the playbook's first recipe -- move plain declarations into a leaf unit --
 cannot handle, because nothing on any edge is a plain declaration. Since E18 Task 5 the plan
-cuts cycle 3 with recipe R1 (routine-call inversion, below); cycle 2 still ends in
-`No edge of this cycle can be cut mechanically`, with a reason per edge:
+cuts cycle 3 with recipe R1 (routine-call inversion, below), and since E18 Task 6 cycle 2 with
+recipe R2 (member hand-over through an extracted interface):
 
 | Cycle | Cheap edge | What is on it | Recipe |
 |---|---|---|---|
@@ -592,8 +767,12 @@ rule a recipe must encode:
 
 Routine-call inversion is in `cycles --plan` since E18 Task 5 (cycle 3 above; it names the
 pointer `<Routine>Ptr` and its type `T<Routine>Ptr`, copied from the stored signature, and refuses
-when the call is reachable from an `initialization` section). The member hand-over is E18 Task 6;
-until then this section is the record of what "mechanical" has to mean for cycle 2.
+when the call is reachable from an `initialization` section). The member hand-over is in it since
+E18 Task 6 (cycle 2 above): the GUID is the MD5 of `<leaf>.<interface>`, so the text is
+reproducible; the TObject receiver is cast through `TComponent`, the first `IInterface` ancestor
+of `TDemoGagePort`; and it refuses whenever the interface could not carry what the consumer does
+-- a write, a construction, a method or class-method call, a name inside the `with` body that
+would bind to something else, a reference-counted class.
 
 ## Honest caveats
 
