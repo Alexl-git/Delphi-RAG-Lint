@@ -1,0 +1,17 @@
+{
+  "Failures": [
+    "A: C:\\TEMP\\claude\\featuregen-task4\\scratch\\seeded-repo\\features\\entries\\ask.json: not canonical (first difference at byte 2423); run tools\\feature-registry.ps1 normalise",
+    "A: C:\\TEMP\\claude\\featuregen-task4\\scratch\\seeded-repo\\features\\entries\\zz-dangling.json: not canonical (first difference at byte 267); run tools\\feature-registry.ps1 normalise",
+    "A: ask.json: unknown key 'zzKey' (not in entry.schema.json)",
+    "A: chart-engine-dot-lookup.json: workflow doc 'charts\\README.md' does not exist (repo-relative)",
+    "A: feature-registry.json: script path 'tools\\feature-registry.ps1' does not exist (repo-relative)",
+    "A: feature-registry.json: script path 'tools\\build-feature-pages.ps1' does not exist (repo-relative)",
+    "A: feature-registry.json: script path 'tools\\publish-release.ps1' does not exist (repo-relative)",
+    "A: zz-dangling.json: since '9.9.9' is not a '## v<version>' heading in CHANGELOG.md",
+    "A: zz-dangling.json: summary ends with a period; the Quick-Help line carries none",
+    "A: zz-dangling.json: wikiPage 'Hom' -- no such page in docs\\wiki (exact case; did you mean: Home, ask, lsp)",
+    "A: zz-dangling.json: related 'zz-nope' is not a registered id (did you mean: allow, compare, info)",
+    "A: zz-dangling.json: lastVerified.build '9.9.9' is not a CHANGELOG version"
+  ],
+  "Notes": []
+}

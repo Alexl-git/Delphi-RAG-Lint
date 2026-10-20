@@ -165,6 +165,7 @@ uses
   , FeatureGen.Json
   , FeatureGen.Output
   , FeatureGen.Wiki
+  , FeatureGen.Site
   ;
 
 const
@@ -848,7 +849,7 @@ begin
     lOwner := JS(pEntry, 'owner');
     if not InOrd(lOwner, pCtx.TeamIds) then
       lP.Add(lTag + ': owner ''' + lOwner + ''' is not in teams.json (one of: ' + JoinS(pCtx.TeamIds, ' ')
-        + '); add it with feature-registry.ps1 add -NewTeam');
+        + '); add it with featuregen add --new-team');
     lStatus := JS(pEntry, 'status');
     lInBacklog := InOrd(lId, pCtx.SeedBacklog);
     lSince := JS(pEntry, 'since');
@@ -1566,7 +1567,7 @@ begin
       if lRegVerbs.Contains(LowerCase(lV)) or InCI(lV, pCtx.ExemptVerbs) then
         Continue;
       Fail('B', 'every --help verb is registered -- unregistered: ''' + lV + ''''#10'   ^ no entry claims it. Create features\entries\' + lV
-        + '.json (tools\feature-registry.ps1 add -Id ' + lV + ' ...), then run tools\build-feature-pages.ps1 and commit the regenerated pages:'#10
+        + '.json (featuregen add --id ' + lV + ' ...), then run featuregen build --all and commit the regenerated pages:'#10
         + Indent3(Skeleton(lV, SurfaceObj(['type', 'cli', 'verb', lV]), pCtx)));
     end;
     for lV in FLive.SubVerbs do
@@ -1728,7 +1729,7 @@ begin
           begin
             lWhere := (if JHas(lS, 'path') then JS(lS, 'path') else JS(lS, 'caption'));
             Fail('C', lId + ': ' + lT + ' ''' + lWhere + ''' matches no live caption (nearest: ' + JoinS(NearestCaption(lK, FLive.Captions), ' | ')
-              + ') -- the usual cause is a renamed or moved menu item: tools\feature-registry.ps1 move-menu, or update the entry');
+              + ') -- the usual cause is a renamed or moved menu item: featuregen move-menu, or update the entry');
           end;
         end;
       end;
@@ -1797,7 +1798,7 @@ end;
 procedure TChecker.CheckGenerated;
 var
   lW: TOutputWriter;
-  lRes: TOutputResult;
+  lRes, lSite: TOutputResult;
   lC, lKey, lOld, lFile: string;
 begin
   try
@@ -1807,18 +1808,23 @@ begin
       lRes := lW.Finish;
       for lC in lRes.Changed do
       begin
+        // D covers every wiki output, cli-reference.md included; the website set follows below.
         lKey := lC.Split([#13#10])[0];
-        // D covers the outputs the PowerShell generator owns (WikiOutputPaths);
-        // cli-reference.md is guarded by "build --check".
-        if not InCI(lKey, WikiOutputPaths) then
-          Continue;
         lFile := TPath.Combine(FRepo, lKey);
         lOld := (if TFile.Exists(lFile) then TEncoding.ASCII.GetString(TFile.ReadAllBytes(lFile)) else '');
-        Fail('D', lKey + ' differs from a fresh render -- run tools\build-feature-pages.ps1 and commit (or revert the hand edit)'#10
+        Fail('D', lKey + ' differs from a fresh render -- run featuregen build --all and commit (or revert the hand edit)'#10
           + Indent3(DiffHead(lOld, lW.TextOf(lKey).Replace(#10, #13#10))));
       end;
     finally
       lW.Free;
+    end;
+    // the website set and the per-page updated map (features\generated\site-pages.json)
+    lSite := BuildSiteSet(FRepo, FLive.Engine, FLive.ProductVersion, True);
+    for lC in lSite.Changed do
+    begin
+      lKey := lC.Split([#13#10])[0];
+      Fail('D', lKey + ' differs from a fresh render -- run featuregen build --all and commit (or revert the hand edit)'#10
+        + Indent3(Copy(lC, Length(lKey) + 3, MaxInt)));
     end;
   except
     on E: Exception do
@@ -1909,7 +1915,7 @@ begin
               lFirst := i - 1;
               Break;
             end;
-          Fail('A', Format('%s: not canonical (first difference at byte %d); run tools\feature-registry.ps1 normalise', [lE.Path, lFirst]));
+          Fail('A', Format('%s: not canonical (first difference at byte %d); run featuregen normalise', [lE.Path, lFirst]));
         end;
         if JHas(lE.Entry, 'homeOrder') then
         begin

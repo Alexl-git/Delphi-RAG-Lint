@@ -89,6 +89,16 @@ procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter:
 /// <exception cref="EFeatureGen">As the three-argument overload.</exception>
 procedure BuildSite(const pRepo: string; const pFmt: TSiteFormat; const pWriter: TOutputWriter; const pPages: TSitePages); overload;
 
+/// <summary>Renders the whole website set and features\generated\site-pages.json for a repository, or only compares them (check D, "build --check").</summary>
+/// <param name="pRepo">Repository root.</param>
+/// <param name="pEngine">Full path of drag-lint.exe (--help).</param>
+/// <param name="pVersion">DRAGLINT_VERSION; a changed page is stamped with it.</param>
+/// <param name="pCheck">True: write and remove nothing, report only.</param>
+/// <returns>Written, Changed and Removed, every path repo-relative (the site root, or features\generated\site-pages.json).</returns>
+/// <exception cref="EFeatureGen">The set cannot be generated (see BuildSite).</exception>
+/// <remarks>Same behaviour as "featuregen build --site" with the default root.</remarks>
+function BuildSiteSet(const pRepo, pEngine, pVersion: string; pCheck: Boolean): TOutputResult;
+
 /// <summary>Checks every link of the Markdown files queued in the writer.</summary>
 /// <param name="pWriter">Writer after the set was Put.</param>
 /// <returns>One message per violation, naming the page and the link; empty when all is well.</returns>
@@ -116,6 +126,7 @@ uses
   , System.Hash
   , System.JSON
   , FeatureGen.Json
+  , FeatureGen.Live
   ;
 
 function YamlScalar(const pValue: string): string; forward;
@@ -1148,6 +1159,65 @@ begin
   finally
     lBad.Free;
     lFiles.Free;
+  end;
+end;
+
+function BuildSiteSet(const pRepo, pEngine, pVersion: string; pCheck: Boolean): TOutputResult;
+var
+  lFmt: TSiteFormat;
+  lHelp: TLiveHelp;
+  lPages: TSitePages;
+  lWriter: TOutputWriter;
+  lPagesRes: TOutputResult;
+  lRoot, lGenerated, lItem: string;
+  lList: TList<string>;
+begin
+  lFmt := LoadSiteFormat(pRepo);
+  lRoot := lFmt.Root.TrimRight(['\']) + '\';
+  lGenerated := 'features\generated\';
+  lHelp := TLiveHelp.Create;
+  lPages := TSitePages.Create(pVersion);
+  try
+    lHelp.Load(pEngine);
+    lFmt.Help := lHelp;
+    lPages.LoadFromFile(TPath.Combine(pRepo, lGenerated + 'site-pages.json'));
+    lWriter := TOutputWriter.Create(TPath.Combine(pRepo, lFmt.Root), pCheck, True);
+    try
+      BuildSite(pRepo, lFmt, lWriter, lPages);
+      Result := lWriter.Finish;
+    finally
+      lWriter.Free;
+    end;
+    lWriter := TOutputWriter.Create(TPath.Combine(pRepo, lGenerated.TrimRight(['\'])), pCheck, False);
+    try
+      lWriter.Put('site-pages.json', lPages.ToJson, 'site-pages.json');
+      lPagesRes := lWriter.Finish;
+    finally
+      lWriter.Free;
+    end;
+  finally
+    lPages.Free;
+    lHelp.Free;
+  end;
+  lList := TList<string>.Create;
+  try
+    for lItem in Result.Written do
+      lList.Add(lRoot + lItem);
+    for lItem in lPagesRes.Written do
+      lList.Add(lGenerated + lItem);
+    Result.Written := lList.ToArray;
+    lList.Clear;
+    for lItem in Result.Changed do
+      lList.Add(lRoot + lItem);
+    for lItem in lPagesRes.Changed do
+      lList.Add(lGenerated + lItem);
+    Result.Changed := lList.ToArray;
+    lList.Clear;
+    for lItem in Result.Removed do
+      lList.Add(lRoot + lItem);
+    Result.Removed := lList.ToArray;
+  finally
+    lList.Free;
   end;
 end;
 

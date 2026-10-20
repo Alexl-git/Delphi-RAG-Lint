@@ -1,0 +1,8 @@
+{
+  "Failures": [],
+  "Notes": [
+    "exempt with reason: 0 verb(s), 19 caption(s), 1 exe(s) -- features\\exemptions.json",
+    "backlog: ENGINE 144 remaining (intro + lastVerified owed; deadline: before the R2 installer release (owner decision 15.2))",
+    "backlog: CONVERTER 7 remaining (intro + lastVerified owed; deadline: before the R2 installer release (owner decision 15.2))"
+  ]
+}
