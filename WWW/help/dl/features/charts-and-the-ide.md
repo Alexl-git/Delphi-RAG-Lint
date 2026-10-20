@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80004
 since: 1.20.1-alpha
 status: shipped
-updated: 1.26.1-alpha
+updated: 1.32.0-alpha
 ---
 
 # Charts and the IDE

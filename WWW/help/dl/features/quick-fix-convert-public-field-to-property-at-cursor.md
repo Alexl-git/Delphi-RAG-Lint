@@ -7,7 +7,7 @@ group: refactoring
 order: 50008
 since: 0.0.0
 status: shipped
-updated: 0.0.0
+updated: 1.32.0-alpha
 ---
 
 # Quick-Fix: Convert Public Field to Property at Cursor

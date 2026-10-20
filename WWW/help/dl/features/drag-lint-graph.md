@@ -7,7 +7,7 @@ group: editor-integration
 order: 110002
 since: 0.10.0-alpha
 status: shipped
-updated: 0.10.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # drag-lint Graph

@@ -7,7 +7,7 @@ group: search-navigation
 order: 20030
 since: 0.33.0-alpha
 status: shipped
-updated: 0.33.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # usages

@@ -7,7 +7,7 @@ group: component-conversion
 order: 60010
 since: 1.15.0-alpha
 status: shipped
-updated: 1.15.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # glyph-vacuum

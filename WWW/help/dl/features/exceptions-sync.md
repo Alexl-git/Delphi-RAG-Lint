@@ -7,7 +7,7 @@ group: linting
 order: 30005
 since: 1.8.0-alpha
 status: shipped
-updated: 1.8.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # exceptions-sync

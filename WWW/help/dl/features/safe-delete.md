@@ -7,7 +7,7 @@ group: refactoring
 order: 50011
 since: 0.69.0-alpha
 status: shipped
-updated: 0.69.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # safe-delete

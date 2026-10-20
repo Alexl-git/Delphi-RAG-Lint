@@ -7,7 +7,7 @@ group: maintenance
 order: 120005
 since: 0.91.0-alpha
 status: shipped
-updated: 0.91.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # dump-call-edges

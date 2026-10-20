@@ -7,7 +7,7 @@ group: search-navigation
 order: 20026
 since: 0.30.0-alpha
 status: shipped
-updated: 0.30.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # Show Structure

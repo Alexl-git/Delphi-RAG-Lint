@@ -7,7 +7,7 @@ group: maintenance
 order: 120013
 since: 0.40.5-alpha
 status: shipped
-updated: 0.40.5-alpha
+updated: 1.32.0-alpha
 ---
 
 # sql

@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70017
 since: 0.21.0-alpha
 status: shipped
-updated: 0.21.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # Show Wiring (Spring4D DI + DFM events)

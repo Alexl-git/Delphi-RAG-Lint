@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70019
 since: 0.40.5-alpha
 status: shipped
-updated: 0.40.5-alpha
+updated: 1.32.0-alpha
 ---
 
 # Uses Report (CSV)

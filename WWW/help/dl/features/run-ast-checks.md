@@ -7,7 +7,7 @@ group: linting
 order: 30018
 since: 0.31.0-alpha
 status: shipped
-updated: 0.31.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # Run AST Checks

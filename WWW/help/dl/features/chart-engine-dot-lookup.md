@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80002
 since: 1.26.1-alpha
 status: shipped
-updated: 1.26.1-alpha
+updated: 1.32.0-alpha
 ---
 
 # Where the charts find the engine and Graphviz

@@ -7,7 +7,7 @@ group: search-navigation
 order: 20029
 since: 0.19.0-alpha
 status: shipped
-updated: 0.19.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # Type at Cursor

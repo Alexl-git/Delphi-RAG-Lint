@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70012
 since: 0.17.0-alpha
 status: shipped
-updated: 0.17.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # Impact / Blast Radius (symbol)

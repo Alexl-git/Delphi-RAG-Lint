@@ -7,7 +7,7 @@ group: compiler
 order: 90003
 since: 0.26.0-alpha
 status: shipped
-updated: 0.26.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # compile-check

@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70004
 since: 0.0.0
 status: shipped
-updated: 0.0.0
+updated: 1.32.0-alpha
 ---
 
 # Circular Dependency Report (worked example)

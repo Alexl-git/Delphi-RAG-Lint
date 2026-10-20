@@ -7,7 +7,7 @@ group: linting
 order: 30004
 since: 0.2.0-alpha
 status: shipped
-updated: 0.2.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # drag-lint: Project Rules

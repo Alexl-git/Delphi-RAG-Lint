@@ -7,7 +7,7 @@ group: indexing
 order: 10006
 since: 1.20.4-alpha
 status: shipped
-updated: 1.20.4-alpha
+updated: 1.32.0-alpha
 ---
 
 # register-project

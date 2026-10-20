@@ -7,7 +7,7 @@ group: search-navigation
 order: 20031
 since: 1.7.0-alpha
 status: shipped
-updated: 1.7.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # wiki

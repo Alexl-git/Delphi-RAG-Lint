@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80005
 since: 1.28.0-alpha
 status: shipped
-updated: 1.26.7-alpha
+updated: 1.32.0-alpha
 ---
 
 # Compare a report with current code

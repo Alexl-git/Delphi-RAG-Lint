@@ -7,7 +7,7 @@ group: refactoring
 order: 50004
 since: 0.94.0-alpha
 status: shipped
-updated: 0.94.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # Create helper class

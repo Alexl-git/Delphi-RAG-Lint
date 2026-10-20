@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80001
 since: 1.30.0-alpha
 status: shipped
-updated: 1.26.1-alpha
+updated: 1.32.0-alpha
 ---
 
 # ask

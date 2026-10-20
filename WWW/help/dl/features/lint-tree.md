@@ -7,7 +7,7 @@ group: linting
 order: 30015
 since: 1.11.0-alpha
 status: shipped
-updated: 1.11.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # lint-tree

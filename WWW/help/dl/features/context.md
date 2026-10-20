@@ -7,7 +7,7 @@ group: search-navigation
 order: 20004
 since: 0.6.0-alpha
 status: shipped
-updated: 0.6.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # context

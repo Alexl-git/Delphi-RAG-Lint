@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70001
 since: 0.99.0-alpha
 status: shipped
-updated: 0.99.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # butterfly

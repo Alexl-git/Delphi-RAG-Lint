@@ -7,7 +7,7 @@ group: database
 order: 100001
 since: 0.40.5-alpha
 status: shipped
-updated: 0.40.5-alpha
+updated: 1.32.0-alpha
 ---
 
 # fb-snapshot

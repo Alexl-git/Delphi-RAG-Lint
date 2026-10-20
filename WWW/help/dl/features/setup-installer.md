@@ -7,7 +7,7 @@ group: editor-integration
 order: 110013
 since: 1.28.3-alpha
 status: experimental
-updated: 1.28.3-alpha
+updated: 1.32.0-alpha
 ---
 
 # Setup installer

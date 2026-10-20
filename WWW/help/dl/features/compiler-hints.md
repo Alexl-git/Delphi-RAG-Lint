@@ -7,7 +7,7 @@ group: search-navigation
 order: 20003
 since: 0.1.0-alpha
 status: shipped
-updated: 0.1.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # Compiler Hints

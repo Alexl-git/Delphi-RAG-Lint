@@ -7,7 +7,7 @@ group: editor-integration
 order: 110010
 since: 1.26.1-alpha
 status: shipped
-updated: 1.31.1-alpha
+updated: 1.32.0-alpha
 ---
 
 # Register the MCP server (Claude Code, VS Code)

@@ -7,7 +7,7 @@ group: indexing
 order: 10007
 since: 0.3.0-alpha
 status: shipped
-updated: 0.3.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # schema

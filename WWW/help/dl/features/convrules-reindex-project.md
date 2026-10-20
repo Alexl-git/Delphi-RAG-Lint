@@ -7,7 +7,7 @@ group: component-conversion
 order: 60008
 since: 1.26.7-alpha
 status: shipped
-updated: 1.26.7-alpha
+updated: 1.32.0-alpha
 ---
 
 # Reindex project

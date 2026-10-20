@@ -7,7 +7,7 @@ group: indexing
 order: 10002
 since: 1.3.0-alpha
 status: shipped
-updated: 1.3.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # migrate-dbs

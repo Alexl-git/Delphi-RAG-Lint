@@ -7,7 +7,7 @@ group: editor-integration
 order: 110008
 since: 0.21.0-alpha
 status: shipped
-updated: 0.21.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # Installation

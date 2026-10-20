@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70016
 since: 0.96.0-alpha
 status: shipped
-updated: 0.96.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # Show in Call Graph

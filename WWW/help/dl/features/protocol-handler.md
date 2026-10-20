@@ -7,7 +7,7 @@ group: diagrams-charts
 order: 80006
 since: 1.31.0-alpha
 status: shipped
-updated: 1.31.0-alpha
+updated: 1.32.0-alpha
 ---
 
 # Click-to-source: the draglint:// handler
