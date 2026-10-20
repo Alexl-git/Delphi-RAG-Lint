@@ -1,0 +1,22 @@
+{
+  "id": "installation",
+  "title": "Installation",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.21.0-alpha",
+  "summary": "Getting the CLI, the IDE plugin, or the LSP running",
+  "wikiPage": "Installation",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "drag-lint.exe"
+    },
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\Installation.md"
+    }
+  ],
+  "audience": "both",
+  "homeOrder": 20
+}

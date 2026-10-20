@@ -14,8 +14,29 @@
     },
     {
       "type": "cli",
-      "verb": "surface"
+      "verb": "surface",
+      "usage": "drag-lint surface --qname <Foo.TBar> [--db <file.sqlite>] [--include-impl] [--all-visibility] [--format text|json]",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.TBar>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--include-impl"
+        },
+        {
+          "name": "--all-visibility"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "pitfalls": ["names, TYPES and trailing comments. outline --file lists them with line numbers."]
 }

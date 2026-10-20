@@ -1,0 +1,39 @@
+{
+  "id": "convert-validate",
+  "title": "convert-validate",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.1.0-alpha",
+  "summary": "Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees",
+  "wikiPage": "convert-validate",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "convert-validate",
+      "usage": "drag-lint convert-validate --rules <file> [--from <FromType>] [--to <ToType>] [--print-parsed] [--db PATH ...] (parse+validate a reFind-superset conversion-rules DSL; checks #link/#default paths against the real --from/--to members, segment by segment with no depth limit (a published leaf; each hop published, or public and class-typed; private never) -- lazily, per class, no tree is built, so --depth and the book's #depth are ignored here (and by the hidden convert-reemit), though a bad #depth (not 1..10, or a second one) is a line N error, and so is a From-only header ('#convert TFoo -> ' or '#convert TFoo': '#convert TFoo has no To type'; '#useswap X -> ': '#useswap X has no replacement unit'); and a #link glyph expression (<FromPath> G[I/N], stitched G[1/6]G[2/6], per-N alternatives split by commas, G[count]) for syntax, I in 1..N and one alternative per N, naming the column; 'line N: warning:' lines (e.g. a straight NumGlyphs carry beside a G-link) never change the exit code; a path whose members all EXIST but one is inaccessible (private anywhere, protected anywhere, a public leaf) is a warning on stdout, not an error: 'line N: warning: <path>: <Member> is <visibility> in <Class>; never applied unless a descendant class changes its visibility' -- only a segment naming no member is \"not found\" (exit 1); without BOTH --from and --to the book is only PARSED -- no path is checked -- and a 'NOTE:' line on stderr says so; a #warn path or {Prop} placeholder, or a #check-ref ToPath, naming no member is a line N error, and so is a malformed #warn / #check-ref (1.26.5); no JSON mode)",
+      "flags": [
+        {
+          "name": "--rules",
+          "arg": "<file>"
+        },
+        {
+          "name": "--from",
+          "arg": "<FromType>"
+        },
+        {
+          "name": "--to",
+          "arg": "<ToType>"
+        },
+        {
+          "name": "--print-parsed"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

@@ -15,7 +15,43 @@
     },
     {
       "type": "cli",
-      "verb": "allow"
+      "verb": "allow",
+      "usage": "drag-lint allow <file> --fix-line <L> --fix-rule <id> [--apply] [--rules-dir <dir>] [--config <file>] [--profile <name>] [--enable id,...] [--disable id,...] [--stand-in-for <realpath>] (record a dl:ok review of ONE finding; dry-run without --apply; the lint options decide which findings the line has)",
+      "flags": [
+        {
+          "name": "--fix-line",
+          "arg": "<L>"
+        },
+        {
+          "name": "--fix-rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--rules-dir",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--config",
+          "arg": "<file>"
+        },
+        {
+          "name": "--profile",
+          "arg": "<name>"
+        },
+        {
+          "name": "--enable"
+        },
+        {
+          "name": "--disable"
+        },
+        {
+          "name": "--stand-in-for",
+          "arg": "<realpath>"
+        }
+      ]
     }
   ],
   "audience": "both"

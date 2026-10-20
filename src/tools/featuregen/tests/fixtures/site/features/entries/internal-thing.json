@@ -1,0 +1,11 @@
+{
+  "id": "internal-thing",
+  "title": "Internal thing",
+  "group": "g-ide",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "0.9.0-alpha",
+  "summary": "Hidden internal",
+  "surfaces": [ { "type": "cli", "verb": "hidden" } ],
+  "audience": "both"
+}

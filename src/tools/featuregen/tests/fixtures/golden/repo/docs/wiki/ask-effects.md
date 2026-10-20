@@ -1,0 +1,39 @@
+# ask: effects
+
+**What a routine does to state outside its locals.** One of the diagram questions of the `ask` verb -- see [Diagrams and Charts](Diagrams-and-Charts) for the model, the bundle and click-to-source.
+
+## Asking it
+
+Answered in-process by the engine (`drag-lint ask`); no PowerShell is needed (see [Charts and the IDE](Charts-and-the-IDE)).
+
+From RAD Studio: *drag-lint > Reports > What this routine changes (side effects)...* -- put the caret on the selection first (see [IDE Menu Reference](IDE-Menu-Reference#reports)).
+
+```
+drag-lint ask --question effects --at <file.pas>:<line>:<col> --db <project.sqlite>
+```
+
+The selection is the symbol under `--at` (resolved exactly as [Type at Cursor](Type-at-Cursor) resolves a caret). From a terminal, ask it by name:
+
+```
+drag-lint ask effects --target MyApp.Pricing.CalcDiscount --db <project.sqlite>
+```
+
+## You select
+
+A method or routine.
+
+## The chart shows
+
+The purity verdict and the effect summary, token by token: `g` writes global state (or a resource, or runs SQL), `h` frees heap storage it did not allocate, `s` writes its own fields, `p<k>` writes through parameter k (0-based, named from the signature), `?` a blocker the analysis could not see through. A routine with no tokens and a proven verdict is shown as **Effect-free (proven)** -- the same words hover and autodoc use. The full key is the [Effect Summary Legend](Effect-Summary-Legend).
+
+## It stands on
+
+`symbol_facts.effect_summary`, `effect_free`, `mutates_params` and `returns_owner`, written by the purity resolve stage (whole-DB fixpoint).
+
+## Parameters
+
+None.
+
+## Read it carefully
+
+An empty summary with a proven verdict is PURE; an empty summary with no verdict is NOT ANALYSED. The chart keeps the two apart -- reading absence as ignorance would call thousands of provably pure routines unknown. `?` is an admission, so it is always counted in the header beside the effects.

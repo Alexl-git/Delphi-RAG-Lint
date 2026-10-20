@@ -10,7 +10,14 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "dump-refs"
+      "verb": "dump-refs",
+      "usage": "drag-lint dump-refs <file> --db PATH (diagnostic: refs + enclosing_symbol_id attribution)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "both",

@@ -105,6 +105,15 @@ foreach ($r in $required) {
 Check 'convrules-catalog.index is NOT shipped' (-not $text.Contains('convrules-catalog.index")')) 'the catalog index carries absolute build-machine paths and must not be packed'
 
 Write-Host ''
+Write-Host 'check 3 -- featuregen (a developer tool) is NOT in the payload'
+
+# featuregen.exe regenerates the repo's docs from features\; it needs a repository clone and
+# the registry, so it never ships (spec criterion 12). The pack script may RUN it through
+# tools\featuregen-gate.ps1 (a gate) but must never name the exe or copy its folder.
+Check 'build\pack-lint-release.ps1 does not name featuregen.exe' (-not ($text -match 'featuregen\.exe')) 'the pack script mentions featuregen.exe -- the tool must not be packed'
+Check 'build\pack-lint-release.ps1 does not copy src\tools\featuregen' (-not ($text -match 'src\\tools\\featuregen')) 'the pack script reaches into src\tools\featuregen'
+Check 'the pack script runs the gate, which is where featuregen is called' ($text.Contains('featuregen-gate.ps1')) 'the pack script no longer gates on the generated pages'
+Write-Host ''
 if ($script:Failed) { Write-Host 'RELEASE PACK PAYLOAD GUARD: FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'RELEASE PACK PAYLOAD GUARD: PASS' -ForegroundColor Green
 exit 0

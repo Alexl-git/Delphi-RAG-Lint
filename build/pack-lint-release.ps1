@@ -35,8 +35,8 @@ $dproj = Join-Path $repo "src\cli\drag-lint.dproj"
 # GATE (feature registry, 2026-10-05): the manual and the wiki pages in the
 # archive are built from generated lists; refuse to pack while they are stale.
 # Runs before -SkipBuild is honoured, so a payload check is gated too.
-& pwsh -NoProfile -File (Join-Path $repo "tools\build-feature-pages.ps1") -Check
-if ($LASTEXITCODE -ne 0) { Write-Host "PACK REFUSED: generated feature pages are not current -- run tools\build-feature-pages.ps1 and commit" -ForegroundColor Red; exit 1 }
+& pwsh -NoProfile -File (Join-Path $repo "tools\featuregen-gate.ps1") -Repo $repo
+if ($LASTEXITCODE -ne 0) { Write-Host "PACK REFUSED: generated feature pages are not current (or featuregen is missing) -- run featuregen build --all and commit" -ForegroundColor Red; exit 1 }
 
 if ($SkipBuild) {
   Write-Host "-SkipBuild: staging from the binaries already on disk (NOT a releasable archive)" -ForegroundColor Yellow

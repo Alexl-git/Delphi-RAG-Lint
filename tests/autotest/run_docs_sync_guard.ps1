@@ -184,7 +184,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 
 $Repo = (Resolve-Path $Repo).Path
-# Shared with tools\FeatureRegistry.psm1: ONE definition of the verb and caption
+# Shared with featuregen (FeatureGen.Live ports it): ONE definition of the verb and caption
 # harvests, so the registry guard cannot fork these regexes silently.
 . (Join-Path $Repo 'tests\autotest\lib\DocsSurfaceHarvest.ps1')
 Write-Host '== documented CLI surface vs the real one ==' -ForegroundColor Cyan

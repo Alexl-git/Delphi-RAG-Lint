@@ -11,8 +11,28 @@
     {
       "type": "cli",
       "verb": "query",
-      "example": "drag-lint query --kind <k> --all"
+      "example": "drag-lint query --kind <k> --all",
+      "usage": "drag-lint query --name <symbol-name> [--db ...] [--json] [--case-sensitive] [--exact]",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<symbol-name>"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--case-sensitive"
+        },
+        {
+          "name": "--exact"
+        }
+      ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "pitfalls": ["a project DB IS the compile closure, so a hit is membership and a MISS is non-membership.", "STRING LITERALS, DFM, SQL *and COMMENT PROSE* -- // { } (* *) and ///. Filter with --kind: literal|const|resourcestring|format|comment|doc|dfm-prop|sql-exception. --kind literal is what this returned before comments were indexed."]
 }

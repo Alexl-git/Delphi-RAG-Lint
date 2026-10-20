@@ -1,0 +1,69 @@
+{
+  "id": "mcp-config-writer",
+  "title": "Register the MCP server (Claude Code, VS Code)",
+  "group": "editor-integration",
+  "owner": "CHARTS",
+  "status": "shipped",
+  "since": "1.26.1-alpha",
+  "summary": "Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable",
+  "intro": "Run drag-lint mcp-config --all (try --dry-run first) once after installing, so Claude Code and VS Code can start drag-lint's MCP server. Pass --db to pin one index per entry (--name); --remove takes only its own entry out again.",
+  "wikiPage": "Register-MCP-Server",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "mcp-config",
+      "example": "--all --dry-run",
+      "usage": "drag-lint mcp-config (--claude-code | --vscode | --all) [--remove] [--dry-run] [--name <n>] [--db <index>] [--engine <exe>] [--config-path <file>] [--json]",
+      "flags": [
+        {
+          "name": "--claude-code"
+        },
+        {
+          "name": "--vscode"
+        },
+        {
+          "name": "--all"
+        },
+        {
+          "name": "--remove"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--name",
+          "arg": "<n>"
+        },
+        {
+          "name": "--db",
+          "arg": "<index>"
+        },
+        {
+          "name": "--engine",
+          "arg": "<exe>"
+        },
+        {
+          "name": "--config-path",
+          "arg": "<file>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--home-dir"
+        },
+        {
+          "name": "--appdata-dir"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "aliases": ["Set-DragLintMcpConfig", "claude mcp add", "mcp setup", "mcp.json"],
+  "related": ["serve"],
+  "lastVerified": {
+    "date": "2026-10-14",
+    "by": "alexanderl",
+    "build": "1.31.1-alpha"
+  }
+}

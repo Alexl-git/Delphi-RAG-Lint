@@ -1,0 +1,45 @@
+{
+  "id": "reconcile-project-members-dpr-dproj",
+  "title": "Reconcile Project Members (.dpr/.dproj)",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.18.0-alpha",
+  "summary": "Compares a project file's declared member list against what is on disk and in the compile closure",
+  "wikiPage": "Reconcile-Project-Members-dpr-dproj",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Reconcile Project Members (.dpr/.dproj)..."
+    },
+    {
+      "type": "cli",
+      "verb": "reconcile-project",
+      "usage": "drag-lint reconcile-project <App.dpr|.dproj> [--apply] [--only <unit,...>] [--db <db>] [--full] [--json] [--config <path>] - sync project member list; flag stale used units. --only restricts MISSING (and therefore --apply) to a reviewed selection, so a dry run with --only previews exactly what --apply would write. --json carries `applied` (the OUTCOME, false when --apply had nothing to write) plus `backups` and `edited` when --apply is passed",
+      "flags": [
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--only",
+          "arg": "<unit,...>"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        },
+        {
+          "name": "--full"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--config",
+          "arg": "<path>"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

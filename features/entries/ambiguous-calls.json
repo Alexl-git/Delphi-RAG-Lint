@@ -10,7 +10,25 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "ambiguous-calls"
+      "verb": "ambiguous-calls",
+      "usage": "drag-lint ambiguous-calls [--qname <Foo.Bar>|--file <file>] --db PATH [--json] (resolver-coverage diagnostic: unresolved/ambiguous call sites)",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.Bar>"
+        },
+        {
+          "name": "--file",
+          "arg": "<file>"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

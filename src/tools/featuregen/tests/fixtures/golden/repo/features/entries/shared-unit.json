@@ -1,0 +1,34 @@
+{
+  "id": "shared-unit",
+  "title": "shared-unit",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.10.0-alpha",
+  "summary": "Reads or extends the dl:shared marker on a unit, recording which projects share it",
+  "wikiPage": "shared-unit",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "shared-unit",
+      "usage": "drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json] (read/extend the dl:shared marker; dry-run without --apply)",
+      "flags": [
+        {
+          "name": "--in",
+          "arg": "<file.pas>"
+        },
+        {
+          "name": "--add-project",
+          "arg": "<name>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

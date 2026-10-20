@@ -1,0 +1,40 @@
+{
+  "id": "call-path",
+  "title": "call-path",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.91.0-alpha",
+  "summary": "Finds the shortest resolved call path from one symbol to another",
+  "wikiPage": "call-path",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "call-path",
+      "usage": "drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json] (shortest resolved call path A -> ... -> B; exit 1 = no path)",
+      "flags": [
+        {
+          "name": "--from",
+          "arg": "<A>"
+        },
+        {
+          "name": "--to",
+          "arg": "<B>"
+        },
+        {
+          "name": "--max-depth",
+          "arg": "N"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

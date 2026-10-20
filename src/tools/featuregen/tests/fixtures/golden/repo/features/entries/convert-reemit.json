@@ -1,0 +1,18 @@
+{
+  "id": "convert-reemit",
+  "title": "convert-reemit",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "internal",
+  "since": "1.10.0-alpha",
+  "summary": "The DFM re-emit stage of the conversion pipeline, driven by convert-apply and by test runners",
+  "wikiPage": "Maintenance",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "convert-reemit"
+    }
+  ],
+  "audience": "agent",
+  "notes": "internal: internal stage of the conversion pipeline (DFM re-emit), driven by convert-apply and by two runners under tests\\."
+}

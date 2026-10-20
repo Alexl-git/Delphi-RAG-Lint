@@ -10,7 +10,28 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "callgraph"
+      "verb": "callgraph",
+      "usage": "drag-lint callgraph --qname <X> [--direction callers|callees] [--depth N] --db PATH [--json] (N-deep resolved call tree; cycle-guarded)",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<X>"
+        },
+        {
+          "name": "--direction"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

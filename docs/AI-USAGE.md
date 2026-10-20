@@ -752,7 +752,7 @@ reloads inside that window; `bench-context [--n N]` times N context bundles.
 
 ### 2c. Registered verbs (generated from the feature registry)
 
-The table between the markers is written by `tools\build-feature-pages.ps1` from
+The table between the markers is written by `featuregen build` from
 `features\entries\*.json` (entries whose `audience` is `agent` or `both` and that
 have a `cli` surface). Do not edit it by hand; edit the entry and regenerate.
 
@@ -1560,19 +1560,19 @@ The registry is the master list of what drag-lint ships; the page is yours, the
 list is the registry's. Spec (local, gitignored design spec): `docs\superpowers\specs\2026-10-05-feature-registry-design.md`;
 page: `docs\wiki\Feature-Registry.md`.
 
-1. Register it: `tools\feature-registry.ps1 add -Id <id> -Title ... -Group ... -Owner ...
-   -Summary ... -Intro ... -WikiPage ... -Surface "<type>:<...> ;; <type>:<...>"` -- surfaces
+1. Register it: `featuregen add` (id, title, group, owner, summary, intro, wiki page and the
+   surfaces as `"<type>:<...> ;; <type>:<...>"`; `featuregen --help` has the option names) -- surfaces
    carry the FULL menu path (`ide-menu:<Top> > Submenu > Caption`), every level. Moving a
-   menu item? `blast-radius -MenuPath "<node>"` first, then `move-menu -From ... -To ...`, in
+   menu item? `featuregen blast-radius` on the menu node first, then `featuregen move-menu` (old and new prefix), in
    the same commit as the plugin change.
 2. Write or update the wiki page named in `wikiPage` -- you own it; the registry links to it.
-3. Run `tools\build-feature-pages.ps1 -Normalise` and commit the regenerated `docs\wiki` pages, the
+3. Run `featuregen normalise` and `featuregen build --all` and commit the regenerated `docs\wiki` pages, the
    README / AI-USAGE blocks and `features\generated\manifest.json` WITH the feature.
 4. Run `tests\autotest\run_feature_registry_guard.ps1` -- it names exactly what is missing and
    prints the JSON skeleton; a red battery is the only reminder there is.
 5. Never hand-edit `Home.md`, `Features.md`, `Feature-Index.md`, `Quick-Help.md` or a
    `dl:registry` block -- edit the entry or the template under `features\templates\` and
-   regenerate. Groups and teams are data (`-NewGroup` / `-NewTeam`), not an enum.
+   regenerate. Groups and teams are data (`featuregen add` creates a new one on request), not an enum.
 
 `status: internal` is for accepted-but-unadvertised verbs; docs-sync check 1's
 `$UndocumentedOnPurpose` stays a separate list in v1 (owner decision 2026-10-05).

@@ -1,0 +1,18 @@
+{
+  "id": "compile-diagnose",
+  "title": "Compile & Diagnose",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings",
+  "wikiPage": "Compile-Diagnose",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Compile & Diagnose"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

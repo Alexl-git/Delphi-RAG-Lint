@@ -1,0 +1,37 @@
+{
+  "id": "wiki",
+  "title": "wiki",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.7.0-alpha",
+  "summary": "Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it",
+  "wikiPage": "wiki",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "wiki",
+      "usage": "drag-lint wiki --term \"<phrase>\" | --list | --check [--json] [--db <file.sqlite>] (dl:wiki CONCEPT topics written in doc comments: --term routes a human word or alias (\"the scheduler\") to the owning symbol, --list prints every topic, --check resolves every SeeCode entry and exits 1 on drift. Authoring format: docs\\wiki\\Wiki-Blocks-Authoring.md)",
+      "flags": [
+        {
+          "name": "--term"
+        },
+        {
+          "name": "--list"
+        },
+        {
+          "name": "--check"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

@@ -15,7 +15,31 @@
     },
     {
       "type": "cli",
-      "verb": "usages"
+      "verb": "usages",
+      "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<X>"
+        },
+        {
+          "name": "--width"
+        },
+        {
+          "name": "--db",
+          "arg": "<path>"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both"

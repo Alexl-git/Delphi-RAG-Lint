@@ -62,5 +62,4 @@ log -- and only the buffer is re-linted.
 
 Before 1.31.2 the database was the one of the project OPENED LAST, so with two
 projects in a group a rescan could write the active project's closure into the
-other project's index. The engine now refuses that pairing too: `index
---project <X>` into a database stamped for another project exits 2.
+other project's index. The engine now refuses that pairing too: `index --project <X>` into a database stamped for another project exits 2.

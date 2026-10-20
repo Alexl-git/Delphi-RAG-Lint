@@ -1,0 +1,18 @@
+{
+  "id": "open-plugin-log",
+  "title": "Open Plugin Log",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.39.0-alpha",
+  "summary": "Opens the drag-lint plugin's own log file",
+  "wikiPage": "Open-Plugin-Log",
+  "surfaces": [
+    {
+      "type": "ide-about",
+      "caption": "Open Plugin Log"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: group guessed"
+}

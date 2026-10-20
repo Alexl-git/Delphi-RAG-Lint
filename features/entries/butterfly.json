@@ -10,7 +10,29 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "butterfly"
+      "verb": "butterfly",
+      "usage": "drag-lint butterfly --qname <X> [--depth N] [--format dot|mermaid|text|json] [--output F] --db PATH [--db ...] (composes callers (upward wing) + callees (downward wing) of X into one chart; default format dot)",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<X>"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--output",
+          "arg": "F"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "both",

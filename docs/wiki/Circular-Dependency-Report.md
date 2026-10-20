@@ -149,8 +149,7 @@ whose method bodies use the cycle's globals, so moving it would drag them along;
 the playbook extracts a base class with only the members `DemoLogger` uses and
 keeps the class where it is. Either way no interface edge survives, and
 behaviour does not change. `--causes` and `--plan` are what
-produce this level of detail; see [Circular Uses Report (cycles + fix
-plan)](Circular-Uses-Report-cycles-fix-plan) for the general feature page.
+produce this level of detail; see [Circular Uses Report (cycles + fix plan)](Circular-Uses-Report-cycles-fix-plan) for the general feature page.
 
 ## Honest caveats
 

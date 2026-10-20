@@ -16,8 +16,7 @@ drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...
 
 then answer **Yes** when it asks where the output should go.
 
-There used to be a second menu item, `Reverse Call Tree (clickable, Messages
-window)...`, sitting directly below the first. The two were one report with two
+There used to be a second menu item, `Reverse Call Tree (clickable, Messages window)...`, sitting directly below the first. The two were one report with two
 renderers, differing only in where the answer lands -- so the menu was asking
 you to choose a renderer before you had seen the answer. They merged in session
 78; the destination moved into a dialog. Nothing about the report itself
@@ -25,8 +24,7 @@ changed, and both renderers are still there.
 
 ## What it needs
 An index IS required -- `reverse-calltree` reads the project's index
-database. The project's DB lives at `<project folder>\_D-RAG\<project
-file>.sqlite`; run `drag-lint resolve-dbs --project <X.dproj>` if you are
+database. The project's DB lives at `<project folder>\_D-RAG\<project file>.sqlite`; run `drag-lint resolve-dbs --project <X.dproj>` if you are
 unsure which one.
 
 ## Example

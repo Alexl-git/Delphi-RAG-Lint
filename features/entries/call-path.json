@@ -10,7 +10,29 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "call-path"
+      "verb": "call-path",
+      "usage": "drag-lint call-path --from <A> --to <B> [--max-depth N] --db PATH [--json] (shortest resolved call path A -> ... -> B; exit 1 = no path)",
+      "flags": [
+        {
+          "name": "--from",
+          "arg": "<A>"
+        },
+        {
+          "name": "--to",
+          "arg": "<B>"
+        },
+        {
+          "name": "--max-depth",
+          "arg": "N"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

@@ -1,0 +1,38 @@
+{
+  "id": "safe-delete",
+  "title": "safe-delete",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.69.0-alpha",
+  "summary": "Deletes a symbol if and only if it has zero references in the index",
+  "wikiPage": "safe-delete",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "safe-delete",
+      "usage": "drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db> - delete a symbol iff it has zero references",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<QName>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

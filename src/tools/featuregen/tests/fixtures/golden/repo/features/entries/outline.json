@@ -1,0 +1,31 @@
+{
+  "id": "outline",
+  "title": "outline",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.86.0-alpha",
+  "summary": "Prints the file-scoped symbol outline for one Pascal unit",
+  "wikiPage": "outline",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "outline",
+      "usage": "drag-lint outline --file <path.pas> [--db <path>] [--format text|json]",
+      "flags": [
+        {
+          "name": "--file",
+          "arg": "<path.pas>"
+        },
+        {
+          "name": "--db",
+          "arg": "<path>"
+        },
+        {
+          "name": "--format"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

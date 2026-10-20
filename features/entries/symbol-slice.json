@@ -14,7 +14,21 @@
     },
     {
       "type": "cli",
-      "verb": "slice"
+      "verb": "slice",
+      "usage": "drag-lint slice --qname <Foo.TBar> [--db <file.sqlite>] [--format text|json]",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.TBar>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
   "audience": "both"

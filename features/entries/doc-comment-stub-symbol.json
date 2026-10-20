@@ -14,7 +14,21 @@
     },
     {
       "type": "cli",
-      "verb": "generate-docs"
+      "verb": "generate-docs",
+      "usage": "drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.TBar.Baz>"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "both"

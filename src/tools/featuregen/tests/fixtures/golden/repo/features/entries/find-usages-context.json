@@ -1,0 +1,46 @@
+{
+  "id": "find-usages-context",
+  "title": "Find Usages",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.33.0-alpha",
+  "summary": "Lists references to the symbol represented by a Structure-tree node",
+  "wikiPage": "Find-Usages-context",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Find Usages"
+    },
+    {
+      "type": "cli",
+      "verb": "usages",
+      "usage": "drag-lint usages --name <X> [--width narrow|wide|very-wide] [--db <path>] [--depth N] [--format json|--json]",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<X>"
+        },
+        {
+          "name": "--width"
+        },
+        {
+          "name": "--db",
+          "arg": "<path>"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

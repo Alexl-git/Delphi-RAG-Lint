@@ -1,0 +1,7 @@
+{
+  "teams": [
+    { "id": "ENGINE", "title": "Engine team", "order": 10, "summary": "The CLI, the index, the linter, the LSP, the IDE plugin." },
+    { "id": "CONVERTER", "title": "Converter team", "order": 20, "summary": "Component conversion: convert-* verbs, proptree, glyph-vacuum, ConvRulesEditor." },
+    { "id": "CHARTS", "title": "Charts team", "order": 30, "summary": "Chart questions, charts\\src scripts, forms-csv, the Reports submenu." }
+  ]
+}

@@ -10,7 +10,31 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "lsp"
+      "verb": "lsp",
+      "usage": "drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--stdio"
+        },
+        {
+          "name": "--clientProcessId"
+        },
+        {
+          "name": "--proxy"
+        },
+        {
+          "name": "--delphi-lsp",
+          "arg": "<path>"
+        },
+        {
+          "name": "--trace",
+          "arg": "<file>"
+        }
+      ]
     }
   ],
   "audience": "both",

@@ -1,0 +1,12 @@
+{
+  "id": "selftest-thing",
+  "title": "Selftest thing",
+  "group": "g-ide",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.9.0-alpha",
+  "summary": "Self test",
+  "wikiPage": "Selftest-thing",
+  "surfaces": [ { "type": "cli", "verb": "selftest" } ],
+  "audience": "both"
+}

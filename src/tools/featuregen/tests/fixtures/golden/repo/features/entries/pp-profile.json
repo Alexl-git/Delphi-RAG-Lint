@@ -1,0 +1,30 @@
+{
+  "id": "pp-profile",
+  "title": "pp-profile",
+  "group": "indexing",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.92.0-alpha",
+  "summary": "Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line",
+  "wikiPage": "pp-profile",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "pp-profile",
+      "usage": "drag-lint pp-profile [--dproj PATH] [--platform win32|win64] [--config Release|Debug] (diagnostic: print the resolved define profile, one symbol per line)",
+      "flags": [
+        {
+          "name": "--dproj",
+          "arg": "PATH"
+        },
+        {
+          "name": "--platform"
+        },
+        {
+          "name": "--config"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

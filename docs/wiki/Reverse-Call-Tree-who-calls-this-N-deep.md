@@ -17,8 +17,7 @@ drag-lint > Uses & Dependencies > Reverse Call Tree (who calls this, N-deep)...
 
 ## What it needs
 An index IS required -- `reverse-calltree` reads the project's index
-database. The project's DB lives at `<project folder>\_D-RAG\<project
-file>.sqlite`; run `drag-lint resolve-dbs --project <X.dproj>` if you are
+database. The project's DB lives at `<project folder>\_D-RAG\<project file>.sqlite`; run `drag-lint resolve-dbs --project <X.dproj>` if you are
 unsure which one.
 
 ## Example

@@ -11,7 +11,20 @@
     {
       "type": "cli",
       "verb": "query",
-      "sub": "typecat"
+      "sub": "typecat",
+      "usage": "drag-lint query typecat --name <type> [--db ...] [--json] (resolve type category: float/string/class/interface/...)",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<type>"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both"

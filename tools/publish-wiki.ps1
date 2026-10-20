@@ -37,9 +37,9 @@ $ErrorActionPreference = 'Stop'
 
 # GATE (feature registry, 2026-10-05): a publish must never carry a generated
 # page that differs from the registry. -Check writes nothing; exit 1 = stale.
-& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'build-feature-pages.ps1') -Check
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'featuregen-gate.ps1') -Repo (Split-Path -Parent $PSScriptRoot)
 if ($LASTEXITCODE -ne 0) {
-  Write-Host 'publish-wiki: generated pages are not current -- run tools\build-feature-pages.ps1, commit, then publish' -ForegroundColor Red
+  Write-Host 'publish-wiki: generated pages are not current -- run featuregen build --all, commit, then publish' -ForegroundColor Red
   exit 1
 }
 

@@ -14,7 +14,21 @@
     },
     {
       "type": "cli",
-      "verb": "library-drift"
+      "verb": "library-drift",
+      "usage": "drag-lint library-drift [--platform <p>] [--config <path>] [--json] - registry library roots that have source on disk but none in the index (exit 2 if drift; roots the section exclude prunes are listed as excluded, not counted)",
+      "flags": [
+        {
+          "name": "--platform",
+          "arg": "<p>"
+        },
+        {
+          "name": "--config",
+          "arg": "<path>"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

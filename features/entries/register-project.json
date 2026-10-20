@@ -10,7 +10,20 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "register-project"
+      "verb": "register-project",
+      "usage": "drag-lint register-project <file.dproj> [--name <Section>] [--apply] [--json] (add a NEW project to the manifest so index --all and the IDE can see it; dry-run without --apply)",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<Section>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

@@ -14,7 +14,31 @@
     },
     {
       "type": "cli",
-      "verb": "check-unit"
+      "verb": "check-unit",
+      "usage": "drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]",
+      "flags": [
+        {
+          "name": "--project",
+          "arg": "<dproj>"
+        },
+        {
+          "name": "--platform"
+        },
+        {
+          "name": "--shadow",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--resolve-uses"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
   "audience": "both"

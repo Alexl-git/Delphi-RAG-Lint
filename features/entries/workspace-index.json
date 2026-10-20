@@ -11,7 +11,14 @@
     {
       "type": "cli",
       "verb": "workspace",
-      "sub": "index"
+      "sub": "index",
+      "usage": "drag-lint workspace index [--config <.drag-lint-workspace.json>]",
+      "flags": [
+        {
+          "name": "--config",
+          "arg": "<.drag-lint-workspace.json>"
+        }
+      ]
     }
   ],
   "audience": "both",

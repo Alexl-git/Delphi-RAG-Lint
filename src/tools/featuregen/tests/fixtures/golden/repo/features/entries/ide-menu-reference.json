@@ -1,0 +1,19 @@
+{
+  "id": "ide-menu-reference",
+  "title": "IDE Menu Reference",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "What every item in the drag-lint menu does",
+  "wikiPage": "IDE-Menu-Reference",
+  "surfaces": [
+    {
+      "type": "workflow",
+      "doc": "docs\\wiki\\IDE-Menu-Reference.md"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown",
+  "homeOrder": 40
+}

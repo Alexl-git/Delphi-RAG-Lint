@@ -11,9 +11,31 @@
     {
       "type": "cli",
       "verb": "query",
-      "sub": "find-callers"
+      "sub": "find-callers",
+      "usage": "drag-lint query find-callers --name <callee-name> [--context N] [--resolved] [--db ...] [--json]",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<callee-name>"
+        },
+        {
+          "name": "--context",
+          "arg": "N"
+        },
+        {
+          "name": "--resolved",
+          "summary": "precise callers via resolved call_edges (grouped by target, certain|ambiguous); a PROPERTY/FIELD name lists its bound accesses [certain, read|write]; an ENUM VALUE name lists each bound read [certain, read] (resolver 1.6.0-alpha)"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",
+  "pitfalls": ["the BARE member name. --name TFoo.Bar silently returns 0; --name Bar returns the sites."],
   "notes": "issued by the plugin from DragLint.Plugin.CodeLensCache.pas:466"
 }
