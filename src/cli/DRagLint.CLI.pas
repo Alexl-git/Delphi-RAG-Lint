@@ -22207,12 +22207,13 @@ var
     wherever the answer needs it. `--library-db none` opens no library at all (fix
     round 1: test runners must never reach the real one through the manifest).
     E18 T13: shared by --plan, --fix and the --causes JSON (its fix object). }
-  function OpenPlanLibrary(out pFailed: Boolean): ISymbolStore;
+  function OpenPlanLibrary(out pFailed: Boolean; out pMessage: string): ISymbolStore;
   var
     LibPath: string;
   begin
-    pFailed:= False;
-    Result := nil;
+    pFailed := False;
+    pMessage:= '';
+    Result  := nil;
     LibPath:= '';
     if (Length(AArgs.LibraryDbs) > 0) and SameText(AArgs.LibraryDbs[0], 'none') then
       Writeln(ErrOutput, 'drag-lint: note: cycles --plan reads no platform library (--library-db none)')
@@ -22221,8 +22222,8 @@ var
       LibPath:= AArgs.LibraryDbs[0];
       if not TFile.Exists(LibPath) then
       begin
-        Writeln('ERROR: library database not found: ', LibPath);
-        pFailed:= True;
+        pMessage:= 'library database not found: ' + LibPath;
+        pFailed := True;
         Exit;
       end;
     end
@@ -22320,8 +22321,13 @@ begin
       Graph.UnitFid  := UnitFid;
       { E18 T6 / T13: the platform library for recipe R2 (OpenPlanLibrary) }
       var LibFailed: Boolean;
-      var LibStore: ISymbolStore:= OpenPlanLibrary(LibFailed);
-      if LibFailed then Exit(2);
+      var LibMessage: string;
+      var LibStore: ISymbolStore:= OpenPlanLibrary(LibFailed, LibMessage);
+      if LibFailed then
+      begin
+        Writeln('ERROR: ', LibMessage);
+        Exit(2);
+      end;
       if AArgs.Fix then
       begin
         var FixOpts: TCycleFixOptions;
@@ -22382,10 +22388,13 @@ begin
           EdgeGraph.UnitFid  := UnitFid;
           AddCycleEdgeSurfaces(Store, Sccs, EdgeGraph, JArr);
           { E18 T13: the fix object per group -- the planner's verdict, edges and the exact commands }
+          { a library that cannot be opened must not change the rest of the --causes output: the fix
+            objects say so instead (E18 T13 fix round) }
           var JsonLibFailed: Boolean;
-          var JsonLib: ISymbolStore:= OpenPlanLibrary(JsonLibFailed);
-          if JsonLibFailed then Exit(2);
-          AddCycleFixHints(Store, AArgs.DbPath, Sccs, EdgeGraph, JsonLib, AArgs.ProjectPath, JArr);
+          var JsonLibMessage: string;
+          var JsonLib: ISymbolStore:= OpenPlanLibrary(JsonLibFailed, JsonLibMessage);
+          AddCycleFixHints(Store, AArgs.DbPath, Sccs, EdgeGraph, JsonLib, AArgs.ProjectPath, JArr,
+            (if JsonLibFailed then 'library unavailable: ' + JsonLibMessage else ''));
         end;
         Writeln(JArr.ToJson);
       finally

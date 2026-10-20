@@ -24,10 +24,20 @@
 [CmdletBinding()]
 param(
   [string]$Exe       = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-part-all-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite',
   [string]$Rsvars    = 'C:\Program Files (x86)\Embarcadero\Studio\37.0\bin\rsvars.bat'
 )
+# E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
+# -KeepScratch is passed (the path is printed).
+function Remove-Scratch {
+  if ($script:Failed -and $KeepScratch) { Write-Host "scratch kept: $WorkDir" -ForegroundColor Yellow; return }
+  Set-Location -LiteralPath $env:TEMP
+  if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
+}
+trap { $script:Failed = $true; Remove-Scratch; break }
+
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $script:Passed = 0
@@ -207,6 +217,7 @@ Check 'k: stopped = no edge is cuttable, after 1 iteration' (("$($r.Json.stopped
 Check 'k: the child got both --library-db and --rules-dir' ((([regex]::Matches($r.Log, '--library-db')).Count -eq 2) -and $r.Log.Contains('--rules-dir')) $r.Log
 
 Write-Host ''
+Remove-Scratch
 if ($script:Failed) { Write-Host "FAILED ($script:Passed passed)" -ForegroundColor Red; exit 1 }
 Write-Host "ALL PASS ($script:Passed)" -ForegroundColor Green
 exit 0

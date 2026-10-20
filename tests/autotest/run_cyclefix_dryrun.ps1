@@ -23,9 +23,19 @@
 [CmdletBinding()]
 param(
   [string]$Exe       = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-dryrun-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
+# -KeepScratch is passed (the path is printed).
+function Remove-Scratch {
+  if ($script:Failed -and $KeepScratch) { Write-Host "scratch kept: $WorkDir" -ForegroundColor Yellow; return }
+  Set-Location -LiteralPath $env:TEMP
+  if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
+}
+trap { $script:Failed = $true; Remove-Scratch; break }
+
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $script:Passed = 0
@@ -187,6 +197,7 @@ try {
 Check 'z1: the real library DBs are unchanged (size + mtime)' ((Get-LibStamp) -eq $stampBefore) ''
 
 Write-Host ("{0} PASS" -f $script:Passed)
+Remove-Scratch
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'ALL PASS' -ForegroundColor Green
 exit 0

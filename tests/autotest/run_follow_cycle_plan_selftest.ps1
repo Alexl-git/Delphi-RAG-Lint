@@ -22,8 +22,18 @@
 [CmdletBinding()]
 param(
   [string]$Exe     = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [switch]$KeepScratch,
   [string]$WorkDir = "$env:TEMP\drag-lint-follow-plan-$PID"
 )
+# E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
+# -KeepScratch is passed (the path is printed).
+function Remove-Scratch {
+  if ($script:Failed -and $KeepScratch) { Write-Host "scratch kept: $WorkDir" -ForegroundColor Yellow; return }
+  Set-Location -LiteralPath $env:TEMP
+  if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
+}
+trap { $script:Failed = $true; Remove-Scratch; break }
+
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -165,6 +175,7 @@ try {
   Check 'REFUSE exits 2: cycle not in plan' (($LASTEXITCODE -eq 2) -and ($r -match 'REFUSE: cycle 7')) $r
 } finally {
   Pop-Location
+  Remove-Scratch
 }
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'PASS' -ForegroundColor Green; exit 0

@@ -25,9 +25,19 @@
 [CmdletBinding()]
 param(
   [string]$Exe       = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-fixit-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
+# -KeepScratch is passed (the path is printed).
+function Remove-Scratch {
+  if ($script:Failed -and $KeepScratch) { Write-Host "scratch kept: $WorkDir" -ForegroundColor Yellow; return }
+  Set-Location -LiteralPath $env:TEMP
+  if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
+}
+trap { $script:Failed = $true; Remove-Scratch; break }
+
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $script:Passed = 0
@@ -113,6 +123,9 @@ try {
   }
   Check 'a3: cuts line names routine-call inversion, (chosen)' `
     ($b3 -match '(?m)^  cuts    : demoblueprint -> demoblueprint\.viewmodel \(routine-call inversion\) \(chosen\)\s*$') $b3
+  Check 'a5: exactly ONE Fix it block per cycle' `
+    ((([regex]::Matches($c1, '(?m)^Fix it')).Count -eq 1) -and (([regex]::Matches($c2, '(?m)^Fix it')).Count -eq 1) -and (([regex]::Matches($c3, '(?m)^Fix it')).Count -eq 1)) `
+    ("{0}/{1}/{2}" -f ([regex]::Matches($c1, '(?m)^Fix it')).Count, ([regex]::Matches($c2, '(?m)^Fix it')).Count, ([regex]::Matches($c3, '(?m)^Fix it')).Count)
   Check 'a4: the block is last in its cycle (nothing after it but the next heading)' `
     ($b2 -ne '' -and $c2.TrimEnd().EndsWith($b2.TrimEnd())) ($c2.Substring([Math]::Max(0, $c2.Length - 300)))
 
@@ -141,7 +154,15 @@ try {
     Check 'c7: without --project the JSON commands carry --project <your.dproj>' `
       ($jn -and $jn[2].fix.dry_run -like '*--project <your.dproj> --db *') ''
 
-    Write-Host '== (d) agreement with the --fix dry run' -ForegroundColor Cyan
+    # a library that cannot be opened: the rest of the --causes output is unchanged, the fix objects say why
+  $jbad = (& $Exe cycles --format json --causes --project $proj --db $db --library-db (Join-Path $WorkDir 'no-such-library.sqlite') 2>$null | Out-String) | ConvertFrom-Json
+  Check 'c8: missing --library-db: exit 0 path, JSON still parses with 3 groups' ($jbad -and @($jbad).Count -eq 3) ''
+  Check 'c8: every fix has available=false and reason `library unavailable: library database not found: <path>`' `
+    ($jbad -and @($jbad | Where-Object { $_.fix.available -eq $false -and $_.fix.reason -like 'library unavailable: library database not found: *no-such-library.sqlite' }).Count -eq 3) (($jbad | ConvertTo-Json -Depth 5 -Compress))
+  Check 'c8: the commands are still there and the groups/edges are unchanged' `
+    ($jbad -and $jbad[1].fix.dry_run -like '*--cycle 2' -and (($jbad | ForEach-Object { $_.units -join ',' }) -join ';') -eq (($g | ForEach-Object { $_.units -join ',' }) -join ';') -and @($jbad[2].edges).Count -eq @($g[2].edges).Count -and @($jbad[2].edges).Count -gt 0) ''
+
+  Write-Host '== (d) agreement with the --fix dry run' -ForegroundColor Cyan
     foreach ($n in 2, 3) {
       if ($n -eq 2 -and -not $haveLib) { continue }
       $fx = (& $Exe cycles --fix --project $proj --db $db --cycle $n --no-compile --library-db $Lib --format json 2>$null | Out-String) | ConvertFrom-Json
@@ -168,7 +189,7 @@ try {
     ((Get-TreeHash $demo $db) + '|' + (Get-TreeHash $nocut $ndb) -eq $hashBefore) ''
 } finally {
   Pop-Location
-  if (Test-Path $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
+  Remove-Scratch
 }
 Check 'z1: the real library DBs are unchanged (size + mtime)' ((Get-LibStamp) -eq $stampBefore) ''
 

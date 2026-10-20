@@ -18,9 +18,19 @@
 [CmdletBinding()]
 param(
   [string]$Exe       = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [switch]$KeepScratch,
   [string]$WorkDir   = "$env:TEMP\drag-lint-cyclefix-shadow-$PID",
   [string]$LibraryDb = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
+# -KeepScratch is passed (the path is printed).
+function Remove-Scratch {
+  if ($script:Failed -and $KeepScratch) { Write-Host "scratch kept: $WorkDir" -ForegroundColor Yellow; return }
+  Set-Location -LiteralPath $env:TEMP
+  if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
+}
+trap { $script:Failed = $true; Remove-Scratch; break }
+
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 $script:Passed = 0
@@ -140,10 +150,24 @@ try {
   Copy-Tree $Demo $dproj
   $ddb = Join-Path $WorkDir 'dflt.sqlite'
   & $Exe index --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb *> (Join-Path $WorkDir 'dflt-index.log')
-  $txt = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null | Out-String)
+  # the default scratch is deleted at the end of the run (E18 T13 fix round); this check inspects it, so it asks to keep it
+  $env:DRAGLINT_CYCLEFIX_KEEP_SCRATCH = '1'
+  try {
+    $txt = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null | Out-String)
+  } finally { $env:DRAGLINT_CYCLEFIX_KEEP_SCRATCH = $null }
   $m = [regex]::Match($txt, '(?m)^Shadow tree: (.+?)\s*$')
   Check 'c3: text output announces "Shadow tree: C:\TEMP\draglint_cyclefix_<pid>"' ($m.Success -and $m.Groups[1].Value -match '^C:\\TEMP\\draglint_cyclefix_\d+\\?$') $txt
   Check 'c3: that directory exists and holds files' ($m.Success -and (Test-Path $m.Groups[1].Value) -and (@(Get-ChildItem $m.Groups[1].Value -Recurse -File).Count -gt 0)) ''
+  if ($m.Success -and (Test-Path $m.Groups[1].Value)) { [IO.Directory]::Delete($m.Groups[1].Value, $true) }
+  # c4: without the seam the product deletes the default shadow it created; a --shadow-out dir is never deleted
+  $txt2 = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none 2>$null | Out-String)
+  $m2 = [regex]::Match($txt2, '(?m)^Shadow tree: (.+?)\s*$')
+  Check 'c4: the run announced a default shadow dir (SANITY) and it is gone after the run' `
+    ($m2.Success -and $m2.Groups[1].Value -match '^C:\\TEMP\\draglint_cyclefix_\d+\\?$' -and -not (Test-Path $m2.Groups[1].Value) -and -not (Test-Path ($m2.Groups[1].Value.TrimEnd('\') + '_build'))) $txt2
+  if ($m2.Success -and (Test-Path $m2.Groups[1].Value)) { [IO.Directory]::Delete($m2.Groups[1].Value, $true) }
+  $own = Join-Path $WorkDir 'c4-own-shadow'
+  $null = (& $Exe cycles --fix --project (Join-Path $dproj 'CircularDemo.dproj') --db $ddb --no-compile --library-db none --shadow-out $own 2>$null | Out-String)
+  Check 'c4: POSITIVE CONTROL an explicit --shadow-out dir survives the run, with files' ((Test-Path $own) -and (@(Get-ChildItem $own -Recurse -File).Count -gt 0)) ''
   # --- fix round 1 -------------------------------------------------------------------------
   # Index a fresh demo copy after Patch(proj) changed it; run `cycles --fix` with an explicit shadow dir.
   function Run-Patched([string]$Tag, [scriptblock]$Patch, [hashtable]$Env = @{}, [string[]]$Extra = @()) {
@@ -217,6 +241,7 @@ try {
 Check 'z1: the real library DBs are unchanged (size + mtime)' ((Get-LibStamp) -eq $stampBefore) ''
 
 Write-Host ("{0} PASS" -f $script:Passed)
+Remove-Scratch
 if ($script:Failed) { Write-Host 'FAIL' -ForegroundColor Red; exit 1 }
 Write-Host 'ALL PASS' -ForegroundColor Green
 exit 0

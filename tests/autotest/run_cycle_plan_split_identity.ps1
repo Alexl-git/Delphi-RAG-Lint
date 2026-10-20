@@ -43,12 +43,22 @@
 [CmdletBinding()]
 param(
   [string]$Exe        = "$PSScriptRoot\..\..\third_party\dll-win64\drag-lint.exe",
+  [switch]$KeepScratch,
   [string]$WorkDir    = "$env:TEMP\drag-lint-cycle-split-$PID",
   [string]$SelfDb     = '',
   [string]$SelfOracle = '',
   [string]$SelfRoot   = '',
   [string]$LibraryDb  = 'C:\Projects\.drag-lint\library-Win64.sqlite'
 )
+# E18 T13: removes this run's scratch (WorkDir) however the run ends; kept only on failure when
+# -KeepScratch is passed (the path is printed).
+function Remove-Scratch {
+  if ($script:Failed -and $KeepScratch) { Write-Host "scratch kept: $WorkDir" -ForegroundColor Yellow; return }
+  Set-Location -LiteralPath $env:TEMP
+  if (Test-Path -LiteralPath $WorkDir) { [IO.Directory]::Delete($WorkDir, $true) }
+}
+trap { $script:Failed = $true; Remove-Scratch; break }
+
 $ErrorActionPreference = 'Stop'
 $script:Failed = $false
 function Check($n, $ok, $d = '') {
@@ -242,6 +252,7 @@ if ($SelfDb -ne '' -and $SelfOracle -ne '' -and (Test-Path $SelfDb) -and (Test-P
 }
 } finally {
   if (Test-Path -LiteralPath $LibCopy) { [IO.File]::Delete($LibCopy) }
+  Remove-Scratch
 }
 
 Write-Host ''

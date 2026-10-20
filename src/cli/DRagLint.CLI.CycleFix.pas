@@ -282,7 +282,7 @@ function ApplyTestBreak(const pView: TCyclePlanView; pMode: Integer): TCyclePlan
 /// path is refused explicitly.</remarks>
 function MechanisabilityGate(const pView: TCyclePlanView; const pOwn: TOwnRoots): TArray<TRefusal>;
 
-/// <summary>The default shadow directory: C:\TEMP\draglint_cyclefix_&lt;pid&gt;\.</summary>
+/// <summary>The default shadow directory: C:\TEMP\draglint_cyclefix_&lt;pid&gt;\. RunCycleFix deletes it, and the gate's _build dir, when the run ends unless DRAGLINT_CYCLEFIX_KEEP_SCRATCH=1; a --shadow-out directory is never deleted.</summary>
 /// <returns>The directory name with a trailing path delimiter; nothing is created.</returns>
 function DefaultShadowDir: string;
 
@@ -2556,11 +2556,33 @@ begin
   else Result:= RunAll(pOpts, pSccs, pGraph, Only);
 end;
 
+// E18 T13 fix round: the scratch THIS run created is deleted when the run ends, success or failure --
+// the default shadow dir (never a user's --shadow-out) and the compile gate's _build dir.
+// DRAGLINT_CYCLEFIX_KEEP_SCRATCH=1 keeps them for a test that inspects them.
+procedure DeleteDefaultScratch(const pOpts: TCycleFixOptions);
+const
+  CKeepScratchVar = 'DRAGLINT_CYCLEFIX_KEEP_SCRATCH';
+begin
+  if GetEnvironmentVariable(CKeepScratchVar) = '1' then Exit;
+  var Dirs: TArray<string>:= [BuildScratchDir];
+  if pOpts.ShadowOut = '' then Dirs:= Dirs + [DefaultShadowDir];
+  for var D in Dirs do
+    try
+      if TDirectory.Exists(D) then TDirectory.Delete(D, True);
+    except
+      on EInOutError do Writeln(ErrOutput, 'drag-lint: note: scratch not deleted: ', D); // best effort: a locked file must not change the run's result
+    end;
+end;
+
 function RunCycleFix(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 begin
-  if SameText(pOpts.Part, CPartAll) then Result:= RunAllSelected(pOpts, pSccs, pGraph)
-  else Result:= RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore);
+  try
+    if SameText(pOpts.Part, CPartAll) then Result:= RunAllSelected(pOpts, pSccs, pGraph)
+    else Result:= RunCycleFixGroups(pOpts, pStore, pSccs, pGraph, pLibStore);
+  finally
+    DeleteDefaultScratch(pOpts);
+  end;
 end;
 
 end.
