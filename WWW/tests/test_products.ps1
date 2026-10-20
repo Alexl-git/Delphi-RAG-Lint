@@ -40,6 +40,19 @@ Assert-Throws { Read-ProductPage $f $cfg } '*:8:*unknown fact*rule*'
 $f = New-BadProduct 'yadf' (($head -replace 'id: dl', 'id: yadf') + $mic + "<p>{{fact:rules}}</p>`r`n")
 Assert-Throws { Read-ProductPage $f $cfg } '*unknown fact*rules*'
 
+# test_product_fills_facts_in_title_and_summary (the summary feeds og:description and the index tile)
+$f = New-BadProduct 'dl' ("<!--product`r`nid: dl`r`ntitle: T {{fact:rules}}`r`nsummary: {{fact:rules}} rules`r`n-->`r`n" + $mic)
+$p = Read-ProductPage $f $cfg
+Assert-Equal 'T 190' $p.Title 'fact filled in title'
+Assert-Equal '190 rules' $p.Summary 'fact filled in summary'
+# an unknown fact in the block names its own line (summary is line 4)
+$f = New-BadProduct 'dl' (($head -replace 'summary: S', 'summary: {{fact:rule}}') + $mic)
+Assert-Throws { Read-ProductPage $f $cfg } '*:4:*unknown fact*rule*'
+
+# test_get_line_at (1-based; the index is the first character of the line it names)
+Assert-Equal 1 (Get-LineAt "a`nb`nc" 0) 'line of index 0'
+Assert-Equal 3 (Get-LineAt "a`nb`nc" 4) 'line of the last char'
+
 # test_product_id_must_match_folder_and_config
 $f = New-BadProduct 'dl' (($head -replace 'id: dl', 'id: yadf') + $mic)
 Assert-Throws { Read-ProductPage $f $cfg } '*folder*'

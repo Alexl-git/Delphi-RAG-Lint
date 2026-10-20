@@ -4,7 +4,7 @@
 
 $script:ProductKeys = 'id', 'title', 'summary'
 
-function Get-LineAt([string]$Text, [int]$Index) { 1 + ($Text.Substring(0, $Index) -split "`n").Count - 1 }
+function Get-LineAt([string]$Text, [int]$Index) { ($Text.Substring(0, $Index) -split "`n").Count }
 
 function Read-ProductPage([string]$Path, $Config) {
     $bytes = [IO.File]::ReadAllBytes($Path)
@@ -40,16 +40,17 @@ function Read-ProductPage([string]$Path, $Config) {
     if ($meta.image -and ($meta.image -notmatch '^[a-z0-9][a-z0-9-]*\.(png|jpe?g)$' -or -not (Test-Path -LiteralPath (Join-Path $dir $meta.image)))) {
         throw "${Path}:1: image '$($meta.image)' must be a .png or .jpg file in the product folder"
     }
-    $fm = [regex]::Matches($body, '\{\{fact:(\w+)\}\}')
-    foreach ($f in $fm) {
+    # Facts fill the body and the title / summary lines of the block alike; scanning the whole
+    # text gives every unknown fact its own line number.
+    foreach ($f in [regex]::Matches($text, '\{\{fact:(\w+)\}\}')) {
         $name = $f.Groups[1].Value
         if ($null -eq $product.facts -or $null -eq $product.facts.$name) {
-            throw "${Path}:$(Get-LineAt $text ($m.Length + $f.Index)): unknown fact '$name' (add it to site.json products[$($meta.id)].facts)"
+            throw "${Path}:$(Get-LineAt $text $f.Index): unknown fact '$name' (add it to site.json products[$($meta.id)].facts)"
         }
     }
-    $body = [regex]::Replace($body, '\{\{fact:(\w+)\}\}', { param($x) [string]$product.facts.($x.Groups[1].Value) })
+    $fill = { param([string]$s) [regex]::Replace($s, '\{\{fact:(\w+)\}\}', { param($x) [string]$product.facts.($x.Groups[1].Value) }) }
     [pscustomobject]@{
-        Id = $meta.id; Title = $meta.title; Summary = $meta.summary; Image = $meta.image; Body = $body; Dir = $dir
+        Id = $meta.id; Title = (& $fill $meta.title); Summary = (& $fill $meta.summary); Image = $meta.image; Body = (& $fill $body); Dir = $dir
     }
 }
 

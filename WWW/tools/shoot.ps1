@@ -7,6 +7,10 @@
 # Headless Edge will not make a window narrower than ~490 px (asked for 375 it lays out at 492),
 # so the page is loaded in an iframe of exactly <w> px inside a wider window, and the PNG is
 # cropped to <w>.
+# The iframe's scrolling="no" would clip sideways overflow out of the picture, so the copy (its
+# CSP meta dropped) gets a script that paints an 8 px magenta square at the top left when
+# document.documentElement.scrollWidth > innerWidth; each width prints "<w> px: fits" or
+# "<w> px: OVERFLOW", and the script exits 1 after the shots if any width overflowed.
 param(
     [Parameter(Mandatory)][string]$Site,
     [Parameter(Mandatory)][string]$Page,
@@ -20,6 +24,11 @@ $src = Join-Path $siteDir $Page
 $siteUrl = ([Uri]($siteDir.TrimEnd('\') + '\')).AbsoluteUri
 $copy = Join-Path (Split-Path $src -Parent) '_shoot.html'
 $html = [IO.File]::ReadAllText($src) -replace '(href|src)="/(?!/)', "`$1=""$siteUrl"
+$probe = '<script>addEventListener("load",function(){if(document.documentElement.scrollWidth>innerWidth){' +
+    'var b=document.createElement("div");b.style.cssText="position:fixed;left:0;top:0;width:8px;height:8px;' +
+    'background:#f0f;z-index:2147483647";document.body.appendChild(b)}})</script>'
+$html = ($html -replace '<meta http-equiv="Content-Security-Policy"[^>]*>', '') -replace '</body>', "$probe</body>"
+$overflow = @()
 [IO.File]::WriteAllText($copy, $html, [Text.Encoding]::ASCII)
 [void][IO.Directory]::CreateDirectory($Out)
 $name = Split-Path (Split-Path $src -Parent) -Leaf
@@ -49,12 +58,19 @@ try {
         # from memory: a GDI+ clone of a file-backed bitmap keeps the file locked
         $img = [Drawing.Bitmap]::new([IO.MemoryStream]::new([IO.File]::ReadAllBytes($raw)))
         $cut = $img.Clone([Drawing.Rectangle]::new(0, 0, $w, $img.Height), $img.PixelFormat)
-        try { $cut.Save($png, [Drawing.Imaging.ImageFormat]::Png) }
+        try {
+            $px = $cut.GetPixel(3, 3)
+            $over = $px.R -gt 240 -and $px.G -lt 15 -and $px.B -gt 240
+            $cut.Save($png, [Drawing.Imaging.ImageFormat]::Png)
+        }
         finally { $cut.Dispose(); $img.Dispose() }
         [IO.File]::Delete($raw)
         Write-Host "wrote $png"
+        if ($over) { $overflow += $w; Write-Host "$w px: OVERFLOW (scrollWidth > $w; the magenta square marks it)" }
+        else { Write-Host "$w px: fits" }
     }
 } finally {
     [IO.File]::Delete($copy)
     [IO.File]::Delete($frame)
 }
+if ($overflow) { Write-Host "sideways overflow at $($overflow -join ', ') px"; exit 1 }

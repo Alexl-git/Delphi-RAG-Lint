@@ -8,6 +8,7 @@ function Test-SiteOutput([string]$Dir, $Config) {
         Where-Object { $_.Extension -in '.html', '.css', '.js', '.xml', '.txt', '.config' }
     foreach ($f in $text) {
         $rel = $f.FullName.Substring($root.Length + 1)
+        if ($f.Name -like '_shoot*') { $problems.Add("${rel}: screenshot copy left by tools\shoot.ps1 (delete it)"); continue }
         $bytes = [IO.File]::ReadAllBytes($f.FullName)
         if (@($bytes | Where-Object { $_ -gt 0x7F } | Select-Object -First 1).Count) {
             $problems.Add("${rel}: non-ASCII byte"); continue

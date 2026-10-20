@@ -44,6 +44,14 @@ foreach ($k in $cases.Keys) {
     Assert-True ($r[0] -like "bad\index.html:*$k*") "case $k message: $($r[0])"
 }
 
+# a screenshot copy left by tools\shoot.ps1 (_shoot.html, _shoot-frame.html) is never published
+foreach ($n in '_shoot.html', '_shoot-frame.html') {
+    $pages = $base.Clone(); $pages["x\$n"] = $good
+    $r = @(Test-SiteOutput (New-Site $pages) $c)
+    Assert-Equal 1 $r.Count "leftover $n gives exactly one problem: $($r -join '; ')"
+    Assert-True ($r[0] -like "x\${n}:*shoot*") "leftover $n message: $($r[0])"
+}
+
 # the 404 page is not shared: no preview needed
 $pages = $base.Clone()
 $pages['404.html'] = $good.Replace($share, '')

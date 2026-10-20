@@ -143,7 +143,7 @@ section{padding:52px 0 0}
   color:var(--muted);text-transform:uppercase;
 }
 code{
-  font-family:var(--f-mono);font-size:.88em;
+  font-family:var(--f-mono);font-size:.88em;font-variant-ligatures:none;
   background:var(--surface-sunk);
   padding:1px 5px;border-radius:3px;
   color:var(--ink);
