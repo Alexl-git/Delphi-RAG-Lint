@@ -75,7 +75,8 @@ type
     HelpVerbs: TArray<string>;
     /// <summary>Verbs dispatched by DRagLint.CLI.pas (Args.Command = '..'), sorted unique.</summary>
     DispatchVerbs: TArray<string>;
-    /// <summary>verb -> sorted subcommands (CliFlagVerbMap.ps1 Get-CliVerbSubcommandMap); verbs with none are absent. Keys are case-insensitive.</summary>
+    /// <summary>verb -> sorted subcommands (CliFlagVerbMap.ps1 Get-CliVerbSubcommandMap); verbs with none are absent. Keys are case-insensitive.
+    /// Harvest raises when it is empty (unlike Get-LiveSurface), so check B cannot pass vacuously.</summary>
     SubMap: TDictionary<string, TArray<string>>;
     /// <summary>Main-menu captions (menu items, section headers, About buttons, report rows and group headers), dialog buttons excluded; first-seen order, unique (ordinal).</summary>
     Captions: TArray<string>;
@@ -871,6 +872,9 @@ begin
     raise EFeatureGenLive.CreateFmt('live surface: dispatch scan yielded %d verb(s); expected > 20', [Length(DispatchVerbs)]);
   SubMap.Clear;
   HarvestSubcommandMap(lCli, SubMap);
+  // Not in Get-LiveSurface: an empty map would let check B's subcommand loop pass vacuously.
+  if SubMap.Count = 0 then
+    raise EFeatureGenLive.Create('live surface: 0 subcommands harvested from DRagLint.CLI.pas; expected > 0');
   // main-menu captions, dialog buttons apart
   lMenu := MenuSourceText(pRepo);
   lRx := DialogButtonRegex(lMenu);

@@ -28,6 +28,13 @@ uses
   , FeatureGen.Live
   ;
 
+const
+  /// <summary>Marks a schema finding below the top level of the entry / groups document (a pointer
+  /// with two or more segments). The PowerShell guard's Test-Json reports such violations as "not
+  /// valid" with no error record, so they never became a PowerShell finding; parity tests exclude
+  /// them by this marker and assert their count.</summary>
+  NESTED_SCHEMA_MARK = 'nested schema (the PowerShell guard drops these): ';
+
 type
   /// <summary>How much the check runs.</summary>
   /// <remarks>clWellFormed: check A only, no engine and no live harvest (what "add" validates with).
@@ -465,6 +472,22 @@ begin
     Result := 'null';
 end;
 
+{ One schema message; a pointer of two or more segments ('/surfaces/0/...') carries
+  NESTED_SCHEMA_MARK, a shallower one the JsonSchema.Net wording the PowerShell guard prints. }
+function SchemaMessage(const pMsg, pPtr: string): string;
+const
+  NESTED_DEPTH = 2;
+var
+  lDepth: Integer;
+  lCh: Char;
+begin
+  lDepth := 0;
+  for lCh in pPtr do
+    if lCh = '/' then
+      Inc(lDepth);
+  Result := (if lDepth >= NESTED_DEPTH then NESTED_SCHEMA_MARK else '') + SCHEMA_PREFIX + pMsg + ' at ''' + pPtr + '''';
+end;
+
 procedure ValidateNode(const pV: TJSONValue; const pS: TJSONObject; const pRoot: TJSONObject; const pPtr: string;
   const pOut: TList<string>);
 var
@@ -478,7 +501,7 @@ var
 
   procedure Add(const pMsg: string);
   begin
-    pOut.Add(SCHEMA_PREFIX + pMsg + ' at ''' + pPtr + '''');
+    pOut.Add(SchemaMessage(pMsg, pPtr));
   end;
 
   function IntOf(const pKey: string; out pN: Integer): Boolean;
@@ -565,7 +588,7 @@ begin
         if (lProps is not TJSONObject) or (TJSONObject(lProps).GetValue(lP.JsonString.Value) = nil) then
         begin
           lName := lP.JsonString.Value;
-          pOut.Add(SCHEMA_PREFIX + 'All values fail against the false schema at ''' + pPtr + '/' + lName + '''');
+          pOut.Add(SchemaMessage('All values fail against the false schema', pPtr + '/' + lName));
         end;
   end;
 end;

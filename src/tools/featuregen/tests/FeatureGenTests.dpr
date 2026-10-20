@@ -1531,14 +1531,126 @@ end;
 var
   GLive: TLiveSurface = nil;
 
-function SharedLive(const pRepo: string): TLiveSurface;
+{ The shared real-repo surface, harvested once. GLive is set only after a harvest
+  succeeded, so a failed harvest never leaves a half-filled surface for later tests. }
+function SharedLiveFrom(const pRepo, pEngine: string): TLiveSurface;
+var
+  lLive: TLiveSurface;
 begin
   if GLive = nil then
   begin
-    GLive := TLiveSurface.Create;
-    GLive.Harvest(pRepo, MAIN_ENGINE);
+    lLive := TLiveSurface.Create;
+    try
+      lLive.Harvest(pRepo, pEngine);
+    except
+      lLive.Free;
+      raise;
+    end;
+    GLive := lLive;
   end;
   Result := GLive;
+end;
+
+function SharedLive(const pRepo: string): TLiveSurface;
+begin
+  Result := SharedLiveFrom(pRepo, MAIN_ENGINE);
+end;
+
+procedure TestSharedLiveNotCachedOnFailure(const pRepo: string);
+begin
+  if GLive <> nil then
+    Exit;
+  try
+    SharedLiveFrom(pRepo, TPath.Combine(SCRATCH, 'no-such-engine.exe'));
+  except
+    on E: EFeatureGenLive do
+      Writeln('INFO expected harvest failure: ', E.Message);
+  end;
+  Check('Live.SharedLiveNotCachedAfterFailedHarvest', GLive = nil, 'a failed harvest left GLive set');
+  FreeAndNil(GLive);
+end;
+
+{ Every TLiveSurface kind that is empty (or a version that is ''); none on a healthy tree. }
+function EmptyLiveKinds(const pLive: TLiveSurface): TArray<string>;
+
+  procedure Need(pOk: Boolean; const pKind: string);
+  begin
+    if not pOk then
+      Result := Result + [pKind];
+  end;
+
+var
+  lH: string;
+  lHostsOk: Boolean;
+  lTotal: TJSONValue;
+begin
+  Result := nil;
+  Need(Length(pLive.HelpVerbs) > 0, 'HelpVerbs');
+  Need(Length(pLive.DispatchVerbs) > 0, 'DispatchVerbs');
+  Need(pLive.SubMap.Count > 0, 'SubMap');
+  Need(Length(pLive.Captions) > 0, 'Captions');
+  Need(Length(pLive.DialogButtons) > 0, 'DialogButtons');
+  Need(Length(pLive.AboutButtons) > 0, 'AboutButtons');
+  Need(Length(pLive.ContextHosts) > 0, 'ContextHosts');
+  lHostsOk := Length(pLive.ContextHosts) > 0;
+  for lH in pLive.ContextHosts do
+    if not pLive.ContextCaptions.ContainsKey(lH) or (Length(pLive.ContextCaptions[lH]) = 0) then
+      lHostsOk := False;
+  Need(lHostsOk, 'ContextCaptions');
+  Need(Length(pLive.McpTools) > 0, 'McpTools');
+  Need(Length(pLive.McpDispatch) > 0, 'McpDispatch');
+  lTotal := nil;
+  if (pLive.RuleCatalog is TJSONObject) and (TJSONObject(pLive.RuleCatalog).GetValue('summary') is TJSONObject) then
+    lTotal := TJSONObject(TJSONObject(pLive.RuleCatalog).GetValue('summary')).GetValue('total');
+  Need((lTotal <> nil) and (StrToIntDef(lTotal.Value, 0) > 0), 'RuleCatalog');
+  Need(Length(pLive.ReportQuestions) > 0, 'ReportQuestions');
+  Need(pLive.ReportQuestionCount > 0, 'ReportQuestionCount');
+  Need(pLive.GroupCaptions.Count > 0, 'GroupCaptions');
+  Need(Length(pLive.ChartValidateSet) > 0, 'ChartValidateSet');
+  Need(Length(pLive.EmitterFiles) > 0, 'EmitterFiles');
+  Need(Length(pLive.PackExes) > 0, 'PackExes');
+  Need(pLive.ProductVersion <> '', 'ProductVersion');
+  Need(pLive.ExtractorVersion <> '', 'ExtractorVersion');
+  Need(pLive.ResolverVersion <> '', 'ResolverVersion');
+  Need(pLive.SchemaVersion <> '', 'SchemaVersion');
+end;
+
+procedure TestEmptyKindsPositiveControl;
+var
+  lLive: TLiveSurface;
+  lEmpty: TArray<string>;
+begin
+  lLive := TLiveSurface.Create;
+  try
+    lEmpty := EmptyLiveKinds(lLive);
+  finally
+    lLive.Free;
+  end;
+  Check('Live.EmptyKindsCatchesEveryEmptyKind', Length(lEmpty) = 21, IntToStr(Length(lEmpty)) + ': ' + string.Join(' ', lEmpty));
+end;
+
+procedure TestHarvestRaisesOnEmptySubMap(const pRepo: string);
+var
+  lDir, lMsg: string;
+  lLive: TLiveSurface;
+begin
+  lDir := FreshDir('no-subs-repo');
+  ForceDirectories(TPath.Combine(lDir, 'src\cli'));
+  TFile.WriteAllText(TPath.Combine(lDir, 'src\cli\DRagLint.CLI.pas'),
+    ReadBytesText(TPath.Combine(pRepo, 'src\cli\DRagLint.CLI.pas')).Replace('SubCommand', 'SubCmdZz'), TEncoding.ASCII);
+  lMsg := '';
+  lLive := TLiveSurface.Create;
+  try
+    try
+      lLive.Harvest(lDir, MAIN_ENGINE);
+    except
+      on E: Exception do
+        lMsg := E.Message;
+    end;
+  finally
+    lLive.Free;
+  end;
+  Check('Live.HarvestRaisesOnEmptySubMap', lMsg = 'live surface: 0 subcommands harvested from DRagLint.CLI.pas; expected > 0', lMsg);
 end;
 
 procedure TestLiveHarvestParity(const pRepo: string);
@@ -1566,6 +1678,8 @@ begin
   Writeln('INFO live harvest (Delphi): ', KindCounts(lMine));
   Check('Live.HarvestEqualsPowerShell', (lMsg = '') and (Length(lPsLines) > 100) and (Length(lMissing) = 0) and (Length(lExtra) = 0),
     lMsg + ' [' + lPs.Trim + '] missing: ' + string.Join(' | ', Copy(lMissing, 0, 8)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 8)));
+  if lMsg = '' then
+    Check('Live.HarvestEveryKindNonEmpty', Length(EmptyLiveKinds(lLive)) = 0, string.Join(' ', EmptyLiveKinds(lLive)));
 end;
 
 function ReadPsCheck(const pFile: string; out pNotes: TArray<string>): TArray<string>;
@@ -1594,34 +1708,94 @@ begin
 end;
 
 const
-  // The one finding class featuregen reports and the PowerShell guard cannot
-  // (spec criterion 5: an unregistered MCP tool fails). Kept OUT of the set
-  // comparison by name, and counted, so it can never hide another difference.
-  DELPHI_ONLY_PREFIX = 'B: every MCP tool is registered -- ';
+  // The two finding classes featuregen reports and the PowerShell guard cannot.
+  // Each is kept OUT of the set comparison by an exact marker and its count is
+  // ASSERTED against an independently computed expectation, so the exclusion can
+  // never hide another difference.
+  // (1) spec criterion 5: an unregistered MCP tool fails;
+  MCP_ONLY_PREFIX = 'B: every MCP tool is registered -- ';
+  // (2) nested schema violations (the PowerShell Test-Json drops them): an "A: "
+  //     finding carrying FeatureGen.Check.NESTED_SCHEMA_MARK.
 
-function WithoutDelphiOnly(const pItems: TArray<string>; out pDropped: Integer): TArray<string>;
+{ Splits off the two Delphi-only classes; returns the rest. }
+function WithoutDelphiOnly(const pItems: TArray<string>; out pMcp, pNested: Integer): TArray<string>;
 var
   lS: string;
 begin
   Result := nil;
-  pDropped := 0;
+  pMcp := 0;
+  pNested := 0;
   for lS in pItems do
-    if lS.StartsWith(DELPHI_ONLY_PREFIX) then
-      Inc(pDropped)
+    if lS.StartsWith(MCP_ONLY_PREFIX) then
+      Inc(pMcp)
+    else if lS.StartsWith('A: ') and (Pos(NESTED_SCHEMA_MARK, lS) > 0) then
+      Inc(pNested)
     else
       Result := Result + [lS];
 end;
 
+{ The exclusion guard: an excluded count must equal a known, non-negative expectation. }
+function ExclusionCountOk(pDropped, pExpected: Integer): Boolean;
+begin
+  Result := (pExpected >= 0) and (pDropped = pExpected);
+end;
+
+procedure TestExclusionCountPositiveControl;
+begin
+  Check('Check.ExclusionCountGuardCatchesMismatch', not ExclusionCountOk(15, 14) and not ExclusionCountOk(0, -1)
+    and not ExclusionCountOk(3, -1) and ExclusionCountOk(15, 15) and ExclusionCountOk(0, 0));
+end;
+
+{ Live MCP tools that no non-planned entry under pRepo\features\entries registers
+  with an mcp surface: the count the MCP-only B class must have. Computed from the
+  files, independently of FeatureGen.Check. }
+function ExpectedMcpExclusions(const pRepo: string; const pTools: TArray<string>): Integer;
+var
+  lF, lT: string;
+  lV, lS: TJSONValue;
+  lA: TJSONValue;
+  lReg: TList<string>;
+  i: Integer;
+begin
+  lReg := TList<string>.Create;
+  try
+    for lF in TDirectory.GetFiles(TPath.Combine(pRepo, 'features\entries'), '*.json') do
+    begin
+      lV := ReadJsonFile(lF);
+      try
+        if SameText(Prop(lV, 'status'), 'planned') then
+          Continue;
+        lA := TJSONObject(lV).GetValue('surfaces');
+        if lA is TJSONArray then
+          for i := 0 to TJSONArray(lA).Count - 1 do
+          begin
+            lS := TJSONArray(lA).Items[i];
+            if SameText(Prop(lS, 'type'), 'mcp') then
+              lReg.Add(LowerCase(Prop(lS, 'tool')));
+          end;
+      finally
+        lV.Free;
+      end;
+    end;
+    Result := 0;
+    for lT in pTools do
+      if not lReg.Contains(LowerCase(lT)) then
+        Inc(Result);
+  finally
+    lReg.Free;
+  end;
+end;
+
 { pMinFindings: the PowerShell set must hold at least this many failures (a seeded
-  repo); the Delphi-only class must hold exactly pDelphiOnly (-1 = any). }
-procedure TestCheckParity(const pRepo, pLevelName: string; pLevel: TCheckLevel; const pName: string = '';
-  pMinFindings: Integer = 0; pDelphiOnly: Integer = -1);
+  repo). pMcpExpected / pNestedExpected: the exact size of each Delphi-only class. }
+procedure TestCheckParity(const pRepo, pLevelName: string; pLevel: TCheckLevel; const pName: string;
+  pMinFindings, pMcpExpected, pNestedExpected: Integer);
 var
   lFile, lPs, lMsg, lLine, lName: string;
   lPsFail, lPsNotes, lNotes, lMine, lCompared, lMissing, lExtra, lNMissing, lNExtra: TArray<string>;
   lFindings: TArray<TFinding>;
   lF: TFinding;
-  lDropped: Integer;
+  lDropped, lNested: Integer;
 begin
   lName := (if pName <> '' then pName else pLevelName);
   lFile := TPath.Combine(FreshDir('check-parity-' + lName), 'ps-check.json');
@@ -1638,17 +1812,18 @@ begin
     on E: Exception do
       lMsg := E.ClassName + ': ' + E.Message;
   end;
-  lCompared := WithoutDelphiOnly(lMine, lDropped);
+  lCompared := WithoutDelphiOnly(lMine, lDropped, lNested);
   CompareFindingSets(lPsFail, lCompared, lMissing, lExtra);
   CompareFindingSets(lPsNotes, lNotes, lNMissing, lNExtra);
   Writeln('INFO check ', lName, ': PowerShell ', Length(lPsFail), ' failure(s) / ', Length(lPsNotes), ' note(s); featuregen ',
-    Length(lMine), ' (', lDropped, ' Delphi-only MCP) / ', Length(lNotes));
+    Length(lMine), ' (', lDropped, ' Delphi-only MCP, expected ', pMcpExpected, '; ', lNested, ' nested schema, expected ',
+    pNestedExpected, ') / ', Length(lNotes));
   for lLine in lMine do
     Writeln('INFO   finding: ', lLine.Split([#10])[0]);
   for lLine in lNotes do
     Writeln('INFO   note: ', lLine);
   Check('Check.ParityWithPowerShell.' + lName, (lMsg = '') and TFile.Exists(lFile) and (Length(lPsFail) >= pMinFindings)
-    and ((pDelphiOnly < 0) or (lDropped = pDelphiOnly))
+    and ExclusionCountOk(lDropped, pMcpExpected) and ExclusionCountOk(lNested, pNestedExpected)
     and (Length(lMissing) = 0) and (Length(lExtra) = 0) and (Length(lNMissing) = 0) and (Length(lNExtra) = 0),
     lMsg + ' [' + lPs.Trim + '] missing: ' + string.Join(' | ', Copy(lMissing, 0, 5)) + ' // extra: ' + string.Join(' | ', Copy(lExtra, 0, 5))
     + ' // notes missing: ' + string.Join(' | ', lNMissing) + ' // notes extra: ' + string.Join(' | ', lNExtra));
@@ -1693,7 +1868,8 @@ begin
     '{'#13#10'  "id": "zz-dangling",'#13#10'  "title": "Dangling probe",'#13#10'  "group": "maintenance",'#13#10
     + '  "owner": "CONVERTER",'#13#10'  "status": "shipped",'#13#10'  "since": "9.9.9",'#13#10
     + '  "summary": "A probe whose surfaces are all gone.",'#13#10'  "intro": "Probe.",'#13#10'  "wikiPage": "Hom",'#13#10
-    + '  "surfaces": [ { "type": "cli", "verb": "zz-gone" }, { "type": "mcp", "tool": "zz_gone" }, { "type": "ide-menu", "path": "drag-lint > Zz Gone Away" } ],'#13#10
+    // nested schema violation (a flags item without "name"): Delphi-only, 1 finding
+    + '  "surfaces": [ { "type": "cli", "verb": "zz-gone", "flags": [ { "arg": "x" } ] },{ "type": "mcp", "tool": "zz_gone" }, { "type": "ide-menu", "path": "drag-lint > Zz Gone Away" } ],'#13#10
     + '  "audience": "both",'#13#10'  "related": ["ask", "zz-nope"],'#13#10
     + '  "lastVerified": { "date": "2026-01-01", "by": "probe", "build": "9.9.9" }'#13#10'}'#13#10, TEncoding.ASCII);
   // B: a --help verb loses its entry (and A: the seed backlog names a missing entry)
@@ -1884,14 +2060,19 @@ begin
     if lRepo <> '' then
       TestWikiParity(lRepo);
     TestCompareFindingSetsPositiveControl;
+    TestEmptyKindsPositiveControl;
+    TestExclusionCountPositiveControl;
     if lRepo <> '' then
     begin
+      TestSharedLiveNotCachedOnFailure(lRepo);
+      TestHarvestRaisesOnEmptySubMap(lRepo);
       TestLiveHarvestParity(lRepo);
-      TestCheckParity(lRepo, 'WellFormed', clWellFormed);
-      TestCheckParity(lRepo, 'Full', clFull);
+      TestCheckParity(lRepo, 'WellFormed', clWellFormed, 'WellFormed', 0, 0, 0);
+      TestCheckParity(lRepo, 'Full', clFull, 'Full', 0, ExpectedMcpExclusions(lRepo, SharedLive(lRepo).McpTools), 0);
       lSeeded := SeededRepo(lRepo);
-      TestCheckParity(lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0);
-      TestCheckParity(lSeeded, 'Full', clFull, 'SeededFull', 8, -1);
+      // the seeded copy carries the same MCP server source, so the live tool list is the same
+      TestCheckParity(lSeeded, 'WellFormed', clWellFormed, 'SeededWellFormed', 5, 0, 1);
+      TestCheckParity(lSeeded, 'Full', clFull, 'SeededFull', 8, ExpectedMcpExclusions(lSeeded, SharedLive(lRepo).McpTools), 1);
       TestPositiveControls(lRepo);
       TestPlannedSkipsLive(lRepo);
       TestWellFormedCatchesBadEntry(lRepo);
