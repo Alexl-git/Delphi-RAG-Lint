@@ -33,8 +33,9 @@ function Read-ProductPage([string]$Path, $Config) {
     if ($bad.Success) {
         throw "${Path}:$(Get-LineAt $text ($m.Length + $bad.Index)): forbidden markup '$($bad.Value.Trim())' (no scripts, <style> or style= in product pages)"
     }
-    if (-not $body.Substring(0, [Math]::Min(3000, $body.Length)).Contains('href="https://www.htrmicronite.com')) {
-        throw "${Path}: no Micronite mention near the top (a link to https://www.htrmicronite.com in the first 3000 characters)"
+    # Anywhere in the body: the approved product pages carry it in their "Built for our own work" section.
+    if (-not $body.Contains('href="https://www.htrmicronite.com')) {
+        throw "${Path}: no Micronite mention (a link to https://www.htrmicronite.com)"
     }
     if ($meta.image -and ($meta.image -notmatch '^[a-z0-9][a-z0-9-]*\.(png|jpe?g)$' -or -not (Test-Path -LiteralPath (Join-Path $dir $meta.image)))) {
         throw "${Path}:1: image '$($meta.image)' must be a .png or .jpg file in the product folder"

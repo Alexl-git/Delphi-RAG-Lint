@@ -1,6 +1,12 @@
 # Draws the default share-preview card WWW\assets\share\default.png (1200x630, the size
 # LinkedIn / Facebook / Slack expect). Run by hand after a branding change; the PNG is committed.
-param([string]$Out = (Join-Path $PSScriptRoot '..\assets\share\default.png'))
+# A product card: -Out WWW\products\<id>\share.png -Title <name> -Line1 <H1> -Line2 <tagline>.
+param(
+    [string]$Out = (Join-Path $PSScriptRoot '..\assets\share\default.png'),
+    [string]$Title = 'Delphi-RAG-Lint',
+    [string]$Line1 = 'Index, query and lint Delphi code -',
+    [string]$Line2 = 'from the command line and inside RAD Studio.'
+)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
@@ -15,14 +21,15 @@ try {
     $x = 0
     foreach ($hex in '#9A6B0F', '#9E3535', '#176E5F') { $g.FillRectangle([Drawing.SolidBrush]::new((C $hex)), $x, 0, 18, $h); $x += 18 }
 
-    $title = [Drawing.Font]::new('Georgia', 84, [Drawing.FontStyle]::Bold, [Drawing.GraphicsUnit]::Pixel)
-    $body  = [Drawing.Font]::new('Segoe UI', 38, [Drawing.FontStyle]::Regular, [Drawing.GraphicsUnit]::Pixel)
+    # font names must not reuse the parameter names: PowerShell variables ignore case
+    $fTitle = [Drawing.Font]::new('Georgia', 84, [Drawing.FontStyle]::Bold, [Drawing.GraphicsUnit]::Pixel)
+    $fBody  = [Drawing.Font]::new('Segoe UI', 38, [Drawing.FontStyle]::Regular, [Drawing.GraphicsUnit]::Pixel)
     $small = [Drawing.Font]::new('Segoe UI', 28, [Drawing.FontStyle]::Regular, [Drawing.GraphicsUnit]::Pixel)
-    $g.DrawString('Delphi-RAG-Lint', $title, [Drawing.SolidBrush]::new((C '#EFF2F5')), 110, 150)
+    $g.DrawString($Title, $fTitle, [Drawing.SolidBrush]::new((C '#EFF2F5')), 110, 150)
     $g.FillRectangle([Drawing.SolidBrush]::new((C '#2B4C82')), 114, 268, 140, 6)   # --accent rule
     $soft = [Drawing.SolidBrush]::new((C '#C3CDD7'))
-    $g.DrawString('Index, query and lint Delphi code -', $body, $soft, 110, 310)
-    $g.DrawString('from the command line and inside RAD Studio.', $body, $soft, 110, 362)
+    $g.DrawString($Line1, $fBody, $soft, 110, 310)
+    $g.DrawString($Line2, $fBody, $soft, 110, 362)
     $muted = [Drawing.SolidBrush]::new((C '#8D9AA7'))
     $g.DrawString('www.delphi-rag-lint.com', $small, $muted, 110, 520)
     $by = 'by HTR Micronite'

@@ -59,6 +59,10 @@ Assert-Throws { Read-ProductPage $f $cfg } '*forbidden markup*'
 $f = New-BadProduct 'dl' ($head + "<p>no link</p>`r`n")
 Assert-Throws { Read-ProductPage $f $cfg } '*Micronite*'
 
+# test_product_micronite_link_may_sit_low: the approved pages carry it in their section 04
+$f = New-BadProduct 'dl' ($head + "<p>$('x' * 4000)</p>`r`n" + $mic)
+Assert-Equal 'dl' (Read-ProductPage $f $cfg).Id 'Micronite link after 3000 characters is accepted'
+
 # test_product_image_must_exist
 $f = New-BadProduct 'dl' (($head -replace 'summary: S', "summary: S`r`nimage: share.png") + $mic)
 Assert-Throws { Read-ProductPage $f $cfg } '*image*share.png*'
