@@ -370,6 +370,20 @@ begin
   end;
 end;
 
+{ Check A's homeOrder uniqueness (TChecker.Run) is not part of CheckEntry, so add / update refuse it here. }
+procedure RefuseDuplicateHomeOrder(const pVerb: string; const pCtx: TCheckContext; const pEntry: TJSONObject; const pStem: string);
+var
+  lRaw: TRawEntry;
+  lHo: string;
+begin
+  lHo := Prop(pEntry, 'homeOrder');
+  if lHo = '' then
+    Exit;
+  for lRaw in pCtx.Entries do
+    if (lRaw.Stem <> pStem) and (Prop(lRaw.Entry, 'homeOrder') = lHo) then
+      raise ECommand.CreateFmt('%s: entry ''%s'': homeOrder %s is also used by %s; nothing written', [pVerb, pStem, lHo, lRaw.Stem]);
+end;
+
 procedure EmitText(pJson: Boolean; const pText: string; const pOut: TCmdOut);
 var
   lJ: TJSONString;
@@ -768,6 +782,7 @@ begin
       AddTrusted(lCtx, lEntry);
       lProblems := CheckEntry(lEntry, lCtx, lId);
       RefuseOnProblems('add', lId, 'is not valid; nothing written', lProblems);
+      RefuseDuplicateHomeOrder('add', lCtx, lEntry, lId);
       // Render before the first write: the serialiser raises on non-ASCII.
       lText := CanonicalJson(lEntry, lCtx.KeyOrder);
       if lGroupsText <> '' then
@@ -847,6 +862,7 @@ begin
       AddTrusted(lCtx, lEntry);
       lProblems := CheckEntry(lEntry, lCtx, pId);
       RefuseOnProblems('update', pId, 'would not be valid; file untouched', lProblems);
+      RefuseDuplicateHomeOrder('update', lCtx, lEntry, pId);
       WriteIfChanged(lFile, CanonicalJson(lEntry, lCtx.KeyOrder));
     finally
       lCtx.Free;
@@ -1508,6 +1524,7 @@ var
   lArgs: TCmdArgs;
   lErr, lRepo, lMsg: string;
   lJson: Boolean;
+  lHome: Integer;
 begin
   if not IsRegistryVerb(pVerb) then
   begin
@@ -1522,6 +1539,11 @@ begin
       Exit(2);
     end;
     lJson := lArgs.Switch('json');
+    if (pVerb = 'add') and lArgs.Has('home-order') and not TryStrToInt(lArgs.Get('home-order'), lHome) then
+    begin
+      pOut('featuregen: add: --home-order must be a whole number');
+      Exit(2);
+    end;
     Result := 1;
     try
       lRepo := FindRepoOf(lArgs.Get('repo'), pDefaultRepo);

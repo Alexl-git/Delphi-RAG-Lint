@@ -2108,7 +2108,9 @@ begin
   lExit := RunCmd('add', lArgs, lOut);
   Check('Cmd.AddRejectsUnknownOwner', (lExit = 1) and (Pos('nearest: CONVERTER', lOut) > 0), IntToStr(lExit) + ' ' + lOut);
   lExit := RunCmd('add', AddProbeArgs(lCopy) + ['--title', 'Caf' + Char($E9)], lOut);
-  Check('Cmd.AddRefusesNonAscii', (lExit = 1) and not TFile.Exists(TPath.Combine(lCopy, 'features\entries\zz-probe.json')), IntToStr(lExit) + ' ' + lOut);
+  Check('Cmd.AddRefusesNonAscii', (lExit = 1) and (Pos('non-ASCII', lOut) > 0) and not TFile.Exists(TPath.Combine(lCopy, 'features\entries\zz-probe.json')), IntToStr(lExit) + ' ' + lOut);
+  lExit := RunCmd('add', AddProbeArgs(lCopy) + ['--home-order', 'abc'], lOut);
+  Check('Cmd.AddNonNumericHomeOrderIsUsageError', (lExit = 2) and not TFile.Exists(TPath.Combine(lCopy, 'features\entries\zz-probe.json')), IntToStr(lExit) + ' ' + lOut);
   lExit := RunCmd('add', ['--repo', lCopy, '--title', 'x'], lOut);
   Check('Cmd.AddNeedsId', (lExit = 1) and (Pos('--id is required', lOut) > 0), lOut);
   lExit := RunCmd('add', ['--repo', lCopy, '--bogus', 'x'], lOut);
@@ -2260,8 +2262,48 @@ begin
   Check('Cmd.NormaliseIdempotent', Pos('normalised 0 file(s)', lOut) > 0, lOut);
 end;
 
+procedure TestCmdHomeOrderAndNull(const pRepo: string);
+var
+  lCopy, lOut, lFile, lBefore, lRaw: string;
+  lExit: Integer;
+begin
+  lCopy := CmdRepo(pRepo, 'cmd-homeorder');
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'outline', '--set', 'homeOrder=3'], lOut);
+  Check('Cmd.HomeOrder.setOnOutline', lExit = 0, lOut);
+  lExit := RunCmd('add', AddProbeArgs(lCopy) + ['--home-order', '3'], lOut);
+  Check('Cmd.AddRefusesDuplicateHomeOrder', (lExit = 1) and (Pos('homeOrder 3 is also used by outline', lOut) > 0)
+    and not TFile.Exists(TPath.Combine(lCopy, 'features\entries\zz-probe.json')), IntToStr(lExit) + ' ' + lOut);
+  lExit := RunCmd('add', AddProbeArgs(lCopy), lOut);
+  lFile := TPath.Combine(lCopy, 'features\entries\zz-probe.json');
+  lBefore := ReadBytesText(lFile);
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'zz-probe', '--set', 'homeOrder=3'], lOut);
+  Check('Cmd.UpdateRefusesDuplicateHomeOrder', (lExit = 1) and (Pos('homeOrder 3 is also used by outline', lOut) > 0)
+    and (ReadBytesText(lFile) = lBefore), IntToStr(lExit) + ' ' + lOut);
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'outline', '--set', 'homeOrder=3'], lOut);
+  Check('Cmd.UpdateOwnHomeOrderIsNotADuplicate', lExit = 0, lOut);
+  // null-drop: a null inside a surface is dropped from the written bytes
+  lExit := RunCmd('update', ['--repo', lCopy, '--id', 'zz-probe', '--set', 'surfaces=[{"type":"cli","verb":"zzv","sub":null}]'], lOut);
+  lRaw := ReadBytesText(lFile);
+  Check('Cmd.UpdateDropsNull', (lExit = 0) and (Pos('"zzv"', lRaw) > 0) and (Pos('"sub"', lRaw) = 0) and (Pos('null', lRaw) = 0), IntToStr(lExit) + ' ' + lOut + lRaw);
+end;
+
+procedure TestCmdMoveMenuSibling(const pRepo: string);
+var
+  lCopy, lOut, lFile, lBefore: string;
+  lExit: Integer;
+begin
+  lCopy := CmdRepo(pRepo, 'cmd-move-sibling');
+  lExit := RunCmd('add', AddProbeArgs(lCopy) + ['--surface', 'ide-menu:drag-lint > Reports Extra > Leaf'], lOut);
+  Check('Cmd.MoveMenuSibling.added', lExit = 0, lOut);
+  lFile := TPath.Combine(lCopy, 'features\entries\zz-probe.json');
+  lBefore := ReadBytesText(lFile);
+  lExit := RunCmd('move-menu', ['--repo', lCopy, '--from', 'drag-lint > Reports', '--to', 'drag-lint > Charts'], lOut);
+  Check('Cmd.MoveMenuLeavesPrefixSiblingAlone', (lExit = 0) and (ReadBytesText(lFile) = lBefore) and (Pos('zz-probe', lOut) = 0), lOut);
+end;
 procedure TestCommands(const pRepo: string);
 begin
+  TestCmdHomeOrderAndNull(pRepo);
+  TestCmdMoveMenuSibling(pRepo);
   TestCmdAdd(pRepo);
   TestCmdAddRefusals(pRepo);
   TestCmdUpdate(pRepo);
