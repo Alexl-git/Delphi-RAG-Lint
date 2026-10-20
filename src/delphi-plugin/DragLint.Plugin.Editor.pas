@@ -254,6 +254,7 @@ uses
   , DragLint.Plugin.JobQueue
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Reports
+  , DragLint.Plugin.CycleFix
   ;
 
 { ---- PluginBuildTag ---- }
@@ -4433,6 +4434,25 @@ begin
   DLRunReport(Format('cycles --db "%s" --plan --edges --causes --format text', [Db]), 'drag-lint-circular-uses.txt');
 end;
 
+{ E18 Task 15: the mechanical fix, as a DRY RUN only (no --cycle: the engine
+  picks the SCC) -- the same rule as InvokeUsesFix below: no --apply from a menu click. The reviewed,
+  one-SCC apply is the Uses & Deps tab's "Circular uses" section. Save first:
+  the engine plans and compiles from the files on disk. }
+procedure InvokeCircularUsesFix(Sender: TObject);
+var
+  Db, Proj: string; MS: IOTAModuleServices;
+begin
+  if Supports(BorlandIDEServices, IOTAModuleServices, MS) then MS.SaveAll;
+  Db  := ResolvePrimaryIndexDb;
+  Proj:= GetActiveProjectFile;
+  if (Db = '') or (Proj = '') then
+  begin
+    ShowMessage('drag-lint: no project/index found.');
+    Exit;
+  end;
+  DLRunReport(CycleFixMenuArgs(Proj, Db), 'drag-lint-circular-uses-fix.txt');
+end;
+
 procedure InvokeUsesAudit(Sender: TObject);
 var
   Pas, Db: string; MS: IOTAModuleServices;
@@ -6197,6 +6217,7 @@ begin
   AddSeparator(SubUses);
   AddSectionHeader(SubUses, 'This project');
   AddWrappedItem(SubUses, 'Circular Uses Report (cycles + fix plan)...'                , InvokeCircularUses    );
+  AddWrappedItem(SubUses, 'Fix Circular Uses Mechanically (dry run)...'                , InvokeCircularUsesFix );
   AddWrappedItem(SubUses, 'Reconcile Project Members (.dpr/.dproj)...'                 , InvokeReconcileProject);
   AddWrappedItem(SubUses, 'Uses Report (CSV)...'                                       , InvokeUsesReportCsv   );
   AddWrappedItem(SubUses, 'Dependency Report (third-party rollup)...'                  , InvokeDepsReport      );

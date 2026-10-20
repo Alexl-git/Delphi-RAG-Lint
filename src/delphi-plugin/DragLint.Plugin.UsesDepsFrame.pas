@@ -42,6 +42,12 @@ unit DragLint.Plugin.UsesDepsFrame;
   which files to reload afterwards -- so they are one class parameterised by
   TUsesVerb, and the frame is only a host.
 
+  THE THIRD SECTION (E18 Task 15): "Circular uses" drives `cycles --fix`, whose
+  unit of work is ONE strongly connected component rather than a set of ticked
+  names, so it is a small descendant (TCircularUsesSection) with radio-like
+  ticks and Dry run / Apply buttons. Its command lines, rows and outcome text
+  live in the pure DragLint.Plugin.CycleFix, which a console harness tests.
+
   Code-built (no .dfm) -- see the CreateNew note on the frame constructor. }
 
 interface
@@ -55,11 +61,12 @@ uses
   , Vcl.ExtCtrls
   , Vcl.CheckLst
   , System.Generics.Collections
+  , DragLint.Plugin.CycleFix
   ;
 
 type
   /// <summary>Which engine verb a section drives.</summary>
-  TUsesVerb = (uvUnitCleanup, uvProjectMembers);
+  TUsesVerb = (uvUnitCleanup, uvProjectMembers, uvCircularUses);
 
   /// <summary>How a section reports a user-visible message to its host.</summary>
   /// <remarks>A METHOD POINTER, not TProc&lt;string&gt;: Delphi will not
@@ -99,22 +106,30 @@ type
   TUsesDepsSection = class(TGroupBox)
     private
       FVerb      : TUsesVerb    ;
-      FList      : TCheckListBox;
-      FBar       : TPanel       ;
       FBtnRefresh: TButton      ;
-      FBtnTickAll: TButton      ;
-      FBtnApply  : TButton      ;
       FRows      : TUsesDepsRows;
       FReport    : TUsesReportProc;
       procedure BuildControls;
-      procedure Report(const AText: string);
-      procedure Render;
       function  TickedNames: string;
       function  DryRunArgs (const APas, AProj, ADb: string): string;
       function  ApplyArgs  (const APas, AProj, ADb, AOnly: string): string;
       procedure HandleRefresh(Sender: TObject);
       procedure HandleTickAll(Sender: TObject);
-      procedure HandleApply  (Sender: TObject);
+    protected
+      FList      : TCheckListBox;
+      FBar       : TPanel       ;
+      { The middle button: "Tick all" here, "Dry run" in TCircularUsesSection. }
+      FBtnTickAll: TButton      ;
+      FBtnApply  : TButton      ;
+      /// <summary>Forwards AText to the host's status line (dropped when the
+      /// constructor was given nil).</summary>
+      /// <param name="AText">The message, shown verbatim.</param>
+      procedure Report(const AText: string);
+      /// <summary>Repaints the checklist from the section's rows.</summary>
+      procedure Render; virtual;
+      /// <summary>The Apply button: runs the verb's --apply for the ticked rows.</summary>
+      /// <param name="Sender">The button; unused.</param>
+      procedure HandleApply(Sender: TObject); virtual;
     public
       /// <summary>Builds the section into AParent for AVerb.</summary>
       /// <param name="AOwner">Component owner; frees the section and its controls.</param>
@@ -128,10 +143,47 @@ type
       destructor Destroy; override;
       /// <summary>Re-queries this section and repaints it. Never called on tab
       /// activation -- only from a button or the frame's "Refresh both".</summary>
-      procedure Refresh;
+      procedure Refresh; virtual;
   end;
 
-  /// <summary>The Uses &amp; Deps dock tab: a scope strip, two sections and one
+  /// <summary>The "Circular uses" section: one row per strongly connected
+  /// component (SCC) of the project's uses graph, read from
+  /// `cycles --format json --causes`, with Dry run and Apply for the ONE
+  /// ticked SCC (`cycles --fix --cycle n`).</summary>
+  /// <remarks>Ticks are radio-like: ticking a row unticks every other, because
+  /// --cycle takes one SCC and fixing one changes the graph the others were
+  /// computed on. The engine owns the edit (atomic, compiler-verified, rolled
+  /// back on failure); this section only passes --cycle and, on Apply, --apply.
+  /// After an apply every `written[]` path is reloaded. Not thread-safe; VCL,
+  /// main thread only.</remarks>
+  TCircularUsesSection = class(TUsesDepsSection)
+    private
+      FCycles: TArray<TCycleRow>;
+      function  TickedCycle: Integer;
+      procedure RunFix(AApply: Boolean);
+      procedure HandleDryRun    (Sender: TObject);
+      procedure HandleClickCheck(Sender: TObject);
+    protected
+      /// <summary>One row per SCC: units, fix state, fix.reason.</summary>
+      procedure Render; override;
+      /// <summary>Runs `cycles --fix --cycle n --apply` for the ticked SCC.</summary>
+      /// <param name="Sender">The button; unused.</param>
+      procedure HandleApply(Sender: TObject); override;
+    public
+      /// <summary>Builds the section and re-captions its strip to
+      /// Refresh / Dry run / Apply, with radio-like ticks.</summary>
+      /// <param name="AOwner">Component owner; frees the section and its controls.</param>
+      /// <param name="AParent">Control the section is parented into -- the frame.</param>
+      /// <param name="ACaption">Group-box caption; names the scope to the user.</param>
+      /// <param name="AOnReport">Receives every user-visible message; may be nil.</param>
+      constructor Create(AOwner: TComponent; AParent: TWinControl; const ACaption: string;
+                         AOnReport: TUsesReportProc); reintroduce;
+      /// <summary>Re-runs the SCC list query and repaints. Writes nothing;
+      /// never called on tab activation.</summary>
+      procedure Refresh; override;
+  end;
+
+  /// <summary>The Uses &amp; Deps dock tab: a scope strip, three sections and one
   /// shared status line.</summary>
   TUsesDepsFrame = class(TForm)
     private
@@ -141,13 +193,15 @@ type
       FUnitSec      : TUsesDepsSection;
       FSplitter     : TSplitter      ;
       FProjSec      : TUsesDepsSection;
+      FSplitter2    : TSplitter      ;
+      FCycleSec     : TCircularUsesSection;
       FStatus       : TLabel         ;
       procedure BuildControls;
       procedure SetStatus(const AText: string);
       procedure HandleRefreshAll(Sender: TObject);
     public
       constructor Create(AOwner: TComponent); override;
-      /// <summary>Re-queries BOTH sections. Public so the dock can offer one
+      /// <summary>Re-queries EVERY section. Public so the dock can offer one
       /// "refresh everything" entry point; never called automatically.</summary>
       procedure RefreshAll;
   end;
@@ -191,8 +245,9 @@ const
   STATUS_H   =  34;  { two lines of wrapped status text                  }
   SPLIT_H    =   4;
   UNIT_BOX_H = 230;  { initial split; the user drags FSplitter from here }
+  PROJ_BOX_H = 170;  { project-members box; FSplitter2 sits below it      }
   FRAME_W    = 620;
-  FRAME_H    = 560;
+  FRAME_H    = 720;
 
 type
   /// <summary>The unit, project and index a query runs against.</summary>
@@ -678,6 +733,141 @@ begin
   Refresh;
 end; // procedure
 
+{ ---- TCircularUsesSection ------------------------------------------------- }
+
+constructor TCircularUsesSection.Create(AOwner: TComponent; AParent: TWinControl;
+  const ACaption: string; AOnReport: TUsesReportProc);
+begin
+  inherited Create(AOwner, AParent, uvCircularUses, ACaption, AOnReport);
+  { The base strip is Refresh / Tick all / Apply selected. "Tick all" has no
+    meaning when one SCC is the unit of work, so the middle button becomes the
+    dry run -- the button a user should press before Apply. }
+  FBtnTickAll.Caption:= 'Dry run';
+  FBtnTickAll.OnClick:= HandleDryRun;
+  FBtnApply.Caption  := 'Apply';
+  FList.OnClickCheck := HandleClickCheck;
+end;
+
+procedure TCircularUsesSection.Render;
+var
+  I: Integer;
+begin
+  FList.Items.BeginUpdate;
+  try
+    FList.Clear;
+    { EVERY SCC IS LISTED, fixable or not, and every row can be ticked: the dry
+      run of an unfixable SCC is how the user reads the engine's refusal in
+      full, and Apply on one is refused by the engine, not by this panel. }
+    for I:= 0 to High(FCycles) do
+    begin
+      FList.Items.Add(CycleRowCaption(FCycles[I]));
+      FList.Checked[I]:= False;
+    end;
+  finally
+    FList.Items.EndUpdate;
+  end;
+end;
+
+{ Radio-like: --cycle takes ONE SCC. }
+procedure TCircularUsesSection.HandleClickCheck(Sender: TObject);
+var
+  I: Integer;
+begin
+  if (FList.ItemIndex < 0) or not FList.Checked[FList.ItemIndex] then Exit;
+  for I:= 0 to FList.Items.Count - 1 do
+    if I <> FList.ItemIndex then FList.Checked[I]:= False;
+end;
+
+{ The ticked SCC's 1-based --cycle number; 0 when none is ticked. }
+function TCircularUsesSection.TickedCycle: Integer;
+var
+  I: Integer;
+begin
+  for I:= 0 to FList.Items.Count - 1 do
+    if (I <= High(FCycles)) and FList.Checked[I] then Exit(FCycles[I].Cycle);
+  Result:= 0;
+end;
+
+procedure TCircularUsesSection.Refresh;
+var
+  Scope : TUsesScope;
+  Output: string    ;
+  Fixable: Integer  ;
+  Row   : TCycleRow ;
+begin
+  SetLength(FCycles, 0);
+  Render;
+  Scope:= ResolveScope;
+  if not Scope.Ok then
+  begin
+    Report(Scope.Problem);
+    Exit;
+  end;
+  SaveAllModules;
+  if RunEngine(CycleListArgs(Scope.Proj, Scope.Db), Output) < 0 then
+  begin
+    Report('drag-lint.exe not found -- check drag-lint Options.');
+    Exit;
+  end;
+  FCycles:= ParseCycleRows(Output);
+  Render;
+  Fixable:= 0;
+  for Row in FCycles do
+    if Row.Fixable then Inc(Fixable);
+  Report(Format('cycles: %d circular unit group(s), %d with a mechanical fix. Tick one, then Dry run.',
+                [Length(FCycles), Fixable]));
+end; // procedure
+
+{ One path for both buttons, so the dry run the user reviewed and the apply
+  that follows cannot differ in anything but --apply. }
+procedure TCircularUsesSection.RunFix(AApply: Boolean);
+var
+  N      : Integer         ;
+  Scope  : TUsesScope      ;
+  Args   : string          ;
+  Output : string          ;
+  Outcome: TCycleFixOutcome;
+begin
+  N:= TickedCycle;
+  if N <= 0 then
+  begin
+    Report('Tick one circular unit group first.');
+    Exit;
+  end;
+  Scope:= ResolveScope;
+  if not Scope.Ok then
+  begin
+    Report(Scope.Problem);
+    Exit;
+  end;
+  SaveAllModules;
+  Args:= if AApply then CycleFixApplyArgs(Scope.Proj, Scope.Db, N)
+         else CycleFixDryRunArgs(Scope.Proj, Scope.Db, N);
+  if RunEngine(Args, Output) < 0 then
+  begin
+    Report('drag-lint.exe not found -- check drag-lint Options.');
+    Exit;
+  end;
+  Outcome:= ParseCycleFixOutcome(Output);
+  { The written[] paths, not a guess: the engine creates new units and edits the
+    .dpr/.dproj as well as the cycle's units, and every one may be open. }
+  if CycleFixWroteFiles(Outcome) then ReloadModules(Outcome.Written);
+  if AApply and Outcome.Readable then
+    Refresh;   { the graph changed; repaint from what is now true }
+  { AFTER the refresh, whose own count line would otherwise overwrite it. }
+  Report(DescribeCycleFixOutcome(Outcome));
+end; // procedure
+
+procedure TCircularUsesSection.HandleDryRun(Sender: TObject);
+begin
+  RunFix(False);
+end;
+
+procedure TCircularUsesSection.HandleApply(Sender: TObject);
+begin
+  RunFix(True);
+end;
+
 { ---- TUsesDepsFrame ------------------------------------------------------- }
 
 constructor TUsesDepsFrame.Create(AOwner: TComponent);
@@ -711,7 +901,7 @@ begin
   FBtnRefreshAll.Parent := FTopPanel;
   FBtnRefreshAll.Align  := alRight;
   FBtnRefreshAll.Width  := BTN_W;
-  FBtnRefreshAll.Caption:= 'Refresh both';
+  FBtnRefreshAll.Caption:= 'Refresh all';
   FBtnRefreshAll.OnClick:= HandleRefreshAll;
 
   { --- status line, pinned to the bottom so a long list cannot push it off - }
@@ -723,7 +913,7 @@ begin
   FStatus.Height  := STATUS_H;
   FStatus.Caption := '  Nothing has been queried yet.';
 
-  { --- the two sections, both reporting into the one status line ---------- }
+  { --- the three sections, all reporting into the one status line --------- }
   FUnitSec:= TUsesDepsSection.Create(Self, Self, uvUnitCleanup,
     ' This unit -- uses cleanup (uses-fix) ', SetStatus);
   FUnitSec.Align := alTop;
@@ -737,7 +927,19 @@ begin
 
   FProjSec:= TUsesDepsSection.Create(Self, Self, uvProjectMembers,
     ' This project -- members used but not listed (reconcile-project) ', SetStatus);
-  FProjSec.Align:= alClient;
+  FProjSec.Align := alTop;
+  FProjSec.Height:= PROJ_BOX_H;
+  FProjSec.Top   := FSplitter.Top + FSplitter.Height;
+
+  FSplitter2:= TSplitter.Create(Self);
+  FSplitter2.Parent:= Self;
+  FSplitter2.Align := alTop;
+  FSplitter2.Height:= SPLIT_H;
+  FSplitter2.Top   := FProjSec.Top + FProjSec.Height;
+
+  FCycleSec:= TCircularUsesSection.Create(Self, Self,
+    ' This project -- Circular uses (cycles --fix) ', SetStatus);
+  FCycleSec.Align:= alClient;
 end; // procedure
 
 procedure TUsesDepsFrame.SetStatus(const AText: string);
@@ -754,6 +956,7 @@ begin
     [ExtractFileName(Scope.Pas), ExtractFileName(Scope.Proj)]);
   FUnitSec.Refresh;
   FProjSec.Refresh;
+  FCycleSec.Refresh;
 end;
 
 procedure TUsesDepsFrame.HandleRefreshAll(Sender: TObject);
