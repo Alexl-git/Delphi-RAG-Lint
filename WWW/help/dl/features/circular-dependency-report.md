@@ -7,7 +7,7 @@ group: graphs-reports
 order: 70004
 since: 0.0.0
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Circular Dependency Report (worked example)
@@ -32,10 +32,10 @@ produces for it.
 ### The sample project
 
 `circular-demo/` (repo root, alongside `README.md`) is a small, deliberately
-minimal Delphi console project: 4 units, ~75 symbols. Despite that size it
-contains a genuine four-unit dependency cycle that **still compiles**, because
-one of the four edges is an `implementation` uses rather than an `interface`
-uses:
+minimal Delphi console project: 10 units, ~135 symbols, holding three
+dependency cycles of three different shapes that all **still compile**. This
+page is about the first and largest, a four-unit cycle in which one of the four
+edges is an `implementation` uses rather than an `interface` uses:
 
 ```text
 DemoConfig  -> DemoLogger    interface
@@ -67,6 +67,15 @@ they create ordering dependencies between units that the compiler will not
 complain about, so the cycle is not merely a tidiness problem -- it is a real
 coupling the reader has to hold in their head.
 
+The other two cycles are implementation-only and modelled on real client code:
+a three-unit one (`DemoBlueprint -> DemoBlueprint.ViewModel -> DemoControlPlan
+-> DemoBlueprint`) whose only cheap cut is a single **routine call**, and a
+two-unit one (`DemoUIConnect <-> DemoGagePort`) whose only cheap cut is a
+**member access** behind `is` / `as`. Nothing on either is a plain constant or
+variable, so the playbook's "move the globals into a leaf" recipe does not
+apply; the report says so per edge, and refuses them. What a wider recipe would
+do with them is written up in `circular-demo/CYCLE-REPORT.md`.
+
 ### Reproduce it yourself
 
 ```text
@@ -74,7 +83,7 @@ drag-lint index  --project circular-demo\CircularDemo.dproj --db circular-demo\_
 drag-lint cycles --db circular-demo\_D-RAG\CircularDemo.sqlite --edges --causes --plan --format text
 ```
 
-Indexing this project takes well under a second (5 files, 73 symbols, 223
+Indexing this project takes well under a second (11 files, 134 symbols, 451
 refs) -- small enough to run on a whim to check the claims on this page yourself.
 
 ### Can a model follow it?
@@ -114,9 +123,9 @@ Status: **interface coupling** -- units of this cycle use each other in their IN
 ### Step 1: what moves where
 1. `TDemoSession` -- **class with methods**, declared at `DemoSession.pas` lines 14-47; method bodies at `DemoSession.pas` lines 64-73, 75-80, 82-86, 88-95, 97-100.
    - Recipe: **extract a base class** and keep `TDemoSession` where it is. Why: its method bodies use `GDemoSessionCount`, `GDemoAuditCount`, `GDemoAuditTrail`, which live in units of this cycle; moving the class would mean moving those bodies (lines 64-73, 75-80, 82-86, 88-95, 97-100) AND everything they use.
-   - New class `TDemoSessionBase` in `DemoSession.Contracts` carries exactly what the units below use: `FId`, `FUser`, `Id`, `User`.
+   - New class `TDemoSessionBase` in `DemoSession.Untangle` carries exactly what the units below use: `FId`, `FUser`, `Id`, `User`.
 2. `TDemoLogLevel` -- **enum**, declared at `DemoLogger.pas` lines 14-15.
-   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoLogger.Contracts`.
+   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoLogger.Untangle`.
 
 ### Step 2: uses clauses -- keep, move or remove the old unit
 - `DemoConfig.pas` / `DemoLogger`: the interface no longer needs it; the implementation still does (`GDemoMinLevel` line 56, `DemoLog` line 58, `DemoLogLevelName` line 59, `GDemoLogCount` line 67) -> **move** it from the interface uses to the implementation uses.
@@ -124,7 +133,8 @@ Status: **interface coupling** -- units of this cycle use each other in their IN
 ### Checklist
 ...
 12. [ ] Run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite"`. It must print exactly:
-1 circular unit group(s) found:
+3 circular unit group(s) found:
+...
   [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (implementation-only -- legal, lower impact)
 
 ### Part B (optional): remove the implementation-only cycle too
@@ -132,10 +142,11 @@ Status: **interface coupling** -- units of this cycle use each other in their IN
 ```
 
 Applied literally (a script that only knows the playbook's own markup), Part A
-compiles and `cycles` prints exactly the predicted line; re-running `--plan`
-then prints Part B, which moves `TDemoSettings` + `GDemoSettings` into
-`DemoConfig.Contracts`, compiles, and ends in `No circular unit dependencies
-found.` The program's output is unchanged throughout.
+compiles and `cycles` prints the predicted three groups, the four-unit one now
+implementation-only; re-running `--plan` then prints Part B, which moves
+`TDemoSettings` + `GDemoSettings` into `DemoConfig.Untangle`, compiles, and
+leaves only the two cycles the playbook refuses. The program's output is
+unchanged throughout.
 The full, unabridged report -- regenerated from the current engine and checked
 for drift -- lives in the repository at
 `circular-demo/CYCLE-REPORT.md`.

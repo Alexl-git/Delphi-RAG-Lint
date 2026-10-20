@@ -6,10 +6,11 @@ circular references, or a project's dependency graph feels tangled.
 
 ## Running it from the CLI
 ```
-drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json|text]
+drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--format json|text]
 ```
 `--edges` and `--causes` add detail to the cycle report; `--plan` produces the
-refactoring playbook; `--format` selects `json` or `text` output.
+refactoring playbook; `--format` selects `json` or `text` output. `--fix` makes the edits
+for you -- see [Fix it mechanically](#fix-it-mechanically-cycles---fix) below.
 
 ## What `--plan` gives you
 A mechanical procedure, written so that a reader with no project context can
@@ -47,8 +48,122 @@ touched only the named files (4 of 4 criteria; re-run on engine 1.19.0-alpha).
 The examples are regenerated from the engine and checked for drift by the test
 battery, so they always show what the current `--plan` prints.
 
+## Fix it mechanically: `cycles --fix`
+
+`--plan` tells you what to edit; `--fix` makes the edits for you, one circular group per run,
+and proves them with the compiler.
+
+```
+drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> [--cycle <n> | --unit <stem>]
+                 [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile]
+                 [--platform win32|win64] [--library-db <lib.sqlite>] [--format json|text]
+```
+
+**Which group.** `--cycle <n>` (the number `drag-lint cycles` prints) or `--unit <stem>` (the
+group that unit belongs to). Without either, the run walks the groups in order, prints each
+refused one with its first refusal, and plans the first mechanical one; the text output then
+ends with one line naming every group it never reached:
+
+```
+Not planned: cycle(s) 2, 3 -- this run plans one group; add --cycle <n> to plan another
+```
+
+**Dry run (the default).** Plans the group, checks the plan against the files on disk, stages
+the result in a shadow tree (`C:\TEMP\draglint_cyclefix_<pid>\`, or `--shadow-out <dir>`) and
+prints the verdict. No source file of the project is written -- but the dry run **builds the
+project by default** (the baseline gate), and that build writes what any build writes (dcu,
+exe). `--no-compile` skips it. Exit 0 mechanical, 1 refused, 2 error (bad flags, no such group).
+
+**Apply.** `--apply` runs the same plan, then:
+1. the baseline build must pass (else `dirty-baseline`, nothing written);
+2. every file it touches is backed up as `<file>.BCK<n>` (the lowest free n) plus a
+   `recovery.txt`, unless `--no-backup`;
+3. the edits are written and the project is built in place; one bounded repair (R4: a cast
+   through the plan's ancestor, a missing leaf unit in `uses`, a re-emitted pointer type) is
+   tried on a compile error, otherwise every file is rolled back;
+4. the project is re-indexed (unless `--no-reindex`) and `cycles` re-run: the output must
+   equal the plan's prediction.
+
+Exit codes with `--apply`: **0** written and verified (or written with `--no-reindex`);
+**1** refused, rolled back after a compile error or build timeout, or written but not
+verified; **2** error -- a write or build failed part-way (rolled back, project not changed,
+or the rollback failure is named), or bad flags. `--apply --no-compile` is refused with
+exit 2: an apply always builds.
+
+**Parts.** An interface-coupled group is Part A (it becomes a legal implementation-only
+group); an implementation-only one is Part B (one edge is cut). `--part a|b` asks for one;
+`--part all` applies Part A and then Part B in one run, re-planning on the re-indexed project
+after each iteration -- so it **needs `--apply` and refuses `--no-reindex`**.
+
+**Recipes.** Part A moves globals into a `<Declaring>.Untangle` leaf, as `--plan` describes.
+Part B cuts one edge: **R1** routine-call inversion (an edge that is exactly one routine whose
+signature types all live outside the cycle is called through a procedural variable declared in
+a leaf and assigned in the declaring unit's initialization section); **R2** member hand-over
+(an edge that is only `is` / `as` against one class plus reads of its members: the class
+implements an `I<Class>Surface` interface declared in its leaf, and the consumer uses
+`Supports` / `as`).
+
+**JSON.** `--format json` prints one `cycle-fix/1` document: `mode`, `cycles[]` (per group:
+`n`, `units`, `part`, `verdict`, `recipe`, `edge`, `refusals[]`, `moves`, `uses`, `new_units`,
+`edits`, `compile`, `baseline`, `repairs`, `written`, `backups`, `reindex`, `predicted`,
+`actual`, `verified`), `shadow`, `baseline`, `ok`, `exit_code`. Separately,
+`cycles --format json --causes [--project <X.dproj>]` adds a `fix` object to every group of
+the report -- `available`, `part`, `dry_run` and `apply` (the exact commands; `--project` names
+the project in them, else `<your.dproj>`), `edges[]`, `reason`, and for a Part A group whose
+Part B would cut an edge afterwards, `followup {from,to,recipe}`.
+
+### Refusal kinds
+
+A refused group prints `Verdict: refused` and one `  - <kind>: <reason>` line per refusal.
+The engine never guesses; every kind it can give:
+
+* **Run and gate:** `dirty-baseline` (the project does not build before any edit),
+  `no-compiler` (rsvars.bat missing; use `--no-compile` for a dry run), `compile-error` (the
+  project does not build after the edit; rolled back), `build-timeout` (the build did not
+  finish; rolled back), `build-error` (the build itself failed to run; rolled back, exit 2),
+  `write-failed` (a write failed part-way; rolled back, exit 2), `stale-file` (a file changed
+  after it was indexed: reindex and retry), `anchor-mismatch` (a line the plan edits is not
+  what the planner saw), `non-ascii-text` (an inserted line holds a non-ASCII character and
+  the file is ANSI), `outside-roots` (the plan would edit a file outside the project's own
+  roots).
+* **Plan:** `base-class` (a class whose bodies use the cycle would need a base class
+  extracted -- a manual step), `directive` (a compiler directive inside an edited region),
+  `manual-edit` (the default for any edit the planner cannot make mechanically).
+* **R1 (routine-call inversion):** `not-a-routine`, `signature-in-cycle`,
+  `overloaded-routine`, `signature-unknown`, `qualified-ref`, `routine-not-called`,
+  `init-order`, `unsupported-directive`.
+* **R2 (member hand-over):** `member-write`, `construction`, `class-method`, `class-ref`,
+  `type-decl`, `type-cast`, `other-ref`, `multiple-classes`, `member-unsupported`,
+  `duplicate-identifier`, `no-iinterface`, `ref-counted`, `receiver-unknown`, `cast-unseen`,
+  `exception-semantics`, `ancestry-unknown`, `with-member`, `unresolved-qualified-type`,
+  `type-unresolved`, `leaf-uses-cycle`.
+
+### What stays manual
+
+A refused group is yours: `--plan` still prints the playbook and the standard remedy for it,
+and `tools\follow-cycle-plan.ps1` applies a playbook's edits literally when you have decided
+to follow it by hand. Moving a class whose method bodies use the cycle, and any cut the
+refusals above name, stay human decisions.
+
+### Per-file finding
+
+`lint <file> --db <db> --format json` reports `circular-uses` on every unit of a cycle, with
+`"fix_hint": "cycles --fix --project \"<X.dproj>\" --db \"<db>\" --unit <stem>"`; `lint-all`
+keeps one finding per cycle and no hint.
+
 ## Reaching it in the IDE
-drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...
+* drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...
+* drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)... -- a dry
+  run only (the engine picks the group; no `--apply` from a menu click). Save first: the
+  engine plans and compiles from the files on disk.
+* View > Tool Windows > drag-lint > Uses & Deps tab, section *This project -- Circular uses
+  (cycles --fix)*: one row per group, Dry run / Apply buttons.
+* drag-lint Structure window, Diagnostics tree, right-click a `circular-uses` finding:
+  *Fix this cycle (dry run)...* and *Apply cycle fix...* (a dry run, your confirmation, then
+  `--apply`).
+
+The IDE gives each cycle-fix job a 35 minute limit, because the engine builds the project
+(baseline and, on apply, after the edit) inside that one job.
 
 ## What it needs
 Required. You must have indexed the project before running this -- cycle

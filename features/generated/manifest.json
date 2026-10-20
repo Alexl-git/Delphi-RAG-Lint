@@ -1,5 +1,5 @@
 {
-  "product": "1.32.0-alpha",
+  "product": "1.33.0-alpha",
   "extractor": "1.22.0-alpha",
   "resolver": "1.12.1-alpha",
   "schema": 23,
@@ -4198,6 +4198,133 @@
       ],
       "audience": "both",
       "requires": ["index"]
+    },
+    {
+      "id": "cycles-fix",
+      "title": "Cycles fix (mechanical, compile-gated)",
+      "group": "graphs-reports",
+      "owner": "ENGINE",
+      "status": "shipped",
+      "since": "1.33.0-alpha",
+      "summary": "Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output",
+      "intro": "cycles --fix makes the edits a --plan playbook describes: a dry run that builds the project and stages the result, or --apply with .BCK backups, an in-place build, rollback on a compile error and a re-indexed verify.",
+      "wikiPage": "Circular-Uses-Report-cycles-fix-plan",
+      "surfaces": [
+        {
+          "type": "cli",
+          "verb": "cycles",
+          "example": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite>",
+          "usage": "drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan [--project <X.dproj>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\\TEMP\\draglint_cyclefix_<pid>\\, --shadow-out names another) and builds the project unless --no-compile, exit 0 mechanical / 1 refused / 2 error; --apply writes it (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 verified / 1 refused, rolled back or not verified / 2 error; --apply --no-compile is exit 2; --part all needs --apply, refuses --no-reindex; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a \"Fix it\" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); --library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest's library for win64; --library-db none = no library); --format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge's surface: members read, writes, construction, class methods, routine + signature types)",
+          "flags": [
+            {
+              "name": "--db",
+              "arg": "<file.sqlite>"
+            },
+            {
+              "name": "--edges"
+            },
+            {
+              "name": "--causes"
+            },
+            {
+              "name": "--plan"
+            },
+            {
+              "name": "--project",
+              "arg": "<X.dproj>"
+            },
+            {
+              "name": "--fix"
+            },
+            {
+              "name": "--cycle",
+              "arg": "<n>"
+            },
+            {
+              "name": "--unit",
+              "arg": "<stem>"
+            },
+            {
+              "name": "--part"
+            },
+            {
+              "name": "--apply"
+            },
+            {
+              "name": "--no-backup"
+            },
+            {
+              "name": "--no-reindex"
+            },
+            {
+              "name": "--no-compile"
+            },
+            {
+              "name": "--shadow-out",
+              "arg": "<dir>"
+            },
+            {
+              "name": "--format"
+            },
+            {
+              "name": "--library-db",
+              "arg": "<lib.sqlite>"
+            },
+            {
+              "name": "--platform"
+            }
+          ]
+        },
+        {
+          "type": "ide-menu",
+          "path": "drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)...",
+          "steps": ["Save all files (the engine plans and compiles from disk)", "drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)...", "Read the verdict in the report: mechanical, or refused with one line per refusal"]
+        },
+        {
+          "type": "tool-window",
+          "path": "View > Tool Windows > drag-lint > Uses & Deps > This project -- Circular uses (cycles --fix)",
+          "steps": ["View > Tool Windows > drag-lint, tab Uses & Deps", "In the Circular uses section tick one group", "Dry run to see the verdict, then Apply to write, build and verify it"]
+        },
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Fix this cycle (dry run)...",
+          "steps": ["In the drag-lint Structure window, Diagnostics tree, right-click a circular-uses finding", "Fix this cycle (dry run)..."]
+        },
+        {
+          "type": "ide-context",
+          "host": "Structure form",
+          "caption": "Apply cycle fix...",
+          "steps": ["In the drag-lint Structure window, Diagnostics tree, right-click a circular-uses finding", "Apply cycle fix... (runs the dry run, asks you to confirm, then --apply)"]
+        },
+        {
+          "type": "script",
+          "path": "charts\\src\\Emit-Cycles.ps1"
+        }
+      ],
+      "audience": "both",
+      "requires": ["index", "compiler"],
+      "related": ["circular-uses-report-cycles-fix-plan"],
+      "questions": [
+        {
+          "ask": "Can drag-lint break this uses cycle for me?",
+          "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite>"
+        },
+        {
+          "ask": "Apply the cycle fix for the group that holds this unit",
+          "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --unit <stem> --apply"
+        },
+        {
+          "ask": "Why was this cycle refused?",
+          "command": "drag-lint cycles --fix --project <X.dproj> --db <file.sqlite> --cycle <n>"
+        }
+      ],
+      "verified": {
+        "date": "2026-10-20",
+        "by": "ENGINE",
+        "build": "1.33.0-alpha",
+        "surfaceHash": "34d74bf879457e5e79cedf0dadf8ff48b072520eff8a511a711d7e4352fe3e16"
+      }
     },
     {
       "id": "deps-report",

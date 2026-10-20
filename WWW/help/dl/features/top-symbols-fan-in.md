@@ -4,10 +4,10 @@ title: Top Symbols (fan-in)
 summary: Ranks indexed symbols by fan-in -- how many places reference them
 product: DL
 group: graphs-reports
-order: 70018
+order: 70019
 since: 0.6.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Top Symbols (fan-in)

@@ -2443,6 +2443,25 @@ begin
   end;
 end;
 
+// E18 T16: a run without --cycle / --unit (pOnly = 0) plans one group and stops; when there are
+// several groups, prints one line naming those it did not plan (pPlanned: the visited groups'
+// numbers), so they are never left implied. Prints nothing when every group was planned.
+procedure WriteNotPlanned(pOnly, pCount: Integer; const pPlanned: TList<Integer>);
+var
+  Rest: TList<string>;
+begin
+  if (pOnly <> 0) or (pCount < 2) then Exit;
+  Rest:= TList<string>.Create;
+  try
+    for var I:= 1 to pCount do
+      if not pPlanned.Contains(I) then Rest.Add(IntToStr(I));
+    if Rest.Count > 0 then
+      Writeln('Not planned: cycle(s) ' + string.Join(', ', Rest.ToArray) + ' -- this run plans one group; add --cycle <n> to plan another');
+  finally
+    Rest.Free;
+  end;
+end;
+
 function RunCycleFixGroups(const pOpts: TCycleFixOptions; const pStore: ISymbolStore;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore): Integer;
 var
@@ -2452,6 +2471,7 @@ var
   Cycles  : TJSONArray;
   Playbook: TStringList;
   Summary : TStringList;
+  Planned : TList<Integer>;
   Chosen  : Boolean;
   BadPart : string;
   ProjectDir: string;
@@ -2482,6 +2502,7 @@ begin
   Cycles  := TJSONArray.Create;
   Playbook:= TStringList.Create;
   Summary := TStringList.Create;
+  Planned := TList<Integer>.Create;
   try
     VisitCyclePlans(pStore, pOpts.Db, pSccs, pGraph, pLibStore,
       function(const pView: TCyclePlanView; const pRender: TFunc<TArray<string>>): Boolean
@@ -2519,6 +2540,7 @@ begin
             Applied:= ApplyGroup(Staged, pOpts, ProjectDir, ShadowDir, pStore, Gate);
           var Report:= if Applied.Ran then Applied else NoApply;
           Cycles.AddElement(CycleToJson(pView, Verdict + Report.Refusals, pGraph, Gate, Report));
+          Planned.Add(pView.CycleIndex);
           Chosen:= Length(Verdict) = 0;
           if (not pOpts.Json) and ((Only > 0) or Chosen) then Playbook.AddStrings(pRender());
           if not (Chosen and pOpts.Json) then AddGroupLines(pOpts, Staged, Verdict, Only > 0, Applied, ShadowDir, Summary);
@@ -2557,10 +2579,12 @@ begin
       for var Line in Playbook do Writeln(Line);
       for var Line in Summary do Writeln(Line);
       if (pSccs.Count > 0) and (Only = 0) and not Chosen then Writeln(CVerdictRefused);
+      WriteNotPlanned(Only, pSccs.Count, Planned);
       var Timing:= TimingLine(Gate);
       if Timing <> '' then Writeln(Timing);
     end;
   finally
+    Planned.Free;
     Summary.Free;
     Playbook.Free;
     Cycles.Free;

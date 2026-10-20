@@ -24,10 +24,13 @@
   Parameters:
     -Repo     repo root (default: two levels above this script)
     -WorkDir  scratch folder for the control (created, removed on exit; unique per process)
+    -Engine   drag-lint.exe whose live surface is checked (default: <Repo>\third_party\dll-win64\drag-lint.exe;
+              a worktree passes its own src\cli\Win64\Debug build, which needs rules\ beside it)
 #>
 [CmdletBinding()]
 param([string]$Repo = (Resolve-Path "$PSScriptRoot\..\..").Path,
-      [string]$WorkDir = "$env:TEMP\drag-lint-feature-registry-guard-$PID")
+      [string]$WorkDir = "$env:TEMP\drag-lint-feature-registry-guard-$PID",
+      [string]$Engine = '')
 Set-StrictMode -Version Latest
 try {
 $ErrorActionPreference = 'Stop'
@@ -40,7 +43,7 @@ function Check([string]$Name, [bool]$Ok, [string]$Detail = '') {
 }
 Write-Host '== feature registry guard (featuregen) ==' -ForegroundColor Cyan
 . (Join-Path $Repo 'tools\featuregen-ensure.ps1')
-$engine = Join-Path $Repo 'third_party\dll-win64\drag-lint.exe'
+$engine = if ($Engine) { $Engine } else { Join-Path $Repo 'third_party\dll-win64\drag-lint.exe' }
 try { $exe = Get-FeatureGenExe -Repo $Repo }
 catch { Write-Host "GUARD BROKEN: $($_.Exception.Message) (build\_build_featuregen_local.bat builds it)" -ForegroundColor Red; exit 1 }
 # ---- control 0: the freshness rule itself goes RED on a missing / stale exe -------------

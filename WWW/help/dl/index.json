@@ -909,11 +909,20 @@
     "file": "features/circular-uses-report-cycles-fix-plan.md"
   },
   {
+    "id": "cycles-fix",
+    "title": "Cycles fix (mechanical, compile-gated)",
+    "summary": "Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output",
+    "group": "graphs-reports",
+    "order": 70006,
+    "since": "1.33.0-alpha",
+    "file": "features/cycles-fix.md"
+  },
+  {
     "id": "deps-report",
     "title": "deps-report",
     "summary": "Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on",
     "group": "graphs-reports",
-    "order": 70006,
+    "order": 70007,
     "since": "0.95.0-alpha",
     "file": "features/deps-report.md"
   },
@@ -922,7 +931,7 @@
     "title": "Export Enums (Delphi const)",
     "summary": "Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations",
     "group": "graphs-reports",
-    "order": 70007,
+    "order": 70008,
     "since": "0.6.0-alpha",
     "file": "features/export-enums-delphi-const.md"
   },
@@ -931,7 +940,7 @@
     "title": "Export Graph (DOT)",
     "summary": "Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring",
     "group": "graphs-reports",
-    "order": 70008,
+    "order": 70009,
     "since": "0.6.0-alpha",
     "file": "features/export-graph-dot.md"
   },
@@ -940,7 +949,7 @@
     "title": "Export to Obsidian",
     "summary": "Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages",
     "group": "graphs-reports",
-    "order": 70009,
+    "order": 70010,
     "since": "0.6.0-alpha",
     "file": "features/export-to-obsidian.md"
   },
@@ -949,7 +958,7 @@
     "title": "Find Dead Code",
     "summary": "Scans the index for code with no references -- candidates to delete",
     "group": "graphs-reports",
-    "order": 70010,
+    "order": 70011,
     "since": "0.25.0-alpha",
     "file": "features/find-dead-code.md"
   },
@@ -958,7 +967,7 @@
     "title": "Forms for testers (CSV)",
     "summary": "A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form",
     "group": "graphs-reports",
-    "order": 70011,
+    "order": 70012,
     "since": "0.44.0-alpha",
     "file": "features/generate-test-helper-csv.md"
   },
@@ -967,7 +976,7 @@
     "title": "Impact / Blast Radius (symbol)",
     "summary": "Reports what would be affected if a chosen symbol changes -- the set of code to retest",
     "group": "graphs-reports",
-    "order": 70012,
+    "order": 70013,
     "since": "0.17.0-alpha",
     "file": "features/impact-blast-radius-symbol.md"
   },
@@ -976,7 +985,7 @@
     "title": "Reverse Call Tree (clickable, Messages window)",
     "summary": "The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller",
     "group": "graphs-reports",
-    "order": 70013,
+    "order": 70014,
     "since": "0.96.0-alpha",
     "file": "features/reverse-call-tree-clickable-messages-window.md"
   },
@@ -985,7 +994,7 @@
     "title": "Reverse Call Tree (who calls this, N-deep)",
     "summary": "Builds the tree of callers of a chosen symbol, transitively, to a chosen depth",
     "group": "graphs-reports",
-    "order": 70014,
+    "order": 70015,
     "since": "0.96.0-alpha",
     "file": "features/reverse-call-tree-who-calls-this-n-deep.md"
   },
@@ -994,7 +1003,7 @@
     "title": "Scan TODOs / FIXMEs",
     "summary": "Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers",
     "group": "graphs-reports",
-    "order": 70015,
+    "order": 70016,
     "since": "0.12.0-alpha",
     "file": "features/scan-todos-fixmes.md"
   },
@@ -1003,7 +1012,7 @@
     "title": "Show in Call Graph",
     "summary": "Opens the call graph rooted at the symbol represented by a Structure-tree node",
     "group": "graphs-reports",
-    "order": 70016,
+    "order": 70017,
     "since": "0.96.0-alpha",
     "file": "features/show-in-call-graph.md"
   },
@@ -1012,7 +1021,7 @@
     "title": "Show Wiring (Spring4D DI + DFM events)",
     "summary": "Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type",
     "group": "graphs-reports",
-    "order": 70017,
+    "order": 70018,
     "since": "0.21.0-alpha",
     "file": "features/show-wiring-spring4d-di-dfm-events.md"
   },
@@ -1021,7 +1030,7 @@
     "title": "Top Symbols (fan-in)",
     "summary": "Ranks indexed symbols by fan-in -- how many places reference them",
     "group": "graphs-reports",
-    "order": 70018,
+    "order": 70019,
     "since": "0.6.0-alpha",
     "file": "features/top-symbols-fan-in.md"
   },
@@ -1030,7 +1039,7 @@
     "title": "Uses Report (CSV)",
     "summary": "Exports the project's unit-dependency data as a CSV file",
     "group": "graphs-reports",
-    "order": 70019,
+    "order": 70020,
     "since": "0.40.5-alpha",
     "file": "features/uses-report-csv.md"
   },

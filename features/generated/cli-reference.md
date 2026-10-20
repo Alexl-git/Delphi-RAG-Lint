@@ -352,8 +352,23 @@ drag-lint cycles --db <file.sqlite> [--edges] [--causes] [--plan] [--format json
 | `--causes` |  |  |  |
 | `--plan` |  |  |  |
 | `--format` |  |  |  |
+| `--project` | `<X.dproj>` |  |  |
+| `--fix` |  |  |  |
+| `--cycle` | `<n>` |  |  |
+| `--unit` | `<stem>` |  |  |
+| `--part` |  |  |  |
+| `--apply` |  |  |  |
+| `--no-backup` |  |  |  |
+| `--no-reindex` |  |  |  |
+| `--no-compile` |  |  |  |
+| `--shadow-out` | `<dir>` |  |  |
+| `--library-db` | `<lib.sqlite>` |  |  |
+| `--platform` |  |  |  |
 
-Described in [Circular Uses Report (cycles + fix plan)](../../docs/wiki/Circular-Uses-Report-cycles-fix-plan.md).
+Described in:
+
+* [Circular Uses Report (cycles + fix plan)](../../docs/wiki/Circular-Uses-Report-cycles-fix-plan.md)
+* [Cycles fix (mechanical, compile-gated)](../../docs/wiki/Circular-Uses-Report-cycles-fix-plan.md)
 
 ### deps-report
 

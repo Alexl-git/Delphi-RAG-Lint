@@ -158,6 +158,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [callgraph](features/callgraph.md) | Prints an N-deep resolved call tree for a symbol, in either direction | 0.91.0-alpha |
 | [Circular Dependency Report (worked example)](features/circular-dependency-report.md) | A worked example: a real four-unit uses cycle, and the report drag-lint produces for it | 0.0.0 |
 | [Circular Uses Report (cycles + fix plan)](features/circular-uses-report-cycles-fix-plan.md) | Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them | 0.43.0-alpha |
+| [Cycles fix (mechanical, compile-gated)](features/cycles-fix.md) | Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output | 1.33.0-alpha |
 | [deps-report](features/deps-report.md) | Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on | 0.95.0-alpha |
 | [Export Enums (Delphi const)](features/export-enums-delphi-const.md) | Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations | 0.6.0-alpha |
 | [Export Graph (DOT)](features/export-graph-dot.md) | Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring | 0.6.0-alpha |

@@ -1020,9 +1020,12 @@ begin
   Writeln('  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)');
   Writeln('                               Safe to run any time: prints "nothing pending." when there is nothing to do.');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
-  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan [--project <X.dproj>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --fix = dry run of the mechanical cycle fix for ONE group (verdict + cycle-fix/1 JSON; writes nothing; exit 0 mechanical / 1 refused / 2 error; stages the result in a shadow tree, default C:\TEMP\draglint_cyclefix_<pid>\, --shadow-out names another); --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); ' +
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan [--project <X.dproj>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64]   (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\TEMP\draglint_cyclefix_<pid>\, --shadow-out names another) and builds the project unless --no-compile,' +
+    ' exit 0 mechanical / 1 refused / 2 error; --apply writes it' +
+    ' (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 verified / 1 refused, rolled back or not verified / 2 error; --apply --no-compile is exit 2; --part all needs --apply, refuses --no-reindex;' +
+    ' --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); ' +
     '--library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); ' +
-    '--format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason} and edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
+    '--format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
@@ -17337,6 +17340,9 @@ begin
         deliberate-break (inst.Old -> DL_NONE(inst.Old)), migrate-check;
         pas_uses[] status mapped for the member. }
       JCap.AddPair('migrate_members', TJSONBool.Create(True));
+      { E18 (1.33.0): cycles --fix plans, gates and (with --apply) writes the mechanical
+        fix of one circular group -- cycle-fix/1 JSON, exit 0 / 1 / 2. }
+      JCap.AddPair('cycle_fix', TJSONBool.Create(True));
       { 1.25.0, same contract: convert-apply lists the descendant units that
         still stream or use an instance it converts (apply/1 descendants[],
         items[] kind descendant-not-converted) -- a warning, never a refusal. }

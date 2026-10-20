@@ -55,6 +55,7 @@ The drag-lint menu tree in the RAD Studio IDE. Each item links to the feature it
     * [Call Graph (Butterfly)...](features/call-graph-butterfly.md)
     * [Circular Uses Report (cycles + fix plan)...](features/circular-uses-report-cycles-fix-plan.md)
     * [Dependency Report (third-party rollup)...](features/deps-report.md)
+    * [Fix Circular Uses Mechanically (dry run)...](features/cycles-fix.md)
     * [Impact / Blast Radius (symbol)...](features/impact-blast-radius-symbol.md)
     * [Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor](features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md)
     * [Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)](features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md)

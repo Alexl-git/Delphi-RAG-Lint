@@ -240,6 +240,7 @@ Call graphs, dependency reports, dead code, tester spreadsheets.
 | [callgraph](callgraph) | `callgraph` |  |
 | [Circular Dependency Report (worked example)](Circular-Dependency-Report) | procedure: `docs\wiki\Circular-Dependency-Report.md` |  |
 | [Circular Uses Report (cycles + fix plan)](Circular-Uses-Report-cycles-fix-plan) | drag-lint > Uses & Dependencies > Circular Uses Report (cycles + fix plan)...; `cycles` |  |
+| [Cycles fix (mechanical, compile-gated)](Circular-Uses-Report-cycles-fix-plan) | `cycles`; drag-lint > Uses & Dependencies > Fix Circular Uses Mechanically (dry run)...; View > Tool Windows > drag-lint > Uses & Deps > This project -- Circular uses (cycles --fix); Structure form: Fix this cycle (dry run)...; Structure form: Apply cycle fix...; `charts\src\Emit-Cycles.ps1` |  |
 | [deps-report](deps-report) | `deps-report`; drag-lint > Uses & Dependencies > Dependency Report (third-party rollup)... |  |
 | [Export Enums (Delphi const)](Export-Enums-Delphi-const) | drag-lint > Generate & Export > Export Enums (Delphi const)...; `export enums` |  |
 | [Export Graph (DOT)](Export-Graph-DOT) | drag-lint > Generate & Export > Export Graph (DOT)...; `graph` |  |

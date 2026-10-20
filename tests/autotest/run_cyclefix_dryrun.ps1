@@ -128,7 +128,11 @@ try {
   Write-Host '== (e) text output: positive control + a refused group' -ForegroundColor Cyan
   $r = Run-Fix $demo $db @('--no-compile', '--library-db', 'none') $false
   Check 'e: --format text contains Verdict:' ($r.Out -match 'Verdict: mechanical \(dry run; add --apply to write\)') $r.Out
+  # E18 T16: without --cycle, the groups the run did not plan are named, with the --cycle hint
+  Check 'e: no --cycle, 3 groups: names the unplanned groups 2, 3 with a --cycle <n> hint' `
+    ($r.Out -match '(?m)^Not planned: cycle\(s\) 2, 3 -- this run plans one group; add --cycle <n> to plan another\r?$') $r.Out
   $r = Run-Fix $demo $db @('--cycle', '2', '--no-compile', '--library-db', 'none') $false
+  Check 'e: --cycle 2: no Not planned line (the group was named)' (-not $r.Out.Contains('Not planned:')) $r.Out
   Check 'e: refused group: exit 1' ($r.Exit -eq 1) "exit $($r.Exit)"
   Check 'e: refused group: Verdict: refused + a refusal line' `
     (($r.Out -match '(?m)^Verdict: refused') -and ($r.Out -match '(?m)^  - [\w-]+: ')) $r.Out
