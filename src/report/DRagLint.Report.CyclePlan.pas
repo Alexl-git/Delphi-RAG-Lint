@@ -294,22 +294,34 @@ procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
   const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
   const pLibStore: ISymbolStore = nil; const pFixProject: string = '');
 
+type
+/// <summary>The inputs of AddCycleFixHints bundled in one record (keeps the routine under the parameter limit).</summary>
+/// <remarks>Plain value record; every reference is borrowed, none is owned or freed by the record.</remarks>
+TCycleFixHintInput = record
+  /// <summary>Open index the graph was built from; read only.</summary>
+  Store: ISymbolStore;
+  /// <summary>Path of that index, quoted in the commands.</summary>
+  DbPath: string;
+  /// <summary>The circular groups, as lower-case unit stems.</summary>
+  Sccs: TList<TArray<string>>;
+  /// <summary>The uses graph the groups were computed from.</summary>
+  Graph: TCycleGraph;
+  /// <summary>Platform library index (read only) or nil.</summary>
+  LibStore: ISymbolStore;
+  /// <summary>The project file to name in the commands, or '' for the placeholder.</summary>
+  FixProject: string;
+  /// <summary>When not empty, no planner runs: every fix object is available=false with this text as its reason (the platform library could not be opened).</summary>
+  Unavailable: string;
+end;
+
 /// <summary>Adds a `fix` object (TCycleFixHint) to every group object of a `cycles --format json` report.</summary>
-/// <param name="pStore">Open index the graph was built from; read only.</param>
-/// <param name="pDbPath">Path of that index, quoted in the commands.</param>
-/// <param name="pSccs">The circular groups, as lower-case unit stems.</param>
-/// <param name="pGraph">The uses graph the groups were computed from.</param>
-/// <param name="pLibStore">Platform library index (read only) or nil.</param>
-/// <param name="pFixProject">The project file to name in the commands, or '' for the placeholder.</param>
-/// <param name="pGroups">The report's group objects, index-aligned with pSccs; each must be a
+/// <param name="pIn">The index, graph, groups and project (see TCycleFixHintInput).</param>
+/// <param name="pGroups">The report's group objects, index-aligned with pIn.Sccs; each must be a
 /// TJSONObject. The new objects become owned by those objects.</param>
-/// <param name="pUnavailable">When not empty, no planner runs: every fix object is available=false with this text as its reason (the platform library could not be opened).</param>
 /// <remarks>Runs the planner once per group, so it is only for `--causes`. Writes nothing.
 /// Fields: available, part, dry_run, apply, edges[{from,to,recipe,chosen}], reason, and for a
 /// Part A group `followup` {from,to,recipe} when Part B cuts an edge afterwards.</remarks>
-procedure AddCycleFixHints(const pStore: ISymbolStore; const pDbPath: string;
-  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore;
-  const pFixProject: string; const pGroups: TJSONArray; const pUnavailable: string = '');
+procedure AddCycleFixHints(const pIn: TCycleFixHintInput; const pGroups: TJSONArray);
 
 /// <summary>Adds an `edges` array to every group object of a `cycles --format json`
 /// report: one entry per uses edge inside the group, with that edge's surface
@@ -4489,7 +4501,7 @@ begin
   else Result.Evals:= PlanImplCycle;
   try
     CapturePlan(Result);
-  except
+  except  // dl:ok bare-except@9273 -- releases the half-built plan result and re-raises; nothing is swallowed
     Result.Release;
     raise;
   end;
@@ -4808,9 +4820,7 @@ begin
   end;
 end;
 
-procedure AddCycleFixHints(const pStore: ISymbolStore; const pDbPath: string;
-  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pLibStore: ISymbolStore;
-  const pFixProject: string; const pGroups: TJSONArray; const pUnavailable: string);
+procedure AddCycleFixHints(const pIn: TCycleFixHintInput; const pGroups: TJSONArray);
 
   function EdgeJson(const pEdge: TFixEdge; pWithChosen: Boolean): TJSONObject;
   begin
@@ -4824,25 +4834,25 @@ procedure AddCycleFixHints(const pStore: ISymbolStore; const pDbPath: string;
 var
   Planner: TCyclePlanner;
 begin
-  if pUnavailable <> '' then
+  if pIn.Unavailable <> '' then
   begin
-    for var I:= 1 to pSccs.Count do
+    for var I:= 1 to pIn.Sccs.Count do
     begin
       var Fix:= TJSONObject.Create;
       Fix.AddPair('available', TJSONBool.Create(False));
       Fix.AddPair('part', '');
-      Fix.AddPair('dry_run', FixCommandText(pFixProject, pDbPath, I, False));
-      Fix.AddPair('apply', FixCommandText(pFixProject, pDbPath, I, True));
+      Fix.AddPair('dry_run', FixCommandText(pIn.FixProject, pIn.DbPath, I, False));
+      Fix.AddPair('apply', FixCommandText(pIn.FixProject, pIn.DbPath, I, True));
       Fix.AddPair('edges', TJSONArray.Create);
-      Fix.AddPair('reason', pUnavailable);
+      Fix.AddPair('reason', pIn.Unavailable);
       (pGroups.Items[I - 1] as TJSONObject).AddPair('fix', Fix);
     end;
     Exit;
   end;
-  Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, nil, pLibStore);
+  Planner:= TCyclePlanner.Create(pIn.Store, pIn.DbPath, pIn.Sccs, pIn.Graph, nil, pIn.LibStore);
   try
-    Planner.FixProject:= pFixProject;
-    for var I:= 1 to pSccs.Count do
+    Planner.FixProject:= pIn.FixProject;
+    for var I:= 1 to pIn.Sccs.Count do
     begin
       var Plan:= Planner.BuildPlan(I);
       try

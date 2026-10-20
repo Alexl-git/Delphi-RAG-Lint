@@ -19,7 +19,7 @@ interface
 
 uses
   System.SysUtils, System.Generics.Collections,
-  DRagLint.Core.Interfaces, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.TextEdit;
+  DRagLint.Core.Interfaces, DRagLint.Project.OwnRoots, DRagLint.Report.CyclePlan, DRagLint.Refactor.TextEdit; // dl:unit DRagLint.Report.CyclePlan accepted -- CCYCLENONE is the no-edge marker string the plan prints; it travels with the planner whose output CycleFix reads back
 
 type
   /// <summary>The `cycles --fix` flags, as DoCycles parsed them.</summary>
@@ -304,6 +304,7 @@ function ToTextEdits(const pView: TCyclePlanView): TArray<TTextEdit>;
 /// <param name="pProjectDir">The project folder; the shadow mirrors paths relative to it.
 /// A file outside it is staged under `_outside\&lt;drive&gt;\...`.</param>
 /// <param name="pShadowDir">Receives the staged files; existing files of the same name are overwritten.</param>
+/// <param name="pTamperAllowed">True only on a dry run, to let the DRAGLINT_CYCLEFIX_TEST_TAMPER test seam alter the staged text (see TamperAllowed); every call that feeds a write must pass False.</param>
 /// <returns>The refusals (kind anchor-mismatch) or an empty array when the shadow was written.</returns>
 /// <remarks>Everything is computed in memory first; nothing is written when any refusal arises.
 /// Refuses when a file is missing or a line of it differs from the plan's "Current text" / anchor

@@ -1846,10 +1846,24 @@ begin
     else if (A = '--n') and (i < ParamCount) then begin Inc(i); Result.BenchN:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--to') and (i < ParamCount) then begin Inc(i); Result.RenameTo:= ParamStr(i); end
     else if A = '--no-backup' then Result.NoBackup:= True
-    else if (A = '--cycle') and (i < ParamCount) then begin Inc(i); Result.FixCycle:= StrToIntDef(ParamStr(i), 0); Result.FixCycleGiven:= True; end // cycles --fix
-    else if (A = '--part') and (i < ParamCount) then begin Inc(i); Result.FixPart:= LowerCase(ParamStr(i)); end // cycles --fix
-    else if A = '--no-compile' then Result.NoCompile:= True // cycles --fix
-    else if (A = '--shadow-out') and (i < ParamCount) then begin Inc(i); Result.ShadowOut:= ParamStr(i); end // cycles --fix
+    // cycles --fix
+    else if (A = '--cycle') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.FixCycle:= StrToIntDef(ParamStr(i), 0);
+      Result.FixCycleGiven:= True;
+    end
+    else if (A = '--part') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.FixPart:= LowerCase(ParamStr(i));  // dl:ok duplicate-code@378f -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
+    end
+    else if A = '--no-compile' then Result.NoCompile:= True
+    else if (A = '--shadow-out') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.ShadowOut:= ParamStr(i);  // dl:ok duplicate-code@6921 -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
+    end
     // v0.69 D2a: rename --kind param positional args
     // Note: --kind  already parsed into Result.Kind   (line ~638)
     //       --file  already parsed into Result.InFile (line ~433)
@@ -22453,9 +22467,15 @@ begin
             objects say so instead (E18 T13 fix round) }
           var JsonLibFailed: Boolean;
           var JsonLibMessage: string;
-          var JsonLib: ISymbolStore:= OpenPlanLibrary(JsonLibFailed, JsonLibMessage);
-          AddCycleFixHints(Store, AArgs.DbPath, Sccs, EdgeGraph, JsonLib, AArgs.ProjectPath, JArr,
-            (if JsonLibFailed then 'library unavailable: ' + (if JsonLibMessage <> '' then JsonLibMessage else 'the platform library could not be opened') else ''));
+          var HintIn: TCycleFixHintInput;
+          HintIn.Store:= Store;
+          HintIn.DbPath:= AArgs.DbPath;
+          HintIn.Sccs:= Sccs;
+          HintIn.Graph:= EdgeGraph;
+          HintIn.LibStore:= OpenPlanLibrary(JsonLibFailed, JsonLibMessage);
+          HintIn.FixProject:= AArgs.ProjectPath;
+          HintIn.Unavailable:= (if JsonLibFailed then 'library unavailable: ' + (if JsonLibMessage <> '' then JsonLibMessage else 'the platform library could not be opened') else '');
+          AddCycleFixHints(HintIn, JArr);
         end;
         Writeln(JArr.ToJson);
       finally

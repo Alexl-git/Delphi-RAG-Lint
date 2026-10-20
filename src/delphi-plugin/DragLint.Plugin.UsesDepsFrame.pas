@@ -61,7 +61,7 @@ uses
   , Vcl.ExtCtrls
   , Vcl.CheckLst
   , System.Generics.Collections
-  , DragLint.Plugin.CycleFix
+  , DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit; a second copy here is what let it drift (see StructureForm)
   ;
 
 type
