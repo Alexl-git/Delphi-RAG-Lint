@@ -11,7 +11,24 @@
     {
       "type": "cli",
       "verb": "query",
-      "sub": "ancestors"
+      "sub": "ancestors",
+      "usage": "drag-lint query ancestors --name <type> [--of <ancestor>] [--db ...] [--json] (transitive class/interface hierarchy)",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<type>"
+        },
+        {
+          "name": "--of",
+          "arg": "<ancestor>"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both"

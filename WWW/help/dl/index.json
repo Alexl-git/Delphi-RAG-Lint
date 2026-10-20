@@ -1,0 +1,1478 @@
+[
+  {
+    "id": "auto-document-whole-project",
+    "title": "Auto-Document Whole Project",
+    "summary": "Writes DocInsight documentation into every public declaration a project owns",
+    "group": "indexing",
+    "order": 10001,
+    "since": "0.1.0-alpha",
+    "file": "features/auto-document-whole-project.md"
+  },
+  {
+    "id": "migrate-dbs",
+    "title": "migrate-dbs",
+    "summary": "Moves project index databases into each project's own D-RAG folder, matching the current index layout",
+    "group": "indexing",
+    "order": 10002,
+    "since": "1.3.0-alpha",
+    "file": "features/migrate-dbs.md"
+  },
+  {
+    "id": "pp-profile",
+    "title": "pp-profile",
+    "summary": "Diagnostic that prints the resolved preprocessor define profile for a project, one symbol per line",
+    "group": "indexing",
+    "order": 10003,
+    "since": "0.92.0-alpha",
+    "file": "features/pp-profile.md"
+  },
+  {
+    "id": "purge-locals",
+    "title": "purge-locals",
+    "summary": "A size escape hatch for an index database that has grown too large: it drops local-variable and parameter symbols and runs VACUUM to reclaim space",
+    "group": "indexing",
+    "order": 10004,
+    "since": "0.91.0-alpha",
+    "file": "features/purge-locals.md"
+  },
+  {
+    "id": "rebuild-index-for-this-project",
+    "title": "Rebuild Index for This Project",
+    "summary": "Walks a project's .dproj compile closure and (re)builds its index",
+    "group": "indexing",
+    "order": 10005,
+    "since": "0.1.0-alpha",
+    "file": "features/rebuild-index-for-this-project.md"
+  },
+  {
+    "id": "register-project",
+    "title": "register-project",
+    "summary": "Add a new project to the manifest so index --all and the IDE can see it",
+    "group": "indexing",
+    "order": 10006,
+    "since": "1.20.4-alpha",
+    "file": "features/register-project.md"
+  },
+  {
+    "id": "schema",
+    "title": "schema",
+    "summary": "Prints the live schema of an index database: schemaversion, every table and column, and row counts",
+    "group": "indexing",
+    "order": 10007,
+    "since": "0.3.0-alpha",
+    "file": "features/schema.md"
+  },
+  {
+    "id": "show-resolved-dbs-debug",
+    "title": "Show Resolved DBs (debug)",
+    "summary": "Prints which database(s) drag-lint would actually use for a given project, file, or platform, without running a real query",
+    "group": "indexing",
+    "order": 10008,
+    "since": "0.60.0-alpha",
+    "file": "features/show-resolved-dbs-debug.md"
+  },
+  {
+    "id": "call-path",
+    "title": "call-path",
+    "summary": "Finds the shortest resolved call path from one symbol to another",
+    "group": "search-navigation",
+    "order": 20001,
+    "since": "0.91.0-alpha",
+    "file": "features/call-path.md"
+  },
+  {
+    "id": "class-surface",
+    "title": "Class Surface",
+    "summary": "Shows the public surface of a class: its members and signatures, without the method bodies",
+    "group": "search-navigation",
+    "order": 20002,
+    "since": "0.1.0-alpha",
+    "file": "features/class-surface.md"
+  },
+  {
+    "id": "compiler-hints",
+    "title": "Compiler Hints",
+    "summary": "Uses query hints to surface compiler hint/warning findings that have been imported into the index, filtered by code or severity",
+    "group": "search-navigation",
+    "order": 20003,
+    "since": "0.1.0-alpha",
+    "file": "features/compiler-hints.md"
+  },
+  {
+    "id": "context",
+    "title": "context",
+    "summary": "Returns a compact context bundle for a symbol -- its doc comment, class surface (signatures), the target's own body, and a capped list of callers",
+    "group": "search-navigation",
+    "order": 20004,
+    "since": "0.6.0-alpha",
+    "file": "features/context.md"
+  },
+  {
+    "id": "find-callees",
+    "title": "find-callees",
+    "summary": "Lists the resolved outgoing calls of one routine",
+    "group": "search-navigation",
+    "order": 20005,
+    "since": "0.91.0-alpha",
+    "file": "features/find-callees.md"
+  },
+  {
+    "id": "find-undocumented-public",
+    "title": "Find Undocumented (public)",
+    "summary": "Uses query find to list indexed symbols filtered by documentation state, kind, or visibility",
+    "group": "search-navigation",
+    "order": 20006,
+    "since": "0.1.0-alpha",
+    "file": "features/find-undocumented-public.md"
+  },
+  {
+    "id": "find-unit",
+    "title": "find-unit",
+    "summary": "Finds which indexed unit declares a symbol, and adds that unit to a file's uses clause",
+    "group": "search-navigation",
+    "order": 20007,
+    "since": "0.69.0-alpha",
+    "file": "features/find-unit.md"
+  },
+  {
+    "id": "find-usages",
+    "title": "Find Usages",
+    "summary": "Lists every reference to the symbol under the editor caret across the indexed project",
+    "group": "search-navigation",
+    "order": 20008,
+    "since": "0.33.0-alpha",
+    "file": "features/find-usages.md"
+  },
+  {
+    "id": "find-usages-context",
+    "title": "Find Usages",
+    "summary": "Lists references to the symbol represented by a Structure-tree node",
+    "group": "search-navigation",
+    "order": 20009,
+    "since": "0.33.0-alpha",
+    "file": "features/find-usages-context.md"
+  },
+  {
+    "id": "go-to-declaration",
+    "title": "Go to Declaration",
+    "summary": "Jumps the editor caret to the declaration of the symbol represented by a Structure-tree node",
+    "group": "search-navigation",
+    "order": 20010,
+    "since": "0.0.0",
+    "file": "features/go-to-declaration.md"
+  },
+  {
+    "id": "go-to-definition",
+    "title": "Go to Definition",
+    "summary": "Jumps the editor caret to the declaration of the symbol under the cursor",
+    "group": "search-navigation",
+    "order": 20011,
+    "since": "0.0.0",
+    "file": "features/go-to-definition.md"
+  },
+  {
+    "id": "go-to-implementation",
+    "title": "Go to Implementation",
+    "summary": "Jumps the editor caret to the implementation of the symbol represented by a Structure-tree node",
+    "group": "search-navigation",
+    "order": 20012,
+    "since": "0.43.0-alpha",
+    "file": "features/go-to-implementation.md"
+  },
+  {
+    "id": "helpers-of",
+    "title": "helpers-of",
+    "summary": "Lists record/class helper edges targeting a given type, anywhere in the index",
+    "group": "search-navigation",
+    "order": 20013,
+    "since": "0.94.0-alpha",
+    "file": "features/helpers-of.md"
+  },
+  {
+    "id": "hover-at-cursor",
+    "title": "Hover at Cursor",
+    "summary": "Shows a hover card for the symbol under the editor caret: signature, documentation, and callers",
+    "group": "search-navigation",
+    "order": 20014,
+    "since": "0.7.0-alpha",
+    "file": "features/hover-at-cursor.md"
+  },
+  {
+    "id": "outline",
+    "title": "outline",
+    "summary": "Prints the file-scoped symbol outline for one Pascal unit",
+    "group": "search-navigation",
+    "order": 20015,
+    "since": "0.86.0-alpha",
+    "file": "features/outline.md"
+  },
+  {
+    "id": "query-ancestors",
+    "title": "query ancestors",
+    "summary": "Resolves the transitive class/interface hierarchy of a type",
+    "group": "search-navigation",
+    "order": 20016,
+    "since": "0.1.0-alpha",
+    "file": "features/query-ancestors.md"
+  },
+  {
+    "id": "query-descendants",
+    "title": "query descendants",
+    "summary": "The reverse of query ancestors: lists every class that descends from a given ancestor, across all scanned databases",
+    "group": "search-navigation",
+    "order": 20017,
+    "since": "0.1.0-alpha",
+    "file": "features/query-descendants.md"
+  },
+  {
+    "id": "query-find-callers",
+    "title": "query find-callers",
+    "summary": "Lists callers of a routine by name, with an option to restrict results to precise, resolved callers",
+    "group": "search-navigation",
+    "order": 20018,
+    "since": "0.1.0-alpha",
+    "file": "features/query-find-callers.md"
+  },
+  {
+    "id": "query-kind-all",
+    "title": "query --kind --all",
+    "summary": "Lists every symbol of one kind -- every unit, every class, every enum -- with no name, no doc clause and no row cap",
+    "group": "search-navigation",
+    "order": 20019,
+    "since": "0.1.0-alpha",
+    "file": "features/query-kind-all.md"
+  },
+  {
+    "id": "query-name-like",
+    "title": "query --name-like",
+    "summary": "Case-insensitive substring search over symbol names",
+    "group": "search-navigation",
+    "order": 20020,
+    "since": "0.1.0-alpha",
+    "file": "features/query-name-like.md"
+  },
+  {
+    "id": "query-type-usage",
+    "title": "query type-usage",
+    "summary": "Answers one question, of a list of type names, about one file",
+    "group": "search-navigation",
+    "order": 20021,
+    "since": "0.1.0-alpha",
+    "file": "features/query-type-usage.md"
+  },
+  {
+    "id": "query-typecat",
+    "title": "query typecat",
+    "summary": "Resolves a type's category -- float, string, class, interface, and so on",
+    "group": "search-navigation",
+    "order": 20022,
+    "since": "0.1.0-alpha",
+    "file": "features/query-typecat.md"
+  },
+  {
+    "id": "query-unit-usage",
+    "title": "query unit-usage",
+    "summary": "Answers one question, about one unit and one file",
+    "group": "search-navigation",
+    "order": 20023,
+    "since": "0.1.0-alpha",
+    "file": "features/query-unit-usage.md"
+  },
+  {
+    "id": "show-completion",
+    "title": "Show Completion",
+    "summary": "Shows an index-backed completion list at the editor caret",
+    "group": "search-navigation",
+    "order": 20024,
+    "since": "0.21.0-alpha",
+    "file": "features/show-completion.md"
+  },
+  {
+    "id": "show-signature-help",
+    "title": "Show Signature Help",
+    "summary": "Shows parameter help for the call being typed at the editor caret",
+    "group": "search-navigation",
+    "order": 20025,
+    "since": "0.21.0-alpha",
+    "file": "features/show-signature-help.md"
+  },
+  {
+    "id": "show-structure",
+    "title": "Show Structure",
+    "summary": "Shows a structural outline of the current unit",
+    "group": "search-navigation",
+    "order": 20026,
+    "since": "0.30.0-alpha",
+    "file": "features/show-structure.md"
+  },
+  {
+    "id": "symbol-search",
+    "title": "Symbol Search",
+    "summary": "Searches symbols by name across the indexed projects",
+    "group": "search-navigation",
+    "order": 20027,
+    "since": "0.1.0-alpha",
+    "file": "features/symbol-search.md"
+  },
+  {
+    "id": "symbol-slice",
+    "title": "Symbol Slice",
+    "summary": "Shows the slice of code relevant to one symbol: its declaration, body, and immediate context",
+    "group": "search-navigation",
+    "order": 20028,
+    "since": "0.17.0-alpha",
+    "file": "features/symbol-slice.md"
+  },
+  {
+    "id": "type-at-cursor",
+    "title": "Type at Cursor",
+    "summary": "Resolves the static type of the expression under the editor caret",
+    "group": "search-navigation",
+    "order": 20029,
+    "since": "0.19.0-alpha",
+    "file": "features/type-at-cursor.md"
+  },
+  {
+    "id": "usages",
+    "title": "usages",
+    "summary": "Finds usage sites of a named symbol, with a choice of report width",
+    "group": "search-navigation",
+    "order": 20030,
+    "since": "0.33.0-alpha",
+    "file": "features/usages.md"
+  },
+  {
+    "id": "wiki",
+    "title": "wiki",
+    "summary": "Looks up the dl:wiki concept topics a team has written into their own doc comments, and routes a human phrase to the code that implements it",
+    "group": "search-navigation",
+    "order": 20031,
+    "since": "1.7.0-alpha",
+    "file": "features/wiki.md"
+  },
+  {
+    "id": "copy-all-diagnostics",
+    "title": "Copy All Diagnostics",
+    "summary": "Puts every lint finding for the current unit onto the clipboard, starting from the Structure form",
+    "group": "linting",
+    "order": 30001,
+    "since": "0.1.0-alpha",
+    "file": "features/copy-all-diagnostics.md"
+  },
+  {
+    "id": "copy-diagnostics-current-file",
+    "title": "Copy Diagnostics (Current File)",
+    "summary": "Puts the current file's lint findings onto the clipboard",
+    "group": "linting",
+    "order": 30002,
+    "since": "0.1.0-alpha",
+    "file": "features/copy-diagnostics-current-file.md"
+  },
+  {
+    "id": "copy-selected-diagnostics",
+    "title": "Copy Selected Diagnostics",
+    "summary": "Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard",
+    "group": "linting",
+    "order": 30003,
+    "since": "1.28.3-alpha",
+    "file": "features/copy-selected-diagnostics.md"
+  },
+  {
+    "id": "drag-lint-project-rules",
+    "title": "drag-lint: Project Rules",
+    "summary": "Shows the catalog of lint rules in the context of a specific project",
+    "group": "linting",
+    "order": 30004,
+    "since": "0.2.0-alpha",
+    "file": "features/drag-lint-project-rules.md"
+  },
+  {
+    "id": "exceptions-sync",
+    "title": "exceptions-sync",
+    "summary": "Declare one exception class per distinct raise Exception.Create message, then rewrite the raise sites",
+    "group": "linting",
+    "order": 30005,
+    "since": "1.8.0-alpha",
+    "file": "features/exceptions-sync.md"
+  },
+  {
+    "id": "fix-all-in-project",
+    "title": "Fix all in project",
+    "summary": "Applies autofixes for every fixable finding across the whole project, starting from the Structure form",
+    "group": "linting",
+    "order": 30006,
+    "since": "0.61.0-alpha",
+    "file": "features/fix-all-in-project.md"
+  },
+  {
+    "id": "fix-all-in-unit",
+    "title": "Fix all in unit",
+    "summary": "Applies autofixes for every fixable finding in the current unit, starting from the Structure form",
+    "group": "linting",
+    "order": 30007,
+    "since": "0.1.0-alpha",
+    "file": "features/fix-all-in-unit.md"
+  },
+  {
+    "id": "fix-all-reliability",
+    "title": "Fix all reliability (1.31.3)",
+    "summary": "Fix all no longer drops every rename for library-root members, shows a wait cursor and refuses a second fix, and keeps E-prefixed exception classes",
+    "group": "linting",
+    "order": 30008,
+    "since": "1.31.3-alpha",
+    "file": "features/fix-all-reliability.md"
+  },
+  {
+    "id": "fix-it",
+    "title": "Fix it",
+    "summary": "Applies the fix for the single lint finding on a Structure-tree node; an unused unit is removed or moved to implementation by compiling",
+    "group": "linting",
+    "order": 30009,
+    "since": "0.1.0-alpha",
+    "file": "features/fix-it.md"
+  },
+  {
+    "id": "format-whole-project-with-yadf",
+    "title": "Format Whole Project with YADF",
+    "summary": "Runs YADF formatting across a project's files, with indexing involved as part of the same action",
+    "group": "linting",
+    "order": 30010,
+    "since": "0.1.0-alpha",
+    "file": "features/format-whole-project-with-yadf.md"
+  },
+  {
+    "id": "format-with-yadf",
+    "title": "Format with YADF",
+    "summary": "Reformats one Pascal unit by driving the external YADF formatter",
+    "group": "linting",
+    "order": 30011,
+    "since": "0.16.0-alpha",
+    "file": "features/format-with-yadf.md"
+  },
+  {
+    "id": "lint-buffer-unsaved",
+    "title": "Lint Buffer (Unsaved)",
+    "summary": "Lints the current editor buffer's in-memory content, including unsaved edits, without writing it to disk first",
+    "group": "linting",
+    "order": 30012,
+    "since": "0.1.0-alpha",
+    "file": "features/lint-buffer-unsaved.md"
+  },
+  {
+    "id": "lint-project",
+    "title": "lint-project",
+    "summary": "Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol",
+    "group": "linting",
+    "order": 30013,
+    "since": "0.48.0-alpha",
+    "file": "features/lint-project.md"
+  },
+  {
+    "id": "lint-rules",
+    "title": "Lint rules",
+    "summary": "Every lint rule the engine ships, imported from rules --json",
+    "group": "linting",
+    "order": 30014,
+    "since": "0.2.0-alpha",
+    "file": "features/lint-rules.md"
+  },
+  {
+    "id": "lint-tree",
+    "title": "lint-tree",
+    "summary": "Answers one question lint-all cannot: does an interface edit to this unit reach any dependent?",
+    "group": "linting",
+    "order": 30015,
+    "since": "1.11.0-alpha",
+    "file": "features/lint-tree.md"
+  },
+  {
+    "id": "multi-project-rename",
+    "title": "Rename across every project that compiles a shared unit",
+    "summary": "A naming fix on a unit several project indexes own renames it in every owner or in none, after an IDE confirmation listing the projects",
+    "group": "linting",
+    "order": 30016,
+    "since": "1.29.0-alpha",
+    "file": "features/multi-project-rename.md"
+  },
+  {
+    "id": "rescan-this-unit",
+    "title": "Rescan this unit",
+    "summary": "Re-indexes the active project and re-lints the current unit on demand, so the Diagnostics panel drops findings already fixed",
+    "group": "linting",
+    "order": 30017,
+    "since": "1.28.3-alpha",
+    "file": "features/rescan-this-unit.md"
+  },
+  {
+    "id": "run-ast-checks",
+    "title": "Run AST Checks",
+    "summary": "Runs drag-lint's AST-level checks against a file",
+    "group": "linting",
+    "order": 30018,
+    "since": "0.31.0-alpha",
+    "file": "features/run-ast-checks.md"
+  },
+  {
+    "id": "run-diagnostics-didsave",
+    "title": "Run Diagnostics (didSave)",
+    "summary": "Runs drag-lint's diagnostics pass on a file automatically when it is saved, mirroring the LSP textDocument/didSave notification",
+    "group": "linting",
+    "order": 30019,
+    "since": "0.0.0",
+    "file": "features/run-diagnostics-didsave.md"
+  },
+  {
+    "id": "run-lint-all-full-report",
+    "title": "Run Lint All (Full Report)",
+    "summary": "Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check",
+    "group": "linting",
+    "order": 30020,
+    "since": "0.61.0-alpha",
+    "file": "features/run-lint-all-full-report.md"
+  },
+  {
+    "id": "type-name-prefix-origin",
+    "title": "type-name-prefix: expected letter from the ancestor chain",
+    "summary": "type-name-prefix picks E or T from the ancestor chain (project, then library index); untraceable ancestors are an index gap; autofix uses the finding's letter",
+    "group": "linting",
+    "order": 30021,
+    "since": "1.31.4-alpha",
+    "file": "features/type-name-prefix-origin.md"
+  },
+  {
+    "id": "doc-comment-stub-symbol",
+    "title": "Doc Comment Stub (symbol)",
+    "summary": "Uses generate-docs to produce a doc-comment stub for one qualified symbol",
+    "group": "documentation",
+    "order": 40001,
+    "since": "0.25.0-alpha",
+    "file": "features/doc-comment-stub-symbol.md"
+  },
+  {
+    "id": "doc-drift",
+    "title": "doc-drift",
+    "summary": "Diagnostic that computes deterministic doc-vs-code drift findings for one symbol",
+    "group": "documentation",
+    "order": 40002,
+    "since": "0.93.0-alpha",
+    "file": "features/doc-drift.md"
+  },
+  {
+    "id": "doc-forget",
+    "title": "doc-forget",
+    "summary": "Reap or rename the project tags on inbound documentation facts; a dry run unless told to apply",
+    "group": "documentation",
+    "order": 40003,
+    "since": "1.17.0-alpha",
+    "file": "features/doc-forget.md"
+  },
+  {
+    "id": "document-all",
+    "title": "document-all",
+    "summary": "Documents every public declaration in every indexed unit, with no project scope",
+    "group": "documentation",
+    "order": 40004,
+    "since": "0.93.0-alpha",
+    "file": "features/document-all.md"
+  },
+  {
+    "id": "document-it",
+    "title": "Document it",
+    "summary": "Generates or repairs a managed DocInsight comment on the single symbol represented by a Structure-tree node",
+    "group": "documentation",
+    "order": 40005,
+    "since": "0.90.0-alpha",
+    "file": "features/document-it.md"
+  },
+  {
+    "id": "document-project",
+    "title": "Document project",
+    "summary": "Generates or repairs managed DocInsight comments for every public declaration the project owns, starting from a Structure-tree node's project",
+    "group": "documentation",
+    "order": 40006,
+    "since": "0.90.0-alpha",
+    "file": "features/document-project.md"
+  },
+  {
+    "id": "document-unit",
+    "title": "Document unit",
+    "summary": "Generates or repairs managed DocInsight comments for every public declaration in the unit represented by a Structure-tree node (facts-only)",
+    "group": "documentation",
+    "order": 40007,
+    "since": "0.90.0-alpha",
+    "file": "features/document-unit.md"
+  },
+  {
+    "id": "effect-summary-legend",
+    "title": "Effect Summary Legend",
+    "summary": "The purity analysis writes a short token string for every routine it judges -- symbolfacts.effectsummary in the index",
+    "group": "documentation",
+    "order": 40008,
+    "since": "0.0.0",
+    "file": "features/effect-summary-legend.md"
+  },
+  {
+    "id": "shared-unit",
+    "title": "shared-unit",
+    "summary": "Reads or extends the dl:shared marker on a unit, recording which projects share it",
+    "group": "documentation",
+    "order": 40009,
+    "since": "1.10.0-alpha",
+    "file": "features/shared-unit.md"
+  },
+  {
+    "id": "wiki-blocks-authoring",
+    "title": "dl:wiki concept blocks",
+    "summary": "The format of a dl:wiki block -- the concept notes the wiki verb reads",
+    "group": "documentation",
+    "order": 40010,
+    "since": "1.7.0-alpha",
+    "file": "features/wiki-blocks-authoring.md"
+  },
+  {
+    "id": "allow",
+    "title": "allow",
+    "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
+    "group": "refactoring",
+    "order": 50001,
+    "since": "0.54.0-alpha",
+    "file": "features/allow.md"
+  },
+  {
+    "id": "allow-this-message",
+    "title": "Allow this message",
+    "summary": "Records a dl:ok review of one finding, so it stops being reported without being fixed",
+    "group": "refactoring",
+    "order": 50002,
+    "since": "0.54.0-alpha",
+    "file": "features/allow-this-message.md"
+  },
+  {
+    "id": "create-enum-helper",
+    "title": "create-enum-helper",
+    "summary": "Generates a Byte-family record helper (ToByte/FromByte/ToInteger/ FromInteger/ToString/FromString) for an enum type",
+    "group": "refactoring",
+    "order": 50003,
+    "since": "0.94.0-alpha",
+    "file": "features/create-enum-helper.md"
+  },
+  {
+    "id": "create-helper-class",
+    "title": "Create helper class",
+    "summary": "Generates a Byte-family record helper for an enum type represented by a Structure-tree node",
+    "group": "refactoring",
+    "order": 50004,
+    "since": "0.94.0-alpha",
+    "file": "features/create-helper-class.md"
+  },
+  {
+    "id": "extract-method",
+    "title": "extract-method",
+    "summary": "Pulls a run of statements out of a routine into a new method",
+    "group": "refactoring",
+    "order": 50005,
+    "since": "0.85.0-alpha",
+    "file": "features/extract-method.md"
+  },
+  {
+    "id": "quick-fix-add-unit-for-inline-hint-h2443-at-cursor",
+    "title": "Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor",
+    "summary": "The same idea as the undeclared-identifier quick-fix, but for compiler hint H2443 -- an inline routine whose declaring unit is not in scope",
+    "group": "refactoring",
+    "order": 50006,
+    "since": "0.0.0",
+    "file": "features/quick-fix-add-unit-for-inline-hint-h2443-at-cursor.md"
+  },
+  {
+    "id": "quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u",
+    "title": "Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)",
+    "summary": "Finds which unit declares the identifier under the caret and adds that unit to the current unit's uses clause",
+    "group": "refactoring",
+    "order": 50007,
+    "since": "0.0.0",
+    "file": "features/quick-fix-add-unit-for-undeclared-at-cursor-ctrl-alt-u.md"
+  },
+  {
+    "id": "quick-fix-convert-public-field-to-property-at-cursor",
+    "title": "Quick-Fix: Convert Public Field to Property at Cursor",
+    "summary": "Rewrites a public field under the caret as a property",
+    "group": "refactoring",
+    "order": 50008,
+    "since": "0.0.0",
+    "file": "features/quick-fix-convert-public-field-to-property-at-cursor.md"
+  },
+  {
+    "id": "reconcile-project-members-dpr-dproj",
+    "title": "Reconcile Project Members (.dpr/.dproj)",
+    "summary": "Compares a project file's declared member list against what is on disk and in the compile closure",
+    "group": "refactoring",
+    "order": 50009,
+    "since": "1.18.0-alpha",
+    "file": "features/reconcile-project-members-dpr-dproj.md"
+  },
+  {
+    "id": "rename-symbol",
+    "title": "Rename Symbol",
+    "summary": "Renames a symbol across the whole indexed project",
+    "group": "refactoring",
+    "order": 50010,
+    "since": "0.24.0-alpha",
+    "file": "features/rename-symbol.md"
+  },
+  {
+    "id": "safe-delete",
+    "title": "safe-delete",
+    "summary": "Deletes a symbol if and only if it has zero references in the index",
+    "group": "refactoring",
+    "order": 50011,
+    "since": "0.69.0-alpha",
+    "file": "features/safe-delete.md"
+  },
+  {
+    "id": "unit-test-stub-symbol",
+    "title": "Unit Test Stub (symbol)",
+    "summary": "Uses generate-test to produce a unit-test skeleton for one qualified symbol",
+    "group": "refactoring",
+    "order": 50012,
+    "since": "0.27.0-alpha",
+    "file": "features/unit-test-stub-symbol.md"
+  },
+  {
+    "id": "uses-audit-interface-impl-moves-unused-this-unit",
+    "title": "Uses Audit -- interface->impl moves + unused (this unit)",
+    "summary": "For one unit, reports which uses entries could move from the interface section to implementation, and which are unused entirely",
+    "group": "refactoring",
+    "order": 50013,
+    "since": "0.43.0-alpha",
+    "file": "features/uses-audit-interface-impl-moves-unused-this-unit.md"
+  },
+  {
+    "id": "uses-cleanup-preview-compiler-verified-this-unit",
+    "title": "Uses Cleanup Preview (compiler-verified, this unit)",
+    "summary": "The removals a Uses Audit suggests, but verified by actually compiling",
+    "group": "refactoring",
+    "order": 50014,
+    "since": "0.43.0-alpha",
+    "file": "features/uses-cleanup-preview-compiler-verified-this-unit.md"
+  },
+  {
+    "id": "uses-deps-tab",
+    "title": "Uses & Deps Tab",
+    "summary": "Open the Uses & Deps tab to review uses-clause fixes and apply them",
+    "group": "refactoring",
+    "order": 50015,
+    "since": "0.0.0",
+    "file": "features/uses-deps-tab.md"
+  },
+  {
+    "id": "convert-apply",
+    "title": "convert-apply",
+    "summary": "Locates .dfm component instances that match a #convert rule from a conversion-rules file and rewrites all five surfaces: declaration retype, uses-add",
+    "group": "component-conversion",
+    "order": 60001,
+    "since": "1.2.0-alpha",
+    "file": "features/convert-apply.md"
+  },
+  {
+    "id": "convert-apply-migrate",
+    "title": "convert-apply #migrate (member rename / DL_NONE)",
+    "summary": "#migrate Old -> New / Old -> DL_NONE inside a #convert block renames or deliberately breaks a member at every bound .pas access site",
+    "group": "component-conversion",
+    "order": 60002,
+    "since": "1.22.0-alpha",
+    "file": "features/convert-apply-migrate.md"
+  },
+  {
+    "id": "convert-scaffold",
+    "title": "convert-scaffold",
+    "summary": "Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type",
+    "group": "component-conversion",
+    "order": 60003,
+    "since": "1.1.0-alpha",
+    "file": "features/convert-scaffold.md"
+  },
+  {
+    "id": "convert-validate",
+    "title": "convert-validate",
+    "summary": "Parses and validates a conversion-rules file (a reFind-superset DSL), checking its #link/#default paths against the real property trees",
+    "group": "component-conversion",
+    "order": 60004,
+    "since": "1.1.0-alpha",
+    "file": "features/convert-validate.md"
+  },
+  {
+    "id": "convrules-convert-progress",
+    "title": "Convert progress",
+    "summary": "ConvRulesEditor Convert tab: per-step progress (unit, book, phase, elapsed) on the status bar and the tab",
+    "group": "component-conversion",
+    "order": 60005,
+    "since": "1.26.7-alpha",
+    "file": "features/convrules-convert-progress.md"
+  },
+  {
+    "id": "convrules-editor",
+    "title": "ConvRulesEditor",
+    "summary": "Visual rulebook editor for the conversion rules; its Convert tab reports StripDB value casts, cast sites to convert by hand and uses changes (engine 1.27)",
+    "group": "component-conversion",
+    "order": 60006,
+    "since": "0.0.0",
+    "file": "features/convrules-editor.md"
+  },
+  {
+    "id": "convrules-qualify-fix",
+    "title": "Qualify #convert quick fix",
+    "summary": "ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book",
+    "group": "component-conversion",
+    "order": 60007,
+    "since": "1.31.5-alpha",
+    "file": "features/convrules-qualify-fix.md"
+  },
+  {
+    "id": "convrules-reindex-project",
+    "title": "Reindex project",
+    "summary": "ConvRulesEditor command: incremental index --project of the editor's project index, cancellable",
+    "group": "component-conversion",
+    "order": 60008,
+    "since": "1.26.7-alpha",
+    "file": "features/convrules-reindex-project.md"
+  },
+  {
+    "id": "convrules-work-list",
+    "title": "Work list",
+    "summary": "ConvRulesEditor tab: what the last Convert run's converted code still uses from the old components (engine pas_uses)",
+    "group": "component-conversion",
+    "order": 60009,
+    "since": "1.28.2-alpha",
+    "file": "features/convrules-work-list.md"
+  },
+  {
+    "id": "glyph-vacuum",
+    "title": "glyph-vacuum",
+    "summary": "Measure every streamed glyph or picture under a tree before writing a glyph rule",
+    "group": "component-conversion",
+    "order": 60010,
+    "since": "1.15.0-alpha",
+    "file": "features/glyph-vacuum.md"
+  },
+  {
+    "id": "proptree",
+    "title": "proptree",
+    "summary": "Recursive deep-property enumerator for a class: flattens its own and inherited properties into dotted paths, recursing into class-typed properties",
+    "group": "component-conversion",
+    "order": 60011,
+    "since": "1.1.0-alpha",
+    "file": "features/proptree.md"
+  },
+  {
+    "id": "butterfly",
+    "title": "butterfly",
+    "summary": "Composes a symbol's callers (upward wing) and callees (downward wing) into one combined chart in a single command",
+    "group": "graphs-reports",
+    "order": 70001,
+    "since": "0.99.0-alpha",
+    "file": "features/butterfly.md"
+  },
+  {
+    "id": "call-graph-butterfly",
+    "title": "Call Graph (Butterfly)",
+    "summary": "Shows callers and callees of one symbol together in a single \"butterfly\" view",
+    "group": "graphs-reports",
+    "order": 70002,
+    "since": "0.96.0-alpha",
+    "file": "features/call-graph-butterfly.md"
+  },
+  {
+    "id": "callgraph",
+    "title": "callgraph",
+    "summary": "Prints an N-deep resolved call tree for a symbol, in either direction",
+    "group": "graphs-reports",
+    "order": 70003,
+    "since": "0.91.0-alpha",
+    "file": "features/callgraph.md"
+  },
+  {
+    "id": "circular-dependency-report",
+    "title": "Circular Dependency Report (worked example)",
+    "summary": "A worked example: a real four-unit uses cycle, and the report drag-lint produces for it",
+    "group": "graphs-reports",
+    "order": 70004,
+    "since": "0.0.0",
+    "file": "features/circular-dependency-report.md"
+  },
+  {
+    "id": "circular-uses-report-cycles-fix-plan",
+    "title": "Circular Uses Report (cycles + fix plan)",
+    "summary": "Finds uses cycles among indexed units and, on request, proposes a followable refactoring plan to break them",
+    "group": "graphs-reports",
+    "order": 70005,
+    "since": "0.43.0-alpha",
+    "file": "features/circular-uses-report-cycles-fix-plan.md"
+  },
+  {
+    "id": "deps-report",
+    "title": "deps-report",
+    "summary": "Produces a third-party dependency rollup from an index: which external units/libraries an indexed codebase depends on",
+    "group": "graphs-reports",
+    "order": 70006,
+    "since": "0.95.0-alpha",
+    "file": "features/deps-report.md"
+  },
+  {
+    "id": "export-enums-delphi-const",
+    "title": "Export Enums (Delphi const)",
+    "summary": "Uses export enums with --format delphi-const to dump indexed enum types as Delphi const declarations",
+    "group": "graphs-reports",
+    "order": 70007,
+    "since": "0.6.0-alpha",
+    "file": "features/export-enums-delphi-const.md"
+  },
+  {
+    "id": "export-graph-dot",
+    "title": "Export Graph (DOT)",
+    "summary": "Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring",
+    "group": "graphs-reports",
+    "order": 70008,
+    "since": "0.6.0-alpha",
+    "file": "features/export-graph-dot.md"
+  },
+  {
+    "id": "export-to-obsidian",
+    "title": "Export to Obsidian",
+    "summary": "Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages",
+    "group": "graphs-reports",
+    "order": 70009,
+    "since": "0.6.0-alpha",
+    "file": "features/export-to-obsidian.md"
+  },
+  {
+    "id": "find-dead-code",
+    "title": "Find Dead Code",
+    "summary": "Scans the index for code with no references -- candidates to delete",
+    "group": "graphs-reports",
+    "order": 70010,
+    "since": "0.25.0-alpha",
+    "file": "features/find-dead-code.md"
+  },
+  {
+    "id": "generate-test-helper-csv",
+    "title": "Forms for testers (CSV)",
+    "summary": "A CSV of a project's forms, one row per form, telling a tester how to reach each one from the main form",
+    "group": "graphs-reports",
+    "order": 70011,
+    "since": "0.44.0-alpha",
+    "file": "features/generate-test-helper-csv.md"
+  },
+  {
+    "id": "impact-blast-radius-symbol",
+    "title": "Impact / Blast Radius (symbol)",
+    "summary": "Reports what would be affected if a chosen symbol changes -- the set of code to retest",
+    "group": "graphs-reports",
+    "order": 70012,
+    "since": "0.17.0-alpha",
+    "file": "features/impact-blast-radius-symbol.md"
+  },
+  {
+    "id": "reverse-call-tree-clickable-messages-window",
+    "title": "Reverse Call Tree (clickable, Messages window)",
+    "summary": "The same reverse call tree, rendered into the IDE's Messages window so each line navigates to the caller",
+    "group": "graphs-reports",
+    "order": 70013,
+    "since": "0.96.0-alpha",
+    "file": "features/reverse-call-tree-clickable-messages-window.md"
+  },
+  {
+    "id": "reverse-call-tree-who-calls-this-n-deep",
+    "title": "Reverse Call Tree (who calls this, N-deep)",
+    "summary": "Builds the tree of callers of a chosen symbol, transitively, to a chosen depth",
+    "group": "graphs-reports",
+    "order": 70014,
+    "since": "0.96.0-alpha",
+    "file": "features/reverse-call-tree-who-calls-this-n-deep.md"
+  },
+  {
+    "id": "scan-todos-fixmes",
+    "title": "Scan TODOs / FIXMEs",
+    "summary": "Scans source for TODO/FIXME/HACK/XXX/REVIEW/NOTE markers",
+    "group": "graphs-reports",
+    "order": 70015,
+    "since": "0.12.0-alpha",
+    "file": "features/scan-todos-fixmes.md"
+  },
+  {
+    "id": "show-in-call-graph",
+    "title": "Show in Call Graph",
+    "summary": "Opens the call graph rooted at the symbol represented by a Structure-tree node",
+    "group": "graphs-reports",
+    "order": 70016,
+    "since": "0.96.0-alpha",
+    "file": "features/show-in-call-graph.md"
+  },
+  {
+    "id": "show-wiring-spring4d-di-dfm-events",
+    "title": "Show Wiring (Spring4D DI + DFM events)",
+    "summary": "Surfaces bindings the compiler does not make obvious: Spring4D container registrations and DFM event hookups for a type",
+    "group": "graphs-reports",
+    "order": 70017,
+    "since": "0.21.0-alpha",
+    "file": "features/show-wiring-spring4d-di-dfm-events.md"
+  },
+  {
+    "id": "top-symbols-fan-in",
+    "title": "Top Symbols (fan-in)",
+    "summary": "Ranks indexed symbols by fan-in -- how many places reference them",
+    "group": "graphs-reports",
+    "order": 70018,
+    "since": "0.6.0-alpha",
+    "file": "features/top-symbols-fan-in.md"
+  },
+  {
+    "id": "uses-report-csv",
+    "title": "Uses Report (CSV)",
+    "summary": "Exports the project's unit-dependency data as a CSV file",
+    "group": "graphs-reports",
+    "order": 70019,
+    "since": "0.40.5-alpha",
+    "file": "features/uses-report-csv.md"
+  },
+  {
+    "id": "ask",
+    "title": "ask",
+    "summary": "Ask one report question and print the answer as text",
+    "group": "diagrams-charts",
+    "order": 80001,
+    "since": "1.30.0-alpha",
+    "file": "features/ask.md"
+  },
+  {
+    "id": "chart-engine-dot-lookup",
+    "title": "Where the charts find the engine and Graphviz",
+    "summary": "The charts find dot.exe by DRAGLINT_DOT, settings.json, the installed layout, then the shared default",
+    "group": "diagrams-charts",
+    "order": 80002,
+    "since": "1.26.1-alpha",
+    "file": "features/chart-engine-dot-lookup.md"
+  },
+  {
+    "id": "chart-questions",
+    "title": "Chart questions",
+    "summary": "Every chart question of the Reports submenu and drag-lint ask, imported from REPORT_QUESTIONS",
+    "group": "diagrams-charts",
+    "order": 80003,
+    "since": "1.20.2-alpha",
+    "file": "features/chart-questions.md"
+  },
+  {
+    "id": "charts-and-the-ide",
+    "title": "Charts and the IDE",
+    "summary": "Ask a chart question, open the answer, read a round-trip trace, jump to RAD Studio",
+    "group": "diagrams-charts",
+    "order": 80004,
+    "since": "1.20.1-alpha",
+    "file": "features/charts-and-the-ide.md"
+  },
+  {
+    "id": "compare",
+    "title": "Compare a report with current code",
+    "summary": "Reruns a saved or pasted report and shows before / delta / after",
+    "group": "diagrams-charts",
+    "order": 80005,
+    "since": "1.28.0-alpha",
+    "file": "features/compare.md"
+  },
+  {
+    "id": "protocol-handler",
+    "title": "Click-to-source: the draglint:// handler",
+    "summary": "Registers draglint:// so a chart row opens its line in RAD Studio; a GUI helper exe, no PowerShell",
+    "group": "diagrams-charts",
+    "order": 80006,
+    "since": "1.31.0-alpha",
+    "file": "features/protocol-handler.md"
+  },
+  {
+    "id": "add-missing-units-to-uses-whole-unit",
+    "title": "Add Missing Units to uses (whole unit)",
+    "summary": "The whole-unit form of the undeclared-identifier quick-fix: resolves every unresolved name in a unit at once and adds the units that declare them",
+    "group": "compiler",
+    "order": 90001,
+    "since": "0.43.0-alpha",
+    "file": "features/add-missing-units-to-uses-whole-unit.md"
+  },
+  {
+    "id": "compile-buffer-unsaved",
+    "title": "Compile Buffer (unsaved)",
+    "summary": "Compiles a project with the current editor buffer's unsaved content substituted for its file on disk, then restores the original file unchanged",
+    "group": "compiler",
+    "order": 90002,
+    "since": "0.0.0",
+    "file": "features/compile-buffer-unsaved.md"
+  },
+  {
+    "id": "compile-check",
+    "title": "compile-check",
+    "summary": "Runs a compiler-backed check against a single Delphi project (.dproj) or source file (.pas) and reports the result",
+    "group": "compiler",
+    "order": 90003,
+    "since": "0.26.0-alpha",
+    "file": "features/compile-check.md"
+  },
+  {
+    "id": "compile-dependents",
+    "title": "Compile Dependents",
+    "summary": "Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3)",
+    "group": "compiler",
+    "order": 90004,
+    "since": "0.0.0",
+    "file": "features/compile-dependents.md"
+  },
+  {
+    "id": "compile-diagnose",
+    "title": "Compile & Diagnose",
+    "summary": "Compiles a project or unit and folds the compiler's errors and warnings into drag-lint findings",
+    "group": "compiler",
+    "order": 90005,
+    "since": "0.0.0",
+    "file": "features/compile-diagnose.md"
+  },
+  {
+    "id": "full-compile-sweep",
+    "title": "Full Compile Sweep",
+    "summary": "Recompiles a project's stale units and refreshes its stored compiler findings, forcing a full build rather than the default stale-count threshold",
+    "group": "compiler",
+    "order": 90006,
+    "since": "1.2.0-alpha",
+    "file": "features/full-compile-sweep.md"
+  },
+  {
+    "id": "ghost-check",
+    "title": "ghost-check",
+    "summary": "Compiles a project with one or more units' content temporarily replaced by their unsaved editor buffers, then restores the original files unchanged",
+    "group": "compiler",
+    "order": 90007,
+    "since": "1.8.0-alpha",
+    "file": "features/ghost-check.md"
+  },
+  {
+    "id": "ghost-recover",
+    "title": "ghost-recover",
+    "summary": "Scans a project's hidden D-RAG folder for recovery journals left behind when a ghost-check overlay was interrupted by a crash",
+    "group": "compiler",
+    "order": 90008,
+    "since": "0.64.1-alpha",
+    "file": "features/ghost-recover.md"
+  },
+  {
+    "id": "import-build-log",
+    "title": "Import Build Log",
+    "summary": "Parses an external dcc or msbuild build log and folds its errors and warnings into drag-lint's stored findings",
+    "group": "compiler",
+    "order": 90009,
+    "since": "0.8.0-alpha",
+    "file": "features/import-build-log.md"
+  },
+  {
+    "id": "preprocess-file",
+    "title": "preprocess-file",
+    "summary": "Diagnostic that prints a file's {$IFDEF}-resolved source to stdout under a given define set",
+    "group": "compiler",
+    "order": 90010,
+    "since": "0.92.0-alpha",
+    "file": "features/preprocess-file.md"
+  },
+  {
+    "id": "project-facts",
+    "title": "project-facts",
+    "summary": "Report what the build does: defines that are on and what sets each, imports, output paths and packages",
+    "group": "compiler",
+    "order": 90011,
+    "since": "1.20.0-alpha",
+    "file": "features/project-facts.md"
+  },
+  {
+    "id": "recover-buffer-compile-files",
+    "title": "Recover Buffer-Compile Files",
+    "summary": "Restores any file left holding unsaved-buffer content after a Compile Buffer (unsaved) run was interrupted (for example by a crash)",
+    "group": "compiler",
+    "order": 90012,
+    "since": "0.0.0",
+    "file": "features/recover-buffer-compile-files.md"
+  },
+  {
+    "id": "fb-snapshot",
+    "title": "fb-snapshot",
+    "summary": "Connects to a Firebird database and captures a snapshot into a sqlite index",
+    "group": "database",
+    "order": 100001,
+    "since": "0.40.5-alpha",
+    "file": "features/fb-snapshot.md"
+  },
+  {
+    "id": "link-orm",
+    "title": "link-orm",
+    "summary": "Links a project's code index to a SQL index so ORM-style relationships between Delphi symbols and SQL objects can be resolved across both",
+    "group": "database",
+    "order": 100002,
+    "since": "0.40.5-alpha",
+    "file": "features/link-orm.md"
+  },
+  {
+    "id": "drag-lint",
+    "title": "drag-lint",
+    "summary": "This page documents the \"View > Tool Windows > drag-lint\" menu entry -- the main drag-lint dockable tool window",
+    "group": "editor-integration",
+    "order": 110001,
+    "since": "0.2.0-alpha",
+    "file": "features/drag-lint.md"
+  },
+  {
+    "id": "drag-lint-graph",
+    "title": "drag-lint Graph",
+    "summary": "This page documents the \"View > Tool Windows > drag-lint Graph\" menu entry -- the drag-lint graph viewer",
+    "group": "editor-integration",
+    "order": 110002,
+    "since": "0.10.0-alpha",
+    "file": "features/drag-lint-graph.md"
+  },
+  {
+    "id": "drag-lint-graph-dockable",
+    "title": "drag-lint Graph (dockable)",
+    "summary": "Opens the drag-lint graph viewer as a dockable window inside the IDE, so it can sit beside Structure",
+    "group": "editor-integration",
+    "order": 110003,
+    "since": "0.0.0",
+    "file": "features/drag-lint-graph-dockable.md"
+  },
+  {
+    "id": "drag-lint-options",
+    "title": "drag-lint Options",
+    "summary": "The plugin's settings dialog for drag-lint: lets you browse and toggle the lint rule catalog",
+    "group": "editor-integration",
+    "order": 110004,
+    "since": "0.95.0-alpha",
+    "file": "features/drag-lint-options.md"
+  },
+  {
+    "id": "drag-lint-panel-dockable",
+    "title": "drag-lint Panel (dockable)",
+    "summary": "Opens the main drag-lint dockable tool window inside the IDE",
+    "group": "editor-integration",
+    "order": 110005,
+    "since": "0.0.0",
+    "file": "features/drag-lint-panel-dockable.md"
+  },
+  {
+    "id": "ide-menu-reference",
+    "title": "IDE Menu Reference",
+    "summary": "What every item in the drag-lint menu does",
+    "group": "editor-integration",
+    "order": 110006,
+    "since": "0.0.0",
+    "file": "features/ide-menu-reference.md"
+  },
+  {
+    "id": "ide-release",
+    "title": "ide-release",
+    "summary": "Asks a running drag-lint Delphi IDE plugin not to respawn its drag-lint.exe child processes for a while -- and to drop the running one on its next request",
+    "group": "editor-integration",
+    "order": 110007,
+    "since": "1.13.0-alpha",
+    "file": "features/ide-release.md"
+  },
+  {
+    "id": "installation",
+    "title": "Installation",
+    "summary": "Getting the CLI, the IDE plugin, or the LSP running",
+    "group": "editor-integration",
+    "order": 110008,
+    "since": "0.21.0-alpha",
+    "file": "features/installation.md"
+  },
+  {
+    "id": "lsp",
+    "title": "lsp",
+    "summary": "Starts the LSP (Language Server Protocol) stdio server",
+    "group": "editor-integration",
+    "order": 110009,
+    "since": "0.6.0-alpha",
+    "file": "features/lsp.md"
+  },
+  {
+    "id": "mcp-config-writer",
+    "title": "Register the MCP server (Claude Code, VS Code)",
+    "summary": "Adds drag-lint serve to Claude Code and VS Code MCP config: merged, backed up, idempotent, removable",
+    "group": "editor-integration",
+    "order": 110010,
+    "since": "1.26.1-alpha",
+    "file": "features/mcp-config-writer.md"
+  },
+  {
+    "id": "mcp-server",
+    "title": "MCP server",
+    "summary": "Exposes the index to MCP clients as 15 tools",
+    "group": "editor-integration",
+    "order": 110011,
+    "since": "0.4.0-alpha",
+    "file": "features/mcp-server.md"
+  },
+  {
+    "id": "serve",
+    "title": "serve",
+    "summary": "Starts the MCP (Model Context Protocol) stdio server, for AI clients such as Claude or Cursor to query a drag-lint index",
+    "group": "editor-integration",
+    "order": 110012,
+    "since": "0.4.0-alpha",
+    "file": "features/serve.md"
+  },
+  {
+    "id": "setup-installer",
+    "title": "Setup installer",
+    "summary": "One Inno Setup installer for the engine, chart scripts, Graphviz dot, the IDE plugin, ConvRulesEditor, drag-lint-graph and YADF",
+    "group": "editor-integration",
+    "order": 110013,
+    "since": "1.28.3-alpha",
+    "file": "features/setup-installer.md"
+  },
+  {
+    "id": "workspace-add",
+    "title": "workspace add",
+    "summary": "Registers a project file into a .drag-lint-workspace.json workspace config, so multi-project workspace commands know about it",
+    "group": "editor-integration",
+    "order": 110014,
+    "since": "0.6.0-alpha",
+    "file": "features/workspace-add.md"
+  },
+  {
+    "id": "workspace-index",
+    "title": "workspace index",
+    "summary": "Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass",
+    "group": "editor-integration",
+    "order": 110015,
+    "since": "0.6.0-alpha",
+    "file": "features/workspace-index.md"
+  },
+  {
+    "id": "workspace-status",
+    "title": "workspace status",
+    "summary": "Reports the status of every project registered in a .drag-lint-workspace.json workspace config",
+    "group": "editor-integration",
+    "order": 110016,
+    "since": "0.6.0-alpha",
+    "file": "features/workspace-status.md"
+  },
+  {
+    "id": "about-and-status",
+    "title": "About and Status",
+    "summary": "The plugin's status window -- versions, connection health, and which indexes are actually in use",
+    "group": "maintenance",
+    "order": 120001,
+    "since": "0.15.0-alpha",
+    "file": "features/about-and-status.md"
+  },
+  {
+    "id": "ambiguous-calls",
+    "title": "ambiguous-calls",
+    "summary": "Resolver-coverage diagnostic that reports call sites the engine could not pin to exactly one target -- unresolved or ambiguous calls",
+    "group": "maintenance",
+    "order": 120002,
+    "since": "0.91.0-alpha",
+    "file": "features/ambiguous-calls.md"
+  },
+  {
+    "id": "bench-context",
+    "title": "bench-context",
+    "summary": "Benchmarks the context command by building context bundles for a sample of symbols against a database",
+    "group": "maintenance",
+    "order": 120003,
+    "since": "0.18.0-alpha",
+    "file": "features/bench-context.md"
+  },
+  {
+    "id": "diff",
+    "title": "diff",
+    "summary": "Compares two index databases and reports what changed between them -- for example an index snapshot taken before and after a refactor",
+    "group": "maintenance",
+    "order": 120004,
+    "since": "0.13.0-alpha",
+    "file": "features/diff.md"
+  },
+  {
+    "id": "dump-call-edges",
+    "title": "dump-call-edges",
+    "summary": "Diagnostic that dumps every resolved call edge in the index as refid|targetqname|confidence rows",
+    "group": "maintenance",
+    "order": 120005,
+    "since": "0.91.0-alpha",
+    "file": "features/dump-call-edges.md"
+  },
+  {
+    "id": "dump-refs",
+    "title": "dump-refs",
+    "summary": "Diagnostic that dumps every ref in a file together with its enclosingsymbolid attribution",
+    "group": "maintenance",
+    "order": 120006,
+    "since": "0.82.0-alpha",
+    "file": "features/dump-refs.md"
+  },
+  {
+    "id": "feature-registry",
+    "title": "Feature registry",
+    "summary": "The machine-checked master list of every feature, and the generator of the index pages",
+    "group": "maintenance",
+    "order": 120007,
+    "since": "1.22.0-alpha",
+    "file": "features/feature-registry.md"
+  },
+  {
+    "id": "info",
+    "title": "info",
+    "summary": "Prints engine self-info: version, build date, license (MIT), tree-sitter details, and capabilities",
+    "group": "maintenance",
+    "order": 120008,
+    "since": "0.19.0-alpha",
+    "file": "features/info.md"
+  },
+  {
+    "id": "library-drift-check",
+    "title": "Library Drift Check",
+    "summary": "Flags registered library roots that have source on disk but nothing in the index",
+    "group": "maintenance",
+    "order": 120009,
+    "since": "0.0.0",
+    "file": "features/library-drift-check.md"
+  },
+  {
+    "id": "maintenance",
+    "title": "Maintenance",
+    "summary": "Indexes, the manifest, reindexing, and what to do when something looks wrong",
+    "group": "maintenance",
+    "order": 120010,
+    "since": "0.0.0",
+    "file": "features/maintenance.md"
+  },
+  {
+    "id": "open-plugin-log",
+    "title": "Open Plugin Log",
+    "summary": "Opens the drag-lint plugin's own log file",
+    "group": "maintenance",
+    "order": 120011,
+    "since": "0.39.0-alpha",
+    "file": "features/open-plugin-log.md"
+  },
+  {
+    "id": "shutdown",
+    "title": "shutdown",
+    "summary": "Ask running lsp engines to close their indexes and stand down, so an index can be rebuilt without killing them",
+    "group": "maintenance",
+    "order": 120012,
+    "since": "0.6.0-alpha",
+    "file": "features/shutdown.md"
+  },
+  {
+    "id": "sql",
+    "title": "sql",
+    "summary": "Runs one read-only SQL statement against an index database and prints the result set",
+    "group": "maintenance",
+    "order": 120013,
+    "since": "0.40.5-alpha",
+    "file": "features/sql.md"
+  }
+]

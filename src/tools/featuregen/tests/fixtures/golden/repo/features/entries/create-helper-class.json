@@ -1,0 +1,49 @@
+{
+  "id": "create-helper-class",
+  "title": "Create helper class",
+  "group": "refactoring",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.94.0-alpha",
+  "summary": "Generates a Byte-family record helper for an enum type represented by a Structure-tree node",
+  "wikiPage": "Create-helper-class",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Create helper class"
+    },
+    {
+      "type": "cli",
+      "verb": "create-enum-helper",
+      "usage": "drag-lint create-enum-helper --qname <TEnum> [--apply|--json|--no-backup] [--methods <csv>] [--tostring rtti|case] [--db PATH] - generate a Byte-family record helper for an enum",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<TEnum>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--methods",
+          "arg": "<csv>"
+        },
+        {
+          "name": "--tostring"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

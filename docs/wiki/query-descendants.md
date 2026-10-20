@@ -34,8 +34,8 @@ interfaces answers **nothing**. On the platform library,
 
 ## Exit codes
 
-`0` found at least one descendant · `1` no such ancestor (**not** an error --
-it is the answer) · `2` usage error, or a stale/unusable `--db`.
+`0` found at least one descendant ; `1` no such ancestor (**not** an error --
+it is the answer) ; `2` usage error, or a stale/unusable `--db`.
 
 The exit-1 case is load-bearing: an unconditional `0` would destroy the only
 signal a caller has for "no such ancestor".

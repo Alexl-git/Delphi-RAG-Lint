@@ -1,8 +1,7 @@
 # Reindex project
 
 Conversion > Reindex project in ConvRulesEditor refreshes the editor's project
-index: an incremental `drag-lint index --project <Project>.dproj --db
-<project index>`. Use it after editing units in the IDE, or between the stages
+index: an incremental `drag-lint index --project <Project>.dproj --db <project index>`. Use it after editing units in the IDE, or between the stages
 of a multi-step conversion, so the Convert tab and the property trees read the
 current code.
 

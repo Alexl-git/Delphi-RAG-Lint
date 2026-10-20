@@ -10,7 +10,21 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "outline"
+      "verb": "outline",
+      "usage": "drag-lint outline --file <path.pas> [--db <path>] [--format text|json]",
+      "flags": [
+        {
+          "name": "--file",
+          "arg": "<path.pas>"
+        },
+        {
+          "name": "--db",
+          "arg": "<path>"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
   "audience": "both"

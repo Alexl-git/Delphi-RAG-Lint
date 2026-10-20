@@ -1,0 +1,35 @@
+{
+  "id": "lint-project",
+  "title": "lint-project",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.48.0-alpha",
+  "summary": "Runs project-scoped structural lint rules against an index -- checks such as god-class, unused-public-symbol",
+  "wikiPage": "lint-project",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lint-project",
+      "usage": "drag-lint lint-project --db <file.sqlite> [--rule god-class|unused-public-symbol|interface-reference-cycle|layering-violation|unused-private-member|unused-unit-in-uses|circular-uses|repeated-type-switch|global-only-uses-edge|duplicate-global-decl|uses-global-census|discarded-effect-free-result|query-name-with-effect|assert-with-side-effect] [--layers <f.json>] [--json]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--rule"
+        },
+        {
+          "name": "--layers",
+          "arg": "<f.json>"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

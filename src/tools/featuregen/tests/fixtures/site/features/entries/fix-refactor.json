@@ -1,0 +1,11 @@
+{
+  "id": "fix-refactor",
+  "title": "Fix refactor",
+  "group": "g-ide",
+  "owner": "ENGINE",
+  "status": "experimental",
+  "since": "0.9.0-alpha",
+  "summary": "Fixes a refactoring",
+  "surfaces": [ { "type": "ide-menu", "path": "drag-lint > Refactor > Fix" } ],
+  "audience": "both"
+}

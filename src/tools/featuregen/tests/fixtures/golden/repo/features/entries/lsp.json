@@ -1,0 +1,43 @@
+{
+  "id": "lsp",
+  "title": "lsp",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Starts the LSP (Language Server Protocol) stdio server",
+  "wikiPage": "lsp",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "lsp",
+      "usage": "drag-lint lsp --db <file.sqlite> (LSP stdio server) [--stdio] [--parent-pid <n>] [--clientProcessId <n>]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--stdio"
+        },
+        {
+          "name": "--clientProcessId"
+        },
+        {
+          "name": "--proxy"
+        },
+        {
+          "name": "--delphi-lsp",
+          "arg": "<path>"
+        },
+        {
+          "name": "--trace",
+          "arg": "<file>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"],
+  "notes": "issued by the plugin from DragLint.Plugin.LspClient.pas:297"
+}

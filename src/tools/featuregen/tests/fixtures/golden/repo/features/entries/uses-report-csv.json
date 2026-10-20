@@ -1,0 +1,45 @@
+{
+  "id": "uses-report-csv",
+  "title": "Uses Report (CSV)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.40.5-alpha",
+  "summary": "Exports the project's unit-dependency data as a CSV file",
+  "wikiPage": "Uses-Report-CSV",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Uses Report (CSV)..."
+    },
+    {
+      "type": "cli",
+      "verb": "uses-report",
+      "usage": "drag-lint uses-report --output <out.csv> [--db ...] [--depth N] [--include-external] [--all-sources] [--name <pattern>] (--name is a substring on the unit stem; one that matches NO source unit exits 2 with an ERROR and writes nothing, like outline)",
+      "flags": [
+        {
+          "name": "--output",
+          "arg": "<out.csv>"
+        },
+        {
+          "name": "--db"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--include-external"
+        },
+        {
+          "name": "--all-sources"
+        },
+        {
+          "name": "--name",
+          "arg": "<pattern>"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

@@ -1,0 +1,35 @@
+{
+  "id": "doc-comment-stub-symbol",
+  "title": "Doc Comment Stub (symbol)",
+  "group": "documentation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.25.0-alpha",
+  "summary": "Uses generate-docs to produce a doc-comment stub for one qualified symbol",
+  "wikiPage": "Doc-Comment-Stub-symbol",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Generate & Export > Doc Comment Stub (symbol)..."
+    },
+    {
+      "type": "cli",
+      "verb": "generate-docs",
+      "usage": "drag-lint generate-docs --qname <Foo.TBar.Baz> [--format xmldoc|pasdoc] [--db PATH]",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.TBar.Baz>"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

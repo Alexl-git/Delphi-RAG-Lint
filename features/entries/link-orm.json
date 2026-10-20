@@ -10,7 +10,14 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "link-orm"
+      "verb": "link-orm",
+      "usage": "drag-lint link-orm --db <projDb.sqlite> --db <sqlDb.sqlite>",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<projDb.sqlite>"
+        }
+      ]
     }
   ],
   "audience": "both",

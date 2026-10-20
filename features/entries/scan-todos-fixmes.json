@@ -14,7 +14,8 @@
     },
     {
       "type": "cli",
-      "verb": "todos"
+      "verb": "todos",
+      "usage": "drag-lint todos [<path>] (TODO/FIXME/HACK/XXX/REVIEW/NOTE scanner; [--json])"
     }
   ],
   "audience": "both"

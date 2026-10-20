@@ -1,0 +1,24 @@
+{
+  "id": "copy-selected-diagnostics",
+  "title": "Copy Selected Diagnostics",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.28.3-alpha",
+  "summary": "Copies only the Diagnostics rows selected in the Structure form (Ctrl/Shift-click, Ctrl+C) to the clipboard",
+  "intro": "Select one or several Diagnostics rows in the Structure form and choose Copy or press Ctrl+C. The rows are copied in panel order, one finding per line. Selecting the Diagnostics root copies everything, like Copy All Diagnostics.",
+  "wikiPage": "Copy-Selected-Diagnostics",
+  "surfaces": [
+    {
+      "type": "ide-context",
+      "host": "Structure form",
+      "caption": "Copy"
+    }
+  ],
+  "audience": "both",
+  "lastVerified": {
+    "date": "2026-10-13",
+    "by": "alexanderl",
+    "build": "1.28.3-alpha"
+  }
+}

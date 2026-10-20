@@ -1,0 +1,36 @@
+{
+  "id": "library-drift-check",
+  "title": "Library Drift Check",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Flags registered library roots that have source on disk but nothing in the index",
+  "wikiPage": "Library-Drift-Check",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Index & Maintenance > Library Drift Check..."
+    },
+    {
+      "type": "cli",
+      "verb": "library-drift",
+      "usage": "drag-lint library-drift [--platform <p>] [--config <path>] [--json] - registry library roots that have source on disk but none in the index (exit 2 if drift; roots the section exclude prunes are listed as excluded, not counted)",
+      "flags": [
+        {
+          "name": "--platform",
+          "arg": "<p>"
+        },
+        {
+          "name": "--config",
+          "arg": "<path>"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: since unknown"
+}

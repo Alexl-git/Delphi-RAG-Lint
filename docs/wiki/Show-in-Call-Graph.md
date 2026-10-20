@@ -26,8 +26,7 @@ callers = who calls X (default), callees = what X calls; cycle-guarded.
 ## What it needs
 
 An index IS required -- `reverse-calltree` reads the project's index
-database. The project's DB lives at `<project folder>\_D-RAG\<project
-file>.sqlite`; run `drag-lint resolve-dbs --project <X.dproj>` if you are
+database. The project's DB lives at `<project folder>\_D-RAG\<project file>.sqlite`; run `drag-lint resolve-dbs --project <X.dproj>` if you are
 unsure which one.
 
 ## Example

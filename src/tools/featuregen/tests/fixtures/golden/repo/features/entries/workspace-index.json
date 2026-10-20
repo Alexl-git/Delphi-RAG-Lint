@@ -1,0 +1,26 @@
+{
+  "id": "workspace-index",
+  "title": "workspace index",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.6.0-alpha",
+  "summary": "Indexes every project registered in a .drag-lint-workspace.json workspace config in one pass",
+  "wikiPage": "workspace-index",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "workspace",
+      "sub": "index",
+      "usage": "drag-lint workspace index [--config <.drag-lint-workspace.json>]",
+      "flags": [
+        {
+          "name": "--config",
+          "arg": "<.drag-lint-workspace.json>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "notes": "issued by the plugin from DragLint.Plugin.ProjectNotifier.pas:103"
+}

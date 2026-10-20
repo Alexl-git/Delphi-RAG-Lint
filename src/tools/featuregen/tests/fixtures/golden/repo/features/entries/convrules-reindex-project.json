@@ -1,0 +1,25 @@
+{
+  "id": "convrules-reindex-project",
+  "title": "Reindex project",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.26.7-alpha",
+  "summary": "ConvRulesEditor command: incremental index --project of the editor's project index, cancellable",
+  "intro": "Refresh the project index after IDE edits or between conversion stages.",
+  "wikiPage": "convrules-editor-reindex-project",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Conversion > Reindex project"
+    }
+  ],
+  "audience": "both",
+  "related": ["convrules-editor"],
+  "lastVerified": {
+    "date": "2026-10-11",
+    "by": "alexanderl",
+    "build": "1.26.7-alpha"
+  }
+}

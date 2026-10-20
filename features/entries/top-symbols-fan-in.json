@@ -14,7 +14,24 @@
     },
     {
       "type": "cli",
-      "verb": "top"
+      "verb": "top",
+      "usage": "drag-lint top --db <file.sqlite> [--by fanin] [--limit N] [--json]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--by"
+        },
+        {
+          "name": "--limit",
+          "arg": "N"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

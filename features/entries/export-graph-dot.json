@@ -14,7 +14,25 @@
     },
     {
       "type": "cli",
-      "verb": "graph"
+      "verb": "graph",
+      "usage": "drag-lint graph --db <file.sqlite> [--format dot|mermaid] [--name <root-substr>] [--output <file>]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--name",
+          "arg": "<root-substr>"
+        },
+        {
+          "name": "--output",
+          "arg": "<file>"
+        }
+      ]
     }
   ],
   "audience": "both",

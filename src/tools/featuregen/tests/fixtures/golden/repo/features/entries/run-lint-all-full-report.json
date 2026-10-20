@@ -1,0 +1,66 @@
+{
+  "id": "run-lint-all-full-report",
+  "title": "Run Lint All (Full Report)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.61.0-alpha",
+  "summary": "Runs the whole rule catalog against a project's indexed code and reports every surviving finding -- the overall project health check",
+  "wikiPage": "Run-Lint-All-Full-Report",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Code Quality > Run Lint All (Full Report)..."
+    },
+    {
+      "type": "cli",
+      "verb": "lint-all",
+      "usage": "drag-lint lint-all [--db <file.sqlite>] [--project <.dproj>] [--rule <id>] [--disable id,...] [--output <report.txt>] [--json] [--quiet] [--lint-third-party] [--no-preprocess]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--project",
+          "arg": "<.dproj>"
+        },
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--disable"
+        },
+        {
+          "name": "--output",
+          "arg": "<report.txt>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--quiet",
+          "summary": "suppress per-file progress lines written to stderr"
+        },
+        {
+          "name": "--lint-third-party"
+        },
+        {
+          "name": "--no-preprocess"
+        },
+        {
+          "name": "--fix"
+        },
+        {
+          "name": "--fix-naming"
+        },
+        {
+          "name": "--apply"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "pitfalls": ["lint `<file>` is a strict SUBSET: project-wide rules can only fire in lint-all."]
+}

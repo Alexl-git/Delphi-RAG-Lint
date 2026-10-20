@@ -1,0 +1,56 @@
+{
+  "id": "copy-diagnostics-current-file",
+  "title": "Copy Diagnostics (Current File)",
+  "group": "linting",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.1.0-alpha",
+  "summary": "Puts the current file's lint findings onto the clipboard",
+  "wikiPage": "Copy-Diagnostics-Current-File",
+  "surfaces": [
+    {
+      "type": "ide-about",
+      "caption": "Copy Diagnostics (Current File)"
+    },
+    {
+      "type": "cli",
+      "verb": "lint",
+      "usage": "drag-lint lint <path> [--rule <id>] [--disable id1,id2] [--rules-dir <dir>] [--json] [--no-preprocess] [--library-db <lib.sqlite>]",
+      "flags": [
+        {
+          "name": "--rule",
+          "arg": "<id>"
+        },
+        {
+          "name": "--disable"
+        },
+        {
+          "name": "--rules-dir",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-preprocess"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib.sqlite>"
+        },
+        {
+          "name": "--db",
+          "arg": "<index.sqlite>"
+        },
+        {
+          "name": "--project-rules"
+        },
+        {
+          "name": "--stand-in-for",
+          "arg": "<realpath>"
+        }
+      ]
+    }
+  ],
+  "audience": "both"
+}

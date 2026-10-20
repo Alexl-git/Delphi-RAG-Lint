@@ -10,7 +10,32 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "document-all"
+      "verb": "document-all",
+      "usage": "drag-lint document-all [--stubs|--apply|--json|--no-backup|--include-accessors|--migrate-pure] [--db PATH] - document every public decl in every indexed unit (no project scope)",
+      "flags": [
+        {
+          "name": "--stubs"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--include-accessors"
+        },
+        {
+          "name": "--migrate-pure"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "both"

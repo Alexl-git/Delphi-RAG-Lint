@@ -1,0 +1,17 @@
+{
+  "id": "drag-lint-graph",
+  "title": "drag-lint Graph",
+  "group": "editor-integration",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.10.0-alpha",
+  "summary": "This page documents the \"View > Tool Windows > drag-lint Graph\" menu entry -- the drag-lint graph viewer",
+  "wikiPage": "drag-lint-Graph",
+  "surfaces": [
+    {
+      "type": "tool-window",
+      "path": "View > Tool Windows > drag-lint Graph"
+    }
+  ],
+  "audience": "both"
+}

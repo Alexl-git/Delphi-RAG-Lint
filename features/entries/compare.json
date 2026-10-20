@@ -12,7 +12,53 @@
     {
       "type": "cli",
       "verb": "compare",
-      "example": "drag-lint compare --in U.pas --line 120"
+      "example": "drag-lint compare --in U.pas --line 120",
+      "usage": "drag-lint compare --old <report.txt|forms.csv|bundle dir> [--command \"<id> -Target T -Project P ...>\"] [--project <P.dproj>]",
+      "flags": [
+        {
+          "name": "--old",
+          "arg": "<report.txt|forms.csv|bundle dir>"
+        },
+        {
+          "name": "--command"
+        },
+        {
+          "name": "--project",
+          "arg": "<P.dproj>"
+        },
+        {
+          "name": "--new",
+          "arg": "<same kind>"
+        },
+        {
+          "name": "--old-db",
+          "arg": "<old.sqlite>"
+        },
+        {
+          "name": "--db",
+          "arg": "<new.sqlite>"
+        },
+        {
+          "name": "--auto"
+        },
+        {
+          "name": "--save"
+        },
+        {
+          "name": "--snapshot-dir",
+          "arg": "<dir>"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--output",
+          "arg": "<file>"
+        },
+        {
+          "name": "--open"
+        }
+      ]
     }
   ],
   "audience": "both",

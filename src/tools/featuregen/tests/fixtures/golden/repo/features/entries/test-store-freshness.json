@@ -1,0 +1,18 @@
+{
+  "id": "test-store-freshness",
+  "title": "test-store-freshness",
+  "group": "maintenance",
+  "owner": "ENGINE",
+  "status": "internal",
+  "since": "0.0.0",
+  "summary": "Store-freshness probe used by a test runner; it needs --db and does nothing else",
+  "wikiPage": "Maintenance",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "test-store-freshness"
+    }
+  ],
+  "audience": "agent",
+  "notes": "internal: store-freshness probe used by a test runner; requires --db and does nothing else.; seed: group guessed; seed: since unknown"
+}

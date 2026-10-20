@@ -1,0 +1,46 @@
+{
+  "id": "call-graph-butterfly",
+  "title": "Call Graph (Butterfly)",
+  "group": "graphs-reports",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.96.0-alpha",
+  "summary": "Shows callers and callees of one symbol together in a single \"butterfly\" view",
+  "wikiPage": "Call-Graph-Butterfly",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Uses & Dependencies > Call Graph (Butterfly)..."
+    },
+    {
+      "type": "cli",
+      "verb": "reverse-calltree",
+      "usage": "drag-lint reverse-calltree --qname <X> [--direction callers|callees] [--depth N] [--format text|json|dot|mermaid] [--json] --db PATH [--db ...] (N-deep call tree; callers=who calls X (default), callees=what X calls; cycle-guarded)",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<X>"
+        },
+        {
+          "name": "--direction"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--format"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

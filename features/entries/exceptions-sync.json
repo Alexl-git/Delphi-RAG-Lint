@@ -10,7 +10,24 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "exceptions-sync"
+      "verb": "exceptions-sync",
+      "usage": "drag-lint exceptions-sync [--db <file.sqlite>] [--config <lint.json>] [--apply] [--json] (materialise the project's derived exception classes)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--config",
+          "arg": "<lint.json>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both",

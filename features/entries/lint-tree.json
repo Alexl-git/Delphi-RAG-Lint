@@ -10,8 +10,48 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "lint-tree"
+      "verb": "lint-tree",
+      "usage": "drag-lint lint-tree --unit <B.pas> --db <file.sqlite> [--buffer <buf>] [--project <.dproj>]",
+      "flags": [
+        {
+          "name": "--unit",
+          "arg": "<B.pas>"
+        },
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--buffer",
+          "arg": "<buf>"
+        },
+        {
+          "name": "--project",
+          "arg": "<.dproj>"
+        },
+        {
+          "name": "--baseline",
+          "arg": "<f.json>"
+        },
+        {
+          "name": "--write-baseline",
+          "arg": "<f.json>"
+        },
+        {
+          "name": "--platform"
+        },
+        {
+          "name": "--with-rules"
+        },
+        {
+          "name": "--compile"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "pitfalls": ["does an interface edit to `<B.pas>` reach any dependent? Exits 0 whether or not it found anything; 2 means it could NOT run. --baseline pins the OLD side to an edit-episode capture -- without it the OLD side is the live index, which is CLI/manual use only."]
 }

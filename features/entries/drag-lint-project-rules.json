@@ -15,7 +15,21 @@
     },
     {
       "type": "cli",
-      "verb": "rules"
+      "verb": "rules",
+      "usage": "drag-lint rules [--json] [--category <name>] [--rules-dir <dir>] - list every lint rule (catalog)",
+      "flags": [
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--category",
+          "arg": "<name>"
+        },
+        {
+          "name": "--rules-dir",
+          "arg": "<dir>"
+        }
+      ]
     }
   ],
   "audience": "both"

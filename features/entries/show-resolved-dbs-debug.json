@@ -14,8 +14,22 @@
     },
     {
       "type": "cli",
-      "verb": "resolve-dbs"
+      "verb": "resolve-dbs",
+      "usage": "drag-lint resolve-dbs [--platform win32|win64] [--config <path>] [--json] (print the consumer DB list query/lsp/serve would use)",
+      "flags": [
+        {
+          "name": "--platform"
+        },
+        {
+          "name": "--config",
+          "arg": "<path>"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
-  "audience": "both"
+  "audience": "both",
+  "pitfalls": ["never guess a DB path. Also --project `<P.dproj>` and --platform `<win32|win64>`."]
 }

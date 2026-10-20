@@ -1,0 +1,28 @@
+{
+  "id": "fb-snapshot",
+  "title": "fb-snapshot",
+  "group": "database",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.40.5-alpha",
+  "summary": "Connects to a Firebird database and captures a snapshot into a sqlite index",
+  "wikiPage": "fb-snapshot",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "fb-snapshot",
+      "usage": "drag-lint fb-snapshot --connection \"Database=...;User=...;Password=...;DriverID=FB\" --db <sql.sqlite>",
+      "flags": [
+        {
+          "name": "--connection"
+        },
+        {
+          "name": "--db",
+          "arg": "<sql.sqlite>"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

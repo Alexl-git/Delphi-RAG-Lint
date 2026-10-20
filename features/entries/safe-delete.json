@@ -10,7 +10,27 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "safe-delete"
+      "verb": "safe-delete",
+      "usage": "drag-lint safe-delete --name <QName> [--json|--apply|--no-backup] --db <db> - delete a symbol iff it has zero references",
+      "flags": [
+        {
+          "name": "--name",
+          "arg": "<QName>"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--db",
+          "arg": "<db>"
+        }
+      ]
     }
   ],
   "audience": "both",

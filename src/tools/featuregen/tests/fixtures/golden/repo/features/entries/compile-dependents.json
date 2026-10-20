@@ -1,0 +1,18 @@
+{
+  "id": "compile-dependents",
+  "title": "Compile Dependents",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.0.0",
+  "summary": "Check the units that depend on the one being edited now, instead of waiting for the automatic quiet-period pass (lint-tree tier 3)",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "ide-menu",
+      "path": "drag-lint > Compile Dependents"
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page; seed: since unknown"
+}

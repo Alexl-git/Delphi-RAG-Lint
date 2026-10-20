@@ -1,0 +1,38 @@
+{
+  "id": "project-facts",
+  "title": "project-facts",
+  "group": "compiler",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "1.20.0-alpha",
+  "summary": "Report what the build does: defines that are on and what sets each, imports, output paths and packages",
+  "wikiPage": "Features",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "project-facts",
+      "usage": "drag-lint project-facts --dproj PATH [--platform win32|win64] [--config Release|Debug] [--db PATH] [--json] (what the BUILD does: defines ON and what sets each, <Import>s, output paths, packages; flags a post-processor define with no build step imported)",
+      "flags": [
+        {
+          "name": "--dproj",
+          "arg": "PATH"
+        },
+        {
+          "name": "--platform"
+        },
+        {
+          "name": "--config"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "notes": "seed: needs own page"
+}

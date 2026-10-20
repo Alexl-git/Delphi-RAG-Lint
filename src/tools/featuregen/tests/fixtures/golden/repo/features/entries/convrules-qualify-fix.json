@@ -1,0 +1,25 @@
+{
+  "id": "convrules-qualify-fix",
+  "title": "Qualify #convert quick fix",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.31.5-alpha",
+  "summary": "ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book",
+  "intro": "Fix an ambiguous bare #convert class the way the engine suggests, without retyping the line.",
+  "wikiPage": "convrules-editor-qualify-fix",
+  "surfaces": [
+    {
+      "type": "exe",
+      "name": "ConvRulesEditor.exe",
+      "menu": "Convert tab > Qualify #convert..."
+    }
+  ],
+  "audience": "both",
+  "related": ["convert-apply", "convrules-editor"],
+  "lastVerified": {
+    "date": "2026-10-19",
+    "by": "alexanderl",
+    "build": "1.31.6-alpha"
+  }
+}

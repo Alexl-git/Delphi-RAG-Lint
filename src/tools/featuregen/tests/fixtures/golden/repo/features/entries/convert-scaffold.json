@@ -1,0 +1,52 @@
+{
+  "id": "convert-scaffold",
+  "title": "convert-scaffold",
+  "group": "component-conversion",
+  "owner": "CONVERTER",
+  "status": "shipped",
+  "since": "1.1.0-alpha",
+  "summary": "Auto-generates a valid conversion-rules file from the real property trees of a from-type and a to-type",
+  "wikiPage": "convert-scaffold",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "convert-scaffold",
+      "usage": "drag-lint convert-scaffold --from <FromType> --to <ToType> [--output <file>] [--surface dfm|pas] [--depth N] [--rules <file>] [--progress-interval S] --db PATH [--db ...] (auto-generate a VALID conversion-rules file from the real F/T property trees, expanded to --depth N, else the --rules book's #depth N, else 5 (a bad value exits 2): concrete #link where 1 source matches by leaf-name+type, ??? for ambiguities, DROPPED notes for orphaned F props; --surface picks the TO-side target bar, default dfm=published-properties-only, pas=published+public incl. public fields; is_writable=false targets are never auto-linked on either surface; --progress-interval S: see PROGRESS below)",
+      "flags": [
+        {
+          "name": "--from",
+          "arg": "<FromType>"
+        },
+        {
+          "name": "--to",
+          "arg": "<ToType>"
+        },
+        {
+          "name": "--output",
+          "arg": "<file>"
+        },
+        {
+          "name": "--surface"
+        },
+        {
+          "name": "--depth",
+          "arg": "N"
+        },
+        {
+          "name": "--rules",
+          "arg": "<file>"
+        },
+        {
+          "name": "--progress-interval",
+          "arg": "S"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

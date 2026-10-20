@@ -14,7 +14,14 @@
     },
     {
       "type": "cli",
-      "verb": "import-log"
+      "verb": "import-log",
+      "usage": "drag-lint import-log <logfile> --db <file.sqlite> (parse dcc/msbuild log)",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        }
+      ]
     }
   ],
   "audience": "both",

@@ -1,0 +1,11 @@
+{
+  "id": "fix-uses",
+  "title": "Fix uses",
+  "group": "g-ide",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.86.0-alpha",
+  "summary": "Fixes the uses clause",
+  "surfaces": [ { "type": "ide-menu", "path": "drag-lint > Uses > Fix" } ],
+  "audience": "both"
+}

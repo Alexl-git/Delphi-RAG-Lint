@@ -1,0 +1,64 @@
+---
+id: query-typecat
+title: query typecat
+summary: Resolves a type's category -- float, string, class, interface, and so on
+product: DL
+group: search-navigation
+order: 20022
+since: 0.1.0-alpha
+status: shipped
+updated: 1.32.0-alpha
+---
+
+# query typecat
+
+Resolves a type's category -- float, string, class, interface, and so on.
+
+## How to run it
+
+Full flag list: [query in the CLI reference](../cli.md#query).
+
+## Flags
+
+| Flag | Argument | Meaning | Default |
+| --- | --- | --- | --- |
+| `--name` | `<type>` |  |  |
+| `--db` |  |  |  |
+| `--json` |  |  |  |
+
+## Details
+
+Resolves a type's category -- float, string, class, interface, and so on.
+Reach for it when you need to know what kind of type a name refers to
+before writing code against it.
+
+### Running it from the CLI
+
+```text
+drag-lint query typecat --name <type> [--db ...] [--json]
+```
+
+`--name` is the type to resolve.
+
+### Reaching it in the IDE
+
+No IDE surface -- this is a CLI-only feature.
+
+### What it needs
+
+The `--db` flag is optional -- drag-lint auto-resolves the index when
+omitted. An index must still exist.
+
+### Example
+
+Illustrative:
+
+```text
+drag-lint query typecat --name Currency --db C:\Projects\MyApp\_D-RAG\MyApp.sqlite
+```
+
+This would report which type category `Currency` resolves to.
+
+---
+
+[All features](../index.md) | [CLI reference](../cli.md) | [IDE menus](../ide.md)

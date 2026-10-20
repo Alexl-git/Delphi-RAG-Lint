@@ -1,0 +1,478 @@
+help	allow
+help	ambiguous-calls
+help	ask
+help	bench-context
+help	butterfly
+help	call-path
+help	callgraph
+help	check-ast
+help	check-unit
+help	compare
+help	compile-check
+help	context
+help	convert-apply
+help	convert-scaffold
+help	convert-validate
+help	create-enum-helper
+help	cycles
+help	deps-report
+help	diff
+help	doc-drift
+help	doc-forget
+help	document
+help	document-all
+help	dump-call-edges
+help	dump-refs
+help	exceptions-sync
+help	export
+help	extract-method
+help	fb-snapshot
+help	find-callees
+help	find-deadcode
+help	find-unit
+help	format
+help	forms-csv
+help	generate-docs
+help	generate-test
+help	ghost-check
+help	ghost-recover
+help	glyph-vacuum
+help	graph
+help	helpers-of
+help	hover
+help	ide-release
+help	impact
+help	import-log
+help	index
+help	info
+help	library-drift
+help	link-orm
+help	lint
+help	lint-all
+help	lint-project
+help	lint-tree
+help	lsp
+help	mcp-config
+help	migrate-dbs
+help	outline
+help	pp-profile
+help	preprocess-file
+help	project-facts
+help	proptree
+help	protocol
+help	purge-locals
+help	query
+help	reconcile-project
+help	refresh-findings
+help	register-project
+help	rename
+help	resolve-dbs
+help	reverse-calltree
+help	rules
+help	safe-delete
+help	schema
+help	serve
+help	shared-unit
+help	shutdown
+help	slice
+help	sql
+help	surface
+help	todos
+help	top
+help	typeat
+help	usages
+help	uses-audit
+help	uses-fix
+help	uses-report
+help	wiki
+help	wiring
+help	workspace
+dispatch	allow
+dispatch	ambiguous-calls
+dispatch	ask
+dispatch	bench-context
+dispatch	butterfly
+dispatch	call-path
+dispatch	callgraph
+dispatch	check-ast
+dispatch	check-unit
+dispatch	compare
+dispatch	compile-check
+dispatch	context
+dispatch	contrast-selftest
+dispatch	convert-apply
+dispatch	convert-reemit
+dispatch	convert-scaffold
+dispatch	convert-validate
+dispatch	create-enum-helper
+dispatch	cycles
+dispatch	deps-report
+dispatch	diff
+dispatch	doc-drift
+dispatch	doc-facts-selftest
+dispatch	doc-forget
+dispatch	document
+dispatch	document-all
+dispatch	dump-call-edges
+dispatch	dump-pp-eval
+dispatch	dump-pp-lex
+dispatch	dump-refs
+dispatch	exceptions-sync
+dispatch	export
+dispatch	extract-method
+dispatch	fb-snapshot
+dispatch	find-callees
+dispatch	find-deadcode
+dispatch	find-unit
+dispatch	format
+dispatch	forms-csv
+dispatch	generate-docs
+dispatch	generate-test
+dispatch	ghost-check
+dispatch	ghost-recover
+dispatch	glyph-vacuum
+dispatch	graph
+dispatch	helpers-of
+dispatch	hover
+dispatch	ide-release
+dispatch	impact
+dispatch	import-log
+dispatch	index
+dispatch	info
+dispatch	library-drift
+dispatch	link-orm
+dispatch	lint
+dispatch	lint-all
+dispatch	lint-project
+dispatch	lint-tree
+dispatch	lsp
+dispatch	mcp-config
+dispatch	migrate-dbs
+dispatch	outline
+dispatch	pp-profile
+dispatch	preprocess-file
+dispatch	project-facts
+dispatch	proptree
+dispatch	protocol
+dispatch	purge-locals
+dispatch	query
+dispatch	reconcile-project
+dispatch	refresh-findings
+dispatch	register-project
+dispatch	rename
+dispatch	resolve-dbs
+dispatch	resolve-uses
+dispatch	reverse-calltree
+dispatch	rules
+dispatch	safe-delete
+dispatch	schema
+dispatch	selftest
+dispatch	serve
+dispatch	shared-unit
+dispatch	shutdown
+dispatch	slice
+dispatch	sql
+dispatch	surface
+dispatch	test-store-freshness
+dispatch	todos
+dispatch	top
+dispatch	typeat
+dispatch	usages
+dispatch	uses-audit
+dispatch	uses-fix
+dispatch	uses-report
+dispatch	wiki
+dispatch	wiring
+dispatch	workspace
+sub	export enums
+sub	export obsidian
+sub	query ancestors
+sub	query descendants
+sub	query find
+sub	query find-callers
+sub	query hints
+sub	query type-usage
+sub	query typecat
+sub	query unit-usage
+sub	selftest closure
+sub	selftest coverage
+sub	selftest dbselect
+sub	selftest drift
+sub	selftest fact-wrap
+sub	selftest files
+sub	selftest glob
+sub	selftest harvest
+sub	selftest ignore
+sub	selftest manifest-merge
+sub	selftest manifest-save-atomic
+sub	selftest own-roots
+sub	selftest recreate
+sub	selftest section-db
+sub	selftest studio-root
+sub	selftest unused-locals
+sub	workspace add
+sub	workspace index
+sub	workspace status
+caption	Full Compile Sweep
+caption	drag-lint Panel (dockable)
+caption	drag-lint Graph (dockable)
+caption	Hover at Cursor
+caption	Go to Definition
+caption	Show Completion
+caption	Show Signature Help
+caption	Find Usages...
+caption	Symbol Search...
+caption	Show Structure
+caption	Rename Symbol...
+caption	Convert Public Field to Property at Cursor
+caption	Format with YADF
+caption	Format Whole Project with YADF...
+caption	drag-lint Options...
+caption	Uses & Deps Tab -- review & apply fixes...
+caption	Uses Audit -- interface->impl moves + unused...
+caption	Uses Cleanup Preview (compiler-verified)...
+caption	Add Missing Units to uses (whole unit)...
+caption	Quick-Fix: Add Unit for Undeclared at Cursor (Ctrl+Alt+U)
+caption	Quick-Fix: Add Unit for Inline Hint (H2443) at Cursor
+caption	Impact / Blast Radius (symbol)...
+caption	Show Wiring (Spring4D DI + DFM events)...
+caption	Reverse Call Tree (who calls this, N-deep)...
+caption	Call Graph (Butterfly)...
+caption	Circular Uses Report (cycles + fix plan)...
+caption	Reconcile Project Members (.dpr/.dproj)...
+caption	Uses Report (CSV)...
+caption	Dependency Report (third-party rollup)...
+caption	Forms for testers (CSV)...
+caption	Class Surface...
+caption	Symbol Slice...
+caption	Type at Cursor
+caption	Run Lint All (Full Report)...
+caption	Find Dead Code...
+caption	Find Undocumented (public)...
+caption	Scan TODOs / FIXMEs...
+caption	Compiler Hints...
+caption	Top Symbols (fan-in)...
+caption	Doc Comment Stub (symbol)...
+caption	Auto-Document Whole Project...
+caption	Unit Test Stub (symbol)...
+caption	Export Enums (Delphi const)...
+caption	Export Graph (DOT)...
+caption	Export to Obsidian...
+caption	Rebuild Index for This Project
+caption	Show Resolved DBs (debug)...
+caption	Library Drift Check...
+caption	Compile & Diagnose
+caption	Compile Buffer (unsaved)
+caption	Compile Dependents
+caption	About
+caption	This unit / at the cursor
+caption	This project
+caption	For testers
+caption	Compile & Analysis
+caption	Diagnose Current State
+caption	Copy Report
+caption	Refresh
+caption	Open Plugin Log
+caption	Run Diagnostics (didSave)
+caption	Run AST Checks
+caption	Lint Buffer (Unsaved)
+caption	Copy Diagnostics (Current File)
+caption	Recover Buffer-Compile Files
+caption	Import Build Log...
+caption	Check for Updates
+caption	Close
+caption	drag-lint
+caption	drag-lint (!)
+caption	-
+caption	Uses & Dependencies
+caption	Reports
+caption	Inspect Symbol
+caption	Code Quality
+caption	Generate & Export
+caption	Index & Maintenance
+caption	drag-lint Graph
+caption	Problems detected -- the red lines above are the ones that matter.
+caption	All resolved components look healthy.
+caption	Diagnose report copied to the clipboard.
+caption	Setting updated -- the groups above have been re-read.
+caption	Callers and callees (butterfly chart)...
+caption	Who calls this routine...
+caption	What this routine calls...
+caption	Call path from this routine to another...
+caption	What this routine changes (side effects)...
+caption	Which tables this routine touches...
+caption	Which exceptions escape this routine...
+caption	Does this routine leave the process...
+caption	Where this protocol command travels...
+caption	What a change here would break...
+caption	Which tests reach this code...
+caption	Who writes this field...
+caption	Who reads this field...
+caption	What feeds this control (back to the column)...
+caption	Where this field lands in the database...
+caption	Field round-trip (grid -> server -> SQL)...
+caption	What this type exposes (class surface)...
+caption	Ancestors and descendants (hierarchy)...
+caption	Who registers and resolves this interface...
+caption	Which handler runs on which event (form)...
+caption	Form lifecycle (create -> show -> destroy)...
+caption	Dependencies of this unit...
+caption	Project architecture (layered zones)...
+caption	Circular unit dependencies...
+caption	Who uses this table or column...
+caption	Where this database column is shown...
+caption	Routine at the cursor
+caption	Field, property or grid column at the cursor
+caption	Type at the cursor
+caption	This unit
+dialog	Cancel
+dialog	Close
+dialog	Copy to clipboard
+dialog	Fix
+dialog	Go To
+about	Check for Updates
+about	Close
+about	Copy Diagnostics (Current File)
+about	Copy Report
+about	Diagnose Current State
+about	Import Build Log...
+about	Lint Buffer (Unsaved)
+about	Open Plugin Log
+about	Recover Buffer-Compile Files
+about	Refresh
+about	Run AST Checks
+about	Run Diagnostics (didSave)
+context	Structure form|Allow this message
+context	Structure form|Copy
+context	Structure form|Copy All Diagnostics
+context	Structure form|Create helper class
+context	Structure form|Document it
+context	Structure form|Document project
+context	Structure form|Document unit
+context	Structure form|Find Usages
+context	Structure form|Fix all in project
+context	Structure form|Fix all in unit
+context	Structure form|Fix it
+context	Structure form|Go to Declaration
+context	Structure form|Go to Implementation (body)
+context	Structure form|Rescan this unit
+context	Structure form|Show in Call Graph
+context	Project Manager|drag-lint: Project Rules...
+mcp	find_by_doc_tag
+mcp	find_callers
+mcp	find_symbol
+mcp	find_undocumented
+mcp	get_context_bundle
+mcp	get_impact
+mcp	get_slice
+mcp	get_surface
+mcp	get_symbol_doc
+mcp	get_type_at_position
+mcp	get_wiring
+mcp	lint
+mcp	rename_symbol
+mcp	run_ast_checks
+mcp	run_compile_check
+mcp-dispatch	find_by_doc_tag
+mcp-dispatch	find_callers
+mcp-dispatch	find_symbol
+mcp-dispatch	find_undocumented
+mcp-dispatch	get_context_bundle
+mcp-dispatch	get_impact
+mcp-dispatch	get_slice
+mcp-dispatch	get_surface
+mcp-dispatch	get_symbol_doc
+mcp-dispatch	get_type_at_position
+mcp-dispatch	get_wiring
+mcp-dispatch	lint
+mcp-dispatch	rename_symbol
+mcp-dispatch	run_ast_checks
+mcp-dispatch	run_compile_check
+question	butterfly|Callers and callees (butterfly chart)...|rtkRoutine
+question	who-calls|Who calls this routine...|rtkRoutine
+question	what-it-calls|What this routine calls...|rtkRoutine
+question	path|Call path from this routine to another...|rtkRoutine
+question	effects|What this routine changes (side effects)...|rtkRoutine
+question	touches-tables|Which tables this routine touches...|rtkRoutine
+question	exception-paths|Which exceptions escape this routine...|rtkRoutine
+question	crosses-boundary|Does this routine leave the process...|rtkRoutine
+question	protocol-trace|Where this protocol command travels...|rtkRoutine
+question	change-impact|What a change here would break...|rtkRoutine
+question	tested-by|Which tests reach this code...|rtkRoutine
+question	who-writes|Who writes this field...|rtkMember
+question	who-reads|Who reads this field...|rtkMember
+question	feeds-from|What feeds this control (back to the column)...|rtkMember
+question	lands-where|Where this field lands in the database...|rtkMember
+question	round-trip|Field round-trip (grid -> server -> SQL)...|rtkMember
+question	class-surface|What this type exposes (class surface)...|rtkType
+question	hierarchy|Ancestors and descendants (hierarchy)...|rtkType
+question	wiring|Who registers and resolves this interface...|rtkType
+question	event-wiring|Which handler runs on which event (form)...|rtkType
+question	lifecycle|Form lifecycle (create -> show -> destroy)...|rtkType
+question	deps|Dependencies of this unit...|rtkUnit
+question	architecture|Project architecture (layered zones)...|rtkProject
+question	cycles|Circular unit dependencies...|rtkProject
+question	consumers|Who uses this table or column...|rtkName
+question	shown-where|Where this database column is shown...|rtkName
+question-count	26
+group-caption	rtkRoutine|Routine at the cursor
+group-caption	rtkMember|Field, property or grid column at the cursor
+group-caption	rtkUnit|This unit
+group-caption	rtkName|Table or column (typed name)
+group-caption	rtkProject|This project
+group-caption	rtkType|Type at the cursor
+validateset	butterfly
+validateset	deps
+validateset	who-calls
+validateset	what-it-calls
+validateset	who-writes
+validateset	who-reads
+validateset	hierarchy
+validateset	class-surface
+validateset	event-wiring
+validateset	touches-tables
+validateset	lifecycle
+validateset	cycles
+validateset	wiring
+validateset	effects
+validateset	architecture
+validateset	protocol-trace
+validateset	crosses-boundary
+validateset	shown-where
+validateset	change-impact
+validateset	tested-by
+validateset	exception-paths
+validateset	consumers
+validateset	feeds-from
+validateset	lands-where
+validateset	round-trip
+validateset	path
+emitter	Emit-Architecture.ps1
+emitter	Emit-Butterfly.ps1
+emitter	Emit-ChangeImpact.ps1
+emitter	Emit-ClassSurface.ps1
+emitter	Emit-Consumers.ps1
+emitter	Emit-CrossesBoundary.ps1
+emitter	Emit-Cycles.ps1
+emitter	Emit-Deps.ps1
+emitter	Emit-Effects.ps1
+emitter	Emit-EventWiring.ps1
+emitter	Emit-ExceptionPaths.ps1
+emitter	Emit-FeedsFrom.ps1
+emitter	Emit-Hierarchy.ps1
+emitter	Emit-LandsWhere.ps1
+emitter	Emit-Lifecycle.ps1
+emitter	Emit-MemberAccess.ps1
+emitter	Emit-Path.ps1
+emitter	Emit-ProtocolTrace.ps1
+emitter	Emit-RoundTrip.ps1
+emitter	Emit-ShownWhere.ps1
+emitter	Emit-TestedBy.ps1
+emitter	Emit-TouchesTables.ps1
+emitter	Emit-WhoCalls.ps1
+emitter	Emit-Wiring.ps1
+pack	drag-lint.exe
+pack	ConvRulesEditor.exe
+pack	sqlite3.dll
+rules-total	190
+version	1.32.0-alpha|1.22.0-alpha|1.12.1-alpha|23

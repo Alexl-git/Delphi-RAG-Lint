@@ -14,7 +14,20 @@
     },
     {
       "type": "cli",
-      "verb": "find-deadcode"
+      "verb": "find-deadcode",
+      "usage": "drag-lint find-deadcode [--kind method|function|...] [--include-private] [--db PATH]",
+      "flags": [
+        {
+          "name": "--kind"
+        },
+        {
+          "name": "--include-private"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "both"

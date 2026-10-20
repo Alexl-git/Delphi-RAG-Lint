@@ -53,9 +53,9 @@ after is treated as corruption.
 
 ## Exit codes
 
-`0` done · `2` usage, or the target does not exist · `3` no usable YADF
-resolved · `4` YADF below the minimum version, nothing written · `5` formatting
-changed the declared symbols, file restored · `1` any other formatter failure.
+`0` done ; `2` usage, or the target does not exist ; `3` no usable YADF
+resolved ; `4` YADF below the minimum version, nothing written ; `5` formatting
+changed the declared symbols, file restored ; `1` any other formatter failure.
 
 ## Reaching it in the IDE
 

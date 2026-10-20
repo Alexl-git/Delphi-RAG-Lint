@@ -182,8 +182,7 @@ whenever the profiler does -- an old-format report means an old binary.
 
 ### A batch `index --all` reported success but one index is missing
 
-Section builds are independent; a section that fails prints `ERROR building
-section <name>` and the sweep continues. **Read the log for `ERROR`, do not trust
+Section builds are independent; a section that fails prints `ERROR building section <name>` and the sweep continues. **Read the log for `ERROR`, do not trust
 the exit code alone.** If you hit an intermittent
 `FOREIGN KEY constraint failed`, keep the log and the database rather than
 re-running -- a re-run usually succeeds, which is why it stays undiagnosed.

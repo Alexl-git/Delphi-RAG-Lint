@@ -14,11 +14,75 @@
     },
     {
       "type": "cli",
-      "verb": "index"
+      "verb": "index",
+      "usage": "drag-lint index <path> [--db <file.sqlite>] [--watch [--interval N]] [--library-db <lib.sqlite> ...]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--watch"
+        },
+        {
+          "name": "--interval",
+          "arg": "N"
+        },
+        {
+          "name": "--library-db",
+          "arg": "<lib.sqlite>",
+          "summary": "consult another index for calls THIS one cannot resolve."
+        },
+        {
+          "name": "--max-file-kb",
+          "arg": "N"
+        },
+        {
+          "name": "--no-use-ignore"
+        },
+        {
+          "name": "--no-sql-ms"
+        },
+        {
+          "name": "--deep"
+        },
+        {
+          "name": "--shallow"
+        },
+        {
+          "name": "--exclude-under"
+        },
+        {
+          "name": "--include-only"
+        }
+      ]
     },
     {
       "type": "cli",
-      "verb": "document"
+      "verb": "document",
+      "usage": "drag-lint document --qname <Foo.TBar.Baz> [--apply|--json|--no-backup|--migrate-pure] [--db PATH] - generate/repair a managed DocInsight comment",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.TBar.Baz>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        },
+        {
+          "name": "--no-backup"
+        },
+        {
+          "name": "--migrate-pure"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        }
+      ]
     }
   ],
   "audience": "both"

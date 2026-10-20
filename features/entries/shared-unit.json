@@ -10,7 +10,24 @@
   "surfaces": [
     {
       "type": "cli",
-      "verb": "shared-unit"
+      "verb": "shared-unit",
+      "usage": "drag-lint shared-unit --in <file.pas> [--add-project <name>] [--apply] [--json] (read/extend the dl:shared marker; dry-run without --apply)",
+      "flags": [
+        {
+          "name": "--in",
+          "arg": "<file.pas>"
+        },
+        {
+          "name": "--add-project",
+          "arg": "<name>"
+        },
+        {
+          "name": "--apply"
+        },
+        {
+          "name": "--json"
+        }
+      ]
     }
   ],
   "audience": "both"

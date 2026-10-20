@@ -14,7 +14,17 @@
     },
     {
       "type": "cli",
-      "verb": "typeat"
+      "verb": "typeat",
+      "usage": "drag-lint typeat <file>:<line>:<col> [--db <file.sqlite>] [--format text|json]",
+      "flags": [
+        {
+          "name": "--db",
+          "arg": "<file.sqlite>"
+        },
+        {
+          "name": "--format"
+        }
+      ]
     }
   ],
   "audience": "both"

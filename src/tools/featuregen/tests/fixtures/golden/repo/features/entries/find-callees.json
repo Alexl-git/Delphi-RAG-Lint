@@ -1,0 +1,32 @@
+{
+  "id": "find-callees",
+  "title": "find-callees",
+  "group": "search-navigation",
+  "owner": "ENGINE",
+  "status": "shipped",
+  "since": "0.91.0-alpha",
+  "summary": "Lists the resolved outgoing calls of one routine",
+  "wikiPage": "find-callees",
+  "surfaces": [
+    {
+      "type": "cli",
+      "verb": "find-callees",
+      "usage": "drag-lint find-callees --qname <Foo.Bar> --db PATH [--json] (resolved outgoing calls of routine X)",
+      "flags": [
+        {
+          "name": "--qname",
+          "arg": "<Foo.Bar>"
+        },
+        {
+          "name": "--db",
+          "arg": "PATH"
+        },
+        {
+          "name": "--json"
+        }
+      ]
+    }
+  ],
+  "audience": "both",
+  "requires": ["index"]
+}

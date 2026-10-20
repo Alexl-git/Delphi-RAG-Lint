@@ -12,7 +12,20 @@
     {
       "type": "cli",
       "verb": "protocol",
-      "example": "register --dry-run"
+      "example": "register --dry-run",
+      "usage": "drag-lint protocol register [--handler <drag-lint-open.exe>] [--dry-run] [--force] (HKCU\\Software\\Classes\\draglint -> the handler; --force accepts a *-wt\\ path or replaces a foreign registration)",
+      "flags": [
+        {
+          "name": "--handler",
+          "arg": "<drag-lint-open.exe>"
+        },
+        {
+          "name": "--dry-run"
+        },
+        {
+          "name": "--force"
+        }
+      ]
     },
     {
       "type": "exe",

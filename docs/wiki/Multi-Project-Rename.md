@@ -37,8 +37,7 @@ single-project user CAN now see:
   read-only to find the unit's owners (one SQL lookup per index);
 * the fix is REFUSED (fail-closed) when that probe cannot answer: the manifest
   did not load completely, or an index that exists cannot be opened (locked,
-  corrupt) -- `rename-unknown:` plus `autofix: rename refused -- ownership
-  unknown: ...`;
+  corrupt) -- `rename-unknown:` plus `autofix: rename refused -- ownership unknown: ...`;
 * a `rename-unindexed:` line for each configured index whose file does not
   exist.
 
@@ -55,12 +54,10 @@ Right-click a naming finding in the Structure form and choose "Fix it".
    * every owning project with its index state and how many references it
      holds (`DMTEST -- index fresh, 1 reference(s)`);
    * what will NOT be renamed, if anything;
-   * when any owner is stale: `<N> project index(es) are stale and will be
-     reindexed before writing -- this can take several minutes.`;
+   * when any owner is stale: `<N> project index(es) are stale and will be reindexed before writing -- this can take several minutes.`;
    * the note that only projects with a drag-lint index were checked, naming
      the configured projects whose index was never built:
-     `Not checked (no index): <section>[, <section>] -- projects without a
-     drag-lint index may still compile this unit.` (up to 10 sections, then
+     `Not checked (no index): <section>[, <section>] -- projects without a drag-lint index may still compile this unit.` (up to 10 sections, then
      `and K more`).
 
    A unit with ONE owner also gets this confirmation whenever the preview
