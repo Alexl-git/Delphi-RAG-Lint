@@ -406,6 +406,10 @@ Files:
 ### Recommended fix (optional)
 Cut the edge `demouiconnect -> demogageport` by **member hand-over through an extracted interface**: `demouiconnect` takes from `demogageport` only `is` / `as` tests against `TDemoGagePort` and reads of its members. `TDemoGagePort` implements a new interface `IDemoGagePortSurface`, declared in `DemoGagePort.Untangle`, and `demouiconnect` tests and casts against that instead. No edge of this cycle can be cut by moving declarations or by routine-call inversion.
 
+Every edge of this cycle, weighed in this order: move globals, routine-call inversion, member hand-over; within one recipe the edge whose surface has the fewest members, then the fewest references, wins. One edge is cut per run:
+- `demouiconnect -> demogageport`: recipe: member hand-over -- **cut by this plan**
+- `demogageport -> demouiconnect`: not mechanical: `GDemoUIConnect` (var): it needs `TDemoUIConnect` (class), which cannot move: its method bodies use `TDemoGagePort`, which live in units of this cycle -- they would have to move with it
+
 ### DONE
 This plan cuts the edge `demouiconnect -> demogageport`, the cheapest edge of this cycle that can be cut mechanically. It is DONE when both hold: (1) the project compiles with 0 errors, and (2) `drag-lint cycles` prints exactly the output given in the last checklist item.
 After it, these units form no cycle at all.
@@ -600,6 +604,11 @@ Files:
 
 ### Recommended fix (optional)
 Cut the edge `demoblueprint -> demoblueprint.viewmodel` by **routine-call inversion**: `demoblueprint` takes only the routine `DemoBlueprintViewModelCreate` from `demoblueprint.viewmodel`, and every type of its signature is declared outside this cycle. `demoblueprint` calls it through a procedural variable declared in `DemoBlueprint.Interfaces` instead. No edge of this cycle can be cut by moving declarations.
+
+Every edge of this cycle, weighed in this order: move globals, routine-call inversion, member hand-over; within one recipe the edge whose surface has the fewest members, then the fewest references, wins. One edge is cut per run:
+- `demoblueprint -> demoblueprint.viewmodel`: recipe: routine-call inversion -- **cut by this plan**
+- `democontrolplan -> demoblueprint`: not mechanical: `TDemoBlueprint` (class): its method bodies use `DemoBlueprintViewModelCreate`, which live in units of this cycle -- they would have to move with it
+- `demoblueprint.viewmodel -> democontrolplan`: not mechanical: `TDemoControlPlan` (class): its method bodies use `TDemoBlueprint`, which live in units of this cycle -- they would have to move with it
 
 ### DONE
 This plan cuts the edge `demoblueprint -> demoblueprint.viewmodel`, the cheapest edge of this cycle that can be cut mechanically. It is DONE when both hold: (1) the project compiles with 0 errors, and (2) `drag-lint cycles` prints exactly the output given in the last checklist item.

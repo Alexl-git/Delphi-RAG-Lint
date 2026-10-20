@@ -197,6 +197,7 @@ type
     CutFids    : TArray<Int64>;
     HeaderNew  : string;
     Switches   : TArray<TSwitchLine>;
+    Refusal    : string;  // mvBlocked by a recipe gate: its refusal kind (F5: 'base-class'); '' otherwise
   end;
 
   TConsumer = record
@@ -234,7 +235,7 @@ type
     Why     : string;
     Cost    : Integer;
     Surface : TEdgeSurface;  // what FromStem takes from ToStem (E18 T4)
-    Recipe  : TCutRecipe;    // how the plan cuts it (E18 T5); crNone = not cut
+    Recipe  : TCutRecipe;    // the recipe that applies to this edge (E18 T7 R3); crNone = none applies
     Refusal : string;        // the refusal kind when a recipe was tried and refused
     Steps   : TRecipeSteps;  // crRoutineInversion: the R1 steps
   end;
@@ -378,6 +379,8 @@ type
     function PullMembers(const pF: TPlanFile; var pItem: TMoveItem; const pChildren: TArray<TSymbol>;
       pUsed: TDictionary<string, Boolean>): Boolean;
     function BuildSwitches(var pItem: TMoveItem): Boolean;
+    function BaseSiteRefusal(const pItem: TMoveItem): string;
+    function ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string): string;
     function TryAdd(const pSym: TSymbol; const pCut: TArray<Int64>; out pWhy: string): Boolean;
     function AddDependencies(const pItem: TMoveItem; out pWhy: string): Boolean;
     function AddCompanions(const pItem: TMoveItem; out pWhy: string): Boolean;
@@ -422,6 +425,7 @@ type
     function ExpectedOutput(pSelf: Integer): TArray<string>;
     function GroupHasIntf(const pComp: TArray<string>): Boolean;
     function EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>): TEdgeEval;
+    procedure RenderEdgeChoices(const pEvals: TArray<TEdgeEval>);
     function RemainingNeeds(const pFrom, pTo: string; pAll: Boolean): TArray<TNeed>;
     // rendering
     procedure Emit(const pText: string);
@@ -1031,6 +1035,95 @@ begin
   Result:= scIntf;
 end;
 
+type
+  TTypeSite = (tsParam, tsResult, tsOther);
+
+{ E18 T7 F5: where the type name at column pCol of line pLine sits. tsParam: a
+  parameter of a routine header (pParam = the group before the colon, e.g.
+  `const a, b`); tsResult: a function result; tsOther: anything else (a field, a
+  variable, a cast, a generic argument, a procedural type's parameter). The header
+  is read backwards up to CMaxHeaderLines lines for the unmatched `(`. }
+function TypeSiteAt(const pLines: TArray<string>; pLine, pCol: Integer; out pParam: string): TTypeSite;
+const
+  CMaxHeaderLines = 30;
+var
+  S, Tail, Head: string;
+  Depth, L, Open: Integer;
+begin
+  pParam:= '';
+  S:= TrimRight(Copy(CodePart(LineAt(pLines, pLine)), 1, pCol - 1));
+  if not EndsStr(':', S) then Exit(tsOther);
+  S:= TrimRight(Copy(S, 1, Length(S) - 1));
+  if EndsStr(')', S) or TRegEx.IsMatch(S, '\bfunction\s+[\w.<>]+$', [roIgnoreCase]) then Exit(tsResult);
+  Tail := '';
+  Depth:= 0;
+  L    := pLine;
+  Open := 0;
+  while Open = 0 do
+  begin
+    for var I:= Length(S) downto 1 do
+    begin
+      if S[I] = ')' then Inc(Depth)
+      else if (S[I] = '(') and (Depth > 0) then Dec(Depth)
+      else if S[I] = '(' then
+      begin
+        Open:= I;
+        Break;
+      end;
+    end;
+    if Open > 0 then Break;
+    Tail:= S + ' ' + Tail;
+    Dec(L);
+    if (L < 1) or (pLine - L > CMaxHeaderLines) then Exit(tsOther);
+    S:= CodePart(LineAt(pLines, L));
+    if IsBlockWord(S) or SameText(Trim(S), 'begin') then Exit(tsOther);
+  end;
+  Head:= TrimRight(Copy(S, 1, Open - 1));
+  if not TRegEx.IsMatch(Head, '\b(procedure|function|constructor|destructor|operator)\s+[\w.<>, ]+$', [roIgnoreCase]) then
+    Exit(tsOther);
+  Tail:= Copy(S, Open + 1, MaxInt) + ' ' + Tail;
+  pParam:= Trim(Copy(Tail, LastDelimiter(';', Tail) + 1, MaxInt));
+  Result:= tsParam;
+end;
+
+{ E18 T7 R3: the order the recipes are preferred in (lower first). }
+function RecipeRank(pRecipe: TCutRecipe): Integer;
+begin
+  case pRecipe of
+    crMoveGlobals     : Result:= 0;
+    crRoutineInversion: Result:= 1;
+    crMemberInterface : Result:= 2;
+  else
+    Result:= MaxInt;
+  end;
+end;
+
+{ E18 T7 R3: pEv is a better cut than pBest -- the preferred recipe, then the
+  fewest surface members, then the fewest surface refs, then the lower recipe
+  cost; an empty pBest loses to any edge a recipe applies to. }
+function BetterCut(const pEv, pBest: TEdgeEval): Boolean;
+begin
+  if pEv.Recipe = crNone then Exit(False);
+  if pBest.FromStem = '' then Exit(True);
+  if RecipeRank(pEv.Recipe) <> RecipeRank(pBest.Recipe) then Exit(RecipeRank(pEv.Recipe) < RecipeRank(pBest.Recipe));
+  if Length(pEv.Surface.Members) <> Length(pBest.Surface.Members) then
+    Exit(Length(pEv.Surface.Members) < Length(pBest.Surface.Members));
+  if Length(pEv.Surface.Refs) <> Length(pBest.Surface.Refs) then
+    Exit(Length(pEv.Surface.Refs) < Length(pBest.Surface.Refs));
+  Result:= pEv.Cost < pBest.Cost;
+end;
+
+function RecipeLabel(pRecipe: TCutRecipe): string;
+begin
+  case pRecipe of
+    crMoveGlobals     : Result:= 'move globals';
+    crRoutineInversion: Result:= 'routine-call inversion';
+    crMemberInterface : Result:= 'member hand-over';
+  else
+    Result:= 'none';
+  end;
+end;
+
 { ---------------------------------------------------------------------------
   TCyclePlanner -- construction and loading
   --------------------------------------------------------------------------- }
@@ -1502,7 +1595,17 @@ begin
   finally
     Used.Free;
   end;
-  if BuildSwitches(pItem) then pItem.Kind:= mvBase;
+  if not BuildSwitches(pItem) then Exit;
+  { E18 T7 F5: the base class stands in for the class only where nothing but a
+    member read or a nil test happens to it }
+  var Site:= BaseSiteRefusal(pItem);
+  if Site <> '' then
+  begin
+    pItem.Refusal:= 'base-class';
+    pItem.Reason := 'refused: base-class -- ' + Site;
+    Exit;
+  end;
+  pItem.Kind:= mvBase;
 end;
 
 function TCyclePlanner.UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>): TDictionary<string, Boolean>;
@@ -1650,6 +1753,94 @@ begin
     Result:= True;
   finally
     L.Free;
+  end;
+end;
+
+{ E18 T7 F5: '' when every switched site of pItem is a const or value parameter
+  whose routine body only reads members of it or compares it with nil; otherwise
+  the first offending site, as "`<file>:<line>` <what>". }
+function TCyclePlanner.BaseSiteRefusal(const pItem: TMoveItem): string;
+var
+  Param: string;
+begin
+  for var S in pItem.Switches do
+  begin
+    var F   := GetFile(S.Fid);
+    var Site:= Format('`%s:%d`', [ExtractFileName(F.Path), S.Line]);
+    for var M in TRegEx.Matches(CodePart(LineAt(F.Lines, S.Line)), '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) do
+    begin
+      case TypeSiteAt(F.Lines, S.Line, M.Index, Param) of
+        tsResult: Exit(Format('%s: a function result of type `%s`', [Site, pItem.Sym.Name]));
+        tsOther : Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
+          'variable, cast or type argument)', [Site, pItem.Sym.Name]));
+      end;
+      var Group:= Trim(TRegEx.Replace(Param, '^\[\s*ref\s*\]', '', [roIgnoreCase]));
+      var Modifier:= LowerCase(Copy(Group, 1, Pos(' ', Group + ' ') - 1));
+      if MatchText(Modifier, ['var', 'out']) then
+        Exit(Format('%s: `%s` is a `%s` parameter of type `%s`; a base class cannot stand in for it',
+          [Site, Group, Modifier, pItem.Sym.Name]));
+      if MatchText(Modifier, ['const', 'constref']) then Group:= Trim(Copy(Group, Length(Modifier) + 1, MaxInt));
+      for var Name in Group.Split([',']) do
+      begin
+        var Why:= ParamBodyRefusal(S.Fid, S.Line, Trim(Name));
+        if Why <> '' then Exit(Format('%s: parameter `%s` -- %s', [Site, Trim(Name), Why]));
+      end;
+    end;
+  end;
+  Result:= '';
+end;
+
+{ E18 T7 F5: '' when the routine whose implementation header holds pLine uses
+  pParam only to read one of its members (member_accesses mode read, receiver =
+  the parameter) or to compare it with nil; otherwise what it does, with the line.
+  A line outside every routine body (an interface or class declaration) has no
+  body to check here -- its implementation header is a switched site too. }
+function TCyclePlanner.ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string): string;
+var
+  Routine: TSymbol;
+  MA     : TCallEdge;
+  Bare   : TDictionary<Integer, Integer>;
+  Allowed: TDictionary<Integer, Integer>;
+  N      : Integer;
+begin
+  Result := '';
+  Routine:= Default(TSymbol);
+  var F:= GetFile(pFid);
+  for var S in F.Syms do
+    if (S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and
+      (S.ImplStartLine > 0) and (S.ImplStartLine <= pLine) and (pLine <= S.ImplEndLine) and
+      (S.ImplStartLine > Routine.ImplStartLine) then Routine:= S;
+  if Routine.Id = 0 then Exit;
+  Bare   := TDictionary<Integer, Integer>.Create;
+  Allowed:= TDictionary<Integer, Integer>.Create;
+  try
+    for var R in F.Refs do
+    begin
+      if (R.StartLine < Routine.ImplStartLine) or (R.StartLine > Routine.ImplEndLine) then Continue;
+      if SameText(R.ReceiverText, pParam) then
+      begin
+        if not (SameText(R.Kind, 'member-access') and MemberAccessOf(R.Id, MA) and SameText(MA.MemberMode, 'read')) then
+          Exit(Format('line %d: `%s.%s` is not a read of a member', [R.StartLine, pParam, R.NameText]));
+        if not Allowed.TryGetValue(R.StartLine, N) then N:= 0;
+        Allowed.AddOrSetValue(R.StartLine, N + 1);
+      end
+      else if SameText(R.NameText, pParam) and (R.ReceiverText = '') then
+      begin
+        if not Bare.TryGetValue(R.StartLine, N) then N:= 0;
+        Bare.AddOrSetValue(R.StartLine, N + 1);
+      end;
+    end;
+    for var P in Bare do
+    begin
+      if not Allowed.TryGetValue(P.Key, N) then N:= 0;
+      Inc(N, TRegEx.Matches(CodePart(LineAt(F.Lines, P.Key)), '\b' + pParam + '\s*(=|<>)\s*nil\b',
+        [roIgnoreCase]).Count);
+      if P.Value > N then
+        Exit(Format('line %d uses `%s` other than to read a member or compare it with nil', [P.Key, pParam]));
+    end;
+  finally
+    Allowed.Free;
+    Bare.Free;
   end;
 end;
 
@@ -3191,11 +3382,13 @@ begin
           var Needs:= RemainingNeeds(A, B, False);
           if Length(Needs) = 0 then Continue;
           var Ev:= EvaluateEdge(A, B, Needs);
+          if Ev.Movable then Ev.Recipe:= crMoveGlobals;
           Names.Clear;
           for var N in Needs do Names.Add(Format('%s (%s)', [N.Owner.Name, N.Owner.Kind.ToText]));
           EmitFmt('- `%s -> %s`: %s -- %s', [A, B, QuoteList(Names.ToArray),
             (if Ev.Movable then 'mechanical: these can move into a new leaf unit' else 'not mechanical: ' + Ev.Why)]);
-          if Ev.Movable and ((Best.FromStem = '') or (Ev.Cost < Best.Cost)) then Best:= Ev;
+          { R3's order; Part B predicts only move-globals cuts (R1 / R2 are weighed on the re-run) }
+          if BetterCut(Ev, Best) then Best:= Ev;
         end;
   finally
     Names.Free;
@@ -3275,6 +3468,23 @@ begin
   RenderPartB;
 end;
 
+{ E18 T7 R3: every edge of the cycle with the recipe that applies to it, or the
+  reason none does; the cut edge is marked. }
+procedure TCyclePlanner.RenderEdgeChoices(const pEvals: TArray<TEdgeEval>);
+begin
+  Emit('');
+  Emit('Every edge of this cycle, weighed in this order: move globals, routine-call inversion, member ' +
+    'hand-over; within one recipe the edge whose surface has the fewest members, then the fewest references, ' +
+    'wins. One edge is cut per run:');
+  for var Ev in pEvals do
+    if Ev.Recipe = crNone then
+      EmitFmt('- `%s -> %s`: not mechanical: %s', [Ev.FromStem, Ev.ToStem, Ev.Why])
+    else
+      EmitFmt('- `%s -> %s`: recipe: %s%s', [Ev.FromStem, Ev.ToStem, RecipeLabel(Ev.Recipe),
+        (if (Ev.FromStem = FCutEdge.FromStem) and (Ev.ToStem = FCutEdge.ToStem) then ' -- **cut by this plan**'
+         else ' -- also possible, not cut by this plan')]);
+end;
+
 procedure TCyclePlanner.RenderNoMechanicalCut(const pEvals: TArray<TEdgeEval>);
 begin
   Emit('No edge of this cycle can be cut mechanically:');
@@ -3298,14 +3508,17 @@ begin
         if (A <> B) and FGraph.Adj[A].Contains(B) then
         begin
           var Ev:= EvaluateEdge(A, B, RemainingNeeds(A, B, True));
+          if Ev.Movable then Ev.Recipe:= crMoveGlobals;
           Evals.Add(Ev);
-          if Ev.Movable and ((FCutEdge.FromStem = '') or (Ev.Cost < FCutEdge.Cost)) then FCutEdge:= Ev;
         end;
-    { E18 T5: no edge can MOVE -- try R1 on the edges that are one routine }
-    if FCutEdge.FromStem = '' then PlanInversion(Evals)
-    else FCutEdge.Recipe:= crMoveGlobals;
-    { E18 T6: nor one routine -- try R2 on the edges that are `is` / `as` + member reads }
-    if FCutEdge.FromStem = '' then PlanMemberHandOver(Evals);
+    { E18 T7 R3: every edge that cannot MOVE is tried with R1 (one routine), then
+      R2 (`is` / `as` + member reads); each edge keeps its recipe or its reason,
+      and the best by BetterCut is the one cut of this run }
+    PlanInversion(Evals);
+    PlanMemberHandOver(Evals);
+    for var Ev in Evals do
+      if BetterCut(Ev, FCutEdge) then FCutEdge:= Ev;
+    if FCutEdge.Recipe in [crRoutineInversion, crMemberInterface] then FInversion:= FCutEdge.Steps;
     Result:= Evals.ToArray;
   finally
     Evals.Free;
@@ -3320,9 +3533,10 @@ begin
   Materialize;
 end;
 
-{ R1 on every edge whose surface is exactly one routine: a refusal is recorded on
-  the edge (its Why is what the playbook prints); the applicable edge with the
-  fewest calls becomes the cut edge. }
+{ R1 on every edge that cannot move and whose surface is exactly one routine: a
+  refusal is recorded on the edge (its Why is what the playbook prints), an
+  applicable edge gets Recipe crRoutineInversion, its Steps and Cost = its calls.
+  PlanImplCycle picks the cut (R3). }
 procedure TCyclePlanner.PlanInversion(pEvals: TList<TEdgeEval>);
 var
   Refusal: TRecipeRefusal;
@@ -3330,7 +3544,7 @@ begin
   for var I:= 0 to pEvals.Count - 1 do
   begin
     var Ev:= pEvals[I];
-    if Ev.Surface.RoutineName = '' then Continue;
+    if (Ev.Recipe <> crNone) or (Ev.Surface.RoutineName = '') then Continue;
     var Steps:= PlanRoutineInversion(Self, Ev.Surface, Refusal);
     if Refusal.Kind = '' then
     begin
@@ -3357,30 +3571,29 @@ begin
     Ev.Steps := Steps;
     Ev.Cost  := Ev.Surface.CallCount;
     pEvals[I]:= Ev;
-    if (FCutEdge.FromStem = '') or (Ev.Cost < FCutEdge.Cost) then FCutEdge:= Ev;
   end;
-  FInversion:= FCutEdge.Steps;
 end;
 
-{ R2 on every edge whose surface tests or casts against a class with `is` / `as`: as
-  PlanInversion, a refusal is recorded on the edge; the applicable edge with the fewest
-  edits becomes the cut edge. The interface goes into the class unit's Untangle leaf,
-  which must not declare its name already. }
+{ R2 on every edge that neither moves nor is one routine, and whose surface tests or
+  casts against a class with `is` / `as`: as PlanInversion, a refusal is recorded on
+  the edge, an applicable edge gets Recipe crMemberInterface, its Steps and Cost = its
+  edits. The interface goes into the class unit's Untangle leaf, which must not declare
+  its name already. }
 procedure TCyclePlanner.PlanMemberHandOver(pEvals: TList<TEdgeEval>);
 var
   Refusal: TRecipeRefusal;
 begin
   var Root:= if FProjectFid > 0 then ExtractFilePath(PathOf(FProjectFid)) else '';
+  var UnitScopes:= EffectiveUnitScopes(if TFile.Exists(FProjectFile) and SameText(ExtractFileExt(FProjectFile), '.dproj')
+    then TFile.ReadAllText(FProjectFile) else '');
   for var I:= 0 to pEvals.Count - 1 do
   begin
     var Ev:= pEvals[I];
     var Tested:= False;
     for var R in Ev.Surface.Refs do
       if R.Kind in [erTypeIs, erTypeAs] then Tested:= True;
-    if (Ev.Surface.RoutineName <> '') or not Tested then Continue;
+    if (Ev.Recipe <> crNone) or (Ev.Surface.RoutineName <> '') or not Tested then Continue;
     var Leaf := ResolveUntangleLeaf(FStore, Ev.Surface.ToStem, FComp, Root);
-    var UnitScopes:= EffectiveUnitScopes(if TFile.Exists(FProjectFile) and SameText(ExtractFileExt(FProjectFile), '.dproj')
-      then TFile.ReadAllText(FProjectFile) else '');
     var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, UnitScopes, Refusal);
     if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then
       for var S in GetFile(Leaf.Fid).Syms do
@@ -3402,9 +3615,7 @@ begin
     Ev.Steps := Steps;
     Ev.Cost  := Length(Steps.Edits);
     pEvals[I]:= Ev;
-    if (FCutEdge.FromStem = '') or (Ev.Cost < FCutEdge.Cost) then FCutEdge:= Ev;
   end;
-  FInversion:= FCutEdge.Steps;
 end;
 
 { The unit that receives R1's procedural type and variable: the existing unit J2
@@ -3614,6 +3825,7 @@ begin
     if Still <> '' then
       EmitFmt('refused: edge-still-used -- %s. The steps below keep that uses entry, so the edge stays: ' +
         'do not follow them.', [Still]);
+    RenderEdgeChoices(pPlan.Evals);
     Emit('');
     RenderDone(False);
     RenderInversion(CStepMoves);
@@ -3635,6 +3847,7 @@ begin
     if Still <> '' then
       EmitFmt('refused: edge-still-used -- %s. The steps below keep that uses entry, so the edge stays: ' +
         'do not follow them.', [Still]);
+    RenderEdgeChoices(pPlan.Evals);
     Emit('');
     RenderDone(False);
     RenderMemberHandOver(CStepMoves);
@@ -3647,6 +3860,7 @@ begin
   EmitFmt('Cut the edge `%s -> %s`: everything `%s` uses from `%s` can move into a new leaf unit, ' +
     'the smallest mechanical cut in this cycle.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem,
     pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem]);
+  RenderEdgeChoices(pPlan.Evals);
   Emit('');
   RenderDone(False);
   RenderMoves(CStepMoves);
@@ -3675,16 +3889,13 @@ var
 begin
   L:= TList<TRefusal>.Create;
   try
-    { the facts the playbook already prints: MANUAL items, base-class extractions
-      (refused until Task 7), interface edges the index could not resolve, and
-      the per-file steps it can only describe }
+    { the facts the playbook already prints: MANUAL items (a base class the F5
+      gate refused is one, kind base-class; an allowed extraction is mechanical
+      since E18 T7), interface edges the index could not resolve, and the
+      per-file steps it can only describe }
     for var M in FManual do
-      Add((if M.Kind = mvBlocked then 'blocked-symbol' else 'manual-edit'), M.Sym.Name,
-        PathOf(M.Sym.FileId), M.Reason, M.Decl.First);
-    for var Id in FOrder do
-      if FItems[Id].Kind = mvBase then
-        Add('base-class', FItems[Id].Sym.Name, PathOf(FItems[Id].Sym.FileId),
-          'a base class must be extracted', FItems[Id].Decl.First);
+      Add((if M.Refusal <> '' then M.Refusal else if M.Kind = mvBlocked then 'blocked-symbol' else 'manual-edit'),
+        M.Sym.Name, PathOf(M.Sym.FileId), M.Reason, M.Decl.First);
     if pPlan.HasIntf then
     begin
       for var A in FComp do

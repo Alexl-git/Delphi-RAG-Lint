@@ -57,20 +57,15 @@ An excerpt (the full output is in [REPORT.md](REPORT.md)):
 <!-- dl:excerpt-cycles --plan -->
 ```
 ### Step 1: what moves where
-1. `TOrder` -- **class with methods**, declared at `Orders.pas` lines 6-19; method bodies at `Orders.pas` lines 30-35, 37-44.
-   - Recipe: **extract a base class** and keep `TOrder` where it is. Why: its method bodies use `TCustomer`, which live in units of this cycle; moving the class would mean moving those bodies (lines 30-35, 37-44) AND everything they use.
-   - New class `TOrderBase` in `Orders.Untangle` carries exactly what the units below use: nothing (an empty base).
-   - `TOrder` stays in `Orders.pas` and becomes `TOrder = class(TOrderBase)`; the members above are deleted from it.
-   - Units that switch to `TOrderBase` (the name is replaced on these lines): `Customers.pas` lines 13, 16, 30.
+Nothing can be moved mechanically.
 
-### Step 2: uses clauses -- keep, move or remove the old unit
-- `Customers.pas` / `Orders`: nothing from it is used there any more -> **remove** it from the interface uses.
+**MANUAL -- not mechanical.** These symbols cannot be moved by the recipes above; their edge stays until you cut it by hand:
+- `TOrder` (class, `Orders.pas` line 10): refused: base-class -- `Customers.pas:13`: `TOrder` is used here as something other than a parameter type (a field, variable, cast or type argument).
 ```
 
-It goes on with the full text of the new unit, every edit with its current and
-new text (bottom-up), and a checklist that ends in the exact output `cycles`
-must print afterwards -- here `No circular unit dependencies found.`
-
-The index can miss some references (e.g. `set` types), so the checklist compiles
-the project and re-runs `cycles`; it lists what to do for each compile error the
-edits can produce.
+`TOrder` cannot move (its method bodies use `TCustomer`), and a base class may
+stand in for it only where every use is a `const` or value parameter that its
+routine merely reads members of or compares with nil. `Customers.pas` keeps a
+FIELD of `TOrder` (line 13), so the plan refuses with `base-class` and names that
+line instead of guessing; the rest of the playbook (uses decisions, edits, a
+checklist ending in the exact `cycles` output) is in [REPORT.md](REPORT.md).

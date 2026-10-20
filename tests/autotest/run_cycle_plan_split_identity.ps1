@@ -31,7 +31,7 @@
   headers (Step 3), `E<n>.` lines per file heading (Step 4; the .dpr and .dproj
   headings for DprEdits / DprojEdits), and the group lines of the expected
   `cycles` output (Predicted = groups - (cycles - 1)). Demo verdicts are pinned:
-  Cycle 1 refuses with `base-class`; Cycle 2 is mechanical since E18 T6 (recipe R2, member
+  Cycle 1 is mechanical since E18 T7 (F5 allows its base class); Cycle 2 is mechanical since E18 T6 (recipe R2, member
   hand-over through an extracted interface); Cycle 3 is mechanical since E18 T5 (recipe R1, routine-call inversion). Its own
   positive control: one dumped count is changed in memory and the same compare
   must then report a mismatch.
@@ -207,7 +207,8 @@ if ($LibArgs.Count -eq 0) {
   Check 'demo: plan arrays equal the rendered playbook' ($bad.Count -eq 0) ($bad -join '; ')
   $byCycle = @{}
   foreach ($l in $run.Dump) { $d = ConvertFrom-DumpLine $l; $byCycle[[int]$d['cycle']] = $d }
-  Check 'demo: cycle 1 is refused with base-class' (($byCycle[1].verdict -eq 'refused') -and (($byCycle[1].refusals -split ',') -contains 'base-class')) "[$($byCycle[1].verdict) / $($byCycle[1].refusals)]"
+  # E18 T7 F5: TDemoSession's switched sites are const parameters read for members / tested for nil -> mechanical.
+  Check 'demo: cycle 1 is mechanical (base class allowed by F5)' (($byCycle[1].verdict -eq 'mechanical') -and ($byCycle[1].refusals -eq '')) "[$($byCycle[1].verdict) / $($byCycle[1].refusals)]"
   # E18 T6: cycle 2 is cut by R2 (member hand-over through an extracted interface) -- mechanical.
   Check "demo: cycle 2 is mechanical (R2)" (($byCycle[2].verdict -eq 'mechanical') -and ($byCycle[2].refusals -eq '')) "[$($byCycle[2].verdict) / $($byCycle[2].refusals)]"
   # E18 T5: cycle 3 is cut by R1 (routine-call inversion) -- mechanical, no refusal.

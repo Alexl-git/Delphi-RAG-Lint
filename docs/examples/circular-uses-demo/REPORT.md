@@ -60,111 +60,33 @@ Part A (steps 1-4, required) removes the INTERFACE coupling: each symbol above -
 
 ### DONE
 This plan (Part A) removes the INTERFACE-section coupling of this cycle. It is DONE when both hold: (1) the project compiles with 0 errors, and (2) `drag-lint cycles` prints exactly the output given in the last checklist item.
-After it, these units form no cycle at all.
+After it, some of these units still use each other in their interfaces: the MANUAL items were not cut. Cut them by hand, or leave them.
 
 ### Step 1: what moves where
-1. `TOrder` -- **class with methods**, declared at `Orders.pas` lines 6-19; method bodies at `Orders.pas` lines 30-35, 37-44.
-   - Recipe: **extract a base class** and keep `TOrder` where it is. Why: its method bodies use `TCustomer`, which live in units of this cycle; moving the class would mean moving those bodies (lines 30-35, 37-44) AND everything they use.
-   - New class `TOrderBase` in `Orders.Untangle` carries exactly what the units below use: nothing (an empty base).
-   - `TOrder` stays in `Orders.pas` and becomes `TOrder = class(TOrderBase)`; the members above are deleted from it.
-   - Units that switch to `TOrderBase` (the name is replaced on these lines): `Customers.pas` lines 13, 16, 30.
-   - Used by (each needs `Orders.Untangle` in the uses clause of that section; the edit step does it):
-     - `Orders.pas` interface (first use: line 10)
-     - `Customers.pas` interface (first use: line 13)
-     - `Customers.pas` implementation (first use: line 30)
+Nothing can be moved mechanically.
+
+**MANUAL -- not mechanical.** These symbols cannot be moved by the recipes above; their edge stays until you cut it by hand:
+- `TOrder` (class, `Orders.pas` line 10): refused: base-class -- `Customers.pas:13`: `TOrder` is used here as something other than a parameter type (a field, variable, cast or type argument).
 
 ### Step 2: uses clauses -- keep, move or remove the old unit
 For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.
-- `Customers.pas` / `Orders`: nothing from it is used there any more -> **remove** it from the interface uses.
+- (no uses entry between units of this cycle changes)
 
 ### Step 3: create the new units
-Each new unit may use only RTL / library units and other new `*.Untangle` units -- never a unit of this cycle (`Customers`, `Orders`). Create each file with EXACTLY this text:
-
-#### `Orders.Untangle` -> `circular-uses-demo\Orders.Untangle.pas`
-```pascal
-unit Orders.Untangle;
-
-// Created by `drag-lint cycles --plan`: declarations moved here from Orders
-// to break a circular unit dependency. This unit may use only units OUTSIDE
-// that cycle -- never Customers, Orders.
-
-interface
-
-type
-  /// <summary>Base class of <c>TOrder</c>: the members that units
-  /// outside <c>Orders</c> use, extracted by drag-lint cycles --plan
-  /// so those units can depend on this leaf unit instead.</summary>
-  TOrderBase = class
-  end;
-
-implementation
-
-end.
-```
+No new unit is needed.
 
 ### Step 4: edit the existing files
 Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
 
-#### `Customers.pas`  (`circular-uses-demo\Customers.pas`)
-E1. Replace line 30. Current text:
-```pascal
-procedure TCustomer.AddOrder(const AOrder: TOrder);
-```
-New text:
-```pascal
-procedure TCustomer.AddOrder(const AOrder: TOrderBase);
-```
-E2. Replace line 16. Current text:
-```pascal
-    procedure AddOrder(const AOrder: TOrder);
-```
-New text:
-```pascal
-    procedure AddOrder(const AOrder: TOrderBase);
-```
-E3. Replace line 13. Current text:
-```pascal
-    FOrders: TArray<TOrder>;   { references TOrder from Orders -> forces the uses }
-```
-New text:
-```pascal
-    FOrders: TArray<TOrderBase>;   { references TOrder from Orders -> forces the uses }
-```
-E4. Replace line 6. Current text:
-```pascal
-  Orders;   { <-- interface-section use of Orders: half of the cycle }
-```
-New text:
-```pascal
-  Orders.Untangle;   { <-- interface-section use of Orders: half of the cycle }
-```
-
-#### `Orders.pas`  (`circular-uses-demo\Orders.pas`)
-E1. Replace line 10. Current text:
-```pascal
-  TOrder = class
-```
-New text:
-```pascal
-  TOrder = class(TOrderBase)
-```
-E2. After line 3 (`interface`), insert:
-```pascal
-
-uses
-  Orders.Untangle;
-```
-
 ### Checklist
 Tick each box in order. Do not skip the compile.
-1. [ ] Create `circular-uses-demo\Orders.Untangle.pas` with the exact text given for `Orders.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
-2. [ ] Apply every edit listed for `Customers.pas`, in the order listed.
-3. [ ] Apply every edit listed for `Orders.pas`, in the order listed.
-4. [ ] Compile the project. Expect 0 errors; on an error see "If the compile fails" below.
-5. [ ] Re-index: `drag-lint index "circular-uses-demo" --db "demo.sqlite"`
-6. [ ] Run `drag-lint cycles --db "demo.sqlite"`. It must print exactly:
+1. [ ] Compile the project. Expect 0 errors; on an error see "If the compile fails" below.
+2. [ ] Re-index: `drag-lint index "circular-uses-demo" --db "demo.sqlite"`
+3. [ ] Run `drag-lint cycles --db "demo.sqlite"`. It must print exactly:
 ```text
-No circular unit dependencies found.
+1 circular unit group(s) found:
+  [2 units] customers <-> orders   (has interface coupling -- widest recompile blast radius)
+  (add --edges for the uses lines, --causes for the symbols to refactor)
 ```
    The units inside a group may be listed in a different order. Lines starting with `(loaded`, `drag-lint: note:` or `  resolver:` are informational -- ignore them.
 
@@ -176,5 +98,10 @@ No circular unit dependencies found.
 - `F1026 File not found`: a new unit's file name must equal its unit name plus `.pas`.
 
 ### Part B (optional): remove the implementation-only cycle too
-Nothing to do: after Part A no cycle remains among these units.
+After Part A these units still use each other through these edges (predicted):
+- `customers -> orders`: `TOrder (class)` -- not mechanical: `TOrder` (class): its method bodies use `TCustomer`, which live in units of this cycle -- they would have to move with it
+- `orders -> customers`: `TCustomer (class)` -- not mechanical: `TCustomer` (class): its method bodies use `TOrder`, which live in units of this cycle -- they would have to move with it
+
+The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
+No edge above can be cut mechanically; leaving the implementation-only cycle is acceptable.
 ````
