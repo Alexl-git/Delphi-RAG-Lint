@@ -723,11 +723,10 @@ begin
 end;
 
 function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
-const
-  CBomLen = 3;  // the UTF-8 BOM EF BB BF
 begin
   pEncoding:= SourceEncodingOf(pBytes);
-  if pEncoding = TEncoding.UTF8 then Result:= TEncoding.UTF8.GetString(pBytes, CBomLen, Length(pBytes) - CBomLen)
+  if pEncoding = TEncoding.UTF8 then
+    Result:= TEncoding.UTF8.GetString(pBytes, Length(TEncoding.UTF8.GetPreamble), Length(pBytes) - Length(TEncoding.UTF8.GetPreamble))
   else Result:= TEncoding.ANSI.GetString(pBytes);
 end;
 
@@ -749,6 +748,7 @@ begin
     Lines.Free;
   end;
 end;
+
 function LineAt(const pLines: TArray<string>; pLine: Integer): string;
 begin
   if (pLine >= 1) and (pLine <= Length(pLines)) then Result:= pLines[pLine - 1]

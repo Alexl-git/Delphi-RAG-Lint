@@ -87,7 +87,17 @@ function ToTextEdits(const pView: TCyclePlanView): TArray<TTextEdit>;
 /// the edit set unappliable, when the applier drops an edit (line count check), or when a new unit's
 /// file already exists. Edited files are written ANSI with the applier's CRLF; new units ASCII,
 /// CRLF, one trailing CRLF.</remarks>
-function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string): TArray<TRefusal>;
+function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string;
+  pTamperAllowed: Boolean = False): TArray<TRefusal>;
+
+/// <summary>True when the DRAGLINT_CYCLEFIX_TEST_TAMPER test seam may act: on a dry run only.</summary>
+/// <param name="pOpts">The flags.</param>
+/// <returns>False whenever --apply is set, whatever the environment says.</returns>
+/// <remarks>The seam alters staged text without any anchor guard seeing it, so no write path may honour it.
+/// Task 11: the apply writes from the shadow; every StageShadow call that feeds a write must pass
+/// pTamperAllowed = False (the default).</remarks>
+function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
+
 /// <summary>Runs `cycles --fix` as a dry run and prints the result to stdout.</summary>
 /// <param name="pOpts">The flags.</param>
 /// <param name="pStore">Open index of the project; read only.</param>
@@ -178,6 +188,11 @@ end;
 
 // The text the applier's stale guard can hold: '' for a blank line or one that starts a comment
 // (AnchorIsValid never accepts a comment line as an anchor).
+function TamperAllowed(const pOpts: TCycleFixOptions): Boolean;
+begin
+  Result:= not pOpts.Apply;
+end;
+
 function GuardText(const pLine: string): string;
 begin
   Result:= Trim(pLine);
@@ -316,7 +331,9 @@ begin
       Exit;
     end;
 end;
-function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string): TArray<TRefusal>;
+
+function StageShadow(const pView: TCyclePlanView; const pProjectDir, pShadowDir: string;
+  pTamperAllowed: Boolean): TArray<TRefusal>;
 type
   TStaged = record
     Path : string;
@@ -349,7 +366,7 @@ begin
         Continue;
       end;
       var Content:= DecodeSource(TFile.ReadAllBytes(P), Enc);
-      ApplyTestTamper(P, Content);
+      if pTamperAllowed then ApplyTestTamper(P, Content);
       Lines.Text:= Content;
       var Before:= Refs.Count;
       CheckAnchors(P, pView, Lines, Refs);
@@ -606,6 +623,8 @@ begin
   Chosen  := False;
   BadPart := '';
   ShadowUsed:= '';
+  if TamperAllowed(pOpts) and (GetEnvironmentVariable('DRAGLINT_CYCLEFIX_TEST_TAMPER') <> '') then
+    Writeln(ErrOutput, 'cycles --fix: TEST TAMPER active (dry run only)');
   ProjectDir:= ExtractFilePath(ExpandFileName(pOpts.Project));
   ShadowDir := if pOpts.ShadowOut <> '' then IncludeTrailingPathDelimiter(ExpandFileName(pOpts.ShadowOut)) else DefaultShadowDir;
   Cycles  := TJSONArray.Create;
@@ -635,7 +654,8 @@ begin
             Exit(True);
           end;
           { a plan the gate passes is staged in the shadow tree; an anchor mismatch refuses the group }
-          if All.Count = 0 then All.AddRange(StageShadow(pView, ProjectDir, ShadowDir));
+          { Task 11: the apply's write path must NOT pass TamperAllowed(pOpts) here -- stage with False }
+          if All.Count = 0 then All.AddRange(StageShadow(pView, ProjectDir, ShadowDir, TamperAllowed(pOpts)));
           var Verdict:= All.ToArray;
           if Length(Verdict) = 0 then ShadowUsed:= ShadowDir;
           Cycles.AddElement(CycleToJson(pView, Verdict, pGraph));

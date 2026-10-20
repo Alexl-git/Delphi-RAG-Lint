@@ -146,22 +146,24 @@ try {
   Check 'c3: that directory exists and holds files' ($m.Success -and (Test-Path $m.Groups[1].Value) -and (@(Get-ChildItem $m.Groups[1].Value -Recurse -File).Count -gt 0)) ''
   # --- fix round 1 -------------------------------------------------------------------------
   # Index a fresh demo copy after Patch(proj) changed it; run `cycles --fix` with an explicit shadow dir.
-  function Run-Patched([string]$Tag, [scriptblock]$Patch, [hashtable]$Env = @{}) {
+  function Run-Patched([string]$Tag, [scriptblock]$Patch, [hashtable]$Env = @{}, [string[]]$Extra = @()) {
     $proj = Join-Path $WorkDir "$Tag-proj"
     $shadow = Join-Path $WorkDir "$Tag-shadow"
     Copy-Tree $Demo $proj
     & $Patch $proj
     $db = Join-Path $WorkDir "$Tag.sqlite"
     & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+    $errf = Join-Path $WorkDir "$Tag-stderr.txt"
     foreach ($k in $Env.Keys) { Set-Item "Env:$k" $Env[$k] }
     try {
       $out = (& $Exe cycles --fix --project (Join-Path $proj 'CircularDemo.dproj') --db $db --cycle 1 `
-        --no-compile --library-db none --shadow-out $shadow --format json 2>$null | Out-String)
+        --no-compile --library-db none --shadow-out $shadow --format json @Extra 2>$errf | Out-String)
       $code = $LASTEXITCODE
+      $err = [IO.File]::ReadAllText($errf)
     } finally { foreach ($k in $Env.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue } }
     $j = try { $out | ConvertFrom-Json } catch { $null }
     $n = if (Test-Path $shadow) { @(Get-ChildItem $shadow -Recurse -File).Count } else { 0 }
-    return @{ Exit = $code; Json = $j; Out = $out; Shadow = $shadow; ShadowFiles = $n; Proj = $proj }
+    return @{ Exit = $code; Json = $j; Out = $out; Err = $err; Shadow = $shadow; ShadowFiles = $n; Proj = $proj }
   }
   function Patch-Bytes([string]$Path, [string]$From, [byte[]]$To) {
     $b = [IO.File]::ReadAllBytes($Path)
@@ -197,6 +199,10 @@ try {
   $kinds = if ($r.Json) { @($r.Json.cycles[0].refusals | ForEach-Object { $_.kind }) } else { @() }
   Check 'e3: exit 1, refusal anchor-mismatch' ($r.Exit -eq 1 -and $kinds -contains 'anchor-mismatch') $r.Out
   Check 'e3: shadow empty or absent' ($r.ShadowFiles -eq 0) "files=$($r.ShadowFiles)"
+  Check 'e3: stderr announces the seam (dry run)' ($r.Err.Contains('cycles --fix: TEST TAMPER active (dry run only)')) $r.Err
+  Check 'e3: CONTROL no notice when the variable is unset' (-not $r0.Err.Contains('TEST TAMPER')) $r0.Err
+  $ra = Run-Patched 'e3a' { param($p) } @{ DRAGLINT_CYCLEFIX_TEST_TAMPER = 'DemoLogger.pas|llWarn, llError|llWarn, llXError' } @('--apply')
+  Check 'e3: with --apply the seam is NOT honoured: no notice, exit 2, nothing staged' (-not $ra.Err.Contains('TEST TAMPER') -and $ra.Exit -eq 2 -and $ra.ShadowFiles -eq 0) "exit=$($ra.Exit) files=$($ra.ShadowFiles) $($ra.Err)"
 
   Write-Host '== e4: --shadow-out must be empty' -ForegroundColor Cyan
   $busy = Join-Path $WorkDir 'busy'
