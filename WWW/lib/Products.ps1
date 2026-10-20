@@ -53,8 +53,13 @@ function Read-ProductPage([string]$Path, $Config) {
     }
 }
 
-# One page per site.json product, in site.json order; a product without a page is an error.
+# One page per site.json product, in site.json order; a product without a page is an error,
+# and so is a product folder with no site.json product (it would never be published).
 function Get-ProductPages([string]$Root, $Config) {
+    $ids = @($Config.products | ForEach-Object { $_.id })
+    foreach ($d in Get-ChildItem -LiteralPath $Root -Directory) {
+        if ($d.Name -notin $ids) { throw "products: folder '$($d.Name)' has no site.json product (add it to site.json products, or remove $($d.FullName))" }
+    }
     foreach ($p in $Config.products) {
         $f = Join-Path (Join-Path $Root $p.id) 'index.html'
         if (-not (Test-Path -LiteralPath $f)) { throw "products: no page for site.json product '$($p.id)' (expected $f)" }

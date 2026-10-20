@@ -55,3 +55,12 @@ Copy-Item "$PSScriptRoot\fixtures\products\*" $pr -Recurse
 $out4 = New-TestDir
 & "$PSScriptRoot\..\build.ps1" -Out $out4 -ArticlesRoot "$PSScriptRoot\fixtures\articles" -ProductsRoot $pr -Gh $fake *>$null
 Assert-Equal 1 $LASTEXITCODE 'build fails on a missing product picture'
+
+# a product folder with no site.json product fails the build (it would otherwise never be published)
+$pr2 = New-TestDir
+Copy-Item "$PSScriptRoot\fixtures\products\*" $pr2 -Recurse
+Copy-Item "$pr2\yadf" "$pr2\zzz" -Recurse
+$out5 = New-TestDir
+$msg = & "$PSScriptRoot\..\build.ps1" -Out $out5 -ArticlesRoot "$PSScriptRoot\fixtures\articles" -ProductsRoot $pr2 -Gh $fake *>&1
+Assert-Equal 1 $LASTEXITCODE 'build fails on a product folder not in site.json'
+Assert-True ("$msg" -like '*zzz*') "failure names the folder: $msg"
