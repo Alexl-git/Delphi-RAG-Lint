@@ -43,8 +43,12 @@ cut is the one nominated, and there are no unrelated edits.
   and then Part B of this report, applied by a 150-line script that only parses the playbook's
   own markup (no Pascal knowledge): 0 errors, 0 warnings, program output byte-identical,
   `cycles` then reporting exactly the two cycles the playbook refuses. The script refuses
-  cycles 2 and 3 itself -- the report has no steps for them (see "The two cycles the playbook
-  refuses" below).
+  cycles 2 and 3 itself -- the report had no steps for them (see "The two cycles the move
+  recipe cannot cut" below).
+* **2026-10-19, E18 Task 5: the report now cuts cycle 3** (routine-call inversion). Followed by
+  the same script, the tree compiles and the program's output stays byte-identical
+  (`tests\autotest\run_cyclefix_r1_dcc.ps1`); `cycles` then reports the four- and two-unit
+  cycles only.
 
 ## The report, verbatim
 
@@ -419,13 +423,95 @@ Files:
     - line 69: `TDemoControlPlan`  [class]  -> declared in `democontrolplan`
 
 ### Recommended fix (optional)
-No edge of this cycle can be cut mechanically:
-- `demoblueprint -> demoblueprint.viewmodel`: `DemoBlueprintViewModelCreate` (function) -- a routine; could be called through a pointer declared in `DemoBlueprint.Interfaces` (not automated)
-- `democontrolplan -> demoblueprint`: `TDemoBlueprint` (class): its method bodies use `DemoBlueprintViewModelCreate`, which live in units of this cycle -- they would have to move with it
-- `demoblueprint.viewmodel -> democontrolplan`: `TDemoControlPlan` (class): its method bodies use `TDemoBlueprint`, which live in units of this cycle -- they would have to move with it
+Cut the edge `demoblueprint -> demoblueprint.viewmodel` by **routine-call inversion**: `demoblueprint` takes only the routine `DemoBlueprintViewModelCreate` from `demoblueprint.viewmodel`, and every type of its signature is declared outside this cycle. `demoblueprint` calls it through a procedural variable declared in `DemoBlueprint.Interfaces` instead. No edge of this cycle can be cut by moving declarations.
 
-The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
-This cycle is legal Delphi and compiles; leaving it is acceptable.
+### DONE
+This plan cuts the edge `demoblueprint -> demoblueprint.viewmodel`, the cheapest edge of this cycle that can be cut mechanically. It is DONE when both hold: (1) the project compiles with 0 errors, and (2) `drag-lint cycles` prints exactly the output given in the last checklist item.
+After it, these units form no cycle at all.
+
+### Step 1: what moves where
+Nothing moves. Recipe: **routine-call inversion** -- `DemoBlueprintViewModelCreate` stays in `DemoBlueprint.ViewModel`; callers outside this cycle keep calling it by name.
+- `DemoBlueprint.Interfaces` gets the procedural type `TDemoBlueprintViewModelCreatePtr` -- the routine's own signature, copied verbatim (keep every `const` and parameter name) -- and the variable `DemoBlueprintViewModelCreatePtr`.
+- `DemoBlueprint.ViewModel` assigns `DemoBlueprintViewModelCreatePtr := DemoBlueprintViewModelCreate;` as the first statement of its initialization section.
+- `DemoBlueprint.pas` calls `DemoBlueprintViewModelCreatePtr` instead of `DemoBlueprintViewModelCreate` (line 74). None of these calls is reachable from an initialization section the index can see, so the variable is assigned before it is called.
+
+### Step 2: uses clauses -- keep, move or remove the old unit
+For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.
+- `DemoBlueprint.pas` / `DemoBlueprint.ViewModel`: nothing from it is used there any more -> **remove** it from the implementation uses.
+
+### Step 3: create the new units
+- `DemoBlueprint.Interfaces` already exists (`circular-demo\DemoBlueprint.Interfaces.pas`) and uses no unit of this cycle: it receives the procedural type and variable of `DemoBlueprintViewModelCreate`. Do not create it again; the edit step lists the insert.
+No new unit is needed.
+
+### Step 4: edit the existing files
+Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
+
+#### `DemoBlueprint.pas`  (`circular-demo\DemoBlueprint.pas`)
+E1. Replace line 74. Current text:
+```pascal
+  FViewModel := DemoBlueprintViewModelCreate(FFolderId);
+```
+New text:
+```pascal
+  FViewModel := DemoBlueprintViewModelCreatePtr(FFolderId);
+```
+E2. Replace lines 57-58. Current text:
+```pascal
+uses
+  DemoBlueprint.ViewModel; // <-- the edge to cut: used for ONE routine call
+```
+New text:
+```pascal
+// <-- the edge to cut: used for ONE routine call
+```
+
+#### `DemoBlueprint.ViewModel.pas`  (`circular-demo\DemoBlueprint.ViewModel.pas`)
+E1. Replace line 80. Current text:
+```pascal
+end.
+```
+New text:
+```pascal
+initialization
+  DemoBlueprintViewModelCreatePtr := DemoBlueprintViewModelCreate;
+
+end.
+```
+
+#### `DemoBlueprint.Interfaces.pas`  (`circular-demo\DemoBlueprint.Interfaces.pas`)
+E1. After line 25 (`end;`), insert:
+```pascal
+
+  /// <summary>Signature of DemoBlueprintViewModelCreate (DemoBlueprint.ViewModel), copied verbatim.</summary>
+  TDemoBlueprintViewModelCreatePtr = function(const pFolderId: Integer): IDemoBlueprintViewModel;
+
+var
+  /// <summary>Holds DemoBlueprintViewModelCreate, assigned by DemoBlueprint.ViewModel in its initialization section; the units of its former cycle call it instead of naming the routine.</summary>
+  DemoBlueprintViewModelCreatePtr: TDemoBlueprintViewModelCreatePtr;
+```
+
+### Checklist
+Tick each box in order. Do not skip the compile.
+1. [ ] Apply every edit listed for `DemoBlueprint.pas`, in the order listed.
+2. [ ] Apply every edit listed for `DemoBlueprint.ViewModel.pas`, in the order listed.
+3. [ ] Apply every edit listed for `DemoBlueprint.Interfaces.pas`, in the order listed.
+4. [ ] Compile `CircularDemo.dproj` (RAD Studio: Project > Build; or `msbuild "circular-demo\CircularDemo.dproj" /t:Build` from a RAD Studio Command Prompt). Expect 0 errors; on an error see "If the compile fails" below, fix, and compile again.
+5. [ ] Re-index: `drag-lint index --project "circular-demo\CircularDemo.dproj" --db "circular-demo\_D-RAG\CircularDemo.sqlite"`
+6. [ ] Run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite"`. It must print exactly:
+```text
+2 circular unit group(s) found:
+  [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (has interface coupling -- widest recompile blast radius)
+  [2 units] demouiconnect <-> demogageport   (implementation-only -- legal, lower impact)
+  (add --edges for the uses lines, --causes for the symbols to refactor)
+```
+   The units inside a group may be listed in a different order. Lines starting with `(loaded`, `drag-lint: note:` or `  resolver:` are informational -- ignore them.
+
+#### If the compile fails
+- `E2003 Undeclared identifier: 'X'` in file F at line N: the index missed a use of X. If X is listed in the "what moves where" step, add that step's new unit to F's uses clause of the section holding line N (interface above `implementation`, implementation below it). Otherwise X still lives in a unit you moved or removed in the uses step: add that unit back to the same section.
+- `E2065 Unsatisfied forward or external declaration`: a class moved without its method bodies. Move the bodies listed for it as well.
+- `E2010 Incompatible types: 'TX' and 'TXBase'` or `E2033 Types of actual and formal var parameters must be identical`: a routine now takes or returns the base class. Cast at that line: `TX(value)`.
+- `F2047 Circular unit reference`: a new unit names a unit of this cycle in its uses. Remove that entry -- the new units may use only what the "create the new units" step lists.
+- `F1026 File not found`: a new unit's file name must equal its unit name plus `.pas`.
 ````
 
 ## What is worth noticing in that output
@@ -470,14 +556,15 @@ why.
 F1026 -- and the fix for each, because the index can miss a reference (for example a `set`
 type) and the compile is the final check.
 
-## The two cycles the playbook refuses -- and what would cut them
+## The two cycles the move recipe cannot cut -- and what does
 
-Cycles 2 and 3 of the report above end in `No edge of this cycle can be cut mechanically`,
-with a reason per edge. Both are modelled on cycles found in a real client application, and
-both are shapes the playbook's one recipe -- move plain declarations into a leaf unit --
-cannot handle, because nothing on any edge is a plain declaration:
+Cycles 2 and 3 of the report above are modelled on cycles found in a real client application,
+and both are shapes the playbook's first recipe -- move plain declarations into a leaf unit --
+cannot handle, because nothing on any edge is a plain declaration. Since E18 Task 5 the plan
+cuts cycle 3 with recipe R1 (routine-call inversion, below); cycle 2 still ends in
+`No edge of this cycle can be cut mechanically`, with a reason per edge:
 
-| Cycle | Cheap edge | What is on it | Recipe (not in the engine today) |
+| Cycle | Cheap edge | What is on it | Recipe |
 |---|---|---|---|
 | 3: `DemoBlueprint -> DemoBlueprint.ViewModel -> DemoControlPlan -> DemoBlueprint` | `DemoBlueprint -> DemoBlueprint.ViewModel` | ONE routine call, `DemoBlueprintViewModelCreate(FFolderId)` at `DemoBlueprint.pas:74`. Its signature uses only `Integer` and `IDemoBlueprintViewModel`, declared in the leaf `DemoBlueprint.Interfaces` that both units already use in their interface section. | **Routine-call inversion**: a procedural type mirroring the routine's signature, and a variable of it, in that leaf; assigned in `DemoBlueprint.ViewModel`'s `initialization`; `DemoBlueprint` calls the variable instead of the routine and drops the uses entry. |
 | 2: `DemoUIConnect <-> DemoGagePort` | `DemoUIConnect -> DemoGagePort` | The class `TDemoGagePort` as an `is` / `as` operand (4 sites) and READS of two members, `Log` and `LastGage`. No construction, no write, no class method. | **Member hand-over through an extracted interface**: a new leaf `DemoGagePort.Untangle` declaring `IDemoGagePortSurface` with the two members as read-only properties; `TDemoGagePort` implements it with two one-line getters; in `DemoUIConnect` `is` becomes `Supports(...)`, `as TDemoGagePort` becomes `as IDemoGagePortSurface`, and the uses entry switches to the leaf. |
@@ -503,9 +590,10 @@ rule a recipe must encode:
   IDemoGagePortSurface` compiles, and behaves the same because the `Supports` guard runs
   first, as the `is` guard did before.
 
-Neither recipe is in `cycles --plan` yet; E18 (`cycles --fix`) is the implementation plan for
-them. Until then this section is the record of what "mechanical" has to mean for these two
-shapes.
+Routine-call inversion is in `cycles --plan` since E18 Task 5 (cycle 3 above; it names the
+pointer `<Routine>Ptr` and its type `T<Routine>Ptr`, copied from the stored signature, and refuses
+when the call is reachable from an `initialization` section). The member hand-over is E18 Task 6;
+until then this section is the record of what "mechanical" has to mean for cycle 2.
 
 ## Honest caveats
 

@@ -7,6 +7,7 @@
       cycle 1 (applied here with tools\follow-cycle-plan.ps1), then re-indexed and re-planned.
   (b) A routine that blocks an edge, whose signature types all resolve OUTSIDE the cycle, names
       the unit a pointer / event could be declared in instead of the generic "it is a routine".
+      Since E18 T5 the plan CUTS that edge (recipe R1) and names the unit the pointer goes into.
   (c) The `(loaded defaults from ...)` note is a STDERR line: the plan on stdout must not hold
       it, and must end with the plan's own last line. Hard positive control: the note IS on stderr.
 #>
@@ -59,7 +60,7 @@ Check 'c3 control: the note is on stderr (defaults file written by this runner)'
 
 Write-Host '== (b) routine edge in cycle 3' -ForegroundColor Cyan
 $flat = ($p0.Out -replace '\s+', ' ')
-$wantB = '`demoblueprint -> demoblueprint.viewmodel`: `DemoBlueprintViewModelCreate` (function) -- a routine; could be called through a pointer declared in `DemoBlueprint.Interfaces` (not automated)'
+$wantB = 'Cut the edge `demoblueprint -> demoblueprint.viewmodel` by **routine-call inversion**: `demoblueprint` takes only the routine `DemoBlueprintViewModelCreate` from `demoblueprint.viewmodel`, and every type of its signature is declared outside this cycle. `demoblueprint` calls it through a procedural variable declared in `DemoBlueprint.Interfaces` instead.'
 Check 'b1 edge line names the routine and the interface unit' ($flat.Contains($wantB))
 
 Write-Host '== (a) companion type after Part A' -ForegroundColor Cyan

@@ -227,6 +227,9 @@ type
     Why     : string;
     Cost    : Integer;
     Surface : TEdgeSurface;  // what FromStem takes from ToStem (E18 T4)
+    Recipe  : TCutRecipe;    // how the plan cuts it (E18 T5); crNone = not cut
+    Refusal : string;        // the refusal kind when a recipe was tried and refused
+    Steps   : TRecipeSteps;  // crRoutineInversion: the R1 steps
   end;
 
   TPredGroup = record
@@ -240,7 +243,9 @@ type
   /// <summary>One reason a cycle's plan cannot be applied mechanically.</summary>
   /// <remarks>Kind is one of the strings of the 2026-10-10 contract 4.4:
   /// manual-edit, blocked-symbol, unresolved-edge, directive, leaf-uses-cycle,
-  /// qualified-ref, class-ctor, base-class, outside-roots. Line is 0 when the
+  /// qualified-ref, class-ctor, base-class, outside-roots; R1 (E18 T5) adds
+  /// signature-in-cycle, signature-unknown, routine-not-called, init-order,
+  /// duplicate-identifier, edge-still-used. Line is 0 when the
   /// refusal has no single line (an edge, a unit).</remarks>
   TRefusal = record
     Kind    : string;
@@ -331,6 +336,7 @@ type
     FTouched    : TList<Int64>;
     FPredicted  : TList<TPredGroup>;
     FCutEdge    : TEdgeEval;
+    FInversion  : TRecipeSteps;  // R1 steps of FCutEdge; Recipe = crNone otherwise
     // loading + resolution
     procedure IndexAllFiles;
     function GetFile(pFid: Int64): TPlanFile;
@@ -436,6 +442,12 @@ type
     // planning (no output)
     procedure PlanIntfCycle;
     function PlanImplCycle: TArray<TEdgeEval>;
+    procedure PlanInversion(pEvals: TList<TEdgeEval>);
+    function InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
+    procedure MaterializeInversion;
+    function IsInversionStem(const pStem: string): Boolean;
+    function InversionDeclLines(const pStem: string): TArray<string>;
+    procedure RenderInversion(pStep: Integer);
     procedure CapturePlan(var pPlan: TCycleFixPlan);
     procedure CaptureRefusals(var pPlan: TCycleFixPlan);
     procedure DumpPlanForTests(const pPlan: TCycleFixPlan);
@@ -1309,7 +1321,8 @@ begin
   FDprojEdits.Clear;
   FTouched.Clear;
   FPredicted.Clear;
-  FCutEdge:= Default(TEdgeEval);
+  FCutEdge  := Default(TEdgeEval);
+  FInversion:= Default(TRecipeSteps);
 end;
 
 function TCyclePlanner.BodyRanges(const pSym: TSymbol): TArray<TLineRange>;
@@ -1706,6 +1719,9 @@ function TCyclePlanner.IsMovedFor(const pOwner: TSymbol; pFid: Int64): Boolean;
 var
   Item: TMoveItem;
 begin
+  { R1: the consumer's calls of the inverted routine go through the pointer }
+  if (FInversion.Recipe = crRoutineInversion) and (pOwner.Id = FInversion.RoutineId) and
+    (pFid = FInversion.ConsumerFid) then Exit(True);
   if not FItems.TryGetValue(pOwner.Id, Item) then Exit(False);
   if Item.Kind in [mvDecl, mvWithBodies] then Exit(True);
   for var Fid in Item.CutFids do
@@ -1756,6 +1772,8 @@ begin
     for var Id in FOrder do
       if FLeafInfo.ContainsKey(FItems[Id].Stem) and (FLeafInfo[FItems[Id].Stem].Decision = pDecision) then
         AddUnique(L, FItems[Id].Stem);
+    if IsInversionStem(FInversion.DeclStem) and (FLeafInfo[FInversion.DeclStem].Decision = pDecision) then
+      AddUnique(L, FInversion.DeclStem);
     Result:= L.ToArray;
   finally
     L.Free;
@@ -2815,6 +2833,9 @@ var
   Entries: TList<string>;
 begin
   var P:= GetFile(FidOfStem(pStem));
+  { R1 into an existing unit (J2): its signature types are declared there or are
+    System built-ins -- it needs no new uses entry }
+  if IsInversionStem(pStem) and (FInversion.LeafStem <> '') then Exit(nil);
   Entries:= TList<string>.Create;
   try
     for var U in SectionEntries(P, pSect) do
@@ -2860,6 +2881,7 @@ begin
       else L.AddRange(SliceLines(P.Lines, Item.Decl));
       if Item.Kind = mvWithBodies then pBodies.AddRange(Item.Bodies);
     end;
+    if IsInversionStem(pStem) then L.AddRange(InversionDeclLines(pStem));
     Result:= L.ToArray;
   finally
     Items.Free;
@@ -2926,6 +2948,11 @@ begin
     for var Stem in LeafStems(D) do
       if FLeafInfo[Stem].Reason <> '' then EmitFmt('- Note: %s.', [FLeafInfo[Stem].Reason]);
   for var Stem in LeafStems(udExtend) do
+    if IsInversionStem(Stem) then
+      EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: it receives the procedural ' +
+        'type and variable of `%s`. Do not create it again; the edit step lists the insert.',
+        [FLeafName[Stem], FLeafPath[Stem], FInversion.RoutineName])
+    else
     EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: what moves out of `%s` goes ' +
       'into it. Do not create it again; the edit step lists the insert.', [FLeafName[Stem], FLeafPath[Stem],
       UnitNameOfStem(Stem)]);
@@ -3238,13 +3265,179 @@ begin
           Evals.Add(Ev);
           if Ev.Movable and ((FCutEdge.FromStem = '') or (Ev.Cost < FCutEdge.Cost)) then FCutEdge:= Ev;
         end;
+    { E18 T5: no edge can MOVE -- try R1 on the edges that are one routine }
+    if FCutEdge.FromStem = '' then PlanInversion(Evals)
+    else FCutEdge.Recipe:= crMoveGlobals;
     Result:= Evals.ToArray;
   finally
     Evals.Free;
   end;
   if FCutEdge.FromStem = '' then Exit;
+  if FCutEdge.Recipe = crRoutineInversion then
+  begin
+    MaterializeInversion;
+    Exit;
+  end;
   for var N in FCutEdge.Needs do TryAdd(N.Owner, nil, Why);
   Materialize;
+end;
+
+{ R1 on every edge whose surface is exactly one routine: a refusal is recorded on
+  the edge (its Why is what the playbook prints); the applicable edge with the
+  fewest calls becomes the cut edge. }
+procedure TCyclePlanner.PlanInversion(pEvals: TList<TEdgeEval>);
+var
+  Refusal: TRecipeRefusal;
+begin
+  for var I:= 0 to pEvals.Count - 1 do
+  begin
+    var Ev:= pEvals[I];
+    if Ev.Surface.RoutineName = '' then Continue;
+    var Steps:= PlanRoutineInversion(Self, Ev.Surface, Refusal);
+    if Refusal.Kind = '' then
+    begin
+      { the leaf must not declare the pointer's names already }
+      var Leaf:= InversionLeaf(Steps);
+      if Leaf.Decision = udExtend then
+        for var S in GetFile(Leaf.Fid).Syms do
+          if SameText(S.Name, Steps.PtrType) or SameText(S.Name, Steps.PtrVar) then
+          begin
+            Refusal.Kind  := 'duplicate-identifier';
+            Refusal.Reason:= Format('`%s` already declares `%s` (line %d)', [Leaf.UnitName, S.Name, S.StartLine]);
+            Break;
+          end;
+    end;
+    if Refusal.Kind <> '' then
+    begin
+      Ev.Refusal:= Refusal.Kind;
+      Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [Ev.Surface.RoutineName,
+        (if Length(Ev.Needs) > 0 then Ev.Needs[0].Owner.Kind.ToText else 'routine'), Refusal.Kind, Refusal.Reason]);
+      pEvals[I]:= Ev;
+      Continue;
+    end;
+    Ev.Recipe:= crRoutineInversion;
+    Ev.Steps := Steps;
+    Ev.Cost  := Ev.Surface.CallCount;
+    pEvals[I]:= Ev;
+    if (FCutEdge.FromStem = '') or (Ev.Cost < FCutEdge.Cost) then FCutEdge:= Ev;
+  end;
+  FInversion:= FCutEdge.Steps;
+end;
+
+{ The unit that receives R1's procedural type and variable: the existing unit J2
+  chose, else the catalog's `<Declaring>.Untangle` (created or extended). }
+function TCyclePlanner.InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
+begin
+  if pSteps.LeafStem = '' then
+    Exit(ResolveUntangleLeaf(FStore, pSteps.DeclStem, FComp,
+      (if FProjectFid > 0 then ExtractFilePath(PathOf(FProjectFid)) else '')));
+  Result:= Default(TUntangleLeaf);
+  var F:= GetFile(FidOfStem(pSteps.LeafStem));
+  Result.UnitName  := F.UnitName;
+  Result.Path      := F.Path;
+  Result.SourceStem:= pSteps.DeclStem;
+  Result.Decision  := udExtend;
+  Result.Fid       := F.Fid;
+  for var S in F.Syms do
+    if SameText(S.Section, 'interface') and not (S.Kind in [skUnit, skProgram, skPackage]) and
+      (S.EndLine > Result.InsertAfterLine) then Result.InsertAfterLine:= S.EndLine;
+end;
+
+function TCyclePlanner.IsInversionStem(const pStem: string): Boolean;
+begin
+  Result:= (FInversion.Recipe = crRoutineInversion) and (pStem <> '') and (pStem = FInversion.DeclStem) and
+    FLeafInfo.ContainsKey(pStem);
+end;
+
+{ R1's file edits and leaf, through the same leaf machinery as a move: the
+  leaf is registered under the declaring unit's stem, the consumer's uses entry
+  of the declaring unit is decided by DecideOne (IsMovedFor answers for the
+  inverted calls), and the rest of Materialize runs unchanged. }
+procedure TCyclePlanner.MaterializeInversion;
+var
+  E: TFileEdit;
+begin
+  var Stem:= FInversion.DeclStem;
+  var Leaf:= InversionLeaf(FInversion);
+  FLeafInfo.AddOrSetValue(Stem, Leaf);
+  FLeafName.AddOrSetValue(Stem, Leaf.UnitName);
+  FLeafPath.AddOrSetValue(Stem, Leaf.Path);
+  for var R in FInversion.Edits do
+  begin
+    E:= Default(TFileEdit);
+    E.Kind    := if R.Replace then ekReplace else ekInsertAfter;
+    E.First   := R.Line;
+    E.Last    := R.Line;
+    E.NewLines:= R.NewLines;
+    EditList(R.Fid).Add(E);
+  end;
+  var Consumer:= GetFile(FInversion.ConsumerFid);
+  for var R in FInversion.Edits do
+    if R.Fid = Consumer.Fid then AddUses(Consumer.Fid, SectOf(Consumer, R.Line), UsesEntryFor(Consumer, Stem));
+  var Decl:= GetFile(FidOfStem(Stem));
+  AddUses(Decl.Fid, scImpl, UsesEntryFor(Decl, Stem));
+  Materialize;
+end;
+
+{ The leaf text of R1: the procedural type (the routine's signature verbatim,
+  J3) and the variable. Inside an existing unit's `type` block the keyword is
+  not repeated. }
+function TCyclePlanner.InversionDeclLines(const pStem: string): TArray<string>;
+var
+  L: TList<string>;
+begin
+  var Leaf  := FLeafInfo[pStem];
+  var InType:= False;
+  if (Leaf.Decision = udExtend) and (Leaf.InsertAfterLine > 0) then
+  begin
+    var Lines:= GetFile(Leaf.Fid).Lines;
+    var H    := HeaderOf(Lines, Leaf.InsertAfterLine + 1);
+    InType:= (H > 0) and SameText(Trim(CodePart(LineAt(Lines, H))), 'type');
+  end;
+  L:= TList<string>.Create;
+  try
+    L.Add('');
+    if not InType then L.Add('type');
+    L.Add(Format('  /// <summary>Signature of %s (%s), copied verbatim.</summary>',
+      [FInversion.RoutineName, UnitNameOfStem(pStem)]));
+    L.Add('  ' + FInversion.TypeDecl);
+    L.Add('');
+    L.Add('var');
+    L.Add(Format('  /// <summary>Holds %s, assigned by %s in its initialization section; the units of ' +
+      'its former cycle call it instead of naming the routine.</summary>', [FInversion.RoutineName,
+      UnitNameOfStem(pStem)]));
+    L.Add('  ' + FInversion.VarDecl);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+procedure TCyclePlanner.RenderInversion(pStep: Integer);
+var
+  Calls: TList<string>;
+begin
+  EmitFmt('### Step %d: what moves where', [pStep]);
+  Calls:= TList<string>.Create;
+  try
+    for var R in FInversion.Edits do
+      if R.Fid = FInversion.ConsumerFid then Calls.Add(IntToStr(R.Line));
+    var Decl:= UnitNameOfStem(FInversion.DeclStem);
+    EmitFmt('Nothing moves. Recipe: **routine-call inversion** -- `%s` stays in `%s`; callers outside ' +
+      'this cycle keep calling it by name.', [FInversion.RoutineName, Decl]);
+    EmitFmt('- `%s` gets the procedural type `%s` -- the routine''s own signature, copied verbatim (keep ' +
+      'every `const` and parameter name) -- and the variable `%s`.', [FLeafName[FInversion.DeclStem],
+      FInversion.PtrType, FInversion.PtrVar]);
+    EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
+      [Decl, FInversion.PtrVar, FInversion.RoutineName]);
+    EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). None of these calls is reachable from an ' +
+      'initialization section the index can see, so the variable is assigned before it is called.',
+      [ExtractFileName(PathOf(FInversion.ConsumerFid)), FInversion.PtrVar, FInversion.RoutineName,
+       string.Join(', ', Calls.ToArray)]);
+  finally
+    Calls.Free;
+  end;
+  Emit('');
 end;
 
 procedure TCyclePlanner.RenderImplCycle(const pPlan: TCycleFixPlan);
@@ -3258,6 +3451,22 @@ begin
   if pPlan.CutEdge.FromStem = '' then
   begin
     RenderNoMechanicalCut(pPlan.Evals);
+    Exit;
+  end;
+  if pPlan.CutEdge.Recipe = crRoutineInversion then
+  begin
+    EmitFmt('Cut the edge `%s -> %s` by **routine-call inversion**: `%s` takes only the routine `%s` from ' +
+      '`%s`, and every type of its signature is declared outside this cycle. `%s` calls it through a ' +
+      'procedural variable declared in `%s` instead. No edge of this cycle can be cut by moving ' +
+      'declarations.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, pPlan.CutEdge.FromStem,
+      FInversion.RoutineName, pPlan.CutEdge.ToStem, pPlan.CutEdge.FromStem, FLeafName[FInversion.DeclStem]]);
+    Emit('');
+    RenderDone(False);
+    RenderInversion(CStepMoves);
+    RenderDecisions(CStepUses);
+    RenderLeafUnits(CStepCreate);
+    RenderEdits(CStepEdit);
+    RenderChecklist(pPlan.CycleIndex - 1);
     Exit;
   end;
   EmitFmt('Cut the edge `%s -> %s`: everything `%s` uses from `%s` can move into a new leaf unit, ' +
@@ -3318,8 +3527,17 @@ begin
     else if pPlan.CutEdge.FromStem = '' then
     begin
       for var Ev in pPlan.Evals do
-        Add((if Length(Ev.Needs) = 0 then 'unresolved-edge' else 'manual-edit'),
+        Add((if Ev.Refusal <> '' then Ev.Refusal else if Length(Ev.Needs) = 0 then 'unresolved-edge' else 'manual-edit'),
           Ev.FromStem + ' -> ' + Ev.ToStem, PathOf(FidOfStem(Ev.FromStem)), Ev.Why, 0);
+    end
+    else if pPlan.CutEdge.Recipe = crRoutineInversion then
+    begin
+      { R1 cuts the edge only when the consumer drops the uses entry }
+      for var D in FDecisions do
+        if (D.Fid = FInversion.ConsumerFid) and (D.PartnerStem = FInversion.DeclStem) and
+          (D.Verdict in [uvKeep, uvKeepUnseen]) then
+          Add('edge-still-used', D.Still, PathOf(D.Fid), Format('the %s section still uses `%s`%s',
+            [SectLabel(D.Sect), UnitNameOfStem(D.PartnerStem), (if D.Still <> '' then ': ' + D.Still else '')]), 0);
     end;
     for var Fid in pPlan.Touched do
       for var E in EditsOf(Fid) do

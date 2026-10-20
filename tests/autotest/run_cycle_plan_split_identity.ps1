@@ -31,7 +31,7 @@
   headers (Step 3), `E<n>.` lines per file heading (Step 4; the .dpr and .dproj
   headings for DprEdits / DprojEdits), and the group lines of the expected
   `cycles` output (Predicted = groups - (cycles - 1)). Demo verdicts are pinned:
-  Cycle 1 refuses with `base-class`, Cycles 2-3 with `manual-edit`. Its own
+  Cycle 1 refuses with `base-class`, Cycle 2 with `manual-edit`; Cycle 3 is mechanical since E18 T5 (recipe R1, routine-call inversion). Its own
   positive control: one dumped count is changed in memory and the same compare
   must then report a mismatch.
 #>
@@ -193,9 +193,9 @@ if (Test-Path $oraclePath) {
   $byCycle = @{}
   foreach ($l in $run.Dump) { $d = ConvertFrom-DumpLine $l; $byCycle[[int]$d['cycle']] = $d }
   Check 'demo: cycle 1 is refused with base-class' (($byCycle[1].verdict -eq 'refused') -and (($byCycle[1].refusals -split ',') -contains 'base-class')) "[$($byCycle[1].verdict) / $($byCycle[1].refusals)]"
-  foreach ($c in 2, 3) {
-    Check "demo: cycle $c is refused with manual-edit" (($byCycle[$c].verdict -eq 'refused') -and (($byCycle[$c].refusals -split ',') -contains 'manual-edit')) "[$($byCycle[$c].verdict) / $($byCycle[$c].refusals)]"
-  }
+  Check "demo: cycle 2 is refused with manual-edit" (($byCycle[2].verdict -eq 'refused') -and (($byCycle[2].refusals -split ',') -contains 'manual-edit')) "[$($byCycle[2].verdict) / $($byCycle[2].refusals)]"
+  # E18 T5: cycle 3 is cut by R1 (routine-call inversion) -- mechanical, no refusal.
+  Check "demo: cycle 3 is mechanical (R1)" (($byCycle[3].verdict -eq 'mechanical') -and ($byCycle[3].refusals -eq '')) "[$($byCycle[3].verdict) / $($byCycle[3].refusals)]"
   Check 'demo: cycle 1 plan is non-trivial (items, new units, edits)' (([int]$byCycle[1].items -gt 0) -and ($byCycle[1].newunits -ne '') -and ($byCycle[1].edits -ne '')) $run.Dump[0]
 
   # POSITIVE CONTROL: one dumped count off by one must be reported by the same compare.

@@ -135,6 +135,70 @@ type
     function MemberAccessOf(pRefId: Int64; out pAccess: TCallEdge): Boolean;
   end;
 
+  /// <summary>The recipe that cuts one edge of a circular group.</summary>
+  /// <remarks>crMoveGlobals = move the declarations into a leaf unit (the playbook's
+  /// original recipe); crRoutineInversion = R1, call one routine through a
+  /// procedural variable (PlanRoutineInversion); crMemberInterface = R2 (Task 6).</remarks>
+  TCutRecipe = (crNone, crMoveGlobals, crRoutineInversion, crMemberInterface);
+
+  /// <summary>One line edit a recipe makes in an existing unit.</summary>
+  TRecipeEdit = record
+    /// <summary>File id of the edited unit.</summary>
+    Fid: Int64;
+    /// <summary>1-based line, as indexed.</summary>
+    Line: Integer;
+    /// <summary>True: replace Line by NewLines; False: insert NewLines after Line.</summary>
+    Replace: Boolean;
+    /// <summary>The new text.</summary>
+    NewLines: TArray<string>;
+  end;
+
+  /// <summary>Why a recipe does not apply to an edge.</summary>
+  TRecipeRefusal = record
+    /// <summary>Refusal kind (2026-10-10 contract 4.4 strings); '' when the recipe applies.</summary>
+    Kind: string;
+    /// <summary>The symbol the refusal names.</summary>
+    Symbol: string;
+    /// <summary>File the refusal points at; 0 for none.</summary>
+    Fid: Int64;
+    /// <summary>Line the refusal points at; 0 for none.</summary>
+    Line: Integer;
+    /// <summary>One sentence for the playbook.</summary>
+    Reason: string;
+  end;
+
+  /// <summary>What recipe R1 (routine-call inversion) does to one edge, as data the
+  /// planner maps onto its leaf machinery and file edits.</summary>
+  /// <remarks>The leaf's new unit, its .dpr / .dproj registration and every uses-clause
+  /// edit are NOT here: the planner derives them (UntangleCatalog leaf, Task 3a lexer
+  /// edits) from LeafStem / DeclStem / ConsumerFid.</remarks>
+  TRecipeSteps = record
+    /// <summary>crRoutineInversion when filled; crNone otherwise.</summary>
+    Recipe: TCutRecipe;
+    /// <summary>symbols.id of the routine.</summary>
+    RoutineId: Int64;
+    /// <summary>The routine's name, as declared.</summary>
+    RoutineName: string;
+    /// <summary>Lower-case stem of the unit that declares it (the edge's ToStem).</summary>
+    DeclStem: string;
+    /// <summary>File id of the calling unit (the edge's FromStem).</summary>
+    ConsumerFid: Int64;
+    /// <summary>`T&lt;Routine&gt;Ptr`.</summary>
+    PtrType: string;
+    /// <summary>`&lt;Routine&gt;Ptr`.</summary>
+    PtrVar: string;
+    /// <summary>`T&lt;Routine&gt;Ptr = function(&lt;signature verbatim&gt;);` (no indent).</summary>
+    TypeDecl: string;
+    /// <summary>`&lt;Routine&gt;Ptr: T&lt;Routine&gt;Ptr;` (no indent).</summary>
+    VarDecl: string;
+    /// <summary>Stem of the EXISTING unit outside the group that receives TypeDecl / VarDecl
+    /// (J2); '' = the declaring unit's `&lt;Source&gt;.Untangle` leaf.</summary>
+    LeafStem: string;
+    /// <summary>The call-site replacements (consumer) and the initialization assignment
+    /// (declaring unit).</summary>
+    Edits: TArray<TRecipeEdit>;
+  end;
+
 /// <summary>Tells which kind of type use a refs.kind 'type_use' row is, from its line.</summary>
 /// <param name="pLineText">The source line of the reference.</param>
 /// <param name="pName">The type name the ref records.</param>
@@ -186,6 +250,33 @@ function BuildEdgeSurface(const pSource: IEdgeSurfaceSource; const pFromFid: Int
 /// routine_sig, sig_types:[{name, unit, in_scc}], call_count}}; the caller owns it.</returns>
 function EdgeSurfaceToJson(const pS: TEdgeSurface): TJSONObject;
 
+/// <summary>Recipe R1, routine-call inversion: the edge A -&gt; B is one routine of B
+/// that A calls; A calls it through a procedural variable declared in a leaf and
+/// assigned in B's initialization section, so A no longer names B.</summary>
+/// <param name="pSource">Index access; must not be nil; IsSccStem answers for the edge's group.</param>
+/// <param name="pSurface">The edge's surface (BuildEdgeSurface); RoutineName must be set.</param>
+/// <param name="pRefusal">Receives why the recipe does not apply; Kind '' when it does.</param>
+/// <returns>The steps; Recipe = crNone when refused.</returns>
+/// <remarks>
+/// <para>Refusals, checked in this order: `not-a-routine` (RoutineName ''),
+/// `signature-in-cycle` (a SigTypes entry is InScc; names the type),
+/// `signature-unknown` (a function with no stored signature), `routine-not-called`
+/// (a ref of the edge is not a call -- `@Foo`, `X := Foo` as a value),
+/// `qualified-ref` (a call written `Unit.Foo`), `init-order` (a call line lies in
+/// A's initialization section, or that section -- from `initialization` to `end.` --
+/// names the enclosing routine as a whole word: the variable is still nil there).</para>
+/// <para>Leaf (J2): the first resolved signature type's unit that is outside the group,
+/// used by BOTH A and B in their interface sections, declares every resolved signature
+/// type, and leaves only System built-ins unresolved; else LeafStem '' (the planner
+/// uses B's Untangle leaf). The signature is copied verbatim (J3). Callers outside the
+/// group are not touched (J6).</para>
+/// <para>B's edit: the assignment becomes the first statement of its initialization
+/// section; without one, `initialization` is inserted before `finalization`, or the
+/// final `end.` is replaced by the section plus `end.`.</para>
+/// </remarks>
+function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;
+  out pRefusal: TRecipeRefusal): TRecipeSteps;
+
 implementation
 
 uses
@@ -194,6 +285,11 @@ uses
 
 const
   CNotTypeWords = ' const var out array of function procedure reference to packed ';
+  { System-unit types every unit sees without a uses entry (R1, J2) }
+  CBuiltinTypes = ' integer cardinal shortint smallint longint int64 uint64 byte word longword nativeint ' +
+    'nativeuint boolean bytebool wordbool longbool char ansichar widechar string ansistring widestring ' +
+    'unicodestring shortstring rawbytestring single double extended currency real comp pointer pchar ' +
+    'pansichar pwidechar tobject tclass iinterface iunknown variant olevariant tdatetime tguid hresult ';
 
 function StemOfPath(const pPath: string): string;
 begin
@@ -565,6 +661,212 @@ begin
     JT.AddPair('in_scc', TJSONBool.Create(T.InScc));
   end;
   Surf.AddPair('call_count', TJSONNumber.Create(pS.CallCount));
+end;
+
+{ ---------------------------------------------------------------------------
+  R1 -- routine-call inversion
+  --------------------------------------------------------------------------- }
+
+function LineOf(const pLines: TArray<string>; pLine: Integer): string;
+begin
+  if (pLine >= 1) and (pLine <= Length(pLines)) then Result:= pLines[pLine - 1]
+  else Result:= '';
+end;
+
+{ The code of a line before a `//` comment, trimmed. }
+function BareCode(const pLine: string): string;
+begin
+  var P:= Pos('//', pLine);
+  Result:= Trim(if P > 0 then Copy(pLine, 1, P - 1) else pLine);
+end;
+
+{ 1-based number of the LAST line whose code is exactly pWord, or 0. }
+function LastKeywordLine(const pLines: TArray<string>; const pWord: string): Integer;
+begin
+  for var I:= High(pLines) downto 0 do
+    if SameText(BareCode(pLines[I]), pWord) then Exit(I + 1);
+  Result:= 0;
+end;
+
+function MakeRefusal(const pKind, pSymbol: string; pFid: Int64; pLine: Integer; const pReason: string): TRecipeRefusal;
+begin
+  Result.Kind  := pKind;
+  Result.Symbol:= pSymbol;
+  Result.Fid   := pFid;
+  Result.Line  := pLine;
+  Result.Reason:= pReason;
+end;
+
+function UsesInInterface(const pStore: ISymbolStore; pFid: Int64; const pStem: string): Boolean;
+begin
+  for var U in pStore.GetUnitUsesForFile(pFid) do
+    if (U.Section = uusInterface) and SameText(U.UnitName, pStem) then Exit(True);
+  Result:= False;
+end;
+
+{ J2: the existing unit outside the group that both ends use in their interface
+  and that declares every resolved type of the signature; '' when there is none. }
+function PickExistingLeaf(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;
+  pFromFid, pDeclFid: Int64): string;
+var
+  Cand: string;
+begin
+  Result:= '';
+  Cand  := '';
+  for var T in pSurface.SigTypes do
+    if T.DeclStem = '' then
+    begin
+      if not ContainsText(CBuiltinTypes, ' ' + T.Name.Substring(T.Name.LastIndexOf('.') + 1) + ' ') then Exit;
+    end
+    else if Cand = '' then Cand:= T.DeclStem
+    else if T.DeclStem <> Cand then Exit;
+  if (Cand = '') or pSource.IsSccStem(Cand) then Exit;
+  if UsesInInterface(pSource.Store, pFromFid, Cand) and UsesInInterface(pSource.Store, pDeclFid, Cand) then
+    Result:= Cand;
+end;
+
+{ J4, conservative: the call runs in the consumer's initialization section, or
+  that section names the routine that holds the call. }
+function InitOrderWhy(const pLines: TArray<string>; const pRef: TEdgeRef; const pUnit: string): string;
+begin
+  Result:= '';
+  var Init:= LastKeywordLine(pLines, 'initialization');
+  if Init = 0 then Exit;
+  var Stop:= LastKeywordLine(pLines, 'end.');
+  if Stop < Init then Stop:= Length(pLines) + 1;
+  if (pRef.Line > Init) and (pRef.Line < Stop) then
+    Exit(Format('the call at line %d runs in the initialization section of `%s`, before the variable ' +
+      'may be assigned', [pRef.Line, pUnit]));
+  var Encl:= pRef.Enclosing.Substring(pRef.Enclosing.LastIndexOf('.') + 1);
+  if Encl = '' then Exit;
+  for var L:= Init + 1 to Stop - 1 do
+    if TRegEx.IsMatch(BareCode(LineOf(pLines, L)), '\b' + TRegEx.Escape(Encl) + '\b', [roIgnoreCase]) then
+      Exit(Format('`%s` (it makes the call at line %d) is named at line %d, in the initialization section of ' +
+        '`%s`: it may run before the variable is assigned', [Encl, pRef.Line, L, pUnit]));
+end;
+
+{ The declaring unit's edit: the assignment as the first statement of its
+  initialization section, creating the section when there is none. }
+function AssignmentEdit(const pLines: TArray<string>; pFid: Int64; const pAssign: string; out pEdit: TRecipeEdit): Boolean;
+begin
+  pEdit    := Default(TRecipeEdit);
+  pEdit.Fid:= pFid;
+  var Init:= LastKeywordLine(pLines, 'initialization');
+  var Fin := LastKeywordLine(pLines, 'finalization');
+  var Stop:= LastKeywordLine(pLines, 'end.');
+  if Init > 0 then
+  begin
+    pEdit.Line    := Init;
+    pEdit.NewLines:= [pAssign];
+  end
+  else if Fin > 0 then
+  begin
+    pEdit.Line    := Fin - 1;
+    pEdit.NewLines:= ['initialization', pAssign, ''];
+  end
+  else if Stop > 0 then
+  begin
+    pEdit.Line    := Stop;
+    pEdit.Replace := True;
+    pEdit.NewLines:= ['initialization', pAssign, '', LineOf(pLines, Stop)];
+  end;
+  Result:= pEdit.Line > 0;
+end;
+
+{ R1 refusals a signature can give: not one routine, a type of the cycle, no stored signature. }
+function SignatureRefusal(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface; pDeclFid: Int64;
+  out pRoutine: TSymbol): TRecipeRefusal;
+begin
+  Result  := Default(TRecipeRefusal);
+  pRoutine:= Default(TSymbol);
+  var Name:= pSurface.RoutineName;
+  if (Name = '') or (Length(pSurface.Refs) = 0) then
+    Exit(MakeRefusal('not-a-routine', '', pDeclFid, 0, 'the edge is not exactly one routine'));
+  for var T in pSurface.SigTypes do
+    if T.InScc then
+      Exit(MakeRefusal('signature-in-cycle', T.Name, pDeclFid, 0, Format('the signature of `%s` names ' +
+        '`%s`, declared in `%s`, a unit of this cycle -- a procedural type outside the cycle cannot name it',
+        [Name, T.Name, T.DeclStem])));
+  pRoutine:= pSource.Store.GetSymbolById(pSurface.Refs[0].SymbolId);
+  if (pRoutine.Kind = skFunction) and (pSurface.RoutineSig = '') then
+    Result:= MakeRefusal('signature-unknown', Name, pDeclFid, pRoutine.StartLine,
+      Format('the index holds no signature for the function `%s`', [Name]));
+end;
+
+{ R1 refusals a call site can give: not a call, a unit-qualified call, init order (J4). }
+function CallRefusal(const pSurface: TEdgeSurface; pFromFid: Int64; const pLines: TArray<string>;
+  const pFromUnit: string): TRecipeRefusal;
+begin
+  Result:= Default(TRecipeRefusal);
+  var Name:= pSurface.RoutineName;
+  for var R in pSurface.Refs do
+  begin
+    if R.Kind <> erCall then
+      Exit(MakeRefusal('routine-not-called', Name, pFromFid, R.Line, Format('line %d uses `%s` without ' +
+        'calling it (`%s`)', [R.Line, Name, R.LineText])));
+    if TRegEx.IsMatch(LineOf(pLines, R.Line), '\.\s*' + TRegEx.Escape(Name) + '\b', [roIgnoreCase]) then
+      Exit(MakeRefusal('qualified-ref', Name, pFromFid, R.Line, Format('line %d calls `%s` qualified by ' +
+        'its unit', [R.Line, Name])));
+    var Why:= InitOrderWhy(pLines, R, pFromUnit);
+    if Why <> '' then Exit(MakeRefusal('init-order', Name, pFromFid, R.Line, Why));
+  end;
+end;
+
+function PlanRoutineInversion(const pSource: IEdgeSurfaceSource; const pSurface: TEdgeSurface;
+  out pRefusal: TRecipeRefusal): TRecipeSteps;
+var
+  Routine: TSymbol;
+  Edits  : TList<TRecipeEdit>;
+  Done   : TList<Integer>;
+  E      : TRecipeEdit;
+begin
+  Result  := Default(TRecipeSteps);
+  var FromFid:= pSource.FidOfStem(pSurface.FromStem);
+  var DeclFid:= pSource.FidOfStem(pSurface.ToStem);
+  var Name   := pSurface.RoutineName;
+  var Lines  := pSource.FileLines(FromFid);
+  pRefusal:= SignatureRefusal(pSource, pSurface, DeclFid, Routine);
+  if pRefusal.Kind = '' then
+    pRefusal:= CallRefusal(pSurface, FromFid, Lines,
+      ChangeFileExt(ExtractFileName(pSource.Store.GetFilePath(FromFid)), ''));
+  if pRefusal.Kind <> '' then Exit;
+  Result.Recipe     := crRoutineInversion;
+  Result.RoutineId  := Routine.Id;
+  Result.RoutineName:= Name;
+  Result.DeclStem   := pSurface.ToStem;
+  Result.ConsumerFid:= FromFid;
+  Result.PtrVar     := Name + 'Ptr';
+  Result.PtrType    := 'T' + Result.PtrVar;
+  Result.TypeDecl   := Format('%s = %s%s;', [Result.PtrType,
+    (if Routine.Kind = skFunction then 'function' else 'procedure'), pSurface.RoutineSig]);
+  Result.VarDecl    := Format('%s: %s;', [Result.PtrVar, Result.PtrType]);
+  Result.LeafStem   := PickExistingLeaf(pSource, pSurface, FromFid, DeclFid);
+  Edits:= TList<TRecipeEdit>.Create;
+  Done := TList<Integer>.Create;
+  try
+    for var R in pSurface.Refs do
+    begin
+      if Done.Contains(R.Line) then Continue;
+      Done.Add(R.Line);
+      E:= Default(TRecipeEdit);
+      E.Fid     := FromFid;
+      E.Line    := R.Line;
+      E.Replace := True;
+      E.NewLines:= [TRegEx.Replace(LineOf(Lines, R.Line), '(?<![\w.])' + TRegEx.Escape(Name) + '\b',
+        Result.PtrVar, [roIgnoreCase])];
+      Edits.Add(E);
+    end;
+    if not AssignmentEdit(pSource.FileLines(DeclFid), DeclFid, Format('  %s := %s;', [Result.PtrVar, Name]), E) then
+    begin
+      pRefusal:= MakeRefusal('manual-edit', Name, DeclFid, 0, 'the declaring unit has no final `end.`');
+      Exit(Default(TRecipeSteps));
+    end;
+    Edits.Add(E);
+    Result.Edits:= Edits.ToArray;
+  finally
+    Done.Free;
+    Edits.Free;
+  end;
 end;
 
 end.

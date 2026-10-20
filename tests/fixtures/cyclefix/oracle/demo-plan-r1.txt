@@ -1,0 +1,54 @@
+# E18 Task 5 oracle: Step 4 of `cycles --plan` for circular-demo cycle 3 (recipe R1,
+# routine-call inversion). Compared by tests\autotest\run_cyclefix_r1.ps1 modulo blank lines,
+# Pascal comment lines and these `# ` lines; @@ROOT@@ = the demo copy. Derived from the
+# hand-written C:\TEMP\claude\e18-fable\demo-plan-r1-proper.txt with two differences: the
+# pointer is named <Routine>Ptr / T<Routine>Ptr (plan rule), and the uses clause of
+# DemoBlueprint.pas is edited by the Task 3a lexer, which keeps the entry's trailing comment.
+
+### Step 4: edit the existing files
+Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
+
+#### `DemoBlueprint.pas`  (`@@ROOT@@\DemoBlueprint.pas`)
+E1. Replace line 74. Current text:
+```pascal
+  FViewModel := DemoBlueprintViewModelCreate(FFolderId);
+```
+New text:
+```pascal
+  FViewModel := DemoBlueprintViewModelCreatePtr(FFolderId);
+```
+E2. Replace lines 57-58. Current text:
+```pascal
+uses
+  DemoBlueprint.ViewModel; // <-- the edge to cut: used for ONE routine call
+```
+New text:
+```pascal
+// <-- the edge to cut: used for ONE routine call
+```
+
+#### `DemoBlueprint.ViewModel.pas`  (`@@ROOT@@\DemoBlueprint.ViewModel.pas`)
+E1. Replace line 80. Current text:
+```pascal
+end.
+```
+New text:
+```pascal
+initialization
+  DemoBlueprintViewModelCreatePtr := DemoBlueprintViewModelCreate;
+
+end.
+```
+
+#### `DemoBlueprint.Interfaces.pas`  (`@@ROOT@@\DemoBlueprint.Interfaces.pas`)
+E1. After line 25 (`end;`), insert:
+```pascal
+
+  /// <summary>Signature of DemoBlueprintViewModelCreate (DemoBlueprint.ViewModel), copied verbatim.</summary>
+  TDemoBlueprintViewModelCreatePtr = function(const pFolderId: Integer): IDemoBlueprintViewModel;
+
+var
+  /// <summary>Holds DemoBlueprintViewModelCreate, assigned by DemoBlueprint.ViewModel in its initialization section; the units of its former cycle call it instead of naming the routine.</summary>
+  DemoBlueprintViewModelCreatePtr: TDemoBlueprintViewModelCreatePtr;
+```
+
