@@ -204,6 +204,12 @@ function Get-HttpStatus([string]$Url) {
     } finally { $c.Dispose() }
 }
 
+# True when the bare http URL redirects to $BaseUrl/... . 302 counts: the IONOS .htaccess
+# add-on answers 302 whatever the R= flag (owner 2026-10-20: accept it).
+function Test-LiveRedirect($Response, [string]$BaseUrl) {
+    $Response.Status -in 301, 302 -and ([string]$Response.Location).StartsWith("$BaseUrl/")
+}
+
 # True only when the response is OUR home page (200 and our canonical link), so a
 # placeholder that IIS still serves with 200 is not mistaken for a successful publish.
 function Test-LiveHome($Response, [string]$BaseUrl) {

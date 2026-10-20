@@ -47,6 +47,14 @@ Assert-Throws { Test-PublishCredential $ftp } '*ftp*'
 $nofp = $ok.PSObject.Copy(); $nofp.TlsFingerprint = ''
 Assert-Throws { Test-PublishCredential $nofp } '*TlsFingerprint*'
 
+# test_live_redirect: IONOS's .htaccess add-on only answers 302 (owner 2026-10-20: accept it)
+$b = 'https://www.delphi-rag-lint.com'
+Assert-True (Test-LiveRedirect ([pscustomobject]@{ Status = 301; Location = "$b/" }) $b) '301 to base'
+Assert-True (Test-LiveRedirect ([pscustomobject]@{ Status = 302; Location = "$b/" }) $b) '302 to base accepted'
+Assert-True (-not (Test-LiveRedirect ([pscustomobject]@{ Status = 302; Location = 'https://evil.example/' }) $b)) '302 elsewhere refused'
+Assert-True (-not (Test-LiveRedirect ([pscustomobject]@{ Status = 302; Location = "$b.evil.example/" }) $b)) 'look-alike host refused'
+Assert-True (-not (Test-LiveRedirect ([pscustomobject]@{ Status = 200; Location = '' }) $b)) 'no redirect refused'
+
 # test_http_status_sees_redirect: pwsh 7.6 Invoke-WebRequest -MaximumRedirection 0 THROWS on a 302,
 # which made the live redirect check read 0 although the redirect worked (2026-10-20)
 $port = Get-Random -Minimum 20000 -Maximum 40000

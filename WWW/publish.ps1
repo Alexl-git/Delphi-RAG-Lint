@@ -80,8 +80,8 @@ try {
     $bareUrl = $base -replace '^https://www\.', 'http://'
     $bare = Get-HttpStatus "$bareUrl/"
     Write-Host "GET $bareUrl/ = $($bare.Status) $($bare.Location)"
-    if ($bare.Status -ne 301 -or -not $bare.Location.StartsWith($base)) {
-        if ($noRewrite) { Write-Host 'redirect missing: switch on HTTPS forwarding in the IONOS panel' }
+    if (-not (Test-LiveRedirect $bare $base)) {
+        Write-Host 'redirect missing: check the .htaccess in the site root (IONOS IIS has no URL Rewrite)'
         $ok = $false
     }
 
