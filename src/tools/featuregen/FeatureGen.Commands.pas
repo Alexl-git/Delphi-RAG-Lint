@@ -78,6 +78,7 @@ const
   SURFACE_TYPES: array[0..10] of string = ('cli', 'ide-menu', 'ide-context', 'ide-about', 'tool-window', 'shortcut', 'lsp',
     'mcp', 'script', 'exe', 'workflow');
   ASCII_MAX = 127;
+  UTF8_BOM: array[0..2] of Byte = ($EF, $BB, $BF);
   LIST_ORDER_STEP = 10;
   CRLF = #13#10;
 
@@ -1638,8 +1639,8 @@ begin
         Continue;
       lB := TFile.ReadAllBytes(lF);
       lStart := 0;
-      if (Length(lB) >= 3) and (lB[0] = $EF) and (lB[1] = $BB) and (lB[2] = $BF) then  // dl:ok magic-literal@d7a3 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
-        lStart := 3;  // dl:ok magic-literal@2702 -- REVIEWED 2026-10-19: a width, index or ASCII bound that is its own meaning at this spot; a named constant would only rename it
+      if (Length(lB) >= Length(UTF8_BOM)) and CompareMem(@lB[0], @UTF8_BOM[0], Length(UTF8_BOM)) then
+        lStart := Length(UTF8_BOM);
       for i := lStart to High(lB) do
         if lB[i] > ASCII_MAX then
           raise ECommand.CreateFmt('normalise: %s: non-ASCII byte 0x%.2X at byte %d; fix it by hand', [lF, lB[i], i]);

@@ -335,7 +335,7 @@ Which databases cover what, drift checks, raw dumps, self-tests.
 | [dump-pp-eval](Maintenance) | `dump-pp-eval` | internal |
 | [dump-pp-lex](Maintenance) | `dump-pp-lex` | internal |
 | [dump-refs](dump-refs) | `dump-refs` |  |
-| [Feature registry](Feature-Registry) | `tools\featuregen-gate.ps1 -Repo -Full`; `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
+| [Feature registry](Feature-Registry) | `tools\publish-release.ps1 -Version -DryRun`; procedure: `docs\wiki\Feature-Registry.md` |  |
 | [featuregen](featuregen) | `featuregen.exe`; `build\_build_featuregen_local.bat builds featuregen.exe from this checkout`; `tools\featuregen-gate.ps1 -Repo -Full`; procedure: `docs\wiki\featuregen.md` | internal |
 | [info](info) | `info` |  |
 | [Library Drift Check](Library-Drift-Check) | drag-lint > Index & Maintenance > Library Drift Check...; `library-drift` |  |

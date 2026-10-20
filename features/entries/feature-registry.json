@@ -11,11 +11,6 @@
   "surfaces": [
     {
       "type": "script",
-      "path": "tools\\featuregen-gate.ps1",
-      "args": "-Repo -Full"
-    },
-    {
-      "type": "script",
       "path": "tools\\publish-release.ps1",
       "args": "-Version -DryRun"
     },

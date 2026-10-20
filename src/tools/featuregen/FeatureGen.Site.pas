@@ -611,14 +611,14 @@ begin
       try
         lSubs.Add('');
         for lI in lVerbs[lVerb] do
-          for lS in pInc[lI].Surfaces do  // dl:ok loop-var-after-loop@8db8 -- REVIEWED 2026-10-19: the variable is read inside the body of its own enclosing for-in loop, not after it
+          for lS in pInc[lI].Surfaces do  // dl:ok loop-var-after-loop@8db8 -- REVIEWED 2026-10-20: engine false positive (variable read only inside the loop that assigns it), see docs\INBOX-loop-var-after-loop-nested-forin.md
             if (lS.Kind = 'cli') and (lS.Verb = lVerb) and (lS.Sub <> '') and not lSubs.Contains(lS.Sub) then
               lSubs.Add(lS.Sub);
         for lSub in lSubs do
         begin
           lUsage := '';
           for lI in lVerbs[lVerb] do
-            for lS in pInc[lI].Surfaces do  // dl:ok loop-var-after-loop@8db8 -- REVIEWED 2026-10-19: the variable is read inside the body of its own enclosing for-in loop, not after it
+            for lS in pInc[lI].Surfaces do  // dl:ok loop-var-after-loop@8db8 -- REVIEWED 2026-10-20: engine false positive (variable read only inside the loop that assigns it), see docs\INBOX-loop-var-after-loop-nested-forin.md
               if (lUsage = '') and (lS.Kind = 'cli') and (lS.Verb = lVerb) and (lS.Sub = lSub) then
                 lUsage := lS.Usage;
           if (lUsage = '') and (pFmt.Help <> nil) then
@@ -636,7 +636,7 @@ begin
       lSeen := TList<string>.Create;
       try
         for lI in lVerbs[lVerb] do
-          for lS in pInc[lI].Surfaces do  // dl:ok loop-var-after-loop@8db8 -- REVIEWED 2026-10-19: the variable is read inside the body of its own enclosing for-in loop, not after it
+          for lS in pInc[lI].Surfaces do  // dl:ok loop-var-after-loop@8db8 -- REVIEWED 2026-10-20: engine false positive (variable read only inside the loop that assigns it), see docs\INBOX-loop-var-after-loop-nested-forin.md
             if (lS.Kind = 'cli') and (lS.Verb = lVerb) then
               for lF in lS.Flags do
                 if not lSeen.Contains(lF.Name) then
@@ -655,7 +655,7 @@ begin
       begin
         Result := Result + 'Described in:'#10#10;  // dl:ok concat-in-loop@2920 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
         for lI in lVerbs[lVerb] do
-          Result := Result + '* ' + LeafLink(pInc[lI], pInc[lI].Title) + #10;  // dl:ok loop-var-after-loop@f538 -- REVIEWED 2026-10-19: the variable is read inside the body of its own enclosing for-in loop, not after it
+          Result := Result + '* ' + LeafLink(pInc[lI], pInc[lI].Title) + #10;  // dl:ok loop-var-after-loop@f538 -- REVIEWED 2026-10-20: engine false positive (variable read only inside the loop that assigns it), see docs\INBOX-loop-var-after-loop-nested-forin.md
         Result := Result + #10;  // dl:ok concat-in-loop@02e6 -- REVIEWED 2026-10-19: builds one small bounded text (tens of lines) whose bytes must match the PowerShell output; not a hot path
       end;
     end;

@@ -41,7 +41,8 @@ the PowerShell scripts that did this are retired). `featuregen --help` lists eve
    and regenerate. Groups and teams are data (`--new-group` / `--new-team`).
 6. A commit that adds or changes a feature updates ITS OWN entry (usage, flags,
    steps, questions, wiki page) and runs `featuregen verify --id <its id>`. Never
-   verify another team's entry; report it to its owner instead.`status: internal` = accepted-but-unadvertised verbs; docs-sync's `$UndocumentedOnPurpose`
+   verify another team's entry; report it to its owner instead.
+`status: internal` = accepted-but-unadvertised verbs; docs-sync's `$UndocumentedOnPurpose`
 stays a separate list (owner 2026-10-05).
 
 ## A project index is only as complete as its `.dproj` / `.dpr`

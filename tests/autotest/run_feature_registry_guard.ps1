@@ -60,7 +60,8 @@ if ($clean -match 'zz-guard-control') { Write-Host 'GUARD BROKEN: the unseeded s
 $seed = Join-Path $scratch 'features\entries\zz-guard-control.json'
 [IO.File]::WriteAllText($seed, "{`n  `"id`": `"zz-guard-control`",`n  `"zzUnknownKey`": 1`n}`n", [Text.Encoding]::ASCII)
 $red = & $exe check --level wellformed --repo $scratch 2>&1 | Out-String
-if (($LASTEXITCODE -ne 1) -or ($red -notmatch 'zz-guard-control\.json')) { Write-Host "GUARD BROKEN: a seeded bad entry did not fail check A naming it (exit $LASTEXITCODE): $($red.Trim())" -ForegroundColor Red; exit 1 }Write-Host '  [CTRL] a seeded bad entry fails check A and is named; the unseeded copy never names it' -ForegroundColor DarkGray
+if (($LASTEXITCODE -ne 1) -or ($red -notmatch 'zz-guard-control\.json')) { Write-Host "GUARD BROKEN: a seeded bad entry did not fail check A naming it (exit $LASTEXITCODE): $($red.Trim())" -ForegroundColor Red; exit 1 }
+Write-Host '  [CTRL] a seeded bad entry fails check A and is named; the unseeded copy never names it' -ForegroundColor DarkGray
 
 # ---- the real repo ----------------------------------------------------------------------
 Write-Host '-- checks A-E (check --level full)' -ForegroundColor Cyan
