@@ -17,7 +17,7 @@ drag-lint index  --project circular-demo\CircularDemo.dproj --db circular-demo\_
 drag-lint cycles --db circular-demo\_D-RAG\CircularDemo.sqlite --edges --causes --plan --format text
 ```
 
-Indexing this project takes well under a second (5 files, 73 symbols, 223 refs).
+Indexing this project takes well under a second (11 files, 134 symbols, 451 refs).
 
 ## Can a model follow it?
 
@@ -39,6 +39,22 @@ cut is the one nominated, and there are no unrelated edits.
 * **2026-09-28, re-run on engine 1.19.0-alpha with this exact report: PASSED 4/4 again.**
   0 errors, 0 warnings, identical program output, the predicted `cycles` output byte-for-byte,
   only the six named files touched plus the three new units.
+* **2026-10-19, engine 1.32.0-alpha, the project extended to three cycles (10 units).** Part A
+  and then Part B of this report, applied by a 150-line script that only parses the playbook's
+  own markup (no Pascal knowledge): 0 errors, 0 warnings, program output byte-identical,
+  `cycles` then reporting exactly the two cycles the playbook refuses. The script refuses
+  cycles 2 and 3 itself -- the report had no steps for them (see "The two cycles the move
+  recipe cannot cut" below).
+* **2026-10-19, E18 Task 5: the report now cuts cycle 3** (routine-call inversion). Followed by
+  the same script, the tree compiles and the program's output stays byte-identical
+  (`tests\autotest\run_cyclefix_r1_dcc.ps1`); `cycles` then reports the four- and two-unit
+  cycles only.
+* **2026-10-19, E18 Task 6: the report now cuts cycle 2 too** (member hand-over through an
+  extracted interface). Followed by the same script, the tree compiles and the program's output
+  stays byte-identical (`tests\autotest\run_cyclefix_r2_dcc.ps1`); `cycles` then reports the
+  four- and three-unit cycles only. This recipe reads class ancestry from the platform library
+  index (`--library-db`, else the manifest's library for `--platform`, default win64); without
+  one, cycle 2 is refused instead.
 
 ## The report, verbatim
 
@@ -80,29 +96,29 @@ After it, these units still form a cycle, but only through IMPLEMENTATION uses. 
 ### Step 1: what moves where
 1. `TDemoSession` -- **class with methods**, declared at `DemoSession.pas` lines 14-47; method bodies at `DemoSession.pas` lines 64-73, 75-80, 82-86, 88-95, 97-100.
    - Recipe: **extract a base class** and keep `TDemoSession` where it is. Why: its method bodies use `GDemoSessionCount`, `GDemoAuditCount`, `GDemoAuditTrail`, which live in units of this cycle; moving the class would mean moving those bodies (lines 64-73, 75-80, 82-86, 88-95, 97-100) AND everything they use.
-   - New class `TDemoSessionBase` in `DemoSession.Contracts` carries exactly what the units below use: `FId`, `FUser`, `Id`, `User`.
+   - New class `TDemoSessionBase` in `DemoSession.Untangle` carries exactly what the units below use: `FId`, `FUser`, `Id`, `User`.
    - `TDemoSession` stays in `DemoSession.pas` and becomes `TDemoSession = class(TDemoSessionBase)`; the members above are deleted from it.
    - Units that switch to `TDemoSessionBase` (the name is replaced on these lines): `DemoLogger.pas` lines 40, 53.
-   - Used by (each needs `DemoSession.Contracts` in the uses clause of that section; the edit step does it):
+   - Used by (each needs `DemoSession.Untangle` in the uses clause of that section; the edit step does it):
      - `DemoSession.pas` interface (first use: line 20)
      - `DemoLogger.pas` interface (first use: line 40)
      - `DemoLogger.pas` implementation (first use: line 53)
 2. `TDemoLogLevel` -- **enum**, declared at `DemoLogger.pas` lines 14-15.
-   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoLogger.Contracts`.
-   - Used by (each needs `DemoLogger.Contracts` in the uses clause of that section; the edit step does it):
+   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoLogger.Untangle`.
+   - Used by (each needs `DemoLogger.Untangle` in the uses clause of that section; the edit step does it):
      - `DemoLogger.pas` interface (first use: line 20)
      - `DemoLogger.pas` implementation (first use: line 46)
      - `DemoConfig.pas` interface (first use: line 23)
      - `DemoConfig.pas` implementation (first use: line 52)
-     - `CircularDemo.dpr` program uses (first use: line 37)
+     - `CircularDemo.dpr` program uses (first use: line 56)
 3. `TDemoAuditKind` -- **enum**, declared at `DemoAudit.pas` lines 23-24.
-   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoAudit.Contracts`.
-   - Used by (each needs `DemoAudit.Contracts` in the uses clause of that section; the edit step does it):
+   - Recipe: an enum has no code of its own -- move the declaration, unchanged, into `DemoAudit.Untangle`.
+   - Used by (each needs `DemoAudit.Untangle` in the uses clause of that section; the edit step does it):
      - `DemoAudit.pas` interface (first use: line 45)
      - `DemoAudit.pas` implementation (first use: line 71)
      - `DemoSession.pas` interface (first use: line 35)
      - `DemoSession.pas` implementation (first use: line 72)
-     - `CircularDemo.dpr` program uses (first use: line 36)
+     - `CircularDemo.dpr` program uses (first use: line 55)
 
 ### Step 2: uses clauses -- keep, move or remove the old unit
 For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.
@@ -111,11 +127,11 @@ For each unit of the cycle that uses a unit whose declarations move. A unit can 
 - `DemoSession.pas` / `DemoAudit`: the interface no longer needs it; the implementation still does (`GDemoAuditCount` line 71, `GDemoAuditTrail` line 84) -> **move** it from the interface uses to the implementation uses.
 
 ### Step 3: create the new units
-Each new unit may use only RTL / library units and other new `*.Contracts` units -- never a unit of this cycle (`DemoAudit`, `DemoConfig`, `DemoLogger`, `DemoSession`). Create each file with EXACTLY this text:
+Each new unit may use only RTL / library units and other new `*.Untangle` units -- never a unit of this cycle (`DemoAudit`, `DemoConfig`, `DemoLogger`, `DemoSession`). Create each file with EXACTLY this text:
 
-#### `DemoSession.Contracts` -> `circular-demo\DemoSession.Contracts.pas`
+#### `DemoSession.Untangle` -> `circular-demo\DemoSession.Untangle.pas`
 ```pascal
-unit DemoSession.Contracts;
+unit DemoSession.Untangle;
 
 // Created by `drag-lint cycles --plan`: declarations moved here from DemoSession
 // to break a circular unit dependency. This unit may use only units OUTSIDE
@@ -145,11 +161,11 @@ implementation
 
 end.
 ```
-Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoSession.Contracts in 'DemoSession.Contracts.pas'`; the .dproj lists it as `<DCCReference Include="DemoSession.Contracts.pas"/>`.
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoSession.Untangle in 'DemoSession.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="DemoSession.Untangle.pas"/>`.
 
-#### `DemoLogger.Contracts` -> `circular-demo\DemoLogger.Contracts.pas`
+#### `DemoLogger.Untangle` -> `circular-demo\DemoLogger.Untangle.pas`
 ```pascal
-unit DemoLogger.Contracts;
+unit DemoLogger.Untangle;
 
 // Created by `drag-lint cycles --plan`: declarations moved here from DemoLogger
 // to break a circular unit dependency. This unit may use only units OUTSIDE
@@ -168,11 +184,11 @@ implementation
 
 end.
 ```
-Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoLogger.Contracts in 'DemoLogger.Contracts.pas'`; the .dproj lists it as `<DCCReference Include="DemoLogger.Contracts.pas"/>`.
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoLogger.Untangle in 'DemoLogger.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="DemoLogger.Untangle.pas"/>`.
 
-#### `DemoAudit.Contracts` -> `circular-demo\DemoAudit.Contracts.pas`
+#### `DemoAudit.Untangle` -> `circular-demo\DemoAudit.Untangle.pas`
 ```pascal
-unit DemoAudit.Contracts;
+unit DemoAudit.Untangle;
 
 // Created by `drag-lint cycles --plan`: declarations moved here from DemoAudit
 // to break a circular unit dependency. This unit may use only units OUTSIDE
@@ -192,7 +208,7 @@ implementation
 
 end.
 ```
-Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoAudit.Contracts in 'DemoAudit.Contracts.pas'`; the .dproj lists it as `<DCCReference Include="DemoAudit.Contracts.pas"/>`.
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoAudit.Untangle in 'DemoAudit.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="DemoAudit.Untangle.pas"/>`.
 
 ### Step 4: edit the existing files
 Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
@@ -226,18 +242,14 @@ type
   /// <summary>Severity of a log line, ordered from least to most severe.</summary>
   TDemoLogLevel = (llDebug, llInfo, llWarn, llError);
 ```
-E5. Replace lines 9-11. Current text:
+E5. Replace line 11. Current text:
 ```pascal
-uses
-  System.SysUtils,
   DemoSession;
 ```
 New text:
 ```pascal
-uses
-  System.SysUtils,
-  DemoSession.Contracts,
-  DemoLogger.Contracts;
+  DemoSession.Untangle,
+  DemoLogger.Untangle;
 ```
 
 #### `DemoConfig.pas`  (`circular-demo\DemoConfig.pas`)
@@ -247,17 +259,13 @@ E1. After line 45 (`implementation`), insert:
 uses
   DemoLogger;
 ```
-E2. Replace lines 9-11. Current text:
+E2. Replace line 11. Current text:
 ```pascal
-uses
-  System.SysUtils,
   DemoLogger;
 ```
 New text:
 ```pascal
-uses
-  System.SysUtils,
-  DemoLogger.Contracts;
+  DemoLogger.Untangle;
 ```
 
 #### `DemoAudit.pas`  (`circular-demo\DemoAudit.pas`)
@@ -266,18 +274,14 @@ E1. Delete lines 23-24. Current text:
   /// <summary>Classification recorded with each audit entry.</summary>
   TDemoAuditKind = (akOpen, akWork, akClose);
 ```
-E2. Replace lines 18-20. Current text:
+E2. Replace line 20. Current text:
 ```pascal
-uses
-  System.SysUtils,
   System.Classes;
 ```
 New text:
 ```pascal
-uses
-  System.SysUtils,
   System.Classes,
-  DemoAudit.Contracts;
+  DemoAudit.Untangle;
 ```
 
 #### `DemoSession.pas`  (`circular-demo\DemoSession.pas`)
@@ -307,62 +311,48 @@ New text:
 ```pascal
   TDemoSession = class(TDemoSessionBase)
 ```
-E5. Replace lines 9-11. Current text:
+E5. Replace line 11. Current text:
 ```pascal
-uses
-  System.SysUtils,
   DemoAudit;
 ```
 New text:
 ```pascal
-uses
-  System.SysUtils,
-  DemoSession.Contracts,
-  DemoAudit.Contracts;
+  DemoSession.Untangle,
+  DemoAudit.Untangle;
 ```
 
 #### `CircularDemo.dpr`  (`circular-demo\CircularDemo.dpr`)
-E1. Replace lines 18-23. Current text:
+E1. Replace line 39. Current text:
 ```pascal
-uses
-  System.SysUtils,
-  DemoAudit in 'DemoAudit.pas',
-  DemoSession in 'DemoSession.pas',
-  DemoLogger in 'DemoLogger.pas',
-  DemoConfig in 'DemoConfig.pas';
+  DemoUIConnect in 'DemoUIConnect.pas';
 ```
 New text:
 ```pascal
-uses
-  System.SysUtils,
-  DemoAudit in 'DemoAudit.pas',
-  DemoSession in 'DemoSession.pas',
-  DemoLogger in 'DemoLogger.pas',
-  DemoConfig in 'DemoConfig.pas',
-  DemoLogger.Contracts in 'DemoLogger.Contracts.pas',
-  DemoAudit.Contracts in 'DemoAudit.Contracts.pas',
-  DemoSession.Contracts in 'DemoSession.Contracts.pas';
+  DemoUIConnect in 'DemoUIConnect.pas',
+  DemoLogger.Untangle in 'DemoLogger.Untangle.pas',
+  DemoAudit.Untangle in 'DemoAudit.Untangle.pas',
+  DemoSession.Untangle in 'DemoSession.Untangle.pas';
 ```
 
 #### `CircularDemo.dproj`  (`circular-demo\CircularDemo.dproj`)
 E1. After line 81 (`<DCCReference Include="DemoLogger.pas"/>`), insert:
 ```xml
-        <DCCReference Include="DemoLogger.Contracts.pas"/>
+        <DCCReference Include="DemoLogger.Untangle.pas"/>
 ```
 E2. After line 80 (`<DCCReference Include="DemoSession.pas"/>`), insert:
 ```xml
-        <DCCReference Include="DemoSession.Contracts.pas"/>
+        <DCCReference Include="DemoSession.Untangle.pas"/>
 ```
 E3. After line 79 (`<DCCReference Include="DemoAudit.pas"/>`), insert:
 ```xml
-        <DCCReference Include="DemoAudit.Contracts.pas"/>
+        <DCCReference Include="DemoAudit.Untangle.pas"/>
 ```
 
 ### Checklist
 Tick each box in order. Do not skip the compile.
-1. [ ] Create `circular-demo\DemoSession.Contracts.pas` with the exact text given for `DemoSession.Contracts`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
-2. [ ] Create `circular-demo\DemoLogger.Contracts.pas` with the exact text given for `DemoLogger.Contracts`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
-3. [ ] Create `circular-demo\DemoAudit.Contracts.pas` with the exact text given for `DemoAudit.Contracts`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+1. [ ] Create `circular-demo\DemoSession.Untangle.pas` with the exact text given for `DemoSession.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+2. [ ] Create `circular-demo\DemoLogger.Untangle.pas` with the exact text given for `DemoLogger.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+3. [ ] Create `circular-demo\DemoAudit.Untangle.pas` with the exact text given for `DemoAudit.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
 4. [ ] Apply every edit listed for `DemoLogger.pas`, in the order listed.
 5. [ ] Apply every edit listed for `DemoConfig.pas`, in the order listed.
 6. [ ] Apply every edit listed for `DemoAudit.pas`, in the order listed.
@@ -373,8 +363,10 @@ Tick each box in order. Do not skip the compile.
 11. [ ] Re-index: `drag-lint index --project "circular-demo\CircularDemo.dproj" --db "circular-demo\_D-RAG\CircularDemo.sqlite"`
 12. [ ] Run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite"`. It must print exactly:
 ```text
-1 circular unit group(s) found:
+3 circular unit group(s) found:
   [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (implementation-only -- legal, lower impact)
+  [2 units] demouiconnect <-> demogageport   (implementation-only -- legal, lower impact)
+  [3 units] demoblueprint <-> democontrolplan <-> demoblueprint.viewmodel   (implementation-only -- legal, lower impact)
   (add --edges for the uses lines, --causes for the symbols to refactor)
 ```
    The units inside a group may be listed in a different order. Lines starting with `(loaded`, `drag-lint: note:` or `  resolver:` are informational -- ignore them.
@@ -394,7 +386,336 @@ After Part A these units still use each other through these edges (predicted):
 - `demosession -> demoaudit`: `GDemoAuditCount (var)`, `GDemoAuditTrail (var)` -- not mechanical: `GDemoAuditTrail` (var): it needs `TDemoAuditTrail` (class), which cannot move: its method bodies use `GDemoSettings`, which live in units of this cycle -- they would have to move with it
 
 The standard remedy: move the shared GLOBAL variables (and the plain types they need) into a leaf unit that both sides use; a routine can move only together with everything its body uses, or be handed over as a parameter / event instead of being called by name.
-To do it: finish Part A (every checklist item), then run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite" --plan` again. It prints Part B as the same kind of numbered, mechanical steps, with line numbers for the edited files. The edge it will cut is `demoaudit -> democonfig`.
+To do it: finish Part A (every checklist item), then run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite" --plan` again. It prints Part B as the same kind of numbered, mechanical steps, with line numbers for the edited files. The edge it will cut is `demoaudit -> democonfig`. Recipe: move globals.
+
+Fix it (mechanical, compile-gated):
+  dry run : drag-lint cycles --fix --project <your.dproj> --db "circular-demo\_D-RAG\CircularDemo.sqlite" --cycle 1
+  apply   : drag-lint cycles --fix --project <your.dproj> --db "circular-demo\_D-RAG\CircularDemo.sqlite" --cycle 1 --apply
+  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units)
+  then    : Part B, optional, after Part A: demoaudit -> democonfig (move globals)
+  requires: the project builds with 0 errors before the fix (the dry run checks this)
+
+## Cycle 2: demouiconnect <-> demogageport
+
+Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile blast radius). Optional to fix; the steps below are for when you want a fully acyclic uses-graph.
+
+Files:
+- `demouiconnect` -> `circular-demo\DemoUIConnect.pas`
+- `demogageport` -> `circular-demo\DemoGagePort.pas`
+
+### Why it cycles (implementation-section edges)
+- `demouiconnect` uses `demogageport` in its **implementation** section (`DemoUIConnect.pas`) via:
+    - line 47: `TDemoGagePort`  [class]  -> declared in `demogageport`
+- `demogageport` uses `demouiconnect` in its **implementation** section (`DemoGagePort.pas`) via:
+    - line 66: `GDemoUIConnect`  [var]  -> declared in `demouiconnect`
+    - line 76: `TDemoUIConnect`  [class]  -> declared in `demouiconnect`
+
+### Recommended fix (optional)
+Cut the edge `demouiconnect -> demogageport` by **member hand-over through an extracted interface**: `demouiconnect` takes from `demogageport` only `is` / `as` tests against `TDemoGagePort` and reads of its members. `TDemoGagePort` implements a new interface `IDemoGagePortSurface`, declared in `DemoGagePort.Untangle`, and `demouiconnect` tests and casts against that instead. No edge of this cycle can be cut by moving declarations or by routine-call inversion.
+
+Every edge of this cycle, weighed in this order: move globals, routine-call inversion, member hand-over; within one recipe the edge whose surface has the fewest members, then the fewest references, wins. One edge is cut per run:
+- `demouiconnect -> demogageport`: recipe: member hand-over -- **cut by this plan**
+- `demogageport -> demouiconnect`: not mechanical: `GDemoUIConnect` (var): it needs `TDemoUIConnect` (class), which cannot move: its method bodies use `TDemoGagePort`, which live in units of this cycle -- they would have to move with it
+
+### DONE
+This plan cuts the edge `demouiconnect -> demogageport`, the cheapest edge of this cycle that can be cut mechanically. It is DONE when both hold: (1) the project compiles with 0 errors, and (2) `drag-lint cycles` prints exactly the output given in the last checklist item.
+After it, these units form no cycle at all.
+
+### Step 1: what moves where
+Nothing moves. Recipe: **member hand-over through an extracted interface** -- `TDemoGagePort` stays in `DemoGagePort`; units outside this cycle keep using it as before.
+- `DemoGagePort.Untangle` gets the interface `IDemoGagePortSurface` (GUID `{60014EC1-4FF2-B804-877E-DBE382355481}`), with a read-only property for each member `DemoUIConnect.pas` reads: Log: TStrings, LastGage: Integer.
+- `TDemoGagePort` implements it: `IDemoGagePortSurface` is appended to its heritage, and a getter per member is declared before the class's `end;` and implemented in its implementation section.
+- `DemoUIConnect.pas`: `X is TDemoGagePort` becomes `Supports(X, IDemoGagePortSurface)` (line 47, 55).
+- `DemoUIConnect.pas`: `X as TDemoGagePort` becomes `X as IDemoGagePortSurface` (line 49, 57); a receiver whose type does not implement IInterface is cast through `TComponent` first.
+- Checked: no name inside a `with` body changes what it binds to; the members carried are fields and properties of the class itself, read only.
+- Exceptions: a failed `as IDemoGagePortSurface` raises EIntfCastError, not EInvalidCast as `as TDemoGagePort` did -- a handler for EInvalidCast no longer catches it. Checked: `DemoUIConnect.pas` handles no EInvalidCast, or each `as` follows its `is` guard.
+
+### Step 2: uses clauses -- keep, move or remove the old unit
+For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.
+- `DemoUIConnect.pas` / `DemoGagePort`: nothing from it is used there any more -> **remove** it from the implementation uses.
+
+### Step 3: create the new units
+Each new unit may use only RTL / library units and other new `*.Untangle` units -- never a unit of this cycle (`DemoGagePort`, `DemoUIConnect`). Create each file with EXACTLY this text:
+
+#### `DemoGagePort.Untangle` -> `circular-demo\DemoGagePort.Untangle.pas`
+```pascal
+unit DemoGagePort.Untangle;
+
+// Created by `drag-lint cycles --plan`: the interface TDemoGagePort (DemoGagePort) implements, extracted
+// to break a circular unit dependency. This unit may use only units OUTSIDE
+// that cycle -- never DemoGagePort, DemoUIConnect.
+
+interface
+
+uses
+  System.Classes;
+
+type
+  /// <summary>The surface of <c>TDemoGagePort</c> that <c>DemoUIConnect</c> uses.</summary>
+  IDemoGagePortSurface = interface
+    ['{60014EC1-4FF2-B804-877E-DBE382355481}']
+    function GetLog: TStrings;
+    function GetLastGage: Integer;
+    property Log: TStrings read GetLog;
+    property LastGage: Integer read GetLastGage;
+  end;
+
+implementation
+
+end.
+```
+Register it in the project (the edit step spells out both edits): the .dpr uses clause gets `DemoGagePort.Untangle in 'DemoGagePort.Untangle.pas'`; the .dproj lists it as `<DCCReference Include="DemoGagePort.Untangle.pas"/>`.
+
+### Step 4: edit the existing files
+Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
+
+#### `DemoUIConnect.pas`  (`circular-demo\DemoUIConnect.pas`)
+E1. Replace line 57. Current text:
+```pascal
+  with Sender as TDemoGagePort do
+```
+New text:
+```pascal
+  with TComponent(Sender) as IDemoGagePortSurface do
+```
+E2. Replace line 55. Current text:
+```pascal
+  if not (Sender is TDemoGagePort) then
+```
+New text:
+```pascal
+  if not Supports(Sender, IDemoGagePortSurface) then
+```
+E3. Replace line 49. Current text:
+```pascal
+  with Owner as TDemoGagePort do
+```
+New text:
+```pascal
+  with Owner as IDemoGagePortSurface do
+```
+E4. Replace line 47. Current text:
+```pascal
+  if not (Owner is TDemoGagePort) then
+```
+New text:
+```pascal
+  if not Supports(Owner, IDemoGagePortSurface) then
+```
+E5. Replace line 43. Current text:
+```pascal
+  DemoGagePort; // <-- the edge to cut: `is`/`as` + two member reads
+```
+New text:
+```pascal
+  DemoGagePort.Untangle; // <-- the edge to cut: `is`/`as` + two member reads
+```
+
+#### `DemoGagePort.pas`  (`circular-demo\DemoGagePort.pas`)
+E1. After line 56 (`DemoUIConnect; // constructs TDemoUIConnect, writes GDemoUIConnect: not a mechanical cut`), insert:
+```pascal
+
+function TDemoGagePort.GetLog: TStrings;
+begin
+  Result := FLog;
+end;
+
+function TDemoGagePort.GetLastGage: Integer;
+begin
+  Result := FLastGage;
+end;
+```
+E2. After line 50 (`property LastGage: Integer read FLastGage;`), insert:
+```pascal
+    /// <summary>IDemoGagePortSurface: returns Log (cycles --plan, member hand-over).</summary>
+    function GetLog: TStrings;
+    /// <summary>IDemoGagePortSurface: returns LastGage (cycles --plan, member hand-over).</summary>
+    function GetLastGage: Integer;
+```
+E3. Replace line 33. Current text:
+```pascal
+  TDemoGagePort = class(TComponent)
+```
+New text:
+```pascal
+  TDemoGagePort = class(TComponent, IDemoGagePortSurface)
+```
+E4. Replace line 28. Current text:
+```pascal
+  System.Classes;
+```
+New text:
+```pascal
+  System.Classes,
+  DemoGagePort.Untangle;
+```
+
+#### `CircularDemo.dpr`  (`circular-demo\CircularDemo.dpr`)
+E1. Replace line 39. Current text:
+```pascal
+  DemoUIConnect in 'DemoUIConnect.pas';
+```
+New text:
+```pascal
+  DemoUIConnect in 'DemoUIConnect.pas',
+  DemoGagePort.Untangle in 'DemoGagePort.Untangle.pas';
+```
+
+#### `CircularDemo.dproj`  (`circular-demo\CircularDemo.dproj`)
+E1. After line 87 (`<DCCReference Include="DemoGagePort.pas"/>`), insert:
+```xml
+        <DCCReference Include="DemoGagePort.Untangle.pas"/>
+```
+
+### Checklist
+Tick each box in order. Do not skip the compile.
+1. [ ] Create `circular-demo\DemoGagePort.Untangle.pas` with the exact text given for `DemoGagePort.Untangle`. Save it as plain ASCII with Windows CRLF line endings, like the existing units.
+2. [ ] Apply every edit listed for `DemoUIConnect.pas`, in the order listed.
+3. [ ] Apply every edit listed for `DemoGagePort.pas`, in the order listed.
+4. [ ] Apply every edit listed for `CircularDemo.dpr`, in the order listed.
+5. [ ] Apply every edit listed for `CircularDemo.dproj`.
+6. [ ] Compile `CircularDemo.dproj` (RAD Studio: Project > Build; or `msbuild "circular-demo\CircularDemo.dproj" /t:Build` from a RAD Studio Command Prompt). Expect 0 errors; on an error see "If the compile fails" below, fix, and compile again.
+7. [ ] Re-index: `drag-lint index --project "circular-demo\CircularDemo.dproj" --db "circular-demo\_D-RAG\CircularDemo.sqlite"`
+8. [ ] Run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite"`. It must print exactly:
+```text
+2 circular unit group(s) found:
+  [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (has interface coupling -- widest recompile blast radius)
+  [3 units] demoblueprint <-> democontrolplan <-> demoblueprint.viewmodel   (implementation-only -- legal, lower impact)
+  (add --edges for the uses lines, --causes for the symbols to refactor)
+```
+   The units inside a group may be listed in a different order. Lines starting with `(loaded`, `drag-lint: note:` or `  resolver:` are informational -- ignore them.
+
+#### If the compile fails
+- `E2003 Undeclared identifier: 'X'` in file F at line N: the index missed a use of X. If X is listed in the "what moves where" step, add that step's new unit to F's uses clause of the section holding line N (interface above `implementation`, implementation below it). Otherwise X still lives in a unit you moved or removed in the uses step: add that unit back to the same section.
+- `E2065 Unsatisfied forward or external declaration`: a class moved without its method bodies. Move the bodies listed for it as well.
+- `E2010 Incompatible types: 'TX' and 'TXBase'` or `E2033 Types of actual and formal var parameters must be identical`: a routine now takes or returns the base class. Cast at that line: `TX(value)`.
+- `F2047 Circular unit reference`: a new unit names a unit of this cycle in its uses. Remove that entry -- the new units may use only what the "create the new units" step lists.
+- `F1026 File not found`: a new unit's file name must equal its unit name plus `.pas`.
+
+Fix it (mechanical, compile-gated):
+  dry run : drag-lint cycles --fix --project <your.dproj> --db "circular-demo\_D-RAG\CircularDemo.sqlite" --cycle 2
+  apply   : drag-lint cycles --fix --project <your.dproj> --db "circular-demo\_D-RAG\CircularDemo.sqlite" --cycle 2 --apply
+  cuts    : demouiconnect -> demogageport (member hand-over through an extracted interface) (chosen)
+  requires: the project builds with 0 errors before the fix (the dry run checks this)
+
+## Cycle 3: demoblueprint <-> democontrolplan <-> demoblueprint.viewmodel
+
+Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile blast radius). Optional to fix; the steps below are for when you want a fully acyclic uses-graph.
+
+Files:
+- `demoblueprint` -> `circular-demo\DemoBlueprint.pas`
+- `democontrolplan` -> `circular-demo\DemoControlPlan.pas`
+- `demoblueprint.viewmodel` -> `circular-demo\DemoBlueprint.ViewModel.pas`
+
+### Why it cycles (implementation-section edges)
+- `demoblueprint` uses `demoblueprint.viewmodel` in its **implementation** section (`DemoBlueprint.pas`) via:
+    - line 74: `DemoBlueprintViewModelCreate`  [function]  -> declared in `demoblueprint.viewmodel`
+- `democontrolplan` uses `demoblueprint` in its **implementation** section (`DemoControlPlan.pas`) via:
+    - line 58: `TDemoBlueprint`  [class]  -> declared in `demoblueprint`
+- `demoblueprint.viewmodel` uses `democontrolplan` in its **implementation** section (`DemoBlueprint.ViewModel.pas`) via:
+    - line 69: `TDemoControlPlan`  [class]  -> declared in `democontrolplan`
+
+### Recommended fix (optional)
+Cut the edge `demoblueprint -> demoblueprint.viewmodel` by **routine-call inversion**: `demoblueprint` takes only the routine `DemoBlueprintViewModelCreate` from `demoblueprint.viewmodel`, and every type of its signature is declared outside this cycle. `demoblueprint` calls it through a procedural variable declared in `DemoBlueprint.Interfaces` instead. No edge of this cycle can be cut by moving declarations.
+
+Every edge of this cycle, weighed in this order: move globals, routine-call inversion, member hand-over; within one recipe the edge whose surface has the fewest members, then the fewest references, wins. One edge is cut per run:
+- `demoblueprint -> demoblueprint.viewmodel`: recipe: routine-call inversion -- **cut by this plan**
+- `democontrolplan -> demoblueprint`: not mechanical: `TDemoBlueprint` (class): its method bodies use `DemoBlueprintViewModelCreate`, which live in units of this cycle -- they would have to move with it
+- `demoblueprint.viewmodel -> democontrolplan`: not mechanical: `TDemoControlPlan` (class): its method bodies use `TDemoBlueprint`, which live in units of this cycle -- they would have to move with it
+
+### DONE
+This plan cuts the edge `demoblueprint -> demoblueprint.viewmodel`, the cheapest edge of this cycle that can be cut mechanically. It is DONE when both hold: (1) the project compiles with 0 errors, and (2) `drag-lint cycles` prints exactly the output given in the last checklist item.
+After it, these units form no cycle at all.
+
+### Step 1: what moves where
+Nothing moves. Recipe: **routine-call inversion** -- `DemoBlueprintViewModelCreate` stays in `DemoBlueprint.ViewModel`; callers outside this cycle keep calling it by name.
+- `DemoBlueprint.Interfaces` gets the procedural type `TDemoBlueprintViewModelCreatePtr` -- the routine's own signature, copied verbatim (keep every `const` and parameter name) -- and the variable `DemoBlueprintViewModelCreatePtr`.
+- `DemoBlueprint.ViewModel` assigns `DemoBlueprintViewModelCreatePtr := DemoBlueprintViewModelCreate;` as the first statement of its initialization section.
+- `DemoBlueprint.pas` calls `DemoBlueprintViewModelCreatePtr` instead of `DemoBlueprintViewModelCreate` (line 74). Checked: its own initialization section makes none of these calls and does not name the routine that makes them. NOT checked: an initialization section of another unit that reaches them through a call chain.
+
+### Step 2: uses clauses -- keep, move or remove the old unit
+For each unit of the cycle that uses a unit whose declarations move. A unit can be removed from a section only when nothing else from it is used there.
+- `DemoBlueprint.pas` / `DemoBlueprint.ViewModel`: nothing from it is used there any more -> **remove** it from the implementation uses.
+
+### Step 3: create the new units
+- `DemoBlueprint.Interfaces` already exists (`circular-demo\DemoBlueprint.Interfaces.pas`) and uses no unit of this cycle: it receives the procedural type and variable of `DemoBlueprintViewModelCreate`. Do not create it again; the edit step lists the insert.
+No new unit is needed.
+
+### Step 4: edit the existing files
+Apply each file's edits in the order listed. They run from the bottom of the file to the top, so the line numbers of the edits still to do do not move. "Current text" is what the lines say before the edit -- if it does not match, stop: the file changed since it was indexed.
+
+#### `DemoBlueprint.pas`  (`circular-demo\DemoBlueprint.pas`)
+E1. Replace line 74. Current text:
+```pascal
+  FViewModel := DemoBlueprintViewModelCreate(FFolderId);
+```
+New text:
+```pascal
+  FViewModel := DemoBlueprintViewModelCreatePtr(FFolderId);
+```
+E2. Replace lines 57-58. Current text:
+```pascal
+uses
+  DemoBlueprint.ViewModel; // <-- the edge to cut: used for ONE routine call
+```
+New text:
+```pascal
+// <-- the edge to cut: used for ONE routine call
+```
+
+#### `DemoBlueprint.ViewModel.pas`  (`circular-demo\DemoBlueprint.ViewModel.pas`)
+E1. Replace line 80. Current text:
+```pascal
+end.
+```
+New text:
+```pascal
+initialization
+  DemoBlueprintViewModelCreatePtr := DemoBlueprintViewModelCreate;
+
+end.
+```
+
+#### `DemoBlueprint.Interfaces.pas`  (`circular-demo\DemoBlueprint.Interfaces.pas`)
+E1. After line 25 (`end;`), insert:
+```pascal
+
+  /// <summary>Signature of DemoBlueprintViewModelCreate (DemoBlueprint.ViewModel), copied verbatim.</summary>
+  TDemoBlueprintViewModelCreatePtr = function(const pFolderId: Integer): IDemoBlueprintViewModel;
+
+var
+  /// <summary>Holds DemoBlueprintViewModelCreate, assigned by DemoBlueprint.ViewModel in its initialization section; the units of its former cycle call it instead of naming the routine.</summary>
+  DemoBlueprintViewModelCreatePtr: TDemoBlueprintViewModelCreatePtr;
+```
+
+### Checklist
+Tick each box in order. Do not skip the compile.
+1. [ ] Apply every edit listed for `DemoBlueprint.pas`, in the order listed.
+2. [ ] Apply every edit listed for `DemoBlueprint.ViewModel.pas`, in the order listed.
+3. [ ] Apply every edit listed for `DemoBlueprint.Interfaces.pas`, in the order listed.
+4. [ ] Compile `CircularDemo.dproj` (RAD Studio: Project > Build; or `msbuild "circular-demo\CircularDemo.dproj" /t:Build` from a RAD Studio Command Prompt). Expect 0 errors; on an error see "If the compile fails" below, fix, and compile again.
+5. [ ] Re-index: `drag-lint index --project "circular-demo\CircularDemo.dproj" --db "circular-demo\_D-RAG\CircularDemo.sqlite"`
+6. [ ] Run `drag-lint cycles --db "circular-demo\_D-RAG\CircularDemo.sqlite"`. It must print exactly:
+```text
+2 circular unit group(s) found:
+  [4 units] demologger <-> democonfig <-> demoaudit <-> demosession   (has interface coupling -- widest recompile blast radius)
+  [2 units] demouiconnect <-> demogageport   (implementation-only -- legal, lower impact)
+  (add --edges for the uses lines, --causes for the symbols to refactor)
+```
+   The units inside a group may be listed in a different order. Lines starting with `(loaded`, `drag-lint: note:` or `  resolver:` are informational -- ignore them.
+
+#### If the compile fails
+- `E2003 Undeclared identifier: 'X'` in file F at line N: the index missed a use of X. If X is listed in the "what moves where" step, add that step's new unit to F's uses clause of the section holding line N (interface above `implementation`, implementation below it). Otherwise X still lives in a unit you moved or removed in the uses step: add that unit back to the same section.
+- `E2065 Unsatisfied forward or external declaration`: a class moved without its method bodies. Move the bodies listed for it as well.
+- `E2010 Incompatible types: 'TX' and 'TXBase'` or `E2033 Types of actual and formal var parameters must be identical`: a routine now takes or returns the base class. Cast at that line: `TX(value)`.
+- `F2047 Circular unit reference`: a new unit names a unit of this cycle in its uses. Remove that entry -- the new units may use only what the "create the new units" step lists.
+- `F1026 File not found`: a new unit's file name must equal its unit name plus `.pas`.
+
+Fix it (mechanical, compile-gated):
+  dry run : drag-lint cycles --fix --project <your.dproj> --db "circular-demo\_D-RAG\CircularDemo.sqlite" --cycle 3
+  apply   : drag-lint cycles --fix --project <your.dproj> --db "circular-demo\_D-RAG\CircularDemo.sqlite" --cycle 3 --apply
+  cuts    : demoblueprint -> demoblueprint.viewmodel (routine-call inversion) (chosen)
+  requires: the project builds with 0 errors before the fix (the dry run checks this)
 ````
 
 ## What is worth noticing in that output
@@ -439,10 +760,59 @@ why.
 F1026 -- and the fix for each, because the index can miss a reference (for example a `set`
 type) and the compile is the final check.
 
+## The two cycles the move recipe cannot cut -- and what does
+
+Cycles 2 and 3 of the report above are modelled on cycles found in a real client application,
+and both are shapes the playbook's first recipe -- move plain declarations into a leaf unit --
+cannot handle, because nothing on any edge is a plain declaration. Since E18 Task 5 the plan
+cuts cycle 3 with recipe R1 (routine-call inversion, below), and since E18 Task 6 cycle 2 with
+recipe R2 (member hand-over through an extracted interface):
+
+| Cycle | Cheap edge | What is on it | Recipe |
+|---|---|---|---|
+| 3: `DemoBlueprint -> DemoBlueprint.ViewModel -> DemoControlPlan -> DemoBlueprint` | `DemoBlueprint -> DemoBlueprint.ViewModel` | ONE routine call, `DemoBlueprintViewModelCreate(FFolderId)` at `DemoBlueprint.pas:74`. Its signature uses only `Integer` and `IDemoBlueprintViewModel`, declared in the leaf `DemoBlueprint.Interfaces` that both units already use in their interface section. | **Routine-call inversion**: a procedural type mirroring the routine's signature, and a variable of it, in that leaf; assigned in `DemoBlueprint.ViewModel`'s `initialization`; `DemoBlueprint` calls the variable instead of the routine and drops the uses entry. |
+| 2: `DemoUIConnect <-> DemoGagePort` | `DemoUIConnect -> DemoGagePort` | The class `TDemoGagePort` as an `is` / `as` operand (4 sites) and READS of two members, `Log` and `LastGage`. No construction, no write, no class method. | **Member hand-over through an extracted interface**: a new leaf `DemoGagePort.Untangle` declaring `IDemoGagePortSurface` with the two members as read-only properties; `TDemoGagePort` implements it with two one-line getters; in `DemoUIConnect` `is` becomes `Supports(...)`, `as TDemoGagePort` becomes `as IDemoGagePortSurface`, and the uses entry switches to the leaf. |
+
+The other edges of each cycle construct a class or write a global, which no mechanical recipe
+covers -- but a cycle needs only ONE edge cut.
+
+Measured on 2026-10-19 (engine 1.32.0-alpha, Win64 Debug): the two recipes, written by hand
+in the playbook's own step format and applied by the same script that knows nothing about
+Pascal, compiled with 0 errors and 0 warnings, left the program's output byte-identical, and
+`cycles` then reported only the four-unit cycle. Two traps surfaced on the way, each a Delphi
+rule a recipe must encode:
+
+* **The procedural type must mirror the routine's signature verbatim.** `TFunc<Integer,
+  IDemoBlueprintViewModel>` looks equivalent, but the routine takes `const pFolderId: Integer`
+  and the result is `DemoBlueprint.ViewModel.pas(81): error E2010: Incompatible types:
+  'TFunc<Integer,IDemoBlueprintViewModel>' and 'Procedure'`. `function(const pFolderId:
+  Integer): IDemoBlueprintViewModel` compiles.
+* **`as <interface>` needs a receiver whose STATIC type implements `IInterface`.** `Owner` is
+  a `TComponent`, so `Owner as IDemoGagePortSurface` compiles; `Sender` is a `TObject`, so
+  `Sender as IDemoGagePortSurface` is `DemoUIConnect.pas(57): error E2015: Operator not
+  applicable to this operand type` (plus three follow-on errors). `TComponent(Sender) as
+  IDemoGagePortSurface` compiles, and behaves the same because the `Supports` guard runs
+  first, as the `is` guard did before.
+
+Routine-call inversion is in `cycles --plan` since E18 Task 5 (cycle 3 above; it names the
+pointer `<Routine>Ptr` and its type `T<Routine>Ptr`, copied from the stored signature, and refuses
+when the call is reachable from an `initialization` section). The member hand-over is in it since
+E18 Task 6 (cycle 2 above): the GUID is the MD5 of `<leaf>.<interface>`, so the text is
+reproducible; the TObject receiver is cast through `TComponent`, the first `IInterface` ancestor
+of `TDemoGagePort`; and it refuses whenever the interface could not carry what the consumer does
+-- a write, a construction, a method or class-method call, a name inside the `with` body that
+would bind to something else, a reference-counted class.
+
 ## Honest caveats
 
 * The report's own preamble says the index can miss a reference, so every procedure ends with
   a compile and a re-check. That caveat is drag-lint's, not ours.
+* The predicted `cycles` block at the end of Part A lists the three groups in a different
+  ORDER than `cycles` prints them after the edit (`[2 units]`, `[3 units]`, `[4 units]`
+  predicted; `[4 units]` first in the live output). The content is identical, and the
+  checklist only excuses a different order of the units INSIDE a group. A comparison that keys
+  on group order -- `tools\score-cycle-playbook.ps1` does -- reports that as a mismatch;
+  tracked under E18.
 * Fix ONE cycle at a time and re-run `cycles --plan`: after the first edit, the line numbers
   given for any other cycle are stale.
 * This project is deliberately small. It exists to make the output legible and to be the
@@ -451,8 +821,8 @@ type) and the compile is the final check.
 
 ## The globals, and why they matter here
 
-Seven module-level globals are shared across unit boundaries, each touched by at least two
-units:
+Seven module-level globals of the four-unit cycle are shared across unit boundaries, each
+touched by at least two units:
 
 | Global | Declared in | Written by | Read by |
 |---|---|---|---|

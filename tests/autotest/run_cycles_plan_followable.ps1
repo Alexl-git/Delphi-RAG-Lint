@@ -60,14 +60,16 @@ $dproj = Join-Path $scratch 'CircularDemo.dproj'
 Push-Location C:\TEMP
 try {
   $idx = & $exePath index --project $dproj --db $db 2>&1 | Out-String
-  Check 'SANITY: the four demo units indexed with no errors' `
-        (([regex]::Matches($idx, 'Demo\w+\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 4) $idx
+  # 2026-10-19 (E18): the demo grew from 4 units to 10 (two more cycles, both
+  # refused by the planner); the 4-unit cycle and its line numbers are unchanged.
+  Check 'SANITY: the ten demo units indexed with no errors' `
+        (([regex]::Matches($idx, 'Demo[\w.]+\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')).Count -eq 10) $idx
 
   $report = & $exePath cycles --db $db 2>&1 | Out-String
   Check 'POSITIVE CONTROL: plain report finds the 4-unit group with interface coupling' `
         ($report -match '\[4 units\].*has interface coupling') $report
 
-  $plan = (& $exePath cycles --plan --db $db 2>&1 | Out-String) -replace "`r`n", "`n"
+  $plan = (& $exePath cycles --plan --library-db none --db $db 2>&1 | Out-String) -replace "`r`n", "`n"
   Set-Content -Path (Join-Path $scratch 'plan.md') -Value $plan -Encoding ascii
 
   # --- 1. kind + recipe per symbol ------------------------------------------
@@ -88,8 +90,8 @@ try {
   # --- 2. consumers per symbol ---------------------------------------------
   Check 'consumers of TDemoLogLevel: DemoConfig interface, first use line 23' `
         (Has $plan '`DemoConfig.pas` interface (first use: line 23)') $plan
-  Check 'consumers of TDemoLogLevel: the .dpr, first use line 37' `
-        (Has $plan '`CircularDemo.dpr` program uses (first use: line 37)') $plan
+  Check 'consumers of TDemoLogLevel: the .dpr, first use line 56' `
+        (Has $plan '`CircularDemo.dpr` program uses (first use: line 56)') $plan
   Check 'consumers of TDemoSessionBase: DemoLogger lines 40 and 53 switch to the base' `
         (Has $plan '`DemoLogger.pas` lines 40, 53') $plan
 
@@ -100,7 +102,7 @@ try {
         ($plan -match '`DemoSession\.pas` / `DemoAudit`: [^\n]*\*\*move\*\*') $plan
 
   # --- 4. new units + their uses rule ---------------------------------------
-  foreach ($u in 'DemoLogger.Contracts','DemoAudit.Contracts','DemoSession.Contracts') {
+  foreach ($u in 'DemoLogger.Untangle','DemoAudit.Untangle','DemoSession.Untangle') {
     Check "new unit ${u}: full content given" (Has $plan "unit $u;") $plan
   }
   Check 'new units: the uses rule names the cycle units it must never use' `
@@ -108,9 +110,9 @@ try {
 
   # --- 5. registration ------------------------------------------------------
   Check '.dpr registration line for a new unit' `
-        (Has $plan "DemoLogger.Contracts in 'DemoLogger.Contracts.pas'") $plan
+        (Has $plan "DemoLogger.Untangle in 'DemoLogger.Untangle.pas'") $plan
   Check '.dproj DCCReference line for a new unit' `
-        (Has $plan '<DCCReference Include="DemoLogger.Contracts.pas"/>') $plan
+        (Has $plan '<DCCReference Include="DemoLogger.Untangle.pas"/>') $plan
 
   # --- 6. edits are bottom-up with the current text quoted -------------------
   Check 'edits: bottom-up ordering is stated' (Has $plan 'from the bottom of the file to the top') $plan
@@ -132,8 +134,12 @@ try {
         ($plan -match '\[ \] Create `[^`]+` with the exact text given for `[^`]+`\. Save it as plain ASCII with Windows CRLF line endings') $plan
   Check 'checklist gives the re-index command for this project' `
         (Has $plan ('index --project "' + $dproj + '" --db "' + $db + '"')) $plan
-  Check 'checklist predicts the implementation-only result exactly' `
-        ($plan -match '1 circular unit group\(s\) found:\n  \[4 units\] [a-z <\->]+   \(implementation-only -- legal, lower impact\)') $plan
+  # The prediction lists all three groups (the two refused cycles survive Part A
+  # untouched); their ORDER is not asserted -- see the E18 plan, the predicted
+  # block orders groups differently from the live `cycles` output.
+  Check 'checklist predicts the implementation-only result: three groups, the 4-unit one implementation-only' `
+        (($plan -match '3 circular unit group\(s\) found:') -and
+         ($plan -match '\[4 units\] [a-z <\->]+   \(implementation-only -- legal, lower impact\)')) $plan
 
   # --- the old, unfollowable wording is gone ---------------------------------
   Check 'the old "cycle N should be gone" promise is gone' ($plan -notmatch 'should be gone') $plan

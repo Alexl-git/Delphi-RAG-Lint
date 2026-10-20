@@ -201,6 +201,23 @@ type
 /// </remarks>
 function CollectCircularUsesDetailed(const AStore: ISymbolStore): TArray<TCycleCoupling>;
 
+/// <summary>The command pointer every circular-uses message ends with (E18 T16):
+/// ` fix: drag-lint cycles --fix --project <X.dproj> --unit <stem>`. The IDE Messages pane
+/// shows the finding's message, so this is how the command reaches it (fix_hint is JSON only).</summary>
+/// <param name="pProject">The project file to name; '' gives the placeholder `<X.dproj>`. A path
+/// holding a space is double-quoted.</param>
+/// <param name="pStem">The unit stem for --unit, as given (lower-case by convention).</param>
+/// <returns>The pointer, starting with a space.</returns>
+function CycleFixPointer(const pProject, pStem: string): string;
+
+/// <summary>pMessage with its cycle-fix pointer (see CycleFixPointer), if it has one, replaced by
+/// the pointer for pProject / pStem; a message without one gets it appended.</summary>
+/// <param name="pMessage">A circular-uses finding message.</param>
+/// <param name="pProject">As for CycleFixPointer.</param>
+/// <param name="pStem">As for CycleFixPointer.</param>
+/// <returns>The message ending in exactly one pointer.</returns>
+function WithCycleFixPointer(const pMessage, pProject, pStem: string): string;
+
 implementation
 
 { Side-effect / operator / helper units that are legitimately used without any
@@ -233,6 +250,21 @@ const
     'exceptionlog',  { EurekaLog: installs the hook in initialization }
     'ememleaks', 'eresleaks', 'eappvcl', 'eexceptionmanager'
   );
+
+const
+  CCycleFixPointerHead = ' fix: drag-lint cycles --fix --project ';
+
+function CycleFixPointer(const pProject, pStem: string): string;
+begin
+  var Proj:= if pProject = '' then '<X.dproj>' else if Pos(' ', pProject) > 0 then '"' + pProject + '"' else pProject;
+  Result:= CCycleFixPointerHead + Proj + ' --unit ' + pStem;
+end;
+
+function WithCycleFixPointer(const pMessage, pProject, pStem: string): string;
+begin
+  var At:= Pos(CCycleFixPointerHead, pMessage);
+  Result:= (if At > 0 then Copy(pMessage, 1, At - 1) else pMessage) + CycleFixPointer(pProject, pStem);
+end;
 
 function IsSideEffectUnit(const AUnitName: string): Boolean;
 var
@@ -588,8 +620,10 @@ var
               end;
           if HasImplEdge then
             F.Message := Format('Circular unit dependency among %d units: %s -- it already routes through an implementation-section uses, so it compiles; this is a coupling smell, not a build error. Extract the shared code into a new unit (moving another use to the implementation section will NOT break this cycle)', [Comp.Count, Names])
+              + CycleFixPointer('', LowerCase(ChangeFileExt(ExtractFileName(AStore.GetFilePath(Anchor)), '')))
           else
-            F.Message := Format('Circular unit dependency among %d units: %s -- break the cycle (extract shared code or move a use to the implementation section)', [Comp.Count, Names]);
+            F.Message := Format('Circular unit dependency among %d units: %s -- break the cycle (extract shared code or move a use to the implementation section)', [Comp.Count, Names])
+              + CycleFixPointer('', LowerCase(ChangeFileExt(ExtractFileName(AStore.GetFilePath(Anchor)), '')));
           F.FilePath:= AStore.GetFilePath(Anchor);
           var Ln: Integer:= 1;
           UnitLine.TryGetValue(Anchor, Ln);

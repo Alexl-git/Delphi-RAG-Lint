@@ -44,10 +44,102 @@ unit DRagLint.Convert.UnitRules;
 interface
 
 uses
+  System.Generics.Collections,
   DRagLint.Convert.Rules,
   DRagLint.Refactor.TextEdit;
 
 type
+  /// <summary>The kind of one significant token TUsesLexer returns.</summary>
+  TTokKind = (tkIdent, tkString, tkSym, tkEof);
+
+  /// <summary>One significant token of TUsesLexer: an identifier, a string
+  /// literal or one symbol character (a number lexes as tkSym).</summary>
+  /// <remarks>Start / Stop are 1-based offsets into the lexer's text; Stop is
+  /// exclusive. Depth counts the $IF / $IFDEF / $IFNDEF / $IFOPT regions open
+  /// at the token. Escaped marks an '&amp;ident' (an identifier, never a
+  /// keyword); Start then points past the ampersand.</remarks>
+  TTok = record
+    Kind : TTokKind;
+    Start: Integer;
+    Stop : Integer;
+    Text : string;
+    Depth: Integer;
+    Escaped: Boolean;  { an '&ident': an identifier, never a keyword }
+  end;
+
+  /// <summary>One entry of a uses clause: 'Name[.Name...] [in 'path']'.</summary>
+  /// <remarks>Start / Stop span the whole entry (the path literal included),
+  /// 1-based, Stop exclusive; Depth is the conditional-region depth at its
+  /// first token (see TTok).</remarks>
+  TUsesEntry = record
+    Name : string;
+    Start: Integer;
+    Stop : Integer;
+    Depth: Integer;
+    Escaped: Boolean;  { first token was '&ident': its '&' sits at Start - 1 }
+  end;
+
+  /// <summary>One section's uses clause as ParseClause reads it.</summary>
+  /// <remarks>Commas[i] sits between Entries[i] and Entries[i + 1]. Start is
+  /// the `uses` token's start, Stop the `;` token's stop (exclusive); UsesTok
+  /// and Semi are those two tokens (Semi.Depth tells whether the `;` sits in a
+  /// conditional region). Section / Present / KwLine are filled by the caller
+  /// (KwLine: the section keyword's line, kept for a clause that has to be
+  /// created).</remarks>
+  TUsesClause = record
+    Section: string;
+    Present: Boolean;
+    KwLine : Integer;
+    Start  : Integer;
+    Stop   : Integer;
+    Entries: TArray<TUsesEntry>;
+    Commas : TArray<TTok>;
+    UsesTok: TTok;
+    Semi   : TTok;
+  end;
+
+  /// <summary>A small Pascal lexer for uses clauses: skips whitespace and
+  /// comments, records every compiler directive and tracks the
+  /// conditional-region depth.</summary>
+  /// <remarks>
+  /// <para>Comments and directives are trivia: Next never returns them, so a
+  /// caller that must keep a comment finds it as non-blank text BETWEEN two
+  /// tokens, and a directive with DirectiveIn.</para>
+  /// <para>The text may use LF or CRLF line breaks (a CR is whitespace).
+  /// It lexes only as far as the caller asks; DirectiveIn knows only the
+  /// directives lexed so far. Not thread-safe; one instance per text. Shared
+  /// with DRagLint.Report.CyclePlan (E18 T3a: minimal uses-clause edits).</para>
+  /// </remarks>
+  TUsesLexer = class
+  private
+    FText      : string;
+    FPos       : Integer;
+    FDepth     : Integer;
+    FDirectives: TList<Integer>;
+    procedure Directive(AStart, ABodyStart: Integer; const ACloser: string);
+    procedure SkipTo(const ACloser: string);
+    procedure SkipTrivia;
+    function IsMultiLineOpener: Boolean;
+    procedure ReadString;
+  public
+    /// <summary>Starts lexing AText at its first character.</summary>
+    /// <param name="AText">The text to lex; the lexer keeps its own copy.</param>
+    constructor Create(const AText: string);
+    /// <summary>Frees the directive list.</summary>
+    destructor Destroy; override;
+    /// <summary>The next significant token after any whitespace, comment or
+    /// directive.</summary>
+    /// <returns>The token; Kind = tkEof (Start = Stop = Length + 1) at the
+    /// end of the text, and on every call after it.</returns>
+    function Next: TTok;
+    /// <summary>True when a compiler directive lexed so far STARTS at an
+    /// offset in [AFrom, ATo).</summary>
+    /// <param name="AFrom">First offset, 1-based, inclusive.</param>
+    /// <param name="ATo">Last offset, exclusive.</param>
+    /// <returns>Whether such a directive exists.</returns>
+    function DirectiveIn(AFrom, ATo: Integer): Boolean;
+  end;
+
   /// <summary>One reason a uses entry is still needed, or still referenced:
   /// a name and where it sits (C9, apply/1 uses[].needed_by).</summary>
   /// <remarks>For a `kept` row Name is a .dfm component, 'Name: Class', and
@@ -269,13 +361,25 @@ function UnitRuleWatchList(const ARules: TConversionRuleSet; const AExtraAdds: T
 /// <remarks>Pure.</remarks>
 function ImplementationKeywordLine(const AText: string): Integer;
 
+/// <summary>Reads one uses clause, 'Name[.Name...] [in 'path']' (, ...) ';',
+/// after an already-consumed `uses` token.</summary>
+/// <param name="ALex">The lexer, positioned just after AUsesTok; it is left
+/// just after the `;`, and its DirectiveIn then knows every directive up to
+/// there.</param>
+/// <param name="AUsesTok">The `uses` token ALex returned.</param>
+/// <param name="AClause">Receives Start, Stop, Entries, Commas, UsesTok,
+/// Semi and Present = True on success; Section and KwLine are untouched.</param>
+/// <returns>False on any other shape (AClause then partly filled; ignore it).</returns>
+/// <remarks>Shared by the unit-rule planner and DRagLint.Report.CyclePlan
+/// (E18 T3a), so the uses grammar lives in one place.</remarks>
+function ParseClause(ALex: TUsesLexer; const AUsesTok: TTok; var AClause: TUsesClause): Boolean;
+
 implementation
 
 uses
   System.SysUtils,
   System.Math,
-  System.Generics.Defaults,
-  System.Generics.Collections;
+  System.Generics.Defaults;
 
 const
   SECTION_INTF = 'interface';
@@ -291,63 +395,9 @@ const
   PAR_OPEN_LEN = 3;  // paren + star + dollar
 
 type
-  TTokKind = (tkIdent, tkString, tkSym, tkEof);
-
-  { One significant token. Offsets are 1-based into the LF-normalised text;
-    Stop is exclusive. Depth counts the $IF / $IFDEF regions open at the token. }
-  TTok = record
-    Kind : TTokKind;
-    Start: Integer;
-    Stop : Integer;
-    Text : string;
-    Depth: Integer;
-    Escaped: Boolean;  { an '&ident': an identifier, never a keyword }
-  end;
-
-  TUsesEntry = record
-    Name : string;
-    Start: Integer;
-    Stop : Integer;
-    Depth: Integer;
-  end;
-
-  { One section's uses clause. Commas[i] sits between Entries[i] and
-    Entries[i + 1]. KwLine is the section keyword's line, kept for a clause
-    that has to be created. }
-  TUsesClause = record
-    Section: string;
-    Present: Boolean;
-    KwLine : Integer;
-    Start  : Integer;
-    Stop   : Integer;
-    Entries: TArray<TUsesEntry>;
-    Commas : TArray<TTok>;
-  end;
-
   TSpan = record
     Start: Integer;
     Stop : Integer;
-  end;
-
-  { A small Pascal lexer: skips whitespace and comments, records every
-    compiler directive and tracks the conditional-region depth. It lexes only
-    as far as the parser asks, which is the implementation uses clause. }
-  TUsesLexer = class
-  private
-    FText      : string;
-    FPos       : Integer;
-    FDepth     : Integer;
-    FDirectives: TList<Integer>;
-    procedure Directive(AStart, ABodyStart: Integer; const ACloser: string);
-    procedure SkipTo(const ACloser: string);
-    procedure SkipTrivia;
-    function IsMultiLineOpener: Boolean;
-    procedure ReadString;
-  public
-    constructor Create(const AText: string);
-    destructor Destroy; override;
-    function Next: TTok;
-    function DirectiveIn(AFrom, ATo: Integer): Boolean;
   end;
 
 function IsIdentStart(C: Char): Boolean;
@@ -543,8 +593,6 @@ begin
   Result:= (T.Kind = tkSym) and (T.Text = ASym);
 end;
 
-{ Reads 'Name[.Name...] [in 'path']' (, ...) ';' after an already-consumed
-  'uses' token. False on any other shape. }
 function ParseClause(ALex: TUsesLexer; const AUsesTok: TTok; var AClause: TUsesClause): Boolean;
 var
   T      : TTok;
@@ -556,7 +604,8 @@ begin
   Entries:= TList<TUsesEntry>.Create;
   Commas := TList<TTok>.Create;
   try
-    AClause.Start:= AUsesTok.Start;
+    AClause.Start  := AUsesTok.Start;
+    AClause.UsesTok:= AUsesTok;
     repeat
       T:= ALex.Next;
       if T.Kind <> tkIdent then Exit;
@@ -565,6 +614,7 @@ begin
       E.Start:= T.Start;
       E.Stop := T.Stop;
       E.Depth:= T.Depth;
+      E.Escaped:= T.Escaped;
       T:= ALex.Next;
       while IsSym(T, '.') do
       begin
@@ -588,6 +638,7 @@ begin
         Exit;
     until IsSym(T, ';');
     AClause.Stop   := T.Stop;
+    AClause.Semi   := T;
     AClause.Present:= True;
     AClause.Entries:= Entries.ToArray;
     AClause.Commas := Commas.ToArray;

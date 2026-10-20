@@ -12,7 +12,7 @@
   EXPECTED on an unedited copy:
     1-CYCLE  FAIL  -- the tree still has the INTERFACE coupling the plan removes
     2-BUILD  PASS  -- the demo compiles as shipped
-    3-CUT    FAIL  -- none of the three nominated *.Contracts units exists
+    3-CUT    FAIL  -- none of the three nominated *.Untangle units exists
     4-SCOPE  PASS  -- nothing changed, so nothing changed outside the report
   and an overall exit 1. The positive half (a model's edited tree scoring 4/4)
   needs a model and is recorded in
@@ -48,7 +48,7 @@ $report = Join-Path $WorkDir 'report.txt'
 Push-Location (Join-Path $WorkDir 'orig')
 try {
   & $exePath index --project 'circular-demo\CircularDemo.dproj' --db (Join-Path $WorkDir 'rep.sqlite') 2>&1 | Out-Null
-  & $exePath cycles --db (Join-Path $WorkDir 'rep.sqlite') --edges --causes --plan --format text 2>$null |
+  & $exePath cycles --db (Join-Path $WorkDir 'rep.sqlite') --edges --causes --plan --format text --library-db none 2>$null |
     Set-Content -LiteralPath $report -Encoding ascii
 } finally { Pop-Location }
 Check 'V the engine printed a plan with a checklist' ((Get-Content $report -Raw) -match 'It must print exactly:') $report

@@ -57,6 +57,8 @@ param(
   # protocol command can be named. Optional -- without it the chart shows one side
   # and says so.
   [string] $CounterpartDb,
+  # cycles only: the .dproj the Fix it commands name (Emit-Cycles -Project)
+  [string] $Project,
   # consumers, feeds-from and lands-where: the SQL-SCRIPT index clone (tables,
   # triggers, procedures). -DbPath stays the Delphi project index; -Target is
   # TABLE or TABLE.COLUMN for consumers, <Form>.<Control> for feeds-from.
@@ -146,6 +148,7 @@ try {
     'cycles'         {
       $cy = @{ DbPath = $DbPath; OutDir = $dir }
       if ($Target -ne 'project') { $cy.Unit = $Target }
+      if ($Project) { $cy.Project = $Project }
       & (Join-Path $PSScriptRoot 'Emit-Cycles.ps1') @cy
     }
     'architecture'   { & (Join-Path $PSScriptRoot 'Emit-Architecture.ps1')  -DbPath $DbPath -OutDir $dir }

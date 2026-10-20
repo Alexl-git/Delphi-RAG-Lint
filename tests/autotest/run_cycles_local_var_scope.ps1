@@ -57,7 +57,7 @@ try {
         (($idx -match 'uCycA\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors') -and
          ($idx -match 'uCycB\.pas\s*->\s*\d+ symbols, \d+ refs, 0 errors')) $idx
 
-  $plan = & $exePath cycles --plan --db $db 2>&1 | Out-String
+  $plan = & $exePath cycles --plan --library-db none --db $db 2>&1 | Out-String
 
   Check 'SANITY: the cycle is detected and is implementation-only' `
         ($plan -match 'implementation-only') $plan

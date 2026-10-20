@@ -80,6 +80,8 @@ uses
     DragLint.Plugin.StatusBar
   , { EnqueueReindexThenRelint: Rescan this unit }
     DragLint.Plugin.SaveNotifier
+  , { CYCLE_FIX_TIMEOUT_MS: the one time limit of every IDE cycle-fix run }
+    DragLint.Plugin.CycleFix // dl:unit DragLint.Plugin.CycleFix accepted -- CYCLE_FIX_TIMEOUT_MS is the one plugin cycle-fix time limit (controller ruling, E18 T15b fix round 1); a second copy here is what let it drift to 10 min
   ;
 
 { ---- TStructureNodeData: stores line info in tree node.Data ---- }
@@ -119,6 +121,10 @@ type
       FItemDocProject : TMenuItem   ; { ADF T10 AutoDocument: 'Document project' -- any node, active .dproj }
       FItemEnumHelper : TMenuItem   ; { Task 8 enum-helper: 'Create helper class' -- skEnum/skEnumValue node, no existing helper }
       FItemAllow      : TMenuItem   ; { 'Allow this message' -- dl:ok review of a single finding }
+      { E18 T15b: on a circular-uses finding, `cycles --fix` instead of the generic 'Fix it' }
+      FItemCycleSep   : TMenuItem   ; { separator before the two cycle items }
+      FItemCycleDry   : TMenuItem   ; { 'Fix this cycle (dry run)...' }
+      FItemCycleApply : TMenuItem   ; { 'Apply cycle fix...' -- dry run, confirm, then --apply }
       FRootDiag       : TTreeNode   ; { the current 'Diagnostics (N)' root, for node discrimination }
       FFixableRules   : TStringList ; { lower-case rule-ids with a registered fix; nil until first fetched }
       { fix_opt_in naming rules: 'Fix it' on ONE finding is the opt-in (the engine
@@ -172,6 +178,11 @@ type
       procedure FixItClick             (Sender: TObject);
       procedure FixAllInUnitClick      (Sender: TObject);
       procedure FixAllInProjectClick   (Sender: TObject);
+      { E18 T15b: 'Fix this cycle (dry run)...' / 'Apply cycle fix...' on a circular-uses finding. }
+      function  NodeIsCycleFinding     (ANode: TTreeNode): Boolean;
+      procedure CycleFixDryRunClick    (Sender: TObject);
+      procedure CycleFixApplyClick     (Sender: TObject);
+      procedure RunCycleFix            (AApply: Boolean);
       { v0.90 AutoDocument: 'Document it' handler + its enablement predicate. }
       function  NodeIsDocumentable     (ANode: TTreeNode): Boolean;
       procedure DocumentItClick        (Sender: TObject);
@@ -223,6 +234,8 @@ type
 const
   { the one rule 'Fix it' routes to uses-fix instead of `lint --fix` }
   CUnusedUnitRule = 'unused-unit-in-uses';
+  { E18 T15b: the rule whose fix is `cycles --fix` (the tree's two cycle items) }
+  CCircularUsesRule = 'circular-uses';
 
 var
   GStructureForm: TDragLintStructureForm = nil;
@@ -591,6 +604,14 @@ begin
   FItemFixIt     := FPopup.Items[FPopup.Items.Count - 3];
   FItemFixUnit   := FPopup.Items[FPopup.Items.Count - 2];
   FItemFixProject:= FPopup.Items[FPopup.Items.Count - 1];
+  { E18 T15b: a circular-uses finding is fixed by `cycles --fix`, a verb of its own; shown
+    (and 'Fix it' hidden) only on such a node, see PopupPopup }
+  AddPopupItem(FPopup, '-'                           , nil                    ); { separator }
+  FItemCycleSep  := FPopup.Items[FPopup.Items.Count - 1];
+  AddPopupItem(FPopup, 'Fix this &cycle (dry run)...', CycleFixDryRunClick    );
+  FItemCycleDry  := FPopup.Items[FPopup.Items.Count - 1];
+  AddPopupItem(FPopup, 'Appl&y cycle fix...'         , CycleFixApplyClick     );
+  FItemCycleApply:= FPopup.Items[FPopup.Items.Count - 1];
   { 'Allow this message' sits with the fix verbs because it is the other answer
     to a finding: fix the code, or record that a human looked and accepted it.
     Deliberately LAST, and deliberately not the default -- suppression should
@@ -1215,6 +1236,13 @@ begin
     var OfferProj, OfferWhy: string;
     Exit((UnusedUnitOfNode(ANode) <> '') and (ActiveProjectWriteDb(OfferProj, OfferWhy) <> ''));
   end;
+  { E18 T15b: circular-uses is fixed by `cycles --fix` (two cycle items, not 'Fix it'); it needs
+    the active project and its own write index, as uses-fix does }
+  if SameText(ND.Code, CCircularUsesRule) then
+  begin
+    var CycProj, CycWhy: string;
+    Exit(ActiveProjectWriteDb(CycProj, CycWhy) <> '');
+  end;
   EnsureFixableRules;
   Result:= (FFixableRules <> nil) and (FFixableRules.IndexOf(LowerCase(ND.Code)) >= 0);
   { a naming rename finds every use through the index, so it needs one }
@@ -1307,6 +1335,14 @@ begin
       Inc(FixCount, CountFixableDiags(FDiags, FOptInFixRules.ToStringArray));
   end;
   FItemFixIt     .Enabled:= IsFinding;
+  { E18 T15b: a circular-uses finding gets the two cycle items instead of 'Fix it' }
+  var IsCycle: Boolean:= IsFinding and NodeIsCycleFinding(Node);
+  FItemFixIt     .Visible:= not IsCycle;
+  FItemCycleSep  .Visible:= IsCycle;
+  FItemCycleDry  .Visible:= IsCycle;
+  FItemCycleApply.Visible:= IsCycle;
+  FItemCycleDry  .Enabled:= IsCycle;
+  FItemCycleApply.Enabled:= IsCycle;
   FItemFixUnit   .Enabled:= InDiags and (FixCount > 0);
   FItemFixUnit   .Caption:= if FixCount > 0 then Format('Fix all in &unit (%d)', [FixCount]) else 'Fix all in &unit';
   FItemFixProject.Enabled:= IsRoot   ;
@@ -1343,6 +1379,12 @@ begin
     if not NodeIsFixableFinding(FTree.Selected) then Exit;
     ND:= TStructureNodeData(FTree.Selected.Data);
     if FCurrentFile = '' then Exit;
+    { E18 T15b: 'Fix it' is hidden on a circular-uses node; a stray click is the dry run }
+    if SameText(ND.Code, CCircularUsesRule) then
+    begin
+      RunCycleFix(False);
+      Exit;
+    end;
     if SameText(ND.Code, CUnusedUnitRule) then
     begin
       { Owner ask 2026-10-13: decide whether the unit can go entirely or must
@@ -1633,6 +1675,173 @@ end;
 procedure TDragLintStructureForm.RunFixJob(const ATitle, ACmd: string; ATimeoutMs: Integer; const AUsesUnit: string);
 begin
   EnqueueFixJob(FCurrentFile, ATitle, ACmd, ATimeoutMs, AUsesUnit);
+end;
+
+{ ---- E18 T15b: "Fix this cycle" on a circular-uses finding ---- }
+
+{ Re-read the diagnostics of every live panel -- after a cycle fix wrote several units. Reaches
+  the panels through GLiveStructureForms only, never a captured form (see EnqueueFixJob). }
+procedure RefreshDiagnosticsInPanels;
+begin
+  if GLiveStructureForms = nil then Exit;
+  for var F: TDragLintStructureForm in GLiveStructureForms do
+    try
+      F.RefreshDiagnosticsOnly;
+    except
+      on E: Exception do DLT('cyclefix', 'RefreshDiagnosticsOnly failed: ' + E.ClassName + ': ' + E.Message);
+    end;
+end;
+
+{ The note a finished cycle-fix job leaves: CycleFixSummary, or the first output line when the
+  engine printed no cycle-fix/1 document (a crash, a usage error). }
+function CycleFixNote(AExit: Integer; const AOutput: string): string;
+begin
+  Result:= CycleFixSummary(AOutput);
+  if (AExit <> 0) and SameText(Result, CycleFixSummary('')) then
+    Result:= Format('FAILED (exit %d): %s', [AExit, FirstOutputLine(AOutput)]);
+end;
+
+{ Show ANote for AFilePath on the panels, the status strip and the Messages pane. }
+procedure ReportCycleFix(const AFilePath, ATitle, ANote: string);
+begin
+  ShowFixResultInPanels(AFilePath, ATitle + ': ' + ANote);
+  SetDragLintNote(ATitle + ': ' + ANote);
+  PostIdeMessage('drag-lint: ' + ATitle + ': ' + ANote);
+end;
+
+{ The --apply run: on exit 0 every written[] file is reloaded from disk, the panels re-read their
+  diagnostics and the project is re-linted. OnDone captures no form. }
+procedure EnqueueCycleFixApply(const AFilePath, ATitle, AApplyCmd: string);
+var
+  Job     : TDragLintJob;
+  FilePath: string;
+  Title   : string;
+begin
+  FilePath:= AFilePath;
+  Title   := ATitle;
+  if RefusedWhileFixRuns(Title) then Exit;
+  Job:= TDragLintJob.Create;
+  Job.Kind       := jkGeneric;
+  Job.Busy       := True;
+  Job.Title      := Title;
+  Job.CoalesceKey:= 'cyclefix-apply:' + LowerCase(FilePath);
+  Job.CmdLine    := AApplyCmd;
+  Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS; { DragLint.Plugin.CycleFix: above the longest --apply the engine's own limits allow, so its rollback fires first }
+  Job.Streaming  := False;
+  Job.OnDone:=
+    procedure(AExit: Integer; AOutput: string)
+    begin
+      try
+        var Note: string:= CycleFixNote(AExit, AOutput);
+        DLT('cyclefix', Format('%s -> exit=%d note=[%s]', [Title, AExit, Note]));
+        ReportCycleFix(FilePath, Title, Note);
+        if AExit <> 0 then Exit;
+        for var W in CycleFixWrittenFiles(AOutput) do ReloadModuleFromDisk(W);
+        RefreshDiagnosticsInPanels;
+        EnqueueReindexThenRelint('');
+      except
+        on E: Exception do DLT('cyclefix', 'apply OnDone failed: ' + E.ClassName + ': ' + E.Message);
+      end;
+    end;
+  SetDragLintNote(Title + '...');
+  JobQueue.Enqueue(Job);
+end;
+
+{ The dry run (writes nothing; runs the baseline build). AApply: its document then builds the
+  confirm dialog -- shown only when CycleFixCanApply; a refusal (dirty baseline, a recipe refusal)
+  is reported instead, with no dialog -- and Yes queues ADryCmd + ' --apply'. Every edited unit
+  must be saved first: the apply rewrites them on disk and reloads the buffers. }
+procedure EnqueueCycleFixJob(const AFilePath, ATitle, ADryCmd: string; AApply: Boolean);
+var
+  Job     : TDragLintJob;
+  FilePath: string;
+  Title   : string;
+  DryCmd  : string;
+  Apply   : Boolean;
+begin
+  FilePath:= AFilePath;
+  Title   := ATitle;
+  DryCmd  := ADryCmd;
+  Apply   := AApply;
+  if RefusedWhileFixRuns(Title) then Exit;
+  Job:= TDragLintJob.Create;
+  Job.Kind       := jkGeneric;
+  Job.Busy       := True; { released before OnDone, so the confirm dialog has a normal cursor }
+  Job.Title      := Title + (if Apply then ' (dry run first)' else '');
+  Job.CoalesceKey:= 'cyclefix-dry:' + LowerCase(FilePath);
+  Job.CmdLine    := DryCmd;
+  Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS; { DragLint.Plugin.CycleFix: above the longest --apply the engine's own limits allow, so its rollback fires first }
+  Job.Streaming  := False;
+  Job.OnDone:=
+    procedure(AExit: Integer; AOutput: string)
+    begin
+      try
+        var Note: string:= CycleFixNote(AExit, AOutput);
+        DLT('cyclefix', Format('%s dry run -> exit=%d note=[%s]', [Title, AExit, Note]));
+        if (not Apply) or not CycleFixCanApply(AOutput) then
+        begin
+          ReportCycleFix(FilePath, Title, Note);
+          Exit;
+        end;
+        for var Edited in CycleFixEditedFiles(AOutput) do
+          if BufferIsModified(Edited) then
+          begin
+            ReportCycleFix(FilePath, Title, 'not run -- ' + ExtractFileName(Edited) +
+              ' has unsaved changes; save it first (the fix rewrites it on disk and reloads it)');
+            Exit;
+          end;
+        if MessageDlg(CycleFixConfirmText(AOutput), mtConfirmation, [mbYes, mbNo], 0, mbNo) = mrYes then
+          EnqueueCycleFixApply(FilePath, Title, DryCmd + ' --apply')
+        else ReportCycleFix(FilePath, Title, 'cancelled -- nothing written');
+      except
+        on E: Exception do DLT('cyclefix', 'dry run OnDone failed: ' + E.ClassName + ': ' + E.Message);
+      end;
+    end;
+  SetDragLintNote(Job.Title + '...');
+  JobQueue.Enqueue(Job);
+end;
+
+{ A circular-uses finding row (the code alone; NodeIsFixableFinding adds the index gate). }
+function TDragLintStructureForm.NodeIsCycleFinding(ANode: TTreeNode): Boolean;
+begin
+  Result:= (ANode <> nil) and (ANode.Data <> nil) and (ANode.Parent = FRootDiag)
+       and SameText(TStructureNodeData(ANode.Data).Code, CCircularUsesRule);
+end;
+
+{ `cycles --fix --project <active> --db <its write index> --unit <this unit> --platform <p>
+  --format json` -- the dry run; AApply asks to apply it afterwards (EnqueueCycleFixJob). The
+  project and DB are the ACTIVE project's own (ActiveProjectWriteDb): --apply re-indexes the DB it
+  is handed, so a mispaired one would be overwritten with this closure (as uses-fix, 2026-10-16). }
+procedure TDragLintStructureForm.RunCycleFix(AApply: Boolean);
+begin
+  try
+    if not (NodeIsCycleFinding(FTree.Selected) and NodeIsFixableFinding(FTree.Selected)) then Exit;
+    if FCurrentFile = '' then Exit;
+    var FixProj, FixWhy: string;
+    var FixDb: string:= ActiveProjectWriteDb(FixProj, FixWhy);
+    if FixDb = '' then
+    begin
+      DLT('cyclefix', 'NOT run: ' + FixWhy);
+      Exit;
+    end;
+    var UnitStem: string:= LowerCase(ChangeFileExt(ExtractFileName(FCurrentFile), ''));
+    EnqueueCycleFixJob(FCurrentFile, (if AApply then 'Apply cycle fix ' else 'Cycle fix (dry run) ') + UnitStem,
+      Format('"%s" cycles --fix --project "%s" --db "%s" --unit "%s" --platform %s --format json',
+        [ResolveExePath, FixProj, FixDb, UnitStem, LowerCase(GetActivePlatformForLibrary)]),
+      AApply);
+  except
+    on E: Exception do DLT('cyclefix', 'RunCycleFix failed: ' + E.ClassName + ': ' + E.Message);
+  end;
+end;
+
+procedure TDragLintStructureForm.CycleFixDryRunClick(Sender: TObject);
+begin
+  RunCycleFix(False);
+end;
+
+procedure TDragLintStructureForm.CycleFixApplyClick(Sender: TObject);
+begin
+  RunCycleFix(True);
 end;
 
 { Is ACode a naming rule whose fix renames call sites (the engine's fix_opt_in

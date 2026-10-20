@@ -4,10 +4,10 @@ title: Export to Obsidian
 summary: Uses export obsidian to write the indexed project out as a set of Obsidian vault markdown pages
 product: DL
 group: graphs-reports
-order: 70009
+order: 70010
 since: 0.6.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Export to Obsidian

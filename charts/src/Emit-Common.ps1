@@ -2853,7 +2853,7 @@ function Add-RowCluster {
     $Rows, [string] $Border, [string] $Fill, [string] $Hdr,
     [string] $RowInk = '#1F2933', [string] $LineInk = '#8A94A6',
     [string] $FontSans = 'Segoe UI', [string] $Style = 'rounded,filled',
-    [int] $PenWidth = 2
+    [int] $PenWidth = 2, [string] $FontMono = 'Consolas'
   )
   [void]$Sb.AppendLine("  subgraph $Cid {")
   [void]$Sb.AppendLine("    style=`"$Style`"; color=`"$Border`"; fillcolor=`"$Fill`"; penwidth=$PenWidth;")
@@ -2879,6 +2879,15 @@ function Add-RowCluster {
       throw "Add-RowCluster ($Cid): row $($p + 1) is empty -- did a `, `$array` return get wrapped in @()?"
     }
     $p++
+    # A CODE row (E18 T14, the cycles "Fix it" cell): a command the page cannot run, so it hands the exact
+    # text over -- monospace, no href (nothing handles a copy link); TITLE = the stronger command (Tip), here
+    # the --apply line. A Code row needs a non-empty Label (the empty-row guard above).
+    if ($r.PSObject.Properties.Name -contains 'Code' -and -not [string]::IsNullOrWhiteSpace([string]$r.Code)) {
+      [void]$tbl.Append("<TR><TD PORT=`"p$p`" ALIGN=`"LEFT`" TITLE=`"$(ConvertTo-XmlText $r.Tip)`">")
+      [void]$tbl.Append("<FONT COLOR=`"$RowInk`" FACE=`"$FontMono`" POINT-SIZE=`"11`">$(ConvertTo-XmlText $r.Code)</FONT></TD></TR>")
+      [void]$ports.Add("${Nid}:p$p")
+      continue
+    }
     # A row with NO Href is a note/disclosure line. It must carry neither HREF
     # nor TITLE: HREF="" still makes dot emit an <a>, which both inflates the
     # anchor count the emitters assert on and offers the reader a dead link.

@@ -3,7 +3,70 @@
 All notable changes to Delphi-RAG-Lint. This project is **alpha -- expect
 breaking changes** until v1.0.
 
-## Unreleased
+## v1.33.0-alpha -- 2026-10-20
+
+No extractor change (1.22.0-alpha): no re-parse.
+
+### Added
+- **`cycles --fix`: the mechanical, compile-gated fix of one circular group (E18).**
+  `cycles --fix --project <X.dproj> --db <db>` plans one group (`--cycle <n>`, `--unit <stem>`,
+  or the first mechanical one), stages it in a shadow tree and builds the project first (the
+  baseline gate; `--no-compile` skips it) -- a dry run that writes no source file, exit 0
+  mechanical / 1 refused / 2 error, `cycle-fix/1` JSON. `--apply` writes it under `.BCK<n>`
+  backups (`--no-backup`), builds in place with one bounded repair (R4) or rolls every file
+  back, re-indexes (`--no-reindex`) and re-runs `cycles` against the prediction: exit 0
+  written and verified (or written with `--no-reindex`, unverified) / 1 refused, rolled back after a
+  compile error or build timeout, or written but not verified / 2 error -- a write or build failed
+  part-way (rolled back, project not changed, or the rollback failure is named), or bad flags;
+  `--apply --no-compile` is exit 2.
+  `--part all` (needs `--apply`, refuses `--no-reindex`) applies Part A then Part B. Every
+  refusal is named (`dirty-baseline`, `compile-error`, `build-timeout`, `anchor-mismatch`,
+  `non-ascii-text`, `base-class`, `receiver-unknown`, `unit-leaves-program`, `manual-edit`,
+  `blocked-symbol`, `unresolved-edge`, `edge-still-used`, ...; the full list is on the wiki
+  page). Every build is `msbuild /p:Config=Debug` for `--platform` (default win64). A rollback
+  restores the sources, not the DCUs the failed build wrote: rebuild after a rollback. The
+  default scratch (shadow tree, build logs) is deleted at exit unless the run's output cites a
+  file in it; then it is kept and named on stderr, so the cited file exists; the dry run's
+  `Shadow tree:` line says which. A `--library-db` that does not open answers `--format json`
+  with a `cycle-fix/1` error document. Without `--cycle` / `--unit` the text output names the groups the run did
+  not plan, with a `--cycle <n>` hint. `info --json` capability `cycle_fix`.
+- **Part B recipes R1 and R2.** R1 routine-call inversion: an edge that is exactly one routine
+  whose signature types live outside the cycle is called through a procedural variable
+  declared in a leaf. R2 member hand-over: an edge that is only `is` / `as` against one class
+  plus member reads goes through an `I<Class>Surface` interface declared in the class unit's
+  leaf.
+- **Fix-it surfaces.** `cycles --plan` prints a "Fix it" block per group (the exact dry-run
+  and apply commands); `cycles --format json --causes [--project <X.dproj>]` adds per-group
+  `fix{available,part,dry_run,apply,edges[],reason,followup}`; `lint <file> --format json`
+  reports `circular-uses` per unit of a cycle with a `fix_hint`. IDE: *drag-lint > Uses &
+  Dependencies > Fix Circular Uses Mechanically (dry run)...*, the Uses & Deps tab's
+  *Circular uses* section (Dry run / Apply per group), and *Fix this cycle (dry run)...* /
+  *Apply cycle fix...* on a `circular-uses` finding in the Structure window's Diagnostics
+  tree. Every IDE-started run passes the active platform as `--platform`; the tab's Apply
+  asks Yes / No first, like the tree; each job has a 120 minute limit, above the longest run
+  the engine's own limits allow one `--apply` (3 builds x 30 min + re-index + `cycles`
+  10 min each), so the engine always rolls back before the IDE could kill it (the
+  `--part all` iteration limit is the same).
+
+### Fixed
+- `cycles --plan`'s predicted re-check output lists the groups in the order `cycles` really
+  prints them.
+- A plan's uses-clause edits are minimal, lexer-based edits: comments inside the clause
+  survive, and a compiler directive inside it refuses the edit (`directive`) instead of
+  dropping it.
+
+### Changed
+- The `circular-uses` message, in `lint` AND `lint-all`, now ends with
+  ` fix: drag-lint cycles --fix --project <X.dproj> --unit <stem>` (the project given to
+  `lint`, else that placeholder); a tool that matches the whole message text must allow for it.
+- `circular-demo` carries three cycles instead of one (E18 phase 2): the original
+  interface-coupled four-unit cycle, unchanged; a three-unit implementation-only cycle whose
+  only cheap cut is a single routine call (`DemoBlueprint -> DemoBlueprint.ViewModel`); and a
+  two-unit one whose only cheap cut is a member access behind `is` / `as`
+  (`DemoUIConnect -> DemoGagePort`). Both new shapes are modelled on real client cycles that
+  `cycles --plan` refuses today; `CYCLE-REPORT.md` records the hand-written recipes that cut
+  them (0 errors, output identical) and the two compile traps (E2010 const-signature, E2015
+  `TObject` receiver). README / wiki excerpts and `run_cycles_plan_followable.ps1` follow.
 
 ## v1.32.0-alpha -- 2026-10-19
 

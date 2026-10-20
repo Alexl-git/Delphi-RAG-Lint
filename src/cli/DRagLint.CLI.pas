@@ -219,6 +219,7 @@ uses
   , DRagLint.Report    .Deps
   , DRagLint.Report    .RCallTree
   , DRagLint.Report    .CyclePlan // dl:unit DRagLint.Report.CyclePlan accepted -- the report's line formats travel with the playbook that predicts them, so the predicted output cannot drift from what cycles prints
+  , DRagLint.CLI       .CycleFix
   , DRagLint.Convert   .PropTree
   , DRagLint.Convert   .PropCache
   , DRagLint.Convert   .Rules
@@ -426,6 +427,11 @@ type
     Edges          : Boolean; // --edges (cycles: show the actual uses edges)
     Causes         : Boolean; // --causes (cycles: pinpoint the symbols forcing each interface edge)
     Plan           : Boolean; // --plan (cycles: emit a followable markdown refactoring playbook)
+    FixCycle       : Integer; // --cycle <n> (cycles --fix: the 1-based group to plan)
+    FixCycleGiven  : Boolean; // --cycle was on the command line (so 0 / junk is an error, not 'absent')
+    FixPart        : string ; // --part a|b|all (cycles --fix)
+    NoCompile      : Boolean; // --no-compile (cycles --fix: skip the baseline build)
+    ShadowOut      : string ; // --shadow-out <dir> (cycles --fix, debug: where the shadow tree is staged)
     Apply          : Boolean; // --apply (uses-fix / autofix: write changes, not dry-run)
     Fix            : Boolean; // --fix (lint: autofix findings that have a quick-fix; dry-run unless --apply)
     // AutoFix Chunk 1 (Task 3): single-finding fix targeting. Each SET flag
@@ -1014,7 +1020,13 @@ begin
   Writeln('  drag-lint ghost-recover <dproj>   (restore any file left overlaid by an INTERRUPTED ghost-check)');
   Writeln('                               Safe to run any time: prints "nothing pending." when there is nothing to do.');
   Writeln('  drag-lint check-unit <unit.pas> [--project <dproj>] [--platform win32|win64] [--shadow <dir>] [--resolve-uses] [--db PATH] [--format json|text]');
-  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan] [--format json|text]   (circular unit deps; --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output)');
+  Writeln('  drag-lint cycles             --db <file.sqlite>    [--edges] [--causes] [--plan [--project <X.dproj>]] [--fix --project <X.dproj> [--cycle <n> | --unit <stem>] [--part a|b|all] [--apply] [--no-backup] [--no-reindex] [--no-compile] [--shadow-out <dir>]] [--format json|text] [--library-db <lib.sqlite>] [--platform win32|win64] [--rules-dir <dir>]   (circular unit deps; --fix = the mechanical cycle fix for ONE group (the first mechanical one, or --cycle / --unit; text names the groups it did not plan): dry run = verdict + cycle-fix/1 JSON, no source written, stages the result in a shadow tree (default C:\TEMP\draglint_cyclefix_<pid>\, deleted at exit unless a message of the run cites a file in it, then kept and named on stderr; --shadow-out names another, never deleted) and builds the project (msbuild /p:Config=Debug for --platform, default win64) unless --no-compile,' +
+    ' exit 0 mechanical / 1 refused / 2 error; --apply writes it' +
+    ' (.BCK<n> backups unless --no-backup), builds, re-indexes unless --no-reindex and re-runs cycles against the prediction, exit 0 written and verified (or written with --no-reindex, unverified) / 1 refused, rolled back after a compile error or build timeout, or written but not verified /' +
+    ' 2 error: a write or build failed part-way (rolled back, project not changed, or the rollback failure is named) or bad flags; a rollback restores the sources, not the DCUs the failed build wrote: rebuild after a rollback; --apply --no-compile is exit 2; --part all needs --apply, refuses --no-reindex;' +
+    ' --plan = mechanical refactoring playbook: moves, uses edits, new-unit text, checklist + predicted output, and a "Fix it" block per group (the exact --fix dry-run and --apply commands; --project names the project in them, else <your.dproj>); ' +
+    '--library-db / --platform name the platform library --plan reads class ancestry from (default: the manifest''s library for win64; --library-db none = no library); --rules-dir is forwarded to every --part all iteration; ' +
+    '--format json --causes adds per-group fix{available,part,dry_run,apply,edges[],reason,followup} and edges[] with each edge''s surface: members read, writes, construction, class methods, routine + signature types)');
   Writeln('  drag-lint uses-audit <unit.pas> --db <file.sqlite> [--format json|text]   (interface->impl moves + unused units)');
   Writeln('  drag-lint uses-fix <unit.pas> --project <dproj> --db <file.sqlite> [--platform win32|win64] [--apply] [--remove-unused] [--only <unit,...>] [--format json|text]   (compiler-verified uses cleanup; --format json lists every candidate with a status -- verified | skipped | deselected -- and --only restricts which are compiled and written, so a reviewed partial apply is expressible; a unit --only names that is in the uses clause but in no project index -- an RTL/VCL/library unit -- is decided by compiling too: removed when it has no initialization section (with --remove-unused), else moved to the implementation section, else skipped)');
   Writeln('  drag-lint generate-test --qname <Foo.TBar.Baz> [--framework dunitx|dunit] [--db PATH]');
@@ -1834,6 +1846,24 @@ begin
     else if (A = '--n') and (i < ParamCount) then begin Inc(i); Result.BenchN:= StrToIntDef(ParamStr(i), 20); end
     else if (A = '--to') and (i < ParamCount) then begin Inc(i); Result.RenameTo:= ParamStr(i); end
     else if A = '--no-backup' then Result.NoBackup:= True
+    // cycles --fix
+    else if (A = '--cycle') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.FixCycle:= StrToIntDef(ParamStr(i), 0);
+      Result.FixCycleGiven:= True;
+    end
+    else if (A = '--part') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.FixPart:= LowerCase(ParamStr(i));  // dl:ok duplicate-code@378f -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
+    end
+    else if A = '--no-compile' then Result.NoCompile:= True
+    else if (A = '--shadow-out') and (i < ParamCount) then
+    begin
+      Inc(i);
+      Result.ShadowOut:= ParamStr(i);  // dl:ok duplicate-code@6921 -- the flag parser is a table of one-value flags (Inc(i); Result.X:= ParamStr(i)); the shape repeats by construction
+    end
     // v0.69 D2a: rename --kind param positional args
     // Note: --kind  already parsed into Result.Kind   (line ~638)
     //       --file  already parsed into Result.InFile (line ~433)
@@ -12865,6 +12895,8 @@ begin
         { Only for the whole-routine metric rules, and only when measured: an
           absent key says "this rule has no metric", which a 0 would not. }
         if F.Metric > 0 then JObj.AddPair('metric', TJSONNumber.Create(F.Metric));
+        { E18 T15b: the verb that fixes it (per-file circular-uses); absent = no such verb }
+        if F.FixHint <> '' then JObj.AddPair('fix_hint', F.FixHint);
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -13544,6 +13576,125 @@ begin
     Result:= DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(APath,
       ACfg.ThresholdFor('too-many-parameters', DEFAULT_MAX_PARAMETERS), ACfg.ThresholdFor('too-many-locals', DEFAULT_MAX_LOCALS),
       ACfg.ThresholdFor('method-too-long', DEFAULT_METHOD_TOO_LONG), ACfg.ThresholdFor('deep-nesting', DEFAULT_MAX_NESTING));
+end;
+
+/// <summary>E18 T15b: the circular-uses finding of ONE file's `lint` run -- for every unit of a
+/// cycle, at the uses entry a person would edit, with the `cycles --fix` command.</summary>
+/// <param name="AFindings">This file's findings so far (already narrowed to AFilePath).</param>
+/// <param name="AStore">The project index that contains the file.</param>
+/// <param name="AFileId">The file's id in AStore.</param>
+/// <param name="AFilePath">The file's path as AStore spells it.</param>
+/// <param name="AWholeGraph">circular-uses over the WHOLE index (the rule cache's answer): one
+/// finding per cycle at its first unit, the source of the message.</param>
+/// <param name="AProject">--project, or '' for the placeholder `&lt;X.dproj&gt;` in the hint.</param>
+/// <param name="ADb">The index path named in the hint.</param>
+/// <returns>AFindings with this file's whole-graph circular-uses finding (present only on the
+/// cycle's first unit) replaced by ONE finding at the first intra-cycle uses entry of the file
+/// (implementation section preferred), same message, FixHint set. AFindings unchanged when the
+/// unit is in no cycle, or when the cycle has no whole-graph finding to take the message from.</returns>
+/// <remarks>The cycle is ComputeSccs' (the `cycles` pass); lint-all is not touched -- it still
+/// reports one finding per cycle at `:1:1`. Costs one read of every file's uses rows, and only
+/// when the index has a cycle at all.</remarks>
+function CircularUsesForFile(const AFindings: TArray<TLintFinding>; const AStore: ISymbolStore;
+  AFileId: Int64; const AFilePath: string; const AWholeGraph: TArray<TLintFinding>;
+  const AProject, ADb: string): TArray<TLintFinding>;
+const
+  CRule = 'circular-uses';
+  CNoProject = '<X.dproj>';
+
+  function StemOf(const APath: string): string;
+  begin
+    Result:= LowerCase(ChangeFileExt(ExtractFileName(StringReplace(APath, '/', '\', [rfReplaceAll])), ''));
+  end;
+
+var
+  Sccs    : TList<TArray<string>>;
+  Mine    : TArray<string>;
+  MyStem  : string;
+  Msg     : string;
+  ImplLine: Integer;
+  IntfLine: Integer;
+  F       : TLintFinding;
+begin
+  Result:= AFindings;
+  Msg:= '';
+  for F in AWholeGraph do
+    if SameText(F.RuleId, CRule) then
+    begin
+      Msg:= F.Message;
+      Break;
+    end;
+  if Msg = '' then Exit; { no cycle anywhere: skip the graph read }
+
+  MyStem:= StemOf(AFilePath);
+  Mine:= nil;
+  Sccs:= ComputeSccs(AStore);
+  try
+    for var C in Sccs do
+      if MatchText(MyStem, C) then
+      begin
+        Mine:= C;
+        Break;
+      end;
+  finally
+    Sccs.Free;
+  end;
+  if Mine = nil then Exit;
+
+  { the message of THIS cycle: the whole-graph finding anchored at one of its units }
+  Msg:= '';
+  for F in AWholeGraph do
+    if SameText(F.RuleId, CRule) and MatchText(StemOf(F.FilePath), Mine) then
+    begin
+      Msg:= F.Message;
+      Break;
+    end;
+  if Msg = '' then Exit;
+
+  ImplLine:= 0;
+  IntfLine:= 0;
+  var AnyImpl: Integer:= 0; { first line of ANY uses entry: the fallback anchor }
+  var AnyIntf: Integer:= 0;
+  for var U in AStore.GetUnitUsesForFile(AFileId) do
+  begin
+    if U.StartLine <= 0 then Continue;
+    if U.Section = uusImplementation then
+    begin
+      if (AnyImpl = 0) or (U.StartLine < AnyImpl) then AnyImpl:= U.StartLine;
+    end
+    else if (AnyIntf = 0) or (U.StartLine < AnyIntf) then AnyIntf:= U.StartLine;
+    var Target: string:= LowerCase(U.UnitName);
+    if (Target = MyStem) or not MatchText(Target, Mine) then Continue;
+    if U.Section = uusImplementation then
+    begin
+      if (ImplLine = 0) or (U.StartLine < ImplLine) then ImplLine:= U.StartLine;
+    end
+    else if (IntfLine = 0) or (U.StartLine < IntfLine) then IntfLine:= U.StartLine;
+  end;
+  if ImplLine = 0 then ImplLine:= IntfLine;
+  { Fix round 1 (controller ruling): no line-bearing entry names another unit of the cycle --
+    the unit is still in it, so it still gets its ONE finding (with the hint): on its uses
+    clause (implementation first), else line 1. }
+  if ImplLine <= 0 then ImplLine:= AnyImpl;
+  if ImplLine <= 0 then ImplLine:= AnyIntf;
+  if ImplLine <= 0 then ImplLine:= 1;
+
+  Result:= nil;
+  for F in AFindings do
+    if not (SameText(F.RuleId, CRule) and SameText(F.FilePath, AFilePath)) then Result:= Result + [F];
+  F:= Default(TLintFinding);
+  F.RuleId   := CRule;
+  F.Severity := 'warning';
+  F.FileId   := AFileId;
+  F.FilePath := AFilePath;
+  F.StartLine:= ImplLine;
+  F.StartCol := 1;
+  F.EndLine  := ImplLine;
+  F.EndCol   := 1;
+  F.Message  := WithCycleFixPointer(Msg, AProject, MyStem); { E18 T16: THIS unit and project }
+  F.FixHint  := Format('cycles --fix --project "%s" --db "%s" --unit %s',
+    [(if AProject <> '' then AProject else CNoProject), ADb, MyStem]);
+  Result:= Result + [F];
 end;
 
 function DoLint(const AArgs: TArgs): Integer;
@@ -14268,13 +14419,20 @@ begin
           if LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES) then
           begin
             TraceLintChecker('project-rules');
+            var WholeGraph: TFunc<string, TArray<TLintFinding>>:=
+              WholeGraphProvider(FlowStore, FlowLibStore, FlowDb, FlowLibUsed, NarrowRule,
+                                 RuleKeptByRun(AArgs, Cfg, Marked));
             for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
                        FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore,
-                       {AOptInRules=}nil, {AOnlyFileId=}FlowFid,
-                       WholeGraphProvider(FlowStore, FlowLibStore, FlowDb, FlowLibUsed, NarrowRule,
-                                          RuleKeptByRun(AArgs, Cfg, Marked))) do
+                       {AOptInRules=}nil, {AOnlyFileId=}FlowFid, WholeGraph) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
+            { E18 T15b: circular-uses for EVERY unit of a cycle, on the uses line, with the
+              `cycles --fix` command -- the Structure tree's "Fix this cycle" node. WholeGraph is
+              memoised, so the second ask is the same answer Run just used. }
+            if (NarrowRule = '') or SameText(NarrowRule, 'circular-uses') then
+              Findings:= CircularUsesForFile(Findings, FlowStore, FlowFid, MyPath, WholeGraph('circular-uses'),
+                AArgs.ProjectPath, (if FlowDb <> '' then FlowDb else AArgs.DbPath));
             { the pass above read this file's uses from the INDEX; the buffer is
               what the user is looking at }
             Findings:= ReconcileUnusedUnitsWithBuffer(Findings, EffPath);
@@ -17197,6 +17355,9 @@ begin
         deliberate-break (inst.Old -> DL_NONE(inst.Old)), migrate-check;
         pas_uses[] status mapped for the member. }
       JCap.AddPair('migrate_members', TJSONBool.Create(True));
+      { E18 (1.33.0): cycles --fix plans, gates and (with --apply) writes the mechanical
+        fix of one circular group -- cycle-fix/1 JSON, exit 0 / 1 / 2. }
+      JCap.AddPair('cycle_fix', TJSONBool.Create(True));
       { 1.25.0, same contract: convert-apply lists the descendant units that
         still stream or use an instance it converts (apply/1 descendants[],
         items[] kind descendant-not-converted) -- a warning, never a refusal. }
@@ -20173,6 +20334,13 @@ begin
     if LintRuleWants(Nr, LINT_GATE_PROJECT_RULES) then
       Findings:= Findings + DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
         Store, Nr, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), LibStore, OptIn);
+    { E18 T16: a circular-uses message ends in a `cycles --fix` pointer; --project names the real
+      project in it instead of the placeholder (the stem stays the finding's anchor unit). }
+    if AArgs.ProjectPath <> '' then
+      for var Ci:= 0 to High(Findings) do
+        if SameText(Findings[Ci].RuleId, 'circular-uses') then
+          Findings[Ci].Message:= WithCycleFixPointer(Findings[Ci].Message, AArgs.ProjectPath,
+            LowerCase(ChangeFileExt(ExtractFileName(Findings[Ci].FilePath), '')));
     { LibStore is the platform library index, already open above for the
       ownership/DCU checks. unused-unit-in-uses needs it because a PROJECT
       store cannot see System.IniFiles: without it the rule's own
@@ -22109,17 +22277,11 @@ type
   TEdgeSet = TDictionary<string, Boolean>;
 var
   Store    : ISymbolStore                      ;
-  FilePath : string                            ;
+  CycGraph : TCycleGraph                       ; { BuildCycleGraph; the four below alias it }
   Adj      : TDictionary<string, TList<string>>; { unit -> used units (lower) }
   IntfEdges: TEdgeSet                          ; { "a->b" if a uses b in intf }
   UnitFile : TDictionary<string, string>       ; { unit stem -> source path }
   UnitFid  : TDictionary<string, Int64>        ; { unit stem -> file_id (--causes) }
-  // Tarjan state
-  Index  : TDictionary<string, Integer>;
-  Lowlink: TDictionary<string, Integer>;
-  OnStack: TDictionary<string, Boolean>;
-  Stack  : TList<string>               ;
-  Counter: Integer                     ;
   Sccs   : TList<TArray<string>>       ;
   JArr   : TJSONArray                  ;
   i      : Integer                     ;
@@ -22145,115 +22307,139 @@ var
     else Result:= '';
   end;
 
-  procedure StrongConnect(const AV: string);
+  { E18 T6: recipe R2 reads class ancestry from the platform library -- the explicit
+    --library-db, else the manifest's library section for --platform (default win64),
+    as `resolve-dbs --platform` lists it. Opened READ-ONLY; without one, R2 refuses
+    wherever the answer needs it. `--library-db none` opens no library at all (fix
+    round 1: test runners must never reach the real one through the manifest).
+    E18 T13: shared by --plan, --fix and the --causes JSON (its fix object). }
+  function OpenPlanLibrary(out pFailed: Boolean; out pMessage: string): ISymbolStore;
   var
-    W        : string       ;
-    Comp     : TList<string>;
-    Top      : string       ;
-    Neighbors: TList<string>;
+    LibPath: string;
   begin
-    Index  .AddOrSetValue(AV, Counter);
-    Lowlink.AddOrSetValue(AV, Counter);
-    Inc(Counter);
-    Stack.Add(AV);
-    OnStack.AddOrSetValue(AV, True);
-
-    if Adj.TryGetValue(AV, Neighbors) then
-      for W in Neighbors do
-      begin
-        if not Index.ContainsKey(W) then
-        begin
-          if Adj.ContainsKey(W) then StrongConnect(W)
-          else
-          begin
-            { external/library unit -- a leaf, cannot be part of a cycle }
-            Continue;
-          end;
-          if Lowlink[W] < Lowlink[AV] then Lowlink[AV]:= Lowlink[W];
-        end
-        else if OnStack.ContainsKey(W) and OnStack[W] then
-          if Index[W] < Lowlink[AV] then Lowlink[AV]:= Index[W];
-      end;
-
-    if Lowlink[AV] = Index[AV] then
+    pFailed := False;
+    pMessage:= '';
+    Result  := nil;
+    LibPath:= '';
+    if (Length(AArgs.LibraryDbs) > 0) and SameText(AArgs.LibraryDbs[0], 'none') then
+      Writeln(ErrOutput, 'drag-lint: note: cycles --plan reads no platform library (--library-db none)')
+    else if Length(AArgs.LibraryDbs) > 0 then
     begin
-      Comp:= TList<string>.Create;
-      repeat
-        Top:= Stack[Stack.Count - 1];
-        Stack.Delete(Stack.Count - 1);
-        OnStack.AddOrSetValue(Top, False);
-        Comp.Add(Top);
-      until Top = AV;
-      if Comp.Count > 1 then Sccs.Add(Comp.ToArray);
-      Comp.Free;
+      LibPath:= AArgs.LibraryDbs[0];
+      if not TFile.Exists(LibPath) then
+      begin
+        pMessage:= 'library database not found: ' + LibPath;
+        pFailed := True;
+        Exit;
+      end;
+    end
+    else
+      try
+        var Manifest:= TManifestIO.Load(ExtractFilePath(ParamStr(0)), GetCurrentDir);
+        var LibDbs  := LibrarySectionDbs(Manifest);
+        var LibRes  := DRagLint.Project.Resolver.TProjectResolver.Create;
+        try
+          for var D in TDbSelect.Resolve(Manifest, (if AArgs.CheckPlatform <> '' then AArgs.CheckPlatform else 'win64'),
+            LibRes, True) do
+            if IsLibrarySectionDb(LibDbs, D) and TFile.Exists(D) then
+            begin
+              LibPath:= D;
+              Break;
+            end;
+        finally
+          LibRes.Free;
+        end;
+      except
+        on E: Exception do
+        begin
+          LibPath:= '';
+          Writeln(ErrOutput, Format('drag-lint: note: cycles --plan: no platform library (%s: %s)', [E.ClassName, E.Message]));
+        end;
+      end;
+    if (LibPath <> '') and not SameText(ExpandFileName(LibPath), ExpandFileName(AArgs.DbPath)) then
+    begin
+      var LibOk: Boolean;
+      Result:= OpenReadOnlyStore(LibPath, LibOk);
+      if not LibOk then Result:= nil;
+      Writeln(ErrOutput, 'drag-lint: note: cycles --plan reads class ancestry from ' +
+        (if Result <> nil then LibPath else '(none: ' + LibPath + ' did not open)'));
     end;
-  end; // procedure
-
+  end;
 var
-  UU   : TArray<TUnitUse>;
-  Uo   : TUnitUse        ;
-  Fid  : Int64           ;
-  UFrom: string          ;
-  UTo  : string          ;
-  K    : string          ;
-  L    : TList<string>   ;
+  FixCode: Integer       ; { cycles --fix: RunCycleFix's exit code; -1 = not a --fix run }
 begin
+  FixCode:= -1;
   if NoDbResolved(AArgs.DbPath, 'cycles') then Exit(2);
   if not TFile.Exists(AArgs.DbPath) then begin Writeln('ERROR: database not found: ', AArgs.DbPath); Exit(2); end;
   var RoOk: Boolean;
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'cycles', AArgs.DbPath) then Exit(2);
 
-  Adj:= TDictionary<string, TList<string>>.Create;
-  IntfEdges:= TEdgeSet.Create;
-  UnitFile:= TDictionary<string, string>.Create;
-  UnitFid:= TDictionary<string, Int64  >.Create;
-  Index  := TDictionary<string, Integer>.Create;
-  Lowlink:= TDictionary<string, Integer>.Create;
-  OnStack:= TDictionary<string, Boolean>.Create;
-  Stack:= TList<string>.Create;
-  Sccs:= TList<TArray<string>>.Create;
+  { E18 T15b: the graph and the Tarjan pass live in DRagLint.Report.CyclePlan (BuildCycleGraph,
+    ComputeSccs), shared with the per-file circular-uses finding of `lint <file>` }
+  CycGraph := BuildCycleGraph(Store);
+  Adj      := CycGraph.Adj;
+  IntfEdges:= CycGraph.IntfEdges;
+  UnitFile := CycGraph.UnitFile;
+  UnitFid  := CycGraph.UnitFid;
+  Sccs     := nil;
   try
-    { build the adjacency from every indexed file's uses clauses }
-    for Fid in Store.GetAllFileIds do
-    begin
-      FilePath:= Store.GetFilePath(Fid);
-      if not SameText(ExtractFileExt(FilePath), '.pas') then Continue;
-      UFrom:= UnitNameOfFile(FilePath);
-      if UFrom = '' then Continue;
-      UnitFile.AddOrSetValue(UFrom, FilePath);
-      UnitFid .AddOrSetValue(UFrom, Fid     );
-      UU:= Store.GetUnitUsesForFile(Fid);
-      if not Adj.TryGetValue(UFrom, L) then begin L:= TList<string>.Create; Adj.AddOrSetValue(UFrom, L); end;
-      for Uo in UU do
-      begin
-        UTo:= LowerCase(Uo.UnitName);
-        if UTo = '' then Continue;
-        if not L.Contains(UTo) then L.Add(UTo);
-        if Uo.Section = uusInterface then IntfEdges.AddOrSetValue(UFrom + '->' + UTo, True);
-      end;
-    end; // for
+    Sccs:= ComputeSccs(CycGraph);
 
-    { Tarjan SCC over the in-project units }
-    Counter:= 0;
-    for K in Adj.Keys do
-      if not Index.ContainsKey(K) then StrongConnect(K);
-
-    if AArgs.Plan then
+    if AArgs.Plan or AArgs.Fix then
     begin
-      { mechanical markdown refactoring playbook -- DRagLint.Report.CyclePlan }
+      { mechanical markdown refactoring playbook -- DRagLint.Report.CyclePlan; --fix = its dry-run verdict }
       var Graph: TCycleGraph;
       Graph.Adj      := Adj;
       Graph.IntfEdges:= IntfEdges;
       Graph.UnitFile := UnitFile;
       Graph.UnitFid  := UnitFid;
-      var PlanLines:= TStringList.Create;
-      try
-        RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines);
-        for var PlanLine in PlanLines do Writeln(PlanLine);
-      finally
-        PlanLines.Free;
-      end; // try
+      { E18 T6 / T13: the platform library for recipe R2 (OpenPlanLibrary) }
+      var LibFailed: Boolean;
+      var LibMessage: string;
+      var LibStore: ISymbolStore:= OpenPlanLibrary(LibFailed, LibMessage);
+      if LibFailed then
+      begin
+        if AArgs.Fix then
+        begin
+          { E18 final review M1: --fix --format json answers with a cycle-fix/1 error document }
+          var ErrOpts:= Default(TCycleFixOptions);
+          ErrOpts.Json:= SameText(AArgs.Format, 'json');
+          ReportCycleFixError(ErrOpts, LibMessage);
+        end
+        else Writeln('ERROR: ', LibMessage);
+        Exit(2);
+      end;
+      if AArgs.Fix then
+      begin
+        var FixOpts: TCycleFixOptions;
+        FixOpts.Project  := AArgs.ProjectPath;
+        FixOpts.Db       := AArgs.DbPath;
+        FixOpts.Platform := AArgs.CheckPlatform;
+        FixOpts.Apply    := AArgs.Apply;
+        FixOpts.NoBackup := AArgs.NoBackup;
+        FixOpts.NoReindex:= AArgs.NoReindex;
+        FixOpts.NoCompile:= AArgs.NoCompile;
+        FixOpts.ShadowOut:= AArgs.ShadowOut;
+        FixOpts.CycleIndex:= AArgs.FixCycle;
+        FixOpts.CycleGiven:= AArgs.FixCycleGiven;
+        FixOpts.UnitStem := AArgs.GhostUnit;
+        FixOpts.Part     := AArgs.FixPart;
+        FixOpts.LibraryDbs:= AArgs.LibraryDbs;
+        FixOpts.RulesDir  := AArgs.RulesDir;
+        FixOpts.Json     := SameText(AArgs.Format, 'json');
+        FixCode:= RunCycleFix(FixOpts, Store, Sccs, Graph, LibStore);
+      end
+      else
+      begin
+        var PlanLines:= TStringList.Create;
+        try
+          RenderCyclePlaybook(Store, AArgs.DbPath, Sccs, Graph, PlanLines, LibStore, AArgs.ProjectPath);
+          for var PlanLine in PlanLines do Writeln(PlanLine);
+        finally
+          PlanLines.Free;
+        end; // try
+      end;
     end // if
     else if SameText(AArgs.Format, 'json') then
     begin
@@ -22273,6 +22459,30 @@ begin
           JO.AddPair('size', TJSONNumber.Create(Length(Comp)));
           JO.AddPair('interface_cycle', TJSONBool.Create(HasIntf));
           JArr.AddElement(JO);
+        end;
+        if AArgs.Causes then
+        begin
+          { E18 T4: per-edge surfaces (TEdgeSurface) -- only on request, so the default call stays fast }
+          var EdgeGraph: TCycleGraph;
+          EdgeGraph.Adj      := Adj;
+          EdgeGraph.IntfEdges:= IntfEdges;
+          EdgeGraph.UnitFile := UnitFile;
+          EdgeGraph.UnitFid  := UnitFid;
+          AddCycleEdgeSurfaces(Store, Sccs, EdgeGraph, JArr);
+          { E18 T13: the fix object per group -- the planner's verdict, edges and the exact commands }
+          { a library that cannot be opened must not change the rest of the --causes output: the fix
+            objects say so instead (E18 T13 fix round) }
+          var JsonLibFailed: Boolean;
+          var JsonLibMessage: string;
+          var HintIn: TCycleFixHintInput;
+          HintIn.Store:= Store;
+          HintIn.DbPath:= AArgs.DbPath;
+          HintIn.Sccs:= Sccs;
+          HintIn.Graph:= EdgeGraph;
+          HintIn.LibStore:= OpenPlanLibrary(JsonLibFailed, JsonLibMessage);
+          HintIn.FixProject:= AArgs.ProjectPath;
+          HintIn.Unavailable:= (if JsonLibFailed then 'library unavailable: ' + (if JsonLibMessage <> '' then JsonLibMessage else 'the platform library could not be opened') else '');
+          AddCycleFixHints(HintIn, JArr);
         end;
         Writeln(JArr.ToJson);
       finally
@@ -22377,11 +22587,10 @@ begin
         if not (AArgs.Edges or AArgs.Causes) then Writeln(CCycleEdgesHint);
       end; // else
     end; // else
-    Result:= 0;
+    Result:= if FixCode >= 0 then FixCode else 0;
   finally
-    for L in Adj.Values do L.Free;
-    Adj.Free; IntfEdges.Free; UnitFile.Free; UnitFid.Free; Index.Free; Lowlink.Free;
-    OnStack.Free; Stack.Free; Sccs.Free;
+    FreeCycleGraph(CycGraph);
+    Sccs.Free;
   end; // try
 end; // begin
 

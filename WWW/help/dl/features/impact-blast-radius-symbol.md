@@ -4,10 +4,10 @@ title: Impact / Blast Radius (symbol)
 summary: Reports what would be affected if a chosen symbol changes -- the set of code to retest
 product: DL
 group: graphs-reports
-order: 70012
+order: 70013
 since: 0.17.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Impact / Blast Radius (symbol)

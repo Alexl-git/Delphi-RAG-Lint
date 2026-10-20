@@ -4,10 +4,10 @@ title: Export Graph (DOT)
 summary: Uses graph to export the indexed call/reference graph in DOT format, either whole or rooted at a name substring
 product: DL
 group: graphs-reports
-order: 70008
+order: 70009
 since: 0.6.0-alpha
 status: shipped
-updated: 1.32.0-alpha
+updated: 1.33.0-alpha
 ---
 
 # Export Graph (DOT)

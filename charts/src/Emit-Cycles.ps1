@@ -85,6 +85,8 @@ param(
   # specified `--plan` for the playbook text unconditionally. Pass -Playbook when
   # the engine's exact wording is wanted and the 46s is acceptable.
   [switch] $Playbook,
+  [string] $Project    = '',   # the .dproj the Fix it commands should name (else the engine prints <your.dproj>)
+  [string] $LibraryDb  = '',   # '' = the engine's default library; 'none' or a path is passed to `cycles --library-db`
   [string] $Engine     = '',
   [string] $Dot        = '',
   [string] $FontMono   = 'Consolas',
@@ -110,7 +112,12 @@ Write-Host "cycles: $(if ($Unit) { $Unit } else { '(whole project)' })"
 # ---- 1. the cycles themselves --------------------------------------------------
 # `cycles` exits 0 and prints `[]` when there are none (measured on DataCopy),
 # so an EMPTY answer is a failure, not "no cycles" (R19).
-$cyclesTxt = Get-EngineText @('cycles', '--db', $DbPath, '--format', 'json')
+# ONE call: --edges --causes adds, per cycle, the planner's `fix` object (E18 T14: the Fix it cell). It
+# replaces nothing slow -- the 46 s `--plan` fetch below stays behind -Playbook.
+$cycArgs = @('cycles', '--db', $DbPath, '--format', 'json', '--edges', '--causes')
+if ($Project)   { $cycArgs += @('--project', $Project) }
+if ($LibraryDb) { $cycArgs += @('--library-db', $LibraryDb) }
+$cyclesTxt = Get-EngineText $cycArgs
 if ([string]::IsNullOrWhiteSpace($cyclesTxt)) { throw "cycles returned no document (exit $script:LastEngineExit)" }
 $cycles = @($cyclesTxt | ConvertFrom-Json)
 
@@ -204,6 +211,45 @@ function Get-OutEdges([string] $From, [string[]] $Members) {
   , @($out | Sort-Object { [int]$_.Edge.line })
 }
 
+# The words the plan uses for a recipe id (CyclePlan.pas CRecipeId / the recipe names).
+function Get-RecipeWords([string] $Id) {
+  switch ($Id) {
+    'move-globals'      { 'move globals' }
+    'routine-inversion' { 'routine-call inversion' }
+    'member-interface'  { 'member hand-over' }
+    default             { $Id }
+  }
+}
+
+# The "Fix it" rows of one cycle, from the engine's own `fix` object (the planner; the chart derives
+# nothing). Rows carry no draglint://open href, so Anchored / Edges / the click targets do not move.
+#   no fix object        -> `fix-it: engine too old`
+#   available            -> a CODE row (the dry-run command, copy href, TITLE = the apply command)
+#                           + a note naming the chosen edge and recipe (Part A: the follow-up)
+#   not available        -> `fix-it: not available -- <reason>`
+function Get-FixItRows($Cycle) {
+  $rows = New-Object System.Collections.ArrayList
+  $fix = $(if ($Cycle.PSObject.Properties['fix']) { $Cycle.fix } else { $null })
+  if ($null -eq $fix) { [void]$rows.Add((New-NoteRow 'fix-it: engine too old')); return , $rows.ToArray() }
+  if (-not [bool]$fix.available) {
+    $why = ([string]$fix.reason -replace '\s+', ' ').Trim()
+    if ($why.Length -gt 200) { $why = $why.Substring(0, 197) + '...' }
+    [void]$rows.Add((New-NoteRow ('fix-it: not available -- ' + $(if ($why) { $why } else { 'no reason given' }))))
+    return , $rows.ToArray()
+  }
+  if (-not [string]::IsNullOrWhiteSpace([string]$fix.dry_run)) {
+    [void]$rows.Add([pscustomobject]@{ Label = [string]$fix.dry_run; Code = [string]$fix.dry_run; Tip = [string]$fix.apply
+                                       Line = $null; Href = $null; Note = $null })
+  }
+  $chosen = @($fix.edges | Where-Object { $_.chosen }) | Select-Object -First 1
+  $follow = $(if ($fix.PSObject.Properties['followup']) { $fix.followup } else { $null })
+  $note = $(if ($chosen) { "fix-it: $($chosen.from) -> $($chosen.to) by $(Get-RecipeWords ([string]$chosen.recipe))" }
+            elseif ($follow) { "fix-it: Part A first, then $($follow.from) -> $($follow.to) by $(Get-RecipeWords ([string]$follow.recipe))" }
+            else { 'fix-it: available' })
+  [void]$rows.Add((New-NoteRow $note))
+  , $rows.ToArray()
+}
+
 # ---- 6. dot ---------------------------------------------------------------------
 $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine('digraph cycles {')
@@ -290,13 +336,14 @@ foreach ($item in $selected) {
                elseif ($isIntf -and -not $intfLoop) { "$counted -- engine: $($verdicts[$item.Ordinal])" }
                else { $verdicts[$item.Ordinal] })
   [void]$cells.Add((New-NoteRow $verdict))
+  foreach ($fr in (Get-FixItRows $c)) { [void]$cells.Add($fr) }
 
   $nodeId++; $clusters++
   $nid = "n$nodeId"
   $ports = Add-RowCluster -Sb $sb -Cid "cluster_cycle_$nodeId" -Nid $nid `
              -Title "group $($item.Ordinal)" -Subtitle "$($c.size) units" -Rows $cells.ToArray() `
              -Border $border -Fill $fill -Hdr $hdr `
-             -RowInk $PAL.rowInk -LineInk $PAL.lineInk -FontSans $FontSans -Style $style
+             -RowInk $PAL.rowInk -LineInk $PAL.lineInk -FontSans $FontSans -FontMono $FontMono -Style $style
 
   # arrows: EVERY measured intra-group edge, each labelled with the line and
   # section that create it. No traversal order is assumed, because the group is

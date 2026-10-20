@@ -9,6 +9,10 @@ product: DL
 
 drag-lint grows out of the daily work on Micronite ([https://www.htrmicronite.com](https://www.htrmicronite.com)), our quality and production-control software.
 
+## 1.33.0-alpha
+
+* [Cycles fix (mechanical, compile-gated)](features/cycles-fix.md) -- Plans, compile-gates and (with --apply) writes the mechanical fix of one circular uses group, verified against the predicted cycles output.
+
 ## 1.31.5-alpha
 
 * [Qualify #convert quick fix](features/convrules-qualify-fix.md) -- ConvRulesEditor Convert tab: one click writes the engine's qualified #convert line (apply/1 qualify_fixes) into the open book.

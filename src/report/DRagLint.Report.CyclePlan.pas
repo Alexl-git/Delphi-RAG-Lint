@@ -22,7 +22,7 @@ unit DRagLint.Report.CyclePlan;  // dl:ok unit-too-large@252c -- one self-contai
 interface
 
 uses
-  System.Classes, System.Generics.Collections,
+  System.Classes, System.SysUtils, System.Generics.Collections, System.JSON,
   DRagLint.Core.Interfaces;
 
 const
@@ -59,6 +59,208 @@ type
     UnitFid: TDictionary<string, Int64>;
   end;
 
+  /// <summary>One reason a cycle's plan cannot be applied mechanically.</summary>
+  /// <remarks>Kind is one of the strings of the 2026-10-10 contract 4.4:
+  /// manual-edit, blocked-symbol, unresolved-edge, directive, leaf-uses-cycle,
+  /// qualified-ref, class-ctor, base-class, outside-roots; R1 (E18 T5) adds
+  /// signature-in-cycle, signature-unknown, routine-not-called, init-order,
+  /// duplicate-identifier, edge-still-used, overloaded-routine, unsupported-directive; R2 (E18 T6) adds
+  /// member-write, construction, class-method, class-ref, type-decl, type-cast, other-ref,
+  /// multiple-classes, member-unsupported, no-iinterface, ref-counted, receiver-unknown,
+  /// cast-unseen, with-member, ancestry-unknown, type-unresolved, unresolved-qualified-type, exception-semantics (and reuses leaf-uses-cycle,
+  /// qualified-ref, duplicate-identifier, edge-still-used, manual-edit). Line is 0 when the
+  /// refusal has no single line (an edge, a unit).</remarks>
+  TRefusal = record
+    Kind    : string;
+    Symbol  : string;
+    FilePath: string;
+    Reason  : string;
+    Line    : Integer;
+  end;
+
+  /// <summary>One symbol a plan moves into a leaf unit.</summary>
+  TPlanMove = record
+    /// <summary>Declared name.</summary>
+    Symbol: string;
+    /// <summary>Declaration keyword (record, class, type, ...) or the symbol kind.</summary>
+    Kind: string;
+    /// <summary>decl, with-bodies, base or blocked.</summary>
+    Recipe: string;
+    /// <summary>Source file as indexed.</summary>
+    FromFile: string;
+    /// <summary>Receiving leaf unit; '' when none is named.</summary>
+    ToUnit: string;
+    /// <summary>First declaration line, as indexed.</summary>
+    First: Integer;
+    /// <summary>Last declaration line, as indexed.</summary>
+    Last: Integer;
+  end;
+
+  /// <summary>One decision on a uses entry.</summary>
+  TPlanUse = record
+    /// <summary>File whose uses clause is judged.</summary>
+    FilePath: string;
+    /// <summary>The entry's unit name.</summary>
+    UnitName: string;
+    /// <summary>interface or implementation.</summary>
+    Section: string;
+    /// <summary>move, remove or keep.</summary>
+    Action: string;
+  end;
+
+  /// <summary>A unit file the plan creates.</summary>
+  TPlanNewUnit = record
+    /// <summary>Unit name.</summary>
+    UnitName: string;
+    /// <summary>Target file path.</summary>
+    Path: string;
+    /// <summary>The unit's full text, one string per line (no line terminators).</summary>
+    Text: TArray<string>;
+  end;
+
+  /// <summary>One edit of an existing file.</summary>
+  TPlanEdit = record
+    /// <summary>The edited file.</summary>
+    FilePath: string;
+    /// <summary>delete, insert, replace or manual.</summary>
+    Kind: string;
+    /// <summary>First line, as indexed.</summary>
+    First: Integer;
+    /// <summary>Last line, as indexed.</summary>
+    Last: Integer;
+    /// <summary>delete/replace: the lines First..Last as the planner read them (the playbook's "Current text"); else empty.</summary>
+    CurrentLines: TArray<string>;
+    /// <summary>replace/insert: the lines that go in; else empty.</summary>
+    NewLines: TArray<string>;
+    /// <summary>insert: the full text of line First, the line the lines go after; else ''.</summary>
+    AnchorText: string;
+  end;
+
+  /// <summary>A plan for one circular group as plain data, for the `cycles --fix` front end.</summary>
+  /// <remarks>Built by VisitCyclePlans from the planner's TCycleFixPlan; it owns nothing.</remarks>
+  TCyclePlanView = record
+    /// <summary>1-based group index (DoCycles order).</summary>
+    CycleIndex: Integer;
+    /// <summary>The group's unit stems.</summary>
+    Units: TArray<string>;
+    /// <summary>True when an interface uses edge is part of the group.</summary>
+    HasIntf: Boolean;
+    /// <summary>'A' for an interface-coupled group, 'B' for an implementation-only one.</summary>
+    Part: Char;
+    /// <summary>True when the planner found no refusal.</summary>
+    Mechanical: Boolean;
+    /// <summary>The planner's refusals.</summary>
+    Refusals: TArray<TRefusal>;
+    /// <summary>Symbols moved.</summary>
+    Moves: TArray<TPlanMove>;
+    /// <summary>Uses-entry decisions.</summary>
+    UseDecisions: TArray<TPlanUse>;
+    /// <summary>Units created.</summary>
+    NewUnits: TArray<TPlanNewUnit>;
+    /// <summary>Every edit of an existing file, the .dpr and .dproj included.</summary>
+    Edits: TArray<TPlanEdit>;
+    /// <summary>Paths of every file the plan edits (the .dproj when it is edited).</summary>
+    TouchedPaths: TArray<string>;
+    /// <summary>move-globals, routine-inversion, member-interface or ''.</summary>
+    Recipe: string;
+    /// <summary>The cut edge as 'from->to' (Part B), else ''.</summary>
+    Edge: string;
+    /// <summary>The expected `cycles` output after the plan, one line per #10.</summary>
+    Predicted: string;
+    /// <summary>member-interface / routine-inversion: the unit that receives the interface or the
+    /// pointer declarations (a new `*.Untangle` leaf or an existing unit); else ''.</summary>
+    InversionUnit: string;
+    /// <summary>member-interface: the extracted interface's name; else ''.</summary>
+    IfaceName: string;
+    /// <summary>member-interface: the ancestor a receiver that does not implement IInterface is
+    /// cast through ('' when no line needs a cast); else ''.</summary>
+    CastAncestor: string;
+    /// <summary>routine-inversion: the procedural type `T&lt;Routine&gt;Ptr`; else ''.</summary>
+    PtrType: string;
+    /// <summary>routine-inversion: the variable `&lt;Routine&gt;Ptr`; else ''.</summary>
+    PtrVar: string;
+    /// <summary>routine-inversion: the type declaration as the plan emits it (no indent), built
+    /// from the routine's signature verbatim; else ''.</summary>
+    PtrTypeDecl: string;
+  end;
+
+  /// <summary>One edge a `Fix it` block names, as the planner weighed it.</summary>
+  TFixEdge = record
+    /// <summary>The using unit's stem.</summary>
+    FromUnit: string;
+    /// <summary>The used unit's stem.</summary>
+    ToUnit: string;
+    /// <summary>move-globals, routine-inversion or member-interface.</summary>
+    Recipe: string;
+    /// <summary>True for the edge `cycles --fix` cuts (the planner's CutEdge).</summary>
+    Chosen: Boolean;
+  end;
+
+  /// <summary>What a `Fix it` block (text) or `fix` object (JSON) says about one circular group.</summary>
+  /// <remarks>Taken only from the planner's plan of the group; nothing is re-derived.</remarks>
+  TCycleFixHint = record
+    /// <summary>1-based group index (DoCycles order).</summary>
+    CycleIndex: Integer;
+    /// <summary>'A' for an interface-coupled group, 'B' for an implementation-only one.</summary>
+    Part: Char;
+    /// <summary>True when the planner found a mechanical cut with no refusal.</summary>
+    Available: Boolean;
+    /// <summary>The `cycles --fix` dry-run command.</summary>
+    DryRun: string;
+    /// <summary>The `cycles --fix --apply` command.</summary>
+    Apply: string;
+    /// <summary>The first refusal as 'kind: reason', or '' when Available.</summary>
+    Reason: string;
+    /// <summary>Part B groups: every edge with a recipe, the chosen one first; Part A: empty.</summary>
+    Edges: TArray<TFixEdge>;
+    /// <summary>Part A groups: True when Part B would cut an edge afterwards (see Followup).</summary>
+    HasFollowup: Boolean;
+    /// <summary>Part A groups: the edge Part B cuts after Part A (Chosen = True); else empty.</summary>
+    Followup: TFixEdge;
+  end;
+
+  /// <summary>Called once per planned group by VisitCyclePlans.</summary>
+  /// <param name="pView">The group's plan as data; valid during the call only.</param>
+  /// <param name="pRender">Returns the playbook of this group, one string per line; call at most once.</param>
+  /// <returns>True to continue with the next group, False to stop.</returns>
+  TCyclePlanVisit = reference to function(const pView: TCyclePlanView; const pRender: TFunc<TArray<string>>): Boolean;
+
+/// <summary>The encoding a source file is read and written in: UTF-8 when it starts with the
+/// UTF-8 BOM, else the system ANSI code page (the indexer's basis).</summary>
+/// <param name="pBytes">The file's raw bytes.</param>
+/// <returns>TEncoding.UTF8 or TEncoding.ANSI; not owned by the caller.</returns>
+function SourceEncodingOf(const pBytes: TBytes): TEncoding;
+
+/// <summary>Decodes a source file's bytes in its own encoding.</summary>
+/// <param name="pBytes">The file's raw bytes.</param>
+/// <param name="pEncoding">Receives the encoding used (SourceEncodingOf).</param>
+/// <returns>The text without the BOM.</returns>
+function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
+
+/// <summary>Encodes text for a source file; the inverse of DecodeSource.</summary>
+/// <param name="pText">The text.</param>
+/// <param name="pEncoding">The file's encoding from DecodeSource.</param>
+/// <returns>The bytes, with the UTF-8 BOM first when the encoding is UTF-8.</returns>
+function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
+
+/// <summary>Reads a source file as lines in its own encoding (DecodeSource), the one routine both
+/// the planner and the cycle-fix staging use so they agree on every character.</summary>
+/// <param name="pPath">The file.</param>
+/// <returns>The lines without terminators.</returns>
+function ReadSourceLines(const pPath: string): TArray<string>;
+/// <summary>Plans each circular group (or one) and hands every plan to pVisit as data.</summary>
+/// <param name="pStore">Open index the graph was built from; read only.</param>
+/// <param name="pDbPath">Path of that index.</param>
+/// <param name="pSccs">The circular groups, lower-case stems.</param>
+/// <param name="pGraph">The uses graph the groups were computed from.</param>
+/// <param name="pLibStore">Platform library index (read only) or nil.</param>
+/// <param name="pVisit">The consumer.</param>
+/// <param name="pOnly">1-based group to plan, or 0 for every group in order.</param>
+/// <remarks>Writes nothing. Groups after the one that made pVisit return False are not planned.</remarks>
+procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
+  const pLibStore: ISymbolStore; const pVisit: TCyclePlanVisit; pOnly: Integer = 0);
+
 /// <summary>Renders the `cycles --plan` markdown playbook for every circular
 /// unit group into <paramref name="pOut"/>, one output line per item.</summary>
 /// <param name="pStore">Open index the graph was built from; read only.</param>
@@ -67,30 +269,112 @@ type
 /// more than one unit), as lower-case unit stems.</param>
 /// <param name="pGraph">The uses graph the groups were computed from.</param>
 /// <param name="pOut">Receives the markdown; lines are appended.</param>
+/// <param name="pLibStore">The platform library index, opened read-only by the caller, or nil.
+/// Recipe R2 reads class ancestry, inherited members and the units of library types from it;
+/// without it R2 refuses wherever the answer needs the library.</param>
+/// <param name="pFixProject">The project file named in each cycle's `Fix it` commands, or '' to print
+/// the placeholder `&lt;your.dproj&gt;`.</param>
 /// <remarks>
 /// <para>An INTERFACE-coupled group gets Part A: every symbol that one member's
 /// interface takes from another moves into a new leaf unit
-/// `&lt;Declaring&gt;.Contracts` -- a class whose method bodies use the cycle is
+/// `&lt;Declaring&gt;.Untangle` (an existing one is extended while it is still a
+/// leaf for the group, DRagLint.Report.UntangleCatalog) -- a class whose method bodies use the cycle is
 /// NOT moved; a base class carrying the members its consumers use is
 /// extracted instead. An implementation-only group gets the cheapest edge
-/// that can be cut the same way, or a statement that none can.</para>
+/// that can be cut the same way; else an edge that is one routine call (R1,
+/// routine-call inversion); else an edge that is `is` / `as` plus member reads
+/// of one class (R2, member hand-over through an extracted interface); or a
+/// statement that none can.</para>
 /// <para>Line numbers are those of the files as indexed. Each file's edits are
 /// listed bottom-up so they can be applied in order without renumbering.</para>
 /// <para>The expected `cycles` output is predicted by replaying the planned
 /// uses changes on the graph; it assumes the other groups are left alone.</para>
 /// </remarks>
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
-  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
+  const pLibStore: ISymbolStore = nil; const pFixProject: string = '');
+
+type
+/// <summary>The inputs of AddCycleFixHints bundled in one record (keeps the routine under the parameter limit).</summary>
+/// <remarks>Plain value record; every reference is borrowed, none is owned or freed by the record.</remarks>
+TCycleFixHintInput = record
+  /// <summary>Open index the graph was built from; read only.</summary>
+  Store: ISymbolStore;
+  /// <summary>Path of that index, quoted in the commands.</summary>
+  DbPath: string;
+  /// <summary>The circular groups, as lower-case unit stems.</summary>
+  Sccs: TList<TArray<string>>;
+  /// <summary>The uses graph the groups were computed from.</summary>
+  Graph: TCycleGraph;
+  /// <summary>Platform library index (read only) or nil.</summary>
+  LibStore: ISymbolStore;
+  /// <summary>The project file to name in the commands, or '' for the placeholder.</summary>
+  FixProject: string;
+  /// <summary>When not empty, no planner runs: every fix object is available=false with this text as its reason (the platform library could not be opened).</summary>
+  Unavailable: string;
+end;
+
+/// <summary>Adds a `fix` object (TCycleFixHint) to every group object of a `cycles --format json` report.</summary>
+/// <param name="pIn">The index, graph, groups and project (see TCycleFixHintInput).</param>
+/// <param name="pGroups">The report's group objects, index-aligned with pIn.Sccs; each must be a
+/// TJSONObject. The new objects become owned by those objects.</param>
+/// <remarks>Runs the planner once per group, so it is only for `--causes`. Writes nothing.
+/// Fields: available, part, dry_run, apply, edges[{from,to,recipe,chosen}], reason, and for a
+/// Part A group `followup` {from,to,recipe} when Part B cuts an edge afterwards.</remarks>
+procedure AddCycleFixHints(const pIn: TCycleFixHintInput; const pGroups: TJSONArray);
+
+/// <summary>Adds an `edges` array to every group object of a `cycles --format json`
+/// report: one entry per uses edge inside the group, with that edge's surface
+/// (DRagLint.Report.CycleEdge.EdgeSurfaceToJson).</summary>
+/// <param name="pStore">Open index the graph was built from; read only.</param>
+/// <param name="pSccs">The circular groups, as lower-case unit stems.</param>
+/// <param name="pGraph">The uses graph the groups were computed from.</param>
+/// <param name="pGroups">The report's group objects, index-aligned with pSccs; each
+/// must be a TJSONObject. The new arrays become owned by those objects.</param>
+/// <remarks>Edges are listed member by member in group order (from, then to), the
+/// order the impl-cycle planner weighs them. Reads every member_accesses row once.</remarks>
+procedure AddCycleEdgeSurfaces(const pStore: ISymbolStore; const pSccs: TList<TArray<string>>;
+  const pGraph: TCycleGraph; const pGroups: TJSONArray);
+
+/// <summary>Builds the unit-uses graph `cycles` works on from every indexed `.pas` file's
+/// unit_uses rows.</summary>
+/// <param name="pStore">Open index; read only.</param>
+/// <returns>A graph whose four dictionaries are NEW and owned by the caller: release them with
+/// FreeCycleGraph.</returns>
+/// <remarks>Keys are lower-case file stems; an edge's target is the lower-case unit name as
+/// written in the uses clause, so a library unit is a node with no outgoing list. E18 T15b:
+/// hoisted out of DoCycles so `lint &lt;file&gt;` builds the same graph.</remarks>
+function BuildCycleGraph(const pStore: ISymbolStore): TCycleGraph;
+
+/// <summary>Frees the four dictionaries (and the adjacency lists) of a graph from BuildCycleGraph
+/// and sets them to nil.</summary>
+/// <param name="pGraph">The graph; safe to call twice.</param>
+procedure FreeCycleGraph(var pGraph: TCycleGraph);
+
+/// <summary>The circular unit groups of a graph: Tarjan's strongly-connected components of more
+/// than one unit.</summary>
+/// <param name="pGraph">A graph from BuildCycleGraph; read only.</param>
+/// <returns>A NEW list owned by the caller, one array of lower-case stems per group, in the order
+/// `cycles` prints them.</returns>
+/// <remarks>The one SCC pass behind `cycles` (DoCycles) and the per-file circular-uses finding of
+/// `lint &lt;file&gt;` (E18 T15b), so the two cannot disagree on which units cycle.</remarks>
+function ComputeSccs(const pGraph: TCycleGraph): TList<TArray<string>>; overload;
+
+/// <summary>The circular unit groups of an index (BuildCycleGraph, then ComputeSccs).</summary>
+/// <param name="pStore">Open index; read only.</param>
+/// <returns>A NEW list owned by the caller, one array of lower-case stems per group.</returns>
+function ComputeSccs(const pStore: ISymbolStore): TList<TArray<string>>; overload;
 
 implementation
 
 uses
-  System.SysUtils, System.IOUtils, System.StrUtils, System.RegularExpressions, System.Math,
+  System.IOUtils, System.StrUtils, System.RegularExpressions, System.Math, System.TypInfo,
   System.Generics.Defaults,
-  DRagLint.Core.Model;
+  DRagLint.Core.Model, DRagLint.Convert.UnitRules, DRagLint.Report.CycleEdge,
+  DRagLint.Report.UntangleCatalog;
 
 const
-  CLeafSuffix    = '.Contracts';
+  CLeafSuffix    = CUntangleSuffix;
   CBaseSuffix    = 'Base';
   CCodeFence     = '```';
   CPascalFence   = '```pascal';
@@ -103,6 +387,7 @@ const
   CAbstractTail  = ' virtual; abstract;';
   CMaxNamesShown = 6;
   CIntfMark      = '!';
+  CKindPrefix    = 'sk';
   CStepMoves     = 1;
   CStepUses      = 2;
   CStepCreate    = 3;
@@ -175,6 +460,7 @@ type
     CutFids    : TArray<Int64>;
     HeaderNew  : string;
     Switches   : TArray<TSwitchLine>;
+    Refusal    : string;  // mvBlocked by a recipe gate: its refusal kind (F5: 'base-class'); '' otherwise
   end;
 
   TConsumer = record
@@ -201,6 +487,7 @@ type
     Last    : Integer;
     NewLines: TArray<string>;
     Note    : string;
+    Refusal : string;  // ekManual only: the refusal kind ('' = manual-edit)
   end;
 
   TEdgeEval = record
@@ -210,6 +497,10 @@ type
     Movable : Boolean;
     Why     : string;
     Cost    : Integer;
+    Surface : TEdgeSurface;  // what FromStem takes from ToStem (E18 T4)
+    Recipe  : TCutRecipe;    // the recipe that applies to this edge (E18 T7 R3); crNone = none applies
+    Refusal : string;        // the refusal kind when a recipe was tried and refused
+    Steps   : TRecipeSteps;  // crRoutineInversion: the R1 steps
   end;
 
   TPredGroup = record
@@ -217,9 +508,56 @@ type
     HasIntf: Boolean;
   end;
 
-  TCyclePlanner = class  // dl:ok god-class@8d65, high-response@8d65 -- implementation-private; one per cycles --plan run, holding the shared per-cycle state that every small step reads; its many methods are the steps, each short
+  /// <summary>Whether a cycle's plan can be applied without a human.</summary>
+  TCycleVerdict = (cvMechanical, cvRefused);
+
+  /// <summary>A unit the plan creates: its name, its file and its full text.</summary>
+  TNewUnit = record
+    UnitName: string;
+    Path    : string;
+    Text    : TArray<string>;
+  end;
+
+  /// <summary>Everything BuildPlan computed for one circular group, as data,
+  /// so a caller can render it (RenderPlan) or apply it.</summary>
+  /// <remarks>
+  /// <para>Ownership: the record owns Edits (created by BuildPlan, owning its
+  /// lists). Do not copy the record -- a copy shares the same Edits object --
+  /// and call Release exactly once, on the one copy you keep. It holds the edits of every touched unit EXCEPT the project's .dpr,
+  /// each list ordered bottom-up (the order the playbook prints them); the .dpr
+  /// edits are in DprEdits, the .dproj edits in DprojEdits (index order).
+  /// Touched is the file order the playbook prints (cycle members first, the
+  /// .dpr last).</para>
+  /// <para>A plan with any refusal has Verdict = cvRefused but still carries
+  /// every step the playbook prints.</para>
+  /// </remarks>
+  TCycleFixPlan = record
+    CycleIndex: Integer;                          // 1-based, DoCycles order
+    Units     : TArray<string>;                   // stems
+    HasIntf   : Boolean;
+    Part      : Char;                             // 'A' or 'B'
+    Verdict   : TCycleVerdict;
+    Refusals  : TArray<TRefusal>;
+    Items     : TArray<TMoveItem>;
+    Decisions : TArray<TUsesDecision>;
+    NewUnits  : TArray<TNewUnit>;
+    Edits     : TDictionary<Int64, TList<TFileEdit>>;  // fid -> edits, EditOrder applied
+    DprojEdits: TArray<TFileEdit>;
+    DprEdits  : TArray<TFileEdit>;
+    Touched   : TArray<Int64>;                    // fids
+    Predicted : TArray<TPredGroup>;
+    ExpectedOutput: TArray<string>;
+    CutEdge   : TEdgeEval;                        // Part B
+    Evals     : TArray<TEdgeEval>;                // Part B: every edge weighed
+    /// <summary>Frees Edits (and its lists); safe to call twice.</summary>
+    procedure Release;
+  end;
+
+  TCyclePlanner = class(TNoRefCountObject, IEdgeSurfaceSource)  // dl:ok god-class@ac0b, high-response@ac0b -- implementation-private; one per cycles --plan run, holding the shared per-cycle state that every small step reads; its many methods are the steps, each short
   private
+    FAccess     : TDictionary<Int64, TCallEdge>;  // ref id -> member_accesses row, loaded on first use
     FStore      : ISymbolStore;
+    FLibStore   : ISymbolStore;  // platform library (R2 ancestry), read-only; nil when none
     FDbPath     : string;
     FSccs       : TList<TArray<string>>;
     FGraph      : TCycleGraph;
@@ -244,8 +582,10 @@ type
     FExtraEdits : TObjectDictionary<Int64, TList<TFileEdit>>;
     FLeafName   : TDictionary<string, string>;
     FLeafPath   : TDictionary<string, string>;
+    FLeafInfo   : TDictionary<string, TUntangleLeaf>;  // source stem -> the catalog's answer
     FLeafDeps   : TObjectDictionary<string, TList<string>>;
     FConsumers  : TObjectDictionary<Int64, TList<TConsumer>>;
+    FPulledBy   : TDictionary<Int64, string>;
     FDecisions  : TList<TUsesDecision>;
     FUsesAdd    : TObjectDictionary<string, TList<string>>;
     FUsesDel    : TObjectDictionary<string, TList<string>>;
@@ -253,6 +593,10 @@ type
     FTouched    : TList<Int64>;
     FPredicted  : TList<TPredGroup>;
     FCutEdge    : TEdgeEval;
+    FInversion  : TRecipeSteps;  // R1 / R2 steps of FCutEdge; Recipe = crNone otherwise
+    FPartBBest  : TEdgeEval;     // Part A groups: the edge Part B cuts after Part A (FromStem = '' when none)
+    FPartBDone  : Boolean;       // FPartBBest has been computed for the current group
+    FFixProject : string;        // the project named in the Fix it commands; '' = placeholder
     // loading + resolution
     procedure IndexAllFiles;
     function GetFile(pFid: Int64): TPlanFile;
@@ -282,15 +626,18 @@ type
     function PullMembers(const pF: TPlanFile; var pItem: TMoveItem; const pChildren: TArray<TSymbol>;
       pUsed: TDictionary<string, Boolean>): Boolean;
     function BuildSwitches(var pItem: TMoveItem): Boolean;
+    function BaseSiteRefusal(const pItem: TMoveItem): string;
+    function ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string): string;
     function TryAdd(const pSym: TSymbol; const pCut: TArray<Int64>; out pWhy: string): Boolean;
     function AddDependencies(const pItem: TMoveItem; out pWhy: string): Boolean;
     function AddCompanions(const pItem: TMoveItem; out pWhy: string): Boolean;
+    procedure NotePulledBy(const pSym, pBy: TSymbol);
     procedure Rollback(pSnap: Integer);
     function IsMovedFor(const pOwner: TSymbol; pFid: Int64): Boolean;
     // materialise
     procedure Materialize;
     procedure AssignLeafNames;
-    function LeafStems: TArray<string>;
+    function LeafStems(pDecision: TUntangleDecision): TArray<string>;
     procedure MarkDeleted(pFid: Int64; const pRange: TLineRange);
     function IsDeleted(pFid: Int64; pLine: Integer): Boolean;
     procedure MarkReplaced(pFid: Int64; pLine: Integer; const pText: string);
@@ -302,11 +649,13 @@ type
     procedure DecideUses;
     procedure DecideOne(const pA: TPlanFile; const pU: TUnitUse);
     procedure RegisterLeaves;
+    procedure ExtendLeaves;
+    function MergeLeafUses(const pF: TPlanFile; pSect: TSect; pAnchor: Integer;
+      const pEntries: TArray<string>): TArray<string>;
     procedure AddUses(pFid: Int64; pSect: TSect; const pEntry: string);
     procedure DelUses(pFid: Int64; pSect: TSect; const pStem: string);
     procedure Touch(pFid: Int64);
     function EntryText(const pF: TPlanFile; const pU: TUnitUse): string;
-    function EntryComment(const pF: TPlanFile; const pU: TUnitUse): string;
     function UsesEntryFor(const pF: TPlanFile; const pLeafStem: string): string;
     procedure DedupeAdds;
     procedure BuildUsesEdits;
@@ -323,6 +672,7 @@ type
     function ExpectedOutput(pSelf: Integer): TArray<string>;
     function GroupHasIntf(const pComp: TArray<string>): Boolean;
     function EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>): TEdgeEval;
+    procedure RenderEdgeChoices(const pEvals: TArray<TEdgeEval>);
     function RemainingNeeds(const pFrom, pTo: string; pAll: Boolean): TArray<TNeed>;
     // rendering
     procedure Emit(const pText: string);
@@ -340,6 +690,8 @@ type
     procedure RenderDecisions(pStep: Integer);
     procedure RenderLeafUnits(pStep: Integer);
     function LeafUnitText(const pStem: string): TArray<string>;
+    function LeafEntries(const pStem: string; pSect: TSect): TArray<string>;
+    function LeafDeclLines(const pStem: string; pBodies: TList<TLineRange>): TArray<string>;
     function BaseClassText(const pItem: TMoveItem): TArray<string>;
     procedure RenderEdits(pStep: Integer);
     procedure RenderFileEdits(const pTitle: string; const pLines: TArray<string>;
@@ -348,20 +700,85 @@ type
     procedure RenderCompileHelp;
     procedure RenderDone(pIntf: Boolean);
     procedure RenderPartB;
-    procedure RenderIntfCycle(pSelf: Integer);
-    procedure RenderImplCycle(pSelf: Integer);
+    procedure CollectPartB(const pEvals: TList<TEdgeEval>; const pTexts: TList<string>);
+    function PartBBest: TEdgeEval;
+    procedure RenderFixIt(const pPlan: TCycleFixPlan);
+    function FixCommand(pCycle: Integer; pApply: Boolean): string;
+    procedure RenderIntfCycle(const pPlan: TCycleFixPlan);
+    procedure RenderImplCycle(const pPlan: TCycleFixPlan);
+    // planning (no output)
+    procedure PlanIntfCycle;
+    function PlanImplCycle: TArray<TEdgeEval>;
+    procedure PlanInversion(pEvals: TList<TEdgeEval>);
+    procedure PlanMemberHandOver(pEvals: TList<TEdgeEval>);
+    procedure RenderMemberHandOver(pStep: Integer);
+    function InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
+    function LeavesProgramReason(const pSteps: TRecipeSteps): string;
+    procedure MaterializeInversion;
+    function IsInversionStem(const pStem: string): Boolean;
+    function InversionDeclLines(const pStem: string): TArray<string>;
+    procedure RenderInversion(pStep: Integer);
+    function InversionStillUsed: string;
+    procedure CapturePlan(var pPlan: TCycleFixPlan);
+    function BuildView(const pPlan: TCycleFixPlan): TCyclePlanView;
+    procedure CaptureRefusals(var pPlan: TCycleFixPlan);
+    procedure DumpPlanForTests(const pPlan: TCycleFixPlan);
     procedure RenderNoMechanicalCut(const pEvals: TArray<TEdgeEval>);
     procedure RenderRemedy;
     function ReindexCommand: string;
     function CyclesCommand(pPlan: Boolean): string;
     function KindLabel(const pItem: TMoveItem): string;
     function MemberNames: string;
+    // IEdgeSurfaceSource (DRagLint.Report.CycleEdge); FidOfStem above is the fourth
+    function Store: ISymbolStore;
+    function FileLines(pFid: Int64): TArray<string>;
+    function BindName(pFid: Int64; pLine: Integer; const pName: string; out pOwner: TSymbol;
+      out pStem: string): Boolean;
+    function IsSccStem(const pStem: string): Boolean;
+    function MemberAccessOf(pRefId: Int64; out pAccess: TCallEdge): Boolean;
   public
     constructor Create(const pStore: ISymbolStore; const pDbPath: string;
-      const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
+      const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
+      const pLibStore: ISymbolStore = nil);
     destructor Destroy; override;
+    /// <summary>Computes the plan for one SCC without rendering.</summary>
+    /// <param name="pCycleIndex">1-based index into the circular groups
+    /// (DoCycles order).</param>
+    /// <returns>The plan; the caller must call its Release.</returns>
+    /// <remarks>Resets and refills the planner's per-cycle state, which then
+    /// stays that of the returned plan until the next BuildPlan.</remarks>
+    function BuildPlan(pCycleIndex: Integer): TCycleFixPlan;
+    /// <summary>Renders the playbook for one SCC from a plan built by BuildPlan.</summary>
+    /// <param name="pPlan">The plan the LAST BuildPlan call returned.</param>
+    /// <exception cref="EInvalidOpException">Raised when pPlan is not the plan of the
+    /// planner's current per-cycle state (another BuildPlan ran since).</exception>
+    /// <remarks>The detail sections still read the planner's per-cycle state,
+    /// which BuildPlan left in place; hence the guard.</remarks>
+    procedure RenderPlan(const pPlan: TCycleFixPlan);
     procedure Run;
+    /// <summary>What the Fix it block (text) and fix object (JSON) say about one group.</summary>
+    /// <param name="pPlan">The plan the LAST BuildPlan call returned.</param>
+    /// <returns>Availability, commands, cuttable edges and the first refusal, all taken from pPlan.</returns>
+    /// <remarks>Availability is the planner's verdict: a mechanical cut with no refusal. It does not
+    /// build; the dry run checks the baseline. Part A groups run the Part B weighing once, only to
+    /// name the follow-up edge.</remarks>
+    function FixHintOf(const pPlan: TCycleFixPlan): TCycleFixHint;
+    /// <summary>The project named in the Fix it commands; '' prints the placeholder `&lt;your.dproj&gt;`.</summary>
+    property FixProject: string read FFixProject write FFixProject;
+    /// <summary>The surface of every uses edge inside one SCC.</summary>
+    /// <param name="pCycleIndex">1-based index into the circular groups.</param>
+    /// <returns>One surface per edge A -&gt; B with A, B in the group and B in A's
+    /// uses, in group order.</returns>
+    /// <remarks>Resets the planner's per-cycle state to that group.</remarks>
+    function EdgeSurfacesOf(pCycleIndex: Integer): TArray<TEdgeSurface>;
   end;
+
+{ TCycleFixPlan }
+
+procedure TCycleFixPlan.Release;
+begin
+  FreeAndNil(Edits);
+end;
 
 { ---------------------------------------------------------------------------
   small text helpers
@@ -418,6 +835,45 @@ begin
     if (pLine[I] = '{') or (Pair = '//') or (Pair = '(*') then Exit(Copy(pLine, 1, I - 1));
   end;
   Result:= pLine;
+end;
+
+function SourceEncodingOf(const pBytes: TBytes): TEncoding;
+const
+  CBomLen = 3;  // the UTF-8 BOM EF BB BF
+  CBomEF  = $EF;
+  CBomBB  = $BB;
+  CBomBF  = $BF;
+begin
+  if (Length(pBytes) >= CBomLen) and (pBytes[0] = CBomEF) and (pBytes[1] = CBomBB) and (pBytes[2] = CBomBF) then
+    Result:= TEncoding.UTF8
+  else Result:= TEncoding.ANSI;
+end;
+
+function DecodeSource(const pBytes: TBytes; out pEncoding: TEncoding): string;
+begin
+  pEncoding:= SourceEncodingOf(pBytes);
+  if pEncoding = TEncoding.UTF8 then
+    Result:= TEncoding.UTF8.GetString(pBytes, Length(TEncoding.UTF8.GetPreamble), Length(pBytes) - Length(TEncoding.UTF8.GetPreamble))
+  else Result:= TEncoding.ANSI.GetString(pBytes);
+end;
+
+function EncodeSource(const pText: string; pEncoding: TEncoding): TBytes;
+begin
+  Result:= pEncoding.GetBytes(pText);
+  if pEncoding = TEncoding.UTF8 then Result:= TEncoding.UTF8.GetPreamble + Result;
+end;
+
+function ReadSourceLines(const pPath: string): TArray<string>;
+var
+  Enc: TEncoding;
+begin
+  var Lines:= TStringList.Create;
+  try
+    Lines.Text:= DecodeSource(TFile.ReadAllBytes(pPath), Enc);
+    Result:= Lines.ToStringArray;
+  finally
+    Lines.Free;
+  end;
 end;
 
 function LineAt(const pLines: TArray<string>; pLine: Integer): string;
@@ -571,6 +1027,322 @@ begin
   end;
 end;
 
+{ ---------------------------------------------------------------------------
+  E18 T3a: minimal edits to an EXISTING uses clause, computed over TUsesLexer
+  tokens. The lexer treats comments as trivia, and only tokens -- plus a BLANK
+  gap between two deleted tokens -- are ever deleted, so every comment
+  survives. Add = `, <Unit>` after the last entry (before the `;` when a
+  directive sits between the two). Remove = the entry and ONE separator: the
+  following one (its line then goes away whole), or the preceding one when the
+  following side holds a directive or a comment parts the entry from it while the
+  preceding one is adjacent; the LAST entry takes the preceding separator and the
+  `;`, which moves to the entry before (T17b D3). An entry in a
+  conditional region, or a directive inside the span a removal deletes,
+  refuses with `directive`; a directive elsewhere in the clause does not.
+  --------------------------------------------------------------------------- }
+type
+  TOfsSpan = record
+    Start: Integer;
+    Stop : Integer;
+  end;
+
+const
+  CClauseBreak = #13#10;
+  CRefDirective = 'directive';
+  CRefManual    = 'manual-edit';
+
+function OfsSpan(pStart, pStop: Integer): TOfsSpan;
+begin
+  Result.Start:= pStart;
+  Result.Stop := pStop;
+end;
+
+{ The first `uses` clause of the lexer's text, read by UnitRules' ParseClause
+  (one uses grammar); Present = False when there is none or it does not parse. }
+function ScanClause(pLex: TUsesLexer): TUsesClause;
+var
+  T: TTok;
+begin
+  Result:= Default(TUsesClause);
+  repeat
+    T:= pLex.Next;
+  until (T.Kind = tkEof) or ((T.Kind = tkIdent) and not T.Escaped and SameText(T.Text, 'uses'));
+  if (T.Kind = tkEof) or not ParseClause(pLex, T, Result) then Result.Present:= False;
+end;
+
+{ True when the entry span holds anything but its own tokens -- a comment or a
+  directive -- asked of the lexer, so an `in 'path'` literal holding `{` or
+  `//` is just a string. }
+function EntryHasTrivia(const pText: string; const pE: TUsesEntry): Boolean;
+var
+  Lex : TUsesLexer;
+  T   : TTok;
+  Body: string;
+  At  : Integer;
+begin
+  Body:= Copy(pText, pE.Start, pE.Stop - pE.Start);
+  Lex := TUsesLexer.Create(Body);
+  try
+    At:= 1;
+    Result:= False;
+    repeat
+      T:= Lex.Next;
+      if Trim(Copy(Body, At, T.Start - At)) <> '' then Result:= True;
+      At:= T.Stop;
+    until Result or (T.Kind = tkEof);
+  finally
+    Lex.Free;
+  end;
+end;
+
+{ Deletes the token spans pSpans (ascending) from pText, and every gap between
+  two of them that is blank -- a gap holding a comment stays. pEatBlanks also
+  deletes the spaces / tabs right after the last span. }
+procedure DeleteSpans(var pText: string; const pSpans: array of TOfsSpan; pEatBlanks: Boolean);
+var
+  Runs: TList<TOfsSpan>;
+  Cur : TOfsSpan;
+begin
+  Runs:= TList<TOfsSpan>.Create;
+  try
+    Cur:= pSpans[0];
+    for var I:= 1 to High(pSpans) do
+      if Trim(Copy(pText, Cur.Stop, pSpans[I].Start - Cur.Stop)) = '' then Cur.Stop:= pSpans[I].Stop
+      else
+      begin
+        Runs.Add(Cur);
+        Cur:= pSpans[I];
+      end;
+    if pEatBlanks then
+      while (Cur.Stop <= Length(pText)) and CharInSet(pText[Cur.Stop], [' ', #9]) do Inc(Cur.Stop);
+    Runs.Add(Cur);
+    for var I:= Runs.Count - 1 downto 0 do Delete(pText, Runs[I].Start, Runs[I].Stop - Runs[I].Start);
+  finally
+    Runs.Free;
+  end;
+end;
+
+{ Adds pEntry after the last entry; returns the refusal kind or ''. }
+function AddClauseEntry(var pText: string; pLex: TUsesLexer; const pScan: TUsesClause; const pEntry: string): string;
+var
+  L        : TUsesEntry;
+  At       : Integer;
+  LineStart: Integer;
+  Indent   : string;
+begin
+  if pScan.Semi.Depth > 0 then Exit(CRefDirective);
+  L := pScan.Entries[High(pScan.Entries)];
+  L.Start:= L.Start - Ord(L.Escaped);
+  At:= if pLex.DirectiveIn(L.Stop, pScan.Semi.Start) then pScan.Semi.Start else L.Stop;
+  LineStart:= L.Start;
+  while (LineStart > 1) and not CharInSet(pText[LineStart - 1], [#10, #13]) do Dec(LineStart);
+  Indent:= Copy(pText, LineStart, L.Start - LineStart);
+  { one entry per line stays one entry per line; an inline clause stays inline }
+  if (Trim(Indent) = '') and (LineStart > pScan.UsesTok.Stop) then Insert(',' + CClauseBreak + Indent + pEntry, pText, At)
+  else Insert(', ' + pEntry, pText, At);
+  Result:= '';
+end;
+
+{ True when entry pIdx has a preceding separator that a removal may take (outside a
+  conditional, no directive up to the entry's end) with only blanks between the two. }
+function PrevAdjacent(const pText: string; pLex: TUsesLexer; const pScan: TUsesClause; pIdx: Integer): Boolean;
+begin
+  if pIdx = 0 then Exit(False);
+  var S:= pScan.Commas[pIdx - 1];
+  var E:= pScan.Entries[pIdx];
+  E.Start:= E.Start - Ord(E.Escaped);
+  Result:= (S.Depth = 0) and not pLex.DirectiveIn(S.Start, E.Stop) and (Trim(Copy(pText, S.Stop, E.Start - S.Stop)) = '');
+end;
+
+{ Removes entry pIdx with one separator; returns the refusal kind or ''. }
+function RemoveClauseEntry(var pText: string; pLex: TUsesLexer; const pScan: TUsesClause; pIdx: Integer): string;
+var
+  E: TUsesEntry;
+  S: TTok;
+begin
+  E:= pScan.Entries[pIdx];
+  if E.Depth > 0 then Exit(CRefDirective);
+  if EntryHasTrivia(pText, E) then Exit(CRefManual);
+  E.Start:= E.Start - Ord(E.Escaped);  { an '&ident' entry's span starts at its '&' }
+  Result:= CRefDirective;
+  if Length(pScan.Entries) = 1 then
+  begin
+    { the last entry goes: so does the clause }
+    if not pLex.DirectiveIn(pScan.UsesTok.Start, pScan.Semi.Stop) then
+    begin
+      DeleteSpans(pText, [OfsSpan(pScan.UsesTok.Start, pScan.UsesTok.Stop), OfsSpan(E.Start, E.Stop),
+        OfsSpan(pScan.Semi.Start, pScan.Semi.Stop)], True);
+      Result:= '';
+    end;
+  end
+  else if (pIdx = High(pScan.Entries)) and (pScan.Commas[pIdx - 1].Depth = 0) and (pScan.Semi.Depth = 0) and
+    not pLex.DirectiveIn(pScan.Entries[pIdx - 1].Stop, pScan.Semi.Stop) then
+  begin
+    { T17b D3: the last entry goes with its separator AND the `;`, which moves to the
+      entry before -- so neither a leading-comma clause (`  , X` / `  , Y;`) nor a
+      comment line before the entry leaves a line holding only `;` }
+    S:= pScan.Commas[pIdx - 1];
+    DeleteSpans(pText, [OfsSpan(S.Start, S.Stop), OfsSpan(E.Start, E.Stop),
+      OfsSpan(pScan.Semi.Start, pScan.Semi.Stop)], False);
+    Insert(';', pText, pScan.Entries[pIdx - 1].Stop);
+    Result:= '';
+  end
+  else if (pIdx < High(pScan.Entries)) and (pScan.Commas[pIdx].Depth = 0) and
+    not pLex.DirectiveIn(E.Start, pScan.Commas[pIdx].Stop) and
+    ((Trim(Copy(pText, E.Stop, pScan.Commas[pIdx].Start - E.Stop)) = '') or not PrevAdjacent(pText, pLex, pScan, pIdx)) then
+  begin
+    { the following separator -- unless a comment parts the entry from it while the
+      preceding one is adjacent (T17b D3: `  , X` then `  // why` then `  , Y` lost
+      X and the comma before Y, leaving a line `  , `) }
+    S:= pScan.Commas[pIdx];
+    DeleteSpans(pText, [OfsSpan(E.Start, E.Stop), OfsSpan(S.Start, S.Stop)], True);
+    Result:= '';
+  end
+  else if (pIdx > 0) and (pScan.Commas[pIdx - 1].Depth = 0) and not pLex.DirectiveIn(pScan.Commas[pIdx - 1].Start, E.Stop) then
+  begin
+    S:= pScan.Commas[pIdx - 1];
+    DeleteSpans(pText, [OfsSpan(S.Start, S.Stop), OfsSpan(E.Start, E.Stop)], False);
+    Result:= '';
+  end;
+end;
+
+function IndexOfEntry(const pScan: TUsesClause; const pStem: string): Integer;
+begin
+  for var I:= 0 to High(pScan.Entries) do
+    if SameText(pScan.Entries[I].Name, pStem) then Exit(I);
+  Result:= -1;
+end;
+
+{ The ONE minimal edit applying pAdds (entry texts) and pDels (stems) to the
+  existing uses clause whose `uses` keyword is on line pUsesLine. Adds go
+  first, so a removal never empties a clause that gains an entry. First = 0
+  when nothing changes; a refusal is an ekManual edit on the line it names,
+  its Refusal the kind. }
+function ClauseEdit(const pLines: TArray<string>; pUsesLine: Integer; const pSectLabel: string;
+  const pAdds, pDels: TArray<string>): TFileEdit;
+var
+  Old   : TArray<string>;
+  Src   : string;           // the clause onward, unedited
+  Text  : string;           // the same, as the ops edit it
+  Orig  : TUsesClause;
+  Cur   : TUsesClause;
+  Lex   : TUsesLexer;
+  Ops   : TList<string>;  // '+entry' / '-stem', in order
+  Kind  : string;
+  BadOfs: Integer;
+  Pre   : Integer;
+  Suf   : Integer;
+  Mid   : TList<string>;
+begin
+  Result:= Default(TFileEdit);
+  Old   := Copy(pLines, pUsesLine - 1, MaxInt);
+  Src   := string.Join(CClauseBreak, Old);
+  Text  := Src;
+  Kind  := '';
+  Lex   := TUsesLexer.Create(Src);
+  try
+    Orig:= ScanClause(Lex);
+  finally
+    Lex.Free;
+  end;
+  BadOfs:= if Orig.Present then Orig.UsesTok.Start else 1;
+  if not Orig.Present then Kind:= CRefManual;
+  Ops:= TList<string>.Create;
+  try
+    if Kind = '' then
+    begin
+      for var S in pAdds do
+      begin
+        var I:= IndexOfEntry(Orig, StemOfEntry(S));
+        if I < 0 then Ops.Add('+' + S);
+      end;
+      { a stem both removed and added again stays where it is }
+      for var S in pDels do
+        if IndexOfEntry(Orig, S) >= 0 then
+        begin
+          var Readded:= False;
+          for var A in pAdds do Readded:= Readded or SameText(StemOfEntry(A), S);
+          if not Readded then Ops.Add('-' + S);
+        end;
+    end;
+    for var Op in Ops do
+    begin
+      Lex:= TUsesLexer.Create(Text);
+      try
+        Cur:= ScanClause(Lex);
+        if not Cur.Present then Kind:= CRefManual
+        else if Op[1] = '+' then
+        begin
+          Kind:= AddClauseEntry(Text, Lex, Cur, Copy(Op, 2, MaxInt));
+          BadOfs:= Orig.Semi.Start;
+        end
+        else
+        begin
+          { both indexes exist by construction (a removal is queued only for an
+            entry of Orig, and adds never remove one) -- refuse, never index -1 }
+          var InCur := IndexOfEntry(Cur, Copy(Op, 2, MaxInt));
+          var InOrig:= IndexOfEntry(Orig, Copy(Op, 2, MaxInt));
+          if (InCur < 0) or (InOrig < 0) then Kind:= CRefManual
+          else
+          begin
+            Kind  := RemoveClauseEntry(Text, Lex, Cur, InCur);
+            BadOfs:= Orig.Entries[InOrig].Start;
+          end;
+        end;
+      finally
+        Lex.Free;
+      end;
+      if Kind <> '' then Break;
+    end;
+  finally
+    Ops.Free;
+  end;
+  if Kind <> '' then
+  begin
+    { the line the refusal names, counted in the UNEDITED clause }
+    Result.Kind   := ekManual;
+    Result.Refusal:= Kind;
+    Result.First  := pUsesLine;
+    for var I:= 1 to BadOfs - 1 do
+      if Src[I] = #10 then Inc(Result.First);
+    Result.Last   := Result.First;
+    Result.Note   := Format('refused: %s -- the %s uses clause, line %d, cannot be edited token by token (%s). ' +
+      'Edit it by hand: remove %s; add %s.', [Kind, pSectLabel, Result.First,
+      (if Kind = CRefDirective then 'the edit would touch a compiler directive or a conditional entry'
+       else 'a comment inside an entry, or a clause shape the lexer does not read'),
+      (if Length(pDels) > 0 then QuoteList(pDels) else 'nothing'), (if Length(pAdds) > 0 then QuoteList(pAdds) else 'nothing')]);
+    Exit;
+  end;
+  var Fresh:= Text.Split([CClauseBreak]);
+  Pre:= 0;
+  while (Pre < Length(Old)) and (Pre < Length(Fresh)) and (Old[Pre] = Fresh[Pre]) do Inc(Pre);
+  Suf:= 0;
+  while (Suf < Length(Old) - Pre) and (Suf < Length(Fresh) - Pre) and (Old[High(Old) - Suf] = Fresh[High(Fresh) - Suf]) do
+    Inc(Suf);
+  Mid:= TList<string>.Create;
+  try
+    { a line an edit left blank goes away with it }
+    for var I:= Pre to High(Fresh) - Suf do
+      if Trim(Fresh[I]) <> '' then Mid.Add(Fresh[I]);
+    if (Length(Old) - Pre - Suf = 0) and (Mid.Count = 0) then Exit;
+    Result.NewLines:= Mid.ToArray;
+  finally
+    Mid.Free;
+  end;
+  if Length(Old) - Pre - Suf = 0 then
+  begin
+    Result.Kind := ekInsertAfter;
+    Result.First:= pUsesLine + Pre - 1;
+    Result.Last := Result.First;
+  end
+  else
+  begin
+    Result.Kind := if Length(Result.NewLines) = 0 then ekDelete else ekReplace;
+    Result.First:= pUsesLine + Pre;
+    Result.Last := pUsesLine + Length(Old) - Suf - 1;
+  end;
+end;
+
 function SortedInts(pList: TList<Integer>): TArray<Integer>;
 begin
   pList.Sort;
@@ -593,15 +1365,141 @@ begin
   Result:= scIntf;
 end;
 
+type
+  TTypeSite = (tsParam, tsResult, tsOther);
+
+{ E18 T7 F5: where the type name at column pCol of line pLine sits. tsParam: a
+  parameter of a routine header (pParam = the group before the colon, e.g.
+  `const a, b`); tsResult: a function result; tsOther: anything else (a field, a
+  variable, a cast, a generic argument, a procedural type's parameter). The header
+  is read backwards up to CMaxHeaderLines lines for the unmatched `(`. }
+function TypeSiteAt(const pLines: TArray<string>; pLine, pCol: Integer; out pParam: string): TTypeSite;
+const
+  CMaxHeaderLines = 30;
+var
+  S, Tail, Head: string;
+  Depth, L, Open: Integer;
+begin
+  pParam:= '';
+  S:= TrimRight(Copy(CodePart(LineAt(pLines, pLine)), 1, pCol - 1));
+  if not EndsStr(':', S) then Exit(tsOther);
+  S:= TrimRight(Copy(S, 1, Length(S) - 1));
+  if EndsStr(')', S) or TRegEx.IsMatch(S, '\bfunction\s+[\w.<>]+$', [roIgnoreCase]) then Exit(tsResult);
+  Tail := '';
+  Depth:= 0;
+  L    := pLine;
+  Open := 0;
+  while Open = 0 do
+  begin
+    for var I:= Length(S) downto 1 do
+    begin
+      if S[I] = ')' then Inc(Depth)
+      else if (S[I] = '(') and (Depth > 0) then Dec(Depth)
+      else if S[I] = '(' then
+      begin
+        Open:= I;
+        Break;
+      end;
+    end;
+    if Open > 0 then Break;
+    Tail:= S + ' ' + Tail;
+    Dec(L);
+    if (L < 1) or (pLine - L > CMaxHeaderLines) then Exit(tsOther);
+    S:= CodePart(LineAt(pLines, L));
+    if IsBlockWord(S) or SameText(Trim(S), 'begin') then Exit(tsOther);
+  end;
+  Head:= TrimRight(Copy(S, 1, Open - 1));
+  if not TRegEx.IsMatch(Head, '\b(procedure|function|constructor|destructor|operator)\s+[\w.<>, ]+$', [roIgnoreCase]) then
+    Exit(tsOther);
+  Tail:= Copy(S, Open + 1, MaxInt) + ' ' + Tail;
+  pParam:= Trim(Copy(Tail, LastDelimiter(';', Tail) + 1, MaxInt));
+  Result:= tsParam;
+end;
+
+{ E18 T7 F5: the end of a routine's implementation header in lines pFirst..pLast:
+  the first `;` outside the parameter list (pLine, pCol). False when none. }
+function HeaderEnd(const pLines: TArray<string>; pFirst, pLast: Integer; out pLine, pCol: Integer): Boolean;
+var
+  Depth: Integer;
+begin
+  Depth:= 0;
+  for var L:= pFirst to pLast do
+  begin
+    var Code:= CodePart(LineAt(pLines, L));
+    for var I:= 1 to Length(Code) do
+      if Code[I] = '(' then Inc(Depth)
+      else if Code[I] = ')' then Dec(Depth)
+      else if (Code[I] = ';') and (Depth = 0) then
+      begin
+        pLine:= L;
+        pCol := I;
+        Exit(True);
+      end;
+  end;
+  pLine := 0;
+  pCol  := 0;
+  Result:= False;
+end;
+
+{ E18 T7 F5: the occurrence of a name at pIndex (length pLen) in pCode is a
+  receiver (`p.`) or one side of a nil test (`p = nil`, `p <> nil`, `nil = p`). }
+function IsReceiverOrNilTest(const pCode: string; pIndex, pLen: Integer): Boolean;
+begin
+  var Rest  := Copy(pCode, pIndex + pLen, MaxInt);
+  var Before:= Copy(pCode, 1, pIndex - 1);
+  Result:= TRegEx.IsMatch(Rest, '^\s*\.') or TRegEx.IsMatch(Rest, '^\s*(=|<>)\s*nil\b', [roIgnoreCase]) or
+    TRegEx.IsMatch(Before, '\bnil\s*(=|<>)\s*$', [roIgnoreCase]);
+end;
+
+{ E18 T7 R3: the order the recipes are preferred in (lower first). }
+function RecipeRank(pRecipe: TCutRecipe): Integer;
+begin
+  case pRecipe of
+    crMoveGlobals     : Result:= 0;
+    crRoutineInversion: Result:= 1;
+    crMemberInterface : Result:= 2;
+  else
+    Result:= MaxInt;
+  end;
+end;
+
+{ E18 T7 R3: pEv is a better cut than pBest -- the preferred recipe, then the
+  fewest surface members, then the fewest surface refs, then the lower recipe
+  cost; an empty pBest loses to any edge a recipe applies to. }
+function BetterCut(const pEv, pBest: TEdgeEval): Boolean;
+begin
+  if pEv.Recipe = crNone then Exit(False);
+  if pBest.FromStem = '' then Exit(True);
+  if RecipeRank(pEv.Recipe) <> RecipeRank(pBest.Recipe) then Exit(RecipeRank(pEv.Recipe) < RecipeRank(pBest.Recipe));
+  if Length(pEv.Surface.Members) <> Length(pBest.Surface.Members) then
+    Exit(Length(pEv.Surface.Members) < Length(pBest.Surface.Members));
+  if Length(pEv.Surface.Refs) <> Length(pBest.Surface.Refs) then
+    Exit(Length(pEv.Surface.Refs) < Length(pBest.Surface.Refs));
+  Result:= pEv.Cost < pBest.Cost;
+end;
+
+function RecipeLabel(pRecipe: TCutRecipe): string;
+begin
+  case pRecipe of
+    crMoveGlobals     : Result:= 'move globals';
+    crRoutineInversion: Result:= 'routine-call inversion';
+    crMemberInterface : Result:= 'member hand-over';
+  else
+    Result:= 'none';
+  end;
+end;
+
 { ---------------------------------------------------------------------------
   TCyclePlanner -- construction and loading
   --------------------------------------------------------------------------- }
 
 constructor TCyclePlanner.Create(const pStore: ISymbolStore; const pDbPath: string;
-  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
+  const pLibStore: ISymbolStore);
 begin
   inherited Create;
   FStore     := pStore;
+  FLibStore  := pLibStore;
   FDbPath    := pDbPath;
   FSccs      := pSccs;
   FGraph     := pGraph;
@@ -622,8 +1520,10 @@ begin
   FExtraEdits:= TObjectDictionary<Int64, TList<TFileEdit>>.Create([doOwnsValues]);
   FLeafName  := TDictionary<string, string>.Create;
   FLeafPath  := TDictionary<string, string>.Create;
+  FLeafInfo  := TDictionary<string, TUntangleLeaf>.Create;
   FLeafDeps  := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
   FConsumers := TObjectDictionary<Int64, TList<TConsumer>>.Create([doOwnsValues]);
+  FPulledBy  := TDictionary<Int64, string>.Create;
   FDecisions := TList<TUsesDecision>.Create;
   FUsesAdd   := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
   FUsesDel   := TObjectDictionary<string, TList<string>>.Create([doOwnsValues]);
@@ -641,8 +1541,10 @@ begin
   FUsesDel.Free;
   FUsesAdd.Free;
   FDecisions.Free;
+  FPulledBy.Free;
   FConsumers.Free;
   FLeafDeps.Free;
+  FLeafInfo.Free;
   FLeafPath.Free;
   FLeafName.Free;
   FExtraEdits.Free;
@@ -659,6 +1561,7 @@ begin
   FStemFid.Free;
   FPaths.Free;
   FFiles.Free;
+  FAccess.Free;
   inherited Destroy;
 end;
 
@@ -723,7 +1626,7 @@ begin
   Result.UnitName := UnitNameOfPath(Result.Path);
   Result.Stem     := LowerCase(Result.UnitName);
   Result.IsProgram:= MatchText(ExtractFileExt(Result.Path), ['.dpr', '.dpk']);
-  if TFile.Exists(Result.Path) then Result.Lines:= TFile.ReadAllLines(Result.Path);
+  if TFile.Exists(Result.Path) then Result.Lines:= ReadSourceLines(Result.Path);
   Result.IntfLine:= FindKeywordLine(Result.Lines, 'interface');
   Result.ImplLine:= FindKeywordLine(Result.Lines, 'implementation');
   Result.Syms    := FStore.FindSymbolsByFile(Result.Path);
@@ -884,15 +1787,20 @@ begin
   FExtraEdits.Clear;
   FLeafName.Clear;
   FLeafPath.Clear;
+  FLeafInfo.Clear;
   FLeafDeps.Clear;
   FConsumers.Clear;
+  FPulledBy.Clear;
   FDecisions.Clear;
   FUsesAdd.Clear;
   FUsesDel.Clear;
   FDprojEdits.Clear;
   FTouched.Clear;
   FPredicted.Clear;
-  FCutEdge:= Default(TEdgeEval);
+  FCutEdge  := Default(TEdgeEval);
+  FInversion:= Default(TRecipeSteps);
+  FPartBBest:= Default(TEdgeEval);
+  FPartBDone:= False;
 end;
 
 function TCyclePlanner.BodyRanges(const pSym: TSymbol): TArray<TLineRange>;
@@ -1054,7 +1962,17 @@ begin
   finally
     Used.Free;
   end;
-  if BuildSwitches(pItem) then pItem.Kind:= mvBase;
+  if not BuildSwitches(pItem) then Exit;
+  { E18 T7 F5: the base class stands in for the class only where nothing but a
+    member read or a nil test happens to it }
+  var Site:= BaseSiteRefusal(pItem);
+  if Site <> '' then
+  begin
+    pItem.Refusal:= 'base-class';
+    pItem.Reason := 'refused: base-class -- ' + Site;
+    Exit;
+  end;
+  pItem.Kind:= mvBase;
 end;
 
 function TCyclePlanner.UsedMemberNames(const pChildren: TArray<TSymbol>; const pCut: TArray<Int64>): TDictionary<string, Boolean>;
@@ -1205,6 +2123,91 @@ begin
   end;
 end;
 
+{ E18 T7 F5: '' when every switched site of pItem is a const or value parameter
+  whose routine body only reads members of it or compares it with nil; otherwise
+  the first offending site, as "`<file>:<line>` <what>". }
+function TCyclePlanner.BaseSiteRefusal(const pItem: TMoveItem): string;
+var
+  Param: string;
+begin
+  for var S in pItem.Switches do
+  begin
+    var F   := GetFile(S.Fid);
+    var Site:= Format('`%s:%d`', [ExtractFileName(F.Path), S.Line]);
+    for var M in TRegEx.Matches(CodePart(LineAt(F.Lines, S.Line)), '\b' + pItem.Sym.Name + '\b', [roIgnoreCase]) do
+    begin
+      case TypeSiteAt(F.Lines, S.Line, M.Index, Param) of
+        tsResult: Exit(Format('%s: a function result of type `%s`', [Site, pItem.Sym.Name]));
+        tsOther : Exit(Format('%s: `%s` is used here as something other than a parameter type (a field, ' +
+          'variable, cast or type argument)', [Site, pItem.Sym.Name]));
+      end;
+      var Group:= Trim(TRegEx.Replace(Param, '^\[\s*ref\s*\]', '', [roIgnoreCase]));
+      var Modifier:= LowerCase(Copy(Group, 1, Pos(' ', Group + ' ') - 1));
+      if MatchText(Modifier, ['var', 'out']) then
+        Exit(Format('%s: `%s` is a `%s` parameter of type `%s`; a base class cannot stand in for it',
+          [Site, Group, Modifier, pItem.Sym.Name]));
+      if MatchText(Modifier, ['const', 'constref']) then Group:= Trim(Copy(Group, Length(Modifier) + 1, MaxInt));
+      for var Name in Group.Split([',']) do
+      begin
+        var Why:= ParamBodyRefusal(S.Fid, S.Line, Trim(Name));
+        if Why <> '' then Exit(Format('%s: parameter `%s` -- %s', [Site, Trim(Name), Why]));
+      end;
+    end;
+  end;
+  Result:= '';
+end;
+
+{ E18 T7 F5: '' when the routine pLine belongs to uses pParam only to read one
+  of its members (member_accesses mode read, receiver = the parameter) or to
+  compare it with nil; otherwise what it does, with the line. pLine is in the
+  routine's implementation header, or in its declaration (interface or class),
+  whose body is then checked through the declaration's implementation range.
+  No body at all (abstract, external, a forward never implemented here) is a
+  refusal: nothing shows the base class is enough for the overrides or callees.
+  Every occurrence of the name in the body is classified by its own column:
+  followed by `.` (a receiver: the member ref must be a read) or by `= nil` /
+  `<> nil` (or preceded by `nil =` / `nil <>`); anything else refuses. }
+function TCyclePlanner.ParamBodyRefusal(pFid: Int64; pLine: Integer; const pParam: string): string;
+var
+  Routine: TSymbol;
+  MA     : TCallEdge;
+  BodyAt : Integer;
+  BodyCol: Integer;
+begin
+  Routine:= Default(TSymbol);
+  var F:= GetFile(pFid);
+  for var S in F.Syms do
+    if (S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and
+      (S.ImplStartLine > 0) and (S.ImplStartLine <= pLine) and (pLine <= S.ImplEndLine) and
+      (S.ImplStartLine > Routine.ImplStartLine) then Routine:= S;
+  if Routine.Id = 0 then
+    for var S in F.Syms do
+      if (S.Kind in [skProcedure, skFunction, skMethod, skConstructor, skDestructor]) and
+        (S.StartLine <= pLine) and (pLine <= S.EndLine) then Routine:= S;
+  if (Routine.Id = 0) or (Routine.ImplStartLine <= 0) or (Routine.ImplEndLine < Routine.ImplStartLine) then
+    Exit(Format('it belongs to no routine body in this file (abstract, external or not ' +
+      'implemented here), so nothing shows a base class is enough for `%s`', [pParam]));
+  if not HeaderEnd(F.Lines, Routine.ImplStartLine, Routine.ImplEndLine, BodyAt, BodyCol) then Exit(Format('the header of `%s` (line %d) could not be read', [Routine.Name, Routine.ImplStartLine]));
+  for var L:= BodyAt to Routine.ImplEndLine do
+  begin
+    var Code:= CodePart(LineAt(F.Lines, L));
+    for var M in TRegEx.Matches(Code, '\b' + pParam + '\b', [roIgnoreCase]) do
+    begin
+      if (L = BodyAt) and (M.Index <= BodyCol) then Continue;
+      if IsReceiverOrNilTest(Code, M.Index, M.Length) then Continue;
+      Exit(Format('line %d (column %d) uses `%s` other than to read a member or compare it with nil',
+        [L, M.Index, pParam]));
+    end;
+  end;
+  Result:= '';
+  for var R in F.Refs do
+  begin
+    if (R.StartLine < Routine.ImplStartLine) or (R.StartLine > Routine.ImplEndLine) then Continue;
+    if SameText(R.ReceiverText, pParam) and
+      not (SameText(R.Kind, 'member-access') and MemberAccessOf(R.Id, MA) and SameText(MA.MemberMode, 'read')) then
+      Exit(Format('line %d: `%s.%s` is not a read of a member', [R.StartLine, pParam, R.NameText]));
+  end;
+end;
 function TCyclePlanner.TryAdd(const pSym: TSymbol; const pCut: TArray<Int64>; out pWhy: string): Boolean;
 var
   Item: TMoveItem;
@@ -1237,6 +2240,7 @@ begin
   for var N in NeedsInRanges(GetFile(pItem.Sym.FileId), MovedRanges(pItem)) do
   begin
     if (N.Owner.Id = pItem.Sym.Id) or not FMembers.ContainsKey(N.OwnerStem) then Continue;
+    NotePulledBy(N.Owner, pItem.Sym);
     if not TryAdd(N.Owner, nil, Why) then
     begin
       pWhy:= Format('it needs `%s` (%s), which cannot move: %s', [N.Owner.Name, N.Owner.Kind.ToText, Why]);
@@ -1258,6 +2262,7 @@ begin
   begin
     if (S.Id = pItem.Sym.Id) or not InRanges(S.StartLine, WithRange(pItem.Decl, nil)) then Continue;
     if (S.Kind = skEnumValue) or not OwnerOf(S, Owner) or (Owner.Id <> S.Id) then Continue;
+    NotePulledBy(S, pItem.Sym);
     if not TryAdd(S, nil, Why) then
     begin
       pWhy:= Format('`%s` is declared on the same lines and cannot move: %s', [S.Name, Why]);
@@ -1265,6 +2270,13 @@ begin
     end;
   end;
   Result:= True;
+end;
+
+procedure TCyclePlanner.NotePulledBy(const pSym, pBy: TSymbol);
+begin
+  { overwrites a stale entry of a probe that Rollback undid; an item already planned keeps none }
+  if FItems.ContainsKey(pSym.Id) then Exit;
+  FPulledBy.AddOrSetValue(pSym.Id, Format('%s `%s`', [(if pBy.Kind = skVarDecl then 'var' else 'declaration'), pBy.Name]));
 end;
 
 procedure TCyclePlanner.Rollback(pSnap: Integer);
@@ -1280,6 +2292,12 @@ function TCyclePlanner.IsMovedFor(const pOwner: TSymbol; pFid: Int64): Boolean;
 var
   Item: TMoveItem;
 begin
+  { R1: the consumer's calls of the inverted routine go through the pointer }
+  if (FInversion.Recipe = crRoutineInversion) and (pOwner.Id = FInversion.RoutineId) and
+    (pFid = FInversion.ConsumerFid) then Exit(True);
+  { R2: the consumer names the interface instead of the class }
+  if (FInversion.Recipe = crMemberInterface) and (pOwner.Id = FInversion.ClassId) and
+    (pFid = FInversion.ConsumerFid) then Exit(True);
   if not FItems.TryGetValue(pOwner.Id, Item) then Exit(False);
   if Item.Kind in [mvDecl, mvWithBodies] then Exit(True);
   for var Fid in Item.CutFids do
@@ -1300,37 +2318,38 @@ begin
   CollectLeafDeps;
   DecideUses;
   RegisterLeaves;
+  ExtendLeaves;
   BuildUsesEdits;
   Predict;
 end;
 
 procedure TCyclePlanner.AssignLeafNames;
 begin
+  { E18 T4b: the catalog names the leaf `<Source>.Untangle` and finds an existing
+    one that is still a leaf for this group (udExtend) }
+  var Root:= if FProjectFid > 0 then ExtractFilePath(PathOf(FProjectFid)) else '';
   for var Id in FOrder do
   begin
     var Stem:= FItems[Id].Stem;
     if FLeafName.ContainsKey(Stem) then Continue;
-    var F:= GetFile(FidOfStem(Stem));
-    var Name:= F.UnitName + CLeafSuffix;
-    var N:= 1;
-    while TFile.Exists(ExtractFilePath(F.Path) + Name + '.pas') do
-    begin
-      Inc(N);
-      Name:= F.UnitName + CLeafSuffix + IntToStr(N);
-    end;
-    FLeafName.Add(Stem, Name);
-    FLeafPath.Add(Stem, ExtractFilePath(F.Path) + Name + '.pas');
+    var Leaf:= ResolveUntangleLeaf(FStore, Stem, FComp, Root);
+    FLeafInfo.Add(Stem, Leaf);
+    FLeafName.Add(Stem, Leaf.UnitName);
+    FLeafPath.Add(Stem, Leaf.Path);
   end;
 end;
 
-function TCyclePlanner.LeafStems: TArray<string>;
+function TCyclePlanner.LeafStems(pDecision: TUntangleDecision): TArray<string>;
 var
   L: TList<string>;
 begin
   L:= TList<string>.Create;
   try
     for var Id in FOrder do
-      if FLeafName.ContainsKey(FItems[Id].Stem) then AddUnique(L, FItems[Id].Stem);
+      if FLeafInfo.ContainsKey(FItems[Id].Stem) and (FLeafInfo[FItems[Id].Stem].Decision = pDecision) then
+        AddUnique(L, FItems[Id].Stem);
+    if IsInversionStem(FInversion.DeclStem) and (FLeafInfo[FInversion.DeclStem].Decision = pDecision) then
+      AddUnique(L, FInversion.DeclStem);
     Result:= L.ToArray;
   finally
     L.Free;
@@ -1539,13 +2558,15 @@ var
 begin
   if FProjectFid = 0 then Exit;
   var Prj:= GetFile(FProjectFid);
-  for var Stem in LeafStems do AddUses(FProjectFid, scProg, UsesEntryFor(Prj, Stem));
+  { only a CREATED leaf is registered; an extended one is in the project already }
+  var Created:= LeafStems(udCreate);
+  for var Stem in Created do AddUses(FProjectFid, scProg, UsesEntryFor(Prj, Stem));
   if not (SameText(ExtractFileExt(FProjectFile), '.dproj') and TFile.Exists(FProjectFile)) then Exit;
-  Dproj:= TFile.ReadAllLines(FProjectFile);
+  Dproj:= ReadSourceLines(FProjectFile);
   for var U in Prj.UsesList do
   begin
     var Stem:= LowerCase(U.UnitName);
-    if (U.InPath = '') or not FLeafName.ContainsKey(Stem) then Continue;
+    if (U.InPath = '') or not MatchText(Stem, Created) then Continue;
     for var I:= 0 to High(Dproj) do
       if ContainsText(Dproj[I], 'Include="' + U.InPath + '"') then
       begin
@@ -1557,6 +2578,89 @@ begin
         FDprojEdits.Add(E);
         Break;
       end;
+  end;
+end;
+
+{ The uses entries pEntries for section pSect of the existing leaf pF. A section
+  that has a clause gets them through AddUses (the T3a lexer add, which skips an
+  entry already there); one without a clause gets a new clause after its keyword
+  -- also through AddUses, unless the insert at pAnchor sits on that keyword
+  line too: two inserts after one line have no order, so the clause is then
+  returned to lead the insert's own text. }
+function TCyclePlanner.MergeLeafUses(const pF: TPlanFile; pSect: TSect; pAnchor: Integer;
+  const pEntries: TArray<string>): TArray<string>;
+begin
+  Result:= nil;
+  if Length(pEntries) = 0 then Exit;
+  var KeyLine:= if pSect = scIntf then pF.IntfLine else pF.ImplLine;
+  if (Length(SectionEntries(pF, pSect)) = 0) and (pAnchor = KeyLine) then
+    Exit(PrependBlank(FormatUses('', pEntries, nil)));
+  for var S in pEntries do AddUses(pF.Fid, pSect, S);
+end;
+
+procedure TCyclePlanner.ExtendLeaves;
+var
+  Bodies: TList<TLineRange>;
+  E     : TFileEdit;
+  Lines : TList<string>;
+begin
+  { E18 T4b: a leaf the catalog found (udExtend) gets the moved declarations
+    inserted after its last interface declaration, the bodies before the end of
+    its implementation section, and the uses entries they need merged in }
+  Bodies:= TList<TLineRange>.Create;
+  Lines := TList<string>.Create;
+  try
+    for var Stem in LeafStems(udExtend) do
+    begin
+      var Leaf:= FLeafInfo[Stem];
+      var F   := GetFile(Leaf.Fid);
+      Bodies.Clear;
+      var Decls:= LeafDeclLines(Stem, Bodies);
+      var At:= Leaf.InsertAfterLine;
+      if At = 0 then
+      begin
+        { no interface declaration: after the interface uses clause, else the keyword }
+        At:= F.IntfLine;
+        for var U in SectionEntries(F, scIntf) do
+          if U.EndLine > At then At:= U.EndLine;
+        while (At > F.IntfLine) and (At < Length(F.Lines)) and not ContainsStr(CodePart(LineAt(F.Lines, At)), ';') do Inc(At);
+      end;
+      Lines.Clear;
+      Lines.AddRange(MergeLeafUses(F, scIntf, At, LeafEntries(Stem, scIntf)));
+      Lines.AddRange(Decls);
+      E:= Default(TFileEdit);
+      E.Kind    := ekInsertAfter;
+      E.First   := At;
+      E.Last    := At;
+      E.NewLines:= Lines.ToArray;
+      EditList(F.Fid).Add(E);
+      if Bodies.Count = 0 then Continue;
+      { the bodies go before `initialization` / `finalization` / `end.` }
+      At:= Length(F.Lines);
+      for var L:= F.ImplLine + 1 to Length(F.Lines) do
+        if MatchText(Trim(CodePart(LineAt(F.Lines, L))), ['initialization', 'finalization', 'end.']) then
+        begin
+          At:= L;
+          Break;
+        end;
+      Dec(At);
+      Lines.Clear;
+      Lines.AddRange(MergeLeafUses(F, scImpl, At, LeafEntries(Stem, scImpl)));
+      for var R in Bodies do
+      begin
+        Lines.Add('');
+        Lines.AddRange(SliceLines(GetFile(FidOfStem(Stem)).Lines, R));
+      end;
+      E:= Default(TFileEdit);
+      E.Kind    := ekInsertAfter;
+      E.First   := At;
+      E.Last    := At;
+      E.NewLines:= Lines.ToArray;
+      EditList(F.Fid).Add(E);
+    end;
+  finally
+    Lines.Free;
+    Bodies.Free;
   end;
 end;
 
@@ -1596,16 +2700,6 @@ begin
   finally
     S.Free;
   end;
-end;
-
-function TCyclePlanner.EntryComment(const pF: TPlanFile; const pU: TUnitUse): string;
-var
-  Rest: string;
-begin
-  Rest:= Trim(Copy(LineAt(pF.Lines, pU.EndLine), pU.EndCol, MaxInt));
-  if StartsStr(',', Rest) or StartsStr(';', Rest) then Rest:= Trim(Copy(Rest, 2, MaxInt));
-  if StartsStr('//', Rest) or StartsStr('{', Rest) then Result:= Rest
-  else Result:= '';
 end;
 
 function TCyclePlanner.UsesEntryFor(const pF: TPlanFile; const pLeafStem: string): string;
@@ -1674,12 +2768,8 @@ var
   Entries : TArray<TUnitUse>;
   Adds    : TList<string>;
   Dels    : TList<string>;
-  Kept    : TList<string>;
-  Notes   : TList<string>;
-  Stems   : TList<string>;
   E       : TFileEdit;
   UsesLine: Integer;
-  Clean   : Boolean;
 begin
   Entries:= SectionEntries(pF, pSect);
   Adds   := ListOf(FUsesAdd, pF.Fid, pSect);
@@ -1700,58 +2790,14 @@ begin
     EditList(pF.Fid).Add(E);
     Exit;
   end;
-  { the clause runs from the `uses` keyword to the last entry; a clause that
-    holds anything else (a directive, a comment line) gets a manual edit }
+  { E18 T3a: an existing clause gets ONE minimal edit computed over its
+    TUsesLexer tokens (ClauseEdit), never a whole-clause rewrite: comments
+    survive, a directive the edit would touch refuses the cycle }
   UsesLine:= Entries[0].StartLine;
   while (UsesLine > 1) and not TRegEx.IsMatch(CodePart(LineAt(pF.Lines, UsesLine)), '\buses\b', [roIgnoreCase]) do
     Dec(UsesLine);
-  E.First:= UsesLine;
-  E.Last := Entries[High(Entries)].EndLine;
-  Clean  := SameText(Trim(CodePart(LineAt(pF.Lines, UsesLine))), 'uses');
-  for var L:= UsesLine + 1 to E.Last do
-  begin
-    var Covered:= Trim(LineAt(pF.Lines, L)) = '';
-    for var U in Entries do
-      if (L >= U.StartLine) and (L <= U.EndLine) then Covered:= True;
-    Clean:= Clean and Covered;
-  end;
-  Kept := TList<string>.Create;
-  Notes:= TList<string>.Create;
-  Stems:= TList<string>.Create;
-  try
-    for var U in Entries do
-      if not Dels.Contains(LowerCase(U.UnitName)) then
-      begin
-        Kept.Add(EntryText(pF, U));
-        Notes.Add(EntryComment(pF, U));
-        Stems.Add(LowerCase(U.UnitName));
-      end;
-    for var S in Adds do
-      if not Stems.Contains(StemOfEntry(S)) then
-      begin
-        Kept.Add(S);
-        Notes.Add('');
-        Stems.Add(StemOfEntry(S));
-      end;
-    if not Clean then
-    begin
-      E.Kind:= ekManual;
-      E.Note:= Format('In the %s uses clause (lines %d-%d): remove %s; add %s. Keep the commas and ' +
-        'the final semicolon correct.', [SectLabel(pSect), E.First, E.Last,
-        (if Dels.Count > 0 then QuoteList(Dels.ToArray) else 'nothing'), (if Adds.Count > 0 then QuoteList(Adds.ToArray) else 'nothing')]);
-    end
-    else if Kept.Count = 0 then E.Kind:= ekDelete
-    else
-    begin
-      E.Kind    := ekReplace;
-      E.NewLines:= FormatUses(TRegEx.Match(LineAt(pF.Lines, UsesLine), '^\s*').Value, Kept.ToArray, Notes.ToArray);
-    end;
-  finally
-    Stems.Free;
-    Notes.Free;
-    Kept.Free;
-  end;
-  EditList(pF.Fid).Add(E);
+  E:= ClauseEdit(pF.Lines, UsesLine, SectLabel(pSect), Adds.ToArray, Dels.ToArray);
+  if E.First > 0 then EditList(pF.Fid).Add(E);
 end;
 
 function TCyclePlanner.EditList(pFid: Int64): TList<TFileEdit>;
@@ -1951,13 +2997,17 @@ begin
     else
     begin
       L.Add(Format(CCycleCountFmt, [N]));
+      // Prediction order = SCC discovery order (the order DoCycles prints): a
+      // group never moves. Untouched SCCs keep their FSccs index; the groups the
+      // edited SCC splits into take that SCC's place.
       for var I:= 0 to FSccs.Count - 1 do
         if I <> pSelf then
           L.Add(Format(CCycleGroupFmt, [Length(FSccs[I]), string.Join(' <-> ', FSccs[I]),
-            (if GroupHasIntf(FSccs[I]) then CCycleTagInterface else CCycleTagImplOnly)]));
-      for var G in FPredicted do
-        L.Add(Format(CCycleGroupFmt, [Length(G.Members), string.Join(' <-> ', G.Members),
-          (if G.HasIntf then CCycleTagInterface else CCycleTagImplOnly)]));
+            (if GroupHasIntf(FSccs[I]) then CCycleTagInterface else CCycleTagImplOnly)]))
+        else
+          for var G in FPredicted do
+            L.Add(Format(CCycleGroupFmt, [Length(G.Members), string.Join(' <-> ', G.Members),
+              (if G.HasIntf then CCycleTagInterface else CCycleTagImplOnly)]));
       L.Add(CCycleEdgesHint);
     end;
     Result:= L.ToArray;
@@ -1992,13 +3042,15 @@ end;
 
 function TCyclePlanner.EvaluateEdge(const pFrom, pTo: string; const pNeeds: TArray<TNeed>): TEdgeEval;
 var
-  Snap: Integer;
-  Why : string;
+  Snap : Integer;
+  Why  : string;
+  Stems: TArray<string>;
 begin
   Result:= Default(TEdgeEval);
   Result.FromStem:= pFrom;
   Result.ToStem  := pTo;
   Result.Needs   := pNeeds;
+  Result.Surface := BuildEdgeSurface(Self, FidOfStem(pFrom), pTo);
   Result.Movable := Length(pNeeds) > 0;
   if not Result.Movable then Result.Why:= 'the index resolved no symbol for this edge';
   Snap:= FOrder.Count;
@@ -2007,6 +3059,13 @@ begin
     begin
       Result.Movable:= False;
       Result.Why    := Format('`%s` (%s): %s', [N.Owner.Name, N.Owner.Kind.ToText, Why]);
+      if (N.Owner.Kind in [skProcedure, skFunction]) and SigTypesOutsideScc(
+        SignatureTypes(Self, N.Owner.FileId, N.Owner.StartLine, N.Owner.Signature), Stems) then
+      begin
+        for var I:= 0 to High(Stems) do Stems[I]:= UnitNameOfStem(Stems[I]);
+        Result.Why:= Format('`%s` (%s) -- a routine; could be called through a pointer declared in %s (not automated)',
+          [N.Owner.Name, N.Owner.Kind.ToText, QuoteList(Stems)]);
+      end;
       Break;
     end;
   Result.Cost:= FOrder.Count - Snap;
@@ -2177,7 +3236,13 @@ procedure TCyclePlanner.RenderConsumers(const pItem: TMoveItem);
 var
   L: TList<TConsumer>;
 begin
-  if not FConsumers.TryGetValue(pItem.Sym.Id, L) then Exit;
+  if not FConsumers.TryGetValue(pItem.Sym.Id, L) then
+  begin
+    { a companion pulled in only by another moved declaration has no consumer of its own }
+    var By: string;
+    if FPulledBy.TryGetValue(pItem.Sym.Id, By) then EmitFmt('   - Used by: only the moved %s', [By]);
+    Exit;
+  end;
   EmitFmt('   - Used by (each needs `%s` in the uses clause of that section; the edit step does it):',
     [FLeafName[pItem.Stem]]);
   for var C in L do
@@ -2336,40 +3401,57 @@ begin
   end;
 end;
 
-function TCyclePlanner.LeafUnitText(const pStem: string): TArray<string>;
+{ The uses entries a leaf of pStem needs in section pSect: the source unit's own
+  entries of that section that are not members of the cycle, plus (interface)
+  the units the moved declarations use. }
+function TCyclePlanner.LeafEntries(const pStem: string; pSect: TSect): TArray<string>;
+var
+  Entries: TList<string>;
+begin
+  var P:= GetFile(FidOfStem(pStem));
+  { R1 into an existing unit (J2): its signature types are declared there or are
+    System built-ins -- it needs no new uses entry }
+  if IsInversionStem(pStem) and (FInversion.LeafStem <> '') then Exit(nil);
+  { R2: the units that declare the member types (PlanMemberInterface), nothing else }
+  if IsInversionStem(pStem) and (FInversion.Recipe = crMemberInterface) then
+  begin
+    Result:= nil;
+    if pSect = scIntf then Result:= FInversion.LeafUses;
+    Exit;
+  end;
+  { T17b D2: the source may already use its leaf (a pass after Part A) -- a unit never
+    goes into its own uses clause (F2092) }
+  var Own: string;
+  if not FLeafName.TryGetValue(pStem, Own) then Own:= '';
+  Entries:= TList<string>.Create;
+  try
+    for var U in SectionEntries(P, pSect) do
+      if not FMembers.ContainsKey(LowerCase(U.UnitName)) and not SameText(U.UnitName, Own) then
+        Entries.Add(EntryText(P, U));
+    if (pSect = scIntf) and FLeafDeps.ContainsKey(pStem) then
+      for var S in FLeafDeps[pStem] do
+        if not SameText(S, Own) then AddUnique(Entries, S);
+    Result:= Entries.ToArray;
+  finally
+    Entries.Free;
+  end;
+end;
+
+{ The interface text of everything that moves out of pStem, each item led by a
+  blank line and, when it changes, its block keyword; pBodies receives the
+  method-body ranges of the items that move with their bodies. }
+function TCyclePlanner.LeafDeclLines(const pStem: string; pBodies: TList<TLineRange>): TArray<string>;
 var
   L      : TList<string>;
-  P      : TPlanFile;
-  Entries: TList<string>;
-  Keyword: string;
-  Bodies : TList<TLineRange>;
   Items  : TList<TMoveItem>;
+  Keyword: string;
 begin
-  P      := GetFile(FidOfStem(pStem));
-  L      := TList<string>.Create;
-  Entries:= TList<string>.Create;
-  Bodies := TList<TLineRange>.Create;
-  Items  := TList<TMoveItem>.Create;
+  var P:= GetFile(FidOfStem(pStem));
+  L    := TList<string>.Create;
+  Items:= TList<TMoveItem>.Create;
   try
-    L.Add('unit ' + FLeafName[pStem] + ';');
-    L.Add('');
-    L.Add('// Created by `drag-lint cycles --plan`: declarations moved here from ' + P.UnitName);
-    L.Add('// to break a circular unit dependency. This unit may use only units OUTSIDE');
-    L.Add('// that cycle -- never ' + MemberNames.Replace('`', '') + '.');
-    L.Add('');
-    L.Add('interface');
-    for var U in SectionEntries(P, scIntf) do
-      if not FMembers.ContainsKey(LowerCase(U.UnitName)) then Entries.Add(EntryText(P, U));
-    if FLeafDeps.ContainsKey(pStem) then
-      for var S in FLeafDeps[pStem] do AddUnique(Entries, S);
-    if Entries.Count > 0 then
-    begin
-      L.Add('');
-      L.AddRange(FormatUses('', Entries.ToArray, nil));
-    end;
     { SOURCE order, not closure order: a variable is added before the type it
       needs, and Delphi requires the type to be declared first }
-    Items.Clear;
     for var Id in FOrder do
       if FItems[Id].Stem = pStem then Items.Add(FItems[Id]);
     Items.Sort(TComparer<TMoveItem>.Construct(
@@ -2386,19 +3468,54 @@ begin
       Keyword:= KW;
       if Item.Kind = mvBase then L.AddRange(BaseClassText(Item))
       else L.AddRange(SliceLines(P.Lines, Item.Decl));
-      if Item.Kind = mvWithBodies then Bodies.AddRange(Item.Bodies);
+      if Item.Kind = mvWithBodies then pBodies.AddRange(Item.Bodies);
     end;
+    if IsInversionStem(pStem) then L.AddRange(InversionDeclLines(pStem));
+    Result:= L.ToArray;
+  finally
+    Items.Free;
+    L.Free;
+  end;
+end;
+
+function TCyclePlanner.LeafUnitText(const pStem: string): TArray<string>;
+var
+  L      : TList<string>;
+  P      : TPlanFile;
+  Entries: TArray<string>;
+  Bodies : TList<TLineRange>;
+begin
+  P     := GetFile(FidOfStem(pStem));
+  L     := TList<string>.Create;
+  Bodies:= TList<TLineRange>.Create;
+  try
+    L.Add('unit ' + FLeafName[pStem] + ';');
+    L.Add('');
+    if IsInversionStem(pStem) and (FInversion.Recipe = crMemberInterface) then
+      L.Add(Format('// Created by `drag-lint cycles --plan`: the interface %s (%s) implements, extracted',
+        [FInversion.ClassTypeName, P.UnitName]))
+    else
+      L.Add('// Created by `drag-lint cycles --plan`: declarations moved here from ' + P.UnitName);
+    L.Add('// to break a circular unit dependency. This unit may use only units OUTSIDE');
+    L.Add('// that cycle -- never ' + MemberNames.Replace('`', '') + '.');
+    L.Add('');
+    L.Add('interface');
+    Entries:= LeafEntries(pStem, scIntf);
+    if Length(Entries) > 0 then
+    begin
+      L.Add('');
+      L.AddRange(FormatUses('', Entries, nil));
+    end;
+    L.AddRange(LeafDeclLines(pStem, Bodies));
     L.Add('');
     L.Add('implementation');
     if Bodies.Count > 0 then
     begin
-      Entries.Clear;
-      for var U in SectionEntries(P, scImpl) do
-        if not FMembers.ContainsKey(LowerCase(U.UnitName)) then Entries.Add(EntryText(P, U));
-      if Entries.Count > 0 then
+      Entries:= LeafEntries(pStem, scImpl);
+      if Length(Entries) > 0 then
       begin
         L.Add('');
-        L.AddRange(FormatUses('', Entries.ToArray, nil));
+        L.AddRange(FormatUses('', Entries, nil));
       end;
       for var R in Bodies do
       begin
@@ -2410,9 +3527,7 @@ begin
     L.Add('end.');
     Result:= L.ToArray;
   finally
-    Items.Free;
     Bodies.Free;
-    Entries.Free;
     L.Free;
   end;
 end;
@@ -2420,10 +3535,34 @@ end;
 procedure TCyclePlanner.RenderLeafUnits(pStep: Integer);
 begin
   EmitFmt('### Step %d: create the new units', [pStep]);
+  { E18 T4b: why a `<Source>.Untangle` that exists was passed over, and which
+    existing leaves receive declarations instead of a new unit }
+  for var D:= Low(TUntangleDecision) to High(TUntangleDecision) do
+    for var Stem in LeafStems(D) do
+      if FLeafInfo[Stem].Reason <> '' then EmitFmt('- Note: %s.', [FLeafInfo[Stem].Reason]);
+  for var Stem in LeafStems(udExtend) do
+    if IsInversionStem(Stem) and (FInversion.Recipe = crMemberInterface) then
+      EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: it receives the interface `%s`. ' +
+        'Do not create it again; the edit step lists the insert.', [FLeafName[Stem], FLeafPath[Stem],
+        FInversion.IfaceName])
+    else if IsInversionStem(Stem) then
+      EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: it receives the procedural ' +
+        'type and variable of `%s`. Do not create it again; the edit step lists the insert.',
+        [FLeafName[Stem], FLeafPath[Stem], FInversion.RoutineName])
+    else
+    EmitFmt('- `%s` already exists (`%s`) and uses no unit of this cycle: what moves out of `%s` goes ' +
+      'into it. Do not create it again; the edit step lists the insert.', [FLeafName[Stem], FLeafPath[Stem],
+      UnitNameOfStem(Stem)]);
+  if Length(LeafStems(udCreate)) = 0 then
+  begin
+    Emit('No new unit is needed.');
+    Emit('');
+    Exit;
+  end;
   EmitFmt('Each new unit may use only RTL / library units and other new `*%s` units -- never a ' +
     'unit of this cycle (%s). Create each file with EXACTLY this text:', [CLeafSuffix, MemberNames]);
   Emit('');
-  for var Stem in LeafStems do
+  for var Stem in LeafStems(udCreate) do
   begin
     EmitFmt('#### `%s` -> `%s`', [FLeafName[Stem], FLeafPath[Stem]]);
     EmitBlock(CPascalFence, LeafUnitText(Stem));
@@ -2492,7 +3631,7 @@ begin
       Result:= pRight.First - pLeft.First;
     end));
   RenderFileEdits(Format('#### `%s`  (`%s`)', [ExtractFileName(FProjectFile), FProjectFile]),
-    TFile.ReadAllLines(FProjectFile), Arr, CXmlFence);
+    ReadSourceLines(FProjectFile), Arr, CXmlFence);
 end;
 
 procedure TCyclePlanner.RenderCompileHelp;
@@ -2530,7 +3669,7 @@ begin
   No:= 0;
   { IDE-9 run 2 (2026-09-23): a cheap model followed the plan 4/4 but saved the
     NEW units with LF endings -- the plan never said how to save them. Say it. }
-  for var Stem in LeafStems do
+  for var Stem in LeafStems(udCreate) do
     Item(Format('Create `%s` with the exact text given for `%s`. Save it as plain ASCII with ' +
       'Windows CRLF line endings, like the existing units.', [FLeafPath[Stem], FLeafName[Stem]]));
   for var Fid in EditOrder do
@@ -2589,20 +3728,12 @@ begin
     'or be handed over as a parameter / event instead of being called by name.');
 end;
 
-procedure TCyclePlanner.RenderPartB;
+{ E18 T13: Part B's weighing of every remaining edge, shared by the Part B text and the Fix it
+  block, so the edge the block names is the edge Part B prints. }
+procedure TCyclePlanner.CollectPartB(const pEvals: TList<TEdgeEval>; const pTexts: TList<string>);
 var
-  Best : TEdgeEval;
   Names: TList<string>;
 begin
-  Emit('### Part B (optional): remove the implementation-only cycle too');
-  if FPredicted.Count = 0 then
-  begin
-    Emit('Nothing to do: after Part A no cycle remains among these units.');
-    Emit('');
-    Exit;
-  end;
-  Emit('After Part A these units still use each other through these edges (predicted):');
-  Best := Default(TEdgeEval);
   Names:= TList<string>.Create;
   try
     for var G in FPredicted do
@@ -2613,37 +3744,184 @@ begin
           var Needs:= RemainingNeeds(A, B, False);
           if Length(Needs) = 0 then Continue;
           var Ev:= EvaluateEdge(A, B, Needs);
+          if Ev.Movable then Ev.Recipe:= crMoveGlobals;
           Names.Clear;
           for var N in Needs do Names.Add(Format('%s (%s)', [N.Owner.Name, N.Owner.Kind.ToText]));
-          EmitFmt('- `%s -> %s`: %s -- %s', [A, B, QuoteList(Names.ToArray),
-            (if Ev.Movable then 'mechanical: these can move into a new leaf unit' else 'not mechanical: ' + Ev.Why)]);
-          if Ev.Movable and ((Best.FromStem = '') or (Ev.Cost < Best.Cost)) then Best:= Ev;
+          pEvals.Add(Ev);
+          pTexts.Add(QuoteList(Names.ToArray));
         end;
+    { E18 T7 R3: the same recipes and order the re-run after Part A uses }
+    PlanInversion(pEvals);
+    PlanMemberHandOver(pEvals);
   finally
     Names.Free;
   end;
+  FPartBBest:= Default(TEdgeEval);
+  for var Ev in pEvals do
+    if BetterCut(Ev, FPartBBest) then FPartBBest:= Ev;
+  FPartBDone:= True;
+end;
+
+function TCyclePlanner.PartBBest: TEdgeEval;
+var
+  Evals: TList<TEdgeEval>;
+  Texts: TList<string>;
+begin
+  if not FPartBDone then
+  begin
+    Evals:= TList<TEdgeEval>.Create;
+    Texts:= TList<string>.Create;
+    try
+      CollectPartB(Evals, Texts);
+    finally
+      Texts.Free;
+      Evals.Free;
+    end;
+  end;
+  Result:= FPartBBest;
+end;
+
+procedure TCyclePlanner.RenderPartB;
+var
+  Evals: TList<TEdgeEval>;
+  Texts: TList<string>;
+begin
+  Emit('### Part B (optional): remove the implementation-only cycle too');
+  if FPredicted.Count = 0 then
+  begin
+    Emit('Nothing to do: after Part A no cycle remains among these units.');
+    Emit('');
+    Exit;
+  end;
+  Emit('After Part A these units still use each other through these edges (predicted):');
+  Evals:= TList<TEdgeEval>.Create;
+  Texts:= TList<string>.Create;
+  try
+    CollectPartB(Evals, Texts);
+    for var I:= 0 to Evals.Count - 1 do
+    begin
+      var Ev:= Evals[I];
+      EmitFmt('- `%s -> %s`: %s -- %s', [Ev.FromStem, Ev.ToStem, Texts[I],
+        (if Ev.Recipe = crMoveGlobals then 'mechanical: these can move into a new leaf unit'
+         else if Ev.Recipe <> crNone then 'mechanical: recipe: ' + RecipeLabel(Ev.Recipe)
+         else 'not mechanical: ' + Ev.Why)]);
+    end;
+  finally
+    Texts.Free;
+    Evals.Free;
+  end;
+  var Best:= FPartBBest;
   Emit('');
   RenderRemedy;
   if Best.FromStem <> '' then
     EmitFmt('To do it: finish Part A (every checklist item), then run `%s` again. It prints Part B as ' +
       'the same kind of numbered, mechanical steps, with line numbers for the edited files. The edge ' +
-      'it will cut is `%s -> %s`.', [CyclesCommand(True), Best.FromStem, Best.ToStem])
+      'it will cut is `%s -> %s`. Recipe: %s.', [CyclesCommand(True), Best.FromStem, Best.ToStem,
+      RecipeLabel(Best.Recipe)])
   else
-    Emit('No edge above can be cut mechanically; leaving the implementation-only cycle is acceptable.');
+    EmitFmt('No edge above can be cut mechanically as the units stand before Part A. Part A changes what ' +
+      'these edges carry, so after it run `%s` again: it weighs move globals, routine-call inversion and ' +
+      'member hand-over against the edited units. Leaving the implementation-only cycle is acceptable.',
+      [CyclesCommand(True)]);
   Emit('');
 end;
 
-procedure TCyclePlanner.RenderIntfCycle(pSelf: Integer);
+function FixCommandText(const pProject, pDbPath: string; pCycle: Integer; pApply: Boolean): string;
+begin
+  Result:= Format('drag-lint cycles --fix --project %s --db "%s" --cycle %d',
+    [(if pProject <> '' then '"' + pProject + '"' else '<your.dproj>'), pDbPath, pCycle]) +
+    (if pApply then ' --apply' else '');
+end;
+
+function TCyclePlanner.FixCommand(pCycle: Integer; pApply: Boolean): string;
+begin
+  Result:= FixCommandText(FFixProject, FDbPath, pCycle, pApply);
+end;
+
+function TCyclePlanner.FixHintOf(const pPlan: TCycleFixPlan): TCycleFixHint;
+const
+  CRecipeId: array[TCutRecipe] of string = ('', 'move-globals', 'routine-inversion', 'member-interface');
+
+  function EdgeOf(const pEv: TEdgeEval; pChosen: Boolean): TFixEdge;
+  begin
+    Result.FromUnit:= pEv.FromStem;
+    Result.ToUnit  := pEv.ToStem;
+    Result.Recipe  := CRecipeId[pEv.Recipe];
+    Result.Chosen  := pChosen;
+  end;
+
+begin
+  Result:= Default(TCycleFixHint);
+  Result.CycleIndex:= pPlan.CycleIndex;
+  Result.Part      := pPlan.Part;
+  Result.Available := pPlan.Verdict = cvMechanical;
+  Result.DryRun    := FixCommand(pPlan.CycleIndex, False);
+  Result.Apply     := FixCommand(pPlan.CycleIndex, True);
+  if Length(pPlan.Refusals) > 0 then
+    Result.Reason:= pPlan.Refusals[0].Kind + ': ' + pPlan.Refusals[0].Reason;
+  if pPlan.HasIntf then
+  begin
+    var Best:= PartBBest;
+    Result.HasFollowup:= Best.FromStem <> '';
+    if Result.HasFollowup then Result.Followup:= EdgeOf(Best, True);
+    Exit;
+  end;
+  { the chosen edge first, then every other edge that has a recipe, in the planner's order }
+  var L:= TList<TFixEdge>.Create;
+  try
+    if pPlan.CutEdge.FromStem <> '' then L.Add(EdgeOf(pPlan.CutEdge, True));
+    for var Ev in pPlan.Evals do
+      if (Ev.Recipe <> crNone) and not ((Ev.FromStem = pPlan.CutEdge.FromStem) and (Ev.ToStem = pPlan.CutEdge.ToStem)) then
+        L.Add(EdgeOf(Ev, False));
+    Result.Edges:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+procedure TCyclePlanner.RenderFixIt(const pPlan: TCycleFixPlan);
+const
+  CRecipeText: array[TCutRecipe] of string = ('', 'move globals', 'routine-call inversion',
+    'member hand-over through an extracted interface');
+
+  function EdgeText(const pEdge: TFixEdge): string;
+  begin
+    Result:= Format('%s -> %s (%s)', [pEdge.FromUnit, pEdge.ToUnit,
+      (if pEdge.Recipe = 'routine-inversion' then CRecipeText[crRoutineInversion]
+       else if pEdge.Recipe = 'member-interface' then CRecipeText[crMemberInterface]
+       else CRecipeText[crMoveGlobals])]);
+  end;
+
+begin
+  var H:= FixHintOf(pPlan);
+  if not H.Available then
+  begin
+    { the kind only: the full reason is already printed in the refusing step above, and is in the JSON }
+    EmitFmt('Fix it: not available -- %s', [(if Length(pPlan.Refusals) > 0 then pPlan.Refusals[0].Kind else 'refused')]);
+    Emit('');
+    Exit;
+  end;
+  Emit('Fix it (mechanical, compile-gated):');
+  EmitFmt('  dry run : %s', [H.DryRun]);
+  EmitFmt('  apply   : %s', [H.Apply]);
+  if H.Part = 'A' then
+  begin
+    Emit('  cuts    : the INTERFACE coupling of this cycle (Part A: move globals into new leaf units)');
+    if H.HasFollowup then
+      EmitFmt('  then    : Part B, optional, after Part A: %s', [EdgeText(H.Followup)]);
+  end
+  else
+    for var E in H.Edges do
+      EmitFmt('  cuts    : %s%s', [EdgeText(E), (if E.Chosen then ' (chosen)' else '')]);
+  Emit('  requires: the project builds with 0 errors before the fix (the dry run checks this)');
+  Emit('');
+end;
+procedure TCyclePlanner.PlanIntfCycle;
 var
   Seeds: TList<TNeed>;
   Cut  : TObjectDictionary<Int64, TList<Int64>>;
   Why  : string;
 begin
-  Emit('Status: **interface coupling** -- units of this cycle use each other in their INTERFACE ' +
-    'uses clauses.');
-  Emit('');
-  RenderFiles;
-  RenderIntfWhy;
   Seeds:= TList<TNeed>.Create;
   Cut  := TObjectDictionary<Int64, TList<Int64>>.Create([doOwnsValues]);
   try
@@ -2678,6 +3956,15 @@ begin
     Seeds.Free;
   end;
   Materialize;
+end;
+
+procedure TCyclePlanner.RenderIntfCycle(const pPlan: TCycleFixPlan);
+begin
+  Emit('Status: **interface coupling** -- units of this cycle use each other in their INTERFACE ' +
+    'uses clauses.');
+  Emit('');
+  RenderFiles;
+  RenderIntfWhy;
   Emit('### Goal');
   Emit('Part A (steps 1-4, required) removes the INTERFACE coupling: each symbol above -- and ' +
     'whatever it needs -- moves into a new leaf unit, or its class gets a base class there, so no ' +
@@ -2689,8 +3976,25 @@ begin
   RenderDecisions(CStepUses);
   RenderLeafUnits(CStepCreate);
   RenderEdits(CStepEdit);
-  RenderChecklist(pSelf);
+  RenderChecklist(pPlan.CycleIndex - 1);
   RenderPartB;
+end;
+
+{ E18 T7 R3: every edge of the cycle with the recipe that applies to it, or the
+  reason none does; the cut edge is marked. }
+procedure TCyclePlanner.RenderEdgeChoices(const pEvals: TArray<TEdgeEval>);
+begin
+  Emit('');
+  Emit('Every edge of this cycle, weighed in this order: move globals, routine-call inversion, member ' +
+    'hand-over; within one recipe the edge whose surface has the fewest members, then the fewest references, ' +
+    'wins. One edge is cut per run:');
+  for var Ev in pEvals do
+    if Ev.Recipe = crNone then
+      EmitFmt('- `%s -> %s`: not mechanical: %s', [Ev.FromStem, Ev.ToStem, Ev.Why])
+    else
+      EmitFmt('- `%s -> %s`: recipe: %s%s', [Ev.FromStem, Ev.ToStem, RecipeLabel(Ev.Recipe),
+        (if (Ev.FromStem = FCutEdge.FromStem) and (Ev.ToStem = FCutEdge.ToStem) then ' -- **cut by this plan**'
+         else ' -- also possible, not cut by this plan')]);
 end;
 
 procedure TCyclePlanner.RenderNoMechanicalCut(const pEvals: TArray<TEdgeEval>);
@@ -2704,17 +4008,11 @@ begin
   Emit('');
 end;
 
-procedure TCyclePlanner.RenderImplCycle(pSelf: Integer);
+function TCyclePlanner.PlanImplCycle: TArray<TEdgeEval>;
 var
   Evals: TList<TEdgeEval>;
   Why  : string;
 begin
-  Emit('Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile ' +
-    'blast radius). Optional to fix; the steps below are for when you want a fully acyclic uses-graph.');
-  Emit('');
-  RenderFiles;
-  RenderImplWhy;
-  Emit('### Recommended fix (optional)');
   Evals:= TList<TEdgeEval>.Create;
   try
     for var A in FComp do
@@ -2722,26 +4020,701 @@ begin
         if (A <> B) and FGraph.Adj[A].Contains(B) then
         begin
           var Ev:= EvaluateEdge(A, B, RemainingNeeds(A, B, True));
+          if Ev.Movable then Ev.Recipe:= crMoveGlobals;
           Evals.Add(Ev);
-          if Ev.Movable and ((FCutEdge.FromStem = '') or (Ev.Cost < FCutEdge.Cost)) then FCutEdge:= Ev;
         end;
-    if FCutEdge.FromStem = '' then RenderNoMechanicalCut(Evals.ToArray);
+    { E18 T7 R3: every edge that cannot MOVE is tried with R1 (one routine), then
+      R2 (`is` / `as` + member reads); each edge keeps its recipe or its reason,
+      and the best by BetterCut is the one cut of this run }
+    PlanInversion(Evals);
+    PlanMemberHandOver(Evals);
+    for var Ev in Evals do
+      if BetterCut(Ev, FCutEdge) then FCutEdge:= Ev;
+    if FCutEdge.Recipe in [crRoutineInversion, crMemberInterface] then FInversion:= FCutEdge.Steps;
+    Result:= Evals.ToArray;
   finally
     Evals.Free;
   end;
   if FCutEdge.FromStem = '' then Exit;
-  EmitFmt('Cut the edge `%s -> %s`: everything `%s` uses from `%s` can move into a new leaf unit, ' +
-    'the smallest mechanical cut in this cycle.', [FCutEdge.FromStem, FCutEdge.ToStem,
-    FCutEdge.FromStem, FCutEdge.ToStem]);
-  Emit('');
+  if FCutEdge.Recipe in [crRoutineInversion, crMemberInterface] then
+  begin
+    MaterializeInversion;
+    Exit;
+  end;
   for var N in FCutEdge.Needs do TryAdd(N.Owner, nil, Why);
   Materialize;
+end;
+
+{ R1 on every edge that cannot move and whose surface is exactly one routine: a
+  refusal is recorded on the edge (its Why is what the playbook prints), an
+  applicable edge gets Recipe crRoutineInversion, its Steps and Cost = its calls.
+  PlanImplCycle picks the cut (R3). }
+procedure TCyclePlanner.PlanInversion(pEvals: TList<TEdgeEval>);
+var
+  Refusal: TRecipeRefusal;
+begin
+  for var I:= 0 to pEvals.Count - 1 do
+  begin
+    var Ev:= pEvals[I];
+    if (Ev.Recipe <> crNone) or (Ev.Surface.RoutineName = '') then Continue;
+    var Steps:= PlanRoutineInversion(Self, Ev.Surface, Refusal);
+    if Refusal.Kind = '' then
+    begin
+      { the leaf must not declare the pointer's names already }
+      var Leaf:= InversionLeaf(Steps);
+      if Leaf.Decision = udExtend then
+        for var S in GetFile(Leaf.Fid).Syms do
+          if SameText(S.Name, Steps.PtrType) or SameText(S.Name, Steps.PtrVar) then
+          begin
+            Refusal.Kind  := 'duplicate-identifier';
+            Refusal.Reason:= Format('`%s` already declares `%s` (line %d)', [Leaf.UnitName, S.Name, S.StartLine]);
+            Break;
+          end;
+    end;
+    if Refusal.Kind = '' then
+    begin
+      Refusal.Reason:= LeavesProgramReason(Steps);
+      if Refusal.Reason <> '' then Refusal.Kind:= 'unit-leaves-program';
+    end;
+    if Refusal.Kind <> '' then
+    begin
+      Ev.Refusal:= Refusal.Kind;
+      Ev.Why    := Format('`%s` (%s): refused: %s -- %s', [Ev.Surface.RoutineName,
+        (if Length(Ev.Needs) > 0 then Ev.Needs[0].Owner.Kind.ToText else 'routine'), Refusal.Kind, Refusal.Reason]);
+      pEvals[I]:= Ev;
+      Continue;
+    end;
+    Ev.Recipe:= crRoutineInversion;
+    Ev.Steps := Steps;
+    Ev.Cost  := Ev.Surface.CallCount;
+    pEvals[I]:= Ev;
+  end;
+end;
+
+{ R2 on every edge that neither moves nor is one routine, and whose surface tests or
+  casts against a class with `is` / `as`: as PlanInversion, a refusal is recorded on
+  the edge, an applicable edge gets Recipe crMemberInterface, its Steps and Cost = its
+  edits. The interface goes into the class unit's Untangle leaf, which must not declare
+  its name already. }
+procedure TCyclePlanner.PlanMemberHandOver(pEvals: TList<TEdgeEval>);
+var
+  Refusal: TRecipeRefusal;
+begin
+  var Root:= if FProjectFid > 0 then ExtractFilePath(PathOf(FProjectFid)) else '';
+  var UnitScopes:= EffectiveUnitScopes(if TFile.Exists(FProjectFile) and SameText(ExtractFileExt(FProjectFile), '.dproj')
+    then TFile.ReadAllText(FProjectFile) else '');
+  for var I:= 0 to pEvals.Count - 1 do
+  begin
+    var Ev:= pEvals[I];
+    var Tested:= False;
+    for var R in Ev.Surface.Refs do
+      if R.Kind in [erTypeIs, erTypeAs] then Tested:= True;
+    if (Ev.Recipe <> crNone) or (Ev.Surface.RoutineName <> '') or not Tested then Continue;
+    var Leaf := ResolveUntangleLeaf(FStore, Ev.Surface.ToStem, FComp, Root);
+    var Steps:= PlanMemberInterface(Self, FLibStore, Ev.Surface, Leaf.UnitName, UnitScopes, Refusal);
+    if (Refusal.Kind = '') and (Leaf.Decision = udExtend) then
+      for var S in GetFile(Leaf.Fid).Syms do
+        if SameText(S.Name, Steps.IfaceName) then
+        begin
+          Refusal.Kind  := 'duplicate-identifier';
+          Refusal.Reason:= Format('`%s` already declares `%s` (line %d)', [Leaf.UnitName, S.Name, S.StartLine]);
+          Break;
+        end;
+    if Refusal.Kind <> '' then
+    begin
+      Ev.Refusal:= Refusal.Kind;
+      Ev.Why    := Format('`%s` (class): refused: %s -- %s', [string.Join(', ', Ev.Surface.ClassNames), Refusal.Kind,
+        Refusal.Reason]);
+      pEvals[I]:= Ev;
+      Continue;
+    end;
+    Ev.Recipe:= crMemberInterface;
+    Ev.Steps := Steps;
+    Ev.Cost  := Length(Steps.Edits);
+    pEvals[I]:= Ev;
+  end;
+end;
+
+{ The unit that receives R1's procedural type and variable: the existing unit J2
+  chose, else the catalog's `<Declaring>.Untangle` (created or extended). }
+function TCyclePlanner.InversionLeaf(const pSteps: TRecipeSteps): TUntangleLeaf;
+begin
+  if pSteps.LeafStem = '' then
+    Exit(ResolveUntangleLeaf(FStore, pSteps.DeclStem, FComp,
+      (if FProjectFid > 0 then ExtractFilePath(PathOf(FProjectFid)) else '')));
+  Result:= Default(TUntangleLeaf);
+  var F:= GetFile(FidOfStem(pSteps.LeafStem));
+  Result.UnitName  := F.UnitName;
+  Result.Path      := F.Path;
+  Result.SourceStem:= pSteps.DeclStem;
+  Result.Decision  := udExtend;
+  Result.Fid       := F.Fid;
+  for var S in F.Syms do
+    if SameText(S.Section, 'interface') and not (S.Kind in [skUnit, skProgram, skPackage]) and
+      (S.EndLine > Result.InsertAfterLine) then Result.InsertAfterLine:= S.EndLine;
+end;
+
+{ Refusal unit-leaves-program (E18 final review F2): R1 assigns the pointer in the
+  declaring unit's initialization section, so that unit must stay in the program
+  once the consumer stops naming it. It stays when the program file (.dpr) lists it
+  or any unit other than the consumer uses it -- both are unit_uses rows (FUsersOf).
+  Otherwise the consumer was its only way in: the linker drops it, its initialization
+  never runs and the first call through the pointer is a nil call at run time,
+  although the project compiles. A DCCReference alone does not link a unit (dcc
+  compiles from the .dpr), so the .dproj is not consulted. With no indexed .dpr
+  (a package, a directory index) nothing is decided here. Returns the reason, or ''. }
+function TCyclePlanner.LeavesProgramReason(const pSteps: TRecipeSteps): string;
+var
+  Users: TList<Int64>;
+begin
+  Result:= '';
+  if FProjectFid = 0 then Exit;
+  if FUsersOf.TryGetValue(pSteps.DeclStem, Users) then
+    for var Fid in Users do
+      if Fid <> pSteps.ConsumerFid then Exit;
+  Result:= Format('`%s` is used only by `%s` and `%s` does not list it: after the cut it leaves the program, ' +
+    'its initialization never assigns `%s` and the call is a nil call at run time -- add it to the program''s uses',
+    [UnitNameOfStem(pSteps.DeclStem), ExtractFileName(PathOf(pSteps.ConsumerFid)), ExtractFileName(PathOf(FProjectFid)),
+     pSteps.PtrVar]);
+end;
+
+function TCyclePlanner.IsInversionStem(const pStem: string): Boolean;
+begin
+  Result:= (FInversion.Recipe in [crRoutineInversion, crMemberInterface]) and (pStem <> '') and
+    (pStem = FInversion.DeclStem) and FLeafInfo.ContainsKey(pStem);
+end;
+
+{ R1's file edits and leaf, through the same leaf machinery as a move: the
+  leaf is registered under the declaring unit's stem, the consumer's uses entry
+  of the declaring unit is decided by DecideOne (IsMovedFor answers for the
+  inverted calls), and the rest of Materialize runs unchanged. }
+procedure TCyclePlanner.MaterializeInversion;
+var
+  E: TFileEdit;
+begin
+  var Stem:= FInversion.DeclStem;
+  var Leaf:= InversionLeaf(FInversion);
+  FLeafInfo.AddOrSetValue(Stem, Leaf);
+  FLeafName.AddOrSetValue(Stem, Leaf.UnitName);
+  FLeafPath.AddOrSetValue(Stem, Leaf.Path);
+  for var R in FInversion.Edits do
+  begin
+    E:= Default(TFileEdit);
+    E.Kind    := if R.Replace then ekReplace else ekInsertAfter;
+    E.First   := R.Line;
+    E.Last    := R.Line;
+    E.NewLines:= R.NewLines;
+    EditList(R.Fid).Add(E);
+  end;
+  var Consumer:= GetFile(FInversion.ConsumerFid);
+  for var R in FInversion.Edits do
+    if R.Fid = Consumer.Fid then AddUses(Consumer.Fid, SectOf(Consumer, R.Line), UsesEntryFor(Consumer, Stem));
+  var Decl:= GetFile(FidOfStem(Stem));
+  if FInversion.Recipe = crMemberInterface then
+  begin
+    { R2: the heritage names the interface, so the class unit's INTERFACE uses the leaf;
+      the consumer gains Supports' unit / a cast ancestor's unit when it does not see them }
+    AddUses(Decl.Fid, scIntf, UsesEntryFor(Decl, Stem));
+    for var U in FInversion.ConsumerUses do AddUses(Consumer.Fid, scImpl, U);
+  end
+  else AddUses(Decl.Fid, scImpl, UsesEntryFor(Decl, Stem));
+  Materialize;
+end;
+
+{ The leaf text of R1: the procedural type (the routine's signature verbatim,
+  J3) and the variable. Inside an existing unit's `type` block the keyword is
+  not repeated. }
+function TCyclePlanner.InversionDeclLines(const pStem: string): TArray<string>;
+var
+  L: TList<string>;
+begin
+  var Leaf  := FLeafInfo[pStem];
+  var InType:= False;
+  if (Leaf.Decision = udExtend) and (Leaf.InsertAfterLine > 0) then
+  begin
+    var Lines:= GetFile(Leaf.Fid).Lines;
+    var H    := HeaderOf(Lines, Leaf.InsertAfterLine + 1);
+    InType:= (H > 0) and SameText(Trim(CodePart(LineAt(Lines, H))), 'type');
+  end;
+  L:= TList<string>.Create;
+  try
+    L.Add('');
+    if not InType then L.Add('type');
+    if FInversion.Recipe = crMemberInterface then
+    begin
+      { R2: the extracted interface }
+      L.AddRange(FInversion.IfaceDecl);
+      Exit(L.ToArray);
+    end;
+    L.Add(Format('  /// <summary>Signature of %s (%s), copied verbatim.</summary>',
+      [FInversion.RoutineName, UnitNameOfStem(pStem)]));
+    L.Add('  ' + FInversion.TypeDecl);
+    L.Add('');
+    L.Add('var');
+    L.Add(Format('  /// <summary>Holds %s, assigned by %s in its initialization section; the units of ' +
+      'its former cycle call it instead of naming the routine.</summary>', [FInversion.RoutineName,
+      UnitNameOfStem(pStem)]));
+    L.Add('  ' + FInversion.VarDecl);
+    Result:= L.ToArray;
+  finally
+    L.Free;
+  end;
+end;
+
+{ Why the R1 consumer keeps the declaring unit's uses entry (its section still
+  uses another name the planner binds to that unit), or '' when it drops it. }
+function TCyclePlanner.InversionStillUsed: string;
+begin
+  Result:= '';
+  for var D in FDecisions do
+    if (D.Fid = FInversion.ConsumerFid) and (D.PartnerStem = FInversion.DeclStem) and
+      (D.Verdict in [uvKeep, uvKeepUnseen]) then
+      Exit(Format('the %s section of `%s` still uses `%s`%s', [SectLabel(D.Sect), ExtractFileName(PathOf(D.Fid)),
+        UnitNameOfStem(D.PartnerStem), (if D.Still <> '' then ': ' + D.Still else '')]));
+end;
+
+procedure TCyclePlanner.RenderInversion(pStep: Integer);
+var
+  Calls: TList<string>;
+begin
+  EmitFmt('### Step %d: what moves where', [pStep]);
+  Calls:= TList<string>.Create;
+  try
+    for var R in FInversion.Edits do
+      if R.Fid = FInversion.ConsumerFid then Calls.Add(IntToStr(R.Line));
+    var Decl:= UnitNameOfStem(FInversion.DeclStem);
+    EmitFmt('Nothing moves. Recipe: **routine-call inversion** -- `%s` stays in `%s`; callers outside ' +
+      'this cycle keep calling it by name.', [FInversion.RoutineName, Decl]);
+    EmitFmt('- `%s` gets the procedural type `%s` -- the routine''s own signature, copied verbatim (keep ' +
+      'every `const` and parameter name) -- and the variable `%s`.', [FLeafName[FInversion.DeclStem],
+      FInversion.PtrType, FInversion.PtrVar]);
+    EmitFmt('- `%s` assigns `%s := %s;` as the first statement of its initialization section.',
+      [Decl, FInversion.PtrVar, FInversion.RoutineName]);
+    EmitFmt('- `%s` calls `%s` instead of `%s` (line %s). Checked: its own initialization section ' +
+      'makes none of these calls and does not name the routine that makes them. NOT checked: an ' +
+      'initialization section of another unit that reaches them through a call chain.',
+      [ExtractFileName(PathOf(FInversion.ConsumerFid)), FInversion.PtrVar, FInversion.RoutineName,
+       string.Join(', ', Calls.ToArray)]);
+  finally
+    Calls.Free;
+  end;
+  Emit('');
+end;
+
+procedure TCyclePlanner.RenderMemberHandOver(pStep: Integer);
+var
+  IsLines, AsLines: TList<string>;
+begin
+  EmitFmt('### Step %d: what moves where', [pStep]);
+  IsLines:= TList<string>.Create;
+  AsLines:= TList<string>.Create;
+  try
+    for var R in FCutEdge.Surface.Refs do
+      if (R.Kind = erTypeIs) and not IsLines.Contains(IntToStr(R.Line)) then IsLines.Add(IntToStr(R.Line))
+      else if (R.Kind = erTypeAs) and not AsLines.Contains(IntToStr(R.Line)) then AsLines.Add(IntToStr(R.Line));
+    var Decl    := UnitNameOfStem(FInversion.DeclStem);
+    var Consumer:= ExtractFileName(PathOf(FInversion.ConsumerFid));
+    EmitFmt('Nothing moves. Recipe: **member hand-over through an extracted interface** -- `%s` stays in `%s`; ' +
+      'units outside this cycle keep using it as before.', [FInversion.ClassTypeName, Decl]);
+    EmitFmt('- `%s` gets the interface `%s` (GUID `%s`), with a read-only property for each member `%s` reads: %s.',
+      [FLeafName[FInversion.DeclStem], FInversion.IfaceName, FInversion.IfaceGuid, Consumer,
+       string.Join(', ', FInversion.MemberSigs)]);
+    EmitFmt('- `%s` implements it: `%s` is appended to its heritage, and a getter per member is declared before ' +
+      'the class''s `end;` and implemented in its implementation section.', [FInversion.ClassTypeName,
+      FInversion.IfaceName]);
+    if IsLines.Count > 0 then
+      EmitFmt('- `%s`: `X is %s` becomes `Supports(X, %s)` (line %s).', [Consumer, FInversion.ClassTypeName,
+        FInversion.IfaceName, string.Join(', ', IsLines.ToArray)]);
+    if AsLines.Count > 0 then
+      EmitFmt('- `%s`: `X as %s` becomes `X as %s` (line %s)%s.', [Consumer, FInversion.ClassTypeName,
+        FInversion.IfaceName, string.Join(', ', AsLines.ToArray),
+        (if FInversion.CastAncestor <> '' then Format('; a receiver whose type does not implement IInterface ' +
+          'is cast through `%s` first', [FInversion.CastAncestor]) else '')]);
+    Emit('- Checked: no name inside a `with` body changes what it binds to; the members carried are fields and ' +
+      'properties of the class itself, read only.');
+    EmitFmt('- Exceptions: a failed `as %s` raises EIntfCastError, not EInvalidCast as `as %s` did -- a handler ' +
+      'for EInvalidCast no longer catches it. Checked: `%s` handles no EInvalidCast, or each `as` follows its ' +
+      '`is` guard.', [FInversion.IfaceName, FInversion.ClassTypeName, Consumer]);
+  finally
+    AsLines.Free;
+    IsLines.Free;
+  end;
+  Emit('');
+end;
+
+procedure TCyclePlanner.RenderImplCycle(const pPlan: TCycleFixPlan);
+begin
+  Emit('Status: **implementation-only** (legal in Delphi, low impact -- no interface-recompile ' +
+    'blast radius). Optional to fix; the steps below are for when you want a fully acyclic uses-graph.');
+  Emit('');
+  RenderFiles;
+  RenderImplWhy;
+  Emit('### Recommended fix (optional)');
+  if pPlan.CutEdge.FromStem = '' then
+  begin
+    RenderNoMechanicalCut(pPlan.Evals);
+    Exit;
+  end;
+  if pPlan.CutEdge.Recipe = crRoutineInversion then
+  begin
+    EmitFmt('Cut the edge `%s -> %s` by **routine-call inversion**: `%s` takes only the routine `%s` from ' +
+      '`%s`, and every type of its signature is declared outside this cycle. `%s` calls it through a ' +
+      'procedural variable declared in `%s` instead. No edge of this cycle can be cut by moving ' +
+      'declarations.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, pPlan.CutEdge.FromStem,
+      FInversion.RoutineName, pPlan.CutEdge.ToStem, pPlan.CutEdge.FromStem, FLeafName[FInversion.DeclStem]]);
+    var Still:= InversionStillUsed;
+    if Still <> '' then
+      EmitFmt('refused: edge-still-used -- %s. The steps below keep that uses entry, so the edge stays: ' +
+        'do not follow them.', [Still]);
+    RenderEdgeChoices(pPlan.Evals);
+    Emit('');
+    RenderDone(False);
+    RenderInversion(CStepMoves);
+    RenderDecisions(CStepUses);
+    RenderLeafUnits(CStepCreate);
+    RenderEdits(CStepEdit);
+    RenderChecklist(pPlan.CycleIndex - 1);
+    Exit;
+  end;
+  if pPlan.CutEdge.Recipe = crMemberInterface then
+  begin
+    EmitFmt('Cut the edge `%s -> %s` by **member hand-over through an extracted interface**: `%s` takes from ' +
+      '`%s` only `is` / `as` tests against `%s` and reads of its members. `%s` implements a new interface `%s`, ' +
+      'declared in `%s`, and `%s` tests and casts against that instead. No edge of this cycle can be cut by ' +
+      'moving declarations or by routine-call inversion.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem,
+      pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem, FInversion.ClassTypeName, FInversion.ClassTypeName,
+      FInversion.IfaceName, FLeafName[FInversion.DeclStem], pPlan.CutEdge.FromStem]);
+    var Still:= InversionStillUsed;
+    if Still <> '' then
+      EmitFmt('refused: edge-still-used -- %s. The steps below keep that uses entry, so the edge stays: ' +
+        'do not follow them.', [Still]);
+    RenderEdgeChoices(pPlan.Evals);
+    Emit('');
+    RenderDone(False);
+    RenderMemberHandOver(CStepMoves);
+    RenderDecisions(CStepUses);
+    RenderLeafUnits(CStepCreate);
+    RenderEdits(CStepEdit);
+    RenderChecklist(pPlan.CycleIndex - 1);
+    Exit;
+  end;
+  EmitFmt('Cut the edge `%s -> %s`: everything `%s` uses from `%s` can move into a new leaf unit, ' +
+    'the smallest mechanical cut in this cycle.', [pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem,
+    pPlan.CutEdge.FromStem, pPlan.CutEdge.ToStem]);
+  RenderEdgeChoices(pPlan.Evals);
+  Emit('');
   RenderDone(False);
   RenderMoves(CStepMoves);
   RenderDecisions(CStepUses);
   RenderLeafUnits(CStepCreate);
   RenderEdits(CStepEdit);
-  RenderChecklist(pSelf);
+  RenderChecklist(pPlan.CycleIndex - 1);
+end;
+
+procedure TCyclePlanner.CaptureRefusals(var pPlan: TCycleFixPlan);
+var
+  L: TList<TRefusal>;
+
+  procedure Add(const pKind, pSymbol, pFilePath, pReason: string; pLine: Integer);
+  var
+    R: TRefusal;
+  begin
+    R.Kind    := pKind;
+    R.Symbol  := pSymbol;
+    R.FilePath:= pFilePath;
+    R.Reason  := pReason;
+    R.Line    := pLine;
+    L.Add(R);
+  end;
+
+begin
+  L:= TList<TRefusal>.Create;
+  try
+    { the facts the playbook already prints: MANUAL items (a base class the F5
+      gate refused is one, kind base-class; an allowed extraction is mechanical
+      since E18 T7), interface edges the index could not resolve, and the
+      per-file steps it can only describe }
+    for var M in FManual do
+      Add((if M.Refusal <> '' then M.Refusal else if M.Kind = mvBlocked then 'blocked-symbol' else 'manual-edit'),
+        M.Sym.Name, PathOf(M.Sym.FileId), M.Reason, M.Decl.First);
+    if pPlan.HasIntf then
+    begin
+      for var A in FComp do
+        for var B in FComp do
+        begin
+          if (A = B) or not FGraph.IntfEdges.ContainsKey(A + '->' + B) then Continue;
+          var Resolved:= False;
+          for var N in NeedsOf(FidOfStem(A)) do
+            if (N.Sect = scIntf) and (N.OwnerStem = B) then Resolved:= True;
+          if not Resolved then
+            Add('unresolved-edge', A + ' -> ' + B, PathOf(FidOfStem(A)),
+              'the index could not resolve what the interface uses', 0);
+        end;
+    end
+    else if pPlan.CutEdge.FromStem = '' then
+    begin
+      for var Ev in pPlan.Evals do
+        Add((if Ev.Refusal <> '' then Ev.Refusal else if Length(Ev.Needs) = 0 then 'unresolved-edge' else 'manual-edit'),
+          Ev.FromStem + ' -> ' + Ev.ToStem, PathOf(FidOfStem(Ev.FromStem)), Ev.Why, 0);
+    end
+    else if pPlan.CutEdge.Recipe in [crRoutineInversion, crMemberInterface] then
+    begin
+      { R1 / R2 cut the edge only when the consumer drops the uses entry }
+      var Still:= InversionStillUsed;
+      if Still <> '' then
+        Add('edge-still-used', (if FInversion.Recipe = crMemberInterface then FInversion.ClassTypeName
+          else FInversion.RoutineName), PathOf(FInversion.ConsumerFid), Still, 0);
+    end;
+    for var Fid in pPlan.Touched do
+      for var E in EditsOf(Fid) do
+        if E.Kind = ekManual then
+          Add((if E.Refusal <> '' then E.Refusal else 'manual-edit'), '', PathOf(Fid), E.Note, E.First);
+    for var E in pPlan.DprojEdits do
+      if E.Kind = ekManual then Add('manual-edit', '', FProjectFile, E.Note, E.First);
+    pPlan.Refusals:= L.ToArray;
+  finally
+    L.Free;
+  end;
+  pPlan.Verdict:= if Length(pPlan.Refusals) > 0 then cvRefused else cvMechanical;
+end;
+
+procedure TCyclePlanner.CapturePlan(var pPlan: TCycleFixPlan);
+var
+  Items : TList<TMoveItem>;
+  Leaves: TList<TNewUnit>;
+begin
+  Items := TList<TMoveItem>.Create;
+  Leaves:= TList<TNewUnit>.Create;
+  try
+    for var Id in FOrder do Items.Add(FItems[Id]);
+    pPlan.Items:= Items.ToArray;
+    for var Stem in LeafStems(udCreate) do
+    begin
+      var U:= Default(TNewUnit);
+      U.UnitName:= FLeafName[Stem];
+      U.Path    := FLeafPath[Stem];
+      U.Text    := LeafUnitText(Stem);
+      Leaves.Add(U);
+    end;
+    pPlan.NewUnits:= Leaves.ToArray;
+  finally
+    Leaves.Free;
+    Items.Free;
+  end;
+  pPlan.Decisions:= FDecisions.ToArray;
+  pPlan.Touched  := EditOrder;
+  pPlan.Edits    := TObjectDictionary<Int64, TList<TFileEdit>>.Create([doOwnsValues]);
+  for var Fid in pPlan.Touched do
+    if (FProjectFid > 0) and (Fid = FProjectFid) then pPlan.DprEdits:= EditsOf(Fid)
+    else
+    begin
+      var L:= TList<TFileEdit>.Create;
+      pPlan.Edits.Add(Fid, L);
+      L.AddRange(EditsOf(Fid));
+    end;
+  pPlan.DprojEdits    := FDprojEdits.ToArray;
+  pPlan.Predicted     := FPredicted.ToArray;
+  pPlan.ExpectedOutput:= ExpectedOutput(pPlan.CycleIndex - 1);
+  pPlan.CutEdge       := FCutEdge;
+  CaptureRefusals(pPlan);
+end;
+
+function TCyclePlanner.BuildPlan(pCycleIndex: Integer): TCycleFixPlan;
+begin
+  ResetCycle(FSccs[pCycleIndex - 1]);
+  Result:= Default(TCycleFixPlan);
+  Result.CycleIndex:= pCycleIndex;
+  Result.Units     := FComp;
+  Result.HasIntf   := GroupHasIntf(FComp);
+  Result.Part      := if Result.HasIntf then 'A' else 'B';
+  if Result.HasIntf then PlanIntfCycle
+  else Result.Evals:= PlanImplCycle;
+  try
+    CapturePlan(Result);
+  except  // dl:ok bare-except@9273 -- releases the half-built plan result and re-raises; nothing is swallowed
+    Result.Release;
+    raise;
+  end;
+end;
+
+function TCyclePlanner.BuildView(const pPlan: TCycleFixPlan): TCyclePlanView;
+const
+  CMoveRecipe: array[TMoveKind] of string = ('decl', 'with-bodies', 'base', 'blocked');
+  CEditKind  : array[TEditKind] of string = ('delete', 'replace', 'insert', 'manual');
+  CSection   : array[TSect] of string = ('interface', 'implementation', 'implementation');
+  CUseAction : array[TUsesVerdict] of string = ('keep', 'keep', 'move', 'remove');
+var
+  Edits  : TList<TPlanEdit>;
+  Paths  : TList<string>;
+  Moves  : TList<TPlanMove>;
+  UseList: TList<TPlanUse>;
+  Created: TList<TPlanNewUnit>;
+
+  procedure AddEdits(const pPath: string; const pList: TArray<TFileEdit>; const pLines: TArray<string>);
+  begin
+    for var E in pList do
+    begin
+      var V:= Default(TPlanEdit);
+      V.FilePath:= pPath;
+      V.Kind    := CEditKind[E.Kind];
+      V.First   := E.First;
+      V.Last    := E.Last;
+      V.NewLines:= E.NewLines;
+      case E.Kind of
+        ekDelete, ekReplace: V.CurrentLines:= SliceLines(pLines, OneRange(E.First, E.Last));
+        ekInsertAfter      : V.AnchorText  := LineAt(pLines, E.First);
+      end;
+      Edits.Add(V);
+    end;
+  end;
+
+begin
+  Result:= Default(TCyclePlanView);
+  Result.CycleIndex:= pPlan.CycleIndex;
+  Result.Units     := pPlan.Units;
+  Result.HasIntf   := pPlan.HasIntf;
+  Result.Part      := pPlan.Part;
+  Result.Mechanical:= pPlan.Verdict = cvMechanical;
+  Result.Refusals  := pPlan.Refusals;
+  Edits  := TList<TPlanEdit>.Create;
+  Paths  := TList<string>.Create;
+  Moves  := TList<TPlanMove>.Create;
+  UseList:= TList<TPlanUse>.Create;
+  Created:= TList<TPlanNewUnit>.Create;
+  try
+    for var Fid in pPlan.Touched do
+    begin
+      Paths.Add(PathOf(Fid));
+      if pPlan.Edits.ContainsKey(Fid) then AddEdits(PathOf(Fid), pPlan.Edits[Fid].ToArray, GetFile(Fid).Lines)
+      else if Fid = FProjectFid then AddEdits(PathOf(Fid), pPlan.DprEdits, GetFile(Fid).Lines);
+    end;
+    if Length(pPlan.DprojEdits) > 0 then
+    begin
+      Paths.Add(FProjectFile);
+      { the playbook's order (RenderEdits), so a consumer applying them in list order does what a follower of the text does }
+      var Sorted:= Copy(pPlan.DprojEdits);
+      TArray.Sort<TFileEdit>(Sorted, TComparer<TFileEdit>.Construct(
+        function(const pLeft, pRight: TFileEdit): Integer
+        begin
+          Result:= pRight.First - pLeft.First;
+        end));
+      AddEdits(FProjectFile, Sorted, ReadSourceLines(FProjectFile));
+    end;
+    for var It in pPlan.Items do
+    begin
+      var M:= Default(TPlanMove);
+      M.Symbol  := It.Sym.Name;
+      M.Kind    := if It.Keyword <> '' then It.Keyword else LowerCase(Copy(GetEnumName(TypeInfo(TSymbolKind), Ord(It.Sym.Kind)), Succ(Length(CKindPrefix))));
+      M.Recipe  := CMoveRecipe[It.Kind];
+      M.FromFile:= PathOf(It.Sym.FileId);
+      M.First   := It.Decl.First;
+      M.Last    := It.Decl.Last;
+      if FLeafName.ContainsKey(It.Stem) then M.ToUnit:= FLeafName[It.Stem];
+      Moves.Add(M);
+    end;
+    for var D in pPlan.Decisions do
+    begin
+      var U:= Default(TPlanUse);
+      U.FilePath:= PathOf(D.Fid);
+      U.UnitName:= UnitNameOfStem(D.PartnerStem);
+      U.Section := CSection[D.Sect];
+      U.Action  := CUseAction[D.Verdict];
+      UseList.Add(U);
+    end;
+    for var N in pPlan.NewUnits do
+    begin
+      var V:= Default(TPlanNewUnit);
+      V.UnitName:= N.UnitName;
+      V.Path    := N.Path;
+      V.Text    := N.Text;
+      Created.Add(V);
+    end;
+    Result.Edits       := Edits.ToArray;
+    Result.TouchedPaths:= Paths.ToArray;
+    Result.Moves       := Moves.ToArray;
+    Result.UseDecisions:= UseList.ToArray;
+    Result.NewUnits    := Created.ToArray;
+  finally
+    Created.Free;
+    UseList.Free;
+    Moves.Free;
+    Paths.Free;
+    Edits.Free;
+  end;
+  if pPlan.HasIntf then Result.Recipe:= 'move-globals'
+  else if pPlan.CutEdge.FromStem <> '' then
+  begin
+    Result.Edge:= pPlan.CutEdge.FromStem + '->' + pPlan.CutEdge.ToStem;
+    case pPlan.CutEdge.Recipe of
+      crRoutineInversion: Result.Recipe:= 'routine-inversion';
+      crMemberInterface : Result.Recipe:= 'member-interface';
+    else Result.Recipe:= 'move-globals';
+    end;
+    var Steps:= pPlan.CutEdge.Steps;
+    if Steps.Recipe in [crRoutineInversion, crMemberInterface] then
+    begin
+      Result.InversionUnit:= InversionLeaf(Steps).UnitName;
+      Result.IfaceName    := Steps.IfaceName;
+      Result.CastAncestor := Steps.CastAncestor;
+      Result.PtrType      := Steps.PtrType;
+      Result.PtrVar       := Steps.PtrVar;
+      Result.PtrTypeDecl  := Steps.TypeDecl;
+    end;
+  end;
+  Result.Predicted:= string.Join(#10, pPlan.ExpectedOutput);
+end;
+
+procedure TCyclePlanner.RenderPlan(const pPlan: TCycleFixPlan);
+begin
+  if (pPlan.CycleIndex < 1) or (pPlan.CycleIndex > FSccs.Count) or
+    (string.Join(',', pPlan.Units) <> string.Join(',', FComp)) then
+    raise EInvalidOpException.CreateFmt('RenderPlan: plan of cycle %d is not the planner''s current cycle',
+      [pPlan.CycleIndex]);
+  EmitFmt('## Cycle %d: %s', [pPlan.CycleIndex, string.Join(' <-> ', pPlan.Units)]);
+  Emit('');
+  if pPlan.HasIntf then RenderIntfCycle(pPlan)
+  else RenderImplCycle(pPlan);
+  RenderFixIt(pPlan);
+end;
+
+{ E18 T1 fix round 1: TEST SEAM, inert unless the environment variable names a
+  file. With DRAGLINT_TEST_DUMP_PLAN=<path>, every plan Run builds appends one
+  tab-separated line of its counts and names to <path>, so
+  run_cycle_plan_split_identity.ps1 can check the plan DATA against the playbook
+  TEXT rendered in the same run -- RenderPlan still prints the details from the
+  planner's live state, and later tasks APPLY the plan's arrays. }
+procedure TCyclePlanner.DumpPlanForTests(const pPlan: TCycleFixPlan);
+const
+  CDumpPlanVar = 'DRAGLINT_TEST_DUMP_PLAN';
+  CVerdictText: array[TCycleVerdict] of string = ('mechanical', 'refused');
+var
+  Path : string;
+  Kinds: TList<string>;
+  Names: TList<string>;
+  Files: TList<string>;
+begin
+  Path:= GetEnvironmentVariable(CDumpPlanVar);
+  if Path = '' then Exit;
+  Kinds:= TList<string>.Create;
+  Names:= TList<string>.Create;
+  Files:= TList<string>.Create;
+  try
+    for var R in pPlan.Refusals do
+      if not Kinds.Contains(R.Kind) then Kinds.Add(R.Kind);
+    for var U in pPlan.NewUnits do Names.Add(U.UnitName);
+    for var Fid in pPlan.Touched do
+      if pPlan.Edits.ContainsKey(Fid) then
+        Files.Add(Format('%s:%d', [ExtractFileName(PathOf(Fid)), pPlan.Edits[Fid].Count]));
+    TFile.AppendAllText(Path, Format('cycle=%d'#9'verdict=%s'#9'refusals=%s'#9'items=%d'#9'decisions=%d'#9 +
+      'newunits=%s'#9'edits=%s'#9'dpr=%d'#9'dproj=%d'#9'predicted=%d',
+      [pPlan.CycleIndex, CVerdictText[pPlan.Verdict], string.Join(',', Kinds.ToArray), Length(pPlan.Items),
+       Length(pPlan.Decisions), string.Join('|', Names.ToArray), string.Join('|', Files.ToArray),
+       Length(pPlan.DprEdits), Length(pPlan.DprojEdits), Length(pPlan.Predicted)]) + sLineBreak, TEncoding.ASCII);
+  finally
+    Files.Free;
+    Names.Free;
+    Kinds.Free;
+  end;
 end;
 
 procedure TCyclePlanner.Run;
@@ -2752,26 +4725,344 @@ begin
     Emit('No circular unit dependencies. Nothing to do.');
     Exit;
   end;
-  for var I:= 0 to FSccs.Count - 1 do
+  for var I:= 1 to FSccs.Count do
   begin
-    ResetCycle(FSccs[I]);
-    EmitFmt('## Cycle %d: %s', [I + 1, string.Join(' <-> ', FComp)]);
-    Emit('');
-    if GroupHasIntf(FComp) then RenderIntfCycle(I)
-    else RenderImplCycle(I);
+    var Plan:= BuildPlan(I);
+    try
+      DumpPlanForTests(Plan);
+      RenderPlan(Plan);
+    finally
+      Plan.Release;
+    end;
+  end;
+end;
+
+{ ---------------------------------------------------------------------------
+  IEdgeSurfaceSource -- the index access DRagLint.Report.CycleEdge reads
+  --------------------------------------------------------------------------- }
+
+function TCyclePlanner.Store: ISymbolStore;
+begin
+  Result:= FStore;
+end;
+
+function TCyclePlanner.FileLines(pFid: Int64): TArray<string>;
+begin
+  Result:= GetFile(pFid).Lines;
+end;
+
+function TCyclePlanner.BindName(pFid: Int64; pLine: Integer; const pName: string; out pOwner: TSymbol;
+  out pStem: string): Boolean;
+var
+  Cands: TArray<TCandidate>;
+  Best : Integer;
+  F    : TPlanFile;
+begin
+  pOwner:= Default(TSymbol);
+  pStem := '';
+  Cands := CandidatesFor(pName);
+  if Length(Cands) = 0 then Exit(False);
+  F   := GetFile(pFid);
+  Best:= PickCandidate(F, SectOf(F, pLine), Cands);
+  if Best = CNotFound then Exit(False);
+  pOwner:= Cands[Best].Owner;
+  pStem := Cands[Best].Stem;
+  Result:= True;
+end;
+
+function TCyclePlanner.IsSccStem(const pStem: string): Boolean;
+begin
+  Result:= FMembers.ContainsKey(pStem);
+end;
+
+function TCyclePlanner.MemberAccessOf(pRefId: Int64; out pAccess: TCallEdge): Boolean;
+begin
+  if FAccess = nil then
+  begin
+    FAccess:= TDictionary<Int64, TCallEdge>.Create;
+    for var E in FStore.DumpAllMemberAccesses do FAccess.AddOrSetValue(E.RefId, E);
+  end;
+  Result:= FAccess.TryGetValue(pRefId, pAccess);
+end;
+
+function TCyclePlanner.EdgeSurfacesOf(pCycleIndex: Integer): TArray<TEdgeSurface>;
+var
+  L   : TList<TEdgeSurface>;
+  Used: TList<string>;
+begin
+  ResetCycle(FSccs[pCycleIndex - 1]);
+  L:= TList<TEdgeSurface>.Create;
+  try
+    for var A in FComp do
+      if FGraph.Adj.TryGetValue(A, Used) then
+        for var B in FComp do
+          if (A <> B) and Used.Contains(B) then L.Add(BuildEdgeSurface(Self, FidOfStem(A), B));
+    Result:= L.ToArray;
+  finally
+    L.Free;
   end;
 end;
 
 procedure RenderCyclePlaybook(const pStore: ISymbolStore; const pDbPath: string;
-  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings);
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph; const pOut: TStrings;
+  const pLibStore: ISymbolStore; const pFixProject: string);
 var
   Planner: TCyclePlanner;
 begin
-  Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, pOut);
+  Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, pOut, pLibStore);
   try
+    Planner.FixProject:= pFixProject;
     Planner.Run;
   finally
     Planner.Free;
+  end;
+end;
+
+procedure VisitCyclePlans(const pStore: ISymbolStore; const pDbPath: string;
+  const pSccs: TList<TArray<string>>; const pGraph: TCycleGraph;
+  const pLibStore: ISymbolStore; const pVisit: TCyclePlanVisit; pOnly: Integer);
+var
+  Planner: TCyclePlanner;
+  Lines  : TStringList;
+begin
+  Lines  := TStringList.Create;
+  Planner:= TCyclePlanner.Create(pStore, pDbPath, pSccs, pGraph, Lines, pLibStore);
+  try
+    for var I:= 1 to pSccs.Count do
+    begin
+      if (pOnly > 0) and (I <> pOnly) then Continue;
+      var Plan:= Planner.BuildPlan(I);
+      try
+        if not pVisit(Planner.BuildView(Plan),
+          function: TArray<string>
+          begin
+            Lines.Clear;
+            Planner.RenderPlan(Plan);
+            Result:= Lines.ToStringArray;
+          end) then Break;
+      finally
+        Plan.Release;
+      end;
+    end;
+  finally
+    Planner.Free;
+    Lines.Free;
+  end;
+end;
+
+procedure AddCycleFixHints(const pIn: TCycleFixHintInput; const pGroups: TJSONArray);
+
+  function EdgeJson(const pEdge: TFixEdge; pWithChosen: Boolean): TJSONObject;
+  begin
+    Result:= TJSONObject.Create;
+    Result.AddPair('from', pEdge.FromUnit);
+    Result.AddPair('to', pEdge.ToUnit);
+    Result.AddPair('recipe', pEdge.Recipe);
+    if pWithChosen then Result.AddPair('chosen', TJSONBool.Create(pEdge.Chosen));
+  end;
+
+var
+  Planner: TCyclePlanner;
+begin
+  if pIn.Unavailable <> '' then
+  begin
+    for var I:= 1 to pIn.Sccs.Count do
+    begin
+      var Fix:= TJSONObject.Create;
+      Fix.AddPair('available', TJSONBool.Create(False));
+      Fix.AddPair('part', '');
+      Fix.AddPair('dry_run', FixCommandText(pIn.FixProject, pIn.DbPath, I, False));
+      Fix.AddPair('apply', FixCommandText(pIn.FixProject, pIn.DbPath, I, True));
+      Fix.AddPair('edges', TJSONArray.Create);
+      Fix.AddPair('reason', pIn.Unavailable);
+      (pGroups.Items[I - 1] as TJSONObject).AddPair('fix', Fix);
+    end;
+    Exit;
+  end;
+  Planner:= TCyclePlanner.Create(pIn.Store, pIn.DbPath, pIn.Sccs, pIn.Graph, nil, pIn.LibStore);
+  try
+    Planner.FixProject:= pIn.FixProject;
+    for var I:= 1 to pIn.Sccs.Count do
+    begin
+      var Plan:= Planner.BuildPlan(I);
+      try
+        var H:= Planner.FixHintOf(Plan);
+        var Fix:= TJSONObject.Create;
+        Fix.AddPair('available', TJSONBool.Create(H.Available));
+        Fix.AddPair('part', LowerCase(H.Part));
+        Fix.AddPair('dry_run', H.DryRun);
+        Fix.AddPair('apply', H.Apply);
+        var Edges:= TJSONArray.Create;
+        for var E in H.Edges do Edges.AddElement(EdgeJson(E, True));
+        Fix.AddPair('edges', Edges);
+        if H.HasFollowup then Fix.AddPair('followup', EdgeJson(H.Followup, False));
+        Fix.AddPair('reason', H.Reason);
+        (pGroups.Items[I - 1] as TJSONObject).AddPair('fix', Fix);
+      finally
+        Plan.Release;
+      end;
+    end;
+  finally
+    Planner.Free;
+  end;
+end;
+
+procedure AddCycleEdgeSurfaces(const pStore: ISymbolStore; const pSccs: TList<TArray<string>>;
+  const pGraph: TCycleGraph; const pGroups: TJSONArray);
+var
+  Planner: TCyclePlanner;
+begin
+  Planner:= TCyclePlanner.Create(pStore, '', pSccs, pGraph, nil);
+  try
+    for var I:= 1 to pSccs.Count do
+    begin
+      var Edges:= TJSONArray.Create;
+      (pGroups.Items[I - 1] as TJSONObject).AddPair('edges', Edges);
+      for var S in Planner.EdgeSurfacesOf(I) do Edges.AddElement(EdgeSurfaceToJson(S));
+    end;
+  finally
+    Planner.Free;
+  end;
+end;
+
+function BuildCycleGraph(const pStore: ISymbolStore): TCycleGraph;
+var
+  Fid  : Int64        ;
+  Path : string       ;
+  UFrom: string       ;
+  UTo  : string       ;
+  L    : TList<string>;
+  Uo   : TUnitUse     ;
+begin
+  Result.Adj      := TDictionary<string, TList<string>>.Create;
+  Result.IntfEdges:= TDictionary<string, Boolean>.Create;
+  Result.UnitFile := TDictionary<string, string>.Create;
+  Result.UnitFid  := TDictionary<string, Int64>.Create;
+  try
+    for Fid in pStore.GetAllFileIds do
+    begin
+      Path:= pStore.GetFilePath(Fid);
+      if not SameText(ExtractFileExt(Path), '.pas') then Continue;
+      { indexed paths may use '/' -- normalise so ExtractFileName strips the dir }
+      UFrom:= LowerCase(ChangeFileExt(ExtractFileName(StringReplace(Path, '/', '\', [rfReplaceAll])), ''));
+      if UFrom = '' then Continue;
+      Result.UnitFile.AddOrSetValue(UFrom, Path);
+      Result.UnitFid .AddOrSetValue(UFrom, Fid );
+      if not Result.Adj.TryGetValue(UFrom, L) then
+      begin
+        L:= TList<string>.Create;
+        Result.Adj.AddOrSetValue(UFrom, L);
+      end;
+      for Uo in pStore.GetUnitUsesForFile(Fid) do
+      begin
+        UTo:= LowerCase(Uo.UnitName);
+        if UTo = '' then Continue;
+        if not L.Contains(UTo) then L.Add(UTo);
+        if Uo.Section = uusInterface then Result.IntfEdges.AddOrSetValue(UFrom + '->' + UTo, True);
+      end;
+    end;
+  except
+    on Exception do
+    begin
+      FreeCycleGraph(Result); { fix round 1: a raise midway must not leak the partial graph }
+      raise;
+    end;
+  end;
+end;
+
+procedure FreeCycleGraph(var pGraph: TCycleGraph);
+begin
+  if pGraph.Adj <> nil then
+    for var L in pGraph.Adj.Values do L.Free;
+  FreeAndNil(pGraph.Adj);
+  FreeAndNil(pGraph.IntfEdges);
+  FreeAndNil(pGraph.UnitFile);
+  FreeAndNil(pGraph.UnitFid);
+end;
+
+function ComputeSccs(const pGraph: TCycleGraph): TList<TArray<string>>;
+var
+  Index  : TDictionary<string, Integer>;
+  Lowlink: TDictionary<string, Integer>;
+  OnStack: TDictionary<string, Boolean>;
+  Stack  : TList<string>               ;
+  Counter: Integer                     ;
+  Sccs   : TList<TArray<string>>       ;
+  Done   : Boolean                     ;
+
+  procedure StrongConnect(const AV: string);
+  var
+    W        : string       ;
+    Comp     : TList<string>;
+    Top      : string       ;
+    Neighbors: TList<string>;
+  begin
+    Index  .AddOrSetValue(AV, Counter);
+    Lowlink.AddOrSetValue(AV, Counter);
+    Inc(Counter);
+    Stack.Add(AV);
+    OnStack.AddOrSetValue(AV, True);
+    if pGraph.Adj.TryGetValue(AV, Neighbors) then
+      for W in Neighbors do
+      begin
+        if not Index.ContainsKey(W) then
+        begin
+          { external/library unit -- a leaf, cannot be part of a cycle }
+          if not pGraph.Adj.ContainsKey(W) then Continue;
+          StrongConnect(W);  // dl:ok duplicate-code@6627 -- the Tarjan pass DRagLint.Charts.Q.Cycles also runs; merging the charts query onto ComputeSccs is outside E18 T15b
+          if Lowlink[W] < Lowlink[AV] then Lowlink[AV]:= Lowlink[W];
+        end
+        else if OnStack.ContainsKey(W) and OnStack[W] then
+          if Index[W] < Lowlink[AV] then Lowlink[AV]:= Index[W];
+      end;
+    if Lowlink[AV] = Index[AV] then
+    begin
+      Comp:= TList<string>.Create;
+      try
+        repeat
+          Top:= Stack[Stack.Count - 1];
+          Stack.Delete(Stack.Count - 1);
+          OnStack.AddOrSetValue(Top, False);
+          Comp.Add(Top);
+        until Top = AV;
+        if Comp.Count > 1 then Sccs.Add(Comp.ToArray);
+      finally
+        Comp.Free;
+      end;
+    end;
+  end;
+
+begin
+  Sccs   := TList<TArray<string>>.Create;
+  Index  := TDictionary<string, Integer>.Create;
+  Lowlink:= TDictionary<string, Integer>.Create;
+  OnStack:= TDictionary<string, Boolean>.Create;
+  Stack  := TList<string>.Create;
+  Done   := False;
+  try
+    Counter:= 0;
+    for var K in pGraph.Adj.Keys do
+      if not Index.ContainsKey(K) then StrongConnect(K);
+    Done:= True;
+  finally
+    Stack.Free;
+    OnStack.Free;
+    Lowlink.Free;
+    Index.Free;
+    if not Done then FreeAndNil(Sccs); { a raise must not leak the caller's list }
+  end;
+  Result:= Sccs;
+end;
+
+function ComputeSccs(const pStore: ISymbolStore): TList<TArray<string>>;
+var
+  Graph: TCycleGraph;
+begin
+  Graph:= BuildCycleGraph(pStore);
+  try
+    Result:= ComputeSccs(Graph);
+  finally
+    FreeCycleGraph(Graph);
   end;
 end;
 
