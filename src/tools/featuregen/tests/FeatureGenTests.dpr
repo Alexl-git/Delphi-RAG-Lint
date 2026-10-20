@@ -1208,6 +1208,9 @@ begin
   lIn := GoldenFile(pRepo, 'inputs');
   for lRel in TDirectory.GetFiles(lIn, '*', TSearchOption.soAllDirectories) do
     CopyFileTo(lIn, lDst, Copy(lRel, Length(lIn) + 2, MaxInt));
+  // README.md and docs\AI-USAGE.md as the PowerShell generator left them: check D quotes lines of them, so their prose is frozen too
+  CopyFileTo(GoldenFile(pRepo, 'wiki'), lDst, 'README.md');
+  CopyFileTo(GoldenFile(pRepo, 'wiki'), lDst, 'docs\AI-USAGE.md');
   // files the registry entries name; they existed at the capture and some are retired since
   for lRel in ['charts\README.md', 'tools\feature-registry.ps1', 'tools\build-feature-pages.ps1', 'tools\publish-release.ps1'] do
     if not TFile.Exists(TPath.Combine(lDst, lRel)) then
