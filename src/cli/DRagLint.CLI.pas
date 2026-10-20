@@ -12877,6 +12877,8 @@ begin
         { Only for the whole-routine metric rules, and only when measured: an
           absent key says "this rule has no metric", which a 0 would not. }
         if F.Metric > 0 then JObj.AddPair('metric', TJSONNumber.Create(F.Metric));
+        { E18 T15b: the verb that fixes it (per-file circular-uses); absent = no such verb }
+        if F.FixHint <> '' then JObj.AddPair('fix_hint', F.FixHint);
         JArr.AddElement(JObj);
       end;
       Writeln(JArr.Format(2));
@@ -13556,6 +13558,112 @@ begin
     Result:= DRagLint.Diagnostics.AstChecks.TAstChecker.CheckRoutineMetrics(APath,
       ACfg.ThresholdFor('too-many-parameters', DEFAULT_MAX_PARAMETERS), ACfg.ThresholdFor('too-many-locals', DEFAULT_MAX_LOCALS),
       ACfg.ThresholdFor('method-too-long', DEFAULT_METHOD_TOO_LONG), ACfg.ThresholdFor('deep-nesting', DEFAULT_MAX_NESTING));
+end;
+
+/// <summary>E18 T15b: the circular-uses finding of ONE file's `lint` run -- for every unit of a
+/// cycle, at the uses entry a person would edit, with the `cycles --fix` command.</summary>
+/// <param name="AFindings">This file's findings so far (already narrowed to AFilePath).</param>
+/// <param name="AStore">The project index that contains the file.</param>
+/// <param name="AFileId">The file's id in AStore.</param>
+/// <param name="AFilePath">The file's path as AStore spells it.</param>
+/// <param name="AWholeGraph">circular-uses over the WHOLE index (the rule cache's answer): one
+/// finding per cycle at its first unit, the source of the message.</param>
+/// <param name="AProject">--project, or '' for the placeholder `&lt;X.dproj&gt;` in the hint.</param>
+/// <param name="ADb">The index path named in the hint.</param>
+/// <returns>AFindings with this file's whole-graph circular-uses finding (present only on the
+/// cycle's first unit) replaced by ONE finding at the first intra-cycle uses entry of the file
+/// (implementation section preferred), same message, FixHint set. AFindings unchanged when the
+/// unit is in no cycle, or when the cycle has no whole-graph finding to take the message from.</returns>
+/// <remarks>The cycle is ComputeSccs' (the `cycles` pass); lint-all is not touched -- it still
+/// reports one finding per cycle at `:1:1`. Costs one read of every file's uses rows, and only
+/// when the index has a cycle at all.</remarks>
+function CircularUsesForFile(const AFindings: TArray<TLintFinding>; const AStore: ISymbolStore;
+  AFileId: Int64; const AFilePath: string; const AWholeGraph: TArray<TLintFinding>;
+  const AProject, ADb: string): TArray<TLintFinding>;
+const
+  CRule = 'circular-uses';
+  CNoProject = '<X.dproj>';
+
+  function StemOf(const APath: string): string;
+  begin
+    Result:= LowerCase(ChangeFileExt(ExtractFileName(StringReplace(APath, '/', '\', [rfReplaceAll])), ''));
+  end;
+
+var
+  Sccs    : TList<TArray<string>>;
+  Mine    : TArray<string>;
+  MyStem  : string;
+  Msg     : string;
+  ImplLine: Integer;
+  IntfLine: Integer;
+  F       : TLintFinding;
+begin
+  Result:= AFindings;
+  Msg:= '';
+  for F in AWholeGraph do
+    if SameText(F.RuleId, CRule) then
+    begin
+      Msg:= F.Message;
+      Break;
+    end;
+  if Msg = '' then Exit; { no cycle anywhere: skip the graph read }
+
+  MyStem:= StemOf(AFilePath);
+  Mine:= nil;
+  Sccs:= ComputeSccs(AStore);
+  try
+    for var C in Sccs do
+      if MatchText(MyStem, C) then
+      begin
+        Mine:= C;
+        Break;
+      end;
+  finally
+    Sccs.Free;
+  end;
+  if Mine = nil then Exit;
+
+  { the message of THIS cycle: the whole-graph finding anchored at one of its units }
+  Msg:= '';
+  for F in AWholeGraph do
+    if SameText(F.RuleId, CRule) and MatchText(StemOf(F.FilePath), Mine) then
+    begin
+      Msg:= F.Message;
+      Break;
+    end;
+  if Msg = '' then Exit;
+
+  ImplLine:= 0;
+  IntfLine:= 0;
+  for var U in AStore.GetUnitUsesForFile(AFileId) do
+  begin
+    var Target: string:= LowerCase(U.UnitName);
+    if (Target = MyStem) or not MatchText(Target, Mine) then Continue;
+    if U.Section = uusImplementation then
+    begin
+      if (ImplLine = 0) or (U.StartLine < ImplLine) then ImplLine:= U.StartLine;
+    end
+    else if (IntfLine = 0) or (U.StartLine < IntfLine) then IntfLine:= U.StartLine;
+  end;
+  if ImplLine = 0 then ImplLine:= IntfLine;
+  if ImplLine <= 0 then Exit;
+
+  Result:= nil;
+  for F in AFindings do
+    if not (SameText(F.RuleId, CRule) and SameText(F.FilePath, AFilePath)) then Result:= Result + [F];
+  F:= Default(TLintFinding);
+  F.RuleId   := CRule;
+  F.Severity := 'warning';
+  F.FileId   := AFileId;
+  F.FilePath := AFilePath;
+  F.StartLine:= ImplLine;
+  F.StartCol := 1;
+  F.EndLine  := ImplLine;
+  F.EndCol   := 1;
+  F.Message  := Msg;
+  F.FixHint  := Format('cycles --fix --project "%s" --db "%s" --unit %s',
+    [(if AProject <> '' then AProject else CNoProject), ADb, MyStem]);
+  Result:= Result + [F];
 end;
 
 function DoLint(const AArgs: TArgs): Integer;
@@ -14280,13 +14388,20 @@ begin
           if LintRuleWants(NarrowRule, LINT_GATE_PROJECT_RULES) then
           begin
             TraceLintChecker('project-rules');
+            var WholeGraph: TFunc<string, TArray<TLintFinding>>:=
+              WholeGraphProvider(FlowStore, FlowLibStore, FlowDb, FlowLibUsed, NarrowRule,
+                                 RuleKeptByRun(AArgs, Cfg, Marked));
             for F in DRagLint.Lint.ProjectRules.TProjectLintRules.Run(
                        FlowStore, NarrowRule, MakeSiblingStoreResolver(AArgs, SibKeep, SibOwned), FlowLibStore,
-                       {AOptInRules=}nil, {AOnlyFileId=}FlowFid,
-                       WholeGraphProvider(FlowStore, FlowLibStore, FlowDb, FlowLibUsed, NarrowRule,
-                                          RuleKeptByRun(AArgs, Cfg, Marked))) do
+                       {AOptInRules=}nil, {AOnlyFileId=}FlowFid, WholeGraph) do
               if SameText(F.FilePath, MyPath) and ((NarrowRule = '') or (NarrowRule = F.RuleId)) then
                 Findings:= Findings + [F];
+            { E18 T15b: circular-uses for EVERY unit of a cycle, on the uses line, with the
+              `cycles --fix` command -- the Structure tree's "Fix this cycle" node. WholeGraph is
+              memoised, so the second ask is the same answer Run just used. }
+            if (NarrowRule = '') or SameText(NarrowRule, 'circular-uses') then
+              Findings:= CircularUsesForFile(Findings, FlowStore, FlowFid, MyPath, WholeGraph('circular-uses'),
+                AArgs.ProjectPath, (if FlowDb <> '' then FlowDb else AArgs.DbPath));
             { the pass above read this file's uses from the INDEX; the buffer is
               what the user is looking at }
             Findings:= ReconcileUnusedUnitsWithBuffer(Findings, EffPath);
@@ -22121,17 +22236,11 @@ type
   TEdgeSet = TDictionary<string, Boolean>;
 var
   Store    : ISymbolStore                      ;
-  FilePath : string                            ;
+  CycGraph : TCycleGraph                       ; { BuildCycleGraph; the four below alias it }
   Adj      : TDictionary<string, TList<string>>; { unit -> used units (lower) }
   IntfEdges: TEdgeSet                          ; { "a->b" if a uses b in intf }
   UnitFile : TDictionary<string, string>       ; { unit stem -> source path }
   UnitFid  : TDictionary<string, Int64>        ; { unit stem -> file_id (--causes) }
-  // Tarjan state
-  Index  : TDictionary<string, Integer>;
-  Lowlink: TDictionary<string, Integer>;
-  OnStack: TDictionary<string, Boolean>;
-  Stack  : TList<string>               ;
-  Counter: Integer                     ;
   Sccs   : TList<TArray<string>>       ;
   JArr   : TJSONArray                  ;
   i      : Integer                     ;
@@ -22156,50 +22265,6 @@ var
     else if Pos('\server\', L) > 0 then Result:= 'SERVER'
     else Result:= '';
   end;
-
-  procedure StrongConnect(const AV: string);
-  var
-    W        : string       ;
-    Comp     : TList<string>;
-    Top      : string       ;
-    Neighbors: TList<string>;
-  begin
-    Index  .AddOrSetValue(AV, Counter);
-    Lowlink.AddOrSetValue(AV, Counter);
-    Inc(Counter);
-    Stack.Add(AV);
-    OnStack.AddOrSetValue(AV, True);
-
-    if Adj.TryGetValue(AV, Neighbors) then
-      for W in Neighbors do
-      begin
-        if not Index.ContainsKey(W) then
-        begin
-          if Adj.ContainsKey(W) then StrongConnect(W)
-          else
-          begin
-            { external/library unit -- a leaf, cannot be part of a cycle }
-            Continue;
-          end;
-          if Lowlink[W] < Lowlink[AV] then Lowlink[AV]:= Lowlink[W];
-        end
-        else if OnStack.ContainsKey(W) and OnStack[W] then
-          if Index[W] < Lowlink[AV] then Lowlink[AV]:= Index[W];
-      end;
-
-    if Lowlink[AV] = Index[AV] then
-    begin
-      Comp:= TList<string>.Create;
-      repeat
-        Top:= Stack[Stack.Count - 1];
-        Stack.Delete(Stack.Count - 1);
-        OnStack.AddOrSetValue(Top, False);
-        Comp.Add(Top);
-      until Top = AV;
-      if Comp.Count > 1 then Sccs.Add(Comp.ToArray);
-      Comp.Free;
-    end;
-  end; // procedure
 
   { E18 T6: recipe R2 reads class ancestry from the platform library -- the explicit
     --library-db, else the manifest's library section for --platform (default win64),
@@ -22260,13 +22325,6 @@ var
     end;
   end;
 var
-  UU   : TArray<TUnitUse>;
-  Uo   : TUnitUse        ;
-  Fid  : Int64           ;
-  UFrom: string          ;
-  UTo  : string          ;
-  K    : string          ;
-  L    : TList<string>   ;
   FixCode: Integer       ; { cycles --fix: RunCycleFix's exit code; -1 = not a --fix run }
 begin
   FixCode:= -1;
@@ -22276,40 +22334,16 @@ begin
   Store:= OpenReadOnlyStore(AArgs.DbPath, RoOk);
   if (not RoOk) and StaleDbRefusesRun(AArgs, 'cycles', AArgs.DbPath) then Exit(2);
 
-  Adj:= TDictionary<string, TList<string>>.Create;
-  IntfEdges:= TEdgeSet.Create;
-  UnitFile:= TDictionary<string, string>.Create;
-  UnitFid:= TDictionary<string, Int64  >.Create;
-  Index  := TDictionary<string, Integer>.Create;
-  Lowlink:= TDictionary<string, Integer>.Create;
-  OnStack:= TDictionary<string, Boolean>.Create;
-  Stack:= TList<string>.Create;
-  Sccs:= TList<TArray<string>>.Create;
+  { E18 T15b: the graph and the Tarjan pass live in DRagLint.Report.CyclePlan (BuildCycleGraph,
+    ComputeSccs), shared with the per-file circular-uses finding of `lint <file>` }
+  CycGraph := BuildCycleGraph(Store);
+  Adj      := CycGraph.Adj;
+  IntfEdges:= CycGraph.IntfEdges;
+  UnitFile := CycGraph.UnitFile;
+  UnitFid  := CycGraph.UnitFid;
+  Sccs     := nil;
   try
-    { build the adjacency from every indexed file's uses clauses }
-    for Fid in Store.GetAllFileIds do
-    begin
-      FilePath:= Store.GetFilePath(Fid);
-      if not SameText(ExtractFileExt(FilePath), '.pas') then Continue;
-      UFrom:= UnitNameOfFile(FilePath);
-      if UFrom = '' then Continue;
-      UnitFile.AddOrSetValue(UFrom, FilePath);
-      UnitFid .AddOrSetValue(UFrom, Fid     );
-      UU:= Store.GetUnitUsesForFile(Fid);
-      if not Adj.TryGetValue(UFrom, L) then begin L:= TList<string>.Create; Adj.AddOrSetValue(UFrom, L); end;
-      for Uo in UU do
-      begin
-        UTo:= LowerCase(Uo.UnitName);
-        if UTo = '' then Continue;
-        if not L.Contains(UTo) then L.Add(UTo);
-        if Uo.Section = uusInterface then IntfEdges.AddOrSetValue(UFrom + '->' + UTo, True);
-      end;
-    end; // for
-
-    { Tarjan SCC over the in-project units }
-    Counter:= 0;
-    for K in Adj.Keys do
-      if not Index.ContainsKey(K) then StrongConnect(K);
+    Sccs:= ComputeSccs(CycGraph);
 
     if AArgs.Plan or AArgs.Fix then
     begin
@@ -22501,9 +22535,8 @@ begin
     end; // else
     Result:= if FixCode >= 0 then FixCode else 0;
   finally
-    for L in Adj.Values do L.Free;
-    Adj.Free; IntfEdges.Free; UnitFile.Free; UnitFid.Free; Index.Free; Lowlink.Free;
-    OnStack.Free; Stack.Free; Sccs.Free;
+    FreeCycleGraph(CycGraph);
+    Sccs.Free;
   end; // try
 end; // begin
 
