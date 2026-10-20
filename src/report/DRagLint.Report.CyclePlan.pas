@@ -167,6 +167,21 @@ type
     Edge: string;
     /// <summary>The expected `cycles` output after the plan, one line per #10.</summary>
     Predicted: string;
+    /// <summary>member-interface / routine-inversion: the unit that receives the interface or the
+    /// pointer declarations (a new `*.Untangle` leaf or an existing unit); else ''.</summary>
+    InversionUnit: string;
+    /// <summary>member-interface: the extracted interface's name; else ''.</summary>
+    IfaceName: string;
+    /// <summary>member-interface: the ancestor a receiver that does not implement IInterface is
+    /// cast through ('' when no line needs a cast); else ''.</summary>
+    CastAncestor: string;
+    /// <summary>routine-inversion: the procedural type `T&lt;Routine&gt;Ptr`; else ''.</summary>
+    PtrType: string;
+    /// <summary>routine-inversion: the variable `&lt;Routine&gt;Ptr`; else ''.</summary>
+    PtrVar: string;
+    /// <summary>routine-inversion: the type declaration as the plan emits it (no indent), built
+    /// from the routine's signature verbatim; else ''.</summary>
+    PtrTypeDecl: string;
   end;
 
   /// <summary>Called once per planned group by VisitCyclePlans.</summary>
@@ -4333,6 +4348,16 @@ begin
       crRoutineInversion: Result.Recipe:= 'routine-inversion';
       crMemberInterface : Result.Recipe:= 'member-interface';
     else Result.Recipe:= 'move-globals';
+    end;
+    var Steps:= pPlan.CutEdge.Steps;
+    if Steps.Recipe in [crRoutineInversion, crMemberInterface] then
+    begin
+      Result.InversionUnit:= InversionLeaf(Steps).UnitName;
+      Result.IfaceName    := Steps.IfaceName;
+      Result.CastAncestor := Steps.CastAncestor;
+      Result.PtrType      := Steps.PtrType;
+      Result.PtrVar       := Steps.PtrVar;
+      Result.PtrTypeDecl  := Steps.TypeDecl;
     end;
   end;
   Result.Predicted:= string.Join(#10, pPlan.ExpectedOutput);

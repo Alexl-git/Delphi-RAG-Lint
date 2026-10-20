@@ -123,7 +123,7 @@ try {
   Check 'e: refused group: Verdict: refused + a refusal line' `
     (($r.Out -match '(?m)^Verdict: refused') -and ($r.Out -match '(?m)^  - [\w-]+: ')) $r.Out
   Check 'e: --part b on an interface-coupled group is an error (exit 2)' `
-    ((Run-Fix $demo $db @('--cycle', '1', '--part', 'b', '--library-db', 'none') $false).Exit -eq 2) ''
+    ((Run-Fix $demo $db @('--cycle', '1', '--part', 'b', '--no-compile', '--library-db', 'none') $false).Exit -eq 2) ''
   Check 'e: --apply is refused today (exit 2)' `
     ((Run-Fix $demo $db @('--apply', '--library-db', 'none') $false).Exit -eq 2) ''
 
