@@ -183,6 +183,62 @@ Check 'g: reindex.status = skipped, reason names the project index rule' (($cy.r
 Check 'g: verified = false' ($cy.verified -eq $false) ''
 Check 'g: the directory DB is unchanged' ((Get-FileSha $G.Db) -eq $dbG) ''
 
+# ---------------------------------------------------------------- (i) mtimes + BOM restored (fix round 1)
+Write-Host '== (i) rollback restores bytes AND mtimes (BOM file, pre-existing recovery.txt)' -ForegroundColor Cyan
+function Get-TreeStamps([string]$Dir) {
+  return ((Get-ChildItem $Dir -File -Recurse | Where-Object {
+      $_.FullName -notmatch '\\(Win32|Win64|__history|__recovery)\\' -and
+      $_.Extension -notmatch '^\.(dcu|exe|res|identcache|local|stat|dsk|map|rsm|drc)$' } |
+    Sort-Object FullName | ForEach-Object { '{0}={1}@{2}' -f $_.FullName.Substring($Dir.Length), (Get-FileHash $_.FullName -Algorithm SHA256).Hash, $_.LastWriteTimeUtc.Ticks }) -join ';')
+}
+function New-BomDemo([string]$Tag) {
+  $proj = Join-Path $WorkDir "$Tag-proj"
+  Copy-Tree $Demo $proj
+  $gp = Join-Path $proj 'DemoGagePort.pas'
+  [IO.File]::WriteAllBytes($gp, [byte[]](0xEF, 0xBB, 0xBF) + [IO.File]::ReadAllBytes($gp))
+  $rec = Join-Path $proj 'recovery.txt'
+  [IO.File]::WriteAllText($rec, "[2020-01-01 00:00:00] an earlier run`r`n", [Text.Encoding]::ASCII)
+  foreach ($f in Get-ChildItem $proj -File) { $f.LastWriteTimeUtc = [datetime]::new(2021, 3, 4, 5, 6, 7, [DateTimeKind]::Utc) }
+  $db = Join-Path $WorkDir "$Tag.sqlite"
+  & $Exe index --project (Join-Path $proj 'CircularDemo.dproj') --db $db *> (Join-Path $WorkDir "$Tag-index.log")
+  return @{ Proj = $proj; Dproj = (Join-Path $proj 'CircularDemo.dproj'); Db = $db }
+}
+$I = New-BomDemo 'i'
+$sI = Get-TreeStamps $I.Proj
+$r = Run-Fix $I @('--unit', 'demogageport', '--apply') @{ DRAGLINT_CYCLEFIX_BREAK = '3' }
+$cy = Cy $r
+Check 'i: compile-error rollback, exit 1' (($r.Exit -eq 1) -and ($cy.rolled_back -eq $true) -and (@($cy.written) -like '*DemoGagePort.pas').Count -eq 1) "exit=$($r.Exit) $($r.Out)"
+Check 'i: bytes AND mtimes of every file (BOM unit, recovery.txt) restored' ((Get-TreeStamps $I.Proj) -eq $sI) ''
+Check 'i: DemoGagePort.pas still starts with the UTF-8 BOM' ((@([IO.File]::ReadAllBytes((Join-Path $I.Proj 'DemoGagePort.pas'))[0..2]) -join ',') -eq '239,187,191') ''
+
+# ---------------------------------------------------------------- (j) a raise after the write (fix round 1)
+Write-Host '== (j) an exception after the write -> rollback, exit 2' -ForegroundColor Cyan
+$J = New-BomDemo 'j'
+$sJ = Get-TreeStamps $J.Proj
+$dbJ = Get-FileSha $J.Db
+$r = Run-Fix $J @('--unit', 'demogageport', '--apply') @{ DRAGLINT_CYCLEFIX_BREAK = '4' }
+$cy = Cy $r
+Check 'j: exit 2' ($r.Exit -eq 2) "exit=$($r.Exit) $($r.Out) $($r.Err)"
+Check 'j: error says rolled back, project not changed' ("$($r.Json.error)" -match 'rolled back, project not changed') $r.Out
+Check 'j: refusal build-error carrying the exception message' (@($cy.refusals | Where-Object { ($_.kind -eq 'build-error') -and ("$($_.reason)" -match 'TEST BREAK 4') }).Count -eq 1) ($cy.refusals | ConvertTo-Json -Compress)
+Check 'j: rolled_back = true' ($cy.rolled_back -eq $true) ''
+Check 'j: bytes AND mtimes of every file restored' ((Get-TreeStamps $J.Proj) -eq $sJ) ''
+Check 'j: DB copy unchanged' ((Get-FileSha $J.Db) -eq $dbJ) ''
+
+# ---------------------------------------------------------------- (k) the write-failure seam is TEMP-only (fix round 1)
+Write-Host '== (k) DRAGLINT_TEST_FAIL_WRITE_AT ignored outside TEMP' -ForegroundColor Cyan
+$outRoot = Join-Path $env:LOCALAPPDATA "drag-lint-cyclefix-atomic-$PID"
+try {
+  $kp = Join-Path $outRoot 'k-proj'
+  Copy-Tree $Demo $kp
+  $K = @{ Proj = $kp; Dproj = (Join-Path $kp 'CircularDemo.dproj'); Db = (Join-Path $outRoot 'k.sqlite') }
+  & $Exe index --project $K.Dproj --db $K.Db *> (Join-Path $WorkDir 'k-index.log')
+  $r = Run-Fix $K @('--unit', 'demogageport', '--apply', '--no-reindex') @{ DRAGLINT_TEST_FAIL_WRITE_AT = '1' }
+  Check 'k: outside TEMP the seam is ignored: exit 0, 5 files written' (($r.Exit -eq 0) -and (@((Cy $r).written).Count -eq 5)) "exit=$($r.Exit) $($r.Out)"
+} finally {
+  if (Test-Path $outRoot) { [IO.Directory]::Delete($outRoot, $true) }
+}
+
 # ---------------------------------------------------------------- (h) build timeout
 Write-Host '== (h) build timeout' -ForegroundColor Cyan
 $H = New-Demo 'h'

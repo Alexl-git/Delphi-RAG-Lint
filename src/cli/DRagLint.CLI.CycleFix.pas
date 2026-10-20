@@ -118,6 +118,8 @@ type
     RecoveryExisted: Boolean;
     /// <summary>Its bytes before the write.</summary>
     RecoveryBefore: TBytes;
+    /// <summary>Its last-write time (UTC) before the write.</summary>
+    RecoveryStamp: TDateTime;
     /// <summary>Why the write failed; '' when it succeeded.</summary>
     Error: string;
     /// <summary>When the write failed: the files the rollback could not restore; '' = restored.</summary>
@@ -247,7 +249,7 @@ function VerifyAfter(const pView: TCyclePlanView; const pOpts: TCycleFixOptions;
 /// units inside each group line and the group lines themselves (a SET of groups).</returns>
 function SameCyclesOutput(const pPredicted, pActual: string): Boolean;
 
-/// <summary>The DRAGLINT_CYCLEFIX_BREAK test seam: 1, 2 or 3 when set AND the project file lies under
+/// <summary>The DRAGLINT_CYCLEFIX_BREAK test seam: 1 to 4 when set AND the project file lies under
 /// %TEMP% or C:\TEMP, else 0.</summary>
 /// <param name="pOpts">The flags.</param>
 /// <returns>The break mode to apply to the plan before staging (ApplyTestBreak), or 0.</returns>
@@ -358,6 +360,7 @@ const
   CJsonDecimals    = -2;   // seconds in the JSON, to 1/100
   CProbeWithLines  = 2;    // DRAGLINT_CYCLEFIX_REPAIR_PROBE=<tree>|<errors file>
   CBreakNoRepair   = 3;    // DRAGLINT_CYCLEFIX_BREAK=3: a stray line in every new unit, no repair covers it
+  CBreakRaise      = 4;    // DRAGLINT_CYCLEFIX_BREAK=4 (--apply): the after gate raises once the files are written
   { A whole-project msbuild of the demo takes seconds and a large project (Micronite) a few minutes;
     30 minutes is far past either and still bounds a hung build of an unattended --apply. }
   CBuildTimeoutMs  = 30 * 60 * 1000;
@@ -1235,7 +1238,11 @@ begin
   end;
   pTx.RecoveryPath   := TPath.Combine(pProjectDir, 'recovery.txt');
   pTx.RecoveryExisted:= TFile.Exists(pTx.RecoveryPath);
-  if pTx.RecoveryExisted then pTx.RecoveryBefore:= TFile.ReadAllBytes(pTx.RecoveryPath);
+  if pTx.RecoveryExisted then
+  begin
+    pTx.RecoveryBefore:= TFile.ReadAllBytes(pTx.RecoveryPath);
+    pTx.RecoveryStamp := TFile.GetLastWriteTimeUtc(pTx.RecoveryPath);
+  end;
   AppendRecoveryBlock(pProjectDir, pHeader, pTx.Backups);
 end;
 
@@ -1256,7 +1263,9 @@ var
   procedure WriteOne(const pPath: string);
   begin
     Inc(Writes);
-    FailWriteForTests(Writes, pPath);
+    { the write-failure test seam acts only on a project under %TEMP% / C:\TEMP (fix round 1);
+      TextEdit.FailWriteForTests itself stays unscoped for convert-apply }
+    if IsUnderTemp(pProjectDir) then FailWriteForTests(Writes, pPath);
     TFile.WriteAllBytes(pPath, Staged[LowerCase(pPath)]);
     pTx.Written:= pTx.Written + [pPath];
   end;
@@ -1342,9 +1351,8 @@ begin
       var Stamp:= pTx.Stamps[I];
       Attempt('restore ' + P, procedure
         begin
-          if TFile.Exists(P) and SameBytes(TFile.ReadAllBytes(P), Orig) then Exit;
-          TFile.WriteAllBytes(P, Orig);
-          TFile.SetLastWriteTimeUtc(P, Stamp);
+          if not TFile.Exists(P) or not SameBytes(TFile.ReadAllBytes(P), Orig) then TFile.WriteAllBytes(P, Orig);
+          if TFile.GetLastWriteTimeUtc(P) <> Stamp then TFile.SetLastWriteTimeUtc(P, Stamp);
         end);
     end;
     for var P in pTx.NewFiles do
@@ -1359,8 +1367,13 @@ begin
     if pTx.RecoveryPath <> '' then
       Attempt('restore ' + pTx.RecoveryPath, procedure
         begin
-          if pTx.RecoveryExisted then TFile.WriteAllBytes(pTx.RecoveryPath, pTx.RecoveryBefore)
-          else DeleteIfPresent(pTx.RecoveryPath);
+          if not pTx.RecoveryExisted then
+          begin
+            DeleteIfPresent(pTx.RecoveryPath);
+            Exit;
+          end;
+          TFile.WriteAllBytes(pTx.RecoveryPath, pTx.RecoveryBefore);
+          TFile.SetLastWriteTimeUtc(pTx.RecoveryPath, pTx.RecoveryStamp);
         end);
     Result:= string.Join('; ', Fails.ToArray);
   finally
@@ -1443,7 +1456,7 @@ begin
   end;
 end;
 
-function VerifyAfter(const pView: TCyclePlanView; const pOpts: TCycleFixOptions;
+function VerifyAfterCore(const pView: TCyclePlanView; const pOpts: TCycleFixOptions;
   const pStore: ISymbolStore): TVerifyResult;
 const
   CMsPerSecond = 1000;
@@ -1499,10 +1512,28 @@ begin
   Result.Reason  := if Result.Verified then '' else 'the cycles output differs from the prediction';
 end;
 
+function VerifyAfter(const pView: TCyclePlanView; const pOpts: TCycleFixOptions;
+  const pStore: ISymbolStore): TVerifyResult;
+begin
+  try
+    Result:= VerifyAfterCore(pView, pOpts, pStore);
+  except
+    on E: Exception do
+    begin
+      { the files compiled and stay; only the verification failed }
+      Result:= Default(TVerifyResult);
+      Result.ReindexDb    := pOpts.Db;
+      Result.ReindexStatus:= 'failed';
+      Result.ReindexReason:= E.ClassName + ': ' + E.Message;
+      Result.Reason       := 'verification failed: ' + E.Message;
+    end;
+  end;
+end;
+
 function BreakSeam(const pOpts: TCycleFixOptions): Integer;
 begin
   Result:= StrToIntDef(GetEnvironmentVariable('DRAGLINT_CYCLEFIX_BREAK'), 0);
-  if not (Result in [CBreakCast, CBreakPointer, CBreakNoRepair]) or not IsUnderTemp(pOpts.Project) then Result:= 0;
+  if not (Result in [CBreakCast, CBreakPointer, CBreakNoRepair, CBreakRaise]) or not IsUnderTemp(pOpts.Project) then Result:= 0;
 end;
 
 function BreakLine(const pView: TCyclePlanView; const pLine: string; pMode: Integer): string;
@@ -1939,9 +1970,28 @@ begin
                      ' -- the project may be PARTLY changed; recovery.txt names the backups';
     Exit;
   end;
-  pGate.After      := CompileAfter(pStaged, pProjectDir, pOpts.Project, pOpts.Platform, BuildScratchDir);
-  pGate.AfterStatus:= if pGate.After.Ok then 'ok' else 'error';
   pGate.AfterFiles := Length(Result.Tx.Written);
+  try
+    if BreakSeam(pOpts) = CBreakRaise then
+      raise EInOutError.Create('TEST BREAK 4: simulated failure of the after gate once the files are written');
+    pGate.After:= CompileAfter(pStaged, pProjectDir, pOpts.Project, pOpts.Platform, BuildScratchDir);
+  except
+    on E: Exception do
+    begin
+      { the build could not even run (spawn, .bat, a repair's file edit): the tree is written but
+        unproven -- roll it back like a compile error, but as an error (exit 2) }
+      pGate.AfterStatus:= 'error';
+      pGate.After.Errors:= [E.ClassName + ': ' + E.Message];
+      var Failure:= RollBack(Result.Tx);
+      Result.RolledBack:= Failure = '';
+      Result.Refusals:= [MakeRefusal('build-error', '', pOpts.Project, 'the after gate failed: ' + E.Message, 0)];
+      Result.ExitCode:= CExitError;
+      Result.Error:= if Result.RolledBack then 'rolled back, project not changed: build error: ' + E.Message
+                     else 'build error (' + E.Message + ') and the rollback FAILED: ' + Failure;
+      Exit;
+    end;
+  end;
+  pGate.AfterStatus:= if pGate.After.Ok then 'ok' else 'error';
   if not pGate.After.Ok then
   begin
     var Failure:= RollBack(Result.Tx);
