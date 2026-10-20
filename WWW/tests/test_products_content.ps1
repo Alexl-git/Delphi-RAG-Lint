@@ -9,7 +9,8 @@ foreach ($s in 'Delphi RAG lint knows your code.',
                'Embarcadero RAD Studio 13 Florence, VS Code, plus any editor that speaks LSP or MCP',
                '190 rules', '16 categories', '23 rules fix the code for you',
                'href="https://www.htrmicronite.com',
-               'It also tells you that there <i>is</i> a needle in there') {
+               'It also tells you that there <i>is</i> a needle in there',
+               'Free and open source &middot; written in Delphi') {
     Assert-True ($b.Contains($s)) "DL page contains '$s'"
 }
 foreach ($h in [regex]::Matches($b, '(?s)<h2[^>]*>(.*?)</h2>')) {
@@ -26,6 +27,7 @@ foreach ($s in 'Smart column alignment', 'Set F / Set R', 'Ctrl+Shift+Alt+R', 'I
                'href="https://www.htrmicronite.com',
                # yadf-6c read-back 2026-10-20 (.dpk: owner 2026-10-20)
                'reformats .pas, .dpr, .dpk and .inc source',
+               'Free and open source &middot; written in Delphi',
                'Help &gt; Tools &gt; YADFOT: Format Current Buffer',
                'so code from 11-13 can build on 10.2.3. Best effort: ambiguous cases are left marked for you to finish.') {
     Assert-True ($y.Contains($s)) "YADF page contains '$s'"
