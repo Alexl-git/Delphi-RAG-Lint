@@ -2,7 +2,10 @@
 . "$PSScriptRoot\..\lib\Check.ps1"
 
 $c = Read-SiteConfig "$PSScriptRoot\..\site.json"
-$good = '<html><head><link rel="canonical" href="https://www.delphi-rag-lint.com/x/"><link rel="stylesheet" href="/assets/s.css"></head>' +
+$share = '<meta property="og:title" content="X"><meta property="og:description" content="About x.">' +
+         '<meta property="og:url" content="https://www.delphi-rag-lint.com/x/">' +
+         '<meta property="og:image" content="https://www.delphi-rag-lint.com/assets/share/default.png">'
+$good = '<html><head><link rel="canonical" href="https://www.delphi-rag-lint.com/x/"><link rel="stylesheet" href="/assets/s.css">' + $share + '</head>' +
         '<body><a href="/x/">x</a><a href="https://www.htrmicronite.com">m</a><script src="/assets/r.js" defer></script></body></html>'
 
 function New-Site([hashtable]$Pages) {
@@ -15,7 +18,7 @@ function New-Site([hashtable]$Pages) {
     }
     $d
 }
-$base = @{ 'x\index.html' = $good; 'assets\s.css' = ''; 'assets\r.js' = '' }
+$base = @{ 'x\index.html' = $good; 'assets\s.css' = ''; 'assets\r.js' = ''; 'assets\share\default.png' = '' }
 
 $d = New-Site $base
 $r = @(Test-SiteOutput $d $c)
@@ -29,6 +32,10 @@ $cases = [ordered]@{
     'inline'     = $good.Replace('<a href="/x/">', '<a style="color:red" href="/x/">')
     'non-ASCII'  = [byte[]]([Text.Encoding]::ASCII.GetBytes($good) + [byte[]](0xE2))
     'placeholder' = $good.Replace('<a href="/x/">x</a>', '{{main}}')
+    # share-preview rule (owner 2026-10-20): every page but 404.html carries a complete preview
+    'share preview' = $good.Replace('<meta property="og:description" content="About x.">', '')
+    'share url'     = $good.Replace('content="https://www.delphi-rag-lint.com/x/">', 'content="https://www.delphi-rag-lint.com/y/">')
+    'share image'   = $good.Replace('/assets/share/default.png', '/assets/share/missing.png')
 }
 foreach ($k in $cases.Keys) {
     $pages = $base.Clone(); $pages['bad\index.html'] = $cases[$k]
@@ -36,3 +43,9 @@ foreach ($k in $cases.Keys) {
     Assert-Equal 1 $r.Count "case $k gives exactly one problem: $($r -join '; ')"
     Assert-True ($r[0] -like "bad\index.html:*$k*") "case $k message: $($r[0])"
 }
+
+# the 404 page is not shared: no preview needed
+$pages = $base.Clone()
+$pages['404.html'] = $good.Replace($share, '')
+$r = @(Test-SiteOutput (New-Site $pages) $c)
+Assert-Equal 0 $r.Count "404.html needs no share preview: $($r -join '; ')"

@@ -40,9 +40,13 @@ function Read-Article([string]$Path) {
     if (-not $body.Substring(0, [Math]::Min(3000, $body.Length)).Contains('href="https://www.htrmicronite.com')) {
         throw "${Path}: no Micronite mention near the top (a link to https://www.htrmicronite.com in the first 3000 characters; see ARTICLE-RULES.md)"
     }
+    # optional share-preview picture: a .png/.jpg next to the article (1200x630 recommended)
+    if ($meta.image -and ($meta.image -notmatch '^[a-z0-9][a-z0-9-]*\.(png|jpe?g)$' -or -not (Test-Path -LiteralPath (Join-Path $dir $meta.image)))) {
+        throw "${Path}:1: image '$($meta.image)' must be a .png or .jpg file in the article folder"
+    }
     [pscustomobject]@{
         Title = $meta.title; Date = $meta.date; Slug = $meta.slug; Summary = $meta.summary
-        Body = $body; Dir = $dir
+        Image = $meta.image; Body = $body; Dir = $dir
     }
 }
 

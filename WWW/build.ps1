@@ -25,9 +25,11 @@ try {
     [void][IO.Directory]::CreateDirectory($Out)
     $pages = [Collections.Generic.List[string]]::new()
 
-    function Add-Page([string]$Path, [string]$Title, [string]$Description, [string]$Main, [string]$Skip = '') {
-        $html = Render-Page $cfg @{ Title = $Title; Description = $Description; Path = $Path; Main = $Main
-                                    Sidebar = (New-Sidebar $cfg $releases $articles -Skip $Skip) }
+    function Add-Page([string]$Path, [string]$Title, [string]$Description, [string]$Main, [string]$Skip = '', [hashtable]$More = @{}) {
+        $page = @{ Title = $Title; Description = $Description; Path = $Path; Main = $Main
+                   Sidebar = (New-Sidebar $cfg $releases $articles -Skip $Skip); NoShare = ($Path -eq '/404.html') }
+        foreach ($k in $More.Keys) { $page[$k] = $More[$k] }
+        $html = Render-Page $cfg $page
         $file = if ($Path.EndsWith('/')) { $Path.TrimStart('/') + 'index.html' } else { $Path.TrimStart('/') }
         Write-SiteFile $file.Replace('/', '\') $html
         if ($Path -ne '/404.html') { $pages.Add($Path) }
@@ -35,7 +37,12 @@ try {
 
     $newest = $articles[0]
     Add-Page '/' '' $newest.Summary $newest.Body $newest.Slug
-    foreach ($a in $articles) { Add-Page "/articles/$($a.Slug)/" $a.Title $a.Summary $a.Body $a.Slug }
+    foreach ($a in $articles) {
+        $more = @{ Type = 'article' }
+        if ($a.Image) { $more.Image = "/articles/$($a.Slug)/$($a.Image)" }
+        Add-Page "/articles/$($a.Slug)/" $a.Title $a.Summary $a.Body $a.Slug $more
+        if ($a.Image) { Copy-Item -LiteralPath (Join-Path $a.Dir $a.Image) -Destination (Join-Path $Out "articles\$($a.Slug)\") }
+    }
 
     $li = foreach ($a in $articles) {
         "<li><a class=""title"" href=""/articles/$($a.Slug)/"">$(ConvertTo-HtmlText $a.Title)</a><span class=""meta"">$($a.Date)</span><p>$(ConvertTo-HtmlText $a.Summary)</p></li>"

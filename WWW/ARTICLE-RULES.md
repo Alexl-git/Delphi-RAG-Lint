@@ -38,6 +38,14 @@ there. Entities belong in the body only.
 The folder must be named `yyyy-mm-dd-<slug>`.
 The file is `index.html` inside that folder.
 
+Optional `image: card.png`: the picture shown when the article's link is shared (LinkedIn,
+Slack, ...). A `.png` or `.jpg` in the article folder, 1200x630 pixels, lowercase file name.
+Without it the site's default card is used. Every page except the 404 page must carry a
+share preview; the build refuses one without it.
+
+Link to an article by its own address, `https://www.delphi-rag-lint.com/articles/<slug>/`,
+never by the home page: the home page always shows the newest article.
+
 ### Forbidden markup
 
 No inline `<style>` tags, no `style=` attributes, no `<script>` tags, no Google Fonts links.

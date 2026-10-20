@@ -84,9 +84,26 @@ function New-Footer($Config) {
     "<footer class=""site-foot""><span>(c) 2026 $(ConvertTo-HtmlText $m.name)</span><a href=""$($m.url)"">$($m.url -replace '^https?://', '')</a></footer>"
 }
 
+# Open Graph + Twitter card tags: the preview LinkedIn, Slack etc. show for a shared link.
+# Page keys: Title, Description, Path; optional Type ('article'), Image (site path).
+function New-ShareTags($Config, [hashtable]$Page) {
+    $t = ConvertTo-HtmlText $(if ($Page.Title) { $Page.Title } else { $Config.siteName })
+    $img = $Config.baseUrl + $(if ($Page.Image) { $Page.Image } else { '/assets/share/default.png' })
+    @(
+        "<meta property=""og:site_name"" content=""$(ConvertTo-HtmlText $Config.siteName)"">"
+        "<meta property=""og:type"" content=""$(if ($Page.Type -eq 'article') { 'article' } else { 'website' })"">"
+        "<meta property=""og:title"" content=""$t"">"
+        "<meta property=""og:description"" content=""$(ConvertTo-HtmlText $Page.Description)"">"
+        "<meta property=""og:url"" content=""$($Config.baseUrl + $Page.Path)"">"
+        "<meta property=""og:image"" content=""$img"">"
+        '<meta name="twitter:card" content="summary_large_image">'
+    ) -join "`n"
+}
+
 function Render-Page($Config, [hashtable]$Page) {
     $tpl = [IO.File]::ReadAllText((Join-Path $script:TemplateDir 'page.html'))
     $vals = @{
+        share       = if ($Page.NoShare) { '' } else { New-ShareTags $Config $Page }
         title       = if ($Page.Title) { "$(ConvertTo-HtmlText $Page.Title) - $($Config.siteName)" } else { $Config.siteName }
         description = ConvertTo-HtmlText $Page.Description
         canonical   = $Config.baseUrl + $Page.Path

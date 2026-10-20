@@ -17,6 +17,19 @@ function Test-SiteOutput([string]$Dir, $Config) {
         if (-not $h.Contains($Config.micronite.url)) { $problems.Add("${rel}: no micronite link") }
         if ($h -notmatch '<link rel="canonical" href="https://www\.delphi-rag-lint\.com/') { $problems.Add("${rel}: no canonical link") }
         if ($h.Contains('{{')) { $problems.Add("${rel}: placeholder left") }
+        # share-preview rule (owner 2026-10-20): every page but the 404 has a complete card
+        if ($rel -ne '404.html') {
+            $og = @{}
+            foreach ($m in [regex]::Matches($h, '<meta property="og:(\w+)" content="([^"]*)">')) { $og[$m.Groups[1].Value] = $m.Groups[2].Value }
+            $missing = @('title', 'description', 'url', 'image' | Where-Object { -not $og[$_] })
+            $canon = [regex]::Match($h, '<link rel="canonical" href="([^"]*)">').Groups[1].Value
+            if ($missing.Count) { $problems.Add("${rel}: no share preview (og:$($missing -join ', og:'))") }
+            elseif ($canon -and $og.url -ne $canon) { $problems.Add("${rel}: share url $($og.url) is not the canonical $canon") }
+            elseif (-not $og.image.StartsWith("$($Config.baseUrl)/") -or
+                    -not (Test-Path -LiteralPath (Join-Path $root $og.image.Substring($Config.baseUrl.Length + 1).Replace('/', '\')))) {
+                $problems.Add("${rel}: share image not found: $($og.image)")
+            }
+        }
         if ($h -match '<style|\sstyle\s*=|<script(?![^>]*\ssrc=)[^>]*>') { $problems.Add("${rel}: inline style or script") }
         foreach ($m in [regex]::Matches($h, '<link\b[^>]*>|\ssrc="[^"]*"')) {
             $tag = $m.Value
