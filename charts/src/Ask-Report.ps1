@@ -317,6 +317,8 @@ try {
     if ($needServer)                    { $nda.ServerDbPath  = $ServerDbPath }
     if ($needSql)                       { $nda.SqlDbPath     = $SqlDbPath }
     if ($wantOther -and $CounterpartDb) { $nda.CounterpartDb = $CounterpartDb }
+    # E18 T14: the cycles Fix it commands name the real .dproj (else the engine prints <your.dproj>)
+    if ($Question -eq 'cycles' -and $Project -and (Test-Path -LiteralPath $Project)) { $nda.Project = (Resolve-Path -LiteralPath $Project).ProviderPath }
     foreach ($n in 'Depth', 'Cap', 'SurfaceCap', 'Control', 'Mode', 'To') { if ($PSBoundParameters.ContainsKey($n)) { $nda[$n] = $PSBoundParameters[$n] } }
     if ($Open) { $nda.Open = $true }
     $prevLive = [Environment]::GetEnvironmentVariable('DRAGLINT_CHARTS_ALLOW_LIVE_DB', 'Process')

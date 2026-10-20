@@ -97,7 +97,7 @@ try {
   Check 'a2: the code cell names the cycle (--cycle 1, --cycle 3), the apply command is the TITLE' `
     (($t -match '>drag-lint cycles --fix --project [^<]*--cycle 1<') -and ($t -match '>drag-lint cycles --fix --project [^<]*--cycle 3<') -and
      ($t -match 'TITLE="drag-lint cycles --fix --project [^"]*--cycle 3 --apply"')) ''
-  Check 'a3: the code cell carries a copy href with the dry-run command' ($t -match 'HREF="draglint://copy\?text=drag-lint%20cycles%20--fix') ''
+  Check 'a3: no draglint://copy href anywhere (nothing handles it) and no [copy] hint' (($t -notmatch 'draglint://copy') -and ($t -notmatch '\[copy\]')) ''
   Check 'a4: cycle 3 names its chosen edge and `routine-call inversion`' `
     ($t -match 'fix-it: demoblueprint -&gt; demoblueprint\.viewmodel by routine-call inversion') ''
   Check 'a5: cycle 1 names the Part B follow-up `move globals`' ($t -match 'fix-it: Part A first, then demoaudit -&gt; democonfig by move globals') ''
@@ -131,8 +131,33 @@ try {
   Check 'e1: Anchored / Edges as before the Fix it rows (9 anchored, 9 edges)' (($pg.Res.Anchored -eq 9) -and ($pg.Res.Edges -eq 9)) "anchored=$($pg.Res.Anchored) edges=$($pg.Res.Edges)"
   Check 'e2: the verdict row text is unchanged' ($t -match '>interface coupling: \d+ of \d+ uses interface-section; every loop crosses an implementation use<' -and $t -match '>implementation-only<') ''
   $pp = Build-Page $db $proj $Exe 'playbook' -Playbook
-  Check 'e3: -Playbook keeps the Status wording and still renders the Fix it cells' (($pp.Dot -match 'Status|units of this cycle|implementation') -and (Count-Code $pp.Dot) -eq 2) ''
-}
+  $statusImpl = 'legal in Delphi, low impact'   # the engine Status of an implementation-only cycle; the chart's own verdict never says it
+  $statusIntf = '-- engine: interface coupling -- units of this cycle use each other in their INTERFACE uses clauses.'
+  Check 'e3: WITH -Playbook the engine Status wording is on the page (cycle 1 after the counted clause, cycles 2 and 3 verbatim)' `
+    (($pp.Dot.Contains($statusIntf)) -and (([regex]::Matches($pp.Dot, [regex]::Escape($statusImpl))).Count -eq 2)) ''
+  Check 'e4: WITHOUT -Playbook neither Status wording is on the page' ((-not $t.Contains($statusImpl)) -and (-not $t.Contains($statusIntf))) ''
+  Check 'e5: -Playbook still renders the Fix it cells' ((Count-Code $pp.Dot) -eq 2) ''
+
+  Write-Host '== (f) through the Ask-Report path (-Plain)' -ForegroundColor Cyan
+  # the wrapper adds --library-db none to `cycles` (Ask-Report has no -LibraryDb; the real library DB is never opened)
+  $wdir = Join-Path $WorkDir 'wrap'; New-Item -ItemType Directory -Force $wdir | Out-Null
+  $wps = "if (`$args[0] -eq 'cycles') { & '$Exe' @args --library-db none; exit `$LASTEXITCODE }`r`n& '$Exe' @args`r`nexit `$LASTEXITCODE`r`n"
+  [IO.File]::WriteAllText((Join-Path $wdir 'wrap.ps1'), $wps, [Text.Encoding]::ASCII)
+  $ask = Join-Path $Repo 'charts\src\Ask-Report.ps1'
+  function Get-AskDot([bool]$WithProject, [string]$Tag) {
+    $outRoot = Join-Path $WorkDir "ask-$Tag"
+    $aa = @('-NoProfile', '-File', $ask, '-Question', 'cycles', '-Target', 'project', '-DbPath', $db, '-Engine', (Join-Path $wdir 'wrap.ps1'), '-OutRoot', $outRoot, '-Plain')
+    if ($WithProject) { $aa += @('-Project', $proj) }
+    $o = & pwsh @aa 2>&1 | Out-String
+    $m = [regex]::Match($o, '(?m)^BUNDLE (.+?)\s*$')
+    if (-not $m.Success) { return @{ Dot = ''; Out = $o } }
+    return @{ Dot = [IO.File]::ReadAllText((Join-Path $m.Groups[1].Value 'graph.dot')); Out = $o }
+  }
+  $ak = Get-AskDot $true 'proj'
+  Check 'f1: SANITY the Ask-Report run produced a bundle with a dot' ($ak.Dot.Length -gt 0) $ak.Out
+  Check 'f2: with -Project the Fix it commands name the real .dproj' ($ak.Dot.Contains($proj) -and $ak.Dot -notmatch '<your\.dproj>|&lt;your\.dproj&gt;') ''
+  $an = Get-AskDot $false 'noproj'
+  Check 'f3: CONTROL without -Project the page prints <your.dproj> (the check can fail)' ($an.Dot -match '&lt;your\.dproj&gt;|<your\.dproj>') ''}
 finally {
   $env:DRAGLINT_CHARTS_ALLOW_LIVE_DB = $savedLive
   if ($script:Failed -and $KeepScratch) { Write-Host "scratch kept: $WorkDir" -ForegroundColor Yellow }

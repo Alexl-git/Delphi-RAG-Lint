@@ -2880,13 +2880,11 @@ function Add-RowCluster {
     }
     $p++
     # A CODE row (E18 T14, the cycles "Fix it" cell): a command the page cannot run, so it hands the exact
-    # text over -- monospace, HREF draglint://copy?text=<command> (the copy affordance; the viewer puts the
-    # text on the clipboard), TITLE = the stronger command (Tip), here the --apply line.
+    # text over -- monospace, no href (nothing handles a copy link); TITLE = the stronger command (Tip), here
+    # the --apply line. A Code row needs a non-empty Label (the empty-row guard above).
     if ($r.PSObject.Properties.Name -contains 'Code' -and -not [string]::IsNullOrWhiteSpace([string]$r.Code)) {
-      $copyHref = 'draglint://copy?text=' + [uri]::EscapeDataString([string]$r.Code)
-      [void]$tbl.Append("<TR><TD PORT=`"p$p`" ALIGN=`"LEFT`" HREF=`"$copyHref`" TITLE=`"$(ConvertTo-XmlText $r.Tip)`">")
-      [void]$tbl.Append("<FONT COLOR=`"$RowInk`" FACE=`"$FontMono`" POINT-SIZE=`"11`">$(ConvertTo-XmlText $r.Code)</FONT>")
-      [void]$tbl.Append("  <FONT COLOR=`"$LineInk`" POINT-SIZE=`"11`">[copy]</FONT></TD></TR>")
+      [void]$tbl.Append("<TR><TD PORT=`"p$p`" ALIGN=`"LEFT`" TITLE=`"$(ConvertTo-XmlText $r.Tip)`">")
+      [void]$tbl.Append("<FONT COLOR=`"$RowInk`" FACE=`"$FontMono`" POINT-SIZE=`"11`">$(ConvertTo-XmlText $r.Code)</FONT></TD></TR>")
       [void]$ports.Add("${Nid}:p$p")
       continue
     }
