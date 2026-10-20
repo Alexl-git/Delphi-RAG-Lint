@@ -15,6 +15,17 @@ unit DragLint.Plugin.CycleFix;
 
 interface
 
+const
+  /// <summary>Time limit, in ms, for every IDE-started `cycles --fix` run (the
+  /// tab's Dry run and Apply, and the menu's dry run): 35 minutes.</summary>
+  /// <remarks>Deliberately ABOVE the engine's own 30-minute build timeout. At the
+  /// plugin's limit ProcRun kills the whole process tree (engine + msbuild/dcc);
+  /// a kill in the middle of an --apply bypasses the engine's atomic rollback and
+  /// can leave half-edited files. With the plugin's limit higher, the engine's
+  /// timeout always fires first and the engine rolls back itself. The other
+  /// Uses &amp; Deps sections keep their own 180 s limit.</remarks>
+  CYCLE_FIX_TIMEOUT_MS = 35 * 60 * 1000;
+
 type
   /// <summary>One strongly connected component of the project's uses graph, as
   /// listed by `cycles --format json --causes`.</summary>

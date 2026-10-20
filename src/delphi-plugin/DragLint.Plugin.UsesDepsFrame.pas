@@ -154,13 +154,18 @@ type
   /// --cycle takes one SCC and fixing one changes the graph the others were
   /// computed on. The engine owns the edit (atomic, compiler-verified, rolled
   /// back on failure); this section only passes --cycle and, on Apply, --apply.
-  /// After an apply every `written[]` path is reloaded. Not thread-safe; VCL,
-  /// main thread only.</remarks>
+  /// After an apply every `written[]` path is reloaded. Dry run and Apply run
+  /// as a Busy job on the plugin's JobQueue (off the main thread, limit
+  /// CYCLE_FIX_TIMEOUT_MS); both buttons are disabled while it is in flight and
+  /// a second start is refused. Not thread-safe; VCL, main thread only.</remarks>
   TCircularUsesSection = class(TUsesDepsSection)
     private
-      FCycles: TArray<TCycleRow>;
+      FCycles : TArray<TCycleRow>;
+      FRunning: Boolean;
       function  TickedCycle: Integer;
+      procedure SetRunning(AValue: Boolean);
       procedure RunFix(AApply: Boolean);
+      procedure FinishFix(AApply: Boolean; AExit: Integer; const AOutput: string);
       procedure HandleDryRun    (Sender: TObject);
       procedure HandleClickCheck(Sender: TObject);
     protected
@@ -178,6 +183,9 @@ type
       /// <param name="AOnReport">Receives every user-visible message; may be nil.</param>
       constructor Create(AOwner: TComponent; AParent: TWinControl; const ACaption: string;
                          AOnReport: TUsesReportProc); reintroduce;
+      /// <summary>Unregisters the section, so a cycles --fix job that finishes
+      /// after the dock is gone does not call into a freed object.</summary>
+      destructor Destroy; override;
       /// <summary>Re-runs the SCC list query and repaints. Writes nothing;
       /// never called on tab activation.</summary>
       procedure Refresh; override;
@@ -225,6 +233,7 @@ uses
   , DragLint.Plugin.DbResolver
   , DragLint.Plugin.ExeResolver
   , DragLint.Plugin.Telemetry
+  , DragLint.Plugin.JobQueue
   ;
 
 const
@@ -735,10 +744,24 @@ end; // procedure
 
 { ---- TCircularUsesSection ------------------------------------------------- }
 
+var
+  { Every live TCircularUsesSection, main thread only. A cycles --fix job's
+    OnDone runs on the main thread up to 35 minutes after it was queued; the
+    dock may have been closed (and the section freed) in between, so OnDone
+    checks membership here before it touches the section. }
+  GLiveCycleSections: TList<TCircularUsesSection> = nil;
+
+function IsLiveCycleSection(ASection: TCircularUsesSection): Boolean;
+begin
+  Result:= (GLiveCycleSections <> nil) and GLiveCycleSections.Contains(ASection);
+end;
+
 constructor TCircularUsesSection.Create(AOwner: TComponent; AParent: TWinControl;
   const ACaption: string; AOnReport: TUsesReportProc);
 begin
   inherited Create(AOwner, AParent, uvCircularUses, ACaption, AOnReport);
+  if GLiveCycleSections = nil then GLiveCycleSections:= TList<TCircularUsesSection>.Create;
+  GLiveCycleSections.Add(Self);
   { The base strip is Refresh / Tick all / Apply selected. "Tick all" has no
     meaning when one SCC is the unit of work, so the middle button becomes the
     dry run -- the button a user should press before Apply. }
@@ -746,6 +769,21 @@ begin
   FBtnTickAll.OnClick:= HandleDryRun;
   FBtnApply.Caption  := 'Apply';
   FList.OnClickCheck := HandleClickCheck;
+end;
+
+destructor TCircularUsesSection.Destroy;
+begin
+  if GLiveCycleSections <> nil then GLiveCycleSections.Remove(Self);
+  inherited Destroy;
+end;
+
+{ Both fix buttons follow the in-flight state; Refresh stays enabled, it is
+  also how a section recovers from a job the queue dropped (see Refresh). }
+procedure TCircularUsesSection.SetRunning(AValue: Boolean);
+begin
+  FRunning           := AValue;
+  FBtnTickAll.Enabled:= not AValue;
+  FBtnApply.Enabled  := not AValue;
 end;
 
 procedure TCircularUsesSection.Render;
@@ -795,6 +833,14 @@ var
   Fixable: Integer  ;
   Row   : TCycleRow ;
 begin
+  { A job the queue dropped (ClearPending, shutdown) never runs its OnDone; it
+    is no longer counted by JobQueueBusy, so that is the signal to re-enable. }
+  if FRunning and not JobQueueBusy then SetRunning(False);
+  if FRunning then
+  begin
+    Report('A cycles --fix run is in progress -- the list refreshes when it finishes.');
+    Exit;
+  end;
   SetLength(FCycles, 0);
   Render;
   Scope:= ResolveScope;
@@ -819,15 +865,28 @@ begin
 end; // procedure
 
 { One path for both buttons, so the dry run the user reviewed and the apply
-  that follows cannot differ in anything but --apply. }
+  that follows cannot differ in anything but --apply.
+
+  OFF THE MAIN THREAD, through the plugin's JobQueue -- the same Busy-job shape
+  as StructureForm.EnqueueFixJob: a fix that builds the project two or three
+  times would otherwise freeze the IDE for minutes. Busy gives the wait cursor
+  and makes JobQueueBusy refuse a second fix anywhere in the plugin; the limit
+  is CYCLE_FIX_TIMEOUT_MS, above the engine's own build timeout, so a kill can
+  never land in the middle of an --apply. }
 procedure TCircularUsesSection.RunFix(AApply: Boolean);
 var
-  N      : Integer         ;
-  Scope  : TUsesScope      ;
-  Args   : string          ;
-  Output : string          ;
-  Outcome: TCycleFixOutcome;
+  N      : Integer     ;
+  Scope  : TUsesScope  ;
+  Exe    : string      ;
+  Job    : TDragLintJob;
+  Sec    : TCircularUsesSection;
+  IsApply: Boolean     ;
 begin
+  if FRunning or JobQueueBusy then
+  begin
+    Report('A drag-lint fix is already running -- wait for it to finish.');
+    Exit;
+  end;
   N:= TickedCycle;
   if N <= 0 then
   begin
@@ -840,15 +899,51 @@ begin
     Report(Scope.Problem);
     Exit;
   end;
-  SaveAllModules;
-  Args:= if AApply then CycleFixApplyArgs(Scope.Proj, Scope.Db, N)
-         else CycleFixDryRunArgs(Scope.Proj, Scope.Db, N);
-  if RunEngine(Args, Output) < 0 then
+  Exe:= DragLintExe;
+  if (Exe = '') or not FileExists(Exe) then
   begin
     Report('drag-lint.exe not found -- check drag-lint Options.');
     Exit;
   end;
-  Outcome:= ParseCycleFixOutcome(Output);
+  SaveAllModules;
+  Job:= TDragLintJob.Create;
+  Job.Kind       := jkGeneric;
+  Job.Busy       := True;
+  Job.Title      := Format('cycles --fix cycle %d (%s)', [N, if AApply then 'apply' else 'dry run']);
+  Job.CoalesceKey:= 'cyclefix:' + LowerCase(Scope.Db);
+  Job.CmdLine    := Format('"%s" %s', [Exe,
+                      if AApply then CycleFixApplyArgs(Scope.Proj, Scope.Db, N)
+                      else CycleFixDryRunArgs(Scope.Proj, Scope.Db, N)]);
+  Job.TimeoutMs  := CYCLE_FIX_TIMEOUT_MS;
+  Job.Streaming  := False;
+  { Locals, so the closure captures copies; Sec is checked for liveness before
+    use because the dock may be gone when the job finishes. }
+  Sec    := Self;
+  IsApply:= AApply;
+  Job.OnDone:=
+    procedure(AExit: Integer; AOutput: string)
+    begin
+      if IsLiveCycleSection(Sec) then Sec.FinishFix(IsApply, AExit, AOutput);
+    end;
+  SetRunning(True);
+  Report(Job.Title + ' -- running in the background; the IDE stays usable.');
+  JobQueue.Enqueue(Job);
+end; // procedure
+
+{ Main thread (the job's OnDone). Re-enables the buttons first, whatever the
+  outcome -- completion, failure or timeout. }
+procedure TCircularUsesSection.FinishFix(AApply: Boolean; AExit: Integer; const AOutput: string);
+var
+  Outcome: TCycleFixOutcome;
+begin
+  SetRunning(False);
+  if AExit = PROCRUN_TIMED_OUT_EXIT_CODE then
+  begin
+    Report(Format('cycles --fix: killed after the %d min limit -- files may or may not have been written. '
+                + 'Check them before re-running.', [CYCLE_FIX_TIMEOUT_MS div (MSecsPerSec * SecsPerMin)]));
+    Exit;
+  end;
+  Outcome:= ParseCycleFixOutcome(AOutput);
   { The written[] paths, not a guess: the engine creates new units and edits the
     .dpr/.dproj as well as the cycle's units, and every one may be open. }
   if CycleFixWroteFiles(Outcome) then ReloadModules(Outcome.Written);
@@ -979,5 +1074,10 @@ begin
   { Deliberately NOT refreshed here -- see the unit header: nothing runs until
     the user presses Refresh. }
 end;
+
+initialization
+
+finalization
+  FreeAndNil(GLiveCycleSections);
 
 end.

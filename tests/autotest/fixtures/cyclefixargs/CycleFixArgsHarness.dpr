@@ -58,6 +58,7 @@ begin
     Emit('args.apply', CycleFixApplyArgs ('<P>', '<D>', 2));
     Emit('args.menu' , CycleFixMenuArgs  ('<P>', '<D>'));
     Emit('args.list' , CycleListArgs     ('<P>', '<D>'));
+    Emit('timeout.cyclefix', IntToStr(CYCLE_FIX_TIMEOUT_MS));
 
     Rows:= ParseCycleRows(BANNER + Fixture('causes.json') + NOTE);
     Emit('rows.count', IntToStr(Length(Rows)));

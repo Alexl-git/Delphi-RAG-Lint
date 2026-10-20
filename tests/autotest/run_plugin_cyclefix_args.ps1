@@ -80,6 +80,27 @@ try {
   Check 'A4 the list query carries --causes (the fix object lives there)' `
     ($kv['args.list'] -ceq 'cycles --project "<P>" --db "<D>" --format json --causes') "got: $($kv['args.list'])"
 
+  Write-Host '-- T: time limits (fix round 1, R1)' -ForegroundColor Cyan
+  # A kill at the plugin's limit takes engine + msbuild/dcc down mid-apply, past the engine's own
+  # rollback; the plugin's limit must therefore sit ABOVE the engine's 30 min build timeout.
+  Check 'T1 CYCLE_FIX_TIMEOUT_MS is 35 min' ($kv['timeout.cyclefix'] -eq '2100000') "got: $($kv['timeout.cyclefix'])"
+  Check 'T2 ... which is above the engine''s 30 min build timeout' ([int]"0$($kv['timeout.cyclefix'])" -gt 1800000) "got: $($kv['timeout.cyclefix'])"
+  $frameSrc  = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.UsesDepsFrame.pas'))
+  $editorSrc = [IO.File]::ReadAllText((Join-Path $pluginDir 'DragLint.Plugin.Editor.pas'))
+  Check 'T3 the other Uses & Deps sections keep 180 s (ENGINE_TIMEOUT_MS, used by RunEngine)' `
+    (($frameSrc -match '(?m)^\s*ENGINE_TIMEOUT_MS\s*=\s*180000;') -and ($frameSrc.Contains('AOutput, ENGINE_TIMEOUT_MS)'))) ''
+  Check 'T4 the tab''s Dry run / Apply job runs under CYCLE_FIX_TIMEOUT_MS' ($frameSrc -match 'Job\.TimeoutMs\s*:=\s*CYCLE_FIX_TIMEOUT_MS;') ''
+  Check 'T5 the menu dry run passes CYCLE_FIX_TIMEOUT_MS; other menu reports keep 180 s' `
+    ($editorSrc.Contains("DLRunReport(CycleFixMenuArgs(Proj, Db), 'drag-lint-circular-uses-fix.txt', CYCLE_FIX_TIMEOUT_MS);") -and ($editorSrc -match 'REPORT_TIMEOUT_MS\s*=\s*180000;') -and ($editorSrc.Contains('RunAndCaptureStdout(Cmd, Output, ATimeoutMs);'))) ''
+  $runFix = [regex]::Match($frameSrc, 'procedure TCircularUsesSection\.RunFix\([\s\S]*?end; // procedure').Value
+  Check 'T6 Dry run / Apply go through the JobQueue, not the blocking RunEngine' `
+    (($runFix -ne '') -and $runFix.Contains('JobQueue.Enqueue(Job)') -and $runFix.Contains('Job.Busy       := True') -and -not $runFix.Contains('RunEngine(')) ''
+  Check 'T7 a second start is refused while a run is in flight' ($runFix.Contains('if FRunning or JobQueueBusy then')) ''
+  $setRun = [regex]::Match($frameSrc, 'procedure TCircularUsesSection\.SetRunning\([\s\S]*?\r?\nend;').Value
+  Check 'T8 both fix buttons follow the in-flight state' ($setRun.Contains('FBtnTickAll.Enabled:= not AValue') -and $setRun.Contains('FBtnApply.Enabled  := not AValue')) ''
+  $finish = [regex]::Match($frameSrc, 'procedure TCircularUsesSection\.FinishFix\([\s\S]*?end; // procedure').Value
+  Check 'T9 OnDone re-enables first, before any outcome branch (completion, failure, timeout)' `
+    (($finish -ne '') -and ($finish.IndexOf('SetRunning(False)') -ge 0) -and ($finish.IndexOf('SetRunning(False)') -lt $finish.IndexOf('PROCRUN_TIMED_OUT_EXIT_CODE'))) ''
   Write-Host '-- L: SCC rows from cycles --format json --causes' -ForegroundColor Cyan
   Check 'L1 one row per SCC (3 on circular-demo), banner + note tolerated' ($kv['rows.count'] -eq '3') "got: $($kv['rows.count'])"
   Check 'L2 rows are numbered 1..n, the --cycle value' (($kv['rows.0.cycle'] -eq '1') -and ($kv['rows.1.cycle'] -eq '2') -and ($kv['rows.2.cycle'] -eq '3')) "got: $($kv['rows.0.cycle']),$($kv['rows.1.cycle']),$($kv['rows.2.cycle'])"
